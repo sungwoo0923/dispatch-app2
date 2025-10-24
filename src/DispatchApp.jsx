@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import { auth, provider } from "./firebase";
 import { signInWithPopup, signOut } from "firebase/auth";
+import { db } from "./firebase";
 import { doc, setDoc } from "firebase/firestore";
 
 /* -------------------------------------------------
