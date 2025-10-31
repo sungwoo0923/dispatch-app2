@@ -5,6 +5,7 @@ import react from "@vitejs/plugin-react";
 export default defineConfig({
   plugins: [react()],
   css: {
+    base: '/betterlogistics-dispatch/',  // 👈 이 줄 추가 (저장소 이름과 동일해야 함)
     postcss: "./postcss.config.js", // ✅ 이 설정이 핵심
   },
 });
