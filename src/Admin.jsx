@@ -1,51 +1,43 @@
-// ===================== Admin.jsx =====================
 import React, { useEffect, useState } from "react";
-import { collection, getDocs, updateDoc, doc, deleteDoc } from "firebase/firestore";
+import {
+  collection,
+  onSnapshot,
+  updateDoc,
+  doc,
+  deleteDoc,
+} from "firebase/firestore";
 import { db } from "./firebase";
 
 export default function Admin() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // ✅ Firestore에서 모든 사용자 불러오기
-  const fetchUsers = async () => {
-    try {
-      const snap = await getDocs(collection(db, "users"));
+  // ✅ 실시간 구독 적용
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, "users"), (snap) => {
       const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       setUsers(list);
-    } catch (err) {
-      alert("데이터 불러오기 실패: " + err.message);
-    } finally {
       setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchUsers();
+    });
+    return () => unsub();
   }, []);
 
-  // ✅ 승인 처리
   const approveUser = async (id) => {
     if (!window.confirm("이 사용자를 승인하시겠습니까?")) return;
     await updateDoc(doc(db, "users", id), { approved: true });
     alert("승인 완료!");
-    fetchUsers();
   };
 
-  // ✅ 승인 취소
   const revokeUser = async (id) => {
     if (!window.confirm("승인을 취소하시겠습니까?")) return;
     await updateDoc(doc(db, "users", id), { approved: false });
     alert("승인 취소 완료!");
-    fetchUsers();
   };
 
-  // ✅ 사용자 삭제
   const deleteUser = async (id) => {
     if (!window.confirm("이 사용자를 삭제하시겠습니까?")) return;
     await deleteDoc(doc(db, "users", id));
     alert("삭제 완료!");
-    fetchUsers();
   };
 
   if (loading) return <div className="p-6 text-center">불러오는 중...</div>;

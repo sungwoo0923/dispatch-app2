@@ -1,3 +1,4 @@
+// ✅ DriverPickerModal.jsx (Firestore 연동 버전)
 import React, { useEffect, useState } from "react";
 
 /**
@@ -10,6 +11,7 @@ export default function DriverPickerModal({
   onSave,
   drivers,
   setDrivers,
+  saveDriver,   // ✅ Firestore 저장 함수 추가 (useFirestoreSync 에서 전달 예정)
   presetCarNo = "",
 }) {
   const [search, setSearch] = useState("");
@@ -131,19 +133,31 @@ export default function DriverPickerModal({
             >
               닫기
             </button>
+
             <button
               className="px-3 py-1 rounded bg-blue-600 text-white"
-              onClick={() => {
+              onClick={async () => {
                 if (!car) return alert("차량번호를 입력하세요.");
                 if (!name) return alert("이름을 입력하세요.");
                 if (!phone) return alert("전화번호를 입력하세요.");
+
                 const exists = drivers.find((d) => d.차량번호 === car);
+
+                // ✅ Firestore 저장 (실시간 반영)
+                await saveDriver({
+                  차량번호: car,
+                  이름: name,
+                  전화번호: phone,
+                });
+
+                // ✅ 로컬에서도 즉시 반영 (옵션)
                 if (!exists) {
                   setDrivers((prev) => [
                     ...prev,
                     { 차량번호: car, 이름: name, 전화번호: phone },
                   ]);
                 }
+
                 onSave({ 차량번호: car, 이름: name, 전화번호: phone });
                 onClose();
               }}

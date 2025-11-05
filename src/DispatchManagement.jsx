@@ -1,11 +1,17 @@
+// src/DispatchManagement.jsx
 import React, { useState, useEffect } from "react";
+import { db } from "./firebase";
+import {
+  collection,
+  doc,
+  onSnapshot,
+  setDoc,
+  serverTimestamp,
+} from "firebase/firestore";
 
-export default function DispatchManagement({
-  dispatchData,
-  setDispatchData,
-  clients,
-}) {
+export default function DispatchManagement({ dispatchData, setDispatchData, clients }) {
   const emptyForm = {
+    _id: crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`,
     등록일: new Date().toISOString().slice(0, 10),
     상차일: "",
     상차시간: "",
@@ -31,18 +37,16 @@ export default function DispatchManagement({
 
   const [form, setForm] = useState(emptyForm);
 
-  // ✅ 저장된 데이터 불러오기
+  // ✅ Firestore 실시간 구독
   useEffect(() => {
-    const saved = localStorage.getItem("dispatchData");
-    if (saved) setDispatchData(JSON.parse(saved));
-  }, []);
+    const unsub = onSnapshot(collection(db, "dispatch"), (snap) => {
+      const list = snap.docs.map((d) => d.data());
+      setDispatchData(list);
+    });
+    return () => unsub();
+  }, [setDispatchData]);
 
-  // ✅ 데이터 저장 시 localStorage 반영
-  useEffect(() => {
-    localStorage.setItem("dispatchData", JSON.stringify(dispatchData));
-  }, [dispatchData]);
-
-  // ✅ 거래처 선택 시 자동으로 상차지명 입력
+  // ✅ 거래처 선택 시 자동 입력
   const handleClientChange = (value) => {
     const client = clients?.find((c) => c.거래처명 === value);
     setForm({
@@ -52,11 +56,10 @@ export default function DispatchManagement({
     });
   };
 
-  // ✅ 입력값 변경 핸들러
+  // ✅ 입력 변경
   const handleChange = (key, value) => {
     let updated = { ...form, [key]: value };
 
-    // 운임 변경 시 수수료 자동계산
     if (key === "청구운임" || key === "기사운임") {
       const fare = parseInt(updated.청구운임 || 0);
       const driver = parseInt(updated.기사운임 || 0);
@@ -66,7 +69,7 @@ export default function DispatchManagement({
     setForm(updated);
   };
 
-  // ✅ 날짜 자동입력 버튼
+  // ✅ 날짜 자동 버튼
   const setDateAuto = (target, isTomorrow = false) => {
     const d = new Date();
     if (isTomorrow) d.setDate(d.getDate() + 1);
@@ -74,16 +77,19 @@ export default function DispatchManagement({
     setForm((f) => ({ ...f, [target]: dateStr }));
   };
 
-  // ✅ 등록하기
-  const handleSubmit = (e) => {
+  // ✅ Firestore에 저장
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.거래처명) {
       alert("거래처명을 선택해주세요.");
       return;
     }
-    const newRecord = { ...form };
-    setDispatchData((prev) => [...prev, newRecord]);
-    alert("배차가 등록되었습니다 ✅");
+    const id = form._id;
+    await setDoc(doc(db, "dispatch", id), {
+      ...form,
+      updatedAt: serverTimestamp(),
+    });
+    alert("✅ 배차가 등록되었습니다");
     setForm(emptyForm);
   };
 
@@ -192,6 +198,8 @@ export default function DispatchManagement({
           </div>
         </div>
 
+        {/* --- 이하 나머지는 기존과 동일, 그대로 유지됨 --- */}
+        {/* (차량, 운임, 메모, 버튼 포함) */}
         {/* 화물내용 */}
         <div className="col-span-6">
           <label className="block text-xs mb-1">화물내용</label>
@@ -203,7 +211,7 @@ export default function DispatchManagement({
           />
         </div>
 
-        {/* 차량종류, 톤수 */}
+        {/* 차량종류 */}
         <div>
           <label className="block text-xs mb-1">차량종류</label>
           <select
@@ -229,6 +237,7 @@ export default function DispatchManagement({
           </select>
         </div>
 
+        {/* 차량톤수 */}
         <div>
           <label className="block text-xs mb-1">차량톤수</label>
           <select
@@ -286,6 +295,7 @@ export default function DispatchManagement({
           />
         </div>
 
+        {/* 등록 버튼 */}
         <div className="col-span-6 text-center mt-3">
           <button
             type="submit"
