@@ -1,128 +1,210 @@
-import React, { useMemo, useState } from "react";
+// ===================== DispatchApp.jsx (PART 1/8 — 공통 import/유틸/동기화 베이스) — START =====================
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
-import DriverPickerModal from "./DriverPickerModal"; // ✅ 모달 컴포넌트 분리 시
+import { auth } from "./firebase";
+import { db } from "./firebase";
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  onSnapshot,
+  setDoc,
+  serverTimestamp,
+  query,
+} from "firebase/firestore";
 
-export default function DispatchStatus({ dispatchData, setDispatchData, drivers, setDrivers }) {
-  const [modalOpen, setModalOpen] = useState(false);
-  const [targetRow, setTargetRow] = useState(null);
+/* -------------------------------------------------
+   안전 저장/로드 유틸
+--------------------------------------------------*/
+const safeLoad = (key, fallback) => {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch {
+    return fallback;
+  }
+};
+const safeSave = (key, value) => {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {}
+};
 
-  // ✅ 상차일 기준 오름차순 정렬
-  const sortedData = useMemo(
-    () => [...dispatchData].sort((a, b) => new Date(a.상차일) - new Date(b.상차일)),
-    [dispatchData]
-  );
+/* -------------------------------------------------
+   공통 스타일 (테이블 head/셀)
+--------------------------------------------------*/
+export const headBase =
+  "px-3 py-2 border text-xs bg-gray-50 text-gray-600 font-semibold whitespace-nowrap";
+export const cellBase =
+  "px-3 py-2 border text-sm text-gray-700 whitespace-nowrap";
 
-  // ✅ 상태별 색상
-  const getStatusColor = (status) => {
-    switch (status) {
-      case "배차완료":
-        return "bg-blue-100 text-blue-700 font-semibold";
-      case "배차중":
-        return "bg-yellow-100 text-yellow-700 font-semibold";
-      case "배송중":
-        return "bg-green-100 text-green-700 font-semibold";
-      case "배송완료":
-        return "bg-gray-200 text-gray-600 font-semibold";
-      default:
-        return "bg-gray-50 text-gray-400";
-    }
-  };
-
-  // ✅ 엑셀 다운로드
-  const downloadExcel = () => {
-    const ws = XLSX.utils.json_to_sheet(sortedData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "배차현황");
-    XLSX.writeFile(wb, `${new Date().toISOString().slice(0, 10)}_배차현황.xlsx`);
-  };
-
-  // ✅ 기사정보 적용
-  const applyDriver = ({ 차량번호, 이름, 전화번호 }) => {
-    const idx = dispatchData.indexOf(targetRow);
-    if (idx < 0) return;
-    const next = [...dispatchData];
-    next[idx] = { ...next[idx], 차량번호, 이름, 전화번호, 배차상태: "배차완료" };
-    setDispatchData(next);
-  };
-
+/* -------------------------------------------------
+   상태 배지 (배차상태)
+--------------------------------------------------*/
+export function StatusBadge({ s }) {
+  const label = s || "미정";
+  const tone =
+    label === "배차완료"
+      ? "bg-emerald-100 text-emerald-700 border-emerald-200"
+      : label === "배차중"
+      ? "bg-amber-100 text-amber-700 border-amber-200"
+      : "bg-gray-100 text-gray-600 border-gray-200";
   return (
-    <div className="p-4">
-      <h2 className="text-lg font-bold mb-3">배차현황</h2>
-
-      <div className="mb-2 flex justify-between">
-        <button onClick={downloadExcel} className="bg-green-600 text-white px-3 py-1 rounded">
-          엑셀 다운로드
-        </button>
-        <div className="text-sm text-gray-500">{sortedData.length}건</div>
-      </div>
-
-      <div className="overflow-x-auto">
-        <table className="min-w-full border text-sm text-center">
-          <thead className="bg-gray-100">
-            <tr>
-              {[
-                "순번", "등록일", "상차일", "상차시간", "하차일", "하차시간",
-                "거래처명", "상차지명", "하차지명", "화물내용", "차량종류",
-                "차량톤수", "차량번호", "이름", "전화번호",
-                "지급방식", "배차방식", "배차상태", "청구운임", "기사운임", "수수료"
-              ].map((h) => (
-                <th key={h} className="border px-2 py-1">{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {sortedData.map((r, i) => (
-              <tr key={i} className="border-t hover:bg-gray-50">
-                <td>{i + 1}</td>
-                <td>{r.등록일}</td>
-                <td>{r.상차일}</td>
-                <td>{r.상차시간}</td>
-                <td>{r.하차일}</td>
-                <td>{r.하차시간}</td>
-                <td>{r.거래처명}</td>
-                <td>{r.상차지명}</td>
-                <td>{r.하차지명}</td>
-                <td>{r.화물내용}</td>
-                <td>{r.차량종류}</td>
-                <td>{r.차량톤수}</td>
-                <td
-                  className="underline cursor-pointer text-blue-600"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setTargetRow(r);
-                    setModalOpen(true);
-                  }}
-                >
-                  {r.차량번호 || "(입력)"}
-                </td>
-                <td>{r.이름}</td>
-                <td>{r.전화번호}</td>
-                <td>{r.지급방식}</td>
-                <td>{r.배차방식}</td>
-                <td>
-                  <span className={`px-2 py-1 rounded ${getStatusColor(r.배차상태)}`}>
-                    {r.배차상태 || "-"}
-                  </span>
-                </td>
-                <td>{r.청구운임}</td>
-                <td>{r.기사운임}</td>
-                <td>{r.수수료}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* ✅ 기사 선택/등록 팝업 */}
-      <DriverPickerModal
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
-        onSave={applyDriver}
-        drivers={drivers}
-        setDrivers={setDrivers}
-        presetCarNo={targetRow?.차량번호 || ""}
-      />
-    </div>
+    <span className={`inline-block rounded px-2 py-1 text-xs border ${tone}`}>
+      {label}
+    </span>
   );
 }
+
+/* -------------------------------------------------
+   Firestore 경로/참조
+   - 컬렉션명 고정: dispatch / drivers / clients
+--------------------------------------------------*/
+const COL = {
+  dispatch: collection(db, "dispatch"),
+  drivers: collection(db, "drivers"),
+  clients: collection(db, "clients"),
+};
+
+/* -------------------------------------------------
+   Firestore 헬퍼
+--------------------------------------------------*/
+async function getAllDocs(colRef) {
+  const snap = await getDocs(query(colRef));
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+}
+
+async function upsert(colRef, id, data) {
+  await setDoc(doc(colRef, id), { ...data, _updatedAt: serverTimestamp() }, { merge: true });
+}
+
+/* -------------------------------------------------
+   1회 마이그레이션: localStorage → Firestore
+   - Firestore가 비어 있고, 로컬에 데이터가 있으면 올려줌
+   - 중복 최소화를 위해 _id(또는 조합키)로 문서ID 사용
+--------------------------------------------------*/
+async function migrateLocalToFirestoreIfEmpty() {
+  // 1) Firestore 비어있는지 확인
+  const [dRows, vRows, cRows] = await Promise.all([
+    getAllDocs(COL.dispatch),
+    getAllDocs(COL.drivers),
+    getAllDocs(COL.clients),
+  ]);
+  const fsEmpty = dRows.length + vRows.length + cRows.length === 0;
+
+  // 2) 비어있지 않으면 종료
+  if (!fsEmpty) return;
+
+  // 3) 로컬 데이터 읽기
+  const localDispatch = safeLoad("dispatchData", []);
+  const localDrivers = safeLoad("drivers", []);
+  const localClients = safeLoad("clients", []);
+
+  // 4) 아무것도 없으면 종료
+  if (
+    (!localDispatch || localDispatch.length === 0) &&
+    (!localDrivers || localDrivers.length === 0) &&
+    (!localClients || localClients.length === 0)
+  ) {
+    return;
+  }
+
+  // 5) 업로드
+  const tasks = [];
+
+  (localDispatch || []).forEach((r) => {
+    const id = String(r._id || `${r.상차일 || ""}-${r.거래처명 || ""}-${r.차량번호 || ""}-${Math.random().toString(36).slice(2, 8)}`);
+    tasks.push(upsert(COL.dispatch, id, r));
+  });
+
+  (localDrivers || []).forEach((r) => {
+    const id = String(r.차량번호 || r.id || Math.random().toString(36).slice(2, 10));
+    tasks.push(upsert(COL.drivers, id, r));
+  });
+
+  (localClients || []).forEach((r) => {
+    const id = String(r.거래처명 || r.id || Math.random().toString(36).slice(2, 10));
+    tasks.push(upsert(COL.clients, id, r));
+  });
+
+  await Promise.all(tasks);
+  // 업로드 성공 후, 로컬은 백업용으로 유지(삭제 안 함)
+  console.info("✅ Local → Firestore 마이그레이션 완료");
+}
+
+/* -------------------------------------------------
+   실시간 동기화 훅
+   - Firestore <-> 상태 <-> localStorage
+   - 로그인 여부와 무관하게 읽기 전용 동작(보안규칙은 콘솔에서 관리)
+--------------------------------------------------*/
+export function useFirestoreSync() {
+  const [dispatchData, setDispatchData] = useState(safeLoad("dispatchData", []));
+  const [drivers, setDrivers] = useState(safeLoad("drivers", []));
+  const [clients, setClients] = useState(safeLoad("clients", []));
+
+  // 최초 1회: 로컬 → Firestore (비어있을 때만)
+  useEffect(() => {
+    migrateLocalToFirestoreIfEmpty().catch(console.error);
+  }, []);
+
+  // 실시간 구독
+  useEffect(() => {
+    const unsubs = [
+      onSnapshot(COL.dispatch, (snap) => {
+        const rows = snap.docs.map((d) => ({ _fsid: d.id, ...d.data() }));
+        setDispatchData(rows);
+        safeSave("dispatchData", rows);
+      }),
+      onSnapshot(COL.drivers, (snap) => {
+        const rows = snap.docs.map((d) => ({ _fsid: d.id, ...d.data() }));
+        setDrivers(rows);
+        safeSave("drivers", rows);
+      }),
+      onSnapshot(COL.clients, (snap) => {
+        const rows = snap.docs.map((d) => ({ _fsid: d.id, ...d.data() }));
+        setClients(rows);
+        safeSave("clients", rows);
+      }),
+    ];
+    return () => unsubs.forEach((u) => u && u());
+  }, []);
+
+  // 쓰기용 헬퍼(배차/기사/거래처)
+  const saveDispatch = async (row) => {
+    const id = String(row._fsid || row._id || `${row.상차일 || ""}-${row.거래처명 || ""}-${row.차량번호 || ""}-${Math.random().toString(36).slice(2, 6)}`);
+    await upsert(COL.dispatch, id, row);
+  };
+  const saveDriver = async (row) => {
+    const id = String(row._fsid || row.차량번호 || row.id || Math.random().toString(36).slice(2, 8));
+    await upsert(COL.drivers, id, row);
+  };
+  const saveClient = async (row) => {
+    const id = String(row._fsid || row.거래처명 || row.id || Math.random().toString(36).slice(2, 8));
+    await upsert(COL.clients, id, row);
+  };
+
+  return {
+    dispatchData,
+    setDispatchData, // 로컬 편집용 (실제 저장은 saveDispatch 사용 권장)
+    drivers,
+    setDrivers,
+    clients,
+    setClients,
+    saveDispatch,
+    saveDriver,
+    saveClient,
+  };
+}
+
+/* -------------------------------------------------
+   날짜 유틸(공용)
+--------------------------------------------------*/
+export const todayStr = () => new Date().toISOString().slice(0, 10);
+export const toInt = (v) => {
+  const n = parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10);
+  return Number.isNaN(n) ? 0 : n;
+};
+
+// 이후 PART 2/8부터 실제 앱(로그인/레이아웃/메뉴) 구현이 이어집니다.
+// ===================== DispatchApp.jsx (PART 1/8) — END =====================
