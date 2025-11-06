@@ -1,4 +1,4 @@
-// ===================== DispatchApp.jsx (PART 1/8 — 공통 import/유틸/동기화 베이스) — START =====================
+// ===================== DispatchStatus.jsx — FULL FILE =====================
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
 import { auth } from "./firebase";
@@ -59,7 +59,6 @@ export function StatusBadge({ s }) {
 
 /* -------------------------------------------------
    Firestore 경로/참조
-   - 컬렉션명 고정: dispatch / drivers / clients
 --------------------------------------------------*/
 const COL = {
   dispatch: collection(db, "dispatch"),
@@ -68,7 +67,15 @@ const COL = {
 };
 
 /* -------------------------------------------------
-   Firestore 헬퍼
+   숫자 유틸
+--------------------------------------------------*/
+const toComma = (v) =>
+  v === 0 || v
+    ? Number(v).toLocaleString() + "원"
+    : ""; // 빈 값은 공백
+
+/* -------------------------------------------------
+   Firestore 동기화 훅
 --------------------------------------------------*/
 async function getAllDocs(colRef) {
   const snap = await getDocs(query(colRef));
@@ -76,79 +83,23 @@ async function getAllDocs(colRef) {
 }
 
 async function upsert(colRef, id, data) {
-  await setDoc(doc(colRef, id), { ...data, _updatedAt: serverTimestamp() }, { merge: true });
+  await setDoc(
+    doc(colRef, id),
+    { ...data, _updatedAt: serverTimestamp() },
+    { merge: true }
+  );
 }
 
 /* -------------------------------------------------
-   1회 마이그레이션: localStorage → Firestore
-   - Firestore가 비어 있고, 로컬에 데이터가 있으면 올려줌
-   - 중복 최소화를 위해 _id(또는 조합키)로 문서ID 사용
---------------------------------------------------*/
-async function migrateLocalToFirestoreIfEmpty() {
-  // 1) Firestore 비어있는지 확인
-  const [dRows, vRows, cRows] = await Promise.all([
-    getAllDocs(COL.dispatch),
-    getAllDocs(COL.drivers),
-    getAllDocs(COL.clients),
-  ]);
-  const fsEmpty = dRows.length + vRows.length + cRows.length === 0;
-
-  // 2) 비어있지 않으면 종료
-  if (!fsEmpty) return;
-
-  // 3) 로컬 데이터 읽기
-  const localDispatch = safeLoad("dispatchData", []);
-  const localDrivers = safeLoad("drivers", []);
-  const localClients = safeLoad("clients", []);
-
-  // 4) 아무것도 없으면 종료
-  if (
-    (!localDispatch || localDispatch.length === 0) &&
-    (!localDrivers || localDrivers.length === 0) &&
-    (!localClients || localClients.length === 0)
-  ) {
-    return;
-  }
-
-  // 5) 업로드
-  const tasks = [];
-
-  (localDispatch || []).forEach((r) => {
-    const id = String(r._id || `${r.상차일 || ""}-${r.거래처명 || ""}-${r.차량번호 || ""}-${Math.random().toString(36).slice(2, 8)}`);
-    tasks.push(upsert(COL.dispatch, id, r));
-  });
-
-  (localDrivers || []).forEach((r) => {
-    const id = String(r.차량번호 || r.id || Math.random().toString(36).slice(2, 10));
-    tasks.push(upsert(COL.drivers, id, r));
-  });
-
-  (localClients || []).forEach((r) => {
-    const id = String(r.거래처명 || r.id || Math.random().toString(36).slice(2, 10));
-    tasks.push(upsert(COL.clients, id, r));
-  });
-
-  await Promise.all(tasks);
-  // 업로드 성공 후, 로컬은 백업용으로 유지(삭제 안 함)
-  console.info("✅ Local → Firestore 마이그레이션 완료");
-}
-
-/* -------------------------------------------------
-   실시간 동기화 훅
-   - Firestore <-> 상태 <-> localStorage
-   - 로그인 여부와 무관하게 읽기 전용 동작(보안규칙은 콘솔에서 관리)
+   실시간 구독 + localStorage 동기화
 --------------------------------------------------*/
 export function useFirestoreSync() {
-  const [dispatchData, setDispatchData] = useState(safeLoad("dispatchData", []));
+  const [dispatchData, setDispatchData] = useState(
+    safeLoad("dispatchData", [])
+  );
   const [drivers, setDrivers] = useState(safeLoad("drivers", []));
   const [clients, setClients] = useState(safeLoad("clients", []));
 
-  // 최초 1회: 로컬 → Firestore (비어있을 때만)
-  useEffect(() => {
-    migrateLocalToFirestoreIfEmpty().catch(console.error);
-  }, []);
-
-  // 실시간 구독
   useEffect(() => {
     const unsubs = [
       onSnapshot(COL.dispatch, (snap) => {
@@ -170,41 +121,125 @@ export function useFirestoreSync() {
     return () => unsubs.forEach((u) => u && u());
   }, []);
 
-  // 쓰기용 헬퍼(배차/기사/거래처)
-  const saveDispatch = async (row) => {
-    const id = String(row._fsid || row._id || `${row.상차일 || ""}-${row.거래처명 || ""}-${row.차량번호 || ""}-${Math.random().toString(36).slice(2, 6)}`);
-    await upsert(COL.dispatch, id, row);
-  };
-  const saveDriver = async (row) => {
-    const id = String(row._fsid || row.차량번호 || row.id || Math.random().toString(36).slice(2, 8));
-    await upsert(COL.drivers, id, row);
-  };
-  const saveClient = async (row) => {
-    const id = String(row._fsid || row.거래처명 || row.id || Math.random().toString(36).slice(2, 8));
-    await upsert(COL.clients, id, row);
-  };
-
   return {
     dispatchData,
-    setDispatchData, // 로컬 편집용 (실제 저장은 saveDispatch 사용 권장)
+    setDispatchData,
     drivers,
     setDrivers,
     clients,
     setClients,
-    saveDispatch,
-    saveDriver,
-    saveClient,
   };
 }
 
 /* -------------------------------------------------
-   날짜 유틸(공용)
+   메인 컴포넌트
 --------------------------------------------------*/
-export const todayStr = () => new Date().toISOString().slice(0, 10);
-export const toInt = (v) => {
-  const n = parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10);
-  return Number.isNaN(n) ? 0 : n;
-};
+export default function DispatchStatus({
+  dispatchData,
+  setDispatchData,
+  drivers,
+  timeOptions,
+  tonOptions,
+}) {
+  const [q, setQ] = useState("");
 
-// 이후 PART 2/8부터 실제 앱(로그인/레이아웃/메뉴) 구현이 이어집니다.
-// ===================== DispatchApp.jsx (PART 1/8) — END =====================
+  const filtered = useMemo(() => {
+    if (!q.trim()) return dispatchData || [];
+    const lower = q.toLowerCase();
+    return (dispatchData || []).filter((r) =>
+      Object.values(r).some((v) =>
+        String(v || "").toLowerCase().includes(lower)
+      )
+    );
+  }, [dispatchData, q]);
+
+  return (
+    <div>
+      <h2 className="text-lg font-bold mb-3">실시간 배차현황</h2>
+
+      {/* 검색 */}
+      <input
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder="검색 (거래처명 / 상차지명 / 차량번호)"
+        className="border p-2 rounded w-80 mb-3"
+      />
+
+      <div className="overflow-auto max-h-[70vh] border rounded">
+        <table className="min-w-[1800px] border-collapse text-sm">
+          <thead>
+            <tr>
+              {[
+                "순번",
+                "등록일",
+                "상차일",
+                "하차일",
+                "거래처명",
+                "상차지명",
+                "하차지명",
+                "차량톤수",
+                "차량종류",
+                "차량번호",
+                "이름",
+                "전화번호",
+                "배차상태",
+                "청구운임",
+                "기사운임",
+                "수수료",
+                "지급방식",
+                "배차방식",
+                "메모",
+              ].map((h) => (
+                <th key={h} className={headBase}>
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+
+          <tbody>
+            {filtered.map((r, i) => (
+              <tr key={r._fsid || r._id || i}>
+                <td className={cellBase}>{i + 1}</td>
+                <td className={cellBase}>{r.등록일 || ""}</td>
+                <td className={cellBase}>{r.상차일 || ""}</td>
+                <td className={cellBase}>{r.하차일 || ""}</td>
+                <td className={cellBase}>{r.거래처명 || ""}</td>
+                <td className={cellBase}>{r.상차지명 || ""}</td>
+                <td className={cellBase}>{r.하차지명 || ""}</td>
+                <td className={cellBase}>{r.차량톤수 || ""}</td>
+                <td className={cellBase}>{r.차량종류 || ""}</td>
+                <td className={cellBase}>{r.차량번호 || ""}</td>
+                <td className={cellBase}>{r.이름 || ""}</td>
+                <td className={cellBase}>{r.전화번호 || ""}</td>
+
+                {/* 배차상태 */}
+                <td className={cellBase}>
+                  <StatusBadge s={r.배차상태} />
+                </td>
+
+                {/* 금액 필드: 자동 콤마 + 원 + 우측 정렬 */}
+                <td className={`${cellBase} text-right`}>
+                  {toComma(r.청구운임)}
+                </td>
+                <td className={`${cellBase} text-right`}>
+                  {toComma(r.기사운임)}
+                </td>
+                <td className={`${cellBase} text-right`}>
+                  {toComma(r.수수료)}
+                </td>
+
+                {/* 지급/배차 방식 */}
+                <td className={cellBase}>{r.지급방식 || ""}</td>
+                <td className={cellBase}>{r.배차방식 || ""}</td>
+
+                {/* 메모 */}
+                <td className={cellBase}>{r.메모 || ""}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}

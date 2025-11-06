@@ -9,6 +9,12 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 
+// ✅ 숫자만 남기고 정수화
+const toNumber = (v) => parseInt(String(v).replace(/[^\d]/g, ""), 10) || 0;
+
+// ✅ 천단위 콤마
+const toComma = (v) => (v ? v.toLocaleString() : "");
+
 export default function DispatchManagement({ dispatchData, setDispatchData, clients }) {
   const emptyForm = {
     _id: crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`,
@@ -49,46 +55,53 @@ export default function DispatchManagement({ dispatchData, setDispatchData, clie
   // ✅ 거래처 선택 시 자동 입력
   const handleClientChange = (value) => {
     const client = clients?.find((c) => c.거래처명 === value);
-    setForm({
-      ...form,
+    setForm((prev) => ({
+      ...prev,
       거래처명: value,
       상차지명: client ? client.거래처명 : "",
-    });
+    }));
   };
 
-  // ✅ 입력 변경
+  // ✅ 입력 핸들러 (콤마 & 수수료 계산)
   const handleChange = (key, value) => {
-    let updated = { ...form, [key]: value };
+    let updated = { ...form };
 
     if (key === "청구운임" || key === "기사운임") {
-      const fare = parseInt(updated.청구운임 || 0);
-      const driver = parseInt(updated.기사운임 || 0);
-      updated.수수료 = fare && driver ? String(fare - driver) : "";
+      const num = toNumber(value);
+      updated[key] = num ? toComma(num) : "";
+
+      const fare = toNumber(updated.청구운임);
+      const driver = toNumber(updated.기사운임);
+      updated.수수료 = fare - driver >= 0 ? toComma(fare - driver) : "";
+    } else {
+      updated[key] = value;
     }
 
     setForm(updated);
   };
 
-  // ✅ 날짜 자동 버튼
+  // ✅ 오늘/내일 버튼
   const setDateAuto = (target, isTomorrow = false) => {
     const d = new Date();
     if (isTomorrow) d.setDate(d.getDate() + 1);
     const dateStr = d.toISOString().slice(0, 10);
-    setForm((f) => ({ ...f, [target]: dateStr }));
+    setForm((prev) => ({ ...prev, [target]: dateStr }));
   };
 
-  // ✅ Firestore에 저장
+  // ✅ 저장 처리 (숫자만 저장)
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.거래처명) {
-      alert("거래처명을 선택해주세요.");
-      return;
-    }
+    if (!form.거래처명) return alert("거래처명을 선택해주세요.");
+
     const id = form._id;
     await setDoc(doc(db, "dispatch", id), {
       ...form,
+      청구운임: toNumber(form.청구운임),
+      기사운임: toNumber(form.기사운임),
+      수수료: toNumber(form.수수료),
       updatedAt: serverTimestamp(),
     });
+
     alert("✅ 배차가 등록되었습니다");
     setForm(emptyForm);
   };
@@ -198,8 +211,6 @@ export default function DispatchManagement({ dispatchData, setDispatchData, clie
           </div>
         </div>
 
-        {/* --- 이하 나머지는 기존과 동일, 그대로 유지됨 --- */}
-        {/* (차량, 운임, 메모, 버튼 포함) */}
         {/* 화물내용 */}
         <div className="col-span-6">
           <label className="block text-xs mb-1">화물내용</label>
@@ -256,30 +267,31 @@ export default function DispatchManagement({ dispatchData, setDispatchData, clie
         <div>
           <label className="block text-xs mb-1">청구운임</label>
           <input
-            type="number"
+            type="text"
             value={form.청구운임}
             onChange={(e) => handleChange("청구운임", e.target.value)}
-            className="border p-2 w-full rounded"
+            className="border p-2 w-full rounded text-right"
+            placeholder="0"
           />
         </div>
 
         <div>
           <label className="block text-xs mb-1">기사운임</label>
           <input
-            type="number"
+            type="text"
             value={form.기사운임}
             onChange={(e) => handleChange("기사운임", e.target.value)}
-            className="border p-2 w-full rounded"
+            className="border p-2 w-full rounded text-right"
+            placeholder="0"
           />
         </div>
 
         <div>
           <label className="block text-xs mb-1">수수료</label>
           <input
-            type="number"
+            type="text"
             value={form.수수료}
-            onChange={(e) => handleChange("수수료", e.target.value)}
-            className="border p-2 w-full rounded bg-gray-100"
+            className="border p-2 w-full rounded bg-gray-100 text-right"
             readOnly
           />
         </div>
