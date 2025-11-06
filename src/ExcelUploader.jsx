@@ -2,6 +2,20 @@
 import React from "react";
 import * as XLSX from "xlsx";
 
+// ✅ 엑셀 날짜/문자 → YYYY-MM-DD 변환기
+const fixDate = (v) => {
+  if (!v) return "";
+  if (typeof v === "number") {
+    const base = new Date(1899, 11, 30);
+    return new Date(base.getTime() + v * 86400000).toISOString().slice(0, 10);
+  }
+  const str = String(v).trim()
+    .replace(/[./]/g, "-")
+    .replace(/\s+/g, "-")
+    .slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(str) ? str : "";
+};
+
 const ExcelUploader = ({ onDataLoaded }) => {
   const handleFileUpload = (e) => {
     const file = e.target.files[0];
@@ -15,7 +29,16 @@ const ExcelUploader = ({ onDataLoaded }) => {
       const worksheet = workbook.Sheets[sheetName];
       const json = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
 
-      if (onDataLoaded) onDataLoaded(json);
+      // ✅ 날짜 자동 정규화 + 지급방식 기본값 적용
+      const mapped = json.map((r) => ({
+        ...r,
+        등록일: fixDate(r.등록일),
+        상차일: fixDate(r.상차일),
+        하차일: fixDate(r.하차일),
+        지급방식: r.지급방식?.trim() || "계산서", // ✅ 빈칸이면 자동 계산서
+      }));
+
+      if (onDataLoaded) onDataLoaded(mapped);
     };
 
     reader.readAsArrayBuffer(file);
@@ -38,6 +61,7 @@ const ExcelUploader = ({ onDataLoaded }) => {
 };
 
 export default ExcelUploader;
+
 
 
 // src/components/DriverManagement.jsx
