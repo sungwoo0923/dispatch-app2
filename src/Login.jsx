@@ -29,7 +29,7 @@ export default function Login() {
           email: user.email,
           name: "신규사용자",
           approved: false,
-          role: "user",
+          role: "user", // 기본 user 권한
           createdAt: serverTimestamp(),
           lastLogin: serverTimestamp(),
         });
@@ -43,7 +43,14 @@ export default function Login() {
         return;
       }
 
-      // 승인된 사용자 → 메인 페이지 이동
+      // ✅ 승인 + 로그인 성공 → role 저장
+      const role = data.role || "user";
+      localStorage.setItem("role", role);
+      localStorage.setItem("uid", user.uid);
+
+      // 마지막 로그인 시간 업데이트
+      await setDoc(ref, { lastLogin: serverTimestamp() }, { merge: true });
+
       navigate("/app");
     } catch (err) {
       console.error(err);
