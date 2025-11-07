@@ -5,6 +5,7 @@ import * as XLSX from "xlsx";
 
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
+import AdminMenu from "./AdminMenu";
 
 /* -------------------------------------------------
    발행사(우리 회사) 고정 정보
@@ -210,7 +211,6 @@ export {
 };
 
 // ===================== DispatchApp.jsx (PART 1/8) — END =====================
-
 // ===================== DispatchApp.jsx (PART 2/8) — START =====================
 export default function DispatchApp() {
   const [user, setUser] = useState(null);
@@ -227,6 +227,22 @@ export default function DispatchApp() {
     return () => unsub();
   }, []);
 
+  // ✅ Firestore에서 role 자동 로드 + localStorage 저장
+  useEffect(() => {
+    const loadRole = async () => {
+      if (!user) return;
+      const snap = await getDoc(doc(db, "users", user.uid));
+      if (snap.exists()) {
+        const data = snap.data();
+        localStorage.setItem("role", data.role || "user");
+      }
+    };
+    loadRole();
+  }, [user]);
+
+  // ✅ 권한 (localStorage에서 role 읽기)
+  const role = localStorage.getItem("role") || "user";
+
   // Firestore 실시간 훅
   const {
     dispatchData,
@@ -241,12 +257,10 @@ export default function DispatchApp() {
     removeClient,
   } = useRealtimeCollections(user);
 
-  // ✅ 권한 (localStorage에 저장된 role 사용)
-  const role = localStorage.getItem("role") || "user";
-
   // 로그아웃
   const logout = async () => {
     await signOut(auth);
+    localStorage.removeItem("role"); // ✅ 로그아웃 시 role 초기화
     alert("로그아웃되었습니다.");
     navigate("/login");
   };
@@ -261,7 +275,7 @@ export default function DispatchApp() {
 
   const [menu, setMenu] = useState("실시간배차현황");
 
-  // ✅ 차단 메뉴 정의
+  // ✅ 차단 메뉴 정의 (user는 접근 불가)
   const blockedMenus = [
     "배차관리",
     "기사관리",
@@ -272,7 +286,7 @@ export default function DispatchApp() {
     "관리자메뉴",
   ];
 
-  // ✅ 메뉴 클릭 처리
+  // ✅ 메뉴 클릭 제어
   const handleMenuClick = (m) => {
     if (role === "user" && blockedMenus.includes(m)) return;
     setMenu(m);
@@ -320,7 +334,7 @@ export default function DispatchApp() {
         </div>
       </header>
 
-      {/* ✅ 메뉴(권한 적용 완료) */}
+      {/* ✅ 메뉴 (권한 적용) */}
       <nav className="flex gap-2 mb-3 overflow-x-auto whitespace-nowrap">
         {[
           "배차관리",
@@ -356,7 +370,7 @@ export default function DispatchApp() {
         })}
       </nav>
 
-      {/* ✅ 화면 렌더링 (role 전달 추가됨) */}
+      {/* ✅ 화면 렌더링 (role 전달) */}
       <main className="bg-white rounded shadow p-4">
         {menu === "배차관리" && role === "admin" && (
           <DispatchManagement
@@ -424,6 +438,8 @@ export default function DispatchApp() {
   );
 }
 // ===================== DispatchApp.jsx (PART 2/8) — END =====================
+
+
 // ===================== DispatchApp.jsx (PART 3/8) — START =====================
 function DispatchManagement({
   dispatchData, drivers, clients, timeOptions, tonOptions,
