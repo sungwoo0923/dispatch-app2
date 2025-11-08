@@ -7,6 +7,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: "autoUpdate",
+      injectRegister: "auto", // ✅ 서비스워커 자동 등록
       includeAssets: [
         "favicon.ico",
         "icons/icon-192x192.png",
@@ -21,6 +22,7 @@ export default defineConfig({
         background_color: "#ffffff",
         display: "standalone",
         start_url: "/",
+        scope: "/",
         icons: [
           {
             src: "/icons/icon-192x192.png",
@@ -40,13 +42,10 @@ export default defineConfig({
           }
         ]
       },
-      devOptions: {
-        enabled: true
-      },
       workbox: {
+        globPatterns: ["**/*.{js,css,html,ico,png,svg}"], // ✅ Vercel 빌드 캐시 방지
         navigateFallback: "/index.html"
-      },
-      injectRegister: "auto" // ✅ 서비스워커 자동 등록
+      }
     })
   ],
   build: {
