@@ -39,7 +39,17 @@ export default defineConfig({
             purpose: "maskable any"
           }
         ]
-      }
+      },
+      devOptions: {
+        enabled: true
+      },
+      workbox: {
+        navigateFallback: "/index.html"
+      },
+      injectRegister: "auto" // ✅ 서비스워커 자동 등록
     })
-  ]
+  ],
+  build: {
+    outDir: "dist"
+  }
 });
