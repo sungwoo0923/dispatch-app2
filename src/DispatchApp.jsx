@@ -1704,10 +1704,13 @@ function RealtimeStatus({
 }
 // ===================== DispatchApp.jsx (PART 4/8) — END =====================
 
-
-
 // ===================== DispatchApp.jsx (PART 5/8) — START =====================
-/* 배차현황 — 메뉴 화면. 실시간배차현황과 **완전 동일한 컬럼/정렬** + 날짜/검색 유지 */
+/* 배차현황 — PC=테이블 / 모바일=카드형 자동 전환
+   - 필터/검색 유지
+   - 전체수정(일괄편집) 지원
+   - 선택삭제/전체삭제/저장
+   - 모바일 하단 고정 액션바(저장·선택삭제·초기화)
+*/
 function DispatchStatus({
   dispatchData = [],
   setDispatchData,
@@ -1716,6 +1719,15 @@ function DispatchStatus({
   removeDispatch,
   upsertDriver,
 }) {
+  // ── 뷰포트 감지
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
+  useEffect(() => {
+    const onR = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", onR);
+    return () => window.removeEventListener("resize", onR);
+  }, []);
+
+  // ── 상태
   const [q, setQ] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -1724,15 +1736,21 @@ function DispatchStatus({
   const [selected, setSelected] = useState(new Set());
   const [justSaved, setJustSaved] = useState([]);
 
-  const toInt = (v) => { const n = parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10); return isNaN(n) ? 0 : n; };
+  const toInt = (v) => {
+    const n = parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10);
+    return isNaN(n) ? 0 : n;
+  };
 
-  // 필터 + 검색 (날짜/검색 유지)
+  // ── 필터 + 검색
   const filtered = useMemo(() => {
     let data = [...dispatchData];
-    if (startDate && endDate) data = data.filter((r) => (r.상차일 || "") >= startDate && (r.상차일 || "") <= endDate);
+    if (startDate) data = data.filter((r) => (r.상차일 || "") >= startDate);
+    if (endDate) data = data.filter((r) => (r.상차일 || "") <= endDate);
     if (q.trim()) {
       const lower = q.toLowerCase();
-      data = data.filter((r) => Object.values(r).some((v) => String(v || "").toLowerCase().includes(lower)));
+      data = data.filter((r) =>
+        Object.values(r).some((v) => String(v || "").toLowerCase().includes(lower))
+      );
     }
     const today = todayStr();
     return data.sort((a, b) => {
@@ -1740,15 +1758,22 @@ function DispatchStatus({
       if (a.배차상태 !== "배차중" && b.배차상태 === "배차중") return 1;
       if (a.상차일 === today && b.상차일 !== today) return -1;
       if (a.상차일 !== today && b.상차일 === today) return 1;
-      return (a.상차일 || "").localeCompare(b.상차일 || "") || (a.상차시간 || "").localeCompare(b.상차시간 || "");
+      return (a.상차일 || "").localeCompare(b.상차일 || "") ||
+             (a.상차시간 || "").localeCompare(b.상차시간 || "");
     });
   }, [dispatchData, q, startDate, endDate]);
 
-  // 선택/토글
-  const toggleAll = () => setSelected((s) => (s.size === filtered.length ? new Set() : new Set(filtered.map((r) => r._id))));
-  const toggleOne = (id) => setSelected((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  // ── 선택 토글
+  const toggleAll = () =>
+    setSelected((s) => (s.size === filtered.length ? new Set() : new Set(filtered.map((r) => r._id))));
+  const toggleOne = (id) =>
+    setSelected((prev) => {
+      const n = new Set(prev);
+      n.has(id) ? n.delete(id) : n.add(id);
+      return n;
+    });
 
-  // 수정 캐시
+  // ── 수정 캐시
   const updateEdited = (row, key, value) =>
     setEdited((prev) => {
       const cur = { ...(prev[row._id] || {}), [key]: value };
@@ -1760,13 +1785,18 @@ function DispatchStatus({
       return { ...prev, [row._id]: cur };
     });
 
-  // 저장/삭제 (Firestore 있으면 우선)
-  const _patch = patchDispatch || (async (id, patch) => setDispatchData && setDispatchData((prev) => prev.map((r) => (r._id === id ? { ...r, ...patch } : r))));
-  const _remove = removeDispatch || (async (row) => setDispatchData && setDispatchData((prev) => prev.filter((r) => r._id !== row._id)));
+  // ── 저장/삭제 (Firestore 우선)
+  const _patch =
+    patchDispatch ||
+    (async (id, patch) =>
+      setDispatchData && setDispatchData((prev) => prev.map((r) => (r._id === id ? { ...r, ...patch } : r))));
+  const _remove =
+    removeDispatch ||
+    (async (row) => setDispatchData && setDispatchData((prev) => prev.filter((r) => r._id !== row._id)));
 
   const saveAll = async () => {
     const ids = Object.keys(edited);
-    if (ids.length === 0) return alert("변경 사항이 없습니다.");
+    if (!ids.length) return alert("변경 사항이 없습니다.");
     if (!confirm("저장하시겠습니까?")) return;
     for (const id of ids) await _patch(id, edited[id]);
     setJustSaved(ids);
@@ -1776,7 +1806,7 @@ function DispatchStatus({
   };
 
   const removeSelected = async () => {
-    if (selected.size === 0) return alert("삭제할 항목이 없습니다.");
+    if (!selected.size) return alert("삭제할 항목이 없습니다.");
     if (!confirm(`${selected.size}건 삭제할까요?`)) return;
     for (const id of selected) {
       const row = filtered.find((r) => r._id === id);
@@ -1786,7 +1816,8 @@ function DispatchStatus({
   };
 
   const removeAll = async () => {
-    if (!confirm("⚠ 전체 삭제하시겠습니까?")) return;
+    if (!filtered.length) return alert("삭제할 데이터가 없습니다.");
+    if (!confirm(`⚠ 현재 목록 ${filtered.length}건 전체 삭제할까요?`)) return;
     for (const row of filtered) await _remove(row);
     setSelected(new Set());
   };
@@ -1802,170 +1833,557 @@ function DispatchStatus({
     "배차상태","청구운임","기사운임","수수료","지급방식","배차방식","메모",
   ];
 
+  // ── 카드 렌더 (모바일)
+  const Card = ({ r, idx }) => {
+    const row = edited[r._id] ? { ...r, ...edited[r._id] } : r;
+    const fee = toInt(row.청구운임) - toInt(row.기사운임);
+    const label = (t) => <div className="text-[11px] text-gray-500">{t}</div>;
+    const Field = ({ k, type = "text" }) =>
+      editAll ? (
+        type === "select-pay" ? (
+          <select
+            className="border rounded px-2 py-1 w-full"
+            value={row.지급방식 || ""}
+            onChange={(e) => updateEdited(r, "지급방식", e.target.value)}
+          >
+            <option value="">선택</option>
+            {PAY_TYPES.map((v) => (
+              <option key={v} value={v}>
+                {v}
+              </option>
+            ))}
+          </select>
+        ) : type === "select-dispatch" ? (
+          <select
+            className="border rounded px-2 py-1 w-full"
+            value={row.배차방식 || ""}
+            onChange={(e) => updateEdited(r, "배차방식", e.target.value)}
+          >
+            <option value="">선택</option>
+            {DISPATCH_TYPES.map((v) => (
+              <option key={v} value={v}>
+                {v}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <input
+            className="border rounded px-2 py-1 w-full"
+            value={row[k] ?? ""}
+            type={type === "date" ? "date" : type === "time" ? "time" : "text"}
+            onChange={(e) => updateEdited(r, k, e.target.value)}
+          />
+        )
+      ) : (
+        <div className="text-sm">{r[k] ?? ""}</div>
+      );
+
+    return (
+      <div
+        key={r._id || idx}
+        className={`rounded-xl border p-3 bg-white ${justSaved.includes(r._id) ? "ring-2 ring-emerald-400" : ""}`}
+      >
+        {/* 헤더 영역 */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={selected.has(r._id)}
+              onChange={() => toggleOne(r._id)}
+              className="mt-0.5"
+            />
+            <div className="text-[13px] text-gray-500">#{idx + 1}</div>
+            <div className="text-xs text-gray-400">{r.등록일 || ""}</div>
+          </div>
+          <StatusBadge s={row.배차상태} />
+        </div>
+
+        {/* 본문 */}
+        <div className="grid grid-cols-2 gap-3 mt-2">
+          <div>
+            {label("상차일 / 시간")}
+            <div className="flex gap-2">
+              <Field k="상차일" type="date" />
+              <Field k="상차시간" type="time" />
+            </div>
+          </div>
+          <div>
+            {label("하차일 / 시간")}
+            <div className="flex gap-2">
+              <Field k="하차일" type="date" />
+              <Field k="하차시간" type="time" />
+            </div>
+          </div>
+
+          <div>{label("거래처명")}<Field k="거래처명" /></div>
+          <div>{label("화물내용")}<Field k="화물내용" /></div>
+
+          <div>{label("상차지명")}<Field k="상차지명" /></div>
+          <div>{label("하차지명")}<Field k="하차지명" /></div>
+
+          <div>{label("차량종류")}<Field k="차량종류" /></div>
+          <div>{label("차량톤수")}<Field k="차량톤수" /></div>
+
+          <div>{label("차량번호")}<Field k="차량번호" /></div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>{label("기사명")}<Field k="이름" /></div>
+            <div>{label("전화번호")}<Field k="전화번호" /></div>
+          </div>
+
+          <div>{label("지급방식")}<Field k="지급방식" type="select-pay" /></div>
+          <div>{label("배차방식")}<Field k="배차방식" type="select-dispatch" /></div>
+
+          <div className="col-span-2">{label("메모")}<Field k="메모" /></div>
+
+          {/* 금액 요약 */}
+          <div className="col-span-2">
+            <div className="flex items-center gap-3 text-sm">
+              <div>청구: <b>{toInt(row.청구운임).toLocaleString()}</b></div>
+              <div>기사: <b>{toInt(row.기사운임).toLocaleString()}</b></div>
+              <div>수수료: <b className={fee < 0 ? "text-red-600" : "text-blue-700"}>{fee.toLocaleString()}</b></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // ── 공통 상단 바 (필터/검색)
+  const TopBar = (
+    <div className="flex flex-wrap items-center gap-2 mb-3">
+      <input
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder="검색..."
+        className="border p-2 rounded w-[min(20rem,80vw)]"
+      />
+      <div className="flex items-center gap-1 text-sm">
+        <input
+          type="date"
+          className="border p-2 rounded"
+          value={startDate}
+          onChange={(e) => setStartDate(e.target.value)}
+        />
+        <span>~</span>
+        <input
+          type="date"
+          className="border p-2 rounded"
+          value={endDate}
+          onChange={(e) => setEndDate(e.target.value)}
+        />
+      </div>
+      {!isMobile && (
+        <button
+          className="ml-auto px-3 py-1 rounded bg-gray-200"
+          onClick={() => {
+            setQ("");
+            setStartDate("");
+            setEndDate("");
+            setSelected(new Set());
+          }}
+        >
+          초기화
+        </button>
+      )}
+    </div>
+  );
+
   return (
     <div className="p-3">
       <h2 className="text-lg font-bold mb-3">배차현황</h2>
 
-      {/* 상단 버튼 */}
-      <div className="flex flex-wrap items-center gap-2 mb-3">
-        <button className="px-3 py-1 rounded bg-gray-300" onClick={() => { setQ(""); setStartDate(""); setEndDate(""); setSelected(new Set()); }}>
-          초기화
-        </button>
+      {/* 상단 액션 + 필터 */}
+      {TopBar}
 
-        <button className={`px-3 py-1 rounded text-white ${editAll ? "bg-gray-600" : "bg-green-600"}`} onClick={() => setEditAll(!editAll)}>
-          {editAll ? "수정취소" : "전체수정"}
-        </button>
+      {/* 액션 버튼 (PC 상단 / 모바일 하단 고정) */}
+      {!isMobile ? (
+        <div className="flex flex-wrap items-center gap-2 mb-3">
+          <button
+            className={`px-3 py-1 rounded text-white ${editAll ? "bg-gray-600" : "bg-green-600"}`}
+            onClick={() => setEditAll(!editAll)}
+          >
+            {editAll ? "수정취소" : "전체수정"}
+          </button>
+          <button className="px-3 py-1 rounded bg-red-500 text-white" onClick={removeSelected}>
+            선택삭제
+          </button>
+          <button className="px-3 py-1 rounded bg-red-700 text-white" onClick={removeAll}>
+            전체삭제
+          </button>
+          <button className="px-3 py-1 rounded bg-blue-600 text-white ml-auto" onClick={saveAll}>
+            저장
+          </button>
+        </div>
+      ) : (
+        <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur border-t p-2 z-50">
+          <div className="flex items-center gap-2">
+            <button
+              className={`px-3 py-2 rounded text-white ${editAll ? "bg-gray-600" : "bg-green-600"}`}
+              onClick={() => setEditAll(!editAll)}
+            >
+              {editAll ? "수정취소" : "전체수정"}
+            </button>
+            <button className="px-3 py-2 rounded bg-red-500 text-white" onClick={removeSelected}>
+              선택삭제
+            </button>
+            <button className="px-3 py-2 rounded bg-blue-600 text-white" onClick={saveAll}>
+              저장
+            </button>
+            <button
+              className="ml-auto px-3 py-2 rounded bg-gray-200"
+              onClick={() => {
+                setQ("");
+                setStartDate("");
+                setEndDate("");
+                setSelected(new Set());
+              }}
+            >
+              초기화
+            </button>
+          </div>
+        </div>
+      )}
 
-        <button className="px-3 py-1 rounded bg-red-500 text-white" onClick={removeSelected}>선택삭제</button>
-        <button className="px-3 py-1 rounded bg-red-700 text-white" onClick={removeAll}>전체삭제</button>
+      {/* 본문: PC=테이블 / 모바일=카드 */}
+      {!isMobile ? (
+        <div className="overflow-x-auto">
+          <table className="min-w-[1800px] text-sm border">
+            <thead>
+              <tr>
+                <th className={head}>
+                  <input
+                    type="checkbox"
+                    onChange={toggleAll}
+                    checked={filtered.length > 0 && selected.size === filtered.length}
+                  />
+                </th>
+                {headers.map((h) => (
+                  <th key={h} className={head}>
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
 
-        <button className="px-3 py-1 rounded bg-blue-600 text-white ml-auto" onClick={saveAll}>저장</button>
-      </div>
+            <tbody>
+              {filtered.map((r, i) => {
+                const row = edited[r._id] ? { ...r, ...edited[r._id] } : r;
+                const saved = justSaved.includes(r._id);
 
-      {/* 검색 + 날짜필터 */}
-      <div className="flex items-center gap-2 mb-2">
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="검색..." className="border p-2 rounded w-80" />
-        <input type="date" className="border p-2 rounded" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-        <span>~</span>
-        <input type="date" className="border p-2 rounded" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
-      </div>
+                return (
+                  <tr
+                    key={r._id}
+                    className={`${i % 2 === 0 ? "bg-white" : "bg-gray-50"} ${saved ? "bg-emerald-100" : ""}`}
+                  >
+                    <td className={cell}>
+                      <input
+                        type="checkbox"
+                        checked={selected.has(r._id)}
+                        onChange={() => toggleOne(r._id)}
+                      />
+                    </td>
 
-      <div className="overflow-x-auto">
-        <table className="min-w-[1800px] text-sm border">
-          <thead>
-            <tr>
-              <th className={head}>
-                <input type="checkbox" onChange={toggleAll} checked={filtered.length > 0 && selected.size === filtered.length} />
-              </th>
-              {headers.map((h) => (
-                <th key={h} className={head}>{h}</th>
-              ))}
-            </tr>
-          </thead>
+                    <td className={`${cell} w-[56px]`}>{i + 1}</td>
+                    <td className={cell}>{r.등록일}</td>
 
-          <tbody>
-            {filtered.map((r, i) => {
-              const row = edited[r._id] ? { ...r, ...edited[r._id] } : r;
-              const saved = justSaved.includes(r._id);
+                    <td className={cell}>
+                      {editAll ? (
+                        <input
+                          type="date"
+                          className={input}
+                          value={row.상차일 || ""}
+                          onChange={(e) => updateEdited(r, "상차일", e.target.value)}
+                        />
+                      ) : (
+                        r.상차일
+                      )}
+                    </td>
+                    <td className={cell}>
+                      {editAll ? (
+                        <input
+                          type="time"
+                          className={input}
+                          value={row.상차시간 || ""}
+                          onChange={(e) => updateEdited(r, "상차시간", e.target.value)}
+                        />
+                      ) : (
+                        r.상차시간
+                      )}
+                    </td>
+                    <td className={cell}>
+                      {editAll ? (
+                        <input
+                          type="date"
+                          className={input}
+                          value={row.하차일 || ""}
+                          onChange={(e) => updateEdited(r, "하차일", e.target.value)}
+                        />
+                      ) : (
+                        r.하차일
+                      )}
+                    </td>
+                    <td className={cell}>
+                      {editAll ? (
+                        <input
+                          type="time"
+                          className={input}
+                          value={row.하차시간 || ""}
+                          onChange={(e) => updateEdited(r, "하차시간", e.target.value)}
+                        />
+                      ) : (
+                        r.하차시간
+                      )}
+                    </td>
 
-              return (
-                <tr key={r._id} className={`${i % 2 === 0 ? "bg-white" : "bg-gray-50"} ${saved ? "bg-emerald-100" : ""}`}>
-                  <td className={cell}><input type="checkbox" checked={selected.has(r._id)} onChange={() => toggleOne(r._id)} /></td>
+                    <td className={cell}>
+                      {editAll ? (
+                        <input
+                          className={input}
+                          value={row.거래처명 || ""}
+                          onChange={(e) => updateEdited(r, "거래처명", e.target.value)}
+                        />
+                      ) : (
+                        r.거래처명
+                      )}
+                    </td>
+                    <td className={cell}>
+                      {editAll ? (
+                        <input
+                          className={input}
+                          value={row.상차지명 || ""}
+                          onChange={(e) => updateEdited(r, "상차지명", e.target.value)}
+                        />
+                      ) : (
+                        r.상차지명
+                      )}
+                    </td>
+                    <td className={cell}>
+                      {editAll ? (
+                        <input
+                          className={input}
+                          value={row.하차지명 || ""}
+                          onChange={(e) => updateEdited(r, "하차지명", e.target.value)}
+                        />
+                      ) : (
+                        r.하차지명
+                      )}
+                    </td>
+                    <td className={cell}>
+                      {editAll ? (
+                        <input
+                          className={input}
+                          value={row.화물내용 || ""}
+                          onChange={(e) => updateEdited(r, "화물내용", e.target.value)}
+                        />
+                      ) : (
+                        r.화물내용
+                      )}
+                    </td>
 
-                  <td className={`${cell} w-[56px]`}>{i + 1}</td>
-                  <td className={cell}>{r.등록일}</td>
+                    <td className={cell}>
+                      {editAll ? (
+                        <select
+                          className={input}
+                          value={row.차량종류 || ""}
+                          onChange={(e) => updateEdited(r, "차량종류", e.target.value)}
+                        >
+                          <option value="">선택</option>
+                          {VEHICLE_TYPES.map((v) => (
+                            <option key={v} value={v}>
+                              {v}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        r.차량종류
+                      )}
+                    </td>
 
-                  <td className={cell}>
-                    {editAll ? <input type="date" className={input} value={row.상차일 || ""} onChange={(e) => updateEdited(r, "상차일", e.target.value)} /> : r.상차일}
-                  </td>
-                  <td className={cell}>
-                    {editAll ? <input type="time" className={input} value={row.상차시간 || ""} onChange={(e) => updateEdited(r, "상차시간", e.target.value)} /> : r.상차시간}
-                  </td>
-                  <td className={cell}>
-                    {editAll ? <input type="date" className={input} value={row.하차일 || ""} onChange={(e) => updateEdited(r, "하차일", e.target.value)} /> : r.하차일}
-                  </td>
-                  <td className={cell}>
-                    {editAll ? <input type="time" className={input} value={row.하차시간 || ""} onChange={(e) => updateEdited(r, "하차시간", e.target.value)} /> : r.하차시간}
-                  </td>
+                    {/* 차량톤수 = 자유입력 */}
+                    <td className={cell}>
+                      {editAll ? (
+                        <input
+                          className={input}
+                          value={row.차량톤수 || ""}
+                          onChange={(e) => updateEdited(r, "차량톤수", e.target.value)}
+                        />
+                      ) : (
+                        row.차량톤수
+                      )}
+                    </td>
 
-                  <td className={cell}>{editAll ? <input className={input} value={row.거래처명 || ""} onChange={(e) => updateEdited(r, "거래처명", e.target.value)} /> : r.거래처명}</td>
-                  <td className={cell}>{editAll ? <input className={input} value={row.상차지명 || ""} onChange={(e) => updateEdited(r, "상차지명", e.target.value)} /> : r.상차지명}</td>
-                  <td className={cell}>{editAll ? <input className={input} value={row.하차지명 || ""} onChange={(e) => updateEdited(r, "하차지명", e.target.value)} /> : r.하차지명}</td>
-                  <td className={cell}>{editAll ? <input className={input} value={row.화물내용 || ""} onChange={(e) => updateEdited(r, "화물내용", e.target.value)} /> : r.화물내용}</td>
+                    <td className={cell}>
+                      <input
+                        className={input}
+                        defaultValue={row.차량번호}
+                        onBlur={(e) => {
+                          const v = (e.target.value || "").replace(/\s+/g, "");
+                          if (!v) {
+                            updateEdited(r, "차량번호", "");
+                            updateEdited(r, "이름", "");
+                            updateEdited(r, "전화번호", "");
+                            updateEdited(r, "배차상태", "배차중");
+                            return;
+                          }
+                          const f = (drivers || []).find(
+                            (d) => (d.차량번호 || "").replace(/\s+/g, "") === v
+                          );
+                          if (f) {
+                            updateEdited(r, "차량번호", f.차량번호);
+                            updateEdited(r, "이름", f.이름 || "");
+                            updateEdited(r, "전화번호", f.전화번호 || "");
+                            updateEdited(r, "배차상태", "배차완료");
+                          } else {
+                            const 이름 = prompt("신규 기사 이름:");
+                            if (!이름) return;
+                            const 전화번호 = prompt("전화번호:") || "";
+                            upsertDriver && upsertDriver({ 이름, 차량번호: v, 전화번호 });
+                            updateEdited(r, "차량번호", v);
+                            updateEdited(r, "이름", 이름);
+                            updateEdited(r, "전화번호", 전화번호);
+                            updateEdited(r, "배차상태", "배차완료");
+                            alert("신규 기사 등록 완료!");
+                          }
+                        }}
+                      />
+                    </td>
 
-                  <td className={cell}>
-                    {editAll ? (
-                      <select className={input} value={row.차량종류 || ""} onChange={(e) => updateEdited(r, "차량종류", e.target.value)}>
-                        <option value="">선택</option>
-                        {VEHICLE_TYPES.map((v) => <option key={v} value={v}>{v}</option>)}
-                      </select>
-                    ) : r.차량종류}
-                  </td>
+                    <td className={cell}>{row.이름}</td>
+                    <td className={cell}>{row.전화번호}</td>
 
-                  {/* 차량톤수 = 자유입력 */}
-                  <td className={cell}>
-                    {editAll ? (
-                      <input className={input} value={row.차량톤수 || ""} onChange={(e) => updateEdited(r, "차량톤수", e.target.value)} />
-                    ) : row.차량톤수}
-                  </td>
+                    <td className={cell}>
+                      <StatusBadge s={row.배차상태} />
+                    </td>
 
-                  <td className={cell}>
-                    <input className={input} defaultValue={row.차량번호} onBlur={(e) => {
-                      const v = (e.target.value || "").replace(/\s+/g, "");
-                      if (!v) {
-                        updateEdited(r, "차량번호", "");
-                        updateEdited(r, "이름", "");
-                        updateEdited(r, "전화번호", "");
-                        updateEdited(r, "배차상태", "배차중");
-                        return;
+                    <td className={cell}>
+                      {editAll ? (
+                        <input
+                          type="number"
+                          className={input}
+                          value={row.청구운임 ?? ""}
+                          onChange={(e) => updateEdited(r, "청구운임", e.target.value)}
+                        />
+                      ) : (
+                        toInt(r.청구운임).toLocaleString()
+                      )}
+                    </td>
+                    <td className={cell}>
+                      {editAll ? (
+                        <input
+                          type="number"
+                          className={input}
+                          value={row.기사운임 ?? ""}
+                          onChange={(e) => updateEdited(r, "기사운임", e.target.value)}
+                        />
+                      ) : (
+                        toInt(r.기사운임).toLocaleString()
+                      )}
+                    </td>
+                    <td
+                      className={cell}
+                      style={{
+                        color:
+                          toInt(row.청구운임) - toInt(row.기사운임) < 0 ? "red" : undefined,
+                      }}
+                    >
+                      {(toInt(row.청구운임) - toInt(row.기사운임)).toLocaleString()
                       }
-                      const f = (drivers || []).find((d) => (d.차량번호 || "").replace(/\s+/g, "") === v);
-                      if (f) {
-                        updateEdited(r, "차량번호", f.차량번호);
-                        updateEdited(r, "이름", f.이름 || "");
-                        updateEdited(r, "전화번호", f.전화번호 || "");
-                        updateEdited(r, "배차상태", "배차완료");
-                      } else {
-                        const 이름 = prompt("신규 기사 이름:");
-                        if (!이름) return;
-                        const 전화번호 = prompt("전화번호:") || "";
-                        upsertDriver && upsertDriver({ 이름, 차량번호: v, 전화번호 });
-                        updateEdited(r, "차량번호", v);
-                        updateEdited(r, "이름", 이름);
-                        updateEdited(r, "전화번호", 전화번호);
-                        updateEdited(r, "배차상태", "배차완료");
-                        alert("신규 기사 등록 완료!");
-                      }
-                    }} />
-                  </td>
+                    </td>
 
-                  <td className={cell}>{row.이름}</td>
-                  <td className={cell}>{row.전화번호}</td>
+                    <td className={cell}>
+                      {editAll ? (
+                        <select
+                          className={input}
+                          value={row.지급방식 || ""}
+                          onChange={(e) => updateEdited(r, "지급방식", e.target.value)}
+                        >
+                          <option value="">선택</option>
+                          {PAY_TYPES.map((v) => (
+                            <option key={v} value={v}>
+                              {v}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        row.지급방식
+                      )}
+                    </td>
 
-                  <td className={cell}><StatusBadge s={row.배차상태} /></td>
+                    <td className={cell}>
+                      {editAll ? (
+                        <select
+                          className={input}
+                          value={row.배차방식 || ""}
+                          onChange={(e) => updateEdited(r, "배차방식", e.target.value)}
+                        >
+                          <option value="">선택</option>
+                          {DISPATCH_TYPES.map((v) => (
+                            <option key={v} value={v}>
+                              {v}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        row.배차방식
+                      )}
+                    </td>
 
-                  <td className={cell}>
-                    {editAll ? <input type="number" className={input} value={row.청구운임 ?? ""} onChange={(e) => updateEdited(r, "청구운임", e.target.value)} /> : toInt(r.청구운임).toLocaleString()}
-                  </td>
-                  <td className={cell}>
-                    {editAll ? <input type="number" className={input} value={row.기사운임 ?? ""} onChange={(e) => updateEdited(r, "기사운임", e.target.value)} /> : toInt(r.기사운임).toLocaleString()}
-                  </td>
-                  <td className={cell} style={{ color: toInt(row.청구운임) - toInt(row.기사운임) < 0 ? "red" : undefined }}>
-                    {(toInt(row.청구운임) - toInt(row.기사운임)).toLocaleString()}
-                  </td>
-
-                  <td className={cell}>
-                    {editAll ? (
-                      <select className={input} value={row.지급방식 || ""} onChange={(e) => updateEdited(r, "지급방식", e.target.value)}>
-                        <option value="">선택</option>
-                        {PAY_TYPES.map((v) => <option key={v} value={v}>{v}</option>)}
-                      </select>
-                    ) : row.지급방식}
-                  </td>
-
-                  <td className={cell}>
-                    {editAll ? (
-                      <select className={input} value={row.배차방식 || ""} onChange={(e) => updateEdited(r, "배차방식", e.target.value)}>
-                        <option value="">선택</option>
-                        {DISPATCH_TYPES.map((v) => <option key={v} value={v}>{v}</option>)}
-                      </select>
-                    ) : row.배차방식}
-                  </td>
-
-                  <td className={cell}>
-                    {editAll ? <textarea className={`${input} h-9`} value={row.메모 || ""} onChange={(e) => updateEdited(r, "메모", e.target.value)} /> : row.메모}
+                    <td className={cell}>
+                      {editAll ? (
+                        <textarea
+                          className={`${input} h-9`}
+                          value={row.메모 || ""}
+                          onChange={(e) => updateEdited(r, "메모", e.target.value)}
+                        />
+                      ) : (
+                        row.메모
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+              {filtered.length === 0 && (
+                <tr>
+                  <td
+                    className="text-center text-gray-500 py-6"
+                    colSpan={headers.length + 1}
+                  >
+                    표시할 데이터가 없습니다.
                   </td>
                 </tr>
-              );
-            })}
-            {filtered.length === 0 && <tr><td className="text-center text-gray-500 py-6" colSpan={headers.length + 1}>표시할 데이터가 없습니다.</td></tr>}
-          </tbody>
-        </table>
-      </div>
+              )}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="space-y-3 pb-20">{/* pb-20: 하단 고정바 영역 확보 */}
+          {/* 전체선택 체크박스 (모바일 상단) */}
+          <div className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              onChange={toggleAll}
+              checked={filtered.length > 0 && selected.size === filtered.length}
+            />
+            <span className="text-gray-600">현재 목록 전체선택/해제</span>
+            <span className="ml-auto text-xs text-gray-400">
+              {selected.size}건 선택됨
+            </span>
+          </div>
+
+          {filtered.map((r, i) => (
+            <Card key={r._id || i} r={r} idx={i} />
+          ))}
+
+          {filtered.length === 0 && (
+            <div className="text-center text-gray-500 py-10">표시할 데이터가 없습니다.</div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
 // ===================== DispatchApp.jsx (PART 5/8) — END =====================
+
 
 // ===================== DispatchApp.jsx (PART 6/8) — START =====================
 
