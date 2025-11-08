@@ -1,158 +1,57 @@
-// src/components/ExcelUploader.jsx
+// src/components/ExcelUploaderClients.jsx
 import React from "react";
 import * as XLSX from "xlsx";
 
-// ✅ 엑셀 날짜/문자 → YYYY-MM-DD 변환기
-const fixDate = (v) => {
-  if (!v) return "";
-  if (typeof v === "number") {
-    const base = new Date(1899, 11, 30);
-    return new Date(base.getTime() + v * 86400000).toISOString().slice(0, 10);
-  }
-  const str = String(v).trim()
-    .replace(/[./]/g, "-")
-    .replace(/\s+/g, "-")
-    .slice(0, 10);
-  return /^\d{4}-\d{2}-\d{2}$/.test(str) ? str : "";
-};
-
-const ExcelUploader = ({ onDataLoaded }) => {
-  const handleFileUpload = (e) => {
-    const file = e.target.files[0];
+/** 거래처 엑셀 업로드 전용
+ *  기대 컬럼: 거래처명, 사업자번호, 대표자, 업태, 종목, 주소, 담당자, 연락처
+ *  - 공백/널 안전 처리
+ *  - 헤더 한글 그대로 매핑
+ */
+export default function ExcelUploaderClients({ onParsed }) {
+  const handleFile = (e) => {
+    const file = e.target.files?.[0];
     if (!file) return;
 
     const reader = new FileReader();
     reader.onload = (evt) => {
-      const data = new Uint8Array(evt.target.result);
-      const workbook = XLSX.read(data, { type: "array" });
-      const sheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[sheetName];
-      const json = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+      try {
+        const data = new Uint8Array(evt.target.result);
+        const wb = XLSX.read(data, { type: "array" });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const json = XLSX.utils.sheet_to_json(ws, { defval: "" });
 
-      // ✅ 날짜 자동 정규화 + 지급방식 기본값 적용
-      const mapped = json.map((r) => ({
-        ...r,
-        등록일: fixDate(r.등록일),
-        상차일: fixDate(r.상차일),
-        하차일: fixDate(r.하차일),
-        지급방식: r.지급방식?.trim() || "계산서", // ✅ 빈칸이면 자동 계산서
-      }));
+        const mapped = json.map((r) => ({
+          거래처명: String(r.거래처명 || "").trim(),
+          사업자번호: String(r.사업자번호 || "").trim(),
+          대표자: String(r.대표자 || "").trim(),
+          업태: String(r.업태 || "").trim(),
+          종목: String(r.종목 || "").trim(),
+          주소: String(r.주소 || "").trim(),
+          담당자: String(r.담당자 || "").trim(),
+          연락처: String(r.연락처 || "").trim(),
+        })).filter(r => r.거래처명);
 
-      if (onDataLoaded) onDataLoaded(mapped);
+        onParsed && onParsed(mapped);
+      } catch (err) {
+        console.error(err);
+        alert("엑셀 파싱 중 오류가 발생했습니다.");
+      } finally {
+        e.target.value = "";
+      }
     };
-
     reader.readAsArrayBuffer(file);
   };
 
   return (
-    <div className="p-2 border rounded-lg bg-gray-50 text-sm w-full max-w-md">
-      <label htmlFor="excelInput" className="font-semibold block mb-1">
-        📁 엑셀 파일 업로드
-      </label>
+    <div className="flex items-center gap-2">
+      <label className="text-sm font-medium">📁 엑셀 업로드</label>
       <input
-        id="excelInput"
         type="file"
-        accept=".xlsx, .xls"
-        onChange={handleFileUpload}
-        className="block w-full text-sm cursor-pointer"
+        accept=".xlsx,.xls"
+        onChange={handleFile}
+        className="block text-sm"
       />
     </div>
   );
-};
+}
 
-export default ExcelUploader;
-
-
-
-// src/components/DriverManagement.jsx
-import React, { useEffect, useState } from "react";
-import ExcelUploader from "./ExcelUploader";
-
-const DriverManagement = () => {
-  const [drivers, setDrivers] = useState(() => {
-    const saved = localStorage.getItem("drivers");
-    return saved ? JSON.parse(saved) : [];
-  });
-
-  const handleExcelData = (data) => {
-    setDrivers(data);
-    localStorage.setItem("drivers", JSON.stringify(data));
-    alert(`${data.length}명의 기사 데이터 업로드 완료`);
-    window.location.reload();
-  };
-
-  return (
-    <div className="p-4">
-      <h2 className="text-lg font-semibold mb-2">기사관리</h2>
-      <ExcelUploader onDataLoaded={handleExcelData} />
-
-      <table className="mt-4 w-full border text-sm">
-        <thead>
-          <tr className="bg-gray-100">
-            <th className="border p-2">이름</th>
-            <th className="border p-2">차량번호</th>
-            <th className="border p-2">전화번호</th>
-          </tr>
-        </thead>
-        <tbody>
-          {drivers.map((d, i) => (
-            <tr key={i}>
-              <td className="border p-2">{d.이름 || d.name}</td>
-              <td className="border p-2">{d.차량번호 || d.carNo}</td>
-              <td className="border p-2">{d.전화번호 || d.phone}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-};
-
-export default DriverManagement;
-
-
-// src/components/ClientManagement.jsx
-import React, { useEffect, useState } from "react";
-import ExcelUploader from "./ExcelUploader";
-
-const ClientManagement = () => {
-  const [clients, setClients] = useState(() => {
-    const saved = localStorage.getItem("clients");
-    return saved ? JSON.parse(saved) : [];
-  });
-
-  const handleExcelData = (data) => {
-    setClients(data);
-    localStorage.setItem("clients", JSON.stringify(data));
-    alert(`${data.length}개의 거래처 데이터 업로드 완료`);
-    window.location.reload();
-  };
-
-  return (
-    <div className="p-4">
-      <h2 className="text-lg font-semibold mb-2">거래처관리</h2>
-      <ExcelUploader onDataLoaded={handleExcelData} />
-
-      <table className="mt-4 w-full border text-sm">
-        <thead>
-          <tr className="bg-gray-100">
-            <th className="border p-2">거래처명</th>
-            <th className="border p-2">사업자번호</th>
-            <th className="border p-2">전화번호</th>
-          </tr>
-        </thead>
-        <tbody>
-          {clients.map((c, i) => (
-            <tr key={i}>
-              <td className="border p-2">{c.거래처명 || c.name}</td>
-              <td className="border p-2">{c.사업자번호 || c.bizNo}</td>
-              <td className="border p-2">{c.전화번호 || c.phone}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-};
-
-export default ClientManagement;
