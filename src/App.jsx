@@ -12,7 +12,8 @@ import { auth } from "./firebase";
 import Login from "./Login";
 import Signup from "./Signup";
 import DispatchApp from "./DispatchApp";
-import NoAccess from "./NoAccess"; // ✅ 새로 추가되는 컴포넌트
+import NoAccess from "./NoAccess";
+import UploadPage from "./UploadPage";   // ✅ 추가
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -44,7 +45,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Navigate to="/login" replace />} />
 
-        {/* 로그인 / 회원가입 */}
+        {/* ✅ 로그인 / 회원가입 */}
         <Route
           path="/login"
           element={user ? <Navigate to="/app" replace /> : <Login />}
@@ -54,7 +55,7 @@ export default function App() {
           element={user ? <Navigate to="/app" replace /> : <Signup />}
         />
 
-        {/* 메인 앱 */}
+        {/* ✅ 메인 앱 (로그인 필요) */}
         <Route
           path="/app"
           element={user ? <DispatchApp role={role} /> : <Navigate to="/login" replace />}
@@ -63,7 +64,10 @@ export default function App() {
         {/* 🚫 권한 없음 화면 */}
         <Route path="/no-access" element={<NoAccess />} />
 
-        {/* 잘못된 URL → 로그인 */}
+        {/* ✅ 공개 업로드 페이지 (로그인 필요 없음) */}
+        <Route path="/upload" element={<UploadPage />} />
+
+        {/* ❌ 잘못된 URL → 로그인 */}
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </Router>
