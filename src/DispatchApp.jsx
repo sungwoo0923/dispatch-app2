@@ -1,5 +1,5 @@
 // ===================== DispatchApp.jsx (PART 1/8) — START =====================
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import * as XLSX from "xlsx";
 
@@ -453,11 +453,14 @@ function DispatchManagement({
     const loadAttachments = async () => {
       if (!dispatchData?.length) return;
       const result = {};
-
       for (const row of dispatchData) {
         if (!row._id) continue;
-        const snap = await getDocs(collection(db, "dispatch", row._id, "attachments"));
-        result[row._id] = snap.size;
+        try {
+          const snap = await getDocs(collection(db, "dispatch", row._id, "attachments"));
+          result[row._id] = snap.size;
+        } catch {
+          result[row._id] = 0;
+        }
       }
       setAttachCount(result);
     };
@@ -915,6 +918,133 @@ function DispatchManagement({
     setBulkOpen(false);
   };
 
+  // ───────────────────────────────────────────
+  // 📎 첨부 모달 (현재 폼의 _id 기준)
+  // ───────────────────────────────────────────
+  const [attachOpen, setAttachOpen] = useState(false);
+  const [attachList, setAttachList] = useState([]); // [{id,name,url,ts}]
+  const loadAttachList = useCallback(async (dispatchId) => {
+    if (!dispatchId) return setAttachList([]);
+    try {
+      const snap = await getDocs(collection(db, "dispatch", dispatchId, "attachments"));
+      const list = [];
+      snap.forEach((d) => list.push({ id: d.id, ...(d.data() || {}) }));
+      // ts 최신순
+      list.sort((a, b) => (b.ts || 0) - (a.ts || 0));
+      setAttachList(list);
+    } catch {
+      setAttachList([]);
+    }
+  }, []);
+
+  const openAttachForCurrent = async () => {
+    await loadAttachList(form._id);
+    setAttachOpen(true);
+  };
+
+  const humanSize = (bytes) => {
+    if (!bytes && bytes !== 0) return "";
+    const k = 1024, sizes = ["B","KB","MB","GB"]; let i = Math.floor(Math.log(bytes)/Math.log(k));
+    if (i < 0) i = 0;
+    const v = bytes / Math.pow(k, i);
+    return `${v.toFixed(v >= 10 ? 0 : 1)} ${sizes[i]}`;
+  };
+
+  const onAttachFiles = async (files) => {
+    if (!files?.length) return;
+    const id = form._id;
+    if (!id) return alert("먼저 저장 또는 폼 유지 상태에서 시도하세요.");
+    for (const f of files) {
+      try {
+        const ext = f.name.split(".").pop() || "bin";
+        const path = `dispatch/${id}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+        const sref = ref(storage, path);
+        await uploadBytes(sref, f);
+        const url = await getDownloadURL(sref);
+        await addDoc(collection(db, "dispatch", id, "attachments"), {
+          name: f.name,
+          url,
+          bytes: f.size || null,
+          ts: Date.now(),
+          path,
+        });
+      } catch (e) {
+        console.error(e);
+        alert(`업로드 실패: ${f.name}`);
+      }
+    }
+    await loadAttachList(id);
+    // 카운트 갱신
+    setAttachCount((m) => ({ ...m, [id]: (m[id] || 0) + files.length }));
+  };
+
+  const onDeleteAttach = async (item) => {
+    if (!confirm("이 첨부파일을 삭제할까요?")) return;
+    try {
+      if (item?.path) {
+        const sref = ref(storage, item.path);
+        await deleteObject(sref).catch(()=>{});
+      }
+      // attachments 컬렉션 문서 삭제
+      await deleteDoc(doc(db, "dispatch", form._id, "attachments", item.id));
+      await loadAttachList(form._id);
+      setAttachCount((m) => ({ ...m, [form._id]: Math.max(0, (m[form._id] || 1) - 1) }));
+    } catch (e) {
+      console.error(e);
+      alert("삭제 실패");
+    }
+  };
+
+  // 📨 공유(카톡/복사) — YYYY-MM-DD, 상/하차지명 포함
+  const buildUploadUrl = (id) => `https://run25.app/upload?id=${encodeURIComponent(id)}`;
+  const buildShareText = (r) => {
+    const 상차일 = (r.상차일 || "").slice(0,10);
+    const 거래처 = r.거래처명 || "-";
+    const 상차지 = r.상차지명 || "-";
+    const 하차지 = r.하차지명 || "-";
+    const 차량 = r.차량번호 ? `${r.차량번호}` : "-";
+    const 기사 = r.이름 ? `${r.이름}` : "-";
+    const link = buildUploadUrl(r._id);
+    return [
+      "[RUN25 운송장 업로드 안내]",
+      "",
+      `✅ 상차일: ${상차일}`,
+      `✅ 거래처: ${거래처}`,
+      `✅ 상차지: ${상차지}`,
+      `✅ 하차지: ${하차지}`,
+      `✅ 차량: ${차량} (${기사})`,
+      "",
+      "아래 링크에서 운송장/인수증 사진을 업로드해주세요👇",
+      `📎 ${link}`,
+      "",
+      "※ 사진은 여러 장 업로드 가능하며, 자동으로 정산에 반영됩니다.",
+    ].join("\n");
+  };
+
+  const shareOrCopy = async () => {
+    const text = buildShareText(form);
+    // 모바일/지원 → 네이티브 공유
+    if (navigator.share) {
+      try {
+        await navigator.share({ text });
+        return;
+      } catch (e) {
+        // 사용자가 취소하면 아래 복사 시도
+      }
+    }
+    // PC → 클립보드 복사
+    try {
+      await navigator.clipboard.writeText(text);
+      alert("공유 메시지를 클립보드에 복사했습니다.");
+    } catch {
+      // 폴백
+      const ta = document.createElement("textarea");
+      ta.value = text; document.body.appendChild(ta);
+      ta.select(); document.execCommand("copy"); document.body.removeChild(ta);
+      alert("공유 메시지를 클립보드에 복사했습니다.");
+    }
+  };
+
   // 스타일
   const inputCls = "border p-2 rounded w-full text-left";
   const labelCls = "text-xs text-gray-500 mb-1 block";
@@ -1138,9 +1268,20 @@ function DispatchManagement({
           </select>
         </div>
 
+        {/* 메모 + 📎 / 📨 */}
         <div className="col-span-6">
           <label className={labelCls}>메모</label>
-          <textarea className={`${inputCls} h-20`} value={form.메모} onChange={(e) => onChange("메모", e.target.value)} />
+          <div className="flex gap-2">
+            <textarea className={`${inputCls} h-20`} value={form.메모} onChange={(e) => onChange("메모", e.target.value)} />
+            <div className="flex flex-col gap-2 w-[150px]">
+              <button type="button" onClick={openAttachForCurrent} className="px-3 py-2 rounded bg-gray-200 text-sm">
+                📎 첨부 ({attachCount[form._id] || 0})
+              </button>
+              <button type="button" onClick={shareOrCopy} className="px-3 py-2 rounded bg-blue-600 text-white text-sm">
+                📨 공유 (카톡/복사)
+              </button>
+            </div>
+          </div>
         </div>
 
         <div className="col-span-6 flex justify-end mt-2">
@@ -1269,6 +1410,51 @@ function DispatchManagement({
           </div>
         </div>
       )}
+
+      {/* ───────── 📎 첨부 모달 ───────── */}
+      {attachOpen && (
+        <div className="fixed inset-0 bg-black/40 z-[9999] flex items-center justify-center">
+          <div className="bg-white rounded-xl shadow-2xl w-[1100px] max-h-[85vh] overflow-hidden flex flex-col">
+            <div className="px-4 py-3 border-b flex items-center justify-between">
+              <b>첨부파일 (#{form._id.slice(-6)})</b>
+              <div className="flex items-center gap-2">
+                <label className="px-3 py-2 border rounded cursor-pointer text-sm">
+                  파일 선택
+                  <input type="file" multiple accept="image/*,application/pdf" className="hidden" onChange={(e)=>onAttachFiles(e.target.files)} />
+                </label>
+                <button onClick={()=>setAttachOpen(false)} className="px-3 py-2 border rounded text-sm">닫기</button>
+              </div>
+            </div>
+            <div className="p-4 overflow-auto">
+              {attachList.length === 0 ? (
+                <div className="text-gray-500 text-sm py-8 text-center">첨부파일이 없습니다. 우측 상단에서 파일을 추가하세요.</div>
+              ) : (
+                <div className="grid grid-cols-4 gap-4">
+                  {attachList.map((it)=>(
+                    <div key={it.id} className="border rounded-lg overflow-hidden">
+                      <div className="aspect-video bg-gray-100 flex items-center justify-center overflow-hidden">
+                        {/\.(png|jpg|jpeg|gif|webp)$/i.test(it.name || "") ? (
+                          <img src={it.url} alt={it.name} className="object-cover w-full h-full" />
+                        ) : (
+                          <a href={it.url} target="_blank" rel="noreferrer" className="text-sm text-blue-600 underline px-3 py-4">파일 열기</a>
+                        )}
+                      </div>
+                      <div className="p-2 text-xs">
+                        <div className="truncate font-medium">{it.name}</div>
+                        <div className="text-gray-500">{it.bytes ? humanSize(it.bytes) : ""}</div>
+                        <div className="flex gap-2 mt-2">
+                          <a href={it.url} target="_blank" rel="noreferrer" className="px-2 py-1 border rounded">열기</a>
+                          <button onClick={()=>onDeleteAttach(it)} className="px-2 py-1 border rounded text-red-600">삭제</button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 
@@ -1374,6 +1560,9 @@ function DispatchManagement({
   );
 }
 // ===================== DispatchApp.jsx (PART 3/8) — END =====================
+
+
+
 
 // ===================== DispatchApp.jsx (PART 4/8) — START =====================
 /* 메뉴용 실시간배차현황 — 배차현황과 100% 동일 컬럼/순서(+주소)
@@ -1804,13 +1993,12 @@ function RealtimeStatus({
 }
 // ===================== DispatchApp.jsx (PART 4/8) — END =====================
 
-
 // ===================== DispatchApp.jsx (PART 5/8) — START =====================
 /* 배차현황 — PC=테이블 / 모바일=카드형 자동 전환
-   - 필터/검색 유지
-   - 전체수정(일괄편집) 지원
-   - 선택삭제/전체삭제/저장
-   - 모바일 하단 고정 액션바(저장·선택삭제·초기화)
+   - 기존 기능 100% 유지
+   - 모바일에서만 카드형 UI 추가(간결 표시, 금액 축약)
+   - 전체수정(일괄편집) / 선택삭제 / 전체삭제 / 저장
+   - 차량번호 즉시입력 → 기사 자동매칭 (미존재 시 즉시 등록)
 */
 function DispatchStatus({
   dispatchData = [],
@@ -1820,51 +2008,69 @@ function DispatchStatus({
   removeDispatch,
   upsertDriver,
 }) {
-  // ── 뷰포트 감지
-  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
-  useEffect(() => {
+  // 반응형 감지
+  const [isMobile, setIsMobile] = React.useState(() => window.innerWidth < 768);
+  React.useEffect(() => {
     const onR = () => setIsMobile(window.innerWidth < 768);
     window.addEventListener("resize", onR);
     return () => window.removeEventListener("resize", onR);
   }, []);
 
-  // ── 상태
-  const [q, setQ] = useState("");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
-  const [editAll, setEditAll] = useState(false);
-  const [edited, setEdited] = useState({});
-  const [selected, setSelected] = useState(new Set());
-  const [justSaved, setJustSaved] = useState([]);
+  // 상태
+  const [q, setQ] = React.useState("");
+  const [startDate, setStartDate] = React.useState("");
+  const [endDate, setEndDate] = React.useState("");
+  const [editAll, setEditAll] = React.useState(false);
+  const [edited, setEdited] = React.useState({}); // { id: {key: value, ...} }
+  const [selected, setSelected] = React.useState(new Set());
+  const [justSaved, setJustSaved] = React.useState([]); // 하이라이트용
 
-  const toInt = (v) => {
-    const n = parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10);
-    return isNaN(n) ? 0 : n;
+  // 금액 축약 표기 (모바일에서 사용)
+  const shortMoney = (n) => {
+    const v = toInt(n);
+    if (Math.abs(v) < 10000) return v.toLocaleString();
+    const sign = v < 0 ? "-" : "";
+    const abs = Math.abs(v);
+    if (abs < 100000000) {
+      // 만 단위
+      const man = Math.floor(abs / 10000);
+      const thou = Math.floor((abs % 10000) / 1000);
+      return sign + man + (thou ? `.${thou}` : "") + "만";
+    }
+    // 억 단위
+    const uk = Math.floor(abs / 100000000);
+    const man = Math.floor((abs % 100000000) / 10000);
+    return sign + uk + (man ? `.${String(man).padStart(4, "0").slice(0, 1)}` : "") + "억";
   };
 
-  // ── 필터 + 검색
-  const filtered = useMemo(() => {
+  // 필터 + 검색 + 정렬
+  const filtered = React.useMemo(() => {
     let data = [...dispatchData];
+
     if (startDate) data = data.filter((r) => (r.상차일 || "") >= startDate);
     if (endDate) data = data.filter((r) => (r.상차일 || "") <= endDate);
+
     if (q.trim()) {
       const lower = q.toLowerCase();
       data = data.filter((r) =>
         Object.values(r).some((v) => String(v || "").toLowerCase().includes(lower))
       );
     }
+
     const today = todayStr();
-    return data.sort((a, b) => {
+    data.sort((a, b) => {
       if (a.배차상태 === "배차중" && b.배차상태 !== "배차중") return -1;
       if (a.배차상태 !== "배차중" && b.배차상태 === "배차중") return 1;
-      if (a.상차일 === today && b.상차일 !== today) return -1;
-      if (a.상차일 !== today && b.상차일 === today) return 1;
+      if ((a.상차일 || "") === today && (b.상차일 || "") !== today) return -1;
+      if ((a.상차일 || "") !== today && (b.상차일 || "") === today) return 1;
       return (a.상차일 || "").localeCompare(b.상차일 || "") ||
              (a.상차시간 || "").localeCompare(b.상차시간 || "");
     });
+
+    return data;
   }, [dispatchData, q, startDate, endDate]);
 
-  // ── 선택 토글
+  // 선택 토글
   const toggleAll = () =>
     setSelected((s) => (s.size === filtered.length ? new Set() : new Set(filtered.map((r) => r._id))));
   const toggleOne = (id) =>
@@ -1874,19 +2080,19 @@ function DispatchStatus({
       return n;
     });
 
-  // ── 수정 캐시
+  // 수정 캐시 업데이트
   const updateEdited = (row, key, value) =>
     setEdited((prev) => {
       const cur = { ...(prev[row._id] || {}), [key]: value };
       if (key === "청구운임" || key === "기사운임") {
         const sale = toInt(cur.청구운임 ?? row.청구운임);
-        const drv = toInt(cur.기사운임 ?? row.기사운임);
+        const drv  = toInt(cur.기사운임 ?? row.기사운임);
         cur.수수료 = sale - drv;
       }
       return { ...prev, [row._id]: cur };
     });
 
-  // ── 저장/삭제 (Firestore 우선)
+  // 저장/삭제 (Firestore 우선)
   const _patch =
     patchDispatch ||
     (async (id, patch) =>
@@ -1923,69 +2129,70 @@ function DispatchStatus({
     setSelected(new Set());
   };
 
-  const head = "border px-2 py-2 bg-gray-100 text-center whitespace-nowrap";
-  const cell = "border px-2 py-1 text-center whitespace-nowrap align-middle";
+  // 차량번호 입력 → 기사 자동매칭/신규등록
+  const handleCarBlur = async (row, raw) => {
+    const v = (raw || "").replace(/\s+/g, "");
+    if (!v) {
+      updateEdited(row, "차량번호", "");
+      updateEdited(row, "이름", "");
+      updateEdited(row, "전화번호", "");
+      updateEdited(row, "배차상태", "배차중");
+      return;
+    }
+    const f = (drivers || []).find((d) => (d.차량번호 || "").replace(/\s+/g, "") === v);
+    if (f) {
+      updateEdited(row, "차량번호", f.차량번호);
+      updateEdited(row, "이름", f.이름 || "");
+      updateEdited(row, "전화번호", f.전화번호 || "");
+      updateEdited(row, "배차상태", "배차완료");
+      return;
+    }
+    // 신규 기사 등록
+    const 이름 = prompt("신규 기사 이름:"); if (!이름) return;
+    const 전화번호 = prompt("전화번호:") || "";
+    await upsertDriver?.({ 이름, 차량번호: v, 전화번호 });
+    updateEdited(row, "차량번호", v);
+    updateEdited(row, "이름", 이름);
+    updateEdited(row, "전화번호", 전화번호);
+    updateEdited(row, "배차상태", "배차완료");
+    alert("신규 기사 등록 완료!");
+  };
+
+  // 스타일
+  const head  = "border px-2 py-2 bg-gray-100 text-center whitespace-nowrap";
+  const cell  = "border px-2 py-1 text-center whitespace-nowrap align-middle";
   const input = "border rounded px-2 py-1 w-full text-left";
 
-  // ✅ 주소 컬럼 추가: 상차지명→상차지주소 / 하차지명→하차지주소
+  // ✅ 주소 컬럼 포함 (상차지명 옆: 상차지주소 / 하차지명 옆: 하차지주소)
   const headers = [
+    "선택",
     "순번","등록일","상차일","상차시간","하차일","하차시간",
     "거래처명","상차지명","상차지주소","하차지명","하차지주소","화물내용","차량종류","차량톤수",
     "차량번호","기사명","전화번호",
     "배차상태","청구운임","기사운임","수수료","지급방식","배차방식","메모",
   ];
 
-  // ── 카드 렌더 (모바일)
+  // ── 모바일 카드
   const Card = ({ r, idx }) => {
     const row = edited[r._id] ? { ...r, ...edited[r._id] } : r;
     const fee = toInt(row.청구운임) - toInt(row.기사운임);
-    const label = (t) => <div className="text-[11px] text-gray-500">{t}</div>;
-    const Field = ({ k, type = "text" }) =>
+    const saved = justSaved.includes(r._id);
+    const L = (t) => <div className="text-[11px] text-gray-500">{t}</div>;
+    const F = ({ k, type = "text" }) =>
       editAll ? (
-        type === "select-pay" ? (
-          <select
-            className="border rounded px-2 py-1 w-full"
-            value={row.지급방식 || ""}
-            onChange={(e) => updateEdited(r, "지급방식", e.target.value)}
-          >
-            <option value="">선택</option>
-            {PAY_TYPES.map((v) => (
-              <option key={v} value={v}>
-                {v}
-              </option>
-            ))}
-          </select>
-        ) : type === "select-dispatch" ? (
-          <select
-            className="border rounded px-2 py-1 w-full"
-            value={row.배차방식 || ""}
-            onChange={(e) => updateEdited(r, "배차방식", e.target.value)}
-          >
-            <option value="">선택</option>
-            {DISPATCH_TYPES.map((v) => (
-              <option key={v} value={v}>
-                {v}
-              </option>
-            ))}
-          </select>
-        ) : (
-          <input
-            className="border rounded px-2 py-1 w-full"
-            value={row[k] ?? ""}
-            type={type === "date" ? "date" : type === "time" ? "time" : "text"}
-            onChange={(e) => updateEdited(r, k, e.target.value)}
-          />
-        )
+        <input
+          className="border rounded px-2 py-1 w-full"
+          value={row[k] ?? ""}
+          type={type}
+          onChange={(e) => updateEdited(r, k, e.target.value)}
+        />
       ) : (
         <div className="text-sm">{r[k] ?? ""}</div>
       );
 
     return (
-      <div
-        key={r._id || idx}
-        className={`rounded-xl border p-3 bg-white ${justSaved.includes(r._id) ? "ring-2 ring-emerald-400" : ""}`}
-      >
-        {/* 헤더 영역 */}
+      <div className={`rounded-xl border p-3 bg-white ${saved ? "ring-2 ring-emerald-400" : ""}`}>
+        {/* 헤더 */}
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <input
@@ -2003,50 +2210,60 @@ function DispatchStatus({
         {/* 본문 */}
         <div className="grid grid-cols-2 gap-3 mt-2">
           <div>
-            {label("상차일 / 시간")}
+            {L("상차일 / 시간")}
             <div className="flex gap-2">
-              <Field k="상차일" type="date" />
-              <Field k="상차시간" type="time" />
+              <F k="상차일" type="date" />
+              <F k="상차시간" type="time" />
             </div>
           </div>
           <div>
-            {label("하차일 / 시간")}
+            {L("하차일 / 시간")}
             <div className="flex gap-2">
-              <Field k="하차일" type="date" />
-              <Field k="하차시간" type="time" />
+              <F k="하차일" type="date" />
+              <F k="하차시간" type="time" />
             </div>
           </div>
 
-          <div>{label("거래처명")}<Field k="거래처명" /></div>
-          <div>{label("화물내용")}<Field k="화물내용" /></div>
+          <div>{L("거래처명")}<F k="거래처명" /></div>
+          <div>{L("화물내용")}<F k="화물내용" /></div>
 
-          <div>{label("상차지명")}<Field k="상차지명" /></div>
-          <div>{label("하차지명")}<Field k="하차지명" /></div>
+          <div>{L("상차지명")}<F k="상차지명" /></div>
+          <div>{L("하차지명")}<F k="하차지명" /></div>
 
-          {/* ✅ 주소 필드 (모바일 카드) */}
-          <div className="col-span-2 sm:col-span-1">{label("상차지주소")}<Field k="상차지주소" /></div>
-          <div className="col-span-2 sm:col-span-1">{label("하차지주소")}<Field k="하차지주소" /></div>
+          <div className="col-span-2 sm:col-span-1">{L("상차지주소")}<F k="상차지주소" /></div>
+          <div className="col-span-2 sm:col-span-1">{L("하차지주소")}<F k="하차지주소" /></div>
 
-          <div>{label("차량종류")}<Field k="차량종류" /></div>
-          <div>{label("차량톤수")}<Field k="차량톤수" /></div>
+          <div>{L("차량종류")}<F k="차량종류" /></div>
+          <div>{L("차량톤수")}<F k="차량톤수" /></div>
 
-          <div>{label("차량번호")}<Field k="차량번호" /></div>
+          <div>
+            {L("차량번호")}
+            {editAll ? (
+              <input
+                className="border rounded px-2 py-1 w-full"
+                defaultValue={row.차량번호 || ""}
+                onBlur={(e) => handleCarBlur(r, e.target.value)}
+              />
+            ) : (
+              <div className="text-sm">{r.차량번호 || ""}</div>
+            )}
+          </div>
           <div className="grid grid-cols-2 gap-2">
-            <div>{label("기사명")}<Field k="이름" /></div>
-            <div>{label("전화번호")}<Field k="전화번호" /></div>
+            <div>{L("기사명")}<F k="이름" /></div>
+            <div>{L("전화번호")}<F k="전화번호" /></div>
           </div>
 
-          <div>{label("지급방식")}<Field k="지급방식" type="select-pay" /></div>
-          <div>{label("배차방식")}<Field k="배차방식" type="select-dispatch" /></div>
+          <div>{L("지급방식")}<F k="지급방식" /></div>
+          <div>{L("배차방식")}<F k="배차방식" /></div>
 
-          <div className="col-span-2">{label("메모")}<Field k="메모" /></div>
+          <div className="col-span-2">{L("메모")}<F k="메모" /></div>
 
-          {/* 금액 요약 */}
+          {/* 금액 요약 (축약 표기) */}
           <div className="col-span-2">
-            <div className="flex items-center gap-3 text-sm">
-              <div>청구: <b>{toInt(row.청구운임).toLocaleString()}</b></div>
-              <div>기사: <b>{toInt(row.기사운임).toLocaleString()}</b></div>
-              <div>수수료: <b className={fee < 0 ? "text-red-600" : "text-blue-700"}>{fee.toLocaleString()}</b></div>
+            <div className="flex items-center gap-4 text-sm">
+              <div>청구: <b>{shortMoney(row.청구운임)}</b></div>
+              <div>기사: <b>{shortMoney(row.기사운임)}</b></div>
+              <div>수수료: <b className={fee < 0 ? "text-red-600" : "text-blue-700"}>{shortMoney(fee)}</b></div>
             </div>
           </div>
         </div>
@@ -2054,7 +2271,7 @@ function DispatchStatus({
     );
   };
 
-  // ── 공통 상단 바 (필터/검색)
+  // 상단 바
   const TopBar = (
     <div className="flex flex-wrap items-center gap-2 mb-3">
       <input
@@ -2098,7 +2315,6 @@ function DispatchStatus({
     <div className="p-3">
       <h2 className="text-lg font-bold mb-3">배차현황</h2>
 
-      {/* 상단 액션 + 필터 */}
       {TopBar}
 
       {/* 액션 버튼 (PC 상단 / 모바일 하단 고정) */}
@@ -2156,18 +2372,19 @@ function DispatchStatus({
           <table className="min-w-[2100px] text-sm border">
             <thead>
               <tr>
-                <th className={head}>
-                  <input
-                    type="checkbox"
-                    onChange={toggleAll}
-                    checked={filtered.length > 0 && selected.size === filtered.length}
-                  />
-                </th>
-                {headers.map((h) => (
-                  <th key={h} className={head}>
-                    {h}
-                  </th>
-                ))}
+                {headers.map((h, i) =>
+                  i === 0 ? (
+                    <th key={h} className={head}>
+                      <input
+                        type="checkbox"
+                        onChange={toggleAll}
+                        checked={filtered.length > 0 && selected.size === filtered.length}
+                      />
+                    </th>
+                  ) : (
+                    <th key={h} className={head}>{h}</th>
+                  )
+                )}
               </tr>
             </thead>
 
@@ -2181,6 +2398,7 @@ function DispatchStatus({
                     key={r._id}
                     className={`${i % 2 === 0 ? "bg-white" : "bg-gray-50"} ${saved ? "bg-emerald-100" : ""}`}
                   >
+                    {/* 선택 */}
                     <td className={cell}>
                       <input
                         type="checkbox"
@@ -2189,9 +2407,11 @@ function DispatchStatus({
                       />
                     </td>
 
+                    {/* 순번/등록일 */}
                     <td className={`${cell} w-[56px]`}>{i + 1}</td>
                     <td className={cell}>{r.등록일}</td>
 
+                    {/* 상하차일/시간 */}
                     <td className={cell}>
                       {editAll ? (
                         <input
@@ -2241,6 +2461,7 @@ function DispatchStatus({
                       )}
                     </td>
 
+                    {/* 거래처/주소/화물 */}
                     <td className={cell}>
                       {editAll ? (
                         <input
@@ -2253,7 +2474,7 @@ function DispatchStatus({
                       )}
                     </td>
 
-                    {/* ✅ 상차지명 / 상차지주소 */}
+                    {/* 상차지명 / 상차지주소 */}
                     <td className={cell}>
                       {editAll ? (
                         <input
@@ -2277,7 +2498,7 @@ function DispatchStatus({
                       )}
                     </td>
 
-                    {/* ✅ 하차지명 / 하차지주소 */}
+                    {/* 하차지명 / 하차지주소 */}
                     <td className={cell}>
                       {editAll ? (
                         <input
@@ -2313,26 +2534,18 @@ function DispatchStatus({
                       )}
                     </td>
 
+                    {/* 차량종류/톤수 */}
                     <td className={cell}>
                       {editAll ? (
-                        <select
+                        <input
                           className={input}
                           value={row.차량종류 || ""}
                           onChange={(e) => updateEdited(r, "차량종류", e.target.value)}
-                        >
-                          <option value="">선택</option>
-                          {VEHICLE_TYPES.map((v) => (
-                            <option key={v} value={v}>
-                              {v}
-                            </option>
-                          ))}
-                        </select>
+                        />
                       ) : (
                         r.차량종류
                       )}
                     </td>
-
-                    {/* 차량톤수 = 자유입력 */}
                     <td className={cell}>
                       {editAll ? (
                         <input
@@ -2345,49 +2558,23 @@ function DispatchStatus({
                       )}
                     </td>
 
+                    {/* 차량번호/기사 */}
                     <td className={cell}>
                       <input
                         className={input}
-                        defaultValue={row.차량번호}
-                        onBlur={(e) => {
-                          const v = (e.target.value || "").replace(/\s+/g, "");
-                          if (!v) {
-                            updateEdited(r, "차량번호", "");
-                            updateEdited(r, "이름", "");
-                            updateEdited(r, "전화번호", "");
-                            updateEdited(r, "배차상태", "배차중");
-                            return;
-                          }
-                          const f = (drivers || []).find(
-                            (d) => (d.차량번호 || "").replace(/\s+/g, "") === v
-                          );
-                          if (f) {
-                            updateEdited(r, "차량번호", f.차량번호);
-                            updateEdited(r, "이름", f.이름 || "");
-                            updateEdited(r, "전화번호", f.전화번호 || "");
-                            updateEdited(r, "배차상태", "배차완료");
-                          } else {
-                            const 이름 = prompt("신규 기사 이름:");
-                            if (!이름) return;
-                            const 전화번호 = prompt("전화번호:") || "";
-                            upsertDriver && upsertDriver({ 이름, 차량번호: v, 전화번호 });
-                            updateEdited(r, "차량번호", v);
-                            updateEdited(r, "이름", 이름);
-                            updateEdited(r, "전화번호", 전화번호);
-                            updateEdited(r, "배차상태", "배차완료");
-                            alert("신규 기사 등록 완료!");
-                          }
-                        }}
+                        defaultValue={row.차량번호 || ""}
+                        onBlur={(e) => handleCarBlur(r, e.target.value)}
                       />
                     </td>
+                    <td className={cell}>{row.이름 || ""}</td>
+                    <td className={cell}>{row.전화번호 || ""}</td>
 
-                    <td className={cell}>{row.이름}</td>
-                    <td className={cell}>{row.전화번호}</td>
-
+                    {/* 상태 */}
                     <td className={cell}>
                       <StatusBadge s={row.배차상태} />
                     </td>
 
+                    {/* 금액 */}
                     <td className={cell}>
                       {editAll ? (
                         <input
@@ -2419,48 +2606,32 @@ function DispatchStatus({
                           toInt(row.청구운임) - toInt(row.기사운임) < 0 ? "red" : undefined,
                       }}
                     >
-                      {(toInt(row.청구운임) - toInt(row.기사운임)).toLocaleString()
-                      }
+                      {(toInt(row.청구운임) - toInt(row.기사운임)).toLocaleString()}
                     </td>
 
+                    {/* 방식/메모 */}
                     <td className={cell}>
                       {editAll ? (
-                        <select
+                        <input
                           className={input}
                           value={row.지급방식 || ""}
                           onChange={(e) => updateEdited(r, "지급방식", e.target.value)}
-                        >
-                          <option value="">선택</option>
-                          {PAY_TYPES.map((v) => (
-                            <option key={v} value={v}>
-                              {v}
-                            </option>
-                          ))}
-                        </select>
+                        />
                       ) : (
                         row.지급방식
                       )}
                     </td>
-
                     <td className={cell}>
                       {editAll ? (
-                        <select
+                        <input
                           className={input}
                           value={row.배차방식 || ""}
                           onChange={(e) => updateEdited(r, "배차방식", e.target.value)}
-                        >
-                          <option value="">선택</option>
-                          {DISPATCH_TYPES.map((v) => (
-                            <option key={v} value={v}>
-                              {v}
-                            </option>
-                          ))}
-                        </select>
+                        />
                       ) : (
                         row.배차방식
                       )}
                     </td>
-
                     <td className={cell}>
                       {editAll ? (
                         <textarea
@@ -2477,10 +2648,7 @@ function DispatchStatus({
               })}
               {filtered.length === 0 && (
                 <tr>
-                  <td
-                    className="text-center text-gray-500 py-6"
-                    colSpan={headers.length + 1}
-                  >
+                  <td className="text-center text-gray-500 py-6" colSpan={headers.length}>
                     표시할 데이터가 없습니다.
                   </td>
                 </tr>
@@ -2489,8 +2657,8 @@ function DispatchStatus({
           </table>
         </div>
       ) : (
-        <div className="space-y-3 pb-20">{/* pb-20: 하단 고정바 영역 확보 */}
-          {/* 전체선택 체크박스 (모바일 상단) */}
+        <div className="space-y-3 pb-20">
+          {/* 전체선택 (모바일 상단) */}
           <div className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
@@ -2516,8 +2684,6 @@ function DispatchStatus({
   );
 }
 // ===================== DispatchApp.jsx (PART 5/8) — END =====================
-
-
 
 // ===================== DispatchApp.jsx (PART 6/8) — START =====================
 
