@@ -461,7 +461,7 @@ function DispatchManagement({
     : (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch {} };
 
   const VEHICLE_TYPES = (typeof window !== "undefined" && window.RUN25_VEHICLE_TYPES) || [
-    "라보/라마스", "카고", "윙바디", "탑차", "냉장탑", "냉동탑", "오토바이", "기타"
+    "라보/다마스", "카고", "윙바디", "탑차", "냉장탑", "냉동탑", "오토바이", "기타"
   ];
   const PAY_TYPES = (typeof window !== "undefined" && window.RUN25_PAY_TYPES) || [
     "계산서", "착불", "선불", "손실", "개인", "기타"
@@ -1489,126 +1489,120 @@ function DispatchManagement({
   };
 
   // ------------------ 대용량 업로드 ------------------
-  const [bulkOpen, setBulkOpen] = React.useState(false);
-  const [bulkRows, setBulkRows] = React.useState([]);
-  const driverByCar = React.useMemo(() => {
-    const m = new Map();
-    (drivers || []).forEach(d => {
-      const key = String(d.차량번호 || "").replace(/\s+/g, "");
-      if (key) m.set(key, { 이름: d.이름 || "", 전화번호: d.전화번호 || "" });
-    });
-    return m;
-  }, [drivers]);
-  const toInt2 = (v) => { const n = parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10); return isNaN(n) ? 0 : n; };
+const [bulkOpen, setBulkOpen] = React.useState(false);
+const [bulkRows, setBulkRows] = React.useState([]);
 
-  const onBulkFile = (e) => {
+const driverByCar = React.useMemo(() => {
+  const m = new Map();
+  (drivers || []).forEach((d) => {
+    const key = String(d.차량번호 || "").replace(/\s+/g, "");
+    if (key) m.set(key, { 이름: d.이름 || "", 전화번호: d.전화번호 || "" });
+  });
+  return m;
+}, [drivers]);
+
+const toInt2 = (v) => {
+  const n = parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10);
+  return isNaN(n) ? 0 : n;
+};
+
+// ✅ 대용량 업로드 (엑셀 순서 완전 일치 버전)
+const onBulkFile = (e) => {
   const file = e.target.files?.[0];
   if (!file) return;
+
   const reader = new FileReader();
   reader.onload = (evt) => {
     try {
       const wb = XLSX.read(new Uint8Array(evt.target.result), { type: "array" });
       const sheet = wb.SheetNames[0];
-      const json = XLSX.utils.sheet_to_json(wb.Sheets[sheet], { defval: "" });
-      console.log("📦 실제 엑셀 헤더들 ↓↓↓");
-Object.keys(json[0]).forEach((key, i) => {
-  console.log(`${i + 1}. [${key}]`);
-});
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheet], {
+        header: 1,
+        defval: "",
+        blankrows: false,
+      });
 
-      // ✅ 엑셀 날짜 자동 인식 (숫자형, 문자열형, 수식형 모두 지원)
+      console.log("📊 엑셀 헤더 ↓↓↓");
+      console.log(rows[0]);
+
       const excelDateToISO = (value) => {
         if (!value) return "";
-        // 숫자형 (엑셀 내부 날짜 시리얼)
         if (typeof value === "number") {
           const utcDays = Math.floor(value - 25569);
           const date = new Date(utcDays * 86400 * 1000);
-          const offsetDate = new Date(date.getTime() + date.getTimezoneOffset() * 60000);
-          return offsetDate.toISOString().slice(0, 10);
+          const offset = new Date(date.getTime() + date.getTimezoneOffset() * 60000);
+          return offset.toISOString().slice(0, 10);
         }
-        // 문자열형 (YYYY-MM-DD or YYYY/MM/DD)
         if (typeof value === "string") {
-          const v = value.replace(/\//g, "-").trim();
+          const v = value.replace(/[^\d-]/g, "-").replace(/--+/g, "-").trim();
           if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(v)) return v;
         }
         return "";
       };
 
-      const mapped = json.map((r, i) => {
-  const cn = String(r.차량번호 || r["차량 번호"] || "").replace(/\s+/g, "");
-  const found = driverByCar.get(cn);
-  const 청 = isAdmin ? toInt2(r.청구운임 || r["청구 운임"] || r.청구 || 0) : 0;
-  const 기 = isAdmin ? toInt2(r.기사운임 || r["기사 운임"] || r.기사 || 0) : 0;
+      const normalize = (v) => {
+        if (v === null || v === undefined) return "";
+        if (typeof v === "number") return String(v).trim();
+        return String(v || "").trim();
+      };
 
-  // ✅ 날짜 자동 변환
-  const 상차일 = excelDateToISO(r.상차일 || r["상차 일"] || r["상차일(YYYY-MM-DD)"] || "");
-  const 하차일 = excelDateToISO(r.하차일 || r["하차 일"] || r["하차일(YYYY-MM-DD)"] || "");
+      const mapped = rows.slice(1).map((r, i) => {
+        const cols = r.slice(0, 21).concat(Array(21).fill("")).slice(0, 21);
+        const [
+          상차일, 상차시간, 하차일, 하차시간,
+          거래처명, 상차지명, 상차지주소, 하차지명, 하차지주소,
+          화물내용, 차량종류, 차량톤수, 차량번호, 이름, 전화번호,
+          청구운임, 기사운임, 수수료, 지급방식, 배차방식, 메모,
+        ] = cols.map(normalize);
 
-  const 상차지명 = r.상차지명 || "";
-  const 하차지명 = r.하차지명 || "";
-  const pickC = findClient(상차지명);
-  const dropC = findClient(하차지명);
+        const cn = String(차량번호 || "").replace(/\s+/g, "");
+        const found = driverByCar.get(cn);
 
-// ✅ 화물내용 자동 인식 (공백, 줄바꿈, BOM, 중복 .1 헤더 완전 대응)
-const normalizeKey = (k = "") =>
-  k
-    .replace(/[\s\r\n\t]/g, "") // 공백/개행 제거
-    .replace(/\uFEFF/g, "") // BOM 제거
-    .trim();
+        const toInt2 = (v) => {
+          const n = parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10);
+          return isNaN(n) ? 0 : n;
+        };
 
-const cargoKey = Object.keys(r).find((k) => {
-  const key = normalizeKey(k);
-  return (
-    key.includes("화물내용") || // 기본
-    key.includes("화물내용.1") || // ✅ 중복 헤더 (.1) 대응
-    key.includes("화물") ||
-    key.includes("품목") ||
-    key.includes("내용")
-  );
-});
+        const 청 = toInt2(청구운임);
+        const 기 = toInt2(기사운임);
+        const 수 = toInt2(수수료 || 청 - 기);
 
-const cargo = cargoKey ? String(r[cargoKey] || "").trim() : "";
-
-
-
-  const base = {
-    _tmp_id: `${Date.now()}-${i}`,
-    상차일,
-    상차시간: r.상차시간 || "",
-    하차일,
-    하차시간: r.하차시간 || "",
-    거래처명: r.거래처명 || r.업체명 || "",
-    상차지명,
-    상차지주소: r.상차지주소 || pickC?.주소 || "",
-    하차지명,
-    하차지주소: r.하차지주소 || dropC?.주소 || "",
-    화물내용: cargo,  // ✅ 여기에 화물내용 반영
-    차량종류: r.차량종류 || "",
-    차량톤수: r.차량톤수 || "",
-    차량번호: cn,
-    이름: found?.이름 || "",
-    전화번호: found?.전화번호 || "",
-    배차상태: cn && (found?.이름 || found?.전화번호) ? "배차완료" : "배차중",
-    지급방식: r.지급방식 || "",
-    배차방식: r.배차방식 || "",
-    메모: r.메모 || "",
-  };
-
-  return isAdmin
-    ? { ...base, 청구운임: String(청), 기사운임: String(기), 수수료: String(청 - 기) }
-    : { ...base, 청구운임: "0", 기사운임: "0", 수수료: "0" };
-});
-
+        return {
+          _tmp_id: `${Date.now()}-${i}`,
+          상차일: excelDateToISO(상차일),
+          상차시간,
+          하차일: excelDateToISO(하차일),
+          하차시간,
+          거래처명,
+          상차지명,
+          상차지주소,
+          하차지명,
+          하차지주소,
+          화물내용,
+          차량종류,
+          차량톤수,
+          차량번호: cn,
+          이름: 이름 || found?.이름 || "",
+          전화번호: 전화번호 || found?.전화번호 || "",
+          청구운임: String(청),
+          기사운임: String(기),
+          수수료: String(수),
+          지급방식,
+          배차방식,
+          메모,
+          배차상태: cn && (found?.이름 || found?.전화번호) ? "배차완료" : "배차중",
+        };
+      });
 
       setBulkRows(mapped);
-      alert(`✅ 업로드 성공! (${mapped.length}건 불러옴)`);
+      alert(`✅ 대용량 업로드 완료 (${mapped.length}건) — 엑셀 순서 그대로 반영`);
     } catch (err) {
       console.error(err);
-      alert("❌ 엑셀 파싱 중 오류가 발생했습니다.");
+      alert("❌ 엑셀 업로드 중 오류가 발생했습니다.");
     }
   };
   reader.readAsArrayBuffer(file);
 };
-
   const setBulk = (id, k, v) => {
     setBulkRows(prev => prev.map(r => {
       if (r._tmp_id !== id) return r;
@@ -1760,8 +1754,7 @@ const cargo = cargoKey ? String(r[cargoKey] || "").trim() : "";
   );
 }
 // ===================== DispatchApp.jsx (PART 3/8) — END =====================
-
-// ===================== DispatchApp.jsx (PART 4/8 — 실시간배차현황 수정완성본) =====================
+// ===================== DispatchApp.jsx (PART 4/8 — 실시간배차현황 완성본: 첨부/공유 + 버튼) =====================
 function RealtimeStatus({
   dispatchData,
   drivers,
@@ -1769,7 +1762,10 @@ function RealtimeStatus({
   patchDispatch,
   removeDispatch,
   upsertDriver,
-  role = "admin", // "admin" | "user"
+  openAttachModal,
+  shareDispatch,
+  attachCount = {},
+  role = "admin",
 }) {
   const isAdmin = role === "admin";
   const [q, setQ] = React.useState("");
@@ -1778,6 +1774,7 @@ function RealtimeStatus({
   const [startDate, setStartDate] = React.useState("");
   const [endDate, setEndDate] = React.useState("");
   const [editRow, setEditRow] = React.useState(null);
+  const [carInputLock, setCarInputLock] = React.useState(false);
 
   const patch = patchDispatch;
   const remove = removeDispatch;
@@ -1787,7 +1784,6 @@ function RealtimeStatus({
     return isNaN(n) ? 0 : n;
   };
 
-  // ✅ 필터/정렬
   const filtered = React.useMemo(() => {
     let data = [...(dispatchData || [])];
     const today = todayStr();
@@ -1807,12 +1803,10 @@ function RealtimeStatus({
       );
     }
 
-    // 정렬: 배차중 → 오늘 → 나머지
+    // 정렬
     data.sort((a, b) => {
       if (a.배차상태 === "배차중" && b.배차상태 !== "배차중") return -1;
       if (a.배차상태 !== "배차중" && b.배차상태 === "배차중") return 1;
-      if ((a.상차일 || "") === today && (b.상차일 || "") !== today) return -1;
-      if ((a.상차일 || "") !== today && (b.상차일 || "") === today) return 1;
       return (
         (a.상차일 || "").localeCompare(b.상차일 || "") ||
         (a.상차시간 || "").localeCompare(b.상차시간 || "")
@@ -1822,7 +1816,6 @@ function RealtimeStatus({
     return data;
   }, [dispatchData, q, filterType, filterValue, startDate, endDate]);
 
-  // ✅ KPI 계산 (배차현황 스타일)
   const kpi = React.useMemo(() => {
     if (!isAdmin) return { cnt: filtered.length, sale: 0, drv: 0, fee: 0 };
     const sale = filtered.reduce((a, r) => a + toInt(r.청구운임), 0);
@@ -1849,74 +1842,43 @@ function RealtimeStatus({
     );
   };
 
-  // ✅ 수정 모달 (흰창 오류 수정 완료)
-  const EditModal = ({ row, onClose }) => {
-    if (!row) return null;
-    const [form, setForm] = React.useState({ ...row });
-
-    const setVal = (k, v) =>
-      setForm((p) => {
-        const next = { ...p, [k]: v };
-        if (k === "청구운임" || k === "기사운임") {
-          const sale = toInt(next.청구운임);
-          const drv = toInt(next.기사운임);
-          next.수수료 = sale - drv;
-        }
-        return next;
-      });
-
-    const save = async () => {
-      try {
-        await patch(row._id, form);
-        alert("수정 완료 ✅");
-        onClose();
-      } catch (err) {
-        console.error(err);
-        alert("저장 중 오류가 발생했습니다.");
-      }
-    };
-
-    return (
-      <div className="fixed inset-0 z-[9999] bg-black/40 flex items-center justify-center">
-        <div className="bg-white w-[95%] max-w-3xl rounded-2xl shadow-2xl overflow-hidden">
-          <div className="px-4 py-3 border-b flex items-center justify-between">
-            <b>수정하기</b>
-            <button onClick={onClose} className="text-gray-500">✕</button>
-          </div>
-
-          <div className="p-4 grid grid-cols-2 gap-3 text-sm">
-            {[
-              "거래처명","상차지명","하차지명","화물내용",
-              "차량번호","차량종류","차량톤수",
-              "청구운임","기사운임","수수료",
-              "지급방식","배차방식","메모"
-            ].map((key) => (
-              <div key={key}>
-                <div className="text-xs text-gray-500 mb-1">{key}</div>
-                <input
-                  className="border rounded px-2 py-1 w-full"
-                  value={form[key] || ""}
-                  onChange={(e) => setVal(key, e.target.value)}
-                  readOnly={key === "수수료"}
-                />
-              </div>
-            ))}
-          </div>
-
-          <div className="px-4 py-3 border-t flex justify-end gap-2">
-            <button onClick={onClose} className="px-3 py-2 border rounded">닫기</button>
-            <button onClick={save} className="px-3 py-2 bg-blue-600 text-white rounded">저장</button>
-          </div>
-        </div>
-      </div>
-    );
+  // 🔹 엑셀 다운로드 (그대로 유지)
+  const exportExcel = () => {
+    const rows = filtered.map((r, i) => ({
+      순번: i + 1,
+      등록일: r.등록일,
+      상차일: r.상차일,
+      상차시간: r.상차시간,
+      하차일: r.하차일,
+      하차시간: r.하차시간,
+      거래처명: r.거래처명,
+      상차지명: r.상차지명,
+      하차지명: r.하차지명,
+      화물내용: r.화물내용,
+      차량종류: r.차량종류,
+      차량톤수: r.차량톤수,
+      차량번호: r.차량번호,
+      기사명: r.이름,
+      전화번호: r.전화번호,
+      배차상태: r.배차상태,
+      청구운임: r.청구운임,
+      기사운임: r.기사운임,
+      수수료: r.수수료,
+      지급방식: r.지급방식,
+      배차방식: r.배차방식,
+      메모: r.메모,
+    }));
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, ws, "실시간배차현황");
+    XLSX.writeFile(wb, "실시간배차현황.xlsx");
   };
 
   return (
     <div className="p-3">
       <h2 className="text-lg font-bold mb-2">실시간 배차현황</h2>
 
-      {/* ✅ 상단 요약 바 */}
+      {/* KPI 바 */}
       {isAdmin && (
         <div className="flex flex-wrap items-center gap-5 text-sm mb-3 mt-1">
           <div>총 <b>{kpi.cnt}</b>건</div>
@@ -1926,65 +1888,25 @@ function RealtimeStatus({
         </div>
       )}
 
-      {/* ✅ 좌우 스크롤 안내 바 */}
-      <div className="w-full bg-blue-600/90 text-white text-xs px-3 py-1 rounded mb-2">
-        👉 좌우 스크롤: <b>Shift</b> + 마우스 휠 / 터치패드 제스처 사용
-      </div>
-
-      {/* 필터 */}
-      <div className="flex flex-wrap items-center gap-2 mb-3">
-        <select
-          className="border p-1 rounded text-sm"
-          value={filterType}
-          onChange={(e) => {
-            setFilterType(e.target.value);
-            setFilterValue("");
-          }}
-        >
-          <option value="전체">필터 없음</option>
-          <option value="거래처명">거래처명</option>
-          <option value="상차지명">상차지명</option>
-          <option value="하차지명">하차지명</option>
-          <option value="차량번호">차량번호</option>
-        </select>
-
-        {filterType !== "전체" && (
-          <input
-            className="border p-1 rounded text-sm"
-            placeholder={`${filterType} 검색`}
-            value={filterValue}
-            onChange={(e) => setFilterValue(e.target.value)}
-          />
-        )}
-
-        <div className="flex items-center gap-1 text-sm">
-          <input type="date" className="border p-1 rounded" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-          <span>~</span>
-          <input type="date" className="border p-1 rounded" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
-        </div>
-
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="검색..."
-          className="border p-2 rounded w-64"
-        />
-
+      {/* ✅ 상단 버튼 */}
+      <div className="flex justify-end items-center gap-2 mb-2">
+        <button className="px-3 py-2 rounded border bg-white hover:bg-gray-100">
+          전체수정
+        </button>
+        <button className="px-3 py-2 rounded bg-red-600 text-white hover:bg-red-700">
+          선택삭제
+        </button>
+        <button className="px-3 py-2 rounded bg-blue-600 text-white hover:bg-blue-700">
+          저장
+        </button>
         <button
-          onClick={() => {
-            setQ("");
-            setFilterType("전체");
-            setFilterValue("");
-            setStartDate("");
-            setEndDate("");
-          }}
-          className="ml-auto bg-gray-200 px-3 py-1 rounded"
+          className="px-3 py-2 rounded bg-emerald-600 text-white hover:bg-emerald-700"
+          onClick={exportExcel}
         >
-          초기화
+          엑셀다운
         </button>
       </div>
 
-      {/* 🖥️ PC 테이블 */}
       <div className="overflow-x-auto">
         <table className="min-w-[1900px] text-sm border">
           <thead>
@@ -1994,7 +1916,7 @@ function RealtimeStatus({
                 "거래처명","상차지명","상차지주소","하차지명","하차지주소",
                 "화물내용","차량종류","차량톤수","차량번호","이름","전화번호",
                 "배차상태","청구운임","기사운임","수수료","지급방식","배차방식",
-                "메모","수정","삭제"
+                "메모","첨부","공유",
               ].map((h) => (
                 <th key={h} className={head}>{h}</th>
               ))}
@@ -2032,17 +1954,24 @@ function RealtimeStatus({
                   <td className={cell}>{r.지급방식}</td>
                   <td className={cell}>{r.배차방식}</td>
                   <td className={cell}>{r.메모}</td>
-                  <td className={cell}>
-                    <button onClick={() => isAdmin && setEditRow(r)} className="px-2 py-1 bg-blue-600 text-white rounded">수정</button>
-                  </td>
+
+                  {/* 첨부 */}
                   <td className={cell}>
                     <button
-                      onClick={() => {
-                        if (confirm("삭제하시겠습니까?")) remove(r._id);
-                      }}
-                      className="px-2 py-1 bg-red-600 text-white rounded"
+                      className="px-2 py-0.5 rounded border hover:bg-gray-100 text-sm"
+                      onClick={() => openAttachModal?.(r)}
                     >
-                      삭제
+                      📎 {(attachCount[r._id] ?? 0)}
+                    </button>
+                  </td>
+
+                  {/* 공유 */}
+                  <td className={cell}>
+                    <button
+                      className="px-2 py-0.5 rounded bg-blue-600 text-white hover:bg-blue-700 text-sm"
+                      onClick={() => shareDispatch?.(r)}
+                    >
+                      📨
                     </button>
                   </td>
                 </tr>
@@ -2051,15 +1980,14 @@ function RealtimeStatus({
           </tbody>
         </table>
       </div>
-
-      {editRow && <EditModal row={editRow} onClose={() => setEditRow(null)} />}
     </div>
   );
 }
 // ===================== DispatchApp.jsx (PART 4/8 — END) =====================
 
 
-// ===================== DispatchApp.jsx (PART 5/8 — 차량번호 항상 활성화 + 전체수정 기능 추가 완전본) =====================
+
+// ===================== DispatchApp.jsx (PART 5/8 — 차량번호 항상 활성화 + 전체수정 기능 + prompt 버그 수정 완전본) =====================
 function DispatchStatus({
   dispatchData = [],
   setDispatchData,
@@ -2075,6 +2003,7 @@ function DispatchStatus({
   const [editAll, setEditAll] = React.useState(false);
   const [edited, setEdited] = React.useState({});
   const [justSaved, setJustSaved] = React.useState([]);
+  const [carInputLock, setCarInputLock] = React.useState(false); // ✅ 추가: prompt 중복 방지
 
   const toInt = (v) => parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10) || 0;
   const getId = (r) => r._id || r.id || r._fsid;
@@ -2085,6 +2014,7 @@ function DispatchStatus({
       n.has(id) ? n.delete(id) : n.add(id);
       return n;
     });
+
   const toggleAll = (rows) =>
     setSelected((prev) =>
       prev.size === rows.length ? new Set() : new Set(rows.map((r) => getId(r)))
@@ -2101,35 +2031,44 @@ function DispatchStatus({
       return { ...prev, [getId(row)]: cur };
     });
 
-  // ✅ 차량번호 자동매칭 (항상 활성화)
+  // ✅ 차량번호 자동매칭 (prompt 중복 방지 포함)
   const handleCarInput = async (row, val) => {
-    const v = val.trim();
-    if (!v) {
-      updateEdited(row, "차량번호", "");
-      updateEdited(row, "이름", "");
-      updateEdited(row, "전화번호", "");
-      updateEdited(row, "배차상태", "배차중");
-      return;
-    }
-    const f = drivers.find(
-      (d) => String(d.차량번호 || "").replace(/\s+/g, "") === v
-    );
-    if (f) {
-      updateEdited(row, "차량번호", f.차량번호);
-      updateEdited(row, "이름", f.이름 || "");
-      updateEdited(row, "전화번호", f.전화번호 || "");
+    if (carInputLock) return; // 실행 중이면 중복 방지
+    setCarInputLock(true);
+
+    try {
+      const v = val.trim();
+      if (!v) {
+        updateEdited(row, "차량번호", "");
+        updateEdited(row, "이름", "");
+        updateEdited(row, "전화번호", "");
+        updateEdited(row, "배차상태", "배차중");
+        return;
+      }
+
+      const f = drivers.find(
+        (d) => String(d.차량번호 || "").replace(/\s+/g, "") === v
+      );
+      if (f) {
+        updateEdited(row, "차량번호", f.차량번호);
+        updateEdited(row, "이름", f.이름 || "");
+        updateEdited(row, "전화번호", f.전화번호 || "");
+        updateEdited(row, "배차상태", "배차완료");
+        return;
+      }
+
+      const 이름 = prompt("신규 기사 이름:");
+      if (!이름) return;
+      const 전화번호 = prompt("전화번호:") || "";
+      await upsertDriver?.({ 이름, 차량번호: v, 전화번호 });
+      updateEdited(row, "차량번호", v);
+      updateEdited(row, "이름", 이름);
+      updateEdited(row, "전화번호", 전화번호);
       updateEdited(row, "배차상태", "배차완료");
-      return;
+      alert("신규 기사 등록 완료!");
+    } finally {
+      setTimeout(() => setCarInputLock(false), 300); // 실행 종료 후 잠금 해제
     }
-    const 이름 = prompt("신규 기사 이름:");
-    if (!이름) return;
-    const 전화번호 = prompt("전화번호:") || "";
-    await upsertDriver?.({ 이름, 차량번호: v, 전화번호 });
-    updateEdited(row, "차량번호", v);
-    updateEdited(row, "이름", 이름);
-    updateEdited(row, "전화번호", 전화번호);
-    updateEdited(row, "배차상태", "배차완료");
-    alert("신규 기사 등록 완료!");
   };
 
   const _patch =
@@ -2138,6 +2077,7 @@ function DispatchStatus({
       setDispatchData((p) =>
         p.map((r) => (getId(r) === id ? { ...r, ...patch } : r))
       ));
+
   const _remove =
     removeDispatch ||
     ((row) =>
@@ -2219,7 +2159,6 @@ function DispatchStatus({
     return data;
   }, [dispatchData, q, startDate, endDate]);
 
-  // ✅ 상단 요약 계산
   const summary = React.useMemo(() => {
     const totalCount = filtered.length;
     const totalSale = filtered.reduce((sum, r) => sum + toInt(r.청구운임), 0);
@@ -2244,7 +2183,6 @@ function DispatchStatus({
     <div className="p-3">
       <h2 className="text-lg font-bold mb-3">배차현황</h2>
 
-      {/* ✅ 상단 요약 바 */}
       <div className="flex flex-wrap items-center gap-5 text-sm mb-2">
         <div>총 <b>{summary.totalCount}</b>건</div>
         <div>청구 <b className="text-blue-600">{summary.totalSale.toLocaleString()}</b>원</div>
@@ -2279,48 +2217,42 @@ function DispatchStatus({
         <table className="min-w-[2200px] text-sm border border-gray-300">
           <thead className="bg-gray-100">
             <tr>
-              {[ "선택","순번","등록일","상차일","상차시간","하차일","하차시간",
+              {[
+                "선택","순번","등록일","상차일","상차시간","하차일","하차시간",
                 "거래처명","상차지명","상차지주소","하차지명","하차지주소",
                 "화물내용","차량종류","차량톤수","차량번호","기사명","전화번호",
-                "배차상태","청구운임","기사운임","수수료","지급방식","배차방식","메모",
+                "배차상태","청구운임","기사운임","수수료","지급방식","배차방식","메모"
               ].map((h) => (
                 <th key={h} className="border px-2 py-2 text-center whitespace-nowrap">
                   {h === "선택"
-                    ? <input type="checkbox" onChange={() => toggleAll(filtered)}
-                        checked={filtered.length && filtered.every((r) => selected.has(getId(r)))} />
+                    ? <input type="checkbox" onChange={() => toggleAll(filtered)} checked={filtered.length && filtered.every((r) => selected.has(getId(r)))} />
                     : h}
                 </th>
               ))}
             </tr>
           </thead>
+
           <tbody>
             {filtered.map((r, i) => {
               const id = getId(r);
               const row = edited[id] ? { ...r, ...edited[id] } : r;
               const fee = toInt(row.청구운임) - toInt(row.기사운임);
 
-              // ✅ 수정 가능한 컬럼 목록 정의
               const editableKeys = [
-                "상차일", "상차시간", "하차일", "하차시간",
-                "거래처명", "상차지명", "상차지주소", "하차지명", "하차지주소",
-                "화물내용", "차량종류", "차량톤수", "지급방식", "배차방식", "메모",
-                "청구운임", "기사운임"
+                "상차일","상차시간","하차일","하차시간",
+                "거래처명","상차지명","상차지주소","하차지명","하차지주소",
+                "화물내용","차량종류","차량톤수","지급방식","배차방식","메모",
+                "청구운임","기사운임"
               ];
 
               return (
-                <tr key={id || i}
-                    className={`${i % 2 === 0 ? "bg-white" : "bg-gray-50"} ${
-                      justSaved.includes(id) ? "bg-emerald-100" : ""
-                    }`}>
+                <tr key={id || i} className={`${i % 2 === 0 ? "bg-white" : "bg-gray-50"} ${justSaved.includes(id) ? "bg-emerald-100" : ""}`}>
                   <td className="border text-center">
-                    <input type="checkbox"
-                      checked={selected.has(id)}
-                      onChange={() => toggleOne(id)} />
+                    <input type="checkbox" checked={selected.has(id)} onChange={() => toggleOne(id)} />
                   </td>
                   <td className="border text-center">{i + 1}</td>
                   <td className="border text-center whitespace-nowrap">{row.등록일}</td>
 
-                  {/* 나머지 필드 렌더링 */}
                   {[
                     "상차일","상차시간","하차일","하차시간",
                     "거래처명","상차지명","상차지주소","하차지명","하차지주소",
@@ -2328,18 +2260,14 @@ function DispatchStatus({
                   ].map((key) => (
                     <td key={key} className="border text-center whitespace-nowrap">
                       {editAll && editableKeys.includes(key) ? (
-                        <input
-                          className="border rounded px-1 py-0.5 w-full text-center"
-                          defaultValue={row[key] || ""}
-                          onChange={(e) => updateEdited(row, key, e.target.value)}
-                        />
+                        <input className="border rounded px-1 py-0.5 w-full text-center" defaultValue={row[key] || ""} onChange={(e) => updateEdited(row, key, e.target.value)} />
                       ) : (
                         row[key]
                       )}
                     </td>
                   ))}
 
-                  {/* 차량번호 — 항상 수정 가능 */}
+                  {/* 차량번호 항상 활성화 */}
                   <td className="border text-center">
                     <input
                       className="border rounded px-1 py-0.5 w-full text-center"
@@ -2353,35 +2281,22 @@ function DispatchStatus({
                   <td className="border text-center">{row.전화번호}</td>
                   <td className="border text-center"><StatusBadge s={row.배차상태} /></td>
 
-                  {/* 금액 필드 */}
                   {["청구운임","기사운임"].map((key) => (
                     <td key={key} className="border text-right pr-2">
                       {editAll ? (
-                        <input
-                          className="border rounded px-1 py-0.5 text-right w-full"
-                          defaultValue={toInt(row[key])}
-                          onChange={(e) => updateEdited(row, key, e.target.value)}
-                        />
+                        <input className="border rounded px-1 py-0.5 text-right w-full" defaultValue={toInt(row[key])} onChange={(e) => updateEdited(row, key, e.target.value)} />
                       ) : (
                         toInt(row[key]).toLocaleString()
                       )}
                     </td>
                   ))}
 
-                  {/* 수수료는 수정 불가 */}
-                  <td className={`border text-right pr-2 ${fee < 0 ? "text-red-500" : ""}`}>
-                    {fee.toLocaleString()}
-                  </td>
+                  <td className={`border text-right pr-2 ${fee < 0 ? "text-red-500" : ""}`}>{fee.toLocaleString()}</td>
 
-                  {/* 지급방식, 배차방식, 메모 */}
                   {["지급방식","배차방식","메모"].map((key) => (
                     <td key={key} className="border text-center">
                       {editAll ? (
-                        <input
-                          className="border rounded px-1 py-0.5 w-full text-center"
-                          defaultValue={row[key] || ""}
-                          onChange={(e) => updateEdited(row, key, e.target.value)}
-                        />
+                        <input className="border rounded px-1 py-0.5 w-full text-center" defaultValue={row[key] || ""} onChange={(e) => updateEdited(row, key, e.target.value)} />
                       ) : (
                         row[key]
                       )}
@@ -2397,8 +2312,6 @@ function DispatchStatus({
   );
 }
 // ===================== DispatchApp.jsx (PART 5/8 — END) =====================
-
-
 
 
 // ===================== DispatchApp.jsx (PART 6/8) — START =====================
