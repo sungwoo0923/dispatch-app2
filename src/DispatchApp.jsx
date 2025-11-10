@@ -464,10 +464,10 @@ function DispatchManagement({
     "라보/라마스", "카고", "윙바디", "탑차", "냉장탑", "냉동탑", "오토바이", "기타"
   ];
   const PAY_TYPES = (typeof window !== "undefined" && window.RUN25_PAY_TYPES) || [
-    "계산서", "착불", "선불", "손실", "인성", "개인", "기타"
+    "계산서", "착불", "선불", "손실", "개인", "기타"
   ];
   const DISPATCH_TYPES = (typeof window !== "undefined" && window.RUN25_DISPATCH_TYPES) || [
-    "24시", "직접배차", "24(외주업체)"
+    "24시", "직접배차", "인성", "24(외주업체)"
   ];
   const StatusBadge = ({ s }) => {
     const map = {
