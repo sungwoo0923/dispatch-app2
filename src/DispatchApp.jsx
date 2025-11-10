@@ -461,10 +461,10 @@ function DispatchManagement({
     : (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch {} };
 
   const VEHICLE_TYPES = (typeof window !== "undefined" && window.RUN25_VEHICLE_TYPES) || [
-    "카고", "윙바디", "탑차", "냉장탑", "냉동탑", "오토바이", "기타"
+    "라보/라마스", "카고", "윙바디", "탑차", "냉장탑", "냉동탑", "오토바이", "기타"
   ];
   const PAY_TYPES = (typeof window !== "undefined" && window.RUN25_PAY_TYPES) || [
-    "계산서", "착불", "선불", "손실", "개인", "기타"
+    "계산서", "착불", "선불", "손실", "인성", "개인", "기타"
   ];
   const DISPATCH_TYPES = (typeof window !== "undefined" && window.RUN25_DISPATCH_TYPES) || [
     "24시", "직접배차", "24(외주업체)"
@@ -1502,60 +1502,113 @@ function DispatchManagement({
   const toInt2 = (v) => { const n = parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10); return isNaN(n) ? 0 : n; };
 
   const onBulkFile = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      try {
-        const wb = XLSX.read(new Uint8Array(evt.target.result), { type: "array" });
-        const sheet = wb.SheetNames[0];
-        const json = XLSX.utils.sheet_to_json(wb.Sheets[sheet], { defval: "" });
-        const mapped = json.map((r, i) => {
-          const cn = String(r.차량번호 || r["차량 번호"] || "").replace(/\s+/g, "");
-          const found = driverByCar.get(cn);
-          const 청 = isAdmin ? toInt2(r.청구운임 || r["청구 운임"] || r.청구 || 0) : 0;
-          const 기 = isAdmin ? toInt2(r.기사운임 || r["기사 운임"] || r.기사 || 0) : 0;
+  const file = e.target.files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (evt) => {
+    try {
+      const wb = XLSX.read(new Uint8Array(evt.target.result), { type: "array" });
+      const sheet = wb.SheetNames[0];
+      const json = XLSX.utils.sheet_to_json(wb.Sheets[sheet], { defval: "" });
+      console.log("📦 실제 엑셀 헤더들 ↓↓↓");
+Object.keys(json[0]).forEach((key, i) => {
+  console.log(`${i + 1}. [${key}]`);
+});
 
-          const 상차일 = lockYear((r.상차일 || r["상차 일"] || "").toString().slice(0, 10));
-          const 하차일 = lockYear((r.하차일 || r["하차 일"] || "").toString().slice(0, 10));
+      // ✅ 엑셀 날짜 자동 인식 (숫자형, 문자열형, 수식형 모두 지원)
+      const excelDateToISO = (value) => {
+        if (!value) return "";
+        // 숫자형 (엑셀 내부 날짜 시리얼)
+        if (typeof value === "number") {
+          const utcDays = Math.floor(value - 25569);
+          const date = new Date(utcDays * 86400 * 1000);
+          const offsetDate = new Date(date.getTime() + date.getTimezoneOffset() * 60000);
+          return offsetDate.toISOString().slice(0, 10);
+        }
+        // 문자열형 (YYYY-MM-DD or YYYY/MM/DD)
+        if (typeof value === "string") {
+          const v = value.replace(/\//g, "-").trim();
+          if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(v)) return v;
+        }
+        return "";
+      };
 
-          const 상차지명 = r.상차지명 || "";
-          const 하차지명 = r.하차지명 || "";
-          const pickC = findClient(상차지명);
-          const dropC = findClient(하차지명);
+      const mapped = json.map((r, i) => {
+  const cn = String(r.차량번호 || r["차량 번호"] || "").replace(/\s+/g, "");
+  const found = driverByCar.get(cn);
+  const 청 = isAdmin ? toInt2(r.청구운임 || r["청구 운임"] || r.청구 || 0) : 0;
+  const 기 = isAdmin ? toInt2(r.기사운임 || r["기사 운임"] || r.기사 || 0) : 0;
 
-          const base = {
-            _tmp_id: `${Date.now()}-${i}`,
-            상차일, 상차시간: r.상차시간 || "",
-            하차일, 하차시간: r.하차시간 || "",
-            거래처명: r.거래처명 || r.업체명 || "",
-            상차지명,
-            상차지주소: r.상차지주소 || pickC?.주소 || "",
-            하차지명,
-            하차지주소: r.하차지주소 || dropC?.주소 || "",
-            화물내용: r.화물내용 || r.화물 || "",
-            차량종류: r.차량종류 || "",
-            차량톤수: r.차량톤수 || "",
-            차량번호: cn,
-            이름: found?.이름 || "",
-            전화번호: found?.전화번호 || "",
-            배차상태: cn && (found?.이름 || found?.전화번호) ? "배차완료" : "배차중",
-            지급방식: r.지급방식 || "",
-            배차방식: r.배차방식 || "",
-            메모: r.메모 || "",
-          };
-          return isAdmin
-            ? { ...base, 청구운임: String(청), 기사운임: String(기), 수수료: String(청 - 기) }
-            : { ...base, 청구운임: "0", 기사운임: "0", 수수료: "0" };
-        });
-        setBulkRows(mapped);
-      } catch (err) {
-        console.error(err);
-        alert("엑셀 파싱 중 오류가 발생했습니다.");
-      }
-    };
-    reader.readAsArrayBuffer(file);
+  // ✅ 날짜 자동 변환
+  const 상차일 = excelDateToISO(r.상차일 || r["상차 일"] || r["상차일(YYYY-MM-DD)"] || "");
+  const 하차일 = excelDateToISO(r.하차일 || r["하차 일"] || r["하차일(YYYY-MM-DD)"] || "");
+
+  const 상차지명 = r.상차지명 || "";
+  const 하차지명 = r.하차지명 || "";
+  const pickC = findClient(상차지명);
+  const dropC = findClient(하차지명);
+
+// ✅ 화물내용 자동 인식 (공백, 줄바꿈, BOM, 중복 .1 헤더 완전 대응)
+const normalizeKey = (k = "") =>
+  k
+    .replace(/[\s\r\n\t]/g, "") // 공백/개행 제거
+    .replace(/\uFEFF/g, "") // BOM 제거
+    .trim();
+
+const cargoKey = Object.keys(r).find((k) => {
+  const key = normalizeKey(k);
+  return (
+    key.includes("화물내용") || // 기본
+    key.includes("화물내용.1") || // ✅ 중복 헤더 (.1) 대응
+    key.includes("화물") ||
+    key.includes("품목") ||
+    key.includes("내용")
+  );
+});
+
+const cargo = cargoKey ? String(r[cargoKey] || "").trim() : "";
+
+
+
+  const base = {
+    _tmp_id: `${Date.now()}-${i}`,
+    상차일,
+    상차시간: r.상차시간 || "",
+    하차일,
+    하차시간: r.하차시간 || "",
+    거래처명: r.거래처명 || r.업체명 || "",
+    상차지명,
+    상차지주소: r.상차지주소 || pickC?.주소 || "",
+    하차지명,
+    하차지주소: r.하차지주소 || dropC?.주소 || "",
+    화물내용: cargo,  // ✅ 여기에 화물내용 반영
+    차량종류: r.차량종류 || "",
+    차량톤수: r.차량톤수 || "",
+    차량번호: cn,
+    이름: found?.이름 || "",
+    전화번호: found?.전화번호 || "",
+    배차상태: cn && (found?.이름 || found?.전화번호) ? "배차완료" : "배차중",
+    지급방식: r.지급방식 || "",
+    배차방식: r.배차방식 || "",
+    메모: r.메모 || "",
   };
+
+  return isAdmin
+    ? { ...base, 청구운임: String(청), 기사운임: String(기), 수수료: String(청 - 기) }
+    : { ...base, 청구운임: "0", 기사운임: "0", 수수료: "0" };
+});
+
+
+      setBulkRows(mapped);
+      alert(`✅ 업로드 성공! (${mapped.length}건 불러옴)`);
+    } catch (err) {
+      console.error(err);
+      alert("❌ 엑셀 파싱 중 오류가 발생했습니다.");
+    }
+  };
+  reader.readAsArrayBuffer(file);
+};
+
   const setBulk = (id, k, v) => {
     setBulkRows(prev => prev.map(r => {
       if (r._tmp_id !== id) return r;
