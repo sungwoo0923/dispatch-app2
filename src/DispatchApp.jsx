@@ -2,10 +2,12 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import * as XLSX from "xlsx";
+import FixedClients from "./FixedClients";
 
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import AdminMenu from "./AdminMenu";
+
 
 /* -------------------------------------------------
    발행사(우리 회사) 고정 정보
@@ -343,6 +345,7 @@ export default function DispatchApp() {
           "미배차현황",
           "기사관리",
           "거래처관리",
+          "고정거래처관리",
           "매출관리",
           "거래처정산",
           "지급관리",
@@ -421,6 +424,10 @@ export default function DispatchApp() {
         {menu === "거래처관리" && role === "admin" && (
           <ClientManagement clients={clients} upsertClient={upsertClient} removeClient={removeClient} />
         )}
+{menu === "고정거래처관리" && role === "admin" && (
+  <FixedClients drivers={drivers} upsertDriver={upsertDriver} />
+)}
+
 
         {menu === "매출관리" && role === "admin" && <Settlement dispatchData={dispatchData} />}
 
@@ -433,6 +440,8 @@ export default function DispatchApp() {
         )}
 
         {menu === "관리자메뉴" && role === "admin" && <AdminMenu />}
+
+        
       </main>
     </>
   );
@@ -1754,7 +1763,7 @@ const onBulkFile = (e) => {
   );
 }
 // ===================== DispatchApp.jsx (PART 3/8) — END =====================
-// ===================== DispatchApp.jsx (PART 4/8 — 실시간배차현황 최종 안정버전) =====================
+// ===================== DispatchApp.jsx (PART 4/8 — 실시간배차현황: 선택수정/전체수정 작동버전) =====================
 function RealtimeStatus({
   dispatchData,
   drivers,
@@ -1772,17 +1781,22 @@ function RealtimeStatus({
   const [rows, setRows] = React.useState(dispatchData || []);
   const [selected, setSelected] = React.useState([]);
   const [editMode, setEditMode] = React.useState(false);
+  const [edited, setEdited] = React.useState({});
 
-  React.useEffect(() => setRows(dispatchData || []), [dispatchData]);
+  React.useEffect(() => {
+    setRows(dispatchData || []);
+    setEdited({});
+  }, [dispatchData]);
 
   const toInt = (v) => {
     const n = parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10);
     return isNaN(n) ? 0 : n;
   };
 
-  const normalizePlate = React.useCallback((s) => {
-    return String(s || "").replace(/\s+/g, "").replace(/[-.]/g, "").trim();
-  }, []);
+  const normalizePlate = React.useCallback(
+    (s) => String(s || "").replace(/\s+/g, "").replace(/[-.]/g, "").trim(),
+    []
+  );
 
   const driverMap = React.useMemo(() => {
     const m = new Map();
@@ -1793,104 +1807,53 @@ function RealtimeStatus({
     return m;
   }, [drivers, normalizePlate]);
 
-  // ✅ 차량번호 입력 시 자동매칭 / 삭제 시 초기화 / 신규등록 팝업 포함
   const handleCarInput = async (id, rawVal, keyEvent) => {
     if (keyEvent && keyEvent.key && keyEvent.key !== "Enter") return;
-    if (keyEvent) {
-      keyEvent.preventDefault(); // ⛔ 기본 엔터동작 방지 (스크롤/포커스 이동 방지)
-      keyEvent.stopPropagation();
-    }
-
     const v = normalizePlate(rawVal);
-    const idxInRows = rows.findIndex((r) => r._id === id);
-    if (idxInRows === -1) return;
-
-    // ✅ 차량번호 비움 → 이름/전화번호 초기화
-    if (!v) {
-      const cleared = { ...rows[idxInRows], 차량번호: "", 이름: "", 전화번호: "" };
-      setRows((prev) => prev.map((r) => (r._id === id ? cleared : r)));
-      setRows((prev) => [...prev]);
-      await patchDispatch?.(id, cleared);
-      return;
-    }
-
-    // ✅ 기사 목록 없으면 재시도
-    if (!drivers || drivers.length === 0) {
-      setTimeout(() => handleCarInput(id, rawVal), 400);
-      return;
-    }
+    const idx = rows.findIndex((r) => r._id === id);
+    if (idx === -1) return;
 
     const match = driverMap.get(v);
-
-    // ✅ 등록된 기사 자동매칭 (배차상태는 저장 시 처리)
     if (match) {
       const updated = {
-        ...rows[idxInRows],
         차량번호: match.차량번호,
         이름: match.이름 || "",
         전화번호: match.전화번호 || "",
       };
-      setRows((prev) => prev.map((r) => (r._id === id ? updated : r)));
-      setRows((prev) => [...prev]);
+      setRows((prev) => prev.map((r) => (r._id === id ? { ...r, ...updated } : r)));
       await patchDispatch?.(id, updated);
-      console.log("✅ 기사 자동매칭 성공:", match);
       return;
     }
 
-    // ✅ 신규차량 등록 팝업 — 취소 시 즉시 중단
     const ok = confirm(`차량번호 [${rawVal}] 가 등록되어 있지 않습니다. 신규 기사로 추가할까요?`);
     if (!ok) return;
-
-    // ✅ 하나의 prompt에서 이름+전화번호 한 번에 입력
     const 입력 = prompt("신규 기사 이름과 전화번호를 입력하세요\n(예: 홍길동 010-1234-5678)");
-    if (!입력) return; // 취소 시 종료
-
+    if (!입력) return;
     const [이름, 전화번호] = 입력.split(" ");
-    if (!이름) return alert("이름은 필수입니다.");
-
     const newDriver = { 이름, 차량번호: rawVal, 전화번호: 전화번호 || "" };
     await upsertDriver?.(newDriver);
 
-    const updated = {
-      ...rows[idxInRows],
-      차량번호: rawVal,
-      이름,
-      전화번호: 전화번호 || "",
-    };
-    setRows((prev) => prev.map((r) => (r._id === id ? updated : r)));
-    setRows((prev) => [...prev]);
+    const updated = { 차량번호: rawVal, 이름, 전화번호: 전화번호 || "" };
+    setRows((prev) => prev.map((r) => (r._id === id ? { ...r, ...updated } : r)));
     await patchDispatch?.(id, updated);
     alert("✅ 신규 기사 등록 완료");
   };
 
-  // ✅ 필터링 및 정렬
   const filtered = React.useMemo(() => {
     let data = [...rows];
     const today = new Date().toISOString().slice(0, 10);
-    if (!startDate && !endDate)
-      data = data.filter((r) => (r.상차일 || "") === today);
+    if (!startDate && !endDate) data = data.filter((r) => (r.상차일 || "") === today);
     else {
       if (startDate) data = data.filter((r) => (r.상차일 || "") >= startDate);
       if (endDate) data = data.filter((r) => (r.상차일 || "") <= endDate);
     }
-
     if (filterType !== "전체" && filterValue)
       data = data.filter((r) => String(r[filterType] || "").includes(filterValue));
-
     if (q.trim()) {
       const lower = q.toLowerCase();
-      data = data.filter((r) =>
-        Object.values(r).some((v) => String(v || "").toLowerCase().includes(lower))
-      );
+      data = data.filter((r) => Object.values(r).some((v) => String(v || "").toLowerCase().includes(lower)));
     }
-
-    // ✅ 배차중이 항상 위로
-    data.sort((a, b) => {
-      if (a.배차상태 === "배차중" && b.배차상태 !== "배차중") return -1;
-      if (a.배차상태 !== "배차중" && b.배차상태 === "배차중") return 1;
-      return (a.상차일 || "").localeCompare(b.상차일 || "");
-    });
-
+    data.sort((a, b) => (a.상차일 || "").localeCompare(b.상차일 || ""));
     return data;
   }, [rows, q, filterType, filterValue, startDate, endDate]);
 
@@ -1901,16 +1864,9 @@ function RealtimeStatus({
   }, [filtered]);
 
   const toggleSelect = (id) =>
-    setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
-
-  const toggleEditMode = async () => {
-    if (!editMode) setEditMode(true);
-    else {
-      for (const row of rows) await patchDispatch(row._id, row);
-      alert("전체 수정 완료 ✅");
-      setEditMode(false);
-    }
-  };
+    setSelected((p) =>
+      p.includes(id) ? p.filter((x) => x !== id) : [...p, id]
+    );
 
   const handleDeleteSelected = async () => {
     if (!selected.length) return alert("삭제할 항목을 선택하세요.");
@@ -1920,23 +1876,43 @@ function RealtimeStatus({
     setSelected([]);
   };
 
-  // ✅ 저장 시에만 배차완료 처리
-  const handleSave = async () => {
-    for (const row of rows) {
-      const updated = {
-        ...row,
-        배차상태: row.이름 ? "배차완료" : "배차중",
-      };
-      await patchDispatch(row._id, updated);
-    }
-    alert("저장 완료 ✅");
-  };
-
   const handleExcel = () => {
     const ws = XLSX.utils.json_to_sheet(filtered);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "실시간배차현황");
     XLSX.writeFile(wb, "실시간배차현황.xlsx");
+  };
+
+  // ✅ 수정 관련 로직
+  const handleEditChange = (id, key, value) => {
+    setEdited((prev) => ({
+      ...prev,
+      [id]: { ...(prev[id] || {}), [key]: value },
+    }));
+  };
+
+  const handleSaveSelected = async () => {
+    if (!selected.length) return alert("선택된 항목이 없습니다.");
+    for (const id of selected) {
+      const updates = edited[id];
+      if (updates && Object.keys(updates).length) {
+        await patchDispatch?.(id, updates);
+      }
+    }
+    alert("✅ 선택 항목 수정 완료");
+    setEdited({});
+    setEditMode(false);
+  };
+
+  const handleSaveAll = async () => {
+    const entries = Object.entries(edited);
+    if (!entries.length) return alert("변경된 내용이 없습니다.");
+    for (const [id, updates] of entries) {
+      await patchDispatch?.(id, updates);
+    }
+    alert("✅ 전체 수정 완료");
+    setEdited({});
+    setEditMode(false);
   };
 
   const head = "border px-2 py-2 bg-gray-100 text-center whitespace-nowrap";
@@ -1946,7 +1922,7 @@ function RealtimeStatus({
     <div className="p-3">
       <h2 className="text-lg font-bold mb-2">실시간 배차현황</h2>
 
-      {/* KPI */}
+      {/* KPI 표시 */}
       <div className="flex flex-wrap items-center gap-5 text-sm mb-3 mt-1">
         <div>총 <b>{kpi.cnt}</b>건</div>
         <div>청구 <b className="text-blue-600">{kpi.sale.toLocaleString()}</b>원</div>
@@ -1954,15 +1930,12 @@ function RealtimeStatus({
         <div>수수료 <b className="text-amber-600">{kpi.fee.toLocaleString()}</b>원</div>
       </div>
 
-      {/* 필터 & 버튼 */}
+      {/* 필터 및 버튼 */}
       <div className="flex flex-wrap items-center gap-2 mb-3">
         <select
           className="border p-1 rounded text-sm"
           value={filterType}
-          onChange={(e) => {
-            setFilterType(e.target.value);
-            setFilterValue("");
-          }}
+          onChange={(e) => { setFilterType(e.target.value); setFilterValue(""); }}
         >
           <option value="전체">필터 없음</option>
           <option value="거래처명">거래처명</option>
@@ -1993,26 +1966,18 @@ function RealtimeStatus({
           className="border p-2 rounded w-64"
         />
 
-        <button
-          onClick={() => { setQ(""); setFilterType("전체"); setFilterValue(""); setStartDate(""); setEndDate(""); }}
-          className="bg-gray-200 px-3 py-1 rounded"
-        >
-          초기화
-        </button>
-
         <div className="ml-auto flex gap-2">
-          <button onClick={toggleEditMode} className={`px-3 py-1 rounded text-white ${editMode ? "bg-emerald-600" : "bg-blue-500"}`}>
-            {editMode ? "수정완료" : "전체수정"}
-          </button>
+          <button onClick={() => setEditMode((v) => !v)} className={`px-3 py-1 rounded text-white ${editMode ? "bg-blue-700" : "bg-blue-500"}`}>전체수정</button>
+          <button onClick={handleSaveSelected} className="px-3 py-1 rounded bg-amber-500 text-white">선택수정</button>
+          <button onClick={handleSaveAll} className="px-3 py-1 rounded bg-emerald-600 text-white">저장</button>
           <button onClick={handleDeleteSelected} className="bg-red-500 text-white px-3 py-1 rounded">선택삭제</button>
           <button onClick={handleExcel} className="bg-green-600 text-white px-3 py-1 rounded">엑셀다운</button>
-          <button onClick={handleSave} className="bg-indigo-600 text-white px-3 py-1 rounded">저장</button>
         </div>
       </div>
 
       {/* 테이블 */}
       <div className="overflow-x-auto">
-        <table className="min-w-[1900px] text-sm border">
+        <table className="min-w-[2000px] text-sm border">
           <thead>
             <tr>
               {[
@@ -2026,8 +1991,8 @@ function RealtimeStatus({
 
           <tbody>
             {filtered.map((r, idx) => {
-              const sale = toInt(r.청구운임);
-              const drv = toInt(r.기사운임);
+              const sale = toInt(edited[r._id]?.청구운임 ?? r.청구운임);
+              const drv = toInt(edited[r._id]?.기사운임 ?? r.기사운임);
               const fee = sale - drv;
 
               return (
@@ -2053,22 +2018,16 @@ function RealtimeStatus({
                   <td className={cell}>{r.화물내용}</td>
                   <td className={cell}>{r.차량종류}</td>
                   <td className={cell}>{r.차량톤수}</td>
-
-                  {/* 차량번호 입력 */}
                   <td className={cell}>
                     <input
                       type="text"
                       className="border p-1 rounded w-[110px]"
-                      value={r.차량번호 || ""}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setRows((prev) => prev.map((x) => (x._id === r._id ? { ...x, 차량번호: val } : x)));
-                      }}
+                      defaultValue={r.차량번호 || ""}
+                      onChange={(e) => handleEditChange(r._id, "차량번호", e.target.value)}
                       onKeyDown={(e) => e.key === "Enter" && handleCarInput(r._id, e.currentTarget.value, e)}
                       onBlur={(e) => handleCarInput(r._id, e.currentTarget.value)}
                     />
                   </td>
-
                   <td className={cell}>{r.이름}</td>
                   <td className={cell}>{r.전화번호}</td>
                   <td className={cell}>
@@ -2080,9 +2039,27 @@ function RealtimeStatus({
                       {r.배차상태 || ""}
                     </span>
                   </td>
-                  <td className={`${cell} text-right pr-2`}>{sale.toLocaleString()}</td>
-                  <td className={`${cell} text-right pr-2`}>{drv.toLocaleString()}</td>
-                  <td className={`${cell} text-right pr-2 ${fee < 0 ? "text-red-500" : ""}`}>{fee.toLocaleString()}</td>
+                  <td className={cell}>
+                    <input
+                      type="text"
+                      className="border p-1 rounded w-[80px] text-right"
+                      defaultValue={r.청구운임 || ""}
+                      onChange={(e) => handleEditChange(r._id, "청구운임", e.target.value)}
+                    />
+                  </td>
+                  <td className={cell}>
+                    <input
+                      type="text"
+                      className="border p-1 rounded w-[80px] text-right"
+                      defaultValue={r.기사운임 || ""}
+                      onChange={(e) => handleEditChange(r._id, "기사운임", e.target.value)}
+                    />
+                  </td>
+                  <td className={`${cell} text-right pr-2`}>
+                    <span className={fee < 0 ? "text-red-600" : "text-blue-600"}>
+                      {fee.toLocaleString()}
+                    </span>
+                  </td>
                   <td className={cell}>{r.지급방식}</td>
                   <td className={cell}>{r.배차방식}</td>
                   <td className={cell}>{r.메모}</td>
@@ -2098,7 +2075,8 @@ function RealtimeStatus({
 // ===================== DispatchApp.jsx (PART 4/8 — END) =====================
 
 
-// ===================== DispatchApp.jsx (PART 5/8 — 차량번호 항상 활성화 + 전체수정 기능 + prompt 버그 수정 완전본) =====================
+
+// ===================== DispatchApp.jsx (PART 5/8 — 차량번호 항상 활성화 + 전체수정 기능 + 메모 더보기 완전본) =====================
 function DispatchStatus({
   dispatchData = [],
   setDispatchData,
@@ -2114,7 +2092,7 @@ function DispatchStatus({
   const [editAll, setEditAll] = React.useState(false);
   const [edited, setEdited] = React.useState({});
   const [justSaved, setJustSaved] = React.useState([]);
-  const [carInputLock, setCarInputLock] = React.useState(false); // ✅ 추가: prompt 중복 방지
+  const [carInputLock, setCarInputLock] = React.useState(false);
 
   const toInt = (v) => parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10) || 0;
   const getId = (r) => r._id || r.id || r._fsid;
@@ -2142,11 +2120,9 @@ function DispatchStatus({
       return { ...prev, [getId(row)]: cur };
     });
 
-  // ✅ 차량번호 자동매칭 (prompt 중복 방지 포함)
   const handleCarInput = async (row, val) => {
-    if (carInputLock) return; // 실행 중이면 중복 방지
+    if (carInputLock) return;
     setCarInputLock(true);
-
     try {
       const v = val.trim();
       if (!v) {
@@ -2156,7 +2132,6 @@ function DispatchStatus({
         updateEdited(row, "배차상태", "배차중");
         return;
       }
-
       const f = drivers.find(
         (d) => String(d.차량번호 || "").replace(/\s+/g, "") === v
       );
@@ -2167,7 +2142,6 @@ function DispatchStatus({
         updateEdited(row, "배차상태", "배차완료");
         return;
       }
-
       const 이름 = prompt("신규 기사 이름:");
       if (!이름) return;
       const 전화번호 = prompt("전화번호:") || "";
@@ -2178,7 +2152,7 @@ function DispatchStatus({
       updateEdited(row, "배차상태", "배차완료");
       alert("신규 기사 등록 완료!");
     } finally {
-      setTimeout(() => setCarInputLock(false), 300); // 실행 종료 후 잠금 해제
+      setTimeout(() => setCarInputLock(false), 300);
     }
   };
 
@@ -2348,12 +2322,10 @@ function DispatchStatus({
               const id = getId(r);
               const row = edited[id] ? { ...r, ...edited[id] } : r;
               const fee = toInt(row.청구운임) - toInt(row.기사운임);
-
               const editableKeys = [
-                "상차일","상차시간","하차일","하차시간",
-                "거래처명","상차지명","상차지주소","하차지명","하차지주소",
-                "화물내용","차량종류","차량톤수","지급방식","배차방식","메모",
-                "청구운임","기사운임"
+                "상차일","상차시간","하차일","하차시간","거래처명","상차지명",
+                "상차지주소","하차지명","하차지주소","화물내용","차량종류",
+                "차량톤수","지급방식","배차방식","메모","청구운임","기사운임"
               ];
 
               return (
@@ -2365,9 +2337,8 @@ function DispatchStatus({
                   <td className="border text-center whitespace-nowrap">{row.등록일}</td>
 
                   {[
-                    "상차일","상차시간","하차일","하차시간",
-                    "거래처명","상차지명","상차지주소","하차지명","하차지주소",
-                    "화물내용","차량종류","차량톤수"
+                    "상차일","상차시간","하차일","하차시간","거래처명","상차지명",
+                    "상차지주소","하차지명","하차지주소","화물내용","차량종류","차량톤수"
                   ].map((key) => (
                     <td key={key} className="border text-center whitespace-nowrap">
                       {editAll && editableKeys.includes(key) ? (
@@ -2404,7 +2375,7 @@ function DispatchStatus({
 
                   <td className={`border text-right pr-2 ${fee < 0 ? "text-red-500" : ""}`}>{fee.toLocaleString()}</td>
 
-                  {["지급방식","배차방식","메모"].map((key) => (
+                  {["지급방식","배차방식"].map((key) => (
                     <td key={key} className="border text-center">
                       {editAll ? (
                         <input className="border rounded px-1 py-0.5 w-full text-center" defaultValue={row[key] || ""} onChange={(e) => updateEdited(row, key, e.target.value)} />
@@ -2413,6 +2384,19 @@ function DispatchStatus({
                       )}
                     </td>
                   ))}
+
+                  {/* ✅ 메모 더보기 */}
+                  <td className="border text-center">
+                    {editAll ? (
+                      <input
+                        className="border rounded px-1 py-0.5 w-full text-center"
+                        defaultValue={row.메모 || ""}
+                        onChange={(e) => updateEdited(row, "메모", e.target.value)}
+                      />
+                    ) : (
+                      <MemoCell text={row.메모 || ""} />
+                    )}
+                  </td>
                 </tr>
               );
             })}
@@ -2422,7 +2406,52 @@ function DispatchStatus({
     </div>
   );
 }
+
+/* ✅ 메모 더보기 컴포넌트 */
+function MemoCell({ text }) {
+  const [showFull, setShowFull] = React.useState(false);
+  if (!text) return <span className="text-gray-400">-</span>;
+  const isLong = text.length > 5;
+  const short = isLong ? text.slice(0, 5) + "..." : text;
+
+  return (
+    <div className="relative inline-block">
+      <span>{showFull ? text : short}</span>
+      {isLong && !showFull && (
+        <button
+          onClick={() => setShowFull(true)}
+          className="text-blue-600 text-xs ml-1 underline"
+        >
+          더보기
+        </button>
+      )}
+      {showFull && (
+        <div
+          className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+          onClick={() => setShowFull(false)}
+        >
+          <div
+            className="bg-white p-4 rounded-lg shadow-lg w-[400px] max-w-[90%]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="font-semibold text-lg mb-2">메모 내용</h3>
+            <div className="text-sm whitespace-pre-wrap break-words">{text}</div>
+            <div className="text-right mt-4">
+              <button
+                onClick={() => setShowFull(false)}
+                className="px-3 py-1 rounded bg-blue-600 text-white text-sm"
+              >
+                닫기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 // ===================== DispatchApp.jsx (PART 5/8 — END) =====================
+
 
 // ===================== DispatchApp.jsx (PART 6/8) — START =====================
 
