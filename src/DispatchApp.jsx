@@ -168,7 +168,10 @@ function useRealtimeCollections(user){
     if(!_id) return;
     await setDoc(doc(db, COLL.dispatch, _id), patch, { merge: true });
   };
-  const removeDispatch = async (_id)=> deleteDoc(doc(db, COLL.dispatch, _id));
+  const removeDispatch = async (row) => {
+  if (!row?._id) return;
+  await deleteDoc(doc(db, "dispatch", row._id));
+};
 
   const upsertDriver = async (driver)=>{
     const id = driver.차량번호 || driver.id || crypto?.randomUUID?.();
@@ -402,19 +405,18 @@ export default function DispatchApp() {
           />
         )}
 
-        {menu === "배차현황" && (
-          <DispatchStatus
-            role={role}
-            dispatchData={dispatchData}
-            timeOptions={timeOptions}
-            tonOptions={tonOptions}
-            drivers={drivers}
-            patchDispatch={patchDispatch}
-            removeDispatch={removeDispatch}
-            upsertDriver={upsertDriver}
-          />
-        )}
-
+{menu === "배차현황" && (
+  <DispatchStatus
+    role={role}
+    dispatchData={dispatchData}
+    timeOptions={timeOptions}
+    tonOptions={tonOptions}
+    drivers={drivers}
+    patchDispatch={patchDispatch}
+    removeDispatch={removeDispatch}
+    upsertDriver={upsertDriver}
+  />
+)}
         {menu === "미배차현황" && <UnassignedStatus role={role} dispatchData={dispatchData} />}
 
         {menu === "기사관리" && role === "admin" && (
@@ -1763,7 +1765,7 @@ const onBulkFile = (e) => {
   );
 }
 // ===================== DispatchApp.jsx (PART 3/8) — END =====================
-// ===================== DispatchApp.jsx (PART 4/8 — 실시간배차현황: 선택수정/전체수정 작동버전) =====================
+// ===================== DispatchApp.jsx (PART 4/8 — 실시간배차현황: KST + 선택수정 + 상태정렬 완전본) =====================
 function RealtimeStatus({
   dispatchData,
   drivers,
@@ -1780,7 +1782,7 @@ function RealtimeStatus({
   const [endDate, setEndDate] = React.useState("");
   const [rows, setRows] = React.useState(dispatchData || []);
   const [selected, setSelected] = React.useState([]);
-  const [editMode, setEditMode] = React.useState(false);
+  const [selectedEditMode, setSelectedEditMode] = React.useState(false);
   const [edited, setEdited] = React.useState({});
 
   React.useEffect(() => {
@@ -1788,16 +1790,28 @@ function RealtimeStatus({
     setEdited({});
   }, [dispatchData]);
 
+  // ✅ 한국시간(KST) 기준 날짜 계산
+  const todayKST = () => {
+    const now = new Date();
+    now.setHours(now.getHours() + 9);
+    return now.toISOString().slice(0, 10);
+  };
+
+  // 숫자 포맷
   const toInt = (v) => {
     const n = parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10);
     return isNaN(n) ? 0 : n;
   };
+  const formatComma = (num) => {
+    const n = toInt(num);
+    return n ? n.toLocaleString() : "";
+  };
 
+  // 차량번호 정규화
   const normalizePlate = React.useCallback(
     (s) => String(s || "").replace(/\s+/g, "").replace(/[-.]/g, "").trim(),
     []
   );
-
   const driverMap = React.useMemo(() => {
     const m = new Map();
     (drivers || []).forEach((d) => {
@@ -1807,12 +1821,24 @@ function RealtimeStatus({
     return m;
   }, [drivers, normalizePlate]);
 
+  // 차량번호 입력 핸들러
   const handleCarInput = async (id, rawVal, keyEvent) => {
     if (keyEvent && keyEvent.key && keyEvent.key !== "Enter") return;
     const v = normalizePlate(rawVal);
     const idx = rows.findIndex((r) => r._id === id);
     if (idx === -1) return;
 
+    // ✅ 차량번호 삭제 시 이름/전화번호 초기화
+    if (!v) {
+      const updated = { 차량번호: "", 이름: "", 전화번호: "" };
+      setRows((prev) =>
+        prev.map((r) => (r._id === id ? { ...r, ...updated } : r))
+      );
+      await patchDispatch?.(id, updated);
+      return;
+    }
+
+    // ✅ 등록된 기사 자동 매칭
     const match = driverMap.get(v);
     if (match) {
       const updated = {
@@ -1820,49 +1846,81 @@ function RealtimeStatus({
         이름: match.이름 || "",
         전화번호: match.전화번호 || "",
       };
-      setRows((prev) => prev.map((r) => (r._id === id ? { ...r, ...updated } : r)));
+      setRows((prev) =>
+        prev.map((r) => (r._id === id ? { ...r, ...updated } : r))
+      );
       await patchDispatch?.(id, updated);
       return;
     }
 
-    const ok = confirm(`차량번호 [${rawVal}] 가 등록되어 있지 않습니다. 신규 기사로 추가할까요?`);
+    // ✅ 신규 기사 등록
+    const ok = confirm(
+      `차량번호 [${rawVal}] 가 등록되어 있지 않습니다. 신규 기사로 추가할까요?`
+    );
     if (!ok) return;
-    const 입력 = prompt("신규 기사 이름과 전화번호를 입력하세요\n(예: 홍길동 010-1234-5678)");
+    const 입력 = prompt(
+      "신규 기사 이름과 전화번호를 입력하세요\n(예: 홍길동 010-1234-5678)"
+    );
     if (!입력) return;
     const [이름, 전화번호] = 입력.split(" ");
     const newDriver = { 이름, 차량번호: rawVal, 전화번호: 전화번호 || "" };
     await upsertDriver?.(newDriver);
 
     const updated = { 차량번호: rawVal, 이름, 전화번호: 전화번호 || "" };
-    setRows((prev) => prev.map((r) => (r._id === id ? { ...r, ...updated } : r)));
+    setRows((prev) =>
+      prev.map((r) => (r._id === id ? { ...r, ...updated } : r))
+    );
     await patchDispatch?.(id, updated);
     alert("✅ 신규 기사 등록 완료");
   };
 
+  // ✅ 필터 (당일 상차건 + 상태정렬)
   const filtered = React.useMemo(() => {
     let data = [...rows];
-    const today = new Date().toISOString().slice(0, 10);
-    if (!startDate && !endDate) data = data.filter((r) => (r.상차일 || "") === today);
+    const today = todayKST();
+
+    // 날짜 필터
+    if (!startDate && !endDate)
+      data = data.filter((r) => (r.상차일 || "") === today);
     else {
       if (startDate) data = data.filter((r) => (r.상차일 || "") >= startDate);
       if (endDate) data = data.filter((r) => (r.상차일 || "") <= endDate);
     }
+
+    // 기타 필터
     if (filterType !== "전체" && filterValue)
-      data = data.filter((r) => String(r[filterType] || "").includes(filterValue));
+      data = data.filter((r) =>
+        String(r[filterType] || "").includes(filterValue)
+      );
     if (q.trim()) {
       const lower = q.toLowerCase();
-      data = data.filter((r) => Object.values(r).some((v) => String(v || "").toLowerCase().includes(lower)));
+      data = data.filter((r) =>
+        Object.values(r).some((v) =>
+          String(v || "").toLowerCase().includes(lower)
+        )
+      );
     }
-    data.sort((a, b) => (a.상차일 || "").localeCompare(b.상차일 || ""));
+
+    // ✅ 배차상태 → 상차일 순 정렬
+    data.sort((a, b) => {
+      const statusOrder = { 배차중: 0, 배차완료: 1 };
+      const sa = statusOrder[a.배차상태] ?? 99;
+      const sb = statusOrder[b.배차상태] ?? 99;
+      if (sa !== sb) return sa - sb;
+      return (a.상차일 || "").localeCompare(b.상차일 || "");
+    });
+
     return data;
   }, [rows, q, filterType, filterValue, startDate, endDate]);
 
+  // KPI 요약
   const kpi = React.useMemo(() => {
     const sale = filtered.reduce((a, r) => a + toInt(r.청구운임), 0);
     const drv = filtered.reduce((a, r) => a + toInt(r.기사운임), 0);
     return { cnt: filtered.length, sale, drv, fee: sale - drv };
   }, [filtered]);
 
+  // 유틸
   const toggleSelect = (id) =>
     setSelected((p) =>
       p.includes(id) ? p.filter((x) => x !== id) : [...p, id]
@@ -1876,14 +1934,52 @@ function RealtimeStatus({
     setSelected([]);
   };
 
-  const handleExcel = () => {
-    const ws = XLSX.utils.json_to_sheet(filtered);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "실시간배차현황");
-    XLSX.writeFile(wb, "실시간배차현황.xlsx");
+// ✅ 엑셀 내보내기 (컬럼 순서 고정 + 천단위 콤마 적용)
+const handleExcel = () => {
+  if (!filtered.length) return alert("내보낼 데이터가 없습니다.");
+
+  // 컬럼 순서
+  const headers = [
+    "순번", "상차일", "거래처명", "상차지명", "하차지명",
+    "화물내용", "차량번호", "이름", "핸드폰번호",
+    "청구운임", "기사운임", "수수료", "지급방식", "배차방식",
+  ];
+
+  // ✅ 천 단위 콤마 포맷 함수
+  const comma = (num) => {
+    const n = parseInt(String(num ?? "0").replace(/[^\d-]/g, ""), 10);
+    return isNaN(n) ? "" : n.toLocaleString();
   };
 
-  // ✅ 수정 관련 로직
+  // ✅ 실제 데이터 구성
+  const rowsForExcel = filtered.map((r, i) => ({
+    순번: i + 1,
+    상차일: r.상차일 || "",
+    거래처명: r.거래처명 || "",
+    상차지명: r.상차지명 || "",
+    하차지명: r.하차지명 || "",
+    화물내용: r.화물내용 || "",
+    차량번호: r.차량번호 || "",
+    이름: r.이름 || "",
+    핸드폰번호: r.전화번호 || "",
+    청구운임: comma(r.청구운임),
+    기사운임: comma(r.기사운임),
+    수수료: comma(toInt(r.청구운임) - toInt(r.기사운임)),
+    지급방식: r.지급방식 || "",
+    배차방식: r.배차방식 || "",
+  }));
+
+  // ✅ 시트 생성 및 헤더 고정
+  const ws = XLSX.utils.json_to_sheet(rowsForExcel, { header: headers });
+  XLSX.utils.sheet_add_aoa(ws, [headers], { origin: "A1" });
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "실시간배차현황");
+  XLSX.writeFile(wb, "실시간배차현황.xlsx");
+};
+
+
+
   const handleEditChange = (id, key, value) => {
     setEdited((prev) => ({
       ...prev,
@@ -1901,28 +1997,27 @@ function RealtimeStatus({
     }
     alert("✅ 선택 항목 수정 완료");
     setEdited({});
-    setEditMode(false);
+    setSelectedEditMode(false);
   };
 
-  const handleSaveAll = async () => {
-    const entries = Object.entries(edited);
-    if (!entries.length) return alert("변경된 내용이 없습니다.");
-    for (const [id, updates] of entries) {
-      await patchDispatch?.(id, updates);
-    }
-    alert("✅ 전체 수정 완료");
-    setEdited({});
-    setEditMode(false);
-  };
+// ✅ 수정 가능 컬럼 필터
+const canEdit = (key, id) => {
+  if (!(selectedEditMode && selected.includes(id))) return false;
+  // 수정 불가 컬럼 제외
+  const readOnly = ["등록일", "순번", "차량번호", "배차상태", "이름", "전화번호"];
+  return !readOnly.includes(key);
+};
 
-  const head = "border px-2 py-2 bg-gray-100 text-center whitespace-nowrap";
-  const cell = "border px-2 py-1 text-center whitespace-nowrap align-middle";
+  const head =
+    "border px-2 py-2 bg-gray-100 text-center whitespace-nowrap";
+  const cell =
+    "border px-2 py-[2px] text-center align-middle whitespace-nowrap overflow-hidden text-ellipsis leading-tight";
 
   return (
-    <div className="p-3">
+    <div className="p-3 w-full">
       <h2 className="text-lg font-bold mb-2">실시간 배차현황</h2>
 
-      {/* KPI 표시 */}
+      {/* KPI */}
       <div className="flex flex-wrap items-center gap-5 text-sm mb-3 mt-1">
         <div>총 <b>{kpi.cnt}</b>건</div>
         <div>청구 <b className="text-blue-600">{kpi.sale.toLocaleString()}</b>원</div>
@@ -1930,12 +2025,15 @@ function RealtimeStatus({
         <div>수수료 <b className="text-amber-600">{kpi.fee.toLocaleString()}</b>원</div>
       </div>
 
-      {/* 필터 및 버튼 */}
+      {/* 필터 + 버튼 */}
       <div className="flex flex-wrap items-center gap-2 mb-3">
         <select
           className="border p-1 rounded text-sm"
           value={filterType}
-          onChange={(e) => { setFilterType(e.target.value); setFilterValue(""); }}
+          onChange={(e) => {
+            setFilterType(e.target.value);
+            setFilterValue("");
+          }}
         >
           <option value="전체">필터 없음</option>
           <option value="거래처명">거래처명</option>
@@ -1955,9 +2053,19 @@ function RealtimeStatus({
           />
         )}
 
-        <input type="date" className="border p-1 rounded" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+        <input
+          type="date"
+          className="border p-1 rounded"
+          value={startDate}
+          onChange={(e) => setStartDate(e.target.value)}
+        />
         <span>~</span>
-        <input type="date" className="border p-1 rounded" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+        <input
+          type="date"
+          className="border p-1 rounded"
+          value={endDate}
+          onChange={(e) => setEndDate(e.target.value)}
+        />
 
         <input
           value={q}
@@ -1967,17 +2075,40 @@ function RealtimeStatus({
         />
 
         <div className="ml-auto flex gap-2">
-          <button onClick={() => setEditMode((v) => !v)} className={`px-3 py-1 rounded text-white ${editMode ? "bg-blue-700" : "bg-blue-500"}`}>전체수정</button>
-          <button onClick={handleSaveSelected} className="px-3 py-1 rounded bg-amber-500 text-white">선택수정</button>
-          <button onClick={handleSaveAll} className="px-3 py-1 rounded bg-emerald-600 text-white">저장</button>
-          <button onClick={handleDeleteSelected} className="bg-red-500 text-white px-3 py-1 rounded">선택삭제</button>
-          <button onClick={handleExcel} className="bg-green-600 text-white px-3 py-1 rounded">엑셀다운</button>
+          <button
+            onClick={() => {
+              if (selected.length === 0)
+                return alert("수정할 항목을 먼저 선택하세요.");
+              setSelectedEditMode(true);
+            }}
+            className="px-3 py-1 rounded bg-amber-500 text-white"
+          >
+            선택수정
+          </button>
+          <button
+            onClick={handleSaveSelected}
+            className="px-3 py-1 rounded bg-emerald-600 text-white"
+          >
+            저장
+          </button>
+          <button
+            onClick={handleDeleteSelected}
+            className="bg-red-500 text-white px-3 py-1 rounded"
+          >
+            선택삭제
+          </button>
+          <button
+            onClick={handleExcel}
+            className="bg-green-600 text-white px-3 py-1 rounded"
+          >
+            엑셀다운
+          </button>
         </div>
       </div>
 
       {/* 테이블 */}
-      <div className="overflow-x-auto">
-        <table className="min-w-[2000px] text-sm border">
+      <div className="overflow-x-auto w-full">
+        <table className="w-auto min-w-max text-sm border table-auto">
           <thead>
             <tr>
               {[
@@ -1985,15 +2116,30 @@ function RealtimeStatus({
                 "거래처명","상차지명","상차지주소","하차지명","하차지주소",
                 "화물내용","차량종류","차량톤수","차량번호","이름","전화번호",
                 "배차상태","청구운임","기사운임","수수료","지급방식","배차방식","메모"
-              ].map((h) => <th key={h} className={head}>{h}</th>)}
+              ].map((h) => (
+                <th key={h} className={head}>{h}</th>
+              ))}
             </tr>
           </thead>
-
           <tbody>
             {filtered.map((r, idx) => {
               const sale = toInt(edited[r._id]?.청구운임 ?? r.청구운임);
               const drv = toInt(edited[r._id]?.기사운임 ?? r.기사운임);
               const fee = sale - drv;
+
+              const editableInput = (key, val) =>
+                canEdit(key, r._id) ? (
+                  <input
+                    type="text"
+                    className="border p-1 rounded w-full"
+                    defaultValue={val || ""}
+                    onChange={(e) =>
+                      handleEditChange(r._id, key, e.target.value)
+                    }
+                  />
+                ) : (
+                  val
+                );
 
               return (
                 <tr key={r._id || idx} className={idx % 2 ? "bg-gray-50" : ""}>
@@ -2004,65 +2150,88 @@ function RealtimeStatus({
                       onChange={() => toggleSelect(r._id)}
                     />
                   </td>
-                  <td className={`${cell} w-[50px]`}>{idx + 1}</td>
+                  <td className={cell}>{idx + 1}</td>
                   <td className={cell}>{r.등록일}</td>
-                  <td className={cell}>{r.상차일}</td>
-                  <td className={cell}>{r.상차시간}</td>
-                  <td className={cell}>{r.하차일}</td>
-                  <td className={cell}>{r.하차시간}</td>
-                  <td className={cell}>{r.거래처명}</td>
-                  <td className={cell}>{r.상차지명}</td>
-                  <td className={cell}>{r.상차지주소}</td>
-                  <td className={cell}>{r.하차지명}</td>
-                  <td className={cell}>{r.하차지주소}</td>
-                  <td className={cell}>{r.화물내용}</td>
-                  <td className={cell}>{r.차량종류}</td>
-                  <td className={cell}>{r.차량톤수}</td>
+                  <td className={cell}>{editableInput("상차일", r.상차일)}</td>
+                  <td className={cell}>{editableInput("상차시간", r.상차시간)}</td>
+                  <td className={cell}>{editableInput("하차일", r.하차일)}</td>
+                  <td className={cell}>{editableInput("하차시간", r.하차시간)}</td>
+                  <td className={cell}>{editableInput("거래처명", r.거래처명)}</td>
+                  <td className={cell}>{editableInput("상차지명", r.상차지명)}</td>
+                  <td className={cell}>{editableInput("상차지주소", r.상차지주소)}</td>
+                  <td className={cell}>{editableInput("하차지명", r.하차지명)}</td>
+                  <td className={cell}>{editableInput("하차지주소", r.하차지주소)}</td>
+                  <td className={cell}>{editableInput("화물내용", r.화물내용)}</td>
+                  <td className={cell}>{editableInput("차량종류", r.차량종류)}</td>
+                  <td className={cell}>{editableInput("차량톤수", r.차량톤수)}</td>
                   <td className={cell}>
                     <input
                       type="text"
                       className="border p-1 rounded w-[110px]"
                       defaultValue={r.차량번호 || ""}
-                      onChange={(e) => handleEditChange(r._id, "차량번호", e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && handleCarInput(r._id, e.currentTarget.value, e)}
-                      onBlur={(e) => handleCarInput(r._id, e.currentTarget.value)}
+                      onChange={(e) =>
+                        handleEditChange(r._id, "차량번호", e.target.value)
+                      }
+                      onKeyDown={(e) =>
+                        e.key === "Enter" &&
+                        handleCarInput(r._id, e.currentTarget.value, e)
+                      }
+                      onBlur={(e) =>
+                        handleCarInput(r._id, e.currentTarget.value)
+                      }
                     />
                   </td>
                   <td className={cell}>{r.이름}</td>
                   <td className={cell}>{r.전화번호}</td>
                   <td className={cell}>
-                    <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
-                      r.배차상태 === "배차완료"
-                        ? "bg-green-100 text-green-700 border border-green-400"
-                        : "bg-yellow-100 text-yellow-700 border border-yellow-400"
-                    }`}>
+                    <span
+                      className={`px-2 py-0.5 rounded text-xs font-semibold ${
+                        r.배차상태 === "배차완료"
+                          ? "bg-green-100 text-green-700 border border-green-400"
+                          : "bg-yellow-100 text-yellow-700 border border-yellow-400"
+                      }`}
+                    >
                       {r.배차상태 || ""}
                     </span>
                   </td>
                   <td className={cell}>
-                    <input
-                      type="text"
-                      className="border p-1 rounded w-[80px] text-right"
-                      defaultValue={r.청구운임 || ""}
-                      onChange={(e) => handleEditChange(r._id, "청구운임", e.target.value)}
-                    />
+                    {canEdit("청구운임", r._id) ? (
+                      <input
+                        type="text"
+                        className="border p-1 rounded w-[80px] text-right"
+                        defaultValue={r.청구운임 || ""}
+                        onChange={(e) =>
+                          handleEditChange(r._id, "청구운임", e.target.value)
+                        }
+                      />
+                    ) : (
+                      formatComma(r.청구운임)
+                    )}
                   </td>
                   <td className={cell}>
-                    <input
-                      type="text"
-                      className="border p-1 rounded w-[80px] text-right"
-                      defaultValue={r.기사운임 || ""}
-                      onChange={(e) => handleEditChange(r._id, "기사운임", e.target.value)}
-                    />
+                    {canEdit("기사운임", r._id) ? (
+                      <input
+                        type="text"
+                        className="border p-1 rounded w-[80px] text-right"
+                        defaultValue={r.기사운임 || ""}
+                        onChange={(e) =>
+                          handleEditChange(r._id, "기사운임", e.target.value)
+                        }
+                      />
+                    ) : (
+                      formatComma(r.기사운임)
+                    )}
                   </td>
                   <td className={`${cell} text-right pr-2`}>
-                    <span className={fee < 0 ? "text-red-600" : "text-blue-600"}>
-                      {fee.toLocaleString()}
+                    <span
+                      className={fee < 0 ? "text-red-600" : "text-blue-600"}
+                    >
+                      {formatComma(fee)}
                     </span>
                   </td>
-                  <td className={cell}>{r.지급방식}</td>
-                  <td className={cell}>{r.배차방식}</td>
-                  <td className={cell}>{r.메모}</td>
+                  <td className={cell}>{editableInput("지급방식", r.지급방식)}</td>
+                  <td className={cell}>{editableInput("배차방식", r.배차방식)}</td>
+                  <td className={cell}>{editableInput("메모", r.메모)}</td>
                 </tr>
               );
             })}
@@ -2073,10 +2242,7 @@ function RealtimeStatus({
   );
 }
 // ===================== DispatchApp.jsx (PART 4/8 — END) =====================
-
-
-
-// ===================== DispatchApp.jsx (PART 5/8 — 차량번호 항상 활성화 + 전체수정 기능 + 메모 더보기 완전본) =====================
+// ===================== DispatchApp.jsx (PART 5/8 — 차량번호 항상 활성화 + 선택수정→수정완료 통합버튼 완전본) =====================
 function DispatchStatus({
   dispatchData = [],
   setDispatchData,
@@ -2089,7 +2255,7 @@ function DispatchStatus({
   const [startDate, setStartDate] = React.useState("");
   const [endDate, setEndDate] = React.useState("");
   const [selected, setSelected] = React.useState(new Set());
-  const [editAll, setEditAll] = React.useState(false);
+  const [editMode, setEditMode] = React.useState(false); // ✅ 선택수정모드
   const [edited, setEdited] = React.useState({});
   const [justSaved, setJustSaved] = React.useState([]);
   const [carInputLock, setCarInputLock] = React.useState(false);
@@ -2168,15 +2334,24 @@ function DispatchStatus({
     ((row) =>
       setDispatchData((p) => p.filter((r) => getId(r) !== getId(row))));
 
-  const saveAll = async () => {
-    const ids = Object.keys(edited);
-    if (!ids.length) return alert("변경 사항이 없습니다.");
-    if (!confirm("저장하시겠습니까?")) return;
-    for (const id of ids) await _patch(id, edited[id]);
-    setJustSaved(ids);
-    setEdited({});
-    setTimeout(() => setJustSaved([]), 1000);
-    alert("저장 완료 ✅");
+  const handleEditToggle = async () => {
+    if (!editMode) {
+      if (!selected.size) return alert("수정할 항목을 선택하세요.");
+      setEditMode(true); // 수정모드 ON
+    } else {
+      const ids = Object.keys(edited);
+      if (!ids.length) {
+        setEditMode(false);
+        return alert("변경된 내용이 없습니다.");
+      }
+      if (!confirm("수정된 내용을 저장하시겠습니까?")) return;
+      for (const id of ids) await _patch(id, edited[id]);
+      setJustSaved(ids);
+      setEdited({});
+      setEditMode(false);
+      setTimeout(() => setJustSaved([]), 1000);
+      alert("수정 완료 ✅");
+    }
   };
 
   const removeSelectedRows = async () => {
@@ -2289,17 +2464,16 @@ function DispatchStatus({
         </div>
 
         <div className="flex items-center gap-2">
-          <button className="px-3 py-2 rounded border bg-white hover:bg-gray-100" onClick={() => setEditAll(!editAll)}>
-            {editAll ? "수정취소" : "전체수정"}
+          <button className="px-3 py-2 rounded bg-yellow-500 text-white" onClick={handleEditToggle}>
+            {editMode ? "수정완료" : "선택수정"}
           </button>
           <button className="px-3 py-2 rounded bg-red-600 text-white" onClick={removeSelectedRows}>선택삭제</button>
-          <button className="px-3 py-2 rounded bg-blue-600 text-white" onClick={saveAll}>저장</button>
           <button className="px-3 py-2 rounded bg-emerald-600 text-white" onClick={downloadExcel}>엑셀다운</button>
         </div>
       </div>
 
       <div className="overflow-x-auto">
-        <table className="min-w-[2200px] text-sm border border-gray-300">
+        <table className="w-auto min-w-max text-sm border table-auto">
           <thead className="bg-gray-100">
             <tr>
               {[
@@ -2341,7 +2515,7 @@ function DispatchStatus({
                     "상차지주소","하차지명","하차지주소","화물내용","차량종류","차량톤수"
                   ].map((key) => (
                     <td key={key} className="border text-center whitespace-nowrap">
-                      {editAll && editableKeys.includes(key) ? (
+                      {editMode && selected.has(id) && editableKeys.includes(key) ? (
                         <input className="border rounded px-1 py-0.5 w-full text-center" defaultValue={row[key] || ""} onChange={(e) => updateEdited(row, key, e.target.value)} />
                       ) : (
                         row[key]
@@ -2365,7 +2539,7 @@ function DispatchStatus({
 
                   {["청구운임","기사운임"].map((key) => (
                     <td key={key} className="border text-right pr-2">
-                      {editAll ? (
+                      {editMode && selected.has(id) ? (
                         <input className="border rounded px-1 py-0.5 text-right w-full" defaultValue={toInt(row[key])} onChange={(e) => updateEdited(row, key, e.target.value)} />
                       ) : (
                         toInt(row[key]).toLocaleString()
@@ -2377,7 +2551,7 @@ function DispatchStatus({
 
                   {["지급방식","배차방식"].map((key) => (
                     <td key={key} className="border text-center">
-                      {editAll ? (
+                      {editMode && selected.has(id) ? (
                         <input className="border rounded px-1 py-0.5 w-full text-center" defaultValue={row[key] || ""} onChange={(e) => updateEdited(row, key, e.target.value)} />
                       ) : (
                         row[key]
@@ -2387,7 +2561,7 @@ function DispatchStatus({
 
                   {/* ✅ 메모 더보기 */}
                   <td className="border text-center">
-                    {editAll ? (
+                    {editMode && selected.has(id) ? (
                       <input
                         className="border rounded px-1 py-0.5 w-full text-center"
                         defaultValue={row.메모 || ""}
@@ -2451,6 +2625,7 @@ function MemoCell({ text }) {
   );
 }
 // ===================== DispatchApp.jsx (PART 5/8 — END) =====================
+
 
 
 // ===================== DispatchApp.jsx (PART 6/8) — START =====================
