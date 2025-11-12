@@ -2307,13 +2307,10 @@ function RealtimeStatus({
   );
 }
 // ===================== DispatchApp.jsx (PART 4/8 — END) =====================
-
-
-
-// ===================== DispatchApp.jsx (PART 5/8 — 차량번호 항상 활성화 + 선택수정→수정완료 통합버튼 + 주소 더보기 완전본) =====================
+// ===================== DispatchApp.jsx (PART 5/8 — 차량번호 즉시저장 + 자동정렬 + 대용량업로드 완전본) =====================
 function DispatchStatus({
   dispatchData = [],
-  setDispatchData,
+  setDispatchData = () => {}, // 안전 폴백
   drivers = [],
   patchDispatch,
   removeDispatch,
@@ -2323,14 +2320,111 @@ function DispatchStatus({
   const [startDate, setStartDate] = React.useState("");
   const [endDate, setEndDate] = React.useState("");
   const [selected, setSelected] = React.useState(new Set());
-  const [editMode, setEditMode] = React.useState(false); // ✅ 선택수정 모드
+  const [editMode, setEditMode] = React.useState(false);
   const [edited, setEdited] = React.useState({});
   const [justSaved, setJustSaved] = React.useState([]);
   const [carInputLock, setCarInputLock] = React.useState(false);
 
-  const toInt = (v) =>
-    parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10) || 0;
+  const toInt = (v) => parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10) || 0;
   const getId = (r) => r._id || r.id || r._fsid;
+
+  /* ✅ 대용량 업로드 */
+  const handleBulkFile = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      const data = new Uint8Array(evt.target.result);
+      const workbook = XLSX.read(data, { type: "array" });
+      const sheetName = workbook.SheetNames[0];
+      const ws = workbook.Sheets[sheetName];
+      const json = XLSX.utils.sheet_to_json(ws, { defval: "" });
+
+      const mapped = json.map((row) => ({
+        _id: crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`,
+        등록일: row["상차일"] || new Date().toISOString().slice(0, 10),
+        상차일: row["상차일"] || "",
+        상차시간: row["상차시간"] || "",
+        하차일: row["하차일"] || "",
+        하차시간: row["하차시간"] || "",
+        거래처명: row["거래처명"] || "",
+        상차지명: row["상차지명"] || "",
+        상차지주소: row["상차지주소"] || "",
+        하차지명: row["하차지명"] || "",
+        하차지주소: row["하차지주소"] || "",
+        화물내용: row["화물내용"] || "",
+        차량종류: row["차량종류"] || "",
+        차량톤수: row["차량톤수"] || "",
+        차량번호: row["차량번호"] || "",
+        이름: row["이름"] || "",
+        전화번호: row["전화번호"] || "",
+        청구운임: toInt(row["청구운임"]),
+        기사운임: toInt(row["기사운임"]),
+        수수료: toInt(row["청구운임"]) - toInt(row["기사운임"]),
+        지급방식: row["지급방식"] || "",
+        배차방식: row["배차방식"] || "",
+        메모: row["메모"] || "",
+        배차상태: row["배차상태"] || "배차중",
+      }));
+
+      if (!mapped.length) return alert("엑셀 데이터가 비어있거나 매칭 실패");
+      if (confirm(`${mapped.length}건을 추가하시겠습니까?`)) {
+        setDispatchData((prev) => {
+          const merged = [...prev, ...mapped];
+          merged.sort((a, b) => (a.상차일 || "").localeCompare(b.상차일 || ""));
+          return merged;
+        });
+        alert("✅ 대용량 데이터 업로드 완료");
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  /* ✅ 차량번호 입력 즉시 저장 + 정렬 */
+  const handleCarInput = async (row, val) => {
+    if (carInputLock) return;
+    setCarInputLock(true);
+    try {
+      const v = (val || "").trim().replace(/\s+/g, "");
+      const id = getId(row);
+      if (!v) {
+        await patchAndSort(id, { 차량번호: "", 이름: "", 전화번호: "", 배차상태: "배차중" });
+        return;
+      }
+
+      const f = drivers.find(
+        (d) => String(d.차량번호 || "").replace(/\s+/g, "") === v
+      );
+      if (f) {
+        await patchAndSort(id, {
+          차량번호: f.차량번호,
+          이름: f.이름 || "",
+          전화번호: f.전화번호 || "",
+          배차상태: "배차완료",
+        });
+        return;
+      }
+
+      const 이름 = prompt("신규 기사 이름:");
+      if (!이름) return;
+      const 전화번호 = prompt("전화번호:") || "";
+      await upsertDriver?.({ 이름, 차량번호: v, 전화번호 });
+      await patchAndSort(id, { 차량번호: v, 이름, 전화번호, 배차상태: "배차완료" });
+      alert("신규 기사 등록 완료!");
+    } finally {
+      setTimeout(() => setCarInputLock(false), 300);
+    }
+  };
+
+  /* ✅ 공통 Patch + 정렬 함수 */
+  const patchAndSort = async (id, patch) => {
+    if (patchDispatch) await patchDispatch(id, patch);
+    setDispatchData((prev) => {
+      const updated = prev.map((r) => (getId(r) === id ? { ...r, ...patch } : r));
+      updated.sort((a, b) => (a.상차일 || "").localeCompare(b.상차일 || ""));
+      return updated;
+    });
+  };
 
   const toggleOne = (id) =>
     setSelected((prev) => {
@@ -2355,55 +2449,11 @@ function DispatchStatus({
       return { ...prev, [getId(row)]: cur };
     });
 
-  const handleCarInput = async (row, val) => {
-    if (carInputLock) return;
-    setCarInputLock(true);
-    try {
-      const v = (val || "").trim().replace(/\s+/g, "");
-      if (!v) {
-        updateEdited(row, "차량번호", "");
-        updateEdited(row, "이름", "");
-        updateEdited(row, "전화번호", "");
-        updateEdited(row, "배차상태", "배차중");
-        return;
-      }
-      const f = drivers.find(
-        (d) => String(d.차량번호 || "").replace(/\s+/g, "") === v
-      );
-      if (f) {
-        updateEdited(row, "차량번호", f.차량번호);
-        updateEdited(row, "이름", f.이름 || "");
-        updateEdited(row, "전화번호", f.전화번호 || "");
-        updateEdited(row, "배차상태", "배차완료");
-        return;
-      }
-      const 이름 = prompt("신규 기사 이름:");
-      if (!이름) return;
-      const 전화번호 = prompt("전화번호:") || "";
-      await upsertDriver?.({ 이름, 차량번호: v, 전화번호 });
-      updateEdited(row, "차량번호", v);
-      updateEdited(row, "이름", 이름);
-      updateEdited(row, "전화번호", 전화번호);
-      updateEdited(row, "배차상태", "배차완료");
-      alert("신규 기사 등록 완료!");
-    } finally {
-      setTimeout(() => setCarInputLock(false), 300);
-    }
-  };
-
-  const _patch =
-    patchDispatch ||
-    ((id, patch) =>
-      setDispatchData((p) =>
-        p.map((r) => (getId(r) === id ? { ...r, ...patch } : r))
-      ));
-
   const _remove =
     removeDispatch ||
     ((row) =>
       setDispatchData((p) => p.filter((r) => getId(r) !== getId(row))));
 
-  // ✅ 선택수정 ↔ 수정완료 단일 버튼
   const handleEditToggle = async () => {
     if (!editMode) {
       if (!selected.size) return alert("수정할 항목을 선택하세요.");
@@ -2415,7 +2465,8 @@ function DispatchStatus({
         return alert("변경된 내용이 없습니다.");
       }
       if (!confirm("수정된 내용을 저장하시겠습니까?")) return;
-      for (const id of ids) await _patch(id, edited[id]);
+      for (const id of ids)
+        patchDispatch ? await patchDispatch(id, edited[id]) : null;
       setJustSaved(ids);
       setEdited({});
       setEditMode(false);
@@ -2475,19 +2526,10 @@ function DispatchStatus({
     if (q.trim()) {
       const lower = q.toLowerCase();
       data = data.filter((r) =>
-        Object.values(r).some((v) =>
-          String(v || "").toLowerCase().includes(lower)
-        )
+        Object.values(r).some((v) => String(v || "").toLowerCase().includes(lower))
       );
     }
-    data.sort((a, b) => {
-      if (a.배차상태 === "배차중" && b.배차상태 !== "배차중") return -1;
-      if (a.배차상태 !== "배차중" && b.배차상태 === "배차중") return 1;
-      return (
-        (a.상차일 || "").localeCompare(b.상차일 || "") ||
-        (a.등록일 || "").localeCompare(b.등록일 || "")
-      );
-    });
+    data.sort((a, b) => (a.상차일 || "").localeCompare(b.상차일 || ""));
     return data;
   }, [dispatchData, q, startDate, endDate]);
 
@@ -2495,8 +2537,7 @@ function DispatchStatus({
     const totalCount = filtered.length;
     const totalSale = filtered.reduce((s, r) => s + toInt(r.청구운임), 0);
     const totalDriver = filtered.reduce((s, r) => s + toInt(r.기사운임), 0);
-    const totalFee = totalSale - totalDriver;
-    return { totalCount, totalSale, totalDriver, totalFee };
+    return { totalCount, totalSale, totalDriver, totalFee: totalSale - totalDriver };
   }, [filtered]);
 
   const StatusBadge = ({ s }) => {
@@ -2507,228 +2548,100 @@ function DispatchStatus({
         ? "bg-yellow-100 text-yellow-800 border-yellow-400"
         : "hidden";
     return (
-      <span
-        className={`border px-2 py-0.5 rounded text-xs font-semibold whitespace-nowrap ${color}`}
-      >
+      <span className={`border px-2 py-0.5 rounded text-xs font-semibold whitespace-nowrap ${color}`}>
         {s}
       </span>
     );
   };
 
+  // ✅ UI
   return (
     <div className="p-3">
       <h2 className="text-lg font-bold mb-3">배차현황</h2>
 
       <div className="flex flex-wrap items-center gap-5 text-sm mb-2">
-        <div>
-          총 <b>{summary.totalCount}</b>건
-        </div>
-        <div>
-          청구{" "}
-          <b className="text-blue-600">
-            {summary.totalSale.toLocaleString()}
-          </b>
-          원
-        </div>
-        <div>
-          기사{" "}
-          <b className="text-green-600">
-            {summary.totalDriver.toLocaleString()}
-          </b>
-          원
-        </div>
-        <div>
-          수수료{" "}
-          <b className="text-amber-600">
-            {summary.totalFee.toLocaleString()}
-          </b>
-          원
-        </div>
-      </div>
-
-      <div className="w-full bg-blue-600/90 text-white text-xs px-3 py-1 rounded mb-2">
-        👉 좌우 스크롤: <b>Shift</b> + 마우스 휠 / 터치패드 제스처 사용
+        <div>총 <b>{summary.totalCount}</b>건</div>
+        <div>청구 <b className="text-blue-600">{summary.totalSale.toLocaleString()}</b>원</div>
+        <div>기사 <b className="text-green-600">{summary.totalDriver.toLocaleString()}</b>원</div>
+        <div>수수료 <b className="text-amber-600">{summary.totalFee.toLocaleString()}</b>원</div>
       </div>
 
       <div className="flex justify-between items-center gap-3 mb-3">
         <div className="flex items-center gap-2">
-          <input
-            className="border p-2 rounded w-52"
-            placeholder="검색어"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-          />
-          <input
-            type="date"
-            className="border p-2 rounded"
-            value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-          />
+          <input className="border p-2 rounded w-52" placeholder="검색어" value={q} onChange={(e) => setQ(e.target.value)} />
+          <input type="date" className="border p-2 rounded" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
           <span>~</span>
-          <input
-            type="date"
-            className="border p-2 rounded"
-            value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
-          />
-          <button
-            onClick={() => {
-              setQ("");
-              setStartDate("");
-              setEndDate("");
-            }}
-            className="px-3 py-2 border rounded bg-gray-100 hover:bg-gray-200"
-          >
-            초기화
-          </button>
+          <input type="date" className="border p-2 rounded" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            className="px-3 py-2 rounded bg-yellow-500 text-white"
-            onClick={handleEditToggle}
-          >
+          <label className="px-3 py-2 rounded bg-indigo-600 text-white cursor-pointer hover:bg-indigo-700">
+            대용량 업로드
+            <input type="file" accept=".xlsx,.xls" hidden onChange={handleBulkFile} />
+          </label>
+          <button className="px-3 py-2 rounded bg-yellow-500 text-white" onClick={handleEditToggle}>
             {editMode ? "수정완료" : "선택수정"}
           </button>
-          <button
-            className="px-3 py-2 rounded bg-red-600 text-white"
-            onClick={removeSelectedRows}
-          >
+          <button className="px-3 py-2 rounded bg-red-600 text-white" onClick={removeSelectedRows}>
             선택삭제
           </button>
-          <button
-            className="px-3 py-2 rounded bg-emerald-600 text-white"
-            onClick={downloadExcel}
-          >
+          <button className="px-3 py-2 rounded bg-emerald-600 text-white" onClick={downloadExcel}>
             엑셀다운
           </button>
         </div>
       </div>
 
+      {/* ✅ 테이블 */}
       <div className="overflow-x-auto">
         <table className="w-auto min-w-max text-sm border table-auto">
           <thead className="bg-gray-100">
             <tr>
               {[
-                "선택",
-                "순번",
-                "등록일",
-                "상차일",
-                "상차시간",
-                "하차일",
-                "하차시간",
-                "거래처명",
-                "상차지명",
-                "상차지주소",
-                "하차지명",
-                "하차지주소",
-                "화물내용",
-                "차량종류",
-                "차량톤수",
-                "차량번호",
-                "기사명",
-                "전화번호",
-                "배차상태",
-                "청구운임",
-                "기사운임",
-                "수수료",
-                "지급방식",
-                "배차방식",
-                "메모",
+                "선택","순번","등록일","상차일","상차시간","하차일","하차시간","거래처명",
+                "상차지명","상차지주소","하차지명","하차지주소","화물내용","차량종류","차량톤수",
+                "차량번호","기사명","전화번호","배차상태","청구운임","기사운임","수수료",
+                "지급방식","배차방식","메모",
               ].map((h) => (
-                <th
-                  key={h}
-                  className="border px-2 py-2 text-center whitespace-nowrap"
-                >
+                <th key={h} className="border px-2 py-2 text-center whitespace-nowrap">
                   {h === "선택" ? (
                     <input
                       type="checkbox"
                       onChange={() => toggleAll(filtered)}
-                      checked={
-                        filtered.length &&
-                        filtered.every((r) => selected.has(getId(r)))
-                      }
+                      checked={filtered.length && filtered.every((r) => selected.has(getId(r)))}
                     />
-                  ) : (
-                    h
-                  )}
+                  ) : h}
                 </th>
               ))}
             </tr>
           </thead>
-
           <tbody>
             {filtered.map((r, i) => {
               const id = getId(r);
               const row = edited[id] ? { ...r, ...edited[id] } : r;
               const fee = toInt(row.청구운임) - toInt(row.기사운임);
-
               const editableKeys = [
-                "상차일",
-                "상차시간",
-                "하차일",
-                "하차시간",
-                "거래처명",
-                "상차지명",
-                "상차지주소",
-                "하차지명",
-                "하차지주소",
-                "화물내용",
-                "차량종류",
-                "차량톤수",
-                "지급방식",
-                "배차방식",
-                "메모",
-                "청구운임",
-                "기사운임",
+                "상차일","상차시간","하차일","하차시간","거래처명","상차지명","상차지주소",
+                "하차지명","하차지주소","화물내용","차량종류","차량톤수","지급방식","배차방식","메모","청구운임","기사운임",
               ];
 
               return (
-                <tr
-                  key={id || i}
-                  className={`${i % 2 === 0 ? "bg-white" : "bg-gray-50"} ${
-                    justSaved.includes(id) ? "bg-emerald-100" : ""
-                  }`}
-                >
+                <tr key={id || i} className={`${i % 2 === 0 ? "bg-white" : "bg-gray-50"} ${justSaved.includes(id) ? "bg-emerald-100" : ""}`}>
                   <td className="border text-center">
-                    <input
-                      type="checkbox"
-                      checked={selected.has(id)}
-                      onChange={() => toggleOne(id)}
-                    />
+                    <input type="checkbox" checked={selected.has(id)} onChange={() => toggleOne(id)} />
                   </td>
                   <td className="border text-center">{i + 1}</td>
-                  <td className="border text-center whitespace-nowrap">
-                    {row.등록일}
-                  </td>
+                  <td className="border text-center whitespace-nowrap">{row.등록일}</td>
 
                   {[
-                    "상차일",
-                    "상차시간",
-                    "하차일",
-                    "하차시간",
-                    "거래처명",
-                    "상차지명",
-                    "상차지주소",
-                    "하차지명",
-                    "하차지주소",
-                    "화물내용",
-                    "차량종류",
-                    "차량톤수",
+                    "상차일","상차시간","하차일","하차시간","거래처명","상차지명","상차지주소",
+                    "하차지명","하차지주소","화물내용","차량종류","차량톤수",
                   ].map((key) => (
-                    <td
-                      key={key}
-                      className="border text-center whitespace-nowrap"
-                    >
-                      {editMode &&
-                      selected.has(id) &&
-                      editableKeys.includes(key) ? (
+                    <td key={key} className="border text-center whitespace-nowrap">
+                      {editMode && selected.has(id) && editableKeys.includes(key) ? (
                         <input
                           className="border rounded px-1 py-0.5 w-full text-center"
                           defaultValue={row[key] || ""}
-                          onChange={(e) =>
-                            updateEdited(row, key, e.target.value)
-                          }
+                          onChange={(e) => updateEdited(row, key, e.target.value)}
                         />
                       ) : key === "상차지주소" || key === "하차지주소" ? (
                         <AddressCell text={row[key] || ""} max={5} />
@@ -2738,73 +2651,48 @@ function DispatchStatus({
                     </td>
                   ))}
 
-{/* 차량번호 항상 활성화 */}
-<td className="border text-center">
-  <input
-    className="border rounded px-1 py-0.5 text-center w-[90px]"  // 🔧 너비 제한
-    defaultValue={row.차량번호 || ""}
-    onKeyDown={(e) =>
-      e.key === "Enter" && handleCarInput(row, e.target.value)
-    }
-    onBlur={(e) => handleCarInput(row, e.target.value)}
-  />
-</td>
-
+                  {/* 차량번호 항상 활성화 */}
+                  <td className="border text-center">
+                    <input
+                      className="border rounded px-1 py-0.5 text-center w-[90px]"
+                      defaultValue={row.차량번호 || ""}
+                      onKeyDown={(e) => e.key === "Enter" && handleCarInput(row, e.target.value)}
+                      onBlur={(e) => handleCarInput(row, e.target.value)}
+                    />
+                  </td>
 
                   <td className="border text-center">{row.이름}</td>
                   <td className="border text-center">{row.전화번호}</td>
-                  <td className="border text-center">
-                    <StatusBadge s={row.배차상태} />
-                  </td>
+                  <td className="border text-center"><StatusBadge s={row.배차상태} /></td>
 
-                  {["청구운임", "기사운임"].map((key) => (
+                  {["청구운임","기사운임"].map((key) => (
                     <td key={key} className="border text-right pr-2">
                       {editMode && selected.has(id) ? (
-                        <input
-                          className="border rounded px-1 py-0.5 text-right w-full"
-                          defaultValue={toInt(row[key])}
-                          onChange={(e) =>
-                            updateEdited(row, key, e.target.value)
-                          }
-                        />
+                        <input className="border rounded px-1 py-0.5 text-right w-full" defaultValue={toInt(row[key])}
+                          onChange={(e) => updateEdited(row, key, e.target.value)} />
                       ) : (
                         toInt(row[key]).toLocaleString()
                       )}
                     </td>
                   ))}
 
-                  <td
-                    className={`border text-right pr-2 ${
-                      fee < 0 ? "text-red-500" : ""
-                    }`}
-                  >
-                    {fee.toLocaleString()}
-                  </td>
+                  <td className={`border text-right pr-2 ${fee < 0 ? "text-red-500" : ""}`}>{fee.toLocaleString()}</td>
 
-                  {["지급방식", "배차방식"].map((key) => (
+                  {["지급방식","배차방식"].map((key) => (
                     <td key={key} className="border text-center">
                       {editMode && selected.has(id) ? (
-                        <input
-                          className="border rounded px-1 py-0.5 w-full text-center"
+                        <input className="border rounded px-1 py-0.5 w-full text-center"
                           defaultValue={row[key] || ""}
-                          onChange={(e) =>
-                            updateEdited(row, key, e.target.value)
-                          }
-                        />
-                      ) : (
-                        row[key]
-                      )}
+                          onChange={(e) => updateEdited(row, key, e.target.value)} />
+                      ) : row[key]}
                     </td>
                   ))}
 
-                  {/* ✅ 메모 더보기 */}
                   <td className="border text-center">
                     {editMode && selected.has(id) ? (
-                      <input
-                        className="border rounded px-1 py-0.5 w-full text-center"
+                      <input className="border rounded px-1 py-0.5 w-full text-center"
                         defaultValue={row.메모 || ""}
-                        onChange={(e) => updateEdited(row, "메모", e.target.value)}
-                      />
+                        onChange={(e) => updateEdited(row, "메모", e.target.value)} />
                     ) : (
                       <MemoCell text={row.메모 || ""} />
                     )}
@@ -2819,7 +2707,7 @@ function DispatchStatus({
   );
 }
 
-/* ✅ 주소 더보기(5글자 초과 시 축약 + 팝업) */
+/* ✅ 주소 더보기 */
 function AddressCell({ text = "", max = 5 }) {
   const [open, setOpen] = React.useState(false);
   const clean = String(text || "");
@@ -2832,33 +2720,18 @@ function AddressCell({ text = "", max = 5 }) {
     <div className="relative inline-block">
       <span>{open ? clean : short}</span>
       {isLong && !open && (
-        <button
-          onClick={() => setOpen(true)}
-          className="text-blue-600 text-xs ml-1 underline"
-        >
+        <button onClick={() => setOpen(true)} className="text-blue-600 text-xs ml-1 underline">
           더보기
         </button>
       )}
       {open && (
-        <div
-          className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
-          onClick={() => setOpen(false)}
-        >
-          <div
-            className="bg-white p-4 rounded-lg shadow-lg w-[420px] max-w-[90%]"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+          onClick={() => setOpen(false)}>
+          <div className="bg-white p-4 rounded-lg shadow-lg w-[420px] max-w-[90%]" onClick={(e) => e.stopPropagation()}>
             <h3 className="font-semibold text-lg mb-2">주소 전체보기</h3>
-            <div className="text-sm whitespace-pre-wrap break-words">
-              {clean}
-            </div>
+            <div className="text-sm whitespace-pre-wrap break-words">{clean}</div>
             <div className="text-right mt-4">
-              <button
-                onClick={() => setOpen(false)}
-                className="px-3 py-1 rounded bg-blue-600 text-white text-sm"
-              >
-                닫기
-              </button>
+              <button onClick={() => setOpen(false)} className="px-3 py-1 rounded bg-blue-600 text-white text-sm">닫기</button>
             </div>
           </div>
         </div>
@@ -2878,31 +2751,18 @@ function MemoCell({ text }) {
     <div className="relative inline-block">
       <span>{showFull ? text : short}</span>
       {isLong && !showFull && (
-        <button
-          onClick={() => setShowFull(true)}
-          className="text-blue-600 text-xs ml-1 underline"
-        >
+        <button onClick={() => setShowFull(true)} className="text-blue-600 text-xs ml-1 underline">
           더보기
         </button>
       )}
       {showFull && (
-        <div
-          className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
-          onClick={() => setShowFull(false)}
-        >
-          <div
-            className="bg-white p-4 rounded-lg shadow-lg w-[400px] max-w-[90%]"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+          onClick={() => setShowFull(false)}>
+          <div className="bg-white p-4 rounded-lg shadow-lg w-[400px] max-w-[90%]" onClick={(e) => e.stopPropagation()}>
             <h3 className="font-semibold text-lg mb-2">메모 내용</h3>
-            <div className="text-sm whitespace-pre-wrap break-words">
-              {String(text)}
-            </div>
+            <div className="text-sm whitespace-pre-wrap break-words">{String(text)}</div>
             <div className="text-right mt-4">
-              <button
-                onClick={() => setShowFull(false)}
-                className="px-3 py-1 rounded bg-blue-600 text-white text-sm"
-              >
+              <button onClick={() => setShowFull(false)} className="px-3 py-1 rounded bg-blue-600 text-white text-sm">
                 닫기
               </button>
             </div>
@@ -2912,8 +2772,8 @@ function MemoCell({ text }) {
     </div>
   );
 }
-// ===================== DispatchApp.jsx (PART 5/8 — END) =====================
 
+// ===================== DispatchApp.jsx (PART 5/8 — END) =====================
 
 
 
