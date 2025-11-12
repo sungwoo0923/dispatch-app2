@@ -1183,17 +1183,30 @@ const handleCarNoEnter = (value) => {
         const lower = q.toLowerCase();
         data = data.filter((r) => Object.values(r).some((v) => String(v || "").toLowerCase().includes(lower)));
       }
-      // 정렬: 배차중 우선 → 오늘 → 나머지 (시간순)
-      data.sort((a, b) => {
-        if (a.배차상태 === "배차중" && b.배차상태 !== "배차중") return -1;
-        if (a.배차상태 !== "배차중" && b.배차상태 === "배차중") return 1;
-        if ((a.상차일 || "") === today && (b.상차일 || "") !== today) return -1;
-        if ((a.상차일 || "") !== today && (b.상차일 || "") === today) return 1;
-        return (
-          (a.상차일 || "").localeCompare(b.상차일 || "") ||
-          (a.상차시간 || "").localeCompare(b.상차시간 || "")
-        );
-      });
+      const filtered = React.useMemo(() => {
+  let data = [...dispatchData];
+  if (startDate) data = data.filter((r) => (r.상차일 || "") >= startDate);
+  if (endDate) data = data.filter((r) => (r.상차일 || "") <= endDate);
+  if (q.trim()) {
+    const lower = q.toLowerCase();
+    data = data.filter((r) =>
+      Object.values(r).some((v) =>
+        String(v || "").toLowerCase().includes(lower)
+      )
+    );
+  }
+
+  // ✅ 배차중 → 맨 위 / 배차완료 → 아래
+  data.sort((a, b) => {
+    if (a.배차상태 === "배차중" && b.배차상태 !== "배차중") return -1;
+    if (a.배차상태 !== "배차중" && b.배차상태 === "배차중") return 1;
+    // 배차상태 같으면 날짜 순
+    return (a.상차일 || "").localeCompare(b.상차일 || "");
+  });
+
+  return data;
+}, [dispatchData, q, startDate, endDate]);
+
       return data;
     }, [dispatchData, q, filterType, filterValue, startDate, endDate]);
 
@@ -2403,36 +2416,47 @@ function DispatchStatus({
       return { ...prev, [getId(row)]: cur };
     });
 
+  // ✅ 차량번호 입력 → 기사/전화 자동 채움 + 배차완료로 전환 + Firestore 즉시 저장 + 로컬 상태 반영
   const handleCarInput = async (row, val) => {
     if (carInputLock) return;
     setCarInputLock(true);
     try {
       const v = (val || "").trim().replace(/\s+/g, "");
+      const id = getId(row);
+
+      // 공란 → 배차중으로 복귀
       if (!v) {
-        updateEdited(row, "차량번호", "");
-        updateEdited(row, "이름", "");
-        updateEdited(row, "전화번호", "");
-        updateEdited(row, "배차상태", "배차중");
+        const patch = { 차량번호: "", 이름: "", 전화번호: "", 배차상태: "배차중" };
+        if (patchDispatch) await patchDispatch(id, patch);
+        setDispatchData((p) => p.map((r) => (getId(r) === id ? { ...r, ...patch } : r)));
         return;
       }
+
       const f = drivers.find(
         (d) => String(d.차량번호 || "").replace(/\s+/g, "") === v
       );
+
       if (f) {
-        updateEdited(row, "차량번호", f.차량번호);
-        updateEdited(row, "이름", f.이름 || "");
-        updateEdited(row, "전화번호", f.전화번호 || "");
-        updateEdited(row, "배차상태", "배차완료");
+        const patch = {
+          차량번호: f.차량번호,
+          이름: f.이름 || "",
+          전화번호: f.전화번호 || "",
+          배차상태: "배차완료",
+        };
+        if (patchDispatch) await patchDispatch(id, patch);
+        setDispatchData((p) => p.map((r) => (getId(r) === id ? { ...r, ...patch } : r)));
         return;
       }
+
+      // 신규 기사 등록 플로우
       const 이름 = prompt("신규 기사 이름:");
       if (!이름) return;
       const 전화번호 = prompt("전화번호:") || "";
       await upsertDriver?.({ 이름, 차량번호: v, 전화번호 });
-      updateEdited(row, "차량번호", v);
-      updateEdited(row, "이름", 이름);
-      updateEdited(row, "전화번호", 전화번호);
-      updateEdited(row, "배차상태", "배차완료");
+
+      const patch = { 차량번호: v, 이름, 전화번호, 배차상태: "배차완료" };
+      if (patchDispatch) await patchDispatch(id, patch);
+      setDispatchData((p) => p.map((r) => (getId(r) === id ? { ...r, ...patch } : r)));
       alert("신규 기사 등록 완료!");
     } finally {
       setTimeout(() => setCarInputLock(false), 300);
@@ -2451,25 +2475,40 @@ function DispatchStatus({
     ((row) =>
       setDispatchData((p) => p.filter((r) => getId(r) !== getId(row))));
 
-  const handleEditToggle = async () => {
-    if (!editMode) {
-      if (!selected.size) return alert("수정할 항목을 선택하세요.");
-      setEditMode(true);
-    } else {
-      const ids = Object.keys(edited);
-      if (!ids.length) {
-        setEditMode(false);
-        return alert("변경된 내용이 없습니다.");
-      }
-      if (!confirm("수정된 내용을 저장하시겠습니까?")) return;
-      for (const id of ids) await _patch(id, edited[id]);
-      setJustSaved(ids);
-      setEdited({});
+  // ✅ 선택수정 → 수정완료 시 하이라이트 + 자동 스크롤
+const handleEditToggle = async () => {
+  if (!editMode) {
+    if (!selected.size) return alert("수정할 항목을 선택하세요.");
+    setEditMode(true);
+  } else {
+    const ids = Object.keys(edited);
+    if (!ids.length) {
       setEditMode(false);
-      setTimeout(() => setJustSaved([]), 1000);
-      alert("수정 완료 ✅");
+      return alert("변경된 내용이 없습니다.");
     }
-  };
+    if (!confirm("수정된 내용을 저장하시겠습니까?")) return;
+
+    // 🔹 Firestore 및 로컬 상태에 반영
+    for (const id of ids) await _patch(id, edited[id]);
+
+    // 🔹 하이라이트 표시할 ID 기록
+    setJustSaved(ids);
+    setEdited({});
+    setEditMode(false);
+
+    // 🔹 자동 스크롤: 첫 수정된 행으로 이동
+    if (ids.length > 0) {
+      const firstId = ids[0];
+      const el = document.getElementById(`row-${firstId}`);
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+
+    // 🔹 하이라이트 유지 1.2초 후 제거
+    setTimeout(() => setJustSaved([]), 1200);
+    alert("수정 완료 ✅");
+  }
+};
+
 
   const removeSelectedRows = async () => {
     if (!selected.size) return alert("삭제할 항목이 없습니다.");
@@ -2515,6 +2554,7 @@ function DispatchStatus({
     XLSX.writeFile(wb, "배차현황.xlsx");
   };
 
+  // ✅ 정렬: 배차중 먼저, 그 다음 배차완료(최신일자/시간 내림차순)
   const filtered = React.useMemo(() => {
     let data = [...dispatchData];
     if (startDate) data = data.filter((r) => (r.상차일 || "") >= startDate);
@@ -2528,12 +2568,18 @@ function DispatchStatus({
       );
     }
     data.sort((a, b) => {
+      // 1) 배차중 우선
       if (a.배차상태 === "배차중" && b.배차상태 !== "배차중") return -1;
       if (a.배차상태 !== "배차중" && b.배차상태 === "배차중") return 1;
-      return (
-        (a.상차일 || "").localeCompare(b.상차일 || "") ||
-        (a.등록일 || "").localeCompare(b.등록일 || "")
-      );
+      // 2) 동일 상태 내에서는 상차일/상차시간 최신순 (내림차순)
+      const ad = a.상차일 || "";
+      const bd = b.상차일 || "";
+      if (ad !== bd) return bd.localeCompare(ad);
+      const at = a.상차시간 || "";
+      const bt = b.상차시간 || "";
+      if (at !== bt) return bt.localeCompare(at);
+      // 3) 마지막으로 등록일 최신순
+      return (b.등록일 || "").localeCompare(a.등록일 || "");
     });
     return data;
   }, [dispatchData, q, startDate, endDate]);
@@ -2707,11 +2753,12 @@ function DispatchStatus({
 
               return (
                 <tr
-                  key={id || i}
-                  className={`${i % 2 === 0 ? "bg-white" : "bg-gray-50"} ${
-                    justSaved.includes(id) ? "bg-emerald-100" : ""
-                  }`}
-                >
+  id={`row-${id}`}  // ✅ 행 식별용 ID 추가
+  key={id || i}
+  className={`${i % 2 === 0 ? "bg-white" : "bg-gray-50"} ${
+    justSaved.includes(id) ? "animate-pulse bg-emerald-200" : ""
+  }`}
+>
                   <td className="border text-center">
                     <input type="checkbox" checked={selected.has(id)} onChange={() => toggleOne(id)} />
                   </td>
@@ -2895,6 +2942,7 @@ function MemoCell({ text }) {
   );
 }
 // ===================== DispatchApp.jsx (PART 5/8 — END) =====================
+
 
 
 // ===================== DispatchApp.jsx (PART 6/8) — START =====================
