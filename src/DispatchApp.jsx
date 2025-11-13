@@ -223,7 +223,10 @@ export default function DispatchApp() {
   const [user, setUser] = useState(null);
   const navigate = useNavigate();
 
-  // 로그인 상태
+  // ❌ 삭제 (중복 선언 오류 원인)
+  // const [dispatchData, setDispatchData] = useState([]);
+
+  // ---------------- 로그인 상태 ----------------
   useEffect(() => {
     const unsub = auth.onAuthStateChanged(async (u) => {
       if (u) {
@@ -234,7 +237,7 @@ export default function DispatchApp() {
     return () => unsub();
   }, []);
 
-  // ✅ Firestore에서 role 자동 로드 + localStorage 저장
+  // ---------------- Firestore role 자동 로드 ----------------
   useEffect(() => {
     const loadRole = async () => {
       if (!user) return;
@@ -247,10 +250,10 @@ export default function DispatchApp() {
     loadRole();
   }, [user]);
 
-  // ✅ 권한 (localStorage에서 role 읽기)
+  // ---------------- 권한 ----------------
   const role = localStorage.getItem("role") || "user";
 
-  // Firestore 실시간 훅
+  // ---------------- Firestore 실시간 훅 ----------------
   const {
     dispatchData,
     drivers,
@@ -264,25 +267,30 @@ export default function DispatchApp() {
     removeClient,
   } = useRealtimeCollections(user);
 
-  // 로그아웃
+  // ---------------- 로그아웃 ----------------
   const logout = async () => {
     await signOut(auth);
-    localStorage.removeItem("role"); // ✅ 로그아웃 시 role 초기화
+    localStorage.removeItem("role");
     alert("로그아웃되었습니다.");
     navigate("/login");
   };
 
-  // 옵션 리스트
+  // ---------------- 옵션 리스트 ----------------
   const timeOptions = useMemo(
     () =>
-      Array.from({ length: 24 * 6 }, (_, i) => `${String(Math.floor(i / 6)).padStart(2, "0")}:${String((i % 6) * 10).padStart(2, "0")}`),
+      Array.from({ length: 24 * 6 }, (_, i) =>
+        `${String(Math.floor(i / 6)).padStart(2, "0")}:${String(
+          (i % 6) * 10
+        ).padStart(2, "0")}`
+      ),
     []
   );
+
   const tonOptions = useMemo(() => Array.from({ length: 25 }, (_, i) => `${i + 1}톤`), []);
 
   const [menu, setMenu] = useState("실시간배차현황");
 
-  // ✅ 차단 메뉴 정의 (user는 접근 불가)
+  // ---------------- user 차단 메뉴 ----------------
   const blockedMenus = [
     "배차관리",
     "기사관리",
@@ -293,13 +301,13 @@ export default function DispatchApp() {
     "관리자메뉴",
   ];
 
-  // ✅ 메뉴 클릭 제어
+  // ---------------- 메뉴 클릭 제어 ----------------
   const handleMenuClick = (m) => {
     if (role === "user" && blockedMenus.includes(m)) return;
     setMenu(m);
   };
 
-  // 로그인 전 화면
+  // ---------------- 로그인 전 화면 ----------------
   if (!user)
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50">
@@ -324,24 +332,30 @@ export default function DispatchApp() {
           <input name="email" type="email" placeholder="이메일" className="border p-2 rounded" required />
           <input name="password" type="password" placeholder="비밀번호" className="border p-2 rounded" required />
           <button type="submit" className="bg-blue-600 text-white py-2 rounded">로그인</button>
-          <button type="button" onClick={() => navigate("/signup")} className="text-blue-600 text-sm hover:underline mt-2">
+          <button
+            type="button"
+            onClick={() => navigate("/signup")}
+            className="text-blue-600 text-sm hover:underline mt-2"
+          >
             회원가입 하러가기
           </button>
         </form>
       </div>
     );
 
+  // ---------------- 메뉴 UI ----------------
   return (
     <>
       <header className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">배차 프로그램</h1>
         <div className="flex items-center gap-3">
           <span className="text-gray-700 text-sm">{user?.email}</span>
-          <button onClick={logout} className="bg-gray-300 px-3 py-1 rounded text-sm">로그아웃</button>
+          <button onClick={logout} className="bg-gray-300 px-3 py-1 rounded text-sm">
+            로그아웃
+          </button>
         </div>
       </header>
 
-      {/* ✅ 메뉴 (권한 적용) */}
       <nav className="flex gap-2 mb-3 overflow-x-auto whitespace-nowrap">
         {[
           "배차관리",
@@ -378,19 +392,17 @@ export default function DispatchApp() {
         })}
       </nav>
 
-      {/* ✅ 화면 렌더링 (role 전달) */}
+      {/* ---------------- 화면 렌더링 ---------------- */}
       <main className="bg-white rounded shadow p-4">
-        {menu === "배차관리" && role === "admin" && (
+        {menu === "배차관리" && (
           <DispatchManagement
-            role={role}
             dispatchData={dispatchData}
-            timeOptions={timeOptions}
-            tonOptions={tonOptions}
             drivers={drivers}
             clients={clients}
             addDispatch={addDispatch}
             upsertDriver={upsertDriver}
             upsertClient={upsertClient}
+            role={role}
           />
         )}
 
@@ -407,50 +419,69 @@ export default function DispatchApp() {
           />
         )}
 
-{menu === "배차현황" && (
-  <DispatchStatus
-    role={role}
-    dispatchData={dispatchData}
-    timeOptions={timeOptions}
-    tonOptions={tonOptions}
-    drivers={drivers}
-    patchDispatch={patchDispatch}
-    removeDispatch={removeDispatch}
-    upsertDriver={upsertDriver}
-  />
-)}
-        {menu === "미배차현황" && <UnassignedStatus role={role} dispatchData={dispatchData} />}
+        {menu === "배차현황" && (
+          <DispatchStatus
+            role={role}
+            dispatchData={dispatchData}
+            timeOptions={timeOptions}
+            tonOptions={tonOptions}
+            drivers={drivers}
+            patchDispatch={patchDispatch}
+            removeDispatch={removeDispatch}
+            upsertDriver={upsertDriver}
+          />
+        )}
+
+        {menu === "미배차현황" && (
+          <UnassignedStatus role={role} dispatchData={dispatchData} />
+        )}
 
         {menu === "기사관리" && role === "admin" && (
-          <DriverManagement drivers={drivers} upsertDriver={upsertDriver} removeDriver={removeDriver} />
+          <DriverManagement
+            drivers={drivers}
+            upsertDriver={upsertDriver}
+            removeDriver={removeDriver}
+          />
         )}
 
         {menu === "거래처관리" && role === "admin" && (
-          <ClientManagement clients={clients} upsertClient={upsertClient} removeClient={removeClient} />
+          <ClientManagement
+            clients={clients}
+            upsertClient={upsertClient}
+            removeClient={removeClient}
+          />
         )}
-{menu === "고정거래처관리" && role === "admin" && (
-  <FixedClients drivers={drivers} upsertDriver={upsertDriver} />
-)}
 
+        {menu === "고정거래처관리" && role === "admin" && (
+          <FixedClients drivers={drivers} upsertDriver={upsertDriver} />
+        )}
 
-        {menu === "매출관리" && role === "admin" && <Settlement dispatchData={dispatchData} />}
+        {menu === "매출관리" && role === "admin" && (
+          <Settlement dispatchData={dispatchData} />
+        )}
 
         {menu === "거래처정산" && role === "admin" && (
-          <ClientSettlement dispatchData={dispatchData} clients={clients} setClients={(next) => next.forEach(upsertClient)} />
+          <ClientSettlement
+            dispatchData={dispatchData}
+            clients={clients}
+            setClients={(next) => next.forEach(upsertClient)}
+          />
         )}
 
         {menu === "지급관리" && role === "admin" && (
-          <PaymentManagement dispatchData={dispatchData} patchDispatch={patchDispatch} />
+          <PaymentManagement
+            dispatchData={dispatchData}
+            patchDispatch={patchDispatch}
+          />
         )}
 
         {menu === "관리자메뉴" && role === "admin" && <AdminMenu />}
-
-        
       </main>
     </>
   );
 }
 // ===================== DispatchApp.jsx (PART 2/8) — END =====================
+
 
 // ===================== DispatchApp.jsx (PART 3/8) — START =====================
 function DispatchManagement({
@@ -1140,12 +1171,6 @@ const handleCarNoEnter = (value) => {
       )}
     </>
   );
-
-  /* -------------------------------------------------
-     ✅ 하단부 실시간배차현황 (배차관리 전용)
-     - 메뉴와 100% 동일한 UX: 수정(전체편집), 삭제(체크/선택삭제), 조회/검색, KPI, 엑셀다운
-     - 상세보기 없음
-  --------------------------------------------------*/
   /* -------------------------------------------------
    ✅ 하단부 실시간배차현황 (배차관리 전용)
    - 메뉴와 동일한 UX
@@ -1600,21 +1625,44 @@ const exportExcel = () => {
       {/* 테이블 */}
       <div className="overflow-x-auto">
         <table className="min-w-[2000px] text-sm border">
-          <thead>
-            <tr>
-              {deleteMode && <th className={head}>선택</th>}
-              {[
-                "순번","등록일","상차일","상차시간","하차일","하차시간",
-                "거래처명","상차지명","상차지주소","하차지명","하차지주소",
-                "화물내용","차량종류","차량톤수",
-                "차량번호","이름","전화번호",
-                "배차상태","청구운임","기사운임","수수료",
-                "지급방식","배차방식","메모","첨부","공유"
-              ].map((h)=>(
-                <th key={h} className={head}>{h}</th>
-              ))}
-            </tr>
-          </thead>
+<thead>
+  <tr>
+    {[
+      "선택",
+      "순번",
+      "등록일",
+      "상차일",
+      "상차시간",
+      "하차일",
+      "하차시간",
+      "거래처명",
+      "상차지명",
+      "상차지주소",
+      "하차지명",
+      "하차지주소",
+      "화물내용",
+      "차량종류",
+      "차량톤수",
+      "차량번호",
+      "이름",
+      "전화번호",
+      "배차상태",
+      "청구운임",
+      "기사운임",
+      "수수료",
+      "지급방식",
+      "배차방식",
+      "메모",
+      "첨부",
+      "공유",
+    ].map((h) => (
+      <th key={h} className={head}>
+        {h}
+      </th>
+    ))}
+  </tr>
+</thead>
+
 
           <tbody>
             {filtered.length === 0 && (
@@ -1812,141 +1860,152 @@ const exportExcel = () => {
 };
 
 
-  // ------------------ 대용량 업로드 ------------------
-  const [bulkOpen, setBulkOpen] = React.useState(false);
-  const [bulkRows, setBulkRows] = React.useState([]);
+  /* ------------------ 대용량 업로드 ------------------ */
+const [bulkOpen, setBulkOpen] = React.useState(false);
+const [bulkRows, setBulkRows] = React.useState([]);
 
-  const driverByCar = React.useMemo(() => {
-    const m = new Map();
-    (drivers || []).forEach((d) => {
-      const key = String(d.차량번호 || "").replace(/\s+/g, "");
-      if (key) m.set(key, { 이름: d.이름 || "", 전화번호: d.전화번호 || "" });
-    });
-    return m;
-  }, [drivers]);
+const driverByCar = React.useMemo(() => {
+  const m = new Map();
+  (drivers || []).forEach((d) => {
+    const key = String(d.차량번호 || "").replace(/\s+/g, "");
+    if (key) m.set(key, { 이름: d.이름 || "", 전화번호: d.전화번호 || "" });
+  });
+  return m;
+}, [drivers]);
 
-  const toInt2 = (v) => {
-    const n = parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10);
-    return isNaN(n) ? 0 : n;
-  };
+const toInt2 = (v) => {
+  const n = parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10);
+  return isNaN(n) ? 0 : n;
+};
 
-  // ✅ 대용량 업로드 (엑셀 순서 완전 일치 버전)
-  const onBulkFile = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+// 엑셀 날짜 변환
+const excelDateToISO = (value) => {
+  if (!value) return "";
+  if (typeof value === "number") {
+    const utcDays = Math.floor(value - 25569);
+    const date = new Date(utcDays * 86400 * 1000);
+    const offset = new Date(date.getTime() + date.getTimezoneOffset() * 60000);
+    return offset.toISOString().slice(0, 10);
+  }
+  if (typeof value === "string") {
+    let v = value.trim();
+    const onlyNums = v.replace(/[^0-9]/g, "");
+    if (onlyNums.length === 4) {
+      const mm = onlyNums.slice(0, 2);
+      const dd = onlyNums.slice(2, 4);
+      return `${new Date().getFullYear()}-${mm}-${dd}`;
+    }
+    if (onlyNums.length === 3) {
+      const mm = onlyNums.slice(0, 1);
+      const dd = onlyNums.slice(1, 3);
+      return `${new Date().getFullYear()}-${mm.padStart(2,"0")}-${dd.padStart(2,"0")}`;
+    }
+    const cleaned = v.replace(/[^\d]/g, "-").replace(/--+/g, "-");
+    if (/^\d{1,2}-\d{1,2}$/.test(cleaned)) {
+      const [m, d] = cleaned.split("-");
+      return `${new Date().getFullYear()}-${m.padStart(2,"0")}-${d.padStart(2,"0")}`;
+    }
+    if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(cleaned)) return cleaned;
+  }
+  return "";
+};
 
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      try {
-        const wb = XLSX.read(new Uint8Array(evt.target.result), { type: "array" });
-        const sheet = wb.SheetNames[0];
-        const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheet], {
-          header: 1,
-          defval: "",
-          blankrows: false,
-        });
+const onBulkFile = (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
 
-        console.log("📊 엑셀 헤더 ↓↓↓");
-        console.log(rows[0]);
+  const reader = new FileReader();
+  reader.onload = (evt) => {
+    try {
+      const wb = XLSX.read(new Uint8Array(evt.target.result), { type: "array" });
+      const sheet = wb.SheetNames[0];
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheet], {
+        header: 1,
+        defval: "",
+        blankrows: false,
+      });
 
-        const excelDateToISO = (value) => {
-          if (!value) return "";
-          if (typeof value === "number") {
-            const utcDays = Math.floor(value - 25569);
-            const date = new Date(utcDays * 86400 * 1000);
-            const offset = new Date(date.getTime() + date.getTimezoneOffset() * 60000);
-            return offset.toISOString().slice(0, 10);
-          }
-          if (typeof value === "string") {
-            const v = value.replace(/[^\d-]/g, "-").replace(/--+/g, "-").trim();
-            if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(v)) return v;
-          }
-          return "";
+      const normalize = (v) => {
+        if (v === null || v === undefined) return "";
+        if (typeof v === "number") return String(v).trim();
+        return String(v || "").trim();
+      };
+
+      const mapped = rows.slice(1).map((r, i) => {
+        const cols = r.slice(0, 21).concat(Array(21).fill("")).slice(0, 21);
+        const [
+          상차일, 상차시간, 하차일, 하차시간,
+          거래처명, 상차지명, 상차지주소, 하차지명, 하차지주소,
+          화물내용, 차량종류, 차량톤수, 차량번호, 이름, 전화번호,
+          청구운임, 기사운임, 수수료, 지급방식, 배차방식, 메모,
+        ] = cols.map(normalize);
+
+        const cn = String(차량번호 || "").replace(/\s+/g, "");
+        const found = driverByCar.get(cn);
+
+        const 청 = toInt2(청구운임);
+        const 기 = toInt2(기사운임);
+        const 수 = toInt2(수수료 || 청 - 기);
+
+        return {
+          _tmp_id: `${Date.now()}-${i}`,
+          상차일: excelDateToISO(상차일),
+          상차시간,
+          하차일: excelDateToISO(하차일),
+          하차시간,
+          거래처명,
+          상차지명,
+          상차지주소,
+          하차지명,
+          하차지주소,
+          화물내용,
+          차량종류,
+          차량톤수,
+          차량번호: cn,
+          이름: 이름 || found?.이름 || "",
+          전화번호: 전화번호 || found?.전화번호 || "",
+          청구운임: String(청),
+          기사운임: String(기),
+          수수료: String(수),
+          지급방식,
+          배차방식,
+          메모,
+          배차상태: cn && (found?.이름 || found?.전화번호) ? "배차완료" : "배차중",
         };
+      });
 
-        const normalize = (v) => {
-          if (v === null || v === undefined) return "";
-          if (typeof v === "number") return String(v).trim();
-          return String(v || "").trim();
-        };
-
-        const mapped = rows.slice(1).map((r, i) => {
-          const cols = r.slice(0, 21).concat(Array(21).fill("")).slice(0, 21);
-          const [
-            상차일, 상차시간, 하차일, 하차시간,
-            거래처명, 상차지명, 상차지주소, 하차지명, 하차지주소,
-            화물내용, 차량종류, 차량톤수, 차량번호, 이름, 전화번호,
-            청구운임, 기사운임, 수수료, 지급방식, 배차방식, 메모,
-          ] = cols.map(normalize);
-
-          const cn = String(차량번호 || "").replace(/\s+/g, "");
-          const found = driverByCar.get(cn);
-
-          const toInt2 = (v) => {
-            const n = parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10);
-            return isNaN(n) ? 0 : n;
-          };
-
-          const 청 = toInt2(청구운임);
-          const 기 = toInt2(기사운임);
-          const 수 = toInt2(수수료 || 청 - 기);
-
-          return {
-            _tmp_id: `${Date.now()}-${i}`,
-            상차일: excelDateToISO(상차일),
-            상차시간,
-            하차일: excelDateToISO(하차일),
-            하차시간,
-            거래처명,
-            상차지명,
-            상차지주소,
-            하차지명,
-            하차지주소,
-            화물내용,
-            차량종류,
-            차량톤수,
-            차량번호: cn,
-            이름: 이름 || found?.이름 || "",
-            전화번호: 전화번호 || found?.전화번호 || "",
-            청구운임: String(청),
-            기사운임: String(기),
-            수수료: String(수),
-            지급방식,
-            배차방식,
-            메모,
-            배차상태: cn && (found?.이름 || found?.전화번호) ? "배차완료" : "배차중",
-          };
-        });
-
-        setBulkRows(mapped);
-        alert(`✅ 대용량 업로드 완료 (${mapped.length}건) — 엑셀 순서 그대로 반영`);
-      } catch (err) {
-        console.error(err);
-        alert("❌ 엑셀 업로드 중 오류가 발생했습니다.");
-      }
-    };
-    reader.readAsArrayBuffer(file);
+      setBulkRows(mapped);
+      alert(`대용량 업로드 완료 (${mapped.length}건)`);
+    } catch (err) {
+      console.error(err);
+      alert("엑셀 업로드 오류");
+    }
   };
-  const setBulk = (id, k, v) => {
-    setBulkRows(prev => prev.map(r => {
-      if (r._tmp_id !== id) return r;
-      if (!isAdmin && (k === "청구운임" || k === "기사운임" || k === "수수료")) return r;
-      if (isAdmin && (k==="청구운임" || k==="기사운임")) {
-        const sale = toInt2(k==="청구운임" ? v : r.청구운임);
-        const drv  = toInt2(k==="기사운임" ? v : r.기사운임);
-        return { ...r, [k]: v, 수수료: String(sale - drv) };
-      }
-      if (k === "상차지명") {
-        const c = findClient(v);
-        return { ...r, 상차지명: v, 상차지주소: r.상차지주소 || c?.주소 || "" };
-      }
-      if (k === "하차지명") {
-        const c = findClient(v);
-        return { ...r, 하차지명: v, 하차지주소: r.하차지주소 || c?.주소 || "" };
-      }
-      return { ...r, [k]: v };
-    }));
-  };
+  reader.readAsArrayBuffer(file);
+};
+
+const setBulk = (id, k, v) => {
+  setBulkRows(prev => prev.map(r => {
+    if (r._tmp_id !== id) return r;
+
+    if (k === "상차지명") {
+      const c = findClient(v);
+      return { ...r, 상차지명: v, 상차지주소: c?.주소 || r.상차지주소 || "" };
+    }
+    if (k === "하차지명") {
+      const c = findClient(v);
+      return { ...r, 하차지명: v, 하차지주소: c?.주소 || r.하차지주소 || "" };
+    }
+    if (k === "청구운임" || k === "기사운임") {
+      const sale = toInt2(k==="청구운임" ? v : r.청구운임);
+      const drv  = toInt2(k==="기사운임" ? v : r.기사운임);
+      return { ...r, [k]: v, 수수료: String(sale - drv) };
+    }
+
+    return { ...r, [k]: v };
+  }));
+};
+
   const saveBulk = async () => {
     if (!bulkRows.length) return alert("저장할 데이터가 없습니다.");
     for (const row of bulkRows) {
@@ -1994,6 +2053,7 @@ const exportExcel = () => {
       await addDispatch(rec);
     }
     alert(`총 ${bulkRows.length}건 저장 완료`);
+    window.dispatchEvent(new Event("RUN25_REFRESH"));
     setBulkRows([]);
     setBulkOpen(false);
   };
@@ -2097,22 +2157,84 @@ function RealtimeStatus({
   const [selectedEditMode, setSelectedEditMode] = React.useState(false);
   const [edited, setEdited] = React.useState({});
 
-  // 삭제된 건 재등장 방지
+  // 삭제건 재등장 방지
   const [deletedIds, setDeletedIds] = React.useState(() => new Set());
-  // 차량번호 자동매칭 하이라이트
+  // 하이라이트
   const [highlightIds, setHighlightIds] = React.useState(() => new Set());
-  // 저장 완료된 행 하이라이트
-  const [savedHighlightIds, setSavedHighlightIds] = React.useState(
-    () => new Set()
-  );
-  // 신규 기사 등록 중 중복 방지
+  const [savedHighlightIds, setSavedHighlightIds] = React.useState(() => new Set());
+
+  // 신규 기사 등록 중복 방지
   const [isRegistering, setIsRegistering] = React.useState(false);
-  // 주소 더보기 상태
+
+  // 주소 더보기
   const [expandedAddr, setExpandedAddr] = React.useState({});
-  // 상차 2시간 이내 + 차량번호 없음 경고 리스트
+
+  // 상차 임박 경고
   const [warningList, setWarningList] = React.useState([]);
 
-  // 🔥 Firestore → rows 동기화 + 삭제건 제거 유지
+  // -----------------------------------------------------
+  //   ⬇⬇⬇⬇⬇  🔥 추가 ① : 첨부파일 개수 로딩
+  // -----------------------------------------------------
+  const [attachCount, setAttachCount] = React.useState({});
+
+  React.useEffect(() => {
+    const load = async () => {
+      const result = {};
+      if (!dispatchData) return;
+
+      for (const row of dispatchData) {
+        if (!row?._id) continue;
+        try {
+          const snap = await getDocs(
+            collection(db, "dispatch", row._id, "attachments")
+          );
+          result[row._id] = snap.size;
+        } catch (e) {
+          result[row._id] = 0;
+        }
+      }
+      setAttachCount(result);
+    };
+
+    load();
+  }, [dispatchData]);
+
+  // -----------------------------------------------------
+  //   ⬇⬇⬇⬇⬇  🔥 추가 ② : 공유 기능 shareDispatch
+  // -----------------------------------------------------
+const shareDispatch = (row) => {
+  const uploadUrl = `${window.location.origin}/upload?id=${row._id}`;
+
+  const msg = `
+📦 [배차 정보]
+
+🟦 거래처: ${row.거래처명 || ""}
+📍 상차지: ${row.상차지명 || ""} / ${row.상차지주소 || ""}
+📍 하차지: ${row.하차지명 || ""} / ${row.하차지주소 || ""}
+
+⏰ 상차: ${row.상차일 || ""} ${row.상차시간 || ""}
+⏰ 하차: ${row.하차일 || ""} ${row.하차시간 || ""}
+
+🚚 차량: ${row.차량번호 || ""} / ${row.이름 || ""} (${row.전화번호 || ""})
+💰 운임: ${(row.청구운임 || 0).toLocaleString()}원
+
+📝 메모:
+${row.메모 || ""}
+
+📎 사진 업로드 링크:
+${uploadUrl}
+  `.trim();
+
+  navigator.clipboard.writeText(msg);
+  alert("📋 공유 메시지가 복사되었습니다!");
+};
+
+  // -----------------------------------------------------
+  //   🔥 여기까지 추가 끝. 아래는 네 기존 코드 그대로 유지
+  // -----------------------------------------------------
+
+
+  // 🔥 Firestore → rows 동기화
   React.useEffect(() => {
     const base = (dispatchData || []).filter(
       (r) => !!r && !deletedIds.has(r._id)
@@ -2131,12 +2253,16 @@ function RealtimeStatus({
     });
   }, [dispatchData, deletedIds]);
 
-  // 한국시간 (KST)
+
+  // =================================
+  // 한국시간(KST)
+  // =================================
   const todayKST = () => {
     const now = new Date();
     now.setHours(now.getHours() + 9);
     return now.toISOString().slice(0, 10);
   };
+
 
   const toInt = (v) => {
     const n = parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10);
@@ -2163,19 +2289,20 @@ function RealtimeStatus({
     return m;
   })();
 
+
   // ========================
   // 📌 차량번호 입력 처리
   // ========================
   const handleCarInput = async (id, rawVal, keyEvent) => {
     if (keyEvent && keyEvent.key !== "Enter") return;
-    if (isRegistering) return; // 🔥 신규 등록 중일 때 중복 실행 방지
+    if (isRegistering) return;
 
     const v = normalizePlate(rawVal);
     const idx = rows.findIndex((r) => r._id === id);
     if (idx === -1) return;
     const oldRow = rows[idx];
 
-    // ① 차량번호 삭제 → 리셋
+    // 차량번호 삭제
     if (!v) {
       const updated = {
         차량번호: "",
@@ -2190,7 +2317,7 @@ function RealtimeStatus({
       return;
     }
 
-    // ② 기존 기사 자동 매칭
+    // 기존 기사 자동매칭
     const match = driverMap.get(v);
     if (match) {
       const isStatusChanging = oldRow.배차상태 !== "배차완료";
@@ -2207,7 +2334,6 @@ function RealtimeStatus({
           r._id === id ? { ...r, ...updated } : r
         );
 
-        // 방금 완료된 건을 최상단으로 이동
         const target = updatedRows.find((r) => r._id === id);
         const done = updatedRows.filter(
           (r) => r._id !== id && r.배차상태 === "배차완료"
@@ -2218,7 +2344,6 @@ function RealtimeStatus({
 
       await patchDispatch?.(id, updated);
 
-      // 🔆 차량번호/이름/전화번호 3칸 하이라이트 (1초)
       if (isStatusChanging) {
         setHighlightIds((prev) => {
           const next = new Set(prev);
@@ -2238,19 +2363,19 @@ function RealtimeStatus({
       return;
     }
 
-    // ③ 신규 기사 등록
+    // 신규 기사 등록
     const ok = confirm(`차량번호 [${rawVal}] 신규 기사로 등록할까요?`);
     if (!ok) return;
 
-    setIsRegistering(true); // 🔥 중복 방지 ON
+    setIsRegistering(true);
 
-    const 입력이름 = prompt("신규 기사 이름을 입력하세요 (예: 홍길동)");
+    const 입력이름 = prompt("신규 기사 이름을 입력하세요");
     if (!입력이름) {
       setIsRegistering(false);
       return;
     }
 
-    const 입력전화 = prompt("신규 기사 전화번호를 입력하세요 (예: 010-1234-5678)");
+    const 입력전화 = prompt("전화번호를 입력하세요");
     if (!입력전화) {
       setIsRegistering(false);
       return;
@@ -2275,7 +2400,6 @@ function RealtimeStatus({
 
     await patchDispatch?.(id, updated);
 
-    // 하이라이트 1초
     setHighlightIds((prev) => {
       const next = new Set(prev);
       next.add(id);
@@ -2289,19 +2413,19 @@ function RealtimeStatus({
       });
     }, 1000);
 
-    setIsRegistering(false); // 중복 방지 해제
+    setIsRegistering(false);
 
     alert("신규 기사 등록 완료");
   };
 
+
   // ========================
-  // 📌 필터 + KPI + 정렬
+  // 📌 필터 + KPI 처리
   // ========================
   const filtered = React.useMemo(() => {
     let data = [...rows];
     const today = todayKST();
 
-    // 날짜 필터
     const isInRange = (date, start, end) => {
       if (!date) return false;
       const d = new Date(date).getTime();
@@ -2316,14 +2440,12 @@ function RealtimeStatus({
       data = data.filter((r) => isInRange(r.상차일, startDate, endDate));
     }
 
-    // 개별 필드 검색 필터
     if (filterType && filterValue) {
       data = data.filter((r) =>
         String(r[filterType] || "").includes(filterValue)
       );
     }
 
-    // 통합 검색
     if (q.trim()) {
       const lower = q.toLowerCase();
       data = data.filter((r) =>
@@ -2333,19 +2455,19 @@ function RealtimeStatus({
       );
     }
 
-    // 배차중 → 배차완료 순 정렬
     const order = { 배차중: 0, 배차완료: 1 };
     const indexMap = new Map(rows.map((r, i) => [r._id, i]));
 
     data.sort((a, b) => {
       const oa = order[a.배차상태] ?? 99;
       const ob = order[b.배차상태] ?? 99;
-      if (oa !== ob) return oa - ob; // 상태 우선
-      return (indexMap.get(a._id) ?? 0) - (indexMap.get(b._id) ?? 0); // 기존 순서 유지
+      if (oa !== ob) return oa - ob;
+      return (indexMap.get(a._id) ?? 0) - (indexMap.get(b._id) ?? 0);
     });
 
     return data;
   }, [rows, q, filterType, filterValue, startDate, endDate]);
+
 
   const kpi = React.useMemo(() => {
     const sale = filtered.reduce((a, r) => a + toInt(r.청구운임), 0);
@@ -2353,9 +2475,10 @@ function RealtimeStatus({
     return { cnt: filtered.length, sale, drv, fee: sale - drv };
   }, [filtered]);
 
-  // =============================
-  // ⚠ 상차 2시간 전 + 차량번호 없음 경고
-  // =============================
+
+  // =========================================
+  //  ⚠ 상차 2시간 전 경고
+  // =========================================
   React.useEffect(() => {
     if (!rows.length) {
       setWarningList([]);
@@ -2369,30 +2492,28 @@ function RealtimeStatus({
       if (r.차량번호 && String(r.차량번호).trim() !== "") return;
       if (!r.상차일 || !r.상차시간) return;
 
-      try {
-        const timeStr = String(r.상차시간).padStart(5, "0");
-        const dt = new Date(`${r.상차일}T${timeStr}:00`);
-        if (isNaN(dt.getTime())) return;
+      const timeStr = String(r.상차시간).padStart(5, "0");
+      const dt = new Date(`${r.상차일}T${timeStr}:00`);
+      if (isNaN(dt.getTime())) return;
 
-        const diff = dt.getTime() - now.getTime();
-        if (diff > 0 && diff <= 2 * 60 * 60 * 1000) {
-          temp.push(r);
-        }
-      } catch (e) {
-        // 무시
+      const diff = dt.getTime() - now.getTime();
+      if (diff > 0 && diff <= 2 * 60 * 60 * 1000) {
+        temp.push(r);
       }
     });
 
     setWarningList(temp);
   }, [rows]);
 
+
   // ========================
-  // 📌 체크박스 선택
+  // 📌 선택 체크
   // ========================
   const toggleSelect = (id) =>
     setSelected((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
     );
+
 
   // ========================
   // 📌 선택 삭제
@@ -2419,8 +2540,9 @@ function RealtimeStatus({
     setSelected([]);
   };
 
+
   // ========================
-  // 📌 선택수정 저장 (노란불 1초)
+  // 📌 선택수정 저장
   // ========================
   const handleEditChange = (id, key, value) => {
     setEdited((prev) => ({
@@ -2440,7 +2562,6 @@ function RealtimeStatus({
       }
     }
 
-    // 🔥 저장된 행 하이라이트
     setSavedHighlightIds((prev) => {
       const next = new Set(prev);
       ids.forEach((id) => next.add(id));
@@ -2460,9 +2581,10 @@ function RealtimeStatus({
     setSelectedEditMode(false);
   };
 
-  // ------------------------
-  // 📌 엑셀 다운로드 (테이블 컬럼 100% 동일 버전, 주소 컬럼 제외)
-  // ------------------------
+
+  // ------------------------------------------
+  // 📌 엑셀다운
+  // ------------------------------------------
   const handleExcel = () => {
     if (!filtered.length) return alert("내보낼 데이터가 없습니다.");
 
@@ -2520,22 +2642,22 @@ function RealtimeStatus({
     XLSX.writeFile(wb, "실시간배차현황.xlsx");
   };
 
-  // ------------------------
-  // 📌 수정 가능 컬럼
-  // ------------------------
+
+  // ------------------------------------------
+  // 📌 수정 가능 여부
+  // ------------------------------------------
   const canEdit = (key, id) => {
     if (!(selectedEditMode && selected.includes(id))) return false;
     const readOnly = ["등록일", "순번", "차량번호", "배차상태", "이름", "전화번호"];
     return !readOnly.includes(key);
   };
 
-  // ------------------------
-  // 📌 editableInput — 날짜/드롭다운 추가 버전
-  // ------------------------
+  // ------------------------------------------
+  // 📌 editable input
+  // ------------------------------------------
   const editableInput = (key, val, rowId) => {
     if (!canEdit(key, rowId)) return val;
 
-    // 날짜 선택
     if (key === "상차일" || key === "하차일") {
       return (
         <input
@@ -2547,7 +2669,6 @@ function RealtimeStatus({
       );
     }
 
-    // 지급방식 선택
     if (key === "지급방식") {
       return (
         <select
@@ -2566,7 +2687,6 @@ function RealtimeStatus({
       );
     }
 
-    // 배차방식 선택
     if (key === "배차방식") {
       return (
         <select
@@ -2583,7 +2703,6 @@ function RealtimeStatus({
       );
     }
 
-    // 기본 입력
     return (
       <input
         type="text"
@@ -2594,7 +2713,6 @@ function RealtimeStatus({
     );
   };
 
-  // 주소 더보기 렌더링
   const renderAddrCell = (key, val, rowId) => {
     if (canEdit(key, rowId)) {
       return (
@@ -2636,23 +2754,21 @@ function RealtimeStatus({
     );
   };
 
-  // ------------------------
-  // 📌 테이블 스타일
-  // ------------------------
   const head =
     "border px-2 py-2 bg-gray-100 text-center whitespace-nowrap";
   const cell =
     "border px-2 py-[2px] text-center align-middle whitespace-nowrap overflow-hidden text-ellipsis leading-tight";
   const addrCell = `${cell} min-w-[80px] max-w-[160px]`;
 
-  // ------------------------
-  // 📌 렌더링
-  // ------------------------
+
+  // ------------------------------------------
+  // 📌 화면 렌더
+  // ------------------------------------------
   return (
     <div className="p-3 w-full">
       <h2 className="text-lg font-bold mb-2">실시간 배차현황</h2>
 
-      {/* ⚠ 2시간 내 미배차 경고 */}
+      {/* 경고 */}
       {warningList.length > 0 && (
         <div className="bg-red-100 border border-red-400 text-red-800 p-3 rounded mb-3 text-sm">
           <b>⚠ 배차 경고!</b>{" "}
@@ -2684,9 +2800,7 @@ function RealtimeStatus({
         </div>
         <div>
           수수료{" "}
-          <b className="text-amber-600">
-            {kpi.fee.toLocaleString()}
-          </b>
+          <b className="text-amber-600">{kpi.fee.toLocaleString()}</b>
           원
         </div>
       </div>
@@ -2749,7 +2863,7 @@ function RealtimeStatus({
         </button>
       </div>
 
-      {/* 버튼 */}
+      {/* 상단 버튼 */}
       <div className="flex justify-end gap-2 mb-2">
         <button
           onClick={() => {
@@ -2815,6 +2929,8 @@ function RealtimeStatus({
                 "지급방식",
                 "배차방식",
                 "메모",
+                "첨부",
+                "공유",
               ].map((h) => (
                 <th key={h} className={head}>
                   {h}
@@ -2838,7 +2954,11 @@ function RealtimeStatus({
                   key={r._id}
                   className={`
                     ${idx % 2 ? "bg-gray-50" : ""}
-                    ${selected.includes(r._id) ? "animate-pulse bg-yellow-100" : ""}
+                    ${
+                      selected.includes(r._id)
+                        ? "animate-pulse bg-yellow-100"
+                        : ""
+                    }
                     ${
                       highlightIds.has(r._id)
                         ? "animate-pulse bg-green-200"
@@ -2851,7 +2971,6 @@ function RealtimeStatus({
                     }
                   `}
                 >
-                  {/* 체크 */}
                   <td className={cell}>
                     <input
                       type="checkbox"
@@ -2867,34 +2986,7 @@ function RealtimeStatus({
                     {editableInput("상차일", r.상차일, r._id)}
                   </td>
 
-                  {/* 상차시간 (남은 시간 색상 표시) */}
-                  <td
-                    className={`${cell} ${
-                      (() => {
-                        if (!r.상차시간) return "";
-                        try {
-                          const now = new Date();
-                          now.setHours(now.getHours() + 9);
-                          const loadDate = r.상차일 || todayKST();
-                          const target = new Date(
-                            `${loadDate}T${String(r.상차시간).padStart(
-                              5,
-                              "0"
-                            )}:00+09:00`
-                          );
-                          const diffHours =
-                            (target - now) / (1000 * 60 * 60);
-                          if (diffHours <= 1)
-                            return "text-red-600 font-bold";
-                          if (diffHours <= 2)
-                            return "text-green-600 font-semibold";
-                          return "";
-                        } catch {
-                          return "";
-                        }
-                      })()
-                    }`}
-                  >
+                  <td className={cell}>
                     {editableInput("상차시간", r.상차시간, r._id)}
                   </td>
 
@@ -2915,6 +3007,7 @@ function RealtimeStatus({
                   <td className={addrCell}>
                     {renderAddrCell("상차지주소", r.상차지주소, r._id)}
                   </td>
+
                   <td className={cell}>
                     {editableInput("하차지명", r.하차지명, r._id)}
                   </td>
@@ -2922,7 +3015,6 @@ function RealtimeStatus({
                     {renderAddrCell("하차지주소", r.하차지주소, r._id)}
                   </td>
 
-                  {/* 화물 + 차량 */}
                   <td className={cell}>
                     {editableInput("화물내용", r.화물내용, r._id)}
                   </td>
@@ -2933,7 +3025,7 @@ function RealtimeStatus({
                     {editableInput("차량톤수", r.차량톤수, r._id)}
                   </td>
 
-                  {/* 차량번호 + 이름 + 전화 */}
+                  {/* 차량번호 */}
                   <td className={`${cell} ${highlightCell}`}>
                     <input
                       type="text"
@@ -2954,7 +3046,6 @@ function RealtimeStatus({
                     {r.전화번호}
                   </td>
 
-                  {/* 배차상태 */}
                   <td className={cell}>
                     <span
                       className={`px-2 py-0.5 rounded text-xs font-semibold ${
@@ -2967,7 +3058,7 @@ function RealtimeStatus({
                     </span>
                   </td>
 
-                  {/* 금액 */}
+                  {/* 청구운임 */}
                   <td className={cell}>
                     {canEdit("청구운임", r._id) ? (
                       <input
@@ -2987,6 +3078,7 @@ function RealtimeStatus({
                     )}
                   </td>
 
+                  {/* 기사운임 */}
                   <td className={cell}>
                     {canEdit("기사운임", r._id) ? (
                       <input
@@ -3022,8 +3114,31 @@ function RealtimeStatus({
                   <td className={cell}>
                     {editableInput("배차방식", r.배차방식, r._id)}
                   </td>
+
                   <td className={cell}>
                     {editableInput("메모", r.메모, r._id)}
+                  </td>
+
+                  {/* 첨부 */}
+                  <td className={cell}>
+                    <button
+                      onClick={() =>
+                        window.open(`/upload?id=${r._id}`, "_blank")
+                      }
+                      className="text-blue-600 underline"
+                    >
+                      📎 {attachCount[r._id] || 0}
+                    </button>
+                  </td>
+
+                  {/* 공유 */}
+                  <td className={cell}>
+                    <button
+                      onClick={() => shareDispatch(r)}
+                      className="bg-blue-600 text-white px-3 py-1 rounded"
+                    >
+                      공유
+                    </button>
                   </td>
                 </tr>
               );
@@ -3035,9 +3150,6 @@ function RealtimeStatus({
   );
 }
 // ===================== DispatchApp.jsx (PART 4/8 — END) =====================
-
-
-
 
 // ===================== DispatchApp.jsx (PART 5/8 — 차량번호 항상 활성화 + 선택수정→수정완료 통합버튼 + 주소 더보기 완전본 + 대용량업로드 추가) =====================
 function DispatchStatus({
@@ -3061,56 +3173,95 @@ function DispatchStatus({
   const toInt = (v) => parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10) || 0;
   const getId = (r) => r._id || r.id || r._fsid;
 
-  // ✅ 대용량 업로드 처리
-  const handleBulkFile = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      const data = new Uint8Array(evt.target.result);
-      const workbook = XLSX.read(data, { type: "array" });
-      const sheetName = workbook.SheetNames[0];
-      const ws = workbook.Sheets[sheetName];
-      const json = XLSX.utils.sheet_to_json(ws, { defval: "" });
+  // =============================================
+// ✅ 대용량 업로드 (엑셀 → Firestore + 상태 반영 완전본)
+// =============================================
+const excelDateToISO = (value) => {
+  if (!value) return "";
+  if (typeof value === "number") {
+    const utcDays = Math.floor(value - 25569);
+    const date = new Date(utcDays * 86400 * 1000);
+    return date.toISOString().slice(0, 10);
+  }
+  if (typeof value === "string") {
+    const clean = value.replace(/[^\d]/g, "-").replace(/--+/g, "-");
+    const parts = clean.split("-").filter(Boolean);
+    if (parts.length === 3) {
+      let [y, m, d] = parts;
+      if (y.length === 2) y = "20" + y;
+      if (m.length === 1) m = "0" + m;
+      if (d.length === 1) d = "0" + d;
+      return `${y}-${m}-${d}`;
+    }
+  }
+  return "";
+};
 
-      const mapped = json.map((row, idx) => ({
-        _id: crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`,
-        등록일: row["상차일"] || new Date().toISOString().slice(0, 10),
-        상차일: row["상차일"] || "",
-        상차시간: row["상차시간"] || "",
-        하차일: row["하차일"] || "",
-        하차시간: row["하차시간"] || "",
-        거래처명: row["거래처명"] || "",
-        상차지명: row["상차지명"] || "",
-        상차지주소: row["상차지주소"] || "",
-        하차지명: row["하차지명"] || "",
-        하차지주소: row["하차지주소"] || "",
-        화물내용: row["화물내용"] || "",
-        차량종류: row["차량종류"] || "",
-        차량톤수: row["차량톤수"] || "",
-        차량번호: row["차량번호"] || "",
-        이름: row["이름"] || "",
-        전화번호: row["전화번호"] || "",
-        청구운임: toInt(row["청구운임"]),
-        기사운임: toInt(row["기사운임"]),
-        수수료: toInt(row["청구운임"]) - toInt(row["기사운임"]),
-        지급방식: row["지급방식"] || "",
-        배차방식: row["배차방식"] || "",
-        메모: row["메모"] || "",
-        배차상태: row["배차상태"] || "배차중",
-      }));
+const handleBulkFile = (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
 
-      if (mapped.length > 0) {
-        if (confirm(`${mapped.length}건을 추가하시겠습니까?`)) {
-          setDispatchData((prev) => [...prev, ...mapped]);
-          alert("✅ 대용량 데이터 업로드 완료");
+  const reader = new FileReader();
+  reader.onload = async (evt) => {
+    const data = new Uint8Array(evt.target.result);
+    const workbook = XLSX.read(data, { type: "array" });
+    const sheetName = workbook.SheetNames[0];
+    const ws = workbook.Sheets[sheetName];
+    const json = XLSX.utils.sheet_to_json(ws, { defval: "" });
+
+    const mapped = json.map((row) => ({
+      _id: crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`,
+      등록일: excelDateToISO(row["상차일"]) || new Date().toISOString().slice(0, 10),
+      상차일: excelDateToISO(row["상차일"]),
+      상차시간: row["상차시간"] || "",
+      하차일: excelDateToISO(row["하차일"]),
+      하차시간: row["하차시간"] || "",
+      거래처명: row["거래처명"] || "",
+      상차지명: row["상차지명"] || "",
+      상차지주소: row["상차지주소"] || "",
+      하차지명: row["하차지명"] || "",
+      하차지주소: row["하차지주소"] || "",
+      화물내용: row["화물내용"] || "",
+      차량종류: row["차량종류"] || "",
+      차량톤수: row["차량톤수"] || "",
+      차량번호: row["차량번호"] || "",
+      이름: row["이름"] || "",
+      전화번호: row["전화번호"] || "",
+      청구운임: toInt(row["청구운임"]),
+      기사운임: toInt(row["기사운임"]),
+      수수료: toInt(row["청구운임"]) - toInt(row["기사운임"]),
+      지급방식: row["지급방식"] || "",
+      배차방식: row["배차방식"] || "",
+      메모: row["메모"] || "",
+      배차상태: row["배차상태"] || "배차중",
+    }));
+
+    if (!mapped.length) {
+      alert("❌ 엑셀 데이터가 없습니다.");
+      return;
+    }
+
+    if (!confirm(`${mapped.length}건을 업로드하시겠습니까?`)) return;
+
+    try {
+      for (const item of mapped) {
+        if (patchDispatch) {
+          await patchDispatch(item._id, item);
         }
-      } else {
-        alert("엑셀 데이터가 비어있거나 매칭 실패");
       }
-    };
-    reader.readAsArrayBuffer(file);
+
+      setDispatchData((prev) => [...prev, ...mapped]);
+
+      alert("✅ 대용량 업로드 완료되었습니다.");
+    } catch (err) {
+      console.error(err);
+      alert("❌ 업로드 중 오류 발생");
+    }
   };
+
+  reader.readAsArrayBuffer(file);
+};
+
 
   const toggleOne = (id) =>
     setSelected((prev) => {
