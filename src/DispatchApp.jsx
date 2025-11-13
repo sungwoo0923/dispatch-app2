@@ -487,7 +487,8 @@ export default function DispatchApp() {
 function DispatchManagement({
   dispatchData, drivers, clients, timeOptions, tonOptions,
   addDispatch, upsertDriver, upsertClient,
-  role = "admin",          // 🔒 권한: "admin" | "user"
+  patchDispatch, removeDispatch,   // ⭐ 추가
+  role = "admin",
 }) {
   const isAdmin = role === "admin";
 
@@ -1176,7 +1177,7 @@ const handleCarNoEnter = (value) => {
    - 메뉴와 동일한 UX
    - 상차 2시간 전 + 미배차 경고 기능 포함
 --------------------------------------------------*/
-const RealtimeStatusEmbed = () => {
+const RealtimeStatusEmbed = ({ patchDispatch, removeDispatch }) => {
   const today = _todayStr();
 
   // 🔎 필터 상태
@@ -1320,36 +1321,32 @@ const RealtimeStatusEmbed = () => {
   };
 
   // ================================
-  // 상위 patch/remove 연동
-  // ================================
-  const patchOne = async (id, updates) => {
-    try {
-      if (typeof window?.RUN25_PATCH === "function") {
-        await window.RUN25_PATCH(id, updates);
-        return true;
-      }
-    } catch (e) {}
-
-    window.dispatchEvent(
-      new CustomEvent("RUN25_REQUEST_PATCH", { detail: { id, updates } })
-    );
-    alert("수정 요청이 전송되었습니다.");
+// 상위 patch/remove 연동 (🔥 실제 Firestore 반영되게 수정)
+// ================================
+const patchOne = async (id, updates) => {
+  try {
+    // 🔥 DispatchManagement 에서 내려온 patchDispatch 사용
+    await patchDispatch(id, updates);
     return true;
-  };
+  } catch (e) {
+    console.error("patch 실패", e);
+    alert("수정 중 오류 발생");
+    return false;
+  }
+};
 
-  const removeOne = async (id) => {
-    try {
-      if (typeof window?.RUN25_REMOVE === "function") {
-        await window.RUN25_REMOVE(id);
-        return true;
-      }
-    } catch (e) {}
-
-    window.dispatchEvent(
-      new CustomEvent("RUN25_REQUEST_REMOVE", { detail: { id } })
-    );
+const removeOne = async (id) => {
+  try {
+    // 🔥 DispatchManagement 에서 내려온 removeDispatch 사용
+    await removeDispatch(id);
     return true;
-  };
+  } catch (e) {
+    console.error("삭제 실패", e);
+    alert("삭제 중 오류 발생");
+    return false;
+  }
+};
+
 
   const saveSelectedEdits = async () => {
     const ids = [...selected];
@@ -1549,72 +1546,55 @@ const exportExcel = () => {
 
         {/* 편집/삭제/엑셀 */}
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => {
-              setEditMode((v) => !v);
-              setDeleteMode(false);
-            }}
-            className={`px-3 py-1 rounded ${
-              editMode ? "bg-blue-600 text-white" : "bg-gray-200"
-            }`}
-          >
-            수정
-          </button>
 
-          <button
-            onClick={() => {
-              setDeleteMode((v) => !v);
-              setEditMode(false);
-              clearSelect();
-            }}
-            className={`px-3 py-1 rounded ${
-              deleteMode ? "bg-red-600 text-white" : "bg-gray-200"
-            }`}
-          >
-            삭제
-          </button>
+  {!editMode && (
+    <>
+      <button
+        onClick={() => {
+          setEditMode(true);
+          clearSelect();
+        }}
+        className="px-3 py-1 rounded bg-orange-500 text-white"
+      >
+        선택수정
+      </button>
 
-          {deleteMode && (
-            <>
-              <button onClick={selectAll} className="px-3 py-1 rounded border">
-                전체선택
-              </button>
-              <button onClick={clearSelect} className="px-3 py-1 rounded border">
-                선택해제
-              </button>
-              <button
-                onClick={deleteSelected}
-                className="px-3 py-1 rounded bg-red-600 text-white"
-              >
-                선택삭제
-              </button>
-            </>
-          )}
+      <button
+        onClick={exportExcel}
+        className="px-3 py-1 rounded bg-green-600 text-white"
+      >
+        엑셀다운
+      </button>
+    </>
+  )}
 
-          {editMode && (
-            <>
-              <button
-                onClick={saveSelectedEdits}
-                className="px-3 py-1 rounded bg-emerald-600 text-white"
-              >
-                선택저장
-              </button>
-              <button
-                onClick={saveAllEdits}
-                className="px-3 py-1 rounded bg-emerald-700 text-white"
-              >
-                전체저장
-              </button>
-            </>
-          )}
+  {editMode && (
+    <>
+      <button
+        onClick={saveSelectedEdits}
+        className="px-3 py-1 rounded bg-green-600 text-white"
+      >
+        저장
+      </button>
 
-          <button
-            onClick={exportExcel}
-            className="px-3 py-1 rounded border"
-          >
-            엑셀다운
-          </button>
-        </div>
+      <button
+        onClick={deleteSelected}
+        className="px-3 py-1 rounded bg-red-600 text-white"
+      >
+        선택삭제
+      </button>
+
+      <button
+        onClick={exportExcel}
+        className="px-3 py-1 rounded bg-green-600 text-white"
+      >
+        엑셀다운
+      </button>
+    </>
+  )}
+
+</div>
+
       </div>
 
       {/* 안내 */}
@@ -1662,197 +1642,228 @@ const exportExcel = () => {
     ))}
   </tr>
 </thead>
+<tbody>
+  {filtered.length === 0 && (
+    <tr>
+      <td
+        className="text-center text-gray-500 py-6"
+        colSpan={deleteMode ? 27 : 26}
+      >
+        📭 조건에 맞는 데이터가 없습니다.
+      </td>
+    </tr>
+  )}
+
+  {filtered.map((r, idx) => {
+    const id = r._id;
+    const sale = toInt(r.청구운임);
+    const drv = toInt(r.기사운임);
+    const fee = sale - drv;
+
+    const val = (k) => editedRows[id]?.[k] ?? r[k] ?? "";
+
+    const textCell = (k, extra = "") =>
+      editMode ? (
+        <input
+          className={`border rounded px-2 py-1 w-full ${extra}`}
+          value={val(k)}
+          onChange={(e) => changeCell(id, k, e.target.value)}
+        />
+      ) : (
+        <span>{r[k] || ""}</span>
+      );
+
+    const numCell = (k) =>
+      editMode ? (
+        <input
+          className="border rounded px-2 py-1 w-full text-right"
+          value={val(k)}
+          onChange={(e) =>
+            changeCell(id, k, e.target.value.replace(/[^\d-]/g, ""))
+          }
+        />
+      ) : (
+        <span>{toInt(r[k]).toLocaleString()}</span>
+      );
+
+    const selCell = (k, opts) =>
+      editMode ? (
+        <select
+          className="border rounded px-2 py-1 w-full"
+          value={val(k)}
+          onChange={(e) => changeCell(id, k, e.target.value)}
+        >
+          <option value="">선택 ▾</option>
+          {opts.map((v) => (
+            <option key={v} value={v}>
+              {v}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <span>{r[k] || ""}</span>
+      );
+
+    return (
+      <tr key={id} className={idx % 2 ? "bg-gray-50" : ""}>
+
+{/* 선택 */}
+{(deleteMode || editMode) ? (
+  <td className={cell}>
+    <input
+      type="checkbox"
+      checked={selected.has(id)}
+      onChange={() => toggleSelect(id)}
+    />
+  </td>
+) : (
+  <td className={cell}></td>
+)}
 
 
-          <tbody>
-            {filtered.length === 0 && (
-              <tr>
-                <td
-                  className="text-center text-gray-500 py-6"
-                  colSpan={deleteMode ? 27 : 26}
-                >
-                  📭 조건에 맞는 데이터가 없습니다.
-                </td>
-              </tr>
-            )}
+        {/* 순번 */}
+        <td className={`${cell} w-[50px]`}>{idx + 1}</td>
 
-            {filtered.map((r, idx) => {
-              const id = r._id;
-              const sale = toInt(r.청구운임);
-              const drv = toInt(r.기사운임);
-              const fee = sale - drv;
+        {/* 등록일 */}
+        <td className={cell}>{textCell("등록일")}</td>
 
-              const val = (k) => editedRows[id]?.[k] ?? r[k] ?? "";
+        {/* 상차일 */}
+        <td className={cell}>{textCell("상차일")}</td>
 
-              const textCell = (k, extra = "") =>
-                editMode ? (
-                  <input
-                    className={`border rounded px-2 py-1 w-full ${extra}`}
-                    value={val(k)}
-                    onChange={(e) =>
-                      changeCell(id, k, e.target.value)
-                    }
-                  />
-                ) : (
-                  <span>{r[k] || ""}</span>
-                );
+        {/* 상차시간 */}
+        <td className={cell}>{textCell("상차시간")}</td>
 
-              const numCell = (k) =>
-                editMode ? (
-                  <input
-                    className="border rounded px-2 py-1 w-full text-right"
-                    value={val(k)}
-                    onChange={(e) =>
-                      changeCell(
-                        id,
-                        k,
-                        e.target.value.replace(/[^\d-]/g, "")
-                      )
-                    }
-                  />
-                ) : (
-                  <span>{toInt(r[k]).toLocaleString()}</span>
-                );
+        {/* 하차일 */}
+        <td className={cell}>{textCell("하차일")}</td>
 
-              const selCell = (k, opts) =>
-                editMode ? (
-                  <select
-                    className="border rounded px-2 py-1 w-full"
-                    value={val(k)}
-                    onChange={(e) => changeCell(id, k, e.target.value)}
-                  >
-                    <option value="">선택 ▾</option>
-                    {opts.map((v) => (
-                      <option key={v} value={v}>
-                        {v}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <span>{r[k] || ""}</span>
-                );
+        {/* 하차시간 */}
+        <td className={cell}>{textCell("하차시간")}</td>
 
-              return (
-                <tr key={id} className={idx % 2 ? "bg-gray-50" : ""}>
-                  {deleteMode && (
-                    <td className={cell}>
-                      <input
-                        type="checkbox"
-                        checked={selected.has(id)}
-                        onChange={() => toggleSelect(id)}
-                      />
-                    </td>
-                  )}
+        {/* 거래처명 */}
+        <td className={cell}>{textCell("거래처명")}</td>
 
-                  <td className={`${cell} w-[50px]`}>{idx + 1}</td>
-                  <td className={cell}>{textCell("등록일")}</td>
-                  <td className={cell}>{textCell("상차일")}</td>
-                  <td className={cell}>{textCell("상차시간")}</td>
-                  <td className={cell}>{textCell("하차일")}</td>
-                  <td className={cell}>{textCell("하차시간")}</td>
+        {/* 상차지명 */}
+        <td className={cell}>{textCell("상차지명")}</td>
 
-                  <td className={cell}>{textCell("거래처명")}</td>
-                  <td className={cell}>{textCell("상차지명")}</td>
+        {/* 상차지주소 */}
+        <td className={cell}>
+          {editMode ? (
+            <input
+              className="border rounded px-2 py-1 w-full"
+              value={val("상차지주소")}
+              onChange={(e) => changeCell(id, "상차지주소", e.target.value)}
+            />
+          ) : (
+            <AddressCell
+              id={id}
+              field="상차지주소"
+              value={r.상차지주소}
+            />
+          )}
+        </td>
 
-                  <td className={cell}>
-                    {editMode ? (
-                      <input
-                        className="border rounded px-2 py-1 w-full"
-                        value={val("상차지주소")}
-                        onChange={(e) =>
-                          changeCell(id, "상차지주소", e.target.value)
-                        }
-                      />
-                    ) : (
-                      <AddressCell
-                        id={id}
-                        field="상차지주소"
-                        value={r.상차지주소}
-                      />
-                    )}
-                  </td>
+        {/* 하차지명 */}
+        <td className={cell}>{textCell("하차지명")}</td>
 
-                  <td className={cell}>{textCell("하차지명")}</td>
+        {/* 하차지주소 */}
+        <td className={cell}>
+          {editMode ? (
+            <input
+              className="border rounded px-2 py-1 w-full"
+              value={val("하차지주소")}
+              onChange={(e) => changeCell(id, "하차지주소", e.target.value)}
+            />
+          ) : (
+            <AddressCell
+              id={id}
+              field="하차지주소"
+              value={r.하차지주소}
+            />
+          )}
+        </td>
 
-                  <td className={cell}>
-                    {editMode ? (
-                      <input
-                        className="border rounded px-2 py-1 w-full"
-                        value={val("하차지주소")}
-                        onChange={(e) =>
-                          changeCell(id, "하차지주소", e.target.value)
-                        }
-                      />
-                    ) : (
-                      <AddressCell
-                        id={id}
-                        field="하차지주소"
-                        value={r.하차지주소}
-                      />
-                    )}
-                  </td>
+        {/* 화물내용 */}
+        <td className={cell}>{textCell("화물내용")}</td>
 
-                  <td className={cell}>{textCell("화물내용")}</td>
+        {/* 차량종류 */}
+        <td className={cell}>{textCell("차량종류")}</td>
 
-                  <td className={cell}>{textCell("차량종류")}</td>
-                  <td className={cell}>{textCell("차량톤수")}</td>
-                  <td className={cell}>{textCell("차량번호")}</td>
-                  <td className={cell}>{textCell("이름")}</td>
-                  <td className={cell}>{textCell("전화번호")}</td>
+        {/* 차량톤수 */}
+        <td className={cell}>{textCell("차량톤수")}</td>
 
-                  <td className={cell}>
-                    {editMode
-                      ? selCell("배차상태", ["배차중", "배차완료", "미배차"])
-                      : r.배차상태}
-                  </td>
+        {/* 차량번호 */}
+        <td className={cell}>{textCell("차량번호")}</td>
 
-                  <td className={`${cell} text-right pr-2`}>
-                    {numCell("청구운임")}
-                  </td>
-                  <td className={`${cell} text-right pr-2`}>
-                    {numCell("기사운임")}
-                  </td>
-                  <td
-                    className={`${cell} text-right pr-2 ${
-                      fee < 0 ? "text-red-500" : ""
-                    }`}
-                  >
-                    {(fee).toLocaleString()}
-                  </td>
+        {/* 이름 */}
+        <td className={cell}>{textCell("이름")}</td>
 
-                  <td className={cell}>
-                    {editMode ? selCell("지급방식", PAY_TYPES) : r.지급방식}
-                  </td>
+        {/* 전화번호 */}
+        <td className={cell}>{textCell("전화번호")}</td>
 
-                  <td className={cell}>
-                    {editMode ? selCell("배차방식", DISPATCH_TYPES) : r.배차방식}
-                  </td>
+        {/* 배차상태 */}
+        <td className={cell}>
+          {editMode
+            ? selCell("배차상태", ["배차중", "배차완료", "미배차"])
+            : r.배차상태}
+        </td>
 
-                  <td className={cell}>{textCell("메모")}</td>
+        {/* 청구운임 */}
+        <td className={`${cell} text-right pr-2`}>
+          {numCell("청구운임")}
+        </td>
 
-                  {/* 첨부 */}
-                  <td className={cell}>
-                    <button
-                      className="px-2 py-0.5 rounded border hover:bg-gray-100 text-sm"
-                      onClick={() => openAttachModal(r)}
-                    >
-                      📎 {attachCount[r._id] ?? 0}
-                    </button>
-                  </td>
+        {/* 기사운임 */}
+        <td className={`${cell} text-right pr-2`}>
+          {numCell("기사운임")}
+        </td>
 
-                  {/* 공유 */}
-                  <td className={cell}>
-                    <button
-                      className="px-2 py-0.5 rounded bg-blue-600 text-white hover:bg-blue-700 text-sm"
-                      onClick={() => shareDispatch(r)}
-                    >
-                      📨
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
+        {/* 수수료 */}
+        <td
+          className={`${cell} text-right pr-2 ${
+            fee < 0 ? "text-red-500" : ""
+          }`}
+        >
+          {fee.toLocaleString()}
+        </td>
+
+        {/* 지급방식 */}
+        <td className={cell}>
+          {editMode ? selCell("지급방식", PAY_TYPES) : r.지급방식}
+        </td>
+
+        {/* 배차방식 */}
+        <td className={cell}>
+          {editMode ? selCell("배차방식", DISPATCH_TYPES) : r.배차방식}
+        </td>
+
+        {/* 메모 */}
+        <td className={cell}>{textCell("메모")}</td>
+
+        {/* 첨부 */}
+        <td className={cell}>
+          <button
+            className="px-2 py-0.5 rounded border hover:bg-gray-100 text-sm"
+            onClick={() => openAttachModal(r)}
+          >
+            📎 {attachCount[r._id] ?? 0}
+          </button>
+        </td>
+
+        {/* 공유 */}
+        <td className={cell}>
+          <button
+            className="px-2 py-0.5 rounded bg-blue-600 text-white hover:bg-blue-700 text-sm"
+            onClick={() => shareDispatch(r)}
+          >
+            📨
+          </button>
+        </td>
+
+      </tr>
+    );
+  })}
+</tbody>
+
         </table>
       </div>
     </div>
@@ -2068,7 +2079,10 @@ const setBulk = (id, k, v) => {
       <hr className="my-6 border-t-2 border-gray-300" />
 
       {/* ✅ 아래: 실시간배차현황 (메뉴와 동일 기능) */}
-      <RealtimeStatusEmbed />
+      <RealtimeStatusEmbed 
+  patchDispatch={patchDispatch}
+  removeDispatch={removeDispatch}
+/>
 
       {/* 대용량 업로드 모달 */}
       {bulkOpen && (
@@ -3813,10 +3827,7 @@ function MemoCell({ text }) {
 }
 // ===================== DispatchApp.jsx (PART 5/8 — END) =====================
 
-
-
 // ===================== DispatchApp.jsx (PART 6/8) — START =====================
-
 
 function Settlement({ dispatchData }){
   const [startDate,setStartDate]=useState("");
@@ -3917,48 +3928,35 @@ function Settlement({ dispatchData }){
 
   const won=(n)=>`${(n||0).toLocaleString()}원`;
 
-  const downloadExcel=()=>{
-    try{
-      if(!window.XLSX && typeof XLSX==="undefined"){ alert("엑셀 라이브러리가 로드되지 않았습니다. (XLSX)"); return; }
-      const summaryRows=[
-        { 항목:"기간시작", 값:startDate||"-" },{ 항목:"기간종료", 값:endDate||"-" },{ 항목:"거래처", 값:clientFilter||"전체" },{},
-        { 항목:"기간 매출", 값:rangeTotals.매출 },{ 항목:"기간 기사운반비", 값:rangeTotals.기사 },{ 항목:"기간 수수료", 값:rangeTotals.수수료 },{},
-        { 항목:"이번달 매출", 값:kpi.월매출 },{ 항목:"이번달 기사운반비", 값:kpi.월기사 },{ 항목:"이번달 수수료", 값:kpi.월수수료 },
-        { 항목:"이번달 평균 이익률(%)", 값:Number(monthProfitRate.toFixed(1)) },{},
-        { 항목:"전월 매출", 값:kpi.전월매출 },{ 항목:"전월 대비 증감", 값:kpi.전월증감 },{ 항목:"전월 대비 증감률(%)", 값:Number(kpi.전월증감률.toFixed(1)) },
-      ];
-      const wsSummary=XLSX.utils.json_to_sheet(summaryRows);
-      const wsClients=XLSX.utils.json_to_sheet(clientAgg.map(r=>({ 거래처명:r.거래처명, 건수:r.건수, 매출:r.매출, 기사운반비:r.기사, 수수료:r.수수료, 이익률:r.매출>0?Number(((r.수수료/r.매출)*100).toFixed(1)):0 })));
-      const wsDetail=XLSX.utils.json_to_sheet(rangeRows.map((r,i)=>({ 순번:i+1, 상차일:r.상차일||"", 거래처명:r.거래처명||"", 차량번호:r.차량번호||"", 기사이름:r.이름||"", 청구운임:toInt(r.청구운임), 기사운임:toInt(r.기사운임), 수수료:toInt(r.청구운임)-toInt(r.기사운임), 메모:r.메모||"" })));
-      const wsTrend=XLSX.utils.json_to_sheet(dailyTrend.map(d=>({ 일자:d.date, 매출:d.매출, 기사운반비:d.기사, 수수료:d.수수료 })));
-      const wb=XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, wsSummary, "요약");
-      XLSX.utils.book_append_sheet(wb, wsClients, "거래처별집계");
-      XLSX.utils.book_append_sheet(wb, wsDetail, "상세목록");
-      XLSX.utils.book_append_sheet(wb, wsTrend, "일자트렌드");
-      XLSX.writeFile(wb, `매출관리_${startDate||"all"}~${endDate||"all"}.xlsx`);
-    }catch(err){ console.error(err); alert("엑셀 내보내기 중 오류가 발생했습니다."); }
-  };
-
   const headBaseLocal = typeof headBase==="string" ? headBase : "px-3 py-2 border bg-gray-50 text-center";
   const cellBaseLocal = typeof cellBase==="string" ? cellBase : "px-3 py-2 border text-center";
 
   return (
     <div>
       <h2 className="text-lg font-bold mb-3">매출관리</h2>
-      {monthProfitRate<15 && <div className="mb-3 rounded-lg border border-rose-200 bg-rose-50 text-rose-700 px-4 py-2"><span className="font-semibold">⚠ 이번달 평균 이익률 {monthProfitRate.toFixed(1)}%</span><span className="text-rose-600"> (목표 15% 미만)</span></div>}
+
+      {/* KPI 경고 */}
+      {monthProfitRate<15 && (
+        <div className="mb-3 rounded-lg border border-rose-200 bg-rose-50 text-rose-700 px-4 py-2">
+          <span className="font-semibold">⚠ 이번달 평균 이익률 {monthProfitRate.toFixed(1)}%</span>
+          <span className="text-rose-600"> (목표 15% 미만)</span>
+        </div>
+      )}
+
+      {/* 필터 */}
       <div className="flex flex-wrap items-end gap-3 mb-4">
         <div className="flex flex-col"><label className="text-xs text-gray-500 mb-1">시작일</label><input type="date" className="border p-2 rounded" value={startDate} onChange={(e)=>setStartDate(e.target.value)} /></div>
         <div className="flex flex-col"><label className="text-xs text-gray-500 mb-1">종료일</label><input type="date" className="border p-2 rounded" value={endDate} onChange={(e)=>setEndDate(e.target.value)} /></div>
         <div className="flex flex-col"><label className="text-xs text-gray-500 mb-1">거래처</label>
           <select className="border p-2 rounded min-w-[200px]" value={clientFilter} onChange={(e)=>setClientFilter(e.target.value)}>
-            <option value="">전체</option>{clients.map(c=><option key={c} value={c}>{c}</option>)}
+            <option value="">전체</option>
+            {clients.map(c=><option key={c} value={c}>{c}</option>)}
           </select>
         </div>
         <button type="button" onClick={()=>{setStartDate(""); setEndDate(""); setClientFilter("");}} className="px-3 py-2 rounded bg-gray-200">필터 초기화</button>
-        <button type="button" onClick={downloadExcel} className="ml-auto px-3 py-2 rounded bg-blue-600 text-white">엑셀 다운로드</button>
       </div>
 
+      {/* KPI 카드 */}
       <div className="grid grid-cols-3 xl:grid-cols-8 gap-3 mb-4">
         <KpiCard title="월 매출" value={kpi.월매출} />
         <KpiCard title="월 기사운반비" value={kpi.월기사} />
@@ -3970,54 +3968,98 @@ function Settlement({ dispatchData }){
         <KpiCard title="당일 수수료" value={kpi.당일수수료} />
       </div>
 
+      
+      {/* 📘 전월/전년 비교 입력 박스 */}
+      <CompareBox current={{
+        sale: kpi.월매출,
+        driver: kpi.월기사,
+        fee: kpi.월수수료
+      }} />
+
+
+      {/* 기간 합계  */}
       <div className="grid grid-cols-3 gap-3 mb-6">
         <SumCard label="기간 매출" value={won(rangeTotals.매출)} />
         <SumCard label="기간 기사운반비" value={won(rangeTotals.기사)} />
         <SumCard label="기간 수수료" value={won(rangeTotals.수수료)} highlight />
       </div>
 
+
+      {/* Top5 + 위험거래처 */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
         <ChartPanel title="🏆 Top5 거래처 (매출 기준)">
-          {topClients.length===0 ? <div className="text-gray-500 text-sm">표시할 데이터가 없습니다.</div> :
-            <SimpleBars data={topClients.map(d=>({ label:d.거래처명, value:d.매출 }))} max={Math.max(1,...topClients.map(d=>d.매출))} valueLabel={(v)=>won(v)} />}
+          {topClients.length===0
+            ? <div className="text-gray-500 text-sm">표시할 데이터가 없습니다.</div>
+            : <SimpleBars data={topClients.map(d=>({ label:d.거래처명, value:d.매출 }))} 
+                max={Math.max(1,...topClients.map(d=>d.매출))}
+                valueLabel={(v)=>won(v)} /> }
         </ChartPanel>
+
         <ChartPanel title="⚠ 주의 거래처 (이익률 10% 미만)">
-          {riskyClients.length===0 ? <div className="text-gray-500 text-sm">이익률 10% 미만 거래처가 없습니다.</div> :
-            <div className="space-y-2">
-              {riskyClients.map(d=>(
-                <div key={d.거래처명} className="flex items-center justify-between rounded-lg border border-rose-200 bg-rose-50 px-3 py-2">
-                  <div className="truncate font-medium text-rose-700">{d.거래처명}</div>
-                  <div className="text-xs text-rose-700">매출 {d.매출.toLocaleString()}원 · 수수료 {d.수수료.toLocaleString()}원 · 이익률 {(d.rate).toFixed(1)}%</div>
-                </div>
-              ))}
-            </div>}
+          {riskyClients.length===0
+            ? <div className="text-gray-500 text-sm">이익률 10% 미만 거래처가 없습니다.</div>
+            : (
+              <div className="space-y-2">
+                {riskyClients.map(d=>(
+                  <div key={d.거래처명} className="flex items-center justify-between rounded-lg border border-rose-200 bg-rose-50 px-3 py-2">
+                    <div className="truncate font-medium text-rose-700">{d.거래처명}</div>
+                    <div className="text-xs text-rose-700">
+                      매출 {d.매출.toLocaleString()}원 · 수수료 {d.수수료.toLocaleString()}원 · 이익률 {(d.rate).toFixed(1)}%
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
         </ChartPanel>
       </div>
 
+
+      {/* 전월 대비 라인차트 + 기간 트렌드 */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
         <ChartPanel title={`전월 대비 일자 매출 (이번달 ${mKey} vs 전월 ${pKey})`}>
-          <SimpleLine data={monthDaily.map(d=>({ x:d.x, y1:d.y1, y2:d.y2 }))} series={[{key:"y1",name:"이번달 매출"},{key:"y2",name:"전월 매출"}]} />
+          <SimpleLine
+            data={monthDaily.map(d=>({ x:d.x, y1:d.y1, y2:d.y2 }))}
+            series={[
+              { key:"y1", name:"이번달 매출" },
+              { key:"y2", name:"전월 매출" },
+            ]}
+          />
         </ChartPanel>
+
         <ChartPanel title="기간 일자 트렌드 (매출/수수료/기사)">
-          <SimpleLine data={dailyTrend.map(d=>({ x:d.date.slice(5), y1:d.매출, y2:d.수수료, y3:d.기사 }))} series={[{key:"y1",name:"매출"},{key:"y2",name:"수수료"},{key:"y3",name:"기사운반비"}]} />
+          <SimpleLine
+            data={dailyTrend.map(d=>({ x:d.date.slice(5), y1:d.매출, y2:d.수수료, y3:d.기사 }))}
+            series={[
+              { key:"y1", name:"매출" },
+              { key:"y2", name:"수수료" },
+              { key:"y3", name:"기사운반비" },
+            ]}
+          />
         </ChartPanel>
       </div>
 
+
+      {/* 거래처별 집계 */}
       <div className="mb-6">
         <h3 className="font-semibold mb-2">거래처별 기간 집계</h3>
         <div className="overflow-x-auto">
           <table className="w-full text-sm border">
             <thead className="bg-gray-100">
               <tr>
-                <th className={headBaseLocal}>거래처명</th><th className={headBaseLocal}>건수</th><th className={headBaseLocal}>매출</th>
-                <th className={headBaseLocal}>기사운반비</th><th className={headBaseLocal}>수수료</th><th className={headBaseLocal}>이익률</th>
+                <th className={headBaseLocal}>거래처명</th>
+                <th className={headBaseLocal}>건수</th>
+                <th className={headBaseLocal}>매출</th>
+                <th className={headBaseLocal}>기사운반비</th>
+                <th className={headBaseLocal}>수수료</th>
+                <th className={headBaseLocal}>이익률</th>
               </tr>
             </thead>
             <tbody>
               {clientAgg.length===0 ? (
                 <tr><td className="text-center text-gray-500 py-6" colSpan={6}>조건에 맞는 데이터가 없습니다.</td></tr>
               ) : clientAgg.map(r=>{
-                const rateNum=r.매출>0?(r.수수료/r.매출)*100:0; const rateStr=r.매출>0?rateNum.toFixed(1)+"%":"-";
+                const rateNum=r.매출>0?(r.수수료/r.매출)*100:0;
+                const rateStr=r.매출>0?rateNum.toFixed(1)+"%":"-";
                 const colorClass=r.매출>0 && rateNum<10 ? "text-red-600 font-semibold" : "text-gray-700";
                 return (
                   <tr key={r.거래처명} className="odd:bg-white even:bg-gray-50 text-center">
@@ -4035,82 +4077,238 @@ function Settlement({ dispatchData }){
         </div>
       </div>
 
-      <div>
-        <h3 className="font-semibold mb-2">기간 상세 목록</h3>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm border">
-            <thead>
-              <tr>
-                <th className={headBaseLocal}>순번</th><th className={headBaseLocal}>상차일</th><th className={headBaseLocal}>거래처명</th>
-                <th className={headBaseLocal}>차량번호</th><th className={headBaseLocal}>이름</th>
-                <th className={headBaseLocal}>청구운임</th><th className={headBaseLocal}>기사운임</th><th className={headBaseLocal}>수수료</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rangeRows.length===0 ? (
-                <tr><td className="text-center text-gray-500 py-6" colSpan={8}>기간/거래처 조건에 맞는 데이터가 없습니다.</td></tr>
-              ) : rangeRows.map((r,i)=>(
-                <tr key={r._id||i} className={i%2===0?"bg-white":"bg-gray-50"}>
-                  <td className={cellBaseLocal}>{i+1}</td>
-                  <td className={cellBaseLocal}>{r.상차일||""}</td>
-                  <td className={cellBaseLocal}>{r.거래처명||""}</td>
-                  <td className={cellBaseLocal}>{r.차량번호||""}</td>
-                  <td className={cellBaseLocal}>{r.이름||""}</td>
-                  <td className={cellBaseLocal}>{(toInt(r.청구운임)).toLocaleString()}</td>
-                  <td className={cellBaseLocal}>{(toInt(r.기사운임)).toLocaleString()}</td>
-                  <td className={cellBaseLocal}>{(toInt(r.청구운임)-toInt(r.기사운임)).toLocaleString()}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {/* 상세목록 — 삭제됨 */}
+    </div>
+  );
+}
+
+
+/* =======================================
+   CompareBox — 전월/전년 입력 & 자동 분석
+======================================= */
+
+function CompareBox({ current }) {
+  const [prev, setPrev] = useState({ sale: "", driver: "", fee: "" });
+  const [lastYear, setLastYear] = useState({ sale: "", driver: "", fee: "" });
+
+  const toInt2 = (v) =>
+    isNaN(parseInt(String(v).replace(/[^\d-]/g, "")))
+      ? 0
+      : parseInt(String(v).replace(/[^\d-]/g, ""));
+
+  // 전월 비교 계산
+  const prevCalc = useMemo(() => {
+    if (!prev.sale && !prev.driver && !prev.fee) return null;
+    const pSale = toInt2(prev.sale);
+    const pDriver = toInt2(prev.driver);
+    const pFee = toInt2(prev.fee);
+
+    return {
+      매출증감: current.sale - pSale,
+      기사증감: current.driver - pDriver,
+      수수료증감: current.fee - pFee,
+      이익률증감:
+        current.sale > 0 && pSale > 0
+          ? (current.fee / current.sale) * 100 -
+            (pFee / pSale) * 100
+          : 0,
+    };
+  }, [prev, current]);
+
+  // 전년 비교 계산
+  const yearCalc = useMemo(() => {
+    if (!lastYear.sale && !lastYear.driver && !lastYear.fee) return null;
+    const ySale = toInt2(lastYear.sale);
+    const yDriver = toInt2(lastYear.driver);
+    const yFee = toInt2(lastYear.fee);
+
+    return {
+      매출증감: current.sale - ySale,
+      기사증감: current.driver - yDriver,
+      수수료증감: current.fee - yFee,
+      이익률증감:
+        current.sale > 0 && ySale > 0
+          ? (current.fee / current.sale) * 100 -
+            (yFee / ySale) * 100
+          : 0,
+    };
+  }, [lastYear, current]);
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-2xl p-4 mb-6 shadow-sm">
+      <h3 className="font-semibold text-gray-700 mb-3">📘 비교 기준 데이터 입력</h3>
+
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        {/* 전월 입력 */}
+        <div>
+          <p className="font-semibold text-gray-600 mb-2">전월 기준 입력</p>
+          <div className="space-y-2">
+            <InputBox label="전월 매출" value={prev.sale}
+              onChange={(v) => setPrev({ ...prev, sale: v })} />
+            <InputBox label="전월 기사운임" value={prev.driver}
+              onChange={(v) => setPrev({ ...prev, driver: v })} />
+            <InputBox label="전월 수수료" value={prev.fee}
+              onChange={(v) => setPrev({ ...prev, fee: v })} />
+          </div>
         </div>
+
+        {/* 전년 입력 */}
+        <div>
+          <p className="font-semibold text-gray-600 mb-2">전년 기준 입력</p>
+          <div className="space-y-2">
+            <InputBox label="전년 매출" value={lastYear.sale}
+              onChange={(v) => setLastYear({ ...lastYear, sale: v })} />
+            <InputBox label="전년 기사운임" value={lastYear.driver}
+              onChange={(v) => setLastYear({ ...lastYear, driver: v })} />
+            <InputBox label="전년 수수료" value={lastYear.fee}
+              onChange={(v) => setLastYear({ ...lastYear, fee: v })} />
+          </div>
+        </div>
+      </div>
+
+      {/* 분석 결과 */}
+      <div className="mt-5 pt-4 border-t">
+        <h3 className="font-semibold text-gray-700 mb-3">📊 분석 결과</h3>
+
+        {/* 전월 비교 */}
+        {prevCalc && (
+          <div className="mb-4 p-3 rounded-xl bg-blue-50 border border-blue-200">
+            <p className="font-semibold text-blue-700 mb-1">이번달 vs 전월</p>
+            <CompareRow name="매출" value={prevCalc.매출증감} />
+            <CompareRow name="기사운임" value={prevCalc.기사증감} />
+            <CompareRow name="수수료" value={prevCalc.수수료증감} />
+            <CompareRow name="이익률 변화(%)" value={prevCalc.이익률증감} isRate />
+          </div>
+        )}
+
+        {/* 전년 비교 */}
+        {yearCalc && (
+          <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200">
+            <p className="font-semibold text-emerald-700 mb-1">이번달 vs 전년</p>
+            <CompareRow name="매출" value={yearCalc.매출증감} />
+            <CompareRow name="기사운임" value={yearCalc.기사증감} />
+            <CompareRow name="수수료" value={yearCalc.수수료증감} />
+            <CompareRow name="이익률 변화(%)" value={yearCalc.이익률증감} isRate />
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-/* 보조 카드/차트 컴포넌트 (동일) */
-function KpiCard({ title, value, accent, subtle }){
-  const base = subtle ? "bg-gray-50 border-gray-200" : accent ? "bg-emerald-50 border-emerald-200" : "bg-white border-gray-200";
-  return <div className={`rounded-2xl p-3 border shadow-sm ${base}`}><p className="text-xs text-gray-500">{title}</p><p className="text-xl font-bold mt-1">{Number(value||0).toLocaleString()}원</p></div>;
+
+/* ===================== 보조 UI 컴포넌트 ===================== */
+
+function InputBox({ label, value, onChange }) {
+  return (
+    <div>
+      <label className="text-xs text-gray-500">{label}</label>
+      <input
+        type="text"
+        className="border p-2 rounded w-full"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="숫자만 입력"
+      />
+    </div>
+  );
 }
+
+function CompareRow({ name, value, isRate }) {
+  const num = Number(value || 0);
+  const cls = num >= 0 ? "text-blue-700 font-semibold" : "text-rose-700 font-semibold";
+  return (
+    <p className={cls}>
+      {name}: {num >= 0 ? "+" : ""}
+      {isRate ? num.toFixed(1) + "%" : num.toLocaleString() + "원"}
+    </p>
+  );
+}
+
+
+/* 기존 KPI + Chart 컴포넌트 동일 */
+function KpiCard({ title, value, accent, subtle }){
+  const base = subtle ? "bg-gray-50 border-gray-200" :
+              accent ? "bg-emerald-50 border-emerald-200" :
+                       "bg-white border-gray-200";
+  return (
+    <div className={`rounded-2xl p-3 border shadow-sm ${base}`}>
+      <p className="text-xs text-gray-500">{title}</p>
+      <p className="text-xl font-bold mt-1">{Number(value||0).toLocaleString()}원</p>
+    </div>
+  );
+}
+
 function KpiMiniRate({ title, rate }){
   const danger=rate<10, warn=rate>=10 && rate<15;
-  const base = danger?"bg-rose-50 border-rose-200 text-rose-700" : warn?"bg-amber-50 border-amber-200 text-amber-700" : "bg-emerald-50 border-emerald-200 text-emerald-700";
-  return <div className={`rounded-2xl p-3 border shadow-sm ${base}`}><p className="text-xs">{title}</p><p className="text-xl font-bold mt-1">{(rate||0).toFixed(1)}%</p></div>;
+  const base = danger?"bg-rose-50 border-rose-200 text-rose-700"
+            : warn?"bg-amber-50 border-amber-200 text-amber-700"
+            : "bg-emerald-50 border-emerald-200 text-emerald-700";
+  return (
+    <div className={`rounded-2xl p-3 border shadow-sm ${base}`}>
+      <p className="text-xs">{title}</p>
+      <p className="text-xl font-bold mt-1">{(rate||0).toFixed(1)}%</p>
+    </div>
+  );
 }
+
 function KpiDeltaCard({ title, diff, rate }){
   const up=diff>=0;
   return (
     <div className={`rounded-2xl p-3 border shadow-sm ${up?"bg-blue-50 border-blue-200":"bg-rose-50 border-rose-200"}`}>
       <p className="text-xs text-gray-500">{title}</p>
-      <p className={`text-xl font-bold mt-1 ${up?"text-blue-700":"text-rose-700"}`}>{`${diff>=0?"+":""}${Number(diff||0).toLocaleString()}원`}</p>
-      <p className={`text-xs ${up?"text-blue-700":"text-rose-700"}`}>{`${rate>=0?"+":""}${(rate||0).toFixed(1)}%`}</p>
+      <p className={`text-xl font-bold mt-1 ${up?"text-blue-700":"text-rose-700"}`}>
+        {`${diff>=0?"+":""}${Number(diff||0).toLocaleString()}원`}
+      </p>
+      <p className={`text-xs ${up?"text-blue-700":"text-rose-700"}`}>
+        {`${rate>=0?"+":""}${(rate||0).toFixed(1)}%`}
+      </p>
     </div>
   );
 }
+
 function SumCard({ label, value, highlight }){
-  return <div className={`rounded-2xl p-4 text-center border ${highlight?"bg-blue-50 border-blue-200":"bg-white border-gray-200"} shadow-sm`}><p className="text-sm text-gray-500">{label}</p><p className="text-2xl font-bold mt-1">{value}</p></div>;
+  return (
+    <div className={`rounded-2xl p-4 text-center border ${highlight?"bg-blue-50 border-blue-200":"bg-white border-gray-200"} shadow-sm`}>
+      <p className="text-sm text-gray-500">{label}</p>
+      <p className="text-2xl font-bold mt-1">{value}</p>
+    </div>
+  );
 }
-function ChartPanel({ title, children }){ return <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4"><h4 className="font-semibold mb-3">{title}</h4>{children}</div>; }
+
+function ChartPanel({ title, children }){
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
+      <h4 className="font-semibold mb-3">{title}</h4>
+      {children}
+    </div>
+  );
+}
+
 function SimpleBars({ data, max, barClass="bg-blue-500", valueLabel }){
   const safeMax=Math.max(1,max||1);
   return (
     <div className="space-y-2">
-      {data.length===0 ? <div className="text-gray-500 text-sm">표시할 데이터가 없습니다.</div> :
-        data.map(d=>{
-          const pct=Math.round((d.value/safeMax)*100);
-          return (
-            <div key={d.label} className="flex items-center gap-3">
-              <div className="w-36 truncate text-xs text-gray-700" title={d.label}>{d.label}</div>
-              <div className="flex-1 h-4 bg-gray-100 rounded"><div className={`h-4 rounded ${barClass}`} style={{width:`${pct}%`}} /></div>
-              <div className="w-28 text-right text-xs text-gray-600">{valueLabel?valueLabel(d.value):d.value}</div>
-            </div>
-          );
+      {data.length===0
+        ? <div className="text-gray-500 text-sm">표시할 데이터가 없습니다.</div>
+        : data.map(d=>{
+            const pct=Math.round((d.value/safeMax)*100);
+            return (
+              <div key={d.label} className="flex items-center gap-3">
+                <div className="w-36 truncate text-xs text-gray-700" title={d.label}>{d.label}</div>
+                <div className="flex-1 h-4 bg-gray-100 rounded">
+                  <div className={`h-4 rounded ${barClass}`} style={{width:`${pct}%`}} />
+                </div>
+                <div className="w-28 text-right text-xs text-gray-600">
+                  {valueLabel?valueLabel(d.value):d.value}
+                </div>
+              </div>
+            );
         })}
     </div>
   );
 }
+
 function SimpleLine({ data, series }){
   const width=560, height=280, padding={left:40,right:10,top:10,bottom:24};
   const xs=data.map(d=>d.x); const xCount=xs.length||1;
@@ -4122,18 +4320,41 @@ function SimpleLine({ data, series }){
   const colors=["#2563eb","#ef4444","#10b981","#6b7280"];
   return (
     <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-[300px]">
-      {Array.from({length:5}).map((_,i)=>{ const yVal=yMin+((yMax-yMin)*i)/4; const y=yScale(yVal);
-        return (<g key={i}><line x1={padding.left} x2={width-padding.right} y1={y} y2={y} stroke="#e5e7eb" strokeWidth="1" /><text x={4} y={y+4} fontSize="10" fill="#6b7280">{Math.round(yVal).toLocaleString()}</text></g>);
+      {Array.from({length:5}).map((_,i)=>{
+        const yVal=yMin+((yMax-yMin)*i)/4; const y=yScale(yVal);
+        return (
+          <g key={i}>
+            <line x1={padding.left} x2={width-padding.right} y1={y} y2={y} stroke="#e5e7eb" strokeWidth="1" />
+            <text x={4} y={y+4} fontSize="10" fill="#6b7280">
+              {Math.round(yVal).toLocaleString()}
+            </text>
+          </g>
+        );
       })}
-      {xs.map((d,i)=>{ const show=i===0 || i===xCount-1 || i%Math.ceil(xCount/6)===0; if(!show) return null; const x=xScale(i);
-        return (<text key={i} x={x} y={height-2} fontSize="10" textAnchor="middle" fill="#6b7280">{d}</text>);
+      {xs.map((d,i)=>{
+        const show=i===0 || i===xCount-1 || i%Math.ceil(xCount/6)===0;
+        if(!show) return null;
+        const x=xScale(i);
+        return (
+          <text key={i} x={x} y={height-2} fontSize="10" textAnchor="middle" fill="#6b7280">{d}</text>
+        );
       })}
-      {series.map((s,idx)=><path key={s.key} d={makePath(s.key)} fill="none" stroke={colors[idx%colors.length]} strokeWidth="2" />)}
-      {series.map((s,idx)=>(<g key={s.key} transform={`translate(${padding.left + idx*140}, ${padding.top + 8})`}><rect width="12" height="12" fill={colors[idx%colors.length]} rx="2" /><text x="16" y="11" fontSize="12" fill="#374151">{s.name}</text></g>))}
+      {series.map((s,idx)=>
+        <path key={s.key} d={makePath(s.key)} fill="none"
+          stroke={colors[idx%colors.length]} strokeWidth="2" />
+      )}
+      {series.map((s,idx)=>(
+        <g key={s.key} transform={`translate(${padding.left + idx*140}, ${padding.top + 8})`}>
+          <rect width="12" height="12" fill={colors[idx%colors.length]} rx="2" />
+          <text x="16" y="11" fontSize="12" fill="#374151">{s.name}</text>
+        </g>
+      ))}
     </svg>
   );
 }
+
 // ===================== DispatchApp.jsx (PART 6/8) — END =====================
+
 // ===================== DispatchApp.jsx (PART 7/8 — 거래처명/차량종류 필터 추가 완성) =====================
 function UnassignedStatus({ dispatchData }) {
   const [q, setQ] = React.useState("");
@@ -4818,48 +5039,113 @@ function ClientSettlement({ dispatchData, clients = [], setClients }) {
         </button>
       </div>
 
-      {/* ========== 탭: 거래명세서 (기존 그대로) ========== */}
+      {/* ========== 탭: 거래명세서 (검색식) ========== */}
       {tab === "invoice" && (
         <>
           <div className="flex flex-wrap items-end gap-3 mb-4">
+            {/* 🔍 거래처 검색 + 조회 버튼 */}
             <div className="flex flex-col">
-              <label className="text-xs text-gray-500 mb-1">거래처</label>
-              <select className="border p-2 rounded min-w-[220px]" value={client} onChange={(e) => setClient(e.target.value)}>
-                <option value="">거래처 선택</option>
-                {clients.map((c) => (<option key={c.거래처명} value={c.거래처명}>{c.거래처명}</option>))}
-              </select>
+              <label className="text-xs text-gray-500 mb-1">거래처 검색</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  className="border p-2 rounded min-w-[220px]"
+                  placeholder="거래처명을 입력하세요"
+                  value={client}
+                  onChange={(e) => setClient(e.target.value)}
+                />
+                <button
+                  className="px-3 py-2 rounded bg-blue-600 text-white"
+                  onClick={() => {
+                    const kw = client.trim();
+                    if (!kw) return alert("거래처명을 입력하세요.");
+
+                    const foundClient = clients.find((c) =>
+                      String(c.거래처명 || "").includes(kw)
+                    );
+
+                    if (!foundClient) {
+                      alert("일치하는 거래처가 없습니다.");
+                      return;
+                    }
+
+                    setClient(foundClient.거래처명);
+                  }}
+                >
+                  조회
+                </button>
+              </div>
             </div>
 
             <div className="flex flex-col">
               <label className="text-xs text-gray-500 mb-1">시작일</label>
-              <input type="date" className="border p-2 rounded" value={start} onChange={(e) => setStart(e.target.value)} />
+              <input
+                type="date"
+                className="border p-2 rounded"
+                value={start}
+                onChange={(e) => setStart(e.target.value)}
+              />
             </div>
 
             <div className="flex flex-col">
               <label className="text-xs text-gray-500 mb-1">종료일</label>
-              <input type="date" className="border p-2 rounded" value={end} onChange={(e) => setEnd(e.target.value)} />
+              <input
+                type="date"
+                className="border p-2 rounded"
+                value={end}
+                onChange={(e) => setEnd(e.target.value)}
+              />
             </div>
 
             <div className="ml-auto flex gap-2">
-              <button onClick={downloadInvoiceExcel} className="bg-emerald-600 text-white px-3 py-2 rounded">📊 엑셀 다운로드</button>
-              <button onClick={savePDF} className="bg-blue-600 text-white px-3 py-2 rounded">📄 PDF 저장</button>
-              <button onClick={() => setShowEdit(true)} className="border px-3 py-2 rounded">거래처 정보</button>
+              <button
+                onClick={downloadInvoiceExcel}
+                className="bg-emerald-600 text-white px-3 py-2 rounded"
+              >
+                📊 엑셀 다운로드
+              </button>
+              <button
+                onClick={savePDF}
+                className="bg-blue-600 text-white px-3 py-2 rounded"
+              >
+                📄 PDF 저장
+              </button>
+              <button
+                onClick={() => setShowEdit(true)}
+                className="border px-3 py-2 rounded"
+              >
+                거래처 정보
+              </button>
             </div>
           </div>
 
-          <div id="invoiceArea" className="w-[1200px] mx-auto bg-white border-2 border-blue-400 rounded-2xl shadow-md overflow-hidden text-[15px]">
-            <h2 className="text-3xl font-extrabold text-blue-800 text-center mt-6 mb-1">거래명세서</h2>
+          <div
+            id="invoiceArea"
+            className="w-[1200px] mx-auto bg-white border-2 border-blue-400 rounded-2xl shadow-md overflow-hidden text-[15px]"
+          >
+            <h2 className="text-3xl font-extrabold text-blue-800 text-center mt-6 mb-1">
+              거래명세서
+            </h2>
             {(start || end) && (
               <p className="text-center text-gray-600 font-medium mb-2">
                 거래기간 : {start || "시작일"} ~ {end || "종료일"}
               </p>
             )}
-            <p className="text-center text-gray-500 mb-4">(공급자 및 공급받는자 기재)</p>
+            <p className="text-center text-gray-500 mb-4">
+              (공급자 및 공급받는자 기재)
+            </p>
 
             <div className="grid grid-cols-2 border-t-2 border-blue-400 mx-6 mb-6 rounded overflow-hidden">
               <table className="w-full border border-blue-200 text-sm">
                 <thead>
-                  <tr><th colSpan="2" className="bg-blue-100 text-blue-900 font-bold text-center p-2 border-b">공급받는자</th></tr>
+                  <tr>
+                    <th
+                      colSpan="2"
+                      className="bg-blue-100 text-blue-900 font-bold text-center p-2 border-b"
+                    >
+                      공급받는자
+                    </th>
+                  </tr>
                 </thead>
                 <tbody>
                   {[
@@ -4871,7 +5157,9 @@ function ClientSettlement({ dispatchData, clients = [], setClients }) {
                     ["종목", cInfo.종목],
                   ].map(([k, v]) => (
                     <tr key={k}>
-                      <td className="border p-2 bg-blue-50 text-blue-900 font-semibold text-center w-28">{k}</td>
+                      <td className="border p-2 bg-blue-50 text-blue-900 font-semibold text-center w-28">
+                        {k}
+                      </td>
                       <td className="border p-2">{v || "-"}</td>
                     </tr>
                   ))}
@@ -4880,21 +5168,59 @@ function ClientSettlement({ dispatchData, clients = [], setClients }) {
 
               <table className="w-full border border-blue-200 text-sm">
                 <thead>
-                  <tr><th colSpan="2" className="bg-blue-100 text-blue-900 font-bold text-center p-2 border-b">공급자</th></tr>
+                  <tr>
+                    <th
+                      colSpan="2"
+                      className="bg-blue-100 text-blue-900 font-bold text-center p-2 border-b"
+                    >
+                      공급자
+                    </th>
+                  </tr>
                 </thead>
                 <tbody>
-                  <tr><td className="border p-2 bg-blue-50 text-blue-900 font-semibold text-center w-28">상호</td><td className="border p-2">{COMPANY_PRINT.name}</td></tr>
                   <tr>
-                    <td className="border p-2 bg-blue-50 text-blue-900 font-semibold text-center">대표자</td>
+                    <td className="border p-2 bg-blue-50 text-blue-900 font-semibold text-center w-28">
+                      상호
+                    </td>
+                    <td className="border p-2">{COMPANY_PRINT.name}</td>
+                  </tr>
+                  <tr>
+                    <td className="border p-2 bg-blue-50 text-blue-900 font-semibold text-center">
+                      대표자
+                    </td>
                     <td className="border p-2 relative">
                       {COMPANY_PRINT.ceo} (인)
-                      <img src={COMPANY_PRINT.seal} alt="seal" className="absolute right-4 top-1 h-8 w-8 opacity-80" />
+                      <img
+                        src={COMPANY_PRINT.seal}
+                        alt="seal"
+                        className="absolute right-4 top-1 h-8 w-8 opacity-80"
+                      />
                     </td>
                   </tr>
-                  <tr><td className="border p-2 bg-blue-50 text-blue-900 font-semibold text-center">사업자번호</td><td className="border p-2">{COMPANY_PRINT.bizNo}</td></tr>
-                  <tr><td className="border p-2 bg-blue-50 text-blue-900 font-semibold text-center">주소</td><td className="border p-2">{COMPANY_PRINT.addr}</td></tr>
-                  <tr><td className="border p-2 bg-blue-50 text-blue-900 font-semibold text-center">업태</td><td className="border p-2">{COMPANY_PRINT.type}</td></tr>
-                  <tr><td className="border p-2 bg-blue-50 text-blue-900 font-semibold text-center">종목</td><td className="border p-2">{COMPANY_PRINT.item}</td></tr>
+                  <tr>
+                    <td className="border p-2 bg-blue-50 text-blue-900 font-semibold text-center">
+                      사업자번호
+                    </td>
+                    <td className="border p-2">{COMPANY_PRINT.bizNo}</td>
+                  </tr>
+                  <tr>
+                    <td className="border p-2 bg-blue-50 text-blue-900 font-semibold text-center">
+                      주소
+                    </td>
+                    <td className="border p-2">{COMPANY_PRINT.addr}</td>
+                  </tr>
+                  <tr>
+                    <td className="border p-2 bg-blue-50 text-blue-900 font-semibold text-center">
+                      업태
+                    </td>
+                    <td className="border p-2">{COMPANY_PRINT.type}</td>
+                  </tr>
+                  <tr>
+                    <td className="border p-2 bg-blue-50 text-blue-900 font-semibold text-center">
+                      종목
+                    </td>
+                    <td className="border p-2">{COMPANY_PRINT.item}</td>
+                  </tr>
                 </tbody>
               </table>
             </div>
@@ -4904,31 +5230,69 @@ function ClientSettlement({ dispatchData, clients = [], setClients }) {
               <table className="w-full text-sm border border-blue-300">
                 <thead>
                   <tr className="bg-blue-50 text-blue-900 font-semibold text-center">
-                    {["No", "상하차지", "화물명", "기사명", "공급가액", "세액(10%)"].map((h) => (
-                      <th key={h} className="border border-blue-300 p-2">{h}</th>
-                    ))}
+                    {["No", "상하차지", "화물명", "기사명", "공급가액", "세액(10%)"].map(
+                      (h) => (
+                        <th
+                          key={h}
+                          className="border border-blue-300 p-2"
+                        >
+                          {h}
+                        </th>
+                      )
+                    )}
                   </tr>
                 </thead>
                 <tbody>
                   {mapped.length === 0 ? (
-                    <tr><td colSpan={6} className="text-center text-gray-500 py-8">표시할 내역이 없습니다.</td></tr>
+                    <tr>
+                      <td
+                        colSpan={6}
+                        className="text-center text-gray-500 py-8"
+                      >
+                        표시할 내역이 없습니다.
+                      </td>
+                    </tr>
                   ) : (
                     mapped.map((m) => (
-                      <tr key={m.idx} className="odd:bg-white even:bg-blue-50">
-                        <td className="border border-blue-300 p-2 text-center">{m.idx}</td>
-                        <td className="border border-blue-300 p-2">{m.상하차지}</td>
-                        <td className="border border-blue-300 p-2">{m.화물명}</td>
-                        <td className="border border-blue-300 p-2 text-center">{m.기사명}</td>
-                        <td className="border border-blue-300 p-2 text-right">{won(m.공급가액)}</td>
-                        <td className="border border-blue-300 p-2 text-right">{won(m.세액)}</td>
+                      <tr
+                        key={m.idx}
+                        className="odd:bg-white even:bg-blue-50"
+                      >
+                        <td className="border border-blue-300 p-2 text-center">
+                          {m.idx}
+                        </td>
+                        <td className="border border-blue-300 p-2">
+                          {m.상하차지}
+                        </td>
+                        <td className="border border-blue-300 p-2">
+                          {m.화물명}
+                        </td>
+                        <td className="border border-blue-300 p-2 text-center">
+                          {m.기사명}
+                        </td>
+                        <td className="border border-blue-300 p-2 text-right">
+                          {won(m.공급가액)}
+                        </td>
+                        <td className="border border-blue-300 p-2 text-right">
+                          {won(m.세액)}
+                        </td>
                       </tr>
                     ))
                   )}
                   {mapped.length > 0 && (
                     <tr className="bg-blue-100 font-bold">
-                      <td colSpan={4} className="border border-blue-300 p-2 text-center">합계</td>
-                      <td className="border border-blue-300 p-2 text-right">{won(합계공급가)}</td>
-                      <td className="border border-blue-300 p-2 text-right">{won(합계세액)}</td>
+                      <td
+                        colSpan={4}
+                        className="border border-blue-300 p-2 text-center"
+                      >
+                        합계
+                      </td>
+                      <td className="border border-blue-300 p-2 text-right">
+                        {won(합계공급가)}
+                      </td>
+                      <td className="border border-blue-300 p-2 text-right">
+                        {won(합계세액)}
+                      </td>
                     </tr>
                   )}
                 </tbody>
@@ -4944,15 +5308,42 @@ function ClientSettlement({ dispatchData, clients = [], setClients }) {
             <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
               <div className="bg-white p-6 rounded-lg shadow-lg w-[420px]">
                 <h3 className="text-lg font-bold mb-4">거래처 정보 수정</h3>
-                {["거래처명", "사업자번호", "대표자", "업태", "종목", "주소", "담당자", "연락처"].map((k) => (
+                {[
+                  "거래처명",
+                  "사업자번호",
+                  "대표자",
+                  "업태",
+                  "종목",
+                  "주소",
+                  "담당자",
+                  "연락처",
+                ].map((k) => (
                   <div key={k} className="mb-3">
-                    <label className="block text-sm font-medium mb-1">{k}</label>
-                    <input className="border p-2 w-full rounded" value={editInfo[k] || ""} onChange={(e) => setEditInfo({ ...editInfo, [k]: e.target.value })} />
+                    <label className="block text-sm font-medium mb-1">
+                      {k}
+                    </label>
+                    <input
+                      className="border p-2 w-full rounded"
+                      value={editInfo[k] || ""}
+                      onChange={(e) =>
+                        setEditInfo({ ...editInfo, [k]: e.target.value })
+                      }
+                    />
                   </div>
                 ))}
                 <div className="flex justify-end gap-2 mt-4">
-                  <button onClick={() => setShowEdit(false)} className="px-3 py-2 border rounded">닫기</button>
-                  <button onClick={saveEdit} className="px-3 py-2 bg-blue-600 text-white rounded">저장</button>
+                  <button
+                    onClick={() => setShowEdit(false)}
+                    className="px-3 py-2 border rounded"
+                  >
+                    닫기
+                  </button>
+                  <button
+                    onClick={saveEdit}
+                    className="px-3 py-2 bg-blue-600 text-white rounded"
+                  >
+                    저장
+                  </button>
                 </div>
               </div>
             </div>
@@ -4967,25 +5358,48 @@ function ClientSettlement({ dispatchData, clients = [], setClients }) {
           <div className="flex flex-wrap items-end gap-2 mb-3">
             <div className="flex flex-col">
               <label className="text-xs text-gray-500 mb-1">거래처</label>
-              <select className="border p-2 rounded min-w-[220px]" value={selClient} onChange={(e)=>{ setSelClient(e.target.value); clearSel(); }}>
+              <select
+                className="border p-2 rounded min-w-[220px]"
+                value={selClient}
+                onChange={(e) => {
+                  setSelClient(e.target.value);
+                  clearSel();
+                }}
+              >
                 <option value="">거래처 선택</option>
-                {clientOptions8.map(v => <option key={v} value={v}>{v}</option>)}
+                {clientOptions8.map((v) => (
+                  <option key={v} value={v}>
+                    {v}
+                  </option>
+                ))}
               </select>
             </div>
 
             <div className="flex flex-col">
               <label className="text-xs text-gray-500 mb-1">월</label>
-              <select className="border p-2 rounded min-w-[120px]" value={monthFilter} onChange={(e)=>setMonthFilter(e.target.value)}>
+              <select
+                className="border p-2 rounded min-w-[120px]"
+                value={monthFilter}
+                onChange={(e) => setMonthFilter(e.target.value)}
+              >
                 <option value="all">전체</option>
-                {Array.from({length:12},(_,i)=>String(i+1).padStart(2,"0")).map(mm=>(
-                  <option key={mm} value={mm}>{parseInt(mm,10)}월</option>
+                {Array.from({ length: 12 }, (_, i) =>
+                  String(i + 1).padStart(2, "0")
+                ).map((mm) => (
+                  <option key={mm} value={mm}>
+                    {parseInt(mm, 10)}월
+                  </option>
                 ))}
               </select>
             </div>
 
             <div className="flex flex-col">
               <label className="text-xs text-gray-500 mb-1">정산상태</label>
-              <select className="border p-2 rounded min-w-[120px]" value={statusFilter} onChange={(e)=>setStatusFilter(e.target.value)}>
+              <select
+                className="border p-2 rounded min-w-[120px]"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+              >
                 <option value="전체">전체</option>
                 <option value="미정산">미정산</option>
                 <option value="정산완료">정산완료</option>
@@ -4993,32 +5407,69 @@ function ClientSettlement({ dispatchData, clients = [], setClients }) {
             </div>
 
             <button
-              onClick={()=>{ setSelClient(""); setMonthFilter("all"); setStatusFilter("전체"); clearSel(); }}
+              onClick={() => {
+                setSelClient("");
+                setMonthFilter("all");
+                setStatusFilter("전체");
+                clearSel();
+              }}
               className="px-3 py-2 rounded bg-gray-200"
-            >필터 초기화</button>
+            >
+              필터 초기화
+            </button>
 
             <div className="ml-auto flex gap-2">
               <button
                 onClick={settleSelected}
-                className={`px-3 py-2 rounded text-white ${selectedMonths.size ? "bg-emerald-600" : "bg-emerald-600/50 cursor-not-allowed"}`}
+                className={`px-3 py-2 rounded text-white ${
+                  selectedMonths.size
+                    ? "bg-emerald-600"
+                    : "bg-emerald-600/50 cursor-not-allowed"
+                }`}
                 disabled={!selectedMonths.size}
-              >선택 정산완료</button>
+              >
+                선택 정산완료
+              </button>
               <button
                 onClick={settleAll}
-                className={`px-3 py-2 rounded text-white ${monthRows.length ? "bg-emerald-700" : "bg-emerald-700/50 cursor-not-allowed"}`}
+                className={`px-3 py-2 rounded text-white ${
+                  monthRows.length
+                    ? "bg-emerald-700"
+                    : "bg-emerald-700/50 cursor-not-allowed"
+                }`}
                 disabled={!monthRows.length}
-              >전체 정산완료</button>
-              <button onClick={downloadMonthExcel} className="px-3 py-2 rounded bg-blue-600 text-white">📥 엑셀 다운로드</button>
+              >
+                전체 정산완료
+              </button>
+              <button
+                onClick={downloadMonthExcel}
+                className="px-3 py-2 rounded bg-blue-600 text-white"
+              >
+                📥 엑셀 다운로드
+              </button>
             </div>
           </div>
 
           {/* KPI */}
           <div className="flex flex-wrap gap-2 text-xs md:text-sm mb-3">
-            <span className="px-2 py-1 rounded bg-gray-100">연도 <b>{THIS_YEAR}</b></span>
-            <span className="px-2 py-1 rounded bg-blue-50 text-blue-800">거래처 <b>{selClient || "-"}</b></span>
-            <span className="px-2 py-1 rounded bg-indigo-50 text-indigo-800">표시 월 <b>{monthFilter==="all" ? "전체" : `${THIS_YEAR}-${monthFilter}`}</b></span>
-            <span className="px-2 py-1 rounded bg-rose-50 text-rose-700">총 청구금액 <b>{kpi.amt.toLocaleString()}</b>원</span>
-            <span className="px-2 py-1 rounded bg-emerald-50 text-emerald-700">선택 월 <b>{selectedMonths.size}</b>개</span>
+            <span className="px-2 py-1 rounded bg-gray-100">
+              연도 <b>{THIS_YEAR}</b>
+            </span>
+            <span className="px-2 py-1 rounded bg-blue-50 text-blue-800">
+              거래처 <b>{selClient || "-"}</b>
+            </span>
+            <span className="px-2 py-1 rounded bg-indigo-50 text-indigo-800">
+              표시 월{" "}
+              <b>
+                {monthFilter === "all" ? "전체" : `${THIS_YEAR}-${monthFilter}`}
+              </b>
+            </span>
+            <span className="px-2 py-1 rounded bg-rose-50 text-rose-700">
+              총 청구금액 <b>{kpi.amt.toLocaleString()}</b>원
+            </span>
+            <span className="px-2 py-1 rounded bg-emerald-50 text-emerald-700">
+              선택 월 <b>{selectedMonths.size}</b>개
+            </span>
           </div>
 
           {/* 테이블 */}
@@ -5029,43 +5480,87 @@ function ClientSettlement({ dispatchData, clients = [], setClients }) {
                   <th className="px-3 py-2 border text-center">
                     <input
                       type="checkbox"
-                      onChange={()=>toggleAllMonths(monthRows)}
-                      checked={selectedMonths.size>0 && selectedMonths.size===monthRows.length}
+                      onChange={() => toggleAllMonths(monthRows)}
+                      checked={
+                        selectedMonths.size > 0 &&
+                        selectedMonths.size === monthRows.length
+                      }
                       aria-label="전체선택"
                     />
                   </th>
-                  {["순번","청구월","거래처명","총 청구금액","정산상태","정산일","메모"].map(h=>(
-                    <th key={h} className="px-3 py-2 border">{h}</th>
+                  {[
+                    "순번",
+                    "청구월",
+                    "거래처명",
+                    "총 청구금액",
+                    "정산상태",
+                    "정산일",
+                    "메모",
+                  ].map((h) => (
+                    <th key={h} className="px-3 py-2 border">
+                      {h}
+                    </th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {!selClient ? (
-                  <tr><td className="text-center text-gray-500 py-6" colSpan={8}>거래처를 선택하세요.</td></tr>
-                ) : monthRows.length===0 ? (
-                  <tr><td className="text-center text-gray-500 py-6" colSpan={8}>표시할 데이터가 없습니다.</td></tr>
+                  <tr>
+                    <td
+                      className="text-center text-gray-500 py-6"
+                      colSpan={8}
+                    >
+                      거래처를 선택하세요.
+                    </td>
+                  </tr>
+                ) : monthRows.length === 0 ? (
+                  <tr>
+                    <td
+                      className="text-center text-gray-500 py-6"
+                      colSpan={8}
+                    >
+                      표시할 데이터가 없습니다.
+                    </td>
+                  </tr>
                 ) : (
-                  monthRows.map((row, idx)=>(
-                    <tr key={row.yyyymm} className={idx%2===0 ? "bg-white" : "bg-gray-50"}>
+                  monthRows.map((row, idx) => (
+                    <tr
+                      key={row.yyyymm}
+                      className={idx % 2 === 0 ? "bg-white" : "bg-gray-50"}
+                    >
                       {/* 선택 */}
                       <td className="px-3 py-2 border text-center">
-                        <input type="checkbox" checked={selectedMonths.has(row.yyyymm)} onChange={()=>toggleMonthSelect(row.yyyymm)} />
+                        <input
+                          type="checkbox"
+                          checked={selectedMonths.has(row.yyyymm)}
+                          onChange={() => toggleMonthSelect(row.yyyymm)}
+                        />
                       </td>
-                      <td className="px-3 py-2 border text-center">{idx+1}</td>
-                      <td className="px-3 py-2 border text-center">{row.yyyymm}</td>
-                      <td className="px-3 py-2 border text-center">{row.거래처명}</td>
-                      <td className="px-3 py-2 border text-right">{won(row.총청구금액)}</td>
+                      <td className="px-3 py-2 border text-center">
+                        {idx + 1}
+                      </td>
+                      <td className="px-3 py-2 border text-center">
+                        {row.yyyymm}
+                      </td>
+                      <td className="px-3 py-2 border text-center">
+                        {row.거래처명}
+                      </td>
+                      <td className="px-3 py-2 border text-right">
+                        {won(row.총청구금액)}
+                      </td>
 
                       {/* 정산상태 — 클릭 토글 */}
                       <td
                         className="px-3 py-2 border text-center cursor-pointer select-none"
                         title="클릭하여 미정산/정산완료 전환"
-                        onClick={()=>toggleMonthStatus(row)}
+                        onClick={() => toggleMonthStatus(row)}
                       >
                         <StatusBadge status={row.정산상태} />
                       </td>
 
-                      <td className="px-3 py-2 border text-center">{row.정산일 || ""}</td>
+                      <td className="px-3 py-2 border text-center">
+                        {row.정산일 || ""}
+                      </td>
                       <td className="px-3 py-2 border"></td>
                     </tr>
                   ))
@@ -5076,8 +5571,14 @@ function ClientSettlement({ dispatchData, clients = [], setClients }) {
 
           <div className="mt-2 text-xs text-gray-500">
             · 상태 클릭 시 해당 <b>거래처·월</b>의 모든 오더에
-            <code className="mx-1 px-1 bg-gray-100 rounded">정산상태["YYYY-MM"]</code> / 
-            <code className="mx-1 px-1 bg-gray-100 rounded">정산일["YYYY-MM"]</code>이 저장됩니다. (상차일 기준)
+            <code className="mx-1 px-1 bg-gray-100 rounded">
+              정산상태["YYYY-MM"]
+            </code>
+            /
+            <code className="mx-1 px-1 bg-gray-100 rounded">
+              정산일["YYYY-MM"]
+            </code>
+            이 저장됩니다. (상차일 기준)
           </div>
         </div>
       )}
@@ -5085,6 +5586,7 @@ function ClientSettlement({ dispatchData, clients = [], setClients }) {
   );
 }
 // ===================== DispatchApp.jsx (PART 8/8) — 거래명세서 + 미수금관리(월집계/토글/선택/전체정산) — END =====================
+
 
 
 
