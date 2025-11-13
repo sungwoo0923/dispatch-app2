@@ -1146,450 +1146,671 @@ const handleCarNoEnter = (value) => {
      - 메뉴와 100% 동일한 UX: 수정(전체편집), 삭제(체크/선택삭제), 조회/검색, KPI, 엑셀다운
      - 상세보기 없음
   --------------------------------------------------*/
-  const RealtimeStatusEmbed = () => {
-    const today = _todayStr();
+  /* -------------------------------------------------
+   ✅ 하단부 실시간배차현황 (배차관리 전용)
+   - 메뉴와 동일한 UX
+   - 상차 2시간 전 + 미배차 경고 기능 포함
+--------------------------------------------------*/
+const RealtimeStatusEmbed = () => {
+  const today = _todayStr();
 
-    // 🔎 필터 상태
-    const [q, setQ] = React.useState("");
-    const [filterType, setFilterType] = React.useState("전체");
-    const [filterValue, setFilterValue] = React.useState("");
-    const [startDate, setStartDate] = React.useState("");
-    const [endDate, setEndDate] = React.useState("");
+  // 🔎 필터 상태
+  const [q, setQ] = React.useState("");
+  const [filterType, setFilterType] = React.useState("전체");
+  const [filterValue, setFilterValue] = React.useState("");
+  const [startDate, setStartDate] = React.useState("");
+  const [endDate, setEndDate] = React.useState("");
 
-    // ✏️ 편집/삭제 모드
-    const [editMode, setEditMode] = React.useState(false);      // 전체 수정 모드
-    const [deleteMode, setDeleteMode] = React.useState(false);  // 삭제 체크박스 모드
-    const [selected, setSelected] = React.useState(new Set());  // 선택된 행 id
+  // ✏️ 편집/삭제 모드
+  const [editMode, setEditMode] = React.useState(false);
+  const [deleteMode, setDeleteMode] = React.useState(false);
+  const [selected, setSelected] = React.useState(new Set());
 
-    // 📝 편집값 저장소: { id: {필드:값, ...}, ... }
-    const [editedRows, setEditedRows] = React.useState({});
+  // 편집 저장용
+  const [editedRows, setEditedRows] = React.useState({});
 
-    const toInt = (v) => {
-      const n = parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10);
-      return isNaN(n) ? 0 : n;
-    };
+  // 상차 2시간 전 경고
+  const [warningList, setWarningList] = React.useState([]);
 
-    // 데이터 필터링/정렬 (메뉴와 동일)
-    const filtered = React.useMemo(() => {
-      let data = [...(dispatchData || [])];
-      if (!startDate && !endDate) data = data.filter((r) => (r.상차일 || "") === today);
-      else {
-        if (startDate) data = data.filter((r) => (r.상차일 || "") >= startDate);
-        if (endDate) data = data.filter((r) => (r.상차일 || "") <= endDate);
-      }
-      if (filterType !== "전체" && filterValue)
-        data = data.filter((r) => String(r[filterType] || "").includes(filterValue));
-      if (q.trim()) {
-        const lower = q.toLowerCase();
-        data = data.filter((r) => Object.values(r).some((v) => String(v || "").toLowerCase().includes(lower)));
-      }
-      const filtered = React.useMemo(() => {
-  let data = [...dispatchData];
-  if (startDate) data = data.filter((r) => (r.상차일 || "") >= startDate);
-  if (endDate) data = data.filter((r) => (r.상차일 || "") <= endDate);
-  if (q.trim()) {
-    const lower = q.toLowerCase();
-    data = data.filter((r) =>
-      Object.values(r).some((v) =>
-        String(v || "").toLowerCase().includes(lower)
-      )
-    );
-  }
+  // 숫자 변환
+  const toInt = (v) => {
+    const n = parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10);
+    return isNaN(n) ? 0 : n;
+  };
 
-  // ✅ 배차중 → 맨 위 / 배차완료 → 아래
-  data.sort((a, b) => {
-    if (a.배차상태 === "배차중" && b.배차상태 !== "배차중") return -1;
-    if (a.배차상태 !== "배차중" && b.배차상태 === "배차중") return 1;
-    // 배차상태 같으면 날짜 순
-    return (a.상차일 || "").localeCompare(b.상차일 || "");
-  });
+  // ================================
+  // 🔥 필터링/정렬
+  // ================================
+  const filtered = React.useMemo(() => {
+    let data = [...(dispatchData || [])];
 
-  return data;
-}, [dispatchData, q, startDate, endDate]);
+    // 날짜 필터
+    if (!startDate && !endDate) {
+      data = data.filter((r) => (r.상차일 || "") === today);
+    } else {
+      if (startDate) data = data.filter((r) => (r.상차일 || "") >= startDate);
+      if (endDate) data = data.filter((r) => (r.상차일 || "") <= endDate);
+    }
 
-      return data;
-    }, [dispatchData, q, filterType, filterValue, startDate, endDate]);
-
-    // KPI (배차현황 스타일)
-    const kpi = React.useMemo(() => {
-      const sale = filtered.reduce((a, r) => a + toInt(r.청구운임), 0);
-      const drv  = filtered.reduce((a, r) => a + toInt(r.기사운임), 0);
-      return { cnt: filtered.length, sale, drv, fee: sale - drv };
-    }, [filtered]);
-
-    // 선택/체크박스
-    const toggleSelect = (id) => {
-      setSelected(prev => {
-        const next = new Set(prev);
-        if (next.has(id)) next.delete(id); else next.add(id);
-        return next;
-      });
-    };
-    const selectAll = () => {
-      setSelected(new Set(filtered.map(r => r._id).filter(Boolean)));
-    };
-    const clearSelect = () => setSelected(new Set());
-
-    // 편집값 적용
-    const changeCell = (id, key, value) => {
-      setEditedRows(prev => {
-        const base = prev[id] ? { ...prev[id] } : {};
-        let next = { ...base, [key]: value };
-        // 금액 계산
-        if (key === "청구운임" || key === "기사운임") {
-          const sale = toInt(key==="청구운임" ? value : base.청구운임 ?? "");
-          const drv  = toInt(key==="기사운임" ? value : base.기사운임 ?? "");
-          next.수수료 = String(sale - drv);
-        }
-        return { ...prev, [id]: next };
-      });
-    };
-
-    // 저장/삭제 헬퍼 (상위 연결 없을 때도 동작 시도)
-    const patchOne = async (id, updates) => {
-      if (!id) return;
-      try {
-        if (typeof window !== "undefined" && typeof window.RUN25_PATCH === "function") {
-          await window.RUN25_PATCH(id, updates);
-          return true;
-        }
-        window.dispatchEvent(new CustomEvent("RUN25_REQUEST_PATCH", { detail: { id, updates } }));
-        alert("수정 요청이 전송되었습니다. (상위 핸들러 연결 필요)");
-        return true;
-      } catch (e) {
-        console.error(e);
-        alert("수정 중 오류가 발생했습니다.");
-        return false;
-      }
-    };
-    const removeOne = async (id) => {
-      if (!id) return;
-      try {
-        if (typeof window !== "undefined" && typeof window.RUN25_REMOVE === "function") {
-          await window.RUN25_REMOVE(id);
-          return true;
-        }
-        window.dispatchEvent(new CustomEvent("RUN25_REQUEST_REMOVE", { detail: { id } }));
-        return true;
-      } catch (e) {
-        console.error(e);
-        alert("삭제 중 오류가 발생했습니다.");
-        return false;
-      }
-    };
-
-    const saveSelectedEdits = async () => {
-      const ids = [...selected];
-      if (!ids.length) return alert("선택된 항목이 없습니다.");
-      for (const id of ids) {
-        const updates = editedRows[id];
-        if (updates && Object.keys(updates).length) {
-          await patchOne(id, updates);
-        }
-      }
-      alert("선택 항목 저장 완료");
-      setEditedRows({});
-      setSelected(new Set());
-      setEditMode(false);
-    };
-
-    const saveAllEdits = async () => {
-      const entries = Object.entries(editedRows);
-      if (!entries.length) return alert("변경된 내용이 없습니다.");
-      for (const [id, updates] of entries) {
-        await patchOne(id, updates);
-      }
-      alert("전체 저장 완료");
-      setEditedRows({});
-      setEditMode(false);
-    };
-
-    const deleteSelected = async () => {
-      const ids = [...selected];
-      if (!ids.length) return alert("선택된 항목이 없습니다.");
-      if (!confirm(`${ids.length}건을 삭제하시겠습니까?`)) return;
-      for (const id of ids) await removeOne(id);
-      alert("선택 삭제 완료");
-      setSelected(new Set());
-      setDeleteMode(false);
-    };
-
-    // 엑셀 다운로드
-    const exportExcel = () => {
-      try {
-        const rows = filtered.map(r => ({
-          순번: r.순번, 등록일: r.등록일, 상차일: r.상차일, 상차시간: r.상차시간,
-          하차일: r.하차일, 하차시간: r.하차시간, 거래처명: r.거래처명,
-          상차지명: r.상차지명, 상차지주소: r.상차지주소, 하차지명: r.하차지명, 하차지주소: r.하차지주소,
-          화물내용: r.화물내용, 차량종류: r.차량종류, 차량톤수: r.차량톤수,
-          차량번호: r.차량번호, 이름: r.이름, 전화번호: r.전화번호,
-          배차상태: r.배차상태, 청구운임: r.청구운임, 기사운임: r.기사운임, 수수료: r.수수료,
-          지급방식: r.지급방식, 배차방식: r.배차방식, 메모: r.메모,
-        }));
-        const wb = XLSX.utils.book_new();
-        const ws = XLSX.utils.json_to_sheet(rows);
-        XLSX.utils.book_append_sheet(wb, ws, "실시간배차현황");
-        XLSX.writeFile(wb, `실시간배차현황_${_todayStr()}.xlsx`);
-      } catch (e) {
-        console.error(e);
-        alert("엑셀 내보내기 중 오류가 발생했습니다.");
-      }
-    };
-
-    const head = "border px-2 py-2 bg-gray-100 text-center whitespace-nowrap";
-    const cell = "border px-2 py-1 text-center whitespace-nowrap align-middle";
-
-    // 🔎 주소 9글자 + 더보기/접기 토글
-    const [expandedAddr, setExpandedAddr] = React.useState({});
-    const AddressCell = ({ id, field, value }) => {
-      const key = `${id}:${field}`;
-      const expanded = !!expandedAddr[key];
-      const text = String(value || "");
-      const tooLong = text.length > 9;
-      if (editMode) {
-        // 편집 모드에서는 원래 input 렌더가 대신 들어가므로 여기선 사용 안됨
-        return <span>{text}</span>;
-      }
-      return (
-        <div className="flex items-center justify-center gap-1">
-          <span className={expanded ? "" : "max-w-[9ch] overflow-hidden text-ellipsis whitespace-nowrap"}>
-            {text}
-          </span>
-          {tooLong && (
-            <button
-              type="button"
-              className="text-[11px] underline text-blue-600"
-              onClick={() => setExpandedAddr(p => ({ ...p, [key]: !expanded }))}
-            >
-              {expanded ? "접기" : "더보기"}
-            </button>
-          )}
-        </div>
+    // 필드 검색
+    if (filterType !== "전체" && filterValue) {
+      data = data.filter((r) =>
+        String(r[filterType] || "").includes(filterValue)
       );
-    };
+    }
+
+    // 통합 검색
+    if (q.trim()) {
+      const lower = q.toLowerCase();
+      data = data.filter((r) =>
+        Object.values(r).some((v) =>
+          String(v || "").toLowerCase().includes(lower)
+        )
+      );
+    }
+
+    // 정렬: 배차중 → 배차완료
+    data.sort((a, b) => {
+      if (a.배차상태 === "배차중" && b.배차상태 !== "배차중") return -1;
+      if (a.배차상태 !== "배차중" && b.배차상태 === "배차중") return 1;
+      return (a.상차일 || "").localeCompare(b.상차일 || "");
+    });
+
+    return data;
+  }, [dispatchData, q, filterType, filterValue, startDate, endDate]);
+
+  // ================================
+  // ⚠ 상차 2시간 전 + 차량번호 없음 감지
+  // ================================
+  React.useEffect(() => {
+    if (!filtered.length) {
+      setWarningList([]);
+      return;
+    }
+
+    const now = new Date();
+    const temp = [];
+
+    filtered.forEach((r) => {
+      if (r.차량번호 && String(r.차량번호).trim() !== "") return;
+      if (!r.상차일 || !r.상차시간) return;
+
+      try {
+        const t = String(r.상차시간).padStart(5, "0");
+        const dt = new Date(`${r.상차일}T${t}:00`);
+        const diff = dt.getTime() - now.getTime();
+
+        if (diff > 0 && diff <= 2 * 60 * 60 * 1000) {
+          temp.push(r);
+        }
+      } catch (_) {}
+    });
+
+    setWarningList(temp);
+  }, [filtered]);
+
+  // ================================
+  // KPI
+  // ================================
+  const kpi = React.useMemo(() => {
+    const sale = filtered.reduce((a, r) => a + toInt(r.청구운임), 0);
+    const drv = filtered.reduce((a, r) => a + toInt(r.기사운임), 0);
+    return { cnt: filtered.length, sale, drv, fee: sale - drv };
+  }, [filtered]);
+
+  // ================================
+  // 선택/체크박스
+  // ================================
+  const toggleSelect = (id) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const selectAll = () => {
+    setSelected(new Set(filtered.map((r) => r._id).filter(Boolean)));
+  };
+
+  const clearSelect = () => setSelected(new Set());
+
+  // ================================
+  // 편집값 저장
+  // ================================
+  const changeCell = (id, key, value) => {
+    setEditedRows((prev) => {
+      const base = prev[id] ? { ...prev[id] } : {};
+      let next = { ...base, [key]: value };
+
+      // 금액 자동 계산
+      if (key === "청구운임" || key === "기사운임") {
+        const sale = toInt(key === "청구운임" ? value : base.청구운임 ?? "");
+        const drv = toInt(key === "기사운임" ? value : base.기사운임 ?? "");
+        next.수수료 = String(sale - drv);
+      }
+
+      return { ...prev, [id]: next };
+    });
+  };
+
+  // ================================
+  // 상위 patch/remove 연동
+  // ================================
+  const patchOne = async (id, updates) => {
+    try {
+      if (typeof window?.RUN25_PATCH === "function") {
+        await window.RUN25_PATCH(id, updates);
+        return true;
+      }
+    } catch (e) {}
+
+    window.dispatchEvent(
+      new CustomEvent("RUN25_REQUEST_PATCH", { detail: { id, updates } })
+    );
+    alert("수정 요청이 전송되었습니다.");
+    return true;
+  };
+
+  const removeOne = async (id) => {
+    try {
+      if (typeof window?.RUN25_REMOVE === "function") {
+        await window.RUN25_REMOVE(id);
+        return true;
+      }
+    } catch (e) {}
+
+    window.dispatchEvent(
+      new CustomEvent("RUN25_REQUEST_REMOVE", { detail: { id } })
+    );
+    return true;
+  };
+
+  const saveSelectedEdits = async () => {
+    const ids = [...selected];
+    if (!ids.length) return alert("선택된 항목이 없습니다.");
+
+    for (const id of ids) {
+      const updates = editedRows[id];
+      if (updates) await patchOne(id, updates);
+    }
+
+    alert("선택 항목 저장 완료");
+    setEditedRows({});
+    clearSelect();
+    setEditMode(false);
+  };
+
+  const saveAllEdits = async () => {
+    const entries = Object.entries(editedRows);
+    if (!entries.length) return alert("변경된 내용이 없습니다.");
+
+    for (const [id, updates] of entries) await patchOne(id, updates);
+
+    alert("전체 저장 완료");
+    setEditedRows({});
+    setEditMode(false);
+  };
+
+  const deleteSelected = async () => {
+    const ids = [...selected];
+    if (!ids.length) return alert("선택된 항목이 없습니다.");
+    if (!confirm(`${ids.length}건을 삭제하시겠습니까?`)) return;
+
+    for (const id of ids) await removeOne(id);
+
+    alert("삭제 완료");
+    clearSelect();
+    setDeleteMode(false);
+  };
+
+  // ================================
+  // 주소 더보기/접기
+  // ================================
+  const [expandedAddr, setExpandedAddr] = React.useState({});
+  const AddressCell = ({ id, field, value }) => {
+    const key = `${id}:${field}`;
+    const expanded = !!expandedAddr[key];
+    const text = String(value || "");
+    const tooLong = text.length > 9;
+
+    if (editMode) return <span>{text}</span>;
 
     return (
-      <div className="mt-8">
-        {/* ✅ KPI 바 */}
-        <div className="flex flex-wrap items-center gap-5 text-sm mb-3 mt-1">
-          <div>총 <b>{kpi.cnt}</b>건</div>
-          <div>청구 <b className="text-blue-600">{kpi.sale.toLocaleString()}</b>원</div>
-          <div>기사 <b className="text-green-600">{kpi.drv.toLocaleString()}</b>원</div>
-          <div>수수료 <b className="text-amber-600">{kpi.fee.toLocaleString()}</b>원</div>
-        </div>
-
-        {/* 상단 컨트롤바 */}
-        <div className="flex flex-wrap items-center gap-2 mb-2">
-          <select
-            className="border p-1 rounded text-sm"
-            value={filterType}
-            onChange={(e) => { setFilterType(e.target.value); setFilterValue(""); }}
-          >
-            <option value="전체">필터 없음</option>
-            <option value="거래처명">거래처명</option>
-            <option value="상차지명">상차지명</option>
-            <option value="하차지명">하차지명</option>
-            <option value="차량번호">차량번호</option>
-          </select>
-
-          {filterType !== "전체" && (
-            <input
-              className="border p-1 rounded text-sm"
-              placeholder={`${filterType} 검색`}
-              value={filterValue}
-              onChange={(e) => setFilterValue(e.target.value)}
-            />
-          )}
-
-          <div className="flex items-center gap-1 text-sm">
-            <input type="date" className="border p-1 rounded" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-            <span>~</span>
-            <input type="date" className="border p-1 rounded" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
-          </div>
-
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="검색..."
-            className="border p-2 rounded w-56"
-          />
-
+      <div className="flex items-center justify-center gap-1">
+        <span
+          className={
+            expanded
+              ? ""
+              : "max-w-[9ch] overflow-hidden text-ellipsis whitespace-nowrap"
+          }
+        >
+          {text}
+        </span>
+        {tooLong && (
           <button
-            onClick={() => { setQ(""); setFilterType("전체"); setFilterValue(""); setStartDate(""); setEndDate(""); }}
-            className="ml-auto bg-gray-200 px-3 py-1 rounded"
+            className="text-[11px] underline text-blue-600"
+            onClick={() =>
+              setExpandedAddr((p) => ({ ...p, [key]: !expanded }))
+            }
           >
-            초기화
+            {expanded ? "접기" : "더보기"}
           </button>
-
-          {/* 편집/삭제/엑셀 */}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => { setEditMode((v)=>!v); setDeleteMode(false); }}
-              className={`px-3 py-1 rounded ${editMode ? "bg-blue-600 text-white" : "bg-gray-200"}`}
-            >
-              수정
-            </button>
-            <button
-              onClick={() => { setDeleteMode((v)=>!v); setEditMode(false); clearSelect(); }}
-              className={`px-3 py-1 rounded ${deleteMode ? "bg-red-600 text-white" : "bg-gray-200"}`}
-            >
-              삭제
-            </button>
-            {deleteMode && (
-              <>
-                <button onClick={selectAll} className="px-3 py-1 rounded border">전체선택</button>
-                <button onClick={clearSelect} className="px-3 py-1 rounded border">선택해제</button>
-                <button onClick={deleteSelected} className="px-3 py-1 rounded bg-red-600 text-white">선택삭제</button>
-              </>
-            )}
-            {editMode && (
-              <>
-                <button onClick={saveSelectedEdits} className="px-3 py-1 rounded bg-emerald-600 text-white">선택저장</button>
-                <button onClick={saveAllEdits} className="px-3 py-1 rounded bg-emerald-700 text-white">전체저장</button>
-              </>
-            )}
-            <button onClick={exportExcel} className="px-3 py-1 rounded border">엑셀다운</button>
-          </div>
-        </div>
-
-        {/* 좌우 스크롤 안내 */}
-        <div className="w-full bg-blue-600/90 text-white text-xs px-3 py-1 rounded mb-2">
-          👉 좌우 스크롤: <b>Shift</b> + 마우스 휠 / 터치패드 제스처
-        </div>
-
-        {/* 테이블 */}
-        <div className="overflow-x-auto">
-          <table className="min-w-[2000px] text-sm border">
-            <thead>
-              <tr>
-                {deleteMode && <th className={head}>선택</th>}
-                {[
-                  "순번","등록일","상차일","상차시간","하차일","하차시간",
-                  "거래처명","상차지명","상차지주소","하차지명","하차지주소","화물내용",
-                  "차량종류","차량톤수","차량번호","이름","전화번호","배차상태",
-                  "청구운임","기사운임","수수료","지급방식","배차방식","메모","첨부","공유"
-                ].map((h) => <th key={h} className={head}>{h}</th>)}
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.length === 0 && (
-                <tr><td className="text-center text-gray-500 py-6" colSpan={deleteMode? 27:26}>📭 조건에 맞는 데이터가 없습니다.</td></tr>
-              )}
-              {filtered.map((r, idx) => {
-                const id = r._id || `${idx}`;
-                const sale = toInt(r.청구운임);
-                const drv  = toInt(r.기사운임);
-                const fee  = sale - drv;
-                const cnt  = attachCount[r._id] ?? 0;
-
-                const val = (k) => (editedRows[id]?.[k] ?? r[k] ?? "");
-                const textCell = (k, extra="") => editMode
-                  ? <input className={`border rounded px-2 py-1 w-full ${extra}`} value={val(k)} onChange={(e)=>changeCell(id,k,e.target.value)} />
-                  : <span>{r[k] || ""}</span>;
-                const numCell = (k) => editMode
-                  ? <input className="border rounded px-2 py-1 w-full text-right" value={val(k)} onChange={(e)=>changeCell(id,k, e.target.value.replace(/[^\d-]/g,""))} />
-                  : <span>{toInt(r[k]).toLocaleString()}</span>;
-                const selCell = (k, opts) => editMode
-                  ? (
-                    <select className="border rounded px-2 py-1 w-full" value={val(k)} onChange={(e)=>changeCell(id,k,e.target.value)}>
-                      <option value="">선택 ▾</option>
-                      {opts.map(v => <option key={v} value={v}>{v}</option>)}
-                    </select>
-                  ) : <span>{r[k] || ""}</span>;
-
-                return (
-                  <tr key={id} className={idx % 2 ? "bg-gray-50" : ""}>
-                    {deleteMode && (
-                      <td className={cell}>
-                        <input type="checkbox" checked={selected.has(id)} onChange={()=>toggleSelect(id)}/>
-                      </td>
-                    )}
-                    <td className={`${cell} w-[50px]`}>{idx + 1}</td>
-                    <td className={cell}>{textCell("등록일")}</td>
-                    <td className={cell}>{textCell("상차일")}</td>
-                    <td className={cell}>{textCell("상차시간")}</td>
-                    <td className={cell}>{textCell("하차일")}</td>
-                    <td className={cell}>{textCell("하차시간")}</td>
-
-                    <td className={cell}>{textCell("거래처명")}</td>
-                    <td className={cell}>{textCell("상차지명")}</td>
-
-                    {/* ✅ 상차지주소: 9글자 + 더보기/접기 (보기모드에서만) */}
-                    <td className={cell}>
-                      {editMode
-                        ? <input className="border rounded px-2 py-1 w-full" value={val("상차지주소")} onChange={(e)=>changeCell(id,"상차지주소",e.target.value)} />
-                        : <AddressCell id={id} field="상차지주소" value={r.상차지주소} />
-                      }
-                    </td>
-
-                    <td className={cell}>{textCell("하차지명")}</td>
-
-                    {/* ✅ 하차지주소: 9글자 + 더보기/접기 (보기모드에서만) */}
-                    <td className={cell}>
-                      {editMode
-                        ? <input className="border rounded px-2 py-1 w-full" value={val("하차지주소")} onChange={(e)=>changeCell(id,"하차지주소",e.target.value)} />
-                        : <AddressCell id={id} field="하차지주소" value={r.하차지주소} />
-                      }
-                    </td>
-
-                    <td className={cell}>{textCell("화물내용")}</td>
-
-                    <td className={cell}>{textCell("차량종류")}</td>
-                    <td className={cell}>{textCell("차량톤수")}</td>
-                    <td className={cell}>{textCell("차량번호")}</td>
-                    <td className={cell}>{textCell("이름")}</td>
-                    <td className={cell}>{textCell("전화번호")}</td>
-
-                    <td className={cell}>
-                      {editMode
-                        ? selCell("배차상태", ["배차중","배차완료","미배차"])
-                        : <StatusBadge s={r.배차상태} />
-                      }
-                    </td>
-
-                    <td className={`${cell} text-right pr-2`}>{isAdmin ? numCell("청구운임") : (sale.toLocaleString())}</td>
-                    <td className={`${cell} text-right pr-2`}>{isAdmin ? numCell("기사운임") : (drv.toLocaleString())}</td>
-                    <td className={`${cell} text-right pr-2 ${ (editMode ? toInt(val("청구운임")) - toInt(val("기사운임")) : fee) < 0 ? "text-red-500" : ""}`}>
-                      {(editMode ? (toInt(val("청구운임")) - toInt(val("기사운임"))) : fee).toLocaleString()}
-                    </td>
-
-                    <td className={cell}>
-                      {editMode ? selCell("지급방식", PAY_TYPES) : (r.지급방식 || "")}
-                    </td>
-                    <td className={cell}>
-                      {editMode ? selCell("배차방식", DISPATCH_TYPES) : (r.배차방식 || "")}
-                    </td>
-                    <td className={cell}>{textCell("메모")}</td>
-
-                    {/* 📎 첨부 */}
-                    <td className={cell}>
-                      <button
-                        title="첨부"
-                        className="px-2 py-0.5 rounded border hover:bg-gray-100 text-sm"
-                        onClick={()=>openAttachModal(r)}
-                      >
-                        📎 {cnt}
-                      </button>
-                    </td>
-                    {/* 📨 공유 */}
-                    <td className={cell}>
-                      <button
-                        title="공유 (카톡/복사)"
-                        className="px-2 py-0.5 rounded bg-blue-600 text-white hover:bg-blue-700 text-sm"
-                        onClick={()=>shareDispatch(r)}
-                      >
-                        📨
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        )}
       </div>
     );
   };
+
+  // ================================
+  // 테이블 스타일
+  // ================================
+  const head =
+    "border px-2 py-2 bg-gray-100 text-center whitespace-nowrap";
+  const cell =
+    "border px-2 py-1 text-center whitespace-nowrap align-middle";
+
+  // ================================
+  // 렌더링
+  // ================================
+  // 엑셀 다운로드
+const exportExcel = () => {
+  try {
+    const rows = filtered.map(r => ({
+      순번: r.순번, 등록일: r.등록일, 상차일: r.상차일, 상차시간: r.상차시간,
+      하차일: r.하차일, 하차시간: r.하차시간, 거래처명: r.거래처명,
+      상차지명: r.상차지명, 상차지주소: r.상차지주소, 하차지명: r.하차지명, 하차지주소: r.하차지주소,
+      화물내용: r.화물내용, 차량종류: r.차량종류, 차량톤수: r.차량톤수,
+      차량번호: r.차량번호, 이름: r.이름, 전화번호: r.전화번호,
+      배차상태: r.배차상태, 청구운임: r.청구운임, 기사운임: r.기사운임, 수수료: r.수수료,
+      지급방식: r.지급방식, 배차방식: r.배차방식, 메모: r.메모,
+    }));
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, ws, "실시간배차현황");
+    XLSX.writeFile(wb, `실시간배차현황_${_todayStr()}.xlsx`);
+  } catch (e) {
+    console.error(e);
+    alert("엑셀 내보내기 중 오류가 발생했습니다.");
+  }
+};
+
+  return (
+    <div className="mt-8">
+
+      {/* ⚠ 경고창 */}
+      {warningList.length > 0 && (
+        <div className="bg-red-100 border border-red-400 text-red-800 p-3 rounded mb-3 text-sm">
+          <b>⚠ 배차 경고!</b> 상차 2시간 이하 남았는데{" "}
+          <b>{warningList.length}</b>건이 미배차 상태입니다.
+          <ul className="list-disc ml-5 mt-1">
+            {warningList.map((r) => (
+              <li key={r._id}>
+                [{r.상차일} {r.상차시간}] {r.상차지명} (거래처: {r.거래처명})
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* KPI */}
+      <div className="flex flex-wrap items-center gap-5 text-sm mb-3 mt-1">
+        <div>총 <b>{kpi.cnt}</b>건</div>
+        <div>청구 <b className="text-blue-600">{kpi.sale.toLocaleString()}</b>원</div>
+        <div>기사 <b className="text-green-600">{kpi.drv.toLocaleString()}</b>원</div>
+        <div>수수료 <b className="text-amber-600">{kpi.fee.toLocaleString()}</b>원</div>
+      </div>
+
+      {/* 필터바 */}
+      <div className="flex flex-wrap items-center gap-2 mb-2">
+        <select
+          className="border p-1 rounded text-sm"
+          value={filterType}
+          onChange={(e) => {
+            setFilterType(e.target.value);
+            setFilterValue("");
+          }}
+        >
+          <option value="전체">필터 없음</option>
+          <option value="거래처명">거래처명</option>
+          <option value="상차지명">상차지명</option>
+          <option value="하차지명">하차지명</option>
+          <option value="차량번호">차량번호</option>
+        </select>
+
+        {filterType !== "전체" && (
+          <input
+            className="border p-1 rounded text-sm"
+            placeholder={`${filterType} 검색`}
+            value={filterValue}
+            onChange={(e) => setFilterValue(e.target.value)}
+          />
+        )}
+
+        <div className="flex items-center gap-1 text-sm">
+          <input
+            type="date"
+            className="border p-1 rounded"
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+          />
+          <span>~</span>
+          <input
+            type="date"
+            className="border p-1 rounded"
+            value={endDate}
+            onChange={(e) => setEndDate(e.target.value)}
+          />
+        </div>
+
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="검색..."
+          className="border p-2 rounded w-56"
+        />
+
+        <button
+          onClick={() => {
+            setQ("");
+            setFilterType("전체");
+            setFilterValue(""); 
+            setStartDate("");
+            setEndDate("");
+          }}
+          className="ml-auto bg-gray-200 px-3 py-1 rounded"
+        >
+          초기화
+        </button>
+
+        {/* 편집/삭제/엑셀 */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              setEditMode((v) => !v);
+              setDeleteMode(false);
+            }}
+            className={`px-3 py-1 rounded ${
+              editMode ? "bg-blue-600 text-white" : "bg-gray-200"
+            }`}
+          >
+            수정
+          </button>
+
+          <button
+            onClick={() => {
+              setDeleteMode((v) => !v);
+              setEditMode(false);
+              clearSelect();
+            }}
+            className={`px-3 py-1 rounded ${
+              deleteMode ? "bg-red-600 text-white" : "bg-gray-200"
+            }`}
+          >
+            삭제
+          </button>
+
+          {deleteMode && (
+            <>
+              <button onClick={selectAll} className="px-3 py-1 rounded border">
+                전체선택
+              </button>
+              <button onClick={clearSelect} className="px-3 py-1 rounded border">
+                선택해제
+              </button>
+              <button
+                onClick={deleteSelected}
+                className="px-3 py-1 rounded bg-red-600 text-white"
+              >
+                선택삭제
+              </button>
+            </>
+          )}
+
+          {editMode && (
+            <>
+              <button
+                onClick={saveSelectedEdits}
+                className="px-3 py-1 rounded bg-emerald-600 text-white"
+              >
+                선택저장
+              </button>
+              <button
+                onClick={saveAllEdits}
+                className="px-3 py-1 rounded bg-emerald-700 text-white"
+              >
+                전체저장
+              </button>
+            </>
+          )}
+
+          <button
+            onClick={exportExcel}
+            className="px-3 py-1 rounded border"
+          >
+            엑셀다운
+          </button>
+        </div>
+      </div>
+
+      {/* 안내 */}
+      <div className="w-full bg-blue-600/90 text-white text-xs px-3 py-1 rounded mb-2">
+        👉 좌우 스크롤: <b>Shift</b> + 마우스 휠 / 터치패드 제스처
+      </div>
+
+      {/* 테이블 */}
+      <div className="overflow-x-auto">
+        <table className="min-w-[2000px] text-sm border">
+          <thead>
+            <tr>
+              {deleteMode && <th className={head}>선택</th>}
+              {[
+                "순번","등록일","상차일","상차시간","하차일","하차시간",
+                "거래처명","상차지명","상차지주소","하차지명","하차지주소",
+                "화물내용","차량종류","차량톤수",
+                "차량번호","이름","전화번호",
+                "배차상태","청구운임","기사운임","수수료",
+                "지급방식","배차방식","메모","첨부","공유"
+              ].map((h)=>(
+                <th key={h} className={head}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+
+          <tbody>
+            {filtered.length === 0 && (
+              <tr>
+                <td
+                  className="text-center text-gray-500 py-6"
+                  colSpan={deleteMode ? 27 : 26}
+                >
+                  📭 조건에 맞는 데이터가 없습니다.
+                </td>
+              </tr>
+            )}
+
+            {filtered.map((r, idx) => {
+              const id = r._id;
+              const sale = toInt(r.청구운임);
+              const drv = toInt(r.기사운임);
+              const fee = sale - drv;
+
+              const val = (k) => editedRows[id]?.[k] ?? r[k] ?? "";
+
+              const textCell = (k, extra = "") =>
+                editMode ? (
+                  <input
+                    className={`border rounded px-2 py-1 w-full ${extra}`}
+                    value={val(k)}
+                    onChange={(e) =>
+                      changeCell(id, k, e.target.value)
+                    }
+                  />
+                ) : (
+                  <span>{r[k] || ""}</span>
+                );
+
+              const numCell = (k) =>
+                editMode ? (
+                  <input
+                    className="border rounded px-2 py-1 w-full text-right"
+                    value={val(k)}
+                    onChange={(e) =>
+                      changeCell(
+                        id,
+                        k,
+                        e.target.value.replace(/[^\d-]/g, "")
+                      )
+                    }
+                  />
+                ) : (
+                  <span>{toInt(r[k]).toLocaleString()}</span>
+                );
+
+              const selCell = (k, opts) =>
+                editMode ? (
+                  <select
+                    className="border rounded px-2 py-1 w-full"
+                    value={val(k)}
+                    onChange={(e) => changeCell(id, k, e.target.value)}
+                  >
+                    <option value="">선택 ▾</option>
+                    {opts.map((v) => (
+                      <option key={v} value={v}>
+                        {v}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <span>{r[k] || ""}</span>
+                );
+
+              return (
+                <tr key={id} className={idx % 2 ? "bg-gray-50" : ""}>
+                  {deleteMode && (
+                    <td className={cell}>
+                      <input
+                        type="checkbox"
+                        checked={selected.has(id)}
+                        onChange={() => toggleSelect(id)}
+                      />
+                    </td>
+                  )}
+
+                  <td className={`${cell} w-[50px]`}>{idx + 1}</td>
+                  <td className={cell}>{textCell("등록일")}</td>
+                  <td className={cell}>{textCell("상차일")}</td>
+                  <td className={cell}>{textCell("상차시간")}</td>
+                  <td className={cell}>{textCell("하차일")}</td>
+                  <td className={cell}>{textCell("하차시간")}</td>
+
+                  <td className={cell}>{textCell("거래처명")}</td>
+                  <td className={cell}>{textCell("상차지명")}</td>
+
+                  <td className={cell}>
+                    {editMode ? (
+                      <input
+                        className="border rounded px-2 py-1 w-full"
+                        value={val("상차지주소")}
+                        onChange={(e) =>
+                          changeCell(id, "상차지주소", e.target.value)
+                        }
+                      />
+                    ) : (
+                      <AddressCell
+                        id={id}
+                        field="상차지주소"
+                        value={r.상차지주소}
+                      />
+                    )}
+                  </td>
+
+                  <td className={cell}>{textCell("하차지명")}</td>
+
+                  <td className={cell}>
+                    {editMode ? (
+                      <input
+                        className="border rounded px-2 py-1 w-full"
+                        value={val("하차지주소")}
+                        onChange={(e) =>
+                          changeCell(id, "하차지주소", e.target.value)
+                        }
+                      />
+                    ) : (
+                      <AddressCell
+                        id={id}
+                        field="하차지주소"
+                        value={r.하차지주소}
+                      />
+                    )}
+                  </td>
+
+                  <td className={cell}>{textCell("화물내용")}</td>
+
+                  <td className={cell}>{textCell("차량종류")}</td>
+                  <td className={cell}>{textCell("차량톤수")}</td>
+                  <td className={cell}>{textCell("차량번호")}</td>
+                  <td className={cell}>{textCell("이름")}</td>
+                  <td className={cell}>{textCell("전화번호")}</td>
+
+                  <td className={cell}>
+                    {editMode
+                      ? selCell("배차상태", ["배차중", "배차완료", "미배차"])
+                      : r.배차상태}
+                  </td>
+
+                  <td className={`${cell} text-right pr-2`}>
+                    {numCell("청구운임")}
+                  </td>
+                  <td className={`${cell} text-right pr-2`}>
+                    {numCell("기사운임")}
+                  </td>
+                  <td
+                    className={`${cell} text-right pr-2 ${
+                      fee < 0 ? "text-red-500" : ""
+                    }`}
+                  >
+                    {(fee).toLocaleString()}
+                  </td>
+
+                  <td className={cell}>
+                    {editMode ? selCell("지급방식", PAY_TYPES) : r.지급방식}
+                  </td>
+
+                  <td className={cell}>
+                    {editMode ? selCell("배차방식", DISPATCH_TYPES) : r.배차방식}
+                  </td>
+
+                  <td className={cell}>{textCell("메모")}</td>
+
+                  {/* 첨부 */}
+                  <td className={cell}>
+                    <button
+                      className="px-2 py-0.5 rounded border hover:bg-gray-100 text-sm"
+                      onClick={() => openAttachModal(r)}
+                    >
+                      📎 {attachCount[r._id] ?? 0}
+                    </button>
+                  </td>
+
+                  {/* 공유 */}
+                  <td className={cell}>
+                    <button
+                      className="px-2 py-0.5 rounded bg-blue-600 text-white hover:bg-blue-700 text-sm"
+                      onClick={() => shareDispatch(r)}
+                    >
+                      📨
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
 
   // ------------------ 대용량 업로드 ------------------
   const [bulkOpen, setBulkOpen] = React.useState(false);
@@ -1857,7 +2078,7 @@ const handleCarNoEnter = (value) => {
   );
 }
 // ===================== DispatchApp.jsx (PART 3/8) — END =====================
-// ===================== DispatchApp.jsx (PART 4/8 — 실시간배차현황: 필터바 복원 + 자동배차완료상단) =====================
+// ===================== DispatchApp.jsx (PART 4/8 — START) =====================
 function RealtimeStatus({
   dispatchData,
   drivers,
@@ -1876,41 +2097,41 @@ function RealtimeStatus({
   const [selectedEditMode, setSelectedEditMode] = React.useState(false);
   const [edited, setEdited] = React.useState({});
 
-  // ✅ 삭제항목 재등장 방지용
+  // 삭제된 건 재등장 방지
   const [deletedIds, setDeletedIds] = React.useState(() => new Set());
-
-  // ✅ 차량정보 입력 시 잠깐 반짝(차량번호/이름/전화번호만)
+  // 차량번호 자동매칭 하이라이트
   const [highlightIds, setHighlightIds] = React.useState(() => new Set());
-
-  const [savedHighlightIds, setSavedHighlightIds] = React.useState(() => new Set());
-
-  const [isRegistering, setIsRegistering] = React.useState(false);
-
-  React.useEffect(() => {
-  const base = (dispatchData || []).filter(
-    (r) => !!r && !deletedIds.has(r._id)
+  // 저장 완료된 행 하이라이트
+  const [savedHighlightIds, setSavedHighlightIds] = React.useState(
+    () => new Set()
   );
+  // 신규 기사 등록 중 중복 방지
+  const [isRegistering, setIsRegistering] = React.useState(false);
+  // 주소 더보기 상태
+  const [expandedAddr, setExpandedAddr] = React.useState({});
+  // 상차 2시간 이내 + 차량번호 없음 경고 리스트
+  const [warningList, setWarningList] = React.useState([]);
 
-  setRows((prev) => {
-    // 기존 prev 에서 존재하던 id 순서를 유지한 채로
-    const map = new Map(base.map((r) => [r._id, r]));
+  // 🔥 Firestore → rows 동기화 + 삭제건 제거 유지
+  React.useEffect(() => {
+    const base = (dispatchData || []).filter(
+      (r) => !!r && !deletedIds.has(r._id)
+    );
 
-    const merged = prev
-      .filter((r) => map.has(r._id)) // Firestore에서 존재하는 항목만
-      .map((r) => ({
-        ...r,
-        ...map.get(r._id), // Firestore 최신 데이터 적용 (정렬은 유지)
-      }));
+    setRows((prev) => {
+      const map = new Map(base.map((r) => [r._id, r]));
 
-    const newOnes = base.filter((r) => !prev.some((p) => p._id === r._id));
+      const merged = prev
+        .filter((r) => map.has(r._id))
+        .map((r) => ({ ...r, ...map.get(r._id) }));
 
-    // 🔥 prev 정렬 우선 → 신규건은 뒤에 추가
-    return [...merged, ...newOnes];
-  });
-}, [dispatchData, deletedIds]);
+      const newOnes = base.filter((r) => !prev.some((p) => p._id === r._id));
 
+      return [...merged, ...newOnes];
+    });
+  }, [dispatchData, deletedIds]);
 
-  // ✅ 한국시간(KST)
+  // 한국시간 (KST)
   const todayKST = () => {
     const now = new Date();
     now.setHours(now.getHours() + 9);
@@ -1932,7 +2153,7 @@ function RealtimeStatus({
     []
   );
 
-  // 항상 최신 drivers 로 map 생성
+  // 최신 driverMap
   const driverMap = (() => {
     const m = new Map();
     (drivers || []).forEach((d) => {
@@ -1947,17 +2168,14 @@ function RealtimeStatus({
   // ========================
   const handleCarInput = async (id, rawVal, keyEvent) => {
     if (keyEvent && keyEvent.key !== "Enter") return;
-
-      // 🔥 신규 기사 등록 중이면 중복 실행 금지
-  if (isRegistering) return;
+    if (isRegistering) return; // 🔥 신규 등록 중일 때 중복 실행 방지
 
     const v = normalizePlate(rawVal);
     const idx = rows.findIndex((r) => r._id === id);
     if (idx === -1) return;
-
     const oldRow = rows[idx];
 
-    // ─── 차량번호 삭제 시 리셋 ───
+    // ① 차량번호 삭제 → 리셋
     if (!v) {
       const updated = {
         차량번호: "",
@@ -1972,7 +2190,7 @@ function RealtimeStatus({
       return;
     }
 
-    // ─── 1) 기존 기사 자동 매칭 ───
+    // ② 기존 기사 자동 매칭
     const match = driverMap.get(v);
     if (match) {
       const isStatusChanging = oldRow.배차상태 !== "배차완료";
@@ -1988,7 +2206,8 @@ function RealtimeStatus({
         const updatedRows = prev.map((r) =>
           r._id === id ? { ...r, ...updated } : r
         );
-        // 🔼 방금 배차완료 된 건을 배차완료 그룹 맨 위로
+
+        // 방금 완료된 건을 최상단으로 이동
         const target = updatedRows.find((r) => r._id === id);
         const done = updatedRows.filter(
           (r) => r._id !== id && r.배차상태 === "배차완료"
@@ -1999,13 +2218,14 @@ function RealtimeStatus({
 
       await patchDispatch?.(id, updated);
 
-      // 🔆 1초 동안만 차량정보 3칸 하이라이트
+      // 🔆 차량번호/이름/전화번호 3칸 하이라이트 (1초)
       if (isStatusChanging) {
         setHighlightIds((prev) => {
           const next = new Set(prev);
           next.add(id);
           return next;
         });
+
         setTimeout(() => {
           setHighlightIds((prev) => {
             const next = new Set(prev);
@@ -2018,78 +2238,92 @@ function RealtimeStatus({
       return;
     }
 
-    // ------------------------------
-// 2) 신규 기사 등록
-// ------------------------------
-const ok = confirm(`차량번호 [${rawVal}] 신규 기사로 등록할까요?`);
-if (!ok) return;
+    // ③ 신규 기사 등록
+    const ok = confirm(`차량번호 [${rawVal}] 신규 기사로 등록할까요?`);
+    if (!ok) return;
 
-setIsRegistering(true);  // 🔥 잠금 걸기
+    setIsRegistering(true); // 🔥 중복 방지 ON
 
-const 입력이름 = prompt("신규 기사 이름을 입력하세요 (예: 홍길동)");
-if (!입력이름) {
-  setIsRegistering(false);
-  return;
-}
+    const 입력이름 = prompt("신규 기사 이름을 입력하세요 (예: 홍길동)");
+    if (!입력이름) {
+      setIsRegistering(false);
+      return;
+    }
 
-const 입력전화 = prompt("신규 기사 전화번호를 입력하세요 (예: 010-1234-5678)");
-if (!입력전화) {
-  setIsRegistering(false);
-  return;
-}
+    const 입력전화 = prompt("신규 기사 전화번호를 입력하세요 (예: 010-1234-5678)");
+    if (!입력전화) {
+      setIsRegistering(false);
+      return;
+    }
 
-const newDriver = { 이름: 입력이름, 차량번호: rawVal, 전화번호: 입력전화 };
+    const newDriver = { 이름: 입력이름, 차량번호: rawVal, 전화번호: 입력전화 };
+    await upsertDriver?.(newDriver);
 
-await upsertDriver?.(newDriver);
+    const updated = {
+      차량번호: rawVal,
+      이름: 입력이름,
+      전화번호: 입력전화,
+      배차상태: "배차완료",
+    };
 
-const updated = {
-  차량번호: rawVal,
-  이름: 입력이름,
-  전화번호: 입력전화,
-  배차상태: "배차완료",
-  _highlight: true,
-};
+    setRows((prev) => {
+      const next = prev.map((r) => (r._id === id ? { ...r, ...updated } : r));
+      const done = next.filter((r) => r.배차상태 === "배차완료");
+      const wait = next.filter((r) => r.배차상태 !== "배차완료");
+      return [...done, ...wait];
+    });
 
-// 🔥 로컬 반영
-setRows((prev) => {
-  const next = prev.map((r) => (r._id === id ? { ...r, ...updated } : r));
-  const done = next.filter((r) => r.배차상태 === "배차완료");
-  const wait = next.filter((r) => r.배차상태 !== "배차완료");
-  return [...done, ...wait];
-});
+    await patchDispatch?.(id, updated);
 
-// 🔥 DB 반영
-await patchDispatch?.(id, updated);
+    // 하이라이트 1초
+    setHighlightIds((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+    setTimeout(() => {
+      setHighlightIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }, 1000);
 
-// 🔥 하이라이트 제거
-setTimeout(() => {
-  setRows((prev) =>
-    prev.map((r) => (r._id === id ? { ...r, _highlight: false } : r))
-  );
-}, 1000);
+    setIsRegistering(false); // 중복 방지 해제
 
-setIsRegistering(false); // 🔥 잠금 해제
-
-alert("신규 기사 등록 완료");
-
+    alert("신규 기사 등록 완료");
   };
 
-  // ✅ 당일 상차건 + 배차상태 정렬
+  // ========================
+  // 📌 필터 + KPI + 정렬
+  // ========================
   const filtered = React.useMemo(() => {
     let data = [...rows];
     const today = todayKST();
+
+    // 날짜 필터
+    const isInRange = (date, start, end) => {
+      if (!date) return false;
+      const d = new Date(date).getTime();
+      const s = start ? new Date(start).getTime() : -Infinity;
+      const e = end ? new Date(end).getTime() : Infinity;
+      return d >= s && d <= e;
+    };
+
     if (!startDate && !endDate) {
       data = data.filter((r) => (r.상차일 || "") === today);
     } else {
-      if (startDate)
-        data = data.filter((r) => (r.상차일 || "") >= startDate);
-      if (endDate) data = data.filter((r) => (r.상차일 || "") <= endDate);
+      data = data.filter((r) => isInRange(r.상차일, startDate, endDate));
     }
 
-    if (filterType && filterValue)
+    // 개별 필드 검색 필터
+    if (filterType && filterValue) {
       data = data.filter((r) =>
         String(r[filterType] || "").includes(filterValue)
       );
+    }
+
+    // 통합 검색
     if (q.trim()) {
       const lower = q.toLowerCase();
       data = data.filter((r) =>
@@ -2099,16 +2333,15 @@ alert("신규 기사 등록 완료");
       );
     }
 
-    // 상태 정렬: 배차중 ↑, 배차완료 ↓
+    // 배차중 → 배차완료 순 정렬
     const order = { 배차중: 0, 배차완료: 1 };
     const indexMap = new Map(rows.map((r, i) => [r._id, i]));
+
     data.sort((a, b) => {
       const oa = order[a.배차상태] ?? 99;
       const ob = order[b.배차상태] ?? 99;
-      if (oa !== ob) return oa - ob;
-      const ia = indexMap.get(a._id) ?? 0;
-      const ib = indexMap.get(b._id) ?? 0;
-      return ia - ib;
+      if (oa !== ob) return oa - ob; // 상태 우선
+      return (indexMap.get(a._id) ?? 0) - (indexMap.get(b._id) ?? 0); // 기존 순서 유지
     });
 
     return data;
@@ -2120,82 +2353,75 @@ alert("신규 기사 등록 완료");
     return { cnt: filtered.length, sale, drv, fee: sale - drv };
   }, [filtered]);
 
+  // =============================
+  // ⚠ 상차 2시간 전 + 차량번호 없음 경고
+  // =============================
+  React.useEffect(() => {
+    if (!rows.length) {
+      setWarningList([]);
+      return;
+    }
+
+    const now = new Date();
+    const temp = [];
+
+    rows.forEach((r) => {
+      if (r.차량번호 && String(r.차량번호).trim() !== "") return;
+      if (!r.상차일 || !r.상차시간) return;
+
+      try {
+        const timeStr = String(r.상차시간).padStart(5, "0");
+        const dt = new Date(`${r.상차일}T${timeStr}:00`);
+        if (isNaN(dt.getTime())) return;
+
+        const diff = dt.getTime() - now.getTime();
+        if (diff > 0 && diff <= 2 * 60 * 60 * 1000) {
+          temp.push(r);
+        }
+      } catch (e) {
+        // 무시
+      }
+    });
+
+    setWarningList(temp);
+  }, [rows]);
+
+  // ========================
+  // 📌 체크박스 선택
+  // ========================
   const toggleSelect = (id) =>
-    setSelected((p) =>
-      p.includes(id) ? p.filter((x) => x !== id) : [...p, id]
+    setSelected((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
     );
 
+  // ========================
+  // 📌 선택 삭제
+  // ========================
   const handleDeleteSelected = async () => {
     if (!selected.length) return alert("삭제할 항목을 선택하세요.");
     if (!confirm(`${selected.length}건을 삭제하시겠습니까?`)) return;
 
     for (const id of selected) {
       try {
-        await removeDispatch(id); // ✅ DB에서도 삭제
-      } catch (e) {
-        console.error("삭제 실패:", id, e);
-      }
+        await removeDispatch(id);
+      } catch (e) {}
     }
 
-    // ✅ 화면에서도 즉시 반영
     setRows((prev) => prev.filter((r) => !selected.includes(r._id)));
 
-    // ✅ 재등장 방지 메모
     setDeletedIds((prev) => {
       const next = new Set(prev);
       selected.forEach((id) => next.add(id));
       return next;
     });
 
-    alert("✅ 선택 항목 삭제 완료");
+    alert("삭제 완료");
     setSelected([]);
   };
 
-  const handleExcel = () => {
-    if (!filtered.length) return alert("내보낼 데이터가 없습니다.");
-    const headers = [
-      "순번",
-      "상차일",
-      "거래처명",
-      "상차지명",
-      "하차지명",
-      "화물내용",
-      "차량번호",
-      "이름",
-      "핸드폰번호",
-      "청구운임",
-      "기사운임",
-      "수수료",
-      "지급방식",
-      "배차방식",
-    ];
-    const comma = (num) => {
-      const n = parseInt(String(num ?? "0").replace(/[^\d-]/g, ""), 10);
-      return isNaN(n) ? "" : n.toLocaleString();
-    };
-    const rowsForExcel = filtered.map((r, i) => ({
-      순번: i + 1,
-      상차일: r.상차일 || "",
-      거래처명: r.거래처명 || "",
-      상차지명: r.상차지명 || "",
-      하차지명: r.하차지명 || "",
-      화물내용: r.화물내용 || "",
-      차량번호: r.차량번호 || "",
-      이름: r.이름 || "",
-      핸드폰번호: r.전화번호 || "",
-      청구운임: comma(r.청구운임),
-      기사운임: comma(r.기사운임),
-      수수료: comma(toInt(r.청구운임) - toInt(r.기사운임)),
-      지급방식: r.지급방식 || "",
-      배차방식: r.배차방식 || "",
-    }));
-    const ws = XLSX.utils.json_to_sheet(rowsForExcel, { header: headers });
-    XLSX.utils.sheet_add_aoa(ws, [headers], { origin: "A1" });
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "실시간배차현황");
-    XLSX.writeFile(wb, "실시간배차현황.xlsx");
-  };
-
+  // ========================
+  // 📌 선택수정 저장 (노란불 1초)
+  // ========================
   const handleEditChange = (id, key, value) => {
     setEdited((prev) => ({
       ...prev,
@@ -2203,69 +2429,258 @@ alert("신규 기사 등록 완료");
     }));
   };
 
-const handleSaveSelected = async () => {
-  const ids = selected.length ? selected : Object.keys(edited);
-  if (!ids.length) return alert("변경된 내용이 없습니다.");
+  const handleSaveSelected = async () => {
+    const ids = selected.length ? selected : Object.keys(edited);
+    if (!ids.length) return alert("변경된 내용이 없습니다.");
 
-  for (const id of ids) {
-    const updates = edited[id];
-    if (updates && Object.keys(updates).length) {
-      try {
-        await patchDispatch?.(id, updates);
-      } catch (e) {
-        console.error("patchDispatch error:", id, updates, e);
+    for (const id of ids) {
+      const changes = edited[id];
+      if (changes && Object.keys(changes).length) {
+        await patchDispatch?.(id, changes);
       }
     }
-  }
 
-  // 🔥 저장된 행 하이라이트 효과
-  setSavedHighlightIds(prev => {
-    const next = new Set(prev);
-    ids.forEach(id => next.add(id));
-    return next;
-  });
-
-  // 🔥 1초 뒤 자동 제거
-  setTimeout(() => {
-    setSavedHighlightIds(prev => {
+    // 🔥 저장된 행 하이라이트
+    setSavedHighlightIds((prev) => {
       const next = new Set(prev);
-      ids.forEach(id => next.delete(id));
+      ids.forEach((id) => next.add(id));
       return next;
     });
-  }, 1000);
 
-  alert("✅ 저장 완료");
-  setEdited({});
-  setSelectedEditMode(false);
-};
+    setTimeout(() => {
+      setSavedHighlightIds((prev) => {
+        const next = new Set(prev);
+        ids.forEach((id) => next.delete(id));
+        return next;
+      });
+    }, 1000);
 
+    alert("저장 완료");
+    setEdited({});
+    setSelectedEditMode(false);
+  };
 
+  // ------------------------
+  // 📌 엑셀 다운로드 (테이블 컬럼 100% 동일 버전, 주소 컬럼 제외)
+  // ------------------------
+  const handleExcel = () => {
+    if (!filtered.length) return alert("내보낼 데이터가 없습니다.");
+
+    const headers = [
+      "순번",
+      "등록일",
+      "상차일",
+      "하차일",
+      "거래처명",
+      "상차지명",
+      "하차지명",
+      "화물내용",
+      "차량종류",
+      "차량톤수",
+      "차량번호",
+      "기사명",
+      "전화번호",
+      "배차상태",
+      "청구운임",
+      "기사운임",
+      "수수료",
+      "지급방식",
+      "배차방식",
+      "메모",
+    ];
+
+    const rowsForExcel = filtered.map((r, idx) => ({
+      순번: idx + 1,
+      등록일: r.등록일 || "",
+      상차일: r.상차일 || "",
+      하차일: r.하차일 || "",
+      거래처명: r.거래처명 || "",
+      상차지명: r.상차지명 || "",
+      하차지명: r.하차지명 || "",
+      화물내용: r.화물내용 || "",
+      차량종류: r.차량종류 || "",
+      차량톤수: r.차량톤수 || "",
+      차량번호: r.차량번호 || "",
+      기사명: r.이름 || "",
+      전화번호: r.전화번호 || "",
+      배차상태: r.배차상태 || "",
+      청구운임: formatComma(r.청구운임),
+      기사운임: formatComma(r.기사운임),
+      수수료: formatComma(toInt(r.청구운임) - toInt(r.기사운임)),
+      지급방식: r.지급방식 || "",
+      배차방식: r.배차방식 || "",
+      메모: r.메모 || "",
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(rowsForExcel, { header: headers });
+    XLSX.utils.sheet_add_aoa(ws, [headers], { origin: "A1" });
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "실시간배차현황");
+    XLSX.writeFile(wb, "실시간배차현황.xlsx");
+  };
+
+  // ------------------------
+  // 📌 수정 가능 컬럼
+  // ------------------------
   const canEdit = (key, id) => {
     if (!(selectedEditMode && selected.includes(id))) return false;
     const readOnly = ["등록일", "순번", "차량번호", "배차상태", "이름", "전화번호"];
     return !readOnly.includes(key);
   };
 
+  // ------------------------
+  // 📌 editableInput — 날짜/드롭다운 추가 버전
+  // ------------------------
+  const editableInput = (key, val, rowId) => {
+    if (!canEdit(key, rowId)) return val;
+
+    // 날짜 선택
+    if (key === "상차일" || key === "하차일") {
+      return (
+        <input
+          type="date"
+          className="border p-1 rounded w-full"
+          defaultValue={val || ""}
+          onChange={(e) => handleEditChange(rowId, key, e.target.value)}
+        />
+      );
+    }
+
+    // 지급방식 선택
+    if (key === "지급방식") {
+      return (
+        <select
+          className="border p-1 rounded w-full"
+          defaultValue={val || ""}
+          onChange={(e) => handleEditChange(rowId, key, e.target.value)}
+        >
+          <option value="">선택</option>
+          <option value="계산서">계산서</option>
+          <option value="착불">착불</option>
+          <option value="선불">선불</option>
+          <option value="손실">손실</option>
+          <option value="개인">개인</option>
+          <option value="기타">기타</option>
+        </select>
+      );
+    }
+
+    // 배차방식 선택
+    if (key === "배차방식") {
+      return (
+        <select
+          className="border p-1 rounded w-full"
+          defaultValue={val || ""}
+          onChange={(e) => handleEditChange(rowId, key, e.target.value)}
+        >
+          <option value="">선택</option>
+          <option value="24시">24시</option>
+          <option value="직접배차">직접배차</option>
+          <option value="인성">인성</option>
+          <option value="24(외주업체)">24(외주업체)</option>
+        </select>
+      );
+    }
+
+    // 기본 입력
+    return (
+      <input
+        type="text"
+        className="border p-1 rounded w-full"
+        defaultValue={val || ""}
+        onChange={(e) => handleEditChange(rowId, key, e.target.value)}
+      />
+    );
+  };
+
+  // 주소 더보기 렌더링
+  const renderAddrCell = (key, val, rowId) => {
+    if (canEdit(key, rowId)) {
+      return (
+        <input
+          type="text"
+          className="border p-1 rounded w-full"
+          defaultValue={val || ""}
+          onChange={(e) => handleEditChange(rowId, key, e.target.value)}
+        />
+      );
+    }
+
+    const text = String(val || "");
+    if (!text) return "";
+    const stateKey = `${rowId}_${key}`;
+    const isExpanded = !!expandedAddr[stateKey];
+
+    const display =
+      text.length <= 12 || isExpanded ? text : text.slice(0, 12) + "...";
+
+    return (
+      <div className="flex items-center gap-1">
+        <span className="whitespace-pre-line break-words">{display}</span>
+        {text.length > 12 && (
+          <button
+            type="button"
+            className="text-xs text-blue-600 underline"
+            onClick={() =>
+              setExpandedAddr((prev) => ({
+                ...prev,
+                [stateKey]: !prev[stateKey],
+              }))
+            }
+          >
+            {isExpanded ? "접기" : "더보기"}
+          </button>
+        )}
+      </div>
+    );
+  };
+
+  // ------------------------
+  // 📌 테이블 스타일
+  // ------------------------
   const head =
     "border px-2 py-2 bg-gray-100 text-center whitespace-nowrap";
   const cell =
     "border px-2 py-[2px] text-center align-middle whitespace-nowrap overflow-hidden text-ellipsis leading-tight";
-
-  // 주소 칸만 최소 너비
   const addrCell = `${cell} min-w-[80px] max-w-[160px]`;
 
+  // ------------------------
+  // 📌 렌더링
+  // ------------------------
   return (
     <div className="p-3 w-full">
       <h2 className="text-lg font-bold mb-2">실시간 배차현황</h2>
+
+      {/* ⚠ 2시간 내 미배차 경고 */}
+      {warningList.length > 0 && (
+        <div className="bg-red-100 border border-red-400 text-red-800 p-3 rounded mb-3 text-sm">
+          <b>⚠ 배차 경고!</b>{" "}
+          상차 2시간 이하 남았는데 차량번호가 없는 건이{" "}
+          <b>{warningList.length}</b>건 있습니다.
+          <ul className="list-disc ml-5 mt-1 space-y-0.5">
+            {warningList.map((r) => (
+              <li key={r._id}>
+                [{r.상차일} {r.상차시간}] {r.상차지명 || "-"} (거래처:{" "}
+                {r.거래처명 || "-"})
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* KPI */}
       <div className="flex flex-wrap items-center gap-5 text-sm mb-3 mt-1">
         <div>
           총 <b>{kpi.cnt}</b>건
         </div>
         <div>
-          청구 <b className="text-blue-600">{kpi.sale.toLocaleString()}</b>원
+          청구{" "}
+          <b className="text-blue-600">{kpi.sale.toLocaleString()}</b>원
         </div>
         <div>
-          기사 <b className="text-green-600">{kpi.drv.toLocaleString()}</b>원
+          기사{" "}
+          <b className="text-green-600">{kpi.drv.toLocaleString()}</b>원
         </div>
         <div>
           수수료{" "}
@@ -2276,25 +2691,29 @@ const handleSaveSelected = async () => {
         </div>
       </div>
 
-      {/* ✅ 필터바 */}
+      {/* 필터 */}
       <div className="flex flex-wrap items-center gap-2 mb-3">
         <select
           value={filterType}
           onChange={(e) => setFilterType(e.target.value)}
           className="border p-2 rounded"
         >
-          {["거래처명", "상차지명", "하차지명", "차량번호", "이름"].map((f) => (
-            <option key={f} value={f}>
-              {f}
-            </option>
-          ))}
+          {["거래처명", "상차지명", "하차지명", "차량번호", "이름"].map(
+            (f) => (
+              <option key={f} value={f}>
+                {f}
+              </option>
+            )
+          )}
         </select>
+
         <input
           value={filterValue}
           onChange={(e) => setFilterValue(e.target.value)}
           placeholder={`${filterType} 검색`}
           className="border p-2 rounded"
         />
+
         <input
           type="date"
           value={startDate}
@@ -2308,12 +2727,14 @@ const handleSaveSelected = async () => {
           onChange={(e) => setEndDate(e.target.value)}
           className="border p-2 rounded"
         />
+
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="통합 검색..."
           className="border p-2 rounded w-64"
         />
+
         <button
           onClick={() => {
             setFilterType("거래처명");
@@ -2340,18 +2761,21 @@ const handleSaveSelected = async () => {
         >
           선택수정
         </button>
+
         <button
           onClick={handleSaveSelected}
           className="px-3 py-1 rounded bg-emerald-600 text-white"
         >
           저장
         </button>
+
         <button
           onClick={handleDeleteSelected}
           className="bg-red-500 text-white px-3 py-1 rounded"
         >
           선택삭제
         </button>
+
         <button
           onClick={handleExcel}
           className="bg-green-600 text-white px-3 py-1 rounded"
@@ -2405,33 +2829,29 @@ const handleSaveSelected = async () => {
               const drv = toInt(edited[r._id]?.기사운임 ?? r.기사운임);
               const fee = sale - drv;
 
-              const editableInput = (key, val) =>
-                canEdit(key, r._id) ? (
-                  <input
-                    type="text"
-                    className="border p-1 rounded w-full"
-                    defaultValue={val || ""}
-                    onChange={(e) =>
-                      handleEditChange(r._id, key, e.target.value)
-                    }
-                  />
-                ) : (
-                  val
-                );
-
-              const highlightCell =
-                highlightIds.has(r._id) && "animate-pulse bg-green-200";
+              const highlightCell = highlightIds.has(r._id)
+                ? "animate-pulse bg-green-200"
+                : "";
 
               return (
                 <tr
-  key={r._id || idx}
-  className={`
-    ${idx % 2 ? "bg-gray-50" : ""}
-    ${selected.includes(r._id) ? "animate-pulse bg-yellow-100" : ""}
-    ${highlightIds.has(r._id) ? "animate-pulse bg-green-200" : ""}
-    ${savedHighlightIds.has(r._id) ? "animate-pulse bg-yellow-200" : ""}
-  `}
->
+                  key={r._id}
+                  className={`
+                    ${idx % 2 ? "bg-gray-50" : ""}
+                    ${selected.includes(r._id) ? "animate-pulse bg-yellow-100" : ""}
+                    ${
+                      highlightIds.has(r._id)
+                        ? "animate-pulse bg-green-200"
+                        : ""
+                    }
+                    ${
+                      savedHighlightIds.has(r._id)
+                        ? "animate-pulse bg-yellow-200"
+                        : ""
+                    }
+                  `}
+                >
+                  {/* 체크 */}
                   <td className={cell}>
                     <input
                       type="checkbox"
@@ -2439,11 +2859,15 @@ const handleSaveSelected = async () => {
                       onChange={() => toggleSelect(r._id)}
                     />
                   </td>
+
                   <td className={cell}>{idx + 1}</td>
                   <td className={cell}>{r.등록일}</td>
-                  <td className={cell}>{editableInput("상차일", r.상차일)}</td>
 
-                  {/* 상차시간: 남은 시간 색상 표시 */}
+                  <td className={cell}>
+                    {editableInput("상차일", r.상차일, r._id)}
+                  </td>
+
+                  {/* 상차시간 (남은 시간 색상 표시) */}
                   <td
                     className={`${cell} ${
                       (() => {
@@ -2453,7 +2877,7 @@ const handleSaveSelected = async () => {
                           now.setHours(now.getHours() + 9);
                           const loadDate = r.상차일 || todayKST();
                           const target = new Date(
-                            `${loadDate}T${r.상차시간.padStart(
+                            `${loadDate}T${String(r.상차시간).padStart(
                               5,
                               "0"
                             )}:00+09:00`
@@ -2471,27 +2895,46 @@ const handleSaveSelected = async () => {
                       })()
                     }`}
                   >
-                    {editableInput("상차시간", r.상차시간)}
+                    {editableInput("상차시간", r.상차시간, r._id)}
                   </td>
 
-                  <td className={cell}>{editableInput("하차일", r.하차일)}</td>
-                  <td className={cell}>{editableInput("하차시간", r.하차시간)}</td>
-                  <td className={cell}>{editableInput("거래처명", r.거래처명)}</td>
-                  <td className={cell}>{editableInput("상차지명", r.상차지명)}</td>
+                  <td className={cell}>
+                    {editableInput("하차일", r.하차일, r._id)}
+                  </td>
+                  <td className={cell}>
+                    {editableInput("하차시간", r.하차시간, r._id)}
+                  </td>
+
+                  <td className={cell}>
+                    {editableInput("거래처명", r.거래처명, r._id)}
+                  </td>
+                  <td className={cell}>
+                    {editableInput("상차지명", r.상차지명, r._id)}
+                  </td>
 
                   <td className={addrCell}>
-                    {editableInput("상차지주소", r.상차지주소)}
+                    {renderAddrCell("상차지주소", r.상차지주소, r._id)}
                   </td>
-                  <td className={cell}>{editableInput("하차지명", r.하차지명)}</td>
+                  <td className={cell}>
+                    {editableInput("하차지명", r.하차지명, r._id)}
+                  </td>
                   <td className={addrCell}>
-                    {editableInput("하차지주소", r.하차지주소)}
+                    {renderAddrCell("하차지주소", r.하차지주소, r._id)}
                   </td>
-                  <td className={cell}>{editableInput("화물내용", r.화물내용)}</td>
-                  <td className={cell}>{editableInput("차량종류", r.차량종류)}</td>
-                  <td className={cell}>{editableInput("차량톤수", r.차량톤수)}</td>
 
-                  {/* 🔆 여기 3칸만 하이라이트 */}
-                  <td className={`${cell} ${highlightCell || ""}`}>
+                  {/* 화물 + 차량 */}
+                  <td className={cell}>
+                    {editableInput("화물내용", r.화물내용, r._id)}
+                  </td>
+                  <td className={cell}>
+                    {editableInput("차량종류", r.차량종류, r._id)}
+                  </td>
+                  <td className={cell}>
+                    {editableInput("차량톤수", r.차량톤수, r._id)}
+                  </td>
+
+                  {/* 차량번호 + 이름 + 전화 */}
+                  <td className={`${cell} ${highlightCell}`}>
                     <input
                       type="text"
                       className="border p-1 rounded w-[110px]"
@@ -2505,13 +2948,13 @@ const handleSaveSelected = async () => {
                       }
                     />
                   </td>
-                  <td className={`${cell} ${highlightCell || ""}`}>
-                    {r.이름}
-                  </td>
-                  <td className={`${cell} ${highlightCell || ""}`}>
+
+                  <td className={`${cell} ${highlightCell}`}>{r.이름}</td>
+                  <td className={`${cell} ${highlightCell}`}>
                     {r.전화번호}
                   </td>
 
+                  {/* 배차상태 */}
                   <td className={cell}>
                     <span
                       className={`px-2 py-0.5 rounded text-xs font-semibold ${
@@ -2520,9 +2963,11 @@ const handleSaveSelected = async () => {
                           : "bg-yellow-100 text-yellow-700 border border-yellow-400"
                       }`}
                     >
-                      {r.배차상태 || ""}
+                      {r.배차상태}
                     </span>
                   </td>
+
+                  {/* 금액 */}
                   <td className={cell}>
                     {canEdit("청구운임", r._id) ? (
                       <input
@@ -2530,13 +2975,18 @@ const handleSaveSelected = async () => {
                         className="border p-1 rounded w-full"
                         defaultValue={r.청구운임 || ""}
                         onChange={(e) =>
-                          handleEditChange(r._id, "청구운임", e.target.value)
+                          handleEditChange(
+                            r._id,
+                            "청구운임",
+                            e.target.value
+                          )
                         }
                       />
                     ) : (
                       formatComma(r.청구운임)
                     )}
                   </td>
+
                   <td className={cell}>
                     {canEdit("기사운임", r._id) ? (
                       <input
@@ -2544,13 +2994,18 @@ const handleSaveSelected = async () => {
                         className="border p-1 rounded w-full"
                         defaultValue={r.기사운임 || ""}
                         onChange={(e) =>
-                          handleEditChange(r._id, "기사운임", e.target.value)
+                          handleEditChange(
+                            r._id,
+                            "기사운임",
+                            e.target.value
+                          )
                         }
                       />
                     ) : (
                       formatComma(r.기사운임)
                     )}
                   </td>
+
                   <td className={`${cell} text-right pr-2`}>
                     <span
                       className={
@@ -2560,9 +3015,16 @@ const handleSaveSelected = async () => {
                       {formatComma(fee)}
                     </span>
                   </td>
-                  <td className={cell}>{editableInput("지급방식", r.지급방식)}</td>
-                  <td className={cell}>{editableInput("배차방식", r.배차방식)}</td>
-                  <td className={cell}>{editableInput("메모", r.메모)}</td>
+
+                  <td className={cell}>
+                    {editableInput("지급방식", r.지급방식, r._id)}
+                  </td>
+                  <td className={cell}>
+                    {editableInput("배차방식", r.배차방식, r._id)}
+                  </td>
+                  <td className={cell}>
+                    {editableInput("메모", r.메모, r._id)}
+                  </td>
                 </tr>
               );
             })}
@@ -2573,6 +3035,8 @@ const handleSaveSelected = async () => {
   );
 }
 // ===================== DispatchApp.jsx (PART 4/8 — END) =====================
+
+
 
 
 // ===================== DispatchApp.jsx (PART 5/8 — 차량번호 항상 활성화 + 선택수정→수정완료 통합버튼 + 주소 더보기 완전본 + 대용량업로드 추가) =====================
