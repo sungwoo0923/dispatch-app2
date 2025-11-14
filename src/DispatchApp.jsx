@@ -2423,6 +2423,75 @@ function RealtimeStatus({
       String(s || "").replace(/\s+/g, "").replace(/[-.]/g, "").trim(),
     []
   );
+  // ------------------------
+// 신규 등록 팝업 차량번호 입력
+// ------------------------
+const handlePopupCarInput = async (e) => {
+  if (e.key !== "Enter") return;  // 엔터 아니면 반응 X
+
+  const rawVal = e.target.value;
+  const plate = normalizePlate(rawVal);
+
+  // 🔥 차량번호를 모두 지운 경우 → 이름/전화번호도 초기화
+  if (!plate) {
+    setNewOrder((prev) => ({
+      ...prev,
+      차량번호: "",
+      이름: "",
+      전화번호: "",
+    }));
+    return;
+  }
+
+  // 🔍 기존 기사 자동 매칭
+  const match = (drivers || []).find(
+    (d) => normalizePlate(d.차량번호) === plate
+  );
+
+  if (match) {
+    // 🔥 기존 기사면 자동 등록
+    setNewOrder((prev) => ({
+      ...prev,
+      차량번호: rawVal,
+      이름: match.이름,
+      전화번호: match.전화번호,
+    }));
+    return;
+  }
+
+  // ---------------------------
+  // 🔥 신규 기사 등록
+  // ---------------------------
+  const ok = window.confirm(
+    `차량번호 [${rawVal}] 기사 정보가 없습니다.\n신규 기사로 등록할까요?`
+  );
+  if (!ok) return;
+
+  const 이름 = prompt("신규 기사 이름을 입력하세요");
+  if (!이름) return;
+
+  const 전화번호 = prompt("전화번호를 입력하세요");
+  if (!전화번호) return;
+
+  // Firestore 신규 기사 저장
+  await upsertDriver?.({
+    차량번호: rawVal,
+    이름,
+    전화번호,
+  });
+
+  // 신규 기사 정보 입력창에 반영
+  setNewOrder((prev) => ({
+    ...prev,
+    차량번호: rawVal,
+    이름,
+    전화번호,
+  }));
+
+  alert("신규 기사 등록 완료!");
+};
+
+
 
   // ------------------------
   // driverMap 생성
@@ -3044,6 +3113,7 @@ ${url}
                 "화물내용",
                 "차량종류",
                 "차량톤수",
+                "혼적",
                 "차량번호",
                 "이름",
                 "전화번호",
@@ -3112,6 +3182,10 @@ ${url}
                   <td className={cell}>{editableInput("화물내용", r.화물내용, r._id)}</td>
                   <td className={cell}>{editableInput("차량종류", r.차량종류, r._id)}</td>
                   <td className={cell}>{editableInput("차량톤수", r.차량톤수, r._id)}</td>
+                  <td className={cell}>
+  {r.혼적 ? "Y" : ""}
+</td>
+                  
 
                   {/* 차량번호 */}
                   <td className={cell}>
@@ -3227,7 +3301,9 @@ ${url}
       {showCreate && (
         <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
           <div className="bg-white p-5 rounded shadow-xl w-[460px] max-h-[90vh] overflow-y-auto">
+            
             <h3 className="text-lg font-bold mb-3">신규 오더 등록</h3>
+          
 
             <div className="space-y-3">
 
@@ -3468,6 +3544,68 @@ ${url}
                   }
                 />
               </div>
+              {/* 화물내용 */}
+<div>
+  <label>화물내용</label>
+  <input
+    className="border p-2 rounded w-full"
+    value={newOrder.화물내용}
+    onChange={(e) => handleChange("화물내용", e.target.value)}
+    placeholder="예: 파렛트 12개 / 냉동식품 / 상온화물"
+  />
+</div>
+{/* 차량번호 / 기사명 / 전화번호 */}
+<div className="grid grid-cols-2 gap-3">
+  <div>
+    <label>차량번호</label>
+    <input
+  className="border p-2 rounded w-full"
+  value={newOrder.차량번호 || ""}
+  onChange={(e) => {
+    const rawVal = e.target.value;
+
+    // 차량번호 쓰는 즉시 상태 업데이트
+    setNewOrder((prev) => ({
+      ...prev,
+      차량번호: rawVal,
+      // 🔥 차량번호를 전부 지웠으면 이름/전화번호도 즉시 초기화
+      ...(rawVal.trim() === "" && {
+        이름: "",
+        전화번호: "",
+      }),
+    }));
+  }}
+  onKeyDown={handlePopupCarInput}  // 엔터 입력시 자동매칭/신규등록
+  placeholder="예: 93가1234 또는 서울12가3456"
+/>
+
+
+
+  </div>
+
+  <div>
+    <label>기사명</label>
+    <input
+      className="border p-2 rounded w-full bg-gray-100"
+      value={newOrder.이름}
+      onChange={(e) => handleChange("이름", e.target.value)}
+      placeholder="자동입력"
+      readOnly
+    />
+  </div>
+</div>
+
+<div>
+  <label>전화번호</label>
+  <input
+    className="border p-2 rounded w-full bg-gray-100"
+    value={newOrder.전화번호}
+    onChange={(e) => handleChange("전화번호", e.target.value)}
+    placeholder="자동입력"
+    readOnly
+  />
+</div>
+
 
               {/* 상하차 방법 */}
               <div className="grid grid-cols-2 gap-3">
@@ -4202,7 +4340,7 @@ data.sort((a, b) => {
               {[
                 "선택","순번","등록일","상차일","상차시간","하차일","하차시간",
                 "거래처명","상차지명","상차지주소","하차지명","하차지주소",
-                "화물내용","차량종류","차량톤수","차량번호","기사명","전화번호",
+                "화물내용","차량종류","차량톤수","혼적","차량번호","기사명","전화번호",
                 "배차상태","청구운임","기사운임","수수료","지급방식","배차방식","메모",
               ].map((h) => (
                 <th key={h} className="border px-2 py-2 text-center whitespace-nowrap">
@@ -4269,7 +4407,10 @@ data.sort((a, b) => {
                       )}
                     </td>
                   ))}
-
+{/* 혼적 여부(Y) */}
+<td className="border text-center">
+  {row.혼적 ? "Y" : ""}
+</td>
                   {/* 차량번호(항상 활성화) */}
                   <td className="border text-center">
                     <input
@@ -4307,19 +4448,44 @@ data.sort((a, b) => {
                   </td>
 
                   {/* 지급 / 배차 방식 */}
-                  {["지급방식","배차방식"].map((key) => (
-                    <td key={key} className="border text-center">
-                      {editMode && selected.has(id) ? (
-                        <input
-                          className="border rounded px-1 py-0.5 w-full text-center"
-                          defaultValue={row[key] || ""}
-                          onChange={(e) => updateEdited(row, key, e.target.value)}
-                        />
-                      ) : (
-                        row[key]
-                      )}
-                    </td>
-                  ))}
+<td className="border text-center">
+  {editMode && selected.has(id) ? (
+    <select
+      className="border rounded px-1 py-0.5 w-full text-center"
+      defaultValue={row.지급방식 || ""}
+      onChange={(e) => updateEdited(row, "지급방식", e.target.value)}
+    >
+      <option value="">선택없음</option>
+      <option value="계산서">계산서</option>
+      <option value="착불">착불</option>
+      <option value="선불">선불</option>
+      <option value="손실">손실</option>
+      <option value="개인">개인</option>
+      <option value="기타">기타</option>
+    </select>
+  ) : (
+    row.지급방식
+  )}
+</td>
+
+<td className="border text-center">
+  {editMode && selected.has(id) ? (
+    <select
+      className="border rounded px-1 py-0.5 w-full text-center"
+      defaultValue={row.배차방식 || ""}
+      onChange={(e) => updateEdited(row, "배차방식", e.target.value)}
+    >
+      <option value="">선택없음</option>
+      <option value="24시">24시</option>
+      <option value="직접배차">직접배차</option>
+      <option value="인성">인성</option>
+      <option value="24시(외주업체)">24시(외주업체)</option>
+    </select>
+  ) : (
+    row.배차방식
+  )}
+</td>
+
 
                   {/* 메모 더보기 */}
                   <td className="border text-center">
@@ -4344,13 +4510,16 @@ data.sort((a, b) => {
           🔵 신규 오더 등록 팝업 (업그레이드 버전)
       --------------------------------------------------------- */}
       {showCreate && (
-        <NewOrderPopup
-          setShowCreate={setShowCreate}
-          newOrder={newOrder}
-          setNewOrder={setNewOrder}
-          addDispatch={addDispatch}
-          clients={clients}
-        />
+<NewOrderPopup
+  setShowCreate={setShowCreate}
+  newOrder={newOrder}
+  setNewOrder={setNewOrder}
+  addDispatch={addDispatch}
+  clients={clients}
+  drivers={drivers}        // ⭐ 추가
+  upsertDriver={upsertDriver} // ⭐ 신규 기사 등록에 필요
+/>
+
       )}
     </div>
   );
@@ -4446,7 +4615,15 @@ function MemoCell({ text }) {
 }
 
   /* ===================== 신규 오더 등록 팝업 ===================== */
-function NewOrderPopup({ setShowCreate, newOrder, setNewOrder, addDispatch, clients }) {
+function NewOrderPopup({
+  setShowCreate,
+  newOrder,
+  setNewOrder,
+  addDispatch,
+  clients,
+  drivers,       // ⭐ 추가
+  upsertDriver,  // ⭐ 추가
+}) {
   const handleChange = (key, value) =>
     setNewOrder((prev) => ({ ...prev, [key]: value }));
 
@@ -4659,6 +4836,7 @@ function NewOrderPopup({ setShowCreate, newOrder, setNewOrder, addDispatch, clie
               onChange={(e) => handleChange("하차지주소", e.target.value)}
             />
           </div>
+          
 
           {/* 화물내용 - ★ 추가됨 */}
           <div>
