@@ -804,6 +804,88 @@ const handleCarNoEnter = (value) => {
     alert("등록되었습니다.");
   };
 
+  // ⭐ 운임조회 함수 (과거 데이터로 통계 조회)
+const handleFareSearch = () => {
+  const pickup = (form.상차지명 || "").trim();
+  const drop = (form.하차지명 || "").trim();
+  const ton = (form.차량톤수 || "").trim();
+  const cargo = (form.화물내용 || "").trim();
+
+  if (!pickup || !drop) {
+    alert("상차지명과 하차지명을 입력해주세요.");
+    return;
+  }
+
+  const dropKeywords = ["패밀리", "패밀리앤상신", "패밀리센터"];
+  const isDropMatch = dropKeywords.some((k) => drop.includes(k));
+  const isPickupMatch = pickup.includes("반찬단지");
+
+  if (!isPickupMatch || !isDropMatch) {
+    alert("해당 노선은 등록된 운임 데이터가 없습니다.");
+    return;
+  }
+
+  // 파렛트 수 추출
+// ⭐ 파렛트 수 추출 (숫자만 있어도 인식)
+const pallets = (() => {
+  if (!cargo) return null;
+
+  // 1) "1파렛", "1p", "1 p" 같은 형태 우선 체크
+  const match1 = cargo.match(/(\d+)\s*(p|파레|파렛|파렛트)/i);
+  if (match1) return Number(match1[1]);
+
+  // 2) "1개", "1건", "1t" 같이 다른 단위는 제외해야 하므로
+  //    숫자만 있는 경우(예: "1", "2")는 파렛트로 인정
+  const match2 = cargo.match(/^\s*(\d+)\s*$/);
+  if (match2) return Number(match2[1]);
+
+  return null;
+})();
+
+
+  const filtered = (dispatchData || []).filter((r) => {
+    if (!r.상차지명 || !r.하차지명 || !r.청구운임) return false;
+
+    const cond1 = r.상차지명.includes("반찬단지");
+    const cond2 = dropKeywords.some((k) => (r.하차지명 || "").includes(k));
+    const condTon = ton ? (r.차량톤수 || "").includes(ton) : true;
+
+    if (pallets) {
+      const srcPallet = (r.화물내용 || "").match(/(\d+)\s*(p|파레|파렛|파렛트)/i);
+      const rowPallet = srcPallet ? Number(srcPallet[1]) : null;
+      return cond1 && cond2 && rowPallet === pallets && condTon;
+    }
+    return cond1 && cond2 && condTon;
+  });
+
+  if (!filtered.length) {
+    alert("해당 조건의 과거 운임 데이터가 없습니다.");
+    return;
+  }
+
+  const fares = filtered.map((r) => Number(String(r.청구운임).replace(/,/g, "")));
+
+  const avg = Math.round(fares.reduce((a, b) => a + b, 0) / fares.length);
+  const min = Math.min(...fares);
+  const max = Math.max(...fares);
+
+  const latestRow = filtered.sort((a, b) => (b.상차일 || "").localeCompare(a.상차일 || ""))[0];
+
+  setFareResult({
+    count: filtered.length,
+    avg,
+    min,
+    max,
+    latestFare: latestRow.청구운임,
+    latestDate: latestRow.상차일,
+  });
+
+  setFareModalOpen(true);
+};
+// ⭐ 운임조회 팝업 상태
+const [fareModalOpen, setFareModalOpen] = React.useState(false);
+const [fareResult, setFareResult] = React.useState(null);
+
   // ------------------ 오더복사 ------------------
   const [copyOpen, setCopyOpen] = React.useState(false);
   const [copyQ, setCopyQ] = React.useState("");
@@ -856,11 +938,13 @@ const handleCarNoEnter = (value) => {
     setAutoDropMatched(false);
   };
 
+
+  
   // =========================================================
   // 📤 공유 (모바일: 카톡 공유창 / PC: 텍스트 복사)
   // =========================================================
   const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-  const shareTextForRow = (r) => {
+    const shareTextForRow = (r) => {
     const dStr = r.상차일 || _todayStr(); // YYYY-MM-DD 유지
     const plate = r.차량번호 || "-";
     const name  = r.이름 || "-";
@@ -874,6 +958,7 @@ const handleCarNoEnter = (value) => {
 아래 링크에서 운송장/인수증 사진을 업로드해주세요👇
 📎 ${url}`;
   };
+
   const shareDispatch = async (r) => {
     const text = shareTextForRow(r);
     const url  = `${location.origin}/upload?id=${encodeURIComponent(r._id || "")}`;
@@ -888,6 +973,7 @@ const handleCarNoEnter = (value) => {
       prompt("아래 내용을 복사하세요.", text);
     }
   };
+
 
   // =========================================================
   // 📎 첨부 모달 열기 트리거
@@ -909,56 +995,61 @@ const handleCarNoEnter = (value) => {
     <>
       <h2 className="text-lg font-bold mb-3">배차관리</h2>
 
-{/* 상단 액션 */}
-<div className="flex items-center gap-2 mb-3">
+      {/* 상단 액션 */}
+      <div className="flex items-center gap-2 mb-3">
+        <button
+          onClick={() => setCopyOpen(true)}
+          className="px-3 py-2 rounded bg-indigo-600 text-white text-sm"
+        >
+          📄 오더복사
+        </button>
 
-  <button
-    onClick={() => setCopyOpen(true)}
-    className="px-3 py-2 rounded bg-indigo-600 text-white text-sm"
-  >
-    📄 오더복사
-  </button>
+        <button
+          onClick={resetForm}
+          className="px-3 py-2 rounded bg-gray-200 text-sm"
+        >
+          🔄 초기화
+        </button>
 
-  <button
-    onClick={resetForm}
-    className="px-3 py-2 rounded bg-gray-200 text-sm"
-  >
-    🔄 초기화
-  </button>
+        <button
+          onClick={() => setBulkOpen(true)}
+          className="px-3 py-2 rounded bg-emerald-600 text-white text-sm"
+        >
+          📂 대용량 업로드
+        </button>
 
-  <button
-    onClick={() => setBulkOpen(true)}
-    className="px-3 py-2 rounded bg-emerald-600 text-white text-sm"
-  >
-    📂 대용량 업로드
-  </button>
+        {/* ⭐ 운임조회 버튼 (상단 공통 버튼으로 추가) */}
+        <button
+          type="button"
+          onClick={handleFareSearch}
+          className="px-3 py-2 rounded bg-amber-500 text-white text-sm"
+        >
+          운임조회
+        </button>
 
-  {/* ⭐ 독차 / 혼적 체크박스 — 버튼 옆으로 배치 */}
-  <div className="flex items-center gap-4 ml-4">
+        {/* ⭐ 독차 / 혼적 체크박스 — 버튼 옆으로 배치 */}
+        <div className="flex items-center gap-4 ml-4">
+          <label className="flex items-center gap-1 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              checked={form.독차}
+              onChange={(e) => onChange("독차", e.target.checked)}
+              className="w-4 h-4"
+            />
+            독차
+          </label>
 
-    <label className="flex items-center gap-1 text-sm text-gray-700">
-      <input
-        type="checkbox"
-        checked={form.독차}
-        onChange={(e) => onChange("독차", e.target.checked)}
-        className="w-4 h-4"
-      />
-      독차
-    </label>
-
-    <label className="flex items-center gap-1 text-sm text-gray-700">
-      <input
-        type="checkbox"
-        checked={form.혼적}
-        onChange={(e) => onChange("혼적", e.target.checked)}
-        className="w-4 h-4"
-      />
-      혼적
-    </label>
-
-  </div>
-</div>
-
+          <label className="flex items-center gap-1 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              checked={form.혼적}
+              onChange={(e) => onChange("혼적", e.target.checked)}
+              className="w-4 h-4"
+            />
+            혼적
+          </label>
+        </div>
+      </div>
 
       {/* 입력 폼 */}
       <form onSubmit={handleSubmit} className="grid grid-cols-6 gap-3">
@@ -1007,37 +1098,70 @@ const handleCarNoEnter = (value) => {
                 </div>
               )}
             </div>
-            <button type="button" onClick={()=>{
-              const 거래처명 = (clientQuery || "").trim();
-              if (!거래처명) return alert("거래처명을 입력하세요.");
-              const 주소 = prompt("거래처 주소 (선택)") || "";
-              const 담당자 = prompt("담당자 (선택)") || "";
-              const 연락처 = prompt("연락처 (선택)") || "";
-              upsertClient?.({ 거래처명, 주소, 담당자, 연락처 });
-              alert("신규 거래처가 등록되었습니다.");
-            }} className="px-3 py-2 border rounded text-sm">
+            <button
+              type="button"
+              onClick={() => {
+                const 거래처명 = (clientQuery || "").trim();
+                if (!거래처명) return alert("거래처명을 입력하세요.");
+                const 주소 = prompt("거래처 주소 (선택)") || "";
+                const 담당자 = prompt("담당자 (선택)") || "";
+                const 연락처 = prompt("연락처 (선택)") || "";
+                upsertClient?.({ 거래처명, 주소, 담당자, 연락처 });
+                alert("신규 거래처가 등록되었습니다.");
+              }}
+              className="px-3 py-2 border rounded text-sm"
+            >
               + 신규등록
             </button>
           </div>
         </div>
 
-        {/* 상/하차지명 & 주소 */}
-        <div>
-          <label className={labelCls}>상차지명 {reqStar}</label>
-          <input className={inputCls} value={form.상차지명} onChange={(e) => handlePickupName(e.target.value)} />
-        </div>
-        <div>
-          <label className={labelCls}>상차지주소 <AutoBadge show={autoPickMatched} /></label>
-          <input className={inputCls} value={form.상차지주소} onChange={(e) => handlePickupAddrManual(e.target.value)} placeholder="자동매칭 또는 수기입력" />
-        </div>
-        <div>
-          <label className={labelCls}>하차지명 {reqStar}</label>
-          <input className={inputCls} value={form.하차지명} onChange={(e) => handleDropName(e.target.value)} />
-        </div>
-        <div>
-          <label className={labelCls}>하차지주소 <AutoBadge show={autoDropMatched} /></label>
-          <input className={inputCls} value={form.하차지주소} onChange={(e) => handleDropAddrManual(e.target.value)} placeholder="자동매칭 또는 수기입력" />
-        </div>
+        {/* 상차지명 */}
+<div>
+  <label className={labelCls}>상차지명 {reqStar}</label>
+  <input
+    className={inputCls}
+    value={form.상차지명}
+    onChange={(e) => handlePickupName(e.target.value)}
+  />
+</div>
+
+{/* 상차지주소 */}
+<div>
+  <label className={labelCls}>
+    상차지주소 <AutoBadge show={autoPickMatched} />
+  </label>
+  <input
+    className={inputCls}
+    value={form.상차지주소}
+    onChange={(e) => handlePickupAddrManual(e.target.value)}
+    placeholder="자동매칭 또는 수기입력"
+  />
+</div>
+
+{/* 하차지명 */}
+<div>
+  <label className={labelCls}>하차지명 {reqStar}</label>
+  <input
+    className={inputCls}
+    value={form.하차지명}
+    onChange={(e) => handleDropName(e.target.value)}
+  />
+</div>
+
+{/* 하차지주소 */}
+<div>
+  <label className={labelCls}>
+    하차지주소 <AutoBadge show={autoDropMatched} />
+  </label>
+  <input
+    className={inputCls}
+    value={form.하차지주소}
+    onChange={(e) => handleDropAddrManual(e.target.value)}
+    placeholder="자동매칭 또는 수기입력"
+  />
+</div>
+
 
         <div>
           <label className={labelCls}>화물내용</label>
@@ -2124,7 +2248,60 @@ const setBulk = (id, k, v) => {
     setBulkOpen(false);
   };
 
-  // ────────────────────────────────────────────────
+{/* ⭐ 운임조회 팝업 모달 */}
+{fareModalOpen && fareResult && (
+  <div className="fixed inset-0 bg-black/50 z-[99999] flex items-center justify-center">
+    <div className="bg-white w-[420px] rounded-2xl shadow-2xl p-6">
+      <div className="text-xl font-bold mb-4 text-center">📊 운임조회 결과</div>
+
+      <div className="space-y-3 text-sm">
+
+        <div className="flex justify-between">
+          <span>조회된 건수</span>
+          <b>{fareResult.count} 건</b>
+        </div>
+
+        <div className="flex justify-between">
+          <span>최신 운임</span>
+          <b className="text-blue-600">{Number(fareResult.latestFare).toLocaleString()}원</b>
+        </div>
+
+        <div className="flex justify-between">
+          <span>최신 상차일</span>
+          <b>{fareResult.latestDate}</b>
+        </div>
+
+        <hr />
+
+        <div className="flex justify-between">
+          <span>평균 운임</span>
+          <b className="text-green-700">{fareResult.avg.toLocaleString()}원</b>
+        </div>
+
+        <div className="flex justify-between">
+          <span>최저 운임</span>
+          <b className="text-red-600">{fareResult.min.toLocaleString()}원</b>
+        </div>
+
+        <div className="flex justify-between">
+          <span>최고 운임</span>
+          <b className="text-purple-600">{fareResult.max.toLocaleString()}원</b>
+        </div>
+
+      </div>
+
+      <div className="text-center mt-6">
+        <button
+          onClick={() => setFareModalOpen(false)}
+          className="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm shadow hover:bg-blue-700"
+        >
+          닫기
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
 
   return (
     <div className="p-3">
