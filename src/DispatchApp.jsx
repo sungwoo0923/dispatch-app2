@@ -2239,6 +2239,59 @@ function RealtimeStatus({
   const [selectedEditMode, setSelectedEditMode] = React.useState(false);
   const [edited, setEdited] = React.useState({});
 
+
+
+  // ----------------------------
+// 🔥 수정모드 + 수정중 데이터 복원
+// ----------------------------
+React.useEffect(() => {
+  const saved = JSON.parse(localStorage.getItem("realtimeEdit") || "{}");
+
+  if (saved.selectedEditMode) setSelectedEditMode(saved.selectedEditMode);
+  if (saved.selected) setSelected(saved.selected);
+  if (saved.edited) setEdited(saved.edited);
+}, []);
+// ----------------------------
+// 🔥 수정모드 + 선택된행 + 수정값 자동 저장
+// ----------------------------
+React.useEffect(() => {
+  localStorage.setItem(
+    "realtimeEdit",
+    JSON.stringify({
+      selectedEditMode,
+      selected,
+      edited,
+    })
+  );
+}, [selectedEditMode, selected, edited]);
+
+
+  React.useEffect(() => {
+  const saved = JSON.parse(localStorage.getItem("realtimeFilters") || "{}");
+
+  if (saved.q) setQ(saved.q);
+  if (saved.filterType) setFilterType(saved.filterType);
+  if (saved.filterValue) setFilterValue(saved.filterValue);
+  if (saved.startDate) setStartDate(saved.startDate);
+  if (saved.endDate) setEndDate(saved.endDate);
+}, []);
+
+// -------------------------------------------------------------
+// ⭐ 저장 useEffect도 위의 것 바로 아래에 같이 위치 ⭐
+// -------------------------------------------------------------
+React.useEffect(() => {
+  localStorage.setItem(
+    "realtimeFilters",
+    JSON.stringify({
+      q,
+      filterType,
+      filterValue,
+      startDate,
+      endDate,
+    })
+  );
+}, [q, filterType, filterValue, startDate, endDate]);
+
   // 신규 오더 등록 팝업
   const [showCreate, setShowCreate] = React.useState(false);
   const [autoList, setAutoList] = React.useState([]);
@@ -2268,6 +2321,11 @@ function RealtimeStatus({
     혼적: false,
     독차: false,
   });
+  // 🔥 신규 오더 입력 변경 처리
+const handleChange = (key, value) => {
+  setNewOrder(prev => ({ ...prev, [key]: value }));
+};
+
 
   // 삭제된 건 재등장 방지
   const [deletedIds, setDeletedIds] = React.useState(() => new Set());
@@ -2321,6 +2379,19 @@ function RealtimeStatus({
       return [...kept, ...newOnes];
     });
   }, [dispatchData, deletedIds]);
+  // 🔥 rows 갱신 후 edited 데이터 다시 반영
+React.useEffect(() => {
+  if (!Object.keys(edited).length) return;
+
+  setRows((prev) =>
+    prev.map((r) =>
+      edited[r._id]
+        ? { ...r, ...edited[r._id] } // 수정값 덮어쓰기
+        : r
+    )
+  );
+}, [rows]);
+
 
   // ------------------------
   // 첨부파일 개수 로드
@@ -3922,6 +3993,20 @@ function DispatchStatus({
   const [justSaved, setJustSaved] = React.useState([]);
   const [carInputLock, setCarInputLock] = React.useState(false);
   const [bulkRows, setBulkRows] = React.useState([]);
+
+  // ⭐ 화면 진입 시 이번 달 자동 설정
+React.useEffect(() => {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = now.getMonth() + 1; // 1~12
+
+  const firstDay = `${y}-${String(m).padStart(2, "0")}-01`;
+  const lastDay = new Date(y, m, 0).toISOString().slice(0, 10); // 이번달 마지막날
+
+  setStartDate(firstDay);
+  setEndDate(lastDay);
+}, []);
+
 
 // 🔥 배차현황 화면 들어올 때 날짜 초기화
 React.useEffect(() => {
