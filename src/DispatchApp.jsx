@@ -2345,7 +2345,7 @@ function RealtimeStatus({
     };
 
     load();
-  }, [dispatchData]);
+  }, [dispatchData, showCreate, rows]);
 
   // ------------------------
   // 오전/오후 → 24시간 변환

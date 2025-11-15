@@ -9,6 +9,9 @@ import {
   collection,
   addDoc,
   serverTimestamp,
+  doc,
+  updateDoc,
+  increment,
 } from "firebase/firestore";
 import { v4 as uuidv4 } from "uuid";
 
@@ -29,13 +32,18 @@ export async function uploadProofImage(dispatchId, file, carNo) {
   // URL 획득
   const url = await getDownloadURL(storageRef);
 
-  // Firestore 저장 (서브컬렉션)
+  // Firestore 저장 (attachments 서브컬렉션)
   await addDoc(collection(db, "dispatch", dispatchId, "attachments"), {
     url,
     name: fileName,
     size: file.size,
     createdAt: serverTimestamp(),
     uploadedBy: carNo,
+  });
+
+  // 🔥🔥 첨부 개수 +1 (중요!)
+  await updateDoc(doc(db, "dispatch", dispatchId), {
+    attachmentsCount: increment(1),
   });
 
   return true;

@@ -1,4 +1,3 @@
-// src/UploadPage.jsx
 import React, { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { db, storage } from "./firebase";
@@ -10,6 +9,8 @@ import {
   serverTimestamp,
   getDocs,
   deleteDoc,
+  updateDoc,
+  increment,
 } from "firebase/firestore";
 import { uploadBytesResumable, getDownloadURL, ref } from "firebase/storage";
 
@@ -46,6 +47,7 @@ export default function UploadPage() {
       alert("최대 5장까지 업로드 가능합니다.");
       return;
     }
+
     for (const f of list) {
       if (f.size > 10 * 1024 * 1024) {
         alert(`❌ ${f.name} (10MB 초과)`);
@@ -65,14 +67,27 @@ export default function UploadPage() {
       const task = uploadBytesResumable(storageRef, file);
 
       await new Promise((resolve, reject) => {
-        task.on("state_changed", null, reject, async () => {
-          const url = await getDownloadURL(task.snapshot.ref);
-          await addDoc(collection(db, "dispatch", dispatchId, "attachments"), {
-            url,
-            createdAt: serverTimestamp(),
-          });
-          resolve();
-        });
+        task.on(
+          "state_changed",
+          null,
+          reject,
+          async () => {
+            const url = await getDownloadURL(task.snapshot.ref);
+
+            // Firestore 저장 (서브컬렉션)
+            await addDoc(collection(db, "dispatch", dispatchId, "attachments"), {
+              url,
+              createdAt: serverTimestamp(),
+            });
+
+            // 🔥🔥 dispatch 문서 첨부갯수 +1 업데이트
+            await updateDoc(doc(db, "dispatch", dispatchId), {
+              attachmentsCount: increment(1),
+            });
+
+            resolve();
+          }
+        );
       });
     }
 
@@ -83,7 +98,15 @@ export default function UploadPage() {
 
   const removeFile = async (id) => {
     if (!window.confirm("삭제할까요?")) return;
+
+    // 삭제
     await deleteDoc(doc(db, "dispatch", dispatchId, "attachments", id));
+    
+    // 🔥 삭제 시 갯수 -1
+    await updateDoc(doc(db, "dispatch", dispatchId), {
+      attachmentsCount: increment(-1),
+    });
+
     setUploaded((p) => p.filter((x) => x.id !== id));
   };
 
@@ -120,9 +143,7 @@ export default function UploadPage() {
           <button
             onClick={uploadAll}
             disabled={uploading}
-            className={`w-full py-2 rounded text-white ${
-              uploading ? "bg-gray-400" : "bg-blue-600 hover:bg-blue-700"
-            }`}
+            className={`w-full py-2 rounded text-white ${uploading ? "bg-gray-400" : "bg-blue-600 hover:bg-blue-700"}`}
           >
             {uploading ? "업로드 중..." : "업로드"}
           </button>
@@ -135,11 +156,19 @@ export default function UploadPage() {
 
       {uploaded.length > 0 && (
         <div className="mt-6">
-          <div className="text-sm font-semibold mb-2">📎 업로드된 파일 ({uploaded.length}/5)</div>
+          <div className="text-sm font-semibold mb-2">
+            📎 업로드된 파일 ({uploaded.length}/5)
+          </div>
+
           <div className="grid grid-cols-3 gap-3">
             {uploaded.map((f) => (
               <div key={f.id} className="border rounded p-1 relative">
-                <img src={f.url} alt="" className="w-full h-24 object-cover rounded" />
+                <img
+                  src={f.url}
+                  alt=""
+                  className="w-full h-24 object-cover rounded cursor-pointer"
+                  onClick={() => window.open(f.url, "_blank")}  // 🔥 클릭 → 새창
+                />
                 <button
                   onClick={() => removeFile(f.id)}
                   className="absolute top-1 right-1 bg-white/80 px-1 rounded text-xs"
