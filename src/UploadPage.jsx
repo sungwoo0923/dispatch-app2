@@ -58,43 +58,61 @@ export default function UploadPage() {
   };
 
   const uploadAll = async () => {
-    if (!files.length) return alert("업로드할 파일을 선택하세요.");
-    setUploading(true);
+  if (!files.length) return alert("업로드할 파일을 선택하세요.");
+  setUploading(true);
 
-    for (const file of files) {
-      const path = `dispatch/${dispatchId}/${Date.now()}-${file.name}`;
-      const storageRef = ref(storage, path);
-      const task = uploadBytesResumable(storageRef, file);
+  try {
+    // 🔥 모든 파일 업로드를 동시에 처리
+    const tasks = files.map((file) => {
+      return new Promise((resolve, reject) => {
+        const path = `dispatch/${dispatchId}/${Date.now()}-${file.name.replace(/\s+/g, "_")}`;
+        const storageRef = ref(storage, path);
+        const task = uploadBytesResumable(storageRef, file);
 
-      await new Promise((resolve, reject) => {
         task.on(
           "state_changed",
           null,
           reject,
           async () => {
-            const url = await getDownloadURL(task.snapshot.ref);
+            try {
+              const url = await getDownloadURL(task.snapshot.ref);
 
-            // Firestore 저장 (서브컬렉션)
-            await addDoc(collection(db, "dispatch", dispatchId, "attachments"), {
-              url,
-              createdAt: serverTimestamp(),
-            });
+              // Firestore attachments 생성
+              await addDoc(
+                collection(db, "dispatch", dispatchId, "attachments"),
+                {
+                  url,
+                  createdAt: serverTimestamp(),
+                }
+              );
 
-            // 🔥🔥 dispatch 문서 첨부갯수 +1 업데이트
-            await updateDoc(doc(db, "dispatch", dispatchId), {
-              attachmentsCount: increment(1),
-            });
+              // 🔥 dispatch 문서 첨부갯수 +1
+              await updateDoc(doc(db, "dispatch", dispatchId), {
+                attachmentsCount: increment(1),
+              });
 
-            resolve();
+              resolve();
+            } catch (e) {
+              reject(e);
+            }
           }
         );
       });
-    }
+    });
+
+    // 🔥 핵심: 모든 업로드 Promise를 병렬로 실행
+    await Promise.all(tasks);
 
     setFiles([]);
     setComplete(true);
-    setUploading(false);
-  };
+  } catch (err) {
+    console.error("업로드 오류:", err);
+    alert("업로드 중 오류가 발생했습니다.");
+  }
+
+  setUploading(false);
+};
+
 
   const removeFile = async (id) => {
     if (!window.confirm("삭제할까요?")) return;
