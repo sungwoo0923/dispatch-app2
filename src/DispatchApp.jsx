@@ -804,8 +804,7 @@ const handleCarNoEnter = (value) => {
     alert("등록되었습니다.");
   };
 
-  // ⭐ 운임조회 함수 (과거 데이터로 통계 조회)
-const handleFareSearch = () => {
+  const handleFareSearch = () => {
   const pickup = (form.상차지명 || "").trim();
   const drop = (form.하차지명 || "").trim();
   const ton = (form.차량톤수 || "").trim();
@@ -816,50 +815,94 @@ const handleFareSearch = () => {
     return;
   }
 
-  const dropKeywords = ["패밀리", "패밀리앤상신", "패밀리센터"];
-  const isDropMatch = dropKeywords.some((k) => drop.includes(k));
-  const isPickupMatch = pickup.includes("반찬단지");
+  // 🔍 파렛트 수 추출
+  const pallets = (() => {
+    if (!cargo) return null;
+    const m = cargo.match(/(\d+)\s*(p|파레|파렛|파렛트)/i);
+    if (m) return Number(m[1]);
 
-  if (!isPickupMatch || !isDropMatch) {
-    alert("해당 노선은 등록된 운임 데이터가 없습니다.");
-    return;
+    const m2 = cargo.match(/^\s*(\d+)\s*$/);
+    if (m2) return Number(m2[1]);
+
+    return null;
+  })();
+
+    // 🔍 유사도 기반 필터 (차량종류 포함 버전)
+const filtered = (dispatchData || []).filter((r) => {
+  if (!r.상차지명 || !r.하차지명) return false;
+
+  const matchPickup =
+    r.상차지명.includes(pickup) || pickup.includes(r.상차지명);
+
+  const matchDrop =
+    r.하차지명.includes(drop) || drop.includes(r.하차지명);
+
+  // 톤수는 계속 무시
+  const matchTon = true;
+
+  // ⭐ 차량종류 비교 (입력된 경우만)
+  const matchVehicle =
+    !form.차량종류 || !r.차량종류
+      ? true
+      : r.차량종류 === form.차량종류;
+
+  // -----------------------------
+//  ⭐ 화물내용 유사도 판별
+// -----------------------------
+
+// 입력 화물에서 숫자 추출 (예: 4파레트 → 4)
+const extractNumber = (text = "") => {
+  const m = String(text).trim().match(/^(\d+)/); // 맨 앞 숫자
+  return m ? Number(m[1]) : null;
+};
+
+// 입력 화물 시작 숫자
+const inputNum = extractNumber(cargo);
+
+// 과거 기록 화물에서 숫자 추출
+const rowNum = extractNumber(r.화물내용);
+
+// -----------------------------
+// CASE A: 숫자 화물 (파레트류)
+// -----------------------------
+let matchCargo = true;
+
+if (inputNum !== null) {
+  if (rowNum !== null) {
+    // 숫자 화물끼리 ±1 허용
+    matchCargo = Math.abs(inputNum - rowNum) <= 1;
+  } else {
+    // 기록이 숫자가 아니면 매칭 불가 → false
+    matchCargo = false;
   }
+}
 
-  // 파렛트 수 추출
-// ⭐ 파렛트 수 추출 (숫자만 있어도 인식)
-const pallets = (() => {
-  if (!cargo) return null;
+// -----------------------------
+// CASE B: 일반 화물 (변압기, 박스 등)
+// -----------------------------
+if (inputNum === null) {
+  const normCargo = (s) => String(s || "").trim().toLowerCase();
 
-  // 1) "1파렛", "1p", "1 p" 같은 형태 우선 체크
-  const match1 = cargo.match(/(\d+)\s*(p|파레|파렛|파렛트)/i);
-  if (match1) return Number(match1[1]);
+  // 동일/부분일치 화물 있으면 OK
+  if (normCargo(r.화물내용).includes(normCargo(cargo))) {
+    matchCargo = true;
+  } else {
+    // 동일 화물 없으면 → 톤수 기준 비교
+    matchCargo =
+      (form.차량톤수 && r.차량톤수)
+        ? r.차량톤수.includes(form.차량톤수)
+        : true;
+  }
+}
 
-  // 2) "1개", "1건", "1t" 같이 다른 단위는 제외해야 하므로
-  //    숫자만 있는 경우(예: "1", "2")는 파렛트로 인정
-  const match2 = cargo.match(/^\s*(\d+)\s*$/);
-  if (match2) return Number(match2[1]);
 
-  return null;
-})();
+  return matchPickup && matchDrop && matchCargo && matchTon && matchVehicle;
 
+});
 
-  const filtered = (dispatchData || []).filter((r) => {
-    if (!r.상차지명 || !r.하차지명 || !r.청구운임) return false;
-
-    const cond1 = r.상차지명.includes("반찬단지");
-    const cond2 = dropKeywords.some((k) => (r.하차지명 || "").includes(k));
-    const condTon = ton ? (r.차량톤수 || "").includes(ton) : true;
-
-    if (pallets) {
-      const srcPallet = (r.화물내용 || "").match(/(\d+)\s*(p|파레|파렛|파렛트)/i);
-      const rowPallet = srcPallet ? Number(srcPallet[1]) : null;
-      return cond1 && cond2 && rowPallet === pallets && condTon;
-    }
-    return cond1 && cond2 && condTon;
-  });
 
   if (!filtered.length) {
-    alert("해당 조건의 과거 운임 데이터가 없습니다.");
+    alert("유사한 과거 운임 데이터를 찾지 못했습니다.");
     return;
   }
 
@@ -882,6 +925,7 @@ const pallets = (() => {
 
   setFareModalOpen(true);
 };
+
 // ⭐ 운임조회 팝업 상태
 const [fareModalOpen, setFareModalOpen] = React.useState(false);
 const [fareResult, setFareResult] = React.useState(null);
@@ -1026,6 +1070,7 @@ const [fareResult, setFareResult] = React.useState(null);
         >
           운임조회
         </button>
+        
 
         {/* ⭐ 독차 / 혼적 체크박스 — 버튼 옆으로 배치 */}
         <div className="flex items-center gap-4 ml-4">
@@ -1349,6 +1394,9 @@ const [fareResult, setFareResult] = React.useState(null);
       )}
     </>
   );
+
+
+
   /* -------------------------------------------------
    ✅ 하단부 실시간배차현황 (배차관리 전용)
    - 메뉴와 동일한 UX
@@ -2248,59 +2296,7 @@ const setBulk = (id, k, v) => {
     setBulkOpen(false);
   };
 
-{/* ⭐ 운임조회 팝업 모달 */}
-{fareModalOpen && fareResult && (
-  <div className="fixed inset-0 bg-black/50 z-[99999] flex items-center justify-center">
-    <div className="bg-white w-[420px] rounded-2xl shadow-2xl p-6">
-      <div className="text-xl font-bold mb-4 text-center">📊 운임조회 결과</div>
 
-      <div className="space-y-3 text-sm">
-
-        <div className="flex justify-between">
-          <span>조회된 건수</span>
-          <b>{fareResult.count} 건</b>
-        </div>
-
-        <div className="flex justify-between">
-          <span>최신 운임</span>
-          <b className="text-blue-600">{Number(fareResult.latestFare).toLocaleString()}원</b>
-        </div>
-
-        <div className="flex justify-between">
-          <span>최신 상차일</span>
-          <b>{fareResult.latestDate}</b>
-        </div>
-
-        <hr />
-
-        <div className="flex justify-between">
-          <span>평균 운임</span>
-          <b className="text-green-700">{fareResult.avg.toLocaleString()}원</b>
-        </div>
-
-        <div className="flex justify-between">
-          <span>최저 운임</span>
-          <b className="text-red-600">{fareResult.min.toLocaleString()}원</b>
-        </div>
-
-        <div className="flex justify-between">
-          <span>최고 운임</span>
-          <b className="text-purple-600">{fareResult.max.toLocaleString()}원</b>
-        </div>
-
-      </div>
-
-      <div className="text-center mt-6">
-        <button
-          onClick={() => setFareModalOpen(false)}
-          className="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm shadow hover:bg-blue-700"
-        >
-          닫기
-        </button>
-      </div>
-    </div>
-  </div>
-)}
 
 
   return (
@@ -2309,6 +2305,74 @@ const setBulk = (id, k, v) => {
       {renderForm()}
 
       <hr className="my-6 border-t-2 border-gray-300" />
+{fareModalOpen && fareResult && (
+  <div className="fixed inset-0 bg-black/50 z-[99999] flex items-center justify-center">
+    <div className="bg-white rounded-xl shadow-2xl w-[480px] p-6">
+      <div className="flex justify-between items-center mb-4">
+        <h3 className="text-lg font-bold">📦 운임조회 결과</h3>
+        <button
+          onClick={() => setFareModalOpen(false)}
+          className="text-gray-500 hover:text-black"
+        >
+          ✕
+        </button>
+      </div>
+
+      {/* 기본 운임 분석 */}
+      <div className="space-y-1 text-sm">
+        <p>· 조회된 데이터: <b>{fareResult.count}</b> 건</p>
+        <p>· 평균 운임: <b>{fareResult.avg.toLocaleString()}</b> 원</p>
+        <p>· 최소 ~ 최대: <b>{fareResult.min.toLocaleString()} ~ {fareResult.max.toLocaleString()}</b> 원</p>
+        <p>· 최신 운임: <b>{fareResult.latestFare}</b> 원</p>
+        <p>· 최근 상차일: {fareResult.latestDate || "-"}</p>
+      </div>
+
+      <hr className="my-4" />
+
+      {/* ⭐ AI 추천운임 */}
+      <div className="bg-amber-50 border border-amber-200 p-4 rounded-lg">
+        <h4 className="font-semibold mb-2 text-amber-700">🤖 AI 추천운임</h4>
+
+        {(() => {
+          const latest = Number(String(fareResult.latestFare || "0").replace(/,/g, ""));
+          const avg = fareResult.avg || 0;
+
+          const aiValue = Math.round(latest * 0.6 + avg * 0.4);
+          let confidence = Math.min(95, 60 + fareResult.count * 5);
+
+          return (
+            <>
+              <p className="text-sm mb-1">추천운임: <b className="text-lg">{aiValue.toLocaleString()}</b> 원</p>
+              <p className="text-sm text-gray-600 mb-3">
+                신뢰도 {confidence}% (유사데이터 {fareResult.count}건 분석)
+              </p>
+
+              <button
+                onClick={() => {
+                  onChange("청구운임", String(aiValue));
+                  setFareModalOpen(false);
+                  alert("AI 추천운임이 청구운임에 자동 적용되었습니다.");
+                }}
+                className="w-full bg-amber-600 text-white py-2 rounded hover:bg-amber-700"
+              >
+                추천운임 적용하기
+              </button>
+            </>
+          );
+        })()}
+      </div>
+
+      <div className="text-right mt-4">
+        <button
+          onClick={() => setFareModalOpen(false)}
+          className="px-4 py-2 border rounded"
+        >
+          닫기
+        </button>
+      </div>
+    </div>
+  </div>
+)}
 
       {/* ✅ 아래: 실시간배차현황 (메뉴와 동일 기능) */}
       <RealtimeStatusEmbed 
@@ -3159,7 +3223,7 @@ const handlePopupCarInput = async (e) => {
 ⏰ 하차: ${row.하차일 || ""} ${row.하차시간 || ""}
 
 🚚 차량: ${row.차량번호 || ""} / ${row.이름 || ""} (${row.전화번호 || ""})
-💰 운임: ${(row.청구운임 || 0).toLocaleString()}원
+💰 운임: ${(row.기사운임 || 0).toLocaleString()}원
 
 📝 메모:
 ${row.메모 || ""}
