@@ -4283,42 +4283,43 @@ React.useEffect(() => {
   const getId = (r) => r._id || r.id || r._fsid;
 
   // =============================================
-  // ✅ 대용량 업로드 (엑셀 → Firestore + 상태 반영 완전본)
-  // =============================================
-  const excelDateToISO = (value) => {
-    if (!value) return "";
-    if (typeof value === "number") {
-      const utcDays = Math.floor(value - 25569);
-      const date = new Date(utcDays * 86400 * 1000);
-      return date.toISOString().slice(0, 10);
+// ✅ 대용량 업로드 (엑셀 → Firestore)
+// =============================================
+const excelDateToISO = (value) => {
+  if (!value) return "";
+  if (typeof value === "number") {
+    const utcDays = Math.floor(value - 25569);
+    const date = new Date(utcDays * 86400 * 1000);
+    return date.toISOString().slice(0, 10);
+  }
+  if (typeof value === "string") {
+    const clean = value.replace(/[^\d]/g, "-").replace(/--+/g, "-");
+    const parts = clean.split("-").filter(Boolean);
+    if (parts.length === 3) {
+      let [y, m, d] = parts;
+      if (y.length === 2) y = "20" + y;
+      if (m.length === 1) m = "0" + m;
+      if (d.length === 1) d = "0" + d;
+      return `${y}-${m}-${d}`;
     }
-    if (typeof value === "string") {
-      const clean = value.replace(/[^\d]/g, "-").replace(/--+/g, "-");
-      const parts = clean.split("-").filter(Boolean);
-      if (parts.length === 3) {
-        let [y, m, d] = parts;
-        if (y.length === 2) y = "20" + y;
-        if (m.length === 1) m = "0" + m;
-        if (d.length === 1) d = "0" + d;
-        return `${y}-${m}-${d}`;
-      }
-    }
-    return "";
-  };
+  }
+  return "";
+};
 
-  const handleBulkFile = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+const handleBulkFile = (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = async (evt) => {
-      const data = new Uint8Array(evt.target.result);
-      const workbook = XLSX.read(data, { type: "array" });
-      const sheetName = workbook.SheetNames[0];
-      const ws = workbook.Sheets[sheetName];
-      const json = XLSX.utils.sheet_to_json(ws, { defval: "" });
+  const reader = new FileReader();
+  reader.onload = async (evt) => {
+    const data = new Uint8Array(evt.target.result);
+    const workbook = XLSX.read(data, { type: "array" });
+    const sheetName = workbook.SheetNames[0];
+    const ws = workbook.Sheets[sheetName];
+    const json = XLSX.utils.sheet_to_json(ws, { defval: "" });
 
-      const mapped = json.map((row) => ({
+    const mapped = json.map((row) => {
+      const mappedRow = {
         _id: crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`,
         등록일: excelDateToISO(row["상차일"]) || new Date().toISOString().slice(0, 10),
         상차일: excelDateToISO(row["상차일"]),
@@ -4343,33 +4344,50 @@ React.useEffect(() => {
         배차방식: row["배차방식"] || "",
         메모: row["메모"] || "",
         배차상태: row["배차상태"] || "배차중",
-      }));
+      };
 
-      if (!mapped.length) {
-        alert("❌ 엑셀 데이터가 없습니다.");
-        return;
-      }
+      // ====================================================
+      // 🚛 자동 기사 매칭 (차량번호 → 이름/전화번호 자동입력)
+      // ====================================================
+      const cleanCar = String(mappedRow.차량번호 || "").replace(/\s+/g, "");
 
-      if (!confirm(`${mapped.length}건을 업로드하시겠습니까?`)) return;
+      if (cleanCar) {
+        const matched = drivers.find(
+          (d) =>
+            String(d.차량번호 || "").replace(/\s+/g, "") === cleanCar
+        );
 
-      try {
-        for (const item of mapped) {
-          if (patchDispatch) {
-            await patchDispatch(item._id, item);
-          }
+        if (matched) {
+          mappedRow.이름 = matched.이름 || "";
+          mappedRow.전화번호 = matched.전화번호 || "";
+          mappedRow.배차상태 = "배차완료";
         }
-
-        setDispatchData((prev) => [...prev, ...mapped]);
-
-        alert("✅ 대용량 업로드 완료되었습니다.");
-      } catch (err) {
-        console.error(err);
-        alert("❌ 업로드 중 오류 발생");
       }
-    };
 
-    reader.readAsArrayBuffer(file);
+      return mappedRow;
+    });
+
+    if (!mapped.length) {
+      alert("❌ 엑셀 데이터가 없습니다.");
+      return;
+    }
+
+    if (!confirm(`${mapped.length}건을 업로드하시겠습니까?`)) return;
+
+    try {
+      for (const item of mapped) {
+        await patchDispatch(item._id, item);
+      }
+      alert("✅ 대용량 업로드 완료되었습니다.");
+    } catch (err) {
+      console.error(err);
+      alert("❌ 업로드 중 오류 발생");
+    }
   };
+
+  reader.readAsArrayBuffer(file);
+};
+
   // ================================  
   // 🔵 선택수정 / 수정완료  
   // ================================
