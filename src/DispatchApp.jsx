@@ -4248,13 +4248,6 @@ React.useEffect(() => {
   setEndDate(lastDay);
 }, []);
 
-
-// 🔥 배차현황 화면 들어올 때 날짜 초기화
-React.useEffect(() => {
-  setStartDate("");
-  setEndDate("");
-}, []);
-
   // ======================= 신규 오더 등록 팝업 상태 =======================
   const [showCreate, setShowCreate] = React.useState(false);
   const [newOrder, setNewOrder] = React.useState({
