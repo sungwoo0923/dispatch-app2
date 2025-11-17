@@ -803,116 +803,170 @@ const handleCarNoEnter = (value) => {
     setAutoDropMatched(false);
     alert("등록되었습니다.");
   };
-
-  const handleFareSearch = () => {
+// ⭐ 운임조회 (업그레이드 버전: 화물내용 없어도 동작 + 최근 화물내용 포함)
+const handleFareSearch = () => {
   const pickup = (form.상차지명 || "").trim();
-  const drop = (form.하차지명 || "").trim();
-  const ton = (form.차량톤수 || "").trim();
-  const cargo = (form.화물내용 || "").trim();
+  const drop   = (form.하차지명 || "").trim();
+  const tonStr = (form.차량톤수 || "").trim();   // 예: "1톤", "1.4톤"
+  const cargo  = (form.화물내용 || "").trim();   // 예: "12파렛", "변압기"
+  const vehicle = (form.차량종류 || "").trim();  // 예: "윙바디"
 
   if (!pickup || !drop) {
     alert("상차지명과 하차지명을 입력해주세요.");
     return;
   }
 
-  // 🔍 파렛트 수 추출
-  const pallets = (() => {
-    if (!cargo) return null;
-    const m = cargo.match(/(\d+)\s*(p|파레|파렛|파렛트)/i);
+  // -----------------------------
+  // 🔧 공통 유틸 함수들
+  // -----------------------------
+
+
+  // 파렛트/숫자 추출 (4p, 4P, 4파렛, 4팔레트, "4" 등 전부 인식)
+  const extractPalletNum = (text = "") => {
+    const str = String(text).trim();
+    if (!str) return null;
+
+    // 1) "4p", "4 P", "4파렛", "4팔레트" 등
+    const m = str.match(/(\d+)\s*(p|P|파|팔|파레|파렛|파렛트|팔레트|PL)/);
     if (m) return Number(m[1]);
 
-    const m2 = cargo.match(/^\s*(\d+)\s*$/);
+    // 2) 그냥 숫자만 있을 때 ("4")
+    const m2 = str.match(/^\s*(\d+)\s*$/);
     if (m2) return Number(m2[1]);
 
     return null;
-  })();
+  };
 
-    // 🔍 유사도 기반 필터 (차량종류 포함 버전)
-const filtered = (dispatchData || []).filter((r) => {
-  if (!r.상차지명 || !r.하차지명) return false;
+  // 선두 숫자 추출 (예: "12파렛 상온" → 12)
+  const extractLeadingNum = (text = "") => {
+    const m = String(text).trim().match(/^(\d+)/);
+    return m ? Number(m[1]) : null;
+  };
 
-  const matchPickup =
-    r.상차지명.includes(pickup) || pickup.includes(r.상차지명);
+  // 톤수 숫자 추출 (예: "1톤" → 1, "1.4톤" → 1.4, "2t" → 2)
+  const extractTonNum = (text = "") => {
+    const m = String(text).replace(/톤|t/gi, "").match(/(\d+(\.\d+)?)/);
+    return m ? Number(m[1]) : null;
+  };
 
-  const matchDrop =
-    r.하차지명.includes(drop) || drop.includes(r.하차지명);
-
-  // 톤수는 계속 무시
-  const matchTon = true;
-
-  // ⭐ 차량종류 비교 (입력된 경우만)
-  const matchVehicle =
-    !form.차량종류 || !r.차량종류
-      ? true
-      : r.차량종류 === form.차량종류;
+  // 입력값 기준 숫자들
+  const inputPallets = extractPalletNum(cargo);        // 파렛 수
+  const inputCargoNum = extractLeadingNum(cargo);      // 화물 선두 숫자
+  const inputTonNum = extractTonNum(tonStr);           // 톤수 숫자 (1, 1.4 등)
 
   // -----------------------------
-//  ⭐ 화물내용 유사도 판별
+// 🔍 1차 필터: (업그레이드 버전)
 // -----------------------------
+let filtered = (dispatchData || []).filter((r) => {
+  if (!r.상차지명 || !r.하차지명) return false;
 
-// 입력 화물에서 숫자 추출 (예: 4파레트 → 4)
-const extractNumber = (text = "") => {
-  const m = String(text).trim().match(/^(\d+)/); // 맨 앞 숫자
-  return m ? Number(m[1]) : null;
-};
+  const rPickup = String(r.상차지명).trim();
+  const rDrop   = String(r.하차지명).trim();
 
-// 입력 화물 시작 숫자
-const inputNum = extractNumber(cargo);
+  const matchPickup =
+  norm(rPickup).includes(norm(pickup)) ||
+  norm(pickup).includes(norm(rPickup));
 
-// 과거 기록 화물에서 숫자 추출
-const rowNum = extractNumber(r.화물내용);
+const matchDrop =
+  norm(rDrop).includes(norm(drop)) ||
+  norm(drop).includes(norm(rDrop));
 
-// -----------------------------
-// CASE A: 숫자 화물 (파레트류)
-// -----------------------------
-let matchCargo = true;
 
-if (inputNum !== null) {
-  if (rowNum !== null) {
-    // 숫자 화물끼리 ±1 허용
-    matchCargo = Math.abs(inputNum - rowNum) <= 1;
-  } else {
-    // 기록이 숫자가 아니면 매칭 불가 → false
-    matchCargo = false;
+  if (!matchPickup || !matchDrop) return false;
+
+const matchVehicle =
+  !vehicle || !r.차량종류
+    ? true
+    : norm(r.차량종류).includes(norm(vehicle)) || norm(vehicle).includes(norm(r.차량종류));
+
+
+  if (!matchVehicle) return false;
+
+  // 톤수 비교
+  let matchTon = true;
+  if (inputTonNum != null) {
+    const rowTonNum = extractTonNum(r.차량톤수 || "");
+    if (rowTonNum != null) {
+      matchTon = Math.abs(rowTonNum - inputTonNum) <= 0.5;
+    }
   }
-}
 
-// -----------------------------
-// CASE B: 일반 화물 (변압기, 박스 등)
-// -----------------------------
-if (inputNum === null) {
-  const normCargo = (s) => String(s || "").trim().toLowerCase();
+  // 화물내용 비교
+  let matchCargo = true;
 
-  // 동일/부분일치 화물 있으면 OK
-  if (normCargo(r.화물내용).includes(normCargo(cargo))) {
-    matchCargo = true;
+  const rowCargo = String(r.화물내용 || "");
+  const normInputCargo = norm(cargo);
+  const normRowCargo   = norm(rowCargo);
+
+  if (inputPallets != null) {
+    const rowPallets = extractPalletNum(rowCargo) ?? extractLeadingNum(rowCargo);
+    if (rowPallets != null) {
+      matchCargo = Math.abs(rowPallets - inputPallets) <= 1;
+    } else {
+      matchCargo = false;
+    }
+  } else if (inputCargoNum != null) {
+    const rowNum = extractLeadingNum(rowCargo);
+    if (rowNum != null) {
+      matchCargo = Math.abs(rowNum - inputCargoNum) <= 1;
+    } else {
+      matchCargo = false;
+    }
   } else {
-    // 동일 화물 없으면 → 톤수 기준 비교
-    matchCargo =
-      (form.차량톤수 && r.차량톤수)
-        ? r.차량톤수.includes(form.차량톤수)
-        : true;
+    if (normRowCargo.includes(normInputCargo) || normInputCargo.includes(normRowCargo)) {
+      matchCargo = true;
+    } else {
+      matchCargo = matchTon;
+    }
   }
-}
 
-
-  return matchPickup && matchDrop && matchCargo && matchTon && matchVehicle;
-
+  return matchVehicle && matchTon && matchCargo;
 });
 
+  // -----------------------------
+  // 🔁 2차 Fallback: 화물/톤/차량 다 무시하고 상하차지만 맞는 데이터
+  // -----------------------------
+  if (!filtered.length) {
+    filtered = (dispatchData || []).filter((r) => {
+      if (!r.상차지명 || !r.하차지명) return false;
+      const rPickup = String(r.상차지명).trim();
+      const rDrop   = String(r.하차지명).trim();
+      const matchPickup =
+        rPickup.includes(pickup) || pickup.includes(rPickup);
+      const matchDrop =
+        rDrop.includes(drop) || drop.includes(rDrop);
+      return matchPickup && matchDrop;
+    });
+  }
 
   if (!filtered.length) {
     alert("유사한 과거 운임 데이터를 찾지 못했습니다.");
     return;
   }
 
-  const fares = filtered.map((r) => Number(String(r.청구운임).replace(/,/g, "")));
+  // -----------------------------
+  // 💰 운임 통계 계산
+  // -----------------------------
+  const fares = filtered
+    .map((r) => Number(String(r.청구운임 || "0").replace(/,/g, "")))
+    .filter((n) => !isNaN(n));
+
+  if (!fares.length) {
+    alert("해당 조건의 과거 데이터에 청구운임 정보가 없습니다.");
+    return;
+  }
 
   const avg = Math.round(fares.reduce((a, b) => a + b, 0) / fares.length);
   const min = Math.min(...fares);
   const max = Math.max(...fares);
 
-  const latestRow = filtered.sort((a, b) => (b.상차일 || "").localeCompare(a.상차일 || ""))[0];
+  // 🔥 가장 최근 상차일 기준 정렬 후, 최신 1건
+  const latestRow = filtered
+    .slice()
+    .sort((a, b) => (b.상차일 || "").localeCompare(a.상차일 || ""))[0];
+
+  const latestCargo =
+  latestRow?.화물내용?.trim() ? latestRow.화물내용 : "(기록 없음)";
 
   setFareResult({
     count: filtered.length,
@@ -921,10 +975,13 @@ if (inputNum === null) {
     max,
     latestFare: latestRow.청구운임,
     latestDate: latestRow.상차일,
+    latestCargo, // ⭐ 최근 화물내용 추가
   });
 
   setFareModalOpen(true);
 };
+
+  
 
 // ⭐ 운임조회 팝업 상태
 const [fareModalOpen, setFareModalOpen] = React.useState(false);
@@ -2325,6 +2382,9 @@ const setBulk = (id, k, v) => {
         <p>· 최소 ~ 최대: <b>{fareResult.min.toLocaleString()} ~ {fareResult.max.toLocaleString()}</b> 원</p>
         <p>· 최신 운임: <b>{fareResult.latestFare}</b> 원</p>
         <p>· 최근 상차일: {fareResult.latestDate || "-"}</p>
+        <p>· 최근 화물내용: 
+  {fareResult.latestCargo === "" ? "(기록 없음)" : fareResult.latestCargo}
+</p>
       </div>
 
       <hr className="my-4" />
