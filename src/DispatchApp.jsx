@@ -3461,10 +3461,91 @@ const handlePopupCarInput = async (e) => {
   // ------------------------
   // 📌 공유 메시지
   // ------------------------
-  const shareDispatch = (row) => {
-    const url = `${window.location.origin}/upload?id=${row._id}`;
+  // ------------------------
+// 📌 카카오톡 메시지 생성
+// ------------------------
+const makeKakaoMsg = (r) => {
+  // 날짜 표시 "11월 18일 (화)"
+  const dateObj = r.상차일 ? new Date(r.상차일) : null;
+  const dayNames = ["일", "월", "화", "수", "목", "금", "토"];
+  const dayLabel = dateObj ? dayNames[dateObj.getDay()] : "";
+  const month = dateObj ? dateObj.getMonth() + 1 : "";
+  const day = dateObj ? dateObj.getDate() : "";
+  const shortDate = dateObj ? `${month}월 ${day}일 (${dayLabel})` : "";
 
-    const msg = `
+  // 전화번호 하이픈 자동 정리
+  const formatPhone = (p) => {
+    if (!p) return "";
+    const num = p.replace(/\D/g, "");
+    if (num.length === 11)
+      return num.replace(/(\d{3})(\d{4})(\d{4})/, "$1-$2-$3");
+    if (num.length === 10)
+      return num.replace(/(\d{3})(\d{3})(\d{4})/, "$1-$2-$3");
+    return p;
+  };
+
+  const driverPhone = formatPhone(r.전화번호 || "");
+
+  // 익일 자동 판단
+  let displayUnloadTime = r.하차시간 || "";
+  if (r.상차일 && r.하차일) {
+    const s = new Date(r.상차일);
+    const h = new Date(r.하차일);
+    if (h.getTime() > s.getTime()) {
+      displayUnloadTime = `익일 ${r.하차시간 || ""}`;
+    }
+  }
+
+  // 지급방식 표시 결정
+  let payLabel = "(부가세별도)";
+  if (r.지급방식 === "선불" || r.지급방식 === "착불") {
+    payLabel = `(${r.지급방식})`;
+  }
+
+  return `
+${shortDate}
+
+[상차지]
+${r.상차지명 || ""}
+☎ 
+상차일자 : ${r.상차일 || ""}
+상차시간 : ${r.상차시간 || ""}
+상차주소 : ${r.상차지주소 || ""}
+
+[하차지]
+${r.하차지명 || ""}
+하차일자 : ${r.하차일 || ""}
+하차시간 : ${displayUnloadTime}
+하차주소 : ${r.하차지주소 || ""}
+☎ 
+
+배차차량 : ${r.차량번호 || ""}/${r.이름 || ""}/${driverPhone}
+화물내용 : ${r.화물내용 || ""}
+차량종류 : ${r.차량종류 || ""}
+차량톤수 : ${r.차량톤수 || ""}
+
+운임 : ${(r.청구운임 || 0).toLocaleString()}원 ${payLabel}
+
+배차되었습니다.
+  `.trim();
+};
+
+// ------------------------
+// 📌 카카오톡 복사
+// ------------------------
+const kakaoCopy = (row) => {
+  const msg = makeKakaoMsg(row);
+  navigator.clipboard.writeText(msg);
+  alert("📋 카카오톡 메시지가 복사되었습니다!\n카톡에 붙여넣기 하면 바로 전송됩니다.");
+};
+
+// ------------------------
+// 📌 공유 메시지 (기존 함수)
+// ------------------------
+const shareDispatch = (row) => {
+  const url = `${window.location.origin}/upload?id=${row._id}`;
+
+  const msg = `
 📦 [배차 정보]
 
 🟦 거래처: ${row.거래처명 || ""}
@@ -3475,7 +3556,7 @@ const handlePopupCarInput = async (e) => {
 ⏰ 하차: ${row.하차일 || ""} ${row.하차시간 || ""}
 
 🚚 차량: ${row.차량번호 || ""} / ${row.이름 || ""} (${row.전화번호 || ""})
-💰 운임: ${(row.기사운임 || 0).toLocaleString()}원
+💰 기사운임: ${(row.기사운임 || 0).toLocaleString()}원
 
 📝 메모:
 ${row.메모 || ""}
@@ -3484,9 +3565,9 @@ ${row.메모 || ""}
 ${url}
 `.trim();
 
-    navigator.clipboard.writeText(msg);
-    alert("📋 공유 메시지가 복사되었습니다!");
-  };
+  navigator.clipboard.writeText(msg);
+  alert("📋 공유 메시지가 복사되었습니다!");
+};
 
   // ------------------------
   // 테이블 스타일
@@ -3697,6 +3778,7 @@ ${url}
                 "메모",
                 "첨부",
                 "공유",
+                "카톡",
               ].map((h) => (
                 <th key={h} className={head}>
                   {h}
@@ -3851,14 +3933,24 @@ ${url}
                   </td>
 
                   {/* 공유 */}
-                  <td className={cell}>
-                    <button
-                      onClick={() => shareDispatch(r)}
-                      className="bg-blue-600 text-white px-3 py-1 rounded"
-                    >
-                      공유
-                    </button>
-                  </td>
+<td className={cell}>
+  <button
+    onClick={() => shareDispatch(r)}
+    className="bg-blue-600 text-white px-3 py-1 rounded"
+  >
+    공유
+  </button>
+</td>
+
+{/* 카톡 */}
+<td className={cell}>
+  <button
+    onClick={() => kakaoCopy(r)}
+    className="bg-yellow-500 text-white px-3 py-1 rounded"
+  >
+    카톡
+  </button>
+</td>
                 </tr>
               );
             })}
