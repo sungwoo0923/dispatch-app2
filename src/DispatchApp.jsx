@@ -2731,7 +2731,8 @@ function RealtimeStatus({
 // 🔵 선택수정 팝업 상태
 const [editPopupOpen, setEditPopupOpen] = React.useState(false);
 const [editTarget, setEditTarget] = React.useState(null);
-
+// 🔵 동일 노선 추천 리스트
+const [similarOrders, setSimilarOrders] = React.useState([]);
 
 
   // ----------------------------
@@ -2966,7 +2967,33 @@ React.useEffect(() => {
     setWarningList(temp);
   }, [rows]);
   
+// ------------------------
+// 🔁 동일 노선 추천 불러오기
+// ------------------------
+const loadSimilarOrders = React.useCallback((fromName, toName) => {
+  if (!fromName || !toName) {
+    setSimilarOrders([]);
+    return;
+  }
 
+  try {
+    const qRef = query(
+      collection(db, "dispatch"),
+      where("상차지명", "==", fromName),
+      where("하차지명", "==", toName),
+      orderBy("상차일", "desc"),
+      limit(5)
+    );
+
+    onSnapshot(qRef, (snap) => {
+      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      setSimilarOrders(list);
+    });
+  } catch (e) {
+    console.error("동일 노선 추천 오류", e);
+    setSimilarOrders([]);
+  }
+}, []);
   // ------------------------
   // 숫자 변환
   // ------------------------
@@ -4146,69 +4173,128 @@ ${url}
                   </select>
                 </div>
               </div>
-
-              {/* 상하차지 */}
-              <div>
-                <label>상차지명</label>
-                <input
-                  type="text"
-                  className="border p-2 rounded w-full"
-                  value={newOrder.상차지명}
-                  onChange={(e) =>
-                    setNewOrder((prev) => ({
-                      ...prev,
-                      상차지명: e.target.value,
-                    }))
-                  }
-                />
-              </div>
-
-              <div>
-                <label>상차지주소</label>
-                <input
-                  type="text"
-                  className="border p-2 rounded w-full"
-                  value={newOrder.상차지주소}
-                  onChange={(e) =>
-                    setNewOrder((prev) => ({
-                      ...prev,
-                      상차지주소: e.target.value,
-                    }))
-                  }
-                />
-              </div>
-
-              <div>
-                <label>하차지명</label>
-                <input
-                  type="text"
-                  className="border p-2 rounded w-full"
-                  value={newOrder.하차지명}
-                  onChange={(e) =>
-                    setNewOrder((prev) => ({
-                      ...prev,
-                      하차지명: e.target.value,
-                    }))
-                  }
-                />
-              </div>
-
-              <div>
-                <label>하차지주소</label>
-                <input
-                  type="text"
-                  className="border p-2 rounded w-full"
-                  value={newOrder.하차지주소}
-                  onChange={(e) =>
-                    setNewOrder((prev) => ({
-                      ...prev,
-                      하차지주소: e.target.value,
-                    }))
-                  }
-                />
-              </div>
-              {/* 화물내용 */}
+{/* 상하차지 */}
 <div>
+
+  {/* 상차지명 */}
+  <div>
+    <label>상차지명</label>
+    <input
+      type="text"
+      className="border p-2 rounded w-full"
+      value={newOrder.상차지명}
+      onChange={(e) => {
+        const v = e.target.value;
+        setNewOrder((prev) => ({
+          ...prev,
+          상차지명: v,
+        }));
+        loadSimilarOrders(v, newOrder.하차지명);
+      }}
+    />
+  </div>
+
+  {/* 상차지주소 */}
+  <div>
+    <label>상차지주소</label>
+    <input
+      type="text"
+      className="border p-2 rounded w-full"
+      value={newOrder.상차지주소}
+      onChange={(e) =>
+        setNewOrder((prev) => ({
+          ...prev,
+          상차지주소: e.target.value,
+        }))
+      }
+    />
+  </div>
+
+  {/* 하차지명 */}
+  <div>
+    <label>하차지명</label>
+    <input
+      type="text"
+      className="border p-2 rounded w-full"
+      value={newOrder.하차지명}
+      onChange={(e) => {
+        const v = e.target.value;
+        setNewOrder((prev) => ({
+          ...prev,
+          하차지명: v,
+        }));
+        loadSimilarOrders(newOrder.상차지명, v);
+      }}
+    />
+  </div>
+
+  {/* 하차지주소 */}
+  <div>
+    <label>하차지주소</label>
+    <input
+      type="text"
+      className="border p-2 rounded w-full"
+      value={newOrder.하차지주소}
+      onChange={(e) =>
+        setNewOrder((prev) => ({
+          ...prev,
+          하차지주소: e.target.value,
+        }))
+      }
+    />
+  </div>
+
+</div>
+
+{/* 화물내용 */}
+<div>
+              
+  {/* 🔁 최근 동일 노선 추천 */}
+{similarOrders.length > 0 && (
+  <div className="p-3 border rounded bg-gray-50 mt-3 text-sm">
+    <h3 className="font-bold mb-2">📌 최근 동일 노선 기록</h3>
+
+    {similarOrders.map((o, idx) => (
+      <div
+        key={o.id}
+        className="p-2 mb-2 border rounded cursor-pointer hover:bg-blue-50"
+        onClick={() => {
+          setNewOrder((prev) => ({
+            ...prev,
+            화물내용: o.화물내용 || prev.화물내용,
+            차량종류: o.차량종류 || prev.차량종류,
+            차량톤수: o.차량톤수 || prev.차량톤수,
+            청구운임: o.청구운임 || prev.청구운임,
+            기사운임: o.기사운임 || prev.기사운임,
+            차량번호: o.차량번호 || prev.차량번호,
+            이름: o.이름 || prev.이름,
+            전화번호: o.전화번호 || prev.전화번호,
+          }));
+        }}
+      >
+        <div className="font-semibold">
+          {idx + 1}) {o.상차지명} → {o.하차지명}
+        </div>
+
+        <div className="text-xs text-gray-500">{o.상차일}</div>
+
+        <div className="text-xs mt-1">
+          차량종류: {o.차량종류 || "-"} / 톤수: {o.차량톤수 || "-"}
+        </div>
+        <div className="text-xs">화물: {o.화물내용 || "-"}</div>
+
+        <div className="text-xs mt-1">
+          청구운임: {(o.청구운임 || 0).toLocaleString()}원<br />
+          기사운임: {(o.기사운임 || 0).toLocaleString()}원
+        </div>
+
+        <div className="text-xs mt-1">
+          기사: {o.이름 || "-"} / {o.차량번호 || "-"}
+        </div>
+      </div>
+    ))}
+  </div>
+)}
   <label>화물내용</label>
   <input
     className="border p-2 rounded w-full"
