@@ -988,21 +988,48 @@ const [fareModalOpen, setFareModalOpen] = React.useState(false);
 const [fareResult, setFareResult] = React.useState(null);
 
   // ------------------ 오더복사 ------------------
-  const [copyOpen, setCopyOpen] = React.useState(false);
-  const [copyQ, setCopyQ] = React.useState("");
-  const copyList = React.useMemo(() => {
-    const q = copyQ.trim().toLowerCase();
-    const arr = (dispatchData || []).slice().sort((a, b) =>
-      (a.상차일 || "").localeCompare(b.상차일 || "") ||
-      (a.상차시간 || "").localeCompare(b.상차시간 || "")
+// 🔎 오더복사용 상태
+const [copyOpen, setCopyOpen] = React.useState(false);
+const [copyQ, setCopyQ] = React.useState("");
+const [copyStart, setCopyStart] = React.useState("");
+const [copyEnd, setCopyEnd] = React.useState("");
+const [copyFilterType, setCopyFilterType] = React.useState("전체");
+
+// 🔍 오더복사 리스트
+const copyList = React.useMemo(() => {
+  const q = copyQ.trim().toLowerCase();
+
+  // 검색어 없으면 아무것도 안 보여줌
+  if (!q) return [];
+
+  let arr = (dispatchData || []);
+
+  // 날짜 필터
+  if (copyStart) arr = arr.filter((r) => (r.상차일 || "") >= copyStart);
+  if (copyEnd)   arr = arr.filter((r) => (r.상차일 || "") <= copyEnd);
+
+  // 필드 필터
+  if (copyFilterType !== "전체") {
+    arr = arr.filter((r) =>
+      String(r[copyFilterType] || "").toLowerCase().includes(q)
     );
-    if (!q) return arr;
-    return arr.filter((r) =>
+  } else {
+    arr = arr.filter((r) =>
       ["거래처명", "상차지명", "하차지명", "화물내용"].some((k) =>
         String(r[k] || "").toLowerCase().includes(q)
       )
     );
-  }, [dispatchData, copyQ]);
+  }
+
+  // 정렬
+  arr = arr.slice().sort((a, b) =>
+    (a.상차일 || "").localeCompare(b.상차일 || "") ||
+    (a.상차시간 || "").localeCompare(b.상차시간 || "")
+  );
+
+  return arr;
+}, [dispatchData, copyQ, copyStart, copyEnd, copyFilterType]);
+const [copySelected, setCopySelected] = React.useState([]);
 
   const applyCopy = (r) => {
     const keep = {
@@ -1393,66 +1420,163 @@ const [fareResult, setFareResult] = React.useState(null);
         </div>
       </form>
 
-      {/* ───────── 오더복사 모달 ───────── */}
-      {copyOpen && (
-        <div className="fixed inset-0 bg-black/40 z-[9999] flex items-center justify-center">
-          <div className="bg-white rounded-xl shadow-2xl w-[1200px] max-h-[85vh] overflow-hidden">
-            <div className="px-4 py-3 border-b flex items-center justify-between">
-              <b>오더복사</b>
-              <button onClick={() => setCopyOpen(false)} className="text-gray-500">✕</button>
-            </div>
-            <div className="p-4">
-              <input
-                className="border p-2 rounded w-80"
-                placeholder="상차지명/거래처명/하차지명/화물내용 검색"
-                value={copyQ}
-                onChange={(e) => setCopyQ(e.target.value)}
-              />
-              <div className="overflow-auto mt-3">
-                <table className="min-w-[1100px] text-sm border">
-                  <thead>
-                    <tr>
-                      {["상차일","상차시간","거래처명","상차지명","상차지주소","하차지명","하차지주소","화물내용","차량종류","차량톤수","메모","복사"].map((h)=>(
-                        <th key={h} className="border px-2 py-2 bg-gray-100 text-center whitespace-nowrap">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {copyList.map((r,i)=>(
-                      <tr key={r._id || i} className={i%2? "bg-gray-50":""}>
-                        <td className="border px-2 py-1 text-center whitespace-nowrap">{r.상차일}</td>
-                        <td className="border px-2 py-1 text-center whitespace-nowrap">{r.상차시간}</td>
-                        <td className="border px-2 py-1 text-center whitespace-nowrap">{r.거래처명}</td>
-                        <td className="border px-2 py-1 text-center whitespace-nowrap">{r.상차지명}</td>
-                        <td className="border px-2 py-1 text-center whitespace-nowrap">{r.상차지주소}</td>
-                        <td className="border px-2 py-1 text-center whitespace-nowrap">{r.하차지명}</td>
-                        <td className="border px-2 py-1 text-center whitespace-nowrap">{r.하차지주소}</td>
-                        <td className="border px-2 py-1 text-center whitespace-nowrap">{r.화물내용}</td>
-                        <td className="border px-2 py-1 text-center whitespace-nowrap">{r.차량종류}</td>
-                        <td className="border px-2 py-1 text-center whitespace-nowrap">{r.차량톤수}</td>
-                        <td className="border px-2 py-1 text-center whitespace-nowrap">{r.메모}</td>
-                        <td className="border px-2 py-1 text-center">
-                          <button onClick={()=>applyCopy(r)} className="px-2 py-1 bg-indigo-600 text-white rounded text-xs">복사</button>
-                        </td>
-                      </tr>
-                    ))}
-                    {copyList.length===0 && (
-                      <tr><td className="text-center text-gray-500 py-6" colSpan={12}>검색 결과가 없습니다.</td></tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-            <div className="px-4 py-3 border-t text-right">
-              <button onClick={()=>setCopyOpen(false)} className="px-3 py-2 rounded border">닫기</button>
-            </div>
-          </div>
+      {/* ------------------------------  
+      🔵 오더복사 팝업 (완성본)
+-------------------------------- */}
+{copyOpen && (
+  <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+    <div className="bg-white w-[900px] p-5 rounded shadow-xl">
+
+      {/* 헤더 */}
+      <div className="flex justify-between mb-4">
+        <h2 className="text-lg font-bold">오더복사</h2>
+        <button onClick={() => setCopyOpen(false)}>✕</button>
+      </div>
+
+      {/* 검색바 */}
+      <div className="flex gap-2 mb-3">
+
+        {/* 드롭다운 */}
+        <select
+          className="border p-2 rounded"
+          value={copyFilterType}
+          onChange={(e) => setCopyFilterType(e.target.value)}
+        >
+          <option value="전체">전체</option>
+          <option value="거래처명">거래처명</option>
+          <option value="상차지명">상차지명</option>
+          <option value="하차지명">하차지명</option>
+          <option value="화물내용">화물내용</option>
+        </select>
+
+        {/* 검색어 입력 */}
+        <input
+          type="text"
+          placeholder="검색어 입력"
+          className="border p-2 rounded flex-1"
+          value={copyQ}
+          onChange={(e) => setCopyQ(e.target.value)}
+        />
+
+        {/* 🔥 복사 버튼 */}
+        <button
+  className="px-4 py-2 bg-blue-600 text-white rounded"
+  onClick={() => {
+    if (copySelected.length === 0)
+      return alert("복사할 항목을 선택하세요.");
+
+    const r = copySelected[0];
+
+    const today = new Date().toISOString().slice(0, 10);
+
+    // 🔥 선택한 오더 내용 입력폼으로 복사 + 날짜는 오늘로 재설정
+    setForm((prev) => ({
+      ...prev,
+      거래처명: r.거래처명 || "",
+      상차지명: r.상차지명 || "",
+      상차지주소: r.상차지주소 || "",
+      하차지명: r.하차지명 || "",
+      하차지주소: r.하차지주소 || "",
+      화물내용: r.화물내용 || "",
+      차량종류: r.차량종류 || "",
+      차량톤수: r.차량톤수 || "",
+      
+      // 🔥 여기 핵심 3가지: 이걸 오늘 날짜로 덮어씀
+      상차일: today,
+      하차일: today,
+      등록일: today,
+
+      상차시간: r.상차시간 || "",
+      하차시간: r.하차시간 || "",
+      지급방식: r.지급방식 || "",
+      배차방식: r.배차방식 || "",
+      메모: r.메모 || "",
+
+      // 차량번호/기사명은 복사 안 함
+      차량번호: "",
+      이름: "",
+      전화번호: "",
+      배차상태: "배차중",
+    }));
+
+    alert("오더 내용이 입력창에 복사되었습니다!");
+    setCopyOpen(false);
+  }}
+>
+  복사
+</button>
+
+      </div>
+
+      {/* 결과 테이블 */}
+<div className="border rounded overflow-x-auto">
+  <div className="max-h-[360px] overflow-y-auto">
+    <table className="min-w-max text-sm whitespace-nowrap">
+<thead className="bg-gray-100">
+  <tr>
+    <th className="p-2 border px-3 py-2 whitespace-nowrap">상차일</th>
+    <th className="p-2 border px-3 py-2 whitespace-nowrap">거래처명</th>
+    <th className="p-2 border px-3 py-2 whitespace-nowrap">상차지명</th>
+    <th className="p-2 border px-3 py-2 whitespace-nowrap">하차지명</th>
+    <th className="p-2 border px-3 py-2 whitespace-nowrap">화물내용</th>
+    <th className="p-2 border px-3 py-2 whitespace-nowrap">차량종류</th>
+    <th className="p-2 border px-3 py-2 whitespace-nowrap">차량톤수</th>
+    <th className="p-2 border px-3 py-2 whitespace-nowrap">메모</th>
+  </tr>
+</thead>
+
+            <tbody>
+              {copyList.length === 0 ? (
+                <tr>
+                  <td colSpan={10} className="text-center p-4 text-gray-500">
+                    검색 결과가 없습니다.
+                  </td>
+                </tr>
+              ) : (
+                copyList.map((row) => (
+                  <tr key={row._id} className="border-b hover:bg-gray-50">
+                    <td className="text-center">
+                      <input
+                        type="checkbox"
+                        checked={copySelected.includes(row)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setCopySelected((prev) => [...prev, row]);
+                          } else {
+                            setCopySelected((prev) =>
+                              prev.filter((x) => x !== row)
+                            );
+                          }
+                        }}
+                      />
+                    </td>
+                    <td className="p-2">{row.상차일}</td>
+                    <td className="p-2">{row.거래처명}</td>
+                    <td className="p-2">{row.상차지명}</td>
+                    <td className="p-2">{row.하차지명}</td>
+                    <td className="p-2">{row.화물내용}</td>
+                    <td className="p-2">{row.차량종류}</td>
+                    <td className="p-2">{row.차량톤수}</td>
+                    <td className="p-2">{row.메모}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
-      )}
+      </div>
+
+      {/* 닫기 버튼 */}
+      <div className="text-right mt-3">
+        <button className="px-3 py-1 bg-gray-300 rounded" onClick={() => setCopyOpen(false)}>
+          닫기
+        </button>
+      </div>
+    </div>
+  </div>
+)}
     </>
   );
-
-
 
   /* -------------------------------------------------
    ✅ 하단부 실시간배차현황 (배차관리 전용)
@@ -1721,24 +1845,71 @@ const removeOne = async (id) => {
   // 엑셀 다운로드
 const exportExcel = () => {
   try {
-    const rows = filtered.map(r => ({
-      순번: r.순번, 등록일: r.등록일, 상차일: r.상차일, 상차시간: r.상차시간,
-      하차일: r.하차일, 하차시간: r.하차시간, 거래처명: r.거래처명,
-      상차지명: r.상차지명, 상차지주소: r.상차지주소, 하차지명: r.하차지명, 하차지주소: r.하차지주소,
-      화물내용: r.화물내용, 차량종류: r.차량종류, 차량톤수: r.차량톤수,
-      차량번호: r.차량번호, 이름: r.이름, 전화번호: r.전화번호,
-      배차상태: r.배차상태, 청구운임: r.청구운임, 기사운임: r.기사운임, 수수료: r.수수료,
-      지급방식: r.지급방식, 배차방식: r.배차방식, 메모: r.메모,
-    }));
+    const toExcelDate = (str) => {
+      if (!str) return "";
+      const dt = new Date(str);
+      if (isNaN(dt.getTime())) return "";
+      return dt;
+    };
+
+    const toNumber = (v) => {
+      if (v === null || v === undefined) return 0;
+      const clean = String(v).replace(/[^\d-]/g, "");
+      const n = Number(clean);
+      return isNaN(n) ? 0 : n;
+    };
+
+    const rows = filtered.map(r => {
+      const claim = toNumber(r.청구운임);
+      const drive = toNumber(r.기사운임);
+      let fee = toNumber(r.수수료);
+
+      // 🔥 여기 핵심 (수수료 자동보정)
+      // Firestore 값이 비어있거나 0인데 실제로는 수수료가 있어야 하는 경우 처리
+      if (fee === 0 && claim > 0 && drive > 0) {
+        fee = claim - drive;
+      }
+
+      return {
+        순번: r.순번 || "",
+        등록일: toExcelDate(r.등록일),
+        상차일: toExcelDate(r.상차일),
+        상차시간: r.상차시간 || "",
+        하차일: toExcelDate(r.하차일),
+        하차시간: r.하차시간 || "",
+        거래처명: r.거래처명 || "",
+        상차지명: r.상차지명 || "",
+        상차지주소: r.상차지주소 || "",
+        하차지명: r.하차지명 || "",
+        하차지주소: r.하차지주소 || "",
+        화물내용: r.화물내용 || "",
+        차량종류: r.차량종류 || "",
+        차량톤수: r.차량톤수 || "",
+        차량번호: r.차량번호 || "",
+        이름: r.이름 || "",
+        전화번호: r.전화번호 || "",
+        배차상태: r.배차상태 || "",
+        청구운임: claim,
+        기사운임: drive,
+        수수료: fee,
+        지급방식: r.지급방식 || "",
+        배차방식: r.배차방식 || "",
+        메모: r.메모 || "",
+      };
+    });
+
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.json_to_sheet(rows);
-    XLSX.utils.book_append_sheet(wb, ws, "실시간배차현황");
-    XLSX.writeFile(wb, `실시간배차현황_${_todayStr()}.xlsx`);
+
+    XLSX.utils.book_append_sheet(wb, ws, "배차현황");
+    XLSX.writeFile(wb, `배차현황_${_todayStr()}.xlsx`);
   } catch (e) {
     console.error(e);
-    alert("엑셀 내보내기 중 오류가 발생했습니다.");
+    alert("엑셀 내보내기 오류");
   }
 };
+
+
 
   return (
     <div className="mt-8">
@@ -4953,37 +5124,71 @@ const handleEditToggle = async () => {
   };
 
   const downloadExcel = () => {
-    const rows = dispatchData.map((r, i) => ({
+  const rows = dispatchData.map((r, i) => {
+    const sale = toInt(r.청구운임);
+    const driver = toInt(r.기사운임);
+    const fee = sale - driver;   // ⭐ Firestore 값 무시하고 직접 계산
+
+    return {
       순번: i + 1,
-      등록일: r.등록일,
-      상차일: r.상차일,
-      상차시간: r.상차시간,
-      하차일: r.하차일,
-      하차시간: r.하차시간,
-      거래처명: r.거래처명,
-      상차지명: r.상차지명,
-      상차지주소: r.상차지주소,
-      하차지명: r.하차지명,
-      하차지주소: r.하차지주소,
-      화물내용: r.화물내용,
-      차량종류: r.차량종류,
-      차량톤수: r.차량톤수,
-      차량번호: r.차량번호,
-      기사명: r.이름,
-      전화번호: r.전화번호,
-      배차상태: r.배차상태,
-      청구운임: toInt(r.청구운임).toLocaleString("ko-KR"),
-      기사운임: toInt(r.기사운임).toLocaleString("ko-KR"),
-      수수료: toInt(r.수수료).toLocaleString("ko-KR"),
-      지급방식: r.지급방식,
-      배차방식: r.배차방식,
-      메모: r.메모,
-    }));
-    const ws = XLSX.utils.json_to_sheet(rows);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "배차현황");
-    XLSX.writeFile(wb, "배차현황.xlsx");
-  };
+
+      // 🔵 날짜는 Excel 날짜 형식으로 유지되도록 그대로 문자열로 저장
+      등록일: r.등록일 || "",
+      상차일: r.상차일 || "",
+      상차시간: r.상차시간 || "",
+      하차일: r.하차일 || "",
+      하차시간: r.하차시간 || "",
+
+      거래처명: r.거래처명 || "",
+      상차지명: r.상차지명 || "",
+      상차지주소: r.상차지주소 || "",
+      하차지명: r.하차지명 || "",
+      하차지주소: r.하차지주소 || "",
+      화물내용: r.화물내용 || "",
+
+      차량종류: r.차량종류 || "",
+      차량톤수: r.차량톤수 || "",
+      차량번호: r.차량번호 || "",
+      기사명: r.이름 || "",
+      전화번호: r.전화번호 || "",
+      배차상태: r.배차상태 || "",
+
+      // 🔵 숫자는 숫자로 저장 (엑셀에서 수식/필터/정렬 가능)
+      청구운임: sale,
+      기사운임: driver,
+      수수료: fee,
+
+      지급방식: r.지급방식 || "",
+      배차방식: r.배차방식 || "",
+      메모: r.메모 || "",
+    };
+  });
+
+  const ws = XLSX.utils.json_to_sheet(rows);
+
+  // 숫자 콤마 자동적용을 위한 서식 지정
+  const range = XLSX.utils.decode_range(ws['!ref']);
+
+  for (let C = 0; C <= range.e.c; C++) {
+    const header = ws[XLSX.utils.encode_cell({ r: 0, c: C })]?.v;
+
+    if (["청구운임", "기사운임", "수수료"].includes(header)) {
+      for (let R = 1; R <= range.e.r; R++) {
+        const cellRef = XLSX.utils.encode_cell({ r: R, c: C });
+        if (!ws[cellRef]) continue;
+
+        ws[cellRef].t = "n";            // 숫자 타입
+        ws[cellRef].z = "#,##0";        // 콤마 적용
+      }
+    }
+  }
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "배차현황");
+
+  XLSX.writeFile(wb, "배차현황.xlsx");
+};
+
 
   // ===================== 정렬 ======================
   const filtered = React.useMemo(() => {
