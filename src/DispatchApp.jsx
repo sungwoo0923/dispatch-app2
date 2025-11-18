@@ -2539,6 +2539,9 @@ function RealtimeStatus({
   const [selected, setSelected] = React.useState([]);
   const [selectedEditMode, setSelectedEditMode] = React.useState(false);
   const [edited, setEdited] = React.useState({});
+// 🔵 선택수정 팝업 상태
+const [editPopupOpen, setEditPopupOpen] = React.useState(false);
+const [editTarget, setEditTarget] = React.useState(null);
 
 
 
@@ -3363,14 +3366,21 @@ ${url}
       {/* 상단 버튼 */}
       <div className="flex justify-end gap-2 mb-2">
         <button
-          onClick={() => {
-            if (!selected.length) return alert("수정할 항목을 선택하세요.");
-            setSelectedEditMode(true);
-          }}
-          className="px-3 py-1 rounded bg-amber-500 text-white"
-        >
-          선택수정
-        </button>
+  onClick={() => {
+    if (selected.length !== 1)
+      return alert("수정할 항목은 1개만 선택해야 합니다.");
+
+    const row = rows.find((r) => r._id === selected[0]);
+    if (!row) return;
+
+    setEditTarget({ ...row }); // 팝업에 띄울 데이터
+    setEditPopupOpen(true);    // 팝업 열기
+  }}
+  className="px-3 py-1 rounded bg-amber-500 text-white"
+>
+  선택수정
+</button>
+
 
         <button
           onClick={handleSaveSelected}
@@ -3950,9 +3960,6 @@ ${url}
   onKeyDown={handlePopupCarInput}  // 엔터 입력시 자동매칭/신규등록
   placeholder="예: 93가1234 또는 서울12가3456"
 />
-
-
-
   </div>
 
   <div>
@@ -3977,7 +3984,6 @@ ${url}
     readOnly
   />
 </div>
-
 
               {/* 상하차 방법 */}
               <div className="grid grid-cols-2 gap-3">
@@ -4219,9 +4225,374 @@ ${url}
           </div>
         </div>
       )}
+      {/* ===================== 선택수정(팝업) ===================== */}
+{editPopupOpen && editTarget && (
+  <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+    <div className="bg-white p-5 rounded shadow-xl w-[480px] max-h-[90vh] overflow-y-auto">
+
+      <h3 className="text-lg font-bold mb-4">선택한 오더 수정</h3>
+
+      {/* ------------------------------------------------ */}
+      {/* 🔵 거래처명 */}
+      {/* ------------------------------------------------ */}
+      <div className="mb-3">
+        <label>거래처명</label>
+        <input
+          className="border p-2 rounded w-full"
+          value={editTarget.거래처명 || ""}
+          onChange={(e) =>
+            setEditTarget((p) => ({ ...p, 거래처명: e.target.value }))
+          }
+        />
+      </div>
+
+      {/* ------------------------------------------------ */}
+      {/* 🔵 상/하차일 & 시간 */}
+      {/* ------------------------------------------------ */}
+      <div className="grid grid-cols-2 gap-3 mb-3">
+        <div>
+          <label>상차일</label>
+          <input
+            type="date"
+            className="border p-2 rounded w-full"
+            value={editTarget.상차일 || ""}
+            onChange={(e) =>
+              setEditTarget((p) => ({ ...p, 상차일: e.target.value }))
+            }
+          />
+        </div>
+
+        <div>
+          <label>상차시간</label>
+          <select
+            className="border p-2 rounded w-full"
+            value={editTarget.상차시간 || ""}
+            onChange={(e) =>
+              setEditTarget((p) => ({ ...p, 상차시간: e.target.value }))
+            }
+          >
+            <option value="">선택없음</option>
+            {[
+              "오전 6:00","오전 7:00","오전 8:00","오전 9:00",
+              "오전 10:00","오전 11:00","오후 12:00","오후 1:00",
+              "오후 2:00","오후 3:00","오후 4:00","오후 5:00",
+              "오후 6:00","오후 7:00","오후 8:00","오후 9:00",
+              "오후 10:00"
+            ].map(t => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label>하차일</label>
+          <input
+            type="date"
+            className="border p-2 rounded w-full"
+            value={editTarget.하차일 || ""}
+            onChange={(e) =>
+              setEditTarget((p) => ({ ...p, 하차일: e.target.value }))
+            }
+          />
+        </div>
+
+        <div>
+          <label>하차시간</label>
+          <select
+            className="border p-2 rounded w-full"
+            value={editTarget.하차시간 || ""}
+            onChange={(e) =>
+              setEditTarget((p) => ({ ...p, 하차시간: e.target.value }))
+            }
+          >
+            <option value="">선택없음</option>
+            {[
+              "오전 6:00","오전 7:00","오전 8:00","오전 9:00",
+              "오전 10:00","오전 11:00","오후 12:00","오후 1:00",
+              "오후 2:00","오후 3:00","오후 4:00","오후 5:00",
+              "오후 6:00","오후 7:00","오후 8:00","오후 9:00",
+              "오후 10:00"
+            ].map(t => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* ------------------------------------------------ */}
+      {/* 🔵 상하차지 */}
+      {/* ------------------------------------------------ */}
+      <div className="mb-3">
+        <label>상차지명</label>
+        <input
+          className="border p-2 rounded w-full"
+          value={editTarget.상차지명 || ""}
+          onChange={(e) =>
+            setEditTarget((p) => ({ ...p, 상차지명: e.target.value }))
+          }
+        />
+      </div>
+
+      <div className="mb-3">
+        <label>상차지주소</label>
+        <input
+          className="border p-2 rounded w-full"
+          value={editTarget.상차지주소 || ""}
+          onChange={(e) =>
+            setEditTarget((p) => ({ ...p, 상차지주소: e.target.value }))
+          }
+        />
+      </div>
+
+      <div className="mb-3">
+        <label>하차지명</label>
+        <input
+          className="border p-2 rounded w-full"
+          value={editTarget.하차지명 || ""}
+          onChange={(e) =>
+            setEditTarget((p) => ({ ...p, 하차지명: e.target.value }))
+          }
+        />
+      </div>
+
+      <div className="mb-3">
+        <label>하차지주소</label>
+        <input
+          className="border p-2 rounded w-full"
+          value={editTarget.하차지주소 || ""}
+          onChange={(e) =>
+            setEditTarget((p) => ({ ...p, 하차지주소: e.target.value }))
+          }
+        />
+      </div>
+
+      {/* ------------------------------------------------ */}
+      {/* 🔵 화물내용 */}
+      {/* ------------------------------------------------ */}
+      <div className="mb-3">
+        <label>화물내용</label>
+        <input
+          className="border p-2 rounded w-full"
+          value={editTarget.화물내용 || ""}
+          onChange={(e) =>
+            setEditTarget((p) => ({ ...p, 화물내용: e.target.value }))
+          }
+        />
+      </div>
+
+      {/* ------------------------------------------------ */}
+      {/* 🔵 차량번호 (자동매칭) */}
+      {/* ------------------------------------------------ */}
+      <div className="mb-3">
+        <label>차량번호</label>
+        <input
+  className="border p-2 rounded w-full"
+  value={editTarget.차량번호 || ""}
+  placeholder="예: 93가1234"
+  onChange={(e) => {
+    // 입력값 UI에만 반영, 매칭은 하지 않음
+    setEditTarget((p) => ({ ...p, 차량번호: e.target.value }));
+  }}
+  onKeyDown={(e) => {
+    if (e.key !== "Enter") return;
+
+    const raw = e.target.value.trim();
+    const clean = raw.replace(/\s+/g, "");
+
+    // 기존 기사 매칭
+    const match = drivers.find(
+      (d) => String(d.차량번호).replace(/\s+/g, "") === clean
+    );
+
+    if (match) {
+      setEditTarget((p) => ({
+        ...p,
+        이름: match.이름,
+        전화번호: match.전화번호,
+        배차상태: "배차완료",
+      }));
+      return;
+    }
+
+    // 신규 등록
+    const ok = window.confirm(
+      `[${raw}] 등록된 기사가 없습니다.\n신규 기사로 추가할까요?`
+    );
+    if (!ok) return;
+
+    const 이름 = prompt("기사명 입력:");
+    const 전화번호 = prompt("전화번호 입력:");
+
+    upsertDriver({
+      차량번호: raw,
+      이름,
+      전화번호,
+    });
+
+    setEditTarget((p) => ({
+      ...p,
+      이름,
+      전화번호,
+      배차상태: "배차완료",
+    }));
+  }}
+/>
+
+      </div>
+
+      {/* 🔵 이름/전화번호 (자동입력) */}
+      <div className="grid grid-cols-2 gap-3 mb-3">
+        <div>
+          <label>기사명</label>
+          <input
+            className="border p-2 rounded w-full bg-gray-100"
+            value={editTarget.이름 || ""}
+            readOnly
+          />
+        </div>
+
+        <div>
+          <label>전화번호</label>
+          <input
+            className="border p-2 rounded w-full bg-gray-100"
+            value={editTarget.전화번호 || ""}
+            readOnly
+          />
+        </div>
+      </div>
+
+      {/* ------------------------------------------------ */}
+      {/* 🔵 운임 (수수료 자동계산) */}
+      {/* ------------------------------------------------ */}
+      <div className="grid grid-cols-3 gap-3 mb-3">
+        <div>
+          <label>청구운임</label>
+          <input
+            className="border p-2 rounded w-full"
+            value={editTarget.청구운임 || ""}
+            onChange={(e) => {
+              const v = Number(e.target.value.replace(/[^0-9]/g, ""));
+              setEditTarget((p) => ({
+                ...p,
+                청구운임: v,
+                수수료: Number(v) - Number(p.기사운임 || 0),
+              }));
+            }}
+          />
+        </div>
+
+        <div>
+          <label>기사운임</label>
+          <input
+            className="border p-2 rounded w-full"
+            value={editTarget.기사운임 || ""}
+            onChange={(e) => {
+              const v = Number(e.target.value.replace(/[^0-9]/g, ""));
+              setEditTarget((p) => ({
+                ...p,
+                기사운임: v,
+                수수료: Number(p.청구운임 || 0) - Number(v),
+              }));
+            }}
+          />
+        </div>
+
+        <div>
+          <label>수수료</label>
+          <input
+            className="border p-2 rounded w-full bg-gray-100"
+            value={(editTarget.수수료 || 0).toLocaleString()}
+            readOnly
+          />
+        </div>
+      </div>
+
+      {/* ------------------------------------------------ */}
+      {/* 🔵 지급/배차 방식 */}
+      {/* ------------------------------------------------ */}
+      <div className="grid grid-cols-2 gap-3 mb-3">
+        <div>
+          <label>지급방식</label>
+          <select
+            className="border p-2 rounded w-full"
+            value={editTarget.지급방식 || ""}
+            onChange={(e) =>
+              setEditTarget((p) => ({ ...p, 지급방식: e.target.value }))
+            }
+          >
+            <option value="">선택 없음</option>
+            <option value="계산서">계산서</option>
+            <option value="착불">착불</option>
+            <option value="선불">선불</option>
+            <option value="손실">손실</option>
+            <option value="개인">개인</option>
+            <option value="기타">기타</option>
+          </select>
+        </div>
+
+        <div>
+          <label>배차방식</label>
+          <select
+            className="border p-2 rounded w-full"
+            value={editTarget.배차방식 || ""}
+            onChange={(e) =>
+              setEditTarget((p) => ({ ...p, 배차방식: e.target.value }))
+            }
+          >
+            <option value="">선택 없음</option>
+            <option value="24시">24시</option>
+            <option value="직접배차">직접배차</option>
+            <option value="인성">인성</option>
+            <option value="24시(외주업체)">24시(외주업체)</option>
+          </select>
+        </div>
+      </div>
+
+      {/* ------------------------------------------------ */}
+      {/* 🔵 메모 */}
+      {/* ------------------------------------------------ */}
+      <div className="mb-3">
+        <label>메모</label>
+        <textarea
+          className="border p-2 rounded w-full h-20"
+          value={editTarget.메모 || ""}
+          onChange={(e) =>
+            setEditTarget((p) => ({ ...p, 메모: e.target.value }))
+          }
+        />
+      </div>
+
+      {/* ------------------------------------------------ */}
+      {/* 🔵 저장/취소 */}
+      {/* ------------------------------------------------ */}
+      <div className="flex justify-end gap-3 mt-4">
+        <button
+          className="px-3 py-1 rounded bg-gray-300"
+          onClick={() => setEditPopupOpen(false)}
+        >
+          취소
+        </button>
+
+        <button
+          className="px-3 py-1 rounded bg-blue-600 text-white"
+          onClick={async () => {
+            await patchDispatch(editTarget._id, editTarget);
+            alert("수정이 저장되었습니다.");
+            setEditPopupOpen(false);
+          }}
+        >
+          저장
+        </button>
+      </div>
+
+    </div>
+  </div>
+)}
+
     </div>
   );
 }
+
 /* ===================== 메모 더보기 컴포넌트 ===================== */
 function MemoMore({ text = "" }) {
   const [open, setOpen] = React.useState(false);
@@ -4294,7 +4665,9 @@ function DispatchStatus({
   const [justSaved, setJustSaved] = React.useState([]);
   const [carInputLock, setCarInputLock] = React.useState(false);
   const [bulkRows, setBulkRows] = React.useState([]);
-
+// 🔵 선택수정 팝업 상태 (★ 여기에 추가!)
+const [editPopupOpen, setEditPopupOpen] = React.useState(false);
+const [editTarget, setEditTarget] = React.useState(null);
   // ⭐ 화면 진입 시 이번 달 자동 설정
 React.useEffect(() => {
   const now = new Date();
@@ -4523,34 +4896,50 @@ const handleBulkFile = (e) => {
     ((row) =>
       setDispatchData((p) => p.filter((r) => getId(r) !== getId(row))));
 
-  const handleEditToggle = async () => {
-    if (!editMode) {
-      if (!selected.size) return alert("수정할 항목을 선택하세요.");
-      setEditMode(true);
-    } else {
-      const ids = Object.keys(edited);
-      if (!ids.length) {
-        setEditMode(false);
-        return alert("변경된 내용이 없습니다.");
-      }
-      if (!confirm("수정된 내용을 저장하시겠습니까?")) return;
+  // ================================  
+// 🔵 선택수정 / 수정완료 (팝업 방식)  
+// ================================
+const handleEditToggle = async () => {
 
-      for (const id of ids) await _patch(id, edited[id]);
+  // 1) 수정 모드 OFF → 선택수정 버튼 처음 누른 상태
+  if (!editMode) {
+    if (!selected.size) return alert("수정할 항목을 선택하세요.");
 
-      setJustSaved(ids);
-      setEdited({});
-      setEditMode(false);
+    // 선택된 항목 중 첫 번째 row 찾기
+    const first = filtered.find((r) => selected.has(getId(r)));
 
-      if (ids.length > 0) {
-        const firstId = ids[0];
-        const el = document.getElementById(`row-${firstId}`);
-        if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
-      }
-
-      setTimeout(() => setJustSaved([]), 1200);
-      alert("수정 완료 ✅");
+    if (first) {
+      setEditTarget(first);        // 팝업에 전달
+      setEditPopupOpen(true);      // 팝업 열기
     }
-  };
+    return;   // 🔥 여기서 끝 (기존 setEditMode 켜지지 않음)
+  }
+
+  // 2) 전체수정 모드일 때는 기존 저장 로직 그대로 적용
+  const ids = Object.keys(edited);
+  if (!ids.length) {
+    setEditMode(false);
+    return alert("변경된 내용이 없습니다.");
+  }
+
+  if (!confirm("수정된 내용을 저장하시겠습니까?")) return;
+
+  for (const id of ids) await _patch(id, edited[id]);
+
+  setJustSaved(ids);
+  setEdited({});
+  setEditMode(false);
+
+  if (ids.length > 0) {
+    const firstId = ids[0];
+    const el = document.getElementById(`row-${firstId}`);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  setTimeout(() => setJustSaved([]), 1200);
+  alert("수정 완료되었습니다.");
+};
+
 
   const removeSelectedRows = async () => {
     if (!selected.size) return alert("삭제할 항목이 없습니다.");
@@ -4916,9 +5305,373 @@ data.sort((a, b) => {
   drivers={drivers}        // ⭐ 추가
   upsertDriver={upsertDriver} // ⭐ 신규 기사 등록에 필요
 />
-
       )}
+    {/* ===================== 선택수정(팝업) ===================== */}
+{editPopupOpen && editTarget && (
+  <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+    <div className="bg-white p-5 rounded shadow-xl w-[480px] max-h-[90vh] overflow-y-auto">
+
+      <h3 className="text-lg font-bold mb-4">선택한 오더 수정</h3>
+
+      {/* ------------------------------------------------ */}
+      {/* 🔵 거래처명 */}
+      {/* ------------------------------------------------ */}
+      <div className="mb-3">
+        <label>거래처명</label>
+        <input
+          className="border p-2 rounded w-full"
+          value={editTarget.거래처명 || ""}
+          onChange={(e) =>
+            setEditTarget((p) => ({ ...p, 거래처명: e.target.value }))
+          }
+        />
+      </div>
+
+      {/* ------------------------------------------------ */}
+      {/* 🔵 상/하차일 & 시간 */}
+      {/* ------------------------------------------------ */}
+      <div className="grid grid-cols-2 gap-3 mb-3">
+        <div>
+          <label>상차일</label>
+          <input
+            type="date"
+            className="border p-2 rounded w-full"
+            value={editTarget.상차일 || ""}
+            onChange={(e) =>
+              setEditTarget((p) => ({ ...p, 상차일: e.target.value }))
+            }
+          />
+        </div>
+
+        <div>
+          <label>상차시간</label>
+          <select
+            className="border p-2 rounded w-full"
+            value={editTarget.상차시간 || ""}
+            onChange={(e) =>
+              setEditTarget((p) => ({ ...p, 상차시간: e.target.value }))
+            }
+          >
+            <option value="">선택없음</option>
+            {[
+              "오전 6:00","오전 7:00","오전 8:00","오전 9:00",
+              "오전 10:00","오전 11:00","오후 12:00","오후 1:00",
+              "오후 2:00","오후 3:00","오후 4:00","오후 5:00",
+              "오후 6:00","오후 7:00","오후 8:00","오후 9:00",
+              "오후 10:00"
+            ].map(t => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label>하차일</label>
+          <input
+            type="date"
+            className="border p-2 rounded w-full"
+            value={editTarget.하차일 || ""}
+            onChange={(e) =>
+              setEditTarget((p) => ({ ...p, 하차일: e.target.value }))
+            }
+          />
+        </div>
+
+        <div>
+          <label>하차시간</label>
+          <select
+            className="border p-2 rounded w-full"
+            value={editTarget.하차시간 || ""}
+            onChange={(e) =>
+              setEditTarget((p) => ({ ...p, 하차시간: e.target.value }))
+            }
+          >
+            <option value="">선택없음</option>
+            {[
+              "오전 6:00","오전 7:00","오전 8:00","오전 9:00",
+              "오전 10:00","오전 11:00","오후 12:00","오후 1:00",
+              "오후 2:00","오후 3:00","오후 4:00","오후 5:00",
+              "오후 6:00","오후 7:00","오후 8:00","오후 9:00",
+              "오후 10:00"
+            ].map(t => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* ------------------------------------------------ */}
+      {/* 🔵 상하차지 */}
+      {/* ------------------------------------------------ */}
+      <div className="mb-3">
+        <label>상차지명</label>
+        <input
+          className="border p-2 rounded w-full"
+          value={editTarget.상차지명 || ""}
+          onChange={(e) =>
+            setEditTarget((p) => ({ ...p, 상차지명: e.target.value }))
+          }
+        />
+      </div>
+
+      <div className="mb-3">
+        <label>상차지주소</label>
+        <input
+          className="border p-2 rounded w-full"
+          value={editTarget.상차지주소 || ""}
+          onChange={(e) =>
+            setEditTarget((p) => ({ ...p, 상차지주소: e.target.value }))
+          }
+        />
+      </div>
+
+      <div className="mb-3">
+        <label>하차지명</label>
+        <input
+          className="border p-2 rounded w-full"
+          value={editTarget.하차지명 || ""}
+          onChange={(e) =>
+            setEditTarget((p) => ({ ...p, 하차지명: e.target.value }))
+          }
+        />
+      </div>
+
+      <div className="mb-3">
+        <label>하차지주소</label>
+        <input
+          className="border p-2 rounded w-full"
+          value={editTarget.하차지주소 || ""}
+          onChange={(e) =>
+            setEditTarget((p) => ({ ...p, 하차지주소: e.target.value }))
+          }
+        />
+      </div>
+
+      {/* ------------------------------------------------ */}
+      {/* 🔵 화물내용 */}
+      {/* ------------------------------------------------ */}
+      <div className="mb-3">
+        <label>화물내용</label>
+        <input
+          className="border p-2 rounded w-full"
+          value={editTarget.화물내용 || ""}
+          onChange={(e) =>
+            setEditTarget((p) => ({ ...p, 화물내용: e.target.value }))
+          }
+        />
+      </div>
+
+      {/* ------------------------------------------------ */}
+      {/* 🔵 차량번호 (자동매칭) */}
+      {/* ------------------------------------------------ */}
+      <div className="mb-3">
+        <label>차량번호</label>
+        <input
+  className="border p-2 rounded w-full"
+  value={editTarget.차량번호 || ""}
+  placeholder="예: 93가1234"
+  onChange={(e) => {
+    // 입력값 UI에만 반영, 매칭은 하지 않음
+    setEditTarget((p) => ({ ...p, 차량번호: e.target.value }));
+  }}
+  onKeyDown={(e) => {
+    if (e.key !== "Enter") return;
+
+    const raw = e.target.value.trim();
+    const clean = raw.replace(/\s+/g, "");
+
+    // 기존 기사 매칭
+    const match = drivers.find(
+      (d) => String(d.차량번호).replace(/\s+/g, "") === clean
+    );
+
+    if (match) {
+      setEditTarget((p) => ({
+        ...p,
+        이름: match.이름,
+        전화번호: match.전화번호,
+        배차상태: "배차완료",
+      }));
+      return;
+    }
+
+    // 신규 등록
+    const ok = window.confirm(
+      `[${raw}] 등록된 기사가 없습니다.\n신규 기사로 추가할까요?`
+    );
+    if (!ok) return;
+
+    const 이름 = prompt("기사명 입력:");
+    const 전화번호 = prompt("전화번호 입력:");
+
+    upsertDriver({
+      차량번호: raw,
+      이름,
+      전화번호,
+    });
+
+    setEditTarget((p) => ({
+      ...p,
+      이름,
+      전화번호,
+      배차상태: "배차완료",
+    }));
+  }}
+/>
+
+      </div>
+
+      {/* 🔵 이름/전화번호 (자동입력) */}
+      <div className="grid grid-cols-2 gap-3 mb-3">
+        <div>
+          <label>기사명</label>
+          <input
+            className="border p-2 rounded w-full bg-gray-100"
+            value={editTarget.이름 || ""}
+            readOnly
+          />
+        </div>
+
+        <div>
+          <label>전화번호</label>
+          <input
+            className="border p-2 rounded w-full bg-gray-100"
+            value={editTarget.전화번호 || ""}
+            readOnly
+          />
+        </div>
+      </div>
+
+      {/* ------------------------------------------------ */}
+      {/* 🔵 운임 (수수료 자동계산) */}
+      {/* ------------------------------------------------ */}
+      <div className="grid grid-cols-3 gap-3 mb-3">
+        <div>
+          <label>청구운임</label>
+          <input
+            className="border p-2 rounded w-full"
+            value={editTarget.청구운임 || ""}
+            onChange={(e) => {
+              const v = Number(e.target.value.replace(/[^0-9]/g, ""));
+              setEditTarget((p) => ({
+                ...p,
+                청구운임: v,
+                수수료: Number(v) - Number(p.기사운임 || 0),
+              }));
+            }}
+          />
+        </div>
+
+        <div>
+          <label>기사운임</label>
+          <input
+            className="border p-2 rounded w-full"
+            value={editTarget.기사운임 || ""}
+            onChange={(e) => {
+              const v = Number(e.target.value.replace(/[^0-9]/g, ""));
+              setEditTarget((p) => ({
+                ...p,
+                기사운임: v,
+                수수료: Number(p.청구운임 || 0) - Number(v),
+              }));
+            }}
+          />
+        </div>
+
+        <div>
+          <label>수수료</label>
+          <input
+            className="border p-2 rounded w-full bg-gray-100"
+            value={(editTarget.수수료 || 0).toLocaleString()}
+            readOnly
+          />
+        </div>
+      </div>
+
+      {/* ------------------------------------------------ */}
+      {/* 🔵 지급/배차 방식 */}
+      {/* ------------------------------------------------ */}
+      <div className="grid grid-cols-2 gap-3 mb-3">
+        <div>
+          <label>지급방식</label>
+          <select
+            className="border p-2 rounded w-full"
+            value={editTarget.지급방식 || ""}
+            onChange={(e) =>
+              setEditTarget((p) => ({ ...p, 지급방식: e.target.value }))
+            }
+          >
+            <option value="">선택 없음</option>
+            <option value="계산서">계산서</option>
+            <option value="착불">착불</option>
+            <option value="선불">선불</option>
+            <option value="손실">손실</option>
+            <option value="개인">개인</option>
+            <option value="기타">기타</option>
+          </select>
+        </div>
+
+        <div>
+          <label>배차방식</label>
+          <select
+            className="border p-2 rounded w-full"
+            value={editTarget.배차방식 || ""}
+            onChange={(e) =>
+              setEditTarget((p) => ({ ...p, 배차방식: e.target.value }))
+            }
+          >
+            <option value="">선택 없음</option>
+            <option value="24시">24시</option>
+            <option value="직접배차">직접배차</option>
+            <option value="인성">인성</option>
+            <option value="24시(외주업체)">24시(외주업체)</option>
+          </select>
+        </div>
+      </div>
+
+      {/* ------------------------------------------------ */}
+      {/* 🔵 메모 */}
+      {/* ------------------------------------------------ */}
+      <div className="mb-3">
+        <label>메모</label>
+        <textarea
+          className="border p-2 rounded w-full h-20"
+          value={editTarget.메모 || ""}
+          onChange={(e) =>
+            setEditTarget((p) => ({ ...p, 메모: e.target.value }))
+          }
+        />
+      </div>
+
+      {/* ------------------------------------------------ */}
+      {/* 🔵 저장/취소 */}
+      {/* ------------------------------------------------ */}
+      <div className="flex justify-end gap-3 mt-4">
+        <button
+          className="px-3 py-1 rounded bg-gray-300"
+          onClick={() => setEditPopupOpen(false)}
+        >
+          취소
+        </button>
+
+        <button
+          className="px-3 py-1 rounded bg-blue-600 text-white"
+          onClick={async () => {
+            await patchDispatch(editTarget._id, editTarget);
+            alert("수정이 저장되었습니다.");
+            setEditPopupOpen(false);
+          }}
+        >
+          저장
+        </button>
+      </div>
+
     </div>
+  </div>
+)}
+
+    </div>
+    
   );
 }
 
