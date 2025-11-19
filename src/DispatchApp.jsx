@@ -7,6 +7,7 @@ import { flushSync } from "react-dom";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import AdminMenu from "./AdminMenu";
+import { calcFare } from "./fareUtil";
 
 
 /* -------------------------------------------------
@@ -1787,6 +1788,7 @@ const removeOne = async (id) => {
     setEditedRows({});
     clearSelect();
     setEditMode(false);
+    setSelected([]);
   };
 
   const saveAllEdits = async () => {
@@ -2056,6 +2058,13 @@ const exportExcel = () => {
       >
         선택삭제
       </button>
+  {/* ⭐ 선택초기화 버튼 추가 */}
+    <button
+      onClick={() => setSelected(new Set())}
+      className="px-3 py-1 rounded bg-gray-500 text-white"
+    >
+      선택초기화
+    </button>
 
       <button
         onClick={exportExcel}
@@ -2701,7 +2710,9 @@ const setBulk = (id, k, v) => {
 /* 메뉴용 실시간배차현황 — 배차현황과 100% 동일 컬럼/순서(+주소)
    role 지원: admin | user
 */
+
 function RealtimeStatus({
+  
   dispatchData,
   drivers,
   clients,
@@ -2788,7 +2799,10 @@ React.useEffect(() => {
 
   // 신규 오더 등록 팝업
   const [showCreate, setShowCreate] = React.useState(false);
+  const [fareOpen, setFareOpen] = React.useState(false);
+const [fareResult, setFareResult] = React.useState(null);
   const [autoList, setAutoList] = React.useState([]);
+  
 
   const [newOrder, setNewOrder] = React.useState({
     상차일: "",
@@ -2994,6 +3008,30 @@ const loadSimilarOrders = React.useCallback((fromName, toName) => {
     setSimilarOrders([]);
   }
 }, []);
+// ⭐ 운임조회 실행 함수
+const handleFareCheck = () => {
+  if (!newOrder.상차지명 || !newOrder.하차지명) {
+    alert("상차지명과 하차지명을 입력해야 운임조회가 가능합니다.");
+    return;
+  }
+
+  const result = calcFare(dispatchData, {
+    pickup: newOrder.상차지명,
+    drop: newOrder.하차지명,
+    vehicle: newOrder.차량종류,
+    ton: newOrder.차량톤수,
+    cargo: newOrder.화물내용,
+  });
+
+  if (!result) {
+    alert("유사 운임 데이터를 찾을 수 없습니다.");
+    return;
+  }
+
+  setFareResult(result);
+  setFareOpen(true);
+};
+
   // ------------------------
   // 숫자 변환
   // ------------------------
@@ -3692,6 +3730,13 @@ ${url}
         >
           선택삭제
         </button>
+        {/* ⭐⭐⭐ 선택초기화 버튼 추가 */}
+<button
+  onClick={() => setSelected([])}
+  className="px-3 py-1 rounded bg-gray-500 text-white"
+>
+  선택초기화
+</button>
 
         {/* 엑셀 다운로드 */}
         <button
@@ -3988,6 +4033,7 @@ ${url}
       {/* ---------------------------------------------------------
           🔵 신규 오더 등록 팝업 (업그레이드 완성본)
       --------------------------------------------------------- */}
+      
       {showCreate && (
         <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
           <div className="bg-white p-5 rounded shadow-xl w-[460px] max-h-[90vh] overflow-y-auto">
@@ -4024,6 +4070,14 @@ ${url}
 
               {/* 거래처명 자동완성 */}
               <div>
+                <button
+  type="button"
+  onClick={handleFareCheck}
+  className="bg-amber-500 text-white px-3 py-2 rounded w-full mb-2"
+>
+  🔍 운임조회
+</button>
+
                 <label className="font-semibold text-sm">거래처명</label>
                 <input
                   type="text"
@@ -4946,7 +5000,7 @@ ${url}
             await patchDispatch(editTarget._id, editTarget);
             alert("수정이 저장되었습니다.");
             setEditPopupOpen(false);
-            setSelected(new Set()); 
+            setSelected([]);
           }}
         >
           저장
