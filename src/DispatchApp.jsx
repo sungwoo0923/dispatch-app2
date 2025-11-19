@@ -2914,46 +2914,43 @@ React.useEffect(() => {
 // 🔔 파일 업로드 감지
 // ========================
 React.useEffect(() => {
-  if (!rows.length) return;
+    if (!rows.length) return;
 
-  const newAlerts = [];
+    const newAlerts = [];
 
-  rows.forEach(r => {
-    const id = r._id;
-    const cur = (r.attachmentsCount || 0);    // 너가 쓰는 첨부 개수 필드명에 맞추면 됨
-    const prev = prevAttachRef.current[id] || 0;
+    rows.forEach(r => {
+      const id = r._id;
+      const cur = attachCount[id] || 0;
+      const prev = prevAttachRef.current[id] || 0;
 
-    // 첨부파일 증가 감지
-    if (cur > prev) {
-      newAlerts.push({
-        id,
-        date: r.상차일,
-        from: r.상차지명,
-        to: r.하차지명,
-        count: cur - prev,
-        time: Date.now(),
-      });
+      if (cur > prev) {
+        newAlerts.push({
+          id,
+          date: r.상차일,
+          from: r.상차지명,
+          to: r.하차지명,
+          count: cur - prev,
+          time: Date.now(),
+        });
 
-      // 🔔 소리 재생
-      const audio = new Audio("/dingdong.mp3");
-      audio.volume = 0.6;
-      audio.play().catch(()=>{});
+        const audio = new Audio("/dingdong.mp3");
+        audio.volume = 0.6;
+        audio.play().catch(()=>{});
+      }
+
+      prevAttachRef.current[id] = cur;
+    });
+
+    if (newAlerts.length > 0) {
+      setUploadAlerts(prev => [...prev, ...newAlerts]);
+
+      setTimeout(() => {
+        setUploadAlerts(prev => prev.filter(a => Date.now() - a.time < 6000));
+      }, 6000);
     }
 
-    prevAttachRef.current[id] = cur;
-  });
+}, [rows, attachCount]);   // ⭐⭐ 여기까지 필수!
 
-  if (newAlerts.length > 0) {
-    setUploadAlerts(prev => [...prev, ...newAlerts]);
-
-    // 6초 뒤 자동 제거
-    setTimeout(() => {
-      setUploadAlerts(prev =>
-        prev.filter(a => Date.now() - a.time < 6000)
-      );
-    }, 6000);
-  }
-}, [rows]);
 
 
   // ------------------------
