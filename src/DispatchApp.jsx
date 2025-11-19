@@ -2715,7 +2715,6 @@ const setBulk = (id, k, v) => {
 /* 메뉴용 실시간배차현황 — 배차현황과 100% 동일 컬럼/순서(+주소)
    role 지원: admin | user
 */
-
 function RealtimeStatus({
   
   dispatchData,
@@ -5124,6 +5123,26 @@ ${url}
     </div>
   </div>
 )}
+{/* 🔔 첨부파일 업로드 알림 토스트 */}
+<div className="fixed bottom-5 right-5 flex flex-col gap-2 z-[9999]">
+  {uploadAlerts.map((a) => (
+    <div
+      key={a.time}
+      className="bg-indigo-600 text-white px-4 py-3 rounded shadow-lg animate-[fadeInUp_0.3s_ease-out]"
+    >
+      <div className="text-sm opacity-80">{a.date}</div>
+      <div className="font-bold">{a.from} → {a.to}</div>
+      <div className="mt-1">📎 {a.count}건 업로드됨</div>
+    </div>
+  ))}
+</div>
+
+<style>{`
+  @keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(20px);}
+    to { opacity: 1; transform: translateY(0);}
+  }
+`}</style>
 
     </div>
   );
