@@ -2737,6 +2737,12 @@ function RealtimeStatus({
   // ------------------------
   const [q, setQ] = React.useState("");
   const [filterType, setFilterType] = React.useState("거래처명");
+  // 🔔 업로드 알림 리스트
+const [uploadAlerts, setUploadAlerts] = React.useState([]);
+
+// 🔔 이전 첨부 개수 저장
+const prevAttachRef = React.useRef({});
+
   const [filterValue, setFilterValue] = React.useState("");
   const [startDate, setStartDate] = React.useState("");
   const [endDate, setEndDate] = React.useState("");
@@ -2903,6 +2909,50 @@ React.useEffect(() => {
         : r
     )
   );
+}, [rows]);
+// ========================
+// 🔔 파일 업로드 감지
+// ========================
+React.useEffect(() => {
+  if (!rows.length) return;
+
+  const newAlerts = [];
+
+  rows.forEach(r => {
+    const id = r._id;
+    const cur = (r.attachmentsCount || 0);    // 너가 쓰는 첨부 개수 필드명에 맞추면 됨
+    const prev = prevAttachRef.current[id] || 0;
+
+    // 첨부파일 증가 감지
+    if (cur > prev) {
+      newAlerts.push({
+        id,
+        date: r.상차일,
+        from: r.상차지명,
+        to: r.하차지명,
+        count: cur - prev,
+        time: Date.now(),
+      });
+
+      // 🔔 소리 재생
+      const audio = new Audio("/dingdong.mp3");
+      audio.volume = 0.6;
+      audio.play().catch(()=>{});
+    }
+
+    prevAttachRef.current[id] = cur;
+  });
+
+  if (newAlerts.length > 0) {
+    setUploadAlerts(prev => [...prev, ...newAlerts]);
+
+    // 6초 뒤 자동 제거
+    setTimeout(() => {
+      setUploadAlerts(prev =>
+        prev.filter(a => Date.now() - a.time < 6000)
+      );
+    }, 6000);
+  }
 }, [rows]);
 
 
@@ -6752,534 +6802,749 @@ function NewOrderPopup({
 }
 
 // ===================== DispatchApp.jsx (PART 5/8 — END) =====================
+// ===================== DispatchApp.jsx (PART 6/8 — 매출관리 리디자인 v2) — START =====================
 
-// ===================== DispatchApp.jsx (PART 6/8) — START =====================
+function Settlement({ dispatchData }) {
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [clientFilter, setClientFilter] = useState("");
 
-function Settlement({ dispatchData }){
-  const [startDate,setStartDate]=useState("");
-  const [endDate,setEndDate]=useState("");
-  const [clientFilter,setClientFilter]=useState("");
+  const toInt = (v) => {
+    const n = parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10);
+    return isNaN(n) ? 0 : n;
+  };
+  const todayStrLocal = () => new Date().toISOString().slice(0, 10);
+  const monthKey = () => new Date().toISOString().slice(0, 7);
+  const prevMonthKey = () => {
+    const d = new Date();
+    d.setMonth(d.getMonth() - 1);
+    return d.toISOString().slice(0, 7);
+  };
+  const isInRange = (d, s, e) => {
+    if (!d) return false;
+    if (s && d < s) return false;
+    if (e && d > e) return false;
+    return true;
+  };
 
-  const toInt=(v)=>{ const n=parseInt(String(v||"0").replace(/[^\d-]/g,""),10); return isNaN(n)?0:n; };
-  const todayStrLocal=()=>new Date().toISOString().slice(0,10);
-  const monthKey=()=>new Date().toISOString().slice(0,7);
-  const prevMonthKey=()=>{ const d=new Date(); d.setMonth(d.getMonth()-1); return d.toISOString().slice(0,7); };
-  const isInRange=(d,s,e)=>{ if(!d) return false; if(s && d<s) return false; if(e && d>e) return false; return true; };
+  const baseRows = Array.isArray(dispatchData) ? dispatchData : [];
 
-  const baseRows = Array.isArray(dispatchData)?dispatchData:[];
-  const rangeRows = useMemo(()=>{
-    let rows=baseRows.filter(r=>(r.배차상태||"")==="배차완료");
-    if(clientFilter) rows=rows.filter(r=>(r.거래처명||"")===clientFilter);
-    if(startDate||endDate) rows=rows.filter(r=>isInRange((r.상차일||""),startDate,endDate));
-    return rows.sort((a,b)=>(a.상차일||"").localeCompare(b.상차일||""));
-  },[baseRows,startDate,endDate,clientFilter]);
+  // 🔍 기간 필터 + 거래처 필터
+  const rangeRows = useMemo(() => {
+    let rows = baseRows.filter((r) => (r.배차상태 || "") === "배차완료");
+    if (clientFilter)
+      rows = rows.filter((r) => (r.거래처명 || "") === clientFilter);
+    if (startDate || endDate)
+      rows = rows.filter((r) =>
+        isInRange(r.상차일 || "", startDate, endDate)
+      );
+    return rows.sort((a, b) =>
+      (a.상차일 || "").localeCompare(b.상차일 || "")
+    );
+  }, [baseRows, startDate, endDate, clientFilter]);
 
-  const mKey=monthKey(); const pKey=prevMonthKey(); const today=todayStrLocal();
-  const monthRows=useMemo(()=>baseRows.filter(r=>(r.배차상태||"")==="배차완료" && String(r.상차일||"").startsWith(mKey)),[baseRows,mKey]);
-  const prevMonthRows=useMemo(()=>baseRows.filter(r=>(r.배차상태||"")==="배차완료" && String(r.상차일||"").startsWith(pKey)),[baseRows,pKey]);
-  const todayRows=useMemo(()=>baseRows.filter(r=>(r.배차상태||"")==="배차완료" && (r.상차일||"")===today),[baseRows,today]);
+  const mKey = monthKey();
+  const pKey = prevMonthKey();
+  const today = todayStrLocal();
 
-  const sumBy=(rows,key)=>rows.reduce((a,r)=>a+toInt(r[key]),0);
+  // 🔹 이번달 / 전월 / 오늘 데이터 분리
+  const monthRows = useMemo(
+    () =>
+      baseRows.filter(
+        (r) =>
+          (r.배차상태 || "") === "배차완료" &&
+          String(r.상차일 || "").startsWith(mKey)
+      ),
+    [baseRows, mKey]
+  );
+  const prevMonthRows = useMemo(
+    () =>
+      baseRows.filter(
+        (r) =>
+          (r.배차상태 || "") === "배차완료" &&
+          String(r.상차일 || "").startsWith(pKey)
+      ),
+    [baseRows, pKey]
+  );
+  const todayRows = useMemo(
+    () =>
+      baseRows.filter(
+        (r) =>
+          (r.배차상태 || "") === "배차완료" && (r.상차일 || "") === today
+      ),
+    [baseRows, today]
+  );
+
+  const sumBy = (rows, key) => rows.reduce((a, r) => a + toInt(r[key]), 0);
+
+  // ✅ 핵심 KPI 계산
   const kpi = {
-    월매출: sumBy(monthRows,"청구운임"),
-    월기사: sumBy(monthRows,"기사운임"),
-    당일매출: sumBy(todayRows,"청구운임"),
-    당일기사: sumBy(todayRows,"기사운임"),
-    전월매출: sumBy(prevMonthRows,"청구운임"),
+    월매출: sumBy(monthRows, "청구운임"),
+    월기사: sumBy(monthRows, "기사운임"),
+    당일매출: sumBy(todayRows, "청구운임"),
+    당일기사: sumBy(todayRows, "기사운임"),
+    전월매출: sumBy(prevMonthRows, "청구운임"),
   };
   kpi.월수수료 = kpi.월매출 - kpi.월기사;
   kpi.당일수수료 = kpi.당일매출 - kpi.당일기사;
   kpi.전월증감 = kpi.월매출 - kpi.전월매출;
-  kpi.전월증감률 = kpi.전월매출 ? ((kpi.전월증감 / kpi.전월매출) * 100) : 0;
-  const monthProfitRate = kpi.월매출>0 ? (kpi.월수수료/kpi.월매출)*100 : 0;
+  kpi.전월증감률 = kpi.전월매출
+    ? (kpi.전월증감 / kpi.전월매출) * 100
+    : 0;
+  const monthProfitRate =
+    kpi.월매출 > 0 ? (kpi.월수수료 / kpi.월매출) * 100 : 0;
 
-  const rangeTotals = useMemo(()=>{
-    const 매출=sumBy(rangeRows,"청구운임");
-    const 기사=sumBy(rangeRows,"기사운임");
-    const 수수료=매출-기사;
+  // ✅ 조회 기간 합계
+  const rangeTotals = useMemo(() => {
+    const 매출 = sumBy(rangeRows, "청구운임");
+    const 기사 = sumBy(rangeRows, "기사운임");
+    const 수수료 = 매출 - 기사;
     return { 매출, 기사, 수수료 };
-  },[rangeRows]);
+  }, [rangeRows]);
 
-  const clients = useMemo(()=>{
-    const s=new Set(); baseRows.forEach(r=>{ if(r.거래처명) s.add(r.거래처명); }); return Array.from(s).sort((a,b)=>a.localeCompare(b,'ko'));
-  },[baseRows]);
+  // ✅ 거래처 목록 (필터용)
+  const clients = useMemo(() => {
+    const s = new Set();
+    baseRows.forEach((r) => {
+      if (r.거래처명) s.add(r.거래처명);
+    });
+    return Array.from(s).sort((a, b) => a.localeCompare(b, "ko"));
+  }, [baseRows]);
 
-  const clientAgg = useMemo(()=>{
-    const map=new Map();
-    for(const r of rangeRows){
-      const c=r.거래처명||"미지정"; const sale=toInt(r.청구운임); const driver=toInt(r.기사운임); const fee=sale-driver;
-      const prev=map.get(c)||{ 거래처명:c, 건수:0, 매출:0, 기사:0, 수수료:0 };
-      prev.건수+=1; prev.매출+=sale; prev.기사+=driver; prev.수수료+=fee;
-      map.set(c,prev);
+  // ✅ 거래처별 집계 (기간 기준)
+  const clientAgg = useMemo(() => {
+    const map = new Map();
+    for (const r of rangeRows) {
+      const c = r.거래처명 || "미지정";
+      const sale = toInt(r.청구운임);
+      const driver = toInt(r.기사운임);
+      const fee = sale - driver;
+      const prev =
+        map.get(c) || { 거래처명: c, 건수: 0, 매출: 0, 기사: 0, 수수료: 0 };
+      prev.건수 += 1;
+      prev.매출 += sale;
+      prev.기사 += driver;
+      prev.수수료 += fee;
+      map.set(c, prev);
     }
-    const arr=Array.from(map.values()); arr.sort((a,b)=>b.매출-a.매출);
+    const arr = Array.from(map.values());
+    arr.sort((a, b) => b.매출 - a.매출);
     return arr;
-  },[rangeRows]);
+  }, [rangeRows]);
 
-  const topClients = useMemo(()=>clientAgg.slice(0,5),[clientAgg]);
-  const riskyClients = useMemo(()=>{
-    const arr = clientAgg.map(r=>({ ...r, rate: r.매출>0 ? (r.수수료/r.매출)*100 : 0 }))
-      .filter(r=>r.매출>0 && r.rate<10).sort((a,b)=>b.매출-a.매출).slice(0,5);
+  const topClients = useMemo(
+    () => clientAgg.slice(0, 5),
+    [clientAgg]
+  );
+  const riskyClients = useMemo(() => {
+    const arr = clientAgg
+      .map((r) => ({
+        ...r,
+        rate: r.매출 > 0 ? (r.수수료 / r.매출) * 100 : 0,
+      }))
+      .filter((r) => r.매출 > 0 && r.rate < 10)
+      .sort((a, b) => b.매출 - a.매출)
+      .slice(0, 5);
     return arr;
-  },[clientAgg]);
+  }, [clientAgg]);
 
-  const monthDaily = useMemo(()=>{
-    const add=(rows, yyyymm)=>{
-      const m=new Map();
-      rows.forEach(r=>{
-        const d=r.상차일||""; if(!d.startsWith(yyyymm)) return;
-        const day=parseInt(d.slice(8,10),10)||0; const sale=toInt(r.청구운임);
-        m.set(day, (m.get(day)||0)+sale);
+  // ✅ 전월 대비 / 기간 트렌드 차트 데이터
+  const monthDaily = useMemo(() => {
+    const add = (rows, yyyymm) => {
+      const m = new Map();
+      rows.forEach((r) => {
+        const d = r.상차일 || "";
+        if (!d.startsWith(yyyymm)) return;
+        const day = parseInt(d.slice(8, 10), 10) || 0;
+        const sale = toInt(r.청구운임);
+        m.set(day, (m.get(day) || 0) + sale);
       });
-      return Array.from(m.entries()).map(([day,sum])=>({ day, sum })).sort((a,b)=>a.day-b.day);
+      return Array.from(m.entries())
+        .map(([day, sum]) => ({ day, sum }))
+        .sort((a, b) => a.day - b.day);
     };
-    const cur=add(monthRows,mKey); const prev=add(prevMonthRows,pKey);
-    const maxDay=Math.max(cur.at(-1)?.day||0, prev.at(-1)?.day||0, 1);
-    const xs=Array.from({length:maxDay},(_,i)=>i+1);
-    const y1=xs.map(d=>cur.find(x=>x.day===d)?.sum||0);
-    const y2=xs.map(d=>prev.find(x=>x.day===d)?.sum||0);
-    return xs.map((d,i)=>({ x:String(d).padStart(2,"0"), y1:y1[i], y2:y2[i] }));
-  },[monthRows,prevMonthRows,mKey,pKey]);
+    const cur = add(monthRows, mKey);
+    const prev = add(prevMonthRows, pKey);
+    const maxDay = Math.max(cur.at(-1)?.day || 0, prev.at(-1)?.day || 0, 1);
+    const xs = Array.from({ length: maxDay }, (_, i) => i + 1);
+    const y1 = xs.map((d) => cur.find((x) => x.day === d)?.sum || 0);
+    const y2 = xs.map((d) => prev.find((x) => x.day === d)?.sum || 0);
+    return xs.map((d, i) => ({
+      x: String(d).padStart(2, "0"),
+      y1: y1[i],
+      y2: y2[i],
+    }));
+  }, [monthRows, prevMonthRows, mKey, pKey]);
 
-  const dailyTrend = useMemo(()=>{
-    const m=new Map();
-    for(const r of rangeRows){
-      const d=r.상차일||""; if(!d) continue;
-      const sale=toInt(r.청구운임); const driver=toInt(r.기사운임); const fee=sale-driver;
-      const prev=m.get(d)||{ date:d, 매출:0, 기사:0, 수수료:0 };
-      prev.매출+=sale; prev.기사+=driver; prev.수수료+=fee; m.set(d,prev);
+  const dailyTrend = useMemo(() => {
+    const m = new Map();
+    for (const r of rangeRows) {
+      const d = r.상차일 || "";
+      if (!d) continue;
+      const sale = toInt(r.청구운임);
+      const driver = toInt(r.기사운임);
+      const fee = sale - driver;
+      const prev =
+        m.get(d) || { date: d, 매출: 0, 기사: 0, 수수료: 0 };
+      prev.매출 += sale;
+      prev.기사 += driver;
+      prev.수수료 += fee;
+      m.set(d, prev);
     }
-    return Array.from(m.values()).sort((a,b)=>a.date.localeCompare(b.date));
-  },[rangeRows]);
+    return Array.from(m.values()).sort((a, b) =>
+      a.date.localeCompare(b.date)
+    );
+  }, [rangeRows]);
 
-  const won=(n)=>`${(n||0).toLocaleString()}원`;
+  const won = (n) => `${(n || 0).toLocaleString()}원`;
 
-  const headBaseLocal = typeof headBase==="string" ? headBase : "px-3 py-2 border bg-gray-50 text-center";
-  const cellBaseLocal = typeof cellBase==="string" ? cellBase : "px-3 py-2 border text-center";
+  const headBaseLocal =
+    typeof headBase === "string"
+      ? headBase
+      : "px-3 py-2 border bg-gray-50 text-center";
+  const cellBaseLocal =
+    typeof cellBase === "string"
+      ? cellBase
+      : "px-3 py-2 border text-center";
 
   return (
-    <div>
-      <h2 className="text-lg font-bold mb-3">매출관리</h2>
+    <div className="space-y-6">
+      <div className="flex items-baseline justify-between">
+        <div>
+          <h2 className="text-xl font-bold mb-1">매출관리</h2>
+          <p className="text-xs text-gray-500">
+            배차완료 건 기준 · 상차일로 집계
+          </p>
+        </div>
+      </div>
 
-      {/* KPI 경고 */}
-      {monthProfitRate<15 && (
-        <div className="mb-3 rounded-lg border border-rose-200 bg-rose-50 text-rose-700 px-4 py-2">
-          <span className="font-semibold">⚠ 이번달 평균 이익률 {monthProfitRate.toFixed(1)}%</span>
+      {/* 🔎 필터 영역 */}
+      <div className="flex flex-wrap items-end gap-3 mb-2">
+        <div className="flex flex-col">
+          <label className="text-xs text-gray-500 mb-1">시작일</label>
+          <input
+            type="date"
+            className="border p-2 rounded"
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+          />
+        </div>
+        <div className="flex flex-col">
+          <label className="text-xs text-gray-500 mb-1">종료일</label>
+          <input
+            type="date"
+            className="border p-2 rounded"
+            value={endDate}
+            onChange={(e) => setEndDate(e.target.value)}
+          />
+        </div>
+        <div className="flex flex-col">
+          <label className="text-xs text-gray-500 mb-1">거래처</label>
+          <select
+            className="border p-2 rounded min-w-[200px]"
+            value={clientFilter}
+            onChange={(e) => setClientFilter(e.target.value)}
+          >
+            <option value="">전체</option>
+            {clients.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            setStartDate("");
+            setEndDate("");
+            setClientFilter("");
+          }}
+          className="px-3 py-2 rounded bg-gray-100 text-sm border border-gray-300 hover:bg-gray-200"
+        >
+          필터 초기화
+        </button>
+      </div>
+
+      {/* ⚠ 이익률 경고 */}
+      {monthProfitRate < 15 && (
+        <div className="mb-3 rounded-lg border border-rose-200 bg-rose-50 text-rose-700 px-4 py-2 text-sm">
+          <span className="font-semibold">
+            ⚠ 이번달 평균 이익률 {monthProfitRate.toFixed(1)}%
+          </span>
           <span className="text-rose-600"> (목표 15% 미만)</span>
         </div>
       )}
 
-      {/* 필터 */}
-      <div className="flex flex-wrap items-end gap-3 mb-4">
-        <div className="flex flex-col"><label className="text-xs text-gray-500 mb-1">시작일</label><input type="date" className="border p-2 rounded" value={startDate} onChange={(e)=>setStartDate(e.target.value)} /></div>
-        <div className="flex flex-col"><label className="text-xs text-gray-500 mb-1">종료일</label><input type="date" className="border p-2 rounded" value={endDate} onChange={(e)=>setEndDate(e.target.value)} /></div>
-        <div className="flex flex-col"><label className="text-xs text-gray-500 mb-1">거래처</label>
-          <select className="border p-2 rounded min-w-[200px]" value={clientFilter} onChange={(e)=>setClientFilter(e.target.value)}>
-            <option value="">전체</option>
-            {clients.map(c=><option key={c} value={c}>{c}</option>)}
-          </select>
+      {/* 1) 최상단 메인 KPI 4개 */}
+      <section>
+        <h3 className="text-sm font-semibold text-gray-700 mb-2">
+          이번달 핵심 요약
+        </h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+          <KpiCard title="월 매출" value={kpi.월매출} accent />
+          <KpiCard title="월 수수료" value={kpi.월수수료} accent />
+          <KpiMiniRate title="이번달 평균 이익률" rate={monthProfitRate} />
+          <KpiDeltaCard
+            title="전월 대비 매출"
+            diff={kpi.전월증감}
+            rate={kpi.전월증감률}
+          />
         </div>
-        <button type="button" onClick={()=>{setStartDate(""); setEndDate(""); setClientFilter("");}} className="px-3 py-2 rounded bg-gray-200">필터 초기화</button>
-      </div>
+      </section>
 
-      {/* KPI 카드 */}
-      <div className="grid grid-cols-3 xl:grid-cols-8 gap-3 mb-4">
-        <KpiCard title="월 매출" value={kpi.월매출} />
-        <KpiCard title="월 기사운반비" value={kpi.월기사} />
-        <KpiCard title="월 수수료" value={kpi.월수수료} accent />
-        <KpiMiniRate title="이번달 평균 이익률" rate={monthProfitRate} />
-        <KpiCard title="전월 매출" value={kpi.전월매출} subtle />
-        <KpiDeltaCard title="전월 대비" diff={kpi.전월증감} rate={kpi.전월증감률} />
-        <KpiCard title="당일 매출" value={kpi.당일매출} />
-        <KpiCard title="당일 수수료" value={kpi.당일수수료} />
-      </div>
+      {/* 2) 월 / 오늘 / 기간 블록 요약 */}
+      <section>
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+          {/* 이번달 상세 */}
+          <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+            <p className="text-xs font-semibold text-gray-500 mb-2">
+              이번달 요약
+            </p>
+            <KpiRow label="월 매출" value={won(kpi.월매출)} />
+            <KpiRow label="월 기사운임" value={won(kpi.월기사)} />
+            <KpiRow label="월 수수료" value={won(kpi.월수수료)} highlight />
+          </div>
 
-      
-      {/* 📘 전월/전년 비교 입력 박스 */}
-      <CompareBox current={{
-        sale: kpi.월매출,
-        driver: kpi.월기사,
-        fee: kpi.월수수료
-      }} />
+          {/* 오늘 기준 */}
+          <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+            <p className="text-xs font-semibold text-gray-500 mb-2">
+              오늘 기준
+            </p>
+            <KpiRow label="오늘 매출" value={won(kpi.당일매출)} />
+            <KpiRow label="오늘 기사운임" value={won(kpi.당일기사)} />
+            <KpiRow
+              label="오늘 수수료"
+              value={won(kpi.당일수수료)}
+              highlight
+            />
+          </div>
 
+          {/* 조회기간 기준 */}
+          <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+            <p className="text-xs font-semibold text-gray-500 mb-2">
+              조회 기간 요약
+            </p>
+            <KpiRow label="기간 매출" value={won(rangeTotals.매출)} />
+            <KpiRow label="기간 기사운임" value={won(rangeTotals.기사)} />
+            <KpiRow
+              label="기간 수수료"
+              value={won(rangeTotals.수수료)}
+              highlight
+            />
+          </div>
+        </div>
+      </section>
 
-      {/* 기간 합계  */}
-      <div className="grid grid-cols-3 gap-3 mb-6">
-        <SumCard label="기간 매출" value={won(rangeTotals.매출)} />
-        <SumCard label="기간 기사운반비" value={won(rangeTotals.기사)} />
-        <SumCard label="기간 수수료" value={won(rangeTotals.수수료)} highlight />
-      </div>
+      {/* 3) Top5 / 위험 거래처 */}
+      <section>
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          <ChartPanel title="🏆 Top5 거래처 (매출 기준)">
+            {topClients.length === 0 ? (
+              <div className="text-gray-500 text-sm">
+                표시할 데이터가 없습니다.
+              </div>
+            ) : (
+              <SimpleBars
+                data={topClients.map((d) => ({
+                  label: d.거래처명,
+                  value: d.매출,
+                }))}
+                max={Math.max(1, ...topClients.map((d) => d.매출))}
+                valueLabel={(v) => won(v)}
+              />
+            )}
+          </ChartPanel>
 
-
-      {/* Top5 + 위험거래처 */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
-        <ChartPanel title="🏆 Top5 거래처 (매출 기준)">
-          {topClients.length===0
-            ? <div className="text-gray-500 text-sm">표시할 데이터가 없습니다.</div>
-            : <SimpleBars data={topClients.map(d=>({ label:d.거래처명, value:d.매출 }))} 
-                max={Math.max(1,...topClients.map(d=>d.매출))}
-                valueLabel={(v)=>won(v)} /> }
-        </ChartPanel>
-
-        <ChartPanel title="⚠ 주의 거래처 (이익률 10% 미만)">
-          {riskyClients.length===0
-            ? <div className="text-gray-500 text-sm">이익률 10% 미만 거래처가 없습니다.</div>
-            : (
+          <ChartPanel title="⚠ 이익률 10% 미만 거래처">
+            {riskyClients.length === 0 ? (
+              <div className="text-gray-500 text-sm">
+                이익률 10% 미만 거래처가 없습니다.
+              </div>
+            ) : (
               <div className="space-y-2">
-                {riskyClients.map(d=>(
-                  <div key={d.거래처명} className="flex items-center justify-between rounded-lg border border-rose-200 bg-rose-50 px-3 py-2">
-                    <div className="truncate font-medium text-rose-700">{d.거래처명}</div>
+                {riskyClients.map((d) => (
+                  <div
+                    key={d.거래처명}
+                    className="flex items-center justify-between rounded-lg border border-rose-200 bg-rose-50 px-3 py-2"
+                  >
+                    <div className="truncate font-medium text-rose-700">
+                      {d.거래처명}
+                    </div>
                     <div className="text-xs text-rose-700">
-                      매출 {d.매출.toLocaleString()}원 · 수수료 {d.수수료.toLocaleString()}원 · 이익률 {(d.rate).toFixed(1)}%
+                      매출 {d.매출.toLocaleString()}원 · 수수료{" "}
+                      {d.수수료.toLocaleString()}원 · 이익률{" "}
+                      {d.rate.toFixed(1)}%
                     </div>
                   </div>
                 ))}
               </div>
             )}
-        </ChartPanel>
-      </div>
+          </ChartPanel>
+        </div>
+      </section>
 
+      {/* 4) 차트 2개 */}
+      <section>
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          <ChartPanel
+            title={`전월 대비 일자 매출 (이번달 ${mKey} vs 전월 ${pKey})`}
+          >
+            <SimpleLine
+              data={monthDaily.map((d) => ({
+                x: d.x,
+                y1: d.y1,
+                y2: d.y2,
+              }))}
+              series={[
+                { key: "y1", name: "이번달 매출" },
+                { key: "y2", name: "전월 매출" },
+              ]}
+            />
+          </ChartPanel>
 
-      {/* 전월 대비 라인차트 + 기간 트렌드 */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
-        <ChartPanel title={`전월 대비 일자 매출 (이번달 ${mKey} vs 전월 ${pKey})`}>
-          <SimpleLine
-            data={monthDaily.map(d=>({ x:d.x, y1:d.y1, y2:d.y2 }))}
-            series={[
-              { key:"y1", name:"이번달 매출" },
-              { key:"y2", name:"전월 매출" },
-            ]}
-          />
-        </ChartPanel>
+          <ChartPanel title="기간 일자 트렌드 (매출 / 수수료 / 기사운임)">
+            <SimpleLine
+              data={dailyTrend.map((d) => ({
+                x: d.date.slice(5),
+                y1: d.매출,
+                y2: d.수수료,
+                y3: d.기사,
+              }))}
+              series={[
+                { key: "y1", name: "매출" },
+                { key: "y2", name: "수수료" },
+                { key: "y3", name: "기사운임" },
+              ]}
+            />
+          </ChartPanel>
+        </div>
+      </section>
 
-        <ChartPanel title="기간 일자 트렌드 (매출/수수료/기사)">
-          <SimpleLine
-            data={dailyTrend.map(d=>({ x:d.date.slice(5), y1:d.매출, y2:d.수수료, y3:d.기사 }))}
-            series={[
-              { key:"y1", name:"매출" },
-              { key:"y2", name:"수수료" },
-              { key:"y3", name:"기사운반비" },
-            ]}
-          />
-        </ChartPanel>
-      </div>
-
-
-      {/* 거래처별 집계 */}
-      <div className="mb-6">
-        <h3 className="font-semibold mb-2">거래처별 기간 집계</h3>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm border">
-            <thead className="bg-gray-100">
+      {/* 5) 거래처별 기간 집계 테이블 */}
+      <section className="mb-6">
+        <h3 className="font-semibold mb-2 text-sm">
+          거래처별 기간 집계 (조회 조건 기준)
+        </h3>
+        <div className="overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-sm">
+          <table className="w-full text-sm border-collapse">
+            <thead className="bg-gray-50">
               <tr>
                 <th className={headBaseLocal}>거래처명</th>
                 <th className={headBaseLocal}>건수</th>
                 <th className={headBaseLocal}>매출</th>
-                <th className={headBaseLocal}>기사운반비</th>
+                <th className={headBaseLocal}>기사운임</th>
                 <th className={headBaseLocal}>수수료</th>
                 <th className={headBaseLocal}>이익률</th>
               </tr>
             </thead>
             <tbody>
-              {clientAgg.length===0 ? (
-                <tr><td className="text-center text-gray-500 py-6" colSpan={6}>조건에 맞는 데이터가 없습니다.</td></tr>
-              ) : clientAgg.map(r=>{
-                const rateNum=r.매출>0?(r.수수료/r.매출)*100:0;
-                const rateStr=r.매출>0?rateNum.toFixed(1)+"%":"-";
-                const colorClass=r.매출>0 && rateNum<10 ? "text-red-600 font-semibold" : "text-gray-700";
-                return (
-                  <tr key={r.거래처명} className="odd:bg-white even:bg-gray-50 text-center">
-                    <td className={cellBaseLocal}>{r.거래처명}</td>
-                    <td className={cellBaseLocal}>{r.건수}</td>
-                    <td className={cellBaseLocal}>{r.매출.toLocaleString()}</td>
-                    <td className={cellBaseLocal}>{r.기사.toLocaleString()}</td>
-                    <td className={`${cellBaseLocal} text-blue-600 font-semibold`}>{r.수수료.toLocaleString()}</td>
-                    <td className={`${cellBaseLocal} ${colorClass}`}>{rateStr}</td>
-                  </tr>
-                );
-              })}
+              {clientAgg.length === 0 ? (
+                <tr>
+                  <td
+                    className="text-center text-gray-500 py-6"
+                    colSpan={6}
+                  >
+                    조건에 맞는 데이터가 없습니다.
+                  </td>
+                </tr>
+              ) : (
+                clientAgg.map((r) => {
+                  const rateNum =
+                    r.매출 > 0 ? (r.수수료 / r.매출) * 100 : 0;
+                  const rateStr =
+                    r.매출 > 0 ? rateNum.toFixed(1) + "%" : "-";
+                  const colorClass =
+                    r.매출 > 0 && rateNum < 10
+                      ? "text-red-600 font-semibold"
+                      : "text-gray-700";
+                  return (
+                    <tr
+                      key={r.거래처명}
+                      className="odd:bg-white even:bg-gray-50 text-center"
+                    >
+                      <td className={cellBaseLocal}>{r.거래처명}</td>
+                      <td className={cellBaseLocal}>{r.건수}</td>
+                      <td className={cellBaseLocal}>
+                        {r.매출.toLocaleString()}
+                      </td>
+                      <td className={cellBaseLocal}>
+                        {r.기사.toLocaleString()}
+                      </td>
+                      <td
+                        className={`${cellBaseLocal} text-blue-600 font-semibold`}
+                      >
+                        {r.수수료.toLocaleString()}
+                      </td>
+                      <td
+                        className={`${cellBaseLocal} ${colorClass}`}
+                      >
+                        {rateStr}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
-      </div>
-
-      {/* 상세목록 — 삭제됨 */}
+      </section>
     </div>
   );
 }
-
-
-/* =======================================
-   CompareBox — 전월/전년 입력 & 자동 분석
-======================================= */
-
-function CompareBox({ current }) {
-  const [prev, setPrev] = useState({ sale: "", driver: "", fee: "" });
-  const [lastYear, setLastYear] = useState({ sale: "", driver: "", fee: "" });
-
-  const toInt2 = (v) =>
-    isNaN(parseInt(String(v).replace(/[^\d-]/g, "")))
-      ? 0
-      : parseInt(String(v).replace(/[^\d-]/g, ""));
-
-  // 전월 비교 계산
-  const prevCalc = useMemo(() => {
-    if (!prev.sale && !prev.driver && !prev.fee) return null;
-    const pSale = toInt2(prev.sale);
-    const pDriver = toInt2(prev.driver);
-    const pFee = toInt2(prev.fee);
-
-    return {
-      매출증감: current.sale - pSale,
-      기사증감: current.driver - pDriver,
-      수수료증감: current.fee - pFee,
-      이익률증감:
-        current.sale > 0 && pSale > 0
-          ? (current.fee / current.sale) * 100 -
-            (pFee / pSale) * 100
-          : 0,
-    };
-  }, [prev, current]);
-
-  // 전년 비교 계산
-  const yearCalc = useMemo(() => {
-    if (!lastYear.sale && !lastYear.driver && !lastYear.fee) return null;
-    const ySale = toInt2(lastYear.sale);
-    const yDriver = toInt2(lastYear.driver);
-    const yFee = toInt2(lastYear.fee);
-
-    return {
-      매출증감: current.sale - ySale,
-      기사증감: current.driver - yDriver,
-      수수료증감: current.fee - yFee,
-      이익률증감:
-        current.sale > 0 && ySale > 0
-          ? (current.fee / current.sale) * 100 -
-            (yFee / ySale) * 100
-          : 0,
-    };
-  }, [lastYear, current]);
-
-  return (
-    <div className="bg-white border border-gray-200 rounded-2xl p-4 mb-6 shadow-sm">
-      <h3 className="font-semibold text-gray-700 mb-3">📘 비교 기준 데이터 입력</h3>
-
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        {/* 전월 입력 */}
-        <div>
-          <p className="font-semibold text-gray-600 mb-2">전월 기준 입력</p>
-          <div className="space-y-2">
-            <InputBox label="전월 매출" value={prev.sale}
-              onChange={(v) => setPrev({ ...prev, sale: v })} />
-            <InputBox label="전월 기사운임" value={prev.driver}
-              onChange={(v) => setPrev({ ...prev, driver: v })} />
-            <InputBox label="전월 수수료" value={prev.fee}
-              onChange={(v) => setPrev({ ...prev, fee: v })} />
-          </div>
-        </div>
-
-        {/* 전년 입력 */}
-        <div>
-          <p className="font-semibold text-gray-600 mb-2">전년 기준 입력</p>
-          <div className="space-y-2">
-            <InputBox label="전년 매출" value={lastYear.sale}
-              onChange={(v) => setLastYear({ ...lastYear, sale: v })} />
-            <InputBox label="전년 기사운임" value={lastYear.driver}
-              onChange={(v) => setLastYear({ ...lastYear, driver: v })} />
-            <InputBox label="전년 수수료" value={lastYear.fee}
-              onChange={(v) => setLastYear({ ...lastYear, fee: v })} />
-          </div>
-        </div>
-      </div>
-
-      {/* 분석 결과 */}
-      <div className="mt-5 pt-4 border-t">
-        <h3 className="font-semibold text-gray-700 mb-3">📊 분석 결과</h3>
-
-        {/* 전월 비교 */}
-        {prevCalc && (
-          <div className="mb-4 p-3 rounded-xl bg-blue-50 border border-blue-200">
-            <p className="font-semibold text-blue-700 mb-1">이번달 vs 전월</p>
-            <CompareRow name="매출" value={prevCalc.매출증감} />
-            <CompareRow name="기사운임" value={prevCalc.기사증감} />
-            <CompareRow name="수수료" value={prevCalc.수수료증감} />
-            <CompareRow name="이익률 변화(%)" value={prevCalc.이익률증감} isRate />
-          </div>
-        )}
-
-        {/* 전년 비교 */}
-        {yearCalc && (
-          <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200">
-            <p className="font-semibold text-emerald-700 mb-1">이번달 vs 전년</p>
-            <CompareRow name="매출" value={yearCalc.매출증감} />
-            <CompareRow name="기사운임" value={yearCalc.기사증감} />
-            <CompareRow name="수수료" value={yearCalc.수수료증감} />
-            <CompareRow name="이익률 변화(%)" value={yearCalc.이익률증감} isRate />
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 
 /* ===================== 보조 UI 컴포넌트 ===================== */
 
-function InputBox({ label, value, onChange }) {
+function KpiRow({ label, value, highlight }) {
   return (
-    <div>
-      <label className="text-xs text-gray-500">{label}</label>
-      <input
-        type="text"
-        className="border p-2 rounded w-full"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder="숫자만 입력"
-      />
+    <div className="flex items-center justify-between text-sm py-1.5">
+      <span className="text-gray-600">{label}</span>
+      <span
+        className={
+          highlight
+            ? "font-semibold text-blue-600"
+            : "font-semibold text-gray-800"
+        }
+      >
+        {value}
+      </span>
     </div>
   );
 }
 
-function CompareRow({ name, value, isRate }) {
-  const num = Number(value || 0);
-  const cls = num >= 0 ? "text-blue-700 font-semibold" : "text-rose-700 font-semibold";
-  return (
-    <p className={cls}>
-      {name}: {num >= 0 ? "+" : ""}
-      {isRate ? num.toFixed(1) + "%" : num.toLocaleString() + "원"}
-    </p>
-  );
-}
-
-
-/* 기존 KPI + Chart 컴포넌트 동일 */
-function KpiCard({ title, value, accent, subtle }){
-  const base = subtle ? "bg-gray-50 border-gray-200" :
-              accent ? "bg-emerald-50 border-emerald-200" :
-                       "bg-white border-gray-200";
+function KpiCard({ title, value, accent, subtle }) {
+  const base = subtle
+    ? "bg-gray-50 border-gray-200"
+    : accent
+    ? "bg-blue-50 border-blue-200"
+    : "bg-white border-gray-200";
   return (
     <div className={`rounded-2xl p-3 border shadow-sm ${base}`}>
       <p className="text-xs text-gray-500">{title}</p>
-      <p className="text-xl font-bold mt-1">{Number(value||0).toLocaleString()}원</p>
+      <p className="text-xl font-bold mt-1">
+        {Number(value || 0).toLocaleString()}원
+      </p>
     </div>
   );
 }
 
-function KpiMiniRate({ title, rate }){
-  const danger=rate<10, warn=rate>=10 && rate<15;
-  const base = danger?"bg-rose-50 border-rose-200 text-rose-700"
-            : warn?"bg-amber-50 border-amber-200 text-amber-700"
-            : "bg-emerald-50 border-emerald-200 text-emerald-700";
+function KpiMiniRate({ title, rate }) {
+  const danger = rate < 10,
+    warn = rate >= 10 && rate < 15;
+  const base = danger
+    ? "bg-rose-50 border-rose-200 text-rose-700"
+    : warn
+    ? "bg-amber-50 border-amber-200 text-amber-700"
+    : "bg-emerald-50 border-emerald-200 text-emerald-700";
   return (
     <div className={`rounded-2xl p-3 border shadow-sm ${base}`}>
       <p className="text-xs">{title}</p>
-      <p className="text-xl font-bold mt-1">{(rate||0).toFixed(1)}%</p>
+      <p className="text-xl font-bold mt-1">
+        {(rate || 0).toFixed(1)}%
+      </p>
     </div>
   );
 }
 
-function KpiDeltaCard({ title, diff, rate }){
-  const up=diff>=0;
+function KpiDeltaCard({ title, diff, rate }) {
+  const up = diff >= 0;
   return (
-    <div className={`rounded-2xl p-3 border shadow-sm ${up?"bg-blue-50 border-blue-200":"bg-rose-50 border-rose-200"}`}>
+    <div
+      className={`rounded-2xl p-3 border shadow-sm ${
+        up
+          ? "bg-blue-50 border-blue-200"
+          : "bg-rose-50 border-rose-200"
+      }`}
+    >
       <p className="text-xs text-gray-500">{title}</p>
-      <p className={`text-xl font-bold mt-1 ${up?"text-blue-700":"text-rose-700"}`}>
-        {`${diff>=0?"+":""}${Number(diff||0).toLocaleString()}원`}
+      <p
+        className={`text-xl font-bold mt-1 ${
+          up ? "text-blue-700" : "text-rose-700"
+        }`}
+      >
+        {`${diff >= 0 ? "+" : ""}${Number(diff || 0).toLocaleString()}원`}
       </p>
-      <p className={`text-xs ${up?"text-blue-700":"text-rose-700"}`}>
-        {`${rate>=0?"+":""}${(rate||0).toFixed(1)}%`}
+      <p
+        className={`text-xs ${
+          up ? "text-blue-700" : "text-rose-700"
+        }`}
+      >
+        {`${rate >= 0 ? "+" : ""}${(rate || 0).toFixed(1)}%`}
       </p>
     </div>
   );
 }
 
-function SumCard({ label, value, highlight }){
-  return (
-    <div className={`rounded-2xl p-4 text-center border ${highlight?"bg-blue-50 border-blue-200":"bg-white border-gray-200"} shadow-sm`}>
-      <p className="text-sm text-gray-500">{label}</p>
-      <p className="text-2xl font-bold mt-1">{value}</p>
-    </div>
-  );
-}
-
-function ChartPanel({ title, children }){
+function ChartPanel({ title, children }) {
   return (
     <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
-      <h4 className="font-semibold mb-3">{title}</h4>
+      <h4 className="font-semibold mb-3 text-sm">{title}</h4>
       {children}
     </div>
   );
 }
 
-function SimpleBars({ data, max, barClass="bg-blue-500", valueLabel }){
-  const safeMax=Math.max(1,max||1);
+function SimpleBars({ data, max, barClass = "bg-blue-500", valueLabel }) {
+  const safeMax = Math.max(1, max || 1);
   return (
     <div className="space-y-2">
-      {data.length===0
-        ? <div className="text-gray-500 text-sm">표시할 데이터가 없습니다.</div>
-        : data.map(d=>{
-            const pct=Math.round((d.value/safeMax)*100);
-            return (
-              <div key={d.label} className="flex items-center gap-3">
-                <div className="w-36 truncate text-xs text-gray-700" title={d.label}>{d.label}</div>
-                <div className="flex-1 h-4 bg-gray-100 rounded">
-                  <div className={`h-4 rounded ${barClass}`} style={{width:`${pct}%`}} />
-                </div>
-                <div className="w-28 text-right text-xs text-gray-600">
-                  {valueLabel?valueLabel(d.value):d.value}
-                </div>
+      {data.length === 0 ? (
+        <div className="text-gray-500 text-sm">
+          표시할 데이터가 없습니다.
+        </div>
+      ) : (
+        data.map((d) => {
+          const pct = Math.round((d.value / safeMax) * 100);
+          return (
+            <div key={d.label} className="flex items-center gap-3">
+              <div
+                className="w-36 truncate text-xs text-gray-700"
+                title={d.label}
+              >
+                {d.label}
               </div>
-            );
-        })}
+              <div className="flex-1 h-4 bg-gray-100 rounded">
+                <div
+                  className={`h-4 rounded ${barClass}`}
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+              <div className="w-28 text-right text-xs text-gray-600">
+                {valueLabel ? valueLabel(d.value) : d.value}
+              </div>
+            </div>
+          );
+        })
+      )}
     </div>
   );
 }
 
-function SimpleLine({ data, series }){
-  const width=560, height=280, padding={left:40,right:10,top:10,bottom:24};
-  const xs=data.map(d=>d.x); const xCount=xs.length||1;
-  const allY=[]; data.forEach(d=>series.forEach(s=>allY.push(d[s.key]||0)));
-  const yMax=Math.max(1,...allY), yMin=0;
-  const xScale=(i)=>padding.left + (i*(width-padding.left-padding.right))/Math.max(1,xCount-1);
-  const yScale=(v)=>padding.top + (height-padding.top-padding.bottom)*(1-(v-yMin)/(yMax-yMin));
-  const makePath=(key)=> data.length===0 ? "" : data.map((d,i)=>`${i===0?"M":"L"} ${xScale(i)} ${yScale(d[key]||0)}`).join(" ");
-  const colors=["#2563eb","#ef4444","#10b981","#6b7280"];
+function SimpleLine({ data, series }) {
+  const width = 560,
+    height = 280,
+    padding = { left: 40, right: 10, top: 10, bottom: 24 };
+  const xs = data.map((d) => d.x);
+  const xCount = xs.length || 1;
+  const allY = [];
+  data.forEach((d) => series.forEach((s) => allY.push(d[s.key] || 0)));
+  const yMax = Math.max(1, ...allY),
+    yMin = 0;
+
+  const xScale = (i) =>
+    padding.left +
+    (i * (width - padding.left - padding.right)) /
+      Math.max(1, xCount - 1);
+  const yScale = (v) =>
+    padding.top +
+    (height - padding.top - padding.bottom) *
+      (1 - (v - yMin) / (yMax - yMin));
+
+  const makePath = (key) =>
+    data.length === 0
+      ? ""
+      : data
+          .map(
+            (d, i) =>
+              `${i === 0 ? "M" : "L"} ${xScale(i)} ${yScale(d[key] || 0)}`
+          )
+          .join(" ");
+
+  const colors = ["#2563eb", "#ef4444", "#10b981", "#6b7280"];
+
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-[300px]">
-      {Array.from({length:5}).map((_,i)=>{
-        const yVal=yMin+((yMax-yMin)*i)/4; const y=yScale(yVal);
+    <svg
+      viewBox={`0 0 ${width} ${height}`}
+      className="w-full h-[300px]"
+    >
+      {/* Y축 가이드라인 */}
+      {Array.from({ length: 5 }).map((_, i) => {
+        const yVal = yMin + ((yMax - yMin) * i) / 4;
+        const y = yScale(yVal);
         return (
           <g key={i}>
-            <line x1={padding.left} x2={width-padding.right} y1={y} y2={y} stroke="#e5e7eb" strokeWidth="1" />
-            <text x={4} y={y+4} fontSize="10" fill="#6b7280">
+            <line
+              x1={padding.left}
+              x2={width - padding.right}
+              y1={y}
+              y2={y}
+              stroke="#e5e7eb"
+              strokeWidth="1"
+            />
+            <text
+              x={4}
+              y={y + 4}
+              fontSize="10"
+              fill="#6b7280"
+            >
               {Math.round(yVal).toLocaleString()}
             </text>
           </g>
         );
       })}
-      {xs.map((d,i)=>{
-        const show=i===0 || i===xCount-1 || i%Math.ceil(xCount/6)===0;
-        if(!show) return null;
-        const x=xScale(i);
+
+      {/* X축 라벨 */}
+      {xs.map((d, i) => {
+        const show =
+          i === 0 || i === xCount - 1 || i % Math.ceil(xCount / 6) === 0;
+        if (!show) return null;
+        const x = xScale(i);
         return (
-          <text key={i} x={x} y={height-2} fontSize="10" textAnchor="middle" fill="#6b7280">{d}</text>
+          <text
+            key={i}
+            x={x}
+            y={height - 2}
+            fontSize="10"
+            textAnchor="middle"
+            fill="#6b7280"
+          >
+            {d}
+          </text>
         );
       })}
-      {series.map((s,idx)=>
-        <path key={s.key} d={makePath(s.key)} fill="none"
-          stroke={colors[idx%colors.length]} strokeWidth="2" />
-      )}
-      {series.map((s,idx)=>(
-        <g key={s.key} transform={`translate(${padding.left + idx*140}, ${padding.top + 8})`}>
-          <rect width="12" height="12" fill={colors[idx%colors.length]} rx="2" />
-          <text x="16" y="11" fontSize="12" fill="#374151">{s.name}</text>
+
+      {/* 라인 */}
+      {series.map((s, idx) => (
+        <path
+          key={s.key}
+          d={makePath(s.key)}
+          fill="none"
+          stroke={colors[idx % colors.length]}
+          strokeWidth="2"
+        />
+      ))}
+
+      {/* 범례 */}
+      {series.map((s, idx) => (
+        <g
+          key={s.key}
+          transform={`translate(${
+            padding.left + idx * 140
+          }, ${padding.top + 8})`}
+        >
+          <rect
+            width="12"
+            height="12"
+            fill={colors[idx % colors.length]}
+            rx="2"
+          />
+          <text
+            x="16"
+            y="11"
+            fontSize="12"
+            fill="#374151"
+          >
+            {s.name}
+          </text>
         </g>
       ))}
     </svg>
   );
 }
 
-// ===================== DispatchApp.jsx (PART 6/8) — END =====================
+// ===================== DispatchApp.jsx (PART 6/8 — END) =====================
+
+
 
 // ===================== DispatchApp.jsx (PART 7/8 — 거래처명/차량종류 필터 추가 완성) =====================
 function UnassignedStatus({ dispatchData }) {
