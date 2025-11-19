@@ -4946,6 +4946,7 @@ ${url}
             await patchDispatch(editTarget._id, editTarget);
             alert("수정이 저장되었습니다.");
             setEditPopupOpen(false);
+            setSelected(new Set()); 
           }}
         >
           저장
@@ -5355,6 +5356,7 @@ const handleEditToggle = async () => {
   setJustSaved(ids);
   setEdited({});
   setEditMode(false);
+  setSelected(new Set());
 
   if (ids.length > 0) {
     const firstId = ids[0];
@@ -5538,6 +5540,12 @@ data.sort((a, b) => {
     >
       선택삭제
     </button>
+<button
+  className="px-3 py-2 rounded bg-gray-500 text-white"
+  onClick={() => setSelected(new Set())}
+>
+  선택초기화
+</button>
 
     <button
       className="px-3 py-2 rounded bg-emerald-600 text-white"
@@ -6106,6 +6114,7 @@ data.sort((a, b) => {
             await patchDispatch(editTarget._id, editTarget);
             alert("수정이 저장되었습니다.");
             setEditPopupOpen(false);
+            setSelected(new Set());
           }}
         >
           저장
