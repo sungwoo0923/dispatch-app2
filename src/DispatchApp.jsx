@@ -2738,6 +2738,11 @@ function RealtimeStatus({
   const [filterType, setFilterType] = React.useState("거래처명");
   // 🔔 업로드 알림 리스트
 const [uploadAlerts, setUploadAlerts] = React.useState([]);
+// 이미 본 알림(id 저장)
+const [seenAlerts, setSeenAlerts] = React.useState(() => {
+  return new Set(JSON.parse(localStorage.getItem("seenAlerts") || "[]"));
+});
+
 
 // 🔔 이전 첨부 개수 저장
 const prevAttachRef = React.useRef({});
@@ -2910,19 +2915,22 @@ React.useEffect(() => {
   );
 }, [rows]);
 // ========================
-// 🔔 파일 업로드 감지
+// 🔔 파일 업로드 감지 (이미 본 건 다시 안 뜸)
 // ========================
 React.useEffect(() => {
-    if (!rows.length) return;
+  if (!rows.length) return;
 
-    const newAlerts = [];
+  const newAlerts = [];
 
-    rows.forEach(r => {
-      const id = r._id;
-      const cur = attachCount[id] || 0;
-      const prev = prevAttachRef.current[id] || 0;
+  rows.forEach(r => {
+    const id = r._id;
+    const cur = attachCount[id] || 0;
+    const prev = prevAttachRef.current[id] || 0;
 
-      if (cur > prev) {
+    // 첨부파일 증가 체크
+    if (cur > prev) {
+      // 이미 본 알림이면 스킵
+      if (!seenAlerts.has(id)) {
         newAlerts.push({
           id,
           date: r.상차일,
@@ -2932,25 +2940,35 @@ React.useEffect(() => {
           time: Date.now(),
         });
 
+        // 알림음
         const audio = new Audio("/dingdong.mp3");
         audio.volume = 0.6;
-        audio.play().catch(()=>{});
+        audio.play().catch(() => {});
       }
 
+      // 이전 첨부 개수 업데이트
       prevAttachRef.current[id] = cur;
-    });
-
-    if (newAlerts.length > 0) {
-      setUploadAlerts(prev => [...prev, ...newAlerts]);
-
-      setTimeout(() => {
-        setUploadAlerts(prev => prev.filter(a => Date.now() - a.time < 6000));
-      }, 6000);
     }
+  });
 
-}, [rows, attachCount]);   // ⭐⭐ 여기까지 필수!
+  if (newAlerts.length > 0) {
+    // 알림 추가
+    setUploadAlerts(prev => [...prev, ...newAlerts]);
 
+    // 이미 본 알림 목록에 추가
+    const updatedSeen = new Set(seenAlerts);
+    newAlerts.forEach(a => updatedSeen.add(a.id));
+    setSeenAlerts(updatedSeen);
+    localStorage.setItem("seenAlerts", JSON.stringify([...updatedSeen]));
 
+    // 6초 후 화면에서 알림 제거
+    setTimeout(() => {
+      setUploadAlerts(prev =>
+        prev.filter(a => Date.now() - a.time < 6000)
+      );
+    }, 6000);
+  }
+}, [rows, attachCount]);
 
   // ------------------------
   // 첨부파일 개수 로드
