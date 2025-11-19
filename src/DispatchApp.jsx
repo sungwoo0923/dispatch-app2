@@ -8,6 +8,7 @@ import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import AdminMenu from "./AdminMenu";
 import { calcFare } from "./fareUtil";
+import StandardFare from "./StandardFare";
 
 
 /* -------------------------------------------------
@@ -363,6 +364,7 @@ export default function DispatchApp() {
           "실시간배차현황",
           "배차현황",
           "미배차현황",
+          "표준운임표",
           "기사관리",
           "거래처관리",
           "고정거래처관리",
@@ -442,6 +444,9 @@ export default function DispatchApp() {
         {menu === "미배차현황" && (
           <UnassignedStatus role={role} dispatchData={dispatchData} />
         )}
+{menu === "표준운임표" && (
+  <StandardFare dispatchData={dispatchData} />
+)}
 
         {menu === "기사관리" && role === "admin" && (
           <DriverManagement
@@ -4357,6 +4362,23 @@ ${url}
     placeholder="예: 파렛트 12개 / 냉동식품 / 상온화물"
   />
 </div>
+{/* 화물 톤수 */}
+<div>
+  <label>화물톤수</label>
+  <input
+    type="text"
+    className="border p-2 rounded w-full"
+    value={newOrder.화물톤수 || ""}
+    onChange={(e) =>
+      setNewOrder((prev) => ({
+        ...prev,
+        화물톤수: e.target.value,
+      }))
+    }
+    placeholder="예: 12톤 / 8톤 / 5톤"
+  />
+</div>
+
 {/* 차량번호 / 기사명 / 전화번호 */}
 <div className="grid grid-cols-2 gap-3">
   <div>
@@ -4646,6 +4668,51 @@ ${url}
           </div>
         </div>
       )}
+      {/* ⭐ 운임 조회 결과 팝업 */}
+{fareOpen && fareResult && (
+  <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+    <div className="bg-white p-5 rounded shadow-xl w-[420px]">
+      <h3 className="text-lg font-bold mb-3">📦 운임 조회 결과</h3>
+
+      <div className="text-sm mb-3">
+        <div>조회 데이터: {fareResult.count}건</div>
+        <div>평균 운임: {fareResult.avg.toLocaleString()}원</div>
+        <div>최소 ~ 최대: {fareResult.min.toLocaleString()}원 ~ {fareResult.max.toLocaleString()}원</div>
+
+        {/* ⭐ 최신 데이터 상세 표시 */}
+        <div className="mt-2 p-2 border rounded bg-gray-50">
+          <div className="font-semibold mb-1">최근 운임 정보</div>
+          <div>청구운임: {fareResult.latest.청구운임?.toLocaleString()}원</div>
+          <div>차량종류: {fareResult.latest.차량종류 || "-"}</div>
+          <div>차량톤수: {fareResult.latest.차량톤수 || "-"}</div>
+          <div>화물내용: {fareResult.latest.화물내용 || "-"}</div>
+        </div>
+      </div>
+
+      <button
+        className="w-full bg-blue-600 text-white py-2 rounded mb-2"
+        onClick={() => {
+          setNewOrder((prev) => ({
+            ...prev,
+            청구운임: fareResult.latest.청구운임,  // 🔥 수정된 부분
+          }));
+          setFareOpen(false);
+        }}
+      >
+        추천운임 적용하기
+      </button>
+
+      <button
+        className="w-full bg-gray-400 text-white py-2 rounded"
+        onClick={() => setFareOpen(false)}
+      >
+        닫기
+      </button>
+    </div>
+  </div>
+)}
+
+
       {/* ===================== 선택수정(팝업) ===================== */}
 {editPopupOpen && editTarget && (
   <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
@@ -5088,6 +5155,10 @@ function DispatchStatus({
   const [carInputLock, setCarInputLock] = React.useState(false);
   const [bulkRows, setBulkRows] = React.useState([]);
 // 🔵 선택수정 팝업 상태 (★ 여기에 추가!)
+// ⭐ 페이지네이션 상태
+const [page, setPage] = React.useState(0);
+const pageSize = 100;
+
 const [editPopupOpen, setEditPopupOpen] = React.useState(false);
 const [editTarget, setEditTarget] = React.useState(null);
   // ⭐ 화면 진입 시 이번 달 자동 설정
@@ -5435,39 +5506,48 @@ const handleEditToggle = async () => {
   };
 
   const downloadExcel = () => {
-  // 🔵 화면에서 필터된 데이터만 엑셀로 다운로드
   const rows = filtered.map((r, i) => ({
     순번: i + 1,
-    등록일: r.등록일,
-    상차일: r.상차일,
-    상차시간: r.상차시간,
-    하차일: r.하차일,
-    하차시간: r.하차시간,
-    거래처명: r.거래처명,
-    상차지명: r.상차지명,
-    상차지주소: r.상차지주소,
-    하차지명: r.하차지명,
-    하차지주소: r.하차지주소,
-    화물내용: r.화물내용,
-    차량종류: r.차량종류,
-    차량톤수: r.차량톤수,
-    차량번호: r.차량번호,
-    기사명: r.이름,
-    전화번호: r.전화번호,
-    배차상태: r.배차상태,
-    청구운임: toInt(r.청구운임).toLocaleString("ko-KR"),
-    기사운임: toInt(r.기사운임).toLocaleString("ko-KR"),
-    수수료: toInt(r.수수료).toLocaleString("ko-KR"),
-    지급방식: r.지급방식,
-    배차방식: r.배차방식,
-    메모: r.메모,
+
+    // 날짜는 문자열 그대로 저장 (엑셀에서 가장 안전한 방식)
+    등록일: r.등록일 || "",
+    상차일: r.상차일 || "",
+    하차일: r.하차일 || "",
+
+    상차시간: r.상차시간 || "",
+    하차시간: r.하차시간 || "",
+
+    거래처명: r.거래처명 || "",
+    상차지명: r.상차지명 || "",
+    상차지주소: r.상차지주소 || "",
+    하차지명: r.하차지명 || "",
+    하차지주소: r.하차지주소 || "",
+    화물내용: r.화물내용 || "",
+    차량종류: r.차량종류 || "",
+    차량톤수: r.차량톤수 || "",
+    차량번호: r.차량번호 || "",
+    기사명: r.이름 || r.기사명 || "",
+    전화번호: r.전화번호 || "",
+    배차상태: r.배차상태 || "",
+
+    // 🔥 금액은 숫자(Number)로 저장해야 엑셀이 파일을 정상 인식함!!
+    청구운임: Number(String(r.청구운임).replace(/[^\d]/g, "")) || 0,
+    기사운임: Number(String(r.기사운임).replace(/[^\d]/g, "")) || 0,
+    수수료: Number(String(r.수수료).replace(/[^\d]/g, "")) || 0,
+
+    지급방식: r.지급방식 || "",
+    배차방식: r.배차방식 || "",
+    메모: r.메모 || "",
   }));
 
   const ws = XLSX.utils.json_to_sheet(rows);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "배차현황");
+
   XLSX.writeFile(wb, "배차현황.xlsx");
 };
+
+
 
 
   // ===================== 정렬 ======================
@@ -5503,9 +5583,12 @@ data.sort((a, b) => {
 
     return data;
   }, [dispatchData, q, startDate, endDate]);
-
-
-
+  // ⭐ 페이지 적용된 데이터
+const pageRows = React.useMemo(() => {
+  const start = page * pageSize;
+  const end = start + pageSize;
+  return filtered.slice(start, end);
+}, [filtered, page]);
   const summary = React.useMemo(() => {
     const totalCount = filtered.length;
     const totalSale = filtered.reduce((s, r) => s + toInt(r.청구운임), 0);
@@ -5542,6 +5625,7 @@ data.sort((a, b) => {
       </div>
 
       <div className="flex justify-between items-center gap-3 mb-3">
+
   {/* 🔍 검색 + 날짜 */}
   <div className="flex items-center gap-2">
     <input
@@ -5568,7 +5652,6 @@ data.sort((a, b) => {
   {/* 우측 버튼 묶음 */}
   <div className="flex items-center gap-2">
 
-    {/* 🔵 신규 오더 등록 — 여기로 이동시킴 */}
     <button
       onClick={() => setShowCreate(true)}
       className="px-3 py-2 rounded bg-blue-600 text-white hover:bg-blue-700"
@@ -5594,12 +5677,13 @@ data.sort((a, b) => {
     >
       선택삭제
     </button>
-<button
-  className="px-3 py-2 rounded bg-gray-500 text-white"
-  onClick={() => setSelected(new Set())}
->
-  선택초기화
-</button>
+
+    <button
+      className="px-3 py-2 rounded bg-gray-500 text-white"
+      onClick={() => setSelected(new Set())}
+    >
+      선택초기화
+    </button>
 
     <button
       className="px-3 py-2 rounded bg-emerald-600 text-white"
@@ -5607,7 +5691,49 @@ data.sort((a, b) => {
     >
       엑셀다운
     </button>
+
   </div>
+</div>   {/* 🔥 이 div가 검색+버튼 전체를 감싸는 div — 여기로 끝 */}
+
+{/* ⭐ 페이지 이동 버튼 */}
+<div className="flex items-center gap-4 my-3 select-none">
+
+  {/* ◀ 이전 */}
+  <button
+    className={`
+      px-4 py-2 rounded-lg text-sm font-semibold border 
+      transition-all duration-150
+      ${page === 0 
+        ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
+        : "bg-white hover:bg-gray-100 text-gray-700 border-gray-300 shadow-sm"}
+    `}
+    disabled={page === 0}
+    onClick={() => setPage((p) => Math.max(0, p - 1))}
+  >
+    ◀ 이전
+  </button>
+
+  {/* 페이지 번호 */}
+  <span className="text-sm font-semibold text-gray-600">
+    {page + 1}
+    <span className="text-gray-400"> / {Math.ceil(filtered.length / pageSize)}</span>
+  </span>
+
+  {/* 다음 ▶ */}
+  <button
+    className={`
+      px-4 py-2 rounded-lg text-sm font-semibold border 
+      transition-all duration-150
+      ${(page + 1) * pageSize >= filtered.length
+        ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
+        : "bg-white hover:bg-gray-100 text-gray-700 border-gray-300 shadow-sm"}
+    `}
+    disabled={(page + 1) * pageSize >= filtered.length}
+    onClick={() => setPage((p) => p + 1)}
+  >
+    다음 ▶
+  </button>
+
 </div>
 
 
@@ -5636,7 +5762,7 @@ data.sort((a, b) => {
           </thead>
 
           <tbody>
-            {filtered.map((r, i) => {
+            {pageRows.map((r, i) => {
               const id = getId(r);
               const row = edited[id] ? { ...r, ...edited[id] } : r;
               const fee = toInt(row.청구운임) - toInt(row.기사운임);
