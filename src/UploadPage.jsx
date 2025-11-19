@@ -65,7 +65,9 @@ export default function UploadPage() {
     // 🔥 모든 파일 업로드를 동시에 처리
     const tasks = files.map((file) => {
       return new Promise((resolve, reject) => {
-        const path = `dispatch/${dispatchId}/${Date.now()}-${file.name.replace(/\s+/g, "_")}`;
+        const path = `dispatch/${dispatchId}/attachments/${Date.now()}-${file.name.replace(/\s+/g, "_")}`;
+
+
         const storageRef = ref(storage, path);
         const task = uploadBytesResumable(storageRef, file);
 

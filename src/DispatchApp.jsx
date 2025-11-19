@@ -5447,33 +5447,7 @@ data.sort((a, b) => {
 
     return data;
   }, [dispatchData, q, startDate, endDate]);
-// 🚨 자동 오류 감지
-React.useEffect(() => {
-  const errors = [];
 
-  filtered.forEach((r) => {
-    if (r.상차일 > r.하차일) {
-      errors.push(`[${r.거래처명}] 상차일이 하차일보다 늦음`);
-    }
-
-    if (!r.상차지주소 || !r.하차지주소) {
-      errors.push(`[${r.거래처명}] 주소 누락`);
-    }
-
-    if (r.배차상태 === "배차완료" && !r.차량번호) {
-      errors.push(`[${r.거래처명}] 배차완료인데 차량번호 없음`);
-    }
-
-    const today = new Date().toISOString().slice(0, 10);
-    if (r.상차일 < today && r.배차상태 !== "배차완료") {
-      errors.push(`[${r.거래처명}] 상차일 지났는데 아직 미배차`);
-    }
-  });
-
-  if (errors.length > 0) {
-    alert(`🚨 오류 감지됨 (${errors.length}건)\n\n` + errors.join("\n"));
-  }
-}, [filtered]);
 
 
   const summary = React.useMemo(() => {
