@@ -719,14 +719,14 @@ const filteredClients = React.useMemo(() => {
 // 선택 시 상차지 자동 입력
 const applyClientSelect = (name) => {
   const p = (placeRows || []).find(
-    (x) => norm(x.업체명) === norm(name)
+    (x) => norm(x.업체명 || "") === norm(name)
   );
 
   setForm((prev) => ({
     ...prev,
     거래처명: name,
-    상차지명: name,
-    상차지주소: p?.주소 || "",
+    상차지명: name,               // ⭐ 상차지명 자동 입력
+    상차지주소: p?.주소 || "",      // ⭐ 주소 자동 입력
     상차지담당자: p?.담당자 || "",
     상차지담당자번호: p?.담당자번호 || "",
   }));
@@ -734,6 +734,7 @@ const applyClientSelect = (name) => {
   setClientQuery(name);
   setIsClientOpen(false);
 };
+
 
 
   // ✅ 주소 자동매칭 뱃지
