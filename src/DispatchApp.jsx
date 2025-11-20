@@ -9054,6 +9054,7 @@ function PaymentManagement({ dispatchData = [], clients = [], drivers = [] }) {
 
   // ---------- 지급일 공통 달력 ----------
   const [selectedPayDate, setSelectedPayDate] = React.useState(todayStr9());
+  const [memoPopup, setMemoPopup] = useState({ open: false, text: "" });
 
   // ---------- 드롭다운 옵션 ----------
   const PAY_METHODS = ["계산서","선불","착불"];
@@ -9762,15 +9763,26 @@ function PaymentManagement({ dispatchData = [], clients = [], drivers = [] }) {
                       )}
                     </td>
 
-                    {/* 메모 */}
-                    <td className={cell}>
-                      {!editMode ? roText(r.메모||"") : (
-                        <input className={`${input} ${editableCls}`}
-                          value={d.메모 ?? ""}
-                          onChange={(e)=>setD(r._id,"메모",e.target.value)}
-                        />
-                      )}
-                    </td>
+                    {/* 메모 (더보기 팝업 + 너비 축소) */}
+<td className={cell + " min-w-[80px] max-w-[80px] truncate"}>
+  {!editMode ? (
+    <span
+      className="cursor-pointer hover:underline"
+      onClick={() => setMemoPopup({ open: true, text: r.메모 || "" })}
+    >
+      {(r.메모 || "").length > 5
+        ? (r.메모.substring(0, 5) + "…")
+        : (r.메모 || "")}
+    </span>
+  ) : (
+    <input
+      className={`${input} ${editableCls}`}
+      value={d.메모 ?? ""}
+      onChange={(e)=>setD(r._id,"메모",e.target.value)}
+    />
+  )}
+</td>
+
 
                   </tr>
                 );
