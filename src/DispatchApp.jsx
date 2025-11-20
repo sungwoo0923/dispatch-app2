@@ -396,18 +396,23 @@ export default function DispatchApp() {
       </nav>
 
       {/* ---------------- 화면 렌더링 ---------------- */}
-      <main className="bg-white rounded shadow p-4">
-        {menu === "배차관리" && (
-          <DispatchManagement
-            dispatchData={dispatchData}
-            drivers={drivers}
-            clients={clients}
-            addDispatch={addDispatch}
-            upsertDriver={upsertDriver}
-            upsertClient={upsertClient}
-            role={role}
-          />
-        )}
+<main className="bg-white rounded shadow p-4">
+
+  {menu === "배차관리" && (
+    <DispatchManagement
+      dispatchData={dispatchData}
+      drivers={drivers}
+      clients={clients}
+      addDispatch={addDispatch}
+      upsertDriver={upsertDriver}
+      upsertClient={upsertClient}
+      placeRows={[   // ⭐⭐⭐⭐ 자동완성의 핵심!!
+        ...(JSON.parse(localStorage.getItem("hachaPlaces_v1") || "[]")),
+        ...clients
+      ]}
+      role={role}
+    />
+  )}
 
         {menu === "실시간배차현황" && (
 <RealtimeStatus
@@ -500,14 +505,88 @@ function DispatchManagement({
   dispatchData, drivers, clients, timeOptions, tonOptions,
   addDispatch, upsertDriver, upsertClient,
   patchDispatch, removeDispatch,   // ⭐ 추가
+  placeRows = [],   // ⭐ 추가
   role = "admin",
 }) {
+  
   const isAdmin = role === "admin";
+    // ⭐ 여기 맨 위에 오도록
+    const [clientQuery, setClientQuery] = React.useState("");
+  const [isClientOpen, setIsClientOpen] = React.useState(false);
+  const [clientActive, setClientActive] = React.useState(0);
+  const comboRef = React.useRef(null);
+  React.useEffect(() => {
+    const onDocClick = (e) => {
+      if (!comboRef.current) return;
+      if (!comboRef.current.contains(e.target)) setIsClientOpen(false);
+    };
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, []);
+  const [showPlaceDropdown, setShowPlaceDropdown] = React.useState(false);  // ⭐ 여기 추가
+  const [placeQuery, setPlaceQuery] = React.useState("");                   // ⭐ 여기 추가
+const [placeOptions, setPlaceOptions] = React.useState([]);
 
   // ---------- 🔧 안전 폴백 유틸(다른 파트 미정의 시 자체 사용) ----------
   const _todayStr = (typeof todayStr === "function")
     ? todayStr
     : () => new Date().toISOString().slice(0, 10);
+      // 0) 하차지 거래처 리스트 (ClientManagement의 하차지 탭에서 저장된 값들)
+  const placeList = React.useMemo(() => {
+    try {
+      return JSON.parse(localStorage.getItem("hachaPlaces_v1") || "[]");
+    } catch (e) {
+      console.error(e);
+      return [];
+    }
+  }, []);
+// 🔽 placeList 아래에 바로 추가 (3파트)
+const mergedClients = React.useMemo(() => {
+  return [...placeList, ...clients];  // 기본 + 하차지 모두 검색
+}, [placeList, clients]);
+
+const findClient = (name) => {
+  if (!name) return null;
+  const n = normalize(name);
+  return mergedClients.find(
+    c => normalize(c.업체명 || "").includes(n)
+  );
+};
+
+  // 이름/주소 정규화
+  const normalizePlaceKey = (s = "") =>
+    String(s)
+      .toLowerCase()
+      .replace(/\s+/g, "")
+      .replace(/[\(\)\[\]]/g, "")
+      .replace(/[^0-9a-z가-힣]/g, "");
+
+  // 상차지명/하차지명 → 하차지 거래처(업체명+주소+담당자+번호) 찾는 함수
+  const findPlace = (name) => {
+    const key = normalizePlaceKey(name);
+    if (!key) return null;
+
+    // 1) 완전 일치 업체명
+    let exact = placeList.find(
+      (p) => normalizePlaceKey(p.업체명 || "") === key
+    );
+    if (exact) return exact;
+
+    // 2) 포함되는 업체명
+    let partial = placeList.find(
+      (p) => normalizePlaceKey(p.업체명 || "").includes(key)
+    );
+    if (partial) return partial;
+
+    // 3) 주소에 포함된 경우 (예: '용인'만 쳐도 용인시 기흥구 ~ 주소 매칭)
+    let byAddr = placeList.find(
+      (p) => normalizePlaceKey(p.주소 || "").includes(key)
+    );
+    if (byAddr) return byAddr;
+
+    return null;
+  };
+
   const _tomorrowStr = (typeof tomorrowStr === "function")
     ? tomorrowStr
     : () => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().slice(0, 10); };
@@ -590,10 +669,14 @@ function DispatchManagement({
     등록일: _todayStr(),
     거래처명: "",
     상차지명: "",
-    상차지주소: "",
-    하차지명: "",
-    하차지주소: "",
-    화물내용: "",
+상차지주소: "",
+상차지담당자: "",
+상차지담당자번호: "",
+하차지명: "",
+하차지주소: "",
+하차지담당자: "",
+하차지담당자번호: "",
+화물내용: "",
     차량종류: "",
     차량톤수: "",
     차량번호: "",
@@ -619,46 +702,43 @@ function DispatchManagement({
   const [form, setForm] = React.useState(() => ({ ...emptyForm, ..._safeLoad("dispatchForm", {}) }));
   React.useEffect(() => _safeSave("dispatchForm", form), [form]);
 
-  // ✅ 거래처 자동매칭용
-  const norm = (s = "") => String(s).trim().toLowerCase();
-  const clientMap = React.useMemo(() => {
-    const m = new Map();
-    (clients || []).forEach((c) => {
-      const name = c.거래처명 || c.name || c.title || "";
-      if (!name) return;
-      m.set(norm(name), c);
-    });
-    return m;
-  }, [clients]);
-  const findClient = (name) => clientMap.get(norm(name));
+  // =====================
+// ⭐ 거래처 = 하차지거래처 기반으로 자동완성
+// =====================
+const norm = (s = "") => String(s).trim().toLowerCase();
+
+// placeRows = [{업체명, 주소, 담당자, 담당자번호}]
+const filteredClients = React.useMemo(() => {
+  const q = norm(clientQuery);
+  if (!q) return placeRows || [];
+  return (placeRows || []).filter((p) =>
+    norm(p.업체명 || "").includes(q)
+  );
+}, [clientQuery, placeRows]);
+
+// 선택 시 상차지 자동 입력
+const applyClientSelect = (name) => {
+  const p = (placeRows || []).find(
+    (x) => norm(x.업체명) === norm(name)
+  );
+
+  setForm((prev) => ({
+    ...prev,
+    거래처명: name,
+    상차지명: name,
+    상차지주소: p?.주소 || "",
+    상차지담당자: p?.담당자 || "",
+    상차지담당자번호: p?.담당자번호 || "",
+  }));
+
+  setClientQuery(name);
+  setIsClientOpen(false);
+};
+
 
   // ✅ 주소 자동매칭 뱃지
   const [autoPickMatched, setAutoPickMatched] = React.useState(false);
   const [autoDropMatched, setAutoDropMatched] = React.useState(false);
-
-  // 거래처 콤보
-  const [clientQuery, setClientQuery] = React.useState(form.거래처명 || "");
-  const [isClientOpen, setIsClientOpen] = React.useState(false);
-  const [clientActive, setClientActive] = React.useState(0);
-  const comboRef = React.useRef(null);
-  React.useEffect(() => {
-    const onDocClick = (e) => {
-      if (!comboRef.current) return;
-      if (!comboRef.current.contains(e.target)) setIsClientOpen(false);
-    };
-    document.addEventListener("mousedown", onDocClick);
-    return () => document.removeEventListener("mousedown", onDocClick);
-  }, []);
-
-  const clientOptions = (clients || []).map((c) => ({
-    거래처명: c.거래처명 || c.name || c.title || "",
-    주소: c.주소 || "",
-  }));
-  const filteredClients = React.useMemo(() => {
-    const q = norm(clientQuery);
-    if (!q) return clientOptions;
-    return clientOptions.filter((c) => norm(c.거래처명).includes(q));
-  }, [clientQuery, clientOptions]);
 
   const onChange = (key, value) => {
     if (isAdmin && (key === "청구운임" || key === "기사운임")) {
@@ -681,36 +761,52 @@ function DispatchManagement({
     setForm((p) => ({ ...p, [key]: value }));
   };
 
-  // ✅ 거래처 선택 → 상차지/주소 자동
-  const applyClientSelect = (name) => {
-    const selected = findClient(name);
-    setForm((p) => ({
-      ...p,
-      거래처명: name,
-      상차지명: p.상차지명 || name,
-      상차지주소: (p.상차지명 || name) && selected?.주소 && norm(p.상차지명 || name) === norm(name)
-        ? selected.주소
-        : p.상차지주소,
-    }));
-    setAutoPickMatched((p) => !!(selected?.주소 && norm((form.상차지명 || name)) === norm(name)));
-    setClientQuery(name);
-    setIsClientOpen(false);
-    setClientActive(0);
-  };
-
-  // ✅ 상/하차지명 변경 시 주소 자동매칭
   const handlePickupName = (value) => {
-    const pickClient = findClient(value);
-    setForm((p) => ({ ...p, 상차지명: value, 상차지주소: pickClient?.주소 || p.상차지주소 }));
-    setAutoPickMatched(!!pickClient?.주소);
-  };
+  const place = findPlace(value);         // ⭐ 신규: 하차지 DB 자동매칭
+
+  setForm((p) => ({
+    ...p,
+    상차지명: value,
+    상차지주소:
+      place?.주소 ||
+      p.상차지주소,
+
+    상차지담당자: place?.담당자 || p.상차지담당자,
+    상차지담당자번호: place?.담당자번호 || p.상차지담당자번호,
+  }));
+
+  // 기존 거래처 매칭 배지 + 하차지 매칭 상태 유지
+  setAutoPickMatched(!!place?.주소);
+};
+
   const handleDropName = (value) => {
-    const dropClient = findClient(value);
-    setForm((p) => ({ ...p, 하차지명: value, 하차지주소: dropClient?.주소 || p.하차지주소 }));
-    setAutoDropMatched(!!dropClient?.주소);
-  };
+  const place = findPlace(value);   // ⭐ 하차지 DB 매칭 추가
+
+  setForm((p) => ({
+    ...p,
+    하차지명: value,
+    하차지주소:
+      place?.주소 ||
+      p.하차지주소,
+
+    하차지담당자: place?.담당자 || p.하차지담당자,
+    하차지담당자번호: place?.담당자번호 || p.하차지담당자번호,
+  }));
+
+  setAutoDropMatched(!!place?.주소);
+};
+
   const handlePickupAddrManual = (v) => { setForm((p) => ({ ...p, 상차지주소: v })); setAutoPickMatched(false); };
   const handleDropAddrManual  = (v) => { setForm((p) => ({ ...p, 하차지주소: v })); setAutoDropMatched(false); };
+
+  // 🔍 하차지 자동완성 검색
+const filterPlaces = (q) => {
+  const nq = String(q || "").trim().toLowerCase();
+  if (!nq) return [];
+  return (placeRows || []).filter((p) =>
+    String(p.업체명 || "").toLowerCase().includes(nq)
+  );
+};
 
   // 🚗 차량번호 입력 → 항상 수정 가능 + 자동 기사정보 입력
 const driverMap = React.useMemo(() => {
@@ -1232,24 +1328,32 @@ const [copySelected, setCopySelected] = React.useState([]);
                 }}
               />
               {isClientOpen && (
-                <div className="absolute left-0 right-0 mt-1 max-h-52 overflow-auto bg-white border rounded shadow-lg z-50">
-                  {filteredClients.length === 0 ? (
-                    <div className="px-3 py-2 text-sm text-gray-500">검색 결과 없음</div>
-                  ) : (
-                    filteredClients.map((c, idx) => (
-                      <div
-                        key={c.거래처명}
-                        className={`px-3 py-2 text-sm cursor-pointer ${idx === clientActive ? "bg-blue-50" : "hover:bg-gray-50"}`}
-                        onMouseEnter={() => setClientActive(idx)}
-                        onMouseDown={(e) => { e.preventDefault(); applyClientSelect(c.거래처명); }}
-                      >
-                        <div className="font-medium">{c.거래처명}</div>
-                        {c.주소 ? <div className="text-[11px] text-gray-500">{c.주소}</div> : null}
-                      </div>
-                    ))
-                  )}
-                </div>
-              )}
+  <div className="absolute left-0 right-0 mt-1 max-h-52 overflow-auto bg-white border rounded shadow-lg z-50">
+    {filteredClients.length === 0 ? (
+      <div className="px-3 py-2 text-sm text-gray-500">검색 결과 없음</div>
+    ) : (
+      filteredClients.map((p, idx) => (
+        <div
+          key={p.업체명}
+          className={`px-3 py-2 text-sm cursor-pointer ${
+            idx === clientActive ? "bg-blue-50" : "hover:bg-gray-50"
+          }`}
+          onMouseEnter={() => setClientActive(idx)}
+          onMouseDown={(e) => {
+            e.preventDefault();
+            applyClientSelect(p.업체명);
+          }}
+        >
+          <div className="font-medium">{p.업체명}</div>
+          {p.주소 ? (
+            <div className="text-[11px] text-gray-500">{p.주소}</div>
+          ) : null}
+        </div>
+      ))
+    )}
+  </div>
+)}
+
             </div>
             <button
               type="button"
@@ -1292,15 +1396,49 @@ const [copySelected, setCopySelected] = React.useState([]);
   />
 </div>
 
-{/* 하차지명 */}
-<div>
+{/* 하차지명 + 자동완성 */}
+<div className="relative">
   <label className={labelCls}>하차지명 {reqStar}</label>
+
   <input
-    className={inputCls}
-    value={form.하차지명}
-    onChange={(e) => handleDropName(e.target.value)}
-  />
+  className={inputCls}
+  placeholder="하차지 검색"
+  value={form.하차지명}
+  onChange={(e) => {
+  const v = e.target.value;
+  handleDropName(v);     
+  setPlaceOptions(filterPlaces(v));   // ⭐ 자동완성 목록 생성
+  setShowPlaceDropdown(true);
+}}
+
+  onBlur={() => setTimeout(() => setShowPlaceDropdown(false), 200)}
+/>
+
+  {showPlaceDropdown && placeOptions.length > 0 && (
+    <div className="absolute z-50 bg-white border rounded shadow w-full max-h-48 overflow-auto">
+      {placeOptions.map((p, i) => (
+        <div
+          key={i}
+          className="px-2 py-1 hover:bg-blue-100 cursor-pointer"
+          onMouseDown={() => {
+            setForm((prev) => ({
+              ...prev,
+              하차지명: p.업체명,
+              하차지주소: p.주소,
+              하차지담당자: p.담당자,
+              하차지담당자번호: p.담당자번호,
+            }));
+            setShowPlaceDropdown(false);
+          }}
+        >
+          <b>{p.업체명}</b>
+          {p.주소 ? <div className="text-xs text-gray-500">{p.주소}</div> : null}
+        </div>
+      ))}
+    </div>
+  )}
 </div>
+
 
 {/* 하차지주소 */}
 <div>
@@ -2485,15 +2623,29 @@ const onBulkFile = (e) => {
 const setBulk = (id, k, v) => {
   setBulkRows(prev => prev.map(r => {
     if (r._tmp_id !== id) return r;
+if (k === "상차지명") {
+  const p = findPlace(v);
+  return {
+    ...r,
+    상차지명: v,
+    상차지주소: p?.주소 || r.상차지주소 || "",
+    상차지담당자: p?.담당자 || r.상차지담당자 || "",
+    상차지담당자번호: p?.담당자번호 || r.상차지담당자번호 || "",
+  };
+}
 
-    if (k === "상차지명") {
-      const c = findClient(v);
-      return { ...r, 상차지명: v, 상차지주소: c?.주소 || r.상차지주소 || "" };
-    }
-    if (k === "하차지명") {
-      const c = findClient(v);
-      return { ...r, 하차지명: v, 하차지주소: c?.주소 || r.하차지주소 || "" };
-    }
+if (k === "하차지명") {
+  const p = findPlace(v);
+  return {
+    ...r,
+    하차지명: v,
+    하차지주소: p?.주소 || r.하차지주소 || "",
+    하차지담당자: p?.담당자 || r.하차지담당자 || "",
+    하차지담당자번호: p?.담당자번호 || r.하차지담당자번호 || "",
+  };
+}
+
+  
     if (k === "청구운임" || k === "기사운임") {
       const sale = toInt2(k==="청구운임" ? v : r.청구운임);
       const drv  = toInt2(k==="기사운임" ? v : r.기사운임);
@@ -2727,6 +2879,10 @@ function RealtimeStatus({
 }) {
 
   const isAdmin = role === "admin";
+// 🔵 하차지 자동완성 상태
+const [placeOptions, setPlaceOptions] = React.useState([]);   // 자동완성 목록
+const [showPlaceDropdown, setShowPlaceDropdown] = React.useState(false);  // 드롭다운 표시 여부
+const [placeQuery, setPlaceQuery] = React.useState("");       // 검색 문자열
 
   // ------------------------
   // 상태들
@@ -9796,10 +9952,8 @@ function PaymentManagement({ dispatchData = [], clients = [], drivers = [] }) {
 }
 
 // ===================== DispatchApp.jsx (PART 9/9 — 지급관리 V5 최종본) — END =====================
-
-
 // ===================== DispatchApp.jsx (PART 10/10) — START =====================
-// 기사관리 (DriverManagement) — 예전 방식 그대로: 검색/신규등록/수정/삭제/엑셀업로드
+// 기사관리 (DriverManagement)
 function DriverManagement({ drivers = [], upsertDriver, removeDriver }) {
   const [q, setQ] = React.useState("");
   const [rows, setRows] = React.useState(() =>
@@ -9821,6 +9975,20 @@ function DriverManagement({ drivers = [], upsertDriver, removeDriver }) {
     );
   }, [rows, q]);
 
+  // ===================== 페이지네이션 =====================
+  const [page, setPage] = React.useState(1);
+  const perPage = 100;
+
+  React.useEffect(() => { setPage(1); }, [q]);
+
+  const paged = React.useMemo(() => {
+    const start = (page - 1) * perPage;
+    return filtered.slice(start, start + perPage);
+  }, [filtered, page]);
+
+  const totalPages = Math.ceil(filtered.length / perPage);
+  // =====================================================
+
   const toggleOne = (id) => {
     setSelected(prev => {
       const n = new Set(prev);
@@ -9836,7 +10004,6 @@ function DriverManagement({ drivers = [], upsertDriver, removeDriver }) {
   const handleBlur = async (row, key, val) => {
     const id = row.차량번호 || row.id;
     const patch = { ...row, [key]: val };
-    // 차량번호가 키. 사용자가 차량번호를 바꾼 경우도 merge로 처리
     const keyId = patch.차량번호 || id || crypto?.randomUUID?.();
     await upsertDriver?.({ ...patch, id: keyId });
   };
@@ -9951,9 +10118,9 @@ function DriverManagement({ drivers = [], upsertDriver, removeDriver }) {
             </tr>
           </thead>
           <tbody>
-            {filtered.length===0 ? (
+            {paged.length===0 ? (
               <tr><td className="text-center text-gray-500 py-6" colSpan={5}>표시할 데이터가 없습니다.</td></tr>
-            ) : filtered.map((r,i)=> {
+            ) : paged.map((r,i)=> {
               const id = r.차량번호 || r.id || `${i}`;
               return (
                 <tr key={id} className={i%2? "bg-gray-50":""}>
@@ -9988,251 +10155,1020 @@ function DriverManagement({ drivers = [], upsertDriver, removeDriver }) {
           </tbody>
         </table>
       </div>
+
+      {/* ================= 페이지 버튼 ================ */}
+      <div className="flex items-center justify-center gap-4 mt-4 text-sm">
+        <button
+          className="px-4 py-1 border rounded disabled:opacity-50"
+          disabled={page === 1}
+          onClick={() => setPage(p => Math.max(1, p - 1))}
+        >
+          ◀ 이전
+        </button>
+
+        <span>
+          {page} / {totalPages || 1}
+        </span>
+
+        <button
+          className="px-4 py-1 border rounded disabled:opacity-50"
+          disabled={page === totalPages || totalPages===0}
+          onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+        >
+          다음 ▶
+        </button>
+      </div>
     </div>
   );
 }
 // ===================== DispatchApp.jsx (PART 10/10) — END =====================
 
 
-
 // ===================== DispatchApp.jsx (PART 11/11) — START =====================
-// 거래처관리 (ClientManagement) — 예전 방식 그대로: 검색/신규등록/수정/삭제/엑셀업로드
+// 거래처관리 (ClientManagement) — 기본 거래처 + 하차지 거래처 서브탭 포함
+
 function ClientManagement({ clients = [], upsertClient, removeClient }) {
+
+  // 🔧 주소 비교용 정규화 (하차지명은 신경 안 쓰고, 주소만 기준으로 중복 판단)
+const normalizePlace = (s = "") =>
+  String(s)
+    .toLowerCase()
+    .replace(/\s+/g, "")          // 공백 제거
+    .replace(/[^\w가-힣\/-]/g, ""); // 숫자/영문/한글 + / - 만 남기고 제거
+
+
+
+  /* -----------------------------------------------------------
+     공통 유틸/스타일
+  ----------------------------------------------------------- */
+  const norm = (s = "") => String(s).toLowerCase().replace(/\s+/g, "");
+  const head =
+    headBase ||
+    "border px-2 py-2 bg-gray-100 text-center whitespace-nowrap";
+  const cell =
+    cellBase ||
+    "border px-2 py-1 text-center whitespace-nowrap align-middle";
+  const input = inputBase || "border p-1 rounded w-36 text-center";
+
+  /* -----------------------------------------------------------
+     상단 서브탭 (기본 / 하차지)
+  ----------------------------------------------------------- */
+  const [subTab, setSubTab] = React.useState("기본"); // "기본" | "하차지"
+
+  /* -----------------------------------------------------------
+     🔵 [1] 기본 거래처관리 상태
+  ----------------------------------------------------------- */
   const [q, setQ] = React.useState("");
   const [rows, setRows] = React.useState(() =>
-    (clients || []).map(c => ({ ...c }))
+    (clients || []).map((c) => ({ ...c }))
   );
   const [selected, setSelected] = React.useState(new Set());
+
   const [newForm, setNewForm] = React.useState({
-    거래처명:"", 사업자번호:"", 대표자:"", 업태:"", 종목:"", 주소:"", 담당자:"", 연락처:"", 메모:""
+    거래처명: "",
+    사업자번호: "",
+    대표자: "",
+    업태: "",
+    종목: "",
+    주소: "",
+    담당자: "",
+    연락처: "",
+    메모: "",
   });
 
   React.useEffect(() => {
-    // normalizeClients 유틸을 통해 중복정리
-    const normalized = normalizeClients ? normalizeClients(clients) : (clients || []);
-    setRows(normalized.map(c => ({ ...c })));
+    const normalized = normalizeClients ? normalizeClients(clients) : clients || [];
+    setRows(normalized.map((c) => ({ ...c })));
   }, [clients]);
 
-  const norm = (s="") => String(s).toLowerCase().replace(/\s+/g,"");
   const filtered = React.useMemo(() => {
     if (!q.trim()) return rows;
     const nq = norm(q);
-    return rows.filter(r =>
-      ["거래처명","사업자번호","대표자","업태","종목","주소","담당자","연락처","메모"].some(k => norm(r[k]||"").includes(nq))
+    return rows.filter((r) =>
+      ["거래처명", "사업자번호", "대표자", "업태", "종목", "주소", "담당자", "연락처", "메모"].some(
+        (k) => norm(r[k] || "").includes(nq)
+      )
     );
   }, [rows, q]);
 
-  const toggleOne = (name) => {
-    setSelected(prev => {
+  const toggleOne = (id) => {
+    setSelected((prev) => {
       const n = new Set(prev);
-      n.has(name) ? n.delete(name) : n.add(name);
+      n.has(id) ? n.delete(id) : n.add(id);
       return n;
     });
   };
+
   const toggleAll = () => {
     if (selected.size === filtered.length) setSelected(new Set());
-    else setSelected(new Set(filtered.map(r => r.거래처명).filter(Boolean)));
+    else setSelected(new Set(filtered.map((r) => r.거래처명).filter(Boolean)));
   };
 
   const handleBlur = async (row, key, val) => {
-    const patch = { ...row, [key]: val };
-    const id = patch.거래처명 || row.id || crypto?.randomUUID?.();
-    await upsertClient?.({ ...patch, id });
+    const id = row.거래처명 || row.id;
+    if (!id) return;
+    await upsertClient?.({
+      ...row,
+      [key]: val,
+      id,
+    });
   };
 
   const addNew = async () => {
-    const 거래처명 = (newForm.거래처명||"").trim();
+    const 거래처명 = (newForm.거래처명 || "").trim();
     if (!거래처명) return alert("거래처명은 필수입니다.");
+
     await upsertClient?.({ ...newForm, id: 거래처명 });
-    setNewForm({ 거래처명:"", 사업자번호:"", 대표자:"", 업태:"", 종목:"", 주소:"", 담당자:"", 연락처:"", 메모:"" });
+
+    setNewForm({
+      거래처명: "",
+      사업자번호: "",
+      대표자: "",
+      업태: "",
+      종목: "",
+      주소: "",
+      담당자: "",
+      연락처: "",
+      메모: "",
+    });
+
     alert("등록 완료");
   };
 
-  const removeSelected = async () => {
+  const removeSelectedFn = async () => {
     if (!selected.size) return alert("선택된 항목이 없습니다.");
-    if (!confirm(`${selected.size}건 삭제할까요?`)) return;
-    for (const name of selected) await removeClient?.(name);
+    if (!confirm(`${selected.size}건 삭제하시겠습니까?`)) return;
+
+    for (const id of selected) {
+      await removeClient?.(id);
+    }
+
     setSelected(new Set());
     alert("삭제 완료");
   };
 
-  // 엑셀 업로드
   const onExcel = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
     const reader = new FileReader();
     reader.onload = async (evt) => {
       try {
-        const wb = XLSX.read(new Uint8Array(evt.target.result), { type: "array" });
+        const wb = XLSX.read(new Uint8Array(evt.target.result), {
+          type: "array",
+        });
         const sheet = wb.SheetNames[0];
-        const json = XLSX.utils.sheet_to_json(wb.Sheets[sheet], { defval: "" });
+        const json = XLSX.utils.sheet_to_json(wb.Sheets[sheet], {
+          defval: "",
+        });
+
         let ok = 0;
+
         for (const r of json) {
-          // 다양한 헤더명 커버
-          const row = normalizeClient ? normalizeClient(r) : {
-            거래처명: r.거래처명 || r["상호"] || r["회사명"] || r["업체명"] || r["거래처"] || "",
-            사업자번호: r.사업자번호 || r["사업자 등록번호"] || r["사업자등록번호"] || "",
-            대표자: r.대표자 || r["대표자명"] || r["대표"] || "",
-            업태: r.업태 || "",
-            종목: r.종목 || "",
-            주소: r.주소 || "",
-            담당자: r.담당자 || r["담당"] || "",
-            연락처: r.연락처 || r["전화"] || r["휴대폰"] || "",
-            메모: r.메모 || r["비고"] || "",
-          };
-          const 거래처명 = (row?.거래처명 || "").trim();
+          const row = normalizeClient
+            ? normalizeClient(r)
+            : {
+                거래처명:
+                  r.거래처명 ||
+                  r["상호"] ||
+                  r["회사명"] ||
+                  r["업체명"] ||
+                  r["거래처"] ||
+                  "",
+                사업자번호:
+                  r.사업자번호 ||
+                  r["사업자 등록번호"] ||
+                  r["사업자등록번호"] ||
+                  "",
+                대표자: r.대표자 || r["대표자명"] || r["대표"] || "",
+                업태: r.업태 || "",
+                종목: r.종목 || "",
+                주소: r.주소 || "",
+                담당자: r.담당자 || r["담당"] || "",
+                연락처: r.연락처 || r["전화"] || r["휴대폰"] || "",
+                메모: r.메모 || r["비고"] || "",
+              };
+
+          const 거래처명 = (row.거래처명 || "").trim();
           if (!거래처명) continue;
+
           await upsertClient?.({ ...row, id: 거래처명 });
           ok++;
         }
-        alert(`총 ${ok}건 반영`);
+
+        alert(`총 ${ok}건 반영 완료`);
       } catch (err) {
         console.error(err);
-        alert("엑셀 처리 중 오류");
+        alert("엑셀 처리 오류");
       } finally {
         e.target.value = "";
       }
     };
+
     reader.readAsArrayBuffer(file);
   };
 
-  const head = headBase || "border px-2 py-2 bg-gray-100 text-center whitespace-nowrap";
-  const cell = cellBase || "border px-2 py-1 text-center whitespace-nowrap align-middle";
-  const input = inputBase || "border p-1 rounded w-36 text-center";
+  /* -----------------------------------------------------------
+     🔵 [2] 하차지 거래처 관리 (localStorage 저장)
+  ----------------------------------------------------------- */
+  const loadPlaces = () => {
+    try {
+      const raw = localStorage.getItem("hachaPlaces_v1");
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      console.error(e);
+      return [];
+    }
+  };
 
+  const [placeRows, setPlaceRows] = React.useState(loadPlaces);
+  const [placeSelected, setPlaceSelected] = React.useState(new Set());
+  const [placeQ, setPlaceQ] = React.useState("");
+  const [placeFilterType, setPlaceFilterType] = React.useState("업체명");
+
+  const [placeNewForm, setPlaceNewForm] = React.useState({
+    업체명: "",
+    주소: "",
+    담당자: "",
+    담당자번호: "",
+    메모: "",
+  });
+
+  React.useEffect(() => {
+    try {
+      localStorage.setItem("hachaPlaces_v1", JSON.stringify(placeRows));
+    } catch (e) {
+      console.error(e);
+    }
+  }, [placeRows]);
+
+  const filteredPlaces = React.useMemo(() => {
+    if (!placeQ.trim()) return placeRows;
+    const nq = norm(placeQ);
+
+    if (placeFilterType === "업체명") {
+      return placeRows.filter((r) => norm(r.업체명 || "").includes(nq));
+    }
+    if (placeFilterType === "주소") {
+      return placeRows.filter((r) => norm(r.주소 || "").includes(nq));
+    }
+    return placeRows;
+  }, [placeRows, placeQ, placeFilterType]);
+
+  const togglePlaceOne = (id) => {
+    setPlaceSelected((prev) => {
+      const n = new Set(prev);
+      n.has(id) ? n.delete(id) : n.add(id);
+      return n;
+    });
+  };
+
+  const togglePlaceAll = () => {
+    if (placeSelected.size === filteredPlaces.length) setPlaceSelected(new Set());
+    else
+      setPlaceSelected(
+        new Set(filteredPlaces.map((p) => p.id || p.업체명).filter(Boolean))
+      );
+  };
+
+  const handlePlaceBlur = (row, key, val) => {
+    const id = row.id || row.업체명;
+    if (!id) return;
+
+    setPlaceRows((prev) =>
+      prev.map((p) => ((p.id || p.업체명) === id ? { ...p, [key]: val } : p))
+    );
+  };
+
+  const addNewPlace = () => {
+    const 업체명 = (placeNewForm.업체명 || "").trim();
+    if (!업체명) return alert("업체명은 필수입니다.");
+
+    const id = 업체명;
+
+    setPlaceRows((prev) => {
+      const idx = prev.findIndex((p) => (p.id || p.업체명) === id);
+      const newRow = { ...placeNewForm, id };
+
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = newRow;
+        return copy;
+      }
+
+      return [...prev, newRow];
+    });
+
+    setPlaceNewForm({
+      업체명: "",
+      주소: "",
+      담당자: "",
+      담당자번호: "",
+      메모: "",
+    });
+
+    alert("등록 완료");
+  };
+
+  const removeSelectedPlaces = () => {
+    if (!placeSelected.size) return alert("선택된 항목이 없습니다.");
+    if (!confirm(`${placeSelected.size}건 삭제할까요?`)) return;
+
+    setPlaceRows((prev) =>
+      prev.filter((p) => !placeSelected.has(p.id || p.업체명))
+    );
+
+    setPlaceSelected(new Set());
+    alert("삭제 완료");
+  };
+
+    const onExcelPlaces = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        const wb = XLSX.read(new Uint8Array(evt.target.result), {
+          type: "array",
+        });
+        const sheet = wb.SheetNames[0];
+        const json = XLSX.utils.sheet_to_json(wb.Sheets[sheet], {
+          defval: "",
+        });
+
+        let ok = 0;
+
+        setPlaceRows((prev) => {
+          // ======================
+          // ① 기존 데이터: 주소 기준으로 Map 생성
+          //    → 주소가 같은 건 1개만 남기고 나머지는 무시
+          // ======================
+          const map = new Map();
+
+          for (const p of prev) {
+            const addrKey = normalizePlace(p.주소 || "");
+            // 주소가 없으면 기준이 없으니 일단 패스
+            if (!addrKey) continue;
+
+            if (!map.has(addrKey)) {
+              map.set(addrKey, p);
+            }
+          }
+
+          // 엑셀 데이터 반영
+for (const r of json) {
+  // ===== 업체명 (하차지명 포함 모든 경우 인식) =====
+  const 업체명 =
+    (r.업체명 ||
+     r["하차지명"] ||
+     r["하차지"] ||
+     r["상호"] ||
+     r["회사명"] ||
+     r["업체"] ||
+     r["업체명"] ||
+     "").toString().trim();
+
+  if (!업체명) continue;
+
+  // ===== 주소 =====
+  const 주소 =
+    (r.주소 ||
+     r["주소지"] ||
+     r["하차지주소"] ||
+     r["상세주소"] ||
+     "").toString().trim();
+
+  // ===== 담당자 이름 =====
+  const 담당자 =
+    (r.담당자 ||
+     r["인수자"] ||
+     r["이름"] ||
+     r["담당"] ||
+     "").toString().trim();
+
+  // ===== 전화번호 =====
+  const 담당자번호 =
+    (r.담당자번호 ||
+     r["전화"] ||
+     r["전화번호"] ||
+     r["연락처"] ||
+     r["핸드폰"] ||
+     r["휴대폰"] ||
+     "").toString().trim();
+
+  const 메모 = (r.메모 || "").toString().trim();
+
+
+            // 🔑 주소 정규화 키
+            const addrKey = normalizePlace(주소);
+
+            // 주소가 하나도 없으면, 중복 기준이 없으니 그냥 패스 (원하면 업체명 기준으로 처리할 수도 있음)
+            if (!addrKey) {
+              console.log("주소 없음 → 이번 행은 스킵:", 업체명);
+              continue;
+            }
+
+            // 이미 같은(또는 비슷한) 주소가 등록되어 있으면 중복으로 간주 → 스킵
+            if (map.has(addrKey)) {
+              console.log("중복 주소 스킵:", 업체명, "/", 주소);
+              continue;
+            }
+
+            // 신규 추가
+            map.set(addrKey, {
+              id: 업체명 || 주소 || `place_${map.size + 1}`,
+              업체명,
+              주소,
+              담당자,
+              담당자번호,
+              메모,
+            });
+            ok++;
+          }
+
+          alert(`총 ${ok}건 신규 반영 (주소 기준 중복 자동 제외됨)`);
+          return Array.from(map.values());
+        });
+      } catch (err) {
+        console.error(err);
+        alert("엑셀 처리 오류");
+      } finally {
+        e.target.value = "";
+      }
+    };
+
+    reader.readAsArrayBuffer(file);
+  };
+
+
+
+  const bulkEditPlaces = () => {
+    if (!placeSelected.size) {
+      alert("선택된 항목이 없습니다.");
+      return;
+    }
+
+    const 업체명 = prompt("업체명 (비워두면 기존값 유지):", "");
+    const 주소 = prompt("주소 (비워두면 기존값 유지):", "");
+    const 담당자 = prompt("담당자 (비워두면 기존값 유지):", "");
+    const 담당자번호 = prompt("담당자번호 (비워두면 기존값 유지):", "");
+    const 메모 = prompt("메모 (비워두면 기존값 유지):", "");
+
+    setPlaceRows((prev) =>
+      prev.map((p) => {
+        const id = p.id || p.업체명;
+        if (!placeSelected.has(id)) return p;
+        return {
+          ...p,
+          업체명: 업체명 || p.업체명,
+          주소: 주소 || p.주소,
+          담당자: 담당자 || p.담당자,
+          담당자번호: 담당자번호 || p.담당자번호,
+          메모: 메모 || p.메모,
+        };
+      })
+    );
+
+    alert("선택 항목 수정 완료");
+  };
+
+  /* -----------------------------------------------------------
+     렌더링
+  ----------------------------------------------------------- */
   return (
     <div>
       <h2 className="text-lg font-bold mb-3">거래처관리</h2>
 
-      {/* 상단 바 */}
-      <div className="flex flex-wrap items-center gap-2 mb-3">
-        <input
-          className="border p-2 rounded w-80"
-          placeholder="검색 (거래처/대표자/주소/담당자/연락처...)"
-          value={q}
-          onChange={(e)=>setQ(e.target.value)}
-        />
-        <label className="px-3 py-1 border rounded cursor-pointer text-sm">
-          📁 엑셀 업로드
-          <input type="file" accept=".xlsx,.xls" onChange={onExcel} className="hidden" />
-        </label>
-        <button onClick={removeSelected} className="px-3 py-1 rounded bg-red-600 text-white text-sm">선택삭제</button>
+      {/* 상단 서브탭 버튼 */}
+      <div className="flex gap-2 mb-4">
+        <button
+          className={
+            "px-4 py-2 rounded text-sm " +
+            (subTab === "기본"
+              ? "bg-blue-600 text-white"
+              : "bg-gray-100 text-gray-700")
+          }
+          onClick={() => setSubTab("기본")}
+        >
+          기본 거래처
+        </button>
+        <button
+          className={
+            "px-4 py-2 rounded text-sm " +
+            (subTab === "하차지"
+              ? "bg-blue-600 text-white"
+              : "bg-gray-100 text-gray-700")
+          }
+          onClick={() => setSubTab("하차지")}
+        >
+          하차지 거래처
+        </button>
       </div>
 
-      {/* 신규 등록 */}
-      <div className="grid grid-cols-4 gap-2 mb-4">
-        <div>
-          <div className="text-xs text-gray-500 mb-1">거래처명*</div>
-          <input className="border p-2 rounded w-full" value={newForm.거래처명} onChange={e=>setNewForm(p=>({...p,거래처명:e.target.value}))}/>
-        </div>
-        <div>
-          <div className="text-xs text-gray-500 mb-1">사업자번호</div>
-          <input className="border p-2 rounded w-full" value={newForm.사업자번호} onChange={e=>setNewForm(p=>({...p,사업자번호:e.target.value}))}/>
-        </div>
-        <div>
-          <div className="text-xs text-gray-500 mb-1">대표자</div>
-          <input className="border p-2 rounded w-full" value={newForm.대표자} onChange={e=>setNewForm(p=>({...p,대표자:e.target.value}))}/>
-        </div>
-        <div>
-          <div className="text-xs text-gray-500 mb-1">담당자</div>
-          <input className="border p-2 rounded w-full" value={newForm.담당자} onChange={e=>setNewForm(p=>({...p,담당자:e.target.value}))}/>
-        </div>
-        <div className="col-span-2">
-          <div className="text-xs text-gray-500 mb-1">주소</div>
-          <input className="border p-2 rounded w-full" value={newForm.주소} onChange={e=>setNewForm(p=>({...p,주소:e.target.value}))}/>
-        </div>
-        <div>
-          <div className="text-xs text-gray-500 mb-1">연락처</div>
-          <input className="border p-2 rounded w-full" value={newForm.연락처} onChange={e=>setNewForm(p=>({...p,연락처:e.target.value}))}/>
-        </div>
-        <div>
-          <div className="text-xs text-gray-500 mb-1">업태</div>
-          <input className="border p-2 rounded w-full" value={newForm.업태} onChange={e=>setNewForm(p=>({...p,업태:e.target.value}))}/>
-        </div>
-        <div>
-          <div className="text-xs text-gray-500 mb-1">종목</div>
-          <input className="border p-2 rounded w-full" value={newForm.종목} onChange={e=>setNewForm(p=>({...p,종목:e.target.value}))}/>
-        </div>
-        <div className="col-span-4">
-          <div className="text-xs text-gray-500 mb-1">메모</div>
-          <input className="border p-2 rounded w-full" value={newForm.메모} onChange={e=>setNewForm(p=>({...p,메모:e.target.value}))}/>
-        </div>
-        <div className="col-span-4 flex justify-end">
-          <button onClick={addNew} className="px-4 py-2 rounded bg-blue-600 text-white">+ 신규등록</button>
-        </div>
-      </div>
+      {/* ================== 🔵 탭 1: 기존 거래처관리 ================== */}
+      {subTab === "기본" && (
+        <>
+          {/* 상단 바 */}
+          <div className="flex flex-wrap items-center gap-2 mb-3">
+            <input
+              className="border p-2 rounded w-80"
+              placeholder="검색 (거래처/대표자/주소/담당자/연락처...)"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+            />
+            <label className="px-3 py-1 border rounded cursor-pointer text-sm">
+              📁 엑셀 업로드
+              <input
+                type="file"
+                accept=".xlsx,.xls"
+                onChange={onExcel}
+                className="hidden"
+              />
+            </label>
+            <button
+              onClick={removeSelectedFn}
+              className="px-3 py-1 rounded bg-red-600 text-white text-sm"
+            >
+              선택삭제
+            </button>
+          </div>
 
-      {/* 표 */}
-      <div className="overflow-x-auto">
-        <table className="min-w-[1400px] text-sm border">
-          <thead>
-            <tr>
-              <th className={head}>
-                <input type="checkbox"
-                  onChange={toggleAll}
-                  checked={filtered.length>0 && selected.size===filtered.length}
-                />
-              </th>
-              {["거래처명","사업자번호","대표자","업태","종목","주소","담당자","연락처","메모","삭제"].map(h=>(
-                <th key={h} className={head}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.length===0 ? (
-              <tr><td className="text-center text-gray-500 py-6" colSpan={10}>표시할 데이터가 없습니다.</td></tr>
-            ) : filtered.map((r,i)=> {
-              const id = r.거래처명 || r.id || `${i}`;
-              return (
-                <tr key={id} className={i%2? "bg-gray-50":""}>
-                  <td className={cell}>
-                    <input type="checkbox" checked={selected.has(id)} onChange={()=>toggleOne(id)} />
-                  </td>
-                  <td className={`${cell} min-w-[180px]`}>
-                    <input className={`${input} w-48`} defaultValue={r.거래처명||""}
-                      onBlur={(e)=>handleBlur(r,"거래처명", e.target.value)} />
-                  </td>
-                  <td className={cell}>
-                    <input className={input} defaultValue={r.사업자번호||""}
-                      onBlur={(e)=>handleBlur(r,"사업자번호", e.target.value)} />
-                  </td>
-                  <td className={cell}>
-                    <input className={input} defaultValue={r.대표자||""}
-                      onBlur={(e)=>handleBlur(r,"대표자", e.target.value)} />
-                  </td>
-                  <td className={cell}>
-                    <input className={input} defaultValue={r.업태||""}
-                      onBlur={(e)=>handleBlur(r,"업태", e.target.value)} />
-                  </td>
-                  <td className={`${cell} min-w-[260px]`}>
-                    <input className={`${input} w-64 text-left`} defaultValue={r.주소||""}
-                      onBlur={(e)=>handleBlur(r,"주소", e.target.value)} />
-                  </td>
-                  <td className={cell}>
-                    <input className={input} defaultValue={r.담당자||""}
-                      onBlur={(e)=>handleBlur(r,"담당자", e.target.value)} />
-                  </td>
-                  <td className={cell}>
-                    <input className={input} defaultValue={r.연락처||""}
-                      onBlur={(e)=>handleBlur(r,"연락처", e.target.value)} />
-                  </td>
-                  <td className={`${cell} min-w-[220px]`}>
-                    <input className={`${input} w-56 text-left`} defaultValue={r.메모||""}
-                      onBlur={(e)=>handleBlur(r,"메모", e.target.value)} />
-                  </td>
-                  <td className={cell}>
-                    <button
-                      onClick={()=>{ if(confirm("삭제하시겠습니까?")) removeClient?.(id); }}
-                      className="px-2 py-1 bg-red-600 text-white rounded"
-                    >삭제</button>
-                  </td>
+          {/* 신규 등록 */}
+          <div className="grid grid-cols-4 gap-2 mb-4">
+            <div>
+              <div className="text-xs text-gray-500 mb-1">거래처명*</div>
+              <input
+                className="border p-2 rounded w-full"
+                value={newForm.거래처명}
+                onChange={(e) =>
+                  setNewForm((p) => ({ ...p, 거래처명: e.target.value }))
+                }
+              />
+            </div>
+            <div>
+              <div className="text-xs text-gray-500 mb-1">사업자번호</div>
+              <input
+                className="border p-2 rounded w-full"
+                value={newForm.사업자번호}
+                onChange={(e) =>
+                  setNewForm((p) => ({ ...p, 사업자번호: e.target.value }))
+                }
+              />
+            </div>
+            <div>
+              <div className="text-xs text-gray-500 mb-1">대표자</div>
+              <input
+                className="border p-2 rounded w-full"
+                value={newForm.대표자}
+                onChange={(e) =>
+                  setNewForm((p) => ({ ...p, 대표자: e.target.value }))
+                }
+              />
+            </div>
+            <div>
+              <div className="text-xs text-gray-500 mb-1">담당자</div>
+              <input
+                className="border p-2 rounded w-full"
+                value={newForm.담당자}
+                onChange={(e) =>
+                  setNewForm((p) => ({ ...p, 담당자: e.target.value }))
+                }
+              />
+            </div>
+            <div className="col-span-2">
+              <div className="text-xs text-gray-500 mb-1">주소</div>
+              <input
+                className="border p-2 rounded w-full"
+                value={newForm.주소}
+                onChange={(e) =>
+                  setNewForm((p) => ({ ...p, 주소: e.target.value }))
+                }
+              />
+            </div>
+            <div>
+              <div className="text-xs text-gray-500 mb-1">연락처</div>
+              <input
+                className="border p-2 rounded w-full"
+                value={newForm.연락처}
+                onChange={(e) =>
+                  setNewForm((p) => ({ ...p, 연락처: e.target.value }))
+                }
+              />
+            </div>
+            <div>
+              <div className="text-xs text-gray-500 mb-1">업태</div>
+              <input
+                className="border p-2 rounded w-full"
+                value={newForm.업태}
+                onChange={(e) =>
+                  setNewForm((p) => ({ ...p, 업태: e.target.value }))
+                }
+              />
+            </div>
+            <div>
+              <div className="text-xs text-gray-500 mb-1">종목</div>
+              <input
+                className="border p-2 rounded w-full"
+                value={newForm.종목}
+                onChange={(e) =>
+                  setNewForm((p) => ({ ...p, 종목: e.target.value }))
+                }
+              />
+            </div>
+            <div className="col-span-4">
+              <div className="text-xs text-gray-500 mb-1">메모</div>
+              <input
+                className="border p-2 rounded w-full"
+                value={newForm.메모}
+                onChange={(e) =>
+                  setNewForm((p) => ({ ...p, 메모: e.target.value }))
+                }
+              />
+            </div>
+            <div className="col-span-4 flex justify-end">
+              <button
+                onClick={addNew}
+                className="px-4 py-2 rounded bg-blue-600 text-white"
+              >
+                + 신규등록
+              </button>
+            </div>
+          </div>
+
+          {/* 표 */}
+          <div className="overflow-x-auto">
+            <table className="min-w-[1400px] text-sm border">
+              <thead>
+                <tr>
+                  <th className={head}>
+                    <input
+                      type="checkbox"
+                      onChange={toggleAll}
+                      checked={
+                        filtered.length > 0 &&
+                        selected.size === filtered.length
+                      }
+                    />
+                  </th>
+                  {[
+                    "거래처명",
+                    "사업자번호",
+                    "대표자",
+                    "업태",
+                    "종목",
+                    "주소",
+                    "담당자",
+                    "연락처",
+                    "메모",
+                    "삭제",
+                  ].map((h) => (
+                    <th key={h} className={head}>
+                      {h}
+                    </th>
+                  ))}
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+              </thead>
+              <tbody>
+                {filtered.length === 0 ? (
+                  <tr>
+                    <td
+                      className="text-center text-gray-500 py-6"
+                      colSpan={10}
+                    >
+                      표시할 데이터가 없습니다.
+                    </td>
+                  </tr>
+                ) : (
+                  filtered.map((r, i) => {
+                    const id = r.거래처명 || r.id || `${i}`;
+                    return (
+                      <tr key={id} className={i % 2 ? "bg-gray-50" : ""}>
+                        <td className={cell}>
+                          <input
+                            type="checkbox"
+                            checked={selected.has(id)}
+                            onChange={() => toggleOne(id)}
+                          />
+                        </td>
+                        <td className={`${cell} min-w-[180px]`}>
+                          <input
+                            className={`${input} w-48`}
+                            defaultValue={r.거래처명 || ""}
+                            onBlur={(e) =>
+                              handleBlur(r, "거래처명", e.target.value)
+                            }
+                          />
+                        </td>
+                        <td className={cell}>
+                          <input
+                            className={input}
+                            defaultValue={r.사업자번호 || ""}
+                            onBlur={(e) =>
+                              handleBlur(r, "사업자번호", e.target.value)
+                            }
+                          />
+                        </td>
+                        <td className={cell}>
+                          <input
+                            className={input}
+                            defaultValue={r.대표자 || ""}
+                            onBlur={(e) =>
+                              handleBlur(r, "대표자", e.target.value)
+                            }
+                          />
+                        </td>
+                        <td className={cell}>
+                          <input
+                            className={input}
+                            defaultValue={r.업태 || ""}
+                            onBlur={(e) =>
+                              handleBlur(r, "업태", e.target.value)
+                            }
+                          />
+                        </td>
+                        <td className={`${cell} min-w-[260px]`}>
+                          <input
+                            className={`${input} w-64 text-left`}
+                            defaultValue={r.주소 || ""}
+                            onBlur={(e) =>
+                              handleBlur(r, "주소", e.target.value)
+                            }
+                          />
+                        </td>
+                        <td className={cell}>
+                          <input
+                            className={input}
+                            defaultValue={r.담당자 || ""}
+                            onBlur={(e) =>
+                              handleBlur(r, "담당자", e.target.value)
+                            }
+                          />
+                        </td>
+                        <td className={cell}>
+                          <input
+                            className={input}
+                            defaultValue={r.연락처 || ""}
+                            onBlur={(e) =>
+                              handleBlur(r, "연락처", e.target.value)
+                            }
+                          />
+                        </td>
+                        <td className={`${cell} min-w-[220px]`}>
+                          <input
+                            className={`${input} w-56 text-left`}
+                            defaultValue={r.메모 || ""}
+                            onBlur={(e) =>
+                              handleBlur(r, "메모", e.target.value)
+                            }
+                          />
+                        </td>
+                        <td className={cell}>
+                          <button
+                            onClick={() => {
+                              if (!confirm("삭제하시겠습니까?")) return;
+                              removeClient?.(id);
+                            }}
+                            className="px-2 py-1 bg-red-600 text-white rounded"
+                          >
+                            삭제
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      {/* ================== 🔵 탭 2: 하차지 거래처관리 ================== */}
+      {subTab === "하차지" && (
+        <>
+          {/* 상단 바 */}
+          <div className="flex flex-wrap items-center gap-2 mb-3">
+            <select
+              className="border p-2 rounded"
+              value={placeFilterType}
+              onChange={(e) => setPlaceFilterType(e.target.value)}
+            >
+              <option value="업체명">업체명</option>
+              <option value="주소">주소</option>
+            </select>
+
+            <input
+              className="border p-2 rounded w-80"
+              placeholder={`${placeFilterType} 검색`}
+              value={placeQ}
+              onChange={(e) => setPlaceQ(e.target.value)}
+            />
+
+            <label className="px-3 py-1 border rounded cursor-pointer text-sm">
+              📁 엑셀 업로드
+              <input
+                type="file"
+                accept=".xlsx,.xls"
+                onChange={onExcelPlaces}
+                className="hidden"
+              />
+            </label>
+
+            <button
+              onClick={bulkEditPlaces}
+              className="px-3 py-1 rounded bg-green-600 text-white text-sm"
+            >
+              선택수정
+            </button>
+
+            <button
+              onClick={removeSelectedPlaces}
+              className="px-3 py-1 rounded bg-red-600 text-white text-sm"
+            >
+              선택삭제
+            </button>
+          </div>
+
+          {/* 신규 등록 */}
+          <div className="grid grid-cols-4 gap-2 mb-4">
+            <div>
+              <div className="text-xs text-gray-500 mb-1">업체명*</div>
+              <input
+                className="border p-2 rounded w-full"
+                value={placeNewForm.업체명}
+                onChange={(e) =>
+                  setPlaceNewForm((p) => ({ ...p, 업체명: e.target.value }))
+                }
+              />
+            </div>
+            <div className="col-span-2">
+              <div className="text-xs text-gray-500 mb-1">주소</div>
+              <input
+                className="border p-2 rounded w-full"
+                value={placeNewForm.주소}
+                onChange={(e) =>
+                  setPlaceNewForm((p) => ({ ...p, 주소: e.target.value }))
+                }
+              />
+            </div>
+            <div>
+              <div className="text-xs text-gray-500 mb-1">담당자</div>
+              <input
+                className="border p-2 rounded w-full"
+                value={placeNewForm.담당자}
+                onChange={(e) =>
+                  setPlaceNewForm((p) => ({ ...p, 담당자: e.target.value }))
+                }
+              />
+            </div>
+            <div>
+              <div className="text-xs text-gray-500 mb-1">담당자번호</div>
+              <input
+                className="border p-2 rounded w-full"
+                value={placeNewForm.담당자번호}
+                onChange={(e) =>
+                  setPlaceNewForm((p) => ({ ...p, 담당자번호: e.target.value }))
+                }
+              />
+            </div>
+            <div className="col-span-3">
+              <div className="text-xs text-gray-500 mb-1">메모</div>
+              <input
+                className="border p-2 rounded w-full"
+                value={placeNewForm.메모}
+                onChange={(e) =>
+                  setPlaceNewForm((p) => ({ ...p, 메모: e.target.value }))
+                }
+              />
+            </div>
+            <div className="col-span-4 flex justify-end">
+              <button
+                onClick={addNewPlace}
+                className="px-4 py-2 rounded bg-blue-600 text-white"
+              >
+                + 신규등록
+              </button>
+            </div>
+          </div>
+
+          {/* 표 */}
+          <div className="overflow-x-auto">
+            <table className="min-w-[1000px] text-sm border">
+              <thead>
+                <tr>
+                  <th className={head}>
+                    <input
+                      type="checkbox"
+                      onChange={togglePlaceAll}
+                      checked={
+                        filteredPlaces.length > 0 &&
+                        placeSelected.size === filteredPlaces.length
+                      }
+                    />
+                  </th>
+                  {["업체명", "주소", "담당자", "담당자번호", "메모", "삭제"].map(
+                    (h) => (
+                      <th key={h} className={head}>
+                        {h}
+                      </th>
+                    )
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {filteredPlaces.length === 0 ? (
+                  <tr>
+                    <td
+                      className="text-center text-gray-500 py-6"
+                      colSpan={6}
+                    >
+                      표시할 데이터가 없습니다.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredPlaces.map((r, i) => {
+                    const id = r.id || r.업체명 || `${i}`;
+                    return (
+                      <tr key={id} className={i % 2 ? "bg-gray-50" : ""}>
+                        <td className={cell}>
+                          <input
+                            type="checkbox"
+                            checked={placeSelected.has(id)}
+                            onChange={() => togglePlaceOne(id)}
+                          />
+                        </td>
+                        <td className={`${cell} min-w-[180px]`}>
+                          <input
+                            className={`${input} w-48`}
+                            defaultValue={r.업체명 || ""}
+                            onBlur={(e) =>
+                              handlePlaceBlur(r, "업체명", e.target.value)
+                            }
+                          />
+                        </td>
+                        <td className={`${cell} min-w-[260px]`}>
+                          <input
+                            className={`${input} w-64 text-left`}
+                            defaultValue={r.주소 || ""}
+                            onBlur={(e) =>
+                              handlePlaceBlur(r, "주소", e.target.value)
+                            }
+                          />
+                        </td>
+                        <td className={cell}>
+                          <input
+                            className={input}
+                            defaultValue={r.담당자 || ""}
+                            onBlur={(e) =>
+                              handlePlaceBlur(r, "담당자", e.target.value)
+                            }
+                          />
+                        </td>
+                        <td className={cell}>
+                          <input
+                            className={input}
+                            defaultValue={r.담당자번호 || ""}
+                            onBlur={(e) =>
+                              handlePlaceBlur(r, "담당자번호", e.target.value)
+                            }
+                          />
+                        </td>
+                        <td className={`${cell} min-w-[220px]`}>
+                          <input
+                            className={`${input} w-56 text-left`}
+                            defaultValue={r.메모 || ""}
+                            onBlur={(e) =>
+                              handlePlaceBlur(r, "메모", e.target.value)
+                            }
+                          />
+                        </td>
+                        <td className={cell}>
+                          <button
+                            onClick={() => {
+                              if (!confirm("삭제하시겠습니까?")) return;
+                              setPlaceRows((prev) =>
+                                prev.filter(
+                                  (p) => (p.id || p.업체명) !== id
+                                )
+                              );
+                            }}
+                            className="px-2 py-1 bg-red-600 text-white rounded"
+                          >
+                            삭제
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
     </div>
   );
 }
+
 // ===================== DispatchApp.jsx (PART 11/11) — END =====================
