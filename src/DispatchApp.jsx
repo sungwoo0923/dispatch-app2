@@ -4932,6 +4932,43 @@ ${url}
         />
       </div>
 
+      {/* 🔵 차량정보 */}
+<div className="grid grid-cols-2 gap-3 mb-3">
+  <div>
+    <label>차량종류</label>
+    <select
+      className="border p-2 rounded w-full"
+      value={editTarget.차량종류 || ""}
+      onChange={(e) =>
+        setEditTarget((p) => ({ ...p, 차량종류: e.target.value }))
+      }
+    >
+      <option value="">선택 없음</option>
+      <option value="라보">라보</option>
+      <option value="다마스">다마스</option>
+      <option value="카고">카고</option>
+      <option value="윙바디">윙바디</option>
+      <option value="탑차">탑차</option>
+      <option value="냉장탑">냉장탑</option>
+      <option value="냉동탑">냉동탑</option>
+      <option value="오토바이">오토바이</option>
+      <option value="기타">기타</option>
+    </select>
+  </div>
+
+  <div>
+    <label>차량톤수</label>
+    <input
+      className="border p-2 rounded w-full"
+      value={editTarget.차량톤수 || ""}
+      onChange={(e) =>
+        setEditTarget((p) => ({ ...p, 차량톤수: e.target.value }))
+      }
+    />
+  </div>
+</div>
+
+
       {/* ------------------------------------------------ */}
       {/* 🔵 차량번호 (자동매칭) */}
       {/* ------------------------------------------------ */}
@@ -6178,6 +6215,43 @@ const pageRows = React.useMemo(() => {
           }
         />
       </div>
+
+      {/* 🔵 차량정보 */}
+<div className="grid grid-cols-2 gap-3 mb-3">
+  <div>
+    <label>차량종류</label>
+    <select
+      className="border p-2 rounded w-full"
+      value={editTarget.차량종류 || ""}
+      onChange={(e) =>
+        setEditTarget((p) => ({ ...p, 차량종류: e.target.value }))
+      }
+    >
+      <option value="">선택없음</option>
+      <option value="라보">라보</option>
+      <option value="다마스">다마스</option>
+      <option value="카고">카고</option>
+      <option value="윙바디">윙바디</option>
+      <option value="탑차">탑차</option>
+      <option value="냉장탑">냉장탑</option>
+      <option value="냉동탑">냉동탑</option>
+      <option value="오토바이">오토바이</option>
+      <option value="기타">기타</option>
+    </select>
+  </div>
+
+  <div>
+    <label>차량톤수</label>
+    <input
+      className="border p-2 rounded w-full"
+      value={editTarget.차량톤수 || ""}
+      onChange={(e) =>
+        setEditTarget((p) => ({ ...p, 차량톤수: e.target.value }))
+      }
+    />
+  </div>
+</div>
+
 
       {/* ------------------------------------------------ */}
       {/* 🔵 차량번호 (자동매칭) */}
