@@ -211,7 +211,30 @@ const removeDispatch = async (arg) => {
     upsertClient, removeClient,
   };
 }
+/* -------------------------------------------------
+   하차지 저장 (upsertPlace) — Firestore
+--------------------------------------------------*/
+const upsertPlace = async (place) => {
+  try {
+    if (!place?.업체명) return;
 
+    const key =
+      String(place.업체명).trim().replace(/\s+/g, "_") +
+      "_" +
+      String(place.주소 || "").trim().replace(/\s+/g, "_");
+
+    await setDoc(doc(db, "places", key), {
+      업체명: place.업체명 || "",
+      주소: place.주소 || "",
+      담당자: place.담당자 || "",
+      담당자번호: place.담당자번호 || "",
+    });
+
+    console.log("🔥 하차지 저장됨:", place);
+  } catch (e) {
+    console.error("⛔ upsertPlace 오류:", e);
+  }
+};
 /* -------------------------------------------------
    공통
 --------------------------------------------------*/
@@ -416,15 +439,18 @@ export default function DispatchApp() {
 
   {menu === "배차관리" && (
     <DispatchManagement
-      dispatchData={dispatchData}
-      drivers={drivers}
-      clients={clients}
-      addDispatch={addDispatch}
-      upsertDriver={upsertDriver}
-      upsertClient={upsertClient}
-     placeRows={places}
-      role={role}
-    />
+  dispatchData={dispatchData}
+  drivers={drivers}
+  clients={clients}
+  addDispatch={addDispatch}
+  upsertDriver={upsertDriver}
+  upsertClient={upsertClient}
+  upsertPlace={upsertPlace}   // ⭐ 반드시 추가!!
+  placeRows={places}
+  role={role}
+/>
+
+
   )}
 
         {menu === "실시간배차현황" && (
@@ -516,7 +542,7 @@ export default function DispatchApp() {
 // ===================== DispatchApp.jsx (PART 3/8) — START =====================
 function DispatchManagement({
   dispatchData, drivers, clients, timeOptions, tonOptions,
-  addDispatch, upsertDriver, upsertClient,
+  addDispatch, upsertDriver, upsertClient, upsertPlace,
   patchDispatch, removeDispatch,   // ⭐ 추가
   placeRows = [],   // ⭐ 추가
   role = "admin",
@@ -1357,20 +1383,36 @@ const [copySelected, setCopySelected] = React.useState([]);
 
             </div>
             <button
-              type="button"
-              onClick={() => {
-                const 거래처명 = (clientQuery || "").trim();
-                if (!거래처명) return alert("거래처명을 입력하세요.");
-                const 주소 = prompt("거래처 주소 (선택)") || "";
-                const 담당자 = prompt("담당자 (선택)") || "";
-                const 연락처 = prompt("연락처 (선택)") || "";
-                upsertClient?.({ 거래처명, 주소, 담당자, 연락처 });
-                alert("신규 거래처가 등록되었습니다.");
-              }}
-              className="px-3 py-2 border rounded text-sm"
-            >
-              + 신규등록
-            </button>
+  type="button"
+  onClick={() => {
+    const 업체명 = (clientQuery || "").trim();
+    if (!업체명) return alert("업체명을 입력하세요.");
+
+    const 주소 = prompt("주소 (선택)") || "";
+    const 담당자 = prompt("담당자 (선택)") || "";
+    const 담당자번호 = prompt("연락처 (선택)") || "";
+
+    // ⭐⭐ 하차지거래처 등록 함수 사용 ⭐⭐
+    if (typeof upsertPlace === "function") {
+      upsertPlace({ 업체명, 주소, 담당자, 담당자번호 });
+    } else {
+      // ⭐ upsertPlace 없을 때 localStorage 직접 저장
+      try {
+        const list = JSON.parse(localStorage.getItem("hachaPlaces_v1") || "[]");
+        list.push({ 업체명, 주소, 담당자, 담당자번호 });
+        localStorage.setItem("hachaPlaces_v1", JSON.stringify(list));
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    alert("하차지거래처에 신규 등록되었습니다.");
+  }}
+  className="px-3 py-2 border rounded text-sm"
+>
+  + 신규등록
+</button>
+
           </div>
         </div>
 
@@ -4000,9 +4042,9 @@ ${url}
     배차상태: r.배차상태 || "",
 
     // 🔥 숫자는 Number 타입으로 → Excel이 콤마 자동 표시
-    청구운임: num(r.청구운임),
-    기사운임: num(r.기사운임),
-    수수료: num(r.청구운임) - num(r.기사운임),
+청구운임: toMoney(r.청구운임),
+기사운임: toMoney(r.기사운임),
+수수료: toMoney(r.청구운임) - toMoney(r.기사운임),
 
     지급방식: r.지급방식 || "",
     배차방식: r.배차방식 || "",
@@ -5887,7 +5929,12 @@ const handleEditToggle = async () => {
     setSelected(new Set());
     alert("삭제 완료 ✅");
   };
-
+// 🔥 금액 변환 함수 (이거 추가!!)
+const toMoney = (v) => {
+  if (v === undefined || v === null) return 0;
+  const n = Number(String(v).replace(/[^\d]/g, ""));
+  return Number.isNaN(n) ? 0 : n;
+};
   const downloadExcel = () => {
   const headers = [
     "순번","등록일","상차일","상차시간","하차일","하차시간",
@@ -5896,69 +5943,100 @@ const handleEditToggle = async () => {
     "배차상태","청구운임","기사운임","수수료","지급방식","배차방식","메모"
   ];
 
-  const rows = filtered.map((r, i) => ({
-    순번: i + 1,
-    등록일: r.등록일 || "",
-    상차일: r.상차일 || "",
-    상차시간: r.상차시간 || "",
-    하차일: r.하차일 || "",
-    하차시간: r.하차시간 || "",
-    거래처명: r.거래처명 || "",
-    상차지명: r.상차지명 || "",
-    상차지주소: r.상차지주소 || "",
-    하차지명: r.하차지명 || "",
-    하차지주소: r.하차지주소 || "",
-    화물내용: r.화물내용 || "",
-    차량종류: r.차량종류 || "",
-    차량톤수: r.차량톤수 || "",
-    차량번호: r.차량번호 || "",
-    기사명: r.이름 || "",
-    전화번호: r.전화번호 || "",
-    배차상태: r.배차상태 || "",
-    청구운임: Number(String(r.청구운임).replace(/[^\d]/g, "")),
-    기사운임: Number(String(r.기사운임).replace(/[^\d]/g, "")),
-    수수료:
-      Number(String(r.청구운임).replace(/[^\d]/g, "")) -
-      Number(String(r.기사운임).replace(/[^\d]/g, "")),
-    지급방식: r.지급방식 || "",
-    배차방식: r.배차방식 || "",
-    메모: r.메모 || "",
-  }));
+const rows = pageRows.map((r, i) => ({
+  순번: page * pageSize + i + 1,
+
+  등록일: r.등록일 || "",
+  상차일: r.상차일 || "",
+  상차시간: r.상차시간 || "",
+  하차일: r.하차일 || "",
+  하차시간: r.하차시간 || "",
+  거래처명: r.거래처명 || "",
+  상차지명: r.상차지명 || "",
+  상차지주소: r.상차지주소 || "",
+  하차지명: r.하차지명 || "",
+  하차지주소: r.하차지주소 || "",
+  화물내용: r.화물내용 || "",
+  차량종류: r.차량종류 || "",
+  차량톤수: r.차량톤수 || "",
+  차량번호: r.차량번호 || "",
+  기사명: r.이름 || "",
+  전화번호: r.전화번호 || "",
+  배차상태: r.배차상태 || "",
+
+  // 🔥 2번 문제(청구/기사/수수료 0 나오는 문제) 해결
+  청구운임: toMoney(r.청구운임),
+  기사운임: toMoney(r.기사운임),
+  수수료: toMoney(r.청구운임) - toMoney(r.기사운임),
+
+  지급방식: r.지급방식 || "",
+  배차방식: r.배차방식 || "",
+  메모: r.메모 || "",
+}));
+
 
   // 헤더 스킵하고 데이터만 생성
-  const ws = XLSX.utils.json_to_sheet(rows, { skipHeader: true });
-XLSX.utils.sheet_add_aoa(ws, [headers], { origin: "A1" });
-  // 헤더를 A1에 강제 삽입
-  XLSX.utils.sheet_add_aoa(ws, [headers], { origin: "A1" });
-
-  // 날짜/금액 타입 변환
-  Object.keys(ws).forEach((cell) => {
-    if (cell[0] === "!") return;
-    const col = cell.replace(/[0-9]/g, "");
-
-    // 날짜 칼럼(B=등록일, C=상차일, E=하차일)
-if (["B", "C", "E"].includes(col)) {
-  const v = ws[cell].v;
-
-  // YYYY-MM-DD 형식만 처리
-  if (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v)) {
-    // 🔥 시간 없는 순수 날짜로 저장
-    ws[cell].v = new Date(v + "T00:00:00Z");  
-
-    ws[cell].t = "d";
-    ws[cell].z = "yyyy-mm-dd"; // 🔥 날짜만 표시
-  }
-}
+const ws = XLSX.utils.json_to_sheet(rows, { skipHeader: false });
 
 
-    // 금액 (청구 S / 기사 T / 수수료 U)
-    if (["S", "T", "U"].includes(col)) {
-      const num = Number(String(ws[cell].v).replace(/[^\d-]/g, ""));
-      ws[cell].v = isNaN(num) ? 0 : num;
-      ws[cell].t = "n";
-      ws[cell].z = "#,##0";  // 💥 콤마 숫자 형식
+// ================================
+// 날짜/금액 타입 변환 (헤더 보호 포함)
+// ================================
+Object.keys(ws).forEach((cell) => {
+  // 메타데이터(예: !ref)는 스킵
+  if (cell[0] === "!") return;
+
+  // A, B, C ... 열
+  const col = cell.replace(/[0-9]/g, "");
+
+  // 1, 2, 3 ... 행 번호
+  const row = parseInt(cell.replace(/[A-Z]/g, ""), 10);
+
+
+  // ------------------------------------
+  // 1) 날짜 칼럼(B=등록일, C=상차일, E=하차일)
+  // ------------------------------------
+  if (["B", "C", "E"].includes(col)) {
+    const v = ws[cell].v;
+
+    // yyyy-mm-dd 형식만 허용
+    if (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v)) {
+      ws[cell].v = v;   // 문자열 그대로
+      ws[cell].t = "s"; // string 타입
     }
-  });
+  }
+
+
+  // ------------------------------------
+  // 2) 금액 칼럼(S=청구, T=기사, U=수수료)
+  //    🔥 헤더는 절대 숫자로 변환 금지(row === 1)
+  // ------------------------------------
+  if (["S", "T", "U"].includes(col)) {
+
+    // 1행 헤더는 건드리지 않음
+    if (row === 1) return;
+
+    const num = Number(String(ws[cell].v).replace(/[^\d-]/g, ""));
+    ws[cell].v = isNaN(num) ? 0 : num;
+    ws[cell].t = "n";      // number type
+    ws[cell].z = "#,##0";  // 천 단위 콤마 표시
+  }
+});
+
+
+// ================================
+// 컬럼 너비
+// ================================
+ws["!cols"] = [
+  { wch: 6 },   // A: 순번
+  { wch: 12 },  // B: 등록일
+  { wch: 12 },  // C: 상차일
+  { wch: 10 },  // D: 상차시간
+  { wch: 12 },  // E: 하차일
+  { wch: 10 },  // F: 하차시간
+];
+
+
 
   ws["!cols"] = [
     { wch: 6 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 10 },
@@ -5998,16 +6076,16 @@ data.sort((a, b) => {
   const br = b.등록일 || "";
   return br.localeCompare(ar);
 });
-
-
     return data;
   }, [dispatchData, q, startDate, endDate]);
-  // ⭐ 페이지 적용된 데이터
+// ⭐⭐⭐ 페이지 데이터 (정렬된 filtered 기준)
 const pageRows = React.useMemo(() => {
   const start = page * pageSize;
   const end = start + pageSize;
   return filtered.slice(start, end);
 }, [filtered, page]);
+
+
   const summary = React.useMemo(() => {
     const totalCount = filtered.length;
     const totalSale = filtered.reduce((s, r) => s + toInt(r.청구운임), 0);
@@ -6229,7 +6307,7 @@ if (!loaded) return null;
                     <input type="checkbox" checked={selected.has(id)} onChange={() => toggleOne(id)} />
                   </td>
 
-                  <td className="border text-center">{i + 1}</td>
+                  <td className="border text-center">{(page * pageSize) + i + 1}</td>
                   <td className="border text-center whitespace-nowrap">{row.등록일}</td>
 
                   {/* -------------------- 반복 입력 컬럼 -------------------- */}
@@ -7243,9 +7321,9 @@ function NewOrderPopup({
   >
     <option value="">선택없음</option>
     <option value="24시">24시</option>
-    <option value="직접배차">직접배차</option>
-    <option value="인성">인성</option>
-    <option value="인성">24시(외주업체)</option>
+<option value="직접배차">직접배차</option>
+<option value="인성">인성</option>
+<option value="24시(외주업체)">24시(외주업체)</option>
   </select>
 </div>
 
@@ -9575,7 +9653,7 @@ function PaymentManagement({ dispatchData = [], clients = [], drivers = [] }) {
     }
 
     const rows = filtered.map((r,i)=>({
-      순번: r.순번 || i+1,
+      순번: i + 1,
       상차일: r.상차일 || "",
       지급상태: r.지급상태 || "지급중",
       지급일: r.지급일 || "",
