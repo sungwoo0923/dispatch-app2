@@ -544,27 +544,81 @@ const [placeOptions, setPlaceOptions] = React.useState([]);
   const _todayStr = (typeof todayStr === "function")
     ? todayStr
     : () => new Date().toISOString().slice(0, 10);
-      // 0) 하차지 거래처 리스트 (ClientManagement의 하차지 탭에서 저장된 값들)
+    // 0) 하차지 거래처 리스트
+  //    1순위: 상위에서 내려온 placeRows(Firestore places 컬렉션)
+  //    2순위: 예전 localStorage(hachaPlaces_v1) - 구버전 데이터 보험용
   const placeList = React.useMemo(() => {
+    if (Array.isArray(placeRows) && placeRows.length) {
+      return placeRows; // ✅ 지금은 이걸 주로 씀
+    }
     try {
-      return JSON.parse(localStorage.getItem("hachaPlaces_v1") || "[]");
+      const raw = localStorage.getItem("hachaPlaces_v1");
+      return raw ? JSON.parse(raw) : [];
     } catch (e) {
-      console.error(e);
+      console.error("placeList localStorage 파싱 실패:", e);
       return [];
     }
-  }, []);
-// 🔽 placeList 아래에 바로 추가 (3파트)
-const mergedClients = React.useMemo(() => {
-  return [...placeList, ...clients];  // 기본 + 하차지 모두 검색
-}, [placeList, clients]);
+  }, [placeRows]);
 
-const findClient = (name) => {
-  if (!name) return null;
-  const n = normalize(name);
-  return mergedClients.find(
-    c => normalize(c.업체명 || "").includes(n)
-  );
-};
+  // 🔽 placeList 아래에 바로 추가
+  const mergedClients = React.useMemo(() => {
+    // 필요하면 나중에 기본 clients도 합칠 수 있음
+    return [...placeList];
+  }, [placeList]);
+
+  const findClient = (name) => {
+    if (!name) return null;
+    const n = normalize(name);
+    return mergedClients.find(
+      (c) => normalize(c.업체명 || "").includes(n)
+    );
+  };
+
+  // 이름/주소 정규화
+  const normalizePlaceKey = (s = "") =>
+    String(s)
+      .toLowerCase()
+      .replace(/\s+/g, "")
+      .replace(/[\(\)\[\]]/g, "")
+      .replace(/[^0-9a-z가-힣]/g, "");
+
+  // 상차지명/하차지명 → 하차지 거래처(업체명+주소+담당자+번호) 찾는 함수
+  const findPlace = (name) => {
+    const key = normalizePlaceKey(name);
+    if (!key) return null;
+
+    const list = placeList || [];
+
+    // 1) 완전 일치 업체명
+    let exact = list.find(
+      (p) => normalizePlaceKey(p.업체명 || "") === key
+    );
+    if (exact) return exact;
+
+    // 2) 포함되는 업체명
+    let partial = list.find(
+      (p) => normalizePlaceKey(p.업체명 || "").includes(key)
+    );
+    if (partial) return partial;
+
+    // 3) 주소에 포함된 경우 (예: '용인'만 쳐도 용인시 기흥구 ~ 주소 매칭)
+    let byAddr = list.find(
+      (p) => normalizePlaceKey(p.주소 || "").includes(key)
+    );
+    if (byAddr) return byAddr;
+
+    return null;
+  };
+
+  // 🔍 하차지 자동완성 필터 함수
+  const filterPlaces = (q) => {
+    const nq = String(q || "").trim().toLowerCase();
+    if (!nq) return [];
+    return mergedClients.filter((p) =>
+      String(p.업체명 || "").toLowerCase().includes(nq)
+    );
+  };
+
 
   // 이름/주소 정규화
   const normalizePlaceKey = (s = "") =>
