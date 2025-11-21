@@ -205,7 +205,7 @@ const removeDispatch = async (arg) => {
   const removeClient = async (id)=> deleteDoc(doc(db, COLL.clients, id));
 
   return {
-    dispatchData, drivers, clients,
+    dispatchData, drivers, clients, places,
     addDispatch, patchDispatch, removeDispatch,
     upsertDriver, removeDriver,
     upsertClient, removeClient,
@@ -275,6 +275,7 @@ export default function DispatchApp() {
     dispatchData,
     drivers,
     clients,
+    places,
     addDispatch,
     patchDispatch,
     removeDispatch,
