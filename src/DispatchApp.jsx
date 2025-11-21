@@ -544,35 +544,64 @@ const [placeOptions, setPlaceOptions] = React.useState([]);
   const _todayStr = (typeof todayStr === "function")
     ? todayStr
     : () => new Date().toISOString().slice(0, 10);
-    // 0) 하차지 거래처 리스트
-  //    1순위: 상위에서 내려온 placeRows(Firestore places 컬렉션)
-  //    2순위: 예전 localStorage(hachaPlaces_v1) - 구버전 데이터 보험용
-  const placeList = React.useMemo(() => {
-    if (Array.isArray(placeRows) && placeRows.length) {
-      return placeRows; // ✅ 지금은 이걸 주로 씀
-    }
-    try {
-      const raw = localStorage.getItem("hachaPlaces_v1");
-      return raw ? JSON.parse(raw) : [];
-    } catch (e) {
-      console.error("placeList localStorage 파싱 실패:", e);
-      return [];
-    }
-  }, [placeRows]);
+    // ===================== 하차지(placeRows) + 로컬(hachaPlaces_v1) 병합 =====================
 
-  // 🔽 placeList 아래에 바로 추가
-  const mergedClients = React.useMemo(() => {
-    // 필요하면 나중에 기본 clients도 합칠 수 있음
-    return [...placeList];
-  }, [placeList]);
+// 문자열 정규화(공백 제거 + 소문자)
+const normalizeKey = (s = "") =>
+  String(s).toLowerCase().replace(/\s+/g, "");
 
-  const findClient = (name) => {
-    if (!name) return null;
-    const n = normalize(name);
-    return mergedClients.find(
-      (c) => normalize(c.업체명 || "").includes(n)
-    );
-  };
+// Firestore + localStorage 통합 placeList 생성
+const placeList = React.useMemo(() => {
+  const fromFirestore = Array.isArray(placeRows) ? placeRows : [];
+
+  let fromLocal = [];
+  try {
+    fromLocal = JSON.parse(localStorage.getItem("hachaPlaces_v1") || "[]");
+  } catch {
+    fromLocal = [];
+  }
+
+  // 공통 포맷 통일 함수
+  const toRow = (p = {}) => ({
+    업체명: p.업체명 || p.거래처명 || "",
+    주소: p.주소 || "",
+    담당자: p.담당자 || p.인수자 || "",
+    담당자번호: p.담당자번호 || p.연락처 || "",
+  });
+
+  // 주소 + 업체명으로 중복제거
+  const map = new Map();
+  [...fromFirestore, ...fromLocal].forEach((raw) => {
+    const row = toRow(raw);
+    const key =
+      normalizeKey(row.업체명 || "") + "|" + normalizeKey(row.주소 || "");
+    if (!key.trim()) return;
+    if (!map.has(key)) map.set(key, row);
+  });
+
+  const merged = Array.from(map.values());
+
+  // 최신 합본을 localStorage에도 저장(테스트/배포 동일하게 유지)
+  try {
+    localStorage.setItem("hachaPlaces_v1", JSON.stringify(merged));
+  } catch {}
+
+  return merged;
+}, [placeRows]);
+
+// 기본 clients + 하차지 모두 포함한 통합 검색 풀
+const mergedClients = React.useMemo(() => {
+  return [...placeList, ...clients];
+}, [placeList, clients]);
+
+// 이름 기준으로 하차지/기본거래처 찾기
+const findClient = (name = "") => {
+  const n = normalizeKey(name);
+  return mergedClients.find(
+    (c) => normalizeKey(c.업체명 || "").includes(n)
+  );
+};
+
 
   // 이름/주소 정규화
   const normalizePlaceKey = (s = "") =>
