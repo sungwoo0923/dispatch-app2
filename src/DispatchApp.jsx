@@ -138,6 +138,21 @@ function useRealtimeCollections(user){
   const [dispatchData, setDispatchData] = useState([]);
   const [drivers, setDrivers] = useState([]);
   const [clients, setClients] = useState([]);
+  // ===================== 하차지(places) Firestore 실시간 구독 =====================
+  const [places, setPlaces] = useState([]);
+
+  useEffect(() => {
+    const coll = collection(db, "places");
+    const unsub = onSnapshot(coll, (snap) => {
+      const arr = snap.docs.map((d) => ({
+        _id: d.id,
+        ...(d.data() || {}),
+      }));
+      setPlaces(arr);
+    });
+
+    return () => unsub();
+  }, []);
 
   useEffect(()=>{
     if(!user) { setDispatchData([]); setDrivers([]); setClients([]); return; }
@@ -406,10 +421,7 @@ export default function DispatchApp() {
       addDispatch={addDispatch}
       upsertDriver={upsertDriver}
       upsertClient={upsertClient}
-      placeRows={[   // ⭐⭐⭐⭐ 자동완성의 핵심!!
-        ...(JSON.parse(localStorage.getItem("hachaPlaces_v1") || "[]")),
-        ...clients
-      ]}
+     placeRows={places}
       role={role}
     />
   )}
