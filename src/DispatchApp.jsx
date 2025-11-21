@@ -601,44 +601,6 @@ const findClient = (name = "") => {
     (c) => normalizeKey(c.업체명 || "").includes(n)
   );
 };
-
-
-  // 이름/주소 정규화
-  const normalizePlaceKey = (s = "") =>
-    String(s)
-      .toLowerCase()
-      .replace(/\s+/g, "")
-      .replace(/[\(\)\[\]]/g, "")
-      .replace(/[^0-9a-z가-힣]/g, "");
-
-  // 상차지명/하차지명 → 하차지 거래처(업체명+주소+담당자+번호) 찾는 함수
-  const findPlace = (name) => {
-    const key = normalizePlaceKey(name);
-    if (!key) return null;
-
-    const list = placeList || [];
-
-    // 1) 완전 일치 업체명
-    let exact = list.find(
-      (p) => normalizePlaceKey(p.업체명 || "") === key
-    );
-    if (exact) return exact;
-
-    // 2) 포함되는 업체명
-    let partial = list.find(
-      (p) => normalizePlaceKey(p.업체명 || "").includes(key)
-    );
-    if (partial) return partial;
-
-    // 3) 주소에 포함된 경우 (예: '용인'만 쳐도 용인시 기흥구 ~ 주소 매칭)
-    let byAddr = list.find(
-      (p) => normalizePlaceKey(p.주소 || "").includes(key)
-    );
-    if (byAddr) return byAddr;
-
-    return null;
-  };
-
   // 🔍 하차지 자동완성 필터 함수
   const filterPlaces = (q) => {
     const nq = String(q || "").trim().toLowerCase();
@@ -649,47 +611,7 @@ const findClient = (name = "") => {
   };
 
 
-  // 이름/주소 정규화
-  const normalizePlaceKey = (s = "") =>
-    String(s)
-      .toLowerCase()
-      .replace(/\s+/g, "")
-      .replace(/[\(\)\[\]]/g, "")
-      .replace(/[^0-9a-z가-힣]/g, "");
-
-  // 상차지명/하차지명 → 하차지 거래처(업체명+주소+담당자+번호) 찾는 함수
-  const findPlace = (name) => {
-    const key = normalizePlaceKey(name);
-    if (!key) return null;
-
-    // 1) 완전 일치 업체명
-    let exact = placeList.find(
-      (p) => normalizePlaceKey(p.업체명 || "") === key
-    );
-    if (exact) return exact;
-
-    // 2) 포함되는 업체명
-    let partial = placeList.find(
-      (p) => normalizePlaceKey(p.업체명 || "").includes(key)
-    );
-    if (partial) return partial;
-
-    // 3) 주소에 포함된 경우 (예: '용인'만 쳐도 용인시 기흥구 ~ 주소 매칭)
-    let byAddr = placeList.find(
-      (p) => normalizePlaceKey(p.주소 || "").includes(key)
-    );
-    if (byAddr) return byAddr;
-
-    return null;
-  };
-  // 🔍 자동완성 필터 함수 추가 (⭐ 반드시 필요)
-const filterPlaces = (q) => {
-  const nq = String(q || "").trim().toLowerCase();
-  if (!nq) return [];
-  return mergedClients.filter((p) =>
-    String(p.업체명 || "").toLowerCase().includes(nq)
-  );
-};
+  
 
   const _tomorrowStr = (typeof tomorrowStr === "function")
     ? tomorrowStr
@@ -867,39 +789,22 @@ const applyClientSelect = (name) => {
   };
 
   const handlePickupName = (value) => {
-  const place = findPlace(value);         // ⭐ 신규: 하차지 DB 자동매칭
-
   setForm((p) => ({
     ...p,
     상차지명: value,
-    상차지주소:
-      place?.주소 ||
-      p.상차지주소,
-
-    상차지담당자: place?.담당자 || p.상차지담당자,
-    상차지담당자번호: place?.담당자번호 || p.상차지담당자번호,
   }));
-
-  // 기존 거래처 매칭 배지 + 하차지 매칭 상태 유지
-  setAutoPickMatched(!!place?.주소);
+  setAutoPickMatched(false);
 };
 
-  const handleDropName = (value) => {
-  const place = findPlace(value);   // ⭐ 하차지 DB 매칭 추가
 
+  const handleDropName = (value) => {
   setForm((p) => ({
     ...p,
     하차지명: value,
-    하차지주소:
-      place?.주소 ||
-      p.하차지주소,
-
-    하차지담당자: place?.담당자 || p.하차지담당자,
-    하차지담당자번호: place?.담당자번호 || p.하차지담당자번호,
   }));
-
-  setAutoDropMatched(!!place?.주소);
+  setAutoDropMatched(false);
 };
+
 
   const handlePickupAddrManual = (v) => { setForm((p) => ({ ...p, 상차지주소: v })); setAutoPickMatched(false); };
   const handleDropAddrManual  = (v) => { setForm((p) => ({ ...p, 하차지주소: v })); setAutoDropMatched(false); };
@@ -2720,26 +2625,20 @@ const setBulk = (id, k, v) => {
   setBulkRows(prev => prev.map(r => {
     if (r._tmp_id !== id) return r;
 if (k === "상차지명") {
-  const p = findPlace(v);
   return {
     ...r,
     상차지명: v,
-    상차지주소: p?.주소 || r.상차지주소 || "",
-    상차지담당자: p?.담당자 || r.상차지담당자 || "",
-    상차지담당자번호: p?.담당자번호 || r.상차지담당자번호 || "",
   };
 }
 
+
 if (k === "하차지명") {
-  const p = findPlace(v);
   return {
     ...r,
     하차지명: v,
-    하차지주소: p?.주소 || r.하차지주소 || "",
-    하차지담당자: p?.담당자 || r.하차지담당자 || "",
-    하차지담당자번호: p?.담당자번호 || r.하차지담당자번호 || "",
   };
 }
+
 
   
     if (k === "청구운임" || k === "기사운임") {
