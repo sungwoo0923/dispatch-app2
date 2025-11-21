@@ -2870,6 +2870,7 @@ function RealtimeStatus({
   dispatchData,
   drivers,
   clients,
+  placeRows,
   timeOptions,
   tonOptions,
   addDispatch,     // ⭐⭐⭐⭐⭐ 요거 반드시 필요!!!
@@ -2884,6 +2885,15 @@ function RealtimeStatus({
 const [placeOptions, setPlaceOptions] = React.useState([]);   // 자동완성 목록
 const [showPlaceDropdown, setShowPlaceDropdown] = React.useState(false);  // 드롭다운 표시 여부
 const [placeQuery, setPlaceQuery] = React.useState("");       // 검색 문자열
+// 🔵 하차지 자동완성 필터 함수
+const filterPlaces = (q) => {
+  const nq = String(q || "").trim().toLowerCase();
+  if (!nq) return [];
+  return (placeRows || []).filter((p) =>
+    String(p.업체명 || "").toLowerCase().includes(nq)
+  );
+};
+
 
   // ------------------------
   // 상태들
@@ -5473,6 +5483,8 @@ function DispatchStatus({
   setDispatchData,
   drivers = [],
   clients = [],
+  places = [],
+  placeRows = [],
   addDispatch,
   patchDispatch,
   removeDispatch,
@@ -5494,11 +5506,17 @@ function DispatchStatus({
   const [justSaved, setJustSaved] = React.useState([]);
   const [carInputLock, setCarInputLock] = React.useState(false);
   const [bulkRows, setBulkRows] = React.useState([]);
-    const [loaded, setLoaded] = React.useState(false);   // ⭐ 복구완료 여부
+ const [loaded, setLoaded] = React.useState(false);   // ⭐ 복구완료 여부
+
 // 🔵 선택수정 팝업 상태 (★ 여기에 추가!)
 // ⭐ 페이지네이션 상태
 const [page, setPage] = React.useState(0);
 const pageSize = 100;
+
+// 🔵 자동완성(상/하차지) 상태  ← ★★★ 여기 추가
+const [placeQuery, setPlaceQuery] = React.useState("");
+const [placeOptions, setPlaceOptions] = React.useState([]);
+const [showPlaceDropdown, setShowPlaceDropdown] = React.useState(false);
 
 const [editPopupOpen, setEditPopupOpen] = React.useState(false);
 const [editTarget, setEditTarget] = React.useState(null);
@@ -5631,6 +5649,20 @@ const handleBulkFile = (e) => {
         메모: row["메모"] || "",
         배차상태: row["배차상태"] || "배차중",
       };
+      
+// ================================
+// 🔵 자동완성 검색 함수 (★ 여기에 추가)
+// ================================
+const filterPlaces = (text) => {
+  const q = String(text || "").trim().toLowerCase();
+  if (!q) return [];
+  return (placeRows || []).filter((p) =>
+    String(p.업체명 || "")
+      .toLowerCase()
+      .includes(q)
+  );
+};
+
 
       // ====================================================
       // 🚛 자동 기사 매칭 (차량번호 → 이름/전화번호 자동입력)
@@ -6217,25 +6249,77 @@ if (!loaded) return null;
                   <td className="border text-center whitespace-nowrap">{row.등록일}</td>
 
                   {/* -------------------- 반복 입력 컬럼 -------------------- */}
-                  {[
-                    "상차일","상차시간","하차일","하차시간",
-                    "거래처명","상차지명","상차지주소","하차지명","하차지주소",
-                    "화물내용","차량종류","차량톤수",
-                  ].map((key) => (
-                    <td key={key} className="border text-center whitespace-nowrap">
-                      {editMode && selected.has(id) && editableKeys.includes(key) ? (
-                        <input
-                          className="border rounded px-1 py-0.5 w-full text-center"
-                          defaultValue={row[key] || ""}
-                          onChange={(e) => updateEdited(row, key, e.target.value)}
-                        />
-                      ) : key === "상차지주소" || key === "하차지주소" ? (
-                        <AddressCell text={row[key] || ""} max={5} />
-                      ) : (
-                        row[key]
-                      )}
-                    </td>
-                  ))}
+{[
+  "상차일","상차시간","하차일","하차시간",
+  "거래처명","상차지명","상차지주소","하차지명","하차지주소",
+  "화물내용","차량종류","차량톤수",
+].map((key) => (
+  <td key={key} className="border text-center whitespace-nowrap">
+    {editMode && selected.has(id) && editableKeys.includes(key) ? (
+      <div className="relative w-full">
+        {/* ⭐ 입력창 */}
+        <input
+          className="border rounded px-1 py-0.5 w-full text-center"
+          defaultValue={row[key] || ""}
+          onChange={(e) => {
+            const v = e.target.value;
+            updateEdited(row, key, v);
+
+            // ⭐ 상차지명/하차지명 자동완성
+            if (key === "상차지명" || key === "하차지명") {
+              const opts = filterPlaces(v);
+              setPlaceOptions(opts);
+              setPlaceQuery(v);
+              setShowPlaceDropdown(true);
+            }
+          }}
+          onBlur={() => setTimeout(() => setShowPlaceDropdown(false), 200)}
+          onFocus={(e) => {
+            if (key === "상차지명" || key === "하차지명") {
+              const opts = filterPlaces(e.target.value);
+              setPlaceOptions(opts);
+              setShowPlaceDropdown(true);
+            }
+          }}
+        />
+
+        {/* ⭐ 자동완성 드롭다운 */}
+        {showPlaceDropdown &&
+          (key === "상차지명" || key === "하차지명") &&
+          placeOptions.length > 0 && (
+            <div className="absolute left-0 top-full bg-white border rounded shadow-lg w-full max-h-40 overflow-y-auto z-50">
+              {placeOptions.slice(0, 12).map((p, idx) => (
+                <div
+                  key={idx}
+                  className="p-1 px-2 cursor-pointer hover:bg-gray-100"
+                  onMouseDown={() => {
+                    updateEdited(row, key, p.업체명);
+
+                    // 주소 자동 입력
+                    if (key === "상차지명")
+                      updateEdited(row, "상차지주소", p.주소 || "");
+                    if (key === "하차지명")
+                      updateEdited(row, "하차지주소", p.주소 || "");
+
+                    setShowPlaceDropdown(false);
+                  }}
+                >
+                  {p.업체명}
+                  <span className="text-gray-500"> — {p.주소}</span>
+                </div>
+              ))}
+            </div>
+          )}
+      </div>
+    ) : key === "상차지주소" || key === "하차지주소" ? (
+      <AddressCell text={row[key] || ""} max={5} />
+    ) : (
+      row[key]
+    )}
+  </td>
+))}
+
+
 {/* 혼적 여부(Y) */}
 <td className="border text-center">
   {row.혼적 ? "Y" : ""}
@@ -10183,6 +10267,7 @@ function DriverManagement({ drivers = [], upsertDriver, removeDriver }) {
   );
 }
 // ===================== DispatchApp.jsx (PART 10/10) — END =====================
+
 // ===================== DispatchApp.jsx (PART 11/11) — START =====================
 // 거래처관리 (ClientManagement) — 기본 거래처 + 하차지 거래처 서브탭 포함
 
@@ -11203,5 +11288,4 @@ function ClientManagement({ clients = [], upsertClient, removeClient }) {
 }
 
 // ===================== DispatchApp.jsx (PART 11/11) — END =====================
-
 
