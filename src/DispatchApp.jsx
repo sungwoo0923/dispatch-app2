@@ -586,6 +586,14 @@ const findClient = (name) => {
 
     return null;
   };
+  // 🔍 자동완성 필터 함수 추가 (⭐ 반드시 필요)
+const filterPlaces = (q) => {
+  const nq = String(q || "").trim().toLowerCase();
+  if (!nq) return [];
+  return mergedClients.filter((p) =>
+    String(p.업체명 || "").toLowerCase().includes(nq)
+  );
+};
 
   const _tomorrowStr = (typeof tomorrowStr === "function")
     ? tomorrowStr
@@ -799,15 +807,6 @@ const applyClientSelect = (name) => {
 
   const handlePickupAddrManual = (v) => { setForm((p) => ({ ...p, 상차지주소: v })); setAutoPickMatched(false); };
   const handleDropAddrManual  = (v) => { setForm((p) => ({ ...p, 하차지주소: v })); setAutoDropMatched(false); };
-
-  // 🔍 하차지 자동완성 검색
-const filterPlaces = (q) => {
-  const nq = String(q || "").trim().toLowerCase();
-  if (!nq) return [];
-  return (placeRows || []).filter((p) =>
-    String(p.업체명 || "").toLowerCase().includes(nq)
-  );
-};
 
   // 🚗 차량번호 입력 → 항상 수정 가능 + 자동 기사정보 입력
 const driverMap = React.useMemo(() => {
@@ -2885,16 +2884,6 @@ function RealtimeStatus({
 const [placeOptions, setPlaceOptions] = React.useState([]);   // 자동완성 목록
 const [showPlaceDropdown, setShowPlaceDropdown] = React.useState(false);  // 드롭다운 표시 여부
 const [placeQuery, setPlaceQuery] = React.useState("");       // 검색 문자열
-// 🔵 하차지 자동완성 필터 함수
-const filterPlaces = (q) => {
-  const nq = String(q || "").trim().toLowerCase();
-  if (!nq) return [];
-  return (placeRows || []).filter((p) =>
-    String(p.업체명 || "").toLowerCase().includes(nq)
-  );
-};
-
-
   // ------------------------
   // 상태들
   // ------------------------
