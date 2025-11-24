@@ -9,8 +9,70 @@ import {
   serverTimestamp,
   query,
   orderBy,
+  deleteDoc,
 } from "firebase/firestore";
 import { db } from "../firebase";
+
+// 🔹 도로명주소 → 행정동 변환용 (국가주소검색 API)
+//    👉 반드시 실제 키로 교체해서 사용하세요.
+const JUSO_API_KEY = "YOUR_JUSO_API_KEY_HERE"; // TODO: 여기에 실제 발급 키 입력
+
+// 🔹 주소 캐시 (같은 주소 여러 번 호출 시 중복 요청 방지)
+const addrCache = new Map();
+
+// 🔹 주소 → "시/군/구 동" 으로 변환 시도
+async function fetchDongFromJuso(rawAddr) {
+  if (!rawAddr) return "";
+  if (!JUSO_API_KEY || JUSO_API_KEY === "YOUR_JUSO_API_KEY_HERE") {
+    // 키가 없으면 그냥 원본 주소 반환
+    return rawAddr;
+  }
+
+  if (addrCache.has(rawAddr)) {
+    return addrCache.get(rawAddr);
+  }
+
+  try {
+    const url =
+      "https://www.juso.go.kr/addrlink/addrLinkApi.do" +
+      `?currentPage=1&countPerPage=1&keyword=${encodeURIComponent(
+        rawAddr
+      )}&confmKey=${JUSO_API_KEY}&resultType=json`;
+    const res = await fetch(url);
+    const data = await res.json();
+    const juso = data?.results?.juso?.[0];
+    if (!juso) {
+      addrCache.set(rawAddr, rawAddr);
+      return rawAddr;
+    }
+
+    // 지번주소 또는 도로명주소에서 "시도 시군구 동"까지만 파싱
+    const baseAddr = juso.jibunAddr || juso.roadAddr || rawAddr;
+    const parts = String(baseAddr).split(" ");
+    // 예: ["인천광역시","서구","원창동","123-4"]
+    if (parts.length >= 3) {
+      const short = `${parts[0].replace("광역시", "")} ${parts[1]} ${
+        parts[2]
+      }`;
+      addrCache.set(rawAddr, short);
+      return short;
+    }
+
+    addrCache.set(rawAddr, rawAddr);
+    return rawAddr;
+  } catch (e) {
+    console.error("주소 변환 오류:", e);
+    return rawAddr;
+  }
+}
+
+// 🔹 상/하차방법 약어
+const METHOD_SHORT_MAP = {
+  지게차: "지",
+  수작업: "수",
+  직접수작업: "직수",
+  수도움: "수도움",
+};
 
 // 🔹 공통: 숫자만 추출
 const toNumber = (v) =>
@@ -28,11 +90,43 @@ const getPickupDate = (o = {}) => {
 };
 
 // 🔹 공통: 청구운임(또는 인수증) 가져오기 (PC/모바일 혼합 대응)
-const getClaim = (o = {}) =>
-  o.청구운임 ?? o.인수증 ?? 0;
+const getClaim = (o = {}) => o.청구운임 ?? o.인수증 ?? 0;
 
 // 🔹 공통: 산재보험료
 const getSanjae = (o = {}) => o.산재보험료 ?? 0;
+
+// 🔹 공통: 상대 날짜 라벨 (당상/낼상/날짜, 당착/낼착/날짜)
+function getRelativeDateLabel(dateStr, type /* "상" | "착" */) {
+  if (!dateStr) return "-";
+  const onlyDate = String(dateStr).slice(0, 10);
+
+  const today = new Date();
+  const todayStr = today.toISOString().slice(0, 10);
+  const tomorrow = new Date();
+  tomorrow.setDate(today.getDate() + 1);
+  const tomorrowStr = tomorrow.toISOString().slice(0, 10);
+
+  if (onlyDate === todayStr) {
+    return type === "상" ? "당상" : "당착";
+  }
+  if (onlyDate === tomorrowStr) {
+    return type === "상" ? "낼상" : "낼착";
+  }
+
+  // 그 외는 MM-DD 로 표시
+  return onlyDate.slice(5);
+}
+
+// 🔹 공통: 혼적/독차 텍스트
+function getLoadType(order = {}) {
+  const isMixed = order.혼적여부 || order.혼적;
+  const isFull =
+    order.독차여부 !== undefined
+      ? order.독차여부
+      : !isMixed; // 아무 값 없으면 독차
+
+  return isMixed ? "혼적" : isFull ? "독차" : "독차";
+}
 
 // 🔹 카톡 공유용 문자열 생성
 function buildKakaoMessage(order) {
@@ -79,9 +173,7 @@ function buildKakaoMessage(order) {
 
   if (order.화물내용 || order.화물중량) {
     lines.push("");
-    lines.push(
-      `[화물] ${order.화물내용 || order.화물중량 || ""}`
-    );
+    lines.push(`[화물] ${order.화물내용 || order.화물중량 || ""}`);
   }
 
   if (order.비고 || order.메모) {
@@ -138,7 +230,8 @@ export default function MobileApp() {
   // --------------------------------------------------
   // 2. 화면 상태 / 필터
   // --------------------------------------------------
-  const [page, setPage] = useState("list"); // list | form | detail
+  // page: list | form | detail | fare | status | unassigned
+  const [page, setPage] = useState("list");
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [statusTab, setStatusTab] = useState("전체");
   const [showMenu, setShowMenu] = useState(false);
@@ -172,6 +265,8 @@ export default function MobileApp() {
     수수료: 0,
     산재보험료: 0,
     적요: "",
+    독차: false,
+    혼적: false,
   });
 
   // --------------------------------------------------
@@ -201,6 +296,14 @@ export default function MobileApp() {
     });
   }, [orders, statusTab, startDate, endDate]);
 
+  const unassignedOrders = useMemo(
+    () =>
+      filteredOrders.filter(
+        (o) => (o.배차상태 || o.상태 || "배차전") === "배차전"
+      ),
+    [filteredOrders]
+  );
+
   // --------------------------------------------------
   // 5. Firestore 신규 저장 (PC와 동일 구조로 넣기)
   // --------------------------------------------------
@@ -216,6 +319,9 @@ export default function MobileApp() {
 
     const 상차일시 = `${form.상차일 || ""} ${form.상차시간 || ""}`.trim();
     const 하차일시 = `${form.하차일 || ""} ${form.하차시간 || ""}`.trim();
+
+    const isMixed = !!form.혼적;
+    const isFull = form.독차 || (!form.혼적 && !form.독차);
 
     const docData = {
       // 상태
@@ -259,6 +365,10 @@ export default function MobileApp() {
       인수증: 청구운임,
       산재보험료: toNumber(form.산재보험료),
 
+      // 혼적/독차
+      혼적여부: isMixed,
+      독차여부: isFull,
+
       // 기사
       기사명: "",
       차량번호: "",
@@ -296,13 +406,15 @@ export default function MobileApp() {
       수수료: 0,
       산재보험료: 0,
       적요: "",
+      독차: false,
+      혼적: false,
     });
 
     setPage("list");
   };
 
   // --------------------------------------------------
-  // 6. 기사 배차 / 배차취소 (차량번호 기준 + 신규기사 등록)
+  // 6. 기사 배차 / 배차취소 / 배차삭제
   // --------------------------------------------------
   const assignDriver = async ({ 차량번호, 이름, 전화번호 }) => {
     if (!selectedOrder) return;
@@ -373,12 +485,39 @@ export default function MobileApp() {
     alert("배차가 취소되었습니다.");
   };
 
+  const deleteDispatch = async () => {
+    if (!selectedOrder) return;
+    if (
+      !window.confirm(
+        "정말 이 배차를 완전히 삭제하시겠습니까? (복구 불가)"
+      )
+    )
+      return;
+
+    await deleteDoc(doc(db, "dispatch", selectedOrder.id));
+    setSelectedOrder(null);
+    setPage("list");
+    alert("배차가 삭제되었습니다.");
+  };
+
   const handleRefresh = () => {
     window.location.reload();
   };
 
   const title =
-    page === "list" ? "등록내역" : page === "form" ? "화물등록" : "상세보기";
+    page === "list"
+      ? "등록내역"
+      : page === "form"
+      ? "화물등록"
+      : page === "detail"
+      ? "상세보기"
+      : page === "fare"
+      ? "표준운임표"
+      : page === "status"
+      ? "배차현황"
+      : page === "unassigned"
+      ? "미배차현황"
+      : "";
 
   // --------------------------------------------------
   // 7. 렌더링
@@ -403,11 +542,23 @@ export default function MobileApp() {
             setPage("form");
             setShowMenu(false);
           }}
+          onGoFare={() => {
+            setPage("fare");
+            setShowMenu(false);
+          }}
+          onGoStatus={() => {
+            setPage("status");
+            setShowMenu(false);
+          }}
+          onGoUnassigned={() => {
+            setPage("unassigned");
+            setShowMenu(false);
+          }}
         />
       )}
 
       <div className="flex-1 overflow-y-auto pb-24">
-        {page === "list" && (
+        {(page === "list" || page === "status") && (
           <MobileOrderList
             orders={filteredOrders}
             statusTab={statusTab}
@@ -418,6 +569,23 @@ export default function MobileApp() {
             setEndDate={setEndDate}
             quickRange={quickRange}
             // 🔹 카드 클릭 시 상세보기로 이동
+            onSelect={(order) => {
+              setSelectedOrder(order);
+              setPage("detail");
+            }}
+          />
+        )}
+
+        {page === "unassigned" && (
+          <MobileOrderList
+            orders={unassignedOrders}
+            statusTab={statusTab}
+            setStatusTab={setStatusTab}
+            startDate={startDate}
+            endDate={endDate}
+            setStartDate={setStartDate}
+            setEndDate={setEndDate}
+            quickRange={quickRange}
             onSelect={(order) => {
               setSelectedOrder(order);
               setPage("detail");
@@ -440,6 +608,13 @@ export default function MobileApp() {
             drivers={drivers}
             onAssignDriver={assignDriver}
             onCancelAssign={cancelAssign}
+            onDelete={deleteDispatch}
+          />
+        )}
+
+        {page === "fare" && (
+          <MobileStandardFare
+            orders={orders}
           />
         )}
       </div>
@@ -488,7 +663,14 @@ function MobileHeader({ title, onBack, onRefresh, onMenu }) {
   );
 }
 
-function MobileSideMenu({ onClose, onGoList, onGoCreate }) {
+function MobileSideMenu({
+  onClose,
+  onGoList,
+  onGoCreate,
+  onGoFare,
+  onGoStatus,
+  onGoUnassigned,
+}) {
   return (
     <div className="fixed inset-0 z-40">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
@@ -506,15 +688,10 @@ function MobileSideMenu({ onClose, onGoList, onGoCreate }) {
             <MenuItem label="화물등록" onClick={onGoCreate} />
           </MenuSection>
 
-          <MenuSection title="PC 데이터 메뉴 (웹으로 열기)">
-            <MenuItem
-              label="표준운임표 (PC 화면)"
-              onClick={() => (window.location.href = "/standard-fare")}
-            />
-            <MenuItem
-              label="배차현황 / 미배차 (PC 화면)"
-              onClick={() => (window.location.href = "/app?view=pc")}
-            />
+          <MenuSection title="배차/운임">
+            <MenuItem label="배차현황" onClick={onGoStatus} />
+            <MenuItem label="미배차현황" onClick={onGoUnassigned} />
+            <MenuItem label="표준운임표" onClick={onGoFare} />
           </MenuSection>
         </div>
 
@@ -637,15 +814,9 @@ function MobileOrderList({
 function MobileOrderCard({ order }) {
   const claim = getClaim(order);
   const sanjae = getSanjae(order);
+  const loadTypeText = getLoadType(order);
 
   const state = order.배차상태 || order.상태 || "배차전";
-
-  const stateColor =
-    state === "배차완료"
-      ? "bg-green-100 text-green-700 border-green-300"
-      : state === "배차취소"
-      ? "bg-red-100 text-red-700 border-red-300"
-      : "bg-gray-100 text-gray-700 border-gray-200";
 
   const 상차일시 =
     order.상차일시 ||
@@ -654,34 +825,121 @@ function MobileOrderCard({ order }) {
     order.하차일시 ||
     `${order.하차일 || ""} ${order.하차시간 || ""}`.trim();
 
+  const pickupLabel = getRelativeDateLabel(order.상차일, "상");
+  const dropLabel = getRelativeDateLabel(order.하차일, "착");
+
+  const pickupMethodShort = METHOD_SHORT_MAP[order.상차방법] || "";
+  const dropMethodShort = METHOD_SHORT_MAP[order.하차방법] || "";
+
+  const tonText = order.차량톤수 || order.톤수 || "";
+  const payTypeText = order.지급방식 || "";
+  const cargoText =
+    order.화물내용 || order.화물중량 || order.차량종류 || order.차종 || "";
+
+  const [pickupShortAddr, setPickupShortAddr] = useState(
+    order.상차지주소 || ""
+  );
+  const [dropShortAddr, setDropShortAddr] = useState(order.하차지주소 || "");
+
+  useEffect(() => {
+    let ignore = false;
+
+    async function run() {
+      if (order.상차지주소) {
+        const s = await fetchDongFromJuso(order.상차지주소);
+        if (!ignore) setPickupShortAddr(s);
+      } else {
+        setPickupShortAddr("");
+      }
+
+      if (order.하차지주소) {
+        const s2 = await fetchDongFromJuso(order.하차지주소);
+        if (!ignore) setDropShortAddr(s2);
+      } else {
+        setDropShortAddr("");
+      }
+    }
+
+    run();
+    return () => {
+      ignore = true;
+    };
+  }, [order.상차지주소, order.하차지주소]);
+
   return (
     <div className="bg-white rounded-xl shadow-sm px-4 py-3 border active:scale-[0.99] transition">
-      <div className="flex justify-between items-start mb-1">
-        <div className="text-sm font-semibold text-blue-600">
-          {order.상차지명}
+      {/* 거래처명 */}
+      <div className="text-xs text-gray-400 mb-1">
+        {order.거래처명 || "-"}
+      </div>
+
+      {/* 상차/하차 + 주소(동) */}
+      <div className="flex justify-between text-sm">
+        <div className="mr-2">
+          <div>
+            <span className="text-gray-500 mr-1">상차</span>
+            <span className="font-semibold">{order.상차지명 || "-"}</span>
+          </div>
+          <div className="text-xs text-gray-500">
+            {pickupShortAddr || order.상차지주소 || ""}
+          </div>
         </div>
-        <span
-          className={`px-2 py-0.5 text-xs rounded-full border ${stateColor}`}
-        >
-          {state}
-        </span>
+        <div className="text-right ml-2">
+          <div>
+            <span className="text-gray-500 mr-1">하차</span>
+            <span className="font-semibold">{order.하차지명 || "-"}</span>
+          </div>
+          <div className="text-xs text-gray-500">
+            {dropShortAddr || order.하차지주소 || ""}
+          </div>
+        </div>
       </div>
 
-      <div className="text-sm text-gray-800">{order.하차지명}</div>
+      {/* 당상/당착/낼상/낼착 + 상/하차방법 약어 */}
+      <div className="flex justify-between items-center mt-1 text-xs text-gray-700">
+        <div>
+          <span className="font-semibold mr-1">{pickupLabel}</span>
+          {pickupMethodShort && (
+            <span className="px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-100">
+              {pickupMethodShort}
+            </span>
+          )}
+        </div>
+        <div>
+          <span className="font-semibold mr-1">{dropLabel}</span>
+          {dropMethodShort && (
+            <span className="px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-100">
+              {dropMethodShort}
+            </span>
+          )}
+        </div>
+      </div>
 
+      {/* 상하차 날짜/시간 */}
       <div className="text-xs text-gray-500 mt-1">
-        {상차일시} ~ {하차일시}
+        {상차일시 || "-"} ~ {하차일시 || "-"}
       </div>
 
-      <div className="flex justify-between items-center mt-2 text-sm">
-        <div>청구 {fmt(claim)}</div>
-        {order.차량톤수 || order.톤수 ? (
-          <span className="text-xs px-2 py-0.5 bg-gray-50 border rounded-full">
-            {(order.차량톤수 || order.톤수)}/{order.차량종류 || order.차종}
+      {/* 청구/독차+지급방식/톤/화물 */}
+      <div className="mt-2 text-sm">
+        <div className="flex justify-between items-center">
+          <div>
+            <span className="text-gray-600 mr-1">청구</span>
+            <span className="font-semibold">{fmt(claim)}</span>
+          </div>
+          <span className="text-xs px-2 py-0.5 rounded-full border bg-gray-50 text-gray-700">
+            {state}
           </span>
-        ) : null}
+        </div>
+
+        <div className="mt-1 text-xs text-gray-800">
+          {loadTypeText} {payTypeText && `${payTypeText} `}
+/{" "}
+          {tonText || "-"} / {cargoText || "-"}
+        </div>
       </div>
 
+      {/* 산재보험료 */}
       <div className="text-xs text-gray-500 mt-1">
         산재보험료 {fmt(sanjae)}
       </div>
@@ -690,12 +948,19 @@ function MobileOrderCard({ order }) {
 }
 
 /* ---------------------------------------------------------------------
-   상세보기 (지도 / 카톡공유 / 기사배차)
+   상세보기 (지도 / 카톡공유 / 기사배차 / 삭제)
 --------------------------------------------------------------------- */
-function MobileOrderDetail({ order, drivers, onAssignDriver, onCancelAssign }) {
+function MobileOrderDetail({
+  order,
+  drivers,
+  onAssignDriver,
+  onCancelAssign,
+  onDelete,
+}) {
   const [carNo, setCarNo] = useState(order.차량번호 || "");
   const [name, setName] = useState(order.기사명 || "");
   const [phone, setPhone] = useState(order.전화번호 || "");
+  const [showDriverModal, setShowDriverModal] = useState(false);
 
   useEffect(() => {
     // 차량번호 변경 시 기존 기사 자동 매칭
@@ -759,15 +1024,35 @@ function MobileOrderDetail({ order, drivers, onAssignDriver, onCancelAssign }) {
       alert("차량번호를 입력해주세요.");
       return;
     }
-    if (!name || !phone) {
-      if (
-        !window.confirm(
-          "기사 이름/연락처가 비어 있습니다. 그대로 배차하시겠습니까?"
-        )
-      )
-        return;
+
+    const norm = (s = "") => String(s).replace(/\s+/g, "").toLowerCase();
+    const d = drivers.find((dr) => norm(dr.차량번호) === norm(carNo));
+
+    // 기존 기사 있으면 바로 배차
+    if (d) {
+      onAssignDriver({
+        차량번호: d.차량번호,
+        이름: d.이름,
+        전화번호: d.전화번호,
+      });
+      return;
+    }
+
+    // 기존 기사 없으면 신규등록 모달 열기
+    setShowDriverModal(true);
+  };
+
+  const handleConfirmNewDriver = () => {
+    if (!name) {
+      alert("기사 이름을 입력해주세요.");
+      return;
+    }
+    if (!phone) {
+      alert("기사 연락처를 입력해주세요.");
+      return;
     }
     onAssignDriver({ 차량번호: carNo, 이름: name, 전화번호: phone });
+    setShowDriverModal(false);
   };
 
   return (
@@ -813,8 +1098,7 @@ function MobileOrderDetail({ order, drivers, onAssignDriver, onCancelAssign }) {
 
         {/* 화물내용 / 톤수 / 차량종류 */}
         <div className="text-xs text-gray-700 mb-1">
-          화물내용:{" "}
-          {order.화물내용 || order.화물중량 || "-"}
+          화물내용: {order.화물내용 || order.화물중량 || "-"}
         </div>
 
         <div className="flex flex-wrap gap-2 text-xs text-gray-700 mb-3">
@@ -951,7 +1235,136 @@ function MobileOrderDetail({ order, drivers, onAssignDriver, onCancelAssign }) {
             배차 취소하기
           </button>
         )}
+
+        {/* 배차 삭제 */}
+        <button
+          onClick={onDelete}
+          className="w-full py-2 rounded-lg bg-red-500 text-white text-sm font-semibold mt-2"
+        >
+          배차 삭제하기
+        </button>
       </div>
+
+      {/* 신규 기사 등록 모달 */}
+      {showDriverModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-lg w-11/12 max-w-sm p-4">
+            <div className="flex justify-between items-center mb-2">
+              <div className="font-semibold text-sm">신규 기사 등록</div>
+              <button
+                className="text-gray-400 text-lg"
+                onClick={() => setShowDriverModal(false)}
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="space-y-2 text-sm">
+              <input
+                className="w-full border rounded px-2 py-1"
+                value={carNo}
+                onChange={(e) => setCarNo(e.target.value)}
+                placeholder="차량번호"
+              />
+              <input
+                className="w-full border rounded px-2 py-1"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="기사 이름"
+              />
+              <input
+                className="w-full border rounded px-2 py-1"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="기사 연락처"
+              />
+            </div>
+
+            <button
+              onClick={handleConfirmNewDriver}
+              className="w-full mt-3 py-2 rounded-lg bg-emerald-500 text-white text-sm font-semibold"
+            >
+              등록 후 배차하기
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------------
+   모바일 표준운임표 (최근 데이터 기반 간단 통계)
+--------------------------------------------------------------------- */
+function MobileStandardFare({ orders }) {
+  // 상차/하차/톤수/차량종류 기준 평균 운임
+  const rows = useMemo(() => {
+    const map = new Map();
+    (orders || []).forEach((o) => {
+      const from = o.상차지명 || "";
+      const to = o.하차지명 || "";
+      const ton = o.차량톤수 || o.톤수 || "";
+      const car = o.차량종류 || o.차종 || "";
+      const claim = getClaim(o);
+      if (!from || !to || !claim) return;
+      const key = [from, to, ton, car].join("|");
+      const prev = map.get(key) || {
+        from,
+        to,
+        ton,
+        car,
+        total: 0,
+        count: 0,
+      };
+      prev.total += claim;
+      prev.count += 1;
+      map.set(key, prev);
+    });
+
+    return Array.from(map.values())
+      .map((r) => ({
+        ...r,
+        avg: Math.round(r.total / r.count),
+      }))
+      .sort((a, b) => b.avg - a.avg);
+  }, [orders]);
+
+  return (
+    <div className="px-4 py-3 space-y-2">
+      <div className="text-sm text-gray-600 mb-2">
+        최근 배차 데이터를 기반으로 상/하차지 + 톤수 + 차량종류별 평균 운임을
+        보여줍니다.
+      </div>
+
+      {rows.length === 0 && (
+        <div className="text-center text-gray-400 text-sm py-10">
+          아직 표준운임을 계산할 수 있는 데이터가 없습니다.
+        </div>
+      )}
+
+      {rows.map((r, idx) => (
+        <div
+          key={`${r.from}-${r.to}-${r.ton}-${r.car}-${idx}`}
+          className="bg-white border rounded-xl px-4 py-3 shadow-sm text-sm"
+        >
+          <div className="flex justify-between items-center mb-1">
+            <div className="font-semibold">
+              {r.from} → {r.to}
+            </div>
+            <div className="text-xs text-gray-400">{r.count}건</div>
+          </div>
+          <div className="text-xs text-gray-600 mb-1">
+            {r.ton && `${r.ton} `}
+            {r.car}
+          </div>
+          <div className="text-sm">
+            평균 운임:{" "}
+            <span className="font-semibold">
+              {fmt(r.avg).replace("원", "")}원
+            </span>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -1009,6 +1422,11 @@ function MobileOrderForm({ form, setForm, clients, onSave }) {
     setQueryDrop("");
     setShowDropList(false);
   };
+
+  const toggleDokcha = () =>
+    setForm((p) => ({ ...p, 독차: !p.독차 }));
+  const toggleHonjeok = () =>
+    setForm((p) => ({ ...p, 혼적: !p.혼적 }));
 
   return (
     <div className="px-4 py-3 space-y-3">
@@ -1172,7 +1590,39 @@ function MobileOrderForm({ form, setForm, clients, onSave }) {
         />
       </div>
 
-      {/* 톤수 / 차종 / 중량  → grid로 해서 안 넘치게 */}
+      {/* 독차 / 혼적 */}
+      <div className="bg-white rounded-lg border shadow-sm">
+        <RowLabelInput
+          label="독차 / 혼적"
+          input={
+            <div className="flex gap-4 items-center text-sm">
+              <label className="flex items-center gap-1">
+                <input
+                  type="checkbox"
+                  className="w-4 h-4"
+                  checked={!!form.독차}
+                  onChange={toggleDokcha}
+                />
+                <span>독차</span>
+              </label>
+              <label className="flex items-center gap-1">
+                <input
+                  type="checkbox"
+                  className="w-4 h-4"
+                  checked={!!form.혼적}
+                  onChange={toggleHonjeok}
+                />
+                <span>혼적</span>
+              </label>
+              <div className="text-[11px] text-gray-400">
+                둘 다 해제 시 독차로 간주
+              </div>
+            </div>
+          }
+        />
+      </div>
+
+      {/* 톤수 / 차종 / 중량  → grid */}
       <div className="bg-white rounded-lg border shadow-sm">
         <RowLabelInput
           label="톤수 / 차종 / 중량"
@@ -1263,6 +1713,7 @@ function MobileOrderForm({ form, setForm, clients, onSave }) {
                 <option value="손실">손실</option>
                 <option value="개인">개인</option>
                 <option value="기타">기타</option>
+                <option value="인수증">인수증</option>
               </select>
               <select
                 className="flex-1 border rounded px-2 py-1 text-sm"
