@@ -973,68 +973,121 @@ function MobileOrderList({
     </div>
   );
 }
-// ======================= MobileOrderCard (톤수/차종/화물 추가 완성본) =======================
+// 상태 문자열(배차중 -> 배차전으로 보이게)
+function normalizeState(raw) {
+  if (!raw) return "배차전";
+  if (raw === "배차중") return "배차전";
+  return raw;
+}
+
+// 카드에서 쓰는 날짜 상태: 당상/당착/낼상/낼착/그 외 MM/DD
+function getDayStatusForCard(dateStr, type) {
+  if (!dateStr) return "";
+
+  const target = new Date(dateStr);
+  if (Number.isNaN(target.getTime())) return "";
+
+  const today = new Date();
+  const t0 = new Date(
+    target.getFullYear(),
+    target.getMonth(),
+    target.getDate()
+  );
+  const n0 = new Date(
+    today.getFullYear(),
+    today.getMonth(),
+    today.getDate()
+  );
+  const diff = Math.round(
+    (t0.getTime() - n0.getTime()) / (1000 * 60 * 60 * 24)
+  );
+
+  // 오늘
+  if (diff === 0) {
+    return type === "pickup" ? "당상" : "당착";
+  }
+  // 내일
+  if (diff === 1) {
+    return type === "pickup" ? "낼상" : "낼착";
+  }
+
+  // 그 외(어제 포함)는 MM/DD 로만 표시
+  const m = String(target.getMonth() + 1).padStart(2, "0");
+  const d = String(target.getDate()).padStart(2, "0");
+  return `${m}/${d}`;
+}
+
 function MobileOrderCard({ order }) {
   const claim = getClaim(order);
-  const driverFare = order.기사운임 ?? 0;
-  const state = order.배차상태 || order.상태 || "배차전";
+  const fee = order.기사운임 ?? 0;
 
-  // 상태 색상
-  const stateColor =
+  // 상태 (배차중 -> 배차전으로 표시)
+  const stateRaw = order.배차상태 || order.상태 || "배차전";
+  const state = normalizeState(stateRaw);
+
+  const stateBadgeClass =
     state === "배차완료"
       ? "border-green-400 text-green-600"
       : state === "배차취소"
       ? "border-red-400 text-red-600"
-      : "border-gray-300 text-gray-600";
+      : "border-gray-400 text-gray-600";
 
-  // 주소 짧게
+  // 날짜 상태(당상/당착/낼상/낼착/MM/DD)
+  const pickupStatus = getDayStatusForCard(order.상차일, "pickup");
+  const dropStatus = getDayStatusForCard(order.하차일, "drop");
+
+  // 작업코드(지/수/직수/수도)
+  const pickupMethodCode = methodCode(order.상차방법);
+  const dropMethodCode = methodCode(order.하차방법);
+
+  // 짧은 주소(시/구)
   const pickupShort = shortAddr(order.상차지주소 || "");
   const dropShort = shortAddr(order.하차지주소 || "");
 
-  // 하차일 기준 배지 (당일 → 당착)
-  const rawDropBadge = getDayBadge(order.하차일);
-  const dropBadge = rawDropBadge === "당일" ? "당착" : rawDropBadge;
-
-  // 하차방법 코드
-  const dropMethod = methodCode(order.하차방법);
-
-  // 🔵 추가: 톤수/차종/화물내용
-  const ton = order.차량톤수 || order.톤수 || "";
+  // 톤수 / 차종 / 화물내용 chips
+  const ton = order.톤수 || order.차량톤수 || "";
   const carType = order.차량종류 || order.차종 || "";
   const cargo = order.화물내용 || "";
 
+  const chips = [
+    ton && String(ton),
+    carType && String(carType),
+    cargo && String(cargo),
+  ].filter(Boolean);
+
   return (
-    <div className="bg-white rounded-2xl shadow-sm px-4 py-4 border border-gray-200">
-      {/* 상단·작은 글씨 */}
+    <div className="bg-white rounded-2xl shadow px-4 py-3 border">
+      {/* 거래처명 (위 회색 작은 글씨) */}
       <div className="text-[13px] text-gray-400 mb-1">
-        {order.상차지명 || "-"}
+        {order.거래처명 || "-"}
       </div>
 
+      {/* 상단: 상하차 + 상태 배지 */}
       <div className="flex justify-between items-start">
         <div>
-          {/* 상차지명 */}
+          {/* 상차지명 (파란색) */}
           <div className="text-[17px] font-bold text-blue-600">
             {order.상차지명}
             {pickupShort && (
-              <span className="ml-1 text-[12px] text-gray-500">
+              <span className="text-[12px] text-gray-500 ml-1">
                 ({pickupShort})
               </span>
             )}
           </div>
 
-          {/* 하차지명 */}
-          <div className="mt-1 text-[15px] text-gray-800 font-semibold">
+          {/* 하차지명 (검정) */}
+          <div className="mt-1 text-[15px] text-gray-900 font-semibold">
             {order.하차지명}
             {dropShort && (
-              <span className="ml-1 text-[12px] text-gray-500">
+              <span className="text-[12px] text-gray-500 ml-1">
                 ({dropShort})
               </span>
             )}
           </div>
 
-          {/* 🔵 주소는 사진처럼 흐리게 한 줄 */}
+          {/* 하차 전체 주소 */}
           {order.하차지주소 && (
-            <div className="text-[12px] text-gray-500 mt-1">
+            <div className="mt-1 text-[12px] text-gray-500">
               {order.하차지주소}
             </div>
           )}
@@ -1042,50 +1095,73 @@ function MobileOrderCard({ order }) {
 
         {/* 상태 배지 */}
         <span
-          className={`px-3 py-1 rounded-full border text-[12px] font-medium whitespace-nowrap ${stateColor}`}
+          className={`px-3 py-1 rounded-full border text-[12px] font-medium ${stateBadgeClass}`}
         >
           {state}
         </span>
       </div>
 
-      {/* 배지 라인: 당착 + 지/수/직수/수도 */}
-      <div className="flex gap-3 text-[12px] font-semibold mt-3">
-        {dropBadge && <span className="text-blue-500">{dropBadge}</span>}
-        {dropMethod && <span className="text-orange-500">{dropMethod}</span>}
+      {/* 당상/당착 + 작업코드 줄 */}
+      <div className="flex items-center gap-4 text-[12px] font-semibold mt-3">
+        {/* 상차 쪽 */}
+        {(pickupStatus || pickupMethodCode) && (
+          <div className="flex items-center gap-1">
+            {pickupStatus && (
+              <span className="text-blue-500">
+                {pickupStatus}
+              </span>
+            )}
+            {pickupMethodCode && (
+              <span className="text-orange-500">
+                {pickupMethodCode}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* 하차 쪽 */}
+        {(dropStatus || dropMethodCode) && (
+          <div className="flex items-center gap-1">
+            {dropStatus && (
+              <span className="text-blue-500">
+                {dropStatus}
+              </span>
+            )}
+            {dropMethodCode && (
+              <span className="text-orange-500">
+                {dropMethodCode}
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* 🔵 추가정보: 톤수 / 차종 / 화물내용 */}
-      {(ton || carType || cargo) && (
-        <div className="flex flex-wrap gap-2 text-[12px] text-gray-700 mt-3">
-          {ton && (
-            <span className="px-2 py-0.5 bg-gray-100 rounded-full border text-gray-700">
-              {ton}
+      {/* 톤수 / 차종 / 화물내용 chips */}
+      {chips.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {chips.map((label, idx) => (
+            <span
+              key={idx}
+              className="px-3 py-1 rounded-full border text-[11px] text-gray-700 bg-gray-50"
+            >
+              {label}
             </span>
-          )}
-          {carType && (
-            <span className="px-2 py-0.5 bg-gray-100 rounded-full border text-gray-700">
-              {carType}
-            </span>
-          )}
-          {cargo && (
-            <span className="px-2 py-0.5 bg-gray-100 rounded-full border text-gray-700">
-              {cargo}
-            </span>
-          )}
+          ))}
         </div>
       )}
 
       {/* 금액 라인 */}
       <div className="flex justify-between items-center mt-4">
-        <div className="text-[15px] font-bold">청구 {fmtMoney(claim)}</div>
-        <div className="text-[15px] font-bold text-blue-600">
-          기사 {fmtMoney(driverFare)}
+        <div className="text-[14px] font-bold text-gray-900">
+          청구 {fmtMoney(claim)}
+        </div>
+        <div className="text-[14px] font-bold text-blue-600">
+          기사 {fmtMoney(fee)}
         </div>
       </div>
     </div>
   );
 }
-
 // ======================================================================
 // 상세보기
 // ======================================================================
