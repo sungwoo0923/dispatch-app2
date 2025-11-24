@@ -973,83 +973,118 @@ function MobileOrderList({
     </div>
   );
 }
+// ======================= MobileOrderCard (톤수/차종/화물 추가 완성본) =======================
 function MobileOrderCard({ order }) {
   const claim = getClaim(order);
-  const fee = order.기사운임 ?? 0;
-
+  const driverFare = order.기사운임 ?? 0;
   const state = order.배차상태 || order.상태 || "배차전";
 
-  // 상태 배지 색상
-  const stateBadge =
+  // 상태 색상
+  const stateColor =
     state === "배차완료"
       ? "border-green-400 text-green-600"
       : state === "배차취소"
       ? "border-red-400 text-red-600"
-      : "border-gray-400 text-gray-600";
+      : "border-gray-300 text-gray-600";
 
-  const 상차표시 = getDayStatus(order.상차일);
-  const 하차표시 = getDayStatus(order.하차일);
+  // 주소 짧게
+  const pickupShort = shortAddr(order.상차지주소 || "");
+  const dropShort = shortAddr(order.하차지주소 || "");
 
-  const pickupShort = shortAddr(order.상차지주소);
-  const dropShort = shortAddr(order.하차지주소);
+  // 하차일 기준 배지 (당일 → 당착)
+  const rawDropBadge = getDayBadge(order.하차일);
+  const dropBadge = rawDropBadge === "당일" ? "당착" : rawDropBadge;
+
+  // 하차방법 코드
+  const dropMethod = methodCode(order.하차방법);
+
+  // 🔵 추가: 톤수/차종/화물내용
+  const ton = order.차량톤수 || order.톤수 || "";
+  const carType = order.차량종류 || order.차종 || "";
+  const cargo = order.화물내용 || "";
 
   return (
-    <div className="bg-white rounded-2xl shadow px-4 py-4 border">
-      {/* 거래처명 */}
-      <div className="text-[13px] text-gray-400 mb-1">{order.거래처명 || "-"}</div>
+    <div className="bg-white rounded-2xl shadow-sm px-4 py-4 border border-gray-200">
+      {/* 상단·작은 글씨 */}
+      <div className="text-[13px] text-gray-400 mb-1">
+        {order.상차지명 || "-"}
+      </div>
 
       <div className="flex justify-between items-start">
-        {/* 상차/하차 정보 */}
         <div>
+          {/* 상차지명 */}
           <div className="text-[17px] font-bold text-blue-600">
             {order.상차지명}
             {pickupShort && (
-              <span className="text-[12px] text-gray-500 ml-1">
+              <span className="ml-1 text-[12px] text-gray-500">
                 ({pickupShort})
               </span>
             )}
           </div>
 
+          {/* 하차지명 */}
           <div className="mt-1 text-[15px] text-gray-800 font-semibold">
             {order.하차지명}
             {dropShort && (
-              <span className="text-[12px] text-gray-500 ml-1">
+              <span className="ml-1 text-[12px] text-gray-500">
                 ({dropShort})
               </span>
             )}
           </div>
 
-          <div className="mt-1 text-[12px] text-gray-500">
-            {order.하차지주소}
-          </div>
+          {/* 🔵 주소는 사진처럼 흐리게 한 줄 */}
+          {order.하차지주소 && (
+            <div className="text-[12px] text-gray-500 mt-1">
+              {order.하차지주소}
+            </div>
+          )}
         </div>
 
         {/* 상태 배지 */}
         <span
-          className={`px-3 py-1 rounded-full border text-[12px] font-medium ${stateBadge}`}
+          className={`px-3 py-1 rounded-full border text-[12px] font-medium whitespace-nowrap ${stateColor}`}
         >
           {state}
         </span>
       </div>
 
-      {/* 당착/당상 */}
-      <div className="flex gap-3 text-[11px] text-gray-600 font-semibold mt-3">
-        <span className="text-blue-500">{상차표시}</span>
-        <span className="text-orange-500">{하차표시}</span>
+      {/* 배지 라인: 당착 + 지/수/직수/수도 */}
+      <div className="flex gap-3 text-[12px] font-semibold mt-3">
+        {dropBadge && <span className="text-blue-500">{dropBadge}</span>}
+        {dropMethod && <span className="text-orange-500">{dropMethod}</span>}
       </div>
 
-      {/* 금액 */}
+      {/* 🔵 추가정보: 톤수 / 차종 / 화물내용 */}
+      {(ton || carType || cargo) && (
+        <div className="flex flex-wrap gap-2 text-[12px] text-gray-700 mt-3">
+          {ton && (
+            <span className="px-2 py-0.5 bg-gray-100 rounded-full border text-gray-700">
+              {ton}
+            </span>
+          )}
+          {carType && (
+            <span className="px-2 py-0.5 bg-gray-100 rounded-full border text-gray-700">
+              {carType}
+            </span>
+          )}
+          {cargo && (
+            <span className="px-2 py-0.5 bg-gray-100 rounded-full border text-gray-700">
+              {cargo}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* 금액 라인 */}
       <div className="flex justify-between items-center mt-4">
-        <div className="text-[15px] font-bold">청구 {fmt(claim)}</div>
+        <div className="text-[15px] font-bold">청구 {fmtMoney(claim)}</div>
         <div className="text-[15px] font-bold text-blue-600">
-          기사 {fmt(fee)}
+          기사 {fmtMoney(driverFare)}
         </div>
       </div>
     </div>
   );
 }
-
-
 
 // ======================================================================
 // 상세보기
