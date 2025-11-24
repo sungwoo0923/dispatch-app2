@@ -8,7 +8,7 @@ import {
   onSnapshot,
   serverTimestamp,
 } from "firebase/firestore";
-import { db } from "../firebase";
+import { db } from "../../firebase";
 
 // ------------------------------------------------------------------
 // 공통 유틸
