@@ -272,10 +272,10 @@ export default function MobileApp() {
     setEndDate(end.toISOString().slice(0, 10));
   };
 
-  const filteredOrders = useMemo(() => {
-    return orders.filter((o) => {
-      const state =
-        o.배차상태 || o.상태 || "배차전";
+const filteredOrders = useMemo(() => {
+  return orders.filter((o) => {
+    // ⭐ 여기서 배차중을 배차전으로 통일
+    const state = normalizeState(o.배차상태 || o.상태 || "배차전");
 
       // 상단 상태 탭 (전체/배차전/배차완료/배차취소)
       if (
