@@ -275,7 +275,7 @@ export default function MobileApp() {
 const filteredOrders = useMemo(() => {
   return orders.filter((o) => {
     // ⭐ 여기서 배차중을 배차전으로 통일
-    const state = normalizeState(o.배차상태 || o.상태 || "배차전");
+    const state = normalizeState(o);
 
       // 상단 상태 탭 (전체/배차전/배차완료/배차취소)
       if (
@@ -946,8 +946,9 @@ function MobileOrderList({
             }
           >
             <option value="">배차 전체</option>
-            <option value="배차전">배차전</option>
-            <option value="배차완료">배차완료</option>
+<option value="배차중">배차중</option>
+<option value="배차완료">배차완료</option>
+
             <option value="배차취소">배차취소</option>
           </select>
         </div>
@@ -986,12 +987,13 @@ function MobileOrderList({
     </div>
   );
 }
-// 상태 문자열(배차중 -> 배차전으로 보이게)
-function normalizeState(raw) {
-  if (!raw) return "배차전";
-  if (raw === "배차중") return "배차전";
-  return raw;
+function normalizeState(order) {
+  const car = order.차량번호?.trim();
+  if (!car) return "배차중";
+  return "배차완료";
 }
+
+
 
 // 카드에서 쓰는 날짜 상태: 당상/당착/낼상/낼착/그 외 MM/DD
 function getDayStatusForCard(dateStr, type) {
@@ -1035,8 +1037,10 @@ function MobileOrderCard({ order }) {
   const fee = order.기사운임 ?? 0;
 
   // 상태 (배차중 -> 배차전으로 표시)
-  const stateRaw = order.배차상태 || order.상태 || "배차전";
-  const state = normalizeState(stateRaw);
+const state = order.배차상태 === "배차취소"
+  ? "배차취소"
+  : normalizeState(order);
+
 
   const stateBadgeClass =
     state === "배차완료"
