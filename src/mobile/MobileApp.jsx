@@ -973,7 +973,6 @@ function MobileOrderList({
     </div>
   );
 }
-
 function MobileOrderCard({ order }) {
   const claim = getClaim(order);
   const state = order.배차상태 || order.상태 || "배차전";
@@ -983,7 +982,16 @@ function MobileOrderCard({ order }) {
       ? "bg-green-100 text-green-700 border-green-300"
       : state === "배차취소"
       ? "bg-red-100 text-red-700 border-red-300"
-      : "bg-gray-100 text-gray-700 border-gray-300";
+      : "bg-gray-100 text-gray-700 border-gray-200";
+
+  // 간단 주소: 시 구 동까지만
+  const short3 = (addr = "") => {
+    const p = addr.split(/\s+/);
+    return p.slice(0, 3).join(" ");
+  };
+
+  const 상차간단주소 = short3(order.상차지주소 || "");
+  const 하차간단주소 = short3(order.하차지주소 || "");
 
   const 상차일배지 = getDayBadge(order.상차일);
   const 하차일배지 = getDayBadge(order.하차일);
@@ -991,92 +999,154 @@ function MobileOrderCard({ order }) {
   const 상차코드 = methodCode(order.상차방법);
   const 하차코드 = methodCode(order.하차방법);
 
-  const 상차시간 = onlyTime(order.상차일시) || order.상차시간 || "";
-  const 하차시간 = onlyTime(order.하차일시) || order.하차시간 || "";
+  const 상차시간 =
+    onlyTime(order.상차일시) || order.상차시간 || "";
+  const 하차시간 =
+    onlyTime(order.하차일시) || order.하차시간 || "";
+
+  const carLabel = [
+    order.톤수 || order.차량톤수 || "",
+    order.차량종류 || order.차종 || "",
+    order.화물내용 || "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  // 작업코드 색상
+  const codeColor = (code) => {
+    if (code === "수") return "bg-yellow-400 text-black";
+    if (code === "지") return "bg-orange-400 text-white";
+    if (code === "직수") return "bg-black text-white";
+    if (code === "수도") return "bg-blue-300 text-black";
+    return "bg-gray-200 text-gray-700";
+  };
 
   return (
-    <div className="bg-white rounded-2xl shadow px-5 py-5 border border-gray-100">
-      
-      {/* 상단 거래처명 + 상태 */}
-      <div className="flex justify-between items-center mb-3">
-        <div className="text-[13px] font-medium text-gray-700">
-          {order.거래처명}
+    <div className="bg-white rounded-3xl shadow-lg px-5 py-5 border border-gray-200 active:scale-[0.99] transition-transform">
+
+      {/* 상단: 거래처명 + 상태 */}
+      <div className="flex justify-between items-start mb-4">
+        <div className="text-[14px] font-semibold text-gray-700">
+          {order.거래처명 || "-"}
         </div>
-        <div className={`px-2 py-0.5 text-[11px] rounded-full border ${stateColor}`}>
+        <span
+          className={`px-3 py-1 rounded-full text-[12px] border font-medium ${stateColor}`}
+        >
           {state}
+        </span>
+      </div>
+
+      {/* 상차 */}
+      <div className="mb-5">
+        <div className="text-[17px] font-extrabold text-blue-600 tracking-tight">
+          {order.상차지명}
         </div>
-      </div>
-
-      {/* 상차지 */}
-      <div className="mt-1">
-        <div className="text-[15px] font-bold text-blue-700">{order.상차지명}</div>
-        <div className="text-[12px] text-gray-600">{order.상차지주소}</div>
-      </div>
-
-      {/* 하차지 */}
-      <div className="mt-3">
-        <div className="text-[15px] font-bold text-gray-800">{order.하차지명}</div>
-        <div className="text-[12px] text-gray-600">{order.하차지주소}</div>
-      </div>
-
-      {/* 당상/당착 + 작업코드 */}
-      <div className="flex gap-2 items-center mt-3">
-        {상차일배지 && (
-          <span className="text-[11px] px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">
-            {상차일배지 === "당일" ? "당상" : 상차일배지}
-          </span>
-        )}
-        {상차코드 && (
-          <span className={`text-[11px] px-1.5 py-0.5 rounded-full ${methodColor(상차코드)}`}>
-            {상차코드}
-          </span>
+        {상차간단주소 && (
+          <div className="text-[12px] text-gray-500 mt-0.5">
+            {상차간단주소}
+          </div>
         )}
 
-        {하차일배지 && (
-          <span className="text-[11px] px-2 py-0.5 rounded-full bg-sky-100 text-sky-700">
-            {하차일배지 === "당일" ? "당착" : 하차일배지}
-          </span>
-        )}
-        {하차코드 && (
-          <span className={`text-[11px] px-1.5 py-0.5 rounded-full ${methodColor(하차코드)}`}>
-            {하차코드}
-          </span>
+        {/* 배지 */}
+        <div className="flex gap-2 items-center mt-2">
+          {상차일배지 && (
+            <span className="px-2.5 py-1 rounded-full text-[12px] bg-indigo-100 text-indigo-700 font-medium">
+              {상차일배지 === "당일"
+                ? "당상"
+                : 상차일배지 === "내일"
+                ? "낼상"
+                : 상차일배지 === "어제"
+                ? "어제상"
+                : 상차일배지}
+            </span>
+          )}
+
+          {상차코드 && (
+            <span
+              className={`px-2.5 py-1 rounded-full text-[12px] font-semibold ${codeColor(
+                상차코드
+              )}`}
+            >
+              {상차코드}
+            </span>
+          )}
+        </div>
+
+        {상차시간 && (
+          <div className="mt-1 text-[12px] text-gray-600">
+            상차 {상차시간}
+          </div>
         )}
       </div>
 
-      {/* 금액 라인 */}
-      <div className="flex justify-between items-end mt-4">
+      {/* 하차 */}
+      <div className="mb-5">
+        <div className="text-[17px] font-extrabold text-gray-800 tracking-tight">
+          {order.하차지명}
+        </div>
+        {하차간단주소 && (
+          <div className="text-[12px] text-gray-500 mt-0.5">
+            {하차간단주소}
+          </div>
+        )}
+
+        {/* 배지 */}
+        <div className="flex gap-2 items-center mt-2">
+          {하차일배지 && (
+            <span className="px-2.5 py-1 rounded-full text-[12px] bg-sky-100 text-sky-700 font-medium">
+              {하차일배지 === "당일"
+                ? "당착"
+                : 하차일배지 === "내일"
+                ? "낼착"
+                : 하차일배지 === "어제"
+                ? "어제착"
+                : 하차일배지}
+            </span>
+          )}
+
+          {하차코드 && (
+            <span
+              className={`px-2.5 py-1 rounded-full text-[12px] font-semibold ${codeColor(
+                하차코드
+              )}`}
+            >
+              {하차코드}
+            </span>
+          )}
+        </div>
+
+        {하차시간 && (
+          <div className="mt-1 text-[12px] text-gray-600">
+            하차 {하차시간}
+          </div>
+        )}
+      </div>
+
+      {/* 금액 */}
+      <div className="flex justify-between items-end mt-5">
         <div>
           <div className="text-[11px] text-gray-500">청구</div>
-          <div className="text-[22px] font-bold text-gray-900">{fmtMoney(claim)}</div>
+          <div className="text-[26px] font-extrabold text-gray-900 leading-tight">
+            {fmtMoney(claim)}
+          </div>
         </div>
 
         <div className="text-right">
           <div className="text-[11px] text-gray-500">기사</div>
-          <div className="text-[22px] font-bold text-blue-500">
+          <div className="text-[26px] font-extrabold text-blue-500 leading-tight">
             {fmtMoney(order.기사운임 || 0)}
           </div>
         </div>
       </div>
 
-      {/* 차량/톤수/파렛트수 → 두 번째 사진 스타일 */}
-      <div className="mt-4 flex gap-2 flex-wrap">
-        {order.톤수 && (
-          <span className="px-2 py-1 text-[11px] rounded-full bg-gray-100 border text-gray-700">
-            {order.톤수}톤
+      {/* 톤수 / 차량 / 화물 */}
+      {carLabel && (
+        <div className="flex mt-5">
+          <span className="px-3 py-1 rounded-full text-[12px] bg-gray-100 text-gray-700 border">
+            {carLabel}
           </span>
-        )}
-        {order.차량종류 && (
-          <span className="px-2 py-1 text-[11px] rounded-full bg-gray-100 border text-gray-700">
-            {order.차량종류}
-          </span>
-        )}
-        {order.화물내용 && (
-          <span className="px-2 py-1 text-[11px] rounded-full bg-gray-100 border text-gray-700">
-            {order.화물내용}
-          </span>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
