@@ -38,8 +38,12 @@ const getSanjae = (o = {}) => o.산재보험료 ?? 0;
 function buildKakaoMessage(order) {
   const lines = [];
 
-  const 상차일시 = order.상차일시 || `${order.상차일 || ""} ${order.상차시간 || ""}`.trim();
-  const 하차일시 = order.하차일시 || `${order.하차일 || ""} ${order.하차시간 || ""}`.trim();
+  const 상차일시 =
+    order.상차일시 ||
+    `${order.상차일 || ""} ${order.상차시간 || ""}`.trim();
+  const 하차일시 =
+    order.하차일시 ||
+    `${order.하차일 || ""} ${order.하차시간 || ""}`.trim();
 
   if (상차일시) lines.push(`상차일시: ${상차일시}`);
   if (하차일시) lines.push(`하차일시: ${하차일시}`);
@@ -60,14 +64,25 @@ function buildKakaoMessage(order) {
 
   lines.push("");
   lines.push(
-    `차량: ${order.차량톤수 || order.톤수 || ""} ${order.차량종류 || order.차종 || ""}`.trim() ||
-      "차량 정보 없음"
+    `차량: ${
+      order.차량톤수 || order.톤수 || ""
+    } ${order.차량종류 || order.차종 || ""}`.trim() || "차량 정보 없음"
   );
 
   const claim = getClaim(order);
+  const driverFare = order.기사운임 ?? 0;
+  const fee = order.수수료 ?? claim - driverFare;
+
   lines.push(`청구운임: ${claim.toLocaleString("ko-KR")}원`);
-  lines.push(`기사운임: ${(order.기사운임 ?? 0).toLocaleString("ko-KR")}원`);
-  lines.push(`수수료: ${(order.수수료 ?? claim - (order.기사운임 ?? 0)).toLocaleString("ko-KR")}원`);
+  lines.push(`기사운임: ${driverFare.toLocaleString("ko-KR")}원`);
+  lines.push(`수수료: ${fee.toLocaleString("ko-KR")}원`);
+
+  if (order.화물내용 || order.화물중량) {
+    lines.push("");
+    lines.push(
+      `[화물] ${order.화물내용 || order.화물중량 || ""}`
+    );
+  }
 
   if (order.비고 || order.메모) {
     lines.push("");
@@ -172,7 +187,11 @@ export default function MobileApp() {
 
   const filteredOrders = useMemo(() => {
     return orders.filter((o) => {
-      if (statusTab !== "전체" && o.배차상태 !== statusTab && o.상태 !== statusTab) {
+      if (
+        statusTab !== "전체" &&
+        o.배차상태 !== statusTab &&
+        o.상태 !== statusTab
+      ) {
         return false;
       }
       const d = getPickupDate(o);
@@ -219,7 +238,7 @@ export default function MobileApp() {
       하차지명: form.하차지명,
       하차지주소: form.하차지주소 || "",
 
-      // 차량정보
+      // 차량정보/화물내용
       차량톤수: form.톤수 || "",
       톤수: form.톤수 || "",
       차량종류: form.차종 || "",
@@ -355,7 +374,6 @@ export default function MobileApp() {
   };
 
   const handleRefresh = () => {
-    // 필터는 유지하고, 서버 데이터만 새로고침 느낌이면 실제 새로고침이 제일 깔끔
     window.location.reload();
   };
 
@@ -399,6 +417,11 @@ export default function MobileApp() {
             setStartDate={setStartDate}
             setEndDate={setEndDate}
             quickRange={quickRange}
+            // 🔹 카드 클릭 시 상세보기로 이동
+            onSelect={(order) => {
+              setSelectedOrder(order);
+              setPage("detail");
+            }}
           />
         )}
 
@@ -483,7 +506,7 @@ function MobileSideMenu({ onClose, onGoList, onGoCreate }) {
             <MenuItem label="화물등록" onClick={onGoCreate} />
           </MenuSection>
 
-          <MenuSection title="PC 데이터 메뉴">
+          <MenuSection title="PC 데이터 메뉴 (웹으로 열기)">
             <MenuItem
               label="표준운임표 (PC 화면)"
               onClick={() => (window.location.href = "/standard-fare")}
@@ -535,11 +558,13 @@ function MobileOrderList({
   setStartDate,
   setEndDate,
   quickRange,
+  onSelect,
 }) {
   const tabs = ["전체", "배차전", "배차완료", "배차취소"];
 
   return (
     <div>
+      {/* 상태 탭 */}
       <div className="flex bg-white border-b">
         {tabs.map((t) => (
           <button
@@ -556,6 +581,7 @@ function MobileOrderList({
         ))}
       </div>
 
+      {/* 날짜 필터 */}
       <div className="bg-white border-b px-4 py-3">
         <div className="flex items-center gap-2 text-sm">
           <input
@@ -586,9 +612,14 @@ function MobileOrderList({
         </div>
       </div>
 
+      {/* 리스트 */}
       <div className="px-3 py-3 space-y-3">
         {orders.map((o) => (
-          <div key={o.id}>
+          <div
+            key={o.id}
+            onClick={() => onSelect && onSelect(o)}
+            className="cursor-pointer"
+          >
             <MobileOrderCard order={o} />
           </div>
         ))}
@@ -607,8 +638,7 @@ function MobileOrderCard({ order }) {
   const claim = getClaim(order);
   const sanjae = getSanjae(order);
 
-  const state =
-    order.배차상태 || order.상태 || "배차전";
+  const state = order.배차상태 || order.상태 || "배차전";
 
   const stateColor =
     state === "배차완료"
@@ -617,8 +647,12 @@ function MobileOrderCard({ order }) {
       ? "bg-red-100 text-red-700 border-red-300"
       : "bg-gray-100 text-gray-700 border-gray-200";
 
-  const 상차일시 = order.상차일시 || `${order.상차일 || ""} ${order.상차시간 || ""}`.trim();
-  const 하차일시 = order.하차일시 || `${order.하차일 || ""} ${order.하차시간 || ""}`.trim();
+  const 상차일시 =
+    order.상차일시 ||
+    `${order.상차일 || ""} ${order.상차시간 || ""}`.trim();
+  const 하차일시 =
+    order.하차일시 ||
+    `${order.하차일 || ""} ${order.하차시간 || ""}`.trim();
 
   return (
     <div className="bg-white rounded-xl shadow-sm px-4 py-3 border active:scale-[0.99] transition">
@@ -675,7 +709,9 @@ function MobileOrderDetail({ order, drivers, onAssignDriver, onCancelAssign }) {
 
   const openMap = (type) => {
     const addr =
-      type === "pickup" ? order.상차지주소 || order.상차지명 : order.하차지주소 || order.하차지명;
+      type === "pickup"
+        ? order.상차지주소 || order.상차지명
+        : order.하차지주소 || order.하차지명;
     if (!addr) {
       alert("주소 정보가 없습니다.");
       return;
@@ -706,11 +742,17 @@ function MobileOrderDetail({ order, drivers, onAssignDriver, onCancelAssign }) {
 
   const claim = getClaim(order);
   const sanjae = getSanjae(order);
+  const driverFare = order.기사운임 ?? 0;
+  const fee = order.수수료 ?? claim - driverFare;
 
   const state = order.배차상태 || order.상태 || "배차전";
 
-  const 상차일시 = order.상차일시 || `${order.상차일 || ""} ${order.상차시간 || ""}`.trim();
-  const 하차일시 = order.하차일시 || `${order.하차일 || ""} ${order.하차시간 || ""}`.trim();
+  const 상차일시 =
+    order.상차일시 ||
+    `${order.상차일 || ""} ${order.상차시간 || ""}`.trim();
+  const 하차일시 =
+    order.하차일시 ||
+    `${order.하차일 || ""} ${order.하차시간 || ""}`.trim();
 
   const handleAssignClick = () => {
     if (!carNo) {
@@ -718,7 +760,11 @@ function MobileOrderDetail({ order, drivers, onAssignDriver, onCancelAssign }) {
       return;
     }
     if (!name || !phone) {
-      if (!window.confirm("기사 이름/연락처가 비어 있습니다. 그대로 배차하시겠습니까?"))
+      if (
+        !window.confirm(
+          "기사 이름/연락처가 비어 있습니다. 그대로 배차하시겠습니까?"
+        )
+      )
         return;
     }
     onAssignDriver({ 차량번호: carNo, 이름: name, 전화번호: phone });
@@ -726,7 +772,7 @@ function MobileOrderDetail({ order, drivers, onAssignDriver, onCancelAssign }) {
 
   return (
     <div className="px-4 py-3 space-y-4">
-      {/* 기본 정보 */}
+      {/* 기본 정보 카드 */}
       <div className="bg-white border rounded-xl px-4 py-3 shadow-sm">
         <div className="flex justify-between items-start mb-2">
           <div>
@@ -737,12 +783,18 @@ function MobileOrderDetail({ order, drivers, onAssignDriver, onCancelAssign }) {
               {order.상차지명}
             </div>
             {order.상차지주소 && (
-              <div className="text-xs text-gray-500">{order.상차지주소}</div>
+              <div className="text-xs text-gray-500">
+                {order.상차지주소}
+              </div>
             )}
 
-            <div className="mt-2 text-sm text-gray-800">{order.하차지명}</div>
+            <div className="mt-2 text-sm text-gray-800">
+              {order.하차지명}
+            </div>
             {order.하차지주소 && (
-              <div className="text-xs text-gray-500">{order.하차지주소}</div>
+              <div className="text-xs text-gray-500">
+                {order.하차지주소}
+              </div>
             )}
           </div>
 
@@ -751,6 +803,7 @@ function MobileOrderDetail({ order, drivers, onAssignDriver, onCancelAssign }) {
           </span>
         </div>
 
+        {/* 날짜/시간 */}
         <div className="text-xs text-gray-500 mb-1">
           상차일시: {상차일시 || "-"}
         </div>
@@ -758,24 +811,45 @@ function MobileOrderDetail({ order, drivers, onAssignDriver, onCancelAssign }) {
           하차일시: {하차일시 || "-"}
         </div>
 
+        {/* 화물내용 / 톤수 / 차량종류 */}
+        <div className="text-xs text-gray-700 mb-1">
+          화물내용:{" "}
+          {order.화물내용 || order.화물중량 || "-"}
+        </div>
+
         <div className="flex flex-wrap gap-2 text-xs text-gray-700 mb-3">
           {(order.차량톤수 || order.톤수) && (
             <span className="border rounded-full px-2 py-0.5 bg-gray-50">
-              {order.차량톤수 || order.톤수}
+              톤수: {order.차량톤수 || order.톤수}
             </span>
           )}
           {(order.차량종류 || order.차종) && (
             <span className="border rounded-full px-2 py-0.5 bg-gray-50">
-              {order.차량종류 || order.차종}
+              차량종류: {order.차량종류 || order.차종}
             </span>
           )}
         </div>
 
+        {/* 금액들 */}
         <div className="flex items-center gap-2 text-sm mb-1">
           <span className="px-2 py-0.5 rounded-full bg-gray-200 text-gray-700 text-xs">
             청구운임
           </span>
           <span className="font-semibold">{fmt(claim)}</span>
+        </div>
+
+        <div className="flex items-center gap-2 text-sm mb-1">
+          <span className="px-2 py-0.5 rounded-full bg-sky-200 text-sky-900 text-xs">
+            기사운임
+          </span>
+          <span className="font-semibold">{fmt(driverFare)}</span>
+        </div>
+
+        <div className="flex items-center gap-2 text-sm mb-1">
+          <span className="px-2 py-0.5 rounded-full bg-orange-200 text-orange-900 text-xs">
+            수수료
+          </span>
+          <span className="font-semibold">{fmt(fee)}</span>
         </div>
 
         <div className="flex items-center gap-2 text-sm mb-2">
@@ -786,7 +860,7 @@ function MobileOrderDetail({ order, drivers, onAssignDriver, onCancelAssign }) {
         </div>
       </div>
 
-      {/* 지도 */}
+      {/* 지도 보기 */}
       <div className="bg-white border rounded-xl px-4 py-3 shadow-sm">
         <div className="text-sm font-semibold mb-2">지도 보기</div>
         <div className="flex gap-2">
@@ -886,8 +960,7 @@ function MobileOrderDetail({ order, drivers, onAssignDriver, onCancelAssign }) {
    등록 폼
 --------------------------------------------------------------------- */
 function MobileOrderForm({ form, setForm, clients, onSave }) {
-  const update = (key, value) =>
-    setForm((p) => ({ ...p, [key]: value }));
+  const update = (key, value) => setForm((p) => ({ ...p, [key]: value }));
 
   const updateMoney = (key, value) =>
     setForm((p) => {
@@ -911,14 +984,14 @@ function MobileOrderForm({ form, setForm, clients, onSave }) {
   const pickupOptions = useMemo(() => {
     if (!queryPickup) return [];
     return clients
-      .filter((c) => norm(c.거래처명).includes(norm(queryPickup)))
+      .filter((c) => norm(c.거래처명 || "").includes(norm(queryPickup)))
       .slice(0, 10);
   }, [clients, queryPickup]);
 
   const dropOptions = useMemo(() => {
     if (!queryDrop) return [];
     return clients
-      .filter((c) => norm(c.거래처명).includes(norm(queryDrop)))
+      .filter((c) => norm(c.거래처명 || "").includes(norm(queryDrop)))
       .slice(0, 10);
   }, [clients, queryDrop]);
 
