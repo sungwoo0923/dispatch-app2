@@ -1416,4 +1416,106 @@ function MobileOrderForm({ form, setForm, clients, onSave }) {
     </div>
   );
 }
+/* #############################################################
+   공통: 레이블 + 입력 UI
+############################################################# */
+function RowLabelInput({ label, input }) {
+  return (
+    <div className="flex px-3 py-2 border-b items-center">
+      <div className="w-24 text-xs text-gray-500">{label}</div>
+      <div className="flex-1">{input}</div>
+    </div>
+  );
+}
+
+/* #############################################################
+   🔵 MobileApp 메인 화면 렌더링
+############################################################# */
+return (
+  <div className="min-h-screen bg-gray-100">
+    {/* 상단 헤더 */}
+    <div className="flex justify-between items-center px-4 py-3 bg-white shadow">
+      <button onClick={() => setShowMenu(!showMenu)}>☰</button>
+      <div className="font-bold">등록내역</div>
+      <button onClick={() => window.location.reload()}>⟳</button>
+    </div>
+
+    {/* 메뉴 */}
+    {showMenu && (
+      <div className="bg-white border-b px-4 py-3 space-y-2 text-sm">
+        <button className="block w-full text-left" onClick={() => setPage("list")}>
+          📋 등록내역
+        </button>
+        <button className="block w-full text-left" onClick={() => setPage("table")}>
+          📑 테이블(컬럼형)
+        </button>
+        <button className="block w-full text-left" onClick={() => setPage("form")}>
+          ➕ 배차등록
+        </button>
+      </div>
+    )}
+
+    {/* 페이지 전환 */}
+    {page === "list" && (
+      <MobileOrderList
+        orders={useFilteredOrders({
+          orders,
+          statusTab,
+          filterCarType,
+          filterAssign,
+          startDate,
+          endDate,
+        })}
+        statusTab={statusTab}
+        setStatusTab={setStatusTab}
+        filterCarType={filterCarType}
+        setFilterCarType={setFilterCarType}
+        filterAssign={filterAssign}
+        setFilterAssign={setFilterAssign}
+        startDate={startDate}
+        endDate={endDate}
+        setStartDate={setStartDate}
+        setEndDate={setEndDate}
+        quickRange={quickRange}
+        onClickOrder={(o) => {
+          setSelectedOrder(o);
+          setPage("detail");
+        }}
+      />
+    )}
+
+    {page === "detail" && selectedOrder && (
+      <MobileOrderDetail
+        order={selectedOrder}
+        drivers={drivers}
+        onAssignDriver={(d) =>
+          assignDriverToOrder({
+            order: selectedOrder,
+            drivers,
+            ...d,
+            setSelectedOrder,
+          })
+        }
+        onCancelAssign={() =>
+          cancelAssign(selectedOrder, setSelectedOrder)
+        }
+        onCancelOrder={() =>
+          cancelOrder(selectedOrder, setSelectedOrder, setPage)
+        }
+      />
+    )}
+
+    {page === "form" && (
+      <MobileOrderForm
+        form={form}
+        setForm={setForm}
+        clients={clients}
+        onSave={() =>
+          saveOrder(form, todayStr, setForm, setPage)
+        }
+      />
+    )}
+  </div>
+);
+}   // ← ← ← **🔥 이게 MobileApp 함수 닫는 최종 괄호**
 
