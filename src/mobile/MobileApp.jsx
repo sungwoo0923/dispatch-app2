@@ -272,10 +272,10 @@ export default function MobileApp() {
     setEndDate(end.toISOString().slice(0, 10));
   };
 
-const filteredOrders = useMemo(() => {
-  return orders.filter((o) => {
-    // ⭐ 여기서 배차중을 배차전으로 통일
-    const state = normalizeState(o);
+  const filteredOrders = useMemo(() => {
+    return orders.filter((o) => {
+      const state =
+        o.배차상태 || o.상태 || "배차전";
 
       // 상단 상태 탭 (전체/배차전/배차완료/배차취소)
       if (
@@ -297,27 +297,13 @@ const filteredOrders = useMemo(() => {
           return false;
       }
 
-// 상차일, 하차일, 등록일 모두 비교 (앞 10자리만 잘라서 YYYY-MM-DD 형식으로)
-const pickup = (o.상차일 || "").slice(0, 10);
-const drop   = (o.하차일 || "").slice(0, 10);
-const reg    = (o.등록일 || "").slice(0, 10);
-
-const dateList = [pickup, drop, reg].filter(Boolean);
-
-
-if (dateList.length > 0) {
-  // 하나라도 범위에 걸리면 OK
-  const inRange = dateList.some((dt) => {
-    const d = dt.slice(0, 10);
-    return (
-      (!startDate || d >= startDate) &&
-      (!endDate || d <= endDate)
-    );
-  });
-
-  if (!inRange) return false;
-}
-
+      // 날짜 필터
+      const d = getPickupDate(o);
+      if (startDate && d && d < startDate)
+        return false;
+      if (endDate && d && d > endDate)
+        return false;
+      return true;
     });
   }, [
     orders,
@@ -331,15 +317,14 @@ if (dateList.length > 0) {
   // 배차현황용: 전체 orders 그대로 사용, 다만 필터 방식만 살짝 다름
   const filteredStatusOrders = filteredOrders;
   const unassignedOrders = useMemo(
-  () =>
-    filteredOrders.filter((o) => {
-      const state = normalizeState(o);
-      // 🔵 차량번호 없는 것들만 '미배차'로 취급 (배차중)
-      return state === "배차중";
-    }),
-  [filteredOrders]
-);
-
+    () =>
+      filteredOrders.filter((o) => {
+        const state =
+          o.배차상태 || o.상태 || "배차전";
+        return state === "배차전";
+      }),
+    [filteredOrders]
+  );
 
   // 날짜별 그룹핑
   const groupedByDate = useMemo(() => {
@@ -852,7 +837,7 @@ function MobileOrderList({
   assignFilter,
   setAssignFilter,
 }) {
-  const tabs = ["전체", "배차중", "배차완료", "배차취소"];
+  const tabs = ["전체", "배차전", "배차완료", "배차취소"];
 
   const dates = Array.from(groupedByDate.keys()).sort(
     (a, b) => a.localeCompare(b)
@@ -948,9 +933,8 @@ function MobileOrderList({
             }
           >
             <option value="">배차 전체</option>
-<option value="배차중">배차중</option>
-<option value="배차완료">배차완료</option>
-
+            <option value="배차전">배차전</option>
+            <option value="배차완료">배차완료</option>
             <option value="배차취소">배차취소</option>
           </select>
         </div>
@@ -989,23 +973,12 @@ function MobileOrderList({
     </div>
   );
 }
-function normalizeState(order) {
-  // 🔵 모바일에서만 쓰는 '배차취소' 우선 처리
-  if (order.배차상태 === "배차취소" || order.상태 === "배차취소") {
-    return "배차취소";
-  }
-
-  // 🔵 PC 기준과 동일: 차량번호가 있으면 '배차완료', 없으면 '배차중'
-  const car = order.차량번호?.trim();
-  if (car && car !== "") {
-    return "배차완료";
-  }
-
-  return "배차중";
+// 상태 문자열(배차중 -> 배차전으로 보이게)
+function normalizeState(raw) {
+  if (!raw) return "배차전";
+  if (raw === "배차중") return "배차전";
+  return raw;
 }
-
-
-
 
 // 카드에서 쓰는 날짜 상태: 당상/당착/낼상/낼착/그 외 MM/DD
 function getDayStatusForCard(dateStr, type) {
@@ -1049,10 +1022,8 @@ function MobileOrderCard({ order }) {
   const fee = order.기사운임 ?? 0;
 
   // 상태 (배차중 -> 배차전으로 표시)
-const state = order.배차상태 === "배차취소"
-  ? "배차취소"
-  : normalizeState(order);
-
+  const stateRaw = order.배차상태 || order.상태 || "배차전";
+  const state = normalizeState(stateRaw);
 
   const stateBadgeClass =
     state === "배차완료"
@@ -1114,6 +1085,12 @@ const state = order.배차상태 === "배차취소"
             )}
           </div>
 
+          {/* 하차 전체 주소 */}
+          {order.하차지주소 && (
+            <div className="mt-1 text-[12px] text-gray-500">
+              {order.하차지주소}
+            </div>
+          )}
         </div>
 
         {/* 상태 배지 */}
