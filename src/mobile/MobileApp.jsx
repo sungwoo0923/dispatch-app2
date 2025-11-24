@@ -8,7 +8,7 @@ import {
   onSnapshot,
   serverTimestamp,
 } from "firebase/firestore";
-import { db } from "../../firebase";
+import { db } from "../firebase";
 
 // ------------------------------------------------------------------
 // 공통 유틸
@@ -297,12 +297,13 @@ const filteredOrders = useMemo(() => {
           return false;
       }
 
-      // 상차일, 하차일, 등록일 모두 비교
-const pickup = o.상차일 || "";
-const drop = o.하차일 || "";
-const reg = o.등록일 || "";
+// 상차일, 하차일, 등록일 모두 비교 (앞 10자리만 잘라서 YYYY-MM-DD 형식으로)
+const pickup = (o.상차일 || "").slice(0, 10);
+const drop   = (o.하차일 || "").slice(0, 10);
+const reg    = (o.등록일 || "").slice(0, 10);
 
 const dateList = [pickup, drop, reg].filter(Boolean);
+
 
 if (dateList.length > 0) {
   // 하나라도 범위에 걸리면 OK
@@ -330,14 +331,15 @@ if (dateList.length > 0) {
   // 배차현황용: 전체 orders 그대로 사용, 다만 필터 방식만 살짝 다름
   const filteredStatusOrders = filteredOrders;
   const unassignedOrders = useMemo(
-    () =>
-      filteredOrders.filter((o) => {
-        const state =
-          o.배차상태 || o.상태 || "배차전";
-        return state === "배차전";
-      }),
-    [filteredOrders]
-  );
+  () =>
+    filteredOrders.filter((o) => {
+      const state = normalizeState(o);
+      // 🔵 차량번호 없는 것들만 '미배차'로 취급 (배차중)
+      return state === "배차중";
+    }),
+  [filteredOrders]
+);
+
 
   // 날짜별 그룹핑
   const groupedByDate = useMemo(() => {
@@ -850,7 +852,7 @@ function MobileOrderList({
   assignFilter,
   setAssignFilter,
 }) {
-  const tabs = ["전체", "배차전", "배차완료", "배차취소"];
+  const tabs = ["전체", "배차중", "배차완료", "배차취소"];
 
   const dates = Array.from(groupedByDate.keys()).sort(
     (a, b) => a.localeCompare(b)
@@ -988,10 +990,20 @@ function MobileOrderList({
   );
 }
 function normalizeState(order) {
+  // 🔵 모바일에서만 쓰는 '배차취소' 우선 처리
+  if (order.배차상태 === "배차취소" || order.상태 === "배차취소") {
+    return "배차취소";
+  }
+
+  // 🔵 PC 기준과 동일: 차량번호가 있으면 '배차완료', 없으면 '배차중'
   const car = order.차량번호?.trim();
-  if (!car) return "배차중";
-  return "배차완료";
+  if (car && car !== "") {
+    return "배차완료";
+  }
+
+  return "배차중";
 }
+
 
 
 
