@@ -10,18 +10,27 @@ import {
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "./firebase";
 
+// PC 버전
+import DispatchApp from "./DispatchApp";
+
+// 모바일 버전 (⭐ 새로 만들 MobileApp.jsx)
+import MobileApp from "./Mobile/MobileApp";
+
+// 공용
 import Login from "./Login";
 import Signup from "./Signup";
-import DispatchApp from "./DispatchApp";
 import NoAccess from "./NoAccess";
 import UploadPage from "./UploadPage";
-import StandardFare from "./StandardFare";   // 🔥 Firestore 연동 버전
+import StandardFare from "./StandardFare"; // 표준운임표
 
 export default function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // 로그인 상태 감시
+  // 🔥 모바일 판별
+  const [isMobile, setIsMobile] = useState(false);
+
+  // -- 로그인 상태 관찰
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => {
       setUser(u);
@@ -29,6 +38,14 @@ export default function App() {
     });
     return () => unsub();
   }, []);
+
+  // -- 모바일 / PC 자동 판별
+  useEffect(() => {
+  const ua = navigator.userAgent.toLowerCase();
+  const mobileCheck = /iphone|ipad|ipod|android|mobi/i.test(ua);
+  setIsMobile(mobileCheck);
+}, []);
+
 
   if (loading) {
     return (
@@ -46,38 +63,41 @@ export default function App() {
         {/* 기본 루트 */}
         <Route path="/" element={<Navigate to="/login" replace />} />
 
-        {/* 로그인/회원가입 */}
+        {/* 로그인 */}
         <Route
           path="/login"
           element={user ? <Navigate to="/app" replace /> : <Login />}
         />
+
+        {/* 회원가입 */}
         <Route
           path="/signup"
           element={user ? <Navigate to="/app" replace /> : <Signup />}
         />
 
-        {/* 메인 앱 */}
+        {/* 메인 앱 경로 */}
         <Route
           path="/app"
           element={
             user ? (
-              <DispatchApp role={role} />
+              // 🔥 PC/모바일 UI 자동 분리
+              isMobile ? <MobileApp role={role} /> : <DispatchApp role={role} />
             ) : (
               <Navigate to="/login" replace />
             )
           }
         />
 
-        {/* 표준운임표 (🔥 Firestore 연동 필요) */}
+        {/* 표준운임표 */}
         <Route path="/standard-fare" element={<StandardFare />} />
 
-        {/* No access 페이지 */}
+        {/* 권한 없음 */}
         <Route path="/no-access" element={<NoAccess />} />
 
-        {/* 공개 업로드 페이지 */}
+        {/* 첨부파일 업로드 페이지 */}
         <Route path="/upload" element={<UploadPage />} />
 
-        {/* 그 외 URL → 로그인 */}
+        {/* 나머지는 로그인으로 */}
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </Router>

@@ -1,7 +1,11 @@
 // src/Login.jsx
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { signInWithEmailAndPassword } from "firebase/auth";
+import {
+  signInWithEmailAndPassword,
+  setPersistence,
+  browserLocalPersistence,
+} from "firebase/auth";   // 🔥 추가
 import { auth, db } from "./firebase";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 
@@ -15,6 +19,9 @@ export default function Login() {
     if (!email || !password) return alert("이메일과 비밀번호를 입력하세요.");
 
     try {
+      // 🔥 자동 로그인 유지 설정 (localStorage)
+      await setPersistence(auth, browserLocalPersistence);
+
       const result = await signInWithEmailAndPassword(auth, email, password);
       const user = result.user;
 
@@ -29,7 +36,7 @@ export default function Login() {
           email: user.email,
           name: "신규사용자",
           approved: false,
-          role: "user", // 기본 user 권한
+          role: "user",
           createdAt: serverTimestamp(),
           lastLogin: serverTimestamp(),
         });
@@ -43,7 +50,7 @@ export default function Login() {
         return;
       }
 
-      // ✅ 승인 + 로그인 성공 → role 저장
+      // 🔥 승인된 유저 → role 저장
       const role = data.role || "user";
       localStorage.setItem("role", role);
       localStorage.setItem("uid", user.uid);

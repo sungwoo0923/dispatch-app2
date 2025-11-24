@@ -3164,26 +3164,28 @@ React.useEffect(() => {
   // 첨부파일 개수 로드
   // ------------------------
   React.useEffect(() => {
-    const load = async () => {
-      const result = {};
-      if (!dispatchData) return;
+  const load = async () => {
+    const result = {};
+    if (!dispatchData) return;
 
-      for (const row of dispatchData) {
-        if (!row?._id) continue;
-        try {
-          const snap = await getDocs(
-            collection(db, "dispatch", row._id, "attachments")
-          );
-          result[row._id] = snap.size;
-        } catch {
-          result[row._id] = 0;
-        }
+    for (const row of dispatchData) {
+      if (!row?._id) continue;
+      try {
+        const snap = await getDocs(
+          collection(db, "dispatch", row._id, "attachments")
+        );
+        result[row._id] = snap.size;
+      } catch {
+        result[row._id] = 0;
       }
-      setAttachCount(result);
-    };
+    }
+    setAttachCount(result);
+  };
 
-    load();
-  }, [dispatchData, showCreate, rows]);
+  load();
+}, [dispatchData, showCreate]);   // ← rows 제거 !!!
+
+
 
   // ------------------------
   // 오전/오후 → 24시간 변환
@@ -5943,7 +5945,7 @@ const toMoney = (v) => {
     "배차상태","청구운임","기사운임","수수료","지급방식","배차방식","메모"
   ];
 
-const rows = pageRows.map((r, i) => ({
+const rows = filtered.map((r, i) => ({
   순번: page * pageSize + i + 1,
 
   등록일: r.등록일 || "",
