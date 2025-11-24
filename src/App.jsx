@@ -40,12 +40,27 @@ export default function App() {
     return () => unsub();
   }, []);
 
-  // -- 모바일 / PC 자동 판별
-  useEffect(() => {
-  const ua = navigator.userAgent.toLowerCase();
-  const mobileCheck = /iphone|ipad|ipod|android|mobi/i.test(ua);
-  setIsMobile(mobileCheck);
+// -- 모바일 / PC 자동 판별 (+ ?view=pc 이면 PC 강제)
+useEffect(() => {
+  const check = () => {
+    const ua = navigator.userAgent.toLowerCase();
+    const mobileCheck = /iphone|ipad|ipod|android|mobi/i.test(ua);
+
+    const params = new URLSearchParams(window.location.search);
+    const forcePc = params.get("view") === "pc";
+
+    setIsMobile(mobileCheck && !forcePc);
+  };
+
+  check();
+  window.addEventListener("resize", check);
+  window.addEventListener("popstate", check);
+  return () => {
+    window.removeEventListener("resize", check);
+    window.removeEventListener("popstate", check);
+  };
 }, []);
+
 
 
   if (loading) {
