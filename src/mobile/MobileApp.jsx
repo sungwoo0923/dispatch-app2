@@ -1,9 +1,10 @@
-// ======================= src/mobile/MobileApp.jsx =======================
+// ======================= src/mobile/MobileApp.jsx (PART 1/4) =======================
 import React, { useState, useMemo, useEffect } from "react";
 import {
   collection,
   addDoc,
   updateDoc,
+  deleteDoc,
   doc,
   onSnapshot,
   serverTimestamp,
@@ -162,6 +163,13 @@ function buildKakaoMessage(order) {
   return lines.join("\n");
 }
 
+// 상태 문자열(배차중 -> 배차전으로 보이게)
+function normalizeState(raw) {
+  if (!raw) return "배차전";
+  if (raw === "배차중") return "배차전";
+  return raw;
+}
+
 // ======================================================================
 //  메인 컴포넌트
 // ======================================================================
@@ -220,8 +228,7 @@ export default function MobileApp() {
   const [statusTab, setStatusTab] = useState("전체");
   const [showMenu, setShowMenu] = useState(false);
 
-  const todayStr = () =>
-    new Date().toISOString().slice(0, 10);
+  const todayStr = () => new Date().toISOString().slice(0, 10);
 
   const [startDate, setStartDate] = useState(todayStr());
   const [endDate, setEndDate] = useState(todayStr());
@@ -266,61 +273,44 @@ export default function MobileApp() {
     const end = new Date();
     const start = new Date();
     start.setDate(end.getDate() - (days - 1));
-    setStartDate(
-      start.toISOString().slice(0, 10)
-    );
+    setStartDate(start.toISOString().slice(0, 10));
     setEndDate(end.toISOString().slice(0, 10));
   };
 
   const filteredOrders = useMemo(() => {
     return orders.filter((o) => {
-      const state =
-        o.배차상태 || o.상태 || "배차전";
+      const rawState = o.배차상태 || o.상태 || "배차전";
+      const state = normalizeState(rawState);
 
       // 상단 상태 탭 (전체/배차전/배차완료/배차취소)
-      if (
-        statusTab !== "전체" &&
-        state !== statusTab
-      )
-        return false;
+      if (statusTab !== "전체" && state !== statusTab) return false;
 
       // 드롭다운 배차상태 필터
-      if (assignFilter && state !== assignFilter)
-        return false;
+      if (assignFilter) {
+        const aState = normalizeState(rawState);
+        if (aState !== assignFilter) return false;
+      }
 
       // 차량종류 필터
       if (vehicleFilter) {
-        const carType = String(
-          o.차량종류 || o.차종 || ""
-        ).toLowerCase();
-        if (!carType.includes(vehicleFilter.toLowerCase()))
-          return false;
+        const carType = String(o.차량종류 || o.차종 || "").toLowerCase();
+        if (!carType.includes(vehicleFilter.toLowerCase())) return false;
       }
 
       // 날짜 필터
       const d = getPickupDate(o);
-      if (startDate && d && d < startDate)
-        return false;
-      if (endDate && d && d > endDate)
-        return false;
+      if (startDate && d && d < startDate) return false;
+      if (endDate && d && d > endDate) return false;
       return true;
     });
-  }, [
-    orders,
-    statusTab,
-    startDate,
-    endDate,
-    vehicleFilter,
-    assignFilter,
-  ]);
+  }, [orders, statusTab, startDate, endDate, vehicleFilter, assignFilter]);
 
-  // 배차현황용: 전체 orders 그대로 사용, 다만 필터 방식만 살짝 다름
+  // 배차현황용
   const filteredStatusOrders = filteredOrders;
   const unassignedOrders = useMemo(
     () =>
       filteredOrders.filter((o) => {
-        const state =
-          o.배차상태 || o.상태 || "배차전";
+        const state = normalizeState(o.배차상태 || o.상태 || "배차전");
         return state === "배차전";
       }),
     [filteredOrders]
@@ -338,7 +328,7 @@ export default function MobileApp() {
   }, [filteredOrders]);
 
   // --------------------------------------------------
-  // 5. 신규 저장
+  // 5. 신규 저장 (PC 컬럼과 동일 구조로 저장)
   // --------------------------------------------------
   const handleSave = async () => {
     if (!form.상차지명 || !form.하차지명) {
@@ -350,63 +340,46 @@ export default function MobileApp() {
     const 기사운임 = toNumber(form.기사운임);
     const 수수료 = 청구운임 - 기사운임;
 
-    const 상차일시 = `${form.상차일 || ""} ${
-      form.상차시간 || ""
-    }`.trim();
-    const 하차일시 = `${form.하차일 || ""} ${
-      form.하차시간 || ""
-    }`.trim();
-
     const docData = {
-      배차상태: "배차전",
-      상태: "배차전",
-      등록일: todayStr(),
-
-      상차일: form.상차일 || "",
-      상차시간: form.상차시간 || "",
-      하차일: form.하차일 || "",
-      하차시간: form.하차시간 || "",
-      상차일시,
-      하차일시,
-
-      거래처명: form.거래처명 || form.상차지명 || "",
+      // 🔵 PC와 100% 동일한 필드
+      거래처명: form.거래처명 || "",
       상차지명: form.상차지명,
       상차지주소: form.상차지주소 || "",
       하차지명: form.하차지명,
       하차지주소: form.하차지주소 || "",
-
-      차량톤수: form.톤수 || "",
-      톤수: form.톤수 || "",
-      차량종류: form.차종 || "",
-      차종: form.차종 || "",
       화물내용: form.화물내용 || "",
-      화물중량: form.화물내용 || "",
-
+      차량종류: form.차종 || "",
+      차량톤수: form.톤수 || "",
       상차방법: form.상차방법 || "",
       하차방법: form.하차방법 || "",
+      상차일: form.상차일 || "",
+      상차시간: form.상차시간 || "",
+      하차일: form.하차일 || "",
+      하차시간: form.하차시간 || "",
       지급방식: form.지급방식 || "",
       배차방식: form.배차방식 || "",
+      메모: form.적요 || "",
+
+      // 기타
       혼적여부: form.혼적여부 || "독차",
+      차량번호: form.차량번호 || "",
+      기사명: "",
+      전화번호: "",
 
       청구운임,
       기사운임,
       수수료,
-      인수증: 청구운임,
-      산재보험료: toNumber(form.산재보험료),
 
-      기사명: "",
-      차량번호: form.차량번호 || "",
-      전화번호: "",
-
-      메모: form.적요 || "",
-      비고: form.적요 || "",
+      배차상태: "배차전",
+      등록일: new Date().toISOString().slice(0, 10),
 
       createdAt: serverTimestamp(),
     };
 
     await addDoc(collection(db, "dispatch"), docData);
-    alert("배차가 등록되었습니다.");
+    alert("등록되었습니다.");
 
+    // 폼 초기화
     setForm({
       거래처명: "",
       상차일: "",
@@ -426,24 +399,20 @@ export default function MobileApp() {
       배차방식: "",
       청구운임: 0,
       기사운임: 0,
+      차량번호: "",
+      적요: "",
+      혼적여부: "독차",
       수수료: 0,
       산재보험료: 0,
-      차량번호: "",
-      혼적여부: "독차",
-      적요: "",
     });
 
     setPage("list");
   };
 
   // --------------------------------------------------
-  // 6. 기사 배차 / 배차취소 / 오더취소
+  // 6. 기사 배차 / 배차취소 / 오더취소(=삭제)
   // --------------------------------------------------
-  const assignDriver = async ({
-    차량번호,
-    이름,
-    전화번호,
-  }) => {
+  const assignDriver = async ({ 차량번호, 이름, 전화번호 }) => {
     if (!selectedOrder) return;
     const norm = (s = "") =>
       String(s).replace(/\s+/g, "").toLowerCase();
@@ -452,35 +421,25 @@ export default function MobileApp() {
       (d) => norm(d.차량번호) === norm(차량번호)
     );
 
+    // 없는 차량번호면 기사 DB에 신규 등록
     if (!driver) {
-      const ref = await addDoc(
-        collection(db, "drivers"),
-        {
-          차량번호,
-          이름,
-          전화번호,
-          메모: "",
-          createdAt: serverTimestamp(),
-        }
-      );
-      driver = {
-        id: ref.id,
+      const ref = await addDoc(collection(db, "drivers"), {
         차량번호,
         이름,
         전화번호,
-      };
+        메모: "",
+        createdAt: serverTimestamp(),
+      });
+      driver = { id: ref.id, 차량번호, 이름, 전화번호 };
     }
 
-    await updateDoc(
-      doc(db, "dispatch", selectedOrder.id),
-      {
-        배차상태: "배차완료",
-        상태: "배차완료",
-        기사명: driver.이름,
-        차량번호: driver.차량번호,
-        전화번호: driver.전화번호,
-      }
-    );
+    await updateDoc(doc(db, "dispatch", selectedOrder.id), {
+      배차상태: "배차완료",
+      상태: "배차완료",
+      기사명: driver.이름,
+      차량번호: driver.차량번호,
+      전화번호: driver.전화번호,
+    });
 
     setSelectedOrder((prev) =>
       prev
@@ -495,24 +454,19 @@ export default function MobileApp() {
         : prev
     );
 
-    alert(
-      `기사 배차 완료: ${driver.이름} (${driver.차량번호})`
-    );
+    alert(`기사 배차 완료: ${driver.이름} (${driver.차량번호})`);
   };
 
   const cancelAssign = async () => {
     if (!selectedOrder) return;
 
-    await updateDoc(
-      doc(db, "dispatch", selectedOrder.id),
-      {
-        배차상태: "배차전",
-        상태: "배차전",
-        기사명: "",
-        차량번호: "",
-        전화번호: "",
-      }
-    );
+    await updateDoc(doc(db, "dispatch", selectedOrder.id), {
+      배차상태: "배차전",
+      상태: "배차전",
+      기사명: "",
+      차량번호: "",
+      전화번호: "",
+    });
 
     setSelectedOrder((prev) =>
       prev
@@ -530,33 +484,20 @@ export default function MobileApp() {
     alert("배차가 취소되었습니다.");
   };
 
-  // 오더 자체 취소 = 배차취소 상태로 전환
+  // 🔴 오더 취소 = 실제 삭제 (PC와 동일)
   const cancelOrder = async () => {
     if (!selectedOrder) return;
     if (
-      !window.confirm("해당 오더를 배차취소로 변경할까요?")
+      !window.confirm(
+        "해당 오더를 삭제(배차취소) 하시겠습니까?\n삭제 후에는 복구할 수 없습니다."
+      )
     )
       return;
 
-    await updateDoc(
-      doc(db, "dispatch", selectedOrder.id),
-      {
-        배차상태: "배차취소",
-        상태: "배차취소",
-      }
-    );
-
-    setSelectedOrder((prev) =>
-      prev
-        ? {
-            ...prev,
-            배차상태: "배차취소",
-            상태: "배차취소",
-          }
-        : prev
-    );
-
-    alert("오더가 배차취소 상태로 변경되었습니다.");
+    await deleteDoc(doc(db, "dispatch", selectedOrder.id));
+    setSelectedOrder(null);
+    setPage("list");
+    alert("오더가 삭제되었습니다.");
   };
 
   const handleRefresh = () => {
@@ -591,14 +532,8 @@ export default function MobileApp() {
               }
             : undefined
         }
-        onRefresh={
-          page === "list" ? handleRefresh : undefined
-        }
-        onMenu={
-          page === "list"
-            ? () => setShowMenu(true)
-            : undefined
-        }
+        onRefresh={page === "list" ? handleRefresh : undefined}
+        onMenu={page === "list" ? () => setShowMenu(true) : undefined}
       />
 
       {showMenu && (
@@ -668,22 +603,14 @@ export default function MobileApp() {
           />
         )}
 
-        {page === "fare" && (
-          <MobileStandardFare />
-        )}
+        {page === "fare" && <MobileStandardFare />}
 
         {page === "status" && (
-          <MobileStatusTable
-            title="배차현황"
-            orders={filteredStatusOrders}
-          />
+          <MobileStatusTable title="배차현황" orders={filteredStatusOrders} />
         )}
 
         {page === "unassigned" && (
-          <MobileStatusTable
-            title="미배차현황"
-            orders={unassignedOrders}
-          />
+          <MobileStatusTable title="미배차현황" orders={unassignedOrders} />
         )}
       </div>
 
@@ -698,10 +625,11 @@ export default function MobileApp() {
     </div>
   );
 }
+// ======================= src/mobile/MobileApp.jsx (PART 2/4) =======================
 
-// ======================================================================
-// 공통 UI 컴포넌트
-// ======================================================================
+// ----------------------------------------------------------------------
+// 공통 헤더 / 사이드 메뉴
+// ----------------------------------------------------------------------
 function MobileHeader({ title, onBack, onRefresh, onMenu }) {
   const hasLeft = !!onBack || !!onMenu;
   const leftFn = onBack || onMenu;
@@ -717,9 +645,7 @@ function MobileHeader({ title, onBack, onRefresh, onMenu }) {
         {hasLeft ? leftLabel : ""}
       </button>
 
-      <div className="font-semibold text-base">
-        {title}
-      </div>
+      <div className="font-semibold text-base">{title}</div>
 
       <button
         className="w-8 h-8 text-lg flex items-center justify-center text-gray-700"
@@ -742,48 +668,25 @@ function MobileSideMenu({
 }) {
   return (
     <div className="fixed inset-0 z-40">
-      <div
-        className="absolute inset-0 bg-black/40"
-        onClick={onClose}
-      />
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div className="absolute left-0 top-0 bottom-0 w-64 bg-white shadow-xl flex flex-col">
         <div className="px-4 py-3 border-b flex items-center justify-between">
-          <div className="font-semibold text-base">
-            (주)돌캐 모바일
-          </div>
-          <button
-            className="text-gray-500 text-xl"
-            onClick={onClose}
-          >
+          <div className="font-semibold text-base">(주)돌캐 모바일</div>
+          <button className="text-gray-500 text-xl" onClick={onClose}>
             ×
           </button>
         </div>
 
         <div className="flex-1 overflow-y-auto">
           <MenuSection title="모바일">
-            <MenuItem
-              label="등록내역"
-              onClick={onGoList}
-            />
-            <MenuItem
-              label="화물등록"
-              onClick={onGoCreate}
-            />
+            <MenuItem label="등록내역" onClick={onGoList} />
+            <MenuItem label="화물등록" onClick={onGoCreate} />
           </MenuSection>
 
           <MenuSection title="현황 / 운임표">
-            <MenuItem
-              label="표준운임표"
-              onClick={onGoFare}
-            />
-            <MenuItem
-              label="배차현황"
-              onClick={onGoStatus}
-            />
-            <MenuItem
-              label="미배차현황"
-              onClick={onGoUnassigned}
-            />
+            <MenuItem label="표준운임표" onClick={onGoFare} />
+            <MenuItem label="배차현황" onClick={onGoStatus} />
+            <MenuItem label="미배차현황" onClick={onGoUnassigned} />
           </MenuSection>
         </div>
 
@@ -798,12 +701,8 @@ function MobileSideMenu({
 function MenuSection({ title, children }) {
   return (
     <div className="mt-2">
-      <div className="px-4 py-1 text-xs text-gray-400">
-        {title}
-      </div>
-      <div className="flex flex-col">
-        {children}
-      </div>
+      <div className="px-4 py-1 text-xs text-gray-400">{title}</div>
+      <div className="flex flex-col">{children}</div>
     </div>
   );
 }
@@ -837,10 +736,11 @@ function MobileOrderList({
   assignFilter,
   setAssignFilter,
 }) {
+  // 탭 라벨은 '배차전'이지만, 실제 데이터의 '배차중'은 normalizeState 에서 '배차전'으로 변환
   const tabs = ["전체", "배차전", "배차완료", "배차취소"];
 
-  const dates = Array.from(groupedByDate.keys()).sort(
-    (a, b) => a.localeCompare(b)
+  const dates = Array.from(groupedByDate.keys()).sort((a, b) =>
+    a.localeCompare(b)
   );
 
   return (
@@ -875,20 +775,14 @@ function MobileOrderList({
             type="date"
             className="flex-1 border rounded-full px-3 py-1.5 text-sm bg-gray-50"
             value={startDate}
-            onChange={(e) =>
-              setStartDate(e.target.value)
-            }
+            onChange={(e) => setStartDate(e.target.value)}
           />
-          <span className="text-xs text-gray-400">
-            ~
-          </span>
+          <span className="text-xs text-gray-400">~</span>
           <input
             type="date"
             className="flex-1 border rounded-full px-3 py-1.5 text-sm bg-gray-50"
             value={endDate}
-            onChange={(e) =>
-              setEndDate(e.target.value)
-            }
+            onChange={(e) => setEndDate(e.target.value)}
           />
         </div>
 
@@ -910,9 +804,7 @@ function MobileOrderList({
           <select
             className="flex-1 border rounded-full px-3 py-1.5 bg-gray-50"
             value={vehicleFilter}
-            onChange={(e) =>
-              setVehicleFilter(e.target.value)
-            }
+            onChange={(e) => setVehicleFilter(e.target.value)}
           >
             <option value="">차종 전체</option>
             <option value="라보">라보</option>
@@ -928,14 +820,11 @@ function MobileOrderList({
           <select
             className="flex-1 border rounded-full px-3 py-1.5 bg-gray-50"
             value={assignFilter}
-            onChange={(e) =>
-              setAssignFilter(e.target.value)
-            }
+            onChange={(e) => setAssignFilter(e.target.value)}
           >
             <option value="">배차 전체</option>
             <option value="배차전">배차전</option>
             <option value="배차완료">배차완료</option>
-            <option value="배차취소">배차취소</option>
           </select>
         </div>
       </div>
@@ -958,10 +847,7 @@ function MobileOrderList({
               </div>
               <div className="space-y-3">
                 {list.map((o) => (
-                  <div
-                    key={o.id}
-                    onClick={() => onSelect(o)}
-                  >
+                  <div key={o.id} onClick={() => onSelect(o)}>
                     <MobileOrderCard order={o} />
                   </div>
                 ))}
@@ -973,12 +859,7 @@ function MobileOrderList({
     </div>
   );
 }
-// 상태 문자열(배차중 -> 배차전으로 보이게)
-function normalizeState(raw) {
-  if (!raw) return "배차전";
-  if (raw === "배차중") return "배차전";
-  return raw;
-}
+// ======================= src/mobile/MobileApp.jsx (PART 3/4) =======================
 
 // 카드에서 쓰는 날짜 상태: 당상/당착/낼상/낼착/그 외 MM/DD
 function getDayStatusForCard(dateStr, type) {
@@ -1049,11 +930,9 @@ function MobileOrderCard({ order }) {
   const carType = order.차량종류 || order.차종 || "";
   const cargo = order.화물내용 || "";
 
-  const chips = [
-    ton && String(ton),
-    carType && String(carType),
-    cargo && String(cargo),
-  ].filter(Boolean);
+  const chips = [ton && String(ton), carType && String(carType), cargo && String(cargo)].filter(
+    Boolean
+  );
 
   return (
     <div className="bg-white rounded-2xl shadow px-4 py-3 border">
@@ -1084,13 +963,6 @@ function MobileOrderCard({ order }) {
               </span>
             )}
           </div>
-
-          {/* 하차 전체 주소 */}
-          {order.하차지주소 && (
-            <div className="mt-1 text-[12px] text-gray-500">
-              {order.하차지주소}
-            </div>
-          )}
         </div>
 
         {/* 상태 배지 */}
@@ -1107,14 +979,10 @@ function MobileOrderCard({ order }) {
         {(pickupStatus || pickupMethodCode) && (
           <div className="flex items-center gap-1">
             {pickupStatus && (
-              <span className="text-blue-500">
-                {pickupStatus}
-              </span>
+              <span className="text-blue-500">{pickupStatus}</span>
             )}
             {pickupMethodCode && (
-              <span className="text-orange-500">
-                {pickupMethodCode}
-              </span>
+              <span className="text-orange-500">{pickupMethodCode}</span>
             )}
           </div>
         )}
@@ -1123,14 +991,10 @@ function MobileOrderCard({ order }) {
         {(dropStatus || dropMethodCode) && (
           <div className="flex items-center gap-1">
             {dropStatus && (
-              <span className="text-blue-500">
-                {dropStatus}
-              </span>
+              <span className="text-blue-500">{dropStatus}</span>
             )}
             {dropMethodCode && (
-              <span className="text-orange-500">
-                {dropMethodCode}
-              </span>
+              <span className="text-orange-500">{dropMethodCode}</span>
             )}
           </div>
         )}
@@ -1162,6 +1026,7 @@ function MobileOrderCard({ order }) {
     </div>
   );
 }
+
 // ======================================================================
 // 상세보기
 // ======================================================================
@@ -1172,16 +1037,11 @@ function MobileOrderDetail({
   onCancelAssign,
   onCancelOrder,
 }) {
-  const [carNo, setCarNo] = useState(
-    order.차량번호 || ""
-  );
-  const [name, setName] = useState(
-    order.기사명 || ""
-  );
-  const [phone, setPhone] = useState(
-    order.전화번호 || ""
-  );
+  const [carNo, setCarNo] = useState(order.차량번호 || "");
+  const [name, setName] = useState(order.기사명 || "");
+  const [phone, setPhone] = useState(order.전화번호 || "");
 
+  // 차량번호 입력 시 기사 자동매칭 (PC와 동일 로직 느낌)
   useEffect(() => {
     const norm = (s = "") =>
       String(s).replace(/\s+/g, "").toLowerCase();
@@ -1204,9 +1064,7 @@ function MobileOrderDetail({
       alert("주소 정보가 없습니다.");
       return;
     }
-    const url = `https://map.kakao.com/?q=${encodeURIComponent(
-      addr
-    )}`;
+    const url = `https://map.kakao.com/?q=${encodeURIComponent(addr)}`;
     window.open(url, "_blank");
   };
 
@@ -1223,32 +1081,23 @@ function MobileOrderDetail({
         document.execCommand("copy");
         document.body.removeChild(ta);
       }
-      alert(
-        "카카오톡 공유용 텍스트가 복사되었습니다."
-      );
+      alert("카카오톡 공유용 텍스트가 복사되었습니다.");
     } catch (e) {
       console.error(e);
-      alert(
-        "복사 중 오류가 발생했습니다. 직접 복사해 주세요."
-      );
+      alert("복사 중 오류가 발생했습니다. 직접 복사해 주세요.");
     }
   };
 
   const claim = getClaim(order);
   const sanjae = getSanjae(order);
-  const state =
-    order.배차상태 || order.상태 || "배차전";
+  const state = order.배차상태 || order.상태 || "배차전";
 
   const 상차일시 =
     order.상차일시 ||
-    `${order.상차일 || ""} ${
-      order.상차시간 || ""
-    }`.trim();
+    `${order.상차일 || ""} ${order.상차시간 || ""}`.trim();
   const 하차일시 =
     order.하차일시 ||
-    `${order.하차일 || ""} ${
-      order.하차시간 || ""
-    }`.trim();
+    `${order.하차일 || ""} ${order.하차시간 || ""}`.trim();
 
   const handleAssignClick = () => {
     if (!carNo) {
@@ -1364,9 +1213,7 @@ function MobileOrderDetail({
 
       {/* 지도 */}
       <div className="bg-white border rounded-xl px-4 py-3 shadow-sm">
-        <div className="text-sm font-semibold mb-2">
-          지도 보기
-        </div>
+        <div className="text-sm font-semibold mb-2">지도 보기</div>
         <div className="flex gap-2">
           <button
             onClick={() => openMap("pickup")}
@@ -1385,9 +1232,7 @@ function MobileOrderDetail({
 
       {/* 카톡 공유 */}
       <div className="bg-white border rounded-xl px-4 py-3 shadow-sm">
-        <div className="text-sm font-semibold mb-2">
-          카톡 공유
-        </div>
+        <div className="text-sm font-semibold mb-2">카톡 공유</div>
         <button
           onClick={handleCopyKakao}
           className="w-full py-2 rounded-lg bg-yellow-400 text-black text-sm font-semibold"
@@ -1395,16 +1240,13 @@ function MobileOrderDetail({
           카카오톡 공유용 텍스트 복사
         </button>
         <div className="mt-1 text-[11px] text-gray-500">
-          버튼을 누른 후 카카오톡 대화방에 들어가서
-          붙여넣기 하시면 됩니다.
+          버튼을 누른 후 카카오톡 대화방에 들어가서 붙여넣기 하시면 됩니다.
         </div>
       </div>
 
       {/* 기사 배차 */}
       <div className="bg-white border rounded-xl px-4 py-3 shadow-sm space-y-3">
-        <div className="text-sm font-semibold mb-1">
-          기사 배차
-        </div>
+        <div className="text-sm font-semibold mb-1">기사 배차</div>
 
         <div className="text-xs text-gray-500 mb-1">
           현재 상태:{" "}
@@ -1421,8 +1263,7 @@ function MobileOrderDetail({
           </span>
           {order.기사명 && (
             <>
-              {" / "}기사: {order.기사명}(
-              {order.차량번호})
+              {" / "}기사: {order.기사명}({order.차량번호})
             </>
           )}
         </div>
@@ -1432,25 +1273,19 @@ function MobileOrderDetail({
             className="w-full border rounded px-2 py-1"
             placeholder="차량번호"
             value={carNo}
-            onChange={(e) =>
-              setCarNo(e.target.value)
-            }
+            onChange={(e) => setCarNo(e.target.value)}
           />
           <input
             className="w-full border rounded px-2 py-1"
             placeholder="기사 이름"
             value={name}
-            onChange={(e) =>
-              setName(e.target.value)
-            }
+            onChange={(e) => setName(e.target.value)}
           />
           <input
             className="w-full border rounded px-2 py-1"
             placeholder="기사 연락처"
             value={phone}
-            onChange={(e) =>
-              setPhone(e.target.value)
-            }
+            onChange={(e) => setPhone(e.target.value)}
           />
         </div>
 
@@ -1474,31 +1309,24 @@ function MobileOrderDetail({
           onClick={onCancelOrder}
           className="w-full py-2 rounded-lg bg-red-100 text-red-700 text-sm font-semibold mt-1"
         >
-          오더 취소(배차취소 처리)
+          오더 취소(삭제)
         </button>
       </div>
     </div>
   );
 }
+// ======================= src/mobile/MobileApp.jsx (PART 4/4) =======================
 
 // ======================================================================
 // 등록 폼
 // ======================================================================
-function MobileOrderForm({
-  form,
-  setForm,
-  clients,
-  onSave,
-}) {
+function MobileOrderForm({ form, setForm, clients, onSave }) {
   const update = (key, value) =>
     setForm((p) => ({ ...p, [key]: value }));
 
   const updateMoney = (key, value) =>
     setForm((p) => {
-      const next = {
-        ...p,
-        [key]: toNumber(value),
-      };
+      const next = { ...p, [key]: toNumber(value) };
       if (key === "청구운임" || key === "기사운임") {
         const 청구 = toNumber(next.청구운임);
         const 기사 = toNumber(next.기사운임);
@@ -1509,10 +1337,8 @@ function MobileOrderForm({
 
   const [queryPickup, setQueryPickup] = useState("");
   const [queryDrop, setQueryDrop] = useState("");
-  const [showPickupList, setShowPickupList] =
-    useState(false);
-  const [showDropList, setShowDropList] =
-    useState(false);
+  const [showPickupList, setShowPickupList] = useState(false);
+  const [showDropList, setShowDropList] = useState(false);
 
   const norm = (s = "") =>
     String(s).toLowerCase().replace(/\s+/g, "");
@@ -1521,9 +1347,7 @@ function MobileOrderForm({
     if (!queryPickup) return [];
     return clients
       .filter((c) =>
-        norm(c.거래처명 || c.상호 || "").includes(
-          norm(queryPickup)
-        )
+        norm(c.거래처명 || c.상호 || "").includes(norm(queryPickup))
       )
       .slice(0, 10);
   }, [clients, queryPickup]);
@@ -1532,9 +1356,7 @@ function MobileOrderForm({
     if (!queryDrop) return [];
     return clients
       .filter((c) =>
-        norm(c.거래처명 || c.상호 || "").includes(
-          norm(queryDrop)
-        )
+        norm(c.거래처명 || c.상호 || "").includes(norm(queryDrop))
       )
       .slice(0, 10);
   }, [clients, queryDrop]);
@@ -1574,10 +1396,7 @@ function MobileOrderForm({
             className="w-full border rounded px-2 py-1 text-right text-sm"
             value={form.산재보험료 || ""}
             onChange={(e) =>
-              updateMoney(
-                "산재보험료",
-                e.target.value
-              )
+              updateMoney("산재보험료", e.target.value)
             }
           />
         </div>
@@ -1593,20 +1412,13 @@ function MobileOrderForm({
                 type="date"
                 className="flex-1 border rounded px-2 py-1 text-sm"
                 value={form.상차일}
-                onChange={(e) =>
-                  update("상차일", e.target.value)
-                }
+                onChange={(e) => update("상차일", e.target.value)}
               />
               <input
                 className="flex-1 border rounded px-2 py-1 text-sm"
                 placeholder="예: 08:00"
                 value={form.상차시간}
-                onChange={(e) =>
-                  update(
-                    "상차시간",
-                    e.target.value
-                  )
-                }
+                onChange={(e) => update("상차시간", e.target.value)}
               />
             </div>
           }
@@ -1619,20 +1431,13 @@ function MobileOrderForm({
                 type="date"
                 className="flex-1 border rounded px-2 py-1 text-sm"
                 value={form.하차일}
-                onChange={(e) =>
-                  update("하차일", e.target.value)
-                }
+                onChange={(e) => update("하차일", e.target.value)}
               />
               <input
                 className="flex-1 border rounded px-2 py-1 text-sm"
                 placeholder="예: 14:00"
                 value={form.하차시간}
-                onChange={(e) =>
-                  update(
-                    "하차시간",
-                    e.target.value
-                  )
-                }
+                onChange={(e) => update("하차시간", e.target.value)}
               />
             </div>
           }
@@ -1647,12 +1452,7 @@ function MobileOrderForm({
             <input
               className="w-full border rounded px-2 py-1 text-sm"
               value={form.거래처명}
-              onChange={(e) =>
-                update(
-                  "거래처명",
-                  e.target.value
-                )
-              }
+              onChange={(e) => update("거래처명", e.target.value)}
             />
           }
         />
@@ -1668,16 +1468,12 @@ function MobileOrderForm({
                 className="w-full border rounded px-2 py-1 text-sm"
                 value={form.상차지명}
                 onChange={(e) => {
-                  update(
-                    "상차지명",
-                    e.target.value
-                  );
+                  update("상차지명", e.target.value);
                   setQueryPickup(e.target.value);
                   setShowPickupList(true);
                 }}
                 onFocus={() =>
-                  form.상차지명 &&
-                  setShowPickupList(true)
+                  form.상차지명 && setShowPickupList(true)
                 }
               />
               <input
@@ -1685,36 +1481,28 @@ function MobileOrderForm({
                 placeholder="상차지 주소"
                 value={form.상차지주소}
                 onChange={(e) =>
-                  update(
-                    "상차지주소",
-                    e.target.value
-                  )
+                  update("상차지주소", e.target.value)
                 }
               />
-              {showPickupList &&
-                pickupOptions.length > 0 && (
-                  <div className="border rounded bg-white max-h-40 overflow-y-auto text-xs">
-                    {pickupOptions.map((c) => (
-                      <button
-                        key={c.id}
-                        type="button"
-                        className="w-full text-left px-2 py-1 hover:bg-gray-100"
-                        onClick={() =>
-                          pickPickup(c)
-                        }
-                      >
-                        <div className="font-semibold">
-                          {c.거래처명 ||
-                            c.상호 ||
-                            "-"}
-                        </div>
-                        <div className="text-[11px] text-gray-500">
-                          {c.주소 || ""}
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
+              {showPickupList && pickupOptions.length > 0 && (
+                <div className="border rounded bg-white max-h-40 overflow-y-auto text-xs">
+                  {pickupOptions.map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      className="w-full text-left px-2 py-1 hover:bg-gray-100"
+                      onClick={() => pickPickup(c)}
+                    >
+                      <div className="font-semibold">
+                        {c.거래처명 || c.상호 || "-"}
+                      </div>
+                      <div className="text-[11px] text-gray-500">
+                        {c.주소 || ""}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           }
         />
@@ -1726,16 +1514,12 @@ function MobileOrderForm({
                 className="w-full border rounded px-2 py-1 text-sm"
                 value={form.하차지명}
                 onChange={(e) => {
-                  update(
-                    "하차지명",
-                    e.target.value
-                  );
+                  update("하차지명", e.target.value);
                   setQueryDrop(e.target.value);
                   setShowDropList(true);
                 }}
                 onFocus={() =>
-                  form.하차지명 &&
-                  setShowDropList(true)
+                  form.하차지명 && setShowDropList(true)
                 }
               />
               <input
@@ -1743,34 +1527,28 @@ function MobileOrderForm({
                 placeholder="하차지 주소"
                 value={form.하차지주소}
                 onChange={(e) =>
-                  update(
-                    "하차지주소",
-                    e.target.value
-                  )
+                  update("하차지주소", e.target.value)
                 }
               />
-              {showDropList &&
-                dropOptions.length > 0 && (
-                  <div className="border rounded bg-white max-h-40 overflow-y-auto text-xs">
-                    {dropOptions.map((c) => (
-                      <button
-                        key={c.id}
-                        type="button"
-                        className="w-full text-left px-2 py-1 hover:bg-gray-100"
-                        onClick={() => pickDrop(c)}
-                      >
-                        <div className="font-semibold">
-                          {c.거래처명 ||
-                            c.상호 ||
-                            "-"}
-                        </div>
-                        <div className="text-[11px] text-gray-500">
-                          {c.주소 || ""}
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
+              {showDropList && dropOptions.length > 0 && (
+                <div className="border rounded bg-white max-h-40 overflow-y-auto text-xs">
+                  {dropOptions.map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      className="w-full text-left px-2 py-1 hover:bg-gray-100"
+                      onClick={() => pickDrop(c)}
+                    >
+                      <div className="font-semibold">
+                        {c.거래처명 || c.상호 || "-"}
+                      </div>
+                      <div className="text-[11px] text-gray-500">
+                        {c.주소 || ""}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           }
         />
@@ -1786,53 +1564,30 @@ function MobileOrderForm({
                 className="border rounded px-2 py-1 text-sm"
                 placeholder="톤수"
                 value={form.톤수}
-                onChange={(e) =>
-                  update("톤수", e.target.value)
-                }
+                onChange={(e) => update("톤수", e.target.value)}
               />
               <select
                 className="border rounded px-2 py-1 text-sm"
                 value={form.차종}
-                onChange={(e) =>
-                  update("차종", e.target.value)
-                }
+                onChange={(e) => update("차종", e.target.value)}
               >
                 <option value="">차량종류</option>
-                <option value="라보/다마스">
-                  라보/다마스
-                </option>
+                <option value="라보/다마스">라보/다마스</option>
                 <option value="카고">카고</option>
-                <option value="윙바디">
-                  윙바디
-                </option>
+                <option value="윙바디">윙바디</option>
                 <option value="탑차">탑차</option>
-                <option value="냉장탑">
-                  냉장탑
-                </option>
-                <option value="냉동탑">
-                  냉동탑
-                </option>
-                <option value="냉장윙">
-                  냉장윙
-                </option>
-                <option value="냉동윙">
-                  냉동윙
-                </option>
-                <option value="오토바이">
-                  오토바이
-                </option>
+                <option value="냉장탑">냉장탑</option>
+                <option value="냉동탑">냉동탑</option>
+                <option value="냉장윙">냉장윙</option>
+                <option value="냉동윙">냉동윙</option>
+                <option value="오토바이">오토바이</option>
                 <option value="기타">기타</option>
               </select>
               <input
                 className="border rounded px-2 py-1 text-sm"
                 placeholder="화물내용"
                 value={form.화물내용}
-                onChange={(e) =>
-                  update(
-                    "화물내용",
-                    e.target.value
-                  )
-                }
+                onChange={(e) => update("화물내용", e.target.value)}
               />
             </div>
           }
@@ -1848,50 +1603,24 @@ function MobileOrderForm({
               <select
                 className="flex-1 border rounded px-2 py-1 text-sm"
                 value={form.상차방법}
-                onChange={(e) =>
-                  update(
-                    "상차방법",
-                    e.target.value
-                  )
-                }
+                onChange={(e) => update("상차방법", e.target.value)}
               >
                 <option value="">상차방법</option>
-                <option value="지게차">
-                  지게차
-                </option>
-                <option value="수작업">
-                  수작업
-                </option>
-                <option value="직접수작업">
-                  직접수작업
-                </option>
-                <option value="수도움">
-                  수도움
-                </option>
+                <option value="지게차">지게차</option>
+                <option value="수작업">수작업</option>
+                <option value="직접수작업">직접수작업</option>
+                <option value="수도움">수도움</option>
               </select>
               <select
                 className="flex-1 border rounded px-2 py-1 text-sm"
                 value={form.하차방법}
-                onChange={(e) =>
-                  update(
-                    "하차방법",
-                    e.target.value
-                  )
-                }
+                onChange={(e) => update("하차방법", e.target.value)}
               >
                 <option value="">하차방법</option>
-                <option value="지게차">
-                  지게차
-                </option>
-                <option value="수작업">
-                  수작업
-                </option>
-                <option value="직접수작업">
-                  직접수작업
-                </option>
-                <option value="수도움">
-                  수도움
-                </option>
+                <option value="지게차">지게차</option>
+                <option value="수작업">수작업</option>
+                <option value="직접수작업">직접수작업</option>
+                <option value="수도움">수도움</option>
               </select>
             </div>
           }
@@ -1907,12 +1636,7 @@ function MobileOrderForm({
               <select
                 className="flex-1 border rounded px-2 py-1 text-sm"
                 value={form.지급방식}
-                onChange={(e) =>
-                  update(
-                    "지급방식",
-                    e.target.value
-                  )
-                }
+                onChange={(e) => update("지급방식", e.target.value)}
               >
                 <option value="">지급방식</option>
                 <option value="계산서">계산서</option>
@@ -1925,22 +1649,13 @@ function MobileOrderForm({
               <select
                 className="flex-1 border rounded px-2 py-1 text-sm"
                 value={form.배차방식}
-                onChange={(e) =>
-                  update(
-                    "배차방식",
-                    e.target.value
-                  )
-                }
+                onChange={(e) => update("배차방식", e.target.value)}
               >
                 <option value="">배차방식</option>
                 <option value="24">24</option>
-                <option value="직접배차">
-                  직접배차
-                </option>
+                <option value="직접배차">직접배차</option>
                 <option value="인성">인성</option>
-                <option value="24시(외주업체)">
-                  24시(외주업체)
-                </option>
+                <option value="24시(외주업체)">24시(외주업체)</option>
               </select>
             </div>
           }
@@ -1955,12 +1670,7 @@ function MobileOrderForm({
                   name="mix"
                   value="혼적"
                   checked={form.혼적여부 === "혼적"}
-                  onChange={(e) =>
-                    update(
-                      "혼적여부",
-                      e.target.value
-                    )
-                  }
+                  onChange={(e) => update("혼적여부", e.target.value)}
                 />
                 혼적
               </label>
@@ -1969,15 +1679,8 @@ function MobileOrderForm({
                   type="radio"
                   name="mix"
                   value="독차"
-                  checked={
-                    form.혼적여부 !== "혼적"
-                  }
-                  onChange={(e) =>
-                    update(
-                      "혼적여부",
-                      e.target.value
-                    )
-                  }
+                  checked={form.혼적여부 !== "혼적"}
+                  onChange={(e) => update("혼적여부", e.target.value)}
                 />
                 독차
               </label>
@@ -1995,10 +1698,7 @@ function MobileOrderForm({
               className="w-full border rounded px-2 py-1 text-right text-sm"
               value={form.청구운임 || ""}
               onChange={(e) =>
-                updateMoney(
-                  "청구운임",
-                  e.target.value
-                )
+                updateMoney("청구운임", e.target.value)
               }
             />
           }
@@ -2010,10 +1710,7 @@ function MobileOrderForm({
               className="w-full border rounded px-2 py-1 text-right text-sm"
               value={form.기사운임 || ""}
               onChange={(e) =>
-                updateMoney(
-                  "기사운임",
-                  e.target.value
-                )
+                updateMoney("기사운임", e.target.value)
               }
             />
           }
@@ -2038,12 +1735,7 @@ function MobileOrderForm({
             <input
               className="w-full border rounded px-2 py-1 text-sm"
               value={form.차량번호}
-              onChange={(e) =>
-                update(
-                  "차량번호",
-                  e.target.value
-                )
-              }
+              onChange={(e) => update("차량번호", e.target.value)}
             />
           }
         />
@@ -2057,9 +1749,7 @@ function MobileOrderForm({
             <textarea
               className="w-full border rounded px-2 py-1 text-sm h-16"
               value={form.적요}
-              onChange={(e) =>
-                update("적요", e.target.value)
-              }
+              onChange={(e) => update("적요", e.target.value)}
             />
           }
         />
@@ -2086,9 +1776,7 @@ function RowLabelInput({ label, input }) {
       <div className="w-24 px-3 py-2 text-xs text-gray-600 bg-gray-50 flex items-center">
         {label}
       </div>
-      <div className="flex-1 px-3 py-2">
-        {input}
-      </div>
+      <div className="flex-1 px-3 py-2">{input}</div>
     </div>
   );
 }
@@ -2100,16 +1788,13 @@ function MobileStandardFare() {
   const [rows, setRows] = useState([]);
 
   useEffect(() => {
-    const unsub = onSnapshot(
-      collection(db, "standardFare"),
-      (snap) => {
-        const list = snap.docs.map((d) => ({
-          id: d.id,
-          ...d.data(),
-        }));
-        setRows(list);
-      }
-    );
+    const unsub = onSnapshot(collection(db, "standardFare"), (snap) => {
+      const list = snap.docs.map((d) => ({
+        id: d.id,
+        ...d.data(),
+      }));
+      setRows(list);
+    });
     return () => unsub();
   }, []);
 
@@ -2123,26 +1808,15 @@ function MobileStandardFare() {
           <table className="w-full text-[11px]">
             <thead className="bg-gray-50 border-b sticky top-0">
               <tr>
-                <th className="px-2 py-1 border-r">
-                  출발지
-                </th>
-                <th className="px-2 py-1 border-r">
-                  도착지
-                </th>
-                <th className="px-2 py-1 border-r">
-                  톤수
-                </th>
-                <th className="px-2 py-1">
-                  기준운임
-                </th>
+                <th className="px-2 py-1 border-r">출발지</th>
+                <th className="px-2 py-1 border-r">도착지</th>
+                <th className="px-2 py-1 border-r">톤수</th>
+                <th className="px-2 py-1">기준운임</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr
-                  key={r.id}
-                  className="border-t"
-                >
+                <tr key={r.id} className="border-t">
                   <td className="px-2 py-1 border-r">
                     {r.출발지 || r.from || ""}
                   </td>
@@ -2194,24 +1868,12 @@ function MobileStatusTable({ title, orders }) {
           <table className="w-full text-[11px]">
             <thead className="bg-gray-50 border-b sticky top-0">
               <tr>
-                <th className="px-2 py-1 border-r">
-                  상차일
-                </th>
-                <th className="px-2 py-1 border-r">
-                  거래처
-                </th>
-                <th className="px-2 py-1 border-r">
-                  상차지
-                </th>
-                <th className="px-2 py-1 border-r">
-                  하차지
-                </th>
-                <th className="px-2 py-1 border-r">
-                  차량/기사
-                </th>
-                <th className="px-2 py-1">
-                  청구/기사
-                </th>
+                <th className="px-2 py-1 border-r">상차일</th>
+                <th className="px-2 py-1 border-r">거래처</th>
+                <th className="px-2 py-1 border-r">상차지</th>
+                <th className="px-2 py-1 border-r">하차지</th>
+                <th className="px-2 py-1 border-r">차량/기사</th>
+                <th className="px-2 py-1">청구/기사</th>
               </tr>
             </thead>
             <tbody>
@@ -2231,27 +1893,17 @@ function MobileStatusTable({ title, orders }) {
                   </td>
                   <td className="px-2 py-1 border-r">
                     <div>
-                      {o.차량톤수 ||
-                        o.톤수}{" "}
-                      {o.차량종류 ||
-                        o.차종}
+                      {o.차량톤수 || o.톤수}{" "}
+                      {o.차량종류 || o.차종}
                     </div>
                     <div className="text-[10px] text-gray-500">
-                      {o.기사명}(
-                      {o.차량번호})
+                      {o.기사명}({o.차량번호})
                     </div>
                   </td>
                   <td className="px-2 py-1 text-right whitespace-nowrap">
-                    <div>
-                      청 {fmtMoney(
-                        getClaim(o)
-                      )}
-                    </div>
+                    <div>청 {fmtMoney(getClaim(o))}</div>
                     <div className="text-[10px] text-gray-500">
-                      기{" "}
-                      {fmtMoney(
-                        o.기사운임 || 0
-                      )}
+                      기 {fmtMoney(o.기사운임 || 0)}
                     </div>
                   </td>
                 </tr>
