@@ -297,13 +297,26 @@ export default function MobileApp() {
           return false;
       }
 
-      // 날짜 필터
-      const d = getPickupDate(o);
-      if (startDate && d && d < startDate)
-        return false;
-      if (endDate && d && d > endDate)
-        return false;
-      return true;
+      // 상차일, 하차일, 등록일 모두 비교
+const pickup = o.상차일 || "";
+const drop = o.하차일 || "";
+const reg = o.등록일 || "";
+
+const dateList = [pickup, drop, reg].filter(Boolean);
+
+if (dateList.length > 0) {
+  // 하나라도 범위에 걸리면 OK
+  const inRange = dateList.some((dt) => {
+    const d = dt.slice(0, 10);
+    return (
+      (!startDate || d >= startDate) &&
+      (!endDate || d <= endDate)
+    );
+  });
+
+  if (!inRange) return false;
+}
+
     });
   }, [
     orders,
@@ -1085,12 +1098,6 @@ function MobileOrderCard({ order }) {
             )}
           </div>
 
-          {/* 하차 전체 주소 */}
-          {order.하차지주소 && (
-            <div className="mt-1 text-[12px] text-gray-500">
-              {order.하차지주소}
-            </div>
-          )}
         </div>
 
         {/* 상태 배지 */}
