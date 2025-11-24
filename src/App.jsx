@@ -14,7 +14,8 @@ import { auth } from "./firebase";
 import DispatchApp from "./DispatchApp";
 
 // 모바일 버전 (⭐ 새로 만들 MobileApp.jsx)
-import MobileApp from "./Mobile/MobileApp";
+import MobileApp from "./mobile/MobileApp";
+
 
 // 공용
 import Login from "./Login";
