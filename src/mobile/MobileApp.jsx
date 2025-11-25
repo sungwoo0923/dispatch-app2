@@ -348,77 +348,53 @@ const groupedByDate = useMemo(() => {
 //  신규 저장
 // --------------------------------------------------
 const handleSave = async () => {
-  if (!form.상차지명 || !form.하차지명) {
-    alert("상차지 / 하차지는 필수입니다.");
-    return;
-  }
-
   const 청구운임 = toNumber(form.청구운임);
   const 기사운임 = toNumber(form.기사운임);
   const 수수료 = 청구운임 - 기사운임;
 
-  const docData = {
-    거래처명: form.거래처명 || "",
+  const data = {
+    거래처명: form.거래처명,
     상차지명: form.상차지명,
-    상차지주소: form.상차지주소 || "",
+    상차지주소: form.상차지주소,
     하차지명: form.하차지명,
-    하차지주소: form.하차지주소 || "",
-    화물내용: form.화물내용 || "",
-    차량종류: form.차종 || "",
-    차량톤수: form.톤수 || "",
-    상차방법: form.상차방법 || "",
-    하차방법: form.하차방법 || "",
-    상차일: form.상차일 || "",
-    상차시간: form.상차시간 || "",
-    하차일: form.하차일 || "",
-    하차시간: form.하차시간 || "",
-    지급방식: form.지급방식 || "",
-    배차방식: form.배차방식 || "",
-    메모: form.적요 || "",
-    혼적여부: form.혼적여부 || "독차",
-    차량번호: form.차량번호 || "",
-    기사명: "",
-    전화번호: "",
+    하차지주소: form.하차지주소,
+    화물내용: form.화물내용,
+    차량종류: form.차종,
+    차량톤수: form.톤수,
+    상차방법: form.상차방법,
+    하차방법: form.하차방법,
+    상차일: form.상차일,
+    상차시간: form.상차시간,
+    하차일: form.하차일,
+    하차시간: form.하차시간,
+    지급방식: form.지급방식,
+    배차방식: form.배차방식,
+    메모: form.적요,
+    혼적여부: form.혼적여부,
+    차량번호: form.차량번호,
     청구운임,
     기사운임,
     수수료,
-    배차상태: "배차전",
-    등록일: new Date().toISOString().slice(0, 10),
-    createdAt: serverTimestamp(),
+    산재보험료: form.산재보험료 || 0,
   };
 
-  await addDoc(collection(db, "dispatch"), docData);
-  alert("등록되었습니다.");
-
-  // 초기화
-  setForm({
-    거래처명: "",
-    상차일: "",
-    상차시간: "",
-    하차일: "",
-    하차시간: "",
-    상차지명: "",
-    상차지주소: "",
-    하차지명: "",
-    하차지주소: "",
-    톤수: "",
-    차종: "",
-    화물내용: "",
-    상차방법: "",
-    하차방법: "",
-    지급방식: "",
-    배차방식: "",
-    청구운임: 0,
-    기사운임: 0,
-    수수료: 0,
-    산재보험료: 0,
-    차량번호: "",
-    혼적여부: "독차",
-    적요: "",
-  });
+  // 🔥 수정모드인지 체크
+  if (form._editId) {
+    await updateDoc(doc(db, "dispatch", form._editId), data);
+    alert("수정되었습니다.");
+  } else {
+    await addDoc(collection(db, "dispatch"), {
+      ...data,
+      배차상태: "배차전",
+      createdAt: serverTimestamp(),
+      등록일: new Date().toISOString().slice(0, 10),
+    });
+    alert("등록되었습니다.");
+  }
 
   setPage("list");
 };
+
 
 // --------------------------------------------------
 // 기사 배차 + 신규 기사등록 팝업
@@ -608,12 +584,14 @@ return (
 
       {page === "detail" && selectedOrder && (
         <MobileOrderDetail
-          order={selectedOrder}
-          drivers={drivers}
-          onAssignDriver={assignDriver}
-          onCancelAssign={cancelAssign}
-          onCancelOrder={cancelOrder}
-        />
+  order={selectedOrder}
+  drivers={drivers}
+  onAssignDriver={assignDriver}
+  onCancelAssign={cancelAssign}
+  onCancelOrder={cancelOrder}
+  setPage={setPage}
+  setForm={setForm}
+/>
       )}
 
       {page === "fare" && <MobileStandardFare />}
@@ -958,6 +936,8 @@ function MobileOrderDetail({
   onAssignDriver,
   onCancelAssign,
   onCancelOrder,
+  setPage,
+  setForm
 }) {
   const [carNo, setCarNo] = useState(order.차량번호 || "");
   const [name, setName] = useState(order.기사명 || "");
@@ -1113,6 +1093,44 @@ function MobileOrderDetail({
           오더 삭제
         </button>
       </div>
+      {/* 🔵 수정하기 버튼 추가 */}
+<button
+  onClick={() => {
+    window.scrollTo(0, 0);
+    setPage("form");
+
+    setForm({
+      거래처명: order.거래처명 || "",
+      상차일: order.상차일 || "",
+      상차시간: order.상차시간 || "",
+      하차일: order.하차일 || "",
+      하차시간: order.하차시간 || "",
+      상차지명: order.상차지명 || "",
+      상차지주소: order.상차지주소 || "",
+      하차지명: order.하차지명 || "",
+      하차지주소: order.하차지주소 || "",
+      톤수: order.톤수 || order.차량톤수 || "",
+      차종: order.차종 || order.차량종류 || "",
+      화물내용: order.화물내용 || "",
+      상차방법: order.상차방법 || "",
+      하차방법: order.하차방법 || "",
+      지급방식: order.지급방식 || "",
+      배차방식: order.배차방식 || "",
+      청구운임: order.청구운임 || 0,
+      기사운임: order.기사운임 || 0,
+      수수료: order.수수료 || 0,
+      산재보험료: order.산재보험료 || 0,
+      차량번호: order.차량번호 || "",
+      혼적여부: order.혼적여부 || "독차",
+      적요: order.메모 || "",
+      _editId: order.id,   // 🔥 수정모드 표시용
+    });
+  }}
+  className="w-full py-2 rounded-lg bg-orange-500 text-white text-sm font-semibold mt-2"
+>
+  오더 수정하기
+</button>
+
     </div>
   );
 }
