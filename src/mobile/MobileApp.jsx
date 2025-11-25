@@ -251,30 +251,37 @@ const [searchText, setSearchText] = useState("");
   // 3. 등록 폼
   // --------------------------------------------------
   const [form, setForm] = useState({
-    거래처명: "",
-    상차일: "",
-    상차시간: "",
-    하차일: "",
-    하차시간: "",
-    상차지명: "",
-    상차지주소: "",
-    하차지명: "",
-    하차지주소: "",
-    톤수: "",
-    차종: "",
-    화물내용: "",
-    상차방법: "",
-    하차방법: "",
-    지급방식: "",
-    배차방식: "",
-    청구운임: 0,
-    기사운임: 0,
-    수수료: 0,
-    산재보험료: 0,
-    차량번호: "",
-    혼적여부: "독차", // 혼적 / 독차
-    적요: "",
-  });
+  거래처명: "",
+  상차일: "",
+  상차시간: "",
+  하차일: "",
+  하차시간: "",
+  상차지명: "",
+  상차지주소: "",
+  하차지명: "",
+  하차지주소: "",
+  톤수: "",
+  차종: "",
+  화물내용: "",
+  상차방법: "",
+  하차방법: "",
+  지급방식: "",
+  배차방식: "",
+  청구운임: 0,
+  기사운임: 0,
+  수수료: 0,
+  산재보험료: 0,
+  차량번호: "",
+  기사명: "",
+  전화번호: "",
+  혼적여부: "독차",
+  적요: "",
+
+  // 🔥 반드시 추가!
+  _editId: null,
+  _returnToDetail: false,
+});
+
 
   // --------------------------------------------------
   // 4. 필터링
@@ -646,16 +653,18 @@ const [searchText, setSearchText] = useState("");
     수수료: 0,
     산재보험료: 0,
     차량번호: "",
+    기사명: "",
+    전화번호: "",
     혼적여부: "독차",
     적요: "",
-    // 🔥 수정모드 관련 값 제거
     _editId: null,
     _returnToDetail: false,
   });
 
-  setPage("form");
-  setShowMenu(false);
+  setPage("form");        // ← 🔥 반드시 있어야 함
+  setShowMenu(false);     // ← 🔥 이것도 반드시 있어야 함
 }}
+
 
           onGoFare={() => {
             setPage("fare");
@@ -745,34 +754,35 @@ upsertDriver={upsertDriver}
         <button
           onClick={() => {
   setForm({
-    거래처명: "",
-    상차일: "",
-    상차시간: "",
-    하차일: "",
-    하차시간: "",
-    상차지명: "",
-    상차지주소: "",
-    하차지명: "",
-    하차지주소: "",
-    톤수: "",
-    차종: "",
-    화물내용: "",
-    상차방법: "",
-    하차방법: "",
-    지급방식: "",
-    배차방식: "",
-    청구운임: 0,
-    기사운임: 0,
-    수수료: 0,
-    산재보험료: 0,
-    차량번호: "",
-    기사명: "",
-    전화번호: "",
-    혼적여부: "독차",
-    적요: "",
-    _editId: null,
-    _returnToDetail: false,
-  });
+  거래처명: "",
+  상차일: "",
+  상차시간: "",
+  하차일: "",
+  하차시간: "",
+  상차지명: "",
+  상차지주소: "",
+  하차지명: "",
+  하차지주소: "",
+  톤수: "",
+  차종: "",
+  화물내용: "",
+  상차방법: "",
+  하차방법: "",
+  지급방식: "",
+  배차방식: "",
+  청구운임: 0,
+  기사운임: 0,
+  수수료: 0,
+  산재보험료: 0,
+  차량번호: "",
+  기사명: "",
+  전화번호: "",
+  혼적여부: "독차",
+  적요: "",
+  _editId: null,
+  _returnToDetail: false,
+});
+
 
   setSelectedOrder(null);
   setPage("form");
@@ -1226,8 +1236,10 @@ function MobileOrderDetail({
   setPage,
   setForm,
   setSelectedOrder,
-  showToast,   // 🔥 추가
+  showToast,
+  upsertDriver,   // 🔥 이거 추가!!
 }) {
+
 
 
   const [carNo, setCarNo] = useState(order.차량번호 || "");
@@ -2121,17 +2133,44 @@ function MobileOrderForm({ form, setForm, clients, onSave, setPage, showToast, d
 
   {/* 🔥 수정취소 버튼 추가 */}
   {form._editId && (
-    <button
-      onClick={() => {
-        setForm({});
-        setPage("detail");
-        showToast("수정이 취소되었습니다.");
-      }}
-      className="w-full py-3 rounded-lg bg-gray-300 text-gray-800 text-base font-semibold shadow"
-    >
-      수정취소
-    </button>
-  )}
+  <button
+    onClick={() => {
+      setForm({
+        거래처명: "",
+        상차일: "",
+        상차시간: "",
+        하차일: "",
+        하차시간: "",
+        상차지명: "",
+        상차지주소: "",
+        하차지명: "",
+        하차지주소: "",
+        톤수: "",
+        차종: "",
+        화물내용: "",
+        상차방법: "",
+        하차방법: "",
+        지급방식: "",
+        배차방식: "",
+        청구운임: 0,
+        기사운임: 0,
+        수수료: 0,
+        산재보험료: 0,
+        차량번호: "",
+        기사명: "",
+        전화번호: "",
+        혼적여부: "독차",
+        적요: "",
+        _editId: null,
+        _returnToDetail: false,
+      });
+    }}
+    className="w-full py-3 rounded-lg bg-gray-300 text-gray-800 text-base font-semibold shadow"
+  >
+    수정취소
+  </button>
+)}
+
 
 </div>
 
