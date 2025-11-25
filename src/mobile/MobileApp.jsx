@@ -68,6 +68,7 @@ export default function MobileApp() {
    🔥 수정모드용 폼 상태 생성
 ------------------------------------------------------------- */
 const [editForm, setEditForm] = useState(null); // null = 수정모드 아님
+const [showMenu, setShowMenu] = useState(false);
 
   // 🔵 전체 오더 실시간 연동
   useEffect(() => {
