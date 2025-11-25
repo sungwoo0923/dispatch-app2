@@ -10151,10 +10151,10 @@ function DriverManagement({ drivers = [], upsertDriver, removeDriver }) {
   };
 
   const handleBlur = async (row, key, val) => {
-    const id = row.차량번호 || row.id;
-    const patch = { ...row, [key]: val };
-    const keyId = patch.차량번호 || id || crypto?.randomUUID?.();
-    await upsertDriver?.({ ...patch, id: keyId });
+    const id = row.id; // ← 반드시 문서 ID로 고정
+const patch = { ...row, [key]: val };
+await upsertDriver?.({ ...patch, id });
+
   };
 
   const addNew = async () => {

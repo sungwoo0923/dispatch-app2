@@ -529,14 +529,16 @@ const upsertDriver = async ({ 차량번호, 이름, 전화번호 }) => {
 
     // 없는 차량번호면 기사 DB에 신규 등록
     if (!driver) {
-      const ref = await addDoc(collection(db, "drivers"), {
-        차량번호,
-        이름,
-        전화번호,
-        메모: "",
-        createdAt: serverTimestamp(),
-      });
-      driver = { id: ref.id, 차량번호, 이름, 전화번호 };
+      if (!driver) {
+  const newId = await upsertDriver({
+    차량번호,
+    이름: 이름 || "",
+    전화번호: 전화번호 || "",
+  });
+
+  driver = { id: newId, 차량번호, 이름: 이름 || "", 전화번호: 전화번호 || "" };
+}
+
     }
 
     await updateDoc(doc(db, "dispatch", selectedOrder.id), {
@@ -776,15 +778,28 @@ upsertDriver={upsertDriver}
 )}
 
 
-        {page === "fare" && <MobileStandardFare />}
+       {page === "fare" && (
+  <MobileStandardFare
+    onBack={() => setPage("list")}   // ← 뒤로가기 추가
+  />
+)}
 
-        {page === "status" && (
-          <MobileStatusTable title="배차현황" orders={filteredStatusOrders} />
-        )}
+{page === "status" && (
+  <MobileStatusTable
+    title="배차현황"
+    orders={filteredStatusOrders}
+    onBack={() => setPage("list")}   // ← 뒤로가기 추가
+  />
+)}
 
-        {page === "unassigned" && (
-          <MobileStatusTable title="미배차현황" orders={unassignedOrders} />
-        )}
+{page === "unassigned" && (
+  <MobileStatusTable
+    title="미배차현황"
+    orders={unassignedOrders}
+    onBack={() => setPage("list")}   // ← 뒤로가기 추가
+  />
+)}
+
       </div>
 
       {page === "list" && !showMenu && (
@@ -2248,8 +2263,9 @@ function RowLabelInput({ label, input }) {
 // ======================================================================
 // 모바일 표준운임표 (간단 테이블)
 // ======================================================================
-function MobileStandardFare() {
+function MobileStandardFare({ onBack }) {
   const [rows, setRows] = useState([]);
+  const [query, setQuery] = useState("");
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "standardFare"), (snap) => {
@@ -2262,68 +2278,94 @@ function MobileStandardFare() {
     return () => unsub();
   }, []);
 
+  const norm = (s = "") => String(s).toLowerCase().replace(/\s+/g, "");
+
+  const filtered = rows.filter((r) => {
+    if (!query.trim()) return true;
+    const q = norm(query);
+
+    return (
+      norm(r.출발지 || r.from || "").includes(q) ||
+      norm(r.도착지 || r.to || "").includes(q) ||
+      norm(r.톤수 || r.ton || "").includes(q)
+    );
+  });
+
   return (
     <div className="px-3 py-3">
-      <div className="bg-white border rounded-xl shadow-sm overflow-hidden">
-        <div className="px-3 py-2 border-b text-sm font-semibold">
-          표준운임표
-        </div>
-        <div className="max-h-[70vh] overflow-auto">
-          <table className="w-full text-[11px]">
-            <thead className="bg-gray-50 border-b sticky top-0">
-              <tr>
-                <th className="px-2 py-1 border-r">출발지</th>
-                <th className="px-2 py-1 border-r">도착지</th>
-                <th className="px-2 py-1 border-r">톤수</th>
-                <th className="px-2 py-1">기준운임</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.id} className="border-t">
-                  <td className="px-2 py-1 border-r">
-                    {r.출발지 || r.from || ""}
-                  </td>
-                  <td className="px-2 py-1 border-r">
-                    {r.도착지 || r.to || ""}
-                  </td>
-                  <td className="px-2 py-1 border-r text-center">
-                    {r.톤수 || r.ton || ""}
-                  </td>
-                  <td className="px-2 py-1 text-right">
-                    {r.운임
-                      ? fmtMoney(r.운임)
-                      : r.fare
-                      ? fmtMoney(r.fare)
-                      : ""}
-                  </td>
-                </tr>
-              ))}
+      {/* 🔙 뒤로가기 버튼 */}
+      <div className="mb-3">
+        <button
+          onClick={onBack}
+          className="px-3 py-1 rounded bg-gray-200 text-gray-700 text-sm"
+        >
+          ◀ 뒤로가기
+        </button>
+      </div>
 
-              {rows.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={4}
-                    className="px-3 py-4 text-center text-gray-400"
-                  >
-                    등록된 표준운임 데이터가 없습니다.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+      {/* 검색창 */}
+      <input
+        className="w-full border rounded px-3 py-2 mb-3 text-sm"
+        placeholder="출발지 / 도착지 / 톤수 검색"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+      />
+
+      {/* 표준운임표 테이블 */}
+      <div className="bg-white border rounded-xl shadow-sm overflow-hidden max-h-[70vh]">
+        <table className="w-full text-[11px]">
+          <thead className="bg-gray-50 border-b sticky top-0">
+            <tr>
+              <th className="px-2 py-1 border-r">출발지</th>
+              <th className="px-2 py-1 border-r">도착지</th>
+              <th className="px-2 py-1 border-r">톤수</th>
+              <th className="px-2 py-1">기준운임</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((r) => (
+              <tr key={r.id} className="border-t">
+                <td className="px-2 py-1 border-r">{r.출발지 || r.from}</td>
+                <td className="px-2 py-1 border-r">{r.도착지 || r.to}</td>
+                <td className="px-2 py-1 border-r text-center">
+                  {r.톤수 || r.ton}
+                </td>
+                <td className="px-2 py-1 text-right">
+                  {fmtMoney(r.운임 || r.fare)}
+                </td>
+              </tr>
+            ))}
+
+            {filtered.length === 0 && (
+              <tr>
+                <td colSpan={4} className="px-3 py-4 text-center text-gray-400">
+                  검색된 데이터가 없습니다.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   );
 }
 
+
 // ======================================================================
 // 모바일 배차현황 / 미배차현황 테이블 (컬럼형)
 // ======================================================================
-function MobileStatusTable({ title, orders }) {
+function MobileStatusTable({ title, orders, onBack }) {
+
   return (
     <div className="px-3 py-3">
+      {onBack && (
+  <button
+    onClick={onBack}
+    className="mb-3 px-3 py-1 rounded bg-gray-200 text-gray-700 text-sm"
+  >
+    ◀ 뒤로가기
+  </button>
+)}
       <div className="mb-2 text-xs text-gray-500">
         {title} (총 {orders.length}건)
       </div>
