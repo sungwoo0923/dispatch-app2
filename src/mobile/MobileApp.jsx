@@ -793,12 +793,13 @@ upsertDriver={upsertDriver}
 )}
 
 {page === "unassigned" && (
-  <MobileStatusTable
+  <MobileStatusTableGrouped
     title="미배차현황"
-    orders={unassignedOrders}
-    onBack={() => setPage("list")}   // ← 뒤로가기 추가
+    groups={groupByDate(unassignedOrders)}
+    onBack={() => setPage("list")}
   />
 )}
+
 
       </div>
 
@@ -2265,14 +2266,19 @@ function RowLabelInput({ label, input }) {
 // ======================================================================
 function MobileStandardFare({ onBack }) {
   const [rows, setRows] = useState([]);
-  const [query, setQuery] = useState("");
+  const [form, setForm] = useState({
+    from: "",
+    to: "",
+    cargo: "",
+    ton: "",
+    carType: "",
+  });
+
+  const update = (k, v) => setForm((p) => ({ ...p, [k]: v }));
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "standardFare"), (snap) => {
-      const list = snap.docs.map((d) => ({
-        id: d.id,
-        ...d.data(),
-      }));
+      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       setRows(list);
     });
     return () => unsub();
@@ -2281,74 +2287,143 @@ function MobileStandardFare({ onBack }) {
   const norm = (s = "") => String(s).toLowerCase().replace(/\s+/g, "");
 
   const filtered = rows.filter((r) => {
-    if (!query.trim()) return true;
-    const q = norm(query);
-
-    return (
-      norm(r.출발지 || r.from || "").includes(q) ||
-      norm(r.도착지 || r.to || "").includes(q) ||
-      norm(r.톤수 || r.ton || "").includes(q)
-    );
+    if (form.from && !norm(r.출발지 || "").includes(norm(form.from))) return false;
+    if (form.to && !norm(r.도착지 || "").includes(norm(form.to))) return false;
+    if (form.cargo && !norm(r.화물내용 || "").includes(norm(form.cargo))) return false;
+    if (form.ton && !norm(String(r.톤수 || "")).includes(norm(form.ton))) return false;
+    if (form.carType && form.carType !== "전체") {
+      if (!norm(r.차량종류 || "").includes(norm(form.carType))) return false;
+    }
+    return true;
   });
 
+  const resetForm = () =>
+    setForm({
+      from: "",
+      to: "",
+      cargo: "",
+      ton: "",
+      carType: "",
+    });
+
   return (
-    <div className="px-3 py-3">
-      {/* 🔙 뒤로가기 버튼 */}
-      <div className="mb-3">
-        <button
-          onClick={onBack}
-          className="px-3 py-1 rounded bg-gray-200 text-gray-700 text-sm"
+    <div className="px-4 py-4 space-y-4">
+
+      {/* 🔙 뒤로가기 */}
+      <button
+        onClick={onBack}
+        className="px-3 py-1 rounded bg-gray-200 text-gray-800 text-sm"
+      >
+        ◀ 뒤로가기
+      </button>
+
+      {/* 🔵 검색박스 */}
+      <div className="bg-white rounded-xl border shadow-sm p-4 space-y-3">
+
+        <div className="text-sm font-semibold text-gray-700">
+          표준 운임 검색
+        </div>
+
+        <input
+          className="w-full border rounded-full px-3 py-2 text-sm bg-gray-50"
+          placeholder="상차지"
+          value={form.from}
+          onChange={(e) => update("from", e.target.value)}
+        />
+
+        <input
+          className="w-full border rounded-full px-3 py-2 text-sm bg-gray-50"
+          placeholder="하차지"
+          value={form.to}
+          onChange={(e) => update("to", e.target.value)}
+        />
+
+        <input
+          className="w-full border rounded-full px-3 py-2 text-sm bg-gray-50"
+          placeholder="화물내용"
+          value={form.cargo}
+          onChange={(e) => update("cargo", e.target.value)}
+        />
+
+        <input
+          className="w-full border rounded-full px-3 py-2 text-sm bg-gray-50"
+          placeholder="톤수 입력"
+          value={form.ton}
+          onChange={(e) => update("ton", e.target.value)}
+        />
+
+        <select
+          className="w-full border rounded-full px-3 py-2 text-sm bg-gray-50"
+          value={form.carType}
+          onChange={(e) => update("carType", e.target.value)}
         >
-          ◀ 뒤로가기
-        </button>
+          <option value="">차량종류 전체</option>
+          <option value="라보">라보</option>
+          <option value="다마스">다마스</option>
+          <option value="카고">카고</option>
+          <option value="윙바디">윙바디</option>
+          <option value="탑차">탑차</option>
+          <option value="냉장탑">냉장탑</option>
+          <option value="냉동탑">냉동탑</option>
+          <option value="오토바이">오토바이</option>
+        </select>
+
+        <div className="flex gap-2 mt-3">
+          <button
+  onClick={() => setForm((p) => ({ ...p }))}
+  className="flex-1 py-2 rounded-full bg-blue-500 text-white text-sm"
+>
+  검색하기
+</button>
+
+
+          <button
+            onClick={resetForm}
+            className="flex-1 py-2 rounded-full bg-gray-200 text-gray-700 text-sm"
+          >
+            초기화
+          </button>
+        </div>
       </div>
 
-      {/* 검색창 */}
-      <input
-        className="w-full border rounded px-3 py-2 mb-3 text-sm"
-        placeholder="출발지 / 도착지 / 톤수 검색"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-      />
-
-      {/* 표준운임표 테이블 */}
+      {/* 🔵 결과 테이블 */}
       <div className="bg-white border rounded-xl shadow-sm overflow-hidden max-h-[70vh]">
-        <table className="w-full text-[11px]">
-          <thead className="bg-gray-50 border-b sticky top-0">
+        <table className="w-full text-[12px]">
+          <thead className="bg-gray-50 sticky top-0 border-b">
             <tr>
-              <th className="px-2 py-1 border-r">출발지</th>
-              <th className="px-2 py-1 border-r">도착지</th>
+              <th className="px-2 py-1 border-r">상차지</th>
+              <th className="px-2 py-1 border-r">하차지</th>
+              <th className="px-2 py-1 border-r">화물내용</th>
               <th className="px-2 py-1 border-r">톤수</th>
-              <th className="px-2 py-1">기준운임</th>
+              <th className="px-2 py-1">운임</th>
             </tr>
           </thead>
           <tbody>
             {filtered.map((r) => (
               <tr key={r.id} className="border-t">
-                <td className="px-2 py-1 border-r">{r.출발지 || r.from}</td>
-                <td className="px-2 py-1 border-r">{r.도착지 || r.to}</td>
-                <td className="px-2 py-1 border-r text-center">
-                  {r.톤수 || r.ton}
-                </td>
-                <td className="px-2 py-1 text-right">
-                  {fmtMoney(r.운임 || r.fare)}
-                </td>
+                <td className="px-2 py-1 border-r">{r.출발지}</td>
+                <td className="px-2 py-1 border-r">{r.도착지}</td>
+                <td className="px-2 py-1 border-r">{r.화물내용}</td>
+                <td className="px-2 py-1 border-r">{r.톤수}</td>
+                <td className="px-2 py-1 text-right">{fmtMoney(r.운임)}</td>
               </tr>
             ))}
 
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-3 py-4 text-center text-gray-400">
-                  검색된 데이터가 없습니다.
+                <td colSpan={5} className="text-center py-5 text-gray-400">
+                  검색된 내용이 없습니다.
                 </td>
               </tr>
             )}
           </tbody>
         </table>
       </div>
+
     </div>
   );
 }
+
 
 
 // ======================================================================
