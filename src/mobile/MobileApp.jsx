@@ -267,8 +267,8 @@ export default function MobileApp() {
 
   const todayStr = () => new Date().toISOString().slice(0, 10);
 
-  const [startDate, setStartDate] = useState(todayStr());
-  const [endDate, setEndDate] = useState(todayStr());
+const [startDate, setStartDate] = useState("");
+const [endDate, setEndDate] = useState("");
 
   // 🔵 추가 드롭다운 필터 (차량종류 / 배차상태)
   const [vehicleFilter, setVehicleFilter] = useState("");
@@ -2730,23 +2730,35 @@ function MobileStandardFare({ onBack }) {
     </div>
   );
 }
-
 // ======================================================================
-// 모바일 배차현황 / 미배차현황 테이블 (컬럼형)
+// 모바일 배차현황 / 미배차현황 테이블 (날짜별 그룹형 UI)
 // ======================================================================
 function MobileStatusTable({ title, orders, onBack }) {
 
+  // 날짜 기준 그룹핑
+  const dateMap = new Map();
+  for (const o of orders) {
+    const d = getPickupDate(o) || "기타";
+    if (!dateMap.has(d)) dateMap.set(d, []);
+    dateMap.get(d).push(o);
+  }
+  // 정렬 (날짜 오름차순)
+  const sortedDates = Array.from(dateMap.keys()).sort();
+
   return (
     <div className="px-3 py-3">
+
+      {/* 뒤로가기 */}
       {onBack && (
-  <button
-    onClick={onBack}
-    className="mb-3 px-3 py-1 rounded bg-gray-200 text-gray-700 text-sm"
-  >
-    ◀ 뒤로가기
-  </button>
-)}
-      {/* 🔵 빠른 배차등록 + 미배차 건수 */}
+        <button
+          onClick={onBack}
+          className="mb-3 px-3 py-1 rounded bg-gray-200 text-gray-700 text-sm"
+        >
+          ◀ 뒤로가기
+        </button>
+      )}
+
+      {/* 빠른 배차등록 버튼 */}
       <button
         onClick={() => alert("빠른 배차등록 눌림")}
         className="mb-3 w-full py-2 bg-blue-500 text-white text-sm rounded-lg font-semibold shadow active:scale-95 flex justify-center gap-2"
@@ -2760,66 +2772,78 @@ function MobileStatusTable({ title, orders, onBack }) {
       <div className="mb-2 text-xs text-gray-500">
         {title} (총 {orders.length}건)
       </div>
-      <div className="bg-white border rounded-xl shadow-sm overflow-hidden">
-        <div className="max-h-[70vh] overflow-auto">
-          <table className="w-full text-[11px]">
-            <thead className="bg-gray-50 border-b sticky top-0">
-              <tr>
-                <th className="px-2 py-1 border-r">상차일</th>
-                <th className="px-2 py-1 border-r">거래처</th>
-                <th className="px-2 py-1 border-r">상차지</th>
-                <th className="px-2 py-1 border-r">하차지</th>
-                <th className="px-2 py-1 border-r">차량/기사</th>
-                <th className="px-2 py-1">청구/기사</th>
-              </tr>
-            </thead>
-            <tbody>
-              {orders.map((o) => (
-                <tr key={o.id} className="border-t">
-                  <td className="px-2 py-1 border-r whitespace-nowrap">
-                    {getPickupDate(o)}
-                  </td>
-                  <td className="px-2 py-1 border-r">
-                    {o.거래처명}
-                  </td>
-                  <td className="px-2 py-1 border-r">
-                    {o.상차지명}
-                  </td>
-                  <td className="px-2 py-1 border-r">
-                    {o.하차지명}
-                  </td>
-                  <td className="px-2 py-1 border-r">
-                    <div>
-                      {o.차량톤수 || o.톤수}{" "}
-                      {o.차량종류 || o.차종}
-                    </div>
-                    <div className="text-[10px] text-gray-500">
-                      {o.기사명}({o.차량번호})
-                    </div>
-                  </td>
-                  <td className="px-2 py-1 text-right whitespace-nowrap">
-                    <div>청 {fmtMoney(getClaim(o))}</div>
-                    <div className="text-[10px] text-gray-500">
-                      기 {fmtMoney(o.기사운임 || 0)}
-                    </div>
-                  </td>
-                </tr>
-              ))}
 
-              {orders.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={6}
-                    className="px-3 py-4 text-center text-gray-400"
-                  >
-                    데이터가 없습니다.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      {/* 🔥 날짜별 그룹 출력 */}
+      {sortedDates.map((dateStr) => {
+        const groupList = dateMap.get(dateStr);
+
+        return (
+          <div key={dateStr} className="mb-6">
+
+            {/* 날짜 헤더 */}
+            <div className="text-lg font-bold text-gray-800 mb-2">
+              {dateStr.slice(5).replace("-", ".")}
+            </div>
+
+            {/* 기존 테이블 그대로 유지 */}
+            <div className="bg-white border rounded-xl shadow-sm overflow-hidden">
+              <div className="max-h-[70vh] overflow-auto">
+                <table className="w-full text-[11px]">
+                  <thead className="bg-gray-50 border-b sticky top-0">
+                    <tr>
+                      <th className="px-2 py-1 border-r">상차일</th>
+                      <th className="px-2 py-1 border-r">거래처</th>
+                      <th className="px-2 py-1 border-r">상차지</th>
+                      <th className="px-2 py-1 border-r">하차지</th>
+                      <th className="px-2 py-1 border-r">차량/기사</th>
+                      <th className="px-2 py-1">청구/기사</th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {groupList.map((o) => (
+                      <tr key={o.id} className="border-t">
+                        <td className="px-2 py-1 border-r whitespace-nowrap">
+                          {getPickupDate(o)}
+                        </td>
+                        <td className="px-2 py-1 border-r">{o.거래처명}</td>
+                        <td className="px-2 py-1 border-r">{o.상차지명}</td>
+                        <td className="px-2 py-1 border-r">{o.하차지명}</td>
+                        <td className="px-2 py-1 border-r">
+                          <div>{o.차량톤수 || o.톤수} {o.차량종류 || o.차종}</div>
+                          <div className="text-[10px] text-gray-500">
+                            {o.기사명}({o.차량번호})
+                          </div>
+                        </td>
+                        <td className="px-2 py-1 text-right whitespace-nowrap">
+                          <div>청 {fmtMoney(getClaim(o))}</div>
+                          <div className="text-[10px] text-gray-500">
+                            기 {fmtMoney(o.기사운임 || 0)}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+
+                    {groupList.length === 0 && (
+                      <tr>
+                        <td
+                          colSpan={6}
+                          className="px-3 py-4 text-center text-gray-400"
+                        >
+                          데이터가 없습니다.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+          </div>
+        );
+      })}
     </div>
   );
 }
+
+
