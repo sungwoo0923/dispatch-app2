@@ -40,21 +40,40 @@ export default function App() {
     return () => unsub();
   }, []);
 
-// -- 모바일 / PC 자동 판별 (+ ?view=pc 이면 PC 강제)
+// -- 모바일 / PC 자동 판별 (+ ?view=pc, ?view=mobile 강제 지원)
 useEffect(() => {
   const check = () => {
-    const check = () => {
-  const params = new URLSearchParams(window.location.search);
-  const forcePc = params.get("view") === "pc";
+    const ua = navigator.userAgent.toLowerCase();
 
-  // iOS / Android 모두 완벽히 잡는 모바일 판별
-  const isReallyMobile =
-    /Android|iPhone|iPad|iPod|iOS|Mobile/i.test(navigator.userAgent) ||
-    (window.innerWidth < 900 && window.innerHeight < 1400);
+    // iPhone Safari가 Mac으로 위장하는 문제 해결
+    const isIOS =
+      /iphone|ipad|ipod/.test(ua) ||
+      (ua.includes("macintosh") && "ontouchend" in document);
 
-  setIsMobile(isReallyMobile && !forcePc);
-};
+    const isAndroid = ua.includes("android");
 
+    const mobileCheck = isIOS || isAndroid;
+
+    // URL 파라미터
+    const params = new URLSearchParams(window.location.search);
+    const forcePc = params.get("view") === "pc";
+    const forceMobile = params.get("view") === "mobile";
+
+    // 최종 판단
+    let final = mobileCheck;
+    if (forcePc) final = false;
+    if (forceMobile) final = true;
+
+    setIsMobile(final);
+
+    console.log("=== Device Detect ===");
+    console.log("UA:", navigator.userAgent);
+    console.log("isIOS:", isIOS);
+    console.log("isAndroid:", isAndroid);
+    console.log("mobileCheck:", mobileCheck);
+    console.log("forcePc:", forcePc);
+    console.log("forceMobile:", forceMobile);
+    console.log("final:", final);
   };
 
   check();
@@ -65,6 +84,7 @@ useEffect(() => {
     window.removeEventListener("popstate", check);
   };
 }, []);
+
 
 
 
