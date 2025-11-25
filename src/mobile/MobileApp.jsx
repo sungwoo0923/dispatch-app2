@@ -209,6 +209,7 @@ export default function MobileApp() {
   const [selectedOrder, setSelectedOrder] = useState(null);
 
   const [statusTab, setStatusTab] = useState("전체");
+  const [showMenu, setShowMenu] = useState(false);
 
   const todayStr = () => new Date().toISOString().slice(0, 10);
 

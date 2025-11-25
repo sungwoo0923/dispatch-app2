@@ -43,13 +43,18 @@ export default function App() {
 // -- 모바일 / PC 자동 판별 (+ ?view=pc 이면 PC 강제)
 useEffect(() => {
   const check = () => {
-    const ua = navigator.userAgent.toLowerCase();
-    const mobileCheck = /iphone|ipad|ipod|android|mobi/i.test(ua);
+    const check = () => {
+  const params = new URLSearchParams(window.location.search);
+  const forcePc = params.get("view") === "pc";
 
-    const params = new URLSearchParams(window.location.search);
-    const forcePc = params.get("view") === "pc";
+  // iOS / Android 모두 완벽히 잡는 모바일 판별
+  const isReallyMobile =
+    /Android|iPhone|iPad|iPod|iOS|Mobile/i.test(navigator.userAgent) ||
+    (window.innerWidth < 900 && window.innerHeight < 1400);
 
-    setIsMobile(mobileCheck && !forcePc);
+  setIsMobile(isReallyMobile && !forcePc);
+};
+
   };
 
   check();
