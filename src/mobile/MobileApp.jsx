@@ -826,9 +826,11 @@ upsertDriver={upsertDriver}
 {page === "unassigned" && (
   <MobileStatusTableGrouped
     title="미배차현황"
+    orders={unassignedOrders}   // ← ★ 꼭 전달해야 함!!!
     onBack={() => setPage("list")}
   />
 )}
+
       </div>
 
       {page === "list" && !showMenu && (
@@ -2303,6 +2305,9 @@ function MobileStandardFare({ onBack }) {
   // 입력폼
   const [pickup, setPickup] = useState("");
   const [drop, setDrop] = useState("");
+    const [showPickupList, setShowPickupList] = useState(false);
+  const [showDropList, setShowDropList] = useState(false);
+
   const [cargo, setCargo] = useState("");
   const [ton, setTon] = useState("");
   const [vehicle, setVehicle] = useState("전체");
@@ -2515,9 +2520,12 @@ function MobileStandardFare({ onBack }) {
             className="w-full border rounded-xl px-3 py-2 bg-gray-50 text-sm"
             placeholder="상차지"
             value={pickup}
-            onChange={(e) => setPickup(e.target.value)}
+            onChange={(e) => {
+  setPickup(e.target.value);
+  setShowPickupList(true);   // 🔥 입력하면 자동완성 열림
+}}
           />
-          {pickup && (
+          {showPickupList && pickup && (
             <div className="absolute z-20 bg-white border w-full max-h-40 overflow-auto rounded-xl shadow mt-1">
               {pickupList
                 .filter((x) =>
@@ -2528,7 +2536,11 @@ function MobileStandardFare({ onBack }) {
                   <div
                     key={x}
                     className="px-3 py-2 hover:bg-gray-100 text-sm"
-                    onClick={() => setPickup(x)}
+                    onClick={() => {
+  setPickup(x);
+  setShowPickupList(false);   // 🔥 선택하면 자동완성 닫기
+}}
+
                   >
                     {x}
                   </div>
@@ -2538,32 +2550,38 @@ function MobileStandardFare({ onBack }) {
         </div>
 
         {/* 하차지 자동완성 */}
-        <div className="relative">
-          <input
-            className="w-full border rounded-xl px-3 py-2 bg-gray-50 text-sm"
-            placeholder="하차지"
-            value={drop}
-            onChange={(e) => setDrop(e.target.value)}
-          />
-          {drop && (
-            <div className="absolute z-20 bg-white border w-full max-h-40 overflow-auto rounded-xl shadow mt-1">
-              {dropList
-                .filter((x) =>
-                  clean(x).includes(clean(drop))
-                )
-                .slice(0, 20)
-                .map((x) => (
-                  <div
-                    key={x}
-                    className="px-3 py-2 hover:bg-gray-100 text-sm"
-                    onClick={() => setDrop(x)}
-                  >
-                    {x}
-                  </div>
-                ))}
-            </div>
-          )}
-        </div>
+<div className="relative">
+  <input
+    className="w-full border rounded-xl px-3 py-2 bg-gray-50 text-sm"
+    placeholder="하차지"
+    value={drop}
+    onChange={(e) => {
+      setDrop(e.target.value);
+      setShowDropList(true);   // 🔥 입력하면 열림
+    }}
+  />
+
+  {showDropList && drop && (
+    <div className="absolute z-20 bg-white border w-full max-h-40 overflow-auto rounded-xl shadow mt-1">
+      {dropList
+        .filter((x) => clean(x).includes(clean(drop)))
+        .slice(0, 20)
+        .map((x) => (
+          <div
+            key={x}
+            className="px-3 py-2 hover:bg-gray-100 text-sm"
+            onClick={() => {
+              setDrop(x);
+              setShowDropList(false);  // 🔥 선택하면 닫힘
+            }}
+          >
+            {x}
+          </div>
+        ))}
+    </div>
+  )}
+</div>
+
 
         <input
           className="w-full border rounded-xl px-3 py-2 bg-gray-50 text-sm"
