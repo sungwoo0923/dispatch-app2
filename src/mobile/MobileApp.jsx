@@ -209,7 +209,6 @@ export default function MobileApp() {
   const [selectedOrder, setSelectedOrder] = useState(null);
 
   const [statusTab, setStatusTab] = useState("전체");
-  const [showMenu, setShowMenu] = useState(false);
 
   const todayStr = () => new Date().toISOString().slice(0, 10);
 
@@ -349,66 +348,77 @@ const groupedByDate = useMemo(() => {
 //  신규 저장
 // --------------------------------------------------
 const handleSave = async () => {
+  if (!form.상차지명 || !form.하차지명) {
+    alert("상차지 / 하차지는 필수입니다.");
+    return;
+  }
+
   const 청구운임 = toNumber(form.청구운임);
   const 기사운임 = toNumber(form.기사운임);
   const 수수료 = 청구운임 - 기사운임;
 
-  const data = {
-    거래처명: form.거래처명,
+  const docData = {
+    거래처명: form.거래처명 || "",
     상차지명: form.상차지명,
-    상차지주소: form.상차지주소,
+    상차지주소: form.상차지주소 || "",
     하차지명: form.하차지명,
-    하차지주소: form.하차지주소,
-    화물내용: form.화물내용,
-    차량종류: form.차종,
-    차량톤수: form.톤수,
-    상차방법: form.상차방법,
-    하차방법: form.하차방법,
-    상차일: form.상차일,
-    상차시간: form.상차시간,
-    하차일: form.하차일,
-    하차시간: form.하차시간,
-    지급방식: form.지급방식,
-    배차방식: form.배차방식,
-    메모: form.적요,
-    혼적여부: form.혼적여부,
-    차량번호: form.차량번호,
+    하차지주소: form.하차지주소 || "",
+    화물내용: form.화물내용 || "",
+    차량종류: form.차종 || "",
+    차량톤수: form.톤수 || "",
+    상차방법: form.상차방법 || "",
+    하차방법: form.하차방법 || "",
+    상차일: form.상차일 || "",
+    상차시간: form.상차시간 || "",
+    하차일: form.하차일 || "",
+    하차시간: form.하차시간 || "",
+    지급방식: form.지급방식 || "",
+    배차방식: form.배차방식 || "",
+    메모: form.적요 || "",
+    혼적여부: form.혼적여부 || "독차",
+    차량번호: form.차량번호 || "",
+    기사명: "",
+    전화번호: "",
     청구운임,
     기사운임,
     수수료,
-    산재보험료: form.산재보험료 || 0,
-  };
-
-  // 🔥 수정모드인지 확인
-  if (form._editId) {
-    await updateDoc(doc(db, "dispatch", form._editId), data);
-    alert("수정되었습니다.");
-
-    if (form._returnToDetail) {
-      // 수정 완료 → 상세보기 복귀
-      const updated = { id: form._editId, ...data };
-      setSelectedOrder(updated); 
-      setPage("detail");
-    } else {
-      setPage("list");
-    }
-
-    return;
-  }
-
-  // ⬇ 신규등록
-  await addDoc(collection(db, "dispatch"), {
-    ...data,
     배차상태: "배차전",
     등록일: new Date().toISOString().slice(0, 10),
     createdAt: serverTimestamp(),
+  };
+
+  await addDoc(collection(db, "dispatch"), docData);
+  alert("등록되었습니다.");
+
+  // 초기화
+  setForm({
+    거래처명: "",
+    상차일: "",
+    상차시간: "",
+    하차일: "",
+    하차시간: "",
+    상차지명: "",
+    상차지주소: "",
+    하차지명: "",
+    하차지주소: "",
+    톤수: "",
+    차종: "",
+    화물내용: "",
+    상차방법: "",
+    하차방법: "",
+    지급방식: "",
+    배차방식: "",
+    청구운임: 0,
+    기사운임: 0,
+    수수료: 0,
+    산재보험료: 0,
+    차량번호: "",
+    혼적여부: "독차",
+    적요: "",
   });
 
-  alert("등록되었습니다.");
   setPage("list");
 };
-
-
 
 // --------------------------------------------------
 // 기사 배차 + 신규 기사등록 팝업
@@ -588,28 +598,24 @@ return (
       )}
 
       {page === "form" && (
-  <MobileOrderForm
-    form={form}
-    setForm={setForm}
-    clients={clients}
-    onSave={handleSave}
-    setSelectedOrder={setSelectedOrder}   // 🔥 추가
-    setPage={setPage}                     // 🔥 추가
-  />
-)}
-
+        <MobileOrderForm
+          form={form}
+          setForm={setForm}
+          clients={clients}
+          onSave={handleSave}
+        />
+      )}
 
       {page === "detail" && selectedOrder && (
-  <MobileOrderDetail
-    order={selectedOrder}
-    drivers={drivers}
-    onAssignDriver={assignDriver}
-    onCancelAssign={cancelAssign}
-    onCancelOrder={cancelOrder}
-    setPage={setPage}
-    setForm={setForm}
-  />
-)}
+        <MobileOrderDetail
+          order={selectedOrder}
+          drivers={drivers}
+          onAssignDriver={assignDriver}
+          onCancelAssign={cancelAssign}
+          onCancelOrder={cancelOrder}
+          setSelectedOrder={setSelectedOrder}
+        />
+      )}
 
       {page === "fare" && <MobileStandardFare />}
 
@@ -953,9 +959,12 @@ function MobileOrderDetail({
   onAssignDriver,
   onCancelAssign,
   onCancelOrder,
-  setPage,
-  setForm
+  setSelectedOrder,
 }) {
+    // 🔵 수정 모드용 상태
+  const [editMode, setEditMode] = useState(false);
+  const [editForm, setEditForm] = useState({ ...order });
+
   const [carNo, setCarNo] = useState(order.차량번호 || "");
   const [name, setName] = useState(order.기사명 || "");
   const [phone, setPhone] = useState(order.전화번호 || "");
@@ -982,6 +991,29 @@ function MobileOrderDetail({
       전화번호: phone,
     });
   };
+    const handleEditSave = async () => {
+  try {
+    const payload = {
+      ...editForm,
+      청구운임: toNumber(editForm.청구운임),
+      기사운임: toNumber(editForm.기사운임),
+      수수료: toNumber(editForm.청구운임) - toNumber(editForm.기사운임),
+    };
+
+    await updateDoc(doc(db, "dispatch", order.id), payload);
+
+    // 🔥 상세 화면도 즉시 반영되도록
+    setSelectedOrder((p) => p ? { ...p, ...payload } : p);
+
+    alert("수정되었습니다.");
+    setEditMode(false);
+  } catch (err) {
+    console.error(err);
+    alert("수정 중 오류 발생");
+  }
+};
+
+
 
   const openMap = (type) => {
     const addr =
@@ -1000,6 +1032,15 @@ function MobileOrderDetail({
       {/* 기본 정보 */}
       <div className="bg-white border rounded-xl px-4 py-3 shadow-sm">
         <div className="flex justify-between items-start mb-2">
+          <button
+  onClick={() => {
+    setEditForm({ ...order });
+    setEditMode(true);
+  }}
+  className="ml-2 px-2 py-1 text-xs bg-yellow-200 text-yellow-800 rounded"
+>
+  수정
+</button>
           <div>
             <div className="text-xs text-gray-400 mb-1">
               {order.거래처명 || "-"}
@@ -1063,6 +1104,191 @@ function MobileOrderDetail({
       </div>
 
       {/* 배차 입력 */}
+      {editMode && (
+  <div className="bg-white border rounded-xl px-4 py-3 shadow-sm space-y-3 mt-4">
+    <div className="text-sm font-semibold mb-2">상세 정보 수정</div>
+
+    {/* 거래처명 */}
+    <input
+      className="w-full border rounded px-2 py-1"
+      value={editForm.거래처명}
+      onChange={(e) => setEditForm((p) => ({ ...p, 거래처명: e.target.value }))}
+      placeholder="거래처명"
+    />
+
+    {/* 상차/하차 */}
+    <input
+      className="w-full border rounded px-2 py-1"
+      value={editForm.상차지명}
+      onChange={(e) => setEditForm((p) => ({ ...p, 상차지명: e.target.value }))}
+      placeholder="상차지명"
+    />
+
+    <input
+      className="w-full border rounded px-2 py-1"
+      value={editForm.상차지주소}
+      onChange={(e) => setEditForm((p) => ({ ...p, 상차지주소: e.target.value }))}
+      placeholder="상차지주소"
+    />
+
+    <input
+      className="w-full border rounded px-2 py-1"
+      value={editForm.하차지명}
+      onChange={(e) => setEditForm((p) => ({ ...p, 하차지명: e.target.value }))}
+      placeholder="하차지명"
+    />
+
+    <input
+      className="w-full border rounded px-2 py-1"
+      value={editForm.하차지주소}
+      onChange={(e) => setEditForm((p) => ({ ...p, 하차지주소: e.target.value }))}
+      placeholder="하차지주소"
+    />
+
+    {/* 일시 */}
+    <div className="flex gap-2">
+      <input
+        type="date"
+        className="flex-1 border rounded px-2 py-1"
+        value={editForm.상차일}
+        onChange={(e) => setEditForm((p) => ({ ...p, 상차일: e.target.value }))}
+      />
+      <input
+        className="flex-1 border rounded px-2 py-1"
+        value={editForm.상차시간}
+        onChange={(e) => setEditForm((p) => ({ ...p, 상차시간: e.target.value }))}
+      />
+    </div>
+
+    <div className="flex gap-2">
+      <input
+        type="date"
+        className="flex-1 border rounded px-2 py-1"
+        value={editForm.하차일}
+        onChange={(e) => setEditForm((p) => ({ ...p, 하차일: e.target.value }))}
+      />
+      <input
+        className="flex-1 border rounded px-2 py-1"
+        value={editForm.하차시간}
+        onChange={(e) => setEditForm((p) => ({ ...p, 하차시간: e.target.value }))}
+      />
+    </div>
+
+    {/* 차량 정보 */}
+    <div className="flex gap-2">
+      <input
+        className="flex-1 border rounded px-2 py-1"
+        value={editForm.톤수}
+        onChange={(e) => setEditForm((p) => ({ ...p, 톤수: e.target.value }))}
+        placeholder="톤수"
+      />
+      <input
+        className="flex-1 border rounded px-2 py-1"
+        value={editForm.차종}
+        onChange={(e) => setEditForm((p) => ({ ...p, 차종: e.target.value }))}
+        placeholder="차종"
+      />
+    </div>
+
+    <input
+      className="w-full border rounded px-2 py-1"
+      value={editForm.차량번호}
+      onChange={(e) => setEditForm((p) => ({ ...p, 차량번호: e.target.value }))}
+      placeholder="차량번호"
+    />
+
+    {/* 기사 정보 */}
+    <input
+      className="w-full border rounded px-2 py-1"
+      value={editForm.기사명 || ""}
+      onChange={(e) => setEditForm((p) => ({ ...p, 기사명: e.target.value }))}
+      placeholder="기사명"
+    />
+
+    <input
+      className="w-full border rounded px-2 py-1"
+      value={editForm.전화번호 || ""}
+      onChange={(e) => setEditForm((p) => ({ ...p, 전화번호: e.target.value }))}
+      placeholder="전화번호"
+    />
+
+    {/* 운임 */}
+    <input
+      className="w-full border rounded px-2 py-1 text-right"
+      value={editForm.청구운임}
+      onChange={(e) =>
+        setEditForm((p) => ({ ...p, 청구운임: toNumber(e.target.value) }))
+      }
+      placeholder="청구운임"
+    />
+
+    <input
+      className="w-full border rounded px-2 py-1 text-right"
+      value={editForm.기사운임}
+      onChange={(e) =>
+        setEditForm((p) => ({ ...p, 기사운임: toNumber(e.target.value) }))
+      }
+      placeholder="기사운임"
+    />
+
+    {/* 방법 / 혼적 */}
+    <input
+      className="w-full border rounded px-2 py-1"
+      value={editForm.상차방법}
+      onChange={(e) => setEditForm((p) => ({ ...p, 상차방법: e.target.value }))}
+      placeholder="상차방법"
+    />
+
+    <input
+      className="w-full border rounded px-2 py-1"
+      value={editForm.하차방법}
+      onChange={(e) => setEditForm((p) => ({ ...p, 하차방법: e.target.value }))}
+      placeholder="하차방법"
+    />
+
+    {/* 지급 / 배차 */}
+    <input
+      className="w-full border rounded px-2 py-1"
+      value={editForm.지급방식}
+      onChange={(e) => setEditForm((p) => ({ ...p, 지급방식: e.target.value }))}
+      placeholder="지급방식"
+    />
+
+    <input
+      className="w-full border rounded px-2 py-1"
+      value={editForm.배차방식}
+      onChange={(e) => setEditForm((p) => ({ ...p, 배차방식: e.target.value }))}
+      placeholder="배차방식"
+    />
+
+    {/* 비고 */}
+    <textarea
+      className="w-full border rounded px-2 py-1 h-20"
+      value={editForm.메모 || ""}
+      onChange={(e) => setEditForm((p) => ({ ...p, 메모: e.target.value }))}
+      placeholder="비고"
+    />
+
+    {/* 버튼 */}
+    <div className="flex gap-2 pt-2">
+      <button
+        onClick={handleEditSave}
+        className="flex-1 py-2 bg-blue-500 text-white text-sm rounded-lg"
+      >
+        수정 저장
+      </button>
+
+      <button
+        onClick={() => setEditMode(false)}
+        className="flex-1 py-2 bg-gray-200 text-gray-700 text-sm rounded-lg"
+      >
+        수정 취소
+      </button>
+    </div>
+  </div>
+)}
+
+
       <div className="bg-white border rounded-xl px-4 py-3 shadow-sm space-y-3">
         <div className="text-sm font-semibold mb-1">기사 배차</div>
 
@@ -1110,69 +1336,9 @@ function MobileOrderDetail({
           오더 삭제
         </button>
       </div>
-
-      {/* 수정하기 / 배차정보 유지 */}
-      <div className="bg-white border rounded-xl px-4 py-3 shadow-sm space-y-2">
-        <div className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            id="keepDriver"
-            checked={order._keepDriver || false}
-            onChange={(e) => {
-              order._keepDriver = e.target.checked;
-            }}
-          />
-          <label htmlFor="keepDriver" className="text-sm text-gray-700">
-            배차정보(기사/차량번호/연락처) 유지하고 수정하기
-          </label>
-        </div>
-
-        <button
-          onClick={() => {
-            window.scrollTo(0, 0);
-            setPage("form");
-
-            setForm({
-              거래처명: order.거래처명 || "",
-              상차일: order.상차일 || "",
-              상차시간: order.상차시간 || "",
-              하차일: order.하차일 || "",
-              하차시간: order.하차시간 || "",
-              상차지명: order.상차지명 || "",
-              상차지주소: order.상차지주소 || "",
-              하차지명: order.하차지명 || "",
-              하차지주소: order.하차지주소 || "",
-              톤수: order.톤수 || order.차량톤수 || "",
-              차종: order.차종 || order.차량종류 || "",
-              화물내용: order.화물내용 || "",
-              상차방법: order.상차방법 || "",
-              하차방법: order.하차방법 || "",
-              지급방식: order.지급방식 || "",
-              배차방식: order.배차방식 || "",
-              청구운임: order.청구운임 || 0,
-              기사운임: order.기사운임 || 0,
-              수수료: order.수수료 || 0,
-              산재보험료: order.산재보험료 || 0,
-              차량번호: order.차량번호 || "",
-              혼적여부: order.혼적여부 || "독차",
-              적요: order.메모 || "",
-
-              기사명: order._keepDriver ? order.기사명 : "",
-              전화번호: order._keepDriver ? order.전화번호 : "",
-
-              _editId: order.id,
-              _returnToDetail: true,
-            });
-          }}
-          className="w-full py-2 rounded-lg bg-orange-500 text-white text-sm font-semibold"
-        >
-          오더 수정하기
-        </button>
-      </div>
     </div>
   );
 }
-
 
 // ======================================================================
 // 표준운임표 (🔥 PC처럼 전체 검색 가능하게 수정됨)
@@ -1324,15 +1490,7 @@ function MobileStatusTable({ title, orders }) {
 // ======================================================================
 // 등록 폼
 // ======================================================================
-function MobileOrderForm({ 
-  form, 
-  setForm, 
-  clients, 
-  onSave,
-  setSelectedOrder,     // 🔥 추가
-  setPage               // 🔥 추가
-}) {
-
+function MobileOrderForm({ form, setForm, clients, onSave }) {
   const update = (k, v) => setForm((p) => ({ ...p, [k]: v }));
 
   return (
@@ -1544,29 +1702,12 @@ function MobileOrderForm({
         />
       </div>
 
-      <div className="flex gap-2 mt-4 mb-8">
-  <button
-    onClick={onSave}
-    className="flex-1 py-3 rounded-lg bg-blue-500 text-white text-base font-semibold shadow"
-  >
-    {form._editId ? "수정하기" : "등록하기"}
-  </button>
-
-  {form._editId && (
-    <button
-      onClick={() => {
-        // 상세보기로 되돌림
-        const updated = { id: form._editId, ...form };
-        setSelectedOrder(updated);
-        setPage("detail");
-      }}
-      className="w-28 py-3 rounded-lg bg-gray-300 text-gray-700 text-base font-semibold shadow"
-    >
-      수정취소
-    </button>
-  )}
-</div>
-
+      <button
+        onClick={onSave}
+        className="w-full py-3 rounded-lg bg-blue-500 text-white text-base font-semibold shadow mt-4 mb-8"
+      >
+        등록하기
+      </button>
     </div>
   );
 }
