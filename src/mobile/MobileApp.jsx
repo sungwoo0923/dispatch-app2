@@ -824,12 +824,14 @@ upsertDriver={upsertDriver}
 )}
 
 {page === "unassigned" && (
-  <MobileStatusTableGrouped
+  <MobileStatusTable
     title="미배차현황"
-    orders={unassignedOrders}   // ← ★ 꼭 전달해야 함!!!
+    orders={unassignedOrders}
     onBack={() => setPage("list")}
   />
 )}
+
+
 
       </div>
 
