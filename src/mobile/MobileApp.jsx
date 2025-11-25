@@ -378,22 +378,35 @@ const handleSave = async () => {
     산재보험료: form.산재보험료 || 0,
   };
 
-  // 🔥 수정모드인지 체크
+  // 🔥 수정모드인지 확인
   if (form._editId) {
     await updateDoc(doc(db, "dispatch", form._editId), data);
     alert("수정되었습니다.");
-  } else {
-    await addDoc(collection(db, "dispatch"), {
-      ...data,
-      배차상태: "배차전",
-      createdAt: serverTimestamp(),
-      등록일: new Date().toISOString().slice(0, 10),
-    });
-    alert("등록되었습니다.");
+
+    if (form._returnToDetail) {
+      // 수정 완료 → 상세보기 복귀
+      const updated = { id: form._editId, ...data };
+      setSelectedOrder(updated); 
+      setPage("detail");
+    } else {
+      setPage("list");
+    }
+
+    return;
   }
 
+  // ⬇ 신규등록
+  await addDoc(collection(db, "dispatch"), {
+    ...data,
+    배차상태: "배차전",
+    등록일: new Date().toISOString().slice(0, 10),
+    createdAt: serverTimestamp(),
+  });
+
+  alert("등록되었습니다.");
   setPage("list");
 };
+
 
 
 // --------------------------------------------------
@@ -574,25 +587,28 @@ return (
       )}
 
       {page === "form" && (
-        <MobileOrderForm
-          form={form}
-          setForm={setForm}
-          clients={clients}
-          onSave={handleSave}
-        />
-      )}
+  <MobileOrderForm
+    form={form}
+    setForm={setForm}
+    clients={clients}
+    onSave={handleSave}
+    setSelectedOrder={setSelectedOrder}   // 🔥 추가
+    setPage={setPage}                     // 🔥 추가
+  />
+)}
+
 
       {page === "detail" && selectedOrder && (
-        <MobileOrderDetail
-  order={selectedOrder}
-  drivers={drivers}
-  onAssignDriver={assignDriver}
-  onCancelAssign={cancelAssign}
-  onCancelOrder={cancelOrder}
-  setPage={setPage}
-  setForm={setForm}
-/>
-      )}
+  <MobileOrderDetail
+    order={selectedOrder}
+    drivers={drivers}
+    onAssignDriver={assignDriver}
+    onCancelAssign={cancelAssign}
+    onCancelOrder={cancelOrder}
+    setPage={setPage}
+    setForm={setForm}
+  />
+)}
 
       {page === "fare" && <MobileStandardFare />}
 
@@ -1093,47 +1109,69 @@ function MobileOrderDetail({
           오더 삭제
         </button>
       </div>
-      {/* 🔵 수정하기 버튼 추가 */}
-<button
-  onClick={() => {
-    window.scrollTo(0, 0);
-    setPage("form");
 
-    setForm({
-      거래처명: order.거래처명 || "",
-      상차일: order.상차일 || "",
-      상차시간: order.상차시간 || "",
-      하차일: order.하차일 || "",
-      하차시간: order.하차시간 || "",
-      상차지명: order.상차지명 || "",
-      상차지주소: order.상차지주소 || "",
-      하차지명: order.하차지명 || "",
-      하차지주소: order.하차지주소 || "",
-      톤수: order.톤수 || order.차량톤수 || "",
-      차종: order.차종 || order.차량종류 || "",
-      화물내용: order.화물내용 || "",
-      상차방법: order.상차방법 || "",
-      하차방법: order.하차방법 || "",
-      지급방식: order.지급방식 || "",
-      배차방식: order.배차방식 || "",
-      청구운임: order.청구운임 || 0,
-      기사운임: order.기사운임 || 0,
-      수수료: order.수수료 || 0,
-      산재보험료: order.산재보험료 || 0,
-      차량번호: order.차량번호 || "",
-      혼적여부: order.혼적여부 || "독차",
-      적요: order.메모 || "",
-      _editId: order.id,   // 🔥 수정모드 표시용
-    });
-  }}
-  className="w-full py-2 rounded-lg bg-orange-500 text-white text-sm font-semibold mt-2"
->
-  오더 수정하기
-</button>
+      {/* 수정하기 / 배차정보 유지 */}
+      <div className="bg-white border rounded-xl px-4 py-3 shadow-sm space-y-2">
+        <div className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            id="keepDriver"
+            checked={order._keepDriver || false}
+            onChange={(e) => {
+              order._keepDriver = e.target.checked;
+            }}
+          />
+          <label htmlFor="keepDriver" className="text-sm text-gray-700">
+            배차정보(기사/차량번호/연락처) 유지하고 수정하기
+          </label>
+        </div>
 
+        <button
+          onClick={() => {
+            window.scrollTo(0, 0);
+            setPage("form");
+
+            setForm({
+              거래처명: order.거래처명 || "",
+              상차일: order.상차일 || "",
+              상차시간: order.상차시간 || "",
+              하차일: order.하차일 || "",
+              하차시간: order.하차시간 || "",
+              상차지명: order.상차지명 || "",
+              상차지주소: order.상차지주소 || "",
+              하차지명: order.하차지명 || "",
+              하차지주소: order.하차지주소 || "",
+              톤수: order.톤수 || order.차량톤수 || "",
+              차종: order.차종 || order.차량종류 || "",
+              화물내용: order.화물내용 || "",
+              상차방법: order.상차방법 || "",
+              하차방법: order.하차방법 || "",
+              지급방식: order.지급방식 || "",
+              배차방식: order.배차방식 || "",
+              청구운임: order.청구운임 || 0,
+              기사운임: order.기사운임 || 0,
+              수수료: order.수수료 || 0,
+              산재보험료: order.산재보험료 || 0,
+              차량번호: order.차량번호 || "",
+              혼적여부: order.혼적여부 || "독차",
+              적요: order.메모 || "",
+
+              기사명: order._keepDriver ? order.기사명 : "",
+              전화번호: order._keepDriver ? order.전화번호 : "",
+
+              _editId: order.id,
+              _returnToDetail: true,
+            });
+          }}
+          className="w-full py-2 rounded-lg bg-orange-500 text-white text-sm font-semibold"
+        >
+          오더 수정하기
+        </button>
+      </div>
     </div>
   );
 }
+
 
 // ======================================================================
 // 표준운임표 (🔥 PC처럼 전체 검색 가능하게 수정됨)
@@ -1285,7 +1323,15 @@ function MobileStatusTable({ title, orders }) {
 // ======================================================================
 // 등록 폼
 // ======================================================================
-function MobileOrderForm({ form, setForm, clients, onSave }) {
+function MobileOrderForm({ 
+  form, 
+  setForm, 
+  clients, 
+  onSave,
+  setSelectedOrder,     // 🔥 추가
+  setPage               // 🔥 추가
+}) {
+
   const update = (k, v) => setForm((p) => ({ ...p, [k]: v }));
 
   return (
@@ -1497,12 +1543,29 @@ function MobileOrderForm({ form, setForm, clients, onSave }) {
         />
       </div>
 
-      <button
-        onClick={onSave}
-        className="w-full py-3 rounded-lg bg-blue-500 text-white text-base font-semibold shadow mt-4 mb-8"
-      >
-        등록하기
-      </button>
+      <div className="flex gap-2 mt-4 mb-8">
+  <button
+    onClick={onSave}
+    className="flex-1 py-3 rounded-lg bg-blue-500 text-white text-base font-semibold shadow"
+  >
+    {form._editId ? "수정하기" : "등록하기"}
+  </button>
+
+  {form._editId && (
+    <button
+      onClick={() => {
+        // 상세보기로 되돌림
+        const updated = { id: form._editId, ...form };
+        setSelectedOrder(updated);
+        setPage("detail");
+      }}
+      className="w-28 py-3 rounded-lg bg-gray-300 text-gray-700 text-base font-semibold shadow"
+    >
+      수정취소
+    </button>
+  )}
+</div>
+
     </div>
   );
 }
