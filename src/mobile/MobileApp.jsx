@@ -298,6 +298,16 @@ const [searchText, setSearchText] = useState("");
     return orders.filter((o) => {
       const rawState = o.배차상태 || o.상태 || "배차전";
       const state = normalizeState(rawState);
+      // 이 아래에 바로 추가하면 제일 깔끔함
+function groupByDate(list = []) {
+  const map = new Map();
+  for (const o of list) {
+    const d = getPickupDate(o) || "기타";
+    if (!map.has(d)) map.set(d, []);
+    map.get(d).push(o);
+  }
+  return map;
+}
 
       // 상단 상태 탭 (전체/배차전/배차완료/배차취소)
       if (statusTab !== "전체" && state !== statusTab) return false;
@@ -2284,15 +2294,22 @@ function MobileStandardFare({ onBack }) {
     return () => unsub();
   }, []);
 
- const norm = (s = "") =>
+const norm = (s = "") =>
   String(s)
     .toLowerCase()
-    .replace(/\s+/g, "")      // 공백 제거
-    .replace(/-/g, "")        // 하이픈 제거
-    .replace(/_/g, "")        // 언더바 제거
-    .replace(/[^\w가-힣]/g, "") // 특수문자 제거
-    .replace(/p/g, "파")      // 3p → 3파렛트
-    .replace(/r/g, "롤");     // r → 롤박스
+    .replace(/\s+/g, "")
+    .replace(/-/g, "")
+    .replace(/_/g, "")
+    .replace(/[^\w가-힣]/g, "")
+    .replace(/톤/g, "")   
+    .replace(/kg/g, "")   
+    .replace(/p/g, "파")
+    .replace(/r/g, "롤");
+
+const normNumber = (s = "") => {
+  const n = String(s).replace(/[^\d.]/g, "");
+  return n === "" ? null : n;   // 숫자 없으면 null
+};
 
 
   const filtered = rows.filter((r) => {
@@ -2310,8 +2327,31 @@ function MobileStandardFare({ onBack }) {
 
   if (f_from && !from.includes(f_from)) return false;
   if (f_to && !to.includes(f_to)) return false;
-  if (f_cargo && !cargo.includes(f_cargo)) return false;
-  if (f_ton && !ton.includes(f_ton)) return false;
+  // 🔵 화물내용 숫자 비교
+if (f_cargo) {
+  const cargoNum = normNumber(cargo);
+  const f_cargoNum = normNumber(form.cargo);
+
+  // 1) 문자 검색(3파렛 ↔ 3파렛트 등)
+  const charMatch = cargo.includes(f_cargo);
+
+  // 2) 숫자 검색(3 ↔ 3파렛)
+  const numMatch = cargoNum && f_cargoNum && cargoNum === f_cargoNum;
+
+  if (!charMatch && !numMatch) return false;
+}
+
+  // 🔵 톤수 숫자 비교
+if (f_ton) {
+  const tonNum = normNumber(ton);
+  const f_tonNum = normNumber(form.ton);
+
+  const charMatch = ton.includes(f_ton); // 문자 포함 비교
+  const numMatch = tonNum && f_tonNum && tonNum == f_tonNum; // 숫자 비교
+
+  if (!charMatch && !numMatch) return false;
+}
+
 
   if (f_car && f_car !== "전체" && !car.includes(f_car)) return false;
 
