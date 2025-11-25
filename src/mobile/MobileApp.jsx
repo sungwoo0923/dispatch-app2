@@ -10,7 +10,28 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { db } from "../firebase";
-
+// 🔥 2) BackIconButton는 import 아래에 와야 정상
+function BackIconButton({ onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className="w-8 h-8 flex items-center justify-center rounded-full active:scale-95 bg-white"
+    >
+      <svg
+        width="20"
+        height="20"
+        viewBox="0 0 24 24"
+        stroke="#222"
+        strokeWidth="2.3"
+        fill="none"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M15 6l-6 6 6 6" />
+      </svg>
+    </button>
+  );
+}
 // ------------------------------------------------------------------
 // 공통 유틸
 // ------------------------------------------------------------------
@@ -174,6 +195,16 @@ function normalizeState(raw) {
 //  메인 컴포넌트
 // ======================================================================
 export default function MobileApp() {
+    // 🔥 여기에 넣어야 함!!!
+  function groupByDate(list = []) {
+    const map = new Map();
+    for (const o of list) {
+      const d = getPickupDate(o) || "기타";
+      if (!map.has(d)) map.set(d, []);
+      map.get(d).push(o);
+    }
+    return map;
+  }
     const [toast, setToast] = useState("");
       const showToast = (msg) => {
     setToast(msg);
@@ -298,16 +329,6 @@ const [searchText, setSearchText] = useState("");
     return orders.filter((o) => {
       const rawState = o.배차상태 || o.상태 || "배차전";
       const state = normalizeState(rawState);
-      // 이 아래에 바로 추가하면 제일 깔끔함
-function groupByDate(list = []) {
-  const map = new Map();
-  for (const o of list) {
-    const d = getPickupDate(o) || "기타";
-    if (!map.has(d)) map.set(d, []);
-    map.get(d).push(o);
-  }
-  return map;
-}
 
       // 상단 상태 탭 (전체/배차전/배차완료/배차취소)
       if (statusTab !== "전체" && state !== statusTab) return false;
@@ -805,12 +826,9 @@ upsertDriver={upsertDriver}
 {page === "unassigned" && (
   <MobileStatusTableGrouped
     title="미배차현황"
-    groups={groupByDate(unassignedOrders)}
     onBack={() => setPage("list")}
   />
 )}
-
-
       </div>
 
       {page === "list" && !showMenu && (
@@ -860,34 +878,38 @@ upsertDriver={upsertDriver}
   );
 }
 // ======================= src/mobile/MobileApp.jsx (PART 2/4) =======================
-
 // ----------------------------------------------------------------------
 // 공통 헤더 / 사이드 메뉴
 // ----------------------------------------------------------------------
 function MobileHeader({ title, onBack, onRefresh, onMenu }) {
   const hasLeft = !!onBack || !!onMenu;
   const leftFn = onBack || onMenu;
-  const leftLabel = onBack ? "◀" : "≡";
 
   return (
     <div className="flex items-center justify-between px-4 py-3 bg-white border-b sticky top-0 z-30">
-      <button
-        className="w-8 h-8 text-xl flex items-center justify-center text-gray-700"
-        onClick={hasLeft ? leftFn : undefined}
-        disabled={!hasLeft}
-      >
-        {hasLeft ? leftLabel : ""}
-      </button>
 
-      <div className="font-semibold text-base">{title}</div>
+      {/* 왼쪽 버튼 */}
+      <div className="w-8">
+        {hasLeft && <BackIconButton onClick={leftFn} />}
+      </div>
 
-      <button
-        className="w-8 h-8 text-lg flex items-center justify-center text-gray-700"
-        onClick={onRefresh}
-        disabled={!onRefresh}
-      >
-        {onRefresh ? "⟳" : ""}
-      </button>
+      {/* 중앙 제목 */}
+      <div className="font-semibold text-base text-gray-800">
+        {title}
+      </div>
+
+      {/* 오른쪽 버튼 */}
+      <div className="w-8 flex justify-end">
+        {onRefresh && (
+          <button
+            className="w-8 h-8 flex items-center justify-center rounded-full active:scale-95 text-gray-700"
+            onClick={onRefresh}
+          >
+            ⟳
+          </button>
+        )}
+      </div>
+
     </div>
   );
 }
@@ -1120,6 +1142,7 @@ function MobileOrderList({
   );
 }
 // ======================= src/mobile/MobileApp.jsx (PART 3/4) =======================
+
 
 // 카드에서 쓰는 날짜 상태: 당상/당착/낼상/낼착/그 외 MM/DD
 function getDayStatusForCard(dateStr, type) {
