@@ -484,35 +484,37 @@ setForm({
 const upsertDriver = async ({ 차량번호, 이름, 전화번호 }) => {
   if (!차량번호) return;
 
-  const norm = (s = "") =>
-    String(s).replace(/\s+/g, "").toLowerCase();
+  const norm = (s = "") => String(s).replace(/\s+/g, "").toLowerCase();
 
-  // 기존 기사 찾기
+  // 기존 기사 검색
   const existing = drivers.find(
     (d) => norm(d.차량번호) === norm(차량번호)
   );
 
+  // 기존 문서 업데이트
   if (existing) {
     await updateDoc(doc(db, "drivers", existing.id), {
-      차량번호,
-      이름,
-      전화번호,
+      차량번호: 차량번호 || "",
+      이름: 이름 || "",
+      전화번호: 전화번호 || "",
+      메모: existing.메모 ?? "",
       updatedAt: serverTimestamp(),
     });
     return existing.id;
   }
 
-  // 신규등록
+  // 신규 문서 생성
   const ref = await addDoc(collection(db, "drivers"), {
-    차량번호,
-    이름,
-    전화번호,
+    차량번호: 차량번호 || "",
+    이름: 이름 || "",
+    전화번호: 전화번호 || "",
     메모: "",
     createdAt: serverTimestamp(),
   });
 
   return ref.id;
 };
+
   // --------------------------------------------------
   // 6. 기사 배차 / 배차취소 / 오더취소(=삭제)
   // --------------------------------------------------
@@ -1653,7 +1655,7 @@ useEffect(() => {
 // 등록 폼
 // ======================================================================
 function MobileOrderForm({ form, setForm, clients, onSave, setPage, showToast, drivers, upsertDriver }) {
-
+const [showNewDriver, setShowNewDriver] = useState(false);
   const update = (key, value) =>
     setForm((p) => ({ ...p, [key]: value }));
 
@@ -2061,41 +2063,54 @@ function MobileOrderForm({ form, setForm, clients, onSave, setPage, showToast, d
       </div>
 
       {/* 차량번호 */}
-      <div className="bg-white rounded-lg border shadow-sm">
-        <RowLabelInput
-          label="차량번호"
-          input={
-            <input
-              className="w-full border rounded px-2 py-1 text-sm"
-              value={form.차량번호}
-              onChange={(e) => {
-  const v = e.target.value;
-  update("차량번호", v);
+{/* 차량번호 */}
+<div className="bg-white rounded-lg border shadow-sm">
+  <RowLabelInput
+    label="차량번호"
+    input={
+      <input
+        className="w-full border rounded px-2 py-1 text-sm"
+        value={form.차량번호}
+        onChange={(e) => {
+          const v = e.target.value;
+          update("차량번호", v);
 
-  const norm = (s = "") =>
-    String(s).replace(/\s+/g, "").toLowerCase();
+          // 🔥 입력 중에는 신규등록 버튼 숨기기
+          setShowNewDriver(false);
 
-  // 🔥 차량번호 매칭
-  const found = drivers.find(
-    (d) => norm(d.차량번호) === norm(v)
-  );
+          const norm = (s = "") =>
+            String(s).replace(/\s+/g, "").toLowerCase();
 
-  if (found) {
-    // 기존 기사 자동 입력
-    update("기사명", found.이름 || "");
-    update("전화번호", found.전화번호 || "");
-  } else {
-    // 신규 차량 → 이름/전화번호 빈칸 유지
-    update("기사명", "");
-    update("전화번호", "");
-  }
-}}
+          // 🔥 기존 기사 자동 매칭
+          const found = drivers.find(
+            (d) => norm(d.차량번호) === norm(v)
+          );
 
-            />
+          if (found) {
+            update("기사명", found.이름 || "");
+            update("전화번호", found.전화번호 || "");
+          } else {
+            update("기사명", "");
+            update("전화번호", "");
           }
-        />
-      </div>
-      {/* 기사 이름 */}
+        }}
+        onBlur={() => {
+          // 🔥 다른 칸 클릭했을 때만 신규등록 가능하도록
+          if (
+            form.차량번호 &&
+            form.차량번호.length >= 2 && // ← 최소 2글자
+            !drivers.some((d) => d.차량번호 === form.차량번호)
+          ) {
+            setShowNewDriver(true);
+          }
+        }}
+      />
+    }
+  />
+</div>
+
+
+{/* 기사 이름 */}
 <div className="bg-white rounded-lg border shadow-sm">
   <RowLabelInput
     label="기사명"
@@ -2122,9 +2137,9 @@ function MobileOrderForm({ form, setForm, clients, onSave, setPage, showToast, d
     }
   />
 </div>
-{/* 신규 기사 등록 버튼 */}
-{form.차량번호 &&
- !drivers.some(d => d.차량번호 === form.차량번호) && (
+
+{/* 신규 기사 등록 버튼 — blur 후에만 뜸 */}
+{showNewDriver && (
   <button
     onClick={() => {
       upsertDriver({
@@ -2133,12 +2148,14 @@ function MobileOrderForm({ form, setForm, clients, onSave, setPage, showToast, d
         전화번호: form.전화번호 || "",
       });
       showToast("신규 기사 등록 완료");
+      setShowNewDriver(false); // 등록 후 숨기기
     }}
     className="w-full py-2 mt-2 rounded bg-green-600 text-white text-sm font-semibold"
   >
     🚚 신규 기사 등록하기
   </button>
 )}
+
 
 
 
