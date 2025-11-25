@@ -207,6 +207,7 @@ export default function MobileApp() {
   // --------------------------------------------------
   const [page, setPage] = useState("list"); // list | form | detail | fare | status | unassigned
   const [selectedOrder, setSelectedOrder] = useState(null);
+  const [showMenu, setShowMenu] = useState(false);
 
   const [statusTab, setStatusTab] = useState("전체");
 
