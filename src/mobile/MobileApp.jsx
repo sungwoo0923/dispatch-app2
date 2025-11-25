@@ -2295,207 +2295,391 @@ function RowLabelInput({ label, input }) {
 }
 
 // ======================================================================
-// 모바일 표준운임표 (간단 테이블)
+// 🔥 모바일 표준운임표 (AI 추천 + 자동완성 + 드롭다운 + PC 검색규칙 적용)
 // ======================================================================
 function MobileStandardFare({ onBack }) {
-  const [rows, setRows] = useState([]);
-  const [form, setForm] = useState({
-    from: "",
-    to: "",
-    cargo: "",
-    ton: "",
-    carType: "",
-  });
+  const [dispatchData, setDispatchData] = useState([]);
 
-  const update = (k, v) => setForm((p) => ({ ...p, [k]: v }));
+  // 입력폼
+  const [pickup, setPickup] = useState("");
+  const [drop, setDrop] = useState("");
+  const [cargo, setCargo] = useState("");
+  const [ton, setTon] = useState("");
+  const [vehicle, setVehicle] = useState("전체");
 
+  // 자동완성 리스트
+  const [pickupList, setPickupList] = useState([]);
+  const [dropList, setDropList] = useState([]);
+
+  // 검색 결과
+  const [matchedRows, setMatchedRows] = useState([]);
+  const [result, setResult] = useState(null);
+  const [aiFare, setAiFare] = useState(null);
+
+  // 🔥 차량종류 목록
+  const VEHICLE_TYPES = [
+    "전체",
+    "다마스",
+    "라보",
+    "라보/다마스",
+    "카고",
+    "윙바디",
+    "냉장탑",
+    "냉동탑",
+    "리프트",
+    "오토바이"
+  ];
+
+  // 정규화
+  const clean = (s) =>
+    String(s || "").trim().toLowerCase().replace(/\s+/g, "");
+
+  const extractPalletNum = (text = "") => {
+    const m = String(text).match(/(\d+)\s*(p|파렛|팔레트|pl)/i);
+    if (m) return Number(m[1]);
+    const m2 = String(text).match(/^(\d+)$/);
+    return m2 ? Number(m2[1]) : null;
+  };
+
+  const extractLeadingNum = (text = "") => {
+    const m = String(text).match(/^(\d+)/);
+    return m ? Number(m[1]) : null;
+  };
+
+  const extractTonNum = (text = "") => {
+    const m = String(text).replace(/톤|t/gi, "").match(/(\d+(\.\d+)?)/);
+    return m ? Number(m[1]) : null;
+  };
+
+  // ------------------------------------------------------------
+  // 1) Firestore 실시간 데이터 (PC와 동일)
+  // ------------------------------------------------------------
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, "standardFare"), (snap) => {
-      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      setRows(list);
+    const unsub = onSnapshot(collection(db, "dispatch"), (snap) => {
+      const arr = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      setDispatchData(arr);
+
+      // 자동완성용 상차/하차 리스트 생성
+      const pickupSet = new Set();
+      const dropSet = new Set();
+      arr.forEach((r) => {
+        if (r.상차지명) pickupSet.add(r.상차지명);
+        if (r.하차지명) dropSet.add(r.하차지명);
+      });
+
+      setPickupList(Array.from(pickupSet).sort());
+      setDropList(Array.from(dropSet).sort());
     });
+
     return () => unsub();
   }, []);
 
-const norm = (s = "") =>
-  String(s)
-    .toLowerCase()
-    .replace(/\s+/g, "")
-    .replace(/-/g, "")
-    .replace(/_/g, "")
-    .replace(/[^\w가-힣]/g, "")
-    .replace(/톤/g, "")   
-    .replace(/kg/g, "")   
-    .replace(/p/g, "파")
-    .replace(/r/g, "롤");
+  // ------------------------------------------------------------
+  // 2) PC 검색규칙 적용 calcFare
+  // ------------------------------------------------------------
+  const calcFareMobile = () => {
+    if (!pickup.trim() || !drop.trim()) {
+      alert("상차지 / 하차지를 입력하세요.");
+      return;
+    }
 
-const normNumber = (s = "") => {
-  const n = String(s).replace(/[^\d.]/g, "");
-  return n === "" ? null : n;   // 숫자 없으면 null
-};
+    const normPickup = clean(pickup);
+    const normDrop = clean(drop);
+    const inputTonNum = extractTonNum(ton);
+    const inputPallet = extractPalletNum(cargo);
 
+    // --------------------------
+    // 1차 필터
+    // --------------------------
+    let filtered = dispatchData.filter((r) => {
+      if (!r.상차지명 || !r.하차지명) return false;
 
-  const filtered = rows.filter((r) => {
-  const from = norm(r.출발지 || "");
-  const to = norm(r.도착지 || "");
-  const cargo = norm(r.화물내용 || "");
-  const ton = norm(String(r.톤수 || ""));
-  const car = norm(r.차량종류 || "");
+      const rp = clean(r.상차지명);
+      const rd = clean(r.하차지명);
 
-  const f_from = norm(form.from);
-  const f_to = norm(form.to);
-  const f_cargo = norm(form.cargo);
-  const f_ton = norm(form.ton);
-  const f_car = norm(form.carType);
+      const okPickup = rp.includes(normPickup) || normPickup.includes(rp);
+      const okDrop = rd.includes(normDrop) || normDrop.includes(rd);
+      if (!okPickup || !okDrop) return false;
 
-  if (f_from && !from.includes(f_from)) return false;
-  if (f_to && !to.includes(f_to)) return false;
-  // 🔵 화물내용 숫자 비교
-if (f_cargo) {
-  const cargoNum = normNumber(cargo);
-  const f_cargoNum = normNumber(form.cargo);
+      // 차량종류 필터
+      if (vehicle !== "전체") {
+        const rv = clean(r.차량종류 || "");
+        const vv = clean(vehicle);
+        if (!rv.includes(vv) && !vv.includes(rv)) return false;
+      }
 
-  // 1) 문자 검색(3파렛 ↔ 3파렛트 등)
-  const charMatch = cargo.includes(f_cargo);
+      // 톤수 필터
+      if (inputTonNum != null) {
+        const rton = extractTonNum(r.차량톤수 || "");
+        if (rton != null && Math.abs(rton - inputTonNum) > 0.5) return false;
+      }
 
-  // 2) 숫자 검색(3 ↔ 3파렛)
-  const numMatch = cargoNum && f_cargoNum && cargoNum === f_cargoNum;
+      // 파렛트/숫자 필터
+      if (inputPallet != null) {
+        const rowPallet =
+          extractPalletNum(r.화물내용 || "") ||
+          extractLeadingNum(r.화물내용 || "");
+        if (rowPallet != null && Math.abs(rowPallet - inputPallet) > 1)
+          return false;
+      }
 
-  if (!charMatch && !numMatch) return false;
-}
-
-  // 🔵 톤수 숫자 비교
-if (f_ton) {
-  const tonNum = normNumber(ton);
-  const f_tonNum = normNumber(form.ton);
-
-  const charMatch = ton.includes(f_ton); // 문자 포함 비교
-  const numMatch = tonNum && f_tonNum && tonNum == f_tonNum; // 숫자 비교
-
-  if (!charMatch && !numMatch) return false;
-}
-
-
-  if (f_car && f_car !== "전체" && !car.includes(f_car)) return false;
-
-  return true;
-});
-
-  const resetForm = () =>
-    setForm({
-      from: "",
-      to: "",
-      cargo: "",
-      ton: "",
-      carType: "",
+      return true;
     });
 
+    // --------------------------
+    // 2차 fallback
+    // --------------------------
+    if (!filtered.length) {
+      filtered = dispatchData.filter((r) => {
+        const rp = clean(r.상차지명);
+        const rd = clean(r.하차지명);
+        return rp.includes(normPickup) && rd.includes(normDrop);
+      });
+    }
+
+    if (!filtered.length) {
+      alert("검색된 내용이 없습니다.");
+      setMatchedRows([]);
+      setResult(null);
+      setAiFare(null);
+      return;
+    }
+
+    setMatchedRows(filtered);
+
+    // --------------------------
+    // AI 추천운임 계산 (PC 동일)
+    // --------------------------
+    const fares = filtered
+      .map((r) => Number(String(r.청구운임 || 0).replace(/[^\d]/g, "")))
+      .filter((v) => !isNaN(v));
+
+    const avg = Math.round(fares.reduce((a, b) => a + b, 0) / fares.length);
+    const min = Math.min(...fares);
+    const max = Math.max(...fares);
+
+    const latest = filtered
+      .slice()
+      .sort((a, b) => (b.상차일 || "").localeCompare(a.상차일 || ""))[0];
+
+    const latestFare = Number(
+      String(latest?.청구운임 || 0).replace(/[^\d]/g, "")
+    );
+
+    const aiValue = Math.round(latestFare * 0.6 + avg * 0.4);
+    const confidence = Math.min(95, 60 + filtered.length * 5);
+
+    setAiFare({
+      avg,
+      min,
+      max,
+      latestFare,
+      aiValue,
+      confidence,
+    });
+
+    setResult({
+      count: filtered.length,
+      avg,
+      min,
+      max,
+      latestFare,
+      latest,
+    });
+  };
+
+  // ------------------------------------------------------------
+  // UI 시작
+  // ------------------------------------------------------------
   return (
     <div className="px-4 py-4 space-y-4">
 
-      {/* 🔙 뒤로가기 */}
+      {/* 뒤로가기 */}
       <button
         onClick={onBack}
-        className="px-3 py-1 rounded bg-gray-200 text-gray-800 text-sm"
+        className="px-3 py-1 rounded bg-gray-200 text-gray-700 text-sm"
       >
         ◀ 뒤로가기
       </button>
 
-      {/* 🔵 검색박스 */}
-      <div className="bg-white rounded-xl border shadow-sm p-4 space-y-3">
+      {/* 검색 카드 */}
+      <div className="bg-white rounded-2xl border shadow p-4 space-y-3">
 
-        <div className="text-sm font-semibold text-gray-700">
-          표준 운임 검색
+        <div className="text-base font-bold text-gray-700 mb-2">
+          📘 표준 운임 검색
+        </div>
+
+        {/* 상차지 자동완성 */}
+        <div className="relative">
+          <input
+            className="w-full border rounded-xl px-3 py-2 bg-gray-50 text-sm"
+            placeholder="상차지"
+            value={pickup}
+            onChange={(e) => setPickup(e.target.value)}
+          />
+          {pickup && (
+            <div className="absolute z-20 bg-white border w-full max-h-40 overflow-auto rounded-xl shadow mt-1">
+              {pickupList
+                .filter((x) =>
+                  clean(x).includes(clean(pickup))
+                )
+                .slice(0, 20)
+                .map((x) => (
+                  <div
+                    key={x}
+                    className="px-3 py-2 hover:bg-gray-100 text-sm"
+                    onClick={() => setPickup(x)}
+                  >
+                    {x}
+                  </div>
+                ))}
+            </div>
+          )}
+        </div>
+
+        {/* 하차지 자동완성 */}
+        <div className="relative">
+          <input
+            className="w-full border rounded-xl px-3 py-2 bg-gray-50 text-sm"
+            placeholder="하차지"
+            value={drop}
+            onChange={(e) => setDrop(e.target.value)}
+          />
+          {drop && (
+            <div className="absolute z-20 bg-white border w-full max-h-40 overflow-auto rounded-xl shadow mt-1">
+              {dropList
+                .filter((x) =>
+                  clean(x).includes(clean(drop))
+                )
+                .slice(0, 20)
+                .map((x) => (
+                  <div
+                    key={x}
+                    className="px-3 py-2 hover:bg-gray-100 text-sm"
+                    onClick={() => setDrop(x)}
+                  >
+                    {x}
+                  </div>
+                ))}
+            </div>
+          )}
         </div>
 
         <input
-          className="w-full border rounded-full px-3 py-2 text-sm bg-gray-50"
-          placeholder="상차지"
-          value={form.from}
-          onChange={(e) => update("from", e.target.value)}
+          className="w-full border rounded-xl px-3 py-2 bg-gray-50 text-sm"
+          placeholder="화물내용 (예: 16파렛)"
+          value={cargo}
+          onChange={(e) => setCargo(e.target.value)}
         />
 
         <input
-          className="w-full border rounded-full px-3 py-2 text-sm bg-gray-50"
-          placeholder="하차지"
-          value={form.to}
-          onChange={(e) => update("to", e.target.value)}
+          className="w-full border rounded-xl px-3 py-2 bg-gray-50 text-sm"
+          placeholder="톤수 (예: 1톤)"
+          value={ton}
+          onChange={(e) => setTon(e.target.value)}
         />
 
-        <input
-          className="w-full border rounded-full px-3 py-2 text-sm bg-gray-50"
-          placeholder="화물내용"
-          value={form.cargo}
-          onChange={(e) => update("cargo", e.target.value)}
-        />
-
-        <input
-          className="w-full border rounded-full px-3 py-2 text-sm bg-gray-50"
-          placeholder="톤수 입력"
-          value={form.ton}
-          onChange={(e) => update("ton", e.target.value)}
-        />
-
+        {/* 차량종류 드롭다운 */}
         <select
-          className="w-full border rounded-full px-3 py-2 text-sm bg-gray-50"
-          value={form.carType}
-          onChange={(e) => update("carType", e.target.value)}
+          className="w-full border rounded-xl px-3 py-2 bg-gray-50 text-sm"
+          value={vehicle}
+          onChange={(e) => setVehicle(e.target.value)}
         >
-          <option value="">차량종류 전체</option>
-          <option value="라보">라보</option>
-          <option value="다마스">다마스</option>
-          <option value="카고">카고</option>
-          <option value="윙바디">윙바디</option>
-          <option value="탑차">탑차</option>
-          <option value="냉장탑">냉장탑</option>
-          <option value="냉동탑">냉동탑</option>
-          <option value="오토바이">오토바이</option>
+          {VEHICLE_TYPES.map((v) => (
+            <option key={v}>{v}</option>
+          ))}
         </select>
 
-        <div className="flex gap-2 mt-3">
+        {/* 버튼 */}
+        <div className="flex gap-3 mt-2">
           <button
-  onClick={() => setForm((p) => ({ ...p }))}
-  className="flex-1 py-2 rounded-full bg-blue-500 text-white text-sm"
->
-  검색하기
-</button>
-
+            onClick={calcFareMobile}
+            className="flex-1 py-2 rounded-xl bg-blue-500 text-white text-sm"
+          >
+            🔍 검색하기
+          </button>
 
           <button
-            onClick={resetForm}
-            className="flex-1 py-2 rounded-full bg-gray-200 text-gray-700 text-sm"
+            onClick={() => {
+              setPickup("");
+              setDrop("");
+              setCargo("");
+              setTon("");
+              setVehicle("전체");
+              setMatchedRows([]);
+              setResult(null);
+              setAiFare(null);
+            }}
+            className="flex-1 py-2 rounded-xl bg-gray-200 text-gray-700 text-sm"
           >
             초기화
           </button>
         </div>
       </div>
 
-      {/* 🔵 결과 테이블 */}
-      <div className="bg-white border rounded-xl shadow-sm overflow-hidden max-h-[70vh]">
+      {/* AI 추천운임 카드 */}
+      {aiFare && (
+        <div className="bg-amber-50 border border-amber-300 rounded-2xl p-4 shadow">
+          <h3 className="font-bold text-lg mb-3">🤖 AI 추천운임</h3>
+
+          <p>평균 운임: <b>{aiFare.avg.toLocaleString()}</b> 원</p>
+          <p>최소~최대: <b>{aiFare.min.toLocaleString()} ~ {aiFare.max.toLocaleString()}</b> 원</p>
+          <p>최근 동일구간: <b>{aiFare.latestFare.toLocaleString()}</b> 원</p>
+
+          <div className="mt-4 p-4 bg-white border rounded-xl shadow-sm">
+            <div className="text-xl text-amber-700 font-bold mb-1">
+              📌 {aiFare.aiValue.toLocaleString()} 원
+            </div>
+            <div className="text-gray-600">
+              신뢰도: <b>{aiFare.confidence}%</b>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 결과 집계 */}
+      {result && (
+        <div className="bg-blue-50 rounded-xl border border-blue-200 p-4">
+          <div>총 {result.count} 건</div>
+          <div>평균 운임: {result.avg.toLocaleString()}원</div>
+          <div>최소~최대: {result.min.toLocaleString()} ~ {result.max.toLocaleString()}원</div>
+          <div>최근 운임: {result.latestFare.toLocaleString()}원</div>
+        </div>
+      )}
+
+      {/* 결과 테이블 */}
+      <div className="bg-white border rounded-2xl shadow overflow-hidden max-h-[70vh]">
         <table className="w-full text-[12px]">
           <thead className="bg-gray-50 sticky top-0 border-b">
             <tr>
+              <th className="px-2 py-1 border-r">상차일</th>
               <th className="px-2 py-1 border-r">상차지</th>
               <th className="px-2 py-1 border-r">하차지</th>
               <th className="px-2 py-1 border-r">화물내용</th>
               <th className="px-2 py-1 border-r">톤수</th>
-              <th className="px-2 py-1">운임</th>
+              <th className="px-2 py-1 border-r">청구운임</th>
             </tr>
           </thead>
           <tbody>
-            {filtered.map((r) => (
-              <tr key={r.id} className="border-t">
-                <td className="px-2 py-1 border-r">{r.출발지}</td>
-                <td className="px-2 py-1 border-r">{r.도착지}</td>
-                <td className="px-2 py-1 border-r">{r.화물내용}</td>
-                <td className="px-2 py-1 border-r">{r.톤수}</td>
-                <td className="px-2 py-1 text-right">{fmtMoney(r.운임)}</td>
-              </tr>
-            ))}
-
-            {filtered.length === 0 && (
+            {matchedRows.length > 0 ? (
+              matchedRows.map((r) => (
+                <tr key={r.id} className="border-t">
+                  <td className="px-2 py-1 border-r">{r.상차일}</td>
+                  <td className="px-2 py-1 border-r">{r.상차지명}</td>
+                  <td className="px-2 py-1 border-r">{r.하차지명}</td>
+                  <td className="px-2 py-1 border-r">{r.화물내용}</td>
+                  <td className="px-2 py-1 border-r">{r.차량톤수}</td>
+                  <td className="px-2 py-1 text-right">
+                    {Number(r.청구운임 || 0).toLocaleString()}
+                  </td>
+                </tr>
+              ))
+            ) : (
               <tr>
-                <td colSpan={5} className="text-center py-5 text-gray-400">
+                <td
+                  colSpan={6}
+                  className="text-center py-5 text-gray-400"
+                >
                   검색된 내용이 없습니다.
                 </td>
               </tr>
@@ -2503,12 +2687,9 @@ if (f_ton) {
           </tbody>
         </table>
       </div>
-
     </div>
   );
 }
-
-
 
 // ======================================================================
 // 모바일 배차현황 / 미배차현황 테이블 (컬럼형)
