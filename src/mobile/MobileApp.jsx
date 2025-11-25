@@ -478,6 +478,41 @@ setForm({
 });
 
 };
+// --------------------------------------------------
+// 🔵 (추가) 모바일 전용 upsertDriver — ★★★ 바로 여기 넣기 ★★★
+// --------------------------------------------------
+const upsertDriver = async ({ 차량번호, 이름, 전화번호 }) => {
+  if (!차량번호) return;
+
+  const norm = (s = "") =>
+    String(s).replace(/\s+/g, "").toLowerCase();
+
+  // 기존 기사 찾기
+  const existing = drivers.find(
+    (d) => norm(d.차량번호) === norm(차량번호)
+  );
+
+  if (existing) {
+    await updateDoc(doc(db, "drivers", existing.id), {
+      차량번호,
+      이름,
+      전화번호,
+      updatedAt: serverTimestamp(),
+    });
+    return existing.id;
+  }
+
+  // 신규등록
+  const ref = await addDoc(collection(db, "drivers"), {
+    차량번호,
+    이름,
+    전화번호,
+    메모: "",
+    createdAt: serverTimestamp(),
+  });
+
+  return ref.id;
+};
   // --------------------------------------------------
   // 6. 기사 배차 / 배차취소 / 오더취소(=삭제)
   // --------------------------------------------------
