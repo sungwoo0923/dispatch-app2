@@ -707,6 +707,8 @@ const [searchText, setSearchText] = useState("");
             onSave={handleSave}
             setPage={setPage}
 showToast={showToast}
+drivers={drivers}
+upsertDriver={upsertDriver}
           />
         )}
 
@@ -720,8 +722,10 @@ showToast={showToast}
   setPage={setPage}
   setForm={setForm}
   setSelectedOrder={setSelectedOrder}
-  showToast={showToast}   // 🔥 추가!
+  showToast={showToast}
+  upsertDriver={upsertDriver}   // 🔥🔥 이거 추가해야 신규등록 됨!!
 />
+
 
 )}
 
@@ -739,7 +743,41 @@ showToast={showToast}
 
       {page === "list" && !showMenu && (
         <button
-          onClick={() => setPage("form")}
+          onClick={() => {
+  setForm({
+    거래처명: "",
+    상차일: "",
+    상차시간: "",
+    하차일: "",
+    하차시간: "",
+    상차지명: "",
+    상차지주소: "",
+    하차지명: "",
+    하차지주소: "",
+    톤수: "",
+    차종: "",
+    화물내용: "",
+    상차방법: "",
+    하차방법: "",
+    지급방식: "",
+    배차방식: "",
+    청구운임: 0,
+    기사운임: 0,
+    수수료: 0,
+    산재보험료: 0,
+    차량번호: "",
+    기사명: "",
+    전화번호: "",
+    혼적여부: "독차",
+    적요: "",
+    _editId: null,
+    _returnToDetail: false,
+  });
+
+  setSelectedOrder(null);
+  setPage("form");
+}}
+
           className="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-blue-500 text-white text-3xl flex items-center justify-center shadow-lg active:scale-95"
         >
           +
@@ -1452,12 +1490,31 @@ useEffect(() => {
         </div>
 
         <button
-          onClick={handleAssignClick}
-          className="w-full py-2 rounded-lg bg-emerald-500 text-white text-sm font-semibold mt-2"
-        >
-          기사 배차하기
-        </button>
+  onClick={handleAssignClick}
+  className="w-full py-2 rounded-lg bg-emerald-500 text-white text-sm font-semibold mt-2"
+>
+  기사 배차하기
+</button>
 
+
+{/* 🔵 신규 기사 등록 버튼 — 정확히 여기!! */}
+{carNo && !drivers.some(d => d.차량번호 === carNo) && (
+  <div className="mt-2">
+    <button
+      onClick={() => {
+        upsertDriver({
+          차량번호: carNo,
+          이름: name || "",
+          전화번호: phone || "",
+        });
+        showToast("신규 기사 등록 완료");
+      }}
+      className="w-full py-2 bg-green-600 text-white rounded-lg text-sm font-semibold"
+    >
+      🚚 신규 기사 등록하기
+    </button>
+  </div>
+)}
         {state === "배차완료" && (
           <button
             onClick={onCancelAssign}
@@ -1548,7 +1605,7 @@ useEffect(() => {
 // ======================================================================
 // 등록 폼
 // ======================================================================
-function MobileOrderForm({ form, setForm, clients, onSave, setPage, showToast }) {
+function MobileOrderForm({ form, setForm, clients, onSave, setPage, showToast, drivers, }) {
   const update = (key, value) =>
     setForm((p) => ({ ...p, [key]: value }));
 
@@ -2017,6 +2074,24 @@ function MobileOrderForm({ form, setForm, clients, onSave, setPage, showToast })
     }
   />
 </div>
+{/* 신규 기사 등록 버튼 */}
+{form.차량번호 &&
+ !drivers.some(d => d.차량번호 === form.차량번호) && (
+  <button
+    onClick={() => {
+      upsertDriver({
+        차량번호: form.차량번호,
+        이름: form.기사명 || "",
+        전화번호: form.전화번호 || "",
+      });
+      showToast("신규 기사 등록 완료");
+    }}
+    className="w-full py-2 mt-2 rounded bg-green-600 text-white text-sm font-semibold"
+  >
+    🚚 신규 기사 등록하기
+  </button>
+)}
+
 
 
       {/* 적요 */}
