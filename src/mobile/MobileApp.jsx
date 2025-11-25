@@ -382,13 +382,31 @@ const [searchText, setSearchText] = useState("");
   // 배차현황용
   const filteredStatusOrders = filteredOrders;
   const unassignedOrders = useMemo(
-    () =>
-      filteredOrders.filter((o) => {
-        const state = normalizeState(o.배차상태 || o.상태 || "배차전");
-        return state === "배차전";
+  () =>
+    filteredOrders
+      .filter((o) => {
+        // 차량번호 없으면 미배차
+        const noVehicle =
+          !o.차량번호 || String(o.차량번호).trim() === "";
+        return noVehicle;
+      })
+      .sort((a, b) => {
+        // PC 동일 정렬: 상차일 → 상차시간 → 거래처명
+        const ad = String(a.상차일 || "");
+        const bd = String(b.상차일 || "");
+        if (ad !== bd) return ad.localeCompare(bd);
+
+        const at = String(a.상차시간 || a.상차일시 || "");
+        const bt = String(b.상차시간 || b.상차일시 || "");
+        if (at !== bt) return at.localeCompare(bt);
+
+        const ac = String(a.거래처명 || "");
+        const bc = String(b.거래처명 || "");
+        return ac.localeCompare(bc);
       }),
-    [filteredOrders]
-  );
+  [filteredOrders]
+);
+
 
   // 날짜별 그룹핑
   const groupedByDate = useMemo(() => {
@@ -825,11 +843,13 @@ upsertDriver={upsertDriver}
 
 {page === "unassigned" && (
   <MobileStatusTable
-    title="미배차현황"
+    title={`미배차현황 (${unassignedOrders.length})`}
     orders={unassignedOrders}
+    onQuickAssign={(order) => setQuickAssignTarget(order)}  // ★ 빠른 배차등록용
     onBack={() => setPage("list")}
   />
 )}
+
 
 
 
@@ -2726,6 +2746,17 @@ function MobileStatusTable({ title, orders, onBack }) {
     ◀ 뒤로가기
   </button>
 )}
+      {/* 🔵 빠른 배차등록 + 미배차 건수 */}
+      <button
+        onClick={() => alert("빠른 배차등록 눌림")}
+        className="mb-3 w-full py-2 bg-blue-500 text-white text-sm rounded-lg font-semibold shadow active:scale-95 flex justify-center gap-2"
+      >
+        🚀 빠른 배차등록
+        <span className="px-2 rounded-full bg-white text-blue-600 font-bold">
+          {orders.length}
+        </span>
+      </button>
+
       <div className="mb-2 text-xs text-gray-500">
         {title} (총 {orders.length}건)
       </div>
