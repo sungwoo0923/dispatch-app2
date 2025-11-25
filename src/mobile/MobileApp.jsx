@@ -226,10 +226,11 @@ export default function MobileApp() {
       }));
       // 상차일/등록일 기준으로 최신순 정렬
       list.sort((a, b) => {
-        const da = getPickupDate(a);
-        const db_ = getPickupDate(b);
-        return (db_ || "").localeCompare(da || "");
-      });
+  const da = getPickupDate(a);
+  const db = getPickupDate(b);
+  return (db || "").localeCompare(da || "");
+});
+
       setOrders(list);
     });
     return () => unsub();
@@ -346,9 +347,11 @@ const [searchText, setSearchText] = useState("");
       }
 
       // 날짜 필터
-      const d = getPickupDate(o);
-      if (startDate && d && d < startDate) return false;
-      if (endDate && d && d > endDate) return false;
+const d = getPickupDate(o);
+if (!d) return false;    // ← 이 한 줄 추가하면 해결됨
+if (startDate && d < startDate) return false;
+if (endDate && d > endDate) return false;
+
           // 🔍 검색 필터
     if (searchText.trim()) {
       const t = searchText.trim().toLowerCase();
@@ -383,13 +386,12 @@ const [searchText, setSearchText] = useState("");
   const filteredStatusOrders = filteredOrders;
   const unassignedOrders = useMemo(
   () =>
-    filteredOrders
-      .filter((o) => {
-        // 차량번호 없으면 미배차
-        const noVehicle =
-          !o.차량번호 || String(o.차량번호).trim() === "";
-        return noVehicle;
-      })
+    orders   // ← 전체 데이터로 변경해야 함
+        .filter((o) => {
+          const noVehicle =
+            !o.차량번호 || String(o.차량번호).trim() === "";
+          return noVehicle;
+        })
       .sort((a, b) => {
         // PC 동일 정렬: 상차일 → 상차시간 → 거래처명
         const ad = String(a.상차일 || "");
@@ -2733,7 +2735,7 @@ function MobileStandardFare({ onBack }) {
 // ======================================================================
 // 모바일 배차현황 / 미배차현황 테이블 (날짜별 그룹형 UI)
 // ======================================================================
-function MobileStatusTable({ title, orders, onBack }) {
+function MobileStatusTable({ title, orders, onBack, onQuickAssign }) {
 
   // 날짜 기준 그룹핑
   const dateMap = new Map();
@@ -2760,8 +2762,8 @@ function MobileStatusTable({ title, orders, onBack }) {
 
       {/* 빠른 배차등록 버튼 */}
       <button
-        onClick={() => alert("빠른 배차등록 눌림")}
-        className="mb-3 w-full py-2 bg-blue-500 text-white text-sm rounded-lg font-semibold shadow active:scale-95 flex justify-center gap-2"
+        onClick={() => onQuickAssign && onQuickAssign()}
+  className="mb-3 w-full py-2 bg-blue-500 text-white text-sm rounded-lg font-semibold shadow active:scale-95 flex justify-center gap-2"
       >
         🚀 빠른 배차등록
         <span className="px-2 rounded-full bg-white text-blue-600 font-bold">
