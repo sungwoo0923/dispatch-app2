@@ -2284,18 +2284,39 @@ function MobileStandardFare({ onBack }) {
     return () => unsub();
   }, []);
 
-  const norm = (s = "") => String(s).toLowerCase().replace(/\s+/g, "");
+ const norm = (s = "") =>
+  String(s)
+    .toLowerCase()
+    .replace(/\s+/g, "")      // 공백 제거
+    .replace(/-/g, "")        // 하이픈 제거
+    .replace(/_/g, "")        // 언더바 제거
+    .replace(/[^\w가-힣]/g, "") // 특수문자 제거
+    .replace(/p/g, "파")      // 3p → 3파렛트
+    .replace(/r/g, "롤");     // r → 롤박스
+
 
   const filtered = rows.filter((r) => {
-    if (form.from && !norm(r.출발지 || "").includes(norm(form.from))) return false;
-    if (form.to && !norm(r.도착지 || "").includes(norm(form.to))) return false;
-    if (form.cargo && !norm(r.화물내용 || "").includes(norm(form.cargo))) return false;
-    if (form.ton && !norm(String(r.톤수 || "")).includes(norm(form.ton))) return false;
-    if (form.carType && form.carType !== "전체") {
-      if (!norm(r.차량종류 || "").includes(norm(form.carType))) return false;
-    }
-    return true;
-  });
+  const from = norm(r.출발지 || "");
+  const to = norm(r.도착지 || "");
+  const cargo = norm(r.화물내용 || "");
+  const ton = norm(String(r.톤수 || ""));
+  const car = norm(r.차량종류 || "");
+
+  const f_from = norm(form.from);
+  const f_to = norm(form.to);
+  const f_cargo = norm(form.cargo);
+  const f_ton = norm(form.ton);
+  const f_car = norm(form.carType);
+
+  if (f_from && !from.includes(f_from)) return false;
+  if (f_to && !to.includes(f_to)) return false;
+  if (f_cargo && !cargo.includes(f_cargo)) return false;
+  if (f_ton && !ton.includes(f_ton)) return false;
+
+  if (f_car && f_car !== "전체" && !car.includes(f_car)) return false;
+
+  return true;
+});
 
   const resetForm = () =>
     setForm({
