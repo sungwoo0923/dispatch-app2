@@ -567,17 +567,17 @@ const [searchText, setSearchText] = useState("");
   };
 
   const title =
-    page === "list"
-      ? "등록내역"
-      : page === "form"
-      ? "화물등록"
-      : page === "fare"
-      ? "표준운임표"
-      : page === "status"
-      ? "배차현황"
-      : page === "unassigned"
-      ? "미배차현황"
-      : "상세보기";
+  page === "list"
+    ? "등록내역"
+    : page === "form"
+    ? (form._editId ? "수정하기" : "화물등록")   // ← 수정 포인트!!!
+    : page === "fare"
+    ? "표준운임표"
+    : page === "status"
+    ? "배차현황"
+    : page === "unassigned"
+    ? "미배차현황"
+    : "상세보기";
 
   // --------------------------------------------------
   // 7. 렌더링
@@ -595,13 +595,23 @@ const [searchText, setSearchText] = useState("");
       <MobileHeader
         title={title}
         onBack={
-          page !== "list"
-            ? () => {
-                setPage("list");
-                setSelectedOrder(null);
-              }
-            : undefined
+  page === "form"
+    ? () => {
+        // 폼에서 뒤로가기 → 상세보기로 복귀
+        if (form._editId && form._returnToDetail) {
+          setPage("detail");
+          return;
         }
+
+        // 신규등록 폼이면 목록으로
+        setPage("list");
+      }
+    : page === "detail"
+    ? () => setPage("list")
+    : undefined
+}
+
+
         onRefresh={page === "list" ? handleRefresh : undefined}
         onMenu={page === "list" ? () => setShowMenu(true) : undefined}
       />
@@ -614,9 +624,39 @@ const [searchText, setSearchText] = useState("");
             setShowMenu(false);
           }}
           onGoCreate={() => {
-            setPage("form");
-            setShowMenu(false);
-          }}
+  setForm({
+    거래처명: "",
+    상차일: "",
+    상차시간: "",
+    하차일: "",
+    하차시간: "",
+    상차지명: "",
+    상차지주소: "",
+    하차지명: "",
+    하차지주소: "",
+    톤수: "",
+    차종: "",
+    화물내용: "",
+    상차방법: "",
+    하차방법: "",
+    지급방식: "",
+    배차방식: "",
+    청구운임: 0,
+    기사운임: 0,
+    수수료: 0,
+    산재보험료: 0,
+    차량번호: "",
+    혼적여부: "독차",
+    적요: "",
+    // 🔥 수정모드 관련 값 제거
+    _editId: null,
+    _returnToDetail: false,
+  });
+
+  setPage("form");
+  setShowMenu(false);
+}}
+
           onGoFare={() => {
             setPage("fare");
             setShowMenu(false);
@@ -665,6 +705,8 @@ const [searchText, setSearchText] = useState("");
             setForm={setForm}
             clients={clients}
             onSave={handleSave}
+            setPage={setPage}
+showToast={showToast}
           />
         )}
 
@@ -1167,6 +1209,13 @@ function MobileOrderDetail({
       setPhone(d.전화번호 || "");
     }
   }, [carNo, drivers]);
+// 🔥 차량번호 지우면 이름/전화번호 자동 초기화
+useEffect(() => {
+  if (!carNo) {
+    setName("");
+    setPhone("");
+  }
+}, [carNo]);
 
   const openMap = (type) => {
     const addr =
@@ -1435,29 +1484,17 @@ function MobileOrderDetail({
       checked={order._keepDriver || false}
       onChange={(e) => {
         setSelectedOrder((prev) => ({
-  ...prev,
-  _keepDriver: e.target.checked,
-}));
-
+          ...prev,
+          _keepDriver: e.target.checked,
+        }));
       }}
     />
     <label htmlFor="keepDriver" className="text-sm text-gray-700">
       배차정보(기사/차량번호/연락처) 유지하고 수정하기
     </label>
   </div>
-{/* 수정 취소 버튼 */}
-<button
-  onClick={() => {
-    setPage("detail");
-    // 수정 중 폼은 초기화 (기존 선택된 오더 그대로 유지)
-    setForm({});
-    showToast("수정이 취소되었습니다.");
-  }}
-  className="w-full py-2 rounded-lg bg-gray-200 text-gray-700 text-sm font-semibold mt-1"
->
-  수정 취소
-</button>
 
+  {/* 🔵 상세보기에서 수정 버튼 1개만 */}
   <button
     onClick={() => {
       window.scrollTo(0, 0);
@@ -1491,16 +1528,17 @@ function MobileOrderDetail({
         기사명: order._keepDriver ? order.기사명 : "",
         전화번호: order._keepDriver ? order.전화번호 : "",
 
-        _editId: order.id,   
+        _editId: order.id,
         _returnToDetail: true,
       });
     }}
     className="w-full py-2 rounded-lg bg-orange-500 text-white text-sm font-semibold mt-2"
   >
-    오더 수정하기
+    수정하기
   </button>
 
 </div>
+
 
     </div>
   );
@@ -1510,7 +1548,7 @@ function MobileOrderDetail({
 // ======================================================================
 // 등록 폼
 // ======================================================================
-function MobileOrderForm({ form, setForm, clients, onSave }) {
+function MobileOrderForm({ form, setForm, clients, onSave, setPage, showToast }) {
   const update = (key, value) =>
     setForm((p) => ({ ...p, [key]: value }));
 
@@ -1925,11 +1963,61 @@ function MobileOrderForm({ form, setForm, clients, onSave }) {
             <input
               className="w-full border rounded px-2 py-1 text-sm"
               value={form.차량번호}
-              onChange={(e) => update("차량번호", e.target.value)}
+              onChange={(e) => {
+  const v = e.target.value;
+  update("차량번호", v);
+
+  const norm = (s = "") =>
+    String(s).replace(/\s+/g, "").toLowerCase();
+
+  // 🔥 차량번호 매칭
+  const found = drivers.find(
+    (d) => norm(d.차량번호) === norm(v)
+  );
+
+  if (found) {
+    // 기존 기사 자동 입력
+    update("기사명", found.이름 || "");
+    update("전화번호", found.전화번호 || "");
+  } else {
+    // 신규 차량 → 이름/전화번호 빈칸 유지
+    update("기사명", "");
+    update("전화번호", "");
+  }
+}}
+
             />
           }
         />
       </div>
+      {/* 기사 이름 */}
+<div className="bg-white rounded-lg border shadow-sm">
+  <RowLabelInput
+    label="기사명"
+    input={
+      <input
+        className="w-full border rounded px-2 py-1 text-sm"
+        value={form.기사명 || ""}
+        onChange={(e) => update("기사명", e.target.value)}
+      />
+    }
+  />
+</div>
+
+{/* 기사 전화번호 */}
+<div className="bg-white rounded-lg border shadow-sm">
+  <RowLabelInput
+    label="연락처"
+    input={
+      <input
+        className="w-full border rounded px-2 py-1 text-sm"
+        value={form.전화번호 || ""}
+        onChange={(e) => update("전화번호", e.target.value)}
+      />
+    }
+  />
+</div>
+
 
       {/* 적요 */}
       <div className="bg-white rounded-lg border shadow-sm">
@@ -1946,12 +2034,32 @@ function MobileOrderForm({ form, setForm, clients, onSave }) {
       </div>
 
       <div className="mt-4 mb-8">
+  <div className="mt-4 mb-8 space-y-2">
+
+  {/* 수정하기 / 등록하기 */}
   <button
     onClick={onSave}
     className="w-full py-3 rounded-lg bg-blue-500 text-white text-base font-semibold shadow"
   >
     {form._editId ? "수정하기" : "등록하기"}
   </button>
+
+  {/* 🔥 수정취소 버튼 추가 */}
+  {form._editId && (
+    <button
+      onClick={() => {
+        setForm({});
+        setPage("detail");
+        showToast("수정이 취소되었습니다.");
+      }}
+      className="w-full py-3 rounded-lg bg-gray-300 text-gray-800 text-base font-semibold shadow"
+    >
+      수정취소
+    </button>
+  )}
+
+</div>
+
 </div>
     </div>
   );
