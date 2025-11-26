@@ -333,96 +333,106 @@ export default function MobileApp() {
   // --------------------------------------------------
   const thisMonth = new Date().toISOString().slice(0, 7);
 
-  const filteredOrders = useMemo(() => {
-    let base = [...orders];
+const filteredOrders = useMemo(() => {
+  let base = [...orders];
 
-    // 1) 당월 데이터만
-    base = base.filter((o) => {
-      const d = getPickupDate(o) || "";
-      return d.startsWith(thisMonth);
+  // 🔹 오늘 / 날짜 선택 여부
+  const today = todayStr();
+  const dateSelected = !!(startDate || endDate);
+
+  // 1) 당월 데이터만
+  base = base.filter((o) => {
+    const d = getPickupDate(o) || "";
+    return d.startsWith(thisMonth);
+  });
+
+  // 1-1) 날짜 선택 안 했고, 탭이 "전체"가 아닐 때(배차중/배차완료) → 당일만 자동 필터
+  if (!dateSelected && statusTab !== "전체") {
+    base = base.filter((o) => getPickupDate(o) === today);
+  }
+
+  // 2) 상단 탭: 전체 / 배차중 / 배차완료
+  base = base.filter((o) => {
+    if (statusTab === "전체") return true;
+    const state = getStatus(o); // 🔥 차량번호 기준 상태
+    return state === statusTab;
+  });
+
+  // 3) 드롭다운 배차상태 (배차 전체 / 배차중 / 배차완료)
+  base = base.filter((o) => {
+    if (!assignFilter) return true;
+    const state = getStatus(o);
+    return state === assignFilter;
+  });
+
+  // 4) 차량종류 필터
+  base = base.filter((o) => {
+    if (!vehicleFilter) return true;
+    const carType = String(o.차량종류 || o.차종 || "").toLowerCase();
+    return carType.includes(vehicleFilter.toLowerCase());
+  });
+
+  // 5) 날짜 필터 (직접 고른 경우만 동작)
+  base = base.filter((o) => {
+    const d = getPickupDate(o);
+    if (!d) return false;
+    if (startDate && d < startDate) return false;
+    if (endDate && d > endDate) return false;
+    return true;
+  });
+
+  // 6) 검색
+  base = base.filter((o) => {
+    if (!searchText.trim()) return true;
+
+    const t = searchText.trim().toLowerCase();
+    const map = {
+      거래처명: o.거래처명 || "",
+      기사명: o.기사명 || "",
+      차량번호: o.차량번호 || "",
+      상차지명: o.상차지명 || "",
+      하차지명: o.하차지명 || "",
+    };
+
+    return String(map[searchType] || "").toLowerCase().includes(t);
+  });
+
+  // 7) 정렬
+  if (statusTab === "전체") {
+    // 전체 = 차량번호 없는(배차중) 위로 + 최신 날짜순
+    base.sort((a, b) => {
+      const aEmpty = !String(a.차량번호 || "").trim();
+      const bEmpty = !String(b.차량번호 || "").trim();
+
+      if (aEmpty && !bEmpty) return -1;
+      if (!aEmpty && bEmpty) return 1;
+
+      const da = getPickupDate(a) || "";
+      const db = getPickupDate(b) || "";
+      return db.localeCompare(da);
     });
-
-    // 2) 상단 탭: 전체 / 배차중 / 배차완료
-    base = base.filter((o) => {
-      if (statusTab === "전체") return true;
-      const state = getStatus(o); // 🔥 차량번호 기준 상태
-      return state === statusTab;
+  } else {
+    // 배차중/배차완료 탭은 최신 날짜순
+    base.sort((a, b) => {
+      const da = getPickupDate(a) || "";
+      const db = getPickupDate(b) || "";
+      return db.localeCompare(da);
     });
+  }
 
-    // 3) 드롭다운 배차상태 (배차 전체 / 배차중 / 배차완료)
-    base = base.filter((o) => {
-      if (!assignFilter) return true;
-      const state = getStatus(o);
-      return state === assignFilter;
-    });
+  return base;
+}, [
+  orders,
+  statusTab,
+  assignFilter,
+  vehicleFilter,
+  startDate,
+  endDate,
+  searchType,
+  searchText,
+  thisMonth,
+]);
 
-    // 4) 차량종류 필터
-    base = base.filter((o) => {
-      if (!vehicleFilter) return true;
-      const carType = String(o.차량종류 || o.차종 || "").toLowerCase();
-      return carType.includes(vehicleFilter.toLowerCase());
-    });
-
-    // 5) 날짜 필터
-    base = base.filter((o) => {
-      const d = getPickupDate(o);
-      if (!d) return false;
-      if (startDate && d < startDate) return false;
-      if (endDate && d > endDate) return false;
-      return true;
-    });
-
-    // 6) 검색
-    base = base.filter((o) => {
-      if (!searchText.trim()) return true;
-
-      const t = searchText.trim().toLowerCase();
-      const map = {
-        거래처명: o.거래처명 || "",
-        기사명: o.기사명 || "",
-        차량번호: o.차량번호 || "",
-        상차지명: o.상차지명 || "",
-        하차지명: o.하차지명 || "",
-      };
-
-      return String(map[searchType] || "").toLowerCase().includes(t);
-    });
-
-    // 7) 정렬
-    if (statusTab === "전체") {
-      // 전체 = 차량번호 없는(배차중) 걸 위로 + 최신 날짜순
-      base.sort((a, b) => {
-        const aEmpty = !String(a.차량번호 || "").trim();
-        const bEmpty = !String(b.차량번호 || "").trim();
-
-        if (aEmpty && !bEmpty) return -1;
-        if (!aEmpty && bEmpty) return 1;
-
-        const da = getPickupDate(a) || "";
-        const db = getPickupDate(b) || "";
-        return db.localeCompare(da);
-      });
-    } else {
-      // 탭이 배차중/배차완료면 최신 날짜순
-      base.sort((a, b) => {
-        const da = getPickupDate(a) || "";
-        const db = getPickupDate(b) || "";
-        return db.localeCompare(da);
-      });
-    }
-
-    return base;
-  }, [
-    orders,
-    statusTab,
-    assignFilter,
-    vehicleFilter,
-    startDate,
-    endDate,
-    searchType,
-    searchText,
-    thisMonth,
-  ]);
 
   // 배차현황용
   const filteredStatusOrders = filteredOrders;
@@ -512,8 +522,6 @@ export default function MobileApp() {
     if (isEdit) {
       await updateDoc(doc(db, "dispatch", form._editId), {
         ...docData,
-        배차상태: statusByCar,
-        상태: statusByCar,
       });
 
       showToast("수정이 완료되었습니다.");
@@ -648,8 +656,6 @@ export default function MobileApp() {
     }
 
     await updateDoc(doc(db, "dispatch", selectedOrder.id), {
-      배차상태: "배차완료",
-      상태: "배차완료",
       기사명: driver.이름,
       차량번호: driver.차량번호,
       전화번호: driver.전화번호,
@@ -676,8 +682,6 @@ export default function MobileApp() {
 
     // 🔥 차량번호/기사정보만 제거 → 상태는 자동으로 "배차중"
     await updateDoc(doc(db, "dispatch", selectedOrder.id), {
-      배차상태: "배차중",
-      상태: "배차중",
       기사명: "",
       차량번호: "",
       전화번호: "",
