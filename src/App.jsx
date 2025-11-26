@@ -1,4 +1,5 @@
 // ======================= src/App.jsx =======================
+
 import React, { useState, useEffect } from "react";
 import {
   BrowserRouter as Router,
@@ -15,7 +16,7 @@ import DispatchApp from "./DispatchApp";
 
 // 모바일 버전 (⭐ 새로 만들 MobileApp.jsx)
 import MobileApp from "./mobile/MobileApp";
-
+import CleanupFix from "./cleanupFix";
 
 // 공용
 import Login from "./Login";
@@ -100,6 +101,7 @@ useEffect(() => {
 
   return (
     <Router>
+       <CleanupFix /> {/* 🔥 정리 버튼 — 클릭만 하고 나중에 삭제 */}
       <Routes>
         {/* 기본 루트 */}
         <Route path="/" element={<Navigate to="/login" replace />} />
