@@ -267,8 +267,22 @@ export default function MobileApp() {
 
   const todayStr = () => new Date().toISOString().slice(0, 10);
 
-const [startDate, setStartDate] = useState("");
-const [endDate, setEndDate] = useState("");
+// 오늘 날짜
+const today = new Date();
+
+// 이번 달 1일
+const firstDay = new Date(today.getFullYear(), today.getMonth(), 1)
+  .toISOString()
+  .slice(0, 10);
+
+// 이번 달 마지막 날
+const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0)
+  .toISOString()
+  .slice(0, 10);
+
+const [startDate, setStartDate] = useState(firstDay);
+const [endDate, setEndDate] = useState(lastDay);
+
 
   // 🔵 추가 드롭다운 필터 (차량종류 / 배차상태)
   const [vehicleFilter, setVehicleFilter] = useState("");
@@ -2730,6 +2744,7 @@ function MobileStandardFare({ onBack }) {
     </div>
   );
 }
+
 // ======================================================================
 // 모바일 배차현황 / 미배차현황 테이블 (날짜별 그룹형 UI)
 // ======================================================================
@@ -2845,5 +2860,4 @@ function MobileStatusTable({ title, orders, onBack }) {
     </div>
   );
 }
-
 
