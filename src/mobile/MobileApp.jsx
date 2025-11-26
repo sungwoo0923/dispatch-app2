@@ -1,4 +1,4 @@
-// ======================= src/mobile/MobileApp.jsx (PART 1/4) =======================
+// ======================= src/mobile/MobileApp.jsx (PART 1/3) =======================
 import React, { useState, useMemo, useEffect } from "react";
 import {
   collection,
@@ -10,7 +10,8 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { db } from "../firebase";
-// 🔥 2) BackIconButton는 import 아래에 와야 정상
+
+// 🔙 뒤로가기 아이콘 버튼
 function BackIconButton({ onClick }) {
   return (
     <button
@@ -32,6 +33,7 @@ function BackIconButton({ onClick }) {
     </button>
   );
 }
+
 // ------------------------------------------------------------------
 // 공통 유틸
 // ------------------------------------------------------------------
@@ -50,8 +52,7 @@ const getPickupDate = (o = {}) => {
 };
 
 // 청구운임 / 인수증
-const getClaim = (o = {}) =>
-  o.청구운임 ?? o.인수증 ?? 0;
+const getClaim = (o = {}) => o.청구운임 ?? o.인수증 ?? 0;
 
 // 산재보험료
 const getSanjae = (o = {}) => o.산재보험료 ?? 0;
@@ -105,7 +106,6 @@ const getDayBadge = (dateStr) => {
   if (diff === 0) return "당일";
   if (diff === 1) return "내일";
   if (diff === -1) return "어제";
-  // 그 외에는 MM/DD
   const m = String(target.getMonth() + 1).padStart(2, "0");
   const d = String(target.getDate()).padStart(2, "0");
   return `${m}/${d}`;
@@ -184,40 +184,35 @@ function buildKakaoMessage(order) {
   return lines.join("\n");
 }
 
-// 상태 문자열(배차중 -> 배차전으로 보이게)
-function getStatus(o = {}) {
-  return o.차량번호 ? "배차완료" : "배차중";
-}
+// 🔥 상태 문자열: 차량번호 유무로만 결정
+// 차량번호 없음 → "배차중", 있으면 → "배차완료"
+const getStatus = (o = {}) => {
+  const car = String(o.차량번호 || "").trim();
+  return car ? "배차완료" : "배차중";
+};
 
 // ======================================================================
 //  메인 컴포넌트
 // ======================================================================
 export default function MobileApp() {
   // -------------------------------------------------------------
-// 🔥 추가: 상태 표준화 함수 (배차중 → 배차전)
-// -------------------------------------------------------------
-const normalizeState = (raw = "") => {
-  if (!raw) return "배차전";
-  if (raw.includes("완료")) return "배차완료";
-  if (raw.includes("취소")) return "배차취소";
-  return "배차전";
-};
+  // 🔥 추가: 빠른 날짜 선택 (1/3/7/15일 버튼)
+  // -------------------------------------------------------------
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
 
-// -------------------------------------------------------------
-// 🔥 추가: 빠른 날짜 선택 (1/3/7/15일 버튼)
-// -------------------------------------------------------------
-const quickRange = (days) => {
-  const today = new Date();
-  const end = today.toISOString().slice(0, 10);
-  const startObj = new Date();
-  startObj.setDate(today.getDate() - (days - 1));
-  const start = startObj.toISOString().slice(0, 10);
-  setStartDate(start);
-  setEndDate(end);
-};
+  const quickRange = (days) => {
+    const today = new Date();
+    const end = today.toISOString().slice(0, 10);
+    const startObj = new Date();
+    startObj.setDate(today.getDate() - (days - 1));
+    const start = startObj.toISOString().slice(0, 10);
+    setStartDate(start);
+    setEndDate(end);
+  };
 
-    // 🔥 여기에 넣어야 함!!!
-  function groupByDate(list = []) {
+  // 날짜별 그룹핑
+  const groupByDate = (list = []) => {
     const map = new Map();
     for (const o of list) {
       const d = getPickupDate(o) || "기타";
@@ -225,10 +220,12 @@ const quickRange = (days) => {
       map.get(d).push(o);
     }
     return map;
-  }
-    const [toast, setToast] = useState("");
-    const [quickAssignTarget, setQuickAssignTarget] = useState(null);
-      const showToast = (msg) => {
+  };
+
+  const [toast, setToast] = useState("");
+  const [quickAssignTarget, setQuickAssignTarget] = useState(null);
+
+  const showToast = (msg) => {
     setToast(msg);
     setTimeout(() => setToast(""), 2000);
   };
@@ -248,10 +245,10 @@ const quickRange = (days) => {
       }));
       // 상차일/등록일 기준으로 최신순 정렬
       list.sort((a, b) => {
-  const da = getPickupDate(a);
-  const db = getPickupDate(b);
-  return (db || "").localeCompare(da || "");
-});
+        const da = getPickupDate(a);
+        const db = getPickupDate(b);
+        return (db || "").localeCompare(da || "");
+      });
 
       setOrders(list);
     });
@@ -290,300 +287,18 @@ const quickRange = (days) => {
 
   const todayStr = () => new Date().toISOString().slice(0, 10);
 
-const [startDate, setStartDate] = useState("");
-const [endDate, setEndDate] = useState("");
-
   // 🔵 추가 드롭다운 필터 (차량종류 / 배차상태)
   const [vehicleFilter, setVehicleFilter] = useState("");
   const [assignFilter, setAssignFilter] = useState("");
-  // 🔍 검색 상태
-const [searchType, setSearchType] = useState("거래처명");
-const [searchText, setSearchText] = useState("");
 
+  // 🔍 검색 상태
+  const [searchType, setSearchType] = useState("거래처명");
+  const [searchText, setSearchText] = useState("");
 
   // --------------------------------------------------
   // 3. 등록 폼
   // --------------------------------------------------
   const [form, setForm] = useState({
-  거래처명: "",
-  상차일: "",
-  상차시간: "",
-  하차일: "",
-  하차시간: "",
-  상차지명: "",
-  상차지주소: "",
-  하차지명: "",
-  하차지주소: "",
-  톤수: "",
-  차종: "",
-  화물내용: "",
-  상차방법: "",
-  하차방법: "",
-  지급방식: "",
-  배차방식: "",
-  청구운임: 0,
-  기사운임: 0,
-  수수료: 0,
-  산재보험료: 0,
-  차량번호: "",
-  기사명: "",
-  전화번호: "",
-  혼적여부: "독차",
-  적요: "",
-
-  // 🔥 반드시 추가!
-  _editId: null,
-  _returnToDetail: false,
-});
-
-
-  // --------------------------------------------------
-// 4. 필터링
-// --------------------------------------------------
-
-// 🔥 당월 키 (예: "2025-11")
-const thisMonth = new Date().toISOString().slice(0, 7);
-
-const filteredOrders = useMemo(() => {
-
-  // ------------------------------------
-  // 0) 원본 복사
-  // ------------------------------------
-  let base = [...orders];
-
-  // ------------------------------------
-  // 1) 무조건 당월 데이터만 남긴다 (전체 / 배차현황 / 배차완료 공통)
-  // ------------------------------------
-  base = base.filter((o) => {
-    const d = getPickupDate(o) || "";
-    return d.startsWith(thisMonth);
-  });
-
-  // ------------------------------------
-  // 2) 탭(전체/배차전/배차완료/배차취소)
-  // ------------------------------------
-  base = base.filter((o) => {
-    const rawState = o.배차상태 || o.상태 || "배차전";
-    const state = normalizeState(rawState);
-
-    if (statusTab !== "전체" && state !== statusTab) return false;
-    return true;
-  });
-
-  // ------------------------------------
-  // 3) 드롭다운 배차상태 (배차 전체/배차전/배차완료)
-  // ------------------------------------
-  base = base.filter((o) => {
-    if (!assignFilter) return true;
-    const rawState = o.배차상태 || o.상태 || "배차전";
-    const state = normalizeState(rawState);
-    return state === assignFilter;
-  });
-
-  // ------------------------------------
-  // 4) 차량종류 필터
-  // ------------------------------------
-  base = base.filter((o) => {
-    if (!vehicleFilter) return true;
-    const carType = String(o.차량종류 || o.차종 || "").toLowerCase();
-    return carType.includes(vehicleFilter.toLowerCase());
-  });
-
-  // ------------------------------------
-  // 5) 날짜 필터
-  // ------------------------------------
-  base = base.filter((o) => {
-    const d = getPickupDate(o);
-    if (!d) return false;
-    if (startDate && d < startDate) return false;
-    if (endDate && d > endDate) return false;
-    return true;
-  });
-
-  // ------------------------------------
-  // 6) 검색
-  // ------------------------------------
-  base = base.filter((o) => {
-    if (!searchText.trim()) return true;
-
-    const t = searchText.trim().toLowerCase();
-    const map = {
-      거래처명: o.거래처명 || "",
-      기사명: o.기사명 || "",
-      차량번호: o.차량번호 || "",
-      상차지명: o.상차지명 || "",
-      하차지명: o.하차지명 || "",
-    };
-
-    return String(map[searchType] || "").toLowerCase().includes(t);
-  });
-
-  // ------------------------------------
-  // 7) 정렬
-  // ------------------------------------
-  if (statusTab === "전체") {
-    // 전체 = 배차중(차량번호 없음) 최상단 + 최신날짜순
-    base.sort((a, b) => {
-      const aEmpty = !a.차량번호;
-      const bEmpty = !b.차량번호;
-
-      if (aEmpty && !bEmpty) return -1;
-      if (!aEmpty && bEmpty) return 1;
-
-      const da = getPickupDate(a) || "";
-      const db = getPickupDate(b) || "";
-      return db.localeCompare(da);
-    });
-  } else {
-    // 나머지 = 무조건 최신날짜순
-    base.sort((a, b) => {
-      const da = getPickupDate(a) || "";
-      const db = getPickupDate(b) || "";
-      return db.localeCompare(da);
-    });
-  }
-
-  return base;
-
-}, [
-  orders,
-  statusTab,
-  assignFilter,
-  vehicleFilter,
-  startDate,
-  endDate,
-  searchType,
-  searchText,
-]);
-
-
-
-
-  // 배차현황용
-  const filteredStatusOrders = filteredOrders;
-  const unassignedOrders = useMemo(
-  () =>
-    orders   // ← 전체 데이터로 변경해야 함
-        .filter((o) => {
-          const noVehicle =
-            !o.차량번호 || String(o.차량번호).trim() === "";
-          return noVehicle;
-        })
-      .sort((a, b) => {
-        // PC 동일 정렬: 상차일 → 상차시간 → 거래처명
-        const ad = String(a.상차일 || "");
-        const bd = String(b.상차일 || "");
-        if (ad !== bd) return ad.localeCompare(bd);
-
-        const at = String(a.상차시간 || a.상차일시 || "");
-        const bt = String(b.상차시간 || b.상차일시 || "");
-        if (at !== bt) return at.localeCompare(bt);
-
-        const ac = String(a.거래처명 || "");
-        const bc = String(b.거래처명 || "");
-        return ac.localeCompare(bc);
-      }),
-  [filteredOrders]
-);
-
-
-  // 날짜별 그룹핑
-  const groupedByDate = useMemo(() => {
-    const map = new Map();
-    for (const o of filteredOrders) {
-      const d = getPickupDate(o) || "기타";
-      if (!map.has(d)) map.set(d, []);
-      map.get(d).push(o);
-    }
-    return map;
-  }, [filteredOrders]);
-
-  // --------------------------------------------------
-  // 5. 신규 저장 (PC 컬럼과 동일 구조로 저장)
-  // --------------------------------------------------
-  const handleSave = async () => {
-  const isEdit = !!form._editId;   // 🔥 수정모드 여부
-
-  if (!form.상차지명 || !form.하차지명) {
-    alert("상차지 / 하차지는 필수입니다.");
-    return;
-  }
-
-  const 청구운임 = toNumber(form.청구운임);
-  const 기사운임 = toNumber(form.기사운임);
-  const 수수료 = 청구운임 - 기사운임;
-
-  const docData = {
-    거래처명: form.거래처명 || "",
-    상차지명: form.상차지명,
-    상차지주소: form.상차지주소 || "",
-    하차지명: form.하차지명,
-    하차지주소: form.하차지주소 || "",
-    화물내용: form.화물내용 || "",
-    차량종류: form.차종 || "",
-    차량톤수: form.톤수 || "",
-    상차방법: form.상차방법 || "",
-    하차방법: form.하차방법 || "",
-    상차일: form.상차일 || "",
-    상차시간: form.상차시간 || "",
-    하차일: form.하차일 || "",
-    하차시간: form.하차시간 || "",
-    지급방식: form.지급방식 || "",
-    배차방식: form.배차방식 || "",
-    메모: form.적요 || "",
-    혼적여부: form.혼적여부 || "독차",
-    차량번호: form.차량번호 || "",
-    기사명: form.기사명 || "",
-    전화번호: form.전화번호 || "",
-    청구운임,
-    기사운임,
-    수수료,
-  };
-
-  // --------------------------------------------------
-  // 🔵 수정모드 처리
-  // --------------------------------------------------
-  if (isEdit) {
-  await updateDoc(doc(db, "dispatch", form._editId), docData);
-
-  // 🔥 토스트 알림 (아래에서 정의)
-  showToast("수정이 완료되었습니다.");
-
-  if (form._returnToDetail) {
-    setSelectedOrder({ id: form._editId, ...docData });
-    setPage("detail");
-    return;
-  }
-
-  setPage("list");
-
-  // 🔥 목록 맨 위로 자동 스크롤
-  setTimeout(() => window.scrollTo({ top: 0, behavior: "smooth" }), 50);
-
-  return;
-}
-
-
-  // --------------------------------------------------
-// 🔵 신규등록 처리 — (교체 코드)
-// --------------------------------------------------
-try {
-  const newDocRef = await addDoc(collection(db, "dispatch"), {
-    ...docData,
-    id: crypto.randomUUID(), // 🔥 Firestore 문서에 id 필드 보존
-    배차상태: form.차량번호 ? "배차완료" : "배차중",
-    상태: form.차량번호 ? "배차완료" : "배차중",
-    등록일: new Date().toISOString().slice(0, 10),
-    createdAt: serverTimestamp(),
-  });
-
-  showToast("등록 완료!");
-
-  // 🔥 저장 끝나면 목록으로 이동
-  setPage("list");
-
-  // 🔥 폼 초기화
-  setForm({
     거래처명: "",
     상차일: "",
     상차시간: "",
@@ -613,78 +328,323 @@ try {
     _returnToDetail: false,
   });
 
-  // 🔥 스크롤 맨 위로
-  setTimeout(
-    () => window.scrollTo({ top: 0, behavior: "smooth" }),
-    50
+  // --------------------------------------------------
+  // 4. 필터링
+  // --------------------------------------------------
+  const thisMonth = new Date().toISOString().slice(0, 7);
+
+  const filteredOrders = useMemo(() => {
+    let base = [...orders];
+
+    // 1) 당월 데이터만
+    base = base.filter((o) => {
+      const d = getPickupDate(o) || "";
+      return d.startsWith(thisMonth);
+    });
+
+    // 2) 상단 탭: 전체 / 배차중 / 배차완료
+    base = base.filter((o) => {
+      if (statusTab === "전체") return true;
+      const state = getStatus(o); // 🔥 차량번호 기준 상태
+      return state === statusTab;
+    });
+
+    // 3) 드롭다운 배차상태 (배차 전체 / 배차중 / 배차완료)
+    base = base.filter((o) => {
+      if (!assignFilter) return true;
+      const state = getStatus(o);
+      return state === assignFilter;
+    });
+
+    // 4) 차량종류 필터
+    base = base.filter((o) => {
+      if (!vehicleFilter) return true;
+      const carType = String(o.차량종류 || o.차종 || "").toLowerCase();
+      return carType.includes(vehicleFilter.toLowerCase());
+    });
+
+    // 5) 날짜 필터
+    base = base.filter((o) => {
+      const d = getPickupDate(o);
+      if (!d) return false;
+      if (startDate && d < startDate) return false;
+      if (endDate && d > endDate) return false;
+      return true;
+    });
+
+    // 6) 검색
+    base = base.filter((o) => {
+      if (!searchText.trim()) return true;
+
+      const t = searchText.trim().toLowerCase();
+      const map = {
+        거래처명: o.거래처명 || "",
+        기사명: o.기사명 || "",
+        차량번호: o.차량번호 || "",
+        상차지명: o.상차지명 || "",
+        하차지명: o.하차지명 || "",
+      };
+
+      return String(map[searchType] || "").toLowerCase().includes(t);
+    });
+
+    // 7) 정렬
+    if (statusTab === "전체") {
+      // 전체 = 차량번호 없는(배차중) 걸 위로 + 최신 날짜순
+      base.sort((a, b) => {
+        const aEmpty = !String(a.차량번호 || "").trim();
+        const bEmpty = !String(b.차량번호 || "").trim();
+
+        if (aEmpty && !bEmpty) return -1;
+        if (!aEmpty && bEmpty) return 1;
+
+        const da = getPickupDate(a) || "";
+        const db = getPickupDate(b) || "";
+        return db.localeCompare(da);
+      });
+    } else {
+      // 탭이 배차중/배차완료면 최신 날짜순
+      base.sort((a, b) => {
+        const da = getPickupDate(a) || "";
+        const db = getPickupDate(b) || "";
+        return db.localeCompare(da);
+      });
+    }
+
+    return base;
+  }, [
+    orders,
+    statusTab,
+    assignFilter,
+    vehicleFilter,
+    startDate,
+    endDate,
+    searchType,
+    searchText,
+    thisMonth,
+  ]);
+
+  // 배차현황용
+  const filteredStatusOrders = filteredOrders;
+
+  // 미배차(차량번호 없는 전체 오더)
+  const unassignedOrders = useMemo(
+    () =>
+      orders
+        .filter((o) => {
+          const noVehicle =
+            !o.차량번호 || String(o.차량번호).trim() === "";
+          return noVehicle;
+        })
+        .sort((a, b) => {
+          const ad = String(a.상차일 || "");
+          const bd = String(b.상차일 || "");
+          if (ad !== bd) return ad.localeCompare(bd);
+
+          const at = String(a.상차시간 || a.상차일시 || "");
+          const bt = String(b.상차시간 || b.상차일시 || "");
+          if (at !== bt) return at.localeCompare(bt);
+
+          const ac = String(a.거래처명 || "");
+          const bc = String(b.거래처명 || "");
+          return ac.localeCompare(bc);
+        }),
+    [orders]
   );
-} catch (e) {
-  console.error(e);
-  alert("등록 실패!");
-}
 
-};
-// --------------------------------------------------
-// 🔵 (추가) 모바일 전용 upsertDriver — ★★★ 바로 여기 넣기 ★★★
-// --------------------------------------------------
-const upsertDriver = async ({ 차량번호, 이름, 전화번호 }) => {
-  if (!차량번호) return;
+  // 날짜별 그룹핑 메모
+  const groupedByDate = useMemo(() => {
+    const map = new Map();
+    for (const o of filteredOrders) {
+      const d = getPickupDate(o) || "기타";
+      if (!map.has(d)) map.set(d, []);
+      map.get(d).push(o);
+    }
+    return map;
+  }, [filteredOrders]);
 
-  const norm = (s = "") => String(s).replace(/\s+/g, "").toLowerCase();
+  // --------------------------------------------------
+  // 5. 저장 / 수정
+  // --------------------------------------------------
+  const handleSave = async () => {
+    const isEdit = !!form._editId;
 
-  // 기존 기사 검색
-  const existing = drivers.find(
-    (d) => norm(d.차량번호) === norm(차량번호)
-  );
+    if (!form.상차지명 || !form.하차지명) {
+      alert("상차지 / 하차지는 필수입니다.");
+      return;
+    }
 
-  // 기존 문서 업데이트
-  if (existing) {
-    await updateDoc(doc(db, "drivers", existing.id), {
+    const 청구운임 = toNumber(form.청구운임);
+    const 기사운임 = toNumber(form.기사운임);
+    const 수수료 = 청구운임 - 기사운임;
+
+    const docData = {
+      거래처명: form.거래처명 || "",
+      상차지명: form.상차지명,
+      상차지주소: form.상차지주소 || "",
+      하차지명: form.하차지명,
+      하차지주소: form.하차지주소 || "",
+      화물내용: form.화물내용 || "",
+      차량종류: form.차종 || "",
+      차량톤수: form.톤수 || "",
+      상차방법: form.상차방법 || "",
+      하차방법: form.하차방법 || "",
+      상차일: form.상차일 || "",
+      상차시간: form.상차시간 || "",
+      하차일: form.하차일 || "",
+      하차시간: form.하차시간 || "",
+      지급방식: form.지급방식 || "",
+      배차방식: form.배차방식 || "",
+      메모: form.적요 || "",
+      혼적여부: form.혼적여부 || "독차",
+      차량번호: form.차량번호 || "",
+      기사명: form.기사명 || "",
+      전화번호: form.전화번호 || "",
+      청구운임,
+      기사운임,
+      수수료,
+    };
+
+    const statusByCar =
+      (docData.차량번호 || "").trim() ? "배차완료" : "배차중";
+
+    // 🔵 수정모드
+    if (isEdit) {
+      await updateDoc(doc(db, "dispatch", form._editId), {
+        ...docData,
+        배차상태: statusByCar,
+        상태: statusByCar,
+      });
+
+      showToast("수정이 완료되었습니다.");
+
+      if (form._returnToDetail) {
+        setSelectedOrder({ id: form._editId, ...docData });
+        setPage("detail");
+        return;
+      }
+
+      setPage("list");
+      setTimeout(
+        () => window.scrollTo({ top: 0, behavior: "smooth" }),
+        50
+      );
+      return;
+    }
+
+    // 🔵 신규등록
+    try {
+      const newDocRef = await addDoc(collection(db, "dispatch"), {
+        ...docData,
+        id: crypto.randomUUID(), // Firestore에 id 필드도 보존
+        배차상태: statusByCar,
+        상태: statusByCar,
+        등록일: todayStr(),
+        createdAt: serverTimestamp(),
+      });
+
+      showToast("등록 완료!");
+
+      setPage("list");
+      setForm({
+        거래처명: "",
+        상차일: "",
+        상차시간: "",
+        하차일: "",
+        하차시간: "",
+        상차지명: "",
+        상차지주소: "",
+        하차지명: "",
+        하차지주소: "",
+        톤수: "",
+        차종: "",
+        화물내용: "",
+        상차방법: "",
+        하차방법: "",
+        지급방식: "",
+        배차방식: "",
+        청구운임: 0,
+        기사운임: 0,
+        수수료: 0,
+        산재보험료: 0,
+        차량번호: "",
+        기사명: "",
+        전화번호: "",
+        혼적여부: "독차",
+        적요: "",
+        _editId: null,
+        _returnToDetail: false,
+      });
+
+      setTimeout(
+        () => window.scrollTo({ top: 0, behavior: "smooth" }),
+        50
+      );
+    } catch (e) {
+      console.error(e);
+      alert("등록 실패!");
+    }
+  };
+
+  // --------------------------------------------------
+  // 🔵 모바일 전용 upsertDriver
+  // --------------------------------------------------
+  const upsertDriver = async ({ 차량번호, 이름, 전화번호 }) => {
+    if (!차량번호) return;
+
+    const norm = (s = "") => String(s).replace(/\s+/g, "").toLowerCase();
+
+    const existing = drivers.find(
+      (d) => norm(d.차량번호) === norm(차량번호)
+    );
+
+    if (existing) {
+      await updateDoc(doc(db, "drivers", existing.id), {
+        차량번호: 차량번호 || "",
+        이름: 이름 || "",
+        전화번호: 전화번호 || "",
+        메모: existing.메모 ?? "",
+        updatedAt: serverTimestamp(),
+      });
+      return existing.id;
+    }
+
+    const ref = await addDoc(collection(db, "drivers"), {
       차량번호: 차량번호 || "",
       이름: 이름 || "",
       전화번호: 전화번호 || "",
-      메모: existing.메모 ?? "",
-      updatedAt: serverTimestamp(),
+      메모: "",
+      createdAt: serverTimestamp(),
     });
-    return existing.id;
-  }
 
-  // 신규 문서 생성
-  const ref = await addDoc(collection(db, "drivers"), {
-    차량번호: 차량번호 || "",
-    이름: 이름 || "",
-    전화번호: 전화번호 || "",
-    메모: "",
-    createdAt: serverTimestamp(),
-  });
-
-  return ref.id;
-};
+    return ref.id;
+  };
 
   // --------------------------------------------------
-  // 6. 기사 배차 / 배차취소 / 오더취소(=삭제)
+  // 6. 기사 배차 / 배차취소(상태는 배차중으로만) / 오더삭제
   // --------------------------------------------------
   const assignDriver = async ({ 차량번호, 이름, 전화번호 }) => {
     if (!selectedOrder) return;
-    const norm = (s = "") =>
-      String(s).replace(/\s+/g, "").toLowerCase();
+
+    const norm = (s = "") => String(s).replace(/\s+/g, "").toLowerCase();
 
     let driver = drivers.find(
       (d) => norm(d.차량번호) === norm(차량번호)
     );
 
-    // 없는 차량번호면 기사 DB에 신규 등록
     if (!driver) {
-      if (!driver) {
-  const newId = await upsertDriver({
-    차량번호,
-    이름: 이름 || "",
-    전화번호: 전화번호 || "",
-  });
+      const newId = await upsertDriver({
+        차량번호,
+        이름: 이름 || "",
+        전화번호: 전화번호 || "",
+      });
 
-  driver = { id: newId, 차량번호, 이름: 이름 || "", 전화번호: 전화번호 || "" };
-}
-
+      driver = {
+        id: newId,
+        차량번호,
+        이름: 이름 || "",
+        전화번호: 전화번호 || "",
+      };
     }
 
     await updateDoc(doc(db, "dispatch", selectedOrder.id), {
@@ -714,9 +674,10 @@ const upsertDriver = async ({ 차량번호, 이름, 전화번호 }) => {
   const cancelAssign = async () => {
     if (!selectedOrder) return;
 
+    // 🔥 차량번호/기사정보만 제거 → 상태는 자동으로 "배차중"
     await updateDoc(doc(db, "dispatch", selectedOrder.id), {
-      배차상태: "배차전",
-      상태: "배차전",
+      배차상태: "배차중",
+      상태: "배차중",
       기사명: "",
       차량번호: "",
       전화번호: "",
@@ -726,8 +687,8 @@ const upsertDriver = async ({ 차량번호, 이름, 전화번호 }) => {
       prev
         ? {
             ...prev,
-            배차상태: "배차전",
-            상태: "배차전",
+            배차상태: "배차중",
+            상태: "배차중",
             기사명: "",
             차량번호: "",
             전화번호: "",
@@ -738,12 +699,12 @@ const upsertDriver = async ({ 차량번호, 이름, 전화번호 }) => {
     alert("배차가 취소되었습니다.");
   };
 
-  // 🔴 오더 취소 = 실제 삭제 (PC와 동일)
+  // 🔴 오더 취소 = 실제 삭제
   const cancelOrder = async () => {
     if (!selectedOrder) return;
     if (
       !window.confirm(
-        "해당 오더를 삭제(배차취소) 하시겠습니까?\n삭제 후에는 복구할 수 없습니다."
+        "해당 오더를 삭제하시겠습니까?\n삭제 후에는 복구할 수 없습니다."
       )
     )
       return;
@@ -759,51 +720,51 @@ const upsertDriver = async ({ 차량번호, 이름, 전화번호 }) => {
   };
 
   const title =
-  page === "list"
-    ? "등록내역"
-    : page === "form"
-    ? (form._editId ? "수정하기" : "화물등록")   // ← 수정 포인트!!!
-    : page === "fare"
-    ? "표준운임표"
-    : page === "status"
-    ? "배차현황"
-    : page === "unassigned"
-    ? "미배차현황"
-    : "상세보기";
+    page === "list"
+      ? "등록내역"
+      : page === "form"
+      ? form._editId
+        ? "수정하기"
+        : "화물등록"
+      : page === "fare"
+      ? "표준운임표"
+      : page === "status"
+      ? "배차현황"
+      : page === "unassigned"
+      ? "미배차현황"
+      : "상세보기";
 
-  // --------------------------------------------------
-  // 7. 렌더링
-  // --------------------------------------------------
+  // ------------------------------------------------------------------
+  // 렌더링
+  // ------------------------------------------------------------------
   return (
     <div className="w-full max-w-md mx-auto min-h-screen bg-gray-50 flex flex-col relative">
-         {/* 🔔 토스트 알림 */}
-    {toast && (
-      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 
+      {/* 🔔 토스트 알림 */}
+      {toast && (
+        <div
+          className="fixed bottom-4 left-1/2 -translate-x-1/2 
                       bg-black text-white px-4 py-2 rounded-lg 
-                      text-sm shadow-lg z-[9999]">
-        {toast}
-      </div>
-    )}
+                      text-sm shadow-lg z-[9999]"
+        >
+          {toast}
+        </div>
+      )}
+
       <MobileHeader
         title={title}
         onBack={
-  page === "form"
-    ? () => {
-        // 폼에서 뒤로가기 → 상세보기로 복귀
-        if (form._editId && form._returnToDetail) {
-          setPage("detail");
-          return;
+          page === "form"
+            ? () => {
+                if (form._editId && form._returnToDetail) {
+                  setPage("detail");
+                  return;
+                }
+                setPage("list");
+              }
+            : page === "detail"
+            ? () => setPage("list")
+            : undefined
         }
-
-        // 신규등록 폼이면 목록으로
-        setPage("list");
-      }
-    : page === "detail"
-    ? () => setPage("list")
-    : undefined
-}
-
-
         onRefresh={page === "list" ? handleRefresh : undefined}
         onMenu={page === "list" ? () => setShowMenu(true) : undefined}
       />
@@ -816,41 +777,38 @@ const upsertDriver = async ({ 차량번호, 이름, 전화번호 }) => {
             setShowMenu(false);
           }}
           onGoCreate={() => {
-  setForm({
-    거래처명: "",
-    상차일: "",
-    상차시간: "",
-    하차일: "",
-    하차시간: "",
-    상차지명: "",
-    상차지주소: "",
-    하차지명: "",
-    하차지주소: "",
-    톤수: "",
-    차종: "",
-    화물내용: "",
-    상차방법: "",
-    하차방법: "",
-    지급방식: "",
-    배차방식: "",
-    청구운임: 0,
-    기사운임: 0,
-    수수료: 0,
-    산재보험료: 0,
-    차량번호: "",
-    기사명: "",
-    전화번호: "",
-    혼적여부: "독차",
-    적요: "",
-    _editId: null,
-    _returnToDetail: false,
-  });
-
-  setPage("form");        // ← 🔥 반드시 있어야 함
-  setShowMenu(false);     // ← 🔥 이것도 반드시 있어야 함
-}}
-
-
+            setForm({
+              거래처명: "",
+              상차일: "",
+              상차시간: "",
+              하차일: "",
+              하차시간: "",
+              상차지명: "",
+              상차지주소: "",
+              하차지명: "",
+              하차지주소: "",
+              톤수: "",
+              차종: "",
+              화물내용: "",
+              상차방법: "",
+              하차방법: "",
+              지급방식: "",
+              배차방식: "",
+              청구운임: 0,
+              기사운임: 0,
+              수수료: 0,
+              산재보험료: 0,
+              차량번호: "",
+              기사명: "",
+              전화번호: "",
+              혼적여부: "독차",
+              적요: "",
+              _editId: null,
+              _returnToDetail: false,
+            });
+            setPage("form");
+            setShowMenu(false);
+          }}
           onGoFare={() => {
             setPage("fare");
             setShowMenu(false);
@@ -885,12 +843,11 @@ const upsertDriver = async ({ 차량번호, 이름, 전화번호 }) => {
             setVehicleFilter={setVehicleFilter}
             assignFilter={assignFilter}
             setAssignFilter={setAssignFilter}
-            // 🔍 검색 추가
-  searchType={searchType}
-  setSearchType={setSearchType}
-  searchText={searchText}
-  setSearchText={setSearchText}
-/>
+            searchType={searchType}
+            setSearchType={setSearchType}
+            searchText={searchText}
+            setSearchText={setSearchText}
+          />
         )}
 
         {page === "form" && (
@@ -900,96 +857,84 @@ const upsertDriver = async ({ 차량번호, 이름, 전화번호 }) => {
             clients={clients}
             onSave={handleSave}
             setPage={setPage}
-showToast={showToast}
-drivers={drivers}
-upsertDriver={upsertDriver}
+            showToast={showToast}
+            drivers={drivers}
+            upsertDriver={upsertDriver}
           />
         )}
 
         {page === "detail" && selectedOrder && (
-  <MobileOrderDetail
-  order={selectedOrder}
-  drivers={drivers}
-  onAssignDriver={assignDriver}
-  onCancelAssign={cancelAssign}
-  onCancelOrder={cancelOrder}
-  setPage={setPage}
-  setForm={setForm}
-  setSelectedOrder={setSelectedOrder}
-  showToast={showToast}
-  upsertDriver={upsertDriver}   // 🔥🔥 이거 추가해야 신규등록 됨!!
-/>
+          <MobileOrderDetail
+            order={selectedOrder}
+            drivers={drivers}
+            onAssignDriver={assignDriver}
+            onCancelAssign={cancelAssign}
+            onCancelOrder={cancelOrder}
+            setPage={setPage}
+            setForm={setForm}
+            setSelectedOrder={setSelectedOrder}
+            showToast={showToast}
+            upsertDriver={upsertDriver}
+          />
+        )}
 
+        {page === "fare" && (
+          <MobileStandardFare onBack={() => setPage("list")} />
+        )}
 
-)}
+        {page === "status" && (
+          <MobileStatusTable
+            title="배차현황"
+            orders={filteredStatusOrders}
+            onBack={() => setPage("list")}
+          />
+        )}
 
-
-       {page === "fare" && (
-  <MobileStandardFare
-    onBack={() => setPage("list")}   // ← 뒤로가기 추가
-  />
-)}
-
-{page === "status" && (
-  <MobileStatusTable
-    title="배차현황"
-    orders={filteredStatusOrders}
-    onBack={() => setPage("list")}   // ← 뒤로가기 추가
-  />
-)}
-
-{page === "unassigned" && (
-  <MobileStatusTable
-    title={`미배차현황 (${unassignedOrders.length})`}
-    orders={unassignedOrders}
-    onQuickAssign={(order) => setQuickAssignTarget(order)}  // ★ 빠른 배차등록용
-    onBack={() => setPage("list")}
-  />
-)}
-
-
-
-
+        {page === "unassigned" && (
+          <MobileStatusTable
+            title={`미배차현황 (${unassignedOrders.length})`}
+            orders={unassignedOrders}
+            onQuickAssign={(order) => setQuickAssignTarget(order)}
+            onBack={() => setPage("list")}
+          />
+        )}
       </div>
 
       {page === "list" && !showMenu && (
         <button
           onClick={() => {
-  setForm({
-  거래처명: "",
-  상차일: "",
-  상차시간: "",
-  하차일: "",
-  하차시간: "",
-  상차지명: "",
-  상차지주소: "",
-  하차지명: "",
-  하차지주소: "",
-  톤수: "",
-  차종: "",
-  화물내용: "",
-  상차방법: "",
-  하차방법: "",
-  지급방식: "",
-  배차방식: "",
-  청구운임: 0,
-  기사운임: 0,
-  수수료: 0,
-  산재보험료: 0,
-  차량번호: "",
-  기사명: "",
-  전화번호: "",
-  혼적여부: "독차",
-  적요: "",
-  _editId: null,
-  _returnToDetail: false,
-});
-
-
-  setSelectedOrder(null);
-  setPage("form");
-}}
-
+            setForm({
+              거래처명: "",
+              상차일: "",
+              상차시간: "",
+              하차일: "",
+              하차시간: "",
+              상차지명: "",
+              상차지주소: "",
+              하차지명: "",
+              하차지주소: "",
+              톤수: "",
+              차종: "",
+              화물내용: "",
+              상차방법: "",
+              하차방법: "",
+              지급방식: "",
+              배차방식: "",
+              청구운임: 0,
+              기사운임: 0,
+              수수료: 0,
+              산재보험료: 0,
+              차량번호: "",
+              기사명: "",
+              전화번호: "",
+              혼적여부: "독차",
+              적요: "",
+              _editId: null,
+              _returnToDetail: false,
+            });
+            setSelectedOrder(null);
+            setPage("form");
+          }}
           className="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-blue-500 text-white text-3xl flex items-center justify-center shadow-lg active:scale-95"
         >
           +
@@ -998,7 +943,8 @@ upsertDriver={upsertDriver}
     </div>
   );
 }
-// ======================= src/mobile/MobileApp.jsx (PART 2/4) =======================
+// ======================= src/mobile/MobileApp.jsx (PART 2/3) =======================
+
 // ----------------------------------------------------------------------
 // 공통 헤더 / 사이드 메뉴
 // ----------------------------------------------------------------------
@@ -1008,7 +954,6 @@ function MobileHeader({ title, onBack, onRefresh, onMenu }) {
 
   return (
     <div className="flex items-center justify-between px-4 py-3 bg-white border-b sticky top-0 z-30">
-
       {/* 왼쪽 버튼 */}
       <div className="w-8">
         {hasLeft && <BackIconButton onClick={leftFn} />}
@@ -1030,7 +975,6 @@ function MobileHeader({ title, onBack, onRefresh, onMenu }) {
           </button>
         )}
       </div>
-
     </div>
   );
 }
@@ -1112,13 +1056,13 @@ function MobileOrderList({
   setVehicleFilter,
   assignFilter,
   setAssignFilter,
-    searchType,
+  searchType,
   setSearchType,
   searchText,
   setSearchText,
 }) {
-  // 탭 라벨은 '배차전'이지만, 실제 데이터의 '배차중'은 normalizeState 에서 '배차전'으로 변환
-  const tabs = ["전체", "배차전", "배차완료", "배차취소"];
+  // 🔥 탭: 전체 / 배차중 / 배차완료 (배차전/배차취소 없음)
+  const tabs = ["전체", "배차중", "배차완료"];
 
   const dates = Array.from(groupedByDate.keys()).sort((a, b) =>
     a.localeCompare(b)
@@ -1204,32 +1148,32 @@ function MobileOrderList({
             onChange={(e) => setAssignFilter(e.target.value)}
           >
             <option value="">배차 전체</option>
-            <option value="배차전">배차전</option>
+            <option value="배차중">배차중</option>
             <option value="배차완료">배차완료</option>
           </select>
         </div>
+
         {/* 🔍 검색줄 */}
-<div className="flex gap-2 text-sm mt-2">
-  <select
-    className="w-28 border rounded-full px-3 py-1.5 bg-gray-50"
-    value={searchType}
-    onChange={(e) => setSearchType(e.target.value)}
-  >
-    <option value="거래처명">거래처명</option>
-    <option value="기사명">기사명</option>
-    <option value="차량번호">차량번호</option>
-    <option value="상차지명">상차지명</option>
-    <option value="하차지명">하차지명</option>
-  </select>
+        <div className="flex gap-2 text-sm mt-2">
+          <select
+            className="w-28 border rounded-full px-3 py-1.5 bg-gray-50"
+            value={searchType}
+            onChange={(e) => setSearchType(e.target.value)}
+          >
+            <option value="거래처명">거래처명</option>
+            <option value="기사명">기사명</option>
+            <option value="차량번호">차량번호</option>
+            <option value="상차지명">상차지명</option>
+            <option value="하차지명">하차지명</option>
+          </select>
 
-  <input
-    className="flex-1 border rounded-full px-3 py-1.5 bg-gray-50"
-    placeholder="검색어 입력"
-    value={searchText}
-    onChange={(e) => setSearchText(e.target.value)}
-  />
-</div>
-
+          <input
+            className="flex-1 border rounded-full px-3 py-1.5 bg-gray-50"
+            placeholder="검색어 입력"
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+          />
+        </div>
       </div>
 
       {/* 카드 목록 */}
@@ -1262,8 +1206,6 @@ function MobileOrderList({
     </div>
   );
 }
-// ======================= src/mobile/MobileApp.jsx (PART 3/4) =======================
-
 
 // 카드에서 쓰는 날짜 상태: 당상/당착/낼상/낼착/그 외 MM/DD
 function getDayStatusForCard(dateStr, type) {
@@ -1287,16 +1229,13 @@ function getDayStatusForCard(dateStr, type) {
     (t0.getTime() - n0.getTime()) / (1000 * 60 * 60 * 24)
   );
 
-  // 오늘
   if (diff === 0) {
     return type === "pickup" ? "당상" : "당착";
   }
-  // 내일
   if (diff === 1) {
     return type === "pickup" ? "낼상" : "낼착";
   }
 
-  // 그 외(어제 포함)는 MM/DD 로만 표시
   const m = String(target.getMonth() + 1).padStart(2, "0");
   const d = String(target.getDate()).padStart(2, "0");
   return `${m}/${d}`;
@@ -1306,30 +1245,23 @@ function MobileOrderCard({ order }) {
   const claim = getClaim(order);
   const fee = order.기사운임 ?? 0;
 
-  // 상태 (배차중 -> 배차전으로 표시)
-  const stateRaw = order.배차상태 || order.상태 || "배차전";
-  const state = normalizeState(stateRaw);
+  // 🔥 상태 = 차량번호 기준 (배차중 / 배차완료)
+  const state = getStatus(order);
 
   const stateBadgeClass =
     state === "배차완료"
       ? "border-green-400 text-green-600"
-      : state === "배차취소"
-      ? "border-red-400 text-red-600"
       : "border-gray-400 text-gray-600";
 
-  // 날짜 상태(당상/당착/낼상/낼착/MM/DD)
   const pickupStatus = getDayStatusForCard(order.상차일, "pickup");
   const dropStatus = getDayStatusForCard(order.하차일, "drop");
 
-  // 작업코드(지/수/직수/수도)
   const pickupMethodCode = methodCode(order.상차방법);
   const dropMethodCode = methodCode(order.하차방법);
 
-  // 짧은 주소(시/구)
   const pickupShort = shortAddr(order.상차지주소 || "");
   const dropShort = shortAddr(order.하차지주소 || "");
 
-  // 톤수 / 차종 / 화물내용 chips
   const ton = order.톤수 || order.차량톤수 || "";
   const carType = order.차량종류 || order.차종 || "";
   const cargo = order.화물내용 || "";
@@ -1379,7 +1311,6 @@ function MobileOrderCard({ order }) {
 
       {/* 당상/당착 + 작업코드 줄 */}
       <div className="flex items-center gap-4 text-[12px] font-semibold mt-3">
-        {/* 상차 쪽 */}
         {(pickupStatus || pickupMethodCode) && (
           <div className="flex items-center gap-1">
             {pickupStatus && (
@@ -1391,7 +1322,6 @@ function MobileOrderCard({ order }) {
           </div>
         )}
 
-        {/* 하차 쪽 */}
         {(dropStatus || dropMethodCode) && (
           <div className="flex items-center gap-1">
             {dropStatus && (
@@ -1444,16 +1374,13 @@ function MobileOrderDetail({
   setForm,
   setSelectedOrder,
   showToast,
-  upsertDriver,   // 🔥 이거 추가!!
+  upsertDriver,
 }) {
-
-
-
   const [carNo, setCarNo] = useState(order.차량번호 || "");
   const [name, setName] = useState(order.기사명 || "");
   const [phone, setPhone] = useState(order.전화번호 || "");
 
-  // 차량번호 입력 시 기사 자동매칭 (PC와 동일 로직 느낌)
+  // 차량번호 입력 시 기사 자동매칭
   useEffect(() => {
     const norm = (s = "") =>
       String(s).replace(/\s+/g, "").toLowerCase();
@@ -1466,13 +1393,14 @@ function MobileOrderDetail({
       setPhone(d.전화번호 || "");
     }
   }, [carNo, drivers]);
-// 🔥 차량번호 지우면 이름/전화번호 자동 초기화
-useEffect(() => {
-  if (!carNo) {
-    setName("");
-    setPhone("");
-  }
-}, [carNo]);
+
+  // 차량번호 지우면 이름/전화번호 자동 초기화
+  useEffect(() => {
+    if (!carNo) {
+      setName("");
+      setPhone("");
+    }
+  }, [carNo]);
 
   const openMap = (type) => {
     const addr =
@@ -1509,7 +1437,7 @@ useEffect(() => {
 
   const claim = getClaim(order);
   const sanjae = getSanjae(order);
-  const state = order.배차상태 || order.상태 || "배차전";
+  const state = getStatus(order); // 🔥 상태 계산 일원화
 
   const 상차일시 =
     order.상차일시 ||
@@ -1673,8 +1601,6 @@ useEffect(() => {
             className={
               state === "배차완료"
                 ? "text-green-600 font-semibold"
-                : state === "배차취소"
-                ? "text-red-600 font-semibold"
                 : "text-gray-700"
             }
           >
@@ -1709,31 +1635,31 @@ useEffect(() => {
         </div>
 
         <button
-  onClick={handleAssignClick}
-  className="w-full py-2 rounded-lg bg-emerald-500 text-white text-sm font-semibold mt-2"
->
-  기사 배차하기
-</button>
+          onClick={handleAssignClick}
+          className="w-full py-2 rounded-lg bg-emerald-500 text-white text-sm font-semibold mt-2"
+        >
+          기사 배차하기
+        </button>
 
+        {/* 신규 기사 등록 버튼 */}
+        {carNo && !drivers.some((d) => d.차량번호 === carNo) && (
+          <div className="mt-2">
+            <button
+              onClick={() => {
+                upsertDriver({
+                  차량번호: carNo,
+                  이름: name || "",
+                  전화번호: phone || "",
+                });
+                showToast("신규 기사 등록 완료");
+              }}
+              className="w-full py-2 bg-green-600 text-white rounded-lg text-sm font-semibold"
+            >
+              🚚 신규 기사 등록하기
+            </button>
+          </div>
+        )}
 
-{/* 🔵 신규 기사 등록 버튼 — 정확히 여기!! */}
-{carNo && !drivers.some(d => d.차량번호 === carNo) && (
-  <div className="mt-2">
-    <button
-      onClick={() => {
-        upsertDriver({
-          차량번호: carNo,
-          이름: name || "",
-          전화번호: phone || "",
-        });
-        showToast("신규 기사 등록 완료");
-      }}
-      className="w-full py-2 bg-green-600 text-white rounded-lg text-sm font-semibold"
-    >
-      🚚 신규 기사 등록하기
-    </button>
-  </div>
-)}
         {state === "배차완료" && (
           <button
             onClick={onCancelAssign}
@@ -1750,82 +1676,86 @@ useEffect(() => {
           오더 취소(삭제)
         </button>
       </div>
-      {/* 🔵 수정하기 / 배차정보 유지 옵션 */}
-<div className="bg-white border rounded-xl px-4 py-3 shadow-sm space-y-2">
 
-  <div className="flex items-center gap-2 text-sm">
-    <input
-      type="checkbox"
-      id="keepDriver"
-      checked={order._keepDriver || false}
-      onChange={(e) => {
-        setSelectedOrder((prev) => ({
-          ...prev,
-          _keepDriver: e.target.checked,
-        }));
-      }}
-    />
-    <label htmlFor="keepDriver" className="text-sm text-gray-700">
-      배차정보(기사/차량번호/연락처) 유지하고 수정하기
-    </label>
-  </div>
+      {/* 수정하기 / 배차정보 유지 옵션 */}
+      <div className="bg-white border rounded-xl px-4 py-3 shadow-sm space-y-2">
+        <div className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            id="keepDriver"
+            checked={order._keepDriver || false}
+            onChange={(e) => {
+              setSelectedOrder((prev) => ({
+                ...prev,
+                _keepDriver: e.target.checked,
+              }));
+            }}
+          />
+          <label htmlFor="keepDriver" className="text-sm text-gray-700">
+            배차정보(기사/차량번호/연락처) 유지하고 수정하기
+          </label>
+        </div>
 
-  {/* 🔵 상세보기에서 수정 버튼 1개만 */}
-  <button
-    onClick={() => {
-      window.scrollTo(0, 0);
-      setPage("form");
+        <button
+          onClick={() => {
+            window.scrollTo(0, 0);
+            setPage("form");
 
-      setForm({
-        거래처명: order.거래처명 || "",
-        상차일: order.상차일 || "",
-        상차시간: order.상차시간 || "",
-        하차일: order.하차일 || "",
-        하차시간: order.하차시간 || "",
-        상차지명: order.상차지명 || "",
-        상차지주소: order.상차지주소 || "",
-        하차지명: order.하차지명 || "",
-        하차지주소: order.하차지주소 || "",
-        톤수: order.톤수 || order.차량톤수 || "",
-        차종: order.차종 || order.차량종류 || "",
-        화물내용: order.화물내용 || "",
-        상차방법: order.상차방법 || "",
-        하차방법: order.하차방법 || "",
-        지급방식: order.지급방식 || "",
-        배차방식: order.배차방식 || "",
-        청구운임: order.청구운임 || 0,
-        기사운임: order.기사운임 || 0,
-        수수료: order.수수료 || 0,
-        산재보험료: order.산재보험료 || 0,
-        차량번호: order.차량번호 || "",
-        혼적여부: order.혼적여부 || "독차",
-        적요: order.메모 || "",
-
-        기사명: order._keepDriver ? order.기사명 : "",
-        전화번호: order._keepDriver ? order.전화번호 : "",
-
-        _editId: order.id,
-        _returnToDetail: true,
-      });
-    }}
-    className="w-full py-2 rounded-lg bg-orange-500 text-white text-sm font-semibold mt-2"
-  >
-    수정하기
-  </button>
-
-</div>
-
-
+            setForm({
+              거래처명: order.거래처명 || "",
+              상차일: order.상차일 || "",
+              상차시간: order.상차시간 || "",
+              하차일: order.하차일 || "",
+              하차시간: order.하차시간 || "",
+              상차지명: order.상차지명 || "",
+              상차지주소: order.상차지주소 || "",
+              하차지명: order.하차지명 || "",
+              하차지주소: order.하차지주소 || "",
+              톤수: order.톤수 || order.차량톤수 || "",
+              차종: order.차종 || order.차량종류 || "",
+              화물내용: order.화물내용 || "",
+              상차방법: order.상차방법 || "",
+              하차방법: order.하차방법 || "",
+              지급방식: order.지급방식 || "",
+              배차방식: order.배차방식 || "",
+              청구운임: order.청구운임 || 0,
+              기사운임: order.기사운임 || 0,
+              수수료: order.수수료 || 0,
+              산재보험료: order.산재보험료 || 0,
+              차량번호: order.차량번호 || "",
+              혼적여부: order.혼적여부 || "독차",
+              적요: order.메모 || "",
+              기사명: order._keepDriver ? order.기사명 : "",
+              전화번호: order._keepDriver ? order.전화번호 : "",
+              _editId: order.id,
+              _returnToDetail: true,
+            });
+          }}
+          className="w-full py-2 rounded-lg bg-orange-500 text-white text-sm font-semibold mt-2"
+        >
+          수정하기
+        </button>
+      </div>
     </div>
   );
 }
-// ======================= src/mobile/MobileApp.jsx (PART 4/4) =======================
+// ======================= src/mobile/MobileApp.jsx (PART 3/3) =======================
 
 // ======================================================================
 // 등록 폼
 // ======================================================================
-function MobileOrderForm({ form, setForm, clients, onSave, setPage, showToast, drivers, upsertDriver }) {
-const [showNewDriver, setShowNewDriver] = useState(false);
+function MobileOrderForm({
+  form,
+  setForm,
+  clients,
+  onSave,
+  setPage,
+  showToast,
+  drivers,
+  upsertDriver,
+}) {
+  const [showNewDriver, setShowNewDriver] = useState(false);
+
   const update = (key, value) =>
     setForm((p) => ({ ...p, [key]: value }));
 
@@ -2232,102 +2162,91 @@ const [showNewDriver, setShowNewDriver] = useState(false);
         />
       </div>
 
-      {/* 차량번호 */}
-{/* 차량번호 */}
-<div className="bg-white rounded-lg border shadow-sm">
-  <RowLabelInput
-    label="차량번호"
-    input={
-      <input
-        className="w-full border rounded px-2 py-1 text-sm"
-        value={form.차량번호}
-        onChange={(e) => {
-          const v = e.target.value;
-          update("차량번호", v);
+      {/* 차량번호 / 기사명 / 연락처 */}
+      <div className="bg-white rounded-lg border shadow-sm">
+        <RowLabelInput
+          label="차량번호"
+          input={
+            <input
+              className="w-full border rounded px-2 py-1 text-sm"
+              value={form.차량번호}
+              onChange={(e) => {
+                const v = e.target.value;
+                update("차량번호", v);
+                setShowNewDriver(false);
 
-          // 🔥 입력 중에는 신규등록 버튼 숨기기
-          setShowNewDriver(false);
+                const norm = (s = "") =>
+                  String(s).replace(/\s+/g, "").toLowerCase();
 
-          const norm = (s = "") =>
-            String(s).replace(/\s+/g, "").toLowerCase();
+                const found = drivers.find(
+                  (d) => norm(d.차량번호) === norm(v)
+                );
 
-          // 🔥 기존 기사 자동 매칭
-          const found = drivers.find(
-            (d) => norm(d.차량번호) === norm(v)
-          );
-
-          if (found) {
-            update("기사명", found.이름 || "");
-            update("전화번호", found.전화번호 || "");
-          } else {
-            update("기사명", "");
-            update("전화번호", "");
+                if (found) {
+                  update("기사명", found.이름 || "");
+                  update("전화번호", found.전화번호 || "");
+                } else {
+                  update("기사명", "");
+                  update("전화번호", "");
+                }
+              }}
+              onBlur={() => {
+                if (
+                  form.차량번호 &&
+                  form.차량번호.length >= 2 &&
+                  !drivers.some((d) => d.차량번호 === form.차량번호)
+                ) {
+                  setShowNewDriver(true);
+                }
+              }}
+            />
           }
-        }}
-        onBlur={() => {
-          // 🔥 다른 칸 클릭했을 때만 신규등록 가능하도록
-          if (
-            form.차량번호 &&
-            form.차량번호.length >= 2 && // ← 최소 2글자
-            !drivers.some((d) => d.차량번호 === form.차량번호)
-          ) {
-            setShowNewDriver(true);
+        />
+      </div>
+
+      <div className="bg-white rounded-lg border shadow-sm">
+        <RowLabelInput
+          label="기사명"
+          input={
+            <input
+              className="w-full border rounded px-2 py-1 text-sm"
+              value={form.기사명 || ""}
+              onChange={(e) => update("기사명", e.target.value)}
+            />
           }
-        }}
-      />
-    }
-  />
-</div>
+        />
+      </div>
 
+      <div className="bg-white rounded-lg border shadow-sm">
+        <RowLabelInput
+          label="연락처"
+          input={
+            <input
+              className="w-full border rounded px-2 py-1 text-sm"
+              value={form.전화번호 || ""}
+              onChange={(e) => update("전화번호", e.target.value)}
+            />
+          }
+        />
+      </div>
 
-{/* 기사 이름 */}
-<div className="bg-white rounded-lg border shadow-sm">
-  <RowLabelInput
-    label="기사명"
-    input={
-      <input
-        className="w-full border rounded px-2 py-1 text-sm"
-        value={form.기사명 || ""}
-        onChange={(e) => update("기사명", e.target.value)}
-      />
-    }
-  />
-</div>
-
-{/* 기사 전화번호 */}
-<div className="bg-white rounded-lg border shadow-sm">
-  <RowLabelInput
-    label="연락처"
-    input={
-      <input
-        className="w-full border rounded px-2 py-1 text-sm"
-        value={form.전화번호 || ""}
-        onChange={(e) => update("전화번호", e.target.value)}
-      />
-    }
-  />
-</div>
-
-{/* 신규 기사 등록 버튼 — blur 후에만 뜸 */}
-{showNewDriver && (
-  <button
-    onClick={() => {
-      upsertDriver({
-        차량번호: form.차량번호,
-        이름: form.기사명 || "",
-        전화번호: form.전화번호 || "",
-      });
-      showToast("신규 기사 등록 완료");
-      setShowNewDriver(false); // 등록 후 숨기기
-    }}
-    className="w-full py-2 mt-2 rounded bg-green-600 text-white text-sm font-semibold"
-  >
-    🚚 신규 기사 등록하기
-  </button>
-)}
-
-
-
+      {/* 신규 기사 등록 버튼 */}
+      {showNewDriver && (
+        <button
+          onClick={() => {
+            upsertDriver({
+              차량번호: form.차량번호,
+              이름: form.기사명 || "",
+              전화번호: form.전화번호 || "",
+            });
+            showToast("신규 기사 등록 완료");
+            setShowNewDriver(false);
+          }}
+          className="w-full py-2 mt-2 rounded bg-green-600 text-white text-sm font-semibold"
+        >
+          🚚 신규 기사 등록하기
+        </button>
+      )}
 
       {/* 적요 */}
       <div className="bg-white rounded-lg border shadow-sm">
@@ -2343,60 +2262,53 @@ const [showNewDriver, setShowNewDriver] = useState(false);
         />
       </div>
 
-      <div className="mt-4 mb-8">
-  <div className="mt-4 mb-8 space-y-2">
+      <div className="mt-4 mb-8 space-y-2">
+        <button
+          onClick={onSave}
+          className="w-full py-3 rounded-lg bg-blue-500 text-white text-base font-semibold shadow"
+        >
+          {form._editId ? "수정하기" : "등록하기"}
+        </button>
 
-  {/* 수정하기 / 등록하기 */}
-  <button
-    onClick={onSave}
-    className="w-full py-3 rounded-lg bg-blue-500 text-white text-base font-semibold shadow"
-  >
-    {form._editId ? "수정하기" : "등록하기"}
-  </button>
-
-  {/* 🔥 수정취소 버튼 추가 */}
-  {form._editId && (
-  <button
-    onClick={() => {
-      setForm({
-        거래처명: "",
-        상차일: "",
-        상차시간: "",
-        하차일: "",
-        하차시간: "",
-        상차지명: "",
-        상차지주소: "",
-        하차지명: "",
-        하차지주소: "",
-        톤수: "",
-        차종: "",
-        화물내용: "",
-        상차방법: "",
-        하차방법: "",
-        지급방식: "",
-        배차방식: "",
-        청구운임: 0,
-        기사운임: 0,
-        수수료: 0,
-        산재보험료: 0,
-        차량번호: "",
-        기사명: "",
-        전화번호: "",
-        혼적여부: "독차",
-        적요: "",
-        _editId: null,
-        _returnToDetail: false,
-      });
-    }}
-    className="w-full py-3 rounded-lg bg-gray-300 text-gray-800 text-base font-semibold shadow"
-  >
-    수정취소
-  </button>
-)}
-
-</div>
-
-</div>
+        {form._editId && (
+          <button
+            onClick={() => {
+              setForm({
+                거래처명: "",
+                상차일: "",
+                상차시간: "",
+                하차일: "",
+                하차시간: "",
+                상차지명: "",
+                상차지주소: "",
+                하차지명: "",
+                하차지주소: "",
+                톤수: "",
+                차종: "",
+                화물내용: "",
+                상차방법: "",
+                하차방법: "",
+                지급방식: "",
+                배차방식: "",
+                청구운임: 0,
+                기사운임: 0,
+                수수료: 0,
+                산재보험료: 0,
+                차량번호: "",
+                기사명: "",
+                전화번호: "",
+                혼적여부: "독차",
+                적요: "",
+                _editId: null,
+                _returnToDetail: false,
+              });
+            }}
+            className="w-full py-3 rounded-lg bg-gray-300 text-gray-800 text-base font-semibold shadow"
+          >
+            수정취소
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -2416,31 +2328,27 @@ function RowLabelInput({ label, input }) {
 }
 
 // ======================================================================
-// 🔥 모바일 표준운임표 (AI 추천 + 자동완성 + 드롭다운 + PC 검색규칙 적용)
+// 모바일 표준운임표 (기존 로직 그대로)
 // ======================================================================
 function MobileStandardFare({ onBack }) {
   const [dispatchData, setDispatchData] = useState([]);
 
-  // 입력폼
   const [pickup, setPickup] = useState("");
   const [drop, setDrop] = useState("");
-    const [showPickupList, setShowPickupList] = useState(false);
+  const [showPickupList, setShowPickupList] = useState(false);
   const [showDropList, setShowDropList] = useState(false);
 
   const [cargo, setCargo] = useState("");
   const [ton, setTon] = useState("");
   const [vehicle, setVehicle] = useState("전체");
 
-  // 자동완성 리스트
   const [pickupList, setPickupList] = useState([]);
   const [dropList, setDropList] = useState([]);
 
-  // 검색 결과
   const [matchedRows, setMatchedRows] = useState([]);
   const [result, setResult] = useState(null);
   const [aiFare, setAiFare] = useState(null);
 
-  // 🔥 차량종류 목록
   const VEHICLE_TYPES = [
     "전체",
     "다마스",
@@ -2451,10 +2359,9 @@ function MobileStandardFare({ onBack }) {
     "냉장탑",
     "냉동탑",
     "리프트",
-    "오토바이"
+    "오토바이",
   ];
 
-  // 정규화
   const clean = (s) =>
     String(s || "").trim().toLowerCase().replace(/\s+/g, "");
 
@@ -2471,19 +2378,17 @@ function MobileStandardFare({ onBack }) {
   };
 
   const extractTonNum = (text = "") => {
-    const m = String(text).replace(/톤|t/gi, "").match(/(\d+(\.\d+)?)/);
+    const m = String(text)
+      .replace(/톤|t/gi, "")
+      .match(/(\d+(\.\d+)?)/);
     return m ? Number(m[1]) : null;
   };
 
-  // ------------------------------------------------------------
-  // 1) Firestore 실시간 데이터 (PC와 동일)
-  // ------------------------------------------------------------
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "dispatch"), (snap) => {
       const arr = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       setDispatchData(arr);
 
-      // 자동완성용 상차/하차 리스트 생성
       const pickupSet = new Set();
       const dropSet = new Set();
       arr.forEach((r) => {
@@ -2498,9 +2403,6 @@ function MobileStandardFare({ onBack }) {
     return () => unsub();
   }, []);
 
-  // ------------------------------------------------------------
-  // 2) PC 검색규칙 적용 calcFare
-  // ------------------------------------------------------------
   const calcFareMobile = () => {
     if (!pickup.trim() || !drop.trim()) {
       alert("상차지 / 하차지를 입력하세요.");
@@ -2512,33 +2414,29 @@ function MobileStandardFare({ onBack }) {
     const inputTonNum = extractTonNum(ton);
     const inputPallet = extractPalletNum(cargo);
 
-    // --------------------------
-    // 1차 필터
-    // --------------------------
     let filtered = dispatchData.filter((r) => {
       if (!r.상차지명 || !r.하차지명) return false;
 
       const rp = clean(r.상차지명);
       const rd = clean(r.하차지명);
 
-      const okPickup = rp.includes(normPickup) || normPickup.includes(rp);
+      const okPickup =
+        rp.includes(normPickup) || normPickup.includes(rp);
       const okDrop = rd.includes(normDrop) || normDrop.includes(rd);
       if (!okPickup || !okDrop) return false;
 
-      // 차량종류 필터
       if (vehicle !== "전체") {
         const rv = clean(r.차량종류 || "");
         const vv = clean(vehicle);
         if (!rv.includes(vv) && !vv.includes(rv)) return false;
       }
 
-      // 톤수 필터
       if (inputTonNum != null) {
         const rton = extractTonNum(r.차량톤수 || "");
-        if (rton != null && Math.abs(rton - inputTonNum) > 0.5) return false;
+        if (rton != null && Math.abs(rton - inputTonNum) > 0.5)
+          return false;
       }
 
-      // 파렛트/숫자 필터
       if (inputPallet != null) {
         const rowPallet =
           extractPalletNum(r.화물내용 || "") ||
@@ -2550,9 +2448,6 @@ function MobileStandardFare({ onBack }) {
       return true;
     });
 
-    // --------------------------
-    // 2차 fallback
-    // --------------------------
     if (!filtered.length) {
       filtered = dispatchData.filter((r) => {
         const rp = clean(r.상차지명);
@@ -2571,11 +2466,10 @@ function MobileStandardFare({ onBack }) {
 
     setMatchedRows(filtered);
 
-    // --------------------------
-    // AI 추천운임 계산 (PC 동일)
-    // --------------------------
     const fares = filtered
-      .map((r) => Number(String(r.청구운임 || 0).replace(/[^\d]/g, "")))
+      .map((r) =>
+        Number(String(r.청구운임 || 0).replace(/[^\d]/g, ""))
+      )
       .filter((v) => !isNaN(v));
 
     const avg = Math.round(fares.reduce((a, b) => a + b, 0) / fares.length);
@@ -2612,13 +2506,8 @@ function MobileStandardFare({ onBack }) {
     });
   };
 
-  // ------------------------------------------------------------
-  // UI 시작
-  // ------------------------------------------------------------
   return (
     <div className="px-4 py-4 space-y-4">
-
-      {/* 뒤로가기 */}
       <button
         onClick={onBack}
         className="px-3 py-1 rounded bg-gray-200 text-gray-700 text-sm"
@@ -2626,9 +2515,7 @@ function MobileStandardFare({ onBack }) {
         ◀ 뒤로가기
       </button>
 
-      {/* 검색 카드 */}
       <div className="bg-white rounded-2xl border shadow p-4 space-y-3">
-
         <div className="text-base font-bold text-gray-700 mb-2">
           📘 표준 운임 검색
         </div>
@@ -2640,26 +2527,23 @@ function MobileStandardFare({ onBack }) {
             placeholder="상차지"
             value={pickup}
             onChange={(e) => {
-  setPickup(e.target.value);
-  setShowPickupList(true);   // 🔥 입력하면 자동완성 열림
-}}
+              setPickup(e.target.value);
+              setShowPickupList(true);
+            }}
           />
           {showPickupList && pickup && (
             <div className="absolute z-20 bg-white border w-full max-h-40 overflow-auto rounded-xl shadow mt-1">
               {pickupList
-                .filter((x) =>
-                  clean(x).includes(clean(pickup))
-                )
+                .filter((x) => clean(x).includes(clean(pickup)))
                 .slice(0, 20)
                 .map((x) => (
                   <div
                     key={x}
                     className="px-3 py-2 hover:bg-gray-100 text-sm"
                     onClick={() => {
-  setPickup(x);
-  setShowPickupList(false);   // 🔥 선택하면 자동완성 닫기
-}}
-
+                      setPickup(x);
+                      setShowPickupList(false);
+                    }}
                   >
                     {x}
                   </div>
@@ -2669,38 +2553,37 @@ function MobileStandardFare({ onBack }) {
         </div>
 
         {/* 하차지 자동완성 */}
-<div className="relative">
-  <input
-    className="w-full border rounded-xl px-3 py-2 bg-gray-50 text-sm"
-    placeholder="하차지"
-    value={drop}
-    onChange={(e) => {
-      setDrop(e.target.value);
-      setShowDropList(true);   // 🔥 입력하면 열림
-    }}
-  />
-
-  {showDropList && drop && (
-    <div className="absolute z-20 bg-white border w-full max-h-40 overflow-auto rounded-xl shadow mt-1">
-      {dropList
-        .filter((x) => clean(x).includes(clean(drop)))
-        .slice(0, 20)
-        .map((x) => (
-          <div
-            key={x}
-            className="px-3 py-2 hover:bg-gray-100 text-sm"
-            onClick={() => {
-              setDrop(x);
-              setShowDropList(false);  // 🔥 선택하면 닫힘
+        <div className="relative">
+          <input
+            className="w-full border rounded-xl px-3 py-2 bg-gray-50 text-sm"
+            placeholder="하차지"
+            value={drop}
+            onChange={(e) => {
+              setDrop(e.target.value);
+              setShowDropList(true);
             }}
-          >
-            {x}
-          </div>
-        ))}
-    </div>
-  )}
-</div>
+          />
 
+          {showDropList && drop && (
+            <div className="absolute z-20 bg-white border w-full max-h-40 overflow-auto rounded-xl shadow mt-1">
+              {dropList
+                .filter((x) => clean(x).includes(clean(drop)))
+                .slice(0, 20)
+                .map((x) => (
+                  <div
+                    key={x}
+                    className="px-3 py-2 hover:bg-gray-100 text-sm"
+                    onClick={() => {
+                      setDrop(x);
+                      setShowDropList(false);
+                    }}
+                  >
+                    {x}
+                  </div>
+                ))}
+            </div>
+          )}
+        </div>
 
         <input
           className="w-full border rounded-xl px-3 py-2 bg-gray-50 text-sm"
@@ -2716,7 +2599,6 @@ function MobileStandardFare({ onBack }) {
           onChange={(e) => setTon(e.target.value)}
         />
 
-        {/* 차량종류 드롭다운 */}
         <select
           className="w-full border rounded-xl px-3 py-2 bg-gray-50 text-sm"
           value={vehicle}
@@ -2727,7 +2609,6 @@ function MobileStandardFare({ onBack }) {
           ))}
         </select>
 
-        {/* 버튼 */}
         <div className="flex gap-3 mt-2">
           <button
             onClick={calcFareMobile}
@@ -2759,9 +2640,21 @@ function MobileStandardFare({ onBack }) {
         <div className="bg-amber-50 border border-amber-300 rounded-2xl p-4 shadow">
           <h3 className="font-bold text-lg mb-3">🤖 AI 추천운임</h3>
 
-          <p>평균 운임: <b>{aiFare.avg.toLocaleString()}</b> 원</p>
-          <p>최소~최대: <b>{aiFare.min.toLocaleString()} ~ {aiFare.max.toLocaleString()}</b> 원</p>
-          <p>최근 동일구간: <b>{aiFare.latestFare.toLocaleString()}</b> 원</p>
+          <p>
+            평균 운임: <b>{aiFare.avg.toLocaleString()}</b> 원
+          </p>
+          <p>
+            최소~최대:{" "}
+            <b>
+              {aiFare.min.toLocaleString()} ~
+              {aiFare.max.toLocaleString()}
+            </b>{" "}
+            원
+          </p>
+          <p>
+            최근 동일구간:{" "}
+            <b>{aiFare.latestFare.toLocaleString()}</b> 원
+          </p>
 
           <div className="mt-4 p-4 bg-white border rounded-xl shadow-sm">
             <div className="text-xl text-amber-700 font-bold mb-1">
@@ -2779,8 +2672,13 @@ function MobileStandardFare({ onBack }) {
         <div className="bg-blue-50 rounded-xl border border-blue-200 p-4">
           <div>총 {result.count} 건</div>
           <div>평균 운임: {result.avg.toLocaleString()}원</div>
-          <div>최소~최대: {result.min.toLocaleString()} ~ {result.max.toLocaleString()}원</div>
-          <div>최근 운임: {result.latestFare.toLocaleString()}원</div>
+          <div>
+            최소~최대: {result.min.toLocaleString()} ~{" "}
+            {result.max.toLocaleString()}원
+          </div>
+          <div>
+            최근 운임: {result.latestFare.toLocaleString()}원
+          </div>
         </div>
       )}
 
@@ -2827,25 +2725,21 @@ function MobileStandardFare({ onBack }) {
     </div>
   );
 }
+
 // ======================================================================
 // 모바일 배차현황 / 미배차현황 테이블 (날짜별 그룹형 UI)
 // ======================================================================
 function MobileStatusTable({ title, orders, onBack, onQuickAssign }) {
-
-  // 날짜 기준 그룹핑
   const dateMap = new Map();
   for (const o of orders) {
     const d = getPickupDate(o) || "기타";
     if (!dateMap.has(d)) dateMap.set(d, []);
     dateMap.get(d).push(o);
   }
-  // 정렬 (날짜 오름차순)
   const sortedDates = Array.from(dateMap.keys()).sort();
 
   return (
     <div className="px-3 py-3">
-
-      {/* 뒤로가기 */}
       {onBack && (
         <button
           onClick={onBack}
@@ -2855,10 +2749,9 @@ function MobileStatusTable({ title, orders, onBack, onQuickAssign }) {
         </button>
       )}
 
-      {/* 빠른 배차등록 버튼 */}
       <button
         onClick={() => onQuickAssign && onQuickAssign()}
-  className="mb-3 w-full py-2 bg-blue-500 text-white text-sm rounded-lg font-semibold shadow active:scale-95 flex justify-center gap-2"
+        className="mb-3 w-full py-2 bg-blue-500 text-white text-sm rounded-lg font-semibold shadow active:scale-95 flex justify-center gap-2"
       >
         🚀 빠른 배차등록
         <span className="px-2 rounded-full bg-white text-blue-600 font-bold">
@@ -2870,19 +2763,15 @@ function MobileStatusTable({ title, orders, onBack, onQuickAssign }) {
         {title} (총 {orders.length}건)
       </div>
 
-      {/* 🔥 날짜별 그룹 출력 */}
       {sortedDates.map((dateStr) => {
         const groupList = dateMap.get(dateStr);
 
         return (
           <div key={dateStr} className="mb-6">
-
-            {/* 날짜 헤더 */}
             <div className="text-lg font-bold text-gray-800 mb-2">
               {dateStr.slice(5).replace("-", ".")}
             </div>
 
-            {/* 기존 테이블 그대로 유지 */}
             <div className="bg-white border rounded-xl shadow-sm overflow-hidden">
               <div className="max-h-[70vh] overflow-auto">
                 <table className="w-full text-[11px]">
@@ -2892,7 +2781,9 @@ function MobileStatusTable({ title, orders, onBack, onQuickAssign }) {
                       <th className="px-2 py-1 border-r">거래처</th>
                       <th className="px-2 py-1 border-r">상차지</th>
                       <th className="px-2 py-1 border-r">하차지</th>
-                      <th className="px-2 py-1 border-r">차량/기사</th>
+                      <th className="px-2 py-1 border-r">
+                        차량/기사
+                      </th>
                       <th className="px-2 py-1">청구/기사</th>
                     </tr>
                   </thead>
@@ -2903,11 +2794,20 @@ function MobileStatusTable({ title, orders, onBack, onQuickAssign }) {
                         <td className="px-2 py-1 border-r whitespace-nowrap">
                           {getPickupDate(o)}
                         </td>
-                        <td className="px-2 py-1 border-r">{o.거래처명}</td>
-                        <td className="px-2 py-1 border-r">{o.상차지명}</td>
-                        <td className="px-2 py-1 border-r">{o.하차지명}</td>
                         <td className="px-2 py-1 border-r">
-                          <div>{o.차량톤수 || o.톤수} {o.차량종류 || o.차종}</div>
+                          {o.거래처명}
+                        </td>
+                        <td className="px-2 py-1 border-r">
+                          {o.상차지명}
+                        </td>
+                        <td className="px-2 py-1 border-r">
+                          {o.하차지명}
+                        </td>
+                        <td className="px-2 py-1 border-r">
+                          <div>
+                            {o.차량톤수 || o.톤수}{" "}
+                            {o.차량종류 || o.차종}
+                          </div>
                           <div className="text-[10px] text-gray-500">
                             {o.기사명}({o.차량번호})
                           </div>
@@ -2935,7 +2835,6 @@ function MobileStatusTable({ title, orders, onBack, onQuickAssign }) {
                 </table>
               </div>
             </div>
-
           </div>
         );
       })}
