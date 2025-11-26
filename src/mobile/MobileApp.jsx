@@ -801,59 +801,32 @@ const deleteAllOrders = async () => {
       />
 
       {showMenu && (
-        <MobileSideMenu
-          onClose={() => setShowMenu(false)}
-          onGoList={() => {
-            setPage("list");
-            setShowMenu(false);
-          }}
-          onGoCreate={() => {
-            setForm({
-              거래처명: "",
-              상차일: "",
-              상차시간: "",
-              하차일: "",
-              하차시간: "",
-              상차지명: "",
-              상차지주소: "",
-              하차지명: "",
-              하차지주소: "",
-              톤수: "",
-              차종: "",
-              화물내용: "",
-              상차방법: "",
-              하차방법: "",
-              지급방식: "",
-              배차방식: "",
-              청구운임: 0,
-              기사운임: 0,
-              수수료: 0,
-              산재보험료: 0,
-              차량번호: "",
-              기사명: "",
-              전화번호: "",
-              혼적여부: "독차",
-              적요: "",
-              _editId: null,
-              _returnToDetail: false,
-            });
-            setPage("form");
-            setShowMenu(false);
-          }}
-          onGoFare={() => {
-            setPage("fare");
-            setShowMenu(false);
-          }}
-          onGoStatus={() => {
-            setPage("status");
-            setShowMenu(false);
-          }}
-          onGoUnassigned={() => {
-            setPage("unassigned");
-            setShowMenu(false);
-          }}
-        />
-      )}
+  <MobileSideMenu
+    onClose={() => setShowMenu(false)}
+    onGoList={() => {
+      setPage("list");
+      setShowMenu(false);
+    }}
+    onGoCreate={() => {
+      setPage("create");
+      setShowMenu(false);
+    }}
+    onGoFare={() => {
+      setPage("fare");
+      setShowMenu(false);
+    }}
+    onGoStatus={() => {
+      setPage("status");
+      setShowMenu(false);
+    }}
+    onGoUnassigned={() => {
+      setPage("unassigned");
+      setShowMenu(false);
+    }}
+    onDeleteAll={deleteAllOrders} // ⭐⭐ 추가 !!!
+  />
+)}
+
 
       <div className="flex-1 overflow-y-auto pb-24">
         {page === "list" && (
@@ -1017,7 +990,9 @@ function MobileSideMenu({
   onGoFare,
   onGoStatus,
   onGoUnassigned,
+  onDeleteAll, // ⭐⭐ 추가 !!!
 }) {
+
   return (
     <div className="fixed inset-0 z-40">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
@@ -1042,11 +1017,12 @@ function MobileSideMenu({
           </MenuSection>
           <MenuSection title="데이터 삭제">
   <button
-    onClick={deleteAllOrders}
-    className="w-full text-left px-4 py-2 text-sm text-red-600 font-semibold hover:bg-red-100"
-  >
-    🗑 전체 삭제
-  </button>
+  onClick={onDeleteAll} // ⭐⭐ deleteAllOrders → onDeleteAll로 교체!!
+  className="text-red-600 font-semibold"
+>
+  전체 삭제
+</button>
+
 </MenuSection>
 
         </div>
