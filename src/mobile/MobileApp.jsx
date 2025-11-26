@@ -1268,107 +1268,89 @@ function dayBadgeClass(label) {
   // 그 외 날짜 (예: 11/30)
   return "bg-gray-50 text-gray-500 border-gray-200";
 }
+
 function MobileOrderCard({ order }) {
   const claim = getClaim(order);
   const fee = order.기사운임 ?? 0;
-
   const state = getStatus(order);
+
+  // 배차 상태 뱃지 색상
   const stateBadgeClass =
     state === "배차완료"
       ? "bg-emerald-50 text-emerald-700 border-emerald-300"
       : "bg-gray-100 text-gray-700 border-gray-300";
 
-  const pickupName = order.상차지명 || "-";
-  const dropName = order.하차지명 || "-";
-  const pickupAddrShort = shortAddr(order.상차지주소 || "");
-  const dropAddrShort = shortAddr(order.하차지주소 || "");
+  const pickupName = order.상차지명 || "(정보 없음)";
+  const dropName = order.하차지명 || "(정보 없음)";
+
+  const pickupAddr = shortAddr(order.상차지주소) || "(정보 없음)";
+  const dropAddr = shortAddr(order.하차지주소) || "(정보 없음)";
 
   const pickupTime =
-    order.상차시간 || (order.상차일시 ? onlyTime(order.상차일시) : "");
+    onlyTime(order.상차시간 || order.상차일시) || "시간 없음";
   const dropTime =
-    order.하차시간 || (order.하차일시 ? onlyTime(order.하차일시) : "");
+    onlyTime(order.하차시간 || order.하차일시) || "시간 없음";
 
   const pickupStatus = getDayStatusForCard(order.상차일, "pickup");
   const dropStatus = getDayStatusForCard(order.하차일, "drop");
 
-  const ton = order.톤수 || order.차량톤수 || "";
-  const carType = order.차량종류 || order.차종 || "";
-  const cargo = order.화물내용 || "";
-  const bottomText = [ton && `${ton}`, carType, cargo]
+  const bottomText = [
+    order.톤수 && `${order.톤수}톤`,
+    order.차량종류,
+    order.화물내용
+  ]
     .filter(Boolean)
     .join(" · ");
 
   return (
     <div className="relative bg-white rounded-2xl shadow border px-3 py-3">
       
-      {/* 배차상태 배지 (고정 위치) */}
+      {/* 배차상태 라벨 */}
       <span
         className={`absolute right-3 top-3 px-2 py-0.5 rounded-full border text-[11px] font-semibold ${stateBadgeClass}`}
       >
         {state}
       </span>
 
-      {/* 상/하 줄 */}
-      <div className="space-y-1">
-        {/* 상차 줄 */}
-        <div className="flex items-center gap-2">
-          <span className="px-1.5 py-0.5 rounded-full bg-blue-500 text-white text-[12px] font-bold">상</span>
+      {/* 상차 */}
+      <div className="flex items-center gap-2 mb-1">
+        <span className="px-1.5 py-0.5 rounded-full bg-blue-500 text-white text-[12px] font-bold">상</span>
 
-          <div className="flex-1 min-w-0">
-            <div className="text-[14px] font-semibold truncate">{pickupName}</div>
-            <div className="text-[12px] text-gray-600 truncate">({pickupAddrShort})</div>
-          </div>
-
-          {/* 시간 & 당상 */}
-          <div className="flex items-center gap-1 ml-2 whitespace-nowrap">
-            {pickupTime && <span className="text-[12px] text-gray-600">{pickupTime}</span>}
-            {pickupStatus && (
-              <span
-                className={
-                  "w-[40px] text-center px-1 py-0.5 rounded-full border text-[12px] font-semibold " +
-                  dayBadgeClass(pickupStatus)
-                }
-              >
-                {pickupStatus}
-              </span>
-            )}
-          </div>
+        <div className="truncate text-[14px] font-semibold">
+          {pickupName} ({pickupAddr})
         </div>
 
-        {/* 하차 줄 */}
-        <div className="flex items-center gap-2">
-          <span className="px-1.5 py-0.5 rounded-full bg-gray-500 text-white text-[12px] font-bold">하</span>
-
-          <div className="flex-1 min-w-0">
-            <div className="text-[14px] font-semibold truncate">{dropName}</div>
-            <div className="text-[12px] text-gray-600 truncate">({dropAddrShort})</div>
-          </div>
-
-          <div className="flex items-center gap-1 ml-2 whitespace-nowrap">
-            {dropTime && <span className="text-[12px] text-gray-600">{dropTime}</span>}
-            {dropStatus && (
-              <span
-                className={
-                  "w-[40px] text-center px-1 py-0.5 rounded-full border text-[12px] font-semibold " +
-                  dayBadgeClass(dropStatus)
-                }
-              >
-                {dropStatus}
-              </span>
-            )}
-          </div>
+        <div className="flex items-center gap-1 ml-auto whitespace-nowrap">
+          <span className="text-[12px] text-gray-600">{pickupTime}</span>
+          <span className={"w-[40px] text-center px-1 py-0.5 rounded-full border text-[12px] font-semibold " + dayBadgeClass(pickupStatus)}>
+            {pickupStatus}
+          </span>
         </div>
       </div>
 
-      {/* 구분선 */}
-      <div className="mt-2 pt-2 border-t border-dashed border-gray-200" />
+      {/* 하차 */}
+      <div className="flex items-center gap-2">
+        <span className="px-1.5 py-0.5 rounded-full bg-gray-600 text-white text-[12px] font-bold">하</span>
 
-      {/* 하단: 화물 + 금액 */}
-      <div className="mt-1 flex items-center text-[12px]">
-        <div className="flex-1 min-w-0 truncate text-gray-700">
-          {bottomText || "-"}
+        <div className="truncate text-[14px] font-semibold">
+          {dropName} ({dropAddr})
         </div>
 
+        <div className="flex items-center gap-1 ml-auto whitespace-nowrap">
+          <span className="text-[12px] text-gray-600">{dropTime}</span>
+          <span className={"w-[40px] text-center px-1 py-0.5 rounded-full border text-[12px] font-semibold " + dayBadgeClass(dropStatus)}>
+            {dropStatus}
+          </span>
+        </div>
+      </div>
+
+      <div className="mt-2 pt-2 border-t border-dashed border-gray-200" />
+
+      {/* 하단 */}
+      <div className="mt-1 flex items-center text-[12px]">
+        <div className="flex-1 min-w-0 truncate text-gray-700">
+          {bottomText || "(정보 없음)"}
+        </div>
         <div className="flex items-center gap-1 ml-2 whitespace-nowrap">
           <span className="text-[13px]">💰</span>
           <span>청구 {fmtMoney(claim)}</span>
@@ -1381,6 +1363,7 @@ function MobileOrderCard({ order }) {
     </div>
   );
 }
+
 
 
 // ======================================================================
