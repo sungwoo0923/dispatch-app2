@@ -1,5 +1,6 @@
 // ======================= src/mobile/MobileApp.jsx (PART 1/3) =======================
 import React, { useState, useMemo, useEffect } from "react";
+import { getDocs, writeBatch } from "firebase/firestore";
 import {
   collection,
   addDoc,
@@ -240,7 +241,8 @@ export default function MobileApp() {
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "dispatch"), (snap) => {
       const list = snap.docs.map((d) => ({
-        id: d.id,
+        _id: d.id,  // Firestore 문서 ID 저장
+id: d.id,   // ⚠ 기존 id 필드도 유지 (혹시 컴포넌트 참고할 수 있으니까)
         ...d.data(),
       }));
       // 상차일/등록일 기준으로 최신순 정렬
@@ -488,44 +490,40 @@ const filteredOrders = useMemo(() => {
     const 기사운임 = toNumber(form.기사운임);
     const 수수료 = 청구운임 - 기사운임;
 
-    const docData = {
-      거래처명: form.거래처명 || "",
-      상차지명: form.상차지명,
-      상차지주소: form.상차지주소 || "",
-      하차지명: form.하차지명,
-      하차지주소: form.하차지주소 || "",
-      화물내용: form.화물내용 || "",
-      차량종류: form.차종 || "",
-      차량톤수: form.톤수 || "",
-      상차방법: form.상차방법 || "",
-      하차방법: form.하차방법 || "",
-      상차일: form.상차일 || "",
-      상차시간: form.상차시간 || "",
-      하차일: form.하차일 || "",
-      하차시간: form.하차시간 || "",
-      지급방식: form.지급방식 || "",
-      배차방식: form.배차방식 || "",
-      메모: form.적요 || "",
-      혼적여부: form.혼적여부 || "독차",
-      차량번호: form.차량번호 || "",
-      기사명: form.기사명 || "",
-      전화번호: form.전화번호 || "",
-      청구운임,
-      기사운임,
-      수수료,
-    };
+    // 🔥 docData 는 오직 1번만 선언!
+const docData = {
+  거래처명: form.거래처명 || "",
+  상차지명: form.상차지명,
+  상차지주소: form.상차지주소 || "",
+  하차지명: form.하차지명,
+  하차지주소: form.하차지주소 || "",
+  화물내용: form.화물내용 || "",
+  차량종류: form.차종 || "",
+  차량톤수: form.톤수 || "",
+  상차방법: form.상차방법 || "",
+  하차방법: form.하차방법 || "",
+  상차일: form.상차일 || "",
+  상차시간: form.상차시간 || "",
+  하차일: form.하차일 || "",
+  하차시간: form.하차시간 || "",
+  지급방식: form.지급방식 || "",
+  배차방식: form.배차방식 || "",
+  메모: form.적요 || "",
+  혼적여부: form.혼적여부 || "독차",
+  차량번호: form.차량번호 || "",
+  기사명: form.기사명 || "",
+  전화번호: form.전화번호 || "",
+  청구운임,
+  기사운임,
+  수수료,
+  이름: form.기사명 || "", // PC 호환 필드
+  updatedAt: serverTimestamp(),
+};
 
     const statusByCar =
       (docData.차량번호 || "").trim() ? "배차완료" : "배차중";
 
-    // 🔥 고유 문서 ID 보존 (PC와 모바일 모두 동일하게!)
-const docId = form._editId || form.id;
-
-const docData = {
-  ...docData,
-  이름: form.기사명 || "",    // PC 호환: 기사명 → 이름 필드 추가
-  updatedAt: serverTimestamp(),
-};
+    
 
 if (docId) {
   // 🛠 수정
@@ -729,6 +727,27 @@ try {
   const handleRefresh = () => {
     window.location.reload();
   };
+// 🔴 전체 삭제 기능 (모든 dispatch 데이터 삭제)
+const deleteAllOrders = async () => {
+  if (!window.confirm("⚠ 전체 배차 데이터를 삭제하시겠습니까?")) return;
+  if (!window.confirm("🚨 정말로 전체 삭제합니다. 복구할 수 없습니다.")) return;
+
+  try {
+    const snap = await getDocs(collection(db, "dispatch"));
+    const batch = writeBatch(db);
+
+    snap.docs.forEach((d) => {
+      batch.delete(doc(db, "dispatch", d.id));
+    });
+
+    await batch.commit();
+
+    alert("전체 데이터 삭제 완료🔥");
+  } catch (e) {
+    console.error(e);
+    alert("삭제 중 오류 발생!");
+  }
+};
 
   const title =
     page === "list"
@@ -744,6 +763,7 @@ try {
       : page === "unassigned"
       ? "미배차현황"
       : "상세보기";
+    
 
   // ------------------------------------------------------------------
   // 렌더링
@@ -1020,6 +1040,15 @@ function MobileSideMenu({
             <MenuItem label="배차현황" onClick={onGoStatus} />
             <MenuItem label="미배차현황" onClick={onGoUnassigned} />
           </MenuSection>
+          <MenuSection title="데이터 삭제">
+  <button
+    onClick={deleteAllOrders}
+    className="w-full text-left px-4 py-2 text-sm text-red-600 font-semibold hover:bg-red-100"
+  >
+    🗑 전체 삭제
+  </button>
+</MenuSection>
+
         </div>
 
         <div className="px-4 py-3 border-t text-xs text-gray-400">

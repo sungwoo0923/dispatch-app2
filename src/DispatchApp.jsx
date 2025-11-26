@@ -438,37 +438,38 @@ export default function DispatchApp() {
 <main className="bg-white rounded shadow p-4">
 
   {menu === "배차관리" && (
-    <DispatchManagement
-  dispatchData={dispatchData}
-  drivers={drivers}
-  clients={clients}
-  addDispatch={addDispatch}
-  upsertDriver={upsertDriver}
-  upsertClient={upsertClient}
-  upsertPlace={upsertPlace}   // ⭐ 반드시 추가!!
-  placeRows={places}
-  role={role}
-/>
+  <DispatchManagement
+    dispatchData={dispatchData}
+    drivers={drivers}
+    clients={clients}
+    addDispatch={addDispatch}
+    upsertDriver={upsertDriver}
+    upsertClient={upsertClient}
+    patchDispatch={patchDispatch}        // ⭐ 추가!
+    removeDispatch={removeDispatch}      // ⭐ 추가!
+    upsertPlace={upsertPlace}
+    placeRows={places}
+    role={role}
+  />
+)}
 
-
-  )}
 
         {menu === "실시간배차현황" && (
-<RealtimeStatus
-  role={role}
-  dispatchData={dispatchData}
-  timeOptions={timeOptions}
-  tonOptions={tonOptions}
-  drivers={drivers}
-  clients={clients}
-  addDispatch={addDispatch}     // ★★★ 반드시 추가!!
-  patchDispatch={patchDispatch}
-  removeDispatch={removeDispatch}
-  upsertDriver={upsertDriver}
-/>
+  <RealtimeStatus
+    role={role}
+    dispatchData={dispatchData}
+    timeOptions={timeOptions}
+    tonOptions={tonOptions}
+    drivers={drivers}
+    clients={clients}
+    addDispatch={addDispatch}
+    patchDispatch={patchDispatch}
+    removeDispatch={removeDispatch}
+    upsertDriver={upsertDriver}
+    key={menu}   // 🔥 이거 반드시 추가!
+  />
+)}
 
-
-        )}
 
 {menu === "배차현황" && (
   <DispatchStatus
@@ -4185,8 +4186,9 @@ XLSX.writeFile(wb, "실시간배차현황.xlsx");
               const fee = sale - drv;
 
               return (
-                <tr
-                  key={r._id}
+<tr
+  key={r._id || r.id || `idx-${idx}`}
+
                   className={`
                     ${idx % 2 ? "bg-gray-50" : ""}
                     ${selected.includes(r._id) ? "animate-pulse bg-yellow-100" : ""}
@@ -6297,13 +6299,14 @@ if (!loaded) return null;
               return (
                <tr
   id={`row-${id}`}
-  key={id || i}
+  key={id || r._fsid || r._id || `idx-${i}`}
   className={`
     ${i % 2 === 0 ? "bg-white" : "bg-gray-50"}
     ${selected.has(id) ? "bg-yellow-100" : ""}
     ${justSaved.includes(id) ? "animate-pulse bg-emerald-200" : ""}
   `}
 >
+
 
                   <td className="border text-center">
                     <input type="checkbox" checked={selected.has(id)} onChange={() => toggleOne(id)} />

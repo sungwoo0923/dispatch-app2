@@ -14,24 +14,23 @@ import { auth } from "./firebase";
 // PC 버전
 import DispatchApp from "./DispatchApp";
 
-// 모바일 버전 (⭐ 새로 만들 MobileApp.jsx)
+// 모바일 버전
 import MobileApp from "./mobile/MobileApp";
 
-// 공용
+// 공용 화면
 import Login from "./Login";
 import Signup from "./Signup";
 import NoAccess from "./NoAccess";
 import UploadPage from "./UploadPage";
-import StandardFare from "./StandardFare"; // 표준운임표
+import StandardFare from "./StandardFare";
 
 export default function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // 🔥 모바일 판별
   const [isMobile, setIsMobile] = useState(false);
 
-  // -- 로그인 상태 관찰
+  // 🔐 로그인 상태 관찰
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => {
       setUser(u);
@@ -40,53 +39,46 @@ export default function App() {
     return () => unsub();
   }, []);
 
-// -- 모바일 / PC 자동 판별 (+ ?view=pc, ?view=mobile 강제 지원)
-useEffect(() => {
-  const check = () => {
-    const ua = navigator.userAgent.toLowerCase();
+  // 📱 모바일/PC 자동 판단 + ?view=pc 강제 옵션
+  useEffect(() => {
+    const checkDevice = () => {
+      const ua = navigator.userAgent.toLowerCase();
 
-    // iPhone Safari가 Mac으로 위장하는 문제 해결
-    const isIOS =
-      /iphone|ipad|ipod/.test(ua) ||
-      (ua.includes("macintosh") && "ontouchend" in document);
+      const isIOS =
+        /iphone|ipad|ipod/.test(ua) ||
+        (ua.includes("macintosh") && "ontouchend" in document);
+      const isAndroid = ua.includes("android");
 
-    const isAndroid = ua.includes("android");
+      const mobileCheck = isIOS || isAndroid;
 
-    const mobileCheck = isIOS || isAndroid;
+      const params = new URLSearchParams(window.location.search);
+      const forcePc = params.get("view") === "pc";
+      const forceMobile = params.get("view") === "mobile";
 
-    // URL 파라미터
-    const params = new URLSearchParams(window.location.search);
-    const forcePc = params.get("view") === "pc";
-    const forceMobile = params.get("view") === "mobile";
+      let final = mobileCheck;
+      if (forcePc) final = false;
+      if (forceMobile) final = true;
 
-    // 최종 판단
-    let final = mobileCheck;
-    if (forcePc) final = false;
-    if (forceMobile) final = true;
+      setIsMobile(final);
 
-    setIsMobile(final);
+      console.log("=== Device Detect ===");
+      console.log("UA:", navigator.userAgent);
+      console.log("isIOS:", isIOS);
+      console.log("isAndroid:", isAndroid);
+      console.log("mobileCheck:", mobileCheck);
+      console.log("forcePc:", forcePc);
+      console.log("forceMobile:", forceMobile);
+      console.log("final:", final);
+    };
 
-    console.log("=== Device Detect ===");
-    console.log("UA:", navigator.userAgent);
-    console.log("isIOS:", isIOS);
-    console.log("isAndroid:", isAndroid);
-    console.log("mobileCheck:", mobileCheck);
-    console.log("forcePc:", forcePc);
-    console.log("forceMobile:", forceMobile);
-    console.log("final:", final);
-  };
-
-  check();
-  window.addEventListener("resize", check);
-  window.addEventListener("popstate", check);
-  return () => {
-    window.removeEventListener("resize", check);
-    window.removeEventListener("popstate", check);
-  };
-}, []);
-
-
-
+    checkDevice();
+    window.addEventListener("resize", checkDevice);
+    window.addEventListener("popstate", checkDevice);
+    return () => {
+      window.removeEventListener("resize", checkDevice);
+      window.removeEventListener("popstate", checkDevice);
+    };
+  }, []);
 
   if (loading) {
     return (
@@ -116,13 +108,16 @@ useEffect(() => {
           element={user ? <Navigate to="/app" replace /> : <Signup />}
         />
 
-        {/* 메인 앱 경로 */}
+        {/* 메인 앱 - 모바일/PC 분기 */}
         <Route
           path="/app"
           element={
             user ? (
-              // 🔥 PC/모바일 UI 자동 분리
-              isMobile ? <MobileApp role={role} /> : <DispatchApp role={role} />
+              isMobile ? (
+                <MobileApp role={role} />
+              ) : (
+                <DispatchApp role={role} />
+              )
             ) : (
               <Navigate to="/login" replace />
             )
@@ -135,12 +130,14 @@ useEffect(() => {
         {/* 권한 없음 */}
         <Route path="/no-access" element={<NoAccess />} />
 
-        {/* 첨부파일 업로드 페이지 */}
+        {/* 파일 업로드 */}
         <Route path="/upload" element={<UploadPage />} />
 
-        {/* 나머지는 로그인으로 */}
+        {/* 잘못된 경로 → 로그인 */}
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </Router>
   );
 }
+
+// ======================= END =======================
