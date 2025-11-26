@@ -526,14 +526,14 @@ const docData = {
 
     
 
-if (docId) {
+if (form._editId) {
   // 🛠 수정
-  await updateDoc(doc(db, "dispatch", docId), docData);
+  await updateDoc(doc(db, "dispatch", form._editId), docData);
 
   showToast("수정 완료!");
 
   if (form._returnToDetail) {
-    setSelectedOrder({ id: docId, ...docData });
+    setSelectedOrder({ id: form._editId, ...docData });
     setPage("detail");
     return;
   }
@@ -554,9 +554,6 @@ try {
   // 🧩 신규 생성 후 폼에도 ID 저장!
   setForm((p) => ({ ...p, _editId: ref.id }));
   showToast("등록 완료!");
-
-  setPage("list");
-  setTimeout(() => window.scrollTo({ top: 0, behavior: "smooth" }), 50);
 
 
       setPage("list");
@@ -809,7 +806,7 @@ const deleteAllOrders = async () => {
       setShowMenu(false);
     }}
     onGoCreate={() => {
-      setPage("create");
+      setPage("form");  // 신규 등록 화면 열기
       setShowMenu(false);
     }}
     onGoFare={() => {
@@ -1017,13 +1014,10 @@ function MobileSideMenu({
             <MenuItem label="미배차현황" onClick={onGoUnassigned} />
           </MenuSection>
           <MenuSection title="데이터 삭제">
-  <button
-  onClick={onDeleteAll} // ⭐⭐ deleteAllOrders → onDeleteAll로 교체!!
-  className="text-red-600 font-semibold"
->
-  전체 삭제
-</button>
-
+ <MenuItem
+label="전체 삭제"
+onClick={onDeleteAll}
+  />
 </MenuSection>
 
         </div>
@@ -1261,7 +1255,19 @@ function getDayStatusForCard(dateStr, type) {
   const d = String(target.getDate()).padStart(2, "0");
   return `${m}/${d}`;
 }
-
+// 당상/당착/내상/내착 뱃지 색상
+function dayBadgeClass(label) {
+  if (label === "당상" || label === "당착") {
+    // 🔵 오늘
+    return "bg-blue-50 text-blue-600 border-blue-200";
+  }
+  if (label === "내상" || label === "내착") {
+    // 🔴 내일
+    return "bg-red-50 text-red-600 border-red-200";
+  }
+  // 그 외 날짜 (예: 11/30)
+  return "bg-gray-50 text-gray-500 border-gray-200";
+}
 
 function MobileOrderCard({ order }) {
   const claim = getClaim(order);
