@@ -1950,18 +1950,56 @@ function MobileOrderForm({
       </div>
 
       {/* 거래처명 */}
-      <div className="bg-white rounded-lg border shadow-sm">
-        <RowLabelInput
-          label="거래처명"
-          input={
-            <input
-              className="w-full border rounded px-2 py-1 text-sm"
-              value={form.거래처명}
-              onChange={(e) => update("거래처명", e.target.value)}
-            />
+<div className="bg-white rounded-lg border shadow-sm">
+  <RowLabelInput
+    label="거래처명"
+    input={
+      <input
+        className="w-full border rounded px-2 py-1 text-sm"
+        value={form.거래처명}
+        onChange={(e) => {
+          const val = e.target.value;
+          update("거래처명", val);
+          update("상차지명", val);
+
+          const norm = (s = "") =>
+            String(s).toLowerCase().replace(/\s+/g, "");
+
+          const found = clients.find(
+            (c) => norm(c.거래처명) === norm(val)
+          );
+
+          if (found) {
+            update("상차지주소", found.주소 || "");
+          } else {
+            update("상차지주소", "");
           }
-        />
-      </div>
+        }}
+        onBlur={() => {
+          const val = form.거래처명;
+          const norm = (s = "") =>
+            String(s).toLowerCase().replace(/\s+/g, "");
+
+          const found = clients.find(
+            (c) => norm(c.거래처명) === norm(val)
+          );
+
+          if (!found && val.trim().length >= 2) {
+            if (window.confirm("📌 등록되지 않은 거래처입니다.\n신규 등록하시겠습니까?")) {
+              addDoc(collection(db, "clients"), {
+                거래처명: val,
+                주소: form.상차지주소 || "",
+                createdAt: serverTimestamp(),
+              });
+              showToast("신규 거래처 등록 완료!");
+            }
+          }
+        }}
+      />
+    }
+  />
+</div>
+
 
       {/* 상/하차 + 주소 + 자동완성 */}
       <div className="bg-white rounded-lg border shadow-sm">
