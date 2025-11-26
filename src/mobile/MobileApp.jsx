@@ -960,9 +960,16 @@ function MobileHeader({ title, onBack, onRefresh, onMenu }) {
   return (
     <div className="flex items-center justify-between px-4 py-3 bg-white border-b sticky top-0 z-30">
       {/* 왼쪽 버튼 */}
-      <div className="w-8">
-        {hasLeft && <BackIconButton onClick={leftFn} />}
-      </div>
+     <div className="w-12">
+       {hasLeft && (
+         <button
+           onClick={leftFn}
+           className="text-sm font-semibold text-blue-600"
+         >
+           MENU
+         </button>
+       )}
+     </div>
 
       {/* 중앙 제목 */}
       <div className="font-semibold text-base text-gray-800">
