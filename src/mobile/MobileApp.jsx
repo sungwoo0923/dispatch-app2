@@ -518,40 +518,47 @@ const filteredOrders = useMemo(() => {
     const statusByCar =
       (docData.차량번호 || "").trim() ? "배차완료" : "배차중";
 
-    // 🔵 수정모드
-    if (isEdit) {
-      await updateDoc(doc(db, "dispatch", form._editId), {
-        ...docData,
-      });
+    // 🔥 고유 문서 ID 보존 (PC와 모바일 모두 동일하게!)
+const docId = form._editId || form.id;
 
-      showToast("수정이 완료되었습니다.");
+const docData = {
+  ...docData,
+  이름: form.기사명 || "",    // PC 호환: 기사명 → 이름 필드 추가
+  updatedAt: serverTimestamp(),
+};
 
-      if (form._returnToDetail) {
-        setSelectedOrder({ id: form._editId, ...docData });
-        setPage("detail");
-        return;
-      }
+if (docId) {
+  // 🛠 수정
+  await updateDoc(doc(db, "dispatch", docId), docData);
 
-      setPage("list");
-      setTimeout(
-        () => window.scrollTo({ top: 0, behavior: "smooth" }),
-        50
-      );
-      return;
-    }
+  showToast("수정 완료!");
 
-    // 🔵 신규등록
-    try {
-      const newDocRef = await addDoc(collection(db, "dispatch"), {
-        ...docData,
-        id: crypto.randomUUID(), // Firestore에 id 필드도 보존
-        배차상태: statusByCar,
-        상태: statusByCar,
-        등록일: todayStr(),
-        createdAt: serverTimestamp(),
-      });
+  if (form._returnToDetail) {
+    setSelectedOrder({ id: docId, ...docData });
+    setPage("detail");
+    return;
+  }
 
-      showToast("등록 완료!");
+  setPage("list");
+  setTimeout(() => window.scrollTo({ top: 0, behavior: "smooth" }), 50);
+  return;
+}
+
+// 🆕 신규등록
+try {
+  const ref = await addDoc(collection(db, "dispatch"), {
+    ...docData,
+    등록일: todayStr(),
+    createdAt: serverTimestamp(),
+  });
+
+  // 🧩 신규 생성 후 폼에도 ID 저장!
+  setForm((p) => ({ ...p, _editId: ref.id }));
+  showToast("등록 완료!");
+
+  setPage("list");
+  setTimeout(() => window.scrollTo({ top: 0, behavior: "smooth" }), 50);
+
 
       setPage("list");
       setForm({
