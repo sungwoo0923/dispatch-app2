@@ -66,7 +66,7 @@ const shortAddr = (addr = "") => {
   return "";
 };
 
-// 날짜 헤더: 2025-11-24 → 11.24
+// 날짜 헤더: 2025-11-24 → 11.24(월)
 const weekday = ["일", "월", "화", "수", "목", "금", "토"];
 const formatDateHeader = (dateStr) => {
   if (!dateStr) return "";
@@ -74,7 +74,8 @@ const formatDateHeader = (dateStr) => {
   if (Number.isNaN(d.getTime())) return dateStr;
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
-  return `${m}.${day}`;
+  const w = weekday[d.getDay()] ?? "";
+  return `${m}.${day}(${w})`;
 };
 
 // 상단 범위 표시: 2025-11-24, 2025-11-24 → 11.24 ~ 11.24
@@ -1223,7 +1224,7 @@ function MobileOrderList({
   );
 }
 
-// 카드에서 쓰는 날짜 상태: 당상/당착/낼상/낼착/그 외 MM/DD
+// 카드에서 쓰는 날짜 상태: 당상/당착/내상/내착/그 외 MM/DD
 function getDayStatusForCard(dateStr, type) {
   if (!dateStr) return "";
 
@@ -1245,17 +1246,22 @@ function getDayStatusForCard(dateStr, type) {
     (t0.getTime() - n0.getTime()) / (1000 * 60 * 60 * 24)
   );
 
+  // 🔵 오늘 = 당상/당착
   if (diff === 0) {
     return type === "pickup" ? "당상" : "당착";
   }
+
+  // 🔴 내일 = 내상/내착
   if (diff === 1) {
-    return type === "pickup" ? "낼상" : "낼착";
+    return type === "pickup" ? "내상" : "내착";
   }
 
+  // 그 외 날짜는 MM/DD만 보여줌
   const m = String(target.getMonth() + 1).padStart(2, "0");
   const d = String(target.getDate()).padStart(2, "0");
   return `${m}/${d}`;
 }
+
 
 function MobileOrderCard({ order }) {
   const claim = getClaim(order);
@@ -1263,17 +1269,20 @@ function MobileOrderCard({ order }) {
 
   // 🔥 상태 = 차량번호 기준 (배차중 / 배차완료)
   const state = getStatus(order);
-
   const stateBadgeClass =
     state === "배차완료"
-      ? "border-green-400 text-green-600"
-      : "border-gray-400 text-gray-600";
+      ? "bg-emerald-50 text-emerald-700 border-emerald-300"
+      : "bg-gray-100 text-gray-600 border-gray-300";
 
+  // 당상/당착/내상/내착 (또는 MM/DD)
   const pickupStatus = getDayStatusForCard(order.상차일, "pickup");
   const dropStatus = getDayStatusForCard(order.하차일, "drop");
 
-  const pickupMethodCode = methodCode(order.상차방법);
-  const dropMethodCode = methodCode(order.하차방법);
+  // 시간 (상차시간/하차시간 없으면 상차일시/하차일시에서 시간만 추출)
+  const pickupTime =
+    order.상차시간 || (order.상차일시 ? onlyTime(order.상차일시) : "");
+  const dropTime =
+    order.하차시간 || (order.하차일시 ? onlyTime(order.하차일시) : "");
 
   const pickupShort = shortAddr(order.상차지주소 || "");
   const dropShort = shortAddr(order.하차지주소 || "");
@@ -1288,69 +1297,94 @@ function MobileOrderCard({ order }) {
 
   return (
     <div className="bg-white rounded-2xl shadow px-4 py-3 border">
-      {/* 거래처명 (위 회색 작은 글씨) */}
-      <div className="text-[13px] text-gray-400 mb-1">
-        {order.거래처명 || "-"}
-      </div>
-
-      {/* 상단: 상하차 + 상태 배지 */}
-      <div className="flex justify-between items-start">
-        <div>
-          {/* 상차지명 (파란색) */}
-          <div className="text-[17px] font-bold text-blue-600">
-            {order.상차지명}
-            {pickupShort && (
-              <span className="text-[12px] text-gray-500 ml-1">
-                ({pickupShort})
-              </span>
-            )}
-          </div>
-
-          {/* 하차지명 (검정) */}
-          <div className="mt-1 text-[15px] text-gray-900 font-semibold">
-            {order.하차지명}
-            {dropShort && (
-              <span className="text-[12px] text-gray-500 ml-1">
-                ({dropShort})
-              </span>
-            )}
-          </div>
+      {/* 상단: 거래처 + 상태 배지 */}
+      <div className="flex justify-between items-center mb-2">
+        <div className="text-[12px] text-gray-400 font-medium truncate pr-2">
+          {order.거래처명 || "-"}
         </div>
-
-        {/* 상태 배지 */}
         <span
-          className={`px-3 py-1 rounded-full border text-[12px] font-medium ${stateBadgeClass}`}
+          className={`px-2 py-0.5 rounded-full border text-[11px] font-medium ${stateBadgeClass}`}
         >
           {state}
         </span>
       </div>
 
-      {/* 당상/당착 + 작업코드 줄 */}
-      <div className="flex items-center gap-4 text-[12px] font-semibold mt-3">
-        {(pickupStatus || pickupMethodCode) && (
-          <div className="flex items-center gap-1">
-            {pickupStatus && (
-              <span className="text-blue-500">{pickupStatus}</span>
-            )}
-            {pickupMethodCode && (
-              <span className="text-orange-500">{pickupMethodCode}</span>
-            )}
+      {/* 상/하 라인 */}
+      <div className="space-y-2">
+        {/* 상차 라인 */}
+        <div className="flex items-center gap-2">
+          {/* 상 동그라미 */}
+          <div className="w-6 h-6 rounded-full bg-blue-500 text-white text-[11px] flex items-center justify-center font-bold shrink-0">
+            상
           </div>
-        )}
 
-        {(dropStatus || dropMethodCode) && (
-          <div className="flex items-center gap-1">
-            {dropStatus && (
-              <span className="text-blue-500">{dropStatus}</span>
-            )}
-            {dropMethodCode && (
-              <span className="text-orange-500">{dropMethodCode}</span>
+          {/* 업체명 + 주소/시간 */}
+          <div className="flex-1 min-w-0">
+            <div className="text-[14px] font-semibold text-gray-900 truncate">
+              {order.상차지명 || "-"}
+            </div>
+            {(pickupShort || pickupTime) && (
+              <div className="text-[11px] text-gray-500 flex gap-2">
+                {pickupShort && (
+                  <span className="truncate">{pickupShort}</span>
+                )}
+                {pickupTime && (
+                  <span>{pickupTime}</span>
+                )}
+              </div>
             )}
           </div>
-        )}
+
+          {/* 당상/내상 등 상태 뱃지 */}
+          {pickupStatus && (
+            <span
+              className={
+                "ml-2 px-2 py-0.5 rounded-full border text-[11px] font-semibold whitespace-nowrap " +
+                dayBadgeClass(pickupStatus)
+              }
+            >
+              {pickupStatus}
+            </span>
+          )}
+        </div>
+
+        {/* 하차 라인 */}
+        <div className="flex items-center gap-2">
+          {/* 하 동그라미 (회색) */}
+          <div className="w-6 h-6 rounded-full bg-gray-300 text-white text-[11px] flex items-center justify-center font-bold shrink-0">
+            하
+          </div>
+
+          <div className="flex-1 min-w-0">
+            <div className="text-[14px] font-semibold text-gray-900 truncate">
+              {order.하차지명 || "-"}
+            </div>
+            {(dropShort || dropTime) && (
+              <div className="text-[11px] text-gray-500 flex gap-2">
+                {dropShort && (
+                  <span className="truncate">{dropShort}</span>
+                )}
+                {dropTime && (
+                  <span>{dropTime}</span>
+                )}
+              </div>
+            )}
+          </div>
+
+          {dropStatus && (
+            <span
+              className={
+                "ml-2 px-2 py-0.5 rounded-full border text-[11px] font-semibold whitespace-nowrap " +
+                dayBadgeClass(dropStatus)
+              }
+            >
+              {dropStatus}
+            </span>
+          )}
+        </div>
       </div>
 
-      {/* 톤수 / 차종 / 화물내용 chips */}
+      {/* 톤수 / 차종 / 화물 chips */}
       {chips.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-2">
           {chips.map((label, idx) => (
@@ -1364,18 +1398,19 @@ function MobileOrderCard({ order }) {
         </div>
       )}
 
-      {/* 금액 라인 */}
-      <div className="flex justify-between items-center mt-4">
-        <div className="text-[14px] font-bold text-gray-900">
+      {/* 금액 라인 (청구 | 기사) */}
+      <div className="flex justify-between items-center mt-3 pt-2 border-t border-dashed border-gray-200">
+        <div className="text-[13px] font-bold text-gray-900">
           청구 {fmtMoney(claim)}
         </div>
-        <div className="text-[14px] font-bold text-blue-600">
+        <div className="text-[13px] font-bold text-blue-600">
           기사 {fmtMoney(fee)}
         </div>
       </div>
     </div>
   );
 }
+
 
 // ======================================================================
 // 상세보기
