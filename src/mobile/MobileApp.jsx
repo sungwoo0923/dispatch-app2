@@ -893,13 +893,17 @@ const deleteAllOrders = async () => {
         )}
 
         {page === "unassigned" && (
-          <MobileStatusTable
-            title={`미배차현황 (${unassignedOrders.length})`}
-            orders={unassignedOrders}
-            onQuickAssign={(order) => setQuickAssignTarget(order)}
-            onBack={() => setPage("list")}
-          />
-        )}
+  <MobileUnassignedList
+    title={`미배차현황 (${unassignedOrders.length})`}
+    orders={unassignedOrders}
+    onQuickAssign={(order) => setQuickAssignTarget(order)}
+    onBack={() => setPage("list")}
+    setSelectedOrder={setSelectedOrder}  // ⭐ 추가
+    setPage={setPage}                    // ⭐ 추가
+  />
+)}
+
+
       </div>
 
       {page === "list" && !showMenu && (
@@ -2877,6 +2881,97 @@ function MobileStatusTable({ title, orders, onBack, onQuickAssign }) {
                   </tbody>
                 </table>
               </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+// ======================================================================
+// 📌 미배차현황 (카드형)
+// ======================================================================
+function MobileUnassignedList({
+  title,
+  orders,
+  onBack,
+  onQuickAssign,
+  setSelectedOrder,
+  setPage,
+}) {
+  const dateMap = new Map();
+  for (const o of orders) {
+    const d = getPickupDate(o) || "기타";
+    if (!dateMap.has(d)) dateMap.set(d, []);
+    dateMap.get(d).push(o);
+  }
+  const sortedDates = Array.from(dateMap.keys()).sort();
+
+  return (
+    <div className="px-3 py-3">
+      {onBack && (
+        <button
+          onClick={onBack}
+          className="mb-3 px-3 py-1 rounded bg-gray-200 text-gray-700 text-sm"
+        >
+          ◀ 뒤로가기
+        </button>
+      )}
+
+      <button
+        onClick={() => onQuickAssign && onQuickAssign()}
+        className="mb-3 w-full py-2 bg-blue-500 text-white text-sm rounded-lg font-semibold shadow active:scale-95 flex justify-center gap-2"
+      >
+        🚚 빠른 배차등록
+        <span className="px-2 rounded-full bg-white text-blue-600 font-bold">
+          {orders.length}
+        </span>
+      </button>
+
+      <div className="mb-2 text-xs text-gray-500">
+        {title}
+      </div>
+
+      {sortedDates.map((dateStr) => {
+        const list = dateMap.get(dateStr);
+
+        return (
+          <div key={dateStr} className="mb-6">
+            <div className="text-sm font-bold text-gray-700 mb-2 px-1">
+              {formatDateHeader(dateStr)}
+            </div>
+
+            <div className="space-y-3">
+              {list.map((o) => (
+  <div key={o.id} className="space-y-1">
+    {/* 카드 UI */}
+    <MobileOrderCard order={o} />
+
+    {/* 액션 버튼 2개 */}
+    <div className="flex items-center gap-2 justify-end px-1">
+      
+      {/* 📄 상세보기 */}
+      <button
+        onClick={() => {
+          setSelectedOrder(o);
+          setPage("detail");
+        }}
+        className="px-3 py-1 border rounded-md text-[11px] text-gray-700 bg-gray-50 active:scale-95"
+      >
+        📄 상세보기
+      </button>
+
+      {/* 🚚 빠른 배차등록 */}
+      <button
+        onClick={() => onQuickAssign && onQuickAssign(o)}
+        className="px-3 py-1 border rounded-md text-[11px] text-white bg-blue-600 active:scale-95"
+      >
+        🚚 배차등록
+      </button>
+    </div>
+  </div>
+))}
+
             </div>
           </div>
         );
