@@ -894,13 +894,12 @@ const deleteAllOrders = async () => {
 
         {page === "unassigned" && (
   <MobileUnassignedList
-    title={`미배차현황 (${unassignedOrders.length})`}
-    orders={unassignedOrders}
-    onQuickAssign={(order) => setQuickAssignTarget(order)}
-    onBack={() => setPage("list")}
-    setSelectedOrder={setSelectedOrder}  // ⭐ 추가
-    setPage={setPage}                    // ⭐ 추가
-  />
+  title={`미배차현황 (${unassignedOrders.length})`}
+  orders={unassignedOrders}
+  onBack={() => setPage("list")}
+  setSelectedOrder={setSelectedOrder}
+  setPage={setPage}
+/>
 )}
 
 
@@ -1210,7 +1209,12 @@ function MobileOrderList({
               <div className="space-y-3">
                 {list.map((o) => (
                   <div key={o.id} onClick={() => onSelect(o)}>
-                    <MobileOrderCard order={o} />
+                    <MobileOrderCard
+  order={o}
+  setSelectedOrder={onSelect}
+  setPage={() => {}}
+/>
+
                   </div>
                 ))}
               </div>
@@ -1273,7 +1277,7 @@ function dayBadgeClass(label) {
   return "bg-gray-50 text-gray-500 border-gray-200";
 }
 
-function MobileOrderCard({ order }) {
+function MobileOrderCard({ order, setSelectedOrder, setPage }) {
   const claim = getClaim(order);
   const fee = order.기사운임 ?? 0;
   const state = getStatus(order);
@@ -1305,7 +1309,8 @@ function MobileOrderCard({ order }) {
     .join(" · ");
 
   return (
-    <div className="bg-white rounded-2xl shadow border px-3 py-3">
+    <div className="relative bg-white rounded-2xl shadow border px-3 py-3">
+
       
       {/* ▶ 배차 상태 (상 라인 위) */}
       <div className="flex justify-end mb-0.5">
@@ -1318,6 +1323,17 @@ function MobileOrderCard({ order }) {
           {state}
         </span>
       </div>
+{/* 📄 상세보기 버튼 (카드 상단 왼쪽) */}
+<button
+  onClick={() => {
+    window?.scrollTo({ top: 0 });
+    setSelectedOrder(order);
+    setPage("detail");
+  }}
+  className="absolute -left-2 -top-2 bg-white rounded-md border px-2 py-0.5 text-[10px] text-gray-600 shadow-sm active:scale-95 z-10"
+>
+  상세
+</button>
 
       {/* ▶ 상 라인 */}
       <div className="flex items-center gap-2 mt-1">
@@ -2796,15 +2812,6 @@ function MobileStatusTable({ title, orders, onBack, onQuickAssign }) {
         </button>
       )}
 
-      <button
-        onClick={() => onQuickAssign && onQuickAssign()}
-        className="mb-3 w-full py-2 bg-blue-500 text-white text-sm rounded-lg font-semibold shadow active:scale-95 flex justify-center gap-2"
-      >
-        🚀 빠른 배차등록
-        <span className="px-2 rounded-full bg-white text-blue-600 font-bold">
-          {orders.length}
-        </span>
-      </button>
 
       <div className="mb-2 text-xs text-gray-500">
         {title} (총 {orders.length}건)
@@ -2918,16 +2925,6 @@ function MobileUnassignedList({
         </button>
       )}
 
-      <button
-        onClick={() => onQuickAssign && onQuickAssign()}
-        className="mb-3 w-full py-2 bg-blue-500 text-white text-sm rounded-lg font-semibold shadow active:scale-95 flex justify-center gap-2"
-      >
-        🚚 빠른 배차등록
-        <span className="px-2 rounded-full bg-white text-blue-600 font-bold">
-          {orders.length}
-        </span>
-      </button>
-
       <div className="mb-2 text-xs text-gray-500">
         {title}
       </div>
@@ -2945,30 +2942,12 @@ function MobileUnassignedList({
               {list.map((o) => (
   <div key={o.id} className="space-y-1">
     {/* 카드 UI */}
-    <MobileOrderCard order={o} />
+<MobileOrderCard
+  order={o}
+  setSelectedOrder={setSelectedOrder}
+  setPage={setPage}
+/>
 
-    {/* 액션 버튼 2개 */}
-    <div className="flex items-center gap-2 justify-end px-1">
-      
-      {/* 📄 상세보기 */}
-      <button
-        onClick={() => {
-          setSelectedOrder(o);
-          setPage("detail");
-        }}
-        className="px-3 py-1 border rounded-md text-[11px] text-gray-700 bg-gray-50 active:scale-95"
-      >
-        📄 상세보기
-      </button>
-
-      {/* 🚚 빠른 배차등록 */}
-      <button
-        onClick={() => onQuickAssign && onQuickAssign(o)}
-        className="px-3 py-1 border rounded-md text-[11px] text-white bg-blue-600 active:scale-95"
-      >
-        🚚 배차등록
-      </button>
-    </div>
   </div>
 ))}
 
