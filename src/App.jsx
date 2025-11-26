@@ -85,9 +85,6 @@ useEffect(() => {
   };
 }, []);
 
-
-
-
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen text-lg text-gray-600">
