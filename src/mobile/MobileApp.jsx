@@ -1693,10 +1693,11 @@ function MobileOrderDetail({
 
       // 🔥 페이지 렌더 후 값 주입 & 검색 실행 + React 상태도 업데이트
 setTimeout(() => {
-  const pickupVal = order.상차지명 || "";
-  const dropVal = order.하차지명 || "";
-  const tonVal = order.차량톤수 || order.톤수 || "";
-  const cargoVal = order.화물내용 || "";
+ const normalize = (v) => String(v || "").trim().replace(/\s+/g, "");
+ const pickupVal = normalize(order.상차지명);
+ const dropVal = normalize(order.하차지명);
+ const tonVal = normalize(order.차량톤수 || order.톤수);
+ const cargoVal = normalize(order.화물내용);
 
   const elPickup = document.querySelector("input[placeholder='상차지']");
   const elDrop = document.querySelector("input[placeholder='하차지']");
@@ -2681,49 +2682,45 @@ function MobileStandardFare({ onBack }) {
           <div className="text-xs text-gray-600">
             과거 운임 기록:
           </div>
-          {/* 과거 운임 기록 */}
-{/* 📌 과거 이력 테이블 */}
-<div className="overflow-x-auto mt-4">
-  <table className="w-full border text-[11px]">
-    <thead className="bg-gray-100 border-b">
-      <tr>
-        <th className="px-2 py-1 border-r">상차일</th>
-        <th className="px-2 py-1 border-r">상차지</th>
-        <th className="px-2 py-1 border-r">하차지</th>
-        <th className="px-2 py-1 border-r">화물내용</th>
-        <th className="px-2 py-1 border-r">차량종류</th>
-        <th className="px-2 py-1 border-r">톤수</th>
-        <th className="px-2 py-1 border-r">청구</th>
-        <th className="px-2 py-1 border-r">기사</th>
-        <th className="px-2 py-1">수수료</th>
-      </tr>
-    </thead>
-    <tbody>
-      {matchedRows.map((r) => (
-        <tr key={r.id} className="border-t text-center">
-          <td className="px-1 py-1 border-r whitespace-nowrap">
-            {r.상차일?.slice(0, 10) || "-"}
-          </td>
-          <td className="px-1 py-1 border-r">{r.상차지명 || "-"}</td>
-          <td className="px-1 py-1 border-r">{r.하차지명 || "-"}</td>
-          <td className="px-1 py-1 border-r">{r.화물내용 || "-"}</td>
-          <td className="px-1 py-1 border-r">{r.차량종류 || r.차종 || "-"}</td>
-          <td className="px-1 py-1 border-r">{r.차량톤수 || r.톤수 || "-"}</td>
-          <td className="px-1 py-1 border-r whitespace-nowrap">
-            {Number(r.청구운임 || 0).toLocaleString()}원
-          </td>
-          <td className="px-1 py-1 border-r whitespace-nowrap">
-            {Number(r.기사운임 || 0).toLocaleString()}원
-          </td>
-          <td className="px-1 py-1 whitespace-nowrap">
-            {(Number(r.청구운임 || 0) -
-              Number(r.기사운임 || 0)).toLocaleString()}원
-          </td>
-        </tr>
-      ))}
-    </tbody>
-  </table>
+          {/* 📌 과거 운임 카드형 UI */}
+<div className="mt-4 space-y-3">
+  {matchedRows.map((r) => {
+    const fare = Number(r.청구운임 || 0).toLocaleString();
+    const driver = Number(r.기사운임 || 0).toLocaleString();
+    const profit = Number(r.청구운임 || 0) - Number(r.기사운임 || 0);
+
+    return (
+      <div
+        key={r.id}
+        className="bg-white shadow-sm rounded-xl p-3 border"
+      >
+        {/* 날짜 + 금액 */}
+        <div className="flex justify-between text-sm font-semibold">
+          <span>{r.상차일?.slice(5) || "-"}</span>
+          <span className="text-blue-600">{fare}원</span>
+        </div>
+
+        {/* 경로 */}
+        <div className="text-xs text-gray-600 mt-1">
+          {r.상차지명} → {r.하차지명}
+        </div>
+
+        {/* 사양 */}
+        <div className="text-[11px] text-gray-500 mt-1 leading-tight">
+          {[r.화물내용, r.차량종류, r.차량톤수]
+            .filter(Boolean)
+            .join(" · ")}
+        </div>
+
+        {/* 수수료 */}
+        <div className="text-[11px] text-gray-500 mt-1">
+          기사 {driver}원 · 수수료 {profit.toLocaleString()}원
+        </div>
+      </div>
+    );
+  })}
 </div>
+
 
 
         </div>
