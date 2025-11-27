@@ -1674,7 +1674,45 @@ function MobileOrderDetail({
           버튼을 누른 후 카카오톡 대화방에 들어가서 붙여넣기 하시면 됩니다.
         </div>
       </div>
+  {/* 🔍 여기에 삽입 시작 → 자동 운임조회 버튼 */}
+  <div className="bg-white border rounded-xl px-4 py-3 shadow-sm mt-4">
+    <div className="text-sm font-semibold mb-2">표준운임 조회</div>
+    <button
+      onClick={() => {
+        window.scrollTo(0, 0);
+        setPage("fare");
 
+        setTimeout(() => {
+          // 운임표 화면으로 넘기고 자동 입력 + 검색 실행
+          const pickup = order.상차지명 || "";
+          const drop = order.하차지명 || "";
+          const ton = order.차량톤수 || order.톤수 || "";
+          const cargo = order.화물내용 || "";
+
+          const elPickup = document.querySelector("input[placeholder='상차지']");
+          if (elPickup) elPickup.value = pickup;
+
+          const elDrop = document.querySelector("input[placeholder='하차지']");
+          if (elDrop) elDrop.value = drop;
+
+          const elTon = document.querySelector("input[placeholder='톤수 (예: 1톤)']");
+          if (elTon) elTon.value = ton;
+
+          const elCargo = document.querySelector("input[placeholder='화물내용 (예: 16파렛)']");
+          if (elCargo) elCargo.value = cargo;
+
+          // 실제 검색 버튼 클릭
+         const btn = document.querySelector("#fare-search-button");
+if (btn) btn.click();
+
+        }, 300);
+      }}
+      className="w-full py-2 rounded-lg bg-indigo-500 text-white text-sm font-semibold"
+    >
+      🔍 이 구간 운임 바로 조회하기
+    </button>
+  </div>
+  {/* 🔍 삽입 끝 */}
       {/* 기사 배차 */}
       <div className="bg-white border rounded-xl px-4 py-3 shadow-sm space-y-3">
         <div className="text-sm font-semibold mb-1">기사 배차</div>
@@ -2732,12 +2770,13 @@ function MobileStandardFare({ onBack }) {
         </select>
 
         <div className="flex gap-3 mt-2">
-          <button
-            onClick={calcFareMobile}
-            className="flex-1 py-2 rounded-xl bg-blue-500 text-white text-sm"
-          >
-            🔍 검색하기
-          </button>
+         <button
+  id="fare-search-button"
+  onClick={calcFareMobile}
+  className="flex-1 py-2 rounded-xl bg-blue-500 text-white text-sm"
+>
+  🔍 검색하기
+</button>
 
           <button
             onClick={() => {
@@ -2789,65 +2828,64 @@ function MobileStandardFare({ onBack }) {
         </div>
       )}
 
-      {/* 결과 집계 */}
-      {result && (
-        <div className="bg-blue-50 rounded-xl border border-blue-200 p-4">
-          <div>총 {result.count} 건</div>
-          <div>평균 운임: {result.avg.toLocaleString()}원</div>
-          <div>
-            최소~최대: {result.min.toLocaleString()} ~{" "}
-            {result.max.toLocaleString()}원
-          </div>
-          <div>
-            최근 운임: {result.latestFare.toLocaleString()}원
-          </div>
-        </div>
-      )}
+      {/* 📌 추천 운임 결과 카드형 UI */}
+{result && (
+  <div className="bg-white rounded-2xl border shadow p-4 space-y-4">
 
-      {/* 결과 테이블 */}
-      <div className="bg-white border rounded-2xl shadow overflow-hidden max-h-[70vh]">
-        <table className="w-full text-[12px]">
-          <thead className="bg-gray-50 sticky top-0 border-b">
-            <tr>
-              <th className="px-2 py-1 border-r">상차일</th>
-              <th className="px-2 py-1 border-r">상차지</th>
-              <th className="px-2 py-1 border-r">하차지</th>
-              <th className="px-2 py-1 border-r">화물내용</th>
-              <th className="px-2 py-1 border-r">톤수</th>
-              <th className="px-2 py-1 border-r">청구운임</th>
-            </tr>
-          </thead>
-          <tbody>
-            {matchedRows.length > 0 ? (
-              matchedRows.map((r) => (
-                <tr key={r.id} className="border-t">
-                  <td className="px-2 py-1 border-r">{r.상차일}</td>
-                  <td className="px-2 py-1 border-r">{r.상차지명}</td>
-                  <td className="px-2 py-1 border-r">{r.하차지명}</td>
-                  <td className="px-2 py-1 border-r">{r.화물내용}</td>
-                  <td className="px-2 py-1 border-r">{r.차량톤수}</td>
-                  <td className="px-2 py-1 text-right">
-                    {Number(r.청구운임 || 0).toLocaleString()}
-                  </td>
-                </tr>
-              ))
-            ) : (
-              <tr>
-                <td
-                  colSpan={6}
-                  className="text-center py-5 text-gray-400"
-                >
-                  검색된 내용이 없습니다.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+    {/* 최근 청구운임 */}
+    <div>
+      <div className="text-xs text-gray-600 mb-1">📌 최근 청구운임</div>
+      <div className="flex justify-between items-center">
+        <div className="text-[11px] text-gray-500">
+          {result.latest?.상차일 || "-"}
+        </div>
+        <div className="text-base font-bold text-blue-600">
+          {Number(result.latestFare || 0).toLocaleString()}원
+        </div>
       </div>
     </div>
-  );
-}
 
+    {/* 평균 운임 */}
+    <div>
+      <div className="text-xs text-gray-600 mb-1">📊 평균 운임</div>
+      <div className="text-lg font-bold text-gray-800">
+        {Number(result.avg || 0).toLocaleString()}원
+      </div>
+    </div>
+
+    {/* 과거 기록 */}
+    <div>
+      <div className="text-xs text-gray-600 font-semibold mb-1">
+        📚 과거 거래 내역 ({matchedRows.length}건)
+      </div>
+
+      <div className="space-y-2 max-h-[50vh] overflow-y-auto pr-1">
+        {matchedRows.slice().sort((a, b) =>
+          (b.상차일 || "").localeCompare(a.상차일 || "")
+        ).map((r) => (
+          <div
+            key={r.id}
+            className="border rounded-lg p-3 bg-gray-50 flex justify-between items-center"
+          >
+            <div>
+              <div className="text-[11px] text-gray-500">
+                {r.상차일 || "-"}
+              </div>
+              <div className="text-sm font-medium text-gray-800 truncate">
+                {r.상차지명} → {r.하차지명}
+              </div>
+            </div>
+
+            <div className="text-sm font-semibold text-blue-600 whitespace-nowrap">
+              {Number(r.청구운임 || 0).toLocaleString()}원
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+
+  </div>
+)}
 // ======================================================================
 // 모바일 배차현황 / 미배차현황 테이블 (날짜별 그룹형 UI)
 // ======================================================================
@@ -3003,9 +3041,10 @@ function MobileUnassignedList({
     {/* 카드 UI */}
 <MobileOrderCard
   order={o}
-  setSelectedOrder={setSelectedOrder}
+  setSelectedOrder={onSelect}
   setPage={setPage}
 />
+
 
   </div>
 ))}
