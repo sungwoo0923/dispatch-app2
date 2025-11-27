@@ -1709,10 +1709,17 @@ function MobileOrderDetail({
         if (elCargo) elCargo.value = cargo;
 
         // 🚀 DOM 적용 후 자동 검색
-        setTimeout(() => {
-          const btn = document.querySelector("#fare-search-button");
-          if (btn) btn.click();
-        }, 200);
+setTimeout(() => {
+  const elPickup = document.querySelector("input[placeholder='상차지']");
+  const elDrop = document.querySelector("input[placeholder='하차지']");
+
+  // 값이 채워진 후에만 자동 검색 실행
+  if (elPickup?.value.trim() && elDrop?.value.trim()) {
+    const btn = document.querySelector("#fare-search-button");
+    if (btn) btn.click();
+  }
+}, 200);
+
       }, 400);
     }}
     className="w-full py-2 rounded-lg bg-indigo-500 text-white text-sm font-semibold"
@@ -2885,8 +2892,6 @@ function MobileUnassignedList({
     window.scrollTo(0, 0);
   }}
 />
-
-
 
   </div>
 ))}
