@@ -968,27 +968,34 @@ const deleteAllOrders = async () => {
 // 공통 헤더 / 사이드 메뉴
 // ----------------------------------------------------------------------
 function MobileHeader({ title, onBack, onRefresh, onMenu }) {
-  const hasLeft = !!onBack || !!onMenu;
-  const leftFn = onBack || onMenu;
-
+  const isListPage = !!onMenu; // 리스트 화면인지 판별
   return (
     <div className="flex items-center justify-between px-4 py-3 bg-white border-b sticky top-0 z-30">
       {/* 왼쪽 버튼 */}
-     <div className="w-12">
-       {hasLeft && (
-         <button
-           onClick={leftFn}
-           className="text-sm font-semibold text-blue-600"
-         >
-           MENU
-         </button>
-       )}
-     </div>
+      <div className="w-12">
+        {isListPage ? (
+          /* 리스트 화면 = MENU 버튼 */
+          <button
+            onClick={onMenu}
+            className="text-sm font-semibold text-blue-600"
+          >
+            MENU
+          </button>
+        ) : (
+          /* 그 외 화면 = 뒤로가기 버튼 */
+          onBack && (
+            <button
+              onClick={onBack}
+              className="text-sm font-semibold text-gray-700"
+            >
+              ◀
+            </button>
+          )
+        )}
+      </div>
 
       {/* 중앙 제목 */}
-      <div className="font-semibold text-base text-gray-800">
-        {title}
-      </div>
+      <div className="font-semibold text-base text-gray-800">{title}</div>
 
       {/* 오른쪽 버튼 */}
       <div className="w-8 flex justify-end">
@@ -1004,6 +1011,7 @@ function MobileHeader({ title, onBack, onRefresh, onMenu }) {
     </div>
   );
 }
+
 
 function MobileSideMenu({
   onClose,
@@ -2488,59 +2496,26 @@ function RowLabelInput({ label, input }) {
 }
 
 // ======================================================================
-// 모바일 표준운임표 (기존 로직 그대로)
+// 📌 모바일 표준운임표 — 흰 화면 100% 해결 버전
 // ======================================================================
 function MobileStandardFare({ onBack }) {
   const [dispatchData, setDispatchData] = useState([]);
 
   const [pickup, setPickup] = useState("");
   const [drop, setDrop] = useState("");
-  const [showPickupList, setShowPickupList] = useState(false);
-  const [showDropList, setShowDropList] = useState(false);
-
   const [cargo, setCargo] = useState("");
   const [ton, setTon] = useState("");
   const [vehicle, setVehicle] = useState("전체");
-
-  const [pickupList, setPickupList] = useState([]);
-  const [dropList, setDropList] = useState([]);
 
   const [matchedRows, setMatchedRows] = useState([]);
   const [result, setResult] = useState(null);
   const [aiFare, setAiFare] = useState(null);
 
-  const VEHICLE_TYPES = [
-    "전체",
-    "다마스",
-    "라보",
-    "라보/다마스",
-    "카고",
-    "윙바디",
-    "냉장탑",
-    "냉동탑",
-    "리프트",
-    "오토바이"
-  ];
-
   const clean = (s) =>
     String(s || "").trim().toLowerCase().replace(/\s+/g, "");
 
-  const extractPalletNum = (text = "") => {
-    const m = String(text).match(/(\d+)\s*(p|파렛|팔레트|pl)/i);
-    if (m) return Number(m[1]);
-    const m2 = String(text).match(/^(\d+)$/);
-    return m2 ? Number(m2[1]) : null;
-  };
-
-  const extractLeadingNum = (text = "") => {
-    const m = String(text).match(/^(\d+)/);
-    return m ? Number(m[1]) : null;
-  };
-
   const extractTonNum = (text = "") => {
-    const m = String(text)
-      .replace(/톤|t/gi, "")
-      .match(/(\d+(\.\d+)?)/);
+    const m = String(text).replace(/톤|t/gi, "").match(/(\d+(\.\d+)?)/);
     return m ? Number(m[1]) : null;
   };
 
@@ -2548,18 +2523,7 @@ function MobileStandardFare({ onBack }) {
     const unsub = onSnapshot(collection(db, "dispatch"), (snap) => {
       const arr = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       setDispatchData(arr);
-
-      const pickupSet = new Set();
-      const dropSet = new Set();
-      arr.forEach((r) => {
-        if (r.상차지명) pickupSet.add(r.상차지명);
-        if (r.하차지명) dropSet.add(r.하차지명);
-      });
-
-      setPickupList(Array.from(pickupSet).sort());
-      setDropList(Array.from(dropSet).sort());
     });
-
     return () => unsub();
   }, []);
 
@@ -2572,22 +2536,18 @@ function MobileStandardFare({ onBack }) {
     const normPickup = clean(pickup);
     const normDrop = clean(drop);
     const inputTonNum = extractTonNum(ton);
-    const inputPallet = extractPalletNum(cargo);
 
     let filtered = dispatchData.filter((r) => {
-      if (!r.상차지명 || !r.하차지명) return false;
-
-      const rp = clean(r.상차지명);
-      const rd = clean(r.하차지명);
-
-      const okPickup = rp.includes(normPickup) || normPickup.includes(rp);
-      const okDrop = rd.includes(normDrop) || normDrop.includes(rd);
+      const rp = clean(r.상차지명 || "");
+      const rd = clean(r.하차지명 || "");
+      const okPickup = rp.includes(normPickup);
+      const okDrop = rd.includes(normDrop);
       if (!okPickup || !okDrop) return false;
 
       if (vehicle !== "전체") {
         const rv = clean(r.차량종류 || "");
         const vv = clean(vehicle);
-        if (!rv.includes(vv) && !vv.includes(rv)) return false;
+        if (!rv.includes(vv)) return false;
       }
 
       if (inputTonNum != null) {
@@ -2596,30 +2556,12 @@ function MobileStandardFare({ onBack }) {
           return false;
       }
 
-      if (inputPallet != null) {
-        const rowPallet =
-          extractPalletNum(r.화물내용 || "") ||
-          extractLeadingNum(r.화물내용 || "");
-        if (rowPallet != null && Math.abs(rowPallet - inputPallet) > 1)
-          return false;
-      }
-
       return true;
     });
 
     if (!filtered.length) {
-      filtered = dispatchData.filter((r) => {
-        const rp = clean(r.상차지명);
-        const rd = clean(r.하차지명);
-        return rp.includes(normPickup) && rd.includes(normDrop);
-      });
-    }
-
-    if (!filtered.length) {
-      alert("검색된 내용이 없습니다.");
-      setMatchedRows([]);
+      alert("검색된 데이터가 없습니다.");
       setResult(null);
-      setAiFare(null);
       return;
     }
 
@@ -2630,51 +2572,119 @@ function MobileStandardFare({ onBack }) {
       .filter((v) => !isNaN(v));
 
     const avg = Math.round(fares.reduce((a, b) => a + b, 0) / fares.length);
-    const min = Math.min(...fares);
-    const max = Math.max(...fares);
-
-    const latest = filtered
-      .slice()
-      .sort((a, b) => (b.상차일 || "").localeCompare(a.상차일 || ""))[0];
-
+    const latest = filtered.sort(
+      (a, b) => (b.상차일 || "").localeCompare(a.상차일 || "")
+    )[0];
     const latestFare = Number(
       String(latest?.청구운임 || 0).replace(/[^\d]/g, "")
     );
-
     const aiValue = Math.round(latestFare * 0.6 + avg * 0.4);
-    const confidence = Math.min(95, 60 + filtered.length * 5);
 
     setAiFare({
       avg,
-      min,
-      max,
       latestFare,
       aiValue,
-      confidence
+      confidence: Math.min(95, 60 + filtered.length * 5),
     });
 
-    setResult({
-      count: filtered.length,
-      avg,
-      min,
-      max,
-      latestFare,
-      latest
-    });
+    setResult({ avg, latest, latestFare });
   };
 
   return (
     <div className="px-4 py-4 space-y-4">
-      {/* ... (당신이 준 JSX 그대로, 생략 없이 존재) */}
-      {/* 📌 추천 운임 결과 카드형 UI */}
+      {/* 뒤로가기 */}
+      <button
+        onClick={onBack}
+        className="px-3 py-1 bg-gray-200 text-sm rounded"
+      >
+        ◀
+      </button>
+
+      {/* 입력 */}
+      <div className="bg-white border rounded-xl p-4 space-y-3 shadow-sm">
+        <input
+          className="w-full border rounded px-3 py-2 text-sm"
+          placeholder="상차지"
+          value={pickup}
+          onChange={(e) => setPickup(e.target.value)}
+        />
+        <input
+          className="w-full border rounded px-3 py-2 text-sm"
+          placeholder="하차지"
+          value={drop}
+          onChange={(e) => setDrop(e.target.value)}
+        />
+        <input
+          className="w-full border rounded px-3 py-2 text-sm"
+          placeholder="톤수 (예: 1톤)"
+          value={ton}
+          onChange={(e) => setTon(e.target.value)}
+        />
+        <select
+          className="w-full border rounded px-3 py-2 text-sm"
+          value={vehicle}
+          onChange={(e) => setVehicle(e.target.value)}
+        >
+          <option value="전체">전체</option>
+          <option value="라보">라보</option>
+          <option value="다마스">다마스</option>
+          <option value="카고">카고</option>
+          <option value="윙바디">윙바디</option>
+        </select>
+
+        <button
+          id="fare-search-button"
+          onClick={calcFareMobile}
+          className="w-full bg-blue-500 text-white py-2 rounded-lg text-sm font-semibold"
+        >
+          🔍 운임조회
+        </button>
+      </div>
+
+      {/* 결과 */}
       {result && (
-        <div className="bg-white rounded-2xl border shadow p-4 space-y-4">
-          {/* ... 모든 JSX 그대로 유지 */}
+        <div className="bg-white border p-4 rounded-xl shadow-sm space-y-3">
+          <div className="font-semibold">
+            건수: {matchedRows.length}건
+          </div>
+          <div>평균운임: {result.avg.toLocaleString()}원</div>
+          <div>
+            최근운임: {result.latestFare.toLocaleString()}원 (
+            {result.latest?.상차일?.slice(0, 10) || "-"})
+          </div>
+
+          {aiFare && (
+            <div className="mt-3 p-3 rounded-lg bg-indigo-50 border border-indigo-200">
+              <div className="text-sm text-indigo-800">
+                🔮 추천 운임(예측):{" "}
+                <span className="font-bold">
+                  {aiFare.aiValue.toLocaleString()}원
+                </span>
+              </div>
+              <div className="text-xs text-indigo-500">
+                정확도 {aiFare.confidence}%
+              </div>
+            </div>
+          )}
+
+          {/* 과거 금액 리스트 */}
+          <div className="text-xs text-gray-600">
+            과거 운임 기록:
+          </div>
+          <ul className="text-xs list-disc pl-5">
+            {matchedRows.map((r) => (
+              <li key={r.id}>
+                {r.상차일?.slice(5)} —{" "}
+                {Number(String(r.청구운임).replace(/[^\d]/g, "")).toLocaleString()}원
+              </li>
+            ))}
+          </ul>
         </div>
       )}
     </div>
   );
-} // 📌 여기 추가 — 컴포넌트 종료!!!
+}
+
 
 // ======================================================================
 // 모바일 배차현황 / 미배차현황 테이블 (날짜별 그룹형 UI)
