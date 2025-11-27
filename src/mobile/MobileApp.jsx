@@ -1691,36 +1691,38 @@ function MobileOrderDetail({
       window.scrollTo(0, 0);
       setPage("fare");
 
-      // 🔥 페이지 렌더 후 값 주입 & 검색 실행
-      setTimeout(() => {
-        const pickup = order.상차지명 || "";
-        const drop = order.하차지명 || "";
-        const ton = order.차량톤수 || order.톤수 || "";
-        const cargo = order.화물내용 || "";
-
-        const elPickup = document.querySelector("input[placeholder='상차지']");
-        const elDrop = document.querySelector("input[placeholder='하차지']");
-        const elTon = document.querySelector("input[placeholder='톤수 (예: 1톤)']");
-        const elCargo = document.querySelector("input[placeholder='화물내용 (예: 16파렛)']");
-
-        if (elPickup) elPickup.value = pickup;
-        if (elDrop) elDrop.value = drop;
-        if (elTon) elTon.value = ton;
-        if (elCargo) elCargo.value = cargo;
-
-        // 🚀 DOM 적용 후 자동 검색
+      // 🔥 페이지 렌더 후 값 주입 & 검색 실행 + React 상태도 업데이트
 setTimeout(() => {
+  const pickupVal = order.상차지명 || "";
+  const dropVal = order.하차지명 || "";
+  const tonVal = order.차량톤수 || order.톤수 || "";
+  const cargoVal = order.화물내용 || "";
+
   const elPickup = document.querySelector("input[placeholder='상차지']");
   const elDrop = document.querySelector("input[placeholder='하차지']");
+  const elTon = document.querySelector("input[placeholder='톤수 (예: 1톤)']");
+  const elCargo = document.querySelector("input[placeholder='화물내용 (예: 16파렛)']");
 
-  // 값이 채워진 후에만 자동 검색 실행
-  if (elPickup?.value.trim() && elDrop?.value.trim()) {
-    const btn = document.querySelector("#fare-search-button");
-    if (btn) btn.click();
-  }
-}, 200);
+  if (elPickup) elPickup.value = pickupVal;
+  if (elDrop) elDrop.value = dropVal;
+  if (elTon) elTon.value = tonVal;
+  if (elCargo) elCargo.value = cargoVal;
 
-      }, 400);
+  // ⭐ React 상태 업데이트
+  setPickup(pickupVal);
+  setDrop(dropVal);
+  setTon(tonVal);
+  setCargo(cargoVal);
+
+  // 🚀 자동 검색 실행 (필수값 있을 때)
+  setTimeout(() => {
+    if (pickupVal && dropVal && cargoVal) {
+      const btn = document.querySelector("#fare-search-button");
+      if (btn) btn.click();
+    }
+  }, 200);
+}, 400);
+
     }}
     className="w-full py-2 rounded-lg bg-indigo-500 text-white text-sm font-semibold"
   >
