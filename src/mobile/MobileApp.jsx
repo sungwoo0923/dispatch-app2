@@ -2879,9 +2879,13 @@ function MobileUnassignedList({
     {/* 카드 UI */}
 <MobileOrderCard
   order={o}
-  setSelectedOrder={setSelectedOrder}
-  setPage={setPage}
+  onSelect={() => {
+    setSelectedOrder(o);
+    setPage("detail");
+    window.scrollTo(0, 0);
+  }}
 />
+
 
 
   </div>
