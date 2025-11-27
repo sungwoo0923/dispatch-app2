@@ -4288,7 +4288,10 @@ XLSX.writeFile(wb, "실시간배차현황.xlsx");
                     />
                   </td>
 
-                  <td className={cell}>{r.이름}</td>
+                  <td className={`${cell} w-[80px] max-w-[80px] overflow-hidden text-ellipsis`}>
+  {r.이름}
+</td>
+
                   <td className={cell}>{r.전화번호}</td>
 
                   <td className={cell}>
@@ -6431,9 +6434,10 @@ if (!loaded) return null;
   {row.혼적 ? "Y" : ""}
 </td>
                   {/* 차량번호(항상 활성화) */}
-                  <td className="border text-center">
-                    <input
-                      className="border rounded px-1 py-0.5 text-center w-[90px]"
+                  <td className="border text-center whitespace-nowrap w-[120px] max-w-[120px]">
+  <input
+    className="border rounded px-1 py-0.5 text-center w-[118px]"
+
                       defaultValue={row.차량번호 || ""}
                       onKeyDown={(e) => e.key === "Enter" && handleCarInput(row, e.target.value)}
                       onBlur={(e) => handleCarInput(row, e.target.value)}
