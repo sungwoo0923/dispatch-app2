@@ -330,6 +330,20 @@ id: d.id,   // ⚠ 기존 id 필드도 유지 (혹시 컴포넌트 참고할 수
     _editId: null,
     _returnToDetail: false,
   });
+  
+// 🔥 앱 처음 로드 시 오늘 날짜 자동 설정 + 기본탭 배차중
+useEffect(() => {
+  const today = new Date().toISOString().slice(0, 10);
+
+  // 날짜 선택 안 되어 있으면 자동으로 오늘 적용
+  if (!startDate && !endDate) {
+    setStartDate(today);
+    setEndDate(today);
+  }
+
+  // ⭐ 기본 탭 = 배차중
+  setStatusTab("배차중");
+}, []);
 
   // --------------------------------------------------
   // 4. 필터링
@@ -3002,4 +3016,5 @@ function MobileUnassignedList({
       })}
     </div>
   );
+
 }
