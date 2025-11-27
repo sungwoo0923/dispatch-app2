@@ -133,6 +133,10 @@ const COLL = {
   drivers: "drivers",
   clients: "clients",
 };
+// 🔐 테스트 계정이면 다른 컬렉션 사용
+const getCollectionName = (role) =>
+  role === "test" ? "dispatch_test" : "dispatch";
+
 
 function useRealtimeCollections(user){
   const [dispatchData, setDispatchData] = useState([]);
@@ -158,7 +162,10 @@ function useRealtimeCollections(user){
     if(!user) { setDispatchData([]); setDrivers([]); setClients([]); return; }
 
     const unsubs = [];
-    unsubs.push(onSnapshot(collection(db, COLL.dispatch), (snap)=>{
+    const userRole = localStorage.getItem("role") || "user";
+const collName = getCollectionName(userRole);
+
+unsubs.push(onSnapshot(collection(db, collName), (snap)=>{
       const arr = snap.docs.map(d=>d.data());
       setDispatchData(arr);
       safeSave("dispatchData", arr);
@@ -292,21 +299,35 @@ export default function DispatchApp() {
 
   // ---------------- 권한 ----------------
   const role = localStorage.getItem("role") || "user";
-
+const isTest = role === "test";
   // ---------------- Firestore 실시간 훅 ----------------
-  const {
-    dispatchData,
-    drivers,
-    clients,
-    places,
-    addDispatch,
-    patchDispatch,
-    removeDispatch,
-    upsertDriver,
-    removeDriver,
-    upsertClient,
-    removeClient,
-  } = useRealtimeCollections(user);
+const {
+  dispatchData,
+  drivers,
+  clients,
+  places,
+  addDispatch,
+  patchDispatch,
+  removeDispatch,
+  upsertDriver,
+  removeDriver,
+  upsertClient,
+  removeClient,
+} = useRealtimeCollections(user);
+
+// 🔍 role 따라 표시 데이터 필터링
+const dispatchDataFiltered = useMemo(() => {
+  if (!dispatchData) return [];
+
+  // admin & user → 전체 표시
+  if (role !== "test") {
+    return dispatchData;
+  }
+
+  // test 계정 → "테스트" 거래처만 표시
+  return dispatchData.filter(o => o.거래처명 === "테스트");
+}, [dispatchData, role]);
+
 
   // ---------------- 로그아웃 ----------------
   const logout = async () => {
@@ -439,25 +460,26 @@ export default function DispatchApp() {
 
   {menu === "배차관리" && (
   <DispatchManagement
-    dispatchData={dispatchData}
-    drivers={drivers}
-    clients={clients}
-    addDispatch={addDispatch}
-    upsertDriver={upsertDriver}
-    upsertClient={upsertClient}
-    patchDispatch={patchDispatch}        // ⭐ 추가!
-    removeDispatch={removeDispatch}      // ⭐ 추가!
-    upsertPlace={upsertPlace}
-    placeRows={places}
-    role={role}
-  />
+  dispatchData={dispatchDataFiltered}
+  drivers={drivers}
+  clients={clients}
+  addDispatch={addDispatch}
+  upsertDriver={upsertDriver}
+  upsertClient={upsertClient}
+  patchDispatch={patchDispatch}
+  removeDispatch={removeDispatch}
+  upsertPlace={upsertPlace}
+  placeRows={places}
+  role={role}
+  isTest={isTest}   // ★ 추가!
+/>
+
 )}
 
-
-        {menu === "실시간배차현황" && (
+{menu === "실시간배차현황" && (
   <RealtimeStatus
     role={role}
-    dispatchData={dispatchData}
+    dispatchData={dispatchDataFiltered}   // ★ 변경!
     timeOptions={timeOptions}
     tonOptions={tonOptions}
     drivers={drivers}
@@ -466,15 +488,14 @@ export default function DispatchApp() {
     patchDispatch={patchDispatch}
     removeDispatch={removeDispatch}
     upsertDriver={upsertDriver}
-    key={menu}   // 🔥 이거 반드시 추가!
+    key={menu}
   />
 )}
-
 
 {menu === "배차현황" && (
   <DispatchStatus
     role={role}
-    dispatchData={dispatchData}   // 전체 데이터
+    dispatchData={dispatchDataFiltered}   // ★ 변경!
     timeOptions={timeOptions}
     tonOptions={tonOptions}
     drivers={drivers}
@@ -485,6 +506,7 @@ export default function DispatchApp() {
     upsertDriver={upsertDriver}
   />
 )}
+
 
         {menu === "미배차현황" && (
           <UnassignedStatus role={role} dispatchData={dispatchData} />
@@ -544,12 +566,16 @@ export default function DispatchApp() {
 function DispatchManagement({
   dispatchData, drivers, clients, timeOptions, tonOptions,
   addDispatch, upsertDriver, upsertClient, upsertPlace,
-  patchDispatch, removeDispatch,   // ⭐ 추가
-  placeRows = [],   // ⭐ 추가
+  patchDispatch, removeDispatch,
+  placeRows = [],
   role = "admin",
+  isTest = false,  // ★ 추가!
 }) {
+
   
   const isAdmin = role === "admin";
+
+  
     // ⭐ 여기 맨 위에 오도록
     const [clientQuery, setClientQuery] = React.useState("");
   const [isClientOpen, setIsClientOpen] = React.useState(false);
@@ -1789,7 +1815,8 @@ const [copySelected, setCopySelected] = React.useState([]);
    - 메뉴와 동일한 UX
    - 상차 2시간 전 + 미배차 경고 기능 포함
 --------------------------------------------------*/
-const RealtimeStatusEmbed = ({ patchDispatch, removeDispatch }) => {
+const RealtimeStatusEmbed = ({ patchDispatch, removeDispatch, isTest = false }) => {
+
   const today = _todayStr();
 
   // 🔎 필터 상태
@@ -2137,12 +2164,19 @@ const exportExcel = () => {
       )}
 
       {/* KPI */}
-      <div className="flex flex-wrap items-center gap-5 text-sm mb-3 mt-1">
-        <div>총 <b>{kpi.cnt}</b>건</div>
-        <div>청구 <b className="text-blue-600">{kpi.sale.toLocaleString()}</b>원</div>
-        <div>기사 <b className="text-green-600">{kpi.drv.toLocaleString()}</b>원</div>
-        <div>수수료 <b className="text-amber-600">{kpi.fee.toLocaleString()}</b>원</div>
-      </div>
+      {/* KPI (테스트 계정이면 금액 숨김) */}
+<div className="flex flex-wrap items-center gap-5 text-sm mb-3 mt-1">
+  <div>총 <b>{kpi.cnt}</b>건</div>
+
+  {!isTest && (
+    <>
+      <div>청구 <b className="text-blue-600">{kpi.sale.toLocaleString()}</b>원</div>
+      <div>기사 <b className="text-green-600">{kpi.drv.toLocaleString()}</b>원</div>
+      <div>수수료 <b className="text-amber-600">{kpi.fee.toLocaleString()}</b>원</div>
+    </>
+  )}
+</div>
+
 
       {/* 필터바 */}
       <div className="flex flex-wrap items-center gap-2 mb-2">
@@ -2825,10 +2859,14 @@ if (k === "하차지명") {
 )}
 
       {/* ✅ 아래: 실시간배차현황 (메뉴와 동일 기능) */}
-      <RealtimeStatusEmbed 
-  patchDispatch={patchDispatch}
-  removeDispatch={removeDispatch}
-/>
+      {/* ⭐ 테스트 계정은 하단 리스트 숨김 */}
+{!isTest && (
+  <RealtimeStatusEmbed
+    patchDispatch={patchDispatch}
+    removeDispatch={removeDispatch}
+  />
+)}
+
 
       {/* 대용량 업로드 모달 */}
       {bulkOpen && (
@@ -2918,6 +2956,7 @@ function RealtimeStatus({
 }) {
 
   const isAdmin = role === "admin";
+  
 // 🔵 하차지 자동완성 상태
 const [placeOptions, setPlaceOptions] = React.useState([]);   // 자동완성 목록
 const [showPlaceDropdown, setShowPlaceDropdown] = React.useState(false);  // 드롭다운 표시 여부

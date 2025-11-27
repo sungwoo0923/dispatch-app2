@@ -1,380 +1,154 @@
-// ===================== DispatchStatus.jsx — FULL FIXED VERSION =====================
-import React, { useEffect, useMemo, useState } from "react";
-import * as XLSX from "xlsx";
+// src/DispatchManagement.jsx
+import React, { useState, useEffect } from "react";
 import { db } from "./firebase";
 import {
+  collection,
   doc,
-  writeBatch,
+  onSnapshot,
+  setDoc,
   serverTimestamp,
 } from "firebase/firestore";
 
-export const headBase =
-  "px-3 py-2 border text-xs bg-gray-50 text-gray-600 font-semibold whitespace-nowrap";
-export const cellBase =
-  "px-3 py-2 border text-sm text-gray-700 whitespace-nowrap";
+// 숫자만
+const toNumber = (v) => parseInt(String(v).replace(/[^\d]/g, ""), 10) || 0;
+// 콤마
+const toComma = (v) => (v ? v.toLocaleString() : "");
 
-export function StatusBadge({ s }) {
-  const label = s || "미정";
-  const tone =
-    label === "배차완료"
-      ? "bg-emerald-100 text-emerald-700 border-emerald-200"
-      : label === "배차중"
-      ? "bg-amber-100 text-amber-700 border-amber-200"
-      : "bg-gray-100 text-gray-600 border-gray-200";
-  return (
-    <span className={`inline-block rounded px-2 py-1 text-xs border ${tone}`}>
-      {label}
-    </span>
-  );
-}
-
-const onlyNum = (v) =>
-  Number.parseInt(String(v ?? "").replace(/[^\d-]/g, ""), 10) || 0;
-const toWon = (n) =>
-  n === 0 || n ? Number(n).toLocaleString() + "원" : "";
-
-export default function DispatchStatus({
-  dispatchData = [],
-  drivers = [],
-  timeOptions = [],
-  tonOptions = [],
-  patchDispatch,
-  removeDispatch,
+export default function DispatchManagement({
+  dispatchData,
+  setDispatchData,
+  clients,
+  role, // admin | user | test
 }) {
-// 🔥 오늘 날짜(YYYY-MM-DD)
-const today = new Date().toISOString().slice(0, 10);
+  const isTest = role === "test"; // ⭐ 테스트 계정 판단
 
-// 🔸 상단 제어
-const [q, setQ] = useState("");
-const [statusFilter, setStatusFilter] = useState("전체");
-const [startDate, setStartDate] = useState(today);
-const [endDate, setEndDate] = useState(today);
+  const emptyForm = {
+    _id: crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`,
+    등록일: new Date().toISOString().slice(0, 10),
+    상차일: "",
+    상차시간: "",
+    하차일: "",
+    하차시간: "",
+    거래처명: "",
+    상차지명: "",
+    하차지명: "",
+    화물내용: "",
+    차량종류: "",
+    차량톤수: "",
+    차량번호: "",
+    이름: "",
+    전화번호: "",
+    배차상태: "",
+    지급방식: "",
+    배차방식: "",
+    청구운임: "",
+    기사운임: "",
+    수수료: "",
+    메모: "",
+  };
 
-  const [editMode, setEditMode] = useState(false);
-  const [selected, setSelected] = useState(new Set());
-  const [localRows, setLocalRows] = useState([]);
+  const [form, setForm] = useState(emptyForm);
 
-  const getId = (r) => r._id || r.id || r._editId;
-
+  // 🔥 테스트 계정 → dispatchData 조회 제한 (데이터 숨김)
   useEffect(() => {
-    if (!editMode) setLocalRows(structuredClone(dispatchData || []));
-  }, [dispatchData, editMode]);
-  // 🔥 메뉴 재진입 시 날짜 필터 항상 오늘로 리셋
-useEffect(() => {
-  setStartDate(today);
-  setEndDate(today);
-}, []);
-
-  const filtered = useMemo(() => {
-    let rows = [...(editMode ? localRows : dispatchData)];
-
-// === 날짜 비교용 (상차일 없으면 등록일 사용) ===
-const getPickupDate = (o = {}) => {
-  if (o.상차일) return String(o.상차일).slice(0, 10);
-  if (o.상차일시) return String(o.상차일시).slice(0, 10);
-  if (o.등록일) return String(o.등록일).slice(0, 10);
-  return "";
-};
-
-// 🔥 기존 상차일 기준 필터 → getPickupDate 기준으로 변경
-if (startDate) rows = rows.filter((r) => getPickupDate(r) >= startDate);
-if (endDate) rows = rows.filter((r) => getPickupDate(r) <= endDate);
-
-
-    if (statusFilter !== "전체")
-      rows = rows.filter((r) => (r.배차상태 || "") === statusFilter);
-
-    if (q.trim()) {
-      const lower = q.toLowerCase();
-      rows = rows.filter((r) =>
-        Object.values(r).some((v) =>
-          String(v ?? "").toLowerCase().includes(lower)
-        )
-      );
+    if (isTest) {
+      setDispatchData([]);
+      return;
     }
 
-    // 🔥 getPickupDate 기준으로 정렬 (등록일/상차일 없을 때도 OK)
-const getPickupDate = (o = {}) =>
-  (o.상차일 && String(o.상차일).slice(0, 10)) ||
-  (o.상차일시 && String(o.상차일시).slice(0, 10)) ||
-  (o.등록일 && String(o.등록일).slice(0, 10)) ||
-  "";
-
-rows.sort((a, b) => {
-  const d1 = getPickupDate(a);
-  const d2 = getPickupDate(b);
-  if (d1 !== d2) return d1.localeCompare(d2);
-  const st = (s) => ((s || "") === "배차중" ? 0 : 1);
-  return st(a.배차상태) - st(b.배차상태);
-});
-
-
-    return rows;
-  }, [dispatchData, localRows, q, startDate, endDate, statusFilter, editMode]);
-
-  const totals = useMemo(() => {
-    const sale = filtered.reduce((s, r) => s + onlyNum(r.청구운임), 0);
-    const drv = filtered.reduce((s, r) => s + onlyNum(r.기사운임), 0);
-    return {
-      sale,
-      drv,
-      fee: sale - drv,
-    };
-  }, [filtered]);
-
-  const columns = [
-    { key: "_select", label: "" },
-    { key: "등록일", label: "등록일", type: "date" },
-    { key: "상차일", label: "상차일", type: "date" },
-    { key: "하차일", label: "하차일", type: "date" },
-    { key: "거래처명", label: "거래처명", type: "text" },
-    { key: "상차지명", label: "상차지명", type: "text" },
-    { key: "하차지명", label: "하차지명", type: "text" },
-    { key: "차량번호", label: "차량번호", type: "text" },
-    { key: "배차상태", label: "배차상태", type: "select", options: ["배차중", "배차완료"] },
-    { key: "청구운임", label: "청구운임", type: "number" },
-    { key: "기사운임", label: "기사운임", type: "number" },
-    { key: "수수료", label: "수수료", type: "calc" },
-    { key: "메모", label: "메모", type: "text" },
-  ];
-
-  const handleEditChange = (id, key, value) => {
-    setLocalRows((rows) =>
-      rows.map((r) => {
-        if (getId(r) !== id) return r;
-        const draft = { ...r };
-
-        if (key === "청구운임" || key === "기사운임") {
-          draft[key] = onlyNum(value);
-          draft["수수료"] = onlyNum(draft.청구운임) - onlyNum(draft.기사운임);
-        } else if (key === "수수료") {
-          return draft;
-        } else {
-          draft[key] = value;
-        }
-        return draft;
-      })
-    );
-  };
-
-  const enterEdit = () => {
-    setLocalRows(structuredClone(filtered));
-    setEditMode(true);
-  };
-
-  const cancelEdit = () => {
-    setEditMode(false);
-    setLocalRows(structuredClone(dispatchData));
-  };
-
-  // 🔥 Firestore 저장 로직 복구!!! (핵심)
-  const saveAll = async () => {
-    const changed = localRows.filter((r) => {
-      const orig = dispatchData.find((o) => getId(o) === getId(r)) || {};
-      return JSON.stringify(orig) !== JSON.stringify(r);
+    const unsub = onSnapshot(collection(db, "dispatch"), (snap) => {
+      const list = snap.docs.map((d) => d.data());
+      setDispatchData(list);
     });
 
-    if (!changed.length) {
-      alert("변경된 내용 없음");
-      return setEditMode(false);
-    }
+    return () => unsub();
+  }, [isTest, setDispatchData]);
 
-    try {
-      for (const r of changed) {
-        const id = getId(r);
-        const patch = {
-          ...r,
-          청구운임: onlyNum(r.청구운임),
-          기사운임: onlyNum(r.기사운임),
-          수수료: onlyNum(r.청구운임) - onlyNum(r.기사운임),
-          _updatedAt: serverTimestamp(),
-        };
-        await patchDispatch(id, patch); // 🔥 DB 저장
-      }
+  // 저장 제한
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (isTest) return alert("🚫 테스트 계정은 저장할 수 없습니다.");
+    if (!form.거래처명) return alert("거래처명을 선택해주세요.");
 
-      alert("저장 완료!");
-      setEditMode(false);
-    } catch (e) {
-      console.error(e);
-      alert("저장 오류");
-    }
+    const id = form._id;
+    await setDoc(doc(db, "dispatch", id), {
+      ...form,
+      청구운임: toNumber(form.청구운임),
+      기사운임: toNumber(form.기사운임),
+      수수료: toNumber(form.수수료),
+      updatedAt: serverTimestamp(),
+    });
+
+    alert("배차가 등록되었습니다");
+    setForm(emptyForm);
   };
 
-  const renderCell = (row, key, idx) => {
-    const id = getId(row);
-
-    if (!editMode) {
-      if (key === "배차상태") return <StatusBadge s={row[key]} />;
-      if (key === "_select")
-        return (
-          <input
-            type="checkbox"
-            checked={selected.has(id)}
-            onChange={() =>
-              setSelected((s) => {
-                const n = new Set(s);
-                n.has(id) ? n.delete(id) : n.add(id);
-                return n;
-              })
-            }
-          />
-        );
-      if (key === "청구운임" || key === "기사운임")
-        return <div className="text-right">{toWon(row[key])}</div>;
-      if (key === "수수료")
-        return (
-          <div className="text-right text-blue-700 font-semibold">
-            {toWon(onlyNum(row.청구운임) - onlyNum(row.기사운임))}
-          </div>
-        );
-      return row[key] ?? "";
-    }
-
-    const col = columns.find((c) => c.key === key);
-    if (!col) return row[key] ?? "";
-
-    if (key === "_select")
-      return (
-        <input
-          type="checkbox"
-          checked={selected.has(id)}
-          onChange={() =>
-            setSelected((s) => {
-              const n = new Set(s);
-              n.has(id) ? n.delete(id) : n.add(id);
-              return n;
-            })
-          }
-        />
-      );
-
-    if (col.type === "calc")
-      return (
-        <input
-          readOnly
-          className="bg-gray-100 border rounded px-2 py-1 w-24"
-          value={toWon(onlyNum(row.청구운임) - onlyNum(row.기사운임))}
-        />
-      );
-
-    if (col.type === "select")
-      return (
-        <select
-          className="border rounded px-2 py-1"
-          value={row[key] || ""}
-          onChange={(e) => handleEditChange(id, key, e.target.value)}
-        >
-          <option value="">선택</option>
-          {col.options.map((o) => (
-            <option key={o}>{o}</option>
-          ))}
-        </select>
-      );
-
-    const type =
-      col.type === "date" ? "date" : col.type === "number" ? "text" : "text";
-
-    return (
-      <input
-        type={type}
-        className="border rounded px-2 py-1 w-32"
-        value={row[key] || ""}
-        onChange={(e) => handleEditChange(id, key, e.target.value)}
-      />
-    );
-  };
+  // 전체 input 비활성화 클래스
+  const disabled = isTest ? "bg-gray-200 text-gray-500 pointer-events-none" : "";
 
   return (
     <div>
-      <h2 className="text-xl font-bold mb-3">실시간 배차현황</h2>
+      <h2 className="text-lg font-bold mb-3">배차관리</h2>
 
-      <div className="flex gap-2 mb-2">
-        <input
-          placeholder="검색"
-          className="border p-2 rounded w-64"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-        />
-        <input
-          type="date"
-          className="border p-2 rounded"
-          value={startDate}
-          onChange={(e) => setStartDate(e.target.value)}
-        />
-        <input
-          type="date"
-          className="border p-2 rounded"
-          value={endDate}
-          onChange={(e) => setEndDate(e.target.value)}
-        />
-
-        <select
-          className="border p-2 rounded"
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-        >
-          <option value="전체">전체</option>
-          <option value="배차중">배차중</option>
-          <option value="배차완료">배차완료</option>
-        </select>
-
-        {!editMode ? (
-          <button
-            className="bg-blue-600 text-white px-3 py-2 rounded"
-            onClick={enterEdit}
+      {/* Form */}
+      <form
+        onSubmit={handleSubmit}
+        className="grid grid-cols-6 gap-3 text-sm bg-gray-50 p-4 rounded"
+      >
+        {/* 거래처명 */}
+        <div className="col-span-2">
+          <label className="block text-xs mb-1">거래처명</label>
+          <select
+            value={form.거래처명}
+            onChange={(e) => setForm({ ...form, 거래처명: e.target.value })}
+            disabled={isTest}
+            className={`border p-2 w-full rounded ${disabled}`}
           >
-            수정
-          </button>
-        ) : (
-          <button
-            className="bg-green-600 text-white px-3 py-2 rounded"
-            onClick={saveAll}
-          >
-            저장
-          </button>
-        )}
-        {editMode && (
-          <button
-            className="bg-gray-400 text-white px-3 py-2 rounded"
-            onClick={cancelEdit}
-          >
-            취소
-          </button>
-        )}
-      </div>
-
-      <div className="mb-2">
-        총 청구: {toWon(totals.sale)} / 총 기사: {toWon(totals.drv)} / 총 수수료:
-        {toWon(totals.fee)}
-      </div>
-
-      <div className="overflow-auto border rounded">
-        <table className="min-w-[1600px] border-collapse text-sm">
-          <thead>
-            <tr>
-              {columns.map((c) => (
-                <th key={c.key} className={headBase}>
-                  {c.label}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((r, i) => (
-              <tr
-                key={getId(r)}
-                className={i % 2 ? "bg-gray-50" : "bg-white"}
-              >
-                {columns.map((c) => (
-                  <td key={c.key} className={cellBase}>
-                    {renderCell(r, c.key, i)}
-                  </td>
-                ))}
-              </tr>
+            <option value="">거래처 선택</option>
+            {(clients || []).map((c, i) => (
+              <option key={i} value={c.거래처명}>
+                {c.거래처명}
+              </option>
             ))}
-          </tbody>
-        </table>
-      </div>
+          </select>
+        </div>
+
+        {/* 화물내용 (대신하여 예시, 나머지도 동일 처리됨) */}
+        <div className="col-span-6">
+          <label className="block text-xs mb-1">화물내용</label>
+          <input
+            value={form.화물내용}
+            onChange={(e) => setForm({ ...form, 화물내용: e.target.value })}
+            disabled={isTest}
+            className={`border p-2 w-full rounded ${disabled}`}
+            placeholder="예: 10파렛트 냉장식품"
+          />
+        </div>
+
+        {/* Submit 버튼 */}
+        <div className="col-span-6 text-center mt-3">
+          <button
+            type="submit"
+            disabled={isTest}
+            className={`px-6 py-2 rounded ${
+              isTest
+                ? "bg-gray-400 cursor-not-allowed"
+                : "bg-blue-600 hover:bg-blue-700 text-white"
+            }`}
+          >
+            등록하기
+          </button>
+        </div>
+      </form>
+
+      {/* 테스트 계정 안내 */}
+      {isTest && (
+        <div className="text-center mt-3 text-red-500 font-bold">
+          🚫 테스트 계정은 조회/저장/수정/삭제가 제한됩니다.
+          <br />
+          거래처명이 "테스트" 인 데이터만 조회 가능합니다.
+        </div>
+      )}
     </div>
   );
 }

@@ -24,8 +24,8 @@ export default function Signup() {
         uid: user.uid,
         email: user.email,
         name: "신규사용자",
-        role: "user",
-        approved: false,
+        role: "test",      // 🆕 기본 권한: test!
+        approved: false,   // 승인 전 로그인 제한 유지
         createdAt: serverTimestamp(),
         lastLogin: serverTimestamp(),
       });
