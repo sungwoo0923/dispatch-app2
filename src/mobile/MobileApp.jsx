@@ -1237,14 +1237,13 @@ function MobileOrderList({
               </div>
               <div className="space-y-3">
                 {list.map((o) => (
-                  <div key={o.id} onClick={() => onSelect(o)}>
-                    <MobileOrderCard
-  order={o}
-  setSelectedOrder={onSelect}
-  setPage={() => {}}
-/>
+                  <div key={o.id}>
+  <MobileOrderCard
+    order={o}
+    onSelect={() => onSelect(o)}
+  />
+</div>
 
-                  </div>
                 ))}
               </div>
             </div>
@@ -1306,7 +1305,7 @@ function dayBadgeClass(label) {
   return "bg-gray-50 text-gray-500 border-gray-200";
 }
 
-function MobileOrderCard({ order, setSelectedOrder, setPage }) {
+function MobileOrderCard({ order, onSelect }) {
   const claim = getClaim(order);
   const fee = order.기사운임 ?? 0;
   const state = getStatus(order);
@@ -1354,11 +1353,12 @@ function MobileOrderCard({ order, setSelectedOrder, setPage }) {
       </div>
 {/* 📄 상세보기 버튼 (카드 상단 왼쪽) */}
 <button
-  onClick={() => {
-    window?.scrollTo({ top: 0 });
-    setSelectedOrder(order);
-    setPage("detail");
+  onClick={(e) => {
+    e.stopPropagation();
+    window.scrollTo(0, 0);
+    onSelect(order);
   }}
+
   className="absolute -left-2 -top-2 bg-white rounded-md border px-2 py-0.5 text-[10px] text-gray-600 shadow-sm active:scale-95 z-10"
 >
   상세
@@ -1683,43 +1683,44 @@ function MobileOrderDetail({
         </div>
       </div>
   {/* 🔍 여기에 삽입 시작 → 자동 운임조회 버튼 */}
-  <div className="bg-white border rounded-xl px-4 py-3 shadow-sm mt-4">
-    <div className="text-sm font-semibold mb-2">표준운임 조회</div>
-    <button
-      onClick={() => {
-        window.scrollTo(0, 0);
-        setPage("fare");
+<div className="bg-white border rounded-xl px-4 py-3 shadow-sm mt-4">
+  <div className="text-sm font-semibold mb-2">표준운임 조회</div>
 
+  <button
+    onClick={() => {
+      window.scrollTo(0, 0);
+      setPage("fare");
+
+      // 🔥 페이지 렌더 후 값 주입 & 검색 실행
+      setTimeout(() => {
+        const pickup = order.상차지명 || "";
+        const drop = order.하차지명 || "";
+        const ton = order.차량톤수 || order.톤수 || "";
+        const cargo = order.화물내용 || "";
+
+        const elPickup = document.querySelector("input[placeholder='상차지']");
+        const elDrop = document.querySelector("input[placeholder='하차지']");
+        const elTon = document.querySelector("input[placeholder='톤수 (예: 1톤)']");
+        const elCargo = document.querySelector("input[placeholder='화물내용 (예: 16파렛)']");
+
+        if (elPickup) elPickup.value = pickup;
+        if (elDrop) elDrop.value = drop;
+        if (elTon) elTon.value = ton;
+        if (elCargo) elCargo.value = cargo;
+
+        // 🚀 DOM 적용 후 자동 검색
         setTimeout(() => {
-          // 운임표 화면으로 넘기고 자동 입력 + 검색 실행
-          const pickup = order.상차지명 || "";
-          const drop = order.하차지명 || "";
-          const ton = order.차량톤수 || order.톤수 || "";
-          const cargo = order.화물내용 || "";
+          const btn = document.querySelector("#fare-search-button");
+          if (btn) btn.click();
+        }, 200);
+      }, 400);
+    }}
+    className="w-full py-2 rounded-lg bg-indigo-500 text-white text-sm font-semibold"
+  >
+    🔍 이 구간 운임 바로 조회하기
+  </button>
+</div>
 
-          const elPickup = document.querySelector("input[placeholder='상차지']");
-          if (elPickup) elPickup.value = pickup;
-
-          const elDrop = document.querySelector("input[placeholder='하차지']");
-          if (elDrop) elDrop.value = drop;
-
-          const elTon = document.querySelector("input[placeholder='톤수 (예: 1톤)']");
-          if (elTon) elTon.value = ton;
-
-          const elCargo = document.querySelector("input[placeholder='화물내용 (예: 16파렛)']");
-          if (elCargo) elCargo.value = cargo;
-
-          // 실제 검색 버튼 클릭
-         const btn = document.querySelector("#fare-search-button");
-if (btn) btn.click();
-
-        }, 300);
-      }}
-      className="w-full py-2 rounded-lg bg-indigo-500 text-white text-sm font-semibold"
-    >
-      🔍 이 구간 운임 바로 조회하기
-    </button>
-  </div>
   {/* 🔍 삽입 끝 */}
       {/* 기사 배차 */}
       <div className="bg-white border rounded-xl px-4 py-3 shadow-sm space-y-3">
@@ -2671,20 +2672,56 @@ function MobileStandardFare({ onBack }) {
           <div className="text-xs text-gray-600">
             과거 운임 기록:
           </div>
-          <ul className="text-xs list-disc pl-5">
-            {matchedRows.map((r) => (
-              <li key={r.id}>
-                {r.상차일?.slice(5)} —{" "}
-                {Number(String(r.청구운임).replace(/[^\d]/g, "")).toLocaleString()}원
-              </li>
-            ))}
-          </ul>
+          {/* 과거 운임 기록 */}
+{/* 📌 과거 이력 테이블 */}
+<div className="overflow-x-auto mt-4">
+  <table className="w-full border text-[11px]">
+    <thead className="bg-gray-100 border-b">
+      <tr>
+        <th className="px-2 py-1 border-r">상차일</th>
+        <th className="px-2 py-1 border-r">상차지</th>
+        <th className="px-2 py-1 border-r">하차지</th>
+        <th className="px-2 py-1 border-r">화물내용</th>
+        <th className="px-2 py-1 border-r">차량종류</th>
+        <th className="px-2 py-1 border-r">톤수</th>
+        <th className="px-2 py-1 border-r">청구</th>
+        <th className="px-2 py-1 border-r">기사</th>
+        <th className="px-2 py-1">수수료</th>
+      </tr>
+    </thead>
+    <tbody>
+      {matchedRows.map((r) => (
+        <tr key={r.id} className="border-t text-center">
+          <td className="px-1 py-1 border-r whitespace-nowrap">
+            {r.상차일?.slice(0, 10) || "-"}
+          </td>
+          <td className="px-1 py-1 border-r">{r.상차지명 || "-"}</td>
+          <td className="px-1 py-1 border-r">{r.하차지명 || "-"}</td>
+          <td className="px-1 py-1 border-r">{r.화물내용 || "-"}</td>
+          <td className="px-1 py-1 border-r">{r.차량종류 || r.차종 || "-"}</td>
+          <td className="px-1 py-1 border-r">{r.차량톤수 || r.톤수 || "-"}</td>
+          <td className="px-1 py-1 border-r whitespace-nowrap">
+            {Number(r.청구운임 || 0).toLocaleString()}원
+          </td>
+          <td className="px-1 py-1 border-r whitespace-nowrap">
+            {Number(r.기사운임 || 0).toLocaleString()}원
+          </td>
+          <td className="px-1 py-1 whitespace-nowrap">
+            {(Number(r.청구운임 || 0) -
+              Number(r.기사운임 || 0)).toLocaleString()}원
+          </td>
+        </tr>
+      ))}
+    </tbody>
+  </table>
+</div>
+
+
         </div>
       )}
     </div>
   );
 }
-
 
 // ======================================================================
 // 모바일 배차현황 / 미배차현황 테이블 (날짜별 그룹형 UI)
