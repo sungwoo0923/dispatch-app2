@@ -242,10 +242,10 @@ export default function MobileApp() {
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "dispatch"), (snap) => {
       const list = snap.docs.map((d) => ({
-  _id: d.id,
- ...d.data(), 
-  id: d.data().id || "",
-}));
+        _id: d.id,  // Firestore 문서 ID 저장
+id: d.id,   // ⚠ 기존 id 필드도 유지 (혹시 컴포넌트 참고할 수 있으니까)
+        ...d.data(),
+      }));
       // 상차일/등록일 기준으로 최신순 정렬
       list.sort((a, b) => {
         const da = getPickupDate(a);
