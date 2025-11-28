@@ -256,6 +256,29 @@ export default function MobileApp() {
     });
     return () => unsub();
   }, []);
+  // 🔔 상차 임박 2시간 이내 감지
+useEffect(() => {
+  if (!orders.length) return;
+
+  const now = new Date();
+  const TWO_HOURS = 120; // 분
+
+  const nearOrders = orders.filter(o => {
+    if (!o.상차일 || !o.상차시간) return false;
+    if (!o.차량번호) return false; // 배차완료만 체크
+
+    const dt = new Date(`${o.상차일} ${o.상차시간}`);
+    const diffMin = (dt - now) / (1000 * 60);
+
+    return diffMin > 0 && diffMin <= TWO_HOURS;
+  });
+
+  if (nearOrders.length > 0) {
+    setToast(`⚠️ 상차 임박 ${nearOrders.length}건! 확인하세요`);
+    navigator.vibrate?.(200); // 진동 (모바일)
+  }
+}, [orders]);
+
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "drivers"), (snap) => {
@@ -1346,6 +1369,26 @@ function MobileOrderCard({ order, onSelect }) {
           {state}
         </span>
       </div>
+      {/* ⚠ 상차 임박 표시 */}
+{(() => {
+  const now = new Date();
+  if (!order.상차일 || !order.상차시간) return null;
+
+  const dt = new Date(`${order.상차일} ${order.상차시간}`);
+  const diffMin = (dt - now) / 60000;
+
+  if (diffMin > 0 && diffMin <= 120) {
+    return (
+      <div className="text-right mb-0.5">
+        <span className="ml-1 px-2 py-0.5 rounded-full bg-red-500 text-white text-[10px] font-bold">
+          ⚠ 임박
+        </span>
+      </div>
+    );
+  }
+  return null;
+})()}
+
 {/* 📄 상세보기 버튼 (카드 상단 왼쪽) */}
 <button
   onClick={(e) => {
