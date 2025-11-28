@@ -198,36 +198,38 @@ const getStatus = (o = {}) => {
 // ======================================================================
 
 export default function MobileApp() {
-    // 🔔 로그인 후 FCM 토픽 구독 (알림 수신)
-  useEffect(() => {
-    const subscribeTopic = async () => {
-      try {
-        const messaging = getMessaging(app);
+    // 🔔 로그인 된 상태에서만 FCM 토픽 구독
+useEffect(() => {
+  const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
+    if (!user) return; // 🔥 로그인 안되면 실행 X
 
-        const token = await getToken(messaging, {
-          vapidKey: "💡 여기에 VAPID KEY 넣기",
-        });
+    try {
+      const messaging = getMessaging();
+      const token = await getToken(messaging, {
+        vapidKey: "💡 여기에_VAPID_KEY_",
+      });
 
-        if (!token) return;
+      if (!token) return;
 
-        await fetch(
-          `https://iid.googleapis.com/iid/v1/${token}/rel/topics/dispatch-alert`,
-          {
-            method: "POST",
-            headers: {
-              Authorization: `key=🔑 서버키(Server Key)`,
-            },
-          }
-        );
+      await fetch(
+        `https://iid.googleapis.com/iid/v1/${token}/rel/topics/dispatch-alert`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `key=🔑서버키(Server Key)`,
+          },
+        }
+      );
 
-        console.log("📌 Subscribed to topic: dispatch-alert");
-      } catch (err) {
-        console.error("❌ 토픽 구독 실패", err);
-      }
-    };
+      console.log("📌 FCM Topic 구독 완료");
+    } catch (err) {
+      console.error("❌ FCM 구독 실패", err);
+    }
+  });
 
-    subscribeTopic();
-  }, []);
+  return () => unsubscribeAuth();
+}, []);
+
   // -------------------------------------------------------------
   // 🔥 추가: 빠른 날짜 선택 (1/3/7/15일 버튼)
   // -------------------------------------------------------------
