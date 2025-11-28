@@ -42,6 +42,7 @@ export default function App() {
   // 🔔 로그인 후 FCM 토큰 요청 + Foreground 수신
   useEffect(() => {
     if (!user) return;
+    if (window.location.pathname !== "/app") return; // 🔥 추가된 조건!!
 
     requestForToken().then((token) => {
       if (token) console.log("📌 FCM Token:", token);
