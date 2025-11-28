@@ -11,7 +11,9 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { db } from "../firebase";
-
+// 🔥 role 기반 컬렉션 분기
+const role = localStorage.getItem("role") || "user";
+const collName = role === "test" ? "dispatch_test" : "dispatch";
 // 🔙 뒤로가기 아이콘 버튼
 function BackIconButton({ onClick }) {
   return (
@@ -237,7 +239,7 @@ export default function MobileApp() {
   const [clients, setClients] = useState([]);
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, "dispatch"), (snap) => {
+    const unsub = onSnapshot(collection(db, collName), (snap) => {
   const list = snap.docs.map((d) => ({
     _id: d.id,
     id: d.id,
@@ -544,11 +546,11 @@ const handleSave = async () => {
   };
 
   // 🔹 수정 모드
-if (form.id) {
-  await updateDoc(doc(db, "dispatch", form.id), {
+if (form._editId) {
+  await updateDoc(doc(db, collName, form._editId), {
     ...docData,
-    _id: form.id,   // 🔥 PC/모바일 통일용
-    id: form.id,
+    _id: form._editId,
+    id: form._editId,
   });
   showToast("수정 완료!");
   setPage("list");
@@ -556,9 +558,10 @@ if (form.id) {
 }
 
 
+
 // 🔹 신규 등록
 try {
-  const ref = await addDoc(collection(db, "dispatch"), {
+  const ref = await addDoc(collection(db, collName), {
     ...docData,
     _id: "",    // 임시
     id: "",     // 임시
@@ -567,7 +570,7 @@ try {
   });
 
   // 🔥 Firestore 문서 고유 ID 확정 저장
-  await updateDoc(doc(db, "dispatch", ref.id), {
+  await updateDoc(doc(db, collName, ref.id), {
     _id: ref.id,
     id: ref.id,
   });
@@ -641,7 +644,7 @@ try {
       };
     }
 
-    await updateDoc(doc(db, "dispatch", selectedOrder.id), {
+    await updateDoc(doc(db, collName, selectedOrder.id), {
       기사명: driver.이름,
       차량번호: driver.차량번호,
       전화번호: driver.전화번호,
@@ -667,7 +670,7 @@ try {
     if (!selectedOrder) return;
 
     // 🔥 차량번호/기사정보만 제거 → 상태는 자동으로 "배차중"
-    await updateDoc(doc(db, "dispatch", selectedOrder.id), {
+    await updateDoc(doc(db, collName, selectedOrder.id), {
       기사명: "",
       차량번호: "",
       전화번호: "",
@@ -699,7 +702,7 @@ try {
     )
       return;
 
-    await deleteDoc(doc(db, "dispatch", selectedOrder.id));
+    await deleteDoc(doc(db, collName, selectedOrder.id));
     setSelectedOrder(null);
     setPage("list");
     alert("오더가 삭제되었습니다.");
@@ -714,14 +717,14 @@ const deleteAllOrders = async () => {
   if (!window.confirm("🚨 정말로 전체 삭제합니다. 복구할 수 없습니다.")) return;
 
   try {
-    const snap = await getDocs(collection(db, "dispatch"));
-    const batch = writeBatch(db);
+const snap = await getDocs(collection(db, collName));
+const batch = writeBatch(db); // 누락된 batch 선언 추가
 
-    snap.docs.forEach((d) => {
-      batch.delete(doc(db, "dispatch", d.id));
-    });
+snap.docs.forEach((d) => {
+  batch.delete(doc(db, collName, d.id)); // ✔️ 올바른 컬렉션명
+});
 
-    await batch.commit();
+await batch.commit();
 
     alert("전체 데이터 삭제 완료🔥");
   } catch (e) {
@@ -2500,7 +2503,7 @@ function MobileStandardFare({ onBack }) {
   };
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, "dispatch"), (snap) => {
+    const unsub = onSnapshot(collection(db, collName), (snap) => {
       const arr = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       setDispatchData(arr);
     });
