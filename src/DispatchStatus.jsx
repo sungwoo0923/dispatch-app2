@@ -1,26 +1,17 @@
-// src/DispatchManagement.jsx
 import React, { useState, useEffect } from "react";
 import { db } from "./firebase";
-import {
-  collection,
-  doc,
-  onSnapshot,
-  setDoc,
-  serverTimestamp,
-} from "firebase/firestore";
+import { collection, doc, onSnapshot, setDoc, serverTimestamp } from "firebase/firestore";
 
-// 숫자만
 const toNumber = (v) => parseInt(String(v).replace(/[^\d]/g, ""), 10) || 0;
-// 콤마
 const toComma = (v) => (v ? v.toLocaleString() : "");
 
 export default function DispatchManagement({
   dispatchData,
   setDispatchData,
   clients,
-  role, // admin | user | test
+  role,
 }) {
-  const isTest = role === "test"; // ⭐ 테스트 계정 판단
+  const isTest = role === "test";
 
   const emptyForm = {
     _id: crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`,
@@ -49,25 +40,34 @@ export default function DispatchManagement({
 
   const [form, setForm] = useState(emptyForm);
 
-  // 🔥 테스트 계정 → dispatchData 조회 제한 (데이터 숨김)
+  // ------------------- Firestore 실시간 데이터 구독 -------------------
   useEffect(() => {
-    if (isTest) {
-      setDispatchData([]);
-      return;
-    }
-
     const unsub = onSnapshot(collection(db, "dispatch"), (snap) => {
-      const list = snap.docs.map((d) => d.data());
+        let list = snap.docs.map((d) => ({
+    _id: d.id,   // Firestore 문서 ID 보존
+    ...d.data()
+  }));
+
+      // ⭐ 테스트 계정은 거래처명 "테스트" 포함된 데이터만 표시
+      if (isTest) {
+        list = list.filter(
+          (item) =>
+            item.거래처명 &&
+            item.거래처명.toLowerCase().includes("테스트")
+        );
+      }
+
       setDispatchData(list);
     });
 
     return () => unsub();
   }, [isTest, setDispatchData]);
 
-  // 저장 제한
+  // ------------------- 저장 제한 -------------------
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (isTest) return alert("🚫 테스트 계정은 저장할 수 없습니다.");
+
     if (!form.거래처명) return alert("거래처명을 선택해주세요.");
 
     const id = form._id;
@@ -79,30 +79,30 @@ export default function DispatchManagement({
       updatedAt: serverTimestamp(),
     });
 
-    alert("배차가 등록되었습니다");
+    alert("등록되었습니다");
     setForm(emptyForm);
   };
 
-  // 전체 input 비활성화 클래스
-  const disabled = isTest ? "bg-gray-200 text-gray-500 pointer-events-none" : "";
+  const disabled = isTest
+    ? "bg-gray-200 text-gray-500 pointer-events-none"
+    : "";
 
   return (
     <div>
       <h2 className="text-lg font-bold mb-3">배차관리</h2>
 
-      {/* Form */}
+      {/* 🔥 테스트 계정은 입력 불가 처리 */}
       <form
         onSubmit={handleSubmit}
         className="grid grid-cols-6 gap-3 text-sm bg-gray-50 p-4 rounded"
       >
-        {/* 거래처명 */}
         <div className="col-span-2">
           <label className="block text-xs mb-1">거래처명</label>
           <select
             value={form.거래처명}
             onChange={(e) => setForm({ ...form, 거래처명: e.target.value })}
-            disabled={isTest}
             className={`border p-2 w-full rounded ${disabled}`}
+            disabled={isTest}
           >
             <option value="">거래처 선택</option>
             {(clients || []).map((c, i) => (
@@ -113,19 +113,17 @@ export default function DispatchManagement({
           </select>
         </div>
 
-        {/* 화물내용 (대신하여 예시, 나머지도 동일 처리됨) */}
         <div className="col-span-6">
           <label className="block text-xs mb-1">화물내용</label>
           <input
             value={form.화물내용}
             onChange={(e) => setForm({ ...form, 화물내용: e.target.value })}
-            disabled={isTest}
             className={`border p-2 w-full rounded ${disabled}`}
+            disabled={isTest}
             placeholder="예: 10파렛트 냉장식품"
           />
         </div>
 
-        {/* Submit 버튼 */}
         <div className="col-span-6 text-center mt-3">
           <button
             type="submit"
@@ -141,12 +139,9 @@ export default function DispatchManagement({
         </div>
       </form>
 
-      {/* 테스트 계정 안내 */}
       {isTest && (
         <div className="text-center mt-3 text-red-500 font-bold">
           🚫 테스트 계정은 조회/저장/수정/삭제가 제한됩니다.
-          <br />
-          거래처명이 "테스트" 인 데이터만 조회 가능합니다.
         </div>
       )}
     </div>

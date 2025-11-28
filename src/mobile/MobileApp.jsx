@@ -46,10 +46,7 @@ const fmtMoney = (v) =>
 
 // 상차일 기준 날짜 뽑기(PC/모바일 공통 대응)
 const getPickupDate = (o = {}) => {
-  if (o.상차일) return String(o.상차일).slice(0, 10);
-  if (o.상차일시) return String(o.상차일시).slice(0, 10);
-  if (o.등록일) return String(o.등록일).slice(0, 10);
-  return "";
+return String(o.상차일 || "").slice(0, 10);
 };
 
 // 청구운임 / 인수증
@@ -241,11 +238,11 @@ export default function MobileApp() {
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "dispatch"), (snap) => {
-      const list = snap.docs.map((d) => ({
-        _id: d.id,  // Firestore 문서 ID 저장
-id: d.id,   // ⚠ 기존 id 필드도 유지 (혹시 컴포넌트 참고할 수 있으니까)
-        ...d.data(),
-      }));
+  const list = snap.docs.map((d) => ({
+    _id: d.id,
+    id: d.id,
+    ...d.data(),
+  }));
       // 상차일/등록일 기준으로 최신순 정렬
       list.sort((a, b) => {
         const da = getPickupDate(a);
@@ -494,7 +491,7 @@ const filteredOrders = useMemo(() => {
   // 5. 저장 / 수정
   // --------------------------------------------------
   const handleSave = async () => {
-    const isEdit = !!form._editId;
+    const isEdit = !!form.id;
 
     if (!form.상차지명 || !form.하차지명) {
       alert("상차지 / 하차지는 필수입니다.");
@@ -542,7 +539,7 @@ const docData = {
 
 if (form._editId) {
   // 🛠 수정
-  await updateDoc(doc(db, "dispatch", form._editId), docData);
+  await updateDoc(doc(db, "dispatch", form.id), docData);
 
   showToast("수정 완료!");
 
@@ -559,14 +556,14 @@ if (form._editId) {
 
 // 🆕 신규등록
 try {
-  const ref = await addDoc(collection(db, "dispatch"), {
-    ...docData,
-    등록일: todayStr(),
-    createdAt: serverTimestamp(),
-  });
+ const ref = await addDoc(collection(db, "dispatch"), {
+  ...docData,
+  등록일: todayStr(),
+  createdAt: serverTimestamp(),
+});
 
   // 🧩 신규 생성 후 폼에도 ID 저장!
-  setForm((p) => ({ ...p, _editId: ref.id }));
+  setForm((p) => ({ ...p, id: ref.id }));
   showToast("등록 완료!");
 
 
