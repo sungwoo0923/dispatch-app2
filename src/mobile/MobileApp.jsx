@@ -278,6 +278,31 @@ export default function MobileApp() {
     });
     return () => unsub();
   }, []);
+// --------------------------------------------------
+// 🔥 하차지 거래처(placeRows)도 불러와서 자동매칭 가능하게!
+// --------------------------------------------------
+useEffect(() => {
+  const unsub = onSnapshot(collection(db, "placeRows"), (snap) => {
+    const list = snap.docs.map((d) => ({
+      id: d.id,
+      거래처명: d.data().하차지명 || d.data().거래처명 || "",
+      주소: d.data().주소 || "",
+    }));
+
+    // 기존 clients와 병합 (중복 제거)
+    setClients((prev) => {
+      const merged = [...prev];
+      list.forEach((item) => {
+        if (!merged.some((c) => c.거래처명 === item.거래처명)) {
+          merged.push(item);
+        }
+      });
+      return merged;
+    });
+  });
+
+  return () => unsub();
+}, []);
 
   // --------------------------------------------------
   // 2. 화면 상태 / 필터
@@ -2050,8 +2075,6 @@ function MobileOrderForm({
   />
 </div>
 
-
-
       {/* 상/하차 + 주소 + 자동완성 */}
       <div className="bg-white rounded-lg border shadow-sm">
         <RowLabelInput
@@ -2065,6 +2088,12 @@ function MobileOrderForm({
                   update("상차지명", e.target.value);
                   setQueryPickup(e.target.value);
                   setShowPickupList(true);
+                   // 🔥 입력만 해도 주소 자동 매칭
+ const val = e.target.value.trim().toLowerCase();
+ const found = clients.find(
+   (c) => String(c.거래처명 || "").trim().toLowerCase() === val
+ );
+ update("상차지주소", found?.주소 || "");
                 }}
                 onFocus={() =>
                   form.상차지명 && setShowPickupList(true)
@@ -2111,6 +2140,12 @@ function MobileOrderForm({
                   update("하차지명", e.target.value);
                   setQueryDrop(e.target.value);
                   setShowDropList(true);
+                   // 🔥 입력만 해도 주소 자동 매칭
+ const val = e.target.value.trim().toLowerCase();
+ const found = clients.find(
+   (c) => String(c.거래처명 || "").trim().toLowerCase() === val
+ );
+ update("하차지주소", found?.주소 || "");
                 }}
                 onFocus={() =>
                   form.하차지명 && setShowDropList(true)
