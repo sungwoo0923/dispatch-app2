@@ -5,7 +5,23 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>dispatch-app</title>
+
+    <!-- 🚀 Firebase Messaging Service Worker 등록 -->
+    <script>
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker
+          .register("/firebase-messaging-sw.js")
+          .then((registration) => {
+            console.log("🔥 Service Worker 등록 성공:", registration);
+          })
+          .catch((err) => {
+            console.error("❌ Service Worker 등록 실패:", err);
+          });
+      }
+    </script>
+
   </head>
+
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>

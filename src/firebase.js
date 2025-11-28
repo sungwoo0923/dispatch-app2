@@ -1,8 +1,9 @@
-// src/firebase.js
+// ======================= src/firebase.js =======================
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
-import { getStorage } from "firebase/storage"; // Storage 복구
+import { getStorage } from "firebase/storage"; // Storage 포함
+import { getMessaging, isSupported } from "firebase/messaging"; // 🔥 Push 추가
 
 // ====================================================
 // Firebase 설정
@@ -20,13 +21,15 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
+// ====================================================
 // Export Firebase services
+// ====================================================
 export const auth = getAuth(app);
 export const db = getFirestore(app);
-export const storage = getStorage(app); // 🔥 storage export 복구
+export const storage = getStorage(app);
 
 // ====================================================
-// 🔥 테스트 계정 판정 (role === "test"이면 Test Mode)
+// 🔥 테스트 계정 판정 (role === "test")
 // ====================================================
 export const isTestUser = (u) => {
   if (!u) return false;
@@ -34,7 +37,7 @@ export const isTestUser = (u) => {
 };
 
 // ====================================================
-// 🔥 컬렉션 분기 — test 계정은 별도 DB 사용 (실DB 보호!!)
+// 🔥 컬렉션 분기 — test 계정은 별도 DB 사용
 // ====================================================
 export const getCollections = (user) => {
   const test = isTestUser(user);
@@ -50,3 +53,22 @@ export const getCollections = (user) => {
         clients: "clients",
       };
 };
+
+// ====================================================
+// 🔔 FCM Messaging — 지원되는 환경에서만 활성화
+// (Chrome + HTTPS + ServiceWorker 등록 필수)
+// ====================================================
+export const messagingPromise = isSupported().then((supported) => {
+  if (!supported) {
+    console.warn("⚠️ 이 브라우저에서는 푸시 알림이 지원되지 않음");
+    return null;
+  }
+  try {
+    return getMessaging(app);
+  } catch (e) {
+    console.error("🔴 getMessaging error:", e);
+    return null;
+  }
+});
+
+// ======================= END =======================

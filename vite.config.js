@@ -7,7 +7,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: "autoUpdate",
-      injectRegister: "auto", // ✅ 서비스워커 자동 등록
+      injectRegister: "auto",
       includeAssets: [
         "favicon.ico",
         "icons/icon-192x192.png",
@@ -43,12 +43,19 @@ export default defineConfig({
         ]
       },
       workbox: {
-        globPatterns: ["**/*.{js,css,html,ico,png,svg}"], // ✅ Vercel 빌드 캐시 방지
+        globPatterns: ["**/*.{js,css,html,ico,png,svg}"],
         navigateFallback: "/index.html"
       }
     })
   ],
+
+  // 🔥 여기가 핵심!!
+  server: {
+    host: true,
+    historyApiFallback: true, // ⭐ SPA 라우팅 활성화
+  },
+
   build: {
-    outDir: "dist"
+    outDir: "dist",
   }
 });

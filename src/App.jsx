@@ -11,10 +11,11 @@ import {
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "./firebase";
 
-// PC 버전
-import DispatchApp from "./DispatchApp";
+// 🔔 FCM 푸시 알림
+import { requestForToken, onMessageListener } from "./firebaseMessaging";
 
-// 모바일 버전
+// PC / MOBILE
+import DispatchApp from "./DispatchApp";
 import MobileApp from "./mobile/MobileApp";
 
 // 공용 화면
@@ -27,7 +28,6 @@ import StandardFare from "./StandardFare";
 export default function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-
   const [isMobile, setIsMobile] = useState(false);
 
   // 🔐 로그인 상태 관찰
@@ -39,16 +39,32 @@ export default function App() {
     return () => unsub();
   }, []);
 
-  // 📱 모바일/PC 자동 판단 + ?view=pc 강제 옵션
+  // 🔔 로그인 후 FCM 토큰 요청 + Foreground 수신
+  useEffect(() => {
+    if (!user) return;
+
+    requestForToken().then((token) => {
+      if (token) console.log("📌 FCM Token:", token);
+      else console.warn("🚫 FCM Token 발급 실패");
+    });
+
+    const unsubscribe = onMessageListener((payload) => {
+      const title = payload?.notification?.title || "새 알림";
+      const body = payload?.notification?.body || "";
+      alert(`📌 ${title}\n${body}`);
+    });
+
+    return () => unsubscribe?.();
+  }, [user]);
+
+  // 📱 모바일/PC 자동판별
   useEffect(() => {
     const checkDevice = () => {
       const ua = navigator.userAgent.toLowerCase();
-
       const isIOS =
         /iphone|ipad|ipod/.test(ua) ||
         (ua.includes("macintosh") && "ontouchend" in document);
       const isAndroid = ua.includes("android");
-
       const mobileCheck = isIOS || isAndroid;
 
       const params = new URLSearchParams(window.location.search);
@@ -60,15 +76,6 @@ export default function App() {
       if (forceMobile) final = true;
 
       setIsMobile(final);
-
-      console.log("=== Device Detect ===");
-      console.log("UA:", navigator.userAgent);
-      console.log("isIOS:", isIOS);
-      console.log("isAndroid:", isAndroid);
-      console.log("mobileCheck:", mobileCheck);
-      console.log("forcePc:", forcePc);
-      console.log("forceMobile:", forceMobile);
-      console.log("final:", final);
     };
 
     checkDevice();
@@ -93,22 +100,18 @@ export default function App() {
   return (
     <Router>
       <Routes>
-        {/* 기본 루트 */}
         <Route path="/" element={<Navigate to="/login" replace />} />
 
-        {/* 로그인 */}
         <Route
           path="/login"
           element={user ? <Navigate to="/app" replace /> : <Login />}
         />
 
-        {/* 회원가입 */}
         <Route
           path="/signup"
           element={user ? <Navigate to="/app" replace /> : <Signup />}
         />
 
-        {/* 메인 앱 - 모바일/PC 분기 */}
         <Route
           path="/app"
           element={
@@ -124,16 +127,9 @@ export default function App() {
           }
         />
 
-        {/* 표준운임표 */}
         <Route path="/standard-fare" element={<StandardFare />} />
-
-        {/* 권한 없음 */}
         <Route path="/no-access" element={<NoAccess />} />
-
-        {/* 파일 업로드 */}
         <Route path="/upload" element={<UploadPage />} />
-
-        {/* 잘못된 경로 → 로그인 */}
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </Router>

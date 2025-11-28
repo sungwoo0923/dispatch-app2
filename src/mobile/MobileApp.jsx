@@ -11,6 +11,7 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { db } from "../firebase";
+import { getMessaging, getToken } from "firebase/messaging";
 // 🔥 role 기반 컬렉션 분기
 const role = localStorage.getItem("role") || "user";
 const collName = role === "test" ? "dispatch_test" : "dispatch";
@@ -195,7 +196,38 @@ const getStatus = (o = {}) => {
 // ======================================================================
 //  메인 컴포넌트
 // ======================================================================
+
 export default function MobileApp() {
+    // 🔔 로그인 후 FCM 토픽 구독 (알림 수신)
+  useEffect(() => {
+    const subscribeTopic = async () => {
+      try {
+        const messaging = getMessaging(app);
+
+        const token = await getToken(messaging, {
+          vapidKey: "💡 여기에 VAPID KEY 넣기",
+        });
+
+        if (!token) return;
+
+        await fetch(
+          `https://iid.googleapis.com/iid/v1/${token}/rel/topics/dispatch-alert`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `key=🔑 서버키(Server Key)`,
+            },
+          }
+        );
+
+        console.log("📌 Subscribed to topic: dispatch-alert");
+      } catch (err) {
+        console.error("❌ 토픽 구독 실패", err);
+      }
+    };
+
+    subscribeTopic();
+  }, []);
   // -------------------------------------------------------------
   // 🔥 추가: 빠른 날짜 선택 (1/3/7/15일 버튼)
   // -------------------------------------------------------------
