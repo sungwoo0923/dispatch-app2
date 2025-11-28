@@ -278,18 +278,15 @@ export default function MobileApp() {
     });
     return () => unsub();
   }, []);
-// --------------------------------------------------
-// 🔥 하차지 거래처(placeRows)도 불러와서 자동매칭 가능하게!
-// --------------------------------------------------
+// 🔥 하차지 거래처(places)도 자동매칭
 useEffect(() => {
-  const unsub = onSnapshot(collection(db, "placeRows"), (snap) => {
+  const unsub = onSnapshot(collection(db, "places"), (snap) => {
     const list = snap.docs.map((d) => ({
       id: d.id,
-      거래처명: d.data().하차지명 || d.data().거래처명 || "",
-      주소: d.data().상차지주소 || d.data().하차지주소 || "",
+      거래처명: d.data().거래처명 || d.data().상차지명 || d.data().하차지명 || "",
+      주소: d.data().주소 || d.data().상차지주소 || d.data().하차지주소 || "",
     }));
 
-    // 기존 clients와 병합 (중복 제거)
     setClients((prev) => {
       const merged = [...prev];
       list.forEach((item) => {
@@ -303,6 +300,7 @@ useEffect(() => {
 
   return () => unsub();
 }, []);
+
 
   // --------------------------------------------------
   // 2. 화면 상태 / 필터
