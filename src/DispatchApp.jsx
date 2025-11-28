@@ -1,5 +1,6 @@
 // ===================== DispatchApp.jsx (PART 1/8) — START =====================
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { sendOrderTo24 } from "./api/24CallService";
 import { useNavigate } from "react-router-dom";
 import * as XLSX from "xlsx";
 import FixedClients from "./FixedClients";
@@ -9,6 +10,8 @@ import jsPDF from "jspdf";
 import AdminMenu from "./AdminMenu";
 import { calcFare } from "./fareUtil";
 import StandardFare from "./StandardFare";
+
+
 
 
 /* -------------------------------------------------
@@ -263,10 +266,54 @@ export {
   COMPANY, VEHICLE_TYPES, PAY_TYPES, DISPATCH_TYPES,
   headBase, cellBase, inputBase, todayStr
 };
+/* -------------------------------------------------
+   24시화물콜 API 함수 (전역)
+--------------------------------------------------*/
+async function sendTo24Call(order) {
+  try {
+    const res = await fetch(
+      `${import.meta.env.VITE_24CALL_URL}/Order/SetOrder`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-API-KEY": import.meta.env.VITE_24CALL_API_KEY,
+        },
+        body: JSON.stringify(order),
+      }
+    );
+    return await res.json();
+  } catch (e) {
+    console.error("24시콜 API 오류", e);
+    return { success: false, message: "API 요청 실패" };
+  }
+}
+
+/* -------------------------------------------------
+   24시콜 대량 전송 함수 (정확한 위치)
+--------------------------------------------------*/
+async function handle24CallSend(dispatchDataFiltered = []) {
+  if (!Array.isArray(dispatchDataFiltered)) {
+    alert("전송할 데이터가 없습니다.");
+    return;
+  }
+
+  let success = 0;
+  let fail = 0;
+
+  for (const order of dispatchDataFiltered) {
+    const result = await sendOrderTo24(order);
+    if (result?.success) success++;
+    else fail++;
+  }
+
+  alert(`📡 전송 완료!\n성공: ${success}건 | 실패: ${fail}건`);
+}
+
 
 // ===================== DispatchApp.jsx (PART 1/8) — END =====================
 // ===================== DispatchApp.jsx (PART 2/8) — START =====================
-export default function DispatchApp() {
+function DispatchApp() {
   const [user, setUser] = useState(null);
   const navigate = useNavigate();
 
@@ -351,6 +398,7 @@ const dispatchDataFiltered = useMemo(() => {
   const tonOptions = useMemo(() => Array.from({ length: 25 }, (_, i) => `${i + 1}톤`), []);
 
   const [menu, setMenu] = useState("실시간배차현황");
+  const [selected, setSelected] = useState(null);
 
   // ---------------- user 차단 메뉴 ----------------
   const blockedMenus = [
@@ -406,17 +454,21 @@ const dispatchDataFiltered = useMemo(() => {
     );
 
   // ---------------- 메뉴 UI ----------------
+  
   return (
     <>
       <header className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">배차 프로그램</h1>
-        <div className="flex items-center gap-3">
-          <span className="text-gray-700 text-sm">{user?.email}</span>
-          <button onClick={logout} className="bg-gray-300 px-3 py-1 rounded text-sm">
-            로그아웃
-          </button>
-        </div>
-      </header>
+  <h1 className="text-2xl font-bold">배차 프로그램</h1>
+
+  <div className="flex items-center gap-3">
+
+    <span className="text-gray-700 text-sm">{user?.email}</span>
+    <button onClick={logout} className="bg-gray-300 px-3 py-1 rounded text-sm">
+      로그아웃
+    </button>
+  </div>
+</header>
+
 
       <nav className="flex gap-2 mb-3 overflow-x-auto whitespace-nowrap">
         {[
@@ -478,18 +530,21 @@ const dispatchDataFiltered = useMemo(() => {
 
 {menu === "실시간배차현황" && (
   <RealtimeStatus
-    role={role}
-    dispatchData={dispatchDataFiltered}   // ★ 변경!
-    timeOptions={timeOptions}
-    tonOptions={tonOptions}
-    drivers={drivers}
-    clients={clients}
-    addDispatch={addDispatch}
-    patchDispatch={patchDispatch}
-    removeDispatch={removeDispatch}
-    upsertDriver={upsertDriver}
-    key={menu}
-  />
+  role={role}
+  dispatchData={dispatchDataFiltered}
+  timeOptions={timeOptions}
+  tonOptions={tonOptions}
+  drivers={drivers}
+  clients={clients}
+  addDispatch={addDispatch}
+  patchDispatch={patchDispatch}
+  removeDispatch={removeDispatch}
+  upsertDriver={upsertDriver}
+  key={menu}
+  setSelected={setSelected}  // ★ 추가!
+  selected={selected}        // ★ 추가!
+/>
+
 )}
 
 {menu === "배차현황" && (
@@ -509,8 +564,8 @@ const dispatchDataFiltered = useMemo(() => {
 
 
         {menu === "미배차현황" && (
-          <UnassignedStatus role={role} dispatchData={dispatchData} />
-        )}
+  <UnassignedStatus role={role} dispatchData={dispatchDataFiltered} />
+)}
 {menu === "표준운임표" && (
   <StandardFare dispatchData={dispatchData} />
 )}
@@ -558,7 +613,7 @@ const dispatchDataFiltered = useMemo(() => {
       </main>
     </>
   );
-}
+
 // ===================== DispatchApp.jsx (PART 2/8) — END =====================
 
 
@@ -1649,6 +1704,38 @@ const [copySelected, setCopySelected] = React.useState([]);
 
         <div className="col-span-6 flex justify-end mt-2">
           <button type="submit" className="bg-blue-600 text-white px-6 py-2 rounded text-sm hover:bg-blue-700">저장</button>
+          <button
+  type="button"
+  onClick={async () => {
+    const {
+      거래처명, 상차지명, 하차지명,
+      상차일, 상차시간,
+      하차일, 하차시간
+    } = form;
+
+    if (!거래처명 || !상차지명 || !하차지명)
+      return alert("거래처/상차지명/하차지명을 입력해주세요.");
+    if (!상차일 || !하차일)
+      return alert("상차일/하차일은 반드시 필요합니다.");
+
+    const res = await sendOrderTo24(form);
+
+    if (res?.success) {
+      alert(
+        `📡 24시콜 전송 완료!\n\n전송건수: 1건\n실패건수: 0건\n메시지: ${res?.message || "성공"}`
+      );
+    } else {
+      alert(
+        `⛔ 전송 실패!\n\n전송건수: 0건\n실패건수: 1건\n사유: ${res?.message || "알 수 없는 오류"}`
+      );
+    }
+  }}
+  className="ml-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-sm text-white rounded"
+>
+  📡 24시전송
+</button>
+
+
         </div>
       </form>
 
@@ -2408,7 +2495,14 @@ const exportExcel = () => {
       );
 
     return (
-      <tr key={id} className={idx % 2 ? "bg-gray-50" : ""}>
+      <tr
+  key={id}
+  onClick={() => setSelected(r)}
+  className={`cursor-pointer ${
+    selected?._id === r._id ? "bg-blue-100" : ""
+  } ${idx % 2 ? "bg-gray-50" : ""}`}
+>
+
 
 {/* 선택 */}
 {(deleteMode || editMode) ? (
@@ -2954,6 +3048,33 @@ function RealtimeStatus({
   upsertDriver,
   role = "admin",
 }) {
+// 📡 선택 항목 24시콜 전송 (모달 방식)
+const handle24CallSendSelected = async () => {
+  if (!selected.length) {
+    alert("전송할 항목을 선택하세요.");
+    return;
+  }
+
+  const ids = [...selected];
+  const success = [];
+  const fail = [];
+
+  for (const id of ids) {
+    const row = rows.find(r => r._id === id);
+    if (!row) continue;
+
+    try {
+      const res = await sendOrderTo24(row);
+      if (res?.success) success.push(row);
+      else fail.push({ order: row, reason: res?.message || "전송 실패" });
+    } catch (e) {
+      fail.push({ order: row, reason: e.message || "오류 발생" });
+    }
+  }
+
+  setSendResult({ success, fail });
+};
+
 
   const isAdmin = role === "admin";
   
@@ -2984,6 +3105,9 @@ const prevAttachRef = React.useRef({});
   const [selected, setSelected] = React.useState([]);
   const [selectedEditMode, setSelectedEditMode] = React.useState(false);
   const [edited, setEdited] = React.useState({});
+  // 📡 전송 결과 모달 상태
+const [sendResult, setSendResult] = React.useState(null);
+
 // 🔵 선택수정 팝업 상태
 const [editPopupOpen, setEditPopupOpen] = React.useState(false);
 const [editTarget, setEditTarget] = React.useState(null);
@@ -4174,6 +4298,13 @@ XLSX.writeFile(wb, "실시간배차현황.xlsx");
           + 신규 오더 등록
         </button>
       </div>
+{/* 📡 24시콜 테스트 전송 버튼 */}
+<button
+  className="px-3 py-1 bg-orange-500 text-white text-sm rounded hover:bg-orange-600"
+  onClick={handle24CallSendSelected}
+>
+24시콜 전송
+</button>
 
       {/* 테이블 */}
       <div className="overflow-x-auto w-full">
@@ -4392,6 +4523,54 @@ XLSX.writeFile(wb, "실시간배차현황.xlsx");
           </tbody>
         </table>
       </div>
+{/* 📡 전송 결과 모달 */}
+{sendResult && (
+  <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[9999]">
+    <div className="bg-white rounded-xl shadow-lg p-6 w-[420px]">
+      <h2 className="text-lg font-bold mb-3">📡 전송 결과</h2>
+
+      <p className="mb-2">
+        성공: <b className="text-green-600">{sendResult.success.length}</b> 건
+      </p>
+      <p className="mb-4">
+        실패: <b className="text-red-600">{sendResult.fail.length}</b> 건
+      </p>
+
+      {sendResult.fail.length > 0 && (
+        <div className="bg-red-50 p-3 rounded mb-4 text-sm text-red-700">
+          <p className="font-semibold mb-1">❌ 실패 사유</p>
+          {sendResult.fail.map((f, i) => (
+            <div key={i}>- {f.order.거래처명}: {f.reason}</div>
+          ))}
+        </div>
+      )}
+
+      <div className="flex justify-end gap-2">
+        <button
+          className="px-3 py-2 rounded bg-gray-500 text-white"
+          onClick={() => setSendResult(null)}
+        >
+          닫기
+        </button>
+
+        {sendResult.fail.length > 0 && (
+          <button
+            className="px-3 py-2 rounded bg-orange-600 text-white"
+            onClick={async () => {
+              for (const f of sendResult.fail) {
+                try { await sendOrderTo24(f.order); } catch {}
+              }
+              alert("🔁 재전송 완료");
+              setSendResult(null);
+            }}
+          >
+            실패건 재전송
+          </button>
+        )}
+      </div>
+    </div>
+  </div>
+)}
 
       {/* ---------------------------------------------------------
           🔵 신규 오더 등록 팝업 (업그레이드 완성본)
@@ -5575,7 +5754,28 @@ function DispatchStatus({
   const [selected, setSelected] = React.useState(new Set());
   const [editMode, setEditMode] = React.useState(false);
   const [edited, setEdited] = React.useState({});
+  
   const [justSaved, setJustSaved] = React.useState([]);
+  const [sendResult, setSendResult] = React.useState(null);
+
+  async function handle24CallSendSelected(orders) {
+  let success = [];
+  let fail = [];
+
+  for (const order of orders) {
+    try {
+      const res = await sendOrderTo24(order);
+      if (res?.success) success.push(order);
+      else fail.push({ order, reason: res?.message || "전송 실패" });
+    } catch (err) {
+      fail.push({ order, reason: err.message });
+    }
+  }
+
+  setSendResult({ success, fail });
+}
+
+
   const [carInputLock, setCarInputLock] = React.useState(false);
   const [bulkRows, setBulkRows] = React.useState([]);
  const [loaded, setLoaded] = React.useState(false);   // ⭐ 복구완료 여부
@@ -6187,7 +6387,8 @@ if (!loaded) return null;
         <div>수수료 <b className="text-amber-600">{summary.totalFee.toLocaleString()}</b>원</div>
       </div>
 
-      <div className="flex justify-between items-center gap-3 mb-3">
+     <div className="flex justify-between items-center gap-3 mt-10 mb-3">
+
 
   {/* 🔍 검색 + 날짜 */}
   <div className="flex items-center gap-2">
@@ -6214,7 +6415,7 @@ if (!loaded) return null;
   </div>
 
   {/* 우측 버튼 묶음 */}
-  <div className="flex items-center gap-2">
+  <div className="flex items-center gap-2 mt-2">
 
     <button
       onClick={() => setShowCreate(true)}
@@ -6241,6 +6442,37 @@ if (!loaded) return null;
     >
       선택삭제
     </button>
+  {/* 📡 24시콜 테스트 버튼 🚚 */}
+  <button
+    onClick={async () => {
+      try {
+        await addDispatch({
+          등록일: new Date().toISOString().slice(0, 10),
+          상차일: new Date().toISOString().slice(0, 10),
+          상차시간: "오전 9:00",
+          하차일: new Date().toISOString().slice(0, 10),
+          하차시간: "오후 3:00",
+          거래처명: "TEST-24시콜",
+          상차지명: "테스트상차지",
+          하차지명: "테스트하차지",
+          화물내용: "📡 테스트 주문",
+          배차상태: "배차중",
+          배차방식: "24시화물콜",
+          메모: "API 테스트",
+        });
+
+        alert("📡 테스트 주문 생성 완료! 목록에서 확인하세요!");
+      } catch (e) {
+        console.error(e);
+        alert("❌ 실패! 콘솔 확인해주세요");
+      }
+    }}
+    className="px-3 py-2 rounded bg-orange-500 text-white hover:bg-orange-600"
+  >
+    📡 24테스트
+  </button>
+
+
 
     <button
       className="px-3 py-2 rounded bg-gray-500 text-white"
@@ -6297,6 +6529,20 @@ if (!loaded) return null;
   >
     다음 ▶
   </button>
+  <button
+  onClick={() => {
+    const selectedOrders = dispatchData.filter(o => selected.has(getId(o)));
+    if (selectedOrders.length === 0) {
+      alert("선택된 항목이 없습니다.");
+      return;
+    }
+    handle24CallSendSelected(selectedOrders);
+  }}
+ disabled={false}
+  className="m-1 px-4 py-2 rounded text-sm text-white bg-blue-600 hover:bg-blue-700"
+>
+  24시전송
+</button>
 
 </div>
 
@@ -6542,8 +6788,101 @@ if (!loaded) return null;
             })}
           </tbody>
         </table>
-      </div>
+        {/* 📡 전송 결과 모달 */}
+{sendResult && (
+  <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+    <div className="bg-white rounded-xl shadow-lg p-6 w-[480px]">
+      <h2 className="text-xl font-bold mb-4">📡 전송 결과</h2>
 
+      <p className="mb-2">
+        성공: <b className="text-green-600">{sendResult.success.length}</b> 건
+      </p>
+      <p className="mb-4">
+        실패: <b className="text-red-600">{sendResult.fail.length}</b> 건
+      </p>
+
+      {sendResult.fail.length > 0 && (
+        <div className="bg-red-50 p-3 rounded mb-4 text-sm text-red-700">
+          <p className="font-semibold mb-1">❌ 실패 사유</p>
+          {sendResult.fail.map((f, i) => (
+            <div key={i}>- {f.order.거래처명}: {f.reason}</div>
+          ))}
+        </div>
+      )}
+
+      <div className="flex justify-end gap-2">
+        <button
+          className="px-3 py-2 rounded bg-gray-500 text-white"
+          onClick={() => setSendResult(null)}
+        >
+          닫기
+        </button>
+
+        {sendResult.fail.length > 0 && (
+          <button
+            className="px-3 py-2 rounded bg-orange-600 text-white"
+            onClick={async () => {
+              for (const f of sendResult.fail) {
+                try { await sendOrderTo24(f.order); } catch {}
+              }
+              alert("🔁 재전송 완료");
+              setSendResult(null);
+            }}
+          >
+            실패건 재전송
+          </button>
+        )}
+      </div>
+    </div>
+  </div>
+)}
+
+      </div>
+{/* 📡 24시콜 전송 결과 모달 추가 */}
+{sendResult && (
+  <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+    <div className="bg-white rounded-xl shadow-lg p-6 w-[480px]">
+      <h2 className="text-xl font-bold mb-4">📡 전송 결과</h2>
+
+      <p className="mb-2">
+        성공: <b className="text-green-600">{sendResult.success.length}</b> 건
+      </p>
+      <p className="mb-4">
+        실패: <b className="text-red-600">{sendResult.fail.length}</b> 건
+      </p>
+
+      {sendResult.fail.length > 0 && (
+        <div className="bg-red-50 p-3 rounded mb-4 text-sm text-red-700">
+          <p className="font-semibold mb-1">❌ 실패 사유</p>
+          {sendResult.fail.map((f, i) => (
+            <div key={i}>- {f.order.거래처명}: {f.reason}</div>
+          ))}
+        </div>
+      )}
+
+      <div className="flex justify-end gap-2">
+        <button
+          className="px-3 py-2 rounded bg-gray-500 text-white"
+          onClick={() => setSendResult(null)}
+        >
+          닫기
+        </button>
+
+        {sendResult.fail.length > 0 && (
+          <button
+            className="px-3 py-2 rounded bg-orange-600 text-white"
+            onClick={() => {
+              handle24CallSendSelected(sendResult.fail.map(f => f.order));
+              setSendResult(null);
+            }}
+          >
+            실패건 재전송
+          </button>
+        )}
+      </div>
+    </div>
+  </div>
+)}
       {/* ---------------------------------------------------------
           🔵 신규 오더 등록 팝업 (업그레이드 버전)
       --------------------------------------------------------- */}
@@ -11396,5 +11735,9 @@ function ClientManagement({ clients = [], upsertClient, removeClient }) {
     </div>
   );
 }
+}
+
+export default DispatchApp;
+ 
 
 // ===================== DispatchApp.jsx (PART 11/11) — END =====================
