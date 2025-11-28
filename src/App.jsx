@@ -30,7 +30,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
 
-  // 🔐 로그인 상태 관찰
+  // 로그인 상태 관찰
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => {
       setUser(u);
@@ -39,26 +39,24 @@ export default function App() {
     return () => unsub();
   }, []);
 
-  // 🔔 로그인 후 FCM 토큰 요청 + Foreground 수신
+  // 🔔 로그인 후에만 알림 등록
   useEffect(() => {
     if (!user) return;
-    if (window.location.pathname !== "/app") return; // 🔥 추가된 조건!!
+    if (window.location.pathname !== "/app") return;
 
-    requestForToken().then((token) => {
-      if (token) console.log("📌 FCM Token:", token);
-      else console.warn("🚫 FCM Token 발급 실패");
-    });
+    requestForToken();
 
     const unsubscribe = onMessageListener((payload) => {
+      console.log("FCM Received:", payload);
       const title = payload?.notification?.title || "새 알림";
       const body = payload?.notification?.body || "";
-      alert(`📌 ${title}\n${body}`);
+      alert(`${title}\n${body}`);
     });
 
     return () => unsubscribe?.();
   }, [user]);
 
-  // 📱 모바일/PC 자동판별
+  // 모바일 판단
   useEffect(() => {
     const checkDevice = () => {
       const ua = navigator.userAgent.toLowerCase();
@@ -91,7 +89,7 @@ export default function App() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen text-lg text-gray-600">
-        🔐 로그인 상태 확인 중...
+        로그인 확인 중...
       </div>
     );
   }
