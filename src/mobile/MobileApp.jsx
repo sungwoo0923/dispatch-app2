@@ -522,20 +522,27 @@ const docData = {
   배차방식: form.배차방식 || "",
   메모: form.적요 || "",
   혼적여부: form.혼적여부 || "독차",
+
   차량번호: form.차량번호 || "",
   기사명: form.기사명 || "",
   전화번호: form.전화번호 || "",
+
+  이름: form.기사명 || "",  // PC 호환
+  전화: form.전화번호 || "", // PC 호환
+
   청구운임,
   기사운임,
   수수료,
-  이름: form.기사명 || "", // PC 호환 필드
+
+  배차상태: (form.차량번호 || "").trim() ? "배차완료" : "배차중",
+  상태: (form.차량번호 || "").trim() ? "배차완료" : "배차중",
+
   updatedAt: serverTimestamp(),
 };
 
+
     const statusByCar =
       (docData.차량번호 || "").trim() ? "배차완료" : "배차중";
-
-    
 
 if (form._editId) {
   // 🛠 수정
@@ -556,13 +563,17 @@ if (form._editId) {
 
 // 🆕 신규등록
 try {
- const ref = await addDoc(collection(db, "dispatch"), {
-  ...docData,
-  등록일: todayStr(),
-  createdAt: serverTimestamp(),
-});
+  const ref = await addDoc(collection(db, "dispatch"), {
+    ...docData,
+    등록일: todayStr(),
+    createdAt: serverTimestamp(),
+  });
 
-  // 🧩 신규 생성 후 폼에도 ID 저장!
+  // ⭐⭐⭐ PC-모바일 완전 동기화 핵심
+  await updateDoc(doc(db, "dispatch", ref.id), {
+    id: ref.id,
+  });
+
   setForm((p) => ({ ...p, id: ref.id }));
   showToast("등록 완료!");
 
