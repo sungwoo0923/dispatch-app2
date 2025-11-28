@@ -2005,11 +2005,12 @@ function MobileOrderForm({
           update("거래처명", val);
           update("상차지명", val);
 
-          const norm = (s = "") =>
-            String(s).toLowerCase().replace(/\s+/g, "");
-
+          const normalized = val.trim().toLowerCase();
           const found = clients.find(
-            (c) => norm(c.거래처명) === norm(val)
+            (c) =>
+              String(c.거래처명 || "")
+                .trim()
+                .toLowerCase() === normalized
           );
 
           if (found) {
@@ -2019,15 +2020,21 @@ function MobileOrderForm({
           }
         }}
         onBlur={() => {
-          const val = form.거래처명;
-          const norm = (s = "") =>
-            String(s).toLowerCase().replace(/\s+/g, "");
+          const val = form.거래처명.trim();
+          if (!val) return;
 
+          const normalized = val.toLowerCase();
           const found = clients.find(
-            (c) => norm(c.거래처명) === norm(val)
+            (c) =>
+              String(c.거래처명 || "")
+                .trim()
+                .toLowerCase() === normalized
           );
 
-          if (!found && val.trim().length >= 2) {
+          // ⛔ 등록된 거래처는 신규등록 팝업 X
+          if (found) return;
+
+          if (val.length >= 2) {
             if (window.confirm("📌 등록되지 않은 거래처입니다.\n신규 등록하시겠습니까?")) {
               addDoc(collection(db, "clients"), {
                 거래처명: val,
@@ -2042,6 +2049,7 @@ function MobileOrderForm({
     }
   />
 </div>
+
 
 
       {/* 상/하차 + 주소 + 자동완성 */}
