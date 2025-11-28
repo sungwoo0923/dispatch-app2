@@ -544,26 +544,34 @@ const handleSave = async () => {
   };
 
   // 🔹 수정 모드
-  if (form.id) {
-    await updateDoc(doc(db, "dispatch", form.id), docData);
-    showToast("수정 완료!");
-    setPage("list");
-    return;
-  }
+if (form.id) {
+  await updateDoc(doc(db, "dispatch", form.id), {
+    ...docData,
+    _id: form.id,   // 🔥 PC/모바일 통일용
+    id: form.id,
+  });
+  showToast("수정 완료!");
+  setPage("list");
+  return;
+}
 
-  // 🔹 신규 등록
-  try {
-    const ref = await addDoc(collection(db, "dispatch"), {
-      ...docData,
-      id: "", // 임시 ID
-      등록일: today,
-      createdAt: serverTimestamp(),
-    });
 
-    // Firestore 문서 ID로 정확하게 저장
-    await updateDoc(doc(db, "dispatch", ref.id), {
-      id: ref.id,
-    });
+// 🔹 신규 등록
+try {
+  const ref = await addDoc(collection(db, "dispatch"), {
+    ...docData,
+    _id: "",    // 임시
+    id: "",     // 임시
+    등록일: today,
+    createdAt: serverTimestamp(),
+  });
+
+  // 🔥 Firestore 문서 고유 ID 확정 저장
+  await updateDoc(doc(db, "dispatch", ref.id), {
+    _id: ref.id,
+    id: ref.id,
+  });
+
 
     showToast("등록 완료!");
     setPage("list");

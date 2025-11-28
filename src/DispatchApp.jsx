@@ -168,11 +168,16 @@ function useRealtimeCollections(user){
     const userRole = localStorage.getItem("role") || "user";
 const collName = getCollectionName(userRole);
 
-unsubs.push(onSnapshot(collection(db, collName), (snap)=>{
-      const arr = snap.docs.map(d=>d.data());
-      setDispatchData(arr);
-      safeSave("dispatchData", arr);
-    }));
+unsubs.push(onSnapshot(collection(db, collName), (snap) => {
+  const arr = snap.docs.map((d) => ({
+    _id: d.id,        // 🔥 Firestore 문서 ID
+    id: d.id,         // (모바일에서 쓰던 id도 같이 맞춰줌)
+    ...(d.data() || {})
+  }));
+  setDispatchData(arr);
+  safeSave("dispatchData", arr);
+}));
+
     unsubs.push(onSnapshot(collection(db, COLL.drivers), (snap)=>{
       const arr = snap.docs.map(d=>d.data());
       setDrivers(arr);
