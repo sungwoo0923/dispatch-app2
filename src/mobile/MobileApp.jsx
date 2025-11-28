@@ -286,7 +286,7 @@ useEffect(() => {
     const list = snap.docs.map((d) => ({
       id: d.id,
       거래처명: d.data().하차지명 || d.data().거래처명 || "",
-      주소: d.data().주소 || "",
+      주소: d.data().상차지주소 || d.data().하차지주소 || "",
     }));
 
     // 기존 clients와 병합 (중복 제거)
@@ -2093,7 +2093,7 @@ function MobileOrderForm({
  const found = clients.find(
    (c) => String(c.거래처명 || "").trim().toLowerCase() === val
  );
- update("상차지주소", found?.주소 || "");
+ update("상차지주소", found?.상차지주소 || "");
                 }}
                 onFocus={() =>
                   form.상차지명 && setShowPickupList(true)
@@ -2145,7 +2145,7 @@ function MobileOrderForm({
  const found = clients.find(
    (c) => String(c.거래처명 || "").trim().toLowerCase() === val
  );
- update("하차지주소", found?.주소 || "");
+ update("하차지주소", found?.하차지주소 || "");
                 }}
                 onFocus={() =>
                   form.하차지명 && setShowDropList(true)
