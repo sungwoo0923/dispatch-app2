@@ -565,17 +565,20 @@ if (form._editId) {
 try {
   const ref = await addDoc(collection(db, "dispatch"), {
     ...docData,
+    id: docData.id || "", // 🔹 임시값
     등록일: todayStr(),
     createdAt: serverTimestamp(),
   });
 
-  // ⭐⭐⭐ PC-모바일 완전 동기화 핵심
+  // ⭐ 정확하게 ref.id로 업데이트 (문서 새로 안생김)
   await updateDoc(doc(db, "dispatch", ref.id), {
     id: ref.id,
   });
 
-  setForm((p) => ({ ...p, id: ref.id }));
+  console.log("저장됨:", ref.id);
   showToast("등록 완료!");
+  setPage("list");
+
 
 
       setPage("list");
@@ -1492,7 +1495,7 @@ function MobileOrderDetail({
       setName(d.이름 || "");
       setPhone(d.전화번호 || "");
     }
-  }, [carNo, drivers]);
+  }, [carNo]); // 🔥 수정: drivers 제거!
 
   // 차량번호 지우면 이름/전화번호 자동 초기화
   useEffect(() => {
