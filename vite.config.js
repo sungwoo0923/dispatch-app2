@@ -42,10 +42,12 @@ export default defineConfig({
           }
         ]
       },
-      workbox: {
-        globPatterns: ["**/*.{js,css,html,ico,png,svg}"],
-        navigateFallback: "/index.html"
-      }
+    workbox: {
+  globPatterns: ["**/*.{js,css,html,ico,png,svg}"],
+  navigateFallback: "/index.html",
+  maximumFileSizeToCacheInBytes: 5 * 1024 * 1024 // 5MB 허용
+}
+
     })
   ],
 
