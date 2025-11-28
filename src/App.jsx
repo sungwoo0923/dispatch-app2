@@ -39,22 +39,6 @@ export default function App() {
     return () => unsub();
   }, []);
 
-  // 🔔 로그인 후에만 알림 등록
-  useEffect(() => {
-    if (!user) return;
-    if (window.location.pathname !== "/app") return;
-
-    requestForToken();
-
-    const unsubscribe = onMessageListener((payload) => {
-      console.log("FCM Received:", payload);
-      const title = payload?.notification?.title || "새 알림";
-      const body = payload?.notification?.body || "";
-      alert(`${title}\n${body}`);
-    });
-
-    return () => unsubscribe?.();
-  }, [user]);
 
   // 모바일 판단
   useEffect(() => {
