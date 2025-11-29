@@ -1,3 +1,26 @@
+// ======================= src/App.jsx =======================
+
+import React, { useState, useEffect } from "react";
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  Navigate,
+} from "react-router-dom";
+
+import { onAuthStateChanged } from "firebase/auth";
+import { auth } from "./firebase";
+
+// PC / MOBILE
+import DispatchApp from "./DispatchApp";
+import MobileApp from "./mobile/MobileApp";
+
+// 공용 화면
+import Login from "./Login";
+import Signup from "./Signup";
+import NoAccess from "./NoAccess";
+import UploadPage from "./UploadPage";
+import StandardFare from "./StandardFare";
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -12,8 +35,18 @@ export default function App() {
     return () => unsub();
   }, []);
 
-  // 디바이스 판별 (Safari / Kakao / Chrome 전부 OK)
-  const isMobileDevice = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+  // 📌 진짜 모바일 판별 (Android UA 변경 대응)
+  const isMobileDevice = (() => {
+    const ua = navigator.userAgent.toLowerCase();
+    const touch = navigator.maxTouchPoints > 0;
+    const small = window.innerWidth <= 1024;
+    const android = ua.includes("android");
+    const ios = /iphone|ipad|ipod/.test(ua);
+
+    if (android || ios) return true;
+    if (touch && small) return true;
+    return false;
+  })();
 
   if (loading) {
     return (
@@ -40,12 +73,12 @@ export default function App() {
           element={user ? <Navigate to="/app" replace /> : <Signup />}
         />
 
-        {/* PC / Mobile 자동 분기 */}
+        {/* 🔥 PC / Mobile 자동 분기 */}
         <Route
           path="/app"
           element={
             user ? (
-              (isMobileDevice || true) ? (
+              isMobileDevice ? (
                 <MobileApp role={role} />
               ) : (
                 <DispatchApp role={role} />
@@ -60,10 +93,10 @@ export default function App() {
         <Route path="/no-access" element={<NoAccess />} />
         <Route path="/upload" element={<UploadPage />} />
 
-        {/* 나머지는 홈으로 */}
         <Route path="*" element={<Navigate to="/app" replace />} />
       </Routes>
     </Router>
   );
 }
+
 // ======================= END =======================
