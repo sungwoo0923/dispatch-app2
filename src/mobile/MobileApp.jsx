@@ -198,6 +198,7 @@ const getStatus = (o = {}) => {
 // ======================================================================
 
 export default function MobileApp() {
+  
    
   // -------------------------------------------------------------
   // 🔥 추가: 빠른 날짜 선택 (1/3/7/15일 버튼)
@@ -760,27 +761,12 @@ try {
   const handleRefresh = () => {
     window.location.reload();
   };
-// 🔴 전체 삭제 기능 (모든 dispatch 데이터 삭제)
+// 🔴 전체삭제 비활성화
 const deleteAllOrders = async () => {
-  if (!window.confirm("⚠ 전체 배차 데이터를 삭제하시겠습니까?")) return;
-  if (!window.confirm("🚨 정말로 전체 삭제합니다. 복구할 수 없습니다.")) return;
-
-  try {
-const snap = await getDocs(collection(db, collName));
-const batch = writeBatch(db); // 누락된 batch 선언 추가
-
-snap.docs.forEach((d) => {
-  batch.delete(doc(db, collName, d.id)); // ✔️ 올바른 컬렉션명
-});
-
-await batch.commit();
-
-    alert("전체 데이터 삭제 완료🔥");
-  } catch (e) {
-    console.error(e);
-    alert("삭제 중 오류 발생!");
-  }
+  alert("🚫 전체 삭제 기능이 비활성화되었습니다.");
+  return;
 };
+
 
   const title =
     page === "list"
@@ -936,8 +922,6 @@ await batch.commit();
   setPage={setPage}
 />
 )}
-
-
       </div>
 
       {page === "list" && !showMenu && (
@@ -1066,12 +1050,8 @@ function MobileSideMenu({
             <MenuItem label="배차현황" onClick={onGoStatus} />
             <MenuItem label="미배차현황" onClick={onGoUnassigned} />
           </MenuSection>
-          <MenuSection title="데이터 삭제">
- <MenuItem
-label="전체 삭제"
-onClick={onDeleteAll}
-  />
-</MenuSection>
+          {/* 전체삭제 기능 비활성화됨 */}
+
 
         </div>
 
@@ -2022,81 +2002,69 @@ function MobileOrderForm({
       {/* 상차/하차 일시 */}
       <div className="bg-white rounded-lg border shadow-sm">
         <RowLabelInput
-          label="상차일시"
-          input={
-            <div className="flex gap-2">
-              <input
-                type="date"
-                className="flex-1 border rounded px-2 py-1 text-sm"
-                value={form.상차일}
-                onChange={(e) => update("상차일", e.target.value)}
-              />
-              <input
-  type="date"
-  className="flex-1 border rounded px-2 py-1 text-sm"
-  value={form.상차일}
-  onChange={(e) => update("상차일", e.target.value)}
+  label="상차일시"
+  input={
+    <div className="flex gap-2">
+      <input
+        type="date"
+        className="flex-1 border rounded px-2 py-1 text-sm"
+        value={form.상차일}
+        onChange={(e) => update("상차일", e.target.value)}
+      />
+      <select
+        className="flex-1 border rounded px-2 py-1 text-sm"
+        value={form.상차시간}
+        onChange={(e) => update("상차시간", e.target.value)}
+      >
+        <option value="">상차시간</option>
+        {[
+          "오전 1:00", "오전 2:00", "오전 3:00", "오전 4:00", "오전 5:00",
+          "오전 6:00", "오전 7:00", "오전 8:00", "오전 9:00", "오전 10:00",
+          "오전 11:00", "오후 12:00", "오후 1:00", "오후 2:00", "오후 3:00",
+          "오후 4:00", "오후 5:00", "오후 6:00", "오후 7:00", "오후 8:00",
+          "오후 9:00", "오후 10:00", "오후 11:00"
+        ].map((t) => (
+          <option key={t} value={t}>
+            {t}
+          </option>
+        ))}
+      </select>
+    </div>
+  }
 />
-<select
-  className="flex-1 border rounded px-2 py-1 text-sm"
-  value={form.상차시간}
-  onChange={(e) => update("상차시간", e.target.value)}
->
-  <option value="">상차시간</option>
-  {[
-    "오전 1:00", "오전 2:00", "오전 3:00", "오전 4:00", "오전 5:00",
-    "오전 6:00", "오전 7:00", "오전 8:00", "오전 9:00", "오전 10:00",
-    "오전 11:00", "오후 12:00", "오후 1:00", "오후 2:00", "오후 3:00",
-    "오후 4:00", "오후 5:00", "오후 6:00", "오후 7:00", "오후 8:00",
-    "오후 9:00", "오후 10:00", "오후 11:00"
-  ].map((t) => (
-    <option key={t} value={t}>
-      {t}
-    </option>
-  ))}
-</select>
 
-            </div>
-          }
-        />
         <RowLabelInput
-          label="하차일시"
-          input={
-            <div className="flex gap-2">
-              <input
-                type="date"
-                className="flex-1 border rounded px-2 py-1 text-sm"
-                value={form.하차일}
-                onChange={(e) => update("하차일", e.target.value)}
-              />
-              <input
-  type="date"
-  className="flex-1 border rounded px-2 py-1 text-sm"
-  value={form.하차일}
-  onChange={(e) => update("하차일", e.target.value)}
+  label="하차일시"
+  input={
+    <div className="flex gap-2">
+      <input
+        type="date"
+        className="flex-1 border rounded px-2 py-1 text-sm"
+        value={form.하차일}
+        onChange={(e) => update("하차일", e.target.value)}
+      />
+      <select
+        className="flex-1 border rounded px-2 py-1 text-sm"
+        value={form.하차시간}
+        onChange={(e) => update("하차시간", e.target.value)}
+      >
+        <option value="">하차시간</option>
+        {[
+          "오전 1:00", "오전 2:00", "오전 3:00", "오전 4:00", "오전 5:00",
+          "오전 6:00", "오전 7:00", "오전 8:00", "오전 9:00", "오전 10:00",
+          "오전 11:00", "오후 12:00", "오후 1:00", "오후 2:00", "오후 3:00",
+          "오후 4:00", "오후 5:00", "오후 6:00", "오후 7:00", "오후 8:00",
+          "오후 9:00", "오후 10:00", "오후 11:00"
+        ].map((t) => (
+          <option key={t} value={t}>
+            {t}
+          </option>
+        ))}
+      </select>
+    </div>
+  }
 />
-<select
-  className="flex-1 border rounded px-2 py-1 text-sm"
-  value={form.하차시간}
-  onChange={(e) => update("하차시간", e.target.value)}
->
-  <option value="">하차시간</option>
-  {[
-    "오전 1:00", "오전 2:00", "오전 3:00", "오전 4:00", "오전 5:00",
-    "오전 6:00", "오전 7:00", "오전 8:00", "오전 9:00", "오전 10:00",
-    "오전 11:00", "오후 12:00", "오후 1:00", "오후 2:00", "오후 3:00",
-    "오후 4:00", "오후 5:00", "오후 6:00", "오후 7:00", "오후 8:00",
-    "오후 9:00", "오후 10:00", "오후 11:00"
-  ].map((t) => (
-    <option key={t} value={t}>
-      {t}
-    </option>
-  ))}
-</select>
 
-            </div>
-          }
-        />
       </div>
 
       {/* 거래처명 */}
