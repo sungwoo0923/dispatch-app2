@@ -1670,6 +1670,60 @@ function MobileOrderDetail({
           </div>
         )}
       </div>
+      {/* 📌 공유 & 운임조회 (지도보다 위로 이동!) */}
+<div className="bg-white border rounded-xl px-4 py-3 shadow-sm">
+  <div className="text-sm font-semibold mb-2">공유 & 운임조회</div>
+  <div className="flex gap-2">
+    
+    {/* 카톡 공유 */}
+    <button
+      onClick={handleCopyKakao}
+      className="flex-1 py-2 rounded-lg bg-yellow-400 text-black text-sm font-semibold"
+    >
+      카톡공유
+    </button>
+
+    {/* 운임조회 */}
+    <button
+      onClick={() => {
+        window.scrollTo(0, 0);
+        setPage("fare");
+
+        setTimeout(() => {
+          const normalize = (v) => String(v || "").trim().replace(/\s+/g, "");
+          const pickupVal = normalize(order.상차지명);
+          const dropVal = normalize(order.하차지명);
+          const tonVal = normalize(order.차량톤수 || order.톤수);
+          const cargoVal = normalize(order.화물내용);
+
+          const elPickup = document.querySelector("input[placeholder='상차지']");
+          const elDrop = document.querySelector("input[placeholder='하차지']");
+          const elTon = document.querySelector("input[placeholder='톤수 (예: 1톤)']");
+          const elCargo = document.querySelector("input[placeholder='화물내용 (예: 16파렛)']");
+
+          if (elPickup) elPickup.value = pickupVal;
+          if (elDrop) elDrop.value = dropVal;
+          if (elTon) elTon.value = tonVal;
+          if (elCargo) elCargo.value = cargoVal;
+
+          setPickup(pickupVal);
+          setDrop(dropVal);
+          setTon(tonVal);
+          setCargo(cargoVal);
+
+          setTimeout(() => {
+            const btn = document.querySelector("#fare-search-button");
+            if (btn) btn.click();
+          }, 200);
+        }, 400);
+      }}
+      className="flex-1 py-2 rounded-lg bg-indigo-500 text-white text-sm font-semibold"
+    >
+      운임조회
+    </button>
+  </div>
+</div>
+
 
       {/* 지도 */}
       <div className="bg-white border rounded-xl px-4 py-3 shadow-sm">
@@ -1690,69 +1744,7 @@ function MobileOrderDetail({
         </div>
       </div>
 
-      {/* 카톡 공유 */}
-      <div className="bg-white border rounded-xl px-4 py-3 shadow-sm">
-        <div className="text-sm font-semibold mb-2">카톡 공유</div>
-        <button
-          onClick={handleCopyKakao}
-          className="w-full py-2 rounded-lg bg-yellow-400 text-black text-sm font-semibold"
-        >
-          카카오톡 공유용 텍스트 복사
-        </button>
-        <div className="mt-1 text-[11px] text-gray-500">
-          버튼을 누른 후 카카오톡 대화방에 들어가서 붙여넣기 하시면 됩니다.
-        </div>
-      </div>
-      {/* 🔍 여기에 삽입 시작 → 자동 운임조회 버튼 */}
-      <div className="bg-white border rounded-xl px-4 py-3 shadow-sm mt-4">
-        <div className="text-sm font-semibold mb-2">표준운임 조회</div>
-
-        <button
-          onClick={() => {
-            window.scrollTo(0, 0);
-            setPage("fare");
-
-            // 🔥 페이지 렌더 후 값 주입 & 검색 실행 + React 상태도 업데이트
-            setTimeout(() => {
-              const normalize = (v) => String(v || "").trim().replace(/\s+/g, "");
-              const pickupVal = normalize(order.상차지명);
-              const dropVal = normalize(order.하차지명);
-              const tonVal = normalize(order.차량톤수 || order.톤수);
-              const cargoVal = normalize(order.화물내용);
-
-              const elPickup = document.querySelector("input[placeholder='상차지']");
-              const elDrop = document.querySelector("input[placeholder='하차지']");
-              const elTon = document.querySelector("input[placeholder='톤수 (예: 1톤)']");
-              const elCargo = document.querySelector("input[placeholder='화물내용 (예: 16파렛)']");
-
-              if (elPickup) elPickup.value = pickupVal;
-              if (elDrop) elDrop.value = dropVal;
-              if (elTon) elTon.value = tonVal;
-              if (elCargo) elCargo.value = cargoVal;
-
-              // ⭐ React 상태 업데이트
-              setPickup(pickupVal);
-              setDrop(dropVal);
-              setTon(tonVal);
-              setCargo(cargoVal);
-
-              // 🚀 자동 검색 실행 (필수값 있을 때)
-              setTimeout(() => {
-                if (pickupVal && dropVal && cargoVal) {
-                  const btn = document.querySelector("#fare-search-button");
-                  if (btn) btn.click();
-                }
-              }, 200);
-            }, 400);
-
-          }}
-          className="w-full py-2 rounded-lg bg-indigo-500 text-white text-sm font-semibold"
-        >
-          🔍 이 구간 운임 바로 조회하기
-        </button>
-      </div>
-
-      {/* 🔍 삽입 끝 */}
+    
       {/* 기사 배차 */}
       <div className="bg-white border rounded-xl px-4 py-3 shadow-sm space-y-3">
         <div className="text-sm font-semibold mb-1">기사 배차</div>
