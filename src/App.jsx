@@ -61,13 +61,14 @@ export default function App() {
   return (
     <Router>
       <Routes>
+        {/* 루트 → /app으로 이동 */}
         <Route path="/" element={<Navigate to="/app" replace />} />
 
+        {/* 로그인 / 회원가입 */}
         <Route
           path="/login"
           element={user ? <Navigate to="/app" replace /> : <Login />}
         />
-
         <Route
           path="/signup"
           element={user ? <Navigate to="/app" replace /> : <Signup />}
@@ -89,10 +90,12 @@ export default function App() {
           }
         />
 
+        {/* 공용 페이지 */}
         <Route path="/standard-fare" element={<StandardFare />} />
         <Route path="/no-access" element={<NoAccess />} />
         <Route path="/upload" element={<UploadPage />} />
 
+        {/* 나머지는 전부 /app으로 */}
         <Route path="*" element={<Navigate to="/app" replace />} />
       </Routes>
     </Router>
