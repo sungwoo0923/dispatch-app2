@@ -45,7 +45,7 @@ export default function App() {
           path="/app"
           element={
             user ? (
-              isMobileDevice ? (
+              (isMobileDevice || true) ? (
                 <MobileApp role={role} />
               ) : (
                 <DispatchApp role={role} />
