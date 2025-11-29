@@ -1,5 +1,4 @@
 // ======================= src/App.jsx =======================
-
 import React, { useState, useEffect } from "react";
 import {
   BrowserRouter as Router,
@@ -10,9 +9,6 @@ import {
 
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "./firebase";
-
-// 🔔 FCM 푸시 알림
-import { requestForToken, onMessageListener } from "./firebaseMessaging";
 
 // PC / MOBILE
 import DispatchApp from "./DispatchApp";
@@ -28,7 +24,6 @@ import StandardFare from "./StandardFare";
 export default function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [isMobile, setIsMobile] = useState(false);
 
   // 로그인 상태 관찰
   useEffect(() => {
@@ -39,36 +34,8 @@ export default function App() {
     return () => unsub();
   }, []);
 
-
-  // 모바일 판단
-  useEffect(() => {
-    const checkDevice = () => {
-      const ua = navigator.userAgent.toLowerCase();
-      const isIOS =
-        /iphone|ipad|ipod/.test(ua) ||
-        (ua.includes("macintosh") && "ontouchend" in document);
-      const isAndroid = ua.includes("android");
-      const mobileCheck = isIOS || isAndroid;
-
-      const params = new URLSearchParams(window.location.search);
-      const forcePc = params.get("view") === "pc";
-      const forceMobile = params.get("view") === "mobile";
-
-      let final = mobileCheck;
-      if (forcePc) final = false;
-      if (forceMobile) final = true;
-
-      setIsMobile(final);
-    };
-
-    checkDevice();
-    window.addEventListener("resize", checkDevice);
-    window.addEventListener("popstate", checkDevice);
-    return () => {
-      window.removeEventListener("resize", checkDevice);
-      window.removeEventListener("popstate", checkDevice);
-    };
-  }, []);
+  // 디바이스 판별 (Safari / Kakao / Chrome 전부 OK)
+  const isMobileDevice = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
   if (loading) {
     return (
@@ -83,7 +50,7 @@ export default function App() {
   return (
     <Router>
       <Routes>
-        <Route path="/" element={<Navigate to="/login" replace />} />
+        <Route path="/" element={<Navigate to="/app" replace />} />
 
         <Route
           path="/login"
@@ -95,11 +62,12 @@ export default function App() {
           element={user ? <Navigate to="/app" replace /> : <Signup />}
         />
 
+        {/* PC / Mobile 자동 분기 */}
         <Route
           path="/app"
           element={
             user ? (
-              isMobile ? (
+              isMobileDevice ? (
                 <MobileApp role={role} />
               ) : (
                 <DispatchApp role={role} />
@@ -113,10 +81,11 @@ export default function App() {
         <Route path="/standard-fare" element={<StandardFare />} />
         <Route path="/no-access" element={<NoAccess />} />
         <Route path="/upload" element={<UploadPage />} />
-        <Route path="*" element={<Navigate to="/login" replace />} />
+
+        {/* 나머지는 홈으로 */}
+        <Route path="*" element={<Navigate to="/app" replace />} />
       </Routes>
     </Router>
   );
 }
-
 // ======================= END =======================
