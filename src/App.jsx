@@ -99,11 +99,11 @@ export default function App() {
               <Navigate to="/login" replace />
             ) : role === "driver" ? (
               isMobile ? <MobileDriverApp /> : <NoAccess />
-            ) : isMobile ? (
-              <MobileApp role={role} />
-            ) : (
-              <DispatchApp role={role} />
-            )
+           ) : isMobile || true ? (
+  <MobileApp role={role} />
+) : (
+  <DispatchApp role={role} />
+)
           }
         />
 
