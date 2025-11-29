@@ -1711,14 +1711,10 @@ function MobileOrderDetail({
           setTon(tonVal);
           setCargo(cargoVal);
 
-          // 🚀 자동 검색 실행
-setTimeout(() => {
-  if (pickupVal && dropVal) {
-    const btn = document.querySelector("#fare-search-button");
-    btn?.click();
-  }
-}, 600); // ⬅ 딜레이 + 상태 업데이트 반영 보장
-
+          setTimeout(() => {
+            const btn = document.querySelector("#fare-search-button");
+            if (btn) btn.click();
+          }, 200);
         }, 400);
       }}
       className="flex-1 py-2 rounded-lg bg-indigo-500 text-white text-sm font-semibold"
@@ -2600,75 +2596,67 @@ function MobileStandardFare({ onBack }) {
   }, []);
 
   const calcFareMobile = () => {
-  if (!pickup.trim() || !drop.trim()) {
-    alert("상차지 / 하차지는 필수입니다.");
-    return;
-  }
-
-  const normPickup = clean(pickup);
-  const normDrop = clean(drop);
-  const normCargo = clean(cargo);
-  const inputTonNum = extractTonNum(ton);
-
-  // 1️⃣ 상차/하차 필수 우선필터
-  let filtered = dispatchData.filter((r) => {
-    const rp = clean(r.상차지명 || "");
-    const rd = clean(r.하차지명 || "");
-    return rp.includes(normPickup) && rd.includes(normDrop);
-  });
-
-  // 2️⃣ 화물내용이 있으면 강력 필터링
-  if (normCargo) {
-    const cargoFiltered = filtered.filter((r) => {
-      return clean(r.화물내용 || "").includes(normCargo);
-    });
-    if (cargoFiltered.length > 0) {
-      filtered = cargoFiltered;
+    if (!pickup.trim() || !drop.trim()) {
+      alert("상차지 / 하차지를 입력하세요.");
+      return;
     }
-  }
 
-  // 3️⃣ 톤수는 마지막 약한 기준
-  if (inputTonNum != null) {
-    const tonFiltered = filtered.filter((r) => {
-      const rton = extractTonNum(r.차량톤수 || "");
-      return rton != null && Math.abs(rton - inputTonNum) <= 0.5;
+    const normPickup = clean(pickup);
+    const normDrop = clean(drop);
+    const inputTonNum = extractTonNum(ton);
+
+    let filtered = dispatchData.filter((r) => {
+      const rp = clean(r.상차지명 || "");
+      const rd = clean(r.하차지명 || "");
+      const okPickup = rp.includes(normPickup);
+      const okDrop = rd.includes(normDrop);
+      if (!okPickup || !okDrop) return false;
+
+      if (vehicle !== "전체") {
+        const rv = clean(r.차량종류 || "");
+        const vv = clean(vehicle);
+        if (!rv.includes(vv)) return false;
+      }
+
+      if (inputTonNum != null) {
+        const rton = extractTonNum(r.차량톤수 || "");
+        if (rton != null && Math.abs(rton - inputTonNum) > 0.5)
+          return false;
+      }
+
+      return true;
     });
-    if (tonFiltered.length > 0) {
-      filtered = tonFiltered;
+
+    if (!filtered.length) {
+      alert("검색된 데이터가 없습니다.");
+      setResult(null);
+      return;
     }
-  }
 
-  if (!filtered.length) {
-    alert("일치하는 데이터가 없습니다.");
-    setResult(null);
-    return;
-  }
+    setMatchedRows(filtered);
 
-  setMatchedRows(filtered);
+    const fares = filtered
+      .map((r) => Number(String(r.청구운임 || 0).replace(/[^\d]/g, "")))
+      .filter((v) => !isNaN(v));
 
-  const fares = filtered
-    .map((r) => Number(String(r.청구운임 || 0).replace(/[^\d]/g, "")))
-    .filter((v) => !isNaN(v));
+    const avg = Math.round(fares.reduce((a, b) => a + b, 0) / fares.length);
+    const latest = filtered.sort(
+      (a, b) => (b.상차일 || "").localeCompare(a.상차일 || "")
+    )[0];
+    const latestFare = Number(
+      String(latest?.청구운임 || 0).replace(/[^\d]/g, "")
+    );
+    const aiValue = Math.round(latestFare * 0.6 + avg * 0.4);
 
-  const avg = Math.round(fares.reduce((a, b) => a + b, 0) / fares.length);
-  const latest = filtered.sort(
-    (a, b) => (b.상차일 || "").localeCompare(a.상차일 || "")
-  )[0];
-  const latestFare = Number(
-    String(latest?.청구운임 || 0).replace(/[^\d]/g, "")
-  );
-  const aiValue = Math.round(latestFare * 0.6 + avg * 0.4);
+    setAiFare({
+      avg,
+      latestFare,
+      aiValue,
+      confidence: Math.min(95, 60 + filtered.length * 5),
+    });
 
-  setAiFare({
-    avg,
-    latestFare,
-    aiValue,
-    confidence: Math.min(95, 60 + filtered.length * 5),
-  });
-
-  setResult({ avg, latest, latestFare });
-};
-
+    setResult({ avg, latest, latestFare });
+  };
 
   return (
     <div className="px-4 py-4 space-y-4">
@@ -2694,13 +2682,6 @@ function MobileStandardFare({ onBack }) {
           value={drop}
           onChange={(e) => setDrop(e.target.value)}
         />
-        <input
-  className="w-full border rounded px-3 py-2 text-sm"
-  placeholder="화물내용 (예: 16파렛)"
-  value={cargo}
-  onChange={(e) => setCargo(e.target.value)}
-/>
-
         <input
           className="w-full border rounded px-3 py-2 text-sm"
           placeholder="톤수 (예: 1톤)"
