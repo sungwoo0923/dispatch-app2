@@ -1,10 +1,24 @@
 // ======================= src/firebaseMessaging.js =======================
 
-import { getMessaging, getToken, onMessage } from "firebase/messaging";
+import {
+  getMessaging,
+  getToken,
+  onMessage,
+  isSupported,
+} from "firebase/messaging";
 import { auth, db } from "./firebase";
-import { doc, setDoc } from "firebase/firestore";
+import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 
-const messaging = getMessaging();
+// 📌 iOS Safari 등 환경에서 messaging 미지원 방지
+let messaging = null;
+(async () => {
+  if (await isSupported()) {
+    messaging = getMessaging();
+    console.log("📌 Messaging Supported");
+  } else {
+    console.warn("🚫 Messaging Not Supported in this Browser");
+  }
+})();
 
 // 🔥 FCM Token 요청 & Firestore 저장
 export const requestForToken = async () => {
@@ -15,10 +29,18 @@ export const requestForToken = async () => {
       return null;
     }
 
-    const token = await getToken(messaging, {
-      vapidKey:
-        "BIyTmgaR2qjQ7RoUJ7Epj1iR49MtzPuP2oByfw7g27Z00qcy_QB_1BYe1zPOSIMm5ecqypy-Q2LmGAgsDbG7dtM",
-    });
+    if (!messaging) {
+      console.log("⚠ 브라우저에서 Push 미지원 (iOS Private Mode 등)");
+      return null;
+    }
+
+    const vapidKey = import.meta.env.VITE_VAPID_KEY;
+    if (!vapidKey) {
+      console.error("❌ VAPID KEY 누락!! .env 설정 필요");
+      return null;
+    }
+
+    const token = await getToken(messaging, { vapidKey });
 
     if (!token) {
       console.warn("🚫 Token 없음 (알림 권한 거부 or HTTPS 미적용)");
@@ -33,7 +55,7 @@ export const requestForToken = async () => {
       {
         uid: currentUser.uid,
         token,
-        updatedAt: new Date(),
+        updatedAt: serverTimestamp(),
       },
       { merge: true }
     );
@@ -47,10 +69,13 @@ export const requestForToken = async () => {
 };
 
 // 🔔 앱 실행 중 포그라운드 알림 허용
-export const onMessageListener = () =>
-  new Promise((resolve) => {
+export const onMessageListener = () => {
+  if (!messaging) return Promise.resolve(null);
+
+  return new Promise((resolve) => {
     onMessage(messaging, (payload) => {
       console.log("📩 Foreground Message 수신!", payload);
       resolve(payload);
     });
   });
+};

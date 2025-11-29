@@ -1,13 +1,16 @@
-// src/Login.jsx
+// ======================= src/Login.jsx =======================
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   signInWithEmailAndPassword,
   setPersistence,
   browserLocalPersistence,
-} from "firebase/auth";   // 🔥 추가
+} from "firebase/auth";
 import { auth, db } from "./firebase";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+
+// 🔔 FCM 토큰 요청 함수 불러오기
+import { requestForToken } from "./firebaseMessaging";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -58,6 +61,13 @@ export default function Login() {
       // 마지막 로그인 시간 업데이트
       await setDoc(ref, { lastLogin: serverTimestamp() }, { merge: true });
 
+      // ======================================================
+      // 🔔 로그인 성공 → FCM 토큰 요청 & Firestore 저장!
+      // ======================================================
+      await requestForToken();
+      console.log("📌 로그인 후 FCM 토큰 요청 완료!");
+
+      // 메인 페이지 이동
       navigate("/app");
     } catch (err) {
       console.error(err);
@@ -106,3 +116,4 @@ export default function Login() {
     </div>
   );
 }
+// ======================= END =======================

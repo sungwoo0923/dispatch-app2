@@ -2032,11 +2032,30 @@ function MobileOrderForm({
                 onChange={(e) => update("상차일", e.target.value)}
               />
               <input
-                className="flex-1 border rounded px-2 py-1 text-sm"
-                placeholder="예: 08:00"
-                value={form.상차시간}
-                onChange={(e) => update("상차시간", e.target.value)}
-              />
+  type="date"
+  className="flex-1 border rounded px-2 py-1 text-sm"
+  value={form.상차일}
+  onChange={(e) => update("상차일", e.target.value)}
+/>
+<select
+  className="flex-1 border rounded px-2 py-1 text-sm"
+  value={form.상차시간}
+  onChange={(e) => update("상차시간", e.target.value)}
+>
+  <option value="">상차시간</option>
+  {[
+    "오전 1:00", "오전 2:00", "오전 3:00", "오전 4:00", "오전 5:00",
+    "오전 6:00", "오전 7:00", "오전 8:00", "오전 9:00", "오전 10:00",
+    "오전 11:00", "오후 12:00", "오후 1:00", "오후 2:00", "오후 3:00",
+    "오후 4:00", "오후 5:00", "오후 6:00", "오후 7:00", "오후 8:00",
+    "오후 9:00", "오후 10:00", "오후 11:00"
+  ].map((t) => (
+    <option key={t} value={t}>
+      {t}
+    </option>
+  ))}
+</select>
+
             </div>
           }
         />
@@ -2051,11 +2070,30 @@ function MobileOrderForm({
                 onChange={(e) => update("하차일", e.target.value)}
               />
               <input
-                className="flex-1 border rounded px-2 py-1 text-sm"
-                placeholder="예: 14:00"
-                value={form.하차시간}
-                onChange={(e) => update("하차시간", e.target.value)}
-              />
+  type="date"
+  className="flex-1 border rounded px-2 py-1 text-sm"
+  value={form.하차일}
+  onChange={(e) => update("하차일", e.target.value)}
+/>
+<select
+  className="flex-1 border rounded px-2 py-1 text-sm"
+  value={form.하차시간}
+  onChange={(e) => update("하차시간", e.target.value)}
+>
+  <option value="">하차시간</option>
+  {[
+    "오전 1:00", "오전 2:00", "오전 3:00", "오전 4:00", "오전 5:00",
+    "오전 6:00", "오전 7:00", "오전 8:00", "오전 9:00", "오전 10:00",
+    "오전 11:00", "오후 12:00", "오후 1:00", "오후 2:00", "오후 3:00",
+    "오후 4:00", "오후 5:00", "오후 6:00", "오후 7:00", "오후 8:00",
+    "오후 9:00", "오후 10:00", "오후 11:00"
+  ].map((t) => (
+    <option key={t} value={t}>
+      {t}
+    </option>
+  ))}
+</select>
+
             </div>
           }
         />
