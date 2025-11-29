@@ -1,4 +1,4 @@
-// ======================= src/Login.jsx =======================
+// ======================= src/Login.jsx (role 자동설정 추가 버전) =======================
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -8,8 +8,6 @@ import {
 } from "firebase/auth";
 import { auth, db } from "./firebase";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
-
-// 🔔 FCM 토큰 요청 함수 불러오기
 import { requestForToken } from "./firebaseMessaging";
 
 export default function Login() {
@@ -17,23 +15,53 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const navigate = useNavigate();
 
+  // 📌 기사(직영) 계정 목록
+  const driverEmails = [
+    "sw@naver.com",
+    "sw2@naver.com",
+    "sw3@naver.com",
+    "sw4@naver.com",
+    "sw5@naver.com",
+  ];
+
   const handleLogin = async (e) => {
     e.preventDefault();
     if (!email || !password) return alert("이메일과 비밀번호를 입력하세요.");
 
     try {
-      // 🔥 자동 로그인 유지 설정 (localStorage)
       await setPersistence(auth, browserLocalPersistence);
 
       const result = await signInWithEmailAndPassword(auth, email, password);
       const user = result.user;
 
-      // Firestore 승인 여부 확인
       const ref = doc(db, "users", user.uid);
       const snap = await getDoc(ref);
 
+      // ----- 🔥 직영 기사 로그인 처리 -----
+      if (driverEmails.includes(email)) {
+        await setDoc(
+          ref,
+          {
+            uid: user.uid,
+            email: user.email,
+            name: email.split("@")[0],
+            approved: true,
+            role: "driver",
+            createdAt: serverTimestamp(),
+            lastLogin: serverTimestamp(),
+          },
+          { merge: true }
+        );
+
+        localStorage.setItem("role", "driver");
+        localStorage.setItem("uid", user.uid);
+
+        navigate("/app");
+        return;
+      }
+
+      // ----- 기존 사용자 승인 방식 유지 -----
       if (!snap.exists()) {
-        // 신규 사용자면 등록 후 승인 대기 처리
         await setDoc(ref, {
           uid: user.uid,
           email: user.email,
@@ -53,21 +81,17 @@ export default function Login() {
         return;
       }
 
-      // 🔥 승인된 유저 → role 저장
       const role = data.role || "user";
       localStorage.setItem("role", role);
       localStorage.setItem("uid", user.uid);
 
-      // 마지막 로그인 시간 업데이트
-      await setDoc(ref, { lastLogin: serverTimestamp() }, { merge: true });
+      await setDoc(ref, {
+        lastLogin: serverTimestamp(),
+      }, { merge: true });
 
-      // ======================================================
-      // 🔔 로그인 성공 → FCM 토큰 요청 & Firestore 저장!
-      // ======================================================
       await requestForToken();
       console.log("📌 로그인 후 FCM 토큰 요청 완료!");
 
-      // 메인 페이지 이동
       navigate("/app");
     } catch (err) {
       console.error(err);
