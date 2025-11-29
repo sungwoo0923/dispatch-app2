@@ -240,6 +240,29 @@ export default function MobileApp() {
   const [orders, setOrders] = useState([]);
   const [drivers, setDrivers] = useState([]);
   const [clients, setClients] = useState([]);
+  // 🔥 FCM Token 관리자만 저장
+useEffect(() => {
+  const role = localStorage.getItem("role"); // 저장된 role 가져오기
+  if (role !== "admin") return; // 관리자가 아니면 스킵
+
+  import("../firebase").then(({ saveFcmToken }) => {
+    auth.onAuthStateChanged((user) => {
+      if (user) {
+        saveFcmToken(user); // 🔥 FCM 토큰 저장
+      }
+    });
+  });
+}, []);
+// 🔔 앱 켜져 있을 때 알림 표시
+useEffect(() => {
+  import("../firebase").then(({ initForegroundFCM }) => {
+    initForegroundFCM((payload) => {
+      setToast(`${payload.notification.title} - ${payload.notification.body}`);
+      navigator.vibrate?.(200);
+    });
+  });
+}, []);
+
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, collName), (snap) => {
@@ -268,7 +291,8 @@ export default function MobileApp() {
 
     const nearOrders = orders.filter(o => {
       if (!o.상차일 || !o.상차시간) return false;
-      if (!o.차량번호) return false; // 배차완료만 체크
+      if (o.차량번호) return false; // 🔥 배차중(차량번호 없는) 것만 체크
+
 
       const dt = new Date(`${o.상차일} ${o.상차시간}`);
       const diffMin = (dt - now) / (1000 * 60);

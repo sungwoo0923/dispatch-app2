@@ -12,6 +12,7 @@ import {
 export default function AdminMenu() {
   const [users, setUsers] = useState([]);
   const [search, setSearch] = useState("");
+  const [roleTarget, setRoleTarget] = useState(null); // 🔥 드롭다운 표시 대상
 
   const headBase = "border px-2 py-2 whitespace-nowrap bg-gray-100 text-center";
   const cellBase = "border px-2 py-1 text-center whitespace-nowrap";
@@ -32,33 +33,33 @@ export default function AdminMenu() {
     const q = search.trim().toLowerCase();
     if (!q) return users;
     return users.filter((u) =>
-      Object.values(u).some((v) => String(v || "").toLowerCase().includes(q))
+      Object.values(u).some((v) =>
+        String(v || "").toLowerCase().includes(q)
+      )
     );
   }, [search, users]);
 
   // 승인 토글
   const toggleApprove = async (u) => {
     const status = !u.approved;
-    if (!confirm(`${u.email} → ${status ? "승인" : "승인 해제"} 하시겠습니까?`)) return;
     await setDoc(doc(db, "users", u.id), { approved: status }, { merge: true });
-    setUsers((prev) => prev.map((x) => x.id === u.id ? { ...x, approved: status } : x));
+    setUsers((prev) =>
+      prev.map((x) => (x.id === u.id ? { ...x, approved: status } : x))
+    );
   };
 
-  // 🆕 권한 변경 (user ↔ admin ↔ test)
-  const changeRole = async (u) => {
-    const order = ["user", "test", "admin"];
-    const nextRole = order[(order.indexOf(u.role) + 1) % order.length];
-
-    if (!confirm(`${u.email}\n역할을 '${u.role}' → '${nextRole}' 로 변경할까요?`)) return;
-    
-    await setDoc(doc(db, "users", u.id), { role: nextRole }, { merge: true });
-    setUsers((prev) => prev.map((x) => x.id === u.id ? { ...x, role: nextRole } : x));
+  // 🔥 권한 변경 드롭다운 기능
+  const updateRole = async (u, newRole) => {
+    await setDoc(doc(db, "users", u.id), { role: newRole }, { merge: true });
+    setUsers((prev) =>
+      prev.map((x) => (x.id === u.id ? { ...x, role: newRole } : x))
+    );
+    setRoleTarget(null);
   };
 
-  // 🆕 삭제 (본인 삭제 금지)
+  // 삭제 (본인 삭제 금지)
   const removeUser = async (u) => {
     if (me?.uid === u.id) return alert("❌ 본인 계정은 삭제할 수 없습니다.");
-    if (!confirm(`${u.email} 계정을 삭제하시겠습니까?`)) return;
     await deleteDoc(doc(db, "users", u.id));
     setUsers((prev) => prev.filter((x) => x.id !== u.id));
   };
@@ -93,6 +94,7 @@ export default function AdminMenu() {
           ) : (
             filtered.map((u) => {
               const isMe = me?.uid === u.id;
+
               return (
                 <tr key={u.id} className="odd:bg-white even:bg-gray-50">
                   <td className={cellBase}>{u.email}</td>
@@ -101,8 +103,8 @@ export default function AdminMenu() {
                       className={`px-2 py-1 rounded text-xs font-semibold ${
                         u.role === "admin"
                           ? "text-blue-700 bg-blue-100"
-                          : u.role === "test"
-                          ? "text-purple-700 bg-purple-100"
+                          : u.role === "driver"
+                          ? "text-green-700 bg-green-100"
                           : "text-gray-700 bg-gray-100"
                       }`}
                     >
@@ -112,26 +114,56 @@ export default function AdminMenu() {
                   <td className={cellBase}>
                     <span
                       className={`px-2 py-1 rounded text-xs ${
-                        u.approved ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"
+                        u.approved
+                          ? "bg-green-100 text-green-700"
+                          : "bg-yellow-100 text-yellow-700"
                       }`}
                     >
                       {u.approved ? "승인" : "대기"}
                     </span>
                   </td>
+
                   <td className={cellBase}>
-                    <div className="flex gap-2 justify-center">
+                    <div className="flex gap-2 justify-center relative">
+                      {/* 승인/해제 */}
                       <button
                         onClick={() => toggleApprove(u)}
                         className="bg-blue-500 text-white px-2 py-1 rounded text-xs"
                       >
                         {u.approved ? "승인해제" : "승인"}
                       </button>
-                      <button
-                        onClick={() => changeRole(u)}
-                        className="bg-gray-600 text-white px-2 py-1 rounded text-xs"
-                      >
-                        권한 변경
-                      </button>
+
+                      {/* 🔥 권한 변경 드롭다운 버튼 */}
+                      <div className="relative">
+                        <button
+                          onClick={() =>
+                            setRoleTarget(roleTarget === u.id ? null : u.id)
+                          }
+                          className="bg-gray-600 text-white px-2 py-1 rounded text-xs"
+                        >
+                          권한 변경 ▾
+                        </button>
+
+                        {roleTarget === u.id && (
+                          <div className="absolute bg-white border shadow rounded mt-1 w-24 z-10">
+                            {["user", "driver", "admin"].map((r) => (
+                              <button
+                                key={r}
+                                onClick={() => updateRole(u, r)}
+                                className={`block w-full text-left px-2 py-1 text-xs hover:bg-blue-100 ${
+                                  u.role === r
+                                    ? "font-bold text-blue-600"
+                                    : "text-gray-700"
+                                }`}
+                              >
+                                {r}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* 삭제 */}
                       <button
                         onClick={() => removeUser(u)}
                         disabled={isMe}

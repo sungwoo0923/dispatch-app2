@@ -1,9 +1,14 @@
 // ======================= src/firebase.js =======================
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
-import { getStorage } from "firebase/storage"; // Storage 포함
-import { getMessaging, isSupported } from "firebase/messaging"; // 🔥 Push 추가
+import { getFirestore, doc, updateDoc } from "firebase/firestore";
+import { getStorage } from "firebase/storage";
+import {
+  getMessaging,
+  onMessage,
+  getToken,
+  isSupported,
+} from "firebase/messaging";
 
 // ====================================================
 // Firebase 설정
@@ -29,7 +34,7 @@ export const db = getFirestore(app);
 export const storage = getStorage(app);
 
 // ====================================================
-// 🔥 테스트 계정 판정 (role === "test")
+// 🔥 테스트 계정 판정
 // ====================================================
 export const isTestUser = (u) => {
   if (!u) return false;
@@ -37,7 +42,7 @@ export const isTestUser = (u) => {
 };
 
 // ====================================================
-// 🔥 컬렉션 분기 — test 계정은 별도 DB 사용
+// 🔥 컬렉션 분기 — test 계정은 별도 컬렉션
 // ====================================================
 export const getCollections = (user) => {
   const test = isTestUser(user);
@@ -55,20 +60,65 @@ export const getCollections = (user) => {
 };
 
 // ====================================================
-// 🔔 FCM Messaging — 지원되는 환경에서만 활성화
-// (Chrome + HTTPS + ServiceWorker 등록 필수)
+// 🔔 Messaging 지원 여부 확인 (HTTPS + Service Worker 필요)
 // ====================================================
 export const messagingPromise = isSupported().then((supported) => {
   if (!supported) {
-    console.warn("⚠️ 이 브라우저에서는 푸시 알림이 지원되지 않음");
+    console.warn("📵 이 브라우저에서는 푸시 알림이 지원되지 않음");
     return null;
   }
   try {
     return getMessaging(app);
-  } catch (e) {
-    console.error("🔴 getMessaging error:", e);
+  } catch (error) {
+    console.error("Messaging 초기화 오류:", error);
     return null;
   }
 });
+
+// ====================================================
+// 🔔 FCM Token 요청 + Firestore에 저장하는 함수
+// ====================================================
+export async function saveFcmToken(user) {
+  if (!user) return;
+
+  const messaging = await messagingPromise;
+  if (!messaging) return; // 지원 안하는 브라우저면 스킵
+
+  try {
+    const permission = await Notification.requestPermission();
+    if (permission !== "granted") {
+      console.warn("알림 권한 거부됨");
+      return;
+    }
+
+    const vapidKey = import.meta.env.VITE_FCM_VAPID_KEY;
+    const token = await getToken(messaging, { vapidKey });
+
+    if (token) {
+      console.log("📌 FCM Token 발급:", token);
+
+      // Firestore에 token 저장
+      await updateDoc(doc(db, "users", user.uid), {
+        fcmToken: token,
+      });
+    }
+
+  } catch (err) {
+    console.error("FCM Token error:", err);
+  }
+}
+
+// ====================================================
+// 📌 앱 실행 중 수신되는 알림 처리
+// ====================================================
+export async function initForegroundFCM(anyCallback) {
+  const messaging = await messagingPromise;
+  if (!messaging) return;
+
+  onMessage(messaging, (payload) => {
+    console.log("📩 Foreground Push:", payload);
+    anyCallback?.(payload);
+  });
+}
 
 // ======================= END =======================
