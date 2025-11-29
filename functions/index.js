@@ -21,14 +21,14 @@ export const checkDispatchReminder = onSchedule(
     console.log("⏰ checkDispatchReminder 실행!");
 
     const now = new Date();
-    const nowKST = now.getTime() + 9 * 60 * 60 * 1000; // KST 변환
+    const nowKST = new Date(now.getTime() + 9 * 60 * 60 * 1000);
 
-    const todayStr = new Date(nowKST).toISOString().slice(0, 10); // YYYY-MM-DD
+    const todayStr = nowKST.toISOString().slice(0, 10); // YYYY-MM-DD
 
     const snap = await db
       .collection("dispatch")
       .where("상차일", "==", todayStr)
-      .where("배차상태", "==", "배차중")
+      .where("배차상태", "in", ["", "미배차", "배차중"])
       .get();
 
     if (snap.empty) {
@@ -48,29 +48,32 @@ export const checkDispatchReminder = onSchedule(
       const data = docSnap.data();
       const dispatchId = docSnap.id;
 
-      if (data.alert2hSent) continue; // 중복 방지
+      // 중복 방지 필드
+      if (data.alert2hSent) continue;
 
-      // 상차시간 계산
-      if (!data["상차시간"]) continue;
-      const pickupTimeKST = new Date(`${todayStr}T${data["상차시간"]}:00`).getTime();
+      const loadingTimeStr = `${todayStr}T${data["상차시간"] || "00:00"}:00`;
+      const loadingTimeKST = new Date(loadingTimeStr).getTime();
 
-      const diffMin = Math.floor((pickupTimeKST - nowKST) / (1000 * 60));
+      if (!loadingTimeKST) continue;
+
+      const diffMin = Math.floor(
+        (loadingTimeKST - nowKST.getTime()) / (1000 * 60)
+      );
 
       if (diffMin <= 120 && diffMin > 0) {
-        // 알림 발송
-        await getMessaging().sendToDevice(tokens, {
+        const payload = {
           notification: {
             title: "🚨 배차 지연 알림",
-            body: `상차 ${data["상차지명"]} / ${data["상차시간"]} — 배차 미완료!`,
+            body: `${data["상차지명"] || "상차지"} / ${data["상차시간"]} — 배차 미완료!`,
           },
           data: {
             dispatchId,
           },
-        });
+        };
 
-        console.log(`📩 알림 전송: ${dispatchId}`);
+        await getMessaging().sendToDevice(tokens, payload);
+        console.log(`📩 알림 전송: ${dispatchId} (${diffMin}분 전)`);
 
-        // 중복 방지 저장
         await docSnap.ref.update({
           alert2hSent: true,
         });
