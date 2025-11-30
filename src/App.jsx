@@ -22,11 +22,26 @@ import NoAccess from "./NoAccess";
 import UploadPage from "./UploadPage";
 import StandardFare from "./StandardFare";
 
+// 🔍 모바일 감지 (카카오 인앱 포함)
+function detectMobileDevice() {
+  const ua = navigator.userAgent.toLowerCase();
+  const isKakao = ua.includes("kakaotalk");
+  const isAndroid = ua.includes("android");
+  const isIOS = /iphone|ipad|ipod/.test(ua);
+
+  // 📌 카카오톡 인앱은 PC처럼 보여도 무조건 모바일 UI 적용!
+  if (isKakao && (isAndroid || isIOS)) return true;
+
+  // 📌 일반 모바일 브라우저도 모바일 UI
+  if (isAndroid || isIOS) return true;
+
+  // 🔹 나머지는 PC
+  return false;
+}
+
 export default function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-
-  // ✅ 화면 크기 기준 모바일 여부
   const [isMobileDevice, setIsMobileDevice] = useState(null);
 
   // 로그인 상태 관찰
@@ -38,23 +53,11 @@ export default function App() {
     return () => unsub();
   }, []);
 
-  // ✅ 진짜 단순하게: 화면 가로 1024px 이하면 "모바일"로 취급
+  // 모바일/PC 판별 실행
   useEffect(() => {
-    const checkDevice = () => {
-      const width = window.innerWidth;
-      const isMobile = width <= 1024;
-      setIsMobileDevice(isMobile);
-
-      // 🔍 혹시 몰라 콘솔에 찍어두기 (개발용)
-      console.log("[RUN25] width:", width, "=> isMobile:", isMobile);
-    };
-
-    checkDevice();
-    window.addEventListener("resize", checkDevice);
-    return () => window.removeEventListener("resize", checkDevice);
+    setIsMobileDevice(detectMobileDevice());
   }, []);
 
-  // 아직 로그인/디바이스 체크 중이면 로딩 화면
   if (loading || isMobileDevice === null) {
     return (
       <div className="flex items-center justify-center h-screen text-lg text-gray-600">
@@ -68,10 +71,10 @@ export default function App() {
   return (
     <Router>
       <Routes>
-        {/* 루트 → /app으로 이동 */}
+        {/* 루트 → /app */}
         <Route path="/" element={<Navigate to="/app" replace />} />
 
-        {/* 로그인 / 회원가입 */}
+        {/* 로그인/회원가입 */}
         <Route
           path="/login"
           element={user ? <Navigate to="/app" replace /> : <Login />}
@@ -81,13 +84,16 @@ export default function App() {
           element={user ? <Navigate to="/app" replace /> : <Signup />}
         />
 
-        {/* 🔥 PC / Mobile 자동 분기 (화면 크기 기준) */}
+        {/* 🔥 PC / Mobile 자동 분기 */}
         <Route
           path="/app"
           element={
             user ? (
-              
-              <MobileApp role={role} />
+              isMobileDevice ? (
+                <MobileApp role={role} />
+              ) : (
+                <DispatchApp role={role} />
+              )
             ) : (
               <Navigate to="/login" replace />
             )
@@ -99,11 +105,11 @@ export default function App() {
         <Route path="/no-access" element={<NoAccess />} />
         <Route path="/upload" element={<UploadPage />} />
 
-        {/* 나머지는 전부 /app으로 */}
+        {/* ❓그 외 → /app */}
         <Route path="*" element={<Navigate to="/app" replace />} />
       </Routes>
 
-      {/* 🔧 디버그용 표시 (원하면 지워도 됨) */}
+      {/* 🔧 Debug 표시 */}
       <div
         style={{
           position: "fixed",
@@ -117,7 +123,7 @@ export default function App() {
           zIndex: 9999,
         }}
       >
-        VIEW: {isMobileDevice ? "MOBILE" : "PC"}
+        VIEW: {isMobileDevice ? "💚 MOBILE UI" : "💻 PC UI"}
       </div>
     </Router>
   );
