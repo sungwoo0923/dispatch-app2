@@ -431,11 +431,6 @@ useEffect(() => {
     const today = todayStr();
     const dateSelected = !!(startDate || endDate);
 
-    // 1) 당월 데이터만
-    base = base.filter((o) => {
-      const d = getPickupDate(o) || "";
-      return d.startsWith(thisMonth);
-    });
 
     // 1-1) 날짜 선택 안 했고, 탭이 "전체"가 아닐 때(배차중/배차완료) → 당일만 자동 필터
     if (!dateSelected && statusTab !== "전체") {
