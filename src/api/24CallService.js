@@ -21,6 +21,7 @@ export async function sendOrderTo24(order) {
   try {
     const encryptedData = encrypt(mapTo24Order(order));
 
+    
     const res = await fetch(
       `${import.meta.env.VITE_24CALL_URL}/api/order/addOrder`,
       {
