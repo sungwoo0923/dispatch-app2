@@ -58,6 +58,7 @@ const tomorrowStr = () => {
 --------------------------------------------------*/
 const safeLoad = (k, f) => { try { const r = localStorage.getItem(k); return r ? JSON.parse(r) : f; } catch { return f; } };
 const safeSave = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { } };
+
 // ============================================
 // 🔍 문자열 유사 매칭 + 하차지 개수 + 송원 단가표
 // ============================================
@@ -884,7 +885,9 @@ function DispatchApp() {
       혼적: false,
     };
 
-    const [form, setForm] = React.useState(() => ({ ...emptyForm, ..._safeLoad("dispatchForm", {}) }));
+    const [form, setForm] = React.useState(() => ({
+  ...emptyForm,
+}));
     React.useEffect(() => _safeSave("dispatchForm", form), [form]);
 
     // =====================
@@ -1540,13 +1543,33 @@ function DispatchApp() {
                     setClientActive(0);
                   }}
                   onKeyDown={(e) => {
-                    if (!isClientOpen && (e.key === "ArrowDown" || e.key === "Enter")) { setIsClientOpen(true); return; }
-                    if (!filteredClients.length) return;
-                    if (e.key === "ArrowDown") { e.preventDefault(); setClientActive((i) => Math.min(i + 1, filteredClients.length - 1)); }
-                    else if (e.key === "ArrowUp") { e.preventDefault(); setClientActive((i) => Math.max(i - 1, 0)); }
-                    else if (e.key === "Enter") { e.preventDefault(); const pick = filteredClients[clientActive]; if (pick) applyClientSelect(pick.거래처명); }
-                    else if (e.key === "Escape") setIsClientOpen(false);
-                  }}
+  const list = filteredClients;
+  if (!isClientOpen && (e.key === "ArrowDown" || e.key === "Enter")) {
+    setIsClientOpen(true);
+    return;
+  }
+  if (!list.length) return;
+
+  if (e.key === "Enter") {
+    e.preventDefault();
+    const pick = list[clientActive];
+    if (pick) {
+      applyClientSelect(pick.업체명); // 주소까지 자동매칭!
+    }
+    return;
+  }
+
+  if (e.key === "ArrowDown") {
+    e.preventDefault();
+    setClientActive((i) => Math.min(i + 1, list.length - 1));
+  } else if (e.key === "ArrowUp") {
+    e.preventDefault();
+    setClientActive((i) => Math.max(i - 1, 0));
+  } else if (e.key === "Escape") {
+    setIsClientOpen(false);
+  }
+}}
+
                 />
                 {isClientOpen && (
                   <div className="absolute left-0 right-0 mt-1 max-h-52 overflow-auto bg-white border rounded shadow-lg z-50">
@@ -1905,35 +1928,37 @@ function DispatchApp() {
 
                     const today = new Date().toISOString().slice(0, 10);
 
-                    // 🔥 선택한 오더 내용 입력폼으로 복사 + 날짜는 오늘로 재설정
-                    setForm((prev) => ({
-                      ...prev,
-                      거래처명: r.거래처명 || "",
-                      상차지명: r.상차지명 || "",
-                      상차지주소: r.상차지주소 || "",
-                      하차지명: r.하차지명 || "",
-                      하차지주소: r.하차지주소 || "",
-                      화물내용: r.화물내용 || "",
-                      차량종류: r.차량종류 || "",
-                      차량톤수: r.차량톤수 || "",
+                    // 🔥 오더 복사 적용
+setForm(p => ({
+  ...p,
+  거래처명: r.거래처명 || "",
+  상차지명: r.상차지명 || "",
+  하차지명: r.하차지명 || "",
+  화물내용: r.화물내용 || "",
+  차량종류: r.차량종류 || "",
+  차량톤수: r.차량톤수 || "",
+  상차일: today,
+  하차일: today,
+  상차시간: r.상차시간 || "",
+  하차시간: r.하차시간 || "",
+  지급방식: r.지급방식 || "",
+  배차방식: r.배차방식 || "",
+  메모: r.메모 || "",
+  차량번호: "",
+  이름: "",
+  전화번호: "",
+  배차상태: "배차중",
+}));
 
-                      // 🔥 여기 핵심 3가지: 이걸 오늘 날짜로 덮어씀
-                      상차일: today,
-                      하차일: today,
-                      등록일: today,
+// ⭐ 하차지 자동매칭 로직 직접 호출
+applyClientSelect(r.거래처명);
 
-                      상차시간: r.상차시간 || "",
-                      하차시간: r.하차시간 || "",
-                      지급방식: r.지급방식 || "",
-                      배차방식: r.배차방식 || "",
-                      메모: r.메모 || "",
+// UI 동기화
+setClientQuery(r.거래처명 || "");
+setAutoPickMatched(false);
+setAutoDropMatched(false);
 
-                      // 차량번호/기사명은 복사 안 함
-                      차량번호: "",
-                      이름: "",
-                      전화번호: "",
-                      배차상태: "배차중",
-                    }));
+
 
                     alert("오더 내용이 입력창에 복사되었습니다!");
                     setCopyOpen(false);
