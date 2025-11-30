@@ -26,6 +26,9 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // ✅ 화면 크기 기준 모바일 여부
+  const [isMobileDevice, setIsMobileDevice] = useState(null);
+
   // 로그인 상태 관찰
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => {
@@ -35,13 +38,27 @@ export default function App() {
     return () => unsub();
   }, []);
 
-  // 📌 모바일 감지 — UserAgent ❌ / 화면 폭 + 터치만 ✔
-  const isMobileDevice = window.innerWidth < 1000 && navigator.maxTouchPoints > 0;
+  // ✅ 진짜 단순하게: 화면 가로 1024px 이하면 "모바일"로 취급
+  useEffect(() => {
+    const checkDevice = () => {
+      const width = window.innerWidth;
+      const isMobile = width <= 1024;
+      setIsMobileDevice(isMobile);
 
-  if (loading) {
+      // 🔍 혹시 몰라 콘솔에 찍어두기 (개발용)
+      console.log("[RUN25] width:", width, "=> isMobile:", isMobile);
+    };
+
+    checkDevice();
+    window.addEventListener("resize", checkDevice);
+    return () => window.removeEventListener("resize", checkDevice);
+  }, []);
+
+  // 아직 로그인/디바이스 체크 중이면 로딩 화면
+  if (loading || isMobileDevice === null) {
     return (
       <div className="flex items-center justify-center h-screen text-lg text-gray-600">
-        로그인 확인 중...
+        로그인 / 디바이스 확인 중...
       </div>
     );
   }
@@ -51,7 +68,7 @@ export default function App() {
   return (
     <Router>
       <Routes>
-        {/* 루트 → /app */}
+        {/* 루트 → /app으로 이동 */}
         <Route path="/" element={<Navigate to="/app" replace />} />
 
         {/* 로그인 / 회원가입 */}
@@ -64,7 +81,7 @@ export default function App() {
           element={user ? <Navigate to="/app" replace /> : <Signup />}
         />
 
-        {/* 📌 PC / Mobile 자동 분기 */}
+        {/* 🔥 PC / Mobile 자동 분기 (화면 크기 기준) */}
         <Route
           path="/app"
           element={
@@ -80,14 +97,31 @@ export default function App() {
           }
         />
 
-        {/* 공용 */}
+        {/* 공용 페이지 */}
         <Route path="/standard-fare" element={<StandardFare />} />
         <Route path="/no-access" element={<NoAccess />} />
         <Route path="/upload" element={<UploadPage />} />
 
-        {/* 기타 → 앱 */}
+        {/* 나머지는 전부 /app으로 */}
         <Route path="*" element={<Navigate to="/app" replace />} />
       </Routes>
+
+      {/* 🔧 디버그용 표시 (원하면 지워도 됨) */}
+      <div
+        style={{
+          position: "fixed",
+          bottom: 4,
+          right: 4,
+          fontSize: "10px",
+          background: "rgba(0,0,0,0.6)",
+          color: "white",
+          padding: "2px 6px",
+          borderRadius: "999px",
+          zIndex: 9999,
+        }}
+      >
+        VIEW: {isMobileDevice ? "MOBILE" : "PC"}
+      </div>
     </Router>
   );
 }
