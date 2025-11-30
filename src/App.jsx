@@ -35,18 +35,8 @@ export default function App() {
     return () => unsub();
   }, []);
 
-  // 📌 진짜 모바일 판별 (Android UA 변경 대응)
-  const isMobileDevice = (() => {
-    const ua = navigator.userAgent.toLowerCase();
-    const touch = navigator.maxTouchPoints > 0;
-    const small = window.innerWidth <= 1024;
-    const android = ua.includes("android");
-    const ios = /iphone|ipad|ipod/.test(ua);
-
-    if (android || ios) return true;
-    if (touch && small) return true;
-    return false;
-  })();
+  // 📌 모바일 감지 — UserAgent ❌ / 화면 폭 + 터치만 ✔
+  const isMobileDevice = window.innerWidth < 1000 && navigator.maxTouchPoints > 0;
 
   if (loading) {
     return (
@@ -61,7 +51,7 @@ export default function App() {
   return (
     <Router>
       <Routes>
-        {/* 루트 → /app으로 이동 */}
+        {/* 루트 → /app */}
         <Route path="/" element={<Navigate to="/app" replace />} />
 
         {/* 로그인 / 회원가입 */}
@@ -74,7 +64,7 @@ export default function App() {
           element={user ? <Navigate to="/app" replace /> : <Signup />}
         />
 
-        {/* 🔥 PC / Mobile 자동 분기 */}
+        {/* 📌 PC / Mobile 자동 분기 */}
         <Route
           path="/app"
           element={
@@ -90,18 +80,16 @@ export default function App() {
           }
         />
 
-        {/* 공용 페이지 */}
+        {/* 공용 */}
         <Route path="/standard-fare" element={<StandardFare />} />
         <Route path="/no-access" element={<NoAccess />} />
         <Route path="/upload" element={<UploadPage />} />
 
-        {/* 나머지는 전부 /app으로 */}
+        {/* 기타 → 앱 */}
         <Route path="*" element={<Navigate to="/app" replace />} />
       </Routes>
     </Router>
   );
 }
-
-
 
 // ======================= END =======================
