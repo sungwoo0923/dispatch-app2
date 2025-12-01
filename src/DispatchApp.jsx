@@ -10,7 +10,7 @@ import jsPDF from "jspdf";
 import AdminMenu from "./AdminMenu";
 import { calcFare } from "./fareUtil";
 import StandardFare from "./StandardFare";
-import { query, where, orderBy, limit } from "firebase/firestore";
+
 
 
 
@@ -679,9 +679,9 @@ function DispatchApp() {
     isTest = false,  // ★ 추가!
   }) {
 
+
     const isAdmin = role === "admin";
 
-    
 
     // ⭐ 여기 맨 위에 오도록
     const [clientQuery, setClientQuery] = React.useState("");
@@ -3395,7 +3395,6 @@ setAutoDropMatched(false);
         );
 
         return [...kept, ...newOnes];
-        
       });
     }, [dispatchData, deletedIds]);
     // 🔥 rows 갱신 후 edited 데이터 다시 반영
@@ -3410,11 +3409,6 @@ setAutoDropMatched(false);
         )
       );
     }, [rows]);
-    // ⭐ rows 갱신되어도 팝업 상태 유지 (날짜 초기화 방지)
-React.useEffect(() => {
-  setEditPopupOpen((prev) => prev);
-}, [rows]);
-
     // ========================
     // 🔔 파일 업로드 감지 (이미 본 건 다시 안 뜸)
     // ========================
@@ -5614,69 +5608,49 @@ ${url}
                     // 입력값 UI에만 반영, 매칭은 하지 않음
                     setEditTarget((p) => ({ ...p, 차량번호: e.target.value }));
                   }}
-                  onKeyDown={async (e) => {
-  if (e.key !== "Enter") return;
+                  onKeyDown={(e) => {
+                    if (e.key !== "Enter") return;
 
-  const raw = e.target.value.trim();
-  const clean = raw.replace(/\s+/g, "");
+                    const raw = e.target.value.trim();
+                    const clean = raw.replace(/\s+/g, "");
 
-  // 기존 기사 자동매칭
-  const match = drivers.find(
-    (d) => String(d.차량번호).replace(/\s+/g, "") === clean
-  );
+                    // 기존 기사 매칭
+                    const match = drivers.find(
+                      (d) => String(d.차량번호).replace(/\s+/g, "") === clean
+                    );
 
-  if (match) {
-    setEditTarget((p) => ({
-      ...p,
-      차량번호: raw,
-      이름: match.이름,
-      전화번호: match.전화번호,
-      배차상태: "배차완료",
-    }));
+                    if (match) {
+                      setEditTarget((p) => ({
+                        ...p,
+                        이름: match.이름,
+                        전화번호: match.전화번호,
+                        배차상태: "배차완료",
+                      }));
+                      return;
+                    }
 
-    // 팝업 유지
-    e.stopPropagation();
-    setEditPopupOpen(true);
-    return;
-  }
+                    // 신규 등록
+                    const ok = window.confirm(
+                      `[${raw}] 등록된 기사가 없습니다.\n신규 기사로 추가할까요?`
+                    );
+                    if (!ok) return;
 
-  // 신규등록
-  const ok = window.confirm(`[${raw}] 등록된 기사가 없습니다.\n신규 기사로 추가할까요?`);
-  if (!ok) return;
+                    const 이름 = prompt("기사명 입력:");
+                    const 전화번호 = prompt("전화번호 입력:");
 
-  const 이름 = prompt("기사명 입력:");
-  const 전화번호 = prompt("전화번호 입력:");
+                    upsertDriver({
+                      차량번호: raw,
+                      이름,
+                      전화번호,
+                    });
 
-  await upsertDriver({
-    차량번호: raw,
-    이름,
-    전화번호,
-  });
-
-  setEditTarget((p) => ({
-    ...p,
-    차량번호: raw,
-    이름,
-    전화번호,
-    배차상태: "배차완료",
-  }));
-
-  setTimeout(() => {
-  patchDispatch(editTarget?._id, {
-    차량번호: raw,
-    이름,
-    전화번호,
-    배차상태: "배차완료",
-  });
-}, 0);
-
-  // 팝업 유지!
-  e.stopPropagation();
-  setEditPopupOpen(true);
-
-  alert("신규 기사 등록 완료!");
-}}
-
+                    setEditTarget((p) => ({
+                      ...p,
+                      이름,
+                      전화번호,
+                      배차상태: "배차완료",
+                    }));
+                  }}
                 />
 
               </div>
