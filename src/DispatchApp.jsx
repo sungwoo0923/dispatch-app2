@@ -668,8 +668,7 @@ function DispatchApp() {
 
   // ===================== DispatchApp.jsx (PART 2/8) — END =====================
 
-
-  // ===================== DispatchApp.jsx (PART 3/8) — START =====================
+// ===================== DispatchApp.jsx (PART 3/8) — START =====================
   function DispatchManagement({
     dispatchData, drivers, clients, timeOptions, tonOptions,
     addDispatch, upsertDriver, upsertClient, upsertPlace,
@@ -688,17 +687,34 @@ function DispatchApp() {
     const [isClientOpen, setIsClientOpen] = React.useState(false);
     const [clientActive, setClientActive] = React.useState(0);
     const comboRef = React.useRef(null);
-    React.useEffect(() => {
-      const onDocClick = (e) => {
-        if (!comboRef.current) return;
-        if (!comboRef.current.contains(e.target)) setIsClientOpen(false);
-      };
-      document.addEventListener("mousedown", onDocClick);
-      return () => document.removeEventListener("mousedown", onDocClick);
-    }, []);
-    const [showPlaceDropdown, setShowPlaceDropdown] = React.useState(false);  // ⭐ 여기 추가
-    const [placeQuery, setPlaceQuery] = React.useState("");                   // ⭐ 여기 추가
-    const [placeOptions, setPlaceOptions] = React.useState([]);
+
+// 📌 여기 아래 전체를 그대로 붙여넣기! (드롭다운 외부 클릭 시 닫기)
+React.useEffect(() => {
+  function handleClickOutside(e) {
+    if (!comboRef.current) return; 
+
+    if (comboRef.current.contains(e.target)) return;
+
+    setIsClientOpen(false); // 🔥 외부 클릭 시 거래처 드롭다운 닫기
+  }
+
+  document.addEventListener("mousedown", handleClickOutside);
+  return () => {
+    document.removeEventListener("mousedown", handleClickOutside);
+  };
+}, []);
+
+    
+    // 🔽 상/하차 자동완성 드롭다운 상태 (완전 분리)
+const [pickActive, setPickActive] = React.useState(0);
+const [dropActive, setDropActive] = React.useState(0);
+
+const [pickOptions, setPickOptions] = React.useState([]);
+const [dropOptions, setDropOptions] = React.useState([]);
+
+const [showPickDropdown, setShowPickDropdown] = React.useState(false);
+const [showDropDropdown, setShowDropDropdown] = React.useState(false);
+
 
     // ---------- 🔧 안전 폴백 유틸(다른 파트 미정의 시 자체 사용) ----------
     const _todayStr = (typeof todayStr === "function")
@@ -893,13 +909,33 @@ const [form, setForm] = React.useState(() => {
   } catch {}
   return { ...emptyForm };
 });
-
 // ⭐ 변경사항 저장 (자동)
 React.useEffect(() => {
+  if (!form || !form._id) return;
+
+  // ⛔ 저장/초기화 직후 자동저장 완전 차단
+  if (window.__dispatchFormJustSaved) {
+    return;
+  }
+
+  const fields = [
+    "거래처명", "상차지명", "하차지명", "화물내용",
+    "차량번호", "이름", "전화번호"
+  ];
+
+  const hasInput = fields.some((k) => (form[k] || "").trim() !== "");
+
+  if (!hasInput) {
+    try { localStorage.removeItem("dispatchForm"); } catch {}
+    return;
+  }
+
   try {
     localStorage.setItem("dispatchForm", JSON.stringify(form));
   } catch {}
 }, [form]);
+
+
 
 
     // =====================
@@ -1041,14 +1077,14 @@ React.useEffect(() => {
     // 🚫 자동매칭 강제 호출 금지!!
     // handleCarNoChange(clean);
 
-    // 🚫 폼 초기화 방지! 기존 입력값 유지!
-    setForm((prev) => ({
-      ...prev,
-      차량번호: clean,
-      이름,
-      전화번호,
-      배차상태: "배차완료",
-    }));
+    // 기존 입력값 모두 유지 + 기사 정보만 갱신
+setForm((prev) => ({
+  ...prev,
+  차량번호: clean,
+  이름,
+  전화번호,
+}));
+
   }
 };
 
@@ -1085,34 +1121,51 @@ React.useEffect(() => {
 
 
     const handleSubmit = async (e) => {
-      e.preventDefault();
-      if (!validateRequired(form)) return;
-      if (!validateDateTime(form)) return;
+  e.preventDefault();
+  if (!validateRequired(form)) return;
+  if (!validateDateTime(form)) return;
 
-      const status = form.차량번호 && (form.이름 || form.전화번호) ? "배차완료" : "배차중";
-      const moneyPatch = isAdmin ? {} : { 청구운임: "0", 기사운임: "0", 수수료: "0" };
-      const rec = {
-        ...form, ...moneyPatch,
-        상차일: lockYear(form.상차일),
-        하차일: lockYear(form.하차일),
-        순번: nextSeq(),
-        배차상태: status,
-      };
-      await addDispatch(rec);
+  const status = form.차량번호 && (form.이름 || form.전화번호)
+    ? "배차완료"
+    : "배차중";
 
-      const reset = {
-        ...emptyForm,
-        _id: crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`,
-        등록일: _todayStr(),
-        ...(isAdmin ? {} : { 청구운임: "", 기사운임: "", 수수료: "" }),
-      };
-      setForm(reset);
-      setClientQuery("");
-      setAutoPickMatched(false);
-      setAutoDropMatched(false);
-      alert("등록되었습니다.");
-      try { localStorage.removeItem("dispatchForm"); } catch {}
-    };
+  const moneyPatch = isAdmin ? {} : { 청구운임: "0", 기사운임: "0", 수수료: "0" };
+
+  const rec = {
+    ...form,
+    ...moneyPatch,
+    상차일: lockYear(form.상차일),
+    하차일: lockYear(form.하차일),
+    순번: nextSeq(),
+    배차상태: status,
+  };
+
+  await addDispatch(rec);
+
+  // ⭐ localStorage 먼저 제거 (초기화 덮어씌움 방지)
+  try { localStorage.removeItem("dispatchForm"); } catch {}
+
+  // ⭐ 폼 초기화
+  const resetFormData = {
+    ...emptyForm,
+    _id: crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`,
+    등록일: _todayStr(),
+    ...(isAdmin ? {} : { 청구운임: "", 기사운임: "", 수수료: "" }),
+  };
+
+  setForm(resetFormData);
+  setClientQuery("");
+  setAutoPickMatched(false);
+  setAutoDropMatched(false);
+
+  alert("등록되었습니다.");
+  window.__dispatchFormJustSaved = true;
+setTimeout(() => {
+  window.__dispatchFormJustSaved = false;
+}, 200);
+};
+
+
     // ⭐ 운임조회 (업그레이드 버전: 화물내용 없어도 동작 + 최근 화물내용 포함)
     
     // ⭐ 운임조회 팝업 상태
@@ -1423,14 +1476,32 @@ React.useEffect(() => {
     };
 
     // ------------------ 초기화 ------------------
-    const resetForm = () => {
-      const reset = { ...emptyForm, _id: crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`, 등록일: _todayStr() };
-      setForm(reset);
-      setClientQuery("");
-      setAutoPickMatched(false);
-      setAutoDropMatched(false);
-      setCopySelected([]);  // ⭐ 체크 상태 초기화
-    };
+const resetForm = () => {
+  // ⭐ 자동저장 끄기 (1회)
+  window.__dispatchFormJustSaved = true;
+setTimeout(() => {
+  window.__dispatchFormJustSaved = false;
+}, 200);
+
+
+  // ⭐ 저장된 입력 폼 제거
+  try {
+    localStorage.removeItem("dispatchForm");
+  } catch {}
+
+  // ⭐ 빈 폼 설정
+  const reset = {
+    ...emptyForm,
+    _id: crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`,
+    등록일: _todayStr(),
+  };
+
+  setForm(reset);
+  setClientQuery("");
+  setAutoPickMatched(false);
+  setAutoDropMatched(false);
+  setCopySelected([]);
+};
 
 
 
@@ -1658,15 +1729,93 @@ React.useEffect(() => {
             </div>
           </div>
 
-          {/* 상차지명 */}
-          <div>
-            <label className={labelCls}>상차지명 {reqStar}</label>
-            <input
-              className={inputCls}
-              value={form.상차지명}
-              onChange={(e) => handlePickupName(e.target.value)}
-            />
-          </div>
+          {/* 상차지명 + 자동완성 */}
+<div className="relative">
+  <label className={labelCls}>상차지명 {reqStar}</label>
+
+  <input
+    className={inputCls}
+    placeholder="상차지 검색"
+    value={form.상차지명}
+    onChange={(e) => {
+      const v = e.target.value;
+      handlePickupName(v);                      // 상차지명만 업데이트
+      setPickOptions(filterPlaces(v));          // 상차 전용 옵션
+      setShowPickDropdown(true);                // 상차 드롭다운만 켜기
+      setPickActive(0);
+    }}
+    onKeyDown={(e) => {
+      const list = pickOptions;
+      if (!list.length) return;
+
+      if (!showPickDropdown && (e.key === "ArrowDown" || e.key === "Enter")) {
+        setShowPickDropdown(true);
+        return;
+      }
+
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setPickActive((prev) =>
+          prev + 1 < list.length ? prev + 1 : 0
+        );
+      }
+
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setPickActive((prev) =>
+          prev - 1 >= 0 ? prev - 1 : list.length - 1
+        );
+      }
+
+      if (e.key === "Enter") {
+        e.preventDefault();
+        const p = list[pickActive];
+        if (!p) return;
+
+        setForm((prev) => ({
+          ...prev,
+          상차지명: p.업체명,
+          상차지주소: p.주소 || "",
+          상차지담당자: p.담당자 || "",
+          상차지담당자번호: p.담당자번호 || "",
+        }));
+        setShowPickDropdown(false);
+      }
+    }}
+    onBlur={() => setTimeout(() => setShowPickDropdown(false), 200)}
+  />
+
+  {showPickDropdown && pickOptions.length > 0 && (
+    <div className="absolute z-50 bg-white border rounded shadow w-full max-h-48 overflow-auto">
+      {pickOptions.map((p, i) => (
+        <div
+          key={i}
+          className={`px-2 py-1 cursor-pointer ${
+            pickActive === i ? "bg-blue-200" : "hover:bg-blue-100"
+          }`}
+          onMouseEnter={() => setPickActive(i)}
+          onMouseDown={() => {
+            setForm((prev) => ({
+              ...prev,
+              상차지명: p.업체명,
+              상차지주소: p.주소,
+              상차지담당자: p.담당자,
+              상차지담당자번호: p.담당자번호,
+            }));
+            setShowPickDropdown(false);
+          }}
+        >
+          <b>{p.업체명}</b>
+          {p.주소 ? (
+            <div className="text-xs text-gray-500">{p.주소}</div>
+          ) : null}
+        </div>
+      ))}
+    </div>
+  )}
+</div>
+
+
 
           {/* 상차지주소 */}
           <div>
@@ -1681,48 +1830,91 @@ React.useEffect(() => {
             />
           </div>
 
-          {/* 하차지명 + 자동완성 */}
-          <div className="relative">
-            <label className={labelCls}>하차지명 {reqStar}</label>
+{/* 하차지명 + 자동완성 */}
+<div className="relative">
+  <label className={labelCls}>하차지명 {reqStar}</label>
 
-            <input
-              className={inputCls}
-              placeholder="하차지 검색"
-              value={form.하차지명}
-              onChange={(e) => {
-                const v = e.target.value;
-                handleDropName(v);
-                setPlaceOptions(filterPlaces(v));   // ⭐ 자동완성 목록 생성
-                setShowPlaceDropdown(true);
-              }}
+  <input
+    className={inputCls}
+    placeholder="하차지 검색"
+    value={form.하차지명}
+    onChange={(e) => {
+      const v = e.target.value;
+      handleDropName(v);                       // 하차지명만 업데이트
+      setDropOptions(filterPlaces(v));         // 하차 전용 옵션
+      setShowDropDropdown(true);               // 하차 드롭다운만 켜기
+      setDropActive(0);
+    }}
+    onKeyDown={(e) => {
+      const list = dropOptions;
+      if (!list.length) return;
 
-              onBlur={() => setTimeout(() => setShowPlaceDropdown(false), 200)}
-            />
+      if (!showDropDropdown && (e.key === "ArrowDown" || e.key === "Enter")) {
+        setShowDropDropdown(true);
+        return;
+      }
 
-            {showPlaceDropdown && placeOptions.length > 0 && (
-              <div className="absolute z-50 bg-white border rounded shadow w-full max-h-48 overflow-auto">
-                {placeOptions.map((p, i) => (
-                  <div
-                    key={i}
-                    className="px-2 py-1 hover:bg-blue-100 cursor-pointer"
-                    onMouseDown={() => {
-                      setForm((prev) => ({
-                        ...prev,
-                        하차지명: p.업체명,
-                        하차지주소: p.주소,
-                        하차지담당자: p.담당자,
-                        하차지담당자번호: p.담당자번호,
-                      }));
-                      setShowPlaceDropdown(false);
-                    }}
-                  >
-                    <b>{p.업체명}</b>
-                    {p.주소 ? <div className="text-xs text-gray-500">{p.주소}</div> : null}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setDropActive((prev) =>
+          prev + 1 < list.length ? prev + 1 : 0
+        );
+      }
+
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setDropActive((prev) =>
+          prev - 1 >= 0 ? prev - 1 : list.length - 1
+        );
+      }
+
+      if (e.key === "Enter") {
+        e.preventDefault();
+        const p = list[dropActive];
+        if (!p) return;
+
+        setForm((prev) => ({
+          ...prev,
+          하차지명: p.업체명,
+          하차지주소: p.주소 || "",
+          하차지담당자: p.담당자 || "",
+          하차지담당자번호: p.담당자번호 || "",
+        }));
+        setShowDropDropdown(false);
+      }
+    }}
+    onBlur={() => setTimeout(() => setShowDropDropdown(false), 200)}
+  />
+
+  {showDropDropdown && dropOptions.length > 0 && (
+    <div className="absolute z-50 bg-white border rounded shadow w-full max-h-48 overflow-auto">
+      {dropOptions.map((p, i) => (
+        <div
+          key={i}
+          className={`px-2 py-1 cursor-pointer ${
+            dropActive === i ? "bg-blue-200" : "hover:bg-blue-100"
+          }`}
+          onMouseEnter={() => setDropActive(i)}
+          onMouseDown={() => {
+            setForm((prev) => ({
+              ...prev,
+              하차지명: p.업체명,
+              하차지주소: p.주소,
+              하차지담당자: p.담당자,
+              하차지담당자번호: p.담당자번호,
+            }));
+            setShowDropDropdown(false);
+          }}
+        >
+          <b>{p.업체명}</b>
+          {p.주소 ? (
+            <div className="text-xs text-gray-500">{p.주소}</div>
+          ) : null}
+        </div>
+      ))}
+    </div>
+  )}
+</div>
 
 
           {/* 하차지주소 */}
