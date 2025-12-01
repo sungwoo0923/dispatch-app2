@@ -885,10 +885,22 @@ function DispatchApp() {
       혼적: false,
     };
 
-    const [form, setForm] = React.useState(() => ({
-  ...emptyForm,
-}));
-    React.useEffect(() => _safeSave("dispatchForm", form), [form]);
+    // ⭐ localStorage 데이터 우선 복구
+const [form, setForm] = React.useState(() => {
+  try {
+    const saved = JSON.parse(localStorage.getItem("dispatchForm"));
+    if (saved && typeof saved === "object") return saved;
+  } catch {}
+  return { ...emptyForm };
+});
+
+// ⭐ 변경사항 저장 (자동)
+React.useEffect(() => {
+  try {
+    localStorage.setItem("dispatchForm", JSON.stringify(form));
+  } catch {}
+}, [form]);
+
 
     // =====================
     // ⭐ 거래처 = 하차지거래처 기반으로 자동완성
@@ -994,37 +1006,51 @@ function DispatchApp() {
         }));
       } else {
         setForm((p) => ({
-          ...p,
-          차량번호: clean,
-          이름: "",
-          전화번호: "",
-          배차상태: "배차중",
-        }));
+  ...p,
+  차량번호: clean,
+  이름: found?.이름 ?? p.이름,
+  전화번호: found?.전화번호 ?? p.전화번호,
+  배차상태: found ? "배차완료" : p.배차상태,
+}));
       }
     };
 
     const handleCarNoEnter = (value) => {
-      const clean = (value || "").trim().replace(/\s+/g, "");
-      if (!clean) return;
-      const found = driverMap.get(clean);
-      if (found) {
-        setForm((p) => ({
-          ...p,
-          차량번호: clean,
-          이름: found.이름,
-          전화번호: found.전화번호,
-          배차상태: "배차완료",
-        }));
-      } else {
-        const 이름 = prompt("신규 기사 이름:") || "";
-        if (!이름) return;
-        const 전화번호 = prompt("전화번호:") || "";
-        upsertDriver?.({ 이름, 차량번호: clean, 전화번호 });
-        alert("신규 기사 등록 완료!");
-        setForm((p) => ({ ...p, 차량번호: clean, 이름, 전화번호, 배차상태: "배차완료" }));
-      }
-    };
+  const clean = (value || "").trim().replace(/\s+/g, "");
+  if (!clean) return;
 
+  const found = driverMap.get(clean);
+
+  if (found) {
+    setForm((p) => ({
+      ...p,
+      차량번호: clean,
+      이름: found.이름,
+      전화번호: found.전화번호,
+      배차상태: "배차완료",
+    }));
+  } else {
+    const 이름 = prompt("신규 기사 이름:") || "";
+    if (!이름) return;
+    const 전화번호 = prompt("전화번호 입력:") || "";
+
+    upsertDriver?.({ 이름, 차량번호: clean, 전화번호 });
+
+    alert("신규 기사 등록 완료!");
+
+    // 🚫 자동매칭 강제 호출 금지!!
+    // handleCarNoChange(clean);
+
+    // 🚫 폼 초기화 방지! 기존 입력값 유지!
+    setForm((prev) => ({
+      ...prev,
+      차량번호: clean,
+      이름,
+      전화번호,
+      배차상태: "배차완료",
+    }));
+  }
+};
 
     const nextSeq = () => Math.max(0, ...(dispatchData || []).map((r) => Number(r.순번) || 0)) + 1;
 
@@ -1754,8 +1780,23 @@ function DispatchApp() {
               className={inputCls}
               value={form.차량번호}
               onChange={(e) => handleCarNoChange(e.target.value)}  // ✅ 차량번호 변경 시 즉시 자동매칭
-              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleCarNoEnter(e.currentTarget.value); } }}
-              onBlur={(e) => handleCarNoEnter(e.currentTarget.value)}  // ✅ 포커스 아웃 시에도 자동매칭
+              onKeyDown={(e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    e.stopPropagation();  // ⛔ submit 전파 차단
+    handleCarNoEnter(e.target.value);
+  }
+}}
+
+              onBlur={(e) => {
+  const clean = (e.currentTarget.value || "").trim().replace(/\s+/g, "");
+  if (!clean) return;
+  // 🔥 기존 기사 있을 때만 자동매칭
+  if (driverMap.get(clean)) {
+  
+  }
+}}
+
             />
 
           </div>
@@ -3171,7 +3212,8 @@ setAutoDropMatched(false);
     );
   }
   // ===================== DispatchApp.jsx (PART 3/8) — END =====================
-  // ===================== DispatchApp.jsx (PART 4/8 — START) =====================
+  
+// ===================== DispatchApp.jsx (PART 4/8 — START) =====================
   /* 메뉴용 실시간배차현황 — 배차현황과 100% 동일 컬럼/순서(+주소)
      role 지원: admin | user
   */
@@ -3251,9 +3293,12 @@ setAutoDropMatched(false);
 
     // 🔵 선택수정 팝업 상태
     const [editPopupOpen, setEditPopupOpen] = React.useState(false);
+    
     const [editTarget, setEditTarget] = React.useState(null);
     // 🔵 동일 노선 추천 리스트
     const [similarOrders, setSimilarOrders] = React.useState([]);
+     // 🔍 운임조회 모달 상태 (선택수정 전용)
+ const [fareModalOpen, setFareModalOpen] = React.useState(false);
 
 
     // ----------------------------
@@ -3574,29 +3619,43 @@ setAutoDropMatched(false);
         setSimilarOrders([]);
       }
     }, []);
-    // ⭐ 운임조회 실행 함수
-    const handleFareCheck = () => {
-      if (!newOrder.상차지명 || !newOrder.하차지명) {
-        alert("상차지명과 하차지명을 입력해야 운임조회가 가능합니다.");
-        return;
-      }
+    // === 운임조회 실행 함수 (선택수정 전용 최신버전) ===
+const handleFareSearch = () => {
+  const row = editTarget;
+  if (!row) return alert("먼저 수정할 오더를 선택해주세요.");
 
-      const result = calcFare(dispatchData, {
-        pickup: newOrder.상차지명,
-        drop: newOrder.하차지명,
-        vehicle: newOrder.차량종류,
-        ton: newOrder.차량톤수,
-        cargo: newOrder.화물내용,
-      });
+  const pickup = row.상차지명?.trim();
+  const drop = row.하차지명?.trim();
 
-      if (!result) {
-        alert("유사 운임 데이터를 찾을 수 없습니다.");
-        return;
-      }
+  if (!pickup || !drop) return alert("상/하차지를 입력해주세요.");
 
-      setFareResult(result);
-      setFareOpen(true);
-    };
+  const records = dispatchData
+    .filter(r =>
+      r.상차지명?.trim() === pickup &&
+      r.하차지명?.trim() === drop
+    )
+    .sort((a, b) => (b.하차일 || "").localeCompare(a.하차일))
+    .slice(0, 10);
+
+  if (!records.length) {
+    alert("유사 운행 이력이 없습니다.");
+    return;
+  }
+
+  const fares = records.map(r => Number(r.청구운임) || 0);
+  const avg = Math.round(fares.reduce((s, v) => s + v, 0) / fares.length);
+
+  setFareResult({
+    records,
+    count: fares.length,
+    avg,
+    min: Math.min(...fares),
+    max: Math.max(...fares),
+    latest: records[0],
+  });
+
+  setFareModalOpen(true);
+};
 
     // ------------------------
     // 숫자 변환
@@ -3685,9 +3744,6 @@ setAutoDropMatched(false);
 
       alert("신규 기사 등록 완료!");
     };
-
-
-
     // ------------------------
     // driverMap 생성
     // ------------------------
@@ -4276,6 +4332,7 @@ ${url}
 
               setEditTarget({ ...row }); // 팝업에 띄울 데이터
               setEditPopupOpen(true);    // 팝업 열기
+              loadSimilarOrders(row.상차지명, row.하차지명);
             }}
             className="px-3 py-1 rounded bg-amber-500 text-white"
           >
@@ -4711,6 +4768,73 @@ ${url}
             </div>
           </div>
         )}
+        
+{/* 📦 운임조회 결과 모달 (완성버전) */}
+{fareModalOpen && fareResult && (
+  <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[9999]">
+    <div className="bg-white p-6 rounded-lg w-[420px] shadow-lg max-h-[90vh] overflow-y-auto">
+      <h3 className="font-bold text-lg mb-3">📦 운임 조회 결과</h3>
+
+      <p>건수: {fareResult.count}건</p>
+      <p>평균 운임: {fareResult.avg.toLocaleString()}원</p>
+      <p className="mb-3">
+        범위: {fareResult.min.toLocaleString()}원 ~ {fareResult.max.toLocaleString()}원
+      </p>
+
+      <div className="mt-3 border-t pt-3 text-sm">
+        <p className="font-semibold mb-2">📜 과거 운송 기록</p>
+        {fareResult.records.map((r, i) => (
+          <div
+            key={i}
+            className="flex justify-between items-center py-1 border-b last:border-0"
+          >
+            <span>{r.하차일} | {r.화물내용 || "일반화물"}</span>
+            <span>{(Number(r.청구운임) || 0).toLocaleString()}원</span>
+
+            <button
+              className="text-blue-600 hover:underline text-xs"
+              onClick={() => {
+                setEditTarget((p) => ({
+                  ...p,
+                  청구운임: Number(r.청구운임) || 0,
+                  수수료: Number(r.청구운임) - Number(p.기사운임 || 0),
+                }));
+                setFareModalOpen(false);
+              }}
+            >
+              적용
+            </button>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex justify-end gap-2 mt-4">
+        <button
+          className="px-3 py-1 bg-gray-300 rounded"
+          onClick={() => setFareModalOpen(false)}
+        >
+          닫기
+        </button>
+
+        <button
+          className="px-3 py-1 bg-blue-600 text-white rounded"
+          onClick={() => {
+            setEditTarget((p) => ({
+              ...p,
+              청구운임: fareResult.avg,
+              수수료: fareResult.avg - Number(p.기사운임 || 0),
+            }));
+            setFareModalOpen(false);
+          }}
+        >
+          평균 적용
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+
 
         {/* ---------------------------------------------------------
           🔵 신규 오더 등록 팝업 (업그레이드 완성본)
@@ -5408,7 +5532,18 @@ ${url}
           <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
             <div className="bg-white p-5 rounded shadow-xl w-[480px] max-h-[90vh] overflow-y-auto">
 
-              <h3 className="text-lg font-bold mb-4">선택한 오더 수정</h3>
+              <div className="flex items-center justify-between mb-4">
+  <h3 className="text-lg font-bold">선택한 오더 수정</h3>
+
+  <button
+    onClick={handleFareSearch}
+    className="px-3 py-1 rounded bg-amber-500 text-white text-sm"
+  >
+    운임조회
+  </button>
+</div>
+
+            
 
               {/* ------------------------------------------------ */}
               {/* 🔵 거래처명 */}
@@ -5910,6 +6045,56 @@ ${url}
 
     const [justSaved, setJustSaved] = React.useState([]);
     const [sendResult, setSendResult] = React.useState(null);
+    // === 운임조회 팝업 상태 ===
+const [fareModalOpen, setFareModalOpen] = React.useState(false);
+const [fareResult, setFareResult] = React.useState(null);
+
+const filterPlaces = (text) => {
+  const q = String(text || "").trim().toLowerCase();
+  if (!q) return [];
+  return (placeRows || []).filter((p) =>
+    String(p.업체명 || "").toLowerCase().includes(q)
+  );
+};
+// === 운임조회 실행 함수 (과거 이력 기반) ===
+const handleFareSearch = () => {
+  const row = editTarget;
+  if (!row) return alert("먼저 수정할 오더를 선택해주세요.");
+
+  const pickup = row.상차지명?.trim();
+  const drop = row.하차지명?.trim();
+
+  if (!pickup || !drop) return alert("상/하차지를 입력해주세요.");
+
+  const records = dispatchData
+    .filter(r =>
+      r.상차지명?.trim() === pickup &&
+      r.하차지명?.trim() === drop
+    )
+    .sort((a, b) => (b.하차일 || "").localeCompare(a.하차일))
+    .slice(0, 10);
+
+  if (records.length === 0) {
+    return alert("유사 운행 이력이 없습니다.");
+  }
+
+  const fares = records.map(r => Number(r.청구운임) || 0);
+  const avg = Math.round(fares.reduce((s, v) => s + v, 0) / fares.length);
+
+  setFareResult({
+    records,
+    count: fares.length,
+    latestFare: fares[0],
+    avg,
+    min: Math.min(...fares),
+    max: Math.max(...fares),
+    latestCargo: row.화물내용 || "일반화물",
+  });
+
+  setFareModalOpen(true);
+};
+
+
 
     async function handle24CallSendSelected(orders) {
       let success = [];
@@ -5944,6 +6129,7 @@ ${url}
     const [showPlaceDropdown, setShowPlaceDropdown] = React.useState(false);
 
     const [editPopupOpen, setEditPopupOpen] = React.useState(false);
+    
     const [editTarget, setEditTarget] = React.useState(null);
     // ⭐ 화면 진입 시 이번 달 자동 설정
     // ⭐ 화면 진입 시 상태 복구 + 이번 달 기본값
@@ -7012,7 +7198,7 @@ ${url}
                   ))}
                 </div>
               )}
-
+              
               <div className="flex justify-end gap-2">
                 <button
                   className="px-3 py-2 rounded bg-gray-500 text-white"
@@ -7036,6 +7222,71 @@ ${url}
             </div>
           </div>
         )}
+        {/* 📦 운임조회 결과 모달 (과거 이력 포함 완성버전) */}
+{fareModalOpen && fareResult && (
+  <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[9999]">
+    <div className="bg-white p-6 rounded-lg w-[420px] shadow-lg max-h-[90vh] overflow-y-auto">
+      <h3 className="font-bold text-lg mb-3">📦 운임 조회 결과</h3>
+
+      <p>건수: {fareResult.count}건</p>
+      <p>평균 운임: {fareResult.avg.toLocaleString()}원</p>
+      <p className="mb-3">
+        범위: {fareResult.min.toLocaleString()}원 ~ {fareResult.max.toLocaleString()}원
+      </p>
+
+      {/* 🚚 과거 운행 로그 리스트 */}
+      <div className="mt-3 border-t pt-3 text-sm">
+        <p className="font-semibold mb-2">📜 과거 운송 기록</p>
+        {fareResult.records.map((r, i) => (
+          <div
+            key={i}
+            className="flex justify-between items-center py-1 border-b last:border-0"
+          >
+            <span>
+              {r.하차일} | {r.화물내용 || "일반화물"}
+            </span>
+            <span>{(Number(r.청구운임) || 0).toLocaleString()}원</span>
+            <button
+              className="text-blue-600 hover:underline text-xs"
+              onClick={() => {
+                setEditTarget((p) => ({
+                  ...p,
+                  청구운임: Number(r.청구운임) || 0,
+                }));
+                setFareModalOpen(false);
+              }}
+            >
+              적용
+            </button>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex justify-end gap-2 mt-4">
+        <button
+          className="px-3 py-1 bg-gray-300 rounded"
+          onClick={() => setFareModalOpen(false)}
+        >
+          닫기
+        </button>
+
+        <button
+          className="px-3 py-1 bg-blue-600 text-white rounded"
+          onClick={() => {
+            setEditTarget((p) => ({
+              ...p,
+              청구운임: fareResult.avg,
+            }));
+            setFareModalOpen(false);
+          }}
+        >
+          평균 적용
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
         {/* ---------------------------------------------------------
           🔵 신규 오더 등록 팝업 (업그레이드 버전)
       --------------------------------------------------------- */}
@@ -7056,6 +7307,15 @@ ${url}
             <div className="bg-white p-5 rounded shadow-xl w-[480px] max-h-[90vh] overflow-y-auto">
 
               <h3 className="text-lg font-bold mb-4">선택한 오더 수정</h3>
+              <div className="flex justify-end mb-2">
+  <button
+    onClick={handleFareSearch}
+    className="px-3 py-1 rounded bg-amber-500 text-white text-sm"
+  >
+    운임조회
+  </button>
+</div>
+
 
               {/* ------------------------------------------------ */}
               {/* 🔵 거래처명 */}
