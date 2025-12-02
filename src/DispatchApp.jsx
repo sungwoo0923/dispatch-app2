@@ -588,10 +588,14 @@ const dispatchDataFiltered = useMemo(() => {
       document.addEventListener("mousedown", onDocClick);
       return () => document.removeEventListener("mousedown", onDocClick);
     }, []);
-    const [showPlaceDropdown, setShowPlaceDropdown] = React.useState(false);  // ⭐ 여기 추가
-    const [placeQuery, setPlaceQuery] = React.useState("");                   // ⭐ 여기 추가
-    const [placeOptions, setPlaceOptions] = React.useState([]);
+// ⭐ 상차지 자동완성 상태 분리
+const [showPickupDropdown, setShowPickupDropdown] = React.useState(false);
+const [pickupOptions, setPickupOptions] = React.useState([]);
+const [pickupActive, setPickupActive] = React.useState(0);
 
+const [showPlaceDropdown, setShowPlaceDropdown] = React.useState(false);
+const [placeOptions, setPlaceOptions] = React.useState([]);
+const [placeActive, setPlaceActive] = React.useState(0);
     // ---------- 🔧 안전 폴백 유틸(다른 파트 미정의 시 자체 사용) ----------
     const _todayStr = (typeof todayStr === "function")
       ? todayStr
@@ -1662,15 +1666,75 @@ const hasSinmi = (
             </div>
           </div>
 
-          {/* 상차지명 */}
-          <div>
-            <label className={labelCls}>상차지명 {reqStar}</label>
-            <input
-              className={inputCls}
-              value={form.상차지명}
-              onChange={(e) => handlePickupName(e.target.value)}
-            />
-          </div>
+          {/* ⭐ 상차지명 + 자동완성 (독립) */}
+<div className="relative">
+  <label className={labelCls}>상차지명 {reqStar}</label>
+
+  <input
+    className={inputCls}
+    placeholder="상차지 검색"
+    value={form.상차지명}
+    onChange={(e) => {
+      const v = e.target.value;
+      handlePickupName(v);
+      setPickupOptions(filterPlaces(v));
+      setShowPickupDropdown(true);
+      setPickupActive(0);
+    }}
+    onKeyDown={(e) => {
+      const list = pickupOptions;
+      if (!list.length) return;
+
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setPickupActive((i) => Math.min(i + 1, list.length - 1));
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setPickupActive((i) => Math.max(i - 1, 0));
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        const p = list[pickupActive];
+        if (!p) return;
+        setForm((prev) => ({
+          ...prev,
+          상차지명: p.업체명,
+          상차지주소: p.주소,
+          상차지담당자: p.담당자,
+          상차지담당자번호: p.담당자번호,
+        }));
+        setShowPickupDropdown(false);
+      }
+    }}
+    onBlur={() => setTimeout(() => setShowPickupDropdown(false), 200)}
+  />
+
+  {showPickupDropdown && pickupOptions.length > 0 && (
+    <div className="absolute z-50 bg-white border rounded shadow w-full max-h-48 overflow-auto">
+      {pickupOptions.map((p, i) => (
+        <div
+          key={i}
+          className={`px-2 py-1 cursor-pointer ${
+            i === pickupActive ? "bg-blue-50" : "hover:bg-gray-50"
+          }`}
+          onMouseDown={() => {
+            setForm((prev) => ({
+              ...prev,
+              상차지명: p.업체명,
+              상차지주소: p.주소,
+              상차지담당자: p.담당자,
+              상차지담당자번호: p.담당자번호,
+            }));
+            setShowPickupDropdown(false);
+          }}
+        >
+          <b>{p.업체명}</b>
+          {p.주소 ? <div className="text-xs text-gray-500">{p.주소}</div> : null}
+        </div>
+      ))}
+    </div>
+  )}
+</div>
+
 
           {/* 상차지주소 */}
           <div>
@@ -1690,42 +1754,73 @@ const hasSinmi = (
             <label className={labelCls}>하차지명 {reqStar}</label>
 
             <input
-              className={inputCls}
-              placeholder="하차지 검색"
-              value={form.하차지명}
-              onChange={(e) => {
-                const v = e.target.value;
-                handleDropName(v);
-                setPlaceOptions(filterPlaces(v));   // ⭐ 자동완성 목록 생성
-                setShowPlaceDropdown(true);
-              }}
+  className={inputCls}
+  placeholder="하차지 검색"
+  value={form.하차지명}
+  onChange={(e) => {
+    const v = e.target.value;
+    handleDropName(v);
+    setPlaceOptions(filterPlaces(v));
+    setShowPlaceDropdown(true);
+    setPlaceActive(0);
+  }}
+  onKeyDown={(e) => {
+    const list = placeOptions;
+    if (!list.length) return;
 
-              onBlur={() => setTimeout(() => setShowPlaceDropdown(false), 200)}
-            />
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setPlaceActive((i) => Math.min(i + 1, list.length - 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setPlaceActive((i) => Math.max(i - 1, 0));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      const p = list[placeActive];
+      if (!p) return;
+      setForm((prev) => ({
+        ...prev,
+        하차지명: p.업체명,
+        하차지주소: p.주소,
+        하차지담당자: p.담당자,
+        하차지담당자번호: p.담당자번호,
+      }));
+      setShowPlaceDropdown(false);
+    }
+  }}
+  onBlur={() => setTimeout(() => setShowPlaceDropdown(false), 200)}
+/>
+
 
             {showPlaceDropdown && placeOptions.length > 0 && (
-              <div className="absolute z-50 bg-white border rounded shadow w-full max-h-48 overflow-auto">
-                {placeOptions.map((p, i) => (
-                  <div
-                    key={i}
-                    className="px-2 py-1 hover:bg-blue-100 cursor-pointer"
-                    onMouseDown={() => {
-                      setForm((prev) => ({
-                        ...prev,
-                        하차지명: p.업체명,
-                        하차지주소: p.주소,
-                        하차지담당자: p.담당자,
-                        하차지담당자번호: p.담당자번호,
-                      }));
-                      setShowPlaceDropdown(false);
-                    }}
-                  >
-                    <b>{p.업체명}</b>
-                    {p.주소 ? <div className="text-xs text-gray-500">{p.주소}</div> : null}
-                  </div>
-                ))}
-              </div>
-            )}
+  <div className="absolute z-50 bg-white border rounded shadow w-full max-h-48 overflow-auto">
+    {placeOptions.map((p, i) => (
+      <div
+        key={i}
+        className={`px-2 py-1 cursor-pointer ${
+          i === placeActive ? "bg-blue-50" : "hover:bg-gray-50"
+        }`}
+        onMouseEnter={() => setPlaceActive(i)}
+        onMouseDown={() => {
+          setForm((prev) => ({
+            ...prev,
+            하차지명: p.업체명,
+            하차지주소: p.주소,
+            하차지담당자: p.담당자,
+            하차지담당자번호: p.담당자번호,
+          }));
+          setShowPlaceDropdown(false);
+        }}
+      >
+        <b>{p.업체명}</b>
+        {p.주소 ? (
+          <div className="text-xs text-gray-500">{p.주소}</div>
+        ) : null}
+      </div>
+    ))}
+  </div>
+)}
+
           </div>
 
 
