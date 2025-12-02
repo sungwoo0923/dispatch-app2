@@ -2349,7 +2349,7 @@ function MobileOrderForm({
                 onChange={(e) => update("배차방식", e.target.value)}
               >
                 <option value="">배차방식</option>
-                <option value="24">24</option>
+                <option value="24시">24시</option>
                 <option value="직접배차">직접배차</option>
                 <option value="인성">인성</option>
                 <option value="24시(외주업체)">24시(외주업체)</option>
