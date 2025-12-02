@@ -143,10 +143,12 @@ function normalizeClients(arr) {
 import { auth } from "./firebase";
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "firebase/auth";
 import { db } from "./firebase";
-import {
-  doc, getDoc, setDoc, serverTimestamp, collection, getDocs,
-  onSnapshot, deleteDoc
-} from "firebase/firestore";
+ import {
+   doc, getDoc, setDoc, serverTimestamp,
+   collection, getDocs,
+   onSnapshot, deleteDoc,
+   query, where, orderBy, limit
+ } from "firebase/firestore";
 
 /* -------------------------------------------------
    Firestore 사용자 등록/승인 확인
@@ -918,17 +920,20 @@ React.useEffect(() => {
     return;
   }
 
-  const fields = [
-    "거래처명", "상차지명", "하차지명", "화물내용",
-    "차량번호", "이름", "전화번호"
-  ];
+const defaultOk =
+  !form.거래처명?.trim() &&
+  !form.상차지명?.trim() &&
+  !form.하차지명?.trim() &&
+  !form.상차일 &&
+  !form.하차일 &&
+  !form.차량번호?.trim() &&
+  (!form.등록일 || form.등록일 === _todayStr()); // 🔥 추가!
 
-  const hasInput = fields.some((k) => (form[k] || "").trim() !== "");
+if (defaultOk) {
+  try { localStorage.removeItem("dispatchForm"); } catch {}
+  return;
+}
 
-  if (!hasInput) {
-    try { localStorage.removeItem("dispatchForm"); } catch {}
-    return;
-  }
 
   try {
     localStorage.setItem("dispatchForm", JSON.stringify(form));
@@ -1122,6 +1127,8 @@ setForm((prev) => ({
 
     const handleSubmit = async (e) => {
   e.preventDefault();
+  e.stopPropagation();
+
   if (!validateRequired(form)) return;
   if (!validateDateTime(form)) return;
 
@@ -1129,40 +1136,34 @@ setForm((prev) => ({
     ? "배차완료"
     : "배차중";
 
-  const moneyPatch = isAdmin ? {} : { 청구운임: "0", 기사운임: "0", 수수료: "0" };
-
   const rec = {
     ...form,
-    ...moneyPatch,
+    순번: nextSeq(),
     상차일: lockYear(form.상차일),
     하차일: lockYear(form.하차일),
-    순번: nextSeq(),
     배차상태: status,
   };
 
   await addDispatch(rec);
 
-  // ⭐ localStorage 먼저 제거 (초기화 덮어씌움 방지)
-  try { localStorage.removeItem("dispatchForm"); } catch {}
+  /// 🔥 저장 직후 자동저장 완전 차단
+window.__dispatchFormJustSaved = true;
 
-  // ⭐ 폼 초기화
-  const resetFormData = {
-    ...emptyForm,
-    _id: crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`,
-    등록일: _todayStr(),
-    ...(isAdmin ? {} : { 청구운임: "", 기사운임: "", 수수료: "" }),
-  };
+// 🔥 폼 초기화 후 localStorage 삭제
+try { localStorage.removeItem("dispatchForm"); } catch {}
 
-  setForm(resetFormData);
-  setClientQuery("");
-  setAutoPickMatched(false);
-  setAutoDropMatched(false);
+setForm({
+  ...emptyForm,
+  _id: crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`
+});
+setClientQuery("");
 
-  alert("등록되었습니다.");
-  window.__dispatchFormJustSaved = true;
+// ⏱ 자동저장 다시 활성화 — 1초(1000ms)로 늘림
 setTimeout(() => {
   window.__dispatchFormJustSaved = false;
-}, 200);
+}, 1000);
+
+alert("등록되었습니다.");
 };
 
 
@@ -1475,21 +1476,16 @@ setTimeout(() => {
       setCopySelected([]); // ⭐ 체크 초기화
     };
 
-    // ------------------ 초기화 ------------------
-const resetForm = () => {
-  // ⭐ 자동저장 끄기 (1회)
+    const resetForm = () => {
+  // ⭐ 수동 초기화 시 자동저장 완전 차단
   window.__dispatchFormJustSaved = true;
-setTimeout(() => {
-  window.__dispatchFormJustSaved = false;
-}, 200);
 
-
-  // ⭐ 저장된 입력 폼 제거
   try {
     localStorage.removeItem("dispatchForm");
-  } catch {}
+  } catch (e) {
+    console.warn(e);
+  }
 
-  // ⭐ 빈 폼 설정
   const reset = {
     ...emptyForm,
     _id: crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`,
@@ -1501,9 +1497,11 @@ setTimeout(() => {
   setAutoPickMatched(false);
   setAutoDropMatched(false);
   setCopySelected([]);
+
+  setTimeout(() => {
+    window.__dispatchFormJustSaved = false;
+  }, 300);
 };
-
-
 
     // =========================================================
     // 📤 공유 (모바일: 카톡 공유창 / PC: 텍스트 복사)
@@ -2154,49 +2152,56 @@ setTimeout(() => {
                 <button
                   className="px-4 py-2 bg-blue-600 text-white rounded"
                   onClick={() => {
-                    if (copySelected.length === 0)
-                      return alert("복사할 항목을 선택하세요.");
+  if (copySelected.length === 0)
+    return alert("복사할 항목을 선택하세요.");
 
-                    const r = copySelected[0];
+  const r = copySelected[0];
 
-                    const today = new Date().toISOString().slice(0, 10);
+  const today = new Date().toISOString().slice(0, 10);
 
-                    // 🔥 오더 복사 적용
-setForm(p => ({
-  ...p,
-  거래처명: r.거래처명 || "",
-  상차지명: r.상차지명 || "",
-  하차지명: r.하차지명 || "",
-  화물내용: r.화물내용 || "",
-  차량종류: r.차량종류 || "",
-  차량톤수: r.차량톤수 || "",
-  상차일: today,
-  하차일: today,
-  상차시간: r.상차시간 || "",
-  하차시간: r.하차시간 || "",
-  지급방식: r.지급방식 || "",
-  배차방식: r.배차방식 || "",
-  메모: r.메모 || "",
-  차량번호: "",
-  이름: "",
-  전화번호: "",
-  배차상태: "배차중",
-}));
+  // 🔥 복사할 때 자동저장 OFF
+  window.__dispatchFormJustSaved = true;
 
-// ⭐ 하차지 자동매칭 로직 직접 호출
-applyClientSelect(r.거래처명);
+  // 🔥 신규 오더로 강제
+  setForm(p => ({
+    ...p,
+    _id: crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`,
+    순번: "",
+    등록일: _todayStr(),
+    거래처명: r.거래처명 || "",
+    상차지명: r.상차지명 || "",
+    하차지명: r.하차지명 || "",
+    화물내용: r.화물내용 || "",
+    차량종류: r.차량종류 || "",
+    차량톤수: r.차량톤수 || "",
+    상차일: today,
+    하차일: today,
+    상차시간: r.상차시간 || "",
+    하차시간: r.하차시간 || "",
+    지급방식: r.지급방식 || "",
+    배차방식: r.배차방식 || "",
+    메모: r.메모 || "",
+    차량번호: "",
+    이름: "",
+    전화번호: "",
+    배차상태: "배차중",
+  }));
 
-// UI 동기화
-setClientQuery(r.거래처명 || "");
-setAutoPickMatched(false);
-setAutoDropMatched(false);
+  // UI 상태
+  setClientQuery(r.거래처명 || "");
+  setAutoPickMatched(false);
+  setAutoDropMatched(false);
+  setCopyOpen(false);
+  setCopySelected([]);
 
+  alert("오더 내용이 입력창에 복사되었습니다!");
 
+  // ⏱ 복사완료 후 자동저장 다시 ON (조금 딜레이)
+  setTimeout(() => {
+    window.__dispatchFormJustSaved = false;
+  }, 300);
+}}
 
-                    alert("오더 내용이 입력창에 복사되었습니다!");
-                    setCopyOpen(false);
-
-                  }}
                 >
                   복사
                 </button>
@@ -2245,7 +2250,7 @@ setAutoDropMatched(false);
                                 }}
                               />
                             </td>
-                            <td className="p-2">{row.상차일}</td>
+                            
                             <td className="p-2">{row.거래처명}</td>
                             <td className="p-2">{row.상차지명}</td>
                             <td className="p-2">{row.하차지명}</td>
@@ -4050,33 +4055,40 @@ const handleFareSearch = () => {
       }
 
       const newDriver = { 이름, 차량번호: rawVal, 전화번호 };
-      await upsertDriver?.(newDriver);
+await upsertDriver(newDriver);
 
-      const updated = {
-        차량번호: rawVal,
-        이름,
-        전화번호,
-        배차상태: "배차완료",
-      };
+const updated = {
+  차량번호: rawVal,
+  이름,
+  전화번호,
+  배차상태: "배차완료",
+};
 
-      await patchDispatch?.(id, updated);
+// DB 반영
+await patchDispatch(id, updated);
 
-      setHighlightIds((prev) => {
-        const n = new Set(prev);
-        n.add(id);
-        return n;
-      });
+// UI 반영
+setRows((prev) =>
+  prev.map((r) => (r._id === id ? { ...r, ...updated } : r))
+);
 
-      setTimeout(() => {
-        setHighlightIds((prev) => {
-          const n = new Set(prev);
-          n.delete(id);
-          return n;
-        });
-      }, 1000);
+// 강조 효과 유지
+setHighlightIds((prev) => {
+  const n = new Set(prev);
+  n.add(id);
+  return n;
+});
+setTimeout(() => {
+  setHighlightIds((prev) => {
+    const n = new Set(prev);
+    n.delete(id);
+    return n;
+  });
+}, 1000);
 
-      setIsRegistering(false);
-      alert("신규 기사 등록 완료");
+setIsRegistering(false);
+alert("신규 기사 등록 완료");
+
     };
 
     // ------------------------
@@ -5638,6 +5650,7 @@ ${url}
                       alert("신규 오더가 등록되었습니다.");
                       setShowCreate(false);
 
+                    
                       setNewOrder({
                         상차일: "",
                         상차시간: "",
@@ -5935,49 +5948,81 @@ ${url}
                     // 입력값 UI에만 반영, 매칭은 하지 않음
                     setEditTarget((p) => ({ ...p, 차량번호: e.target.value }));
                   }}
-                  onKeyDown={(e) => {
-                    if (e.key !== "Enter") return;
+                  onKeyDown={async (e) => {
+  if (e.key !== "Enter") return;
 
-                    const raw = e.target.value.trim();
-                    const clean = raw.replace(/\s+/g, "");
+  const raw = e.target.value.trim();
+  const clean = raw.replace(/\s+/g, "");
+  if (!clean) return;
 
-                    // 기존 기사 매칭
-                    const match = drivers.find(
-                      (d) => String(d.차량번호).replace(/\s+/g, "") === clean
-                    );
+  // 현재 수정 중인 오더 id
+  const targetId = editTarget?._id;
+  if (!targetId) return;
 
-                    if (match) {
-                      setEditTarget((p) => ({
-                        ...p,
-                        이름: match.이름,
-                        전화번호: match.전화번호,
-                        배차상태: "배차완료",
-                      }));
-                      return;
-                    }
+  // 1) 기존 기사 있는지 확인
+  const match = drivers.find(
+    (d) => String(d.차량번호 || "").replace(/\s+/g, "") === clean
+  );
 
-                    // 신규 등록
-                    const ok = window.confirm(
-                      `[${raw}] 등록된 기사가 없습니다.\n신규 기사로 추가할까요?`
-                    );
-                    if (!ok) return;
+  if (match) {
+    const updated = {
+      차량번호: match.차량번호,
+      이름: match.이름,
+      전화번호: match.전화번호,
+      배차상태: "배차완료",
+    };
 
-                    const 이름 = prompt("기사명 입력:");
-                    const 전화번호 = prompt("전화번호 입력:");
+    // 팝업 상태 업데이트 (팝업 유지)
+    setEditTarget((p) => (p ? { ...p, ...updated } : p));
 
-                    upsertDriver({
-                      차량번호: raw,
-                      이름,
-                      전화번호,
-                    });
+    // 메인 데이터/rows도 바로 반영
+    await patchDispatch(targetId, updated);
 
-                    setEditTarget((p) => ({
-                      ...p,
-                      이름,
-                      전화번호,
-                      배차상태: "배차완료",
-                    }));
-                  }}
+    setDispatchData((prev) =>
+      prev.map((r) => (r._id === targetId ? { ...r, ...updated } : r))
+    );
+
+    setRows((prev) =>
+      prev.map((r) => (r._id === targetId ? { ...r, ...updated } : r))
+    );
+
+    // alert("기존 기사 정보가 적용되었습니다.");
+console.log("기존 기사 정보 적용 완료"); // 팝업 유지
+return;
+  }
+
+  // 2) 기존 기사 없으면 → 신규 기사 등록
+  if (!window.confirm(`[${raw}] 신규 기사로 등록할까요?`)) return;
+
+  const 이름 = prompt("기사명 입력:");
+  const 전화번호 = prompt("전화번호 입력:");
+  if (!이름 || !전화번호) return;
+
+  // 기사 정보 Firestore에 저장
+  await upsertDriver({ 차량번호: raw, 이름, 전화번호 });
+
+  const newData = {
+    차량번호: raw,
+    이름,
+    전화번호,
+    배차상태: "배차완료",
+  };
+
+  // 팝업 상태 유지 + 값만 반영
+  setEditTarget((p) => (p ? { ...p, ...newData } : p));
+
+  // 메인 배차데이터/rows에도 바로 반영
+  await patchDispatch(targetId, newData);
+
+  setRows((prev) =>
+    prev.map((r) => (r._id === targetId ? { ...r, ...newData } : r))
+  );
+
+  // alert("신규 기사 등록 완료!\n팝업에서 다른 내용도 수정한 뒤, 저장 버튼을 눌러주세요.");
+console.log("신규 기사 등록 완료 (팝업 유지)");
+}}
+
+
                 />
 
               </div>
@@ -7695,64 +7740,86 @@ const handleFareSearch = () => {
 
 
               {/* ------------------------------------------------ */}
-              {/* 🔵 차량번호 (자동매칭) */}
-              {/* ------------------------------------------------ */}
-              <div className="mb-3">
-                <label>차량번호</label>
-                <input
-                  className="border p-2 rounded w-full"
-                  value={editTarget.차량번호 || ""}
-                  placeholder="예: 93가1234"
-                  onChange={(e) => {
-                    // 입력값 UI에만 반영, 매칭은 하지 않음
-                    setEditTarget((p) => ({ ...p, 차량번호: e.target.value }));
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key !== "Enter") return;
+              {/* 🔵 차량번호 (자동매칭 + 팝업 유지) */}
+<div className="mb-3">
+  <label>차량번호</label>
+  <input
+    className="border p-2 rounded w-full"
+    value={editTarget.차량번호 || ""}
+    placeholder="예: 93가1234"
+    onChange={(e) => {
+      setEditTarget((p) => ({ ...p, 차량번호: e.target.value }));
+    }}
+    onKeyDown={async (e) => {
+  if (e.key !== "Enter") return;
 
-                    const raw = e.target.value.trim();
-                    const clean = raw.replace(/\s+/g, "");
+  const raw = e.target.value.trim();
+  const clean = raw.replace(/\s+/g, "");
+  if (!clean) return;
 
-                    // 기존 기사 매칭
-                    const match = drivers.find(
-                      (d) => String(d.차량번호).replace(/\s+/g, "") === clean
-                    );
+  const id = editTarget?._id;
+  if (!id) return;
 
-                    if (match) {
-                      setEditTarget((p) => ({
-                        ...p,
-                        이름: match.이름,
-                        전화번호: match.전화번호,
-                        배차상태: "배차완료",
-                      }));
-                      return;
-                    }
+  // 1) 기존 기사 확인
+  const match = drivers.find(
+    (d) => String(d.차량번호 || "").replace(/\s+/g, "") === clean
+  );
 
-                    // 신규 등록
-                    const ok = window.confirm(
-                      `[${raw}] 등록된 기사가 없습니다.\n신규 기사로 추가할까요?`
-                    );
-                    if (!ok) return;
+  if (match) {
+    // 팝업 상태 반영
+    setEditTarget((p) => ({
+      ...p,
+      차량번호: clean,
+      이름: match.이름,
+      전화번호: match.전화번호,
+      배차상태: "배차완료",
+    }));
 
-                    const 이름 = prompt("기사명 입력:");
-                    const 전화번호 = prompt("전화번호 입력:");
+    // 메인 배차데이터 즉시 반영 🔥
+    await patchDispatch(id, {
+      차량번호: clean,
+      이름: match.이름,
+      전화번호: match.전화번호,
+      배차상태: "배차완료",
+    });
 
-                    upsertDriver({
-                      차량번호: raw,
-                      이름,
-                      전화번호,
-                    });
+    alert("기존 기사 정보 적용됨.\n저장 버튼을 눌러도 됩니다!");
+    return;
+  }
 
-                    setEditTarget((p) => ({
-                      ...p,
-                      이름,
-                      전화번호,
-                      배차상태: "배차완료",
-                    }));
-                  }}
-                />
+  // 2) 신규 기사 등록
+  if (!window.confirm(`[${raw}] 신규 기사로 등록할까요?`)) return;
 
-              </div>
+  const 이름 = prompt("기사명 입력:");
+  const 전화번호 = prompt("전화번호 입력:");
+  if (!이름 || !전화번호) return;
+
+  // DB에 신규 기사 등록
+  await upsertDriver({ 차량번호: clean, 이름, 전화번호 });
+
+  // 팝업 즉시 반영
+  setEditTarget((p) => ({
+    ...p,
+    차량번호: clean,
+    이름,
+    전화번호,
+    배차상태: "배차완료",
+  }));
+
+  // 메인데이터에도 즉시 반영 🔥🔥 핵심 포인트
+  await patchDispatch(id, {
+    차량번호: clean,
+    이름,
+    전화번호,
+    배차상태: "배차완료",
+  });
+
+  alert("신규 기사 등록 완료!\n저장 버튼을 누르면 다른 수정내용도 함께 반영됩니다.");
+}}
+
+  />
+</div>
+
 
               {/* 🔵 이름/전화번호 (자동입력) */}
               <div className="grid grid-cols-2 gap-3 mb-3">
@@ -7892,8 +7959,7 @@ const handleFareSearch = () => {
                   onClick={async () => {
                     await patchDispatch(editTarget._id, editTarget);
                     alert("수정이 저장되었습니다.");
-                    setEditPopupOpen(false);
-                    setSelected(new Set());
+                    
                   }}
                 >
                   저장
