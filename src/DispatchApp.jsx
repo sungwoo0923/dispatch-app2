@@ -762,9 +762,9 @@ const dispatchDataFiltered = useMemo(() => {
       전화번호: "",
       상차방법: "",
       하차방법: "",
-      상차일: "",
+      상차일: _todayStr(),
       상차시간: "",
-      하차일: "",
+      하차일: _todayStr(),
       하차시간: "",
       청구운임: "",
       기사운임: "",
@@ -1465,7 +1465,93 @@ const hasSinmi = (
               />
               혼적
             </label>
+            
           </div>
+          {/* 📌 상차일 + 상차시간 */}
+<div className="col-span-6 bg-white border border-gray-200 rounded-lg p-3 shadow-sm">
+  <div className="flex items-end gap-6">
+
+    {/* 상차 */}
+    <div className="flex flex-col">
+      <label className="text-[12px] font-semibold text-gray-600 mb-1">상차일 / 시간</label>
+      <div className="flex items-center gap-2">
+        <input
+          type="date"
+          value={form.상차일}
+          onChange={(e) => onChange("상차일", e.target.value)}
+          className="border rounded-md px-2 py-[4px] text-sm w-[130px] focus:ring-blue-500"
+        />
+        <button
+          type="button"
+          onClick={() => onChange("상차일", _todayStr())}
+          className="bg-blue-100 text-blue-700 px-2 py-[4px] rounded text-[11px]"
+        >
+          당일
+        </button>
+        <button
+          type="button"
+          onClick={() => onChange("상차일", _tomorrowStr())}
+          className="bg-blue-100 text-blue-700 px-2 py-[4px] rounded text-[11px]"
+        >
+          내일
+        </button>
+
+        {/* ⭐ 상차시간 */}
+        <select
+          value={form.상차시간}
+          onChange={(e) => onChange("상차시간", e.target.value)}
+          className="border rounded-md px-2 py-[4px] text-sm w-[130px]"
+        >
+          <option value="">시간 ▾</option>
+          {localTimeOptions.map((t) => (
+            <option key={t} value={t}>{t}</option>
+          ))}
+        </select>
+      </div>
+    </div>
+
+    {/* 하차 */}
+    <div className="flex flex-col">
+      <label className="text-[12px] font-semibold text-gray-600 mb-1">하차일 / 시간</label>
+      <div className="flex items-center gap-2">
+        <input
+          type="date"
+          value={form.하차일}
+          onChange={(e) => onChange("하차일", e.target.value)}
+          className="border rounded-md px-2 py-[4px] text-sm w-[130px] focus:ring-green-500"
+        />
+        <button
+          type="button"
+          onClick={() => onChange("하차일", _todayStr())}
+          className="bg-green-100 text-green-700 px-2 py-[4px] rounded text-[11px]"
+        >
+          당일
+        </button>
+        <button
+          type="button"
+          onClick={() => onChange("하차일", _tomorrowStr())}
+          className="bg-green-100 text-green-700 px-2 py-[4px] rounded text-[11px]"
+        >
+          내일
+        </button>
+
+        {/* ⭐ 하차시간 */}
+        <select
+          value={form.하차시간}
+          onChange={(e) => onChange("하차시간", e.target.value)}
+          className="border rounded-md px-2 py-[4px] text-sm w-[130px]"
+        >
+          <option value="">시간 ▾</option>
+          {localTimeOptions.map((t) => (
+            <option key={t} value={t}>{t}</option>
+          ))}
+        </select>
+      </div>
+    </div>
+
+  </div>
+</div>
+
         </div>
 
         {/* 입력 폼 */}
@@ -1712,37 +1798,7 @@ const hasSinmi = (
             <input className={`${inputCls} bg-gray-100`} value={form.전화번호} readOnly />
           </div>
 
-          {/* 날짜/시간 */}
-          <div>
-            <label className={labelCls}>상차일</label>
-            <input type="date" className={inputCls} value={form.상차일} onChange={(e) => onChange("상차일", lockYear(e.target.value))} />
-            <div className="flex gap-1 mt-1">
-              <button type="button" className="px-2 py-1 bg-gray-200 rounded text-xs" onClick={() => onChange("상차일", _todayStr())}>당일상차</button>
-              <button type="button" className="px-2 py-1 bg-gray-200 rounded text-xs" onClick={() => onChange("상차일", _tomorrowStr())}>내일상차</button>
-            </div>
-          </div>
-          <div>
-            <label className={labelCls}>상차시간</label>
-            <select className={inputCls} value={form.상차시간} onChange={(e) => onChange("상차시간", e.target.value)}>
-              <option value="">선택 ▾</option>
-              {localTimeOptions.map((t) => <option key={t} value={t}>{t}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className={labelCls}>하차일</label>
-            <input type="date" className={inputCls} value={form.하차일} onChange={(e) => onChange("하차일", lockYear(e.target.value))} />
-            <div className="flex gap-1 mt-1">
-              <button type="button" className="px-2 py-1 bg-gray-200 rounded text-xs" onClick={() => onChange("하차일", _todayStr())}>당일하차</button>
-              <button type="button" className="px-2 py-1 bg-gray-200 rounded text-xs" onClick={() => onChange("하차일", _tomorrowStr())}>내일하차</button>
-            </div>
-          </div>
-          <div>
-            <label className={labelCls}>하차시간</label>
-            <select className={inputCls} value={form.하차시간} onChange={(e) => onChange("하차시간", e.target.value)}>
-              <option value="">선택 ▾</option>
-              {localTimeOptions.map((t) => <option key={t} value={t}>{t}</option>)}
-            </select>
-          </div>
+          
 
           <div>
             <label className={labelCls}>상차방법</label>
@@ -7224,7 +7280,7 @@ ${justSaved.includes(id) ? "animate-pulse bg-emerald-200" : ""}
   className="px-3 py-2 rounded bg-amber-600 text-white mb-4 w-full"
   onClick={handleFareSearch}
 >
-  📦 운임조회 (과거 평균/범위 확인)
+  📦 운임조회
 </button>
 
       {/* ------------------------------------------------ */}
@@ -7309,6 +7365,96 @@ ${justSaved.includes(id) ? "animate-pulse bg-emerald-200" : ""}
     </div>
   </div>
 )}
+{/* 📦 운임조회 결과 모달 (선택수정용) */}
+{fareModalOpen && fareResult && (
+  <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[99999]">
+    <div className="bg-white p-6 rounded-lg w-[420px] shadow-xl max-h-[90vh] overflow-y-auto">
+      <h3 className="font-bold text-lg mb-3">📦 운임 조회 결과</h3>
+
+      <p>건수: {fareResult.count}건</p>
+      <p>평균 운임: {fareResult.avg.toLocaleString()}원</p>
+      <p className="mb-3">
+        범위: {fareResult.min.toLocaleString()}원 ~ {fareResult.max.toLocaleString()}원
+      </p>
+
+      {/* 🔽 과거운송 목록 */}
+      <div className="mt-3 border-t pt-3 text-sm">
+        <p className="font-semibold mb-2">📜 과거 운송 기록</p>
+
+        {fareResult.records?.length > 0 ? (
+          <div className="space-y-2 max-h-[250px] overflow-y-auto">
+            {fareResult.records.map((rec) => (
+              <div
+                key={rec._id}
+                className="flex items-center justify-between gap-2 p-2 border rounded bg-gray-50 hover:bg-blue-50"
+              >
+                <div className="flex-1 text-xs leading-tight">
+                  <div className="font-semibold text-gray-900">
+                    {rec.상차일} | {rec.화물내용 || "-"}
+                  </div>
+                  <div className="text-gray-600">
+                    {rec.상차지명} → {rec.하차지명}
+                  </div>
+                  <div className="text-gray-500">
+                    차량: {rec.차량종류 || "-"} / {rec.차량톤수 || "-"}
+                  </div>
+                  <div className="text-gray-800 font-medium">
+                    {(rec.청구운임 || 0).toLocaleString()}원
+                  </div>
+                </div>
+
+                {/* 적용 버튼 */}
+                <button
+                  className="px-2 py-1 bg-blue-600 text-white text-xs rounded whitespace-nowrap"
+                  onClick={() => {
+                    setEditTarget((p) => ({
+                      ...p,
+                      청구운임: Number(rec.청구운임 || 0),
+                      수수료:
+                        Number(rec.청구운임 || 0) - Number(p.기사운임 || 0),
+                    }));
+                    setFareModalOpen(false);
+                  }}
+                >
+                  적용
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-sm text-gray-600 mt-3">
+            유사 운임 데이터 {fareResult.count}건 참고됨
+          </div>
+        )}
+      </div>
+
+      {/* 버튼 */}
+      <div className="flex justify-end gap-2 mt-4">
+        <button
+          className="px-3 py-1 bg-gray-300 rounded"
+          onClick={() => setFareModalOpen(false)}
+        >
+          닫기
+        </button>
+
+        <button
+          className="px-3 py-1 bg-blue-600 text-white rounded"
+          onClick={() => {
+            setEditTarget((p) => ({
+              ...p,
+              청구운임: fareResult.avg,
+              수수료: fareResult.avg - Number(p.기사운임 || 0),
+            }));
+            setFareModalOpen(false);
+          }}
+        >
+          평균 적용
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
 
     </div>
     
