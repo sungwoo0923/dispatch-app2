@@ -1950,8 +1950,7 @@ const hasSinmi = (
                 if (!상차일 || !하차일)
                   return alert("상차일/하차일은 반드시 필요합니다.");
 
-                const res = await sendOrderTo24Proxy(row);
-
+                const res = await sendOrderTo24(row);
                 if (res?.success) {
                   alert(
                     `📡 24시콜 전송 완료!\n\n전송건수: 1건\n실패건수: 0건\n메시지: ${res?.message || "성공"}`
@@ -4486,7 +4485,7 @@ ${url}
         continue;
       }
 
-      const res = await sendOrderTo24Proxy(row);
+      const res = await sendOrderTo24(row);
       if (res?.code === "0") success++;
       else fail++;
     }
@@ -6962,7 +6961,7 @@ if (!loaded) return null;
         continue;
       }
 
-      const res = await sendOrderTo24Proxy(row);
+      const res = await sendOrderTo24(row);
       if (res?.code === "0") success++;
       else fail++;
     }
