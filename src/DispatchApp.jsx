@@ -4464,6 +4464,37 @@ ${url}
 >
   📋 기사복사
 </button>
+{/* 📡 선택전송 (24시콜) */}
+<button
+  onClick={async () => {
+    if (!selected.length)
+      return alert("전송할 항목을 선택하세요.");
+
+    const ids = [...selected];
+    let success = 0, fail = 0;
+
+    for (const id of ids) {
+      const row = dispatchData.find(r => r._id === id);
+      if (!row) continue;
+
+      // 🔽 여기에 수정!!
+      if (!row.상차지주소 || !row.하차지주소) {
+        alert("상차/하차 주소를 입력하세요.");
+        continue;
+      }
+
+      const res = await sendOrderTo24(row);
+      if (res?.code === "0") success++;
+      else fail++;
+    }
+
+    alert(`📡 24시콜 선택전송 완료\n\n성공: ${success}건\n실패: ${fail}건`);
+  }}
+  className="px-3 py-1 rounded bg-orange-600 text-white"
+>
+  📡 선택전송(24시콜)
+</button>
+
 
   {/* 선택수정 */}
   <button
@@ -6909,16 +6940,50 @@ if (!loaded) return null;
 
   {/* 우측 버튼 묶음 */}
   <div className="flex items-center gap-2">
+    {/* 📡 선택전송 (24시콜) */}
+<button
+  onClick={async () => {
+    if (!selected.length)
+      return alert("전송할 항목을 선택하세요.");
+
+    const ids = [...selected];
+    let success = 0, fail = 0;
+
+    for (const id of ids) {
+      const row = dispatchData.find(r => r._id === id);
+      if (!row) continue;
+
+      // 🔽 여기에 수정!!
+      if (!row.상차지주소 || !row.하차지주소) {
+        alert("상차/하차 주소를 입력하세요.");
+        continue;
+      }
+
+      const res = await sendOrderTo24(row);
+      if (res?.code === "0") success++;
+      else fail++;
+    }
+
+    alert(`📡 24시콜 선택전송 완료\n\n성공: ${success}건\n실패: ${fail}건`);
+  }}
+  className="px-3 py-1 rounded bg-orange-600 text-white"
+>
+  📡 선택전송(24시콜)
+</button>
+
+
 {/* 📋 기사복사 */}
 <button
   onClick={() => setCopyModalOpen(true)}
   className="px-3 py-2 rounded bg-purple-600 text-white hover:bg-purple-700"
 >
+  
   📋 기사복사
 </button>
     <button
       onClick={() => setShowCreate(true)}
       className="px-3 py-2 rounded bg-blue-600 text-white hover:bg-blue-700"
+      
     >
       
       + 신규 오더 등록
