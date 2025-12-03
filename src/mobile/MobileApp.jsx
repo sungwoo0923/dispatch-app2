@@ -1709,44 +1709,48 @@ function MobileOrderDetail({
       카톡공유
     </button>
 
-    {/* 운임조회 */}
-    <button
-      onClick={() => {
-        window.scrollTo(0, 0);
-        setPage("fare");
+    /* 운임조회 */
+<button
+  onClick={() => {
+    window.scrollTo(0, 0);
+    setPage("fare");
 
-        setTimeout(() => {
-          const normalize = (v) => String(v || "").trim().replace(/\s+/g, "");
-          const pickupVal = normalize(order.상차지명);
-          const dropVal = normalize(order.하차지명);
-          const tonVal = normalize(order.차량톤수 || order.톤수);
-          const cargoVal = normalize(order.화물내용);
+    setTimeout(() => {
+      const normalize = (v) => String(v || "").trim().replace(/\s+/g, "");
+      const pickupVal = normalize(order.상차지명);
+      const dropVal = normalize(order.하차지명);
+      const tonVal = normalize(order.차량톤수 || order.톤수);
+      const cargoVal = normalize(order.화물내용);
 
-          const elPickup = document.querySelector("input[placeholder='상차지']");
-          const elDrop = document.querySelector("input[placeholder='하차지']");
-          const elTon = document.querySelector("input[placeholder='톤수 (예: 1톤)']");
-          const elCargo = document.querySelector("input[placeholder='화물내용 (예: 16파렛)']");
+      const elPickup = document.querySelector("input[placeholder='상차지']");
+      const elDrop = document.querySelector("input[placeholder='하차지']");
+      const elTon = document.querySelector("input[placeholder='톤수 (예: 1톤)']");
+      const elCargo = document.querySelector("input[placeholder='화물내용 (예: 16파렛)']");
 
-          if (elPickup) elPickup.value = pickupVal;
-          if (elDrop) elDrop.value = dropVal;
-          if (elTon) elTon.value = tonVal;
-          if (elCargo) elCargo.value = cargoVal;
+      if (elPickup) elPickup.value = pickupVal;
+      if (elDrop) elDrop.value = dropVal;
+      if (elTon) elTon.value = tonVal;
+      if (elCargo) elCargo.value = cargoVal;
 
-          setPickup(pickupVal);
-          setDrop(dropVal);
-          setTon(tonVal);
-          setCargo(cargoVal);
+      setPickup(pickupVal);
+      setDrop(dropVal);
+      setTon(tonVal);
+      setCargo(cargoVal);
 
-          setTimeout(() => {
-            const btn = document.querySelector("#fare-search-button");
-            if (btn) btn.click();
-          }, 200);
-        }, 400);
-      }}
-      className="flex-1 py-2 rounded-lg bg-indigo-500 text-white text-sm font-semibold"
-    >
-      운임조회
-    </button>
+      // 🔥 자동조회 허용 플래그
+      window.__forceFareSearch__ = true;
+
+      setTimeout(() => {
+        const btn = document.querySelector("#fare-search-button");
+        if (btn) btn.click();
+      }, 200);
+    }, 400);
+  }}
+  className="flex-1 py-2 rounded-lg bg-indigo-500 text-white text-sm font-semibold"
+>
+  운임조회
+</button>
+
   </div>
 </div>
 
@@ -2621,11 +2625,15 @@ function MobileStandardFare({ onBack }) {
     return () => unsub();
   }, []);
 
-  const calcFareMobile = () => {
+const calcFareMobile = () => {
+  if (window.__forceFareSearch__) {
+    window.__forceFareSearch__ = false;
+  } else {
     if (!pickup.trim() || !drop.trim()) {
       alert("상차지 / 하차지를 입력하세요.");
       return;
     }
+  }
 
     const normPickup = clean(pickup);
     const normDrop = clean(drop);
