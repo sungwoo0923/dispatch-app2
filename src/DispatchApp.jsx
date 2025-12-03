@@ -3306,13 +3306,21 @@ const getYoil = (dateStr) => {
   return ["일","월","화","수","목","금","토"][date.getDay()];
 };
 
-const formatPhone = (phone) =>
-  (phone || "").replace(/\D/g, "").replace(
-    (phone || "").length === 11
-      ? /(\d{3})(\d{4})(\d{4})/
-      : /(\d{3})(\d{3})(\d{4})/,
-    "$1-$2-$3"
-  );
+const formatPhone = (phone) => {
+  const digits = (phone || "").replace(/\D/g, ""); // 숫자만 추출
+
+  if (digits.length === 11) {
+    return digits.replace(/(\d{3})(\d{4})(\d{4})/, "$1-$2-$3");
+  }
+
+  if (digits.length === 10) {
+    return digits.replace(/(\d{3})(\d{3})(\d{4})/, "$1-$2-$3");
+  }
+
+  // fallback (자리수 불명)
+  return phone;
+};
+
 
 const copyMessage = (mode) => {
   if (!selected.length) {
@@ -3352,12 +3360,13 @@ const copyMessage = (mode) => {
 ${fare.toLocaleString()}원 ${payLabel} 배차되었습니다.`;
     }
 
-    // 3️⃣ 전체 상세
-    return `${r.상차일 || ""}(${yoil})
+    // ✨ 전체 상세
+return `${r.상차일 || ""}(${yoil})
 
 ${r.상차지명 || ""} → ${r.하차지명 || ""}
+${r.상차지주소 || ""} → ${r.하차지주소 || ""}
 
-${cargo} ${ton} ${carType}
+${r.화물내용 || ""} ${r.차량톤수 || ""} ${r.차량종류 || ""}
 
 ${plate} ${name} ${phone}
 ${fare.toLocaleString()}원 ${payLabel} 배차되었습니다.`;
@@ -6156,14 +6165,20 @@ const getYoil = (dateStr) => {
   return ["일","월","화","수","목","금","토"][date.getDay()];
 };
 
-// 전화번호 하이픈
-const formatPhone = (phone) =>
-  (phone || "").replace(/\D/g, "").replace(
-    (phone || "").length === 11
-      ? /(\d{3})(\d{4})(\d{4})/
-      : /(\d{3})(\d{3})(\d{4})/,
-    "$1-$2-$3"
-  );
+const formatPhone = (phone) => {
+  const digits = (phone || "").replace(/\D/g, ""); // 숫자만 추출
+
+  if (digits.length === 11) {
+    return digits.replace(/(\d{3})(\d{4})(\d{4})/, "$1-$2-$3");
+  }
+
+  if (digits.length === 10) {
+    return digits.replace(/(\d{3})(\d{3})(\d{4})/, "$1-$2-$3");
+  }
+
+  // fallback (자리수 불명)
+  return phone;
+};
 
 // 복사 실행
 const copyMessage = (mode) => {
@@ -6200,9 +6215,10 @@ ${fare.toLocaleString()}원 ${payLabel} 배차되었습니다.`;
       }
 
       // ✨ 전체 상세
-      return `${r.상차일 || ""}(${yoil})
+return `${r.상차일 || ""}(${yoil})
 
 ${r.상차지명 || ""} → ${r.하차지명 || ""}
+${r.상차지주소 || ""} → ${r.하차지주소 || ""}
 
 ${r.화물내용 || ""} ${r.차량톤수 || ""} ${r.차량종류 || ""}
 
