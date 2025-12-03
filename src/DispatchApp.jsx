@@ -9,7 +9,7 @@ import jsPDF from "jspdf";
 import AdminMenu from "./AdminMenu";
 import { calcFare } from "./fareUtil";
 import StandardFare from "./StandardFare";
-import { sendOrderTo24Proxy as sendOrderTo24 } from "../api/24CallProxy";
+import { sendOrderTo24Proxy as sendOrderTo24 } from "./api/24CallProxy";
 
 
 
