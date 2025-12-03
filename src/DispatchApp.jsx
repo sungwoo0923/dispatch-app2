@@ -9,6 +9,8 @@ import jsPDF from "jspdf";
 import AdminMenu from "./AdminMenu";
 import { calcFare } from "./fareUtil";
 import StandardFare from "./StandardFare";
+import { sendOrderTo24Proxy } from "./api/24CallProxy";
+
 
 
 /* -------------------------------------------------
@@ -1947,7 +1949,7 @@ const hasSinmi = (
                 if (!상차일 || !하차일)
                   return alert("상차일/하차일은 반드시 필요합니다.");
 
-                const res = await sendOrderTo24(form);
+                const res = await sendOrderTo24Proxy(row);
 
                 if (res?.success) {
                   alert(
@@ -4483,7 +4485,7 @@ ${url}
         continue;
       }
 
-      const res = await sendOrderTo24(row);
+      const res = await sendOrderTo24Proxy(row);
       if (res?.code === "0") success++;
       else fail++;
     }
@@ -6959,7 +6961,7 @@ if (!loaded) return null;
         continue;
       }
 
-      const res = await sendOrderTo24(row);
+      const res = await sendOrderTo24Proxy(row);
       if (res?.code === "0") success++;
       else fail++;
     }
