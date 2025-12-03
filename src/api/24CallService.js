@@ -1,12 +1,11 @@
 import CryptoJS from "crypto-js";
 
-const AUTH_KEY = import.meta.env.VITE_24CALL_AUTH_KEY;
-const BASE_URL = import.meta.env.VITE_24CALL_BASE_URL;
+// 환경변수는 이 파일에서 사용되지 않음 (보안을 위해 프론트에서 호출 금지!)
 const ENC_KEY = CryptoJS.enc.Hex.parse(import.meta.env.VITE_24CALL_ENCRYPT_KEY);
 const IV = CryptoJS.enc.Hex.parse(import.meta.env.VITE_24CALL_IV);
 
-// AES 암호화
-const encryptAES = (str) => {
+// AES 암호화 함수
+export const encryptAES = (str) => {
   const encrypted = CryptoJS.AES.encrypt(str, ENC_KEY, {
     iv: IV,
     padding: CryptoJS.pad.Pkcs7,
@@ -36,39 +35,10 @@ export const mapTo24Order = (row) => {
     CarType: row.차량종류 || "",
     GoodsInfo: row.화물내용 || "",
     ReqDate: row.상차일 || "",
-    
-    // 기사 추천용 정보
     CarNo: row.차량번호 || "",
     DriverName: row.이름 || "",
     DriverTel: (row.전화번호 || "").replace(/\D/g, ""),
-
-    // 운임 / 지급방식
     Price: price,
     PayType: payType24, 
   };
 };
-
-
-// API 전송
-export async function sendOrderTo24(row) {
-  try {
-    const payload = mapTo24Order(row);
-    const encrypted = encryptAES(JSON.stringify(payload));
-
-    const res = await fetch(`${BASE_URL}/Order/OrderSet.do`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        authKey: AUTH_KEY,
-      },
-      body: JSON.stringify({ data: encrypted }),
-    });
-
-    const data = await res.json();
-    console.log("📡 24시콜 응답:", data);
-    return data;
-  } catch (err) {
-    console.error("⚠️ 24시콜 전송 오류:", err);
-    return { success: false, error: err };
-  }
-}
