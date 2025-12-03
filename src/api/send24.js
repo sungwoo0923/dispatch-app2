@@ -16,10 +16,19 @@ export default async function handler(req, res) {
       body: JSON.stringify({ data: encrypted }),
     });
 
-    const text = await apiRes.text();
-    console.log("24시콜 응답:", text);
+    const raw = await apiRes.text();
+    console.log("📡 24시콜 응답 RAW:", raw);
 
-    return res.status(200).send(text);
+    let data = {};
+    try {
+      data = JSON.parse(raw);
+    } catch (e) {
+      console.warn("⚠️ JSON 파싱 실패! RAW 반환");
+      data = { success: false, raw };
+    }
+
+    return res.status(200).json(data);
+
   } catch (err) {
     return res.status(500).json({ error: err.toString() });
   }
