@@ -6337,12 +6337,7 @@ const handleFareSearch = () => {
   // ⭐ 화면 진입 시 상태 복구 + 이번 달 기본값
   React.useEffect(() => {
     // 1) 이번 달 기본 날짜 계산
-    const now = new Date();
-    const y = now.getFullYear();
-    const m = now.getMonth() + 1; // 1~12
-
-    const firstDay = `${y}-${String(m).padStart(2, "0")}-01`;
-    const lastDay = new Date(y, m, 0).toISOString().slice(0, 10);
+    const { first: firstDay, last: lastDay } = getMonthRange(); // 🔥 정확한 계산
 
     // 2) localStorage 에서 이전 상태 불러오기
     let saved = {};
@@ -6998,13 +6993,28 @@ if (!loaded) return null;
     const { first, last } = getMonthRange();
     setStartDate(first);
     setEndDate(last);
-    setQ("");       // 🔥 검색어 초기화
+    setQ("");
     setPage(0);
+
+    // ⭐ 모든 검색 조건 초기화 저장!
+    localStorage.setItem(
+      "dispatchStatusState",
+      JSON.stringify({
+        q: "",
+        startDate: first,
+        endDate: last,
+        page: 0,
+        selected: [],
+        edited: {},
+        editMode: false,
+      })
+    );
   }}
   className="px-3 py-1 rounded bg-gray-500 text-white text-sm"
 >
   전체
 </button>
+
 
   </div>
 
