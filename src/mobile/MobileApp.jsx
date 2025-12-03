@@ -2113,65 +2113,86 @@ const chooseClient = (c) => {
       </div>
 
       {/* 거래처명 */}
-      <div className="bg-white rounded-lg border shadow-sm">
-        <RowLabelInput
-          label="거래처명"
-          input={
-            <input
-              className="w-full border rounded px-2 py-1 text-sm"
-              value={form.거래처명}
-              onChange={(e) => {
-                const val = e.target.value;
-                update("거래처명", val);
-                update("상차지명", val);
- setClientQuery(val);
- searchClient(val); // 🔍 자동완성 검색 실행
- {matchedClients.length > 0 && (
-  <ul className="absolute z-50 bg-white border shadow rounded mt-1 w-full max-h-40 overflow-auto">
-    {matchedClients.map((c) => (
-      <li
-        key={c.id}
-        className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
-        onClick={() => chooseClient(c)}
-      >
-        <div className="font-semibold">{c.거래처명}</div>
-        <div className="text-xs text-gray-500">{c.주소}</div>
-      </li>
-    ))}
-  </ul>
-)}
-                
-              }}
-              onBlur={() => {
-                const val = form.거래처명.trim();
-                if (!val) return;
+<div className="bg-white rounded-lg border shadow-sm">
+  <RowLabelInput
+    label="거래처명"
+    input={
+      <div className="relative">
+        <input
+          className="w-full border rounded px-2 py-1 text-sm"
+          value={form.거래처명}
+          onChange={(e) => {
+            const val = e.target.value;
+            update("거래처명", val);
+            update("상차지명", val);
+            setClientQuery(val);
+            searchClient(val);
+          }}
+          onFocus={() => {
+            if (form.거래처명) searchClient(form.거래처명);
+          }}
+          onBlur={() => {
+            // 자동완성 클릭 직후 사라짐 방지
+            setTimeout(() => setMatchedClients([]), 200);
 
-                const normalized = val.toLowerCase();
-                const found = clients.find(
-                  (c) =>
-                    String(c.거래처명 || "")
-                      .trim()
-                      .toLowerCase() === normalized
-                );
+            const val = form.거래처명.trim();
+            if (!val) return;
 
-                // ⛔ 등록된 거래처는 신규등록 팝업 X
-                if (found) return;
+            const normalized = val.toLowerCase();
+            const existing = clients.find(
+              (c) =>
+                String(c.거래처명 || "").trim().toLowerCase() === normalized
+            );
 
-                if (val.length >= 2) {
-                  if (window.confirm("📌 등록되지 않은 거래처입니다.\n신규 등록하시겠습니까?")) {
-                    addDoc(collection(db, "clients"), {
-                      거래처명: val,
-                      주소: form.상차지주소 || "",
-                      createdAt: serverTimestamp(),
-                    });
-                    showToast("신규 거래처 등록 완료!");
-                  }
-                }
-              }}
-            />
-          }
+            // 기존 거래처면 신규등록 팝업 X
+            if (existing) return;
+
+            if (val.length >= 2) {
+              if (window.confirm("📌 등록되지 않은 거래처입니다.\n신규 등록할까요?")) {
+                addDoc(collection(db, "clients"), {
+                  거래처명: val,
+                  addDoc(collection(db, "clients"), {
+  거래처명: val,
+  주소: "",
+  createdAt: serverTimestamp(),
+});
+                  createdAt: serverTimestamp(),
+                });
+                showToast("신규 거래처 등록 완료!");
+              }
+            }
+          }}
         />
+
+        {/* 🔽 자동완성 리스트 */}
+        {matchedClients.length > 0 && (
+          <ul className="absolute z-50 bg-white border shadow rounded mt-1 w-full max-h-40 overflow-auto">
+            {matchedClients.map((c) => (
+              <li
+                key={c.id}
+                className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
+                onMouseDown={() => {
+                  update("거래처명", c.거래처명);
+                  update("상차지명", c.거래처명);
+                  update("상차지주소", c.주소 || c.상차지주소 || c.하차지주소 || "");
+                  setMatchedClients([]);
+                }}
+              >
+                <div className="font-semibold text-gray-800">
+                  {c.거래처명}
+                </div>
+                <div className="text-xs text-gray-500">
+                  {c.주소 || "- 주소 미등록"}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
+    }
+  />
+</div>
+
 
       {/* 상/하차 + 주소 + 자동완성 */}
       <div className="bg-white rounded-lg border shadow-sm">
