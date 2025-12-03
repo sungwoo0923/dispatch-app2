@@ -2131,7 +2131,7 @@ const chooseClient = (c) => {
           onFocus={() => {
             if (form.거래처명) searchClient(form.거래처명);
           }}
-          onBlur={() => {
+          onBlur={async () => {
             // 자동완성 클릭 직후 사라짐 방지
             setTimeout(() => setMatchedClients([]), 200);
 
@@ -2144,23 +2144,18 @@ const chooseClient = (c) => {
                 String(c.거래처명 || "").trim().toLowerCase() === normalized
             );
 
-            // 기존 거래처면 신규등록 팝업 X
-            if (existing) return;
+            // 신규 거래처 등록
+if (!existing && val.length >= 2) {
+  if (window.confirm("📌 등록되지 않은 거래처입니다.\n신규 등록할까요?")) {
+    await addDoc(collection(db, "clients"), {
+      거래처명: val,
+      주소: form.상차지주소 || "",
+      createdAt: serverTimestamp(),
+    });
+    showToast("신규 거래처 등록 완료!");
+  }
+}
 
-            if (val.length >= 2) {
-              if (window.confirm("📌 등록되지 않은 거래처입니다.\n신규 등록할까요?")) {
-                addDoc(collection(db, "clients"), {
-                  거래처명: val,
-                  addDoc(collection(db, "clients"), {
-  거래처명: val,
-  주소: "",
-  createdAt: serverTimestamp(),
-});
-                  createdAt: serverTimestamp(),
-                });
-                showToast("신규 거래처 등록 완료!");
-              }
-            }
           }}
         />
 
