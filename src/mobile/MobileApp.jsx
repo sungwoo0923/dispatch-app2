@@ -1935,6 +1935,32 @@ function MobileOrderForm({
   drivers,
   upsertDriver,
 }) {
+  // 🔍 거래처 자동검색 state
+const [clientQuery, setClientQuery] = useState("");
+const [matchedClients, setMatchedClients] = useState([]);
+
+// 🔍 거래처 검색 함수
+const searchClient = (q) => {
+  const norm = (s = "") => String(s).trim().toLowerCase();
+  const nq = norm(q);
+
+  if (!nq) return setMatchedClients([]);
+
+  const list = clients
+    .filter(c => norm(c.거래처명).includes(nq))
+    .slice(0, 10);
+
+  setMatchedClients(list);
+};
+
+// 🔄 거래처 선택 시 주소 자동반영
+const chooseClient = (c) => {
+  setMatchedClients([]);
+  update("거래처명", c.거래처명);
+  update("상차지명", c.거래처명);
+  update("상차지주소", c.주소 || c.상차지주소 || c.하차지주소 || "");
+};
+
   const [showNewDriver, setShowNewDriver] = useState(false);
 
   const update = (key, value) =>
@@ -1986,11 +2012,11 @@ function MobileOrderForm({
   };
 
   const pickDrop = (c) => {
-    update("하차지명", c.거래처명 || "");
-    update("하차지주소", c.주소 || "");
-    setQueryDrop("");
-    setShowDropList(false);
-  };
+  update("하차지명", c.거래처명 || c.하차지명 || "");
+  update("하차지주소", c.주소 || c.하차지주소 || c.상차지주소 || "");
+  setQueryDrop("");
+  setShowDropList(false);
+};
 
   return (
     <div className="px-4 py-3 space-y-3">
@@ -2098,20 +2124,23 @@ function MobileOrderForm({
                 const val = e.target.value;
                 update("거래처명", val);
                 update("상차지명", val);
-
-                const normalized = val.trim().toLowerCase();
-                const found = clients.find(
-                  (c) =>
-                    String(c.거래처명 || "")
-                      .trim()
-                      .toLowerCase() === normalized
-                );
-
-                if (found) {
-                  update("상차지주소", found.주소 || "");
-                } else {
-                  update("상차지주소", "");
-                }
+ setClientQuery(val);
+ searchClient(val); // 🔍 자동완성 검색 실행
+ {matchedClients.length > 0 && (
+  <ul className="absolute z-50 bg-white border shadow rounded mt-1 w-full max-h-40 overflow-auto">
+    {matchedClients.map((c) => (
+      <li
+        key={c.id}
+        className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
+        onClick={() => chooseClient(c)}
+      >
+        <div className="font-semibold">{c.거래처명}</div>
+        <div className="text-xs text-gray-500">{c.주소}</div>
+      </li>
+    ))}
+  </ul>
+)}
+                
               }}
               onBlur={() => {
                 const val = form.거래처명.trim();
@@ -2206,16 +2235,24 @@ function MobileOrderForm({
                 className="w-full border rounded px-2 py-1 text-sm"
                 value={form.하차지명}
                 onChange={(e) => {
-                  update("하차지명", e.target.value);
-                  setQueryDrop(e.target.value);
-                  setShowDropList(true);
-                  // 🔥 입력만 해도 주소 자동 매칭
-                  const val = e.target.value.trim().toLowerCase();
-                  const found = clients.find(
-                    (c) => String(c.거래처명 || "").trim().toLowerCase() === val
-                  );
-                  update("하차지주소", found?.하차지주소 || "");
-                }}
+  const val = e.target.value;
+  update("하차지명", val);
+  setQueryDrop(val);
+  setShowDropList(true);
+
+  const normalized = val.trim().toLowerCase();
+  const found = clients.find(
+    (c) =>
+      String(c.거래처명 || c.상호 || c.하차지명 || c.상차지명 || "")
+        .trim()
+        .toLowerCase() === normalized
+  );
+
+  if (found) {
+    update("하차지주소", found.주소 || found.하차지주소 || found.상차지주소 || "");
+  }
+}}
+
                 onFocus={() =>
                   form.하차지명 && setShowDropList(true)
                 }
@@ -2685,7 +2722,15 @@ filtered.sort((a, b) => {
     db - da // 최신순
   );
 });
+// 🔥 여기!!
+setMatchedRows(filtered);
 
+if (!filtered.length) {
+  alert("검색된 데이터가 없습니다.");
+  setResult(null);
+  setAiFare(null);
+  return;
+}
 
     const fares = filtered
       .map((r) => Number(String(r.청구운임 || 0).replace(/[^\d]/g, "")))
