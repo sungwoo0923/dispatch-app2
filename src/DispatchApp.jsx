@@ -4430,31 +4430,55 @@ ${url}
     )}
 {/* ======================== 검색 + 날짜 ======================== */}
 <div className="flex items-center gap-2 mb-2">
+  {/* 🔍 검색 입력 */}
   <input
     type="text"
     value={q}
     onChange={(e) => setQ(e.target.value)}
     placeholder="검색어"
-    className="border p-2 rounded w-[150px]"
+    className="border px-2 py-1 rounded text-sm"
   />
 
+  {/* 📅 상차일 */}
   <input
     type="date"
     value={startDate}
     onChange={(e) => setStartDate(e.target.value)}
-    className="border p-2 rounded"
+    className="border px-2 py-1 rounded text-sm"
   />
 
   <span>~</span>
 
+  {/* 📅 하차일 */}
   <input
     type="date"
     value={endDate}
     onChange={(e) => setEndDate(e.target.value)}
-    className="border p-2 rounded"
+    className="border px-2 py-1 rounded text-sm"
   />
-</div>
 
+  {/* 🆕 여기에 버튼 추가 */}
+  <button
+    onClick={() => {
+      const today = todayKST();
+      setStartDate(today);
+      setEndDate(today);
+    }}
+    className="px-3 py-1 rounded bg-blue-500 text-white text-sm"
+  >
+    당일
+  </button>
+
+  <button
+    onClick={() => {
+      setStartDate("");
+      setEndDate("");
+    }}
+    className="px-3 py-1 rounded bg-gray-400 text-white text-sm"
+  >
+    초기화
+  </button>
+</div>
 
 
       {/* 상단 버튼 */}
@@ -6153,6 +6177,23 @@ function DispatchStatus({
   removeDispatch,
   upsertDriver,
 }) {
+  // 📌 오늘 날짜 정확하게 (KST 기준)
+const todayKST = () => {
+  const d = new Date();
+  const korea = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+  return korea.toISOString().slice(0, 10);
+};
+
+// 📌 이번 달 1일 ~ 말일 정확히 반환
+const getMonthRange = () => {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = d.getMonth(); // 0~11
+  const first = new Date(y, m, 1).toISOString().slice(0, 10);
+  const last = new Date(y, m + 1, 0).toISOString().slice(0, 10);
+  return { first, last };
+};
+
   const [q, setQ] = React.useState(() => {
   try {
     const saved = JSON.parse(localStorage.getItem("dispatchStatusState") || "{}");
@@ -6938,6 +6979,33 @@ if (!loaded) return null;
       value={endDate}
       onChange={(e) => setEndDate(e.target.value)}
     />
+<button
+  onClick={() => {
+    const t = todayKST();
+    setStartDate(t);
+    setEndDate(t);
+    setQ("");       // 🔥 검색어 초기화
+    setPage(0);
+  }}
+  className="px-3 py-1 rounded bg-blue-600 text-white text-sm"
+>
+  당일
+</button>
+
+
+<button
+  onClick={() => {
+    const { first, last } = getMonthRange();
+    setStartDate(first);
+    setEndDate(last);
+    setQ("");       // 🔥 검색어 초기화
+    setPage(0);
+  }}
+  className="px-3 py-1 rounded bg-gray-500 text-white text-sm"
+>
+  전체
+</button>
+
   </div>
 
   {/* 우측 버튼 묶음 */}
