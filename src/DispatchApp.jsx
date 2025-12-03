@@ -409,7 +409,7 @@ const dispatchDataFiltered = useMemo(() => {
   return (
     <>
       <header className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">배차 프로그램</h1>
+        <h1 className="text-2xl font-bold">RUN25 배차프로그램</h1>
         <div className="flex items-center gap-3">
           <span className="text-gray-700 text-sm">{user?.email}</span>
           <button onClick={logout} className="bg-gray-300 px-3 py-1 rounded text-sm">
@@ -3298,6 +3298,77 @@ const [placeQuery, setPlaceQuery] = React.useState("");       // 검색 문자�
   const [filterType, setFilterType] = React.useState("거래처명");
   // 🔔 업로드 알림 리스트
 const [uploadAlerts, setUploadAlerts] = React.useState([]);
+{/* =================== 기사복사 모달 상태 =================== */}
+const [copyModalOpen, setCopyModalOpen] = useState(false);
+
+const getYoil = (dateStr) => {
+  const date = new Date(dateStr);
+  return ["일","월","화","수","목","금","토"][date.getDay()];
+};
+
+const formatPhone = (phone) =>
+  (phone || "").replace(/\D/g, "").replace(
+    (phone || "").length === 11
+      ? /(\d{3})(\d{4})(\d{4})/
+      : /(\d{3})(\d{3})(\d{4})/,
+    "$1-$2-$3"
+  );
+
+const copyMessage = (mode) => {
+  if (!selected.length) {
+    alert("복사할 항목을 선택하세요.");
+    return;
+  }
+
+  const text = selected.map((id) => {
+    const r = rows.find((x) => x._id === id);
+    if (!r) return "";
+
+    const plate = r.차량번호 || "";
+    const name = r.이름 || "";
+    const phone = formatPhone(r.전화번호);
+    const cargo = r.화물내용 || "";
+    const ton = r.차량톤수 || "";
+    const carType = r.차량종류 || "";
+    const fare = Number(String(r.청구운임 || "").replace(/[^\d]/g, ""));
+    const pay = r.지급방식 || "";
+    const yoil = r.상차일 ? getYoil(r.상차일) : "";
+
+    let payLabel =
+      pay === "계산서"
+        ? "부가세별도"
+        : pay === "선불" || pay === "착불"
+        ? pay
+        : "";
+
+    // 1️⃣ 기본
+    if (mode === "basic") {
+      return `${plate} ${name} ${phone}`;
+    }
+
+    // 2️⃣ 운임 포함
+    if (mode === "fare") {
+      return `${plate} ${name} ${phone}
+${fare.toLocaleString()}원 ${payLabel} 배차되었습니다.`;
+    }
+
+    // 3️⃣ 전체 상세
+    return `${r.상차일 || ""}(${yoil})
+
+${r.상차지명 || ""} → ${r.하차지명 || ""}
+
+${cargo} ${ton} ${carType}
+
+${plate} ${name} ${phone}
+${fare.toLocaleString()}원 ${payLabel} 배차되었습니다.`;
+  }).join("\n\n");
+
+  navigator.clipboard.writeText(text);
+  setCopyModalOpen(false);
+  alert("📋 복사되었습니다!");
+};
+
+
 // 이미 본 알림(id 저장)
 const [seenAlerts, setSeenAlerts] = React.useState(() => {
   return new Set(JSON.parse(localStorage.getItem("seenAlerts") || "[]"));
@@ -4310,6 +4381,7 @@ ${url}
   alert("📋 공유 메시지가 복사되었습니다!");
 };
 
+
   // ------------------------
   // 테이블 스타일
   // ------------------------
@@ -4375,23 +4447,31 @@ ${url}
 
 
       {/* 상단 버튼 */}
-      <div className="flex justify-end gap-2 mb-2">
-        <button
-  onClick={() => {
-    if (selected.length !== 1)
-      return alert("수정할 항목은 1개만 선택해야 합니다.");
-
-    const row = rows.find((r) => r._id === selected[0]);
-    if (!row) return;
-
-    setEditTarget({ ...row }); // 팝업에 띄울 데이터
-    setEditPopupOpen(true);    // 팝업 열기
-  }}
-  className="px-3 py-1 rounded bg-amber-500 text-white"
+<div className="flex justify-end gap-2 mb-2">
+  {/* 📋 기사복사 모달 오픈 버튼 */}
+<button
+  onClick={() => setCopyModalOpen(true)}
+  className="px-3 py-1 rounded bg-indigo-600 text-white"
 >
-  선택수정
+  📋 기사복사
 </button>
 
+  {/* 선택수정 */}
+  <button
+    onClick={() => {
+      if (selected.length !== 1)
+        return alert("수정할 항목은 1개만 선택해야 합니다.");
+
+      const row = rows.find((r) => r._id === selected[0]);
+      if (!row) return;
+
+      setEditTarget({ ...row }); // 팝업에 띄울 데이터
+      setEditPopupOpen(true);    // 팝업 열기
+    }}
+    className="px-3 py-1 rounded bg-amber-500 text-white"
+  >
+    선택수정
+  </button>
 
         <button
           onClick={handleSaveSelected}
@@ -5918,6 +5998,42 @@ XLSX.writeFile(wb, "실시간배차현황.xlsx");
     </div>
   ))}
 </div>
+{/* 📋 기사복사 선택 모달 */}
+{copyModalOpen && (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
+    <div className="bg-white p-6 rounded-xl shadow-lg w-[320px]">
+      <h3 className="text-lg font-bold mb-4 text-center">📋 복사 방식 선택</h3>
+
+      <div className="space-y-2">
+        <button
+          onClick={() => copyMessage("basic")}
+          className="w-full py-2 bg-gray-200 rounded hover:bg-gray-300"
+        >
+          차량번호 / 기사명 / 전화번호
+        </button>
+        <button
+          onClick={() => copyMessage("fare")}
+          className="w-full py-2 bg-blue-200 rounded hover:bg-blue-300"
+        >
+          운임 포함 (부가세/선불/착불)
+        </button>
+        <button
+          onClick={() => copyMessage("full")}
+          className="w-full py-2 bg-green-200 rounded hover:bg-green-300"
+        >
+          전체 상세 (상하차 + 화물정보 + 차량)
+        </button>
+      </div>
+
+      <button
+        onClick={() => setCopyModalOpen(false)}
+        className="w-full mt-4 py-2 text-sm text-gray-600 hover:opacity-70"
+      >
+        취소
+      </button>
+    </div>
+  </div>
+)}
 
 <style>{`
   @keyframes fadeInUp {
@@ -6029,6 +6145,76 @@ const [showPlaceDropdown, setShowPlaceDropdown] = React.useState(false);
 // ==========================
 const [fareModalOpen, setFareModalOpen] = React.useState(false);
 const [fareResult, setFareResult] = React.useState(null);
+
+// ===================== 📋 기사복사 모달 상태 =====================
+const [copyModalOpen, setCopyModalOpen] = React.useState(false);
+
+// 요일 계산
+const getYoil = (dateStr) => {
+  if (!dateStr) return "";
+  const date = new Date(dateStr);
+  return ["일","월","화","수","목","금","토"][date.getDay()];
+};
+
+// 전화번호 하이픈
+const formatPhone = (phone) =>
+  (phone || "").replace(/\D/g, "").replace(
+    (phone || "").length === 11
+      ? /(\d{3})(\d{4})(\d{4})/
+      : /(\d{3})(\d{3})(\d{4})/,
+    "$1-$2-$3"
+  );
+
+// 복사 실행
+const copyMessage = (mode) => {
+  if (!selected.size) {
+    alert("복사할 항목을 선택하세요.");
+    return;
+  }
+
+  const text = [...selected]
+    .map((id) => {
+      const r = dispatchData.find((d) => getId(d) === id);
+      if (!r) return "";
+
+      const plate = r.차량번호 || "";
+      const name = r.이름 || "";
+      const phone = formatPhone(r.전화번호 || "");
+      const yoil = getYoil(r.상차일 || "");
+      const fare = Number(String(r.청구운임 || "0").replace(/[^\d]/g, ""));
+      const pay = r.지급방식 || "";
+      const payLabel =
+        pay === "계산서"
+          ? "부가세별도"
+          : pay === "선불" || pay === "착불"
+          ? pay
+          : "";
+
+      if (mode === "basic") {
+        return `${plate} ${name} ${phone}`;
+      }
+
+      if (mode === "fare") {
+        return `${plate} ${name} ${phone}
+${fare.toLocaleString()}원 ${payLabel} 배차되었습니다.`;
+      }
+
+      // ✨ 전체 상세
+      return `${r.상차일 || ""}(${yoil})
+
+${r.상차지명 || ""} → ${r.하차지명 || ""}
+
+${r.화물내용 || ""} ${r.차량톤수 || ""} ${r.차량종류 || ""}
+
+${plate} ${name} ${phone}
+${fare.toLocaleString()}원 ${payLabel} 배차되었습니다.`;
+    })
+    .join("\n\n");
+
+  navigator.clipboard.writeText(text);
+  alert("📋 복사 완료!");
+  setCopyModalOpen(false);
+};
 
 // 🚀 운임 조회 실행 함수
 const handleFareSearch = () => {
@@ -6707,11 +6893,18 @@ if (!loaded) return null;
 
   {/* 우측 버튼 묶음 */}
   <div className="flex items-center gap-2">
-
+{/* 📋 기사복사 */}
+<button
+  onClick={() => setCopyModalOpen(true)}
+  className="px-3 py-2 rounded bg-purple-600 text-white hover:bg-purple-700"
+>
+  📋 기사복사
+</button>
     <button
       onClick={() => setShowCreate(true)}
       className="px-3 py-2 rounded bg-blue-600 text-white hover:bg-blue-700"
     >
+      
       + 신규 오더 등록
     </button>
 
@@ -6747,7 +6940,7 @@ if (!loaded) return null;
     >
       엑셀다운
     </button>
-
+    
   </div>
 </div>   {/* 🔥 이 div가 검색+버튼 전체를 감싸는 div — 여기로 끝 */}
 
@@ -7546,6 +7739,42 @@ ${justSaved.includes(id) ? "animate-pulse bg-emerald-200" : ""}
           평균 적용
         </button>
       </div>
+    </div>
+  </div>
+)}
+{/* ===================== 📋 기사복사 선택 모달 ===================== */}
+{copyModalOpen && (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
+    <div className="bg-white p-6 rounded-xl shadow-lg w-[320px]">
+      <h3 className="text-lg font-bold mb-4 text-center">📋 복사 방식 선택</h3>
+
+      <div className="space-y-2">
+        <button
+          onClick={() => copyMessage("basic")}
+          className="w-full py-2 bg-gray-200 rounded hover:bg-gray-300"
+        >
+          기본(번호/이름/전화)
+        </button>
+        <button
+          onClick={() => copyMessage("fare")}
+          className="w-full py-2 bg-blue-200 rounded hover:bg-blue-300"
+        >
+          운임 포함(부가세/선불/착불)
+        </button>
+        <button
+          onClick={() => copyMessage("full")}
+          className="w-full py-2 bg-green-200 rounded hover:bg-green-300"
+        >
+          전체 상세
+        </button>
+      </div>
+
+      <button
+        onClick={() => setCopyModalOpen(false)}
+        className="w-full mt-4 py-2 text-sm text-gray-600"
+      >
+        취소
+      </button>
     </div>
   </div>
 )}
