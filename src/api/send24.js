@@ -17,19 +17,9 @@ export default async function handler(req, res) {
     });
 
     const raw = await apiRes.text();
-    console.log("📡 24시콜 응답 RAW:", raw);
-
-    let data = {};
-    try {
-      data = JSON.parse(raw);
-    } catch (e) {
-      console.warn("⚠️ JSON 파싱 실패! RAW 반환");
-      data = { success: false, raw };
-    }
-
-    return res.status(200).json(data);
+    return res.status(200).json({ success: true, raw });
 
   } catch (err) {
-    return res.status(500).json({ error: err.toString() });
+    return res.status(500).json({ success: false, error: err.toString() });
   }
 }

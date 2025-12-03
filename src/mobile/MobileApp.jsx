@@ -2623,15 +2623,13 @@ function MobileStandardFare({ onBack }) {
   }, []);
 
 const calcFareMobile = () => {
-  // ★ 자동조회 모드에서는 필수값 체크 스킵
-  if (window.__forceFareSearch__) {
-    window.__forceFareSearch__ = false;
-  } else {
-    if (!pickup.trim() || !drop.trim()) {
-      alert("상차지 / 하차지를 입력하세요.");
-      return;
-    }
-  }
+    // ★ 상/하차지 미입력 시 필터 무효화 방지
+ const isForced = window.__forceFareSearch__;
+ window.__forceFareSearch__ = false;
+ if (!isForced && (!pickup.trim() || !drop.trim())) {
+   alert("상차지 / 하차지를 입력하세요.");
+   return;
+ }
 
     const normPickup = clean(pickup);
     const normDrop = clean(drop);
@@ -2640,6 +2638,8 @@ const calcFareMobile = () => {
     let filtered = dispatchData.filter((r) => {
       const rp = clean(r.상차지명 || "");
       const rd = clean(r.하차지명 || "");
+       // 🔥 필수값이 비어있을 경우 무조건 제외
+ if (!normPickup || !normDrop) return false;
       const okPickup = rp.includes(normPickup);
       const okDrop = rd.includes(normDrop);
       if (!okPickup || !okDrop) return false;
