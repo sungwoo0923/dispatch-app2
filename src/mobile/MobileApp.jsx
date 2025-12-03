@@ -2113,65 +2113,70 @@ const chooseClient = (c) => {
       </div>
 
       {/* 거래처명 */}
-      <div className="bg-white rounded-lg border shadow-sm">
-        <RowLabelInput
-          label="거래처명"
-          input={
-            <input
-              className="w-full border rounded px-2 py-1 text-sm"
-              value={form.거래처명}
-              onChange={(e) => {
-                const val = e.target.value;
-                update("거래처명", val);
-                update("상차지명", val);
- setClientQuery(val);
- searchClient(val); // 🔍 자동완성 검색 실행
- {matchedClients.length > 0 && (
-  <ul className="absolute z-50 bg-white border shadow rounded mt-1 w-full max-h-40 overflow-auto">
-    {matchedClients.map((c) => (
-      <li
-        key={c.id}
-        className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
-        onClick={() => chooseClient(c)}
-      >
-        <div className="font-semibold">{c.거래처명}</div>
-        <div className="text-xs text-gray-500">{c.주소}</div>
-      </li>
-    ))}
-  </ul>
-)}
-                
-              }}
-              onBlur={() => {
-                const val = form.거래처명.trim();
-                if (!val) return;
+<RowLabelInput
+  label="거래처명"
+  input={
+    <div className="relative">
+      <input
+        className="w-full border rounded px-2 py-1 text-sm"
+        value={form.거래처명}
+        onChange={(e) => {
+          const val = e.target.value;
+          update("거래처명", val);
+          update("상차지명", val);
+          setClientQuery(val);
+          searchClient(val); // 자동완성 실행
+        }}
+        onFocus={() => {
+          if (form.거래처명) searchClient(form.거래처명);
+        }}
+        onBlur={() => {
+          setTimeout(() => setMatchedClients([]), 200);
 
-                const normalized = val.toLowerCase();
-                const found = clients.find(
-                  (c) =>
-                    String(c.거래처명 || "")
-                      .trim()
-                      .toLowerCase() === normalized
-                );
+          const val = form.거래처명.trim();
+          if (!val) return;
 
-                // ⛔ 등록된 거래처는 신규등록 팝업 X
-                if (found) return;
+          const exists = clients.some(
+            (c) =>
+              String(c.거래처명 || "")
+                .trim()
+                .toLowerCase() === val.toLowerCase()
+          );
 
-                if (val.length >= 2) {
-                  if (window.confirm("📌 등록되지 않은 거래처입니다.\n신규 등록하시겠습니까?")) {
-                    addDoc(collection(db, "clients"), {
-                      거래처명: val,
-                      주소: form.상차지주소 || "",
-                      createdAt: serverTimestamp(),
-                    });
-                    showToast("신규 거래처 등록 완료!");
-                  }
-                }
-              }}
-            />
+          if (!exists && val.length >= 2) {
+            if (window.confirm("📌 신규 거래처 등록하시겠습니까?")) {
+              addDoc(collection(db, "clients"), {
+                거래처명: val,
+                주소: form.상차지주소 || "",
+                createdAt: serverTimestamp(),
+              });
+              showToast("신규 거래처 등록 완료!");
+            }
           }
-        />
-      </div>
+        }}
+      />
+
+      {/* 🔥 자동완성 드롭다운 */}
+      {matchedClients.length > 0 && (
+        <ul className="absolute top-full left-0 w-full bg-white border rounded shadow-lg z-[9999] max-h-48 overflow-auto">
+          {matchedClients.map((c) => (
+            <li
+              key={c.id}
+              className="px-3 py-2 text-sm cursor-pointer hover:bg-blue-100"
+              onMouseDown={() => chooseClient(c)}
+            >
+              <div className="font-medium">{c.거래처명}</div>
+              <div className="text-xs text-gray-500">{c.주소}</div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  }
+/>
+
+
+
 
       {/* 상/하차 + 주소 + 자동완성 */}
       <div className="bg-white rounded-lg border shadow-sm">
@@ -2660,100 +2665,75 @@ function MobileStandardFare({ onBack }) {
   }, []);
 
 const calcFareMobile = () => {
-    // ★ 상/하차지 미입력 시 필터 무효화 방지
- const isForced = window.__forceFareSearch__;
- window.__forceFareSearch__ = false;
- if (!isForced && (!pickup.trim() || !drop.trim())) {
-   alert("상차지 / 하차지를 입력하세요.");
-   return;
- }
+  const normPickup = clean(pickup);
+  const normDrop = clean(drop);
+  const inputTonNum = extractTonNum(ton);
+  const cargoNorm = clean(cargo);
 
-    const normPickup = clean(pickup);
-    const normDrop = clean(drop);
-    const inputTonNum = extractTonNum(ton);
+  // 🔥 자동입력 강제 조회 플래그
+  const isForced = window.__forceFareSearch__;
+  window.__forceFareSearch__ = false;
 
-    let filtered = dispatchData.filter((r) => {
-  const rp = clean(r.상차지명 || "");
-  const rd = clean(r.하차지명 || "");
-
-  if (!normPickup || !normDrop) return false;
-
-  const okPickup = rp.includes(normPickup);
-  const okDrop = rd.includes(normDrop);
-
-  if (!okPickup || !okDrop) return false;
-
-  // ▶ 1. 차량종류 자동 인식 적용 (ton 미선택 시 데이터 기반 필터)
-  if (vehicle !== "전체") {
-    const rv = clean(r.차량종류 || "");
-    const vv = clean(vehicle);
-    if (!rv.includes(vv)) return false;
-  } else {
-    // 차량종류가 전체일 때도, 일치하면 가산점 (정렬에 반영)
-    r._matchVehicleBonus = 1;
+  if (!isForced && (!normPickup || !normDrop)) {
+    alert("상차지 / 하차지를 입력하세요.");
+    return;
   }
 
-  // ▶ 2. 톤수 근사치 필터
-  if (inputTonNum != null) {
-    const rton = extractTonNum(r.차량톤수 || "");
-    if (rton != null && Math.abs(rton - inputTonNum) > 0.5)
-      return false;
-  }
+  // === 유사도 점수 ===
+  const scoreMatch = (r) => {
+    const rp = clean(r.상차지명);
+    const rd = clean(r.하차지명);
+    const rcargo = clean(r.화물내용);
+    const rton = extractTonNum(r.차량톤수);
 
-  // ▶ 2. 주소 정확도 점수 계산
-  r._addrScore =
-    (rp.startsWith(normPickup) ? 3 : okPickup ? 1 : 0) +
-    (rd.startsWith(normDrop) ? 3 : okDrop ? 1 : 0);
+    let s = 0;
 
-  // 주소가 너무 약하면 제외
-  if (r._addrScore < 2) return false;
+    if (rp.startsWith(normPickup)) s += 8;
+    if (rp.includes(normPickup)) s += 4;
 
-  return true;
-});
+    if (rd.startsWith(normDrop)) s += 8;
+    if (rd.includes(normDrop)) s += 4;
 
-// ▶ 3. 최신 데이터 우선 + 정확도 우선 정렬
-filtered.sort((a, b) => {
-  const da = new Date(a.상차일 || 0);
-  const db = new Date(b.상차일 || 0);
+    if (cargoNorm && rcargo.includes(cargoNorm)) s += 3;
 
-  return (
-    (b._addrScore || 0) - (a._addrScore || 0) ||  // 정확도 우선
-    (b._matchVehicleBonus || 0) - (a._matchVehicleBonus || 0) || // 차량종류 가산
-    db - da // 최신순
-  );
-});
-// 🔥 여기!!
-setMatchedRows(filtered);
+    if (rton != null && inputTonNum != null) {
+      const diff = Math.abs(rton - inputTonNum);
+      if (diff <= 0.3) { s += 10; r._sameTon = true; }
+      else if (diff <= 1.0) s += 4;
+    }
 
-if (!filtered.length) {
-  alert("검색된 데이터가 없습니다.");
-  setResult(null);
-  setAiFare(null);
-  return;
-}
-
-    const fares = filtered
-      .map((r) => Number(String(r.청구운임 || 0).replace(/[^\d]/g, "")))
-      .filter((v) => !isNaN(v));
-
-    const avg = Math.round(fares.reduce((a, b) => a + b, 0) / fares.length);
-    const latest = filtered.sort(
-      (a, b) => (b.상차일 || "").localeCompare(a.상차일 || "")
-    )[0];
-    const latestFare = Number(
-      String(latest?.청구운임 || 0).replace(/[^\d]/g, "")
-    );
-    const aiValue = Math.round(latestFare * 0.6 + avg * 0.4);
-
-    setAiFare({
-      avg,
-      latestFare,
-      aiValue,
-      confidence: Math.min(95, 60 + filtered.length * 5),
-    });
-
-    setResult({ avg, latest, latestFare });
+    return s;
   };
+
+  let filtered = dispatchData
+    .map(r => ({ ...r, _score: scoreMatch(r) }))
+    .filter(r => r._score > 0);
+
+  if (!filtered.length) {
+    alert("관련 운송 데이터가 없습니다.");
+    setMatchedRows([]);
+    setResult(null);
+    return;
+  }
+
+  // 🔥 정렬 우선순위: 동일톤 > 점수 > 최신 데이터
+  filtered.sort((a, b) =>
+    (b._sameTon ? 1 : 0) - (a._sameTon ? 1 : 0) ||
+    b._score - a._score ||
+    new Date(b.상차일 || 0) - new Date(a.상차일 || 0)
+  );
+
+  setMatchedRows(filtered);
+
+  // 평균
+  const fares = filtered
+    .map(r => Number(String(r.청구운임 || 0).replace(/[^\d]/g, "")))
+    .filter(v => !isNaN(v));
+
+  const avg = Math.round(fares.reduce((a, b) => a + b, 0) / fares.length);
+  setResult({ avg, count: filtered.length });
+};
+
 
   return (
     <div className="px-4 py-4 space-y-4">
@@ -2846,7 +2826,9 @@ if (!filtered.length) {
               return (
                 <div
                   key={r.id}
-                  className="bg-white shadow-sm rounded-xl p-3 border"
+                  className={`shadow-sm rounded-xl p-3 border ${
+   r._sameTon ? "bg-yellow-50 border-yellow-400" : "bg-white"
+ }`}
                 >
                   {/* 날짜 + 금액 */}
                   <div className="flex justify-between text-sm font-semibold">
