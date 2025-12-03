@@ -1,19 +1,3 @@
-import CryptoJS from "crypto-js";
-
-const AUTH_KEY = process.env.VITE_24CALL_AUTH_KEY;
-const BASE_URL = process.env.VITE_24CALL_BASE_URL;
-const ENC_KEY = CryptoJS.enc.Hex.parse(process.env.VITE_24CALL_ENCRYPT_KEY);
-const IV = CryptoJS.enc.Hex.parse(process.env.VITE_24CALL_IV);
-
-const encryptAES = (str) => {
-  const encrypted = CryptoJS.AES.encrypt(str, ENC_KEY, {
-    iv: IV,
-    padding: CryptoJS.pad.Pkcs7,
-    mode: CryptoJS.mode.CBC,
-  });
-  return encrypted.toString();
-};
-
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method Not Allowed" });
@@ -32,8 +16,10 @@ export default async function handler(req, res) {
       body: JSON.stringify({ data: encrypted }),
     });
 
-    const data = await apiRes.json();
-    return res.status(200).json(data);
+    const text = await apiRes.text();
+    console.log("24시콜 응답:", text);
+
+    return res.status(200).send(text);
   } catch (err) {
     return res.status(500).json({ error: err.toString() });
   }
