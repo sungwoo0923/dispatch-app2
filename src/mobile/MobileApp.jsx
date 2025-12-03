@@ -2636,36 +2636,56 @@ const calcFareMobile = () => {
     const inputTonNum = extractTonNum(ton);
 
     let filtered = dispatchData.filter((r) => {
-      const rp = clean(r.상차지명 || "");
-      const rd = clean(r.하차지명 || "");
-       // 🔥 필수값이 비어있을 경우 무조건 제외
- if (!normPickup || !normDrop) return false;
-      const okPickup = rp.includes(normPickup);
-      const okDrop = rd.includes(normDrop);
-      if (!okPickup || !okDrop) return false;
+  const rp = clean(r.상차지명 || "");
+  const rd = clean(r.하차지명 || "");
 
-      if (vehicle !== "전체") {
-        const rv = clean(r.차량종류 || "");
-        const vv = clean(vehicle);
-        if (!rv.includes(vv)) return false;
-      }
+  if (!normPickup || !normDrop) return false;
 
-      if (inputTonNum != null) {
-        const rton = extractTonNum(r.차량톤수 || "");
-        if (rton != null && Math.abs(rton - inputTonNum) > 0.5)
-          return false;
-      }
+  const okPickup = rp.includes(normPickup);
+  const okDrop = rd.includes(normDrop);
 
-      return true;
-    });
+  if (!okPickup || !okDrop) return false;
 
-    if (!filtered.length) {
-      alert("검색된 데이터가 없습니다.");
-      setResult(null);
-      return;
-    }
+  // ▶ 1. 차량종류 자동 인식 적용 (ton 미선택 시 데이터 기반 필터)
+  if (vehicle !== "전체") {
+    const rv = clean(r.차량종류 || "");
+    const vv = clean(vehicle);
+    if (!rv.includes(vv)) return false;
+  } else {
+    // 차량종류가 전체일 때도, 일치하면 가산점 (정렬에 반영)
+    r._matchVehicleBonus = 1;
+  }
 
-    setMatchedRows(filtered);
+  // ▶ 2. 톤수 근사치 필터
+  if (inputTonNum != null) {
+    const rton = extractTonNum(r.차량톤수 || "");
+    if (rton != null && Math.abs(rton - inputTonNum) > 0.5)
+      return false;
+  }
+
+  // ▶ 2. 주소 정확도 점수 계산
+  r._addrScore =
+    (rp.startsWith(normPickup) ? 3 : okPickup ? 1 : 0) +
+    (rd.startsWith(normDrop) ? 3 : okDrop ? 1 : 0);
+
+  // 주소가 너무 약하면 제외
+  if (r._addrScore < 2) return false;
+
+  return true;
+});
+
+// ▶ 3. 최신 데이터 우선 + 정확도 우선 정렬
+filtered.sort((a, b) => {
+  const da = new Date(a.상차일 || 0);
+  const db = new Date(b.상차일 || 0);
+
+  return (
+    (b._addrScore || 0) - (a._addrScore || 0) ||  // 정확도 우선
+    (b._matchVehicleBonus || 0) - (a._matchVehicleBonus || 0) || // 차량종류 가산
+    db - da // 최신순
+  );
+});
+
 
     const fares = filtered
       .map((r) => Number(String(r.청구운임 || 0).replace(/[^\d]/g, "")))
