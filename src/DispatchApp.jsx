@@ -9,14 +9,7 @@ import jsPDF from "jspdf";
 import AdminMenu from "./AdminMenu";
 import { calcFare } from "./fareUtil";
 import StandardFare from "./StandardFare";
-const sendOrderTo24 = async (row) => {
-  const res = await fetch("/api/send24", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(row),
-  });
-  return await res.json();
-};
+import { sendOrderTo24Proxy as sendOrderTo24 } from "../api/24CallProxy";
 
 
 
@@ -1990,16 +1983,17 @@ setFareModalOpen(true);
                 if (!상차일 || !하차일)
                   return alert("상차일/하차일은 반드시 필요합니다.");
 
-                const res = await sendOrderTo24(row);
-                if (res?.success) {
-                  alert(
-                    `📡 24시콜 전송 완료!\n\n전송건수: 1건\n실패건수: 0건\n메시지: ${res?.message || "성공"}`
-                  );
-                } else {
-                  alert(
-                    `⛔ 전송 실패!\n\n전송건수: 0건\n실패건수: 1건\n사유: ${res?.message || "알 수 없는 오류"}`
-                  );
-                }
+                const res = await sendOrderTo24(form);
+
+if (res?.success) {
+  alert(
+    `📡 24시콜 전송 완료!\n\n전송건수: 1건\n실패건수: 0건\n메시지: ${res?.message || "성공"}`
+  );
+} else {
+  alert(
+    `⛔ 전송 실패!\n\n전송건수: 0건\n실패건수: 1건\n사유: ${res?.message || "알 수 없는 오류"}`
+  );
+}
               }}
               className="ml-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-sm text-white rounded"
             >
@@ -3539,23 +3533,35 @@ ${url}
       const row = dispatchData.find(r => r._id === id);
       if (!row) continue;
 
-      // 🔽 여기에 수정!!
       if (!row.상차지주소 || !row.하차지주소) {
-        alert("상차/하차 주소를 입력하세요.");
+        alert(`[${row.상차지명} → ${row.하차지명}]\n주소가 없습니다.`);
+        fail++;
         continue;
       }
 
-      const res = await sendOrderTo24(row);
-      if (res?.code === "0") success++;
-      else fail++;
+      try {
+        const res = await sendOrderTo24(row);
+
+        if (res?.success) {
+          success++;
+        } else {
+          fail++;
+        }
+      } catch (e) {
+        console.error("24시콜 오류:", e);
+        fail++;
+      }
     }
 
-    alert(`📡 24시콜 선택전송 완료\n\n성공: ${success}건\n실패: ${fail}건`);
+    alert(`📡 24시콜 선택전송 완료!
+성공: ${success}건
+실패: ${fail}건`);
   }}
   className="px-3 py-1 rounded bg-orange-600 text-white"
 >
   📡 선택전송(24시콜)
 </button>
+
 
 
   {/* 선택수정 */}
@@ -6219,36 +6225,48 @@ if (!loaded) return null;
 
   {/* 우측 버튼 묶음 */}
   <div className="flex items-center gap-2">
-    {/* 📡 선택전송 (24시콜) */}
+    {/* 📡 선택전송 (24시콜)_배차현황 */}
 <button
   onClick={async () => {
-    if (!selected.length)
+    if (!selected.size)
       return alert("전송할 항목을 선택하세요.");
 
     const ids = [...selected];
     let success = 0, fail = 0;
 
     for (const id of ids) {
-      const row = dispatchData.find(r => r._id === id);
+      const row = dispatchData.find((r) => r._id === id);
       if (!row) continue;
 
-      // 🔽 여기에 수정!!
       if (!row.상차지주소 || !row.하차지주소) {
-        alert("상차/하차 주소를 입력하세요.");
+        alert(`[${row.상차지명} → ${row.하차지명}]\n주소가 없습니다.`);
+        fail++;
         continue;
       }
 
-      const res = await sendOrderTo24(row);
-      if (res?.code === "0") success++;
-      else fail++;
+      try {
+        const res = await sendOrderTo24(row);
+
+        if (res?.success) {
+          success++;
+        } else {
+          fail++;
+        }
+      } catch (e) {
+        console.error("24시콜 오류:", e);
+        fail++;
+      }
     }
 
-    alert(`📡 24시콜 선택전송 완료\n\n성공: ${success}건\n실패: ${fail}건`);
+    alert(`📡 24시콜 선택전송 완료!
+성공: ${success}건
+실패: ${fail}건`);
   }}
   className="px-3 py-1 rounded bg-orange-600 text-white"
 >
   📡 선택전송(24시콜)
 </button>
+
 
 
 {/* 📋 기사복사 */}
