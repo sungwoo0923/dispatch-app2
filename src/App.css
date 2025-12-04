@@ -44,3 +44,11 @@
 .table-section th {
   background: #f2f2f2;
 }
+@keyframes flashHighlight {
+  0% { background-color: rgba(0, 200, 255, 0.6); }
+  100% { background-color: transparent; }
+}
+
+.flash-highlight {
+  animation: flashHighlight 1.2s ease-out forwards;
+}
