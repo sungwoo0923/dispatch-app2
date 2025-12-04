@@ -9,7 +9,15 @@ import jsPDF from "jspdf";
 import AdminMenu from "./AdminMenu";
 import { calcFare } from "./fareUtil";
 import StandardFare from "./StandardFare";
-import { sendOrderTo24Proxy as sendOrderTo24 } from "./api/24CallProxy";
+const sendOrderTo24 = async (row) => {
+  const res = await fetch("/api/send24", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(row),
+  });
+  return await res.json();
+};
+
 
 
 
