@@ -10,9 +10,14 @@ export default async function handler(req, res) {
 
   try {
     const row = req.body;
+    console.log("📝 전달받은 row:", row);
+    console.log("🔑 AUTH_KEY 존재?:", AUTH_KEY ? "OK" : "❌ 없음");
 
     const payload = mapTo24Order(row);
+    console.log("🚚 전송 payload:", payload);
+
     const encrypted = encryptAES(JSON.stringify(payload));
+    console.log("🔐 encrypted:", encrypted);
 
     const formBody = new URLSearchParams();
     formBody.append("data", encrypted);
@@ -21,18 +26,29 @@ export default async function handler(req, res) {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
-        "authKey": AUTH_KEY,
+        authKey: AUTH_KEY,
       },
       body: formBody.toString(),
     });
 
     const raw = await apiRes.text();
-    console.log("📡 24시콜 응답: ", raw);
+    console.log("📡 24시콜 응답 RAW:", raw);
 
-    // 항상 JSON로 감싸서 리턴!
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      parsed = { result: "fail", raw };
+    }
+
+    const success = parsed?.result === "success";
+    const message = parsed?.message || parsed?.raw || "Unknown Response";
+
     return res.status(200).json({
-      success: true,
-      raw: raw,
+      success,
+      message,
+      raw,
+      payloadSent: payload,
     });
 
   } catch (err) {

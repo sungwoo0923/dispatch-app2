@@ -6,11 +6,17 @@ export async function sendOrderTo24Proxy(row) {
       body: JSON.stringify(row),
     });
 
-    const text = await res.text(); // JSON 아닐 수도 있어
+    const text = await res.text(); // JSON 아닐 수도 있으니
+
     try {
       return JSON.parse(text);
     } catch (e) {
-      return { success: false, error: "Invalid JSON", raw: text };
+      return {
+        success: false,
+        error: "Invalid JSON",
+        raw: text,
+        status: res.status,
+      };
     }
 
   } catch (error) {
