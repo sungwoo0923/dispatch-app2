@@ -1287,17 +1287,25 @@ const hasSinmi = (
       const latestCargo =
         latestRow?.화물내용?.trim() ? latestRow.화물내용 : "(기록 없음)";
 
-      setFareResult({
-        count: filtered.length,
-        avg,
-        min,
-        max,
-        latestFare: latestRow.청구운임,
-        latestDate: latestRow.상차일,
-        latestCargo,
-      });
+setFareResult({
+  count: filtered.length,
+  avg,
+  min,
+  max,
+  latestFare: latestRow.청구운임,
+  latestDate: latestRow.상차일,
+  latestCargo,
+  filteredList: filtered
+    .slice()
+    .sort((a, b) =>
+      (b.lastUpdated || b.상차일 || "").localeCompare(
+        a.lastUpdated || a.상차일 || ""
+      )
+    ),
+});
 
-      setFareModalOpen(true);
+setFareModalOpen(true);
+
     };
 
     // ------------------ 오더복사 ------------------
@@ -2165,6 +2173,94 @@ setAutoDropMatched(false);
     return (
       <>
         {renderForm()}
+        {/* ⭐ 운임조회 결과 모달 */}
+{fareModalOpen && fareResult && (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
+    <div className="bg-white rounded-lg p-7 w-[500px] shadow-2xl max-h-[90vh] overflow-y-auto">
+      
+      {/* 헤더 */}
+      <div className="flex justify-between items-center mb-4">
+        <h3 className="text-lg font-bold">📦 운임조회 결과</h3>
+        <button
+          onClick={() => setFareModalOpen(false)}
+          className="text-gray-500 hover:text-black text-xl"
+        >
+          ×
+        </button>
+      </div>
+
+      <div className="text-sm leading-6">
+        <p>📌 조회된 데이터: <b>{fareResult.count}</b> 건</p>
+        <p>📌 평균 운임: <b>{fareResult.avg.toLocaleString()} 원</b></p>
+        <p>📌 최소 → 최대: {fareResult.min.toLocaleString()} ~ {fareResult.max.toLocaleString()} 원</p>
+        <p>📌 최신 운임: {fareResult.latestFare?.toLocaleString()} 원</p>
+        <p>📌 최신 상차일: {fareResult.latestDate}</p>
+        <p>📌 최근 화물: {fareResult.latestCargo}</p>
+      </div>
+
+      {/* 추천 카드 */}
+      <div className="bg-amber-50 border border-amber-300 rounded-lg p-4 mt-4">
+        <h4 className="font-semibold text-amber-700 mb-2"> AI 추천운임</h4>
+        <p className="text-xl font-bold text-amber-900">
+          {fareResult.avg.toLocaleString()} 원
+        </p>
+        <p className="text-[12px] text-gray-600">(최근 데이터 분석 기준)</p>
+
+        {/* 💡 운임 적용 버튼 */}
+        <button
+          onClick={() => {
+            setForm((p) => ({ ...p, 청구운임: String(fareResult.avg) }));
+            setFareModalOpen(false);
+          }}
+          className="mt-4 bg-amber-600 hover:bg-amber-700 text-white w-full py-2 rounded-md text-sm"
+        >
+          추천운임 적용하기
+        </button>
+        {/* 📜 과거 운송 기록 */}
+{fareResult.filteredList && fareResult.filteredList.length > 0 && (
+  <div className="mt-5 border-t pt-4">
+    <h4 className="font-semibold mb-2">📜 과거 운송 기록 (최신순)</h4>
+    <div className="max-h-[180px] overflow-y-auto text-sm">
+      {fareResult.filteredList.map((r, idx) => (
+        <div key={idx} className="flex justify-between items-center py-2 border-b">
+          <div className="flex-1">
+            <b>{r.상차일}</b> | {r.화물내용 || "-"}
+          </div>
+          <div className="text-right">
+            {Number(r.청구운임).toLocaleString()} 원
+          </div>
+          <button
+            onClick={() => {
+              setForm((p) => ({
+                ...p,
+                청구운임: String(r.청구운임),
+              }));
+              setFareModalOpen(false);
+            }}
+            className="ml-3 px-3 py-1 bg-blue-600 text-white rounded text-xs"
+          >
+            적용
+          </button>
+        </div>
+      ))}
+    </div>
+  </div>
+)}
+      </div>
+
+      {/* 닫기 버튼 */}
+      <div className="text-right mt-5">
+        <button
+          className="bg-gray-300 hover:bg-gray-400 px-4 py-2 rounded text-sm"
+          onClick={() => setFareModalOpen(false)}
+        >
+          닫기
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
 
         {/* ⭐ 4파트 동일한 실시간배차현황 테이블 */}
         <RealtimeStatus
@@ -2497,19 +2593,29 @@ const [driverSelectRowId, setDriverSelectRowId] = React.useState(null);
     );
 
     setRows((prev) => {
-      const map = new Map(base.map((r) => [r._id, r]));
+  const map = new Map(base.map((r) => [r._id, r]));
 
-      const kept = prev
-        .filter((r) => map.has(r._id))
-        .map((r) => ({ ...r, ...map.get(r._id) }));
+  const kept = prev
+    .filter((r) => map.has(r._id))
+    .map((r) => ({ ...r, ...map.get(r._id) }));
 
-      const newOnes = base.filter(
-        (r) => !prev.some((p) => p._id === r._id)
-      );
+  const newOnes = base.filter(
+    (r) => !prev.some((p) => p._id === r._id)
+  );
 
-      return [...kept, ...newOnes];
-    });
-  }, [dispatchData, deletedIds]);
+  const merged = [...kept, ...newOnes];
+
+  // 🔥 최종 정렬: 배차중 → 최상단 / 배차완료 → updatedAt 최신순
+  merged.sort((a, b) => {
+    if (a.배차상태 === "배차중" && b.배차상태 !== "배차중") return -1;
+    if (a.배차상태 !== "배차중" && b.배차상태 === "배차중") return 1;
+    return (b.updatedAt || 0) - (a.updatedAt || 0);
+  });
+
+  return merged;
+});
+}, [dispatchData, deletedIds]);
+
   // 🔥 rows 갱신 후 edited 데이터 다시 반영
 React.useEffect(() => {
   if (!Object.keys(edited).length) return;
@@ -2896,7 +3002,33 @@ const handleCarInput = async (id, rawVal, keyEvent) => {
     );
 
     await patchDispatch?.(id, updated);
-    return;
+// 🔥 포커스 유지
+setTimeout(() => {
+  const el = document.querySelector(`[data-id="${id}"] input[name="차량번호"]`);
+  if (el) {
+    el.focus();
+    el.select();
+  }
+}, 80);
+
+// 최근 업데이트 기준 화면 rows 최신화
+setRows(prev =>
+  prev.map(r =>
+    r._id === id ? { ...r, updatedAt: Date.now() } : r
+  )
+);
+
+// dispatchData도 동일하게 최신화 + 상태 강제 배차완료
+setDispatchData(prev =>
+  prev.map(r =>
+    r._id === id
+      ? { ...r, updatedAt: Date.now(), 배차상태: "배차완료" }
+      : r
+  )
+);
+
+return;
+
   }
 
   const matches = driverMap.get(v) || [];
@@ -2971,21 +3103,6 @@ const handleCarInput = async (id, rawVal, keyEvent) => {
         )
       );
     }
-
-    // 🔥 배차중 → 배차완료 순서
-    // 🔥 그리고 배차완료 내부는 rows의 기존 순서 유지
-    const order = { 배차중: 0, 배차완료: 1 };
-
-    data.sort((a, b) => {
-      const oa = order[a.배차상태] ?? 99;
-      const ob = order[b.배차상태] ?? 99;
-      if (oa !== ob) return oa - ob;
-
-      // 기존 rows 순서 지킴
-      const ai = rows.findIndex((r) => r._id === a._id);
-      const bi = rows.findIndex((r) => r._id === b._id);
-      return ai - bi;
-    });
 
     return data;
   }, [rows, q, filterType, filterValue, startDate, endDate]);
@@ -3707,17 +3824,20 @@ XLSX.writeFile(wb, "실시간배차현황.xlsx");
                   {/* 차량번호 */}
                   <td className={cell}>
                     <input
-                      type="text"
-                      defaultValue={r.차량번호 || ""}
-                      className="border p-1 rounded w-[110px]"
-                      onKeyDown={(e) =>
-                        e.key === "Enter" &&
-                        handleCarInput(r._id, e.currentTarget.value, e)
-                      }
-                      onBlur={(e) =>
-                        handleCarInput(r._id, e.currentTarget.value)
-                      }
-                    />
+  name="차량번호"
+  data-id={r._id}
+  type="text"
+  defaultValue={r.차량번호 || ""}
+  className="border p-1 rounded w-[110px]"
+  onKeyDown={(e) =>
+    e.key === "Enter" &&
+    handleCarInput(r._id, e.currentTarget.value, e)
+  }
+  onBlur={(e) =>
+    handleCarInput(r._id, e.currentTarget.value)
+  }
+/>
+
                   </td>
 
                   <td className={`${cell} w-[80px] max-w-[80px] overflow-hidden text-ellipsis`}>
