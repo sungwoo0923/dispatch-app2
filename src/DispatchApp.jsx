@@ -599,8 +599,65 @@ const dispatchDataFiltered = useMemo(() => {
     isTest = false,  // ★ 추가!
   }) {
 
+    // 관리자 여부 체크
+const isAdmin = role === "admin";
 
-    const isAdmin = role === "admin";
+// 기존 필터 상태 (유지)
+const [filterType, setFilterType] = React.useState(null);
+const [filterValue, setFilterValue] = React.useState("");
+
+// ========================================================
+// 🔷 Today Dashboard 데이터 계산 (UI 대시보드에서 사용)
+// ========================================================
+
+// 📌 기준 날짜(오늘)
+const today = todayKST();
+function todayKST() {
+  const d = new Date();
+  const offset = d.getTimezoneOffset() * 60000;
+  const korea = new Date(d.getTime() - offset + 9 * 60 * 60 * 1000);
+  return korea.toISOString().slice(0, 10);
+}
+
+// 📌 오늘 상차 기준으로 당일 데이터만 필터링
+const todayRows = (dispatchData || []).filter(
+  r => (r.상차일 || "").slice(0, 10) === today
+);
+
+// 📌 현황 계산
+const total = todayRows.length;
+const done = todayRows.filter(r => r.배차상태 === "배차완료").length;
+const doing = todayRows.filter(r => r.배차상태 === "배차중").length;
+
+// 📌 차량 미지정 (전화만 받았거나 대기중)
+const pending = todayRows.filter(
+  r => !r.차량번호 || r.차량번호.trim() === ""
+).length;
+
+// 📌 지연위험 (추후 고도화 예정)
+const delayed = 0;
+
+// 📊 배차 진행률 %
+const rate = total ? Math.round((done / total) * 100) : 0;
+// 💸 오늘 예상 매출
+const todayRevenue = todayRows
+  .filter(r => r.배차상태 === "배차완료")
+  .reduce((sum, r) => {
+    const v = Number(String(r.청구운임 || "0").replace(/[^\d]/g, ""));
+    return sum + (isNaN(v) ? 0 : v);
+  }, 0);
+// ========================================================
+// ⭐ 상태 기반 필터링 실행 + 실시간배차현황 테이블로 스크롤 이동
+// ========================================================
+const goStatus = (type, value) => {
+  setFilterType(type);
+  setFilterValue(value);
+
+  const el = document.getElementById("realtime-status-area");
+  if (el) {
+    el.scrollIntoView({ behavior: "smooth" });
+  }
+};
 
 
     // ⭐ 여기 맨 위에 오도록
@@ -1327,8 +1384,15 @@ setFareModalOpen(true);
       let arr = (dispatchData || []);
 
       // 날짜 필터
-      if (copyStart) arr = arr.filter((r) => (r.상차일 || "") >= copyStart);
-      if (copyEnd) arr = arr.filter((r) => (r.상차일 || "") <= copyEnd);
+// ⭐ 오늘 기준으로 고정
+const today = new Date().toISOString().slice(0, 10);
+arr = arr.filter((r) => (r.상차일 || "").slice(0, 10) === today);
+
+// ⭐ 현황패널 필터 적용
+if (filterType && filterValue) {
+  arr = arr.filter((r) => String(r[filterType]) === filterValue);
+}
+
 
       // 필드 필터
       if (copyFilterType !== "전체") {
@@ -1447,397 +1511,300 @@ setFareModalOpen(true);
       <>
         <h2 className="text-lg font-bold mb-3">배차관리</h2>
 
-        {/* 상단 액션 */}
-        <div className="flex items-center gap-2 mb-3">
-          <button
-             onClick={() => {
-            setCopyOpen(true);
-            setCopySelected([]); // ⭐ 모달 열 때 초기화
-}}
-
-            className="px-3 py-2 rounded bg-indigo-600 text-white text-sm"
-          >
-            📄 오더복사
-          </button>
-
-          <button
-            onClick={resetForm}
-            className="px-3 py-2 rounded bg-gray-200 text-sm"
-          >
-            🔄 초기화
-          </button>
-
-          <button
-            onClick={() => setBulkOpen(true)}
-            className="px-3 py-2 rounded bg-emerald-600 text-white text-sm"
-          >
-            📂 대용량 업로드
-          </button>
-
-          {/* ⭐ 운임조회 버튼 (상단 공통 버튼으로 추가) */}
-          <button
-            type="button"
-            onClick={handleFareSearch}
-            className="px-3 py-2 rounded bg-amber-500 text-white text-sm"
-          >
-            운임조회
-          </button>
-
-
-          {/* ⭐ 독차 / 혼적 체크박스 — 버튼 옆으로 배치 */}
-          <div className="flex items-center gap-4 ml-4">
-            <label className="flex items-center gap-1 text-sm text-gray-700">
-              <input
-                type="checkbox"
-                checked={form.독차}
-                onChange={(e) => onChange("독차", e.target.checked)}
-                className="w-4 h-4"
-              />
-              독차
-            </label>
-
-            <label className="flex items-center gap-1 text-sm text-gray-700">
-              <input
-                type="checkbox"
-                checked={form.혼적}
-                onChange={(e) => onChange("혼적", e.target.checked)}
-                className="w-4 h-4"
-              />
-              혼적
-            </label>
-            
-          </div>
-          {/* 📌 상차일 + 상차시간 */}
-<div className="col-span-6 bg-white border border-gray-200 rounded-lg p-3 shadow-sm">
-  <div className="flex items-end gap-6">
-
-    {/* 상차 */}
-    <div className="flex flex-col">
-      <label className="text-[12px] font-semibold text-gray-600 mb-1">상차일 / 시간</label>
-      <div className="flex items-center gap-2">
-        <input
-          type="date"
-          value={form.상차일}
-          onChange={(e) => onChange("상차일", e.target.value)}
-          className="border rounded-md px-2 py-[4px] text-sm w-[130px] focus:ring-blue-500"
-        />
-        <button
-          type="button"
-          onClick={() => onChange("상차일", _todayStr())}
-          className="bg-blue-100 text-blue-700 px-2 py-[4px] rounded text-[11px]"
-        >
-          당일
-        </button>
-        <button
-          type="button"
-          onClick={() => onChange("상차일", _tomorrowStr())}
-          className="bg-blue-100 text-blue-700 px-2 py-[4px] rounded text-[11px]"
-        >
-          내일
-        </button>
-
-        {/* ⭐ 상차시간 */}
-        <select
-          value={form.상차시간}
-          onChange={(e) => onChange("상차시간", e.target.value)}
-          className="border rounded-md px-2 py-[4px] text-sm w-[130px]"
-        >
-          <option value="">시간 ▾</option>
-          {localTimeOptions.map((t) => (
-            <option key={t} value={t}>{t}</option>
-          ))}
-        </select>
-      </div>
-    </div>
-
-    {/* 하차 */}
-    <div className="flex flex-col">
-      <label className="text-[12px] font-semibold text-gray-600 mb-1">하차일 / 시간</label>
-      <div className="flex items-center gap-2">
-        <input
-          type="date"
-          value={form.하차일}
-          onChange={(e) => onChange("하차일", e.target.value)}
-          className="border rounded-md px-2 py-[4px] text-sm w-[130px] focus:ring-green-500"
-        />
-        <button
-          type="button"
-          onClick={() => onChange("하차일", _todayStr())}
-          className="bg-green-100 text-green-700 px-2 py-[4px] rounded text-[11px]"
-        >
-          당일
-        </button>
-        <button
-          type="button"
-          onClick={() => onChange("하차일", _tomorrowStr())}
-          className="bg-green-100 text-green-700 px-2 py-[4px] rounded text-[11px]"
-        >
-          내일
-        </button>
-
-        {/* ⭐ 하차시간 */}
-        <select
-          value={form.하차시간}
-          onChange={(e) => onChange("하차시간", e.target.value)}
-          className="border rounded-md px-2 py-[4px] text-sm w-[130px]"
-        >
-          <option value="">시간 ▾</option>
-          {localTimeOptions.map((t) => (
-            <option key={t} value={t}>{t}</option>
-          ))}
-        </select>
-      </div>
-    </div>
-
-  </div>
-</div>
-
-        </div>
+        
 
         {/* 입력 폼 */}
-        <form onSubmit={handleSubmit} className="grid grid-cols-6 gap-3">
-          {/* 거래처 + 신규등록 */}
-          <div className="col-span-2">
-            <label className={labelCls}>거래처 {reqStar}</label>
-            <div className="flex gap-2">
-              <div className="relative flex-1" ref={comboRef}>
-                <input
-                  className={inputCls}
-                  placeholder="거래처 검색/입력"
-                  value={clientQuery}
-                  onFocus={() => setIsClientOpen(true)}
-                  onChange={(e) => {
-                    setClientQuery(e.target.value);
-                    onChange("거래처명", e.target.value);
-                    setIsClientOpen(true);
-                    setClientActive(0);
-                  }}
-                  onKeyDown={(e) => {
-  const list = filteredClients;
-  if (!isClientOpen && (e.key === "ArrowDown" || e.key === "Enter")) {
-    setIsClientOpen(true);
-    return;
-  }
-  if (!list.length) return;
+  {/* ================== 프리미엄 액션바 ================== */}
+<div className="w-full bg-white rounded-xl shadow-lg border px-4 py-3 flex items-center gap-3 mb-5">
 
-  if (e.key === "Enter") {
-    e.preventDefault();
-    const pick = list[clientActive];
-    if (pick) {
-      applyClientSelect(pick.업체명); // 주소까지 자동매칭!
-    }
-    return;
-  }
+  {/* 좌측 버튼 그룹 */}
+  <div className="flex items-center gap-2">
+    <button className="premium-btn indigo" onClick={() => { setCopyOpen(true); setCopySelected([]); }}>
+      📄 오더복사
+    </button>
+    <button className="premium-btn gray" onClick={resetForm}>
+      🔄 초기화
+    </button>
+    <button className="premium-btn green" onClick={() => setBulkOpen(true)}>
+      📂 대용량 업로드
+    </button>
+    <button className="premium-btn yellow" onClick={handleFareSearch}>
+      💰 운임조회
+    </button>
+  </div>
 
-  if (e.key === "ArrowDown") {
-    e.preventDefault();
-    setClientActive((i) => Math.min(i + 1, list.length - 1));
-  } else if (e.key === "ArrowUp") {
-    e.preventDefault();
-    setClientActive((i) => Math.max(i - 1, 0));
-  } else if (e.key === "Escape") {
-    setIsClientOpen(false);
-  }
-}}
+  {/* 구분선 */}
+  <div className="w-px h-7 bg-gray-200" />
 
-                />
-                {isClientOpen && (
-                  <div className="absolute left-0 right-0 mt-1 max-h-52 overflow-auto bg-white border rounded shadow-lg z-50">
-                    {filteredClients.length === 0 ? (
-                      <div className="px-3 py-2 text-sm text-gray-500">검색 결과 없음</div>
-                    ) : (
-                      filteredClients.map((p, idx) => (
-                        <div
-                          key={p.업체명}
-                          className={`px-3 py-2 text-sm cursor-pointer ${idx === clientActive ? "bg-blue-50" : "hover:bg-gray-50"
-                            }`}
-                          onMouseEnter={() => setClientActive(idx)}
-                          onMouseDown={(e) => {
-                            e.preventDefault();
-                            applyClientSelect(p.업체명);
-                          }}
-                        >
-                          <div className="font-medium">{p.업체명}</div>
-                          {p.주소 ? (
-                            <div className="text-[11px] text-gray-500">{p.주소}</div>
-                          ) : null}
-                        </div>
-                      ))
-                    )}
-                  </div>
-                )}
+  {/* 독차 & 혼적 */}
+  <div className="flex items-center gap-4">
+    <label className="chk">독차<input type="checkbox" checked={form.독차} onChange={(e)=>onChange("독차",e.target.checked)}/></label>
+    <label className="chk">혼적<input type="checkbox" checked={form.혼적} onChange={(e)=>onChange("혼적",e.target.checked)}/></label>
+  </div>
 
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  const 업체명 = (clientQuery || "").trim();
-                  if (!업체명) return alert("업체명을 입력하세요.");
+  <div className="w-px h-7 bg-gray-200" />
 
-                  const 주소 = prompt("주소 (선택)") || "";
-                  const 담당자 = prompt("담당자 (선택)") || "";
-                  const 담당자번호 = prompt("연락처 (선택)") || "";
+  {/* 날짜 시간 ▼ */}
+  <div className="flex items-center gap-3 text-sm">
+    <label className="text-gray-600 font-medium">상차</label>
+    <input type="date" value={form.상차일} className="inp small" onChange={(e)=>onChange("상차일",e.target.value)}/>
+    <select value={form.상차시간} className="inp small" onChange={(e)=>onChange("상차시간",e.target.value)}>
+      <option value="">시간</option>
+      {localTimeOptions.map((t)=><option key={t} value={t}>{t}</option>)}
+    </select>
+      {/* 🔹 상차: 당일/내일 */}
+  <button
+    type="button"
+    className="px-2 py-1 text-xs rounded bg-blue-100 text-blue-600 hover:bg-blue-200"
+    onClick={() => onChange("상차일", _todayStr())}
+  >
+    당일
+  </button>
 
-                  // ⭐⭐ 하차지거래처 등록 함수 사용 ⭐⭐
-                  if (typeof upsertPlace === "function") {
-                    upsertPlace({ 업체명, 주소, 담당자, 담당자번호 });
-                  } else {
-                    // ⭐ upsertPlace 없을 때 localStorage 직접 저장
-                    try {
-                      const list = JSON.parse(localStorage.getItem("hachaPlaces_v1") || "[]");
-                      list.push({ 업체명, 주소, 담당자, 담당자번호 });
-                      localStorage.setItem("hachaPlaces_v1", JSON.stringify(list));
-                    } catch (e) {
-                      console.error(e);
-                    }
-                  }
+  <button
+    type="button"
+    className="px-2 py-1 text-xs rounded bg-blue-100 text-blue-600 hover:bg-blue-200"
+    onClick={() => onChange("상차일", _tomorrowStr())}
+  >
+    내일
+  </button>
 
-                  alert("하차지거래처에 신규 등록되었습니다.");
-                }}
-                className="px-3 py-2 border rounded text-sm"
-              >
-                + 신규등록
-              </button>
+    <label className="text-gray-600 font-medium ml-6">하차</label>
+    <input type="date" value={form.하차일} className="inp small" onChange={(e)=>onChange("하차일",e.target.value)}/>
+    <select value={form.하차시간} className="inp small" onChange={(e)=>onChange("하차시간",e.target.value)}>
+      <option value="">시간</option>
+      {localTimeOptions.map((t)=><option key={t} value={t}>{t}</option>)}
+    </select>
+      {/* 🔹 하차: 당일/내일 */}
+  <button
+    type="button"
+    className="px-2 py-1 text-xs rounded bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
+    onClick={() => onChange("하차일", _todayStr())}
+  >
+    당일
+  </button>
 
-            </div>
-          </div>
+  <button
+    type="button"
+    className="px-2 py-1 text-xs rounded bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
+    onClick={() => onChange("하차일", _tomorrowStr())}
+  >
+    내일
+  </button>
 
-          {/* ⭐ 상차지명 + 자동완성 (독립) */}
-<div className="relative">
-  <label className={labelCls}>상차지명 {reqStar}</label>
+  </div>
 
-  <input
-    className={inputCls}
-    placeholder="상차지 검색"
-    value={form.상차지명}
-    onChange={(e) => {
-      const v = e.target.value;
-      handlePickupName(v);
-      setPickupOptions(filterPlaces(v));
-      setShowPickupDropdown(true);
-      setPickupActive(0);
-    }}
-    onKeyDown={(e) => {
-      const list = pickupOptions;
-      if (!list.length) return;
-
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        setPickupActive((i) => Math.min(i + 1, list.length - 1));
-      } else if (e.key === "ArrowUp") {
-        e.preventDefault();
-        setPickupActive((i) => Math.max(i - 1, 0));
-      } else if (e.key === "Enter") {
-        e.preventDefault();
-        const p = list[pickupActive];
-        if (!p) return;
-        setForm((prev) => ({
-          ...prev,
-          상차지명: p.업체명,
-          상차지주소: p.주소,
-          상차지담당자: p.담당자,
-          상차지담당자번호: p.담당자번호,
-        }));
-        setShowPickupDropdown(false);
-      }
-    }}
-    onBlur={() => setTimeout(() => setShowPickupDropdown(false), 200)}
-  />
-
-  {showPickupDropdown && pickupOptions.length > 0 && (
-    <div className="absolute z-50 bg-white border rounded shadow w-full max-h-48 overflow-auto">
-      {pickupOptions.map((p, i) => (
-        <div
-          key={i}
-          className={`px-2 py-1 cursor-pointer ${
-            i === pickupActive ? "bg-blue-50" : "hover:bg-gray-50"
-          }`}
-          onMouseDown={() => {
-            setForm((prev) => ({
-              ...prev,
-              상차지명: p.업체명,
-              상차지주소: p.주소,
-              상차지담당자: p.담당자,
-              상차지담당자번호: p.담당자번호,
-            }));
-            setShowPickupDropdown(false);
-          }}
-        >
-          <b>{p.업체명}</b>
-          {p.주소 ? <div className="text-xs text-gray-500">{p.주소}</div> : null}
-        </div>
-      ))}
-    </div>
-  )}
 </div>
+ 
+<form
+  onSubmit={handleSubmit}
+  className="grid grid-cols-6 gap-3 bg-white shadow-lg border border-gray-200 rounded-2xl p-6 ml-0 max-w-[1500px]"
+>
 
+  {/* 거래처 + 신규등록 */}
+  <div className="col-span-2">
+    <label className={labelCls}>거래처 {reqStar}</label>
+    <div className="flex gap-2">
+      <div className="relative flex-1" ref={comboRef}>
+        <input
+          className={inputCls}
+          placeholder="거래처 검색/입력"
+          value={clientQuery}
+          onFocus={() => setIsClientOpen(true)}
+          onChange={(e) => {
+            setClientQuery(e.target.value);
+            onChange("거래처명", e.target.value);
+            setIsClientOpen(true);
+            setClientActive(0);
+          }}
+          onKeyDown={(e) => {
+            const list = filteredClients;
+            if (!isClientOpen && (e.key === "ArrowDown" || e.key === "Enter")) {
+              setIsClientOpen(true);
+              return;
+            }
+            if (!list.length) return;
 
-          {/* 상차지주소 */}
-          <div>
-            <label className={labelCls}>
-              상차지주소 <AutoBadge show={autoPickMatched} />
-            </label>
-            <input
-              className={inputCls}
-              value={form.상차지주소}
-              onChange={(e) => handlePickupAddrManual(e.target.value)}
-              placeholder="자동매칭 또는 수기입력"
-            />
+            if (e.key === "Enter") {
+              e.preventDefault();
+              const pick = list[clientActive];
+              if (pick) applyClientSelect(pick.업체명);
+              return;
+            }
+            if (e.key === "ArrowDown") {
+              e.preventDefault();
+              setClientActive((i) => Math.min(i + 1, list.length - 1));
+            } else if (e.key === "ArrowUp") {
+              e.preventDefault();
+              setClientActive((i) => Math.max(i - 1, 0));
+            } else if (e.key === "Escape") {
+              setIsClientOpen(false);
+            }
+          }}
+        />
+        {isClientOpen && (
+          <div className="absolute left-0 right-0 mt-1 max-h-52 overflow-auto bg-white border rounded-lg shadow-xl z-50">
+            {filteredClients.length === 0 ? (
+              <div className="px-3 py-2 text-sm text-gray-500">
+                검색 결과 없음
+              </div>
+            ) : (
+              filteredClients.map((p, idx) => (
+                <div
+                  key={p.업체명}
+                  className={`px-3 py-2 text-sm cursor-pointer ${
+                    idx === clientActive ? "bg-blue-50" : "hover:bg-gray-50"
+                  }`}
+                  onMouseEnter={() => setClientActive(idx)}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    applyClientSelect(p.업체명);
+                  }}
+                >
+                  <div className="font-medium">{p.업체명}</div>
+                  {p.주소 && (
+                    <div className="text-[11px] text-gray-500">{p.주소}</div>
+                  )}
+                </div>
+              ))
+            )}
           </div>
+        )}
+      </div>
 
-          {/* 하차지명 + 자동완성 */}
-          <div className="relative">
-            <label className={labelCls}>하차지명 {reqStar}</label>
+      <button
+        type="button"
+        onClick={() => {
+          const 업체명 = (clientQuery || "").trim();
+          if (!업체명) return alert("업체명을 입력하세요.");
+          const 주소 = prompt("주소 (선택)") || "";
+          const 담당자 = prompt("담당자 (선택)") || "";
+          const 담당자번호 = prompt("연락처 (선택)") || "";
 
-            <input
-  className={inputCls}
-  placeholder="하차지 검색"
-  value={form.하차지명}
-  onChange={(e) => {
-    const v = e.target.value;
-    handleDropName(v);
-    setPlaceOptions(filterPlaces(v));
-    setShowPlaceDropdown(true);
-    setPlaceActive(0);
-  }}
-  onKeyDown={(e) => {
-    const list = placeOptions;
-    if (!list.length) return;
+          if (typeof upsertPlace === "function") {
+            upsertPlace({ 업체명, 주소, 담당자, 담당자번호 });
+          } else {
+            try {
+              const list = JSON.parse(localStorage.getItem("hachaPlaces_v1") || "[]");
+              list.push({ 업체명, 주소, 담당자, 담당자번호 });
+              localStorage.setItem("hachaPlaces_v1", JSON.stringify(list));
+            } catch (e) {}
+          }
 
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      setPlaceActive((i) => Math.min(i + 1, list.length - 1));
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setPlaceActive((i) => Math.max(i - 1, 0));
-    } else if (e.key === "Enter") {
-      e.preventDefault();
-      const p = list[placeActive];
-      if (!p) return;
-      setForm((prev) => ({
-        ...prev,
-        하차지명: p.업체명,
-        하차지주소: p.주소,
-        하차지담당자: p.담당자,
-        하차지담당자번호: p.담당자번호,
-      }));
-      setShowPlaceDropdown(false);
-    }
-  }}
-  onBlur={() => setTimeout(() => setShowPlaceDropdown(false), 200)}
-/>
+          alert("하차지거래처에 신규 등록되었습니다.");
+        }}
+        className="px-3 py-2 border rounded-lg text-sm bg-gray-50 hover:bg-gray-100"
+      >
+        + 신규등록
+      </button>
+    </div>
+  </div>
 
+  {/* 상차지명 + 자동완성 */}
+  <div className="relative">
+    <label className={labelCls}>상차지명 {reqStar}</label>
 
-            {showPlaceDropdown && placeOptions.length > 0 && (
-  <div className="absolute z-50 bg-white border rounded shadow w-full max-h-48 overflow-auto">
-    {placeOptions.map((p, i) => (
-      <div
-        key={i}
-        className={`px-2 py-1 cursor-pointer ${
-          i === placeActive ? "bg-blue-50" : "hover:bg-gray-50"
-        }`}
-        onMouseEnter={() => setPlaceActive(i)}
-        onMouseDown={() => {
+    <input
+      className={inputCls}
+      placeholder="상차지 검색"
+      value={form.상차지명}
+      onChange={(e) => {
+        const v = e.target.value;
+        handlePickupName(v);
+        setPickupOptions(filterPlaces(v));
+        setShowPickupDropdown(true);
+        setPickupActive(0);
+      }}
+      onKeyDown={(e) => {
+        const list = pickupOptions;
+        if (!list.length) return;
+        if (["ArrowDown", "ArrowUp", "Enter"].includes(e.key)) {
+          e.preventDefault();
+        }
+        if (e.key === "Enter") {
+          const p = list[pickupActive];
+          if (!p) return;
+          setForm((prev) => ({
+            ...prev,
+            상차지명: p.업체명,
+            상차지주소: p.주소,
+            상차지담당자: p.담당자,
+            상차지담당자번호: p.담당자번호,
+          }));
+          setShowPickupDropdown(false);
+        } else if (e.key === "ArrowDown") {
+          setPickupActive((i) => Math.min(i + 1, list.length - 1));
+        } else if (e.key === "ArrowUp") {
+          setPickupActive((i) => Math.max(i - 1, 0));
+        }
+      }}
+      onBlur={() => setTimeout(() => setShowPickupDropdown(false), 200)}
+    />
+
+    {showPickupDropdown && pickupOptions.length > 0 && (
+      <div className="absolute z-50 bg-white border rounded-lg shadow-lg w-full max-h-48 overflow-auto">
+        {pickupOptions.map((p, i) => (
+          <div
+            key={i}
+            className={`px-2 py-1 cursor-pointer ${
+              i === pickupActive ? "bg-blue-50" : "hover:bg-gray-50"
+            }`}
+            onMouseDown={() => {
+              setForm((prev) => ({
+                ...prev,
+                상차지명: p.업체명,
+                상차지주소: p.주소,
+                상차지담당자: p.담당자,
+                상차지담당자번호: p.담당자번호,
+              }));
+              setShowPickupDropdown(false);
+            }}
+          >
+            <b>{p.업체명}</b>
+            {p.주소 && <div className="text-xs text-gray-500">{p.주소}</div>}
+          </div>
+        ))}
+      </div>
+    )}
+  </div>
+
+  {/* 상차지주소 */}
+  <div>
+    <label className={labelCls}>
+      상차지주소 <AutoBadge show={autoPickMatched} />
+    </label>
+    <input
+      className={inputCls}
+      value={form.상차지주소}
+      onChange={(e) => handlePickupAddrManual(e.target.value)}
+      placeholder="자동매칭 또는 수기입력"
+    />
+  </div>
+
+  {/* 하차지명 + 자동완성 */}
+  <div className="relative">
+    <label className={labelCls}>하차지명 {reqStar}</label>
+
+    <input
+      className={inputCls}
+      placeholder="하차지 검색"
+      value={form.하차지명}
+      onChange={(e) => {
+        const v = e.target.value;
+        handleDropName(v);
+        setPlaceOptions(filterPlaces(v));
+        setShowPlaceDropdown(true);
+        setPlaceActive(0);
+      }}
+      onKeyDown={(e) => {
+        const list = placeOptions;
+        if (!list.length) return;
+        if (["ArrowDown", "ArrowUp", "Enter"].includes(e.key)) {
+          e.preventDefault();
+        }
+        if (e.key === "Enter") {
+          const p = list[placeActive];
+          if (!p) return;
           setForm((prev) => ({
             ...prev,
             하차지명: p.업체명,
@@ -1846,163 +1813,185 @@ setFareModalOpen(true);
             하차지담당자번호: p.담당자번호,
           }));
           setShowPlaceDropdown(false);
-        }}
-      >
-        <b>{p.업체명}</b>
-        {p.주소 ? (
-          <div className="text-xs text-gray-500">{p.주소}</div>
-        ) : null}
+        } else if (e.key === "ArrowDown") {
+          setPlaceActive((i) => Math.min(i + 1, list.length - 1));
+        } else if (e.key === "ArrowUp") {
+          setPlaceActive((i) => Math.max(i - 1, 0));
+        }
+      }}
+      onBlur={() => setTimeout(() => setShowPlaceDropdown(false), 200)}
+    />
+
+    {showPlaceDropdown && placeOptions.length > 0 && (
+      <div className="absolute z-50 bg-white border rounded-lg shadow-lg w-full max-h-48 overflow-auto">
+        {placeOptions.map((p, i) => (
+          <div
+            key={i}
+            className={`px-2 py-1 cursor-pointer ${
+              i === placeActive ? "bg-blue-50" : "hover:bg-gray-50"
+            }`}
+            onMouseEnter={() => setPlaceActive(i)}
+            onMouseDown={() => {
+              setForm((prev) => ({
+                ...prev,
+                하차지명: p.업체명,
+                하차지주소: p.주소,
+                하차지담당자: p.담당자,
+                하차지담당자번호: p.담당자번호,
+              }));
+              setShowPlaceDropdown(false);
+            }}
+          >
+            <b>{p.업체명}</b>
+            {p.주소 && <div className="text-xs text-gray-500">{p.주소}</div>}
+          </div>
+        ))}
       </div>
-    ))}
+    )}
   </div>
-)}
 
-          </div>
+  {/* 하차지주소 */}
+  <div>
+    <label className={labelCls}>
+      하차지주소 <AutoBadge show={autoDropMatched} />
+    </label>
+    <input
+      className={inputCls}
+      value={form.하차지주소}
+      onChange={(e) => handleDropAddrManual(e.target.value)}
+      placeholder="자동매칭 또는 수기입력"
+    />
+  </div>
 
+  {/* 화물내용 */}
+  <div>
+    <label className={labelCls}>화물내용</label>
+    <input className={inputCls} value={form.화물내용} onChange={(e) => onChange("화물내용", e.target.value)} />
+  </div>
 
-          {/* 하차지주소 */}
-          <div>
-            <label className={labelCls}>
-              하차지주소 <AutoBadge show={autoDropMatched} />
-            </label>
-            <input
-              className={inputCls}
-              value={form.하차지주소}
-              onChange={(e) => handleDropAddrManual(e.target.value)}
-              placeholder="자동매칭 또는 수기입력"
-            />
-          </div>
+  <div>
+    <label className={labelCls}>차량종류</label>
+    <select className={inputCls} value={form.차량종류} onChange={(e) => onChange("차량종류", e.target.value)}>
+      <option value="">선택 ▾</option>
+      {VEHICLE_TYPES.map((v) => <option key={v} value={v}>{v}</option>)}
+    </select>
+  </div>
 
+  <div>
+    <label className={labelCls}>차량톤수</label>
+    <input className={inputCls} placeholder="예: 1톤 / 2.5톤" value={form.차량톤수} onChange={(e) => onChange("차량톤수", e.target.value)} />
+  </div>
 
-          <div>
-            <label className={labelCls}>화물내용</label>
-            <input className={inputCls} value={form.화물내용} onChange={(e) => onChange("화물내용", e.target.value)} />
-          </div>
-          <div>
-            <label className={labelCls}>차량종류</label>
-            <select className={inputCls} value={form.차량종류} onChange={(e) => onChange("차량종류", e.target.value)}>
-              <option value="">선택 ▾</option>
-              {VEHICLE_TYPES.map((v) => <option key={v} value={v}>{v}</option>)}
-            </select>
-          </div>
+  {/* 금액 */}
+  {isAdmin && (
+    <>
+      <div>
+        <label className={labelCls}>청구운임</label>
+        <input className={inputCls} value={form.청구운임} onChange={(e) => onChange("청구운임", e.target.value.replace(/[^\d-]/g, ""))} />
+      </div>
+      <div>
+        <label className={labelCls}>기사운임</label>
+        <input className={inputCls} value={form.기사운임} onChange={(e) => onChange("기사운임", e.target.value.replace(/[^\d-]/g, ""))} />
+      </div>
+      <div>
+        <label className={labelCls}>수수료</label>
+        <input className={`${inputCls} bg-gray-100`} value={form.수수료} readOnly />
+      </div>
+    </>
+  )}
 
-          <div>
-            <label className={labelCls}>차량톤수</label>
-            <input className={inputCls} placeholder="예: 1톤 / 2.5톤" value={form.차량톤수} onChange={(e) => onChange("차량톤수", e.target.value)} />
-          </div>
+  {/* 차량정보 */}
+  <div>
+    <label className={labelCls}>차량번호</label>
+    <input
+      className={inputCls}
+      value={form.차량번호}
+      onChange={(e) => handleCarNoChange(e.target.value)}
+      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleCarNoEnter(e.currentTarget.value); } }}
+      onBlur={(e) => handleCarNoEnter(e.currentTarget.value)}
+    />
+  </div>
 
-          {/* 🔒 금액 (admin 전용) */}
-          {isAdmin && (
-            <>
-              <div>
-                <label className={labelCls}>청구운임</label>
-                <input className={inputCls} value={form.청구운임} onChange={(e) => onChange("청구운임", e.target.value.replace(/[^\d-]/g, ""))} />
-              </div>
-              <div>
-                <label className={labelCls}>기사운임</label>
-                <input className={inputCls} value={form.기사운임} onChange={(e) => onChange("기사운임", e.target.value.replace(/[^\d-]/g, ""))} />
-              </div>
-              <div>
-                <label className={labelCls}>수수료</label>
-                <input className={`${inputCls} bg-gray-100`} value={form.수수료} readOnly />
-              </div>
-            </>
-          )}
+  <div>
+    <label className={labelCls}>기사명</label>
+    <input className={`${inputCls} bg-gray-100`} value={form.이름} readOnly />
+  </div>
 
-          <div>
-            <label className={labelCls}>차량번호</label>
-            <input
-              className={inputCls}
-              value={form.차량번호}
-              onChange={(e) => handleCarNoChange(e.target.value)}  // ✅ 차량번호 변경 시 즉시 자동매칭
-              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleCarNoEnter(e.currentTarget.value); } }}
-              onBlur={(e) => handleCarNoEnter(e.currentTarget.value)}  // ✅ 포커스 아웃 시에도 자동매칭
-            />
+  <div>
+    <label className={labelCls}>전화번호</label>
+    <input className={`${inputCls} bg-gray-100`} value={form.전화번호} readOnly />
+  </div>
 
-          </div>
-          <div>
-            <label className={labelCls}>기사명</label>
-            <input className={`${inputCls} bg-gray-100`} value={form.이름} readOnly />
-          </div>
-          <div>
-            <label className={labelCls}>전화번호</label>
-            <input className={`${inputCls} bg-gray-100`} value={form.전화번호} readOnly />
-          </div>
+  {/* 상/하차 방법 */}
+  <div>
+    <label className={labelCls}>상차방법</label>
+    <select className={inputCls} value={form.상차방법} onChange={(e) => onChange("상차방법", e.target.value)}>
+      <option value="">선택 ▾</option>
+      {["지게차", "수작업", "직접수작업", "수도움"].map(v => <option key={v} value={v}>{v}</option>)}
+    </select>
+  </div>
 
-          
+  <div>
+    <label className={labelCls}>하차방법</label>
+    <select className={inputCls} value={form.하차방법} onChange={(e) => onChange("하차방법", e.target.value)}>
+      <option value="">선택 ▾</option>
+      {["지게차", "수작업", "직접수작업", "수도움"].map(v => <option key={v} value={v}>{v}</option>)}
+    </select>
+  </div>
 
-          <div>
-            <label className={labelCls}>상차방법</label>
-            <select className={inputCls} value={form.상차방법} onChange={(e) => onChange("상차방법", e.target.value)}>
-              <option value="">선택 ▾</option>
-              {["지게차", "수작업", "직접수작업", "수도움"].map(v => <option key={v} value={v}>{v}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className={labelCls}>하차방법</label>
-            <select className={inputCls} value={form.하차방법} onChange={(e) => onChange("하차방법", e.target.value)}>
-              <option value="">선택 ▾</option>
-              {["지게차", "수작업", "직접수작업", "수도움"].map(v => <option key={v} value={v}>{v}</option>)}
-            </select>
-          </div>
+  {/* 결제 */}
+  <div>
+    <label className={labelCls}>지급방식</label>
+    <select className={inputCls} value={form.지급방식} onChange={(e) => onChange("지급방식", e.target.value)}>
+      <option value="">선택 ▾</option>
+      {PAY_TYPES.map(v => <option key={v} value={v}>{v}</option>)}
+    </select>
+  </div>
 
-          <div>
-            <label className={labelCls}>지급방식</label>
-            <select className={inputCls} value={form.지급방식} onChange={(e) => onChange("지급방식", e.target.value)}>
-              <option value="">선택 ▾</option>
-              {PAY_TYPES.map(v => <option key={v} value={v}>{v}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className={labelCls}>배차방식</label>
-            <select className={inputCls} value={form.배차방식} onChange={(e) => onChange("배차방식", e.target.value)}>
-              <option value="">선택 ▾</option>
-              {DISPATCH_TYPES.map(v => <option key={v} value={v}>{v}</option>)}
-            </select>
-          </div>
+  <div>
+    <label className={labelCls}>배차방식</label>
+    <select className={inputCls} value={form.배차방식} onChange={(e) => onChange("배차방식", e.target.value)}>
+      <option value="">선택 ▾</option>
+      {DISPATCH_TYPES.map(v => <option key={v} value={v}>{v}</option>)}
+    </select>
+  </div>
 
+  {/* 메모 */}
+  <div className="col-span-6">
+    <label className={labelCls}>메모</label>
+    <textarea className={`${inputCls} h-20`} value={form.메모} onChange={(e) => onChange("메모", e.target.value)} />
+  </div>
 
-          <div className="col-span-6">
-            <label className={labelCls}>메모</label>
-            <textarea className={`${inputCls} h-20`} value={form.메모} onChange={(e) => onChange("메모", e.target.value)} />
-          </div>
+  {/* 버튼 */}
+  <div className="col-span-6 flex justify-end mt-2">
+    <button
+      type="submit"
+      className="bg-blue-600 text-white px-6 py-2 rounded-lg text-sm hover:bg-blue-700"
+    >
+      저장
+    </button>
+    <button
+      type="button"
+      onClick={async () => {
+        const { 거래처명, 상차지명, 하차지명, 상차일, 상차시간, 하차일, 하차시간 } = form;
+        if (!거래처명 || !상차지명 || !하차지명) return alert("거래처/상차지명/하차지명을 입력해주세요.");
+        if (!상차일 || !하차일) return alert("상차일/하차일은 반드시 필요합니다.");
+        const res = await sendOrderTo24(form);
 
-          <div className="col-span-6 flex justify-end mt-2">
-            <button type="submit" className="bg-blue-600 text-white px-6 py-2 rounded text-sm hover:bg-blue-700">저장</button>
-            <button
-              type="button"
-              onClick={async () => {
-                const {
-                  거래처명, 상차지명, 하차지명,
-                  상차일, 상차시간,
-                  하차일, 하차시간
-                } = form;
+        if (res?.success) {
+          alert(`📡 24시콜 전송 완료!\n\n전송건수: 1건\n실패건수: 0건\n메시지: ${res?.message || "성공"}`);
+        } else {
+          alert(`⛔ 전송 실패!\n\n전송건수: 0건\n실패건수: 1건\n사유: ${res?.message || "알 수 없는 오류"}`);
+        }
+      }}
+      className="ml-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-sm text-white rounded-lg"
+    >
+      📡 24시전송
+    </button>
+  </div>
 
-                if (!거래처명 || !상차지명 || !하차지명)
-                  return alert("거래처/상차지명/하차지명을 입력해주세요.");
-                if (!상차일 || !하차일)
-                  return alert("상차일/하차일은 반드시 필요합니다.");
+</form>
 
-                const res = await sendOrderTo24(form);
-
-if (res?.success) {
-  alert(
-    `📡 24시콜 전송 완료!\n\n전송건수: 1건\n실패건수: 0건\n메시지: ${res?.message || "성공"}`
-  );
-} else {
-  alert(
-    `⛔ 전송 실패!\n\n전송건수: 0건\n실패건수: 1건\n사유: ${res?.message || "알 수 없는 오류"}`
-  );
-}
-              }}
-              className="ml-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-sm text-white rounded"
-            >
-              📡 24시전송
-            </button>
-
-
-          </div>
-        </form>
 
         {/* ------------------------------  
       🔵 오더복사 팝업 (완성본)
@@ -2175,6 +2164,100 @@ setAutoDropMatched(false);
     return (
       <>
         {renderForm()}
+           {/* ⭐ 오른쪽 프리미엄 Today Dashboard ⭐ */}
+<div
+  className="
+    absolute
+    right-10
+    top-[220px]
+    w-[x]        /* 👈 대시보드 가로 크기 */
+    p-10              /* 👈 내부 패딩(세로 크기에도 영향) */
+    rounded-3xl
+    bg-white/95
+    border border-gray-100
+    shadow-2xl
+    backdrop-blur-xl
+    select-none
+    z-[9999]
+  "
+  style={{ height: "590px" }}   // 👈 여기서 높이 조절
+>
+  <div className="flex items-center justify-between mb-6">
+    <h3 className="text-lg font-bold text-gray-800">
+      Today Dashboard
+    </h3>
+    <span className="text-xs text-gray-400">
+      자동새로고침 적용
+    </span>
+  </div>
+
+  {/* Progress Bar */}
+  <div className="mb-6">
+    <div className="text-xs text-gray-500 mb-1 flex justify-between">
+      <span>배차진행률</span>
+      <span>{rate}%</span>
+    </div>
+    <div className="w-full h-3 bg-blue-100 rounded-full overflow-hidden">
+      <div
+        className="
+          h-3
+          bg-gradient-to-r from-blue-500 to-blue-700
+          transition-all duration-700
+          rounded-full
+        "
+        style={{ width: `${rate}%` }}
+      />
+    </div>
+  </div>
+
+  {/* KPI */}
+  <div className="space-y-4 text-[15px] font-medium">
+
+    <div className="flex justify-between p-3 rounded-xl hover:bg-blue-50 cursor-pointer"
+      onClick={() => goStatus(null, "")}>
+      <span>총 오더</span>
+      <span className="font-bold">{total}</span>
+    </div>
+
+    <div className="flex justify-between p-3 rounded-xl hover:bg-blue-50 cursor-pointer"
+      onClick={() => goStatus("배차상태", "배차완료")}>
+      <span>배차완료</span>
+      <span className="font-bold text-blue-600">{done}</span>
+    </div>
+
+    <div className="flex justify-between p-3 rounded-xl hover:bg-blue-50 cursor-pointer"
+      onClick={() => goStatus("배차상태", "배차중")}>
+      <span>배차중</span>
+      <span className="font-bold text-blue-500">{doing}</span>
+    </div>
+
+    <div className="flex justify-between p-3 rounded-xl hover:bg-blue-50 cursor-pointer"
+      onClick={() => goStatus("차량번호", "")}>
+      <span>미배차</span>
+      <span className="font-bold text-rose-500">{pending}</span>
+    </div>
+
+    <div className="flex justify-between p-3 rounded-xl hover:bg-blue-50 cursor-pointer">
+      <span>지연 위험</span>
+      <span className="font-bold text-red-600">{delayed}</span>
+    </div>
+
+  </div>
+
+  {/* 💸 TodayRevenue */}
+  <div className="mt-10 bg-gradient-to-r from-blue-600 to-blue-700 rounded-2xl text-white p-5 text-center shadow-lg">
+    <div className="text-sm opacity-90">오늘 예상 매출</div>
+    <div className="text-2xl font-extrabold mt-1">
+      {todayRevenue.toLocaleString()} 원
+    </div>
+  </div>
+
+</div>
+
+
+
+
+
         {/* ⭐ 운임조회 결과 모달 */}
 {fareModalOpen && fareResult && (
   <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
@@ -2264,19 +2347,24 @@ setAutoDropMatched(false);
 )}
 
 
-        {/* ⭐ 4파트 동일한 실시간배차현황 테이블 */}
-        <RealtimeStatus
-          role={role}
-          dispatchData={dispatchData}
-          drivers={drivers}
-          clients={clients}
-          timeOptions={timeOptions}
-          tonOptions={tonOptions}
-          addDispatch={addDispatch}
-          patchDispatch={patchDispatch}
-          removeDispatch={removeDispatch}
-          upsertDriver={upsertDriver}
-        />
+        {/* ⭐ 4파트 동일한 실시간배차현황 테이블 */} 
+<div id="realtime-status-area">
+  <RealtimeStatus
+    role={role}
+    dispatchData={dispatchData}
+    drivers={drivers}
+    clients={clients}
+    timeOptions={timeOptions}
+    tonOptions={tonOptions}
+    addDispatch={addDispatch}
+    patchDispatch={patchDispatch}
+    removeDispatch={removeDispatch}
+    upsertDriver={upsertDriver}
+    filterType={filterType}
+    filterValue={filterValue}
+  />
+</div>
+
       </>
     );
   }
@@ -2490,12 +2578,27 @@ React.useEffect(() => {
   React.useEffect(() => {
   const saved = JSON.parse(localStorage.getItem("realtimeFilters") || "{}");
 
+  if (!saved.startDate && !saved.endDate) {
+    const today = todayKST();
+    setStartDate(today);
+    setEndDate(today);
+    localStorage.setItem(
+      "realtimeFilters",
+      JSON.stringify({
+        startDate: today,
+        endDate: today,
+      })
+    );
+    return;
+  }
+
   if (saved.q) setQ(saved.q);
   if (saved.filterType) setFilterType(saved.filterType);
   if (saved.filterValue) setFilterValue(saved.filterValue);
   if (saved.startDate) setStartDate(saved.startDate);
   if (saved.endDate) setEndDate(saved.endDate);
 }, []);
+
 
 // -------------------------------------------------------------
 // ⭐ 저장 useEffect도 위의 것 바로 아래에 같이 위치 ⭐
@@ -2580,11 +2683,13 @@ const [driverSelectRowId, setDriverSelectRowId] = React.useState(null);
   // ------------------------
   // 한국 시간
   // ------------------------
-  const todayKST = () => {
-    const now = new Date();
-    now.setHours(now.getHours() + 9);
-    return now.toISOString().slice(0, 10);
-  };
+// 정확한 한국 날짜 계산 (UTC 편차 자동 반영)
+const todayKST = () => {
+  const now = new Date();
+  const offset = now.getTimezoneOffset() * 60000;
+  const korea = new Date(now.getTime() - offset + 9 * 60 * 60 * 1000);
+  return korea.toISOString().slice(0, 10);
+};
 
   // ------------------------
   // Firestore → rows 반영 (순서 절대 보존)
