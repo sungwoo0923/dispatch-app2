@@ -751,9 +751,6 @@ const [placeActive, setPlaceActive] = React.useState(0);
       );
     };
 
-
-
-
     const _tomorrowStr = (typeof tomorrowStr === "function")
       ? tomorrowStr
       : () => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().slice(0, 10); };
@@ -903,8 +900,6 @@ const [placeActive, setPlaceActive] = React.useState(0);
       setClientQuery(name);
       setIsClientOpen(false);
     };
-
-
 
     // ✅ 주소 자동매칭 뱃지
     const [autoPickMatched, setAutoPickMatched] = React.useState(false);
@@ -1119,6 +1114,9 @@ const palletFareRules = {
     const [fareResult, setFareResult] = React.useState(null);
     // ⭐ 운임조회 (송원 전용 자동요율 → 그 다음 AI 통계)
     const handleFareSearch = () => {
+      // ⭐ 운임조회는 날짜 필터 무시 → 전체 데이터 강제 사용
+const fullData = Array.isArray(dispatchData) ? [...dispatchData] : [];
+
       const pickup = (form.상차지명 || "").trim();
       const drop = (form.하차지명 || "").trim();
       const tonStr = (form.차량톤수 || "").trim();   // 예: "1톤", "1.4톤"
@@ -1235,7 +1233,7 @@ const hasSinmi = (
       //    (송원 규칙에 안 맞는 경우만 사용)
       // ============================================
 
-      let filtered = (dispatchData || []).filter((r) => {
+      let filtered = fullData.filter((r) => {
         if (!r.상차지명 || !r.하차지명) return false;
 
         const rPickup = String(r.상차지명).trim();
@@ -1305,7 +1303,7 @@ const hasSinmi = (
 
       // 🔁 상하차지만 맞는 데이터로 Fallback
       if (!filtered.length) {
-        filtered = (dispatchData || []).filter((r) => {
+        filtered = fullData.filter((r) => {
           if (!r.상차지명 || !r.하차지명) return false;
           const rPickup = String(r.상차지명).trim();
           const rDrop = String(r.하차지명).trim();
@@ -1367,82 +1365,84 @@ setFareModalOpen(true);
     };
 
     // ------------------ 오더복사 ------------------
-    // 🔎 오더복사용 상태
-    const [copyOpen, setCopyOpen] = React.useState(false);
-    const [copyQ, setCopyQ] = React.useState("");
-    const [copyStart, setCopyStart] = React.useState("");
-    const [copyEnd, setCopyEnd] = React.useState("");
-    const [copyFilterType, setCopyFilterType] = React.useState("전체");
 
-    // 🔍 오더복사 리스트
-    const copyList = React.useMemo(() => {
-      const q = copyQ.trim().toLowerCase();
+// 🔎 오더복사용 상태
+const [copyOpen, setCopyOpen] = React.useState(false);
+const [copyQ, setCopyQ] = React.useState("");
+const [copyStart, setCopyStart] = React.useState("");
+const [copyEnd, setCopyEnd] = React.useState("");
+const [copyFilterType, setCopyFilterType] = React.useState("전체");
 
-      // 검색어 없으면 아무것도 안 보여줌
-      if (!q) return [];
+// 🔍 오더복사 리스트
+const copyList = React.useMemo(() => {
+  const q = copyQ.trim().toLowerCase();
 
-      let arr = (dispatchData || []);
+  // 검색어 없으면 비표시 (기존 기능 유지)
+  if (!q) return [];
 
-      // 날짜 필터
-// ⭐ 오늘 기준으로 고정
-const today = new Date().toISOString().slice(0, 10);
-arr = arr.filter((r) => (r.상차일 || "").slice(0, 10) === today);
+  // ⭐ 전체 데이터 사용
+  let arr = Array.isArray(dispatchData) ? [...dispatchData] : [];
 
-// ⭐ 현황패널 필터 적용
-if (filterType && filterValue) {
-  arr = arr.filter((r) => String(r[filterType]) === filterValue);
-}
+  // ⭐ 현황패널 필터 적용
+  if (filterType && filterValue) {
+    arr = arr.filter(
+      (r) => String(r[filterType] || "").toLowerCase() === String(filterValue).toLowerCase()
+    );
+  }
 
+  // ⭐ 필드 기준 검색
+  if (copyFilterType !== "전체") {
+    arr = arr.filter((r) =>
+      String(r[copyFilterType] || "").toLowerCase().includes(q)
+    );
+  } else {
+    arr = arr.filter((r) =>
+      ["거래처명", "상차지명", "하차지명", "화물내용"].some((k) =>
+        String(r[k] || "").toLowerCase().includes(q)
+      )
+    );
+  }
 
-      // 필드 필터
-      if (copyFilterType !== "전체") {
-        arr = arr.filter((r) =>
-          String(r[copyFilterType] || "").toLowerCase().includes(q)
-        );
-      } else {
-        arr = arr.filter((r) =>
-          ["거래처명", "상차지명", "하차지명", "화물내용"].some((k) =>
-            String(r[k] || "").toLowerCase().includes(q)
-          )
-        );
-      }
+  // ⭐ 최신순 정렬
+  arr = arr.slice().sort((a, b) =>
+    (b.상차일 || "").localeCompare(a.상차일 || "") ||
+    (b.상차시간 || "").localeCompare(a.상차시간 || "")
+  );
 
-      // 정렬
-      arr = arr.slice().sort((a, b) =>
-        (a.상차일 || "").localeCompare(b.상차일 || "") ||
-        (a.상차시간 || "").localeCompare(b.상차시간 || "")
-      );
+  return arr;
+}, [dispatchData, copyQ, copyFilterType, filterType, filterValue]);
 
-      return arr;
-    }, [dispatchData, copyQ, copyStart, copyEnd, copyFilterType]);
-    const [copySelected, setCopySelected] = React.useState([]);
+const [copySelected, setCopySelected] = React.useState([]);
 
-    const applyCopy = (r) => {
-      const keep = {
-        거래처명: r.거래처명 || "",
-        상차지명: r.상차지명 || "",
-        상차지주소: r.상차지주소 || "",
-        하차지명: r.하차지명 || "",
-        하차지주소: r.하차지주소 || "",
-        화물내용: r.화물내용 || "",
-        차량종류: r.차량종류 || "",
-        차량톤수: r.차량톤수 || "",
-        상차방법: r.상차방법 || "",
-        하차방법: r.하차방법 || "",
-        상차일: lockYear(r.상차일 || ""),
-        상차시간: r.상차시간 || "",
-        하차일: lockYear(r.하차일 || ""),
-        하차시간: r.하차시간 || "",
-        지급방식: r.지급방식 || "",
-        배차방식: r.배차방식 || "",
-        메모: r.메모 || "",
-      };
-      setForm((p) => ({ ...p, ...keep }));
-      setAutoPickMatched(false);
-      setAutoDropMatched(false);
-      setCopyOpen(false);
-      setCopySelected([]); // ⭐ 체크 초기화
-    };
+// 📌 복사 적용 함수
+const applyCopy = (r) => {
+  const keep = {
+    거래처명: r.거래처명 || "",
+    상차지명: r.상차지명 || "",
+    상차지주소: r.상차지주소 || "",
+    하차지명: r.하차지명 || "",
+    하차지주소: r.하차지주소 || "",
+    화물내용: r.화물내용 || "",
+    차량종류: r.차량종류 || "",
+    차량톤수: r.차량톤수 || "",
+    상차방법: r.상차방법 || "",
+    하차방법: r.하차방법 || "",
+    상차일: lockYear(r.상차일 || ""),
+    상차시간: r.상차시간 || "",
+    하차일: lockYear(r.하차일 || ""),
+    하차시간: r.하차시간 || "",
+    지급방식: r.지급방식 || "",
+    배차방식: r.배차방식 || "",
+    메모: r.메모 || "",
+  };
+
+  setForm((p) => ({ ...p, ...keep }));
+  setAutoPickMatched(false);
+  setAutoDropMatched(false);
+  setCopyOpen(false);
+  setCopySelected([]); // 선택 초기화
+};
+
 
     // ------------------ 초기화 ------------------
     const resetForm = () => {
@@ -3734,11 +3734,20 @@ ${url}
 <div className="flex justify-end gap-2 mb-2">
   {/* 📋 기사복사 모달 오픈 버튼 */}
 <button
-  onClick={() => setCopyModalOpen(true)}
+  onClick={() => {
+    if (!selected.length) {
+      return alert("📋 복사할 오더를 선택하세요.");
+    }
+    if (selected.length > 1) {
+      return alert("⚠️ 복사는 1개의 오더만 가능합니다.");
+    }
+    setCopyModalOpen(true);
+  }}
   className="px-3 py-1 rounded bg-indigo-600 text-white"
 >
   📋 기사복사
 </button>
+
 {/* 📡 선택전송 (24시콜) */}
 <button
   onClick={async () => {
@@ -6108,20 +6117,24 @@ const recommendDriver = (row) => {
 // 🔵 선택수정 / 수정완료 (팝업 방식)  
 // ================================
 const handleEditToggle = async () => {
+  // 🔐 여러 건 선택 시 경고
+  if (!editMode && selected.size > 1) {
+    return alert("⚠️ 1개의 항목만 선택해주세요.\n(지금은 선택수정 모드입니다)");
+  }
 
   // 1) 수정 모드 OFF → 선택수정 버튼 처음 누른 상태
   if (!editMode) {
     if (!selected.size) return alert("수정할 항목을 선택하세요.");
 
-    // 선택된 항목 중 첫 번째 row 찾기
     const first = filtered.find((r) => selected.has(getId(r)));
 
     if (first) {
-      setEditTarget(first);        // 팝업에 전달
-      setEditPopupOpen(true);      // 팝업 열기
+      setEditTarget(first);
+      setEditPopupOpen(true);
     }
-    return;   // 🔥 여기서 끝 (기존 setEditMode 켜지지 않음)
+    return; 
   }
+
 
   // 2) 전체수정 모드일 때는 기존 저장 로직 그대로 적용
   const ids = Object.keys(edited);
@@ -6490,12 +6503,20 @@ if (!loaded) return null;
 
 {/* 📋 기사복사 */}
 <button
-  onClick={() => setCopyModalOpen(true)}
+  onClick={() => {
+    if (selected.size === 0) {
+      return alert("📋 복사할 항목을 선택하세요.");
+    }
+    if (selected.size > 1) {
+      return alert("⚠️ 1개의 항목만 선택할 수 있습니다.");
+    }
+    setCopyModalOpen(true);
+  }}
   className="px-3 py-2 rounded bg-purple-600 text-white hover:bg-purple-700"
 >
-  
   📋 기사복사
 </button>
+
     <button
       onClick={() => setShowCreate(true)}
       className="px-3 py-2 rounded bg-blue-600 text-white hover:bg-blue-700"
