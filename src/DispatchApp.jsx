@@ -1506,6 +1506,119 @@ if (filterType && filterValue) {
     const labelCls = "text-xs text-gray-600 mb-1 block";
     const reqStar = <span className="text-red-500">*</span>;
     const AutoBadge = ({ show }) => show ? <span className="ml-2 text-[12px] text-emerald-700">(📌 자동매칭됨)</span> : null;
+// ---------------------------------------------
+// ⭐ 오늘 유가 정보 가져오기 (휘발유/경유)
+// ---------------------------------------------
+async function fetchFuelPrices(apiKey) {
+  const KEY = apiKey || "DEMO_KEY"; // ← 실제 키 없으면 DEMO
+  const url = `https://www.opinet.co.kr/api/avgAllPrice.do?out=json&code=${KEY}`;
+  try {
+    const resp = await fetch(url);
+    const json = await resp.json();
+    return json.RESULT?.OIL || [];
+  } catch (e) {
+    console.warn("유가 조회 실패:", e);
+    return [];
+  }
+}
+
+function FuelPriceWidget({ apiKey }) {
+  const [prices, setPrices] = React.useState([]);
+
+  React.useEffect(() => {
+    fetchFuelPrices(apiKey).then(setPrices);
+  }, [apiKey]);
+
+  return (
+    <div className="mb-4 bg-white rounded-xl shadow-lg border p-4 w-[280px]">
+      <h3 className="font-bold text-gray-800 text-sm mb-2">⛽ 오늘 유가 (전국 평균)</h3>
+
+      {prices.length === 0 && (
+        <div className="text-gray-400 text-xs">불러오는 중...</div>
+      )}
+
+      <div className="space-y-1 text-sm">
+        {prices.map(oil => (
+          <div key={oil.PRODCD} className="flex justify-between">
+            <span>{oil.PRODNM}</span>
+            <span className="font-bold">{Number(oil.PRICE).toLocaleString()} 원/L</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+// ----------------------------
+// ⛽ 자동 슬라이드 유가 배너
+// ----------------------------
+async function fetchFuelPrices(areaCode) {
+  const key = process.env.VITE_OPINET_API_KEY;
+  const url = `https://www.opinet.co.kr/api/avgAllPrice.do?code=${key}&out=json&area=${areaCode}`;
+  const res = await fetch(url);
+  const json = await res.json();
+  return json.RESULT?.OIL || [];
+}
+
+const AREA_OPTIONS = [
+  { code: "", name: "전국" },
+  { code: "04", name: "인천" },
+  { code: "09", name: "경기" },
+  { code: "01", name: "서울" },
+];
+
+function FuelSlideWidget() {
+  const [prices, setPrices] = React.useState([]);
+  const [page, setPage] = React.useState(0);
+  const [area, setArea] = React.useState("");
+
+  React.useEffect(() => {
+    fetchFuelPrices(area).then(setPrices).catch(console.error);
+  }, [area]);
+
+  React.useEffect(() => {
+    const timer = setInterval(() => {
+      setPage((p) => (p + 1) % 3);
+    }, 3000);
+    return () => clearInterval(timer);
+  }, []);
+
+  if (!prices.length) return null;
+
+  const items = [
+    prices.find(o => o.PRODNM.includes("휘발유")),
+    prices.find(o => o.PRODNM.includes("경유")),
+    prices.find(o => o.PRODNM.includes("고급")),
+  ].filter(Boolean);
+
+  const item = items[page];
+  const diff = item?.DIFF ?? 0;
+  const up = diff > 0;
+
+  return (
+    <div className="mb-6">
+      <select
+        value={area}
+        onChange={(e) => setArea(e.target.value)}
+        className="border rounded px-2 py-1 text-xs mb-2"
+      >
+        {AREA_OPTIONS.map(a => (
+          <option key={a.code} value={a.code}>{a.name}</option>
+        ))}
+      </select>
+
+      <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white text-center rounded-xl py-4 shadow-lg transition-all duration-500">
+        <div className="text-xs opacity-90">{item.PRODNM}</div>
+        <div className="text-xl font-extrabold mt-1">
+          {Number(item.PRICE).toLocaleString()} 원/L
+        </div>
+
+        <div className={`text-xs font-bold mt-1 ${up ? "text-rose-200" : "text-green-200"}`}>
+          {up ? "▲" : "▼"} {Math.abs(diff)}원
+        </div>
+      </div>
+    </div>
+  );
+}
 
     const renderForm = () => (
       <>
@@ -2169,9 +2282,9 @@ setAutoDropMatched(false);
   className="
     absolute
     right-10
-    top-[220px]
-    w-[x]        /* 👈 대시보드 가로 크기 */
-    p-10              /* 👈 내부 패딩(세로 크기에도 영향) */
+    top-[215px]
+    w-[350px]
+    p-10
     rounded-3xl
     bg-white/95
     border border-gray-100
@@ -2180,9 +2293,14 @@ setAutoDropMatched(false);
     select-none
     z-[9999]
   "
-  style={{ height: "590px" }}   // 👈 여기서 높이 조절
+  style={{ height: "600px" }}
 >
-  <div className="flex items-center justify-between mb-6">
+
+  {/* 🌟 자동 슬라이드 유가 배너 */}
+  <FuelSlideWidget />
+
+  {/* Dashboard Header */}
+  <div className="flex items-center justify-between mb-6 mt-4">
     <h3 className="text-lg font-bold text-gray-800">
       Today Dashboard
     </h3>
@@ -2210,7 +2328,7 @@ setAutoDropMatched(false);
     </div>
   </div>
 
-  {/* KPI */}
+  {/* KPI Cards */}
   <div className="space-y-4 text-[15px] font-medium">
 
     <div className="flex justify-between p-3 rounded-xl hover:bg-blue-50 cursor-pointer"
@@ -2244,7 +2362,7 @@ setAutoDropMatched(false);
 
   </div>
 
-  {/* 💸 TodayRevenue */}
+  {/* 💸 오늘 매출 */}
   <div className="mt-10 bg-gradient-to-r from-blue-600 to-blue-700 rounded-2xl text-white p-5 text-center shadow-lg">
     <div className="text-sm opacity-90">오늘 예상 매출</div>
     <div className="text-2xl font-extrabold mt-1">
@@ -2253,10 +2371,6 @@ setAutoDropMatched(false);
   </div>
 
 </div>
-
-
-
-
 
         {/* ⭐ 운임조회 결과 모달 */}
 {fareModalOpen && fareResult && (
