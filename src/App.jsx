@@ -38,11 +38,18 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [isMobileDevice, setIsMobileDevice] = useState(null);
 
-  // 🔥 SW 업데이트 상태
   const [updateReady, setUpdateReady] = useState(false);
 
   useEffect(() => {
-    const handler = () => setUpdateReady(true);
+    const handler = () => {
+      const saved = localStorage.getItem("latestVersion");
+      const latest = __APP_VERSION__;
+
+      // 저장된 버전이 아니면(즉, 새 버전이면) 팝업 표시
+      if (saved !== latest) {
+        setUpdateReady(true);
+      }
+    };
     window.addEventListener("app-update-ready", handler);
     return () => window.removeEventListener("app-update-ready", handler);
   }, []);
@@ -71,13 +78,16 @@ export default function App() {
 
   return (
     <>
-      {/* 🔵 업데이트 알림 배너 */}
+      {/* 🔵 업데이트 알림 배너 (배포 시 1번만 노출) */}
       {updateReady && (
         <div className="fixed top-0 left-0 right-0 z-[99999] bg-blue-600 text-white text-sm py-2 text-center shadow-md animate-pulse">
           새 버전이 배포되었습니다.
           <button
             className="font-bold underline ml-2"
-            onClick={() => window.location.reload(true)}
+            onClick={() => {
+              localStorage.setItem("latestVersion", __APP_VERSION__);
+              window.location.reload(true);
+            }}
           >
             새로고침
           </button>
