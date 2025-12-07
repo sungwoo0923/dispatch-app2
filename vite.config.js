@@ -11,9 +11,9 @@ export default defineConfig({
       // Firebase FCM 서비스워커 포함
       srcDir: "public",
       filename: "firebase-messaging-sw.js",
-           workbox: {
-       maximumFileSizeToCacheInBytes: 10 * 1024 * 1024, // 🔥 10MB까지 허용
-     },
+      workbox: {
+        maximumFileSizeToCacheInBytes: 10 * 1024 * 1024, // 🔥 10MB까지 허용
+      },
 
       includeAssets: [
         "favicon.ico",
@@ -65,5 +65,13 @@ export default defineConfig({
 
   build: {
     outDir: "dist",
+  },
+
+  // ⭐️ 배포 버전 / 빌드 시간 자동 주입 ⭐️ (App.jsx에서 사용)
+  define: {
+    __APP_VERSION__: JSON.stringify(
+      process.env.VERCEL_GIT_COMMIT_SHA || "local"
+    ),
+    __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
   },
 });
