@@ -1,22 +1,16 @@
-// ===================== public/sw.js =====================
+// ===================== public/sw.js (정리본) =====================
 
-// 캐시 이름: 매 배포마다 변경되어 새로 설치됨
-const CACHE_NAME = "run25-cache-v1";
+// 설치: 기존 SW 무시하고 즉시 새 버전 활성화 대기
+self.addEventListener("install", () => self.skipWaiting());
 
-// 설치: 기존 캐시 무시하고 새 버전 적용
-self.addEventListener("install", (e) => {
-  self.skipWaiting();
+// 활성화: 기존 탭에서도 즉시 제어권 가져가기
+self.addEventListener("activate", (event) => {
+  event.waitUntil(self.clients.claim());
 });
 
-// 활성화: 오래된 캐시 삭제
-self.addEventListener("activate", (e) => {
-  clients.claim();
-});
-
-// 버전 업데이트 감지 (새 SW 설치되면 메시지 전송)
+// 버전 체크 명령 받으면 새 버전 알림 전송
 self.addEventListener("message", (event) => {
   if (event.data === "CHECK_VERSION") {
-    // 새 버전 설치되었음을 알려줌
     self.clients.matchAll().then((clients) => {
       clients.forEach((client) =>
         client.postMessage({ type: "NEW_VERSION" })
