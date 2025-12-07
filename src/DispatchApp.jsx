@@ -10,6 +10,9 @@ import AdminMenu from "./AdminMenu";
 import { calcFare } from "./fareUtil";
 import StandardFare from "./StandardFare";
 import { sendOrderTo24Proxy as sendOrderTo24 } from "../api/24CallProxy";
+import {
+  LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid
+} from "recharts";
 
 
 
@@ -243,7 +246,7 @@ const removeClient = async (id) => deleteDoc(doc(db, COLL.clients, id));
     upsertClient,
     removeClient,
   };
-}  // ← ⭐ 이거 반드시 필요!!
+}  // ← ⭐ 이거 반드시 필요
 /* -------------------------------------------------
    하차지 저장 (upsertPlace) — Firestore
 --------------------------------------------------*/
@@ -284,7 +287,17 @@ export const toInt = (v) => {
   return isNaN(n) ? 0 : n;
 };
 export const fmtWon = (n) => `${Number(n || 0).toLocaleString()}원`;
-
+// 📌 전화번호 하이픈 자동 적용 함수
+function formatPhone(phone) {
+  const p = (phone || "").replace(/[^\d]/g, "");
+  if (p.length === 11) {
+    return `${p.slice(0, 3)}-${p.slice(3, 7)}-${p.slice(7)}`;
+  }
+  if (p.length === 10) {
+    return `${p.slice(0, 3)}-${p.slice(3, 6)}-${p.slice(6)}`;
+  }
+  return phone;
+}
 export {
   COMPANY, VEHICLE_TYPES, PAY_TYPES, DISPATCH_TYPES,
   headBase, cellBase, inputBase, todayStr
@@ -604,48 +617,158 @@ const isAdmin = role === "admin";
 
 // 기존 필터 상태 (유지)
 const [filterType, setFilterType] = React.useState(null);
+
 const [filterValue, setFilterValue] = React.useState("");
+// ⭐ 신규 기사등록 모달 상태
+const [driverModal, setDriverModal] = React.useState({
+  open: false,
+  carNo: "",
+  name: "",
+  phone: "",
+});
+ // ⭐ 등록 확인 팝업 상태
+const [confirmOpen, setConfirmOpen] = React.useState(false);
+
+// ⭐ 신규 기사 등록시: 기본 커서 위치(기사명)
+const nameInputRef = React.useRef(null);
+
+React.useEffect(() => {
+  if (!driverModal.open) return;
+  const timer = setTimeout(() => {
+    try {
+      nameInputRef.current?.focus();
+    } catch {}
+  }, 30);
+  return () => clearTimeout(timer);
+}, [driverModal.open]);
+
+
+
+// ⭐ Top3 팝업 상태
+const [popupType, setPopupType] = React.useState(null);
+
+
+const [statusPopup, setStatusPopup] = React.useState(null);
+// ⭐ 전화번호 숫자→하이폰 포맷 변환
+function formatPhone(raw) {
+  if (!raw) return "";
+  const num = raw.replace(/[^\d]/g, "");
+  if (num.length === 11) {
+    return `${num.slice(0,3)}-${num.slice(3,7)}-${num.slice(7)}`;
+  }
+  if (num.length === 10) {
+    return `${num.slice(0,3)}-${num.slice(3,6)}-${num.slice(6)}`;
+  }
+  return raw;
+}
 
 // ========================================================
 // 🔷 Today Dashboard 데이터 계산 (UI 대시보드에서 사용)
 // ========================================================
 
-// 📌 기준 날짜(오늘)
+// 📌 오늘 날짜 (KST)
+ function todayKST() {
+   const d = new Date();
+   d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+   return d.toISOString().slice(0, 10);
+ }
 const today = todayKST();
-function todayKST() {
-  const d = new Date();
-  const offset = d.getTimezoneOffset() * 60000;
-  const korea = new Date(d.getTime() - offset + 9 * 60 * 60 * 1000);
-  return korea.toISOString().slice(0, 10);
-}
 
-// 📌 오늘 상차 기준으로 당일 데이터만 필터링
+// 📌 당일 상차 데이터만 필터링
 const todayRows = (dispatchData || []).filter(
-  r => (r.상차일 || "").slice(0, 10) === today
+  r => String(r.상차일 || "").slice(0, 10) === today
 );
 
-// 📌 현황 계산
+// 📊 KPI 계산: 모두 당일 ONLY
 const total = todayRows.length;
 const done = todayRows.filter(r => r.배차상태 === "배차완료").length;
 const doing = todayRows.filter(r => r.배차상태 === "배차중").length;
+const pending = todayRows.filter(r => !r.차량번호?.trim()).length;
+const delayed = todayRows.filter(r => r.배차상태 === "지연").length;
+// 🔹 시간대별 요청건수 트렌드 데이터 생성
+const trendData = React.useMemo(() => {
+  const hourly = {};
+  todayRows.forEach(r => {
+    const t = (r.상차시간 || "").match(/(\d+)/);
+    const hour = t ? Number(t[1]) : null;
+    if (hour != null && hour >= 0 && hour <= 23) {
+      hourly[hour] = (hourly[hour] || 0) + 1;
+    }
+  });
 
-// 📌 차량 미지정 (전화만 받았거나 대기중)
-const pending = todayRows.filter(
-  r => !r.차량번호 || r.차량번호.trim() === ""
-).length;
+  const list = [];
+  for (let i = 0; i < 24; i++) {
+    list.push({ hour: `${i}시`, count: hourly[i] || 0 });
+  }
+  return list;
+}, [todayRows]);
 
-// 📌 지연위험 (추후 고도화 예정)
-const delayed = 0;
 
-// 📊 배차 진행률 %
-const rate = total ? Math.round((done / total) * 100) : 0;
-// 💸 오늘 예상 매출
-const todayRevenue = todayRows
-  .filter(r => r.배차상태 === "배차완료")
-  .reduce((sum, r) => {
-    const v = Number(String(r.청구운임 || "0").replace(/[^\d]/g, ""));
-    return sum + (isNaN(v) ? 0 : v);
-  }, 0);
+// 진행률
+const rate = total > 0 ? Math.round((done / total) * 100) : 0;
+
+// 당일 기사 수: 배차된 기사 (중복 제거)
+const driverCount = new Set(
+  todayRows
+    .map(r => r.이름?.trim())
+    .filter(Boolean)
+).size;
+
+// 신규 거래처/하차지 (값 존재 여부 기준)
+const newClients = todayRows.filter(r => r.거래처명?.trim()).length;
+const newPlaces = todayRows.filter(r => r.하차지명?.trim()).length;
+
+// 🚚 유통 데이터
+const money = (text) => {
+  const n = Number(String(text || "0").replace(/[^\d]/g, ""));
+  return isNaN(n) ? 0 : n;
+};
+
+// 매출/기사비용/마진율
+const todayRevenue = todayRows.reduce((sum, r) => sum + money(r.청구운임), 0);
+const todayDriverCost = todayRows.reduce((sum, r) => sum + money(r.기사운임), 0);
+const todayMarginRate = todayRevenue
+  ? ((todayRevenue - todayDriverCost) / todayRevenue) * 100
+  : 0;
+// 🔹 Top 거래처/하차지 통계
+const topClients = Object.entries(
+  todayRows.reduce((map, r) => {
+    const k = r.거래처명 || "기타";
+    map[k] = (map[k] || 0) + 1;
+    return map;
+  }, {})
+).sort((a,b)=>b[1]-a[1]).slice(0,3);
+
+const topDrops = Object.entries(
+  todayRows.reduce((map, r) => {
+    const k = r.하차지명 || "기타";
+    map[k] = (map[k] || 0) + 1;
+    return map;
+  }, {})
+).sort((a,b)=>b[1]-a[1]).slice(0,3);
+
+
+// 🔹 알림 설정 (시간 자동감지)
+const [alertTime, setAlertTime] = React.useState("10:00");
+const [alertShown, setAlertShown] = React.useState(false);
+
+React.useEffect(() => {
+  const timer = setInterval(() => {
+    const now = new Date();
+    const hh = String(now.getHours()).padStart(2, "0");
+    const mm = String(now.getMinutes()).padStart(2, "0");
+    const cur = `${hh}:${mm}`;
+
+    if (!alertShown && cur === alertTime) {
+      alert(`⏰ 알림: ${alertTime}\n미배차 ${pending}건, 지연 ${delayed}건 확인!`);
+      setAlertShown(true);
+    }
+  }, 10000);
+
+  return () => clearInterval(timer);
+}, [alertTime, alertShown, pending, delayed]);
+
+
 // ========================================================
 // ⭐ 상태 기반 필터링 실행 + 실시간배차현황 테이블로 스크롤 이동
 // ========================================================
@@ -965,7 +1088,7 @@ const [placeActive, setPlaceActive] = React.useState(0);
           ...p,
           차량번호: clean,
           이름: found.이름,
-          전화번호: found.전화번호,
+          전화번호: formatPhone(found.전화번호), // ⭐ 표시용 하이픈 적용
           배차상태: "배차완료",
         }));
       } else {
@@ -980,27 +1103,27 @@ const [placeActive, setPlaceActive] = React.useState(0);
     };
 
     const handleCarNoEnter = (value) => {
-      const clean = (value || "").trim().replace(/\s+/g, "");
-      if (!clean) return;
-      const found = driverMap.get(clean);
-      if (found) {
-        setForm((p) => ({
-          ...p,
-          차량번호: clean,
-          이름: found.이름,
-          전화번호: found.전화번호,
-          배차상태: "배차완료",
-        }));
-      } else {
-        const 이름 = prompt("신규 기사 이름:") || "";
-        if (!이름) return;
-        const 전화번호 = prompt("전화번호:") || "";
-        upsertDriver?.({ 이름, 차량번호: clean, 전화번호 });
-        alert("신규 기사 등록 완료!");
-        setForm((p) => ({ ...p, 차량번호: clean, 이름, 전화번호, 배차상태: "배차완료" }));
-      }
-    };
+  const clean = (value || "").trim().replace(/\s+/g, "");
+  if (!clean) return;
 
+  const found = driverMap.get(clean);
+  if (found) {
+    setForm((p) => ({
+      ...p,
+      차량번호: clean,
+      이름: found.이름,
+      전화번호: formatPhone(found.전화번호), // ⭐ 표시용 하이픈 적용
+      배차상태: "배차완료",
+    }));
+  } else {
+    setDriverModal({
+      open: true,
+      carNo: clean,
+      name: "",
+      phone: "",
+    });
+  }
+};
 
     const nextSeq = () => Math.max(0, ...(dispatchData || []).map((r) => Number(r.순번) || 0)) + 1;
 
@@ -1079,34 +1202,52 @@ const palletFareRules = {
 
 
     const handleSubmit = async (e) => {
-      e.preventDefault();
-      if (!validateRequired(form)) return;
-      if (!validateDateTime(form)) return;
+  e.preventDefault();
+  if (!validateRequired(form)) return;
+  if (!validateDateTime(form)) return;
 
-      const status = form.차량번호 && (form.이름 || form.전화번호) ? "배차완료" : "배차중";
-      const moneyPatch = isAdmin ? {} : { 청구운임: "0", 기사운임: "0", 수수료: "0" };
-      const rec = {
-        ...form, ...moneyPatch,
-        상차일: lockYear(form.상차일),
-        하차일: lockYear(form.하차일),
-        순번: nextSeq(),
-        배차상태: status,
-      };
-      await addDispatch(rec);
+  setConfirmOpen(true);
+};
 
-      const reset = {
-        ...emptyForm,
-        _id: crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`,
-        등록일: _todayStr(),
-        ...(isAdmin ? {} : { 청구운임: "", 기사운임: "", 수수료: "" }),
-      };
-      setForm(reset);
-      setClientQuery("");
-      setAutoPickMatched(false);
-      setAutoDropMatched(false);
-      alert("등록되었습니다.");
-      try { localStorage.removeItem("dispatchForm"); } catch {}
-    };
+// ⭐ 실제 저장 함수
+const doSave = async () => {
+  const status = form.차량번호 && (form.이름 || form.전화번호)
+    ? "배차완료"
+    : "배차중";
+
+  const moneyPatch = isAdmin ? {} : {
+    청구운임: "0",
+    기사운임: "0",
+    수수료: "0"
+  };
+
+  const rec = {
+    ...form, ...moneyPatch,
+    상차일: lockYear(form.상차일),
+    하차일: lockYear(form.하차일),
+    순번: nextSeq(),
+    배차상태: status,
+  };
+
+  await addDispatch(rec);
+
+  const reset = {
+    ...emptyForm,
+    _id: crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`,
+    등록일: _todayStr(),
+    ...(isAdmin ? {} : { 청구운임: "", 기사운임: "", 수수료: "" }),
+  };
+
+  setForm(reset);
+  setClientQuery("");
+  setAutoPickMatched(false);
+  setAutoDropMatched(false);
+  setConfirmOpen(false);
+  try { localStorage.removeItem("dispatchForm"); } catch {}
+
+  alert("등록되었습니다.");
+};
+
     // ⭐ 운임조회 (업그레이드 버전: 화물내용 없어도 동작 + 최근 화물내용 포함)
     
     // ⭐ 운임조회 팝업 상태
@@ -1338,7 +1479,7 @@ const hasSinmi = (
 
       const latestRow = filtered
         .slice()
-        .sort((a, b) => (b.상차일 || "").localeCompare(a.상차일 || ""))[0];
+        .sort((a, b) => String(b.상차일 || "").localeCompare(String(a.상차일 || "")))[0];
 
       const latestCargo =
         latestRow?.화물내용?.trim() ? latestRow.화물내용 : "(기록 없음)";
@@ -1551,13 +1692,7 @@ function FuelPriceWidget({ apiKey }) {
 // ----------------------------
 // ⛽ 자동 슬라이드 유가 배너
 // ----------------------------
-async function fetchFuelPrices(areaCode) {
-  const key = process.env.VITE_OPINET_API_KEY;
-  const url = `https://www.opinet.co.kr/api/avgAllPrice.do?code=${key}&out=json&area=${areaCode}`;
-  const res = await fetch(url);
-  const json = await res.json();
-  return json.RESULT?.OIL || [];
-}
+
 
 const AREA_OPTIONS = [
   { code: "", name: "전국" },
@@ -1628,7 +1763,17 @@ function FuelSlideWidget() {
 
         {/* 입력 폼 */}
   {/* ================== 프리미엄 액션바 ================== */}
-<div className="w-full bg-white rounded-xl shadow-lg border px-4 py-3 flex items-center gap-3 mb-5">
+<div 
+  className="
+    bg-white 
+    rounded-xl shadow-lg border 
+    px-4 py-3 
+    flex flex-wrap items-center gap-3 mb-5 
+    max-w-[1500px]    // 입력폼과 동일 폭
+  "
+  style={{ minHeight: "52px" }}
+>
+
 
   {/* 좌측 버튼 그룹 */}
   <div className="flex items-center gap-2">
@@ -2229,7 +2374,16 @@ setAutoDropMatched(false);
                         </tr>
                       ) : (
                         copyList.map((row) => (
-                          <tr key={row._id} className="border-b hover:bg-gray-50">
+                          <tr
+  key={row._id}
+  id={`row-${row._id}`} // ★ 수정: 스크롤 이동용 ID
+  className="hover:bg-gray-50 cursor-pointer"
+  onDoubleClick={() => {
+    if (typeof window.RUN25_EDIT_ROW === "function") {
+      window.RUN25_EDIT_ROW(row); // 수정 팝업
+    }
+  }}
+>
                             <td className="text-center">
                               <input
                                 type="checkbox"
@@ -2276,101 +2430,380 @@ setAutoDropMatched(false);
     // ⭐ 여기부터 4파트 테이블 추가
     return (
       <>
-        {renderForm()}
-           {/* ⭐ 오른쪽 프리미엄 Today Dashboard ⭐ */}
-<div
-  className="
-    absolute
-    right-10
-    top-[215px]
-    w-[350px]
-    p-10
-    rounded-3xl
-    bg-white/95
-    border border-gray-100
-    shadow-2xl
-    backdrop-blur-xl
-    select-none
-    z-[9999]
-  "
-  style={{ height: "600px" }}
->
+      
+           {/* ==================== 상단: 입력폼 + Dashboard ==================== */}
+<div className="flex items-start gap-6 w-full">
 
-  {/* 🌟 자동 슬라이드 유가 배너 */}
-  <FuelSlideWidget />
+  {/* 왼쪽 입력폼 (절대 변경 금지) */}
+  <div className="flex-1">{renderForm()}</div>
 
-  {/* Dashboard Header */}
-  <div className="flex items-center justify-between mb-6 mt-4">
-    <h3 className="text-lg font-bold text-gray-800">
-      Today Dashboard
-    </h3>
-    <span className="text-xs text-gray-400">
-      자동새로고침 적용
-    </span>
-  </div>
+  {/* ================= Premium Today Dashboard v4 ================= */}
+  <div
+    className="
+      w-[1000px]
+      rounded-3xl
+      bg-white
+      shadow-xl
+      border border-gray-200
+      p-6
+      sticky top-[110px]
+      flex-shrink-0
+    "
+  >
 
-  {/* Progress Bar */}
-  <div className="mb-6">
-    <div className="text-xs text-gray-500 mb-1 flex justify-between">
-      <span>배차진행률</span>
-      <span>{rate}%</span>
-    </div>
-    <div className="w-full h-3 bg-blue-100 rounded-full overflow-hidden">
-      <div
-        className="
-          h-3
-          bg-gradient-to-r from-blue-500 to-blue-700
-          transition-all duration-700
-          rounded-full
-        "
-        style={{ width: `${rate}%` }}
+    {/* Header + 알림시간 설정 */}
+    <div className="flex justify-between items-center mb-4">
+      <h3 className="text-lg font-semibold text-gray-900">Today Dashboard</h3>
+      <input
+        type="time"
+        value={alertTime}
+        onChange={(e) => {
+          setAlertTime(e.target.value);
+          setAlertShown(false);
+        }}
+        className="border rounded px-1 py-0.5 text-[10px]"
       />
     </div>
-  </div>
 
-  {/* KPI Cards */}
-  <div className="space-y-4 text-[15px] font-medium">
-
-    <div className="flex justify-between p-3 rounded-xl hover:bg-blue-50 cursor-pointer"
-      onClick={() => goStatus(null, "")}>
-      <span>총 오더</span>
-      <span className="font-bold">{total}</span>
+    {/* Progress */}
+    <div className="mb-6">
+      <div className="flex justify-between text-[11px] text-gray-500 mb-1">
+        <span>배차진행률</span><span>{rate}%</span>
+      </div>
+      <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+        <div className="h-full bg-blue-600" style={{ width: `${rate}%` }} />
+      </div>
     </div>
 
-    <div className="flex justify-between p-3 rounded-xl hover:bg-blue-50 cursor-pointer"
-      onClick={() => goStatus("배차상태", "배차완료")}>
-      <span>배차완료</span>
-      <span className="font-bold text-blue-600">{done}</span>
+    {/* Quick Status */}
+<div className="grid grid-cols-3 gap-2 mb-6 text-[12px]">
+
+  {/* 임박 */}
+  <button
+    onClick={() =>
+      setStatusPopup({
+        title: "임박 리스트",
+        list: todayRows.filter(r => r.배차상태 === "배차중")
+      })
+    }
+    className={`bg-amber-50 hover:bg-amber-100 border border-amber-200 py-2 rounded-xl text-center font-medium
+      ${doing > 0 ? "animate-pulse" : ""}`}
+  >
+    ⏳ 임박 {doing}
+  </button>
+
+  {/* 미배차 */}
+  <button
+    onClick={() =>
+      setStatusPopup({
+        title: "미배차 리스트",
+        list: todayRows.filter(r => !r.차량번호?.trim())
+      })
+    }
+    className="bg-gray-50 hover:bg-gray-100 border border-gray-200 py-2 rounded-xl text-center font-medium"
+  >
+    🚧 미배차 {pending}
+  </button>
+
+  {/* 지연 */}
+  <button
+    onClick={() =>
+      setStatusPopup({
+        title: "지연 리스트",
+        list: todayRows.filter(r => r.배차상태 === "지연")
+      })
+    }
+    className={`bg-rose-50 hover:bg-rose-100 border border-rose-200 py-2 rounded-xl text-center font-medium
+      ${delayed > 0 ? "animate-pulse" : ""}`}
+  >
+    ⚠ 지연 {delayed}
+  </button>
+
+</div>
+
+
+    {/* KPI */}
+    <div className="grid grid-cols-3 gap-3 text-center mb-6">
+      <div><div className="text-[11px] text-gray-500">총오더</div><div className="text-base font-bold">{total}</div></div>
+      <div><div className="text-[11px] text-gray-500">완료</div><div className="text-base font-bold text-blue-600">{done}</div></div>
+      <div><div className="text-[11px] text-gray-500">진행</div><div className="text-base font-bold text-blue-600">{doing}</div></div>
+      <div><div className="text-[11px] text-gray-500">기사수</div><div className="text-base font-semibold">{driverCount}</div></div>
+      <div><div className="text-[11px] text-gray-500">신규거래</div><div className="text-base font-semibold text-emerald-600">{newClients}</div></div>
+      <div><div className="text-[11px] text-gray-500">신규하차</div><div className="text-base font-semibold text-emerald-600">{newPlaces}</div></div>
     </div>
 
-    <div className="flex justify-between p-3 rounded-xl hover:bg-blue-50 cursor-pointer"
-      onClick={() => goStatus("배차상태", "배차중")}>
-      <span>배차중</span>
-      <span className="font-bold text-blue-500">{doing}</span>
+    {/* Financial */}
+    <div className="space-y-1.5 text-[13px] mb-6">
+      <div className="flex justify-between"><span>매출</span><b>{todayRevenue.toLocaleString()}원</b></div>
+      <div className="flex justify-between"><span>기사비용</span><b>{todayDriverCost.toLocaleString()}원</b></div>
+      <div className="flex justify-between"><span>마진율</span>
+        <b className={todayMarginRate >= 0 ? "text-emerald-600" : "text-red-600"}>{todayMarginRate.toFixed(0)}%</b>
+      </div>
     </div>
 
-    <div className="flex justify-between p-3 rounded-xl hover:bg-blue-50 cursor-pointer"
-      onClick={() => goStatus("차량번호", "")}>
-      <span>미배차</span>
-      <span className="font-bold text-rose-500">{pending}</span>
+    {/* Trend Graph */}
+    <div className="bg-white border border-gray-200 rounded-xl p-3 mb-6">
+      <div className="text-[11px] text-gray-600 mb-2">시간대별 요청건수</div>
+      <div className="h-[110px]">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={trendData}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="hour" stroke="#888" fontSize={10} />
+            <YAxis allowDecimals={false} stroke="#888" fontSize={10} />
+            <Tooltip />
+            <Line type="monotone" dataKey="count" stroke="#2563eb" strokeWidth={2} dot={false} />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
     </div>
 
-    <div className="flex justify-between p-3 rounded-xl hover:bg-blue-50 cursor-pointer">
-      <span>지연 위험</span>
-      <span className="font-bold text-red-600">{delayed}</span>
+    {/* Top 3 Buttons */}
+    <div className="grid grid-cols-3 gap-2">
+      <button onClick={() => setPopupType("driver")} className="bg-gray-50 border border-gray-200 rounded-lg py-2 text-[12px] font-medium hover:bg-gray-100">
+        기사 Top 3
+      </button>
+      <button onClick={() => setPopupType("client")} className="bg-gray-50 border border-gray-200 rounded-lg py-2 text-[12px] font-medium hover:bg-gray-100">
+        상차지 Top 3
+      </button>
+      <button onClick={() => setPopupType("place")} className="bg-gray-50 border border-gray-200 rounded-lg py-2 text-[12px] font-medium hover:bg-gray-100">
+        하차지 Top 3
+      </button>
     </div>
 
-  </div>
-
-  {/* 💸 오늘 매출 */}
-  <div className="mt-10 bg-gradient-to-r from-blue-600 to-blue-700 rounded-2xl text-white p-5 text-center shadow-lg">
-    <div className="text-sm opacity-90">오늘 예상 매출</div>
-    <div className="text-2xl font-extrabold mt-1">
-      {todayRevenue.toLocaleString()} 원
-    </div>
   </div>
 
 </div>
+{/* ================= 신규 기사 등록 모달 ================= */}
+{driverModal.open && (
+  <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[99999]">
+    <div className="bg-white rounded-xl p-6 w-[420px] shadow-xl border border-gray-200">
+      <h3 className="text-lg font-bold mb-4">신규 기사 등록</h3>
+
+      <div className="space-y-3 text-sm">
+        <div>
+          <label className="block text-gray-600 mb-1">차량번호</label>
+          <input
+            className="border p-2 rounded w-full bg-gray-100"
+            value={driverModal.carNo}
+            readOnly
+          />
+        </div>
+
+        <div>
+          <label className="block text-gray-600 mb-1">기사명</label>
+          <input
+            className="border p-2 rounded w-full"
+            placeholder="예: 홍길동"
+            value={driverModal.name}
+            onChange={(e) =>
+              setDriverModal((p) => ({ ...p, name: e.target.value }))
+            }
+            ref={nameInputRef}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                document.getElementById("driver-save-btn")?.click();
+              }
+            }}
+          />
+        </div>
+
+        <div>
+          <label className="block text-gray-600 mb-1">전화번호</label>
+          <input
+            className="border p-2 rounded w-full"
+            placeholder="숫자(하이픈) 입력"
+            value={driverModal.phone}
+            onChange={(e) =>
+              setDriverModal((p) => ({
+                ...p,
+                phone: e.target.value.replace(/[^\d-]/g, ""),
+              }))
+            }
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                document.getElementById("driver-save-btn")?.click();
+              }
+            }}
+          />
+        </div>
+      </div>
+
+      <div className="flex justify-end gap-2 mt-6">
+        <button
+          className="px-4 py-2 rounded bg-gray-200"
+          onClick={() => setDriverModal({ open: false })}
+        >
+          취소
+        </button>
+
+        <button
+          id="driver-save-btn"
+          className="px-4 py-2 rounded bg-blue-600 text-white"
+          onClick={async () => {
+            if (!driverModal.name.trim()) return alert("기사명을 입력하세요.");
+            if (!driverModal.phone.replace(/[^\d]/g, "").trim()) return alert("전화번호를 입력하세요.");
+
+            const rawPhone = driverModal.phone.replace(/[^\d]/g, "");
+            if (!rawPhone || rawPhone.length < 10) return alert("전화번호를 정확히 입력하세요.");
+
+            await upsertDriver({
+              _id: driverModal.carNo,
+              차량번호: driverModal.carNo,
+              이름: driverModal.name,
+              전화번호: rawPhone,
+            });
+
+            setForm((p) => ({
+              ...p,
+              차량번호: driverModal.carNo,
+              이름: driverModal.name,
+              전화번호: formatPhone(rawPhone),
+              배차상태: "배차완료",
+            }));
+
+            setDriverModal({ open: false });
+          }}
+        >
+          저장
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+{/* ================= 등록 확인 팝업 ================= */}
+{confirmOpen && (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]"
+    onKeyDown={(e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        document.getElementById("confirm-save-btn")?.click();
+      }
+    }}
+    tabIndex={0} // Enter 감지 위해 포커스 가능
+  >
+    <div className="bg-white rounded-xl p-6 w-[380px] shadow-xl border border-gray-200">
+      
+      <h3 className="text-base font-bold mb-4">등록하시겠습니까?</h3>
+
+      <div className="text-sm text-gray-700 mb-4 leading-6">
+        <p>거래처: <b>{form.거래처명}</b></p>
+        <p>{form.상차지명} → {form.하차지명}</p>
+        {isAdmin && (
+          <p>청구운임: <b>{Number(form.청구운임 || 0).toLocaleString()}원</b></p>
+        )}
+      </div>
+
+      <div className="flex justify-end gap-2">
+        <button
+          className="px-3 py-1.5 bg-gray-200 rounded"
+          onClick={() => setConfirmOpen(false)}
+        >
+          취소
+        </button>
+
+        <button
+          id="confirm-save-btn"
+          className="px-3 py-1.5 bg-blue-600 text-white rounded"
+          onClick={doSave}
+        >
+          확인
+        </button>
+      </div>
+      
+    </div>
+  </div>
+)}
+
+
+{/* ================= Status Popup ================= */}
+{statusPopup && (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
+    <div className="bg-white rounded-xl p-6 w-[420px] shadow-xl border border-gray-200">
+      <h3 className="text-base font-bold mb-4">
+        {statusPopup.title}
+      </h3>
+
+      <div className="space-y-2 text-sm max-h-[300px] overflow-y-auto pr-1">
+        {statusPopup.list.length > 0 ? (
+          statusPopup.list.map((r, i) => (
+            <div
+              key={i}
+              className="flex justify-between border-b pb-1"
+            >
+              <span className="text-[12px]">
+                {r.상차지명 || "-"} → {r.하차지명 || "-"}
+              </span>
+              <span className="font-semibold">{r.배차상태 || "-"}</span>
+            </div>
+          ))
+        ) : (
+          <div className="text-center text-gray-500 text-[12px] py-3">
+            데이터 없음
+          </div>
+        )}
+      </div>
+
+      <button
+        className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-md text-sm mt-5"
+        onClick={() => setStatusPopup(null)}
+      >
+        닫기
+      </button>
+    </div>
+    
+  </div>
+  
+)}
+
+
+
+{/* ================= Top 3 Popup ================= */}
+{popupType && (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
+    <div className="bg-white rounded-xl p-6 w-[360px] shadow-xl border border-gray-200">
+      <h3 className="text-base font-bold mb-4">
+        {popupType === "driver" && "활동 많은 기사 Top 3"}
+        {popupType === "client" && "최다 상차지 Top 3"}
+        {popupType === "place" && "최다 하차지 Top 3"}
+      </h3>
+
+      <div className="space-y-2 text-sm">
+        {popupType === "driver" &&
+          [...todayRows].slice(0, 3).map((r, i) => (
+            <div key={i} className="flex justify-between">
+              <span>{r.이름 || "-"}</span>
+              <span className="font-semibold">{r.배차상태}</span>
+            </div>
+          ))}
+        {popupType === "client" &&
+          topClients.map(([name, count], i) => (
+            <div key={i} className="flex justify-between">
+              <span>{name}</span>
+              <span className="font-semibold">{count}건</span>
+            </div>
+          ))}
+        {popupType === "place" &&
+          topDrops.map(([name, count], i) => (
+            <div key={i} className="flex justify-between">
+              <span>{name}</span>
+              <span className="font-semibold">{count}건</span>
+            </div>
+          ))}
+      </div>
+
+      <button
+        className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-md text-sm mt-5"
+        onClick={() => setPopupType(null)}
+      >
+        닫기
+      </button>
+    </div>
+  </div>
+)}
+
 
         {/* ⭐ 운임조회 결과 모달 */}
 {fareModalOpen && fareResult && (
@@ -2497,7 +2930,7 @@ function RealtimeStatus({
   placeRows,
   timeOptions,
   tonOptions,
-  addDispatch,     // ⭐⭐⭐⭐⭐ 요거 반드시 필요!!!
+  addDispatch,     // ⭐⭐⭐⭐⭐ 요거 반드시 필요
   patchDispatch,
   removeDispatch,
   upsertDriver,
@@ -2799,11 +3232,11 @@ const [driverSelectRowId, setDriverSelectRowId] = React.useState(null);
   // ------------------------
 // 정확한 한국 날짜 계산 (UTC 편차 자동 반영)
 const todayKST = () => {
-  const now = new Date();
-  const offset = now.getTimezoneOffset() * 60000;
-  const korea = new Date(now.getTime() - offset + 9 * 60 * 60 * 1000);
-  return korea.toISOString().slice(0, 10);
+  const d = new Date();
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().slice(0, 10);
 };
+
 
   // ------------------------
   // Firestore → rows 반영 (순서 절대 보존)
@@ -2928,7 +3361,7 @@ React.useEffect(() => {
   };
 
   load();
-}, [dispatchData, showCreate]);   // ← rows 제거 !!!
+}, [dispatchData, showCreate]);   // ← rows 제거
 
 
 
@@ -3194,7 +3627,7 @@ const confirmDriverApply = async () => {
 // 📌 차량번호 입력(auto-match + 신규기사 등록)
 // ------------------------
 const handleCarInput = async (id, rawVal, keyEvent) => {
-  // 🚨 엔터 입력 시 → 기본동작 + 이벤트 전파 모두 차단!!
+  // 🚨 엔터 입력 시 → 기본동작 + 이벤트 전파 모두 차단
   if (keyEvent && keyEvent.key === "Enter") {
     keyEvent.preventDefault();
     keyEvent.stopPropagation();
@@ -4086,7 +4519,7 @@ XLSX.writeFile(wb, "실시간배차현황.xlsx");
   {r.이름}
 </td>
 
-                  <td className={cell}>{r.전화번호}</td>
+                  <td className={cell}>{formatPhone(r.전화번호)}</td>
 
                   <td className={cell}>
                     <span
@@ -6173,7 +6606,7 @@ const handleEditToggle = async () => {
     setSelected(new Set());
     alert("삭제 완료 ✅");
   };
-// 🔥 금액 변환 함수 (이거 추가!!)
+// 🔥 금액 변환 함수 (이거 추가)
 const toMoney = (v) => {
   if (v === undefined || v === null) return 0;
   const n = Number(String(v).replace(/[^\d]/g, ""));
@@ -10797,17 +11230,40 @@ function DriverManagement({ drivers = [], upsertDriver, removeDriver }) {
       return n;
     });
   };
-  const toggleAll = () => {
-    if (selected.size === filtered.length) setSelected(new Set());
-    else setSelected(new Set(filtered.map(r => r.차량번호 || r.id).filter(Boolean)));
-  };
+ const toggleAll = () => {
+  // ✅ 항상 Firestore 문서 id(r.id)를 우선 사용
+  const allIds = filtered
+    .map(r => r.id || r.차량번호)   // id가 없으면 차량번호 fallback
+    .filter(Boolean);
 
-  const handleBlur = async (row, key, val) => {
-    const id = row.id; // ← 반드시 문서 ID로 고정
-const patch = { ...row, [key]: val };
-await upsertDriver?.({ ...patch, id });
+  if (allIds.length === 0) {
+    setSelected(new Set());
+    return;
+  }
 
-  };
+  if (selected.size === allIds.length) {
+    setSelected(new Set());
+  } else {
+    setSelected(new Set(allIds));
+  }
+};
+
+
+const handleBlur = async (row, key, val) => {
+  const oldId = row.id; // 기존 ID(기존 차량번호)
+  const newId = key === "차량번호" ? val.replace(/\s+/g,"") : oldId;
+
+  const patch = { ...row, [key]: val, id: newId };
+
+  if (newId !== oldId) {
+    // 1) 새문서 생성
+    await upsertDriver?.(patch);
+    // 2) 기존 문서 삭제
+    await removeDriver?.(oldId);
+  } else {
+    await upsertDriver?.(patch);
+  }
+};
 
   const addNew = async () => {
     const 차량번호 = (newForm.차량번호 || "").replace(/\s+/g,"");
@@ -10818,12 +11274,17 @@ await upsertDriver?.({ ...patch, id });
   };
 
   const removeSelected = async () => {
-    if (!selected.size) return alert("선택된 항목이 없습니다.");
-    if (!confirm(`${selected.size}건 삭제할까요?`)) return;
-    for (const id of selected) await removeDriver?.(id);
-    setSelected(new Set());
-    alert("삭제 완료");
-  };
+  if (!selected.size) return alert("선택된 항목이 없습니다.");
+  // ✅ 브라우저 전역 window.confirm 사용
+  if (!window.confirm(`${selected.size}건 삭제할까요?`)) return;
+
+  for (const id of selected) {
+    await removeDriver?.(id);
+  }
+  setSelected(new Set());
+  alert("삭제 완료");
+};
+
 
   // 엑셀 업로드
   const onExcel = (e) => {
@@ -10919,41 +11380,95 @@ await upsertDriver?.({ ...patch, id });
             </tr>
           </thead>
           <tbody>
-            {paged.length===0 ? (
-              <tr><td className="text-center text-gray-500 py-6" colSpan={5}>표시할 데이터가 없습니다.</td></tr>
-            ) : paged.map((r,i)=> {
-              const id = r.차량번호 || r.id || `${i}`;
-              return (
-                <tr key={id} className={i%2? "bg-gray-50":""}>
-                  <td className={cell}>
-                    <input type="checkbox" checked={selected.has(id)} onChange={()=>toggleOne(id)} />
-                  </td>
-                  <td className={cell}>
-                    <input className={input} defaultValue={r.차량번호||""}
-                      onBlur={(e)=>handleBlur(r,"차량번호", e.target.value)} />
-                  </td>
-                  <td className={cell}>
-                    <input className={input} defaultValue={r.이름||""}
-                      onBlur={(e)=>handleBlur(r,"이름", e.target.value)} />
-                  </td>
-                  <td className={cell}>
-                    <input className={input} defaultValue={r.전화번호||""}
-                      onBlur={(e)=>handleBlur(r,"전화번호", e.target.value)} />
-                  </td>
-                  <td className={cell}>
-                    <input className={`${input} w-64`} defaultValue={r.메모||""}
-                      onBlur={(e)=>handleBlur(r,"메모", e.target.value)} />
-                  </td>
-                  <td className={cell}>
-                    <button
-                      onClick={()=>{ if(confirm("삭제하시겠습니까?")) removeDriver?.(id); }}
-                      className="px-2 py-1 bg-red-600 text-white rounded"
-                    >삭제</button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
+  {paged.length === 0 ? (
+    <tr>
+      <td className="text-center text-gray-500 py-6" colSpan={6}>
+        표시할 데이터가 없습니다.
+      </td>
+    </tr>
+  ) : (
+    paged.map((r, i) => {
+      // ✅ Firestore 문서 id를 최우선으로 사용
+      const docId = r._id || r.id || r.차량번호;
+      // ✅ React key는 docId가 없으면 인덱스로
+      const rowKey = docId || `${r.차량번호}_${i}`;
+
+      return (
+        <tr key={rowKey} className={i % 2 ? "bg-gray-50" : ""}>
+          {/* 체크박스 */}
+          <td className={cell}>
+            <input
+              type="checkbox"
+              checked={docId ? selected.has(docId) : false}
+              onChange={() => {
+                if (!docId) {
+                  alert("ID 없음: 삭제/선택이 불가능한 행입니다.");
+                  return;
+                }
+                toggleOne(docId);
+              }}
+            />
+          </td>
+
+          {/* 차량번호 */}
+          <td className={cell}>
+            <input
+              className={input}
+              defaultValue={r.차량번호 || ""}
+              onBlur={(e) => handleBlur(r, "차량번호", e.target.value)}
+            />
+          </td>
+
+          {/* 이름 */}
+          <td className={cell}>
+            <input
+              className={input}
+              defaultValue={r.이름 || ""}
+              onBlur={(e) => handleBlur(r, "이름", e.target.value)}
+            />
+          </td>
+
+          {/* 전화번호 */}
+          <td className={cell}>
+            <input
+              className={input}
+              defaultValue={r.전화번호 || ""}
+              onBlur={(e) => handleBlur(r, "전화번호", e.target.value)}
+            />
+          </td>
+
+          {/* 메모 */}
+          <td className={cell}>
+            <input
+              className={`${input} w-64`}
+              defaultValue={r.메모 || ""}
+              onBlur={(e) => handleBlur(r, "메모", e.target.value)}
+            />
+          </td>
+
+          {/* 삭제 버튼 */}
+          <td className={cell}>
+            <button
+              className="px-2 py-1 bg-red-600 text-white rounded"
+              onClick={() => {
+                if (!docId) {
+                  alert("ID 없음: 삭제가 불가능한 행입니다.");
+                  return;
+                }
+                if (confirm("삭제하시겠습니까?")) {
+                  removeDriver?.(docId);  // ✅ 항상 doc.id 기준으로 삭제
+                }
+              }}
+            >
+              삭제
+            </button>
+          </td>
+        </tr>
+      );
+    })
+  )}
+</tbody>
+
         </table>
       </div>
 
@@ -11758,14 +12273,16 @@ function ClientManagement({ clients = [], upsertClient, removeClient }) {
                         </td>
                         <td className={cell}>
                           <button
-                            onClick={() => {
-                              if (!confirm("삭제하시겠습니까?")) return;
-                              removeClient?.(id);
-                            }}
-                            className="px-2 py-1 bg-red-600 text-white rounded"
-                          >
-                            삭제
-                          </button>
+  onClick={() => {
+    if (window.confirm("삭제하시겠습니까?")) {
+      removeDriver?.(id);
+    }
+  }}
+  className="px-2 py-1 bg-red-600 text-white rounded"
+>
+  삭제
+</button>
+
                         </td>
                       </tr>
                     );
