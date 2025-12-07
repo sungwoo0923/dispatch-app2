@@ -38,7 +38,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [isMobileDevice, setIsMobileDevice] = useState(null);
 
-  // 🔥 업데이트 상태 추가
+  // 🔥 SW 업데이트 상태
   const [updateReady, setUpdateReady] = useState(false);
 
   useEffect(() => {
@@ -108,11 +108,10 @@ export default function App() {
           <Route path="/standard-fare" element={<StandardFare />} />
           <Route path="/no-access" element={<NoAccess />} />
           <Route path="/upload" element={<UploadPage />} />
-
           <Route path="*" element={<Navigate to="/app" replace />} />
         </Routes>
 
-        {/* Debug 표시 */}
+        {/* 🔧 VIEW 표시 */}
         <div
           style={{
             position: "fixed",
@@ -128,7 +127,26 @@ export default function App() {
         >
           VIEW: {isMobileDevice ? "💚 MOBILE UI" : "💻 PC UI"}
         </div>
+
+        {/* 🔥 버전 표시 (배포일자 포함) */}
+        <div
+          style={{
+            position: "fixed",
+            bottom: 22,
+            right: 4,
+            fontSize: "10px",
+            background: "rgba(0,0,0,0.6)",
+            color: "white",
+            padding: "2px 6px",
+            borderRadius: "4px",
+            zIndex: 9999,
+          }}
+        >
+          v: {__APP_VERSION__.slice(0, 7)} | {__BUILD_TIME__.slice(0, 10)}
+        </div>
       </Router>
     </>
   );
 }
+
+// ======================= END =======================
