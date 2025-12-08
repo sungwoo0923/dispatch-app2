@@ -77,4 +77,12 @@ export default defineConfig({
   build: {
     outDir: "dist",
   },
+
+  // ⭐️ 배포 버전 / 빌드 시간 자동 주입 ⭐️ (App.jsx에서 사용)
+  define: {
+    __APP_VERSION__: JSON.stringify(
+      process.env.VERCEL_GIT_COMMIT_SHA || "local"
+    ),
+    __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
+  },
 });

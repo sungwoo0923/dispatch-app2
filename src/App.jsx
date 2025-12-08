@@ -22,20 +22,14 @@ import NoAccess from "./NoAccess";
 import UploadPage from "./UploadPage";
 import StandardFare from "./StandardFare";
 
-// 🔍 모바일 감지 (카카오 인앱 포함)
+// 모바일 감지
 function detectMobileDevice() {
   const ua = navigator.userAgent.toLowerCase();
   const isKakao = ua.includes("kakaotalk");
   const isAndroid = ua.includes("android");
   const isIOS = /iphone|ipad|ipod/.test(ua);
-
-  // 📌 카카오톡 인앱은 PC처럼 보여도 무조건 모바일 UI 적용!
   if (isKakao && (isAndroid || isIOS)) return true;
-
-  // 📌 일반 모바일 브라우저도 모바일 UI
   if (isAndroid || isIOS) return true;
-
-  // 🔹 나머지는 PC
   return false;
 }
 
@@ -44,7 +38,22 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [isMobileDevice, setIsMobileDevice] = useState(null);
 
-  // 로그인 상태 관찰
+  const [updateReady, setUpdateReady] = useState(false);
+
+  useEffect(() => {
+    const handler = () => {
+      const saved = localStorage.getItem("latestVersion");
+      const latest = __APP_VERSION__;
+
+      // 저장된 버전이 아니면(즉, 새 버전이면) 팝업 표시
+      if (saved !== latest) {
+        setUpdateReady(true);
+      }
+    };
+    window.addEventListener("app-update-ready", handler);
+    return () => window.removeEventListener("app-update-ready", handler);
+  }, []);
+
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => {
       setUser(u);
@@ -53,7 +62,6 @@ export default function App() {
     return () => unsub();
   }, []);
 
-  // 모바일/PC 판별 실행
   useEffect(() => {
     setIsMobileDevice(detectMobileDevice());
   }, []);
@@ -69,63 +77,85 @@ export default function App() {
   const role = localStorage.getItem("role") || "user";
 
   return (
-    <Router>
-      <Routes>
-        {/* 루트 → /app */}
-        <Route path="/" element={<Navigate to="/app" replace />} />
+    <>
+      {/* 🔵 업데이트 알림 배너 (배포 시 1번만 노출) */}
+      {updateReady && (
+        <div className="fixed top-0 left-0 right-0 z-[99999] bg-blue-600 text-white text-sm py-2 text-center shadow-md animate-pulse">
+          새 버전이 배포되었습니다.
+          <button
+            className="font-bold underline ml-2"
+            onClick={() => {
+              localStorage.setItem("latestVersion", __APP_VERSION__);
+              window.location.reload(true);
+            }}
+          >
+            새로고침
+          </button>
+        </div>
+      )}
 
-        {/* 로그인/회원가입 */}
-        <Route
-          path="/login"
-          element={user ? <Navigate to="/app" replace /> : <Login />}
-        />
-        <Route
-          path="/signup"
-          element={user ? <Navigate to="/app" replace /> : <Signup />}
-        />
+      <Router>
+        <Routes>
+          <Route path="/" element={<Navigate to="/app" replace />} />
+          <Route path="/login" element={user ? <Navigate to="/app" replace /> : <Login />} />
+          <Route path="/signup" element={user ? <Navigate to="/app" replace /> : <Signup />} />
 
-        {/* 🔥 PC / Mobile 자동 분기 */}
-        <Route
-          path="/app"
-          element={
-            user ? (
-              isMobileDevice ? (
-                <MobileApp role={role} />
+          <Route
+            path="/app"
+            element={
+              user ? (
+                isMobileDevice ? (
+                  <MobileApp role={role} />
+                ) : (
+                  <DispatchApp role={role} />
+                )
               ) : (
-                <DispatchApp role={role} />
+                <Navigate to="/login" replace />
               )
-            ) : (
-              <Navigate to="/login" replace />
-            )
-          }
-        />
+            }
+          />
 
-        {/* 공용 페이지 */}
-        <Route path="/standard-fare" element={<StandardFare />} />
-        <Route path="/no-access" element={<NoAccess />} />
-        <Route path="/upload" element={<UploadPage />} />
+          <Route path="/standard-fare" element={<StandardFare />} />
+          <Route path="/no-access" element={<NoAccess />} />
+          <Route path="/upload" element={<UploadPage />} />
+          <Route path="*" element={<Navigate to="/app" replace />} />
+        </Routes>
 
-        {/* ❓그 외 → /app */}
-        <Route path="*" element={<Navigate to="/app" replace />} />
-      </Routes>
+        {/* 🔧 VIEW 표시 */}
+        <div
+          style={{
+            position: "fixed",
+            bottom: 4,
+            right: 4,
+            fontSize: "10px",
+            background: "rgba(0,0,0,0.6)",
+            color: "white",
+            padding: "2px 6px",
+            borderRadius: "999px",
+            zIndex: 9999,
+          }}
+        >
+          VIEW: {isMobileDevice ? "💚 MOBILE UI" : "💻 PC UI"}
+        </div>
 
-      {/* 🔧 Debug 표시 */}
-      <div
-        style={{
-          position: "fixed",
-          bottom: 4,
-          right: 4,
-          fontSize: "10px",
-          background: "rgba(0,0,0,0.6)",
-          color: "white",
-          padding: "2px 6px",
-          borderRadius: "999px",
-          zIndex: 9999,
-        }}
-      >
-        VIEW: {isMobileDevice ? "💚 MOBILE UI" : "💻 PC UI"}
-      </div>
-    </Router>
+        {/* 🔥 버전 표시 (배포일자 포함) */}
+        <div
+          style={{
+            position: "fixed",
+            bottom: 22,
+            right: 4,
+            fontSize: "10px",
+            background: "rgba(0,0,0,0.6)",
+            color: "white",
+            padding: "2px 6px",
+            borderRadius: "4px",
+            zIndex: 9999,
+          }}
+        >
+          v: {__APP_VERSION__.slice(0, 7)} | {__BUILD_TIME__.slice(0, 10)}
+        </div>
+      </Router>
+    </>
   );
 }
 
