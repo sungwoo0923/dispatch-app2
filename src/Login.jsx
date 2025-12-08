@@ -1,4 +1,4 @@
-// ======================= src/Login.jsx (role 자동설정 추가 버전) =======================
+// ======================= src/Login.jsx (UPDATE) =======================
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -8,21 +8,11 @@ import {
 } from "firebase/auth";
 import { auth, db } from "./firebase";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
-import { requestForToken } from "./firebaseMessaging";
 
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const navigate = useNavigate();
-
-  // 📌 기사(직영) 계정 목록
-  const driverEmails = [
-    "sw@naver.com",
-    "sw2@naver.com",
-    "sw3@naver.com",
-    "sw4@naver.com",
-    "sw5@naver.com",
-  ];
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -37,39 +27,14 @@ export default function Login() {
       const ref = doc(db, "users", user.uid);
       const snap = await getDoc(ref);
 
-      // ----- 🔥 직영 기사 로그인 처리 -----
-      if (driverEmails.includes(email)) {
-        await setDoc(
-          ref,
-          {
-            uid: user.uid,
-            email: user.email,
-            name: email.split("@")[0],
-            approved: true,
-            role: "driver",
-            createdAt: serverTimestamp(),
-            lastLogin: serverTimestamp(),
-          },
-          { merge: true }
-        );
-
-        localStorage.setItem("role", "driver");
-        localStorage.setItem("uid", user.uid);
-
-        navigate("/app");
-        return;
-      }
-
-      // ----- 기존 사용자 승인 방식 유지 -----
+      // 일반 PC 사용자 로그인 처리 유지
       if (!snap.exists()) {
         await setDoc(ref, {
           uid: user.uid,
           email: user.email,
-          name: "신규사용자",
-          approved: false,
           role: "user",
+          approved: false,
           createdAt: serverTimestamp(),
-          lastLogin: serverTimestamp(),
         });
         alert("회원가입 완료! 관리자 승인 후 로그인 가능합니다.");
         return;
@@ -81,18 +46,11 @@ export default function Login() {
         return;
       }
 
-      const role = data.role || "user";
+      const role = data.role;
       localStorage.setItem("role", role);
       localStorage.setItem("uid", user.uid);
 
-      await setDoc(ref, {
-        lastLogin: serverTimestamp(),
-      }, { merge: true });
-
-      await requestForToken();
-      console.log("📌 로그인 후 FCM 토큰 요청 완료!");
-
-      navigate("/app");
+      navigate(role === "admin" ? "/app" : "/app");
     } catch (err) {
       console.error(err);
       alert("로그인 실패: " + err.message);
@@ -101,43 +59,35 @@ export default function Login() {
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50">
-      <h1 className="text-2xl font-bold mb-4">배차 시스템 로그인</h1>
+      <h1 className="text-xl font-bold mb-4">배차 시스템 로그인</h1>
 
       <form onSubmit={handleLogin} className="flex flex-col gap-3 w-72">
         <input
           type="email"
           placeholder="이메일"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
           className="border p-2 rounded"
-          required
+          onChange={(e) => setEmail(e.target.value)}
         />
         <input
           type="password"
           placeholder="비밀번호"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
           className="border p-2 rounded"
-          required
+          onChange={(e) => setPassword(e.target.value)}
         />
-        <button
-          type="submit"
-          className="bg-blue-600 text-white py-2 rounded hover:bg-blue-700"
-        >
+        <button type="submit" className="bg-blue-600 text-white p-2 rounded">
           로그인
         </button>
       </form>
 
-      <div className="mt-4 text-sm text-gray-600">
-        계정이 없으신가요?{" "}
+      {/* 추가: 차량/기사 로그인 */}
+      <div className="mt-4">
         <button
-          onClick={() => navigate("/signup")}
-          className="text-blue-600 hover:underline"
+          className="text-green-700 underline"
+          onClick={() => navigate("/driver-login")}
         >
-          회원가입
+          차량/기사 로그인
         </button>
       </div>
     </div>
   );
 }
-// ======================= END =======================

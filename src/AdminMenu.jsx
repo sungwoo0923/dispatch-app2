@@ -41,12 +41,27 @@ export default function AdminMenu() {
 
   // 승인 토글
   const toggleApprove = async (u) => {
-    const status = !u.approved;
-    await setDoc(doc(db, "users", u.id), { approved: status }, { merge: true });
-    setUsers((prev) =>
-      prev.map((x) => (x.id === u.id ? { ...x, approved: status } : x))
-    );
-  };
+  const status = !u.approved;
+
+  await setDoc(doc(db, "users", u.id), { approved: status }, { merge: true });
+
+  setUsers((prev) =>
+    prev.map((x) => (x.id === u.id ? { ...x, approved: status } : x))
+  );
+
+  // 🔥 승인 시 drivers.active 자동 반영
+  if (status) {
+    await setDoc(doc(db, "drivers", u.id), {
+      active: true,
+      updatedAt: new Date(),
+    }, { merge: true });
+  } else {
+    await setDoc(doc(db, "drivers", u.id), {
+      active: false,
+    }, { merge: true });
+  }
+};
+  
 
   // 🔥 권한 변경 드롭다운 기능
   const updateRole = async (u, newRole) => {

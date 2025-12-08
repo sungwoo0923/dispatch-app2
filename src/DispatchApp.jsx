@@ -14,6 +14,7 @@ import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid
 } from "recharts";
 import { BarChart, Bar, Legend } from "recharts";
+import FleetManagement from "./FleetManagement";
 
 
 
@@ -309,6 +310,8 @@ export default function DispatchApp() {
   const [user, setUser] = useState(null);
   const navigate = useNavigate();
 
+  // ⭐ 여기 추가!
+  const [subMenu, setSubMenu] = useState("고정거래처관리");
   // ❌ 삭제 (중복 선언 오류 원인)
   // const [dispatchData, setDispatchData] = useState([]);
 
@@ -573,8 +576,42 @@ const dispatchDataFiltered = useMemo(() => {
         )}
 
         {menu === "고정거래처관리" && role === "admin" && (
-          <FixedClients drivers={drivers} upsertDriver={upsertDriver} />
-        )}
+  <div>
+    {/* 상단 탭 */}
+    <div className="flex gap-2 mb-3 border-b pb-2">
+      <button
+        className={`px-3 py-1 text-sm rounded ${
+          subMenu === "고정거래처관리"
+            ? "bg-blue-600 text-white"
+            : "bg-gray-200"
+        }`}
+        onClick={() => setSubMenu("고정거래처관리")}
+      >
+        고정거래처관리
+      </button>
+
+      <button
+        className={`px-3 py-1 text-sm rounded ${
+          subMenu === "지입차관리"
+            ? "bg-blue-600 text-white"
+            : "bg-gray-200"
+        }`}
+        onClick={() => setSubMenu("지입차관리")}
+      >
+        지입차관리
+      </button>
+    </div>
+
+    {/* 탭 화면 */}
+    {subMenu === "고정거래처관리" && (
+      <FixedClients drivers={drivers} upsertDriver={upsertDriver} />
+    )}
+
+    {subMenu === "지입차관리" && (
+      <FleetManagement />
+    )}
+  </div>
+)}
 
         {menu === "매출관리" && role === "admin" && (
           <Settlement dispatchData={dispatchData} />
