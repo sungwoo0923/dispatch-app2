@@ -1054,7 +1054,54 @@ function MobileSideMenu({
   onGoUnassigned,
   onDeleteAll, // ⭐⭐ 추가 !!!
 }) {
+  const logout = () => {
+    if (!window.confirm("로그아웃 하시겠습니까?")) return;
 
+    localStorage.removeItem("role");
+    localStorage.removeItem("uid");
+    localStorage.removeItem("token");
+
+    window.location.href = "/driver-login"; // 또는 "/"
+  };
+
+  return (
+    <div className="fixed inset-0 z-40">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="absolute left-0 top-0 bottom-0 w-64 bg-white shadow-xl flex flex-col">
+
+        <div className="px-4 py-3 border-b flex items-center justify-between">
+          <div className="font-semibold text-base">(주)돌캐 모바일</div>
+          <button className="text-gray-500 text-xl" onClick={onClose}>
+            ×
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto">
+          <MenuSection title="모바일">
+            <MenuItem label="등록내역" onClick={onGoList} />
+            <MenuItem label="화물등록" onClick={onGoCreate} />
+          </MenuSection>
+
+          <MenuSection title="현황 / 운임표">
+            <MenuItem label="표준운임표" onClick={onGoFare} />
+            <MenuItem label="배차현황" onClick={onGoStatus} />
+            <MenuItem label="미배차현황" onClick={onGoUnassigned} />
+          </MenuSection>
+        </div>
+
+        {/* 🔥 로그아웃 버튼 추가 */}
+        <div className="border-t px-4 py-3">
+          <button
+            onClick={logout}
+            className="w-full py-2 bg-red-500 text-white rounded-lg text-sm font-semibold active:scale-95"
+          >
+            로그아웃
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
   return (
     <div className="fixed inset-0 z-40">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
