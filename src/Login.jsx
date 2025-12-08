@@ -1,92 +1,75 @@
-// ======================= src/Login.jsx (UPDATE) =======================
 import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import {
-  signInWithEmailAndPassword,
-  setPersistence,
-  browserLocalPersistence,
-} from "firebase/auth";
 import { auth, db } from "./firebase";
-import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
+import { useNavigate } from "react-router-dom";
 
 export default function Login() {
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const navigate = useNavigate();
+  const [pw, setPw] = useState("");
+  const nav = useNavigate();
 
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    if (!email || !password) return alert("이메일과 비밀번호를 입력하세요.");
-
+  const login = async () => {
     try {
-      await setPersistence(auth, browserLocalPersistence);
+      const user = await signInWithEmailAndPassword(auth, email, pw);
+      const ref = doc(db, "users", user.user.uid);
+      const info = (await getDoc(ref)).data();
 
-      const result = await signInWithEmailAndPassword(auth, email, password);
-      const user = result.user;
+      if (!info.approved) return alert("관리자 승인 대기중입니다.");
 
-      const ref = doc(db, "users", user.uid);
-      const snap = await getDoc(ref);
-
-      // 일반 PC 사용자 로그인 처리 유지
-      if (!snap.exists()) {
-        await setDoc(ref, {
-          uid: user.uid,
-          email: user.email,
-          role: "user",
-          approved: false,
-          createdAt: serverTimestamp(),
-        });
-        alert("회원가입 완료! 관리자 승인 후 로그인 가능합니다.");
-        return;
-      }
-
-      const data = snap.data();
-      if (!data.approved) {
-        alert("관리자 승인 대기 중입니다.");
-        return;
-      }
-
-      const role = data.role;
-      localStorage.setItem("role", role);
-      localStorage.setItem("uid", user.uid);
-
-      navigate(role === "admin" ? "/app" : "/app");
-    } catch (err) {
-      console.error(err);
-      alert("로그인 실패: " + err.message);
+      localStorage.setItem("role", info.role || "user");
+      alert("로그인 성공!");
+      nav("/app");
+    } catch (e) {
+      alert("로그인 실패: " + e.message);
     }
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50">
-      <h1 className="text-xl font-bold mb-4">배차 시스템 로그인</h1>
+    <div className="flex justify-center items-center min-h-screen bg-gray-100">
+      <div className="bg-white p-8 rounded shadow w-[350px]">
+        <h2 className="text-center font-bold mb-6">배차 시스템 로그인</h2>
 
-      <form onSubmit={handleLogin} className="flex flex-col gap-3 w-72">
         <input
           type="email"
           placeholder="이메일"
-          className="border p-2 rounded"
+          value={email}
           onChange={(e) => setEmail(e.target.value)}
+          className="w-full p-2 mb-3 border rounded"
         />
+
         <input
           type="password"
           placeholder="비밀번호"
-          className="border p-2 rounded"
-          onChange={(e) => setPassword(e.target.value)}
+          value={pw}
+          onChange={(e) => setPw(e.target.value)}
+          className="w-full p-2 mb-4 border rounded"
         />
-        <button type="submit" className="bg-blue-600 text-white p-2 rounded">
+
+        <button
+          onClick={login}
+          className="w-full bg-blue-600 text-white p-2 rounded active:scale-95"
+        >
           로그인
         </button>
-      </form>
 
-      {/* 추가: 차량/기사 로그인 */}
-      <div className="mt-4">
-        <button
-          className="text-green-700 underline"
-          onClick={() => navigate("/driver-login")}
-        >
-          차량/기사 로그인
-        </button>
+        <div className="text-center text-sm mt-3">
+          <button
+            className="text-green-700 underline"
+            onClick={() => nav("/signup")}
+          >
+            직원 회원가입
+          </button>
+        </div>
+
+        <div className="text-center text-sm mt-2">
+          <button
+            className="text-green-700 underline"
+            onClick={() => nav("/driver-login")}
+          >
+            차량/기사 로그인
+          </button>
+        </div>
       </div>
     </div>
   );
