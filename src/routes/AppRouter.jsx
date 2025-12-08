@@ -23,6 +23,7 @@ export default function AppRouter() {
 
         {/* 로그인 및 회원가입: 항상 접근 허용 */}
         <Route path="/" element={<Login />} />
+        <Route path="/login" element={<Navigate to="/" replace />} />
         <Route path="/driver-login" element={<DriverLogin />} />
         <Route path="/driver-register" element={<DriverRegister />} />
 
