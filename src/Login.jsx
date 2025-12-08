@@ -1,75 +1,66 @@
+// ======================= src/Login.jsx =======================
 import React, { useState } from "react";
-import { auth, db } from "./firebase";
-import { signInWithEmailAndPassword } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
-import { useNavigate } from "react-router-dom";
+import { auth, signInWithEmailAndPassword } from "./firebase";
+import { useNavigate, Link } from "react-router-dom";
 
 export default function Login() {
   const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
-  const nav = useNavigate();
+  const navigate = useNavigate();
 
   const login = async () => {
     try {
-      const user = await signInWithEmailAndPassword(auth, email, pw);
-      const ref = doc(db, "users", user.user.uid);
-      const info = (await getDoc(ref)).data();
-
-      if (!info.approved) return alert("관리자 승인 대기중입니다.");
-
-      localStorage.setItem("role", info.role || "user");
-      alert("로그인 성공!");
-      nav("/app");
-    } catch (e) {
-      alert("로그인 실패: " + e.message);
+      await signInWithEmailAndPassword(auth, email, pw);
+      localStorage.setItem("role", "admin"); // 기본은 admin(직원)
+      navigate("/app");
+    } catch (err) {
+      alert("로그인 실패: " + err.message);
     }
   };
 
   return (
-    <div className="flex justify-center items-center min-h-screen bg-gray-100">
-      <div className="bg-white p-8 rounded shadow w-[350px]">
-        <h2 className="text-center font-bold mb-6">배차 시스템 로그인</h2>
+    <div className="min-h-screen flex justify-center items-center bg-gray-100">
+      <div className="bg-white p-6 rounded-xl shadow w-96 text-center">
+        <h2 className="text-lg font-semibold mb-4">배차 시스템 로그인</h2>
 
         <input
           type="email"
+          className="border w-full px-3 py-2 mb-2 rounded"
           placeholder="이메일"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="w-full p-2 mb-3 border rounded"
         />
 
         <input
           type="password"
+          className="border w-full px-3 py-2 mb-4 rounded"
           placeholder="비밀번호"
           value={pw}
           onChange={(e) => setPw(e.target.value)}
-          className="w-full p-2 mb-4 border rounded"
         />
 
         <button
+          className="bg-blue-600 w-full py-2 text-white rounded mb-4"
           onClick={login}
-          className="w-full bg-blue-600 text-white p-2 rounded active:scale-95"
         >
           로그인
         </button>
 
-        <div className="text-center text-sm mt-3">
-          <button
-            className="text-green-700 underline"
-            onClick={() => nav("/signup")}
-          >
-            직원 회원가입
-          </button>
-        </div>
+        {/* 직원 회원가입 */}
+        <Link to="/signup" className="text-sm text-green-600 block mb-1">
+          직원 회원가입
+        </Link>
 
-        <div className="text-center text-sm mt-2">
-          <button
-            className="text-green-700 underline"
-            onClick={() => nav("/driver-login")}
-          >
-            차량/기사 로그인
-          </button>
-        </div>
+        {/* 차량/기사 로그인 */}
+        <Link to="/driver-login" className="text-sm text-blue-600 block">
+          차량/기사 로그인
+        </Link>
+
+        {/* 차량/기사 회원가입 🔥 추가 */}
+        <Link to="/driver-register" className="text-sm mt-1 text-gray-700 block">
+          차량/기사 회원가입
+        </Link>
+
       </div>
     </div>
   );
