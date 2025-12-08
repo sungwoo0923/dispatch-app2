@@ -1,4 +1,4 @@
-// ======================= src/routes/AppRouter.jsx (FIXED + ADD REGISTER) =======================
+// ======================= src/routes/AppRouter.jsx (FINAL) =======================
 import React from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import DriverHome from "../driver/DriverHome";
@@ -15,24 +15,28 @@ export default function AppRouter() {
     <BrowserRouter>
       <Routes>
 
-        {/* 기사 전용 라우팅 */}
+        {/* 공통 로그인/회원가입 */}
+        <Route path="/" element={<Login />} />
         <Route path="/driver-login" element={<DriverLogin />} />
         <Route path="/driver-register" element={<DriverRegister />} />
 
+        {/* 기사 전용 */}
         {role === "driver" && (
-          <Route path="/driver-home" element={<DriverHome />} />
+          <>
+            <Route path="/driver-home" element={<DriverHome />} />
+            <Route path="/*" element={<DriverHome />} />
+          </>
         )}
 
-        {/* 일반 사용자 라우팅 */}
-        {role !== "driver" && (
+        {/* 관리자 전용 */}
+        {role === "admin" && (
           <>
-            <Route path="/" element={<Login />} />
             <Route path="/app" element={<DispatchApp />} />
             <Route path="/fleet" element={<FleetManagement />} />
           </>
         )}
 
-        {/* 기본 라우팅 처리 (404 보호 + 자동 리다이렉트) */}
+        {/* 보호 라우팅 */}
         <Route
           path="*"
           element={
@@ -41,7 +45,6 @@ export default function AppRouter() {
               : <Navigate to="/" replace />
           }
         />
-
       </Routes>
     </BrowserRouter>
   );
