@@ -1055,14 +1055,17 @@ function MobileSideMenu({
   onDeleteAll, // ⭐⭐ 추가 !!!
 }) {
   const logout = () => {
-    if (!window.confirm("로그아웃 하시겠습니까?")) return;
+  if (!window.confirm("로그아웃 하시겠습니까?")) return;
 
-    localStorage.removeItem("role");
-    localStorage.removeItem("uid");
-    localStorage.removeItem("token");
+  // 모든 캐시 제거
+  localStorage.clear();
 
-    window.location.href = "/driver-login"; // 또는 "/"
-  };
+  // 앱 전체 새로고침 + 올바른 로그인 화면으로 이동
+  setTimeout(() => {
+    window.location.replace("/driver-login");
+  }, 100);
+};
+
 
   return (
     <div className="fixed inset-0 z-40">
