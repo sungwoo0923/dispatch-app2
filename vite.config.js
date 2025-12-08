@@ -11,9 +11,9 @@ export default defineConfig({
       // Firebase FCM 서비스워커 포함
       srcDir: "public",
       filename: "firebase-messaging-sw.js",
-           workbox: {
-       maximumFileSizeToCacheInBytes: 10 * 1024 * 1024, // 🔥 10MB까지 허용
-     },
+      workbox: {
+        maximumFileSizeToCacheInBytes: 10 * 1024 * 1024, // 🔥 10MB까지 허용
+      },
 
       includeAssets: [
         "favicon.ico",
@@ -61,6 +61,17 @@ export default defineConfig({
   server: {
     host: true,
     historyApiFallback: true,
+
+    // ⭐⭐ 오피넷 Proxy 설정 추가 ⭐⭐
+    proxy: {
+      "/api/fuel": {
+        target: "https://www.opinet.co.kr",
+        changeOrigin: true,
+        secure: false,
+        rewrite: (path) =>
+          path.replace(/^\/api\/fuel/, "/api/avgAllPrice.do"),
+      },
+    },
   },
 
   build: {

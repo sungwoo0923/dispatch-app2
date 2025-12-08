@@ -52,3 +52,52 @@
 .flash-highlight {
   animation: flashHighlight 1.2s ease-out forwards;
 }
+/* === Premium Dashboard Dark Theme === */
+
+.dashboard-dark {
+  background: #1b1b1b;
+  min-height: 100vh;
+  color: #ececec;
+  padding: 30px;
+}
+
+.card-dark {
+  background: #222;
+  border-radius: 14px;
+  padding: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.section-title {
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 12px;
+  opacity: 0.9;
+}
+
+.icon-btn {
+  background: #333;
+  padding: 8px 11px;
+  border-radius: 50%;
+  font-size: 14px;
+  cursor: pointer;
+  transition: .2s;
+}
+
+.icon-btn:hover {
+  background: #444;
+  transform: scale(1.05);
+}
+
+/* KPI Box */
+.kpi-box {
+  border-radius: 14px;
+  padding: 20px;
+  border: 1px solid rgba(255,255,255,0.08);
+  box-shadow: 0 6px 15px rgba(0,0,0,0.12);
+  transition: .25s ease;
+}
+
+.kpi-box:hover {
+  transform: translateY(-4px);
+}
