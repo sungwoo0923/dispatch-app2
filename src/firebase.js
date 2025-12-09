@@ -1,4 +1,4 @@
-니가 준코드로 이 파일도 바꿔야해? 바꾸기 전에 지금 데이터가 넘어왔다고한거야
+
 // ======================= src/firebase.js (FINAL FIXED) =======================
 import { initializeApp } from "firebase/app";
 import {
