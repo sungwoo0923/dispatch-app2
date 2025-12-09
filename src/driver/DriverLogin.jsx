@@ -25,6 +25,8 @@ export default function DriverLogin() {
     navigate("/driver-home");
   };
 
+
+  
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100 p-6">
       <h2 className="text-lg font-semibold mb-4">기사 로그인</h2>
