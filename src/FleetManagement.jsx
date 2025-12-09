@@ -1,7 +1,6 @@
-// ======================= FleetManagement.jsx (FULL PREMIUM FINAL) =======================
-import React, { useEffect, useState, useMemo } from "react";
+// ======================= FleetManagement.jsx (FINAL DRIVER FILTER) =======================
+import React, { useEffect, useState, useMemo, useRef } from "react";
 import "leaflet/dist/leaflet.css";
-import L from "leaflet";
 import { db, auth, getCollections } from "./firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import {
@@ -10,18 +9,39 @@ import {
   doc,
   getDoc,
 } from "firebase/firestore";
-
-// 지도 새 컴포넌트
 import DriverMap from "./components/DriverMap.jsx";
+import { MapContainer, TileLayer, Polyline, Marker } from "react-leaflet";
 
-// 상태별 색상
+// 상태 색상
 const statusColors = {
-  "운행중": "blue",
-  "대기": "gray",
-  "적재중": "orange",
-  "휴식": "yellow",
-  "출차": "green",
-  "퇴근": "black",
+  운행중: "bg-blue-600",
+  대기: "bg-gray-500",
+  적재중: "bg-orange-500",
+  휴식: "bg-yellow-500",
+  출차: "bg-green-600",
+  퇴근: "bg-black",
+};
+
+// 숫자 애니메이션 Hook
+const useAnimatedNumber = (value) => {
+  const [display, setDisplay] = useState(value);
+  const ref = useRef(value);
+
+  useEffect(() => {
+    const step = (value - ref.current) / 10;
+    const id = setInterval(() => {
+      ref.current += step;
+      setDisplay(ref.current);
+      if (Math.abs(value - ref.current) < 0.01) {
+        clearInterval(id);
+        ref.current = value;
+        setDisplay(value);
+      }
+    }, 40);
+    return () => clearInterval(id);
+  }, [value]);
+
+  return display;
 };
 
 export default function FleetManagement() {
@@ -29,42 +49,42 @@ export default function FleetManagement() {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("전체");
   const [selected, setSelected] = useState(null);
+  const [hoverPath, setHoverPath] = useState(null);
 
-  // 🔥 drivers_test / drivers 자동 분기
+  // DB 구독
   useEffect(() => {
     const unsubAuth = onAuthStateChanged(auth, (user) => {
       if (!user) return;
 
       const { drivers: driversCol } = getCollections(user);
 
-      const unsubDrivers = onSnapshot(
-        collection(db, driversCol),
-        async (snap) => {
-          const arr = [];
+      const unsubDrivers = onSnapshot(collection(db, driversCol), async (snap) => {
+        const arr = [];
 
-          for (const s of snap.docs) {
-            const id = s.id;
-            const d = s.data();
+        for (const s of snap.docs) {
+          const id = s.id;
+          const d = s.data();
 
-            const uSnap = await getDoc(doc(db, "users", id));
-            const u = uSnap.exists() ? uSnap.data() : {};
+          const uSnap = await getDoc(doc(db, "users", id));
+          const u = uSnap.exists() ? uSnap.data() : {};
 
-            arr.push({
-              id,
-              이름: u.name || d.name,
-              차량번호: u.carNo || d.carNo,
-              상태: d.status,
-              location: d.location,
-              총거리: d.totalDistance || 0,
-              근무시간: d.workMinutes || 0,
-              updatedAt: d.updatedAt,
-              active: d.active,
-            });
-          }
-
-          setDrivers(arr);
+          arr.push({
+            id,
+            이름: u.name || d.name,
+            차량번호: u.carNo || d.carNo,
+            role: u.role || d.role,
+            상태: d.status,
+            location: d.location,
+            경로: d.path || [],
+            총거리: d.totalDistance || 0,
+            근무시간: d.workMinutes || 0,
+            updatedAt: d.updatedAt,
+            active: d.active,
+          });
         }
-      );
+
+        setDrivers(arr);
+      });
 
       return () => unsubDrivers();
     });
@@ -72,15 +92,27 @@ export default function FleetManagement() {
     return () => unsubAuth();
   }, []);
 
+  // 필터: 드라이버 + 활성 + 상태 일치
   const filteredRows = useMemo(() => {
     return drivers.filter((d) => {
       const keyword = query.trim();
-      const matchQ = !keyword || d.차량번호?.includes(keyword) || d.이름?.includes(keyword);
+      const matchQ =
+        !keyword ||
+        d.차량번호?.includes(keyword) ||
+        d.이름?.includes(keyword);
+
       const matchF = filter === "전체" || d.상태 === filter;
-      return matchQ && matchF && d.active;
+
+      return (
+        d.role === "driver" && // 드라이버만!
+        d.active === true && // 활성만!
+        matchQ &&
+        matchF
+      );
     });
   }, [drivers, query, filter]);
 
+  // KPI
   const kpi = useMemo(() => {
     const total = filteredRows.length;
     const drive = filteredRows.filter((d) => d.상태 === "운행중").length;
@@ -89,19 +121,17 @@ export default function FleetManagement() {
 
   return (
     <div className="flex flex-col gap-6">
-
       {/* KPI */}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-        <Card label="총 기사" value={`${kpi.total} 명`} color="text-blue-600" />
+        <Card label="지입수" value={`${kpi.total} 명`} color="text-blue-600" />
         <Card label="운행중" value={`${kpi.drive} 명`} color="text-green-600" />
       </div>
 
-      {/* 검색/필터 */}
+      {/* 검색 */}
       <div className="flex gap-3">
         <input
-          type="text"
-          placeholder="차량번호 / 기사명 검색"
           className="border rounded p-2 w-52"
+          placeholder="차량번호 / 기사명 검색"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
@@ -115,23 +145,26 @@ export default function FleetManagement() {
           <option>운행중</option>
           <option>적재중</option>
           <option>휴식</option>
-          <option>퇴근</option>
         </select>
       </div>
 
-      {/* 표 */}
-      <DriverTable rows={filteredRows} onSelect={setSelected} />
+      {/* 카드형 리스트 */}
+      <DriverCardList rows={filteredRows} onSelect={setSelected} onHover={setHoverPath} />
 
-      {/* 🔥 새 지도 */}
-      <DriverMap />
+      {/* 상세 팝업 */}
+      {selected && <DriverDetailModal data={selected} onClose={() => setSelected(null)} />}
 
+      {/* Hover 이동경로 */}
+      {hoverPath && <MiniDrivingPath data={hoverPath} />}
+
+      {/* 지도 */}
+      <DriverMap drivers={filteredRows} onSelect={setSelected} />
     </div>
   );
 }
 
-// =========================================
-// Components
-// =========================================
+// ===================================================================================
+
 function Card({ label, value, color }) {
   return (
     <div className="bg-white border shadow rounded-xl p-4">
@@ -141,46 +174,96 @@ function Card({ label, value, color }) {
   );
 }
 
-function DriverTable({ rows, onSelect }) {
+function DriverCardList({ rows, onSelect, onHover }) {
   return (
-    <div className="bg-white border shadow rounded-xl p-4 overflow-auto">
-      <table className="w-full text-sm">
-        <thead className="bg-gray-100 border-b">
-          <tr>
-            <th className="p-2">차량번호</th>
-            <th className="p-2">기사명</th>
-            <th className="p-2">상태</th>
-            <th className="p-2">누적거리(km)</th>
-            <th className="p-2">업데이트</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.length === 0 && (
-            <tr>
-              <td colSpan="5" className="text-center p-4 text-gray-400">
-                데이터 없음
-              </td>
-            </tr>
-          )}
-
-          {rows.map((d) => (
-            <tr
-              key={d.id}
-              className="border-b hover:bg-gray-50 cursor-pointer"
-              onClick={() => onSelect(d)}
-            >
-              <td className="text-center">{d.차량번호}</td>
-              <td className="text-center">{d.이름}</td>
-              <td className="text-center">{d.상태}</td>
-              <td className="text-center">{(d.총거리 || 0).toFixed(1)}</td>
-              <td className="text-center">
-                {d.updatedAt?.toDate?.()?.toLocaleString?.() || "-"}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="bg-white border shadow rounded-xl p-4">
+      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
+        {rows.map((d) => (
+          <DriverCard key={d.id} data={d} onSelect={onSelect} onHover={onHover} />
+        ))}
+      </div>
     </div>
   );
 }
+
+function DriverCard({ data, onSelect, onHover }) {
+  const distance = useAnimatedNumber(data.총거리);
+  const worktime = useAnimatedNumber(data.근무시간);
+
+  return (
+    <div
+      className="border rounded-xl p-4 cursor-pointer hover:shadow-lg bg-gray-50 flex justify-between"
+      onClick={() => onSelect(data)}
+      onMouseEnter={() => onHover(data)}
+      onMouseLeave={() => onHover(null)}
+    >
+      <div>
+        <p className="font-bold text-lg">{data.차량번호}</p>
+        <p className="text-sm text-gray-600">{data.이름}</p>
+        <p className="text-xs text-gray-500 mt-1">{distance.toFixed(2)} km 이동</p>
+        <p className="text-xs text-gray-500">근무 {Math.floor(worktime)} 분</p>
+      </div>
+
+      <div className="text-right">
+        <span
+          className={`px-2 py-1 text-xs rounded-lg text-white ${
+            statusColors[data.상태] || "bg-gray-400"
+          }`}
+        >
+          {data.상태}
+        </span>
+        <p className="text-[10px] text-gray-400 mt-1">
+          {data.updatedAt?.toDate?.()?.toLocaleTimeString?.() || "-"}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function DriverDetailModal({ data, onClose }) {
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+      <div className="bg-white rounded-xl p-6 w-80 shadow-lg">
+        <h3 className="text-lg font-bold mb-3">
+          {data.이름} / {data.차량번호}
+        </h3>
+        <p>상태: {data.상태}</p>
+        <p>총 이동거리: {(data.총거리 || 0).toFixed(2)} km</p>
+        <p>근무 시간: {data.근무시간 || 0} 분</p>
+
+        <p className="text-xs text-gray-400 mt-2">
+          업데이트 {data.updatedAt?.toDate?.()?.toLocaleString?.()}
+        </p>
+
+        <button className="w-full py-2 bg-blue-600 text-white rounded-lg mt-4" onClick={onClose}>
+          닫기
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function MiniDrivingPath({ data }) {
+  if (!data.location) return null;
+
+  return (
+    <div className="fixed bottom-4 right-4 bg-white border rounded-xl shadow-lg z-50">
+      <MapContainer
+        center={[data.location.lat, data.location.lng]}
+        zoom={14}
+        scrollWheelZoom={false}
+        className="h-48 w-48 rounded-xl"
+      >
+        <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+
+        <Marker position={[data.location.lat, data.location.lng]} />
+
+        {Array.isArray(data.경로) && data.경로.length > 1 && (
+          <Polyline positions={data.경로.map((p) => [p.lat, p.lng])} color="blue" />
+        )}
+      </MapContainer>
+    </div>
+  );
+}
+
 // ======================= END =======================

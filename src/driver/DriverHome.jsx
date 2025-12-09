@@ -1,21 +1,22 @@
-// ===================== src/driver/DriverHome.jsx (PREMIUM FULL) =====================
+// ===================== DriverHome.jsx (FINAL STABLE v3) =====================
 import React, { useEffect, useState } from "react";
 import { db, auth } from "../firebase";
 import {
   doc, onSnapshot, updateDoc, serverTimestamp,
-  getDoc, collection, addDoc
+  getDoc, collection, addDoc, query, where, orderBy, onSnapshot as logsSub
 } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
 import { onAuthStateChanged, signOut } from "firebase/auth";
+import DriverMap from "../components/DriverMap";
 
 export default function DriverHome() {
   const navigate = useNavigate();
   const [uid, setUid] = useState(null);
-  const [driver, setDriver] = useState(undefined);
+  const [driver, setDriver] = useState(null);
   const [activeTab, setActiveTab] = useState("home");
-  const [showMore, setShowMore] = useState(false);
+  const [logs, setLogs] = useState([]);
 
-  // 로그인 유지 체크
+  // 로그인 감시
   useEffect(() => {
     return onAuthStateChanged(auth, (u) => {
       if (!u) navigate("/driver-login");
@@ -23,7 +24,7 @@ export default function DriverHome() {
     });
   }, []);
 
-  // Driver 실시간 구독
+  // Driver 데이터 구독
   useEffect(() => {
     if (!uid) return;
     return onSnapshot(doc(db, "drivers", uid), (snap) => {
@@ -31,23 +32,68 @@ export default function DriverHome() {
     });
   }, [uid]);
 
-  if (!driver)
-    return <div className="flex items-center justify-center h-screen">로딩중…</div>;
+  // Logs 구독
+  useEffect(() => {
+    if (!uid) return;
+    const q = query(
+      collection(db, "driver_logs"),
+      where("uid", "==", uid),
+      orderBy("timestamp", "desc")
+    );
+    return logsSub(q, (snap) => {
+      setLogs(snap.docs.map((v) => v.data()));
+    });
+  }, [uid]);
 
-  // ===================== 거리 계산 함수 =====================
-  const calcDist = (lat1, lng1, lat2, lng2) => {
-    const R = 6371;
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLng = (lng2 - lng1) * Math.PI / 180;
-    const a =
-      Math.sin(dLat / 2) ** 2 +
-      Math.cos(lat1 * Math.PI / 180) *
-      Math.cos(lat2 * Math.PI / 180) *
-      Math.sin(dLng / 2) ** 2;
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  };
+  // 위치 & 거리 업데이트
+  useEffect(() => {
+    if (!uid) return;
+    const timer = setInterval(async () => {
+      navigator.geolocation.getCurrentPosition(async (pos) => {
+        const ref = doc(db, "drivers", uid);
+        const snap = await getDoc(ref);
+        const d = snap.data();
+        const { latitude, longitude } = pos.coords;
 
-  // ===================== 상태 변경 + 로그 기록 =====================
+        const calcDist = (lat1, lng1, lat2, lng2) => {
+          const R = 6371;
+          const dLat = (lat2 - lat1) * Math.PI / 180;
+          const dLng = (lng2 - lng1) * Math.PI / 180;
+          const a =
+            Math.sin(dLat / 2) ** 2 +
+            Math.cos(lat1 * Math.PI / 180) *
+            Math.cos(lat2 * Math.PI / 180) *
+            Math.sin(dLng / 2) ** 2;
+          return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        };
+
+        let dist = d.totalDistance || 0;
+        if (d.location)
+          dist += calcDist(d.location.lat, d.location.lng, latitude, longitude);
+
+        await updateDoc(ref, {
+          location: { lat: latitude, lng: longitude },
+          totalDistance: dist,
+          updatedAt: serverTimestamp(),
+        });
+      });
+    }, 10000);
+    return () => clearInterval(timer);
+  }, [uid]);
+
+  if (!driver) {
+    return <div className="h-screen flex items-center justify-center text-lg font-bold">로딩중...</div>;
+  }
+
+  const mainBtns = [
+    ["출근", "대기", "출근", "#1E90FF"],
+    ["상차", "적재중", "상차입차", "#F97316"],
+    ["하차", "운행중", "하차입차", "#10B981"],
+    ["대기", "대기", "대기", "#64748B"],
+    ["휴식", "휴식", "대기", "#EAB308"],
+    ["퇴근", "퇴근", "대기", "#111827"],
+  ];
+
   const updateStatus = async (mainStatus, subStatus) => {
     const ref = doc(db, "drivers", uid);
     const now = new Date();
@@ -57,63 +103,14 @@ export default function DriverHome() {
       mainStatus,
       subStatus,
       active: mainStatus !== "퇴근",
-      status:
-        mainStatus === "퇴근" ? "퇴근" :
-        mainStatus === "대기" ? "대기" :
-        "운행중",
-      updatedAt: serverTimestamp()
+      status: mainStatus,
+      updatedAt: serverTimestamp(),
     });
 
     await addDoc(collection(db, "driver_logs"), {
-      uid,
-      mainStatus,
-      subStatus,
-      timestamp: serverTimestamp(),
-      dateKey,
+      uid, mainStatus, subStatus, timestamp: serverTimestamp(), dateKey,
     });
   };
-
-  // ===================== 위치 + 운행거리 자동 기록 =====================
-  useEffect(() => {
-    if (!uid) return;
-    let lastPos = null;
-
-    const loop = setInterval(() => {
-      navigator.geolocation.getCurrentPosition(async (pos) => {
-        const { latitude, longitude } = pos.coords;
-
-        const ref = doc(db, "drivers", uid);
-        const snap = await getDoc(ref);
-        const d = snap.data();
-
-        let dist = d.totalDistance || 0;
-        if (d.location) {
-          dist += calcDist(
-            d.location.lat, d.location.lng,
-            latitude, longitude
-          );
-        }
-
-        await updateDoc(ref, {
-          location: { lat: latitude, lng: longitude },
-          totalDistance: dist,
-          updatedAt: serverTimestamp()
-        });
-      });
-    }, 10000);
-
-    return () => clearInterval(loop);
-  }, [uid]);
-
-  const mainBtns = [
-    ["출근", "운행중", "출근", "#007AFF"],
-    ["대기", "대기", "대기", "#727272"],
-    ["퇴근", "퇴근", "퇴근", "#FF3B30"],
-  ];
-
-  const subFlow = ["출근", "상차입차", "상차출차", "하차입차", "하차출차", "대기"];
-  const nowSub = driver.subStatus || "대기";
-  const nextSub = subFlow[(subFlow.indexOf(nowSub) + 1) % subFlow.length];
 
   return (
     <div className="min-h-screen p-5 pb-20 bg-gray-100">
@@ -125,11 +122,9 @@ export default function DriverHome() {
         <div className="text-sm text-gray-600 mt-2">
           {driver.name} / {driver.carNo}
         </div>
-
         <div className="text-xs text-gray-500 mt-1">
           총 이동거리: {(driver.totalDistance || 0).toFixed(2)} km
         </div>
-
         <button
           onClick={() => { signOut(auth); navigate("/driver-login"); }}
           className="mt-3 text-xs text-red-500 underline float-right"
@@ -138,7 +133,7 @@ export default function DriverHome() {
         </button>
       </div>
 
-      {/* 메인 화면 */}
+      {/* 화면 탭 */}
       {activeTab === "home" && (
         <>
           <div className="grid grid-cols-3 gap-3 mb-6">
@@ -153,48 +148,20 @@ export default function DriverHome() {
               </button>
             ))}
           </div>
-
-          <button
-            className="w-full py-4 bg-emerald-600 text-white rounded-xl font-semibold shadow-lg"
-            onClick={() => updateStatus("운행중", nextSub)}
-          >
-            다음: {nextSub}
-          </button>
-
-          <button
-            className="mt-4 text-xs text-gray-600 underline w-full"
-            onClick={() => setShowMore(!showMore)}
-          >
-            전체 단계 보기
-          </button>
-
-          {showMore && (
-            <div className="grid grid-cols-3 gap-2 mt-3">
-              {subFlow.map((s) => (
-                <button
-                  key={s}
-                  className="py-2 bg-gray-300 rounded text-xs"
-                  onClick={() => updateStatus("운행중", s)}
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-          )}
         </>
       )}
 
-      {/* 위치 탭 */}
-      {activeTab === "location" && (
-        <div className="text-center text-sm text-gray-500 mt-10">
-          위치 추적 연동 준비중...
-        </div>
-      )}
+      {activeTab === "location" && <DriverMap />}
 
-      {/* 로그 탭 */}
       {activeTab === "logs" && (
-        <div className="text-center text-sm text-gray-500 mt-10">
-          로그 연동 예정...
+        <div className="bg-white p-4 rounded-xl shadow text-sm">
+          {logs.length === 0 && <p>로그 없음</p>}
+          {logs.map((log, i) => (
+            <div key={i} className="border-b py-2">
+              {log.mainStatus} | {log.subStatus} | 
+              {log.timestamp?.toDate?.()?.toLocaleTimeString() || "-"}
+            </div>
+          ))}
         </div>
       )}
 
