@@ -1,5 +1,5 @@
-// ======================= FleetManagement.jsx (PREMIUM FINAL FIXED) =======================
-import React, { useState, useMemo, useEffect } from "react";
+// ======================= FleetManagement.jsx (FULL FINAL SYNCED) =======================
+import React, { useEffect, useState, useMemo } from "react";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 import {
@@ -7,16 +7,24 @@ import {
   TileLayer,
   Marker,
   Popup,
-  Polyline
+  Polyline,
 } from "react-leaflet";
+import { db, auth, getCollections } from "./firebase";
+import { onAuthStateChanged } from "firebase/auth";
+import {
+  collection,
+  onSnapshot,
+  doc,
+  getDoc,
+} from "firebase/firestore";
 
-// Leaflet 기본 마커 설정
+// Leaflet 아이콘 설정
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl:
     "https://unpkg.com/leaflet@1.9.1/dist/images/marker-icon-2x.png",
   iconUrl: "https://unpkg.com/leaflet@1.9.1/dist/images/marker-icon.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.1/dist/images/marker-shadow.png"
+  shadowUrl: "https://unpkg.com/leaflet@1.9.1/dist/images/marker-shadow.png",
 });
 
 // 상태별 색상
@@ -26,51 +34,92 @@ const statusColors = {
   적재중: "orange",
   휴식: "yellow",
   출차: "green",
-  입차: "cyan"
+  퇴근: "black",
 };
 
-// 지도 기준 위치 (인천 서구 오류동 1581-3)
+// 지도 기본 좌표
 const SEOUL_CENTER = [37.51093, 126.67645];
 
-export default function FleetManagement({ drivers = [] }) {
+export default function FleetManagement() {
+  const [drivers, setDrivers] = useState([]);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("전체");
   const [selected, setSelected] = useState(null);
 
+  // 🔥 drivers / drivers_test 자동분기 반영
+  useEffect(() => {
+    const unsubAuth = onAuthStateChanged(auth, (user) => {
+      if (!user) return;
 
+      const { drivers: driversCol } = getCollections(user);
 
-  // 검색 필터 반영
+      const unsubDrivers = onSnapshot(
+        collection(db, driversCol),
+        async (snap) => {
+          const arr = [];
+
+          for (const s of snap.docs) {
+            const id = s.id;
+            const d = s.data();
+
+            const uSnap = await getDoc(doc(db, "users", id));
+            const u = uSnap.exists() ? uSnap.data() : {};
+
+            arr.push({
+              _id: id,
+              uid: id,
+              이름: u.name || u.이름 || d.name,
+              차량번호: u.carNo || u.차량번호 || d.carNo,
+              상태: d.status || d.상태 || "-",
+              location: d.location,
+              history: d.history || [],
+              총거리: d.총거리 || 0,
+              근무시간: d.근무시간 || 0,
+              updatedAt: d.updatedAt,
+            });
+          }
+
+          setDrivers(arr);
+        }
+      );
+
+      return () => unsubDrivers();
+    });
+
+    return () => unsubAuth();
+  }, []);
+
+  // 검색 / 필터 기능
   const filteredRows = useMemo(() => {
     return drivers
-      .filter((d) => d?.isDriver && d?.차량번호 && d?.이름)
+      .filter((d) => d.차량번호)
       .filter((d) => {
         const q = query.trim();
         const matchQ = !q || d.차량번호.includes(q) || d.이름.includes(q);
         const matchF = filter === "전체" || d.상태 === filter;
+        const matchActive = d.active !== false; // 승인 기사만 표시
         return matchQ && matchF;
       });
   }, [query, filter, drivers]);
 
   // KPI
   const kpi = useMemo(() => {
-    const valid = drivers.filter((d) => d?.isDriver);
-    const total = valid.length;
-    const run = valid.filter((d) => d.상태 === "운행중").length;
+    const total = filteredRows.length;
+    const run = filteredRows.filter((d) => d.상태 === "운행중").length;
     const avg =
       (
-        valid.reduce((a, b) => a + (b.근무시간 || 0), 0) /
+        filteredRows.reduce((a, b) => a + (b.근무시간 || 0), 0) /
         (total || 1)
       ).toFixed(1);
-    return { total, run, avg };
-  }, [drivers]);
 
-  // 지도 중심
+    return { total, run, avg };
+  }, [filteredRows]);
+
   const mapCenter =
     selected?.location?.lat && selected?.location?.lng
       ? [selected.location.lat, selected.location.lng]
       : SEOUL_CENTER;
 
-  // 이동 경로
   const getHistoryPath = () => {
     if (!selected?.history) return [];
     return selected.history
@@ -85,14 +134,10 @@ export default function FleetManagement({ drivers = [] }) {
       <div className="grid grid-cols-3 gap-4">
         <Card label="총 지입차" value={`${kpi.total}대`} color="text-blue-600" />
         <Card label="운행 중" value={`${kpi.run}대`} color="text-green-600" />
-        <Card
-          label="평균 근무시간"
-          value={`${kpi.avg}h`}
-          color="text-yellow-600"
-        />
+        <Card label="평균 근무시간" value={`${kpi.avg}h`} color="text-yellow-600" />
       </div>
 
-      {/* 검색 필터 */}
+      {/* 검색 */}
       <SearchPanel
         query={query}
         setQuery={setQuery}
@@ -100,56 +145,60 @@ export default function FleetManagement({ drivers = [] }) {
         setFilter={setFilter}
       />
 
-      {/* 기사 테이블 */}
+      {/* 표 */}
       <DriverTable rows={filteredRows} onSelect={setSelected} />
 
       {/* 지도 */}
       <div className="bg-white rounded-xl shadow p-4">
         <h3 className="text-lg font-semibold mb-3">기사 위치 지도</h3>
 
- <MapContainer
-  key="fleet-map"
-  center={mapCenter}
-  zoom={11}
-  style={{ height: "400px", width: "100%" }}
-  preferCanvas={true}
->
+        <MapContainer
+          key="fleet-map"
+          center={mapCenter}
+          zoom={11}
+          style={{ height: "400px", width: "100%" }}
+        >
           <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
 
           {filteredRows
-            .filter((d) => d?.location?.lat && d?.location?.lng)
+            .filter((d) => d.location?.lat)
             .map((d) => (
               <Marker
                 key={d._id}
                 position={[d.location.lat, d.location.lng]}
                 icon={L.divIcon({
-                  className: "fleet-marker",
-                  html: `<div style="width:12px;height:12px;border-radius:50%;background:${
-                    statusColors[d.상태] || "blue"
-                  };border:2px solid white"></div>`
+                  html: `<div style="width:12px;height:12px;border-radius:50%;
+                    background:${statusColors[d.상태] || "blue"};
+                    border:2px solid white"></div>`,
                 })}
                 eventHandlers={{ click: () => setSelected(d) }}
               >
                 <Popup>
-                  {d.이름} ({d.차량번호})<br />
+                  {d.이름} ({d.차량번호})
+                  <br />
                   상태: {d.상태}
                 </Popup>
               </Marker>
             ))}
 
-          {selected && <Polyline positions={getHistoryPath()} color="blue" />}
+          {selected && (
+            <Polyline positions={getHistoryPath()} color="blue" />
+          )}
         </MapContainer>
       </div>
 
-      {/* 상세 정보 모달 */}
+      {/* 상세 모달 */}
       {selected && (
-        <DetailModal selected={selected} onClose={() => setSelected(null)} />
+        <DetailModal
+          selected={selected}
+          onClose={() => setSelected(null)}
+        />
       )}
     </div>
   );
 }
 
-// ------------------- Sub Components -------------------
+// ==================== 서브 컴포넌트 ====================
 
 function Card({ label, value, color }) {
   return (
@@ -182,6 +231,8 @@ function SearchPanel({ query, setQuery, filter, setFilter }) {
           <option>운행중</option>
           <option>휴식</option>
           <option>적재중</option>
+          <option>출차</option>
+          <option>퇴근</option>
         </select>
       </div>
     </div>
@@ -202,7 +253,6 @@ function DriverTable({ rows, onSelect }) {
             <th className="p-2 text-center">업데이트</th>
           </tr>
         </thead>
-
         <tbody>
           {rows.length === 0 ? (
             <tr>
@@ -251,7 +301,6 @@ function DetailModal({ selected, onClose }) {
         <p>기사명: {selected.이름}</p>
         <p>상태: {selected.상태}</p>
         <p>전화번호: {selected.전화번호 || "-"}</p>
-
         <button
           onClick={onClose}
           className="mt-5 bg-gray-200 px-3 py-1 rounded"
@@ -262,3 +311,4 @@ function DetailModal({ selected, onClose }) {
     </div>
   );
 }
+// ======================= END =======================

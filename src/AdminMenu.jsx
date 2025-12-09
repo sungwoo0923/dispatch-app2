@@ -8,6 +8,7 @@ import {
   deleteDoc,
   doc,
 } from "firebase/firestore";
+import { onSnapshot } from "firebase/firestore";
 
 export default function AdminMenu() {
   const [users, setUsers] = useState([]);
@@ -19,14 +20,16 @@ export default function AdminMenu() {
   const me = auth.currentUser;
 
   // 사용자 목록 불러오기
-  useEffect(() => {
-    const loadUsers = async () => {
-      const snap = await getDocs(collection(db, "users"));
-      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      setUsers(list);
-    };
-    loadUsers();
-  }, []);
+useEffect(() => {
+  const unsub = onSnapshot(collection(db, "users"), (snapshot) => {
+    const list = snapshot.docs.map((d) => ({
+      id: d.id,
+      ...d.data(),
+    }));
+    setUsers(list);
+  });
+  return () => unsub();
+}, []);
 
   // 검색
   const filtered = useMemo(() => {

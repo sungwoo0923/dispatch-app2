@@ -1,56 +1,49 @@
-// ===================== DriverTracking.jsx (GPS 업그레이드 Full) =====================
+// ===================== src/driver/DriverTracking.jsx (FINAL REALTIME GPS) =====================
 import React, { useEffect, useState } from "react";
-import { db } from "../firebase";
-import { doc, setDoc } from "firebase/firestore";
+import { auth, db } from "../firebase";
+import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
 
-export default function DriverTracking({ driver }) {
-  const [coords, setCoords] = useState(null);
+export default function DriverTracking() {
+  const user = auth.currentUser;
+  const [pos, setPos] = useState(null);
+  const uid = user?.uid;
 
   useEffect(() => {
-    if (!driver?._id) return;
+    if (!uid) return;
 
     const watchId = navigator.geolocation.watchPosition(
-      (pos) => {
-        const { latitude, longitude } = pos.coords;
-        setCoords({ lat: latitude, lng: longitude });
+      (position) => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        setPos({ lat, lng });
 
-        setDoc(
-          doc(db, "drivers", driver._id),
-          {
-            location: {
-              lat: latitude,
-              lng: longitude,
-              updatedAt: Date.now()
-            }
-          },
-          { merge: true }
-        );
+        updateDoc(doc(db, "drivers", uid), {
+          location: { lat, lng },
+          updatedAt: serverTimestamp(),
+        });
       },
       (err) => {
-        console.error("GPS Error:", err);
+        console.error("위치 권한 필요:", err);
       },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 5000
-      }
+      { enableHighAccuracy: true, maximumAge: 5000 }
     );
 
     return () => navigator.geolocation.clearWatch(watchId);
-  }, [driver]);
+  }, [uid]);
 
   return (
-    <div className="p-4 text-center">
-      <h3 className="font-bold text-lg mb-3">실시간 위치 공유</h3>
-      {coords ? (
-        <p className="text-green-700 font-semibold">
-          위치 공유 중<br />
-          {coords.lat.toFixed(5)}, {coords.lng.toFixed(5)}
-        </p>
+    <div className="p-6 text-center">
+      <h2 className="text-lg font-semibold mb-3">실시간 위치 전송 중</h2>
+
+      {pos ? (
+        <div>
+          <p>
+            {pos.lat.toFixed(6)}, {pos.lng.toFixed(6)}
+          </p>
+        </div>
       ) : (
-        <p className="text-gray-500">GPS 수신 중...</p>
+        <p>GPS 신호 대기...</p>
       )}
     </div>
   );
 }
-// ==================================================================

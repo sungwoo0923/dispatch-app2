@@ -1,4 +1,4 @@
-// ===================== src/driver/DriverRegister.jsx (FINAL) =====================
+// ===================== src/driver/DriverRegister.jsx =====================
 import React, { useState } from "react";
 import { auth, db } from "../firebase";
 import { createUserWithEmailAndPassword } from "firebase/auth";
@@ -10,6 +10,7 @@ export default function DriverRegister() {
   const [name, setName] = useState("");
   const navigate = useNavigate();
 
+  // 차량번호 → 이메일 변환
   const makeEmail = (v) => `${v.replace(/ /g, "")}@driver.run25.kr`;
 
   const register = async () => {
@@ -18,40 +19,39 @@ export default function DriverRegister() {
     }
 
     const email = makeEmail(carNo.trim());
-    const password = carNo.trim();
+    const password = carNo.trim(); // 차량번호 = 비밀번호 초기값
 
     try {
       const res = await createUserWithEmailAndPassword(auth, email, password);
       const uid = res.user.uid;
 
+      // users 컬렉션
       await setDoc(doc(db, "users", uid), {
         uid,
         email,
         role: "driver",
         name: name.trim(),
         carNo: carNo.trim(),
-        approved: false,
+        approved: false, // 기본은 미승인 상태
         createdAt: serverTimestamp(),
       });
 
+      // drivers 컬렉션
       await setDoc(doc(db, "drivers", uid), {
         uid,
-        email,
         name: name.trim(),
         carNo: carNo.trim(),
+        status: "대기",
         active: false,
-        location: null,
-        history: [],
-        status: "registered",
         updatedAt: serverTimestamp(),
       });
 
       alert("등록 완료! 관리자 승인 후 로그인 가능합니다.");
       navigate("/driver-login");
-      
+
     } catch (err) {
       console.error(err);
-      alert("등록 실패: 이미 등록된 차량이거나 오류가 있습니다.");
+      alert("등록 실패: 이미 등록된 차량번호일 수 있습니다.");
     }
   };
 
@@ -64,18 +64,18 @@ export default function DriverRegister() {
         ← 로그인
       </button>
 
-      <h2 className="text-lg font-semibold text-gray-800 mb-4">기사 등록</h2>
+      <h2 className="text-lg font-semibold mb-4 text-gray-900">기사 등록</h2>
 
       <div className="bg-white p-4 rounded shadow w-80 flex flex-col gap-3">
         <input
-          placeholder="차량번호(예: 97가1234)"
+          placeholder="차량번호 (예: 경기97가1234)"
           value={carNo}
           onChange={(e) => setCarNo(e.target.value)}
           className="border p-2 rounded"
         />
 
         <input
-          placeholder="이름"
+          placeholder="기사 이름"
           value={name}
           onChange={(e) => setName(e.target.value)}
           className="border p-2 rounded"
@@ -91,3 +91,4 @@ export default function DriverRegister() {
     </div>
   );
 }
+// ===================== END =====================

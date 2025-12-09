@@ -1,7 +1,7 @@
-// ======================= src/driver/DriverLogin.jsx (AUTH + APPROVE CHECK) =======================
-import React, { useState } from "react";
+// ======================= src/driver/DriverLogin.jsx (FINAL FIXED v2) =======================
+import React, { useState, useEffect } from "react";
 import { auth, db } from "../firebase";
-import { signInWithEmailAndPassword } from "firebase/auth";
+import { signInWithEmailAndPassword, signOut } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
 
@@ -12,45 +12,61 @@ export default function DriverLogin() {
 
   const makeEmail = (v) => `${v.replace(/ /g, "")}@driver.run25.kr`;
 
+  // ⭐ 페이지 진입 시 무조건 초기화
+  useEffect(() => {
+    signOut(auth);
+    localStorage.removeItem("role");
+    localStorage.removeItem("uid");
+  }, []);
+
   const login = async () => {
-    if (!carNo.trim() || !name.trim()) return alert("모두 입력해주세요!");
+    if (!carNo.trim() || !name.trim()) {
+      return alert("모두 입력해주세요!");
+    }
 
     const email = makeEmail(carNo.trim());
-    const password = carNo.trim(); // 차량번호 = PW
+    const password = carNo.trim();
+
     try {
-      // 1) Auth 로그인
+      // Auth 로그인
       const res = await signInWithEmailAndPassword(auth, email, password);
       const uid = res.user.uid;
 
-      // 2) Firestore 승인 확인
+      // Firestore 사용자 정보 조회
       const snap = await getDoc(doc(db, "users", uid));
       if (!snap.exists()) {
-        alert("등록된 기사 데이터가 없습니다.");
-        return signOut(auth);
+        alert("등록된 기사 정보가 없습니다.");
+        await signOut(auth);
+        return;
       }
 
       const u = snap.data();
       if (!u.approved) {
         alert("관리자 승인 대기중입니다!");
-        return signOut(auth);
+        await signOut(auth);
+        return;
       }
 
-      // 3) Local 저장
+      // 승인 완료 → 드라이버 권한 저장
       localStorage.setItem("role", "driver");
       localStorage.setItem("uid", uid);
 
       alert("로그인 성공!");
-      navigate("/driver-home");
+
+      // 🔥 Auth/role 완전 반영 후 이동 (리다이렉트 충돌 방지)
+      setTimeout(() => {
+        navigate("/driver-home", { replace: true });
+      }, 300);
 
     } catch (err) {
       console.error(err);
       alert("로그인 실패: 차량번호 또는 이름이 올바르지 않습니다.");
+      await signOut(auth);
     }
   };
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100 p-6">
-
       <button
         className="absolute top-4 left-4 text-sm text-blue-600 hover:underline"
         onClick={() => navigate("/login")}
@@ -61,7 +77,6 @@ export default function DriverLogin() {
       <h2 className="text-lg font-semibold mb-4">기사 로그인</h2>
 
       <div className="bg-white p-4 rounded shadow w-80 flex flex-col gap-3">
-
         <input
           placeholder="차량번호"
           value={carNo}
@@ -89,10 +104,8 @@ export default function DriverLogin() {
         >
           등록하기
         </button>
-
       </div>
     </div>
   );
 }
-
 // ======================= END =======================
