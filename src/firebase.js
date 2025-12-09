@@ -1,4 +1,5 @@
-// ======================= src/firebase.js =======================
+니가 준코드로 이 파일도 바꿔야해? 바꾸기 전에 지금 데이터가 넘어왔다고한거야
+// ======================= src/firebase.js (FINAL FIXED) =======================
 import { initializeApp } from "firebase/app";
 import {
   getAuth,
@@ -27,7 +28,9 @@ import {
   isSupported,
 } from "firebase/messaging";
 
-// Firebase 설정 유지
+// ====================================================
+// Firebase 설정
+// ====================================================
 const firebaseConfig = {
   apiKey: "AIzaSyDaCTK03VbaXQCEKEiD7yp2KIzzX5x64a4",
   authDomain: "dispatch-app-9b92f.firebaseapp.com",
@@ -45,7 +48,7 @@ export const db = getFirestore(app);
 export const storage = getStorage(app);
 
 // ====================================================
-// Auth & Firestore Export (⭐ 핵심 추가)
+// Firebase Export
 // ====================================================
 export {
   signInWithEmailAndPassword,
@@ -64,17 +67,40 @@ export {
 };
 
 // ====================================================
-// 아래 메시징 관련 기존 코드 그대로 유지
+// ⭐ 안정화된 컬렉션 분기 함수
 // ====================================================
-export const isTestUser = (u) => u?.role === "test";
+export function getCollections() {
+  const role = localStorage.getItem("role");
 
-export const getCollections = (user) => {
-  const test = isTestUser(user);
-  return test
-    ? { dispatch: "dispatch_test", drivers: "drivers_test", clients: "clients_test" }
-    : { dispatch: "dispatch", drivers: "drivers", clients: "clients" };
-};
+  // 기사/미로그인/권한없음 → 실 서비스 drivers 사용
+  if (!role || role === "driver") {
+    return {
+      dispatch: "dispatch",
+      drivers: "drivers",
+      clients: "clients",
+    };
+  }
 
+  // TEST 계정 분기
+  if (role === "test") {
+    return {
+      dispatch: "dispatch_test",
+      drivers: "drivers_test",
+      clients: "clients_test",
+    };
+  }
+
+  // 관리자/직원 → 실 서비스
+  return {
+    dispatch: "dispatch",
+    drivers: "drivers",
+    clients: "clients",
+  };
+}
+
+// ====================================================
+// FCM (기존 유지)
+// ====================================================
 export const messagingPromise = isSupported().then((supported) => {
   if (!supported) return null;
   try { return getMessaging(app); } catch { return null; }
@@ -97,4 +123,5 @@ export async function initForegroundFCM(cb) {
   if (!messaging) return;
   onMessage(messaging, (payload) => cb?.(payload));
 }
+
 // ======================= END =======================

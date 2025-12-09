@@ -1,10 +1,11 @@
-// ===================== DriverHome.jsx (FINAL STABLE v3) =====================
+// ===================== DriverHome.jsx (PREMIUM SYNC v6) =====================
 import React, { useEffect, useState } from "react";
 import { db, auth } from "../firebase";
 import {
-  doc, onSnapshot, updateDoc, serverTimestamp,
-  getDoc, collection, addDoc, query, where, orderBy, onSnapshot as logsSub
+  doc, onSnapshot, setDoc, updateDoc, serverTimestamp,
+  getDoc, collection, addDoc, query, where, orderBy
 } from "firebase/firestore";
+import { getCollections } from "../firebase";
 import { useNavigate } from "react-router-dom";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import DriverMap from "../components/DriverMap";
@@ -16,6 +17,10 @@ export default function DriverHome() {
   const [activeTab, setActiveTab] = useState("home");
   const [logs, setLogs] = useState([]);
 
+  // 🔵 지도 데이터 전달용 상태
+  const [locationData, setLocationData] = useState(null);
+  const [pathData, setPathData] = useState([]);
+
   // 로그인 감시
   useEffect(() => {
     return onAuthStateChanged(auth, (u) => {
@@ -24,15 +29,30 @@ export default function DriverHome() {
     });
   }, []);
 
-  // Driver 데이터 구독
+  // drivers/{uid} 구독
   useEffect(() => {
     if (!uid) return;
     return onSnapshot(doc(db, "drivers", uid), (snap) => {
-      setDriver(snap.data());
+      const d = snap.data();
+      setDriver(d);
+      setLocationData(d.location || null);
     });
   }, [uid]);
 
-  // Logs 구독
+  // 🔵 주행 로그 구독 (지도 경로 표시용)
+  useEffect(() => {
+    if (!uid) return;
+    const q = query(
+      collection(db, "driver_locations"),
+      where("uid", "==", uid),
+      orderBy("timestamp", "asc")  // 경로 순서대로
+    );
+    return onSnapshot(q, (snap) => {
+      setPathData(snap.docs.map(v => v.data().location));
+    });
+  }, [uid]);
+
+  // driver_logs
   useEffect(() => {
     if (!uid) return;
     const q = query(
@@ -40,25 +60,28 @@ export default function DriverHome() {
       where("uid", "==", uid),
       orderBy("timestamp", "desc")
     );
-    return logsSub(q, (snap) => {
+    return onSnapshot(q, (snap) => {
       setLogs(snap.docs.map((v) => v.data()));
     });
   }, [uid]);
 
-  // 위치 & 거리 업데이트
+  // 🔵 위치 자동 업데이트 (10초)
   useEffect(() => {
     if (!uid) return;
+
     const timer = setInterval(async () => {
       navigator.geolocation.getCurrentPosition(async (pos) => {
+        const { latitude, longitude } = pos.coords;
+        const newLocation = { lat: latitude, lng: longitude };
+
         const ref = doc(db, "drivers", uid);
         const snap = await getDoc(ref);
-        const d = snap.data();
-        const { latitude, longitude } = pos.coords;
+        const d = snap.data() || {};
 
         const calcDist = (lat1, lng1, lat2, lng2) => {
           const R = 6371;
-          const dLat = (lat2 - lat1) * Math.PI / 180;
-          const dLng = (lng2 - lng1) * Math.PI / 180;
+          const dLat = ((lat2 - lat1) * Math.PI) / 180;
+          const dLng = ((lng2 - lng1) * Math.PI) / 180;
           const a =
             Math.sin(dLat / 2) ** 2 +
             Math.cos(lat1 * Math.PI / 180) *
@@ -68,22 +91,42 @@ export default function DriverHome() {
         };
 
         let dist = d.totalDistance || 0;
-        if (d.location)
-          dist += calcDist(d.location.lat, d.location.lng, latitude, longitude);
+        if (d.location) dist += calcDist(d.location.lat, d.location.lng, latitude, longitude);
 
-        await updateDoc(ref, {
-          location: { lat: latitude, lng: longitude },
+        const updateData = {
+          location: newLocation,
           totalDistance: dist,
           updatedAt: serverTimestamp(),
+          active: true,
+          status: d.mainStatus || "대기",
+        };
+
+        setLocationData(newLocation);
+
+        await updateDoc(ref, updateData);
+
+        if (auth.currentUser) {
+          const { drivers: driversCol } = getCollections();
+          await setDoc(doc(db, driversCol, uid), updateData, { merge: true });
+        }
+
+        await addDoc(collection(db, "driver_locations"), {
+          uid,
+          location: newLocation,
+          totalDistance: dist,
+          timestamp: serverTimestamp(),
         });
       });
     }, 10000);
+
     return () => clearInterval(timer);
   }, [uid]);
 
-  if (!driver) {
-    return <div className="h-screen flex items-center justify-center text-lg font-bold">로딩중...</div>;
-  }
+  if (!driver) return (
+    <div className="h-screen flex items-center justify-center text-lg font-bold">
+      로딩중...
+    </div>
+  );
 
   const mainBtns = [
     ["출근", "대기", "출근", "#1E90FF"],
@@ -114,6 +157,7 @@ export default function DriverHome() {
 
   return (
     <div className="min-h-screen p-5 pb-20 bg-gray-100">
+
       {/* 상태 카드 */}
       <div className="rounded-2xl p-5 bg-white shadow mb-6">
         <div className="text-2xl font-bold text-blue-600">
@@ -133,39 +177,43 @@ export default function DriverHome() {
         </button>
       </div>
 
-      {/* 화면 탭 */}
-      {activeTab === "home" && (
-        <>
-          <div className="grid grid-cols-3 gap-3 mb-6">
-            {mainBtns.map(([label, m, s, color]) => (
-              <button
-                key={label}
-                style={{ background: color }}
-                className="text-white py-3 rounded-xl font-bold shadow"
-                onClick={() => updateStatus(m, s)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </>
+      {activeTab === "location" && (
+        <DriverMap
+          location={locationData}
+          path={pathData}
+          totalDistance={driver.totalDistance || 0}
+          status={driver.mainStatus}
+          updatedAt={driver.updatedAt}
+        />
       )}
 
-      {activeTab === "location" && <DriverMap />}
+      {activeTab === "home" && (
+        <div className="grid grid-cols-3 gap-3 mb-6">
+          {mainBtns.map(([label, m, s, color]) => (
+            <button
+              key={label}
+              style={{ background: color }}
+              className="text-white py-3 rounded-xl font-bold shadow"
+              onClick={() => updateStatus(m, s)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {activeTab === "logs" && (
         <div className="bg-white p-4 rounded-xl shadow text-sm">
           {logs.length === 0 && <p>로그 없음</p>}
           {logs.map((log, i) => (
             <div key={i} className="border-b py-2">
-              {log.mainStatus} | {log.subStatus} | 
+              {log.mainStatus} | {log.subStatus} |
               {log.timestamp?.toDate?.()?.toLocaleTimeString() || "-"}
             </div>
           ))}
         </div>
       )}
 
-      {/* Bottom Nav */}
       <div className="fixed bottom-0 left-0 w-full bg-white flex shadow">
         {[
           ["home", "상태"],
