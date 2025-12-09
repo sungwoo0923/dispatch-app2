@@ -1,4 +1,4 @@
-// ======================= FleetManagement.jsx (FINAL DRIVER FILTER) =======================
+// ======================= FleetManagement.jsx (FINAL FULL COPY VERSION) =======================
 import React, { useEffect, useState, useMemo, useRef } from "react";
 import "leaflet/dist/leaflet.css";
 import { db, auth, getCollections } from "./firebase";
@@ -51,6 +51,9 @@ export default function FleetManagement() {
   const [selected, setSelected] = useState(null);
   const [hoverPath, setHoverPath] = useState(null);
 
+  // ⭐ 지도 센터
+  const [center, setCenter] = useState(null);
+
   // DB 구독
   useEffect(() => {
     const unsubAuth = onAuthStateChanged(auth, (user) => {
@@ -92,7 +95,7 @@ export default function FleetManagement() {
     return () => unsubAuth();
   }, []);
 
-  // 필터: 드라이버 + 활성 + 상태 일치
+  // 필터
   const filteredRows = useMemo(() => {
     return drivers.filter((d) => {
       const keyword = query.trim();
@@ -104,8 +107,8 @@ export default function FleetManagement() {
       const matchF = filter === "전체" || d.상태 === filter;
 
       return (
-        d.role === "driver" && // 드라이버만!
-        d.active === true && // 활성만!
+        d.role === "driver" &&
+        d.active === true &&
         matchQ &&
         matchF
       );
@@ -149,21 +152,40 @@ export default function FleetManagement() {
       </div>
 
       {/* 카드형 리스트 */}
-      <DriverCardList rows={filteredRows} onSelect={setSelected} onHover={setHoverPath} />
+      <DriverCardList
+        rows={filteredRows}
+        onSelect={(d) => {
+          setSelected(d);
+          if (d.location) setCenter(d.location); // ⭐ 카드 누르면 지도 이동
+        }}
+        onHover={setHoverPath}
+      />
 
       {/* 상세 팝업 */}
-      {selected && <DriverDetailModal data={selected} onClose={() => setSelected(null)} />}
+      {selected && (
+        <DriverDetailModal
+          data={selected}
+          onClose={() => setSelected(null)}
+        />
+      )}
 
       {/* Hover 이동경로 */}
       {hoverPath && <MiniDrivingPath data={hoverPath} />}
 
       {/* 지도 */}
-      <DriverMap drivers={filteredRows} onSelect={setSelected} />
+      <DriverMap
+        drivers={filteredRows}
+        onSelect={(d) => {
+          setSelected(d);
+          if (d.location) setCenter(d.location); // ⭐ 지도 마커 누르면 지도 이동
+        }}
+        center={center}
+      />
     </div>
   );
 }
 
-// ===================================================================================
+// ==================================================================
 
 function Card({ label, value, color }) {
   return (
@@ -179,7 +201,12 @@ function DriverCardList({ rows, onSelect, onHover }) {
     <div className="bg-white border shadow rounded-xl p-4">
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
         {rows.map((d) => (
-          <DriverCard key={d.id} data={d} onSelect={onSelect} onHover={onHover} />
+          <DriverCard
+            key={d.id}
+            data={d}
+            onSelect={onSelect}
+            onHover={onHover}
+          />
         ))}
       </div>
     </div>
@@ -222,20 +249,32 @@ function DriverCard({ data, onSelect, onHover }) {
 
 function DriverDetailModal({ data, onClose }) {
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl p-6 w-80 shadow-lg">
-        <h3 className="text-lg font-bold mb-3">
+    <div
+      className="fixed inset-0 bg-black bg-opacity-40 backdrop-blur-sm
+                 flex items-center justify-center z-[9999]"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl p-6 w-80 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="text-lg font-bold mb-2">
           {data.이름} / {data.차량번호}
-        </h3>
-        <p>상태: {data.상태}</p>
-        <p>총 이동거리: {(data.총거리 || 0).toFixed(2)} km</p>
-        <p>근무 시간: {data.근무시간 || 0} 분</p>
+        </div>
 
-        <p className="text-xs text-gray-400 mt-2">
-          업데이트 {data.updatedAt?.toDate?.()?.toLocaleString?.()}
-        </p>
+        <div className="text-sm text-gray-600 mb-1">상태: {data.상태}</div>
+        <div className="text-sm text-gray-600">
+          총 이동거리: {(data.총거리 || 0).toFixed(2)} km
+        </div>
 
-        <button className="w-full py-2 bg-blue-600 text-white rounded-lg mt-4" onClick={onClose}>
+        <div className="text-xs text-gray-400 mt-3">
+          업데이트: {data.updatedAt?.toDate?.()?.toLocaleString?.()}
+        </div>
+
+        <button
+          className="w-full py-2 mt-4 bg-blue-600 text-white rounded-xl"
+          onClick={onClose}
+        >
           닫기
         </button>
       </div>

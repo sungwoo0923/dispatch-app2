@@ -29,7 +29,22 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [role, setRole] = useState(null);
   const [loading, setLoading] = useState(true);
+// ⭐ 새 버전 감지 → 자동 새로고침 (무한루프 방지)
+useEffect(() => {
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      const refreshed = sessionStorage.getItem("app-refreshed");
 
+      if (!refreshed) {
+        console.log("%cSW 업데이트 → 새로고침 진행", "color:#22cc22;font-weight:bold;");
+        sessionStorage.setItem("app-refreshed", "yes");
+        window.location.reload();
+      } else {
+        console.log("%c이미 새로고침됨 → 무한루프 방지", "color:#ffaa00;font-weight:bold;");
+      }
+    });
+  }
+}, []);
   // Auth + Role 실시간 반영
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
