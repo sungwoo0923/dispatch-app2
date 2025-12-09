@@ -1,15 +1,10 @@
-// ===================== src/driver/DriverHome.jsx (PREMIUM FINAL) =====================
+// ===================== src/driver/DriverHome.jsx (PREMIUM FULL) =====================
 import React, { useEffect, useState } from "react";
 import { db, auth } from "../firebase";
 import {
-  doc,
-  onSnapshot,
-  updateDoc,
-  serverTimestamp,
-  getDoc,
+  doc, onSnapshot, updateDoc, serverTimestamp,
+  getDoc, collection, addDoc
 } from "firebase/firestore";
-import DriverTracking from "./DriverTracking";
-import DriverLogs from "./DriverLogs";
 import { useNavigate } from "react-router-dom";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 
@@ -20,131 +15,166 @@ export default function DriverHome() {
   const [activeTab, setActiveTab] = useState("home");
   const [showMore, setShowMore] = useState(false);
 
-  // 로그인 체크
+  // 로그인 유지 체크
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (user) => {
-      if (!user) navigate("/driver-login");
-      else setUid(user.uid);
+    return onAuthStateChanged(auth, (u) => {
+      if (!u) navigate("/driver-login");
+      else setUid(u.uid);
     });
-    return () => unsub();
-  }, [navigate]);
+  }, []);
 
-  // 드라이버 데이터 실시간 구독
+  // Driver 실시간 구독
   useEffect(() => {
     if (!uid) return;
-    const ref = doc(db, "drivers", uid);
-    const unsub = onSnapshot(ref, (snap) => {
-      if (!snap.exists()) return setDriver(null);
+    return onSnapshot(doc(db, "drivers", uid), (snap) => {
       setDriver(snap.data());
     });
-    return () => unsub();
   }, [uid]);
 
   if (!driver)
-    return (
-      <div className="flex items-center justify-center h-screen">
-        승인 대기 또는 불러오는 중
-      </div>
-    );
+    return <div className="flex items-center justify-center h-screen">로딩중…</div>;
 
-  // ===================== 상태 업데이트 =====================
+  // ===================== 거리 계산 함수 =====================
+  const calcDist = (lat1, lng1, lat2, lng2) => {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const a =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos(lat1 * Math.PI / 180) *
+      Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLng / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  };
+
+  // ===================== 상태 변경 + 로그 기록 =====================
   const updateStatus = async (mainStatus, subStatus) => {
     const ref = doc(db, "drivers", uid);
-    const snap = await getDoc(ref);
-    const location = snap.data()?.location || null;
+    const now = new Date();
+    const dateKey = now.toISOString().slice(0, 10);
 
     await updateDoc(ref, {
       mainStatus,
       subStatus,
       active: mainStatus !== "퇴근",
-      updatedAt: serverTimestamp(),
-      location,
-       status:
-   mainStatus === "퇴근" ? "퇴근" :
-   mainStatus === "대기" ? "대기" :
-   "운행중",
+      status:
+        mainStatus === "퇴근" ? "퇴근" :
+        mainStatus === "대기" ? "대기" :
+        "운행중",
+      updatedAt: serverTimestamp()
+    });
+
+    await addDoc(collection(db, "driver_logs"), {
+      uid,
+      mainStatus,
+      subStatus,
+      timestamp: serverTimestamp(),
+      dateKey,
     });
   };
 
+  // ===================== 위치 + 운행거리 자동 기록 =====================
+  useEffect(() => {
+    if (!uid) return;
+    let lastPos = null;
+
+    const loop = setInterval(() => {
+      navigator.geolocation.getCurrentPosition(async (pos) => {
+        const { latitude, longitude } = pos.coords;
+
+        const ref = doc(db, "drivers", uid);
+        const snap = await getDoc(ref);
+        const d = snap.data();
+
+        let dist = d.totalDistance || 0;
+        if (d.location) {
+          dist += calcDist(
+            d.location.lat, d.location.lng,
+            latitude, longitude
+          );
+        }
+
+        await updateDoc(ref, {
+          location: { lat: latitude, lng: longitude },
+          totalDistance: dist,
+          updatedAt: serverTimestamp()
+        });
+      });
+    }, 10000);
+
+    return () => clearInterval(loop);
+  }, [uid]);
+
   const mainBtns = [
-    ["출근", "운행중", "출근", "bg-blue-600"],
-    ["대기", "대기", "대기", "bg-slate-500"],
-    ["퇴근", "퇴근", "퇴근", "bg-rose-600"],
+    ["출근", "운행중", "출근", "#007AFF"],
+    ["대기", "대기", "대기", "#727272"],
+    ["퇴근", "퇴근", "퇴근", "#FF3B30"],
   ];
 
   const subFlow = ["출근", "상차입차", "상차출차", "하차입차", "하차출차", "대기"];
-
-  const currentSub = driver.subStatus || "대기";
-  const nextIndex = subFlow.indexOf(currentSub) + 1;
-  const nextSub = subFlow[nextIndex] || "대기";
+  const nowSub = driver.subStatus || "대기";
+  const nextSub = subFlow[(subFlow.indexOf(nowSub) + 1) % subFlow.length];
 
   return (
-    <div className="min-h-screen bg-gray-100 p-4 pb-20">
-      {/* 상단 대표 상태 카드 */}
-      <div className="bg-white rounded-2xl shadow p-4 mb-5">
-        <p className="font-bold text-xl text-blue-600 mb-1">
+    <div className="min-h-screen p-5 pb-20 bg-gray-100">
+      {/* 상태 카드 */}
+      <div className="rounded-2xl p-5 bg-white shadow mb-6">
+        <div className="text-2xl font-bold text-blue-600">
           {driver.mainStatus || "대기"}
-        </p>
-        <p className="text-sm text-gray-700">기사: {driver.name}</p>
-        <p className="text-sm text-gray-700 mb-3">
-          차량번호: {driver.carNo}
-        </p>
+        </div>
+        <div className="text-sm text-gray-600 mt-2">
+          {driver.name} / {driver.carNo}
+        </div>
+
+        <div className="text-xs text-gray-500 mt-1">
+          총 이동거리: {(driver.totalDistance || 0).toFixed(2)} km
+        </div>
 
         <button
-          onClick={() => {
-            localStorage.clear();
-            signOut(auth);
-            navigate("/driver-login");
-          }}
-          className="px-3 py-1 bg-rose-600 text-white rounded text-xs float-right"
+          onClick={() => { signOut(auth); navigate("/driver-login"); }}
+          className="mt-3 text-xs text-red-500 underline float-right"
         >
           로그아웃
         </button>
       </div>
 
+      {/* 메인 화면 */}
       {activeTab === "home" && (
         <>
-          {/* 대표 상태 버튼 */}
-          <div className="grid grid-cols-3 gap-3 mb-5">
+          <div className="grid grid-cols-3 gap-3 mb-6">
             {mainBtns.map(([label, m, s, color]) => (
               <button
                 key={label}
+                style={{ background: color }}
+                className="text-white py-3 rounded-xl font-bold shadow"
                 onClick={() => updateStatus(m, s)}
-                className={`${color} text-white font-bold py-3 rounded-xl shadow-md`}
               >
                 {label}
               </button>
             ))}
           </div>
 
-          {/* 추천 버튼 */}
-          <div className="mb-4">
-            <p className="text-xs text-gray-500 mb-1">
-              다음 작업 제안
-            </p>
-            <button
-              onClick={() => updateStatus("운행중", nextSub)}
-              className="w-full py-3 rounded-xl bg-emerald-600 text-white font-semibold shadow-md"
-            >
-              {nextSub}
-            </button>
-          </div>
-
-          {/* 전체 상태 */}
           <button
-            onClick={() => setShowMore(!showMore)}
-            className="text-gray-700 text-xs underline mb-2"
+            className="w-full py-4 bg-emerald-600 text-white rounded-xl font-semibold shadow-lg"
+            onClick={() => updateStatus("운행중", nextSub)}
           >
-            전체 업무 단계 보기 ▾
+            다음: {nextSub}
+          </button>
+
+          <button
+            className="mt-4 text-xs text-gray-600 underline w-full"
+            onClick={() => setShowMore(!showMore)}
+          >
+            전체 단계 보기
           </button>
 
           {showMore && (
-            <div className="grid grid-cols-3 gap-2 mt-2 text-xs">
+            <div className="grid grid-cols-3 gap-2 mt-3">
               {subFlow.map((s) => (
                 <button
                   key={s}
+                  className="py-2 bg-gray-300 rounded text-xs"
                   onClick={() => updateStatus("운행중", s)}
-                  className="bg-gray-300 py-2 rounded text-gray-900"
                 >
                   {s}
                 </button>
@@ -154,11 +184,22 @@ export default function DriverHome() {
         </>
       )}
 
-      {activeTab === "location" && <DriverTracking driverId={uid} />}
-      {activeTab === "logs" && <DriverLogs driverId={uid} />}
+      {/* 위치 탭 */}
+      {activeTab === "location" && (
+        <div className="text-center text-sm text-gray-500 mt-10">
+          위치 추적 연동 준비중...
+        </div>
+      )}
 
-      {/* Bottom Navigation */}
-      <div className="fixed bottom-0 left-0 w-full flex bg-white shadow">
+      {/* 로그 탭 */}
+      {activeTab === "logs" && (
+        <div className="text-center text-sm text-gray-500 mt-10">
+          로그 연동 예정...
+        </div>
+      )}
+
+      {/* Bottom Nav */}
+      <div className="fixed bottom-0 left-0 w-full bg-white flex shadow">
         {[
           ["home", "상태"],
           ["location", "위치"],
@@ -168,9 +209,7 @@ export default function DriverHome() {
             key={key}
             onClick={() => setActiveTab(key)}
             className={`flex-1 py-3 text-xs ${
-              activeTab === key
-                ? "bg-blue-600 text-white"
-                : "bg-gray-200 text-gray-600"
+              activeTab === key ? "text-blue-600 font-bold" : "text-gray-500"
             }`}
           >
             {txt}

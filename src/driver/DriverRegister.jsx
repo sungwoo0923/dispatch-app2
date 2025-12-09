@@ -1,4 +1,4 @@
-// ===================== src/driver/DriverRegister.jsx =====================
+// ===================== src/driver/DriverRegister.jsx (SYNC FIXED) =====================
 import React, { useState } from "react";
 import { auth, db } from "../firebase";
 import { createUserWithEmailAndPassword } from "firebase/auth";
@@ -10,7 +10,6 @@ export default function DriverRegister() {
   const [name, setName] = useState("");
   const navigate = useNavigate();
 
-  // 차량번호 → 이메일 변환
   const makeEmail = (v) => `${v.replace(/ /g, "")}@driver.run25.kr`;
 
   const register = async () => {
@@ -19,36 +18,41 @@ export default function DriverRegister() {
     }
 
     const email = makeEmail(carNo.trim());
-    const password = carNo.trim(); // 차량번호 = 비밀번호 초기값
+    const password = carNo.trim();
 
     try {
       const res = await createUserWithEmailAndPassword(auth, email, password);
       const uid = res.user.uid;
 
-      // users 컬렉션
+      // users
       await setDoc(doc(db, "users", uid), {
         uid,
         email,
         role: "driver",
         name: name.trim(),
         carNo: carNo.trim(),
-        approved: false, // 기본은 미승인 상태
+        approved: false,
         createdAt: serverTimestamp(),
       });
 
-      // drivers 컬렉션
+      // drivers (🔥 관리자 및 앱 최신필드 포함)
       await setDoc(doc(db, "drivers", uid), {
         uid,
         name: name.trim(),
         carNo: carNo.trim(),
+        mainStatus: "대기",
+        subStatus: "대기",
         status: "대기",
+        state: "대기",
+        goStatus: "대기",
         active: false,
+        totalDistance: 0,
         updatedAt: serverTimestamp(),
       });
 
       alert("등록 완료! 관리자 승인 후 로그인 가능합니다.");
       navigate("/driver-login");
-
+      
     } catch (err) {
       console.error(err);
       alert("등록 실패: 이미 등록된 차량번호일 수 있습니다.");
@@ -73,7 +77,6 @@ export default function DriverRegister() {
           onChange={(e) => setCarNo(e.target.value)}
           className="border p-2 rounded"
         />
-
         <input
           placeholder="기사 이름"
           value={name}

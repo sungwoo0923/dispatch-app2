@@ -1,86 +1,108 @@
-// ===================== src/driver/DriverLogin.jsx (FINAL) =====================
-import React, { useState } from "react";
-import { auth, db } from "../firebase";
-import { signInWithEmailAndPassword, signOut } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
-import { useNavigate } from "react-router-dom";
+// ===================== src/driver/DriverLogs.jsx (WORK TIME V2) =====================
+import React, { useEffect, useState } from "react";
+import { db } from "../firebase";
+import {
+  collection,
+  query,
+  where,
+  orderBy,
+  onSnapshot
+} from "firebase/firestore";
 
-export default function DriverLogin() {
-  const [carNo, setCarNo] = useState("");
-  const [name, setName] = useState("");
-  const navigate = useNavigate();
+export default function DriverLogs({ driverId }) {
+  const [logs, setLogs] = useState([]);
+  const [summary, setSummary] = useState({
+    totalWork: 0,
+    totalDrive: 0
+  });
 
-  const makeEmail = (v) => `${v.replace(/ /g, "")}@driver.run25.kr`;
+  // 근무시간 계산 로직
+  useEffect(() => {
+    if (!driverId) return;
 
-  const login = async () => {
-    if (!carNo.trim() || !name.trim()) {
-      return alert("모두 입력해주세요!");
-    }
+    const q = query(
+      collection(db, "driver_logs"),
+      where("uid", "==", driverId),
+      orderBy("timestamp", "asc")
+    );
 
-    const email = makeEmail(carNo.trim());
-    const password = carNo.trim();
+    const unsub = onSnapshot(q, async (snap) => {
+      const list = snap.docs.map((d) => ({
+        id: d.id,
+        ...d.data()
+      }));
+      setLogs(list);
 
-    try {
-      const res = await signInWithEmailAndPassword(auth, email, password);
-      const uid = res.user.uid;
+      // 시간 계산
+      let workMs = 0;
+      let driveMs = 0;
 
-      const snap = await getDoc(doc(db, "users", uid));
-      if (!snap.exists() || !snap.data().approved) {
-        alert("관리자 승인 대기중입니다!");
-        await signOut(auth);
-        return;
-      }
+      let lastTime = null;
+      let lastStatus = null;
 
-      localStorage.setItem("role", "driver");
-      localStorage.setItem("uid", uid);
+      list.forEach((log) => {
+        if (!log.timestamp?.toDate) return;
+        const time = log.timestamp.toDate();
 
-      navigate("/driver-home");
+        if (lastTime) {
+          const diff = time - lastTime;
 
-    } catch (err) {
-      console.error(err);
-      alert("로그인 실패: 차량번호 또는 이름이 올바르지 않습니다.");
-    }
+          // 출근~퇴근 전체: 근무시간
+          if (lastStatus && lastStatus !== "퇴근") {
+            // 휴식 제외
+            if (lastStatus !== "휴식") {
+              workMs += diff;
+            }
+          }
+
+          // 운행중만: 운행시간
+          if (lastStatus === "운행중") {
+            driveMs += diff;
+          }
+        }
+
+        lastTime = time;
+        lastStatus = log.mainStatus;
+      });
+
+      setSummary({
+        totalWork: Math.floor(workMs / 1000 / 60), // minutes
+        totalDrive: Math.floor(driveMs / 1000 / 60)
+      });
+    });
+
+    return () => unsub();
+  }, [driverId]);
+
+  const formatMin = (min) => {
+    const h = Math.floor(min / 60);
+    const m = min % 60;
+    return `${h}시간 ${m}분`;
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100 p-6">
-      <button
-        className="absolute top-4 left-4 text-sm text-blue-600 hover:underline"
-        onClick={() => navigate("/login")}
-      >
-        ← 직원 로그인
-      </button>
+    <div className="text-sm text-gray-800 p-2">
+      <div className="bg-white rounded-xl shadow p-4 mb-4">
+        <div className="font-bold mb-2">근무 요약</div>
+        <p>총 근무시간: {formatMin(summary.totalWork)}</p>
+        <p>운행중 시간: {formatMin(summary.totalDrive)}</p>
+      </div>
 
-      <h2 className="text-lg font-semibold mb-4">기사 로그인</h2>
-
-      <div className="bg-white p-4 rounded shadow w-80 flex flex-col gap-3">
-        <input
-          placeholder="차량번호"
-          value={carNo}
-          onChange={(e) => setCarNo(e.target.value)}
-          className="border p-2 rounded"
-        />
-        <input
-          placeholder="이름"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          className="border p-2 rounded"
-        />
-
-        <button
-          onClick={login}
-          className="bg-blue-600 text-white py-2 rounded hover:bg-blue-700"
-        >
-          로그인
-        </button>
-
-        <button
-          onClick={() => navigate("/driver-register")}
-          className="text-sm text-blue-600 mt-2"
-        >
-          회원가입
-        </button>
+      <div className="bg-white rounded-xl shadow p-4">
+        <div className="font-bold mb-2">로그 내역</div>
+        <div className="max-h-60 overflow-auto">
+          {logs.map((l) => (
+            <div key={l.id} className="py-2 border-b">
+              [{l.mainStatus}] {l.subStatus}  
+              <br />
+              <span className="text-xs text-gray-500">
+                {l.timestamp?.toDate()?.toLocaleString()}
+              </span>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
 }
+// ===================== END =====================
