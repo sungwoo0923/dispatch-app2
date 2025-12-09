@@ -1,73 +1,56 @@
-// ===================== src/driver/DriverTracking.jsx =====================
-import React, { useEffect } from "react";
+// ===================== DriverTracking.jsx (GPS 업그레이드 Full) =====================
+import React, { useEffect, useState } from "react";
 import { db } from "../firebase";
-import { doc, updateDoc, addDoc, collection, serverTimestamp, increment, getDoc, setDoc } from "firebase/firestore";
+import { doc, setDoc } from "firebase/firestore";
 
-export default function DriverTracking({ phone }) {
-
-  const updateTracking = async (gps) => {
-    const driverRef = doc(db, "drivers", phone);
-    const dayKey = new Date().toISOString().slice(0, 10);
-    const workRef = doc(db, "driver_work", phone, "days", dayKey);
-    const snap = await getDoc(workRef);
-
-    let lastGps = snap.exists() ? snap.data().lastGps : null;
-    let dist = 0;
-
-    if (lastGps) dist = getDistance(lastGps.lat, lastGps.lng, gps.lat, gps.lng);
-
-    await setDoc(
-      workRef,
-      {
-        lastGps: gps,
-        totalDistanceKm: increment(dist / 1000),
-        totalWorkTimeSec: increment(60),
-        updatedAt: serverTimestamp(),
-      },
-      { merge: true }
-    );
-
-    await updateDoc(driverRef, {
-      gps,
-      updatedAt: serverTimestamp(),
-    });
-
-    await addDoc(collection(db, "driver_logs", phone, "events"), {
-      gps,
-      type: "auto-track",
-      dist,
-      time: serverTimestamp(),
-    });
-  };
+export default function DriverTracking({ driver }) {
+  const [coords, setCoords] = useState(null);
 
   useEffect(() => {
-    if (!phone) return;
-    const timer = setInterval(() => {
-      navigator.geolocation.getCurrentPosition((pos) => {
-        updateTracking({
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-        });
-      });
-    }, 60000);
+    if (!driver?._id) return;
 
-    return () => clearInterval(timer);
-  }, [phone]);
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords;
+        setCoords({ lat: latitude, lng: longitude });
+
+        setDoc(
+          doc(db, "drivers", driver._id),
+          {
+            location: {
+              lat: latitude,
+              lng: longitude,
+              updatedAt: Date.now()
+            }
+          },
+          { merge: true }
+        );
+      },
+      (err) => {
+        console.error("GPS Error:", err);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 5000
+      }
+    );
+
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, [driver]);
 
   return (
-    <div className="text-center mt-10">
-      위치 자동기록중(1분단위)
+    <div className="p-4 text-center">
+      <h3 className="font-bold text-lg mb-3">실시간 위치 공유</h3>
+      {coords ? (
+        <p className="text-green-700 font-semibold">
+          위치 공유 중<br />
+          {coords.lat.toFixed(5)}, {coords.lng.toFixed(5)}
+        </p>
+      ) : (
+        <p className="text-gray-500">GPS 수신 중...</p>
+      )}
     </div>
   );
 }
-
-function getDistance(lat1, lon1, lat2, lon2) {
-  const R = 6371000;
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = Math.sin(dLat / 2)**2 +
-    Math.cos(lat1 * Math.PI / 180) *
-    Math.cos(lat2 * Math.PI / 180) *
-    Math.sin(dLon / 2)**2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
+// ==================================================================

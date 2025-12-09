@@ -1,7 +1,8 @@
-// ======================= src/driver/DriverRegister.jsx =======================
+// ===================== src/driver/DriverRegister.jsx (FINAL) =====================
 import React, { useState } from "react";
-import { db, doc, setDoc } from "../firebase";
-import { collection, getDocs, serverTimestamp } from "firebase/firestore";
+import { auth, db } from "../firebase";
+import { createUserWithEmailAndPassword } from "firebase/auth";
+import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
 
 export default function DriverRegister() {
@@ -9,36 +10,60 @@ export default function DriverRegister() {
   const [name, setName] = useState("");
   const navigate = useNavigate();
 
+  const makeEmail = (v) => `${v.replace(/ /g, "")}@driver.run25.kr`;
+
   const register = async () => {
-    if (!carNo.trim() || !name.trim()) return alert("모두 입력하세요!");
+    if (!carNo.trim() || !name.trim()) {
+      return alert("차량번호와 이름을 입력하세요!");
+    }
 
-    const id = `${carNo.trim()}_${name.trim()}`;
+    const email = makeEmail(carNo.trim());
+    const password = carNo.trim();
 
-    // users 컬렉션 등록 (승인 대기)
-    await setDoc(doc(db, "users", id), {
-      uid: id,
-      email: carNo.trim(), // 차량번호 기반
-      role: "driver",
-      name: name.trim(),
-      approved: false,
-      createdAt: serverTimestamp(),
-    });
+    try {
+      const res = await createUserWithEmailAndPassword(auth, email, password);
+      const uid = res.user.uid;
 
-    // drivers 컬렉션 등록(비활성)
-    await setDoc(doc(db, "drivers", id), {
-      차량번호: carNo.trim(),
-      이름: name.trim(),
-      active: false,
-      상태: "대기",
-      updatedAt: serverTimestamp(),
-    }, { merge: true });
+      await setDoc(doc(db, "users", uid), {
+        uid,
+        email,
+        role: "driver",
+        name: name.trim(),
+        carNo: carNo.trim(),
+        approved: false,
+        createdAt: serverTimestamp(),
+      });
 
-    alert("등록 완료! 관리자 승인 후 로그인 가능합니다.");
-    navigate("/driver-login");
+      await setDoc(doc(db, "drivers", uid), {
+        uid,
+        email,
+        name: name.trim(),
+        carNo: carNo.trim(),
+        active: false,
+        location: null,
+        history: [],
+        status: "registered",
+        updatedAt: serverTimestamp(),
+      });
+
+      alert("등록 완료! 관리자 승인 후 로그인 가능합니다.");
+      navigate("/driver-login");
+      
+    } catch (err) {
+      console.error(err);
+      alert("등록 실패: 이미 등록된 차량이거나 오류가 있습니다.");
+    }
   };
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100 p-6">
+      <button
+        className="absolute top-4 left-4 text-sm text-gray-600 hover:underline"
+        onClick={() => navigate("/driver-login")}
+      >
+        ← 로그인
+      </button>
+
       <h2 className="text-lg font-semibold text-gray-800 mb-4">기사 등록</h2>
 
       <div className="bg-white p-4 rounded shadow w-80 flex flex-col gap-3">
@@ -48,8 +73,9 @@ export default function DriverRegister() {
           onChange={(e) => setCarNo(e.target.value)}
           className="border p-2 rounded"
         />
+
         <input
-          placeholder="기사 이름"
+          placeholder="이름"
           value={name}
           onChange={(e) => setName(e.target.value)}
           className="border p-2 rounded"
@@ -60,13 +86,6 @@ export default function DriverRegister() {
           className="bg-blue-600 text-white py-2 rounded hover:bg-blue-700"
         >
           등록
-        </button>
-
-        <button
-          onClick={() => navigate("/driver-login")}
-          className="text-sm text-blue-600 mt-2"
-        >
-          로그인하기
         </button>
       </div>
     </div>

@@ -1,72 +1,106 @@
-// ===================== src/driver/DriverHome.jsx =====================
+// ===================== src/driver/DriverHome.jsx (FIXED) =====================
 import React, { useEffect, useState } from "react";
 import { db, auth } from "../firebase";
-import { doc, onSnapshot, serverTimestamp, updateDoc, setDoc } from "firebase/firestore";
+import {
+  doc,
+  onSnapshot,
+  updateDoc,
+  serverTimestamp,
+} from "firebase/firestore";
 import DriverTracking from "./DriverTracking";
 import DriverLogs from "./DriverLogs";
+import { useNavigate } from "react-router-dom";
+import { onAuthStateChanged, signOut } from "firebase/auth";
 
 export default function DriverHome() {
-  const phone = auth.currentUser?.phoneNumber;
+  const navigate = useNavigate();
+  const [uid, setUid] = useState(null);
+  const [driver, setDriver] = useState(undefined);
   const [activeTab, setActiveTab] = useState("home");
-  const [driver, setDriver] = useState(null);
-  const [workInfo, setWorkInfo] = useState({});
-  const today = new Date().toISOString().slice(0, 10);
 
+  // 인증 완료 확인
   useEffect(() => {
-    if (!phone) return;
+    const unsub = onAuthStateChanged(auth, (user) => {
+      if (!user) navigate("/driver-login");
+      else setUid(user.uid);
+    });
+    return () => unsub();
+  }, [navigate]);
 
-    const ref = doc(db, "drivers", phone);
+  // 기사 정보 실시간 구독
+  useEffect(() => {
+    if (!uid) return;
+    const ref = doc(db, "users", uid);
     const unsub = onSnapshot(ref, (snap) => {
-      if (snap.exists()) setDriver(snap.data());
+      if (!snap.exists()) {
+        setDriver(null);
+        return;
+      }
+      setDriver(snap.data());
     });
+    return () => unsub();
+  }, [uid]);
 
-    const dayRef = doc(db, "driver_work", phone, "days", today);
-    const unsubDay = onSnapshot(dayRef, (snap) => {
-      if (snap.exists()) setWorkInfo(snap.data());
-    });
+  if (driver === undefined) return <div className="flex items-center justify-center p-10">로딩중...</div>;
 
-    return () => { unsub(); unsubDay(); };
-  }, [phone]);
-
-  if (!driver) return <div>로딩중...</div>;
-  if (!driver.active)
+  if (driver === null || driver.approved === false) {
     return (
-      <div className="p-5 text-center text-red-600">
-        관리자 승인 대기중입니다.
+      <div className="flex flex-col items-center justify-center h-screen gap-3 text-center">
+        <p>관리자 승인 대기중입니다</p>
+        <button
+          onClick={() => {
+            localStorage.clear();
+            signOut(auth);
+            navigate("/driver-login");
+          }}
+          className="bg-blue-600 text-white px-3 py-2 rounded text-sm"
+        >
+          로그인 화면
+        </button>
       </div>
     );
-
-  const km = (workInfo.totalDistanceKm || 0).toFixed(1);
-  const h = Math.floor((workInfo.totalWorkTimeSec || 0) / 3600);
-  const m = Math.floor(((workInfo.totalWorkTimeSec || 0) % 3600) / 60);
+  }
 
   const changeStatus = async (status) => {
-    await updateDoc(doc(db, "drivers", phone), {
+    await updateDoc(doc(db, "users", uid), {
       상태: status,
       updatedAt: serverTimestamp(),
     });
   };
 
-  const buttons = [
+  const menu = [
     ["대기", "bg-gray-500"],
-    ["휴식", "bg-yellow-400"],
-    ["운행중", "bg-blue-600"],
-    ["입차", "bg-green-600"],
-    ["출차", "bg-orange-500"],
-    ["퇴근", "bg-red-500"],
+    ["휴식", "bg-yellow-500"],
+    ["운행중", "bg-blue-500"],
+    ["적재중", "bg-orange-500"],
+    ["출차", "bg-green-600"],
+    ["퇴근", "bg-red-600"],
   ];
 
   return (
-    <div className="min-h-screen p-5 bg-gray-100">
-      <div className="p-3 bg-white rounded mb-4 shadow">
-        <h3 className="font-bold text-gray-800 mb-2">오늘 근무 요약</h3>
-        <p>총 이동거리: {km} km</p>
-        <p>근무시간: {h}시간 {m}분</p>
+    <div className="min-h-screen bg-gray-100 p-4 pb-16">
+      <div className="bg-white rounded-xl shadow p-3 mb-4 flex items-center justify-between">
+        <div>
+          <h3 className="font-bold text-lg mb-1">상태 변경</h3>
+          <p className="text-sm">기사: {driver.name || driver.이름}</p>
+          <p className="text-sm">차량번호: {driver.carNo || driver.차량번호}</p>
+        </div>
+
+        <button
+          onClick={() => {
+            localStorage.clear();
+            signOut(auth);
+            navigate("/driver-login");
+          }}
+          className="px-3 py-1 bg-red-600 text-white rounded text-xs"
+        >
+          로그아웃
+        </button>
       </div>
 
       {activeTab === "home" && (
-        <div className="grid grid-cols-3 gap-3 mb-5">
-          {buttons.map(([label, color]) => (
+        <div className="grid grid-cols-3 gap-3">
+          {menu.map(([label, color]) => (
             <button
               key={label}
               onClick={() => changeStatus(label)}
@@ -78,25 +112,28 @@ export default function DriverHome() {
         </div>
       )}
 
-      {activeTab === "location" && <DriverTracking phone={phone} />}
-      {activeTab === "logs" && <DriverLogs phone={phone} />}
+      {activeTab === "location" && <DriverTracking driverId={uid} />}
+      {activeTab === "logs" && <DriverLogs driverId={uid} />}
 
-      <div className="fixed bottom-0 left-0 w-full flex">
-        <Tab keytab="home" label="상태" active={activeTab} setActive={setActiveTab} />
-        <Tab keytab="location" label="위치" active={activeTab} setActive={setActiveTab} />
-        <Tab keytab="logs" label="로그" active={activeTab} setActive={setActiveTab} />
+      <div className="fixed bottom-0 left-0 w-full flex bg-white shadow">
+        {[
+          ["home", "상태"],
+          ["location", "위치"],
+          ["logs", "로그"],
+        ].map(([key, txt]) => (
+          <button
+            key={key}
+            onClick={() => setActiveTab(key)}
+            className={`flex-1 py-3 text-xs ${
+              activeTab === key
+                ? "bg-blue-600 text-white"
+                : "bg-gray-200 text-gray-700"
+            }`}
+          >
+            {txt}
+          </button>
+        ))}
       </div>
     </div>
-  );
-}
-
-function Tab({ keytab, label, active, setActive }) {
-  return (
-    <button
-      className={`flex-1 p-3 ${active === keytab ? "bg-blue-600 text-white" : "bg-gray-300"}`}
-      onClick={() => setActive(keytab)}
-    >
-      {label}
-    </button>
   );
 }

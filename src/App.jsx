@@ -1,4 +1,4 @@
-// ======================= src/App.jsx =======================
+// ======================= src/App.jsx (FINAL FIXED) =======================
 
 import React, { useState, useEffect } from "react";
 import {
@@ -11,48 +11,36 @@ import {
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "./firebase";
 
-// PC / MOBILE
 import DispatchApp from "./DispatchApp";
 import MobileApp from "./mobile/MobileApp";
 
-// 공용 화면
+// 기사 화면
+import DriverHome from "./driver/DriverHome";
+import DriverLogin from "./driver/DriverLogin";
+import DriverRegister from "./driver/DriverRegister";
+
+// 공용
 import Login from "./Login";
 import Signup from "./Signup";
 import NoAccess from "./NoAccess";
 import UploadPage from "./UploadPage";
 import StandardFare from "./StandardFare";
 
-// 모바일 감지
 function detectMobileDevice() {
   const ua = navigator.userAgent.toLowerCase();
-  const isKakao = ua.includes("kakaotalk");
-  const isAndroid = ua.includes("android");
-  const isIOS = /iphone|ipad|ipod/.test(ua);
-  if (isKakao && (isAndroid || isIOS)) return true;
-  if (isAndroid || isIOS) return true;
-  return false;
+  return (
+    ua.includes("android") ||
+    ua.includes("iphone") ||
+    ua.includes("ipad") ||
+    ua.includes("ipod") ||
+    ua.includes("kakaotalk")
+  );
 }
 
 export default function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isMobileDevice, setIsMobileDevice] = useState(null);
-
-  const [updateReady, setUpdateReady] = useState(false);
-
-  useEffect(() => {
-    const handler = () => {
-      const saved = localStorage.getItem("latestVersion");
-      const latest = __APP_VERSION__;
-
-      // 저장된 버전이 아니면(즉, 새 버전이면) 팝업 표시
-      if (saved !== latest) {
-        setUpdateReady(true);
-      }
-    };
-    window.addEventListener("app-update-ready", handler);
-    return () => window.removeEventListener("app-update-ready", handler);
-  }, []);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => {
@@ -74,88 +62,70 @@ export default function App() {
     );
   }
 
-  const role = localStorage.getItem("role") || "user";
+  const role = localStorage.getItem("role"); // driver | admin | user
 
   return (
-    <>
-      {/* 🔵 업데이트 알림 배너 (배포 시 1번만 노출) */}
-      {updateReady && (
-        <div className="fixed top-0 left-0 right-0 z-[99999] bg-blue-600 text-white text-sm py-2 text-center shadow-md animate-pulse">
-          새 버전이 배포되었습니다.
-          <button
-            className="font-bold underline ml-2"
-            onClick={() => {
-              localStorage.setItem("latestVersion", __APP_VERSION__);
-              window.location.reload(true);
-            }}
-          >
-            새로고침
-          </button>
-        </div>
-      )}
+    <Router>
+      <Routes>
 
-      <Router>
-        <Routes>
-          <Route path="/" element={<Navigate to="/app" replace />} />
-          <Route path="/login" element={user ? <Navigate to="/app" replace /> : <Login />} />
-          <Route path="/signup" element={user ? <Navigate to="/app" replace /> : <Signup />} />
+        {/* 초기 진입 */}
+        <Route path="/" element={<Navigate to="/login" replace />} />
 
-          <Route
-            path="/app"
-            element={
-              user ? (
-                isMobileDevice ? (
-                  <MobileApp role={role} />
-                ) : (
-                  <DispatchApp role={role} />
-                )
-              ) : (
-                <Navigate to="/login" replace />
-              )
-            }
-          />
+        {/* 로그인 */}
+        <Route
+          path="/login"
+          element={
+            !user
+              ? <Login />
+              : role === "driver"
+                ? <Navigate to="/driver-home" replace />
+                : <Navigate to="/app" replace />
+          }
+        />
 
-          <Route path="/standard-fare" element={<StandardFare />} />
-          <Route path="/no-access" element={<NoAccess />} />
-          <Route path="/upload" element={<UploadPage />} />
-          <Route path="*" element={<Navigate to="/app" replace />} />
-        </Routes>
+        <Route path="/signup" element={<Signup />} />
 
-        {/* 🔧 VIEW 표시 */}
-        <div
-          style={{
-            position: "fixed",
-            bottom: 4,
-            right: 4,
-            fontSize: "10px",
-            background: "rgba(0,0,0,0.6)",
-            color: "white",
-            padding: "2px 6px",
-            borderRadius: "999px",
-            zIndex: 9999,
-          }}
-        >
-          VIEW: {isMobileDevice ? "💚 MOBILE UI" : "💻 PC UI"}
-        </div>
+        {/* 🔥 기사 페이지는 무조건 오픈 */}
+        <Route path="/driver-login" element={<DriverLogin />} />
+        <Route path="/driver-register" element={<DriverRegister />} />
+        <Route path="/driver-home" element={<DriverHome />} />
 
-        {/* 🔥 버전 표시 (배포일자 포함) */}
-        <div
-          style={{
-            position: "fixed",
-            bottom: 22,
-            right: 4,
-            fontSize: "10px",
-            background: "rgba(0,0,0,0.6)",
-            color: "white",
-            padding: "2px 6px",
-            borderRadius: "4px",
-            zIndex: 9999,
-          }}
-        >
-          v: {__APP_VERSION__.slice(0, 7)} | {__BUILD_TIME__.slice(0, 10)}
-        </div>
-      </Router>
-    </>
+
+        {/* 🔵 관리자/직원 페이지 */}
+        {role !== "driver" && (
+          <>
+            <Route
+              path="/app"
+              element={
+                user
+                  ? (
+                    isMobileDevice
+                      ? <MobileApp role={role} />
+                      : <DispatchApp role={role} />
+                  )
+                  : <Navigate to="/login" replace />
+              }
+            />
+            <Route path="/standard-fare" element={<StandardFare />} />
+            <Route path="/upload" element={<UploadPage />} />
+            <Route path="/no-access" element={<NoAccess />} />
+          </>
+        )}
+
+        {/* 보호 라우팅 */}
+        <Route
+          path="*"
+          element={
+            user
+              ? role === "driver"
+                ? <Navigate to="/driver-home" replace />
+                : <Navigate to="/app" replace />
+              : <Navigate to="/login" replace />
+          }
+        />
+
+      </Routes>
+    </Router>
   );
 }
 
