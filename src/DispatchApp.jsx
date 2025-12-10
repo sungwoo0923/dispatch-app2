@@ -1122,6 +1122,41 @@ const [placeActive, setPlaceActive] = React.useState(0);
 
       return merged;
     }, [placeRows]);
+        // ===================== 하차지(placeRows) + 로컬 병합 placeList 끝 =====================
+
+    // ⭐ 업체명으로 기존 업체 찾기
+    const findPlaceByName = (name) => {
+      const key = String(name || "").trim().toLowerCase();
+      return placeList.find(
+        (p) => String(p.업체명 || "").trim().toLowerCase() === key
+      );
+    };
+
+    // ⭐ 업체 업데이트 + 신규 생성 자동 처리
+    const savePlaceSmart = (name, addr, manager, phone) => {
+      if (!name) return;
+
+      const exist = findPlaceByName(name);
+
+      if (exist) {
+        // 기존 업체 → merge 업데이트
+        upsertPlace({
+          업체명: exist.업체명,
+          주소: addr || exist.주소,
+          담당자: manager || exist.담당자,
+          담당자번호: phone || exist.담당자번호
+        });
+      } else {
+        // 신규 업체만 생성
+        upsertPlace({
+          업체명: name,
+          주소: addr,
+          담당자: manager,
+          담당자번호: phone
+        });
+      }
+    };
+
 
     // 기본 clients + 하차지 모두 포함한 통합 검색 풀
     const mergedClients = React.useMemo(() => {
@@ -1500,26 +1535,23 @@ const doSave = async () => {
   };
 
   await addDispatch(rec);
-// ⭐ 상/하차지 담당자 정보 자동 저장 (placeRows에 반영)
+// ⭐ 상/하차지 담당자 정보 → 기존 업체 있으면 업데이트만 함
 if (typeof upsertPlace === "function") {
-  if (form.상차지명) {
-    upsertPlace({
-      업체명: form.상차지명,
-      주소: form.상차지주소,
-      담당자: form.상차지담당자,
-      담당자번호: form.상차지담당자번호
-    });
-  }
+  savePlaceSmart(
+    form.상차지명,
+    form.상차지주소,
+    form.상차지담당자,
+    form.상차지담당자번호
+  );
 
-  if (form.하차지명) {
-    upsertPlace({
-      업체명: form.하차지명,
-      주소: form.하차지주소,
-      담당자: form.하차지담당자,
-      담당자번호: form.하차지담당자번호
-    });
-  }
+  savePlaceSmart(
+    form.하차지명,
+    form.하차지주소,
+    form.하차지담당자,
+    form.하차지담당자번호
+  );
 }
+
 
   const reset = {
     ...emptyForm,
@@ -2253,7 +2285,7 @@ function FuelSlideWidget() {
           const 담당자번호 = prompt("연락처 (선택)") || "";
 
           if (typeof upsertPlace === "function") {
-            upsertPlace({ 업체명, 주소, 담당자, 담당자번호 });
+            savePlaceSmart(업체명, 주소, 담당자, 담당자번호);
           } else {
             try {
               const list = JSON.parse(localStorage.getItem("hachaPlaces_v1") || "[]");
@@ -4559,7 +4591,7 @@ ${url}
     }
     setCopyModalOpen(true);
   }}
-  className="px-3 py-1 rounded bg-indigo-600 text-white"
+  className="px-4 py-2 rounded-lg bg-gray-800 text-white text-sm font-semibold shadow hover:opacity-90"
 >
   📋 기사복사
 </button>
@@ -4601,12 +4633,10 @@ ${url}
 성공: ${success}건
 실패: ${fail}건`);
   }}
-  className="px-3 py-1 rounded bg-orange-600 text-white"
+  className="px-4 py-2 rounded-lg bg-gray-700 text-white text-sm font-semibold shadow hover:opacity-90"
 >
   📡 선택전송(24시콜)
 </button>
-
-
 
   {/* 선택수정 */}
   <button
@@ -4620,35 +4650,38 @@ ${url}
       setEditTarget({ ...row }); // 팝업에 띄울 데이터
       setEditPopupOpen(true);    // 팝업 열기
     }}
-    className="px-3 py-1 rounded bg-amber-500 text-white"
+    className="px-4 py-2 rounded-lg bg-gray-600 text-white text-sm font-semibold shadow hover:opacity-90"
   >
     선택수정
   </button>
 
         <button
           onClick={handleSaveSelected}
-          className="px-3 py-1 rounded bg-emerald-600 text-white"
+          className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold shadow hover:opacity-90"
         >
           저장
         </button>
 
         <button
           onClick={handleDeleteSelected}
-          className="bg-red-500 text-white px-3 py-1 rounded"
-        >
+          className="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-semibold shadow hover:opacity-90"
+  >
+        
           선택삭제
         </button>
         {/* ⭐⭐⭐ 선택초기화 버튼 추가 */}
 <button
   onClick={() => setSelected([])}
-  className="px-3 py-1 rounded bg-gray-500 text-white"
->
+  className="px-4 py-2 rounded-lg bg-gray-300 text-gray-800 text-sm font-semibold shadow hover:opacity-90"
+  >
+
   선택초기화
 </button>
 
         {/* 엑셀 다운로드 */}
         <button
           onClick={() => {
+            
   if (!filtered.length) {
     alert("내보낼 데이터가 없습니다.");
     return;
@@ -4768,7 +4801,7 @@ XLSX.writeFile(wb, "실시간배차현황.xlsx");
 
 }}
 
-          className="bg-green-600 text-white px-3 py-1 rounded"
+          className="px-4 py-2 rounded-lg bg-teal-600 text-white text-sm font-semibold shadow hover:opacity-90"
         >
           엑셀다운
         </button>
@@ -4776,7 +4809,7 @@ XLSX.writeFile(wb, "실시간배차현황.xlsx");
         {/* 신규 오더 버튼 */}
         <button
           onClick={() => setShowCreate(true)}
-          className="bg-blue-500 text-white px-3 py-1 rounded"
+          className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold shadow hover:opacity-90"
         >
           + 신규 오더 등록
         </button>
@@ -6527,6 +6560,20 @@ const formatPhone = (phone) => {
   // fallback
   return digits;
 };
+// ⚠️ 복사용 전화번호 포맷 (formatPhone2가 없어서 오류 발생 → 추가)
+const formatPhone2 = (phone) => {
+  const digits = String(phone ?? "").replace(/\D/g, "");
+
+  if (digits.length === 11) {
+    return digits.replace(/(\d{3})(\d{4})(\d{4})/, "$1-$2-$3");
+  }
+
+  if (digits.length === 10) {
+    return digits.replace(/(\d{3})(\d{3})(\d{4})/, "$1-$2-$3");
+  }
+
+  return digits;
+};
 
 
 // 복사 실행
@@ -7331,49 +7378,50 @@ if (!loaded) return null;
     }
     setCopyModalOpen(true);
   }}
-  className="px-3 py-2 rounded bg-purple-600 text-white hover:bg-purple-700"
+  className="px-4 py-2 rounded-lg bg-purple-600 text-white shadow-md hover:bg-purple-700 transition-all"
 >
   📋 기사복사
 </button>
 
     <button
       onClick={() => setShowCreate(true)}
-      className="px-3 py-2 rounded bg-blue-600 text-white hover:bg-blue-700"
+      className="px-4 py-2 rounded-lg bg-indigo-600 text-white shadow-md hover:bg-indigo-700 transition-all"
+  
       
     >
       
       + 신규 오더 등록
     </button>
 
-    <label className="px-3 py-2 rounded bg-indigo-600 text-white cursor-pointer hover:bg-indigo-700">
+    <label className="px-4 py-2 rounded-lg bg-blue-600 text-white shadow-md hover:bg-blue-700 transition-all cursor-pointer">
       대용량 업로드
       <input type="file" accept=".xlsx,.xls" hidden onChange={handleBulkFile} />
     </label>
 
     <button
-      className="px-3 py-2 rounded bg-yellow-500 text-white"
-      onClick={handleEditToggle}
+      className="px-4 py-2 rounded-lg bg-yellow-500 text-white shadow-md hover:bg-yellow-600 transition-all"
+    onClick={handleEditToggle}
     >
       {editMode ? "수정완료" : "선택수정"}
     </button>
 
     <button
-      className="px-3 py-2 rounded bg-red-600 text-white"
+      className="px-4 py-2 rounded-lg bg-red-600 text-white shadow-md hover:bg-red-700 transition-all"
       onClick={removeSelectedRows}
     >
       선택삭제
     </button>
 
     <button
-      className="px-3 py-2 rounded bg-gray-500 text-white"
+      className="px-4 py-2 rounded-lg bg-gray-400 text-white shadow-md hover:bg-gray-500 transition-all"
       onClick={() => setSelected(new Set())}
     >
       선택초기화
     </button>
 
     <button
-      className="px-3 py-2 rounded bg-emerald-600 text-white"
-      onClick={downloadExcel}
+      className="px-4 py-2 rounded-lg bg-emerald-600 text-white shadow-md hover:bg-emerald-700 transition-all"
+    onClick={downloadExcel}
     >
       엑셀다운
     </button>
