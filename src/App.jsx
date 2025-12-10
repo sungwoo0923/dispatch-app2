@@ -25,26 +25,31 @@ import NoAccess from "./NoAccess";
 import UploadPage from "./UploadPage";
 import StandardFare from "./StandardFare";
 
+// ⭐ 비밀번호 변경 페이지 추가
+import ChangePassword from "./ChangePassword";
+
 export default function App() {
   const [user, setUser] = useState(null);
   const [role, setRole] = useState(null);
   const [loading, setLoading] = useState(true);
-// ⭐ 새 버전 감지 → 자동 새로고침 (무한루프 방지)
-useEffect(() => {
-  if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.addEventListener("controllerchange", () => {
-      const refreshed = sessionStorage.getItem("app-refreshed");
 
-      if (!refreshed) {
-        console.log("%cSW 업데이트 → 새로고침 진행", "color:#22cc22;font-weight:bold;");
-        sessionStorage.setItem("app-refreshed", "yes");
-        window.location.reload();
-      } else {
-        console.log("%c이미 새로고침됨 → 무한루프 방지", "color:#ffaa00;font-weight:bold;");
-      }
-    });
-  }
-}, []);
+  // ⭐ 새 버전 감지 → 자동 새로고침 (무한루프 방지)
+  useEffect(() => {
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.addEventListener("controllerchange", () => {
+        const refreshed = sessionStorage.getItem("app-refreshed");
+
+        if (!refreshed) {
+          console.log("%cSW 업데이트 → 새로고침 진행", "color:#22cc22;font-weight:bold;");
+          sessionStorage.setItem("app-refreshed", "yes");
+          window.location.reload();
+        } else {
+          console.log("%c이미 새로고침됨 → 무한루프 방지", "color:#ffaa00;font-weight:bold;");
+        }
+      });
+    }
+  }, []);
+
   // Auth + Role 실시간 반영
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
@@ -57,12 +62,11 @@ useEffect(() => {
 
       setUser(u);
 
-      // Firestore role 불러오기
       const snap = await getDoc(doc(db, "users", u.uid));
       if (snap.exists()) {
         const r = snap.data().role;
         setRole(r);
-        localStorage.setItem("role", r); // 캐시 유지
+        localStorage.setItem("role", r);
       } else {
         setRole(null);
       }
@@ -89,10 +93,8 @@ useEffect(() => {
     <Router>
       <Routes>
 
-        {/* 기본 라우팅 */}
         <Route path="/" element={<Navigate to="/login" replace />} />
 
-        {/* 직원/관리자 로그인 */}
         <Route
           path="/login"
           element={
@@ -124,7 +126,7 @@ useEffect(() => {
           }
         />
 
-        {/* 기사 전용 홈 */}
+        {/* 기사 홈 */}
         <Route
           path="/driver-home"
           element={
@@ -134,7 +136,7 @@ useEffect(() => {
           }
         />
 
-        {/* 직원/관리자 Web UI */}
+        {/* 직원/관리자 메인 */}
         <Route
           path="/app"
           element={
@@ -146,11 +148,13 @@ useEffect(() => {
           }
         />
 
+        {/* ⭐ 비밀번호 변경 추가 */}
+        <Route path="/change-password" element={<ChangePassword />} />
+
         <Route path="/standard-fare" element={<StandardFare />} />
         <Route path="/upload" element={<UploadPage />} />
         <Route path="/no-access" element={<NoAccess />} />
 
-        {/* 보호 라우팅 */}
         <Route
           path="*"
           element={

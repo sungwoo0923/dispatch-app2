@@ -192,14 +192,22 @@ unsubs.push(onSnapshot(collection(db, collName), (snap)=>{
     return ()=>unsubs.forEach(u=>u&&u());
   }, [user]);
 
-  const addDispatch = async (record)=>{
-    const _id = record._id || crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
-    await setDoc(doc(db, COLL.dispatch, _id), { ...record, _id });
-  };
-  const patchDispatch = async (_id, patch)=>{
-    if(!_id) return;
-    await setDoc(doc(db, COLL.dispatch, _id), patch, { merge: true });
-  };
+  const addDispatch = async (record) => {
+  const _id = record._id || crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
+  await setDoc(doc(db, COLL.dispatch, _id), { 
+    ...record,
+    _id,
+    작성자: auth.currentUser?.email || "",   // ★ 추가
+  });
+};
+  const patchDispatch = async (_id, patch) => {
+  if (!_id) return;
+  await setDoc(doc(db, COLL.dispatch, _id), { 
+    ...patch,
+    작성자: auth.currentUser?.email || "",   // ★ 추가
+  }, { merge: true });
+};
+
 const removeDispatch = async (arg) => {
   const id = typeof arg === "string" ? arg : arg?._id;
   if (!id) return;
@@ -315,6 +323,8 @@ export default function DispatchApp() {
 
   // ⭐ 여기 추가!
   const [subMenu, setSubMenu] = useState("고정거래처관리");
+   // ⭐ 내 정보 패널 ON/OFF
+  const [showMyInfo, setShowMyInfo] = useState(false);
   // ❌ 삭제 (중복 선언 오류 원인)
   // const [dispatchData, setDispatchData] = useState([]);
 
@@ -372,6 +382,94 @@ const dispatchDataFiltered = useMemo(() => {
   // test 계정 → "테스트" 거래처만 표시
   return dispatchData.filter(o => o.거래처명 === "테스트");
 }, [dispatchData, role]);
+// ⭐ 내 정보 통계 계산
+const myStats = useMemo(() => {
+  if (!dispatchData) return { totalOrders: 0, totalRevenue: 0, totalProfit: 0 };
+
+  const myOrders = dispatchData.filter(d =>
+  !d?.작성자 || d?.작성자 === user?.email
+);
+
+  let totalRevenue = 0;
+  let totalProfit = 0;
+
+  myOrders.forEach(o => {
+    const fare = Number(o?.청구운임 || 0);
+    const driverFee = Number(o?.기사운임 || 0);
+
+    totalRevenue += fare;
+    totalProfit += fare - driverFee;
+  });
+
+  return {
+    totalOrders: myOrders.length,
+    totalRevenue,
+    totalProfit,
+  };
+}, [dispatchData, user]);
+// ⭐ 오늘 날짜
+const today = todayStr();
+
+// ⭐ 안전한 날짜 파싱 함수 (Timestamp, string 모두 지원)
+function parseDate(v) {
+  if (!v) return null;
+
+  // Firebase Timestamp 객체면 toDate() 사용
+  if (typeof v === "object" && v.toDate) {
+    return v.toDate();
+  }
+
+  // 문자열이면 Date로 변환
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+// ⭐ KST 기준 날짜(2025-02-14 형태로)
+function toYMD_KST(date) {
+  if (!date) return "";
+  const d = new Date(date.getTime() + 9 * 60 * 60 * 1000);
+  return d.toISOString().slice(0, 10);
+}
+
+// ⭐ 오늘 통계
+const todayStats = useMemo(() => {
+  if (!dispatchData || !user) return { count: 0, revenue: 0, profit: 0 };
+
+  const todayStrKST = today; // 기존 todayStr 사용
+
+  const list = dispatchData.filter((d) => {
+    // 내가 작성한 오더만
+    const isMine = !d?.작성자 || d.작성자 === user.email;
+
+    // 상차일자 파싱
+    const dt = parseDate(d?.상차일자 || d?.상차일 || d?.상차);
+
+    // 날짜가 없으면 제외
+    if (!dt) return false;
+
+    // KST 기준 YYYY-MM-DD로 변환
+    const dateKST = toYMD_KST(dt);
+
+    // 오늘과 동일하면 포함
+    return isMine && dateKST === todayStrKST;
+  });
+
+  return list.reduce(
+    (acc, o) => {
+      const fare = toInt(o?.청구운임);
+      const driverFee = toInt(o?.기사운임);
+
+      acc.count += 1;
+      acc.revenue += fare;
+      acc.profit += fare - driverFee;
+
+      return acc;
+    },
+    { count: 0, revenue: 0, profit: 0 }
+  );
+}, [dispatchData, user, today]);
+
+
 
 
   // ---------------- 로그아웃 ----------------
@@ -453,54 +551,84 @@ const dispatchDataFiltered = useMemo(() => {
     );
 
   // ---------------- 메뉴 UI ----------------
-  return (
-    <>
-      <header className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">RUN25 배차프로그램</h1>
-        <div className="flex items-center gap-3">
-          <span className="text-gray-700 text-sm">{user?.email}</span>
-          <button onClick={logout} className="bg-gray-300 px-3 py-1 rounded text-sm">
-            로그아웃
-          </button>
-        </div>
-      </header>
+return (
+  <>
 
-      <nav className="flex gap-2 mb-3 overflow-x-auto whitespace-nowrap">
-        {[
-          "배차관리",
-          "실시간배차현황",
-          "배차현황",
-          "미배차현황",
-          "표준운임표",
-          "기사관리",
-          "거래처관리",
-          "고정거래처관리",
-          "매출관리",
-          "거래처정산",
-          "지급관리",
-          "관리자메뉴",
-        ].map((m) => {
-          const isBlocked = role === "user" && blockedMenus.includes(m);
-          const isActive = menu === m;
+    <header className="sticky top-0 z-50 bg-white shadow-md rounded-b-xl px-6 py-4 mb-6 flex items-center justify-between">
 
-          return (
-            <button
-              key={m}
-              disabled={isBlocked}
-              onClick={() => handleMenuClick(m)}
-              className={`px-3 py-2 rounded border text-sm ${
-                isBlocked
-                  ? "bg-gray-200 text-gray-500 cursor-not-allowed"
-                  : isActive
-                  ? "bg-blue-600 text-white"
-                  : "bg-white text-black"
-              }`}
-            >
-              {m}
-            </button>
-          );
-        })}
-      </nav>
+  {/* 좌측 서비스명 */}
+  <div className="flex flex-col leading-tight">
+    <span className="text-xl font-extrabold text-gray-800 tracking-tight">
+      RUN25 배차프로그램(Park)
+    
+    </span>
+    <span className="text-xs text-gray-500">물류 배차·정산 통합관리 시스템</span>
+  </div>
+
+  {/* 우측 사용자 영역 */}
+  <div className="flex items-center gap-4">
+
+    {/* 내 정보 버튼 */}
+    <button
+      onClick={() => setShowMyInfo(true)}
+      className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md text-sm shadow-sm transition"
+    >
+      내 정보
+    </button>
+
+    {/* 이메일 */}
+    <span className="text-gray-700 text-sm bg-gray-100 px-3 py-1 rounded-full">
+      {user?.email}
+    </span>
+
+    {/* 로그아웃 */}
+    <button 
+      onClick={logout} 
+      className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-md text-sm shadow-sm transition"
+    >
+      로그아웃
+    </button>
+
+  </div>
+</header>
+
+    <nav className="flex gap-2 mb-3 overflow-x-auto whitespace-nowrap">
+      {[
+        "배차관리",
+        "실시간배차현황",
+        "배차현황",
+        "미배차현황",
+        "표준운임표",
+        "기사관리",
+        "거래처관리",
+        "고정거래처관리",
+        "매출관리",
+        "거래처정산",
+        "지급관리",
+        "관리자메뉴",
+      ].map((m) => {
+    const isBlocked = role === "user" && blockedMenus.includes(m);
+    const isActive = menu === m;
+
+    return (
+      <button
+        key={m}
+        disabled={isBlocked}
+        onClick={() => handleMenuClick(m)}
+        className={`px-3 py-2 rounded border text-sm ${
+          isBlocked
+            ? "bg-gray-200 text-gray-500 cursor-not-allowed"
+            : isActive
+            ? "bg-blue-600 text-white"
+            : "bg-white text-black"
+        }`}
+      >
+        {m}
+      </button>
+    );
+  })}
+</nav>
+
 
       {/* ---------------- 화면 렌더링 ---------------- */}
 <main className="bg-white rounded shadow p-4">
@@ -637,9 +765,95 @@ const dispatchDataFiltered = useMemo(() => {
 
         {menu === "관리자메뉴" && role === "admin" && <AdminMenu />}
       </main>
-    </>
-  );
+      {/* ⭐⭐⭐ 내 정보 패널 ⭐⭐⭐ */}
+{showMyInfo && (
+  <div
+    className="fixed inset-0 bg-black bg-opacity-40 z-50 flex justify-end"
+    onClick={() => setShowMyInfo(false)}
+  >
+    <div
+      className="w-80 bg-white h-full shadow-xl p-6 overflow-y-auto"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <h2 className="text-xl font-bold mb-4">내 정보</h2>
+
+      {/* 이메일 */}
+      <div className="mb-6">
+        <p className="font-semibold text-gray-700">이메일</p>
+        <p className="text-gray-900">{user?.email}</p>
+      </div>
+
+      {/* 비밀번호 변경 */}
+      <button
+        onClick={() => navigate("/change-password")}
+        className="w-full bg-blue-500 text-white py-2 rounded-md mb-6 hover:bg-blue-600 transition"
+      >
+        비밀번호 변경
+      </button>
+
+      {/* 나의 통계 */}
+      <h3 className="text-lg font-semibold mb-3">나의 통계</h3>
+
+      {/* 오늘 통계 */}
+      <div className="mt-4 pb-4 border-b">
+        <h3 className="text-sm font-bold text-gray-700 mb-2">오늘 통계</h3>
+
+        <div className="space-y-2">
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-600">오늘 오더 수</span>
+            <span className="font-bold">{todayStats.count}</span>
+          </div>
+
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-600">오늘 매출</span>
+            <span className="font-bold text-blue-600">
+              {todayStats.revenue.toLocaleString()}원
+            </span>
+          </div>
+
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-600">오늘 수익</span>
+            <span className="font-bold text-green-600">
+              {todayStats.profit.toLocaleString()}원
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* 총 통계 */}
+      <div className="mt-4">
+        <h3 className="text-sm font-bold text-gray-700 mb-2">총 통계</h3>
+
+        <div className="space-y-2">
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-600">총 오더 수</span>
+            <span className="font-bold">{myStats.totalOrders}</span>
+          </div>
+
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-600">총 매출</span>
+            <span className="font-bold text-blue-600">
+              {myStats.totalRevenue.toLocaleString()}원
+            </span>
+          </div>
+
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-600">총 수익</span>
+            <span className="font-bold text-green-600">
+              {myStats.totalProfit.toLocaleString()}원
+            </span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+)}
+
+</>
+);
 }
+
 // ===================== DispatchApp.jsx (PART 2/8) — END =====================
 
 // ===================== DispatchApp.jsx (PART 3/8) — START =====================
@@ -692,15 +906,22 @@ const [statusPopup, setStatusPopup] = React.useState(null);
 // ⭐ 전화번호 숫자→하이폰 포맷 변환
 function formatPhone(raw) {
   if (!raw) return "";
-  const num = raw.replace(/[^\d]/g, "");
+  
+  const str = String(raw);   // ★ 어떤 타입이 와도 문자열로 강제
+
+  const num = str.replace(/[^\d]/g, ""); // 숫자만 추출
+
   if (num.length === 11) {
-    return `${num.slice(0,3)}-${num.slice(3,7)}-${num.slice(7)}`;
+    return `${num.slice(0, 3)}-${num.slice(3, 7)}-${num.slice(7)}`;
   }
+
   if (num.length === 10) {
-    return `${num.slice(0,3)}-${num.slice(3,6)}-${num.slice(6)}`;
+    return `${num.slice(0, 3)}-${num.slice(3, 6)}-${num.slice(6)}`;
   }
-  return raw;
+
+  return str;   // 기본 문자열 리턴(하이픈 없는 경우 등)
 }
+
 
 // ========================================================
 // 🔷 Today Dashboard 데이터 계산 (UI 대시보드에서 사용)
@@ -1949,7 +2170,7 @@ function FuelSlideWidget() {
             ) : (
               filteredClients.map((p, idx) => (
                 <div
-                  key={p.업체명}
+                  key={p.업체명 + "_" + idx}
                   className={`px-3 py-2 text-sm cursor-pointer ${
                     idx === clientActive ? "bg-blue-50" : "hover:bg-gray-50"
                   }`}
@@ -2124,7 +2345,7 @@ function FuelSlideWidget() {
       <div className="absolute z-50 bg-white border rounded-lg shadow-lg w-full max-h-48 overflow-auto">
         {placeOptions.map((p, i) => (
           <div
-            key={i}
+            key={p.업체명 + "_" + i}
             className={`px-2 py-1 cursor-pointer ${
               i === placeActive ? "bg-blue-50" : "hover:bg-gray-50"
             }`}
@@ -3006,19 +3227,32 @@ const getYoil = (dateStr) => {
   return ["일","월","화","수","목","금","토"][date.getDay()];
 };
 
-const formatPhone = (phone) => {
-  const digits = String(phone ?? "").replace(/\D/g, "");
+const formatPhone = (value) => {
+  const digits = String(value ?? "").replace(/\D/g, "");
 
+  // 11자리 → 010-0000-0000
   if (digits.length === 11) {
     return digits.replace(/(\d{3})(\d{4})(\d{4})/, "$1-$2-$3");
   }
 
+  // 10자리 → 지역번호 고려
   if (digits.length === 10) {
+    // 02로 시작 → (서울)
+    if (digits.startsWith("02")) {
+      return digits.replace(/(\d{2})(\d{4})(\d{4})/, "$1-$2-$3");
+    }
+    // 일반 지역번호 (031, 051, 055…)
     return digits.replace(/(\d{3})(\d{3})(\d{4})/, "$1-$2-$3");
   }
 
-  return digits; // fallback
+  // 8자리 → 0000-0000
+  if (digits.length === 8) {
+    return digits.replace(/(\d{4})(\d{4})/, "$1-$2");
+  }
+
+  return digits;
 };
+
 
 
 
