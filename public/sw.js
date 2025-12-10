@@ -4,6 +4,9 @@
 // 배포할 때마다 이 숫자만 수동으로 바꿔주면 된다
 const VERSION = "2025-02-10-01";
 
+// === 반드시 이렇게 VERSION 로그를 출력해야 함 ===
+console.log("Service Worker Loaded. VERSION =", VERSION);
+
 // 설치
 self.addEventListener("install", () => {
   self.skipWaiting();
@@ -29,7 +32,6 @@ self.addEventListener("message", (event) => {
     }
   }
 
-  // SKIP_WAITING 처리
   if (event.data?.type === "SKIP_WAITING") {
     self.skipWaiting();
   }

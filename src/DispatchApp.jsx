@@ -370,18 +370,15 @@ const {
   removeClient,
 } = useRealtimeCollections(user);
 
-// 🔍 role 따라 표시 데이터 필터링
+// 🔍 모든 계정(admin 포함) = 본인 작성 오더만 보기
 const dispatchDataFiltered = useMemo(() => {
-  if (!dispatchData) return [];
+  if (!dispatchData || !user) return [];
 
-  // admin & user → 전체 표시
-  if (role !== "test") {
-    return dispatchData;
-  }
+  return dispatchData.filter(o =>
+    !o?.작성자 || o?.작성자 === user.email
+  );
+}, [dispatchData, user]);
 
-  // test 계정 → "테스트" 거래처만 표시
-  return dispatchData.filter(o => o.거래처명 === "테스트");
-}, [dispatchData, role]);
 // ⭐ 내 정보 통계 계산
 const myStats = useMemo(() => {
   if (!dispatchData) return { totalOrders: 0, totalRevenue: 0, totalProfit: 0 };
@@ -592,42 +589,52 @@ return (
   </div>
 </header>
 
-    <nav className="flex gap-2 mb-3 overflow-x-auto whitespace-nowrap">
-      {[
-        "배차관리",
-        "실시간배차현황",
-        "배차현황",
-        "미배차현황",
-        "표준운임표",
-        "기사관리",
-        "거래처관리",
-        "고정거래처관리",
-        "매출관리",
-        "거래처정산",
-        "지급관리",
-        "관리자메뉴",
-      ].map((m) => {
-    const isBlocked = role === "user" && blockedMenus.includes(m);
-    const isActive = menu === m;
+<nav className="w-full bg-[#2D7BFF] shadow-sm rounded-lg px-3 py-3 mb-5">
+  <div className="flex gap-2 overflow-x-auto whitespace-nowrap">
 
-    return (
-      <button
-        key={m}
-        disabled={isBlocked}
-        onClick={() => handleMenuClick(m)}
-        className={`px-3 py-2 rounded border text-sm ${
-          isBlocked
-            ? "bg-gray-200 text-gray-500 cursor-not-allowed"
-            : isActive
-            ? "bg-blue-600 text-white"
-            : "bg-white text-black"
-        }`}
-      >
-        {m}
-      </button>
-    );
-  })}
+    {[
+      "배차관리",
+      "실시간배차현황",
+      "배차현황",
+      "미배차현황",
+      "표준운임표",
+      "기사관리",
+      "거래처관리",
+      "고정거래처관리",
+      "매출관리",
+      "거래처정산",
+      "지급관리",
+      "관리자메뉴",
+    ].map((m) => {
+      const isBlocked = role === "user" && blockedMenus.includes(m);
+      const isActive = menu === m;
+
+      return (
+        <button
+          key={m}
+          disabled={isBlocked}
+          onClick={() => handleMenuClick(m)}
+          className={`
+            px-5 py-2 text-sm font-medium rounded-md border transition-all duration-150
+
+            ${
+              isBlocked
+                ? "bg-gray-300 text-gray-500 border-gray-400 cursor-not-allowed"
+
+                : isActive
+                ? "bg-white text-[#2D7BFF] border-white shadow-md"
+
+                : "bg-[#2D7BFF] text-white border-transparent hover:bg-[#1F5EDB]"
+            }
+          `}
+        >
+          {m}
+        </button>
+      );
+    })}
+  </div>
 </nav>
+
 
 
       {/* ---------------- 화면 렌더링 ---------------- */}
@@ -865,6 +872,7 @@ return (
     role = "admin",
     isTest = false,  // ★ 추가!
   }) {
+    
 
     // 관리자 여부 체크
 const isAdmin = role === "admin";
@@ -1491,6 +1499,26 @@ const doSave = async () => {
   };
 
   await addDispatch(rec);
+// ⭐ 상/하차지 담당자 정보 자동 저장 (placeRows에 반영)
+if (typeof upsertPlace === "function") {
+  if (form.상차지명) {
+    upsertPlace({
+      업체명: form.상차지명,
+      주소: form.상차지주소,
+      담당자: form.상차지담당자,
+      담당자번호: form.상차지담당자번호
+    });
+  }
+
+  if (form.하차지명) {
+    upsertPlace({
+      업체명: form.하차지명,
+      주소: form.하차지주소,
+      담당자: form.하차지담당자,
+      담당자번호: form.하차지담당자번호
+    });
+  }
+}
 
   const reset = {
     ...emptyForm,
@@ -1904,8 +1932,23 @@ const applyCopy = (r) => {
     };
 
     // ───── 내부 렌더: 입력폼 (그대로 유지) ─────
-    const inputCls = "border p-2 rounded w-full text-left";
-    const labelCls = "text-xs text-gray-600 mb-1 block";
+// =======================
+// KakaoT Minimal Clean Theme
+// =======================
+
+// 입력창 (카카오T 스타일)
+const inputCls =
+  "w-full px-3 py-2 rounded-xl text-sm border " +
+  "border-[#E5E7EB] bg-white " +             // 연한 그레이 테두리
+  "focus:border-black focus:ring-1 focus:ring-black/60 " + 
+  "transition-all";
+
+// 라벨 (카카오T 스타일)
+const labelCls =
+  "block text-[13px] font-semibold text-black mb-1";
+
+
+
     const reqStar = <span className="text-red-500">*</span>;
     const AutoBadge = ({ show }) => show ? <span className="ml-2 text-[12px] text-emerald-700">(📌 자동매칭됨)</span> : null;
 // ---------------------------------------------
@@ -2117,8 +2160,16 @@ function FuelSlideWidget() {
  
 <form
   onSubmit={handleSubmit}
-  className="grid grid-cols-6 gap-3 bg-white shadow-lg border border-gray-200 rounded-2xl p-6 ml-0 max-w-[1500px]"
+  className="
+    grid grid-cols-6 gap-4
+    bg-white
+    border border-[#EDEDED]
+    rounded-2xl p-8
+    shadow-[0_2px_12px_rgba(0,0,0,0.06)]
+  "
 >
+
+
 
   {/* 거래처 + 신규등록 */}
   <div className="col-span-2">
@@ -2215,6 +2266,7 @@ function FuelSlideWidget() {
         className="px-3 py-2 border rounded-lg text-sm bg-gray-50 hover:bg-gray-100"
       >
         + 신규등록
+        
       </button>
     </div>
   </div>
@@ -2299,6 +2351,30 @@ function FuelSlideWidget() {
       placeholder="자동매칭 또는 수기입력"
     />
   </div>
+  {/* 상차지 담당자 */}
+<div>
+  <label className={labelCls}>상차지 담당자</label>
+  <input
+    className={inputCls}
+    value={form.상차지담당자}
+    onChange={(e) => onChange("상차지담당자", e.target.value)}
+    placeholder="담당자 이름"
+  />
+</div>
+
+{/* 상차지 연락처 */}
+<div>
+  <label className={labelCls}>상차지 연락처</label>
+  <input
+    className={inputCls}
+    value={form.상차지담당자번호}
+    onChange={(e) =>
+      onChange("상차지담당자번호", e.target.value.replace(/[^\d-]/g, ""))
+    }
+    placeholder="010-0000-0000"
+  />
+</div>
+
 
   {/* 하차지명 + 자동완성 */}
   <div className="relative">
@@ -2381,6 +2457,30 @@ function FuelSlideWidget() {
       placeholder="자동매칭 또는 수기입력"
     />
   </div>
+  {/* 하차지 담당자 */}
+<div>
+  <label className={labelCls}>하차지 담당자</label>
+  <input
+    className={inputCls}
+    value={form.하차지담당자}
+    onChange={(e) => onChange("하차지담당자", e.target.value)}
+    placeholder="담당자 이름"
+  />
+</div>
+
+{/* 하차지 연락처 */}
+<div>
+  <label className={labelCls}>하차지 연락처</label>
+  <input
+    className={inputCls}
+    value={form.하차지담당자번호}
+    onChange={(e) =>
+      onChange("하차지담당자번호", e.target.value.replace(/[^\d-]/g, ""))
+    }
+    placeholder="010-0000-0000"
+  />
+</div>
+
 
   {/* 화물내용 */}
   <div>

@@ -11,10 +11,10 @@ ReactDOM.createRoot(document.getElementById("root")).render(
 );
 
 // =====================================================
-// 서비스워커 등록 + 새버전 감지 + 강제 업데이트
+// 서비스워커 등록 + 새버전 감지 → App.jsx UI 토스트 호출
 // =====================================================
 
-// ★ 클라이언트 버전 (배포할 때마다 이 숫자만 바꿔주면 됨)
+// ★ 클라이언트 버전 (sw.js VERSION과 동일해야 함)
 const CLIENT_VERSION = "2025-02-10-01";
 
 if ("serviceWorker" in navigator) {
@@ -24,33 +24,34 @@ if ("serviceWorker" in navigator) {
       .then((reg) => {
         console.log("SW Registered:", reg);
 
-        // ================================
-        // 주기적으로 새 버전 체크
-        // ================================
+        // 새 SW가 발견되면 바로 버전 체크
+        reg.addEventListener("updatefound", () => {
+          const newSW = reg.installing;
+          newSW.addEventListener("statechange", () => {
+            if (newSW.state === "installed") {
+              reg.active?.postMessage({
+                type: "CHECK_VERSION",
+                version: CLIENT_VERSION,
+              });
+            }
+          });
+        });
+
+        // 주기적 버전 체크
         setInterval(() => {
           const msg = { type: "CHECK_VERSION", version: CLIENT_VERSION };
-          reg.waiting?.postMessage(msg);
           reg.active?.postMessage(msg);
+          reg.waiting?.postMessage(msg);
         }, 30000);
 
-        // ================================
-        // 서비스워커 → 메시지 받기
-        // ================================
+        // 서비스워커 메시지 수신
         navigator.serviceWorker.addEventListener("message", (event) => {
           if (event.data?.type === "NEW_VERSION") {
-            console.log("🚨 새 버전 감지됨!");
+            console.log("🚨 NEW VERSION DETECTED → Trigger UI");
 
-            const ok = confirm("새로운 업데이트가 있습니다. 지금 적용할까요?");
-
-            if (ok) {
-              // waiting 상태의 SW가 있다면 즉시 활성화
-              reg.waiting?.postMessage({ type: "SKIP_WAITING" });
-
-              // 잠시 후 새 버전으로 새로고침
-              setTimeout(() => {
-                window.location.reload();
-              }, 500);
-            }
+            // confirm 절대 사용 안함!!
+            // App.jsx의 업데이트 UI 토스트를 열기 위한 이벤트 발행
+            window.dispatchEvent(new Event("app-update-ready"));
           }
         });
       })
