@@ -32,23 +32,16 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [role, setRole] = useState(null);
   const [loading, setLoading] = useState(true);
+    // 업데이트 알림 노출 상태
+  const [updateReady, setUpdateReady] = useState(false);
 
-  // ⭐ 새 버전 감지 → 자동 새로고침 (무한루프 방지)
+  // SW가 NEW_VERSION 이벤트를 보내면 updateReady = true
   useEffect(() => {
-    if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.addEventListener("controllerchange", () => {
-        const refreshed = sessionStorage.getItem("app-refreshed");
-
-        if (!refreshed) {
-          console.log("%cSW 업데이트 → 새로고침 진행", "color:#22cc22;font-weight:bold;");
-          sessionStorage.setItem("app-refreshed", "yes");
-          window.location.reload();
-        } else {
-          console.log("%c이미 새로고침됨 → 무한루프 방지", "color:#ffaa00;font-weight:bold;");
-        }
-      });
-    }
+    const onUpdate = () => setUpdateReady(true);
+    window.addEventListener("app-update-ready", onUpdate);
+    return () => window.removeEventListener("app-update-ready", onUpdate);
   }, []);
+
 
   // Auth + Role 실시간 반영
   useEffect(() => {
@@ -90,6 +83,36 @@ export default function App() {
   );
 
   return (
+  <>
+    {/* ⭐⭐⭐ 업데이트 알림 토스트 UI ⭐⭐⭐ */}
+    {updateReady && (
+      <div className="fixed bottom-6 right-6 bg-white shadow-xl border rounded-lg p-4 z-[9999] w-72">
+        <div className="font-bold text-gray-800 mb-2 flex items-center gap-2">
+          <span>🔄 새 업데이트가 있습니다</span>
+        </div>
+
+        <p className="text-sm text-gray-600 mb-3">
+          최신 기능을 적용하려면 업데이트를 진행하세요.
+        </p>
+
+        <div className="flex gap-2">
+          <button
+            onClick={() => window.location.reload()}
+            className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded text-sm"
+          >
+            지금 업데이트
+          </button>
+
+          <button
+            onClick={() => setUpdateReady(false)}
+            className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 rounded text-sm"
+          >
+            닫기
+          </button>
+        </div>
+      </div>
+    )}
+
     <Router>
       <Routes>
 
@@ -168,6 +191,7 @@ export default function App() {
 
       </Routes>
     </Router>
-  );
+  </>
+);   // ⭐⭐⭐ 바로 여기!! 닫는 괄호 + 세미콜론 추가
 }
 // ======================= END =======================

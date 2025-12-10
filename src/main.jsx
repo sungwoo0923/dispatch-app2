@@ -11,8 +11,12 @@ ReactDOM.createRoot(document.getElementById("root")).render(
 );
 
 // =====================================================
-// 🔥 서비스워커 등록
+// 서비스워커 등록 + 새버전 감지 + 강제 업데이트
 // =====================================================
+
+// ★ 클라이언트 버전 (배포할 때마다 이 숫자만 바꿔주면 됨)
+const CLIENT_VERSION = "2025-02-10-01";
+
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker
@@ -20,17 +24,33 @@ if ("serviceWorker" in navigator) {
       .then((reg) => {
         console.log("SW Registered:", reg);
 
-        // 30초마다 새버전 체크
+        // ================================
+        // 주기적으로 새 버전 체크
+        // ================================
         setInterval(() => {
-          reg.waiting?.postMessage("CHECK_VERSION");
-          reg.active?.postMessage("CHECK_VERSION");
+          const msg = { type: "CHECK_VERSION", version: CLIENT_VERSION };
+          reg.waiting?.postMessage(msg);
+          reg.active?.postMessage(msg);
         }, 30000);
 
-        // 메시지 수신
+        // ================================
+        // 서비스워커 → 메시지 받기
+        // ================================
         navigator.serviceWorker.addEventListener("message", (event) => {
           if (event.data?.type === "NEW_VERSION") {
-            console.log("🚨 새 버전 감지!");
-            window.dispatchEvent(new Event("app-update-ready"));
+            console.log("🚨 새 버전 감지됨!");
+
+            const ok = confirm("새로운 업데이트가 있습니다. 지금 적용할까요?");
+
+            if (ok) {
+              // waiting 상태의 SW가 있다면 즉시 활성화
+              reg.waiting?.postMessage({ type: "SKIP_WAITING" });
+
+              // 잠시 후 새 버전으로 새로고침
+              setTimeout(() => {
+                window.location.reload();
+              }, 500);
+            }
           }
         });
       })
