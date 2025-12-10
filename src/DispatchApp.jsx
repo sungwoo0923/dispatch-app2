@@ -589,8 +589,8 @@ return (
   </div>
 </header>
 
-<nav className="w-full bg-[#2D7BFF] shadow-sm rounded-lg px-3 py-3 mb-5">
-  <div className="flex gap-2 overflow-x-auto whitespace-nowrap">
+<nav className="w-full bg-white shadow-sm border-b border-gray-200 px-4 py-2 mb-5">
+  <div className="flex gap-4 overflow-x-auto whitespace-nowrap">
 
     {[
       "배차관리",
@@ -614,21 +614,22 @@ return (
           key={m}
           disabled={isBlocked}
           onClick={() => handleMenuClick(m)}
-          className={`
-            px-5 py-2 text-sm font-medium rounded-md border transition-all duration-150
-
+          className={`relative px-3 pb-2 pt-1 text-sm font-medium transition-all 
             ${
               isBlocked
-                ? "bg-gray-300 text-gray-500 border-gray-400 cursor-not-allowed"
-
+                ? "text-gray-300 cursor-not-allowed"
                 : isActive
-                ? "bg-white text-[#2D7BFF] border-white shadow-md"
-
-                : "bg-[#2D7BFF] text-white border-transparent hover:bg-[#1F5EDB]"
+                ? "text-blue-600 font-semibold"
+                : "text-gray-600 hover:text-blue-600"
             }
           `}
         >
           {m}
+
+          {/* 활성 메뉴 바(토스 느낌) */}
+          {!isBlocked && isActive && (
+            <span className="absolute left-0 right-0 -bottom-[1px] h-[3px] bg-[#1B64FF] rounded-full"></span>
+          )}
         </button>
       );
     })}

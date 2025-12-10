@@ -1,4 +1,4 @@
-// ===================== src/main.jsx =====================
+// ===================== src/main.jsx (수정본) =====================
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App.jsx";
@@ -14,8 +14,8 @@ ReactDOM.createRoot(document.getElementById("root")).render(
 // 서비스워커 등록 + 새버전 감지 → App.jsx UI 토스트 호출
 // =====================================================
 
-// ★ 클라이언트 버전 (sw.js VERSION과 동일해야 함)
-const CLIENT_VERSION = "2025-02-10-01";
+// ★ 클라이언트 버전 (sw.js VERSION과 다르게 유지해야 업데이트 감지됨)
+const CLIENT_VERSION = "2025-02-10-01";  // ← 여기 그대로 두면 됨
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
@@ -24,7 +24,7 @@ if ("serviceWorker" in navigator) {
       .then((reg) => {
         console.log("SW Registered:", reg);
 
-        // 새 SW가 발견되면 바로 버전 체크
+        // 새 SW가 발견되면 버전 체크
         reg.addEventListener("updatefound", () => {
           const newSW = reg.installing;
           newSW.addEventListener("statechange", () => {
@@ -49,8 +49,6 @@ if ("serviceWorker" in navigator) {
           if (event.data?.type === "NEW_VERSION") {
             console.log("🚨 NEW VERSION DETECTED → Trigger UI");
 
-            // confirm 절대 사용 안함!!
-            // App.jsx의 업데이트 UI 토스트를 열기 위한 이벤트 발행
             window.dispatchEvent(new Event("app-update-ready"));
           }
         });
