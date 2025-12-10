@@ -290,15 +290,18 @@ export const toInt = (v) => {
 export const fmtWon = (n) => `${Number(n || 0).toLocaleString()}원`;
 // 📌 전화번호 하이픈 자동 적용 함수
 function formatPhone(phone) {
-  const p = (phone || "").replace(/[^\d]/g, "");
+  const p = String(phone ?? "").replace(/[^\d]/g, "");
+
   if (p.length === 11) {
     return `${p.slice(0, 3)}-${p.slice(3, 7)}-${p.slice(7)}`;
   }
   if (p.length === 10) {
     return `${p.slice(0, 3)}-${p.slice(3, 6)}-${p.slice(6)}`;
   }
-  return phone;
+
+  return p;
 }
+
 export {
   COMPANY, VEHICLE_TYPES, PAY_TYPES, DISPATCH_TYPES,
   headBase, cellBase, inputBase, todayStr
@@ -3004,7 +3007,7 @@ const getYoil = (dateStr) => {
 };
 
 const formatPhone = (phone) => {
-  const digits = (phone || "").replace(/\D/g, ""); // 숫자만 추출
+  const digits = String(phone ?? "").replace(/\D/g, "");
 
   if (digits.length === 11) {
     return digits.replace(/(\d{3})(\d{4})(\d{4})/, "$1-$2-$3");
@@ -3014,9 +3017,9 @@ const formatPhone = (phone) => {
     return digits.replace(/(\d{3})(\d{3})(\d{4})/, "$1-$2-$3");
   }
 
-  // fallback (자리수 불명)
-  return phone;
+  return digits; // fallback
 };
+
 
 
 const copyMessage = (mode) => {
@@ -6176,7 +6179,7 @@ const getYoil = (dateStr) => {
 };
 
 const formatPhone = (phone) => {
-  const digits = (phone || "").replace(/\D/g, ""); // 숫자만 추출
+  const digits = String(phone ?? "").replace(/\D/g, "");
 
   if (digits.length === 11) {
     return digits.replace(/(\d{3})(\d{4})(\d{4})/, "$1-$2-$3");
@@ -6186,9 +6189,10 @@ const formatPhone = (phone) => {
     return digits.replace(/(\d{3})(\d{3})(\d{4})/, "$1-$2-$3");
   }
 
-  // fallback (자리수 불명)
-  return phone;
+  // fallback
+  return digits;
 };
+
 
 // 복사 실행
 const copyMessage = (mode) => {
@@ -6204,7 +6208,7 @@ const copyMessage = (mode) => {
 
       const plate = r.차량번호 || "";
       const name = r.이름 || "";
-      const phone = formatPhone(r.전화번호 || "");
+      const phone = formatPhone2(r.전화번호 || "");
       const yoil = getYoil(r.상차일 || "");
       const fare = Number(String(r.청구운임 || "0").replace(/[^\d]/g, ""));
       const pay = r.지급방식 || "";
