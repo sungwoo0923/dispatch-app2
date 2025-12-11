@@ -370,22 +370,30 @@ const {
   removeClient,
 } = useRealtimeCollections(user);
 
-// 🔍 모든 계정(admin 포함) = 본인 작성 오더만 보기
+// 🔍 admin = 전체 데이터, 일반 user = 본인 작성 데이터만
 const dispatchDataFiltered = useMemo(() => {
   if (!dispatchData || !user) return [];
 
+  // 관리자면 전체 데이터 그대로 반환
+  if (role === "admin") return dispatchData;
+
+  // 일반 계정은 본인 데이터만
   return dispatchData.filter(o =>
     !o?.작성자 || o?.작성자 === user.email
   );
-}, [dispatchData, user]);
+}, [dispatchData, user, role]);
+
 
 // ⭐ 내 정보 통계 계산
 const myStats = useMemo(() => {
   if (!dispatchData) return { totalOrders: 0, totalRevenue: 0, totalProfit: 0 };
 
-  const myOrders = dispatchData.filter(d =>
-  !d?.작성자 || d?.작성자 === user?.email
-);
+  const myOrders =
+  role === "admin"
+    ? dispatchData               // 🔥 관리자 → 전체 데이터
+    : dispatchData.filter(d =>   // 일반 계정 → 본인 데이터만
+        !d?.작성자 || d?.작성자 === user?.email
+      );
 
   let totalRevenue = 0;
   let totalProfit = 0;
@@ -435,21 +443,19 @@ const todayStats = useMemo(() => {
   const todayStrKST = today; // 기존 todayStr 사용
 
   const list = dispatchData.filter((d) => {
-    // 내가 작성한 오더만
-    const isMine = !d?.작성자 || d.작성자 === user.email;
+  // 날짜 파싱
+  const dt = parseDate(d?.상차일자 || d?.상차일 || d?.상차);
+  if (!dt) return false;
 
-    // 상차일자 파싱
-    const dt = parseDate(d?.상차일자 || d?.상차일 || d?.상차);
+  const dateKST = toYMD_KST(dt);
 
-    // 날짜가 없으면 제외
-    if (!dt) return false;
+  // 🔥 admin이면 전체 보여주고, user는 본인 데이터만 보여줌
+  const isMine =
+    role === "admin" ? true : (!d?.작성자 || d.작성자 === user.email);
 
-    // KST 기준 YYYY-MM-DD로 변환
-    const dateKST = toYMD_KST(dt);
+  return isMine && dateKST === todayStrKST;
+});
 
-    // 오늘과 동일하면 포함
-    return isMine && dateKST === todayStrKST;
-  });
 
   return list.reduce(
     (acc, o) => {
@@ -6574,7 +6580,6 @@ const formatPhone2 = (phone) => {
 
   return digits;
 };
-
 
 // 복사 실행
 const copyMessage = (mode) => {
