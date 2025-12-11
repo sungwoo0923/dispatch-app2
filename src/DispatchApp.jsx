@@ -257,29 +257,49 @@ const removeClient = async (id) => deleteDoc(doc(db, COLL.clients, id));
   };
 }  // ← ⭐ 이거 반드시 필요
 /* -------------------------------------------------
-   하차지 저장 (upsertPlace) — Firestore
+   하차지 저장 (upsertPlace) — Firestore (최종 안정버전)
 --------------------------------------------------*/
 const upsertPlace = async (place) => {
   try {
-    if (!place?.업체명) return;
+    const rawName = place?.업체명 || "";
+    const name = rawName.trim();
+    if (!name) return;
 
-    const key =
-      String(place.업체명).trim().replace(/\s+/g, "_") +
-      "_" +
-      String(place.주소 || "").trim().replace(/\s+/g, "_");
+    const key = makePlaceKey(name);
+    const ref = doc(db, "places", key);
+    const snap = await getDoc(ref);
 
-    await setDoc(doc(db, "places", key), {
-      업체명: place.업체명 || "",
-      주소: place.주소 || "",
-      담당자: place.담당자 || "",
-      담당자번호: place.담당자번호 || "",
-    });
+    const data = {
+      업체명: name,
+      주소: (place.주소 || "").trim(),
+      담당자: (place.담당자 || "").trim(),
+      담당자번호: (place.담당자번호 || "").trim(),
+      updatedAt: Date.now(),
+    };
 
-    console.log("🔥 하차지 저장됨:", place);
+    if (snap.exists()) {
+      // 기존 업체 업데이트
+      await updateDoc(ref, data);
+      console.log("🔥 기존 업체 업데이트:", key, data);
+    } else {
+      // 신규 업체 등록
+      await setDoc(ref, data);
+      console.log("🆕 신규 업체 등록:", key, data);
+    }
+
+    // Firestore 변화 후 placeRows 즉시 갱신 트리거
+    try {
+      setPlaceRowsTrigger(Date.now());
+    } catch (e) {
+      console.error("trigger error", e);
+    }
+
   } catch (e) {
     console.error("⛔ upsertPlace 오류:", e);
   }
 };
+
+
 /* -------------------------------------------------
    공통
 --------------------------------------------------*/
@@ -879,7 +899,61 @@ return (
     role = "admin",
     isTest = false,  // ★ 추가!
   }) {
-    
+    const [placeRowsTrigger, setPlaceRowsTrigger] = React.useState(0);
+      // ================================
+  // 🔑 업체명 Key 정규화 함수(추가!)
+  // ================================
+  function normalizeKey(str = "") {
+    return String(str)
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, "")
+      .replace(/[^a-z0-9가-힣]/g, "");
+  }
+    // ⭐ Firestore 실시간 구독으로 placeRows 강제 최신화
+// Firestore + localStorage 통합 placeList 생성
+const placeList = React.useMemo(() => {
+  // ⭐ Firestore 최신값 사용
+  const fromFirestore = Array.isArray(placeRows) ? placeRows : [];
+
+  let fromLocal = [];
+  try {
+    fromLocal = JSON.parse(localStorage.getItem("hachaPlaces_v1") || "[]");
+  } catch {
+    fromLocal = [];
+  }
+
+  // 공통 포맷 통일 함수
+  const toRow = (p = {}) => ({
+    업체명: p.업체명 || p.거래처명 || "",
+    주소: p.주소 || "",
+    담당자: p.담당자 || p.인수자 || "",
+    담당자번호: p.담당자번호 || p.연락처 || "",
+  });
+
+  // 업체명 정규화 키
+  const map = new Map();
+  [...fromFirestore, ...fromLocal].forEach((raw) => {
+    const row = toRow(raw);
+    const key = normalizeKey(row.업체명 || "");
+    if (!key.trim()) return;
+
+    // ⭐ Firestore 값이 우선. 동일 업체명일 경우 Firestore 값이 최종 값
+    if (!map.has(key)) map.set(key, row);
+    else map.set(key, row); 
+  });
+
+  const merged = Array.from(map.values());
+
+  // 최신 합본을 localStorage에도 저장
+  try {
+    localStorage.setItem("hachaPlaces_v1", JSON.stringify(merged));
+  } catch {}
+
+  return merged;
+}, [placeRows, placeRowsTrigger]);
+
+
 
     // 관리자 여부 체크
 const isAdmin = role === "admin";
@@ -888,6 +962,8 @@ const isAdmin = role === "admin";
 const [filterType, setFilterType] = React.useState(null);
 
 const [filterValue, setFilterValue] = React.useState("");
+ 
+
 // ⭐ 신규 기사등록 모달 상태
 const [driverModal, setDriverModal] = React.useState({
   open: false,
@@ -1084,84 +1160,73 @@ const [placeActive, setPlaceActive] = React.useState(0);
     const _todayStr = (typeof todayStr === "function")
       ? todayStr
       : () => new Date().toISOString().slice(0, 10);
-    // ===================== 하차지(placeRows) + 로컬(hachaPlaces_v1) 병합 =====================
+    
+       // ===================== 하차지(placeRows) + 로컬 병합 placeList 끝 =====================
 
-    // 문자열 정규화(공백 제거 + 소문자)
-    const normalizeKey = (s = "") =>
-      String(s).toLowerCase().replace(/\s+/g, "");
+// ⭐ 업체명으로 기존 업체 찾기
+const findPlaceByName = (name) => {
+  const key = normalizeKey(name);
+  return placeList.find(
+    (p) => normalizeKey(p.업체명) === key
+  );
+};
 
-    // Firestore + localStorage 통합 placeList 생성
-    const placeList = React.useMemo(() => {
-      const fromFirestore = Array.isArray(placeRows) ? placeRows : [];
+// ⭐ 업체 업데이트 + 신규 생성 자동 처리
+const savePlaceSmart = (name, addr, manager, phone) => {
+  if (!name) return;
 
-      let fromLocal = [];
-      try {
-        fromLocal = JSON.parse(localStorage.getItem("hachaPlaces_v1") || "[]");
-      } catch {
-        fromLocal = [];
-      }
+  const exist = findPlaceByName(name);
 
-      // 공통 포맷 통일 함수
-      const toRow = (p = {}) => ({
-        업체명: p.업체명 || p.거래처명 || "",
-        주소: p.주소 || "",
-        담당자: p.담당자 || p.인수자 || "",
-        담당자번호: p.담당자번호 || p.연락처 || "",
-      });
+  // ======================
+  // ① 기존 업체 있을 때 (업데이트)
+  // ======================
+  if (exist) {
+    const updated = {
+      업체명: exist.업체명,
+      주소: addr || exist.주소,
+      담당자: manager || exist.담당자,
+      담당자번호: phone || exist.담당자번호,
+    };
 
-      // 주소 + 업체명으로 중복제거
-      const map = new Map();
-      [...fromFirestore, ...fromLocal].forEach((raw) => {
-        const row = toRow(raw);
-        const key =
-          normalizeKey(row.업체명 || "") + "|" + normalizeKey(row.주소 || "");
-        if (!key.trim()) return;
-        if (!map.has(key)) map.set(key, row);
-      });
+    // Firestore 저장
+    upsertPlace(updated);
 
-      const merged = Array.from(map.values());
-
-      // 최신 합본을 localStorage에도 저장(테스트/배포 동일하게 유지)
-      try {
-        localStorage.setItem("hachaPlaces_v1", JSON.stringify(merged));
-      } catch { }
-
-      return merged;
-    }, [placeRows]);
-        // ===================== 하차지(placeRows) + 로컬 병합 placeList 끝 =====================
-
-    // ⭐ 업체명으로 기존 업체 찾기
-    const findPlaceByName = (name) => {
-      const key = String(name || "").trim().toLowerCase();
-      return placeList.find(
-        (p) => String(p.업체명 || "").trim().toLowerCase() === key
+    // localStorage 최신화
+    try {
+      const list = JSON.parse(localStorage.getItem("hachaPlaces_v1") || "[]");
+      const idx = list.findIndex(
+        (x) => normalizeKey(x.업체명) === normalizeKey(updated.업체명)
       );
-    };
 
-    // ⭐ 업체 업데이트 + 신규 생성 자동 처리
-    const savePlaceSmart = (name, addr, manager, phone) => {
-      if (!name) return;
+      if (idx >= 0) list[idx] = updated;
+      localStorage.setItem("hachaPlaces_v1", JSON.stringify(list));
+    } catch (e) {}
 
-      const exist = findPlaceByName(name);
+    // 자동완성 즉시 업데이트
+    try {
+      const newLocal = JSON.parse(localStorage.getItem("hachaPlaces_v1") || "[]");
+      setPickupOptions(newLocal);
+      setPlaceOptions(newLocal);
+    } catch (e) {}
 
-      if (exist) {
-        // 기존 업체 → merge 업데이트
-        upsertPlace({
-          업체명: exist.업체명,
-          주소: addr || exist.주소,
-          담당자: manager || exist.담당자,
-          담당자번호: phone || exist.담당자번호
-        });
-      } else {
-        // 신규 업체만 생성
-        upsertPlace({
-          업체명: name,
-          주소: addr,
-          담당자: manager,
-          담당자번호: phone
-        });
-      }
-    };
+    // placeRows 강제 갱신 트리거
+    try {
+      setPlaceRowsTrigger(Date.now());
+    } catch (e) {}
+
+    return; // 업데이트 끝
+  }
+
+  // ======================
+  // ② 신규 업체 생성
+  // ======================
+  upsertPlace({
+    업체명: name,
+    주소: addr,
+    담당자: manager,
+    담당자번호: phone,
+  });
+};
 
 
     // 기본 clients + 하차지 모두 포함한 통합 검색 풀
@@ -1309,19 +1374,17 @@ const [placeActive, setPlaceActive] = React.useState(0);
 
     // placeRows = [{업체명, 주소, 담당자, 담당자번호}]
     const filteredClients = React.useMemo(() => {
-      const q = norm(clientQuery);
-      if (!q) return placeRows || [];
-      return (placeRows || []).filter((p) =>
-        norm(p.업체명 || "").includes(q)
-      );
-    }, [clientQuery, placeRows]);
-
-    // 선택 시 상차지 자동 입력
-    const applyClientSelect = (name) => {
-      const p = (placeRows || []).find(
-        (x) => norm(x.업체명 || "") === norm(name)
-      );
-
+  const q = norm(clientQuery);
+  if (!q) return placeList;
+  return placeList.filter((p) =>
+    norm(p.업체명 || "").includes(q)
+  );
+}, [clientQuery, placeList]);
+// ⭐⭐ 여기 아래 넣기 ⭐⭐
+function applyClientSelect(name) {
+  const p = placeList.find(
+    (x) => norm(x.업체명 || "") === norm(name)
+  );
       setForm((prev) => ({
         ...prev,
         거래처명: name,
@@ -1334,6 +1397,7 @@ const [placeActive, setPlaceActive] = React.useState(0);
       setClientQuery(name);
       setIsClientOpen(false);
     };
+
 
     // ✅ 주소 자동매칭 뱃지
     const [autoPickMatched, setAutoPickMatched] = React.useState(false);
@@ -1557,7 +1621,19 @@ if (typeof upsertPlace === "function") {
     form.하차지담당자번호
   );
 }
+// ★★★ 여기 아래에 추가!! ★★★
+const updatedPickup = findPlaceByName(form.상차지명);
+const updatedDrop = findPlaceByName(form.하차지명);
 
+setForm((p) => ({
+  ...p,
+  상차지주소: updatedPickup?.주소 || p.상차지주소,
+  상차지담당자: updatedPickup?.담당자 || p.상차지담당자,
+  상차지담당자번호: updatedPickup?.담당자번호 || p.상차지담당자번호,
+  하차지주소: updatedDrop?.주소 || p.하차지주소,
+  하차지담당자: updatedDrop?.담당자 || p.하차지담당자,
+  하차지담당자번호: updatedDrop?.담당자번호 || p.하차지담당자번호,
+}));
 
   const reset = {
     ...emptyForm,
@@ -2223,6 +2299,21 @@ function FuelSlideWidget() {
           onChange={(e) => {
             setClientQuery(e.target.value);
             onChange("거래처명", e.target.value);
+
+const found = placeList.find(
+  x => norm(x.업체명) === norm(e.target.value)
+);
+
+if (found) {
+  setForm(prev => ({
+    ...prev,
+    상차지명: found.업체명,
+    상차지주소: found.주소,
+    상차지담당자: found.담당자,
+    상차지담당자번호: found.담당자번호,
+  }));
+}
+
             setIsClientOpen(true);
             setClientActive(0);
           }}
@@ -3467,6 +3558,15 @@ const prevAttachRef = React.useRef({});
   const [selected, setSelected] = React.useState([]);
   const [selectedEditMode, setSelectedEditMode] = React.useState(false);
   const [edited, setEdited] = React.useState({});
+  // =======================
+// 🔵 선택삭제 팝업 + 되돌리기 상태
+// =======================
+const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
+const [deleteList, setDeleteList] = React.useState([]);
+
+const [undoStack, setUndoStack] = React.useState([]);
+const [showUndo, setShowUndo] = React.useState(false);
+
 // === 유사 운임조회 (선택수정 전용 업그레이드) ===
 const handleFareSearch = () => {
   const row = editTarget;
@@ -4217,42 +4317,56 @@ return;
     });
 
     setTimeout(() => {
-      setSavedHighlightIds((prev) => {
-        const n = new Set(prev);
-        ids.forEach((id) => n.delete(id));
-        return n;
-      });
-    }, 1000);
+  setSavedHighlightIds((prev) => {
+    const n = new Set(prev);
+    ids.forEach((id) => n.delete(id));
+    return n;
+  });
+}, 2000);   // ← 2초로 변경
+
 
     alert("저장 완료");
     setEdited({});
     setSelectedEditMode(false);
   };
+// =======================
+// 🔥 팝업에서 실제 삭제 실행
+// =======================
+const executeDelete = async () => {
+  const ids = deleteList.map(r => r._id);
 
-  // ------------------------
-  // 📌 선택 삭제
-  // ------------------------
-  const handleDeleteSelected = async () => {
-    if (!selected.length) return alert("삭제할 항목을 선택하세요.");
-    if (!confirm(`${selected.length}건 삭제할까요?`)) return;
-
-    for (const id of selected) {
-      try {
-        await removeDispatch(id);
-      } catch {}
+  for (const id of ids) {
+    try {
+      await removeDispatch(id);
+    } catch (e) {
+      console.error("삭제 실패:", e);
     }
+  }
 
-    setRows((prev) => prev.filter((r) => !selected.includes(r._id)));
+  // 화면에서 제거
+  setRows(prev => prev.filter(r => !ids.includes(r._id)));
 
-    setDeletedIds((prev) => {
-      const n = new Set(prev);
-      selected.forEach((id) => n.add(id));
-      return n;
-    });
+  // 되돌리기 스택 저장
+  setUndoStack(deleteList);
+  setShowUndo(true);
+  setTimeout(() => setShowUndo(false), 8000);
 
-    alert("삭제 완료");
-    setSelected([]);
-  };
+  // 초기화
+  setSelected([]);
+  setDeleteConfirmOpen(false);
+};
+
+// =======================
+// 🔥 되돌리기 기능
+// =======================
+const undoDelete = async () => {
+  for (const r of undoStack) {
+    await addDispatch(r);
+  }
+  setRows(prev => [...prev, ...undoStack]);
+  setUndoStack([]);
+  setShowUndo(false);
+};
 
   // ------------------------
   // 📌 선택수정 편집 가능 여부
@@ -4668,13 +4782,19 @@ ${url}
           저장
         </button>
 
-        <button
-          onClick={handleDeleteSelected}
-          className="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-semibold shadow hover:opacity-90"
-  >
-        
-          선택삭제
-        </button>
+       <button
+  onClick={() => {
+    if (!selected.length) return alert("삭제할 항목을 선택하세요.");
+
+    const list = rows.filter(r => selected.includes(r._id));
+    setDeleteList(list);             // 삭제 대상 저장
+    setDeleteConfirmOpen(true);      // 팝업 열기
+  }}
+  className="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-semibold shadow hover:opacity-90"
+>
+  선택삭제
+</button>
+
         {/* ⭐⭐⭐ 선택초기화 버튼 추가 */}
 <button
   onClick={() => setSelected([])}
@@ -4876,9 +4996,9 @@ XLSX.writeFile(wb, "실시간배차현황.xlsx");
 
                   className={`
                     ${idx % 2 ? "bg-gray-50" : ""}
-                    ${selected.includes(r._id) ? "animate-pulse bg-yellow-100" : ""}
+                    ${selected.includes(r._id) ? "bg-yellow-200 border-2 border-yellow-500" : ""}
                     ${highlightIds.has(r._id) ? "animate-pulse bg-green-200" : ""}
-                    ${savedHighlightIds.has(r._id) ? "animate-pulse bg-yellow-200" : ""}
+                    ${savedHighlightIds.has(r._id) ? "row-highlight" : ""}
                   `}
                 >
                   <td className={cell}>
@@ -6155,28 +6275,55 @@ XLSX.writeFile(wb, "실시간배차현황.xlsx");
       </div>
 
       {/* ------------------------------------------------ */}
-      {/* 🔵 저장/취소 */}
-      {/* ------------------------------------------------ */}
-      <div className="flex justify-end gap-3 mt-4">
-        <button
-          className="px-3 py-1 rounded bg-gray-300"
-          onClick={() => setEditPopupOpen(false)}
-        >
-          취소
-        </button>
+{/* 🔵 저장/취소 */}
+{/* ------------------------------------------------ */}
+<div className="flex justify-end gap-3 mt-4">
+  <button
+    className="px-3 py-1 rounded bg-gray-300"
+    onClick={() => setEditPopupOpen(false)}
+  >
+    취소
+  </button>
 
-        <button
-          className="px-3 py-1 rounded bg-blue-600 text-white"
-          onClick={async () => {
-            await patchDispatch(editTarget._id, editTarget);
-            alert("수정이 저장되었습니다.");
-            setEditPopupOpen(false);
-            setSelected([]);
-          }}
-        >
-          저장
-        </button>
-      </div>
+  <button
+    className="px-3 py-1 rounded bg-blue-600 text-white"
+    onClick={async () => {
+      // 1) Firestore에 저장
+      await patchDispatch(editTarget._id, editTarget);
+
+      // 2) 방금 저장한 행에 하이라이트 추가
+      setSavedHighlightIds((prev) => {
+        const next = new Set(prev);
+        next.add(editTarget._id);
+        return next;
+      });
+
+      // 3) 3초 후 하이라이트 제거 (원하면 2000으로 줄여도 됨)
+      setTimeout(() => {
+        setSavedHighlightIds((prev) => {
+          const next = new Set(prev);
+          next.delete(editTarget._id);
+          return next;
+        });
+      }, 3000);
+
+      // 4) 팝업 닫기 + 선택 초기화
+      alert("수정이 저장되었습니다.");
+      setEditPopupOpen(false);
+      setSelected([]);
+      const savedId = editTarget._id;
+
+// ⭐ Firestore 재정렬 후 스크롤 이동
+setTimeout(() => {
+  const el = document.getElementById(`row-${savedId}`);
+  if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+}, 300);
+    }}
+  >
+    저장
+  </button>
+</div>
+
 
     </div>
   </div>
@@ -6370,6 +6517,56 @@ XLSX.writeFile(wb, "실시간배차현황.xlsx");
     </div>
   </div>
 )}
+{/* ======================= 선택삭제 확인 팝업 ======================= */}
+{deleteConfirmOpen && (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
+    <div className="bg-white p-6 rounded-xl shadow-xl w-[420px] max-h-[80vh] overflow-y-auto">
+
+      <h3 className="text-lg font-bold mb-4 text-center text-red-600">
+        선택한 항목을 삭제하시겠습니까?
+      </h3>
+
+      <div className="space-y-3 text-sm">
+        {deleteList.map((r, idx) => (
+          <div key={r._id} className="p-3 border rounded bg-gray-50">
+            <div className="font-semibold mb-1">
+              {idx + 1}. {r.거래처명 || "-"}
+            </div>
+            <div><b>상차:</b> {r.상차일} {r.상차지명}</div>
+            <div><b>하차:</b> {r.하차일} {r.하차지명}</div>
+            <div><b>차량:</b> {r.차량번호} / {r.이름}</div>
+            <div><b>운임:</b> {(r.청구운임 || 0).toLocaleString()}원</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex justify-between gap-3 mt-5">
+        <button
+          onClick={() => setDeleteConfirmOpen(false)}
+          className="flex-1 py-2 rounded bg-gray-200"
+        >
+          취소
+        </button>
+
+        <button
+          onClick={executeDelete}
+          className="flex-1 py-2 rounded bg-red-600 text-white font-semibold"
+        >
+          삭제하기
+        </button>
+      </div>
+
+    </div>
+  </div>
+)}
+{showUndo && (
+  <div className="fixed bottom-6 right-6 bg-gray-900 text-white px-4 py-3 rounded-lg shadow-lg z-[99999] flex items-center gap-3">
+    <span>삭제됨</span>
+    <button onClick={undoDelete} className="underline font-semibold">
+      되돌리기
+    </button>
+  </div>
+)}
 
 {/* 📋 기사복사 선택 모달 */}
 {copyModalOpen && (
@@ -6412,6 +6609,22 @@ XLSX.writeFile(wb, "실시간배차현황.xlsx");
   @keyframes fadeInUp {
     from { opacity: 0; transform: translateY(20px);}
     to { opacity: 1; transform: translateY(0);}
+  }
+`}</style>
+<style>{`
+  @keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(20px);}
+    to { opacity: 1; transform: translateY(0);}
+  }
+
+  @keyframes highlightFlash {
+    0%   { background-color: #fff7c2; }
+    50%  { background-color: #ffe066; }
+    100% { background-color: #fff7c2; }
+  }
+  
+  .row-highlight {
+    animation: highlightFlash 0.6s ease-in-out infinite;
   }
 `}</style>
 
@@ -6515,6 +6728,14 @@ const getMonthRange = () => {
   const [endDate, setEndDate] = React.useState("");
   const [selected, setSelected] = React.useState(new Set());
   const [editMode, setEditMode] = React.useState(false);
+  // ==========================
+// 선택삭제 + 되돌리기 기능
+// ==========================
+const [showDeletePopup, setShowDeletePopup] = React.useState(false);
+const [backupDeleted, setBackupDeleted] = React.useState([]);
+const [undoVisible, setUndoVisible] = React.useState(false);
+const [savedHighlightIds, setSavedHighlightIds] = React.useState(new Set());
+
   const [editTarget, setEditTarget] = React.useState(null);
   const [edited, setEdited] = React.useState({});
   const [justSaved, setJustSaved] = React.useState([]);
@@ -6531,6 +6752,17 @@ const pageSize = 100;
 const [placeQuery, setPlaceQuery] = React.useState("");
 const [placeOptions, setPlaceOptions] = React.useState([]);
 const [showPlaceDropdown, setShowPlaceDropdown] = React.useState(false);
+
+// 🔵 자동완성 검색 함수 (여기로 옮겨!!!)
+const filterPlaces = (text) => {
+  const q = String(text || "").trim().toLowerCase();
+  if (!q) return [];
+  return (placeRows || []).filter((p) =>
+    String(p.업체명 || "")
+      .toLowerCase()
+      .includes(q)
+  );
+};
 
 // ==========================
 // 📦 운임 조회 모달 상태 추가
@@ -6784,20 +7016,6 @@ const handleBulkFile = (e) => {
         메모: row["메모"] || "",
         배차상태: row["배차상태"] || "배차중",
       };
-      
-// ================================
-// 🔵 자동완성 검색 함수 (★ 여기에 추가)
-// ================================
-const filterPlaces = (text) => {
-  const q = String(text || "").trim().toLowerCase();
-  if (!q) return [];
-  return (placeRows || []).filter((p) =>
-    String(p.업체명 || "")
-      .toLowerCase()
-      .includes(q)
-  );
-};
-
 
       // ====================================================
       // 🚛 자동 기사 매칭 (차량번호 → 이름/전화번호 자동입력)
@@ -7017,33 +7235,67 @@ const handleEditToggle = async () => {
   if (!confirm("수정된 내용을 저장하시겠습니까?")) return;
 
   for (const id of ids) await _patch(id, edited[id]);
+  // 2) 저장된 ID들을 반짝임 목록에 추가(★)
+setSavedHighlightIds(prev => {
+  const next = new Set(prev);
+  ids.forEach(id => next.add(id));
+  return next;
+});
+
+// 3) 3초 후 반짝임 제거(★)
+setTimeout(() => {
+  setSavedHighlightIds(prev => {
+    const next = new Set(prev);
+    ids.forEach(id => next.delete(id));
+    return next;
+  });
+}, 3000);
 
   setJustSaved(ids);
   setEdited({});
   setEditMode(false);
   setSelected(new Set());
 
-  if (ids.length > 0) {
-    const firstId = ids[0];
+if (ids.length > 0) {
+  const firstId = ids[0];
+
+  setTimeout(() => {
     const el = document.getElementById(`row-${firstId}`);
     if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
-  }
+  }, 300);  // 🔥 Firestore 반영 후 스크롤 이동
+}
 
   setTimeout(() => setJustSaved([]), 1200);
   alert("수정 완료되었습니다.");
 };
+// ==========================
+// 삭제 실행(되돌리기 기능 포함)
+// ==========================
+const deleteRowsWithUndo = async () => {
+  const ids = [...selected];
+  if (!ids.length) return;
+
+  // 삭제될 항목 백업
+  const backup = ids.map(id => dispatchData.find(r => getId(r) === id));
+  setBackupDeleted(backup);
+
+  // Firestore에서 실제 삭제
+  for (const row of backup) {
+    await _remove(row);
+  }
+
+  // 선택 초기화
+  setSelected(new Set());
+
+  // 팝업 닫기
+  setShowDeletePopup(false);
+
+  // 되돌리기 버튼 표시
+  setUndoVisible(true);
+  setTimeout(() => setUndoVisible(false), 30000);
+};
 
 
-  const removeSelectedRows = async () => {
-    if (!selected.size) return alert("삭제할 항목이 없습니다.");
-    if (!confirm(`${selected.size}건 삭제할까요?`)) return;
-    for (const id of selected) {
-      const row = dispatchData.find((r) => getId(r) === id);
-      if (row) await _remove(row);
-    }
-    setSelected(new Set());
-    alert("삭제 완료 ✅");
-  };
 // 🔥 금액 변환 함수 (이거 추가)
 const toMoney = (v) => {
   if (v === undefined || v === null) return 0;
@@ -7244,10 +7496,21 @@ const pageRows = React.useMemo(() => {
     }
   }, [q, startDate, endDate, page, selected, edited, editMode]);
 if (!loaded) return null;
+<style>
+{`
+  .row-highlight {
+    animation: highlightFade 0.5s ease-out 0s 5;   /* 0.5초 × 5회 */
+  }
 
-  return (
-    
-    <div className="p-3">
+  @keyframes highlightFade {
+    0% { background-color: #fff3b0; }
+    100% { background-color: transparent; }
+  }
+`}
+</style>
+
+return (
+  <div className="p-3">
       <h2 className="text-lg font-bold mb-3">배차현황</h2>
 
       {/* ----------- 요약 ---------- */}
@@ -7410,12 +7673,15 @@ if (!loaded) return null;
       {editMode ? "수정완료" : "선택수정"}
     </button>
 
-    <button
-      className="px-4 py-2 rounded-lg bg-red-600 text-white shadow-md hover:bg-red-700 transition-all"
-      onClick={removeSelectedRows}
-    >
-      선택삭제
-    </button>
+  <button
+  className="px-4 py-2 rounded-lg bg-red-600 text-white shadow-md hover:bg-red-700 transition-all"
+  onClick={() => {
+    if (!selected.size) return alert("삭제할 항목이 없습니다.");
+    setShowDeletePopup(true);
+  }}
+>
+  선택삭제
+</button>
 
     <button
       className="px-4 py-2 rounded-lg bg-gray-400 text-white shadow-md hover:bg-gray-500 transition-all"
@@ -7518,13 +7784,11 @@ if (!loaded) return null;
   id={`row-${id}`}
   key={id || r._fsid || r._id || `idx-${i}`}
   className={`
-${selected.has(id) ? "bg-yellow-100" : ""}
-${i % 2 === 0 ? "bg-white" : "bg-gray-50"}
-${justSaved.includes(id) ? "flash-highlight" : ""}
-
+    ${i % 2 === 0 ? "bg-white" : "bg-gray-50"}
+    ${selected.has(id) ? "bg-yellow-100" : ""}
+    ${savedHighlightIds.has(id) ? "row-highlight" : ""}
   `}
 >
-
 
                   <td className="border text-center">
                     <input type="checkbox" checked={selected.has(id)} onChange={() => toggleOne(id)} />
@@ -8129,16 +8393,44 @@ ${justSaved.includes(id) ? "flash-highlight" : ""}
         </button>
 
         <button
-          className="px-3 py-1 rounded bg-blue-600 text-white"
-          onClick={async () => {
-            await patchDispatch(editTarget._id, editTarget);
-            alert("수정이 저장되었습니다.");
-            setEditPopupOpen(false);
-            setSelected(new Set());
-          }}
-        >
-          저장
-        </button>
+  className="px-3 py-1 rounded bg-blue-600 text-white"
+  onClick={async () => {
+    // 1) Firestore 저장
+    await patchDispatch(editTarget._id, editTarget);
+
+    // 2) 방금 저장한 행을 반짝이게
+    setSavedHighlightIds((prev) => {
+      const next = new Set(prev);
+      next.add(editTarget._id);
+      return next;
+    });
+
+    // 3초 후 자동 제거
+    setTimeout(() => {
+      setSavedHighlightIds((prev) => {
+        const next = new Set(prev);
+        next.delete(editTarget._id);
+        return next;
+      });
+    }, 3000);
+
+    // 3) 팝업 종료
+    alert("수정이 저장되었습니다.");
+const savedId = editTarget._id;
+
+setEditPopupOpen(false);
+setSelected(new Set());
+
+// 🔥 Firestore 적용 후 렌더링 시간 보정
+setTimeout(() => {
+  const el = document.getElementById(`row-${savedId}`);
+  if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+}, 300);
+  }}
+>
+  저장
+</button>
+
       </div>
 
     </div>
@@ -8396,6 +8688,74 @@ ${justSaved.includes(id) ? "flash-highlight" : ""}
       <button className="mt-3 w-full py-2 rounded bg-gray-200"
         onClick={() => setDriverSelectInfo(null)}>취소</button>
     </div>
+  </div>
+)}
+{/* ========================== 선택삭제 팝업 ========================== */}
+{/* ========================== 선택삭제 팝업 ========================== */}
+{showDeletePopup && (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
+    <div className="bg-white p-6 rounded-xl shadow-lg w-[360px]">
+      <h3 className="text-lg font-bold mb-4 text-center text-red-600">
+        선택한 항목을 삭제하시겠습니까?
+      </h3>
+
+      <p className="text-center mb-2">
+        총 {selected.size}개의 항목이 삭제됩니다.
+      </p>
+
+      {/* 👍 선택된 항목 목록 표시 추가 */}
+      <div className="bg-gray-50 border p-3 rounded mb-4 max-h-60 overflow-y-auto text-sm">
+        {[...selected].map((id, idx) => {
+          const row = dispatchData.find((r) => getId(r) === id);
+          if (!row) return null;
+
+          return (
+            <div key={id} className="mb-3 border-b pb-2">
+              <div className="font-semibold">{idx + 1}. {row.거래처명 || "-"}</div>
+              <div>상차: {row.상차일 || ""} {row.상차지명 || ""}</div>
+              <div>하차: {row.하차일 || ""} {row.하차지명 || ""}</div>
+              <div>차량: {row.차량번호 || "-"}</div>
+              <div>운임: {(row.청구운임 || 0).toLocaleString()}원</div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="flex gap-2">
+        <button
+          className="flex-1 py-2 bg-gray-300 rounded"
+          onClick={() => setShowDeletePopup(false)}
+        >
+          취소
+        </button>
+
+        <button
+          className="flex-1 py-2 bg-red-600 text-white rounded"
+          onClick={deleteRowsWithUndo}
+        >
+          삭제하기
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+{/* ========================== 되돌리기 알림 ========================== */}
+{undoVisible && (
+  <div className="fixed bottom-5 right-5 bg-gray-900 text-white px-5 py-3 rounded-lg shadow-xl flex items-center gap-3 z-[100000]">
+    <span>삭제됨</span>
+    <button
+      className="bg-blue-500 px-3 py-1 rounded"
+      onClick={async () => {
+        for (const row of backupDeleted) {
+          await patchDispatch(row._id, row);
+        }
+        setUndoVisible(false);
+        alert("삭제가 복구되었습니다.");
+      }}
+    >
+      되돌리기
+    </button>
   </div>
 )}
 
