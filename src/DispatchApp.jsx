@@ -257,6 +257,14 @@ const removeClient = async (id) => deleteDoc(doc(db, COLL.clients, id));
   };
 }  // ← ⭐ 이거 반드시 필요
 /* -------------------------------------------------
+   하차지 Key 생성 함수 (⭐ 반드시 필요)
+--------------------------------------------------*/
+function makePlaceKey(name = "", addr = "") {
+  const n = String(name).trim().toLowerCase().replace(/\s+/g, "");
+  const a = String(addr).trim().toLowerCase().replace(/\s+/g, "");
+  return `${n}_${a}`;
+}
+/* -------------------------------------------------
    하차지 저장 (upsertPlace) — Firestore (최종 안정버전)
 --------------------------------------------------*/
 const upsertPlace = async (place) => {
