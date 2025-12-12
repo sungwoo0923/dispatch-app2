@@ -2757,13 +2757,18 @@ function MobileStandardFare({ onBack }) {
   const [result, setResult] = useState(null);
   const [aiFare, setAiFare] = useState(null);
 
-  const clean = (s) =>
-    String(s || "").trim().toLowerCase().replace(/\s+/g, "");
+ const clean = (s = "") =>
+  String(s || "").trim().toLowerCase().replace(/\s+/g, "");
 
-  const extractTonNum = (text = "") => {
-    const m = String(text).replace(/톤|t/gi, "").match(/(\d+(\.\d+)?)/);
-    return m ? Number(m[1]) : null;
-  };
+const extractCargoNumber = (text = "") => {
+  const m = String(text).match(/(\d+)/);
+  return m ? Number(m[1]) : null;
+};
+const extractTonNum = (text = "") => {
+  const cleanText = String(text).replace(/톤|t/gi, "");
+  const m = cleanText.match(/(\d+(?:\.\d+)?)/);  // ← 정규식 확정본
+  return m ? Number(m[1]) : null;
+};
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, collName), (snap) => {
@@ -2774,100 +2779,97 @@ function MobileStandardFare({ onBack }) {
   }, []);
 
 const calcFareMobile = () => {
-    // ★ 상/하차지 미입력 시 필터 무효화 방지
- const isForced = window.__forceFareSearch__;
- window.__forceFareSearch__ = false;
- if (!isForced && (!pickup.trim() || !drop.trim())) {
-   alert("상차지 / 하차지를 입력하세요.");
-   return;
- }
+  const isForced = window.__forceFareSearch__;
+  window.__forceFareSearch__ = false;
 
-    const normPickup = clean(pickup);
-    const normDrop = clean(drop);
-    const inputTonNum = extractTonNum(ton);
-
-    let filtered = dispatchData.filter((r) => {
-  const rp = clean(r.상차지명 || "");
-  const rd = clean(r.하차지명 || "");
-
-  if (!normPickup || !normDrop) return false;
-
-  const okPickup = rp.includes(normPickup);
-  const okDrop = rd.includes(normDrop);
-
-  if (!okPickup || !okDrop) return false;
-
-  // ▶ 1. 차량종류 자동 인식 적용 (ton 미선택 시 데이터 기반 필터)
-  if (vehicle !== "전체") {
-    const rv = clean(r.차량종류 || "");
-    const vv = clean(vehicle);
-    if (!rv.includes(vv)) return false;
-  } else {
-    // 차량종류가 전체일 때도, 일치하면 가산점 (정렬에 반영)
-    r._matchVehicleBonus = 1;
+  if (!isForced && (!pickup.trim() || !drop.trim())) {
+    alert("상차지 / 하차지를 입력하세요.");
+    return;
   }
 
-  // ▶ 2. 톤수 근사치 필터
-  if (inputTonNum != null) {
-    const rton = extractTonNum(r.차량톤수 || "");
-    if (rton != null && Math.abs(rton - inputTonNum) > 0.5)
-      return false;
+  const normPickup = clean(pickup);
+  const normDrop = clean(drop);
+  const inputTonNum = extractTonNum(ton);
+
+  let filtered = dispatchData
+    .map((r) => {
+      const rp = clean(r.상차지명 || "") + clean(r.상차지주소 || "");
+      const rd = clean(r.하차지명 || "") + clean(r.하차지주소 || "");
+
+      const okPickup = rp.includes(normPickup);
+      const okDrop = rd.includes(normDrop);
+      if (!okPickup || !okDrop) return null;
+
+      // 주소 정확도 점수
+      r._addrScore =
+        (rp.startsWith(normPickup) ? 3 : okPickup ? 1 : 0) +
+        (rd.startsWith(normDrop) ? 3 : okDrop ? 1 : 0);
+
+      // 차량종류 필터
+      if (vehicle !== "전체") {
+        const rv = clean(r.차량종류 || "");
+        const vv = clean(vehicle);
+        if (!rv.includes(vv)) return null;
+      }
+
+      // 화물(파렛) 숫자 필터
+      if (cargo.trim()) {
+        const cargoNum = extractCargoNumber(cargo);
+        const rowNum = extractCargoNumber(r.화물내용);
+        if (cargoNum != null && rowNum != cargoNum) return null;
+      }
+
+      // 톤수 근사치 필터
+      if (inputTonNum != null) {
+        const rTon = extractTonNum(r.차량톤수 || "");
+        if (rTon != null && Math.abs(rTon - inputTonNum) > 0.5) return null;
+      }
+
+      return r;
+    })
+    .filter(Boolean);
+
+  if (!filtered.length) {
+    alert("검색된 데이터가 없습니다.");
+    setMatchedRows([]);
+    setResult(null);
+    setAiFare(null);
+    return;
   }
 
-  // ▶ 2. 주소 정확도 점수 계산
-  r._addrScore =
-    (rp.startsWith(normPickup) ? 3 : okPickup ? 1 : 0) +
-    (rd.startsWith(normDrop) ? 3 : okDrop ? 1 : 0);
+  // 정렬
+  filtered.sort((a, b) => {
+    const da = new Date(a.상차일 || 0);
+    const db = new Date(b.상차일 || 0);
 
-  // 주소가 너무 약하면 제외
-  if (r._addrScore < 2) return false;
-
-  return true;
-});
-
-// ▶ 3. 최신 데이터 우선 + 정확도 우선 정렬
-filtered.sort((a, b) => {
-  const da = new Date(a.상차일 || 0);
-  const db = new Date(b.상차일 || 0);
-
-  return (
-    (b._addrScore || 0) - (a._addrScore || 0) ||  // 정확도 우선
-    (b._matchVehicleBonus || 0) - (a._matchVehicleBonus || 0) || // 차량종류 가산
-    db - da // 최신순
-  );
-});
-// 🔥 여기!!
-setMatchedRows(filtered);
-
-if (!filtered.length) {
-  alert("검색된 데이터가 없습니다.");
-  setResult(null);
-  setAiFare(null);
-  return;
-}
-
-    const fares = filtered
-      .map((r) => Number(String(r.청구운임 || 0).replace(/[^\d]/g, "")))
-      .filter((v) => !isNaN(v));
-
-    const avg = Math.round(fares.reduce((a, b) => a + b, 0) / fares.length);
-    const latest = filtered.sort(
-      (a, b) => (b.상차일 || "").localeCompare(a.상차일 || "")
-    )[0];
-    const latestFare = Number(
-      String(latest?.청구운임 || 0).replace(/[^\d]/g, "")
+    return (
+      (b._addrScore || 0) - (a._addrScore || 0) ||
+      db - da
     );
-    const aiValue = Math.round(latestFare * 0.6 + avg * 0.4);
+  });
 
-    setAiFare({
-      avg,
-      latestFare,
-      aiValue,
-      confidence: Math.min(95, 60 + filtered.length * 5),
-    });
+  setMatchedRows(filtered);
 
-    setResult({ avg, latest, latestFare });
-  };
+  const fares = filtered.map((r) =>
+    Number(String(r.청구운임 || 0).replace(/[^\d]/g, ""))
+  );
+  const avg = Math.round(fares.reduce((a, b) => a + b, 0) / fares.length);
+
+  const latest = filtered[0];
+  const latestFare = Number(String(latest.청구운임 || 0).replace(/[^\d]/g, ""));
+
+  const aiValue = Math.round(latestFare * 0.6 + avg * 0.4);
+
+  setAiFare({
+    avg,
+    latestFare,
+    aiValue,
+    confidence: Math.min(95, 60 + filtered.length * 5),
+  });
+
+  setResult({ avg, latest, latestFare });
+};
+
 
   return (
     <div className="px-4 py-4 space-y-4">

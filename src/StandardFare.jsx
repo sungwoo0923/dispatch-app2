@@ -150,12 +150,23 @@ const search = () => {
 
     // 화물내용
     if (cargo.trim()) {
-      const cargoNum = extractCargoNumber(cargo);
-      list = list.filter((r) => {
-        const rowNum = extractCargoNumber(r.화물내용);
-        return cargoNum === rowNum || clean(r.화물내용).includes(clean(cargo));
-      });
+  const cargoNum = extractCargoNumber(cargo); // 입력된 숫자
+  const cargoText = clean(cargo);             // 입력된 텍스트
+
+  list = list.filter((r) => {
+    const rowNum = extractCargoNumber(r.화물내용);   // 실제 row 숫자
+    const rowText = clean(r.화물내용);              // 실제 row 텍스트
+
+    // 1) 숫자를 입력한 경우 → 정확한 숫자 일치만 허용
+    if (cargoNum !== null) {
+      return rowNum === cargoNum;
     }
+
+    // 2) 숫자 없이 문자만 입력한 경우 → 텍스트 포함 검색
+    return rowText.includes(cargoText);
+  });
+}
+
 
     // 톤수
     if (ton.trim()) {
