@@ -10,7 +10,7 @@ import {
   onSnapshot,
   serverTimestamp,
 } from "firebase/firestore";
-import { db } from "../firebase";
+import { db, auth } from "../firebase";
 import { getMessaging, getToken } from "firebase/messaging";
 // 🔥 role 기반 컬렉션 분기
 const role = localStorage.getItem("role") || "user";
@@ -2279,15 +2279,16 @@ if (!existing && val.length >= 2) {
   const found = clients.find(
     (c) =>
       String(c.거래처명 || "").trim().toLowerCase() === normalized
-        .toLowerCase() === normalized
   );
 
   if (found) {
-    update("하차지주소",
-    found?.주소 || found?.하차지주소 || found?.상차지주소 || ""
-  );
+    update(
+      "하차지주소",
+      found.주소 || found.하차지주소 || found.상차지주소 || ""
+    );
   }
 }}
+
 
                 onFocus={() =>
                   form.하차지명 && setShowDropList(true)
