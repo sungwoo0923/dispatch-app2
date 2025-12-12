@@ -1,4 +1,4 @@
-// ======================= src/App.jsx (ROLE FIRESTORE VER - FINAL) =======================
+// ======================= src/App.jsx (ROLE FIRESTORE VER - FINAL + SMARTPHONE FIX) =======================
 
 import React, { useState, useEffect } from "react";
 import {
@@ -29,16 +29,42 @@ import UploadPage from "./UploadPage";
 import StandardFare from "./StandardFare";
 import ChangePassword from "./ChangePassword";
 
+/* =======================================================================
+   스마트폰(진짜 모바일)만 MobileApp을 띄우는 감지 함수
+   아이패드, 갤럭시 탭은 PC 버전(DispatchApp)으로 처리됨
+======================================================================= */
+function isSmartPhone() {
+  const ua = navigator.userAgent.toLowerCase();
+
+  // 아이패드 판별(iPadOS는 MacIntel로 나오지만 터치 지원함)
+  const isIpad =
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1) ||
+    ua.includes("ipad");
+
+  if (isIpad) return false;
+
+  // Galaxy Tab 등 태블릿은 screen width로 걸러짐
+  if (ua.includes("tablet")) return false;
+
+  // 화면 폭 기준(스마트폰은 대부분 < 768px)
+  const isSmallScreen = window.innerWidth < 768;
+
+  // 스마트폰 UserAgent
+  const isPhoneUA = /iphone|ipod|android(?!.*tablet)/.test(ua);
+
+  return isPhoneUA || isSmallScreen;
+}
+
 export default function App() {
   const [user, setUser] = useState(null);
   const [role, setRole] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // ⭐ 업데이트 알림 표시 여부
+  // 업데이트 알림
   const [updateReady, setUpdateReady] = useState(false);
 
   // =====================================================================
-  // SW에서 보내는 "NEW_VERSION" 메시지 → updateReady = true
+  // ServiceWorker → NEW_VERSION 메시지 수신
   // =====================================================================
   useEffect(() => {
     const onUpdate = () => setUpdateReady(true);
@@ -83,20 +109,19 @@ export default function App() {
     );
   }
 
-  const isMobile = /android|iphone|ipad|ipod|kakaotalk/i.test(
-    navigator.userAgent
-  );
+  // =====================================================================
+  // 모바일 감지: 스마트폰만 true / 아이패드·갤럭시탭은 false
+  // =====================================================================
+  const isMobile = isSmartPhone();
 
   // =====================================================================
-  // ⭐ 업데이트 적용 함수 → 실제로 SKIP_WAITING 실행
+  // 업데이트 적용 함수
   // =====================================================================
   const applyUpdate = async () => {
     const reg = await navigator.serviceWorker.getRegistration();
     if (reg?.waiting) {
       reg.waiting.postMessage({ type: "SKIP_WAITING" });
     }
-
-    // SW 교체 후 페이지 새로고침
     window.location.reload();
   };
 
@@ -105,7 +130,7 @@ export default function App() {
   // =====================================================================
   return (
     <>
-      {/* ================== 업데이트 알림 토스트 UI ================== */}
+      {/* 업데이트 알림 토스트 */}
       {updateReady && (
         <div className="fixed bottom-6 right-6 bg-white shadow-xl border rounded-lg p-4 z-[9999] w-72">
           <div className="font-bold text-gray-800 mb-2 flex items-center gap-2">
@@ -134,7 +159,7 @@ export default function App() {
         </div>
       )}
 
-      {/* ========================= 라우터 ========================== */}
+      {/* 라우터 */}
       <Router>
         <Routes>
           <Route path="/" element={<Navigate to="/login" replace />} />
@@ -200,7 +225,7 @@ export default function App() {
           <Route path="/upload" element={<UploadPage />} />
           <Route path="/no-access" element={<NoAccess />} />
 
-          {/* 모든 미지정 경로 처리 */}
+          {/* fallback */}
           <Route
             path="*"
             element={
