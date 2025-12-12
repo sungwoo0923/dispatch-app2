@@ -15,8 +15,8 @@ ReactDOM.createRoot(document.getElementById("root")).render(
 // 서비스워커 등록 + 새 버전 감지 → App.jsx UI 이벤트 호출
 // =====================================================
 
-// ★ 클라이언트 버전 (sw.js VERSION과 반드시 동일하게 맞춘 후 배포!)
-const CLIENT_VERSION = "2025-02-10-02";   // ← 이 값은 절대 바꾸지 말 것
+// ★ CLIENT_VERSION 은 항상 sw.js VERSION 과 동일해야 함
+const CLIENT_VERSION = "2025-02-10-03";
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
@@ -25,9 +25,7 @@ if ("serviceWorker" in navigator) {
       .then((reg) => {
         console.log("SW Registered:", reg);
 
-        // ==============================
-        // 새 SW가 발견되면 버전 체크
-        // ==============================
+        // 새 SW가 발견될 때 버전 체크
         reg.addEventListener("updatefound", () => {
           const newSW = reg.installing;
           if (!newSW) return;
@@ -36,7 +34,6 @@ if ("serviceWorker" in navigator) {
             if (newSW.state === "installed") {
               console.log("SW installed → Checking version…");
 
-              // 활성화된 SW에게 버전 체크 요청
               reg.active?.postMessage({
                 type: "CHECK_VERSION",
                 version: CLIENT_VERSION,
@@ -45,18 +42,14 @@ if ("serviceWorker" in navigator) {
           });
         });
 
-        // ==============================
-        // 주기적으로 버전 체크 (30초)
-        // ==============================
+        // 주기적 버전 체크 (30초)
         setInterval(() => {
           const msg = { type: "CHECK_VERSION", version: CLIENT_VERSION };
           reg.active?.postMessage(msg);
           reg.waiting?.postMessage(msg);
         }, 30000);
 
-        // ==============================
-        // SW → 메시지 → 업데이트 UI 오픈
-        // ==============================
+        // 메시지 리스너
         navigator.serviceWorker.addEventListener("message", (event) => {
           if (event.data?.type === "NEW_VERSION") {
             console.log("🚨 NEW VERSION DETECTED → Trigger UI Toast");
@@ -64,6 +57,8 @@ if ("serviceWorker" in navigator) {
           }
         });
       })
-      .catch((err) => console.warn("SW Registration Failed:", err));
+      .catch((err) =>
+        console.warn("SW Registration Failed:", err)
+      );
   });
 }

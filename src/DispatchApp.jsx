@@ -1272,7 +1272,7 @@ const savePlaceSmart = (name, addr, manager, phone) => {
       : (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch { } };
 
     const VEHICLE_TYPES = (typeof window !== "undefined" && window.RUN25_VEHICLE_TYPES) || [
-      "라보/다마스", "카고", "윙바디", "탑차", "냉장탑", "냉동탑", "오토바이", "기타"
+      "라보/다마스", "카고", "윙바디", "탑차", "냉장탑", "냉동탑", "냉장윙", "냉동윙", "리프트", "오토바이", "기타"
     ];
     const PAY_TYPES = (typeof window !== "undefined" && window.RUN25_PAY_TYPES) || [
       "계산서", "착불", "선불", "손실", "개인", "기타"
@@ -5630,9 +5630,12 @@ XLSX.writeFile(wb, "실시간배차현황.xlsx");
                     <option value="다마스">다마스</option>
                     <option value="카고">카고</option>
                     <option value="윙바디">윙바디</option>
+                    <option value="리프트">리프트</option>
                     <option value="탑차">탑차</option>
                     <option value="냉장탑">냉장탑</option>
                     <option value="냉동탑">냉동탑</option>
+                    <option value="냉장윙">냉장윙</option>
+                    <option value="냉동윙">냉동윙</option>
                     <option value="오토바이">오토바이</option>
                     <option value="기타">기타</option>
                   </select>
@@ -6078,13 +6081,15 @@ XLSX.writeFile(wb, "실시간배차현황.xlsx");
       }
     >
       <option value="">선택 없음</option>
-      <option value="라보">라보</option>
-      <option value="다마스">다마스</option>
+      <option value="라보/다마스">라보/다마스</option> 
       <option value="카고">카고</option>
       <option value="윙바디">윙바디</option>
+      <option value="리프트">리프트</option>
       <option value="탑차">탑차</option>
       <option value="냉장탑">냉장탑</option>
       <option value="냉동탑">냉동탑</option>
+      <option value="냉장윙">냉장윙</option>
+      <option value="냉동윙">냉동윙</option>
       <option value="오토바이">오토바이</option>
       <option value="기타">기타</option>
     </select>
@@ -7245,15 +7250,21 @@ const handleEditToggle = async () => {
 
   if (!confirm("수정된 내용을 저장하시겠습니까?")) return;
 
-  for (const id of ids) await _patch(id, edited[id]);
-  // 2) 저장된 ID들을 반짝임 목록에 추가(★)
-setSavedHighlightIds(prev => {
-  const next = new Set(prev);
-  ids.forEach(id => next.add(id));
-  return next;
-});
+  // ================================
+//   수정완료 → 저장 로직
+// ================================
+for (const id of ids) await _patch(id, edited[id]);
 
-// 3) 3초 후 반짝임 제거(★)
+// ⭐ 100ms 후 highlight 실행 (Firestore → DOM 렌더 타이밍 보정)
+setTimeout(() => {
+  setSavedHighlightIds(prev => {
+    const next = new Set(prev);
+    ids.forEach(id => next.add(id));   // 여러 개 선택 저장 시 모두 반짝
+    return next;
+  });
+}, 100);
+
+// ⭐ 3초 후 highlight 제거
 setTimeout(() => {
   setSavedHighlightIds(prev => {
     const next = new Set(prev);
@@ -7261,6 +7272,7 @@ setTimeout(() => {
     return next;
   });
 }, 3000);
+
 
   setJustSaved(ids);
   setEdited({});
@@ -7507,21 +7519,21 @@ const pageRows = React.useMemo(() => {
     }
   }, [q, startDate, endDate, page, selected, edited, editMode]);
 if (!loaded) return null;
-<style>
-{`
-  .row-highlight {
-    animation: highlightFade 0.5s ease-out 0s 5;   /* 0.5초 × 5회 */
-  }
-
-  @keyframes highlightFade {
-    0% { background-color: #fff3b0; }
-    100% { background-color: transparent; }
-  }
-`}
-</style>
 
 return (
   <div className="p-3">
+
+   <style>{`
+  @keyframes highlightFlash {
+    0%   { background-color: #fff7c2; }
+    50%  { background-color: #ffe066; }
+    100% { background-color: #fff7c2; }
+  }
+
+  .row-highlight {
+    animation: highlightFlash 0.8s ease-in-out 3;
+  }
+`}</style>
       <h2 className="text-lg font-bold mb-3">배차현황</h2>
 
       {/* ----------- 요약 ---------- */}
@@ -7796,7 +7808,7 @@ return (
   key={id || r._fsid || r._id || `idx-${i}`}
   className={`
     ${i % 2 === 0 ? "bg-white" : "bg-gray-50"}
-    ${selected.has(id) ? "bg-yellow-100" : ""}
+    ${selected.has(id) ? "bg-yellow-200 border-2 border-yellow-500" : ""}
     ${savedHighlightIds.has(id) ? "row-highlight" : ""}
   `}
 >
@@ -8177,14 +8189,16 @@ return (
         setEditTarget((p) => ({ ...p, 차량종류: e.target.value }))
       }
     >
-      <option value="">선택없음</option>
-      <option value="라보">라보</option>
-      <option value="다마스">다마스</option>
+      <option value="">선택 없음</option>
+      <option value="라보/다마스">라보/다마스</option> 
       <option value="카고">카고</option>
       <option value="윙바디">윙바디</option>
+      <option value="리프트">리프트</option>
       <option value="탑차">탑차</option>
       <option value="냉장탑">냉장탑</option>
       <option value="냉동탑">냉동탑</option>
+      <option value="냉장윙">냉장윙</option>
+      <option value="냉동윙">냉동윙</option>
       <option value="오토바이">오토바이</option>
       <option value="기타">기타</option>
     </select>
@@ -9146,13 +9160,19 @@ function NewOrderPopup({
     value={newOrder.차량종류}
     onChange={(e) => handleChange("차량종류", e.target.value)}
   >
-    <option value="">선택없음</option>
-    <option value="냉장탑">냉장탑</option>
-    <option value="냉동탑">냉동탑</option>
-    <option value="윙바디">윙바디</option>
-    <option value="탑차">탑차</option>
-    <option value="라보/다마스">라보/다마스</option>
-    <option value="오토바이">오토바이</option>
+  <option value="">선택 없음</option>
+      <option value="라보">라보</option>
+      <option value="다마스">다마스</option>
+      <option value="카고">카고</option>
+      <option value="윙바디">윙바디</option>
+      <option value="리프트">리프트</option>
+      <option value="탑차">탑차</option>
+      <option value="냉장탑">냉장탑</option>
+      <option value="냉동탑">냉동탑</option>
+      <option value="냉장윙">냉장윙</option>
+      <option value="냉동윙">냉동윙</option>
+      <option value="오토바이">오토바이</option>
+      <option value="기타">기타</option>
   </select>
 </div>
 
