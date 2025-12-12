@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import * as XLSX from "xlsx";
 import { db } from "./firebase";
+
 import {
   collection,
   onSnapshot,
@@ -9,6 +10,36 @@ import {
   doc,
   deleteDoc,
 } from "firebase/firestore";
+
+import { Dialog } from "@headlessui/react";
+
+// ★★★ 반드시 최상단 import 구역에 있어야 함 ★★★
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+} from "recharts";
+/* -------------------- KPI 카드 컴포넌트 -------------------- */
+function KPI({ title, value, color = "blue" }) {
+  const colorMap = {
+    blue: "bg-blue-100 text-blue-700 border-blue-200",
+    green: "bg-green-100 text-green-700 border-green-200",
+    amber: "bg-amber-100 text-amber-700 border-amber-200",
+    purple: "bg-purple-100 text-purple-700 border-purple-200",
+  };
+
+  return (
+    <div className={`p-4 rounded-lg border shadow-sm ${colorMap[color]}`}>
+      <div className="text-sm font-semibold">{title}</div>
+      <div className="text-xl font-bold mt-1">{value}</div>
+    </div>
+  );
+}
+
 
 export default function FixedClients({ drivers = [], upsertDriver }) {
   const coll = collection(db, "fixedClients");
@@ -165,6 +196,178 @@ export default function FixedClients({ drivers = [], upsertDriver }) {
 
   // 전체/필터 기준 실 수수료
   const realFee = appliedFee || totalFee - Number(prepaidFee || 0);
+  /* -------------------- 기사별 매출 TOP5 계산 -------------------- */
+const topDrivers = useMemo(() => {
+  const map = {};
+
+  filtered.forEach((r) => {
+    const name = r.이름 || "미등록";
+    const sale = Number(r.청구운임 || 0);
+
+    if (!map[name]) map[name] = 0;
+    map[name] += sale;
+  });
+
+  return Object.entries(map)
+    .map(([name, total]) => ({ name, total }))
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 5);
+}, [filtered]);
+
+/* -------------------- 최근 14일 매출 그래프 -------------------- */
+const chartData = useMemo(() => {
+  const now = new Date();
+  const days = [...Array(14)].map((_, i) => {
+    const d = new Date(now);
+    d.setDate(d.getDate() - (13 - i));
+    const key = d.toISOString().slice(0, 10);
+
+    const daySum = filtered
+      .filter((r) => r.날짜 === key)
+      .reduce((a, b) => a + Number(b.청구운임 || 0), 0);
+
+    return {
+      date: key.slice(5),
+      매출: daySum,
+    };
+  });
+
+  return days;
+}, [filtered]);
+// ======================== 빠른 신규등록 팝업 상태 =========================
+const [fastOpen, setFastOpen] = useState(false);
+
+const [fastRows, setFastRows] = useState([
+  {
+    날짜: new Date().toISOString().slice(0, 10),
+    거래처명: "",
+    톤수: "",
+    수량: 1,
+    기사단가: 0,
+    수수료단가: 0,
+    차량번호: "",
+    이름: "",
+    핸드폰번호: "",
+    기사운임: 0,
+    수수료: 0,
+    청구운임: 0
+  }
+]);
+
+const addFastRow = () => {
+  setFastRows((prev) => [
+    ...prev,
+    {
+      날짜: new Date().toISOString().slice(0, 10),
+      거래처명: "",
+      톤수: "",
+      수량: 1,
+      기사단가: 0,
+      수수료단가: 0,
+      차량번호: "",
+      이름: "",
+      핸드폰번호: "",
+      기사운임: 0,
+      수수료: 0,
+      청구운임: 0
+    }
+  ]);
+};
+
+const removeFastRow = (idx) => {
+  setFastRows((prev) => prev.filter((_, i) => i !== idx));
+};
+
+const updateFastField = (idx, field, value) => {
+  setFastRows((prev) => {
+    const updated = [...prev];
+    updated[idx][field] = value;
+
+    const qty = Number(updated[idx].수량 || 0);
+    const d = Number(updated[idx].기사단가 || 0);
+    const f = Number(updated[idx].수수료단가 || 0);
+
+    updated[idx].기사운임 = qty * d;
+    updated[idx].수수료 = qty * f;
+    updated[idx].청구운임 = updated[idx].기사운임 + updated[idx].수수료;
+
+    return updated;
+  });
+};
+
+const matchFastDriver = (idx, car) => {
+  const v = (car || "").replace(/\s+/g, "");
+
+  const match = drivers.find((d) => d.차량번호 === v);
+
+  setFastRows((prev) => {
+    const updated = [...prev];
+
+    // 기본 매칭
+    if (match) {
+      updated[idx].차량번호 = match.차량번호;
+      updated[idx].이름 = match.이름;
+      updated[idx].핸드폰번호 = match.전화번호;
+    }
+
+    // ======== ★ 차량번호별 자동 단가 설정 로직 ★ ========
+    const groupA = ["인천83바5608", "경기95자4318"];   // 단가 6000 / 수수료 1000
+    const groupB = ["서울85바8569", "인천81바6079"];   // 단가 5000 / 수수료 1000
+
+    if (groupA.includes(v)) {
+      updated[idx].기사단가 = 6000;
+      updated[idx].수수료단가 = 1000;
+    } else if (groupB.includes(v)) {
+      updated[idx].기사단가 = 5000;
+      updated[idx].수수료단가 = 1000;
+    }
+
+    // 자동 계산
+    const qty = Number(updated[idx].수량 || 0);
+    const d = Number(updated[idx].기사단가 || 0);
+    const f = Number(updated[idx].수수료단가 || 0);
+
+    updated[idx].기사운임 = qty * d;
+    updated[idx].수수료 = qty * f;
+    updated[idx].청구운임 = updated[idx].기사운임 + updated[idx].수수료;
+
+    return updated;
+  });
+};
+
+const submitFastRows = async () => {
+  for (const row of fastRows) {
+    const id = crypto.randomUUID();
+    await setDoc(doc(coll, id), {
+      id,
+      ...row,
+      정산완료: false
+    });
+  }
+
+  alert(`${fastRows.length}건 등록 완료!`);
+
+  // ★★★ 저장 후 입력값 초기화 ★★★
+  setFastRows([
+    {
+      날짜: new Date().toISOString().slice(0, 10),
+      거래처명: "",
+      톤수: "",
+      수량: 1,
+      기사단가: 0,
+      수수료단가: 0,
+      차량번호: "",
+      이름: "",
+      핸드폰번호: "",
+      기사운임: 0,
+      수수료: 0,
+      청구운임: 0
+    }
+  ]);
+
+  setFastOpen(false);
+};
+
 
   // UI
   return (
@@ -319,7 +522,12 @@ export default function FixedClients({ drivers = [], upsertDriver }) {
         >
           추가
         </button>
-
+<button
+  onClick={() => setFastOpen(true)}
+  className="px-3 py-1 bg-orange-600 text-white rounded"
+>
+  빠른 신규등록   {/* ★★★ 여기 추가 ★★★ */}
+</button>
         <button
           onClick={removeSelectedRows}
           className="px-3 py-1 bg-red-500 text-white rounded"
@@ -353,159 +561,408 @@ export default function FixedClients({ drivers = [], upsertDriver }) {
           엑셀다운
         </button>
       </div>
+{/* =================== 메인 콘텐츠 2단 레이아웃 =================== */}
+<div className="w-full flex flex-col lg:flex-row items-start gap-6 mt-6">
 
-      {/* 테이블 */}
-      <div className="overflow-x-auto">
-        <table className="min-w-[1100px] text-sm border">
-          <thead>
-            <tr className="bg-gray-100">
-              {[
-                "선택",
-                "정산",
-                "날짜",
-                "거래처명",
-                "톤수",
-                "수량",
-                "차량번호",
-                "이름",
-                "핸드폰번호",
-                "청구운임",
-                "기사운임",
-                "수수료",
-              ].map((h) => (
-                <th key={h} className="border px-2 py-2 text-center">
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
+  {/* ================= 왼쪽 테이블 영역 ================= */}
+  <div className="flex-1 overflow-x-auto">
+    <table className="min-w-[1100px] text-sm border">
+      <thead>
+        <tr className="bg-gray-100">
+          {[
+            "선택",
+            "정산",
+            "날짜",
+            "거래처명",
+            "톤수",
+            "수량",
+            "차량번호",
+            "이름",
+            "핸드폰번호",
+            "청구운임",
+            "기사운임",
+            "수수료",
+          ].map((h) => (
+            <th key={h} className="border px-2 py-2 text-center">
+              {h}
+            </th>
+          ))}
+        </tr>
+      </thead>
 
-          <tbody>
-            {filtered.map((r, idx) => (
-              <tr key={r.id} className={idx % 2 ? "bg-gray-50" : ""}>
-                <td className="border px-2 text-center">
+      <tbody>
+        {filtered.map((r, idx) => (
+          <tr key={r.id} className={idx % 2 ? "bg-gray-50" : ""}>
+            <td className="border px-2 text-center">
+              <input
+                type="checkbox"
+                checked={selected.includes(r.id)}
+                onChange={() => toggleSelect(r.id)}
+              />
+            </td>
+
+            <td className="border px-2 text-center">
+              {r.정산완료 ? (
+                <span className="text-green-700 font-bold">완료</span>
+              ) : (
+                "-"
+              )}
+            </td>
+
+            <td className="border px-2 text-center">
+              {editMode ? (
+                <input
+                  type="date"
+                  className="border rounded p-1"
+                  value={r.날짜}
+                  onChange={(e) => updateRow(r.id, { 날짜: e.target.value })}
+                  onBlur={() => saveRow(r)}
+                />
+              ) : (
+                r.날짜
+              )}
+            </td>
+
+            <td className="border px-2 text-center">
+              {editMode ? (
+                <input
+                  value={r.거래처명}
+                  onChange={(e) => updateRow(r.id, { 거래처명: e.target.value })}
+                  onBlur={() => saveRow(r)}
+                  className="border rounded p-1 text-center"
+                />
+              ) : (
+                r.거래처명
+              )}
+            </td>
+
+            <td className="border px-2 text-center">
+              {editMode ? (
+                <select
+                  value={r.톤수}
+                  onChange={(e) => updateRow(r.id, { 톤수: e.target.value })}
+                  onBlur={() => saveRow(r)}
+                  className="border rounded p-1"
+                >
+                  <option value="">선택</option>
+                  {tonList.map((t) => (
+                    <option key={t}>{t}</option>
+                  ))}
+                </select>
+              ) : (
+                r.톤수
+              )}
+            </td>
+
+            <td className="border px-2 text-center">
+              {editMode ? (
+                <input
+                  type="number"
+                  className="border rounded p-1 w-20 text-center"
+                  value={r.수량}
+                  onChange={(e) => updateRow(r.id, { 수량: e.target.value })}
+                  onBlur={() => saveRow(r)}
+                />
+              ) : (
+                r.수량
+              )}
+            </td>
+
+            <td className="border px-2 text-center">
+              <input
+                type="text"
+                className="border rounded p-1 w-28 text-center"
+                value={r.차량번호}
+                onChange={(e) => updateRow(r.id, { 차량번호: e.target.value })}
+                onKeyDown={(e) => handleCarInput(r.id, e.currentTarget.value, e)}
+                onBlur={() => saveRow(r)}
+              />
+            </td>
+
+            <td className="border px-2 text-center">{r.이름}</td>
+            <td className="border px-2 text-center">{r.핸드폰번호}</td>
+
+            {["청구운임", "기사운임", "수수료"].map((f) => (
+              <td key={f} className="border px-2 text-right">
+                {editMode ? (
                   <input
-                    type="checkbox"
-                    checked={selected.includes(r.id)}
-                    onChange={() => toggleSelect(r.id)}
-                  />
-                </td>
-
-                <td className="border px-2 text-center">
-                  {r.정산완료 ? (
-                    <span className="text-green-700 font-bold">완료</span>
-                  ) : (
-                    "-"
-                  )}
-                </td>
-
-                <td className="border px-2 text-center">
-                  {editMode ? (
-                    <input
-                      type="date"
-                      className="border rounded p-1"
-                      value={r.날짜}
-                      onChange={(e) =>
-                        updateRow(r.id, { 날짜: e.target.value })
-                      }
-                      onBlur={() => saveRow(r)}
-                    />
-                  ) : (
-                    r.날짜
-                  )}
-                </td>
-
-                <td className="border px-2 text-center">
-                  {editMode ? (
-                    <input
-                      value={r.거래처명}
-                      onChange={(e) =>
-                        updateRow(r.id, { 거래처명: e.target.value })
-                      }
-                      onBlur={() => saveRow(r)}
-                      className="border rounded p-1 text-center"
-                    />
-                  ) : (
-                    r.거래처명
-                  )}
-                </td>
-
-                <td className="border px-2 text-center">
-                  {editMode ? (
-                    <select
-                      value={r.톤수}
-                      onChange={(e) =>
-                        updateRow(r.id, { 톤수: e.target.value })
-                      }
-                      onBlur={() => saveRow(r)}
-                      className="border rounded p-1"
-                    >
-                      <option value="">선택</option>
-                      {tonList.map((t) => (
-                        <option key={t}>{t}</option>
-                      ))}
-                    </select>
-                  ) : (
-                    r.톤수
-                  )}
-                </td>
-
-                <td className="border px-2 text-center">
-                  {editMode ? (
-                    <input
-                      type="number"
-                      className="border rounded p-1 w-20 text-center"
-                      value={r.수량}
-                      onChange={(e) =>
-                        updateRow(r.id, { 수량: e.target.value })
-                      }
-                      onBlur={() => saveRow(r)}
-                    />
-                  ) : (
-                    r.수량
-                  )}
-                </td>
-
-                <td className="border px-2 text-center">
-                  <input
-                    type="text"
-                    className="border rounded p-1 w-28 text-center"
-                    value={r.차량번호}
+                    type="number"
+                    className="border rounded p-1 w-24 text-right"
+                    value={r[f]}
                     onChange={(e) =>
-                      updateRow(r.id, { 차량번호: e.target.value })
-                    }
-                    onKeyDown={(e) =>
-                      handleCarInput(r.id, e.currentTarget.value, e)
+                      updateRow(r.id, { [f]: Number(e.target.value) })
                     }
                     onBlur={() => saveRow(r)}
                   />
-                </td>
-
-                <td className="border px-2 text-center">{r.이름}</td>
-                <td className="border px-2 text-center">{r.핸드폰번호}</td>
-
-                {["청구운임", "기사운임", "수수료"].map((f) => (
-                  <td key={f} className="border px-2 text-right">
-                    {editMode ? (
-                      <input
-                        type="number"
-                        className="border rounded p-1 w-24 text-right"
-                        value={r[f]}
-                        onChange={(e) =>
-                          updateRow(r.id, { [f]: Number(e.target.value) })
-                        }
-                        onBlur={() => saveRow(r)}
-                      />
-                    ) : (
-                      fmt(r[f])
-                    )}
-                  </td>
-                ))}
-              </tr>
+                ) : (
+                  fmt(r[f])
+                )}
+              </td>
             ))}
-          </tbody>
-        </table>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+
+  {/* ================= 오른쪽 대시보드 ================= */}
+  <div className="w-full lg:max-w-[720px] p-4 bg-white rounded-lg shadow-lg border self-start">
+
+
+
+    {/* KPI 카드 */}
+    <div className="grid grid-cols-2 gap-3 mb-6">
+      <KPI title="총 매출" value={fmt(totalSale) + "원"} color="blue" />
+      <KPI title="총 기사비" value={fmt(totalDrv) + "원"} color="green" />
+      <KPI title="총 수수료" value={fmt(totalFee) + "원"} color="amber" />
+      <KPI
+        title="수익률"
+        value={totalSale ? ((totalFee / totalSale) * 100).toFixed(1) + "%" : "0%"}
+        color="purple"
+      />
+    </div>
+
+    {/* 기사별 TOP5 */}
+    <div className="bg-gray-50 rounded-lg border p-4 mb-6">
+      <h3 className="text-md font-bold mb-3">기사별 매출 TOP 5</h3>
+
+      {topDrivers.length === 0 && (
+        <div className="text-gray-500 text-sm">데이터가 없습니다.</div>
+      )}
+
+      <ul className="space-y-2">
+        {topDrivers.map((d, idx) => (
+          <li
+            key={idx}
+            className="flex justify-between items-center p-2 bg-white rounded border"
+          >
+            <span className="font-semibold">{idx + 1}위. {d.name}</span>
+            <span className="text-blue-600 font-bold">{fmt(d.total)}원</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+
+    {/* 최근 14일 매출 그래프 */}
+    <div className="bg-gray-50 rounded-lg border p-4">
+      <h3 className="text-md font-bold mb-3">최근 14일 매출 추이</h3>
+
+      <ResponsiveContainer width="100%" height={200}>
+        <LineChart data={chartData}>
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis dataKey="date" />
+          <YAxis />
+          <Tooltip />
+          <Line
+            type="monotone"
+            dataKey="매출"
+            stroke="#2563eb"
+            strokeWidth={3}
+          />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+
+  </div>
+</div>
+
+
+      
+      <Dialog open={fastOpen} onClose={() => setFastOpen(false)} className="relative z-50">
+  <div className="fixed inset-0 bg-black/50" aria-hidden="true" />
+  <div className="fixed inset-0 flex items-center justify-center p-4">
+    <Dialog.Panel className="bg-white rounded-lg shadow-xl p-6 w-full max-w-3xl">
+
+      <Dialog.Title className="text-xl font-bold mb-4 flex items-center justify-between">
+  빠른 신규등록
+
+  {/* 닫기 버튼 */}
+  <button
+    onClick={() => setFastOpen(false)}
+    className="text-gray-500 hover:text-black px-2 py-1"
+  >
+    ✕
+  </button>
+</Dialog.Title>
+
+      {/* 반복 입력 구역 (여러 건 등록 가능) */}
+      <div className="max-h-[60vh] overflow-y-auto space-y-4">
+        {fastRows.map((row, idx) => (
+          <div key={idx} className="border rounded p-4 bg-gray-50">
+            <div className="flex justify-between items-center mb-2">
+              <span className="font-semibold">등록 {idx + 1}건</span>
+              {idx > 0 && (
+                <button
+                  className="text-red-600"
+                  onClick={() => removeFastRow(idx)}
+                >
+                  삭제
+                </button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+
+              <div>
+                <label className="text-xs text-gray-600">날짜</label>
+                <input
+                  type="date"
+                  className="border rounded w-full px-2 py-1"
+                  value={row.날짜}
+                  onChange={(e) =>
+                    updateFastField(idx, "날짜", e.target.value)
+                  }
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-gray-600">거래처명</label>
+                <input
+                  className="border rounded w-full px-2 py-1"
+                  value={row.거래처명}
+                  onChange={(e) =>
+                    updateFastField(idx, "거래처명", e.target.value)
+                  }
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-gray-600">톤수</label>
+                <select
+                  className="border rounded w-full px-2 py-1"
+                  value={row.톤수}
+                  onChange={(e) =>
+                    updateFastField(idx, "톤수", e.target.value)
+                  }
+                >
+                  <option value="">선택</option>
+                  {tonList.map((t) => (
+                    <option key={t}>{t}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs text-gray-600">수량</label>
+                <input
+                  type="number"
+                  className="border rounded w-full px-2 py-1"
+                  value={row.수량}
+                  onChange={(e) =>
+                    updateFastField(idx, "수량", e.target.value)
+                  }
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-gray-600">차량번호</label>
+                
+                <input
+  className="border rounded w-full px-2 py-1"
+  value={row.차량번호}
+  onChange={(e) => updateFastField(idx, "차량번호", e.target.value)}
+  onBlur={(e) => matchFastDriver(idx, e.target.value)}
+  onKeyDown={(e) => {
+    if (e.key === "Enter") matchFastDriver(idx, e.target.value);
+  }}
+/>
+
+              </div>
+
+              <div>
+                <label className="text-xs text-gray-600">이름</label>
+                <input
+                  className="border rounded w-full px-2 py-1 bg-gray-100"
+                  value={row.이름}
+                  readOnly
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-gray-600">핸드폰번호</label>
+                <input
+                  className="border rounded w-full px-2 py-1 bg-gray-100"
+                  value={row.핸드폰번호}
+                  readOnly
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-gray-600">기사단가</label>
+                <input
+                  type="number"
+                  className="border rounded w-full px-2 py-1"
+                  value={row.기사단가}
+                  onChange={(e) =>
+                    updateFastField(idx, "기사단가", e.target.value)
+                  }
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-gray-600">수수료단가</label>
+                <input
+                  type="number"
+                  className="border rounded w-full px-2 py-1"
+                  value={row.수수료단가}
+                  onChange={(e) =>
+                    updateFastField(idx, "수수료단가", e.target.value)
+                  }
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-gray-600">기사운임</label>
+                <input
+                  className="border rounded w-full px-2 py-1 bg-gray-100"
+                  value={row.기사운임}
+                  readOnly
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-gray-600">수수료</label>
+                <input
+                  className="border rounded w-full px-2 py-1 bg-gray-100"
+                  value={row.수수료}
+                  readOnly
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-gray-600">청구운임</label>
+                <input
+                  className="border rounded w-full px-2 py-1 bg-gray-100"
+                  value={row.청구운임}
+                  readOnly
+                />
+              </div>
+
+            </div>
+          </div>
+        ))}
       </div>
+
+      <div className="flex justify-between mt-4">
+        <button
+          onClick={addFastRow}
+          className="px-3 py-2 bg-blue-600 text-white rounded"
+        >
+          + 행 추가
+        </button>
+
+        <button
+          onClick={submitFastRows}
+          className="px-3 py-2 bg-emerald-600 text-white rounded"
+        >
+          저장하기
+        </button>
+      </div>
+
+    </Dialog.Panel>
+  </div>
+</Dialog>
+
     </div>
   );
 }

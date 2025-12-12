@@ -1955,6 +1955,9 @@ function MobileOrderForm({
   // 🔍 거래처 자동검색 state
 const [clientQuery, setClientQuery] = useState("");
 const [matchedClients, setMatchedClients] = useState([]);
+  // ▶ 거래처 선택 후 '상차/하차에 어디로 적용할지' 선택 팝업용
+  const [showClientApplyModal, setShowClientApplyModal] = useState(false);
+  const [selectedClient, setSelectedClient] = useState(null);
 
 // 🔍 거래처 검색 함수
 const searchClient = (q) => {
@@ -2181,15 +2184,14 @@ if (!existing && val.length >= 2) {
           <ul className="absolute z-50 bg-white border shadow rounded mt-1 w-full max-h-40 overflow-auto">
             {matchedClients.map((c) => (
               <li
-                key={c.id}
-                className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
-                onMouseDown={() => {
-                  update("거래처명", c.거래처명);
-                  update("상차지명", c.거래처명);
-                  update("상차지주소", c.주소 || c.상차지주소 || c.하차지주소 || "");
-                  setMatchedClients([]);
-                }}
-              >
+  key={c.id}
+  className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
+  onMouseDown={() => {
+    setSelectedClient(c);
+    setShowClientApplyModal(true);
+    setMatchedClients([]);
+  }}
+>
                 <div className="font-semibold text-gray-800">
                   {c.거래처명}
                 </div>
@@ -2216,18 +2218,34 @@ if (!existing && val.length >= 2) {
                 className="w-full border rounded px-2 py-1 text-sm"
                 value={form.상차지명}
                 onChange={(e) => {
-                  update("상차지명", e.target.value);
-                  setQueryPickup(e.target.value);
-                  setShowPickupList(true);
-                  // 🔥 입력만 해도 주소 자동 매칭
-                  const val = e.target.value.trim().toLowerCase();
-                  const found = clients.find(
-                    (c) => String(c.거래처명 || "").trim().toLowerCase() === val
-                  );
-                  update("상차지주소",
-  found?.주소 || found?.상차지주소 || found?.하차지주소 || ""
-);
-                }}
+  const val = e.target.value;
+  update("상차지명", val);
+  setQueryPickup(val);
+  setShowPickupList(true);
+
+  // ★ 입력이 비어 있으면 자동매칭 하지 말고 주소도 지움
+  if (!val.trim()) {
+    update("상차지주소", "");
+    return;
+  }
+
+  // 입력이 완성됐을 때만 자동매칭 (완전 동일한 경우)
+  const normalized = val.trim().toLowerCase();
+  const found = clients.find(
+    (c) =>
+      String(c.거래처명 || "")
+        .trim()
+        .toLowerCase() === normalized
+  );
+
+  if (found) {
+    update(
+      "상차지주소",
+      found.주소 || found.상차지주소 || found.하차지주소 || ""
+    );
+  }
+}}
+
                 onFocus={() =>
                   form.상차지명 && setShowPickupList(true)
                 }
@@ -2275,10 +2293,19 @@ if (!existing && val.length >= 2) {
   setQueryDrop(val);
   setShowDropList(true);
 
+  // ★ 입력이 비어 있으면 주소도 지움
+  if (!val.trim()) {
+    update("하차지주소", "");
+    return;
+  }
+
+  // 정확히 일치하는 경우에만 자동매칭
   const normalized = val.trim().toLowerCase();
   const found = clients.find(
     (c) =>
-      String(c.거래처명 || "").trim().toLowerCase() === normalized
+      String(c.거래처명 || "")
+        .trim()
+        .toLowerCase() === normalized
   );
 
   if (found) {
@@ -2288,6 +2315,7 @@ if (!existing && val.length >= 2) {
     );
   }
 }}
+
 
 
                 onFocus={() =>
@@ -2646,6 +2674,55 @@ if (!existing && val.length >= 2) {
           </button>
         )}
       </div>
+      {/* =============================
+    거래처 적용 선택 팝업
+============================== */}
+{showClientApplyModal && selectedClient && (
+  <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[9999]">
+    <div className="bg-white rounded-xl shadow-xl p-5 w-72">
+
+      <div className="text-sm font-semibold mb-3">
+        선택한 거래처를 어디에 적용할까요?
+      </div>
+
+      <div className="mb-4 text-xs text-gray-500">
+        {selectedClient.거래처명}
+        <br />
+        {selectedClient.주소 || "- 주소 없음"}
+      </div>
+
+      <button
+        className="w-full py-2 mb-2 bg-blue-500 text-white rounded-lg text-sm"
+        onClick={() => {
+          update("상차지명", selectedClient.거래처명);
+          update("상차지주소", selectedClient.주소 || "");
+          setShowClientApplyModal(false);
+        }}
+      >
+        상차지에 적용
+      </button>
+
+      <button
+        className="w-full py-2 mb-2 bg-indigo-500 text-white rounded-lg text-sm"
+        onClick={() => {
+          update("하차지명", selectedClient.거래처명);
+          update("하차지주소", selectedClient.주소 || "");
+          setShowClientApplyModal(false);
+        }}
+      >
+        하차지에 적용
+      </button>
+
+      <button
+        className="w-full py-2 bg-gray-300 text-gray-700 rounded-lg text-sm"
+        onClick={() => setShowClientApplyModal(false)}
+      >
+        취소
+      </button>
+    </div>
+  </div>
+)}
+
     </div>
   );
 }

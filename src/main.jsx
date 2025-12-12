@@ -1,4 +1,4 @@
-// ===================== src/main.jsx (FINAL STABLE VERSION) =====================
+// ===================== src/main.jsx (ULTRA STABLE VERSION) =====================
 
 import React from "react";
 import ReactDOM from "react-dom/client";
@@ -11,54 +11,60 @@ ReactDOM.createRoot(document.getElementById("root")).render(
   </React.StrictMode>
 );
 
-// =====================================================
-// 서비스워커 등록 + 새 버전 감지 → App.jsx UI 이벤트 호출
-// =====================================================
-
-// ★ CLIENT_VERSION 은 항상 sw.js VERSION 과 동일해야 함
+// ★ SW + CLIENT 버전
 const CLIENT_VERSION = "2025-02-10-04";
 
 if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => {
-    navigator.serviceWorker
-      .register("/sw.js")
-      .then((reg) => {
-        console.log("SW Registered:", reg);
+  window.addEventListener("load", async () => {
+    try {
+      const reg = await navigator.serviceWorker.register("/sw.js");
+      console.log("SW Registered:", reg);
 
-        // 새 SW가 발견될 때 버전 체크
-        reg.addEventListener("updatefound", () => {
-          const newSW = reg.installing;
-          if (!newSW) return;
-
-          newSW.addEventListener("statechange", () => {
-            if (newSW.state === "installed") {
-              console.log("SW installed → Checking version…");
-
-              reg.active?.postMessage({
-                type: "CHECK_VERSION",
-                version: CLIENT_VERSION,
-              });
-            }
+      // -----------------------------
+      // 1) 서비스워커가 활성화될 때까지 기다린 후 버전 체크
+      // -----------------------------
+      function checkNow() {
+        if (reg.active) {
+          reg.active.postMessage({
+            type: "CHECK_VERSION",
+            version: CLIENT_VERSION,
           });
-        });
+        }
+      }
 
-        // 주기적 버전 체크 (30초)
-        setInterval(() => {
-          const msg = { type: "CHECK_VERSION", version: CLIENT_VERSION };
-          reg.active?.postMessage(msg);
-          reg.waiting?.postMessage(msg);
-        }, 30000);
+      // activate 이벤트 발생 시 체크
+      navigator.serviceWorker.addEventListener("controllerchange", () => {
+        console.log("SW controller changed → now active");
+        checkNow();
+      });
 
-        // 메시지 리스너
-        navigator.serviceWorker.addEventListener("message", (event) => {
-          if (event.data?.type === "NEW_VERSION") {
-            console.log("🚨 NEW VERSION DETECTED → Trigger UI Toast");
-            window.dispatchEvent(new Event("app-update-ready"));
-          }
-        });
-      })
-      .catch((err) =>
-        console.warn("SW Registration Failed:", err)
-      );
+      // 페이지 로드 직후에도 체크 시도(여기서는 reg.active가 null일 수 있음)
+      setTimeout(checkNow, 500);
+
+      // -----------------------------
+      // 2) 주기적으로 버전 체크 (30초)
+      // -----------------------------
+      setInterval(() => {
+        if (reg.active) {
+          reg.active.postMessage({
+            type: "CHECK_VERSION",
+            version: CLIENT_VERSION,
+          });
+        }
+      }, 30000);
+
+      // -----------------------------
+      // 3) SW → NEW_VERSION 메시지 수신
+      // -----------------------------
+      navigator.serviceWorker.addEventListener("message", (event) => {
+        if (event.data?.type === "NEW_VERSION") {
+          console.log("🚨 NEW VERSION DETECTED → Trigger UI Toast");
+          window.dispatchEvent(new Event("app-update-ready"));
+        }
+      });
+
+    } catch (err) {
+      console.warn("SW Registration Failed:", err);
+    }
   });
 }

@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@headlessui/react": "^2.2.9",
     "chart.js": "^4.5.1",
     "crypto-js": "^4.2.0",
     "firebase": "^10.14.1",

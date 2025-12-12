@@ -351,7 +351,17 @@ export {
 export default function DispatchApp() {
   const [user, setUser] = useState(null);
   const navigate = useNavigate();
+// ⭐ 고정거래처 매출 실시간 구독
+const [fixedRows, setFixedRows] = useState([]);
 
+useEffect(() => {
+  const fc = collection(db, "fixedClients");
+  const unsub = onSnapshot(fc, snap => {
+    const arr = snap.docs.map(d => d.data());
+    setFixedRows(arr);
+  });
+  return () => unsub();
+}, []);
   // ⭐ 여기 추가!
   const [subMenu, setSubMenu] = useState("고정거래처관리");
    // ⭐ 내 정보 패널 ON/OFF
@@ -790,8 +800,11 @@ return (
 )}
 
         {menu === "매출관리" && role === "admin" && (
-          <Settlement dispatchData={dispatchData} />
-        )}
+  <Settlement 
+    dispatchData={dispatchData} 
+    fixedRows={fixedRows}   // ★ 추가
+  />
+)}
 
         {menu === "거래처정산" && role === "admin" && (
           <ClientSettlement
@@ -1149,6 +1162,11 @@ const goStatus = (type, value) => {
     // ⭐ 여기 맨 위에 오도록
     const [clientQuery, setClientQuery] = React.useState("");
     const [isClientOpen, setIsClientOpen] = React.useState(false);
+    // ⭐ 거래처 선택 대상 팝업
+const [placeTargetPopup, setPlaceTargetPopup] = React.useState({
+  open: false,
+  place: null,
+});
     const [clientActive, setClientActive] = React.useState(0);
     const comboRef = React.useRef(null);
     React.useEffect(() => {
@@ -1391,24 +1409,58 @@ const savePlaceSmart = (name, addr, manager, phone) => {
     norm(p.업체명 || "").includes(q)
   );
 }, [clientQuery, placeList]);
-// ⭐⭐ 여기 아래 넣기 ⭐⭐
+// ⭐ 거래처 선택 시 → 어디에 적용할지 팝업 오픈
 function applyClientSelect(name) {
-  const p = placeList.find(
-    (x) => norm(x.업체명 || "") === norm(name)
-  );
-      setForm((prev) => ({
-        ...prev,
-        거래처명: name,
-        상차지명: name,               // ⭐ 상차지명 자동 입력
-        상차지주소: p?.주소 || "",      // ⭐ 주소 자동 입력
-        상차지담당자: p?.담당자 || "",
-        상차지담당자번호: p?.담당자번호 || "",
-      }));
+  const p = placeList.find(x => norm(x.업체명 || "") === norm(name));
 
-      setClientQuery(name);
-      setIsClientOpen(false);
-    };
+  setPlaceTargetPopup({
+    open: true,
+    place: {
+      업체명: name,
+      주소: p?.주소 || "",
+      담당자: p?.담당자 || "",
+      담당자번호: p?.담당자번호 || "",
+    }
+  });
 
+  setClientQuery(name);
+  setIsClientOpen(false);
+}
+// ⭐ 상차지에 적용 (여기 넣는 것! ← 바로 위 applyClientSelect 밑!!)
+function applyToPickup(place) {
+  setForm(prev => ({
+    ...prev,
+    거래처명: place.업체명,
+    상차지명: place.업체명,
+    상차지주소: place.주소,
+    상차지담당자: place.담당자,
+    상차지담당자번호: place.담당자번호,
+  }));
+  setPlaceTargetPopup({ open: false, place: null });
+}
+
+// ⭐ 하차지에 적용 (applyToPickup 바로 아래)
+function applyToDrop(place) {
+  setForm(prev => ({
+    ...prev,
+    거래처명: place.업체명,
+    하차지명: place.업체명,
+    하차지주소: place.주소,
+    하차지담당자: place.담당자,
+    하차지담당자번호: place.담당자번호,
+  }));
+  setPlaceTargetPopup({ open: false, place: null });
+}
+// ⭐ ESC 누르면 "선택 안함(상차지)" 작동
+React.useEffect(() => {
+  const handleEsc = (e) => {
+    if (e.key === "Escape" && placeTargetPopup.open) {
+      applyToPickup(placeTargetPopup.place);
+    }
+  };
+  window.addEventListener("keydown", handleEsc);
+  return () => window.removeEventListener("keydown", handleEsc);
+}, [placeTargetPopup]);
 
     // ✅ 주소 자동매칭 뱃지
     const [autoPickMatched, setAutoPickMatched] = React.useState(false);
@@ -2307,27 +2359,13 @@ function FuelSlideWidget() {
           placeholder="거래처 검색/입력"
           value={clientQuery}
           onFocus={() => setIsClientOpen(true)}
-          onChange={(e) => {
-            setClientQuery(e.target.value);
-            onChange("거래처명", e.target.value);
+         onChange={(e) => {
+  setClientQuery(e.target.value);
+  onChange("거래처명", e.target.value);
+  setIsClientOpen(true);
+  setClientActive(0);
+}}
 
-const found = placeList.find(
-  x => norm(x.업체명) === norm(e.target.value)
-);
-
-if (found) {
-  setForm(prev => ({
-    ...prev,
-    상차지명: found.업체명,
-    상차지주소: found.주소,
-    상차지담당자: found.담당자,
-    상차지담당자번호: found.담당자번호,
-  }));
-}
-
-            setIsClientOpen(true);
-            setClientActive(0);
-          }}
           onKeyDown={(e) => {
             const list = filteredClients;
             if (!isClientOpen && (e.key === "ArrowDown" || e.key === "Enter")) {
@@ -3228,6 +3266,45 @@ setAutoDropMatched(false);
     </div>
   </div>
 )}
+{/* ⭐ 거래처 적용 선택 팝업 */}
+{placeTargetPopup.open && (
+  <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[99999]">
+    <div className="bg-white rounded-xl p-6 w-[360px] shadow-xl border border-gray-200">
+
+      <h3 className="text-base font-bold mb-4">
+        어디에 적용하시겠습니까?
+      </h3>
+
+      <p className="text-sm mb-4">
+        선택한 업체: <b>{placeTargetPopup.place?.업체명}</b>
+      </p>
+
+      <div className="space-y-3">
+        <button
+          className="w-full bg-blue-600 text-white py-2 rounded-lg"
+          onClick={() => applyToPickup(placeTargetPopup.place)}
+        >
+          상차지에 적용
+        </button>
+
+        <button
+          className="w-full bg-emerald-600 text-white py-2 rounded-lg"
+          onClick={() => applyToDrop(placeTargetPopup.place)}
+        >
+          하차지에 적용
+        </button>
+
+        <button
+          className="w-full bg-gray-300 py-2 rounded-lg"
+          onClick={() => applyToPickup(placeTargetPopup.place)}
+        >
+          선택 안함 (기본: 상차지)
+        </button>
+      </div>
+
+    </div>
+  </div>
+)}
 {/* ================= Status Popup ================= */}
 {statusPopup && (
   <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
@@ -3427,6 +3504,7 @@ setAutoDropMatched(false);
   }
   // ===================== DispatchApp.jsx (PART 3/8) — END =====================
   
+
 // ===================== DispatchApp.jsx (PART 4/8 — START) =====================
 
 /* 메뉴용 실시간배차현황 — 배차현황과 100% 동일 컬럼/순서(+주소)
@@ -3524,19 +3602,16 @@ const copyMessage = (mode) => {
         ? pay
         : "";
 
-    // 1️⃣ 기본
     if (mode === "basic") {
       return `${plate} ${name} ${phone}`;
     }
 
-    // 2️⃣ 운임 포함
     if (mode === "fare") {
       return `${plate} ${name} ${phone}
 ${fare.toLocaleString()}원 ${payLabel} 배차되었습니다.`;
     }
 
-    // ✨ 전체 상세
-return `${r.상차일 || ""}(${yoil})
+    return `${r.상차일 || ""}(${yoil})
 
 ${r.상차지명 || ""} → ${r.하차지명 || ""}
 ${r.상차지주소 || ""} → ${r.하차지주소 || ""}
@@ -3550,6 +3625,18 @@ ${fare.toLocaleString()}원 ${payLabel} 배차되었습니다.`;
   navigator.clipboard.writeText(text);
   setCopyModalOpen(false);
   alert("📋 복사되었습니다!");
+
+  // ⭐⭐⭐ 복사 후 자동 타이머 (여기가 정확한 위치)
+  setTimeout(async () => {
+    try {
+      const latest = await navigator.clipboard.readText();
+      if (latest === text) {
+        alert("⏱ 아직 전달되지 않은 것 같습니다.\n카톡에 붙여넣기 하셨나요?");
+      }
+    } catch (e) {
+      console.error("Clipboard read error", e);
+    }
+  }, 3000);
 };
 
 
@@ -9279,7 +9366,7 @@ function NewOrderPopup({
 
 // ===================== DispatchApp.jsx (PART 6/8 — Settlement Premium) — START =====================
 
-function Settlement({ dispatchData }) {
+function Settlement({ dispatchData, fixedRows = [] }) {
   const [detailClient, setDetailClient] = React.useState(null);
 
   const toInt = (v) => parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
@@ -9290,12 +9377,29 @@ function Settlement({ dispatchData }) {
   const prevMonthDate = new Date(yearKey, now.getMonth() - 1, 1);
   const prevMonthKey = `${prevMonthDate.getFullYear()}-${String(prevMonthDate.getMonth() + 1).padStart(2, "0")}`;
 
-const rows = Array.isArray(dispatchData)
-  ? dispatchData.filter((r) =>
+// 1) 배차 데이터 (배차완료만)
+const dispatchRows = Array.isArray(dispatchData)
+  ? dispatchData.filter(r =>
       (r.배차상태 || "") === "배차완료" &&
       !String(r.거래처명 || "").includes("채석강")
     )
   : [];
+
+// 2) 고정거래처 데이터(FixedClients → Settlement 형식으로 매핑)
+const fixedMapped = (fixedRows || []).map(r => ({
+  상차일: r.날짜,
+  출발지: r.출발지 || "",
+  도착지: r.도착지 || "",
+  거래처명: r.거래처명 || "",
+  청구운임: r.청구운임 || 0,
+  기사운임: r.기사운임 || 0,
+  수수료: r.수수료 || 0,
+  배차상태: "배차완료",
+}));
+
+// ⭐ 최종 rows: 배차 + 고정거래처 합산
+const rows = [...dispatchRows, ...fixedMapped];
+
 
   const dayRows = rows.filter((r) => (r.상차일 || "") === today);
   const monthRows = rows.filter((r) => (r.상차일 || "").startsWith(monthKey));
