@@ -1,9 +1,9 @@
-// ======================= src/StandardFare.jsx =======================
+// ======================= src/StandardFare.jsx (PREMIUM UPGRADE) =======================
 import React, { useState, useEffect } from "react";
 import { db } from "./firebase";
 import { collection, onSnapshot } from "firebase/firestore";
 
-// 🔥 차량종류 옵션 목록 (중복 제거 + 정리 버전)
+// 차량종류 옵션
 const VEHICLE_TYPES = [
   "전체",
   "다마스",
@@ -14,19 +14,19 @@ const VEHICLE_TYPES = [
   "냉장탑",
   "냉동탑",
   "리프트",
-  "오토바이"
+  "오토바이",
 ];
 
-// 🔥 문자열 정규화 (공백 제거 + 소문자 변환)
+// 문자열 정규화
 const clean = (s) => String(s || "").replace(/\s+/g, "").trim().toLowerCase();
 
-// 🔥 화물내용 숫자 추출 (예: 16파렛/16p → 16)
+// 화물내용 숫자 추출
 const extractCargoNumber = (text) => {
   const m = String(text).match(/(\d+)/);
   return m ? Number(m[1]) : null;
 };
 
-// 🔥 톤수 숫자 추출 (예: 1톤/1t/1.4톤 → 1 or 1.4)
+// 톤수 추출
 const extractTon = (text) => {
   const m = String(text).replace(/톤|t/gi, "").match(/(\d+(\.\d+)?)/);
   return m ? Number(m[1]) : null;
@@ -42,11 +42,16 @@ export default function StandardFare() {
   const [ton, setTon] = useState(localStorage.getItem("sf_ton") || "");
   const [vehicle, setVehicle] = useState(localStorage.getItem("sf_vehicle") || "전체");
 
+  // 신규 추가 필터
+const [pickupAddr, setPickupAddr] = useState(localStorage.getItem("sf_pickupAddr") || "");
+const [dropAddr, setDropAddr] = useState(localStorage.getItem("sf_dropAddr") || "");
+const [client, setClient] = useState(localStorage.getItem("sf_client") || "전체");
+
   // 결과
   const [result, setResult] = useState([]);
   const [aiFare, setAiFare] = useState(null);
 
-  // 🔥 Firestore 실시간 구독
+  // Firestore 실시간 구독
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "dispatch"), (snap) => {
       const arr = snap.docs.map((d) => ({ _id: d.id, ...d.data() }));
@@ -63,8 +68,14 @@ export default function StandardFare() {
     localStorage.setItem("sf_ton", ton);
     localStorage.setItem("sf_vehicle", vehicle);
   }, [pickup, drop, cargo, ton, vehicle]);
+  // 🔥 주소 + 거래처 저장
+useEffect(() => {
+  localStorage.setItem("sf_pickupAddr", pickupAddr);
+  localStorage.setItem("sf_dropAddr", dropAddr);
+  localStorage.setItem("sf_client", client);
+}, [pickupAddr, dropAddr, client]);
 
-  // ⭐ AI 추천운임 계산
+  // AI 추천 운임 계산
   const calcAiFare = (rows) => {
     if (!rows.length) return null;
 
@@ -78,41 +89,66 @@ export default function StandardFare() {
     const min = Math.min(...fares);
     const max = Math.max(...fares);
 
-    // 최근 데이터
     const latest = rows
       .slice()
       .sort((a, b) => (b.상차일 || "").localeCompare(a.상차일 || ""))[0];
 
     const latestFare = Number(String(latest?.청구운임 || 0).replace(/[^\d]/g, ""));
-
     const aiValue = Math.round(latestFare * 0.6 + avg * 0.4);
     const confidence = Math.min(95, 60 + rows.length * 5);
 
     return { avg, min, max, latestFare, aiValue, confidence };
   };
 
-  // 🔍 검색 실행
-  const search = () => {
-    if (!pickup.trim() || !drop.trim()) {
-      alert("상차지명과 하차지명을 입력하세요.");
-      return;
-    }
+  // 검색 실행
+const search = () => {
+  // 상차 조건 검사 (명칭 또는 주소 둘 중 하나만 있어도 통과)
+  if (!pickup.trim() && !pickupAddr.trim()) {
+    alert("상차지명 또는 상차지 주소 중 하나는 반드시 입력해야 합니다.");
+    return;
+  }
+
+  // 하차 조건 검사 (명칭 또는 주소 둘 중 하나만 있어도 통과)
+  if (!drop.trim() && !dropAddr.trim()) {
+    alert("하차지명 또는 하차지 주소 중 하나는 반드시 입력해야 합니다.");
+    return;
+  }
 
     let list = [...dispatchData];
 
-    // 1) 상/하차지 유사검색(부분일치 허용)
-    list = list.filter(
-      (r) =>
-        clean(r.상차지명).includes(clean(pickup)) ||
-        clean(pickup).includes(clean(r.상차지명))
-    );
-    list = list.filter(
-      (r) =>
-        clean(r.하차지명).includes(clean(drop)) ||
-        clean(drop).includes(clean(r.하차지명))
-    );
+  // ✅ 상차지 OR 조건 (이름 + 주소 + 둘 다 허용)
+  list = list.filter((r) => {
+    const name = clean(r.상차지명 || "");
+    const addr = clean(r.상차지주소 || "");
+    const p = clean(pickup);
+    const pa = clean(pickupAddr);
 
-    // 2) 화물내용 (숫자/문자 모두 허용)
+    // 아무 것도 안 넣으면 통과 (위에서 이미 최소 1개 입력 체크했음)
+    if (!p && !pa) return true;
+
+    return (
+      (p && (name.includes(p) || addr.includes(p))) ||
+      (pa && (name.includes(pa) || addr.includes(pa)))
+    );
+  });
+
+  // ✅ 하차지 OR 조건 (이름 + 주소 + 둘 다 허용)
+  list = list.filter((r) => {
+    const name = clean(r.하차지명 || "");
+    const addr = clean(r.하차지주소 || "");
+    const d = clean(drop);
+    const da = clean(dropAddr);
+
+    if (!d && !da) return true;
+
+    return (
+      (d && (name.includes(d) || addr.includes(d))) ||
+      (da && (name.includes(da) || addr.includes(da)))
+    );
+  });
+
+
+    // 화물내용
     if (cargo.trim()) {
       const cargoNum = extractCargoNumber(cargo);
       list = list.filter((r) => {
@@ -121,7 +157,7 @@ export default function StandardFare() {
       });
     }
 
-    // 3) 톤수 유사검색
+    // 톤수
     if (ton.trim()) {
       const tonNum = extractTon(ton);
       list = list.filter((r) => {
@@ -130,9 +166,14 @@ export default function StandardFare() {
       });
     }
 
-    // 4) 차량종류 필터
+    // 차량종류
     if (vehicle !== "전체") {
       list = list.filter((r) => clean(r.차량종류).includes(clean(vehicle)));
+    }
+
+    // 신규 추가: 거래처명 필터
+    if (client !== "전체") {
+      list = list.filter((r) => clean(r.거래처명) === clean(client));
     }
 
     setResult(list);
@@ -141,13 +182,16 @@ export default function StandardFare() {
     if (list.length === 0) alert("조회된 데이터가 없습니다.");
   };
 
-  // 🔄 초기화 버튼
+  // 초기화
   const reset = () => {
     setPickup("");
     setDrop("");
     setCargo("");
     setTon("");
     setVehicle("전체");
+    setPickupAddr("");
+    setDropAddr("");
+    setClient("전체");
     setResult([]);
     setAiFare(null);
 
@@ -156,56 +200,79 @@ export default function StandardFare() {
     localStorage.removeItem("sf_cargo");
     localStorage.removeItem("sf_ton");
     localStorage.removeItem("sf_vehicle");
+    localStorage.removeItem("sf_pickupAddr");
+localStorage.removeItem("sf_dropAddr");
+localStorage.removeItem("sf_client");
   };
 
   return (
     <div className="p-6">
-      <h2 className="text-2xl font-bold mb-6">📘 표준 운임표</h2>
+      <h2 className="text-3xl font-bold mb-6 text-gray-800">📘 표준 운임표 (Premium UI)</h2>
 
-      {/* 검색창 */}
-      <div className="bg-white p-5 border rounded-xl shadow mb-6">
-        <div className="grid grid-cols-5 gap-4">
+      {/* 검색 카드 */}
+      <div className="bg-white p-6 border rounded-2xl shadow-lg mb-6">
+        
+        {/* 1줄차 입력 */}
+        <div className="grid grid-cols-6 gap-4 mb-4">
 
           <div>
-            <label className="text-sm text-gray-500">상차지 *</label>
+            <label className="text-sm text-gray-600 font-medium">상차지 *</label>
             <input
-              className="border p-2 rounded w-full"
+              className="border p-2 rounded-lg w-full shadow"
               value={pickup}
               onChange={(e) => setPickup(e.target.value)}
             />
           </div>
 
           <div>
-            <label className="text-sm text-gray-500">하차지 *</label>
+            <label className="text-sm text-gray-600 font-medium">상차지 주소</label>
             <input
-              className="border p-2 rounded w-full"
+              className="border p-2 rounded-lg w-full shadow"
+              value={pickupAddr}
+              onChange={(e) => setPickupAddr(e.target.value)}
+            />
+          </div>
+
+          <div>
+            <label className="text-sm text-gray-600 font-medium">하차지 *</label>
+            <input
+              className="border p-2 rounded-lg w-full shadow"
               value={drop}
               onChange={(e) => setDrop(e.target.value)}
             />
           </div>
 
           <div>
-            <label className="text-sm text-gray-500">화물내용</label>
+            <label className="text-sm text-gray-600 font-medium">하차지 주소</label>
             <input
-              className="border p-2 rounded w-full"
-              value={cargo}
-              onChange={(e) => setCargo(e.target.value)}
+              className="border p-2 rounded-lg w-full shadow"
+              value={dropAddr}
+              onChange={(e) => setDropAddr(e.target.value)}
             />
           </div>
 
           <div>
-            <label className="text-sm text-gray-500">차량톤수</label>
-            <input
-              className="border p-2 rounded w-full"
-              value={ton}
-              onChange={(e) => setTon(e.target.value)}
-            />
-          </div>
-
-          <div>
-            <label className="text-sm text-gray-500">차량종류</label>
+            <label className="text-sm text-gray-600 font-medium">거래처</label>
             <select
-              className="border p-2 rounded w-full"
+              className="border p-2 rounded-lg w-full shadow"
+              value={client}
+              onChange={(e) => setClient(e.target.value)}
+            >
+              <option value="전체">전체</option>
+              {[...new Set(dispatchData.map((r) => r.거래처명).filter(Boolean))].map(
+                (c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                )
+              )}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-sm text-gray-600 font-medium">차량종류</label>
+            <select
+              className="border p-2 rounded-lg w-full shadow"
               value={vehicle}
               onChange={(e) => setVehicle(e.target.value)}
             >
@@ -216,105 +283,135 @@ export default function StandardFare() {
               ))}
             </select>
           </div>
+
         </div>
 
-        <div className="mt-4 flex gap-3">
-          <button
-            className="bg-blue-600 text-white px-5 py-2 rounded shadow"
-            onClick={search}
-          >
-            🔍 검색하기
-          </button>
+        {/* 2줄차 입력 */}
+        <div className="grid grid-cols-4 gap-4">
+          <div>
+            <label className="text-sm text-gray-600 font-medium">화물내용</label>
+            <input
+              className="border p-2 rounded-lg w-full shadow"
+              value={cargo}
+              onChange={(e) => setCargo(e.target.value)}
+            />
+          </div>
 
-          <button
-            className="bg-gray-400 text-white px-5 py-2 rounded shadow"
-            onClick={reset}
-          >
-            초기화
-          </button>
+          <div>
+            <label className="text-sm text-gray-600 font-medium">차량톤수</label>
+            <input
+              className="border p-2 rounded-lg w-full shadow"
+              value={ton}
+              onChange={(e) => setTon(e.target.value)}
+            />
+          </div>
+
+          <div className="flex items-end gap-3">
+            <button
+              className="bg-blue-600 text-white px-5 py-2 rounded-lg shadow font-semibold"
+              onClick={search}
+            >
+              🔍 조회
+            </button>
+
+            <button
+              className="bg-gray-500 text-white px-5 py-2 rounded-lg shadow font-semibold"
+              onClick={reset}
+            >
+              초기화
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* 요약 */}
+      {/* 검색 결과 요약 */}
       {result.length > 0 && (
-        <div className="p-3 bg-blue-50 border border-blue-200 rounded mb-5">
+        <div className="p-3 bg-blue-100 border border-blue-300 rounded-lg mb-5 text-gray-800">
           총 <b>{result.length}</b> 건의 과거 데이터를 찾았습니다.
         </div>
       )}
 
-      {/* AI 추천 */}
+      {/* AI 추천 박스 */}
       {aiFare && (
-        <div className="bg-amber-50 p-5 rounded-xl border border-amber-300 shadow mb-6">
-          <h3 className="text-lg font-bold mb-3">🤖 AI 추천운임</h3>
+        <div className="bg-yellow-50 p-6 rounded-xl border border-yellow-300 shadow mb-6">
+          <h3 className="text-xl font-bold mb-3 text-yellow-700">🤖 AI 추천운임</h3>
           <p>평균 운임: <b>{aiFare.avg.toLocaleString()}</b> 원</p>
           <p>최소~최대: <b>{aiFare.min.toLocaleString()} ~ {aiFare.max.toLocaleString()}</b> 원</p>
           <p>최근 동일구간: <b>{aiFare.latestFare.toLocaleString()}</b> 원</p>
 
-          <div className="mt-4 p-4 bg-white border rounded shadow-sm">
-            <div className="text-xl text-amber-700 font-bold mb-1">
+          <div className="mt-4 p-4 bg-white border rounded shadow">
+            <div className="text-2xl text-yellow-700 font-bold mb-1">
               📌 {aiFare.aiValue.toLocaleString()} 원
             </div>
-            <div className="text-gray-600">
-              신뢰도: <b>{aiFare.confidence}%</b>
-            </div>
+            <div className="text-gray-600">신뢰도: <b>{aiFare.confidence}%</b></div>
           </div>
         </div>
       )}
 
       {/* 결과 테이블 */}
-      <div className="overflow-auto border rounded-xl shadow">
-        <table className="min-w-[1300px] text-sm border">
-          <thead className="bg-gray-100">
-            <tr>
-              {[
-                "상차일",
-                "상차지명",
-                "하차지명",
-                "화물내용",
-                "차량종류",
-                "차량톤수",
-                "청구운임",
-                "기사운임",
-                "수수료",
-              ].map((t) => (
-                <th key={t} className="border px-3 py-2 text-center">
-                  {t}
-                </th>
-              ))}
-            </tr>
-          </thead>
+<div className="overflow-auto border rounded-xl shadow-lg">
+  <table className="min-w-[1500px] text-sm border">
+    <thead className="bg-gray-200">
+      <tr>
+        {[
+          "상차일",
+          "상차지명",
+          "상차지주소",
+          "하차지명",
+          "하차지주소",
+          "화물내용",
+          "차량종류",
+          "차량톤수",
+          "청구운임",
+          "기사운임",
+          "수수료",
+          "메모",
+        ].map((t) => (
+          <th
+            key={t}
+            className="border px-3 py-2 text-center font-semibold text-gray-700"
+          >
+            {t}
+          </th>
+        ))}
+      </tr>
+    </thead>
 
-          <tbody>
-            {result.length === 0 ? (
-              <tr>
-                <td colSpan={9} className="py-6 text-center text-gray-500">
-                  데이터가 없습니다.
-                </td>
-              </tr>
-            ) : (
-              result.map((r) => (
-                <tr key={r._id} className="odd:bg-white even:bg-gray-50">
-                  <td className="border px-3 py-2 text-center">{r.상차일}</td>
-                  <td className="border px-3 py-2">{r.상차지명}</td>
-                  <td className="border px-3 py-2">{r.하차지명}</td>
-                  <td className="border px-3 py-2">{r.화물내용}</td>
-                  <td className="border px-3 py-2">{r.차량종류}</td>
-                  <td className="border px-3 py-2">{r.차량톤수}</td>
-                  <td className="border px-3 py-2 text-right">
-                    {Number(r.청구운임 || 0).toLocaleString()}
-                  </td>
-                  <td className="border px-3 py-2 text-right">
-                    {Number(r.기사운임 || 0).toLocaleString()}
-                  </td>
-                  <td className="border px-3 py-2 text-right">
-                    {Number(r.수수료 || 0).toLocaleString()}
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+    <tbody>
+      {result.length === 0 ? (
+        <tr>
+          <td colSpan={12} className="py-6 text-center text-gray-500">
+            데이터가 없습니다.
+          </td>
+        </tr>
+      ) : (
+        result.map((r) => (
+          <tr key={r._id} className="odd:bg-white even:bg-gray-50">
+            <td className="border px-3 py-2 text-center">{r.상차일}</td>
+            <td className="border px-3 py-2">{r.상차지명}</td>
+            <td className="border px-3 py-2">{r.상차지주소}</td>
+            <td className="border px-3 py-2">{r.하차지명}</td>
+            <td className="border px-3 py-2">{r.하차지주소}</td>
+            <td className="border px-3 py-2">{r.화물내용}</td>
+            <td className="border px-3 py-2">{r.차량종류}</td>
+            <td className="border px-3 py-2">{r.차량톤수}</td>
+            <td className="border px-3 py-2 text-right">
+              {Number(r.청구운임 || 0).toLocaleString()}
+            </td>
+            <td className="border px-3 py-2 text-right">
+              {Number(r.기사운임 || 0).toLocaleString()}
+            </td>
+            <td className="border px-3 py-2 text-right">
+              {Number(r.수수료 || 0).toLocaleString()}
+            </td>
+            <td className="border px-3 py-2">{r.메모}</td>
+          </tr>
+        ))
+      )}
+    </tbody>
+  </table>
+</div>
+
     </div>
   );
 }
