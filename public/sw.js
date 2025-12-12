@@ -1,7 +1,7 @@
 // ===================== public/sw.js (FINAL STABLE VERSION) =====================
 
 // ★★ 배포할 때마다 MUST: VERSION 숫자 증가 ★★
-const VERSION = "2025-02-10-03";
+const VERSION = "2025-02-10-04";
 
 console.log("Service Worker Loaded. VERSION =", VERSION);
 

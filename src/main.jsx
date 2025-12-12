@@ -16,7 +16,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
 // =====================================================
 
 // ★ CLIENT_VERSION 은 항상 sw.js VERSION 과 동일해야 함
-const CLIENT_VERSION = "2025-02-10-03";
+const CLIENT_VERSION = "2025-02-10-04";
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {

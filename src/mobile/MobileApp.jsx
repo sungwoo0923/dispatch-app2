@@ -2224,7 +2224,9 @@ if (!existing && val.length >= 2) {
                   const found = clients.find(
                     (c) => String(c.거래처명 || "").trim().toLowerCase() === val
                   );
-                  update("상차지주소", found?.상차지주소 || "");
+                  update("상차지주소",
+  found?.주소 || found?.상차지주소 || found?.하차지주소 || ""
+);
                 }}
                 onFocus={() =>
                   form.상차지명 && setShowPickupList(true)
@@ -2276,13 +2278,14 @@ if (!existing && val.length >= 2) {
   const normalized = val.trim().toLowerCase();
   const found = clients.find(
     (c) =>
-      String(c.거래처명 || c.상호 || c.하차지명 || c.상차지명 || "")
-        .trim()
+      String(c.거래처명 || "").trim().toLowerCase() === normalized
         .toLowerCase() === normalized
   );
 
   if (found) {
-    update("하차지주소", found.주소 || found.하차지주소 || found.상차지주소 || "");
+    update("하차지주소",
+    found?.주소 || found?.하차지주소 || found?.상차지주소 || ""
+  );
   }
 }}
 
