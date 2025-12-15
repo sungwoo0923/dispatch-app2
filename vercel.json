@@ -1,7 +1,8 @@
 {
-  "functions": {
-    "api/send24.js": {
-      "runtime": "nodejs18"
+  "builds": [
+    {
+      "src": "api/send24.js",
+      "use": "@vercel/node"
     }
-  }
+  ]
 }
