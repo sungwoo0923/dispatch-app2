@@ -1,7 +1,7 @@
 {
   "builds": [
     {
-      "src": "dispatch-app2/api/send24.js",
+      "src": "api/send24.js",
       "use": "@vercel/node"
     }
   ]
