@@ -15,10 +15,6 @@ import {
 } from "recharts";
 import { BarChart, Bar, Legend } from "recharts";
 import FleetManagement from "./FleetManagement";
-
-
-
-
 /* -------------------------------------------------
    발행사(우리 회사) 고정 정보
 --------------------------------------------------*/
@@ -100,7 +96,7 @@ import { auth } from "./firebase";
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "firebase/auth";
 import { db } from "./firebase";
 import {
-  doc, getDoc, setDoc, serverTimestamp, collection, getDocs,
+  doc, getDoc, setDoc, updateDoc, serverTimestamp, collection, getDocs,
   onSnapshot, deleteDoc
 } from "firebase/firestore";
 
@@ -2774,13 +2770,49 @@ function FuelSlideWidget() {
         const { 거래처명, 상차지명, 하차지명, 상차일, 상차시간, 하차일, 하차시간 } = form;
         if (!거래처명 || !상차지명 || !하차지명) return alert("거래처/상차지명/하차지명을 입력해주세요.");
         if (!상차일 || !하차일) return alert("상차일/하차일은 반드시 필요합니다.");
-        const res = await sendOrderTo24(form);
+       const res = await sendOrderTo24(form);
 
-        if (res?.success) {
-          alert(`📡 24시콜 전송 완료!\n\n전송건수: 1건\n실패건수: 0건\n메시지: ${res?.message || "성공"}`);
-        } else {
-          alert(`⛔ 전송 실패!\n\n전송건수: 0건\n실패건수: 1건\n사유: ${res?.message || "알 수 없는 오류"}`);
-        }
+// 🔹 기존 로그 불러오기
+const prevLogs = Array.isArray(form["24시전송로그"])
+  ? form["24시전송로그"]
+  : [];
+
+const newLog = {
+  at: serverTimestamp(),
+  success: !!res?.success,
+  resultCode: res?.resultCode || "",
+  resultMsg: res?.resultMsg || res?.message || "",
+};
+
+if (res?.success) {
+  // ✅ 성공
+  await patchDispatch(form._id, {
+    "24시전송여부": true,
+    "24시전송일시": serverTimestamp(),
+    "24시전송결과코드": res.resultCode || "0000",
+    "24시전송메시지": res.resultMsg || "성공",
+    "24시전송로그": [...prevLogs, newLog],
+    배차상태: "24시전송완료",
+  });
+
+  alert(
+    `📡 24시콜 전송 완료!\n\n` +
+    `전송건수: 1건\n실패건수: 0건\n` +
+    `메시지: ${res.resultMsg || "성공"}`
+  );
+} else {
+  // ❌ 실패
+  await patchDispatch(form._id, {
+    "24시전송여부": false,
+    "24시전송로그": [...prevLogs, newLog],
+  });
+
+  alert(
+    `⛔ 24시콜 전송 실패!\n\n` +
+    `사유: ${res?.resultMsg || "알 수 없는 오류"}`
+  );
+}
+
       }}
       className="ml-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-sm text-white rounded-lg"
     >
@@ -3527,6 +3559,22 @@ function RealtimeStatus({
 
   const isAdmin = role === "admin";
   
+   // ==========================
+  // 📌 날짜 유틸 (반드시 최상단)
+  // ==========================
+  const todayKST = () => {
+    const d = new Date();
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    return d.toISOString().slice(0, 10);
+  };
+
+  const tomorrowKST = () => {
+    const d = new Date();
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    d.setDate(d.getDate() + 1);
+    return d.toISOString().slice(0, 10);
+  };
+
 // 🔵 하차지 자동완성 상태
 const [placeOptions, setPlaceOptions] = React.useState([]);   // 자동완성 목록
 const [showPlaceDropdown, setShowPlaceDropdown] = React.useState(false);  // 드롭다운 표시 여부
@@ -3845,17 +3893,6 @@ const [driverSelectRowId, setDriverSelectRowId] = React.useState(null);
 
   // 첨부파일 개수
   const [attachCount, setAttachCount] = React.useState({});
-
-  // ------------------------
-  // 한국 시간
-  // ------------------------
-// 정확한 한국 날짜 계산 (UTC 편차 자동 반영)
-const todayKST = () => {
-  const d = new Date();
-  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
-  return d.toISOString().slice(0, 10);
-};
-
 
   // ------------------------
   // Firestore → rows 반영 (순서 절대 보존)
@@ -4783,6 +4820,17 @@ ${url}
   >
     당일
   </button>
+  <button
+  onClick={() => {
+    const t = tomorrowKST();
+    setStartDate(t);
+    setEndDate(t);
+  }}
+  className="px-3 py-1 rounded bg-emerald-600 text-white text-sm"
+>
+  내일
+</button>
+
 
   <button
     onClick={() => {
@@ -5065,6 +5113,8 @@ XLSX.writeFile(wb, "실시간배차현황.xlsx");
                 "이름",
                 "전화번호",
                 "배차상태",
+                "24시상태",
+                "24시전송",
                 "청구운임",
                 "기사운임",
                 "수수료",
@@ -5172,6 +5222,32 @@ XLSX.writeFile(wb, "실시간배차현황.xlsx");
                       {r.배차상태}
                     </span>
                   </td>
+                  {/* 24시 상태 */}
+<td className={`${cell} text-xs`}>
+  {r["24시전송여부"] === true && (
+    <span className="text-green-600 font-semibold">✅ 전송완료</span>
+  )}
+
+  {r["24시전송여부"] === false && (
+    <span className="text-red-600">
+      {r["24시전송로그"]?.slice(-1)[0]?.resultMsg || "전송실패"}
+    </span>
+  )}
+</td>
+{/* 24시 재전송 */}
+<td className={cell}>
+  <button
+    disabled={r["24시전송여부"] === true}
+    onClick={() => handleSend24(r)}
+    className={`px-3 py-1 rounded text-xs ${
+      r["24시전송여부"]
+        ? "bg-gray-300 cursor-not-allowed"
+        : "bg-blue-600 hover:bg-blue-700 text-white"
+    }`}
+  >
+    {r["24시전송여부"] ? "전송완료" : "🔁 재전송"}
+  </button>
+</td>
 
                   {/* 청구운임 */}
                   <td className={cell}>
@@ -6809,15 +6885,46 @@ const todayKST = () => {
   return korea.toISOString().slice(0, 10);
 };
 
-// 📌 이번 달 1일 ~ 말일 정확히 반환
+// 📌 이번 달 1일 ~ 말일 (KST 기준, UTC 밀림 방지)
 const getMonthRange = () => {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = d.getMonth(); // 0~11
-  const first = new Date(y, m, 1).toISOString().slice(0, 10);
-  const last = new Date(y, m + 1, 0).toISOString().slice(0, 10);
-  return { first, last };
+  const now = new Date();
+
+  // KST 기준 날짜 생성
+  const firstKST = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    1,
+    9, 0, 0
+  );
+
+  const lastKST = new Date(
+    now.getFullYear(),
+    now.getMonth() + 1,
+    0,
+    9, 0, 0
+  );
+
+  const toYMD = (d) => {
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  return {
+    first: toYMD(firstKST),
+    last: toYMD(lastKST),
+  };
 };
+
+// 📌 내일 날짜 (KST 기준)
+const tomorrowKST = () => {
+  const d = new Date();
+  const korea = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+  korea.setDate(korea.getDate() + 1);
+  return korea.toISOString().slice(0, 10);
+};
+
 
   const [q, setQ] = React.useState(() => {
   try {
@@ -6831,6 +6938,8 @@ const getMonthRange = () => {
   const [endDate, setEndDate] = React.useState("");
   const [selected, setSelected] = React.useState(new Set());
   const [editMode, setEditMode] = React.useState(false);
+  // 🔵 24시 전송중 상태 (row 단위)
+const [sending24, setSending24] = React.useState({});
   // ==========================
 // 선택삭제 + 되돌리기 기능
 // ==========================
@@ -7054,7 +7163,7 @@ const handleFareSearch = () => {
   });
 
   const toInt = (v) => parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10) || 0;
-  const getId = (r) => r._id || r.id || r._fsid;
+const getId = (r) => r._id ?? r.id ?? r._fsid;
 
   // =============================================
 // ✅ 대용량 업로드 (엑셀 → Firestore)
@@ -7302,6 +7411,80 @@ const recommendDriver = (row) => {
     .join("\n");
 
   alert(`🚚 자동 기사 추천 결과\n\n${top}`);
+};
+const handleSend24 = async (row) => {
+  const id = getId(row);
+  if (!id) return;
+
+  // 🔒 이미 전송중이면 차단
+  if (sending24[id]) return;
+
+  // 주소 필수 체크
+  if (!row.상차지주소 || !row.하차지주소) {
+    alert("❌ 상차지 / 하차지 주소가 없습니다.");
+    return;
+  }
+
+  // 🔄 전송중 ON
+  setSending24((p) => ({ ...p, [id]: true }));
+
+  try {
+    const res = await sendOrderTo24(row);
+
+    if (res?.success) {
+      await patchDispatch(id, {
+        배차방식: "24시",
+        "24시전송여부": true,
+        "24시전송로그": [
+          ...(row["24시전송로그"] || []),
+          {
+            at: new Date().toISOString(),
+            success: true,
+            resultMsg: res.message || "성공",
+          },
+        ],
+      });
+
+      alert("📡 24시콜 전송 완료");
+    } else {
+      await patchDispatch(id, {
+        "24시전송여부": false,
+        "24시전송로그": [
+          ...(row["24시전송로그"] || []),
+          {
+            at: new Date().toISOString(),
+            success: false,
+            resultMsg: res?.message || "실패",
+          },
+        ],
+      });
+
+      alert(`⛔ 전송 실패\n${res?.message || "알 수 없는 오류"}`);
+    }
+  } catch (e) {
+    console.error(e);
+
+    await patchDispatch(id, {
+      "24시전송여부": false,
+      "24시전송로그": [
+        ...(row["24시전송로그"] || []),
+        {
+          at: new Date().toISOString(),
+          success: false,
+          resultMsg: "네트워크 오류",
+        },
+      ],
+    });
+
+    alert("❌ 네트워크 오류");
+  } finally {
+    // 🔓 전송중 OFF
+    setSending24((p) => {
+      const next = { ...p };
+      delete next[id];
+      return next;
+    });
+  }
 };
 
 
@@ -7667,6 +7850,19 @@ return (
 >
   당일
 </button>
+<button
+  onClick={() => {
+    const t = tomorrowKST();
+    setStartDate(t);
+    setEndDate(t);
+    setQ("");       // 검색어 초기화
+    setPage(0);
+  }}
+  className="px-3 py-1 rounded bg-emerald-600 text-white text-sm"
+>
+  내일
+</button>
+
 
 
 <button
@@ -7714,27 +7910,85 @@ return (
       const row = dispatchData.find((r) => r._id === id);
       if (!row) continue;
 
+      // 🔒 전송중이면 스킵
+      if (sending24[id]) continue;
+
+      // 주소 체크
       if (!row.상차지주소 || !row.하차지주소) {
-        alert(`[${row.상차지명} → ${row.하차지명}]\n주소가 없습니다.`);
         fail++;
+        await patchDispatch(id, {
+          "24시전송여부": false,
+          "24시전송로그": [
+            ...(row["24시전송로그"] || []),
+            {
+              at: new Date().toISOString(),
+              success: false,
+              resultMsg: "주소 누락",
+            },
+          ],
+        });
         continue;
       }
+
+      // 🔄 전송중 ON
+      setSending24((p) => ({ ...p, [id]: true }));
 
       try {
         const res = await sendOrderTo24(row);
 
         if (res?.success) {
           success++;
+          await patchDispatch(id, {
+            배차방식: "24시",
+            "24시전송여부": true,
+            "24시전송로그": [
+              ...(row["24시전송로그"] || []),
+              {
+                at: new Date().toISOString(),
+                success: true,
+                resultMsg: res.message || "성공",
+              },
+            ],
+          });
         } else {
           fail++;
+          await patchDispatch(id, {
+            "24시전송여부": false,
+            "24시전송로그": [
+              ...(row["24시전송로그"] || []),
+              {
+                at: new Date().toISOString(),
+                success: false,
+                resultMsg: res?.message || "실패",
+              },
+            ],
+          });
         }
       } catch (e) {
-        console.error("24시콜 오류:", e);
+        console.error(e);
         fail++;
+        await patchDispatch(id, {
+          "24시전송여부": false,
+          "24시전송로그": [
+            ...(row["24시전송로그"] || []),
+            {
+              at: new Date().toISOString(),
+              success: false,
+              resultMsg: "네트워크 오류",
+            },
+          ],
+        });
+      } finally {
+        // 🔓 전송중 OFF
+        setSending24((p) => {
+          const next = { ...p };
+          delete next[id];
+          return next;
+        });
       }
     }
 
-    alert(`📡 24시콜 선택전송 완료!
+    alert(`📡 24시콜 선택전송 완료
 성공: ${success}건
 실패: ${fail}건`);
   }}
@@ -7742,7 +7996,6 @@ return (
 >
   📡 선택전송(24시콜)
 </button>
-
 
 
 {/* 📋 기사복사 */}
@@ -7861,7 +8114,7 @@ return (
                 "선택","순번","등록일","상차일","상차시간","하차일","하차시간",
                 "거래처명","상차지명","상차지주소","하차지명","하차지주소",
                 "화물내용","차량종류","차량톤수","혼적","차량번호","기사명","전화번호",
-                "배차상태","청구운임","기사운임","수수료","지급방식","배차방식","메모",
+                "배차상태","24시상태","24시전송","청구운임","기사운임","수수료","지급방식","배차방식","메모",
               ].map((h) => (
                 <th key={h} className="border px-2 py-2 text-center whitespace-nowrap">
                   {h === "선택" ? (
@@ -8000,6 +8253,61 @@ return (
                   <td className="border text-center">
                     <StatusBadge s={row.배차상태} />
                   </td>
+<td className="border text-xs text-center whitespace-nowrap max-w-[160px]">
+  {row["24시전송여부"] === true && (
+    <span className="text-green-600 font-semibold">✅ 전송완료</span>
+  )}
+
+  {row["24시전송여부"] === false && (() => {
+    const logs = row["24시전송로그"] || [];
+    const last = logs.slice(-1)[0];
+    const msg = last?.resultMsg || "전송실패";
+    const failCount = logs.filter(l => l.success === false).length;
+
+    return (
+      <div className="flex items-center justify-center gap-1">
+        {/* 실패 메시지 (말줄임 + hover) */}
+        <span
+          className="text-red-600 truncate inline-block max-w-[110px]"
+          title={msg}
+        >
+          {msg}
+        </span>
+
+        {/* 🔴 실패 누적 경고 */}
+        {failCount >= 3 && (
+          <span
+            className="ml-1 px-1.5 py-0.5 rounded text-[10px] font-bold
+                       bg-red-600 text-white"
+            title={`실패 ${failCount}회`}
+          >
+            🔴
+          </span>
+        )}
+      </div>
+    );
+  })()}
+</td>
+
+
+<td className="border text-center">
+  <button
+  disabled={row["24시전송여부"] === true || sending24[id]}
+  onClick={() => handleSend24(row)}
+  className={`px-2 py-1 rounded text-xs ${
+    row["24시전송여부"] || sending24[id]
+      ? "bg-gray-300 cursor-not-allowed"
+      : "bg-blue-600 hover:bg-blue-700 text-white"
+  }`}
+>
+  {sending24[id]
+    ? "전송중…"
+    : row["24시전송여부"]
+    ? "전송완료"
+    : "🔁 재전송"}
+</button>
+
+</td>
 
                   {/* 금액 */}
                   {["청구운임","기사운임"].map((key) => (
