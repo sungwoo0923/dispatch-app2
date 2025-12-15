@@ -282,30 +282,17 @@ const upsertPlace = async (place) => {
     };
 
     if (snap.exists()) {
-      // 기존 업체 업데이트
       await updateDoc(ref, data);
-      console.log("🔥 기존 업체 업데이트:", key, data);
+      console.log("🔥 기존 업체 업데이트:", key);
     } else {
-      // 신규 업체 등록
       await setDoc(ref, data);
-      console.log("🆕 신규 업체 등록:", key, data);
-    }
-
-    // Firestore 변화 후 placeRows 즉시 갱신 트리거
-    try {
-      setPlaceRowsTrigger(Date.now());
-    } catch (e) {
-      console.error("trigger error", e);
+      console.log("🆕 신규 업체 등록:", key);
     }
 
   } catch (e) {
     console.error("⛔ upsertPlace 오류:", e);
   }
 };
-
-
-
-
 
 /* -------------------------------------------------
    공통
@@ -933,47 +920,52 @@ return (
     // ⭐ Firestore 실시간 구독으로 placeRows 강제 최신화
 // Firestore + localStorage 통합 placeList 생성
 const placeList = React.useMemo(() => {
-  // ⭐ Firestore 최신값 사용
   const fromFirestore = Array.isArray(placeRows) ? placeRows : [];
+
+  // 🔥 Firestore 기준 key 목록
+  const firestoreKeys = new Set(
+    fromFirestore.map(p => normalizeKey(p.업체명 || ""))
+  );
 
   let fromLocal = [];
   try {
     fromLocal = JSON.parse(localStorage.getItem("hachaPlaces_v1") || "[]");
-  } catch {
-    fromLocal = [];
-  }
+  } catch {}
 
-  // 공통 포맷 통일 함수
   const toRow = (p = {}) => ({
-    업체명: p.업체명 || p.거래처명 || "",
+    업체명: p.업체명 || "",
     주소: p.주소 || "",
-    담당자: p.담당자 || p.인수자 || "",
-    담당자번호: p.담당자번호 || p.연락처 || "",
+    담당자: p.담당자 || "",
+    담당자번호: p.담당자번호 || "",
   });
 
-  // 업체명 정규화 키
   const map = new Map();
-  [...fromFirestore, ...fromLocal].forEach((raw) => {
-    const row = toRow(raw);
-    const key = normalizeKey(row.업체명 || "");
-    if (!key.trim()) return;
 
-    // ⭐ Firestore 값이 우선. 동일 업체명일 경우 Firestore 값이 최종 값
+  // ✅ Firestore 먼저
+  fromFirestore.forEach(raw => {
+    const row = toRow(raw);
+    const key = normalizeKey(row.업체명);
+    if (key) map.set(key, row);
+  });
+
+  // ✅ localStorage는 Firestore에 존재하는 것만 허용
+  fromLocal.forEach(raw => {
+    const row = toRow(raw);
+    const key = normalizeKey(row.업체명);
+    if (!key) return;
+    if (!firestoreKeys.has(key)) return; // ⭐ 여기 핵심
     if (!map.has(key)) map.set(key, row);
-    else map.set(key, row); 
   });
 
   const merged = Array.from(map.values());
 
-  // 최신 합본을 localStorage에도 저장
+  // 🔥 localStorage 정리 저장
   try {
     localStorage.setItem("hachaPlaces_v1", JSON.stringify(merged));
   } catch {}
 
   return merged;
 }, [placeRows, placeRowsTrigger]);
-
-
 
     // 관리자 여부 체크
 const isAdmin = role === "admin";
@@ -1242,15 +1234,21 @@ const savePlaceSmart = (name, addr, manager, phone) => {
     return; // 업데이트 끝
   }
 
-  // ======================
-  // ② 신규 업체 생성
-  // ======================
-  upsertPlace({
-    업체명: name,
-    주소: addr,
-    담당자: manager,
-    담당자번호: phone,
-  });
+// ======================
+// ② 신규 업체 생성
+// ======================
+upsertPlace({
+  업체명: name,
+  주소: addr,
+  담당자: manager,
+  담당자번호: phone,
+});
+
+// 🔥 신규 생성 후에도 반드시 트리거
+try {
+  setPlaceRowsTrigger(Date.now());
+} catch {}
+
 };
 
 
@@ -12556,6 +12554,13 @@ function ClientManagement({ clients = [], upsertClient, removeClient }) {
       .replace(/\s+/g, "") // 공백 제거
       .replace(/[^\w가-힣\/-]/g, ""); // 숫자/영문/한글 + / - 만 남기고 제거
 
+        // ✅ 여기
+  const normalizeCompanyName = (s = "") =>
+    String(s)
+      .toLowerCase()
+      .replace(/\s+/g, "")
+      .replace(/[^\uAC00-\uD7A3]/g, "");
+
   /* -----------------------------------------------------------
      공통 유틸/스타일
   ----------------------------------------------------------- */
@@ -12766,6 +12771,78 @@ function ClientManagement({ clients = [], upsertClient, removeClient }) {
   };
 
   const [placeRows, setPlaceRows] = React.useState([]);
+  const [showDupPreview, setShowDupPreview] = React.useState(false);
+  // 🔁 하차지 주소 기준 중복 그룹 계산
+// ================================
+// 🔥 주소 포함 관계 기반 중복 그룹 계산 (FINAL)
+// - 업체명: 느슨하게 (띄어쓰기/표기 차이 허용)
+// - 주소: 엄격하게
+// - 광역 ↔ 상세만 중복 인정
+// - 가장 긴 주소 1건 유지
+// ================================
+const duplicatePlaceGroups = React.useMemo(() => {
+  const used = new Set();
+  const groups = [];
+
+  // 주소 정규화
+  const normAddr = (s = "") =>
+    normalizePlace(s).replace(/(대한민국|한국)/g, "");
+
+  // 🔒 광역 주소 판별 (아주 짧은 것만)
+  const isBroadAddress = (addr = "") => {
+    const a = addr.replace(/\s+/g, "");
+    return a.length <= 6; // 곤지암, 김해, 구미, 양산 등
+  };
+
+  for (let i = 0; i < placeRows.length; i++) {
+    const a = placeRows[i];
+    if (!a?.주소 || used.has(a.id)) continue;
+
+    const aAddr = normAddr(a.주소);
+    const aName = normalizeCompanyName(a.업체명 || "");
+    const aBroad = isBroadAddress(aAddr);
+
+    const group = [a];
+
+    for (let j = i + 1; j < placeRows.length; j++) {
+      const b = placeRows[j];
+      if (!b?.주소 || used.has(b.id)) continue;
+
+      // 🔒 안전 필터 1: 업체명 동일 (느슨한 비교)
+      if (normalizeCompanyName(b.업체명 || "") !== aName) continue;
+
+      const bAddr = normAddr(b.주소);
+      const bBroad = isBroadAddress(bAddr);
+
+      // 🔒 안전 필터 2: 둘 다 상세 주소면 패스
+      if (!aBroad && !bBroad) continue;
+
+      // 🔑 주소 포함 관계
+      const isInclude =
+        aAddr.includes(bAddr) || bAddr.includes(aAddr);
+
+      if (isInclude) {
+        group.push(b);
+        used.add(b.id);
+      }
+    }
+
+    if (group.length > 1) {
+      group.forEach((p) => used.add(p.id));
+
+      // ✅ 가장 긴 주소 1건 유지
+      group.sort(
+        (x, y) => (y.주소 || "").length - (x.주소 || "").length
+      );
+
+      groups.push(group);
+    }
+  }
+
+  return groups;
+}, [placeRows]);
+
+
   const [placeSelected, setPlaceSelected] = React.useState(new Set());
   const [placeQ, setPlaceQ] = React.useState("");
   const [placeFilterType, setPlaceFilterType] = React.useState("업체명");
@@ -12841,10 +12918,26 @@ function ClientManagement({ clients = [], upsertClient, removeClient }) {
     const 업체명 = (placeNewForm.업체명 || "").trim();
     if (!업체명) return alert("업체명은 필수입니다.");
 
-    await upsertPlace({
-      ...placeNewForm,
-      업체명,
-    });
+  const addrKey = normalizePlace(placeNewForm.주소 || "");
+if (!addrKey) {
+  alert("주소는 필수입니다.");
+  return;
+}
+
+const exists = placeRows.some(
+  (p) => normalizePlace(p.주소 || "") === addrKey
+);
+
+if (exists) {
+  alert("이미 동일한 주소의 하차지가 등록되어 있습니다.");
+  return;
+}
+
+await upsertPlace({
+  ...placeNewForm,
+  업체명,
+});
+
 
     setPlaceNewForm({
       업체명: "",
@@ -12996,8 +13089,36 @@ function ClientManagement({ clients = [], upsertClient, removeClient }) {
 
     reader.readAsArrayBuffer(file);
   };
+// 🔥 주소 기준 중복 하차지 자동 정리
+// ================================
+// 🔥 주소 포함 관계 기반 중복 자동 정리
+// - 각 그룹당 1건(가장 긴 주소) 유지
+// ================================
+const removeDuplicatePlaces = async () => {
+  if (duplicatePlaceGroups.length === 0) {
+    alert("중복된 하차지가 없습니다.");
+    return;
+  }
+
+  let removed = 0;
+
+  for (const group of duplicatePlaceGroups) {
+    const [, ...toDelete] = group;
+
+    for (const p of toDelete) {
+      if (!p.id) continue;
+      await deleteDoc(doc(db, PLACES_COLL, p.id));
+      removed++;
+    }
+  }
+
+  alert(`중복 하차지 정리 완료 (${removed}건 삭제됨)`);
+};
+
 
   const bulkEditPlaces = async () => {
+    
+
     if (!placeSelected.size) {
       alert("선택된 항목이 없습니다.");
       return;
@@ -13343,6 +13464,11 @@ function ClientManagement({ clients = [], upsertClient, removeClient }) {
       {/* ================== 🔵 탭 2: 하차지 거래처관리 ================== */}
       {subTab === "하차지" && (
         <>
+          {duplicatePlaceGroups.length > 0 && (
+      <div className="mb-3 p-3 rounded bg-yellow-50 border border-yellow-300 text-sm text-yellow-800">
+        ⚠️ 주소 기준 중복 하차지 <b>{duplicatePlaceGroups.length}</b>건 발견됨
+      </div>
+    )}
           {/* 상단 바 */}
           <div className="flex flex-wrap items-center gap-2 mb-3">
             <select
@@ -13382,9 +13508,81 @@ function ClientManagement({ clients = [], upsertClient, removeClient }) {
               onClick={removeSelectedPlaces}
               className="px-3 py-1 rounded bg-red-600 text-white text-sm"
             >
+              
               선택삭제
             </button>
+<button
+  onClick={() => setShowDupPreview(true)}
+  className="px-3 py-1 rounded bg-orange-600 text-white text-sm"
+>
+  중복 미리보기
+</button>
+
           </div>
+          {showDupPreview && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+    <div className="bg-white rounded-lg shadow-lg w-[900px] max-h-[80vh] overflow-hidden">
+
+      <div className="flex justify-between items-center px-4 py-3 border-b">
+        <h3 className="font-bold">
+          주소 포함 기준 중복 미리보기 ({duplicatePlaceGroups.length}건)
+        </h3>
+        <button onClick={() => setShowDupPreview(false)}>✕</button>
+      </div>
+
+      <div className="p-4 overflow-y-auto max-h-[60vh] text-sm">
+        {duplicatePlaceGroups.map((group, gi) => (
+          <div key={gi} className="mb-6 border rounded">
+            <div className="bg-gray-100 px-3 py-2 font-semibold">
+              업체명: {group[0].업체명}
+            </div>
+
+            <table className="w-full border-t">
+              <tbody>
+                {group.map((p, i) => {
+                  const isKeep = i === 0;
+                  return (
+                    <tr
+                      key={p.id}
+                      className={
+                        isKeep
+                          ? "bg-green-50 text-green-800"
+                          : "bg-red-50 text-red-700"
+                      }
+                    >
+                      <td className="border px-2 py-1 w-24 text-center font-bold">
+                        {isKeep ? "유지" : "삭제"}
+                      </td>
+                      <td className="border px-2 py-1">{p.주소}</td>
+                      <td className="border px-2 py-1">{p.담당자}</td>
+                      <td className="border px-2 py-1">{p.담당자번호}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex justify-end gap-2 px-4 py-3 border-t">
+        <button onClick={() => setShowDupPreview(false)}>
+          취소
+        </button>
+        <button
+          onClick={async () => {
+            await removeDuplicatePlaces();
+            setShowDupPreview(false);
+          }}
+          className="bg-red-600 text-white px-4 py-2 rounded"
+        >
+          중복 정리 실행
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
 
           {/* 신규 등록 */}
           <div className="grid grid-cols-4 gap-2 mb-4">
