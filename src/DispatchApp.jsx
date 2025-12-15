@@ -896,7 +896,6 @@ return (
 }
 
 // ===================== DispatchApp.jsx (PART 2/8) — END =====================
-
 // ===================== DispatchApp.jsx (PART 3/8) — START =====================
   function DispatchManagement({
     dispatchData, drivers, clients, timeOptions, tonOptions,
@@ -917,6 +916,12 @@ return (
       .replace(/\s+/g, "")
       .replace(/[^a-z0-9가-힣]/g, "");
   }
+  // ================================
+// 🔍 날짜 문자열 판별 (오더복사용)
+// ================================
+const isDateLike = (v) =>
+  typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v);
+
     // ⭐ Firestore 실시간 구독으로 placeRows 강제 최신화
 // Firestore + localStorage 통합 placeList 생성
 const placeList = React.useMemo(() => {
@@ -1146,7 +1151,8 @@ const goStatus = (type, value) => {
   }
 };
 
-
+// ⭐ 오더복사용 플래그 (🔥 여기 추가)
+const [isCopyMode, setIsCopyMode] = React.useState(false);
     // ⭐ 여기 맨 위에 오도록
     const [clientQuery, setClientQuery] = React.useState("");
     const [isClientOpen, setIsClientOpen] = React.useState(false);
@@ -1405,6 +1411,15 @@ try {
 }, [clientQuery, placeList]);
 // ⭐ 거래처 선택 시 → 어디에 적용할지 팝업 오픈
 function applyClientSelect(name) {
+  // 🔥 오더복사 중이면 팝업 절대 안 띄움
+  if (isCopyMode) {
+    setForm(p => ({ ...p, 거래처명: name }));
+    setClientQuery(name);
+    setIsClientOpen(false);
+    return;
+  }
+
+  // ⬇️ 기존 로직 그대로
   const p = placeList.find(x => norm(x.업체명 || "") === norm(name));
 
   setPlaceTargetPopup({
@@ -1420,6 +1435,7 @@ function applyClientSelect(name) {
   setClientQuery(name);
   setIsClientOpen(false);
 }
+
 // ⭐ 상차지에 적용 (여기 넣는 것! ← 바로 위 applyClientSelect 밑!!)
 function applyToPickup(place) {
   setForm(prev => ({
@@ -1558,6 +1574,61 @@ React.useEffect(() => {
 };
 
     const nextSeq = () => Math.max(0, ...(dispatchData || []).map((r) => Number(r.순번) || 0)) + 1;
+// ================================
+// ⛔ 기사 중복 배차 체크 유틸
+// ================================
+function isTimeOverlap(aStart, aEnd, bStart, bEnd) {
+  if (!aStart || !bStart) return false;
+
+const toMin = (t) => {
+  if (!t) return null;
+
+  // "오전 9시 30분" 대응
+  if (t.includes("오전") || t.includes("오후")) {
+    const isPM = t.includes("오후");
+    const nums = t.match(/\d+/g) || [];
+    let h = Number(nums[0] || 0);
+    const m = Number(nums[1] || 0);
+    if (isPM && h < 12) h += 12;
+    if (!isPM && h === 12) h = 0;
+    return h * 60 + m;
+  }
+
+  // "HH:mm"
+  const [h, m = "0"] = String(t).split(":");
+  return Number(h) * 60 + Number(m);
+};
+
+  const aS = toMin(aStart);
+  const aE = aEnd ? toMin(aEnd) : aS + 60;
+  const bS = toMin(bStart);
+  const bE = bEnd ? toMin(bEnd) : bS + 60;
+
+  return Math.max(aS, bS) < Math.min(aE, bE);
+}
+
+function checkDuplicateDispatch(form, dispatchData) {
+  if (!form.차량번호) return null;
+
+  const targetDate = String(form.상차일 || "").slice(0, 10);
+
+  return dispatchData.find((r) => {
+    if (r._id === form._id) return false; // 🔥 자기 자신 제외
+    if (!r?.차량번호) return false;
+    if (r.차량번호 !== form.차량번호) return false;
+    if (r.배차상태 !== "배차완료") return false;
+
+    const rowDate = String(r.상차일 || "").slice(0, 10);
+    if (rowDate !== targetDate) return false;
+
+    return isTimeOverlap(
+      r.상차시간,
+      r.하차시간,
+      form.상차시간,
+      form.하차시간
+    );
+  });
+}
 
     // ✅ 필수값(거래처/상차지명/하차지명) 검증
     const validateRequired = (f) => {
@@ -1643,6 +1714,18 @@ const palletFareRules = {
 
 // ⭐ 실제 저장 함수
 const doSave = async () => {
+    // ⛔ 기사 중복 배차 방지
+  const dup = checkDuplicateDispatch(form, dispatchData);
+  if (dup) {
+    alert(
+      `⛔ 기사 중복 배차 감지\n\n` +
+      `차량번호: ${form.차량번호}\n` +
+      `기존 상차시간: ${dup.상차시간 || "-"}\n` +
+      `기존 하차시간: ${dup.하차시간 || "-"}`
+    );
+    return;
+  }
+
   const status = form.차량번호 && (form.이름 || form.전화번호)
     ? "배차완료"
     : "배차중";
@@ -2333,10 +2416,10 @@ function FuelSlideWidget() {
 <form
   onSubmit={handleSubmit}
   className="
-    grid grid-cols-6 gap-4
+    grid grid-cols-8 gap-3
     bg-white
     border border-[#EDEDED]
-    rounded-2xl p-8
+    rounded-2xl p-5
     shadow-[0_2px_12px_rgba(0,0,0,0.06)]
   "
 >
@@ -2826,19 +2909,35 @@ if (res?.success) {
 -------------------------------- */}
         {copyOpen && (
           <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-            <div className="bg-white w-[900px] p-5 rounded shadow-xl">
+            <div className="
+  bg-white w-[1100px]
+  p-4 rounded-2xl shadow-2xl
+  flex flex-col
+">
 
               {/* 헤더 */}
-              <div className="flex justify-between mb-4">
-                <h2 className="text-lg font-bold">오더복사</h2>
-                <button onClick={() => {
-  setCopyOpen(false);
-+ setCopySelected([]); // ⭐ 체크 초기화
-}}>
-  ✕
-</button>
+              <div className="
+  flex items-center justify-between
+  pb-2 mb-3 border-b
+">
+  <div>
+    <h2 className="text-lg font-bold">📄 오더복사</h2>
+    <p className="text-xs text-gray-500">
+      더블클릭: 수정 | 체크 후 복사
+    </p>
+  </div>
 
-              </div>
+  <button
+    className="text-gray-400 hover:text-black text-xl"
+    onClick={() => {
+      setCopyOpen(false);
+      setCopySelected([]);
+    }}
+  >
+    ×
+  </button>
+</div>
+
 
               {/* 검색바 */}
               <div className="flex gap-2 mb-3">
@@ -2876,15 +2975,35 @@ if (res?.success) {
 
                     const today = new Date().toISOString().slice(0, 10);
 
-                    // 🔥 오더 복사 적용
-setForm(p => ({
+                    // ✅ 오더복사 시: 업체명만 넣지 말고, placeList에서 찾아서 주소/담당자/번호까지 같이 채운다
+const pickMeta = findPlaceByName(r.상차지명 || "") || {};
+const dropMeta = findPlaceByName(r.하차지명 || "") || {};
+const clientName = isDateLike(r.거래처명) ? "" : (r.거래처명 || "");
+
+// (혹시 row에 주소/담당자 정보가 이미 있으면 그걸 우선, 없으면 placeList 메타로 채움)
+setForm((p) => ({
   ...p,
-  거래처명: r.거래처명 || "",
+
+  거래처명: clientName,
+
+  // 상차
   상차지명: r.상차지명 || "",
+  상차지주소: r.상차지주소 || pickMeta.주소 || "",
+  상차지담당자: r.상차지담당자 || pickMeta.담당자 || "",
+  상차지담당자번호: r.상차지담당자번호 || pickMeta.담당자번호 || "",
+
+  // 하차
   하차지명: r.하차지명 || "",
+  하차지주소: r.하차지주소 || dropMeta.주소 || "",
+  하차지담당자: r.하차지담당자 || dropMeta.담당자 || "",
+  하차지담당자번호: r.하차지담당자번호 || dropMeta.담당자번호 || "",
+
+  // 나머지
   화물내용: r.화물내용 || "",
   차량종류: r.차량종류 || "",
   차량톤수: r.차량톤수 || "",
+  상차방법: r.상차방법 || "",
+  하차방법: r.하차방법 || "",
   상차일: today,
   하차일: today,
   상차시간: r.상차시간 || "",
@@ -2892,21 +3011,18 @@ setForm(p => ({
   지급방식: r.지급방식 || "",
   배차방식: r.배차방식 || "",
   메모: r.메모 || "",
+
   차량번호: "",
   이름: "",
   전화번호: "",
   배차상태: "배차중",
 }));
 
-// ⭐ 하차지 자동매칭 로직 직접 호출
-applyClientSelect(r.거래처명);
-
-// UI 동기화
-setClientQuery(r.거래처명 || "");
+// ✅ UI 동기화 (이 한 번만)
+setClientQuery(clientName);
 setAutoPickMatched(false);
 setAutoDropMatched(false);
-
-
+setIsCopyMode(true);
 
                     alert("오더 내용이 입력창에 복사되었습니다!");
                     setCopyOpen(false);
@@ -2923,17 +3039,23 @@ setAutoDropMatched(false);
                 <div className="max-h-[360px] overflow-y-auto">
                   <table className="min-w-max text-sm whitespace-nowrap">
                     <thead className="bg-gray-100">
-                      <tr>
-                        <th className="p-2 border px-3 py-2 whitespace-nowrap">상차일</th>
-                        <th className="p-2 border px-3 py-2 whitespace-nowrap">거래처명</th>
-                        <th className="p-2 border px-3 py-2 whitespace-nowrap">상차지명</th>
-                        <th className="p-2 border px-3 py-2 whitespace-nowrap">하차지명</th>
-                        <th className="p-2 border px-3 py-2 whitespace-nowrap">화물내용</th>
-                        <th className="p-2 border px-3 py-2 whitespace-nowrap">차량종류</th>
-                        <th className="p-2 border px-3 py-2 whitespace-nowrap">차량톤수</th>
-                        <th className="p-2 border px-3 py-2 whitespace-nowrap">메모</th>
-                      </tr>
-                    </thead>
+  <tr>
+    {/* ✅ 체크박스 컬럼 추가 */}
+    <th className="p-2 border px-3 py-2 whitespace-nowrap text-center">
+      선택
+    </th>
+
+    <th className="p-2 border px-3 py-2 whitespace-nowrap">상차일</th>
+    <th className="p-2 border px-3 py-2 whitespace-nowrap">거래처명</th>
+    <th className="p-2 border px-3 py-2 whitespace-nowrap">상차지명</th>
+    <th className="p-2 border px-3 py-2 whitespace-nowrap">하차지명</th>
+    <th className="p-2 border px-3 py-2 whitespace-nowrap">화물내용</th>
+    <th className="p-2 border px-3 py-2 whitespace-nowrap">차량종류</th>
+    <th className="p-2 border px-3 py-2 whitespace-nowrap">차량톤수</th>
+    <th className="p-2 border px-3 py-2 whitespace-nowrap">메모</th>
+  </tr>
+</thead>
+
 
                     <tbody>
                       {copyList.length === 0 ? (
@@ -9460,15 +9582,27 @@ function NewOrderPopup({
 // ===================== DispatchApp.jsx (PART 6/8 — Settlement Premium) — START =====================
 
 function Settlement({ dispatchData, fixedRows = [] }) {
+  const [targetMonth, setTargetMonth] = React.useState(
+  new Date().toISOString().slice(0, 7)
+);
   const [detailClient, setDetailClient] = React.useState(null);
 
   const toInt = (v) => parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
-  const today = new Date().toISOString().slice(0, 10);
+  // ✔ KPI 기준일: 선택된 월의 같은 일자
+const kpiDay = (() => {
   const now = new Date();
-  const yearKey = now.getFullYear();
-  const monthKey = `${yearKey}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  const prevMonthDate = new Date(yearKey, now.getMonth() - 1, 1);
-  const prevMonthKey = `${prevMonthDate.getFullYear()}-${String(prevMonthDate.getMonth() + 1).padStart(2, "0")}`;
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${targetMonth}-${day}`;
+})();
+
+  const [yearKey, monthNum] = targetMonth.split("-").map(Number);
+const monthKey = targetMonth;
+
+const prevMonthDate = new Date(yearKey, monthNum - 2, 1);
+const prevMonthKey = `${prevMonthDate.getFullYear()}-${String(
+  prevMonthDate.getMonth() + 1
+).padStart(2, "0")}`;
+
 
 // 1) 배차 데이터 (배차완료만)
 const dispatchRows = Array.isArray(dispatchData)
@@ -9494,14 +9628,24 @@ const fixedMapped = (fixedRows || []).map(r => ({
 const rows = [...dispatchRows, ...fixedMapped];
 
 
-  const dayRows = rows.filter((r) => (r.상차일 || "") === today);
+  const dayRows = rows.filter((r) => (r.상차일 || "") === kpiDay);
   const monthRows = rows.filter((r) => (r.상차일 || "").startsWith(monthKey));
-  const yearRows = rows.filter((r) => (r.상차일 || "").startsWith(String(yearKey)));
+  const yearRows = rows.filter((r) => {
+  const d = r.상차일;
+  if (!d) return false;
+
+  // 같은 연도 + 선택 월 이전까지
+  return d >= `${yearKey}-01-01` && d <= `${monthKey}-31`;
+});
+
   const prevMonthRows = rows.filter((r) => (r.상차일 || "").startsWith(prevMonthKey));
 
   const sum = (list, key) => list.reduce((a, r) => a + toInt(r[key]), 0);
   const won = (n) => `${(n || 0).toLocaleString()}원`;
 
+  // 🔑 후레쉬물류 판별
+const isFresh = (r) =>
+  String(r.거래처명 || "").includes("후레쉬물류");
   const stat = (list) => {
     const sale = sum(list, "청구운임");
     const driver = sum(list, "기사운임");
@@ -9512,15 +9656,61 @@ const rows = [...dispatchRows, ...fixedMapped];
   const m = stat(monthRows);
   const y = stat(yearRows);
   const pm = stat(prevMonthRows);
+  // ================================
+// 📊 월 예상 매출 / 수익 / 건수
+// ================================
+
+// 오늘 날짜
+const today = new Date().toISOString().slice(0, 10);
+
+// 이번 달 전체 일수
+const daysInMonth = new Date(yearKey, monthNum, 0).getDate();
+
+// 이번 달 지난 일수 (실적 있는 날 기준)
+const elapsedDays = new Set(
+  monthRows
+    .map(r => r.상차일)
+    .filter(d => d && d <= today)
+).size || 1;
+
+// 현재까지 실적
+const curSale = m.sale;
+const curProfit = m.profit;
+const curCnt = monthRows.length;
+
+// 일 평균
+const avgSalePerDay = curSale / elapsedDays;
+const avgProfitPerDay = curProfit / elapsedDays;
+const avgCntPerDay = curCnt / elapsedDays;
+
+// 월 예상
+const forecast = {
+  sale: Math.round(avgSalePerDay * daysInMonth),
+  profit: Math.round(avgProfitPerDay * daysInMonth),
+  count: Math.round(avgCntPerDay * daysInMonth),
+};
+
+  // 🔹 전월 순수 운송 (후레쉬 미포함)
+const pmPure = stat(
+  prevMonthRows.filter(r => !isFresh(r))
+);
+  // 🔹 후레쉬 미포함 (순수 운송)
+const dPure = stat(dayRows.filter(r => !isFresh(r)));
+const mPure = stat(monthRows.filter(r => !isFresh(r)));
+const yPure = stat(yearRows.filter(r => !isFresh(r)));
+
 
   const diffRate = (cur, prev) =>
     (prev === 0 ? 0 : ((cur - prev) / prev) * 100);
 
-  const vr = {
-    day: diffRate(d.profit, pm.profit),
-    month: diffRate(m.profit, pm.profit),
-    year: diffRate(y.profit, pm.profit),
-  };
+// 🔹 총 운송 전월대비 (월만 의미 있음)
+const vr = {
+  month: diffRate(m.profit, pm.profit),
+};
+// 🔹 순수 운송 전월대비 (월만 의미 있음)
+const vrPure = {
+  month: diffRate(mPure.profit, pmPure.profit),
+};
   const rateText = (n) => `${n >= 0 ? "▲" : "▼"} ${Math.abs(n).toFixed(1)}%`;
   const rateClass = (n) => (n >= 0 ? "text-green-600" : "text-rose-600");
 
@@ -9529,35 +9719,128 @@ const rows = [...dispatchRows, ...fixedMapped];
 
       {/* LEFT PANEL */}
       <div className="space-y-6">
+{/* 🔮 월 예상 실적 */}
+<div className="rounded-2xl bg-indigo-50 border border-indigo-200 p-4">
+  <h3 className="text-sm font-semibold text-indigo-700 mb-3">
+    🔮 월 예상 실적
+  </h3>
 
-        {/* KPI */}
-        <div className="rounded-2xl bg-white border shadow-sm p-4">
-          <table className="w-full text-sm border-collapse text-center">
-            <thead className="bg-gray-50 text-gray-600">
-              <tr>
-                <th className="border p-2">구분</th>
-                <th className="border p-2">매출</th>
-                <th className="border p-2">운반비</th>
-                <th className="border p-2">수익</th>
-                <th className="border p-2">전월대비(수익)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {[["일", d, "day"], ["월", m, "month"], ["년", y, "year"]].map(([label, data, key], i) => (
-                <tr key={i} className="font-semibold">
-                  <td className="border p-2 bg-gray-50">{label}</td>
-                  <td className="border p-2 text-blue-700">{won(data.sale)}</td>
-                  <td className="border p-2 text-gray-600">{won(data.driver)}</td>
-                  <td className="border p-2 text-green-600">{won(data.profit)}</td>
-                  <td className={`border p-2 ${rateClass(vr[key])}`}>{rateText(vr[key])}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+  <div className="grid grid-cols-3 gap-3 text-center">
+    <div className="bg-white rounded-lg border p-3">
+      <p className="text-xs text-gray-500">예상 매출</p>
+      <p className="font-bold text-blue-700">
+        {won(forecast.sale)}
+      </p>
+    </div>
+
+    <div className="bg-white rounded-lg border p-3">
+      <p className="text-xs text-gray-500">예상 건수</p>
+      <p className="font-bold">
+        {forecast.count}건
+      </p>
+    </div>
+
+    <div className="bg-white rounded-lg border p-3">
+      <p className="text-xs text-gray-500">예상 수익</p>
+      <p className="font-bold text-emerald-600">
+        {won(forecast.profit)}
+      </p>
+    </div>
+  </div>
+
+  <p className="text-[11px] text-gray-500 mt-2">
+    * 현재 실적 기준 일평균 추정
+  </p>
+</div>
+
+        {/* KPI – 총 운송료 (후레쉬 포함) */}
+<div className="rounded-2xl bg-white border shadow-sm p-4">
+
+  {/* 🔹 KPI 제목 */}
+  <div className="flex items-center justify-between mb-3">
+    <h3 className="text-sm font-semibold text-gray-800">
+      총 운송료 (후레쉬 포함)
+    </h3>
+    <span className="text-[11px] text-gray-400">
+      배차 + 고정거래처 전체
+    </span>
+  </div>
+
+  <table className="w-full text-sm border-collapse text-center">
+    <thead className="bg-gray-50 text-gray-600">
+      <tr>
+        <th className="border p-2">구분</th>
+        <th className="border p-2">매출</th>
+        <th className="border p-2">운반비</th>
+        <th className="border p-2">수익</th>
+        <th className="border p-2">전월대비(수익)</th>
+      </tr>
+    </thead>
+    <tbody>
+      {[
+  ["일", d, null],
+  ["월", m, "month"],
+  ["년", y, null],
+].map(([label, data, key], i) => (
+  <tr key={i} className="font-semibold">
+    <td className="border p-2 bg-gray-50">{label}</td>
+    <td className="border p-2 text-blue-700">{won(data.sale)}</td>
+    <td className="border p-2 text-gray-600">{won(data.driver)}</td>
+    <td className="border p-2 text-green-600">{won(data.profit)}</td>
+    <td className={`border p-2 ${key ? rateClass(vr[key]) : "text-gray-400"}`}>
+      {key ? rateText(vr[key]) : "—"}
+    </td>
+  </tr>
+))}
+
+    </tbody>
+  </table>
+</div>
+
+        {/* KPI – 순수 운송 (후레쉬 미포함) */}
+<div className="rounded-2xl bg-white border shadow-sm p-4">
+  <h3 className="text-sm font-semibold mb-2 text-emerald-700">
+    순수 운송료 (후레쉬 미포함)
+  </h3>
+
+  <table className="w-full text-sm border-collapse text-center">
+    <thead className="bg-gray-50 text-gray-600">
+      <tr>
+        <th className="border p-2">구분</th>
+        <th className="border p-2">매출</th>
+        <th className="border p-2">운반비</th>
+        <th className="border p-2">수익</th>
+        <th className="border p-2">전월대비(수익)</th>
+      </tr>
+    </thead>
+    <tbody>
+      {[
+  ["일", dPure, null],
+  ["월", mPure, "month"],
+  ["년", yPure, null],
+].map(([label, data, key], i) => (
+  <tr key={i} className="font-semibold">
+    <td className="border p-2 bg-gray-50">{label}</td>
+    <td className="border p-2 text-blue-700">{won(data.sale)}</td>
+    <td className="border p-2 text-gray-600">{won(data.driver)}</td>
+    <td className="border p-2 text-green-600">{won(data.profit)}</td>
+    <td className={`border p-2 ${key ? rateClass(vrPure[key]) : "text-gray-400"}`}>
+      {key ? rateText(vrPure[key]) : "—"}
+    </td>
+  </tr>
+))}
+
+
+    </tbody>
+  </table>
+</div>
+
 
         {/* Top10 */}
-        <SettlementTop10 rows={monthRows} onClickClient={setDetailClient} />
+        <SettlementTop10
+  rows={monthRows.filter(r => !String(r.거래처명 || "").includes("후레쉬물류"))}
+  onClickClient={setDetailClient}
+/>
 
         {/* Chart: Day/Month Profit compare */}
         <SettlementBarChart rows={rows} />
@@ -9565,7 +9848,11 @@ const rows = [...dispatchRows, ...fixedMapped];
       </div>
 
       {/* RIGHT PANEL */}
-      <SettlementAnalysisPanel rows={rows} />
+      <SettlementAnalysisPanel
+  rows={rows}
+  targetMonth={targetMonth}
+  setTargetMonth={setTargetMonth}
+/>
 
       {/* DETAIL POPUP */}
       {detailClient && (
@@ -9673,10 +9960,8 @@ function ClientRiskAlert({ rows }) {
 
 
 /* ==================== Right Side Analysis Panel ==================== */
-function SettlementAnalysisPanel({ rows }) {
-  const [targetMonth, setTargetMonth] = React.useState(
-    new Date().toISOString().slice(0, 7)
-  );
+function SettlementAnalysisPanel({ rows, targetMonth, setTargetMonth }) {
+
   const [client, setClient] = React.useState("");
 
   const months = Array.from({ length: 12 }, (_, i) => {
@@ -9740,7 +10025,9 @@ function SettlementAnalysisPanel({ rows }) {
         {/* 🔥 프리미엄 AI 인사이트 */}
 <AIPremiumInsight
   rows={client ? monthRows.filter(r => r.거래처명 === client) : monthRows}
+  targetMonth={targetMonth}
 />
+
 
       </div>
     </div>
@@ -9773,13 +10060,11 @@ function StatCard({ title, value }) {
     </div>
   );
 }
-function AIPremiumInsight({ rows }) {
+function AIPremiumInsight({ rows, targetMonth }) {
   const toInt = (v) => parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
   if (!rows || rows.length === 0) return null;
 
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth() + 1;
+ const [year, month] = targetMonth.split("-").map(Number);
 
   const prevMonth = month - 1 > 0 ? month - 1 : 12;
   const prevYear = month - 1 > 0 ? year : year - 1;
