@@ -1,5 +1,7 @@
 {
-  "rewrites": [
-    { "source": "/(.*)", "destination": "/" }
-  ]
+  "functions": {
+    "api/send24.js": {
+      "runtime": "nodejs18.x"
+    }
+  }
 }
