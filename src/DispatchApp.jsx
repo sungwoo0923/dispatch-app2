@@ -5222,32 +5222,7 @@ XLSX.writeFile(wb, "실시간배차현황.xlsx");
                       {r.배차상태}
                     </span>
                   </td>
-                  {/* 24시 상태 */}
-<td className={`${cell} text-xs`}>
-  {r["24시전송여부"] === true && (
-    <span className="text-green-600 font-semibold">✅ 전송완료</span>
-  )}
-
-  {r["24시전송여부"] === false && (
-    <span className="text-red-600">
-      {r["24시전송로그"]?.slice(-1)[0]?.resultMsg || "전송실패"}
-    </span>
-  )}
-</td>
-{/* 24시 재전송 */}
-<td className={cell}>
-  <button
-    disabled={r["24시전송여부"] === true}
-    onClick={() => handleSend24(r)}
-    className={`px-3 py-1 rounded text-xs ${
-      r["24시전송여부"]
-        ? "bg-gray-300 cursor-not-allowed"
-        : "bg-blue-600 hover:bg-blue-700 text-white"
-    }`}
-  >
-    {r["24시전송여부"] ? "전송완료" : "🔁 재전송"}
-  </button>
-</td>
+                  
 
                   {/* 청구운임 */}
                   <td className={cell}>
@@ -6938,8 +6913,6 @@ const tomorrowKST = () => {
   const [endDate, setEndDate] = React.useState("");
   const [selected, setSelected] = React.useState(new Set());
   const [editMode, setEditMode] = React.useState(false);
-  // 🔵 24시 전송중 상태 (row 단위)
-const [sending24, setSending24] = React.useState({});
   // ==========================
 // 선택삭제 + 되돌리기 기능
 // ==========================
@@ -7163,7 +7136,7 @@ const handleFareSearch = () => {
   });
 
   const toInt = (v) => parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10) || 0;
-const getId = (r) => r._id ?? r.id ?? r._fsid;
+  const getId = (r) => r._id || r.id || r._fsid;
 
   // =============================================
 // ✅ 대용량 업로드 (엑셀 → Firestore)
@@ -7411,80 +7384,6 @@ const recommendDriver = (row) => {
     .join("\n");
 
   alert(`🚚 자동 기사 추천 결과\n\n${top}`);
-};
-const handleSend24 = async (row) => {
-  const id = getId(row);
-  if (!id) return;
-
-  // 🔒 이미 전송중이면 차단
-  if (sending24[id]) return;
-
-  // 주소 필수 체크
-  if (!row.상차지주소 || !row.하차지주소) {
-    alert("❌ 상차지 / 하차지 주소가 없습니다.");
-    return;
-  }
-
-  // 🔄 전송중 ON
-  setSending24((p) => ({ ...p, [id]: true }));
-
-  try {
-    const res = await sendOrderTo24(row);
-
-    if (res?.success) {
-      await patchDispatch(id, {
-        배차방식: "24시",
-        "24시전송여부": true,
-        "24시전송로그": [
-          ...(row["24시전송로그"] || []),
-          {
-            at: new Date().toISOString(),
-            success: true,
-            resultMsg: res.message || "성공",
-          },
-        ],
-      });
-
-      alert("📡 24시콜 전송 완료");
-    } else {
-      await patchDispatch(id, {
-        "24시전송여부": false,
-        "24시전송로그": [
-          ...(row["24시전송로그"] || []),
-          {
-            at: new Date().toISOString(),
-            success: false,
-            resultMsg: res?.message || "실패",
-          },
-        ],
-      });
-
-      alert(`⛔ 전송 실패\n${res?.message || "알 수 없는 오류"}`);
-    }
-  } catch (e) {
-    console.error(e);
-
-    await patchDispatch(id, {
-      "24시전송여부": false,
-      "24시전송로그": [
-        ...(row["24시전송로그"] || []),
-        {
-          at: new Date().toISOString(),
-          success: false,
-          resultMsg: "네트워크 오류",
-        },
-      ],
-    });
-
-    alert("❌ 네트워크 오류");
-  } finally {
-    // 🔓 전송중 OFF
-    setSending24((p) => {
-      const next = { ...p };
-      delete next[id];
-      return next;
-    });
-  }
 };
 
 
@@ -7910,85 +7809,27 @@ return (
       const row = dispatchData.find((r) => r._id === id);
       if (!row) continue;
 
-      // 🔒 전송중이면 스킵
-      if (sending24[id]) continue;
-
-      // 주소 체크
       if (!row.상차지주소 || !row.하차지주소) {
+        alert(`[${row.상차지명} → ${row.하차지명}]\n주소가 없습니다.`);
         fail++;
-        await patchDispatch(id, {
-          "24시전송여부": false,
-          "24시전송로그": [
-            ...(row["24시전송로그"] || []),
-            {
-              at: new Date().toISOString(),
-              success: false,
-              resultMsg: "주소 누락",
-            },
-          ],
-        });
         continue;
       }
-
-      // 🔄 전송중 ON
-      setSending24((p) => ({ ...p, [id]: true }));
 
       try {
         const res = await sendOrderTo24(row);
 
         if (res?.success) {
           success++;
-          await patchDispatch(id, {
-            배차방식: "24시",
-            "24시전송여부": true,
-            "24시전송로그": [
-              ...(row["24시전송로그"] || []),
-              {
-                at: new Date().toISOString(),
-                success: true,
-                resultMsg: res.message || "성공",
-              },
-            ],
-          });
         } else {
           fail++;
-          await patchDispatch(id, {
-            "24시전송여부": false,
-            "24시전송로그": [
-              ...(row["24시전송로그"] || []),
-              {
-                at: new Date().toISOString(),
-                success: false,
-                resultMsg: res?.message || "실패",
-              },
-            ],
-          });
         }
       } catch (e) {
-        console.error(e);
+        console.error("24시콜 오류:", e);
         fail++;
-        await patchDispatch(id, {
-          "24시전송여부": false,
-          "24시전송로그": [
-            ...(row["24시전송로그"] || []),
-            {
-              at: new Date().toISOString(),
-              success: false,
-              resultMsg: "네트워크 오류",
-            },
-          ],
-        });
-      } finally {
-        // 🔓 전송중 OFF
-        setSending24((p) => {
-          const next = { ...p };
-          delete next[id];
-          return next;
-        });
       }
     }
 
-    alert(`📡 24시콜 선택전송 완료
+    alert(`📡 24시콜 선택전송 완료!
 성공: ${success}건
 실패: ${fail}건`);
   }}
@@ -7996,6 +7837,7 @@ return (
 >
   📡 선택전송(24시콜)
 </button>
+
 
 
 {/* 📋 기사복사 */}
@@ -8114,7 +7956,7 @@ return (
                 "선택","순번","등록일","상차일","상차시간","하차일","하차시간",
                 "거래처명","상차지명","상차지주소","하차지명","하차지주소",
                 "화물내용","차량종류","차량톤수","혼적","차량번호","기사명","전화번호",
-                "배차상태","24시상태","24시전송","청구운임","기사운임","수수료","지급방식","배차방식","메모",
+                "배차상태","청구운임","기사운임","수수료","지급방식","배차방식","메모",
               ].map((h) => (
                 <th key={h} className="border px-2 py-2 text-center whitespace-nowrap">
                   {h === "선택" ? (
@@ -8253,61 +8095,6 @@ return (
                   <td className="border text-center">
                     <StatusBadge s={row.배차상태} />
                   </td>
-<td className="border text-xs text-center whitespace-nowrap max-w-[160px]">
-  {row["24시전송여부"] === true && (
-    <span className="text-green-600 font-semibold">✅ 전송완료</span>
-  )}
-
-  {row["24시전송여부"] === false && (() => {
-    const logs = row["24시전송로그"] || [];
-    const last = logs.slice(-1)[0];
-    const msg = last?.resultMsg || "전송실패";
-    const failCount = logs.filter(l => l.success === false).length;
-
-    return (
-      <div className="flex items-center justify-center gap-1">
-        {/* 실패 메시지 (말줄임 + hover) */}
-        <span
-          className="text-red-600 truncate inline-block max-w-[110px]"
-          title={msg}
-        >
-          {msg}
-        </span>
-
-        {/* 🔴 실패 누적 경고 */}
-        {failCount >= 3 && (
-          <span
-            className="ml-1 px-1.5 py-0.5 rounded text-[10px] font-bold
-                       bg-red-600 text-white"
-            title={`실패 ${failCount}회`}
-          >
-            🔴
-          </span>
-        )}
-      </div>
-    );
-  })()}
-</td>
-
-
-<td className="border text-center">
-  <button
-  disabled={row["24시전송여부"] === true || sending24[id]}
-  onClick={() => handleSend24(row)}
-  className={`px-2 py-1 rounded text-xs ${
-    row["24시전송여부"] || sending24[id]
-      ? "bg-gray-300 cursor-not-allowed"
-      : "bg-blue-600 hover:bg-blue-700 text-white"
-  }`}
->
-  {sending24[id]
-    ? "전송중…"
-    : row["24시전송여부"]
-    ? "전송완료"
-    : "🔁 재전송"}
-</button>
-
-</td>
 
                   {/* 금액 */}
                   {["청구운임","기사운임"].map((key) => (
@@ -12953,24 +12740,6 @@ function ClientManagement({ clients = [], upsertClient, removeClient }) {
 
   // ✅ Firestore 하차지 컬렉션 helpers
   const PLACES_COLL = "places";
-  // 🔒 완전 중복 차단용 (업체명 + 주소 모두 동일할 때만)
-const isExactDuplicatePlace = (name, addr, excludeId = null) => {
-  const nName = norm(name);
-  const nAddr = normalizePlace(addr);
-
-  if (!nAddr) return false;
-
-  return placeRows.some((p) => {
-    const pid = p.id || p.업체명;
-    if (excludeId && pid === excludeId) return false;
-
-    return (
-      norm(p.업체명) === nName &&
-      normalizePlace(p.주소) === nAddr
-    );
-  });
-};
-
 
   const upsertPlace = async (row) => {
     const id = row.id || row.업체명 || crypto?.randomUUID?.();
@@ -13233,7 +13002,6 @@ const isExactDuplicatePlace = (name, addr, excludeId = null) => {
       alert("선택된 항목이 없습니다.");
       return;
     }
-    
 
     const 업체명 = prompt("업체명 (비워두면 기존값 유지):", "");
     const 주소 = prompt("주소 (비워두면 기존값 유지):", "");
