@@ -12953,6 +12953,24 @@ function ClientManagement({ clients = [], upsertClient, removeClient }) {
 
   // ✅ Firestore 하차지 컬렉션 helpers
   const PLACES_COLL = "places";
+  // 🔒 완전 중복 차단용 (업체명 + 주소 모두 동일할 때만)
+const isExactDuplicatePlace = (name, addr, excludeId = null) => {
+  const nName = norm(name);
+  const nAddr = normalizePlace(addr);
+
+  if (!nAddr) return false;
+
+  return placeRows.some((p) => {
+    const pid = p.id || p.업체명;
+    if (excludeId && pid === excludeId) return false;
+
+    return (
+      norm(p.업체명) === nName &&
+      normalizePlace(p.주소) === nAddr
+    );
+  });
+};
+
 
   const upsertPlace = async (row) => {
     const id = row.id || row.업체명 || crypto?.randomUUID?.();
