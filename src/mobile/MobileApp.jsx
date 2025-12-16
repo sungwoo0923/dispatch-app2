@@ -1039,11 +1039,12 @@ const [unassignedTypeFilter, setUnassignedTypeFilter] = useState("전체");
           }}
           className="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-blue-500 text-white text-3xl flex items-center justify-center shadow-lg active:scale-95"
         >
-          +
+          
         </button>
       )}
- </div>
-  </div>   {/* ⭐⭐⭐ 이 div 하나가 빠져 있었음 */}
+    </div>
+  </div>
+  {/* ⭐⭐⭐ 글씨 크기 wrapper 닫힘 */}
 );
 }
 // ======================= src/mobile/MobileApp.jsx (PART 2/3) =======================
