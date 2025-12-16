@@ -848,20 +848,27 @@ const [unassignedTypeFilter, setUnassignedTypeFilter] = useState("전체");
   // ------------------------------------------------------------------
   // 렌더링
   // ------------------------------------------------------------------
-  return (
-  <div
-  className="w-full max-w-md mx-auto min-h-screen bg-gray-50 flex flex-col relative origin-top"
-  style={{
-    transform: `scale(${uiScale})`,
-    transformOrigin: "top center",
-  }}
->
+ return (
+  <div className="w-full max-w-md mx-auto min-h-screen bg-gray-50 flex flex-col relative">
+    
+    {/* 🔍 글씨 크기 전용 래퍼 (화면 스케일 ❌, 글씨만 ⭕) */}
+    <div
+      className="flex flex-col flex-1"
+      style={{
+        fontSize:
+          uiScale === 1
+            ? "1rem"      // 기본
+            : uiScale === 1.1
+            ? "1.1rem"    // 크게
+            : "1.25rem",  // 아주 크게
+      }}
+    >
       {/* 🔔 토스트 알림 */}
       {toast && (
         <div
           className="fixed bottom-4 left-1/2 -translate-x-1/2 
-                      bg-black text-white px-4 py-2 rounded-lg 
-                      text-sm shadow-lg z-[9999]"
+                     bg-black text-white px-4 py-2 rounded-lg 
+                     text-sm shadow-lg z-[9999]"
         >
           {toast}
         </div>
@@ -872,51 +879,49 @@ const [unassignedTypeFilter, setUnassignedTypeFilter] = useState("전체");
         onBack={
           page === "form"
             ? () => {
-              if (form._editId && form._returnToDetail) {
-                setPage("detail");
-                return;
+                if (form._editId && form._returnToDetail) {
+                  setPage("detail");
+                  return;
+                }
+                setPage("list");
               }
-              setPage("list");
-            }
             : page === "detail"
-              ? () => setPage("list")
-              : undefined
+            ? () => setPage("list")
+            : undefined
         }
         onRefresh={page === "list" ? handleRefresh : undefined}
         onMenu={page === "list" ? () => setShowMenu(true) : undefined}
       />
 
       {showMenu && (
-  <MobileSideMenu
-    onClose={() => setShowMenu(false)}
-    onGoList={() => {
-      setPage("list");
-      setShowMenu(false);
-    }}
-    onGoCreate={() => {
-      setPage("form");
-      setShowMenu(false);
-    }}
-    onGoFare={() => {
-      setPage("fare");
-      setShowMenu(false);
-    }}
-    onGoStatus={() => {
-      setPage("status");
-      setShowMenu(false);
-    }}
-    onGoUnassigned={() => {
-      setUnassignedTypeFilter("전체");
-      setPage("unassigned");
-      setShowMenu(false);
-    }}
-    onDeleteAll={deleteAllOrders}
-    setUiScale={setUiScale}   // ✅ ⭐⭐⭐ 이 줄 추가
-    uiScale={uiScale}
-  />
-)}
-
-
+        <MobileSideMenu
+          onClose={() => setShowMenu(false)}
+          onGoList={() => {
+            setPage("list");
+            setShowMenu(false);
+          }}
+          onGoCreate={() => {
+            setPage("form");
+            setShowMenu(false);
+          }}
+          onGoFare={() => {
+            setPage("fare");
+            setShowMenu(false);
+          }}
+          onGoStatus={() => {
+            setPage("status");
+            setShowMenu(false);
+          }}
+          onGoUnassigned={() => {
+            setUnassignedTypeFilter("전체");
+            setPage("unassigned");
+            setShowMenu(false);
+          }}
+          onDeleteAll={deleteAllOrders}
+          setUiScale={setUiScale}
+          uiScale={uiScale}
+        />
+      )}
 
       <div className="flex-1 overflow-y-auto pb-24">
         {page === "list" && (
@@ -1502,7 +1507,7 @@ function MobileOrderCard({ order, onSelect }) {
         <span className="px-1.5 py-0.5 rounded-full bg-blue-500 text-white text-[11px] font-bold">
           상
         </span>
-        <div className="flex-1 truncate text-[13px] font-semibold">
+        <div className="flex-1 truncate text-[1em] font-semibold">
           {pickupName}
           {pickupAddrShort && (
             <span className="text-[12px] text-gray-500 ml-1">
@@ -1510,7 +1515,7 @@ function MobileOrderCard({ order, onSelect }) {
             </span>
           )}
         </div>
-        <span className="text-[11px] text-gray-600">{pickupTime}</span>
+        <span className="text-[0.8em] text-gray-600">{pickupTime}</span>
         {pickupStatus && (
           <span
             className={
@@ -1528,7 +1533,7 @@ function MobileOrderCard({ order, onSelect }) {
         <span className="px-1.5 py-0.5 rounded-full bg-gray-500 text-white text-[11px] font-bold">
           하
         </span>
-        <div className="flex-1 truncate text-[13px] font-semibold">
+        <div className="flex-1 truncate text-[1em] font-semibold">
           {dropName}
           {dropAddrShort && (
             <span className="text-[12px] text-gray-500 ml-1">
@@ -1536,7 +1541,7 @@ function MobileOrderCard({ order, onSelect }) {
             </span>
           )}
         </div>
-        <span className="text-[11px] text-gray-600">{dropTime}</span>
+        <span className="text-[0.8em] text-gray-600">{dropTime}</span>
         {dropStatus && (
           <span
             className={
@@ -1552,7 +1557,7 @@ function MobileOrderCard({ order, onSelect }) {
       <div className="mt-2 pt-2 border-t border-dashed border-gray-200" />
 
       {/* ▶ 하단 */}
-      <div className="flex justify-between text-[11px] text-gray-700">
+      <div className="flex justify-between text-[0.8em] text-gray-700">
         <div className="truncate">{bottomText || "-"}</div>
         <div className="whitespace-nowrap">
           청구 {fmtMoney(claim)} · 기사 {fmtMoney(fee)}
