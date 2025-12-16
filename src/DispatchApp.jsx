@@ -15,6 +15,7 @@ import {
 } from "recharts";
 import { BarChart, Bar, Legend } from "recharts";
 import FleetManagement from "./FleetManagement";
+import PptxGenJS from "pptxgenjs";
 /* -------------------------------------------------
    발행사(우리 회사) 고정 정보
 --------------------------------------------------*/
@@ -9582,21 +9583,211 @@ function NewOrderPopup({
 // ===================== DispatchApp.jsx (PART 6/8 — Settlement Premium) — START =====================
 
 function Settlement({ dispatchData, fixedRows = [] }) {
+  const chartRef = React.useRef(null);
   const [targetMonth, setTargetMonth] = React.useState(
   new Date().toISOString().slice(0, 7)
 );
   const [detailClient, setDetailClient] = React.useState(null);
 
   const toInt = (v) => parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
-  // ✔ KPI 기준일: 선택된 월의 같은 일자
-const kpiDay = (() => {
-  const now = new Date();
-  const day = String(now.getDate()).padStart(2, "0");
-  return `${targetMonth}-${day}`;
-})();
+  // ✅ 여기 추가 (이 위치가 정답)
+const sum = (list, key) => list.reduce((a, r) => a + toInt(r[key]), 0);
+// ✅ 수익률 계산 (전면 공통)
+const profitRate = (sale, profit) =>
+  sale === 0 ? 0 : (profit / sale) * 100;
+
+const ratePct = (n) => `${n.toFixed(1)}%`;
+
+  // ================================
+// 📊 매출 리포트 PPT 생성
+// ================================
+const exportSettlementPPT = async () => {
+  const ppt = new PptxGenJS();
+  let chartImage = null;
+if (chartRef.current) {
+  const canvas = await html2canvas(chartRef.current);
+  chartImage = canvas.toDataURL("image/png");
+}
+  ppt.author = "RUN25";
+  ppt.company = "RUN25 물류";
+  ppt.title = `매출 리포트 ${targetMonth}`;
+
+  const wonText = (n) => `${(n || 0).toLocaleString()}원`;
+
+  /* -----------------------------
+     1. 표지
+  ----------------------------- */
+  let slide = ppt.addSlide();
+  slide.addText(`RUN25 매출 분석 리포트`, {
+    x: 1, y: 1.8, fontSize: 28, bold: true,
+  });
+  slide.addText(`${targetMonth}`, {
+    x: 1, y: 2.6, fontSize: 18,
+  });
+  slide.addText(`작성일: ${new Date().toLocaleDateString()}`, {
+    x: 1, y: 3.2, fontSize: 12, color: "666666",
+  });
+/* -----------------------------
+   1-1. Executive Summary (임원 요약)
+----------------------------- */
+slide = ppt.addSlide();
+slide.addText("Executive Summary", {
+  x: 0.5, y: 0.4,
+  fontSize: 22,
+  bold: true,
+});
+
+slide.addText(
+  `• 순수 운송 매출 ${wonText(mPure.sale)} 달성\n` +
+  `• 전월 대비 ${rateText(vrPure.month)}\n` +
+  `• 상위 거래처 중심 매출 구조 강화`,
+  {
+    x: 0.7,
+    y: 1.4,
+    fontSize: 16,
+    lineSpacing: 28,
+  }
+);
+
+  /* -----------------------------
+     2. 월 예상 실적
+  ----------------------------- */
+  slide = ppt.addSlide();
+  slide.addText("월 예상 실적", { x: 0.5, y: 0.3, fontSize: 20, bold: true });
+
+  slide.addTable([
+    ["예상 매출", "예상 건수", "예상 수익"],
+    [wonText(forecast.sale), `${forecast.count}건`, wonText(forecast.profit)],
+  ], {
+    x: 0.5, y: 1.2, w: 9,
+    colW: [3, 3, 3],
+    fontSize: 16,
+    align: "center",
+  });
+
+  /* -----------------------------
+     3. 당월 실적 요약
+  ----------------------------- */
+  slide = ppt.addSlide();
+  slide.addText("당월 실적 요약", { x: 0.5, y: 0.3, fontSize: 20, bold: true });
+
+  slide.addTable([
+    ["구분", "매출", "운반비", "수익"],
+    ["총 운송", wonText(m.sale), wonText(m.driver), wonText(m.profit)],
+    ["순수 운송", wonText(mPure.sale), wonText(mPure.driver), wonText(mPure.profit)],
+  ], {
+    x: 0.5, y: 1.1, w: 9,
+    colW: [2, 2.5, 2.5, 2],
+    fontSize: 14,
+  });
+
+  /* -----------------------------
+     4. 전월 대비
+  ----------------------------- */
+  slide = ppt.addSlide();
+  slide.addText("전월 대비 분석", { x: 0.5, y: 0.3, fontSize: 20, bold: true });
+
+  slide.addText(
+    `총 운송 수익: ${rateText(vr.month)}\n순수 운송 수익: ${rateText(vrPure.month)}`,
+    { x: 0.5, y: 1.2, fontSize: 16 }
+  );
+
+  /* -----------------------------
+     5. Top10 거래처
+  ----------------------------- */
+  slide = ppt.addSlide();
+  slide.addText("Top10 거래처 (당월 매출)", { x: 0.5, y: 0.3, fontSize: 20, bold: true });
+
+  const clientMap = {};
+monthRows.forEach(r => {
+  const c = r.거래처명 || "미지정";
+  if (!clientMap[c]) clientMap[c] = { sale: 0, profit: 0 };
+  clientMap[c].sale += toInt(r.청구운임);
+  clientMap[c].profit += toInt(r.청구운임) - toInt(r.기사운임);
+});
+
+const top10Rows = Object.entries(clientMap)
+  .map(([c, v]) => [c, wonText(v.sale), wonText(v.profit)])
+  .sort((a, b) => toInt(b[1]) - toInt(a[1]))
+  .slice(0, 10);
+
+
+  slide.addTable(
+    [["거래처", "매출", "수익"], ...top10Rows.slice(0, 10)],
+    { x: 0.5, y: 1.0, w: 9, fontSize: 12 }
+  );
+  /* -----------------------------
+   5-1. 일별 수익 차트
+----------------------------- */
+if (chartImage) {
+  slide = ppt.addSlide();
+  slide.addText("일별 수익 추이", {
+    x: 0.5,
+    y: 0.3,
+    fontSize: 20,
+    bold: true,
+  });
+
+  slide.addImage({
+    data: chartImage,
+    x: 0.5,
+    y: 1.0,
+    w: 9,
+    h: 4.5,
+  });
+}
+
+
+  /* -----------------------------
+     6. 2026 매출 전망
+  ----------------------------- */
+  slide = ppt.addSlide();
+  slide.addText("2026 매출 전망 (순수 운송)", {
+    x: 0.5, y: 0.3, fontSize: 20, bold: true,
+  });
+
+  slide.addTable([
+    ["보수적", "기준", "공격적"],
+    [
+      wonText(forecast2026.conservative),
+      wonText(forecast2026.normal),
+      wonText(forecast2026.aggressive),
+    ],
+  ], {
+    x: 0.5, y: 1.2, w: 9,
+    colW: [3, 3, 3],
+    fontSize: 16,
+    align: "center",
+  });
+
+  /* -----------------------------
+     7. 결론
+  ----------------------------- */
+  slide = ppt.addSlide();
+  slide.addText("결론 및 제언", { x: 0.5, y: 0.3, fontSize: 20, bold: true });
+
+  slide.addText(
+    `• 순수 운송 기준 연매출 ${wonText(yPure.sale)}\n` +
+    `• 2026년 기준 시나리오 ${wonText(forecast2026.normal)}\n` +
+    `• Top 거래처 집중 전략 시 추가 성장 가능`,
+    { x: 0.5, y: 1.2, fontSize: 14 }
+  );
+
+  ppt.writeFile(`RUN25_매출리포트_${targetMonth}.pptx`);
+};
+
 
   const [yearKey, monthNum] = targetMonth.split("-").map(Number);
 const monthKey = targetMonth;
+// KPI 기준일: 선택 월 기준 "존재하는 날짜"로 보정
+const kpiDay = (() => {
+  const today = new Date();
+
+  const maxDay = new Date(yearKey, monthNum, 0).getDate();
+  const safeDay = Math.min(today.getDate(), maxDay);
+
+  return `${targetMonth}-${String(safeDay).padStart(2, "0")}`;
+})();
 
 const prevMonthDate = new Date(yearKey, monthNum - 2, 1);
 const prevMonthKey = `${prevMonthDate.getFullYear()}-${String(
@@ -9635,12 +9826,14 @@ const rows = [...dispatchRows, ...fixedMapped];
   if (!d) return false;
 
   // 같은 연도 + 선택 월 이전까지
-  return d >= `${yearKey}-01-01` && d <= `${monthKey}-31`;
+  const endOfMonth = new Date(yearKey, monthNum, 0)
+  .toISOString()
+  .slice(0, 10);
+
+return d >= `${yearKey}-01-01` && d <= endOfMonth;
 });
 
   const prevMonthRows = rows.filter((r) => (r.상차일 || "").startsWith(prevMonthKey));
-
-  const sum = (list, key) => list.reduce((a, r) => a + toInt(r[key]), 0);
   const won = (n) => `${(n || 0).toLocaleString()}원`;
 
   // 🔑 후레쉬물류 판별
@@ -9698,6 +9891,28 @@ const pmPure = stat(
 const dPure = stat(dayRows.filter(r => !isFresh(r)));
 const mPure = stat(monthRows.filter(r => !isFresh(r)));
 const yPure = stat(yearRows.filter(r => !isFresh(r)));
+// ================================
+// 🔮 2026 매출 예측 (BEST PRACTICE)
+// 기준: 올해 순수 운송 연매출
+// ================================
+
+// 올해 순수 운송 연매출
+const baseYearSale = yPure.sale;
+
+// 연 성장률 가정 (현실적인 범위)
+const growth2026 = {
+  conservative: 0.05, // +5%
+  normal: 0.10,       // +10%
+  aggressive: 0.18,   // +18%
+};
+
+// 2026 연 매출 예측 (합계 기준)
+const forecast2026 = {
+  conservative: Math.round(baseYearSale * (1 + growth2026.conservative)),
+  normal: Math.round(baseYearSale * (1 + growth2026.normal)),
+  aggressive: Math.round(baseYearSale * (1 + growth2026.aggressive)),
+};
+
 
 
   const diffRate = (cur, prev) =>
@@ -9719,10 +9934,16 @@ const vrPure = {
 
       {/* LEFT PANEL */}
       <div className="space-y-6">
+        <button
+  onClick={exportSettlementPPT}
+  className="px-4 py-2 rounded bg-indigo-600 text-white text-sm"
+>
+  📥 매출 리포트 PPT 다운로드
+</button>
 {/* 🔮 월 예상 실적 */}
 <div className="rounded-2xl bg-indigo-50 border border-indigo-200 p-4">
   <h3 className="text-sm font-semibold text-indigo-700 mb-3">
-    🔮 월 예상 실적
+    🔮 월 예상 실적 (당월)
   </h3>
 
   <div className="grid grid-cols-3 gap-3 text-center">
@@ -9753,6 +9974,39 @@ const vrPure = {
   </p>
 </div>
 
+{/* 🔮 2026 매출 전망 (후레쉬 제외) */}
+<div className="rounded-2xl bg-violet-50 border border-violet-200 p-4">
+  <h3 className="text-sm font-semibold text-violet-700 mb-3">
+    🔮 2026 매출 전망 (순수 운송 예상 매출)
+  </h3>
+
+  <div className="grid grid-cols-3 gap-3 text-center">
+    <div className="bg-white rounded-lg border p-3">
+      <p className="text-xs text-gray-500">보수적</p>
+      <p className="font-bold">
+        {won(forecast2026.conservative)}
+      </p>
+    </div>
+
+ <div className="bg-white rounded-lg border p-3">
+  <p className="text-xs text-gray-500">기준</p>
+  <p className="font-bold text-blue-700">
+    {won(forecast2026.normal)}
+  </p>
+</div>
+
+    <div className="bg-white rounded-lg border p-3">
+      <p className="text-xs text-gray-500">공격적</p>
+      <p className="font-bold text-emerald-600">
+        {won(forecast2026.aggressive)}
+      </p>
+    </div>
+  </div>
+
+  <p className="text-[11px] text-gray-500 mt-2">
+    * 후레쉬 제외, 과거 월 성장률 기반
+  </p>
+</div>
         {/* KPI – 총 운송료 (후레쉬 포함) */}
 <div className="rounded-2xl bg-white border shadow-sm p-4">
 
@@ -9773,12 +10027,13 @@ const vrPure = {
         <th className="border p-2">매출</th>
         <th className="border p-2">운반비</th>
         <th className="border p-2">수익</th>
-        <th className="border p-2">전월대비(수익)</th>
+<th className="border p-2">수익률</th>
+<th className="border p-2">전월대비(수익)</th>
+
       </tr>
     </thead>
     <tbody>
       {[
-  ["일", d, null],
   ["월", m, "month"],
   ["년", y, null],
 ].map(([label, data, key], i) => (
@@ -9786,10 +10041,19 @@ const vrPure = {
     <td className="border p-2 bg-gray-50">{label}</td>
     <td className="border p-2 text-blue-700">{won(data.sale)}</td>
     <td className="border p-2 text-gray-600">{won(data.driver)}</td>
-    <td className="border p-2 text-green-600">{won(data.profit)}</td>
-    <td className={`border p-2 ${key ? rateClass(vr[key]) : "text-gray-400"}`}>
-      {key ? rateText(vr[key]) : "—"}
-    </td>
+<td className="border p-2 text-green-600">
+  {won(data.profit)}
+</td>
+
+{/* ✅ 수익률 */}
+<td className="border p-2 text-indigo-700">
+  {ratePct(profitRate(data.sale, data.profit))}
+</td>
+
+{/* 전월대비 */}
+<td className={`border p-2 ${key ? rateClass(vr[key]) : "text-gray-400"}`}>
+  {key ? rateText(vr[key]) : "—"}
+</td>
   </tr>
 ))}
 
@@ -9810,7 +10074,8 @@ const vrPure = {
         <th className="border p-2">매출</th>
         <th className="border p-2">운반비</th>
         <th className="border p-2">수익</th>
-        <th className="border p-2">전월대비(수익)</th>
+<th className="border p-2">수익률</th>
+<th className="border p-2">전월대비(수익)</th>
       </tr>
     </thead>
     <tbody>
@@ -9823,10 +10088,19 @@ const vrPure = {
     <td className="border p-2 bg-gray-50">{label}</td>
     <td className="border p-2 text-blue-700">{won(data.sale)}</td>
     <td className="border p-2 text-gray-600">{won(data.driver)}</td>
-    <td className="border p-2 text-green-600">{won(data.profit)}</td>
-    <td className={`border p-2 ${key ? rateClass(vrPure[key]) : "text-gray-400"}`}>
-      {key ? rateText(vrPure[key]) : "—"}
-    </td>
+<td className="border p-2 text-green-600">
+  {won(data.profit)}
+</td>
+
+{/* ✅ 수익률 */}
+<td className="border p-2 text-indigo-700">
+  {ratePct(profitRate(data.sale, data.profit))}
+</td>
+
+{/* 전월대비 */}
+<td className={`border p-2 ${key ? rateClass(vr[key]) : "text-gray-400"}`}>
+  {key ? rateText(vr[key]) : "—"}
+</td>
   </tr>
 ))}
 
@@ -9843,15 +10117,18 @@ const vrPure = {
 />
 
         {/* Chart: Day/Month Profit compare */}
-        <SettlementBarChart rows={rows} />
+        <SettlementBarChart rows={rows} chartRef={chartRef} />
+
 
       </div>
 
       {/* RIGHT PANEL */}
-      <SettlementAnalysisPanel
+<SettlementAnalysisPanel
   rows={rows}
   targetMonth={targetMonth}
   setTargetMonth={setTargetMonth}
+  forecast2026={forecast2026}
+  yPure={yPure}
 />
 
       {/* DETAIL POPUP */}
@@ -9960,7 +10237,13 @@ function ClientRiskAlert({ rows }) {
 
 
 /* ==================== Right Side Analysis Panel ==================== */
-function SettlementAnalysisPanel({ rows, targetMonth, setTargetMonth }) {
+function SettlementAnalysisPanel({
+  rows,
+  targetMonth,
+  setTargetMonth,
+  forecast2026,
+  yPure,
+}) {
 
   const [client, setClient] = React.useState("");
 
@@ -10026,7 +10309,10 @@ function SettlementAnalysisPanel({ rows, targetMonth, setTargetMonth }) {
 <AIPremiumInsight
   rows={client ? monthRows.filter(r => r.거래처명 === client) : monthRows}
   targetMonth={targetMonth}
+  forecast2026={forecast2026}
+  yPure={yPure}
 />
+
 
 
       </div>
@@ -10060,7 +10346,7 @@ function StatCard({ title, value }) {
     </div>
   );
 }
-function AIPremiumInsight({ rows, targetMonth }) {
+function AIPremiumInsight({ rows, targetMonth, forecast2026, yPure }) {
   const toInt = (v) => parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
   if (!rows || rows.length === 0) return null;
 
@@ -10191,6 +10477,19 @@ const worstDay = sortedDays[sortedDays.length - 1] || { date: "-", profit: 0 };
         AI 추천: Top 고객 집중 시
         <b className="text-emerald-600"> +12~18%</b> 수익 개선 기대
       </p>
+<p className="text-[12px] text-indigo-700">
+  2026년 순수 운송 기준 예상 매출은
+  <b className="mx-1 text-indigo-800">
+    {won(forecast2026.normal)}
+  </b>
+  수준으로,
+  올해 대비
+  <b className="mx-1 text-indigo-800">
+    {(((forecast2026.normal / yPure.sale) - 1) * 100).toFixed(1)}%
+  </b>
+  성장 가능성이 있습니다.
+</p>
+
 
     </div>
   );
@@ -10243,7 +10542,7 @@ function ClientInsight({ rows }) {
 
       {/* Line */}
       <div className="h-44">
-        <ResponsiveContainer width="100%" height="100%">
+        <ResponsiveContainer width="100%" height={240}>
           <LineChart data={chartData}>
             <CartesianGrid strokeDasharray="3 3"/>
             <XAxis dataKey="date" tick={{fontSize:9}}/>
@@ -10397,6 +10696,7 @@ function SettlementTop10({ rows, onClickClient }) {
             <th className="border px-3 py-2 text-right">매출</th>
             <th className="border px-3 py-2 text-right">운반비</th>
             <th className="border px-3 py-2 text-right">수익</th>
+<th className="border px-3 py-2 text-right">수익률</th>
           </tr>
         </thead>
         <tbody>
@@ -10410,6 +10710,7 @@ function SettlementTop10({ rows, onClickClient }) {
               <td className="border px-3 py-2 text-right font-semibold text-blue-700">{won(r.sale)}</td>
               <td className="border px-3 py-2 text-right text-gray-600">{won(r.driver)}</td>
               <td className="border px-3 py-2 text-right font-semibold text-green-600">{won(r.profit)}</td>
+              
             </tr>
           ))}
         </tbody>
@@ -10421,7 +10722,7 @@ function SettlementTop10({ rows, onClickClient }) {
 
 
 /* ==================== Bar Chart ==================== */
-function SettlementBarChart({ rows }) {
+function SettlementBarChart({ rows, chartRef }) {
   const toInt = (v)=>parseInt(String(v||"0").replace(/[^\d-]/g,""),10)||0;
 
   const daily = {};
@@ -10438,10 +10739,11 @@ function SettlementBarChart({ rows }) {
   const data = Object.values(daily).sort((a,b)=>a.date.localeCompare(b.date));
 
   return (
-    <div className="rounded-2xl bg-white border shadow-sm p-4">
+    <div ref={chartRef} className="rounded-2xl bg-white border shadow-sm p-4">
       <h3 className="text-sm font-semibold mb-3">일별 수익 비교</h3>
       <div className="w-full h-60">
-        <ResponsiveContainer width="100%" height="100%">
+        <ResponsiveContainer width="100%" height={240}>
+
           <BarChart data={data}>
             <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
             <XAxis dataKey="date" tick={{fontSize:10}} />

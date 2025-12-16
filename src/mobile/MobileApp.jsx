@@ -204,7 +204,10 @@ export default function MobileApp() {
   // -------------------------------------------------------------
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
-
+  // 🔍 UI 크기 스케일 (1 = 기본, 1.1 = 크게, 1.2 = 아주 크게)
+  const [uiScale, setUiScale] = useState(
+    Number(localStorage.getItem("uiScale") || 1)
+  );
   const quickRange = (days) => {
     const today = new Date();
     const end = today.toISOString().slice(0, 10);
@@ -361,6 +364,8 @@ useEffect(() => {
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [statusTab, setStatusTab] = useState("전체");
   const [showMenu, setShowMenu] = useState(false);
+  // 🔥 미배차 차량 분류 필터 (전체 | 냉장/냉동 | 일반)
+const [unassignedTypeFilter, setUnassignedTypeFilter] = useState("전체");
 
   const todayStr = () => new Date().toISOString().slice(0, 10);
 
@@ -531,29 +536,42 @@ useEffect(() => {
   const filteredStatusOrders = filteredOrders;
 
   // 미배차(차량번호 없는 전체 오더)
-  const unassignedOrders = useMemo(
-    () =>
-      orders
-        .filter((o) => {
-          const noVehicle =
-            !o.차량번호 || String(o.차량번호).trim() === "";
-          return noVehicle;
-        })
-        .sort((a, b) => {
-          const ad = String(a.상차일 || "");
-          const bd = String(b.상차일 || "");
-          if (ad !== bd) return ad.localeCompare(bd);
+  const unassignedOrders = useMemo(() => {
+  return orders
+    .filter((o) => {
+      // 1️⃣ 미배차만
+      const noVehicle =
+        !o.차량번호 || String(o.차량번호).trim() === "";
+      if (!noVehicle) return false;
 
-          const at = String(a.상차시간 || a.상차일시 || "");
-          const bt = String(b.상차시간 || b.상차일시 || "");
-          if (at !== bt) return at.localeCompare(bt);
+      // 2️⃣ 차량 분류 필터
+      if (unassignedTypeFilter === "전체") return true;
 
-          const ac = String(a.거래처명 || "");
-          const bc = String(b.거래처명 || "");
-          return ac.localeCompare(bc);
-        }),
-    [orders]
-  );
+      const carType = String(o.차량종류 || o.차종 || "");
+
+      const isCold =
+        carType.includes("냉장") || carType.includes("냉동");
+
+      if (unassignedTypeFilter === "냉장/냉동") return isCold;
+      if (unassignedTypeFilter === "일반") return !isCold;
+
+      return true;
+    })
+    .sort((a, b) => {
+      const ad = String(a.상차일 || "");
+      const bd = String(b.상차일 || "");
+      if (ad !== bd) return ad.localeCompare(bd);
+
+      const at = String(a.상차시간 || a.상차일시 || "");
+      const bt = String(b.상차시간 || b.상차일시 || "");
+      if (at !== bt) return at.localeCompare(bt);
+
+      return String(a.거래처명 || "").localeCompare(
+        String(b.거래처명 || "")
+      );
+    });
+}, [orders, unassignedTypeFilter]);
+
 
   // 날짜별 그룹핑 메모
   const groupedByDate = useMemo(() => {
@@ -815,7 +833,17 @@ useEffect(() => {
   // 렌더링
   // ------------------------------------------------------------------
   return (
-    <div className="w-full max-w-md mx-auto min-h-screen bg-gray-50 flex flex-col relative">
+  <div
+    className="w-full max-w-md mx-auto min-h-screen bg-gray-50 flex flex-col relative"
+    style={{
+      fontSize:
+        uiScale === 1
+          ? "100%"
+          : uiScale === 1.1
+          ? "110%"
+          : "120%",
+    }}
+  >
       {/* 🔔 토스트 알림 */}
       {toast && (
         <div
@@ -847,31 +875,34 @@ useEffect(() => {
       />
 
       {showMenu && (
-        <MobileSideMenu
-          onClose={() => setShowMenu(false)}
-          onGoList={() => {
-            setPage("list");
-            setShowMenu(false);
-          }}
-          onGoCreate={() => {
-            setPage("form");  // 신규 등록 화면 열기
-            setShowMenu(false);
-          }}
-          onGoFare={() => {
-            setPage("fare");
-            setShowMenu(false);
-          }}
-          onGoStatus={() => {
-            setPage("status");
-            setShowMenu(false);
-          }}
-          onGoUnassigned={() => {
-            setPage("unassigned");
-            setShowMenu(false);
-          }}
-          onDeleteAll={deleteAllOrders} // ⭐⭐ 추가 !!!
-        />
-      )}
+  <MobileSideMenu
+    onClose={() => setShowMenu(false)}
+    onGoList={() => {
+      setPage("list");
+      setShowMenu(false);
+    }}
+    onGoCreate={() => {
+      setPage("form");
+      setShowMenu(false);
+    }}
+    onGoFare={() => {
+      setPage("fare");
+      setShowMenu(false);
+    }}
+    onGoStatus={() => {
+      setPage("status");
+      setShowMenu(false);
+    }}
+    onGoUnassigned={() => {
+      setUnassignedTypeFilter("전체");
+      setPage("unassigned");
+      setShowMenu(false);
+    }}
+    onDeleteAll={deleteAllOrders}
+    setUiScale={setUiScale}   // ✅ ⭐⭐⭐ 이 줄 추가
+  />
+)}
+
 
 
       <div className="flex-1 overflow-y-auto pb-24">
@@ -941,13 +972,15 @@ useEffect(() => {
         )}
 
         {page === "unassigned" && (
-          <MobileUnassignedList
-            title={`미배차현황 (${unassignedOrders.length})`}
-            orders={unassignedOrders}
-            onBack={() => setPage("list")}
-            setSelectedOrder={setSelectedOrder}
-            setPage={setPage}
-          />
+         <MobileUnassignedList
+  title={`미배차현황 (${unassignedOrders.length})`}
+  orders={unassignedOrders}
+  unassignedTypeFilter={unassignedTypeFilter}
+  setUnassignedTypeFilter={setUnassignedTypeFilter}
+  onBack={() => setPage("list")}
+  setSelectedOrder={setSelectedOrder}
+  setPage={setPage}
+/>
         )}
       </div>
 
@@ -1052,8 +1085,10 @@ function MobileSideMenu({
   onGoFare,
   onGoStatus,
   onGoUnassigned,
-  onDeleteAll, // ⭐⭐ 추가 !!!
+  onDeleteAll,
+  setUiScale,   // ⭐ 추가
 }) {
+
   const logout = () => {
   if (!window.confirm("로그아웃 하시겠습니까?")) return;
 
@@ -1091,7 +1126,29 @@ function MobileSideMenu({
             <MenuItem label="미배차현황" onClick={onGoUnassigned} />
           </MenuSection>
         </div>
-
+{/* 🔍 화면 크기 조절 */}
+<div className="border-t px-4 py-3">
+  <div className="text-xs text-gray-400 mb-2">화면 크기</div>
+  <div className="flex gap-2">
+    {[1, 1.1, 1.2].map((v) => (
+      <button
+        key={v}
+        onClick={() => {
+          setUiScale(v);
+          localStorage.setItem("uiScale", v);
+        }}
+        className={`flex-1 py-1.5 rounded-full text-xs font-semibold border
+          ${
+            Number(localStorage.getItem("uiScale") || 1) === v
+              ? "bg-blue-500 text-white border-blue-500"
+              : "bg-white text-gray-600 border-gray-300"
+          }`}
+      >
+        {v === 1 ? "기본" : v === 1.1 ? "크게" : "아주 크게"}
+      </button>
+    ))}
+  </div>
+</div>
         {/* 🔥 로그아웃 버튼 추가 */}
         <div className="border-t px-4 py-3">
           <button
@@ -1380,12 +1437,22 @@ function MobileOrderCard({ order, onSelect }) {
     .filter(Boolean)
     .join(" · ");
 
+  const isCold =
+    String(order.차량종류 || order.차종 || "").includes("냉장") ||
+    String(order.차량종류 || order.차종 || "").includes("냉동");
+
   return (
-    <div className="relative bg-white rounded-2xl shadow border px-3 py-3">
-
-
-      {/* ▶ 배차 상태 (상 라인 위) */}
-      <div className="flex justify-end mb-0.5">
+    <div
+      className="relative bg-white rounded-2xl shadow border px-3 py-3"
+      onClick={onSelect}
+    >
+      {/* ▶ 상태 + 냉장/냉동 */}
+      <div className="flex justify-end items-center gap-1 mb-0.5">
+        {isCold && (
+          <span className="px-2 py-0.5 rounded-full bg-cyan-600 text-white text-[10px] font-bold">
+            ❄ 냉장/냉동
+          </span>
+        )}
         <span
           className={
             "px-2 py-0.5 rounded-full border text-[11px] font-semibold whitespace-nowrap " +
@@ -1395,18 +1462,17 @@ function MobileOrderCard({ order, onSelect }) {
           {state}
         </span>
       </div>
-      {/* ⚠ 상차 임박 표시 */}
-      {(() => {
-        const now = new Date();
-        if (!order.상차일 || !order.상차시간) return null;
 
+      {/* ⚠ 상차 임박 */}
+      {(() => {
+        if (!order.상차일 || !order.상차시간) return null;
+        const now = new Date();
         const dt = new Date(`${order.상차일} ${order.상차시간}`);
         const diffMin = (dt - now) / 60000;
-
         if (diffMin > 0 && diffMin <= 120) {
           return (
             <div className="text-right mb-0.5">
-              <span className="ml-1 px-2 py-0.5 rounded-full bg-red-500 text-white text-[10px] font-bold">
+              <span className="px-2 py-0.5 rounded-full bg-red-500 text-white text-[10px] font-bold">
                 ⚠ 임박
               </span>
             </div>
@@ -1415,106 +1481,71 @@ function MobileOrderCard({ order, onSelect }) {
         return null;
       })()}
 
-      {/* 📄 상세보기 버튼 (카드 상단 왼쪽) */}
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          window.scrollTo(0, 0);
-          onSelect(order);
-        }}
-
-        className="absolute -left-2 -top-2 bg-white rounded-md border px-2 py-0.5 text-[10px] text-gray-600 shadow-sm active:scale-95 z-10"
-      >
-        상세
-      </button>
-
-      {/* ▶ 상 라인 */}
+      {/* ▶ 상차 */}
       <div className="flex items-center gap-2 mt-1">
         <span className="px-1.5 py-0.5 rounded-full bg-blue-500 text-white text-[11px] font-bold">
           상
         </span>
-
-        <div className="flex-1 min-w-0 flex items-center gap-1 truncate">
-          <span className="text-[13px] font-semibold text-gray-900 truncate">
-            {pickupName}
-          </span>
+        <div className="flex-1 truncate text-[13px] font-semibold">
+          {pickupName}
           {pickupAddrShort && (
-            <span className="text-[12px] text-gray-600 truncate">
+            <span className="text-[12px] text-gray-500 ml-1">
               ({pickupAddrShort})
             </span>
           )}
         </div>
-
-        <div className="flex items-center gap-1 whitespace-nowrap">
-          <span className="text-[11px] text-gray-600">{pickupTime}</span>
-          {pickupStatus && (
-            <span
-              className={
-                "w-[38px] text-center px-1 py-0.5 rounded-full border text-[11px] font-semibold " +
-                dayBadgeClass(pickupStatus)
-              }
-            >
-              {pickupStatus}
-            </span>
-          )}
-        </div>
+        <span className="text-[11px] text-gray-600">{pickupTime}</span>
+        {pickupStatus && (
+          <span
+            className={
+              "px-1 py-0.5 rounded-full border text-[11px] " +
+              dayBadgeClass(pickupStatus)
+            }
+          >
+            {pickupStatus}
+          </span>
+        )}
       </div>
 
-      {/* ▶ 하 라인 */}
+      {/* ▶ 하차 */}
       <div className="flex items-center gap-2 mt-1">
         <span className="px-1.5 py-0.5 rounded-full bg-gray-500 text-white text-[11px] font-bold">
           하
         </span>
-
-        <div className="flex-1 min-w-0 flex items-center gap-1 truncate">
-          <span className="text-[13px] font-semibold text-gray-900 truncate">
-            {dropName}
-          </span>
+        <div className="flex-1 truncate text-[13px] font-semibold">
+          {dropName}
           {dropAddrShort && (
-            <span className="text-[12px] text-gray-600 truncate">
+            <span className="text-[12px] text-gray-500 ml-1">
               ({dropAddrShort})
             </span>
           )}
         </div>
-
-        <div className="flex items-center gap-1 whitespace-nowrap">
-          <span className="text-[11px] text-gray-600">{dropTime}</span>
-          {dropStatus && (
-            <span
-              className={
-                "w-[38px] text-center px-1 py-0.5 rounded-full border text-[11px] font-semibold " +
-                dayBadgeClass(dropStatus)
-              }
-            >
-              {dropStatus}
-            </span>
-          )}
-        </div>
+        <span className="text-[11px] text-gray-600">{dropTime}</span>
+        {dropStatus && (
+          <span
+            className={
+              "px-1 py-0.5 rounded-full border text-[11px] " +
+              dayBadgeClass(dropStatus)
+            }
+          >
+            {dropStatus}
+          </span>
+        )}
       </div>
 
-      {/* 구분선 */}
       <div className="mt-2 pt-2 border-t border-dashed border-gray-200" />
 
-      {/* ▶ 하단 정보 */}
-      <div className="mt-1 flex items-center text-[11px] text-gray-700">
-        <div className="flex-1 min-w-0 truncate">
-          {bottomText || "-"}
-        </div>
-
-        <div className="flex items-center gap-1 ml-2 whitespace-nowrap">
-          <span className="text-[12px]">💰</span>
-          <span className="text-[11px]">
-            청구 {fmtMoney(claim)}
-          </span>
-          <span className="text-[11px] text-gray-400">|</span>
-          <span className="text-[11px] text-blue-700">
-            기사 {fmtMoney(fee)}
-          </span>
+      {/* ▶ 하단 */}
+      <div className="flex justify-between text-[11px] text-gray-700">
+        <div className="truncate">{bottomText || "-"}</div>
+        <div className="whitespace-nowrap">
+          청구 {fmtMoney(claim)} · 기사 {fmtMoney(fee)}
         </div>
       </div>
     </div>
   );
 }
+
 
 
 // ======================================================================
@@ -3112,8 +3143,9 @@ function MobileStatusTable({ title, orders, onBack, onQuickAssign }) {
 function MobileUnassignedList({
   title,
   orders,
+  unassignedTypeFilter,
+  setUnassignedTypeFilter,
   onBack,
-  onQuickAssign,
   setSelectedOrder,
   setPage,
 }) {
@@ -3135,6 +3167,23 @@ function MobileUnassignedList({
           ◀ 뒤로가기
         </button>
       )}
+      {/* 🔥 냉장/냉동 / 일반 필터 버튼 */}
+<div className="flex gap-2 mb-3">
+  {["전체", "냉장/냉동", "일반"].map((t) => (
+    <button
+      key={t}
+      onClick={() => setUnassignedTypeFilter(t)}
+      className={`flex-1 py-1.5 rounded-full text-xs font-semibold border
+        ${
+          unassignedTypeFilter === t
+            ? "bg-blue-500 text-white border-blue-500"
+            : "bg-white text-gray-600 border-gray-300"
+        }`}
+    >
+      {t}
+    </button>
+  ))}
+</div>
 
       <div className="mb-2 text-xs text-gray-500">
         {title}
