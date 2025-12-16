@@ -1042,8 +1042,9 @@ const [unassignedTypeFilter, setUnassignedTypeFilter] = useState("전체");
           +
         </button>
       )}
-    </div>
-  );
+ </div>
+  </div>   {/* ⭐⭐⭐ 이 div 하나가 빠져 있었음 */}
+);
 }
 // ======================= src/mobile/MobileApp.jsx (PART 2/3) =======================
 
