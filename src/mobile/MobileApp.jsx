@@ -378,6 +378,8 @@ useEffect(() => {
   // --------------------------------------------------
   const [page, setPage] = useState("list"); // list | form | detail | fare | status | unassigned
   const [selectedOrder, setSelectedOrder] = useState(null);
+  // 🔙 상세보기 진입 출처 (list | unassigned | status)
+const [detailFrom, setDetailFrom] = useState(null);
   const [statusTab, setStatusTab] = useState("전체");
   const [showMenu, setShowMenu] = useState(false);
   // 🔥 미배차 차량 분류 필터 (전체 | 냉장/냉동 | 일반)
@@ -875,23 +877,31 @@ const [unassignedTypeFilter, setUnassignedTypeFilter] = useState("전체");
       )}
 
       <MobileHeader
-        title={title}
-        onBack={
-          page === "form"
-            ? () => {
-                if (form._editId && form._returnToDetail) {
-                  setPage("detail");
-                  return;
-                }
-                setPage("list");
-              }
-            : page === "detail"
-            ? () => setPage("list")
-            : undefined
+  title={title}
+  onBack={
+    page === "form"
+      ? () => {
+          if (form._editId && form._returnToDetail) {
+            setPage("detail");
+            return;
+          }
+          setPage("list");
         }
-        onRefresh={page === "list" ? handleRefresh : undefined}
-        onMenu={page === "list" ? () => setShowMenu(true) : undefined}
-      />
+      : page === "detail"
+      ? () => {
+          if (detailFrom) {
+            setPage(detailFrom);   // 🔥 출처로 복귀
+            setDetailFrom(null);   // 🔥 초기화
+          } else {
+            setPage("list");
+          }
+        }
+      : undefined
+  }
+  onRefresh={page === "list" ? handleRefresh : undefined}
+  onMenu={page === "list" ? () => setShowMenu(true) : undefined}
+/>
+
 
       {showMenu && (
         <MobileSideMenu
@@ -934,10 +944,11 @@ const [unassignedTypeFilter, setUnassignedTypeFilter] = useState("전체");
             setStartDate={setStartDate}
             setEndDate={setEndDate}
             quickRange={quickRange}
-            onSelect={(o) => {
-              setSelectedOrder(o);
-              setPage("detail");
-            }}
+            onSelect={() => {
+  setSelectedOrder(o);
+  setDetailFrom("unassigned"); // ⭐ 어디서 왔는지 기록
+  setPage("detail");
+}}
             vehicleFilter={vehicleFilter}
             setVehicleFilter={setVehicleFilter}
             assignFilter={assignFilter}
@@ -3223,13 +3234,15 @@ function MobileUnassignedList({
                 <div key={o.id} className="space-y-1">
                   {/* 카드 UI */}
                   <MobileOrderCard
-                    order={o}
-                    onSelect={() => {
-                      setSelectedOrder(o);
-                      setPage("detail");
-                      window.scrollTo(0, 0);
-                    }}
-                  />
+  order={o}
+  onSelect={() => {
+    setSelectedOrder(o);
+    setDetailFrom("unassigned"); // ⭐⭐⭐ 이 줄이 핵심
+    setPage("detail");
+    window.scrollTo(0, 0);
+  }}
+/>
+
 
                 </div>
               ))}
