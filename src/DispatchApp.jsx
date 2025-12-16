@@ -4002,9 +4002,15 @@ const handleChange = (key, value) => {
   // 신규기사 등록 중복 방지
   const [isRegistering, setIsRegistering] = React.useState(false);
   // =================== 기사 선택 모달 상태 ===================
-const [driverSelectOpen, setDriverSelectOpen] = React.useState(false);
-const [driverSelectList, setDriverSelectList] = React.useState([]);
-const [driverSelectRowId, setDriverSelectRowId] = React.useState(null);
+const [driverSelectInfo, setDriverSelectInfo] = React.useState(null);
+/*
+{
+  rowId,
+  list: [],
+  selectedDriver: null
+}
+*/
+
 
   // 주소 더보기
   const [expandedAddr, setExpandedAddr] = React.useState({});
@@ -4478,12 +4484,14 @@ return;
   }
 
   // 🔹 기존 기사 여러 명 → 기사 선택 모달
-  if (matches.length > 1) {
-    setDriverSelectRowId(id);
-    setDriverSelectList(matches);
-    setDriverSelectOpen(true);
-    return;
-  }
+if (matches.length > 1) {
+  setDriverSelectInfo({
+    rowId: id,
+    list: matches,
+    selectedDriver: null,
+  });
+  return;
+}
 
   // 🔹 신규 기사 → 팝업
   setDriverConfirmInfo({
@@ -4870,7 +4878,8 @@ ${url}
   // 테이블 스타일
   // ------------------------
   const head =
-    "border px-2 py-2 bg-gray-100 text-center whitespace-nowrap";
+        "border px-2 py-2 bg-slate-100 text-slate-800 text-center whitespace-nowrap";
+
   const cell =
     "border px-2 py-[2px] text-center align-middle whitespace-nowrap overflow-hidden text-ellipsis leading-tight";
   const addrCell = `${cell} min-w-[80px] max-w-[160px]`;
@@ -5234,8 +5243,6 @@ XLSX.writeFile(wb, "실시간배차현황.xlsx");
                 "이름",
                 "전화번호",
                 "배차상태",
-                "24시상태",
-                "24시전송",
                 "청구운임",
                 "기사운임",
                 "수수료",
@@ -6757,83 +6764,185 @@ setTimeout(() => {
 
 
 {/* ===================== 기사 선택 모달 ===================== */}
-{driverSelectOpen && (
-  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
-    <div className="bg-white p-5 rounded-xl shadow-xl w-[360px] max-h-[80vh] overflow-y-auto">
+{/* ===================== 기사 선택 모달 (PART 5 동일) ===================== */}
+{driverSelectInfo && (
+  <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[99999]">
+    <div className="bg-white p-5 rounded-xl shadow-xl w-[380px] max-h-[80vh] overflow-y-auto">
       <h3 className="text-lg font-bold mb-3">🚚 기사 선택</h3>
-      
-      {driverSelectList.map(d => (
+
+      {driverSelectInfo.list.map((d) => (
         <button
           key={d._id}
-          className="w-full text-left border p-2 mb-2 rounded hover:bg-blue-50"
-          onClick={async () => {
-            const updated = {
-              차량번호: d.차량번호,
-              이름: d.이름,
-              전화번호: d.전화번호,
-              배차상태: "배차완료",
-            };
-
-            await patchDispatch?.(driverSelectRowId, updated);
-            setDriverSelectOpen(false);
-            setDriverSelectList([]);
-          }}
+          className={`w-full text-left border p-2 mb-2 rounded
+            ${
+              driverSelectInfo.selectedDriver === d
+                ? "bg-blue-100 border-blue-500"
+                : "hover:bg-blue-50"
+            }`}
+          onClick={() =>
+            setDriverSelectInfo((prev) => ({
+              ...prev,
+              selectedDriver: d,
+            }))
+          }
         >
           {d.차량번호} / {d.이름} / {d.전화번호}
         </button>
       ))}
 
-      <button
-        onClick={() => setDriverSelectOpen(false)}
-        className="mt-3 w-full py-2 bg-gray-200 rounded"
-      >
-        취소
-      </button>
-    </div>
-  </div>
-)}
-{/* ======================= 선택삭제 확인 팝업 ======================= */}
-{deleteConfirmOpen && (
-  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
-    <div className="bg-white p-6 rounded-xl shadow-xl w-[420px] max-h-[80vh] overflow-y-auto">
-
-      <h3 className="text-lg font-bold mb-4 text-center text-red-600">
-        선택한 항목을 삭제하시겠습니까?
-      </h3>
-
-      <div className="space-y-3 text-sm">
-        {deleteList.map((r, idx) => (
-          <div key={r._id} className="p-3 border rounded bg-gray-50">
-            <div className="font-semibold mb-1">
-              {idx + 1}. {r.거래처명 || "-"}
-            </div>
-            <div><b>상차:</b> {r.상차일} {r.상차지명}</div>
-            <div><b>하차:</b> {r.하차일} {r.하차지명}</div>
-            <div><b>차량:</b> {r.차량번호} / {r.이름}</div>
-            <div><b>운임:</b> {(r.청구운임 || 0).toLocaleString()}원</div>
-          </div>
-        ))}
-      </div>
-
-      <div className="flex justify-between gap-3 mt-5">
+      <div className="flex gap-2 mt-4">
+        {/* 취소 */}
         <button
-          onClick={() => setDeleteConfirmOpen(false)}
-          className="flex-1 py-2 rounded bg-gray-200"
+          className="flex-1 py-2 bg-gray-200 rounded"
+          onClick={() => setDriverSelectInfo(null)}
         >
           취소
         </button>
 
+        {/* 적용 */}
         <button
-          onClick={executeDelete}
-          className="flex-1 py-2 rounded bg-red-600 text-white font-semibold"
+          disabled={!driverSelectInfo.selectedDriver}
+          className="flex-1 py-2 bg-blue-600 text-white rounded disabled:bg-gray-400"
+          onClick={async () => {
+            const d = driverSelectInfo.selectedDriver;
+            const rowId = driverSelectInfo.rowId;
+
+            await patchDispatch?.(rowId, {
+              차량번호: d.차량번호,
+              이름: d.이름,
+              전화번호: d.전화번호,
+              배차상태: "배차완료",
+              updatedAt: Date.now(),
+            });
+
+            setDriverSelectInfo(null);
+
+            // 🔥 PART 5와 동일: 저장 후 해당 행으로 스크롤
+            setTimeout(() => {
+              const el = document.getElementById(`row-${rowId}`);
+              if (el) {
+                el.scrollIntoView({
+                  behavior: "smooth",
+                  block: "center",
+                });
+              }
+            }, 300);
+          }}
         >
-          삭제하기
+          적용
         </button>
       </div>
-
     </div>
   </div>
 )}
+
+{/* ======================= 선택삭제 확인 팝업 (소형 · 실무용 최종본) ======================= */}
+{deleteConfirmOpen && (
+  <div
+    className="fixed inset-0 bg-black/40 flex items-center justify-center z-[99999]"
+    tabIndex={-1}
+    onKeyDown={(e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        executeDelete();
+      }
+      if (e.key === "Escape") {
+        setDeleteConfirmOpen(false);
+      }
+    }}
+  >
+    <div className="bg-white rounded-xl shadow-xl w-[420px] max-h-[80vh] overflow-y-auto">
+
+      {/* ===== 헤더 ===== */}
+      <div className="px-5 py-4 border-b flex items-center gap-3">
+        <div className="w-9 h-9 rounded-full bg-red-100 flex items-center justify-center text-red-600">
+          🗑
+        </div>
+        <div>
+          <h3 className="font-bold text-gray-900">
+            선택한 오더를 삭제하시겠습니까?
+          </h3>
+          <p className="text-xs text-gray-500">
+            삭제 후에도 되돌리기로 복구할 수 있습니다.
+          </p>
+        </div>
+      </div>
+
+      {/* ===== 삭제 대상 ===== */}
+      <div className="px-5 py-4 space-y-3 text-sm">
+        {deleteList.map((r, idx) => {
+          const sale = r.청구운임 || 0;
+          const drv = r.기사운임 || 0;
+          const fee = sale - drv;
+
+          return (
+            <div key={r._id} className="border rounded-lg p-3 bg-gray-50">
+              {/* 상단 */}
+              <div className="flex justify-between items-center pb-2 border-b">
+                <div className="font-semibold text-gray-800">
+                  {idx + 1}. {r.거래처명 || "-"}
+                </div>
+              </div>
+
+              {/* 상/하차 */}
+              <div className="mt-2 space-y-1 text-gray-700">
+                <div><b>상차</b> {r.상차일} · {r.상차지명}</div>
+                <div><b>하차</b> {r.하차일} · {r.하차지명}</div>
+                <div><b>차량</b> {r.차량번호 || "-"} / {r.이름 || "-"}</div>
+              </div>
+
+              {/* 운임 */}
+              <div className="grid grid-cols-3 gap-2 mt-3 text-center text-xs">
+                <div className="bg-white border rounded p-2">
+                  <div className="text-gray-400">청구</div>
+                  <div className="font-semibold text-blue-600">
+                    {sale.toLocaleString()}원
+                  </div>
+                </div>
+
+                <div className="bg-white border rounded p-2">
+                  <div className="text-gray-400">기사</div>
+                  <div className="font-semibold text-green-600">
+                    {drv.toLocaleString()}원
+                  </div>
+                </div>
+
+                <div className="bg-white border rounded p-2">
+                  <div className="text-gray-400">수수료</div>
+                  <div
+                    className={`font-semibold ${
+                      fee < 0 ? "text-red-600" : "text-orange-600"
+                    }`}
+                  >
+                    {fee.toLocaleString()}원
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* ===== 버튼 ===== */}
+      <div className="px-5 py-4 border-t flex gap-3">
+        <button
+          onClick={() => setDeleteConfirmOpen(false)}
+          className="flex-1 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold"
+        >
+          취소 (ESC)
+        </button>
+
+        <button
+          onClick={executeDelete}
+          className="flex-1 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold"
+        >
+          삭제 실행 (Enter)
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
 {showUndo && (
   <div className="fixed bottom-6 right-6 bg-gray-900 text-white px-4 py-3 rounded-lg shadow-lg z-[99999] flex items-center gap-3">
     <span>삭제됨</span>
@@ -6961,6 +7070,7 @@ function MemoMore({ text = "" }) {
 
 
 // ===================== PART 4/8 — END =====================
+
 // ===================== DispatchApp.jsx (PART 5/8 — 차량번호 항상 활성화 + 선택수정→수정완료 통합버튼 + 주소/메모 더보기 + 대용량업로드 + 신규 오더 등록) =====================
 function DispatchStatus({
   dispatchData = [],
@@ -7081,6 +7191,15 @@ const [copyModalOpen, setCopyModalOpen] = React.useState(false);
 // 🚚 기사 선택 / 확인 팝업 상태 추가  ⭐⭐
 const [driverConfirmInfo, setDriverConfirmInfo] = React.useState(null);
 const [driverSelectInfo, setDriverSelectInfo] = React.useState(null);
+/*
+{
+  rowId,
+  plate,
+  list: [],
+  selectedDriver: null
+}
+*/
+
 
 
 // 요일 계산
@@ -7415,10 +7534,16 @@ const handleCarInput = async (id, rawVal) => {
   );
 
 
-  if (matches.length > 1) {
-    setDriverSelectInfo({ plate: v, list: matches, rowId: id });
-    return;
-  }
+if (matches.length > 1) {
+  setDriverSelectInfo({
+    rowId: id,
+    plate: v,
+    list: matches,
+    selectedDriver: null,
+  });
+  return;
+}
+
 
   if (matches.length === 1) {
     setDriverConfirmInfo({
@@ -8071,7 +8196,7 @@ return (
       {/* ---------------- 테이블 ---------------- */}
       <div className="overflow-x-auto">
         <table className="w-auto min-w-max text-sm border table-auto">
-          <thead className="bg-gray-100">
+          <thead className="bg-slate-100 text-slate-800">
             <tr>
               {[
                 "선택","순번","등록일","상차일","상차시간","하차일","하차시간",
@@ -8996,77 +9121,191 @@ setTimeout(() => {
 )}
 
 {/* ===================== 기사선택 팝업 ===================== */}
+{/* ===================== 기사선택 팝업 (적용/취소 방식) ===================== */}
 {driverSelectInfo && (
   <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[9999]">
-    <div className="bg-white p-5 rounded-lg w-[360px]">
-      <h3 className="text-lg font-bold mb-3">🚚 선택하라우!</h3>
+    <div className="bg-white p-5 rounded-lg w-[380px] shadow-xl">
+      <h3 className="text-lg font-bold mb-3 text-center">🚚 기사 선택</h3>
 
       {driverSelectInfo.list.map((d, i) => (
-        <button key={i}
-          onClick={async () => {
-            await patchDispatch(driverSelectInfo.rowId, {
-              차량번호: d.차량번호, 이름: d.이름, 전화번호: d.전화번호
-            });
-            setDriverSelectInfo(null);
-          }}
-          className="w-full text-left px-3 py-2 mb-2 rounded border hover:bg-gray-100">
+        <button
+          key={i}
+          onClick={() =>
+            setDriverSelectInfo(p => ({ ...p, selectedDriver: d }))
+          }
+          className={`w-full text-left px-3 py-2 mb-2 rounded border
+            ${
+              driverSelectInfo.selectedDriver === d
+                ? "bg-blue-100 border-blue-500"
+                : "hover:bg-gray-100"
+            }
+          `}
+        >
           {d.이름} ({d.차량번호}) {d.전화번호}
         </button>
       ))}
-      <button className="mt-3 w-full py-2 rounded bg-gray-200"
-        onClick={() => setDriverSelectInfo(null)}>취소</button>
+
+      <div className="flex gap-2 mt-4">
+        {/* 취소 */}
+        <button
+          className="flex-1 py-2 rounded bg-gray-200"
+          onClick={() => setDriverSelectInfo(null)}
+        >
+          취소
+        </button>
+
+        {/* 적용 */}
+        <button
+  disabled={!driverSelectInfo.selectedDriver}
+  className="flex-1 py-2 rounded bg-blue-600 text-white disabled:bg-gray-400"
+  onClick={async () => {
+    const d = driverSelectInfo.selectedDriver;
+    const rowId = driverSelectInfo.rowId;
+
+    // 1️⃣ Firestore 저장
+    await patchDispatch(rowId, {
+      차량번호: d.차량번호,
+      이름: d.이름,
+      전화번호: d.전화번호,
+      배차상태: "배차완료",
+      lastUpdated: new Date().toISOString(),
+    });
+
+    // 2️⃣ 팝업 닫기
+    setDriverSelectInfo(null);
+
+    // 3️⃣ 🔥 정렬 반영 후 해당 행으로 스크롤 이동 (← 여기!)
+    setTimeout(() => {
+      const el = document.getElementById(`row-${rowId}`);
+      if (el) {
+        el.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
+      }
+    }, 300);
+  }}
+>
+  적용
+</button>
+      </div>
     </div>
   </div>
 )}
-{/* ========================== 선택삭제 팝업 ========================== */}
+
+
 {/* ========================== 선택삭제 팝업 ========================== */}
 {showDeletePopup && (
-  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
-    <div className="bg-white p-6 rounded-xl shadow-lg w-[360px]">
-      <h3 className="text-lg font-bold mb-4 text-center text-red-600">
-        선택한 항목을 삭제하시겠습니까?
-      </h3>
+  <div
+    className="fixed inset-0 bg-black/40 flex items-center justify-center z-[99999]"
+    tabIndex={-1}
+    onKeyDown={(e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        deleteRowsWithUndo();
+      }
+      if (e.key === "Escape") {
+        setShowDeletePopup(false);
+      }
+    }}
+  >
+    <div className="bg-white rounded-xl shadow-xl w-[420px] max-h-[80vh] overflow-y-auto">
 
-      <p className="text-center mb-2">
-        총 {selected.size}개의 항목이 삭제됩니다.
-      </p>
+      {/* ===== 헤더 ===== */}
+      <div className="px-5 py-4 border-b flex items-center gap-3">
+        <div className="w-9 h-9 rounded-full bg-red-100 flex items-center justify-center text-red-600">
+          🗑
+        </div>
+        <div>
+          <h3 className="font-bold text-gray-900">
+            선택한 오더를 삭제하시겠습니까?
+          </h3>
+          <p className="text-xs text-gray-500">
+            삭제 후에도 되돌리기로 복구할 수 있습니다.
+          </p>
+        </div>
+      </div>
 
-      {/* 👍 선택된 항목 목록 표시 추가 */}
-      <div className="bg-gray-50 border p-3 rounded mb-4 max-h-60 overflow-y-auto text-sm">
+      {/* ===== 삭제 대상 ===== */}
+      <div className="px-5 py-4 space-y-3 text-sm">
         {[...selected].map((id, idx) => {
-          const row = dispatchData.find((r) => getId(r) === id);
-          if (!row) return null;
+          const r = dispatchData.find(d => getId(d) === id);
+          if (!r) return null;
+
+          const sale = r.청구운임 || 0;
+          const drv  = r.기사운임 || 0;
+          const fee  = sale - drv;
 
           return (
-            <div key={id} className="mb-3 border-b pb-2">
-              <div className="font-semibold">{idx + 1}. {row.거래처명 || "-"}</div>
-              <div>상차: {row.상차일 || ""} {row.상차지명 || ""}</div>
-              <div>하차: {row.하차일 || ""} {row.하차지명 || ""}</div>
-              <div>차량: {row.차량번호 || "-"}</div>
-              <div>운임: {(row.청구운임 || 0).toLocaleString()}원</div>
+            <div key={id} className="border rounded-lg p-3 bg-gray-50">
+              {/* 상단 */}
+              <div className="flex justify-between items-center pb-2 border-b">
+                <div className="font-semibold text-gray-800">
+                  {idx + 1}. {r.거래처명 || "-"}
+                </div>
+              </div>
+
+              {/* 상/하차 */}
+              <div className="mt-2 space-y-1 text-gray-700">
+                <div><b>상차</b> {r.상차일} · {r.상차지명}</div>
+                <div><b>하차</b> {r.하차일} · {r.하차지명}</div>
+                <div><b>차량</b> {r.차량번호 || "-"} / {r.이름 || "-"}</div>
+              </div>
+
+              {/* 운임 */}
+              <div className="grid grid-cols-3 gap-2 mt-3 text-center text-xs">
+                <div className="bg-white border rounded p-2">
+                  <div className="text-gray-400">청구</div>
+                  <div className="font-semibold text-blue-600">
+                    {sale.toLocaleString()}원
+                  </div>
+                </div>
+
+                <div className="bg-white border rounded p-2">
+                  <div className="text-gray-400">기사</div>
+                  <div className="font-semibold text-green-600">
+                    {drv.toLocaleString()}원
+                  </div>
+                </div>
+
+                <div className="bg-white border rounded p-2">
+                  <div className="text-gray-400">수수료</div>
+                  <div
+                    className={`font-semibold ${
+                      fee < 0 ? "text-red-600" : "text-orange-600"
+                    }`}
+                  >
+                    {fee.toLocaleString()}원
+                  </div>
+                </div>
+              </div>
             </div>
           );
         })}
       </div>
 
-      <div className="flex gap-2">
+      {/* ===== 버튼 ===== */}
+      <div className="px-5 py-4 border-t flex gap-3">
         <button
-          className="flex-1 py-2 bg-gray-300 rounded"
           onClick={() => setShowDeletePopup(false)}
+          className="flex-1 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold"
         >
-          취소
+          취소 (ESC)
         </button>
 
         <button
-          className="flex-1 py-2 bg-red-600 text-white rounded"
           onClick={deleteRowsWithUndo}
+          className="flex-1 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold"
         >
-          삭제하기
+          삭제 실행 (Enter)
         </button>
       </div>
+
     </div>
   </div>
 )}
+
+
 
 {/* ========================== 되돌리기 알림 ========================== */}
 {undoVisible && (
