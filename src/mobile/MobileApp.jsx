@@ -1,6 +1,6 @@
 // ======================= src/mobile/MobileApp.jsx (PART 1/3) =======================
 import React, { useState, useMemo, useEffect } from "react";
-import { getDocs, writeBatch } from "firebase/firestore";
+
 import {
   collection,
   addDoc,
@@ -11,7 +11,7 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { db, auth } from "../firebase";
-import { getMessaging, getToken } from "firebase/messaging";
+
 // 🔥 role 기반 컬렉션 분기
 const role = localStorage.getItem("role") || "user";
 const collName = role === "test" ? "dispatch_test" : "dispatch";
@@ -46,7 +46,21 @@ const toNumber = (v) =>
 
 const fmtMoney = (v) =>
   `${Number(v || 0).toLocaleString("ko-KR")}원`;
-
+// ✅ ⬇⬇⬇ 여기 추가 ⬇⬇⬇
+const normalizeKoreanTime = (t = "") => {
+  if (!t) return "";
+  if (t.includes("오전")) {
+    const n = Number(t.replace("오전", "").replace(":00", "").trim());
+    return `${String(n).padStart(2, "0")}:00`;
+  }
+  if (t.includes("오후")) {
+    const n = Number(t.replace("오후", "").replace(":00", "").trim());
+    const h = n === 12 ? 12 : n + 12;
+    return `${String(h).padStart(2, "0")}:00`;
+  }
+  return t;
+};
+// ✅ ⬆⬆⬆ 여기까지 ⬆⬆⬆
 // 상차일 기준 날짜 뽑기(PC/모바일 공통 대응)
 const getPickupDate = (o = {}) => {
   return String(o.상차일 || "").slice(0, 10);
@@ -297,7 +311,9 @@ useEffect(() => {
       if (o.차량번호) return false; // 🔥 배차중(차량번호 없는) 것만 체크
 
 
-      const dt = new Date(`${o.상차일} ${o.상차시간}`);
+      const dt = new Date(
+  `${o.상차일} ${normalizeKoreanTime(o.상차시간)}`
+);
       const diffMin = (dt - now) / (1000 * 60);
 
       return diffMin > 0 && diffMin <= TWO_HOURS;
@@ -834,16 +850,12 @@ const [unassignedTypeFilter, setUnassignedTypeFilter] = useState("전체");
   // ------------------------------------------------------------------
   return (
   <div
-    className="w-full max-w-md mx-auto min-h-screen bg-gray-50 flex flex-col relative"
-    style={{
-      fontSize:
-        uiScale === 1
-          ? "100%"
-          : uiScale === 1.1
-          ? "110%"
-          : "120%",
-    }}
-  >
+  className="w-full max-w-md mx-auto min-h-screen bg-gray-50 flex flex-col relative origin-top"
+  style={{
+    transform: `scale(${uiScale})`,
+    transformOrigin: "top center",
+  }}
+>
       {/* 🔔 토스트 알림 */}
       {toast && (
         <div
@@ -900,6 +912,7 @@ const [unassignedTypeFilter, setUnassignedTypeFilter] = useState("전체");
     }}
     onDeleteAll={deleteAllOrders}
     setUiScale={setUiScale}   // ✅ ⭐⭐⭐ 이 줄 추가
+    uiScale={uiScale}
   />
 )}
 
@@ -1087,6 +1100,7 @@ function MobileSideMenu({
   onGoUnassigned,
   onDeleteAll,
   setUiScale,   // ⭐ 추가
+  uiScale, 
 }) {
 
   const logout = () => {
@@ -1139,7 +1153,7 @@ function MobileSideMenu({
         }}
         className={`flex-1 py-1.5 rounded-full text-xs font-semibold border
           ${
-            Number(localStorage.getItem("uiScale") || 1) === v
+            uiScale === v
               ? "bg-blue-500 text-white border-blue-500"
               : "bg-white text-gray-600 border-gray-300"
           }`}
@@ -1467,7 +1481,9 @@ function MobileOrderCard({ order, onSelect }) {
       {(() => {
         if (!order.상차일 || !order.상차시간) return null;
         const now = new Date();
-        const dt = new Date(`${order.상차일} ${order.상차시간}`);
+        const dt = new Date(
+   `${order.상차일} ${normalizeKoreanTime(order.상차시간)}`
+ );
         const diffMin = (dt - now) / 60000;
         if (diffMin > 0 && diffMin <= 120) {
           return (
@@ -1781,11 +1797,7 @@ function MobileOrderDetail({
           if (elTon) elTon.value = tonVal;
           if (elCargo) elCargo.value = cargoVal;
 
-          setPickup(pickupVal);
-          setDrop(dropVal);
-          setTon(tonVal);
-          setCargo(cargoVal);
-
+          
           setTimeout(() => {
             const btn = document.querySelector("#fare-search-button");
             if (btn) btn.click();
@@ -2801,13 +2813,14 @@ const extractTonNum = (text = "") => {
   return m ? Number(m[1]) : null;
 };
 
-  useEffect(() => {
-    const unsub = onSnapshot(collection(db, collName), (snap) => {
-      const arr = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      setDispatchData(arr);
-    });
-    return () => unsub();
-  }, []);
+ useEffect(() => {
+  (async () => {
+    const snap = await getDocs(collection(db, collName));
+    const arr = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    setDispatchData(arr);
+  })();
+}, []);
+
 
 const calcFareMobile = () => {
   const isForced = window.__forceFareSearch__;
