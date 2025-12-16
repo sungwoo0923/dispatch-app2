@@ -944,10 +944,11 @@ const [unassignedTypeFilter, setUnassignedTypeFilter] = useState("전체");
             setStartDate={setStartDate}
             setEndDate={setEndDate}
             quickRange={quickRange}
-            onSelect={() => {
+onSelect={(o) => {
   setSelectedOrder(o);
-  setDetailFrom("unassigned"); // ⭐ 어디서 왔는지 기록
+  setDetailFrom("list");   // 🔥 list에서 들어온 거
   setPage("detail");
+  window.scrollTo(0, 0);
 }}
             vehicleFilter={vehicleFilter}
             setVehicleFilter={setVehicleFilter}
@@ -1001,16 +1002,18 @@ const [unassignedTypeFilter, setUnassignedTypeFilter] = useState("전체");
         )}
 
         {page === "unassigned" && (
-         <MobileUnassignedList
-  title={`미배차현황 (${unassignedOrders.length})`}
-  orders={unassignedOrders}
-  unassignedTypeFilter={unassignedTypeFilter}
-  setUnassignedTypeFilter={setUnassignedTypeFilter}
-  onBack={() => setPage("list")}
-  setSelectedOrder={setSelectedOrder}
-  setPage={setPage}
-/>
-        )}
+  <MobileUnassignedList
+    title={`미배차현황 (${unassignedOrders.length})`}
+    orders={unassignedOrders}
+    unassignedTypeFilter={unassignedTypeFilter}
+    setUnassignedTypeFilter={setUnassignedTypeFilter}
+    onBack={() => setPage("list")}
+    setSelectedOrder={setSelectedOrder}
+    setPage={setPage}
+    setDetailFrom={setDetailFrom}   // 🔥🔥🔥 이 줄 추가
+  />
+)}
+
       </div>
 
       {page === "list" && !showMenu && (
@@ -3179,6 +3182,7 @@ function MobileUnassignedList({
   onBack,
   setSelectedOrder,
   setPage,
+  setDetailFrom,
 }) {
   const dateMap = new Map();
   for (const o of orders) {
