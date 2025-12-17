@@ -89,6 +89,19 @@ function normalizeClients(arr){
   const map = new Map(); mapped.forEach(c=>map.set(c.거래처명,c));
   return Array.from(map.values());
 }
+/* -------------------------------------------------
+   배차 수정 이력 생성 함수 (⭐ 반드시 필요)
+--------------------------------------------------*/
+function makeDispatchHistory({ field, before, after }) {
+  return {
+    at: Date.now(),                              // 수정 시각
+    user: auth.currentUser?.email || "unknown", // 수정자
+    field,                                      // 수정 필드명
+    before,                                    // 이전 값
+    after,                                     // 변경 값
+  };
+}
+
 
 /* -------------------------------------------------
    Firebase
@@ -199,11 +212,43 @@ unsubs.push(onSnapshot(collection(db, collName), (snap)=>{
 };
   const patchDispatch = async (_id, patch) => {
   if (!_id) return;
-  await setDoc(doc(db, COLL.dispatch, _id), { 
-    ...patch,
-    작성자: auth.currentUser?.email || "",   // ★ 추가
-  }, { merge: true });
+
+  // 1️⃣ 기존 문서 가져오기
+  const ref = doc(db, COLL.dispatch, _id);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return;
+
+  const prev = snap.data();
+  const histories = [];
+
+  // 2️⃣ 변경된 필드만 이력 생성
+  Object.keys(patch).forEach((key) => {
+    if (prev[key] !== patch[key]) {
+      histories.push(
+        makeDispatchHistory({
+          field: key,
+          before: prev[key],
+          after: patch[key],
+        })
+      );
+    }
+  });
+
+  // 3️⃣ Firestore 업데이트
+  await setDoc(
+    ref,
+    {
+      ...patch,
+      작성자: auth.currentUser?.email || "",
+      history: [
+        ...(prev.history || []),
+        ...histories,
+      ],
+    },
+    { merge: true }
+  );
 };
+
 
 const removeDispatch = async (arg) => {
   const id = typeof arg === "string" ? arg : arg?._id;
@@ -917,6 +962,18 @@ return (
       .replace(/\s+/g, "")
       .replace(/[^a-z0-9가-힣]/g, "");
   }
+  function makeHistory({ user, field, before, after }) {
+  return {
+    at: new Date(),
+    userId: user.uid,
+    userName: user.name,
+    action: "update",
+    field,
+    before,
+    after,
+  };
+}
+
   // ================================
 // 🔍 날짜 문자열 판별 (오더복사용)
 // ================================
@@ -2194,10 +2251,10 @@ const applyCopy = (r) => {
 
 // 입력창 (카카오T 스타일)
 const inputCls =
-  "w-full px-3 py-2 rounded-xl text-sm border " +
-  "border-[#E5E7EB] bg-white " +             // 연한 그레이 테두리
-  "focus:border-black focus:ring-1 focus:ring-black/60 " + 
-  "transition-all";
+  "w-full px-3 py-2 rounded-lg text-sm border " +
+  "border-gray-300 bg-white " +
+  "focus:border-blue-600 focus:ring-1 focus:ring-blue-200 " +
+  "placeholder:text-gray-400 transition";
 
 // 라벨 (카카오T 스타일)
 const labelCls =
@@ -9822,7 +9879,6 @@ function NewOrderPopup({
 // ===================== DispatchApp.jsx (PART 6/8 — Settlement Premium) — START =====================
 
 function Settlement({ dispatchData, fixedRows = [] }) {
-  const chartRef = React.useRef(null);
   const [targetMonth, setTargetMonth] = React.useState(
   new Date().toISOString().slice(0, 7)
 );
@@ -9842,11 +9898,6 @@ const ratePct = (n) => `${n.toFixed(1)}%`;
 // ================================
 const exportSettlementPPT = async () => {
   const ppt = new PptxGenJS();
-  let chartImage = null;
-if (chartRef.current) {
-  const canvas = await html2canvas(chartRef.current);
-  chartImage = canvas.toDataURL("image/png");
-}
   ppt.author = "RUN25";
   ppt.company = "RUN25 물류";
   ppt.title = `매출 리포트 ${targetMonth}`;
@@ -9955,27 +10006,6 @@ const top10Rows = Object.entries(clientMap)
     [["거래처", "매출", "수익"], ...top10Rows.slice(0, 10)],
     { x: 0.5, y: 1.0, w: 9, fontSize: 12 }
   );
-  /* -----------------------------
-   5-1. 일별 수익 차트
------------------------------ */
-if (chartImage) {
-  slide = ppt.addSlide();
-  slide.addText("일별 수익 추이", {
-    x: 0.5,
-    y: 0.3,
-    fontSize: 20,
-    bold: true,
-  });
-
-  slide.addImage({
-    data: chartImage,
-    x: 0.5,
-    y: 1.0,
-    w: 9,
-    h: 4.5,
-  });
-}
-
 
   /* -----------------------------
      6. 2026 매출 전망
@@ -10073,6 +10103,50 @@ return d >= `${yearKey}-01-01` && d <= endOfMonth;
 });
 
   const prevMonthRows = rows.filter((r) => (r.상차일 || "").startsWith(prevMonthKey));
+  // ================================
+// 🆕 신규 거래처 (당월 최초 발생)
+// ================================
+const isValidClientName = (c) =>
+  c &&
+  !/^2\d{1,2}년/.test(c) &&     // 25년1월, 25년10월 제거
+  !c.includes("후레쉬물류");    // 후레쉬물류 제외
+
+// 거래처별 최초 등장일 계산
+const firstAppearMap = new Map();
+
+rows.forEach((r) => {
+  const c = r.거래처명 || "";
+  const d = r.상차일 || "";
+  if (!isValidClientName(c) || !d) return;
+
+  if (!firstAppearMap.has(c) || d < firstAppearMap.get(c)) {
+    firstAppearMap.set(c, d);
+  }
+});
+
+// 당월 신규 거래처만 추출
+const newClients = [];
+
+firstAppearMap.forEach((firstDate, client) => {
+  if (firstDate.startsWith(monthKey)) {
+    const clientRows = monthRows.filter(r => r.거래처명 === client);
+
+    const sale = sum(clientRows, "청구운임");
+    const driver = sum(clientRows, "기사운임");
+    const fee = sum(clientRows, "수수료");
+    const profit = sale - driver;
+
+    newClients.push({
+      client,
+      firstDate,
+      cnt: clientRows.length,
+      sale,
+      profit,
+      fee,
+    });
+  }
+});
+
   const won = (n) => `${(n || 0).toLocaleString()}원`;
 
   // 🔑 후레쉬물류 판별
@@ -10173,6 +10247,7 @@ const vrPure = {
 
       {/* LEFT PANEL */}
       <div className="space-y-6">
+        
         <button
   onClick={exportSettlementPPT}
   className="px-4 py-2 rounded bg-indigo-600 text-white text-sm"
@@ -10349,27 +10424,39 @@ const vrPure = {
 </div>
 
 
-        {/* Top10 */}
-        <SettlementTop10
-  rows={monthRows.filter(r => !String(r.거래처명 || "").includes("후레쉬물류"))}
+       {/* Top10 */}
+<SettlementTop10
+  rows={monthRows.filter(
+    r => !String(r.거래처명 || "").includes("후레쉬물류")
+  )}
   onClickClient={setDetailClient}
 />
 
-        {/* Chart: Day/Month Profit compare */}
-        <SettlementBarChart rows={rows} chartRef={chartRef} />
-
-
-      </div>
-
-      {/* RIGHT PANEL */}
-<SettlementAnalysisPanel
+<SettlementTop10Drop
   rows={rows}
   targetMonth={targetMonth}
-  setTargetMonth={setTargetMonth}
-  forecast2026={forecast2026}
-  yPure={yPure}
 />
 
+<SettlementNewClients rows={newClients} />
+</div>
+
+{/* RIGHT PANEL */}
+<div className="flex flex-col gap-6 pt-[42px]">
+  <SettlementAnalysisPanel
+    rows={rows}
+    targetMonth={targetMonth}
+    setTargetMonth={setTargetMonth}
+    forecast2026={forecast2026}
+    yPure={yPure}
+  />
+
+  <AIPremiumInsight
+    rows={rows.filter(r => (r.상차일 || "").startsWith(targetMonth))}
+    targetMonth={targetMonth}
+    forecast2026={forecast2026}
+    yPure={yPure}
+  />
+</div>
       {/* DETAIL POPUP */}
       {detailClient && (
         <SettlementDetailPopup
@@ -10543,16 +10630,6 @@ function SettlementAnalysisPanel({
         ) : (
           <ClientInsight rows={monthRows} />
         )}
-
-        {/* 🔥 프리미엄 AI 인사이트 */}
-<AIPremiumInsight
-  rows={client ? monthRows.filter(r => r.거래처명 === client) : monthRows}
-  targetMonth={targetMonth}
-  forecast2026={forecast2026}
-  yPure={yPure}
-/>
-
-
 
       </div>
     </div>
@@ -10899,9 +10976,73 @@ const worstDay = sortedDays[sortedDays.length - 1] || { date: "-", profit: 0 };
   );
 }
 
+/* ==================== 신규 거래처 (당월 최초 발생) ==================== */
+function SettlementNewClients({ rows }) {
+  const won = (n) => `${(n || 0).toLocaleString()}원`;
+
+  if (!rows || rows.length === 0) {
+    return (
+      <div className="rounded-2xl bg-white border shadow-sm p-4">
+        <h3 className="text-sm font-semibold text-emerald-700 mb-3">
+          🆕 당월 신규 거래처
+        </h3>
+        <div className="text-center text-xs text-gray-400 py-4">
+          신규 거래처 없음
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-2xl bg-emerald-50 border border-emerald-200 p-4">
+      <h3 className="text-sm font-semibold text-emerald-700 mb-3">
+        🆕 당월 신규 거래처
+      </h3>
+
+      <table className="w-full text-sm border-collapse">
+        <thead>
+          <tr className="bg-emerald-100 text-emerald-800">
+            <th className="border px-3 py-2">거래처</th>
+            <th className="border px-3 py-2">최초등록일</th>
+            <th className="border px-3 py-2 text-center">건수</th>
+            <th className="border px-3 py-2 text-right">매출</th>
+            <th className="border px-3 py-2 text-right">수익</th>
+            <th className="border px-3 py-2 text-right">수수료</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={i} className="odd:bg-white even:bg-emerald-50">
+              <td className="border px-3 py-2 font-medium">{r.client}</td>
+              <td className="border px-3 py-2 text-center text-xs">
+                {r.firstDate}
+              </td>
+              <td className="border px-3 py-2 text-center">{r.cnt}</td>
+              <td className="border px-3 py-2 text-right text-blue-700 font-semibold">
+                {won(r.sale)}
+              </td>
+              <td className="border px-3 py-2 text-right text-emerald-700 font-semibold">
+                {won(r.profit)}
+              </td>
+              <td className="border px-3 py-2 text-right text-gray-600">
+                {won(r.fee)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <p className="text-[11px] text-gray-500 mt-2">
+        * 해당 월에 최초로 거래가 발생한 거래처만 표시
+      </p>
+    </div>
+  );
+}
 
 /* ==================== Top10 ==================== */
 function SettlementTop10({ rows, onClickClient }) {
+  /* ==================== 신규 거래처 (당월 최초 발생) ==================== */
+
   const toInt = (v)=>parseInt(String(v||"0").replace(/[^\d-]/g,""),10)||0;
   const won = (n)=> `${(n||0).toLocaleString()}원`;
 
@@ -10939,66 +11080,176 @@ function SettlementTop10({ rows, onClickClient }) {
           </tr>
         </thead>
         <tbody>
-          {top10.map((r)=>(
-            <tr key={r.c}
-              className="odd:bg-white even:bg-gray-50 cursor-pointer hover:bg-blue-50"
-              onClick={()=>onClickClient(r.c)}
-            >
-              <td className="border px-3 py-2">{r.c}</td>
-              <td className="border px-3 py-2 text-center">{r.cnt}</td>
-              <td className="border px-3 py-2 text-right font-semibold text-blue-700">{won(r.sale)}</td>
-              <td className="border px-3 py-2 text-right text-gray-600">{won(r.driver)}</td>
-              <td className="border px-3 py-2 text-right font-semibold text-green-600">{won(r.profit)}</td>
-              
-            </tr>
-          ))}
-        </tbody>
+  {top10.map((r) => {
+    const rate = r.sale === 0 ? 0 : (r.profit / r.sale) * 100;
+
+    return (
+      <tr
+        key={r.c}
+        className="odd:bg-white even:bg-gray-50 cursor-pointer hover:bg-blue-50"
+        onClick={() => onClickClient(r.c)}
+      >
+        <td className="border px-3 py-2">{r.c}</td>
+        <td className="border px-3 py-2 text-center">{r.cnt}</td>
+        <td className="border px-3 py-2 text-right font-semibold text-blue-700">
+          {won(r.sale)}
+        </td>
+        <td className="border px-3 py-2 text-right text-gray-600">
+          {won(r.driver)}
+        </td>
+        <td className="border px-3 py-2 text-right font-semibold text-green-600">
+          {won(r.profit)}
+        </td>
+
+        {/* ✅ 수익률 */}
+        <td className="border px-3 py-2 text-right font-semibold text-indigo-700">
+          {rate.toFixed(1)}%
+        </td>
+      </tr>
+    );
+  })}
+</tbody>
+
       </table>
       }
     </div>
   );
 }
+/* ==================== AI 원인 추정 유틸 ==================== */
+function inferDropReason(r) {
+  const saleRate =
+    r.prev > 0 ? ((r.cur - r.prev) / r.prev) * 100 : 0;
 
+  const cntRate =
+    r.prevCnt > 0 ? ((r.curCnt - r.prevCnt) / r.prevCnt) * 100 : 0;
 
-/* ==================== Bar Chart ==================== */
-function SettlementBarChart({ rows, chartRef }) {
-  const toInt = (v)=>parseInt(String(v||"0").replace(/[^\d-]/g,""),10)||0;
+  if (r.curCnt === 0) return "🚨 거래 중단 가능성";
+  if (cntRate < -40 && saleRate < -40) return "📉 물량 급감";
+  if (cntRate < -30 && saleRate > -10) return "💸 단가 하락";
+  if (cntRate > -10 && saleRate < -30) return "📦 고단가 물량 이탈";
+  if (saleRate < -20) return "⚠️ 전반적 거래 위축";
 
-  const daily = {};
-  rows.forEach((r)=>{
-    const d = r.상차일;
-    if(!d) return;
+  return "ℹ️ 단기 변동";
+}
+
+/* ==================== 전월 대비 매출 감소 Top10 ==================== */
+function SettlementTop10Drop({ rows, targetMonth }) {
+  const toInt = (v) =>
+    parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
+  const won = (n) => `${(n || 0).toLocaleString()}원`;
+
+  // 🔹 기준 월 / 전월 계산
+  const [year, month] = targetMonth.split("-").map(Number);
+
+  const thisMonthKey = `${year}-${String(month).padStart(2, "0")}`;
+  const prevMonth =
+    month === 1
+      ? `${year - 1}-12`
+      : `${year}-${String(month - 1).padStart(2, "0")}`;
+
+  // 🔹 거래처별 집계
+  const map = new Map();
+
+  rows.forEach((r) => {
+    const c = r.거래처명 || "";
+
+// ❌ 거래처명 아닌 데이터 제거
+if (
+  !c ||
+  /^2\d{1,2}년/.test(c) ||     // 25년1월, 25년10월 같은 값 제거
+  c.includes("후레쉬물류")     // 후레쉬물류 제외
+) {
+  return;
+}
     const sale = toInt(r.청구운임);
-    const driver = toInt(r.기사운임);
-    const profit = sale-driver;
-    if(!daily[d]) daily[d] = {date:d.slice(5), sale:0, driver:0, profit:0};
-    daily[d].sale+=sale; daily[d].driver+=driver; daily[d].profit+=profit;
+    const d = r.상차일 || "";
+
+    if (!map.has(c)) {
+      map.set(c, {
+  client: c,
+  cur: 0,
+  prev: 0,
+  curCnt: 0,
+  prevCnt: 0,
+});
+
+    }
+
+if (d.startsWith(thisMonthKey)) {
+  map.get(c).cur += sale;
+  map.get(c).curCnt += 1;
+} else if (d.startsWith(prevMonth)) {
+  map.get(c).prev += sale;
+  map.get(c).prevCnt += 1;
+}
   });
 
-  const data = Object.values(daily).sort((a,b)=>a.date.localeCompare(b.date));
+  // 🔹 전월 대비 감소한 거래처만 추출
+  const top10 = Array.from(map.values())
+    .map((r) => ({
+      ...r,
+      diff: r.cur - r.prev, // 음수면 감소
+    }))
+    .filter((r) => r.prev > 0 && r.diff < 0)
+    .sort((a, b) => a.diff - b.diff) // 가장 많이 떨어진 순
+    .slice(0, 10);
 
   return (
-    <div ref={chartRef} className="rounded-2xl bg-white border shadow-sm p-4">
-      <h3 className="text-sm font-semibold mb-3">일별 수익 비교</h3>
-      <div className="w-full h-60">
-        <ResponsiveContainer width="100%" height={240}>
+    <div className="rounded-2xl bg-rose-50 border border-rose-200 p-4">
+      <h3 className="text-sm font-semibold mb-3 text-rose-700">
+        ⚠ 전월 대비 매출 감소 거래처 TOP10
+      </h3>
 
-          <BarChart data={data}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
-            <XAxis dataKey="date" tick={{fontSize:10}} />
-            <YAxis tick={{fontSize:10}} />
-            <Tooltip formatter={(v)=>`${v.toLocaleString()}원`} />
-            <Legend />
-            <Bar dataKey="sale" name="매출" fill="#2563EB" />
-            <Bar dataKey="driver" name="운반비" fill="#9CA3AF" />
-            <Bar dataKey="profit" name="수익" fill="#059669" />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
+      {top10.length === 0 ? (
+        <div className="text-center text-xs text-gray-400 py-4">
+          감소한 거래처 없음
+        </div>
+      ) : (
+        <table className="w-full text-sm border-collapse">
+          <thead>
+            <tr className="bg-rose-100 text-rose-700">
+             <th className="border px-3 py-2">거래처</th>
+<th className="border px-3 py-2 text-right">전월</th>
+<th className="border px-3 py-2 text-right">당월</th>
+<th className="border px-3 py-2 text-center">거래량</th>
+<th className="border px-3 py-2 text-right">감소액</th>
+<th className="border px-3 py-2">원인 분석</th>
+
+            </tr>
+          </thead>
+          <tbody>
+            {top10.map((r) => (
+              <tr key={r.client} className="odd:bg-white even:bg-rose-50">
+                <td className="border px-3 py-2">{r.client}</td>
+                <td className="border px-3 py-2 text-right">
+  {won(r.prev)}
+</td>
+<td className="border px-3 py-2 text-right">
+  {won(r.cur)}
+</td>
+
+{/* 거래량 비교 */}
+<td className="border px-3 py-2 text-center text-xs">
+  {r.prevCnt} → {r.curCnt}
+</td>
+
+<td className="border px-3 py-2 text-right font-semibold text-rose-600">
+  {won(r.diff)}
+</td>
+
+{/* AI 원인 추정 */}
+<td className="border px-3 py-2 text-xs text-gray-700">
+  {inferDropReason(r)}
+</td>
+
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }
-
 
 /* ==================== Detail Popup ==================== */
 function SettlementDetailPopup({ client, rows, onClose }) {
@@ -13186,10 +13437,11 @@ const handleBlur = async (row, key, val) => {
     };
     reader.readAsArrayBuffer(file);
   };
+  
 
-  const head = headBase || "border px-2 py-2 bg-gray-100 text-center whitespace-nowrap";
-  const cell = cellBase || "border px-2 py-1 text-center whitespace-nowrap align-middle";
-  const input = inputBase || "border p-1 rounded w-36 text-center";
+  const head = "border px-2 py-1 bg-slate-100 text-slate-700 text-xs font-semibold text-center whitespace-nowrap";
+  const cell = "border px-2 py-[2px] text-sm text-slate-800 text-center whitespace-nowrap align-middle";
+  const input = inputBase || "border px-1 py-[2px] text-sm rounded-sm w-28 text-center";
 
   return (
     <div>
@@ -13211,27 +13463,41 @@ const handleBlur = async (row, key, val) => {
       </div>
 
       {/* 신규 등록 */}
-      <div className="grid grid-cols-4 gap-2 mb-4">
-        <div>
-          <div className="text-xs text-gray-500 mb-1">차량번호*</div>
-          <input className="border p-2 rounded w-full" value={newForm.차량번호} onChange={e=>setNewForm(p=>({...p,차량번호:e.target.value}))}/>
-        </div>
-        <div>
-          <div className="text-xs text-gray-500 mb-1">이름</div>
-          <input className="border p-2 rounded w-full" value={newForm.이름} onChange={e=>setNewForm(p=>({...p,이름:e.target.value}))}/>
-        </div>
-        <div>
-          <div className="text-xs text-gray-500 mb-1">전화번호</div>
-          <input className="border p-2 rounded w-full" value={newForm.전화번호} onChange={e=>setNewForm(p=>({...p,전화번호:e.target.value}))}/>
-        </div>
-        <div className="flex items-end">
-          <button onClick={addNew} className="px-4 py-2 rounded bg-blue-600 text-white w-full">+ 신규등록</button>
-        </div>
-        <div className="col-span-4">
-          <div className="text-xs text-gray-500 mb-1">메모</div>
-          <input className="border p-2 rounded w-full" value={newForm.메모} onChange={e=>setNewForm(p=>({...p,메모:e.target.value}))}/>
-        </div>
-      </div>
+      {/* 신규 기사 빠른 등록 (Compact) */}
+<div className="flex items-end gap-2 mb-4 bg-slate-50 px-2 py-1.5 rounded-md border">
+  <input
+    className="border px-2 py-1 rounded text-sm w-40"
+    placeholder="차량번호*"
+    value={newForm.차량번호}
+    onChange={e=>setNewForm(p=>({...p,차량번호:e.target.value}))}
+  />
+  <input
+    className="border px-2 py-1 rounded text-sm w-28"
+    placeholder="이름"
+    value={newForm.이름}
+    onChange={e=>setNewForm(p=>({...p,이름:e.target.value}))}
+  />
+  <input
+    className="border px-2 py-1 rounded text-sm w-36"
+    placeholder="전화번호"
+    value={newForm.전화번호}
+    onChange={e=>setNewForm(p=>({...p,전화번호:e.target.value}))}
+  />
+  <input
+    className="border px-2 py-1 rounded text-sm w-64"
+    placeholder="메모"
+    value={newForm.메모}
+    onChange={e=>setNewForm(p=>({...p,메모:e.target.value}))}
+  />
+
+  <button
+    onClick={addNew}
+    className="px-3 py-1 rounded-md bg-blue-600 text-white text-sm whitespace-nowrap"
+  >
+    + 추가
+  </button>
+</div>
+
 
       {/* 표 */}
       <div className="overflow-x-auto">
@@ -13282,35 +13548,53 @@ const handleBlur = async (row, key, val) => {
 
           {/* 차량번호 */}
           <td className={cell}>
-            <input
-              className={input}
-              defaultValue={r.차량번호 || ""}
-              onBlur={(e) => handleBlur(r, "차량번호", e.target.value)}
-            />
-          </td>
+  <span
+    className="block cursor-pointer px-1 py-[2px] rounded hover:bg-slate-100"
+    contentEditable
+    suppressContentEditableWarning
+    onBlur={(e) =>
+      handleBlur(r, "차량번호", e.currentTarget.innerText.trim())
+    }
+  >
+    {r.차량번호 || "-"}
+  </span>
+</td>
+
 
           {/* 이름 */}
           <td className={cell}>
-            <input
-              className={input}
-              defaultValue={r.이름 || ""}
-              onBlur={(e) => handleBlur(r, "이름", e.target.value)}
-            />
-          </td>
+  <span
+    className="block cursor-pointer px-1 py-[2px] hover:bg-slate-100 rounded"
+    onClick={(e) => {
+      e.currentTarget.contentEditable = true;
+      e.currentTarget.focus();
+    }}
+    onBlur={(e) => handleBlur(r, "이름", e.currentTarget.innerText)}
+    suppressContentEditableWarning
+  >
+    {r.이름 || "-"}
+  </span>
+</td>
+
 
           {/* 전화번호 */}
           <td className={cell}>
-            <input
-              className={input}
-              defaultValue={r.전화번호 || ""}
-              onBlur={(e) => handleBlur(r, "전화번호", e.target.value)}
-            />
-          </td>
+  <span
+    className="block cursor-pointer px-1 py-[2px] rounded hover:bg-slate-100"
+    contentEditable
+    suppressContentEditableWarning
+    onBlur={(e) =>
+      handleBlur(r, "전화번호", e.currentTarget.innerText.trim())
+    }
+  >
+    {r.전화번호 || "-"}
+  </span>
+</td>
 
           {/* 메모 */}
           <td className={cell}>
             <input
-              className={`${input} w-64`}
+              className={`${input} w-48 text-left`}
               defaultValue={r.메모 || ""}
               onBlur={(e) => handleBlur(r, "메모", e.target.value)}
             />
@@ -13319,7 +13603,7 @@ const handleBlur = async (row, key, val) => {
           {/* 삭제 버튼 */}
           <td className={cell}>
             <button
-              className="px-2 py-1 bg-red-600 text-white rounded"
+              className="px-2 py-[2px] text-xs border border-red-400 text-red-600 rounded hover:bg-red-50"
               onClick={() => {
                 if (!docId) {
                   alert("ID 없음: 삭제가 불가능한 행입니다.");
@@ -13340,6 +13624,7 @@ const handleBlur = async (row, key, val) => {
 </tbody>
 
         </table>
+        
       </div>
 
       {/* ================= 페이지 버튼 ================ */}

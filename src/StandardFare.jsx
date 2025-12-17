@@ -31,6 +31,37 @@ const extractTon = (text) => {
   const m = String(text).replace(/톤|t/gi, "").match(/(\d+(\.\d+)?)/);
   return m ? Number(m[1]) : null;
 };
+function calcImplicitFare(dispatchData, {
+  client,
+  vehicle,
+  ton,
+}) {
+  const TON_GAP = 0.5;
+
+  const rows = dispatchData.filter(r => {
+    if (!r.거래처명 || !r.청구운임) return false;
+    if (r.거래처명 !== client) return false;
+    if (vehicle && r.차량종류 !== vehicle) return false;
+
+    const rowTon = extractTon(r.차량톤수);
+    return rowTon && Math.abs(rowTon - ton) <= TON_GAP;
+  });
+
+  if (rows.length < 3) return null;
+
+  const fares = rows.map(r =>
+    Number(String(r.청구운임).replace(/[^\d]/g, ""))
+  );
+
+  const avg = Math.round(fares.reduce((a, b) => a + b, 0) / fares.length);
+
+  return {
+    avg,
+    min: Math.min(...fares),
+    max: Math.max(...fares),
+    count: rows.length,
+  };
+}
 
 export default function StandardFare() {
   const [dispatchData, setDispatchData] = useState([]);
@@ -50,6 +81,16 @@ const [client, setClient] = useState(localStorage.getItem("sf_client") || "전�
   // 결과
   const [result, setResult] = useState([]);
   const [aiFare, setAiFare] = useState(null);
+const implicitFare = React.useMemo(() => {
+  const tonNum = extractTon(ton);
+  if (!client || !vehicle || !tonNum) return null;
+
+  return calcImplicitFare(dispatchData, {
+    client,
+    vehicle,
+    ton: tonNum,
+  });
+}, [client, vehicle, ton, dispatchData]);
 
   // Firestore 실시간 구독
   useEffect(() => {
