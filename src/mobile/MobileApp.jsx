@@ -46,6 +46,12 @@ const toNumber = (v) =>
 
 const fmtMoney = (v) =>
   `${Number(v || 0).toLocaleString("ko-KR")}원`;
+// 🔥 검색용 정규화 (여기에 추가)
+const normalize = (s = "") =>
+  String(s)
+    .toLowerCase()
+    .replace(/\s+/g, "")
+    .replace(/[^\w가-힣]/g, "");
 // ✅ ⬇⬇⬇ 여기 추가 ⬇⬇⬇
 const normalizeKoreanTime = (t = "") => {
   if (!t) return "";
@@ -501,22 +507,26 @@ const [unassignedTypeFilter, setUnassignedTypeFilter] = useState("전체");
 base = base.filter((o) => {
   if (!searchText.trim()) return true;
 
-  const t = searchText.trim().toLowerCase();
+  const q = normalize(searchText);
 
-  const map = {
-    거래처명: o.거래처명 || "",
-    기사명: o.기사명 || "",
-    차량번호: o.차량번호 || "",
-    상차지명: o.상차지명 || "",
-    상차지주소: o.상차지주소 || "",   // ✅ 추가
-    하차지명: o.하차지명 || "",
-    하차지주소: o.하차지주소 || "",   // ✅ 추가
-  };
+  const pickup =
+    normalize(o.상차지명) +
+    normalize(o.상차지주소);
 
-  return String(map[searchType] || "")
-    .toLowerCase()
-    .includes(t);
+  const drop =
+    normalize(o.하차지명) +
+    normalize(o.하차지주소);
+
+  const client = normalize(o.거래처명);
+
+  // 🔥 하나라도 포함되면 통과
+  return (
+    pickup.includes(q) ||
+    drop.includes(q) ||
+    client.includes(q)
+  );
 });
+
 
     // 7) 정렬
     if (statusTab === "전체") {
@@ -1832,7 +1842,13 @@ function MobileOrderDetail({
           if (elDrop) elDrop.value = dropVal;
           if (elTon) elTon.value = tonVal;
           if (elCargo) elCargo.value = cargoVal;
-
+// ✅ ✅ ✅ 여기!!!
+const elPickupAddr = document.querySelector(
+  "input[placeholder='상차지 주소']"
+);
+const elDropAddr = document.querySelector(
+  "input[placeholder='하차지 주소']"
+);
           
           setTimeout(() => {
             const btn = document.querySelector("#fare-search-button");
