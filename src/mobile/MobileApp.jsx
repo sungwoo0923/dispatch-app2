@@ -498,20 +498,25 @@ const [unassignedTypeFilter, setUnassignedTypeFilter] = useState("전체");
     });
 
     // 6) 검색
-    base = base.filter((o) => {
-      if (!searchText.trim()) return true;
+base = base.filter((o) => {
+  if (!searchText.trim()) return true;
 
-      const t = searchText.trim().toLowerCase();
-      const map = {
-        거래처명: o.거래처명 || "",
-        기사명: o.기사명 || "",
-        차량번호: o.차량번호 || "",
-        상차지명: o.상차지명 || "",
-        하차지명: o.하차지명 || "",
-      };
+  const t = searchText.trim().toLowerCase();
 
-      return String(map[searchType] || "").toLowerCase().includes(t);
-    });
+  const map = {
+    거래처명: o.거래처명 || "",
+    기사명: o.기사명 || "",
+    차량번호: o.차량번호 || "",
+    상차지명: o.상차지명 || "",
+    상차지주소: o.상차지주소 || "",   // ✅ 추가
+    하차지명: o.하차지명 || "",
+    하차지주소: o.하차지주소 || "",   // ✅ 추가
+  };
+
+  return String(map[searchType] || "")
+    .toLowerCase()
+    .includes(t);
+});
 
     // 7) 정렬
     if (statusTab === "전체") {
@@ -1343,15 +1348,25 @@ function MobileOrderList({
             <option value="기사명">기사명</option>
             <option value="차량번호">차량번호</option>
             <option value="상차지명">상차지명</option>
+            <option value="상차지주소">상차지주소</option>
             <option value="하차지명">하차지명</option>
+            <option value="하차지주소">하차지주소</option>
+            
           </select>
 
           <input
-            className="flex-1 border rounded-full px-3 py-1.5 bg-gray-50"
-            placeholder="검색어 입력"
-            value={searchText}
-            onChange={(e) => setSearchText(e.target.value)}
-          />
+  className="flex-1 border rounded-full px-3 py-1.5 bg-gray-50"
+  placeholder={
+    searchType === "상차지주소"
+      ? "상차지 주소 검색"
+      : searchType === "하차지주소"
+      ? "하차지 주소 검색"
+      : "검색어 입력"
+  }
+  value={searchText}
+  onChange={(e) => setSearchText(e.target.value)}
+/>
+
         </div>
       </div>
 
