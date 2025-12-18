@@ -1838,17 +1838,24 @@ function MobileOrderDetail({
           const elTon = document.querySelector("input[placeholder='톤수 (예: 1톤)']");
           const elCargo = document.querySelector("input[placeholder='화물내용 (예: 16파렛)']");
 
-          if (elPickup) elPickup.value = pickupVal;
-          if (elDrop) elDrop.value = dropVal;
-          if (elTon) elTon.value = tonVal;
-          if (elCargo) elCargo.value = cargoVal;
-// ✅ ✅ ✅ 여기!!!
+// 기존 지명 입력
+if (elPickup) elPickup.value = pickupVal;
+if (elDrop) elDrop.value = dropVal;
+if (elTon) elTon.value = tonVal;
+if (elCargo) elCargo.value = cargoVal;
+
+// ✅ 주소 input 찾기
 const elPickupAddr = document.querySelector(
   "input[placeholder='상차지 주소']"
 );
 const elDropAddr = document.querySelector(
   "input[placeholder='하차지 주소']"
 );
+
+// ✅ ✅ ✅ 이 두 줄이 핵심 (지금 빠져 있음)
+if (elPickupAddr) elPickupAddr.value = order.상차지주소 || "";
+if (elDropAddr) elDropAddr.value = order.하차지주소 || "";
+
           
           setTimeout(() => {
             const btn = document.querySelector("#fare-search-button");
