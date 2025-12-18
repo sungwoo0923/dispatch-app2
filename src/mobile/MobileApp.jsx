@@ -2890,10 +2890,14 @@ const calcFareMobile = () => {
   const isForced = window.__forceFareSearch__;
   window.__forceFareSearch__ = false;
 
-  if (!isForced && (!pickup.trim() || !drop.trim())) {
-    alert("상차지 / 하차지를 입력하세요.");
-    return;
-  }
+ const hasPickup = pickup.trim() || pickupAddr.trim();
+const hasDrop = drop.trim() || dropAddr.trim();
+
+if (!isForced && (!hasPickup || !hasDrop)) {
+  alert("상차지명 또는 주소 / 하차지명 또는 주소를 입력하세요.");
+  return;
+}
+
 
 const normPickup = clean(pickup + pickupAddr);
 const normDrop = clean(drop + dropAddr);
