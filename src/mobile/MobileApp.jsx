@@ -2827,10 +2827,14 @@ function MobileStandardFare({ onBack }) {
   const [dispatchData, setDispatchData] = useState([]);
 
   const [pickup, setPickup] = useState("");
+  const [pickupAddr, setPickupAddr] = useState(""); // ✅ 추가
   const [drop, setDrop] = useState("");
+  const [dropAddr, setDropAddr] = useState("");     // ✅ 추가
+
   const [cargo, setCargo] = useState("");
   const [ton, setTon] = useState("");
   const [vehicle, setVehicle] = useState("전체");
+  
 
   const [matchedRows, setMatchedRows] = useState([]);
   const [result, setResult] = useState(null);
@@ -2867,8 +2871,8 @@ const calcFareMobile = () => {
     return;
   }
 
-  const normPickup = clean(pickup);
-  const normDrop = clean(drop);
+const normPickup = clean(pickup + pickupAddr);
+const normDrop = clean(drop + dropAddr);
   const inputTonNum = extractTonNum(ton);
 
   let filtered = dispatchData
@@ -2964,17 +2968,33 @@ const calcFareMobile = () => {
       {/* 입력 */}
       <div className="bg-white border rounded-xl p-4 space-y-3 shadow-sm">
         <input
-          className="w-full border rounded px-3 py-2 text-sm"
-          placeholder="상차지"
-          value={pickup}
-          onChange={(e) => setPickup(e.target.value)}
-        />
-        <input
-          className="w-full border rounded px-3 py-2 text-sm"
-          placeholder="하차지"
-          value={drop}
-          onChange={(e) => setDrop(e.target.value)}
-        />
+  className="w-full border rounded px-3 py-2 text-sm"
+  placeholder="상차지"
+  value={pickup}
+  onChange={(e) => setPickup(e.target.value)}
+/>
+
+<input
+  className="w-full border rounded px-3 py-2 text-sm"
+  placeholder="상차지 주소"
+  value={pickupAddr}
+  onChange={(e) => setPickupAddr(e.target.value)}
+/>
+
+<input
+  className="w-full border rounded px-3 py-2 text-sm"
+  placeholder="하차지"
+  value={drop}
+  onChange={(e) => setDrop(e.target.value)}
+/>
+
+<input
+  className="w-full border rounded px-3 py-2 text-sm"
+  placeholder="하차지 주소"
+  value={dropAddr}
+  onChange={(e) => setDropAddr(e.target.value)}
+/>
+
         <input
           className="w-full border rounded px-3 py-2 text-sm"
           placeholder="톤수 (예: 1톤)"
