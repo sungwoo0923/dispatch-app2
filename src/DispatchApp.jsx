@@ -1,6 +1,5 @@
 // ===================== DispatchApp.jsx (PART 1/8) — START =====================
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
 import * as XLSX from "xlsx";
 import FixedClients from "./FixedClients";
 import { flushSync } from "react-dom";
@@ -16,6 +15,7 @@ import {
 import { BarChart, Bar, Legend } from "recharts";
 import FleetManagement from "./FleetManagement";
 import PptxGenJS from "pptxgenjs";
+import { Navigate, useNavigate } from "react-router-dom";
 /* -------------------------------------------------
    발행사(우리 회사) 고정 정보
 --------------------------------------------------*/
@@ -114,34 +114,6 @@ import {
   onSnapshot, deleteDoc
 } from "firebase/firestore";
 
-/* -------------------------------------------------
-   Firestore 사용자 등록/승인 확인
---------------------------------------------------*/
-const registerUserInFirestore = async (user) => {
-  if (!user) return false;
-  const ref = doc(db, "users", user.uid);
-  const snap = await getDoc(ref);
-  if (!snap.exists()) {
-    await setDoc(ref, {
-      uid: user.uid, email: user.email, name: user.displayName || "이름없음",
-      role: "user", approved: false, createdAt: serverTimestamp(), lastLogin: serverTimestamp(),
-    });
-    alert("회원가입 완료! 관리자 승인 후 로그인 가능합니다.");
-    await signOut(auth);
-    window.location.reload();
-    return false;
-  } else {
-    const data = snap.data();
-    if (!data.approved) {
-      alert("관리자 승인 대기 중입니다. 승인 후 로그인 가능합니다.");
-      await signOut(auth);
-      window.location.reload();
-      return false;
-    }
-    await setDoc(ref, { lastLogin: serverTimestamp() }, { merge: true });
-    return true;
-  }
-};
 
 /* -------------------------------------------------
    Firestore 실시간 동기화 훅
@@ -377,54 +349,22 @@ export {
 
 // ===================== DispatchApp.jsx (PART 1/8) — END =====================
 // ===================== DispatchApp.jsx (PART 2/8) — START =====================
-export default function DispatchApp() {
-  const [user, setUser] = useState(null);
+export default function DispatchApp({ role, user }) {
+    // 🔥 화주 차단
+  if (role === "shipper") {
+    return <Navigate to="/shipper" replace />;
+  }
+  const isTest = role === "test";
   const navigate = useNavigate();
 // ⭐ 고정거래처 매출 실시간 구독
 const [fixedRows, setFixedRows] = useState([]);
 
-useEffect(() => {
-  const fc = collection(db, "fixedClients");
-  const unsub = onSnapshot(fc, snap => {
-    const arr = snap.docs.map(d => d.data());
-    setFixedRows(arr);
-  });
-  return () => unsub();
-}, []);
   // ⭐ 여기 추가!
   const [subMenu, setSubMenu] = useState("고정거래처관리");
    // ⭐ 내 정보 패널 ON/OFF
   const [showMyInfo, setShowMyInfo] = useState(false);
   // ❌ 삭제 (중복 선언 오류 원인)
-  // const [dispatchData, setDispatchData] = useState([]);
-
-  // ---------------- 로그인 상태 ----------------
-  useEffect(() => {
-    const unsub = auth.onAuthStateChanged(async (u) => {
-      if (u) {
-        const ok = await registerUserInFirestore(u);
-        if (ok) setUser(u);
-      } else setUser(null);
-    });
-    return () => unsub();
-  }, []);
-
-  // ---------------- Firestore role 자동 로드 ----------------
-  useEffect(() => {
-    const loadRole = async () => {
-      if (!user) return;
-      const snap = await getDoc(doc(db, "users", user.uid));
-      if (snap.exists()) {
-        const data = snap.data();
-        localStorage.setItem("role", data.role || "user");
-      }
-    };
-    loadRole();
-  }, [user]);
-
-  // ---------------- 권한 ----------------
-  const role = localStorage.getItem("role") || "user";
-const isTest = role === "test";
+  // const [dispatchData, setDispatchData] = useState([]);  
   // ---------------- Firestore 실시간 훅 ----------------
 const {
   dispatchData,
@@ -587,42 +527,14 @@ const todayStats = useMemo(() => {
     setMenu(m);
   };
 
-  // ---------------- 로그인 전 화면 ----------------
-  if (!user)
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50">
-        <h1 className="text-xl mb-4 font-bold">회사 배차 시스템</h1>
-        <form
-          onSubmit={async (e) => {
-            e.preventDefault();
-            const email = e.target.email.value;
-            const password = e.target.password.value;
-            try {
-              const result = await signInWithEmailAndPassword(auth, email, password);
-              const ok = await registerUserInFirestore(result.user);
-              if (!ok) return;
-              alert("로그인 성공!");
-              navigate("/app");
-            } catch (err) {
-              alert("로그인 실패: " + err.message);
-            }
-          }}
-          className="flex flex-col gap-3 w-64"
-        >
-          <input name="email" type="email" placeholder="이메일" className="border p-2 rounded" required />
-          <input name="password" type="password" placeholder="비밀번호" className="border p-2 rounded" required />
-          <button type="submit" className="bg-blue-600 text-white py-2 rounded">로그인</button>
-          <button
-            type="button"
-            onClick={() => navigate("/signup")}
-            className="text-blue-600 text-sm hover:underline mt-2"
-          >
-            회원가입 하러가기
-          </button>
-        </form>
-      </div>
-    );
-
+  
+if (!user) {
+  return (
+    <div className="w-full h-screen flex items-center justify-center text-gray-500">
+      로그인 정보 확인 중...
+    </div>
+  );
+}
   // ---------------- 메뉴 UI ----------------
 return (
   <>
@@ -1062,11 +974,8 @@ React.useEffect(() => {
   return () => clearTimeout(timer);
 }, [driverModal.open]);
 
-
-
 // ⭐ Top3 팝업 상태
 const [popupType, setPopupType] = React.useState(null);
-
 
 const [statusPopup, setStatusPopup] = React.useState(null);
 // ⭐ 전화번호 숫자→하이폰 포맷 변환
@@ -1087,7 +996,6 @@ function formatPhone(raw) {
 
   return str;   // 기본 문자열 리턴(하이픈 없는 경우 등)
 }
-
 
 // ========================================================
 // 🔷 Today Dashboard 데이터 계산 (UI 대시보드에서 사용)
@@ -1174,7 +1082,6 @@ const topDrops = Object.entries(
   }, {})
 ).sort((a,b)=>b[1]-a[1]).slice(0,3);
 
-
 // 🔹 알림 설정 (시간 자동감지)
 const [alertTime, setAlertTime] = React.useState("10:00");
 const [alertShown, setAlertShown] = React.useState(false);
@@ -1215,10 +1122,7 @@ const [isCopyMode, setIsCopyMode] = React.useState(false);
     const [clientQuery, setClientQuery] = React.useState("");
     const [isClientOpen, setIsClientOpen] = React.useState(false);
     // ⭐ 거래처 선택 대상 팝업
-const [placeTargetPopup, setPlaceTargetPopup] = React.useState({
-  open: false,
-  place: null,
-});
+
     const [clientActive, setClientActive] = React.useState(0);
     const comboRef = React.useRef(null);
     React.useEffect(() => {
@@ -1469,30 +1373,38 @@ try {
 }, [clientQuery, placeList]);
 // ⭐ 거래처 선택 시 → 어디에 적용할지 팝업 오픈
 function applyClientSelect(name) {
-  // 🔥 오더복사 중이면 팝업 절대 안 띄움
-  if (isCopyMode) {
-    setForm(p => ({ ...p, 거래처명: name }));
-    setClientQuery(name);
-    setIsClientOpen(false);
-    return;
+  const p = placeList.find(
+    x => norm(x.업체명 || "") === norm(name)
+  );
+
+  // ✅ 거래처 → 상차지 자동 적용
+  if (p) {
+    setForm(prev => ({
+      ...prev,
+      거래처명: p.업체명,
+
+      // 🔥 상차지 자동 세팅
+      상차지명: p.업체명,
+      상차지주소: p.주소 || "",
+      상차지담당자: p.담당자 || "",
+      상차지담당자번호: p.담당자번호 || "",
+    }));
+  } else {
+    // 🔹 placeList에 없을 경우 (신규 입력)
+    setForm(prev => ({
+      ...prev,
+      거래처명: name,
+      상차지명: name,   // 이름만이라도 넣어줌
+    }));
   }
-
-  // ⬇️ 기존 로직 그대로
-  const p = placeList.find(x => norm(x.업체명 || "") === norm(name));
-
-  setPlaceTargetPopup({
-    open: true,
-    place: {
-      업체명: name,
-      주소: p?.주소 || "",
-      담당자: p?.담당자 || "",
-      담당자번호: p?.담당자번호 || "",
-    }
-  });
 
   setClientQuery(name);
   setIsClientOpen(false);
+
+  // 자동매칭 뱃지 상태 초기화
+  setAutoPickMatched(!!p);
 }
+
 
 // ⭐ 상차지에 적용 (여기 넣는 것! ← 바로 위 applyClientSelect 밑!!)
 function applyToPickup(place) {
@@ -1519,16 +1431,29 @@ function applyToDrop(place) {
   }));
   setPlaceTargetPopup({ open: false, place: null });
 }
-// ⭐ ESC 누르면 "선택 안함(상차지)" 작동
-React.useEffect(() => {
-  const handleEsc = (e) => {
-    if (e.key === "Escape" && placeTargetPopup.open) {
-      applyToPickup(placeTargetPopup.place);
-    }
-  };
-  window.addEventListener("keydown", handleEsc);
-  return () => window.removeEventListener("keydown", handleEsc);
-}, [placeTargetPopup]);
+// 🔁 상차지 ↔ 하차지 교체
+function swapPickupDrop() {
+  setForm(prev => ({
+    ...prev,
+
+    // 상차 ← 하차
+    상차지명: prev.하차지명,
+    상차지주소: prev.하차지주소,
+    상차지담당자: prev.하차지담당자,
+    상차지담당자번호: prev.하차지담당자번호,
+
+    // 하차 ← 상차
+    하차지명: prev.상차지명,
+    하차지주소: prev.상차지주소,
+    하차지담당자: prev.상차지담당자,
+    하차지담당자번호: prev.상차지담당자번호,
+  }));
+
+  // 자동매칭 뱃지 리셋
+  setAutoPickMatched(false);
+  setAutoDropMatched(false);
+}
+
 
     // ✅ 주소 자동매칭 뱃지
     const [autoPickMatched, setAutoPickMatched] = React.useState(false);
@@ -2263,7 +2188,7 @@ const labelCls =
 
 
     const reqStar = <span className="text-red-500">*</span>;
-    const AutoBadge = ({ show }) => show ? <span className="ml-2 text-[12px] text-emerald-700">(📌 자동매칭됨)</span> : null;
+    const AutoBadge = ({ show }) => show ? <span className="ml-2 text-[12px] text-emerald-700">(자동매칭됨)</span> : null;
 // ---------------------------------------------
 // ⭐ 오늘 유가 정보 가져오기 (휘발유/경유)
 // ---------------------------------------------
@@ -2466,6 +2391,26 @@ function FuelSlideWidget() {
   >
     내일
   </button>
+<button
+  type="button"
+  onClick={swapPickupDrop}
+  className="
+    ml-2
+    inline-flex items-center gap-1
+    px-3 py-1.5
+    text-xs font-semibold
+    rounded-full
+    border border-indigo-200
+    bg-indigo-50
+    text-indigo-700
+    hover:bg-indigo-100
+    active:scale-95
+    transition
+  "
+  title="상차지 ↔ 하차지 교체"
+>
+  ⇄ 상·하차 교체
+</button>
 
   </div>
 
@@ -2481,9 +2426,6 @@ function FuelSlideWidget() {
     shadow-[0_2px_12px_rgba(0,0,0,0.06)]
   "
 >
-
-
-
   {/* 거래처 + 신규등록 */}
   <div className="col-span-2">
     <label className={labelCls}>거래처 {reqStar}</label>
@@ -3476,45 +3418,7 @@ setIsCopyMode(true);
     </div>
   </div>
 )}
-{/* ⭐ 거래처 적용 선택 팝업 */}
-{placeTargetPopup.open && (
-  <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[99999]">
-    <div className="bg-white rounded-xl p-6 w-[360px] shadow-xl border border-gray-200">
 
-      <h3 className="text-base font-bold mb-4">
-        어디에 적용하시겠습니까?
-      </h3>
-
-      <p className="text-sm mb-4">
-        선택한 업체: <b>{placeTargetPopup.place?.업체명}</b>
-      </p>
-
-      <div className="space-y-3">
-        <button
-          className="w-full bg-blue-600 text-white py-2 rounded-lg"
-          onClick={() => applyToPickup(placeTargetPopup.place)}
-        >
-          상차지에 적용
-        </button>
-
-        <button
-          className="w-full bg-emerald-600 text-white py-2 rounded-lg"
-          onClick={() => applyToDrop(placeTargetPopup.place)}
-        >
-          하차지에 적용
-        </button>
-
-        <button
-          className="w-full bg-gray-300 py-2 rounded-lg"
-          onClick={() => applyToPickup(placeTargetPopup.place)}
-        >
-          선택 안함 (기본: 상차지)
-        </button>
-      </div>
-
-    </div>
-  </div>
-)}
 {/* ================= Status Popup ================= */}
 {statusPopup && (
   <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">

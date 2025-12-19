@@ -53,6 +53,12 @@ const normalize = (s = "") =>
     .toLowerCase()
     .replace(/\s+/g, "")
     .replace(/[^\w가-힣]/g, "");
+    // 🔥 거래처/지명 공통 정규화 (★ 핵심)
+const normalizeCompany = (s = "") =>
+  String(s)
+    .toLowerCase()
+    .replace(/\s+/g, "")
+    .replace(/[^\uAC00-\uD7A3a-z0-9]/g, "");
 // ✅ ⬇⬇⬇ 여기 추가 ⬇⬇⬇
 const normalizeKoreanTime = (t = "") => {
   if (!t) return "";
@@ -205,6 +211,36 @@ function buildKakaoMessage(order) {
 
   return lines.join("\n");
 }
+function buildOrderCopyText(order) {
+  // 날짜 + 요일
+  const dateStr = order.상차일 || "";
+  let weekday = "";
+  if (dateStr) {
+    const d = new Date(dateStr);
+    const w = ["일", "월", "화", "수", "목", "금", "토"];
+    weekday = `(${w[d.getDay()]})`;
+  }
+
+  // 지급방식 문구
+  let payText = order.지급방식 || "";
+  if (payText === "계산서") payText = "부가세별도";
+  if (payText === "선불") payText = "선불";
+  if (payText === "착불") payText = "착불";
+
+  const money = Number(order.기사운임 || order.청구운임 || 0).toLocaleString();
+
+  return [
+    `${dateStr}${weekday}`,
+    ``,
+    `${order.상차지명 || "-"} → ${order.하차지명 || "-"}`,
+    `${order.상차지주소 || "-"} → ${order.하차지주소 || "-"}`,
+    ``,
+    `${order.화물내용 || "-"} ${order.차량톤수 || order.톤수 || ""} ${order.차량종류 || order.차종 || ""}`.trim(),
+    ``,
+    `${order.차량번호 || "-"} ${order.기사명 || ""} ${order.전화번호 || ""}`.trim(),
+    `${money}원 ${payText} 배차되었습니다.`,
+  ].join("\n");
+}
 
 // 🔥 상태 문자열: 차량번호 유무로만 결정
 // 차량번호 없음 → "배차중", 있으면 → "배차완료"
@@ -355,30 +391,44 @@ useEffect(() => {
     return () => unsub();
   }, []);
 
-  // 🔥 하차지 거래처(places)도 자동매칭
-  useEffect(() => {
-    const unsub = onSnapshot(collection(db, "places"), (snap) => {
-      const list = snap.docs.map((d) => ({
-        id: d.id,
-        거래처명: d.data().거래처명 || d.data().상차지명 || d.data().하차지명 || "",
-        주소: d.data().주소 || d.data().상차지주소 || d.data().하차지주소 || "",
-      }));
+  // 🔥 하차지 거래처(places)도 clients에 병합
+useEffect(() => {
+  const unsub = onSnapshot(collection(db, "places"), (snap) => {
+    const list = snap.docs.map((d) => ({
+      id: d.id,
+      거래처명:
+        d.data().거래처명 ||
+        d.data().상차지명 ||
+        d.data().하차지명 ||
+        "",
+      주소:
+        d.data().주소 ||
+        d.data().상차지주소 ||
+        d.data().하차지주소 ||
+        "",
+    }));
 
-      setClients((prev) => {
-        const merged = [...prev];
-        list.forEach((item) => {
-          if (!merged.some((c) => c.거래처명 === item.거래처명)) {
-            merged.push(item);
-          }
-        });
-        return merged;
+    setClients((prev) => {
+      const merged = [...prev];
+
+      list.forEach((item) => {
+        if (
+          !merged.some(
+            (c) =>
+              normalizeCompany(c.거래처명) ===
+              normalizeCompany(item.거래처명)
+          )
+        ) {
+          merged.push(item);
+        }
       });
+
+      return merged;
     });
+  });
 
-    return () => unsub();
-  }, []);
-  
-
+  return () => unsub();
+}, []);
 
   // --------------------------------------------------
   // 2. 화면 상태 / 필터
@@ -507,26 +557,32 @@ const [unassignedTypeFilter, setUnassignedTypeFilter] = useState("전체");
     // 6) 검색
 base = base.filter((o) => {
   if (!searchText.trim()) return true;
-
   const q = normalize(searchText);
 
-  const pickup =
-    normalize(o.상차지명) +
-    normalize(o.상차지주소);
+  if (searchType === "거래처명")
+    return normalize(o.거래처명).includes(q);
 
-  const drop =
-    normalize(o.하차지명) +
-    normalize(o.하차지주소);
+  if (searchType === "기사명")
+    return normalize(o.기사명).includes(q);
 
-  const client = normalize(o.거래처명);
+  if (searchType === "차량번호")
+    return normalize(o.차량번호).includes(q);
 
-  // 🔥 하나라도 포함되면 통과
-  return (
-    pickup.includes(q) ||
-    drop.includes(q) ||
-    client.includes(q)
-  );
+  if (searchType === "상차지명")
+    return normalize(o.상차지명).includes(q);
+
+  if (searchType === "상차지주소")
+    return normalize(o.상차지주소).includes(q);
+
+  if (searchType === "하차지명")
+    return normalize(o.하차지명).includes(q);
+
+  if (searchType === "하차지주소")
+    return normalize(o.하차지주소).includes(q);
+
+  return true;
 });
+
 
 
     // 7) 정렬
@@ -1626,6 +1682,8 @@ function MobileOrderDetail({
   showToast,
   upsertDriver,
 }) {
+  const [showCopyModal, setShowCopyModal] = useState(false);
+
   const [carNo, setCarNo] = useState(order.차량번호 || "");
   const [name, setName] = useState(order.기사명 || "");
   const [phone, setPhone] = useState(order.전화번호 || "");
@@ -1811,7 +1869,12 @@ function MobileOrderDetail({
 <div className="bg-white border rounded-xl px-4 py-3 shadow-sm">
   <div className="text-sm font-semibold mb-2">공유 & 운임조회</div>
   <div className="flex gap-2">
-    
+    <button
+  onClick={() => setShowCopyModal(true)}
+  className="flex-1 py-2 rounded-lg bg-gray-700 text-white text-sm font-semibold"
+>
+  📋 복사하기
+</button>
     {/* 카톡 공유 */}
     <button
       onClick={handleCopyKakao}
@@ -2035,7 +2098,14 @@ if (elDropAddr) elDropAddr.value = order.하차지주소 || "";
           className="w-full py-2 rounded-lg bg-orange-500 text-white text-sm font-semibold mt-2"
         >
           수정하기
+          
         </button>
+          {showCopyModal && (
+        <CopySelectModal
+          order={order}
+          onClose={() => setShowCopyModal(false)}
+        />
+      )}
       </div>
     </div>
   );
@@ -2064,14 +2134,14 @@ const [matchedClients, setMatchedClients] = useState([]);
 
 // 🔍 거래처 검색 함수
 const searchClient = (q) => {
-  const norm = (s = "") => String(s).trim().toLowerCase();
-  const nq = norm(q);
+const nq = normalizeCompany(q);
 
-  if (!nq) return setMatchedClients([]);
+const list = clients
+  .filter(c =>
+    normalizeCompany(c.거래처명).includes(nq)
+  )
+  .slice(0, 10);
 
-  const list = clients
-    .filter(c => norm(c.거래처명).includes(nq))
-    .slice(0, 10);
 
   setMatchedClients(list);
 };
@@ -2255,31 +2325,46 @@ const chooseClient = (c) => {
             if (form.거래처명) searchClient(form.거래처명);
           }}
           onBlur={async () => {
-            // 자동완성 클릭 직후 사라짐 방지
-            setTimeout(() => setMatchedClients([]), 200);
+  // 자동완성 클릭 직후 blur 방지
+  setTimeout(() => setMatchedClients([]), 200);
 
-            const val = form.거래처명.trim();
-            if (!val) return;
+  const val = form.거래처명.trim();
+  if (!val) return;
 
-            const normalized = val.toLowerCase();
-            const existing = clients.find(
-              (c) =>
-                String(c.거래처명 || "").trim().toLowerCase() === normalized
-            );
+  const normVal = normalizeCompany(val);
 
-            // 신규 거래처 등록
-if (!existing && val.length >= 2) {
-  if (window.confirm("📌 등록되지 않은 거래처입니다.\n신규 등록할까요?")) {
-    await addDoc(collection(db, "clients"), {
-      거래처명: val,
-      주소: form.상차지주소 || "",
-      createdAt: serverTimestamp(),
-    });
-    showToast("신규 거래처 등록 완료!");
+  // ✅ 1️⃣ 자동완성으로 이미 선택된 경우 → 종료
+  if (selectedClient) {
+    return;
   }
-}
 
-          }}
+  // ✅ 2️⃣ 주소가 이미 있으면 = 기존 거래처 → 종료
+  if (form.상차지주소 || form.하차지주소) {
+    return;
+  }
+
+  // ✅ 3️⃣ clients 기준 기존 거래처 존재 여부
+  const existing = clients.find(
+    (c) => normalizeCompany(c.거래처명) === normVal
+  );
+
+  // ✅ 4️⃣ 진짜 신규일 때만 팝업
+  if (!existing && val.length >= 2) {
+    const ok = window.confirm(
+      "📌 등록되지 않은 거래처입니다.\n신규 등록할까요?"
+    );
+    if (ok) {
+      await addDoc(collection(db, "clients"), {
+        거래처명: val,
+        주소: "",
+        createdAt: serverTimestamp(),
+      });
+      showToast("신규 거래처 등록 완료!");
+    }
+  }
+}}
+
+
         />
 
         {/* 🔽 자동완성 리스트 */}
@@ -2290,10 +2375,22 @@ if (!existing && val.length >= 2) {
   key={c.id}
   className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
   onMouseDown={() => {
-    setSelectedClient(c);
-    setShowClientApplyModal(true);
-    setMatchedClients([]);
-  }}
+  // 🔥 1. 거래처 확정 반영 (blur 전에!)
+  update("거래처명", c.거래처명);
+  update("상차지명", c.거래처명);
+  update(
+    "상차지주소",
+    c.주소 || c.상차지주소 || c.하차지주소 || ""
+  );
+
+  // 🔥 2. 선택 상태 저장
+  setSelectedClient(c);
+  setShowClientApplyModal(true);
+
+  // 🔥 3. 자동완성 닫기
+  setMatchedClients([]);
+}}
+
 >
                 <div className="font-semibold text-gray-800">
                   {c.거래처명}
@@ -2318,41 +2415,37 @@ if (!existing && val.length >= 2) {
           input={
             <div className="space-y-1">
               <input
-                className="w-full border rounded px-2 py-1 text-sm"
-                value={form.상차지명}
-                onChange={(e) => {
-  const val = e.target.value;
-  update("상차지명", val);
-  setQueryPickup(val);
-  setShowPickupList(true);
+  className="w-full border rounded px-2 py-1 text-sm"
+  value={form.상차지명}
+  onChange={(e) => {
+    const val = e.target.value;
+    update("상차지명", val);
+    setQueryPickup(val);
+    setShowPickupList(true);
 
-  // ★ 입력이 비어 있으면 자동매칭 하지 말고 주소도 지움
-  if (!val.trim()) {
-    update("상차지주소", "");
-    return;
-  }
+    if (!val.trim()) {
+      update("상차지주소", "");
+      return;
+    }
 
-  // 입력이 완성됐을 때만 자동매칭 (완전 동일한 경우)
-  const normalized = val.trim().toLowerCase();
-  const found = clients.find(
-    (c) =>
-      String(c.거래처명 || "")
-        .trim()
-        .toLowerCase() === normalized
-  );
+    const normVal = normalizeCompany(val);
 
-  if (found) {
-    update(
-      "상차지주소",
-      found.주소 || found.상차지주소 || found.하차지주소 || ""
+    const found = clients.find(
+      (c) => normalizeCompany(c.거래처명) === normVal
     );
-  }
-}}
 
-                onFocus={() =>
-                  form.상차지명 && setShowPickupList(true)
-                }
-              />
+    if (found) {
+      update(
+        "상차지주소",
+        found.주소 || found.상차지주소 || found.하차지주소 || ""
+      );
+    }
+  }}
+  onFocus={() => {
+    if (form.상차지명) setShowPickupList(true);
+  }}
+/>
+
               <input
                 className="w-full border rounded px-2 py-1 text-xs text-gray-700"
                 placeholder="상차지 주소"
@@ -2388,43 +2481,37 @@ if (!existing && val.length >= 2) {
           input={
             <div className="space-y-1">
               <input
-                className="w-full border rounded px-2 py-1 text-sm"
-                value={form.하차지명}
-                onChange={(e) => {
-  const val = e.target.value;
-  update("하차지명", val);
-  setQueryDrop(val);
-  setShowDropList(true);
+  className="w-full border rounded px-2 py-1 text-sm"
+  value={form.하차지명}
+  onChange={(e) => {
+    const val = e.target.value;
+    update("하차지명", val);
+    setQueryDrop(val);
+    setShowDropList(true);
 
-  // ★ 입력이 비어 있으면 주소도 지움
-  if (!val.trim()) {
-    update("하차지주소", "");
-    return;
-  }
+    if (!val.trim()) {
+      update("하차지주소", "");
+      return;
+    }
 
-  // 정확히 일치하는 경우에만 자동매칭
-  const normalized = val.trim().toLowerCase();
-  const found = clients.find(
-    (c) =>
-      String(c.거래처명 || "")
-        .trim()
-        .toLowerCase() === normalized
-  );
+    const normVal = normalizeCompany(val);
 
-  if (found) {
-    update(
-      "하차지주소",
-      found.주소 || found.하차지주소 || found.상차지주소 || ""
+    const found = clients.find(
+      (c) => normalizeCompany(c.거래처명) === normVal
     );
-  }
-}}
 
+    if (found) {
+      update(
+        "하차지주소",
+        found.주소 || found.하차지주소 || found.상차지주소 || ""
+      );
+    }
+  }}
+  onFocus={() => {
+    if (form.하차지명) setShowDropList(true);
+  }}
+/>
 
-
-                onFocus={() =>
-                  form.하차지명 && setShowDropList(true)
-                }
-              />
               <input
                 className="w-full border rounded px-2 py-1 text-xs text-gray-700"
                 placeholder="하차지 주소"
@@ -2829,6 +2916,50 @@ if (!existing && val.length >= 2) {
     </div>
   );
 }
+function CopySelectModal({ order, onClose }) {
+const copy = async () => {
+  const text = buildOrderCopyText(order);
+  await navigator.clipboard.writeText(text);
+  alert("복사되었습니다.");
+  onClose();
+};
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[9999]">
+      <div className="bg-white rounded-xl shadow-xl p-5 w-72 space-y-2">
+        <div className="text-sm font-semibold">📋 복사 방식 선택</div>
+
+        <button
+          onClick={() => copy("driver")}
+          className="w-full py-2 bg-gray-100 rounded"
+        >
+          기사정보
+        </button>
+
+        <button
+          onClick={() => copy("fare")}
+          className="w-full py-2 bg-blue-100 rounded"
+        >
+          운임 포함
+        </button>
+
+        <button
+          onClick={() => copy("full")}
+          className="w-full py-2 bg-green-100 rounded"
+        >
+          전체 상세
+        </button>
+
+        <button
+          onClick={onClose}
+          className="w-full py-2 bg-gray-300 rounded"
+        >
+          취소
+        </button>
+      </div>
+    </div>
+  );
+}
 
 // ======================================================================
 // 공통 RowLabelInput
@@ -3035,10 +3166,15 @@ const normDrop = clean(drop + dropAddr);
           onChange={(e) => setVehicle(e.target.value)}
         >
           <option value="전체">전체</option>
-          <option value="라보">라보</option>
-          <option value="다마스">다마스</option>
+          <option value="라보/다마스">라보/다마스</option>
           <option value="카고">카고</option>
           <option value="윙바디">윙바디</option>
+          <option value="냉장탑">냉장탑</option>
+          <option value="냉동탑">냉동탑</option>
+          <option value="냉장윙">냉장윙</option>
+          <option value="냉동윙">냉동윙</option>
+          <option value="오토바이">오토바이</option>
+          
         </select>
 
         <button
