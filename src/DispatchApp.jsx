@@ -5281,8 +5281,27 @@ XLSX.writeFile(wb, "실시간배차현황.xlsx");
   name="차량번호"
   data-id={r._id}
   type="text"
-  defaultValue={r.차량번호 || ""}
+  value={r.차량번호 || ""}
   className="border p-1 rounded w-[110px]"
+  onChange={(e) => {
+    const v = e.target.value;
+
+    setRows(prev =>
+      prev.map(row =>
+        row._id === r._id
+          ? {
+              ...row,
+              차량번호: v,
+              ...(v.trim() === "" && {
+                이름: "",
+                전화번호: "",
+                배차상태: "배차중",
+              }),
+            }
+          : row
+      )
+    );
+  }}
   onKeyDown={(e) =>
     e.key === "Enter" &&
     handleCarInput(r._id, e.currentTarget.value, e)
@@ -5291,6 +5310,7 @@ XLSX.writeFile(wb, "실시간배차현황.xlsx");
     handleCarInput(r._id, e.currentTarget.value)
   }
 />
+
 
                   </td>
 
@@ -6345,8 +6365,19 @@ XLSX.writeFile(wb, "실시간배차현황.xlsx");
   value={editTarget.차량번호 || ""}
   placeholder="예: 93가1234"
   onChange={(e) => {
-    // 입력값 UI에만 반영, 매칭은 하지 않음
-    setEditTarget((p) => ({ ...p, 차량번호: e.target.value }));
+    const raw = e.target.value;
+
+    setEditTarget((p) => ({
+      ...p,
+      차량번호: raw,
+
+      // 🔥 차량번호를 전부 지우면 기사정보도 즉시 제거
+      ...(raw.trim() === "" && {
+        이름: "",
+        전화번호: "",
+        배차상태: "배차중",
+      }),
+    }));
   }}
   onKeyDown={(e) => {
     if (e.key !== "Enter") return;
@@ -6354,7 +6385,8 @@ XLSX.writeFile(wb, "실시간배차현황.xlsx");
     const raw = e.target.value.trim();
     const clean = raw.replace(/\s+/g, "");
 
-    // 기존 기사 매칭
+    if (!clean) return; // ← 빈 값이면 아무것도 하지 않음
+
     const match = drivers.find(
       (d) => String(d.차량번호).replace(/\s+/g, "") === clean
     );
@@ -6369,7 +6401,6 @@ XLSX.writeFile(wb, "실시간배차현황.xlsx");
       return;
     }
 
-    // 신규 등록
     const ok = window.confirm(
       `[${raw}] 등록된 기사가 없습니다.\n신규 기사로 추가할까요?`
     );
@@ -6392,6 +6423,7 @@ XLSX.writeFile(wb, "실시간배차현황.xlsx");
     }));
   }}
 />
+
 
       </div>
 
@@ -7031,6 +7063,7 @@ function MemoMore({ text = "" }) {
 
 
 // ===================== PART 4/8 — END =====================
+
 
 // ===================== DispatchApp.jsx (PART 5/8 — 차량번호 항상 활성화 + 선택수정→수정완료 통합버튼 + 주소/메모 더보기 + 대용량업로드 + 신규 오더 등록) =====================
 function DispatchStatus({
@@ -8616,16 +8649,28 @@ return (
   value={editTarget.차량번호 || ""}
   placeholder="예: 93가1234"
   onChange={(e) => {
-    // 입력값 UI에만 반영, 매칭은 하지 않음
-    setEditTarget((p) => ({ ...p, 차량번호: e.target.value }));
+    const v = e.target.value;
+
+    setEditTarget((p) => ({
+      ...p,
+      차량번호: v,
+
+      // 🔥 차량번호를 전부 지우면 기사정보 즉시 초기화
+      ...(v.trim() === "" && {
+        이름: "",
+        전화번호: "",
+        배차상태: "배차중",
+      }),
+    }));
   }}
   onKeyDown={(e) => {
     if (e.key !== "Enter") return;
 
     const raw = e.target.value.trim();
+    if (!raw) return; // 빈 값이면 매칭 로직 실행 X
+
     const clean = raw.replace(/\s+/g, "");
 
-    // 기존 기사 매칭
     const match = drivers.find(
       (d) => String(d.차량번호).replace(/\s+/g, "") === clean
     );
@@ -8640,7 +8685,6 @@ return (
       return;
     }
 
-    // 신규 등록
     const ok = window.confirm(
       `[${raw}] 등록된 기사가 없습니다.\n신규 기사로 추가할까요?`
     );
@@ -8649,11 +8693,7 @@ return (
     const 이름 = prompt("기사명 입력:");
     const 전화번호 = prompt("전화번호 입력:");
 
-    upsertDriver({
-      차량번호: raw,
-      이름,
-      전화번호,
-    });
+    upsertDriver({ 차량번호: raw, 이름, 전화번호 });
 
     setEditTarget((p) => ({
       ...p,

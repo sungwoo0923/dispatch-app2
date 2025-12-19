@@ -73,6 +73,20 @@ const normalizeKoreanTime = (t = "") => {
   }
   return t;
 };
+// ✅ ✅ ✅ 여기 추가 (이 위치!)
+const buildHalfHourTimes = () => {
+  const list = [];
+  for (let h = 0; h < 24; h++) {
+    for (const m of ["00", "30"]) {
+      const hour12 = h % 12 === 0 ? 12 : h % 12;
+      const ampm = h < 12 ? "오전" : "오후";
+      list.push(`${ampm} ${hour12}:${m}`);
+    }
+  }
+  return list;
+};
+
+const HALF_HOUR_TIMES = buildHalfHourTimes();
 // ✅ ⬆⬆⬆ 여기까지 ⬆⬆⬆
 // 상차일 기준 날짜 뽑기(PC/모바일 공통 대응)
 const getPickupDate = (o = {}) => {
@@ -227,7 +241,7 @@ function buildOrderCopyText(order) {
   if (payText === "선불") payText = "선불";
   if (payText === "착불") payText = "착불";
 
-  const money = Number(order.기사운임 || order.청구운임 || 0).toLocaleString();
+  const money = Number(order.청구운임 || 0).toLocaleString();
 
   return [
     `${dateStr}${weekday}`,
@@ -241,7 +255,44 @@ function buildOrderCopyText(order) {
     `${money}원 ${payText} 배차되었습니다.`,
   ].join("\n");
 }
+// ✅✅✅ 여기 (이 위치가 정답)
+function buildOrderTemplateCopyText(order) {
+  const today = new Date();
+  const yyyy = today.getFullYear();
+  const mm = String(today.getMonth() + 1).padStart(2, "0");
+  const dd = String(today.getDate()).padStart(2, "0");
+  const todayStr = `${yyyy}-${mm}-${dd}`;
 
+  return [
+    `📦 오더복사 (${todayStr})`,
+    ``,
+    `[상차]`,
+    `${order.상차지명 || ""}`,
+    `${order.상차지주소 || ""}`,
+    ``,
+    `[하차]`,
+    `${order.하차지명 || ""}`,
+    `${order.하차지주소 || ""}`,
+    ``,
+    `[조건]`,
+    `배차방식: ${order.배차방식 || ""}`,
+    `지급방식: ${order.지급방식 || ""}`,
+    ``,
+    `[차량]`,
+    `차량종류: ${order.차량종류 || order.차종 || ""}`,
+    `톤수: ${order.차량톤수 || order.톤수 || ""}`,
+    ``,
+    `[화물]`,
+    `${order.화물내용 || ""}`,
+    ``,
+    `[작업방식]`,
+    `상차: ${order.상차방법 || ""}`,
+    `하차: ${order.하차방법 || ""}`,
+    ``,
+    `[청구운임]`,
+    `${Number(order.청구운임 || 0).toLocaleString()}원`,
+  ].join("\n");
+}
 // 🔥 상태 문자열: 차량번호 유무로만 결정
 // 차량번호 없음 → "배차중", 있으면 → "배차완료"
 const getStatus = (o = {}) => {
@@ -249,6 +300,8 @@ const getStatus = (o = {}) => {
   return car ? "배차완료" : "배차중";
 };
 
+const normalizePhone = (p = "") =>
+  String(p).replace(/[^\d+]/g, "");
 // ======================================================================
 //  메인 컴포넌트
 // ======================================================================
@@ -433,6 +486,7 @@ useEffect(() => {
   // --------------------------------------------------
   // 2. 화면 상태 / 필터
   // --------------------------------------------------
+  const [onlyToday, setOnlyToday] = useState(false);
   const [page, setPage] = useState("list"); // list | form | detail | fare | status | unassigned
   const [selectedOrder, setSelectedOrder] = useState(null);
   // 🔙 상세보기 진입 출처 (list | unassigned | status)
@@ -509,6 +563,10 @@ const [unassignedTypeFilter, setUnassignedTypeFilter] = useState("전체");
 
     // 🔹 오늘 / 날짜 선택 여부
     const today = todayStr();
+    // ✅ 오늘 오더만 보기 스위치
+if (onlyToday) {
+  base = base.filter((o) => getPickupDate(o) === today);
+}
  const dateSelected = !!(startDate || endDate);
 
  // 🔥 날짜 선택 안 한 경우에만 당월 필터 적용
@@ -587,21 +645,39 @@ base = base.filter((o) => {
 
     // 7) 정렬
     if (statusTab === "전체") {
-      // 전체 = 차량번호 없는(배차중) 위로 + 최신 날짜순
-      base.sort((a, b) => {
-        const aEmpty = !String(a.차량번호 || "").trim();
-        const bEmpty = !String(b.차량번호 || "").trim();
+  // 전체 = TODAY 최우선 → 차량번호 없는(배차중) → 최신 날짜순
+  base.sort((a, b) => {
+    // 🔔 TODAY 우선
+    const today = todayStr();
+    const aToday = getPickupDate(a) === today;
+    const bToday = getPickupDate(b) === today;
 
-        if (aEmpty && !bEmpty) return -1;
-        if (!aEmpty && bEmpty) return 1;
+    if (aToday && !bToday) return -1;
+    if (!aToday && bToday) return 1;
 
-        const da = getPickupDate(a) || "";
-        const db = getPickupDate(b) || "";
-        return db.localeCompare(da);
-      });
-    } else {
+    // 🚚 배차중(차량번호 없음) 우선
+    const aEmpty = !String(a.차량번호 || "").trim();
+    const bEmpty = !String(b.차량번호 || "").trim();
+
+    if (aEmpty && !bEmpty) return -1;
+    if (!aEmpty && bEmpty) return 1;
+
+    // 📅 날짜 최신순
+    const da = getPickupDate(a) || "";
+    const db = getPickupDate(b) || "";
+    return db.localeCompare(da);
+  });
+}
+ else {
       // 배차중/배차완료 탭은 최신 날짜순
       base.sort((a, b) => {
+          const today = todayStr();
+  const aToday = getPickupDate(a) === today;
+  const bToday = getPickupDate(b) === today;
+
+  if (aToday && !bToday) return -1;
+  if (!aToday && bToday) return 1;
+
         const da = getPickupDate(a) || "";
         const db = getPickupDate(b) || "";
         return db.localeCompare(da);
@@ -619,6 +695,7 @@ base = base.filter((o) => {
     searchType,
     searchText,
     thisMonth,
+    onlyToday,
   ]);
 
 
@@ -768,6 +845,56 @@ base = base.filter((o) => {
       alert("등록 실패!");
     }
   };
+  // 📦 오더복사 → 등록창 이동 (오늘 날짜 기준)
+const handleOrderDuplicate = (order) => {
+  const today = new Date().toISOString().slice(0, 10);
+
+  setForm({
+    거래처명: order.거래처명 || "",
+
+    상차일: today,
+    상차시간: order.상차시간 || "",
+    하차일: today,
+    하차시간: order.하차시간 || "",
+
+    상차지명: order.상차지명 || "",
+    상차지주소: order.상차지주소 || "",
+    하차지명: order.하차지명 || "",
+    하차지주소: order.하차지주소 || "",
+
+    톤수: order.톤수 || order.차량톤수 || "",
+    차종: order.차종 || order.차량종류 || "",
+    화물내용: order.화물내용 || "",
+
+    상차방법: order.상차방법 || "",
+    하차방법: order.하차방법 || "",
+
+    지급방식: order.지급방식 || "",
+    배차방식: order.배차방식 || "",
+
+    청구운임: order.청구운임 || 0,
+
+    기사운임: 0,
+    수수료: 0,
+    산재보험료: 0,
+
+    차량번호: "",
+    기사명: "",
+    전화번호: "",
+
+    혼적여부: order.혼적여부 || "독차",
+    적요: "",
+
+    _editId: null,
+    _returnToDetail: false,
+  });
+
+  setSelectedOrder(null);
+  setPage("form");
+  window.scrollTo(0, 0);
+};
+
+
   // --------------------------------------------------
   // 🔵 모바일 전용 upsertDriver
   // --------------------------------------------------
@@ -1016,6 +1143,8 @@ base = base.filter((o) => {
             setStartDate={setStartDate}
             setEndDate={setEndDate}
             quickRange={quickRange}
+            onlyToday={onlyToday}
+setOnlyToday={setOnlyToday}
 onSelect={(o) => {
   setSelectedOrder(o);
   setDetailFrom("list");   // 🔥 list에서 들어온 거
@@ -1050,6 +1179,7 @@ onSelect={(o) => {
           <MobileOrderDetail
             order={selectedOrder}
             drivers={drivers}
+            onDuplicate={handleOrderDuplicate}
             onAssignDriver={assignDriver}
             onCancelAssign={cancelAssign}
             onCancelOrder={cancelOrder}
@@ -1312,6 +1442,8 @@ function MobileOrderList({
   setSearchType,
   searchText,
   setSearchText,
+  onlyToday,
+  setOnlyToday,
 }) {
   // 🔥 탭: 전체 / 배차중 / 배차완료 (배차전/배차취소 없음)
   const tabs = ["전체", "배차중", "배차완료"];
@@ -1364,6 +1496,21 @@ function MobileOrderList({
 
         {/* 빠른 범위 버튼 */}
         <div className="flex gap-2">
+          {/* 오늘 오더만 보기 */}
+<div className="flex justify-end">
+  <button
+    onClick={() => setOnlyToday((v) => !v)}
+    className={`px-3 py-1 rounded-full text-xs font-semibold border
+      ${
+        onlyToday
+          ? "bg-red-500 text-white border-red-500"
+          : "bg-white text-gray-600 border-gray-300"
+      }`}
+  >
+    TODAY만 보기
+  </button>
+</div>
+
           {[1, 3, 7, 15].map((d) => (
             <button
               key={d}
@@ -1527,6 +1674,18 @@ function MobileOrderCard({ order, onSelect }) {
   const claim = getClaim(order);
   const fee = order.기사운임 ?? 0;
   const state = getStatus(order);
+    const isToday =
+    String(order.상차일 || "").slice(0, 10) ===
+    new Date().toISOString().slice(0, 10);
+      useEffect(() => {
+  if (!isToday) return;
+
+  const key = `vibrated_${order.id}`;
+  if (sessionStorage.getItem(key)) return;
+
+  navigator.vibrate?.([60]);
+  sessionStorage.setItem(key, "1");
+}, [isToday, order.id]);
 
   const stateBadgeClass =
     state === "배차완료"
@@ -1565,6 +1724,11 @@ function MobileOrderCard({ order, onSelect }) {
     >
       {/* ▶ 상태 + 냉장/냉동 */}
       <div className="flex justify-end items-center gap-1 mb-0.5">
+        {isToday && (
+  <span className="px-2 py-0.5 rounded-full bg-red-500 text-white text-[10px] font-bold">
+    TODAY
+  </span>
+)}
         {isCold && (
           <span className="px-2 py-0.5 rounded-full bg-cyan-600 text-white text-[10px] font-bold">
             ❄ 냉장/냉동
@@ -1673,6 +1837,7 @@ function MobileOrderCard({ order, onSelect }) {
 function MobileOrderDetail({
   order,
   drivers,
+  onDuplicate,
   onAssignDriver,
   onCancelAssign,
   onCancelOrder,
@@ -1868,13 +2033,23 @@ function MobileOrderDetail({
       {/* 📌 공유 & 운임조회 (지도보다 위로 이동!) */}
 <div className="bg-white border rounded-xl px-4 py-3 shadow-sm">
   <div className="text-sm font-semibold mb-2">공유 & 운임조회</div>
-  <div className="flex gap-2">
-    <button
-  onClick={() => setShowCopyModal(true)}
-  className="flex-1 py-2 rounded-lg bg-gray-700 text-white text-sm font-semibold"
+<div className="flex gap-2">
+  {/* 오더복사 */}
+<button
+  onClick={() => onDuplicate(order)}
+  className="flex-1 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold"
 >
-  📋 복사하기
+  📦 오더복사
 </button>
+
+
+  {/* 기존 복사 */}
+  <button
+    onClick={() => setShowCopyModal(true)}
+    className="flex-1 py-2 rounded-lg bg-gray-700 text-white text-sm font-semibold"
+  >
+    📋 복사하기
+  </button>
     {/* 카톡 공유 */}
     <button
       onClick={handleCopyKakao}
@@ -1933,6 +2108,27 @@ if (elDropAddr) elDropAddr.value = order.하차지주소 || "";
     </button>
   </div>
 </div>
+{/* 📞 전화 / 💬 문자 */}
+{order.전화번호 && (
+  <div className="bg-white border rounded-xl px-4 py-3 shadow-sm">
+    <div className="text-sm font-semibold mb-2">기사 연락</div>
+    <div className="flex gap-2">
+      <a
+  href={`tel:${normalizePhone(order.전화번호)}`}
+  className="flex-1 py-2 rounded-lg bg-emerald-500 text-white text-sm font-semibold text-center"
+>
+  📞 전화
+</a>
+
+<a
+  href={`sms:${normalizePhone(order.전화번호)}`}
+  className="flex-1 py-2 rounded-lg bg-sky-500 text-white text-sm font-semibold text-center"
+>
+        💬 문자
+      </a>
+    </div>
+  </div>
+)}
 
 
       {/* 지도 */}
@@ -2250,23 +2446,16 @@ const chooseClient = (c) => {
                 onChange={(e) => update("상차일", e.target.value)}
               />
               <select
-                className="flex-1 border rounded px-2 py-1 text-sm"
-                value={form.상차시간}
-                onChange={(e) => update("상차시간", e.target.value)}
-              >
-                <option value="">상차시간</option>
-                {[
-                  "오전 1:00", "오전 2:00", "오전 3:00", "오전 4:00", "오전 5:00",
-                  "오전 6:00", "오전 7:00", "오전 8:00", "오전 9:00", "오전 10:00",
-                  "오전 11:00", "오후 12:00", "오후 1:00", "오후 2:00", "오후 3:00",
-                  "오후 4:00", "오후 5:00", "오후 6:00", "오후 7:00", "오후 8:00",
-                  "오후 9:00", "오후 10:00", "오후 11:00"
-                ].map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </select>
+  className="flex-1 border rounded px-2 py-1 text-sm"
+  value={form.상차시간}
+  onChange={(e) => update("상차시간", e.target.value)}
+>
+  <option value="">상차시간</option>
+  {HALF_HOUR_TIMES.map((t) => (
+    <option key={t} value={t}>{t}</option>
+  ))}
+</select>
+
             </div>
           }
         />
@@ -2282,23 +2471,16 @@ const chooseClient = (c) => {
                 onChange={(e) => update("하차일", e.target.value)}
               />
               <select
-                className="flex-1 border rounded px-2 py-1 text-sm"
-                value={form.하차시간}
-                onChange={(e) => update("하차시간", e.target.value)}
-              >
-                <option value="">하차시간</option>
-                {[
-                  "오전 1:00", "오전 2:00", "오전 3:00", "오전 4:00", "오전 5:00",
-                  "오전 6:00", "오전 7:00", "오전 8:00", "오전 9:00", "오전 10:00",
-                  "오전 11:00", "오후 12:00", "오후 1:00", "오후 2:00", "오후 3:00",
-                  "오후 4:00", "오후 5:00", "오후 6:00", "오후 7:00", "오후 8:00",
-                  "오후 9:00", "오후 10:00", "오후 11:00"
-                ].map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </select>
+  className="flex-1 border rounded px-2 py-1 text-sm"
+  value={form.하차시간}
+  onChange={(e) => update("하차시간", e.target.value)}
+>
+  <option value="">하차시간</option>
+  {HALF_HOUR_TIMES.map((t) => (
+    <option key={t} value={t}>{t}</option>
+  ))}
+</select>
+
             </div>
           }
         />
@@ -2917,12 +3099,22 @@ const chooseClient = (c) => {
   );
 }
 function CopySelectModal({ order, onClose }) {
-const copy = async () => {
-  const text = buildOrderCopyText(order);
+const copy = async (type) => {
+  let text = "";
+
+  if (type === "driver") {
+    text = `${order.차량번호} ${order.기사명} ${order.전화번호}`;
+  } else if (type === "fare") {
+    text = buildOrderCopyText(order);
+  } else {
+    text = buildOrderTemplateCopyText(order);
+  }
+
   await navigator.clipboard.writeText(text);
   alert("복사되었습니다.");
   onClose();
 };
+
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[9999]">
