@@ -92,15 +92,16 @@ function normalizeClients(arr){
 /* -------------------------------------------------
    배차 수정 이력 생성 함수 (⭐ 반드시 필요)
 --------------------------------------------------*/
-function makeDispatchHistory({ field, before, after }) {
+function makeDispatchHistory({ userEmail, field, before, after }) {
   return {
-    at: Date.now(),                              // 수정 시각
-    user: auth.currentUser?.email || "unknown", // 수정자
-    field,                                      // 수정 필드명
-    before,                                    // 이전 값
-    after,                                     // 변경 값
+    at: Date.now(),
+    user: userEmail || "unknown",
+    field,
+    before,
+    after,
   };
 }
+
 
 
 /* -------------------------------------------------
@@ -198,10 +199,12 @@ unsubs.push(onSnapshot(collection(db, collName), (snap)=>{
     if (prev[key] !== patch[key]) {
       histories.push(
         makeDispatchHistory({
-          field: key,
-          before: prev[key],
-          after: patch[key],
-        })
+  userEmail: auth.currentUser?.email,
+  field: key,
+  before: prev[key],
+  after: patch[key],
+})
+
       );
     }
   });
@@ -291,13 +294,14 @@ const upsertPlace = async (place) => {
     const ref = doc(db, "places", key);
     const snap = await getDoc(ref);
 
-    const data = {
-      업체명: name,
-      주소: (place.주소 || "").trim(),
-      담당자: (place.담당자 || "").trim(),
-      담당자번호: (place.담당자번호 || "").trim(),
-      updatedAt: Date.now(),
-    };
+const data = {
+  업체명: name,
+  주소: (place.주소 || "").trim(),
+  담당자: (place.담당자 || "").trim(),
+  담당자번호: (place.담당자번호 || "").trim(),
+  isActive: place.isActive !== false, // ⭐ 추가
+  updatedAt: Date.now(),
+};
 
     if (snap.exists()) {
       await updateDoc(ref, data);
@@ -655,6 +659,7 @@ return (
     tonOptions={tonOptions}
     drivers={drivers}
     clients={clients}
+    placeRows={places}
     addDispatch={addDispatch}
     patchDispatch={patchDispatch}
     removeDispatch={removeDispatch}
@@ -671,6 +676,7 @@ return (
     tonOptions={tonOptions}
     drivers={drivers}
     clients={clients}
+    places={places}
     addDispatch={addDispatch}
     patchDispatch={patchDispatch}
     removeDispatch={removeDispatch}
@@ -872,7 +878,13 @@ return (
       .trim()
       .toLowerCase()
       .replace(/\s+/g, "")
-      .replace(/[^a-z0-9가-힣]/g, "");
+      .replace(/[^a-z0-9가-힣]/g, "")
+.replace(/쉬/g, "시")
+.replace(/씨제이/g, "cj")
+.replace(/제이/g, "j")
+.replace(/프레쉬/g, "프레시")
+.replace(/물류/g, "")
+.replace(/유통/g, "")
   }
   function makeHistory({ user, field, before, after }) {
   return {
@@ -895,6 +907,7 @@ const isDateLike = (v) =>
     // ⭐ Firestore 실시간 구독으로 placeRows 강제 최신화
 // Firestore + localStorage 통합 placeList 생성
 const placeList = React.useMemo(() => {
+  
   const fromFirestore = Array.isArray(placeRows) ? placeRows : [];
 
   // 🔥 Firestore 기준 key 목록
@@ -960,6 +973,14 @@ const [driverModal, setDriverModal] = React.useState({
 });
  // ⭐ 등록 확인 팝업 상태
 const [confirmOpen, setConfirmOpen] = React.useState(false);
+// ================================
+// 🔥 거래처/하차지 중복 확인 팝업 상태
+// ================================
+const [dupPopup, setDupPopup] = React.useState({
+  open: false,
+  input: null,      // { name, addr, manager, phone }
+  candidates: [],   // normalizeKey 기준 유사 업체 목록
+});
 
 // ⭐ 신규 기사 등록시: 기본 커서 위치(기사명)
 const nameInputRef = React.useRef(null);
@@ -1148,12 +1169,41 @@ const [placeActive, setPlaceActive] = React.useState(0);
     
        // ===================== 하차지(placeRows) + 로컬 병합 placeList 끝 =====================
 
-// ⭐ 업체명으로 기존 업체 찾기
+// ⭐ 업체명 "완전 동일"만 기존으로 판단
 const findPlaceByName = (name) => {
-  const key = normalizeKey(name);
   return placeList.find(
-    (p) => normalizeKey(p.업체명) === key
+    (p) => String(p.업체명 || "").trim() === String(name || "").trim()
   );
+};
+const openNewPlacePrompt = (name) => {
+  const addr = prompt("주소 (선택)");
+  if (addr === null) return;
+
+  const manager = prompt("담당자 (선택)");
+  if (manager === null) return;
+
+  const phone = prompt("연락처 (선택)");
+  if (phone === null) return;
+
+  // 🔥 최종 확인
+  const ok = window.confirm(
+    `신규 거래처를 등록하시겠습니까?\n\n` +
+    `업체명: ${name}\n` +
+    `주소: ${addr || "-"}\n` +
+    `담당자: ${manager || "-"}\n` +
+    `연락처: ${phone || "-"}`
+  );
+
+  if (!ok) return; // ❌ 여기서 완전 중단
+
+  savePlaceSmart(
+    name,
+    addr || "",
+    manager || "",
+    phone || ""
+  );
+
+  alert("신규 거래처 등록이 완료되었습니다.");
 };
 
 // ⭐ 업체 업데이트 + 신규 생성 자동 처리
@@ -1201,7 +1251,7 @@ const savePlaceSmart = (name, addr, manager, phone) => {
 
     return; // 업데이트 끝
   }
-
+  
 // ======================
 // ② 신규 업체 생성
 // ======================
@@ -1221,9 +1271,35 @@ try {
 
 
     // 기본 clients + 하차지 모두 포함한 통합 검색 풀
-    const mergedClients = React.useMemo(() => {
-      return [...placeList, ...clients];
-    }, [placeList, clients]);
+const mergedClients = React.useMemo(() => {
+  const map = new Map();
+
+  // ✅ 1️⃣ placeList를 먼저 넣는다 (주소/담당자 기준)
+  placeList.forEach(p => {
+    const key = normalizeKey(p.업체명);
+    if (key) map.set(key, p);
+  });
+
+  // ✅ 2️⃣ clients는 "보조 검색용"으로만 사용
+  clients.forEach(c => {
+    const key = normalizeKey(c.업체명);
+    if (!key) return;
+
+    // placeList에 없을 때만 추가
+    if (!map.has(key)) {
+      map.set(key, {
+        업체명: c.업체명,
+        주소: "",
+        담당자: "",
+        담당자번호: "",
+      });
+    }
+  });
+
+  return Array.from(map.values());
+}, [placeList, clients]);
+
+
 
     // 이름 기준으로 하차지/기본거래처 찾기
     const findClient = (name = "") => {
@@ -1234,12 +1310,37 @@ try {
     };
     // 🔍 하차지 자동완성 필터 함수
     const filterPlaces = (q) => {
-      const nq = String(q || "").trim().toLowerCase();
-      if (!nq) return [];
-      return mergedClients.filter((p) =>
-        String(p.업체명 || "").toLowerCase().includes(nq)
-      );
-    };
+  const query = String(q || "").trim();
+  if (!query) return [];
+
+  const nq = normalizeKey(query);
+  const nLower = query.toLowerCase();
+
+  return mergedClients
+    .map((p) => {
+      const name = p.업체명 || "";
+      const nName = name.toLowerCase();
+      const nk = normalizeKey(name);
+
+      let score = 0;
+
+      // 1️⃣ 완전 동일
+      if (name === query) score = 100;
+      // 2️⃣ normalizeKey 동일 (띄어쓰기/철자차이)
+      else if (nk === nq) score = 90;
+      // 3️⃣ 시작 문자열
+      else if (nName.startsWith(nLower)) score = 80;
+      else if (nk.startsWith(nq)) score = 70;
+      // 4️⃣ 포함
+      else if (nName.includes(nLower)) score = 60;
+      else if (nk.includes(nq)) score = 50;
+
+      return score > 0 ? { ...p, __score: score } : null;
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.__score - a.__score);
+};
+
 
     const _tomorrowStr = (typeof tomorrowStr === "function")
       ? tomorrowStr
@@ -1367,10 +1468,36 @@ try {
     const filteredClients = React.useMemo(() => {
   const q = norm(clientQuery);
   if (!q) return placeList;
-  return placeList.filter((p) =>
-    norm(p.업체명 || "").includes(q)
-  );
+
+  const nq = normalizeKey(q);
+
+  return placeList
+    .map(p => {
+      const name = p.업체명 || "";
+      const nName = norm(name);
+      const nk = normalizeKey(name);
+
+      let score = 0;
+
+      // 1️⃣ 완전 동일
+      if (name === clientQuery) score = 100;
+      // 2️⃣ normalizeKey 동일
+      else if (nk === nq) score = 90;
+      // 3️⃣ 시작 문자열
+      else if (nName.startsWith(q)) score = 80;
+      // 4️⃣ normalizeKey 시작
+      else if (nk.startsWith(nq)) score = 70;
+      // 5️⃣ 포함
+      else if (nName.includes(q)) score = 60;
+      else if (nk.includes(nq)) score = 50;
+      else score = 0;
+
+      return { ...p, __score: score };
+    })
+    .filter(p => p.__score > 0)
+    .sort((a, b) => b.__score - a.__score);
 }, [clientQuery, placeList]);
+
 // ⭐ 거래처 선택 시 → 어디에 적용할지 팝업 오픈
 function applyClientSelect(name) {
   const p = placeList.find(
@@ -2325,9 +2452,6 @@ function FuelSlideWidget() {
     <button className="premium-btn gray" onClick={resetForm}>
       🔄 초기화
     </button>
-    <button className="premium-btn green" onClick={() => setBulkOpen(true)}>
-      📂 대용량 업로드
-    </button>
     <button className="premium-btn yellow" onClick={handleFareSearch}>
       💰 운임조회
     </button>
@@ -2444,29 +2568,57 @@ function FuelSlideWidget() {
 }}
 
           onKeyDown={(e) => {
-            const list = filteredClients;
-            if (!isClientOpen && (e.key === "ArrowDown" || e.key === "Enter")) {
-              setIsClientOpen(true);
-              return;
-            }
-            if (!list.length) return;
+  const list = filteredClients;
 
-            if (e.key === "Enter") {
-              e.preventDefault();
-              const pick = list[clientActive];
-              if (pick) applyClientSelect(pick.업체명);
-              return;
-            }
-            if (e.key === "ArrowDown") {
-              e.preventDefault();
-              setClientActive((i) => Math.min(i + 1, list.length - 1));
-            } else if (e.key === "ArrowUp") {
-              e.preventDefault();
-              setClientActive((i) => Math.max(i - 1, 0));
-            } else if (e.key === "Escape") {
-              setIsClientOpen(false);
-            }
-          }}
+  if (!isClientOpen && (e.key === "ArrowDown" || e.key === "Enter")) {
+    setIsClientOpen(true);
+    return;
+  }
+
+  if (e.key === "Enter") {
+    e.preventDefault();
+
+    // 🔥 1️⃣ 검색 결과 없음 → 중복 확인 → 신규 여부 판단
+    if (list.length === 0) {
+      const name = clientQuery.trim();
+      if (!name) return;
+
+      const key = normalizeKey(name);
+    const similar = placeList.filter((p) => {
+  const k = normalizeKey(p.업체명);
+  return k.includes(key) || key.includes(k);
+});
+
+
+      if (similar.length > 0) {
+        setDupPopup({
+          open: true,
+          input: { name },   // ← 여기 중요
+          candidates: similar,
+        });
+      } else {
+        openNewPlacePrompt(name);
+      }
+      return;
+    }
+
+    // 🔹 2️⃣ 검색 결과 있을 때 → 선택
+    const pick = list[clientActive];
+    if (pick) applyClientSelect(pick.업체명);
+    return;
+  }
+
+  if (e.key === "ArrowDown") {
+    e.preventDefault();
+    setClientActive((i) => Math.min(i + 1, list.length - 1));
+  } else if (e.key === "ArrowUp") {
+    e.preventDefault();
+    setClientActive((i) => Math.max(i - 1, 0));
+  } else if (e.key === "Escape") {
+    setIsClientOpen(false);
+  }
+}}
+
         />
         {isClientOpen && (
           <div className="absolute left-0 right-0 mt-1 max-h-52 overflow-auto bg-white border rounded-lg shadow-xl z-50">
@@ -2499,31 +2651,36 @@ function FuelSlideWidget() {
       </div>
 
       <button
-        type="button"
-        onClick={() => {
-          const 업체명 = (clientQuery || "").trim();
-          if (!업체명) return alert("업체명을 입력하세요.");
-          const 주소 = prompt("주소 (선택)") || "";
-          const 담당자 = prompt("담당자 (선택)") || "";
-          const 담당자번호 = prompt("연락처 (선택)") || "";
+  type="button"
+  onClick={() => {
+    const name = (clientQuery || "").trim();
+    if (!name) return alert("업체명을 입력하세요.");
 
-          if (typeof upsertPlace === "function") {
-            savePlaceSmart(업체명, 주소, 담당자, 담당자번호);
-          } else {
-            try {
-              const list = JSON.parse(localStorage.getItem("hachaPlaces_v1") || "[]");
-              list.push({ 업체명, 주소, 담당자, 담당자번호 });
-              localStorage.setItem("hachaPlaces_v1", JSON.stringify(list));
-            } catch (e) {}
-          }
+  const nk = normalizeKey(name);
 
-          alert("하차지거래처에 신규 등록되었습니다.");
-        }}
-        className="px-3 py-2 border rounded-lg text-sm bg-gray-50 hover:bg-gray-100"
-      >
-        + 신규등록
-        
-      </button>
+const similar = placeList.filter(p => {
+  const pk = normalizeKey(p.업체명);
+  return pk.includes(nk) || nk.includes(pk);
+});
+
+    // 🔥 1️⃣ 비슷한 거래처 있으면 → 중복 팝업 먼저
+    if (similar.length > 0) {
+      setDupPopup({
+        open: true,
+        input: { name },
+        candidates: similar,
+      });
+      return;
+    }
+
+    // 🔥 2️⃣ 진짜 없을 때만 신규 입력 팝업
+    openNewPlacePrompt(name);
+  }}
+  className="px-3 py-2 border rounded-lg text-sm bg-gray-50 hover:bg-gray-100"
+>
+  + 신규등록
+</button>
+
     </div>
   </div>
 
@@ -3418,6 +3575,75 @@ setIsCopyMode(true);
     </div>
   </div>
 )}
+{/* ================= 거래처/하차지 중복 확인 팝업 ================= */}
+{dupPopup.open && (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
+    <div className="bg-white rounded-xl p-6 w-[420px] shadow-xl border">
+
+      <h3 className="text-base font-bold mb-3">
+        비슷한 거래처가 있습니다
+      </h3>
+
+      <p className="text-sm text-gray-700 mb-4">
+        신규로 등록하시겠습니까?
+      </p>
+
+      {/* 버튼 */}
+      <div className="flex justify-end gap-2 mb-4">
+        {/* 예 → 신규 등록 */}
+        <button
+          className="px-4 py-2 bg-blue-600 text-white rounded"
+          onClick={() => {
+  const { name } = dupPopup.input;
+
+  setDupPopup({ open: false, input: null, candidates: [] });
+
+  // 🔥 여기서 신규 입력 팝업을 연다
+  setTimeout(() => {
+    openNewPlacePrompt(name);
+  }, 0);
+}}
+
+        >
+          예
+        </button>
+
+        {/* 아니오 */}
+        <button
+  className="px-4 py-2 bg-gray-200 rounded"
+  onClick={() => {
+    // 🔥 신규 등록 거부 → 팝업만 닫기
+    setDupPopup({ open: false, input: null, candidates: [] });
+  }}
+>
+  아니오
+</button>
+
+      </div>
+
+      {/* 기존 업체 선택 */}
+      <div className="border-t pt-3 space-y-2">
+        {dupPopup.candidates.map((p, i) => (
+          <div
+            key={i}
+            className="p-2 border rounded cursor-pointer hover:bg-gray-50"
+            onClick={() => {
+  applyClientSelect(p.업체명); // 🔥 이게 정답
+  setDupPopup({ open: false, input: null, candidates: [] });
+}}
+
+          >
+            <div className="font-medium">{p.업체명}</div>
+            {p.주소 && (
+              <div className="text-xs text-gray-500">{p.주소}</div>
+            )}
+          </div>
+        ))}
+      </div>
+
+    </div>
+  </div>
+)}
 
 {/* ================= Status Popup ================= */}
 {statusPopup && (
@@ -3640,6 +3866,42 @@ function RealtimeStatus({
 }) {
 
   const isAdmin = role === "admin";
+  // ==========================
+// 🔥 거래처 자동완성 전체 풀 (clients + dispatchData)
+// ==========================
+const allClientPool = React.useMemo(() => {
+  const map = new Map();
+
+  // 1️⃣ 거래처 관리
+  (clients || []).forEach((c) => {
+    const name =
+      c.거래처명 || c.name || c.회사명 || c.상호 || c.title || "";
+    if (!name) return;
+
+    map.set(name, {
+      거래처명: name,
+      주소: c.주소 || "",
+      담당자: c.담당자 || "",
+      연락처: c.연락처 || "",
+    });
+  });
+
+  // 2️⃣ 기존 배차 데이터에서 거래처 보강
+  (dispatchData || []).forEach((r) => {
+    const name = r.거래처명;
+    if (!name || map.has(name)) return;
+
+    map.set(name, {
+      거래처명: name,
+      주소: "",
+      담당자: "",
+      연락처: "",
+    });
+  });
+
+  return Array.from(map.values());
+}, [clients, dispatchData]);
+
   
    // ==========================
   // 📌 날짜 유틸 (반드시 최상단)
@@ -3656,11 +3918,84 @@ function RealtimeStatus({
     d.setDate(d.getDate() + 1);
     return d.toISOString().slice(0, 10);
   };
+  // ==========================
+// 🔍 선택수정 상/하차지 자동완성 필터 함수 (여기!!!)
+// ==========================
+// ==========================
+// 🔍 선택수정 거래처 자동완성 필터 (추가해야 함)
+// ==========================
+const normalizeClientKey = (s = "") =>
+  String(s)
+    .toLowerCase()
+    .replace(/\s+/g, "")
+    .replace(/[()㈜.,\-]/g, "")   // ❗ 법인표기 제거
+    .replace(/주식회사|유한회사/g, "")
+    .replace(/[^a-z0-9가-힣]/g, "");
 
-// 🔵 하차지 자동완성 상태
-const [placeOptions, setPlaceOptions] = React.useState([]);   // 자동완성 목록
-const [showPlaceDropdown, setShowPlaceDropdown] = React.useState(false);  // 드롭다운 표시 여부
-const [placeQuery, setPlaceQuery] = React.useState("");       // 검색 문자열
+const filterEditClients = (q) => {
+  if (!q) return [];
+
+  const nq = normalizeClientKey(q);
+
+  return allClientPool
+    .map((c) => {
+      const name = c.거래처명 || "";
+      const nk = normalizeClientKey(name);
+      if (!nk) return null;
+
+      let score = 0;
+      if (nk === nq) score = 100;
+      else if (nk.startsWith(nq)) score = 80;
+      else if (nk.includes(nq)) score = 50;
+
+      return score > 0 ? { ...c, score } : null;
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 8);
+};
+
+const normalizeKey = (s = "") =>
+  String(s)
+    .toLowerCase()
+    .replace(/\s+/g, "")
+    .replace(/[^a-z0-9가-힣]/g, "");
+
+const filterEditPlaces = (q) => {
+  if (!q) return [];
+
+  const nq = normalizeKey(q);
+
+  return (placeRows || [])
+    .map((p) => {
+      const nk = normalizeKey(p.업체명);
+      let score = 0;
+
+      if (nk === nq) score = 100;
+      else if (nk.startsWith(nq)) score = 80;
+      else if (nk.includes(nq)) score = 50;
+
+      return { ...p, score };
+    })
+    .filter((p) => p.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 8);
+};
+
+// ==========================
+// 🔵 선택수정 상/하차지 자동완성 상태
+// ==========================
+const [editPlaceOptions, setEditPlaceOptions] = React.useState([]);
+const [showEditPlaceDropdown, setShowEditPlaceDropdown] = React.useState(false);
+const [editPlaceType, setEditPlaceType] = React.useState(null); // "pickup" | "drop"
+const [editActiveIndex, setEditActiveIndex] = React.useState(0);
+// ==========================
+// 🔵 선택수정 거래처 자동완성 상태 (추가)
+// ==========================
+const [editClientOptions, setEditClientOptions] = React.useState([]);
+const [showEditClientDropdown, setShowEditClientDropdown] = React.useState(false);
+const [editClientActiveIndex, setEditClientActiveIndex] = React.useState(0);
+
   // ------------------------
   // 상태들
   // ------------------------
@@ -4413,15 +4748,6 @@ setTimeout(() => {
 setRows(prev =>
   prev.map(r =>
     r._id === id ? { ...r, updatedAt: Date.now() } : r
-  )
-);
-
-// dispatchData도 동일하게 최신화 + 상태 강제 배차완료
-setDispatchData(prev =>
-  prev.map(r =>
-    r._id === id
-      ? { ...r, updatedAt: Date.now(), 배차상태: "배차완료" }
-      : r
   )
 );
 
@@ -6171,16 +6497,91 @@ XLSX.writeFile(wb, "실시간배차현황.xlsx");
       {/* ------------------------------------------------ */}
       {/* 🔵 거래처명 */}
       {/* ------------------------------------------------ */}
-      <div className="mb-3">
-        <label>거래처명</label>
-        <input
-          className="border p-2 rounded w-full"
-          value={editTarget.거래처명 || ""}
-          onChange={(e) =>
-            setEditTarget((p) => ({ ...p, 거래처명: e.target.value }))
-          }
-        />
-      </div>
+    {/* ===================== 거래처명 ===================== */}
+<div className="mb-3 relative">
+  <label>거래처명</label>
+  <input
+    className="border p-2 rounded w-full"
+    value={editTarget.거래처명 || ""}
+    onChange={(e) => {
+      const v = e.target.value;
+  setShowEditPlaceDropdown(false); // 🔥 충돌 방지
+      setEditTarget((p) => ({ ...p, 거래처명: v }));
+      setEditClientOptions(filterEditClients(v));
+      setShowEditClientDropdown(true);
+      setEditClientActiveIndex(0);
+    }}
+    onKeyDown={(e) => {
+      if (!showEditClientDropdown) return;
+
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setEditClientActiveIndex((i) =>
+          Math.min(i + 1, editClientOptions.length - 1)
+        );
+      }
+
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setEditClientActiveIndex((i) => Math.max(i - 1, 0));
+      }
+
+      if (e.key === "Enter") {
+        e.preventDefault();
+        const c = editClientOptions[editClientActiveIndex];
+        if (!c) return;
+
+        setEditTarget((prev) => ({
+          ...prev,
+          거래처명: c.거래처명,
+          거래처주소: c.주소 || prev.거래처주소,
+          거래처담당자: c.담당자 || prev.거래처담당자,
+          거래처연락처: c.연락처 || prev.거래처연락처,
+        }));
+
+        setShowEditClientDropdown(false);
+      }
+    }}
+    onBlur={() =>
+      setTimeout(() => setShowEditClientDropdown(false), 150)
+    }
+  />
+
+  {showEditClientDropdown && (
+    <div className="absolute z-50 bg-white border w-full max-h-40 overflow-y-auto">
+      {editClientOptions.length === 0 ? (
+        <div className="px-3 py-2 text-sm text-gray-400">
+          검색 결과 없음
+        </div>
+      ) : (
+        editClientOptions.map((c, i) => (
+          <div
+            key={i}
+            className={`px-3 py-1 cursor-pointer ${
+              i === editClientActiveIndex ? "bg-blue-100" : ""
+            }`}
+            onMouseDown={() => {
+              setEditTarget((prev) => ({
+                ...prev,
+                거래처명: c.거래처명,
+                거래처주소: c.주소 || prev.거래처주소,
+                거래처담당자: c.담당자 || prev.거래처담당자,
+                거래처연락처: c.연락처 || prev.거래처연락처,
+              }));
+              setShowEditClientDropdown(false);
+            }}
+          >
+            <div className="font-semibold">{c.거래처명}</div>
+            {c.주소 && (
+              <div className="text-xs text-gray-500">{c.주소}</div>
+            )}
+          </div>
+        ))
+      )}
+    </div>
+  )}
+</div>
+
 
       {/* ------------------------------------------------ */}
       {/* 🔵 상/하차일 & 시간 */}
@@ -6258,49 +6659,175 @@ XLSX.writeFile(wb, "실시간배차현황.xlsx");
       {/* ------------------------------------------------ */}
       {/* 🔵 상하차지 */}
       {/* ------------------------------------------------ */}
-      <div className="mb-3">
-        <label>상차지명</label>
-        <input
-          className="border p-2 rounded w-full"
-          value={editTarget.상차지명 || ""}
-          onChange={(e) =>
-            setEditTarget((p) => ({ ...p, 상차지명: e.target.value }))
-          }
-        />
-      </div>
+      {/* ===================== 상차지 ===================== */}
+<div className="mb-3 relative">
+  <label>상차지명</label>
+  <input
+    className="border p-2 rounded w-full"
+    value={editTarget.상차지명 || ""}
+    onChange={(e) => {
+      const v = e.target.value;
 
-      <div className="mb-3">
-        <label>상차지주소</label>
-        <input
-          className="border p-2 rounded w-full"
-          value={editTarget.상차지주소 || ""}
-          onChange={(e) =>
-            setEditTarget((p) => ({ ...p, 상차지주소: e.target.value }))
-          }
-        />
-      </div>
+      setEditTarget((p) => ({ ...p, 상차지명: v }));
+      setEditPlaceType("pickup");
+      setEditPlaceOptions(filterEditPlaces(v));
+      setShowEditPlaceDropdown(true);
+      setEditActiveIndex(0);
+    }}
+    onKeyDown={(e) => {
+      if (!showEditPlaceDropdown || editPlaceType !== "pickup") return;
 
-      <div className="mb-3">
-        <label>하차지명</label>
-        <input
-          className="border p-2 rounded w-full"
-          value={editTarget.하차지명 || ""}
-          onChange={(e) =>
-            setEditTarget((p) => ({ ...p, 하차지명: e.target.value }))
-          }
-        />
-      </div>
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setEditActiveIndex((i) =>
+          Math.min(i + 1, editPlaceOptions.length - 1)
+        );
+      }
 
-      <div className="mb-3">
-        <label>하차지주소</label>
-        <input
-          className="border p-2 rounded w-full"
-          value={editTarget.하차지주소 || ""}
-          onChange={(e) =>
-            setEditTarget((p) => ({ ...p, 하차지주소: e.target.value }))
-          }
-        />
-      </div>
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setEditActiveIndex((i) => Math.max(i - 1, 0));
+      }
+
+      if (e.key === "Enter") {
+        e.preventDefault();
+        const p = editPlaceOptions[editActiveIndex];
+        if (!p) return;
+
+        setEditTarget((prev) => ({
+          ...prev,
+          상차지명: p.업체명,
+          상차지주소: p.주소 || "",
+        }));
+
+        setShowEditPlaceDropdown(false);
+      }
+    }}
+    onBlur={() =>
+      setTimeout(() => setShowEditPlaceDropdown(false), 150)
+    }
+  />
+
+  {showEditPlaceDropdown && editPlaceType === "pickup" && (
+    <div className="absolute z-50 bg-white border w-full max-h-40 overflow-y-auto">
+      {editPlaceOptions.map((p, i) => (
+        <div
+          key={i}
+          className={`px-3 py-1 cursor-pointer ${
+            i === editActiveIndex ? "bg-blue-100" : ""
+          }`}
+          onMouseDown={() => {
+            setEditTarget((prev) => ({
+              ...prev,
+              상차지명: p.업체명,
+              상차지주소: p.주소 || "",
+            }));
+            setShowEditPlaceDropdown(false);
+          }}
+        >
+          <div className="font-semibold">{p.업체명}</div>
+          <div className="text-xs text-gray-500">{p.주소}</div>
+        </div>
+      ))}
+    </div>
+  )}
+</div>
+
+<div className="mb-3">
+  <label>상차지주소</label>
+  <input
+    className="border p-2 rounded w-full"
+    value={editTarget.상차지주소 || ""}
+    onChange={(e) =>
+      setEditTarget((p) => ({ ...p, 상차지주소: e.target.value }))
+    }
+  />
+</div>
+{/* ===================== 하차지 ===================== */}
+<div className="mb-3 relative">
+  <label>하차지명</label>
+  <input
+    className="border p-2 rounded w-full"
+    value={editTarget.하차지명 || ""}
+    onChange={(e) => {
+      const v = e.target.value;
+
+      setEditTarget((p) => ({ ...p, 하차지명: v }));
+      setEditPlaceType("drop");
+      setEditPlaceOptions(filterEditPlaces(v));
+      setShowEditPlaceDropdown(true);
+      setEditActiveIndex(0);
+    }}
+    onKeyDown={(e) => {
+      if (!showEditPlaceDropdown || editPlaceType !== "drop") return;
+
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setEditActiveIndex((i) =>
+          Math.min(i + 1, editPlaceOptions.length - 1)
+        );
+      }
+
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setEditActiveIndex((i) => Math.max(i - 1, 0));
+      }
+
+      if (e.key === "Enter") {
+        e.preventDefault();
+        const p = editPlaceOptions[editActiveIndex];
+        if (!p) return;
+
+        setEditTarget((prev) => ({
+          ...prev,
+          하차지명: p.업체명,
+          하차지주소: p.주소 || "",
+        }));
+
+        setShowEditPlaceDropdown(false);
+      }
+    }}
+    onBlur={() =>
+      setTimeout(() => setShowEditPlaceDropdown(false), 150)
+    }
+  />
+
+  {showEditPlaceDropdown && editPlaceType === "drop" && (
+    <div className="absolute z-50 bg-white border w-full max-h-40 overflow-y-auto">
+      {editPlaceOptions.map((p, i) => (
+        <div
+          key={i}
+          className={`px-3 py-1 cursor-pointer ${
+            i === editActiveIndex ? "bg-blue-100" : ""
+          }`}
+          onMouseDown={() => {
+            setEditTarget((prev) => ({
+              ...prev,
+              하차지명: p.업체명,
+              하차지주소: p.주소 || "",
+            }));
+            setShowEditPlaceDropdown(false);
+          }}
+        >
+          <div className="font-semibold">{p.업체명}</div>
+          <div className="text-xs text-gray-500">{p.주소}</div>
+        </div>
+      ))}
+    </div>
+  )}
+</div>
+
+<div className="mb-3">
+  <label>하차지주소</label>
+  <input
+    className="border p-2 rounded w-full"
+    value={editTarget.하차지주소 || ""}
+    onChange={(e) =>
+      setEditTarget((p) => ({ ...p, 하차지주소: e.target.value }))
+    }
+  />
+</div>
+
 
       {/* ------------------------------------------------ */}
       {/* 🔵 화물내용 */}
@@ -7078,6 +7605,42 @@ function DispatchStatus({
   removeDispatch,
   upsertDriver,
 }) {
+  // ==========================
+// 🔥 거래처 자동완성 전체 풀 (clients + dispatchData)
+// ==========================
+const allClientPool = React.useMemo(() => {
+  const map = new Map();
+
+  // 거래처 관리
+  (clients || []).forEach((c) => {
+    const name =
+      c.거래처명 || c.name || c.회사명 || c.상호 || c.title || "";
+    if (!name) return;
+
+    map.set(name, {
+      거래처명: name,
+      주소: c.주소 || "",
+      담당자: c.담당자 || "",
+      연락처: c.연락처 || "",
+    });
+  });
+
+  // 기존 배차 데이터에서 보강
+  (dispatchData || []).forEach((r) => {
+    const name = r.거래처명;
+    if (!name || map.has(name)) return;
+
+    map.set(name, {
+      거래처명: name,
+      주소: "",
+      담당자: "",
+      연락처: "",
+    });
+  });
+
+  return Array.from(map.values());
+}, [clients, dispatchData]);
+
   // 📌 오늘 날짜 정확하게 (KST 기준)
 const todayKST = () => {
   const d = new Date();
@@ -7157,22 +7720,111 @@ const [savedHighlightIds, setSavedHighlightIds] = React.useState(new Set());
 // ⭐ 페이지네이션 상태
 const [page, setPage] = React.useState(0);
 const pageSize = 100;
-
+// 🔵 거래처 자동완성 상태
+const [clientOptions, setClientOptions] = React.useState([]);
+const [showClientDropdown, setShowClientDropdown] = React.useState(false);
 // 🔵 자동완성(상/하차지) 상태  ← ★★★ 여기 추가
 const [placeQuery, setPlaceQuery] = React.useState("");
 const [placeOptions, setPlaceOptions] = React.useState([]);
-const [showPlaceDropdown, setShowPlaceDropdown] = React.useState(false);
+// 🔥 PART 4와 동일한 구조
+const [activePlaceField, setActivePlaceField] = React.useState(null);
+// "상차" | "하차" | null
+// 🔽 상/하차 자동완성 키보드 네비게이션용
+const [placeActiveIndex, setPlaceActiveIndex] = React.useState(0);
+const placeListRef = React.useRef(null);
+// 🔥 방향키 이동 시 드롭다운 내부 스크롤 자동 이동
+React.useEffect(() => {
+  if (!placeListRef.current) return;
 
-// 🔵 자동완성 검색 함수 (여기로 옮겨!!!)
+  const list = placeListRef.current;
+  const item = list.children[placeActiveIndex];
+
+  if (!item) return;
+
+  const itemTop = item.offsetTop;
+  const itemBottom = itemTop + item.offsetHeight;
+
+  const viewTop = list.scrollTop;
+  const viewBottom = viewTop + list.clientHeight;
+
+  // ⬇️ 아래로 벗어나면
+  if (itemBottom > viewBottom) {
+    list.scrollTop = itemBottom - list.clientHeight;
+  }
+
+  // ⬆️ 위로 벗어나면
+  if (itemTop < viewTop) {
+    list.scrollTop = itemTop;
+  }
+}, [placeActiveIndex]);
+
+// ==========================
+// 🔍 거래처 자동완성 유틸
+// ==========================
+const normalizeClientKey = (s = "") =>
+  String(s)
+    .toLowerCase()
+    .replace(/\s+/g, "")
+    .replace(/[()㈜.,\-]/g, "")
+    .replace(/주식회사|유한회사/g, "")
+    .replace(/[^a-z0-9가-힣]/g, "");
+
+const filterClients = (q) => {
+  if (!q) return [];
+
+  const nq = normalizeClientKey(q);
+
+  return allClientPool
+    .map((c) => {
+      const name = c.거래처명 || "";
+      const nk = normalizeClientKey(name);
+      if (!nk) return null;
+
+      let score = 0;
+      if (nk === nq) score = 100;
+      else if (nk.startsWith(nq)) score = 80;
+      else if (nk.includes(nq)) score = 50;
+
+      return score > 0 ? { ...c, score } : null;
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 8);
+};
+
+// 🔵 자동완성 검색 함수 (FIX)
 const filterPlaces = (text) => {
   const q = String(text || "").trim().toLowerCase();
   if (!q) return [];
-  return (placeRows || []).filter((p) =>
-    String(p.업체명 || "")
+
+  return (places || []).filter((p) =>
+    String(p.업체명 || p.name || "")
       .toLowerCase()
       .includes(q)
   );
 };
+// 🔥 입력값과 가장 유사한 항목을 위로 정렬
+// 완전일치 > 시작일치 > 포함일치
+const rankPlaces = (list, query) => {
+  const q = String(query || "").trim().toLowerCase();
+  if (!q) return list;
+
+  return list
+    .map((p) => {
+      const name = String(p.업체명 || "").toLowerCase();
+
+      let score = 0;
+      if (name === q) score = 100;            // 완전일치 (반찬단지)
+      else if (name.startsWith(q)) score = 80; // 앞글자 일치
+      else if (name.includes(q)) score = 50;   // 포함
+
+      return score > 0 ? { ...p, __score: score } : null;
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.__score - a.__score);
+};
+
+
 
 // ==========================
 // 📦 운임 조회 모달 상태 추가
@@ -8251,59 +8903,13 @@ return (
   <td key={key} className="border text-center whitespace-nowrap">
     {editMode && selected.has(id) && editableKeys.includes(key) ? (
       <div className="relative w-full">
-        {/* ⭐ 입력창 */}
         <input
-          className="border rounded px-1 py-0.5 w-full text-center"
-          defaultValue={row[key] || ""}
-          onChange={(e) => {
-            const v = e.target.value;
-            updateEdited(row, key, v);
-
-            // ⭐ 상차지명/하차지명 자동완성
-            if (key === "상차지명" || key === "하차지명") {
-              const opts = filterPlaces(v);
-              setPlaceOptions(opts);
-              setPlaceQuery(v);
-              setShowPlaceDropdown(true);
-            }
-          }}
-          onBlur={() => setTimeout(() => setShowPlaceDropdown(false), 200)}
-          onFocus={(e) => {
-            if (key === "상차지명" || key === "하차지명") {
-              const opts = filterPlaces(e.target.value);
-              setPlaceOptions(opts);
-              setShowPlaceDropdown(true);
-            }
-          }}
-        />
-
-        {/* ⭐ 자동완성 드롭다운 */}
-        {showPlaceDropdown &&
-          (key === "상차지명" || key === "하차지명") &&
-          placeOptions.length > 0 && (
-            <div className="absolute left-0 top-full bg-white border rounded shadow-lg w-full max-h-40 overflow-y-auto z-50">
-              {placeOptions.slice(0, 12).map((p, idx) => (
-                <div
-                  key={idx}
-                  className="p-1 px-2 cursor-pointer hover:bg-gray-100"
-                  onMouseDown={() => {
-                    updateEdited(row, key, p.업체명);
-
-                    // 주소 자동 입력
-                    if (key === "상차지명")
-                      updateEdited(row, "상차지주소", p.주소 || "");
-                    if (key === "하차지명")
-                      updateEdited(row, "하차지주소", p.주소 || "");
-
-                    setShowPlaceDropdown(false);
-                  }}
-                >
-                  {p.업체명}
-                  <span className="text-gray-500"> — {p.주소}</span>
-                </div>
-              ))}
-            </div>
-          )}
+  className="border rounded px-1 py-0.5 w-full text-center"
+  defaultValue={row[key] || ""}
+  onChange={(e) => {
+    updateEdited(row, key, e.target.value);
+  }}
+/>
       </div>
     ) : key === "상차지주소" || key === "하차지주소" ? (
       <AddressCell text={row[key] || ""} max={5} />
@@ -8455,16 +9061,38 @@ return (
       {/* ------------------------------------------------ */}
       {/* 🔵 거래처명 */}
       {/* ------------------------------------------------ */}
-      <div className="mb-3">
-        <label>거래처명</label>
-        <input
-          className="border p-2 rounded w-full"
-          value={editTarget.거래처명 || ""}
-          onChange={(e) =>
-            setEditTarget((p) => ({ ...p, 거래처명: e.target.value }))
-          }
-        />
-      </div>
+     <div className="mb-3 relative">
+  <label>거래처명</label>
+  <input
+    className="border p-2 rounded w-full"
+    value={editTarget.거래처명 || ""}
+    onChange={(e) => {
+      const v = e.target.value;
+      setEditTarget((p) => ({ ...p, 거래처명: v }));
+      setClientOptions(filterClients(v));
+      setShowClientDropdown(true);
+    }}
+    onBlur={() => setTimeout(() => setShowClientDropdown(false), 150)}
+  />
+
+  {showClientDropdown && clientOptions.length > 0 && (
+    <div className="absolute z-50 bg-white border w-full max-h-40 overflow-y-auto">
+      {clientOptions.map((c, i) => (
+        <div
+          key={i}
+          className="px-3 py-1 cursor-pointer hover:bg-gray-100"
+          onMouseDown={() => {
+            setEditTarget((p) => ({ ...p, 거래처명: c.거래처명 }));
+            setShowClientDropdown(false);
+          }}
+        >
+          {c.거래처명}
+        </div>
+      ))}
+    </div>
+  )}
+</div>
+
 
       {/* ------------------------------------------------ */}
       {/* 🔵 상/하차일 & 시간 */}
@@ -8540,51 +9168,198 @@ return (
       </div>
 
       {/* ------------------------------------------------ */}
-      {/* 🔵 상하차지 */}
-      {/* ------------------------------------------------ */}
-      <div className="mb-3">
-        <label>상차지명</label>
-        <input
-          className="border p-2 rounded w-full"
-          value={editTarget.상차지명 || ""}
-          onChange={(e) =>
-            setEditTarget((p) => ({ ...p, 상차지명: e.target.value }))
-          }
-        />
-      </div>
+{/* 🔵 상하차지 (자동완성 동일 UX) */}
+{/* ------------------------------------------------ */}
 
-      <div className="mb-3">
-        <label>상차지주소</label>
-        <input
-          className="border p-2 rounded w-full"
-          value={editTarget.상차지주소 || ""}
-          onChange={(e) =>
-            setEditTarget((p) => ({ ...p, 상차지주소: e.target.value }))
-          }
-        />
-      </div>
+{/* ================= 상차지명 ================= */}
+<div className="mb-3 relative">
+  <label>상차지명</label>
+  <input
+    className="border p-2 rounded w-full"
+    value={editTarget.상차지명 || ""}
+    onChange={(e) => {
+      const v = e.target.value;
+      setEditTarget((p) => ({ ...p, 상차지명: v }));
 
-      <div className="mb-3">
-        <label>하차지명</label>
-        <input
-          className="border p-2 rounded w-full"
-          value={editTarget.하차지명 || ""}
-          onChange={(e) =>
-            setEditTarget((p) => ({ ...p, 하차지명: e.target.value }))
-          }
-        />
-      </div>
+      const ranked = rankPlaces(filterPlaces(v), v);
+      setPlaceOptions(ranked);
+      setPlaceActiveIndex(0);
+      setActivePlaceField("상차");
+    }}
+    onFocus={(e) => {
+      const v = e.target.value;
+      const ranked = rankPlaces(filterPlaces(v), v);
+      setPlaceOptions(ranked);
+      setPlaceActiveIndex(0);
+      setActivePlaceField("상차");
+    }}
+    onKeyDown={(e) => {
+      if (!placeOptions.length) return;
 
-      <div className="mb-3">
-        <label>하차지주소</label>
-        <input
-          className="border p-2 rounded w-full"
-          value={editTarget.하차지주소 || ""}
-          onChange={(e) =>
-            setEditTarget((p) => ({ ...p, 하차지주소: e.target.value }))
-          }
-        />
-      </div>
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setPlaceActiveIndex((i) =>
+          Math.min(i + 1, placeOptions.length - 1)
+        );
+      }
+
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setPlaceActiveIndex((i) => Math.max(i - 1, 0));
+      }
+
+      if (e.key === "Enter") {
+        e.preventDefault();
+        const p = placeOptions[placeActiveIndex];
+        if (!p) return;
+
+        setEditTarget((prev) => ({
+          ...prev,
+          상차지명: p.업체명,
+          상차지주소: p.주소 || "",
+        }));
+        setActivePlaceField(null);
+      }
+    }}
+    onBlur={() => setTimeout(() => setActivePlaceField(null), 200)}
+  />
+
+  {activePlaceField === "상차" && placeOptions.length > 0 && (
+    <div
+  ref={placeListRef}
+  className="absolute left-0 top-full z-50 bg-white border rounded shadow-lg w-full max-h-40 overflow-y-auto"
+>
+      {placeOptions.slice(0, 12).map((p, idx) => (
+        <div
+          key={idx}
+          className={
+  "px-3 py-1 cursor-pointer " +
+  (idx === placeActiveIndex ? "bg-blue-100" : "hover:bg-gray-100")
+}
+          onMouseDown={() => {
+            setEditTarget((prev) => ({
+              ...prev,
+              상차지명: p.업체명,
+              상차지주소: p.주소 || "",
+            }));
+            setActivePlaceField(null);
+          }}
+        >
+          <div className="font-medium">{p.업체명}</div>
+          <div className="text-xs text-gray-500">{p.주소}</div>
+        </div>
+      ))}
+    </div>
+  )}
+</div>
+
+{/* ================= 상차지주소 ================= */}
+<div className="mb-3">
+  <label>상차지주소</label>
+  <input
+    className="border p-2 rounded w-full"
+    value={editTarget.상차지주소 || ""}
+    onChange={(e) =>
+      setEditTarget((p) => ({ ...p, 상차지주소: e.target.value }))
+    }
+  />
+</div>
+
+{/* ================= 하차지명 ================= */}
+<div className="mb-3 relative">
+  <label>하차지명</label>
+  <input
+    className="border p-2 rounded w-full"
+    value={editTarget.하차지명 || ""}
+    onChange={(e) => {
+      const v = e.target.value;
+      setEditTarget((p) => ({ ...p, 하차지명: v }));
+
+      const ranked = rankPlaces(filterPlaces(v), v);
+      setPlaceOptions(ranked);
+      setPlaceActiveIndex(0);
+      setActivePlaceField("하차");
+    }}
+    onFocus={(e) => {
+      const v = e.target.value;
+      const ranked = rankPlaces(filterPlaces(v), v);
+      setPlaceOptions(ranked);
+      setPlaceActiveIndex(0);
+      setActivePlaceField("하차");
+    }}
+    onKeyDown={(e) => {
+      if (!placeOptions.length) return;
+
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setPlaceActiveIndex((i) =>
+          Math.min(i + 1, placeOptions.length - 1)
+        );
+      }
+
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setPlaceActiveIndex((i) => Math.max(i - 1, 0));
+      }
+
+      if (e.key === "Enter") {
+        e.preventDefault();
+        const p = placeOptions[placeActiveIndex];
+        if (!p) return;
+
+        setEditTarget((prev) => ({
+          ...prev,
+          하차지명: p.업체명,
+          하차지주소: p.주소 || "",
+        }));
+        setActivePlaceField(null);
+      }
+    }}
+    onBlur={() => setTimeout(() => setActivePlaceField(null), 200)}
+  />
+
+  {activePlaceField === "하차" && placeOptions.length > 0 && (
+    <div
+  ref={placeListRef}
+  className="absolute left-0 top-full z-50 bg-white border rounded shadow-lg w-full max-h-40 overflow-y-auto"
+>
+      {placeOptions.slice(0, 12).map((p, idx) => (
+        <div
+          key={idx}
+          className={
+  "px-3 py-1 cursor-pointer " +
+  (idx === placeActiveIndex ? "bg-blue-100" : "hover:bg-gray-100")
+}
+          onMouseDown={() => {
+            setEditTarget((prev) => ({
+              ...prev,
+              하차지명: p.업체명,
+              하차지주소: p.주소 || "",
+            }));
+            setActivePlaceField(null);
+          }}
+        >
+          <div className="font-medium">{p.업체명}</div>
+          <div className="text-xs text-gray-500">{p.주소}</div>
+        </div>
+      ))}
+    </div>
+  )}
+</div>
+
+{/* ================= 하차지주소 ================= */}
+<div className="mb-3">
+  <label>하차지주소</label>
+  <input
+    className="border p-2 rounded w-full"
+    value={editTarget.하차지주소 || ""}
+    onChange={(e) =>
+      setEditTarget((p) => ({ ...p, 하차지주소: e.target.value }))
+    }
+  />
+</div>
+
+
 
       {/* ------------------------------------------------ */}
       {/* 🔵 화물내용 */}
