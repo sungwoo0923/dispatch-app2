@@ -1110,9 +1110,40 @@ const handleOrderDuplicate = (order) => {
             setShowMenu(false);
           }}
           onGoCreate={() => {
-            setPage("form");
-            setShowMenu(false);
-          }}
+  setForm({
+    거래처명: "",
+    상차일: "",
+    상차시간: "",
+    하차일: "",
+    하차시간: "",
+    상차지명: "",
+    상차지주소: "",
+    하차지명: "",
+    하차지주소: "",
+    톤수: "",
+    차종: "",
+    화물내용: "",
+    상차방법: "",
+    하차방법: "",
+    지급방식: "",
+    배차방식: "",
+    청구운임: 0,
+    기사운임: 0,
+    수수료: 0,
+    산재보험료: 0,
+    차량번호: "",
+    기사명: "",
+    전화번호: "",
+    혼적여부: "독차",
+    적요: "",
+    _editId: null,
+    _returnToDetail: false,
+  });
+  setSelectedOrder(null);
+  setPage("form");
+  setShowMenu(false);
+}}
+
           onGoFare={() => {
             setPage("fare");
             setShowMenu(false);

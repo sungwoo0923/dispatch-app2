@@ -1,56 +1,67 @@
-// ===================== public/sw.js (FINAL STABLE VERSION) =====================
+// ===================== public/sw.js =====================
+// ★ 배포 시 VERSION 반드시 변경 ★
+const VERSION = "2025-02-10-06";
 
-// ★★ 배포할 때마다 MUST: VERSION 숫자 증가 ★★
-const VERSION = "2025-02-10-04";
+console.log("[SW] Loaded. VERSION =", VERSION);
 
-console.log("Service Worker Loaded. VERSION =", VERSION);
-
-// INSTALL
+// INSTALL: 새 SW 설치 (즉시 대기 상태)
 self.addEventListener("install", () => {
-  console.log("SW installing…");
-  self.skipWaiting();
+  console.log("[SW] Installing...");
+  self.skipWaiting(); // waiting 상태로 즉시 진입
 });
 
-// ACTIVATE
+// ACTIVATE: 기존 캐시 정리 + 제어권 확보
 self.addEventListener("activate", (event) => {
-  console.log("SW activating…");
-  event.waitUntil(self.clients.claim());
+  console.log("[SW] Activating...");
+
+  event.waitUntil(
+    (async () => {
+      // 🔥 모든 캐시 제거 (기기별 불일치 방지)
+      const keys = await caches.keys();
+      await Promise.all(keys.map((k) => caches.delete(k)));
+
+      await self.clients.claim();
+      console.log("[SW] Activated & caches cleared");
+    })()
+  );
 });
 
-// MESSAGE
-self.addEventListener("message", (event) => {
+// MESSAGE: 클라이언트 ↔ SW 통신
+self.addEventListener("message", async (event) => {
   const data = event.data || {};
 
-  // 버전 체크
+  // 🔎 버전 체크 요청
   if (data.type === "CHECK_VERSION") {
-    const clientVersion = data.version;
+    if (data.version !== VERSION) {
+      console.log("[SW] New version detected");
 
-    console.log("SW CHECK_VERSION → client:", clientVersion, "server:", VERSION);
-
-    if (clientVersion !== VERSION) {
-      console.log("SW → NEW VERSION DETECTED!");
-
-      self.clients.matchAll().then((clients) => {
-        clients.forEach((client) =>
-          client.postMessage({ type: "NEW_VERSION" })
-        );
-      });
+      const clients = await self.clients.matchAll();
+      clients.forEach((client) =>
+        client.postMessage({ type: "UPDATE_AVAILABLE" })
+      );
     }
   }
 
-  // 강제 업데이트
-  if (data.type === "SKIP_WAITING") {
-    console.log("SW: SKIP_WAITING received → activating new SW");
-    self.skipWaiting();
+  // 🔥 사용자가 "업데이트" 클릭
+  if (data.type === "APPLY_UPDATE") {
+    console.log("[SW] APPLY_UPDATE received");
+
+    // 새 SW 즉시 활성화
+    await self.skipWaiting();
+
+    const clients = await self.clients.matchAll();
+    clients.forEach((client) =>
+      client.postMessage({ type: "UPDATE_APPLIED" })
+    );
   }
 });
 
-// FETCH: 캐시 무효화
+// FETCH: 네트워크 우선 (안정)
 self.addEventListener("fetch", (event) => {
+  if (event.request.method !== "GET") return;
+
   event.respondWith(
-    fetch(event.request, { cache: "no-store" }).catch(() =>
-      caches.match(event.request)
-    )
+    fetch(event.request).catch(() => caches.match(event.request))
   );
 });
 

@@ -1,4 +1,4 @@
-// ===================== src/main.jsx (ULTRA STABLE VERSION) =====================
+// ===================== src/main.jsx =====================
 
 import React from "react";
 import ReactDOM from "react-dom/client";
@@ -11,60 +11,62 @@ ReactDOM.createRoot(document.getElementById("root")).render(
   </React.StrictMode>
 );
 
-// ★ SW + CLIENT 버전
-const CLIENT_VERSION = "2025-02-10-04";
+// ★ 클라이언트 버전 (sw.js 와 반드시 맞출 것)
+const CLIENT_VERSION = "2025-02-10-06";
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", async () => {
     try {
       const reg = await navigator.serviceWorker.register("/sw.js");
-      console.log("SW Registered:", reg);
+      console.log("[APP] SW registered", reg);
 
-      // -----------------------------
-      // 1) 서비스워커가 활성화될 때까지 기다린 후 버전 체크
-      // -----------------------------
-      function checkNow() {
+      let updateNotified = false;
+
+      // 🔎 버전 체크 함수
+      const checkVersion = () => {
         if (reg.active) {
           reg.active.postMessage({
             type: "CHECK_VERSION",
             version: CLIENT_VERSION,
           });
         }
-      }
+      };
 
-      // activate 이벤트 발생 시 체크
-      navigator.serviceWorker.addEventListener("controllerchange", () => {
-        console.log("SW controller changed → now active");
-        checkNow();
-      });
+      // 최초 로드 후 체크
+      setTimeout(checkVersion, 500);
 
-      // 페이지 로드 직후에도 체크 시도(여기서는 reg.active가 null일 수 있음)
-      setTimeout(checkNow, 500);
-
-      // -----------------------------
-      // 2) 주기적으로 버전 체크 (30초)
-      // -----------------------------
-      setInterval(() => {
-        if (reg.active) {
-          reg.active.postMessage({
-            type: "CHECK_VERSION",
-            version: CLIENT_VERSION,
-          });
-        }
-      }, 30000);
-
-      // -----------------------------
-      // 3) SW → NEW_VERSION 메시지 수신
-      // -----------------------------
+      // SW → APP 메시지 수신
       navigator.serviceWorker.addEventListener("message", (event) => {
-        if (event.data?.type === "NEW_VERSION") {
-          console.log("🚨 NEW VERSION DETECTED → Trigger UI Toast");
+        const type = event.data?.type;
+
+        // ✅ 업데이트 가능 알림
+        if (type === "UPDATE_AVAILABLE" && !updateNotified) {
+          updateNotified = true;
+
+          console.log("[APP] Update available");
+
+          // 👉 여기서 UI 알림 띄우면 됨
+          // 예: 토스트 / 모달
           window.dispatchEvent(new Event("app-update-ready"));
         }
+
+        // ✅ 업데이트 적용 완료 → 새로고침
+        if (type === "UPDATE_APPLIED") {
+          console.log("[APP] Update applied → reload");
+          window.location.reload();
+        }
       });
 
+      // 🔄 사용자가 "업데이트" 버튼 눌렀을 때 호출할 함수
+      window.applyAppUpdate = async () => {
+        if (reg.waiting) {
+          reg.waiting.postMessage({ type: "APPLY_UPDATE" });
+        } else if (reg.active) {
+          reg.active.postMessage({ type: "APPLY_UPDATE" });
+        }
+      };
     } catch (err) {
-      console.warn("SW Registration Failed:", err);
+      console.warn("[APP] SW registration failed", err);
     }
   });
 }
