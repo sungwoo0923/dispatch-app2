@@ -101,6 +101,19 @@ function makeDispatchHistory({ userEmail, field, before, after }) {
     after,
   };
 }
+/* -------------------------------------------------
+   🔕 수정이력 제외 필드 (전역 공통)  ⭐⭐⭐ 여기!!!
+--------------------------------------------------*/
+const IGNORE_HISTORY_FIELDS = new Set([
+  "history",
+  "updatedAt",
+  "createdAt",
+  "lastUpdated",
+  "__system",
+  "배차상태",
+  "이름",
+  "전화번호",
+]);
 
 
 
@@ -194,20 +207,25 @@ unsubs.push(onSnapshot(collection(db, collName), (snap)=>{
   const prev = snap.data();
   const histories = [];
 
-  // 2️⃣ 변경된 필드만 이력 생성
-  Object.keys(patch).forEach((key) => {
-    if (prev[key] !== patch[key]) {
-      histories.push(
-        makeDispatchHistory({
-  userEmail: auth.currentUser?.email,
-  field: key,
-  before: prev[key],
-  after: patch[key],
-})
+Object.keys(patch).forEach((key) => {
+  // 🔕 이력 제외 필드
+  if (IGNORE_HISTORY_FIELDS.has(key)) return;
 
-      );
-    }
-  });
+  // 🔕 시스템 수정은 이력 미기록
+  if (patch.__system === true) return;
+
+  if (prev[key] !== patch[key]) {
+    histories.push(
+      makeDispatchHistory({
+        userEmail: auth.currentUser?.email,
+        field: key,
+        before: prev[key],
+        after: patch[key],
+      })
+    );
+  }
+});
+
 
   // 3️⃣ Firestore 업데이트
   await setDoc(
@@ -7075,6 +7093,46 @@ XLSX.writeFile(wb, "실시간배차현황.xlsx");
           }
         />
       </div>
+{/* ===============================
+    🕘 수정 이력
+=============================== */}
+{Array.isArray(editTarget.history) &&
+  editTarget.history.length > 0 && (
+    <div className="mt-4 border-t pt-3">
+      <div className="text-sm font-semibold mb-2 text-gray-700">
+        🕘 수정 이력
+      </div>
+
+      <div className="max-h-40 overflow-y-auto space-y-2">
+        {editTarget.history
+  .filter(h => !IGNORE_HISTORY_FIELDS.has(h.field)) // ⭐ 여기!
+  .slice()
+  .reverse()
+  .map((h, i) => (
+
+            <div
+              key={i}
+              className="text-xs text-gray-700 border-b pb-1"
+            >
+              <div className="text-gray-500">
+                {new Date(h.at).toLocaleString()} · {h.user}
+              </div>
+
+              <div>
+                <b>{h.field}</b> :{" "}
+                <span className="text-red-600">
+                  {String(h.before ?? "없음")}
+                </span>
+                {" → "}
+                <span className="text-blue-600">
+                  {String(h.after ?? "없음")}
+                </span>
+              </div>
+            </div>
+          ))}
+      </div>
+    </div>
+)}
 
       {/* ------------------------------------------------ */}
 {/* 🔵 저장/취소 */}
@@ -9609,7 +9667,46 @@ return (
           }
         />
       </div>
+{/* ===============================
+    🕘 수정 이력
+=============================== */}
+{Array.isArray(editTarget.history) &&
+  editTarget.history.length > 0 && (
+    <div className="mt-4 border-t pt-3">
+      <div className="text-sm font-semibold mb-2 text-gray-700">
+        🕘 수정 이력
+      </div>
 
+      <div className="max-h-40 overflow-y-auto space-y-2">
+        {editTarget.history
+  .filter(h => !IGNORE_HISTORY_FIELDS.has(h.field)) // ⭐⭐⭐ 이 줄 추가
+  .slice()
+  .reverse()
+  .map((h, i) => (
+
+            <div
+              key={i}
+              className="text-xs text-gray-700 border-b pb-1"
+            >
+              <div className="text-gray-500">
+                {new Date(h.at).toLocaleString()} · {h.user}
+              </div>
+
+              <div>
+                <b>{h.field}</b> :{" "}
+                <span className="text-red-600">
+                  {String(h.before ?? "없음")}
+                </span>
+                {" → "}
+                <span className="text-blue-600">
+                  {String(h.after ?? "없음")}
+                </span>
+              </div>
+            </div>
+          ))}
+      </div>
+    </div>
+)}
       {/* ------------------------------------------------ */}
       {/* 🔵 저장/취소 */}
       {/* ------------------------------------------------ */}
