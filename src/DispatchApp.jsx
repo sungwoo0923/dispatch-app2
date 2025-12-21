@@ -4264,6 +4264,12 @@ React.useEffect(() => {
     })
   );
 }, [q, filterType, filterValue, startDate, endDate]);
+// ==========================
+// 🆕 신규 오더 거래처 자동완성 상태
+// ==========================
+const [newClientOptions, setNewClientOptions] = React.useState([]);
+const [showNewClientDropdown, setShowNewClientDropdown] = React.useState(false);
+const [newClientActiveIndex, setNewClientActiveIndex] = React.useState(0);
 
   // 신규 오더 등록 팝업
   const [showCreate, setShowCreate] = React.useState(false);
@@ -4298,11 +4304,43 @@ const [fareModalOpen, setFareModalOpen] = React.useState(false);
     혼적: false,
     독차: false,
   });
-  // 🔥 신규 오더 입력 변경 처리
+  // ==========================
+// 🆕 신규 오더 상/하차지 자동완성 상태
+// ==========================
+const [newPlaceOptions, setNewPlaceOptions] = React.useState([]);
+const [showNewPlaceDropdown, setShowNewPlaceDropdown] = React.useState(false);
+const [newPlaceType, setNewPlaceType] = React.useState(null); // "pickup" | "drop"
+const [newPlaceActiveIndex, setNewPlaceActiveIndex] = React.useState(0);
+const newPlaceListRef = React.useRef(null);
+
+React.useEffect(() => {
+  if (!newPlaceListRef.current) return;
+
+  const list = newPlaceListRef.current;
+  const item = list.children[newPlaceActiveIndex];
+  if (!item) return;
+
+  const itemTop = item.offsetTop;
+  const itemBottom = itemTop + item.offsetHeight;
+
+  const viewTop = list.scrollTop;
+  const viewBottom = viewTop + list.clientHeight;
+
+  // ⬇️ 아래로 벗어남
+  if (itemBottom > viewBottom) {
+    list.scrollTop = itemBottom - list.clientHeight;
+  }
+
+  // ⬆️ 위로 벗어남
+  if (itemTop < viewTop) {
+    list.scrollTop = itemTop;
+  }
+}, [newPlaceActiveIndex]);
+
+// 🔥 신규 오더 입력 변경 처리
 const handleChange = (key, value) => {
   setNewOrder(prev => ({ ...prev, [key]: value }));
 };
-
 
   // 삭제된 건 재등장 방지
   const [deletedIds, setDeletedIds] = React.useState(() => new Set());
@@ -5811,46 +5849,98 @@ XLSX.writeFile(wb, "실시간배차현황.xlsx");
 >
   🔍 운임조회
 </button>
+  
+                {/* ===================== 신규 오더 거래처 자동완성 ===================== */}
+<div className="relative">
+  <label className="font-semibold text-sm">거래처명</label>
 
-                <label className="font-semibold text-sm">거래처명</label>
-                <input
-                  type="text"
-                  value={newOrder.거래처명}
-                  onChange={(e) => {
-  const val = e.target.value;
-  setNewOrder((prev) => ({
-    ...prev,
-    거래처명: val,
-    상차지명: val,     // ⭐ 자동 입력
-  }));
-}}
+  <input
+    type="text"
+    className="border p-2 rounded w-full"
+    value={newOrder.거래처명}
+    placeholder="거래처 검색"
+    onChange={(e) => {
+      const v = e.target.value;
 
-                  placeholder="거래처 검색"
-                  className="border p-2 rounded w-full"
-                />
+      setNewOrder((prev) => ({
+        ...prev,
+        거래처명: v,
+      }));
 
-                {newOrder.거래처명 &&
-                  clients
-                    .filter((c) =>
-                      c.거래처명.includes(newOrder.거래처명)
-                    )
-                    .slice(0, 10)
-                    .map((c) => (
-                      <div
-                        key={c._id}
-                        className="p-1 px-2 border-b cursor-pointer hover:bg-gray-100"
-                        onClick={() =>
-                          setNewOrder((prev) => ({
-                            ...prev,
-                            거래처명: c.거래처명,
-                            상차지명: c.상차지명 || "",
-                            상차지주소: c.상차지주소 || "",
-                          }))
-                        }
-                      >
-                        {c.거래처명}
-                      </div>
-                    ))}
+      const list = filterEditClients(v);
+      setNewClientOptions(list);
+      setShowNewClientDropdown(true);
+      setNewClientActiveIndex(0);
+    }}
+    onKeyDown={(e) => {
+      if (!showNewClientDropdown) return;
+
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setNewClientActiveIndex((i) =>
+          Math.min(i + 1, newClientOptions.length - 1)
+        );
+      }
+
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setNewClientActiveIndex((i) => Math.max(i - 1, 0));
+      }
+
+      if (e.key === "Enter") {
+        e.preventDefault();
+        const c = newClientOptions[newClientActiveIndex];
+        if (!c) return;
+
+        setNewOrder((prev) => ({
+          ...prev,
+          거래처명: c.거래처명,
+          상차지명: c.거래처명,
+          상차지주소: c.주소 || "",
+        }));
+
+        setShowNewClientDropdown(false);
+      }
+    }}
+    onBlur={() =>
+      setTimeout(() => setShowNewClientDropdown(false), 150)
+    }
+  />
+
+  {showNewClientDropdown && (
+    <div className="absolute z-50 bg-white border w-full max-h-40 overflow-y-auto">
+      {newClientOptions.length === 0 ? (
+        <div className="px-3 py-2 text-sm text-gray-400">
+          검색 결과 없음
+        </div>
+      ) : (
+        newClientOptions.map((c, i) => (
+          <div
+            key={i}
+            className={`px-3 py-1 cursor-pointer ${
+              i === newClientActiveIndex ? "bg-blue-100" : ""
+            }`}
+            onMouseDown={() => {
+              setNewOrder((prev) => ({
+                ...prev,
+                거래처명: c.거래처명,
+                상차지명: c.거래처명,
+                상차지주소: c.주소 || "",
+              }));
+              setShowNewClientDropdown(false);
+            }}
+          >
+            <div className="font-semibold">{c.거래처명}</div>
+            {c.주소 && (
+              <div className="text-xs text-gray-500">{c.주소}</div>
+            )}
+          </div>
+        ))
+      )}
+    </div>
+  )}
+</div>
+
               </div>
 
               {/* 상하차일/시간 */}
@@ -5966,70 +6056,206 @@ XLSX.writeFile(wb, "실시간배차현황.xlsx");
 
   {/* 상차지명 */}
   <div>
-    <label>상차지명</label>
-    <input
-      type="text"
-      className="border p-2 rounded w-full"
-      value={newOrder.상차지명}
-      onChange={(e) => {
-        const v = e.target.value;
+{/* ===================== 신규 오더 상차지명 ===================== */}
+<div className="mb-2 relative">
+  <label>상차지명</label>
+  <input
+    className="border p-2 rounded w-full"
+    value={newOrder.상차지명}
+    onChange={(e) => {
+      const v = e.target.value;
+
+      setNewOrder((p) => ({ ...p, 상차지명: v }));
+      setNewPlaceType("pickup");
+
+      const list = filterEditPlaces(v);
+      setNewPlaceOptions(list);
+      setShowNewPlaceDropdown(true);
+      setNewPlaceActiveIndex(0);
+    }}
+    onKeyDown={(e) => {
+      if (!showNewPlaceDropdown || newPlaceType !== "pickup") return;
+
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setNewPlaceActiveIndex((i) =>
+          Math.min(i + 1, newPlaceOptions.length - 1)
+        );
+      }
+
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setNewPlaceActiveIndex((i) => Math.max(i - 1, 0));
+      }
+
+      if (e.key === "Enter") {
+        e.preventDefault();
+        const p = newPlaceOptions[newPlaceActiveIndex];
+        if (!p) return;
+
         setNewOrder((prev) => ({
           ...prev,
-          상차지명: v,
+          상차지명: p.업체명,
+          상차지주소: p.주소 || "",
         }));
-        loadSimilarOrders(v, newOrder.하차지명);
-      }}
-    />
+
+        setShowNewPlaceDropdown(false);
+
+        // 🔥 다음 필드(상차지주소)로 포커스 이동
+        setTimeout(() => {
+          document.getElementById("new-pickup-addr")?.focus();
+        }, 0);
+      }
+    }}
+    onBlur={() =>
+      setTimeout(() => setShowNewPlaceDropdown(false), 150)
+    }
+  />
+
+  {showNewPlaceDropdown && newPlaceType === "pickup" && (
+    <div
+      ref={newPlaceListRef}
+      className="absolute z-50 bg-white border w-full max-h-40 overflow-y-auto"
+    >
+      {newPlaceOptions.map((p, i) => (
+        <div
+          key={i}
+          className={`px-3 py-1 cursor-pointer ${
+            i === newPlaceActiveIndex ? "bg-blue-100" : ""
+          }`}
+          onMouseDown={() => {
+            setNewOrder((prev) => ({
+              ...prev,
+              상차지명: p.업체명,
+              상차지주소: p.주소 || "",
+            }));
+            setShowNewPlaceDropdown(false);
+          }}
+        >
+          <div className="font-semibold">{p.업체명}</div>
+          <div className="text-xs text-gray-500">{p.주소}</div>
+        </div>
+      ))}
+    </div>
+  )}
+</div>
+
   </div>
 
   {/* 상차지주소 */}
   <div>
     <label>상차지주소</label>
-    <input
-      type="text"
-      className="border p-2 rounded w-full"
-      value={newOrder.상차지주소}
-      onChange={(e) =>
-        setNewOrder((prev) => ({
-          ...prev,
-          상차지주소: e.target.value,
-        }))
-      }
-    />
+<input
+  id="new-pickup-addr"
+  type="text"
+  className="border p-2 rounded w-full"
+  value={newOrder.상차지주소}
+  onChange={(e) =>
+    setNewOrder((p) => ({ ...p, 상차지주소: e.target.value }))
+  }
+/>
   </div>
 
   {/* 하차지명 */}
   <div>
-    <label>하차지명</label>
-    <input
-      type="text"
-      className="border p-2 rounded w-full"
-      value={newOrder.하차지명}
-      onChange={(e) => {
-        const v = e.target.value;
+    {/* ===================== 신규 오더 하차지명 ===================== */}
+<div className="mb-2 relative">
+  <label>하차지명</label>
+  <input
+    className="border p-2 rounded w-full"
+    value={newOrder.하차지명}
+    onChange={(e) => {
+      const v = e.target.value;
+
+      setNewOrder((p) => ({ ...p, 하차지명: v }));
+      setNewPlaceType("drop");
+
+      const list = filterEditPlaces(v);
+      setNewPlaceOptions(list);
+      setShowNewPlaceDropdown(true);
+      setNewPlaceActiveIndex(0);
+    }}
+    onKeyDown={(e) => {
+      if (!showNewPlaceDropdown || newPlaceType !== "drop") return;
+
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setNewPlaceActiveIndex((i) =>
+          Math.min(i + 1, newPlaceOptions.length - 1)
+        );
+      }
+
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setNewPlaceActiveIndex((i) => Math.max(i - 1, 0));
+      }
+
+      if (e.key === "Enter") {
+        e.preventDefault();
+        const p = newPlaceOptions[newPlaceActiveIndex];
+        if (!p) return;
+
         setNewOrder((prev) => ({
           ...prev,
-          하차지명: v,
+          하차지명: p.업체명,
+          하차지주소: p.주소 || "",
         }));
-        loadSimilarOrders(newOrder.상차지명, v);
-      }}
-    />
+
+        setShowNewPlaceDropdown(false);
+
+        // 🔥 다음 필드(하차지주소) 포커스
+        setTimeout(() => {
+          document.getElementById("new-drop-addr")?.focus();
+        }, 0);
+      }
+    }}
+    onBlur={() =>
+      setTimeout(() => setShowNewPlaceDropdown(false), 150)
+    }
+  />
+
+  {showNewPlaceDropdown && newPlaceType === "drop" && (
+    <div
+      ref={newPlaceListRef}
+      className="absolute z-50 bg-white border w-full max-h-40 overflow-y-auto"
+    >
+      {newPlaceOptions.map((p, i) => (
+        <div
+          key={i}
+          className={`px-3 py-1 cursor-pointer ${
+            i === newPlaceActiveIndex ? "bg-blue-100" : ""
+          }`}
+          onMouseDown={() => {
+            setNewOrder((prev) => ({
+              ...prev,
+              하차지명: p.업체명,
+              하차지주소: p.주소 || "",
+            }));
+            setShowNewPlaceDropdown(false);
+          }}
+        >
+          <div className="font-semibold">{p.업체명}</div>
+          <div className="text-xs text-gray-500">{p.주소}</div>
+        </div>
+      ))}
+    </div>
+  )}
+</div>
+
   </div>
 
   {/* 하차지주소 */}
   <div>
     <label>하차지주소</label>
-    <input
-      type="text"
-      className="border p-2 rounded w-full"
-      value={newOrder.하차지주소}
-      onChange={(e) =>
-        setNewOrder((prev) => ({
-          ...prev,
-          하차지주소: e.target.value,
-        }))
-      }
-    />
+<input
+  id="new-drop-addr"
+  type="text"
+  className="border p-2 rounded w-full"
+  value={newOrder.하차지주소}
+  onChange={(e) =>
+    setNewOrder((p) => ({ ...p, 하차지주소: e.target.value }))
+  }
+/>
   </div>
 
 </div>
@@ -6549,14 +6775,19 @@ XLSX.writeFile(wb, "실시간배차현황.xlsx");
         const c = editClientOptions[editClientActiveIndex];
         if (!c) return;
 
-        setEditTarget((prev) => ({
-          ...prev,
-          거래처명: c.거래처명,
-          거래처주소: c.주소 || prev.거래처주소,
-          거래처담당자: c.담당자 || prev.거래처담당자,
-          거래처연락처: c.연락처 || prev.거래처연락처,
-        }));
+setEditTarget((prev) => ({
+  ...prev,
 
+  // 거래처
+  거래처명: c.거래처명,
+  거래처주소: c.주소 || prev.거래처주소,
+  거래처담당자: c.담당자 || prev.거래처담당자,
+  거래처연락처: c.연락처 || prev.거래처연락처,
+
+  // 🔥 핵심 추가: 거래처 선택 = 상차지 자동 세팅
+  상차지명: c.거래처명,
+  상차지주소: c.주소 || prev.상차지주소,
+}));
         setShowEditClientDropdown(false);
       }
     }}
@@ -6579,14 +6810,18 @@ XLSX.writeFile(wb, "실시간배차현황.xlsx");
               i === editClientActiveIndex ? "bg-blue-100" : ""
             }`}
             onMouseDown={() => {
-              setEditTarget((prev) => ({
-                ...prev,
-                거래처명: c.거래처명,
-                거래처주소: c.주소 || prev.거래처주소,
-                거래처담당자: c.담당자 || prev.거래처담당자,
-                거래처연락처: c.연락처 || prev.거래처연락처,
-              }));
-              setShowEditClientDropdown(false);
+setEditTarget((prev) => ({
+  ...prev,
+
+  거래처명: c.거래처명,
+  거래처주소: c.주소 || prev.거래처주소,
+  거래처담당자: c.담당자 || prev.거래처담당자,
+  거래처연락처: c.연락처 || prev.거래처연락처,
+
+  // 🔥 여기
+  상차지명: c.거래처명,
+  상차지주소: c.주소 || prev.상차지주소,
+}));ditClientDropdown(false);
             }}
           >
             <div className="font-semibold">{c.거래처명}</div>
