@@ -5970,28 +5970,29 @@ XLSX.writeFile(wb, "실시간배차현황.xlsx");
                         상차시간: e.target.value,
                       }))
                     }
-                    className="border p-2 rounded w-full"
-                  >
-                    {[
-                      "오전 6:00",
-                      "오전 7:00",
-                      "오전 8:00",
-                      "오전 9:00",
-                      "오전 10:00",
-                      "오전 11:00",
-                      "오후 12:00",
-                      "오후 1:00",
-                      "오후 2:00",
-                      "오후 3:00",
-                      "오후 4:00",
-                      "오후 5:00",
-                      "오후 6:00",
-                      "오후 7:00",
-                      "오후 8:00",
-                      "오후 9:00",
-                      "오후 10:00",
-                    ].map((t) => (
-                      <option key={t} value={t}>
+                      className="border p-2 rounded w-full"
+>
+  {[
+    "오전 6:00", "오전 6:30",
+    "오전 7:00", "오전 7:30",
+    "오전 8:00", "오전 8:30",
+    "오전 9:00", "오전 9:30",
+    "오전 10:00", "오전 10:30",
+    "오전 11:00", "오전 11:30",
+    "오후 12:00", "오후 12:30",
+    "오후 1:00", "오후 1:30",
+    "오후 2:00", "오후 2:30",
+    "오후 3:00", "오후 3:30",
+    "오후 4:00", "오후 4:30",
+    "오후 5:00", "오후 5:30",
+    "오후 6:00", "오후 6:30",
+    "오후 7:00", "오후 7:30",
+    "오후 8:00", "오후 8:30",
+    "오후 9:00", "오후 9:30",
+    "오후 10:00", "오후 10:30",
+    "오후 11:00", "오후 11:30",
+  ].map((t) => (
+    <option key={t} value={t}>
                         {t}
                       </option>
                     ))}
@@ -6023,28 +6024,29 @@ XLSX.writeFile(wb, "실시간배차현황.xlsx");
                         하차시간: e.target.value,
                       }))
                     }
-                    className="border p-2 rounded w-full"
-                  >
-                    {[
-                      "오전 6:00",
-                      "오전 7:00",
-                      "오전 8:00",
-                      "오전 9:00",
-                      "오전 10:00",
-                      "오전 11:00",
-                      "오후 12:00",
-                      "오후 1:00",
-                      "오후 2:00",
-                      "오후 3:00",
-                      "오후 4:00",
-                      "오후 5:00",
-                      "오후 6:00",
-                      "오후 7:00",
-                      "오후 8:00",
-                      "오후 9:00",
-                      "오후 10:00",
-                    ].map((t) => (
-                      <option key={t} value={t}>
+                      className="border p-2 rounded w-full"
+>
+  {[
+    "오전 6:00", "오전 6:30",
+    "오전 7:00", "오전 7:30",
+    "오전 8:00", "오전 8:30",
+    "오전 9:00", "오전 9:30",
+    "오전 10:00", "오전 10:30",
+    "오전 11:00", "오전 11:30",
+    "오후 12:00", "오후 12:30",
+    "오후 1:00", "오후 1:30",
+    "오후 2:00", "오후 2:30",
+    "오후 3:00", "오후 3:30",
+    "오후 4:00", "오후 4:30",
+    "오후 5:00", "오후 5:30",
+    "오후 6:00", "오후 6:30",
+    "오후 7:00", "오후 7:30",
+    "오후 8:00", "오후 8:30",
+    "오후 9:00", "오후 9:30",
+    "오후 10:00", "오후 10:30",
+    "오후 11:00", "오후 11:30",
+  ].map((t) => (
+    <option key={t} value={t}>
                         {t}
                       </option>
                     ))}
@@ -6855,23 +6857,40 @@ setEditTarget((prev) => ({
         <div>
           <label>상차시간</label>
           <select
-            className="border p-2 rounded w-full"
-            value={editTarget.상차시간 || ""}
-            onChange={(e) =>
-              setEditTarget((p) => ({ ...p, 상차시간: e.target.value }))
-            }
-          >
-            <option value="">선택없음</option>
-            {[
-              "오전 6:00","오전 7:00","오전 8:00","오전 9:00",
-              "오전 10:00","오전 11:00","오후 12:00","오후 1:00",
-              "오후 2:00","오후 3:00","오후 4:00","오후 5:00",
-              "오후 6:00","오후 7:00","오후 8:00","오후 9:00",
-              "오후 10:00"
-            ].map(t => (
-              <option key={t} value={t}>{t}</option>
-            ))}
-          </select>
+  className="border p-2 rounded w-full"
+  value={editTarget.상차시간 || ""}
+  onChange={(e) =>
+    setEditTarget((p) => ({ ...p, 상차시간: e.target.value }))
+  }
+>
+  <option value="">선택없음</option>
+
+  {[
+    "오전 6:00", "오전 6:30",
+    "오전 7:00", "오전 7:30",
+    "오전 8:00", "오전 8:30",
+    "오전 9:00", "오전 9:30",
+    "오전 10:00", "오전 10:30",
+    "오전 11:00", "오전 11:30",
+    "오후 12:00", "오후 12:30",
+    "오후 1:00", "오후 1:30",
+    "오후 2:00", "오후 2:30",
+    "오후 3:00", "오후 3:30",
+    "오후 4:00", "오후 4:30",
+    "오후 5:00", "오후 5:30",
+    "오후 6:00", "오후 6:30",
+    "오후 7:00", "오후 7:30",
+    "오후 8:00", "오후 8:30",
+    "오후 9:00", "오후 9:30",
+    "오후 10:00", "오후 10:30",
+    "오후 11:00", "오후 11:30",
+  ].map((t) => (
+    <option key={t} value={t}>
+      {t}
+    </option>
+  ))}
+</select>
+
         </div>
 
         <div>
@@ -6897,11 +6916,24 @@ setEditTarget((prev) => ({
           >
             <option value="">선택없음</option>
             {[
-              "오전 6:00","오전 7:00","오전 8:00","오전 9:00",
-              "오전 10:00","오전 11:00","오후 12:00","오후 1:00",
-              "오후 2:00","오후 3:00","오후 4:00","오후 5:00",
-              "오후 6:00","오후 7:00","오후 8:00","오후 9:00",
-              "오후 10:00"
+              "오전 6:00", "오전 6:30",
+  "오전 7:00", "오전 7:30",
+  "오전 8:00", "오전 8:30",
+  "오전 9:00", "오전 9:30",
+  "오전 10:00", "오전 10:30",
+  "오전 11:00", "오전 11:30",
+  "오후 12:00", "오후 12:30",
+  "오후 1:00", "오후 1:30",
+  "오후 2:00", "오후 2:30",
+  "오후 3:00", "오후 3:30",
+  "오후 4:00", "오후 4:30",
+  "오후 5:00", "오후 5:30",
+  "오후 6:00", "오후 6:30",
+  "오후 7:00", "오후 7:30",
+  "오후 8:00", "오후 8:30",
+  "오후 9:00", "오후 9:30",
+  "오후 10:00", "오후 10:30",
+  "오후 11:00", "오후 11:30"
             ].map(t => (
               <option key={t} value={t}>{t}</option>
             ))}
@@ -9414,11 +9446,24 @@ return (
           >
             <option value="">선택없음</option>
             {[
-              "오전 6:00","오전 7:00","오전 8:00","오전 9:00",
-              "오전 10:00","오전 11:00","오후 12:00","오후 1:00",
-              "오후 2:00","오후 3:00","오후 4:00","오후 5:00",
-              "오후 6:00","오후 7:00","오후 8:00","오후 9:00",
-              "오후 10:00"
+               "오전 6:00", "오전 6:30",
+  "오전 7:00", "오전 7:30",
+  "오전 8:00", "오전 8:30",
+  "오전 9:00", "오전 9:30",
+  "오전 10:00", "오전 10:30",
+  "오전 11:00", "오전 11:30",
+  "오후 12:00", "오후 12:30",
+  "오후 1:00", "오후 1:30",
+  "오후 2:00", "오후 2:30",
+  "오후 3:00", "오후 3:30",
+  "오후 4:00", "오후 4:30",
+  "오후 5:00", "오후 5:30",
+  "오후 6:00", "오후 6:30",
+  "오후 7:00", "오후 7:30",
+  "오후 8:00", "오후 8:30",
+  "오후 9:00", "오후 9:30",
+  "오후 10:00", "오후 10:30",
+  "오후 11:00", "오후 11:30"
             ].map(t => (
               <option key={t} value={t}>{t}</option>
             ))}
@@ -9448,11 +9493,24 @@ return (
           >
             <option value="">선택없음</option>
             {[
-              "오전 6:00","오전 7:00","오전 8:00","오전 9:00",
-              "오전 10:00","오전 11:00","오후 12:00","오후 1:00",
-              "오후 2:00","오후 3:00","오후 4:00","오후 5:00",
-              "오후 6:00","오후 7:00","오후 8:00","오후 9:00",
-              "오후 10:00"
+                "오전 6:00", "오전 6:30",
+  "오전 7:00", "오전 7:30",
+  "오전 8:00", "오전 8:30",
+  "오전 9:00", "오전 9:30",
+  "오전 10:00", "오전 10:30",
+  "오전 11:00", "오전 11:30",
+  "오후 12:00", "오후 12:30",
+  "오후 1:00", "오후 1:30",
+  "오후 2:00", "오후 2:30",
+  "오후 3:00", "오후 3:30",
+  "오후 4:00", "오후 4:30",
+  "오후 5:00", "오후 5:30",
+  "오후 6:00", "오후 6:30",
+  "오후 7:00", "오후 7:30",
+  "오후 8:00", "오후 8:30",
+  "오후 9:00", "오후 9:30",
+  "오후 10:00", "오후 10:30",
+  "오후 11:00", "오후 11:30"
             ].map(t => (
               <option key={t} value={t}>{t}</option>
             ))}
@@ -10700,20 +10758,63 @@ function NewOrderPopup({
                 value={newOrder.상차시간}
                 onChange={(e) => handleChange("상차시간", e.target.value)}
               >
-                <option value="">선택없음</option>   {/* ★ 추가 */}
-                <option value="오전 6:00">오전 6:00</option>
-                <option value="오전 7:00">오전 7:00</option>
-                <option value="오전 8:00">오전 8:00</option>
-                <option value="오전 9:00">오전 9:00</option>
-                <option value="오전 10:00">오전 10:00</option>
-                <option value="오전 11:00">오전 11:00</option>
-                <option value="오후 12:00">오후 12:00</option>
-                <option value="오후 1:00">오후 1:00</option>
-                <option value="오후 2:00">오후 2:00</option>
-                <option value="오후 3:00">오후 3:00</option>
-                <option value="오후 4:00">오후 4:00</option>
-                <option value="오후 5:00">오후 5:00</option>
-                <option value="오후 6:00">오후 6:00</option>
+<option value="">선택없음</option>
+
+<option value="오전 6:00">오전 6:00</option>
+<option value="오전 6:30">오전 6:30</option>
+
+<option value="오전 7:00">오전 7:00</option>
+<option value="오전 7:30">오전 7:30</option>
+
+<option value="오전 8:00">오전 8:00</option>
+<option value="오전 8:30">오전 8:30</option>
+
+<option value="오전 9:00">오전 9:00</option>
+<option value="오전 9:30">오전 9:30</option>
+
+<option value="오전 10:00">오전 10:00</option>
+<option value="오전 10:30">오전 10:30</option>
+
+<option value="오전 11:00">오전 11:00</option>
+<option value="오전 11:30">오전 11:30</option>
+
+<option value="오후 12:00">오후 12:00</option>
+<option value="오후 12:30">오후 12:30</option>
+
+<option value="오후 1:00">오후 1:00</option>
+<option value="오후 1:30">오후 1:30</option>
+
+<option value="오후 2:00">오후 2:00</option>
+<option value="오후 2:30">오후 2:30</option>
+
+<option value="오후 3:00">오후 3:00</option>
+<option value="오후 3:30">오후 3:30</option>
+
+<option value="오후 4:00">오후 4:00</option>
+<option value="오후 4:30">오후 4:30</option>
+
+<option value="오후 5:00">오후 5:00</option>
+<option value="오후 5:30">오후 5:30</option>
+
+<option value="오후 6:00">오후 6:00</option>
+<option value="오후 6:30">오후 6:30</option>
+
+<option value="오후 7:00">오후 7:00</option>
+<option value="오후 7:30">오후 7:30</option>
+
+<option value="오후 8:00">오후 8:00</option>
+<option value="오후 8:30">오후 8:30</option>
+
+<option value="오후 9:00">오후 9:00</option>
+<option value="오후 9:30">오후 9:30</option>
+
+<option value="오후 10:00">오후 10:00</option>
+<option value="오후 10:30">오후 10:30</option>
+
+<option value="오후 11:00">오후 11:00</option>
+<option value="오후 11:30">오후 11:30</option>
+
+
               </select>
             </div>
 
@@ -10734,20 +10835,63 @@ function NewOrderPopup({
                 value={newOrder.하차시간}
                 onChange={(e) => handleChange("하차시간", e.target.value)}
               >
-                <option value="">선택없음</option>   {/* ★ 추가 */}
-                <option value="오전 6:00">오전 6:00</option>
-                <option value="오전 7:00">오전 7:00</option>
-                <option value="오전 8:00">오전 8:00</option>
-                <option value="오전 9:00">오전 9:00</option>
-                <option value="오전 10:00">오전 10:00</option>
-                <option value="오전 11:00">오전 11:00</option>
-                <option value="오후 12:00">오후 12:00</option>
-                <option value="오후 1:00">오후 1:00</option>
-                <option value="오후 2:00">오후 2:00</option>
-                <option value="오후 3:00">오후 3:00</option>
-                <option value="오후 4:00">오후 4:00</option>
-                <option value="오후 5:00">오후 5:00</option>
-                <option value="오후 6:00">오후 6:00</option>
+<option value="">선택없음</option>
+
+<option value="오전 6:00">오전 6:00</option>
+<option value="오전 6:30">오전 6:30</option>
+
+<option value="오전 7:00">오전 7:00</option>
+<option value="오전 7:30">오전 7:30</option>
+
+<option value="오전 8:00">오전 8:00</option>
+<option value="오전 8:30">오전 8:30</option>
+
+<option value="오전 9:00">오전 9:00</option>
+<option value="오전 9:30">오전 9:30</option>
+
+<option value="오전 10:00">오전 10:00</option>
+<option value="오전 10:30">오전 10:30</option>
+
+<option value="오전 11:00">오전 11:00</option>
+<option value="오전 11:30">오전 11:30</option>
+
+<option value="오후 12:00">오후 12:00</option>
+<option value="오후 12:30">오후 12:30</option>
+
+<option value="오후 1:00">오후 1:00</option>
+<option value="오후 1:30">오후 1:30</option>
+
+<option value="오후 2:00">오후 2:00</option>
+<option value="오후 2:30">오후 2:30</option>
+
+<option value="오후 3:00">오후 3:00</option>
+<option value="오후 3:30">오후 3:30</option>
+
+<option value="오후 4:00">오후 4:00</option>
+<option value="오후 4:30">오후 4:30</option>
+
+<option value="오후 5:00">오후 5:00</option>
+<option value="오후 5:30">오후 5:30</option>
+
+<option value="오후 6:00">오후 6:00</option>
+<option value="오후 6:30">오후 6:30</option>
+
+<option value="오후 7:00">오후 7:00</option>
+<option value="오후 7:30">오후 7:30</option>
+
+<option value="오후 8:00">오후 8:00</option>
+<option value="오후 8:30">오후 8:30</option>
+
+<option value="오후 9:00">오후 9:00</option>
+<option value="오후 9:30">오후 9:30</option>
+
+<option value="오후 10:00">오후 10:00</option>
+<option value="오후 10:30">오후 10:30</option>
+
+<option value="오후 11:00">오후 11:00</option>
+<option value="오후 11:30">오후 11:30</option>
+
+
               </select>
             </div>
           </div>
