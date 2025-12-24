@@ -10,7 +10,7 @@ import { calcFare } from "./fareUtil";
 import StandardFare from "./StandardFare";
 import { sendOrderTo24Proxy as sendOrderTo24 } from "../api/24CallProxy";
 import {
-  LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid
+  LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,ComposedChart,
 } from "recharts";
 import { BarChart, Bar, Legend } from "recharts";
 import FleetManagement from "./FleetManagement";
@@ -370,12 +370,1148 @@ export {
 };
 
 // ===================== DispatchApp.jsx (PART 1/8) — END =====================
+// ===================== SIMPLE MODAL (HOME 전용) =====================
+function Modal({ title, onClose, children }) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-lg shadow-xl w-full max-w-md p-4"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* 헤더 */}
+        <div className="flex justify-between items-center mb-3">
+          <h3 className="font-semibold text-lg">{title}</h3>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-700 text-xl"
+          >
+            ×
+          </button>
+        </div>
+
+        {/* 내용 */}
+        <div>{children}</div>
+      </div>
+    </div>
+  );
+}
+
+// ===================== HOME UI =====================
+
+// ---------- 공통 UI ----------
+function KpiCard({
+  title,
+  value,
+  color = "text-slate-900",
+  sub,
+  dot,
+}) {
+  return (
+    <div
+      className="
+        bg-white
+        rounded-xl
+        px-5 py-4
+        border border-slate-200
+        shadow-[0_1px_2px_rgba(0,0,0,0.04)]
+        hover:shadow-[0_4px_12px_rgba(0,0,0,0.08)]
+        transition
+      "
+    >
+      {/* 상단 */}
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-semibold tracking-wide text-slate-500">
+          {title}
+        </p>
+
+        {dot && (
+          <span className={`w-2 h-2 rounded-full ${dot}`} />
+        )}
+      </div>
+
+      {/* 숫자 */}
+      <p
+        className={`
+          mt-2
+          text-[36px]
+          font-extrabold
+          leading-none
+          tracking-tight
+          tabular-nums
+          ${color}
+        `}
+      >
+        {value}
+      </p>
+
+      {/* 보조 설명 */}
+      {sub && (
+        <p className="mt-1 text-xs text-slate-400">
+          {sub}
+        </p>
+      )}
+    </div>
+  );
+}
+
+
+function QuickBtn({ text, onClick, highlight }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`
+        px-4 py-2
+        rounded-lg
+        text-sm font-semibold
+        transition
+        ${
+          highlight
+            ? "bg-red-500 text-white shadow hover:bg-red-600"
+            : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+        }
+      `}
+    >
+      {text}
+    </button>
+  );
+}
+
+
+
+
+function Panel({ title, badge, children }) {
+  return (
+    <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
+      <div className="flex items-center gap-2 mb-3">
+        <h4 className="font-semibold text-gray-700">{title}</h4>
+        {badge && (
+          <span className="text-xs bg-red-500 text-white px-2 py-0.5 rounded-full">
+            NEW
+          </span>
+        )}
+      </div>
+      <div className="space-y-2 text-sm text-gray-700">{children}</div>
+    </div>
+  );
+}
+// ===================== 업무공유 카드 공통 박스 =====================
+function WorkBox({ title, children }) {
+  return (
+    <div
+  className="
+    bg-white
+    border border-slate-200
+    border-l-4 border-l-slate-400
+    rounded-xl
+    p-4
+    flex flex-col
+    min-h-[260px]
+    shadow-sm
+  "
+>
+      <div className="flex items-center justify-between mb-3 pb-2 border-b">
+        <h4 className="text-xs font-semibold tracking-widest text-slate-500 uppercase">
+  {title}
+</h4>
+
+      </div>
+
+      <div className="flex-1 text-sm text-gray-700">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+
+// ===================================================
+// 🧑‍💼 나의 오늘 할 일
+// ===================================================
+function MyTodayTasks({ user }) {
+  const today = todayStr();
+  const ref = doc(db, "my_tasks", `${user.email}_${today}`);
+
+  const [items, setItems] = useState([]);
+  const [tab, setTab] = useState("todo"); // todo | done
+  const [draft, setDraft] = useState(""); // ⭐ 입력 전용
+
+  useEffect(() => {
+    getDoc(ref).then((snap) => {
+      if (snap.exists()) {
+        setItems(snap.data().items || []);
+      }
+    });
+  }, []);
+
+  const save = async (next) => {
+    setItems(next);
+    await setDoc(ref, { items: next }, { merge: true });
+  };
+
+const filtered = items.filter((i) => {
+  if (tab === "done") return i.done;
+  return i.started && !i.done; // ⭐ 처리중만
+});
+
+
+  return (
+    <Panel title=" 나의 오늘 할 일">
+      <div className="flex gap-4 mb-3">
+        <button
+          onClick={() => setTab("todo")}
+          className={tab === "todo" ? "font-bold text-blue-600" : ""}
+        >
+          처리중
+        </button>
+        <button
+          onClick={() => setTab("done")}
+          className={tab === "done" ? "font-bold text-green-600" : ""}
+        >
+          처리완료
+        </button>
+      </div>
+{tab === "todo" && (
+  <div className="flex items-center gap-2 border rounded px-2 py-1 bg-gray-50">
+    <span className="text-xs w-16 text-gray-500">입력중</span>
+
+    <input
+      className="flex-1 border px-2 py-1 rounded text-sm"
+      placeholder="할 일을 입력하세요"
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+    />
+
+    <button
+      onClick={() => {
+        if (!draft.trim()) return;
+
+        save([
+          ...items,
+          {
+            id: crypto.randomUUID(),
+            text: draft,
+            started: true, // ⭐ 여기서만 items에 들어감
+            done: false,
+          },
+        ]);
+        setDraft("");
+      }}
+      className="text-xs bg-blue-500 text-white px-2 py-1 rounded"
+    >
+      처리중
+    </button>
+  </div>
+)}
+
+      <div className="space-y-2">
+        {filtered.map((i) => (
+          <div
+            key={i.id}
+            className="flex items-center gap-2 border rounded px-2 py-1"
+          >
+           <span className="text-xs w-16">
+  {i.done
+  
+    ? "완료"
+    : i.started
+    ? "처리중"
+    : "입력중"}
+    {i.done && (
+  <div className="flex gap-2 ml-auto">
+    <button
+      onClick={() => {
+        const next = prompt("수정", i.text);
+        if (next === null) return;
+
+        save(
+          items.map(t =>
+            t.id === i.id ? { ...t, text: next } : t
+          )
+        );
+      }}
+      className="text-xs text-blue-600"
+    >
+      수정
+    </button>
+
+    <button
+      onClick={() =>
+        save(items.filter(t => t.id !== i.id))
+      }
+      className="text-xs text-red-600"
+    >
+      삭제
+    </button>
+  </div>
+)}
+
+</span>
+
+            <input
+              className="flex-1 border px-2 py-1 rounded text-sm"
+              value={i.text}
+              onChange={(e) =>
+                save(
+                  items.map((t) =>
+                    t.id === i.id ? { ...t, text: e.target.value } : t
+                  )
+                )
+              }
+            />
+
+            {/* 입력중 → 처리중 */}
+{!i.started && !i.done && (
+  <button
+    onClick={() =>
+      save(
+        items.map((t) =>
+          t.id === i.id
+            ? { ...t, started: true }
+            : t
+        )
+      )
+    }
+    className="text-xs bg-blue-500 text-white px-2 py-1 rounded"
+  >
+    처리중
+  </button>
+)}
+
+{/* 처리중 → 처리완료 */}
+{i.started && !i.done && (
+  <div className="flex gap-2">
+    {/* 완료 */}
+    <button
+      onClick={() =>
+        save(
+          items.map((t) =>
+            t.id === i.id ? { ...t, done: true } : t
+          )
+        )
+      }
+      className="text-xs bg-green-500 text-white px-2 py-1 rounded"
+    >
+      완료
+    </button>
+
+    {/* 삭제 */}
+    <button
+      onClick={() => {
+        if (!confirm("삭제하시겠습니까?")) return;
+        save(items.filter((t) => t.id !== i.id));
+      }}
+      className="text-xs bg-red-500 text-white px-2 py-1 rounded"
+    >
+      삭제
+    </button>
+  </div>
+)}
+
+
+          </div>
+        ))}
+      </div>
+
+      <button
+  onClick={() => {
+  setDraft("");
+  document.querySelector("input[placeholder='할 일을 입력하세요']")?.focus();
+}}
+  className="mt-3 text-sm text-blue-600"
+>
+  + 할 일 추가
+</button>
+
+    </Panel>
+  );
+}
+
+// ===================================================
+// 📅 휴가 / 외근 일정 (공지사항 UX 동일)
+// ===================================================
+function ScheduleBoard({ user }) {
+  const [list, setList] = useState([]);
+  const [open, setOpen] = useState(false);        // 등록/수정 모달
+  const [selected, setSelected] = useState(null); // 상세 팝업
+  const [editing, setEditing] = useState(null);   // 수정 중 일정
+
+  const [type, setType] = useState("휴가");
+  const [name, setName] = useState("");
+  const [start, setStart] = useState(todayStr());
+  const [end, setEnd] = useState(todayStr());
+  const [memo, setMemo] = useState("");
+
+  useEffect(() => {
+    return onSnapshot(collection(db, "schedules"), (snap) => {
+      setList(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    });
+  }, []);
+
+  // =========================
+  // 저장 (신규 / 수정 공용)
+  // =========================
+  const save = async () => {
+    if (!name.trim()) return alert("이름을 입력하세요");
+
+    // 🔄 수정
+    if (editing) {
+      await setDoc(
+        doc(db, "schedules", editing.id),
+        { type, name, start, end, memo, updatedAt: Date.now() },
+        { merge: true }
+      );
+    }
+    // 🆕 신규
+    else {
+      await setDoc(doc(collection(db, "schedules")), {
+        type,
+        name,
+        start,
+        end,
+        memo,
+        author: user.email,
+        createdAt: Date.now(),
+      });
+    }
+
+    closeForm();
+  };
+
+  const remove = async (id) => {
+    if (!confirm("삭제하시겠습니까?")) return;
+    await deleteDoc(doc(db, "schedules", id));
+    setSelected(null);
+  };
+
+  const openEdit = (s) => {
+    setEditing(s);
+    setType(s.type);
+    setName(s.name);
+    setStart(s.start);
+    setEnd(s.end);
+    setMemo(s.memo || "");
+    setSelected(null);
+    setOpen(true);
+  };
+
+  const closeForm = () => {
+    setOpen(false);
+    setEditing(null);
+    setType("휴가");
+    setName("");
+    setStart(todayStr());
+    setEnd(todayStr());
+    setMemo("");
+  };
+
+  return (
+    <>
+      {/* ================= 헤더 ================= */}
+      <div className="flex items-center justify-between pb-2 border-b">
+        <span className="text-sm font-medium text-gray-800">
+          일정 등록
+        </span>
+
+        <button
+          onClick={() => setOpen(true)}
+          className="text-gray-400 hover:text-gray-700 text-lg"
+        >
+          ＋
+        </button>
+      </div>
+
+      {/* ================= 리스트 ================= */}
+      <div className="divide-y">
+        {list.map((s) => (
+          <button
+            key={s.id}
+            onClick={() => setSelected(s)}
+            className="w-full text-left py-2 px-1
+           hover:bg-slate-50
+           hover:border-l-2 hover:border-blue-500
+           transition"
+          >
+            <div className="text-[13px] text-slate-900 tabular-nums">
+              {s.type} · {s.name}
+            </div>
+            <div className="text-xs text-gray-400">
+              {s.start} ~ {s.end}
+            </div>
+          </button>
+        ))}
+
+        {list.length === 0 && (
+          <div className="py-6 text-sm text-gray-400 text-center">
+            등록된 일정이 없습니다.
+          </div>
+        )}
+      </div>
+
+      {/* ================= 상세 팝업 ================= */}
+      {selected && (
+        <Modal title={`${selected.type} · ${selected.name}`} onClose={() => setSelected(null)}>
+          <div className="space-y-2 text-sm">
+            <div>
+              📅 {selected.start} ~ {selected.end}
+            </div>
+
+            {selected.memo && (
+              <div className="whitespace-pre-line text-gray-700">
+                {selected.memo}
+              </div>
+            )}
+
+            {(!selected.author || selected.author === user.email) && (
+  <div className="flex justify-end gap-3 mt-4">
+    <button
+      onClick={() => openEdit(selected)}
+      className="text-sm text-blue-600"
+    >
+      수정
+    </button>
+    <button
+      onClick={() => remove(selected.id)}
+      className="text-sm text-red-600"
+    >
+      삭제
+    </button>
+  </div>
+)}
+
+          </div>
+        </Modal>
+      )}
+
+      {/* ================= 등록 / 수정 모달 ================= */}
+      {open && (
+        <Modal
+          title={editing ? "일정 수정" : "휴가 / 외근 일정 등록"}
+          onClose={closeForm}
+        >
+          <select
+            className="border w-full px-2 py-1 mb-2"
+            value={type}
+            onChange={(e) => setType(e.target.value)}
+          >
+            <option value="휴가">휴가</option>
+            <option value="외근">외근</option>
+          </select>
+
+          <input
+            className="border w-full px-2 py-1 mb-2"
+            placeholder="이름"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+
+          <div className="flex gap-2 mb-2">
+            <input
+              type="date"
+              className="border w-full px-2 py-1"
+              value={start}
+              onChange={(e) => setStart(e.target.value)}
+            />
+            <input
+              type="date"
+              className="border w-full px-2 py-1"
+              value={end}
+              onChange={(e) => setEnd(e.target.value)}
+            />
+          </div>
+
+          <textarea
+            className="border w-full px-2 py-1 h-24"
+            placeholder="메모 (선택)"
+            value={memo}
+            onChange={(e) => setMemo(e.target.value)}
+          />
+
+          <div className="mt-4 flex justify-end">
+            <QuickBtn text="저장" onClick={save} />
+          </div>
+        </Modal>
+      )}
+    </>
+  );
+}
+
+// ===================================================
+// 📢 공지사항
+// ===================================================
+function NoticeBoard({ user, role }) {
+  const [selected, setSelected] = useState(null);
+  const [list, setList] = useState([]);
+  const [open, setOpen] = useState(false);
+  const [title, setTitle] = useState("");
+  const [content, setContent] = useState("");
+  const [editing, setEditing] = useState(null); // 수정 중인 공지
+
+  useEffect(() => {
+    return onSnapshot(collection(db, "notices"), snap => {
+      setList(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+  }, []);
+
+const save = async () => {
+  if (!title.trim()) return alert("제목을 입력하세요");
+
+  // 🔄 수정
+  if (editing) {
+    await setDoc(
+      doc(db, "notices", editing.id),
+      {
+        title,
+        content,
+        updatedAt: Date.now(),
+      },
+      { merge: true }
+    );
+  }
+  // 🆕 신규
+  else {
+    await setDoc(doc(collection(db, "notices")), {
+      title,
+      content,
+      author: user.email,
+      createdAt: Date.now(),
+    });
+  }
+
+  setOpen(false);
+  setEditing(null);
+  setTitle("");
+  setContent("");
+};
+
+
+  const remove = (id) => deleteDoc(doc(db, "notices", id));
+
+  return (
+    <>
+      {/* 헤더 (게시판 스타일) */}
+      <div className="flex items-center justify-between pb-2 border-b">
+        <span className="text-sm font-medium text-gray-800">
+          공지등록
+        </span>
+
+        {role === "admin" && (
+          <button
+            onClick={() => setOpen(true)}
+            className="text-gray-400 hover:text-gray-700 text-lg"
+          >
+            ＋
+          </button>
+        )}
+      </div>
+
+      {/* 게시판 리스트 */}
+      <div className="divide-y">
+        {list.map(n => (
+          <button
+            key={n.id}
+            onClick={() => setSelected(n)}
+            className="w-full text-left py-2 px-1
+           hover:bg-slate-50
+           hover:border-l-2 hover:border-blue-500
+           transition"
+          >
+            <div className="flex justify-between items-center">
+              <div className="text-sm text-gray-900 truncate">
+                {n.title}
+              </div>
+              <div className="text-xs text-gray-400">
+                {new Date(n.createdAt).toLocaleDateString("ko-KR")}
+              </div>
+            </div>
+          </button>
+        ))}
+
+        {list.length === 0 && (
+          <div className="py-6 text-sm text-gray-400 text-center">
+            등록된 공지사항이 없습니다.
+          </div>
+        )}
+      </div>
+
+      {/* 공지 등록 모달 */}
+      {open && (
+        <Modal
+  title={editing ? "공지 수정" : "공지 등록"}
+  onClose={() => {
+    setOpen(false);
+    setEditing(null);
+  }}
+>
+          <input
+            className="border w-full px-2 py-1 mb-2"
+            placeholder="제목"
+            value={title}
+            onChange={e => setTitle(e.target.value)}
+          />
+          <textarea
+            className="border w-full px-2 py-1 h-32"
+            placeholder="내용"
+            value={content}
+            onChange={e => setContent(e.target.value)}
+          />
+          <div className="mt-4 flex justify-end">
+            <QuickBtn text="저장" onClick={save} />
+          </div>
+        </Modal>
+      )}
+
+      {/* 공지 상세 */}
+      {selected && (
+        <Modal title={selected.title} onClose={() => setSelected(null)}>
+          <div className="space-y-4">
+            <div className="text-sm whitespace-pre-line">
+              {selected.content}
+            </div>
+
+            {selected.author === user.email && (
+  <div className="flex justify-end gap-3">
+    <button
+      onClick={() => {
+        setEditing(selected);   // ⭐ 수정모드 진입
+        setTitle(selected.title);
+        setContent(selected.content);
+        setSelected(null);
+        setOpen(true);
+      }}
+      className="text-sm text-blue-600"
+    >
+      수정
+    </button>
+
+    <button
+      onClick={() => {
+        remove(selected.id);
+        setSelected(null);
+      }}
+      className="text-sm text-red-600"
+    >
+      삭제
+    </button>
+  </div>
+)}
+
+          </div>
+        </Modal>
+      )}
+    </>
+  );
+}
+
+
+
+// ===================================================
+// 📝 인수인계 (공지사항 UX 동일)
+// ===================================================
+function HandoverBoard({ user }) {
+  const today = todayStr();
+  const ref = doc(db, "handover", today);
+
+  const [list, setList] = useState([]);
+
+  const [open, setOpen] = useState(false);        // 등록/수정 모달
+  const [selected, setSelected] = useState(null); // 상세 팝업
+  const [editing, setEditing] = useState(null);   // 수정 중 인수인계
+
+  const [title, setTitle] = useState("");
+  const [content, setContent] = useState("");
+
+  // =========================
+  // 실시간 구독
+  // =========================
+  useEffect(() => {
+    return onSnapshot(ref, snap => {
+      if (snap.exists()) {
+        setList(snap.data().items || []);
+      } else {
+        setList([]);
+      }
+    });
+  }, []);
+
+  // =========================
+  // 저장 (신규 / 수정 공용)
+  // =========================
+  const save = async () => {
+    if (!title.trim()) return alert("제목을 입력하세요");
+
+    let next;
+
+    // 🔄 수정
+    if (editing) {
+      next = list.map(i =>
+        i.id === editing.id
+          ? {
+              ...i,
+              title,
+              content,
+              updatedAt: Date.now(),
+            }
+          : i
+      );
+    }
+    // 🆕 신규
+    else {
+      next = [
+        ...list,
+        {
+          id: crypto.randomUUID(),
+          title,
+          content,
+          author: user.email,
+          createdAt: Date.now(),
+        },
+      ];
+    }
+
+    await setDoc(ref, { items: next }, { merge: true });
+    closeForm();
+  };
+
+  // =========================
+  // 삭제
+  // =========================
+  const remove = async (id) => {
+    if (!confirm("삭제하시겠습니까?")) return;
+
+    const next = list.filter(i => i.id !== id);
+    await setDoc(ref, { items: next }, { merge: true });
+    setSelected(null);
+  };
+
+  // =========================
+  // 수정 진입
+  // =========================
+  const openEdit = (item) => {
+    setEditing(item);
+    setTitle(item.title);
+    setContent(item.content);
+    setSelected(null);
+    setOpen(true);
+  };
+
+  const closeForm = () => {
+    setOpen(false);
+    setEditing(null);
+    setTitle("");
+    setContent("");
+  };
+
+  return (
+    <>
+      {/* ================= 헤더 ================= */}
+      <div className="flex items-center justify-between pb-2 border-b">
+        <span className="text-sm font-medium text-gray-800">
+          인수인계 등록
+        </span>
+
+        <button
+          onClick={() => setOpen(true)}
+          className="text-gray-400 hover:text-gray-700 text-lg"
+        >
+          ＋
+        </button>
+      </div>
+
+      {/* ================= 리스트 ================= */}
+      <div className="divide-y">
+        {list.map(i => (
+          <button
+            key={i.id}
+            onClick={() => setSelected(i)}
+            className="w-full text-left py-2 px-1
+           hover:bg-slate-50
+           hover:border-l-2 hover:border-blue-500
+           transition"
+          >
+            <div className="flex justify-between items-center">
+              <div className="text-sm text-gray-900 truncate">
+                {i.title}
+              </div>
+              <div className="text-xs text-gray-400">
+                {new Date(i.createdAt).toLocaleDateString("ko-KR")}
+              </div>
+            </div>
+          </button>
+        ))}
+
+        {list.length === 0 && (
+          <div className="py-6 text-sm text-gray-400 text-center">
+            등록된 인수인계가 없습니다.
+          </div>
+        )}
+      </div>
+
+      {/* ================= 상세 팝업 ================= */}
+      {selected && (
+        <Modal
+          title={selected.title}
+          onClose={() => setSelected(null)}
+        >
+          <div className="space-y-4 text-sm">
+            <div className="whitespace-pre-line text-gray-700">
+              {selected.content}
+            </div>
+
+            {(!selected.author || selected.author === user.email) && (
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => openEdit(selected)}
+                  className="text-sm text-blue-600"
+                >
+                  수정
+                </button>
+                <button
+                  onClick={() => remove(selected.id)}
+                  className="text-sm text-red-600"
+                >
+                  삭제
+                </button>
+              </div>
+            )}
+          </div>
+        </Modal>
+      )}
+
+      {/* ================= 등록 / 수정 모달 ================= */}
+      {open && (
+        <Modal
+          title={editing ? "인수인계 수정" : "인수인계 등록"}
+          onClose={closeForm}
+        >
+          <input
+            className="border w-full px-2 py-1 mb-2"
+            placeholder="제목"
+            value={title}
+            onChange={e => setTitle(e.target.value)}
+          />
+          <textarea
+            className="border w-full px-2 py-1 h-32"
+            placeholder="내용"
+            value={content}
+            onChange={e => setContent(e.target.value)}
+          />
+          <div className="mt-4 flex justify-end">
+            <QuickBtn text="저장" onClick={save} />
+          </div>
+        </Modal>
+      )}
+    </>
+  );
+}
+
+
+// =====================================================
+// 🏠 HOME DASHBOARD
+// =====================================================
+function HomeDashboard({
+  role,
+  user,
+  todayStats,
+  myStats,
+  pending,
+  delayed,
+  goMenu,
+}) {
+  const [myTaskOpen, setMyTaskOpen] = useState(false);
+  const todayLabel = new Date().toLocaleDateString("ko-KR", {
+    month: "long",
+    day: "numeric",
+    weekday: "short",
+  });
+
+  return (
+    <div className="space-y-10 bg-slate-100 p-6 -m-6">
+
+      {/* 헤더 */}
+      <div>
+        <h2 className="text-2xl font-bold">HOME</h2>
+        <p className="text-sm text-gray-500">
+           {todayLabel} · 오늘의 배차 현황
+        </p>
+      </div>
+
+      {/* KPI */}
+      {/* ================= KPI ================= */}
+<div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+
+  <KpiCard
+    title="오늘 접수"
+    value={todayStats.count}
+    sub="금일 접수 기준"
+  />
+
+  <KpiCard
+    title="처리 필요"
+    value={pending}
+    color="text-red-600"
+    dot="bg-red-500"
+    sub="미배차 오더"
+  />
+
+  <KpiCard
+    title="지연"
+    value={delayed}
+    color="text-orange-500"
+    dot="bg-orange-400"
+    sub="지연 발생"
+  />
+
+  <KpiCard
+    title="오늘 매출"
+    value={`${todayStats.revenue.toLocaleString()}원`}
+    color="text-blue-600"
+    dot="bg-blue-500"
+    sub="당일 매출"
+  />
+
+  <KpiCard
+    title="오늘 수익"
+    value={`${todayStats.profit.toLocaleString()}원`}
+    color="text-green-600"
+    dot="bg-green-500"
+    sub="당일 순이익"
+  />
+
+</div>
+
+
+{/* ================= QUICK ACTIONS ================= */}
+<div className="bg-white border rounded-xl p-5 shadow-sm">
+
+  {/* 헤더 */}
+  <div className="flex items-center justify-between mb-4">
+    <div>
+      <h3 className="text-xs font-bold tracking-widest text-slate-600 uppercase">
+        QUICK ACTIONS
+      </h3>
+      <p className="text-xs text-slate-400 mt-0.5">
+        오늘 즉시 처리
+      </p>
+    </div>
+
+    {pending > 0 && (
+      <span className="text-xs text-red-600 font-semibold">
+        미배차 {pending}건
+      </span>
+    )}
+  </div>
+
+  {/* 버튼 영역 */}
+  <div className="flex flex-wrap gap-3">
+
+    <QuickBtn
+      text="+ 신규 오더 등록"
+      onClick={() => goMenu("배차관리")}
+    />
+
+    <QuickBtn
+      text="실시간 배차 현황"
+      onClick={() => goMenu("실시간배차현황")}
+    />
+
+    <QuickBtn
+      text={`미배차 처리 (${pending}건)`}
+      highlight
+      onClick={() => goMenu("미배차현황")}
+    />
+
+    <QuickBtn
+      text="표준운임표 확인"
+      onClick={() => goMenu("표준운임표")}
+    />
+
+    {/* 나의 오늘 스케줄 */}
+    <button
+      onClick={() => setMyTaskOpen(true)}
+      className="
+        px-4 py-2
+        rounded-lg
+        text-sm font-semibold
+        bg-white
+        text-slate-700
+        border border-slate-300
+        shadow
+        hover:bg-slate-100
+      "
+    >
+      나의 오늘 스케줄
+    </button>
+
+  </div>
+</div>
+
+
+{/* ================= 나의 오늘 할 일 모달 ================= */}
+{myTaskOpen && (
+  <Modal
+    title="나의 오늘 할 일"
+    onClose={() => setMyTaskOpen(false)}
+  >
+    <MyTodayTasks user={user} />
+  </Modal>
+)}
+
+
+
+<Panel title="업무 공유">
+  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+    <WorkBox title="휴가 / 외근 일정">
+      <ScheduleBoard user={user} />
+    </WorkBox>
+
+    <WorkBox title="공지사항">
+  <NoticeBoard role={role} user={user} />
+</WorkBox>
+
+    <WorkBox title="오늘 인수인계">
+      <HandoverBoard user={user} />
+    </WorkBox>
+
+  </div>
+</Panel>
+
+
+
+      {/* 관리자 요약 */}
+<Panel title="관리자 요약">
+  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <KpiCard
+      title="누적 오더"
+      value={myStats.totalOrders}
+    />
+    <KpiCard
+      title="누적 매출"
+      value={`${myStats.totalRevenue.toLocaleString()}원`}
+      color="text-blue-600"
+    />
+    <KpiCard
+      title="누적 수익"
+      value={`${myStats.totalProfit.toLocaleString()}원`}
+      color="text-green-600"
+    />
+  </div>
+</Panel>
+
+    </div>
+  );
+}
+
 // ===================== DispatchApp.jsx (PART 2/8) — START =====================
 export default function DispatchApp({ role, user }) {
     // 🔥 화주 차단
   if (role === "shipper") {
     return <Navigate to="/shipper" replace />;
   }
+  
   const isTest = role === "test";
   const navigate = useNavigate();
 // ⭐ 고정거래처 매출 실시간 구독
@@ -503,6 +1639,50 @@ const todayStats = useMemo(() => {
     { count: 0, revenue: 0, profit: 0 }
   );
 }, [dispatchData, user, today]);
+// ⭐ 오늘 미배차 = 처리 필요 건수
+const pendingToday = useMemo(() => {
+  if (!dispatchData || !user) return 0;
+
+  const todayStrKST = today;
+
+  return dispatchData.filter((d) => {
+    // 날짜 파싱
+    const dt = parseDate(d?.상차일자 || d?.상차일 || d?.상차);
+    if (!dt) return false;
+
+    const dateKST = toYMD_KST(dt);
+
+    // admin은 전체, user는 본인 것만
+    const isMine =
+      role === "admin" ? true : (!d?.작성자 || d.작성자 === user.email);
+
+    // ⭐ 핵심: 오늘 + 차량번호 없음 = 미배차
+    return (
+      isMine &&
+      dateKST === todayStrKST &&
+      (!d.차량번호 || !String(d.차량번호).trim())
+    );
+  }).length;
+}, [dispatchData, user, role, today]);
+
+// ===================== 홈 트렌드 데이터 (시간대별 오더 수) =====================
+const trendData = useMemo(() => {
+  const hourly = {};
+
+  dispatchData.forEach((r) => {
+    const h = String(r?.상차시간 || "").match(/(\d+)/);
+    const hour = h ? Number(h[1]) : null;
+
+    if (hour !== null && hour >= 0 && hour <= 23) {
+      hourly[hour] = (hourly[hour] || 0) + 1;
+    }
+  });
+
+  return Array.from({ length: 24 }, (_, i) => ({
+    hour: `${i}시`,
+    count: hourly[i] || 0,
+  }));
+}, [dispatchData]);
 
 
 
@@ -530,7 +1710,7 @@ const todayStats = useMemo(() => {
 
   const tonOptions = useMemo(() => Array.from({ length: 25 }, (_, i) => `${i + 1}톤`), []);
 
-  const [menu, setMenu] = useState("실시간배차현황");
+  const [menu, setMenu] = useState("HOME");
 
   // ---------------- user 차단 메뉴 ----------------
   const blockedMenus = [
@@ -603,6 +1783,7 @@ return (
   <div className="flex gap-4 overflow-x-auto whitespace-nowrap">
 
     {[
+      "HOME",
       "배차관리",
       "실시간배차현황",
       "배차현황",
@@ -649,7 +1830,20 @@ return (
 
 
       {/* ---------------- 화면 렌더링 ---------------- */}
+      
 <main className="bg-white rounded shadow p-4">
+{menu === "HOME" && (
+  <HomeDashboard
+  role={role}
+  user={user}          // ✅ 이 줄 추가
+  todayStats={todayStats}
+  myStats={myStats}
+  pending={pendingToday}
+  delayed={0}
+  goMenu={(m) => setMenu(m)}
+/>
+
+)}
 
   {menu === "배차관리" && (
   <DispatchManagement
@@ -11651,6 +12845,10 @@ const vrPure = {
     forecast2026={forecast2026}
     yPure={yPure}
   />
+  <YearlySummaryChart
+  rows={rows}
+  year={yearKey}
+/>
 </div>
       {/* DETAIL POPUP */}
       {detailClient && (
@@ -12499,6 +13697,82 @@ function SettlementDetailPopup({ client, rows, onClose }) {
         </div>
 
       </div>
+    </div>
+  );
+}
+/* ==================== 📊 연간 매출 추이 (Bar + Trend Line) ==================== */
+function YearlySummaryChart({ rows, year }) {
+  const toInt = (v) =>
+    parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
+
+  if (!rows || rows.length === 0) {
+    return (
+      <div className="rounded-2xl border bg-white p-4 text-center text-xs text-gray-400">
+        연간 데이터 없음
+      </div>
+    );
+  }
+
+  // 1~12월
+  const months = Array.from({ length: 12 }, (_, i) => ({
+    month: `${i + 1}월`,
+    sale: 0,
+  }));
+
+  rows.forEach((r) => {
+    const d = r.상차일;
+    if (!d || !d.startsWith(String(year))) return;
+
+    const m = Number(d.slice(5, 7)) - 1;
+    months[m].sale += toInt(r.청구운임);
+  });
+
+  return (
+    <div className="rounded-2xl border bg-white p-5 shadow-sm">
+      <h3 className="text-sm font-semibold mb-4">
+        📊 {year}년 월별 매출 추이
+      </h3>
+
+      <div className="h-64">
+        <ResponsiveContainer width="100%" height="100%">
+          <ComposedChart data={months}>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} />
+            <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+            <YAxis
+              tick={{ fontSize: 11 }}
+              tickFormatter={(v) => `${(v / 10000).toFixed(0)}만`}
+            />
+            <Tooltip
+              formatter={(v) => `${v.toLocaleString()}원`}
+              cursor={{ fill: "rgba(37,99,235,0.06)" }}
+            />
+            <Legend />
+
+            {/* 매출 Bar (얇고 둥글게) */}
+            <Bar
+              dataKey="sale"
+              name="매출"
+              barSize={28}
+              radius={[6, 6, 0, 0]}
+              fill="#2563EB"
+            />
+
+            {/* 🔹 매출 추이 Line (부드럽게) */}
+            <Line
+              type="monotone"
+              dataKey="sale"
+              stroke="#1E40AF"
+              strokeWidth={2}
+              dot={{ r: 3 }}
+              activeDot={{ r: 6 }}
+            />
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+
+      <p className="text-[11px] text-gray-500 mt-2">
+        * 막대: 월 매출 규모 · 선: 매출 흐름
+      </p>
     </div>
   );
 }
@@ -15078,6 +16352,9 @@ function ClientManagement({ clients = [], upsertClient, removeClient }) {
 
   const [placeRows, setPlaceRows] = React.useState([]);
   const [showDupPreview, setShowDupPreview] = React.useState(false);
+  // 🔥 중복 미리보기에서 선택한 삭제 대상
+const [dupSelected, setDupSelected] = React.useState(new Set());
+
   // 🔁 하차지 주소 기준 중복 그룹 계산
 // ================================
 // 🔥 주소 포함 관계 기반 중복 그룹 계산 (FINAL)
@@ -15120,26 +16397,34 @@ const duplicatePlaceGroups = React.useMemo(() => {
       const bAddr = normAddr(b.주소);
       const bBroad = isBroadAddress(bAddr);
 
-      // 🔒 안전 필터 2: 둘 다 상세 주소면 패스
-      if (!aBroad && !bBroad) continue;
+      // 1️⃣ 완전 동일
+const isSame = aAddr === bAddr;
 
-      // 🔑 주소 포함 관계
-      const isInclude =
-        aAddr.includes(bAddr) || bAddr.includes(aAddr);
+// 2️⃣ 포함 관계 (광역 ↔ 상세)
+const isInclude =
+  aAddr.includes(bAddr) || bAddr.includes(aAddr);
 
-      if (isInclude) {
-        group.push(b);
-        used.add(b.id);
-      }
+if (isSame || isInclude) {
+  group.push(b);
+  used.add(b.id);
+}
     }
 
     if (group.length > 1) {
       group.forEach((p) => used.add(p.id));
 
-      // ✅ 가장 긴 주소 1건 유지
-      group.sort(
-        (x, y) => (y.주소 || "").length - (x.주소 || "").length
-      );
+      group.sort((a, b) => {
+  const aHasContact = !!(a.담당자 || a.담당자번호);
+  const bHasContact = !!(b.담당자 || b.담당자번호);
+
+  // 1️⃣ 담당자/번호 있는 쪽 우선
+  if (aHasContact !== bHasContact) {
+    return bHasContact - aHasContact;
+  }
+
+  // 2️⃣ 주소 길이 긴 쪽 우선
+  return (b.주소 || "").length - (a.주소 || "").length;
+});
 
       groups.push(group);
     }
@@ -15401,24 +16686,20 @@ await upsertPlace({
 // - 각 그룹당 1건(가장 긴 주소) 유지
 // ================================
 const removeDuplicatePlaces = async () => {
-  if (duplicatePlaceGroups.length === 0) {
-    alert("중복된 하차지가 없습니다.");
+  if (dupSelected.size === 0) {
+    alert("삭제할 중복 항목을 선택하세요.");
     return;
   }
 
   let removed = 0;
 
-  for (const group of duplicatePlaceGroups) {
-    const [, ...toDelete] = group;
-
-    for (const p of toDelete) {
-      if (!p.id) continue;
-      await deleteDoc(doc(db, PLACES_COLL, p.id));
-      removed++;
-    }
+  for (const id of dupSelected) {
+    await deleteDoc(doc(db, PLACES_COLL, id));
+    removed++;
   }
 
-  alert(`중복 하차지 정리 완료 (${removed}건 삭제됨)`);
+  setDupSelected(new Set());
+  alert(`선택한 중복 ${removed}건 삭제 완료`);
 };
 
 
@@ -15849,16 +17130,31 @@ const removeDuplicatePlaces = async () => {
                   const isKeep = i === 0;
                   return (
                     <tr
-                      key={p.id}
-                      className={
-                        isKeep
-                          ? "bg-green-50 text-green-800"
-                          : "bg-red-50 text-red-700"
-                      }
-                    >
-                      <td className="border px-2 py-1 w-24 text-center font-bold">
-                        {isKeep ? "유지" : "삭제"}
-                      </td>
+  key={p.id}
+  className={
+    isKeep
+      ? "bg-green-50 text-green-800"
+      : "bg-red-50 text-red-700"
+  }
+>
+  <td className="border px-2 py-1 w-24 text-center font-bold">
+    {isKeep ? (
+      "유지"
+    ) : (
+      <input
+        type="checkbox"
+        checked={dupSelected.has(p.id)}
+        onChange={() => {
+          setDupSelected((prev) => {
+            const n = new Set(prev);
+            n.has(p.id) ? n.delete(p.id) : n.add(p.id);
+            return n;
+          });
+        }}
+      />
+    )}
+  </td>
+
                       <td className="border px-2 py-1">{p.주소}</td>
                       <td className="border px-2 py-1">{p.담당자}</td>
                       <td className="border px-2 py-1">{p.담당자번호}</td>
