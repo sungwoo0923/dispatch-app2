@@ -124,8 +124,17 @@ import { auth } from "./firebase";
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "firebase/auth";
 import { db } from "./firebase";
 import {
-  doc, getDoc, setDoc, updateDoc, serverTimestamp, collection, getDocs,
-  onSnapshot, deleteDoc
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  serverTimestamp,
+  collection,
+  getDocs,
+  onSnapshot,
+  deleteDoc,
+  query,
+  where
 } from "firebase/firestore";
 
 
@@ -501,25 +510,53 @@ function Panel({ title, badge, children }) {
 function WorkBox({ title, children }) {
   return (
     <div
-  className="
-    bg-white
-    border border-slate-200
-    border-l-4 border-l-slate-400
-    rounded-xl
-    p-4
-    flex flex-col
-    min-h-[260px]
-    shadow-sm
-  "
->
-      <div className="flex items-center justify-between mb-3 pb-2 border-b">
-        <h4 className="text-xs font-semibold tracking-widest text-slate-500 uppercase">
-  {title}
-</h4>
-
+      className="
+        bg-white
+        rounded-2xl
+        border border-slate-200
+        shadow-sm
+        hover:shadow-md
+        transition
+        overflow-hidden
+      "
+    >
+      {/* 헤더 */}
+      <div className="px-4 py-3 border-b bg-slate-50">
+        <h4 className="text-sm font-bold text-slate-700">
+          {title}
+        </h4>
       </div>
 
-      <div className="flex-1 text-sm text-gray-700">
+      {/* 내용 */}
+      <div className="p-4 text-sm text-gray-700">
+        {children}
+      </div>
+    </div>
+  );
+}
+// ===================== DASHBOARD CARD (HOME 전용) =====================
+function DashboardCard({ title, right, children }) {
+  return (
+    <div
+      className="
+        bg-white
+        rounded-xl
+        border border-slate-200
+        shadow-sm
+        flex flex-col
+        min-h-[260px]
+      "
+    >
+      {/* 헤더 */}
+      <div className="px-4 py-3 border-b flex items-center justify-between">
+        <h4 className="text-sm font-semibold text-slate-700">
+          {title}
+        </h4>
+        {right}
+      </div>
+
+      {/* 내용 */}
+      <div className="flex-1 p-3 overflow-hidden">
         {children}
       </div>
     </div>
@@ -733,10 +770,30 @@ const filtered = items.filter((i) => {
 // 📅 휴가 / 외근 일정 (공지사항 UX 동일)
 // ===================================================
 function ScheduleBoard({ user }) {
+  const TYPE_COLOR = {
+  휴가: "bg-blue-100 text-blue-700",
+  병가: "bg-red-100 text-red-700",
+  반차: "bg-purple-100 text-purple-700",
+  외출: "bg-orange-100 text-orange-700",
+  외근: "bg-green-100 text-green-700",
+};
+
+  // ✅ list는 딱 한 번만
   const [list, setList] = useState([]);
-  const [open, setOpen] = useState(false);        // 등록/수정 모달
-  const [selected, setSelected] = useState(null); // 상세 팝업
-  const [editing, setEditing] = useState(null);   // 수정 중 일정
+
+  // ✅ list 다음에 grouped
+  const grouped = useMemo(() => {
+    return list.reduce((acc, s) => {
+      const key = s.start.slice(0, 7); // YYYY-MM
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(s);
+      return acc;
+    }, {});
+  }, [list]);
+
+  const [open, setOpen] = useState(false);
+  const [selected, setSelected] = useState(null);
+  const [editing, setEditing] = useState(null);
 
   const [type, setType] = useState("휴가");
   const [name, setName] = useState("");
@@ -744,11 +801,17 @@ function ScheduleBoard({ user }) {
   const [end, setEnd] = useState(todayStr());
   const [memo, setMemo] = useState("");
 
-  useEffect(() => {
-    return onSnapshot(collection(db, "schedules"), (snap) => {
-      setList(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-    });
-  }, []);
+
+useEffect(() => {
+  return onSnapshot(collection(db, "schedules"), (snap) => {
+    const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    // ✅ 시작일 기준 정렬 (최근 → 과거)
+    rows.sort((a, b) => (a.start < b.start ? 1 : -1));
+
+    setList(rows);
+  });
+}, []);
 
   // =========================
   // 저장 (신규 / 수정 공용)
@@ -824,35 +887,70 @@ function ScheduleBoard({ user }) {
       </div>
 
       {/* ================= 리스트 ================= */}
-      <div className="divide-y">
-        {list.map((s) => (
-          <button
-            key={s.id}
-            onClick={() => setSelected(s)}
-            className="w-full text-left py-2 px-1
-           hover:bg-slate-50
-           hover:border-l-2 hover:border-blue-500
-           transition"
-          >
-            <div className="text-[13px] text-slate-900 tabular-nums">
-              {s.type} · {s.name}
-            </div>
-            <div className="text-xs text-gray-400">
-              {s.start} ~ {s.end}
-            </div>
-          </button>
-        ))}
-
-        {list.length === 0 && (
-          <div className="py-6 text-sm text-gray-400 text-center">
-            등록된 일정이 없습니다.
-          </div>
-        )}
+      <div className="divide-y max-h-[200px] overflow-y-auto pr-1">
+  {Object.entries(grouped).map(([ym, items]) => (
+    <div key={ym}>
+      {/* 월 헤더 */}
+      <div className="text-xs font-semibold text-slate-500 py-1">
+        📅 {ym}
       </div>
+
+      {/* 해당 월 일정 */}
+      {items.map((s) => (
+        <button
+          key={s.id}
+          onClick={() => setSelected(s)}
+          className="
+            w-full text-left py-2 px-1
+            hover:bg-slate-50
+            hover:border-l-2 hover:border-blue-500
+            transition
+          "
+        >
+          <div className="flex items-center gap-2 text-[13px]">
+  <span
+    className={`
+      px-2 py-0.5 rounded-full text-xs font-semibold
+      ${TYPE_COLOR[s.type] || "bg-gray-100 text-gray-600"}
+    `}
+  >
+    {s.type}
+  </span>
+
+  <span className="text-slate-900">
+    {s.name}
+  </span>
+</div>
+
+          <div className="text-xs text-gray-400">
+            {s.start} ~ {s.end}
+          </div>
+        </button>
+      ))}
+    </div>
+  ))}
+</div>
+
 
       {/* ================= 상세 팝업 ================= */}
       {selected && (
-        <Modal title={`${selected.type} · ${selected.name}`} onClose={() => setSelected(null)}>
+        <Modal
+  title={
+    <div className="flex items-center gap-2">
+      <span
+        className={`
+          px-2 py-0.5 rounded-full text-xs font-semibold
+          ${TYPE_COLOR[selected.type] || "bg-gray-100 text-gray-600"}
+        `}
+      >
+        {selected.type}
+      </span>
+      <span>{selected.name}</span>
+    </div>
+  }
+  onClose={() => setSelected(null)}
+>
+
           <div className="space-y-2 text-sm">
             <div>
               📅 {selected.start} ~ {selected.end}
@@ -892,13 +990,17 @@ function ScheduleBoard({ user }) {
           onClose={closeForm}
         >
           <select
-            className="border w-full px-2 py-1 mb-2"
-            value={type}
-            onChange={(e) => setType(e.target.value)}
-          >
-            <option value="휴가">휴가</option>
-            <option value="외근">외근</option>
-          </select>
+  className="border w-full px-2 py-1 mb-2"
+  value={type}
+  onChange={(e) => setType(e.target.value)}
+>
+  <option value="휴가">휴가</option>
+  <option value="병가">병가</option>
+  <option value="반차">반차</option>
+  <option value="외출">외출</option>
+  <option value="외근">외근</option>
+</select>
+
 
           <input
             className="border w-full px-2 py-1 mb-2"
@@ -948,6 +1050,9 @@ function NoticeBoard({ user, role }) {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [editing, setEditing] = useState(null); // 수정 중인 공지
+  const isNewNoticeForMe = (n) =>
+  !n.readBy?.includes(user.email);
+
 
   useEffect(() => {
     return onSnapshot(collection(db, "notices"), snap => {
@@ -977,8 +1082,10 @@ const save = async () => {
       content,
       author: user.email,
       createdAt: Date.now(),
+      readBy: [],
     });
   }
+  
 
   setOpen(false);
   setEditing(null);
@@ -988,7 +1095,22 @@ const save = async () => {
 
 
   const remove = (id) => deleteDoc(doc(db, "notices", id));
+  // ⭐⭐⭐ 여기 추가 ⭐⭐⭐
+  const openNoticeDetail = async (notice) => {
+    setSelected(notice);
 
+    if (!notice.readBy?.includes(user.email)) {
+      const next = list.map((n) =>
+        n.id === notice.id
+          ? { ...n, readBy: [...(n.readBy || []), user.email] }
+          : n
+      );
+
+      await updateDoc(doc(db, "notices", notice.id), {
+        readBy: next.find(n => n.id === notice.id).readBy,
+      });
+    }
+  };
   return (
     <>
       {/* 헤더 (게시판 스타일) */}
@@ -1008,33 +1130,52 @@ const save = async () => {
       </div>
 
       {/* 게시판 리스트 */}
-      <div className="divide-y">
-        {list.map(n => (
-          <button
-            key={n.id}
-            onClick={() => setSelected(n)}
-            className="w-full text-left py-2 px-1
-           hover:bg-slate-50
-           hover:border-l-2 hover:border-blue-500
-           transition"
-          >
-            <div className="flex justify-between items-center">
-              <div className="text-sm text-gray-900 truncate">
-                {n.title}
-              </div>
-              <div className="text-xs text-gray-400">
-                {new Date(n.createdAt).toLocaleDateString("ko-KR")}
-              </div>
-            </div>
-          </button>
-        ))}
+     <div className="divide-y divide-slate-200">
 
-        {list.length === 0 && (
-          <div className="py-6 text-sm text-gray-400 text-center">
-            등록된 공지사항이 없습니다.
+  {list.map(n => (
+    <button
+      key={n.id}
+      onClick={() => openNoticeDetail(n)}
+      className="
+        w-full text-left
+        px-3 py-3
+        hover:bg-slate-50
+        transition
+      "
+    >
+      <div className="flex justify-between items-start">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="font-medium text-slate-900">
+              {n.title}
+            </span>
+
+            {isNewNoticeForMe(n) && (
+              <span className="text-[10px] bg-red-500 text-white px-2 py-0.5 rounded-full">
+                NEW
+              </span>
+            )}
           </div>
-        )}
+
+          <div className="text-xs text-slate-500 mt-1">
+            공지사항
+          </div>
+        </div>
+
+        <span className="text-xs text-slate-400">
+          {new Date(n.createdAt).toLocaleDateString("ko-KR")}
+        </span>
       </div>
+    </button>
+  ))}
+
+  {list.length === 0 && (
+    <div className="py-6 text-sm text-gray-400 text-center">
+      등록된 공지사항이 없습니다.
+    </div>
+  )}
+</div>
+
 
       {/* 공지 등록 모달 */}
       {open && (
@@ -1064,12 +1205,13 @@ const save = async () => {
       )}
 
       {/* 공지 상세 */}
-      {selected && (
-        <Modal title={selected.title} onClose={() => setSelected(null)}>
-          <div className="space-y-4">
-            <div className="text-sm whitespace-pre-line">
-              {selected.content}
-            </div>
+
+  {selected && (
+  <Modal title={selected.title} onClose={() => setSelected(null)}>
+    <div className="space-y-2 text-sm">
+      <div className="whitespace-pre-line text-gray-700">
+        {selected.content}
+      </div>
 
             {selected.author === user.email && (
   <div className="flex justify-end gap-3">
@@ -1111,6 +1253,9 @@ const save = async () => {
 // 📝 인수인계 (공지사항 UX 동일)
 // ===================================================
 function HandoverBoard({ user }) {
+  
+  const [admins, setAdmins] = useState([]);
+const [toAdmin, setToAdmin] = useState("");
   const today = todayStr();
   const ref = doc(db, "handover", today);
 
@@ -1122,6 +1267,9 @@ function HandoverBoard({ user }) {
 
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
+// 👇 여기 붙이기
+const isNewForMe = (item) =>
+  !item.readBy?.includes(user.email);
 
   // =========================
   // 실시간 구독
@@ -1135,6 +1283,19 @@ function HandoverBoard({ user }) {
       }
     });
   }, []);
+  // 🔹 받는 사람(관리자) 목록 로드
+useEffect(() => {
+  getDocs(
+    query(collection(db, "users"), where("role", "==", "admin"))
+  ).then((snap) => {
+    setAdmins(
+      snap.docs
+        .map(d => d.data()?.email)
+        .filter(Boolean)
+    );
+  });
+}, []);
+
 
   // =========================
   // 저장 (신규 / 수정 공용)
@@ -1158,18 +1319,26 @@ function HandoverBoard({ user }) {
       );
     }
     // 🆕 신규
-    else {
-      next = [
-        ...list,
-        {
-          id: crypto.randomUUID(),
-          title,
-          content,
-          author: user.email,
-          createdAt: Date.now(),
-        },
-      ];
-    }
+else {
+  if (!toAdmin) {
+    alert("받는 사람을 선택하세요");
+    return;
+  }
+
+  next = [
+    ...list,
+    {
+      id: crypto.randomUUID(),
+      title,
+      content,
+      from: user.email,   // ✅ 작성자
+      to: toAdmin,        // ✅ 받는 사람
+      createdAt: Date.now(),
+      readBy: [],
+    },
+  ];
+}
+
 
     await setDoc(ref, { items: next }, { merge: true });
     closeForm();
@@ -1193,15 +1362,38 @@ function HandoverBoard({ user }) {
     setEditing(item);
     setTitle(item.title);
     setContent(item.content);
+    setToAdmin(item.to || "");
     setSelected(null);
     setOpen(true);
   };
+    // =========================
+  // 상세 열기 + 읽음 처리 (🔥 NEW 핵심)
+  // =========================
+  const openDetail = async (item) => {
+    setSelected(item);
+
+    // 내가 받은 인수인계 && 아직 안 읽었으면
+    if (
+      item.to === user.email &&
+      !item.readBy?.includes(user.email)
+    ) {
+      const next = list.map((i) =>
+        i.id === item.id
+          ? { ...i, readBy: [...(i.readBy || []), user.email] }
+          : i
+      );
+
+      await setDoc(ref, { items: next }, { merge: true });
+    }
+  };
+
 
   const closeForm = () => {
     setOpen(false);
     setEditing(null);
     setTitle("");
     setContent("");
+    setToAdmin("");
   };
 
   return (
@@ -1221,33 +1413,53 @@ function HandoverBoard({ user }) {
       </div>
 
       {/* ================= 리스트 ================= */}
-      <div className="divide-y">
-        {list.map(i => (
-          <button
-            key={i.id}
-            onClick={() => setSelected(i)}
-            className="w-full text-left py-2 px-1
-           hover:bg-slate-50
-           hover:border-l-2 hover:border-blue-500
-           transition"
-          >
-            <div className="flex justify-between items-center">
-              <div className="text-sm text-gray-900 truncate">
-                {i.title}
-              </div>
-              <div className="text-xs text-gray-400">
-                {new Date(i.createdAt).toLocaleDateString("ko-KR")}
-              </div>
-            </div>
-          </button>
-        ))}
+      <div className="divide-y divide-slate-200">
+  {list.map(i => (
+    <button
+      key={i.id}
+      onClick={() => openDetail(i)}
+       className="
+    w-full text-left
+    px-3 py-3
+    border-l-2 border-transparent
+    hover:bg-slate-50
+    hover:border-blue-500
+    transition
+  "
+>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1">
+          <div className="flex items-center gap-2">
+            <span className="font-medium text-slate-900">
+              {i.title}
+            </span>
 
-        {list.length === 0 && (
-          <div className="py-6 text-sm text-gray-400 text-center">
-            등록된 인수인계가 없습니다.
+            {isNewForMe(i) && (
+              <span className="text-[10px] bg-red-500 text-white px-2 py-0.5 rounded-full">
+                NEW
+              </span>
+            )}
           </div>
-        )}
+
+          <div className="text-xs text-slate-500 mt-1">
+            → {i.to}
+          </div>
+        </div>
+
+        <div className="text-xs text-slate-400 whitespace-nowrap">
+          {new Date(i.createdAt).toLocaleDateString("ko-KR")}
+        </div>
       </div>
+    </button>
+  ))}
+
+  {list.length === 0 && (
+    <div className="py-6 text-sm text-gray-400 text-center">
+      등록된 인수인계가 없습니다.
+    </div>
+  )}
+</div>
+
 
       {/* ================= 상세 팝업 ================= */}
       {selected && (
@@ -1260,7 +1472,7 @@ function HandoverBoard({ user }) {
               {selected.content}
             </div>
 
-            {(!selected.author || selected.author === user.email) && (
+            {selected.from === user.email && (
               <div className="flex justify-end gap-3">
                 <button
                   onClick={() => openEdit(selected)}
@@ -1286,6 +1498,23 @@ function HandoverBoard({ user }) {
           title={editing ? "인수인계 수정" : "인수인계 등록"}
           onClose={closeForm}
         >
+          {/* 작성자 (자동) */}
+<div className="text-xs text-gray-500 mb-1">
+  작성자: {user.email}
+</div>
+
+{/* 받는 사람 선택 */}
+<select
+  className="border w-full px-2 py-1 mb-2"
+  value={toAdmin}
+  onChange={(e) => setToAdmin(e.target.value)}
+>
+  <option value="">받는 사람 선택</option>
+  {admins.map((a) => (
+    <option key={a} value={a}>{a}</option>
+  ))}
+</select>
+
           <input
             className="border w-full px-2 py-1 mb-2"
             placeholder="제목"
@@ -1458,27 +1687,22 @@ function HomeDashboard({
     <MyTodayTasks user={user} />
   </Modal>
 )}
+{/* ================= DASHBOARD (업무 공유) ================= */}
+<div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 
+  <DashboardCard title="휴가 / 외근 일정">
+    <ScheduleBoard user={user} />
+  </DashboardCard>
 
+  <DashboardCard title="공지사항">
+    <NoticeBoard role={role} user={user} />
+  </DashboardCard>
 
-<Panel title="업무 공유">
-  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+  <DashboardCard title="오늘 인수인계">
+    <HandoverBoard user={user} />
+  </DashboardCard>
 
-    <WorkBox title="휴가 / 외근 일정">
-      <ScheduleBoard user={user} />
-    </WorkBox>
-
-    <WorkBox title="공지사항">
-  <NoticeBoard role={role} user={user} />
-</WorkBox>
-
-    <WorkBox title="오늘 인수인계">
-      <HandoverBoard user={user} />
-    </WorkBox>
-
-  </div>
-</Panel>
-
+</div>
 
 
       {/* 관리자 요약 */}
@@ -2984,6 +3208,65 @@ const isLike = (text = "", target = "") =>
   String(text).replace(/\s+/g, "").includes(
     String(target).replace(/\s+/g, "")
   );
+// ================================
+// 🚚 상/하차지 경유 파싱 유틸
+// ================================
+
+// 1원진 / 1.원진 / 1 원진 모두 허용
+function parseStops(text = "") {
+  const raw = String(text).trim();
+  if (!raw) return [];
+
+  // ① "1.원진 2.우리유통" / "1 원진 2 우리유통"
+  const regex = /(\d+)\s*\.?\s*([^\d]+)/g;
+  const matches = [...raw.matchAll(regex)];
+
+  if (matches.length > 0) {
+    return matches
+      .sort((a, b) => Number(a[1]) - Number(b[1]))
+      .map(m => m[2].trim());
+  }
+
+  // ② 숫자 패턴 없으면 단일
+  return [raw];
+}
+
+// 경유 개수 라벨
+function getStopLabel(stops = []) {
+  return stops.length > 1 ? `경유 ${stops.length}곳` : "단일";
+}
+// ================================
+// 🏷 메모 자동 태그 추출
+// ================================
+function extractMemoTags(memo = "") {
+  const text = String(memo);
+
+  const rules = [
+    {
+      key: "대기",
+      match: /대기|대기시간|상차대기|하차대기/,
+      className: "bg-blue-100 text-blue-700",
+    },
+    {
+      key: "야간",
+      match: /야간|심야|밤|야간작업/,
+      className: "bg-purple-100 text-purple-700",
+    },
+    {
+      key: "추가비",
+      match: /추가|추가비|할증|추가요금/,
+      className: "bg-rose-100 text-rose-700",
+    },
+  ];
+
+  return rules
+    .filter(r => r.match.test(text))
+    .map(r => ({
+      label: r.key,
+      className: r.className,
+    }));
+}
+
 
 const getPalletFromCargoText = (cargo = "") => {
   const m = cargo.match(/(\d+)\s*(p|P|파|팔|파레|파렛|파렛트|팔레트|PL)/i);
@@ -2999,6 +3282,47 @@ const getDropCountFromText = (dropName = "") => {
     isLike(dropName, key)
   ).length || 1;
 };
+// ================================
+// ⭐ 톤수 추출 (전역 유틸)
+// ================================
+const extractTonNum = (text = "") => {
+  const m = String(text)
+    .replace(/톤|t/gi, "")
+    .match(/(\d+(\.\d+)?)/);
+  return m ? Number(m[1]) : null;
+};
+
+// ================================
+// ⭐ 운임조회 유사도 점수 계산
+// ================================
+function calcFareMatchScore(row, input) {
+  let score = 0;
+
+  // 상차지 / 하차지 (가장 중요)
+  if (normalizeKey(row.상차지명) === normalizeKey(input.pickup)) score += 40;
+  if (normalizeKey(row.하차지명) === normalizeKey(input.drop)) score += 40;
+
+  // 파렛트 수
+  if (input.pallet != null) {
+    const rowPallet = getPalletFromCargoText(row.화물내용);
+    if (rowPallet === input.pallet) score += 30;
+    else if (rowPallet != null && Math.abs(rowPallet - input.pallet) === 1)
+      score += 15;
+  }
+
+  // 차량종류
+  if (input.vehicle && row.차량종류 === input.vehicle) score += 20;
+
+  // 톤수 (±0.5)
+  if (input.ton != null) {
+    const rowTon = extractTonNum(row.차량톤수);
+    if (rowTon != null && Math.abs(rowTon - input.ton) <= 0.5)
+      score += 10;
+  }
+
+  return score;
+}
+
 
 const palletFareRules = {
   double: [ // 2곳 하차 (푸드플래닛 + 신미)
@@ -3119,6 +3443,7 @@ setForm((p) => ({
     // ⭐ 운임조회 팝업 상태
     const [fareModalOpen, setFareModalOpen] = React.useState(false);
     const [fareResult, setFareResult] = React.useState(null);
+    const [expandedMemo, setExpandedMemo] = React.useState(null);
     // ⭐ 운임조회 (송원 전용 자동요율 → 그 다음 AI 통계)
     const handleFareSearch = () => {
       // ⭐ 운임조회는 날짜 필터 무시 → 전체 데이터 강제 사용
@@ -3154,14 +3479,22 @@ const fullData = Array.isArray(dispatchData) ? [...dispatchData] : [];
         return m ? Number(m[1]) : null;
       };
 
-      const extractTonNum = (text = "") => {
-        const m = String(text).replace(/톤|t/gi, "").match(/(\d+(\.\d+)?)/);
-        return m ? Number(m[1]) : null;
-      };
+      
 
       const inputPallets = extractPalletNum(cargo);
       const inputCargoNum = extractLeadingNum(cargo);
       const inputTonNum = extractTonNum(tonStr);
+// ================================
+// 🔑 화물 유형 판별
+// ================================
+// pallet: 파렛트 수가 명확한 경우
+// ton: 파렛트 아님 → 톤수 기준
+const cargoType =
+  inputPallets != null
+    ? "PALLET"
+    : inputTonNum != null
+    ? "TON"
+    : "UNKNOWN";
 
       // ============================================
       // ① 송원 / 신미 / 푸드플래닛 전용 자동요율 우선 적용
@@ -3241,6 +3574,29 @@ const hasSinmi = (
       // ============================================
 
       let filtered = fullData.filter((r) => {
+        // ================================
+// 🚨 경유/단일 운송 판별 (가장 먼저)
+// ================================
+const inputPickupStops = parseStops(pickup);
+const inputDropStops   = parseStops(drop);
+
+const rowPickupStops = parseStops(r.상차지명);
+const rowDropStops   = parseStops(r.하차지명);
+
+// ❌ 경유 개수 다르면 같은 운송 아님
+if (inputPickupStops.length !== rowPickupStops.length) return false;
+if (inputDropStops.length !== rowDropStops.length) return false;
+
+// ❌ 경유 구성 다르면 제외 (순서 포함)
+const sameStops = (a, b) =>
+  a.length === b.length &&
+  a.every((name, i) =>
+    normalizeKey(name) === normalizeKey(b[i])
+  );
+
+if (!sameStops(inputPickupStops, rowPickupStops)) return false;
+if (!sameStops(inputDropStops, rowDropStops)) return false;
+
         if (!r.상차지명 || !r.하차지명) return false;
 
         const rPickup = String(r.상차지명).trim();
@@ -3308,18 +3664,40 @@ const hasSinmi = (
         return matchVehicle && matchTon && matchCargo;
       });
 
-      // 🔁 상하차지만 맞는 데이터로 Fallback
       if (!filtered.length) {
-        filtered = fullData.filter((r) => {
-          if (!r.상차지명 || !r.하차지명) return false;
-          const rPickup = String(r.상차지명).trim();
-          const rDrop = String(r.하차지명).trim();
-          const matchPickup =
-            rPickup.includes(pickup) || pickup.includes(rPickup);
-          const matchDrop = rDrop.includes(drop) || drop.includes(rDrop);
-          return matchPickup && matchDrop;
-        });
-      }
+  filtered = fullData.filter((r) => {
+    if (!r.상차지명 || !r.하차지명) return false;
+
+    // 🔴 경유/단일 판별 다시 강제
+    const inputPickupStops = parseStops(pickup);
+    const inputDropStops   = parseStops(drop);
+    const rowPickupStops   = parseStops(r.상차지명);
+    const rowDropStops     = parseStops(r.하차지명);
+
+    if (inputPickupStops.length !== rowPickupStops.length) return false;
+    if (inputDropStops.length !== rowDropStops.length) return false;
+
+    const sameStops = (a, b) =>
+      a.length === b.length &&
+      a.every((name, i) =>
+        normalizeKey(name) === normalizeKey(b[i])
+      );
+
+    if (!sameStops(inputPickupStops, rowPickupStops)) return false;
+    if (!sameStops(inputDropStops, rowDropStops)) return false;
+
+    // 그 다음에야 문자열 비교
+    const rPickup = String(r.상차지명).trim();
+    const rDrop = String(r.하차지명).trim();
+
+    return (
+      rPickup.includes(pickup) || pickup.includes(rPickup)
+    ) && (
+      rDrop.includes(drop) || drop.includes(rDrop)
+    );
+  });
+}
+
 
       if (!filtered.length) {
         alert("유사한 과거 운임 데이터를 찾지 못했습니다.");
@@ -3331,6 +3709,30 @@ const hasSinmi = (
           Number(String(r.청구운임 || "0").replace(/,/g, ""))
         )
         .filter((n) => !isNaN(n));
+// ================================
+// ⭐ 입력 조건 정리
+// ================================
+const inputCond = {
+  pickup,
+  drop,
+  pallet: palletCount,
+  vehicle,
+  ton: inputTonNum,
+};
+
+// ⭐ 유사도 점수 부여
+const scoredList = filtered.map(r => ({
+  ...r,
+  __score: calcFareMatchScore(r, inputCond),
+}));
+
+// ⭐ 거의 동일 / 유사 분리
+const exactLike = scoredList.filter(r => r.__score >= 90);
+
+const similarTop = scoredList
+  .filter(r => r.__score >= 60 && r.__score < 90)
+  .sort((a, b) => b.__score - a.__score)
+  .slice(0, 3);
 
       if (!fares.length) {
         alert("해당 조건의 과거 데이터에 청구운임 정보가 없습니다.");
@@ -3351,6 +3753,8 @@ const hasSinmi = (
         latestRow?.화물내용?.trim() ? latestRow.화물내용 : "(기록 없음)";
 
 setFareResult({
+  pickupStops: parseStops(pickup),
+dropStops: parseStops(drop),
   count: filtered.length,
   avg,
   min,
@@ -3358,6 +3762,10 @@ setFareResult({
   latestFare: latestRow.청구운임,
   latestDate: latestRow.상차일,
   latestCargo,
+
+  exactLike,      // ⭐ 추가
+  similarTop,     // ⭐ 추가
+
   filteredList: filtered
     .slice()
     .sort((a, b) =>
@@ -4948,11 +5356,65 @@ setIsCopyMode(true);
 {fareModalOpen && fareResult && (
   <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
     <div className="bg-white rounded-lg p-7 w-[500px] shadow-2xl max-h-[90vh] overflow-y-auto">
-      
+          {/* ================= 거의 동일한 운송 ================= */}
+      {fareResult.exactLike?.length >= 1 &&
+ new Set(fareResult.exactLike.map(r => r.청구운임)).size >= 1 && (
+  <div className="mb-5 p-4 border-2 border-indigo-500 bg-indigo-50 rounded-lg">
+    <h4 className="font-bold text-indigo-700 mb-2">
+      ⚠ 동일 조건 운송 이력이 {fareResult.exactLike.length}건 있습니다
+    </h4>
+
+    <p className="text-xs text-gray-600 mb-3">
+      동일한 조건이지만 <b>청구운임이 서로 다릅니다.</b><br />
+      상황에 맞는 운임을 직접 선택하세요.
+    </p>
+
+    {fareResult.exactLike.map((r, i) => (
+      <div
+        key={i}
+        className="flex justify-between items-center py-2 px-2 border rounded bg-white mb-2"
+      >
+        <div className="text-sm">
+          <div><b>{r.상차일}</b></div>
+          <div className="text-xs text-gray-500">
+            화물: {r.화물내용 || "-"}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <b className="text-indigo-700 text-base">
+            {Number(r.청구운임).toLocaleString()}원
+          </b>
+
+          <button
+            onClick={() => {
+              setForm(p => ({ ...p, 청구운임: String(r.청구운임) }));
+              setFareModalOpen(false);
+            }}
+            className="px-3 py-1 bg-indigo-600 text-white rounded text-xs"
+          >
+            이 운임 선택
+          </button>
+        </div>
+      </div>
+    ))}
+  </div>
+)}
+
       {/* 헤더 */}
       <div className="flex justify-between items-center mb-4">
         <h3 className="text-lg font-bold">📦 운임조회 결과</h3>
+        <div className="flex gap-2 mt-2">
+  <span className="px-2 py-0.5 text-xs rounded bg-blue-100 text-blue-700">
+    상차: {getStopLabel(fareResult.pickupStops)}
+  </span>
+  <span className="px-2 py-0.5 text-xs rounded bg-emerald-100 text-emerald-700">
+    하차: {getStopLabel(fareResult.dropStops)}
+  </span>
+</div>
+
         <button
+        
           onClick={() => setFareModalOpen(false)}
           className="text-gray-500 hover:text-black text-xl"
         >
@@ -4971,6 +5433,7 @@ setIsCopyMode(true);
 
       {/* 추천 카드 */}
       <div className="bg-amber-50 border border-amber-300 rounded-lg p-4 mt-4">
+        
         <h4 className="font-semibold text-amber-700 mb-2"> AI 추천운임</h4>
         <p className="text-xl font-bold text-amber-900">
           {fareResult.avg.toLocaleString()} 원
@@ -4993,10 +5456,61 @@ setIsCopyMode(true);
     <h4 className="font-semibold mb-2">📜 과거 운송 기록 (최신순)</h4>
     <div className="max-h-[180px] overflow-y-auto text-sm">
       {fareResult.filteredList.map((r, idx) => (
+        
         <div key={idx} className="flex justify-between items-center py-2 border-b">
           <div className="flex-1">
-            <b>{r.상차일}</b> | {r.화물내용 || "-"}
-          </div>
+  <div>
+    <b>{r.상차일}</b> | {r.화물내용 || "-"}
+  </div>
+
+{(() => {
+  const memo = r.메모 || "";
+  if (!memo) return null;
+
+  const tags = extractMemoTags(memo);
+
+  const isLong = memo.length > 40;
+  const isOpen = expandedMemo === idx;
+  const displayText =
+    isOpen || !isLong ? memo : memo.slice(0, 40) + "...";
+
+  return (
+    <div className="mt-1 text-xs text-gray-500 whitespace-pre-wrap">
+      
+      {/* 🏷 자동 태그 */}
+      {tags.length > 0 && (
+        <div className="flex gap-1 mb-1">
+          {tags.map((t, i) => (
+            <span
+              key={i}
+              className={`px-2 py-0.5 text-[11px] rounded-full ${t.className}`}
+            >
+              {t.label}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* 📝 메모 본문 */}
+      📝 {displayText}
+
+      {/* 더보기 / 접기 */}
+      {isLong && (
+        <button
+          onClick={() =>
+            setExpandedMemo(isOpen ? null : idx)
+          }
+          className="ml-2 text-blue-600 hover:underline"
+        >
+          {isOpen ? "접기" : "더보기"}
+        </button>
+      )}
+    </div>
+  );
+})()}
+
+</div>
+
           <div className="text-right">
             {Number(r.청구운임).toLocaleString()} 원
           </div>
@@ -12271,6 +12785,10 @@ function Settlement({ dispatchData, fixedRows = [] }) {
   const [targetMonth, setTargetMonth] = React.useState(
   new Date().toISOString().slice(0, 7)
 );
+// ✅ 연도 선택 state 추가
+const [selectedYear, setSelectedYear] = React.useState(
+  new Date().getFullYear()
+);
   const [detailClient, setDetailClient] = React.useState(null);
 
   const toInt = (v) => parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
@@ -12282,160 +12800,63 @@ const profitRate = (sale, profit) =>
 
 const ratePct = (n) => `${n.toFixed(1)}%`;
 
-  // ================================
-// 📊 매출 리포트 PPT 생성
+
 // ================================
-const exportSettlementPPT = async () => {
-  const ppt = new PptxGenJS();
-  ppt.author = "RUN25";
-  ppt.company = "RUN25 물류";
-  ppt.title = `매출 리포트 ${targetMonth}`;
-
-  const wonText = (n) => `${(n || 0).toLocaleString()}원`;
-
-  /* -----------------------------
-     1. 표지
-  ----------------------------- */
-  let slide = ppt.addSlide();
-  slide.addText(`RUN25 매출 분석 리포트`, {
-    x: 1, y: 1.8, fontSize: 28, bold: true,
-  });
-  slide.addText(`${targetMonth}`, {
-    x: 1, y: 2.6, fontSize: 18,
-  });
-  slide.addText(`작성일: ${new Date().toLocaleDateString()}`, {
-    x: 1, y: 3.2, fontSize: 12, color: "666666",
-  });
-/* -----------------------------
-   1-1. Executive Summary (임원 요약)
------------------------------ */
-slide = ppt.addSlide();
-slide.addText("Executive Summary", {
-  x: 0.5, y: 0.4,
-  fontSize: 22,
-  bold: true,
-});
-
-slide.addText(
-  `• 순수 운송 매출 ${wonText(mPure.sale)} 달성\n` +
-  `• 전월 대비 ${rateText(vrPure.month)}\n` +
-  `• 상위 거래처 중심 매출 구조 강화`,
-  {
-    x: 0.7,
-    y: 1.4,
-    fontSize: 16,
-    lineSpacing: 28,
+// 📸 매출관리 화면 전체 캡쳐 (PNG / PDF)
+// ================================
+const exportSettlementCapture = async (type = "png") => {
+  const el = document.getElementById("settlement-capture");
+  if (!el) {
+    alert("캡쳐 영역을 찾을 수 없습니다.");
+    return;
   }
-);
 
-  /* -----------------------------
-     2. 월 예상 실적
-  ----------------------------- */
-  slide = ppt.addSlide();
-  slide.addText("월 예상 실적", { x: 0.5, y: 0.3, fontSize: 20, bold: true });
-
-  slide.addTable([
-    ["예상 매출", "예상 건수", "예상 수익"],
-    [wonText(forecast.sale), `${forecast.count}건`, wonText(forecast.profit)],
-  ], {
-    x: 0.5, y: 1.2, w: 9,
-    colW: [3, 3, 3],
-    fontSize: 16,
-    align: "center",
+  const canvas = await html2canvas(el, {
+    scale: 2,
+    useCORS: true,
+    backgroundColor: "#ffffff",
   });
 
-  /* -----------------------------
-     3. 당월 실적 요약
-  ----------------------------- */
-  slide = ppt.addSlide();
-  slide.addText("당월 실적 요약", { x: 0.5, y: 0.3, fontSize: 20, bold: true });
+  // PNG 저장
+  if (type === "png") {
+    const link = document.createElement("a");
+    link.download = `매출관리_${targetMonth}.png`;
+    link.href = canvas.toDataURL("image/png");
+    link.click();
+    return;
+  }
 
-  slide.addTable([
-    ["구분", "매출", "운반비", "수익"],
-    ["총 운송", wonText(m.sale), wonText(m.driver), wonText(m.profit)],
-    ["순수 운송", wonText(mPure.sale), wonText(mPure.driver), wonText(mPure.profit)],
-  ], {
-    x: 0.5, y: 1.1, w: 9,
-    colW: [2, 2.5, 2.5, 2],
-    fontSize: 14,
-  });
+  // PDF 저장
+  const imgData = canvas.toDataURL("image/png");
+  const pdf = new jsPDF("p", "mm", "a4");
 
-  /* -----------------------------
-     4. 전월 대비
-  ----------------------------- */
-  slide = ppt.addSlide();
-  slide.addText("전월 대비 분석", { x: 0.5, y: 0.3, fontSize: 20, bold: true });
+  const pdfWidth = 210;
+  const pdfHeight = 297;
+  const imgWidth = pdfWidth;
+  const imgHeight = (canvas.height * imgWidth) / canvas.width;
 
-  slide.addText(
-    `총 운송 수익: ${rateText(vr.month)}\n순수 운송 수익: ${rateText(vrPure.month)}`,
-    { x: 0.5, y: 1.2, fontSize: 16 }
-  );
+  let heightLeft = imgHeight;
+  let position = 0;
 
-  /* -----------------------------
-     5. Top10 거래처
-  ----------------------------- */
-  slide = ppt.addSlide();
-  slide.addText("Top10 거래처 (당월 매출)", { x: 0.5, y: 0.3, fontSize: 20, bold: true });
+  pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
+  heightLeft -= pdfHeight;
 
-  const clientMap = {};
-monthRows.forEach(r => {
-  const c = r.거래처명 || "미지정";
-  if (!clientMap[c]) clientMap[c] = { sale: 0, profit: 0 };
-  clientMap[c].sale += toInt(r.청구운임);
-  clientMap[c].profit += toInt(r.청구운임) - toInt(r.기사운임);
-});
+  while (heightLeft > 0) {
+    position = heightLeft - imgHeight;
+    pdf.addPage();
+    pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
+    heightLeft -= pdfHeight;
+  }
 
-const top10Rows = Object.entries(clientMap)
-  .map(([c, v]) => [c, wonText(v.sale), wonText(v.profit)])
-  .sort((a, b) => toInt(b[1]) - toInt(a[1]))
-  .slice(0, 10);
-
-
-  slide.addTable(
-    [["거래처", "매출", "수익"], ...top10Rows.slice(0, 10)],
-    { x: 0.5, y: 1.0, w: 9, fontSize: 12 }
-  );
-
-  /* -----------------------------
-     6. 2026 매출 전망
-  ----------------------------- */
-  slide = ppt.addSlide();
-  slide.addText("2026 매출 전망 (순수 운송)", {
-    x: 0.5, y: 0.3, fontSize: 20, bold: true,
-  });
-
-  slide.addTable([
-    ["보수적", "기준", "공격적"],
-    [
-      wonText(forecast2026.conservative),
-      wonText(forecast2026.normal),
-      wonText(forecast2026.aggressive),
-    ],
-  ], {
-    x: 0.5, y: 1.2, w: 9,
-    colW: [3, 3, 3],
-    fontSize: 16,
-    align: "center",
-  });
-
-  /* -----------------------------
-     7. 결론
-  ----------------------------- */
-  slide = ppt.addSlide();
-  slide.addText("결론 및 제언", { x: 0.5, y: 0.3, fontSize: 20, bold: true });
-
-  slide.addText(
-    `• 순수 운송 기준 연매출 ${wonText(yPure.sale)}\n` +
-    `• 2026년 기준 시나리오 ${wonText(forecast2026.normal)}\n` +
-    `• Top 거래처 집중 전략 시 추가 성장 가능`,
-    { x: 0.5, y: 1.2, fontSize: 14 }
-  );
-
-  ppt.writeFile(`RUN25_매출리포트_${targetMonth}.pptx`);
+  pdf.save(`매출관리_${targetMonth}.pdf`);
 };
 
 
   const [yearKey, monthNum] = targetMonth.split("-").map(Number);
+  // ✅ 월 변경 시 연도도 자동 동기화
+React.useEffect(() => {
+  setSelectedYear(yearKey);
+}, [yearKey]);
 const monthKey = targetMonth;
 // KPI 기준일: 선택 월 기준 "존재하는 날짜"로 보정
 const kpiDay = (() => {
@@ -12632,17 +13053,30 @@ const vrPure = {
   const rateClass = (n) => (n >= 0 ? "text-green-600" : "text-rose-600");
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-10">
+    <div
+  id="settlement-capture"
+  className="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-10"
+>
 
       {/* LEFT PANEL */}
       <div className="space-y-6">
         
-        <button
-  onClick={exportSettlementPPT}
-  className="px-4 py-2 rounded bg-indigo-600 text-white text-sm"
->
-  📥 매출 리포트 PPT 다운로드
-</button>
+ <div className="flex gap-2 mt-2">
+  <button
+    onClick={() => exportSettlementCapture("png")}
+    className="px-4 py-2 rounded bg-gray-700 text-white text-sm"
+  >
+    📸 화면 캡쳐 (PNG)
+  </button>
+
+  <button
+    onClick={() => exportSettlementCapture("pdf")}
+    className="px-4 py-2 rounded bg-emerald-600 text-white text-sm"
+  >
+    📄 화면 저장 (PDF)
+  </button>
+</div>
+
 {/* 🔮 월 예상 실적 */}
 <div className="rounded-2xl bg-indigo-50 border border-indigo-200 p-4">
   <h3 className="text-sm font-semibold text-indigo-700 mb-3">
@@ -12845,9 +13279,37 @@ const vrPure = {
     forecast2026={forecast2026}
     yPure={yPure}
   />
-  <YearlySummaryChart
+  {/* 📅 연도 선택 (★ 여기 정확한 위치) */}
+<div className="bg-white rounded-2xl border shadow-sm p-4">
+  <p className="text-xs text-gray-500 mb-1">조회 연도</p>
+  <select
+    className="border p-2 rounded w-full"
+    value={selectedYear}
+    onChange={(e) => setSelectedYear(Number(e.target.value))}
+  >
+    {Array.from(
+      new Set(
+        rows
+          .map(r => r.상차일?.slice(0, 4))
+          .filter(Boolean)
+      )
+    )
+      .sort((a, b) => b - a)
+      .map(y => (
+        <option key={y} value={Number(y)}>
+          {y}년
+        </option>
+      ))}
+  </select>
+</div>
+<YearlySummaryChart
   rows={rows}
-  year={yearKey}
+  year={selectedYear}
+/>
+
+<YearlyFinanceTable
+  rows={rows}
+  year={selectedYear}
 />
 </div>
       {/* DETAIL POPUP */}
@@ -13776,6 +14238,162 @@ function YearlySummaryChart({ rows, year }) {
     </div>
   );
 }
+/* ==================== 📋 연간 매출 · 수익 · 수익률 테이블 ==================== */
+function YearlyFinanceTable({ rows, year }) {
+  const toInt = (v) =>
+    parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
+
+  const won = (n) => `${(n || 0).toLocaleString()}원`;
+  const pct = (n) => `${n.toFixed(1)}%`;
+
+  // 1~12월 초기화
+  const months = Array.from({ length: 12 }, (_, i) => ({
+    month: `${i + 1}월`,
+    saleAll: 0,
+    profitAll: 0,
+    salePure: 0,
+    profitPure: 0,
+  }));
+
+  rows.forEach((r) => {
+    const d = r.상차일;
+    if (!d || !d.startsWith(String(year))) return;
+
+    const m = Number(d.slice(5, 7)) - 1;
+    const sale = toInt(r.청구운임);
+    const driver = toInt(r.기사운임);
+    const profit = sale - driver;
+
+    const isFresh = String(r.거래처명 || "").includes("후레쉬물류");
+
+    // 전체
+    months[m].saleAll += sale;
+    months[m].profitAll += profit;
+
+    // 순수 (후레쉬 제외)
+    if (!isFresh) {
+      months[m].salePure += sale;
+      months[m].profitPure += profit;
+    }
+  });
+
+  // 🔹 연간 합계
+  const total = months.reduce(
+    (acc, m) => {
+      acc.saleAll += m.saleAll;
+      acc.profitAll += m.profitAll;
+      acc.salePure += m.salePure;
+      acc.profitPure += m.profitPure;
+      return acc;
+    },
+    { saleAll: 0, profitAll: 0, salePure: 0, profitPure: 0 }
+  );
+
+  // 🔹 평균 수익률 (월별 평균)
+  const avgRate = (listSale, listProfit) => {
+    const rates = listSale
+      .map((sale, i) => (sale > 0 ? (listProfit[i] / sale) * 100 : null))
+      .filter((v) => v !== null);
+    return rates.length ? rates.reduce((a, b) => a + b, 0) / rates.length : 0;
+  };
+
+  const avgAllRate = avgRate(
+    months.map((m) => m.saleAll),
+    months.map((m) => m.profitAll)
+  );
+
+  const avgPureRate = avgRate(
+    months.map((m) => m.salePure),
+    months.map((m) => m.profitPure)
+  );
+
+  return (
+    <div className="rounded-2xl border bg-white p-5 shadow-sm">
+      <h3 className="text-sm font-semibold mb-4">
+        📋 {year}년 월별 매출 · 수익 · 수익률 요약
+      </h3>
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm border-collapse text-right">
+          <thead className="bg-gray-50 text-gray-600">
+            <tr>
+              <th className="border p-2 text-center">월</th>
+              <th className="border p-2">총매출</th>
+              <th className="border p-2">총수익</th>
+              <th className="border p-2">총수익률</th>
+              <th className="border p-2">순수운송매출</th>
+              <th className="border p-2">순수운송수익</th>
+              <th className="border p-2">순수수익률</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {months.map((m, i) => {
+              const rateAll =
+                m.saleAll > 0 ? (m.profitAll / m.saleAll) * 100 : 0;
+              const ratePure =
+                m.salePure > 0 ? (m.profitPure / m.salePure) * 100 : 0;
+
+              return (
+                <tr key={i} className="odd:bg-white even:bg-gray-50">
+                  <td className="border p-2 text-center font-medium">
+                    {m.month}
+                  </td>
+                  <td className="border p-2 text-blue-700">
+                    {won(m.saleAll)}
+                  </td>
+                  <td className="border p-2 text-emerald-700">
+                    {won(m.profitAll)}
+                  </td>
+                  <td className="border p-2 text-indigo-700">
+                    {pct(rateAll)}
+                  </td>
+                  <td className="border p-2 text-indigo-700">
+                    {won(m.salePure)}
+                  </td>
+                  <td className="border p-2 font-semibold text-green-700">
+                    {won(m.profitPure)}
+                  </td>
+                  <td className="border p-2 font-semibold text-emerald-700">
+                    {pct(ratePure)}
+                  </td>
+                </tr>
+              );
+            })}
+
+            {/* 🔹 연간 합계 */}
+            <tr className="bg-indigo-50 font-bold">
+              <td className="border p-2 text-center">합계</td>
+              <td className="border p-2 text-blue-800">
+                {won(total.saleAll)}
+              </td>
+              <td className="border p-2 text-emerald-800">
+                {won(total.profitAll)}
+              </td>
+              <td className="border p-2 text-indigo-800">
+                {pct(avgAllRate)}
+              </td>
+              <td className="border p-2 text-indigo-800">
+                {won(total.salePure)}
+              </td>
+              <td className="border p-2 text-green-800">
+                {won(total.profitPure)}
+              </td>
+              <td className="border p-2 text-emerald-800">
+                {pct(avgPureRate)}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p className="text-[11px] text-gray-500 mt-2">
+        * 수익률은 월별 수익률의 평균값 기준 / 후레쉬물류 제외 시 순수 수익
+      </p>
+    </div>
+  );
+}
+
 
 
 // ===================== DispatchApp.jsx (PART 6/8 — END) =====================
