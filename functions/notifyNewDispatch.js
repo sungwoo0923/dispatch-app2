@@ -8,16 +8,19 @@ const db = getFirestore();
 
 export const notifyNewDispatch = onDocumentCreated(
   {
-    document: "dispatch/{dispatchId}",
-    region: "asia-northeast3", // 서울 리전 권장
+    document: "{col}/{dispatchId}",
+    region: "asia-northeast3",
   },
   async (event) => {
-    const data = event.data?.data();
-    const dispatchId = event.params.dispatchId;
+    const { col, dispatchId } = event.params;
 
+    // ✅ dispatch / dispatch_test 둘 다 허용
+    if (!["dispatch", "dispatch_test"].includes(col)) return;
+
+    const data = event.data?.data();
     if (!data) return;
 
-    console.log("📦 신규 오더 생성 감지:", dispatchId);
+    console.log("📦 신규 오더 감지:", col, dispatchId);
 
     // 🔔 FCM 토큰 수집
     const tokenSnap = await db.collection("fcmTokens").get();

@@ -353,15 +353,12 @@ export default function MobileApp() {
   const [orders, setOrders] = useState([]);
   const [drivers, setDrivers] = useState([]);
   const [clients, setClients] = useState([]);
-  // 🔥 FCM Token 관리자만 저장
+// 🔥 모든 로그인 사용자 FCM 토큰 저장
 useEffect(() => {
-  const role = localStorage.getItem("role"); // 저장된 role 가져오기
-  if (role !== "admin") return; // 관리자가 아니면 스킵
-
   import("../firebase").then(({ saveFcmToken }) => {
     auth.onAuthStateChanged((user) => {
       if (user) {
-        saveFcmToken(user); // 🔥 FCM 토큰 저장
+        saveFcmToken(user);
       }
     });
   });
