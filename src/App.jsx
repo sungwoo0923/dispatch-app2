@@ -1,6 +1,6 @@
-// ======================= src/App.jsx (ROLE FIRESTORE VER - FINAL + SMARTPHONE FIX) =======================
+// ======================= src/App.jsx (FINAL + UPDATE BANNER ONCE FIX) =======================
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   BrowserRouter as Router,
   Routes,
@@ -24,7 +24,7 @@ import DriverRegister from "./driver/DriverRegister";
 // Common Screens
 import Login from "./Login";
 import Signup from "./Signup";
-import ShipperLogin from "./shipper/ShipperLogin"; // 🔥 화주 로그인
+import ShipperLogin from "./shipper/ShipperLogin";
 import ShipperSignup from "./shipper/ShipperSignup";
 import ShipperPending from "./shipper/ShipperPending";
 
@@ -59,9 +59,19 @@ export default function App() {
   const [approved, setApproved] = useState(false);
   const [updateReady, setUpdateReady] = useState(false);
 
-  // ======================= ServiceWorker =======================
+  // 🔒 업데이트 배너 1회만 표시하기 위한 락
+  const updateShownRef = useRef(false);
+
+  // ======================= UPDATE EVENT (ONCE) =======================
   useEffect(() => {
-    const onUpdate = () => setUpdateReady(true);
+    const onUpdate = () => {
+      // 이미 한 번 떴으면 무시
+      if (updateShownRef.current) return;
+
+      updateShownRef.current = true;
+      setUpdateReady(true);
+    };
+
     window.addEventListener("app-update-ready", onUpdate);
     return () => window.removeEventListener("app-update-ready", onUpdate);
   }, []);
@@ -79,14 +89,14 @@ export default function App() {
       setUser(u);
 
       const snap = await getDoc(doc(db, "users", u.uid));
-if (snap.exists()) {
-  const data = snap.data();
-  setRole(data.role);
-  setApproved(data.approved === true); // 🔥 핵심
-} else {
-  setRole(null);
-  setApproved(false);
-}
+      if (snap.exists()) {
+        const data = snap.data();
+        setRole(data.role);
+        setApproved(data.approved === true);
+      } else {
+        setRole(null);
+        setApproved(false);
+      }
 
       setLoading(false);
     });
@@ -102,26 +112,29 @@ if (snap.exists()) {
       </div>
     );
   }
-// 🔒 화주 승인 대기 차단 (approved 기반)
-if (user && role === "shipper" && approved === false) {
-  return <Navigate to="/shipper-pending" replace />;
-}
-  const isMobile = isSmartPhone();
 
-  const applyUpdate = async () => {
-    const reg = await navigator.serviceWorker.getRegistration();
-    if (reg?.waiting) {
-      reg.waiting.postMessage({ type: "SKIP_WAITING" });
-    }
-    window.location.reload();
-  };
+  // 🔒 화주 승인 대기
+  if (user && role === "shipper" && approved === false) {
+    return <Navigate to="/shipper-pending" replace />;
+  }
+
+  const isMobile = isSmartPhone();
 
   return (
     <>
+      {/* ======================= UPDATE BANNER (ONCE) ======================= */}
       {updateReady && (
         <div className="fixed bottom-6 right-6 bg-white shadow-xl border rounded-lg p-4 z-[9999] w-72">
-          <div className="font-bold mb-2">🔄 새 업데이트</div>
-          <button onClick={applyUpdate}>지금 업데이트</button>
+          <div className="font-bold mb-2">🔄 새 업데이트가 있습니다</div>
+          <div className="text-sm text-gray-600 mb-3">
+            최신 버전을 적용하려면 업데이트를 눌러주세요.
+          </div>
+          <button
+            className="w-full bg-black text-white py-2 rounded-md"
+            onClick={() => window.applyAppUpdate?.()}
+          >
+            지금 업데이트
+          </button>
         </div>
       )}
 
@@ -130,7 +143,7 @@ if (user && role === "shipper" && approved === false) {
           {/* 기본 */}
           <Route path="/" element={<Navigate to="/login" replace />} />
 
-          {/* 직원 로그인 */}
+          {/* 로그인 */}
           <Route
             path="/login"
             element={
@@ -146,18 +159,17 @@ if (user && role === "shipper" && approved === false) {
 
           <Route path="/signup" element={<Signup />} />
 
-<Route
-  path="/shipper-login"
-  element={
-    user && role === "shipper"
-      ? <Navigate to="/shipper" replace />
-      : <ShipperLogin />
-  }
-/>
-
-<Route path="/shipper-signup" element={<ShipperSignup />} />
-<Route path="/shipper-pending" element={<ShipperPending />} />
-
+          {/* 화주 */}
+          <Route
+            path="/shipper-login"
+            element={
+              user && role === "shipper"
+                ? <Navigate to="/shipper" replace />
+                : <ShipperLogin />
+            }
+          />
+          <Route path="/shipper-signup" element={<ShipperSignup />} />
+          <Route path="/shipper-pending" element={<ShipperPending />} />
 
           {/* 기사 */}
           <Route
@@ -168,7 +180,6 @@ if (user && role === "shipper" && approved === false) {
                 : <DriverLogin />
             }
           />
-
           <Route
             path="/driver-register"
             element={
@@ -177,23 +188,12 @@ if (user && role === "shipper" && approved === false) {
                 : <DriverRegister />
             }
           />
-
           <Route
             path="/driver-home"
             element={
               user && role === "driver"
                 ? <DriverHome />
                 : <Navigate to="/driver-login" replace />
-            }
-          />
-
-          {/* 화주 */}
-          <Route
-            path="/shipper"
-            element={
-              user && role === "shipper"
-                ? <ShipperApp />
-                : <Navigate to="/shipper-login" replace />
             }
           />
 

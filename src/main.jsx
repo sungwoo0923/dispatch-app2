@@ -1,5 +1,4 @@
-// ===================== src/main.jsx =====================
-
+// ===================== src/main.jsx (FINAL - TEST SERVER OK) =====================
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App.jsx";
@@ -11,62 +10,53 @@ ReactDOM.createRoot(document.getElementById("root")).render(
   </React.StrictMode>
 );
 
-// ★ 클라이언트 버전 (sw.js 와 반드시 맞출 것)
-const CLIENT_VERSION = "2025-02-10-06";
+// ======================================================
+// ✅ localhost만 개발 환경으로 취급
+// ======================================================
+const isLocalhost =
+  location.hostname === "localhost" ||
+  location.hostname === "127.0.0.1";
 
-if ("serviceWorker" in navigator) {
+if ("serviceWorker" in navigator && !isLocalhost) {
   window.addEventListener("load", async () => {
     try {
       const reg = await navigator.serviceWorker.register("/sw.js");
-      console.log("[APP] SW registered", reg);
+      console.log("[APP] SW registered");
 
-      let updateNotified = false;
+      // 🔎 새 Service Worker 감지
+      reg.addEventListener("updatefound", () => {
+        const newWorker = reg.installing;
+        if (!newWorker) return;
 
-      // 🔎 버전 체크 함수
-      const checkVersion = () => {
-        if (reg.active) {
-          reg.active.postMessage({
-            type: "CHECK_VERSION",
-            version: CLIENT_VERSION,
-          });
-        }
-      };
-
-      // 최초 로드 후 체크
-      setTimeout(checkVersion, 500);
-
-      // SW → APP 메시지 수신
-      navigator.serviceWorker.addEventListener("message", (event) => {
-        const type = event.data?.type;
-
-        // ✅ 업데이트 가능 알림
-        if (type === "UPDATE_AVAILABLE" && !updateNotified) {
-          updateNotified = true;
-
-          console.log("[APP] Update available");
-
-          // 👉 여기서 UI 알림 띄우면 됨
-          // 예: 토스트 / 모달
-          window.dispatchEvent(new Event("app-update-ready"));
-        }
-
-        // ✅ 업데이트 적용 완료 → 새로고침
-        if (type === "UPDATE_APPLIED") {
-          console.log("[APP] Update applied → reload");
-          window.location.reload();
-        }
+        newWorker.addEventListener("statechange", () => {
+          if (
+            newWorker.state === "installed" &&
+            navigator.serviceWorker.controller
+          ) {
+            console.log("[APP] Update available");
+            window.dispatchEvent(new Event("app-update-ready"));
+          }
+        });
       });
 
-      // 🔄 사용자가 "업데이트" 버튼 눌렀을 때 호출할 함수
-      window.applyAppUpdate = async () => {
+      // 🔄 업데이트 적용 (배너 버튼에서 호출)
+      window.applyAppUpdate = () => {
         if (reg.waiting) {
+          console.log("[APP] Applying update");
           reg.waiting.postMessage({ type: "APPLY_UPDATE" });
-        } else if (reg.active) {
-          reg.active.postMessage({ type: "APPLY_UPDATE" });
         }
       };
+
+      // ✅ 업데이트 적용 완료 시 1회 새로고침
+      navigator.serviceWorker.addEventListener("controllerchange", () => {
+        console.log("[APP] Controller changed → reload");
+        window.location.reload();
+      });
     } catch (err) {
       console.warn("[APP] SW registration failed", err);
     }
   });
+} else {
+  console.log("[APP] Localhost → SW update logic disabled");
 }
+// ===================== END =====================
