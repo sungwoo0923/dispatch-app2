@@ -11136,16 +11136,23 @@ data.sort((a, b) => {
   if (a.배차상태 === "배차중" && b.배차상태 !== "배차중") return -1;
   if (a.배차상태 !== "배차중" && b.배차상태 === "배차중") return 1;
 
-  // 2️⃣ 상차일 최신순
-  const ad = a.상차일 || "";
-  const bd = b.상차일 || "";
+  // 2️⃣ 상차일 최신순 (문자열 강제)
+  const ad = String(a.상차일 ?? "");
+  const bd = String(b.상차일 ?? "");
   if (ad !== bd) return bd.localeCompare(ad);
 
-  // 3️⃣ 동일 상차일이면 마지막 수정 최신순
-  const au = a.lastUpdated || a.등록일 || "";
-  const bu = b.lastUpdated || b.등록일 || "";
-  return bu.localeCompare(au);
+  // 3️⃣ 마지막 수정일 최신순 (Date / Timestamp 대응)
+  const toTime = (v) => {
+    if (!v) return 0;
+    if (typeof v === "string") return Date.parse(v) || 0;
+    if (v instanceof Date) return v.getTime();
+    if (typeof v.toDate === "function") return v.toDate().getTime(); // Firestore Timestamp
+    return 0;
+  };
+
+  return toTime(b.lastUpdated || b.등록일) - toTime(a.lastUpdated || a.등록일);
 });
+
 
     return data;
   }, [dispatchData, q, startDate, endDate]);
