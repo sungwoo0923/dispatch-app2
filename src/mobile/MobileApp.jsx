@@ -530,7 +530,7 @@ useEffect(() => {
   // --------------------------------------------------
   const [onlyToday, setOnlyToday] = useState(false);
   const [page, setPage] = useState("list"); // list | form | detail | fare | status | unassigned
-  // 🆕 공지 NEW 판단
+  // 🆕 공지 NEW 판단 (데이터 기준)
 useEffect(() => {
   if (!notices.length) {
     setHasNewNotice(false);
@@ -542,11 +542,17 @@ useEffect(() => {
   );
 
   const latest = Math.max(
-    ...notices.map(n => n.createdAt?.seconds || 0)
+    ...notices.map(n =>
+      n.createdAt?.seconds ||
+      n.updatedAt?.seconds ||
+      0
+    )
   );
 
   setHasNewNotice(latest > lastRead);
 }, [notices]);
+
+
 
 // 🆕 일정 NEW 판단
 useEffect(() => {
@@ -560,26 +566,17 @@ useEffect(() => {
   );
 
   const latest = Math.max(
-    ...schedules.map(s => s.createdAt?.seconds || 0)
+    ...schedules.map(s =>
+      s.createdAt?.seconds ||
+      s.updatedAt?.seconds ||
+      (s.start ? Math.floor(new Date(s.start).getTime() / 1000) : 0)
+    )
   );
 
   setHasNewSchedule(latest > lastRead);
 }, [schedules]);
 
-// 👀 공지 / 일정 진입 시 NEW 제거
-useEffect(() => {
-  const now = Math.floor(Date.now() / 1000);
 
-  if (page === "notice") {
-    localStorage.setItem("lastReadNoticeAt", now);
-    setHasNewNotice(false);
-  }
-
-  if (page === "schedule") {
-    localStorage.setItem("lastReadScheduleAt", now);
-    setHasNewSchedule(false);
-  }
-}, [page]);
 
   const [selectedOrder, setSelectedOrder] = useState(null);
   // 🔙 상세보기 진입 출처 (list | unassigned | status)
@@ -1238,13 +1235,44 @@ const title =
 }}
 // ⭐⭐⭐ 여기 추가
     onGoNotice={() => {
-      setPage("notice");
-      setShowMenu(false);
-    }}
-      onGoSchedule={() => {
-    setPage("schedule");
-    setShowMenu(false);
-  }}
+  if (notices.length) {
+    const latest = Math.max(
+      ...notices.map(n =>
+        n.createdAt?.seconds ||
+        n.updatedAt?.seconds ||
+        0
+      )
+    );
+
+    if (latest > 0) {
+      localStorage.setItem("lastReadNoticeAt", latest);
+    }
+  }
+
+  setHasNewNotice(false);
+  setPage("notice");
+  setShowMenu(false);
+}}
+
+onGoSchedule={() => {
+  if (schedules.length) {
+    const latest = Math.max(
+      ...schedules.map(s =>
+        s.createdAt?.seconds ||
+        s.updatedAt?.seconds ||
+        (s.start ? Math.floor(new Date(s.start).getTime() / 1000) : 0)
+      )
+    );
+
+    if (latest > 0) {
+      localStorage.setItem("lastReadScheduleAt", latest);
+    }
+  }
+
+  setHasNewSchedule(false);
+  setPage("schedule");
+  setShowMenu(false);
+}}
 
 
           onGoFare={() => {

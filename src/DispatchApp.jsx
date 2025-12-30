@@ -10453,7 +10453,11 @@ const getYoil = (dateStr) => {
   const date = new Date(dateStr);
   return ["일","월","화","수","목","금","토"][date.getDay()];
 };
-
+// 📦 화물내용에서 파렛트 수 추출 (운임조회용)
+const getPalletCount = (text = "") => {
+  const m = String(text).match(/(\d+)\s*파렛/);
+  return m ? Number(m[1]) : null;
+};
 const formatPhone = (phone) => {
   const digits = String(phone ?? "").replace(/\D/g, "");
 
@@ -10539,27 +10543,41 @@ ${fare.toLocaleString()}원 ${payLabel} 배차되었습니다.`;
 const handleFareSearch = () => {
   if (!editTarget) return;
 
-  const records = dispatchData.filter(
-    (r) =>
-      String(r.상차지명 || "").includes(editTarget.상차지명 || "") &&
-      String(r.하차지명 || "").includes(editTarget.하차지명 || "") &&
-      String(r.차량톤수 || "") === String(editTarget.차량톤수 || "")
-  );
+  const targetPallet = getPalletCount(editTarget.화물내용);
 
-  const count = records.length;
-  if (!count) {
+  const records = dispatchData.filter((r) => {
+    const pallet = getPalletCount(r.화물내용);
+
+    // 📦 파렛트 화물일 때만 파렛트 기준 적용
+    if (targetPallet !== null) {
+      return (
+        String(r.상차지명 || "").includes(editTarget.상차지명 || "") &&
+        String(r.하차지명 || "").includes(editTarget.하차지명 || "") &&
+        pallet === targetPallet
+      );
+    }
+
+    // 📦 파렛트가 아닌 화물(박스 등)은 상/하차지만 비교
+    return (
+      String(r.상차지명 || "").includes(editTarget.상차지명 || "") &&
+      String(r.하차지명 || "").includes(editTarget.하차지명 || "")
+    );
+  });
+
+  if (!records.length) {
     alert("📭 유사 운임 데이터가 없습니다.");
     return;
   }
 
   const vals = records.map((r) => Number(r.청구운임 || 0));
-  const avg = Math.round(vals.reduce((a, b) => a + b) / count);
+  const avg = Math.round(vals.reduce((a, b) => a + b) / vals.length);
   const min = Math.min(...vals);
   const max = Math.max(...vals);
 
-  setFareResult({ count, avg, min, max, records });
+  setFareResult({ count: records.length, avg, min, max, records });
   setFareModalOpen(true);
 };
+
 
 
   // ⭐ 화면 진입 시 이번 달 자동 설정
@@ -10618,7 +10636,6 @@ const handleFareSearch = () => {
     메모: "",
     혼적: false,
     독차: false,
-    긴급: false,
   });
 
   const toInt = (v) => parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10) || 0;
@@ -10756,41 +10773,64 @@ const handleBulkFile = (e) => {
       return { ...prev, [getId(row)]: cur };
     });
 
-  // ======================= 차량번호 입력 처리 =======================
+  // ======================= 차량번호 입력 처리 (최종 안정판) =======================
 const handleCarInput = async (id, rawVal) => {
   const v = (rawVal || "").trim();
-  const idx = dispatchData.findIndex((r) => r._id === id);
+
+  // 현재 row 찾기
+  const idx = dispatchData.findIndex((r) => getId(r) === id);
   if (idx === -1) return;
   const row = dispatchData[idx];
 
- // 🚨 차량번호 지웠을 때 — 기사정보도 모두 초기화!
- if (!v) {
-   setDriverConfirmInfo(null); // 팝업 강제 종료
-   await patchDispatch(id, {
-     차량번호: "",
-     이름: "",
-     전화번호: "",
-     배차상태: "배차중",
-   });
-   return;
- }
+  // =====================================================
+  // 1️⃣ 차량번호를 "완전히 삭제"했을 때
+  // =====================================================
+  if (!v) {
+    // 🔥 팝업 전부 강제 종료
+    setDriverConfirmInfo(null);
+    setDriverSelectInfo(null);
 
+    // 🔥 기사 정보 완전 초기화
+    await patchDispatch(id, {
+      차량번호: "",
+      이름: "",
+      전화번호: "",
+      배차상태: "배차중",
+      긴급: row.긴급 === true, // 긴급 플래그 유지
+      lastUpdated: new Date().toISOString(),
+    });
+
+    return;
+  }
+
+  // 공백 제거한 차량번호 (비교용)
+  const clean = v.replace(/\s+/g, "");
+
+  // =====================================================
+  // 2️⃣ 동일 차량번호 기사 검색
+  // =====================================================
   const matches = drivers.filter(
-    (d) => (d.차량번호 || "").trim() === v
+    (d) =>
+      String(d.차량번호 || "")
+        .replace(/\s+/g, "") === clean
   );
 
+  // =====================================================
+  // 3️⃣ 기사 여러 명 → 기사 선택 팝업
+  // =====================================================
+  if (matches.length > 1) {
+    setDriverSelectInfo({
+      rowId: id,
+      plate: v,
+      list: matches,
+      selectedDriver: null,
+    });
+    return;
+  }
 
-if (matches.length > 1) {
-  setDriverSelectInfo({
-    rowId: id,
-    plate: v,
-    list: matches,
-    selectedDriver: null,
-  });
-  return;
-}
-
-
+  // =====================================================
+  // 4️⃣ 기사 1명 → 기사 확인 팝업
+  // =====================================================
   if (matches.length === 1) {
     setDriverConfirmInfo({
       type: "select",
@@ -10800,12 +10840,16 @@ if (matches.length > 1) {
     return;
   }
 
+  // =====================================================
+  // 5️⃣ 기사 없음 → 신규 기사 등록 유도 팝업
+  // =====================================================
   setDriverConfirmInfo({
     type: "new",
     rowId: id,
     plate: v,
   });
 };
+
 
 
   const _patch =
@@ -11117,16 +11161,21 @@ data.sort((a, b) => {
   if (a.배차상태 === "배차중" && b.배차상태 !== "배차중") return -1;
   if (a.배차상태 !== "배차중" && b.배차상태 === "배차중") return 1;
 
-  // 2️⃣ 배차중끼리는 긴급 우선
-  if (a.배차상태 === "배차중" && b.배차상태 === "배차중") {
-    if (a.긴급 && !b.긴급) return -1;
-    if (!a.긴급 && b.긴급) return 1;
-  }
+  // 2️⃣ 상차일 최신순 (문자열 강제)
+  const ad = String(a.상차일 ?? "");
+  const bd = String(b.상차일 ?? "");
+  if (ad !== bd) return bd.localeCompare(ad);
 
-  // 3️⃣ 배차완료는 최근 완료 순
-  const au = a.lastUpdated || a.등록일 || "";
-  const bu = b.lastUpdated || b.등록일 || "";
-  return bu.localeCompare(au);
+  // 3️⃣ 마지막 수정일 최신순 (Date / Timestamp 대응)
+  const toTime = (v) => {
+    if (!v) return 0;
+    if (typeof v === "string") return Date.parse(v) || 0;
+    if (v instanceof Date) return v.getTime();
+    if (typeof v.toDate === "function") return v.toDate().getTime(); // Firestore Timestamp
+    return 0;
+  };
+
+  return toTime(b.lastUpdated || b.등록일) - toTime(a.lastUpdated || a.등록일);
 });
 
 
@@ -11451,6 +11500,7 @@ return (
                 "거래처명","상차지명","상차지주소","하차지명","하차지주소",
                 "화물내용","차량종류","차량톤수","혼적","차량번호","기사명","전화번호",
                 "배차상태","청구운임","기사운임","수수료","지급방식","배차방식","메모",
+              
               ].map((h) => (
                 <th key={h} className="border px-2 py-2 text-center whitespace-nowrap">
                   {h === "선택" ? (
@@ -11479,21 +11529,24 @@ return (
               ];
 
               return (
- <tr
+               <tr
   id={`row-${id}`}
-  key={id}
   className={`
     ${
-      row.긴급 && row.배차상태 === "배차중"
-        ? "bg-red-50 border-l-4 border-red-500"
+      r.긴급 === true && row.배차상태 === "배차중"
+        ? "bg-red-50 border-l-4 border-red-400"
         : i % 2 === 0
-          ? "bg-white"
-          : "bg-gray-50"
+        ? "bg-white"
+        : "bg-gray-50"
     }
+
     ${selected.has(id) ? "bg-yellow-200 border-2 border-yellow-500" : ""}
     ${savedHighlightIds.has(id) ? "row-highlight" : ""}
   `}
 >
+
+
+
 
                   <td className="border text-center">
                     <input type="checkbox" checked={selected.has(id)} onChange={() => toggleOne(id)} />
@@ -11532,14 +11585,34 @@ return (
 <td className="border text-center">
   {row.혼적 ? "Y" : ""}
 </td>
+
+
                   {/* 차량번호(항상 활성화) */}
                   <td className="border text-center whitespace-nowrap w-[120px] max-w-[120px]">
-  <input
+ <input
   className="border rounded px-1 py-0.5 text-center w-[118px]"
-  defaultValue={row.차량번호 || ""}
-  onKeyDown={(e) => e.key === "Enter" && handleCarInput(id, e.target.value)}
-  onBlur={(e) => handleCarInput(id, e.target.value)}
+  value={row.차량번호 || ""}
+  onChange={(e) => {
+    const v = e.target.value;
+    // 화면 값만 변경 (저장은 아직 X)
+    setEdited(prev => ({
+      ...prev,
+      [id]: {
+        ...(prev[id] || {}),
+        차량번호: v,
+      }
+    }));
+  }}
+  onKeyDown={(e) => {
+    if (e.key === "Enter") {
+      handleCarInput(id, row.차량번호);
+    }
+  }}
+  onBlur={() => {
+    handleCarInput(id, row.차량번호);
+  }}
 />
+
 
                   </td>
 
@@ -11549,13 +11622,25 @@ return (
                   <td className="border text-center">
   <div className="flex items-center justify-center gap-1">
     <StatusBadge s={row.배차상태} />
-   {row.긴급 && row.배차상태 === "배차중" && (
-  <span className="text-xs px-1.5 py-0.5 rounded bg-red-600 text-white font-bold">
-    긴급
-  </span>
-)}
+
+    {/* 🚨 긴급 (PART 4와 동일한 스타일 + 느린 깜빡임) */}
+    {row.긴급 && row.배차상태 === "배차중" && (
+      <span
+        className="
+          px-2 py-0.5 rounded-full
+          text-[10px] font-bold
+          bg-red-600 text-white
+          animate-pulse
+        "
+        style={{ animationDuration: "2.5s" }}
+      >
+        긴급
+      </span>
+    )}
   </div>
 </td>
+
+
 
                   {/* 금액 */}
                   {["청구운임","기사운임"].map((key) => (
@@ -11672,11 +11757,11 @@ return (
     {/* ===================== 선택 수정 팝업 본체 ===================== */}
     <div className="bg-white p-5 rounded shadow-xl w-[480px] max-h-[90vh] overflow-y-auto">
       <h3 className="text-lg font-bold mb-4">선택한 오더 수정</h3>
-{/* 🚨 긴급 오더 */}
-<div className="mb-4 flex items-center gap-2">
+      {/* 🚨 긴급 오더 (상단 고정) */}
+<div className="flex items-center gap-2 mb-4">
   <input
     type="checkbox"
-    checked={!!editTarget.긴급}
+    checked={editTarget.긴급 === true}
     onChange={(e) =>
       setEditTarget((p) => ({
         ...p,
@@ -11688,6 +11773,8 @@ return (
     🚨 긴급 오더
   </span>
 </div>
+
+
       {/* ------------------------------------------------ */}
       {/* 🔵 거래처명 */}
       {/* ------------------------------------------------ */}
@@ -12031,6 +12118,7 @@ return (
         />
       </div>
 
+
       {/* 🔵 차량정보 */}
 <div className="grid grid-cols-2 gap-3 mb-3">
   <div>
@@ -12320,11 +12408,36 @@ return (
   className="px-3 py-1 rounded bg-blue-600 text-white"
   onClick={async () => {
     // 1) Firestore 저장
-    await patchDispatch(editTarget._id, {
-  ...editTarget,
-  ...(editTarget.배차상태 === "배차완료" && { 긴급: false }),
-  lastUpdated: new Date().toISOString(),
-});
+    const ALLOWED_FIELDS = [
+  "등록일",
+  "상차일","상차시간",
+  "하차일","하차시간",
+  "거래처명",
+  "상차지명","상차지주소",
+  "하차지명","하차지주소",
+  "화물내용",
+  "차량종류","차량톤수",
+  "차량번호","이름","전화번호",
+  "청구운임","기사운임",
+  "지급방식","배차방식",
+  "메모",
+  "혼적","독차",
+  "긴급",          // 🔥 여기
+  "운임보정",
+  "배차상태",
+];
+
+const payload = Object.fromEntries(
+  ALLOWED_FIELDS
+    .map((k) => [k, editTarget[k]])
+    .filter(([_, v]) => v !== undefined)
+);
+if (payload.배차상태 === "배차중") {
+  delete payload.차량번호;
+  delete payload.이름;
+  delete payload.전화번호;
+}
+await patchDispatch(editTarget._id, payload);
 
 
     // 2) 방금 저장한 행을 반짝이게
@@ -12644,7 +12757,6 @@ setTimeout(() => {
       이름: d.이름,
       전화번호: d.전화번호,
       배차상태: "배차완료",
-      긴급: false,
       lastUpdated: new Date().toISOString(),
     });
 
@@ -12957,6 +13069,7 @@ function NewOrderPopup({
         차량번호: "",
         이름: "",
         전화번호: "",
+        긴급: false, // ⭐ 이거 꼭
       });
 
       alert("신규 오더가 등록되었습니다.");
