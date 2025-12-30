@@ -5,14 +5,21 @@ import { VitePWA } from "vite-plugin-pwa";
 export default defineConfig({
   plugins: [
     react(),
+
+    // ✅ PWA는 유지하되, Service Worker는 직접 관리
     VitePWA({
-      registerType: "autoUpdate",
-      injectRegister: "auto",
-      // Firebase FCM 서비스워커 포함
+      // ❌ 자동 등록 완전 차단
+      registerType: "prompt",
+      injectRegister: false,
+
+      // ❌ Workbox가 SW 생성하지 않게
+      strategies: "injectManifest",
       srcDir: "public",
-      filename: "firebase-messaging-sw.js",
-      workbox: {
-        maximumFileSizeToCacheInBytes: 10 * 1024 * 1024, // 🔥 10MB까지 허용
+      filename: "sw.js",
+
+      // ❌ 개발 서버에서 PWA SW 생성 금지
+      devOptions: {
+        enabled: false,
       },
 
       includeAssets: [
@@ -21,6 +28,7 @@ export default defineConfig({
         "icons/icon-512x512.png",
         "icons/icon-512x512-maskable.png",
       ],
+
       manifest: {
         name: "RUN25(S.W) 배차시스템",
         short_name: "RUN25",
@@ -49,12 +57,6 @@ export default defineConfig({
           },
         ],
       },
-
-      // ⭐ 개발 시에도 PWA 활성화 (필수)
-      devOptions: {
-        enabled: true,
-        type: "module",
-      },
     }),
   ],
 
@@ -62,7 +64,6 @@ export default defineConfig({
     host: true,
     historyApiFallback: true,
 
-    // ⭐⭐ 오피넷 Proxy 설정 추가 ⭐⭐
     proxy: {
       "/api/fuel": {
         target: "https://www.opinet.co.kr",
@@ -78,7 +79,6 @@ export default defineConfig({
     outDir: "dist",
   },
 
-  // ⭐️ 배포 버전 / 빌드 시간 자동 주입 ⭐️ (App.jsx에서 사용)
   define: {
     __APP_VERSION__: JSON.stringify(
       process.env.VERCEL_GIT_COMMIT_SHA || "local"
