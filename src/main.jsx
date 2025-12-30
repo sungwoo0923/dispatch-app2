@@ -1,4 +1,4 @@
-// ===================== src/main.jsx (FINAL - TEST SERVER OK) =====================
+// ===================== src/main.jsx (FINAL - DEV SAFE) =====================
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App.jsx";
@@ -11,17 +11,17 @@ ReactDOM.createRoot(document.getElementById("root")).render(
 );
 
 // ======================================================
-// ✅ localhost만 개발 환경으로 취급
+// 🚫 개발 환경에서는 Service Worker 업데이트 로직 차단
 // ======================================================
-const isLocalhost =
+const isDev =
   location.hostname === "localhost" ||
   location.hostname === "127.0.0.1";
 
-if ("serviceWorker" in navigator && !isLocalhost) {
+if ("serviceWorker" in navigator && !isDev) {
   window.addEventListener("load", async () => {
     try {
       const reg = await navigator.serviceWorker.register("/sw.js");
-      console.log("[APP] SW registered");
+      console.log("[APP] SW registered (prod)");
 
       // 🔎 새 Service Worker 감지
       reg.addEventListener("updatefound", () => {
@@ -39,7 +39,7 @@ if ("serviceWorker" in navigator && !isLocalhost) {
         });
       });
 
-      // 🔄 업데이트 적용 (배너 버튼에서 호출)
+      // 🔄 업데이트 적용 (App.jsx에서 호출)
       window.applyAppUpdate = () => {
         if (reg.waiting) {
           console.log("[APP] Applying update");
@@ -47,7 +47,7 @@ if ("serviceWorker" in navigator && !isLocalhost) {
         }
       };
 
-      // ✅ 업데이트 적용 완료 시 1회 새로고침
+      // ✅ 업데이트 적용 완료 시 단 1회 새로고침
       navigator.serviceWorker.addEventListener("controllerchange", () => {
         console.log("[APP] Controller changed → reload");
         window.location.reload();
@@ -57,6 +57,6 @@ if ("serviceWorker" in navigator && !isLocalhost) {
     }
   });
 } else {
-  console.log("[APP] Localhost → SW update logic disabled");
+  console.log("[APP] Dev mode → Service Worker update logic disabled");
 }
 // ===================== END =====================

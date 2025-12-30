@@ -372,6 +372,42 @@ function formatPhone(phone) {
 
   return p;
 }
+// ===================== TOAST SYSTEM (GLOBAL) =====================
+const ToastContext = React.createContext(null);
+
+function ToastProvider({ children }) {
+  const [toasts, setToasts] = React.useState([]);
+
+  const showToast = (message, type = "success") => {
+    const id = crypto.randomUUID();
+    setToasts((prev) => [...prev, { id, message, type }]);
+
+    setTimeout(() => {
+      setToasts((prev) => prev.filter(t => t.id !== id));
+    }, 3000);
+  };
+
+  return (
+    <ToastContext.Provider value={{ showToast }}>
+      {children}
+
+      {/* 오른쪽 하단 배너 알림 */}
+      <div className="fixed bottom-6 right-6 z-[9999] space-y-2">
+        {toasts.map(t => (
+          <div
+            key={t.id}
+            className="bg-slate-800 text-white px-4 py-3 rounded-lg shadow-lg text-sm"
+          >
+            {t.message}
+          </div>
+        ))}
+      </div>
+    </ToastContext.Provider>
+  );
+}
+
+const useToast = () => React.useContext(ToastContext);
+// ===================== TOAST SYSTEM END =====================
 
 export {
   COMPANY, VEHICLE_TYPES, PAY_TYPES, DISPATCH_TYPES,
@@ -770,6 +806,7 @@ const filtered = items.filter((i) => {
 // 📅 휴가 / 외근 일정 (공지사항 UX 동일)
 // ===================================================
 function ScheduleBoard({ user }) {
+  const { showToast } = useToast();
   const TYPE_COLOR = {
   휴가: "bg-blue-100 text-blue-700",
   병가: "bg-red-100 text-red-700",
@@ -840,8 +877,9 @@ useEffect(() => {
       });
     }
 
-    closeForm();
-  };
+closeForm();
+  showToast(`${type} 일정이 등록되었습니다`);
+};
 
   const remove = async (id) => {
     if (!confirm("삭제하시겠습니까?")) return;
@@ -1044,6 +1082,7 @@ useEffect(() => {
 // 📢 공지사항
 // ===================================================
 function NoticeBoard({ user, role }) {
+  const { showToast } = useToast();
   const [selected, setSelected] = useState(null);
   const [list, setList] = useState([]);
   const [open, setOpen] = useState(false);
@@ -1091,8 +1130,8 @@ const save = async () => {
   setEditing(null);
   setTitle("");
   setContent("");
+showToast("공지사항이 등록되었습니다");
 };
-
 
   const remove = (id) => deleteDoc(doc(db, "notices", id));
   // ⭐⭐⭐ 여기 추가 ⭐⭐⭐
@@ -1253,7 +1292,7 @@ const save = async () => {
 // 📝 인수인계 (공지사항 UX 동일)
 // ===================================================
 function HandoverBoard({ user }) {
-  
+  const { showToast } = useToast();
   const [admins, setAdmins] = useState([]);
 const [toAdmin, setToAdmin] = useState("");
   const today = todayStr();
@@ -1342,7 +1381,8 @@ else {
 
     await setDoc(ref, { items: next }, { merge: true });
     closeForm();
-  };
+   showToast("인수인계가 등록되었습니다");
+};
 
   // =========================
   // 삭제
@@ -1962,9 +2002,8 @@ if (!user) {
   );
 }
   // ---------------- 메뉴 UI ----------------
-return (
-  <>
-
+  return (
+    <ToastProvider>
     <header className="sticky top-0 z-50 bg-white shadow-md rounded-b-xl px-6 py-4 mb-6 flex items-center justify-between">
 
   {/* 좌측 서비스명 */}
@@ -2003,6 +2042,7 @@ return (
   </div>
 </header>
 
+ 
 <nav className="w-full bg-white shadow-sm border-b border-gray-200 px-4 py-2 mb-5">
   <div className="flex gap-4 overflow-x-auto whitespace-nowrap">
 
@@ -2289,12 +2329,10 @@ return (
 
     </div>
   </div>
-)}
-
-</>
-);
+  )}
+  </ToastProvider>
+  );
 }
-
 // ===================== DispatchApp.jsx (PART 2/8) — END =====================
 // ===================== DispatchApp.jsx (PART 3/8) — START =====================
   function DispatchManagement({
@@ -12340,7 +12378,9 @@ return (
 ];
 
 const payload = Object.fromEntries(
-  ALLOWED_FIELDS.map((k) => [k, editTarget[k]])
+  ALLOWED_FIELDS
+    .map((k) => [k, editTarget[k]])
+    .filter(([_, v]) => v !== undefined)
 );
 
 await patchDispatch(editTarget._id, payload);
@@ -12975,6 +13015,7 @@ function NewOrderPopup({
         차량번호: "",
         이름: "",
         전화번호: "",
+        긴급: false, // ⭐ 이거 꼭
       });
 
       alert("신규 오더가 등록되었습니다.");
