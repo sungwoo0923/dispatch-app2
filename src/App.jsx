@@ -130,11 +130,20 @@ export default function App() {
             최신 버전을 적용하려면 업데이트를 눌러주세요.
           </div>
           <button
-            className="w-full bg-black text-white py-2 rounded-md"
-            onClick={() => window.applyAppUpdate?.()}
-          >
-            지금 업데이트
-          </button>
+  className="w-full bg-black text-white py-2 rounded-md"
+  onClick={() => {
+    // 🔥 UI 즉시 종료
+    setUpdateReady(false);
+
+    // 혹시 모를 중복 클릭 방지
+    if (window.__APPLYING_UPDATE__) return;
+    window.__APPLYING_UPDATE__ = true;
+
+    window.applyAppUpdate?.();
+  }}
+>
+  지금 업데이트
+</button>
         </div>
       )}
 
