@@ -307,8 +307,12 @@ const normalizePhone = (p = "") =>
 // ======================================================================
 
 export default function MobileApp() {
-
-
+// 🔔 공지 / 일정 (PC 연동)
+const [notices, setNotices] = useState([]);
+const [schedules, setSchedules] = useState([]);
+// 🆕 NEW 뱃지 상태
+const [hasNewNotice, setHasNewNotice] = useState(false);
+const [hasNewSchedule, setHasNewSchedule] = useState(false);
   // -------------------------------------------------------------
   // 🔥 추가: 빠른 날짜 선택 (1/3/7/15일 버튼)
   // -------------------------------------------------------------
@@ -351,6 +355,7 @@ export default function MobileApp() {
   // 1. Firestore 실시간 연동 (🔥 전체 데이터 — PC와 동일)
   // --------------------------------------------------
   const [orders, setOrders] = useState([]);
+  
   const [drivers, setDrivers] = useState([]);
   const [clients, setClients] = useState([]);
 // 🔥 모든 로그인 사용자 FCM 토큰 저장
@@ -392,6 +397,46 @@ useEffect(() => {
     });
     return () => unsub();
   }, []);
+  // --------------------------------------------------
+// 🔔 PC 공지사항 실시간 구독 (이 위치!)
+// --------------------------------------------------
+useEffect(() => {
+  const unsub = onSnapshot(
+    collection(db, "notices"),   // ⚠️ PC에서 쓰는 컬렉션명
+    
+    (snap) => {
+      const list = snap.docs.map(d => ({
+        id: d.id,
+        ...d.data(),
+      }));
+      list.sort(
+        (a, b) =>
+          (b.createdAt?.seconds || 0) -
+          (a.createdAt?.seconds || 0)
+      );
+      setNotices(list);
+    }
+  );
+  return () => unsub();
+}, []);
+
+// --------------------------------------------------
+// 📅 PC 일정 실시간 구독 (이 위치!)
+// --------------------------------------------------
+useEffect(() => {
+  const unsub = onSnapshot(
+    collection(db, "schedules"), // ⚠️ PC에서 쓰는 컬렉션명
+    (snap) => {
+      const list = snap.docs.map(d => ({
+        id: d.id,
+        ...d.data(),
+      }));
+      setSchedules(list);
+    }
+  );
+  return () => unsub();
+}, []);
+
   // 🔔 상차 임박 2시간 이내 감지
   useEffect(() => {
     if (!orders.length) return;
@@ -485,6 +530,57 @@ useEffect(() => {
   // --------------------------------------------------
   const [onlyToday, setOnlyToday] = useState(false);
   const [page, setPage] = useState("list"); // list | form | detail | fare | status | unassigned
+  // 🆕 공지 NEW 판단
+useEffect(() => {
+  if (!notices.length) {
+    setHasNewNotice(false);
+    return;
+  }
+
+  const lastRead = Number(
+    localStorage.getItem("lastReadNoticeAt") || 0
+  );
+
+  const latest = Math.max(
+    ...notices.map(n => n.createdAt?.seconds || 0)
+  );
+
+  setHasNewNotice(latest > lastRead);
+}, [notices]);
+
+// 🆕 일정 NEW 판단
+useEffect(() => {
+  if (!schedules.length) {
+    setHasNewSchedule(false);
+    return;
+  }
+
+  const lastRead = Number(
+    localStorage.getItem("lastReadScheduleAt") || 0
+  );
+
+  const latest = Math.max(
+    ...schedules.map(s => s.createdAt?.seconds || 0)
+  );
+
+  setHasNewSchedule(latest > lastRead);
+}, [schedules]);
+
+// 👀 공지 / 일정 진입 시 NEW 제거
+useEffect(() => {
+  const now = Math.floor(Date.now() / 1000);
+
+  if (page === "notice") {
+    localStorage.setItem("lastReadNoticeAt", now);
+    setHasNewNotice(false);
+  }
+
+  if (page === "schedule") {
+    localStorage.setItem("lastReadScheduleAt", now);
+    setHasNewSchedule(false);
+  }
+}, [page]);
+
   const [selectedOrder, setSelectedOrder] = useState(null);
   // 🔙 상세보기 진입 출처 (list | unassigned | status)
 const [detailFrom, setDetailFrom] = useState(null);
@@ -532,6 +628,7 @@ const [unassignedTypeFilter, setUnassignedTypeFilter] = useState("전체");
     전화번호: "",
     혼적여부: "독차",
     적요: "",
+
     _editId: null,
     _returnToDetail: false,
   });
@@ -1027,21 +1124,15 @@ const handleOrderDuplicate = (order) => {
   };
 
 
-  const title =
-    page === "list"
-      ? "등록내역"
-      : page === "form"
-        ? form._editId
-          ? "수정하기"
-          : "화물등록"
-        : page === "fare"
-          ? "표준운임표"
-          : page === "status"
-            ? "배차현황"
-            : page === "unassigned"
-              ? "미배차현황"
-              : "상세보기";
-
+const title =
+  page === "list" ? "등록내역"
+  : page === "form" ? (form._editId ? "수정하기" : "화물등록")
+  : page === "notice" ? "공지사항"
+  : page === "schedule" ? "일정"
+  : page === "fare" ? "표준운임표"
+  : page === "status" ? "배차현황"
+  : page === "unassigned" ? "미배차현황"
+  : "상세보기";
 
   // ------------------------------------------------------------------
   // 렌더링
@@ -1086,12 +1177,14 @@ const handleOrderDuplicate = (order) => {
       : page === "detail"
       ? () => {
           if (detailFrom) {
-            setPage(detailFrom);   // 🔥 출처로 복귀
-            setDetailFrom(null);   // 🔥 초기화
+            setPage(detailFrom);
+            setDetailFrom(null);
           } else {
             setPage("list");
           }
         }
+      : page === "notice" || page === "schedule"
+      ? () => setPage("list")   // ⭐⭐⭐ 이 줄이 핵심
       : undefined
   }
   onRefresh={page === "list" ? handleRefresh : undefined}
@@ -1099,9 +1192,12 @@ const handleOrderDuplicate = (order) => {
 />
 
 
+
       {showMenu && (
         <MobileSideMenu
           onClose={() => setShowMenu(false)}
+          hasNewNotice={hasNewNotice}       // ⭐ 추가
+  hasNewSchedule={hasNewSchedule}   // ⭐ 추가
           onGoList={() => {
             setPage("list");
             setShowMenu(false);
@@ -1140,6 +1236,16 @@ const handleOrderDuplicate = (order) => {
   setPage("form");
   setShowMenu(false);
 }}
+// ⭐⭐⭐ 여기 추가
+    onGoNotice={() => {
+      setPage("notice");
+      setShowMenu(false);
+    }}
+      onGoSchedule={() => {
+    setPage("schedule");
+    setShowMenu(false);
+  }}
+
 
           onGoFare={() => {
             setPage("fare");
@@ -1154,6 +1260,7 @@ const handleOrderDuplicate = (order) => {
             setPage("unassigned");
             setShowMenu(false);
           }}
+
           onDeleteAll={deleteAllOrders}
           setUiScale={setUiScale}
           uiScale={uiScale}
@@ -1161,6 +1268,115 @@ const handleOrderDuplicate = (order) => {
       )}
 
       <div className="flex-1 overflow-y-auto pb-24">
+        {page === "notice" && (
+  <div className="px-4 py-3 space-y-3">
+    {notices.length === 0 && (
+      <div className="text-sm text-gray-400 text-center">
+        등록된 공지가 없습니다.
+      </div>
+    )}
+
+    {notices.map(n => (
+      <div
+        key={n.id}
+        className="bg-white rounded-xl border shadow-sm p-4"
+      >
+        {/* 제목 */}
+        <div className="text-sm font-semibold text-gray-900">
+          📢 {n.title}
+        </div>
+
+        {/* 메타 정보 */}
+        <div className="flex items-center gap-2 text-[11px] text-gray-500 mt-1">
+          <span>
+            {n.createdAt?.seconds
+              ? new Date(n.createdAt.seconds * 1000).toLocaleDateString("ko-KR")
+              : ""}
+          </span>
+          <span className="px-1.5 py-0.5 rounded bg-gray-100">
+            공지
+          </span>
+        </div>
+
+        {/* 내용 */}
+        <div className="mt-2 text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
+          {n.content}
+        </div>
+      </div>
+    ))}
+  </div>
+)}
+
+{page === "schedule" && (
+  <div className="px-4 py-3 space-y-3">
+    {schedules.length === 0 && (
+      <div className="text-sm text-gray-400 text-center">
+        등록된 일정이 없습니다.
+      </div>
+    )}
+
+    {schedules.map(s => {
+      const type = s.type || s.title;     // 휴가 / 병가
+      const writer = s.writer || s.name;  // ✅ 핵심
+      const startDate = s.startDate || s.start; // ✅ 핵심
+      const endDate = s.endDate || s.end;       // ✅ 핵심
+      const memo = s.memo || s.reason;    // ✅ 핵심
+
+      return (
+        <div
+          key={s.id}
+          className="bg-white rounded-xl border shadow-sm p-4"
+        >
+          {/* 상단: 일정 종류 + 작성자 */}
+          <div className="flex justify-between items-center">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-semibold text-gray-900">
+                {type}
+              </span>
+
+              <span
+                className={`px-2 py-0.5 rounded-full text-[11px] font-semibold
+                  ${
+                    type === "휴가"
+                      ? "bg-blue-100 text-blue-600"
+                      : type === "병가"
+                      ? "bg-red-100 text-red-600"
+                      : "bg-gray-100 text-gray-600"
+                  }`}
+              >
+                {type}
+              </span>
+            </div>
+
+            {/* 작성자 */}
+            {writer && (
+              <div className="text-[11px] text-gray-500">
+                {writer}
+              </div>
+            )}
+          </div>
+
+          {/* 날짜 */}
+          {(startDate || endDate) && (
+            <div className="mt-1 text-xs text-gray-600">
+              {startDate}
+              {endDate && endDate !== startDate && ` ~ ${endDate}`}
+            </div>
+          )}
+
+          {/* 사유 */}
+          {memo && (
+            <div className="mt-2 text-sm text-gray-700">
+              {memo}
+            </div>
+          )}
+        </div>
+      );
+    })}
+  </div>
+)}
+
+
         {page === "list" && (
           <MobileOrderList
             groupedByDate={groupedByDate}
@@ -1349,6 +1565,10 @@ function MobileSideMenu({
   onGoFare,
   onGoStatus,
   onGoUnassigned,
+  onGoNotice,     // ✅ 추가
+  onGoSchedule,
+    hasNewNotice,        // ⭐ 추가
+  hasNewSchedule,      // ⭐ 추가
   onDeleteAll,
   setUiScale,   // ⭐ 추가
   uiScale, 
@@ -1385,11 +1605,25 @@ function MobileSideMenu({
             <MenuItem label="화물등록" onClick={onGoCreate} />
           </MenuSection>
 
-          <MenuSection title="현황 / 운임표">
-            <MenuItem label="표준운임표" onClick={onGoFare} />
-            <MenuItem label="배차현황" onClick={onGoStatus} />
-            <MenuItem label="미배차현황" onClick={onGoUnassigned} />
-          </MenuSection>
+          <MenuSection title="공지 / 일정">
+  <MenuItem
+  label="공지사항"
+  onClick={onGoNotice}
+  badge={hasNewNotice ? "NEW" : null}
+/>
+<MenuItem
+  label="일정"
+  onClick={onGoSchedule}
+  badge={hasNewSchedule ? "NEW" : null}
+/>
+</MenuSection>
+
+<MenuSection title="현황 / 운임표">
+  <MenuItem label="표준운임표" onClick={onGoFare} />
+  <MenuItem label="배차현황" onClick={onGoStatus} />
+  <MenuItem label="미배차현황" onClick={onGoUnassigned} />
+</MenuSection>
+
         </div>
 {/* 🔍 화면 크기 조절 */}
 <div className="border-t px-4 py-3">
@@ -1438,13 +1672,19 @@ function MenuSection({ title, children }) {
   );
 }
 
-function MenuItem({ label, onClick }) {
+function MenuItem({ label, onClick, badge }) {
   return (
     <button
-      className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
+      className="w-full flex items-center justify-between px-4 py-2 text-sm hover:bg-gray-100"
       onClick={onClick}
     >
-      {label}
+      <span>{label}</span>
+
+      {badge && (
+        <span className="ml-2 px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-red-500 text-white">
+          {badge}
+        </span>
+      )}
     </button>
   );
 }
