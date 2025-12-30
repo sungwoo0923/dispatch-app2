@@ -2516,7 +2516,10 @@ const money = (text) => {
   const n = Number(String(text || "0").replace(/[^\d]/g, ""));
   return isNaN(n) ? 0 : n;
 };
-
+const stripUndefined = (obj) =>
+  Object.fromEntries(
+    Object.entries(obj).filter(([, v]) => v !== undefined)
+  );
 // 매출/기사비용/마진율
 const todayRevenue = todayRows.reduce((sum, r) => sum + money(r.청구운임), 0);
 const todayDriverCost = todayRows.reduce((sum, r) => sum + money(r.기사운임), 0);
@@ -2889,6 +2892,8 @@ const mergedClients = React.useMemo(() => {
       배차상태: "배차중",
       독차: false,
       혼적: false,
+      긴급: false,
+      운임보정: null,
     };
 
     const [form, setForm] = React.useState(() => ({
@@ -3483,9 +3488,18 @@ const doSave = async () => {
     기사운임: "0",
     수수료: "0"
   };
-
+// ⭐ 긴급 단가 보정 (rec 생성 전에!)
+const fareAdjustment = form.긴급
+  ? {
+      type: "긴급",
+      rate: 0.2,        // ← 가산율 (나중에 바꿔도 됨)
+      memo: "긴급 오더",
+    }
+  : null;
 const rec = {
   ...form,
+  운임보정: fareAdjustment,
+  
   ...moneyPatch,
   상차일: lockYear(form.상차일),
   하차일: lockYear(form.하차일),
@@ -4030,7 +4044,10 @@ const applyCopy = (r) => {
     지급방식: r.지급방식 || "",
     배차방식: r.배차방식 || "",
     메모: r.메모 || "",
+    긴급: r.긴급 === true,
+  운임보정: r.운임보정 || null,
   };
+  
 
   setForm((p) => ({ ...p, ...keep }));
   setAutoPickMatched(false);
@@ -4274,7 +4291,20 @@ function FuelSlideWidget() {
   <div className="flex items-center gap-4">
     <label className="chk">독차<input type="checkbox" checked={form.독차} onChange={(e)=>onChange("독차",e.target.checked)}/></label>
     <label className="chk">혼적<input type="checkbox" checked={form.혼적} onChange={(e)=>onChange("혼적",e.target.checked)}/></label>
-  </div>
+      {/* ⭐ 긴급 */}
+  <button
+    type="button"
+    onClick={() => onChange("긴급", !form.긴급)}
+    className={`
+      px-3 py-1.5 rounded-full text-xs font-semibold border
+      ${form.긴급
+        ? "bg-red-600 text-white border-red-600 animate-pulse"
+        : "bg-red-50 text-red-600 border-red-300 hover:bg-red-100"}
+    `}
+  >
+    🚨 긴급
+  </button>
+</div>
 
   <div className="w-px h-7 bg-gray-200" />
 
@@ -5164,7 +5194,18 @@ setIsCopyMode(true);
                             <td className="p-2">{row.화물내용}</td>
                             <td className="p-2">{row.차량종류}</td>
                             <td className="p-2">{row.차량톤수}</td>
-                            <td className="p-2">{row.메모}</td>
+                            <td className="p-2">
+  {row.메모}
+
+  {row.긴급 === true && (
+    <span
+      className="ml-1 px-1.5 py-0.5 text-[10px]
+      rounded-full bg-red-100 text-red-600 border border-red-300"
+    >
+      🚨 긴급
+    </span>
+  )}
+</td>
                           </tr>
                         ))
                       )}
@@ -5681,7 +5722,14 @@ setIsCopyMode(true);
       <b className="text-indigo-700 text-base">
         {Number(r.청구운임).toLocaleString()}원
       </b>
-
+{r.운임보정?.type === "긴급" && (
+  <span
+    className="ml-2 px-1.5 py-0.5 text-[10px]
+    rounded-full bg-red-100 text-red-600 border border-red-300"
+  >
+    🚨 긴급
+  </span>
+)}
       <button
         onClick={() => {
           setForm(p => ({ ...p, 청구운임: String(r.청구운임) }));
@@ -5837,9 +5885,19 @@ setFareModalOpen(false);
 
 </div>
 
-          <div className="text-right">
-            {Number(r.청구운임).toLocaleString()} 원
-          </div>
+          <div className="text-right flex items-center gap-1 justify-end">
+  <span>{Number(r.청구운임).toLocaleString()} 원</span>
+
+  {r.운임보정?.type === "긴급" && (
+    <span
+      className="px-1.5 py-0.5 text-[10px]
+      rounded-full bg-red-100 text-red-600 border border-red-300"
+    >
+      🚨 긴급
+    </span>
+  )}
+</div>
+
           <button
             onClick={() => {
               setForm((p) => ({
@@ -5915,7 +5973,11 @@ function RealtimeStatus({
   upsertDriver,
   role = "admin",
 }) {
-
+  // 🚫 Firestore 저장용: undefined 필드 제거
+  const stripUndefined = (obj) =>
+    Object.fromEntries(
+      Object.entries(obj).filter(([, v]) => v !== undefined)
+    );
   const isAdmin = role === "admin";
   // ==========================
 // 🔥 거래처 자동완성 전체 풀 (clients + dispatchData)
@@ -6365,6 +6427,7 @@ const [fareModalOpen, setFareModalOpen] = React.useState(false);
     메모: "",
     혼적: false,
     독차: false,
+    긴급: false,
   });
   // ==========================
 // 🆕 신규 오더 상/하차지 자동완성 상태
@@ -6973,11 +7036,11 @@ if (matches.length > 1) {
     if (!ids.length) return alert("변경된 내용이 없습니다.");
 
     for (const id of ids) {
-      const ch = edited[id];
-      if (ch && Object.keys(ch).length) {
-        await patchDispatch?.(id, ch);
-      }
-    }
+  const ch = edited[id];
+  if (ch && Object.keys(ch).length) {
+    await patchDispatch?.(id, stripUndefined(ch));
+  }
+}
 
     setSavedHighlightIds((prev) => {
       const n = new Set(prev);
@@ -7674,14 +7737,24 @@ XLSX.writeFile(wb, "실시간배차현황.xlsx");
               return (
 <tr
   key={r._id || r.id || `idx-${idx}`}
+  id={`row-${r._id}`}
+  className={`
+    ${
+      r.긴급 === true &&
+      r.배차상태 === "배차중" &&
+      (!r.차량번호 || String(r.차량번호).trim() === "")
+        ? "bg-red-50 border-l-4 border-red-500"
+        : idx % 2
+        ? "bg-gray-50"
+        : "bg-white"
+    }
 
-                  className={`
-                    ${idx % 2 ? "bg-gray-50" : ""}
-                    ${selected.includes(r._id) ? "bg-yellow-200 border-2 border-yellow-500" : ""}
-                    ${highlightIds.has(r._id) ? "animate-pulse bg-green-200" : ""}
-                    ${savedHighlightIds.has(r._id) ? "row-highlight" : ""}
-                  `}
-                >
+    ${selected.includes(r._id) ? "bg-yellow-200 border-2 border-yellow-500" : ""}
+    ${highlightIds.has(r._id) ? "animate-pulse bg-green-200" : ""}
+    ${savedHighlightIds.has(r._id) ? "row-highlight" : ""}
+  `}
+>
+
                   <td className={cell}>
                     <input
                       type="checkbox"
@@ -7765,17 +7838,33 @@ XLSX.writeFile(wb, "실시간배차현황.xlsx");
                   <td className={cell}>{formatPhone(r.전화번호)}</td>
 
                   <td className={cell}>
-                    <span
-                      className={`px-2 py-0.5 rounded text-xs font-semibold ${
-                        r.배차상태 === "배차완료"
-                          ? "bg-green-100 text-green-700 border border-green-400"
-                          : "bg-yellow-100 text-yellow-700 border border-yellow-400"
-                      }`}
-                    >
-                      {r.배차상태}
-                    </span>
-                  </td>
-                  
+  <div className="flex items-center justify-center gap-1">
+    {/* 배차상태 */}
+    <span
+      className={`px-2 py-0.5 rounded text-xs font-semibold ${
+        r.배차상태 === "배차완료"
+          ? "bg-green-100 text-green-700 border border-green-400"
+          : "bg-yellow-100 text-yellow-700 border border-yellow-400"
+      }`}
+    >
+      {r.배차상태}
+    </span>
+
+    {/* 🚨 긴급 뱃지 (배차중일 때만 표시) */}
+    {r.긴급 && r.배차상태 !== "배차완료" && (
+      <span
+        className="
+          px-2 py-0.5 rounded-full
+          text-[10px] font-bold
+          bg-red-600 text-white
+          animate-pulse
+        "
+      >
+        긴급
+      </span>
+    )}
+  </div>
+</td>
 
                   {/* 청구운임 */}
                   <td className={cell}>
@@ -7876,6 +7965,22 @@ XLSX.writeFile(wb, "실시간배차현황.xlsx");
           
 
             <div className="space-y-3">
+{/* 🚨 긴급 오더 */}
+<div className="flex items-center gap-2 mb-2">
+  <label className="flex items-center gap-2 cursor-pointer">
+    <input
+      type="checkbox"
+      checked={newOrder.긴급 === true}
+      onChange={(e) =>
+        setNewOrder((p) => ({
+          ...p,
+          긴급: e.target.checked,
+        }))
+      }
+    />
+    <span className="font-semibold text-red-600">🚨 긴급 오더</span>
+  </label>
+</div>
 
               {/* 혼적/독차 */}
               <div className="flex gap-4 mb-2">
@@ -8644,14 +8749,27 @@ XLSX.writeFile(wb, "실시간배차현황.xlsx");
               <button
                 onClick={async () => {
                   try {
-                    await addDispatch?.({
-                      ...newOrder,
-                      등록일: new Date().toISOString().slice(0, 10),
-                      배차상태: "배차중",
-                      차량번호: "",
-                      이름: "",
-                      전화번호: "",
-                    });
+                    const payload = stripUndefined({
+  ...newOrder,
+
+  긴급: newOrder.긴급 === true,
+
+  운임보정: newOrder.긴급
+    ? {
+        type: "긴급",
+        rate: 0.2,
+        memo: "긴급 오더",
+      }
+    : null,
+
+  등록일: new Date().toISOString().slice(0, 10),
+  배차상태: "배차중",
+  차량번호: "",
+  이름: "",
+  전화번호: "",
+});
+
+await addDispatch?.(payload);
 
                     alert("신규 오더가 등록되었습니다.");
                     setShowCreate(false);
@@ -8727,8 +8845,15 @@ XLSX.writeFile(wb, "실시간배차현황.xlsx");
                     차량: {rec.차량종류 || "-"} / {rec.차량톤수 || "-"}
                   </div>
                   <div className="text-gray-800 font-medium">
-                    {(rec.청구운임 || 0).toLocaleString()}원
-                  </div>
+  {(rec.청구운임 || 0).toLocaleString()}원
+
+  {rec.운임보정?.type === "긴급" && (
+    <span className="ml-1 px-1.5 py-0.5 text-[10px]
+      bg-red-100 text-red-600 rounded-full">
+      긴급
+    </span>
+  )}
+</div>
                 </div>
 
                 {/* 적용 버튼 */}
@@ -8799,6 +8924,29 @@ XLSX.writeFile(wb, "실시간배차현황.xlsx");
   >
     운임조회
   </button>
+</div>
+{/* 🚨 긴급 오더 */}
+<div className="flex items-center gap-2 mb-3">
+  <label className="flex items-center gap-2 cursor-pointer">
+    <input
+      type="checkbox"
+      checked={editTarget.긴급 === true}
+      onChange={(e) =>
+        setEditTarget((p) => ({
+          ...p,
+          긴급: e.target.checked,
+          운임보정: e.target.checked
+            ? {
+                type: "긴급",
+                rate: 0.2,
+                memo: "긴급 오더",
+              }
+            : null,
+        }))
+      }
+    />
+    <span className="font-semibold text-red-600">🚨 긴급 오더</span>
+  </label>
 </div>
 
 
@@ -8885,7 +9033,8 @@ setEditTarget((prev) => ({
   // 🔥 여기
   상차지명: c.거래처명,
   상차지주소: c.주소 || prev.상차지주소,
-}));ditClientDropdown(false);
+}));
+setShowEditClientDropdown(false);
             }}
           >
             <div className="font-semibold">{c.거래처명}</div>
@@ -9478,7 +9627,33 @@ setEditTarget((prev) => ({
     className="px-3 py-1 rounded bg-blue-600 text-white"
     onClick={async () => {
       // 1) Firestore에 저장
-      await patchDispatch(editTarget._id, editTarget);
+      const ALLOWED_FIELDS = [
+  "등록일",
+  "상차일","상차시간",
+  "하차일","하차시간",
+  "거래처명",
+  "상차지명","상차지주소",
+  "하차지명","하차지주소",
+  "화물내용",
+  "차량종류","차량톤수",
+  "차량번호","이름","전화번호",
+  "청구운임","기사운임",
+  "지급방식","배차방식",
+  "메모",
+  "혼적","독차",
+  "긴급","운임보정",
+  "배차상태",
+];
+
+const payload = stripUndefined(
+  Object.fromEntries(
+    ALLOWED_FIELDS.map((k) => [k, editTarget[k]])
+  )
+);
+
+await patchDispatch(editTarget._id, payload);
+
+
 
       // 2) 방금 저장한 행에 하이라이트 추가
       setSavedHighlightIds((prev) => {
@@ -10576,6 +10751,7 @@ const handleCarInput = async (id, rawVal) => {
      이름: "",
      전화번호: "",
      배차상태: "배차중",
+     긴급: row.긴급 === true,
    });
    return;
  }
@@ -11254,6 +11430,7 @@ return (
                 "거래처명","상차지명","상차지주소","하차지명","하차지주소",
                 "화물내용","차량종류","차량톤수","혼적","차량번호","기사명","전화번호",
                 "배차상태","청구운임","기사운임","수수료","지급방식","배차방식","메모",
+              
               ].map((h) => (
                 <th key={h} className="border px-2 py-2 text-center whitespace-nowrap">
                   {h === "선택" ? (
@@ -11284,13 +11461,22 @@ return (
               return (
                <tr
   id={`row-${id}`}
-  key={id || r._fsid || r._id || `idx-${i}`}
   className={`
-    ${i % 2 === 0 ? "bg-white" : "bg-gray-50"}
+    ${
+      r.긴급 === true && row.배차상태 === "배차중"
+        ? "bg-red-50 border-l-4 border-red-400"
+        : i % 2 === 0
+        ? "bg-white"
+        : "bg-gray-50"
+    }
+
     ${selected.has(id) ? "bg-yellow-200 border-2 border-yellow-500" : ""}
     ${savedHighlightIds.has(id) ? "row-highlight" : ""}
   `}
 >
+
+
+
 
                   <td className="border text-center">
                     <input type="checkbox" checked={selected.has(id)} onChange={() => toggleOne(id)} />
@@ -11329,6 +11515,8 @@ return (
 <td className="border text-center">
   {row.혼적 ? "Y" : ""}
 </td>
+
+
                   {/* 차량번호(항상 활성화) */}
                   <td className="border text-center whitespace-nowrap w-[120px] max-w-[120px]">
   <input
@@ -11344,8 +11532,27 @@ return (
                   <td className="border text-center">{row.전화번호}</td>
 
                   <td className="border text-center">
-                    <StatusBadge s={row.배차상태} />
-                  </td>
+  <div className="flex items-center justify-center gap-1">
+    <StatusBadge s={row.배차상태} />
+
+    {/* 🚨 긴급 (PART 4와 동일한 스타일 + 느린 깜빡임) */}
+    {row.긴급 && row.배차상태 === "배차중" && (
+      <span
+        className="
+          px-2 py-0.5 rounded-full
+          text-[10px] font-bold
+          bg-red-600 text-white
+          animate-pulse
+        "
+        style={{ animationDuration: "2.5s" }}
+      >
+        긴급
+      </span>
+    )}
+  </div>
+</td>
+
+
 
                   {/* 금액 */}
                   {["청구운임","기사운임"].map((key) => (
@@ -11462,6 +11669,23 @@ return (
     {/* ===================== 선택 수정 팝업 본체 ===================== */}
     <div className="bg-white p-5 rounded shadow-xl w-[480px] max-h-[90vh] overflow-y-auto">
       <h3 className="text-lg font-bold mb-4">선택한 오더 수정</h3>
+      {/* 🚨 긴급 오더 (상단 고정) */}
+<div className="flex items-center gap-2 mb-4">
+  <input
+    type="checkbox"
+    checked={editTarget.긴급 === true}
+    onChange={(e) =>
+      setEditTarget((p) => ({
+        ...p,
+        긴급: e.target.checked,
+      }))
+    }
+  />
+  <span className="text-red-600 font-bold flex items-center gap-1">
+    🚨 긴급 오더
+  </span>
+</div>
+
 
       {/* ------------------------------------------------ */}
       {/* 🔵 거래처명 */}
@@ -11806,6 +12030,7 @@ return (
         />
       </div>
 
+
       {/* 🔵 차량정보 */}
 <div className="grid grid-cols-2 gap-3 mb-3">
   <div>
@@ -12095,7 +12320,31 @@ return (
   className="px-3 py-1 rounded bg-blue-600 text-white"
   onClick={async () => {
     // 1) Firestore 저장
-    await patchDispatch(editTarget._id, editTarget);
+    const ALLOWED_FIELDS = [
+  "등록일",
+  "상차일","상차시간",
+  "하차일","하차시간",
+  "거래처명",
+  "상차지명","상차지주소",
+  "하차지명","하차지주소",
+  "화물내용",
+  "차량종류","차량톤수",
+  "차량번호","이름","전화번호",
+  "청구운임","기사운임",
+  "지급방식","배차방식",
+  "메모",
+  "혼적","독차",
+  "긴급",          // 🔥 여기
+  "운임보정",
+  "배차상태",
+];
+
+const payload = Object.fromEntries(
+  ALLOWED_FIELDS.map((k) => [k, editTarget[k]])
+);
+
+await patchDispatch(editTarget._id, payload);
+
 
     // 2) 방금 저장한 행을 반짝이게
     setSavedHighlightIds((prev) => {
