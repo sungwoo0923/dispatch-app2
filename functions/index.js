@@ -1,3 +1,12 @@
+import { onSchedule } from "firebase-functions/v2/scheduler";
+import { onDocumentCreated } from "firebase-functions/v2/firestore";
+import { getMessaging } from "firebase-admin/messaging";
+import { initializeApp } from "firebase-admin/app";
+import { getFirestore } from "firebase-admin/firestore";
+
+initializeApp();
+
+const db = getFirestore();
 export const checkDispatchReminder = onSchedule(
   {
     schedule: "0 * * * *",
@@ -63,5 +72,55 @@ export const checkDispatchReminder = onSchedule(
     }
 
     console.log("✨ checkDispatchReminder 완료!");
+  }
+);
+export const notifyUrgentDispatchOnCreate = onDocumentCreated(
+  "dispatch/{dispatchId}",
+  async (event) => {
+    const snap = event.data;
+    if (!snap) return;
+
+    const data = snap.data();
+    const dispatchId = event.params.dispatchId;
+
+    // 🚨 긴급 아니면 무시
+    if (data.긴급 !== true) return;
+
+    // 🔒 혹시 모를 중복 방지
+    if (data.urgentAlertSent) return;
+
+    console.log("🚨 긴급 오더 등록 감지:", dispatchId);
+
+    // 🔑 기존과 동일한 토큰 로직
+    const tokenSnap = await db.collection("fcmTokens").get();
+    const tokens = tokenSnap.docs
+      .map((d) => d.data().token || d.id)
+      .filter(Boolean);
+
+    if (!tokens.length) {
+      console.log("🚫 토큰 없음");
+      return;
+    }
+
+    // 📤 OS 알림 전송
+   await getMessaging().sendEachForMulticast({
+  tokens,
+  notification: {
+    title: "🚨 긴급 오더 등록",
+    body: `${data["상차지명"]} / ${data["상차시간"]}`,
+  },
+  data: {
+    dispatchId,
+    type: "URGENT_DISPATCH_CREATED",
+  },
+});
+
+
+    // 🔒 재전송 방지 플래그
+    await snap.ref.update({
+      urgentAlertSent: true,
+    });
+
+    console.log("✅ 긴급 오더 OS 알림 전송 완료");
   }
 );
