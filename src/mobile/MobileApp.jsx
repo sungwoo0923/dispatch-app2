@@ -449,34 +449,77 @@ useEffect(() => {
   return () => unsub();
 }, []);
 
-  // 🔔 상차 임박 2시간 이내 감지
-  useEffect(() => {
-    if (!orders.length) return;
+  
+// 🔔 상차 임박 2시간 이내 감지 (⏱ 시간 흐름 포함)
+useEffect(() => {
+  if (!orders.length || !alarmEnabled) return;
 
+  const TWO_HOURS = 120; // 분
+
+  const checkNearPickup = () => {
     const now = new Date();
-    const TWO_HOURS = 120; // 분
 
     const nearOrders = orders.filter(o => {
       if (!o.상차일 || !o.상차시간) return false;
-      if (o.차량번호) return false; // 🔥 배차중(차량번호 없는) 것만 체크
+      if (o.차량번호) return false; // 배차중만
 
+      const [y, m, d] = o.상차일.split("-").map(Number);
+      const [hh, mm] = normalizeKoreanTime(o.상차시간)
+        .split(":")
+        .map(Number);
 
-     const [y, m, d] = o.상차일.split("-").map(Number);
-const [hh, mm] = normalizeKoreanTime(o.상차시간)
-  .split(":")
-  .map(Number);
-
-const dt = new Date(y, m - 1, d, hh, mm);
-      const diffMin = (dt - now) / (1000 * 60);
+      const dt = new Date(y, m - 1, d, hh, mm);
+      const diffMin = (dt - now) / 60000;
 
       return diffMin > 0 && diffMin <= TWO_HOURS;
     });
 
-    if (nearOrders.length > 0 && alarmEnabled) {
-  setToast(`⚠️ 상차 임박 ${nearOrders.length}건! 확인하세요`);
-  navigator.vibrate?.(200);
-}
-  }, [orders]);
+    if (nearOrders.length > 0) {
+      setToast(`⚠️ 상차 임박 ${nearOrders.length}건! 확인하세요`);
+      navigator.vibrate?.(200);
+    }
+  };
+
+  // ✅ 즉시 1회 실행
+  checkNearPickup();
+
+  // ✅ 이후 1분마다 재평가 (PC와 동일한 동작)
+  const timer = setInterval(checkNearPickup, 60 * 1000);
+
+  return () => clearInterval(timer);
+}, [orders, alarmEnabled]);
+// 🚨 긴급 오더 등록 즉시 알림 (등록되는 순간 1회)
+useEffect(() => {
+  if (!alarmEnabled || !orders.length) return;
+
+  // 이미 알림 준 긴급 오더 기록 (중복 방지)
+  const notified = JSON.parse(
+    sessionStorage.getItem("urgentNotified") || "[]"
+  );
+
+  const newUrgentOrders = orders.filter(o => {
+    return (
+      o.긴급 === true &&
+      !o.차량번호 &&          // 배차중
+      !notified.includes(o.id)
+    );
+  });
+
+  if (newUrgentOrders.length > 0) {
+    const o = newUrgentOrders[0];
+
+    setToast(
+      `🚨 긴급 오더 등록\n${o.거래처명 || ""} ${o.상차시간 || ""}`
+    );
+    navigator.vibrate?.([200, 100, 200]);
+
+    const next = [...notified, ...newUrgentOrders.map(o => o.id)];
+    sessionStorage.setItem(
+      "urgentNotified",
+      JSON.stringify(next)
+    );
+  }
+}, [orders, alarmEnabled]);
 
 
   useEffect(() => {
