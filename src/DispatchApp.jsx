@@ -3493,7 +3493,7 @@ const similar = placeList.filter(p => {
     <div className="absolute z-50 bg-white border rounded-lg shadow-lg w-full max-h-48 overflow-auto">
       {filterVehicles(vehicleQuery).map((v, i) => (
         <div
-          key={v}
+          key={`${v}-${i}`}
           className={`px-3 py-2 cursor-pointer text-sm ${
             i === vehicleActive ? "bg-blue-50" : "hover:bg-gray-50"
           }`}
@@ -5016,6 +5016,19 @@ const prevAttachRef = React.useRef({});
   const [selectedEditMode, setSelectedEditMode] = React.useState(false);
   const [edited, setEdited] = React.useState({});
   // =======================
+// 🔥 즉시변경 확인 팝업 (PART 5 이식)
+// =======================
+const [confirmChange, setConfirmChange] = React.useState(null);
+/*
+{
+  rowId,
+  key,
+  before,
+  after
+}
+*/
+
+  // =======================
 // 🔵 선택삭제 팝업 + 되돌리기 상태
 // =======================
 const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
@@ -5893,7 +5906,13 @@ const undoDelete = async () => {
   };
 
   const editableInput = (key, val, rowId) => {
-    if (!canEdit(key, rowId)) return val;
+    // 🔥 이 3개는 항상 드롭다운 (PART 5와 동일)
+if (
+  !canEdit(key, rowId) &&
+  !["차량종류", "지급방식", "배차방식"].includes(key)
+) {
+  return val;
+}
 
     if (key === "상차일" || key === "하차일") {
       return (
@@ -5907,12 +5926,22 @@ const undoDelete = async () => {
     }
 
     if (key === "지급방식") {
-      return (
-        <select
-          className="border p-1 rounded w-full"
-          defaultValue={val || ""}
-          onChange={(e) => handleEditChange(rowId, key, e.target.value)}
-        >
+  return (
+    <select
+      className="border p-1 rounded w-full"
+      value={val || ""}
+      onChange={(e) => {
+        const next = e.target.value;
+        if (next === val) return;
+
+        setConfirmChange({
+          rowId,
+          key: "지급방식",
+          before: val || "",
+          after: next,
+        });
+      }}
+    >
           <option value="">선택</option>
           <option value="계산서">계산서</option>
           <option value="착불">착불</option>
@@ -5925,12 +5954,23 @@ const undoDelete = async () => {
     }
 
     if (key === "배차방식") {
-      return (
-        <select
-          className="border p-1 rounded w-full"
-          defaultValue={val || ""}
-          onChange={(e) => handleEditChange(rowId, key, e.target.value)}
-        >
+  return (
+    <select
+      className="border p-1 rounded w-full"
+      value={val || ""}
+      onChange={(e) => {
+        const next = e.target.value;
+        if (next === val) return;
+
+        setConfirmChange({
+          rowId,
+          key: "배차방식",
+          before: val || "",
+          after: next,
+        });
+      }}
+    >
+
           <option value="">선택</option>
           <option value="24시">24시</option>
           <option value="직접배차">직접배차</option>
@@ -5939,7 +5979,38 @@ const undoDelete = async () => {
         </select>
       );
     }
+if (key === "차량종류") {
+  return (
+    <select
+      className="border p-1 rounded w-full"
+      value={val || ""}
+      onChange={(e) => {
+        const next = e.target.value;
+        if (next === val) return;
 
+        setConfirmChange({
+          rowId,
+          key: "차량종류",
+          before: val || "",
+          after: next,
+        });
+      }}
+    >
+      <option value="">선택</option>
+      <option value="라보/다마스">라보/다마스</option>
+      <option value="카고">카고</option>
+      <option value="윙바디">윙바디</option>
+      <option value="리프트">리프트</option>
+      <option value="탑차">탑차</option>
+      <option value="냉장탑">냉장탑</option>
+      <option value="냉동탑">냉동탑</option>
+      <option value="냉장윙">냉장윙</option>
+      <option value="냉동윙">냉동윙</option>
+      <option value="오토바이">오토바이</option>
+      <option value="기타">기타</option>
+    </select>
+  );
+}
     return (
       <input
         type="text"
@@ -6550,7 +6621,13 @@ XLSX.writeFile(wb, "실시간배차현황.xlsx");
                   </td>
 
                   <td className={cell}>{editableInput("화물내용", r.화물내용, r._id)}</td>
-                  <td className={cell}>{editableInput("차량종류", r.차량종류, r._id)}</td>
+                  <td className={cell}>
+  {editableInput(
+    "차량종류",
+    edited[r._id]?.차량종류 ?? r.차량종류,
+    r._id
+  )}
+</td>
                   <td className={cell}>{editableInput("차량톤수", r.차량톤수, r._id)}</td>
                   <td className={cell}>
   {r.혼적 ? "Y" : ""}
@@ -8835,6 +8912,50 @@ setTimeout(() => {
     </div>
   </div>
 )}
+{/* ===================== 🔥 즉시 변경 확인 팝업 (PART 5 이식) ===================== */}
+{confirmChange && (
+  <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[99999]">
+    <div className="bg-white rounded-xl p-6 w-[360px] shadow-xl">
+
+      <h3 className="text-lg font-bold mb-4 text-center">
+        변경하시겠습니까?
+      </h3>
+
+      <div className="text-sm text-center mb-4">
+        <b>{confirmChange.key}</b>
+        <div className="mt-1 text-gray-500">
+          {String(confirmChange.before || "없음")} →{" "}
+          <span className="text-blue-600 font-semibold">
+            {String(confirmChange.after || "없음")}
+          </span>
+        </div>
+      </div>
+
+      <div className="flex gap-3">
+        <button
+          className="flex-1 py-2 rounded bg-gray-200"
+          onClick={() => setConfirmChange(null)}
+        >
+          취소
+        </button>
+
+        <button
+          className="flex-1 py-2 rounded bg-blue-600 text-white"
+          onClick={async () => {
+            await patchDispatch(confirmChange.rowId, {
+              [confirmChange.key]: confirmChange.after,
+              updatedAt: Date.now(),
+            });
+
+            setConfirmChange(null);
+          }}
+        >
+          변경
+        </button>
+      </div>
+    </div>
+  </div>
+)}
 
 <style>{`
   @keyframes fadeInUp {
@@ -10285,6 +10406,7 @@ return (
 
               return (
                <tr
+               key={id} 
   id={`row-${id}`}
   className={`
     ${
@@ -10317,7 +10439,7 @@ return (
   "하차지명","하차지주소",
   "화물내용","차량종류","차량톤수",
 ].map((key) => (
-  <td key={key} className="border text-center whitespace-nowrap">
+  <td key={`${id}-${key}`} className="border text-center whitespace-nowrap">
 
     {/* ✅ 차량종류 즉시변경 드롭다운 */}
     {key === "차량종류" ? (
@@ -10423,8 +10545,6 @@ return (
   </div>
 </td>
 
-
-
                   {/* 금액 */}
                   {["청구운임","기사운임"].map((key) => (
                     <td key={key} className="border text-right pr-2">
@@ -10479,8 +10599,6 @@ return (
     <option value="24시(외주업체)">24시(외주업체)</option>
   </select>
 </td>
-
-
 
                   {/* 메모 더보기 */}
                   <td className="border text-center">
