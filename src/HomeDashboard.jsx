@@ -113,12 +113,22 @@ function formatCreatedAt(createdAt) {
 export default function HomeDashboard({
   role,
   user,
-  todayStats,
-  myStats,
   pending,
   delayed,
   dispatchData = [],
 }) {
+  const now = new Date();
+const currentYear = now.getFullYear();
+const currentMonth = now.getMonth();
+const todayStr = now.toISOString().slice(0, 10);
+
+const getLoadDate = (row) => {
+  const v = row?.상차일자 || row?.상차일 || row?.상차;
+  if (!v) return null;
+  const d = new Date(String(v).slice(0, 10));
+  return isNaN(d.getTime()) ? null : d;
+};
+
   const [period, setPeriod] = useState("7d");
     // ===================== 공지 팝업 =====================
 const [noticeOpen, setNoticeOpen] = useState(false);
@@ -190,14 +200,60 @@ React.useEffect(() => {
   return () => unsub();
 }, []);
 
+const todayStatsFixed = useMemo(() => {
+  let count = 0;
+  let revenue = 0;
+  let profit = 0;
 
+  dispatchData.forEach(row => {
+    const d = getLoadDate(row);
+    if (!d) return;
+
+    if (d.toISOString().slice(0, 10) === todayStr) {
+      count += 1;
+      revenue += Number(row?.청구운임 || 0);
+      profit += Number(row?.수익 || 0);
+    }
+  });
+
+  return { count, revenue, profit };
+}, [dispatchData]);
+const yearRevenue = useMemo(() => {
+  return dispatchData.reduce((sum, row) => {
+    const d = getLoadDate(row);
+    if (!d) return sum;
+    return d.getFullYear() === currentYear
+      ? sum + Number(row?.청구운임 || 0)
+      : sum;
+  }, 0);
+}, [dispatchData]);
+
+const monthRevenue = useMemo(() => {
+  
+  return dispatchData.reduce((sum, row) => {
+    const d = getLoadDate(row);
+    if (!d) return sum;
+    return d.getFullYear() === currentYear &&
+      d.getMonth() === currentMonth
+      ? sum + Number(row?.청구운임 || 0)
+      : sum;
+  }, 0);
+}, [dispatchData]);
+const orderCountFrom2026 = useMemo(() => {
+  return dispatchData.filter(row => {
+    const d = getLoadDate(row);
+    if (!d) return false;
+    return d >= new Date("2026-01-01");
+  }).length;
+}, [dispatchData]);
   /* ===================== KPI ===================== */
-  const kpis = [
-    { title: "오늘 접수", value: todayStats.count },
-    { title: "미배차", value: pending },
-    { title: "오늘 매출", value: todayStats.revenue },
-    { title: "오늘 수익", value: todayStats.profit },
-  ];
+ const kpis = [
+  { title: "오늘 접수", value: todayStatsFixed.count },
+  { title: "미배차", value: pending },
+  { title: "오늘 매출", value: todayStatsFixed.revenue },
+  { title: "오늘 수익", value: todayStatsFixed.profit },
+];
+
 
   /* ===================== 매출 트렌드 ===================== */
   /* ===================== 최근 7일 매출 추이 ===================== */
@@ -256,6 +312,13 @@ const delta =
   const map = {};
 
   dispatchData.forEach((d) => {
+    const dDate = getLoadDate(d);
+if (!dDate) return;
+
+// 2026년 1월만
+if (dDate.getFullYear() !== 2026) return;
+if (dDate.getMonth() !== 0) return;
+
     const name = d?.거래처명;
 
     if (!name) return;
@@ -445,8 +508,8 @@ const recentOrders = useMemo(() => {
       <div className="mt-4 text-sm text-gray-500">
         Total Revenue
         <span className="block text-xl font-extrabold text-black">
-          ₩{myStats.totalRevenue.toLocaleString()}
-        </span>
+  ₩{yearRevenue.toLocaleString()}
+</span>
 
         {/* 최근 7일 증감 */}
         <div
@@ -467,7 +530,7 @@ const recentOrders = useMemo(() => {
     {/* 년 매출 */}
     <div>
       <div className="text-[34px] font-extrabold text-blue-600 leading-none">
-        <CountUp value={myStats.totalRevenue} />
+        <CountUp value={yearRevenue} />
         <span className="text-lg font-bold ml-1">원</span>
       </div>
       <div className="mt-2 text-base font-medium text-black">
@@ -478,7 +541,7 @@ const recentOrders = useMemo(() => {
     {/* 당월 매출 */}
     <div>
       <div className="text-[34px] font-extrabold text-blue-600 leading-none">
-        <CountUp value={todayStats.revenue} />
+        <CountUp value={monthRevenue} />
         <span className="text-lg font-bold ml-1">원</span>
       </div>
       <div className="mt-2 text-base font-medium text-black">
@@ -487,13 +550,25 @@ const recentOrders = useMemo(() => {
     </div>
 
     {/* 등록 오더 수 */}
+    {/* 2026년 1월부터 누적 오더 수 */}
+<div>
+  <div className="text-[34px] font-extrabold text-blue-600 leading-none">
+    <CountUp value={orderCountFrom2026} />
+    <span className="text-lg font-bold ml-1">건</span>
+  </div>
+  <div className="mt-2 text-base font-medium text-black">
+    2026년 누적 오더 수
+  </div>
+</div>
+
     <div>
       <div className="text-[34px] font-extrabold text-blue-600 leading-none">
         <CountUp value={dispatchData.length} />
+        
         <span className="text-lg font-bold ml-1">건</span>
       </div>
       <div className="mt-2 text-base font-medium text-black">
-        등록 오더 수
+        총 누적 등록 오더 수
       </div>
     </div>
 
@@ -908,7 +983,7 @@ const recentOrders = useMemo(() => {
 
         {/* 최근 오더 */}
         <div className="lg:col-span-2">
-  <Card title="Recent Orders">
+  <Card title="청구 top5">
     <div className="h-[400px] flex flex-col">
 
       {/* 🔹 테이블 헤더 */}

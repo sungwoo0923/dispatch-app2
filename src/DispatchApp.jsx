@@ -1284,6 +1284,10 @@ const [isCopyMode, setIsCopyMode] = React.useState(false);
 // ⭐ 상차지 자동완성 상태 분리
 const [showPickupDropdown, setShowPickupDropdown] = React.useState(false);
 const [pickupOptions, setPickupOptions] = React.useState([]);
+// 🚗 차량종류 자동완성 상태
+const [vehicleQuery, setVehicleQuery] = React.useState("");
+const [showVehicleDropdown, setShowVehicleDropdown] = React.useState(false);
+const [vehicleActive, setVehicleActive] = React.useState(0);
 const [pickupActive, setPickupActive] = React.useState(0);
 
 const [showPlaceDropdown, setShowPlaceDropdown] = React.useState(false);
@@ -1435,8 +1439,19 @@ const mergedClients = React.useMemo(() => {
         (c) => normalizeKey(c.업체명 || "").includes(n)
       );
     };
+    // 🚗 차량종류 자동완성 필터 (★ 반드시 전역)
+const filterVehicles = (q) => {
+  const query = String(q || "").trim();
+  if (!query) return VEHICLE_TYPES;
+
+  const nq = normalizeKey(query);
+  return VEHICLE_TYPES.filter((v) =>
+    normalizeKey(v).includes(nq)
+  );
+};
     // 🔍 하차지 자동완성 필터 함수
     const filterPlaces = (q) => {
+      
   const query = String(q || "").trim();
   if (!query) return [];
 
@@ -3428,13 +3443,74 @@ const similar = placeList.filter(p => {
     <input className={inputCls} value={form.화물내용} onChange={(e) => onChange("화물내용", e.target.value)} />
   </div>
 
-  <div>
-    <label className={labelCls}>차량종류</label>
-    <select className={inputCls} value={form.차량종류} onChange={(e) => onChange("차량종류", e.target.value)}>
-      <option value="">선택 ▾</option>
-      {VEHICLE_TYPES.map((v) => <option key={v} value={v}>{v}</option>)}
-    </select>
-  </div>
+ <div className="relative">
+  <label className={labelCls}>차량종류</label>
+
+  <input
+    className={inputCls}
+    placeholder="차량종류 입력 또는 선택 (예: 냉동윙)"
+    value={vehicleQuery || form.차량종류}
+    onChange={(e) => {
+      const v = e.target.value;
+      setVehicleQuery(v);          // 👉 입력 상태
+      onChange("차량종류", v);     // 👉 form에는 항상 반영
+      setShowVehicleDropdown(true);
+      setVehicleActive(0);
+    }}
+    onFocus={() => {
+      setShowVehicleDropdown(true); // 👉 클릭만 해도 목록 표시
+    }}
+    onKeyDown={(e) => {
+      const list = filterVehicles(vehicleQuery);
+
+      if (!list.length) return;
+
+      if (["ArrowDown", "ArrowUp", "Enter"].includes(e.key)) {
+        e.preventDefault();
+      }
+
+      if (e.key === "Enter") {
+        // 🔹 Enter → 선택지가 있으면 선택, 없으면 그냥 수기입력 유지
+        const pick = list[vehicleActive];
+        if (pick) {
+          onChange("차량종류", pick);
+          setVehicleQuery(pick);
+        }
+        setShowVehicleDropdown(false);
+      } else if (e.key === "ArrowDown") {
+        setVehicleActive((i) => Math.min(i + 1, list.length - 1));
+      } else if (e.key === "ArrowUp") {
+        setVehicleActive((i) => Math.max(i - 1, 0));
+      }
+    }}
+    onBlur={() => {
+      // 🔹 수기 입력 허용 → 그냥 닫기만
+      setTimeout(() => setShowVehicleDropdown(false), 150);
+    }}
+  />
+
+  {showVehicleDropdown && (
+    <div className="absolute z-50 bg-white border rounded-lg shadow-lg w-full max-h-48 overflow-auto">
+      {filterVehicles(vehicleQuery).map((v, i) => (
+        <div
+          key={v}
+          className={`px-3 py-2 cursor-pointer text-sm ${
+            i === vehicleActive ? "bg-blue-50" : "hover:bg-gray-50"
+          }`}
+          onMouseEnter={() => setVehicleActive(i)}
+          onMouseDown={() => {
+            // 🔹 마우스로 선택
+            onChange("차량종류", v);
+            setVehicleQuery(v);
+            setShowVehicleDropdown(false);
+          }}
+        >
+          {v}
+        </div>
+      ))}
+    </div>
+  )}
+</div>
 
   <div>
     <label className={labelCls}>차량톤수</label>
@@ -8951,6 +9027,17 @@ const tomorrowKST = () => {
   const [endDate, setEndDate] = React.useState("");
   const [selected, setSelected] = React.useState(new Set());
   const [editMode, setEditMode] = React.useState(false);
+  // 🔔 즉시 변경 확인 팝업 + 히스토리
+const [confirmChange, setConfirmChange] = React.useState(null);
+/*
+{
+  id,
+  field,
+  before,
+  after
+}
+*/
+
   // ==========================
 // 선택삭제 + 되돌리기 기능
 // ==========================
@@ -9289,7 +9376,28 @@ const handleFareSearch = () => {
 
   const toInt = (v) => parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10) || 0;
   const getId = (r) => r._id || r.id || r._fsid;
+// 🕘 변경 이력 1건 생성
+const makeHistory = ({ field, before, after }) => ({
+  field,
+  before: before ?? "",
+  after: after ?? "",
+  at: new Date().toISOString(),
+  user: "관리자", // 🔥 나중에 로그인 사용자로 교체 가능
+});
+// ⚡ select 즉시 변경 → 확인 팝업용
+const handleImmediateSelectChange = (row, field, nextValue) => {
+  const id = getId(row);
+  const before = row[field] ?? "";
 
+  if (before === nextValue) return;
+
+  setConfirmChange({
+    id,
+    field,
+    before,
+    after: nextValue,
+  });
+};
   // =============================================
 // ✅ 대용량 업로드 (엑셀 → Firestore)
 // =============================================
@@ -9954,8 +10062,6 @@ return (
   내일
 </button>
 
-
-
 <button
   onClick={() => {
     const { first, last } = getMonthRange();
@@ -10207,27 +10313,55 @@ return (
                   {/* -------------------- 반복 입력 컬럼 -------------------- */}
 {[
   "상차일","상차시간","하차일","하차시간",
-  "거래처명","상차지명","상차지주소","하차지명","하차지주소",
+  "거래처명","상차지명","상차지주소",
+  "하차지명","하차지주소",
   "화물내용","차량종류","차량톤수",
 ].map((key) => (
   <td key={key} className="border text-center whitespace-nowrap">
-    {editMode && selected.has(id) && editableKeys.includes(key) ? (
-      <div className="relative w-full">
-        <input
-  className="border rounded px-1 py-0.5 w-full text-center"
-  defaultValue={row[key] || ""}
-  onChange={(e) => {
-    updateEdited(row, key, e.target.value);
-  }}
-/>
-      </div>
+
+    {/* ✅ 차량종류 즉시변경 드롭다운 */}
+    {key === "차량종류" ? (
+      <select
+        className="border rounded px-1 py-0.5 w-full text-center"
+        value={row.차량종류 || ""}
+        onChange={(e) =>
+          handleImmediateSelectChange(row, "차량종류", e.target.value)
+        }
+      >
+        <option value="">선택없음</option>
+        <option value="라보/다마스">라보/다마스</option>
+        <option value="카고">카고</option>
+        <option value="윙바디">윙바디</option>
+        <option value="리프트">리프트</option>
+        <option value="탑차">탑차</option>
+        <option value="냉장탑">냉장탑</option>
+        <option value="냉동탑">냉동탑</option>
+        <option value="냉장윙">냉장윙</option>
+        <option value="냉동윙">냉동윙</option>
+        <option value="오토바이">오토바이</option>
+        <option value="기타">기타</option>
+      </select>
+
     ) : key === "상차지주소" || key === "하차지주소" ? (
       <AddressCell text={row[key] || ""} max={5} />
+
+    ) : editMode && selected.has(id) && editableKeys.includes(key) ? (
+      <div className="relative w-full">
+        <input
+          className="border rounded px-1 py-0.5 w-full text-center"
+          defaultValue={row[key] || ""}
+          onChange={(e) => {
+            updateEdited(row, key, e.target.value);
+          }}
+        />
+      </div>
+
     ) : (
       row[key]
     )}
   </td>
 ))}
+
 
 
 {/* 혼적 여부(Y) */}
@@ -10312,42 +10446,40 @@ return (
 
                   {/* 지급 / 배차 방식 */}
 <td className="border text-center">
-  {editMode && selected.has(id) ? (
-    <select
-      className="border rounded px-1 py-0.5 w-full text-center"
-      defaultValue={row.지급방식 || ""}
-      onChange={(e) => updateEdited(row, "지급방식", e.target.value)}
-    >
-      <option value="">선택없음</option>
-      <option value="계산서">계산서</option>
-      <option value="착불">착불</option>
-      <option value="선불">선불</option>
-      <option value="손실">손실</option>
-      <option value="개인">개인</option>
-      <option value="기타">기타</option>
-    </select>
-  ) : (
-    row.지급방식
-  )}
+  <select
+    className="border rounded px-1 py-0.5 w-full text-center"
+    value={row.지급방식 || ""}
+    onChange={(e) =>
+      handleImmediateSelectChange(row, "지급방식", e.target.value)
+    }
+  >
+    <option value="">선택없음</option>
+    <option value="계산서">계산서</option>
+    <option value="착불">착불</option>
+    <option value="선불">선불</option>
+    <option value="손실">손실</option>
+    <option value="개인">개인</option>
+    <option value="기타">기타</option>
+  </select>
 </td>
 
+
 <td className="border text-center">
-  {editMode && selected.has(id) ? (
-    <select
-      className="border rounded px-1 py-0.5 w-full text-center"
-      defaultValue={row.배차방식 || ""}
-      onChange={(e) => updateEdited(row, "배차방식", e.target.value)}
-    >
-      <option value="">선택없음</option>
-      <option value="24시">24시</option>
-      <option value="직접배차">직접배차</option>
-      <option value="인성">인성</option>
-      <option value="24시(외주업체)">24시(외주업체)</option>
-    </select>
-  ) : (
-    row.배차방식
-  )}
+  <select
+    className="border rounded px-1 py-0.5 w-full text-center"
+    value={row.배차방식 || ""}
+    onChange={(e) =>
+      handleImmediateSelectChange(row, "배차방식", e.target.value)
+    }
+  >
+    <option value="">선택없음</option>
+    <option value="24시">24시</option>
+    <option value="직접배차">직접배차</option>
+    <option value="인성">인성</option>
+    <option value="24시(외주업체)">24시(외주업체)</option>
+  </select>
 </td>
+
 
 
                   {/* 메모 더보기 */}
@@ -10766,8 +10898,7 @@ return (
           }
         />
       </div>
-
-
+      
       {/* 🔵 차량정보 */}
 <div className="grid grid-cols-2 gap-3 mb-3">
   <div>
@@ -11600,7 +11731,56 @@ setTimeout(() => {
     </div>
   </div>
 )}
+{confirmChange && (
+  <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[100000]">
+    <div className="bg-white rounded-xl p-6 w-[360px] shadow-xl">
+      <h3 className="font-bold text-lg mb-4 text-center">
+        변경하시겠습니까?
+      </h3>
 
+      <div className="text-sm mb-4 text-center">
+        <b>{confirmChange.field}</b>
+        <div className="text-gray-500 mt-1">
+          {String(confirmChange.before || "없음")} →{" "}
+          <span className="text-blue-600 font-semibold">
+            {String(confirmChange.after || "없음")}
+          </span>
+        </div>
+      </div>
+
+      <div className="flex gap-3">
+        <button
+          className="flex-1 py-2 rounded bg-gray-200"
+          onClick={() => setConfirmChange(null)}
+        >
+          취소
+        </button>
+
+        <button
+          className="flex-1 py-2 rounded bg-blue-600 text-white"
+          onClick={async () => {
+            const row = dispatchData.find(
+              (r) => getId(r) === confirmChange.id
+            );
+
+            await patchDispatch(confirmChange.id, {
+              [confirmChange.field]: confirmChange.after,
+              history: [
+                ...(row?.history || []),
+                makeHistory(confirmChange),
+              ],
+              lastUpdated: new Date().toISOString(),
+            });
+
+            setConfirmChange(null);
+          }}
+        >
+          변경
+        </button>
+      </div>
+    </div>
+  </div>
+)}
 
     </div>
     
