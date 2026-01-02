@@ -354,6 +354,7 @@ const [hasNewSchedule, setHasNewSchedule] = useState(false);
   };
 
   const [toast, setToast] = useState("");
+  const [toastMuted, setToastMuted] = useState(false);
   const [quickAssignTarget, setQuickAssignTarget] = useState(null);
 
   const showToast = (msg) => {
@@ -378,17 +379,31 @@ useEffect(() => {
     });
   });
 }, []);
-// 🔔 앱 켜져 있을 때 알림 표시
+// 🔔 앱 켜져 있을 때 알림 표시 (FCM 포그라운드)
 useEffect(() => {
-  import("../firebase").then(({ initForegroundFCM }) => {
-    initForegroundFCM((payload) => {
-  if (!alarmEnabled) return;
-  setToast(`${payload.notification.title} - ${payload.notification.body}`);
-  navigator.vibrate?.(200);
-});
+  let unsubscribe;
 
+  import("../firebase").then(({ initForegroundFCM }) => {
+    unsubscribe = initForegroundFCM((payload) => {
+      if (!alarmEnabled) return;
+      if (toastMuted) return;
+
+      const title = payload.notification?.title || "";
+      const body = payload.notification?.body || "";
+
+      if (!title && !body) return;
+
+      setToast(`${title} ${body}`.trim());
+      navigator.vibrate?.(200);
+    });
   });
-}, []);
+
+  return () => {
+    if (typeof unsubscribe === "function") {
+      unsubscribe();
+    }
+  };
+}, [alarmEnabled, toastMuted]);
 
 
   useEffect(() => {
@@ -475,9 +490,11 @@ useEffect(() => {
     });
 
     if (nearOrders.length > 0) {
-      setToast(`⚠️ 상차 임박 ${nearOrders.length}건! 확인하세요`);
-      navigator.vibrate?.(200);
-    }
+  if (toastMuted) return;   // 🔥 이 줄이 핵심
+
+  setToast(`⚠️ 상차 임박 ${nearOrders.length}건! 확인하세요`);
+  navigator.vibrate?.(200);
+}
   };
 
   // ✅ 즉시 1회 실행
@@ -506,12 +523,14 @@ useEffect(() => {
   });
 
   if (newUrgentOrders.length > 0) {
-    const o = newUrgentOrders[0];
+  if (toastMuted) return;   // 🔥 추가
 
-    setToast(
-      `🚨 긴급 오더 등록\n${o.거래처명 || ""} ${o.상차시간 || ""}`
-    );
-    navigator.vibrate?.([200, 100, 200]);
+  const o = newUrgentOrders[0];
+
+  setToast(
+    `🚨 긴급 오더 등록\n${o.거래처명 || ""} ${o.상차시간 || ""}`
+  );
+  navigator.vibrate?.([200, 100, 200]);
 
     const next = [...notified, ...newUrgentOrders.map(o => o.id)];
     sessionStorage.setItem(
@@ -1209,14 +1228,26 @@ const title =
     >
       {/* 🔔 토스트 알림 */}
       {toast && (
-        <div
-          className="fixed bottom-4 left-1/2 -translate-x-1/2 
-                     bg-black text-white px-4 py-2 rounded-lg 
-                     text-sm shadow-lg z-[9999]"
-        >
-          {toast}
-        </div>
-      )}
+  <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50
+                  bg-black text-white px-4 py-3 rounded-xl shadow-lg
+                  flex items-center gap-3 max-w-[90%]">
+    <div className="text-sm whitespace-pre-line">
+      {toast}
+    </div>
+
+    {/* ❌ 닫기 버튼 */}
+   <button
+  onClick={() => {
+    setToast("");
+    setToastMuted(true);   // 🔥 다시 안 뜨게 막음
+  }}
+  className="text-white/70 hover:text-white text-sm"
+>
+  ✕
+</button>
+  </div>
+)}
+
 
       <MobileHeader
   title={title}
