@@ -1,6 +1,14 @@
 {
   "routes": [
     {
+      "src": "/firebase-messaging-sw.js",
+      "headers": {
+        "Content-Type": "application/javascript",
+        "Cache-Control": "no-cache"
+      },
+      "dest": "/firebase-messaging-sw.js"
+    },
+    {
       "src": "/assets/(.*)",
       "headers": {
         "cache-control": "public, max-age=31536000, immutable"
