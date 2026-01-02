@@ -14157,6 +14157,7 @@ function UnassignedStatus({ dispatchData }) {
       return next;
     });
   };
+  
   const exitDeleteMode = () => {
     setDeleteMode(false);
     setSelectedIds(new Set());
@@ -16078,30 +16079,36 @@ function PaymentManagement({ dispatchData = [], clients = [], drivers = [] }) {
 // 기사관리 (DriverManagement)
 function DriverManagement({ drivers = [], upsertDriver, removeDriver }) {
   const [q, setQ] = React.useState("");
-  const [rows, setRows] = React.useState(() =>
-    (drivers || []).map(d => ({ ...d }))
-  );
   const [selected, setSelected] = React.useState(new Set());
-  const [newForm, setNewForm] = React.useState({ 차량번호: "", 이름: "", 전화번호: "", 메모: "" });
+  const [newForm, setNewForm] = React.useState({
+    차량번호: "",
+    이름: "",
+    전화번호: "",
+    메모: "",
+  });
 
-  React.useEffect(() => {
-    setRows((drivers || []).map(d => ({ ...d })));
-  }, [drivers]);
+  // ===================== 검색 정규화 (⚠ 반드시 위에 있어야 함) =====================
+  const norm = (s = "") =>
+    String(s).toLowerCase().replace(/\s+/g, "");
 
-  const norm = (s="") => String(s).toLowerCase().replace(/\s+/g,"");
+  // ===================== 검색 필터 =====================
   const filtered = React.useMemo(() => {
-    if (!q.trim()) return rows;
+    if (!q.trim()) return drivers;
     const nq = norm(q);
-    return rows.filter(r =>
-      ["차량번호","이름","전화번호","메모"].some(k => norm(r[k]||"").includes(nq))
+    return drivers.filter((r) =>
+      ["차량번호", "이름", "전화번호", "메모"].some((k) =>
+        norm(r[k] || "").includes(nq)
+      )
     );
-  }, [rows, q]);
+  }, [drivers, q]);
 
   // ===================== 페이지네이션 =====================
   const [page, setPage] = React.useState(1);
   const perPage = 100;
 
-  React.useEffect(() => { setPage(1); }, [q]);
+  React.useEffect(() => {
+    setPage(1);
+  }, [q]);
 
   const paged = React.useMemo(() => {
     const start = (page - 1) * perPage;
@@ -16111,87 +16118,109 @@ function DriverManagement({ drivers = [], upsertDriver, removeDriver }) {
   const totalPages = Math.ceil(filtered.length / perPage);
   // =====================================================
 
+  // ===================== 선택 =====================
   const toggleOne = (id) => {
-    setSelected(prev => {
+    setSelected((prev) => {
       const n = new Set(prev);
       n.has(id) ? n.delete(id) : n.add(id);
       return n;
     });
   };
- const toggleAll = () => {
-  // ✅ 항상 Firestore 문서 id(r.id)를 우선 사용
-  const allIds = filtered
-    .map(r => r.id || r.차량번호)   // id가 없으면 차량번호 fallback
-    .filter(Boolean);
 
-  if (allIds.length === 0) {
-    setSelected(new Set());
-    return;
-  }
+  const toggleAll = () => {
+    const allIds = filtered.map((r) => r.id).filter(Boolean);
+    if (selected.size === allIds.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(allIds));
+    }
+  };
 
-  if (selected.size === allIds.length) {
-    setSelected(new Set());
-  } else {
-    setSelected(new Set(allIds));
-  }
-};
+  // ===================== 인라인 수정 =====================
+  const handleBlur = async (row, key, val) => {
+    const oldId = row.id;
+    if (!oldId) {
+      alert("문서 ID가 없어 수정할 수 없습니다.");
+      return;
+    }
 
+    // 차량번호 변경 = 문서 이동
+    if (key === "차량번호") {
+      const newId = val.replace(/\s+/g, "");
+      if (!newId || newId === oldId) return;
 
-const handleBlur = async (row, key, val) => {
-  const oldId = row.id; // 기존 ID(기존 차량번호)
-  const newId = key === "차량번호" ? val.replace(/\s+/g,"") : oldId;
+      await upsertDriver({
+        ...row,
+        id: newId,
+        차량번호: newId,
+      });
+      await removeDriver(oldId);
+      return;
+    }
 
-  const patch = { ...row, [key]: val, id: newId };
+    // 일반 필드 수정
+    await upsertDriver({
+      ...row,
+      [key]: val,
+      id: oldId,
+    });
+  };
 
-  if (newId !== oldId) {
-    // 1) 새문서 생성
-    await upsertDriver?.(patch);
-    // 2) 기존 문서 삭제
-    await removeDriver?.(oldId);
-  } else {
-    await upsertDriver?.(patch);
-  }
-};
-
+  // ===================== 신규 추가 =====================
   const addNew = async () => {
-    const 차량번호 = (newForm.차량번호 || "").replace(/\s+/g,"");
+    const 차량번호 = (newForm.차량번호 || "").replace(/\s+/g, "");
     if (!차량번호) return alert("차량번호는 필수입니다.");
-    await upsertDriver?.({ ...newForm, 차량번호, id: 차량번호 });
+    await upsertDriver({
+      ...newForm,
+      차량번호,
+      id: 차량번호,
+    });
     setNewForm({ 차량번호: "", 이름: "", 전화번호: "", 메모: "" });
     alert("등록 완료");
   };
 
+  // ===================== 선택 삭제 =====================
   const removeSelected = async () => {
-  if (!selected.size) return alert("선택된 항목이 없습니다.");
-  // ✅ 브라우저 전역 window.confirm 사용
-  if (!window.confirm(`${selected.size}건 삭제할까요?`)) return;
+    if (!selected.size) return alert("선택된 항목이 없습니다.");
+    if (!window.confirm(`${selected.size}건 삭제할까요?`)) return;
 
-  for (const id of selected) {
-    await removeDriver?.(id);
-  }
-  setSelected(new Set());
-  alert("삭제 완료");
-};
+    for (const id of selected) {
+      await removeDriver(id);
+    }
+    setSelected(new Set());
+    alert("삭제 완료");
+  };
 
-
-  // 엑셀 업로드
+  // ===================== 엑셀 업로드 =====================
   const onExcel = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
     const reader = new FileReader();
     reader.onload = async (evt) => {
       try {
-        const wb = XLSX.read(new Uint8Array(evt.target.result), { type: "array" });
+        const wb = XLSX.read(new Uint8Array(evt.target.result), {
+          type: "array",
+        });
         const sheet = wb.SheetNames[0];
-        const json = XLSX.utils.sheet_to_json(wb.Sheets[sheet], { defval: "" });
+        const json = XLSX.utils.sheet_to_json(wb.Sheets[sheet], {
+          defval: "",
+        });
+
         let ok = 0;
         for (const r of json) {
-          const 차량번호 = String(r.차량번호 || r["차량 번호"] || r["차량번호 "] || "").replace(/\s+/g,"");
+          const 차량번호 = String(
+            r.차량번호 || r["차량 번호"] || r["차량번호 "] || ""
+          ).replace(/\s+/g, "");
           if (!차량번호) continue;
-          const 이름 = r.이름 || r["기사명"] || "";
-          const 전화번호 = r.전화번호 || r["전화"] || r["휴대폰"] || "";
-          const 메모 = r.메모 || r["비고"] || "";
-          await upsertDriver?.({ 차량번호, 이름, 전화번호, 메모, id: 차량번호 });
+
+          await upsertDriver({
+            id: 차량번호,
+            차량번호,
+            이름: r.이름 || r["기사명"] || "",
+            전화번호: r.전화번호 || r["전화"] || r["휴대폰"] || "",
+            메모: r.메모 || r["비고"] || "",
+          });
           ok++;
         }
         alert(`총 ${ok}건 반영`);
@@ -16204,12 +16233,17 @@ const handleBlur = async (row, key, val) => {
     };
     reader.readAsArrayBuffer(file);
   };
-  
 
-  const head = "border px-2 py-1 bg-slate-100 text-slate-700 text-xs font-semibold text-center whitespace-nowrap";
-  const cell = "border px-2 py-[2px] text-sm text-slate-800 text-center whitespace-nowrap align-middle";
-  const input = inputBase || "border px-1 py-[2px] text-sm rounded-sm w-28 text-center";
+  // ===================== 스타일 =====================
+  const head =
+    "border px-2 py-1 bg-slate-100 text-slate-700 text-xs font-semibold text-center whitespace-nowrap";
+  const cell =
+    "border px-2 py-[2px] text-sm text-slate-800 text-center whitespace-nowrap align-middle";
+  const input =
+    inputBase ||
+    "border px-1 py-[2px] text-sm rounded-sm w-28 text-center";
 
+  // ===================== UI =====================
   return (
     <div>
       <h2 className="text-lg font-bold mb-3">기사관리</h2>
@@ -16220,51 +16254,66 @@ const handleBlur = async (row, key, val) => {
           className="border p-2 rounded w-64"
           placeholder="검색 (차량번호/이름/전화/메모)"
           value={q}
-          onChange={(e)=>setQ(e.target.value)}
+          onChange={(e) => setQ(e.target.value)}
         />
         <label className="px-3 py-1 border rounded cursor-pointer text-sm">
           📁 엑셀 업로드
-          <input type="file" accept=".xlsx,.xls" onChange={onExcel} className="hidden" />
+          <input
+            type="file"
+            accept=".xlsx,.xls"
+            onChange={onExcel}
+            className="hidden"
+          />
         </label>
-        <button onClick={removeSelected} className="px-3 py-1 rounded bg-red-600 text-white text-sm">선택삭제</button>
+        <button
+          onClick={removeSelected}
+          className="px-3 py-1 rounded bg-red-600 text-white text-sm"
+        >
+          선택삭제
+        </button>
       </div>
 
       {/* 신규 등록 */}
-      {/* 신규 기사 빠른 등록 (Compact) */}
-<div className="flex items-end gap-2 mb-4 bg-slate-50 px-2 py-1.5 rounded-md border">
-  <input
-    className="border px-2 py-1 rounded text-sm w-40"
-    placeholder="차량번호*"
-    value={newForm.차량번호}
-    onChange={e=>setNewForm(p=>({...p,차량번호:e.target.value}))}
-  />
-  <input
-    className="border px-2 py-1 rounded text-sm w-28"
-    placeholder="이름"
-    value={newForm.이름}
-    onChange={e=>setNewForm(p=>({...p,이름:e.target.value}))}
-  />
-  <input
-    className="border px-2 py-1 rounded text-sm w-36"
-    placeholder="전화번호"
-    value={newForm.전화번호}
-    onChange={e=>setNewForm(p=>({...p,전화번호:e.target.value}))}
-  />
-  <input
-    className="border px-2 py-1 rounded text-sm w-64"
-    placeholder="메모"
-    value={newForm.메모}
-    onChange={e=>setNewForm(p=>({...p,메모:e.target.value}))}
-  />
-
-  <button
-    onClick={addNew}
-    className="px-3 py-1 rounded-md bg-blue-600 text-white text-sm whitespace-nowrap"
-  >
-    + 추가
-  </button>
-</div>
-
+      <div className="flex items-end gap-2 mb-4 bg-slate-50 px-2 py-1.5 rounded-md border">
+        <input
+          className="border px-2 py-1 rounded text-sm w-40"
+          placeholder="차량번호*"
+          value={newForm.차량번호}
+          onChange={(e) =>
+            setNewForm((p) => ({ ...p, 차량번호: e.target.value }))
+          }
+        />
+        <input
+          className="border px-2 py-1 rounded text-sm w-28"
+          placeholder="이름"
+          value={newForm.이름}
+          onChange={(e) =>
+            setNewForm((p) => ({ ...p, 이름: e.target.value }))
+          }
+        />
+        <input
+          className="border px-2 py-1 rounded text-sm w-36"
+          placeholder="전화번호"
+          value={newForm.전화번호}
+          onChange={(e) =>
+            setNewForm((p) => ({ ...p, 전화번호: e.target.value }))
+          }
+        />
+        <input
+          className="border px-2 py-1 rounded text-sm w-64"
+          placeholder="메모"
+          value={newForm.메모}
+          onChange={(e) =>
+            setNewForm((p) => ({ ...p, 메모: e.target.value }))
+          }
+        />
+        <button
+          onClick={addNew}
+          className="px-3 py-1 rounded-md bg-blue-600 text-white text-sm"
+        >
+          + 추가
+        </button>
+      </div>
 
       {/* 표 */}
       <div className="overflow-x-auto">
@@ -16272,146 +16321,139 @@ const handleBlur = async (row, key, val) => {
           <thead>
             <tr>
               <th className={head}>
-                <input type="checkbox"
+                <input
+                  type="checkbox"
                   onChange={toggleAll}
-                  checked={filtered.length>0 && selected.size===filtered.length}
+                  checked={
+                    filtered.length > 0 &&
+                    selected.size === filtered.length
+                  }
                 />
               </th>
-              {["차량번호","이름","전화번호","메모","삭제"].map(h=>(
-                <th key={h} className={head}>{h}</th>
+              {["차량번호", "이름", "전화번호", "메모", "삭제"].map((h) => (
+                <th key={h} className={head}>
+                  {h}
+                </th>
               ))}
             </tr>
           </thead>
           <tbody>
-  {paged.length === 0 ? (
-    <tr>
-      <td className="text-center text-gray-500 py-6" colSpan={6}>
-        표시할 데이터가 없습니다.
-      </td>
-    </tr>
-  ) : (
-    paged.map((r, i) => {
-      // ✅ Firestore 문서 id를 최우선으로 사용
-      const docId = r._id || r.id || r.차량번호;
-      // ✅ React key는 docId가 없으면 인덱스로
-      const rowKey = docId || `${r.차량번호}_${i}`;
+            {paged.length === 0 ? (
+              <tr>
+                <td
+                  className="text-center text-gray-500 py-6"
+                  colSpan={6}
+                >
+                  표시할 데이터가 없습니다.
+                </td>
+              </tr>
+            ) : (
+              paged.map((r, i) => {
+                const docId = r.id || r.차량번호;
+                if (!docId) return null;
 
-      return (
-        <tr key={rowKey} className={i % 2 ? "bg-gray-50" : ""}>
-          {/* 체크박스 */}
-          <td className={cell}>
-            <input
-              type="checkbox"
-              checked={docId ? selected.has(docId) : false}
-              onChange={() => {
-                if (!docId) {
-                  alert("ID 없음: 삭제/선택이 불가능한 행입니다.");
-                  return;
-                }
-                toggleOne(docId);
-              }}
-            />
-          </td>
+                return (
+                  <tr key={`${docId}_${i}`}>
+                    <td className={cell}>
+                      <input
+                        type="checkbox"
+                        checked={selected.has(docId)}
+                        onChange={() => toggleOne(docId)}
+                      />
+                    </td>
 
-          {/* 차량번호 */}
-          <td className={cell}>
-  <span
-    className="block cursor-pointer px-1 py-[2px] rounded hover:bg-slate-100"
-    contentEditable
-    suppressContentEditableWarning
-    onBlur={(e) =>
-      handleBlur(r, "차량번호", e.currentTarget.innerText.trim())
-    }
-  >
-    {r.차량번호 || "-"}
-  </span>
-</td>
+                    <td className={cell}>
+                      <span
+                        contentEditable
+                        suppressContentEditableWarning
+                        onBlur={(e) =>
+                          handleBlur(
+                            r,
+                            "차량번호",
+                            e.currentTarget.innerText.trim()
+                          )
+                        }
+                      >
+                        {r.차량번호 || "-"}
+                      </span>
+                    </td>
 
+                    <td className={cell}>
+                      <span
+                        contentEditable
+                        suppressContentEditableWarning
+                        onBlur={(e) =>
+                          handleBlur(r, "이름", e.currentTarget.innerText)
+                        }
+                      >
+                        {r.이름 || "-"}
+                      </span>
+                    </td>
 
-          {/* 이름 */}
-          <td className={cell}>
-  <span
-    className="block cursor-pointer px-1 py-[2px] hover:bg-slate-100 rounded"
-    onClick={(e) => {
-      e.currentTarget.contentEditable = true;
-      e.currentTarget.focus();
-    }}
-    onBlur={(e) => handleBlur(r, "이름", e.currentTarget.innerText)}
-    suppressContentEditableWarning
-  >
-    {r.이름 || "-"}
-  </span>
-</td>
+                    <td className={cell}>
+                      <span
+                        contentEditable
+                        suppressContentEditableWarning
+                        onBlur={(e) =>
+                          handleBlur(
+                            r,
+                            "전화번호",
+                            e.currentTarget.innerText.trim()
+                          )
+                        }
+                      >
+                        {r.전화번호 || "-"}
+                      </span>
+                    </td>
 
+                    <td className={cell}>
+                      <input
+                        className={`${input} w-48 text-left`}
+                        defaultValue={r.메모 || ""}
+                        onBlur={(e) =>
+                          handleBlur(r, "메모", e.target.value)
+                        }
+                      />
+                    </td>
 
-          {/* 전화번호 */}
-          <td className={cell}>
-  <span
-    className="block cursor-pointer px-1 py-[2px] rounded hover:bg-slate-100"
-    contentEditable
-    suppressContentEditableWarning
-    onBlur={(e) =>
-      handleBlur(r, "전화번호", e.currentTarget.innerText.trim())
-    }
-  >
-    {r.전화번호 || "-"}
-  </span>
-</td>
-
-          {/* 메모 */}
-          <td className={cell}>
-            <input
-              className={`${input} w-48 text-left`}
-              defaultValue={r.메모 || ""}
-              onBlur={(e) => handleBlur(r, "메모", e.target.value)}
-            />
-          </td>
-
-          {/* 삭제 버튼 */}
-          <td className={cell}>
-            <button
-              className="px-2 py-[2px] text-xs border border-red-400 text-red-600 rounded hover:bg-red-50"
-              onClick={() => {
-                if (!docId) {
-                  alert("ID 없음: 삭제가 불가능한 행입니다.");
-                  return;
-                }
-                if (confirm("삭제하시겠습니까?")) {
-                  removeDriver?.(docId);  // ✅ 항상 doc.id 기준으로 삭제
-                }
-              }}
-            >
-              삭제
-            </button>
-          </td>
-        </tr>
-      );
-    })
-  )}
-</tbody>
-
+                    <td className={cell}>
+                      <button
+                        className="px-2 py-[2px] text-xs border border-red-400 text-red-600 rounded"
+                        onClick={() => {
+                          if (
+                            window.confirm("삭제하시겠습니까?")
+                          ) {
+                            removeDriver(docId);
+                          }
+                        }}
+                      >
+                        삭제
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
         </table>
-        
       </div>
 
-      {/* ================= 페이지 버튼 ================ */}
+      {/* 페이지 버튼 */}
       <div className="flex items-center justify-center gap-4 mt-4 text-sm">
         <button
-          className="px-4 py-1 border rounded disabled:opacity-50"
+          className="px-4 py-1 border rounded"
           disabled={page === 1}
-          onClick={() => setPage(p => Math.max(1, p - 1))}
+          onClick={() => setPage((p) => Math.max(1, p - 1))}
         >
           ◀ 이전
         </button>
-
         <span>
           {page} / {totalPages || 1}
         </span>
-
         <button
-          className="px-4 py-1 border rounded disabled:opacity-50"
-          disabled={page === totalPages || totalPages===0}
-          onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+          className="px-4 py-1 border rounded"
+          disabled={page === totalPages || totalPages === 0}
+          onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
         >
           다음 ▶
         </button>
@@ -16420,6 +16462,7 @@ const handleBlur = async (row, key, val) => {
   );
 }
 // ===================== DispatchApp.jsx (PART 10/10) — END =====================
+
 
 // ===================== DispatchApp.jsx (PART 11/11) — START =====================
 // 거래처관리 (ClientManagement) — 기본 거래처 + 하차지 거래처 서브탭 포함

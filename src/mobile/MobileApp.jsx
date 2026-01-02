@@ -127,13 +127,6 @@ const formatRangeShort = (s, e) => {
   return `${ss} ~ ${ee || ss}`;
 };
 
-// 시간 부분만 추출: "2025-11-24 08:00" → "08:00"
-const onlyTime = (dt = "") => {
-  const s = String(dt).trim();
-  const parts = s.split(" ");
-  return parts[1] || "";
-};
-
 // 오늘 / 내일 / 기타 → 당일/내일/어제 or MM/DD
 const getDayBadge = (dateStr) => {
   if (!dateStr) return "";
@@ -299,7 +292,10 @@ const getStatus = (o = {}) => {
   const car = String(o.차량번호 || "").trim();
   return car ? "배차완료" : "배차중";
 };
-
+// 🚨 긴급 오더 판단 (PC/모바일 공통)
+const isUrgentOrder = (o = {}) => {
+  return o.긴급 === true;
+};
 const normalizePhone = (p = "") =>
   String(p).replace(/[^\d+]/g, "");
 // ======================================================================
@@ -307,6 +303,20 @@ const normalizePhone = (p = "") =>
 // ======================================================================
 
 export default function MobileApp() {
+  // 🔕 알림 ON/OFF 상태 (기본 ON)
+const [alarmEnabled, setAlarmEnabled] = useState(
+  localStorage.getItem("alarmEnabled") !== "false"
+);
+
+// 🔁 토글 함수
+const toggleAlarm = () => {
+  setAlarmEnabled((prev) => {
+    const next = !prev;
+    localStorage.setItem("alarmEnabled", String(next));
+    return next;
+  });
+};
+
 // 🔔 공지 / 일정 (PC 연동)
 const [notices, setNotices] = useState([]);
 const [schedules, setSchedules] = useState([]);
@@ -372,9 +382,11 @@ useEffect(() => {
 useEffect(() => {
   import("../firebase").then(({ initForegroundFCM }) => {
     initForegroundFCM((payload) => {
-      setToast(`${payload.notification.title} - ${payload.notification.body}`);
-      navigator.vibrate?.(200);
-    });
+  if (!alarmEnabled) return;
+  setToast(`${payload.notification.title} - ${payload.notification.body}`);
+  navigator.vibrate?.(200);
+});
+
   });
 }, []);
 
@@ -449,18 +461,21 @@ useEffect(() => {
       if (o.차량번호) return false; // 🔥 배차중(차량번호 없는) 것만 체크
 
 
-      const dt = new Date(
-  `${o.상차일} ${normalizeKoreanTime(o.상차시간)}`
-);
+     const [y, m, d] = o.상차일.split("-").map(Number);
+const [hh, mm] = normalizeKoreanTime(o.상차시간)
+  .split(":")
+  .map(Number);
+
+const dt = new Date(y, m - 1, d, hh, mm);
       const diffMin = (dt - now) / (1000 * 60);
 
       return diffMin > 0 && diffMin <= TWO_HOURS;
     });
 
-    if (nearOrders.length > 0) {
-      setToast(`⚠️ 상차 임박 ${nearOrders.length}건! 확인하세요`);
-      navigator.vibrate?.(200); // 진동 (모바일)
-    }
+    if (nearOrders.length > 0 && alarmEnabled) {
+  setToast(`⚠️ 상차 임박 ${nearOrders.length}건! 확인하세요`);
+  navigator.vibrate?.(200);
+}
   }, [orders]);
 
 
@@ -1195,6 +1210,8 @@ const title =
           onClose={() => setShowMenu(false)}
           hasNewNotice={hasNewNotice}       // ⭐ 추가
   hasNewSchedule={hasNewSchedule}   // ⭐ 추가
+  alarmEnabled={alarmEnabled}
+ toggleAlarm={toggleAlarm}
           onGoList={() => {
             setPage("list");
             setShowMenu(false);
@@ -1600,6 +1617,8 @@ function MobileSideMenu({
   onDeleteAll,
   setUiScale,   // ⭐ 추가
   uiScale, 
+  alarmEnabled,
+ toggleAlarm,
 }) {
 
   const logout = () => {
@@ -1653,6 +1672,20 @@ function MobileSideMenu({
 </MenuSection>
 
         </div>
+        {/* 🔕 알림 ON/OFF */}
+<div className="border-t px-4 py-3">
+  <button
+    onClick={toggleAlarm}
+    className={`w-full py-2 rounded-lg text-sm font-semibold
+      ${
+        alarmEnabled
+          ? "bg-green-500 text-white"
+          : "bg-gray-300 text-gray-700"
+      }`}
+  >
+    {alarmEnabled ? "🔔 알림 켜짐" : "🔕 알림 꺼짐"}
+  </button>
+</div>
 {/* 🔍 화면 크기 조절 */}
 <div className="border-t px-4 py-3">
   <div className="text-xs text-gray-400 mb-2">화면 크기</div>
@@ -1994,10 +2027,9 @@ function MobileOrderCard({ order, onSelect }) {
   const pickupAddrShort = shortAddr(order.상차지주소 || "");
   const dropAddrShort = shortAddr(order.하차지주소 || "");
 
-  const pickupTime =
-    onlyTime(order.상차시간 || order.상차일시) || "시간 없음";
-  const dropTime =
-    onlyTime(order.하차시간 || order.하차일시) || "시간 없음";
+const pickupTime = order.상차시간 || "시간 없음";
+const dropTime = order.하차시간 || "시간 없음";
+
 
   const pickupStatus = getDayStatusForCard(order.상차일, "pickup");
   const dropStatus = getDayStatusForCard(order.하차일, "drop");
@@ -2020,6 +2052,11 @@ function MobileOrderCard({ order, onSelect }) {
     >
       {/* ▶ 상태 + 냉장/냉동 */}
       <div className="flex justify-end items-center gap-1 mb-0.5">
+        {isUrgentOrder(order) && (
+  <span className="px-2 py-0.5 rounded-full bg-red-600 text-white text-[10px] font-bold">
+    🚨 긴급
+  </span>
+)}
         {isToday && (
   <span className="px-2 py-0.5 rounded-full bg-red-500 text-white text-[10px] font-bold">
     TODAY
@@ -2044,9 +2081,12 @@ function MobileOrderCard({ order, onSelect }) {
       {(() => {
         if (!order.상차일 || !order.상차시간) return null;
         const now = new Date();
-        const dt = new Date(
-   `${order.상차일} ${normalizeKoreanTime(order.상차시간)}`
- );
+       const [y, m, d] = order.상차일.split("-").map(Number);
+const [hh, mm] = normalizeKoreanTime(order.상차시간)
+  .split(":")
+  .map(Number);
+
+const dt = new Date(y, m - 1, d, hh, mm);
         const diffMin = (dt - now) / 60000;
         if (diffMin > 0 && diffMin <= 120) {
           return (
