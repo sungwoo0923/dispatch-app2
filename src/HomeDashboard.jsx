@@ -117,6 +117,21 @@ export default function HomeDashboard({
   delayed,
   dispatchData = [],
 }) {
+  // 🔔 우측 하단 토스트
+const [toast, setToast] = useState(null);
+
+// ⏱ 토스트 5초 후 자동 닫힘
+React.useEffect(() => {
+  if (!toast) return;
+
+  const timer = setTimeout(() => {
+    setToast(null);
+  }, 5000);
+
+  return () => clearTimeout(timer);
+}, [toast]);
+
+// { type: "notice" | "schedule", data }
   const now = new Date();
 const currentYear = now.getFullYear();
 const currentMonth = now.getMonth();
@@ -152,53 +167,129 @@ const [scheduleForm, setScheduleForm] = React.useState({
   const [notices, setNotices] = React.useState([]);
   const [schedules, setSchedules] = React.useState([]);
   const [handovers, setHandovers] = React.useState([]);
+  // ===================== 인수인계 팝업 =====================
+const [handoverOpen, setHandoverOpen] = useState(false);
+const [handoverForm, setHandoverForm] = useState({
+  text: "",
+  author: "박성우팀장", // 기본값
+});
+const [selectedHandover, setSelectedHandover] = useState(null);
+
 const [selectedNotice, setSelectedNotice] = useState(null);
 const [selectedSchedule, setSelectedSchedule] = useState(null);
+React.useEffect(() => {
+  const q = query(
+    collection(db, "schedules"),
+    
+    orderBy("createdAt", "desc")
+  );
+
+  const unsub = onSnapshot(q, (snap) => {
+    const list = snap.docs
+      .map(d => {
+        const data = d.data();
+        return { id: d.id, ...data };
+      });
+
+    setSchedules(list);
+
+    // 🔔 신규 일정 토스트
+    if (snap.docChanges().some(c => c.type === "added")) {
+      const latest = snap.docChanges().find(c => c.type === "added")?.doc;
+      if (!latest) return;
+
+      const lastId = localStorage.getItem("last_schedule_id");
+      if (latest.id !== lastId) {
+        localStorage.setItem("last_schedule_id", latest.id);
+
+        setToast({
+          type: "schedule",
+          data: { id: latest.id, ...latest.data() },
+        });
+      }
+    }
+  });
+
+  return () => unsub();
+}, []);
+
 React.useEffect(() => {
   const q = query(
     collection(db, "notices"),
     orderBy("createdAt", "desc")
   );
+    const unsub = onSnapshot(q, (snap) => {
+    const list = snap.docs
+      .map(d => {
+        const data = d.data();
+        const date = formatCreatedAt(data.createdAt);
+        if (!date) return null;
+        return { id: d.id, ...data, date };
+      })
+      .filter(Boolean);
 
-  const unsub = onSnapshot(q, (snap) => {
-    setNotices(
-  snap.docs
-    .map(d => {
-      const data = d.data();
-      const date = formatCreatedAt(data.createdAt);
-      if (!date) return null;
+    setNotices(list);
 
-      return {
-        id: d.id,
-        ...data,
-        date,
-      };
-    })
-    .filter(Boolean)
-);
+    // 🔔 신규 공지 토스트
+    if (snap.docChanges().some(c => c.type === "added")) {
+      const latest = snap.docChanges().find(c => c.type === "added")?.doc;
+      if (!latest) return;
 
+      const lastId = localStorage.getItem("last_notice_id");
+      if (latest.id !== lastId) {
+        localStorage.setItem("last_notice_id", latest.id);
 
+        setToast({
+          type: "notice",
+          data: {
+            id: latest.id,
+            ...latest.data(),
+            date: formatCreatedAt(latest.data().createdAt),
+          },
+        });
+      }
+    }
   });
 
   return () => unsub();
-}, []);
+}, []); // ✅ 이 줄 반드시 있어야 함
+// ===================== 인수인계 실시간 구독 + 토스트 =====================
 React.useEffect(() => {
   const q = query(
-    collection(db, "schedules"),
+    collection(db, "handovers"),
     orderBy("createdAt", "desc")
   );
 
   const unsub = onSnapshot(q, (snap) => {
-    setSchedules(
-      snap.docs.map(d => ({
-        id: d.id,
-        ...d.data(),
-      }))
-    );
+    const list = snap.docs.map(d => ({
+      id: d.id,
+      ...d.data(),
+    }));
+    setHandovers(list);
+
+    // 🔔 신규 인수인계 토스트 (added만)
+    const added = snap.docChanges().find(c => c.type === "added");
+    if (!added) return;
+
+    const latest = added.doc;
+    const lastId = localStorage.getItem("last_handover_id");
+
+    if (latest.id !== lastId) {
+      localStorage.setItem("last_handover_id", latest.id);
+
+      setToast({
+        type: "handover",
+        data: {
+          id: latest.id,
+          ...latest.data(),
+        },
+      });
+    }
   });
 
   return () => unsub();
 }, []);
+
 
 const todayStatsFixed = useMemo(() => {
   let count = 0;
@@ -886,47 +977,25 @@ const recentOrders = useMemo(() => {
     </div>
   </Modal>
 )}
-{selectedSchedule && (
+{selectedHandover && (
   <Modal
-    title="휴가 / 외근 일정 상세"
-    onClose={() => setSelectedSchedule(null)}
+    title="인수인계 상세"
+    onClose={() => setSelectedHandover(null)}
   >
-    {/* 1️⃣ 내용 */}
     <div className="space-y-4 text-sm">
-      <div>
-        <div className="text-xs text-gray-500">구분</div>
-        <div className="font-semibold">{selectedSchedule.type}</div>
+      <div className="whitespace-pre-wrap">
+        {selectedHandover.text}
       </div>
-
-      <div>
-        <div className="text-xs text-gray-500">이름</div>
-        <div>{selectedSchedule.name}</div>
-      </div>
-
-      <div>
-        <div className="text-xs text-gray-500">기간</div>
-        <div>
-          {selectedSchedule.start} ~ {selectedSchedule.end}
-        </div>
-      </div>
-
-      {selectedSchedule.memo && (
-        <div>
-          <div className="text-xs text-gray-500">메모</div>
-          <div className="whitespace-pre-wrap">
-            {selectedSchedule.memo}
-          </div>
-        </div>
-      )}
     </div>
 
-    {/* 2️⃣ 🔥 하단 버튼 */}
     <div className="flex justify-center gap-3 pt-6 mt-6 border-t">
       <button
         onClick={async () => {
-          if (!window.confirm("일정을 삭제할까요?")) return;
-          await deleteDoc(doc(db, "schedules", selectedSchedule.id));
-          setSelectedSchedule(null);
+          if (!window.confirm("인수인계를 삭제할까요?")) return;
+          await deleteDoc(
+            doc(db, "handovers", selectedHandover.id)
+          );
+          setSelectedHandover(null);
         }}
         className="px-4 py-2 text-sm rounded border text-red-600 hover:bg-red-50"
       >
@@ -935,15 +1004,9 @@ const recentOrders = useMemo(() => {
 
       <button
         onClick={() => {
-          setScheduleForm({
-            type: selectedSchedule.type,
-            name: selectedSchedule.name,
-            start: selectedSchedule.start,
-            end: selectedSchedule.end,
-            memo: selectedSchedule.memo || "",
-          });
-          setScheduleOpen(true);
-          setSelectedSchedule(null);
+          setHandoverForm({ text: selectedHandover.text });
+          setHandoverOpen(true);
+          setSelectedHandover(null);
         }}
         className="px-4 py-2 text-sm rounded bg-blue-600 text-white"
       >
@@ -952,28 +1015,76 @@ const recentOrders = useMemo(() => {
     </div>
   </Modal>
 )}
-
-
-
   {/* ================= 인수인계 ================= */}
-  <Card title="오늘 인수인계">
+<Card
+  title="오늘 인수인계"
+  action={
+    <button
+      onClick={() => setHandoverOpen(true)}
+      className="px-3 py-1 bg-blue-600 text-white rounded text-sm"
+    >
+      등록
+    </button>
+  }
+>
+{handoverOpen && (
+  <Modal
+    title="인수인계 등록"
+    onClose={() => setHandoverOpen(false)}
+  >
     <div className="space-y-3">
+      <textarea
+        rows={4}
+        placeholder="인수인계 내용"
+        className="w-full border px-2 py-1 rounded"
+        value={handoverForm.text}
+        onChange={(e) =>
+          setHandoverForm({ text: e.target.value })
+        }
+      />
 
-      
+      <button
+        onClick={async () => {
+          if (selectedHandover?.id) {
+            await updateDoc(
+              doc(db, "handovers", selectedHandover.id),
+              { text: handoverForm.text }
+            );
+          } else {
+            await addDoc(collection(db, "handovers"), {
+              text: handoverForm.text,
+              createdAt: serverTimestamp(),
+            });
+          }
 
-      {handovers.length === 0 ? (
+          setHandoverForm({ text: "" });
+          setSelectedHandover(null);
+          setHandoverOpen(false);
+        }}
+        className="w-full bg-blue-600 text-white py-2 rounded"
+      >
+        저장
+      </button>
+    </div>
+  </Modal>
+)}
+            {handovers.length === 0 ? (
         <div className="text-sm text-gray-400">오늘 인수인계 없음</div>
       ) : (
         <ul className="space-y-1 text-sm">
           {handovers.map((h, i) => (
-            <li key={i} className="border-b pb-1">
+            <li
+              key={i}
+              onClick={() => setSelectedHandover(h)}
+              className="border-b pb-1 cursor-pointer hover:bg-slate-50 rounded px-1"
+            >
               {h.text}
             </li>
           ))}
         </ul>
       )}
-    </div>
   </Card>
+
 
 </div>
 
@@ -1040,8 +1151,6 @@ const recentOrders = useMemo(() => {
   </Card>
 </div>
 
-
-
         {/* TOP 10 거래처 */}
         <Card title="Top 10 거래처">
   {/* 🔹 KPI 요약 영역 */}
@@ -1097,6 +1206,63 @@ const recentOrders = useMemo(() => {
 
 
   </div> 
+  {/* ================= 🔔 우측 하단 토스트 ================= */}
+{toast && (
+  <div
+    className="fixed bottom-5 right-5 z-50 bg-white border shadow-lg rounded-lg px-4 py-3 cursor-pointer"
+    onClick={() => {
+      if (toast.type === "notice") {
+  setSelectedNotice(toast.data);
+} else if (toast.type === "schedule") {
+  setSelectedSchedule(toast.data);
+} else if (toast.type === "handover") {
+  setSelectedHandover(toast.data);
+}
+
+      setToast(null);
+    }}
+  >
+    {/* ❌ 닫기 버튼 */}
+    <button
+      onClick={(e) => {
+        e.stopPropagation(); // ⭐ 중요: 상세 열기 막기
+        setToast(null);
+      }}
+      className="absolute top-2 right-2 text-gray-400 hover:text-gray-700 text-sm"
+      aria-label="닫기"
+    >
+      ✕
+    </button>
+
+    <div className="flex items-center gap-2">
+      <span className="text-lg">
+  {toast.type === "notice"
+    ? "📢"
+    : toast.type === "schedule"
+    ? "📅"
+    : "📝"}
+</span>
+     <div className="text-sm font-semibold">
+  {toast.type === "notice"
+    ? "공지사항이 등록되었습니다"
+    : toast.type === "schedule"
+    ? "일정이 등록되었습니다"
+    : "인수인계가 등록되었습니다"}
+</div>
+    </div>
+
+    <div className="text-xs text-gray-500 mt-1 truncate max-w-[240px]">
+  {toast.type === "notice"
+    ? toast.data.title
+    : toast.type === "schedule"
+    ? `[${toast.data.type}] ${toast.data.name}`
+    : toast.data.text}
+</div>
+  </div>
+)}
+
     </div> 
+    
   );
 }
+      

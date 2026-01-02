@@ -2269,6 +2269,7 @@ setForm((p) => ({
   };
 
   setForm(reset);
+  setVehicleQuery(""); 
   setClientQuery("");
   setAutoPickMatched(false);
   setAutoDropMatched(false);
@@ -2752,6 +2753,7 @@ const applyCopy = (r) => {
   
 
   setForm((p) => ({ ...p, ...keep }));
+  setVehicleQuery(keep.차량종류 || ""); // ⭐ 반드시
   setAutoPickMatched(false);
   setAutoDropMatched(false);
   setCopyOpen(false);
@@ -2764,6 +2766,7 @@ const applyCopy = (r) => {
       const reset = { ...emptyForm, _id: crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`, 등록일: _todayStr() };
       setForm(reset);
       setClientQuery("");
+      setVehicleQuery("");
       setAutoPickMatched(false);
       setAutoDropMatched(false);
       setCopySelected([]);  // ⭐ 체크 상태 초기화
@@ -4596,9 +4599,22 @@ setFareModalOpen(false);
         
         <div key={idx} className="flex justify-between items-center py-2 border-b">
           <div className="flex-1">
+ <div className="space-y-0.5">
+  {/* 날짜 */}
   <div>
-    <b>{r.상차일}</b> | {r.화물내용 || "-"}
+    <b>{r.상차일}</b>
   </div>
+
+  {/* ⭐ 상차 → 하차 루트 */}
+  <div className="text-[13px] font-medium text-gray-800">
+    {r.상차지명 || "-"} → {r.하차지명 || "-"}
+  </div>
+
+  {/* 화물 */}
+  <div className="text-xs text-gray-500">
+    화물: {r.화물내용 || "-"}
+  </div>
+</div>
 
 {(() => {
   const memo = r.메모 || "";
