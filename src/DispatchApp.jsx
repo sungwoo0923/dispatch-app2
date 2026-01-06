@@ -984,6 +984,26 @@ if (!user) {
 }
 // ===================== DispatchApp.jsx (PART 2/8) — END =====================
 // ===================== DispatchApp.jsx (PART 3/8) — START =====================
+// ✅ 1️⃣ 여기! DispatchManagement 위
+function ToggleBadge({ active, onClick, activeCls, inactiveCls, children }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`
+        px-3 py-1.5
+        rounded-full
+        text-xs font-semibold
+        border
+        transition
+        active:scale-95
+        ${active ? activeCls : inactiveCls}
+      `}
+    >
+      {children}
+    </button>
+  );
+}
   function DispatchManagement({
     dispatchData, drivers, clients, timeOptions, tonOptions,
     addDispatch, upsertDriver, upsertClient, upsertPlace,
@@ -1574,6 +1594,7 @@ const filterVehicles = (q) => {
       하차지담당자: "",
       하차지담당자번호: "",
       화물내용: "",
+      운행유형: "편도",   // ⭐ 추가 (기본값)
       차량종류: "",
       차량톤수: "",
       차량번호: "",
@@ -1616,13 +1637,14 @@ React.useEffect(() => {
     return;
   }
 
-  const similar = (dispatchData || []).filter(r =>
-    normalizeKey(r.상차지명) === normalizeKey(pickup) &&
-    normalizeKey(r.하차지명) === normalizeKey(drop) &&
-    extractTonNum(r.차량톤수) === ton &&
-    r.청구운임 &&
-    r.기사운임
-  );
+const similar = (dispatchData || []).filter(r =>
+  (r.운행유형 || "편도") === form.운행유형 &&   // ⭐ 추가
+  normalizeKey(r.상차지명) === normalizeKey(pickup) &&
+  normalizeKey(r.하차지명) === normalizeKey(drop) &&
+  extractTonNum(r.차량톤수) === ton &&
+  r.청구운임 &&
+  r.기사운임
+);
 
   if (similar.length < 1) {
     setAiRecommend(null);
@@ -2278,9 +2300,8 @@ setForm((p) => ({
 
   alert("등록되었습니다.");
 };
-
-    // ⭐ 운임조회 (업그레이드 버전: 화물내용 없어도 동작 + 최근 화물내용 포함)
-    
+const isRoundTrip = form.운행유형 === "왕복";
+const ROUND_DISCOUNT = 0.9; // ⭐ 10% 할인 (조정 가능)
     // ⭐ 운임조회 팝업 상태
     const [fareModalOpen, setFareModalOpen] = React.useState(false);
     const [fareResult, setFareResult] = React.useState(null);
@@ -2306,6 +2327,7 @@ const handleFareSearch = () => {
 // ================================
 const pastHistoryList = fullData
   .filter(r => {
+    if ((r.운행유형 || "편도") !== form.운행유형) return false;
     if (!r.상차지명 || !r.하차지명) return false;
 
     const inputPickupStops = parseStops(pickup);
@@ -2439,12 +2461,9 @@ const hasSinmi = (
         }
       }
 
-      // ============================================
-      // ② 여기부터는 기존 "AI 통계 기반 운임조회" 로직 그대로
-      //    (송원 규칙에 안 맞는 경우만 사용)
-      // ============================================
-
       let filtered = fullData.filter((r) => {
+          // ⭐⭐⭐ 이 줄이 핵심 ⭐⭐⭐
+  if ((r.운행유형 || "편도") !== form.운행유형) return false;
         // ================================
 // 🚨 경유/단일 운송 판별 (가장 먼저)
 // ================================
@@ -2537,6 +2556,9 @@ if (!sameStops(inputDropStops, rowDropStops)) return false;
 
       if (!filtered.length) {
   filtered = fullData.filter((r) => {
+
+    // ⭐⭐⭐ 반드시 동일하게 ⭐⭐⭐
+    if ((r.운행유형 || "편도") !== form.운행유형) return false;
     if (!r.상차지명 || !r.하차지명) return false;
 
     // 🔴 경유/단일 판별 다시 강제
@@ -2618,6 +2640,7 @@ const similarTop = scoredList
       }
 
       const avg = Math.round(
+        
         fares.reduce((a, b) => a + b, 0) / fares.length
       );
       const min = Math.min(...fares);
@@ -2685,6 +2708,8 @@ const [copyQ, setCopyQ] = React.useState("");
 const [copyStart, setCopyStart] = React.useState("");
 const [copyEnd, setCopyEnd] = React.useState("");
 const [copyFilterType, setCopyFilterType] = React.useState("전체");
+const [onlyRoundTrip, setOnlyRoundTrip] = React.useState(false);
+
 
 // 🔍 오더복사 리스트
 const copyList = React.useMemo(() => {
@@ -2695,6 +2720,10 @@ const copyList = React.useMemo(() => {
 
   // ⭐ 전체 데이터 사용
   let arr = Array.isArray(dispatchData) ? [...dispatchData] : [];
+  // ⭐ 왕복만 보기 필터
+if (onlyRoundTrip) {
+  arr = arr.filter(r => r.운행유형 === "왕복");
+}
 
   // ⭐ 현황패널 필터 적용
   if (filterType && filterValue) {
@@ -2723,7 +2752,7 @@ const copyList = React.useMemo(() => {
   );
 
   return arr;
-}, [dispatchData, copyQ, copyFilterType, filterType, filterValue]);
+}, [dispatchData, copyQ, copyFilterType, filterType, filterValue, onlyRoundTrip]);
 
 const [copySelected, setCopySelected] = React.useState([]);
 
@@ -2749,6 +2778,7 @@ const applyCopy = (r) => {
     메모: r.메모 || "",
     긴급: r.긴급 === true,
   운임보정: r.운임보정 || null,
+  운행유형: r.운행유형 || "편도",
   };
   
 
@@ -2990,26 +3020,52 @@ function FuelSlideWidget() {
 </div>
 
   {/* 구분선 */}
-  <div className="w-px h-7 bg-gray-200" />
+  <div className="flex items-center gap-2">
 
-  {/* 독차 & 혼적 */}
-  <div className="flex items-center gap-4">
-    <label className="chk">독차<input type="checkbox" checked={form.독차} onChange={(e)=>onChange("독차",e.target.checked)}/></label>
-    <label className="chk">혼적<input type="checkbox" checked={form.혼적} onChange={(e)=>onChange("혼적",e.target.checked)}/></label>
-      {/* ⭐ 긴급 */}
-  <button
-    type="button"
-    onClick={() => onChange("긴급", !form.긴급)}
-    className={`
-      px-3 py-1.5 rounded-full text-xs font-semibold border
-      ${form.긴급
-        ? "bg-red-600 text-white border-red-600 animate-pulse"
-        : "bg-red-50 text-red-600 border-red-300 hover:bg-red-100"}
-    `}
+  {/* 독차 */}
+  <ToggleBadge
+    active={form.독차}
+    onClick={() => onChange("독차", !form.독차)}
+    activeCls="bg-indigo-600 text-white border-indigo-600"
+    inactiveCls="bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100"
   >
-    🚨 긴급
-  </button>
+     독차
+  </ToggleBadge>
+
+  {/* 혼적 */}
+  <ToggleBadge
+    active={form.혼적}
+    onClick={() => onChange("혼적", !form.혼적)}
+    activeCls="bg-emerald-600 text-white border-emerald-600"
+    inactiveCls="bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+  >
+     혼적
+  </ToggleBadge>
+
+  {/* 왕복 */}
+  <ToggleBadge
+    active={form.운행유형 === "왕복"}
+    onClick={() =>
+      onChange("운행유형", form.운행유형 === "왕복" ? "편도" : "왕복")
+    }
+    activeCls="bg-purple-600 text-white border-purple-600"
+    inactiveCls="bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100"
+  >
+     왕복
+  </ToggleBadge>
+
+  {/* 🚨 긴급 (기존 유지, 통일감만) */}
+  <ToggleBadge
+    active={form.긴급}
+    onClick={() => onChange("긴급", !form.긴급)}
+    activeCls="bg-red-600 text-white border-red-600 animate-pulse"
+    inactiveCls="bg-red-50 text-red-600 border-red-300 hover:bg-red-100"
+  >
+     긴급
+  </ToggleBadge>
+
 </div>
+
 
   <div className="w-px h-7 bg-gray-200" />
 
@@ -3581,7 +3637,12 @@ const similar = placeList.filter(p => {
 
       {/* 추천 수치 */}
       <div className="grid grid-cols-2 gap-3 text-sm mb-4">
-        <div>차량: <b>{aiRecommend.vehicle}</b></div>
+        <div>
+  차량:
+  <b className="ml-1">
+    {aiRecommend.vehicle} / {form.차량톤수 || "톤수 미입력"}
+  </b>
+</div>
         <div>표본: <b>{aiRecommend.sampleCount}건</b></div>
         <div>
           청구:
@@ -3778,10 +3839,8 @@ if (res?.success) {
 ">
 
               {/* 헤더 */}
-              <div className="
-  flex items-center justify-between
-  pb-2 mb-3 border-b
-">
+              <div className="flex items-center justify-between pb-2 mb-3 border-b">
+  {/* 왼쪽: 제목 */}
   <div>
     <h2 className="text-lg font-bold">📄 오더복사</h2>
     <p className="text-xs text-gray-500">
@@ -3789,20 +3848,35 @@ if (res?.success) {
     </p>
   </div>
 
-  <button
-    className="text-gray-400 hover:text-black text-xl"
-    onClick={() => {
-      setCopyOpen(false);
-      setCopySelected([]);
-    }}
-  >
-    ×
-  </button>
+  {/* 오른쪽: 옵션 + 닫기 */}
+  <div className="flex items-center gap-4">
+    {/* ⭐ 왕복만 보기 (상단 고정) */}
+    <label className="flex items-center gap-1 text-sm cursor-pointer select-none">
+      <input
+        type="checkbox"
+        checked={onlyRoundTrip}
+        onChange={(e) => setOnlyRoundTrip(e.target.checked)}
+      />
+      왕복만 보기
+    </label>
+
+    {/* 닫기 버튼 */}
+    <button
+      className="text-gray-400 hover:text-black text-xl"
+      onClick={() => {
+        setCopyOpen(false);
+        setCopySelected([]);
+      }}
+    >
+      ×
+    </button>
+  </div>
 </div>
 
 
               {/* 검색바 */}
               <div className="flex gap-2 mb-3">
+
 
                 {/* 드롭다운 */}
                 <select
@@ -3844,8 +3918,9 @@ const clientName = isDateLike(r.거래처명) ? "" : (r.거래처명 || "");
 
 // (혹시 row에 주소/담당자 정보가 이미 있으면 그걸 우선, 없으면 placeList 메타로 채움)
 setForm((p) => ({
+  
   ...p,
-
+운행유형: r.운행유형 || "편도",
   거래처명: clientName,
 
   // 상차
@@ -3955,7 +4030,26 @@ setIsCopyMode(true);
                             </td>
                             <td className="p-2">{row.상차일}</td>
                             <td className="p-2">{row.거래처명}</td>
-                            <td className="p-2">{row.상차지명}</td>
+                            <td className="p-2">
+  <div className="inline-flex items-center gap-1">
+    <span>{row.상차지명}</span>
+
+    {row.운행유형 === "왕복" && (
+      <span
+        className="
+          px-1.5 py-0.5
+          text-[10px] font-semibold
+          rounded-full
+          bg-indigo-100 text-indigo-700
+          border border-indigo-300
+          whitespace-nowrap
+        "
+      >
+        왕복
+      </span>
+    )}
+  </div>
+</td>
                             <td className="p-2">{row.하차지명}</td>
                             <td className="p-2">{row.화물내용}</td>
                             <td className="p-2">{row.차량종류}</td>
@@ -4265,7 +4359,11 @@ setIsCopyMode(true);
 
       <div className="text-sm text-gray-700 mb-4 leading-6">
         <p>거래처: <b>{form.거래처명}</b></p>
-        <p>{form.상차지명} → {form.하차지명}</p>
+        <p>
+  {form.운행유형 === "왕복"
+    ? `${form.상차지명} ↔ ${form.하차지명}`
+    : `${form.상차지명} → ${form.하차지명}`}
+</p>
         {isAdmin && (
           <p>청구운임: <b>{Number(form.청구운임 || 0).toLocaleString()}원</b></p>
         )}
@@ -4541,6 +4639,12 @@ setIsCopyMode(true);
         <p>📌 최신 운임: {fareResult.latestFare?.toLocaleString()} 원</p>
         <p>📌 최신 상차일: {fareResult.latestDate}</p>
         <p>📌 최근 화물: {fareResult.latestCargo}</p>
+        <p>
+  📌 차량톤수:
+  <b className="ml-1">
+    {form.차량톤수 || "미입력"}
+  </b>
+</p>
       </div>
 
       {/* 추천 카드 */}
@@ -4611,9 +4715,13 @@ setFareModalOpen(false);
   </div>
 
   {/* 화물 */}
-  <div className="text-xs text-gray-500">
-    화물: {r.화물내용 || "-"}
-  </div>
+<div className="text-xs text-gray-500">
+  화물: {r.화물내용 || "-"}
+</div>
+<div className="text-xs text-gray-500">
+  차량: {r.차량종류 || "-"} / {r.차량톤수 || "-"}
+</div>
+  
 </div>
 
 {(() => {
@@ -4738,6 +4846,23 @@ setFareModalOpen(false);
 /* 메뉴용 실시간배차현황 — 배차현황과 100% 동일 컬럼/순서(+주소)
    role 지원: admin | user
 */
+// ✅ RealtimeStatus 컴포넌트 위 (또는 아래)
+
+const RoundTripBadge = () => (
+  <span
+    className="
+      ml-1 px-1.5 py-0.5
+      text-[10px] font-bold
+      rounded-full
+      bg-indigo-100 text-indigo-700
+      border border-indigo-300
+      whitespace-nowrap
+    "
+  >
+    왕복
+  </span>
+);
+
 function RealtimeStatus({
   
   dispatchData,
@@ -5219,6 +5344,7 @@ const [fareModalOpen, setFareModalOpen] = React.useState(false);
     지급방식: "",
     배차방식: "",
     메모: "",
+    운행유형: "편도",
     혼적: false,
     독차: false,
     긴급: false,
@@ -6625,7 +6751,14 @@ XLSX.writeFile(wb, "실시간배차현황.xlsx");
                   <td className={cell}>{editableInput("하차시간", r.하차시간, r._id)}</td>
 
                   <td className={cell}>{editableInput("거래처명", r.거래처명, r._id)}</td>
-                  <td className={cell}>{editableInput("상차지명", r.상차지명, r._id)}</td>
+                  <td className={cell}>
+  <div className="inline-flex items-center">
+    {editableInput("상차지명", r.상차지명, r._id)}
+
+    {r.운행유형 === "왕복" && <RoundTripBadge />}
+  </div>
+</td>
+
 
                   <td className={addrCell}>
                     {renderAddrCell("상차지주소", r.상차지주소, r._id)}
@@ -7609,7 +7742,7 @@ XLSX.writeFile(wb, "실시간배차현황.xlsx");
                   try {
                     const payload = stripUndefined({
   ...newOrder,
-
+운행유형: newOrder.운행유형 || "편도",
   긴급: newOrder.긴급 === true,
 
   운임보정: newOrder.긴급
@@ -7783,30 +7916,71 @@ await addDispatch?.(payload);
     운임조회
   </button>
 </div>
-{/* 🚨 긴급 오더 */}
-<div className="flex items-center gap-2 mb-3">
-  <label className="flex items-center gap-2 cursor-pointer">
-    <input
-      type="checkbox"
-      checked={editTarget.긴급 === true}
-      onChange={(e) =>
-        setEditTarget((p) => ({
-          ...p,
-          긴급: e.target.checked,
-          운임보정: e.target.checked
-            ? {
-                type: "긴급",
-                rate: 0.2,
-                memo: "긴급 오더",
-              }
-            : null,
-        }))
-      }
-    />
-    <span className="font-semibold text-red-600">🚨 긴급 오더</span>
-  </label>
-</div>
+{/* ================= 선택수정: 상태 버튼 그룹 ================= */}
+<div className="flex items-center gap-2 mb-4 flex-wrap">
 
+  {/* 🚨 긴급 */}
+  <button
+    type="button"
+    onClick={() =>
+      setEditTarget((p) => ({
+        ...p,
+        긴급: !p.긴급,
+        운임보정: !p.긴급
+          ? { type: "긴급", rate: 0.2, memo: "긴급 오더" }
+          : null,
+      }))
+    }
+    className={`
+      px-3 py-1.5 rounded-full text-xs font-semibold border
+      ${editTarget.긴급
+        ? "bg-red-600 text-white border-red-600 animate-pulse"
+        : "bg-red-50 text-red-600 border-red-300 hover:bg-red-100"}
+    `}
+  >
+    🚨 긴급
+  </button>
+
+  {/* 🔁 왕복 */}
+  <button
+    type="button"
+    onClick={() =>
+      setEditTarget((p) => ({
+        ...p,
+        운행유형: p.운행유형 === "왕복" ? "편도" : "왕복",
+      }))
+    }
+    className={`
+      px-3 py-1.5 rounded-full text-xs font-semibold border
+      ${editTarget.운행유형 === "왕복"
+        ? "bg-purple-600 text-white border-purple-600"
+        : "bg-purple-50 text-purple-700 border-purple-300 hover:bg-purple-100"}
+    `}
+  >
+    🔁 왕복
+  </button>
+
+  {/* 📦 혼적 */}
+  <button
+    type="button"
+    onClick={() =>
+      setEditTarget((p) => ({
+        ...p,
+        혼적: !p.혼적,
+        독차: p.혼적 ? p.독차 : false, // ⭐ 혼적 켜면 독차 해제
+      }))
+    }
+    className={`
+      px-3 py-1.5 rounded-full text-xs font-semibold border
+      ${editTarget.혼적
+        ? "bg-emerald-600 text-white border-emerald-600"
+        : "bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100"}
+    `}
+  >
+    📦 혼적
+  </button>
+
+</div>
 
       {/* ------------------------------------------------ */}
       {/* 🔵 거래처명 */}
@@ -8498,6 +8672,7 @@ setShowEditClientDropdown(false);
   "청구운임","기사운임",
   "지급방식","배차방식",
   "메모",
+  "운행유형",
   "혼적","독차",
   "긴급","운임보정",
   "배차상태",
@@ -9507,6 +9682,7 @@ const handleFareSearch = () => {
     지급방식: "",
     배차방식: "",
     메모: "",
+    운행유형: "편도",
     혼적: false,
     독차: false,
   });
@@ -10494,9 +10670,30 @@ return (
         />
       </div>
 
-    ) : (
-      row[key]
+    ) : key === "상차지명" ? (
+  <div className="inline-flex items-center">
+    <span>{row.상차지명}</span>
+
+    {row.운행유형 === "왕복" && (
+      <span
+        className="
+          ml-1
+          px-1.5 py-0.5
+          text-[10px] font-bold
+          rounded-full
+          bg-indigo-100 text-indigo-700
+          border border-indigo-300
+          whitespace-nowrap
+        "
+      >
+        왕복
+      </span>
     )}
+  </div>
+) : (
+  row[key]
+)}
+
   </td>
 ))}
 
@@ -10671,22 +10868,72 @@ return (
     
     {/* ===================== 선택 수정 팝업 본체 ===================== */}
     <div className="bg-white p-5 rounded shadow-xl w-[480px] max-h-[90vh] overflow-y-auto">
-      <h3 className="text-lg font-bold mb-4">선택한 오더 수정</h3>
-      {/* 🚨 긴급 오더 (상단 고정) */}
-<div className="flex items-center gap-2 mb-4">
-  <input
-    type="checkbox"
-    checked={editTarget.긴급 === true}
-    onChange={(e) =>
+      {/* ================= 선택한 오더 수정 타이틀 ================= */}
+<h3 className="text-lg font-bold mb-3">
+  선택한 오더 수정
+</h3>
+
+{/* ================= 상태 버튼 그룹 ================= */}
+<div className="flex items-center gap-2 mb-4 flex-wrap">
+
+  {/* 🚨 긴급 */}
+  <button
+    type="button"
+    onClick={() =>
       setEditTarget((p) => ({
         ...p,
-        긴급: e.target.checked,
+        긴급: !p.긴급,
       }))
     }
-  />
-  <span className="text-red-600 font-bold flex items-center gap-1">
-    🚨 긴급 오더
-  </span>
+    className={`
+      px-3 py-1.5 rounded-full text-xs font-semibold border
+      ${editTarget.긴급
+        ? "bg-red-600 text-white border-red-600"
+        : "bg-red-50 text-red-600 border-red-300 hover:bg-red-100"}
+    `}
+  >
+    🚨 긴급
+  </button>
+
+  {/* 🔁 왕복 */}
+  <button
+    type="button"
+    onClick={() =>
+      setEditTarget((p) => ({
+        ...p,
+        운행유형: p.운행유형 === "왕복" ? "편도" : "왕복",
+      }))
+    }
+    className={`
+      px-3 py-1.5 rounded-full text-xs font-semibold border
+      ${editTarget.운행유형 === "왕복"
+        ? "bg-purple-600 text-white border-purple-600"
+        : "bg-purple-50 text-purple-700 border-purple-300 hover:bg-purple-100"}
+    `}
+  >
+    🔁 왕복
+  </button>
+
+  {/* 📦 혼적 */}
+  <button
+    type="button"
+    onClick={() =>
+      setEditTarget((p) => ({
+        ...p,
+        혼적: !p.혼적,
+        독차: p.혼적 ? p.독차 : false, // 혼적 ON → 독차 OFF
+      }))
+    }
+    className={`
+      px-3 py-1.5 rounded-full text-xs font-semibold border
+      ${editTarget.혼적
+        ? "bg-emerald-600 text-white border-emerald-600"
+        : "bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100"}
+    `}
+  >
+    📦 혼적
+  </button>
+
 </div>
 
 
@@ -11335,6 +11582,7 @@ return (
   "청구운임","기사운임",
   "지급방식","배차방식",
   "메모",
+  "운행유형",
   "혼적","독차",
   "긴급",          // 🔥 여기
   "운임보정",
@@ -11351,7 +11599,13 @@ if (payload.배차상태 === "배차중") {
   delete payload.이름;
   delete payload.전화번호;
 }
-await patchDispatch(editTarget._id, payload);
+const targetId = getId(editTarget);
+if (!targetId) {
+  alert("❌ 저장 실패: 오더 ID를 찾을 수 없습니다.");
+  return;
+}
+
+await patchDispatch(targetId, payload);
 
 
     // 2) 방금 저장한 행을 반짝이게
@@ -11372,7 +11626,7 @@ await patchDispatch(editTarget._id, payload);
 
     // 3) 팝업 종료
     alert("수정이 저장되었습니다.");
-const savedId = editTarget._id;
+const savedId = targetId;
 
 setEditPopupOpen(false);
 setSelected(new Set());
@@ -12027,6 +12281,7 @@ function NewOrderPopup({
     try {
       await addDispatch({
         ...newOrder,
+        운행유형: newOrder.운행유형 || "편도",
         등록일: new Date().toISOString().slice(0, 10),
         배차상태: "배차중",
         차량번호: "",

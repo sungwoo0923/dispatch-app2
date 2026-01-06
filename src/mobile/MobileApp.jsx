@@ -313,6 +313,12 @@ const toggleAlarm = () => {
   setAlarmEnabled((prev) => {
     const next = !prev;
     localStorage.setItem("alarmEnabled", String(next));
+
+    // 🔥 알림을 다시 켤 때 mute 해제
+    if (next) {
+      setToastMuted(false);
+    }
+
     return next;
   });
 };
@@ -358,9 +364,10 @@ const [hasNewSchedule, setHasNewSchedule] = useState(false);
   const [quickAssignTarget, setQuickAssignTarget] = useState(null);
 
   const showToast = (msg) => {
-    setToast(msg);
-    setTimeout(() => setToast(""), 2000);
-  };
+  if (toastMuted) return;   // 🔥 추가
+  setToast(msg);
+  setTimeout(() => setToast(""), 2000);
+};
 
   // --------------------------------------------------
   // 1. Firestore 실시간 연동 (🔥 전체 데이터 — PC와 동일)
