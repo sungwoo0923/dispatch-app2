@@ -1047,9 +1047,25 @@ const extractTonNum = (text = "") => {
 // ================================
 const isDateLike = (v) =>
   typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v);
+// ===============================
+// 📤 즉시공유 텍스트 생성
+// ===============================
+function makeInstantShareText(form) {
+  const dateStr = form.상차일
+    ? `${form.상차일}(${"일월화수목금토"[new Date(form.상차일).getDay()]})`
+    : "";
 
-    // ⭐ Firestore 실시간 구독으로 placeRows 강제 최신화
-// Firestore + localStorage 통합 placeList 생성
+  return `${dateStr}
+
+${form.상차지명 || "-"} → ${form.하차지명 || "-"}
+${form.상차지주소 || "-"} → ${form.하차지주소 || "-"}
+
+${form.화물내용 || "-"} ${form.차량톤수 || ""} ${form.차량종류 || ""}
+
+${form.차량번호 || "-"} ${form.이름 || "-"} ${form.전화번호 || "-"}
+${Number(form.청구운임 || 0).toLocaleString()}원 부가세별도 배차되었습니다.`;
+}
+
 const placeList = React.useMemo(() => {
   
   const fromFirestore = Array.isArray(placeRows) ? placeRows : [];
@@ -2492,13 +2508,14 @@ if (!sameStops(inputDropStops, rowDropStops)) return false;
         const rPickup = String(r.상차지명).trim();
         const rDrop = String(r.하차지명).trim();
 
-        const matchPickup =
-          norm(rPickup).includes(norm(pickup)) ||
-          norm(pickup).includes(norm(rPickup));
+// ✅ 상차 / 하차 "완전 동일"만 허용
+const matchPickup =
+  normalizeKey(rPickup) === normalizeKey(pickup);
 
-        const matchDrop =
-          norm(rDrop).includes(norm(drop)) ||
-          norm(drop).includes(norm(rDrop));
+const matchDrop =
+  normalizeKey(rDrop) === normalizeKey(drop);
+
+if (!matchPickup || !matchDrop) return false;
 
         if (!matchPickup || !matchDrop) return false;
 
@@ -2584,14 +2601,11 @@ if (!sameStops(inputDropStops, rowDropStops)) return false;
     const rDrop = String(r.하차지명).trim();
 
     return (
-      rPickup.includes(pickup) || pickup.includes(rPickup)
-    ) && (
-      rDrop.includes(drop) || drop.includes(rDrop)
-    );
+  normalizeKey(rPickup) === normalizeKey(pickup) &&
+  normalizeKey(rDrop) === normalizeKey(drop)
+);
   });
 }
-
-
       if (!filtered.length) {
         alert("유사한 과거 운임 데이터를 찾지 못했습니다.");
         return;
@@ -4369,23 +4383,41 @@ setIsCopyMode(true);
         )}
       </div>
 
-      <div className="flex justify-end gap-2">
-        <button
-          className="px-3 py-1.5 bg-gray-200 rounded"
-          onClick={() => setConfirmOpen(false)}
-        >
-          취소
-        </button>
 
-        <button
-          id="confirm-save-btn"
-          className="px-3 py-1.5 bg-blue-600 text-white rounded"
-          onClick={doSave}
-        >
-          확인
-        </button>
-      </div>
-      
+  {/* ⭐ 즉시공유 */}
+  <button
+    type="button"
+    className="px-3 py-1.5 bg-emerald-600 text-white rounded"
+    onClick={async () => {
+      const text = makeInstantShareText(form);
+
+      try {
+        await navigator.clipboard.writeText(text);
+        alert("📋 즉시공유 내용이 복사되었습니다.");
+      } catch {
+        prompt("아래 내용을 복사하세요.", text);
+      }
+    }}
+  >
+    즉시공유
+  </button>
+  
+      <div className="flex justify-end gap-2">
+  <button
+    className="px-3 py-1.5 bg-gray-200 rounded"
+    onClick={() => setConfirmOpen(false)}
+  >
+    취소
+  </button>
+  {/* 기존 저장 */}
+  <button
+    id="confirm-save-btn"
+    className="px-3 py-1.5 bg-blue-600 text-white rounded"
+    onClick={doSave}
+  >
+    확인
+  </button>
+</div>
     </div>
   </div>
 )}
@@ -5757,6 +5789,47 @@ const driverMap = (() => {
   });
   return m;
 })();
+// =====================
+// 🔑 거래처명 정렬 전용 normalize (공통)
+// =====================
+// =====================
+// 🔑 거래처명 통합 normalize (정렬/검색/자동완성 공용)
+// =====================
+const normalizeClient = (s = "") =>
+  String(s)
+    .normalize("NFC")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "") // zero-width 제거
+    .replace(/\u00A0/g, " ")               // NBSP
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, "")
+    .replace(/주식회사|유한회사|\(주\)|㈜/g, "")
+    .replace(/\(.*?\)/g, "")
+    .replace(/[0-9]/g, "")
+    .replace(/[^a-z0-9가-힣]/g, "");
+
+
+// =====================
+// 🔽 정렬 비교 함수 (필수)
+// =====================
+const compareBy = (key, dir = "asc") => (a, b) => {
+  // 🔥 edited 값이 있으면 그걸 기준으로
+  let av = edited[a._id]?.[key] ?? a[key];
+  let bv = edited[b._id]?.[key] ?? b[key];
+
+  if (av == null && bv == null) return 0;
+  if (av == null) return 1;
+  if (bv == null) return -1;
+
+  if (key === "거래처명") {
+    av = normalizeClient(av);
+    bv = normalizeClient(bv);
+  }
+
+  return dir === "asc"
+    ? String(av).localeCompare(String(bv), "ko")
+    : String(bv).localeCompare(String(av), "ko");
+};
 
 // ==========================================
 // 🚚 기사 확인 모달 상태 + 적용 함수 추가 (START)
@@ -5892,47 +5965,70 @@ if (matches.length > 1) {
   return;
 };
 
+// 🔽 정렬 상태
+const [sortKey, setSortKey] = React.useState("");
+const [sortDir, setSortDir] = React.useState("asc"); // asc | desc
+const [sortModalOpen, setSortModalOpen] = React.useState(false);
+const [tempSortKey, setTempSortKey] = React.useState("");
+const [tempSortDir, setTempSortDir] = React.useState("asc");
 
   // ------------------------
   // 📌 필터 + 검색 + 정렬
   // ------------------------
   const filtered = React.useMemo(() => {
-    let data = [...rows];
-    const today = todayKST();
+  let data = [...rows];
+  const today = todayKST();
 
-    const isInRange = (date, start, end) => {
-      if (!date) return false;
-      const d = new Date(date).getTime();
-      const s = start ? new Date(start).getTime() : -Infinity;
-      const e = end ? new Date(end).getTime() : Infinity;
-      return d >= s && d <= e;
-    };
+  const isInRange = (date, start, end) => {
+    if (!date) return false;
+    const d = new Date(date).getTime();
+    const s = start ? new Date(start).getTime() : -Infinity;
+    const e = end ? new Date(end).getTime() : Infinity;
+    return d >= s && d <= e;
+  };
 
-    if (!startDate && !endDate) {
-      data = data.filter((r) => (r.상차일 || "") === today);
-    } else {
-      data = data.filter((r) =>
-        isInRange(r.상차일, startDate, endDate)
-      );
-    }
+  // 날짜 필터
+  if (!startDate && !endDate) {
+    data = data.filter((r) => (r.상차일 || "") === today);
+  } else {
+    data = data.filter((r) =>
+      isInRange(r.상차일, startDate, endDate)
+    );
+  }
 
-    if (filterType && filterValue) {
-      data = data.filter((r) =>
-        String(r[filterType] || "").includes(filterValue)
-      );
-    }
+  // 컬럼 필터
+  if (filterType && filterValue) {
+    data = data.filter((r) =>
+      String(r[filterType] || "").includes(filterValue)
+    );
+  }
 
-    if (q.trim()) {
-      const key = q.toLowerCase();
-      data = data.filter((r) =>
-        Object.values(r).some((v) =>
-          String(v || "").toLowerCase().includes(key)
-        )
-      );
-    }
+  // 전체 검색
+  if (q.trim()) {
+    const key = q.toLowerCase();
+    data = data.filter((r) =>
+      Object.values(r).some((v) =>
+        String(v || "").toLowerCase().includes(key)
+      )
+    );
+  }
 
-    return data;
-  }, [rows, q, filterType, filterValue, startDate, endDate]);
+  // 🔽 정렬 (여기 추가)
+  if (sortKey) {
+    data.sort(compareBy(sortKey, sortDir));
+  }
+
+  return data;
+}, [
+  rows,
+  q,
+  filterType,
+  filterValue,
+  startDate,
+  endDate,
+  sortKey,
+  sortDir,
+]);
 
   // KPI
   const kpi = React.useMemo(() => {
@@ -6422,6 +6518,17 @@ ${url}
 
       {/* 상단 버튼 */}
 <div className="flex justify-end gap-2 mb-2">
+  <button
+  onClick={() => {
+    setTempSortKey(sortKey || "");
+    setTempSortDir(sortDir || "asc");
+    setSortModalOpen(true);
+  }}
+  className="px-4 py-2 rounded-lg bg-slate-500 text-white text-sm font-semibold shadow hover:opacity-90"
+>
+  정렬
+</button>
+
   {/* 📋 기사복사 모달 오픈 버튼 */}
 <button
   onClick={() => {
@@ -9147,6 +9254,99 @@ setTimeout(() => {
     </div>
   </div>
 )}
+{/* ===================== 🔽 정렬 설정 팝업 ===================== */}
+{sortModalOpen && (
+  <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[99999]">
+    <div className="bg-white rounded-xl p-5 w-[360px] shadow-xl">
+      <h3 className="text-lg font-bold mb-4">정렬 설정</h3>
+
+      {/* 정렬 기준 */}
+      <div className="mb-3">
+        <label className="text-sm font-semibold">정렬 기준</label>
+        <select
+          className="border p-2 rounded w-full mt-1"
+          value={tempSortKey}
+          onChange={(e) => setTempSortKey(e.target.value)}
+        >
+          <option value="">선택 안함</option>
+          {[
+            "등록일",
+            "상차일",
+            "하차일",
+            "거래처명",
+            "상차지명",
+            "하차지명",
+            "차량번호",
+            "배차상태",
+            "청구운임",
+            "기사운임",
+            "수수료",
+          ].map((k) => (
+            <option key={k} value={k}>{k}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* 정렬 방향 */}
+      <div className="mb-4">
+        <label className="text-sm font-semibold">정렬 방향</label>
+        <div className="flex gap-2 mt-1">
+          <button
+            className={`flex-1 py-2 rounded ${
+              tempSortDir === "asc"
+                ? "bg-blue-600 text-white"
+                : "bg-gray-200"
+            }`}
+            onClick={() => setTempSortDir("asc")}
+          >
+            오름차순
+          </button>
+          <button
+            className={`flex-1 py-2 rounded ${
+              tempSortDir === "desc"
+                ? "bg-blue-600 text-white"
+                : "bg-gray-200"
+            }`}
+            onClick={() => setTempSortDir("desc")}
+          >
+            내림차순
+          </button>
+        </div>
+      </div>
+
+      {/* 버튼 */}
+      <div className="flex justify-end gap-2">
+        <button
+          className="px-3 py-1 rounded bg-gray-200"
+          onClick={() => setSortModalOpen(false)}
+        >
+          취소
+        </button>
+
+        <button
+          className="px-3 py-1 rounded bg-gray-400 text-white"
+          onClick={() => {
+            setSortKey("");
+            setSortModalOpen(false);
+          }}
+        >
+          정렬 해제
+        </button>
+
+        <button
+          className="px-3 py-1 rounded bg-blue-600 text-white"
+          onClick={() => {
+            setSortKey(tempSortKey);
+            setSortDir(tempSortDir);
+            setSortModalOpen(false);
+          }}
+        >
+          적용
+        </button>
+      </div>
+    </div>
+  </div>
+)}
 
 <style>{`
   @keyframes fadeInUp {
@@ -9337,6 +9537,11 @@ const tomorrowKST = () => {
 });
   const [startDate, setStartDate] = React.useState("");
   const [endDate, setEndDate] = React.useState("");
+  const [sortKey, setSortKey] = React.useState("");
+const [sortDir, setSortDir] = React.useState("asc");
+const [sortKey2, setSortKey2] = React.useState("");
+const [sortDir2, setSortDir2] = React.useState("asc");
+const [sortModalOpen, setSortModalOpen] = React.useState(false);
   const [selected, setSelected] = React.useState(new Set());
   const [editMode, setEditMode] = React.useState(false);
   // 🔔 즉시 변경 확인 팝업 + 히스토리
@@ -10211,46 +10416,80 @@ ws["!cols"] = [
   XLSX.utils.book_append_sheet(wb, ws, "배차현황");
   XLSX.writeFile(wb, "배차현황.xlsx");
 };
+// =====================
+// 🔑 거래처명 정규화 (정렬용)
+// =====================
+const normalizeClient = (s = "") =>
+  String(s)
+    .normalize("NFC")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .replace(/\u00A0/g, " ")
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, "")
+    .replace(/주식회사|유한회사|\(주\)|㈜/g, "")
+    .replace(/\(.*?\)/g, "")
+    .replace(/[0-9]/g, "")
+    .replace(/[^a-z0-9가-힣]/g, "");
+
+// =====================
+// 🔽 정렬 비교 함수 (최종 확정본)
+// =====================
+const compareBy = (key, dir = "asc") => (a, b) => {
+
+  // ✅ 기본 정렬 (정렬 해제 상태)
+  if (!key) {
+    // 1️⃣ 배차중 최우선
+    if (a.배차상태 === "배차중" && b.배차상태 !== "배차중") return -1;
+    if (a.배차상태 !== "배차중" && b.배차상태 === "배차중") return 1;
+
+    // 2️⃣ 상차일 내림차순 (미래 → 과거)
+    const d1 = a.상차일 || "";
+    const d2 = b.상차일 || "";
+    if (d1 !== d2) return d2.localeCompare(d1);
+
+    // 3️⃣ 상차시간 내림차순 (늦은 시간 → 이른 시간)
+    const t1 = a.상차시간 || "";
+    const t2 = b.상차시간 || "";
+    return t2.localeCompare(t1);
+  }
+
+  // ✅ 사용자 선택 정렬
+  let av = a[key];
+  let bv = b[key];
+
+  if (key === "거래처명") {
+    av = normalizeClient(av);
+    bv = normalizeClient(bv);
+  }
+
+  return dir === "asc"
+    ? String(av ?? "").localeCompare(String(bv ?? ""), "ko")
+    : String(bv ?? "").localeCompare(String(av ?? ""), "ko");
+};
+
 
   // ===================== 정렬 ======================
-  const filtered = React.useMemo(() => {
-    let data = [...dispatchData];
-    if (startDate) data = data.filter((r) => (r.상차일 || "") >= startDate);
-    if (endDate) data = data.filter((r) => (r.상차일 || "") <= endDate);
-    if (q.trim()) {
-      const lower = q.toLowerCase();
-      data = data.filter((r) =>
-        Object.values(r).some((v) =>
-          String(v || "").toLowerCase().includes(lower)
-        )
-      );
-    }
+const filtered = React.useMemo(() => {
+  let data = [...dispatchData];
 
-data.sort((a, b) => {
-  // 1️⃣ 배차중 우선
-  if (a.배차상태 === "배차중" && b.배차상태 !== "배차중") return -1;
-  if (a.배차상태 !== "배차중" && b.배차상태 === "배차중") return 1;
+  if (startDate) data = data.filter(r => (r.상차일 || "") >= startDate);
+  if (endDate) data = data.filter(r => (r.상차일 || "") <= endDate);
 
-  // 2️⃣ 상차일 최신순 (문자열 강제)
-  const ad = String(a.상차일 ?? "");
-  const bd = String(b.상차일 ?? "");
-  if (ad !== bd) return bd.localeCompare(ad);
+  if (q.trim()) {
+    const lower = q.toLowerCase();
+    data = data.filter(r =>
+      Object.values(r).some(v =>
+        String(v || "").toLowerCase().includes(lower)
+      )
+    );
+  }
 
-  // 3️⃣ 마지막 수정일 최신순 (Date / Timestamp 대응)
-  const toTime = (v) => {
-    if (!v) return 0;
-    if (typeof v === "string") return Date.parse(v) || 0;
-    if (v instanceof Date) return v.getTime();
-    if (typeof v.toDate === "function") return v.toDate().getTime(); // Firestore Timestamp
-    return 0;
-  };
+  // 🔥 핵심: 거래처명 기준 정렬
+  data.sort(compareBy(sortKey, sortDir));
 
-  return toTime(b.lastUpdated || b.등록일) - toTime(a.lastUpdated || a.등록일);
-});
-
-
-    return data;
-  }, [dispatchData, q, startDate, endDate]);
+  return data;
+}, [dispatchData, q, startDate, endDate, sortKey, sortDir]);
 // ⭐⭐⭐ 페이지 데이터 (정렬된 filtered 기준)
 const pageRows = React.useMemo(() => {
   const start = page * pageSize;
@@ -10407,50 +10646,13 @@ return (
 
   {/* 우측 버튼 묶음 */}
   <div className="flex items-center gap-2">
-    {/* 📡 선택전송 (24시콜)_배차현황 */}
-<button
-  onClick={async () => {
-    if (!selected.size)
-      return alert("전송할 항목을 선택하세요.");
-
-    const ids = [...selected];
-    let success = 0, fail = 0;
-
-    for (const id of ids) {
-      const row = dispatchData.find((r) => r._id === id);
-      if (!row) continue;
-
-      if (!row.상차지주소 || !row.하차지주소) {
-        alert(`[${row.상차지명} → ${row.하차지명}]\n주소가 없습니다.`);
-        fail++;
-        continue;
-      }
-
-      try {
-        const res = await sendOrderTo24(row);
-
-        if (res?.success) {
-          success++;
-        } else {
-          fail++;
-        }
-      } catch (e) {
-        console.error("24시콜 오류:", e);
-        fail++;
-      }
-    }
-
-    alert(`📡 24시콜 선택전송 완료!
-성공: ${success}건
-실패: ${fail}건`);
-  }}
-  className="px-3 py-1 rounded bg-orange-600 text-white"
+    <button
+  onClick={() => setSortModalOpen(true)}
+  className="px-4 py-2 rounded-lg bg-slate-600 text-white shadow-md hover:bg-slate-700"
 >
-  📡 선택전송(24시콜)
+  정렬
 </button>
-
-
-
+    
 {/* 📋 기사복사 */}
 <button
   onClick={() => {
@@ -12169,6 +12371,102 @@ setTimeout(() => {
     </div>
   </div>
 )}
+{sortModalOpen && (
+  <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[100000]">
+    <div className="bg-white rounded-xl w-[420px] p-6 shadow-xl">
+
+      {/* 제목 */}
+      <h3 className="text-lg font-bold mb-4">정렬 설정</h3>
+
+      {/* 정렬 기준 */}
+<div className="mb-5">
+  
+  <div className="text-sm font-semibold mb-2">정렬 기준</div>
+  <select
+    className="w-full border rounded p-2"
+    value={sortKey || ""}
+    onChange={(e) => setSortKey(e.target.value)}
+  >
+    <option value="">선택 안함</option>
+    {[
+      "등록일",
+      "상차일",
+      "하차일",
+      "거래처명",
+      "상차지명",
+      "하차지명",
+      "차량번호",
+      "배차상태",
+      "청구운임",
+      "기사운임",
+      "수수료",
+    ].map((k) => (
+      <option key={k} value={k}>
+        {k}
+      </option>
+    ))}
+  </select>
+</div>
+
+
+      {/* 정렬 방향 */}
+      <div className="mb-6">
+        <div className="text-sm font-semibold mb-2">정렬 방향</div>
+        <div className="flex gap-2">
+          <button
+            className={`flex-1 py-2 rounded ${
+              sortDir === "asc"
+                ? "bg-blue-600 text-white"
+                : "bg-gray-200"
+            }`}
+            onClick={() => setSortDir("asc")}
+          >
+            오름차순
+          </button>
+          <button
+            className={`flex-1 py-2 rounded ${
+              sortDir === "desc"
+                ? "bg-blue-600 text-white"
+                : "bg-gray-200"
+            }`}
+            onClick={() => setSortDir("desc")}
+          >
+            내림차순
+          </button>
+        </div>
+      </div>
+
+      {/* 하단 버튼 */}
+      <div className="flex justify-end gap-2">
+        <button
+          className="px-4 py-2 rounded bg-gray-200"
+          onClick={() => setSortModalOpen(false)}
+        >
+          취소
+        </button>
+
+        <button
+          className="px-4 py-2 rounded bg-gray-300"
+          onClick={() => {
+            setSortKey("");
+            setSortDir("asc");
+            setSortModalOpen(false);
+          }}
+        >
+          정렬 해제
+        </button>
+
+        <button
+          className="px-4 py-2 rounded bg-blue-600 text-white"
+          onClick={() => setSortModalOpen(false)}
+        >
+          적용
+        </button>
+      </div>
+
+    </div>
+  </div>
+)}
 
     </div>
     
@@ -12951,11 +13249,26 @@ const mPure = stat(monthRows.filter(r => !isFresh(r)));
 const yPure = stat(yearRows.filter(r => !isFresh(r)));
 // ================================
 // 🔮 2026 매출 예측 (BEST PRACTICE)
-// 기준: 올해 순수 운송 연매출
+// 기준: 직전 완료 연도(작년) 순수 운송 연매출
 // ================================
 
-// 올해 순수 운송 연매출
-const baseYearSale = yPure.sale;
+// 🔹 직전 연도 (작년)
+const baseYear = yearKey - 1;
+
+// 🔹 작년 전체 연간 데이터
+const lastYearRows = rows.filter(r => {
+  const d = r.상차일;
+  if (!d) return false;
+  return d.startsWith(String(baseYear));
+});
+
+// 🔹 작년 순수 운송 연매출 (후레쉬 제외)
+const lastYearPure = stat(
+  lastYearRows.filter(r => !isFresh(r))
+);
+
+// ✅ 여기서 사용 (선언 이후)
+const baseYearSale = lastYearPure.sale;
 
 // 연 성장률 가정 (현실적인 범위)
 const growth2026 = {
