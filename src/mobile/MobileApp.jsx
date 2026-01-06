@@ -126,9 +126,20 @@ const formatRangeShort = (s, e) => {
   const ee = e ? e.slice(5).replace("-", ".") : "";
   return `${ss} ~ ${ee || ss}`;
 };
+const getHandoverDate = (h) => {
+  if (h?.date) return h.date;
 
+  if (h?.createdAt?.seconds) {
+    return new Date(h.createdAt.seconds * 1000)
+      .toISOString()
+      .slice(0, 10);
+  }
+
+  return "";
+};
 // 오늘 / 내일 / 기타 → 당일/내일/어제 or MM/DD
 const getDayBadge = (dateStr) => {
+
   if (!dateStr) return "";
   const today = new Date();
   const target = new Date(dateStr);
@@ -307,7 +318,7 @@ export default function MobileApp() {
 const [alarmEnabled, setAlarmEnabled] = useState(
   localStorage.getItem("alarmEnabled") !== "false"
 );
-
+const [handovers, setHandovers] = useState([]);
 // 🔁 토글 함수
 const toggleAlarm = () => {
   setAlarmEnabled((prev) => {
@@ -470,6 +481,31 @@ useEffect(() => {
   );
   return () => unsub();
 }, []);
+// --------------------------------------------------
+// 📝 인수인계 실시간 구독 (★ 여기 추가 ★)
+// --------------------------------------------------
+useEffect(() => {
+  const unsub = onSnapshot(
+    collection(db, "handovers"),
+    (snap) => {
+      const list = snap.docs.map(d => ({
+        id: d.id,
+        ...d.data(),
+      }));
+
+      // 최신순 정렬
+      list.sort(
+        (a, b) =>
+          (b.createdAt?.seconds || 0) -
+          (a.createdAt?.seconds || 0)
+      );
+
+      setHandovers(list);
+    }
+  );
+
+  return () => unsub();
+}, []);
 
   
 // 🔔 상차 임박 2시간 이내 감지 (⏱ 시간 흐름 포함)
@@ -613,7 +649,8 @@ useEffect(() => {
   // 2. 화면 상태 / 필터
   // --------------------------------------------------
   const [onlyToday, setOnlyToday] = useState(false);
-  const [page, setPage] = useState("list"); // list | form | detail | fare | status | unassigned
+  const [page, setPage] = useState("list"); 
+// list | form | detail | fare | status | unassigned | handover
   // 🆕 공지 NEW 판단 (데이터 기준)
 useEffect(() => {
   if (!notices.length) {
@@ -1283,9 +1320,6 @@ const title =
   onRefresh={page === "list" ? handleRefresh : undefined}
   onMenu={page === "list" ? () => setShowMenu(true) : undefined}
 />
-
-
-
       {showMenu && (
         <MobileSideMenu
           onClose={() => setShowMenu(false)}
@@ -1440,7 +1474,36 @@ onGoSchedule={() => {
         등록된 일정이 없습니다.
       </div>
     )}
+    {/* ✅ schedule 바깥에 handover 독립 */}
+{page === "handover" && (
+  <div className="px-4 py-3 space-y-3">
+    {handovers.length === 0 && (
+      <div className="text-sm text-gray-400 text-center">
+        등록된 인수인계가 없습니다.
+      </div>
+    )}
 
+    {handovers.map(h => (
+      <div
+        key={h.id}
+        className="bg-white rounded-xl border shadow-sm p-4"
+      >
+        <div className="flex justify-between text-xs text-gray-500 mb-1">
+          <span>작성자: {h.author || "-"}</span>
+          <span>{getHandoverDate(h)}</span>
+        </div>
+
+        <div className="text-sm font-semibold mb-1">
+          받는사람: {h.receiver || "-"}
+        </div>
+
+        <div className="text-sm text-gray-700 whitespace-pre-wrap">
+          {h.text || ""}
+        </div>
+      </div>
+    ))}
+  </div>
+)}
     {schedules.map(s => {
       const type = s.type || s.title;     // 휴가 / 병가
       const writer = s.writer || s.name;  // ✅ 핵심
@@ -1700,6 +1763,7 @@ function MobileSideMenu({
   uiScale, 
   alarmEnabled,
  toggleAlarm,
+ onGoHandover,
 }) {
 
   const logout = () => {
@@ -1744,6 +1808,13 @@ function MobileSideMenu({
   onClick={onGoSchedule}
   badge={hasNewSchedule ? "NEW" : null}
 />
+  <MenuItem
+    label="인수인계"
+    onClick={() => {
+      setPage("handover");
+      setShowMenu(false);
+    }}
+  />
 </MenuSection>
 
 <MenuSection title="현황 / 운임표">

@@ -167,11 +167,32 @@ const [scheduleForm, setScheduleForm] = React.useState({
   const [notices, setNotices] = React.useState([]);
   const [schedules, setSchedules] = React.useState([]);
   const [handovers, setHandovers] = React.useState([]);
+
   // ===================== 인수인계 팝업 =====================
 const [handoverOpen, setHandoverOpen] = useState(false);
+const today = new Date().toISOString().slice(0, 10);
+const todayHandovers = useMemo(() => {
+  return handovers.filter(h => {
+    // 1️⃣ date 필드가 있으면 그걸 사용
+    if (h.date) return h.date === today;
+
+    // 2️⃣ 없으면 createdAt 기준으로 계산
+    if (h.createdAt?.seconds) {
+      const d = new Date(h.createdAt.seconds * 1000)
+        .toISOString()
+        .slice(0, 10);
+      return d === today;
+    }
+
+    return false;
+  });
+}, [handovers, today]);
+
 const [handoverForm, setHandoverForm] = useState({
   text: "",
-  author: "박성우팀장", // 기본값
+  author: user?.displayName || "작성자",
+  receiver: "",
+  date: today,
 });
 const [selectedHandover, setSelectedHandover] = useState(null);
 
@@ -268,8 +289,10 @@ React.useEffect(() => {
     setHandovers(list);
 
     // 🔔 신규 인수인계 토스트 (added만)
-    const added = snap.docChanges().find(c => c.type === "added");
-    if (!added) return;
+    const added = snap.docChanges().find(
+  c => c.type === "added" && !c.doc.metadata.hasPendingWrites
+);
+if (!added) return;
 
     const latest = added.doc;
     const lastId = localStorage.getItem("last_handover_id");
@@ -983,9 +1006,15 @@ const recentOrders = useMemo(() => {
     onClose={() => setSelectedHandover(null)}
   >
     <div className="space-y-4 text-sm">
-      <div className="whitespace-pre-wrap">
-        {selectedHandover.text}
-      </div>
+      <div className="space-y-3 text-sm">
+  <div><b>작성자</b> : {selectedHandover.author}</div>
+  <div><b>받는 사람</b> : {selectedHandover.receiver}</div>
+  <div><b>기준 날짜</b> : {selectedHandover.date}</div>
+
+  <div className="pt-2 border-t whitespace-pre-wrap">
+    {selectedHandover.text}
+  </div>
+</div>
     </div>
 
     <div className="flex justify-center gap-3 pt-6 mt-6 border-t">
@@ -1004,7 +1033,12 @@ const recentOrders = useMemo(() => {
 
       <button
         onClick={() => {
-          setHandoverForm({ text: selectedHandover.text });
+          setHandoverForm({
+  text: selectedHandover.text,
+  author: selectedHandover.author,
+  receiver: selectedHandover.receiver,
+  date: selectedHandover.date,
+});
           setHandoverOpen(true);
           setSelectedHandover(null);
         }}
@@ -1033,56 +1067,106 @@ const recentOrders = useMemo(() => {
     onClose={() => setHandoverOpen(false)}
   >
     <div className="space-y-3">
-      <textarea
-        rows={4}
-        placeholder="인수인계 내용"
-        className="w-full border px-2 py-1 rounded"
-        value={handoverForm.text}
-        onChange={(e) =>
-          setHandoverForm({ text: e.target.value })
-        }
-      />
 
-      <button
-        onClick={async () => {
-          if (selectedHandover?.id) {
-            await updateDoc(
-              doc(db, "handovers", selectedHandover.id),
-              { text: handoverForm.text }
-            );
-          } else {
-            await addDoc(collection(db, "handovers"), {
-              text: handoverForm.text,
-              createdAt: serverTimestamp(),
-            });
-          }
+  {/* 작성자 */}
+  <input
+    placeholder="작성자"
+    className="w-full border px-2 py-1 rounded"
+    value={handoverForm.author}
+    onChange={(e) =>
+      setHandoverForm({ ...handoverForm, author: e.target.value })
+    }
+  />
 
-          setHandoverForm({ text: "" });
-          setSelectedHandover(null);
-          setHandoverOpen(false);
-        }}
-        className="w-full bg-blue-600 text-white py-2 rounded"
-      >
-        저장
-      </button>
-    </div>
+  {/* 받는 사람 */}
+  <input
+    placeholder="받는 사람"
+    className="w-full border px-2 py-1 rounded"
+    value={handoverForm.receiver}
+    onChange={(e) =>
+      setHandoverForm({ ...handoverForm, receiver: e.target.value })
+    }
+  />
+
+  {/* 기준 날짜 */}
+  <input
+    type="date"
+    className="w-full border px-2 py-1 rounded"
+    value={handoverForm.date}
+    onChange={(e) =>
+      setHandoverForm({ ...handoverForm, date: e.target.value })
+    }
+  />
+
+  {/* 인수인계 내용 */}
+  <textarea
+    rows={4}
+    placeholder="인수인계 내용"
+    className="w-full border px-2 py-1 rounded"
+    value={handoverForm.text}
+    onChange={(e) =>
+      setHandoverForm({ ...handoverForm, text: e.target.value })
+    }
+  />
+
+  <button
+    onClick={async () => {
+      if (!handoverForm.text.trim()) {
+        alert("인수인계 내용을 입력하세요");
+        return;
+      }
+
+      if (selectedHandover?.id) {
+  await updateDoc(
+    doc(db, "handovers", selectedHandover.id),
+    {
+      ...handoverForm,
+    }
+  );
+} else {
+  await addDoc(collection(db, "handovers"), {
+    ...handoverForm,
+    createdAt: serverTimestamp(),
+  });
+}
+
+      setHandoverForm({
+        text: "",
+        author: user?.displayName || "작성자",
+        receiver: "",
+        date: today,
+      });
+
+      setHandoverOpen(false);
+      setSelectedHandover(null);
+    }}
+    className="w-full bg-blue-600 text-white py-2 rounded"
+  >
+    저장
+  </button>
+</div>
+
   </Modal>
 )}
-            {handovers.length === 0 ? (
-        <div className="text-sm text-gray-400">오늘 인수인계 없음</div>
-      ) : (
-        <ul className="space-y-1 text-sm">
-          {handovers.map((h, i) => (
-            <li
-              key={i}
-              onClick={() => setSelectedHandover(h)}
-              className="border-b pb-1 cursor-pointer hover:bg-slate-50 rounded px-1"
-            >
-              {h.text}
-            </li>
-          ))}
-        </ul>
-      )}
+            {todayHandovers.length === 0 ? (
+  <div className="text-sm text-gray-400">오늘 인수인계 없음</div>
+) : (
+  <ul className="space-y-1 text-sm">
+    {todayHandovers.map((h) => (
+      <li
+        key={h.id}
+        onClick={() => setSelectedHandover(h)}
+        className="border-b pb-2 cursor-pointer hover:bg-slate-50 rounded px-1"
+      >
+        <div className="text-xs text-gray-500">
+          {h.date} · {h.author} → {h.receiver}
+        </div>
+        <div className="truncate">{h.text}</div>
+      </li>
+    ))}
+  </ul>
+)}
+
   </Card>
 
 
