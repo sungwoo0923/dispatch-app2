@@ -5219,52 +5219,78 @@ const handleFareSearch = () => {
   const drop = row.하차지명?.trim();
   if (!pickup || !drop) return alert("상/하차지를 입력해주세요.");
 
-  const targetPallet = getPalletCount(row.화물내용);
+  const targetCargo = String(row.화물내용 || "").trim();
+  const targetTon = String(row.차량톤수 || "").trim();
 
-  const matchPlace = (a, b) =>
-    String(a || "").includes(String(b || "")) ||
-    String(b || "").includes(String(a || ""));
-
-  const records = (dispatchData || []).filter((r) => {
+  // 🔥 1단계: 상/하차지만으로 무조건 수집
+  const base = (dispatchData || []).filter(r => {
     if (!r.청구운임) return false;
-    if (!matchPlace(r.상차지명, pickup)) return false;
-    if (!matchPlace(r.하차지명, drop)) return false;
-
-    const pallet = getPalletCount(r.화물내용);
-
-    // 📦 파렛트 화물일 경우 → 파렛트 기준
-    if (targetPallet !== null) {
-      return pallet === targetPallet;
-    }
-
-    // 📦 박스 / 기타 화물 → 상/하차지만 기준
-    return true;
+    return (
+      String(r.상차지명 || "").includes(pickup) &&
+      String(r.하차지명 || "").includes(drop)
+    );
   });
 
-  if (!records.length) {
-    alert("📭 유사 운임 데이터가 없습니다.");
+  if (!base.length) {
+    alert("📭 동일 상/하차지 운임 이력이 없습니다.");
     return;
   }
 
-  // 🔁 중복 제거 (PART 5와 동일)
-  const dedup = Array.from(
-    new Map(records.map(r => [makeFareDedupKey(r), r])).values()
+  // 🔥 2단계: 우선순위 점수 부여
+  const scored = base.map(r => {
+  const cargoMatch =
+    targetCargo &&
+    r.화물내용 &&
+    r.화물내용.includes(targetCargo);
+
+  const tonMatch =
+    targetTon &&
+    r.차량톤수 &&
+    r.차량톤수 === targetTon;
+
+  return {
+    ...r,
+
+    // 점수
+    _score: (cargoMatch ? 100 : 0) + (tonMatch ? 100 : 0),
+
+    // 🔥 표시용 메타
+    _match: {
+      cargo: cargoMatch,
+      ton: tonMatch,
+    },
+
+    _time: r.updatedAt || r.등록일 || 0,
+  };
+});
+
+
+  // 🔥 3단계: 정렬
+  scored.sort((a, b) => {
+    // 1️⃣ 화물/톤 매칭 우선
+    if (b._score !== a._score) return b._score - a._score;
+
+    // 2️⃣ 최신순
+    return b._time - a._time;
+  });
+
+  // 🔥 4단계: 통계
+  const fares = scored.map(r =>
+    Number(String(r.청구운임 || "0").replace(/[^\d]/g, ""))
   );
 
-  const fares = dedup.map(r => Number(r.청구운임 || 0));
-  const avg = Math.round(fares.reduce((a, b) => a + b, 0) / fares.length);
-
   setFareResult({
-    records: dedup,
+    records: scored,
     count: fares.length,
-    avg,
+    avg: Math.round(fares.reduce((a, b) => a + b, 0) / fares.length),
     min: Math.min(...fares),
     max: Math.max(...fares),
-    latest: dedup[0],
+    latest: scored[0],
   });
 
   setFareModalOpen(true);
 };
+
 
 
 
@@ -7942,8 +7968,57 @@ await addDispatch?.(payload);
                   <div className="text-gray-500">
                     차량: {rec.차량종류 || "-"} / {rec.차량톤수 || "-"}
                   </div>
-                  <div className="text-gray-800 font-medium">
-  {(rec.청구운임 || 0).toLocaleString()}원
+                  <div className="flex flex-wrap items-center gap-1 mt-1">
+  {/* 금액 */}
+  <span className="text-gray-900 font-semibold">
+    {(rec.청구운임 || 0).toLocaleString()}원
+  </span>
+
+  {/* 🔥 최적 매칭 */}
+{(rec._match?.cargo || rec._match?.ton) && (
+  <span
+    className="
+      inline-flex items-center
+      px-2 py-0.5
+      text-[11px] font-bold
+      rounded-full
+      bg-red-600 text-white
+    "
+  >
+    최적 매칭
+  </span>
+)}
+
+{/* 📦 화물 동일 */}
+{rec._match?.cargo && (
+  <span
+    className="
+      inline-flex items-center
+      px-2 py-0.5
+      text-[11px] font-semibold
+      rounded-full
+      bg-indigo-200 text-indigo-900
+    "
+  >
+    화물 동일
+  </span>
+)}
+
+{/* 🚚 톤수 동일 */}
+{rec._match?.ton && (
+  <span
+    className="
+      inline-flex items-center
+      px-2 py-0.5
+      text-[11px] font-semibold
+      rounded-full
+      bg-emerald-200 text-emerald-900
+    "
+  >
+    톤수 동일
+  </span>
+)}
+
 
   {rec.운임보정?.type === "긴급" && (
     <span className="ml-1 px-1.5 py-0.5 text-[10px]
@@ -9701,7 +9776,11 @@ const rankPlaces = (list, query) => {
 // ==========================
 const [fareModalOpen, setFareModalOpen] = React.useState(false);
 const [fareResult, setFareResult] = React.useState(null);
-
+const [fareSourceData, setFareSourceData] = React.useState([]);
+// 🔥 운임조회용 원본 데이터 (날짜 필터 무시)
+React.useEffect(() => {
+  setFareSourceData(dispatchData);
+}, [dispatchData]);
 // ===================== 📋 기사복사 모달 상태 =====================
 const [copyModalOpen, setCopyModalOpen] = React.useState(false);
 // 🚚 기사 선택 / 확인 팝업 상태 추가  ⭐⭐
@@ -9812,34 +9891,55 @@ ${fare.toLocaleString()}원 ${payLabel} 배차되었습니다.`;
 const handleFareSearch = () => {
   if (!editTarget) return;
 
-  const targetPallet = getPalletCount(editTarget.화물내용);
+  const pickup = String(editTarget.상차지명 || "");
+  const drop   = String(editTarget.하차지명 || "");
+  const cargo  = String(editTarget.화물내용 || "");
+  const ton    = String(editTarget.차량톤수 || "");
 
-  const records = dispatchData.filter((r) => {
-    const pallet = getPalletCount(r.화물내용);
+  // 1️⃣ 필터: 상/하차지만
+  const base = fareSourceData.filter((r) =>
+    String(r.상차지명 || "").includes(pickup) &&
+    String(r.하차지명 || "").includes(drop)
+  );
 
-    // 📦 파렛트 화물일 때만 파렛트 기준 적용
-    if (targetPallet !== null) {
-      return (
-        String(r.상차지명 || "").includes(editTarget.상차지명 || "") &&
-        String(r.하차지명 || "").includes(editTarget.하차지명 || "") &&
-        pallet === targetPallet
-      );
-    }
-
-    // 📦 파렛트가 아닌 화물(박스 등)은 상/하차지만 비교
-    return (
-      String(r.상차지명 || "").includes(editTarget.상차지명 || "") &&
-      String(r.하차지명 || "").includes(editTarget.하차지명 || "")
-    );
-  });
-
-  if (!records.length) {
+  if (!base.length) {
     alert("📭 유사 운임 데이터가 없습니다.");
     return;
   }
 
+  // 2️⃣ 매칭 정보 + 정렬 점수
+  const records = base
+  .map((r) => {
+    const cargoMatch =
+      cargo && r.화물내용 && r.화물내용.includes(cargo);
+
+    const tonMatch =
+      ton && String(r.차량톤수 || "") === ton;
+
+    let priority = 0;
+    if (cargoMatch && tonMatch) priority = 3;
+    else if (cargoMatch) priority = 2;
+    else if (tonMatch) priority = 1;
+
+    return {
+      ...r,
+      _match: { cargo: cargoMatch, ton: tonMatch },
+      _priority: priority,
+      _date: r.상차일 || "",
+    };
+  })
+  .sort((a, b) => {
+    // ✅ PART 4와 동일: 유사도 우선
+    if (b._priority !== a._priority) {
+      return b._priority - a._priority;
+    }
+    // ✅ 같은 그룹 안에서는 과거 → 최근
+    return String(a._date).localeCompare(String(b._date));
+  });
+
+
   const vals = records.map((r) => Number(r.청구운임 || 0));
-  const avg = Math.round(vals.reduce((a, b) => a + b) / vals.length);
+  const avg = Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
   const min = Math.min(...vals);
   const max = Math.max(...vals);
 
@@ -9847,9 +9947,6 @@ const handleFareSearch = () => {
   setFareModalOpen(true);
 };
 
-
-
-  // ⭐ 화면 진입 시 이번 달 자동 설정
   // ⭐ 화면 진입 시 상태 복구 + 이번 달 기본값
   React.useEffect(() => {
     // 1) 이번 달 기본 날짜 계산
@@ -11893,15 +11990,38 @@ setTimeout(() => {
                   <div className="font-semibold text-gray-900">
                     {rec.상차일} | {rec.화물내용 || "-"}
                   </div>
+                  
                   <div className="text-gray-600">
                     {rec.상차지명} → {rec.하차지명}
                   </div>
                   <div className="text-gray-500">
                     차량: {rec.차량종류 || "-"} / {rec.차량톤수 || "-"}
                   </div>
-                  <div className="text-gray-800 font-medium">
-                    {(rec.청구운임 || 0).toLocaleString()}원
-                  </div>
+                  {/* 💰 금액 + 매칭 뱃지 (사진 기준 위치) */}
+<div className="flex items-center gap-2 mt-0.5">
+  <span className="text-gray-800 font-semibold">
+    {(rec.청구운임 || 0).toLocaleString()}원
+  </span>
+
+  {(rec._match?.cargo || rec._match?.ton) && (
+    <span className="px-1.5 py-0.5 text-[10px] rounded-full bg-red-600 text-white font-bold">
+      최적
+    </span>
+  )}
+
+  {rec._match?.cargo && (
+    <span className="px-1.5 py-0.5 text-[10px] rounded-full bg-indigo-100 text-indigo-700 font-semibold">
+      화물 동일
+    </span>
+  )}
+
+  {rec._match?.ton && (
+    <span className="px-1.5 py-0.5 text-[10px] rounded-full bg-emerald-100 text-emerald-700 font-semibold">
+      톤수 동일
+    </span>
+  )}
+</div>
+
                 </div>
 
                 {/* 적용 버튼 */}
