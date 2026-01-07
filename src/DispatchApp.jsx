@@ -8048,24 +8048,37 @@ await addDispatch?.(payload);
     🚨 긴급
   </button>
 
-  {/* 🔁 왕복 */}
-  <button
-    type="button"
-    onClick={() =>
-      setEditTarget((p) => ({
+<button
+  type="button"
+  onClick={() =>
+    setEditTarget((p) => {
+      const next = p.운행유형 === "왕복" ? "편도" : "왕복";
+
+      // 🔥 추가된 딱 한 군데 (저장되게 만드는 핵심)
+      setEdited((prev) => ({
+        ...prev,
+        [p._id]: {
+          ...(prev[p._id] || {}),
+          운행유형: next,
+        },
+      }));
+
+      return {
         ...p,
-        운행유형: p.운행유형 === "왕복" ? "편도" : "왕복",
-      }))
-    }
-    className={`
-      px-3 py-1.5 rounded-full text-xs font-semibold border
-      ${editTarget.운행유형 === "왕복"
-        ? "bg-purple-600 text-white border-purple-600"
-        : "bg-purple-50 text-purple-700 border-purple-300 hover:bg-purple-100"}
-    `}
-  >
-    🔁 왕복
-  </button>
+        운행유형: next,
+      };
+    })
+  }
+  className={`
+    px-3 py-1.5 rounded-full text-xs font-semibold border
+    ${editTarget.운행유형 === "왕복"
+      ? "bg-purple-600 text-white border-purple-600"
+      : "bg-purple-50 text-purple-700 border-purple-300 hover:bg-purple-100"}
+  `}
+>
+  🔁 왕복
+</button>
+
 
   {/* 📦 혼적 */}
   <button
@@ -8786,9 +8799,12 @@ setShowEditClientDropdown(false);
 ];
 
 const payload = stripUndefined(
-  Object.fromEntries(
-    ALLOWED_FIELDS.map((k) => [k, editTarget[k]])
-  )
+  ALLOWED_FIELDS.reduce((acc, k) => {
+    if (editTarget[k] !== undefined) {
+      acc[k] = editTarget[k];
+    }
+    return acc;
+  }, {})
 );
 
 await patchDispatch(editTarget._id, payload);
@@ -11791,11 +11807,13 @@ return (
   "배차상태",
 ];
 
-const payload = Object.fromEntries(
-  ALLOWED_FIELDS
-    .map((k) => [k, editTarget[k]])
-    .filter(([_, v]) => v !== undefined)
-);
+const payload = ALLOWED_FIELDS.reduce((acc, k) => {
+  const v = editTarget[k];
+  if (v !== undefined) {
+    acc[k] = v;
+  }
+  return acc;
+}, {});
 if (payload.배차상태 === "배차중") {
   delete payload.차량번호;
   delete payload.이름;
@@ -13261,11 +13279,62 @@ const lastYearRows = rows.filter(r => {
   if (!d) return false;
   return d.startsWith(String(baseYear));
 });
+// ================================
+// 📦 작년 월별 후레쉬물류 지입 매출
+// ================================
+
+const lastYearFreshByMonth = Array.from({ length: 12 }, (_, i) => ({
+  month: `${i + 1}월`,
+  sale: 0,
+  profit: 0,
+}));
+
+lastYearRows.forEach(r => {
+  if (!isFresh(r)) return; // 🔥 후레쉬만
+  const d = r.상차일;
+  if (!d) return;
+
+  const m = Number(d.slice(5, 7)) - 1;
+  const sale = toInt(r.청구운임);
+  const driver = toInt(r.기사운임);
+
+  lastYearFreshByMonth[m].sale += sale;
+  lastYearFreshByMonth[m].profit += (sale - driver);
+});
 
 // 🔹 작년 순수 운송 연매출 (후레쉬 제외)
 const lastYearPure = stat(
   lastYearRows.filter(r => !isFresh(r))
 );
+// ================================
+// 🎯 연간 목표 대비 실적 (순수 / 후레쉬)
+// ================================
+
+// 🔵 순수 운송 목표 (고정)
+const PURE_TARGET_2026 = 2098451820;
+
+// 🔹 작년 후레쉬 매출
+const lastYearFresh = stat(
+  lastYearRows.filter(r => isFresh(r))
+);
+
+// 🔹 올해 후레쉬 누적
+const yFresh = stat(
+  yearRows.filter(r => isFresh(r))
+);
+
+// 🔸 후레쉬 목표 성장률 (정책값)
+const FRESH_GROWTH_RATE = 0.03; // +3%
+
+// 🔸 올해 후레쉬 목표
+const FRESH_TARGET_2026 = Math.round(
+  lastYearFresh.sale * (1 + FRESH_GROWTH_RATE)
+);
+
+// 🔹 목표 대비 달성률
+const achieveRate = (cur, target) =>
+  target > 0 ? (cur / target) * 100 : 0;
+
 
 // ✅ 여기서 사용 (선언 이후)
 const baseYearSale = lastYearPure.sale;
@@ -13361,7 +13430,92 @@ const vrPure = {
 
 {/* 🔮 2026 매출 전망 (후레쉬 제외) */}
 <div className="rounded-2xl bg-violet-50 border border-violet-200 p-4">
+
+  {/* 🎯 연간 목표 대비 실적 */}
+  <div className="rounded-2xl bg-white border shadow-sm p-4 space-y-4">
+
+    <h3 className="text-sm font-semibold text-gray-800">
+      🎯 연간 목표 대비 실적
+    </h3>
+
+    {/* 🔵 순수 운송 */}
+    <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-3">
+      <p className="text-xs font-semibold text-emerald-700 mb-1">
+        순수 운송 (성장 KPI)
+      </p>
+
+      <div className="grid grid-cols-4 text-center gap-2">
+        <div>
+          <p className="text-xs text-gray-500">작년</p>
+          <p className="text-sm font-semibold">
+            {won(lastYearPure.sale)}
+          </p>
+        </div>
+
+        <div>
+          <p className="text-xs text-gray-500">목표</p>
+          <p className="text-lg font-bold text-blue-700">
+            {won(PURE_TARGET_2026)}
+          </p>
+        </div>
+
+        <div>
+          <p className="text-xs text-gray-500">현재</p>
+          <p className="text-lg font-bold text-emerald-700">
+            {won(yPure.sale)}
+          </p>
+        </div>
+
+        <div>
+          <p className="text-xs text-gray-500">달성률</p>
+          <p className="text-base font-semibold text-indigo-700">
+            {achieveRate(yPure.sale, PURE_TARGET_2026).toFixed(1)}%
+          </p>
+        </div>
+      </div>
+    </div>
+
+    {/* 🟠 후레쉬물류 */}
+    <div className="rounded-xl bg-orange-50 border border-orange-200 p-3">
+      <p className="text-xs font-semibold text-orange-700 mb-1">
+        후레쉬물류 (지입)
+      </p>
+
+      <div className="grid grid-cols-4 text-center gap-2">
+        <div>
+          <p className="text-xs text-gray-500">작년</p>
+          <p className="text-sm font-semibold">
+            {won(lastYearFresh.sale)}
+          </p>
+        </div>
+
+        <div>
+          <p className="text-xs text-gray-500">목표</p>
+          <p className="text-lg font-bold text-blue-700">
+            {won(FRESH_TARGET_2026)}
+          </p>
+        </div>
+
+        <div>
+          <p className="text-xs text-gray-500">현재</p>
+          <p className="text-lg font-bold text-orange-700">
+            {won(yFresh.sale)}
+          </p>
+        </div>
+
+        <div>
+          <p className="text-xs text-gray-500">달성률</p>
+          <p className="text-base font-semibold text-indigo-700">
+            {achieveRate(yFresh.sale, FRESH_TARGET_2026).toFixed(1)}%
+          </p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
   <h3 className="text-sm font-semibold text-violet-700 mb-3">
+    
     🔮 2026 매출 전망 (순수 운송 예상 매출)
   </h3>
 
@@ -13406,7 +13560,7 @@ const vrPure = {
   </div>
 
   <table className="w-full text-sm border-collapse text-center">
-    <thead className="bg-gray-50 text-gray-600">
+    <thead className="bg-gray-50 text-gray-600 text-center">
       <tr>
         <th className="border p-2">구분</th>
         <th className="border p-2">매출</th>
@@ -13453,7 +13607,7 @@ const vrPure = {
   </h3>
 
   <table className="w-full text-sm border-collapse text-center">
-    <thead className="bg-gray-50 text-gray-600">
+    <thead className="bg-gray-50 text-gray-600 text-center">
       <tr>
         <th className="border p-2">구분</th>
         <th className="border p-2">매출</th>
@@ -14495,13 +14649,15 @@ function YearlyFinanceTable({ rows, year }) {
   const pct = (n) => `${n.toFixed(1)}%`;
 
   // 1~12월 초기화
-  const months = Array.from({ length: 12 }, (_, i) => ({
-    month: `${i + 1}월`,
-    saleAll: 0,
-    profitAll: 0,
-    salePure: 0,
-    profitPure: 0,
-  }));
+ const months = Array.from({ length: 12 }, (_, i) => ({
+  month: `${i + 1}월`,
+  saleAll: 0,
+  profitAll: 0,
+  salePure: 0,
+  profitPure: 0,
+  saleFresh: 0,  
+  profitFresh: 0,  
+}));
 
   rows.forEach((r) => {
     const d = r.상차일;
@@ -14523,19 +14679,38 @@ function YearlyFinanceTable({ rows, year }) {
       months[m].salePure += sale;
       months[m].profitPure += profit;
     }
+    // ✅ 후레쉬물류 (지입)
+if (isFresh) {
+  months[m].saleFresh += sale;
+  months[m].profitFresh += profit;
+}
   });
 
-  // 🔹 연간 합계
-  const total = months.reduce(
-    (acc, m) => {
-      acc.saleAll += m.saleAll;
-      acc.profitAll += m.profitAll;
-      acc.salePure += m.salePure;
-      acc.profitPure += m.profitPure;
-      return acc;
-    },
-    { saleAll: 0, profitAll: 0, salePure: 0, profitPure: 0 }
-  );
+// 🔹 연간 합계
+const total = months.reduce(
+  (acc, m) => {
+    acc.saleAll += m.saleAll;
+    acc.profitAll += m.profitAll;
+    acc.salePure += m.salePure;
+    acc.profitPure += m.profitPure;
+
+    // ✅ 여기 추가
+    acc.saleFresh += m.saleFresh;
+    acc.profitFresh += m.profitFresh;
+
+    return acc;
+  },
+  {
+    saleAll: 0,
+    profitAll: 0,
+    salePure: 0,
+    profitPure: 0,
+
+    // ✅ 초기값도 반드시 추가
+    saleFresh: 0,
+    profitFresh: 0,
+  }
+);
 
   // 🔹 평균 수익률 (월별 평균)
   const avgRate = (listSale, listProfit) => {
@@ -14563,7 +14738,7 @@ function YearlyFinanceTable({ rows, year }) {
 
       <div className="overflow-x-auto">
         <table className="w-full text-sm border-collapse text-right">
-          <thead className="bg-gray-50 text-gray-600">
+          <thead className="bg-gray-50 text-gray-600 text-center">
             <tr>
               <th className="border p-2 text-center">월</th>
               <th className="border p-2">총매출</th>
@@ -14572,6 +14747,9 @@ function YearlyFinanceTable({ rows, year }) {
               <th className="border p-2">순수운송매출</th>
               <th className="border p-2">순수운송수익</th>
               <th className="border p-2">순수수익률</th>
+              <th className="border p-2">후레쉬매출</th>
+<th className="border p-2">후레쉬수익</th>
+<th className="border p-2">후레쉬수익률</th>
             </tr>
           </thead>
 
@@ -14605,32 +14783,61 @@ function YearlyFinanceTable({ rows, year }) {
                   <td className="border p-2 font-semibold text-emerald-700">
                     {pct(ratePure)}
                   </td>
+                  <td className="border p-2 text-orange-700">
+  {won(m.saleFresh)}
+</td>
+<td className="border p-2 text-emerald-700">
+  {won(m.profitFresh)}
+</td>
+<td className="border p-2 text-indigo-700">
+  {m.saleFresh > 0
+    ? pct((m.profitFresh / m.saleFresh) * 100)
+    : "0.0%"}
+</td>
                 </tr>
               );
             })}
 
             {/* 🔹 연간 합계 */}
-            <tr className="bg-indigo-50 font-bold">
-              <td className="border p-2 text-center">합계</td>
-              <td className="border p-2 text-blue-800">
-                {won(total.saleAll)}
-              </td>
-              <td className="border p-2 text-emerald-800">
-                {won(total.profitAll)}
-              </td>
-              <td className="border p-2 text-indigo-800">
-                {pct(avgAllRate)}
-              </td>
-              <td className="border p-2 text-indigo-800">
-                {won(total.salePure)}
-              </td>
-              <td className="border p-2 text-green-800">
-                {won(total.profitPure)}
-              </td>
-              <td className="border p-2 text-emerald-800">
-                {pct(avgPureRate)}
-              </td>
-            </tr>
+<tr className="bg-indigo-50 font-bold">
+  <td className="border p-2 text-center">합계</td>
+
+  {/* 전체 */}
+  <td className="border p-2 text-blue-800">
+    {won(total.saleAll)}
+  </td>
+  <td className="border p-2 text-emerald-800">
+    {won(total.profitAll)}
+  </td>
+  <td className="border p-2 text-indigo-800">
+    {pct(avgAllRate)}
+  </td>
+
+  {/* 순수 */}
+  <td className="border p-2 text-indigo-800">
+    {won(total.salePure)}
+  </td>
+  <td className="border p-2 text-green-800">
+    {won(total.profitPure)}
+  </td>
+  <td className="border p-2 text-emerald-800">
+    {pct(avgPureRate)}
+  </td>
+
+  {/* ✅ 후레쉬 */}
+  <td className="border p-2 text-orange-800">
+    {won(total.saleFresh)}
+  </td>
+  <td className="border p-2 text-emerald-800">
+    {won(total.profitFresh)}
+  </td>
+  <td className="border p-2 text-indigo-800">
+    {total.saleFresh > 0
+      ? pct((total.profitFresh / total.saleFresh) * 100)
+      : "0.0%"}
+  </td>
+</tr>
+
           </tbody>
         </table>
       </div>

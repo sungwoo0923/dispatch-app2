@@ -1,4 +1,4 @@
-// ===================== src/main.jsx (FINAL - UPDATE SAFE UX FIXED) =====================
+// ===================== src/main.jsx =====================
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App.jsx";
@@ -14,83 +14,51 @@ ReactDOM.createRoot(document.getElementById("root")).render(
 );
 
 // --------------------------------------------------
-// Service Worker 등록 + 업데이트 처리
+// PWA Service Worker (캐시 / 업데이트 전용)
 // --------------------------------------------------
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", async () => {
     try {
       const reg = await navigator.serviceWorker.register("/sw.js");
-      console.log("[APP] SW registered");
+      console.log("[APP] PWA SW registered");
 
-      // --------------------------------------------------
-      // 내부 상태 플래그
-      // --------------------------------------------------
-      let hasReloaded = false;      // reload 1회 제한
-      let updateApplied = false;   // 업데이트로 인한 controllerchange만 reload
+      let hasReloaded = false;
+      let updateApplied = false;
 
-      // --------------------------------------------------
-      // 새 Service Worker 감지 → 진짜 업데이트 + 1회 노출
-      // --------------------------------------------------
+      // 새 SW 감지
       reg.addEventListener("updatefound", () => {
         const newWorker = reg.installing;
         if (!newWorker) return;
 
-        console.log("[APP] New SW installing");
-
         newWorker.addEventListener("statechange", () => {
-          console.log("[APP] SW state:", newWorker.state);
-
           if (
             newWorker.state === "installed" &&
             navigator.serviceWorker.controller &&
             reg.waiting
           ) {
-            // 🔒 이번 세션에서 이미 배너를 봤으면 무시
             const alreadyShown =
               sessionStorage.getItem("sw-update-shown") === "true";
+            if (alreadyShown) return;
 
-            if (alreadyShown) {
-              console.log("[APP] Update already shown → skip");
-              return;
-            }
-
-            console.log("[APP] 🔔 Real update available (first time)");
             sessionStorage.setItem("sw-update-shown", "true");
             window.dispatchEvent(new Event("app-update-ready"));
           }
         });
       });
 
-      // --------------------------------------------------
-      // App.jsx에서 호출할 업데이트 적용 함수
-      // --------------------------------------------------
+      // App.jsx → 업데이트 적용
       window.applyAppUpdate = () => {
-        if (!reg.waiting) {
-          console.log("[APP] No waiting SW → ignore");
-          return;
-        }
+        if (!reg.waiting) return;
 
-        console.log("[APP] Applying update");
-        updateApplied = true;                 // 🔥 업데이트로 인한 reload만 허용
-        sessionStorage.removeItem("sw-update-shown"); // 다음 배포 대비
+        updateApplied = true;
+        sessionStorage.removeItem("sw-update-shown");
         reg.waiting.postMessage({ type: "APPLY_UPDATE" });
       };
 
-      // --------------------------------------------------
-      // controllerchange 처리
-      // - 초기 SW 장착 시: reload ❌
-      // - 업데이트 적용 시: reload ⭕ (1회)
-      // --------------------------------------------------
+      // 업데이트 적용 후 1회 reload
       navigator.serviceWorker.addEventListener("controllerchange", () => {
-        if (!updateApplied) {
-          console.log("[APP] Controller changed (initial) → skip reload");
-          return;
-        }
-
-        if (hasReloaded) return;
+        if (!updateApplied || hasReloaded) return;
         hasReloaded = true;
-
-        console.log("[APP] Controller changed (update) → reload once");
         window.location.reload();
       });
     } catch (err) {
@@ -98,4 +66,3 @@ if ("serviceWorker" in navigator) {
     }
   });
 }
-// ===================== END =====================
