@@ -1,13 +1,15 @@
 {
-  "routes": [
+  "headers": [
     {
-      "src": "/firebase-messaging-sw.js",
-      "headers": {
-        "Content-Type": "application/javascript",
-        "Cache-Control": "no-cache"
-      },
-      "dest": "/firebase-messaging-sw.js"
-    },
+      "source": "/sw.js",
+      "headers": [
+        { "key": "Content-Type", "value": "application/javascript" },
+        { "key": "Service-Worker-Allowed", "value": "/" },
+        { "key": "Cache-Control", "value": "no-cache" }
+      ]
+    }
+  ],
+  "routes": [
     {
       "src": "/assets/(.*)",
       "headers": {
