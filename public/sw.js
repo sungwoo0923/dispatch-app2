@@ -1,5 +1,8 @@
 // ===================== public/sw.js =====================
-const VERSION = "2026-01-07-01";
+const VERSION = "2026-01-07-02";
+const CACHE_NAME = `dispatch-app-cache-${VERSION}`;
+const OFFLINE_URL = "/";
+
 console.log("[SW] Loaded", VERSION);
 
 // --------------------------------------------------
@@ -18,7 +21,7 @@ firebase.initializeApp({
 const messaging = firebase.messaging();
 
 messaging.onBackgroundMessage((payload) => {
-  console.log("📩 [FCM background]", payload);
+  console.log("[FCM][background]", payload);
 
   const title =
     payload?.notification?.title ||
@@ -40,10 +43,19 @@ messaging.onBackgroundMessage((payload) => {
 });
 
 // --------------------------------------------------
-// INSTALL: 설치만 (자동 업데이트 금지)
+// INSTALL: PWA 필수 리소스 캐시 (🔥 핵심)
 // --------------------------------------------------
-self.addEventListener("install", () => {
+self.addEventListener("install", (event) => {
   console.log("[SW] Installing...");
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) =>
+      cache.addAll([
+        OFFLINE_URL,
+        "/manifest.json"
+      ])
+    )
+  );
+  self.skipWaiting(); // PWA 인식 필수
 });
 
 // --------------------------------------------------
@@ -51,11 +63,20 @@ self.addEventListener("install", () => {
 // --------------------------------------------------
 self.addEventListener("activate", (event) => {
   console.log("[SW] Activating...");
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    caches.keys().then((keys) =>
+      Promise.all(
+        keys
+          .filter((key) => key !== CACHE_NAME)
+          .map((key) => caches.delete(key))
+      )
+    )
+  );
+  self.clients.claim();
 });
 
 // --------------------------------------------------
-// MESSAGE: 사용자 동작으로만 업데이트 적용
+// MESSAGE: 업데이트 수동 적용
 // --------------------------------------------------
 self.addEventListener("message", async (event) => {
   if (event.data?.type === "APPLY_UPDATE") {
@@ -65,11 +86,26 @@ self.addEventListener("message", async (event) => {
 });
 
 // --------------------------------------------------
-// FETCH: 네트워크 우선 (안정)
+// FETCH: 네트워크 우선 + 오프라인 fallback (🔥 PWA 판정 핵심)
 // --------------------------------------------------
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
-  event.respondWith(fetch(event.request));
+
+  event.respondWith(
+    fetch(event.request)
+      .then((res) => {
+        const clone = res.clone();
+        caches.open(CACHE_NAME).then((cache) => {
+          cache.put(event.request, clone);
+        });
+        return res;
+      })
+      .catch(() =>
+        caches.match(event.request).then(
+          (res) => res || caches.match(OFFLINE_URL)
+        )
+      )
+  );
 });
 
 // ===================== END =====================
