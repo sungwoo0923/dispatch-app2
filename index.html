@@ -1,35 +1,42 @@
 <!doctype html>
-<html lang="en">
+<html lang="ko">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" 
-  content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+
+    <!-- 모바일 화면 고정 -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
 
     <title>dispatch-app</title>
 
-    <!-- 🚀 Firebase Messaging Service Worker 등록 -->
-    <script>
-      if ("serviceWorker" in navigator) {
-        navigator.serviceWorker
-          .register("/firebase-messaging-sw.js")
-          .then((registration) => {
-            console.log("🔥 Service Worker 등록 성공:", registration);
-          })
-          .catch((err) => {
-            console.error("❌ Service Worker 등록 실패:", err);
-          });
-      }
-    </script>
+    <!-- ================= PWA 필수 ================= -->
+    <!-- Manifest -->
+    <link rel="manifest" href="/manifest.json" />
 
+    <!-- iOS PWA 설정 -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="dispatch-app" />
+
+    <!-- iOS 홈화면 아이콘 -->
+    <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
+
+    <!-- 파비콘 (선택) -->
+    <link rel="icon" href="/icons/icon-192x192.png" />
   </head>
 
   <body>
     <div id="root"></div>
+
+    <!-- React Entry -->
     <script type="module" src="/src/main.jsx"></script>
 
-    <!-- 🗺 카카오 지도 SDK (정확한 위치) -->
-    <script src="//dapi.kakao.com/v2/maps/sdk.js?appkey=bd50dacf0c9ef4d03e905a2e14e7279a&libraries=services"></script>
-
+    <!-- 🗺 카카오 지도 SDK -->
+    <script
+      src="//dapi.kakao.com/v2/maps/sdk.js?appkey=bd50dacf0c9ef4d03e905a2e14e7279a&libraries=services"
+      defer
+    ></script>
   </body>
 </html>
