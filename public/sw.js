@@ -1,61 +1,25 @@
 // ===================== public/sw.js =====================
-const VERSION = "2026-01-07-02";
+const VERSION = "2026-01-07-03";
 const CACHE_NAME = `dispatch-app-cache-${VERSION}`;
 const OFFLINE_URL = "/";
 
 console.log("[SW] Loaded", VERSION);
 
 // --------------------------------------------------
-// 🔔 Firebase Cloud Messaging (BACKGROUND)
-// --------------------------------------------------
-importScripts("https://www.gstatic.com/firebasejs/9.6.11/firebase-app-compat.js");
-importScripts("https://www.gstatic.com/firebasejs/9.6.11/firebase-messaging-compat.js");
-
-firebase.initializeApp({
-  apiKey: "AIzaSyDaCTK03VbaXQCEKEiD7yp2KIzzX5x64a4",
-  projectId: "dispatch-app-9b92f",
-  messagingSenderId: "273115387263",
-  appId: "1:273115387263:web:8ae6946cb01e265e55764a"
-});
-
-const messaging = firebase.messaging();
-
-messaging.onBackgroundMessage((payload) => {
-  console.log("[FCM][background]", payload);
-
-  const title =
-    payload?.notification?.title ||
-    payload?.data?.title ||
-    "새 알림";
-
-  const options = {
-    body:
-      payload?.notification?.body ||
-      payload?.data?.body ||
-      "",
-    icon: "/icons/icon-192x192.png",
-    badge: "/icons/icon-192x192.png",
-    vibrate: [200, 100, 200],
-    data: payload?.data || {}
-  };
-
-  self.registration.showNotification(title, options);
-});
-
-// --------------------------------------------------
-// INSTALL: PWA 필수 리소스 캐시 (🔥 핵심)
+// INSTALL — 🔥 PWA 판정 핵심 (절대 실패하면 안 됨)
 // --------------------------------------------------
 self.addEventListener("install", (event) => {
   console.log("[SW] Installing...");
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) =>
       cache.addAll([
-        OFFLINE_URL,
-        "/manifest.json"
+        "/",
+        "/index.html",
+        "/manifest.json",
       ])
     )
   );
-  self.skipWaiting(); // PWA 인식 필수
+  self.skipWaiting();
 });
 
 // --------------------------------------------------
@@ -73,22 +37,53 @@ self.addEventListener("activate", (event) => {
     )
   );
   self.clients.claim();
+
+  // 🔥 activate 이후에만 Firebase 로드
+  initFirebaseMessaging();
 });
 
 // --------------------------------------------------
-// MESSAGE: 업데이트 수동 적용
+// 🔔 Firebase Cloud Messaging (AFTER ACTIVATE)
 // --------------------------------------------------
-self.addEventListener("message", async (event) => {
-  if (event.data?.type === "APPLY_UPDATE") {
-    console.log("[SW] APPLY_UPDATE");
-    await self.skipWaiting();
+function initFirebaseMessaging() {
+  try {
+    importScripts("https://www.gstatic.com/firebasejs/9.6.11/firebase-app-compat.js");
+    importScripts("https://www.gstatic.com/firebasejs/9.6.11/firebase-messaging-compat.js");
+
+    firebase.initializeApp({
+      apiKey: "AIzaSyDaCTK03VbaXQCEKEiD7yp2KIzzX5x64a4",
+      projectId: "dispatch-app-9b92f",
+      messagingSenderId: "273115387263",
+      appId: "1:273115387263:web:8ae6946cb01e265e55764a",
+    });
+
+    const messaging = firebase.messaging();
+
+    messaging.onBackgroundMessage((payload) => {
+      const title =
+        payload?.notification?.title ||
+        payload?.data?.title ||
+        "새 알림";
+
+      self.registration.showNotification(title, {
+        body:
+          payload?.notification?.body ||
+          payload?.data?.body ||
+          "",
+        icon: "/icons/icon-192x192.png",
+        badge: "/icons/icon-192x192.png",
+        data: payload?.data || {},
+      });
+    });
+
+    console.log("[SW] Firebase Messaging ready");
+  } catch (e) {
+    console.warn("[SW] Firebase init skipped", e);
   }
-});
-
-
+}
 
 // --------------------------------------------------
-// FETCH: 네트워크 우선 + 오프라인 fallback (🔥 PWA 판정 핵심)
+// FETCH
 // --------------------------------------------------
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
