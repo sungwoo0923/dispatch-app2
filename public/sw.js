@@ -1,14 +1,50 @@
-// ===================== public/sw.js (FINAL - SAFE) =====================
+// ===================== public/sw.js (FINAL + FCM) =====================
 const VERSION = "2025-02-10-06";
 
 console.log("[SW] Loaded. VERSION =", VERSION);
+
+// --------------------------------------------------
+// 🔔 Firebase Cloud Messaging (BACKGROUND)
+// --------------------------------------------------
+importScripts("https://www.gstatic.com/firebasejs/9.6.11/firebase-app-compat.js");
+importScripts("https://www.gstatic.com/firebasejs/9.6.11/firebase-messaging-compat.js");
+
+firebase.initializeApp({
+  apiKey: "AIzaSyDaCTK03VbaXQCEKEiD7yp2KIzzX5x64a4",
+  projectId: "dispatch-app-9b92f",
+  messagingSenderId: "273115387263",
+  appId: "1:273115387263:web:8ae6946cb01e265e55764a",
+});
+
+const messaging = firebase.messaging();
+
+messaging.onBackgroundMessage((payload) => {
+  console.log("📩 [FCM background]", payload);
+
+  const title =
+    payload?.notification?.title ||
+    payload?.data?.title ||
+    "새 알림";
+
+  const options = {
+    body:
+      payload?.notification?.body ||
+      payload?.data?.body ||
+      "",
+    icon: "/icons/icon-192x192.png",
+    badge: "/icons/icon-192x192.png",
+    vibrate: [200, 100, 200],
+    data: payload?.data || {},
+  };
+
+  self.registration.showNotification(title, options);
+});
 
 // --------------------------------------------------
 // INSTALL: 설치만 하고 대기 (🔥 skipWaiting 금지)
 // --------------------------------------------------
 self.addEventListener("install", () => {
   console.log("[SW] Installing...");
-  // 아무것도 안 함 → waiting 상태 유지
 });
 
 // --------------------------------------------------
@@ -27,7 +63,7 @@ self.addEventListener("message", async (event) => {
 
   if (type === "APPLY_UPDATE") {
     console.log("[SW] APPLY_UPDATE received");
-    await self.skipWaiting(); // ✅ 여기서만 활성화
+    await self.skipWaiting();
   }
 });
 

@@ -1,5 +1,4 @@
-import React, { useMemo, useState } from "react";
-
+import React, { useMemo, useState, useRef } from "react";
 import {
   AreaChart,
   Area,
@@ -108,6 +107,12 @@ function formatCreatedAt(createdAt) {
 
   return null;
 }
+// ===================== 인수인계 작성자/수신자 목록 =====================
+const HANDOVER_USERS = [
+  "박성우팀장",
+  "박주상대표",
+  "이도경대리",
+];
 
 /* ===================== HOME DASHBOARD ===================== */
 export default function HomeDashboard({
@@ -117,6 +122,7 @@ export default function HomeDashboard({
   delayed,
   dispatchData = [],
 }) {
+  const isEditingHandoverRef = useRef(false);
   // 🔔 우측 하단 토스트
 const [toast, setToast] = useState(null);
 
@@ -290,7 +296,10 @@ React.useEffect(() => {
 
     // 🔔 신규 인수인계 토스트 (added만)
     const added = snap.docChanges().find(
-  c => c.type === "added" && !c.doc.metadata.hasPendingWrites
+  c =>
+    c.type === "added" &&
+    !c.doc.metadata.hasPendingWrites &&
+    !isEditingHandoverRef.current
 );
 if (!added) return;
 
@@ -1033,6 +1042,7 @@ const recentOrders = useMemo(() => {
 
       <button
         onClick={() => {
+          isEditingHandoverRef.current = true;
           setHandoverForm({
   text: selectedHandover.text,
   author: selectedHandover.author,
@@ -1040,7 +1050,7 @@ const recentOrders = useMemo(() => {
   date: selectedHandover.date,
 });
           setHandoverOpen(true);
-          setSelectedHandover(null);
+          
         }}
         className="px-4 py-2 text-sm rounded bg-blue-600 text-white"
       >
@@ -1054,125 +1064,167 @@ const recentOrders = useMemo(() => {
   title="오늘 인수인계"
   action={
     <button
-      onClick={() => setHandoverOpen(true)}
+      onClick={() => {
+        setSelectedHandover(null); // 🔥 신규 등록 시 수정 잔여값 방지
+        setHandoverForm({
+          text: "",
+          author: "",
+          receiver: "",
+          date: today,
+        });
+        setHandoverOpen(true);
+      }}
       className="px-3 py-1 bg-blue-600 text-white rounded text-sm"
     >
       등록
     </button>
   }
 >
-{handoverOpen && (
-  <Modal
-    title="인수인계 등록"
-    onClose={() => setHandoverOpen(false)}
-  >
-    <div className="space-y-3">
+  {handoverOpen && (
+    <Modal
+      title="인수인계 등록"
+      onClose={() => setHandoverOpen(false)}
+    >
+      <div className="space-y-3">
 
-  {/* 작성자 */}
-  <input
-    placeholder="작성자"
-    className="w-full border px-2 py-1 rounded"
-    value={handoverForm.author}
-    onChange={(e) =>
-      setHandoverForm({ ...handoverForm, author: e.target.value })
-    }
-  />
+        {/* 작성자 */}
+        <select
+          className="w-full border px-2 py-1 rounded"
+          value={handoverForm.author}
+          onChange={(e) =>
+            setHandoverForm({
+              ...handoverForm,
+              author: e.target.value,
+            })
+          }
+        >
+          <option value="">작성자 선택</option>
+          {HANDOVER_USERS.map((name) => (
+            <option key={name} value={name}>
+              {name}
+            </option>
+          ))}
+        </select>
 
-  {/* 받는 사람 */}
-  <input
-    placeholder="받는 사람"
-    className="w-full border px-2 py-1 rounded"
-    value={handoverForm.receiver}
-    onChange={(e) =>
-      setHandoverForm({ ...handoverForm, receiver: e.target.value })
-    }
-  />
+        {/* 받는 사람 */}
+        <select
+          className="w-full border px-2 py-1 rounded"
+          value={handoverForm.receiver}
+          onChange={(e) =>
+            setHandoverForm({
+              ...handoverForm,
+              receiver: e.target.value,
+            })
+          }
+        >
+          <option value="">받는 사람 선택</option>
+          {HANDOVER_USERS.map((name) => (
+            <option key={name} value={name}>
+              {name}
+            </option>
+          ))}
+        </select>
 
-  {/* 기준 날짜 */}
-  <input
-    type="date"
-    className="w-full border px-2 py-1 rounded"
-    value={handoverForm.date}
-    onChange={(e) =>
-      setHandoverForm({ ...handoverForm, date: e.target.value })
-    }
-  />
+        {/* 기준 날짜 */}
+        <input
+          type="date"
+          className="w-full border px-2 py-1 rounded"
+          value={handoverForm.date}
+          onChange={(e) =>
+            setHandoverForm({
+              ...handoverForm,
+              date: e.target.value,
+            })
+          }
+        />
 
-  {/* 인수인계 내용 */}
-  <textarea
-    rows={4}
-    placeholder="인수인계 내용"
-    className="w-full border px-2 py-1 rounded"
-    value={handoverForm.text}
-    onChange={(e) =>
-      setHandoverForm({ ...handoverForm, text: e.target.value })
-    }
-  />
+        {/* 인수인계 내용 */}
+        <textarea
+          rows={4}
+          placeholder="인수인계 내용"
+          className="w-full border px-2 py-1 rounded"
+          value={handoverForm.text}
+          onChange={(e) =>
+            setHandoverForm({
+              ...handoverForm,
+              text: e.target.value,
+            })
+          }
+        />
 
-  <button
-    onClick={async () => {
-      if (!handoverForm.text.trim()) {
-        alert("인수인계 내용을 입력하세요");
-        return;
-      }
+        {/* 저장 */}
+        <button
+          onClick={async () => {
+            // 🔥 필수값 검증
+            if (!handoverForm.author) {
+              alert("작성자를 선택하세요");
+              return;
+            }
+            if (!handoverForm.receiver) {
+              alert("받는 사람을 선택하세요");
+              return;
+            }
+            if (!handoverForm.text.trim()) {
+              alert("인수인계 내용을 입력하세요");
+              return;
+            }
 
-      if (selectedHandover?.id) {
-  await updateDoc(
-    doc(db, "handovers", selectedHandover.id),
-    {
-      ...handoverForm,
-    }
-  );
-} else {
-  await addDoc(collection(db, "handovers"), {
-    ...handoverForm,
-    createdAt: serverTimestamp(),
-  });
-}
+            // 🔄 수정 / 신규 분기
+            if (selectedHandover?.id) {
+              await updateDoc(
+                doc(db, "handovers", selectedHandover.id),
+                { ...handoverForm }
+              );
+            } else {
+              await addDoc(collection(db, "handovers"), {
+                ...handoverForm,
+                createdAt: serverTimestamp(),
+              });
+            }
 
-      setHandoverForm({
-        text: "",
-        author: user?.displayName || "작성자",
-        receiver: "",
-        date: today,
-      });
+            // 🔁 초기화
+            setHandoverForm({
+              text: "",
+              author: "",
+              receiver: "",
+              date: today,
+            });
 
-      setHandoverOpen(false);
-      setSelectedHandover(null);
-    }}
-    className="w-full bg-blue-600 text-white py-2 rounded"
-  >
-    저장
-  </button>
+            setHandoverOpen(false);
+            setSelectedHandover(null);
+            isEditingHandoverRef.current = false;
+          }}
+          className="w-full bg-blue-600 text-white py-2 rounded"
+        >
+          저장
+        </button>
+      </div>
+    </Modal>
+  )}
+
+  {/* ================= 오늘 인수인계 리스트 ================= */}
+  {todayHandovers.length === 0 ? (
+    <div className="text-sm text-gray-400">
+      오늘 인수인계 없음
+    </div>
+  ) : (
+    <ul className="space-y-1 text-sm">
+      {todayHandovers.map((h) => (
+        <li
+          key={h.id}
+          onClick={() => setSelectedHandover(h)}
+          className="border-b pb-2 cursor-pointer hover:bg-slate-50 rounded px-1"
+        >
+          <div className="text-xs text-gray-500">
+            {h.date} · {h.author} → {h.receiver}
+          </div>
+          <div className="truncate">{h.text}</div>
+        </li>
+      ))}
+    </ul>
+  )}
+</Card>
 </div>
-
-  </Modal>
-)}
-            {todayHandovers.length === 0 ? (
-  <div className="text-sm text-gray-400">오늘 인수인계 없음</div>
-) : (
-  <ul className="space-y-1 text-sm">
-    {todayHandovers.map((h) => (
-      <li
-        key={h.id}
-        onClick={() => setSelectedHandover(h)}
-        className="border-b pb-2 cursor-pointer hover:bg-slate-50 rounded px-1"
-      >
-        <div className="text-xs text-gray-500">
-          {h.date} · {h.author} → {h.receiver}
-        </div>
-        <div className="truncate">{h.text}</div>
-      </li>
-    ))}
-  </ul>
-)}
-
-  </Card>
-
-
-</div>
-
-
       {/* ================= 하단 ================= */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
