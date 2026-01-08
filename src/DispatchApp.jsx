@@ -1635,9 +1635,19 @@ const filterVehicles = (q) => {
       운임보정: null,
     };
 
-    const [form, setForm] = React.useState(() => ({
-  ...emptyForm,
-}));
+    const [form, setForm] = React.useState(() => {
+  try {
+    const saved = localStorage.getItem("dispatchForm");
+    if (saved) {
+      return {
+        ...emptyForm,
+        ...JSON.parse(saved),
+      };
+    }
+  } catch {}
+  return { ...emptyForm };
+});
+
     React.useEffect(() => _safeSave("dispatchForm", form), [form]);
 // ===============================
 // 🤖 AI 배차/운임 추천 (HERE)
