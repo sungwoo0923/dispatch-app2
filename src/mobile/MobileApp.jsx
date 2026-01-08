@@ -849,7 +849,8 @@ base = base.filter((o) => {
 
   if (searchType === "하차지주소")
     return normalize(o.하차지주소).includes(q);
-
+if (searchType === "메모")
+  return normalize(o.메모 || o.적요).includes(q);
   return true;
 });
 
@@ -1759,11 +1760,11 @@ function MobileSideMenu({
     hasNewNotice,        // ⭐ 추가
   hasNewSchedule,      // ⭐ 추가
   onDeleteAll,
+  onGoHandover,
   setUiScale,   // ⭐ 추가
   uiScale, 
   alarmEnabled,
  toggleAlarm,
- onGoHandover,
 }) {
 
   const logout = () => {
@@ -1809,12 +1810,10 @@ function MobileSideMenu({
   badge={hasNewSchedule ? "NEW" : null}
 />
   <MenuItem
-    label="인수인계"
-    onClick={() => {
-      setPage("handover");
-      setShowMenu(false);
-    }}
-  />
+  label="인수인계"
+  onClick={onGoHandover}
+/>
+
 </MenuSection>
 
 <MenuSection title="현황 / 운임표">
@@ -2046,7 +2045,7 @@ function MobileOrderList({
             <option value="상차지주소">상차지주소</option>
             <option value="하차지명">하차지명</option>
             <option value="하차지주소">하차지주소</option>
-            
+            <option value="메모">메모</option>
           </select>
 
           <input
@@ -2202,6 +2201,15 @@ const dropTime = order.하차시간 || "시간 없음";
       className="relative bg-white rounded-2xl shadow border px-3 py-3"
       onClick={onSelect}
     >
+      {/* 📝 메모 하이라이트 (최상단 고정) */}
+{(order.메모 || order.적요) && (
+  <div className="mb-2 px-2 py-1 rounded-lg
+                  bg-yellow-100 border border-yellow-300
+                  text-[12px] font-semibold text-yellow-900
+                  truncate">
+    📝 {order.메모 || order.적요}
+  </div>
+)}
       {/* ▶ 상태 + 냉장/냉동 */}
       <div className="flex justify-end items-center gap-1 mb-0.5">
         {isUrgentOrder(order) && (
@@ -2431,6 +2439,19 @@ function MobileOrderDetail({
     <div className="px-4 py-3 space-y-4">
       {/* 기본 정보 */}
       <div className="bg-white border rounded-xl px-4 py-3 shadow-sm">
+        {/* 📝 메모 전용 영역 */}
+{(order.메모 || order.적요) && (
+  <div className="bg-yellow-50 border border-yellow-300
+                  rounded-xl px-4 py-3 shadow-sm">
+    <div className="text-sm font-semibold text-yellow-800 mb-1">
+      📝 메모
+    </div>
+    <div className="text-sm text-gray-800 whitespace-pre-wrap">
+      {order.메모 || order.적요}
+    </div>
+  </div>
+)}
+
         <div className="flex justify-between items-start mb-2">
           <div>
             <div className="text-xs text-gray-400 mb-1">
