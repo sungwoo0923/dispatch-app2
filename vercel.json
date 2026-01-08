@@ -1,19 +1,35 @@
 {
   "routes": [
     {
+      "src": "/icons/(.*)",
+      "headers": {
+        "cache-control": "public, max-age=31536000, immutable"
+      },
+      "dest": "/icons/$1"
+    },
+    {
+      "src": "/manifest.json",
+      "headers": {
+        "Content-Type": "application/manifest+json",
+        "Cache-Control": "no-cache"
+      },
+      "dest": "/manifest.json"
+    },
+    {
+      "src": "/sw.js",
+      "headers": {
+        "Content-Type": "application/javascript",
+        "Cache-Control": "no-cache"
+      },
+      "dest": "/sw.js"
+    },
+    {
       "src": "/firebase-messaging-sw.js",
       "headers": {
         "Content-Type": "application/javascript",
         "Cache-Control": "no-cache"
       },
       "dest": "/firebase-messaging-sw.js"
-    },
-    {
-      "src": "/assets/(.*)",
-      "headers": {
-        "cache-control": "public, max-age=31536000, immutable"
-      },
-      "dest": "/assets/$1"
     },
     {
       "src": "/(.*)",
