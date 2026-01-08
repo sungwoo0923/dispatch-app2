@@ -2214,28 +2214,27 @@ const dropTime = order.하차시간 || "시간 없음";
       className="relative bg-white rounded-2xl shadow border px-3 py-3"
       onClick={onSelect}
     >
-      {/* 📝 메모 요약 */}
+      {/* 📝 메모 뱃지 */}
 {(order.메모 || order.적요) && (
   <div
-  className="mb-2 px-3 py-2 rounded-xl
-             bg-gray-50 border border-gray-200
-             text-[12px] text-gray-700"
-  onClick={(e) => {
-    e.stopPropagation();
-    onOpenMemo(order);
-  }}
->
-  <div className="flex items-center justify-between">
-    <span className="line-clamp-1">
-      📝 {order.메모 || order.적요}
-    </span>
-    <span className="ml-2 text-[11px] text-gray-400">
-      보기
+    className="absolute top-2 left-2"
+    onClick={(e) => {
+      e.stopPropagation();
+      onOpenMemo(order);   // ✅ 기존 팝업 그대로 호출
+    }}
+  >
+    <span
+      className="inline-flex items-center gap-1
+                 px-2 py-0.5 rounded-full
+                 bg-yellow-100 text-yellow-800
+                 border border-yellow-300
+                 text-[10px] font-semibold"
+    >
+      📝 메모
     </span>
   </div>
-</div>
-
 )}
+
       {/* ▶ 상태 + 냉장/냉동 */}
       <div className="flex justify-end items-center gap-1 mb-0.5">
         {isUrgentOrder(order) && (
@@ -2599,55 +2598,30 @@ const [expandMemo, setExpandMemo] = useState(false);
     >
       카톡공유
     </button>
+{/* 운임조회 */}
+<button
+  onClick={() => {
+    // 🔥 운임조회 자동 입력용 preset 저장
+    window.__farePreset__ = {
+      pickup: order.상차지명 || "",
+      pickupAddr: order.상차지주소 || "",
+      drop: order.하차지명 || "",
+      dropAddr: order.하차지주소 || "",
+      ton: order.차량톤수 || order.톤수 || "",
+      cargo: order.화물내용 || "",
+    };
 
-    {/* 운임조회 */}
-    <button
-      onClick={() => {
-        window.__forceFareSearch__ = true; // ★ 추가!
-        window.scrollTo(0, 0);
-        setPage("fare");
+    // 🔥 자동 조회 플래그
+    window.__forceFareSearch__ = true;
 
-        setTimeout(() => {
-          const normalize = (v) => String(v || "").trim().replace(/\s+/g, "");
-          const pickupVal = normalize(order.상차지명);
-          const dropVal = normalize(order.하차지명);
-          const tonVal = normalize(order.차량톤수 || order.톤수);
-          const cargoVal = normalize(order.화물내용);
+    window.scrollTo(0, 0);
+    setPage("fare");
+  }}
+  className="flex-1 py-2 rounded-lg bg-indigo-500 text-white text-sm font-semibold"
+>
+  운임조회
+</button>
 
-          const elPickup = document.querySelector("input[placeholder='상차지']");
-          const elDrop = document.querySelector("input[placeholder='하차지']");
-          const elTon = document.querySelector("input[placeholder='톤수 (예: 1톤)']");
-          const elCargo = document.querySelector("input[placeholder='화물내용 (예: 16파렛)']");
-
-// 기존 지명 입력
-if (elPickup) elPickup.value = pickupVal;
-if (elDrop) elDrop.value = dropVal;
-if (elTon) elTon.value = tonVal;
-if (elCargo) elCargo.value = cargoVal;
-
-// ✅ 주소 input 찾기
-const elPickupAddr = document.querySelector(
-  "input[placeholder='상차지 주소']"
-);
-const elDropAddr = document.querySelector(
-  "input[placeholder='하차지 주소']"
-);
-
-// ✅ ✅ ✅ 이 두 줄이 핵심 (지금 빠져 있음)
-if (elPickupAddr) elPickupAddr.value = order.상차지주소 || "";
-if (elDropAddr) elDropAddr.value = order.하차지주소 || "";
-
-          
-          setTimeout(() => {
-            const btn = document.querySelector("#fare-search-button");
-            if (btn) btn.click();
-          }, 200);
-        }, 400);
-      }}
-      className="flex-1 py-2 rounded-lg bg-indigo-500 text-white text-sm font-semibold"
-    >
-      운임조회
-    </button>
   </div>
 </div>
 {/* 📞 전화 / 💬 문자 */}
@@ -3713,6 +3687,32 @@ function RowLabelInput({ label, input }) {
 // 📌 모바일 표준운임표 — 흰 화면 100% 해결 버전
 // ======================================================================
 function MobileStandardFare({ onBack }) {
+  useEffect(() => {
+  if (!window.__farePreset__) return;
+
+  const p = window.__farePreset__;
+
+  setPickup(p.pickup || "");
+  setPickupAddr(p.pickupAddr || "");
+  setDrop(p.drop || "");
+  setDropAddr(p.dropAddr || "");
+  setTon(p.ton || "");
+  setCargo(p.cargo || "");
+
+  // 1회성 사용
+  window.__farePreset__ = null;
+
+  // 자동 조회
+setTimeout(() => {
+  // 값이 실제로 들어온 뒤에만 실행
+  if (
+    (p.pickup || p.pickupAddr) &&
+    (p.drop || p.dropAddr)
+  ) {
+    calcFareMobile();
+  }
+}, 0);
+}, []);
   const [dispatchData, setDispatchData] = useState([]);
 
   const [pickup, setPickup] = useState("");
@@ -3741,7 +3741,23 @@ const extractTonNum = (text = "") => {
   const m = cleanText.match(/(\d+(?:\.\d+)?)/);  // ← 정규식 확정본
   return m ? Number(m[1]) : null;
 };
+const cargoSimilarityScore = (inputCargo, rowCargo) => {
+  const inputNum = extractCargoNumber(inputCargo);
+  const rowNum = extractCargoNumber(rowCargo);
 
+  // 숫자 추출 불가 시 기본 점수
+  if (inputNum == null || rowNum == null) return 30;
+
+  const diff = Math.abs(inputNum - rowNum);
+
+  if (diff === 0) return 100;   // 완전 동일
+  if (diff <= 1) return 80;
+  if (diff <= 2) return 65;
+  if (diff <= 4) return 45;
+  if (diff <= 6) return 30;
+
+  return 15;
+};
  useEffect(() => {
   (async () => {
     const snap = await getDocs(collection(db, collName));
@@ -3764,66 +3780,73 @@ if (!isForced && (!hasPickup || !hasDrop)) {
 }
 
 
-const normPickup = clean(pickup + pickupAddr);
-const normDrop = clean(drop + dropAddr);
+const normPickup = clean(pickup) || clean(pickupAddr);
+const normDrop   = clean(drop)   || clean(dropAddr);
   const inputTonNum = extractTonNum(ton);
 
   let filtered = dispatchData
-    .map((r) => {
-      const rp = clean(r.상차지명 || "") + clean(r.상차지주소 || "");
-      const rd = clean(r.하차지명 || "") + clean(r.하차지주소 || "");
+  .map((r) => {
+    const rp = clean(r.상차지명 || "") + clean(r.상차지주소 || "");
+    const rd = clean(r.하차지명 || "") + clean(r.하차지주소 || "");
 
-      const okPickup = rp.includes(normPickup);
-      const okDrop = rd.includes(normDrop);
-      if (!okPickup || !okDrop) return null;
+    if (!rp.includes(normPickup) || !rd.includes(normDrop)) return null;
 
-      // 주소 정확도 점수
-      r._addrScore =
-        (rp.startsWith(normPickup) ? 3 : okPickup ? 1 : 0) +
-        (rd.startsWith(normDrop) ? 3 : okDrop ? 1 : 0);
+    // 주소 점수
+    const addrScore =
+      (rp.startsWith(normPickup) ? 3 : 1) +
+      (rd.startsWith(normDrop) ? 3 : 1);
 
-      // 차량종류 필터
-      if (vehicle !== "전체") {
-        const rv = clean(r.차량종류 || "");
-        const vv = clean(vehicle);
-        if (!rv.includes(vv)) return null;
-      }
+    // 차량종류 필터
+    if (vehicle !== "전체") {
+      const rv = clean(r.차량종류 || "");
+      if (!rv.includes(clean(vehicle))) return null;
+    }
 
-      // 화물(파렛) 숫자 필터
-      if (cargo.trim()) {
-        const cargoNum = extractCargoNumber(cargo);
-        const rowNum = extractCargoNumber(r.화물내용);
-        if (cargoNum != null && rowNum != cargoNum) return null;
-      }
+    // 톤수 필터 (있으면만)
+    if (inputTonNum != null) {
+      const rTon = extractTonNum(r.차량톤수 || "");
+      if (rTon != null && Math.abs(rTon - inputTonNum) > 1) return null;
+    }
 
-      // 톤수 근사치 필터
-      if (inputTonNum != null) {
-        const rTon = extractTonNum(r.차량톤수 || "");
-        if (rTon != null && Math.abs(rTon - inputTonNum) > 0.5) return null;
-      }
+    // 🔥 화물 유사도
+    const cargoScore = cargoSimilarityScore(cargo, r.화물내용);
 
-      return r;
-    })
-    .filter(Boolean);
+    return {
+      ...r,
+      _addrScore: addrScore,
+      _cargoScore: cargoScore,
+    };
+  })
+  .filter(Boolean);
 
-  if (!filtered.length) {
+
+if (!filtered.length) {
+  // 🔥 자동 운임조회(preset)일 때는 alert 띄우지 않음
+  if (!isForced) {
     alert("검색된 데이터가 없습니다.");
-    setMatchedRows([]);
-    setResult(null);
-    setAiFare(null);
-    return;
   }
 
-  // 정렬
-  filtered.sort((a, b) => {
-    const da = new Date(a.상차일 || 0);
-    const db = new Date(b.상차일 || 0);
+  setMatchedRows([]);
+  setResult(null);
+  setAiFare(null);
+  return;
+}
 
-    return (
-      (b._addrScore || 0) - (a._addrScore || 0) ||
-      db - da
-    );
-  });
+
+filtered.sort((a, b) => {
+  // 1️⃣ 화물 유사도 최우선
+  if (b._cargoScore !== a._cargoScore) {
+    return b._cargoScore - a._cargoScore;
+  }
+
+  // 2️⃣ 주소 정확도
+  if (b._addrScore !== a._addrScore) {
+    return b._addrScore - a._addrScore;
+  }
+
+  // 3️⃣ 최신 날짜
+  return new Date(b.상차일 || 0) - new Date(a.상차일 || 0);
+});
 
   setMatchedRows(filtered);
 
@@ -3894,6 +3917,12 @@ const normDrop = clean(drop + dropAddr);
           value={ton}
           onChange={(e) => setTon(e.target.value)}
         />
+        <input
+  className="w-full border rounded px-3 py-2 text-sm"
+  placeholder="화물내용 (예: 16파렛)"
+  value={cargo}
+  onChange={(e) => setCargo(e.target.value)}
+/>
         <select
           className="w-full border rounded px-3 py-2 text-sm"
           value={vehicle}
