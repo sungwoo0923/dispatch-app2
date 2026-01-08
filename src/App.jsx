@@ -1,4 +1,4 @@
-// ======================= src/App.jsx (PWA INSTALL SAFE FULL VERSION) =======================
+// ======================= src/App.jsx (FINAL + UPDATE BANNER ONCE FIX) =======================
 
 import React, { useState, useEffect, useRef } from "react";
 import {
@@ -6,9 +6,8 @@ import {
   Routes,
   Route,
   Navigate,
-  useNavigate,
 } from "react-router-dom";
-
+import ShipperApp from "./shipper/ShipperApp";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth, db } from "./firebase";
 import { doc, getDoc } from "firebase/firestore";
@@ -22,22 +21,20 @@ import DriverHome from "./driver/DriverHome";
 import DriverLogin from "./driver/DriverLogin";
 import DriverRegister from "./driver/DriverRegister";
 
-// Shipper
-import ShipperApp from "./shipper/ShipperApp";
+// Common Screens
+import Login from "./Login";
+import Signup from "./Signup";
 import ShipperLogin from "./shipper/ShipperLogin";
 import ShipperSignup from "./shipper/ShipperSignup";
 import ShipperPending from "./shipper/ShipperPending";
 
-// Common
-import Login from "./Login";
-import Signup from "./Signup";
 import NoAccess from "./NoAccess";
 import UploadPage from "./UploadPage";
 import StandardFare from "./StandardFare";
 import ChangePassword from "./ChangePassword";
 
 /* =======================================================================
-   스마트폰 판별 (아이패드 제외)
+   스마트폰(진짜 모바일)만 MobileApp
 ======================================================================= */
 function isSmartPhone() {
   const ua = navigator.userAgent.toLowerCase();
@@ -55,86 +52,36 @@ function isSmartPhone() {
   return isPhoneUA || isSmallScreen;
 }
 
-/* =======================================================================
-   🔥 PWA 설치 전용 엔트리 (/app)
-   ❗ 절대 redirect / auth 체크 / navigate 없음
-======================================================================= */
-function AppInstallEntry() {
-  useEffect(() => {
-    const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
-    const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
-    const isMobileSafari = isIOS && !isStandalone;
-
-    // 1️⃣ PC 브라우저 → 바로 앱 진입
-    if (!isIOS) {
-      window.location.replace("/app/main");
-      return;
-    }
-
-    // 2️⃣ 홈 화면 앱(PWA) → 앱 진입
-    if (isStandalone) {
-      setTimeout(() => {
-        window.location.replace("/app/main");
-      }, 200);
-      return;
-    }
-
-    // 3️⃣ iOS 사파리 주소창 → 설치 대기 (이동 ❌)
-    // 아무 것도 안 함 (이 상태로 홈 화면에 추가)
-  }, []);
-
-  return (
-    <div
-      style={{
-        height: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        fontSize: "14px",
-        color: "#666",
-        background: "#fff",
-      }}
-    >
-      앱을 불러오는 중입니다…
-      <br />
-      <span style={{ fontSize: "12px", marginTop: "8px", display: "block" }}>
-        홈 화면에 추가 후 실행해주세요
-      </span>
-    </div>
-  );
-}
-
-
-/* =======================================================================
-   실제 앱 엔트리 (/app/main)
-======================================================================= */
-function AppMain({ user, role }) {
-  const isMobile = isSmartPhone();
-
-  if (!user) return <Navigate to="/login" replace />;
-  if (role === "driver") return <Navigate to="/driver-home" replace />;
-  if (role === "shipper") return <Navigate to="/shipper" replace />;
-
-  return isMobile ? (
-    <MobileApp role={role} user={user} />
-  ) : (
-    <DispatchApp role={role} user={user} />
-  );
-}
-
 export default function App() {
   const [user, setUser] = useState(null);
   const [role, setRole] = useState(null);
-  const [approved, setApproved] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [approved, setApproved] = useState(false);
+  const [updateReady, setUpdateReady] = useState(false);
 
-  // ======================= AUTH =======================
+  // 🔒 업데이트 배너 1회만 표시하기 위한 락
+  const updateShownRef = useRef(false);
+
+  // ======================= UPDATE EVENT (ONCE) =======================
+  useEffect(() => {
+    const onUpdate = () => {
+      // 이미 한 번 떴으면 무시
+      if (updateShownRef.current) return;
+
+      updateShownRef.current = true;
+      setUpdateReady(true);
+    };
+
+    window.addEventListener("app-update-ready", onUpdate);
+    return () => window.removeEventListener("app-update-ready", onUpdate);
+  }, []);
+
+  // ======================= AUTH + ROLE =======================
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
       if (!u) {
         setUser(null);
         setRole(null);
-        setApproved(false);
         setLoading(false);
         return;
       }
@@ -144,7 +91,7 @@ export default function App() {
       const snap = await getDoc(doc(db, "users", u.uid));
       if (snap.exists()) {
         const data = snap.data();
-        setRole(data.role || null);
+        setRole(data.role);
         setApproved(data.approved === true);
       } else {
         setRole(null);
@@ -157,120 +104,142 @@ export default function App() {
     return () => unsub();
   }, []);
 
-  if (loading) {
+  // 🔒 role 확정 전 차단
+  if (loading || (user && !role)) {
     return (
       <div className="flex items-center justify-center h-screen text-gray-500">
-        권한 확인 중…
+        권한 확인 중...
       </div>
     );
   }
 
+  // 🔒 화주 승인 대기
+  if (user && role === "shipper" && approved === false) {
+    return <Navigate to="/shipper-pending" replace />;
+  }
+
+  const isMobile = isSmartPhone();
+
   return (
-    <Router>
-      <Routes>
-        {/* ================= PWA INSTALL ENTRY ================= */}
-        <Route path="/app" element={<AppInstallEntry />} />
+    <>
+      {/* ======================= UPDATE BANNER (ONCE) ======================= */}
+      {updateReady && (
+        <div className="fixed bottom-6 right-6 bg-white shadow-xl border rounded-lg p-4 z-[9999] w-72">
+          <div className="font-bold mb-2">🔄 새 업데이트가 있습니다</div>
+          <div className="text-sm text-gray-600 mb-3">
+            최신 버전을 적용하려면 업데이트를 눌러주세요.
+          </div>
+          <button
+  className="w-full bg-black text-white py-2 rounded-md"
+  onClick={() => {
+    // 🔥 UI 즉시 종료
+    setUpdateReady(false);
 
-        {/* ================= REAL APP ================= */}
-        <Route
-          path="/app/main"
-          element={<AppMain user={user} role={role} />}
-        />
+    // 혹시 모를 중복 클릭 방지
+    if (window.__APPLYING_UPDATE__) return;
+    window.__APPLYING_UPDATE__ = true;
 
-        {/* ================= AUTH ================= */}
-        <Route
-          path="/login"
-          element={
-            user
-              ? role === "driver"
+    window.applyAppUpdate?.();
+  }}
+>
+  지금 업데이트
+</button>
+        </div>
+      )}
+
+      <Router>
+        <Routes>
+          {/* 기본 */}
+          <Route path="/" element={<Navigate to="/login" replace />} />
+
+          {/* 로그인 */}
+          <Route
+            path="/login"
+            element={
+              user
+                ? role === "driver"
+                  ? <Navigate to="/driver-home" replace />
+                  : role === "shipper"
+                    ? <Navigate to="/shipper" replace />
+                    : <Navigate to="/app" replace />
+                : <Login />
+            }
+          />
+
+          <Route path="/signup" element={<Signup />} />
+
+          {/* 화주 */}
+          <Route
+            path="/shipper-login"
+            element={
+              user && role === "shipper"
+                ? <Navigate to="/shipper" replace />
+                : <ShipperLogin />
+            }
+          />
+          <Route path="/shipper-signup" element={<ShipperSignup />} />
+          <Route path="/shipper-pending" element={<ShipperPending />} />
+
+          {/* 기사 */}
+          <Route
+            path="/driver-login"
+            element={
+              user && role === "driver"
                 ? <Navigate to="/driver-home" replace />
-                : role === "shipper"
-                  ? <Navigate to="/shipper" replace />
-                  : <Navigate to="/app/main" replace />
-              : <Login />
-          }
-        />
-
-        <Route path="/signup" element={<Signup />} />
-
-        {/* ================= DRIVER ================= */}
-        <Route
-          path="/driver-login"
-          element={
-            user && role === "driver"
-              ? <Navigate to="/driver-home" replace />
-              : <DriverLogin />
-          }
-        />
-
-        <Route
-          path="/driver-register"
-          element={
-            user && role === "driver"
-              ? <Navigate to="/driver-home" replace />
-              : <DriverRegister />
-          }
-        />
-
-        <Route
-          path="/driver-home"
-          element={
-            user && role === "driver"
-              ? <DriverHome />
-              : <Navigate to="/driver-login" replace />
-          }
-        />
-
-        {/* ================= SHIPPER ================= */}
-        <Route
-          path="/shipper"
-          element={
-            user && role === "shipper"
-              ? <ShipperApp />
-              : <Navigate to="/shipper-login" replace />
-          }
-        />
-
-        <Route
-          path="/shipper-login"
-          element={
-            user && role === "shipper"
-              ? <Navigate to="/shipper" replace />
-              : <ShipperLogin />
-          }
-        />
-
-        <Route path="/shipper-signup" element={<ShipperSignup />} />
-
-        <Route
-          path="/shipper-pending"
-          element={<ShipperPending />}
-        />
-
-        {/* ================= COMMON ================= */}
-        <Route path="/change-password" element={<ChangePassword />} />
-        <Route path="/standard-fare" element={<StandardFare />} />
-        <Route path="/upload" element={<UploadPage />} />
-        <Route path="/no-access" element={<NoAccess />} />
-
-        {/* ================= ROOT ================= */}
-        <Route path="/" element={<Navigate to="/login" replace />} />
-
-        {/* ================= FALLBACK ================= */}
-        <Route
-          path="*"
-          element={
-            user
-              ? role === "driver"
+                : <DriverLogin />
+            }
+          />
+          <Route
+            path="/driver-register"
+            element={
+              user && role === "driver"
                 ? <Navigate to="/driver-home" replace />
-                : role === "shipper"
+                : <DriverRegister />
+            }
+          />
+          <Route
+            path="/driver-home"
+            element={
+              user && role === "driver"
+                ? <DriverHome />
+                : <Navigate to="/driver-login" replace />
+            }
+          />
+
+          {/* 내부 */}
+          <Route
+            path="/app"
+            element={
+              user && role !== "shipper" && role !== "driver"
+                ? (isMobile
+                    ? <MobileApp role={role} user={user} />
+                    : <DispatchApp role={role} user={user} />)
+                : <Navigate to="/login" replace />
+            }
+          />
+
+          {/* 공통 */}
+          <Route path="/change-password" element={<ChangePassword />} />
+          <Route path="/standard-fare" element={<StandardFare />} />
+          <Route path="/upload" element={<UploadPage />} />
+          <Route path="/no-access" element={<NoAccess />} />
+
+          {/* fallback */}
+          <Route
+            path="*"
+            element={
+              user
+                ? role === "shipper"
                   ? <Navigate to="/shipper" replace />
-                  : <Navigate to="/app/main" replace />
-              : <Navigate to="/login" replace />
-          }
-        />
-      </Routes>
-    </Router>
+                  : role === "driver"
+                    ? <Navigate to="/driver-home" replace />
+                    : <Navigate to="/app" replace />
+                : <Navigate to="/login" replace />
+            }
+          />
+        </Routes>
+      </Router>
+    </>
   );
 }
 
