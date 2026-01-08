@@ -700,6 +700,7 @@ useEffect(() => {
 
 
   const [selectedOrder, setSelectedOrder] = useState(null);
+  const [openMemo, setOpenMemo] = useState(null);
   // 🔙 상세보기 진입 출처 (list | unassigned | status)
 const [detailFrom, setDetailFrom] = useState(null);
   const [statusTab, setStatusTab] = useState("전체");
@@ -1258,7 +1259,32 @@ const title =
   // ------------------------------------------------------------------
  return (
   <div className="w-full max-w-md mx-auto min-h-screen bg-gray-50 flex flex-col relative">
-    
+    {/* 📝 메모 전체 보기 모달 */}
+{openMemo && (
+  <div
+    className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center"
+    onClick={() => setOpenMemo(null)}
+  >
+    <div
+      className="bg-white rounded-2xl p-4 w-[90%] max-h-[70vh] overflow-y-auto"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="text-sm font-bold mb-2">📝 메모</div>
+
+      <div className="text-sm whitespace-pre-wrap text-gray-800">
+        {openMemo.메모 || openMemo.적요}
+      </div>
+
+      <button
+        className="mt-4 w-full py-2 rounded-xl bg-gray-900 text-white text-sm"
+        onClick={() => setOpenMemo(null)}
+      >
+        닫기
+      </button>
+    </div>
+  </div>
+)}
+
     {/* 🔍 글씨 크기 전용 래퍼 (화면 스케일 ❌, 글씨만 ⭕) */}
     <div
       className="flex flex-col flex-1"
@@ -1324,13 +1350,18 @@ const title =
       {showMenu && (
         <MobileSideMenu
           onClose={() => setShowMenu(false)}
+          onGoList={() => {
+    setPage("list");
+    setShowMenu(false);
+  }}
+
           hasNewNotice={hasNewNotice}       // ⭐ 추가
   hasNewSchedule={hasNewSchedule}   // ⭐ 추가
   alarmEnabled={alarmEnabled}
  toggleAlarm={toggleAlarm}
-          onGoList={() => {
-            setPage("list");
-            setShowMenu(false);
+           onGoHandover={() => {
+    setPage("handover");
+    setShowMenu(false);
           }}
           onGoCreate={() => {
   setForm({
@@ -1468,6 +1499,7 @@ onGoSchedule={() => {
   </div>
 )}
 
+{/* ================= 일정 ================= */}
 {page === "schedule" && (
   <div className="px-4 py-3 space-y-3">
     {schedules.length === 0 && (
@@ -1475,7 +1507,45 @@ onGoSchedule={() => {
         등록된 일정이 없습니다.
       </div>
     )}
-    {/* ✅ schedule 바깥에 handover 독립 */}
+
+    {schedules.map(s => {
+      const type = s.type || s.title;
+      const writer = s.writer || s.name;
+      const startDate = s.startDate || s.start;
+      const endDate = s.endDate || s.end;
+      const memo = s.memo || s.reason;
+
+      return (
+        <div
+          key={s.id}
+          className="bg-white rounded-xl border shadow-sm p-4"
+        >
+          <div className="flex justify-between items-center">
+            <div className="text-sm font-semibold">{type}</div>
+            {writer && (
+              <div className="text-[11px] text-gray-500">{writer}</div>
+            )}
+          </div>
+
+          {(startDate || endDate) && (
+            <div className="mt-1 text-xs text-gray-600">
+              {startDate}
+              {endDate && endDate !== startDate && ` ~ ${endDate}`}
+            </div>
+          )}
+
+          {memo && (
+            <div className="mt-2 text-sm text-gray-700 whitespace-pre-wrap">
+              {memo}
+            </div>
+          )}
+        </div>
+      );
+    })}
+  </div>
+)}
+
+{/* ================= 인수인계 ================= */}
 {page === "handover" && (
   <div className="px-4 py-3 space-y-3">
     {handovers.length === 0 && (
@@ -1505,67 +1575,6 @@ onGoSchedule={() => {
     ))}
   </div>
 )}
-    {schedules.map(s => {
-      const type = s.type || s.title;     // 휴가 / 병가
-      const writer = s.writer || s.name;  // ✅ 핵심
-      const startDate = s.startDate || s.start; // ✅ 핵심
-      const endDate = s.endDate || s.end;       // ✅ 핵심
-      const memo = s.memo || s.reason;    // ✅ 핵심
-
-      return (
-        <div
-          key={s.id}
-          className="bg-white rounded-xl border shadow-sm p-4"
-        >
-          {/* 상단: 일정 종류 + 작성자 */}
-          <div className="flex justify-between items-center">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-semibold text-gray-900">
-                {type}
-              </span>
-
-              <span
-                className={`px-2 py-0.5 rounded-full text-[11px] font-semibold
-                  ${
-                    type === "휴가"
-                      ? "bg-blue-100 text-blue-600"
-                      : type === "병가"
-                      ? "bg-red-100 text-red-600"
-                      : "bg-gray-100 text-gray-600"
-                  }`}
-              >
-                {type}
-              </span>
-            </div>
-
-            {/* 작성자 */}
-            {writer && (
-              <div className="text-[11px] text-gray-500">
-                {writer}
-              </div>
-            )}
-          </div>
-
-          {/* 날짜 */}
-          {(startDate || endDate) && (
-            <div className="mt-1 text-xs text-gray-600">
-              {startDate}
-              {endDate && endDate !== startDate && ` ~ ${endDate}`}
-            </div>
-          )}
-
-          {/* 사유 */}
-          {memo && (
-            <div className="mt-2 text-sm text-gray-700">
-              {memo}
-            </div>
-          )}
-        </div>
-      );
-    })}
-  </div>
-)}
-
 
         {page === "list" && (
           <MobileOrderList
@@ -1585,6 +1594,7 @@ onSelect={(o) => {
   setPage("detail");
   window.scrollTo(0, 0);
 }}
+setOpenMemo={setOpenMemo}
             vehicleFilter={vehicleFilter}
             setVehicleFilter={setVehicleFilter}
             assignFilter={assignFilter}
@@ -1646,7 +1656,8 @@ onSelect={(o) => {
     onBack={() => setPage("list")}
     setSelectedOrder={setSelectedOrder}
     setPage={setPage}
-    setDetailFrom={setDetailFrom}   // 🔥🔥🔥 이 줄 추가
+    setDetailFrom={setDetailFrom}
+    setOpenMemo={setOpenMemo}
   />
 )}
 
@@ -1914,6 +1925,7 @@ function MobileOrderList({
   setEndDate,
   quickRange,
   onSelect,
+  setOpenMemo,
   vehicleFilter,
   setVehicleFilter,
   assignFilter,
@@ -2084,9 +2096,10 @@ function MobileOrderList({
                 {list.map((o) => (
                   <div key={o.id}>
                     <MobileOrderCard
-                      order={o}
-                      onSelect={() => onSelect(o)}
-                    />
+  order={o}
+  onSelect={() => onSelect(o)}
+  onOpenMemo={setOpenMemo}
+/>
                   </div>
 
                 ))}
@@ -2150,7 +2163,7 @@ function dayBadgeClass(label) {
   return "bg-gray-50 text-gray-500 border-gray-200";
 }
 
-function MobileOrderCard({ order, onSelect }) {
+function MobileOrderCard({ order, onSelect, onOpenMemo }) {
   const claim = getClaim(order);
   const fee = order.기사운임 ?? 0;
   const state = getStatus(order);
@@ -2201,14 +2214,27 @@ const dropTime = order.하차시간 || "시간 없음";
       className="relative bg-white rounded-2xl shadow border px-3 py-3"
       onClick={onSelect}
     >
-      {/* 📝 메모 하이라이트 (최상단 고정) */}
+      {/* 📝 메모 요약 */}
 {(order.메모 || order.적요) && (
-  <div className="mb-2 px-2 py-1 rounded-lg
-                  bg-yellow-100 border border-yellow-300
-                  text-[12px] font-semibold text-yellow-900
-                  truncate">
-    📝 {order.메모 || order.적요}
+  <div
+  className="mb-2 px-3 py-2 rounded-xl
+             bg-gray-50 border border-gray-200
+             text-[12px] text-gray-700"
+  onClick={(e) => {
+    e.stopPropagation();
+    onOpenMemo(order);
+  }}
+>
+  <div className="flex items-center justify-between">
+    <span className="line-clamp-1">
+      📝 {order.메모 || order.적요}
+    </span>
+    <span className="ml-2 text-[11px] text-gray-400">
+      보기
+    </span>
   </div>
+</div>
+
 )}
       {/* ▶ 상태 + 냉장/냉동 */}
       <div className="flex justify-end items-center gap-1 mb-0.5">
@@ -2344,7 +2370,7 @@ function MobileOrderDetail({
   upsertDriver,
 }) {
   const [showCopyModal, setShowCopyModal] = useState(false);
-
+const [expandMemo, setExpandMemo] = useState(false);
   const [carNo, setCarNo] = useState(order.차량번호 || "");
   const [name, setName] = useState(order.기사명 || "");
   const [phone, setPhone] = useState(order.전화번호 || "");
@@ -2439,14 +2465,21 @@ function MobileOrderDetail({
     <div className="px-4 py-3 space-y-4">
       {/* 기본 정보 */}
       <div className="bg-white border rounded-xl px-4 py-3 shadow-sm">
-        {/* 📝 메모 전용 영역 */}
+        {/* 📝 메모 (접힘/펼치기) */}
 {(order.메모 || order.적요) && (
-  <div className="bg-yellow-50 border border-yellow-300
-                  rounded-xl px-4 py-3 shadow-sm">
-    <div className="text-sm font-semibold text-yellow-800 mb-1">
-      📝 메모
+  <div className="mb-3 bg-yellow-50 border border-yellow-300 rounded-xl px-4 py-3">
+    <div
+      className="text-sm font-semibold text-yellow-800 mb-1 cursor-pointer"
+      onClick={() => setExpandMemo(v => !v)}
+    >
+      📝 메모 {expandMemo ? "▲" : "▼"}
     </div>
-    <div className="text-sm text-gray-800 whitespace-pre-wrap">
+
+    <div
+      className={`text-sm text-gray-800 whitespace-pre-wrap ${
+        expandMemo ? "" : "line-clamp-3"
+      }`}
+    >
       {order.메모 || order.적요}
     </div>
   </div>
@@ -4083,6 +4116,7 @@ function MobileUnassignedList({
   setSelectedOrder,
   setPage,
   setDetailFrom,
+  setOpenMemo,
 }) {
   const dateMap = new Map();
   for (const o of orders) {
@@ -4141,11 +4175,13 @@ function MobileUnassignedList({
   order={o}
   onSelect={() => {
     setSelectedOrder(o);
-    setDetailFrom("unassigned"); // ⭐⭐⭐ 이 줄이 핵심
+    setDetailFrom("unassigned");
     setPage("detail");
     window.scrollTo(0, 0);
   }}
+  onOpenMemo={setOpenMemo}
 />
+
 
 
                 </div>
