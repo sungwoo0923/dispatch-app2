@@ -1,4 +1,4 @@
-// ======================= src/Login.jsx (PREMIUM V6.1) =======================
+// ======================= src/Login.jsx (PREMIUM V6.1 FIXED) =======================
 import React, { useState } from "react";
 import { auth } from "./firebase";
 import {
@@ -26,7 +26,6 @@ export default function Login() {
     try {
       setLoading(true);
       await signInWithEmailAndPassword(auth, email, pw);
-      localStorage.setItem("role", "admin");
       navigate("/app");
     } catch (err) {
       setError("로그인 실패. 이메일과 비밀번호를 확인해주세요.");
@@ -62,50 +61,40 @@ export default function Login() {
           직원 전용 관리자 로그인
         </p>
 
-        {/* 이메일 입력 */}
+        {/* 이메일 */}
         <input
           type="email"
           placeholder="이메일"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="border w-full p-3 rounded-lg mb-3 text-gray-800
-          focus:border-blue-600 focus:ring focus:ring-blue-200"
+          className="border w-full p-3 rounded-lg mb-3"
         />
 
-        {/* 비밀번호 입력 */}
+        {/* 비밀번호 */}
         <input
           type="password"
           placeholder="비밀번호"
           value={pw}
           onChange={(e) => setPw(e.target.value)}
-          className="border w-full p-3 rounded-lg mb-3 text-gray-800
-          focus:border-blue-600 focus:ring focus:ring-blue-200"
+          className="border w-full p-3 rounded-lg mb-3"
         />
 
-        {/* 메시지 */}
-        {error && <p className="text-red-600 text-sm mb-2 font-semibold">{error}</p>}
-        {msg && <p className="text-green-600 text-sm mb-2 font-semibold">{msg}</p>}
+        {error && <p className="text-red-600 text-sm mb-2">{error}</p>}
+        {msg && <p className="text-green-600 text-sm mb-2">{msg}</p>}
 
-        {/* 로그인 버튼 */}
         <button
           onClick={login}
           disabled={loading}
-          className="w-full bg-[#0D2B66] text-white font-bold py-3 rounded-lg
-          hover:bg-[#153A85] transition flex items-center justify-center gap-2 disabled:opacity-60"
+          className="w-full bg-[#0D2B66] text-white py-3 rounded-lg flex justify-center gap-2"
         >
-          {loading ? (
-            <Loader2 size={20} className="animate-spin" />
-          ) : (
-            <LogIn size={20} />
-          )}
+          {loading ? <Loader2 size={20} className="animate-spin" /> : <LogIn size={20} />}
           로그인
         </button>
 
-        {/* 비밀번호 찾기 */}
         {!loading && (
           <button
             onClick={resetPw}
-            className="text-sm text-gray-500 mt-3 hover:text-blue-700 underline"
+            className="text-sm text-gray-500 mt-3 underline"
           >
             비밀번호 찾기
           </button>
@@ -113,31 +102,40 @@ export default function Login() {
 
         <div className="border-t my-6"></div>
 
-        {/* 직원 회원가입 */}
-        <Link
-          to="/signup"
-          className="block text-blue-600 font-semibold hover:underline mb-5"
-        >
+        {/* 직원 / 기사 */}
+        <Link to="/signup" className="block text-blue-600 mb-4">
           직원 회원가입
         </Link>
 
-        {/* 기사 관련 메뉴 */}
-        <div className="text-xs text-gray-500 mb-3">
-          직원이 아닌 경우 차량/기사 메뉴 이용
-        </div>
-
-        <div className="flex justify-center gap-6">
-          <Link
-            to="/driver-login"
-            className="flex items-center gap-1 text-green-700 font-semibold hover:underline"
-          >
+        <div className="flex justify-center gap-6 mb-6">
+          <Link to="/driver-login" className="flex items-center gap-1 text-green-700">
             <Truck size={16} /> 기사 로그인
           </Link>
-          <Link
-            to="/driver-register"
-            className="flex items-center gap-1 text-green-700 font-semibold hover:underline"
-          >
+          <Link to="/driver-register" className="flex items-center gap-1 text-green-700">
             <UserPlus size={16} /> 기사 회원가입
+          </Link>
+        </div>
+
+        {/* ================= 화주 전용 ================= */}
+        <div className="border-t my-6"></div>
+
+        <div className="text-sm text-gray-600 mb-2">
+          화주 고객이신가요?
+        </div>
+
+        <div className="flex justify-center gap-4">
+          <Link
+            to="/shipper-login"
+            className="px-4 py-2 rounded bg-blue-600 text-white font-semibold"
+          >
+            화주 로그인
+          </Link>
+
+          <Link
+            to="/shipper-signup"
+            className="px-4 py-2 rounded bg-gray-200 text-gray-800 font-semibold"
+          >
+            화주 회원가입
           </Link>
         </div>
 

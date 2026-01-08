@@ -1,4 +1,4 @@
-// src/DispatchManagement.jsx
+// ======================= src/DispatchManagement.jsx =======================
 import React, { useState, useEffect } from "react";
 import { db } from "./firebase";
 import {
@@ -7,6 +7,9 @@ import {
   onSnapshot,
   setDoc,
   serverTimestamp,
+  query,
+  where,
+  orderBy,
 } from "firebase/firestore";
 import { encryptData } from "./utils/crypt"; // ⬅ 24시콜 테스트 서버 암호화용
 
@@ -21,7 +24,7 @@ export default function DispatchManagement({
 }) {
   const isTest = role === "test";
 
-  // 기본 폼 구조
+  // ================= 기본 폼 구조 =================
   const emptyForm = {
     _id: crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`,
     등록일: new Date().toISOString().slice(0, 10),
@@ -49,11 +52,7 @@ export default function DispatchManagement({
 
   const [form, setForm] = useState(emptyForm);
 
-  /* 🔥 B) 24시콜 "테스트 서버" 전송 함수
-     - .env 에서 다음 값 사용:
-       REACT_APP_API_URL  : 테스트 서버 URL
-       REACT_APP_AUTH_KEY : 테스트용 authKey
-  */
+  /* ================= 24시콜 테스트 서버 전송 ================= */
   async function testSend24Call() {
     const payload = {
       authKey: process.env.REACT_APP_AUTH_KEY,
@@ -83,15 +82,13 @@ export default function DispatchManagement({
     }
   }
 
-  // 🔁 Firestore 실시간 구독
+  // ================= dispatch 실시간 구독 =================
   useEffect(() => {
-    // 테스트 계정이면 DB 안 보고, 완전 빈 상태
     if (isTest) {
       setDispatchData([]);
       return;
     }
 
-    // 일반/관리자 계정 → dispatch 컬렉션 실시간 구독
     const unsub = onSnapshot(collection(db, "dispatch"), (snap) => {
       const list = snap.docs.map((d) => ({
         _id: d.id,
@@ -103,11 +100,10 @@ export default function DispatchManagement({
     return () => unsub();
   }, [isTest, setDispatchData]);
 
-  // 저장
+  // ================= 배차 저장 =================
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (isTest) return alert("🚫 테스트 계정은 등록 불가!");
-
     if (!form.거래처명) return alert("거래처명을 선택해주세요");
 
     const id = doc(db, "dispatch").id;
@@ -123,14 +119,13 @@ export default function DispatchManagement({
     setForm(emptyForm);
   };
 
-  // 테스트 계정이면 입력창 전부 disabled 느낌으로 표시
   const disabled = isTest ? "bg-gray-200 pointer-events-none" : "";
 
   return (
     <div>
       <h2 className="text-lg font-bold mb-3">배차관리</h2>
 
-      {/* 입력 폼 */}
+      {/* ================= 배차 입력 폼 ================= */}
       <form
         onSubmit={handleSubmit}
         className="grid grid-cols-6 gap-3 text-sm bg-gray-50 p-4 rounded"
@@ -169,9 +164,8 @@ export default function DispatchManagement({
           />
         </div>
 
-        {/* 버튼 영역 */}
+        {/* 버튼 */}
         <div className="col-span-6 text-center mt-3 flex gap-3 justify-center">
-          {/* 등록하기 (실제 DB 저장) */}
           <button
             type="submit"
             disabled={isTest}
@@ -184,7 +178,6 @@ export default function DispatchManagement({
             등록하기
           </button>
 
-          {/* 💥 24시콜 테스트 서버 전송 버튼 */}
           <button
             type="button"
             onClick={testSend24Call}
@@ -195,12 +188,141 @@ export default function DispatchManagement({
         </div>
       </form>
 
-      {/* 테스트 계정 안내 문구 */}
       {isTest && (
         <div className="text-center mt-3 text-red-500 font-bold">
           🚫 테스트 계정은 조회/저장/수정/삭제가 제한됩니다.
         </div>
       )}
+
+      {/* 🔥 화주 요청 오더 영역 */}
+      <ShipperOrderQueue />
     </div>
   );
+}
+
+/* ===================================================================
+   🔥 화주 요청 오더 큐 + 배차 생성 연결 (완성본)
+=================================================================== */
+function ShipperOrderQueue() {
+  const [orders, setOrders] = useState([]);
+
+  useEffect(() => {
+    const q = query(
+      collection(db, "shipper_orders"),
+      where("status", "==", "요청"),
+      orderBy("createdAt", "desc")
+    );
+
+    const unsub = onSnapshot(q, (snap) => {
+      setOrders(
+        snap.docs.map((d) => ({
+          id: d.id,
+          ...d.data(),
+        }))
+      );
+    });
+
+    return () => unsub();
+  }, []);
+
+  if (orders.length === 0) return null;
+
+  return (
+    <div className="mt-6 bg-white border rounded-xl p-5">
+      <h3 className="font-bold mb-4">📦 화주 요청 오더</h3>
+
+      <div className="space-y-3">
+        {orders.map((o) => (
+          <div
+            key={o.id}
+            className="border rounded-lg p-4 flex justify-between items-center"
+          >
+            <div>
+              <div className="font-semibold">
+                {o.pickup} → {o.dropoff}
+              </div>
+              <div className="text-sm text-gray-500">
+                {o.date} {o.time} · {o.vehicle}
+              </div>
+            </div>
+
+            <button
+              onClick={() => createDispatchFromShipperOrder(o)}
+              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+            >
+              배차 생성
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ===================================================================
+   🔗 화주 오더 → dispatch 생성 + 상태 변경
+=================================================================== */
+async function createDispatchFromShipperOrder(order) {
+  // 1️⃣ dispatch 생성
+  const dispatchRef = doc(collection(db, "dispatch"));
+
+  await setDoc(dispatchRef, {
+    등록일: new Date().toISOString().slice(0, 10),
+    상차일: order.date || "",
+    상차시간: order.time || "",
+    하차일: order.date || "",
+    하차시간: "",
+    거래처명: order.company || "화주",
+    상차지명: order.pickup,
+    하차지명: order.dropoff,
+    화물내용: order.memo || "",
+    차량종류: "",
+    차량톤수: order.vehicle || "",
+    차량번호: "",
+    이름: "",
+    전화번호: "",
+    배차상태: "배차중",
+    지급방식: "",
+    배차방식: "화주",
+    청구운임: 0,
+    기사운임: 0,
+    수수료: 0,
+
+    // 🔗 연결 키
+    shipperOrderId: order.id,
+    shipperUid: order.shipperUid,
+
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+
+  // 2️⃣ 화주 오더 상태 변경
+  await setDoc(
+    doc(db, "shipper_orders", order.id),
+    { status: "배차중" },
+    { merge: true }
+  );
+}
+/* ===================================================================
+   ✅ 배차 완료 처리 (dispatch + shipper_orders 동기화)
+=================================================================== */
+async function completeDispatch(dispatch) {
+  // 1️⃣ dispatch 상태 완료
+  await setDoc(
+    doc(db, "dispatch", dispatch._id),
+    {
+      배차상태: "배차완료",
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true }
+  );
+
+  // 2️⃣ 화주 오더가 연결돼 있으면 같이 완료 처리
+  if (dispatch.shipperOrderId) {
+    await setDoc(
+      doc(db, "shipper_orders", dispatch.shipperOrderId),
+      { status: "배차완료" },
+      { merge: true }
+    );
+  }
 }

@@ -2,6 +2,17 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ================= 공통 컴포넌트 ================= */
+@layer components {
+  .input {
+    @apply w-full border rounded-lg p-3 bg-white
+           focus:outline-none
+           focus:ring-2 focus:ring-blue-500
+           focus:border-blue-500;
+  }
+}
+
+/* ================= 전역 ================= */
 body {
   font-family: 'Inter', 'Pretendard', sans-serif;
   background-color: #f9fafb;
@@ -15,10 +26,12 @@ button {
 button:hover {
   opacity: 0.85;
 }
+
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(-10px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
 .animate-fadeIn {
   animation: fadeIn 0.25s ease-out;
 }

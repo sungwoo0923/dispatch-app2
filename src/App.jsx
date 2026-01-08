@@ -148,97 +148,111 @@ export default function App() {
       )}
 
       <Router>
-        <Routes>
-          {/* 기본 */}
-          <Route path="/" element={<Navigate to="/login" replace />} />
+  <Routes>
+    {/* ================= 기본 ================= */}
+    <Route path="/" element={<Navigate to="/login" replace />} />
 
-          {/* 로그인 */}
-          <Route
-            path="/login"
-            element={
-              user
-                ? role === "driver"
-                  ? <Navigate to="/driver-home" replace />
-                  : role === "shipper"
-                    ? <Navigate to="/shipper" replace />
-                    : <Navigate to="/app" replace />
-                : <Login />
-            }
-          />
+    {/* ================= 로그인 ================= */}
+    <Route
+      path="/login"
+      element={
+        user
+          ? role === "driver"
+            ? <Navigate to="/driver-home" replace />
+            : role === "shipper"
+              ? <Navigate to="/shipper" replace />
+              : <Navigate to="/app" replace />
+          : <Login />
+      }
+    />
 
-          <Route path="/signup" element={<Signup />} />
+    <Route path="/signup" element={<Signup />} />
 
-          {/* 화주 */}
-          <Route
-            path="/shipper-login"
-            element={
-              user && role === "shipper"
-                ? <Navigate to="/shipper" replace />
-                : <ShipperLogin />
-            }
-          />
-          <Route path="/shipper-signup" element={<ShipperSignup />} />
-          <Route path="/shipper-pending" element={<ShipperPending />} />
+    {/* ================= 화주 ================= */}
+    <Route
+      path="/shipper-login"
+      element={
+        user && role === "shipper"
+          ? <Navigate to="/shipper" replace />
+          : <ShipperLogin />
+      }
+    />
 
-          {/* 기사 */}
-          <Route
-            path="/driver-login"
-            element={
-              user && role === "driver"
-                ? <Navigate to="/driver-home" replace />
-                : <DriverLogin />
-            }
-          />
-          <Route
-            path="/driver-register"
-            element={
-              user && role === "driver"
-                ? <Navigate to="/driver-home" replace />
-                : <DriverRegister />
-            }
-          />
-          <Route
-            path="/driver-home"
-            element={
-              user && role === "driver"
-                ? <DriverHome />
-                : <Navigate to="/driver-login" replace />
-            }
-          />
+    <Route path="/shipper-signup" element={<ShipperSignup />} />
+    <Route path="/shipper-pending" element={<ShipperPending />} />
 
-          {/* 내부 */}
-          <Route
-            path="/app"
-            element={
-              user && role !== "shipper" && role !== "driver"
-                ? (isMobile
-                    ? <MobileApp role={role} user={user} />
-                    : <DispatchApp role={role} user={user} />)
-                : <Navigate to="/login" replace />
-            }
-          />
+    {/* 🔥 화주 전용 APP */}
+    <Route
+      path="/shipper/*"
+      element={
+        user && role === "shipper"
+          ? <ShipperApp />
+          : <Navigate to="/shipper-login" replace />
+      }
+    />
 
-          {/* 공통 */}
-          <Route path="/change-password" element={<ChangePassword />} />
-          <Route path="/standard-fare" element={<StandardFare />} />
-          <Route path="/upload" element={<UploadPage />} />
-          <Route path="/no-access" element={<NoAccess />} />
+    {/* ================= 기사 ================= */}
+    <Route
+      path="/driver-login"
+      element={
+        user && role === "driver"
+          ? <Navigate to="/driver-home" replace />
+          : <DriverLogin />
+      }
+    />
 
-          {/* fallback */}
-          <Route
-            path="*"
-            element={
-              user
-                ? role === "shipper"
-                  ? <Navigate to="/shipper" replace />
-                  : role === "driver"
-                    ? <Navigate to="/driver-home" replace />
-                    : <Navigate to="/app" replace />
-                : <Navigate to="/login" replace />
-            }
-          />
-        </Routes>
-      </Router>
+    <Route
+      path="/driver-register"
+      element={
+        user && role === "driver"
+          ? <Navigate to="/driver-home" replace />
+          : <DriverRegister />
+      }
+    />
+
+    <Route
+      path="/driver-home"
+      element={
+        user && role === "driver"
+          ? <DriverHome />
+          : <Navigate to="/driver-login" replace />
+      }
+    />
+
+    {/* ================= 내부 직원 ================= */}
+    <Route
+      path="/app"
+      element={
+        user && role !== "shipper" && role !== "driver"
+          ? (isMobile
+              ? <MobileApp role={role} user={user} />
+              : <DispatchApp role={role} user={user} />)
+          : <Navigate to="/login" replace />
+      }
+    />
+
+    {/* ================= 공통 ================= */}
+    <Route path="/change-password" element={<ChangePassword />} />
+    <Route path="/standard-fare" element={<StandardFare />} />
+    <Route path="/upload" element={<UploadPage />} />
+    <Route path="/no-access" element={<NoAccess />} />
+
+    {/* ================= fallback ================= */}
+    <Route
+      path="*"
+      element={
+        user
+          ? role === "shipper"
+            ? <Navigate to="/shipper" replace />
+            : role === "driver"
+              ? <Navigate to="/driver-home" replace />
+              : <Navigate to="/app" replace />
+          : <Navigate to="/login" replace />
+      }
+    />
+  </Routes>
+</Router>
+
     </>
   );
 }

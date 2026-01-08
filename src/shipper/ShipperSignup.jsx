@@ -28,7 +28,8 @@ export default function ShipperSignup() {
       await setDoc(doc(db, "users", uid), {
         email,
         company,
-        role: "shipper_pending",
+        role: "shipper",
+approved: false,
         createdAt: serverTimestamp(),
       });
 
