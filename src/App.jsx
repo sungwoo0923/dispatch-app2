@@ -61,18 +61,45 @@ function isSmartPhone() {
 ======================================================================= */
 function AppInstallEntry() {
   useEffect(() => {
-    // 홈 화면에서 앱으로 실행된 경우만 이동
-    if (window.matchMedia('(display-mode: standalone)').matches) {
-      // 살짝 딜레이 주는 게 iOS에서 안정적
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
+    const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    const isMobileSafari = isIOS && !isStandalone;
+
+    // 1️⃣ PC 브라우저 → 바로 앱 진입
+    if (!isIOS) {
+      window.location.replace("/app/main");
+      return;
+    }
+
+    // 2️⃣ 홈 화면 앱(PWA) → 앱 진입
+    if (isStandalone) {
       setTimeout(() => {
         window.location.replace("/app/main");
-      }, 300);
+      }, 200);
+      return;
     }
+
+    // 3️⃣ iOS 사파리 주소창 → 설치 대기 (이동 ❌)
+    // 아무 것도 안 함 (이 상태로 홈 화면에 추가)
   }, []);
 
   return (
-    <div className="flex items-center justify-center h-screen text-gray-500">
+    <div
+      style={{
+        height: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontSize: "14px",
+        color: "#666",
+        background: "#fff",
+      }}
+    >
       앱을 불러오는 중입니다…
+      <br />
+      <span style={{ fontSize: "12px", marginTop: "8px", display: "block" }}>
+        홈 화면에 추가 후 실행해주세요
+      </span>
     </div>
   );
 }
