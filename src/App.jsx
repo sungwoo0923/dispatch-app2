@@ -60,12 +60,23 @@ function isSmartPhone() {
    ❗ 절대 redirect / auth 체크 / navigate 없음
 ======================================================================= */
 function AppInstallEntry() {
+  useEffect(() => {
+    // 홈 화면에서 앱으로 실행된 경우만 이동
+    if (window.matchMedia('(display-mode: standalone)').matches) {
+      // 살짝 딜레이 주는 게 iOS에서 안정적
+      setTimeout(() => {
+        window.location.replace("/app/main");
+      }, 300);
+    }
+  }, []);
+
   return (
     <div className="flex items-center justify-center h-screen text-gray-500">
       앱을 불러오는 중입니다…
     </div>
   );
 }
+
 
 /* =======================================================================
    실제 앱 엔트리 (/app/main)
