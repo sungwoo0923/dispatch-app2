@@ -199,58 +199,82 @@ unsubs.push(onSnapshot(collection(db, collName), (snap)=>{
     return ()=>unsubs.forEach(u=>u&&u());
   }, [user]);
 
-  const addDispatch = async (record) => {
-  const _id = record._id || crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
-  await setDoc(doc(db, COLL.dispatch, _id), { 
+const addDispatch = async (record) => {
+  const _id =
+    record._id ||
+    crypto?.randomUUID?.() ||
+    `${Date.now()}-${Math.random()}`;
+
+  // 🔥 undefined 제거 (이게 핵심)
+  const cleanRecord = stripUndefinedDeep({
     ...record,
     _id,
-    작성자: auth.currentUser?.email || "",   // ★ 추가
+    작성자: auth.currentUser?.email || "",
   });
+
+  await setDoc(
+    doc(db, COLL.dispatch, _id),
+    cleanRecord
+  );
 };
-  const patchDispatch = async (_id, patch) => {
+// 🔥 undefined 깊이 제거 (중첩 객체까지 안전)
+const stripUndefinedDeep = (obj) => {
+  if (obj === null || typeof obj !== "object") return obj;
+
+  return Object.fromEntries(
+    Object.entries(obj)
+      .filter(([, v]) => v !== undefined)
+      .map(([k, v]) => [k, stripUndefinedDeep(v)])
+  );
+};
+
+const patchDispatch = async (_id, patch) => {
   if (!_id) return;
 
-  // 1️⃣ 기존 문서 가져오기
   const ref = doc(db, COLL.dispatch, _id);
   const snap = await getDoc(ref);
   if (!snap.exists()) return;
 
   const prev = snap.data();
+
+const cleanPatch = stripUndefinedDeep({
+  ...patch,
+
+  // 🔥 전달상태 변경은 정렬에 영향 주지 않음
+  ...(patch.업체전달상태 !== undefined
+    ? {}
+    : { updatedAt: Date.now() }),
+});
+
   const histories = [];
 
-Object.keys(patch).forEach((key) => {
-  // 🔕 이력 제외 필드
+Object.keys(cleanPatch).forEach((key) => {
   if (IGNORE_HISTORY_FIELDS.has(key)) return;
+  if (cleanPatch.__system === true) return;
 
-  // 🔕 시스템 수정은 이력 미기록
-  if (patch.__system === true) return;
+  // 🔥 전달상태 변경은 이력에 남기지 않음 (정렬 고정)
+  if (key === "업체전달상태") return;
+  if (key === "업체전달일시") return;
 
-  if (prev[key] !== patch[key]) {
+  if (prev[key] !== cleanPatch[key]) {
     histories.push(
       makeDispatchHistory({
         userEmail: auth.currentUser?.email,
         field: key,
-        before: prev[key],
-        after: patch[key],
+        before: prev[key] ?? null,
+        after: cleanPatch[key] ?? null,
       })
     );
   }
 });
 
 
-  // 3️⃣ Firestore 업데이트
-  await setDoc(
-    ref,
-    {
-      ...patch,
-      작성자: auth.currentUser?.email || "",
-      history: [
-        ...(prev.history || []),
-        ...histories,
-      ],
-    },
-    { merge: true }
-  );
+  // ✅ updateDoc 사용 (merge + undefined 문제 제거)
+  await updateDoc(ref, {
+    ...cleanPatch,
+    작성자: auth.currentUser?.email || "",
+    history: [...(prev.history || []), ...histories],
+  });
 };
 
 
@@ -517,7 +541,27 @@ function toYMD_KST(date) {
   const d = new Date(date.getTime() + 9 * 60 * 60 * 1000);
   return d.toISOString().slice(0, 10);
 }
+/* =================================================
+   📌 전달상태 계산 (오늘 이전 자동 전달완료)
+   👉 DispatchStatus 내부 / 날짜 유틸 바로 아래
+================================================= */
+const getDeliveryStatus = (row) => {
+  const today = todayStr();      // ← 이미 쓰고 있는 todayStr 그대로 사용
+  const d =
+    row?.상차일자 ||
+    row?.상차일 ||
+    row?.상차 ||
+    "";
 
+  // 1️⃣ DB에 명시된 값이 있으면 그걸 최우선
+  if (row.업체전달상태) return row.업체전달상태;
+
+  // 2️⃣ 오늘 이전 상차 → 자동 전달완료
+  if (d && d < today) return "전달완료";
+
+  // 3️⃣ 오늘 / 미래
+  return "미전달";
+};
 // ⭐ 오늘 통계
 const todayStats = useMemo(() => {
   if (!dispatchData || !user) return { count: 0, revenue: 0, profit: 0 };
@@ -984,7 +1028,6 @@ if (!user) {
 }
 // ===================== DispatchApp.jsx (PART 2/8) — END =====================
 // ===================== DispatchApp.jsx (PART 3/8) — START =====================
-// ✅ 1️⃣ 여기! DispatchManagement 위
 function ToggleBadge({ active, onClick, activeCls, inactiveCls, children }) {
   return (
     <button
@@ -4904,6 +4947,70 @@ const RoundTripBadge = () => (
     왕복
   </span>
 );
+function DeliveryStatusBadge({ row, patchDispatch }) {
+  const status = row.업체전달상태 || "미전달";
+
+  const styleMap = {
+    미전달: "bg-yellow-100 text-yellow-700 border-yellow-400",
+    전달완료: "bg-green-100 text-green-700 border-green-400",
+    전달실패: "bg-red-100 text-red-700 border-red-400",
+  };
+
+  // 🔥 undefined 제거 유틸
+  const stripUndefined = (obj) =>
+    Object.fromEntries(
+      Object.entries(obj).filter(([, v]) => v !== undefined)
+    );
+
+  return (
+    <button
+      type="button"
+      className={`px-2 py-0.5 rounded text-xs font-semibold border ${styleMap[status]}`}
+      onClick={async () => {
+        if (!patchDispatch) return;
+
+        if (status === "전달완료") {
+          const ok = window.confirm("전달 상태를 미전달로 되돌릴까요?");
+          if (!ok) return;
+
+          await patchDispatch(
+            row._id,
+            stripUndefined({
+              업체전달상태: "미전달",
+              업체전달일시: null,
+              업체전달방법: null,
+              업체전달자: null,
+              
+            })
+          );
+          return;
+        }
+
+        const ok = window.confirm("업체에 전달 완료 처리할까요?");
+        if (!ok) return;
+
+        const sender =
+          auth?.currentUser?.email ??
+          auth?.currentUser?.uid ??
+          "unknown";
+
+        await patchDispatch(
+  row._id,
+  stripUndefined({
+    업체전달상태: "전달완료",
+    업체전달일시: Date.now(),
+    업체전달방법: "수동",
+    업체전달자: sender,
+    // ❌ updatedAt 절대 넣지 말 것
+  })
+);
+      }}
+    >
+      {status}
+    </button>
+  );
+}
+
 
 function RealtimeStatus({
   
@@ -5306,6 +5413,8 @@ const handleFareSearch = () => {
 
 const [editPopupOpen, setEditPopupOpen] = React.useState(false);
 const [editTarget, setEditTarget] = React.useState(null);
+const [markDeliveredOnSave, setMarkDeliveredOnSave] = React.useState(false);
+
 // 🔵 동일 노선 추천 리스트
 const [similarOrders, setSimilarOrders] = React.useState([]);
 
@@ -6340,87 +6449,7 @@ if (key === "차량종류") {
     );
   };
 
-  // ------------------------
-  // 📌 공유 메시지
-  // ------------------------
-  // ------------------------
-// 📌 카카오톡 메시지 생성
-// ------------------------
-const makeKakaoMsg = (r) => {
-  // 날짜 표시 "11월 18일 (화)"
-  const dateObj = r.상차일 ? new Date(r.상차일) : null;
-  const dayNames = ["일", "월", "화", "수", "목", "금", "토"];
-  const dayLabel = dateObj ? dayNames[dateObj.getDay()] : "";
-  const month = dateObj ? dateObj.getMonth() + 1 : "";
-  const day = dateObj ? dateObj.getDate() : "";
-  const shortDate = dateObj ? `${month}월 ${day}일 (${dayLabel})` : "";
-
-  // 전화번호 하이픈 자동 정리
-  const formatPhone = (p) => {
-    if (!p) return "";
-    const num = p.replace(/\D/g, "");
-    if (num.length === 11)
-      return num.replace(/(\d{3})(\d{4})(\d{4})/, "$1-$2-$3");
-    if (num.length === 10)
-      return num.replace(/(\d{3})(\d{3})(\d{4})/, "$1-$2-$3");
-    return p;
-  };
-
-  const driverPhone = formatPhone(r.전화번호 || "");
-
-  // 익일 자동 판단
-  let displayUnloadTime = r.하차시간 || "";
-  if (r.상차일 && r.하차일) {
-    const s = new Date(r.상차일);
-    const h = new Date(r.하차일);
-    if (h.getTime() > s.getTime()) {
-      displayUnloadTime = `익일 ${r.하차시간 || ""}`;
-    }
-  }
-
-  // 지급방식 표시 결정
-  let payLabel = "(부가세별도)";
-  if (r.지급방식 === "선불" || r.지급방식 === "착불") {
-    payLabel = `(${r.지급방식})`;
-  }
-
-  return `
-${shortDate}
-
-[상차지]
-${r.상차지명 || ""}
-☎ 
-상차일자 : ${r.상차일 || ""}
-상차시간 : ${r.상차시간 || ""}
-상차주소 : ${r.상차지주소 || ""}
-
-[하차지]
-${r.하차지명 || ""}
-하차일자 : ${r.하차일 || ""}
-하차시간 : ${displayUnloadTime}
-하차주소 : ${r.하차지주소 || ""}
-☎ 
-
-배차차량 : ${r.차량번호 || ""}/${r.이름 || ""}/${driverPhone}
-화물내용 : ${r.화물내용 || ""}
-차량종류 : ${r.차량종류 || ""}
-차량톤수 : ${r.차량톤수 || ""}
-
-운임 : ${(r.청구운임 || 0).toLocaleString()}원 ${payLabel}
-
-배차되었습니다.
-  `.trim();
-};
-
-// ------------------------
-// 📌 카카오톡 복사
-// ------------------------
-const kakaoCopy = (row) => {
-  const msg = makeKakaoMsg(row);
-  navigator.clipboard.writeText(msg);
-  alert("📋 카카오톡 메시지가 복사되었습니다!\n카톡에 붙여넣기 하면 바로 전송됩니다.");
-};
-
+  
 // ------------------------
 // 📌 공유 메시지 (기존 함수)
 // ------------------------
@@ -6840,7 +6869,7 @@ XLSX.writeFile(wb, "실시간배차현황.xlsx");
                 "메모",
                 "첨부",
                 "공유",
-                "카톡",
+                "전달상태",
               ].map((h) => (
                 <th key={h} className={head}>
                   {h}
@@ -7070,16 +7099,11 @@ XLSX.writeFile(wb, "실시간배차현황.xlsx");
     공유
   </button>
 </td>
-
-{/* 카톡 */}
+{/* 전달상태 */}
 <td className={cell}>
-  <button
-    onClick={() => kakaoCopy(r)}
-    className="bg-yellow-500 text-white px-3 py-1 rounded"
-  >
-    카톡
-  </button>
+  <DeliveryStatusBadge row={r} patchDispatch={patchDispatch} />
 </td>
+
                 </tr>
               );
             })}
@@ -7901,6 +7925,10 @@ XLSX.writeFile(wb, "실시간배차현황.xlsx");
   차량번호: "",
   이름: "",
   전화번호: "",
+    업체전달상태: "미전달",
+  업체전달일시: null,
+  업체전달방법: null,
+  업체전달자: null,
 });
 
 await addDispatch?.(payload);
@@ -8184,6 +8212,19 @@ await addDispatch?.(payload);
   >
     📦 혼적
   </button>
+{/* 📤 업체 전달 */}
+<button
+  type="button"
+  onClick={() => setMarkDeliveredOnSave(v => !v)}
+  className={`
+    px-3 py-1.5 rounded-full text-xs font-semibold border
+    ${markDeliveredOnSave
+      ? "bg-green-600 text-white border-green-600"
+      : "bg-green-50 text-green-700 border-green-300 hover:bg-green-100"}
+  `}
+>
+  📤 업체 전달
+</button>
 
 </div>
 
@@ -8883,19 +8924,32 @@ setShowEditClientDropdown(false);
   "배차상태",
 ];
 
-const payload = stripUndefined(
-  ALLOWED_FIELDS.reduce((acc, k) => {
+const sender =
+  auth?.currentUser?.email ??
+  auth?.currentUser?.uid ??
+  "unknown";
+
+const payload = stripUndefined({
+  ...ALLOWED_FIELDS.reduce((acc, k) => {
     if (editTarget[k] !== undefined) {
       acc[k] = editTarget[k];
     }
     return acc;
-  }, {})
-);
+  }, {}),
+
+  // ✅ 📤 업체 전달 버튼 눌렀을 때만 추가
+  ...(markDeliveredOnSave && {
+    업체전달상태: "전달완료",
+    업체전달일시: Date.now(),
+    업체전달방법: "선택수정",
+    업체전달자: sender,
+  }),
+});
 
 await patchDispatch(editTarget._id, payload);
 
-
-
+// 🔥 중요: 다음 편집을 위해 초기화
+setMarkDeliveredOnSave(false);
       // 2) 방금 저장한 행에 하이라이트 추가
       setSavedHighlightIds((prev) => {
         const next = new Set(prev);
@@ -9313,39 +9367,48 @@ setTimeout(() => {
 )}
 {/* ===================== 🔥 즉시 변경 확인 팝업 (PART 5 이식) ===================== */}
 {confirmChange && (
-  <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[99999]">
-    <div className="bg-white rounded-xl p-6 w-[360px] shadow-xl">
-
-      <h3 className="text-lg font-bold mb-4 text-center">
-        변경하시겠습니까?
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100000]">
+    <div className="bg-white rounded-2xl p-6 w-[380px] shadow-2xl">
+      <h3 className="text-lg font-bold text-center mb-4">
+        상태를 변경하시겠습니까?
       </h3>
 
-      <div className="text-sm text-center mb-4">
-        <b>{confirmChange.key}</b>
-        <div className="mt-1 text-gray-500">
-          {String(confirmChange.before || "없음")} →{" "}
-          <span className="text-blue-600 font-semibold">
-            {String(confirmChange.after || "없음")}
+      <div className="text-center text-sm mb-6">
+        <div className="font-semibold mb-1">
+          {confirmChange.field}
+        </div>
+        <div className="text-gray-500">
+          {confirmChange.before || "없음"} →
+          <span className="ml-1 text-blue-600 font-bold">
+            {confirmChange.after}
           </span>
         </div>
       </div>
 
       <div className="flex gap-3">
         <button
-          className="flex-1 py-2 rounded bg-gray-200"
+          className="flex-1 py-2 rounded-lg bg-gray-200 hover:bg-gray-300"
           onClick={() => setConfirmChange(null)}
         >
           취소
         </button>
 
         <button
-          className="flex-1 py-2 rounded bg-blue-600 text-white"
+          className="flex-1 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
           onClick={async () => {
-            await patchDispatch(confirmChange.rowId, {
-              [confirmChange.key]: confirmChange.after,
-              updatedAt: Date.now(),
-            });
+            const patch = {
+              [confirmChange.field]: confirmChange.after,
+            };
 
+            if (confirmChange.field === "업체전달상태") {
+              patch.업체전달일시 =
+                confirmChange.after === "전달완료"
+                  ? Date.now()
+                  : null;
+              patch.업체전달방법 = "수동";
+            }
+
+            await patchDispatch(confirmChange.rowId, patch);
             setConfirmChange(null);
           }}
         >
@@ -9355,6 +9418,7 @@ setTimeout(() => {
     </div>
   </div>
 )}
+
 {/* ===================== 🔽 정렬 설정 팝업 ===================== */}
 {sortModalOpen && (
   <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[99999]">
@@ -10425,7 +10489,7 @@ const deleteRowsWithUndo = async () => {
 // 🔥 금액 변환 함수 (이거 추가)
 const toMoney = (v) => {
   if (v === undefined || v === null) return 0;
-  const n = Number(String(v).replace(/[^\d]/g, ""));
+  const n = Number(String(v).replace(/[^\d-]/g, ""));
   return Number.isNaN(n) ? 0 : n;
 };
   const downloadExcel = () => {
@@ -10502,21 +10566,19 @@ Object.keys(ws).forEach((cell) => {
 
   // ------------------------------------
   // 2) 금액 칼럼(S=청구, T=기사, U=수수료)
-  //    🔥 헤더는 절대 숫자로 변환 금지(row === 1)
-  // ------------------------------------
+// ------------------------------------
   if (["S", "T", "U"].includes(col)) {
 
-    // 1행 헤더는 건드리지 않음
-    if (row === 1) return;
+  if (row === 1) return;
 
-    const num = Number(String(ws[cell].v).replace(/[^\d-]/g, ""));
-    ws[cell].v = isNaN(num) ? 0 : num;
-    ws[cell].t = "n";      // number type
-    ws[cell].z = "#,##0";  // 천 단위 콤마 표시
-  }
+  const num = Number(String(ws[cell].v).replace(/[^\d-]/g, ""));
+  ws[cell].v = isNaN(num) ? 0 : num;
+  ws[cell].t = "n";      
+
+  // 🔥 여기 추가/교체
+  ws[cell].z = "#,##0;[Red]-#,##0";
+}
 });
-
-
 // ================================
 // 컬럼 너비
 // ================================
@@ -10528,9 +10590,6 @@ ws["!cols"] = [
   { wch: 12 },  // E: 하차일
   { wch: 10 },  // F: 하차시간
 ];
-
-
-
   ws["!cols"] = [
     { wch: 6 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 10 },
   ];
@@ -10892,7 +10951,7 @@ return (
                 "선택","순번","등록일","상차일","상차시간","하차일","하차시간",
                 "거래처명","상차지명","상차지주소","하차지명","하차지주소",
                 "화물내용","차량종류","차량톤수","혼적","차량번호","기사명","전화번호",
-                "배차상태","청구운임","기사운임","수수료","지급방식","배차방식","메모",
+                "배차상태","청구운임","기사운임","수수료","지급방식","배차방식","메모","전달상태",
               
               ].map((h) => (
                 <th key={h} className="border px-2 py-2 text-center whitespace-nowrap">
@@ -11150,20 +11209,49 @@ return (
                       <MemoCell text={row.메모 || ""} />
                     )}
                   </td>
-                  <td className="border text-center">
-  <button
-    className="bg-purple-600 text-white px-2 py-1 rounded text-xs"
-    onClick={() => recommendDriver(row)}
-  >
-    추천
-  </button>
-  <button
-    className="bg-yellow-600 text-white px-2 py-1 rounded text-xs ml-1"
-    onClick={() => sendKakao(row)}
-  >
-    카톡
-  </button>
+                  {/* 전달상태 (버튼) */}
+<td className="border text-center whitespace-nowrap">
+  {(() => {
+    const today = todayStr();
+    const d =
+      row?.상차일자 ||
+      row?.상차일 ||
+      row?.상차 ||
+      "";
+
+    const deliveryStatus =
+      row.업체전달상태
+        ? row.업체전달상태
+        : d && d < today
+        ? "전달완료"
+        : "미전달";
+
+    return (
+      <button
+        className={`px-2 py-0.5 text-xs font-semibold rounded border
+          ${
+            deliveryStatus === "전달완료"
+              ? "bg-green-100 text-green-700 border-green-400"
+              : "bg-yellow-100 text-yellow-700 border-yellow-400"
+          }`}
+        onClick={() => {
+          const next =
+            deliveryStatus === "전달완료" ? "미전달" : "전달완료";
+
+          setConfirmChange({
+            id,
+            field: "업체전달상태",
+            before: deliveryStatus,
+            after: next,
+          });
+        }}
+      >
+        {deliveryStatus}
+      </button>
+    );
+  })()}
 </td>
+
 
                 </tr>
               );
@@ -11259,6 +11347,54 @@ return (
     📦 혼적
   </button>
 
+</div>
+{/* ================= 업체 전달 상태 ================= */}
+<div className="mb-4">
+  <label className="block text-sm font-semibold mb-1">
+    업체 전달 상태
+  </label>
+
+  {(() => {
+    const today = todayKST();
+
+    const d =
+      editTarget?.상차일 ||
+      "";
+
+    const deliveryStatus =
+      editTarget.업체전달상태
+        ? editTarget.업체전달상태
+        : d && d < today
+        ? "전달완료"
+        : "미전달";
+
+    return (
+      <button
+        type="button"
+        className={`px-3 py-1.5 text-xs font-semibold rounded border
+          ${
+            deliveryStatus === "전달완료"
+              ? "bg-green-100 text-green-700 border-green-400"
+              : "bg-yellow-100 text-yellow-700 border-yellow-400"
+          }`}
+        onClick={() => {
+          const next =
+            deliveryStatus === "전달완료"
+              ? "미전달"
+              : "전달완료";
+
+          setConfirmChange({
+            id: getId(editTarget),          // ⭐ 중요
+            field: "업체전달상태",
+            before: deliveryStatus,
+            after: next,
+          });
+        }}
+      >
+        {deliveryStatus}
+      </button>
+    );
+  })()}
 </div>
 
 
@@ -12495,26 +12631,28 @@ setTimeout(() => {
         </button>
 
         <button
-          className="flex-1 py-2 rounded bg-blue-600 text-white"
-          onClick={async () => {
-            const row = dispatchData.find(
-              (r) => getId(r) === confirmChange.id
-            );
+  className="flex-1 py-2 rounded bg-blue-600 text-white"
+  onClick={async () => {
+    const patch = {
+      [confirmChange.field]: confirmChange.after,
+      lastUpdated: new Date().toISOString(),
+    };
 
-            await patchDispatch(confirmChange.id, {
-              [confirmChange.field]: confirmChange.after,
-              history: [
-                ...(row?.history || []),
-                makeHistory(confirmChange),
-              ],
-              lastUpdated: new Date().toISOString(),
-            });
+    // 🔥 전달상태 전용 처리 (핵심)
+    if (confirmChange.field === "업체전달상태") {
+      patch.업체전달일시 =
+        confirmChange.after === "전달완료" ? Date.now() : null;
+      patch.업체전달방법 =
+        confirmChange.after === "전달완료" ? "수동" : null;
+    }
 
-            setConfirmChange(null);
-          }}
-        >
-          변경
-        </button>
+    await patchDispatch(confirmChange.id, patch);
+    setConfirmChange(null);
+  }}
+>
+  변경
+</button>
+
       </div>
     </div>
   </div>
@@ -12734,6 +12872,9 @@ function NewOrderPopup({
         이름: "",
         전화번호: "",
         긴급: false, // ⭐ 이거 꼭
+         업체전달상태: "미전달",
+  업체전달일시: null,
+  업체전달방법: null,
       });
 
       alert("신규 오더가 등록되었습니다.");
@@ -13158,7 +13299,6 @@ function NewOrderPopup({
 }
 
 // ===================== DispatchApp.jsx (PART 5/8 — END) =====================
-
 
 // ===================== DispatchApp.jsx (PART 6/8 — Settlement Premium) — START =====================
 

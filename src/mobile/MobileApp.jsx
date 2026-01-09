@@ -314,6 +314,7 @@ const normalizePhone = (p = "") =>
 // ======================================================================
 
 export default function MobileApp() {
+  const [page, setPage] = useState("list");
   // 🔕 알림 ON/OFF 상태 (기본 ON)
 const [alarmEnabled, setAlarmEnabled] = useState(
   localStorage.getItem("alarmEnabled") !== "false"
@@ -649,7 +650,7 @@ useEffect(() => {
   // 2. 화면 상태 / 필터
   // --------------------------------------------------
   const [onlyToday, setOnlyToday] = useState(false);
-  const [page, setPage] = useState("list"); 
+  // list | form | detail | fare | status | unassigned | handover | undelivered
 // list | form | detail | fare | status | unassigned | handover
   // 🆕 공지 NEW 판단 (데이터 기준)
 useEffect(() => {
@@ -915,44 +916,33 @@ if (searchType === "메모")
 
   // 배차현황용
   const filteredStatusOrders = filteredOrders;
+// ✅ 미배차 오더 (차량번호 없는 것)
+const unassignedOrders = useMemo(() => {
+  return orders.filter(
+    (o) => !String(o.차량번호 || "").trim()
+  );
+}, [orders]);
 
-  // 미배차(차량번호 없는 전체 오더)
-  const unassignedOrders = useMemo(() => {
+// 📤 정보미전달 오더 (오늘 이후 + 전달미완료)
+const undeliveredOrders = useMemo(() => {
+  const today = todayStr();
+
   return orders
     .filter((o) => {
-      // 1️⃣ 미배차만
-      const noVehicle =
-        !o.차량번호 || String(o.차량번호).trim() === "";
-      if (!noVehicle) return false;
+      const pickupDate = getPickupDate(o);
 
-      // 2️⃣ 차량 분류 필터
-      if (unassignedTypeFilter === "전체") return true;
-
-      const carType = String(o.차량종류 || o.차종 || "");
-
-      const isCold =
-        carType.includes("냉장") || carType.includes("냉동");
-
-      if (unassignedTypeFilter === "냉장/냉동") return isCold;
-      if (unassignedTypeFilter === "일반") return !isCold;
+      if (!pickupDate) return false;
+      if (pickupDate < today) return false;
+      if (o.업체전달상태 === "전달완료") return false;
 
       return true;
     })
     .sort((a, b) => {
-      const ad = String(a.상차일 || "");
-      const bd = String(b.상차일 || "");
-      if (ad !== bd) return ad.localeCompare(bd);
-
-      const at = String(a.상차시간 || a.상차일시 || "");
-      const bt = String(b.상차시간 || b.상차일시 || "");
-      if (at !== bt) return at.localeCompare(bt);
-
-      return String(a.거래처명 || "").localeCompare(
-        String(b.거래처명 || "")
-      );
+      const da = getPickupDate(a) || "";
+      const db = getPickupDate(b) || "";
+      return da.localeCompare(db);
     });
-}, [orders, unassignedTypeFilter]);
-
+}, [orders]);
 
   // 날짜별 그룹핑 메모
   const groupedByDate = useMemo(() => {
@@ -1033,8 +1023,6 @@ if (searchType === "메모")
       return;
     }
 
-
-
     // 🔹 신규 등록
     try {
       const ref = await addDoc(collection(db, collName), {
@@ -1050,7 +1038,6 @@ if (searchType === "메모")
         _id: ref.id,
         id: ref.id,
       });
-
 
       showToast("등록 완료!");
       setPage("list");
@@ -1107,7 +1094,6 @@ const handleOrderDuplicate = (order) => {
   setPage("form");
   window.scrollTo(0, 0);
 };
-
 
   // --------------------------------------------------
   // 🔵 모바일 전용 upsertDriver
@@ -1319,7 +1305,6 @@ const title =
   </div>
 )}
 
-
       <MobileHeader
   title={title}
   onBack={
@@ -1340,9 +1325,9 @@ const title =
             setPage("list");
           }
         }
-      : page === "notice" || page === "schedule"
-      ? () => setPage("list")   // ⭐⭐⭐ 이 줄이 핵심
-      : undefined
+      : page === "notice" || page === "schedule" || page === "unassigned"
+? () => setPage("list")
+: undefined
   }
   onRefresh={page === "list" ? handleRefresh : undefined}
   onMenu={page === "list" ? () => setShowMenu(true) : undefined}
@@ -1437,7 +1422,6 @@ onGoSchedule={() => {
   setPage("schedule");
   setShowMenu(false);
 }}
-
 
           onGoFare={() => {
             setPage("fare");
@@ -1660,7 +1644,6 @@ setOpenMemo={setOpenMemo}
     setOpenMemo={setOpenMemo}
   />
 )}
-
       </div>
 
       {page === "list" && !showMenu && (
@@ -1714,13 +1697,12 @@ setOpenMemo={setOpenMemo}
 // 공통 헤더 / 사이드 메뉴
 // ----------------------------------------------------------------------
 function MobileHeader({ title, onBack, onRefresh, onMenu }) {
-  const isListPage = !!onMenu; // 리스트 화면인지 판별
+  const isListPage = title === "등록내역";
+
   return (
     <div className="flex items-center justify-between px-4 py-3 bg-white border-b sticky top-0 z-30">
-      {/* 왼쪽 버튼 */}
       <div className="w-12">
         {isListPage ? (
-          /* 리스트 화면 = MENU 버튼 */
           <button
             onClick={onMenu}
             className="text-sm font-semibold text-blue-600"
@@ -1728,26 +1710,18 @@ function MobileHeader({ title, onBack, onRefresh, onMenu }) {
             MENU
           </button>
         ) : (
-          /* 그 외 화면 = 뒤로가기 버튼 */
-          onBack && (
-            <button
-              onClick={onBack}
-              className="text-sm font-semibold text-gray-700"
-            >
-              ◀
-            </button>
-          )
+          onBack && <BackIconButton onClick={onBack} />
         )}
       </div>
 
-      {/* 중앙 제목 */}
-      <div className="font-semibold text-base text-gray-800">{title}</div>
+      <div className="font-semibold text-base text-gray-800">
+        {title}
+      </div>
 
-      {/* 오른쪽 버튼 */}
       <div className="w-8 flex justify-end">
         {onRefresh && (
           <button
-            className="w-8 h-8 flex items-center justify-center rounded-full active:scale-95 text-gray-700"
+            className="w-8 h-8 flex items-center justify-center rounded-full"
             onClick={onRefresh}
           >
             ⟳
@@ -1832,6 +1806,7 @@ function MobileSideMenu({
   <MenuItem label="배차현황" onClick={onGoStatus} />
   <MenuItem label="미배차현황" onClick={onGoUnassigned} />
 </MenuSection>
+
 
         </div>
         {/* 🔕 알림 ON/OFF */}
@@ -2097,6 +2072,7 @@ function MobileOrderList({
                   <div key={o.id}>
                     <MobileOrderCard
   order={o}
+  showUndeliveredOnly={false}
   onSelect={() => onSelect(o)}
   onOpenMemo={setOpenMemo}
 />
@@ -2163,7 +2139,13 @@ function dayBadgeClass(label) {
   return "bg-gray-50 text-gray-500 border-gray-200";
 }
 
-function MobileOrderCard({ order, onSelect, onOpenMemo }) {
+function MobileOrderCard({
+  order,
+  onSelect,
+  onOpenMemo,
+  showUndeliveredOnly,
+  onConfirmDeliver,
+}) {
   const claim = getClaim(order);
   const fee = order.기사운임 ?? 0;
   const state = getStatus(order);
@@ -2230,37 +2212,43 @@ const dropTime = order.하차시간 || "시간 없음";
                  border border-yellow-300
                  text-[10px] font-semibold"
     >
-      📝 메모
+       메모
     </span>
   </div>
 )}
 
       {/* ▶ 상태 + 냉장/냉동 */}
-      <div className="flex justify-end items-center gap-1 mb-0.5">
-        {isUrgentOrder(order) && (
-  <span className="px-2 py-0.5 rounded-full bg-red-600 text-white text-[10px] font-bold">
-    🚨 긴급
+<div className="flex justify-end items-center gap-1 mb-0.5">
+
+  {showUndeliveredOnly && (
+    <span className="px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 text-[10px] font-bold border border-yellow-300">
+      미전달
+    </span>
+  )}
+
+  {!showUndeliveredOnly && isUrgentOrder(order) && (
+    <span className="px-2 py-0.5 rounded-full bg-red-600 text-white text-[10px] font-bold">
+      🚨 긴급
+    </span>
+  )}
+
+  {!showUndeliveredOnly && isToday && (
+    <span className="px-2 py-0.5 rounded-full bg-red-500 text-white text-[10px] font-bold">
+      TODAY
+    </span>
+  )}
+
+  {isCold && (
+    <span className="px-2 py-0.5 rounded-full bg-cyan-600 text-white text-[10px] font-bold">
+      ❄ 냉장/냉동
+    </span>
+  )}
+
+  <span className={"px-2 py-0.5 rounded-full border text-[11px] font-semibold " + stateBadgeClass}>
+    {state}
   </span>
-)}
-        {isToday && (
-  <span className="px-2 py-0.5 rounded-full bg-red-500 text-white text-[10px] font-bold">
-    TODAY
-  </span>
-)}
-        {isCold && (
-          <span className="px-2 py-0.5 rounded-full bg-cyan-600 text-white text-[10px] font-bold">
-            ❄ 냉장/냉동
-          </span>
-        )}
-        <span
-          className={
-            "px-2 py-0.5 rounded-full border text-[11px] font-semibold whitespace-nowrap " +
-            stateBadgeClass
-          }
-        >
-          {state}
-        </span>
-      </div>
+</div>
+
 
       {/* ⚠ 상차 임박 */}
       {(() => {
@@ -2346,12 +2334,26 @@ const dt = new Date(y, m - 1, d, hh, mm);
           청구 {fmtMoney(claim)} · 기사 {fmtMoney(fee)}
         </div>
       </div>
+      {/* ✅ 전달버튼은 여기 */}
+{showUndeliveredOnly && (
+  <div className="flex justify-end mt-2">
+    <button
+      onClick={(e) => {
+        e.stopPropagation();
+        onConfirmDeliver?.();
+      }}
+      className="text-[11px] px-2 py-1 rounded-full
+                 border border-emerald-300
+                 text-emerald-600
+                 hover:bg-emerald-50"
+    >
+      업체전송
+    </button>
+  </div>
+)}
     </div>
   );
 }
-
-
-
 // ======================================================================
 // 상세보기
 // ======================================================================
@@ -3631,7 +3633,6 @@ const copy = async (type) => {
   onClose();
 };
 
-
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[9999]">
       <div className="bg-white rounded-xl shadow-xl p-5 w-72 space-y-2">
@@ -3704,8 +3705,8 @@ function MobileStandardFare({ onBack }) {
 
   // 자동 조회
 setTimeout(() => {
-  // 값이 실제로 들어온 뒤에만 실행
   if (
+    dispatchData.length &&
     (p.pickup || p.pickupAddr) &&
     (p.drop || p.dropAddr)
   ) {
@@ -3714,7 +3715,6 @@ setTimeout(() => {
 }, 0);
 }, []);
   const [dispatchData, setDispatchData] = useState([]);
-
   const [pickup, setPickup] = useState("");
   const [pickupAddr, setPickupAddr] = useState(""); // ✅ 추가
   const [drop, setDrop] = useState("");
@@ -4029,7 +4029,7 @@ filtered.sort((a, b) => {
 // ======================================================================
 // 모바일 배차현황 / 미배차현황 테이블 (날짜별 그룹형 UI)
 // ======================================================================
-function MobileStatusTable({ title, orders, onBack, onQuickAssign }) {
+function MobileStatusTable({ title, orders, onBack }) {
 
   const dateMap = new Map();
   for (const o of orders) {
@@ -4147,8 +4147,47 @@ function MobileUnassignedList({
   setDetailFrom,
   setOpenMemo,
 }) {
+  const [confirmTarget, setConfirmTarget] = useState(null);
+  const handleConfirmDeliver = async () => {
+  if (!confirmTarget) return;
+
+  await updateDoc(
+    doc(db, collName, confirmTarget.id),
+   {
+  업체전달상태: "전달완료",
+  전달완료일시: serverTimestamp(),
+
+  // 🔥 PC 호환 필드 추가
+  정보전달완료: true,
+  정보전달상태: "전달완료",
+}
+  );
+
+  setConfirmTarget(null);
+};
+
+  // ✅ 탭 상태 추가
+const [tab, setTab] = useState("미배차"); 
+// "미배차" | "정보미전달"
+const source = orders.filter((o) => {
+  // 1️⃣ 정보미전달 탭 필터
+  if (tab === "정보미전달" && o.업체전달상태 === "전달완료") {
+    return false;
+  }
+  // 2️⃣ 냉장/냉동 판별
+  const isCold =
+    String(o.차량종류 || o.차종 || "").includes("냉장") ||
+    String(o.차량종류 || o.차종 || "").includes("냉동");
+
+  // 3️⃣ 차량 분류 필터
+  if (unassignedTypeFilter === "냉장/냉동") return isCold;
+  if (unassignedTypeFilter === "일반") return !isCold;
+
+  return true; // 전체
+});
+
   const dateMap = new Map();
-  for (const o of orders) {
+  for (const o of source) {
     const d = getPickupDate(o) || "기타";
     if (!dateMap.has(d)) dateMap.set(d, []);
     dateMap.get(d).push(o);
@@ -4157,14 +4196,25 @@ function MobileUnassignedList({
 
   return (
     <div className="px-3 py-3">
-      {onBack && (
-        <button
-          onClick={onBack}
-          className="mb-3 px-3 py-1 rounded bg-gray-200 text-gray-700 text-sm"
-        >
-          ◀ 뒤로가기
-        </button>
-      )}
+      
+      {/* 🔥 미배차 / 정보미전달 탭 */}
+<div className="flex gap-2 mb-3">
+  {["미배차", "정보미전달"].map((t) => (
+    <button
+      key={t}
+      onClick={() => setTab(t)}
+      className={`flex-1 py-1.5 rounded-full text-xs font-semibold border
+        ${
+          tab === t
+            ? "bg-blue-500 text-white border-blue-500"
+            : "bg-white text-gray-600 border-gray-300"
+        }`}
+    >
+      {t}
+    </button>
+  ))}
+</div>
+
       {/* 🔥 냉장/냉동 / 일반 필터 버튼 */}
 <div className="flex gap-2 mb-3">
   {["전체", "냉장/냉동", "일반"].map((t) => (
@@ -4188,38 +4238,76 @@ function MobileUnassignedList({
       </div>
 
       {sortedDates.map((dateStr) => {
-        const list = dateMap.get(dateStr);
+  const list = dateMap.get(dateStr) || [];
 
-        return (
-          <div key={dateStr} className="mb-6">
-            <div className="text-sm font-bold text-gray-700 mb-2 px-1">
-              {formatDateHeader(dateStr)}
-            </div>
+  return (
+    <div key={dateStr} className="mb-6">
+      <div className="text-sm font-bold text-gray-700 mb-2 px-1">
+        {formatDateHeader(dateStr)}
+      </div>
 
-            <div className="space-y-3">
-              {list.map((o) => (
-                <div key={o.id} className="space-y-1">
-                  {/* 카드 UI */}
-                  <MobileOrderCard
-  order={o}
-  onSelect={() => {
-    setSelectedOrder(o);
-    setDetailFrom("unassigned");
-    setPage("detail");
-    window.scrollTo(0, 0);
-  }}
-  onOpenMemo={setOpenMemo}
-/>
+      <div className="space-y-3">
+        {list.map((o) => (
+          <MobileOrderCard
+            key={o.id}
+            order={o}
+            onSelect={() => {
+              setSelectedOrder(o);
+              setDetailFrom("unassigned");
+              setPage("detail");
+              window.scrollTo(0, 0);
+            }}
+            onOpenMemo={setOpenMemo}
+            showUndeliveredOnly={tab === "정보미전달"}
+            onConfirmDeliver={() => setConfirmTarget(o)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+})}
+      {confirmTarget && (
+  <div
+    className="fixed inset-0 bg-black/40 z-50
+               flex items-center justify-center"
+    onClick={() => setConfirmTarget(null)}
+  >
+    <div
+      className="bg-white rounded-xl p-5 w-[80%] max-w-xs"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="text-sm font-semibold mb-2">
+        정보전달 완료
+      </div>
 
+      <div className="text-sm text-gray-600 mb-4">
+        이 오더를<br />
+        <b className="text-gray-900">전달완료</b> 처리하시겠습니까?
+      </div>
 
+      <div className="flex gap-2">
+        <button
+          onClick={() => setConfirmTarget(null)}
+          className="flex-1 py-2 rounded-lg
+                     bg-gray-200 text-gray-700
+                     text-sm font-semibold"
+        >
+          취소
+        </button>
 
-                </div>
-              ))}
+        <button
+          onClick={handleConfirmDeliver}
+          className="flex-1 py-2 rounded-lg
+                     bg-emerald-500 text-white
+                     text-sm font-semibold"
+        >
+          확인
+        </button>
+      </div>
+    </div>
+  </div>
+)}
 
-            </div>
-          </div>
-        );
-      })}
     </div>
   );
 

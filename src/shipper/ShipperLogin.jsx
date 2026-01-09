@@ -12,7 +12,7 @@ export default function ShipperLogin() {
   const login = async () => {
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      // App.jsx에서 role/approved 보고 자동 라우팅
+      // App.jsx에서 role / approved 보고 자동 라우팅
     } catch (e) {
       alert("로그인 실패");
     }
@@ -47,7 +47,8 @@ export default function ShipperLogin() {
           화주 로그인
         </button>
 
-        <div className="text-sm text-gray-600">
+        {/* 화주 회원가입 */}
+        <div className="text-sm text-gray-600 mb-4">
           아직 계정이 없으신가요?{" "}
           <span
             className="text-blue-600 cursor-pointer underline"
@@ -55,6 +56,17 @@ export default function ShipperLogin() {
           >
             화주 회원가입
           </span>
+        </div>
+
+        {/* ✅ 관리자 로그인으로 돌아가기 */}
+        <div className="text-sm text-gray-500">
+          <button
+            type="button"
+            onClick={() => navigate("/login")}
+            className="hover:text-gray-700 underline"
+          >
+            ← 관리자 로그인으로 돌아가기
+          </button>
         </div>
       </div>
     </div>
