@@ -4947,69 +4947,31 @@ const RoundTripBadge = () => (
     왕복
   </span>
 );
-function DeliveryStatusBadge({ row, patchDispatch }) {
+function DeliveryStatusBadge({ row, onConfirm }) {
   const status = row.업체전달상태 || "미전달";
 
   const styleMap = {
     미전달: "bg-yellow-100 text-yellow-700 border-yellow-400",
     전달완료: "bg-green-100 text-green-700 border-green-400",
-    전달실패: "bg-red-100 text-red-700 border-red-400",
   };
-
-  // 🔥 undefined 제거 유틸
-  const stripUndefined = (obj) =>
-    Object.fromEntries(
-      Object.entries(obj).filter(([, v]) => v !== undefined)
-    );
 
   return (
     <button
       type="button"
       className={`px-2 py-0.5 rounded text-xs font-semibold border ${styleMap[status]}`}
-      onClick={async () => {
-        if (!patchDispatch) return;
-
-        if (status === "전달완료") {
-          const ok = window.confirm("전달 상태를 미전달로 되돌릴까요?");
-          if (!ok) return;
-
-          await patchDispatch(
-            row._id,
-            stripUndefined({
-              업체전달상태: "미전달",
-              업체전달일시: null,
-              업체전달방법: null,
-              업체전달자: null,
-              
-            })
-          );
-          return;
-        }
-
-        const ok = window.confirm("업체에 전달 완료 처리할까요?");
-        if (!ok) return;
-
-        const sender =
-          auth?.currentUser?.email ??
-          auth?.currentUser?.uid ??
-          "unknown";
-
-        await patchDispatch(
-  row._id,
-  stripUndefined({
-    업체전달상태: "전달완료",
-    업체전달일시: Date.now(),
-    업체전달방법: "수동",
-    업체전달자: sender,
-    // ❌ updatedAt 절대 넣지 말 것
-  })
-);
+      onClick={() => {
+        onConfirm({
+          rowId: row._id,
+          before: status,
+          after: status === "전달완료" ? "미전달" : "전달완료",
+        });
       }}
     >
       {status}
     </button>
   );
 }
+
 
 
 function RealtimeStatus({
@@ -5026,6 +4988,15 @@ function RealtimeStatus({
   upsertDriver,
   role = "admin",
 }) {
+  // 📤 업체 전달 상태 변경 확인 팝업
+const [deliveryConfirm, setDeliveryConfirm] = React.useState(null);
+/*
+{
+  rowId,
+  before, // "미전달"
+  after   // "전달완료"
+}
+*/
   // 🚫 Firestore 저장용: undefined 필드 제거
   const stripUndefined = (obj) =>
     Object.fromEntries(
@@ -7101,7 +7072,10 @@ XLSX.writeFile(wb, "실시간배차현황.xlsx");
 </td>
 {/* 전달상태 */}
 <td className={cell}>
-  <DeliveryStatusBadge row={r} patchDispatch={patchDispatch} />
+  <DeliveryStatusBadge
+  row={r}
+  onConfirm={setDeliveryConfirm}
+/>
 </td>
 
                 </tr>
@@ -8215,16 +8189,24 @@ await addDispatch?.(payload);
 {/* 📤 업체 전달 */}
 <button
   type="button"
-  onClick={() => setMarkDeliveredOnSave(v => !v)}
-  className={`
+  onClick={() => {
+    setDeliveryConfirm({
+      rowId: editTarget._id,
+      before: editTarget.업체전달상태 || "미전달",
+      after:
+        editTarget.업체전달상태 === "전달완료"
+          ? "미전달"
+          : "전달완료",
+    });
+  }}
+  className="
     px-3 py-1.5 rounded-full text-xs font-semibold border
-    ${markDeliveredOnSave
-      ? "bg-green-600 text-white border-green-600"
-      : "bg-green-50 text-green-700 border-green-300 hover:bg-green-100"}
-  `}
+    bg-green-50 text-green-700 border-green-300 hover:bg-green-100
+  "
 >
   📤 업체 전달
 </button>
+
 
 </div>
 
@@ -9413,6 +9395,87 @@ setTimeout(() => {
           }}
         >
           변경
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+{/* ===================== 📤 업체 전달 상태 변경 팝업 ===================== */}
+{deliveryConfirm && (
+  <div
+    className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100001]"
+    tabIndex={-1}
+    ref={(el) => el && el.focus()}
+    onKeyDown={(e) => {
+      if (e.key === "Escape") {
+        setDeliveryConfirm(null);
+      }
+
+      if (e.key === "Enter") {
+        e.preventDefault();
+
+        const sender =
+          auth?.currentUser?.email ??
+          auth?.currentUser?.uid ??
+          "unknown";
+
+        patchDispatch(deliveryConfirm.rowId, {
+          업체전달상태: deliveryConfirm.after,
+          업체전달일시:
+            deliveryConfirm.after === "전달완료" ? Date.now() : null,
+          업체전달방법:
+            deliveryConfirm.after === "전달완료" ? "수동" : null,
+          업체전달자:
+            deliveryConfirm.after === "전달완료" ? sender : null,
+        });
+
+        setDeliveryConfirm(null);
+      }
+    }}
+  >
+    <div className="bg-white rounded-2xl p-6 w-[360px] shadow-xl">
+      <h3 className="text-lg font-bold text-center mb-2">
+        변경하시겠습니까?
+      </h3>
+
+      <div className="text-center text-sm mb-5">
+        <div className="font-semibold mb-1">업체전달상태</div>
+        <div className="text-gray-500">
+          {deliveryConfirm.before} →
+          <span className="ml-1 text-blue-600 font-bold">
+            {deliveryConfirm.after}
+          </span>
+        </div>
+      </div>
+
+      <div className="flex gap-3">
+        <button
+          className="flex-1 py-2 rounded-lg bg-gray-200 hover:bg-gray-300"
+          onClick={() => setDeliveryConfirm(null)}
+        >
+          취소 (ESC)
+        </button>
+
+        <button
+          className="flex-1 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
+          onClick={() => {
+            const sender =
+              auth?.currentUser?.email ??
+              auth?.currentUser?.uid ??
+              "unknown";
+
+            patchDispatch(deliveryConfirm.rowId, {
+              업체전달상태: deliveryConfirm.after,
+              업체전달일시:
+                deliveryConfirm.after === "전달완료" ? Date.now() : null,
+              업체전달방법: "수동",
+              업체전달자: sender,
+            });
+
+            setDeliveryConfirm(null);
+          }}
+        >
+          변경 (Enter)
         </button>
       </div>
     </div>

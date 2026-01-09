@@ -1633,8 +1633,11 @@ setOpenMemo={setOpenMemo}
 
         {page === "unassigned" && (
   <MobileUnassignedList
-    title={`미배차현황 (${unassignedOrders.length})`}
-    orders={unassignedOrders}
+    title="미배차 / 정보미전달"
+    orders={{
+      unassigned: unassignedOrders,     // 차량번호 없음
+      undelivered: undeliveredOrders,   // 배차완료 포함
+    }}
     unassignedTypeFilter={unassignedTypeFilter}
     setUnassignedTypeFilter={setUnassignedTypeFilter}
     onBack={() => setPage("list")}
@@ -1644,6 +1647,7 @@ setOpenMemo={setOpenMemo}
     setOpenMemo={setOpenMemo}
   />
 )}
+
       </div>
 
       {page === "list" && !showMenu && (
@@ -4138,7 +4142,7 @@ function MobileStatusTable({ title, orders, onBack }) {
 // ======================================================================
 function MobileUnassignedList({
   title,
-  orders,
+  orders, // { unassigned: [], undelivered: [] }
   unassignedTypeFilter,
   setUnassignedTypeFilter,
   onBack,
@@ -4147,6 +4151,7 @@ function MobileUnassignedList({
   setDetailFrom,
   setOpenMemo,
 }) {
+
   const [confirmTarget, setConfirmTarget] = useState(null);
   const handleConfirmDeliver = async () => {
   if (!confirmTarget) return;
@@ -4166,25 +4171,42 @@ function MobileUnassignedList({
   setConfirmTarget(null);
 };
 
-  // ✅ 탭 상태 추가
+  // ✅ 탭 상태
 const [tab, setTab] = useState("미배차"); 
 // "미배차" | "정보미전달"
-const source = orders.filter((o) => {
-  // 1️⃣ 정보미전달 탭 필터
-  if (tab === "정보미전달" && o.업체전달상태 === "전달완료") {
-    return false;
+
+// 🔥 탭별 데이터 소스 완전 분리
+const rawSource =
+  tab === "미배차"
+    ? orders.unassigned
+    : orders.undelivered;
+
+const source = rawSource.filter((o) => {
+  // 🔹 정보미전달 탭
+  if (tab === "정보미전달") {
+    const state = getStatus(o); // 배차중 / 배차완료
+
+    if (unassignedTypeFilter === "배차중")
+      return state === "배차중";
+
+    if (unassignedTypeFilter === "배차완료")
+      return state === "배차완료";
+
+    return true;
   }
-  // 2️⃣ 냉장/냉동 판별
+
+  // 🔹 미배차 탭 (기존 로직 유지)
   const isCold =
     String(o.차량종류 || o.차종 || "").includes("냉장") ||
     String(o.차량종류 || o.차종 || "").includes("냉동");
 
-  // 3️⃣ 차량 분류 필터
   if (unassignedTypeFilter === "냉장/냉동") return isCold;
   if (unassignedTypeFilter === "일반") return !isCold;
 
-  return true; // 전체
+  return true;
 });
+
+
 
   const dateMap = new Map();
   for (const o of source) {
@@ -4198,16 +4220,19 @@ const source = orders.filter((o) => {
     <div className="px-3 py-3">
       
       {/* 🔥 미배차 / 정보미전달 탭 */}
-<div className="flex gap-2 mb-3">
+<div className="flex rounded-xl overflow-hidden mb-4 border bg-gray-100">
   {["미배차", "정보미전달"].map((t) => (
     <button
       key={t}
-      onClick={() => setTab(t)}
-      className={`flex-1 py-1.5 rounded-full text-xs font-semibold border
+      onClick={() => {
+        setTab(t);
+        setUnassignedTypeFilter("전체"); // 🔥 탭 바뀔 때 필터 초기화
+      }}
+      className={`flex-1 py-2.5 text-sm font-bold
         ${
           tab === t
-            ? "bg-blue-500 text-white border-blue-500"
-            : "bg-white text-gray-600 border-gray-300"
+            ? "bg-blue-600 text-white shadow"
+            : "bg-transparent text-gray-500"
         }`}
     >
       {t}
@@ -4215,17 +4240,22 @@ const source = orders.filter((o) => {
   ))}
 </div>
 
-      {/* 🔥 냉장/냉동 / 일반 필터 버튼 */}
-<div className="flex gap-2 mb-3">
-  {["전체", "냉장/냉동", "일반"].map((t) => (
+
+      {/* 🔎 상태 필터 (조건) */}
+<div className="flex gap-2 mb-4 px-1">
+  {(tab === "정보미전달"
+    ? ["전체", "배차중", "배차완료"]
+    : ["전체", "냉장/냉동", "일반"]
+  ).map((t) => (
     <button
       key={t}
       onClick={() => setUnassignedTypeFilter(t)}
-      className={`flex-1 py-1.5 rounded-full text-xs font-semibold border
+      className={`px-3 py-1 rounded-full text-xs font-semibold border
+        transition
         ${
           unassignedTypeFilter === t
-            ? "bg-blue-500 text-white border-blue-500"
-            : "bg-white text-gray-600 border-gray-300"
+            ? "bg-blue-50 text-blue-700 border-blue-400"
+            : "bg-white text-gray-500 border-gray-300"
         }`}
     >
       {t}
@@ -4236,7 +4266,6 @@ const source = orders.filter((o) => {
       <div className="mb-2 text-xs text-gray-500">
         {title}
       </div>
-
       {sortedDates.map((dateStr) => {
   const list = dateMap.get(dateStr) || [];
 
