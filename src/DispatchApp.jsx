@@ -1694,6 +1694,7 @@ const filterVehicles = (q) => {
       지급방식: "",
       배차방식: "",
       메모: "",
+      메모중요도: "NORMAL",
       배차상태: "배차중",
       독차: false,
       혼적: false,
@@ -2325,8 +2326,14 @@ const fareAdjustment = form.긴급
       memo: "긴급 오더",
     }
   : null;
+  // ⭐ 메모 prefix 자동 보정
+const autoPriority =
+  form.메모?.startsWith("!!") ? "CRITICAL" :
+  form.메모?.startsWith("!")  ? "HIGH" :
+  form.메모중요도 || "NORMAL";
 const rec = {
   ...form,
+  메모중요도: autoPriority,
   운임보정: fareAdjustment,
   
   ...moneyPatch,
@@ -3870,11 +3877,47 @@ const similar = placeList.filter(p => {
     </select>
   </div>
 
-  {/* 메모 */}
-  <div className="col-span-6">
-    <label className={labelCls}>메모</label>
-    <textarea className={`${inputCls} h-20`} value={form.메모} onChange={(e) => onChange("메모", e.target.value)} />
+{/* 메모 + 중요도 */}
+<div className="col-span-6">
+  <label className={labelCls}>메모</label>
+
+  {/* 중요도 토글 */}
+  <div className="flex items-center gap-2 mb-1">
+    <ToggleBadge
+      active={form.메모중요도 === "NORMAL"}
+      onClick={() => onChange("메모중요도", "NORMAL")}
+      activeCls="bg-gray-600 text-white border-gray-600"
+      inactiveCls="bg-gray-100 text-gray-600 border-gray-200"
+    >
+      일반
+    </ToggleBadge>
+
+    <ToggleBadge
+      active={form.메모중요도 === "HIGH"}
+      onClick={() => onChange("메모중요도", "HIGH")}
+      activeCls="bg-orange-600 text-white border-orange-600"
+      inactiveCls="bg-orange-100 text-orange-700 border-orange-200"
+    >
+      중요
+    </ToggleBadge>
+
+    <ToggleBadge
+      active={form.메모중요도 === "CRITICAL"}
+      onClick={() => onChange("메모중요도", "CRITICAL")}
+      activeCls="bg-red-600 text-white border-red-600"
+      inactiveCls="bg-red-100 text-red-600 border-red-200"
+    >
+      긴급
+    </ToggleBadge>
   </div>
+
+  <textarea
+    className={`${inputCls} h-20`}
+    value={form.메모}
+    onChange={(e) => onChange("메모", e.target.value)}
+  />
+</div>
+
 
   {/* 버튼 */}
   <div className="col-span-6 flex justify-end mt-2">
@@ -5563,6 +5606,7 @@ const [fareModalOpen, setFareModalOpen] = React.useState(false);
     지급방식: "",
     배차방식: "",
     메모: "",
+    메모중요도: "NORMAL",
     운행유형: "편도",
     혼적: false,
     독차: false,
@@ -6876,8 +6920,10 @@ XLSX.writeFile(wb, "실시간배차현황.xlsx");
 
               return (
 <tr
+
   key={r._id || r.id || `idx-${idx}`}
   id={`row-${r._id}`}
+  
   className={`
     ${
       r.긴급 === true &&
@@ -7063,10 +7109,23 @@ XLSX.writeFile(wb, "실시간배차현황.xlsx");
                   <td className={cell}>{editableInput("지급방식", r.지급방식, r._id)}</td>
                   <td className={cell}>{editableInput("배차방식", r.배차방식, r._id)}</td>
                   <td className={cell}>
+  {/* 🔴 메모 중요도 뱃지 */}
+  {r.메모중요도 === "CRITICAL" && (
+    <span className="mr-1 px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-red-600 text-white">
+      긴급
+    </span>
+  )}
+  {r.메모중요도 === "HIGH" && (
+    <span className="mr-1 px-1.5 py-0.5 text-[10px] font-semibold rounded-full bg-orange-200 text-orange-800">
+      중요
+    </span>
+  )}
+
   {canEdit("메모", r._id)
     ? editableInput("메모", r.메모, r._id)
     : <MemoMore text={r.메모} />}
 </td>
+
 
                   {/* 첨부 */}
                   <td className={cell}>
@@ -7902,6 +7961,7 @@ XLSX.writeFile(wb, "실시간배차현황.xlsx");
                   try {
                     const payload = stripUndefined({
   ...newOrder,
+  메모중요도: memoPriority,
 운행유형: newOrder.운행유형 || "편도",
   긴급: newOrder.긴급 === true,
 
@@ -8225,8 +8285,6 @@ await addDispatch?.(payload);
 >
   📤 업체 전달
 </button>
-
-
 </div>
 
       {/* ------------------------------------------------ */}
@@ -8838,18 +8896,67 @@ setShowEditClientDropdown(false);
       </div>
 
       {/* ------------------------------------------------ */}
-      {/* 🔵 메모 */}
-      {/* ------------------------------------------------ */}
-      <div className="mb-3">
-        <label>메모</label>
-        <textarea
-          className="border p-2 rounded w-full h-20"
-          value={editTarget.메모 || ""}
-          onChange={(e) =>
-            setEditTarget((p) => ({ ...p, 메모: e.target.value }))
-          }
-        />
-      </div>
+{/* 🔵 메모 + 메모 중요도 */}
+{/* ------------------------------------------------ */}
+<div className="mb-3">
+  <div className="flex items-center justify-between mb-1">
+    <label className="font-semibold">메모</label>
+
+    {/* 🔴 메모 중요도 버튼 */}
+    <div className="flex items-center gap-1">
+      <button
+        type="button"
+        onClick={() =>
+          setEditTarget((p) => ({ ...p, 메모중요도: "NORMAL" }))
+        }
+        className={`px-2 py-0.5 rounded-full text-[11px] font-semibold border
+          ${editTarget.메모중요도 === "NORMAL"
+            ? "bg-gray-700 text-white border-gray-700"
+            : "bg-gray-100 text-gray-600 border-gray-300"}
+        `}
+      >
+        일반
+      </button>
+
+      <button
+        type="button"
+        onClick={() =>
+          setEditTarget((p) => ({ ...p, 메모중요도: "HIGH" }))
+        }
+        className={`px-2 py-0.5 rounded-full text-[11px] font-semibold border
+          ${editTarget.메모중요도 === "HIGH"
+            ? "bg-orange-500 text-white border-orange-500"
+            : "bg-orange-100 text-orange-700 border-orange-300"}
+        `}
+      >
+        중요
+      </button>
+
+      <button
+        type="button"
+        onClick={() =>
+          setEditTarget((p) => ({ ...p, 메모중요도: "CRITICAL" }))
+        }
+        className={`px-2 py-0.5 rounded-full text-[11px] font-semibold border
+          ${editTarget.메모중요도 === "CRITICAL"
+            ? "bg-red-600 text-white border-red-600 animate-pulse"
+            : "bg-red-100 text-red-600 border-red-300"}
+        `}
+      >
+        긴급
+      </button>
+    </div>
+  </div>
+
+  <textarea
+    className="border p-2 rounded w-full h-20"
+    value={editTarget.메모 || ""}
+    onChange={(e) =>
+      setEditTarget((p) => ({ ...p, 메모: e.target.value }))
+    }
+  />
+</div>
+
 {/* ===============================
     🕘 수정 이력
 =============================== */}
@@ -8919,6 +9026,7 @@ setShowEditClientDropdown(false);
   "청구운임","기사운임",
   "지급방식","배차방식",
   "메모",
+  "메모중요도",
   "운행유형",
   "혼적","독차",
   "긴급","운임보정",
@@ -11098,10 +11206,6 @@ return (
     ${savedHighlightIds.has(id) ? "row-highlight" : ""}
   `}
 >
-
-
-
-
                   <td className="border text-center">
                     <input type="checkbox" checked={selected.has(id)} onChange={() => toggleOne(id)} />
                   </td>
@@ -11295,18 +11399,41 @@ return (
   </select>
 </td>
 
-                  {/* 메모 더보기 */}
                   <td className="border text-center">
-                    {editMode && selected.has(id) ? (
-                      <input
-                        className="border rounded px-1 py-0.5 w-full text-center"
-                        defaultValue={row.메모 || ""}
-                        onChange={(e) => updateEdited(row, "메모", e.target.value)}
-                      />
-                    ) : (
-                      <MemoCell text={row.메모 || ""} />
-                    )}
-                  </td>
+  <div className="flex flex-col items-center gap-1">
+
+    {/* ⭐ 메모 중요도 뱃지 */}
+    {row.메모중요도 && row.메모중요도 !== "일반" && (
+      <span
+        className={`
+          px-2 py-0.5 rounded-full
+          text-[10px] font-bold
+          ${
+            row.메모중요도 === "긴급"
+              ? "bg-red-600 text-white animate-pulse"
+              : row.메모중요도 === "중요"
+              ? "bg-orange-500 text-white"
+              : ""
+          }
+        `}
+      >
+        {row.메모중요도}
+      </span>
+    )}
+
+    {/* 메모 본문 */}
+    {editMode && selected.has(id) ? (
+      <input
+        className="border rounded px-1 py-0.5 w-full text-center"
+        defaultValue={row.메모 || ""}
+        onChange={(e) => updateEdited(row, "메모", e.target.value)}
+      />
+    ) : (
+      <MemoCell text={row.메모 || ""} />
+    )}
+  </div>
+</td>
+
                   {/* 전달상태 (버튼) */}
 <td className="border text-center whitespace-nowrap">
   {(() => {
@@ -12061,18 +12188,80 @@ const d =
       </div>
 
       {/* ------------------------------------------------ */}
-      {/* 🔵 메모 */}
-      {/* ------------------------------------------------ */}
-      <div className="mb-3">
-        <label>메모</label>
-        <textarea
-          className="border p-2 rounded w-full h-20"
-          value={editTarget.메모 || ""}
-          onChange={(e) =>
-            setEditTarget((p) => ({ ...p, 메모: e.target.value }))
+{/* 🔵 메모 + 메모 중요도 */}
+{/* ------------------------------------------------ */}
+<div className="mb-3">
+  {/* 라벨 + 중요도 버튼 */}
+  <div className="flex items-center justify-between mb-1">
+    <label className="font-semibold">메모</label>
+
+    <div className="flex items-center gap-1">
+      {/* 일반 */}
+      <button
+        type="button"
+        onClick={() =>
+          setEditTarget((p) => ({ ...p, 메모중요도: "일반" }))
+        }
+        className={`
+          px-2 py-0.5 rounded-full text-[11px] font-semibold border
+          ${
+            editTarget.메모중요도 === "일반"
+              ? "bg-gray-700 text-white border-gray-700"
+              : "bg-gray-100 text-gray-600 border-gray-300"
           }
-        />
-      </div>
+        `}
+      >
+        일반
+      </button>
+
+      {/* 중요 */}
+      <button
+        type="button"
+        onClick={() =>
+          setEditTarget((p) => ({ ...p, 메모중요도: "중요" }))
+        }
+        className={`
+          px-2 py-0.5 rounded-full text-[11px] font-semibold border
+          ${
+            editTarget.메모중요도 === "중요"
+              ? "bg-orange-500 text-white border-orange-500"
+              : "bg-orange-100 text-orange-700 border-orange-300"
+          }
+        `}
+      >
+        중요
+      </button>
+
+      {/* 긴급 */}
+      <button
+        type="button"
+        onClick={() =>
+          setEditTarget((p) => ({ ...p, 메모중요도: "긴급" }))
+        }
+        className={`
+          px-2 py-0.5 rounded-full text-[11px] font-semibold border
+          ${
+            editTarget.메모중요도 === "긴급"
+              ? "bg-red-600 text-white border-red-600 animate-pulse"
+              : "bg-red-100 text-red-600 border-red-300"
+          }
+        `}
+      >
+        긴급
+      </button>
+    </div>
+  </div>
+
+  {/* 메모 입력 */}
+  <textarea
+    className="border p-2 rounded w-full h-20"
+    value={editTarget.메모 || ""}
+    onChange={(e) =>
+      setEditTarget((p) => ({ ...p, 메모: e.target.value }))
+    }
+  />
+</div>
+
 {/* ===============================
     🕘 수정 이력
 =============================== */}
@@ -12141,6 +12330,7 @@ const d =
   "청구운임","기사운임",
   "지급방식","배차방식",
   "메모",
+  "메모중요도",
   "운행유형",
   "혼적","독차",
   "긴급",          // 🔥 여기
@@ -13004,6 +13194,7 @@ function NewOrderPopup({
     try {
       await addDispatch({
         ...newOrder,
+         메모중요도: "일반",
         운행유형: newOrder.운행유형 || "편도",
         등록일: new Date().toISOString().slice(0, 10),
         배차상태: "배차중",
@@ -13011,6 +13202,7 @@ function NewOrderPopup({
         이름: "",
         전화번호: "",
         긴급: false, // ⭐ 이거 꼭
+        
          업체전달상태: "미전달",
   업체전달일시: null,
   업체전달방법: null,
@@ -13040,6 +13232,7 @@ function NewOrderPopup({
         혼적: false,
         독차: false,
         메모: "",
+        메모중요도: "일반",
       });
     } catch (err) {
       console.error(err);
