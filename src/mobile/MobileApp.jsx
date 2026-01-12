@@ -59,6 +59,15 @@ const normalizeCompany = (s = "") =>
     .toLowerCase()
     .replace(/\s+/g, "")
     .replace(/[^\uAC00-\uD7A3a-z0-9]/g, "");
+    // ✅ 한국(KST) 기준 날짜 유틸 (🔥 여기!)
+const todayKST = () => {
+  const now = new Date();
+  const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+  return kst.toISOString().slice(0, 10);
+};
+
+const thisMonthKST = () => todayKST().slice(0, 7);
+
 // ✅ ⬇⬇⬇ 여기 추가 ⬇⬇⬇
 const normalizeKoreanTime = (t = "") => {
   if (!t) return "";
@@ -141,15 +150,17 @@ const getHandoverDate = (h) => {
 const getDayBadge = (dateStr) => {
 
   if (!dateStr) return "";
-  const today = new Date();
+  const now = new Date();
+const today = new Date(now.getTime() + 9 * 60 * 60 * 1000);
   const target = new Date(dateStr);
 
   const diff =
-    Math.floor(
-      (target.setHours(0, 0, 0, 0) - today.setHours(0, 0, 0, 0)) /
-      (1000 * 60 * 60 * 24)
-    );
-
+  Math.floor(
+    (
+      new Date(target.getFullYear(), target.getMonth(), target.getDate()) -
+      new Date(today.getFullYear(), today.getMonth(), today.getDate())
+    ) / (1000 * 60 * 60 * 24)
+  );
   if (diff === 0) return "당일";
   if (diff === 1) return "내일";
   if (diff === -1) return "어제";
@@ -261,11 +272,7 @@ function buildOrderCopyText(order) {
 }
 // ✅✅✅ 여기 (이 위치가 정답)
 function buildOrderTemplateCopyText(order) {
-  const today = new Date();
-  const yyyy = today.getFullYear();
-  const mm = String(today.getMonth() + 1).padStart(2, "0");
-  const dd = String(today.getDate()).padStart(2, "0");
-  const todayStr = `${yyyy}-${mm}-${dd}`;
+  const todayStr = todayKST();
 
   return [
     `📦 오더복사 (${todayStr})`,
@@ -297,6 +304,7 @@ function buildOrderTemplateCopyText(order) {
     `${Number(order.청구운임 || 0).toLocaleString()}원`,
   ].join("\n");
 }
+
 // 🔥 상태 문자열: 차량번호 유무로만 결정
 // 차량번호 없음 → "배차중", 있으면 → "배차완료"
 const getStatus = (o = {}) => {
@@ -350,15 +358,19 @@ const [hasNewSchedule, setHasNewSchedule] = useState(false);
   const [uiScale, setUiScale] = useState(
     Number(localStorage.getItem("uiScale") || 1)
   );
-  const quickRange = (days) => {
-    const today = new Date();
-    const end = today.toISOString().slice(0, 10);
-    const startObj = new Date();
-    startObj.setDate(today.getDate() - (days - 1));
-    const start = startObj.toISOString().slice(0, 10);
-    setStartDate(start);
-    setEndDate(end);
-  };
+const quickRange = (days) => {
+  const end = todayKST();
+
+  const startObj = new Date();
+  startObj.setDate(startObj.getDate() - (days - 1));
+
+  const startKST = new Date(startObj.getTime() + 9 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
+
+  setStartDate(startKST);
+  setEndDate(end);
+};
 
   // 날짜별 그룹핑
   const groupByDate = (list = []) => {
@@ -709,7 +721,7 @@ const [detailFrom, setDetailFrom] = useState(null);
   // 🔥 미배차 차량 분류 필터 (전체 | 냉장/냉동 | 일반)
 const [unassignedTypeFilter, setUnassignedTypeFilter] = useState("전체");
 
-  const todayStr = () => new Date().toISOString().slice(0, 10);
+  const todayStr = () => todayKST();
 
   // 🔵 추가 드롭다운 필터 (차량종류 / 배차상태)
   const [vehicleFilter, setVehicleFilter] = useState("");
@@ -754,8 +766,8 @@ const [unassignedTypeFilter, setUnassignedTypeFilter] = useState("전체");
   });
 
   // 🔥 앱 처음 로드 시 오늘 날짜 자동 설정 + 기본탭 배차중
-  useEffect(() => {
-    const today = new Date().toISOString().slice(0, 10);
+useEffect(() => {
+  const today = todayKST();
 
     // 날짜 선택 안 되어 있으면 자동으로 오늘 적용
     if (!startDate && !endDate) {
@@ -770,7 +782,7 @@ const [unassignedTypeFilter, setUnassignedTypeFilter] = useState("전체");
   // --------------------------------------------------
   // 4. 필터링
   // --------------------------------------------------
-  const thisMonth = new Date().toISOString().slice(0, 7);
+const thisMonth = thisMonthKST();
 
   const filteredOrders = useMemo(() => {
     let base = [...orders];
@@ -1048,7 +1060,7 @@ const undeliveredOrders = useMemo(() => {
   };
   // 📦 오더복사 → 등록창 이동 (오늘 날짜 기준)
 const handleOrderDuplicate = (order) => {
-  const today = new Date().toISOString().slice(0, 10);
+ const today = todayKST();
 
   setForm({
     거래처명: order.거래처명 || "",
@@ -2099,36 +2111,38 @@ function getDayStatusForCard(dateStr, type) {
   const target = new Date(dateStr);
   if (Number.isNaN(target.getTime())) return "";
 
-  const today = new Date();
+  // ✅ 오늘 기준은 KST
+  const now = new Date();
+  const todayKSTDate = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+
+  const n0 = new Date(
+    todayKSTDate.getFullYear(),
+    todayKSTDate.getMonth(),
+    todayKSTDate.getDate()
+  );
+
   const t0 = new Date(
     target.getFullYear(),
     target.getMonth(),
     target.getDate()
   );
-  const n0 = new Date(
-    today.getFullYear(),
-    today.getMonth(),
-    today.getDate()
-  );
-  const diff = Math.round(
-    (t0.getTime() - n0.getTime()) / (1000 * 60 * 60 * 24)
-  );
 
-  // 🔵 오늘 = 당상/당착
+  const diff =
+    (t0.getTime() - n0.getTime()) / (1000 * 60 * 60 * 24);
+
   if (diff === 0) {
     return type === "pickup" ? "당상" : "당착";
   }
 
-  // 🔴 내일 = 내상/내착
   if (diff === 1) {
     return type === "pickup" ? "내상" : "내착";
   }
 
-  // 그 외 날짜는 MM/DD만 보여줌
   const m = String(target.getMonth() + 1).padStart(2, "0");
   const d = String(target.getDate()).padStart(2, "0");
   return `${m}/${d}`;
 }
+
 // 당상/당착/내상/내착 뱃지 색상
 function dayBadgeClass(label) {
   if (label === "당상" || label === "당착") {
@@ -2153,9 +2167,8 @@ function MobileOrderCard({
   const claim = getClaim(order);
   const fee = order.기사운임 ?? 0;
   const state = getStatus(order);
-    const isToday =
-    String(order.상차일 || "").slice(0, 10) ===
-    new Date().toISOString().slice(0, 10);
+const isToday =
+  String(order.상차일 || "").slice(0, 10) === todayKST();
       useEffect(() => {
   if (!isToday) return;
 

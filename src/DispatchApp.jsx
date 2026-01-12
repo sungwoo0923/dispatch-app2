@@ -1367,6 +1367,18 @@ const [pickupOptions, setPickupOptions] = React.useState([]);
 const [vehicleQuery, setVehicleQuery] = React.useState("");
 const [showVehicleDropdown, setShowVehicleDropdown] = React.useState(false);
 const [vehicleActive, setVehicleActive] = React.useState(0);
+const vehicleItemRefs = React.useRef([]);
+React.useEffect(() => {
+  if (!showVehicleDropdown) return;
+
+  const el = vehicleItemRefs.current[vehicleActive];
+  if (el) {
+    el.scrollIntoView({
+      block: "nearest",   // 드롭다운 내부에서만 이동
+      inline: "nearest",
+    });
+  }
+}, [vehicleActive, showVehicleDropdown]);
 const [pickupActive, setPickupActive] = React.useState(0);
 
 const [showPlaceDropdown, setShowPlaceDropdown] = React.useState(false);
@@ -2168,6 +2180,19 @@ const getPalletFromCargoText = (cargo = "") => {
   if (m2) return Number(m2[1]);
   return null;
 };
+// ================================
+// ⭐ 오더복사용 조건 Key 생성 (중복 제거 기준)
+// ================================
+function makeCopyOrderKey(r) {
+  return [
+    r.운행유형 || "편도",                     // ⭐ 편도/왕복 구분
+    normalizeKey(r.상차지명 || ""),
+    normalizeKey(r.하차지명 || ""),
+    extractTonNum(r.차량톤수) ?? "",           // ⭐ 톤수 숫자화
+    r.차량종류 || "",
+    getPalletFromCargoText(r.화물내용) ?? "TON"
+  ].join("|");
+}
 
 const getDropCountFromText = (dropName = "") => {
   const list = ["푸드플래닛", "신미"];
@@ -2818,7 +2843,18 @@ if (onlyRoundTrip) {
     (b.상차시간 || "").localeCompare(a.상차시간 || "")
   );
 
-  return arr;
+  // ⭐ 조건 기준 중복 제거 (대표 1건만)
+const dedupMap = new Map();
+
+// 최신순이므로, 먼저 들어온 것이 대표
+arr.forEach((r) => {
+  const key = makeCopyOrderKey(r);
+  if (!dedupMap.has(key)) {
+    dedupMap.set(key, r);
+  }
+});
+
+return Array.from(dedupMap.values());
 }, [dispatchData, copyQ, copyFilterType, filterType, filterValue, onlyRoundTrip]);
 
 const [copySelected, setCopySelected] = React.useState([]);
@@ -3620,6 +3656,7 @@ const similar = placeList.filter(p => {
       {filterVehicles(vehicleQuery).map((v, i) => (
         <div
           key={`${v}-${i}`}
+          ref={(el) => (vehicleItemRefs.current[i] = el)}
           className={`px-3 py-2 cursor-pointer text-sm ${
             i === vehicleActive ? "bg-blue-50" : "hover:bg-gray-50"
           }`}
@@ -3636,6 +3673,7 @@ const similar = placeList.filter(p => {
       ))}
     </div>
   )}
+  
 </div>
 
   <div>
@@ -5242,9 +5280,19 @@ ${plate} ${name} ${phone}
 ${fare.toLocaleString()}원 ${payLabel} 배차되었습니다.`;
   }).join("\n\n");
 
-  navigator.clipboard.writeText(text);
-  setCopyModalOpen(false);
-  alert("📋 복사되었습니다!");
+navigator.clipboard.writeText(text);
+setCopyModalOpen(false);
+
+// 🔥 복사 완료 후 "전달상태 변경" 확인 팝업 띄우기
+const rowId = selected[0];
+const row = rows.find(r => r._id === rowId);
+
+setDeliveryConfirm({
+  rowId,
+  before: row?.업체전달상태 || "미전달",
+  after: "전달완료",
+  reason: "copy", // ⭐ 기사복사에서 왔다는 표시
+});
 
   // ⭐⭐⭐ 복사 후 자동 타이머 (여기가 정확한 위치)
   setTimeout(async () => {
@@ -9434,26 +9482,37 @@ setTimeout(() => {
     }}
   >
     <div className="bg-white rounded-2xl p-6 w-[360px] shadow-xl">
-      <h3 className="text-lg font-bold text-center mb-2">
-        변경하시겠습니까?
-      </h3>
+<h3 className="text-lg font-bold text-center mb-2">
+  {deliveryConfirm.reason === "copy"
+    ? "📋 복사되었습니다"
+    : "변경하시겠습니까?"}
+</h3>
 
-      <div className="text-center text-sm mb-5">
-        <div className="font-semibold mb-1">업체전달상태</div>
-        <div className="text-gray-500">
-          {deliveryConfirm.before} →
-          <span className="ml-1 text-blue-600 font-bold">
-            {deliveryConfirm.after}
-          </span>
-        </div>
+<div className="text-center text-sm mb-5">
+  {deliveryConfirm.reason === "copy" ? (
+    <div className="text-gray-700">
+      전달상태를 <b className="text-blue-600">전달완료</b>로 변경할까요?
+    </div>
+  ) : (
+    <>
+      <div className="font-semibold mb-1">업체전달상태</div>
+      <div className="text-gray-500">
+        {deliveryConfirm.before} →
+        <span className="ml-1 text-blue-600 font-bold">
+          {deliveryConfirm.after}
+        </span>
       </div>
+    </>
+  )}
+</div>
+
 
       <div className="flex gap-3">
         <button
           className="flex-1 py-2 rounded-lg bg-gray-200 hover:bg-gray-300"
           onClick={() => setDeliveryConfirm(null)}
         >
-          취소 (ESC)
+          아니오 (ESC)
         </button>
 
         <button
@@ -9475,7 +9534,7 @@ setTimeout(() => {
             setDeliveryConfirm(null);
           }}
         >
-          변경 (Enter)
+          확인 (Enter)
         </button>
       </div>
     </div>
@@ -9657,7 +9716,6 @@ function MemoMore({ text = "" }) {
 
 
 // ===================== PART 4/8 — END =====================
-
 // ===================== DispatchApp.jsx (PART 5/8 — 차량번호 항상 활성화 + 선택수정→수정완료 통합버튼 + 주소/메모 더보기 + 대용량업로드 + 신규 오더 등록) =====================
 function DispatchStatus({
   dispatchData = [],
@@ -10019,9 +10077,20 @@ ${fare.toLocaleString()}원 ${payLabel} 배차되었습니다.`;
     })
     .join("\n\n");
 
-  navigator.clipboard.writeText(text);
-  alert("📋 복사 완료!");
-  setCopyModalOpen(false);
+navigator.clipboard.writeText(text);
+setCopyModalOpen(false);
+
+// 🔥 복사 완료 → 전달상태 변경 확인 팝업 호출
+const rowId = [...selected][0];
+const row = dispatchData.find((d) => getId(d) === rowId);
+
+setConfirmChange({
+  id: rowId,
+  field: "업체전달상태",
+  before: row?.업체전달상태 || "미전달",
+  after: "전달완료",
+  reason: "copy", // ⭐ 기사복사에서 왔다는 표시
+});
 };
 
 // 🚀 운임 조회 실행 함수
@@ -11177,10 +11246,7 @@ return (
     handleCarInput(id, row.차량번호);
   }}
 />
-
-
                   </td>
-
                   <td className="border text-center">{row.이름}</td>
                   <td className="border text-center">{row.전화번호}</td>
 
@@ -11275,12 +11341,12 @@ return (
                   {/* 전달상태 (버튼) */}
 <td className="border text-center whitespace-nowrap">
   {(() => {
-    const today = todayStr();
-    const d =
-      row?.상차일자 ||
-      row?.상차일 ||
-      row?.상차 ||
-      "";
+    const today = todayKST();
+const d =
+  row?.상차일자 ||
+  row?.상차일 ||
+  row?.상차 ||
+  "";
 
     const deliveryStatus =
       row.업체전달상태
@@ -12669,54 +12735,98 @@ setTimeout(() => {
   </div>
 )}
 {confirmChange && (
-  <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[100000]">
-    <div className="bg-white rounded-xl p-6 w-[360px] shadow-xl">
-      <h3 className="font-bold text-lg mb-4 text-center">
-        변경하시겠습니까?
-      </h3>
-
-      <div className="text-sm mb-4 text-center">
-        <b>{confirmChange.field}</b>
-        <div className="text-gray-500 mt-1">
-          {String(confirmChange.before || "없음")} →{" "}
-          <span className="text-blue-600 font-semibold">
-            {String(confirmChange.after || "없음")}
-          </span>
-        </div>
-      </div>
-
-      <div className="flex gap-3">
-        <button
-          className="flex-1 py-2 rounded bg-gray-200"
-          onClick={() => setConfirmChange(null)}
-        >
-          취소
-        </button>
-
-        <button
-  className="flex-1 py-2 rounded bg-blue-600 text-white"
-  onClick={async () => {
-    const patch = {
-      [confirmChange.field]: confirmChange.after,
-      lastUpdated: new Date().toISOString(),
-    };
-
-    // 🔥 전달상태 전용 처리 (핵심)
-    if (confirmChange.field === "업체전달상태") {
-      patch.업체전달일시 =
-        confirmChange.after === "전달완료" ? Date.now() : null;
-      patch.업체전달방법 =
-        confirmChange.after === "전달완료" ? "수동" : null;
+  <div
+  className="fixed inset-0 bg-black/40 flex items-center justify-center z-[100000]"
+  tabIndex={-1}
+  ref={(el) => {
+    if (el) setTimeout(() => el.focus(), 0);
+  }}
+  onKeyDown={async (e) => {
+    // ESC → 취소
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      setConfirmChange(null);
+      return;
     }
 
-    await patchDispatch(confirmChange.id, patch);
-    setConfirmChange(null);
+    // Enter → 확인
+    if (e.key === "Enter") {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const patch = {
+        [confirmChange.field]: confirmChange.after,
+        lastUpdated: new Date().toISOString(),
+      };
+
+      if (confirmChange.field === "업체전달상태") {
+        patch.업체전달일시 =
+          confirmChange.after === "전달완료" ? Date.now() : null;
+        patch.업체전달방법 =
+          confirmChange.after === "전달완료" ? "기사복사" : null;
+      }
+
+      await patchDispatch(confirmChange.id, patch);
+      setConfirmChange(null);
+    }
   }}
 >
-  변경
-</button>
+    <div className="bg-white rounded-xl p-6 w-[360px] shadow-xl">
+      <h3 className="font-bold text-lg mb-4 text-center">
+  {confirmChange.reason === "copy"
+    ? "📋 복사되었습니다"
+    : "변경하시겠습니까?"}
+</h3>
 
+      <div className="text-sm mb-4 text-center">
+  {confirmChange.reason === "copy" ? (
+    <div className="text-gray-700">
+      전달상태를{" "}
+      <b className="text-blue-600">전달완료</b>로 변경할까요?
+    </div>
+  ) : (
+    <>
+      <b>{confirmChange.field}</b>
+      <div className="text-gray-500 mt-1">
+        {String(confirmChange.before || "없음")} →{" "}
+        <span className="text-blue-600 font-semibold">
+          {String(confirmChange.after || "없음")}
+        </span>
       </div>
+    </>
+  )}
+</div>
+<div className="flex gap-3">
+  <button
+    className="flex-1 py-2 rounded bg-gray-200"
+    onClick={() => setConfirmChange(null)}
+  >
+    아니오 (ESC)
+  </button>
+
+  <button
+    className="flex-1 py-2 rounded bg-blue-600 text-white"
+    onClick={async () => {
+      const patch = {
+        [confirmChange.field]: confirmChange.after,
+        lastUpdated: new Date().toISOString(),
+      };
+
+      if (confirmChange.field === "업체전달상태") {
+        patch.업체전달일시 =
+          confirmChange.after === "전달완료" ? Date.now() : null;
+        patch.업체전달방법 =
+          confirmChange.after === "전달완료" ? "기사복사" : null;
+      }
+
+      await patchDispatch(confirmChange.id, patch);
+      setConfirmChange(null);
+    }}
+  >
+    확인 (Enter)
+  </button>
+</div>
     </div>
   </div>
 )}
@@ -16432,12 +16542,20 @@ function PaymentManagement({ dispatchData = [], clients = [], drivers = [] }) {
   const head = typeof headBase === "string" ? headBase : "px-3 py-2 border";
   const cell = typeof cellBase === "string" ? cellBase : "px-3 py-2 border text-center";
   const input = typeof inputBase === "string" ? inputBase : "border rounded px-2 py-1";
+  // 🔒 지급관리 임시 비활성화 플래그
+const PAYMENT_DISABLED = true;
 
   // ---------- Firestore ----------
-  const patchDispatchDirect = async (id, patch) => {
-    if (!id || !patch) return;
-    await setDoc(doc(db, COLL.dispatch, id), patch, { merge: true });
-  };
+const patchDispatchDirect = async (id, patch) => {
+  // 🔒 지급관리 비활성화 상태에서는 저장 금지
+  if (PAYMENT_DISABLED) {
+    console.warn("지급관리 비활성화 상태: 저장 차단", { id, patch });
+    return;
+  }
+
+  if (!id || !patch) return;
+  await setDoc(doc(db, COLL.dispatch, id), patch, { merge: true });
+};
 
   // ---------- 지급일 공통 달력 ----------
   const [selectedPayDate, setSelectedPayDate] = React.useState(todayStr9());
@@ -16764,7 +16882,19 @@ function PaymentManagement({ dispatchData = [], clients = [], drivers = [] }) {
   // ---------- 렌더 보조 ----------
   const roText = (v)=> <span className="whitespace-pre">{String(v ?? "")}</span>;
   const editableCls = "bg-yellow-50";
-
+if (PAYMENT_DISABLED) {
+  return (
+    <div className="p-6 border rounded bg-gray-50 text-center">
+      <h2 className="text-lg font-bold mb-2 text-gray-700">
+        지급관리
+      </h2>
+      <p className="text-sm text-gray-500">
+        현재 사용하지 않는 메뉴입니다.<br />
+        추후 활성화 예정입니다.
+      </p>
+    </div>
+  );
+}
   return (
     <div>
       <h2 className="text-lg font-bold mb-3">지급관리</h2>

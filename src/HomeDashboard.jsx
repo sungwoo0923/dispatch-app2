@@ -173,6 +173,12 @@ const [scheduleForm, setScheduleForm] = React.useState({
   const [notices, setNotices] = React.useState([]);
   const [schedules, setSchedules] = React.useState([]);
   const [handovers, setHandovers] = React.useState([]);
+  // 🔹 공지사항 페이지네이션
+const NOTICE_PAGE_SIZE = 5;
+const [noticePage, setNoticePage] = useState(1);
+// 🔹 휴가 / 외근 일정 페이지네이션
+const SCHEDULE_PAGE_SIZE = 5;
+const [schedulePage, setSchedulePage] = useState(1);
 
   // ===================== 인수인계 팝업 =====================
 const [handoverOpen, setHandoverOpen] = useState(false);
@@ -280,6 +286,24 @@ React.useEffect(() => {
 
   return () => unsub();
 }, []); // ✅ 이 줄 반드시 있어야 함
+// 🔹 공지사항 페이지 계산
+const noticeTotalPages = Math.ceil(
+  notices.length / NOTICE_PAGE_SIZE
+);
+
+const pagedNotices = useMemo(() => {
+  const start = (noticePage - 1) * NOTICE_PAGE_SIZE;
+  return notices.slice(start, start + NOTICE_PAGE_SIZE);
+}, [notices, noticePage]);
+// 🔹 휴가 / 외근 일정 페이지 계산
+const scheduleTotalPages = Math.ceil(
+  schedules.length / SCHEDULE_PAGE_SIZE
+);
+
+const pagedSchedules = useMemo(() => {
+  const start = (schedulePage - 1) * SCHEDULE_PAGE_SIZE;
+  return schedules.slice(start, start + SCHEDULE_PAGE_SIZE);
+}, [schedules, schedulePage]);
 // ===================== 인수인계 실시간 구독 + 토스트 =====================
 React.useEffect(() => {
   const q = query(
@@ -738,15 +762,16 @@ const recentOrders = useMemo(() => {
   }
 >
   {notices.length === 0 ? (
-    <div className="text-sm text-gray-400">등록된 공지가 없습니다</div>
-  ) : (
+  <div className="text-sm text-gray-400">등록된 공지가 없습니다</div>
+) : (
+  <>
     <ul className="space-y-2 text-sm">
-      {notices.map((n, i) => (
+      {pagedNotices.map((n) => (
         <li
-  key={i}
-  onClick={() => setSelectedNotice(n)}
-  className="border-b pb-2 cursor-pointer hover:bg-slate-50 rounded px-1"
->
+          key={n.id}
+          onClick={() => setSelectedNotice(n)}
+          className="border-b pb-2 cursor-pointer hover:bg-slate-50 rounded px-1"
+        >
           <div className="font-semibold">{n.title}</div>
           <div className="text-xs text-gray-400">
             {n.date} · 공지사항
@@ -754,9 +779,33 @@ const recentOrders = useMemo(() => {
         </li>
       ))}
     </ul>
-  )}
-</Card>
 
+    {/* 🔹 페이지네이션 */}
+    {noticeTotalPages > 1 && (
+      <div className="flex justify-center gap-1 pt-3">
+        {Array.from({ length: noticeTotalPages }).map((_, idx) => {
+          const page = idx + 1;
+          return (
+            <button
+              key={page}
+              onClick={() => setNoticePage(page)}
+              className={`px-2 py-1 text-xs rounded
+                ${
+                  page === noticePage
+                    ? "bg-blue-600 text-white"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                }`}
+            >
+              {page}
+            </button>
+          );
+        })}
+      </div>
+    )}
+  </>
+)}
+
+</Card>
 {noticeOpen && (
   <Modal title="공지사항 등록" onClose={() => setNoticeOpen(false)}>
     <div className="space-y-3">
@@ -895,26 +944,49 @@ const recentOrders = useMemo(() => {
   {schedules.length === 0 ? (
     <div className="text-sm text-gray-400">등록된 일정이 없습니다</div>
   ) : (
-    <ul className="space-y-2 text-sm">
-  {schedules.map((s, i) => (
-    <li
-      key={i}
-      onClick={() => setSelectedSchedule(s)}
-      className="border-b pb-2 cursor-pointer hover:bg-slate-50 rounded px-1"
-    >
-      <div className="font-semibold">
-        [{s.type}] {s.name}
-      </div>
-      <div className="text-xs text-gray-500">
-        {s.start} ~ {s.end}
-      </div>
-    </li>
-  ))}
-</ul>
+    <>
+      <ul className="space-y-2 text-sm">
+        {pagedSchedules.map((s) => (
+          <li
+            key={s.id}
+            onClick={() => setSelectedSchedule(s)}
+            className="border-b pb-2 cursor-pointer hover:bg-slate-50 rounded px-1"
+          >
+            <div className="font-semibold">
+              [{s.type}] {s.name}
+            </div>
+            <div className="text-xs text-gray-500">
+              {s.start} ~ {s.end}
+            </div>
+          </li>
+        ))}
+      </ul>
 
+      {/* 🔹 페이지네이션 */}
+      {scheduleTotalPages > 1 && (
+        <div className="flex justify-center gap-1 pt-3">
+          {Array.from({ length: scheduleTotalPages }).map((_, idx) => {
+            const page = idx + 1;
+            return (
+              <button
+                key={page}
+                onClick={() => setSchedulePage(page)}
+                className={`px-2 py-1 text-xs rounded
+                  ${
+                    page === schedulePage
+                      ? "bg-blue-600 text-white"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  }`}
+              >
+                {page}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </>
   )}
 </Card>
-
 
 {scheduleOpen && (
   <Modal
@@ -1009,6 +1081,77 @@ const recentOrders = useMemo(() => {
     </div>
   </Modal>
 )}
+{selectedSchedule && (
+  <Modal
+    title="휴가 / 외근 일정 상세"
+    onClose={() => setSelectedSchedule(null)}
+  >
+    <div className="space-y-4 text-sm">
+      <div>
+        <div className="text-xs text-gray-500">구분</div>
+        <div className="font-semibold">
+          {selectedSchedule.type}
+        </div>
+      </div>
+
+      <div>
+        <div className="text-xs text-gray-500">이름</div>
+        <div>{selectedSchedule.name}</div>
+      </div>
+
+      <div>
+        <div className="text-xs text-gray-500">기간</div>
+        <div>
+          {selectedSchedule.start} ~ {selectedSchedule.end}
+        </div>
+      </div>
+
+      {selectedSchedule.memo && (
+        <div>
+          <div className="text-xs text-gray-500">메모</div>
+          <div className="whitespace-pre-wrap">
+            {selectedSchedule.memo}
+          </div>
+        </div>
+      )}
+    </div>
+
+    {/* 🔻 하단 버튼 */}
+    <div className="flex justify-center gap-3 pt-6 mt-6 border-t">
+      <button
+        onClick={async () => {
+          if (!window.confirm("일정을 삭제할까요?")) return;
+          await deleteDoc(
+            doc(db, "schedules", selectedSchedule.id)
+          );
+          setSelectedSchedule(null);
+          setSchedulePage(1);
+        }}
+        className="px-4 py-2 text-sm rounded border text-red-600 hover:bg-red-50"
+      >
+        삭제
+      </button>
+
+      <button
+        onClick={() => {
+          setScheduleForm({
+            type: selectedSchedule.type,
+            name: selectedSchedule.name,
+            start: selectedSchedule.start,
+            end: selectedSchedule.end,
+            memo: selectedSchedule.memo || "",
+          });
+          setScheduleOpen(true);
+          setSelectedSchedule(null);
+        }}
+        className="px-4 py-2 text-sm rounded bg-blue-600 text-white"
+      >
+        수정
+      </button>
+    </div>
+  </Modal>
+)}
+
 {selectedHandover && (
   <Modal
     title="인수인계 상세"
