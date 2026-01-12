@@ -1176,6 +1176,17 @@ const [driverModal, setDriverModal] = React.useState({
 });
  // ⭐ 등록 확인 팝업 상태
 const [confirmOpen, setConfirmOpen] = React.useState(false);
+// ⭐ 실시간배차현황(하단 테이블) 상태 변경 확인 팝업
+const [confirmChange, setConfirmChange] = React.useState(null);
+/*
+{
+  rowId,
+  key,
+  before,
+  after
+}
+*/
+
 // ================================
 // 🔥 거래처/하차지 중복 확인 팝업 상태
 // ================================
@@ -4446,6 +4457,52 @@ setIsCopyMode(true);
     </div>
   </div>
 )}
+{/* ================= 실시간배차 상태 변경 확인 팝업 ================= */}
+{confirmChange && (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
+    <div className="bg-white rounded-xl p-6 w-[360px] shadow-xl border">
+
+      <h3 className="text-base font-bold mb-4">
+        상태를 변경하시겠습니까?
+      </h3>
+
+      <div className="text-sm text-gray-700 mb-5">
+        <div className="mb-1 font-semibold">
+          {confirmChange.key}
+        </div>
+        <div>
+          {confirmChange.before || "미설정"}
+          {" → "}
+          <b className="text-blue-600">
+            {confirmChange.after || "미설정"}
+          </b>
+        </div>
+      </div>
+
+      <div className="flex justify-end gap-2">
+        <button
+          className="px-3 py-1.5 bg-gray-200 rounded"
+          onClick={() => setConfirmChange(null)}
+        >
+          취소
+        </button>
+
+        <button
+          className="px-3 py-1.5 bg-blue-600 text-white rounded"
+          onClick={async () => {
+            await patchDispatch(confirmChange.rowId, {
+              [confirmChange.key]: confirmChange.after,
+            });
+            setConfirmChange(null);
+          }}
+        >
+          확인
+        </button>
+      </div>
+
+    </div>
+  </div>
+)}
 
 {/* ================= 등록 확인 팝업 ================= */}
 {confirmOpen && (
@@ -4956,6 +5013,8 @@ setFareModalOpen(false);
     upsertDriver={upsertDriver}
     filterType={filterType}
     filterValue={filterValue}
+    setConfirmChange={setConfirmChange}
+   PAY_TYPES={PAY_TYPES}
   />
 </div>
 
@@ -5010,8 +5069,6 @@ function DeliveryStatusBadge({ row, onConfirm }) {
   );
 }
 
-
-
 function RealtimeStatus({
   
   dispatchData,
@@ -5026,6 +5083,7 @@ function RealtimeStatus({
   upsertDriver,
   role = "admin",
 }) {
+  
   // 📤 업체 전달 상태 변경 확인 팝업
 const [deliveryConfirm, setDeliveryConfirm] = React.useState(null);
 /*
@@ -5081,21 +5139,26 @@ const allClientPool = React.useMemo(() => {
    // ==========================
   // 📌 날짜 유틸 (반드시 최상단)
   // ==========================
-  const todayKST = () => {
-    const d = new Date();
-    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
-    return d.toISOString().slice(0, 10);
-  };
+const yesterdayKST = () => {
+  const d = new Date();
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  d.setDate(d.getDate() - 1);
+  return d.toISOString().slice(0, 10);
+};
 
-  const tomorrowKST = () => {
-    const d = new Date();
-    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
-    d.setDate(d.getDate() + 1);
-    return d.toISOString().slice(0, 10);
-  };
-  // ==========================
-// 🔍 선택수정 상/하차지 자동완성 필터 함수 (여기!!!)
-// ==========================
+const todayKST = () => {
+  const d = new Date();
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().slice(0, 10);
+};
+
+const tomorrowKST = () => {
+  const d = new Date();
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  d.setDate(d.getDate() + 1);
+  return d.toISOString().slice(0, 10);
+};
+
 // ==========================
 // 🔍 선택수정 거래처 자동완성 필터 (추가해야 함)
 // ==========================
@@ -5176,6 +5239,9 @@ const [editClientActiveIndex, setEditClientActiveIndex] = React.useState(0);
   // ------------------------
   const [q, setQ] = React.useState("");
   const [filterType, setFilterType] = React.useState("거래처명");
+  // 🔒 실시간 배차 날짜 모드
+const [dayMode, setDayMode] = React.useState("today");
+// "yesterday" | "today" | "tomorrow"
   // 🔔 업로드 알림 리스트
 const [uploadAlerts, setUploadAlerts] = React.useState([]);
 {/* =================== 기사복사 모달 상태 =================== */}
@@ -5318,8 +5384,6 @@ const [seenAlerts, setSeenAlerts] = React.useState(() => {
 const prevAttachRef = React.useRef({});
 
   const [filterValue, setFilterValue] = React.useState("");
-  const [startDate, setStartDate] = React.useState("");
-  const [endDate, setEndDate] = React.useState("");
   const [rows, setRows] = React.useState(dispatchData || []);
   const [selected, setSelected] = React.useState([]);
   const [selectedEditMode, setSelectedEditMode] = React.useState(false);
@@ -5462,47 +5526,6 @@ React.useEffect(() => {
   );
 }, [selectedEditMode, selected, edited]);
 
-
-  React.useEffect(() => {
-  const saved = JSON.parse(localStorage.getItem("realtimeFilters") || "{}");
-
-  if (!saved.startDate && !saved.endDate) {
-    const today = todayKST();
-    setStartDate(today);
-    setEndDate(today);
-    localStorage.setItem(
-      "realtimeFilters",
-      JSON.stringify({
-        startDate: today,
-        endDate: today,
-      })
-    );
-    return;
-  }
-
-  if (saved.q) setQ(saved.q);
-  if (saved.filterType) setFilterType(saved.filterType);
-  if (saved.filterValue) setFilterValue(saved.filterValue);
-  if (saved.startDate) setStartDate(saved.startDate);
-  if (saved.endDate) setEndDate(saved.endDate);
-}, []);
-
-
-// -------------------------------------------------------------
-// ⭐ 저장 useEffect도 위의 것 바로 아래에 같이 위치 ⭐
-// -------------------------------------------------------------
-React.useEffect(() => {
-  localStorage.setItem(
-    "realtimeFilters",
-    JSON.stringify({
-      q,
-      filterType,
-      filterValue,
-      startDate,
-      endDate,
-    })
-  );
-}, [q, filterType, filterValue, startDate, endDate]);
 // ==========================
 // 🆕 신규 오더 거래처 자동완성 상태
 // ==========================
@@ -5657,7 +5680,7 @@ React.useEffect(() => {
         : r
     )
   );
-}, [rows]);
+}, [edited]);
 // ========================
 // 🔔 파일 업로드 감지 (이미 본 건 다시 안 뜸)
 // ========================
@@ -6141,33 +6164,15 @@ const [tempSortDir, setTempSortDir] = React.useState("asc");
   // ------------------------
   const filtered = React.useMemo(() => {
   let data = [...rows];
-  const today = todayKST();
 
-  const isInRange = (date, start, end) => {
-    if (!date) return false;
-    const d = new Date(date).getTime();
-    const s = start ? new Date(start).getTime() : -Infinity;
-    const e = end ? new Date(end).getTime() : Infinity;
-    return d >= s && d <= e;
-  };
+  let targetDate = todayKST();
+  if (dayMode === "yesterday") targetDate = yesterdayKST();
+  if (dayMode === "tomorrow") targetDate = tomorrowKST();
 
-  // 날짜 필터
-  if (!startDate && !endDate) {
-    data = data.filter((r) => (r.상차일 || "") === today);
-  } else {
-    data = data.filter((r) =>
-      isInRange(r.상차일, startDate, endDate)
-    );
-  }
+  // 🔒 실시간배차현황은 하루만 조회
+  data = data.filter((r) => r.상차일 === targetDate);
 
-  // 컬럼 필터
-  if (filterType && filterValue) {
-    data = data.filter((r) =>
-      String(r[filterType] || "").includes(filterValue)
-    );
-  }
-
-  // 전체 검색
+  // 검색
   if (q.trim()) {
     const key = q.toLowerCase();
     data = data.filter((r) =>
@@ -6177,22 +6182,14 @@ const [tempSortDir, setTempSortDir] = React.useState("asc");
     );
   }
 
-  // 🔽 정렬 (여기 추가)
+  // 정렬
   if (sortKey) {
     data.sort(compareBy(sortKey, sortDir));
   }
 
   return data;
-}, [
-  rows,
-  q,
-  filterType,
-  filterValue,
-  startDate,
-  endDate,
-  sortKey,
-  sortDir,
-]);
+}, [rows, q, sortKey, sortDir, dayMode]);
+
 
   // KPI
   const kpi = React.useMemo(() => {
@@ -6538,7 +6535,7 @@ ${url}
     )}
 {/* ======================== 검색 + 날짜 ======================== */}
 <div className="flex items-center gap-2 mb-2">
-  {/* 🔍 검색 입력 */}
+  {/* 🔍 검색 */}
   <input
     type="text"
     value={q}
@@ -6547,55 +6544,38 @@ ${url}
     className="border px-2 py-1 rounded text-sm"
   />
 
-  {/* 📅 상차일 */}
-  <input
-    type="date"
-    value={startDate}
-    onChange={(e) => setStartDate(e.target.value)}
-    className="border px-2 py-1 rounded text-sm"
-  />
-
-  <span>~</span>
-
-  {/* 📅 하차일 */}
-  <input
-    type="date"
-    value={endDate}
-    onChange={(e) => setEndDate(e.target.value)}
-    className="border px-2 py-1 rounded text-sm"
-  />
-
-  {/* 🆕 여기에 버튼 추가 */}
+  {/* 🕘 날짜 모드 버튼 */}
   <button
-    onClick={() => {
-      const today = todayKST();
-      setStartDate(today);
-      setEndDate(today);
-    }}
-    className="px-3 py-1 rounded bg-blue-500 text-white text-sm"
+    onClick={() => setDayMode("yesterday")}
+    className={`px-3 py-1 rounded text-sm ${
+      dayMode === "yesterday"
+        ? "bg-gray-700 text-white"
+        : "bg-gray-200"
+    }`}
+  >
+    어제
+  </button>
+
+  <button
+    onClick={() => setDayMode("today")}
+    className={`px-3 py-1 rounded text-sm ${
+      dayMode === "today"
+        ? "bg-blue-600 text-white"
+        : "bg-gray-200"
+    }`}
   >
     당일
   </button>
-  <button
-  onClick={() => {
-    const t = tomorrowKST();
-    setStartDate(t);
-    setEndDate(t);
-  }}
-  className="px-3 py-1 rounded bg-emerald-600 text-white text-sm"
->
-  내일
-</button>
-
 
   <button
-    onClick={() => {
-      setStartDate("");
-      setEndDate("");
-    }}
-    className="px-3 py-1 rounded bg-gray-400 text-white text-sm"
+    onClick={() => setDayMode("tomorrow")}
+    className={`px-3 py-1 rounded text-sm ${
+      dayMode === "tomorrow"
+        ? "bg-emerald-600 text-white"
+        : "bg-gray-200"
+    }`}
   >
-    초기화
+    내일
   </button>
 </div>
 
@@ -6803,15 +6783,6 @@ Object.keys(ws).forEach((cell) => {
       ws[cell].z = "yyyy-mm-dd";  // 날짜 포맷
     }
   }
-
-// 금액(S,T,U)
-if (["S", "T", "U"].includes(col)) {
-  const num = Number(String(ws[cell].v).replace(/[^\d-]/g, ""));
-  ws[cell].v = isNaN(num) ? 0 : num;
-  ws[cell].t = "n";
-  ws[cell].z = "#,##0";    // 콤마 표시
-}
-
   // 2) 금액(S,T,U)
   if (["S", "T", "U"].includes(col)) {
     const num = Number(String(ws[cell].v).replace(/[^\d-]/g, ""));
@@ -9405,7 +9376,7 @@ setTimeout(() => {
 
       <div className="text-center text-sm mb-6">
         <div className="font-semibold mb-1">
-          {confirmChange.field}
+          {confirmChange.key}
         </div>
         <div className="text-gray-500">
           {confirmChange.before || "없음"} →
@@ -9427,10 +9398,10 @@ setTimeout(() => {
           className="flex-1 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
           onClick={async () => {
             const patch = {
-              [confirmChange.field]: confirmChange.after,
+              [confirmChange.key]: confirmChange.after,
             };
 
-            if (confirmChange.field === "업체전달상태") {
+            if (confirmChange.key === "업체전달상태") {
               patch.업체전달일시 =
                 confirmChange.after === "전달완료"
                   ? Date.now()
@@ -9713,8 +9684,6 @@ function MemoMore({ text = "" }) {
     </div>
   );
 }
-
-
 // ===================== PART 4/8 — END =====================
 // ===================== DispatchApp.jsx (PART 5/8 — 차량번호 항상 활성화 + 선택수정→수정완료 통합버튼 + 주소/메모 더보기 + 대용량업로드 + 신규 오더 등록) =====================
 function DispatchStatus({
@@ -12833,13 +12802,10 @@ setTimeout(() => {
 {sortModalOpen && (
   <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[100000]">
     <div className="bg-white rounded-xl w-[420px] p-6 shadow-xl">
-
       {/* 제목 */}
       <h3 className="text-lg font-bold mb-4">정렬 설정</h3>
-
       {/* 정렬 기준 */}
 <div className="mb-5">
-  
   <div className="text-sm font-semibold mb-2">정렬 기준</div>
   <select
     className="w-full border rounded p-2"
