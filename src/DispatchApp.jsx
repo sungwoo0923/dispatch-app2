@@ -1925,6 +1925,9 @@ if (vehicle) {
     }
   }
 
+
+
+  
   // 3️⃣ 톤수 (이전 단계 list 기준)
   if (ton != null) {
     const f = list.filter(r => {
