@@ -1058,6 +1058,9 @@ function ToggleBadge({ active, onClick, activeCls, inactiveCls, children }) {
     const [placeRowsTrigger, setPlaceRowsTrigger] = React.useState(0);
       const [aiRecommend, setAiRecommend] = React.useState(null);
       const [aiPopupOpen, setAiPopupOpen] = React.useState(false);
+      const [areaFareHint, setAreaFareHint] = React.useState(null);
+      const [fareHistoryOpen, setFareHistoryOpen] = React.useState(false);
+      const [guideHistoryList, setGuideHistoryList] = React.useState([]);
 
       // ================================
   // 🔑 업체명 Key 정규화 함수(추가!)
@@ -1075,16 +1078,126 @@ function ToggleBadge({ active, onClick, activeCls, inactiveCls, children }) {
 .replace(/물류/g, "")
 .replace(/유통/g, "")
   }
-  
+  // ================================
+// 📍 주소 → 검색 키워드 세트 생성 (곤지암 / 강서구 대응)
 // ================================
-// ⭐ 톤수 추출 (전역 유틸)
+function extractAreaTokens(addr = "") {
+  const s = String(addr).trim();
+  if (!s) return [];
+
+  // 공백, 특수문자 제거
+  const clean = s.replace(/[^\w가-힣]/g, "");
+
+  const tokens = new Set();
+
+  // 1️⃣ 시/도
+  const sido = clean.match(
+    /(서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주)/
+  )?.[1];
+  if (sido) tokens.add(sido);
+
+  // 2️⃣ 시/군/구
+  const sigungu = clean.match(/([가-힣]+시|[가-힣]+군|[가-힣]+구)/)?.[1];
+  if (sigungu) tokens.add(sigungu);
+  // ⭐️ [추가] "강남" → "강남구" 보정
+if (!sigungu && clean.length >= 2) {
+  tokens.add(clean);        // 강남
+  tokens.add(clean + "구"); // 강남구
+}
+
+  // 3️⃣ 읍/면/동 (곤지암, 장지동 같은 케이스)
+  const eupmyeondong = clean.match(/([가-힣]+읍|[가-힣]+면|[가-힣]+동|[가-힣]{2,})/g);
+  if (eupmyeondong) {
+    eupmyeondong.forEach(t => {
+      if (t.length >= 2) tokens.add(t);
+    });
+  }
+   return Array.from(tokens);
+}
 // ================================
-const extractTonNum = (text = "") => {
-  const m = String(text)
-    .replace(/톤|t/gi, "")
-    .match(/(\d+(\.\d+)?)/);
-  return m ? Number(m[1]) : null;
-};
+// 🔍 두 주소가 같은 지역인지 판단
+// ================================
+function isAreaMatch(inputAddr, rowAddr) {
+  const inputTokens = extractAreaTokens(inputAddr);
+  const rowText = String(rowAddr || "").replace(/\s+/g, "");
+
+  return inputTokens.some(t => rowText.includes(t));
+}
+ // ================================
+// 📍 주소 → 조회용 행정구 단위로 축소
+// 예: "인천 서구 북항로 28-29" → "인천 서구"
+// ================================
+function normalizeAreaForSearch(addr = "") {
+  const s = String(addr).trim();
+  if (!s) return "";
+
+  const sido =
+    s.match(
+      /(서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주)/
+    )?.[1] || "";
+
+  const sigungu =
+    s.match(/([가-힣]+시|[가-힣]+군|[가-힣]+구)/)?.[1] || "";
+
+  // ⭐ 핵심: 행정구 추출 실패 시 → 원문 그대로
+  if (!sido && !sigungu) {
+    return s;
+  }
+
+  return `${sido} ${sigungu}`.trim();
+}
+
+// ================================
+// 🚚 차량종류 그룹화 (최종)
+// ================================
+function normalizeVehicleGroup(type = "") {
+  const t = String(type).replace(/\s+/g, "");
+
+  // 🛵 오토바이 (완전 분리)
+  if (t.includes("오토바이") || t.includes("바이크")) {
+    return "MOTOR";
+  }
+
+  // ❄ 냉장 / 냉동 계열 (톤수·형태 무시)
+  if (t.includes("냉장") || t.includes("냉동")) {
+    return "COLD";
+  }
+
+  // 🚐 소형차
+  if (t.includes("라보") || t.includes("다마스")) {
+    return "SMALL";
+  }
+
+  // 🚚 일반 화물차
+  if (
+    t.includes("카고") ||
+    t.includes("윙") ||
+    t.includes("윙바디") ||
+    t.includes("탑") ||
+    t.includes("탑차") ||
+    t.includes("리프트")
+  ) {
+    return "GENERAL";
+  }
+
+  return "ETC";
+}
+
+// ================================
+// 🚛 차량톤수 숫자 추출 (전역 공용)
+// ================================
+function extractTonNum(text = "") {
+  if (!text) return null;
+
+  const s = String(text).replace(/\s+/g, "");
+
+  // 1️⃣ "1톤", "2.5톤"
+  const m = s.match(/(\d+(?:\.\d+)?)/);
+  if (m) return Number(m[1]);
+
+  return null;
+}
+
   // ================================
 // 🔍 날짜 문자열 판별 (오더복사용)
 // ================================
@@ -1714,6 +1827,35 @@ const filterVehicles = (q) => {
   } catch {}
   return { ...emptyForm };
 });
+// ===============================
+// 💡 주소/조건 기반 자동 운임 가이드
+// ===============================
+React.useEffect(() => {
+  if (!form.상차지주소 || !form.하차지주소) {
+    setAreaFareHint(null);
+    return;
+  }
+
+  const ton = extractTonNum(form.차량톤수);
+
+  const hint = calcNationwideAvgFare({
+    pickupAddr: form.상차지주소,
+    dropAddr: form.하차지주소,
+    ton,
+    cargo: form.화물내용,
+    vehicle: form.차량종류,
+    dispatchData,
+  });
+
+  setAreaFareHint(hint);
+}, [
+  form.상차지주소,
+  form.하차지주소,
+  form.화물내용,
+  form.차량톤수,
+  form.차량종류,
+  dispatchData,
+]);
 
     React.useEffect(() => _safeSave("dispatchForm", form), [form]);
     // ===============================
@@ -1732,6 +1874,97 @@ React.useEffect(() => {
   }
   // eslint-disable-next-line
 }, []);
+// ===============================
+// 💰 주소 기반 전국 평균 운임 계산 (정확 톤수 기준)
+// ===============================
+function calcNationwideAvgFare({
+  pickupAddr,
+  dropAddr,
+  ton,
+  cargo,
+  vehicle,
+  dispatchData,
+}) {
+
+  // 1️⃣ 주소 기준 (무조건)
+let base = (dispatchData || []).filter(r => {
+  const pickupOk = isAreaMatch(
+    pickupAddr,
+    r.상차지주소 || r.상차지명
+  );
+
+  const dropOk = isAreaMatch(
+    dropAddr,
+    r.하차지주소 || r.하차지명
+  );
+
+  return pickupOk && dropOk && r.청구운임;
+});
+
+
+  if (base.length < 2) return null;
+
+  let list = base;
+  let level = "주소";
+  // ⭐ 주소 기준이라도 차량종류는 반드시 고정 (중요!!)
+if (vehicle) {
+  const vg = normalizeVehicleGroup(vehicle);
+  list = list.filter(
+    r => normalizeVehicleGroup(r.차량종류) === vg
+  );
+}
+  // 2️⃣ 차량종류
+  if (vehicle) {
+    const vg = normalizeVehicleGroup(vehicle);
+    const f = list.filter(
+      r => normalizeVehicleGroup(r.차량종류) === vg
+    );
+    if (f.length >= 2) {
+      list = f;
+      level = "차량";
+    }
+  }
+
+  // 3️⃣ 톤수 (이전 단계 list 기준)
+  if (ton != null) {
+    const f = list.filter(r => {
+      const rt = extractTonNum(r.차량톤수);
+      return rt != null && Math.abs(rt - ton) <= 0.5;
+    });
+    if (f.length >= 2) {
+      list = f;
+      level = "톤수";
+    }
+  }
+
+  // 4️⃣ 화물내용 (파렛트)
+  const pallet = getPalletFromCargoText(cargo);
+  if (pallet != null) {
+    const f = list.filter(r => {
+      const rp = getPalletFromCargoText(r.화물내용);
+      return rp != null && Math.abs(rp - pallet) <= 1;
+    });
+    if (f.length >= 2) {
+      list = f;
+      level = "화물";
+    }
+  }
+
+  const fares = list.map(r =>
+    Number(String(r.청구운임).replace(/[^\d]/g, ""))
+  );
+
+return {
+  level,
+  min: Math.min(...fares),
+  max: Math.max(...fares),
+  avg: Math.round(fares.reduce((a,b)=>a+b,0) / fares.length),
+  count: fares.length,
+
+pickupLabel: normalizeAreaForSearch(pickupAddr),
+dropLabel: normalizeAreaForSearch(dropAddr),
+};
+}
 // ===============================
 // 🤖 AI 배차/운임 추천 (HERE)
 // ===============================
@@ -2642,10 +2875,10 @@ if (!matchPickup || !matchDrop) return false;
         if (!matchPickup || !matchDrop) return false;
 
         const matchVehicle =
-          !vehicle || !r.차량종류
-            ? true
-            : norm(r.차량종류).includes(norm(vehicle)) ||
-              norm(vehicle).includes(norm(r.차량종류));
+  !vehicle
+    ? true
+    : normalizeVehicleGroup(r.차량종류) ===
+      normalizeVehicleGroup(vehicle);
 
         if (!matchVehicle) return false;
 
@@ -3295,9 +3528,91 @@ function FuelSlideWidget() {
 >
   ⇄ 상·하차 교체
 </button>
+{areaFareHint && (
+  <div
+    className="
+      mt-2
+      flex items-center gap-4
+      border border-blue-200
+      bg-blue-50
+      rounded-lg
+      px-4 py-2
+      text-sm
+      cursor-pointer
+      hover:bg-blue-100
+      transition
+    "
+    onClick={() => {
+  const inputTon = extractTonNum(form.차량톤수);
+  const inputPallet = getPalletFromCargoText(form.화물내용);
+
+  const history = (dispatchData || []).filter(r => {
+    if (!r.청구운임) return false;
+
+    // 1️⃣ 지역
+   if (
+  !isAreaMatch(
+    form.상차지주소,
+    r.상차지주소 || r.상차지명
+  ) ||
+  !isAreaMatch(
+    form.하차지주소,
+    r.하차지주소 || r.하차지명
+  )
+) {
+  return false;
+}
+
+
+    // 2️⃣ 차량종류 그룹
+    if (
+      normalizeVehicleGroup(r.차량종류) !==
+      normalizeVehicleGroup(form.차량종류)
+    ) {
+      return false;
+    }
+
+    // 3️⃣ 톤수 (입력돼 있으면 강제)
+    if (inputTon != null) {
+      const rowTon = extractTonNum(r.차량톤수);
+      if (rowTon == null) return false;
+      if (Math.abs(rowTon - inputTon) > 0.5) return false;
+    }
+
+    // 4️⃣ 화물내용
+    if (inputPallet != null) {
+      const rowPallet = getPalletFromCargoText(r.화물내용);
+      if (rowPallet == null) return false;
+      if (Math.abs(rowPallet - inputPallet) > 1) return false;
+    }
+
+    return true;
+  });
+
+  setGuideHistoryList(history);
+  setFareHistoryOpen(true);
+}}
+
+  >
+    <span className="font-semibold text-gray-800">
+      {areaFareHint.pickupLabel} → {areaFareHint.dropLabel}
+    </span>
+
+    <span className="text-gray-500">
+      기준: {areaFareHint.level}
+      <span className="ml-1 text-xs">
+        ({areaFareHint.count}건)
+      </span>
+    </span>
+
+    <span className="ml-auto font-bold text-blue-700">
+      {areaFareHint.min.toLocaleString()} ~{" "}
+      {areaFareHint.max.toLocaleString()}원
+    </span>
+  </div>
+)}
 
   </div>
-
 </div>
  
 <form
@@ -3736,6 +4051,7 @@ const similar = placeList.filter(p => {
     <label className={labelCls}>차량톤수</label>
     <input className={inputCls} placeholder="예: 1톤 / 2.5톤" value={form.차량톤수} onChange={(e) => onChange("차량톤수", e.target.value)} />
   </div>
+
 
   {/* 금액 */}
 {isAdmin && (
@@ -4805,7 +5121,69 @@ setIsCopyMode(true);
     </div>
   </div>
 )}
+{/* ================= 📜 과거 운송 이력 (운임 가이드 클릭) ================= */}
+{fareHistoryOpen && (
+  <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40">
+    <div className="bg-white rounded-xl w-[720px] max-h-[80vh] overflow-hidden shadow-xl">
 
+      {/* 헤더 */}
+      <div className="flex justify-between items-center px-5 py-3 border-b">
+        <h3 className="font-semibold text-lg">📜 과거 운송 이력</h3>
+        <button
+          onClick={() => setFareHistoryOpen(false)}
+          className="text-gray-400 hover:text-gray-700"
+        >
+          ✕
+        </button>
+      </div>
+
+      {/* 리스트 */}
+      <div className="p-4 overflow-y-auto max-h-[60vh] text-sm">
+          <div className="text-xs text-gray-500 mb-2">
+    현재 조건과 유사한 운송 이력만 표시됩니다
+  </div>
+       {guideHistoryList.length > 0 ? (
+  guideHistoryList.map((r, idx) => (
+            <div
+              key={idx}
+              className="p-3 mb-2 border rounded-lg hover:bg-gray-50"
+            >
+              <div className="font-semibold">
+                {r.상차지명} → {r.하차지명}
+              </div>
+
+              <div className="text-gray-600 text-xs mt-1">
+                {r.차량종류} / {r.차량톤수} · {r.화물내용}
+              </div>
+
+              <div className="mt-1 font-bold text-blue-600">
+                {Number(r.청구운임).toLocaleString()}원
+              </div>
+
+              <div className="text-xs text-gray-400 mt-1">
+                {r.상차일 || r.등록일}
+              </div>
+            </div>
+          ))
+        ) : (
+          <div className="text-center text-gray-400 py-10">
+            과거 이력이 없습니다.
+          </div>
+        )}
+      </div>
+
+      {/* 푸터 */}
+      <div className="px-5 py-3 border-t text-right">
+        <button
+          onClick={() => setFareHistoryOpen(false)}
+          className="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300 text-sm"
+        >
+          닫기
+        </button>
+      </div>
+    </div>
+  </div>
+)}
 
         {/* ⭐ 운임조회 결과 모달 */}
 {fareModalOpen && fareResult && (
@@ -5077,7 +5455,6 @@ setFareModalOpen(false);
     </div>
   </div>
 )}
-
 
         {/* ⭐ 4파트 동일한 실시간배차현황 테이블 */} 
 <div id="realtime-status-area">
@@ -17592,8 +17969,10 @@ function DriverManagement({ drivers = [], upsertDriver, removeDriver }) {
     });
   };
 
-  const toggleAll = () => {
-    const allIds = filtered.map((r) => r.id).filter(Boolean);
+const toggleAll = () => {
+  const allIds = filtered
+    .map((r) => r.차량번호)
+    .filter(Boolean);
     if (selected.size === allIds.length) {
       setSelected(new Set());
     } else {
@@ -17602,33 +17981,31 @@ function DriverManagement({ drivers = [], upsertDriver, removeDriver }) {
   };
 
   // ===================== 인라인 수정 =====================
-  const handleBlur = async (row, key, val) => {
-    const oldId = row.id;
-    if (!oldId) {
-      alert("문서 ID가 없어 수정할 수 없습니다.");
-      return;
-    }
+const handleBlur = async (row, key, val) => {
+  const oldId = row.차량번호; // ⭐ 기준을 차량번호로 통일
+  if (!oldId) {
+    alert("차량번호가 없어 수정할 수 없습니다.");
+    return;
+  }
 
     // 차량번호 변경 = 문서 이동
     if (key === "차량번호") {
-      const newId = val.replace(/\s+/g, "");
-      if (!newId || newId === oldId) return;
+  const newId = val.replace(/\s+/g, "");
+  if (!newId || newId === oldId) return;
 
-      await upsertDriver({
-        ...row,
-        id: newId,
-        차량번호: newId,
-      });
-      await removeDriver(oldId);
-      return;
-    }
+  await upsertDriver({
+    ...row,
+    차량번호: newId,
+  });
+  await removeDriver(oldId);
+  return;
+}
 
     // 일반 필드 수정
     await upsertDriver({
-      ...row,
-      [key]: val,
-      id: oldId,
-    });
+  ...row,
+  [key]: val,
+});
   };
 
   // ===================== 신규 추가 =====================
