@@ -1716,6 +1716,22 @@ const filterVehicles = (q) => {
 });
 
     React.useEffect(() => _safeSave("dispatchForm", form), [form]);
+    // ===============================
+// ⭐ 폼 최초 로딩 시 날짜 자동 보정
+// ===============================
+React.useEffect(() => {
+  const today = _todayStr();
+
+  if (form.상차일 && form.상차일 < today) {
+    setForm((p) => ({
+      ...p,
+      등록일: today,
+      상차일: today,
+      하차일: today,
+    }));
+  }
+  // eslint-disable-next-line
+}, []);
 // ===============================
 // 🤖 AI 배차/운임 추천 (HERE)
 // ===============================
@@ -2331,14 +2347,24 @@ const autoPriority =
   form.메모?.startsWith("!!") ? "CRITICAL" :
   form.메모?.startsWith("!")  ? "HIGH" :
   form.메모중요도 || "NORMAL";
+  // ===============================
+// ⭐ 날짜 최종 안전 보정 (어제 저장 방지)
+// ===============================
+const today = _todayStr();
+
+const safePickupDate =
+  !form.상차일 || form.상차일 < today ? today : form.상차일;
+
+const safeDropDate =
+  !form.하차일 || form.하차일 < today ? today : form.하차일;
 const rec = {
   ...form,
   메모중요도: autoPriority,
   운임보정: fareAdjustment,
   
   ...moneyPatch,
-  상차일: lockYear(form.상차일),
-  하차일: lockYear(form.하차일),
+  상차일: lockYear(safePickupDate),
+ 하차일: lockYear(safeDropDate),
   순번: nextSeq(),
   배차상태: status,
 
@@ -2890,9 +2916,9 @@ const applyCopy = (r) => {
     차량톤수: r.차량톤수 || "",
     상차방법: r.상차방법 || "",
     하차방법: r.하차방법 || "",
-    상차일: lockYear(r.상차일 || ""),
+    상차일: _todayStr(),
     상차시간: r.상차시간 || "",
-    하차일: lockYear(r.하차일 || ""),
+    하차일: _todayStr(),
     하차시간: r.하차시간 || "",
     지급방식: r.지급방식 || "",
     배차방식: r.배차방식 || "",
@@ -2901,8 +2927,6 @@ const applyCopy = (r) => {
   운임보정: r.운임보정 || null,
   운행유형: r.운행유형 || "편도",
   };
-  
-
   setForm((p) => ({ ...p, ...keep }));
   setVehicleQuery(keep.차량종류 || ""); // ⭐ 반드시
   setAutoPickMatched(false);
@@ -2910,8 +2934,6 @@ const applyCopy = (r) => {
   setCopyOpen(false);
   setCopySelected([]); // 선택 초기화
 };
-
-
     // ------------------ 초기화 ------------------
     const resetForm = () => {
       const reset = { ...emptyForm, _id: crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`, 등록일: _todayStr() };
@@ -11399,38 +11421,33 @@ return (
   </select>
 </td>
 
-                  <td className="border text-center">
-  <div className="flex flex-col items-center gap-1">
+                  <td className="border px-2 whitespace-nowrap">
+  <div className="flex items-center gap-1">
 
-    {/* ⭐ 메모 중요도 뱃지 */}
-    {row.메모중요도 && row.메모중요도 !== "일반" && (
-      <span
-        className={`
-          px-2 py-0.5 rounded-full
-          text-[10px] font-bold
-          ${
-            row.메모중요도 === "긴급"
-              ? "bg-red-600 text-white animate-pulse"
-              : row.메모중요도 === "중요"
-              ? "bg-orange-500 text-white"
-              : ""
-          }
-        `}
-      >
-        {row.메모중요도}
-      </span>
-    )}
+    {/* ⭐ 중요도 뱃지 (항상 먼저, 고정) */}
+    {(() => {
+      const level = row.메모중요도;
 
-    {/* 메모 본문 */}
-    {editMode && selected.has(id) ? (
-      <input
-        className="border rounded px-1 py-0.5 w-full text-center"
-        defaultValue={row.메모 || ""}
-        onChange={(e) => updateEdited(row, "메모", e.target.value)}
-      />
-    ) : (
-      <MemoCell text={row.메모 || ""} />
-    )}
+if (level === "CRITICAL") {
+  return (
+    <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-red-600 text-white animate-pulse">
+      긴급
+    </span>
+  );
+}
+
+if (level === "HIGH") {
+  return (
+    <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-orange-500 text-white">
+      중요
+    </span>
+  );
+}
+      return null;
+    })()}
+
+    {/* 메모 */}
+    <MemoCell text={row.메모 || ""} />
   </div>
 </td>
 
@@ -12199,9 +12216,17 @@ const d =
       {/* 일반 */}
       <button
         type="button"
-        onClick={() =>
-          setEditTarget((p) => ({ ...p, 메모중요도: "일반" }))
-        }
+       onClick={() => {
+  setEditTarget((p) => ({ ...p, 메모중요도: "일반" }));
+
+  setEdited((prev) => ({
+    ...prev,
+    [getId(editTarget)]: {
+      ...(prev[getId(editTarget)] || {}),
+      메모중요도: "일반",
+    },
+  }));
+}}
         className={`
           px-2 py-0.5 rounded-full text-[11px] font-semibold border
           ${
@@ -12216,39 +12241,56 @@ const d =
 
       {/* 중요 */}
       <button
-        type="button"
-        onClick={() =>
-          setEditTarget((p) => ({ ...p, 메모중요도: "중요" }))
-        }
-        className={`
-          px-2 py-0.5 rounded-full text-[11px] font-semibold border
-          ${
-            editTarget.메모중요도 === "중요"
-              ? "bg-orange-500 text-white border-orange-500"
-              : "bg-orange-100 text-orange-700 border-orange-300"
-          }
-        `}
-      >
-        중요
-      </button>
+  type="button"
+  onClick={() => {
+    setEditTarget((p) => ({ ...p, 메모중요도: "HIGH" }));
+
+    setEdited((prev) => ({
+      ...prev,
+      [getId(editTarget)]: {
+        ...(prev[getId(editTarget)] || {}),
+        메모중요도: "HIGH",
+      },
+    }));
+  }}
+  className={`
+    px-2 py-0.5 rounded-full text-[11px] font-semibold border
+    ${
+      editTarget.메모중요도 === "HIGH"
+        ? "bg-orange-500 text-white border-orange-500"
+        : "bg-orange-100 text-orange-700 border-orange-300"
+    }
+  `}
+>
+  중요
+</button>
 
       {/* 긴급 */}
       <button
-        type="button"
-        onClick={() =>
-          setEditTarget((p) => ({ ...p, 메모중요도: "긴급" }))
-        }
-        className={`
-          px-2 py-0.5 rounded-full text-[11px] font-semibold border
-          ${
-            editTarget.메모중요도 === "긴급"
-              ? "bg-red-600 text-white border-red-600 animate-pulse"
-              : "bg-red-100 text-red-600 border-red-300"
-          }
-        `}
-      >
-        긴급
-      </button>
+  type="button"
+  onClick={() => {
+    // ✅ ENUM으로만 저장
+    setEditTarget((p) => ({ ...p, 메모중요도: "CRITICAL" }));
+
+    setEdited((prev) => ({
+      ...prev,
+      [getId(editTarget)]: {
+        ...(prev[getId(editTarget)] || {}),
+        메모중요도: "CRITICAL",
+      },
+    }));
+  }}
+  className={`
+    px-2 py-0.5 rounded-full text-[11px] font-semibold border
+    ${
+      editTarget.메모중요도 === "CRITICAL"
+        ? "bg-red-600 text-white border-red-600 animate-pulse"
+        : "bg-red-100 text-red-600 border-red-300"
+    }
+  `}
+>
+  긴급
+</button>
     </div>
   </div>
 
@@ -12338,8 +12380,13 @@ const d =
   "배차상태",
 ];
 
+const merged = {
+  ...editTarget,
+  ...(edited[getId(editTarget)] || {}),
+};
+
 const payload = ALLOWED_FIELDS.reduce((acc, k) => {
-  const v = editTarget[k];
+  const v = merged[k];
   if (v !== undefined) {
     acc[k] = v;
   }
@@ -13137,13 +13184,13 @@ function MemoCell({ text }) {
   if (!text) return <span className="text-gray-400">-</span>;
 
   const clean = String(text);
-  const isLong = clean.length > 5;
-  const short = isLong ? clean.slice(0, 5) + "…" : clean;
+  const short = clean.length > 5 ? clean.slice(0, 5) + "…" : clean;
 
   return (
-    <div className="relative inline-block">
+    <>
       <span>{showFull ? clean : short}</span>
-      {isLong && !showFull && (
+
+      {clean.length > 5 && !showFull && (
         <button
           onClick={() => setShowFull(true)}
           className="text-blue-600 text-xs ml-1 underline"
@@ -13151,31 +13198,30 @@ function MemoCell({ text }) {
           더보기
         </button>
       )}
+
       {showFull && (
         <div
           className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
           onClick={() => setShowFull(false)}
         >
           <div
-            className="bg-white p-4 rounded-lg shadow-lg w-[400px] max-w-[90%]"
+            className="bg-white p-4 rounded-lg shadow-lg w-[400px]"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="font-semibold text-lg mb-2">메모 내용</h3>
-            <div className="text-sm whitespace-pre-wrap break-words">{clean}</div>
-            <div className="text-right mt-4">
-              <button
-                onClick={() => setShowFull(false)}
-                className="px-3 py-1 rounded bg-blue-600 text-white text-sm"
-              >
+            <h3 className="font-semibold mb-2">메모 내용</h3>
+            <div className="text-sm whitespace-pre-wrap">{clean}</div>
+            <div className="text-right mt-3">
+              <button className="px-3 py-1 bg-blue-600 text-white rounded">
                 닫기
               </button>
             </div>
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }
+
 
   /* ===================== 신규 오더 등록 팝업 ===================== */
 function NewOrderPopup({
