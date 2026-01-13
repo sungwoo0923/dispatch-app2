@@ -3,6 +3,7 @@ import React, { useState, useEffect } from "react";
 import { db } from "./firebase";
 import { collection, onSnapshot } from "firebase/firestore";
 
+
 // 차량종류 옵션
 const VEHICLE_TYPES = [
   "전체",
@@ -15,6 +16,13 @@ const VEHICLE_TYPES = [
   "냉동탑",
   "리프트",
   "오토바이",
+];
+const SORT_OPTIONS = [
+  { value: "DATE_DESC", label: "날짜 최신순" },
+  { value: "DATE_ASC", label: "날짜 오래된순" },
+  { value: "TON_ASC", label: "톤수 낮은순" },
+  { value: "TON_DESC", label: "톤수 높은순" },
+  { value: "VEHICLE", label: "차량종류별" },
 ];
 
 // 문자열 정규화
@@ -147,6 +155,7 @@ function calcImplicitFare(dispatchData, {
 
 export default function StandardFare() {
   const [dispatchData, setDispatchData] = useState([]);
+  const [sortType, setSortType] = useState("DATE_DESC");
 
   // 검색 입력값
   const [pickup, setPickup] = useState(localStorage.getItem("sf_pickup") || "");
@@ -402,6 +411,12 @@ const withFareLevel = list.map(r => {
       ? classifyFare(fare, avgFare, r)
       : "UNKNOWN",
   };
+});
+// ✅ 여기 추가
+withFareLevel.sort((a, b) => {
+  const da = a.상차일 || "";
+  const db = b.상차일 || "";
+  return db.localeCompare(da);
 });
 
 setResult(withFareLevel);

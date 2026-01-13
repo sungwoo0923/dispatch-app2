@@ -2808,6 +2808,24 @@ filtered
   });
 
 const dedupedList = Array.from(dedupMap.values());
+// ================================
+// ⭐ 과거 운송 기록도 동일 기준으로 중복 제거
+// ================================
+const pastDedupMap = new Map();
+
+pastHistoryList
+  .slice()
+  .sort((a, b) =>
+    String(b.상차일 || "").localeCompare(String(a.상차일 || ""))
+  )
+  .forEach((r) => {
+    const key = makeFareDedupKey(r);
+    if (!pastDedupMap.has(key)) {
+      pastDedupMap.set(key, r);
+    }
+  });
+
+const pastDedupedList = Array.from(pastDedupMap.values());
 
 // ================================
 // ⭐ 최종 운임 결과 세팅 (단 한 번만!)
@@ -2828,7 +2846,7 @@ setFareResult({
   similarTop,
 
   filteredList: dedupedList,   // 💰 운임 계산 후보
-  pastHistoryList,             // 📜 진짜 과거 기록
+  pastHistoryList: pastDedupedList,
 });
 
 
@@ -2944,8 +2962,6 @@ const applyCopy = (r) => {
       setAutoDropMatched(false);
       setCopySelected([]);  // ⭐ 체크 상태 초기화
     };
-
-
 
     // =========================================================
     // 📤 공유 (모바일: 카톡 공유창 / PC: 텍스트 복사)
@@ -13202,16 +13218,23 @@ function MemoCell({ text }) {
       {showFull && (
         <div
           className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
-          onClick={() => setShowFull(false)}
+          onClick={() => setShowFull(false)}   // ✅ 바깥 클릭 닫기
         >
           <div
             className="bg-white p-4 rounded-lg shadow-lg w-[400px]"
-            onClick={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()} // ✅ 내부 클릭 전파 차단
           >
             <h3 className="font-semibold mb-2">메모 내용</h3>
-            <div className="text-sm whitespace-pre-wrap">{clean}</div>
+
+            <div className="text-sm whitespace-pre-wrap">
+              {clean}
+            </div>
+
             <div className="text-right mt-3">
-              <button className="px-3 py-1 bg-blue-600 text-white rounded">
+              <button
+                onClick={() => setShowFull(false)} // ✅ 🔥 이게 핵심
+                className="px-3 py-1 bg-blue-600 text-white rounded"
+              >
                 닫기
               </button>
             </div>
@@ -13221,7 +13244,6 @@ function MemoCell({ text }) {
     </>
   );
 }
-
 
   /* ===================== 신규 오더 등록 팝업 ===================== */
 function NewOrderPopup({
