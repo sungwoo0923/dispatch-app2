@@ -61,7 +61,16 @@ export default function App() {
 
   // 🔒 업데이트 배너 1회만 표시하기 위한 락
   const updateShownRef = useRef(false);
+  // ======================= KAKAO IN-APP → CHROME FORCE =======================
+  useEffect(() => {
+    const ua = navigator.userAgent.toLowerCase();
+    const isKakao = ua.includes("kakaotalk");
 
+    if (isKakao) {
+      location.href =
+        "intent://dispatch-app2.vercel.app/app#Intent;scheme=https;package=com.android.chrome;end";
+    }
+  }, []);
   // ======================= UPDATE EVENT (ONCE) =======================
   useEffect(() => {
     const onUpdate = () => {
