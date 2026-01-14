@@ -1924,10 +1924,6 @@ if (vehicle) {
       level = "차량";
     }
   }
-
-
-
-  
   // 3️⃣ 톤수 (이전 단계 list 기준)
   if (ton != null) {
     const f = list.filter(r => {
@@ -2583,24 +2579,15 @@ const autoPriority =
   form.메모?.startsWith("!!") ? "CRITICAL" :
   form.메모?.startsWith("!")  ? "HIGH" :
   form.메모중요도 || "NORMAL";
-  // ===============================
-// ⭐ 날짜 최종 안전 보정 (어제 저장 방지)
-// ===============================
-const today = _todayStr();
-
-const safePickupDate =
-  !form.상차일 || form.상차일 < today ? today : form.상차일;
-
-const safeDropDate =
-  !form.하차일 || form.하차일 < today ? today : form.하차일;
+ 
 const rec = {
   ...form,
   메모중요도: autoPriority,
   운임보정: fareAdjustment,
   
   ...moneyPatch,
-  상차일: lockYear(safePickupDate),
- 하차일: lockYear(safeDropDate),
+  상차일: lockYear(form.상차일),
+  하차일: lockYear(form.하차일),
   순번: nextSeq(),
   배차상태: status,
 
@@ -3458,9 +3445,84 @@ function FuelSlideWidget() {
   >
      긴급
   </ToggleBadge>
+  {areaFareHint && (
+    <div
+      className="
+        mt-2
+        flex items-center gap-4
+        border border-blue-200
+        bg-blue-50
+        rounded-lg
+        px-4 py-2
+        text-sm
+        cursor-pointer
+        hover:bg-blue-100
+        transition
+      "
+      onClick={() => {
+        const inputTon = extractTonNum(form.차량톤수);
+        const inputPallet = getPalletFromCargoText(form.화물내용);
 
+        const history = (dispatchData || []).filter(r => {
+          if (!r.청구운임) return false;
+
+          if (
+            !isAreaMatch(
+              form.상차지주소,
+              r.상차지주소 || r.상차지명
+            ) ||
+            !isAreaMatch(
+              form.하차지주소,
+              r.하차지주소 || r.하차지명
+            )
+          ) {
+            return false;
+          }
+
+          if (
+            normalizeVehicleGroup(r.차량종류) !==
+            normalizeVehicleGroup(form.차량종류)
+          ) {
+            return false;
+          }
+
+          if (inputTon != null) {
+            const rowTon = extractTonNum(r.차량톤수);
+            if (rowTon == null) return false;
+            if (Math.abs(rowTon - inputTon) > 0.5) return false;
+          }
+
+          if (inputPallet != null) {
+            const rowPallet = getPalletFromCargoText(r.화물내용);
+            if (rowPallet == null) return false;
+            if (Math.abs(rowPallet - inputPallet) > 1) return false;
+          }
+
+          return true;
+        });
+
+        setGuideHistoryList(history);
+        setFareHistoryOpen(true);
+      }}
+    >
+      <span className="font-semibold text-gray-800">
+        {areaFareHint.pickupLabel} → {areaFareHint.dropLabel}
+      </span>
+
+      <span className="text-gray-500">
+        기준: {areaFareHint.level}
+        <span className="ml-1 text-xs">
+          ({areaFareHint.count}건)
+        </span>
+      </span>
+
+      <span className="ml-auto font-bold text-blue-700">
+        {areaFareHint.min.toLocaleString()} ~{" "}
+        {areaFareHint.max.toLocaleString()}원
+      </span>
+    </div>
+  )}
 </div>
-
 
   <div className="w-px h-7 bg-gray-200" />
 
@@ -3531,90 +3593,6 @@ function FuelSlideWidget() {
 >
   ⇄ 상·하차 교체
 </button>
-{areaFareHint && (
-  <div
-    className="
-      mt-2
-      flex items-center gap-4
-      border border-blue-200
-      bg-blue-50
-      rounded-lg
-      px-4 py-2
-      text-sm
-      cursor-pointer
-      hover:bg-blue-100
-      transition
-    "
-    onClick={() => {
-  const inputTon = extractTonNum(form.차량톤수);
-  const inputPallet = getPalletFromCargoText(form.화물내용);
-
-  const history = (dispatchData || []).filter(r => {
-    if (!r.청구운임) return false;
-
-    // 1️⃣ 지역
-   if (
-  !isAreaMatch(
-    form.상차지주소,
-    r.상차지주소 || r.상차지명
-  ) ||
-  !isAreaMatch(
-    form.하차지주소,
-    r.하차지주소 || r.하차지명
-  )
-) {
-  return false;
-}
-
-
-    // 2️⃣ 차량종류 그룹
-    if (
-      normalizeVehicleGroup(r.차량종류) !==
-      normalizeVehicleGroup(form.차량종류)
-    ) {
-      return false;
-    }
-
-    // 3️⃣ 톤수 (입력돼 있으면 강제)
-    if (inputTon != null) {
-      const rowTon = extractTonNum(r.차량톤수);
-      if (rowTon == null) return false;
-      if (Math.abs(rowTon - inputTon) > 0.5) return false;
-    }
-
-    // 4️⃣ 화물내용
-    if (inputPallet != null) {
-      const rowPallet = getPalletFromCargoText(r.화물내용);
-      if (rowPallet == null) return false;
-      if (Math.abs(rowPallet - inputPallet) > 1) return false;
-    }
-
-    return true;
-  });
-
-  setGuideHistoryList(history);
-  setFareHistoryOpen(true);
-}}
-
-  >
-    <span className="font-semibold text-gray-800">
-      {areaFareHint.pickupLabel} → {areaFareHint.dropLabel}
-    </span>
-
-    <span className="text-gray-500">
-      기준: {areaFareHint.level}
-      <span className="ml-1 text-xs">
-        ({areaFareHint.count}건)
-      </span>
-    </span>
-
-    <span className="ml-auto font-bold text-blue-700">
-      {areaFareHint.min.toLocaleString()} ~{" "}
-      {areaFareHint.max.toLocaleString()}원
-    </span>
-  </div>
-)}
-
   </div>
 </div>
  
