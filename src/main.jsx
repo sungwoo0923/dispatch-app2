@@ -19,7 +19,10 @@ ReactDOM.createRoot(document.getElementById("root")).render(
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", async () => {
     try {
-      const reg = await navigator.serviceWorker.register("/sw.js");
+      // 🔥 scope 명시 (중요)
+      const reg = await navigator.serviceWorker.register("/sw.js", {
+        scope: "/app",
+      });
       console.log("[APP] PWA SW registered");
 
       let hasReloaded = false;
