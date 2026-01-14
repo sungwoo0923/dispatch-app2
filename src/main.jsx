@@ -19,16 +19,13 @@ ReactDOM.createRoot(document.getElementById("root")).render(
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", async () => {
     try {
-      // 🔥 scope 명시 (중요)
-      const reg = await navigator.serviceWorker.register("/sw.js", {
-        scope: "/app",
-      });
+      // ✅ scope 제거 (카톡 대응 핵심)
+      const reg = await navigator.serviceWorker.register("/sw.js");
       console.log("[APP] PWA SW registered");
 
       let hasReloaded = false;
       let updateApplied = false;
 
-      // 새 SW 감지
       reg.addEventListener("updatefound", () => {
         const newWorker = reg.installing;
         if (!newWorker) return;
@@ -49,7 +46,6 @@ if ("serviceWorker" in navigator) {
         });
       });
 
-      // App.jsx → 업데이트 적용
       window.applyAppUpdate = () => {
         if (!reg.waiting) return;
 
@@ -58,7 +54,6 @@ if ("serviceWorker" in navigator) {
         reg.waiting.postMessage({ type: "APPLY_UPDATE" });
       };
 
-      // 업데이트 적용 후 1회 reload
       navigator.serviceWorker.addEventListener("controllerchange", () => {
         if (!updateApplied || hasReloaded) return;
         hasReloaded = true;
