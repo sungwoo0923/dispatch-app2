@@ -1473,6 +1473,7 @@ const [isCopyMode, setIsCopyMode] = React.useState(false);
     const [clientQuery, setClientQuery] = React.useState("");
     const [isClientOpen, setIsClientOpen] = React.useState(false);
     // ⭐ 거래처 선택 대상 팝업
+    
 
     const [clientActive, setClientActive] = React.useState(0);
     const comboRef = React.useRef(null);
@@ -3614,7 +3615,7 @@ function FuelSlideWidget() {
         <input
           className={inputCls}
           placeholder="거래처 검색/입력"
-          value={clientQuery}
+          value={clientQuery || form.거래처명}
           onFocus={() => setIsClientOpen(true)}
          onChange={(e) => {
   setClientQuery(e.target.value);
