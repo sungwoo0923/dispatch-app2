@@ -4164,6 +4164,19 @@ function MobileUnassignedList({
   setDetailFrom,
   setOpenMemo,
 }) {
+    // ============================
+  // 🔢 미배차 요약 계산
+  // ============================
+  const unassigned = orders.unassigned || [];
+
+  const coldCount = unassigned.filter(o =>
+    String(o.차량종류 || o.차종 || "").includes("냉장") ||
+    String(o.차량종류 || o.차종 || "").includes("냉동")
+  ).length;
+
+  const totalCount = unassigned.length;
+  const normalCount = totalCount - coldCount;
+
 
   const [confirmTarget, setConfirmTarget] = useState(null);
   const handleConfirmDeliver = async () => {
@@ -4234,6 +4247,7 @@ const source = rawSource.filter((o) => {
       
       {/* 🔥 미배차 / 정보미전달 탭 */}
 <div className="flex rounded-xl overflow-hidden mb-4 border bg-gray-100">
+  
   {["미배차", "정보미전달"].map((t) => (
     <button
       key={t}
@@ -4275,6 +4289,29 @@ const source = rawSource.filter((o) => {
     </button>
   ))}
 </div>
+{/* 🔢 미배차 요약 바 */}
+{tab === "미배차" && (
+  <div className="mb-3 px-3 py-2 rounded-xl
+                  bg-white border shadow-sm
+                  flex justify-between items-center
+                  text-xs font-semibold text-gray-700">
+    <span>
+      총 <b className="text-blue-600">{totalCount}</b>건
+    </span>
+
+    <div className="flex gap-2">
+      <span className="px-2 py-0.5 rounded-full
+                       bg-cyan-100 text-cyan-700 text-[11px] font-bold">
+        ❄ 냉장/냉동 {coldCount}
+      </span>
+
+      <span className="px-2 py-0.5 rounded-full
+                       bg-gray-100 text-gray-700 text-[11px] font-bold">
+        🚚 일반 {normalCount}
+      </span>
+    </div>
+  </div>
+)}
 
       <div className="mb-2 text-xs text-gray-500">
         {title}
