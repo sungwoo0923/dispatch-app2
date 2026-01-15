@@ -1238,6 +1238,11 @@ ${form.하차지담당자번호 || "-"}
 
 중량 : ${weight}${pallet ? ` / ${pallet}` : ""}
 ${form.차량종류 || ""}
+// 🔽 기사 전달사항 (있을 때만 출력)
+${form.전달사항?.trim()
+  ? `\n\n📢 기사 전달사항\n${form.전달사항.trim()}`
+  : ""
+}
 
 ${form.차량번호 || "-"} ${form.이름 || "-"} ${form.전화번호 || "-"}
 ${Number(form.청구운임 || 0).toLocaleString()}원 부가세별도 배차되었습니다.`.trim();
@@ -1830,6 +1835,8 @@ const filterVehicles = (q) => {
       배차방식: "",
       메모: "",
       메모중요도: "NORMAL",
+      전달사항: "",
+      전달사항고정: false,
       배차상태: "배차중",
       독차: false,
       혼적: false,
@@ -4234,45 +4241,78 @@ const similar = placeList.filter(p => {
     </select>
   </div>
 
-{/* 메모 + 중요도 */}
-<div className="col-span-6">
-  <label className={labelCls}>메모</label>
+{/* ===============================
+    📝 메모 / 📢 전달사항 (입력폼)
+   =============================== */}
+<div className="col-span-8">
+  <div className="grid grid-cols-2 gap-4">
 
-  {/* 중요도 토글 */}
-  <div className="flex items-center gap-2 mb-1">
-    <ToggleBadge
-      active={form.메모중요도 === "NORMAL"}
-      onClick={() => onChange("메모중요도", "NORMAL")}
-      activeCls="bg-gray-600 text-white border-gray-600"
-      inactiveCls="bg-gray-100 text-gray-600 border-gray-200"
-    >
-      일반
-    </ToggleBadge>
+    {/* ▶ 왼쪽 : 메모 */}
+    <div>
+      <label className={labelCls}>메모</label>
 
-    <ToggleBadge
-      active={form.메모중요도 === "HIGH"}
-      onClick={() => onChange("메모중요도", "HIGH")}
-      activeCls="bg-orange-600 text-white border-orange-600"
-      inactiveCls="bg-orange-100 text-orange-700 border-orange-200"
-    >
-      중요
-    </ToggleBadge>
+      <div className="flex items-center gap-2 mb-1">
+        <ToggleBadge
+          active={form.메모중요도 === "NORMAL"}
+          onClick={() => onChange("메모중요도", "NORMAL")}
+          activeCls="bg-gray-600 text-white border-gray-600"
+          inactiveCls="bg-gray-100 text-gray-600 border-gray-200"
+        >
+          일반
+        </ToggleBadge>
 
-    <ToggleBadge
-      active={form.메모중요도 === "CRITICAL"}
-      onClick={() => onChange("메모중요도", "CRITICAL")}
-      activeCls="bg-red-600 text-white border-red-600"
-      inactiveCls="bg-red-100 text-red-600 border-red-200"
-    >
-      긴급
-    </ToggleBadge>
+        <ToggleBadge
+          active={form.메모중요도 === "HIGH"}
+          onClick={() => onChange("메모중요도", "HIGH")}
+          activeCls="bg-orange-600 text-white border-orange-600"
+          inactiveCls="bg-orange-100 text-orange-700 border-orange-200"
+        >
+          중요
+        </ToggleBadge>
+
+        <ToggleBadge
+          active={form.메모중요도 === "CRITICAL"}
+          onClick={() => onChange("메모중요도", "CRITICAL")}
+          activeCls="bg-red-600 text-white border-red-600"
+          inactiveCls="bg-red-100 text-red-600 border-red-200"
+        >
+          긴급
+        </ToggleBadge>
+      </div>
+
+      <textarea
+        className={`${inputCls} h-20`}
+        placeholder="내부 메모"
+        value={form.메모}
+        onChange={(e) => onChange("메모", e.target.value)}
+      />
+    </div>
+
+    {/* ▶ 오른쪽 : 전달사항 */}
+    <div>
+      <label className={labelCls}>전달사항</label>
+
+      {/* 🔒 고정 버튼 */}
+      <div className="flex items-center gap-2 mb-1">
+        <ToggleBadge
+          active={form.전달사항고정}
+          onClick={() => onChange("전달사항고정", !form.전달사항고정)}
+          activeCls="bg-blue-600 text-white border-blue-600"
+          inactiveCls="bg-blue-100 text-blue-700 border-blue-200"
+        >
+          고정
+        </ToggleBadge>
+      </div>
+
+      <textarea
+        className={`${inputCls} h-20 bg-blue-50`}
+        placeholder="기사 전달사항"
+        value={form.전달사항}
+        onChange={(e) => onChange("전달사항", e.target.value)}
+      />
+    </div>
+
   </div>
-
-  <textarea
-    className={`${inputCls} h-20`}
-    value={form.메모}
-    onChange={(e) => onChange("메모", e.target.value)}
-  />
 </div>
 
 
@@ -5544,7 +5584,33 @@ function RealtimeStatus({
   upsertDriver,
   role = "admin",
 }) {
-  
+  // ❄️ 냉장 / 냉동 차량 판별
+const isColdVehicle = (type = "") => {
+  const t = String(type);
+  return t.includes("냉장") || t.includes("냉동");
+};
+// =======================
+// 🚚 기사 전달용 공통 문구
+// =======================
+  // ❄️ 냉장/냉동 차량 안내 (끝에 줄바꿈 ❌)
+  const COLD_NOTICE = `★★★필독★★★ 냉장(0~10도 유지), 냉동(-18도 이하)
+
+인수증 및 거래명세서, 타코메타 기록지까지 꼭!! 한 장씩 찍어서 보내주세요. 인수증은 증명서입니다. 
+반드시 사진 촬영 후 문자 전송 부탁드립니다. 
+미공유 시 운임 지급이 지연될 수 있습니다.
+
+만약 서류가 없으면 상/하차 사진이라도 꼭 전송 부탁드립니다.
+상/하차지 이슈 발생 시 반드시 사전 연락 바랍니다.
+(사진 전송 후 전화는 안 주셔도 됩니다)`;
+
+// 🚚 일반 차량용
+const NORMAL_NOTICE = `★★★필독★★★ 미공유 시 운임 지급이 지연될 수 있습니다.
+
+인수증(파렛전표) 또는 거래명세서는 반드시 서명 후 문자 전송 바랍니다. 하차지에 전달하는 경우 사진 먼저 촬영 후 업체에 전달해 주시면 됩니다.
+
+인수증이 없는 경우 문자로 내용만 전달주세요.
+상·하차 이슈 발생 시 반드시 사전 연락 바랍니다. 감사합니다.`;
+
   // 📤 업체 전달 상태 변경 확인 팝업
 const [deliveryConfirm, setDeliveryConfirm] = React.useState(null);
 /*
@@ -5714,6 +5780,7 @@ const getYoil = (dateStr) => {
     date.getDay()
   ];
 };
+
 // 📦 화물내용에서 파렛트 수 추출
 const getPalletCount = (text = "") => {
   const m = String(text).match(/(\d+)\s*파렛/);
@@ -5789,7 +5856,46 @@ const copyMessage = (mode) => {
         return `${plate} ${name} ${phone}
 ${fare.toLocaleString()}원 ${payLabel} 배차되었습니다.`;
       }
+if (mode === "driver") {
+  const yoil = getYoil(r.상차일);
+  const dateText = `${r.상차일 || ""} ${yoil}`;
 
+  // ❄️ 차량종류 기준 필독 문구 선택
+  const DRIVER_NOTICE = isColdVehicle(r.차량종류)
+    ? COLD_NOTICE
+    : NORMAL_NOTICE;
+
+  // ✅ 전달사항만 사용 (메모 ❌)
+  const driverNote =
+    edited[r._id]?.전달사항 ??
+    r.전달사항 ??
+    "";
+
+  const driverNoteText = driverNote.trim()
+    ? `\n\n📢 전달사항\n${driverNote.trim()}`
+    : "";
+
+  return `${DRIVER_NOTICE}\n\n${dateText}
+
+상차지 : ${r.상차지명 || "-"}
+주소 : ${r.상차지주소 || "-"}
+담당자 : ${r.상차지담당자 || ""} (${formatPhone(
+  r.상차지담당자번호 || ""
+)})
+상차시간 : ${r.상차시간 || "즉시"}
+
+하차지 : ${r.하차지명 || "-"}
+주소 : ${r.하차지주소 || "-"}
+담당자 : ${r.하차지담당자 || ""} (${formatPhone(
+  r.하차지담당자번호 || ""
+)})
+하차시간 : ${r.하차시간 || "즉시"}
+
+중량 : ${r.차량톤수 || "-"}${
+  r.화물내용 ? ` / ${r.화물내용}` : ""
+} ${r.차량종류 || ""}${driverNoteText}`;
+
+}
       /* =======================
          FULL MODE (기사복사)
       ======================= */
@@ -9487,6 +9593,7 @@ setShowEditClientDropdown(false);
   "지급방식","배차방식",
   "메모",
   "메모중요도",
+  "전달사항",
   "운행유형",
   "혼적","독차",
   "긴급","운임보정",
@@ -9923,6 +10030,12 @@ setTimeout(() => {
         >
           전체 상세 (상하차 + 화물정보 + 차량)
         </button>
+<button
+  onClick={() => copyMessage("driver")}
+  className="w-full py-2 bg-emerald-200 rounded hover:bg-emerald-300 font-semibold text-emerald-900"
+>
+  기사 전달용 (상세 + 전달메시지)
+</button>
       </div>
 
       <button
@@ -10606,6 +10719,71 @@ const copyMessage = (mode) => {
         return `${plate} ${name} ${phone}
 ${fare.toLocaleString()}원 ${payLabel} 배차되었습니다.`;
       }
+      // =====================
+// 🚚 기사 전달용 (DRIVER)
+// =====================
+if (mode === "driver") {
+
+  // ❄️ 냉장/냉동 차량 안내 (끝에 줄바꿈 ❌)
+  const COLD_NOTICE = `★★★필독★★★ 냉장(0~10도 유지), 냉동(-18도 이하)
+
+인수증 및 거래명세서, 타코메타 기록지까지 꼭!! 한 장씩 찍어서 보내주세요. 인수증은 증명서입니다. 
+반드시 사진 촬영 후 문자 전송 부탁드립니다. 
+미공유 시 운임 지급이 지연될 수 있습니다.
+
+만약 서류가 없으면 상/하차 사진이라도 꼭 전송 부탁드립니다.
+상/하차지 이슈 발생 시 반드시 사전 연락 바랍니다.
+(사진 전송 후 전화는 안 주셔도 됩니다)`;
+
+// 🚚 일반 차량용
+const NORMAL_NOTICE = `★★★필독★★★ 미공유 시 운임 지급이 지연될 수 있습니다.
+
+인수증(파렛전표) 또는 거래명세서는 반드시 서명 후 문자 전송 바랍니다. 하차지에 전달하는 경우 사진 먼저 촬영 후 업체에 전달해 주시면 됩니다.
+
+인수증이 없는 경우 문자로 내용만 전달주세요.
+상·하차 이슈 발생 시 반드시 사전 연락 바랍니다. 감사합니다.`;
+
+    const vehicleType = String(r.차량종류 || "").trim();
+
+  const isColdVehicle =
+    vehicleType.includes("냉장") || vehicleType.includes("냉동");
+
+  const DRIVER_NOTICE =
+    vehicleType === ""
+      ? ""
+      : isColdVehicle
+      ? COLD_NOTICE
+      : NORMAL_NOTICE;
+
+  const yoil = getYoil(r.상차일 || "");
+  const dateText = `${r.상차일 || ""} ${yoil}`;
+
+  const driverNote =
+    edited[id]?.전달사항 ??
+    r.전달사항 ??
+    "";
+
+  const driverNoteText = driverNote.trim()
+    ? `\n\n📢 전달사항\n${driverNote.trim()}`
+    : "";
+
+  return `${DRIVER_NOTICE}\n\n${dateText}
+
+상차지 : ${r.상차지명 || "-"}
+주소 : ${r.상차지주소 || "-"}
+담당자 : ${r.상차지담당자 || ""} (${formatPhone(r.상차지담당자번호 || "")})
+상차시간 : ${r.상차시간 || "즉시"}
+
+하차지 : ${r.하차지명 || "-"}
+주소 : ${r.하차지주소 || "-"}
+담당자 : ${r.하차지담당자 || ""} (${formatPhone(r.하차지담당자번호 || "")})
+하차시간 : ${r.하차시간 || "즉시"}
+
+중량 : ${r.차량톤수 || "-"}${r.화물내용 ? ` / ${r.화물내용}` : ""}
+차량 : ${r.차량종류 || "-"}
+
+${driverNoteText}`;
+}
 
       // =====================
       // 전체 상세 (기사복사)
@@ -12874,6 +13052,7 @@ const d =
   "지급방식","배차방식",
   "메모",
   "메모중요도",
+  "전달사항",
   "운행유형",
   "혼적","독차",
   "긴급",          // 🔥 여기
@@ -13422,6 +13601,7 @@ setTimeout(() => {
           onClick={() => copyMessage("fare")}
           className="w-full py-2 bg-blue-200 rounded hover:bg-blue-300"
         >
+          
           운임 포함(부가세/선불/착불)
         </button>
         <button
@@ -13430,12 +13610,19 @@ setTimeout(() => {
         >
           전체 상세
         </button>
-      </div>
+        <button
+    onClick={() => copyMessage("driver")}
+    className="w-full py-2 bg-emerald-200 rounded hover:bg-emerald-300"
+  >
+    기사 전달용 (상세 + 전달메시지)
+  </button>
+</div>
 
       <button
         onClick={() => setCopyModalOpen(false)}
         className="w-full mt-4 py-2 text-sm text-gray-600"
       >
+        
         취소
       </button>
     </div>
