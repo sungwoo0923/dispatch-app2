@@ -1207,19 +1207,40 @@ const isDateLike = (v) =>
 // 📤 즉시공유 텍스트 생성
 // ===============================
 function makeInstantShareText(form) {
-  const dateStr = form.상차일
-    ? `${form.상차일}(${"일월화수목금토"[new Date(form.상차일).getDay()]})`
+  // 날짜: 1월 15일 목요일
+  const d = form.상차일 ? new Date(form.상차일) : null;
+  const dateStr = d
+    ? `${d.getMonth() + 1}월 ${d.getDate()}일 ${"일월화수목금토"[d.getDay()]}요일`
     : "";
+
+  // 시간 기본값 처리
+  const pickupTime = form.상차시간?.trim() || "즉시";
+  const dropTime   = form.하차시간?.trim() || "즉시";
+
+  // 중량 / 파렛트
+  const weight = form.차량톤수 || "3,000kg";
+  const pallet = form.화물내용 || "";
 
   return `${dateStr}
 
-${form.상차지명 || "-"} → ${form.하차지명 || "-"}
-${form.상차지주소 || "-"} → ${form.하차지주소 || "-"}
+상차지 :
+${form.상차지명 || "-"}
+주소 : ${form.상차지주소 || "-"}
+${form.상차지담당자 || ""}${form.상차지담당자번호 ? ` (${form.상차지담당자번호})` : ""}
 
-${form.화물내용 || "-"} ${form.차량톤수 || ""} ${form.차량종류 || ""}
+상차시간 : ${pickupTime}
+하차시간 : ${dropTime}
+
+하차지 : ${form.하차지명 || "-"}
+${form.하차지주소 || "-"}
+담당자 : ${form.하차지담당자 || "-"}
+${form.하차지담당자번호 || "-"}
+
+중량 : ${weight}${pallet ? ` / ${pallet}` : ""}
+${form.차량종류 || ""}
 
 ${form.차량번호 || "-"} ${form.이름 || "-"} ${form.전화번호 || "-"}
-${Number(form.청구운임 || 0).toLocaleString()}원 부가세별도 배차되었습니다.`;
+${Number(form.청구운임 || 0).toLocaleString()}원 부가세별도 배차되었습니다.`.trim();
 }
 
 const placeList = React.useMemo(() => {
@@ -5735,60 +5756,102 @@ const formatPhone = (value) => {
 
   return digits;
 };
-
-
-
-
 const copyMessage = (mode) => {
   if (!selected.length) {
     alert("복사할 항목을 선택하세요.");
     return;
   }
 
-  const text = selected.map((id) => {
-    const r = rows.find((x) => x._id === id);
-    if (!r) return "";
+  const text = selected
+    .map((id) => {
+      const r = rows.find((x) => x._id === id);
+      if (!r) return "";
 
-    const plate = r.차량번호 || "";
-    const name = r.이름 || "";
-    const phone = formatPhone(r.전화번호);
-    const cargo = r.화물내용 || "";
-    const ton = r.차량톤수 || "";
-    const carType = r.차량종류 || "";
-    const fare = Number(String(r.청구운임 || "").replace(/[^\d]/g, ""));
-    const pay = r.지급방식 || "";
-    const yoil = r.상차일 ? getYoil(r.상차일) : "";
+      const plate = r.차량번호 || "";
+      const name = r.이름 || "";
+      const phone = formatPhone(r.전화번호);
+      const fare = Number(String(r.청구운임 || "").replace(/[^\d]/g, ""));
+      const pay = r.지급방식 || "";
+      const yoil = r.상차일 ? getYoil(r.상차일) : "";
 
-    let payLabel =
-      pay === "계산서"
-        ? "부가세별도"
-        : pay === "선불" || pay === "착불"
-        ? pay
-        : "";
+      let payLabel =
+        pay === "계산서"
+          ? "부가세별도"
+          : pay === "선불" || pay === "착불"
+          ? pay
+          : "";
 
-    if (mode === "basic") {
-      return `${plate} ${name} ${phone}`;
-    }
+      if (mode === "basic") {
+        return `${plate} ${name} ${phone}`;
+      }
 
-    if (mode === "fare") {
-      return `${plate} ${name} ${phone}
+      if (mode === "fare") {
+        return `${plate} ${name} ${phone}
 ${fare.toLocaleString()}원 ${payLabel} 배차되었습니다.`;
-    }
+      }
 
-    return `${r.상차일 || ""}(${yoil})
+      /* =======================
+         FULL MODE (기사복사)
+      ======================= */
 
-${r.상차지명 || ""} → ${r.하차지명 || ""}
-${r.상차지주소 || ""} → ${r.하차지주소 || ""}
+      const pickupTime = r.상차시간?.trim() || "즉시";
+      const dropTimeRaw = r.하차시간?.trim() || "즉시";
 
-${r.화물내용 || ""} ${r.차량톤수 || ""} ${r.차량종류 || ""}
+      let dateNotice = "";
+      let dropTimeText = dropTimeRaw;
+
+      if (r.상차일 && r.하차일) {
+        const s = new Date(r.상차일);
+        const e = new Date(r.하차일);
+
+        const s0 = new Date(s.getFullYear(), s.getMonth(), s.getDate());
+        const e0 = new Date(e.getFullYear(), e.getMonth(), e.getDate());
+
+        const diffDays = Math.round(
+          (e0 - s0) / (1000 * 60 * 60 * 24)
+        );
+
+        const sm = s.getMonth() + 1;
+        const sd = s.getDate();
+        const em = e.getMonth() + 1;
+        const ed = e.getDate();
+
+        if (diffDays === 1) {
+          dateNotice = `익일 하차 건 (상차: ${sm}/${sd} → 하차: ${em}/${ed})\n\n`;
+          dropTimeText = `${em}/${ed} ${dropTimeRaw}`;
+        } else if (diffDays >= 2) {
+          dateNotice = `지정일 하차 건 (상차: ${sm}/${sd} → 하차: ${em}/${ed})\n\n`;
+          dropTimeText = `${em}/${ed} ${dropTimeRaw}`;
+        }
+      }
+
+      return `${dateNotice}${r.상차일 || ""} ${yoil}
+
+상차지 : ${r.상차지명 || "-"}
+주소 : ${r.상차지주소 || "-"}
+담당자 : ${r.상차지담당자 || ""} (${formatPhone(
+        r.상차지담당자번호 || ""
+      )})
+상차시간 : ${pickupTime}
+
+하차지 : ${r.하차지명 || "-"}
+주소 : ${r.하차지주소 || "-"}
+담당자 : ${r.하차지담당자 || ""} (${formatPhone(
+        r.하차지담당자번호 || ""
+      )})
+하차시간 : ${dropTimeText}
+
+중량 : ${r.차량톤수 || "-"}${
+        r.화물내용 ? ` / ${r.화물내용}` : ""
+      } ${r.차량종류 || ""}
 
 ${plate} ${name} ${phone}
 ${fare.toLocaleString()}원 ${payLabel} 배차되었습니다.`;
-  }).join("\n\n");
+    })
+    .join("\n\n");
 
-navigator.clipboard.writeText(text);
-setCopyModalOpen(false);
-
+  navigator.clipboard.writeText(text);
+  setCopyModalOpen(false);
 // 🔥 복사 완료 후 "전달상태 변경" 확인 팝업 띄우기
 const rowId = selected[0];
 const row = rows.find(r => r._id === rowId);
@@ -10504,7 +10567,9 @@ const formatPhone2 = (phone) => {
   return digits;
 };
 
-// 복사 실행
+// ===============================
+// 📋 기사복사 (PART 5 최종)
+// ===============================
 const copyMessage = (mode) => {
   if (!selected.size) {
     alert("복사할 항목을 선택하세요.");
@@ -10520,6 +10585,7 @@ const copyMessage = (mode) => {
       const name = r.이름 || "";
       const phone = formatPhone2(r.전화번호 || "");
       const yoil = getYoil(r.상차일 || "");
+
       const fare = Number(String(r.청구운임 || "0").replace(/[^\d]/g, ""));
       const pay = r.지급방식 || "";
       const payLabel =
@@ -10529,6 +10595,9 @@ const copyMessage = (mode) => {
           ? pay
           : "";
 
+      // =====================
+      // 기본 / 운임 모드
+      // =====================
       if (mode === "basic") {
         return `${plate} ${name} ${phone}`;
       }
@@ -10538,34 +10607,91 @@ const copyMessage = (mode) => {
 ${fare.toLocaleString()}원 ${payLabel} 배차되었습니다.`;
       }
 
-      // ✨ 전체 상세
-return `${r.상차일 || ""}(${yoil})
+      // =====================
+      // 전체 상세 (기사복사)
+      // =====================
+      const pickupTime = r.상차시간?.trim() || "즉시";
+      const dropTimeRaw = r.하차시간?.trim() || "즉시";
 
-${r.상차지명 || ""} → ${r.하차지명 || ""}
-${r.상차지주소 || ""} → ${r.하차지주소 || ""}
+      let dateNotice = "";
+      let dropTimeText = dropTimeRaw;
 
-${r.화물내용 || ""} ${r.차량톤수 || ""} ${r.차량종류 || ""}
+      if (r.상차일 && r.하차일) {
+        const s = new Date(r.상차일);
+        const e = new Date(r.하차일);
+
+        const s0 = new Date(s.getFullYear(), s.getMonth(), s.getDate());
+        const e0 = new Date(e.getFullYear(), e.getMonth(), e.getDate());
+
+        const diffDays = Math.round(
+          (e0 - s0) / (1000 * 60 * 60 * 24)
+        );
+
+        const sm = s.getMonth() + 1;
+        const sd = s.getDate();
+        const em = e.getMonth() + 1;
+        const ed = e.getDate();
+
+        if (diffDays === 1) {
+          dateNotice = `익일 하차 건 (상차: ${sm}/${sd} → 하차: ${em}/${ed})\n\n`;
+          dropTimeText = `${em}/${ed} ${dropTimeRaw}`;
+        } else if (diffDays >= 2) {
+          dateNotice = `지정일 하차 건 (상차: ${sm}/${sd} → 하차: ${em}/${ed})\n\n`;
+          dropTimeText = `${em}/${ed} ${dropTimeRaw}`;
+        }
+      }
+
+      return `${dateNotice}${r.상차일 || ""} ${yoil}
+
+상차지 : ${r.상차지명 || "-"}
+주소 : ${r.상차지주소 || "-"}${
+        r.상차지담당자 || r.상차지담당자번호
+          ? `\n담당자 : ${r.상차지담당자 || ""}${
+              r.상차지담당자번호
+                ? ` (${formatPhone(r.상차지담당자번호)})`
+                : ""
+            }`
+          : ""
+      }
+상차시간 : ${pickupTime}
+
+하차지 : ${r.하차지명 || "-"}
+주소 : ${r.하차지주소 || "-"}${
+        r.하차지담당자 || r.하차지담당자번호
+          ? `\n담당자 : ${r.하차지담당자 || ""}${
+              r.하차지담당자번호
+                ? ` (${formatPhone(r.하차지담당자번호)})`
+                : ""
+            }`
+          : ""
+      }
+하차시간 : ${dropTimeText}
+
+중량 : ${r.차량톤수 || "-"}${
+        r.화물내용 ? ` / ${r.화물내용}` : ""
+      } ${r.차량종류 || ""}
 
 ${plate} ${name} ${phone}
 ${fare.toLocaleString()}원 ${payLabel} 배차되었습니다.`;
     })
     .join("\n\n");
 
-navigator.clipboard.writeText(text);
-setCopyModalOpen(false);
+  navigator.clipboard.writeText(text);
+  setCopyModalOpen(false);
 
-// 🔥 복사 완료 → 전달상태 변경 확인 팝업 호출
-const rowId = [...selected][0];
-const row = dispatchData.find((d) => getId(d) === rowId);
+  // 🔔 기사복사 후 전달상태 변경 팝업
+  const rowId = [...selected][0];
+  const row = dispatchData.find((d) => getId(d) === rowId);
 
-setConfirmChange({
-  id: rowId,
-  field: "업체전달상태",
-  before: row?.업체전달상태 || "미전달",
-  after: "전달완료",
-  reason: "copy", // ⭐ 기사복사에서 왔다는 표시
-});
+  setConfirmChange({
+    id: rowId,
+    field: "업체전달상태",
+    before: row?.업체전달상태 || "미전달",
+    after: "전달완료",
+    reason: "copy",
+  });
 };
+
 
 // 🚀 운임 조회 실행 함수
 const handleFareSearch = () => {
