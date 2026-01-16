@@ -4472,26 +4472,24 @@ const pickMeta = findPlaceByName(r.상차지명 || "") || {};
 const dropMeta = findPlaceByName(r.하차지명 || "") || {};
 const clientName = isDateLike(r.거래처명) ? "" : (r.거래처명 || "");
 
-// (혹시 row에 주소/담당자 정보가 이미 있으면 그걸 우선, 없으면 placeList 메타로 채움)
 setForm((p) => ({
-  
   ...p,
-운행유형: r.운행유형 || "편도",
+  운행유형: r.운행유형 || "편도",
   거래처명: clientName,
 
-  // 상차
+  // ✅ 상차지 (무조건 placeList 우선)
   상차지명: r.상차지명 || "",
-  상차지주소: r.상차지주소 || pickMeta.주소 || "",
-  상차지담당자: r.상차지담당자 || pickMeta.담당자 || "",
-  상차지담당자번호: r.상차지담당자번호 || pickMeta.담당자번호 || "",
+  상차지주소: pickMeta?.주소 ?? "",
+  상차지담당자: pickMeta?.담당자 ?? "",
+  상차지담당자번호: pickMeta?.담당자번호 ?? "",
 
-  // 하차
+  // ✅ 하차지
   하차지명: r.하차지명 || "",
-  하차지주소: r.하차지주소 || dropMeta.주소 || "",
-  하차지담당자: r.하차지담당자 || dropMeta.담당자 || "",
-  하차지담당자번호: r.하차지담당자번호 || dropMeta.담당자번호 || "",
+  하차지주소: dropMeta?.주소 ?? "",
+  하차지담당자: dropMeta?.담당자 ?? "",
+  하차지담당자번호: dropMeta?.담당자번호 ?? "",
 
-  // 나머지
+  // 기타 (과거 오더 참고)
   화물내용: r.화물내용 || "",
   차량종류: r.차량종류 || "",
   차량톤수: r.차량톤수 || "",
@@ -4510,7 +4508,6 @@ setForm((p) => ({
   전화번호: "",
   배차상태: "배차중",
 }));
-
 // ✅ UI 동기화 (이 한 번만)
 setClientQuery(clientName);
 setAutoPickMatched(false);
@@ -5823,6 +5820,14 @@ const formatPhone = (value) => {
 
   return digits;
 };
+const buildContactLine = (name, phone) => {
+  if (!name && !phone) return "";
+  if (phone) {
+    return `담당자 : ${name || ""} (${formatPhone(phone)})`;
+  }
+  return `담당자 : ${name}`;
+};
+
 const copyMessage = (mode) => {
   if (!selected.length) {
     alert("복사할 항목을 선택하세요.");
@@ -5878,18 +5883,18 @@ if (mode === "driver") {
   return `${DRIVER_NOTICE}\n\n${dateText}
 
 상차지 : ${r.상차지명 || "-"}
-주소 : ${r.상차지주소 || "-"}
-담당자 : ${r.상차지담당자 || ""} (${formatPhone(
-  r.상차지담당자번호 || ""
-)})
-상차시간 : ${r.상차시간 || "즉시"}
+${r.상차지주소 || "-"}
+${(() => {
+  const line = buildContactLine(r.상차지담당자, r.상차지담당자번호);
+  return line ? `${line}\n` : "";
+})()}상차시간 : ${r.상차시간 || "즉시"}
 
 하차지 : ${r.하차지명 || "-"}
-주소 : ${r.하차지주소 || "-"}
-담당자 : ${r.하차지담당자 || ""} (${formatPhone(
-  r.하차지담당자번호 || ""
-)})
-하차시간 : ${r.하차시간 || "즉시"}
+${r.하차지주소 || "-"}
+${(() => {
+  const line = buildContactLine(r.하차지담당자, r.하차지담당자번호);
+  return line ? `${line}\n` : "";
+})()}하차시간 : ${r.하차시간 || "즉시"}
 
 중량 : ${r.차량톤수 || "-"}${
   r.화물내용 ? ` / ${r.화물내용}` : ""
@@ -5934,18 +5939,24 @@ if (mode === "driver") {
       return `${dateNotice}${r.상차일 || ""} ${yoil}
 
 상차지 : ${r.상차지명 || "-"}
-주소 : ${r.상차지주소 || "-"}
-담당자 : ${r.상차지담당자 || ""} (${formatPhone(
-        r.상차지담당자번호 || ""
-      )})
-상차시간 : ${pickupTime}
+${r.상차지주소 || "-"}
+${(() => {
+  const line = buildContactLine(
+    r.상차지담당자,
+    r.상차지담당자번호
+  );
+  return line ? `${line}\n` : "";
+})()}상차시간 : ${pickupTime}
 
 하차지 : ${r.하차지명 || "-"}
-주소 : ${r.하차지주소 || "-"}
-담당자 : ${r.하차지담당자 || ""} (${formatPhone(
-        r.하차지담당자번호 || ""
-      )})
-하차시간 : ${dropTimeText}
+${r.하차지주소 || "-"}
+${(() => {
+  const line = buildContactLine(
+    r.하차지담당자,
+    r.하차지담당자번호
+  );
+  return line ? `${line}\n` : "";
+})()}하차시간 : ${dropTimeText}
 
 중량 : ${r.차량톤수 || "-"}${
         r.화물내용 ? ` / ${r.화물내용}` : ""
@@ -10679,6 +10690,21 @@ const formatPhone2 = (phone) => {
 
   return digits;
 };
+// =======================
+// 📞 담당자 라인 생성 (기사복사용)
+// =======================
+const buildContactLine = (name, phone) => {
+  if (!name && !phone) return "";
+
+  const cleanName = String(name || "").trim();
+  const cleanPhone = String(phone || "").trim();
+
+  if (cleanPhone) {
+    return `담당자 : ${cleanName} (${formatPhone(cleanPhone)})`;
+  }
+
+  return `담당자 : ${cleanName}`;
+};
 
 // ===============================
 // 📋 기사복사 (PART 5 최종)
@@ -10770,13 +10796,27 @@ const NORMAL_NOTICE = `★★★필독★★★ 미공유 시 운임 지급이 �
   return `${DRIVER_NOTICE}\n\n${dateText}
 
 상차지 : ${r.상차지명 || "-"}
-주소 : ${r.상차지주소 || "-"}
-담당자 : ${r.상차지담당자 || ""} (${formatPhone(r.상차지담당자번호 || "")})
+${r.상차지주소 || "-"}${
+  (() => {
+    const line = buildContactLine(
+      r.상차지담당자,
+      r.상차지담당자번호
+    );
+    return line ? `\n${line}` : "";
+  })()
+}
 상차시간 : ${r.상차시간 || "즉시"}
 
 하차지 : ${r.하차지명 || "-"}
-주소 : ${r.하차지주소 || "-"}
-담당자 : ${r.하차지담당자 || ""} (${formatPhone(r.하차지담당자번호 || "")})
+${r.하차지주소 || "-"}${
+  (() => {
+    const line = buildContactLine(
+      r.하차지담당자,
+      r.하차지담당자번호
+    );
+    return line ? `\n${line}` : "";
+  })()
+}
 하차시간 : ${r.하차시간 || "즉시"}
 
 중량 : ${r.차량톤수 || "-"}${r.화물내용 ? ` / ${r.화물내용}` : ""}
@@ -10822,27 +10862,27 @@ ${driverNoteText}`;
       return `${dateNotice}${r.상차일 || ""} ${yoil}
 
 상차지 : ${r.상차지명 || "-"}
-주소 : ${r.상차지주소 || "-"}${
-        r.상차지담당자 || r.상차지담당자번호
-          ? `\n담당자 : ${r.상차지담당자 || ""}${
-              r.상차지담당자번호
-                ? ` (${formatPhone(r.상차지담당자번호)})`
-                : ""
-            }`
+${r.상차지주소 || "-"}${
+  r.상차지담당자 || r.상차지담당자번호
+    ? `\n담당자 : ${r.상차지담당자 || ""}${
+        r.상차지담당자번호
+          ? ` (${formatPhone(r.상차지담당자번호)})`
           : ""
-      }
+      }`
+    : ""
+}
 상차시간 : ${pickupTime}
 
 하차지 : ${r.하차지명 || "-"}
-주소 : ${r.하차지주소 || "-"}${
-        r.하차지담당자 || r.하차지담당자번호
-          ? `\n담당자 : ${r.하차지담당자 || ""}${
-              r.하차지담당자번호
-                ? ` (${formatPhone(r.하차지담당자번호)})`
-                : ""
-            }`
+${r.하차지주소 || "-"}${
+  r.하차지담당자 || r.하차지담당자번호
+    ? `\n담당자 : ${r.하차지담당자 || ""}${
+        r.하차지담당자번호
+          ? ` (${formatPhone(r.하차지담당자번호)})`
           : ""
-      }
+      }`
+    : ""
+}
 하차시간 : ${dropTimeText}
 
 중량 : ${r.차량톤수 || "-"}${
