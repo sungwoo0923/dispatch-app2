@@ -1047,22 +1047,7 @@ function ToggleBadge({ active, onClick, activeCls, inactiveCls, children }) {
     </button>
   );
 }
-  function DispatchManagement({
-    dispatchData, drivers, clients, timeOptions, tonOptions,
-    addDispatch, upsertDriver, upsertClient, upsertPlace,
-    patchDispatch, removeDispatch,
-    placeRows = [],
-    role = "admin",
-    isTest = false,  // ★ 추가!
-  }) {
-    const [placeRowsTrigger, setPlaceRowsTrigger] = React.useState(0);
-      const [aiRecommend, setAiRecommend] = React.useState(null);
-      const [aiPopupOpen, setAiPopupOpen] = React.useState(false);
-      const [areaFareHint, setAreaFareHint] = React.useState(null);
-      const [fareHistoryOpen, setFareHistoryOpen] = React.useState(false);
-      const [guideHistoryList, setGuideHistoryList] = React.useState([]);
-
-      // ================================
+// ================================
   // 🔑 업체명 Key 정규화 함수(추가!)
   // ================================
   function normalizeKey(str = "") {
@@ -1078,6 +1063,369 @@ function ToggleBadge({ active, onClick, activeCls, inactiveCls, children }) {
 .replace(/물류/g, "")
 .replace(/유통/g, "")
   }
+function StopRow({ value, onChange, onRemove, placeList }) {
+  const [query, setQuery] = React.useState(value.업체명 || "");
+  const [open, setOpen] = React.useState(false);
+  const [activeIndex, setActiveIndex] = React.useState(-1);
+  const [newOpen, setNewOpen] = React.useState(false);
+
+  // 🔥 신규 등록용 상태 (이게 빠져서 흰 화면 났다)
+  const [newPlace, setNewPlace] = React.useState({
+    업체명: "",
+    주소: "",
+    담당자: "",
+    담당자번호: "",
+    메모: "",
+  });
+
+  const listRef = React.useRef(null);
+
+  // ===============================
+  // 자동완성 옵션 (정확일치 우선)
+  // ===============================
+  const options = React.useMemo(() => {
+    if (!query.trim()) return [];
+
+    const nq = normalizeKey(query);
+    const qLower = query.toLowerCase();
+
+    return placeList
+      .map((p) => {
+        const name = p.업체명 || "";
+        const nk = normalizeKey(name);
+        const nLower = name.toLowerCase();
+
+        let score = 0;
+        if (name === query) score = 100;
+        else if (nk === nq) score = 90;
+        else if (nLower.startsWith(qLower)) score = 80;
+        else if (nk.startsWith(nq)) score = 70;
+        else if (nLower.includes(qLower)) score = 60;
+        else if (nk.includes(nq)) score = 50;
+
+        return score > 0 ? { ...p, _score: score } : null;
+      })
+      .filter(Boolean)
+      .sort((a, b) => b._score - a._score)
+      .slice(0, 8);
+  }, [query, placeList]);
+
+  // 옵션 변경 시 첫 줄 선택
+  React.useEffect(() => {
+    setActiveIndex(options.length > 0 ? 0 : -1);
+  }, [options]);
+
+  // 선택 이동 시 자동 스크롤
+  React.useEffect(() => {
+    if (!listRef.current || activeIndex < 0) return;
+    const el = listRef.current.querySelector(
+      `[data-index="${activeIndex}"]`
+    );
+    el?.scrollIntoView({ block: "nearest" });
+  }, [activeIndex]);
+
+  return (
+    <>
+      <div className="border rounded-xl bg-white p-4 shadow-sm space-y-4">
+        {/* 헤더 */}
+        <div className="flex justify-between items-center">
+          <div className="text-sm font-bold text-gray-800">경유지</div>
+          <button
+            onClick={onRemove}
+            className="text-xs text-red-500 hover:underline"
+          >
+            삭제
+          </button>
+        </div>
+
+        {/* 업체명 / 주소 */}
+        <div className="grid grid-cols-2 gap-3 relative">
+          {/* 업체명 */}
+          <div className="relative">
+            <label className="block text-xs text-gray-500 mb-1">
+              업체명
+            </label>
+            <input
+              value={query}
+              onChange={(e) => {
+                const v = e.target.value;
+                setQuery(v);
+                onChange({ ...value, 업체명: v });
+                setOpen(true);
+              }}
+              onKeyDown={(e) => {
+                if (!open) return;
+
+                if (e.key === "ArrowDown" && options.length > 0) {
+                  e.preventDefault();
+                  setActiveIndex((i) =>
+                    i < options.length - 1 ? i + 1 : i
+                  );
+                }
+
+                if (e.key === "ArrowUp" && options.length > 0) {
+                  e.preventDefault();
+                  setActiveIndex((i) => (i > 0 ? i - 1 : 0));
+                }
+
+                if (e.key === "Enter") {
+                  e.preventDefault();
+
+                  // 기존 선택
+                  if (options.length > 0 && activeIndex >= 0) {
+                    const p = options[activeIndex];
+                    setQuery(p.업체명);
+                    onChange({
+                      업체명: p.업체명,
+                      주소: p.주소,
+                      담당자: p.담당자,
+                      담당자번호: p.담당자번호,
+                    });
+                    setOpen(false);
+                    return;
+                  }
+
+                  // 신규 등록
+                  if (options.length === 0 && query.trim()) {
+                    setNewPlace({
+                      업체명: query,
+                      주소: "",
+                      담당자: "",
+                      담당자번호: "",
+                      메모: "",
+                    });
+                    setNewOpen(true);
+                    setOpen(false);
+                  }
+                }
+
+                if (e.key === "Escape") {
+                  setOpen(false);
+                }
+              }}
+              onBlur={() => setTimeout(() => setOpen(false), 150)}
+              className="w-full px-3 py-2 text-sm rounded-lg
+                         border border-gray-300
+                         focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+            />
+
+            {/* 자동완성 */}
+            {open && (
+              <div
+                ref={listRef}
+                className="absolute z-50 mt-1 w-full bg-white
+                           border rounded-lg shadow-lg
+                           max-h-56 overflow-auto"
+              >
+                {options.map((p, i) => (
+                  <div
+                    key={i}
+                    data-index={i}
+                    className={`px-3 py-2 cursor-pointer ${
+                      i === activeIndex
+                        ? "bg-blue-100"
+                        : "hover:bg-blue-50"
+                    }`}
+                    onMouseEnter={() => setActiveIndex(i)}
+                    onMouseDown={() => {
+                      setQuery(p.업체명);
+                      onChange({
+                        업체명: p.업체명,
+                        주소: p.주소,
+                        담당자: p.담당자,
+                        담당자번호: p.담당자번호,
+                      });
+                      setOpen(false);
+                    }}
+                  >
+                    <div className="text-sm font-semibold">{p.업체명}</div>
+                    <div className="text-xs text-gray-500">{p.주소}</div>
+                  </div>
+                ))}
+
+                {options.length === 0 && query.trim() && (
+                  <div
+                    className="px-3 py-3 text-sm text-blue-600
+                               hover:bg-blue-50 cursor-pointer border-t"
+                    onMouseDown={() => {
+                      setNewPlace({
+                        업체명: query,
+                        주소: "",
+                        담당자: "",
+                        담당자번호: "",
+                        메모: "",
+                      });
+                      setNewOpen(true);
+                      setOpen(false);
+                    }}
+                  >
+                    “{query}” 신규 등록
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* 주소 */}
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">
+              주소
+            </label>
+            <input
+              value={value.주소 || ""}
+              onChange={(e) =>
+                onChange({ ...value, 주소: e.target.value })
+              }
+              className="w-full px-3 py-2 text-sm rounded-lg
+                         border border-gray-300 bg-gray-50"
+            />
+          </div>
+        </div>
+
+        {/* 담당자 / 연락처 */}
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">
+              담당자
+            </label>
+            <input
+              value={value.담당자 || ""}
+              onChange={(e) =>
+                onChange({ ...value, 담당자: e.target.value })
+              }
+              className="w-full px-3 py-2 text-sm rounded-lg
+                         border border-gray-200"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">
+              연락처
+            </label>
+            <input
+              value={value.담당자번호 || ""}
+              onChange={(e) =>
+                onChange({
+                  ...value,
+                  담당자번호: e.target.value.replace(/[^\d-]/g, ""),
+                })
+              }
+              className="w-full px-3 py-2 text-sm rounded-lg
+                         border border-gray-200"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* ================= 신규 등록 팝업 ================= */}
+      {newOpen && (
+        <div className="fixed inset-0 z-[100000] bg-black/40 flex items-center justify-center">
+          <div className="bg-white w-[480px] rounded-2xl shadow-xl overflow-hidden">
+            <div className="px-6 py-4 border-b">
+              <h3 className="text-lg font-bold">거래처 신규 등록</h3>
+            </div>
+
+            <div className="px-6 py-5 space-y-4">
+              <input
+                value={newPlace.업체명}
+                onChange={(e) =>
+                  setNewPlace(p => ({ ...p, 업체명: e.target.value }))
+                }
+                className="w-full px-3 py-2 border rounded-lg"
+              />
+              <input
+                placeholder="주소"
+                value={newPlace.주소}
+                onChange={(e) =>
+                  setNewPlace(p => ({ ...p, 주소: e.target.value }))
+                }
+                className="w-full px-3 py-2 border rounded-lg"
+              />
+              <input
+                placeholder="담당자"
+                value={newPlace.담당자}
+                onChange={(e) =>
+                  setNewPlace(p => ({ ...p, 담당자: e.target.value }))
+                }
+                className="w-full px-3 py-2 border rounded-lg"
+              />
+              <input
+                placeholder="연락처"
+                value={newPlace.담당자번호}
+                onChange={(e) =>
+                  setNewPlace(p => ({
+                    ...p,
+                    담당자번호: e.target.value.replace(/[^\d-]/g, ""),
+                  }))
+                }
+                className="w-full px-3 py-2 border rounded-lg"
+              />
+              <textarea
+                rows={3}
+                placeholder="메모"
+                value={newPlace.메모}
+                onChange={(e) =>
+                  setNewPlace(p => ({ ...p, 메모: e.target.value }))
+                }
+                className="w-full px-3 py-2 border rounded-lg"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 px-6 py-4 border-t">
+              <button
+                className="px-4 py-2 bg-gray-100 rounded-lg"
+                onClick={() => setNewOpen(false)}
+              >
+                취소
+              </button>
+              <button
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg"
+                onClick={() => {
+                  // ✅ Firestore에 먼저 저장
+   if (typeof upsertPlace === "function") {
+     upsertPlace({
+       업체명: newPlace.업체명,
+       주소: newPlace.주소,
+       담당자: newPlace.담당자,
+       담당자번호: newPlace.담당자번호,
+     });
+   }
+                  setQuery(newPlace.업체명);
+                  onChange(newPlace);
+                  setNewOpen(false);
+                }}
+              >
+                등록
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+
+  function DispatchManagement({
+    dispatchData, drivers, clients, timeOptions, tonOptions,
+    addDispatch, upsertDriver, upsertClient, upsertPlace,
+    patchDispatch, removeDispatch,
+    placeRows = [],
+    role = "admin",
+    isTest = false,  // ★ 추가!
+  }) {
+    const [placeRowsTrigger, setPlaceRowsTrigger] = React.useState(0);
+      const [aiRecommend, setAiRecommend] = React.useState(null);
+      const [aiPopupOpen, setAiPopupOpen] = React.useState(false);
+      const [areaFareHint, setAreaFareHint] = React.useState(null);
+      const [fareHistoryOpen, setFareHistoryOpen] = React.useState(false);
+      const [guideHistoryList, setGuideHistoryList] = React.useState([]);
+const [stopPopup, setStopPopup] = React.useState({
+  open: false,
+  type: null, // "pickup" | "drop"
+  stops: [],
+});
+      
   // ================================
 // 📍 주소 → 검색 키워드 세트 생성 (곤지암 / 강서구 대응)
 // ================================
@@ -1308,11 +1656,13 @@ const [filterValue, setFilterValue] = React.useState("");
 
 // ⭐ 신규 기사등록 모달 상태
 const [driverModal, setDriverModal] = React.useState({
+  
   open: false,
   carNo: "",
   name: "",
   phone: "",
 });
+
  // ⭐ 등록 확인 팝업 상태
 const [confirmOpen, setConfirmOpen] = React.useState(false);
 // ⭐ 실시간배차현황(하단 테이블) 상태 변경 확인 팝업
@@ -1814,6 +2164,8 @@ const filterVehicles = (q) => {
       하차지명: "",
       하차지주소: "",
       하차지담당자: "",
+      경유지_상차: [], // [{ 업체명, 주소, 담당자, 담당자번호 }]
+경유지_하차: [],
       하차지담당자번호: "",
       화물내용: "",
       운행유형: "편도",   // ⭐ 추가 (기본값)
@@ -3770,8 +4122,43 @@ const similar = placeList.filter(p => {
   </div>
 
   {/* 상차지명 + 자동완성 */}
-  <div className="relative">
-    <label className={labelCls}>상차지명 {reqStar}</label>
+<div className="relative">
+  <div className="flex items-center justify-between">
+    <label className={labelCls}>
+      상차지명 {reqStar}
+    </label>
+
+    <button
+  type="button"
+  className={`
+    text-xs
+    px-2 py-1
+    rounded
+    border
+    whitespace-nowrap
+    transition
+    ${
+      form.경유지_상차?.length > 0
+        ? "bg-indigo-100 text-indigo-700 border-indigo-300"
+        : "bg-indigo-50 text-indigo-700 border-indigo-200"
+    }
+  `}
+  onClick={() =>
+    setStopPopup({
+      open: true,
+      type: "pickup",
+      stops: [...(form.경유지_상차 || [])],
+    })
+  }
+>
+  {form.경유지_상차?.length > 0
+    ? `경유 ${form.경유지_상차.length}`
+    : "+ 경유"}
+</button>
+
+  {/* 🔽 여기 아래에 상차지 자동완성 input이 이어짐 */}
+</div>
+
 
     <input
       className={inputCls}
@@ -3875,9 +4262,40 @@ const similar = placeList.filter(p => {
 
 
   {/* 하차지명 + 자동완성 */}
-  <div className="relative">
-    <label className={labelCls}>하차지명 {reqStar}</label>
+<div className="relative">
+  <div className="flex items-center justify-between">
+    <label className={labelCls}>
+      하차지명 {reqStar}
+    </label>
 
+    <button
+      type="button"
+      className={`
+        text-xs
+        px-2 py-1
+        rounded
+        border
+        whitespace-nowrap
+        transition
+        ${
+          form.경유지_하차?.length > 0
+            ? "bg-emerald-100 text-emerald-700 border-emerald-300"
+            : "bg-emerald-50 text-emerald-700 border-emerald-200"
+        }
+      `}
+      onClick={() =>
+        setStopPopup({
+          open: true,
+          type: "drop",
+          stops: [...(form.경유지_하차 || [])],
+        })
+      }
+    >
+      {form.경유지_하차?.length > 0
+        ? `경유 ${form.경유지_하차.length}`
+        : "+ 경유"}
+    </button>
+  </div>
     <input
       className={inputCls}
       placeholder="하차지 검색"
@@ -4183,8 +4601,6 @@ const similar = placeList.filter(p => {
   </div>
 )}
 
-
-
   {/* 차량정보 */}
   <div>
     <label className={labelCls}>차량번호</label>
@@ -4379,9 +4795,7 @@ if (res?.success) {
       📡 24시전송
     </button>
   </div>
-
 </form>
-
 
         {/* ------------------------------  
       🔵 오더복사 팝업 (완성본)
@@ -4894,6 +5308,7 @@ setIsCopyMode(true);
     </div>
   </div>
 )}
+
 {/* ================= 실시간배차 상태 변경 확인 팝업 ================= */}
 {confirmChange && (
   <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
@@ -5161,6 +5576,104 @@ setIsCopyMode(true);
     </div>
   </div>
 )}
+{/* ================= 경유지 입력 팝업 ================= */}
+{stopPopup.open && (
+  <div className="fixed inset-0 z-[99999] bg-black/40 flex items-center justify-center">
+    <div className="bg-white w-[680px] rounded-2xl shadow-2xl overflow-hidden">
+
+      {/* ===== Header ===== */}
+      <div className="flex items-center justify-between px-6 py-4 border-b">
+        <h3 className="text-lg font-bold text-gray-900">
+          {stopPopup.type === "pickup" ? "상차 경유지" : "하차 경유지"}
+        </h3>
+        <button
+          onClick={() => setStopPopup({ open: false, type: null, stops: [] })}
+          className="w-8 h-8 flex items-center justify-center rounded-full
+                     hover:bg-gray-100 text-gray-500"
+        >
+          ✕
+        </button>
+      </div>
+
+      {/* ===== Body ===== */}
+      <div className="px-6 py-5 bg-gray-50 max-h-[60vh] overflow-y-auto space-y-4">
+        {Array.isArray(stopPopup.stops) &&
+          stopPopup.stops.map((s, i) => (
+            <StopRow
+              key={i}
+              value={s}
+              placeList={placeList}
+              upsertPlace={upsertPlace}
+              onChange={(v) => {
+                const next = [...stopPopup.stops];
+                next[i] = v;
+                setStopPopup(p => ({ ...p, stops: next }));
+              }}
+              onRemove={() => {
+                const next = stopPopup.stops.filter((_, idx) => idx !== i);
+                setStopPopup(p => ({ ...p, stops: next }));
+              }}
+            />
+          ))}
+
+        {/* 경유 추가 */}
+        <button
+          type="button"
+          onClick={() =>
+            setStopPopup(p => ({
+              ...p,
+              stops: [
+                ...p.stops,
+                { 업체명: "", 주소: "", 담당자: "", 담당자번호: "" },
+              ],
+            }))
+          }
+          className="w-full py-2 rounded-lg border border-dashed
+                     text-sm text-gray-500 hover:bg-white"
+        >
+          + 경유지 추가
+        </button>
+      </div>
+
+      {/* ===== Footer ===== */}
+      <div className="flex justify-end gap-2 px-6 py-4 border-t bg-white">
+        <button
+          className="px-5 py-2 rounded-lg bg-gray-100 text-gray-700
+                     hover:bg-gray-200"
+          onClick={() =>
+            setStopPopup({ open: false, type: null, stops: [] })
+          }
+        >
+          취소
+        </button>
+
+        <button
+          className="px-5 py-2 rounded-lg bg-blue-600 text-white
+                     hover:bg-blue-700"
+          onClick={() => {
+            if (stopPopup.type === "pickup") {
+              setForm(p => ({
+                ...p,
+                경유지_상차: stopPopup.stops,
+              }));
+            } else {
+              setForm(p => ({
+                ...p,
+                경유지_하차: stopPopup.stops,
+              }));
+            }
+            setStopPopup({ open: false, type: null, stops: [] });
+          }}
+        >
+          적용
+        </button>
+      </div>
+
+    </div>
+  </div>
+)}
+
+
 {/* ================= 📜 과거 운송 이력 (운임 가이드 클릭) ================= */}
 {fareHistoryOpen && (
   <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40">
@@ -5542,6 +6055,52 @@ const RoundTripBadge = () => (
     왕복
   </span>
 );
+function StopBadge({ label = "경유", count = 0, list = [] }) {
+  const [open, setOpen] = React.useState(false);
+
+  return (
+    <div className="relative">
+      <span
+        onMouseEnter={() => setOpen(true)}
+        onMouseLeave={() => setOpen(false)}
+        className="
+          px-1.5 py-0.5
+          text-[10px] font-bold
+          rounded-full
+          bg-emerald-100 text-emerald-700
+          border border-emerald-300
+          cursor-default
+          whitespace-nowrap
+        "
+      >
+        {label} {count}
+      </span>
+
+      {open && (
+        <div
+          className="
+            absolute z-50 top-full left-0 mt-1
+            bg-white border rounded shadow-lg
+            text-xs min-w-[180px]
+          "
+        >
+          <div className="px-2 py-1 font-semibold bg-gray-50 border-b">
+            🚏 경유지 목록
+          </div>
+
+          {list.map((s, i) => (
+            <div
+              key={i}
+              className="px-2 py-1 border-b last:border-b-0"
+            >
+              {i + 1}. {s.지명 || s.업체명 || "-"}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 function DeliveryStatusBadge({ row, onConfirm }) {
   const status = row.업체전달상태 || "미전달";
 
@@ -5564,6 +6123,25 @@ function DeliveryStatusBadge({ row, onConfirm }) {
     >
       {status}
     </button>
+  );
+}
+function StopCountBadge({ count }) {
+  if (!count || count <= 0) return null;
+
+  return (
+    <span
+      className="
+        ml-1
+        px-1.5 py-0.5
+        text-[10px] font-bold
+        rounded-full
+        bg-indigo-100 text-indigo-700
+        border border-indigo-300
+        whitespace-nowrap
+      "
+    >
+      경유 {count}
+    </span>
   );
 }
 
@@ -6171,8 +6749,10 @@ const [fareModalOpen, setFareModalOpen] = React.useState(false);
     거래처명: "",
     상차지명: "",
     상차지주소: "",
+    경유지_상차: [],
     하차지명: "",
     하차지주소: "",
+    경유지_하차: [],
     화물내용: "",
     차량종류: "",
     차량톤수: "",
@@ -7537,19 +8117,39 @@ XLSX.writeFile(wb, "실시간배차현황.xlsx");
 
                   <td className={cell}>{editableInput("거래처명", r.거래처명, r._id)}</td>
                   <td className={cell}>
-  <div className="inline-flex items-center">
+  <div className="inline-flex items-center gap-1">
     {editableInput("상차지명", r.상차지명, r._id)}
 
     {r.운행유형 === "왕복" && <RoundTripBadge />}
+
+    {Array.isArray(r.경유지_상차) && r.경유지_상차.length > 0 && (
+      <StopBadge
+        label="경유"
+        count={r.경유지_상차.length}
+        list={r.경유지_상차}
+      />
+    )}
   </div>
 </td>
-
-
                   <td className={addrCell}>
                     {renderAddrCell("상차지주소", r.상차지주소, r._id)}
                   </td>
 
-                  <td className={cell}>{editableInput("하차지명", r.하차지명, r._id)}</td>
+                  <td className={cell}>
+  <div className="inline-flex items-center gap-1">
+    {editableInput("하차지명", r.하차지명, r._id)}
+
+    {/* 🚏 하차 경유 */}
+    {Array.isArray(r.경유지_하차) && r.경유지_하차.length > 0 && (
+      <StopBadge
+        label="경유"
+        count={r.경유지_하차.length}
+        list={r.경유지_하차}
+      />
+    )}
+  </div>
+</td>
+
                   <td className={addrCell}>
                     {renderAddrCell("하차지주소", r.하차지주소, r._id)}
                   </td>
@@ -8538,6 +9138,12 @@ XLSX.writeFile(wb, "실시간배차현황.xlsx");
                   try {
                     const payload = stripUndefined({
   ...newOrder,
+    경유지_상차: Array.isArray(newOrder.경유지_상차)
+    ? newOrder.경유지_상차
+    : [],
+  경유지_하차: Array.isArray(newOrder.경유지_하차)
+    ? newOrder.경유지_하차
+    : [],
   메모중요도: memoPriority,
 운행유형: newOrder.운행유형 || "편도",
   긴급: newOrder.긴급 === true,
@@ -9597,6 +10203,8 @@ setShowEditClientDropdown(false);
   "거래처명",
   "상차지명","상차지주소",
   "하차지명","하차지주소",
+  "경유지_상차",
+ "경유지_하차",
   "화물내용",
   "차량종류","차량톤수",
   "차량번호","이름","전화번호",
@@ -10705,7 +11313,6 @@ const buildContactLine = (name, phone) => {
 
   return `담당자 : ${cleanName}`;
 };
-
 // ===============================
 // 📋 기사복사 (PART 5 최종)
 // ===============================
