@@ -2963,6 +2963,8 @@ const autoPriority =
  
 const rec = {
   ...form,
+    경유지_상차: Array.isArray(form.경유지_상차) ? form.경유지_상차 : [],
+  경유지_하차: Array.isArray(form.경유지_하차) ? form.경유지_하차 : [],
   메모중요도: autoPriority,
   운임보정: fareAdjustment,
   
@@ -6055,52 +6057,58 @@ const RoundTripBadge = () => (
     왕복
   </span>
 );
-function StopBadge({ label = "경유", count = 0, list = [] }) {
+
+function StopBadge({ count = 0, list = [] }) {
   const [open, setOpen] = React.useState(false);
+  if (!count) return null;
 
   return (
-    <div className="relative">
-      <span
-        onMouseEnter={() => setOpen(true)}
-        onMouseLeave={() => setOpen(false)}
-        className="
-          px-1.5 py-0.5
-          text-[10px] font-bold
-          rounded-full
-          bg-emerald-100 text-emerald-700
-          border border-emerald-300
-          cursor-default
-          whitespace-nowrap
-        "
-      >
-        {label} {count}
+    <span
+      className="relative ml-1 inline-flex"
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+    >
+      {/* 뱃지 */}
+      <span className="
+        px-1.5 py-0.5
+        text-[10px] font-semibold
+        rounded-full
+        bg-indigo-100 text-indigo-700
+        border border-indigo-300
+        whitespace-nowrap
+      ">
+        경유 {count}
       </span>
 
+      {/* hover 팝업 */}
       {open && (
-        <div
-          className="
-            absolute z-50 top-full left-0 mt-1
-            bg-white border rounded shadow-lg
-            text-xs min-w-[180px]
-          "
-        >
-          <div className="px-2 py-1 font-semibold bg-gray-50 border-b">
-            🚏 경유지 목록
-          </div>
-
+        <div className="
+          absolute top-full left-0 mt-1
+          z-50
+          bg-white border rounded-md shadow-lg
+          text-xs text-gray-700
+          p-2
+          min-w-[220px]
+        ">
           {list.map((s, i) => (
-            <div
-              key={i}
-              className="px-2 py-1 border-b last:border-b-0"
-            >
-              {i + 1}. {s.지명 || s.업체명 || "-"}
+            <div key={i} className="mb-1 last:mb-0">
+              <div className="font-semibold">
+                {i + 1}. {s.업체명 || "-"}
+              </div>
+              {s.주소 && (
+                <div className="text-gray-500">
+                  {s.주소}
+                </div>
+              )}
             </div>
           ))}
         </div>
       )}
-    </div>
+    </span>
   );
 }
+
+
 function DeliveryStatusBadge({ row, onConfirm }) {
   const status = row.업체전달상태 || "미전달";
 
@@ -6442,13 +6450,40 @@ ${fare.toLocaleString()}원 ${payLabel} 배차되었습니다.`;
 if (mode === "driver") {
   const yoil = getYoil(r.상차일);
   const dateText = `${r.상차일 || ""} ${yoil}`;
+  let dateNotice = "";
+  let dropTimeText = r.하차시간 || "즉시";
+
+  if (r.상차일 && r.하차일) {
+    const s = new Date(r.상차일);
+    const e = new Date(r.하차일);
+
+    const s0 = new Date(s.getFullYear(), s.getMonth(), s.getDate());
+    const e0 = new Date(e.getFullYear(), e.getMonth(), e.getDate());
+
+    const diffDays = Math.round(
+      (e0 - s0) / (1000 * 60 * 60 * 24)
+    );
+
+    const sm = s.getMonth() + 1;
+    const sd = s.getDate();
+    const em = e.getMonth() + 1;
+    const ed = e.getDate();
+
+    if (diffDays === 1) {
+      dateNotice = `익일 하차 건 (상차: ${sm}/${sd} → 하차: ${em}/${ed})\n\n`;
+      dropTimeText = `${em}/${ed} ${dropTimeText}`;
+    } else if (diffDays >= 2) {
+      dateNotice = `지정일 하차 건 (상차: ${sm}/${sd} → 하차: ${em}/${ed})\n\n`;
+      dropTimeText = `${em}/${ed} ${dropTimeText}`;
+    }
+  }
 
   // ❄️ 차량종류 기준 필독 문구 선택
   const DRIVER_NOTICE = isColdVehicle(r.차량종류)
     ? COLD_NOTICE
     : NORMAL_NOTICE;
 
-  // ✅ 전달사항만 사용 (메모 ❌)
+  // 전달사항
   const driverNote =
     edited[r._id]?.전달사항 ??
     r.전달사항 ??
@@ -6458,7 +6493,9 @@ if (mode === "driver") {
     ? `\n\n📢 전달사항\n${driverNote.trim()}`
     : "";
 
-  return `${DRIVER_NOTICE}\n\n${dateText}
+  return `${DRIVER_NOTICE}
+
+${dateNotice}${dateText}
 
 상차지 : ${r.상차지명 || "-"}
 ${r.상차지주소 || "-"}
@@ -6472,12 +6509,11 @@ ${r.하차지주소 || "-"}
 ${(() => {
   const line = buildContactLine(r.하차지담당자, r.하차지담당자번호);
   return line ? `${line}\n` : "";
-})()}하차시간 : ${r.하차시간 || "즉시"}
+})()}하차시간 : ${dropTimeText}
 
 중량 : ${r.차량톤수 || "-"}${
-  r.화물내용 ? ` / ${r.화물내용}` : ""
-} ${r.차량종류 || ""}${driverNoteText}`;
-
+    r.화물내용 ? ` / ${r.화물내용}` : ""
+  } ${r.차량종류 || ""}${driverNoteText}`;
 }
       /* =======================
          FULL MODE (기사복사)
@@ -6877,7 +6913,17 @@ React.useEffect(() => {
   setRows((prev) =>
     prev.map((r) =>
       edited[r._id]
-        ? { ...r, ...edited[r._id] } // 수정값 덮어쓰기
+        ? {
+    ...r,
+    ...edited[r._id],
+
+    // 🔥 경유지는 기존 값 유지
+    경유지_상차:
+      edited[r._id].경유지_상차 ?? r.경유지_상차,
+
+    경유지_하차:
+      edited[r._id].경유지_하차 ?? r.경유지_하차,
+  }
         : r
     )
   );
@@ -8071,6 +8117,7 @@ XLSX.writeFile(wb, "실시간배차현황.xlsx");
 
           <tbody>
             {filtered.map((r, idx) => {
+              
               const sale = toInt(edited[r._id]?.청구운임 ?? r.청구운임);
               const drv = toInt(edited[r._id]?.기사운임 ?? r.기사운임);
               const fee = sale - drv;
@@ -8116,40 +8163,36 @@ XLSX.writeFile(wb, "실시간배차현황.xlsx");
                   <td className={cell}>{editableInput("하차시간", r.하차시간, r._id)}</td>
 
                   <td className={cell}>{editableInput("거래처명", r.거래처명, r._id)}</td>
-                  <td className={cell}>
+<td className={cell}>
   <div className="inline-flex items-center gap-1">
-    {editableInput("상차지명", r.상차지명, r._id)}
-
-    {r.운행유형 === "왕복" && <RoundTripBadge />}
+    <span>{r.상차지명}</span>
 
     {Array.isArray(r.경유지_상차) && r.경유지_상차.length > 0 && (
       <StopBadge
-        label="경유"
         count={r.경유지_상차.length}
         list={r.경유지_상차}
       />
     )}
+
+    {r.운행유형 === "왕복" && <RoundTripBadge />}
   </div>
 </td>
                   <td className={addrCell}>
                     {renderAddrCell("상차지주소", r.상차지주소, r._id)}
                   </td>
 
-                  <td className={cell}>
+<td className={cell}>
   <div className="inline-flex items-center gap-1">
-    {editableInput("하차지명", r.하차지명, r._id)}
+    <span>{r.하차지명}</span>
 
-    {/* 🚏 하차 경유 */}
     {Array.isArray(r.경유지_하차) && r.경유지_하차.length > 0 && (
       <StopBadge
-        label="경유"
         count={r.경유지_하차.length}
         list={r.경유지_하차}
       />
     )}
   </div>
 </td>
-
                   <td className={addrCell}>
                     {renderAddrCell("하차지주소", r.하차지주소, r._id)}
                   </td>
@@ -9138,12 +9181,13 @@ XLSX.writeFile(wb, "실시간배차현황.xlsx");
                   try {
                     const payload = stripUndefined({
   ...newOrder,
-    경유지_상차: Array.isArray(newOrder.경유지_상차)
-    ? newOrder.경유지_상차
-    : [],
-  경유지_하차: Array.isArray(newOrder.경유지_하차)
-    ? newOrder.경유지_하차
-    : [],
+  경유지_상차: Array.isArray(newOrder.경유지_상차)
+   ? newOrder.경유지_상차
+   : [],
+
+ 경유지_하차: Array.isArray(newOrder.경유지_하차)
+   ? newOrder.경유지_하차
+   : [],
   메모중요도: memoPriority,
 운행유형: newOrder.운행유형 || "편도",
   긴급: newOrder.긴급 === true,
@@ -11390,7 +11434,36 @@ const NORMAL_NOTICE = `★★★필독★★★ 미공유 시 운임 지급이 �
 
   const yoil = getYoil(r.상차일 || "");
   const dateText = `${r.상차일 || ""} ${yoil}`;
+// ==========================
+// 🔥 익일 / 지정 하차 판별 (FULL MODE와 동일)
+// ==========================
+let dateNotice = "";
+let dropTimeText = r.하차시간 || "즉시";
 
+if (r.상차일 && r.하차일) {
+  const s = new Date(r.상차일);
+  const e = new Date(r.하차일);
+
+  const s0 = new Date(s.getFullYear(), s.getMonth(), s.getDate());
+  const e0 = new Date(e.getFullYear(), e.getMonth(), e.getDate());
+
+  const diffDays = Math.round(
+    (e0 - s0) / (1000 * 60 * 60 * 24)
+  );
+
+  const sm = s.getMonth() + 1;
+  const sd = s.getDate();
+  const em = e.getMonth() + 1;
+  const ed = e.getDate();
+
+  if (diffDays === 1) {
+    dateNotice = `익일 하차 건 (상차: ${sm}/${sd} → 하차: ${em}/${ed})\n\n`;
+    dropTimeText = `${em}/${ed} ${dropTimeText}`;
+  } else if (diffDays >= 2) {
+    dateNotice = `지정일 하차 건 (상차: ${sm}/${sd} → 하차: ${em}/${ed})\n\n`;
+    dropTimeText = `${em}/${ed} ${dropTimeText}`;
+  }
+}
   const driverNote =
     edited[id]?.전달사항 ??
     r.전달사항 ??
@@ -11400,7 +11473,9 @@ const NORMAL_NOTICE = `★★★필독★★★ 미공유 시 운임 지급이 �
     ? `\n\n📢 전달사항\n${driverNote.trim()}`
     : "";
 
-  return `${DRIVER_NOTICE}\n\n${dateText}
+  return `${DRIVER_NOTICE}
+
+${dateNotice}${dateText}
 
 상차지 : ${r.상차지명 || "-"}
 ${r.상차지주소 || "-"}${
@@ -11424,7 +11499,7 @@ ${r.하차지주소 || "-"}${
     return line ? `\n${line}` : "";
   })()
 }
-하차시간 : ${r.하차시간 || "즉시"}
+하차시간 : ${dropTimeText}
 
 중량 : ${r.차량톤수 || "-"}${r.화물내용 ? ` / ${r.화물내용}` : ""}
 차량 : ${r.차량종류 || "-"}
@@ -11817,6 +11892,7 @@ const handleCarInput = async (id, rawVal) => {
       배차상태: "배차중",
       긴급: row.긴급 === true, // 긴급 플래그 유지
       lastUpdated: new Date().toISOString(),
+      
     });
 
     return;
@@ -16843,7 +16919,7 @@ const total = months.reduce(
 // ===================== DispatchApp.jsx (PART 6/8 — END) =====================
 
 // ===================== DispatchApp.jsx (PART 7/8 — 거래처명/차량종류 필터 추가 완성) =====================
-function UnassignedStatus({ dispatchData }) {
+function UnassignedStatus({ dispatchData, drivers = [] }) {
   const [q, setQ] = React.useState("");
   const [startDate, setStartDate] = React.useState("");
   const [endDate, setEndDate] = React.useState("");
@@ -16857,7 +16933,16 @@ function UnassignedStatus({ dispatchData }) {
   // ✅ 주소 더보기 상태관리
   const [openLoadAddrs, setOpenLoadAddrs] = React.useState(new Set());
   const [openUnloadAddrs, setOpenUnloadAddrs] = React.useState(new Set());
+const [openMemos, setOpenMemos] = React.useState(new Set());
+  const [quickAssignOpen, setQuickAssignOpen] = React.useState(false);
+  // 🚚 차량 / 기사 자동매칭
+const [vehicleNo, setVehicleNo] = React.useState("");
+const [driverName, setDriverName] = React.useState("");
+const [driverPhone, setDriverPhone] = React.useState("");
 
+const [matchedDriver, setMatchedDriver] = React.useState(null);
+const [newDriverPopup, setNewDriverPopup] = React.useState(false);
+  const [selectedOrder, setSelectedOrder] = React.useState(null);
   // 🔔 토스트 알림
   const [toast, setToast] = React.useState(null);
   const showToast = (msg, type = "ok") => {
@@ -16952,6 +17037,39 @@ function UnassignedStatus({ dispatchData }) {
       showToast("삭제 중 오류 발생", "err");
     }
   };
+// 🚚 차량번호 정규화
+function normalizeVehicleNo(v = "") {
+  return String(v)
+    .toUpperCase()
+    .replace(/[\s\-]/g, "")   // 공백 + 하이픈 제거
+    .replace(/[^0-9A-Z가-힣]/g, ""); // 기타 문자 제거
+}
+
+// 🚚 차량번호로 기사 찾기
+function findDriverByVehicleNo(vehicleNo) {
+  const key = normalizeVehicleNo(vehicleNo);
+  if (!key) return null;
+
+  return drivers.find(d => {
+    const candidates = [
+      d.차량번호,
+      d.carNo,
+      d.vehicle,
+      d.차량,
+
+      // 🔥 중첩 구조 대응
+      d.car?.number,
+      d.car?.차량번호,
+      d.차량정보?.차량번호,
+      d.vehicleInfo?.number,
+    ];
+
+    return candidates.some(v =>
+      normalizeVehicleNo(v) === key
+    );
+  }) || null;
+}
+
 
   const headBase =
     "border bg-gray-100 text-center text-sm font-semibold px-2 py-2 whitespace-nowrap";
@@ -17117,9 +17235,24 @@ function UnassignedStatus({ dispatchData }) {
 
                 return (
                   <tr
-                    key={r._id || i}
-                    className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}
-                  >
+  key={r._id || i}
+  onClick={() => {
+  if (deleteMode) return;
+
+  setSelectedOrder(r);
+
+  // 🔥 이전 상태 완전 초기화
+  setVehicleNo("");
+  setDriverName("");
+  setDriverPhone("");
+  setMatchedDriver(null);
+  setNewDriverPopup(false);
+
+  setQuickAssignOpen(true);
+}}
+
+  className={`${i % 2 === 0 ? "bg-white" : "bg-gray-50"} cursor-pointer hover:bg-indigo-50`}
+>
                     {deleteMode && (
                       <td className={cellBase}>
                         <input
@@ -17235,7 +17368,42 @@ function UnassignedStatus({ dispatchData }) {
                     <td className={cellBase}>
                       <StatusBadge s={r.배차상태} />
                     </td>
-                    <td className={cellBase}>{r.메모 || ""}</td>
+                    <td className={`${cellBase} max-w-[260px]`}>
+  {r.메모 && r.메모.length > 40 ? (
+    openMemos.has(r._id) ? (
+      <span className="whitespace-pre-wrap">
+        {r.메모}{" "}
+        <button
+          onClick={() =>
+            setOpenMemos(prev => {
+              const next = new Set(prev);
+              next.delete(r._id);
+              return next;
+            })
+          }
+          className="text-blue-600 underline text-xs ml-1"
+        >
+          접기
+        </button>
+      </span>
+    ) : (
+      <span>
+        {r.메모.slice(0, 40)}...
+        <button
+          onClick={() =>
+            setOpenMemos(prev => new Set(prev).add(r._id))
+          }
+          className="text-blue-600 underline text-xs ml-1"
+        >
+          더보기
+        </button>
+      </span>
+    )
+  ) : (
+    r.메모 || ""
+  )}
+</td>
+
                   </tr>
                 );
               })
@@ -17243,9 +17411,99 @@ function UnassignedStatus({ dispatchData }) {
           </tbody>
         </table>
       </div>
+ {/* ✅ 여기부터 빠른 배차 팝업 */}
+      {quickAssignOpen && selectedOrder && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+    <div className="bg-white rounded-xl shadow-xl w-[520px] p-6">
+      <h3 className="text-lg font-bold mb-4">
+        🚚 빠른 배차 등록
+      </h3>
+
+      <div className="text-sm mb-3 text-gray-600">
+        <b>{selectedOrder.거래처명}</b> /
+        {selectedOrder.상차지명} → {selectedOrder.하차지명}
+      </div>
+
+<input
+  placeholder="차량번호"
+  value={vehicleNo}
+  onChange={(e) => {
+    const v = e.target.value;
+    setVehicleNo(v);
+
+    const found = findDriverByVehicleNo(v);
+
+if (found) {
+  setMatchedDriver(found);
+  setDriverName(found.name || found.기사명 || "");
+  setDriverPhone(found.phone || found.전화번호 || "");
+  setNewDriverPopup(false);
+} else {
+  setMatchedDriver(null);
+  setDriverName("");
+  setDriverPhone("");
+  setNewDriverPopup(normalizeVehicleNo(v).length >= 6);
+}
+
+  }}
+  className="border p-2 rounded w-full mb-2"
+/>
+
+      
+      <input
+  placeholder="기사명"
+  value={driverName}
+  onChange={(e) => setDriverName(e.target.value)}
+  className="border p-2 rounded w-full mb-2"
+/>
+
+<input
+  placeholder="기사 연락처"
+  value={driverPhone}
+  onChange={(e) => setDriverPhone(e.target.value)}
+  className="border p-2 rounded w-full mb-2"
+/>
+{matchedDriver && (
+  <div className="text-xs text-emerald-600 mb-2">
+    ✔ 기존 등록 차량 / 기사 자동 매칭됨
+  </div>
+)}
+
+{!matchedDriver && newDriverPopup && (
+  <div className="text-xs text-amber-600 mb-2">
+    ➕ 등록되지 않은 차량입니다. 신규 기사로 등록됩니다.
+  </div>
+)}
+      <input
+        placeholder="지불운임"
+        className="border p-2 rounded w-full mb-4"
+      />
+
+      <div className="flex justify-end gap-2">
+        <button
+          onClick={() => setQuickAssignOpen(false)}
+          className="px-4 py-2 border rounded"
+        >
+          취소
+        </button>
+        <button
+          onClick={() => {
+            // 👉 patchDispatch 여기서 호출
+            setQuickAssignOpen(false);
+          }}
+          className="px-4 py-2 bg-indigo-600 text-white rounded"
+        >
+          배차완료
+        </button>
+      </div>
     </div>
+  </div>
+)}
+    </div>
+    
   );
 }
+
 // ===================== DispatchApp.jsx (PART 7/8) — END =====================
 
 // ===================== DispatchApp.jsx (PART 8/8) — 거래명세서 + 미수금관리(월집계/토글/선택/전체정산) — START =====================

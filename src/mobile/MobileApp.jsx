@@ -2387,7 +2387,9 @@ function MobileOrderDetail({
   showToast,
   upsertDriver,
 }) {
+  const [confirmDeliver, setConfirmDeliver] = useState(false);
   const [showCopyModal, setShowCopyModal] = useState(false);
+    const [confirmUndoDeliver, setConfirmUndoDeliver] = useState(false);
 const [expandMemo, setExpandMemo] = useState(false);
   const [carNo, setCarNo] = useState(order.차량번호 || "");
   const [name, setName] = useState(order.기사명 || "");
@@ -2451,6 +2453,9 @@ const [expandMemo, setExpandMemo] = useState(false);
   const claim = getClaim(order);
   const sanjae = getSanjae(order);
   const state = getStatus(order); // 🔥 상태 계산 일원화
+    const isDelivered =
+    order?.업체전달상태 === "전달완료" ||
+    order?.정보전달완료 === true;
 
   const 상차일시 =
     order.상차일시 ||
@@ -2643,6 +2648,31 @@ const [expandMemo, setExpandMemo] = useState(false);
 
   </div>
 </div>
+{/* 🚚 업체 전달 상태 변경 */}
+<div className="bg-white border rounded-xl px-4 py-3 shadow-sm">
+  <div className="text-sm font-semibold mb-2">업체 전달 상태</div>
+
+  {!isDelivered ? (
+    <button
+      onClick={() => setConfirmDeliver(true)}
+      className="w-full py-3 rounded-lg
+                 bg-emerald-500 text-white
+                 text-sm font-semibold"
+    >
+      전달완료로 변경
+    </button>
+  ) : (
+    <button
+      onClick={() => setConfirmUndoDeliver(true)}
+      className="w-full py-3 rounded-lg
+                 bg-red-500 text-white
+                 text-sm font-semibold"
+    >
+      전달완료 취소 (미전달)
+    </button>
+  )}
+</div>
+
 {/* 📞 전화 / 💬 문자 */}
 {order.전화번호 && (
   <div className="bg-white border rounded-xl px-4 py-3 shadow-sm">
@@ -2832,15 +2862,123 @@ const [expandMemo, setExpandMemo] = useState(false);
           
         </button>
           {showCopyModal && (
-        <CopySelectModal
-          order={order}
-          onClose={() => setShowCopyModal(false)}
-        />
-      )}
+  <CopySelectModal
+    order={order}
+    onClose={() => setShowCopyModal(false)}
+    onAfterFullCopy={() => {
+      setShowCopyModal(false);
+      setConfirmDeliver(true); // 🔥 여기서 팝업 띄움
+    }}
+  />
+)}
+{confirmDeliver && (
+  <div
+    className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center"
+    onClick={() => setConfirmDeliver(false)}
+  >
+    <div
+      className="bg-white rounded-xl p-5 w-[80%] max-w-xs"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="text-sm font-semibold mb-2">
+        복사되었습니다
+      </div>
+
+      <div className="text-sm text-gray-600 mb-4">
+        전달상태를<br />
+        <b className="text-gray-900">전달완료</b>로 변경할까요?
+      </div>
+
+      <div className="flex gap-2">
+        <button
+          onClick={() => setConfirmDeliver(false)}
+          className="flex-1 py-2 rounded-lg bg-gray-200 text-gray-700 text-sm font-semibold"
+        >
+          아니오 (ESC)
+        </button>
+
+        <button
+          onClick={async () => {
+            await updateDoc(
+              doc(db, collName, order.id),
+              {
+                업체전달상태: "전달완료",
+                전달완료일시: serverTimestamp(),
+                정보전달완료: true,
+                정보전달상태: "전달완료",
+              }
+            );
+
+            setConfirmDeliver(false);
+            showToast("전달완료 처리되었습니다");
+          }}
+          className="flex-1 py-2 rounded-lg bg-emerald-500 text-white text-sm font-semibold"
+        >
+          확인 (Enter)
+        </button>
       </div>
     </div>
+  </div>
+)}
+{confirmUndoDeliver && (
+  <div
+    className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center"
+    onClick={() => setConfirmUndoDeliver(false)}
+  >
+    <div
+      className="bg-white rounded-xl p-5 w-[80%] max-w-xs"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="text-sm font-semibold mb-2 text-red-600">
+        전달완료 취소
+      </div>
+
+      <div className="text-sm text-gray-600 mb-4">
+        전달상태를<br />
+        <b className="text-gray-900">미전달</b>로 되돌릴까요?
+      </div>
+
+      <div className="flex gap-2">
+        <button
+          onClick={() => setConfirmUndoDeliver(false)}
+          className="flex-1 py-2 rounded-lg
+                     bg-gray-200 text-gray-700
+                     text-sm font-semibold"
+        >
+          아니오
+        </button>
+
+        <button
+          onClick={async () => {
+            await updateDoc(
+              doc(db, collName, order.id),
+              {
+                업체전달상태: "미전달",
+                정보전달완료: false,
+                정보전달상태: "미전달",
+                전달완료일시: null, // ⭐ 핵심
+              }
+            );
+
+            setConfirmUndoDeliver(false);
+            showToast("미전달로 되돌렸습니다");
+          }}
+          className="flex-1 py-2 rounded-lg
+                     bg-red-500 text-white
+                     text-sm font-semibold"
+        >
+          확인
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+      </div>
+    </div>
+    
   );
 }
+
 // ======================= src/mobile/MobileApp.jsx (PART 3/3) =======================
 
 // ======================================================================
@@ -3633,59 +3771,297 @@ const chooseClient = (c) => {
     </div>
   );
 }
-function CopySelectModal({ order, onClose }) {
-const copy = async (type) => {
-  let text = "";
 
-  if (type === "driver") {
-    text = `${order.차량번호} ${order.기사명} ${order.전화번호}`;
-  } else if (type === "fare") {
-    text = buildOrderCopyText(order);
-  } else {
-    text = buildOrderTemplateCopyText(order);
+function CopySelectModal({ order, onClose, onAfterFullCopy }) {
+  /* ===============================
+     공통 유틸
+  =============================== */
+
+  const getYoil = (dateStr) => {
+    if (!dateStr) return "";
+    const d = new Date(dateStr);
+    return [
+      "일요일",
+      "월요일",
+      "화요일",
+      "수요일",
+      "목요일",
+      "금요일",
+      "토요일",
+    ][d.getDay()];
+  };
+  
+
+  const md = (dateStr) => {
+    if (!dateStr) return "";
+    const m = Number(dateStr.slice(5, 7));
+    const d = Number(dateStr.slice(8, 10));
+    return `${m}/${d}`;
+  };
+// 🔧 톤수 보정 (3 / 3톤 / 0.8톤 모두 대응)
+// 🔧 중량 보정 (kg / g / 톤 혼용 대응)
+const normalizeTon = (v = "") => {
+  if (!v) return "";
+
+  const s = String(v).trim();
+
+  // 이미 단위가 들어간 경우 → 그대로 사용
+  if (/(kg|g|톤|t|ton)/i.test(s)) {
+    return s;
   }
 
-  await navigator.clipboard.writeText(text);
-  alert("복사되었습니다.");
-  onClose();
+  // 숫자만 있으면 → 톤으로 간주
+  if (/^\d+(\.\d+)?$/.test(s)) {
+    return `${s}톤`;
+  }
+
+  // 그 외는 그대로
+  return s;
 };
+
+// 🔧 담당자 출력 포맷 (이름/번호 조건부)
+const buildManagerLine = (name, phone) => {
+  if (!name && !phone) return ""; // 둘 다 없으면 아예 출력 안 함
+
+  const safeName = name || "";
+  const safePhone = phone ? ` (${phone})` : "";
+
+  return `담당자 : ${safeName}${safePhone}`;
+};
+// =======================
+// 🚚 기사 전달용 공통 문구
+// =======================
+
+// ❄️ 냉장/냉동 차량 안내 (끝에 줄바꿈 ❌)
+const COLD_NOTICE = `★★★필독★★★ 냉장(0~10도 유지), 냉동(-18도 이하)
+
+인수증 및 거래명세서, 타코메타 기록지까지 꼭!! 한 장씩 찍어서 보내주세요. 인수증은 증명서입니다. 
+반드시 사진 촬영 후 문자 전송 부탁드립니다. 
+미공유 시 운임 지급이 지연될 수 있습니다.
+
+만약 서류가 없으면 상/하차 사진이라도 꼭 전송 부탁드립니다.
+상/하차지 이슈 발생 시 반드시 사전 연락 바랍니다.
+(사진 전송 후 전화는 안 주셔도 됩니다)`;
+
+// 🚚 일반 차량용
+const NORMAL_NOTICE = `★★★필독★★★ 미공유 시 운임 지급이 지연될 수 있습니다.
+
+인수증(파렛전표) 또는 거래명세서는 반드시 서명 후 문자 전송 바랍니다. 하차지에 전달하는 경우 사진 먼저 촬영 후 업체에 전달해 주시면 됩니다.
+
+인수증이 없는 경우 문자로 내용만 전달주세요.
+상·하차 이슈 발생 시 반드시 사전 연락 바랍니다. 감사합니다.`;
+
+  const diffDays = (a, b) => {
+    if (!a || !b) return 0;
+    return Math.round(
+      (new Date(b) - new Date(a)) / (1000 * 60 * 60 * 24)
+    );
+  };
+
+  const timeOrNow = (t) => (t && t.trim() ? t : "즉시");
+
+  const driverName =
+    order.기사명 || order.이름 || order.기사 || "-";
+  const driverPhone =
+    order.전화번호 || order.전화 || "-";
+ // 🔧 파렛트 추출 (1파 / 2파 / 3파렛트 / 3PLT 대응)
+  const extractPallet = (text) => {
+  if (!text || typeof text !== "string") return "";
+
+  const t = text.replace(/\s+/g, "");
+
+  let m = t.match(/(\d+)(파)(?!렛)/);
+  if (m) return m[1];
+
+  m = t.match(/(\d+)파렛트/);
+  if (m) return m[1];
+
+  m = t.match(/(\d+)(PLT|plt|p)/);
+  if (m) return m[1];
+
+  return "";
+};
+  // 🔧 [여기까지 추가]
+  /* ===============================
+     복사 로직
+  =============================== */
+
+  const copy = async (type) => {
+    let text = "";
+
+    /* =========================
+       1️⃣ 차량번호 / 기사명 / 전화번호
+    ========================= */
+    if (type === "simple") {
+      text = `${order.차량번호 || "-"} ${driverName} ${driverPhone}`;
+    }
+
+    /* =========================
+       2️⃣ 운임 포함 (기존 함수 유지)
+    ========================= */
+    else if (type === "fare") {
+      text = buildOrderCopyText(order);
+    }
+
+    /* =========================
+       3️⃣ 전체 상세 (요청 포맷)
+    ========================= */
+    else if (type === "full") {
+      const dayDiff = diffDays(order.상차일, order.하차일);
+
+      let header = "";
+      if (dayDiff === 1) {
+        header = `익일 하차 건 (상차: ${md(order.상차일)} → 하차: ${md(
+          order.하차일
+        )})`;
+      } else if (dayDiff >= 2) {
+        header = `지정 하차 건 (상차: ${md(order.상차일)} → 하차: ${md(
+          order.하차일
+        )})`;
+      }
+
+      const pickupTime = timeOrNow(order.상차시간);
+      const dropTimeRaw = timeOrNow(order.하차시간);
+      const dropTime =
+        dayDiff >= 1
+          ? `${md(order.하차일)} ${dropTimeRaw}`
+          : dropTimeRaw;
+  // ✅ 여기! 문자열 밖
+  const pallet =
+    extractPallet(order.화물내용) ||
+    extractPallet(order.화물정보) ||
+    "";
+      text = `
+${header ? header + "\n\n" : ""}${order.상차일} ${getYoil(order.상차일)}
+
+상차지 : ${order.상차지명}
+${order.상차지주소}
+담당자 : ${order.상차지담당자} (${order.상차지담당자번호})
+상차시간 : ${pickupTime}
+
+하차지 : ${order.하차지명}
+${order.하차지주소}
+담당자 : ${order.하차지담당자} (${order.하차지담당자번호})
+하차시간 : ${dropTime}
+
+중량 : ${normalizeTon(order.차량톤수)}${
+  pallet ? ` / ${pallet}파렛트` : ""
+} ${order.차량종류 || order.차종}
+
+${order.차량번호} ${driverName} ${driverPhone}
+${Number(order.청구운임 || 0).toLocaleString()}원 부가세별도 배차되었습니다.
+`.trim();
+    }
+
+    /* =========================
+   4️⃣ 기사 전달용 (상세 + 전달메시지)
+========================= */
+else if (type === "driver") {
+  // ❄️ 냉장 / 냉동 여부 판단
+  const carTypeText = String(order.차량종류 || order.차종 || "");
+  const isCold =
+    carTypeText.includes("냉장") || carTypeText.includes("냉동");
+
+  const NOTICE = isCold ? COLD_NOTICE : NORMAL_NOTICE;
+
+  const tonText = normalizeTon(order.차량톤수 || order.톤수);
+
+  const pickupManagerLine = buildManagerLine(
+    order.상차지담당자,
+    order.상차지담당자번호
+  );
+
+  const dropManagerLine = buildManagerLine(
+    order.하차지담당자,
+    order.하차지담당자번호
+  );
+
+  const pallet =
+    extractPallet(order.화물내용) ||
+    extractPallet(order.화물정보) ||
+    "";
+
+  text = `
+${NOTICE}
+
+${order.상차일} ${getYoil(order.상차일)}
+
+상차지 : ${order.상차지명}
+${order.상차지주소}
+${pickupManagerLine}
+상차시간 : ${timeOrNow(order.상차시간)}
+
+하차지 : ${order.하차지명}
+${order.하차지주소}
+${dropManagerLine}
+하차시간 : ${timeOrNow(order.하차시간)}
+
+중량 : ${tonText}${pallet ? ` / ${pallet}파` : ""} ${order.차량종류 || order.차종}
+`.replace(/\n{2,}/g, "\n\n").trim();
+}
+
+await navigator.clipboard.writeText(text);
+
+if (type === "full") {
+  onAfterFullCopy?.();   // 🔥 확인 팝업 트리거
+  return;
+}
+
+alert("복사되었습니다.");
+onClose();
+  };
+
+  /* ===============================
+     UI
+  =============================== */
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[9999]">
-      <div className="bg-white rounded-xl shadow-xl p-5 w-72 space-y-2">
-        <div className="text-sm font-semibold">📋 복사 방식 선택</div>
+      <div className="bg-white rounded-xl shadow-xl p-5 w-80 space-y-2">
+        <div className="text-sm font-semibold text-center">
+          📋 복사 방식 선택
+        </div>
 
         <button
-          onClick={() => copy("driver")}
-          className="w-full py-2 bg-gray-100 rounded"
+          onClick={() => copy("simple")}
+          className="w-full py-2 bg-gray-100 rounded text-sm"
         >
-          기사정보
+          차량번호 / 기사명 / 전화번호
         </button>
 
         <button
           onClick={() => copy("fare")}
-          className="w-full py-2 bg-blue-100 rounded"
+          className="w-full py-2 bg-blue-100 rounded text-sm"
         >
-          운임 포함
+          운임 포함 (부가세/선불/착불)
         </button>
 
         <button
           onClick={() => copy("full")}
-          className="w-full py-2 bg-green-100 rounded"
+          className="w-full py-2 bg-green-100 rounded text-sm"
         >
-          전체 상세
+          전체 상세 (상하차 + 화물정보 + 차량)
+        </button>
+
+        <button
+          onClick={() => copy("driver")}
+          className="w-full py-2 bg-emerald-200 rounded text-sm font-semibold"
+        >
+          기사 전달용 (상세 + 전달메시지)
         </button>
 
         <button
           onClick={onClose}
-          className="w-full py-2 bg-gray-300 rounded"
+          className="w-full py-2 bg-gray-300 rounded text-sm"
         >
           취소
         </button>
       </div>
+      
     </div>
   );
 }
+
 
 // ======================================================================
 // 공통 RowLabelInput
