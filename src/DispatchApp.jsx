@@ -5674,8 +5674,6 @@ setIsCopyMode(true);
     </div>
   </div>
 )}
-
-
 {/* ================= 📜 과거 운송 이력 (운임 가이드 클릭) ================= */}
 {fareHistoryOpen && (
   <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40">
@@ -6347,6 +6345,10 @@ const [editClientActiveIndex, setEditClientActiveIndex] = React.useState(0);
   // ------------------------
   // 상태들
   // ------------------------
+  // 🔎 상태 필터
+const [statusFilter, setStatusFilter] = React.useState("ALL");
+// ALL | UNASSIGNED | ASSIGNED | URGENT | UNDELIVERED
+
   const [q, setQ] = React.useState("");
   const [filterType, setFilterType] = React.useState("거래처명");
   // 🔒 실시간 배차 날짜 모드
@@ -7418,6 +7420,26 @@ const [tempSortDir, setTempSortDir] = React.useState("asc");
 
   // 🔒 실시간배차현황은 하루만 조회
   data = data.filter((r) => r.상차일 === targetDate);
+// 🔎 상태 필터 적용
+if (statusFilter === "UNASSIGNED") {
+  data = data.filter(r => r.배차상태 !== "배차완료");
+}
+
+if (statusFilter === "ASSIGNED") {
+  data = data.filter(r => r.배차상태 === "배차완료");
+}
+
+if (statusFilter === "URGENT") {
+  data = data.filter(
+    r => r.긴급 === true && r.배차상태 !== "배차완료"
+  );
+}
+
+if (statusFilter === "UNDELIVERED") {
+  data = data.filter(
+    r => r.업체전달상태 !== "전달완료"
+  );
+}
 
   // 검색
   if (q.trim()) {
@@ -7435,7 +7457,34 @@ const [tempSortDir, setTempSortDir] = React.useState("asc");
   }
 
   return data;
-}, [rows, q, sortKey, sortDir, dayMode]);
+}, [rows, q, sortKey, sortDir, dayMode, statusFilter]);
+// =========================
+// 📊 상태 요약 (추가 위치)
+// =========================
+const statusSummary = React.useMemo(() => {
+  const 미배차 = filtered.filter(
+    r => r.배차상태 !== "배차완료"
+  ).length;
+
+  const 배차완료 = filtered.filter(
+    r => r.배차상태 === "배차완료"
+  ).length;
+
+  const 긴급미배차 = filtered.filter(
+    r => r.긴급 === true && r.배차상태 !== "배차완료"
+  ).length;
+
+  const 업체미전달 = filtered.filter(
+    r => r.업체전달상태 !== "전달완료"
+  ).length;
+
+  return {
+    미배차,
+    배차완료,
+    긴급미배차,
+    업체미전달,
+  };
+}, [filtered]);
 
 
   // KPI
@@ -7824,8 +7873,74 @@ ${url}
   >
     내일
   </button>
-</div>
+   {/* 👉 상태 필터 */}
+<div className="flex items-center gap-1 ml-3 text-[11px] font-semibold">
 
+  {/* 전체 */}
+  <button
+    onClick={() => setStatusFilter("ALL")}
+    className={`px-2 py-1 rounded-full border
+      ${statusFilter === "ALL"
+        ? "bg-gray-800 text-white border-gray-800"
+        : "bg-gray-100 text-gray-600 border-gray-300"}
+    `}
+  >
+    전체 {filtered.length}
+  </button>
+
+  {/* 미배차 */}
+  <button
+    onClick={() => setStatusFilter("UNASSIGNED")}
+    className={`px-2 py-1 rounded-full border
+      ${statusFilter === "UNASSIGNED"
+        ? "bg-yellow-500 text-white border-yellow-500"
+        : "bg-yellow-50 text-yellow-700 border-yellow-300"}
+    `}
+  >
+    미배차 {statusSummary.미배차}
+  </button>
+
+  {/* 배차완료 */}
+  <button
+    onClick={() => setStatusFilter("ASSIGNED")}
+    className={`px-2 py-1 rounded-full border
+      ${statusFilter === "ASSIGNED"
+        ? "bg-green-600 text-white border-green-600"
+        : "bg-green-50 text-green-700 border-green-300"}
+    `}
+  >
+    완료 {statusSummary.배차완료}
+  </button>
+
+  {/* 긴급 */}
+  {statusSummary.긴급미배차 > 0 && (
+    <button
+      onClick={() => setStatusFilter("URGENT")}
+      className={`px-2 py-1 rounded-full border animate-pulse
+        ${statusFilter === "URGENT"
+          ? "bg-red-600 text-white border-red-600"
+          : "bg-red-50 text-red-700 border-red-300"}
+      `}
+    >
+      긴급 {statusSummary.긴급미배차}
+    </button>
+  )}
+
+  {/* 업체 미전달 */}
+  {statusSummary.업체미전달 > 0 && (
+    <button
+      onClick={() => setStatusFilter("UNDELIVERED")}
+      className={`px-2 py-1 rounded-full border
+        ${statusFilter === "UNDELIVERED"
+          ? "bg-indigo-600 text-white border-indigo-600"
+          : "bg-indigo-50 text-indigo-700 border-indigo-300"}
+      `}
+    >
+      미전달 {statusSummary.업체미전달}
+    </button>
+  )}
+</div>
+</div>
 
       {/* 상단 버튼 */}
 <div className="flex justify-end gap-2 mb-2">
@@ -8753,6 +8868,7 @@ XLSX.writeFile(wb, "실시간배차현황.xlsx");
     setNewOrder((p) => ({ ...p, 상차지주소: e.target.value }))
   }
 />
+
   </div>
 
   {/* 하차지명 */}
@@ -12312,6 +12428,28 @@ const pageRows = React.useMemo(() => {
   return filtered.slice(start, end);
 }, [filtered, page]);
 
+const statusSummary = React.useMemo(() => {
+  let 미배차 = 0;
+  let 완료 = 0;
+  let 미전달 = 0;
+
+  filtered.forEach(r => {
+    if (r.배차상태 === "배차중") 미배차++;
+    if (r.배차상태 === "배차완료") 완료++;
+
+    if ((r.업체전달상태 || "미전달") !== "전달완료") {
+      미전달++;
+    }
+  });
+
+  return {
+    전체: filtered.length,
+    미배차,
+    완료,
+    미전달,
+  };
+}, [filtered]);
+
 
   const summary = React.useMemo(() => {
     const totalCount = filtered.length;
@@ -12320,6 +12458,7 @@ const pageRows = React.useMemo(() => {
     const totalFee = totalSale - totalDriver;
     return { totalCount, totalSale, totalDriver, totalFee };
   }, [filtered]);
+
 
   const StatusBadge = ({ s }) => {
     const color =
@@ -12373,6 +12512,26 @@ return (
       <h2 className="text-lg font-bold mb-3">배차현황</h2>
 
       {/* ----------- 요약 ---------- */}
+      {/* 🔵 상태 요약 칩 (PART 5 추가) */}
+<div className="flex items-center gap-1 text-[11px] font-semibold mb-2">
+
+  <span className="px-2 py-1 rounded-full bg-slate-800 text-white">
+    전체 {statusSummary.전체}
+  </span>
+
+  <span className="px-2 py-1 rounded-full bg-yellow-100 text-yellow-700 border border-yellow-300">
+    미배차 {statusSummary.미배차}
+  </span>
+
+  <span className="px-2 py-1 rounded-full bg-green-100 text-green-700 border border-green-300">
+    완료 {statusSummary.완료}
+  </span>
+
+  <span className="px-2 py-1 rounded-full bg-indigo-100 text-indigo-700 border border-indigo-300">
+    미전달 {statusSummary.미전달}
+  </span>
+
+</div>
       <div className="flex flex-wrap items-center gap-5 text-sm mb-2">
         <div>총 <b>{summary.totalCount}</b>건</div>
         <div>청구 <b className="text-blue-600">{summary.totalSale.toLocaleString()}</b>원</div>
@@ -14657,6 +14816,14 @@ function NewOrderPopup({
     try {
       await addDispatch({
         ...newOrder,
+          // ⭐⭐⭐ 이 두 줄이 핵심 (이거 없어서 안 떴던 거다)
+  경유지_상차: Array.isArray(newOrder.경유지_상차)
+    ? newOrder.경유지_상차
+    : [],
+
+  경유지_하차: Array.isArray(newOrder.경유지_하차)
+    ? newOrder.경유지_하차
+    : [],
          메모중요도: "일반",
         운행유형: newOrder.운행유형 || "편도",
         등록일: new Date().toISOString().slice(0, 10),
@@ -14670,6 +14837,7 @@ function NewOrderPopup({
   업체전달일시: null,
   업체전달방법: null,
       });
+      
 
       alert("신규 오더가 등록되었습니다.");
       setShowCreate(false);
@@ -19510,12 +19678,19 @@ const handleBlur = async (row, key, val) => {
 // 거래처관리 (ClientManagement) — 기본 거래처 + 하차지 거래처 서브탭 포함
 
 function ClientManagement({ clients = [], upsertClient, removeClient }) {
-  // 🔧 주소 비교용 정규화 (하차지명은 신경 안 쓰고, 주소만 기준으로 중복 판단)
-  const normalizePlace = (s = "") =>
-    String(s)
-      .toLowerCase()
-      .replace(/\s+/g, "") // 공백 제거
-      .replace(/[^\w가-힣\/-]/g, ""); // 숫자/영문/한글 + / - 만 남기고 제거
+// 🔧 주소 정규화 (ID / 중복판단 / 저장 전부 공통)
+const normalizePlace = (s = "") =>
+  s
+    .toString()
+    .normalize("NFC")                      // ★ 유니코드 정규화
+    .replace(/[\u200B-\u200D\uFEFF]/g, "") // ★ zero-width 제거
+    .replace(/[‐-‒–—−]/g, "-")             // ★ 모든 하이픈 통일
+    .replace(/[０-９]/g, (d) =>
+      String.fromCharCode(d.charCodeAt(0) - 0xFEE0)
+    )                                      // ★ 전각 숫자 → 반각
+    .toLowerCase()
+    .replace(/\s+/g, "")
+    .replace(/[^\w가-힣-]/g, "");
 
         // ✅ 여기
   const normalizeCompanyName = (s = "") =>
@@ -19708,25 +19883,35 @@ function ClientManagement({ clients = [], upsertClient, removeClient }) {
 
   // ✅ Firestore 하차지 컬렉션 helpers
   const PLACES_COLL = "places";
-
+// 🔑 주소 → Firestore 문서 ID (유일 키)
+const makePlaceId = (addr = "") =>
+  normalizePlace(addr)
+    .replace(/(대한민국|한국|경기도|서울특별시)/g, "")
+    .slice(0, 120);
   const upsertPlace = async (row) => {
-    const id = row.id || row.업체명 || crypto?.randomUUID?.();
-    if (!id) return;
+  const addr = row.주소?.trim();
+  if (!addr) return;
 
-    await setDoc(
-      doc(db, PLACES_COLL, id),
-      {
-        id,
-        업체명: row.업체명 || "",
-        주소: row.주소 || "",
-        담당자: row.담당자 || "",
-        담당자번호: row.담당자번호 || "",
-        메모: row.메모 || "",
-        updatedAt: serverTimestamp(),
-      },
-      { merge: true }
-    );
-  };
+  const id = makePlaceId(addr); // ★ 여기서 ID 고정
+
+  console.log("UPSERT PLACE ID =", id); // ← 디버그용 (확인 후 제거 가능)
+
+  await setDoc(
+    doc(db, PLACES_COLL, id),
+    {
+      id,
+      업체명: row.업체명 || "",
+      주소: addr,
+      담당자: row.담당자 || "",
+      담당자번호: row.담당자번호 || "",
+      메모: row.메모 || "",
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true }
+  );
+};
+
+
 
   const removePlace = async (id) => {
     if (!id) return;
@@ -19751,8 +19936,10 @@ const duplicatePlaceGroups = React.useMemo(() => {
   const groups = [];
 
   // 주소 정규화
-  const normAddr = (s = "") =>
-    normalizePlace(s).replace(/(대한민국|한국)/g, "");
+const normAddr = (s = "") =>
+  normalizePlace(s)
+    .replace(/(대한민국|한국|경기도|서울특별시)/g, "")
+    .replace(/[^\w가-힣]/g, "");
 
   // 🔒 광역 주소 판별 (아주 짧은 것만)
   const isBroadAddress = (addr = "") => {
@@ -19832,18 +20019,33 @@ if (isSame || isInclude) {
   // 🔄 Firestore 실시간 구독
   React.useEffect(() => {
     const unsub = onSnapshot(collection(db, PLACES_COLL), (snap) => {
-      const arr = snap.docs.map((d) => {
-        const data = d.data() || {};
-        return {
-          id: d.id,
-          업체명: data.업체명 || "",
-          주소: data.주소 || "",
-          담당자: data.담당자 || "",
-          담당자번호: data.담당자번호 || data.연락처 || "",
-          메모: data.메모 || "",
-        };
-      });
-      setPlaceRows(arr);
+      const arr = [];
+const addrMap = new Map(); // 🔥 주소 ID 기준
+
+snap.docs.forEach((d) => {
+  const data = d.data() || {};
+  const addr = (data.주소 || "").trim();
+  if (!addr) return;
+
+  const addrId = makePlaceId(addr);
+
+  // 이미 같은 주소가 있으면 스킵 (과거 찌꺼기 제거)
+  if (addrMap.has(addrId)) return;
+
+  const row = {
+    id: d.id,
+    업체명: data.업체명 || "",
+    주소: addr,
+    담당자: data.담당자 || "",
+    담당자번호: data.담당자번호 || data.연락처 || "",
+    메모: data.메모 || "",
+  };
+
+  addrMap.set(addrId, row);
+  arr.push(row);
+});
+
+setPlaceRows(arr);
     });
 
     return () => unsub();
@@ -19878,51 +20080,39 @@ if (isSame || isInclude) {
       );
   };
 
-  const handlePlaceBlur = async (row, key, val) => {
-    const id = row.id || row.업체명;
-    if (!id) return;
-    await upsertPlace({
-      ...row,
-      [key]: val,
-      id,
-    });
-  };
+const handlePlaceBlur = async (row, key, val) => {
+  await upsertPlace({
+    ...row,
+    [key]: val,
+  });
+};
 
   const addNewPlace = async () => {
-    const 업체명 = (placeNewForm.업체명 || "").trim();
-    if (!업체명) return alert("업체명은 필수입니다.");
+  const 업체명 = (placeNewForm.업체명 || "").trim();
+  if (!업체명) return alert("업체명은 필수입니다.");
 
-  const addrKey = normalizePlace(placeNewForm.주소 || "");
-if (!addrKey) {
-  alert("주소는 필수입니다.");
-  return;
-}
+  if (!placeNewForm.주소?.trim()) {
+    alert("주소는 필수입니다.");
+    return;
+  }
 
-const exists = placeRows.some(
-  (p) => normalizePlace(p.주소 || "") === addrKey
-);
+  // 🔥 그냥 저장 (같은 주소면 덮어씀)
+  await upsertPlace({
+    ...placeNewForm,
+    업체명,
+  });
 
-if (exists) {
-  alert("이미 동일한 주소의 하차지가 등록되어 있습니다.");
-  return;
-}
+  setPlaceNewForm({
+    업체명: "",
+    주소: "",
+    담당자: "",
+    담당자번호: "",
+    메모: "",
+  });
 
-await upsertPlace({
-  ...placeNewForm,
-  업체명,
-});
+  alert("등록 완료");
+};
 
-
-    setPlaceNewForm({
-      업체명: "",
-      주소: "",
-      담당자: "",
-      담당자번호: "",
-      메모: "",
-    });
-
-    alert("등록 완료");
-  };
 
   const removeSelectedPlaces = async () => {
     if (!placeSelected.size) return alert("선택된 항목이 없습니다.");

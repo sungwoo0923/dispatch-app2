@@ -3,7 +3,6 @@ import React, { useState, useEffect } from "react";
 import { db } from "./firebase";
 import { collection, onSnapshot } from "firebase/firestore";
 
-
 // 차량종류 옵션
 const VEHICLE_TYPES = [
   "전체",
@@ -16,13 +15,6 @@ const VEHICLE_TYPES = [
   "냉동탑",
   "리프트",
   "오토바이",
-];
-const SORT_OPTIONS = [
-  { value: "DATE_DESC", label: "날짜 최신순" },
-  { value: "DATE_ASC", label: "날짜 오래된순" },
-  { value: "TON_ASC", label: "톤수 낮은순" },
-  { value: "TON_DESC", label: "톤수 높은순" },
-  { value: "VEHICLE", label: "차량종류별" },
 ];
 
 // 문자열 정규화
@@ -155,7 +147,7 @@ function calcImplicitFare(dispatchData, {
 
 export default function StandardFare() {
   const [dispatchData, setDispatchData] = useState([]);
-  const [sortType, setSortType] = useState("DATE_DESC");
+  const [sortKey, setSortKey] = useState("date_desc");
 
   // 검색 입력값
   const [pickup, setPickup] = useState(localStorage.getItem("sf_pickup") || "");
@@ -342,6 +334,7 @@ const search = () => {
         return rowTon && Math.abs(rowTon - tonNum) <= 0.7;
       });
     }
+    
 
     // 차량종류
    // 차량종류 (냉장/냉동 묶음)
@@ -412,16 +405,65 @@ const withFareLevel = list.map(r => {
       : "UNKNOWN",
   };
 });
-// ✅ 여기 추가
-withFareLevel.sort((a, b) => {
-  const da = a.상차일 || "";
-  const db = b.상차일 || "";
-  return db.localeCompare(da);
-});
+const levelRank = {
+  NORMAL: 1,
+  TIGHT: 2,
+  SPIKE: 3,
+};
 
+withFareLevel.sort((a, b) => {
+  switch (sortKey) {
+    case "date_asc":
+      return (a.상차일 || "").localeCompare(b.상차일 || "");
+
+    case "date_desc":
+      return (b.상차일 || "").localeCompare(a.상차일 || "");
+
+    // 🔥 화물내용 순 (숫자 우선)
+    case "cargo_asc": {
+      const an = extractCargoNumber(a.화물내용);
+      const bn = extractCargoNumber(b.화물내용);
+
+      if (an != null && bn != null) return an - bn;
+      if (an != null) return -1;
+      if (bn != null) return 1;
+
+      return (a.화물내용 || "").localeCompare(b.화물내용 || "");
+    }
+
+    // 🔥 차량종류 순 (그룹 기준)
+    case "vehicle_asc": {
+      const ag = normalizeVehicleGroup(a.차량종류);
+      const bg = normalizeVehicleGroup(b.차량종류);
+
+      if (ag !== bg) return ag.localeCompare(bg);
+      return (a.차량종류 || "").localeCompare(b.차량종류 || "");
+    }
+
+    case "fare_asc":
+      return Number(a.청구운임 || 0) - Number(b.청구운임 || 0);
+
+    case "fare_desc":
+      return Number(b.청구운임 || 0) - Number(a.청구운임 || 0);
+
+    case "driver_desc":
+      return Number(b.기사운임 || 0) - Number(a.기사운임 || 0);
+
+    case "fee_desc":
+      return Number(b.수수료 || 0) - Number(a.수수료 || 0);
+
+    case "level":
+      return levelRank[a.fareLevel] - levelRank[b.fareLevel];
+
+    case "level_spike":
+      return levelRank[b.fareLevel] - levelRank[a.fareLevel];
+
+    default:
+      return 0;
+  }
+});
 setResult(withFareLevel);
 setAiFare(calcAiFare(baseGroup));
-
 
     if (list.length === 0) alert("조회된 데이터가 없습니다.");
   };
@@ -539,6 +581,30 @@ localStorage.removeItem("sf_client");
               value={cargo}
               onChange={(e) => setCargo(e.target.value)}
             />
+            <div>
+  <label className="text-sm text-gray-600 font-medium">정렬방식</label>
+  <select
+    className="border p-2 rounded-lg w-full shadow"
+    value={sortKey}
+    onChange={(e) => setSortKey(e.target.value)}
+  >
+  <option value="date_desc">상차일 최신순</option>
+  <option value="date_asc">상차일 오래된순</option>
+
+  <option value="cargo_asc">화물내용 순 (숫자)</option>
+  <option value="vehicle_asc">차량종류 순</option>
+
+  <option value="fare_desc">청구운임 높은순</option>
+  <option value="fare_asc">청구운임 낮은순</option>
+
+  <option value="level">운임레벨 (표준 → 상승 → 프리미엄)</option>
+  <option value="level_spike">운임레벨 (프리미엄 우선)</option>
+
+  <option value="driver_desc">기사운임 높은순</option>
+  <option value="fee_desc">수수료 높은순</option>
+  </select>
+</div>
+
           </div>
 
           <div>

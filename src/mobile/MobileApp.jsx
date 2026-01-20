@@ -188,58 +188,7 @@ const methodColor = (code) => {
   return "bg-gray-100 text-gray-700";
 };
 
-// 카톡 공유용 문자열
-function buildKakaoMessage(order) {
-  const lines = [];
 
-  const 상차일시 =
-    order.상차일시 ||
-    `${order.상차일 || ""} ${order.상차시간 || ""}`.trim();
-  const 하차일시 =
-    order.하차일시 ||
-    `${order.하차일 || ""} ${order.하차시간 || ""}`.trim();
-
-  if (상차일시) lines.push(`상차일시: ${상차일시}`);
-  if (하차일시) lines.push(`하차일시: ${하차일시}`);
-
-  lines.push("");
-  lines.push("[거래처]");
-  lines.push(order.거래처명 || "-");
-
-  lines.push("");
-  lines.push("[상차지]");
-  lines.push(order.상차지명 || "-");
-  if (order.상차지주소) lines.push(order.상차지주소);
-
-  lines.push("");
-  lines.push("[하차지]");
-  lines.push(order.하차지명 || "-");
-  if (order.하차지주소) lines.push(order.하차지주소);
-
-  lines.push("");
-  lines.push(
-    `차량: ${order.차량톤수 || order.톤수 || ""} ${order.차량종류 || order.차종 || ""
-      }`.trim() || "차량 정보 없음"
-  );
-
-  const claim = getClaim(order);
-  lines.push(`청구운임: ${claim.toLocaleString("ko-KR")}원`);
-  lines.push(
-    `기사운임: ${(order.기사운임 ?? 0).toLocaleString("ko-KR")}원`
-  );
-  lines.push(
-    `수수료: ${(
-      order.수수료 ?? claim - (order.기사운임 ?? 0)
-    ).toLocaleString("ko-KR")}원`
-  );
-
-  if (order.비고 || order.메모) {
-    lines.push("");
-    lines.push(`[비고] ${order.비고 || order.메모}`);
-  }
-
-  return lines.join("\n");
-}
 function buildOrderCopyText(order) {
   // 날짜 + 요일
   const dateStr = order.상차일 || "";
@@ -354,6 +303,21 @@ const [hasNewSchedule, setHasNewSchedule] = useState(false);
   // -------------------------------------------------------------
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  // ✅ 당일 / 내일 빠른 선택용
+const setTodayRange = () => {
+  const t = todayKST();
+  setStartDate(t);
+  setEndDate(t);
+};
+
+const setTomorrowRange = () => {
+  const now = new Date();
+  const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+  kst.setDate(kst.getDate() + 1);
+  const tmr = kst.toISOString().slice(0, 10);
+  setStartDate(tmr);
+  setEndDate(tmr);
+};
   // 🔍 UI 크기 스케일 (1 = 기본, 1.1 = 크게, 1.2 = 아주 크게)
   const [uiScale, setUiScale] = useState(
     Number(localStorage.getItem("uiScale") || 1)
@@ -1582,6 +1546,8 @@ onGoSchedule={() => {
             setStartDate={setStartDate}
             setEndDate={setEndDate}
             quickRange={quickRange}
+            setTodayRange={setTodayRange}
+  setTomorrowRange={setTomorrowRange}
             onlyToday={onlyToday}
 setOnlyToday={setOnlyToday}
 onSelect={(o) => {
@@ -1652,6 +1618,8 @@ setOpenMemo={setOpenMemo}
     }}
     unassignedTypeFilter={unassignedTypeFilter}
     setUnassignedTypeFilter={setUnassignedTypeFilter}
+    setTodayRange={setTodayRange}
+  setTomorrowRange={setTomorrowRange}
     onBack={() => setPage("list")}
     setSelectedOrder={setSelectedOrder}
     setPage={setPage}
@@ -1915,6 +1883,8 @@ function MobileOrderList({
   setStartDate,
   setEndDate,
   quickRange,
+  setTodayRange,
+  setTomorrowRange,
   onSelect,
   setOpenMemo,
   vehicleFilter,
@@ -1956,10 +1926,31 @@ function MobileOrderList({
       {/* 날짜/퀵범위/필터 */}
       <div className="bg-white border-b px-4 py-3 space-y-2">
         {/* 상단 범위 텍스트 (11.24 ~ 11.24) */}
-        <div className="text-xs font-semibold text-gray-600">
-          {formatRangeShort(startDate, endDate)}
-        </div>
+        <div className="flex items-center justify-between">
+  {/* 조회 기간 텍스트 */}
+  <div className="text-xs font-semibold text-gray-600">
+    {formatRangeShort(startDate, endDate)}
+  </div>
 
+  {/* 당일 / 내일 버튼 */}
+  <div className="flex gap-1">
+    <button
+      onClick={setTodayRange}
+      className="px-2 py-0.5 rounded-full text-[11px] font-semibold
+                 border bg-blue-50 text-blue-700 border-blue-300"
+    >
+      당일
+    </button>
+
+    <button
+      onClick={setTomorrowRange}
+      className="px-2 py-0.5 rounded-full text-[11px] font-semibold
+                 border bg-indigo-50 text-indigo-700 border-indigo-300"
+    >
+      내일
+    </button>
+  </div>
+</div>
         {/* 시작/종료 날짜 */}
         <div className="flex items-center gap-2 text-sm">
           <input
@@ -1977,34 +1968,7 @@ function MobileOrderList({
           />
         </div>
 
-        {/* 빠른 범위 버튼 */}
-        <div className="flex gap-2">
-          {/* 오늘 오더만 보기 */}
-<div className="flex justify-end">
-  <button
-    onClick={() => setOnlyToday((v) => !v)}
-    className={`px-3 py-1 rounded-full text-xs font-semibold border
-      ${
-        onlyToday
-          ? "bg-red-500 text-white border-red-500"
-          : "bg-white text-gray-600 border-gray-300"
-      }`}
-  >
-    TODAY만 보기
-  </button>
-</div>
-
-          {[1, 3, 7, 15].map((d) => (
-            <button
-              key={d}
-              onClick={() => quickRange(d)}
-              className="flex-1 py-1.5 rounded-full border text-xs bg-gray-100"
-            >
-              {d}일
-            </button>
-          ))}
-        </div>
-
+        
         {/* 차량종류 / 배차상태 드롭다운 */}
         <div className="flex gap-2 text-sm">
           <select
@@ -2430,25 +2394,7 @@ const [expandMemo, setExpandMemo] = useState(false);
     window.open(url, "_blank");
   };
 
-  const handleCopyKakao = async () => {
-    const text = buildKakaoMessage(order);
-    try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(text);
-      } else {
-        const ta = document.createElement("textarea");
-        ta.value = text;
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand("copy");
-        document.body.removeChild(ta);
-      }
-      alert("카카오톡 공유용 텍스트가 복사되었습니다.");
-    } catch (e) {
-      console.error(e);
-      alert("복사 중 오류가 발생했습니다. 직접 복사해 주세요.");
-    }
-  };
+  
 
   const claim = getClaim(order);
   const sanjae = getSanjae(order);
@@ -2615,13 +2561,7 @@ const [expandMemo, setExpandMemo] = useState(false);
   >
     📋 복사하기
   </button>
-    {/* 카톡 공유 */}
-    <button
-      onClick={handleCopyKakao}
-      className="flex-1 py-2 rounded-lg bg-yellow-400 text-black text-sm font-semibold"
-    >
-      카톡공유
-    </button>
+
 {/* 운임조회 */}
 <button
   onClick={() => {
@@ -2694,8 +2634,6 @@ const [expandMemo, setExpandMemo] = useState(false);
     </div>
   </div>
 )}
-
-
       {/* 지도 */}
       <div className="bg-white border rounded-xl px-4 py-3 shadow-sm">
         <div className="text-sm font-semibold mb-2">지도 보기</div>
@@ -2714,8 +2652,6 @@ const [expandMemo, setExpandMemo] = useState(false);
           </button>
         </div>
       </div>
-
-    
       {/* 기사 배차 */}
       <div className="bg-white border rounded-xl px-4 py-3 shadow-sm space-y-3">
         <div className="text-sm font-semibold mb-1">기사 배차</div>
@@ -4534,6 +4470,8 @@ function MobileUnassignedList({
   orders, // { unassigned: [], undelivered: [] }
   unassignedTypeFilter,
   setUnassignedTypeFilter,
+  setTodayRange,
+  setTomorrowRange,
   onBack,
   setSelectedOrder,
   setPage,
