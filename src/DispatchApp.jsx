@@ -185,11 +185,16 @@ unsubs.push(onSnapshot(collection(db, collName), (snap)=>{
       setDispatchData(arr);
       safeSave("dispatchData", arr);
     }));
-    unsubs.push(onSnapshot(collection(db, COLL.drivers), (snap)=>{
-      const arr = snap.docs.map(d=>d.data());
-      setDrivers(arr);
-      safeSave("drivers", arr);
+unsubs.push(
+  onSnapshot(collection(db, COLL.drivers), (snap) => {
+    const arr = snap.docs.map(d => ({
+  ...d.data(),
+  id: d.id,
     }));
+    setDrivers(arr);
+    safeSave("drivers", arr);
+  })
+);
     unsubs.push(onSnapshot(collection(db, COLL.clients), (snap)=>{
       const arr = snap.docs.map(d=>d.data());
       setClients(normalizeClients(arr));
@@ -286,18 +291,27 @@ const removeDispatch = async (arg) => {
 
 
   const upsertDriver = async (driver) => {
-  const id = driver._id || crypto.randomUUID();
+  // ⭐ Firestore 문서 ID = 차량번호
+  const id = driver.id || driver.차량번호;
+  if (!id) throw new Error("기사 차량번호(id) 없음");
 
   const data = {
     ...driver,
-    _id: id,
-    createdAt: serverTimestamp(),
+    id,              // 프론트 기준
+    차량번호: id,   // DB 기준 통일
     updatedAt: serverTimestamp(),
+    createdAt: driver.createdAt || serverTimestamp(),
   };
 
-  await setDoc(doc(db, COLL.drivers, id), data, { merge: true });
+  await setDoc(
+    doc(db, COLL.drivers, id), // ⭐ 핵심
+    data,
+    { merge: true }
+  );
+
   return id;
 };
+
 
 const removeDriver = async (id) => deleteDoc(doc(db, COLL.drivers, id));
 
@@ -19339,7 +19353,7 @@ function DriverManagement({ drivers = [], upsertDriver, removeDriver }) {
 
 const toggleAll = () => {
   const allIds = filtered
-    .map((r) => r.차량번호)
+    .map((r) => r.id)
     .filter(Boolean);
     if (selected.size === allIds.length) {
       setSelected(new Set());
@@ -19350,22 +19364,24 @@ const toggleAll = () => {
 
   // ===================== 인라인 수정 =====================
 const handleBlur = async (row, key, val) => {
-  const oldId = row.차량번호; // ⭐ 기준을 차량번호로 통일
-  if (!oldId) {
-    alert("차량번호가 없어 수정할 수 없습니다.");
-    return;
-  }
+const oldId = row.id; // ⭐ Firestore 문서 ID
+if (!oldId) {
+  alert("문서 ID가 없어 수정/삭제할 수 없습니다.");
+  return;
+}
+
 
     // 차량번호 변경 = 문서 이동
     if (key === "차량번호") {
   const newId = val.replace(/\s+/g, "");
   if (!newId || newId === oldId) return;
 
-  await upsertDriver({
-    ...row,
-    차량번호: newId,
-  });
-  await removeDriver(oldId);
+await upsertDriver({
+  ...row,
+  id: newId,        // ⭐ 새 문서 ID
+  차량번호: newId,
+});
+await removeDriver(oldId);
   return;
 }
 
@@ -19559,8 +19575,8 @@ const handleBlur = async (row, key, val) => {
               </tr>
             ) : (
               paged.map((r, i) => {
-                const docId = r.id || r.차량번호;
-                if (!docId) return null;
+                const docId = r.id;
+if (!docId) return null;
 
                 return (
                   <tr key={`${docId}_${i}`}>
@@ -19773,15 +19789,39 @@ const normalizePlace = (s = "") =>
     else setSelected(new Set(filtered.map((r) => r.거래처명).filter(Boolean)));
   };
 
-  const handleBlur = async (row, key, val) => {
-    const id = row.거래처명 || row.id;
-    if (!id) return;
-    await upsertClient?.({
+const handleBlur = async (row, key, val) => {
+  const currentId = row.id;
+  const correctId = row.차량번호;
+
+  if (!currentId || !correctId) return;
+
+  // ⭐ 이름/전화/메모 수정
+  if (key !== "차량번호") {
+    await upsertDriver({
       ...row,
+      id: correctId,
       [key]: val,
-      id,
     });
-  };
+
+    // 🔥 과거 random ID 문서 제거
+    if (currentId !== correctId) {
+      await removeDriver(currentId);
+    }
+    return;
+  }
+
+  // ⭐ 차량번호 변경 = 문서 이동
+  const newId = val.trim();
+  if (!newId || newId === correctId) return;
+
+  await upsertDriver({
+    ...row,
+    id: newId,
+    차량번호: newId,
+  });
+  await removeDriver(currentId);
+};
+
 
   const addNew = async () => {
     const 거래처명 = (newForm.거래처명 || "").trim();
@@ -20600,11 +20640,15 @@ const removeDuplicatePlaces = async () => {
                         </td>
                         <td className={cell}>
                           <button
-  onClick={() => {
-    if (window.confirm("삭제하시겠습니까?")) {
-      removeDriver?.(id);
-    }
-  }}
+onClick={() => {
+  if (!r.id) {
+    alert("문서 ID가 없어 삭제할 수 없습니다.\n(과거 데이터)");
+    return;
+  }
+  if (window.confirm("삭제하시겠습니까?")) {
+    removeDriver(r.id);
+  }
+}}
   className="px-2 py-1 bg-red-600 text-white rounded"
 >
   삭제
