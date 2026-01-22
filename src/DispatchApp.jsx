@@ -1054,6 +1054,8 @@ if (!user) {
   );
 }
 // ===================== DispatchApp.jsx (PART 2/8) — END =====================
+
+
 // ===================== DispatchApp.jsx (PART 3/8) — START =====================
 function ToggleBadge({ active, onClick, activeCls, inactiveCls, children }) {
   return (
@@ -1692,6 +1694,7 @@ const [driverModal, setDriverModal] = React.useState({
 
  // ⭐ 등록 확인 팝업 상태
 const [confirmOpen, setConfirmOpen] = React.useState(false);
+const confirmOnceRef = React.useRef(false);
 // ⭐ 실시간배차현황(하단 테이블) 상태 변경 확인 팝업
 const [confirmChange, setConfirmChange] = React.useState(null);
 /*
@@ -2616,15 +2619,29 @@ function swapPickupDrop() {
       setForm((p) => ({ ...p, [key]: value }));
     };
 
-    const handlePickupName = (value) => {
-      setForm((p) => ({
-        ...p,
-        상차지명: value,
-      }));
-      setAutoPickMatched(false);
+const handlePickupName = (value) => {
+  setForm((p) => {
+    // 기존 상차지명과 다를 때만 초기화
+    const isChanged = value !== p.상차지명;
+
+    return {
+      ...p,
+      상차지명: value,
+
+      // ✅ 사용자가 직접 수정한 경우 → 연관 필드 초기화
+      ...(isChanged
+        ? {
+            상차지주소: "",
+            상차지담당자: "",
+            상차지담당자번호: "",
+          }
+        : {}),
     };
+  });
 
-
+  // 자동매칭 상태 해제
+  setAutoPickMatched(false);
+};
     const handleDropName = (value) => {
       setForm((p) => ({
         ...p,
@@ -2939,10 +2956,6 @@ const palletFareRules = {
     { min: 9, max: 10, fare: 300000 },
   ],
 };
-
-
-
-
     const handleSubmit = async (e) => {
   e.preventDefault();
   if (!validateRequired(form)) return;
@@ -15389,7 +15402,8 @@ function Settlement({ dispatchData, fixedRows = [] }) {
   );
 
   const [detailClient, setDetailClient] = React.useState(null);
-
+const [aiMode, setAiMode] = React.useState(null); 
+// null | "summary" | "suggest" | "report"
   const toInt = (v) =>
     parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
 
@@ -15753,7 +15767,7 @@ const dayDropTop10 = Object.keys({ ...todayMap, ...prevMap })
   return (
     <div
   id="settlement-capture"
-  className="bg-gray-50 p-6 flex flex-col lg:flex-row gap-6"
+  className="bg-gray-50 p-6 grid grid-cols-1 lg:grid-cols-2 gap-6"
 >
       {/* ================= LEFT PANEL ================= */}
       <div className="space-y-6 flex-1">
@@ -15981,16 +15995,28 @@ const dayDropTop10 = Object.keys({ ...todayMap, ...prevMap })
   newClients={newClients}
 />
 
-</div> {/* 🔥 LEFT PANEL 닫기 */}
+</div>
+{/* ================= RIGHT PANEL ================= */}
+<div className="flex flex-col gap-6 flex-1 h-full self-stretch">
 
-                   {/* ================= RIGHT PANEL ================= */}
-      <div className="flex flex-col gap-6 pt-2 flex-1">
-        <YearlySummaryChart
-          rows={rows}
-          year={selectedYear}
-          setYear={setSelectedYear}
-        />
-      </div>
+  {/* 상단 정렬 슬롯 (왼쪽 버튼 높이 맞춤) */}
+  <div className="h-[44px] flex items-center justify-end">
+    <span className="text-sm text-gray-400">
+      매출관리 리포트
+    </span>
+  </div>
+
+  {/* 실제 리포트 카드 */}
+  <div className="flex-1">
+    <YearlySummaryChart
+      rows={rows}
+      year={selectedYear}
+      setYear={setSelectedYear}
+      onAI={(mode) => setAiMode(mode)}
+    />
+  </div>
+
+</div>
 
       {/* ================= DETAIL POPUP ================= */}
       {detailClient && (
@@ -16002,13 +16028,94 @@ const dayDropTop10 = Object.keys({ ...todayMap, ...prevMap })
           onClose={() => setDetailClient(null)}
         />
       )}
+            {aiMode && (
+        <AIInsightModal
+          mode={aiMode}
+          monthRows={monthRows}
+          forecast2026={forecast2026}
+          onClose={() => setAiMode(null)}
+        />
+      )}
     </div>
   );
 }
 
+
 /* ================================================================= */
 /* ================== 이하 컴포넌트 정의 (디자인만 정리) ================= */
 /* ================================================================= */
+function AIInsightModal({ mode, monthRows = [], forecast2026, onClose }) {
+  const toInt = (v) =>
+    parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
+
+  const sale = monthRows.reduce(
+    (a, r) => a + toInt(r.청구운임),
+    0
+  );
+  const driver = monthRows.reduce(
+    (a, r) => a + toInt(r.기사운임),
+    0
+  );
+  const profit = sale - driver;
+  const rate = sale ? (profit / sale) * 100 : 0;
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center">
+      <div className="bg-white rounded-2xl w-[520px] p-6 shadow-xl space-y-4">
+        <div className="flex justify-between items-center">
+          <h3 className="text-sm font-bold text-gray-800">
+            {mode === "summary" && "AI 요약"}
+            {mode === "suggest" && "AI 액션 제안"}
+            {mode === "report" && "AI 보고서"}
+          </h3>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-700"
+          >
+            ✕
+          </button>
+        </div>
+
+        {mode === "summary" && (
+          <p className="text-sm text-gray-700 leading-relaxed">
+            당월 매출 <b>{sale.toLocaleString()}원</b>,  
+            수익 <b>{profit.toLocaleString()}원</b>,  
+            수익률 <b>{rate.toFixed(1)}%</b>입니다.
+            <br />
+            현재 추세 기준 2026년 예상 매출은{" "}
+            <b className="text-indigo-700">
+              {forecast2026.normal.toLocaleString()}원
+            </b>
+            입니다.
+          </p>
+        )}
+
+        {mode === "suggest" && (
+          <ul className="list-disc pl-5 text-sm text-gray-700 space-y-1">
+            <li>상위 거래처 운임 재협상 검토</li>
+            <li>수익률 10% 미만 거래처 관리 필요</li>
+            <li>고정 거래처 비중 확대 권장</li>
+          </ul>
+        )}
+
+        {mode === "report" && (
+          <textarea
+            readOnly
+            className="w-full h-40 border rounded-lg p-3 text-sm"
+            value={`2026년 매출 요약 보고
+
+총 매출: ${sale.toLocaleString()}원
+총 수익: ${profit.toLocaleString()}원
+수익률: ${rate.toFixed(1)}%
+
+전반적으로 안정적인 성장 흐름을 유지 중입니다.`}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
 function SettlementClientAnalysis({
   topRows = [],
   dropRows = [],
@@ -16043,7 +16150,7 @@ function SettlementClientAnalysis({
             전월 대비 매출 감소 TOP10
           </h4>
           <span className="text-[11px] text-gray-400">
-            기준: 각 월 1일 ~ 오늘 누적
+          
           </span>
         </div>
         <SettlementTop10Drop rows={dropRows} />
@@ -16666,7 +16773,7 @@ function AIPremiumInsight({
   );
 }
 
-function YearlySummaryChart({ rows = [], year, setYear }) {
+function YearlySummaryChart({ rows = [], year, setYear, onAI }) {
   const toInt = (v) =>
     parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
 
@@ -16735,32 +16842,57 @@ function YearlySummaryChart({ rows = [], year, setYear }) {
 
   return (
     <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-      <div className="flex items-center justify-between mb-4">
+<div className="flex items-center justify-between mb-4">
   <h3 className="text-sm font-semibold text-gray-800">
     {year}년 월별 매출 · 수익 · 수익률 요약
   </h3>
 
-  <select
-    className="border rounded-lg px-2 py-1 text-sm"
-    value={year}
-    onChange={(e) => setYear(Number(e.target.value))}
-  >
-    {Array.from(
-      new Set(
-        rows
-          .map((r) => r.상차일?.slice(0, 4))
-          .filter(Boolean)
-      )
-    )
-      .sort((a, b) => b - a)
-      .map((y) => (
-        <option key={y} value={Number(y)}>
-          {y}년
-        </option>
-      ))}
-  </select>
-</div>
+  <div className="flex items-center gap-2">
+    {/* 🤖 AI 버튼 */}
+    <button
+      onClick={() => onAI("summary")}
+      className="px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs hover:bg-indigo-500"
+    >
+      요약
+    </button>
 
+    <button
+      onClick={() => onAI("suggest")}
+      className="px-3 py-1.5 rounded-lg bg-emerald-100 text-emerald-700 text-xs hover:bg-emerald-200"
+    >
+      제안
+    </button>
+
+    <button
+      onClick={() => onAI("report")}
+      className="px-3 py-1.5 rounded-lg bg-gray-100 text-gray-700 text-xs hover:bg-gray-200"
+    >
+      보고서
+    </button>
+    
+
+    {/* 연도 선택 */}
+    <select
+      className="border rounded-lg px-2 py-1 text-sm ml-1"
+      value={year}
+      onChange={(e) => setYear(Number(e.target.value))}
+    >
+      {Array.from(
+        new Set(
+          rows
+            .map((r) => r.상차일?.slice(0, 4))
+            .filter(Boolean)
+        )
+      )
+        .sort((a, b) => b - a)
+        .map((y) => (
+          <option key={y} value={Number(y)}>
+            {y}년
+          </option>
+        ))}
+    </select>
+  </div>
+</div>
       <table className="w-full text-sm border-collapse text-center">
         <thead>
   {/* ===== 1줄: 그룹 헤더 ===== */}
