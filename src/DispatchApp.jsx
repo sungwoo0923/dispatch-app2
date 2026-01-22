@@ -11287,6 +11287,7 @@ const tomorrowKST = () => {
     return "";
   }
 });
+const [searchType, setSearchType] = React.useState("all");
   const [startDate, setStartDate] = React.useState("");
   const [endDate, setEndDate] = React.useState("");
   const [sortKey, setSortKey] = React.useState("");
@@ -12437,27 +12438,64 @@ const compareBy = (key, dir = "asc") => (a, b) => {
 };
 
 
-  // ===================== 정렬 ======================
+  // ===================== 필터 + 정렬 (최종 단일본) =====================
 const filtered = React.useMemo(() => {
   let data = [...dispatchData];
 
+  // 📅 날짜 필터
   if (startDate) data = data.filter(r => (r.상차일 || "") >= startDate);
-  if (endDate) data = data.filter(r => (r.상차일 || "") <= endDate);
+  if (endDate)   data = data.filter(r => (r.상차일 || "") <= endDate);
 
+  // 🔍 검색 필터
   if (q.trim()) {
-    const lower = q.toLowerCase();
-    data = data.filter(r =>
-      Object.values(r).some(v =>
-        String(v || "").toLowerCase().includes(lower)
-      )
-    );
+    const keyword = q.toLowerCase();
+
+    data = data.filter((r) => {
+      const get = (v) => String(v || "").toLowerCase();
+
+      switch (searchType) {
+        case "client":
+          return get(r.거래처명).includes(keyword);
+        case "pickup":
+          return get(r.상차지명).includes(keyword);
+        case "drop":
+          return get(r.하차지명).includes(keyword);
+        case "pay":
+          return get(r.지급방식).includes(keyword);
+        case "dispatch":
+          return get(r.배차방식).includes(keyword);
+        case "car":
+          return get(r.차량번호).includes(keyword);
+        case "driver":
+          return get(r.이름).includes(keyword);
+        case "all":
+        default:
+          return (
+            get(r.거래처명).includes(keyword) ||
+            get(r.상차지명).includes(keyword) ||
+            get(r.하차지명).includes(keyword) ||
+            get(r.차량번호).includes(keyword) ||
+            get(r.이름).includes(keyword) ||
+            get(r.지급방식).includes(keyword) ||
+            get(r.배차방식).includes(keyword)
+          );
+      }
+    });
   }
 
-  // 🔥 핵심: 거래처명 기준 정렬
+  // 🔽 정렬
   data.sort(compareBy(sortKey, sortDir));
 
   return data;
-}, [dispatchData, q, startDate, endDate, sortKey, sortDir]);
+}, [
+  dispatchData,
+  q,
+  searchType,
+  startDate,
+  endDate,
+  sortKey,
+  sortDir,
+]);
 // ⭐⭐⭐ 페이지 데이터 (정렬된 filtered 기준)
 const pageRows = React.useMemo(() => {
   const start = page * pageSize;
@@ -12578,14 +12616,37 @@ return (
 
       <div className="flex justify-between items-center gap-3 mb-3">
 
-  {/* 🔍 검색 + 날짜 */}
-  <div className="flex items-center gap-2">
-    <input
-  className="border p-2 rounded w-52"
-  placeholder="검색어"
-  value={loaded ? q : ""}        // 🔥 핵심
-  onChange={(e) => setQ(e.target.value)}
-/>
+<div className="flex items-center gap-2">
+  {/* 🔍 검색 필터 */}
+  <select
+    className="border p-2 rounded text-sm"
+    value={searchType}
+    onChange={(e) => {
+      setSearchType(e.target.value);
+      setQ("");      // 필터 변경 시 검색어 초기화 (권장)
+      setPage(0);
+    }}
+  >
+    <option value="all">통합검색</option>
+    <option value="client">거래처명</option>
+    <option value="pickup">상차지명</option>
+    <option value="drop">하차지명</option>
+    <option value="pay">지급방식</option>
+    <option value="dispatch">배차방식</option>
+    <option value="car">차량번호</option>
+    <option value="driver">기사명</option>
+  </select>
+
+  {/* 🔍 검색어 */}
+  <input
+    className="border p-2 rounded w-52"
+    placeholder="검색어"
+    value={loaded ? q : ""}
+    onChange={(e) => {
+      setQ(e.target.value);
+      setPage(0);
+    }}
+  />
 
     <input
       type="date"
