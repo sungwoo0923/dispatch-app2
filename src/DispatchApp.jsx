@@ -375,8 +375,13 @@ const upsertPlace = async (place) => {
     const data = {
       업체명: name,
       주소: (place.주소 || "").trim(),
-      담당자: (place.담당자 || "").trim(),
-      담당자번호: (place.담당자번호 || "").trim(),
+      contacts: Array.isArray(place.contacts)
+   ? place.contacts
+   : [{
+       name: (place.담당자 || "").trim(),
+       phone: (place.담당자번호 || "").trim(),
+       isPrimary: true,
+     }],
       isActive: place.isActive !== false, // ⭐ 추가
       updatedAt: Date.now(),
     };
@@ -1074,7 +1079,8 @@ function normalizeKey(str = "") {
     .replace(/물류/g, "")
     .replace(/유통/g, "")
 }
-function StopRow({ value, onChange, onRemove, placeList }) {
+function StopRow({ value, onChange, onRemove, placeList, upsertPlace }) {
+  const [isNewContact, setIsNewContact] = React.useState(false);
   const [query, setQuery] = React.useState(value.업체명 || "");
   const [open, setOpen] = React.useState(false);
   const [activeIndex, setActiveIndex] = React.useState(-1);
@@ -1090,6 +1096,33 @@ function StopRow({ value, onChange, onRemove, placeList }) {
   });
 
   const listRef = React.useRef(null);
+    React.useEffect(() => {
+    const name = value.담당자;
+    const phone = value.담당자번호;
+
+    console.log("[신규감지 체크]", {
+      name,
+      phone,
+      contacts: value.contacts,
+    });
+
+    if (!name || !phone) {
+      setIsNewContact(false);
+      return;
+    }
+
+    const contacts = Array.isArray(value.contacts)
+      ? value.contacts
+      : [];
+
+    const exists = contacts.some(
+      c => c.name === name && c.phone === phone
+    );
+
+    console.log("[신규감지 결과]", { exists });
+
+    setIsNewContact(!exists);
+  }, [value.담당자, value.담당자번호, value.contacts]);
 
   // ===============================
   // 자동완성 옵션 (정확일치 우선)
@@ -1136,68 +1169,129 @@ function StopRow({ value, onChange, onRemove, placeList }) {
   }, [activeIndex]);
 
   return (
-    <>
-      <div className="border rounded-xl bg-white p-4 shadow-sm space-y-4">
-        {/* 헤더 */}
-        <div className="flex justify-between items-center">
-          <div className="text-sm font-bold text-gray-800">경유지</div>
-          <button
-            onClick={onRemove}
-            className="text-xs text-red-500 hover:underline"
-          >
-            삭제
-          </button>
-        </div>
+  <>
+    <div className="border rounded-xl bg-white p-4 shadow-sm space-y-4">
+      {/* 헤더 */}
+      <div className="flex justify-between items-center">
+        <div className="text-sm font-bold text-gray-800">경유지</div>
+        <button
+          onClick={onRemove}
+          className="text-xs text-red-500 hover:underline"
+        >
+          삭제
+        </button>
+      </div>
 
-        {/* 업체명 / 주소 */}
-        <div className="grid grid-cols-2 gap-3 relative">
-          {/* 업체명 */}
-          <div className="relative">
-            <label className="block text-xs text-gray-500 mb-1">
-              업체명
-            </label>
-            <input
-              value={query}
-              onChange={(e) => {
-                const v = e.target.value;
-                setQuery(v);
-                onChange({ ...value, 업체명: v });
-                setOpen(true);
-              }}
-              onKeyDown={(e) => {
-                if (!open) return;
+      {/* 업체명 / 주소 */}
+      <div className="grid grid-cols-2 gap-3 relative">
+        {/* 업체명 */}
+        <div className="relative">
+          <label className="block text-xs text-gray-500 mb-1">
+            업체명
+          </label>
+          <input
+            value={query}
+            onChange={(e) => {
+              const v = e.target.value;
+              setQuery(v);
+              onChange({ ...value, 업체명: v });
+              setOpen(true);
+            }}
+            onKeyDown={(e) => {
+              if (!open) return;
 
-                if (e.key === "ArrowDown" && options.length > 0) {
-                  e.preventDefault();
-                  setActiveIndex((i) =>
-                    i < options.length - 1 ? i + 1 : i
-                  );
+              if (e.key === "ArrowDown" && options.length > 0) {
+                e.preventDefault();
+                setActiveIndex((i) =>
+                  i < options.length - 1 ? i + 1 : i
+                );
+              }
+
+              if (e.key === "ArrowUp" && options.length > 0) {
+                e.preventDefault();
+                setActiveIndex((i) => (i > 0 ? i - 1 : 0));
+              }
+
+              if (e.key === "Enter") {
+                e.preventDefault();
+
+                // 기존 선택
+                if (options.length > 0 && activeIndex >= 0) {
+                  const p = options[activeIndex];
+                  setQuery(p.업체명);
+                  onChange({
+                    업체명: p.업체명,
+                    주소: p.주소,
+                    담당자: p.담당자,
+                    담당자번호: p.담당자번호,
+                    contacts: p.contacts || [],
+                  });
+                  setOpen(false);
+                  return;
                 }
 
-                if (e.key === "ArrowUp" && options.length > 0) {
-                  e.preventDefault();
-                  setActiveIndex((i) => (i > 0 ? i - 1 : 0));
+                // 신규 등록
+                if (options.length === 0 && query.trim()) {
+                  setNewPlace({
+                    업체명: query,
+                    주소: "",
+                    담당자: "",
+                    담당자번호: "",
+                    메모: "",
+                  });
+                  setNewOpen(true);
+                  setOpen(false);
                 }
+              }
 
-                if (e.key === "Enter") {
-                  e.preventDefault();
+              if (e.key === "Escape") {
+                setOpen(false);
+              }
+            }}
+            onBlur={() => setTimeout(() => setOpen(false), 150)}
+            className="w-full px-3 py-2 text-sm rounded-lg
+                       border border-gray-300
+                       focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+          />
 
-                  // 기존 선택
-                  if (options.length > 0 && activeIndex >= 0) {
-                    const p = options[activeIndex];
+          {/* 자동완성 */}
+          {open && (
+            <div
+              ref={listRef}
+              className="absolute z-50 mt-1 w-full bg-white
+                         border rounded-lg shadow-lg
+                         max-h-56 overflow-auto"
+            >
+              {options.map((p, i) => (
+                <div
+                  key={i}
+                  className={`px-3 py-2 cursor-pointer ${
+                    i === activeIndex
+                      ? "bg-blue-100"
+                      : "hover:bg-blue-50"
+                  }`}
+                  onMouseDown={() => {
                     setQuery(p.업체명);
                     onChange({
                       업체명: p.업체명,
                       주소: p.주소,
                       담당자: p.담당자,
                       담당자번호: p.담당자번호,
+                      contacts: p.contacts || [],
                     });
                     setOpen(false);
-                    return;
-                  }
+                  }}
+                >
+                  <div className="text-sm font-semibold">{p.업체명}</div>
+                  <div className="text-xs text-gray-500">{p.주소}</div>
+                </div>
+              ))}
 
-                  // 신규 등록
-                  if (options.length === 0 && query.trim()) {
+              {options.length === 0 && query.trim() && (
+                <div
+                  className="px-3 py-3 text-sm text-blue-600
+                             hover:bg-blue-50 cursor-pointer border-t"
+                  onMouseDown={() => {
                     setNewPlace({
                       업체명: query,
                       주소: "",
@@ -1207,126 +1301,168 @@ function StopRow({ value, onChange, onRemove, placeList }) {
                     });
                     setNewOpen(true);
                     setOpen(false);
-                  }
-                }
-
-                if (e.key === "Escape") {
-                  setOpen(false);
-                }
-              }}
-              onBlur={() => setTimeout(() => setOpen(false), 150)}
-              className="w-full px-3 py-2 text-sm rounded-lg
-                         border border-gray-300
-                         focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-            />
-
-            {/* 자동완성 */}
-            {open && (
-              <div
-                ref={listRef}
-                className="absolute z-50 mt-1 w-full bg-white
-                           border rounded-lg shadow-lg
-                           max-h-56 overflow-auto"
-              >
-                {options.map((p, i) => (
-                  <div
-                    key={i}
-                    data-index={i}
-                    className={`px-3 py-2 cursor-pointer ${i === activeIndex
-                      ? "bg-blue-100"
-                      : "hover:bg-blue-50"
-                      }`}
-                    onMouseEnter={() => setActiveIndex(i)}
-                    onMouseDown={() => {
-                      setQuery(p.업체명);
-                      onChange({
-                        업체명: p.업체명,
-                        주소: p.주소,
-                        담당자: p.담당자,
-                        담당자번호: p.담당자번호,
-                      });
-                      setOpen(false);
-                    }}
-                  >
-                    <div className="text-sm font-semibold">{p.업체명}</div>
-                    <div className="text-xs text-gray-500">{p.주소}</div>
-                  </div>
-                ))}
-
-                {options.length === 0 && query.trim() && (
-                  <div
-                    className="px-3 py-3 text-sm text-blue-600
-                               hover:bg-blue-50 cursor-pointer border-t"
-                    onMouseDown={() => {
-                      setNewPlace({
-                        업체명: query,
-                        주소: "",
-                        담당자: "",
-                        담당자번호: "",
-                        메모: "",
-                      });
-                      setNewOpen(true);
-                      setOpen(false);
-                    }}
-                  >
-                    “{query}” 신규 등록
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* 주소 */}
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">
-              주소
-            </label>
-            <input
-              value={value.주소 || ""}
-              onChange={(e) =>
-                onChange({ ...value, 주소: e.target.value })
-              }
-              className="w-full px-3 py-2 text-sm rounded-lg
-                         border border-gray-300 bg-gray-50"
-            />
-          </div>
+                  }}
+                >
+                  “{query}” 신규 등록
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
-        {/* 담당자 / 연락처 */}
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">
-              담당자
-            </label>
-            <input
-              value={value.담당자 || ""}
-              onChange={(e) =>
-                onChange({ ...value, 담당자: e.target.value })
-              }
-              className="w-full px-3 py-2 text-sm rounded-lg
-                         border border-gray-200"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">
-              연락처
-            </label>
-            <input
-              value={value.담당자번호 || ""}
-              onChange={(e) =>
-                onChange({
-                  ...value,
-                  담당자번호: e.target.value.replace(/[^\d-]/g, ""),
-                })
-              }
-              className="w-full px-3 py-2 text-sm rounded-lg
-                         border border-gray-200"
-            />
-          </div>
+        {/* 주소 */}
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">
+            주소
+          </label>
+          <input
+            value={value.주소 || ""}
+            onChange={(e) =>
+              onChange({ ...value, 주소: e.target.value })
+            }
+            className="w-full px-3 py-2 text-sm rounded-lg
+                       border border-gray-300 bg-gray-50"
+          />
         </div>
       </div>
 
+      {/* ================= 담당자 / 연락처 ================= */}
+<div className="space-y-1">
+
+  {/* 담당자 드롭다운 */}
+  {Array.isArray(value.contacts) && value.contacts.length > 1 && (
+    <select
+      className="w-full px-2 py-1 text-xs border rounded"
+      value={value.담당자 || ""}
+      onChange={(e) => {
+        const c = value.contacts.find(x => x.name === e.target.value);
+        if (!c) return;
+        onChange({
+          ...value,
+          담당자: c.name,
+          담당자번호: c.phone,
+        });
+        setIsNewContact(false);
+      }}
+    >
+      {value.contacts.map((c, i) => (
+        <option key={i} value={c.name}>
+          {c.name}{c.isPrimary ? " (대표)" : ""}
+        </option>
+      ))}
+    </select>
+  )}
+
+  <div className="grid grid-cols-2 gap-3">
+    <div>
+      <label className="block text-xs text-gray-500 mb-1">
+        담당자
+      </label>
+      <input
+        value={value.담당자 || ""}
+        onChange={(e) => {
+          const name = e.target.value;
+          const phone = value.담당자번호 || "";
+          const contacts = Array.isArray(value.contacts)
+            ? value.contacts
+            : [];
+
+          const exists = contacts.some(
+            c => c.name === name && c.phone === phone
+          );
+
+          // 신규 여부 표시
+          setIsNewContact(!!name && !!phone && !exists);
+
+          onChange({
+            ...value,
+            담당자: name,
+            // 🔥 신규면 contacts에 즉시 추가
+            contacts:
+              !!name && !!phone && !exists
+                ? [
+                    ...contacts,
+                    {
+                      name,
+                      phone,
+                      isPrimary: contacts.length === 0,
+                    },
+                  ]
+                : contacts,
+          });
+        }}
+        className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200"
+      />
+    </div>
+
+    <div>
+      <label className="block text-xs text-gray-500 mb-1">
+        연락처
+      </label>
+      <input
+        value={value.담당자번호 || ""}
+        onChange={(e) => {
+          const phone = e.target.value.replace(/[^\d-]/g, "");
+          const name = value.담당자 || "";
+          const contacts = Array.isArray(value.contacts)
+            ? value.contacts
+            : [];
+
+          const exists = contacts.some(
+            c => c.name === name && c.phone === phone
+          );
+
+          // 신규 여부 표시
+          setIsNewContact(!!name && !!phone && !exists);
+
+          onChange({
+            ...value,
+            담당자번호: phone,
+            // 🔥 신규면 contacts에 즉시 추가
+            contacts:
+              !!name && !!phone && !exists
+                ? [
+                    ...contacts,
+                    {
+                      name,
+                      phone,
+                      isPrimary: contacts.length === 0,
+                    },
+                  ]
+                : contacts,
+          });
+        }}
+        className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200"
+      />
+    </div>
+  </div>
+
+  {isNewContact && (
+    <div className="text-xs font-semibold text-emerald-600">
+      🆕 신규 담당자 입력됨 (저장 시 자동 등록)
+    </div>
+  )}
+
+  {value.담당자 && value.담당자번호 && (
+    <button
+      type="button"
+      className="text-xs text-blue-600 underline"
+      onClick={() => {
+        const next = (value.contacts || []).map(c => ({
+          ...c,
+          isPrimary:
+            c.name === value.담당자 &&
+            c.phone === value.담당자번호,
+        }));
+        onChange({ ...value, contacts: next });
+      }}
+    >
+      현재 담당자를 대표로 지정
+    </button>
+  )}
+</div>
+
+    </div>
       {/* ================= 신규 등록 팝업 ================= */}
       {newOpen && (
         <div className="fixed inset-0 z-[100000] bg-black/40 flex items-center justify-center">
@@ -1389,24 +1525,37 @@ function StopRow({ value, onChange, onRemove, placeList }) {
                 취소
               </button>
               <button
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg"
-                onClick={() => {
-                  // ✅ Firestore에 먼저 저장
-                  if (typeof upsertPlace === "function") {
-                    upsertPlace({
-                      업체명: newPlace.업체명,
-                      주소: newPlace.주소,
-                      담당자: newPlace.담당자,
-                      담당자번호: newPlace.담당자번호,
-                    });
-                  }
-                  setQuery(newPlace.업체명);
-                  onChange(newPlace);
-                  setNewOpen(false);
-                }}
-              >
-                등록
-              </button>
+  className="px-4 py-2 bg-blue-600 text-white rounded-lg"
+  onClick={() => {
+    const contacts =
+      newPlace.담당자 && newPlace.담당자번호
+        ? [{
+            name: newPlace.담당자,
+            phone: newPlace.담당자번호,
+            isPrimary: true,
+          }]
+        : [];
+
+    if (typeof upsertPlace === "function") {
+      upsertPlace({
+        ...newPlace,
+        contacts,
+      });
+    }
+
+    setQuery(newPlace.업체명);
+
+    onChange({
+      ...newPlace,
+      contacts,   // ✅ 핵심
+    });
+
+    setNewOpen(false);
+  }}
+>
+  등록
+</button>
+
             </div>
           </div>
         </div>
@@ -1620,12 +1769,21 @@ ${Number(form.청구운임 || 0).toLocaleString()}원 부가세별도 배차되�
       fromLocal = JSON.parse(localStorage.getItem("hachaPlaces_v1") || "[]");
     } catch { }
 
-    const toRow = (p = {}) => ({
-      업체명: p.업체명 || "",
-      주소: p.주소 || "",
-      담당자: p.담당자 || "",
-      담당자번호: p.담당자번호 || "",
-    });
+const toRow = (p = {}) => {
+  const contacts = Array.isArray(p.contacts) ? p.contacts : [];
+
+  return {
+    업체명: p.업체명 || "",
+    주소: p.주소 || "",
+
+    // UI 입력용 (절대 contacts 생성에 사용 ❌)
+    담당자: p.담당자 ?? "",
+    담당자번호: p.담당자번호 ?? "",
+
+    contacts,
+  };
+};
+
 
     const map = new Map();
 
@@ -5554,8 +5712,6 @@ ${Number(form.청구운임 || 0).toLocaleString()}원 부가세별도 배차되�
         </div>
 
       )}
-
-
 
       {/* ================= Top 3 Popup ================= */}
       {popupType && (
