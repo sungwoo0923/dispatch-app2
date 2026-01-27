@@ -303,26 +303,25 @@ function useRealtimeCollections(user) {
 
 
   const upsertDriver = async (driver) => {
-    // ⭐ Firestore 문서 ID = 차량번호
-    const id = driver.id || driver.차량번호;
-    if (!id) throw new Error("기사 차량번호(id) 없음");
+  const id = driver.id || crypto.randomUUID();
+  if (!id) throw new Error("driver id 없음");
 
-    const data = {
-      ...driver,
-      id,              // 프론트 기준
-      차량번호: id,   // DB 기준 통일
-      updatedAt: serverTimestamp(),
-      createdAt: driver.createdAt || serverTimestamp(),
-    };
-
-    await setDoc(
-      doc(db, COLL.drivers, id), // ⭐ 핵심
-      data,
-      { merge: true }
-    );
-
-    return id;
+  const data = {
+    ...driver,
+    id,
+    updatedAt: serverTimestamp(),
+    createdAt: driver.createdAt || serverTimestamp(),
   };
+
+  await setDoc(
+    doc(db, COLL.drivers, id),
+    data,
+    { merge: true }
+  );
+
+  return id;
+};
+
 
   const removeDriver = async (id) => deleteDoc(doc(db, COLL.drivers, id));
 
@@ -6906,6 +6905,7 @@ ${fare.toLocaleString()}원 ${payLabel} 배차되었습니다.`;
   };
   const [editPopupOpen, setEditPopupOpen] = React.useState(false);
   const [editTarget, setEditTarget] = React.useState(null);
+  const [driverPick, setDriverPick] = React.useState(null);
   const [markDeliveredOnSave, setMarkDeliveredOnSave] = React.useState(false);
 
   // 🔵 동일 노선 추천 리스트
@@ -10229,8 +10229,6 @@ ${url}
                 />
               </div>
             </div>
-
-
             {/* ------------------------------------------------ */}
             {/* 🔵 차량번호 (자동매칭) */}
             {/* ------------------------------------------------ */}
@@ -10256,51 +10254,90 @@ ${url}
                   }));
                 }}
                 onKeyDown={(e) => {
-                  if (e.key !== "Enter") return;
+  if (e.key !== "Enter") return;
 
-                  const raw = e.target.value.trim();
-                  const clean = raw.replace(/\s+/g, "");
+  const raw = e.target.value.trim();
+  const clean = raw.replace(/\s+/g, "");
+  if (!clean) return;
 
-                  if (!clean) return; // ← 빈 값이면 아무것도 하지 않음
+  const matches = drivers.filter(
+    (d) => String(d.차량번호 || "").replace(/\s+/g, "") === clean
+  );
 
-                  const match = drivers.find(
-                    (d) => String(d.차량번호).replace(/\s+/g, "") === clean
-                  );
+  // 1명 → 바로 적용
+  if (matches.length === 1) {
+    const d = matches[0];
+    setEditTarget((p) => ({
+      ...p,
+      차량번호: raw,
+      이름: d.이름 || "",
+      전화번호: d.전화번호 || "",
+      배차상태: "배차완료",
+    }));
+    setDriverPick(null);
+    return;
+  }
 
-                  if (match) {
-                    setEditTarget((p) => ({
-                      ...p,
-                      이름: match.이름,
-                      전화번호: match.전화번호,
-                      배차상태: "배차완료",
-                    }));
-                    return;
-                  }
+  // 여러 명 → 선택 UI 띄우기
+  if (matches.length > 1) {
+    setDriverPick({
+      plate: raw,
+      list: matches,
+    });
+    return;
+  }
 
-                  const ok = window.confirm(
-                    `[${raw}] 등록된 기사가 없습니다.\n신규 기사로 추가할까요?`
-                  );
-                  if (!ok) return;
+  // 0명 → 신규 등록
+  const ok = window.confirm(
+    `[${raw}] 등록된 기사가 없습니다.\n신규 기사로 추가할까요?`
+  );
+  if (!ok) return;
 
-                  const 이름 = prompt("기사명 입력:");
-                  const 전화번호 = prompt("전화번호 입력:");
+  const 이름 = prompt("기사명 입력");
+  if (!이름) return;
 
-                  upsertDriver({
-                    차량번호: raw,
-                    이름,
-                    전화번호,
-                  });
+  const 전화번호 = prompt("전화번호 입력");
+  if (!전화번호) return;
 
-                  setEditTarget((p) => ({
-                    ...p,
-                    이름,
-                    전화번호,
-                    배차상태: "배차완료",
-                  }));
-                }}
+  upsertDriver({ 차량번호: raw, 이름, 전화번호 });
+
+  setEditTarget((p) => ({
+    ...p,
+    차량번호: raw,
+    이름,
+    전화번호,
+    배차상태: "배차완료",
+  }));
+}}
               />
+              {driverPick && (
+  <div className="mt-2 border rounded-md bg-white shadow-sm">
+    <div className="px-3 py-1.5 text-xs font-semibold bg-slate-100 border-b">
+      동일 차량번호 기사 선택
+    </div>
 
-
+    {driverPick.list.map((d) => (
+      <button
+        key={d.id}
+        type="button"
+        className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 border-b last:border-b-0"
+        onClick={() => {
+          setEditTarget((p) => ({
+            ...p,
+            차량번호: driverPick.plate,
+            이름: d.이름,
+            전화번호: d.전화번호,
+            배차상태: "배차완료",
+          }));
+          setDriverPick(null);
+        }}
+      >
+        <div className="font-medium">{d.이름}</div>
+        <div className="text-xs text-gray-500">{d.전화번호}</div>
+      </button>
+    ))}
+  </div>
+)}
             </div>
 
             {/* 🔵 이름/전화번호 (자동입력) */}
@@ -11465,6 +11502,7 @@ function DispatchStatus({
   const [editPopupOpen, setEditPopupOpen] = React.useState(false);
   const [bulkRows, setBulkRows] = React.useState([]);
   const [loaded, setLoaded] = React.useState(false);   // ⭐ 복구완료 여부
+  const [matchedDrivers, setMatchedDrivers] = React.useState([]);
 
   // 🔵 선택수정 팝업 상태 (★ 여기에 추가!)
   // ⭐ 페이지네이션 상태
@@ -13851,46 +13889,86 @@ ${fare.toLocaleString()}원 ${payLabel} 배차되었습니다.`;
                   }));
                 }}
                 onKeyDown={(e) => {
-                  if (e.key !== "Enter") return;
+  if (e.key !== "Enter") return;
 
-                  const raw = e.target.value.trim();
-                  if (!raw) return; // 빈 값이면 매칭 로직 실행 X
+  const raw = e.target.value.trim();
+  if (!raw) return;
 
-                  const clean = raw.replace(/\s+/g, "");
+  const clean = raw.replace(/\s+/g, "");
 
-                  const match = drivers.find(
-                    (d) => String(d.차량번호).replace(/\s+/g, "") === clean
-                  );
+  // 🔍 동일 차량번호 기사 전부 찾기
+  const matches = drivers.filter(
+    (d) => String(d.차량번호).replace(/\s+/g, "") === clean
+  );
 
-                  if (match) {
-                    setEditTarget((p) => ({
-                      ...p,
-                      이름: match.이름,
-                      전화번호: match.전화번호,
-                      배차상태: "배차완료",
-                    }));
-                    return;
-                  }
+  // ✅ 1명만 있으면 바로 자동 매칭
+  if (matches.length === 1) {
+    const d = matches[0];
+    setMatchedDrivers([]);
+    setEditTarget((p) => ({
+      ...p,
+      이름: d.이름,
+      전화번호: d.전화번호,
+      배차상태: "배차완료",
+    }));
+    return;
+  }
 
-                  const ok = window.confirm(
-                    `[${raw}] 등록된 기사가 없습니다.\n신규 기사로 추가할까요?`
-                  );
-                  if (!ok) return;
+  // 🔽 2명 이상이면 → 드롭다운 선택
+  if (matches.length > 1) {
+    setMatchedDrivers(matches);
+    return;
+  }
 
-                  const 이름 = prompt("기사명 입력:");
-                  const 전화번호 = prompt("전화번호 입력:");
+  // ❌ 아무도 없으면 신규 등록
+  const ok = window.confirm(
+    `[${raw}] 등록된 기사가 없습니다.\n신규 기사로 추가할까요?`
+  );
+  if (!ok) return;
 
-                  upsertDriver({ 차량번호: raw, 이름, 전화번호 });
+  const 이름 = prompt("기사명 입력:");
+  const 전화번호 = prompt("전화번호 입력:");
+  if (!이름 || !전화번호) return;
 
-                  setEditTarget((p) => ({
-                    ...p,
-                    이름,
-                    전화번호,
-                    배차상태: "배차완료",
-                  }));
-                }}
+  upsertDriver({ 차량번호: raw, 이름, 전화번호 });
+
+  setMatchedDrivers([]);
+  setEditTarget((p) => ({
+    ...p,
+    이름,
+    전화번호,
+    배차상태: "배차완료",
+  }));
+}}
+
               />
+{matchedDrivers.length > 1 && (
+  <div className="mt-2 border rounded bg-white shadow">
+    <div className="text-xs px-2 py-1 text-gray-500 border-b">
+      동일 차량번호 기사 선택
+    </div>
 
+    {matchedDrivers.map((d, i) => (
+      <button
+        key={i}
+        type="button"
+        className="w-full text-left px-3 py-2 hover:bg-blue-50 text-sm"
+        onClick={() => {
+          setEditTarget((p) => ({
+            ...p,
+            이름: d.이름,
+            전화번호: d.전화번호,
+            배차상태: "배차완료",
+          }));
+          setMatchedDrivers([]);
+        }}
+      >
+        <div className="font-medium">{d.이름}</div>
+        <div className="text-xs text-gray-500">{d.전화번호}</div>
+      </button>
+    ))}
+  </div>
+)}
             </div>
 
             {/* 🔵 이름/전화번호 (자동입력) */}
@@ -19506,21 +19584,18 @@ function DriverManagement({ drivers = [], upsertDriver, removeDriver }) {
       alert("문서 ID가 없어 수정/삭제할 수 없습니다.");
       return;
     }
+const handleBlur = async (row, key, val) => {
+  const oldId = row.id;
+  if (!oldId) {
+    alert("문서 ID가 없어 수정/삭제할 수 없습니다.");
+    return;
+  }
 
-
-    // 차량번호 변경 = 문서 이동
-    if (key === "차량번호") {
-      const newId = val.replace(/\s+/g, "");
-      if (!newId || newId === oldId) return;
-
-      await upsertDriver({
-        ...row,
-        id: newId,        // ⭐ 새 문서 ID
-        차량번호: newId,
-      });
-      await removeDriver(oldId);
-      return;
-    }
+  await upsertDriver({
+    ...row,
+    [key]: val,
+  });
+};
 
     // 일반 필드 수정
     await upsertDriver({
@@ -19534,10 +19609,12 @@ function DriverManagement({ drivers = [], upsertDriver, removeDriver }) {
     const 차량번호 = (newForm.차량번호 || "").replace(/\s+/g, "");
     if (!차량번호) return alert("차량번호는 필수입니다.");
     await upsertDriver({
-      ...newForm,
-      차량번호,
-      id: 차량번호,
-    });
+  id: crypto.randomUUID(), // ✅ 여기
+  차량번호,
+  이름: newForm.이름,
+  전화번호: newForm.전화번호,
+  메모: newForm.메모,
+});
     setNewForm({ 차량번호: "", 이름: "", 전화번호: "", 메모: "" });
     alert("등록 완료");
   };
@@ -19578,12 +19655,13 @@ function DriverManagement({ drivers = [], upsertDriver, removeDriver }) {
           if (!차량번호) continue;
 
           await upsertDriver({
-            id: 차량번호,
-            차량번호,
-            이름: r.이름 || r["기사명"] || "",
-            전화번호: r.전화번호 || r["전화"] || r["휴대폰"] || "",
-            메모: r.메모 || r["비고"] || "",
-          });
+  id: crypto.randomUUID(), // ✅ 여기
+  차량번호,
+  이름: r.이름 || r["기사명"] || "",
+  전화번호: r.전화번호 || r["전화"] || r["휴대폰"] || "",
+  메모: r.메모 || r["비고"] || "",
+});
+
           ok++;
         }
         alert(`총 ${ok}건 반영`);
