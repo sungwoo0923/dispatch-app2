@@ -1062,672 +1062,181 @@ function ToggleBadge({ active, onClick, activeCls, inactiveCls, children }) {
     </button>
   );
 }
+  function DispatchManagement({
+    dispatchData, drivers, clients, timeOptions, tonOptions,
+    addDispatch, upsertDriver, upsertClient, upsertPlace,
+    patchDispatch, removeDispatch,
+    placeRows = [],
+    role = "admin",
+    isTest = false,  // ★ 추가!
+  }) {
+    const [placeRowsTrigger, setPlaceRowsTrigger] = React.useState(0);
+      const [aiRecommend, setAiRecommend] = React.useState(null);
+      const [aiPopupOpen, setAiPopupOpen] = React.useState(false);
+      const [areaFareHint, setAreaFareHint] = React.useState(null);
+      const [fareHistoryOpen, setFareHistoryOpen] = React.useState(false);
+      const [guideHistoryList, setGuideHistoryList] = React.useState([]);
+
+      // ================================
+  // 🔑 업체명 Key 정규화 함수(추가!)
+  // ================================
+  function normalizeKey(str = "") {
+    return String(str)
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, "")
+      .replace(/[^a-z0-9가-힣]/g, "")
+.replace(/쉬/g, "시")
+.replace(/씨제이/g, "cj")
+.replace(/제이/g, "j")
+.replace(/프레쉬/g, "프레시")
+.replace(/물류/g, "")
+.replace(/유통/g, "")
+  }
+  // ================================
+// 📍 주소 → 검색 키워드 세트 생성 (곤지암 / 강서구 대응)
 // ================================
-// 🔑 업체명 Key 정규화 함수(추가!)
-// ================================
-function normalizeKey(str = "") {
-  return String(str)
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, "")
-    .replace(/[^a-z0-9가-힣]/g, "")
-    .replace(/쉬/g, "시")
-    .replace(/씨제이/g, "cj")
-    .replace(/제이/g, "j")
-    .replace(/프레쉬/g, "프레시")
-    .replace(/물류/g, "")
-    .replace(/유통/g, "")
-}
-function StopRow({ value, onChange, onRemove, placeList, upsertPlace }) {
-  const [isNewContact, setIsNewContact] = React.useState(false);
-  const [query, setQuery] = React.useState(value.업체명 || "");
-  const [open, setOpen] = React.useState(false);
-  const [activeIndex, setActiveIndex] = React.useState(-1);
-  const [newOpen, setNewOpen] = React.useState(false);
+function extractAreaTokens(addr = "") {
+  const s = String(addr).trim();
+  if (!s) return [];
 
-  // 🔥 신규 등록용 상태 (이게 빠져서 흰 화면 났다)
-  const [newPlace, setNewPlace] = React.useState({
-    업체명: "",
-    주소: "",
-    담당자: "",
-    담당자번호: "",
-    메모: "",
-  });
+  // 공백, 특수문자 제거
+  const clean = s.replace(/[^\w가-힣]/g, "");
 
-  const listRef = React.useRef(null);
-    React.useEffect(() => {
-    const name = value.담당자;
-    const phone = value.담당자번호;
+  const tokens = new Set();
 
-    console.log("[신규감지 체크]", {
-      name,
-      phone,
-      contacts: value.contacts,
-    });
+  // 1️⃣ 시/도
+  const sido = clean.match(
+    /(서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주)/
+  )?.[1];
+  if (sido) tokens.add(sido);
 
-    if (!name || !phone) {
-      setIsNewContact(false);
-      return;
-    }
-
-    const contacts = Array.isArray(value.contacts)
-      ? value.contacts
-      : [];
-
-    const exists = contacts.some(
-      c => c.name === name && c.phone === phone
-    );
-
-    console.log("[신규감지 결과]", { exists });
-
-    setIsNewContact(!exists);
-  }, [value.담당자, value.담당자번호, value.contacts]);
-
-  // ===============================
-  // 자동완성 옵션 (정확일치 우선)
-  // ===============================
-  const options = React.useMemo(() => {
-    if (!query.trim()) return [];
-
-    const nq = normalizeKey(query);
-    const qLower = query.toLowerCase();
-
-    return placeList
-      .map((p) => {
-        const name = p.업체명 || "";
-        const nk = normalizeKey(name);
-        const nLower = name.toLowerCase();
-
-        let score = 0;
-        if (name === query) score = 100;
-        else if (nk === nq) score = 90;
-        else if (nLower.startsWith(qLower)) score = 80;
-        else if (nk.startsWith(nq)) score = 70;
-        else if (nLower.includes(qLower)) score = 60;
-        else if (nk.includes(nq)) score = 50;
-
-        return score > 0 ? { ...p, _score: score } : null;
-      })
-      .filter(Boolean)
-      .sort((a, b) => b._score - a._score)
-      .slice(0, 8);
-  }, [query, placeList]);
-
-  // 옵션 변경 시 첫 줄 선택
-  React.useEffect(() => {
-    setActiveIndex(options.length > 0 ? 0 : -1);
-  }, [options]);
-
-  // 선택 이동 시 자동 스크롤
-  React.useEffect(() => {
-    if (!listRef.current || activeIndex < 0) return;
-    const el = listRef.current.querySelector(
-      `[data-index="${activeIndex}"]`
-    );
-    el?.scrollIntoView({ block: "nearest" });
-  }, [activeIndex]);
-
-  return (
-  <>
-    <div className="border rounded-xl bg-white p-4 shadow-sm space-y-4">
-      {/* 헤더 */}
-      <div className="flex justify-between items-center">
-        <div className="text-sm font-bold text-gray-800">경유지</div>
-        <button
-          onClick={onRemove}
-          className="text-xs text-red-500 hover:underline"
-        >
-          삭제
-        </button>
-      </div>
-
-      {/* 업체명 / 주소 */}
-      <div className="grid grid-cols-2 gap-3 relative">
-        {/* 업체명 */}
-        <div className="relative">
-          <label className="block text-xs text-gray-500 mb-1">
-            업체명
-          </label>
-          <input
-            value={query}
-            onChange={(e) => {
-              const v = e.target.value;
-              setQuery(v);
-              onChange({ ...value, 업체명: v });
-              setOpen(true);
-            }}
-            onKeyDown={(e) => {
-              if (!open) return;
-
-              if (e.key === "ArrowDown" && options.length > 0) {
-                e.preventDefault();
-                setActiveIndex((i) =>
-                  i < options.length - 1 ? i + 1 : i
-                );
-              }
-
-              if (e.key === "ArrowUp" && options.length > 0) {
-                e.preventDefault();
-                setActiveIndex((i) => (i > 0 ? i - 1 : 0));
-              }
-
-              if (e.key === "Enter") {
-                e.preventDefault();
-
-                // 기존 선택
-                if (options.length > 0 && activeIndex >= 0) {
-                  const p = options[activeIndex];
-                  setQuery(p.업체명);
-                  onChange({
-                    업체명: p.업체명,
-                    주소: p.주소,
-                    담당자: p.담당자,
-                    담당자번호: p.담당자번호,
-                    contacts: p.contacts || [],
-                  });
-                  setOpen(false);
-                  return;
-                }
-
-                // 신규 등록
-                if (options.length === 0 && query.trim()) {
-                  setNewPlace({
-                    업체명: query,
-                    주소: "",
-                    담당자: "",
-                    담당자번호: "",
-                    메모: "",
-                  });
-                  setNewOpen(true);
-                  setOpen(false);
-                }
-              }
-
-              if (e.key === "Escape") {
-                setOpen(false);
-              }
-            }}
-            onBlur={() => setTimeout(() => setOpen(false), 150)}
-            className="w-full px-3 py-2 text-sm rounded-lg
-                       border border-gray-300
-                       focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-          />
-
-          {/* 자동완성 */}
-          {open && (
-            <div
-              ref={listRef}
-              className="absolute z-50 mt-1 w-full bg-white
-                         border rounded-lg shadow-lg
-                         max-h-56 overflow-auto"
-            >
-              {options.map((p, i) => (
-                <div
-                  key={i}
-                  className={`px-3 py-2 cursor-pointer ${
-                    i === activeIndex
-                      ? "bg-blue-100"
-                      : "hover:bg-blue-50"
-                  }`}
-                  onMouseDown={() => {
-                    setQuery(p.업체명);
-                    onChange({
-                      업체명: p.업체명,
-                      주소: p.주소,
-                      담당자: p.담당자,
-                      담당자번호: p.담당자번호,
-                      contacts: p.contacts || [],
-                    });
-                    setOpen(false);
-                  }}
-                >
-                  <div className="text-sm font-semibold">{p.업체명}</div>
-                  <div className="text-xs text-gray-500">{p.주소}</div>
-                </div>
-              ))}
-
-              {options.length === 0 && query.trim() && (
-                <div
-                  className="px-3 py-3 text-sm text-blue-600
-                             hover:bg-blue-50 cursor-pointer border-t"
-                  onMouseDown={() => {
-                    setNewPlace({
-                      업체명: query,
-                      주소: "",
-                      담당자: "",
-                      담당자번호: "",
-                      메모: "",
-                    });
-                    setNewOpen(true);
-                    setOpen(false);
-                  }}
-                >
-                  “{query}” 신규 등록
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* 주소 */}
-        <div>
-          <label className="block text-xs text-gray-500 mb-1">
-            주소
-          </label>
-          <input
-            value={value.주소 || ""}
-            onChange={(e) =>
-              onChange({ ...value, 주소: e.target.value })
-            }
-            className="w-full px-3 py-2 text-sm rounded-lg
-                       border border-gray-300 bg-gray-50"
-          />
-        </div>
-      </div>
-
-      {/* ================= 담당자 / 연락처 ================= */}
-<div className="space-y-1">
-
-  {/* 담당자 드롭다운 */}
-  {Array.isArray(value.contacts) && value.contacts.length > 1 && (
-    <select
-      className="w-full px-2 py-1 text-xs border rounded"
-      value={value.담당자 || ""}
-      onChange={(e) => {
-        const c = value.contacts.find(x => x.name === e.target.value);
-        if (!c) return;
-        onChange({
-          ...value,
-          담당자: c.name,
-          담당자번호: c.phone,
-        });
-        setIsNewContact(false);
-      }}
-    >
-      {value.contacts.map((c, i) => (
-        <option key={i} value={c.name}>
-          {c.name}{c.isPrimary ? " (대표)" : ""}
-        </option>
-      ))}
-    </select>
-  )}
-
-  <div className="grid grid-cols-2 gap-3">
-    <div>
-      <label className="block text-xs text-gray-500 mb-1">
-        담당자
-      </label>
-      <input
-        value={value.담당자 || ""}
-        onChange={(e) => {
-          const name = e.target.value;
-          const phone = value.담당자번호 || "";
-          const contacts = Array.isArray(value.contacts)
-            ? value.contacts
-            : [];
-
-          const exists = contacts.some(
-            c => c.name === name && c.phone === phone
-          );
-
-          // 신규 여부 표시
-          setIsNewContact(!!name && !!phone && !exists);
-
-          onChange({
-            ...value,
-            담당자: name,
-            // 🔥 신규면 contacts에 즉시 추가
-            contacts:
-              !!name && !!phone && !exists
-                ? [
-                    ...contacts,
-                    {
-                      name,
-                      phone,
-                      isPrimary: contacts.length === 0,
-                    },
-                  ]
-                : contacts,
-          });
-        }}
-        className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200"
-      />
-    </div>
-
-    <div>
-      <label className="block text-xs text-gray-500 mb-1">
-        연락처
-      </label>
-      <input
-        value={value.담당자번호 || ""}
-        onChange={(e) => {
-          const phone = e.target.value.replace(/[^\d-]/g, "");
-          const name = value.담당자 || "";
-          const contacts = Array.isArray(value.contacts)
-            ? value.contacts
-            : [];
-
-          const exists = contacts.some(
-            c => c.name === name && c.phone === phone
-          );
-
-          // 신규 여부 표시
-          setIsNewContact(!!name && !!phone && !exists);
-
-          onChange({
-            ...value,
-            담당자번호: phone,
-            // 🔥 신규면 contacts에 즉시 추가
-            contacts:
-              !!name && !!phone && !exists
-                ? [
-                    ...contacts,
-                    {
-                      name,
-                      phone,
-                      isPrimary: contacts.length === 0,
-                    },
-                  ]
-                : contacts,
-          });
-        }}
-        className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200"
-      />
-    </div>
-  </div>
-
-  {isNewContact && (
-    <div className="text-xs font-semibold text-emerald-600">
-      🆕 신규 담당자 입력됨 (저장 시 자동 등록)
-    </div>
-  )}
-
-  {value.담당자 && value.담당자번호 && (
-    <button
-      type="button"
-      className="text-xs text-blue-600 underline"
-      onClick={() => {
-        const next = (value.contacts || []).map(c => ({
-          ...c,
-          isPrimary:
-            c.name === value.담당자 &&
-            c.phone === value.담당자번호,
-        }));
-        onChange({ ...value, contacts: next });
-      }}
-    >
-      현재 담당자를 대표로 지정
-    </button>
-  )}
-</div>
-
-    </div>
-      {/* ================= 신규 등록 팝업 ================= */}
-      {newOpen && (
-        <div className="fixed inset-0 z-[100000] bg-black/40 flex items-center justify-center">
-          <div className="bg-white w-[480px] rounded-2xl shadow-xl overflow-hidden">
-            <div className="px-6 py-4 border-b">
-              <h3 className="text-lg font-bold">거래처 신규 등록</h3>
-            </div>
-
-            <div className="px-6 py-5 space-y-4">
-              <input
-                value={newPlace.업체명}
-                onChange={(e) =>
-                  setNewPlace(p => ({ ...p, 업체명: e.target.value }))
-                }
-                className="w-full px-3 py-2 border rounded-lg"
-              />
-              <input
-                placeholder="주소"
-                value={newPlace.주소}
-                onChange={(e) =>
-                  setNewPlace(p => ({ ...p, 주소: e.target.value }))
-                }
-                className="w-full px-3 py-2 border rounded-lg"
-              />
-              <input
-                placeholder="담당자"
-                value={newPlace.담당자}
-                onChange={(e) =>
-                  setNewPlace(p => ({ ...p, 담당자: e.target.value }))
-                }
-                className="w-full px-3 py-2 border rounded-lg"
-              />
-              <input
-                placeholder="연락처"
-                value={newPlace.담당자번호}
-                onChange={(e) =>
-                  setNewPlace(p => ({
-                    ...p,
-                    담당자번호: e.target.value.replace(/[^\d-]/g, ""),
-                  }))
-                }
-                className="w-full px-3 py-2 border rounded-lg"
-              />
-              <textarea
-                rows={3}
-                placeholder="메모"
-                value={newPlace.메모}
-                onChange={(e) =>
-                  setNewPlace(p => ({ ...p, 메모: e.target.value }))
-                }
-                className="w-full px-3 py-2 border rounded-lg"
-              />
-            </div>
-
-            <div className="flex justify-end gap-2 px-6 py-4 border-t">
-              <button
-                className="px-4 py-2 bg-gray-100 rounded-lg"
-                onClick={() => setNewOpen(false)}
-              >
-                취소
-              </button>
-              <button
-  className="px-4 py-2 bg-blue-600 text-white rounded-lg"
-  onClick={() => {
-    const contacts =
-      newPlace.담당자 && newPlace.담당자번호
-        ? [{
-            name: newPlace.담당자,
-            phone: newPlace.담당자번호,
-            isPrimary: true,
-          }]
-        : [];
-
-    if (typeof upsertPlace === "function") {
-      upsertPlace({
-        ...newPlace,
-        contacts,
-      });
-    }
-
-    setQuery(newPlace.업체명);
-
-    onChange({
-      ...newPlace,
-      contacts,   // ✅ 핵심
-    });
-
-    setNewOpen(false);
-  }}
->
-  등록
-</button>
-
-            </div>
-          </div>
-        </div>
-      )}
-    </>
-  );
+  // 2️⃣ 시/군/구
+  const sigungu = clean.match(/([가-힣]+시|[가-힣]+군|[가-힣]+구)/)?.[1];
+  if (sigungu) tokens.add(sigungu);
+  // ⭐️ [추가] "강남" → "강남구" 보정
+if (!sigungu && clean.length >= 2) {
+  tokens.add(clean);        // 강남
+  tokens.add(clean + "구"); // 강남구
 }
 
+  // 3️⃣ 읍/면/동 (곤지암, 장지동 같은 케이스)
+  const eupmyeondong = clean.match(/([가-힣]+읍|[가-힣]+면|[가-힣]+동|[가-힣]{2,})/g);
+  if (eupmyeondong) {
+    eupmyeondong.forEach(t => {
+      if (t.length >= 2) tokens.add(t);
+    });
+  }
+   return Array.from(tokens);
+}
+// ================================
+// 🔍 두 주소가 같은 지역인지 판단
+// ================================
+function isAreaMatch(inputAddr, rowAddr) {
+  const inputTokens = extractAreaTokens(inputAddr);
+  const rowText = String(rowAddr || "").replace(/\s+/g, "");
 
-function DispatchManagement({
-  dispatchData, drivers, clients, timeOptions, tonOptions,
-  addDispatch, upsertDriver, upsertClient, upsertPlace,
-  patchDispatch, removeDispatch,
-  placeRows = [],
-  role = "admin",
-  isTest = false,  // ★ 추가!
-}) {
-  const [placeRowsTrigger, setPlaceRowsTrigger] = React.useState(0);
-  const [aiRecommend, setAiRecommend] = React.useState(null);
-  const [aiPopupOpen, setAiPopupOpen] = React.useState(false);
-  const [areaFareHint, setAreaFareHint] = React.useState(null);
-  const [fareHistoryOpen, setFareHistoryOpen] = React.useState(false);
-  const [guideHistoryList, setGuideHistoryList] = React.useState([]);
-  const [stopPopup, setStopPopup] = React.useState({
-    open: false,
-    type: null, // "pickup" | "drop"
-    stops: [],
-  });
+  return inputTokens.some(t => rowText.includes(t));
+}
+ // ================================
+// 📍 주소 → 조회용 행정구 단위로 축소
+// 예: "인천 서구 북항로 28-29" → "인천 서구"
+// ================================
+function normalizeAreaForSearch(addr = "") {
+  const s = String(addr).trim();
+  if (!s) return "";
 
-  // ================================
-  // 📍 주소 → 검색 키워드 세트 생성 (곤지암 / 강서구 대응)
-  // ================================
-  function extractAreaTokens(addr = "") {
-    const s = String(addr).trim();
-    if (!s) return [];
-
-    // 공백, 특수문자 제거
-    const clean = s.replace(/[^\w가-힣]/g, "");
-
-    const tokens = new Set();
-
-    // 1️⃣ 시/도
-    const sido = clean.match(
+  const sido =
+    s.match(
       /(서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주)/
-    )?.[1];
-    if (sido) tokens.add(sido);
+    )?.[1] || "";
 
-    // 2️⃣ 시/군/구
-    const sigungu = clean.match(/([가-힣]+시|[가-힣]+군|[가-힣]+구)/)?.[1];
-    if (sigungu) tokens.add(sigungu);
-    // ⭐️ [추가] "강남" → "강남구" 보정
-    if (!sigungu && clean.length >= 2) {
-      tokens.add(clean);        // 강남
-      tokens.add(clean + "구"); // 강남구
-    }
+  const sigungu =
+    s.match(/([가-힣]+시|[가-힣]+군|[가-힣]+구)/)?.[1] || "";
 
-    // 3️⃣ 읍/면/동 (곤지암, 장지동 같은 케이스)
-    const eupmyeondong = clean.match(/([가-힣]+읍|[가-힣]+면|[가-힣]+동|[가-힣]{2,})/g);
-    if (eupmyeondong) {
-      eupmyeondong.forEach(t => {
-        if (t.length >= 2) tokens.add(t);
-      });
-    }
-    return Array.from(tokens);
-  }
-  // ================================
-  // 🔍 두 주소가 같은 지역인지 판단
-  // ================================
-  function isAreaMatch(inputAddr, rowAddr) {
-    const inputTokens = extractAreaTokens(inputAddr);
-    const rowText = String(rowAddr || "").replace(/\s+/g, "");
-
-    return inputTokens.some(t => rowText.includes(t));
-  }
-  // ================================
-  // 📍 주소 → 조회용 행정구 단위로 축소
-  // 예: "인천 서구 북항로 28-29" → "인천 서구"
-  // ================================
-  function normalizeAreaForSearch(addr = "") {
-    const s = String(addr).trim();
-    if (!s) return "";
-
-    const sido =
-      s.match(
-        /(서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주)/
-      )?.[1] || "";
-
-    const sigungu =
-      s.match(/([가-힣]+시|[가-힣]+군|[가-힣]+구)/)?.[1] || "";
-
-    // ⭐ 핵심: 행정구 추출 실패 시 → 원문 그대로
-    if (!sido && !sigungu) {
-      return s;
-    }
-
-    return `${sido} ${sigungu}`.trim();
+  // ⭐ 핵심: 행정구 추출 실패 시 → 원문 그대로
+  if (!sido && !sigungu) {
+    return s;
   }
 
-  // ================================
-  // 🚚 차량종류 그룹화 (최종)
-  // ================================
-  function normalizeVehicleGroup(type = "") {
-    const t = String(type).replace(/\s+/g, "");
+  return `${sido} ${sigungu}`.trim();
+}
 
-    // 🛵 오토바이 (완전 분리)
-    if (t.includes("오토바이") || t.includes("바이크")) {
-      return "MOTOR";
-    }
+// ================================
+// 🚚 차량종류 그룹화 (최종)
+// ================================
+function normalizeVehicleGroup(type = "") {
+  const t = String(type).replace(/\s+/g, "");
 
-    // ❄ 냉장 / 냉동 계열 (톤수·형태 무시)
-    if (t.includes("냉장") || t.includes("냉동")) {
-      return "COLD";
-    }
-
-    // 🚐 소형차
-    if (t.includes("라보") || t.includes("다마스")) {
-      return "SMALL";
-    }
-
-    // 🚚 일반 화물차
-    if (
-      t.includes("카고") ||
-      t.includes("윙") ||
-      t.includes("윙바디") ||
-      t.includes("탑") ||
-      t.includes("탑차") ||
-      t.includes("리프트")
-    ) {
-      return "GENERAL";
-    }
-
-    return "ETC";
+  // 🛵 오토바이 (완전 분리)
+  if (t.includes("오토바이") || t.includes("바이크")) {
+    return "MOTOR";
   }
 
-  // ================================
-  // 🚛 차량톤수 숫자 추출 (전역 공용)
-  // ================================
-  function extractTonNum(text = "") {
-    if (!text) return null;
-
-    const s = String(text).replace(/\s+/g, "");
-
-    // 1️⃣ "1톤", "2.5톤"
-    const m = s.match(/(\d+(?:\.\d+)?)/);
-    if (m) return Number(m[1]);
-
-    return null;
+  // ❄ 냉장 / 냉동 계열 (톤수·형태 무시)
+  if (t.includes("냉장") || t.includes("냉동")) {
+    return "COLD";
   }
 
+  // 🚐 소형차
+  if (t.includes("라보") || t.includes("다마스")) {
+    return "SMALL";
+  }
+
+  // 🚚 일반 화물차
+  if (
+    t.includes("카고") ||
+    t.includes("윙") ||
+    t.includes("윙바디") ||
+    t.includes("탑") ||
+    t.includes("탑차") ||
+    t.includes("리프트")
+  ) {
+    return "GENERAL";
+  }
+
+  return "ETC";
+}
+
+// ================================
+// 🚛 차량톤수 숫자 추출 (전역 공용)
+// ================================
+function extractTonNum(text = "") {
+  if (!text) return null;
+
+  const s = String(text).replace(/\s+/g, "");
+
+  // 1️⃣ "1톤", "2.5톤"
+  const m = s.match(/(\d+(?:\.\d+)?)/);
+  if (m) return Number(m[1]);
+
+  return null;
+}
+
   // ================================
-  // 🔍 날짜 문자열 판별 (오더복사용)
-  // ================================
-  const isDateLike = (v) =>
-    typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v);
-  // ===============================
-  // 📤 즉시공유 텍스트 생성
-  // ===============================
-  function makeInstantShareText(form) {
-    // 날짜: 1월 15일 목요일
-    const d = form.상차일 ? new Date(form.상차일) : null;
-    const dateStr = d
-      ? `${d.getMonth() + 1}월 ${d.getDate()}일 ${"일월화수목금토"[d.getDay()]}요일`
-      : "";
+// 🔍 날짜 문자열 판별 (오더복사용)
+// ================================
+const isDateLike = (v) =>
+  typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v);
+// ===============================
+// 📤 즉시공유 텍스트 생성
+// ===============================
+function makeInstantShareText(form) {
+  // 날짜: 1월 15일 목요일
+  const d = form.상차일 ? new Date(form.상차일) : null;
+  const dateStr = d
+    ? `${d.getMonth() + 1}월 ${d.getDate()}일 ${"일월화수목금토"[d.getDay()]}요일`
+    : "";
 
-    // 시간 기본값 처리
-    const pickupTime = form.상차시간?.trim() || "즉시";
-    const dropTime = form.하차시간?.trim() || "즉시";
+  // 시간 기본값 처리
+  const pickupTime = form.상차시간?.trim() || "즉시";
+  const dropTime   = form.하차시간?.trim() || "즉시";
 
-    // 중량 / 파렛트
-    const weight = form.차량톤수 || "3,000kg";
-    const pallet = form.화물내용 || "";
+  // 중량 / 파렛트
+  const weight = form.차량톤수 || "3,000kg";
+  const pallet = form.화물내용 || "";
 
-    return `${dateStr}
+  return `${dateStr}
 
 상차지 :
 ${form.상차지명 || "-"}
@@ -1746,2017 +1255,2058 @@ ${form.하차지담당자번호 || "-"}
 ${form.차량종류 || ""}
 // 🔽 기사 전달사항 (있을 때만 출력)
 ${form.전달사항?.trim()
-        ? `\n\n📢 기사 전달사항\n${form.전달사항.trim()}`
-        : ""
-      }
+  ? `\n\n📢 기사 전달사항\n${form.전달사항.trim()}`
+  : ""
+}
 
 ${form.차량번호 || "-"} ${form.이름 || "-"} ${form.전화번호 || "-"}
 ${Number(form.청구운임 || 0).toLocaleString()}원 부가세별도 배차되었습니다.`.trim();
+}
+
+const placeList = React.useMemo(() => {
+  
+  const fromFirestore = Array.isArray(placeRows) ? placeRows : [];
+
+  // 🔥 Firestore 기준 key 목록
+  const firestoreKeys = new Set(
+    fromFirestore.map(p => normalizeKey(p.업체명 || ""))
+  );
+
+  let fromLocal = [];
+  try {
+    fromLocal = JSON.parse(localStorage.getItem("hachaPlaces_v1") || "[]");
+  } catch {}
+
+  const toRow = (p = {}) => ({
+  업체명: p.업체명 || "",
+  주소: p.주소 || "",
+  담당자목록: Array.isArray(p.담당자목록)
+    ? p.담당자목록
+    : p.담당자 && p.담당자번호
+    ? [{
+        이름: p.담당자,
+        번호: p.담당자번호,
+        대표: true,
+      }]
+    : [],
+});
+
+
+  const map = new Map();
+
+  // ✅ Firestore 먼저
+  fromFirestore.forEach(raw => {
+    const row = toRow(raw);
+    const key = normalizeKey(row.업체명);
+    if (key) map.set(key, row);
+  });
+
+  // ✅ localStorage는 Firestore에 존재하는 것만 허용
+  fromLocal.forEach(raw => {
+    const row = toRow(raw);
+    const key = normalizeKey(row.업체명);
+    if (!key) return;
+    if (!firestoreKeys.has(key)) return; // ⭐ 여기 핵심
+    if (!map.has(key)) map.set(key, row);
+  });
+
+  const merged = Array.from(map.values());
+
+  // 🔥 localStorage 정리 저장
+  try {
+    localStorage.setItem("hachaPlaces_v1", JSON.stringify(merged));
+  } catch {}
+
+  return merged;
+}, [placeRows, placeRowsTrigger]);
+
+    // 관리자 여부 체크
+const isAdmin = role === "admin";
+
+// 기존 필터 상태 (유지)
+const [filterType, setFilterType] = React.useState(null);
+
+const [filterValue, setFilterValue] = React.useState("");
+ 
+
+// ⭐ 신규 기사등록 모달 상태
+const [driverModal, setDriverModal] = React.useState({
+  open: false,
+  carNo: "",
+  name: "",
+  phone: "",
+});
+ // ⭐ 등록 확인 팝업 상태
+const [confirmOpen, setConfirmOpen] = React.useState(false);
+// ⭐ 실시간배차현황(하단 테이블) 상태 변경 확인 팝업
+const [confirmChange, setConfirmChange] = React.useState(null);
+/*
+{
+  rowId,
+  key,
+  before,
+  after
+}
+*/
+
+// ================================
+// 🔥 거래처/하차지 중복 확인 팝업 상태
+// ================================
+const [dupPopup, setDupPopup] = React.useState({
+  open: false,
+  input: null,      // { name, addr, manager, phone }
+  candidates: [],   // normalizeKey 기준 유사 업체 목록
+});
+
+// ⭐ 신규 기사 등록시: 기본 커서 위치(기사명)
+const nameInputRef = React.useRef(null);
+
+React.useEffect(() => {
+  if (!driverModal.open) return;
+  const timer = setTimeout(() => {
+    try {
+      nameInputRef.current?.focus();
+    } catch {}
+  }, 30);
+  return () => clearTimeout(timer);
+}, [driverModal.open]);
+
+// ⭐ Top3 팝업 상태
+const [popupType, setPopupType] = React.useState(null);
+
+const [statusPopup, setStatusPopup] = React.useState(null);
+// ⭐ 전화번호 숫자→하이폰 포맷 변환
+function formatPhone(raw) {
+  if (!raw) return "";
+  
+  const str = String(raw);   // ★ 어떤 타입이 와도 문자열로 강제
+
+  const num = str.replace(/[^\d]/g, ""); // 숫자만 추출
+
+  if (num.length === 11) {
+    return `${num.slice(0, 3)}-${num.slice(3, 7)}-${num.slice(7)}`;
   }
 
-  const placeList = React.useMemo(() => {
+  if (num.length === 10) {
+    return `${num.slice(0, 3)}-${num.slice(3, 6)}-${num.slice(6)}`;
+  }
 
-    const fromFirestore = Array.isArray(placeRows) ? placeRows : [];
+  return str;   // 기본 문자열 리턴(하이픈 없는 경우 등)
+}
 
-    // 🔥 Firestore 기준 key 목록
-    const firestoreKeys = new Set(
-      fromFirestore.map(p => normalizeKey(p.업체명 || ""))
-    );
+// ========================================================
+// 🔷 Today Dashboard 데이터 계산 (UI 대시보드에서 사용)
+// ========================================================
 
-    let fromLocal = [];
+// 📌 오늘 날짜 (KST)
+ function todayKST() {
+   const d = new Date();
+   d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+   return d.toISOString().slice(0, 10);
+ }
+const today = todayKST();
+
+// 📌 당일 상차 데이터만 필터링
+const todayRows = (dispatchData || []).filter(
+  r => String(r.상차일 || "").slice(0, 10) === today
+);
+
+// 📊 KPI 계산: 모두 당일 ONLY
+const total = todayRows.length;
+const done = todayRows.filter(r => r.배차상태 === "배차완료").length;
+const doing = todayRows.filter(r => r.배차상태 === "배차중").length;
+const pending = todayRows.filter(r => !r.차량번호?.trim()).length;
+const delayed = todayRows.filter(r => r.배차상태 === "지연").length;
+// 🔹 시간대별 요청건수 트렌드 데이터 생성
+const trendData = React.useMemo(() => {
+  const hourly = {};
+  todayRows.forEach(r => {
+    const t = (r.상차시간 || "").match(/(\d+)/);
+    const hour = t ? Number(t[1]) : null;
+    if (hour != null && hour >= 0 && hour <= 23) {
+      hourly[hour] = (hourly[hour] || 0) + 1;
+    }
+  });
+
+  const list = [];
+  for (let i = 0; i < 24; i++) {
+    list.push({ hour: `${i}시`, count: hourly[i] || 0 });
+  }
+  return list;
+}, [todayRows]);
+
+
+// 진행률
+const rate = total > 0 ? Math.round((done / total) * 100) : 0;
+
+// 당일 기사 수: 배차된 기사 (중복 제거)
+const driverCount = new Set(
+  todayRows
+    .map(r => r.이름?.trim())
+    .filter(Boolean)
+).size;
+
+// 신규 거래처/하차지 (값 존재 여부 기준)
+const newClients = todayRows.filter(r => r.거래처명?.trim()).length;
+const newPlaces = todayRows.filter(r => r.하차지명?.trim()).length;
+
+// 🚚 유통 데이터
+const money = (text) => {
+  const n = Number(String(text || "0").replace(/[^\d]/g, ""));
+  return isNaN(n) ? 0 : n;
+};
+const stripUndefined = (obj) =>
+  Object.fromEntries(
+    Object.entries(obj).filter(([, v]) => v !== undefined)
+  );
+// 매출/기사비용/마진율
+const todayRevenue = todayRows.reduce((sum, r) => sum + money(r.청구운임), 0);
+const todayDriverCost = todayRows.reduce((sum, r) => sum + money(r.기사운임), 0);
+const todayMarginRate = todayRevenue
+  ? ((todayRevenue - todayDriverCost) / todayRevenue) * 100
+  : 0;
+// 🔹 Top 거래처/하차지 통계
+const topClients = Object.entries(
+  todayRows.reduce((map, r) => {
+    const k = r.거래처명 || "기타";
+    map[k] = (map[k] || 0) + 1;
+    return map;
+  }, {})
+).sort((a,b)=>b[1]-a[1]).slice(0,3);
+
+const topDrops = Object.entries(
+  todayRows.reduce((map, r) => {
+    const k = r.하차지명 || "기타";
+    map[k] = (map[k] || 0) + 1;
+    return map;
+  }, {})
+).sort((a,b)=>b[1]-a[1]).slice(0,3);
+
+// 🔹 알림 설정 (시간 자동감지)
+const [alertTime, setAlertTime] = React.useState("10:00");
+const [alertShown, setAlertShown] = React.useState(false);
+
+React.useEffect(() => {
+  const timer = setInterval(() => {
+    const now = new Date();
+    const hh = String(now.getHours()).padStart(2, "0");
+    const mm = String(now.getMinutes()).padStart(2, "0");
+    const cur = `${hh}:${mm}`;
+
+    if (!alertShown && cur === alertTime) {
+      alert(`⏰ 알림: ${alertTime}\n미배차 ${pending}건, 지연 ${delayed}건 확인!`);
+      setAlertShown(true);
+    }
+  }, 10000);
+
+  return () => clearInterval(timer);
+}, [alertTime, alertShown, pending, delayed]);
+
+
+// ========================================================
+// ⭐ 상태 기반 필터링 실행 + 실시간배차현황 테이블로 스크롤 이동
+// ========================================================
+const goStatus = (type, value) => {
+  setFilterType(type);
+  setFilterValue(value);
+
+  const el = document.getElementById("realtime-status-area");
+  if (el) {
+    el.scrollIntoView({ behavior: "smooth" });
+  }
+};
+
+// ⭐ 오더복사용 플래그 (🔥 여기 추가)
+const [isCopyMode, setIsCopyMode] = React.useState(false);
+    // ⭐ 여기 맨 위에 오도록
+    const [clientQuery, setClientQuery] = React.useState("");
+    const [isClientOpen, setIsClientOpen] = React.useState(false);
+    // ⭐ 거래처 선택 대상 팝업
+    
+
+    const [clientActive, setClientActive] = React.useState(0);
+    const comboRef = React.useRef(null);
+    React.useEffect(() => {
+      const onDocClick = (e) => {
+        if (!comboRef.current) return;
+        if (!comboRef.current.contains(e.target)) setIsClientOpen(false);
+      };
+      document.addEventListener("mousedown", onDocClick);
+      return () => document.removeEventListener("mousedown", onDocClick);
+    }, []);
+// ⭐ 상차지 자동완성 상태 분리
+const [showPickupDropdown, setShowPickupDropdown] = React.useState(false);
+const [pickupOptions, setPickupOptions] = React.useState([]);
+// 🚗 차량종류 자동완성 상태
+const [vehicleQuery, setVehicleQuery] = React.useState("");
+const [showVehicleDropdown, setShowVehicleDropdown] = React.useState(false);
+const [vehicleActive, setVehicleActive] = React.useState(0);
+const vehicleItemRefs = React.useRef([]);
+React.useEffect(() => {
+  if (!showVehicleDropdown) return;
+
+  const el = vehicleItemRefs.current[vehicleActive];
+  if (el) {
+    el.scrollIntoView({
+      block: "nearest",   // 드롭다운 내부에서만 이동
+      inline: "nearest",
+    });
+  }
+}, [vehicleActive, showVehicleDropdown]);
+const [pickupActive, setPickupActive] = React.useState(0);
+
+const [showPlaceDropdown, setShowPlaceDropdown] = React.useState(false);
+const [placeOptions, setPlaceOptions] = React.useState([]);
+const [placeActive, setPlaceActive] = React.useState(0);
+    // ---------- 🔧 안전 폴백 유틸(다른 파트 미정의 시 자체 사용) ----------
+    const _todayStr = (typeof todayStr === "function")
+      ? todayStr
+      : () => new Date().toISOString().slice(0, 10);
+    
+       // ===================== 하차지(placeRows) + 로컬 병합 placeList 끝 =====================
+
+// ⭐ 업체명 "완전 동일"만 기존으로 판단
+const findPlaceByName = (name) => {
+  return placeList.find(
+    (p) => String(p.업체명 || "").trim() === String(name || "").trim()
+  );
+};
+// ⭐ 대표 담당자 추출 유틸 (🔥 반드시 필요)
+function getPrimaryManager(place) {
+  if (!place || !Array.isArray(place.담당자목록)) return null;
+  return place.담당자목록.find(m => m.대표) || null;
+}
+const openNewPlacePrompt = (name) => {
+  const addr = prompt("주소 (선택)");
+  if (addr === null) return;
+
+  const manager = prompt("담당자 (선택)");
+  if (manager === null) return;
+
+  const phone = prompt("연락처 (선택)");
+  if (phone === null) return;
+
+  // 🔥 최종 확인
+  const ok = window.confirm(
+    `신규 거래처를 등록하시겠습니까?\n\n` +
+    `업체명: ${name}\n` +
+    `주소: ${addr || "-"}\n` +
+    `담당자: ${manager || "-"}\n` +
+    `연락처: ${phone || "-"}`
+  );
+
+  if (!ok) return; // ❌ 여기서 완전 중단
+
+  savePlaceSmart(
+    name,
+    addr || "",
+    manager || "",
+    phone || ""
+  );
+
+  alert("신규 거래처 등록이 완료되었습니다.");
+};
+
+// ⭐ 업체 업데이트 + 신규 생성 자동 처리
+const savePlaceSmart = (name, addr, manager, phone) => {
+  // ================================
+// ➕ 상차지 신규 담당자 등록
+// ================================
+const handleRegisterPickupManager = async () => {
+  if (!pickupPlace) return;
+
+  await upsertPlace({
+    업체명: pickupPlace.업체명,
+    주소: pickupPlace.주소,
+    담당자: form.상차지담당자,
+    담당자번호: form.상차지담당자번호,
+  });
+
+  try {
+    setPlaceRowsTrigger(Date.now());
+  } catch {}
+
+  alert("상차지 신규 담당자가 등록되었습니다.");
+};
+  if (!name) return;
+
+  const exist = findPlaceByName(name);
+
+  // ======================
+  // ① 기존 업체 있을 때 (업데이트)
+  // ======================
+  if (exist) {
+    const updated = {
+      업체명: exist.업체명,
+      주소: addr || exist.주소,
+      담당자: manager || exist.담당자,
+      담당자번호: phone || exist.담당자번호,
+    };
+
+    // Firestore 저장
+    upsertPlace(updated);
+
+    // localStorage 최신화
     try {
-      fromLocal = JSON.parse(localStorage.getItem("hachaPlaces_v1") || "[]");
-    } catch { }
+      const list = JSON.parse(localStorage.getItem("hachaPlaces_v1") || "[]");
+      const idx = list.findIndex(
+        (x) => normalizeKey(x.업체명) === normalizeKey(updated.업체명)
+      );
 
-const toRow = (p = {}) => {
-  const contacts = Array.isArray(p.contacts) ? p.contacts : [];
+      if (idx >= 0) list[idx] = updated;
+      localStorage.setItem("hachaPlaces_v1", JSON.stringify(list));
+    } catch (e) {}
 
-  return {
-    업체명: p.업체명 || "",
-    주소: p.주소 || "",
+    // 자동완성 즉시 업데이트
+    try {
+      const newLocal = JSON.parse(localStorage.getItem("hachaPlaces_v1") || "[]");
+      setPickupOptions(newLocal);
+      setPlaceOptions(newLocal);
+    } catch (e) {}
 
-    // UI 입력용 (절대 contacts 생성에 사용 ❌)
-    담당자: p.담당자 ?? "",
-    담당자번호: p.담당자번호 ?? "",
+    // placeRows 강제 갱신 트리거
+    try {
+      setPlaceRowsTrigger(Date.now());
+    } catch (e) {}
 
-    contacts,
-  };
+    return; // 업데이트 끝
+  }
+  
+// ======================
+// ② 신규 업체 생성
+// ======================
+upsertPlace({
+  업체명: name,
+  주소: addr,
+  담당자목록: exist.담당자목록 ?? []
+});
+
+// 🔥 신규 생성 후에도 반드시 트리거
+try {
+  setPlaceRowsTrigger(Date.now());
+} catch {}
+
+};
+
+    // 기본 clients + 하차지 모두 포함한 통합 검색 풀
+const mergedClients = React.useMemo(() => {
+  const map = new Map();
+
+  // ✅ 1️⃣ placeList를 먼저 넣는다 (주소/담당자 기준)
+  placeList.forEach(p => {
+    const key = normalizeKey(p.업체명);
+    if (key) map.set(key, p);
+  });
+
+  // ✅ 2️⃣ clients는 "보조 검색용"으로만 사용
+  clients.forEach(c => {
+    const key = normalizeKey(c.업체명);
+    if (!key) return;
+
+    // placeList에 없을 때만 추가
+    if (!map.has(key)) {
+      map.set(key, {
+        업체명: c.업체명,
+        주소: "",
+        담당자: "",
+        담당자번호: "",
+      });
+    }
+  });
+
+  return Array.from(map.values());
+}, [placeList, clients]);
+
+
+
+    // 이름 기준으로 하차지/기본거래처 찾기
+    const findClient = (name = "") => {
+      const n = normalizeKey(name);
+      return mergedClients.find(
+        (c) => normalizeKey(c.업체명 || "").includes(n)
+      );
+    };
+    // 🚗 차량종류 자동완성 필터 (★ 반드시 전역)
+const filterVehicles = (q) => {
+  const query = String(q || "").trim();
+  if (!query) return VEHICLE_TYPES;
+
+  const nq = normalizeKey(query);
+  return VEHICLE_TYPES.filter((v) =>
+    normalizeKey(v).includes(nq)
+  );
+};
+    // 🔍 하차지 자동완성 필터 함수
+    const filterPlaces = (q) => {
+      
+  const query = String(q || "").trim();
+  if (!query) return [];
+
+  const nq = normalizeKey(query);
+  const nLower = query.toLowerCase();
+
+  return mergedClients
+    .map((p) => {
+      const name = p.업체명 || "";
+      const nName = name.toLowerCase();
+      const nk = normalizeKey(name);
+
+      let score = 0;
+
+      // 1️⃣ 완전 동일
+      if (name === query) score = 100;
+      // 2️⃣ normalizeKey 동일 (띄어쓰기/철자차이)
+      else if (nk === nq) score = 90;
+      // 3️⃣ 시작 문자열
+      else if (nName.startsWith(nLower)) score = 80;
+      else if (nk.startsWith(nq)) score = 70;
+      // 4️⃣ 포함
+      else if (nName.includes(nLower)) score = 60;
+      else if (nk.includes(nq)) score = 50;
+
+      return score > 0 ? { ...p, __score: score } : null;
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.__score - a.__score);
 };
 
 
-    const map = new Map();
+    const _tomorrowStr = (typeof tomorrowStr === "function")
+      ? tomorrowStr
+      : () => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().slice(0, 10); };
+    const _safeLoad = (typeof safeLoad === "function")
+      ? safeLoad
+      : (key, fallback) => { try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : fallback; } catch { return fallback; } };
+    const _safeSave = (typeof safeSave === "function")
+      ? safeSave
+      : (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch { } };
 
-    // ✅ Firestore 먼저
-    fromFirestore.forEach(raw => {
-      const row = toRow(raw);
-      const key = normalizeKey(row.업체명);
-      if (key) map.set(key, row);
-    });
+    const VEHICLE_TYPES = (typeof window !== "undefined" && window.RUN25_VEHICLE_TYPES) || [
+      "라보/다마스", "카고", "윙바디", "탑차", "냉장탑", "냉동탑", "냉장윙", "냉동윙", "리프트", "오토바이", "기타"
+    ];
+    const PAY_TYPES = (typeof window !== "undefined" && window.RUN25_PAY_TYPES) || [
+      "계산서", "착불", "선불", "손실", "개인", "기타"
+    ];
+    const DISPATCH_TYPES = (typeof window !== "undefined" && window.RUN25_DISPATCH_TYPES) || [
+      "24시", "직접배차", "인성", "24(외주업체)"
+    ];
+    const StatusBadge = ({ s }) => {
+      const map = {
+        "배차중": "bg-amber-100 text-amber-800",
+        "배차완료": "bg-emerald-100 text-emerald-800",
+        "미배차": "bg-rose-100 text-rose-800",
+      };
+      return <span className={`px-2 py-0.5 rounded text-xs whitespace-nowrap ${map[s] || "bg-gray-100 text-gray-700"}`}>{s || "-"}</span>;
+    };
 
-    // ✅ localStorage는 Firestore에 존재하는 것만 허용
-    fromLocal.forEach(raw => {
-      const row = toRow(raw);
-      const key = normalizeKey(row.업체명);
-      if (!key) return;
-      if (!firestoreKeys.has(key)) return; // ⭐ 여기 핵심
-      if (!map.has(key)) map.set(key, row);
-    });
+    // ✅ 첨부파일 개수 저장용
+    const [attachCount, setAttachCount] = React.useState({}); // { dispatchId: count }
 
-    const merged = Array.from(map.values());
+    // ✅ 첨부파일 서브컬렉션 개수 로드 (Firestore)
+    React.useEffect(() => {
+      const loadAttachments = async () => {
+        try {
+          if (!dispatchData?.length || typeof getDocs !== "function" || typeof collection !== "function") return;
+          const result = {};
+          for (const row of dispatchData) {
+            if (!row?._id) continue;
+            const snap = await getDocs(collection(db, "dispatch", row._id, "attachments"));
+            result[row._id] = snap.size;
+          }
+          setAttachCount(result);
+        } catch (e) {
+          console.warn("첨부 개수 로드 실패(무시 가능):", e);
+        }
+      };
+      loadAttachments();
+    }, [dispatchData]);
 
-    // 🔥 localStorage 정리 저장
-    try {
-      localStorage.setItem("hachaPlaces_v1", JSON.stringify(merged));
-    } catch { }
+    // ⏱ 시간 옵션(오전6시~오후10시, 30분 간격) — timeOptions 미지정 시 내부 생성
+    const buildHalfHour = React.useMemo(() => {
+      if (Array.isArray(timeOptions) && timeOptions.length) return timeOptions;
+      const list = [];
+      const toLabel = (h, m) => {
+        const ampm = h < 12 ? "오전" : "오후";
+        const hh = ((h % 12) || 12);
+        return `${ampm} ${hh}시${m ? " 30분" : ""}`;
+      };
+      for (let h = 6; h <= 22; h++) {
+        list.push(toLabel(h, 0));
+        if (h !== 22) list.push(toLabel(h, 30));
+      }
+      return list;
+    }, [timeOptions]);
+    const localTimeOptions = buildHalfHour;
 
-    return merged;
-  }, [placeRows, placeRowsTrigger]);
+    // 연도 고정 도우미 (YYYY-MM-DD로 강제; "MM-DD" => "YYYY-MM-DD")
+    const currentYear = new Date().getFullYear();
+    const lockYear = (yyyy_mm_dd_or_mm_dd) => {
+      const v = (yyyy_mm_dd_or_mm_dd || "").trim();
+      if (!v) return "";
+      if (/^\d{2}-\d{2}$/.test(v)) return `${currentYear}-${v}`;
+      return v;
+    };
 
-  // 관리자 여부 체크
-  const isAdmin = role === "admin";
+    const emptyForm = {
+      _id: crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`,
+      순번: "",
+      등록일: _todayStr(),
+      거래처명: "",
+      상차지명: "",
+      상차지주소: "",
+      상차지담당자: "",
+      상차지담당자번호: "",
+      하차지명: "",
+      하차지주소: "",
+      하차지담당자: "",
+      하차지담당자번호: "",
+      화물내용: "",
+      운행유형: "편도",   // ⭐ 추가 (기본값)
+      차량종류: "",
+      차량톤수: "",
+      차량번호: "",
+      이름: "",
+      전화번호: "",
+      상차방법: "",
+      하차방법: "",
+      상차일: _todayStr(),
+      상차시간: "",
+      하차일: _todayStr(),
+      하차시간: "",
+      청구운임: "",
+      기사운임: "",
+      수수료: "",
+      지급방식: "",
+      배차방식: "",
+      메모: "",
+      메모중요도: "NORMAL",
+      전달사항: "",
+      전달사항고정: false,
+      배차상태: "배차중",
+      독차: false,
+      혼적: false,
+      긴급: false,
+      운임보정: null,
+    };
 
-  // 기존 필터 상태 (유지)
-  const [filterType, setFilterType] = React.useState(null);
+    const [form, setForm] = React.useState(() => {
+  try {
+    const saved = localStorage.getItem("dispatchForm");
+    if (saved) {
+      return {
+        ...emptyForm,
+        ...JSON.parse(saved),
+      };
+    }
+  } catch {}
+  return { ...emptyForm };
+});
+// ===============================
+// 💡 주소/조건 기반 자동 운임 가이드
+// ===============================
+React.useEffect(() => {
+  if (!form.상차지주소 || !form.하차지주소) {
+    setAreaFareHint(null);
+    return;
+  }
 
-  const [filterValue, setFilterValue] = React.useState("");
+  const ton = extractTonNum(form.차량톤수);
 
-
-  // ⭐ 신규 기사등록 모달 상태
-  const [driverModal, setDriverModal] = React.useState({
-
-    open: false,
-    carNo: "",
-    name: "",
-    phone: "",
+  const hint = calcNationwideAvgFare({
+    pickupAddr: form.상차지주소,
+    dropAddr: form.하차지주소,
+    ton,
+    cargo: form.화물내용,
+    vehicle: form.차량종류,
+    dispatchData,
   });
 
-  // ⭐ 등록 확인 팝업 상태
-  const [confirmOpen, setConfirmOpen] = React.useState(false);
-  const confirmOnceRef = React.useRef(false);
-  // ⭐ 실시간배차현황(하단 테이블) 상태 변경 확인 팝업
-  const [confirmChange, setConfirmChange] = React.useState(null);
-  /*
-  {
-    rowId,
-    key,
-    before,
-    after
+  setAreaFareHint(hint);
+}, [
+  form.상차지주소,
+  form.하차지주소,
+  form.화물내용,
+  form.차량톤수,
+  form.차량종류,
+  dispatchData,
+]);
+
+    React.useEffect(() => _safeSave("dispatchForm", form), [form]);
+    // ===============================
+// ⭐ 폼 최초 로딩 시 날짜 자동 보정
+// ===============================
+React.useEffect(() => {
+  const today = _todayStr();
+
+  if (form.상차일 && form.상차일 < today) {
+    setForm((p) => ({
+      ...p,
+      등록일: today,
+      상차일: today,
+      하차일: today,
+    }));
   }
-  */
+  // eslint-disable-next-line
+}, []);
+// ===============================
+// 💰 주소 기반 전국 평균 운임 계산 (정확 톤수 기준)
+// ===============================
+function calcNationwideAvgFare({
+  pickupAddr,
+  dropAddr,
+  ton,
+  cargo,
+  vehicle,
+  dispatchData,
+}) {
 
-  // ================================
-  // 🔥 거래처/하차지 중복 확인 팝업 상태
-  // ================================
-  const [dupPopup, setDupPopup] = React.useState({
-    open: false,
-    input: null,      // { name, addr, manager, phone }
-    candidates: [],   // normalizeKey 기준 유사 업체 목록
-  });
-
-  // ⭐ 신규 기사 등록시: 기본 커서 위치(기사명)
-  const nameInputRef = React.useRef(null);
-
-  React.useEffect(() => {
-    if (!driverModal.open) return;
-    const timer = setTimeout(() => {
-      try {
-        nameInputRef.current?.focus();
-      } catch { }
-    }, 30);
-    return () => clearTimeout(timer);
-  }, [driverModal.open]);
-
-  // ⭐ Top3 팝업 상태
-  const [popupType, setPopupType] = React.useState(null);
-
-  const [statusPopup, setStatusPopup] = React.useState(null);
-  // ⭐ 전화번호 숫자→하이폰 포맷 변환
-  function formatPhone(raw) {
-    if (!raw) return "";
-
-    const str = String(raw);   // ★ 어떤 타입이 와도 문자열로 강제
-
-    const num = str.replace(/[^\d]/g, ""); // 숫자만 추출
-
-    if (num.length === 11) {
-      return `${num.slice(0, 3)}-${num.slice(3, 7)}-${num.slice(7)}`;
-    }
-
-    if (num.length === 10) {
-      return `${num.slice(0, 3)}-${num.slice(3, 6)}-${num.slice(6)}`;
-    }
-
-    return str;   // 기본 문자열 리턴(하이픈 없는 경우 등)
-  }
-
-  // ========================================================
-  // 🔷 Today Dashboard 데이터 계산 (UI 대시보드에서 사용)
-  // ========================================================
-
-  // 📌 오늘 날짜 (KST)
-  function todayKST() {
-    const d = new Date();
-    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
-    return d.toISOString().slice(0, 10);
-  }
-  const today = todayKST();
-
-  // 📌 당일 상차 데이터만 필터링
-  const todayRows = (dispatchData || []).filter(
-    r => String(r.상차일 || "").slice(0, 10) === today
+  // 1️⃣ 주소 기준 (무조건)
+let base = (dispatchData || []).filter(r => {
+  const pickupOk = isAreaMatch(
+    pickupAddr,
+    r.상차지주소 || r.상차지명
   );
 
-  // 📊 KPI 계산: 모두 당일 ONLY
-  const total = todayRows.length;
-  const done = todayRows.filter(r => r.배차상태 === "배차완료").length;
-  const doing = todayRows.filter(r => r.배차상태 === "배차중").length;
-  const pending = todayRows.filter(r => !r.차량번호?.trim()).length;
-  const delayed = todayRows.filter(r => r.배차상태 === "지연").length;
-  // 🔹 시간대별 요청건수 트렌드 데이터 생성
-  const trendData = React.useMemo(() => {
-    const hourly = {};
-    todayRows.forEach(r => {
-      const t = (r.상차시간 || "").match(/(\d+)/);
-      const hour = t ? Number(t[1]) : null;
-      if (hour != null && hour >= 0 && hour <= 23) {
-        hourly[hour] = (hourly[hour] || 0) + 1;
-      }
-    });
-
-    const list = [];
-    for (let i = 0; i < 24; i++) {
-      list.push({ hour: `${i}시`, count: hourly[i] || 0 });
-    }
-    return list;
-  }, [todayRows]);
-
-
-  // 진행률
-  const rate = total > 0 ? Math.round((done / total) * 100) : 0;
-
-  // 당일 기사 수: 배차된 기사 (중복 제거)
-  const driverCount = new Set(
-    todayRows
-      .map(r => r.이름?.trim())
-      .filter(Boolean)
-  ).size;
-
-  // 신규 거래처/하차지 (값 존재 여부 기준)
-  const newClients = todayRows.filter(r => r.거래처명?.trim()).length;
-  const newPlaces = todayRows.filter(r => r.하차지명?.trim()).length;
-
-  // 🚚 유통 데이터
-  const money = (text) => {
-    const n = Number(String(text || "0").replace(/[^\d]/g, ""));
-    return isNaN(n) ? 0 : n;
-  };
-  const stripUndefined = (obj) =>
-    Object.fromEntries(
-      Object.entries(obj).filter(([, v]) => v !== undefined)
-    );
-  // 매출/기사비용/마진율
-  const todayRevenue = todayRows.reduce((sum, r) => sum + money(r.청구운임), 0);
-  const todayDriverCost = todayRows.reduce((sum, r) => sum + money(r.기사운임), 0);
-  const todayMarginRate = todayRevenue
-    ? ((todayRevenue - todayDriverCost) / todayRevenue) * 100
-    : 0;
-  // 🔹 Top 거래처/하차지 통계
-  const topClients = Object.entries(
-    todayRows.reduce((map, r) => {
-      const k = r.거래처명 || "기타";
-      map[k] = (map[k] || 0) + 1;
-      return map;
-    }, {})
-  ).sort((a, b) => b[1] - a[1]).slice(0, 3);
-
-  const topDrops = Object.entries(
-    todayRows.reduce((map, r) => {
-      const k = r.하차지명 || "기타";
-      map[k] = (map[k] || 0) + 1;
-      return map;
-    }, {})
-  ).sort((a, b) => b[1] - a[1]).slice(0, 3);
-
-  // 🔹 알림 설정 (시간 자동감지)
-  const [alertTime, setAlertTime] = React.useState("10:00");
-  const [alertShown, setAlertShown] = React.useState(false);
-
-  React.useEffect(() => {
-    const timer = setInterval(() => {
-      const now = new Date();
-      const hh = String(now.getHours()).padStart(2, "0");
-      const mm = String(now.getMinutes()).padStart(2, "0");
-      const cur = `${hh}:${mm}`;
-
-      if (!alertShown && cur === alertTime) {
-        alert(`⏰ 알림: ${alertTime}\n미배차 ${pending}건, 지연 ${delayed}건 확인!`);
-        setAlertShown(true);
-      }
-    }, 10000);
-
-    return () => clearInterval(timer);
-  }, [alertTime, alertShown, pending, delayed]);
-
-
-  // ========================================================
-  // ⭐ 상태 기반 필터링 실행 + 실시간배차현황 테이블로 스크롤 이동
-  // ========================================================
-  const goStatus = (type, value) => {
-    setFilterType(type);
-    setFilterValue(value);
-
-    const el = document.getElementById("realtime-status-area");
-    if (el) {
-      el.scrollIntoView({ behavior: "smooth" });
-    }
-  };
-
-  // ⭐ 오더복사용 플래그 (🔥 여기 추가)
-  const [isCopyMode, setIsCopyMode] = React.useState(false);
-  // ⭐ 여기 맨 위에 오도록
-  const [clientQuery, setClientQuery] = React.useState("");
-  const [isClientOpen, setIsClientOpen] = React.useState(false);
-  // ⭐ 거래처 선택 대상 팝업
-
-
-  const [clientActive, setClientActive] = React.useState(0);
-  const comboRef = React.useRef(null);
-  React.useEffect(() => {
-    const onDocClick = (e) => {
-      if (!comboRef.current) return;
-      if (!comboRef.current.contains(e.target)) setIsClientOpen(false);
-    };
-    document.addEventListener("mousedown", onDocClick);
-    return () => document.removeEventListener("mousedown", onDocClick);
-  }, []);
-  // ⭐ 상차지 자동완성 상태 분리
-  const [showPickupDropdown, setShowPickupDropdown] = React.useState(false);
-  const [pickupOptions, setPickupOptions] = React.useState([]);
-  // 🚗 차량종류 자동완성 상태
-  const [vehicleQuery, setVehicleQuery] = React.useState("");
-  const [showVehicleDropdown, setShowVehicleDropdown] = React.useState(false);
-  const [vehicleActive, setVehicleActive] = React.useState(0);
-  const vehicleItemRefs = React.useRef([]);
-  React.useEffect(() => {
-    if (!showVehicleDropdown) return;
-
-    const el = vehicleItemRefs.current[vehicleActive];
-    if (el) {
-      el.scrollIntoView({
-        block: "nearest",   // 드롭다운 내부에서만 이동
-        inline: "nearest",
-      });
-    }
-  }, [vehicleActive, showVehicleDropdown]);
-  const [pickupActive, setPickupActive] = React.useState(0);
-
-  const [showPlaceDropdown, setShowPlaceDropdown] = React.useState(false);
-  const [placeOptions, setPlaceOptions] = React.useState([]);
-  const [placeActive, setPlaceActive] = React.useState(0);
-  // ---------- 🔧 안전 폴백 유틸(다른 파트 미정의 시 자체 사용) ----------
-  const _todayStr = (typeof todayStr === "function")
-    ? todayStr
-    : () => new Date().toISOString().slice(0, 10);
-
-  // ===================== 하차지(placeRows) + 로컬 병합 placeList 끝 =====================
-
-  // ⭐ 업체명 "완전 동일"만 기존으로 판단
-  const findPlaceByName = (name) => {
-    return placeList.find(
-      (p) => String(p.업체명 || "").trim() === String(name || "").trim()
-    );
-  };
-  const openNewPlacePrompt = (name) => {
-    const addr = prompt("주소 (선택)");
-    if (addr === null) return;
-
-    const manager = prompt("담당자 (선택)");
-    if (manager === null) return;
-
-    const phone = prompt("연락처 (선택)");
-    if (phone === null) return;
-
-    // 🔥 최종 확인
-    const ok = window.confirm(
-      `신규 거래처를 등록하시겠습니까?\n\n` +
-      `업체명: ${name}\n` +
-      `주소: ${addr || "-"}\n` +
-      `담당자: ${manager || "-"}\n` +
-      `연락처: ${phone || "-"}`
-    );
-
-    if (!ok) return; // ❌ 여기서 완전 중단
-
-    savePlaceSmart(
-      name,
-      addr || "",
-      manager || "",
-      phone || ""
-    );
-
-    alert("신규 거래처 등록이 완료되었습니다.");
-  };
-
-  // ⭐ 업체 업데이트 + 신규 생성 자동 처리
-  const savePlaceSmart = (name, addr, manager, phone) => {
-    if (!name) return;
-
-    const exist = findPlaceByName(name);
-
-    // ======================
-    // ① 기존 업체 있을 때 (업데이트)
-    // ======================
-    if (exist) {
-      const updated = {
-        업체명: exist.업체명,
-        주소: addr || exist.주소,
-        담당자: manager || exist.담당자,
-        담당자번호: phone || exist.담당자번호,
-      };
-
-      // Firestore 저장
-      upsertPlace(updated);
-
-      // localStorage 최신화
-      try {
-        const list = JSON.parse(localStorage.getItem("hachaPlaces_v1") || "[]");
-        const idx = list.findIndex(
-          (x) => normalizeKey(x.업체명) === normalizeKey(updated.업체명)
-        );
-
-        if (idx >= 0) list[idx] = updated;
-        localStorage.setItem("hachaPlaces_v1", JSON.stringify(list));
-      } catch (e) { }
-
-      // 자동완성 즉시 업데이트
-      try {
-        const newLocal = JSON.parse(localStorage.getItem("hachaPlaces_v1") || "[]");
-        setPickupOptions(newLocal);
-        setPlaceOptions(newLocal);
-      } catch (e) { }
-
-      // placeRows 강제 갱신 트리거
-      try {
-        setPlaceRowsTrigger(Date.now());
-      } catch (e) { }
-
-      return; // 업데이트 끝
-    }
-
-    // ======================
-    // ② 신규 업체 생성
-    // ======================
-    upsertPlace({
-      업체명: name,
-      주소: addr,
-      담당자: manager,
-      담당자번호: phone,
-    });
-
-    // 🔥 신규 생성 후에도 반드시 트리거
-    try {
-      setPlaceRowsTrigger(Date.now());
-    } catch { }
-
-  };
-
-
-  // 기본 clients + 하차지 모두 포함한 통합 검색 풀
-  const mergedClients = React.useMemo(() => {
-    const map = new Map();
-
-    // ✅ 1️⃣ placeList를 먼저 넣는다 (주소/담당자 기준)
-    placeList.forEach(p => {
-      const key = normalizeKey(p.업체명);
-      if (key) map.set(key, p);
-    });
-
-    // ✅ 2️⃣ clients는 "보조 검색용"으로만 사용
-    clients.forEach(c => {
-      const key = normalizeKey(c.업체명);
-      if (!key) return;
-
-      // placeList에 없을 때만 추가
-      if (!map.has(key)) {
-        map.set(key, {
-          업체명: c.업체명,
-          주소: "",
-          담당자: "",
-          담당자번호: "",
-        });
-      }
-    });
-
-    return Array.from(map.values());
-  }, [placeList, clients]);
-
-
-
-  // 이름 기준으로 하차지/기본거래처 찾기
-  const findClient = (name = "") => {
-    const n = normalizeKey(name);
-    return mergedClients.find(
-      (c) => normalizeKey(c.업체명 || "").includes(n)
-    );
-  };
-  // 🚗 차량종류 자동완성 필터 (★ 반드시 전역)
-  const filterVehicles = (q) => {
-    const query = String(q || "").trim();
-    if (!query) return VEHICLE_TYPES;
-
-    const nq = normalizeKey(query);
-    return VEHICLE_TYPES.filter((v) =>
-      normalizeKey(v).includes(nq)
-    );
-  };
-  // 🔍 하차지 자동완성 필터 함수
-  const filterPlaces = (q) => {
-
-    const query = String(q || "").trim();
-    if (!query) return [];
-
-    const nq = normalizeKey(query);
-    const nLower = query.toLowerCase();
-
-    return mergedClients
-      .map((p) => {
-        const name = p.업체명 || "";
-        const nName = name.toLowerCase();
-        const nk = normalizeKey(name);
-
-        let score = 0;
-
-        // 1️⃣ 완전 동일
-        if (name === query) score = 100;
-        // 2️⃣ normalizeKey 동일 (띄어쓰기/철자차이)
-        else if (nk === nq) score = 90;
-        // 3️⃣ 시작 문자열
-        else if (nName.startsWith(nLower)) score = 80;
-        else if (nk.startsWith(nq)) score = 70;
-        // 4️⃣ 포함
-        else if (nName.includes(nLower)) score = 60;
-        else if (nk.includes(nq)) score = 50;
-
-        return score > 0 ? { ...p, __score: score } : null;
-      })
-      .filter(Boolean)
-      .sort((a, b) => b.__score - a.__score);
-  };
-
-
-  const _tomorrowStr = (typeof tomorrowStr === "function")
-    ? tomorrowStr
-    : () => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().slice(0, 10); };
-  const _safeLoad = (typeof safeLoad === "function")
-    ? safeLoad
-    : (key, fallback) => { try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : fallback; } catch { return fallback; } };
-  const _safeSave = (typeof safeSave === "function")
-    ? safeSave
-    : (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch { } };
-
-  const VEHICLE_TYPES = (typeof window !== "undefined" && window.RUN25_VEHICLE_TYPES) || [
-    "라보/다마스", "카고", "윙바디", "탑차", "냉장탑", "냉동탑", "냉장윙", "냉동윙", "리프트", "오토바이", "기타"
-  ];
-  const PAY_TYPES = (typeof window !== "undefined" && window.RUN25_PAY_TYPES) || [
-    "계산서", "착불", "선불", "손실", "개인", "기타"
-  ];
-  const DISPATCH_TYPES = (typeof window !== "undefined" && window.RUN25_DISPATCH_TYPES) || [
-    "24시", "직접배차", "인성", "24(외주업체)"
-  ];
-  const StatusBadge = ({ s }) => {
-    const map = {
-      "배차중": "bg-amber-100 text-amber-800",
-      "배차완료": "bg-emerald-100 text-emerald-800",
-      "미배차": "bg-rose-100 text-rose-800",
-    };
-    return <span className={`px-2 py-0.5 rounded text-xs whitespace-nowrap ${map[s] || "bg-gray-100 text-gray-700"}`}>{s || "-"}</span>;
-  };
-
-  // ✅ 첨부파일 개수 저장용
-  const [attachCount, setAttachCount] = React.useState({}); // { dispatchId: count }
-
-  // ✅ 첨부파일 서브컬렉션 개수 로드 (Firestore)
-  React.useEffect(() => {
-    const loadAttachments = async () => {
-      try {
-        if (!dispatchData?.length || typeof getDocs !== "function" || typeof collection !== "function") return;
-        const result = {};
-        for (const row of dispatchData) {
-          if (!row?._id) continue;
-          const snap = await getDocs(collection(db, "dispatch", row._id, "attachments"));
-          result[row._id] = snap.size;
-        }
-        setAttachCount(result);
-      } catch (e) {
-        console.warn("첨부 개수 로드 실패(무시 가능):", e);
-      }
-    };
-    loadAttachments();
-  }, [dispatchData]);
-
-  // ⏱ 시간 옵션(오전6시~오후10시, 30분 간격) — timeOptions 미지정 시 내부 생성
-  const buildHalfHour = React.useMemo(() => {
-    if (Array.isArray(timeOptions) && timeOptions.length) return timeOptions;
-    const list = [];
-    const toLabel = (h, m) => {
-      const ampm = h < 12 ? "오전" : "오후";
-      const hh = ((h % 12) || 12);
-      return `${ampm} ${hh}시${m ? " 30분" : ""}`;
-    };
-    for (let h = 6; h <= 22; h++) {
-      list.push(toLabel(h, 0));
-      if (h !== 22) list.push(toLabel(h, 30));
-    }
-    return list;
-  }, [timeOptions]);
-  const localTimeOptions = buildHalfHour;
-
-  // 연도 고정 도우미 (YYYY-MM-DD로 강제; "MM-DD" => "YYYY-MM-DD")
-  const currentYear = new Date().getFullYear();
-  const lockYear = (yyyy_mm_dd_or_mm_dd) => {
-    const v = (yyyy_mm_dd_or_mm_dd || "").trim();
-    if (!v) return "";
-    if (/^\d{2}-\d{2}$/.test(v)) return `${currentYear}-${v}`;
-    return v;
-  };
-
-  const emptyForm = {
-    _id: crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`,
-    순번: "",
-    등록일: _todayStr(),
-    거래처명: "",
-    상차지명: "",
-    상차지주소: "",
-    상차지담당자: "",
-    상차지담당자번호: "",
-    하차지명: "",
-    하차지주소: "",
-    하차지담당자: "",
-    경유지_상차: [], // [{ 업체명, 주소, 담당자, 담당자번호 }]
-    경유지_하차: [],
-    하차지담당자번호: "",
-    화물내용: "",
-    운행유형: "편도",   // ⭐ 추가 (기본값)
-    차량종류: "",
-    차량톤수: "",
-    차량번호: "",
-    이름: "",
-    전화번호: "",
-    상차방법: "",
-    하차방법: "",
-    상차일: _todayStr(),
-    상차시간: "",
-    하차일: _todayStr(),
-    하차시간: "",
-    청구운임: "",
-    기사운임: "",
-    수수료: "",
-    지급방식: "",
-    배차방식: "",
-    메모: "",
-    메모중요도: "NORMAL",
-    전달사항: "",
-    전달사항고정: false,
-    배차상태: "배차중",
-    독차: false,
-    혼적: false,
-    긴급: false,
-    운임보정: null,
-  };
-
-  const [form, setForm] = React.useState(() => {
-    try {
-      const saved = localStorage.getItem("dispatchForm");
-      if (saved) {
-        return {
-          ...emptyForm,
-          ...JSON.parse(saved),
-        };
-      }
-    } catch { }
-    return { ...emptyForm };
-  });
-  // ===============================
-  // 💡 주소/조건 기반 자동 운임 가이드
-  // ===============================
-  React.useEffect(() => {
-    if (!form.상차지주소 || !form.하차지주소) {
-      setAreaFareHint(null);
-      return;
-    }
-
-    const ton = extractTonNum(form.차량톤수);
-
-    const hint = calcNationwideAvgFare({
-      pickupAddr: form.상차지주소,
-      dropAddr: form.하차지주소,
-      ton,
-      cargo: form.화물내용,
-      vehicle: form.차량종류,
-      dispatchData,
-    });
-
-    setAreaFareHint(hint);
-  }, [
-    form.상차지주소,
-    form.하차지주소,
-    form.화물내용,
-    form.차량톤수,
-    form.차량종류,
-    dispatchData,
-  ]);
-
-  React.useEffect(() => _safeSave("dispatchForm", form), [form]);
-  // ===============================
-  // ⭐ 폼 최초 로딩 시 날짜 자동 보정
-  // ===============================
-  React.useEffect(() => {
-    const today = _todayStr();
-
-    if (form.상차일 && form.상차일 < today) {
-      setForm((p) => ({
-        ...p,
-        등록일: today,
-        상차일: today,
-        하차일: today,
-      }));
-    }
-    // eslint-disable-next-line
-  }, []);
-  // ===============================
-  // 💰 주소 기반 전국 평균 운임 계산 (정확 톤수 기준)
-  // ===============================
-  function calcNationwideAvgFare({
-    pickupAddr,
+  const dropOk = isAreaMatch(
     dropAddr,
-    ton,
-    cargo,
-    vehicle,
-    dispatchData,
-  }) {
+    r.하차지주소 || r.하차지명
+  );
 
-    // 1️⃣ 주소 기준 (무조건)
-    let base = (dispatchData || []).filter(r => {
-      const pickupOk = isAreaMatch(
-        pickupAddr,
-        r.상차지주소 || r.상차지명
-      );
-
-      const dropOk = isAreaMatch(
-        dropAddr,
-        r.하차지주소 || r.하차지명
-      );
-
-      return pickupOk && dropOk && r.청구운임;
-    });
+  return pickupOk && dropOk && r.청구운임;
+});
 
 
-    if (base.length < 2) return null;
+  if (base.length < 2) return null;
 
-    let list = base;
-    let level = "주소";
-    // ⭐ 주소 기준이라도 차량종류는 반드시 고정 (중요!!)
-    if (vehicle) {
-      const vg = normalizeVehicleGroup(vehicle);
-      list = list.filter(
-        r => normalizeVehicleGroup(r.차량종류) === vg
-      );
-    }
-    // 2️⃣ 차량종류
-    if (vehicle) {
-      const vg = normalizeVehicleGroup(vehicle);
-      const f = list.filter(
-        r => normalizeVehicleGroup(r.차량종류) === vg
-      );
-      if (f.length >= 2) {
-        list = f;
-        level = "차량";
-      }
-    }
-    // 3️⃣ 톤수 (이전 단계 list 기준)
-    if (ton != null) {
-      const f = list.filter(r => {
-        const rt = extractTonNum(r.차량톤수);
-        return rt != null && Math.abs(rt - ton) <= 0.5;
-      });
-      if (f.length >= 2) {
-        list = f;
-        level = "톤수";
-      }
-    }
-
-    // 4️⃣ 화물내용 (파렛트)
-    const pallet = getPalletFromCargoText(cargo);
-    if (pallet != null) {
-      const f = list.filter(r => {
-        const rp = getPalletFromCargoText(r.화물내용);
-        return rp != null && Math.abs(rp - pallet) <= 1;
-      });
-      if (f.length >= 2) {
-        list = f;
-        level = "화물";
-      }
-    }
-
-    const fares = list.map(r =>
-      Number(String(r.청구운임).replace(/[^\d]/g, ""))
+  let list = base;
+  let level = "주소";
+  // ⭐ 주소 기준이라도 차량종류는 반드시 고정 (중요!!)
+if (vehicle) {
+  const vg = normalizeVehicleGroup(vehicle);
+  list = list.filter(
+    r => normalizeVehicleGroup(r.차량종류) === vg
+  );
+}
+  // 2️⃣ 차량종류
+  if (vehicle) {
+    const vg = normalizeVehicleGroup(vehicle);
+    const f = list.filter(
+      r => normalizeVehicleGroup(r.차량종류) === vg
     );
-
-    return {
-      level,
-      min: Math.min(...fares),
-      max: Math.max(...fares),
-      avg: Math.round(fares.reduce((a, b) => a + b, 0) / fares.length),
-      count: fares.length,
-
-      pickupLabel: normalizeAreaForSearch(pickupAddr),
-      dropLabel: normalizeAreaForSearch(dropAddr),
-    };
+    if (f.length >= 2) {
+      list = f;
+      level = "차량";
+    }
   }
-  // ===============================
-  // 🤖 AI 배차/운임 추천 (HERE)
-  // ===============================
-  React.useEffect(() => {
-    const pickup = form.상차지명?.trim();
-    const drop = form.하차지명?.trim();
-    const ton = extractTonNum(form.차량톤수);
-    const vehicle = form.차량종류;
-
-    if (!pickup || !drop || !ton) {
-      setAiRecommend(null);
-      return;
-    }
-
-    const similar = (dispatchData || []).filter(r =>
-      (r.운행유형 || "편도") === form.운행유형 &&   // ⭐ 추가
-      normalizeKey(r.상차지명) === normalizeKey(pickup) &&
-      normalizeKey(r.하차지명) === normalizeKey(drop) &&
-      extractTonNum(r.차량톤수) === ton &&
-      r.청구운임 &&
-      r.기사운임
-    );
-
-    if (similar.length < 1) {
-      setAiRecommend(null);
-      return;
-    }
-
-    const fares = similar.map(r => Number(String(r.청구운임).replace(/[^\d]/g, "")));
-    const drivers = similar.map(r => Number(String(r.기사운임).replace(/[^\d]/g, "")));
-
-    const avg = (arr) => Math.round(arr.reduce((a, b) => a + b, 0) / arr.length);
-
-    const fareAvg = avg(fares);
-    const driverAvg = avg(drivers);
-
-    const inputFare = Number(form.청구운임 || 0);
-
-    setAiRecommend({
-      vehicle: vehicle || "자동",
-      fareAvg,
-      fareMin: Math.round(fareAvg * 0.9),
-      fareMax: Math.round(fareAvg * 1.1),
-      driverAvg,
-      marginPercent: Math.round(((fareAvg - driverAvg) / fareAvg) * 100),
-      sampleCount: similar.length,
-
-      hasInputFare: inputFare > 0,   // ⭐ 핵심
-
-      isOutlier:
-        inputFare > 0 &&
-        Math.abs((inputFare - fareAvg) / fareAvg) >= 0.25,
+  // 3️⃣ 톤수 (이전 단계 list 기준)
+  if (ton != null) {
+    const f = list.filter(r => {
+      const rt = extractTonNum(r.차량톤수);
+      return rt != null && Math.abs(rt - ton) <= 0.5;
     });
-
-
-
-  }, [
-    form.상차지명,
-    form.하차지명,
-    form.차량톤수,
-    form.차량종류,
-    dispatchData,
-  ]);
-  // ===============================
-  // 🤖 AI 설명 문장 생성
-  // ===============================
-  function makeAiExplain(ai) {
-    if (!ai) return "";
-
-    // ① 운임 미입력
-    if (!ai.hasInputFare) {
-      return (
-        `최근 동일 조건 운송 ${ai.sampleCount}건 기준 ` +
-        `추천 운임 범위는 ${ai.fareMin.toLocaleString()} ~ ` +
-        `${ai.fareMax.toLocaleString()}원 입니다.`
-      );
+    if (f.length >= 2) {
+      list = f;
+      level = "톤수";
     }
+  }
 
-    // ② 이상치
-    if (ai.isOutlier) {
-      return (
-        `최근 동일 조건 운송 ${ai.sampleCount}건 기준 ` +
-        `평균 운임은 ${ai.fareAvg.toLocaleString()}원이며, ` +
-        `입력한 운임은 평균 대비 차이가 큽니다.`
-      );
+  // 4️⃣ 화물내용 (파렛트)
+  const pallet = getPalletFromCargoText(cargo);
+  if (pallet != null) {
+    const f = list.filter(r => {
+      const rp = getPalletFromCargoText(r.화물내용);
+      return rp != null && Math.abs(rp - pallet) <= 1;
+    });
+    if (f.length >= 2) {
+      list = f;
+      level = "화물";
     }
+  }
 
-    // ③ 정상
+  const fares = list.map(r =>
+    Number(String(r.청구운임).replace(/[^\d]/g, ""))
+  );
+
+return {
+  level,
+  min: Math.min(...fares),
+  max: Math.max(...fares),
+  avg: Math.round(fares.reduce((a,b)=>a+b,0) / fares.length),
+  count: fares.length,
+
+pickupLabel: normalizeAreaForSearch(pickupAddr),
+dropLabel: normalizeAreaForSearch(dropAddr),
+};
+}
+// ===============================
+// 🤖 AI 배차/운임 추천 (HERE)
+// ===============================
+React.useEffect(() => {
+  const pickup = form.상차지명?.trim();
+  const drop   = form.하차지명?.trim();
+  const ton    = extractTonNum(form.차량톤수);
+  const vehicle = form.차량종류;
+
+  if (!pickup || !drop || !ton) {
+    setAiRecommend(null);
+    return;
+  }
+
+const similar = (dispatchData || []).filter(r =>
+  (r.운행유형 || "편도") === form.운행유형 &&   // ⭐ 추가
+  normalizeKey(r.상차지명) === normalizeKey(pickup) &&
+  normalizeKey(r.하차지명) === normalizeKey(drop) &&
+  extractTonNum(r.차량톤수) === ton &&
+  r.청구운임 &&
+  r.기사운임
+);
+
+  if (similar.length < 1) {
+    setAiRecommend(null);
+    return;
+  }
+
+  const fares = similar.map(r => Number(String(r.청구운임).replace(/[^\d]/g, "")));
+  const drivers = similar.map(r => Number(String(r.기사운임).replace(/[^\d]/g, "")));
+
+  const avg = (arr) => Math.round(arr.reduce((a,b)=>a+b,0) / arr.length);
+
+  const fareAvg = avg(fares);
+  const driverAvg = avg(drivers);
+
+const inputFare = Number(form.청구운임 || 0);
+
+setAiRecommend({
+  vehicle: vehicle || "자동",
+  fareAvg,
+  fareMin: Math.round(fareAvg * 0.9),
+  fareMax: Math.round(fareAvg * 1.1),
+  driverAvg,
+  marginPercent: Math.round(((fareAvg - driverAvg) / fareAvg) * 100),
+  sampleCount: similar.length,
+
+  hasInputFare: inputFare > 0,   // ⭐ 핵심
+
+  isOutlier:
+    inputFare > 0 &&
+    Math.abs((inputFare - fareAvg) / fareAvg) >= 0.25,
+});
+
+
+
+}, [
+  form.상차지명,
+  form.하차지명,
+  form.차량톤수,
+  form.차량종류,
+  dispatchData,
+]);
+// ===============================
+// 🤖 AI 설명 문장 생성
+// ===============================
+function makeAiExplain(ai) {
+  if (!ai) return "";
+
+  // ① 운임 미입력
+  if (!ai.hasInputFare) {
+    return (
+      `최근 동일 조건 운송 ${ai.sampleCount}건 기준 ` +
+      `추천 운임 범위는 ${ai.fareMin.toLocaleString()} ~ ` +
+      `${ai.fareMax.toLocaleString()}원 입니다.`
+    );
+  }
+
+  // ② 이상치
+  if (ai.isOutlier) {
     return (
       `최근 동일 조건 운송 ${ai.sampleCount}건 기준 ` +
       `평균 운임은 ${ai.fareAvg.toLocaleString()}원이며, ` +
-      `입력한 운임은 통계 범위 내의 적정 금액입니다.`
+      `입력한 운임은 평균 대비 차이가 큽니다.`
     );
   }
 
-
-  // =====================
-  // ⭐ 거래처 = 하차지거래처 기반으로 자동완성
-  // =====================
-  const norm = (s = "") => String(s).trim().toLowerCase();
-
-  // placeRows = [{업체명, 주소, 담당자, 담당자번호}]
-  const filteredClients = React.useMemo(() => {
-    const q = norm(clientQuery);
-    if (!q) return placeList;
-
-    const nq = normalizeKey(q);
-
-    return placeList
-      .map(p => {
-        const name = p.업체명 || "";
-        const nName = norm(name);
-        const nk = normalizeKey(name);
-
-        let score = 0;
-
-        // 1️⃣ 완전 동일
-        if (name === clientQuery) score = 100;
-        // 2️⃣ normalizeKey 동일
-        else if (nk === nq) score = 90;
-        // 3️⃣ 시작 문자열
-        else if (nName.startsWith(q)) score = 80;
-        // 4️⃣ normalizeKey 시작
-        else if (nk.startsWith(nq)) score = 70;
-        // 5️⃣ 포함
-        else if (nName.includes(q)) score = 60;
-        else if (nk.includes(nq)) score = 50;
-        else score = 0;
-
-        return { ...p, __score: score };
-      })
-      .filter(p => p.__score > 0)
-      .sort((a, b) => b.__score - a.__score);
-  }, [clientQuery, placeList]);
-
-  // ⭐ 거래처 선택 시 → 어디에 적용할지 팝업 오픈
-  function applyClientSelect(name) {
-    const p = placeList.find(
-      x => norm(x.업체명 || "") === norm(name)
-    );
-
-    // ✅ 거래처 → 상차지 자동 적용
-    if (p) {
-      setForm(prev => ({
-        ...prev,
-        거래처명: p.업체명,
-
-        // 🔥 상차지 자동 세팅
-        상차지명: p.업체명,
-        상차지주소: p.주소 || "",
-        상차지담당자: p.담당자 || "",
-        상차지담당자번호: p.담당자번호 || "",
-      }));
-    } else {
-      // 🔹 placeList에 없을 경우 (신규 입력)
-      setForm(prev => ({
-        ...prev,
-        거래처명: name,
-        상차지명: name,   // 이름만이라도 넣어줌
-      }));
-    }
-
-    setClientQuery(name);
-    setIsClientOpen(false);
-
-    // 자동매칭 뱃지 상태 초기화
-    setAutoPickMatched(!!p);
-  }
+  // ③ 정상
+  return (
+    `최근 동일 조건 운송 ${ai.sampleCount}건 기준 ` +
+    `평균 운임은 ${ai.fareAvg.toLocaleString()}원이며, ` +
+    `입력한 운임은 통계 범위 내의 적정 금액입니다.`
+  );
+}
 
 
-  // ⭐ 상차지에 적용 (여기 넣는 것! ← 바로 위 applyClientSelect 밑!!)
-  function applyToPickup(place) {
+    // =====================
+    // ⭐ 거래처 = 하차지거래처 기반으로 자동완성
+    // =====================
+    const norm = (s = "") => String(s).trim().toLowerCase();
+
+    // placeRows = [{업체명, 주소, 담당자, 담당자번호}]
+    const filteredClients = React.useMemo(() => {
+  const q = norm(clientQuery);
+  if (!q) return placeList;
+
+  const nq = normalizeKey(q);
+
+  return placeList
+    .map(p => {
+      const name = p.업체명 || "";
+      const nName = norm(name);
+      const nk = normalizeKey(name);
+
+      let score = 0;
+
+      // 1️⃣ 완전 동일
+      if (name === clientQuery) score = 100;
+      // 2️⃣ normalizeKey 동일
+      else if (nk === nq) score = 90;
+      // 3️⃣ 시작 문자열
+      else if (nName.startsWith(q)) score = 80;
+      // 4️⃣ normalizeKey 시작
+      else if (nk.startsWith(nq)) score = 70;
+      // 5️⃣ 포함
+      else if (nName.includes(q)) score = 60;
+      else if (nk.includes(nq)) score = 50;
+      else score = 0;
+
+      return { ...p, __score: score };
+    })
+    .filter(p => p.__score > 0)
+    .sort((a, b) => b.__score - a.__score);
+}, [clientQuery, placeList]);
+
+// ⭐ 거래처 선택 시 → 어디에 적용할지 팝업 오픈
+function applyClientSelect(name) {
+  const p = placeList.find(
+    x => norm(x.업체명 || "") === norm(name)
+  );
+const primary = getPrimaryManager(p);
+  // ✅ 거래처 → 상차지 자동 적용
+  if (p) {
     setForm(prev => ({
       ...prev,
-      거래처명: place.업체명,
-      상차지명: place.업체명,
-      상차지주소: place.주소,
-      상차지담당자: place.담당자,
-      상차지담당자번호: place.담당자번호,
-    }));
-    setPlaceTargetPopup({ open: false, place: null });
-  }
+      거래처명: p.업체명,
 
-  // ⭐ 하차지에 적용 (applyToPickup 바로 아래)
-  function applyToDrop(place) {
+      // 🔥 상차지 자동 세팅
+      상차지명: p.업체명,
+      상차지주소: p.주소 || "",
+      상차지담당자: primary?.이름 || "",
+      상차지담당자번호: primary?.번호 || "",
+    }));
+  } else {
+    // 🔹 placeList에 없을 경우 (신규 입력)
     setForm(prev => ({
       ...prev,
-      거래처명: place.업체명,
-      하차지명: place.업체명,
-      하차지주소: place.주소,
-      하차지담당자: place.담당자,
-      하차지담당자번호: place.담당자번호,
+      거래처명: name,
+      상차지명: name,   // 이름만이라도 넣어줌
     }));
-    setPlaceTargetPopup({ open: false, place: null });
-  }
-  // 🔁 상차지 ↔ 하차지 교체
-  function swapPickupDrop() {
-    setForm(prev => ({
-      ...prev,
-
-      // 상차 ← 하차
-      상차지명: prev.하차지명,
-      상차지주소: prev.하차지주소,
-      상차지담당자: prev.하차지담당자,
-      상차지담당자번호: prev.하차지담당자번호,
-
-      // 하차 ← 상차
-      하차지명: prev.상차지명,
-      하차지주소: prev.상차지주소,
-      하차지담당자: prev.상차지담당자,
-      하차지담당자번호: prev.상차지담당자번호,
-    }));
-
-    // 자동매칭 뱃지 리셋
-    setAutoPickMatched(false);
-    setAutoDropMatched(false);
   }
 
+  setClientQuery(name);
+  setIsClientOpen(false);
 
-  // ✅ 주소 자동매칭 뱃지
-  const [autoPickMatched, setAutoPickMatched] = React.useState(false);
-  const [autoDropMatched, setAutoDropMatched] = React.useState(false);
+  // 자동매칭 뱃지 상태 초기화
+  setAutoPickMatched(!!p);
+}
 
-  const onChange = (key, value) => {
-    if (isAdmin && (key === "청구운임" || key === "기사운임")) {
-      setForm((p) => {
-        const next = { ...p, [key]: value };
-        const sale = parseInt(next.청구운임 || 0, 10) || 0;
-        const drv = parseInt(next.기사운임 || 0, 10) || 0;
-        next.수수료 = String(sale - drv);
-        return next;
-      });
-      return;
-    }
-    if (key === "상차방법") {
-      setForm((p) => {
-        const autoSync = !p.하차방법 || p.하차방법 === p.상차방법;
-        return { ...p, 상차방법: value, 하차방법: autoSync ? value : p.하차방법 };
-      });
-      return;
-    }
-    setForm((p) => ({ ...p, [key]: value }));
-  };
 
-  const handlePickupName = (value) => {
-    setForm((p) => {
-      // 기존 상차지명과 다를 때만 초기화
-      const isChanged = value !== p.상차지명;
+// ⭐ 상차지에 적용 (여기 넣는 것! ← 바로 위 applyClientSelect 밑!!)
+function applyToPickup(place) {
+  setForm(prev => ({
+    ...prev,
+    거래처명: place.업체명,
+    상차지명: place.업체명,
+    상차지주소: place.주소,
+    상차지담당자: place.담당자,
+    상차지담당자번호: place.담당자번호,
+  }));
+  setPlaceTargetPopup({ open: false, place: null });
+}
 
-      return {
+// ⭐ 하차지에 적용 (applyToPickup 바로 아래)
+function applyToDrop(place) {
+  setForm(prev => ({
+    ...prev,
+    거래처명: place.업체명,
+    하차지명: place.업체명,
+    하차지주소: place.주소,
+    하차지담당자: place.담당자,
+    하차지담당자번호: place.담당자번호,
+  }));
+  setPlaceTargetPopup({ open: false, place: null });
+}
+// 🔁 상차지 ↔ 하차지 교체
+function swapPickupDrop() {
+  setForm(prev => ({
+    ...prev,
+
+    // 상차 ← 하차
+    상차지명: prev.하차지명,
+    상차지주소: prev.하차지주소,
+    상차지담당자: prev.하차지담당자,
+    상차지담당자번호: prev.하차지담당자번호,
+
+    // 하차 ← 상차
+    하차지명: prev.상차지명,
+    하차지주소: prev.상차지주소,
+    하차지담당자: prev.상차지담당자,
+    하차지담당자번호: prev.상차지담당자번호,
+  }));
+
+  // 자동매칭 뱃지 리셋
+  setAutoPickMatched(false);
+  setAutoDropMatched(false);
+}
+
+
+    // ✅ 주소 자동매칭 뱃지
+    const [autoPickMatched, setAutoPickMatched] = React.useState(false);
+    const [autoDropMatched, setAutoDropMatched] = React.useState(false);
+
+    const onChange = (key, value) => {
+      if (isAdmin && (key === "청구운임" || key === "기사운임")) {
+        setForm((p) => {
+          const next = { ...p, [key]: value };
+          const sale = parseInt(next.청구운임 || 0, 10) || 0;
+          const drv = parseInt(next.기사운임 || 0, 10) || 0;
+          next.수수료 = String(sale - drv);
+          return next;
+        });
+        return;
+      }
+      if (key === "상차방법") {
+        setForm((p) => {
+          const autoSync = !p.하차방법 || p.하차방법 === p.상차방법;
+          return { ...p, 상차방법: value, 하차방법: autoSync ? value : p.하차방법 };
+        });
+        return;
+      }
+      setForm((p) => ({ ...p, [key]: value }));
+    };
+
+    const handlePickupName = (value) => {
+      setForm((p) => ({
         ...p,
         상차지명: value,
-
-        // ✅ 사용자가 직접 수정한 경우 → 연관 필드 초기화
-        ...(isChanged
-          ? {
-            상차지주소: "",
-            상차지담당자: "",
-            상차지담당자번호: "",
-          }
-          : {}),
-      };
-    });
-
-    // 자동매칭 상태 해제
-    setAutoPickMatched(false);
-  };
-  const handleDropName = (value) => {
-    setForm((p) => ({
-      ...p,
-      하차지명: value,
-    }));
-    setAutoDropMatched(false);
-  };
+      }));
+      setAutoPickMatched(false);
+    };
 
 
-  const handlePickupAddrManual = (v) => { setForm((p) => ({ ...p, 상차지주소: v })); setAutoPickMatched(false); };
-  const handleDropAddrManual = (v) => { setForm((p) => ({ ...p, 하차지주소: v })); setAutoDropMatched(false); };
-
-  // 🚗 차량번호 입력 → 항상 수정 가능 + 자동 기사정보 입력
-  const driverMap = React.useMemo(() => {
-    const m = new Map();
-    (drivers || []).forEach((d) => {
-      const key = String(d.차량번호 || "").replace(/\s+/g, "");
-      if (key) m.set(key, { 이름: d.이름 || "", 전화번호: d.전화번호 || "" });
-    });
-    return m;
-  }, [drivers]);
-
-  const handleCarNoChange = (value) => {
-    const clean = (value || "").trim().replace(/\s+/g, "");
-    const found = driverMap.get(clean);
-    if (found) {
+    const handleDropName = (value) => {
       setForm((p) => ({
         ...p,
-        차량번호: clean,
-        이름: found.이름,
-        전화번호: formatPhone(found.전화번호), // ⭐ 표시용 하이픈 적용
-        배차상태: "배차완료",
+        하차지명: value,
       }));
-    } else {
-      setForm((p) => ({
-        ...p,
-        차량번호: clean,
-        이름: "",
-        전화번호: "",
-        배차상태: "배차중",
-      }));
-    }
-  };
+      setAutoDropMatched(false);
+    };
 
-  const handleCarNoEnter = (value) => {
-    const clean = (value || "").trim().replace(/\s+/g, "");
-    if (!clean) return;
 
-    const found = driverMap.get(clean);
-    if (found) {
-      setForm((p) => ({
-        ...p,
-        차량번호: clean,
-        이름: found.이름,
-        전화번호: formatPhone(found.전화번호), // ⭐ 표시용 하이픈 적용
-        배차상태: "배차완료",
-      }));
-    } else {
-      setDriverModal({
-        open: true,
-        carNo: clean,
-        name: "",
-        phone: "",
+    const handlePickupAddrManual = (v) => { setForm((p) => ({ ...p, 상차지주소: v })); setAutoPickMatched(false); };
+    const handleDropAddrManual = (v) => { setForm((p) => ({ ...p, 하차지주소: v })); setAutoDropMatched(false); };
+
+    // 🚗 차량번호 입력 → 항상 수정 가능 + 자동 기사정보 입력
+    const driverMap = React.useMemo(() => {
+      const m = new Map();
+      (drivers || []).forEach((d) => {
+        const key = String(d.차량번호 || "").replace(/\s+/g, "");
+        if (key) m.set(key, { 이름: d.이름 || "", 전화번호: d.전화번호 || "" });
       });
-    }
-  };
+      return m;
+    }, [drivers]);
 
-  const nextSeq = () => Math.max(0, ...(dispatchData || []).map((r) => Number(r.순번) || 0)) + 1;
-  // ================================
-  // ⛔ 기사 중복 배차 체크 유틸
-  // ================================
-  function isTimeOverlap(aStart, aEnd, bStart, bEnd) {
-    if (!aStart || !bStart) return false;
-
-    const toMin = (t) => {
-      if (!t) return null;
-
-      // "오전 9시 30분" 대응
-      if (t.includes("오전") || t.includes("오후")) {
-        const isPM = t.includes("오후");
-        const nums = t.match(/\d+/g) || [];
-        let h = Number(nums[0] || 0);
-        const m = Number(nums[1] || 0);
-        if (isPM && h < 12) h += 12;
-        if (!isPM && h === 12) h = 0;
-        return h * 60 + m;
+    const handleCarNoChange = (value) => {
+      const clean = (value || "").trim().replace(/\s+/g, "");
+      const found = driverMap.get(clean);
+      if (found) {
+        setForm((p) => ({
+          ...p,
+          차량번호: clean,
+          이름: found.이름,
+          전화번호: formatPhone(found.전화번호), // ⭐ 표시용 하이픈 적용
+          배차상태: "배차완료",
+        }));
+      } else {
+        setForm((p) => ({
+          ...p,
+          차량번호: clean,
+          이름: "",
+          전화번호: "",
+          배차상태: "배차중",
+        }));
       }
-
-      // "HH:mm"
-      const [h, m = "0"] = String(t).split(":");
-      return Number(h) * 60 + Number(m);
     };
 
-    const aS = toMin(aStart);
-    const aE = aEnd ? toMin(aEnd) : aS + 60;
-    const bS = toMin(bStart);
-    const bE = bEnd ? toMin(bEnd) : bS + 60;
+    const handleCarNoEnter = (value) => {
+  const clean = (value || "").trim().replace(/\s+/g, "");
+  if (!clean) return;
 
-    return Math.max(aS, bS) < Math.min(aE, bE);
-  }
-
-  function checkDuplicateDispatch(form, dispatchData) {
-    if (!form.차량번호) return null;
-
-    const targetDate = String(form.상차일 || "").slice(0, 10);
-
-    return dispatchData.find((r) => {
-      if (r._id === form._id) return false; // 🔥 자기 자신 제외
-      if (!r?.차량번호) return false;
-      if (r.차량번호 !== form.차량번호) return false;
-      if (r.배차상태 !== "배차완료") return false;
-
-      const rowDate = String(r.상차일 || "").slice(0, 10);
-      if (rowDate !== targetDate) return false;
-
-      return isTimeOverlap(
-        r.상차시간,
-        r.하차시간,
-        form.상차시간,
-        form.하차시간
-      );
-    });
-  }
-
-  // ✅ 필수값(거래처/상차지명/하차지명) 검증
-  const validateRequired = (f) => {
-    const miss = [];
-    if (!f.거래처명?.trim()) miss.push("거래처");
-    if (!f.상차지명?.trim()) miss.push("상차지명");
-    if (!f.하차지명?.trim()) miss.push("하차지명");
-    if (miss.length) {
-      alert(`필수 항목 누락: ${miss.join(", ")}\n(*) 표시된 항목을 모두 입력하세요.`);
-      return false;
-    }
-    return true;
-  };
-  // ⭐ 날짜/시간 필수 검증
-  const validateDateTime = (f) => {
-    const miss = [];
-
-    if (!f.상차일) miss.push("상차일");
-    if (!f.하차일) miss.push("하차일");
-
-
-    if (miss.length > 0) {
-      alert(`⛔ 날짜가 입력되지 않았습니다.\n[ ${miss.join(", ")} ] 은(는) 반드시 입력해야 합니다.`);
-      return false;
-    }
-    return true;
-  };
-
-  // ==================== 운임조회 보조함수 정의 ====================
-  const isLike = (text = "", target = "") =>
-    String(text).replace(/\s+/g, "").includes(
-      String(target).replace(/\s+/g, "")
-    );
-  // ================================
-  // 🚚 상/하차지 경유 파싱 유틸
-  // ================================
-
-  // 1원진 / 1.원진 / 1 원진 모두 허용
-  function parseStops(text = "") {
-    const raw = String(text).trim();
-    if (!raw) return [];
-
-    // ① "1.원진 2.우리유통" / "1 원진 2 우리유통"
-    const regex = /(\d+)\s*\.?\s*([^\d]+)/g;
-    const matches = [...raw.matchAll(regex)];
-
-    if (matches.length > 0) {
-      return matches
-        .sort((a, b) => Number(a[1]) - Number(b[1]))
-        .map(m => m[2].trim());
-    }
-
-    // ② 숫자 패턴 없으면 단일
-    return [raw];
-  }
-
-  // 경유 개수 라벨
-  function getStopLabel(stops = []) {
-    return stops.length > 1 ? `경유 ${stops.length}곳` : "단일";
-  }
-  // ================================
-  // 🏷 메모 자동 태그 추출
-  // ================================
-  function extractMemoTags(memo = "") {
-    const text = String(memo);
-
-    const rules = [
-      {
-        key: "대기",
-        match: /대기|대기시간|상차대기|하차대기/,
-        className: "bg-blue-100 text-blue-700",
-      },
-      {
-        key: "야간",
-        match: /야간|심야|밤|야간작업/,
-        className: "bg-purple-100 text-purple-700",
-      },
-      {
-        key: "추가비",
-        match: /추가|추가비|할증|추가요금/,
-        className: "bg-rose-100 text-rose-700",
-      },
-    ];
-
-    return rules
-      .filter(r => r.match.test(text))
-      .map(r => ({
-        label: r.key,
-        className: r.className,
-      }));
-  }
-
-
-  const getPalletFromCargoText = (cargo = "") => {
-    const m = cargo.match(/(\d+)\s*(p|P|파|팔|파레|파렛|파렛트|팔레트|PL)/i);
-    if (m) return Number(m[1]);
-    const m2 = cargo.match(/^\s*(\d+)\s*$/);
-    if (m2) return Number(m2[1]);
-    return null;
-  };
-  // ================================
-  // ⭐ 오더복사용 조건 Key 생성 (중복 제거 기준)
-  // ================================
-  function makeCopyOrderKey(r) {
-    return [
-      r.운행유형 || "편도",                     // ⭐ 편도/왕복 구분
-      normalizeKey(r.상차지명 || ""),
-      normalizeKey(r.하차지명 || ""),
-      extractTonNum(r.차량톤수) ?? "",           // ⭐ 톤수 숫자화
-      r.차량종류 || "",
-      getPalletFromCargoText(r.화물내용) ?? "TON"
-    ].join("|");
-  }
-
-  const getDropCountFromText = (dropName = "") => {
-    const list = ["푸드플래닛", "신미"];
-    return list.filter((key) =>
-      isLike(dropName, key)
-    ).length || 1;
-  };
-
-  // ================================
-  // ⭐ 운임조회 유사도 점수 계산
-  // ================================
-  function calcFareMatchScore(row, input) {
-    let score = 0;
-
-    // 상차지 / 하차지 (가장 중요)
-    if (normalizeKey(row.상차지명) === normalizeKey(input.pickup)) score += 40;
-    if (normalizeKey(row.하차지명) === normalizeKey(input.drop)) score += 40;
-
-    // 파렛트 수
-    if (input.pallet != null) {
-      const rowPallet = getPalletFromCargoText(row.화물내용);
-      if (rowPallet === input.pallet) score += 30;
-      else if (rowPallet != null && Math.abs(rowPallet - input.pallet) === 1)
-        score += 15;
-    }
-
-    // 차량종류
-    if (input.vehicle && row.차량종류 === input.vehicle) score += 20;
-
-    // 톤수 (±0.5)
-    if (input.ton != null) {
-      const rowTon = extractTonNum(row.차량톤수);
-      if (rowTon != null && Math.abs(rowTon - input.ton) <= 0.5)
-        score += 10;
-    }
-
-    return score;
-  }
-  // ================================
-  // ⭐ 운임 중복 제거용 Key 생성
-  // ================================
-  function makeFareDedupKey(row) {
-    const pallet = getPalletFromCargoText(row.화물내용);
-    const fare = Number(String(row.청구운임 || "0").replace(/[^\d]/g, ""));
-
-    return [
-      normalizeKey(row.상차지명),
-      normalizeKey(row.하차지명),
-      pallet ?? "",              // ⭐ 파렛트 수
-      row.차량종류 || "",        // ⭐ 차량종류
-      fare                        // ⭐ 청구운임
-    ].join("|");
-  }
-
-
-
-  const palletFareRules = {
-    double: [ // 2곳 하차 (푸드플래닛 + 신미)
-      { min: 4, max: 5, fare: 350000 },
-      { min: 6, max: 7, fare: 370000 },
-      { min: 8, max: 10, fare: 380000 },
-    ],
-
-    food: [ // 푸드플래닛 단일
-      { min: 3, max: 3, fare: 240000 },
-      { min: 4, max: 6, fare: 270000 },
-      { min: 7, max: 8, fare: 280000 },
-      { min: 9, max: 10, fare: 300000 },
-    ],
-
-    sinmi: [ // 신미 단일
-      { min: 2, max: 2, fare: 150000 },
-      { min: 3, max: 3, fare: [180000, 200000] }, // 선택
-      { min: 4, max: 5, fare: 240000 },
-      { min: 6, max: 8, fare: 260000 },
-      { min: 9, max: 10, fare: 300000 },
-    ],
-  };
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!validateRequired(form)) return;
-    if (!validateDateTime(form)) return;
-
-    setConfirmOpen(true);
-  };
-
-  // ⭐ 실제 저장 함수
-  const doSave = async () => {
-    // ⛔ 기사 중복 배차 방지
-    const dup = checkDuplicateDispatch(form, dispatchData);
-    if (dup) {
-      alert(
-        `⛔ 기사 중복 배차 감지\n\n` +
-        `차량번호: ${form.차량번호}\n` +
-        `기존 상차시간: ${dup.상차시간 || "-"}\n` +
-        `기존 하차시간: ${dup.하차시간 || "-"}`
-      );
-      return;
-    }
-
-    const status = form.차량번호 && (form.이름 || form.전화번호)
-      ? "배차완료"
-      : "배차중";
-
-    const moneyPatch = isAdmin ? {} : {
-      청구운임: "0",
-      기사운임: "0",
-      수수료: "0"
-    };
-    // ⭐ 긴급 단가 보정 (rec 생성 전에!)
-    const fareAdjustment = form.긴급
-      ? {
-        type: "긴급",
-        rate: 0.2,        // ← 가산율 (나중에 바꿔도 됨)
-        memo: "긴급 오더",
-      }
-      : null;
-    // ⭐ 메모 prefix 자동 보정
-    const autoPriority =
-      form.메모?.startsWith("!!") ? "CRITICAL" :
-        form.메모?.startsWith("!") ? "HIGH" :
-          form.메모중요도 || "NORMAL";
-
-    const rec = {
-      ...form,
-      경유지_상차: Array.isArray(form.경유지_상차) ? form.경유지_상차 : [],
-      경유지_하차: Array.isArray(form.경유지_하차) ? form.경유지_하차 : [],
-      메모중요도: autoPriority,
-      운임보정: fareAdjustment,
-
-      ...moneyPatch,
-      상차일: lockYear(form.상차일),
-      하차일: lockYear(form.하차일),
-      순번: nextSeq(),
-      배차상태: status,
-
-      // ===============================
-      // 🤖 AI 판단 로그 (영구 저장)
-      // ===============================
-      aiLog: aiRecommend
-        ? {
-          pickup: form.상차지명,
-          drop: form.하차지명,
-          vehicle: aiRecommend.vehicle,
-          fareAvg: aiRecommend.fareAvg,
-          fareMin: aiRecommend.fareMin,
-          fareMax: aiRecommend.fareMax,
-          driverAvg: aiRecommend.driverAvg,
-          marginPercent: aiRecommend.marginPercent,
-          sampleCount: aiRecommend.sampleCount,
-          isOutlier: aiRecommend.isOutlier,
-          appliedFare: Number(form.청구운임 || 0),
-          at: new Date().toISOString(),
-        }
-        : null,
-    };
-
-
-    await addDispatch(rec);
-    // ⭐ 상/하차지 담당자 정보 → 기존 업체 있으면 업데이트만 함
-    if (typeof upsertPlace === "function") {
-      savePlaceSmart(
-        form.상차지명,
-        form.상차지주소,
-        form.상차지담당자,
-        form.상차지담당자번호
-      );
-
-      savePlaceSmart(
-        form.하차지명,
-        form.하차지주소,
-        form.하차지담당자,
-        form.하차지담당자번호
-      );
-    }
-    // ★★★ 여기 아래에 추가!! ★★★
-    const updatedPickup = findPlaceByName(form.상차지명);
-    const updatedDrop = findPlaceByName(form.하차지명);
-
+  const found = driverMap.get(clean);
+  if (found) {
     setForm((p) => ({
       ...p,
-      상차지주소: updatedPickup?.주소 || p.상차지주소,
-      상차지담당자: updatedPickup?.담당자 || p.상차지담당자,
-      상차지담당자번호: updatedPickup?.담당자번호 || p.상차지담당자번호,
-      하차지주소: updatedDrop?.주소 || p.하차지주소,
-      하차지담당자: updatedDrop?.담당자 || p.하차지담당자,
-      하차지담당자번호: updatedDrop?.담당자번호 || p.하차지담당자번호,
+      차량번호: clean,
+      이름: found.이름,
+      전화번호: formatPhone(found.전화번호), // ⭐ 표시용 하이픈 적용
+      배차상태: "배차완료",
     }));
+  } else {
+    setDriverModal({
+      open: true,
+      carNo: clean,
+      name: "",
+      phone: "",
+    });
+  }
+};
 
-    const reset = {
-      ...emptyForm,
-      _id: crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`,
-      등록일: _todayStr(),
-      ...(isAdmin ? {} : { 청구운임: "", 기사운임: "", 수수료: "" }),
+    const nextSeq = () => Math.max(0, ...(dispatchData || []).map((r) => Number(r.순번) || 0)) + 1;
+// ================================
+// ⛔ 기사 중복 배차 체크 유틸
+// ================================
+function isTimeOverlap(aStart, aEnd, bStart, bEnd) {
+  if (!aStart || !bStart) return false;
+
+const toMin = (t) => {
+  if (!t) return null;
+
+  // "오전 9시 30분" 대응
+  if (t.includes("오전") || t.includes("오후")) {
+    const isPM = t.includes("오후");
+    const nums = t.match(/\d+/g) || [];
+    let h = Number(nums[0] || 0);
+    const m = Number(nums[1] || 0);
+    if (isPM && h < 12) h += 12;
+    if (!isPM && h === 12) h = 0;
+    return h * 60 + m;
+  }
+
+  // "HH:mm"
+  const [h, m = "0"] = String(t).split(":");
+  return Number(h) * 60 + Number(m);
+};
+
+  const aS = toMin(aStart);
+  const aE = aEnd ? toMin(aEnd) : aS + 60;
+  const bS = toMin(bStart);
+  const bE = bEnd ? toMin(bEnd) : bS + 60;
+
+  return Math.max(aS, bS) < Math.min(aE, bE);
+}
+
+function checkDuplicateDispatch(form, dispatchData) {
+  if (!form.차량번호) return null;
+
+  const targetDate = String(form.상차일 || "").slice(0, 10);
+
+  return dispatchData.find((r) => {
+    if (r._id === form._id) return false; // 🔥 자기 자신 제외
+    if (!r?.차량번호) return false;
+    if (r.차량번호 !== form.차량번호) return false;
+    if (r.배차상태 !== "배차완료") return false;
+
+    const rowDate = String(r.상차일 || "").slice(0, 10);
+    if (rowDate !== targetDate) return false;
+
+    return isTimeOverlap(
+      r.상차시간,
+      r.하차시간,
+      form.상차시간,
+      form.하차시간
+    );
+  });
+}
+
+    // ✅ 필수값(거래처/상차지명/하차지명) 검증
+    const validateRequired = (f) => {
+      const miss = [];
+      if (!f.거래처명?.trim()) miss.push("거래처");
+      if (!f.상차지명?.trim()) miss.push("상차지명");
+      if (!f.하차지명?.trim()) miss.push("하차지명");
+      if (miss.length) {
+        alert(`필수 항목 누락: ${miss.join(", ")}\n(*) 표시된 항목을 모두 입력하세요.`);
+        return false;
+      }
+      return true;
+    };
+    // ⭐ 날짜/시간 필수 검증
+    const validateDateTime = (f) => {
+      const miss = [];
+
+      if (!f.상차일) miss.push("상차일");
+      if (!f.하차일) miss.push("하차일");
+
+
+      if (miss.length > 0) {
+        alert(`⛔ 날짜가 입력되지 않았습니다.\n[ ${miss.join(", ")} ] 은(는) 반드시 입력해야 합니다.`);
+        return false;
+      }
+      return true;
     };
 
-    setForm(reset);
-    setVehicleQuery("");
-    setClientQuery("");
-    setAutoPickMatched(false);
-    setAutoDropMatched(false);
-    setConfirmOpen(false);
-    try { localStorage.removeItem("dispatchForm"); } catch { }
+// ==================== 운임조회 보조함수 정의 ====================
+const isLike = (text = "", target = "") =>
+  String(text).replace(/\s+/g, "").includes(
+    String(target).replace(/\s+/g, "")
+  );
+// ================================
+// 🚚 상/하차지 경유 파싱 유틸
+// ================================
 
-    alert("등록되었습니다.");
+// 1원진 / 1.원진 / 1 원진 모두 허용
+function parseStops(text = "") {
+  const raw = String(text).trim();
+  if (!raw) return [];
+
+  // ① "1.원진 2.우리유통" / "1 원진 2 우리유통"
+  const regex = /(\d+)\s*\.?\s*([^\d]+)/g;
+  const matches = [...raw.matchAll(regex)];
+
+  if (matches.length > 0) {
+    return matches
+      .sort((a, b) => Number(a[1]) - Number(b[1]))
+      .map(m => m[2].trim());
+  }
+
+  // ② 숫자 패턴 없으면 단일
+  return [raw];
+}
+
+// 경유 개수 라벨
+function getStopLabel(stops = []) {
+  return stops.length > 1 ? `경유 ${stops.length}곳` : "단일";
+}
+// ================================
+// 🏷 메모 자동 태그 추출
+// ================================
+function extractMemoTags(memo = "") {
+  const text = String(memo);
+
+  const rules = [
+    {
+      key: "대기",
+      match: /대기|대기시간|상차대기|하차대기/,
+      className: "bg-blue-100 text-blue-700",
+    },
+    {
+      key: "야간",
+      match: /야간|심야|밤|야간작업/,
+      className: "bg-purple-100 text-purple-700",
+    },
+    {
+      key: "추가비",
+      match: /추가|추가비|할증|추가요금/,
+      className: "bg-rose-100 text-rose-700",
+    },
+  ];
+
+  return rules
+    .filter(r => r.match.test(text))
+    .map(r => ({
+      label: r.key,
+      className: r.className,
+    }));
+}
+
+
+const getPalletFromCargoText = (cargo = "") => {
+  const m = cargo.match(/(\d+)\s*(p|P|파|팔|파레|파렛|파렛트|팔레트|PL)/i);
+  if (m) return Number(m[1]);
+  const m2 = cargo.match(/^\s*(\d+)\s*$/);
+  if (m2) return Number(m2[1]);
+  return null;
+};
+// ================================
+// ⭐ 오더복사용 조건 Key 생성 (중복 제거 기준)
+// ================================
+function makeCopyOrderKey(r) {
+  return [
+    r.운행유형 || "편도",                     // ⭐ 편도/왕복 구분
+    normalizeKey(r.상차지명 || ""),
+    normalizeKey(r.하차지명 || ""),
+    extractTonNum(r.차량톤수) ?? "",           // ⭐ 톤수 숫자화
+    r.차량종류 || "",
+    getPalletFromCargoText(r.화물내용) ?? "TON"
+  ].join("|");
+}
+
+const getDropCountFromText = (dropName = "") => {
+  const list = ["푸드플래닛", "신미"];
+  return list.filter((key) =>
+    isLike(dropName, key)
+  ).length || 1;
+};
+
+// ================================
+// ⭐ 운임조회 유사도 점수 계산
+// ================================
+function calcFareMatchScore(row, input) {
+  let score = 0;
+
+  // 상차지 / 하차지 (가장 중요)
+  if (normalizeKey(row.상차지명) === normalizeKey(input.pickup)) score += 40;
+  if (normalizeKey(row.하차지명) === normalizeKey(input.drop)) score += 40;
+
+  // 파렛트 수
+  if (input.pallet != null) {
+    const rowPallet = getPalletFromCargoText(row.화물내용);
+    if (rowPallet === input.pallet) score += 30;
+    else if (rowPallet != null && Math.abs(rowPallet - input.pallet) === 1)
+      score += 15;
+  }
+
+  // 차량종류
+  if (input.vehicle && row.차량종류 === input.vehicle) score += 20;
+
+  // 톤수 (±0.5)
+  if (input.ton != null) {
+    const rowTon = extractTonNum(row.차량톤수);
+    if (rowTon != null && Math.abs(rowTon - input.ton) <= 0.5)
+      score += 10;
+  }
+
+  return score;
+}
+// ================================
+// ⭐ 운임 중복 제거용 Key 생성
+// ================================
+function makeFareDedupKey(row) {
+  const pallet = getPalletFromCargoText(row.화물내용);
+  const fare = Number(String(row.청구운임 || "0").replace(/[^\d]/g, ""));
+
+  return [
+    normalizeKey(row.상차지명),
+    normalizeKey(row.하차지명),
+    pallet ?? "",              // ⭐ 파렛트 수
+    row.차량종류 || "",        // ⭐ 차량종류
+    fare                        // ⭐ 청구운임
+  ].join("|");
+}
+
+
+
+const palletFareRules = {
+  double: [ // 2곳 하차 (푸드플래닛 + 신미)
+    { min: 4, max: 5, fare: 350000 },
+    { min: 6, max: 7, fare: 370000 },
+    { min: 8, max: 10, fare: 380000 },
+  ],
+
+  food: [ // 푸드플래닛 단일
+    { min: 3, max: 3, fare: 240000 },
+    { min: 4, max: 6, fare: 270000 },
+    { min: 7, max: 8, fare: 280000 },
+    { min: 9, max: 10, fare: 300000 },
+  ],
+
+  sinmi: [ // 신미 단일
+    { min: 2, max: 2, fare: 150000 },
+    { min: 3, max: 3, fare: [180000, 200000] }, // 선택
+    { min: 4, max: 5, fare: 240000 },
+    { min: 6, max: 8, fare: 260000 },
+    { min: 9, max: 10, fare: 300000 },
+  ],
+};
+
+
+
+
+    const handleSubmit = async (e) => {
+  e.preventDefault();
+  if (!validateRequired(form)) return;
+  if (!validateDateTime(form)) return;
+
+  setConfirmOpen(true);
+};
+
+// ⭐ 실제 저장 함수
+const doSave = async () => {
+    // ⛔ 기사 중복 배차 방지
+  const dup = checkDuplicateDispatch(form, dispatchData);
+  if (dup) {
+    alert(
+      `⛔ 기사 중복 배차 감지\n\n` +
+      `차량번호: ${form.차량번호}\n` +
+      `기존 상차시간: ${dup.상차시간 || "-"}\n` +
+      `기존 하차시간: ${dup.하차시간 || "-"}`
+    );
+    return;
+  }
+
+  const status = form.차량번호 && (form.이름 || form.전화번호)
+    ? "배차완료"
+    : "배차중";
+
+  const moneyPatch = isAdmin ? {} : {
+    청구운임: "0",
+    기사운임: "0",
+    수수료: "0"
   };
-  const isRoundTrip = form.운행유형 === "왕복";
-  const ROUND_DISCOUNT = 0.9; // ⭐ 10% 할인 (조정 가능)
-  // ⭐ 운임조회 팝업 상태
-  const [fareModalOpen, setFareModalOpen] = React.useState(false);
-  const [fareResult, setFareResult] = React.useState(null);
-  const [expandedMemo, setExpandedMemo] = React.useState(null);
-  // ⭐ 운임조회 (송원 전용 자동요율 → 그 다음 AI 통계)
-  const handleFareSearch = () => {
-    // ✅ 반드시 맨 위
-    const pickup = (form.상차지명 || "").trim();
-    const drop = (form.하차지명 || "").trim();
-    const tonStr = (form.차량톤수 || "").trim();
-    const cargo = (form.화물내용 || "").trim();
-    const vehicle = (form.차량종류 || "").trim();
-
-    if (!pickup || !drop) {
-      alert("상차지명과 하차지명을 입력해주세요.");
-      return;
+// ⭐ 긴급 단가 보정 (rec 생성 전에!)
+const fareAdjustment = form.긴급
+  ? {
+      type: "긴급",
+      rate: 0.2,        // ← 가산율 (나중에 바꿔도 됨)
+      memo: "긴급 오더",
     }
+  : null;
+  // ⭐ 메모 prefix 자동 보정
+const autoPriority =
+  form.메모?.startsWith("!!") ? "CRITICAL" :
+  form.메모?.startsWith("!")  ? "HIGH" :
+  form.메모중요도 || "NORMAL";
+ 
+const rec = {
+  ...form,
+  메모중요도: autoPriority,
+  운임보정: fareAdjustment,
+  
+  ...moneyPatch,
+  상차일: lockYear(form.상차일),
+  하차일: lockYear(form.하차일),
+  순번: nextSeq(),
+  배차상태: status,
 
-    // ⭐ 전체 데이터
-    const fullData = Array.isArray(dispatchData) ? [...dispatchData] : [];
-    // ================================
-    // 📜 순수 과거 운송 기록
-    // ================================
-    const pastHistoryList = fullData
-      .filter(r => {
-        if ((r.운행유형 || "편도") !== form.운행유형) return false;
-        if (!r.상차지명 || !r.하차지명) return false;
+  // ===============================
+  // 🤖 AI 판단 로그 (영구 저장)
+  // ===============================
+  aiLog: aiRecommend
+    ? {
+        pickup: form.상차지명,
+        drop: form.하차지명,
+        vehicle: aiRecommend.vehicle,
+        fareAvg: aiRecommend.fareAvg,
+        fareMin: aiRecommend.fareMin,
+        fareMax: aiRecommend.fareMax,
+        driverAvg: aiRecommend.driverAvg,
+        marginPercent: aiRecommend.marginPercent,
+        sampleCount: aiRecommend.sampleCount,
+        isOutlier: aiRecommend.isOutlier,
+        appliedFare: Number(form.청구운임 || 0),
+        at: new Date().toISOString(),
+      }
+    : null,
+};
 
-        const inputPickupStops = parseStops(pickup);
-        const inputDropStops = parseStops(drop);
-        const rowPickupStops = parseStops(r.상차지명);
-        const rowDropStops = parseStops(r.하차지명);
+let needPlaceUpdate = false;
+let nextManagers = pickupManagers;
 
-        if (inputPickupStops.length !== rowPickupStops.length) return false;
-        if (inputDropStops.length !== rowDropStops.length) return false;
+if (
+  pickupPlace &&
+  form.상차지담당자 &&
+  form.상차지담당자번호
+) {
+  const name = form.상차지담당자.trim();
+  const phone = form.상차지담당자번호.trim();
 
-        const sameStops = (a, b) =>
-          a.length === b.length &&
-          a.every((name, i) =>
-            normalizeKey(name) === normalizeKey(b[i])
-          );
+  const exactIdx = pickupManagers.findIndex(
+    (m) => m.이름 === name && m.번호 === phone
+  );
 
-        if (!sameStops(inputPickupStops, rowPickupStops)) return false;
-        if (!sameStops(inputDropStops, rowDropStops)) return false;
+  const sameNameIdx = pickupManagers.findIndex(
+    (m) => m.이름 === name && m.번호 !== phone
+  );
 
-        return true;
-      })
-      .sort((a, b) =>
-        String(b.상차일 || "").localeCompare(String(a.상차일 || ""))
+  if (exactIdx === -1 && sameNameIdx === -1) {
+    nextManagers = [
+      ...pickupManagers,
+      { 이름: name, 번호: phone, 대표: false },
+    ];
+    needPlaceUpdate = true;
+  } else if (sameNameIdx !== -1) {
+    nextManagers = pickupManagers.map((m, i) =>
+      i === sameNameIdx ? { ...m, 번호: phone } : m
+    );
+    needPlaceUpdate = true;
+  }
+}
+
+// ✅ 이제 오더 저장
+await addDispatch(rec);
+
+// ✅ 2️⃣ 담당자 업데이트는 실패해도 무시
+if (needPlaceUpdate) {
+  try {
+    await upsertPlace({
+      업체명: pickupPlace.업체명,
+      주소: pickupPlace.주소,
+      담당자목록: nextManagers,
+    });
+    setPlaceRowsTrigger(Date.now());
+  } catch (e) {
+    console.error("상차지 담당자 업데이트 실패 (무시됨):", e);
+  }
+}
+
+
+// ⭐ 상/하차지 담당자 정보 → 기존 업체 있으면 업데이트만 함
+if (typeof upsertPlace === "function") {
+
+}
+// ★★★ 여기 아래에 추가!! ★★★
+const updatedPickup = findPlaceByName(form.상차지명);
+const updatedDrop = findPlaceByName(form.하차지명);
+
+setForm((p) => ({
+  ...p,
+  상차지주소: updatedPickup?.주소 || p.상차지주소,
+  상차지담당자: updatedPickup?.담당자 || p.상차지담당자,
+  상차지담당자번호: updatedPickup?.담당자번호 || p.상차지담당자번호,
+  하차지주소: updatedDrop?.주소 || p.하차지주소,
+  하차지담당자: updatedDrop?.담당자 || p.하차지담당자,
+  하차지담당자번호: updatedDrop?.담당자번호 || p.하차지담당자번호,
+}));
+
+  const reset = {
+    ...emptyForm,
+    _id: crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`,
+    등록일: _todayStr(),
+    ...(isAdmin ? {} : { 청구운임: "", 기사운임: "", 수수료: "" }),
+  };
+
+  setForm(reset);
+  setVehicleQuery(""); 
+  setClientQuery("");
+  setAutoPickMatched(false);
+  setAutoDropMatched(false);
+  setConfirmOpen(false);
+  try { localStorage.removeItem("dispatchForm"); } catch {}
+
+  alert("등록되었습니다.");
+};
+const isRoundTrip = form.운행유형 === "왕복";
+const ROUND_DISCOUNT = 0.9; // ⭐ 10% 할인 (조정 가능)
+    // ⭐ 운임조회 팝업 상태
+    const [fareModalOpen, setFareModalOpen] = React.useState(false);
+    const [fareResult, setFareResult] = React.useState(null);
+    const [expandedMemo, setExpandedMemo] = React.useState(null);
+    // ⭐ 운임조회 (송원 전용 자동요율 → 그 다음 AI 통계)
+const handleFareSearch = () => {
+  // ✅ 반드시 맨 위
+  const pickup = (form.상차지명 || "").trim();
+  const drop   = (form.하차지명 || "").trim();
+  const tonStr = (form.차량톤수 || "").trim();
+  const cargo  = (form.화물내용 || "").trim();
+  const vehicle = (form.차량종류 || "").trim();
+
+  if (!pickup || !drop) {
+    alert("상차지명과 하차지명을 입력해주세요.");
+    return;
+  }
+
+  // ⭐ 전체 데이터
+  const fullData = Array.isArray(dispatchData) ? [...dispatchData] : [];
+  // ================================
+// 📜 순수 과거 운송 기록
+// ================================
+const pastHistoryList = fullData
+  .filter(r => {
+    if ((r.운행유형 || "편도") !== form.운행유형) return false;
+    if (!r.상차지명 || !r.하차지명) return false;
+
+    const inputPickupStops = parseStops(pickup);
+    const inputDropStops   = parseStops(drop);
+    const rowPickupStops   = parseStops(r.상차지명);
+    const rowDropStops     = parseStops(r.하차지명);
+
+    if (inputPickupStops.length !== rowPickupStops.length) return false;
+    if (inputDropStops.length !== rowDropStops.length) return false;
+
+    const sameStops = (a, b) =>
+      a.length === b.length &&
+      a.every((name, i) =>
+        normalizeKey(name) === normalizeKey(b[i])
       );
 
-    // -----------------------------
-    // 🔧 공통 유틸 (기존 로직 유지)
-    // -----------------------------
+    if (!sameStops(inputPickupStops, rowPickupStops)) return false;
+    if (!sameStops(inputDropStops, rowDropStops)) return false;
 
-    const extractPalletNum = (text = "") => {
-      const str = String(text).trim();
-      if (!str) return null;
-      const m = str.match(/(\d+)\s*(p|P|파|팔|파레|파렛|파렛트|팔레트|PL)/);
-      if (m) return Number(m[1]);
-      const m2 = str.match(/^\s*(\d+)\s*$/);
-      if (m2) return Number(m2[1]);
-      return null;
-    };
+    return true;
+  })
+  .sort((a, b) =>
+    String(b.상차일 || "").localeCompare(String(a.상차일 || ""))
+  );
 
-    const extractLeadingNum = (text = "") => {
-      const m = String(text).trim().match(/^(\d+)/);
-      return m ? Number(m[1]) : null;
-    };
+      // -----------------------------
+      // 🔧 공통 유틸 (기존 로직 유지)
+      // -----------------------------
 
+      const extractPalletNum = (text = "") => {
+        const str = String(text).trim();
+        if (!str) return null;
+        const m = str.match(/(\d+)\s*(p|P|파|팔|파레|파렛|파렛트|팔레트|PL)/);
+        if (m) return Number(m[1]);
+        const m2 = str.match(/^\s*(\d+)\s*$/);
+        if (m2) return Number(m2[1]);
+        return null;
+      };
 
+      const extractLeadingNum = (text = "") => {
+        const m = String(text).trim().match(/^(\d+)/);
+        return m ? Number(m[1]) : null;
+      };
 
-    const inputPallets = extractPalletNum(cargo);
-    const inputCargoNum = extractLeadingNum(cargo);
-    const inputTonNum = extractTonNum(tonStr);
-    // ================================
-    // 🔑 화물 유형 판별
-    // ================================
-    // pallet: 파렛트 수가 명확한 경우
-    // ton: 파렛트 아님 → 톤수 기준
-    const cargoType =
-      inputPallets != null
-        ? "PALLET"
-        : inputTonNum != null
-          ? "TON"
-          : "UNKNOWN";
+      
 
-    // ============================================
-    // ① 송원 / 신미 / 푸드플래닛 전용 자동요율 우선 적용
-    // ============================================
-    const palletCount =
-      inputPallets != null ? inputPallets :
+      const inputPallets = extractPalletNum(cargo);
+      const inputCargoNum = extractLeadingNum(cargo);
+      const inputTonNum = extractTonNum(tonStr);
+// ================================
+// 🔑 화물 유형 판별
+// ================================
+// pallet: 파렛트 수가 명확한 경우
+// ton: 파렛트 아님 → 톤수 기준
+const cargoType =
+  inputPallets != null
+    ? "PALLET"
+    : inputTonNum != null
+    ? "TON"
+    : "UNKNOWN";
+
+      // ============================================
+      // ① 송원 / 신미 / 푸드플래닛 전용 자동요율 우선 적용
+      // ============================================
+      const palletCount =
+        inputPallets != null ? inputPallets :
         inputCargoNum != null ? inputCargoNum :
-          getPalletFromCargoText(cargo); // 숫자만 있으면 이것도 처리
+        getPalletFromCargoText(cargo); // 숫자만 있으면 이것도 처리
 
-    if (palletCount != null && isLike(pickup, "송원")) {
-      const dropCount = getDropCountFromText(drop);          // 1곳/2곳/3곳
-      const hasFood = (
-        isLike(drop, "푸드플래닛") ||
-        isLike(drop, "푸드") ||
-        isLike(drop, "푸플")
-      );
+      if (palletCount != null && isLike(pickup, "송원")) {
+        const dropCount = getDropCountFromText(drop);          // 1곳/2곳/3곳
+        const hasFood = (
+  isLike(drop, "푸드플래닛") ||
+  isLike(drop, "푸드") ||
+  isLike(drop, "푸플")
+);
 
-      const hasSinmi = (
-        isLike(drop, "신미")
-      );
+const hasSinmi = (
+  isLike(drop, "신미")
+);
 
 
-      let selectedFare = null;
+        let selectedFare = null;
 
-      // 🔹 2곳 하차 (신미 + 푸드플래닛) — 순서는 상관없이
-      if (dropCount >= 2 && hasFood && hasSinmi) {
-        const rule = palletFareRules.double.find(
-          (r) => palletCount >= r.min && palletCount <= r.max
-        );
-        if (rule) selectedFare = rule.fare;
-      }
+        // 🔹 2곳 하차 (신미 + 푸드플래닛) — 순서는 상관없이
+        if (dropCount >= 2 && hasFood && hasSinmi) {
+          const rule = palletFareRules.double.find(
+            (r) => palletCount >= r.min && palletCount <= r.max
+          );
+          if (rule) selectedFare = rule.fare;
+        }
 
-      // 🔹 푸드플래닛 1곳 하차
-      if (!selectedFare && dropCount === 1 && hasFood && !hasSinmi) {
-        const rule = palletFareRules.food.find(
-          (r) => palletCount >= r.min && palletCount <= r.max
-        );
-        if (rule) selectedFare = rule.fare;
-      }
+        // 🔹 푸드플래닛 1곳 하차
+        if (!selectedFare && dropCount === 1 && hasFood && !hasSinmi) {
+          const rule = palletFareRules.food.find(
+            (r) => palletCount >= r.min && palletCount <= r.max
+          );
+          if (rule) selectedFare = rule.fare;
+        }
 
-      // 🔹 신미 1곳 하차 (3파렛은 선택)
-      if (!selectedFare && dropCount === 1 && hasSinmi && !hasFood) {
-        const rule = palletFareRules.sinmi.find(
-          (r) => palletCount >= r.min && palletCount <= r.max
-        );
-        if (rule) {
-          if (Array.isArray(rule.fare)) {
-            // 3파렛: 18/20 둘 중 선택
-            const yes = window.confirm(
-              "신미 3파레트 요율 선택\n\n[확인] 180,000원\n[취소] 200,000원"
-            );
-            selectedFare = yes ? rule.fare[0] : rule.fare[1];
-          } else {
-            selectedFare = rule.fare;
+        // 🔹 신미 1곳 하차 (3파렛은 선택)
+        if (!selectedFare && dropCount === 1 && hasSinmi && !hasFood) {
+          const rule = palletFareRules.sinmi.find(
+            (r) => palletCount >= r.min && palletCount <= r.max
+          );
+          if (rule) {
+            if (Array.isArray(rule.fare)) {
+              // 3파렛: 18/20 둘 중 선택
+              const yes = window.confirm(
+                "신미 3파레트 요율 선택\n\n[확인] 180,000원\n[취소] 200,000원"
+              );
+              selectedFare = yes ? rule.fare[0] : rule.fare[1];
+            } else {
+              selectedFare = rule.fare;
+            }
           }
         }
-      }
 
-      // 👉 여기서 금액이 결정되었으면, AI추천 안 쓰고 바로 적용
-      if (selectedFare != null) {
-        setForm((prev) => ({
-          ...prev,
-          청구운임: String(selectedFare),
-        }));
-        alert(
-          `송원 전용 자동요율이 적용되었습니다.\n\n적용 운임: ${Number(
-            selectedFare
-          ).toLocaleString()}원`
-        );
-        return; // ⬅ AI 통계 로직으로 내려가지 않음
-      }
-    }
-
-    let filtered = fullData.filter((r) => {
-      // ⭐⭐⭐ 이 줄이 핵심 ⭐⭐⭐
-      if ((r.운행유형 || "편도") !== form.운행유형) return false;
-      // ================================
-      // 🚨 경유/단일 운송 판별 (가장 먼저)
-      // ================================
-      const inputPickupStops = parseStops(pickup);
-      const inputDropStops = parseStops(drop);
-
-      const rowPickupStops = parseStops(r.상차지명);
-      const rowDropStops = parseStops(r.하차지명);
-
-      // ❌ 경유 개수 다르면 같은 운송 아님
-      if (inputPickupStops.length !== rowPickupStops.length) return false;
-      if (inputDropStops.length !== rowDropStops.length) return false;
-
-      // ❌ 경유 구성 다르면 제외 (순서 포함)
-      const sameStops = (a, b) =>
-        a.length === b.length &&
-        a.every((name, i) =>
-          normalizeKey(name) === normalizeKey(b[i])
-        );
-
-      if (!sameStops(inputPickupStops, rowPickupStops)) return false;
-      if (!sameStops(inputDropStops, rowDropStops)) return false;
-
-      if (!r.상차지명 || !r.하차지명) return false;
-
-      const rPickup = String(r.상차지명).trim();
-      const rDrop = String(r.하차지명).trim();
-
-      // ✅ 상차 / 하차 "완전 동일"만 허용
-      const matchPickup =
-        normalizeKey(rPickup) === normalizeKey(pickup);
-
-      const matchDrop =
-        normalizeKey(rDrop) === normalizeKey(drop);
-
-      if (!matchPickup || !matchDrop) return false;
-
-      if (!matchPickup || !matchDrop) return false;
-
-      const matchVehicle =
-        !vehicle
-          ? true
-          : normalizeVehicleGroup(r.차량종류) ===
-          normalizeVehicleGroup(vehicle);
-
-      if (!matchVehicle) return false;
-
-      // 톤수 비교
-      let matchTon = true;
-      if (inputTonNum != null) {
-        const rowTonNum = extractTonNum(r.차량톤수 || "");
-        if (rowTonNum != null) {
-          matchTon = Math.abs(rowTonNum - inputTonNum) <= 0.5;
+        // 👉 여기서 금액이 결정되었으면, AI추천 안 쓰고 바로 적용
+        if (selectedFare != null) {
+          setForm((prev) => ({
+            ...prev,
+            청구운임: String(selectedFare),
+          }));
+          alert(
+            `송원 전용 자동요율이 적용되었습니다.\n\n적용 운임: ${Number(
+              selectedFare
+            ).toLocaleString()}원`
+          );
+          return; // ⬅ AI 통계 로직으로 내려가지 않음
         }
       }
 
-      // 화물내용 비교
-      let matchCargo = true;
-      const rowCargo = String(r.화물내용 || "");
-      const normInputCargo = norm(cargo);
-      const normRowCargo = norm(rowCargo);
+      let filtered = fullData.filter((r) => {
+          // ⭐⭐⭐ 이 줄이 핵심 ⭐⭐⭐
+  if ((r.운행유형 || "편도") !== form.운행유형) return false;
+        // ================================
+// 🚨 경유/단일 운송 판별 (가장 먼저)
+// ================================
+const inputPickupStops = parseStops(pickup);
+const inputDropStops   = parseStops(drop);
 
-      if (inputPallets != null) {
-        const rowPallets =
-          extractPalletNum(rowCargo) ?? extractLeadingNum(rowCargo);
-        if (rowPallets != null) {
-          matchCargo = Math.abs(rowPallets - inputPallets) <= 1;
-        } else {
-          matchCargo = false;
-        }
-      } else if (inputCargoNum != null) {
-        const rowNum = extractLeadingNum(rowCargo);
-        if (rowNum != null) {
-          matchCargo = Math.abs(rowNum - inputCargoNum) <= 1;
-        } else {
-          matchCargo = false;
-        }
-      } else {
-        if (
-          normRowCargo.includes(normInputCargo) ||
-          normInputCargo.includes(normRowCargo)
-        ) {
-          matchCargo = true;
-        } else {
-          matchCargo = matchTon;
-        }
-      }
+const rowPickupStops = parseStops(r.상차지명);
+const rowDropStops   = parseStops(r.하차지명);
 
-      return matchVehicle && matchTon && matchCargo;
-    });
+// ❌ 경유 개수 다르면 같은 운송 아님
+if (inputPickupStops.length !== rowPickupStops.length) return false;
+if (inputDropStops.length !== rowDropStops.length) return false;
 
-    if (!filtered.length) {
-      filtered = fullData.filter((r) => {
+// ❌ 경유 구성 다르면 제외 (순서 포함)
+const sameStops = (a, b) =>
+  a.length === b.length &&
+  a.every((name, i) =>
+    normalizeKey(name) === normalizeKey(b[i])
+  );
 
-        // ⭐⭐⭐ 반드시 동일하게 ⭐⭐⭐
-        if ((r.운행유형 || "편도") !== form.운행유형) return false;
+if (!sameStops(inputPickupStops, rowPickupStops)) return false;
+if (!sameStops(inputDropStops, rowDropStops)) return false;
+
         if (!r.상차지명 || !r.하차지명) return false;
 
-        // 🔴 경유/단일 판별 다시 강제
-        const inputPickupStops = parseStops(pickup);
-        const inputDropStops = parseStops(drop);
-        const rowPickupStops = parseStops(r.상차지명);
-        const rowDropStops = parseStops(r.하차지명);
-
-        if (inputPickupStops.length !== rowPickupStops.length) return false;
-        if (inputDropStops.length !== rowDropStops.length) return false;
-
-        const sameStops = (a, b) =>
-          a.length === b.length &&
-          a.every((name, i) =>
-            normalizeKey(name) === normalizeKey(b[i])
-          );
-
-        if (!sameStops(inputPickupStops, rowPickupStops)) return false;
-        if (!sameStops(inputDropStops, rowDropStops)) return false;
-
-        // 그 다음에야 문자열 비교
         const rPickup = String(r.상차지명).trim();
         const rDrop = String(r.하차지명).trim();
 
-        return (
-          normalizeKey(rPickup) === normalizeKey(pickup) &&
-          normalizeKey(rDrop) === normalizeKey(drop)
-        );
-      });
-    }
-    if (!filtered.length) {
-      alert("유사한 과거 운임 데이터를 찾지 못했습니다.");
-      return;
-    }
+// ✅ 상차 / 하차 "완전 동일"만 허용
+const matchPickup =
+  normalizeKey(rPickup) === normalizeKey(pickup);
 
-    const fares = filtered
-      .map((r) =>
-        Number(String(r.청구운임 || "0").replace(/,/g, ""))
-      )
-      .filter((n) => !isNaN(n));
-    // ================================
-    // ⭐ 입력 조건 정리
-    // ================================
-    const inputCond = {
-      pickup,
-      drop,
-      pallet: palletCount,
-      vehicle,
-      ton: inputTonNum,
-    };
+const matchDrop =
+  normalizeKey(rDrop) === normalizeKey(drop);
 
-    // ⭐ 유사도 점수 부여
-    const scoredList = filtered.map(r => ({
-      ...r,
-      __score: calcFareMatchScore(r, inputCond),
-    }));
+if (!matchPickup || !matchDrop) return false;
 
-    // ⭐ 거의 동일 / 유사 분리
-    const exactLike = scoredList.filter(r => {
-      const rowPallet = getPalletFromCargoText(r.화물내용);
+        if (!matchPickup || !matchDrop) return false;
 
-      return (
-        r.__score >= 90 &&
-        rowPallet === inputCond.pallet   // ⭐ 파렛트 완전 일치
-      );
-    });
+        const matchVehicle =
+  !vehicle
+    ? true
+    : normalizeVehicleGroup(r.차량종류) ===
+      normalizeVehicleGroup(vehicle);
 
-    const similarTop = scoredList
-      .filter(r => r.__score >= 60 && r.__score < 90)
-      .sort((a, b) => b.__score - a.__score)
-      .slice(0, 3);
+        if (!matchVehicle) return false;
 
-    if (!fares.length) {
-      alert("해당 조건의 과거 데이터에 청구운임 정보가 없습니다.");
-      return;
-    }
-
-    const avg = Math.round(
-
-      fares.reduce((a, b) => a + b, 0) / fares.length
-    );
-    const min = Math.min(...fares);
-    const max = Math.max(...fares);
-
-    const latestRow = filtered
-      .slice()
-      .sort((a, b) => String(b.상차일 || "").localeCompare(String(a.상차일 || "")))[0];
-
-    const latestCargo =
-      latestRow?.화물내용?.trim() ? latestRow.화물내용 : "(기록 없음)";
-
-    // ================================
-    // ⭐ 운임 결과 중복 제거 (조건 + 청구운임 기준)
-    // ================================
-    const dedupMap = new Map();
-
-    // 최신순 정렬 → 먼저 들어온 것만 유지
-    filtered
-      .slice()
-      .sort((a, b) =>
-        String(b.상차일 || "").localeCompare(String(a.상차일 || ""))
-      )
-      .forEach((r) => {
-        const key = makeFareDedupKey(r);
-        if (!dedupMap.has(key)) {
-          dedupMap.set(key, r);
+        // 톤수 비교
+        let matchTon = true;
+        if (inputTonNum != null) {
+          const rowTonNum = extractTonNum(r.차량톤수 || "");
+          if (rowTonNum != null) {
+            matchTon = Math.abs(rowTonNum - inputTonNum) <= 0.5;
+          }
         }
-      });
 
-    const dedupedList = Array.from(dedupMap.values());
-    // ================================
-    // ⭐ 과거 운송 기록도 동일 기준으로 중복 제거
-    // ================================
-    const pastDedupMap = new Map();
+        // 화물내용 비교
+        let matchCargo = true;
+        const rowCargo = String(r.화물내용 || "");
+        const normInputCargo = norm(cargo);
+        const normRowCargo = norm(rowCargo);
 
-    pastHistoryList
-      .slice()
-      .sort((a, b) =>
-        String(b.상차일 || "").localeCompare(String(a.상차일 || ""))
-      )
-      .forEach((r) => {
-        const key = makeFareDedupKey(r);
-        if (!pastDedupMap.has(key)) {
-          pastDedupMap.set(key, r);
+        if (inputPallets != null) {
+          const rowPallets =
+            extractPalletNum(rowCargo) ?? extractLeadingNum(rowCargo);
+          if (rowPallets != null) {
+            matchCargo = Math.abs(rowPallets - inputPallets) <= 1;
+          } else {
+            matchCargo = false;
+          }
+        } else if (inputCargoNum != null) {
+          const rowNum = extractLeadingNum(rowCargo);
+          if (rowNum != null) {
+            matchCargo = Math.abs(rowNum - inputCargoNum) <= 1;
+          } else {
+            matchCargo = false;
+          }
+        } else {
+          if (
+            normRowCargo.includes(normInputCargo) ||
+            normInputCargo.includes(normRowCargo)
+          ) {
+            matchCargo = true;
+          } else {
+            matchCargo = matchTon;
+          }
         }
+
+        return matchVehicle && matchTon && matchCargo;
       });
 
-    const pastDedupedList = Array.from(pastDedupMap.values());
+      if (!filtered.length) {
+  filtered = fullData.filter((r) => {
 
-    // ================================
-    // ⭐ 최종 운임 결과 세팅 (단 한 번만!)
-    // ================================
-    setFareResult({
-      pickupStops: parseStops(pickup),
-      dropStops: parseStops(drop),
-      count: dedupedList.length,
+    // ⭐⭐⭐ 반드시 동일하게 ⭐⭐⭐
+    if ((r.운행유형 || "편도") !== form.운행유형) return false;
+    if (!r.상차지명 || !r.하차지명) return false;
 
-      avg,
-      min,
-      max,
-      latestFare: latestRow.청구운임,
-      latestDate: latestRow.상차일,
-      latestCargo,
+    // 🔴 경유/단일 판별 다시 강제
+    const inputPickupStops = parseStops(pickup);
+    const inputDropStops   = parseStops(drop);
+    const rowPickupStops   = parseStops(r.상차지명);
+    const rowDropStops     = parseStops(r.하차지명);
 
-      exactLike,
-      similarTop,
+    if (inputPickupStops.length !== rowPickupStops.length) return false;
+    if (inputDropStops.length !== rowDropStops.length) return false;
 
-      filteredList: dedupedList,   // 💰 운임 계산 후보
-      pastHistoryList: pastDedupedList,
-    });
-
-
-    // 모달 오픈
-    setFareModalOpen(true);
-  };
-
-  // ------------------ 오더복사 ------------------
-
-  // 🔎 오더복사용 상태
-  const [copyOpen, setCopyOpen] = React.useState(false);
-  const [copyQ, setCopyQ] = React.useState("");
-  const [copyStart, setCopyStart] = React.useState("");
-  const [copyEnd, setCopyEnd] = React.useState("");
-  const [copyFilterType, setCopyFilterType] = React.useState("전체");
-  const [onlyRoundTrip, setOnlyRoundTrip] = React.useState(false);
-
-
-  // 🔍 오더복사 리스트
-  const copyList = React.useMemo(() => {
-    const q = copyQ.trim().toLowerCase();
-
-    // 검색어 없으면 비표시 (기존 기능 유지)
-    if (!q) return [];
-
-    // ⭐ 전체 데이터 사용
-    let arr = Array.isArray(dispatchData) ? [...dispatchData] : [];
-    // ⭐ 왕복만 보기 필터
-    if (onlyRoundTrip) {
-      arr = arr.filter(r => r.운행유형 === "왕복");
-    }
-
-    // ⭐ 현황패널 필터 적용
-    if (filterType && filterValue) {
-      arr = arr.filter(
-        (r) => String(r[filterType] || "").toLowerCase() === String(filterValue).toLowerCase()
+    const sameStops = (a, b) =>
+      a.length === b.length &&
+      a.every((name, i) =>
+        normalizeKey(name) === normalizeKey(b[i])
       );
-    }
 
-    // ⭐ 필드 기준 검색
-    if (copyFilterType !== "전체") {
-      arr = arr.filter((r) =>
-        String(r[copyFilterType] || "").toLowerCase().includes(q)
-      );
-    } else {
-      arr = arr.filter((r) =>
-        ["거래처명", "상차지명", "하차지명", "화물내용"].some((k) =>
-          String(r[k] || "").toLowerCase().includes(q)
-        )
-      );
-    }
+    if (!sameStops(inputPickupStops, rowPickupStops)) return false;
+    if (!sameStops(inputDropStops, rowDropStops)) return false;
 
-    // ⭐ 최신순 정렬
-    arr = arr.slice().sort((a, b) =>
-      (b.상차일 || "").localeCompare(a.상차일 || "") ||
-      (b.상차시간 || "").localeCompare(a.상차시간 || "")
-    );
+    // 그 다음에야 문자열 비교
+    const rPickup = String(r.상차지명).trim();
+    const rDrop = String(r.하차지명).trim();
 
-    // ⭐ 조건 기준 중복 제거 (대표 1건만)
-    const dedupMap = new Map();
-
-    // 최신순이므로, 먼저 들어온 것이 대표
-    arr.forEach((r) => {
-      const key = makeCopyOrderKey(r);
-      if (!dedupMap.has(key)) {
-        dedupMap.set(key, r);
+    return (
+  normalizeKey(rPickup) === normalizeKey(pickup) &&
+  normalizeKey(rDrop) === normalizeKey(drop)
+);
+  });
+}
+      if (!filtered.length) {
+        alert("유사한 과거 운임 데이터를 찾지 못했습니다.");
+        return;
       }
-    });
 
-    return Array.from(dedupMap.values());
-  }, [dispatchData, copyQ, copyFilterType, filterType, filterValue, onlyRoundTrip]);
+      const fares = filtered
+        .map((r) =>
+          Number(String(r.청구운임 || "0").replace(/,/g, ""))
+        )
+        .filter((n) => !isNaN(n));
+// ================================
+// ⭐ 입력 조건 정리
+// ================================
+const inputCond = {
+  pickup,
+  drop,
+  pallet: palletCount,
+  vehicle,
+  ton: inputTonNum,
+};
 
-  const [copySelected, setCopySelected] = React.useState([]);
+// ⭐ 유사도 점수 부여
+const scoredList = filtered.map(r => ({
+  ...r,
+  __score: calcFareMatchScore(r, inputCond),
+}));
 
-  // 📌 복사 적용 함수
-  const applyCopy = (r) => {
-    const keep = {
-      거래처명: r.거래처명 || "",
-      상차지명: r.상차지명 || "",
-      상차지주소: r.상차지주소 || "",
-      하차지명: r.하차지명 || "",
-      하차지주소: r.하차지주소 || "",
-      화물내용: r.화물내용 || "",
-      차량종류: r.차량종류 || "",
-      차량톤수: r.차량톤수 || "",
-      상차방법: r.상차방법 || "",
-      하차방법: r.하차방법 || "",
-      상차일: _todayStr(),
-      상차시간: r.상차시간 || "",
-      하차일: _todayStr(),
-      하차시간: r.하차시간 || "",
-      지급방식: r.지급방식 || "",
-      배차방식: r.배차방식 || "",
-      메모: r.메모 || "",
-      긴급: r.긴급 === true,
-      운임보정: r.운임보정 || null,
-      운행유형: r.운행유형 || "편도",
+// ⭐ 거의 동일 / 유사 분리
+const exactLike = scoredList.filter(r => {
+  const rowPallet = getPalletFromCargoText(r.화물내용);
+
+  return (
+    r.__score >= 90 &&
+    rowPallet === inputCond.pallet   // ⭐ 파렛트 완전 일치
+  );
+});
+
+const similarTop = scoredList
+  .filter(r => r.__score >= 60 && r.__score < 90)
+  .sort((a, b) => b.__score - a.__score)
+  .slice(0, 3);
+
+      if (!fares.length) {
+        alert("해당 조건의 과거 데이터에 청구운임 정보가 없습니다.");
+        return;
+      }
+
+      const avg = Math.round(
+        
+        fares.reduce((a, b) => a + b, 0) / fares.length
+      );
+      const min = Math.min(...fares);
+      const max = Math.max(...fares);
+
+      const latestRow = filtered
+        .slice()
+        .sort((a, b) => String(b.상차일 || "").localeCompare(String(a.상차일 || "")))[0];
+
+      const latestCargo =
+        latestRow?.화물내용?.trim() ? latestRow.화물내용 : "(기록 없음)";
+
+// ================================
+// ⭐ 운임 결과 중복 제거 (조건 + 청구운임 기준)
+// ================================
+const dedupMap = new Map();
+
+// 최신순 정렬 → 먼저 들어온 것만 유지
+filtered
+  .slice()
+  .sort((a, b) =>
+    String(b.상차일 || "").localeCompare(String(a.상차일 || ""))
+  )
+  .forEach((r) => {
+    const key = makeFareDedupKey(r);
+    if (!dedupMap.has(key)) {
+      dedupMap.set(key, r);
+    }
+  });
+
+const dedupedList = Array.from(dedupMap.values());
+// ================================
+// ⭐ 과거 운송 기록도 동일 기준으로 중복 제거
+// ================================
+const pastDedupMap = new Map();
+
+pastHistoryList
+  .slice()
+  .sort((a, b) =>
+    String(b.상차일 || "").localeCompare(String(a.상차일 || ""))
+  )
+  .forEach((r) => {
+    const key = makeFareDedupKey(r);
+    if (!pastDedupMap.has(key)) {
+      pastDedupMap.set(key, r);
+    }
+  });
+
+const pastDedupedList = Array.from(pastDedupMap.values());
+
+// ================================
+// ⭐ 최종 운임 결과 세팅 (단 한 번만!)
+// ================================
+setFareResult({
+  pickupStops: parseStops(pickup),
+  dropStops: parseStops(drop),
+  count: dedupedList.length,
+
+  avg,
+  min,
+  max,
+  latestFare: latestRow.청구운임,
+  latestDate: latestRow.상차일,
+  latestCargo,
+
+  exactLike,
+  similarTop,
+
+  filteredList: dedupedList,   // 💰 운임 계산 후보
+  pastHistoryList: pastDedupedList,
+});
+
+
+// 모달 오픈
+setFareModalOpen(true);
+};
+
+    // ------------------ 오더복사 ------------------
+
+// 🔎 오더복사용 상태
+const [copyOpen, setCopyOpen] = React.useState(false);
+const [copyQ, setCopyQ] = React.useState("");
+const [copyStart, setCopyStart] = React.useState("");
+const [copyEnd, setCopyEnd] = React.useState("");
+const [copyFilterType, setCopyFilterType] = React.useState("전체");
+const [onlyRoundTrip, setOnlyRoundTrip] = React.useState(false);
+
+
+// 🔍 오더복사 리스트
+const copyList = React.useMemo(() => {
+  const q = copyQ.trim().toLowerCase();
+
+  // 검색어 없으면 비표시 (기존 기능 유지)
+  if (!q) return [];
+
+  // ⭐ 전체 데이터 사용
+  let arr = Array.isArray(dispatchData) ? [...dispatchData] : [];
+  // ⭐ 왕복만 보기 필터
+if (onlyRoundTrip) {
+  arr = arr.filter(r => r.운행유형 === "왕복");
+}
+
+  // ⭐ 현황패널 필터 적용
+  if (filterType && filterValue) {
+    arr = arr.filter(
+      (r) => String(r[filterType] || "").toLowerCase() === String(filterValue).toLowerCase()
+    );
+  }
+
+  // ⭐ 필드 기준 검색
+  if (copyFilterType !== "전체") {
+    arr = arr.filter((r) =>
+      String(r[copyFilterType] || "").toLowerCase().includes(q)
+    );
+  } else {
+    arr = arr.filter((r) =>
+      ["거래처명", "상차지명", "하차지명", "화물내용"].some((k) =>
+        String(r[k] || "").toLowerCase().includes(q)
+      )
+    );
+  }
+
+  // ⭐ 최신순 정렬
+  arr = arr.slice().sort((a, b) =>
+    (b.상차일 || "").localeCompare(a.상차일 || "") ||
+    (b.상차시간 || "").localeCompare(a.상차시간 || "")
+  );
+
+  // ⭐ 조건 기준 중복 제거 (대표 1건만)
+const dedupMap = new Map();
+
+// 최신순이므로, 먼저 들어온 것이 대표
+arr.forEach((r) => {
+  const key = makeCopyOrderKey(r);
+  if (!dedupMap.has(key)) {
+    dedupMap.set(key, r);
+  }
+});
+
+return Array.from(dedupMap.values());
+}, [dispatchData, copyQ, copyFilterType, filterType, filterValue, onlyRoundTrip]);
+
+const [copySelected, setCopySelected] = React.useState([]);
+
+// 📌 복사 적용 함수
+const applyCopy = (r) => {
+  const keep = {
+    거래처명: r.거래처명 || "",
+    상차지명: r.상차지명 || "",
+    상차지주소: r.상차지주소 || "",
+    하차지명: r.하차지명 || "",
+    하차지주소: r.하차지주소 || "",
+    화물내용: r.화물내용 || "",
+    차량종류: r.차량종류 || "",
+    차량톤수: r.차량톤수 || "",
+    상차방법: r.상차방법 || "",
+    하차방법: r.하차방법 || "",
+    상차일: _todayStr(),
+    상차시간: r.상차시간 || "",
+    하차일: _todayStr(),
+    하차시간: r.하차시간 || "",
+    지급방식: r.지급방식 || "",
+    배차방식: r.배차방식 || "",
+    메모: r.메모 || "",
+    긴급: r.긴급 === true,
+  운임보정: r.운임보정 || null,
+  운행유형: r.운행유형 || "편도",
+  };
+  setForm((p) => ({ ...p, ...keep }));
+  setVehicleQuery(keep.차량종류 || ""); // ⭐ 반드시
+  setAutoPickMatched(false);
+  setAutoDropMatched(false);
+  setCopyOpen(false);
+  setCopySelected([]); // 선택 초기화
+};
+    // ------------------ 초기화 ------------------
+    const resetForm = () => {
+      const reset = { ...emptyForm, _id: crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`, 등록일: _todayStr() };
+      setForm(reset);
+      setClientQuery("");
+      setVehicleQuery("");
+      setAutoPickMatched(false);
+      setAutoDropMatched(false);
+      setCopySelected([]);  // ⭐ 체크 상태 초기화
     };
-    setForm((p) => ({ ...p, ...keep }));
-    setVehicleQuery(keep.차량종류 || ""); // ⭐ 반드시
-    setAutoPickMatched(false);
-    setAutoDropMatched(false);
-    setCopyOpen(false);
-    setCopySelected([]); // 선택 초기화
-  };
-  // ------------------ 초기화 ------------------
-  const resetForm = () => {
-    const reset = { ...emptyForm, _id: crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`, 등록일: _todayStr() };
-    setForm(reset);
-    setClientQuery("");
-    setVehicleQuery("");
-    setAutoPickMatched(false);
-    setAutoDropMatched(false);
-    setCopySelected([]);  // ⭐ 체크 상태 초기화
-  };
 
-  // =========================================================
-  // 📤 공유 (모바일: 카톡 공유창 / PC: 텍스트 복사)
-  // =========================================================
-  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-  const shareTextForRow = (r) => {
-    const dStr = r.상차일 || _todayStr(); // YYYY-MM-DD 유지
-    const plate = r.차량번호 || "-";
-    const name = r.이름 || "-";
-    const url = `${location.origin}/upload?id=${encodeURIComponent(r._id || "")}`;
-    return `[RUN25 운송장 업로드 안내]
+    // =========================================================
+    // 📤 공유 (모바일: 카톡 공유창 / PC: 텍스트 복사)
+    // =========================================================
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const shareTextForRow = (r) => {
+      const dStr = r.상차일 || _todayStr(); // YYYY-MM-DD 유지
+      const plate = r.차량번호 || "-";
+      const name = r.이름 || "-";
+      const url = `${location.origin}/upload?id=${encodeURIComponent(r._id || "")}`;
+      return `[RUN25 운송장 업로드 안내]
 
 ✅ 상차일: ${dStr}
 ✅ 거래처: ${r.거래처명 || "-"}
@@ -3764,251 +3314,296 @@ const toRow = (p = {}) => {
 
 아래 링크에서 운송장/인수증 사진을 업로드해주세요👇
 📎 ${url}`;
-  };
+    };
 
-  const shareDispatch = async (r) => {
-    const text = shareTextForRow(r);
-    const url = `${location.origin}/upload?id=${encodeURIComponent(r._id || "")}`;
-    if (isMobile && navigator.share) {
-      try { await navigator.share({ title: "RUN25 업로드 안내", text, url }); } catch { }
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(text);
-      alert("공유 문구가 클립보드에 복사되었습니다. (카톡/메신저에 붙여넣기)");
-    } catch {
-      prompt("아래 내용을 복사하세요.", text);
-    }
-  };
-
-
-  // =========================================================
-  // 📎 첨부 모달 열기 트리거
-  // =========================================================
-  const openAttachModal = (row) => {
-    try { window.dispatchEvent(new CustomEvent("RUN25_OPEN_ATTACH", { detail: row })); } catch { }
-    if (typeof window.RUN25_OPEN_ATTACH_CB === "function") {
-      try { window.RUN25_OPEN_ATTACH_CB(row); } catch { }
-    }
-  };
-
-  // ───── 내부 렌더: 입력폼 (그대로 유지) ─────
-  // =======================
-  // KakaoT Minimal Clean Theme
-  // =======================
-
-  // 입력창 (카카오T 스타일)
-  const inputCls =
-    "w-full px-3 py-2 rounded-lg text-sm border " +
-    "border-gray-300 bg-white " +
-    "focus:border-blue-600 focus:ring-1 focus:ring-blue-200 " +
-    "placeholder:text-gray-400 transition";
-
-  // 라벨 (카카오T 스타일)
-  const labelCls =
-    "block text-[13px] font-semibold text-black mb-1";
+    const shareDispatch = async (r) => {
+      const text = shareTextForRow(r);
+      const url = `${location.origin}/upload?id=${encodeURIComponent(r._id || "")}`;
+      if (isMobile && navigator.share) {
+        try { await navigator.share({ title: "RUN25 업로드 안내", text, url }); } catch { }
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(text);
+        alert("공유 문구가 클립보드에 복사되었습니다. (카톡/메신저에 붙여넣기)");
+      } catch {
+        prompt("아래 내용을 복사하세요.", text);
+      }
+    };
 
 
+    // =========================================================
+    // 📎 첨부 모달 열기 트리거
+    // =========================================================
+    const openAttachModal = (row) => {
+      try { window.dispatchEvent(new CustomEvent("RUN25_OPEN_ATTACH", { detail: row })); } catch { }
+      if (typeof window.RUN25_OPEN_ATTACH_CB === "function") {
+        try { window.RUN25_OPEN_ATTACH_CB(row); } catch { }
+      }
+    };
 
-  const reqStar = <span className="text-red-500">*</span>;
-  const AutoBadge = ({ show }) => show ? <span className="ml-2 text-[12px] text-emerald-700">(자동매칭됨)</span> : null;
-  // ---------------------------------------------
-  // ⭐ 오늘 유가 정보 가져오기 (휘발유/경유)
-  // ---------------------------------------------
-  async function fetchFuelPrices(apiKey) {
-    const KEY = apiKey || "DEMO_KEY"; // ← 실제 키 없으면 DEMO
-    const url = `https://www.opinet.co.kr/api/avgAllPrice.do?out=json&code=${KEY}`;
-    try {
-      const resp = await fetch(url);
-      const json = await resp.json();
-      return json.RESULT?.OIL || [];
-    } catch (e) {
-      console.warn("유가 조회 실패:", e);
-      return [];
-    }
+    // ───── 내부 렌더: 입력폼 (그대로 유지) ─────
+// =======================
+// KakaoT Minimal Clean Theme
+// =======================
+
+// 입력창 (카카오T 스타일)
+const inputCls =
+  "w-full px-3 py-2 rounded-lg text-sm border " +
+  "border-gray-300 bg-white " +
+  "focus:border-blue-600 focus:ring-1 focus:ring-blue-200 " +
+  "placeholder:text-gray-400 transition";
+
+// 라벨 (카카오T 스타일)
+const labelCls =
+  "block text-[13px] font-semibold text-black mb-1";
+
+
+
+    const reqStar = <span className="text-red-500">*</span>;
+    const AutoBadge = ({ show }) => show ? <span className="ml-2 text-[12px] text-emerald-700">(자동매칭됨)</span> : null;
+// ---------------------------------------------
+// ⭐ 오늘 유가 정보 가져오기 (휘발유/경유)
+// ---------------------------------------------
+async function fetchFuelPrices(apiKey) {
+  const KEY = apiKey || "DEMO_KEY"; // ← 실제 키 없으면 DEMO
+  const url = `https://www.opinet.co.kr/api/avgAllPrice.do?out=json&code=${KEY}`;
+  try {
+    const resp = await fetch(url);
+    const json = await resp.json();
+    return json.RESULT?.OIL || [];
+  } catch (e) {
+    console.warn("유가 조회 실패:", e);
+    return [];
   }
+}
 
-  function FuelPriceWidget({ apiKey }) {
-    const [prices, setPrices] = React.useState([]);
+function FuelPriceWidget({ apiKey }) {
+  const [prices, setPrices] = React.useState([]);
 
-    React.useEffect(() => {
-      fetchFuelPrices(apiKey).then(setPrices);
-    }, [apiKey]);
+  React.useEffect(() => {
+    fetchFuelPrices(apiKey).then(setPrices);
+  }, [apiKey]);
 
-    return (
-      <div className="mb-4 bg-white rounded-xl shadow-lg border p-4 w-[280px]">
-        <h3 className="font-bold text-gray-800 text-sm mb-2">⛽ 오늘 유가 (전국 평균)</h3>
+  return (
+    <div className="mb-4 bg-white rounded-xl shadow-lg border p-4 w-[280px]">
+      <h3 className="font-bold text-gray-800 text-sm mb-2">⛽ 오늘 유가 (전국 평균)</h3>
 
-        {prices.length === 0 && (
-          <div className="text-gray-400 text-xs">불러오는 중...</div>
-        )}
+      {prices.length === 0 && (
+        <div className="text-gray-400 text-xs">불러오는 중...</div>
+      )}
 
-        <div className="space-y-1 text-sm">
-          {prices.map(oil => (
-            <div key={oil.PRODCD} className="flex justify-between">
-              <span>{oil.PRODNM}</span>
-              <span className="font-bold">{Number(oil.PRICE).toLocaleString()} 원/L</span>
-            </div>
-          ))}
+      <div className="space-y-1 text-sm">
+        {prices.map(oil => (
+          <div key={oil.PRODCD} className="flex justify-between">
+            <span>{oil.PRODNM}</span>
+            <span className="font-bold">{Number(oil.PRICE).toLocaleString()} 원/L</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+// ----------------------------
+// ⛽ 자동 슬라이드 유가 배너
+// ----------------------------
+
+
+const AREA_OPTIONS = [
+  { code: "", name: "전국" },
+  { code: "04", name: "인천" },
+  { code: "09", name: "경기" },
+  { code: "01", name: "서울" },
+];
+
+function FuelSlideWidget() {
+  const [prices, setPrices] = React.useState([]);
+  const [page, setPage] = React.useState(0);
+  const [area, setArea] = React.useState("");
+
+  React.useEffect(() => {
+    fetchFuelPrices(area).then(setPrices).catch(console.error);
+  }, [area]);
+
+  React.useEffect(() => {
+    const timer = setInterval(() => {
+      setPage((p) => (p + 1) % 3);
+    }, 3000);
+    return () => clearInterval(timer);
+  }, []);
+
+  if (!prices.length) return null;
+
+  const items = [
+    prices.find(o => o.PRODNM.includes("휘발유")),
+    prices.find(o => o.PRODNM.includes("경유")),
+    prices.find(o => o.PRODNM.includes("고급")),
+  ].filter(Boolean);
+
+  const item = items[page];
+  const diff = item?.DIFF ?? 0;
+  const up = diff > 0;
+
+  return (
+    <div className="mb-6">
+      <select
+        value={area}
+        onChange={(e) => setArea(e.target.value)}
+        className="border rounded px-2 py-1 text-xs mb-2"
+      >
+        {AREA_OPTIONS.map(a => (
+          <option key={a.code} value={a.code}>{a.name}</option>
+        ))}
+      </select>
+
+      <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white text-center rounded-xl py-4 shadow-lg transition-all duration-500">
+        <div className="text-xs opacity-90">{item.PRODNM}</div>
+        <div className="text-xl font-extrabold mt-1">
+          {Number(item.PRICE).toLocaleString()} 원/L
+        </div>
+
+        <div className={`text-xs font-bold mt-1 ${up ? "text-rose-200" : "text-green-200"}`}>
+          {up ? "▲" : "▼"} {Math.abs(diff)}원
         </div>
       </div>
-    );
-  }
-  // ----------------------------
-  // ⛽ 자동 슬라이드 유가 배너
-  // ----------------------------
+    </div>
+  );
+}
+// ================================
+// 🔑 상차지 담당자 파생 상태 (renderForm 상단)
+// ================================
+const pickupPlace = useMemo(() => {
+  return placeList.find(
+    (p) => normalizeKey(p.업체명) === normalizeKey(form.상차지명)
+  );
+}, [placeList, form.상차지명]);
 
+const pickupManagers = useMemo(() => {
+  if (!pickupPlace) return [];
 
-  const AREA_OPTIONS = [
-    { code: "", name: "전국" },
-    { code: "04", name: "인천" },
-    { code: "09", name: "경기" },
-    { code: "01", name: "서울" },
-  ];
-
-  function FuelSlideWidget() {
-    const [prices, setPrices] = React.useState([]);
-    const [page, setPage] = React.useState(0);
-    const [area, setArea] = React.useState("");
-
-    React.useEffect(() => {
-      fetchFuelPrices(area).then(setPrices).catch(console.error);
-    }, [area]);
-
-    React.useEffect(() => {
-      const timer = setInterval(() => {
-        setPage((p) => (p + 1) % 3);
-      }, 3000);
-      return () => clearInterval(timer);
-    }, []);
-
-    if (!prices.length) return null;
-
-    const items = [
-      prices.find(o => o.PRODNM.includes("휘발유")),
-      prices.find(o => o.PRODNM.includes("경유")),
-      prices.find(o => o.PRODNM.includes("고급")),
-    ].filter(Boolean);
-
-    const item = items[page];
-    const diff = item?.DIFF ?? 0;
-    const up = diff > 0;
-
-    return (
-      <div className="mb-6">
-        <select
-          value={area}
-          onChange={(e) => setArea(e.target.value)}
-          className="border rounded px-2 py-1 text-xs mb-2"
-        >
-          {AREA_OPTIONS.map(a => (
-            <option key={a.code} value={a.code}>{a.name}</option>
-          ))}
-        </select>
-
-        <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white text-center rounded-xl py-4 shadow-lg transition-all duration-500">
-          <div className="text-xs opacity-90">{item.PRODNM}</div>
-          <div className="text-xl font-extrabold mt-1">
-            {Number(item.PRICE).toLocaleString()} 원/L
-          </div>
-
-          <div className={`text-xs font-bold mt-1 ${up ? "text-rose-200" : "text-green-200"}`}>
-            {up ? "▲" : "▼"} {Math.abs(diff)}원
-          </div>
-        </div>
-      </div>
-    );
+  if (Array.isArray(pickupPlace.담당자목록)) {
+    return pickupPlace.담당자목록.map((m) => ({
+      이름: m.이름,
+      번호: m.번호,
+      대표: !!m.대표,
+    }));
   }
 
-  const renderForm = () => (
-    <>
-      <h2 className="text-lg font-bold mb-3">배차관리</h2>
+  // 🔥 구형 데이터 대응
+  if (pickupPlace.담당자 && pickupPlace.담당자번호) {
+    return [{
+      이름: pickupPlace.담당자,
+      번호: pickupPlace.담당자번호,
+      대표: true,
+    }];
+  }
+
+  return [];
+}, [pickupPlace]);
 
 
+const hasMultiplePickupManagers = pickupManagers.length > 1;
 
-      {/* 입력 폼 */}
-      {/* ================== 프리미엄 액션바 ================== */}
-      <div
-        className="
+const isNewPickupManager = useMemo(() => {
+  if (!form.상차지담당자번호) return false;
+
+  // ✅ 번호 기준으로 먼저 판단
+  const samePhone = pickupManagers.some(
+    (m) => m.번호 === form.상차지담당자번호
+  );
+
+  if (samePhone) return false; // ← 기존 담당자 (이름 바뀌어도 OK)
+
+  // 번호 자체가 처음이면 신규
+  return !!form.상차지담당자;
+}, [pickupManagers, form.상차지담당자, form.상차지담당자번호]);
+    const renderForm = () => (
+      <>
+        <h2 className="text-lg font-bold mb-3">배차관리</h2>
+
+        {/* 입력 폼 */}
+  {/* ================== 프리미엄 액션바 ================== */}
+<div 
+  className="
     bg-white 
     rounded-xl shadow-lg border 
     px-4 py-3 
     flex flex-wrap items-center gap-3 mb-5 
     max-w-[1500px]    // 입력폼과 동일 폭
   "
-        style={{ minHeight: "52px" }}
-      >
+  style={{ minHeight: "52px" }}
+>
 
 
-        {/* 좌측 버튼 그룹 */}
-        <div className="flex items-center gap-2">
-          <button className="premium-btn indigo" onClick={() => { setCopyOpen(true); setCopySelected([]); }}>
-            📄 오더복사
-          </button>
-          <button className="premium-btn gray" onClick={resetForm}>
-            🔄 초기화
-          </button>
-          <button className="premium-btn yellow" onClick={handleFareSearch}>
-            💰 운임조회
-          </button>
-          {/* ⭐ 여기 추가 */}
-          <button
-            type="button"
-            disabled={!aiRecommend}
-            onClick={() => setAiPopupOpen(true)}
-            className="premium-btn blue disabled:opacity-40"
-          >
-            🤖 AI 추천
-          </button>
-        </div>
+  {/* 좌측 버튼 그룹 */}
+  <div className="flex items-center gap-2">
+    <button className="premium-btn indigo" onClick={() => { setCopyOpen(true); setCopySelected([]); }}>
+      📄 오더복사
+    </button>
+    <button className="premium-btn gray" onClick={resetForm}>
+      🔄 초기화
+    </button>
+    <button className="premium-btn yellow" onClick={handleFareSearch}>
+      💰 운임조회
+    </button>
+     {/* ⭐ 여기 추가 */}
+  <button
+    type="button"
+    disabled={!aiRecommend}
+    onClick={() => setAiPopupOpen(true)}
+    className="premium-btn blue disabled:opacity-40"
+  >
+    🤖 AI 추천
+  </button>
+</div>
 
-        {/* 구분선 */}
-        <div className="flex items-center gap-2">
+  {/* 구분선 */}
+  <div className="flex items-center gap-2">
 
-          {/* 독차 */}
-          <ToggleBadge
-            active={form.독차}
-            onClick={() => onChange("독차", !form.독차)}
-            activeCls="bg-indigo-600 text-white border-indigo-600"
-            inactiveCls="bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100"
-          >
-            독차
-          </ToggleBadge>
+  {/* 독차 */}
+  <ToggleBadge
+    active={form.독차}
+    onClick={() => onChange("독차", !form.독차)}
+    activeCls="bg-indigo-600 text-white border-indigo-600"
+    inactiveCls="bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100"
+  >
+     독차
+  </ToggleBadge>
 
-          {/* 혼적 */}
-          <ToggleBadge
-            active={form.혼적}
-            onClick={() => onChange("혼적", !form.혼적)}
-            activeCls="bg-emerald-600 text-white border-emerald-600"
-            inactiveCls="bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
-          >
-            혼적
-          </ToggleBadge>
+  {/* 혼적 */}
+  <ToggleBadge
+    active={form.혼적}
+    onClick={() => onChange("혼적", !form.혼적)}
+    activeCls="bg-emerald-600 text-white border-emerald-600"
+    inactiveCls="bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+  >
+     혼적
+  </ToggleBadge>
 
-          {/* 왕복 */}
-          <ToggleBadge
-            active={form.운행유형 === "왕복"}
-            onClick={() =>
-              onChange("운행유형", form.운행유형 === "왕복" ? "편도" : "왕복")
-            }
-            activeCls="bg-purple-600 text-white border-purple-600"
-            inactiveCls="bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100"
-          >
-            왕복
-          </ToggleBadge>
+  {/* 왕복 */}
+  <ToggleBadge
+    active={form.운행유형 === "왕복"}
+    onClick={() =>
+      onChange("운행유형", form.운행유형 === "왕복" ? "편도" : "왕복")
+    }
+    activeCls="bg-purple-600 text-white border-purple-600"
+    inactiveCls="bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100"
+  >
+     왕복
+  </ToggleBadge>
 
-          {/* 🚨 긴급 (기존 유지, 통일감만) */}
-          <ToggleBadge
-            active={form.긴급}
-            onClick={() => onChange("긴급", !form.긴급)}
-            activeCls="bg-red-600 text-white border-red-600 animate-pulse"
-            inactiveCls="bg-red-50 text-red-600 border-red-300 hover:bg-red-100"
-          >
-            긴급
-          </ToggleBadge>
-          {areaFareHint && (
-            <div
-              className="
+  {/* 🚨 긴급 (기존 유지, 통일감만) */}
+  <ToggleBadge
+    active={form.긴급}
+    onClick={() => onChange("긴급", !form.긴급)}
+    activeCls="bg-red-600 text-white border-red-600 animate-pulse"
+    inactiveCls="bg-red-50 text-red-600 border-red-300 hover:bg-red-100"
+  >
+     긴급
+  </ToggleBadge>
+  {areaFareHint && (
+    <div
+      className="
         mt-2
         flex items-center gap-4
         border border-blue-200
@@ -4020,124 +3615,124 @@ const toRow = (p = {}) => {
         hover:bg-blue-100
         transition
       "
-              onClick={() => {
-                const inputTon = extractTonNum(form.차량톤수);
-                const inputPallet = getPalletFromCargoText(form.화물내용);
+      onClick={() => {
+        const inputTon = extractTonNum(form.차량톤수);
+        const inputPallet = getPalletFromCargoText(form.화물내용);
 
-                const history = (dispatchData || []).filter(r => {
-                  if (!r.청구운임) return false;
+        const history = (dispatchData || []).filter(r => {
+          if (!r.청구운임) return false;
 
-                  if (
-                    !isAreaMatch(
-                      form.상차지주소,
-                      r.상차지주소 || r.상차지명
-                    ) ||
-                    !isAreaMatch(
-                      form.하차지주소,
-                      r.하차지주소 || r.하차지명
-                    )
-                  ) {
-                    return false;
-                  }
+          if (
+            !isAreaMatch(
+              form.상차지주소,
+              r.상차지주소 || r.상차지명
+            ) ||
+            !isAreaMatch(
+              form.하차지주소,
+              r.하차지주소 || r.하차지명
+            )
+          ) {
+            return false;
+          }
 
-                  if (
-                    normalizeVehicleGroup(r.차량종류) !==
-                    normalizeVehicleGroup(form.차량종류)
-                  ) {
-                    return false;
-                  }
+          if (
+            normalizeVehicleGroup(r.차량종류) !==
+            normalizeVehicleGroup(form.차량종류)
+          ) {
+            return false;
+          }
 
-                  if (inputTon != null) {
-                    const rowTon = extractTonNum(r.차량톤수);
-                    if (rowTon == null) return false;
-                    if (Math.abs(rowTon - inputTon) > 0.5) return false;
-                  }
+          if (inputTon != null) {
+            const rowTon = extractTonNum(r.차량톤수);
+            if (rowTon == null) return false;
+            if (Math.abs(rowTon - inputTon) > 0.5) return false;
+          }
 
-                  if (inputPallet != null) {
-                    const rowPallet = getPalletFromCargoText(r.화물내용);
-                    if (rowPallet == null) return false;
-                    if (Math.abs(rowPallet - inputPallet) > 1) return false;
-                  }
+          if (inputPallet != null) {
+            const rowPallet = getPalletFromCargoText(r.화물내용);
+            if (rowPallet == null) return false;
+            if (Math.abs(rowPallet - inputPallet) > 1) return false;
+          }
 
-                  return true;
-                });
+          return true;
+        });
 
-                setGuideHistoryList(history);
-                setFareHistoryOpen(true);
-              }}
-            >
-              <span className="font-semibold text-gray-800">
-                {areaFareHint.pickupLabel} → {areaFareHint.dropLabel}
-              </span>
+        setGuideHistoryList(history);
+        setFareHistoryOpen(true);
+      }}
+    >
+      <span className="font-semibold text-gray-800">
+        {areaFareHint.pickupLabel} → {areaFareHint.dropLabel}
+      </span>
 
-              <span className="text-gray-500">
-                기준: {areaFareHint.level}
-                <span className="ml-1 text-xs">
-                  ({areaFareHint.count}건)
-                </span>
-              </span>
+      <span className="text-gray-500">
+        기준: {areaFareHint.level}
+        <span className="ml-1 text-xs">
+          ({areaFareHint.count}건)
+        </span>
+      </span>
 
-              <span className="ml-auto font-bold text-blue-700">
-                {areaFareHint.min.toLocaleString()} ~{" "}
-                {areaFareHint.max.toLocaleString()}원
-              </span>
-            </div>
-          )}
-        </div>
+      <span className="ml-auto font-bold text-blue-700">
+        {areaFareHint.min.toLocaleString()} ~{" "}
+        {areaFareHint.max.toLocaleString()}원
+      </span>
+    </div>
+  )}
+</div>
 
-        <div className="w-px h-7 bg-gray-200" />
+  <div className="w-px h-7 bg-gray-200" />
 
-        {/* 날짜 시간 ▼ */}
-        <div className="flex items-center gap-3 text-sm">
-          <label className="text-gray-600 font-medium">상차</label>
-          <input type="date" value={form.상차일} className="inp small" onChange={(e) => onChange("상차일", e.target.value)} />
-          <select value={form.상차시간} className="inp small" onChange={(e) => onChange("상차시간", e.target.value)}>
-            <option value="">시간</option>
-            {localTimeOptions.map((t) => <option key={t} value={t}>{t}</option>)}
-          </select>
-          {/* 🔹 상차: 당일/내일 */}
-          <button
-            type="button"
-            className="px-2 py-1 text-xs rounded bg-blue-100 text-blue-600 hover:bg-blue-200"
-            onClick={() => onChange("상차일", _todayStr())}
-          >
-            당일
-          </button>
+  {/* 날짜 시간 ▼ */}
+  <div className="flex items-center gap-3 text-sm">
+    <label className="text-gray-600 font-medium">상차</label>
+    <input type="date" value={form.상차일} className="inp small" onChange={(e)=>onChange("상차일",e.target.value)}/>
+    <select value={form.상차시간} className="inp small" onChange={(e)=>onChange("상차시간",e.target.value)}>
+      <option value="">시간</option>
+      {localTimeOptions.map((t)=><option key={t} value={t}>{t}</option>)}
+    </select>
+      {/* 🔹 상차: 당일/내일 */}
+  <button
+    type="button"
+    className="px-2 py-1 text-xs rounded bg-blue-100 text-blue-600 hover:bg-blue-200"
+    onClick={() => onChange("상차일", _todayStr())}
+  >
+    당일
+  </button>
 
-          <button
-            type="button"
-            className="px-2 py-1 text-xs rounded bg-blue-100 text-blue-600 hover:bg-blue-200"
-            onClick={() => onChange("상차일", _tomorrowStr())}
-          >
-            내일
-          </button>
+  <button
+    type="button"
+    className="px-2 py-1 text-xs rounded bg-blue-100 text-blue-600 hover:bg-blue-200"
+    onClick={() => onChange("상차일", _tomorrowStr())}
+  >
+    내일
+  </button>
 
-          <label className="text-gray-600 font-medium ml-6">하차</label>
-          <input type="date" value={form.하차일} className="inp small" onChange={(e) => onChange("하차일", e.target.value)} />
-          <select value={form.하차시간} className="inp small" onChange={(e) => onChange("하차시간", e.target.value)}>
-            <option value="">시간</option>
-            {localTimeOptions.map((t) => <option key={t} value={t}>{t}</option>)}
-          </select>
-          {/* 🔹 하차: 당일/내일 */}
-          <button
-            type="button"
-            className="px-2 py-1 text-xs rounded bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
-            onClick={() => onChange("하차일", _todayStr())}
-          >
-            당일
-          </button>
+    <label className="text-gray-600 font-medium ml-6">하차</label>
+    <input type="date" value={form.하차일} className="inp small" onChange={(e)=>onChange("하차일",e.target.value)}/>
+    <select value={form.하차시간} className="inp small" onChange={(e)=>onChange("하차시간",e.target.value)}>
+      <option value="">시간</option>
+      {localTimeOptions.map((t)=><option key={t} value={t}>{t}</option>)}
+    </select>
+      {/* 🔹 하차: 당일/내일 */}
+  <button
+    type="button"
+    className="px-2 py-1 text-xs rounded bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
+    onClick={() => onChange("하차일", _todayStr())}
+  >
+    당일
+  </button>
 
-          <button
-            type="button"
-            className="px-2 py-1 text-xs rounded bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
-            onClick={() => onChange("하차일", _tomorrowStr())}
-          >
-            내일
-          </button>
-          <button
-            type="button"
-            onClick={swapPickupDrop}
-            className="
+  <button
+    type="button"
+    className="px-2 py-1 text-xs rounded bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
+    onClick={() => onChange("하차일", _tomorrowStr())}
+  >
+    내일
+  </button>
+<button
+  type="button"
+  onClick={swapPickupDrop}
+  className="
     ml-2
     inline-flex items-center gap-1
     px-3 py-1.5
@@ -4150,1040 +3745,1069 @@ const toRow = (p = {}) => {
     active:scale-95
     transition
   "
-            title="상차지 ↔ 하차지 교체"
-          >
-            ⇄ 상·하차 교체
-          </button>
-        </div>
-      </div>
-
-      <form
-        onSubmit={handleSubmit}
-        className="
+  title="상차지 ↔ 하차지 교체"
+>
+  ⇄ 상·하차 교체
+</button>
+  </div>
+</div>
+ 
+<form
+  onSubmit={handleSubmit}
+  className="
     grid grid-cols-8 gap-3
     bg-white
     border border-[#EDEDED]
     rounded-2xl p-5
     shadow-[0_2px_12px_rgba(0,0,0,0.06)]
   "
-      >
-        {/* 거래처 + 신규등록 */}
-        <div className="col-span-2">
-          <label className={labelCls}>거래처 {reqStar}</label>
-          <div className="flex gap-2">
-            <div className="relative flex-1" ref={comboRef}>
-              <input
-                className={inputCls}
-                placeholder="거래처 검색/입력"
-                value={clientQuery || form.거래처명}
-                onFocus={() => setIsClientOpen(true)}
-                onChange={(e) => {
-                  setClientQuery(e.target.value);
-                  onChange("거래처명", e.target.value);
-                  setIsClientOpen(true);
-                  setClientActive(0);
-                }}
+>
+  {/* 거래처 + 신규등록 */}
+  <div className="col-span-2">
+    <label className={labelCls}>거래처 {reqStar}</label>
+    <div className="flex gap-2">
+      <div className="relative flex-1" ref={comboRef}>
+        <input
+          className={inputCls}
+          placeholder="거래처 검색/입력"
+          value={clientQuery || form.거래처명}
+          onFocus={() => setIsClientOpen(true)}
+         onChange={(e) => {
+  setClientQuery(e.target.value);
+  onChange("거래처명", e.target.value);
+  setIsClientOpen(true);
+  setClientActive(0);
+}}
 
-                onKeyDown={(e) => {
-                  const list = filteredClients;
+          onKeyDown={(e) => {
+  const list = filteredClients;
 
-                  if (!isClientOpen && (e.key === "ArrowDown" || e.key === "Enter")) {
-                    setIsClientOpen(true);
-                    return;
-                  }
+  if (!isClientOpen && (e.key === "ArrowDown" || e.key === "Enter")) {
+    setIsClientOpen(true);
+    return;
+  }
 
-                  if (e.key === "Enter") {
+  if (e.key === "Enter") {
+    e.preventDefault();
+
+    // 🔥 1️⃣ 검색 결과 없음 → 중복 확인 → 신규 여부 판단
+    if (list.length === 0) {
+      const name = clientQuery.trim();
+      if (!name) return;
+
+      const key = normalizeKey(name);
+    const similar = placeList.filter((p) => {
+  const k = normalizeKey(p.업체명);
+  return k.includes(key) || key.includes(k);
+});
+
+
+      if (similar.length > 0) {
+        setDupPopup({
+          open: true,
+          input: { name },   // ← 여기 중요
+          candidates: similar,
+        });
+      } else {
+        openNewPlacePrompt(name);
+      }
+      return;
+    }
+
+    // 🔹 2️⃣ 검색 결과 있을 때 → 선택
+    const pick = list[clientActive];
+    if (pick) applyClientSelect(pick.업체명);
+    return;
+  }
+
+  if (e.key === "ArrowDown") {
+    e.preventDefault();
+    setClientActive((i) => Math.min(i + 1, list.length - 1));
+  } else if (e.key === "ArrowUp") {
+    e.preventDefault();
+    setClientActive((i) => Math.max(i - 1, 0));
+  } else if (e.key === "Escape") {
+    setIsClientOpen(false);
+  }
+}}
+
+        />
+        {isClientOpen && (
+          <div className="absolute left-0 right-0 mt-1 max-h-52 overflow-auto bg-white border rounded-lg shadow-xl z-50">
+            {filteredClients.length === 0 ? (
+              <div className="px-3 py-2 text-sm text-gray-500">
+                검색 결과 없음
+              </div>
+            ) : (
+              filteredClients.map((p, idx) => (
+                <div
+                  key={p.업체명 + "_" + idx}
+                  className={`px-3 py-2 text-sm cursor-pointer ${
+                    idx === clientActive ? "bg-blue-50" : "hover:bg-gray-50"
+                  }`}
+                  onMouseEnter={() => setClientActive(idx)}
+                  onMouseDown={(e) => {
                     e.preventDefault();
-
-                    // 🔥 1️⃣ 검색 결과 없음 → 중복 확인 → 신규 여부 판단
-                    if (list.length === 0) {
-                      const name = clientQuery.trim();
-                      if (!name) return;
-
-                      const key = normalizeKey(name);
-                      const similar = placeList.filter((p) => {
-                        const k = normalizeKey(p.업체명);
-                        return k.includes(key) || key.includes(k);
-                      });
-
-
-                      if (similar.length > 0) {
-                        setDupPopup({
-                          open: true,
-                          input: { name },   // ← 여기 중요
-                          candidates: similar,
-                        });
-                      } else {
-                        openNewPlacePrompt(name);
-                      }
-                      return;
-                    }
-
-                    // 🔹 2️⃣ 검색 결과 있을 때 → 선택
-                    const pick = list[clientActive];
-                    if (pick) applyClientSelect(pick.업체명);
-                    return;
-                  }
-
-                  if (e.key === "ArrowDown") {
-                    e.preventDefault();
-                    setClientActive((i) => Math.min(i + 1, list.length - 1));
-                  } else if (e.key === "ArrowUp") {
-                    e.preventDefault();
-                    setClientActive((i) => Math.max(i - 1, 0));
-                  } else if (e.key === "Escape") {
-                    setIsClientOpen(false);
-                  }
-                }}
-
-              />
-              {isClientOpen && (
-                <div className="absolute left-0 right-0 mt-1 max-h-52 overflow-auto bg-white border rounded-lg shadow-xl z-50">
-                  {filteredClients.length === 0 ? (
-                    <div className="px-3 py-2 text-sm text-gray-500">
-                      검색 결과 없음
-                    </div>
-                  ) : (
-                    filteredClients.map((p, idx) => (
-                      <div
-                        key={p.업체명 + "_" + idx}
-                        className={`px-3 py-2 text-sm cursor-pointer ${idx === clientActive ? "bg-blue-50" : "hover:bg-gray-50"
-                          }`}
-                        onMouseEnter={() => setClientActive(idx)}
-                        onMouseDown={(e) => {
-                          e.preventDefault();
-                          applyClientSelect(p.업체명);
-                        }}
-                      >
-                        <div className="font-medium">{p.업체명}</div>
-                        {p.주소 && (
-                          <div className="text-[11px] text-gray-500">{p.주소}</div>
-                        )}
-                      </div>
-                    ))
+                    applyClientSelect(p.업체명);
+                  }}
+                >
+                  <div className="font-medium">{p.업체명}</div>
+                  {p.주소 && (
+                    <div className="text-[11px] text-gray-500">{p.주소}</div>
                   )}
                 </div>
-              )}
-            </div>
-
-            <button
-              type="button"
-              onClick={() => {
-                const name = (clientQuery || "").trim();
-                if (!name) return alert("업체명을 입력하세요.");
-
-                const nk = normalizeKey(name);
-
-                const similar = placeList.filter(p => {
-                  const pk = normalizeKey(p.업체명);
-                  return pk.includes(nk) || nk.includes(pk);
-                });
-
-                // 🔥 1️⃣ 비슷한 거래처 있으면 → 중복 팝업 먼저
-                if (similar.length > 0) {
-                  setDupPopup({
-                    open: true,
-                    input: { name },
-                    candidates: similar,
-                  });
-                  return;
-                }
-
-                // 🔥 2️⃣ 진짜 없을 때만 신규 입력 팝업
-                openNewPlacePrompt(name);
-              }}
-              className="px-3 py-2 border rounded-lg text-sm bg-gray-50 hover:bg-gray-100"
-            >
-              + 신규등록
-            </button>
-
+              ))
+            )}
           </div>
-        </div>
-
-        {/* 상차지명 + 자동완성 */}
-        <div className="relative">
-          <div className="flex items-center justify-between">
-            <label className={labelCls}>
-              상차지명 {reqStar}
-            </label>
-
-            <button
-              type="button"
-              className={`
-    text-xs
-    px-2 py-1
-    rounded
-    border
-    whitespace-nowrap
-    transition
-    ${form.경유지_상차?.length > 0
-                  ? "bg-indigo-100 text-indigo-700 border-indigo-300"
-                  : "bg-indigo-50 text-indigo-700 border-indigo-200"
-                }
-  `}
-              onClick={() =>
-                setStopPopup({
-                  open: true,
-                  type: "pickup",
-                  stops: [...(form.경유지_상차 || [])],
-                })
-              }
-            >
-              {form.경유지_상차?.length > 0
-                ? `경유 ${form.경유지_상차.length}`
-                : "+ 경유"}
-            </button>
-
-            {/* 🔽 여기 아래에 상차지 자동완성 input이 이어짐 */}
-          </div>
-
-
-          <input
-            className={inputCls}
-            placeholder="상차지 검색"
-            value={form.상차지명}
-            onChange={(e) => {
-              const v = e.target.value;
-              handlePickupName(v);
-              setPickupOptions(filterPlaces(v));
-              setShowPickupDropdown(true);
-              setPickupActive(0);
-            }}
-            onKeyDown={(e) => {
-              const list = pickupOptions;
-              if (!list.length) return;
-              if (["ArrowDown", "ArrowUp", "Enter"].includes(e.key)) {
-                e.preventDefault();
-              }
-              if (e.key === "Enter") {
-                const p = list[pickupActive];
-                if (!p) return;
-                setForm((prev) => ({
-                  ...prev,
-                  상차지명: p.업체명,
-                  상차지주소: p.주소,
-                  상차지담당자: p.담당자,
-                  상차지담당자번호: p.담당자번호,
-                }));
-                setShowPickupDropdown(false);
-              } else if (e.key === "ArrowDown") {
-                setPickupActive((i) => Math.min(i + 1, list.length - 1));
-              } else if (e.key === "ArrowUp") {
-                setPickupActive((i) => Math.max(i - 1, 0));
-              }
-            }}
-            onBlur={() => setTimeout(() => setShowPickupDropdown(false), 200)}
-          />
-
-          {showPickupDropdown && pickupOptions.length > 0 && (
-            <div className="absolute z-50 bg-white border rounded-lg shadow-lg w-full max-h-48 overflow-auto">
-              {pickupOptions.map((p, i) => (
-                <div
-                  key={i}
-                  className={`px-2 py-1 cursor-pointer ${i === pickupActive ? "bg-blue-50" : "hover:bg-gray-50"
-                    }`}
-                  onMouseDown={() => {
-                    setForm((prev) => ({
-                      ...prev,
-                      상차지명: p.업체명,
-                      상차지주소: p.주소,
-                      상차지담당자: p.담당자,
-                      상차지담당자번호: p.담당자번호,
-                    }));
-                    setShowPickupDropdown(false);
-                  }}
-                >
-                  <b>{p.업체명}</b>
-                  {p.주소 && <div className="text-xs text-gray-500">{p.주소}</div>}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* 상차지주소 */}
-        <div>
-          <label className={labelCls}>
-            상차지주소 <AutoBadge show={autoPickMatched} />
-          </label>
-          <input
-            className={inputCls}
-            value={form.상차지주소}
-            onChange={(e) => handlePickupAddrManual(e.target.value)}
-            placeholder="자동매칭 또는 수기입력"
-          />
-        </div>
-        {/* 상차지 담당자 */}
-        <div>
-          <label className={labelCls}>상차지 담당자</label>
-          <input
-            className={inputCls}
-            value={form.상차지담당자}
-            onChange={(e) => onChange("상차지담당자", e.target.value)}
-            placeholder="담당자 이름"
-          />
-        </div>
-
-        {/* 상차지 연락처 */}
-        <div>
-          <label className={labelCls}>상차지 연락처</label>
-          <input
-            className={inputCls}
-            value={form.상차지담당자번호}
-            onChange={(e) =>
-              onChange("상차지담당자번호", e.target.value.replace(/[^\d-]/g, ""))
-            }
-            placeholder="010-0000-0000"
-          />
-        </div>
-
-
-        {/* 하차지명 + 자동완성 */}
-        <div className="relative">
-          <div className="flex items-center justify-between">
-            <label className={labelCls}>
-              하차지명 {reqStar}
-            </label>
-
-            <button
-              type="button"
-              className={`
-        text-xs
-        px-2 py-1
-        rounded
-        border
-        whitespace-nowrap
-        transition
-        ${form.경유지_하차?.length > 0
-                  ? "bg-emerald-100 text-emerald-700 border-emerald-300"
-                  : "bg-emerald-50 text-emerald-700 border-emerald-200"
-                }
-      `}
-              onClick={() =>
-                setStopPopup({
-                  open: true,
-                  type: "drop",
-                  stops: [...(form.경유지_하차 || [])],
-                })
-              }
-            >
-              {form.경유지_하차?.length > 0
-                ? `경유 ${form.경유지_하차.length}`
-                : "+ 경유"}
-            </button>
-          </div>
-          <input
-            className={inputCls}
-            placeholder="하차지 검색"
-            value={form.하차지명}
-            onChange={(e) => {
-              const v = e.target.value;
-              handleDropName(v);
-              setPlaceOptions(filterPlaces(v));
-              setShowPlaceDropdown(true);
-              setPlaceActive(0);
-            }}
-            onKeyDown={(e) => {
-              const list = placeOptions;
-              if (!list.length) return;
-              if (["ArrowDown", "ArrowUp", "Enter"].includes(e.key)) {
-                e.preventDefault();
-              }
-              if (e.key === "Enter") {
-                const p = list[placeActive];
-                if (!p) return;
-                setForm((prev) => ({
-                  ...prev,
-                  하차지명: p.업체명,
-                  하차지주소: p.주소,
-                  하차지담당자: p.담당자,
-                  하차지담당자번호: p.담당자번호,
-                }));
-                setShowPlaceDropdown(false);
-              } else if (e.key === "ArrowDown") {
-                setPlaceActive((i) => Math.min(i + 1, list.length - 1));
-              } else if (e.key === "ArrowUp") {
-                setPlaceActive((i) => Math.max(i - 1, 0));
-              }
-            }}
-            onBlur={() => setTimeout(() => setShowPlaceDropdown(false), 200)}
-          />
-
-          {showPlaceDropdown && placeOptions.length > 0 && (
-            <div className="absolute z-50 bg-white border rounded-lg shadow-lg w-full max-h-48 overflow-auto">
-              {placeOptions.map((p, i) => (
-                <div
-                  key={p.업체명 + "_" + i}
-                  className={`px-2 py-1 cursor-pointer ${i === placeActive ? "bg-blue-50" : "hover:bg-gray-50"
-                    }`}
-                  onMouseEnter={() => setPlaceActive(i)}
-                  onMouseDown={() => {
-                    setForm((prev) => ({
-                      ...prev,
-                      하차지명: p.업체명,
-                      하차지주소: p.주소,
-                      하차지담당자: p.담당자,
-                      하차지담당자번호: p.담당자번호,
-                    }));
-                    setShowPlaceDropdown(false);
-                  }}
-                >
-                  <b>{p.업체명}</b>
-                  {p.주소 && <div className="text-xs text-gray-500">{p.주소}</div>}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* 하차지주소 */}
-        <div>
-          <label className={labelCls}>
-            하차지주소 <AutoBadge show={autoDropMatched} />
-          </label>
-          <input
-            className={inputCls}
-            value={form.하차지주소}
-            onChange={(e) => handleDropAddrManual(e.target.value)}
-            placeholder="자동매칭 또는 수기입력"
-          />
-        </div>
-        {/* 하차지 담당자 */}
-        <div>
-          <label className={labelCls}>하차지 담당자</label>
-          <input
-            className={inputCls}
-            value={form.하차지담당자}
-            onChange={(e) => onChange("하차지담당자", e.target.value)}
-            placeholder="담당자 이름"
-          />
-        </div>
-
-        {/* 하차지 연락처 */}
-        <div>
-          <label className={labelCls}>하차지 연락처</label>
-          <input
-            className={inputCls}
-            value={form.하차지담당자번호}
-            onChange={(e) =>
-              onChange("하차지담당자번호", e.target.value.replace(/[^\d-]/g, ""))
-            }
-            placeholder="010-0000-0000"
-          />
-        </div>
-
-
-        {/* 화물내용 */}
-        <div>
-          <label className={labelCls}>화물내용</label>
-          <input className={inputCls} value={form.화물내용} onChange={(e) => onChange("화물내용", e.target.value)} />
-        </div>
-
-        <div className="relative">
-          <label className={labelCls}>차량종류</label>
-
-          <input
-            className={inputCls}
-            placeholder="차량종류 입력 또는 선택 (예: 냉동윙)"
-            value={vehicleQuery || form.차량종류}
-            onChange={(e) => {
-              const v = e.target.value;
-              setVehicleQuery(v);          // 👉 입력 상태
-              onChange("차량종류", v);     // 👉 form에는 항상 반영
-              setShowVehicleDropdown(true);
-              setVehicleActive(0);
-            }}
-            onFocus={() => {
-              setShowVehicleDropdown(true); // 👉 클릭만 해도 목록 표시
-            }}
-            onKeyDown={(e) => {
-              const list = filterVehicles(vehicleQuery);
-
-              if (!list.length) return;
-
-              if (["ArrowDown", "ArrowUp", "Enter"].includes(e.key)) {
-                e.preventDefault();
-              }
-
-              if (e.key === "Enter") {
-                // 🔹 Enter → 선택지가 있으면 선택, 없으면 그냥 수기입력 유지
-                const pick = list[vehicleActive];
-                if (pick) {
-                  onChange("차량종류", pick);
-                  setVehicleQuery(pick);
-                }
-                setShowVehicleDropdown(false);
-              } else if (e.key === "ArrowDown") {
-                setVehicleActive((i) => Math.min(i + 1, list.length - 1));
-              } else if (e.key === "ArrowUp") {
-                setVehicleActive((i) => Math.max(i - 1, 0));
-              }
-            }}
-            onBlur={() => {
-              // 🔹 수기 입력 허용 → 그냥 닫기만
-              setTimeout(() => setShowVehicleDropdown(false), 150);
-            }}
-          />
-
-          {showVehicleDropdown && (
-            <div className="absolute z-50 bg-white border rounded-lg shadow-lg w-full max-h-48 overflow-auto">
-              {filterVehicles(vehicleQuery).map((v, i) => (
-                <div
-                  key={`${v}-${i}`}
-                  ref={(el) => (vehicleItemRefs.current[i] = el)}
-                  className={`px-3 py-2 cursor-pointer text-sm ${i === vehicleActive ? "bg-blue-50" : "hover:bg-gray-50"
-                    }`}
-                  onMouseEnter={() => setVehicleActive(i)}
-                  onMouseDown={() => {
-                    // 🔹 마우스로 선택
-                    onChange("차량종류", v);
-                    setVehicleQuery(v);
-                    setShowVehicleDropdown(false);
-                  }}
-                >
-                  {v}
-                </div>
-              ))}
-            </div>
-          )}
-
-        </div>
-
-        <div>
-          <label className={labelCls}>차량톤수</label>
-          <input className={inputCls} placeholder="예: 1톤 / 2.5톤" value={form.차량톤수} onChange={(e) => onChange("차량톤수", e.target.value)} />
-        </div>
-
-
-        {/* 금액 */}
-        {isAdmin && (
-          <>
-            <div>
-              <label className={labelCls}>청구운임</label>
-              <input
-                className={inputCls}
-                value={form.청구운임}
-                onChange={(e) =>
-                  onChange("청구운임", e.target.value.replace(/[^\d-]/g, ""))
-                }
-              />
-            </div>
-
-            <div>
-              <label className={labelCls}>기사운임</label>
-              <input
-                className={inputCls}
-                value={form.기사운임}
-                onChange={(e) =>
-                  onChange("기사운임", e.target.value.replace(/[^\d-]/g, ""))
-                }
-              />
-            </div>
-
-            <div>
-              <label className={labelCls}>수수료</label>
-              <input
-                className={`${inputCls} bg-gray-100`}
-                value={form.수수료}
-                readOnly
-              />
-            </div>
-          </>
         )}
-        {/* ===============================
+      </div>
+
+      <button
+  type="button"
+  onClick={() => {
+    const name = (clientQuery || "").trim();
+    if (!name) return alert("업체명을 입력하세요.");
+
+  const nk = normalizeKey(name);
+
+const similar = placeList.filter(p => {
+  const pk = normalizeKey(p.업체명);
+  return pk.includes(nk) || nk.includes(pk);
+});
+
+    // 🔥 1️⃣ 비슷한 거래처 있으면 → 중복 팝업 먼저
+    if (similar.length > 0) {
+      setDupPopup({
+        open: true,
+        input: { name },
+        candidates: similar,
+      });
+      return;
+    }
+
+    // 🔥 2️⃣ 진짜 없을 때만 신규 입력 팝업
+    openNewPlacePrompt(name);
+  }}
+  className="px-3 py-2 border rounded-lg text-sm bg-gray-50 hover:bg-gray-100"
+>
+  + 신규등록
+</button>
+
+    </div>
+  </div>
+
+  {/* 상차지명 + 자동완성 */}
+  <div className="relative">
+    <label className={labelCls}>상차지명 {reqStar}</label>
+
+    <input
+      className={inputCls}
+      placeholder="상차지 검색"
+      value={form.상차지명}
+      onChange={(e) => {
+        const v = e.target.value;
+        handlePickupName(v);
+        setPickupOptions(filterPlaces(v));
+        setShowPickupDropdown(true);
+        setPickupActive(0);
+      }}
+      onKeyDown={(e) => {
+        const list = pickupOptions;
+        if (!list.length) return;
+        if (["ArrowDown", "ArrowUp", "Enter"].includes(e.key)) {
+          e.preventDefault();
+        }
+        if (e.key === "Enter") {
+          const p = list[pickupActive];
+          if (!p) return;
+const primary = getPrimaryManager(p);
+
+setForm((prev) => ({
+  ...prev,
+  상차지명: p.업체명,
+  상차지주소: p.주소,
+  상차지담당자: primary?.이름 || "",
+  상차지담당자번호: primary?.번호 || "",
+}));
+          setShowPickupDropdown(false);
+        } else if (e.key === "ArrowDown") {
+          setPickupActive((i) => Math.min(i + 1, list.length - 1));
+        } else if (e.key === "ArrowUp") {
+          setPickupActive((i) => Math.max(i - 1, 0));
+        }
+      }}
+      onBlur={() => setTimeout(() => setShowPickupDropdown(false), 200)}
+    />
+
+    {showPickupDropdown && pickupOptions.length > 0 && (
+      <div className="absolute z-50 bg-white border rounded-lg shadow-lg w-full max-h-48 overflow-auto">
+        {pickupOptions.map((p, i) => (
+          <div
+            key={i}
+            className={`px-2 py-1 cursor-pointer ${
+              i === pickupActive ? "bg-blue-50" : "hover:bg-gray-50"
+            }`}
+            onMouseDown={() => {
+  const primary = getPrimaryManager(p);
+
+  setForm((prev) => ({
+    ...prev,
+    상차지명: p.업체명,
+    상차지주소: p.주소,
+    상차지담당자: primary?.이름 || "",
+    상차지담당자번호: primary?.번호 || "",
+  }));
+
+  setShowPickupDropdown(false);
+}}
+          >
+            <b>{p.업체명}</b>
+            {p.주소 && <div className="text-xs text-gray-500">{p.주소}</div>}
+          </div>
+        ))}
+      </div>
+    )}
+  </div>
+
+  {/* 상차지주소 */}
+  <div>
+    <label className={labelCls}>
+      상차지주소 <AutoBadge show={autoPickMatched} />
+    </label>
+    <input
+      className={inputCls}
+      value={form.상차지주소}
+      onChange={(e) => handlePickupAddrManual(e.target.value)}
+      placeholder="자동매칭 또는 수기입력"
+    />
+  </div>
+ {/* 상차지 담당자 */}
+<div>
+  <label className={labelCls}>
+    상차지 담당자
+    {isNewPickupManager && (
+      <span className="ml-2 text-xs text-emerald-600 font-semibold">
+        신규 담당자
+      </span>
+    )}
+  </label>
+
+  {/* 여러 명일 때 드롭다운 */}
+  {hasMultiplePickupManagers && (
+    <select
+      className={`${inputCls} mb-1`}
+      value={`${form.상차지담당자}|${form.상차지담당자번호}`}
+      onChange={(e) => {
+        const [이름, 번호] = e.target.value.split("|");
+        setForm((p) => ({
+          ...p,
+          상차지담당자: 이름,
+          상차지담당자번호: 번호,
+        }));
+      }}
+    >
+      {pickupManagers.map((m, i) => (
+        <option key={i} value={`${m.이름}|${m.번호}`}>
+          {m.이름}{m.대표 ? " (대표)" : ""}
+        </option>
+      ))}
+    </select>
+  )}
+
+  {/* ✅ 입력 + 대표담당자 버튼 (하나만 존재) */}
+  <div className="relative">
+    <input
+      className={`${inputCls} pr-20`}
+      value={form.상차지담당자}
+      onChange={(e) =>
+        onChange("상차지담당자", e.target.value)
+        
+      }
+      placeholder="담당자 이름"
+    />
+
+    {pickupPlace && form.상차지담당자 && (
+      <div className="absolute right-2 top-1/2 -translate-y-1/2">
+        <ToggleBadge
+          active={pickupManagers.some(
+            (m) =>
+              m.이름 === form.상차지담당자 &&
+              m.번호 === form.상차지담당자번호 &&
+              m.대표
+          )}
+          onClick={async () => {
+  const exists = pickupManagers.some(
+    (m) =>
+      m.이름 === form.상차지담당자 &&
+      m.번호 === form.상차지담당자번호
+  );
+
+  const nextManagers = exists
+    ? pickupManagers.map((m) => ({
+        ...m,
+        대표:
+          m.이름 === form.상차지담당자 &&
+          m.번호 === form.상차지담당자번호,
+      }))
+    : [
+        ...pickupManagers.map((m) => ({ ...m, 대표: false })),
+        {
+          이름: form.상차지담당자,
+          번호: form.상차지담당자번호,
+          대표: true,
+        },
+      ];
+
+  await upsertPlace({
+    업체명: pickupPlace.업체명,
+    주소: pickupPlace.주소,
+    담당자목록: nextManagers,
+  });
+
+  setPlaceRowsTrigger(Date.now());
+  alert("대표 담당자로 지정되었습니다.");
+}}
+
+          activeCls="bg-blue-600 text-white border-blue-600"
+          inactiveCls="bg-blue-50 text-blue-700 border-blue-200"
+        >
+          대표
+        </ToggleBadge>
+      </div>
+    )}
+  </div>
+</div>
+{/* 상차지 연락처 */}
+<div>
+  <label className={labelCls}>상차지 연락처</label>
+  <input
+    className={inputCls}
+    value={form.상차지담당자번호}
+    onChange={(e) =>
+      onChange("상차지담당자번호", e.target.value.replace(/[^\d-]/g, ""))
+    }
+    placeholder="010-0000-0000"
+  />
+
+</div>
+
+
+  {/* 하차지명 + 자동완성 */}
+  <div className="relative">
+    <label className={labelCls}>하차지명 {reqStar}</label>
+
+    <input
+      className={inputCls}
+      placeholder="하차지 검색"
+      value={form.하차지명}
+      onChange={(e) => {
+        const v = e.target.value;
+        handleDropName(v);
+        setPlaceOptions(filterPlaces(v));
+        setShowPlaceDropdown(true);
+        setPlaceActive(0);
+      }}
+      onKeyDown={(e) => {
+        const list = placeOptions;
+        if (!list.length) return;
+        if (["ArrowDown", "ArrowUp", "Enter"].includes(e.key)) {
+          e.preventDefault();
+        }
+        if (e.key === "Enter") {
+          const p = list[placeActive];
+          if (!p) return;
+          setForm((prev) => ({
+            ...prev,
+            하차지명: p.업체명,
+            하차지주소: p.주소,
+            하차지담당자: p.담당자,
+            하차지담당자번호: p.담당자번호,
+          }));
+          setShowPlaceDropdown(false);
+        } else if (e.key === "ArrowDown") {
+          setPlaceActive((i) => Math.min(i + 1, list.length - 1));
+        } else if (e.key === "ArrowUp") {
+          setPlaceActive((i) => Math.max(i - 1, 0));
+        }
+      }}
+      onBlur={() => setTimeout(() => setShowPlaceDropdown(false), 200)}
+    />
+
+    {showPlaceDropdown && placeOptions.length > 0 && (
+      <div className="absolute z-50 bg-white border rounded-lg shadow-lg w-full max-h-48 overflow-auto">
+        {placeOptions.map((p, i) => (
+          <div
+            key={p.업체명 + "_" + i}
+            className={`px-2 py-1 cursor-pointer ${
+              i === placeActive ? "bg-blue-50" : "hover:bg-gray-50"
+            }`}
+            onMouseEnter={() => setPlaceActive(i)}
+            onMouseDown={() => {
+              setForm((prev) => ({
+                ...prev,
+                하차지명: p.업체명,
+                하차지주소: p.주소,
+                하차지담당자: p.담당자,
+                하차지담당자번호: p.담당자번호,
+              }));
+              setShowPlaceDropdown(false);
+            }}
+          >
+            <b>{p.업체명}</b>
+            {p.주소 && <div className="text-xs text-gray-500">{p.주소}</div>}
+          </div>
+        ))}
+      </div>
+    )}
+  </div>
+
+  {/* 하차지주소 */}
+  <div>
+    <label className={labelCls}>
+      하차지주소 <AutoBadge show={autoDropMatched} />
+    </label>
+    <input
+      className={inputCls}
+      value={form.하차지주소}
+      onChange={(e) => handleDropAddrManual(e.target.value)}
+      placeholder="자동매칭 또는 수기입력"
+    />
+  </div>
+  {/* 하차지 담당자 */}
+<div>
+  <label className={labelCls}>하차지 담당자</label>
+  <input
+    className={inputCls}
+    value={form.하차지담당자}
+    onChange={(e) => onChange("하차지담당자", e.target.value)}
+    placeholder="담당자 이름"
+  />
+</div>
+
+{/* 하차지 연락처 */}
+<div>
+  <label className={labelCls}>하차지 연락처</label>
+  <input
+    className={inputCls}
+    value={form.하차지담당자번호}
+    onChange={(e) =>
+      onChange("하차지담당자번호", e.target.value.replace(/[^\d-]/g, ""))
+    }
+    placeholder="010-0000-0000"
+  />
+</div>
+
+
+  {/* 화물내용 */}
+  <div>
+    <label className={labelCls}>화물내용</label>
+    <input className={inputCls} value={form.화물내용} onChange={(e) => onChange("화물내용", e.target.value)} />
+  </div>
+
+ <div className="relative">
+  <label className={labelCls}>차량종류</label>
+
+  <input
+    className={inputCls}
+    placeholder="차량종류 입력 또는 선택 (예: 냉동윙)"
+    value={vehicleQuery || form.차량종류}
+    onChange={(e) => {
+      const v = e.target.value;
+      setVehicleQuery(v);          // 👉 입력 상태
+      onChange("차량종류", v);     // 👉 form에는 항상 반영
+      setShowVehicleDropdown(true);
+      setVehicleActive(0);
+    }}
+    onFocus={() => {
+      setShowVehicleDropdown(true); // 👉 클릭만 해도 목록 표시
+    }}
+    onKeyDown={(e) => {
+      const list = filterVehicles(vehicleQuery);
+
+      if (!list.length) return;
+
+      if (["ArrowDown", "ArrowUp", "Enter"].includes(e.key)) {
+        e.preventDefault();
+      }
+
+      if (e.key === "Enter") {
+        // 🔹 Enter → 선택지가 있으면 선택, 없으면 그냥 수기입력 유지
+        const pick = list[vehicleActive];
+        if (pick) {
+          onChange("차량종류", pick);
+          setVehicleQuery(pick);
+        }
+        setShowVehicleDropdown(false);
+      } else if (e.key === "ArrowDown") {
+        setVehicleActive((i) => Math.min(i + 1, list.length - 1));
+      } else if (e.key === "ArrowUp") {
+        setVehicleActive((i) => Math.max(i - 1, 0));
+      }
+    }}
+    onBlur={() => {
+      // 🔹 수기 입력 허용 → 그냥 닫기만
+      setTimeout(() => setShowVehicleDropdown(false), 150);
+    }}
+  />
+
+  {showVehicleDropdown && (
+    <div className="absolute z-50 bg-white border rounded-lg shadow-lg w-full max-h-48 overflow-auto">
+      {filterVehicles(vehicleQuery).map((v, i) => (
+        <div
+          key={`${v}-${i}`}
+          ref={(el) => (vehicleItemRefs.current[i] = el)}
+          className={`px-3 py-2 cursor-pointer text-sm ${
+            i === vehicleActive ? "bg-blue-50" : "hover:bg-gray-50"
+          }`}
+          onMouseEnter={() => setVehicleActive(i)}
+          onMouseDown={() => {
+            // 🔹 마우스로 선택
+            onChange("차량종류", v);
+            setVehicleQuery(v);
+            setShowVehicleDropdown(false);
+          }}
+        >
+          {v}
+        </div>
+      ))}
+    </div>
+  )}
+  
+</div>
+
+  <div>
+    <label className={labelCls}>차량톤수</label>
+    <input className={inputCls} placeholder="예: 1톤 / 2.5톤" value={form.차량톤수} onChange={(e) => onChange("차량톤수", e.target.value)} />
+  </div>
+
+
+  {/* 금액 */}
+{isAdmin && (
+  <>
+    <div>
+      <label className={labelCls}>청구운임</label>
+      <input
+        className={inputCls}
+        value={form.청구운임}
+        onChange={(e) =>
+          onChange("청구운임", e.target.value.replace(/[^\d-]/g, ""))
+        }
+      />
+    </div>
+
+    <div>
+      <label className={labelCls}>기사운임</label>
+      <input
+        className={inputCls}
+        value={form.기사운임}
+        onChange={(e) =>
+          onChange("기사운임", e.target.value.replace(/[^\d-]/g, ""))
+        }
+      />
+    </div>
+
+    <div>
+      <label className={labelCls}>수수료</label>
+      <input
+        className={`${inputCls} bg-gray-100`}
+        value={form.수수료}
+        readOnly
+      />
+    </div>
+  </>
+)}
+{/* ===============================
     🤖 AI 배차 추천 (FULL ROW)
    =============================== */}
-        {/* ================= 🤖 AI 추천 팝업 ================= */}
-        {aiPopupOpen && aiRecommend && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
-            <div className="bg-white rounded-xl p-6 w-[520px] shadow-2xl border">
+{/* ================= 🤖 AI 추천 팝업 ================= */}
+{aiPopupOpen && aiRecommend && (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
+    <div className="bg-white rounded-xl p-6 w-[520px] shadow-2xl border">
 
-              {/* 헤더 */}
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-bold">🤖 AI 배차 추천</h3>
-                <button
-                  onClick={() => setAiPopupOpen(false)}
-                  className="text-gray-400 hover:text-black text-xl"
-                >
-                  ×
-                </button>
-              </div>
+      {/* 헤더 */}
+      <div className="flex justify-between items-center mb-4">
+        <h3 className="text-lg font-bold">🤖 AI 배차 추천</h3>
+        <button
+          onClick={() => setAiPopupOpen(false)}
+          className="text-gray-400 hover:text-black text-xl"
+        >
+          ×
+        </button>
+      </div>
 
-              {/* 요약 */}
-              <div className="mb-4 text-sm leading-relaxed text-gray-700">
-                {makeAiExplain(aiRecommend)}
-              </div>
+      {/* 요약 */}
+      <div className="mb-4 text-sm leading-relaxed text-gray-700">
+        {makeAiExplain(aiRecommend)}
+      </div>
 
-              {/* 추천 수치 */}
-              <div className="grid grid-cols-2 gap-3 text-sm mb-4">
-                <div>
-                  차량:
-                  <b className="ml-1">
-                    {aiRecommend.vehicle} / {form.차량톤수 || "톤수 미입력"}
-                  </b>
-                </div>
-                <div>표본: <b>{aiRecommend.sampleCount}건</b></div>
-                <div>
-                  청구:
-                  <b className="ml-1">
-                    {aiRecommend.fareMin.toLocaleString()} ~{" "}
-                    {aiRecommend.fareMax.toLocaleString()}
-                  </b>
-                </div>
-                <div>
-                  기사:
-                  <b className="ml-1">
-                    {aiRecommend.driverAvg.toLocaleString()}
-                  </b>
-                </div>
-                <div className="col-span-2">
-                  마진:
-                  <b className="ml-1 text-emerald-600">
-                    {aiRecommend.marginPercent}%
-                  </b>
-                </div>
-              </div>
-
-              {/* 경고 */}
-              {aiRecommend.isOutlier && (
-                <div className="mb-4 p-3 rounded bg-red-50 text-red-700 text-xs">
-                  ⚠ 평균 대비 운임 차이가 큽니다
-                </div>
-              )}
-
-              {/* 적용 버튼 */}
-              <div className="flex justify-end gap-2">
-                <button
-                  className="px-4 py-2 rounded bg-gray-200"
-                  onClick={() => setAiPopupOpen(false)}
-                >
-                  닫기
-                </button>
-
-                <button
-                  className="px-4 py-2 rounded bg-blue-600 text-white"
-                  onClick={() => {
-                    onChange("청구운임", String(aiRecommend.fareAvg));
-                    onChange("기사운임", String(aiRecommend.driverAvg));
-                    setAiPopupOpen(false);
-                  }}
-                >
-                  추천 운임 적용
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* 차량정보 */}
+      {/* 추천 수치 */}
+      <div className="grid grid-cols-2 gap-3 text-sm mb-4">
         <div>
-          <label className={labelCls}>차량번호</label>
-          <input
-            className={inputCls}
-            value={form.차량번호}
-            onChange={(e) => handleCarNoChange(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleCarNoEnter(e.currentTarget.value); } }}
-            onBlur={(e) => handleCarNoEnter(e.currentTarget.value)}
-          />
-        </div>
-
+  차량:
+  <b className="ml-1">
+    {aiRecommend.vehicle} / {form.차량톤수 || "톤수 미입력"}
+  </b>
+</div>
+        <div>표본: <b>{aiRecommend.sampleCount}건</b></div>
         <div>
-          <label className={labelCls}>기사명</label>
-          <input className={`${inputCls} bg-gray-100`} value={form.이름} readOnly />
+          청구:
+          <b className="ml-1">
+            {aiRecommend.fareMin.toLocaleString()} ~{" "}
+            {aiRecommend.fareMax.toLocaleString()}
+          </b>
         </div>
-
         <div>
-          <label className={labelCls}>전화번호</label>
-          <input className={`${inputCls} bg-gray-100`} value={form.전화번호} readOnly />
+          기사:
+          <b className="ml-1">
+            {aiRecommend.driverAvg.toLocaleString()}
+          </b>
         </div>
-
-        {/* 상/하차 방법 */}
-        <div>
-          <label className={labelCls}>상차방법</label>
-          <select className={inputCls} value={form.상차방법} onChange={(e) => onChange("상차방법", e.target.value)}>
-            <option value="">선택 ▾</option>
-            {["지게차", "수작업", "직접수작업", "수도움", "크레인"].map(v => <option key={v} value={v}>{v}</option>)}
-          </select>
+        <div className="col-span-2">
+          마진:
+          <b className="ml-1 text-emerald-600">
+            {aiRecommend.marginPercent}%
+          </b>
         </div>
+      </div>
 
-        <div>
-          <label className={labelCls}>하차방법</label>
-          <select className={inputCls} value={form.하차방법} onChange={(e) => onChange("하차방법", e.target.value)}>
-            <option value="">선택 ▾</option>
-            {["지게차", "수작업", "직접수작업", "수도움", "크레인"].map(v => <option key={v} value={v}>{v}</option>)}
-          </select>
+      {/* 경고 */}
+      {aiRecommend.isOutlier && (
+        <div className="mb-4 p-3 rounded bg-red-50 text-red-700 text-xs">
+          ⚠ 평균 대비 운임 차이가 큽니다
         </div>
+      )}
 
-        {/* 결제 */}
-        <div>
-          <label className={labelCls}>지급방식</label>
-          <select className={inputCls} value={form.지급방식} onChange={(e) => onChange("지급방식", e.target.value)}>
-            <option value="">선택 ▾</option>
-            {PAY_TYPES.map(v => <option key={v} value={v}>{v}</option>)}
-          </select>
-        </div>
+      {/* 적용 버튼 */}
+      <div className="flex justify-end gap-2">
+        <button
+          className="px-4 py-2 rounded bg-gray-200"
+          onClick={() => setAiPopupOpen(false)}
+        >
+          닫기
+        </button>
 
-        <div>
-          <label className={labelCls}>배차방식</label>
-          <select className={inputCls} value={form.배차방식} onChange={(e) => onChange("배차방식", e.target.value)}>
-            <option value="">선택 ▾</option>
-            {DISPATCH_TYPES.map(v => <option key={v} value={v}>{v}</option>)}
-          </select>
-        </div>
+        <button
+          className="px-4 py-2 rounded bg-blue-600 text-white"
+          onClick={() => {
+            onChange("청구운임", String(aiRecommend.fareAvg));
+            onChange("기사운임", String(aiRecommend.driverAvg));
+            setAiPopupOpen(false);
+          }}
+        >
+          추천 운임 적용
+        </button>
+      </div>
+    </div>
+  </div>
+)}
 
-        {/* ===============================
+
+
+  {/* 차량정보 */}
+  <div>
+    <label className={labelCls}>차량번호</label>
+    <input
+      className={inputCls}
+      value={form.차량번호}
+      onChange={(e) => handleCarNoChange(e.target.value)}
+      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleCarNoEnter(e.currentTarget.value); } }}
+      onBlur={(e) => handleCarNoEnter(e.currentTarget.value)}
+    />
+  </div>
+
+  <div>
+    <label className={labelCls}>기사명</label>
+    <input className={`${inputCls} bg-gray-100`} value={form.이름} readOnly />
+  </div>
+
+  <div>
+    <label className={labelCls}>전화번호</label>
+    <input className={`${inputCls} bg-gray-100`} value={form.전화번호} readOnly />
+  </div>
+
+  {/* 상/하차 방법 */}
+  <div>
+    <label className={labelCls}>상차방법</label>
+    <select className={inputCls} value={form.상차방법} onChange={(e) => onChange("상차방법", e.target.value)}>
+      <option value="">선택 ▾</option>
+      {["지게차", "수작업", "직접수작업", "수도움", "크레인"].map(v => <option key={v} value={v}>{v}</option>)}
+    </select>
+  </div>
+
+  <div>
+    <label className={labelCls}>하차방법</label>
+    <select className={inputCls} value={form.하차방법} onChange={(e) => onChange("하차방법", e.target.value)}>
+      <option value="">선택 ▾</option>
+      {["지게차", "수작업", "직접수작업", "수도움", "크레인"].map(v => <option key={v} value={v}>{v}</option>)}
+    </select>
+  </div>
+
+  {/* 결제 */}
+  <div>
+    <label className={labelCls}>지급방식</label>
+    <select className={inputCls} value={form.지급방식} onChange={(e) => onChange("지급방식", e.target.value)}>
+      <option value="">선택 ▾</option>
+      {PAY_TYPES.map(v => <option key={v} value={v}>{v}</option>)}
+    </select>
+  </div>
+
+  <div>
+    <label className={labelCls}>배차방식</label>
+    <select className={inputCls} value={form.배차방식} onChange={(e) => onChange("배차방식", e.target.value)}>
+      <option value="">선택 ▾</option>
+      {DISPATCH_TYPES.map(v => <option key={v} value={v}>{v}</option>)}
+    </select>
+  </div>
+
+{/* ===============================
     📝 메모 / 📢 전달사항 (입력폼)
    =============================== */}
-        <div className="col-span-8">
-          <div className="grid grid-cols-2 gap-4">
+<div className="col-span-8">
+  <div className="grid grid-cols-2 gap-4">
 
-            {/* ▶ 왼쪽 : 메모 */}
-            <div>
-              <label className={labelCls}>메모</label>
+    {/* ▶ 왼쪽 : 메모 */}
+    <div>
+      <label className={labelCls}>메모</label>
 
-              <div className="flex items-center gap-2 mb-1">
-                <ToggleBadge
-                  active={form.메모중요도 === "NORMAL"}
-                  onClick={() => onChange("메모중요도", "NORMAL")}
-                  activeCls="bg-gray-600 text-white border-gray-600"
-                  inactiveCls="bg-gray-100 text-gray-600 border-gray-200"
-                >
-                  일반
-                </ToggleBadge>
+      <div className="flex items-center gap-2 mb-1">
+        <ToggleBadge
+          active={form.메모중요도 === "NORMAL"}
+          onClick={() => onChange("메모중요도", "NORMAL")}
+          activeCls="bg-gray-600 text-white border-gray-600"
+          inactiveCls="bg-gray-100 text-gray-600 border-gray-200"
+        >
+          일반
+        </ToggleBadge>
 
-                <ToggleBadge
-                  active={form.메모중요도 === "HIGH"}
-                  onClick={() => onChange("메모중요도", "HIGH")}
-                  activeCls="bg-orange-600 text-white border-orange-600"
-                  inactiveCls="bg-orange-100 text-orange-700 border-orange-200"
-                >
-                  중요
-                </ToggleBadge>
+        <ToggleBadge
+          active={form.메모중요도 === "HIGH"}
+          onClick={() => onChange("메모중요도", "HIGH")}
+          activeCls="bg-orange-600 text-white border-orange-600"
+          inactiveCls="bg-orange-100 text-orange-700 border-orange-200"
+        >
+          중요
+        </ToggleBadge>
 
-                <ToggleBadge
-                  active={form.메모중요도 === "CRITICAL"}
-                  onClick={() => onChange("메모중요도", "CRITICAL")}
-                  activeCls="bg-red-600 text-white border-red-600"
-                  inactiveCls="bg-red-100 text-red-600 border-red-200"
-                >
-                  긴급
-                </ToggleBadge>
-              </div>
+        <ToggleBadge
+          active={form.메모중요도 === "CRITICAL"}
+          onClick={() => onChange("메모중요도", "CRITICAL")}
+          activeCls="bg-red-600 text-white border-red-600"
+          inactiveCls="bg-red-100 text-red-600 border-red-200"
+        >
+          긴급
+        </ToggleBadge>
+      </div>
 
-              <textarea
-                className={`${inputCls} h-20`}
-                placeholder="내부 메모"
-                value={form.메모}
-                onChange={(e) => onChange("메모", e.target.value)}
-              />
-            </div>
+      <textarea
+        className={`${inputCls} h-20`}
+        placeholder="내부 메모"
+        value={form.메모}
+        onChange={(e) => onChange("메모", e.target.value)}
+      />
+    </div>
 
-            {/* ▶ 오른쪽 : 전달사항 */}
-            <div>
-              <label className={labelCls}>전달사항</label>
+    {/* ▶ 오른쪽 : 전달사항 */}
+    <div>
+      <label className={labelCls}>전달사항</label>
 
-              {/* 🔒 고정 버튼 */}
-              <div className="flex items-center gap-2 mb-1">
-                <ToggleBadge
-                  active={form.전달사항고정}
-                  onClick={() => onChange("전달사항고정", !form.전달사항고정)}
-                  activeCls="bg-blue-600 text-white border-blue-600"
-                  inactiveCls="bg-blue-100 text-blue-700 border-blue-200"
-                >
-                  고정
-                </ToggleBadge>
-              </div>
+      {/* 🔒 고정 버튼 */}
+      <div className="flex items-center gap-2 mb-1">
+        <ToggleBadge
+          active={form.전달사항고정}
+          onClick={() => onChange("전달사항고정", !form.전달사항고정)}
+          activeCls="bg-blue-600 text-white border-blue-600"
+          inactiveCls="bg-blue-100 text-blue-700 border-blue-200"
+        >
+          고정
+        </ToggleBadge>
+      </div>
 
-              <textarea
-                className={`${inputCls} h-20 bg-blue-50`}
-                placeholder="기사 전달사항"
-                value={form.전달사항}
-                onChange={(e) => onChange("전달사항", e.target.value)}
-              />
-            </div>
+      <textarea
+        className={`${inputCls} h-20 bg-blue-50`}
+        placeholder="기사 전달사항"
+        value={form.전달사항}
+        onChange={(e) => onChange("전달사항", e.target.value)}
+      />
+    </div>
 
-          </div>
-        </div>
+  </div>
+</div>
 
 
-        {/* 버튼 */}
-        <div className="col-span-6 flex justify-end mt-2">
-          <button
-            type="submit"
-            className="bg-blue-600 text-white px-6 py-2 rounded-lg text-sm hover:bg-blue-700"
-          >
-            저장
-          </button>
-          <button
-            type="button"
-            onClick={async () => {
-              const { 거래처명, 상차지명, 하차지명, 상차일, 상차시간, 하차일, 하차시간 } = form;
-              if (!거래처명 || !상차지명 || !하차지명) return alert("거래처/상차지명/하차지명을 입력해주세요.");
-              if (!상차일 || !하차일) return alert("상차일/하차일은 반드시 필요합니다.");
-              const res = await sendOrderTo24(form);
+  {/* 버튼 */}
+  <div className="col-span-6 flex justify-end mt-2">
+    <button
+      type="submit"
+      className="bg-blue-600 text-white px-6 py-2 rounded-lg text-sm hover:bg-blue-700"
+    >
+      저장
+    </button>
+    <button
+      type="button"
+      onClick={async () => {
+        const { 거래처명, 상차지명, 하차지명, 상차일, 상차시간, 하차일, 하차시간 } = form;
+        if (!거래처명 || !상차지명 || !하차지명) return alert("거래처/상차지명/하차지명을 입력해주세요.");
+        if (!상차일 || !하차일) return alert("상차일/하차일은 반드시 필요합니다.");
+       const res = await sendOrderTo24(form);
 
-              // 🔹 기존 로그 불러오기
-              const prevLogs = Array.isArray(form["24시전송로그"])
-                ? form["24시전송로그"]
-                : [];
+// 🔹 기존 로그 불러오기
+const prevLogs = Array.isArray(form["24시전송로그"])
+  ? form["24시전송로그"]
+  : [];
 
-              const newLog = {
-                at: serverTimestamp(),
-                success: !!res?.success,
-                resultCode: res?.resultCode || "",
-                resultMsg: res?.resultMsg || res?.message || "",
-              };
+const newLog = {
+  at: serverTimestamp(),
+  success: !!res?.success,
+  resultCode: res?.resultCode || "",
+  resultMsg: res?.resultMsg || res?.message || "",
+};
 
-              if (res?.success) {
-                // ✅ 성공
-                await patchDispatch(form._id, {
-                  "24시전송여부": true,
-                  "24시전송일시": serverTimestamp(),
-                  "24시전송결과코드": res.resultCode || "0000",
-                  "24시전송메시지": res.resultMsg || "성공",
-                  "24시전송로그": [...prevLogs, newLog],
-                  배차상태: "24시전송완료",
-                });
+if (res?.success) {
+  // ✅ 성공
+  await patchDispatch(form._id, {
+    "24시전송여부": true,
+    "24시전송일시": serverTimestamp(),
+    "24시전송결과코드": res.resultCode || "0000",
+    "24시전송메시지": res.resultMsg || "성공",
+    "24시전송로그": [...prevLogs, newLog],
+    배차상태: "24시전송완료",
+  });
 
-                alert(
-                  `📡 24시콜 전송 완료!\n\n` +
-                  `전송건수: 1건\n실패건수: 0건\n` +
-                  `메시지: ${res.resultMsg || "성공"}`
-                );
-              } else {
-                // ❌ 실패
-                await patchDispatch(form._id, {
-                  "24시전송여부": false,
-                  "24시전송로그": [...prevLogs, newLog],
-                });
+  alert(
+    `📡 24시콜 전송 완료!\n\n` +
+    `전송건수: 1건\n실패건수: 0건\n` +
+    `메시지: ${res.resultMsg || "성공"}`
+  );
+} else {
+  // ❌ 실패
+  await patchDispatch(form._id, {
+    "24시전송여부": false,
+    "24시전송로그": [...prevLogs, newLog],
+  });
 
-                alert(
-                  `⛔ 24시콜 전송 실패!\n\n` +
-                  `사유: ${res?.resultMsg || "알 수 없는 오류"}`
-                );
-              }
+  alert(
+    `⛔ 24시콜 전송 실패!\n\n` +
+    `사유: ${res?.resultMsg || "알 수 없는 오류"}`
+  );
+}
 
-            }}
-            className="ml-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-sm text-white rounded-lg"
-          >
-            📡 24시전송
-          </button>
-        </div>
-      </form>
+      }}
+      className="ml-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-sm text-white rounded-lg"
+    >
+      📡 24시전송
+    </button>
+  </div>
 
-      {/* ------------------------------  
+</form>
+
+
+        {/* ------------------------------  
       🔵 오더복사 팝업 (완성본)
 -------------------------------- */}
-      {copyOpen && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="
+        {copyOpen && (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+            <div className="
   bg-white w-[1100px]
   p-4 rounded-2xl shadow-2xl
   flex flex-col
 ">
 
-            {/* 헤더 */}
-            <div className="flex items-center justify-between pb-2 mb-3 border-b">
-              {/* 왼쪽: 제목 */}
-              <div>
-                <h2 className="text-lg font-bold">📄 오더복사</h2>
-                <p className="text-xs text-gray-500">
-                  더블클릭: 수정 | 체크 후 복사
-                </p>
-              </div>
+              {/* 헤더 */}
+              <div className="flex items-center justify-between pb-2 mb-3 border-b">
+  {/* 왼쪽: 제목 */}
+  <div>
+    <h2 className="text-lg font-bold">📄 오더복사</h2>
+    <p className="text-xs text-gray-500">
+      더블클릭: 수정 | 체크 후 복사
+    </p>
+  </div>
 
-              {/* 오른쪽: 옵션 + 닫기 */}
-              <div className="flex items-center gap-4">
-                {/* ⭐ 왕복만 보기 (상단 고정) */}
-                <label className="flex items-center gap-1 text-sm cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={onlyRoundTrip}
-                    onChange={(e) => setOnlyRoundTrip(e.target.checked)}
-                  />
-                  왕복만 보기
-                </label>
+  {/* 오른쪽: 옵션 + 닫기 */}
+  <div className="flex items-center gap-4">
+    {/* ⭐ 왕복만 보기 (상단 고정) */}
+    <label className="flex items-center gap-1 text-sm cursor-pointer select-none">
+      <input
+        type="checkbox"
+        checked={onlyRoundTrip}
+        onChange={(e) => setOnlyRoundTrip(e.target.checked)}
+      />
+      왕복만 보기
+    </label>
 
-                {/* 닫기 버튼 */}
+    {/* 닫기 버튼 */}
+    <button
+      className="text-gray-400 hover:text-black text-xl"
+      onClick={() => {
+        setCopyOpen(false);
+        setCopySelected([]);
+      }}
+    >
+      ×
+    </button>
+  </div>
+</div>
+
+
+              {/* 검색바 */}
+              <div className="flex gap-2 mb-3">
+
+
+                {/* 드롭다운 */}
+                <select
+                  className="border p-2 rounded"
+                  value={copyFilterType}
+                  onChange={(e) => setCopyFilterType(e.target.value)}
+                >
+                  <option value="전체">전체</option>
+                  <option value="거래처명">거래처명</option>
+                  <option value="상차지명">상차지명</option>
+                  <option value="하차지명">하차지명</option>
+                  <option value="화물내용">화물내용</option>
+                </select>
+
+                {/* 검색어 입력 */}
+                <input
+                  type="text"
+                  placeholder="검색어 입력"
+                  className="border p-2 rounded flex-1"
+                  value={copyQ}
+                  onChange={(e) => setCopyQ(e.target.value)}
+                />
+
+                {/* 🔥 복사 버튼 */}
                 <button
-                  className="text-gray-400 hover:text-black text-xl"
+                  className="px-4 py-2 bg-blue-600 text-white rounded"
                   onClick={() => {
+                    if (copySelected.length === 0)
+                      return alert("복사할 항목을 선택하세요.");
+
+                    const r = copySelected[0];
+
+                    const today = new Date().toISOString().slice(0, 10);
+
+                    // ✅ 오더복사 시: 업체명만 넣지 말고, placeList에서 찾아서 주소/담당자/번호까지 같이 채운다
+const pickMeta = findPlaceByName(r.상차지명 || "") || {};
+const dropMeta = findPlaceByName(r.하차지명 || "") || {};
+const clientName = isDateLike(r.거래처명) ? "" : (r.거래처명 || "");
+
+setForm((p) => ({
+  ...p,
+  운행유형: r.운행유형 || "편도",
+  거래처명: clientName,
+
+  // ✅ 상차지 (무조건 placeList 우선)
+  상차지명: r.상차지명 || "",
+  상차지주소: pickMeta?.주소 ?? "",
+  상차지담당자: pickMeta?.담당자 ?? "",
+  상차지담당자번호: pickMeta?.담당자번호 ?? "",
+
+  // ✅ 하차지
+  하차지명: r.하차지명 || "",
+  하차지주소: dropMeta?.주소 ?? "",
+  하차지담당자: dropMeta?.담당자 ?? "",
+  하차지담당자번호: dropMeta?.담당자번호 ?? "",
+
+  // 기타 (과거 오더 참고)
+  화물내용: r.화물내용 || "",
+  차량종류: r.차량종류 || "",
+  차량톤수: r.차량톤수 || "",
+  상차방법: r.상차방법 || "",
+  하차방법: r.하차방법 || "",
+  상차일: today,
+  하차일: today,
+  상차시간: r.상차시간 || "",
+  하차시간: r.하차시간 || "",
+  지급방식: r.지급방식 || "",
+  배차방식: r.배차방식 || "",
+  메모: r.메모 || "",
+
+  차량번호: "",
+  이름: "",
+  전화번호: "",
+  배차상태: "배차중",
+}));
+// ✅ UI 동기화 (이 한 번만)
+setClientQuery(clientName);
+setAutoPickMatched(false);
+setAutoDropMatched(false);
+setIsCopyMode(true);
+
+                    alert("오더 내용이 입력창에 복사되었습니다!");
                     setCopyOpen(false);
-                    setCopySelected([]);
+
                   }}
                 >
-                  ×
+                  복사
                 </button>
+
               </div>
-            </div>
+
+              {/* 결과 테이블 */}
+              <div className="border rounded overflow-x-auto">
+                <div className="max-h-[360px] overflow-y-auto">
+                  <table className="min-w-max text-sm whitespace-nowrap">
+                    <thead className="bg-gray-100">
+  <tr>
+    {/* ✅ 체크박스 컬럼 추가 */}
+    <th className="p-2 border px-3 py-2 whitespace-nowrap text-center">
+      선택
+    </th>
+
+    <th className="p-2 border px-3 py-2 whitespace-nowrap">상차일</th>
+    <th className="p-2 border px-3 py-2 whitespace-nowrap">거래처명</th>
+    <th className="p-2 border px-3 py-2 whitespace-nowrap">상차지명</th>
+    <th className="p-2 border px-3 py-2 whitespace-nowrap">하차지명</th>
+    <th className="p-2 border px-3 py-2 whitespace-nowrap">화물내용</th>
+    <th className="p-2 border px-3 py-2 whitespace-nowrap">차량종류</th>
+    <th className="p-2 border px-3 py-2 whitespace-nowrap">차량톤수</th>
+    <th className="p-2 border px-3 py-2 whitespace-nowrap">메모</th>
+  </tr>
+</thead>
 
 
-            {/* 검색바 */}
-            <div className="flex gap-2 mb-3">
-
-
-              {/* 드롭다운 */}
-              <select
-                className="border p-2 rounded"
-                value={copyFilterType}
-                onChange={(e) => setCopyFilterType(e.target.value)}
-              >
-                <option value="전체">전체</option>
-                <option value="거래처명">거래처명</option>
-                <option value="상차지명">상차지명</option>
-                <option value="하차지명">하차지명</option>
-                <option value="화물내용">화물내용</option>
-              </select>
-
-              {/* 검색어 입력 */}
-              <input
-                type="text"
-                placeholder="검색어 입력"
-                className="border p-2 rounded flex-1"
-                value={copyQ}
-                onChange={(e) => setCopyQ(e.target.value)}
-              />
-
-              {/* 🔥 복사 버튼 */}
-              <button
-                className="px-4 py-2 bg-blue-600 text-white rounded"
-                onClick={() => {
-                  if (copySelected.length === 0)
-                    return alert("복사할 항목을 선택하세요.");
-
-                  const r = copySelected[0];
-
-                  const now = new Date();
-                  const today =
-                    now.getFullYear() +
-                    "-" +
-                    String(now.getMonth() + 1).padStart(2, "0") +
-                    "-" +
-                    String(now.getDate()).padStart(2, "0");
-
-                  // ✅ 오더복사 시: 업체명만 넣지 말고, placeList에서 찾아서 주소/담당자/번호까지 같이 채운다
-                  const pickMeta = findPlaceByName(r.상차지명 || "") || {};
-                  const dropMeta = findPlaceByName(r.하차지명 || "") || {};
-                  const clientName = isDateLike(r.거래처명) ? "" : (r.거래처명 || "");
-
-                  setForm((p) => ({
-                    ...p,
-                    운행유형: r.운행유형 || "편도",
-                    거래처명: clientName,
-
-                    // ✅ 상차지 (무조건 placeList 우선)
-                    상차지명: r.상차지명 || "",
-                    상차지주소: r.상차지주소 || pickMeta?.주소 || "",
-                    상차지담당자: r.상차지담당자 || pickMeta?.담당자 || "",
-                    상차지담당자번호: r.상차지담당자번호 || pickMeta?.담당자번호 || "",
-
-                    // ✅ 하차지
-                    하차지명: r.하차지명 || "",
-                    하차지주소: r.하차지주소 || dropMeta?.주소 || "",
-                    하차지담당자: r.하차지담당자 || dropMeta?.담당자 || "",
-                    하차지담당자번호: r.하차지담당자번호 || dropMeta?.담당자번호 || "",
-
-                    // 기타 (과거 오더 참고)
-                    화물내용: r.화물내용 || "",
-                    차량종류: r.차량종류 || "",
-                    차량톤수: r.차량톤수 || "",
-                    상차방법: r.상차방법 || "",
-                    하차방법: r.하차방법 || "",
-                    상차일: today,
-                    하차일: today,
-                    상차시간: r.상차시간 || "",
-                    하차시간: r.하차시간 || "",
-                    지급방식: r.지급방식 || "",
-                    배차방식: r.배차방식 || "",
-                    메모: r.메모 || "",
-
-                    차량번호: "",
-                    이름: "",
-                    전화번호: "",
-                    배차상태: "배차중",
-                  }));
-                  // ✅ UI 동기화 (이 한 번만)
-                  setClientQuery(clientName);
-                  setAutoPickMatched(false);
-                  setAutoDropMatched(false);
-                  setIsCopyMode(true);
-
-                  alert("오더 내용이 입력창에 복사되었습니다!");
-                  setCopyOpen(false);
-
-                }}
-              >
-                복사
-              </button>
-
-            </div>
-
-            {/* 결과 테이블 */}
-            <div className="border rounded overflow-x-auto">
-              <div className="max-h-[360px] overflow-y-auto">
-                <table className="min-w-max text-sm whitespace-nowrap">
-                  <thead className="bg-gray-100">
-                    <tr>
-                      {/* ✅ 체크박스 컬럼 추가 */}
-                      <th className="p-2 border px-3 py-2 whitespace-nowrap text-center">
-                        선택
-                      </th>
-
-                      <th className="p-2 border px-3 py-2 whitespace-nowrap">상차일</th>
-                      <th className="p-2 border px-3 py-2 whitespace-nowrap">거래처명</th>
-                      <th className="p-2 border px-3 py-2 whitespace-nowrap">상차지명</th>
-                      <th className="p-2 border px-3 py-2 whitespace-nowrap">하차지명</th>
-                      <th className="p-2 border px-3 py-2 whitespace-nowrap">화물내용</th>
-                      <th className="p-2 border px-3 py-2 whitespace-nowrap">차량종류</th>
-                      <th className="p-2 border px-3 py-2 whitespace-nowrap">차량톤수</th>
-                      <th className="p-2 border px-3 py-2 whitespace-nowrap">메모</th>
-                    </tr>
-                  </thead>
-
-
-                  <tbody>
-                    {copyList.length === 0 ? (
-                      <tr>
-                        <td colSpan={10} className="text-center p-4 text-gray-500">
-                          검색 결과가 없습니다.
-                        </td>
-                      </tr>
-                    ) : (
-                      copyList.map((row) => (
-                        <tr
-                          key={row._id}
-                          id={`row-${row._id}`} // ★ 수정: 스크롤 이동용 ID
-                          className="hover:bg-gray-50 cursor-pointer"
-                          onDoubleClick={() => {
-                            if (typeof window.RUN25_EDIT_ROW === "function") {
-                              window.RUN25_EDIT_ROW(row); // 수정 팝업
-                            }
-                          }}
-                        >
-                          <td className="text-center">
-                            <input
-                              type="checkbox"
-                              checked={copySelected.includes(row)}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setCopySelected((prev) => [...prev, row]);
-                                } else {
-                                  setCopySelected((prev) =>
-                                    prev.filter((x) => x !== row)
-                                  );
-                                }
-                              }}
-                            />
+                    <tbody>
+                      {copyList.length === 0 ? (
+                        <tr>
+                          <td colSpan={10} className="text-center p-4 text-gray-500">
+                            검색 결과가 없습니다.
                           </td>
-                          <td className="p-2">{row.상차일}</td>
-                          <td className="p-2">{row.거래처명}</td>
-                          <td className="p-2">
-                            <div className="inline-flex items-center gap-1">
-                              <span>{row.상차지명}</span>
+                        </tr>
+                      ) : (
+                        copyList.map((row) => (
+                          <tr
+  key={row._id}
+  id={`row-${row._id}`} // ★ 수정: 스크롤 이동용 ID
+  className="hover:bg-gray-50 cursor-pointer"
+  onDoubleClick={() => {
+    if (typeof window.RUN25_EDIT_ROW === "function") {
+      window.RUN25_EDIT_ROW(row); // 수정 팝업
+    }
+  }}
+>
+                            <td className="text-center">
+                              <input
+                                type="checkbox"
+                                checked={copySelected.includes(row)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setCopySelected((prev) => [...prev, row]);
+                                  } else {
+                                    setCopySelected((prev) =>
+                                      prev.filter((x) => x !== row)
+                                    );
+                                  }
+                                }}
+                              />
+                            </td>
+                            <td className="p-2">{row.상차일}</td>
+                            <td className="p-2">{row.거래처명}</td>
+                            <td className="p-2">
+  <div className="inline-flex items-center gap-1">
+    <span>{row.상차지명}</span>
 
-                              {row.운행유형 === "왕복" && (
-                                <span
-                                  className="
+    {row.운행유형 === "왕복" && (
+      <span
+        className="
           px-1.5 py-0.5
           text-[10px] font-semibold
           rounded-full
@@ -5191,62 +4815,62 @@ const toRow = (p = {}) => {
           border border-indigo-300
           whitespace-nowrap
         "
-                                >
-                                  왕복
-                                </span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="p-2">{row.하차지명}</td>
-                          <td className="p-2">{row.화물내용}</td>
-                          <td className="p-2">{row.차량종류}</td>
-                          <td className="p-2">{row.차량톤수}</td>
-                          <td className="p-2">
-                            {row.메모}
+      >
+        왕복
+      </span>
+    )}
+  </div>
+</td>
+                            <td className="p-2">{row.하차지명}</td>
+                            <td className="p-2">{row.화물내용}</td>
+                            <td className="p-2">{row.차량종류}</td>
+                            <td className="p-2">{row.차량톤수}</td>
+                            <td className="p-2">
+  {row.메모}
 
-                            {row.긴급 === true && (
-                              <span
-                                className="ml-1 px-1.5 py-0.5 text-[10px]
+  {row.긴급 === true && (
+    <span
+      className="ml-1 px-1.5 py-0.5 text-[10px]
       rounded-full bg-red-100 text-red-600 border border-red-300"
-                              >
-                                🚨 긴급
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+    >
+      🚨 긴급
+    </span>
+  )}
+</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* 닫기 버튼 */}
+              <div className="text-right mt-3">
+                <button className="px-3 py-1 bg-gray-300 rounded" onClick={() => setCopyOpen(false)}>
+                  닫기
+                </button>
               </div>
             </div>
-
-            {/* 닫기 버튼 */}
-            <div className="text-right mt-3">
-              <button className="px-3 py-1 bg-gray-300 rounded" onClick={() => setCopyOpen(false)}>
-                닫기
-              </button>
-            </div>
           </div>
-        </div>
-      )}
-    </>
-  );  // ← renderForm() return 끝
+        )}
+            </>
+    );  // ← renderForm() return 끝
 
-  // ⭐ 여기부터 4파트 테이블 추가
-  return (
-    <>
+    // ⭐ 여기부터 4파트 테이블 추가
+    return (
+      <>
+      
+           {/* ==================== 상단: 입력폼 + Dashboard ==================== */}
+<div className="flex items-start gap-6 w-full">
+  
 
-      {/* ==================== 상단: 입력폼 + Dashboard ==================== */}
-      <div className="flex items-start gap-6 w-full">
+  {/* 왼쪽 입력폼 (절대 변경 금지) */}
+  <div className="flex-1">{renderForm()}</div>
 
-
-        {/* 왼쪽 입력폼 (절대 변경 금지) */}
-        <div className="flex-1">{renderForm()}</div>
-
-        {/* ================= Premium Today Dashboard v4 ================= */}
-        <div
-          className="
+  {/* ================= Premium Today Dashboard v4 ================= */}
+ <div
+  className="
     w-[1000px]
     rounded-3xl
     bg-white
@@ -5258,959 +4882,859 @@ const toRow = (p = {}) => {
     self-stretch        /* ① 자동 높이 맞춤 */
     overflow-hidden     /* ② 스크롤 영역 컨트롤 */
   "
-          style={{
-            maxHeight: "calc(100vh - 130px)", /* ③ 화면 초과 방지 */
-            display: "flex",
-            flexDirection: "column",
-          }}
-        >
+  style={{
+    maxHeight: "calc(100vh - 130px)", /* ③ 화면 초과 방지 */
+    display: "flex",
+    flexDirection: "column",
+  }}
+>
 
 
 
-          {/* Header + 알림시간 설정 */}
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">Today Dashboard</h3>
-            <input
-              type="time"
-              value={alertTime}
-              onChange={(e) => {
-                setAlertTime(e.target.value);
-                setAlertShown(false);
-              }}
-              className="border rounded px-1 py-0.5 text-[10px]"
-            />
-          </div>
+    {/* Header + 알림시간 설정 */}
+    <div className="flex justify-between items-center mb-4">
+      <h3 className="text-lg font-semibold text-gray-900">Today Dashboard</h3>
+      <input
+        type="time"
+        value={alertTime}
+        onChange={(e) => {
+          setAlertTime(e.target.value);
+          setAlertShown(false);
+        }}
+        className="border rounded px-1 py-0.5 text-[10px]"
+      />
+    </div>
 
-          {/* Progress */}
-          <div className="mb-6">
-            <div className="flex justify-between text-[11px] text-gray-500 mb-1">
-              <span>배차진행률</span><span>{rate}%</span>
-            </div>
-            <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
-              <div className="h-full bg-blue-600" style={{ width: `${rate}%` }} />
-            </div>
-          </div>
+    {/* Progress */}
+    <div className="mb-6">
+      <div className="flex justify-between text-[11px] text-gray-500 mb-1">
+        <span>배차진행률</span><span>{rate}%</span>
+      </div>
+      <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+        <div className="h-full bg-blue-600" style={{ width: `${rate}%` }} />
+      </div>
+    </div>
 
-          {/* Quick Status */}
-          <div className="grid grid-cols-3 gap-2 mb-6 text-[12px]">
+    {/* Quick Status */}
+<div className="grid grid-cols-3 gap-2 mb-6 text-[12px]">
 
-            {/* 임박 */}
-            <button
-              onClick={() =>
-                setStatusPopup({
-                  title: "임박 리스트",
-                  list: todayRows.filter(r => r.배차상태 === "배차중")
-                })
-              }
-              className={`bg-amber-50 hover:bg-amber-100 border border-amber-200 py-2 rounded-xl text-center font-medium
+  {/* 임박 */}
+  <button
+    onClick={() =>
+      setStatusPopup({
+        title: "임박 리스트",
+        list: todayRows.filter(r => r.배차상태 === "배차중")
+      })
+    }
+    className={`bg-amber-50 hover:bg-amber-100 border border-amber-200 py-2 rounded-xl text-center font-medium
       ${doing > 0 ? "animate-pulse" : ""}`}
-            >
-              ⏳ 임박 {doing}
-            </button>
+  >
+    ⏳ 임박 {doing}
+  </button>
 
-            {/* 미배차 */}
-            <button
-              onClick={() =>
-                setStatusPopup({
-                  title: "미배차 리스트",
-                  list: todayRows.filter(r => !r.차량번호?.trim())
-                })
-              }
-              className="bg-gray-50 hover:bg-gray-100 border border-gray-200 py-2 rounded-xl text-center font-medium"
-            >
-              🚧 미배차 {pending}
-            </button>
+  {/* 미배차 */}
+  <button
+    onClick={() =>
+      setStatusPopup({
+        title: "미배차 리스트",
+        list: todayRows.filter(r => !r.차량번호?.trim())
+      })
+    }
+    className="bg-gray-50 hover:bg-gray-100 border border-gray-200 py-2 rounded-xl text-center font-medium"
+  >
+    🚧 미배차 {pending}
+  </button>
 
-            {/* 지연 */}
-            <button
-              onClick={() =>
-                setStatusPopup({
-                  title: "지연 리스트",
-                  list: todayRows.filter(r => r.배차상태 === "지연")
-                })
-              }
-              className={`bg-rose-50 hover:bg-rose-100 border border-rose-200 py-2 rounded-xl text-center font-medium
+  {/* 지연 */}
+  <button
+    onClick={() =>
+      setStatusPopup({
+        title: "지연 리스트",
+        list: todayRows.filter(r => r.배차상태 === "지연")
+      })
+    }
+    className={`bg-rose-50 hover:bg-rose-100 border border-rose-200 py-2 rounded-xl text-center font-medium
       ${delayed > 0 ? "animate-pulse" : ""}`}
-            >
-              ⚠ 지연 {delayed}
-            </button>
+  >
+    ⚠ 지연 {delayed}
+  </button>
 
-          </div>
+</div>
 
 
-          {/* KPI */}
-          <div className="grid grid-cols-3 gap-3 text-center mb-6">
-            <div><div className="text-[11px] text-gray-500">총오더</div><div className="text-base font-bold">{total}</div></div>
-            <div><div className="text-[11px] text-gray-500">완료</div><div className="text-base font-bold text-blue-600">{done}</div></div>
-            <div><div className="text-[11px] text-gray-500">진행</div><div className="text-base font-bold text-blue-600">{doing}</div></div>
-            <div><div className="text-[11px] text-gray-500">기사수</div><div className="text-base font-semibold">{driverCount}</div></div>
-            <div><div className="text-[11px] text-gray-500">신규거래</div><div className="text-base font-semibold text-emerald-600">{newClients}</div></div>
-            <div><div className="text-[11px] text-gray-500">신규하차</div><div className="text-base font-semibold text-emerald-600">{newPlaces}</div></div>
-          </div>
+    {/* KPI */}
+    <div className="grid grid-cols-3 gap-3 text-center mb-6">
+      <div><div className="text-[11px] text-gray-500">총오더</div><div className="text-base font-bold">{total}</div></div>
+      <div><div className="text-[11px] text-gray-500">완료</div><div className="text-base font-bold text-blue-600">{done}</div></div>
+      <div><div className="text-[11px] text-gray-500">진행</div><div className="text-base font-bold text-blue-600">{doing}</div></div>
+      <div><div className="text-[11px] text-gray-500">기사수</div><div className="text-base font-semibold">{driverCount}</div></div>
+      <div><div className="text-[11px] text-gray-500">신규거래</div><div className="text-base font-semibold text-emerald-600">{newClients}</div></div>
+      <div><div className="text-[11px] text-gray-500">신규하차</div><div className="text-base font-semibold text-emerald-600">{newPlaces}</div></div>
+    </div>
 
-          {/* Financial */}
-          <div className="space-y-1.5 text-[13px] mb-6">
-            <div className="flex justify-between"><span>매출</span><b>{todayRevenue.toLocaleString()}원</b></div>
-            <div className="flex justify-between"><span>기사비용</span><b>{todayDriverCost.toLocaleString()}원</b></div>
-            <div className="flex justify-between"><span>마진율</span>
-              <b className={todayMarginRate >= 0 ? "text-emerald-600" : "text-red-600"}>{todayMarginRate.toFixed(0)}%</b>
-            </div>
-          </div>
-
-          {/* Trend Graph */}
-          <div className="bg-white border border-gray-200 rounded-xl p-3 mb-6">
-            <div className="text-[11px] text-gray-600 mb-2">시간대별 요청건수</div>
-            <div className="h-[110px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={trendData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="hour" stroke="#888" fontSize={10} />
-                  <YAxis allowDecimals={false} stroke="#888" fontSize={10} />
-                  <Tooltip />
-                  <Line type="monotone" dataKey="count" stroke="#2563eb" strokeWidth={2} dot={false} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          {/* Top 3 Buttons */}
-          <div className="grid grid-cols-3 gap-2">
-            <button onClick={() => setPopupType("driver")} className="bg-gray-50 border border-gray-200 rounded-lg py-2 text-[12px] font-medium hover:bg-gray-100">
-              기사 Top 3
-            </button>
-            <button onClick={() => setPopupType("client")} className="bg-gray-50 border border-gray-200 rounded-lg py-2 text-[12px] font-medium hover:bg-gray-100">
-              상차지 Top 3
-            </button>
-            <button onClick={() => setPopupType("place")} className="bg-gray-50 border border-gray-200 rounded-lg py-2 text-[12px] font-medium hover:bg-gray-100">
-              하차지 Top 3
-            </button>
-          </div>
-
-        </div>
-
+    {/* Financial */}
+    <div className="space-y-1.5 text-[13px] mb-6">
+      <div className="flex justify-between"><span>매출</span><b>{todayRevenue.toLocaleString()}원</b></div>
+      <div className="flex justify-between"><span>기사비용</span><b>{todayDriverCost.toLocaleString()}원</b></div>
+      <div className="flex justify-between"><span>마진율</span>
+        <b className={todayMarginRate >= 0 ? "text-emerald-600" : "text-red-600"}>{todayMarginRate.toFixed(0)}%</b>
       </div>
-      {/* ================= 신규 기사 등록 모달 ================= */}
-      {driverModal.open && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[99999]">
-          <div className="bg-white rounded-xl p-6 w-[420px] shadow-xl border border-gray-200">
-            <h3 className="text-lg font-bold mb-4">신규 기사 등록</h3>
+    </div>
 
-            <div className="space-y-3 text-sm">
-              <div>
-                <label className="block text-gray-600 mb-1">차량번호</label>
-                <input
-                  className="border p-2 rounded w-full bg-gray-100"
-                  value={driverModal.carNo}
-                  readOnly
-                />
-              </div>
+    {/* Trend Graph */}
+    <div className="bg-white border border-gray-200 rounded-xl p-3 mb-6">
+      <div className="text-[11px] text-gray-600 mb-2">시간대별 요청건수</div>
+      <div className="h-[110px]">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={trendData}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="hour" stroke="#888" fontSize={10} />
+            <YAxis allowDecimals={false} stroke="#888" fontSize={10} />
+            <Tooltip />
+            <Line type="monotone" dataKey="count" stroke="#2563eb" strokeWidth={2} dot={false} />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
 
-              <div>
-                <label className="block text-gray-600 mb-1">기사명</label>
-                <input
-                  className="border p-2 rounded w-full"
-                  placeholder="예: 홍길동"
-                  value={driverModal.name}
-                  onChange={(e) =>
-                    setDriverModal((p) => ({ ...p, name: e.target.value }))
-                  }
-                  ref={nameInputRef}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      document.getElementById("driver-save-btn")?.click();
-                    }
-                  }}
-                />
-              </div>
+    {/* Top 3 Buttons */}
+    <div className="grid grid-cols-3 gap-2">
+      <button onClick={() => setPopupType("driver")} className="bg-gray-50 border border-gray-200 rounded-lg py-2 text-[12px] font-medium hover:bg-gray-100">
+        기사 Top 3
+      </button>
+      <button onClick={() => setPopupType("client")} className="bg-gray-50 border border-gray-200 rounded-lg py-2 text-[12px] font-medium hover:bg-gray-100">
+        상차지 Top 3
+      </button>
+      <button onClick={() => setPopupType("place")} className="bg-gray-50 border border-gray-200 rounded-lg py-2 text-[12px] font-medium hover:bg-gray-100">
+        하차지 Top 3
+      </button>
+    </div>
 
-              <div>
-                <label className="block text-gray-600 mb-1">전화번호</label>
-                <input
-                  className="border p-2 rounded w-full"
-                  placeholder="숫자(하이픈) 입력"
-                  value={driverModal.phone}
-                  onChange={(e) =>
-                    setDriverModal((p) => ({
-                      ...p,
-                      phone: e.target.value.replace(/[^\d-]/g, ""),
-                    }))
-                  }
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      document.getElementById("driver-save-btn")?.click();
-                    }
-                  }}
-                />
-              </div>
-            </div>
+  </div>
 
-            <div className="flex justify-end gap-2 mt-6">
-              <button
-                className="px-4 py-2 rounded bg-gray-200"
-                onClick={() => setDriverModal({ open: false })}
-              >
-                취소
-              </button>
+</div>
+{/* ================= 신규 기사 등록 모달 ================= */}
+{driverModal.open && (
+  <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[99999]">
+    <div className="bg-white rounded-xl p-6 w-[420px] shadow-xl border border-gray-200">
+      <h3 className="text-lg font-bold mb-4">신규 기사 등록</h3>
 
-              <button
-                id="driver-save-btn"
-                className="px-4 py-2 rounded bg-blue-600 text-white"
-                onClick={async () => {
-                  if (!driverModal.name.trim()) return alert("기사명을 입력하세요.");
-                  if (!driverModal.phone.replace(/[^\d]/g, "").trim()) return alert("전화번호를 입력하세요.");
-
-                  const rawPhone = driverModal.phone.replace(/[^\d]/g, "");
-                  if (!rawPhone || rawPhone.length < 10) return alert("전화번호를 정확히 입력하세요.");
-
-                  await upsertDriver({
-                    _id: driverModal.carNo,
-                    차량번호: driverModal.carNo,
-                    이름: driverModal.name,
-                    전화번호: rawPhone,
-                  });
-
-                  setForm((p) => ({
-                    ...p,
-                    차량번호: driverModal.carNo,
-                    이름: driverModal.name,
-                    전화번호: formatPhone(rawPhone),
-                    배차상태: "배차완료",
-                    배차완료일시: Date.now(),
-                  }));
-
-                  setDriverModal({ open: false });
-                }}
-              >
-                저장
-              </button>
-            </div>
-          </div>
+      <div className="space-y-3 text-sm">
+        <div>
+          <label className="block text-gray-600 mb-1">차량번호</label>
+          <input
+            className="border p-2 rounded w-full bg-gray-100"
+            value={driverModal.carNo}
+            readOnly
+          />
         </div>
-      )}
 
-      {/* ================= 실시간배차 상태 변경 확인 팝업 ================= */}
-      {confirmChange && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
-          <div className="bg-white rounded-xl p-6 w-[360px] shadow-xl border">
-
-            <h3 className="text-base font-bold mb-4">
-              상태를 변경하시겠습니까?
-            </h3>
-
-            <div className="text-sm text-gray-700 mb-5">
-              <div className="mb-1 font-semibold">
-                {confirmChange.key}
-              </div>
-              <div>
-                {confirmChange.before || "미설정"}
-                {" → "}
-                <b className="text-blue-600">
-                  {confirmChange.after || "미설정"}
-                </b>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2">
-              <button
-                className="px-3 py-1.5 bg-gray-200 rounded"
-                onClick={() => setConfirmChange(null)}
-              >
-                취소
-              </button>
-
-              <button
-                className="px-3 py-1.5 bg-blue-600 text-white rounded"
-                onClick={async () => {
-                  await patchDispatch(confirmChange.rowId, {
-                    [confirmChange.key]: confirmChange.after,
-                  });
-                  setConfirmChange(null);
-                }}
-              >
-                확인
-              </button>
-            </div>
-
-          </div>
-        </div>
-      )}
-
-      {/* ================= 등록 확인 팝업 ================= */}
-      {confirmOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]"
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              document.getElementById("confirm-save-btn")?.click();
+        <div>
+          <label className="block text-gray-600 mb-1">기사명</label>
+          <input
+            className="border p-2 rounded w-full"
+            placeholder="예: 홍길동"
+            value={driverModal.name}
+            onChange={(e) =>
+              setDriverModal((p) => ({ ...p, name: e.target.value }))
             }
-          }}
-          tabIndex={0} // Enter 감지 위해 포커스 가능
-        >
-          <div className="bg-white rounded-xl p-6 w-[380px] shadow-xl border border-gray-200">
-
-            <h3 className="text-base font-bold mb-4">등록하시겠습니까?</h3>
-
-            <div className="text-sm text-gray-700 mb-4 leading-6">
-              <p>거래처: <b>{form.거래처명}</b></p>
-              <p>
-                {form.운행유형 === "왕복"
-                  ? `${form.상차지명} ↔ ${form.하차지명}`
-                  : `${form.상차지명} → ${form.하차지명}`}
-              </p>
-              {isAdmin && (
-                <p>청구운임: <b>{Number(form.청구운임 || 0).toLocaleString()}원</b></p>
-              )}
-            </div>
-
-
-            {/* ⭐ 즉시공유 */}
-            <button
-              type="button"
-              className="px-3 py-1.5 bg-emerald-600 text-white rounded"
-              onClick={async () => {
-                const text = makeInstantShareText(form);
-
-                try {
-                  await navigator.clipboard.writeText(text);
-                  alert("📋 즉시공유 내용이 복사되었습니다.");
-                } catch {
-                  prompt("아래 내용을 복사하세요.", text);
-                }
-              }}
-            >
-              즉시공유
-            </button>
-
-            <div className="flex justify-end gap-2">
-              <button
-                className="px-3 py-1.5 bg-gray-200 rounded"
-                onClick={() => setConfirmOpen(false)}
-              >
-                취소
-              </button>
-              {/* 기존 저장 */}
-              <button
-                id="confirm-save-btn"
-                className="px-3 py-1.5 bg-blue-600 text-white rounded"
-                onClick={doSave}
-              >
-                확인
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      {/* ================= 거래처/하차지 중복 확인 팝업 ================= */}
-      {dupPopup.open && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
-          <div className="bg-white rounded-xl p-6 w-[420px] shadow-xl border">
-
-            <h3 className="text-base font-bold mb-3">
-              비슷한 거래처가 있습니다
-            </h3>
-
-            <p className="text-sm text-gray-700 mb-4">
-              신규로 등록하시겠습니까?
-            </p>
-
-            {/* 버튼 */}
-            <div className="flex justify-end gap-2 mb-4">
-              {/* 예 → 신규 등록 */}
-              <button
-                className="px-4 py-2 bg-blue-600 text-white rounded"
-                onClick={() => {
-                  const { name } = dupPopup.input;
-
-                  setDupPopup({ open: false, input: null, candidates: [] });
-
-                  // 🔥 여기서 신규 입력 팝업을 연다
-                  setTimeout(() => {
-                    openNewPlacePrompt(name);
-                  }, 0);
-                }}
-
-              >
-                예
-              </button>
-
-              {/* 아니오 */}
-              <button
-                className="px-4 py-2 bg-gray-200 rounded"
-                onClick={() => {
-                  // 🔥 신규 등록 거부 → 팝업만 닫기
-                  setDupPopup({ open: false, input: null, candidates: [] });
-                }}
-              >
-                아니오
-              </button>
-
-            </div>
-
-            {/* 기존 업체 선택 */}
-            <div className="border-t pt-3 space-y-2">
-              {dupPopup.candidates.map((p, i) => (
-                <div
-                  key={i}
-                  className="p-2 border rounded cursor-pointer hover:bg-gray-50"
-                  onClick={() => {
-                    applyClientSelect(p.업체명); // 🔥 이게 정답
-                    setDupPopup({ open: false, input: null, candidates: [] });
-                  }}
-
-                >
-                  <div className="font-medium">{p.업체명}</div>
-                  {p.주소 && (
-                    <div className="text-xs text-gray-500">{p.주소}</div>
-                  )}
-                </div>
-              ))}
-            </div>
-
-          </div>
-        </div>
-      )}
-
-      {/* ================= Status Popup ================= */}
-      {statusPopup && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
-          <div className="bg-white rounded-xl p-6 w-[420px] shadow-xl border border-gray-200">
-            <h3 className="text-base font-bold mb-4">
-              {statusPopup.title}
-            </h3>
-
-            <div className="space-y-2 text-sm max-h-[300px] overflow-y-auto pr-1">
-              {statusPopup.list.length > 0 ? (
-                statusPopup.list.map((r, i) => (
-                  <div
-                    key={i}
-                    className="flex justify-between border-b pb-1"
-                  >
-                    <span className="text-[12px]">
-                      {r.상차지명 || "-"} → {r.하차지명 || "-"}
-                    </span>
-                    <span className="font-semibold">{r.배차상태 || "-"}</span>
-                  </div>
-                ))
-              ) : (
-                <div className="text-center text-gray-500 text-[12px] py-3">
-                  데이터 없음
-                </div>
-              )}
-            </div>
-
-            <button
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-md text-sm mt-5"
-              onClick={() => setStatusPopup(null)}
-            >
-              닫기
-            </button>
-          </div>
-
+            ref={nameInputRef}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                document.getElementById("driver-save-btn")?.click();
+              }
+            }}
+          />
         </div>
 
-      )}
-
-      {/* ================= Top 3 Popup ================= */}
-      {popupType && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
-          <div className="bg-white rounded-xl p-6 w-[360px] shadow-xl border border-gray-200">
-            <h3 className="text-base font-bold mb-4">
-              {popupType === "driver" && "활동 많은 기사 Top 3"}
-              {popupType === "client" && "최다 상차지 Top 3"}
-              {popupType === "place" && "최다 하차지 Top 3"}
-            </h3>
-
-            <div className="space-y-2 text-sm">
-              {popupType === "driver" &&
-                [...todayRows].slice(0, 3).map((r, i) => (
-                  <div key={i} className="flex justify-between">
-                    <span>{r.이름 || "-"}</span>
-                    <span className="font-semibold">{r.배차상태}</span>
-                  </div>
-                ))}
-              {popupType === "client" &&
-                topClients.map(([name, count], i) => (
-                  <div key={i} className="flex justify-between">
-                    <span>{name}</span>
-                    <span className="font-semibold">{count}건</span>
-                  </div>
-                ))}
-              {popupType === "place" &&
-                topDrops.map(([name, count], i) => (
-                  <div key={i} className="flex justify-between">
-                    <span>{name}</span>
-                    <span className="font-semibold">{count}건</span>
-                  </div>
-                ))}
-            </div>
-
-            <button
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-md text-sm mt-5"
-              onClick={() => setPopupType(null)}
-            >
-              닫기
-            </button>
-          </div>
+        <div>
+          <label className="block text-gray-600 mb-1">전화번호</label>
+          <input
+            className="border p-2 rounded w-full"
+            placeholder="숫자(하이픈) 입력"
+            value={driverModal.phone}
+            onChange={(e) =>
+              setDriverModal((p) => ({
+                ...p,
+                phone: e.target.value.replace(/[^\d-]/g, ""),
+              }))
+            }
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                document.getElementById("driver-save-btn")?.click();
+              }
+            }}
+          />
         </div>
-      )}
-      {/* ================= 경유지 입력 팝업 ================= */}
-      {stopPopup.open && (
-        <div className="fixed inset-0 z-[99999] bg-black/40 flex items-center justify-center">
-          <div className="bg-white w-[680px] rounded-2xl shadow-2xl overflow-hidden">
-
-            {/* ===== Header ===== */}
-            <div className="flex items-center justify-between px-6 py-4 border-b">
-              <h3 className="text-lg font-bold text-gray-900">
-                {stopPopup.type === "pickup" ? "상차 경유지" : "하차 경유지"}
-              </h3>
-              <button
-                onClick={() => setStopPopup({ open: false, type: null, stops: [] })}
-                className="w-8 h-8 flex items-center justify-center rounded-full
-                     hover:bg-gray-100 text-gray-500"
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* ===== Body ===== */}
-            <div className="px-6 py-5 bg-gray-50 max-h-[60vh] overflow-y-auto space-y-4">
-              {Array.isArray(stopPopup.stops) &&
-                stopPopup.stops.map((s, i) => (
-                  <StopRow
-                    key={i}
-                    value={s}
-                    placeList={placeList}
-                    upsertPlace={upsertPlace}
-                    onChange={(v) => {
-                      const next = [...stopPopup.stops];
-                      next[i] = v;
-                      setStopPopup(p => ({ ...p, stops: next }));
-                    }}
-                    onRemove={() => {
-                      const next = stopPopup.stops.filter((_, idx) => idx !== i);
-                      setStopPopup(p => ({ ...p, stops: next }));
-                    }}
-                  />
-                ))}
-
-              {/* 경유 추가 */}
-              <button
-                type="button"
-                onClick={() =>
-                  setStopPopup(p => ({
-                    ...p,
-                    stops: [
-                      ...p.stops,
-                      { 업체명: "", 주소: "", 담당자: "", 담당자번호: "" },
-                    ],
-                  }))
-                }
-                className="w-full py-2 rounded-lg border border-dashed
-                     text-sm text-gray-500 hover:bg-white"
-              >
-                + 경유지 추가
-              </button>
-            </div>
-
-            {/* ===== Footer ===== */}
-            <div className="flex justify-end gap-2 px-6 py-4 border-t bg-white">
-              <button
-                className="px-5 py-2 rounded-lg bg-gray-100 text-gray-700
-                     hover:bg-gray-200"
-                onClick={() =>
-                  setStopPopup({ open: false, type: null, stops: [] })
-                }
-              >
-                취소
-              </button>
-
-              <button
-                className="px-5 py-2 rounded-lg bg-blue-600 text-white
-                     hover:bg-blue-700"
-                onClick={() => {
-                  if (stopPopup.type === "pickup") {
-                    setForm(p => ({
-                      ...p,
-                      경유지_상차: stopPopup.stops,
-                    }));
-                  } else {
-                    setForm(p => ({
-                      ...p,
-                      경유지_하차: stopPopup.stops,
-                    }));
-                  }
-                  setStopPopup({ open: false, type: null, stops: [] });
-                }}
-              >
-                적용
-              </button>
-            </div>
-
-          </div>
-        </div>
-      )}
-      {/* ================= 📜 과거 운송 이력 (운임 가이드 클릭) ================= */}
-      {fareHistoryOpen && (
-        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-xl w-[720px] max-h-[80vh] overflow-hidden shadow-xl">
-
-            {/* 헤더 */}
-            <div className="flex justify-between items-center px-5 py-3 border-b">
-              <h3 className="font-semibold text-lg">📜 과거 운송 이력</h3>
-              <button
-                onClick={() => setFareHistoryOpen(false)}
-                className="text-gray-400 hover:text-gray-700"
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* 리스트 */}
-            <div className="p-4 overflow-y-auto max-h-[60vh] text-sm">
-              <div className="text-xs text-gray-500 mb-2">
-                현재 조건과 유사한 운송 이력만 표시됩니다
-              </div>
-              {guideHistoryList.length > 0 ? (
-                guideHistoryList.map((r, idx) => (
-                  <div
-                    key={idx}
-                    className="p-3 mb-2 border rounded-lg hover:bg-gray-50"
-                  >
-                    <div className="font-semibold">
-                      {r.상차지명} → {r.하차지명}
-                    </div>
-
-                    <div className="text-gray-600 text-xs mt-1">
-                      {r.차량종류} / {r.차량톤수} · {r.화물내용}
-                    </div>
-
-                    <div className="mt-1 font-bold text-blue-600">
-                      {Number(r.청구운임).toLocaleString()}원
-                    </div>
-
-                    <div className="text-xs text-gray-400 mt-1">
-                      {r.상차일 || r.등록일}
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="text-center text-gray-400 py-10">
-                  과거 이력이 없습니다.
-                </div>
-              )}
-            </div>
-
-            {/* 푸터 */}
-            <div className="px-5 py-3 border-t text-right">
-              <button
-                onClick={() => setFareHistoryOpen(false)}
-                className="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300 text-sm"
-              >
-                닫기
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ⭐ 운임조회 결과 모달 */}
-      {fareModalOpen && fareResult && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
-          <div className="bg-white rounded-lg p-7 w-[500px] shadow-2xl max-h-[90vh] overflow-y-auto">
-            {/* ================= 거의 동일한 운송 ================= */}
-            {fareResult.exactLike?.length >= 1 &&
-              new Set(fareResult.exactLike.map(r => r.청구운임)).size > 1 && (
-                <div className="mb-5 p-4 border-2 border-indigo-500 bg-indigo-50 rounded-lg">
-                  <h4 className="font-bold text-indigo-700 mb-2">
-                    ⚠ 동일 조건 운송 이력이 {fareResult.exactLike.length}건 있습니다
-                  </h4>
-
-                  <p className="text-xs text-gray-600 mb-3">
-                    동일한 조건이지만 <b>청구운임이 서로 다릅니다.</b><br />
-                    상황에 맞는 운임을 직접 선택하세요.
-                  </p>
-
-                  {Array.from(
-                    new Map(
-                      fareResult.exactLike.map(r => [
-                        makeFareDedupKey(r), // ⭐ 조건 + 청구운임 기준
-                        r
-                      ])
-                    ).values()
-                  ).map((r, i) => (
-                    <div
-                      key={i}
-                      className="flex justify-between items-center py-2 px-2 border rounded bg-white mb-2"
-                    >
-                      <div className="text-sm">
-                        <div><b>{r.상차일}</b></div>
-                        <div className="text-xs text-gray-500">
-                          화물: {r.화물내용 || "-"}
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-3">
-                        <b className="text-indigo-700 text-base">
-                          {Number(r.청구운임).toLocaleString()}원
-                        </b>
-                        {r.운임보정?.type === "긴급" && (
-                          <span
-                            className="ml-2 px-1.5 py-0.5 text-[10px]
-    rounded-full bg-red-100 text-red-600 border border-red-300"
-                          >
-                            🚨 긴급
-                          </span>
-                        )}
-                        <button
-                          onClick={() => {
-                            setForm(p => ({ ...p, 청구운임: String(r.청구운임) }));
-                            setFareModalOpen(false);
-                          }}
-                          className="px-3 py-1 bg-indigo-600 text-white rounded text-xs"
-                        >
-                          이 운임 선택
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-
-                </div>
-              )}
-
-            {/* 헤더 */}
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-bold">📦 운임조회 결과</h3>
-
-              <div className="flex gap-2 mt-2">
-                <span className="px-2 py-0.5 text-xs rounded bg-blue-100 text-blue-700">
-                  상차: {getStopLabel(fareResult.pickupStops)}
-                </span>
-                <span className="px-2 py-0.5 text-xs rounded bg-emerald-100 text-emerald-700">
-                  하차: {getStopLabel(fareResult.dropStops)}
-                </span>
-              </div>
-
-              <button
-
-                onClick={() => setFareModalOpen(false)}
-                className="text-gray-500 hover:text-black text-xl"
-              >
-                ×
-              </button>
-            </div>
-
-            <div className="text-sm leading-6">
-              <p>📌 조회된 데이터: <b>{fareResult.count}</b> 건</p>
-              <p>📌 평균 운임: <b>{fareResult.avg.toLocaleString()} 원</b></p>
-              <p>📌 최소 → 최대: {fareResult.min.toLocaleString()} ~ {fareResult.max.toLocaleString()} 원</p>
-              <p>📌 최신 운임: {fareResult.latestFare?.toLocaleString()} 원</p>
-              <p>📌 최신 상차일: {fareResult.latestDate}</p>
-              <p>📌 최근 화물: {fareResult.latestCargo}</p>
-              <p>
-                📌 차량톤수:
-                <b className="ml-1">
-                  {form.차량톤수 || "미입력"}
-                </b>
-              </p>
-            </div>
-
-            {/* 추천 카드 */}
-            <div className="bg-amber-50 border border-amber-300 rounded-lg p-4 mt-4">
-
-              <h4 className="font-semibold text-amber-700 mb-2"> AI 추천운임</h4>
-              <p className="text-xl font-bold text-amber-900">
-                {(() => {
-                  const src =
-                    fareResult.exactLike && fareResult.exactLike.length > 0
-                      ? fareResult.exactLike
-                      : fareResult.filteredList;
-
-                  const nums = src
-                    .map(r => Number(String(r.청구운임 || 0).replace(/[^\d]/g, "")))
-                    .filter(n => n > 0);
-
-                  if (!nums.length) return "0 원";
-
-                  const avg = Math.round(nums.reduce((a, b) => a + b, 0) / nums.length);
-                  return `${avg.toLocaleString()} 원`;
-                })()}
-              </p>
-              <p className="text-[12px] text-gray-600">(최근 데이터 분석 기준)</p>
-
-              {/* 💡 운임 적용 버튼 */}
-              <button
-                onClick={() => {
-                  const src =
-                    fareResult.exactLike && fareResult.exactLike.length > 0
-                      ? fareResult.exactLike
-                      : fareResult.filteredList;
-
-                  const nums = src
-                    .map(r => Number(String(r.청구운임 || 0).replace(/[^\d]/g, "")))
-                    .filter(n => n > 0);
-
-                  const avg = nums.length
-                    ? Math.round(nums.reduce((a, b) => a + b, 0) / nums.length)
-                    : 0;
-
-                  setForm((p) => ({ ...p, 청구운임: String(avg) }));
-                  setFareModalOpen(false);
-
-                }}
-                className="mt-4 bg-amber-600 hover:bg-amber-700 text-white w-full py-2 rounded-md text-sm"
-              >
-                추천운임 적용하기
-              </button>
-              {/* 📜 과거 운송 기록 */}
-              {fareResult.filteredList && fareResult.filteredList.length > 0 && (
-                <div className="mt-5 border-t pt-4">
-                  <h4 className="font-semibold mb-2">📜 과거 운송 기록 (최신순)</h4>
-                  <div className="max-h-[180px] overflow-y-auto text-sm">
-                    {fareResult.pastHistoryList.map((r, idx) => (
-
-                      <div key={idx} className="flex justify-between items-center py-2 border-b">
-                        <div className="flex-1">
-                          <div className="space-y-0.5">
-                            {/* 날짜 */}
-                            <div>
-                              <b>{r.상차일}</b>
-                            </div>
-
-                            {/* ⭐ 상차 → 하차 루트 */}
-                            <div className="text-[13px] font-medium text-gray-800">
-                              {r.상차지명 || "-"} → {r.하차지명 || "-"}
-                            </div>
-
-                            {/* 화물 */}
-                            <div className="text-xs text-gray-500">
-                              화물: {r.화물내용 || "-"}
-                            </div>
-                            <div className="text-xs text-gray-500">
-                              차량: {r.차량종류 || "-"} / {r.차량톤수 || "-"}
-                            </div>
-
-                          </div>
-
-                          {(() => {
-                            const memo = r.메모 || "";
-                            if (!memo) return null;
-
-                            const tags = extractMemoTags(memo);
-
-                            const isLong = memo.length > 40;
-                            const isOpen = expandedMemo === idx;
-                            const displayText =
-                              isOpen || !isLong ? memo : memo.slice(0, 40) + "...";
-
-                            return (
-                              <div className="mt-1 text-xs text-gray-500 whitespace-pre-wrap">
-
-                                {/* 🏷 자동 태그 */}
-                                {tags.length > 0 && (
-                                  <div className="flex gap-1 mb-1">
-                                    {tags.map((t, i) => (
-                                      <span
-                                        key={i}
-                                        className={`px-2 py-0.5 text-[11px] rounded-full ${t.className}`}
-                                      >
-                                        {t.label}
-                                      </span>
-                                    ))}
-                                  </div>
-                                )}
-
-                                {/* 📝 메모 본문 */}
-                                📝 {displayText}
-
-                                {/* 더보기 / 접기 */}
-                                {isLong && (
-                                  <button
-                                    onClick={() =>
-                                      setExpandedMemo(isOpen ? null : idx)
-                                    }
-                                    className="ml-2 text-blue-600 hover:underline"
-                                  >
-                                    {isOpen ? "접기" : "더보기"}
-                                  </button>
-                                )}
-                              </div>
-                            );
-                          })()}
-
-                        </div>
-
-                        <div className="text-right flex items-center gap-1 justify-end">
-                          <span>{Number(r.청구운임).toLocaleString()} 원</span>
-
-                          {r.운임보정?.type === "긴급" && (
-                            <span
-                              className="px-1.5 py-0.5 text-[10px]
-      rounded-full bg-red-100 text-red-600 border border-red-300"
-                            >
-                              🚨 긴급
-                            </span>
-                          )}
-                        </div>
-
-                        <button
-                          onClick={() => {
-                            setForm((p) => ({
-                              ...p,
-                              청구운임: String(r.청구운임),
-                            }));
-                            setFareModalOpen(false);
-                          }}
-                          className="ml-3 px-3 py-1 bg-blue-600 text-white rounded text-xs"
-                        >
-                          적용
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* 닫기 버튼 */}
-            <div className="text-right mt-5">
-              <button
-                className="bg-gray-300 hover:bg-gray-400 px-4 py-2 rounded text-sm"
-                onClick={() => setFareModalOpen(false)}
-              >
-                닫기
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ⭐ 4파트 동일한 실시간배차현황 테이블 */}
-      <div id="realtime-status-area">
-        <RealtimeStatus
-          role={role}
-          dispatchData={dispatchData}
-          drivers={drivers}
-          clients={clients}
-          timeOptions={timeOptions}
-          tonOptions={tonOptions}
-          addDispatch={addDispatch}
-          patchDispatch={patchDispatch}
-          removeDispatch={removeDispatch}
-          upsertDriver={upsertDriver}
-          upsertClient={upsertClient}
-          filterType={filterType}
-          filterValue={filterValue}
-          setConfirmChange={setConfirmChange}
-          PAY_TYPES={PAY_TYPES}
-        />
       </div>
 
-    </>
+      <div className="flex justify-end gap-2 mt-6">
+        <button
+          className="px-4 py-2 rounded bg-gray-200"
+          onClick={() => setDriverModal({ open: false })}
+        >
+          취소
+        </button>
+
+        <button
+          id="driver-save-btn"
+          className="px-4 py-2 rounded bg-blue-600 text-white"
+          onClick={async () => {
+            if (!driverModal.name.trim()) return alert("기사명을 입력하세요.");
+            if (!driverModal.phone.replace(/[^\d]/g, "").trim()) return alert("전화번호를 입력하세요.");
+
+            const rawPhone = driverModal.phone.replace(/[^\d]/g, "");
+            if (!rawPhone || rawPhone.length < 10) return alert("전화번호를 정확히 입력하세요.");
+
+            await upsertDriver({
+              _id: driverModal.carNo,
+              차량번호: driverModal.carNo,
+              이름: driverModal.name,
+              전화번호: rawPhone,
+            });
+
+            setForm((p) => ({
+              ...p,
+              차량번호: driverModal.carNo,
+              이름: driverModal.name,
+              전화번호: formatPhone(rawPhone),
+              배차상태: "배차완료",
+            }));
+
+            setDriverModal({ open: false });
+          }}
+        >
+          저장
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+{/* ================= 실시간배차 상태 변경 확인 팝업 ================= */}
+{confirmChange && (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
+    <div className="bg-white rounded-xl p-6 w-[360px] shadow-xl border">
+
+      <h3 className="text-base font-bold mb-4">
+        상태를 변경하시겠습니까?
+      </h3>
+
+      <div className="text-sm text-gray-700 mb-5">
+        <div className="mb-1 font-semibold">
+          {confirmChange.key}
+        </div>
+        <div>
+          {confirmChange.before || "미설정"}
+          {" → "}
+          <b className="text-blue-600">
+            {confirmChange.after || "미설정"}
+          </b>
+        </div>
+      </div>
+
+      <div className="flex justify-end gap-2">
+        <button
+          className="px-3 py-1.5 bg-gray-200 rounded"
+          onClick={() => setConfirmChange(null)}
+        >
+          취소
+        </button>
+
+        <button
+          className="px-3 py-1.5 bg-blue-600 text-white rounded"
+          onClick={async () => {
+            await patchDispatch(confirmChange.rowId, {
+              [confirmChange.key]: confirmChange.after,
+            });
+            setConfirmChange(null);
+          }}
+        >
+          확인
+        </button>
+      </div>
+
+    </div>
+  </div>
+)}
+
+{/* ================= 등록 확인 팝업 ================= */}
+{confirmOpen && (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]"
+    onKeyDown={(e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        document.getElementById("confirm-save-btn")?.click();
+      }
+    }}
+    tabIndex={0} // Enter 감지 위해 포커스 가능
+  >
+    <div className="bg-white rounded-xl p-6 w-[380px] shadow-xl border border-gray-200">
+      
+      <h3 className="text-base font-bold mb-4">등록하시겠습니까?</h3>
+
+      <div className="text-sm text-gray-700 mb-4 leading-6">
+        <p>거래처: <b>{form.거래처명}</b></p>
+        <p>
+  {form.운행유형 === "왕복"
+    ? `${form.상차지명} ↔ ${form.하차지명}`
+    : `${form.상차지명} → ${form.하차지명}`}
+</p>
+        {isAdmin && (
+          <p>청구운임: <b>{Number(form.청구운임 || 0).toLocaleString()}원</b></p>
+        )}
+      </div>
+
+
+  {/* ⭐ 즉시공유 */}
+  <button
+    type="button"
+    className="px-3 py-1.5 bg-emerald-600 text-white rounded"
+    onClick={async () => {
+      const text = makeInstantShareText(form);
+
+      try {
+        await navigator.clipboard.writeText(text);
+        alert("📋 즉시공유 내용이 복사되었습니다.");
+      } catch {
+        prompt("아래 내용을 복사하세요.", text);
+      }
+    }}
+  >
+    즉시공유
+  </button>
+  
+      <div className="flex justify-end gap-2">
+  <button
+    className="px-3 py-1.5 bg-gray-200 rounded"
+    onClick={() => setConfirmOpen(false)}
+  >
+    취소
+  </button>
+  {/* 기존 저장 */}
+  <button
+    id="confirm-save-btn"
+    className="px-3 py-1.5 bg-blue-600 text-white rounded"
+    onClick={doSave}
+  >
+    확인
+  </button>
+</div>
+    </div>
+  </div>
+)}
+{/* ================= 거래처/하차지 중복 확인 팝업 ================= */}
+{dupPopup.open && (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
+    <div className="bg-white rounded-xl p-6 w-[420px] shadow-xl border">
+
+      <h3 className="text-base font-bold mb-3">
+        비슷한 거래처가 있습니다
+      </h3>
+
+      <p className="text-sm text-gray-700 mb-4">
+        신규로 등록하시겠습니까?
+      </p>
+
+      {/* 버튼 */}
+      <div className="flex justify-end gap-2 mb-4">
+        {/* 예 → 신규 등록 */}
+        <button
+          className="px-4 py-2 bg-blue-600 text-white rounded"
+          onClick={() => {
+  const { name } = dupPopup.input;
+
+  setDupPopup({ open: false, input: null, candidates: [] });
+
+  // 🔥 여기서 신규 입력 팝업을 연다
+  setTimeout(() => {
+    openNewPlacePrompt(name);
+  }, 0);
+}}
+
+        >
+          예
+        </button>
+
+        {/* 아니오 */}
+        <button
+  className="px-4 py-2 bg-gray-200 rounded"
+  onClick={() => {
+    // 🔥 신규 등록 거부 → 팝업만 닫기
+    setDupPopup({ open: false, input: null, candidates: [] });
+  }}
+>
+  아니오
+</button>
+
+      </div>
+
+      {/* 기존 업체 선택 */}
+      <div className="border-t pt-3 space-y-2">
+        {dupPopup.candidates.map((p, i) => (
+          <div
+            key={i}
+            className="p-2 border rounded cursor-pointer hover:bg-gray-50"
+            onClick={() => {
+  applyClientSelect(p.업체명); // 🔥 이게 정답
+  setDupPopup({ open: false, input: null, candidates: [] });
+}}
+
+          >
+            <div className="font-medium">{p.업체명}</div>
+            {p.주소 && (
+              <div className="text-xs text-gray-500">{p.주소}</div>
+            )}
+          </div>
+        ))}
+      </div>
+
+    </div>
+  </div>
+)}
+
+{/* ================= Status Popup ================= */}
+{statusPopup && (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
+    <div className="bg-white rounded-xl p-6 w-[420px] shadow-xl border border-gray-200">
+      <h3 className="text-base font-bold mb-4">
+        {statusPopup.title}
+      </h3>
+
+      <div className="space-y-2 text-sm max-h-[300px] overflow-y-auto pr-1">
+        {statusPopup.list.length > 0 ? (
+          statusPopup.list.map((r, i) => (
+            <div
+              key={i}
+              className="flex justify-between border-b pb-1"
+            >
+              <span className="text-[12px]">
+                {r.상차지명 || "-"} → {r.하차지명 || "-"}
+              </span>
+              <span className="font-semibold">{r.배차상태 || "-"}</span>
+            </div>
+          ))
+        ) : (
+          <div className="text-center text-gray-500 text-[12px] py-3">
+            데이터 없음
+          </div>
+        )}
+      </div>
+
+      <button
+        className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-md text-sm mt-5"
+        onClick={() => setStatusPopup(null)}
+      >
+        닫기
+      </button>
+    </div>
+    
+  </div>
+
+)}
+{/* ================= Top 3 Popup ================= */}
+{popupType && (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
+    <div className="bg-white rounded-xl p-6 w-[360px] shadow-xl border border-gray-200">
+      <h3 className="text-base font-bold mb-4">
+        {popupType === "driver" && "활동 많은 기사 Top 3"}
+        {popupType === "client" && "최다 상차지 Top 3"}
+        {popupType === "place" && "최다 하차지 Top 3"}
+      </h3>
+
+      <div className="space-y-2 text-sm">
+        {popupType === "driver" &&
+          [...todayRows].slice(0, 3).map((r, i) => (
+            <div key={i} className="flex justify-between">
+              <span>{r.이름 || "-"}</span>
+              <span className="font-semibold">{r.배차상태}</span>
+            </div>
+          ))}
+        {popupType === "client" &&
+          topClients.map(([name, count], i) => (
+            <div key={i} className="flex justify-between">
+              <span>{name}</span>
+              <span className="font-semibold">{count}건</span>
+            </div>
+          ))}
+        {popupType === "place" &&
+          topDrops.map(([name, count], i) => (
+            <div key={i} className="flex justify-between">
+              <span>{name}</span>
+              <span className="font-semibold">{count}건</span>
+            </div>
+          ))}
+      </div>
+
+      <button
+        className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-md text-sm mt-5"
+        onClick={() => setPopupType(null)}
+      >
+        닫기
+      </button>
+    </div>
+  </div>
+)}
+{/* ================= 📜 과거 운송 이력 (운임 가이드 클릭) ================= */}
+{fareHistoryOpen && (
+  <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40">
+    <div className="bg-white rounded-xl w-[720px] max-h-[80vh] overflow-hidden shadow-xl">
+
+      {/* 헤더 */}
+      <div className="flex justify-between items-center px-5 py-3 border-b">
+        <h3 className="font-semibold text-lg">📜 과거 운송 이력</h3>
+        <button
+          onClick={() => setFareHistoryOpen(false)}
+          className="text-gray-400 hover:text-gray-700"
+        >
+          ✕
+        </button>
+      </div>
+
+      {/* 리스트 */}
+      <div className="p-4 overflow-y-auto max-h-[60vh] text-sm">
+          <div className="text-xs text-gray-500 mb-2">
+    현재 조건과 유사한 운송 이력만 표시됩니다
+  </div>
+       {guideHistoryList.length > 0 ? (
+  guideHistoryList.map((r, idx) => (
+            <div
+              key={idx}
+              className="p-3 mb-2 border rounded-lg hover:bg-gray-50"
+            >
+              <div className="font-semibold">
+                {r.상차지명} → {r.하차지명}
+              </div>
+
+              <div className="text-gray-600 text-xs mt-1">
+                {r.차량종류} / {r.차량톤수} · {r.화물내용}
+              </div>
+
+              <div className="mt-1 font-bold text-blue-600">
+                {Number(r.청구운임).toLocaleString()}원
+              </div>
+
+              <div className="text-xs text-gray-400 mt-1">
+                {r.상차일 || r.등록일}
+              </div>
+            </div>
+          ))
+        ) : (
+          <div className="text-center text-gray-400 py-10">
+            과거 이력이 없습니다.
+          </div>
+        )}
+      </div>
+
+      {/* 푸터 */}
+      <div className="px-5 py-3 border-t text-right">
+        <button
+          onClick={() => setFareHistoryOpen(false)}
+          className="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300 text-sm"
+        >
+          닫기
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+        {/* ⭐ 운임조회 결과 모달 */}
+{fareModalOpen && fareResult && (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
+    <div className="bg-white rounded-lg p-7 w-[500px] shadow-2xl max-h-[90vh] overflow-y-auto">
+          {/* ================= 거의 동일한 운송 ================= */}
+      {fareResult.exactLike?.length >= 1 &&
+ new Set(fareResult.exactLike.map(r => r.청구운임)).size > 1 && (
+  <div className="mb-5 p-4 border-2 border-indigo-500 bg-indigo-50 rounded-lg">
+    <h4 className="font-bold text-indigo-700 mb-2">
+      ⚠ 동일 조건 운송 이력이 {fareResult.exactLike.length}건 있습니다
+    </h4>
+
+    <p className="text-xs text-gray-600 mb-3">
+      동일한 조건이지만 <b>청구운임이 서로 다릅니다.</b><br />
+      상황에 맞는 운임을 직접 선택하세요.
+    </p>
+
+    {Array.from(
+  new Map(
+    fareResult.exactLike.map(r => [
+      makeFareDedupKey(r), // ⭐ 조건 + 청구운임 기준
+      r
+    ])
+  ).values()
+).map((r, i) => (
+  <div
+    key={i}
+    className="flex justify-between items-center py-2 px-2 border rounded bg-white mb-2"
+  >
+    <div className="text-sm">
+      <div><b>{r.상차일}</b></div>
+      <div className="text-xs text-gray-500">
+        화물: {r.화물내용 || "-"}
+      </div>
+    </div>
+
+    <div className="flex items-center gap-3">
+      <b className="text-indigo-700 text-base">
+        {Number(r.청구운임).toLocaleString()}원
+      </b>
+{r.운임보정?.type === "긴급" && (
+  <span
+    className="ml-2 px-1.5 py-0.5 text-[10px]
+    rounded-full bg-red-100 text-red-600 border border-red-300"
+  >
+    🚨 긴급
+  </span>
+)}
+      <button
+        onClick={() => {
+          setForm(p => ({ ...p, 청구운임: String(r.청구운임) }));
+          setFareModalOpen(false);
+        }}
+        className="px-3 py-1 bg-indigo-600 text-white rounded text-xs"
+      >
+        이 운임 선택
+      </button>
+    </div>
+  </div>
+))}
+
+  </div>
+)}
+
+      {/* 헤더 */}
+      <div className="flex justify-between items-center mb-4">
+        <h3 className="text-lg font-bold">📦 운임조회 결과</h3>
+        
+        <div className="flex gap-2 mt-2">
+  <span className="px-2 py-0.5 text-xs rounded bg-blue-100 text-blue-700">
+    상차: {getStopLabel(fareResult.pickupStops)}
+  </span>
+  <span className="px-2 py-0.5 text-xs rounded bg-emerald-100 text-emerald-700">
+    하차: {getStopLabel(fareResult.dropStops)}
+  </span>
+</div>
+
+        <button
+        
+          onClick={() => setFareModalOpen(false)}
+          className="text-gray-500 hover:text-black text-xl"
+        >
+          ×
+        </button>
+      </div>
+
+      <div className="text-sm leading-6">
+        <p>📌 조회된 데이터: <b>{fareResult.count}</b> 건</p>
+        <p>📌 평균 운임: <b>{fareResult.avg.toLocaleString()} 원</b></p>
+        <p>📌 최소 → 최대: {fareResult.min.toLocaleString()} ~ {fareResult.max.toLocaleString()} 원</p>
+        <p>📌 최신 운임: {fareResult.latestFare?.toLocaleString()} 원</p>
+        <p>📌 최신 상차일: {fareResult.latestDate}</p>
+        <p>📌 최근 화물: {fareResult.latestCargo}</p>
+        <p>
+  📌 차량톤수:
+  <b className="ml-1">
+    {form.차량톤수 || "미입력"}
+  </b>
+</p>
+      </div>
+
+      {/* 추천 카드 */}
+      <div className="bg-amber-50 border border-amber-300 rounded-lg p-4 mt-4">
+        
+        <h4 className="font-semibold text-amber-700 mb-2"> AI 추천운임</h4>
+        <p className="text-xl font-bold text-amber-900">
+          {(() => {
+  const src =
+    fareResult.exactLike && fareResult.exactLike.length > 0
+      ? fareResult.exactLike
+      : fareResult.filteredList;
+
+  const nums = src
+    .map(r => Number(String(r.청구운임 || 0).replace(/[^\d]/g, "")))
+    .filter(n => n > 0);
+
+  if (!nums.length) return "0 원";
+
+  const avg = Math.round(nums.reduce((a, b) => a + b, 0) / nums.length);
+  return `${avg.toLocaleString()} 원`;
+})()}
+        </p>
+        <p className="text-[12px] text-gray-600">(최근 데이터 분석 기준)</p>
+
+        {/* 💡 운임 적용 버튼 */}
+        <button
+          onClick={() => {
+            const src =
+  fareResult.exactLike && fareResult.exactLike.length > 0
+    ? fareResult.exactLike
+    : fareResult.filteredList;
+
+const nums = src
+  .map(r => Number(String(r.청구운임 || 0).replace(/[^\d]/g, "")))
+  .filter(n => n > 0);
+
+const avg = nums.length
+  ? Math.round(nums.reduce((a, b) => a + b, 0) / nums.length)
+  : 0;
+
+setForm((p) => ({ ...p, 청구운임: String(avg) }));
+setFareModalOpen(false);
+          
+          }}
+          className="mt-4 bg-amber-600 hover:bg-amber-700 text-white w-full py-2 rounded-md text-sm"
+        >
+          추천운임 적용하기
+        </button>
+        {/* 📜 과거 운송 기록 */}
+{fareResult.filteredList && fareResult.filteredList.length > 0 && (
+  <div className="mt-5 border-t pt-4">
+    <h4 className="font-semibold mb-2">📜 과거 운송 기록 (최신순)</h4>
+    <div className="max-h-[180px] overflow-y-auto text-sm">
+      {fareResult.pastHistoryList.map((r, idx) => (
+        
+        <div key={idx} className="flex justify-between items-center py-2 border-b">
+          <div className="flex-1">
+ <div className="space-y-0.5">
+  {/* 날짜 */}
+  <div>
+    <b>{r.상차일}</b>
+  </div>
+
+  {/* ⭐ 상차 → 하차 루트 */}
+  <div className="text-[13px] font-medium text-gray-800">
+    {r.상차지명 || "-"} → {r.하차지명 || "-"}
+  </div>
+
+  {/* 화물 */}
+<div className="text-xs text-gray-500">
+  화물: {r.화물내용 || "-"}
+</div>
+<div className="text-xs text-gray-500">
+  차량: {r.차량종류 || "-"} / {r.차량톤수 || "-"}
+</div>
+  
+</div>
+
+{(() => {
+  const memo = r.메모 || "";
+  if (!memo) return null;
+
+  const tags = extractMemoTags(memo);
+
+  const isLong = memo.length > 40;
+  const isOpen = expandedMemo === idx;
+  const displayText =
+    isOpen || !isLong ? memo : memo.slice(0, 40) + "...";
+
+  return (
+    <div className="mt-1 text-xs text-gray-500 whitespace-pre-wrap">
+      
+      {/* 🏷 자동 태그 */}
+      {tags.length > 0 && (
+        <div className="flex gap-1 mb-1">
+          {tags.map((t, i) => (
+            <span
+              key={i}
+              className={`px-2 py-0.5 text-[11px] rounded-full ${t.className}`}
+            >
+              {t.label}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* 📝 메모 본문 */}
+      📝 {displayText}
+
+      {/* 더보기 / 접기 */}
+      {isLong && (
+        <button
+          onClick={() =>
+            setExpandedMemo(isOpen ? null : idx)
+          }
+          className="ml-2 text-blue-600 hover:underline"
+        >
+          {isOpen ? "접기" : "더보기"}
+        </button>
+      )}
+    </div>
   );
-}
-// ===================== DispatchApp.jsx (PART 3/8) — END =====================
+})()}
+
+</div>
+
+          <div className="text-right flex items-center gap-1 justify-end">
+  <span>{Number(r.청구운임).toLocaleString()} 원</span>
+
+  {r.운임보정?.type === "긴급" && (
+    <span
+      className="px-1.5 py-0.5 text-[10px]
+      rounded-full bg-red-100 text-red-600 border border-red-300"
+    >
+      🚨 긴급
+    </span>
+  )}
+</div>
+
+          <button
+            onClick={() => {
+              setForm((p) => ({
+                ...p,
+                청구운임: String(r.청구운임),
+              }));
+              setFareModalOpen(false);
+            }}
+            className="ml-3 px-3 py-1 bg-blue-600 text-white rounded text-xs"
+          >
+            적용
+          </button>
+        </div>
+      ))}
+    </div>
+  </div>
+)}
+      </div>
+
+      {/* 닫기 버튼 */}
+      <div className="text-right mt-5">
+        <button
+          className="bg-gray-300 hover:bg-gray-400 px-4 py-2 rounded text-sm"
+          onClick={() => setFareModalOpen(false)}
+        >
+          닫기
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+        {/* ⭐ 4파트 동일한 실시간배차현황 테이블 */} 
+<div id="realtime-status-area">
+  <RealtimeStatus
+    role={role}
+    dispatchData={dispatchData}
+    drivers={drivers}
+    clients={clients}
+    timeOptions={timeOptions}
+    tonOptions={tonOptions}
+    addDispatch={addDispatch}
+    patchDispatch={patchDispatch}
+    removeDispatch={removeDispatch}
+    upsertDriver={upsertDriver}
+    filterType={filterType}
+    filterValue={filterValue}
+    setConfirmChange={setConfirmChange}
+   PAY_TYPES={PAY_TYPES}
+  />
+</div>
+
+      </>
+    );
+  }
+  // ===================== DispatchApp.jsx (PART 3/8) — END =====================
 
 // ===================== DispatchApp.jsx (PART 4/8 — START) =====================
 
@@ -15575,7 +15099,6 @@ function NewOrderPopup({
 }
 
 // ===================== DispatchApp.jsx (PART 5/8 — END) =====================
-
 // ===================== DispatchApp.jsx (PART 6/8 — Settlement Premium) — START =====================
 
 function Settlement({ dispatchData, fixedRows = [] }) {
@@ -15747,7 +15270,8 @@ function Settlement({ dispatchData, fixedRows = [] }) {
 
   const isFresh = (r) =>
     String(r.거래처명 || "").includes("후레쉬물류");
-
+const isExcludedClient = (name = "") =>
+  name.includes("후레쉬물류") || name.includes("채석강");
   const stat = (list) => {
     const sale = sum(list, "청구운임");
     const driver = sum(list, "기사운임");
@@ -16170,14 +15694,16 @@ function Settlement({ dispatchData, fixedRows = [] }) {
             </tbody>
           </table>
         </div>
-        <SettlementClientAnalysis
-          topRows={monthRows.filter(
-            (r) =>
-              !String(r.거래처명 || "").includes("후레쉬물류")
-          )}
-          dropRows={rows}
-          newClients={newClients}
-        />
+       <SettlementClientAnalysis
+  topRows={monthRows.filter(
+    (r) => !isExcludedClient(r.거래처명)
+  )}
+  dropRows={rows.filter(
+    (r) => !isExcludedClient(r.거래처명)
+  )}
+  newClients={newClients}
+  targetMonth={targetMonth}
+/>
 
       </div>
       {/* ================= RIGHT PANEL ================= */}
@@ -16304,6 +15830,7 @@ function SettlementClientAnalysis({
   topRows = [],
   dropRows = [],
   newClients = [],
+  targetMonth,
 }) {
   return (
     <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 space-y-8">
@@ -16321,7 +15848,9 @@ function SettlementClientAnalysis({
         <SettlementTop10
           rows={topRows}
           allRows={dropRows} // 🔥 전체 rows 전달 (전월 비교용)
+          targetMonth={targetMonth}
         />
+
       </section>
 
       {/* 구분선 */}
@@ -16337,7 +15866,10 @@ function SettlementClientAnalysis({
 
           </span>
         </div>
-        <SettlementTop10Drop rows={dropRows} />
+        <SettlementTop10Drop
+  rows={dropRows}
+  targetMonth={targetMonth}
+/>
       </section>
 
       {/* 구분선 */}
@@ -16461,30 +15993,25 @@ function SettlementMonthlyHeader({
   );
 }
 
-function SettlementTop10({ rows = [], allRows = [] }) {
+function SettlementTop10({ rows = [], allRows = [], targetMonth }) {
   const toInt = (v) =>
     parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
 
   // ===============================
   // 📅 전월 동일 기간 계산
   // ===============================
-  const today = new Date();
-  const y = today.getFullYear();
-  const m = today.getMonth() + 1;
-  const d = today.getDate();
+const [y, m] = targetMonth.split("-").map(Number);
 
-  const curStart = `${y}-${String(m).padStart(2, "0")}-01`;
-  const curEnd = `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+const curStart = `${y}-${String(m).padStart(2, "0")}-01`;
+const curEnd = `${y}-${String(m).padStart(2, "0")}-${new Date(y, m, 0).getDate()}`;
 
-  const prevDate = new Date(y, m - 2, 1);
-  const py = prevDate.getFullYear();
-  const pm = prevDate.getMonth() + 1;
-  const prevLastDay = new Date(py, pm, 0).getDate();
+const prev = new Date(y, m - 2, 1);
+const py = prev.getFullYear();
+const pm = prev.getMonth() + 1;
 
-  const prevStart = `${py}-${String(pm).padStart(2, "0")}-01`;
-  const prevEnd = `${py}-${String(pm).padStart(2, "0")}-${String(
-    Math.min(d, prevLastDay)
-  ).padStart(2, "0")}`;
+const prevStart = `${py}-${String(pm).padStart(2, "0")}-01`;
+const prevEnd = `${py}-${String(pm).padStart(2, "0")}-${new Date(py, pm, 0).getDate()}`;
+
 
   // ===============================
   // 📦 거래처별 집계 함수
@@ -16611,32 +16138,24 @@ function SettlementTop10({ rows = [], allRows = [] }) {
   );
 }
 
-function SettlementTop10Drop({ rows = [] }) {
+function SettlementTop10Drop({ rows = [], targetMonth }) {
   const toInt = (v) =>
     parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
 
   // ===============================
   // 📅 전월 동일 기간 계산
   // ===============================
-  const today = new Date();
-  const y = today.getFullYear();
-  const m = today.getMonth() + 1;
-  const d = today.getDate();
+const [y, m] = targetMonth.split("-").map(Number);
 
-  const curStart = `${y}-${String(m).padStart(2, "0")}-01`;
-  const curEnd = `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+const curStart = `${y}-${String(m).padStart(2, "0")}-01`;
+const curEnd = `${y}-${String(m).padStart(2, "0")}-${new Date(y, m, 0).getDate()}`;
 
-  const prevDate = new Date(y, m - 2, 1);
-  const py = prevDate.getFullYear();
-  const pm = prevDate.getMonth() + 1;
-  const prevLastDay = new Date(py, pm, 0).getDate();
+const prev = new Date(y, m - 2, 1);
+const py = prev.getFullYear();
+const pm = prev.getMonth() + 1;
 
-  const prevStart = `${py}-${String(pm).padStart(2, "0")}-01`;
-  const prevEnd = `${py}-${String(pm).padStart(2, "0")}-${String(
-    Math.min(d, prevLastDay)
-  ).padStart(2, "0")}`;
-
-
+const prevStart = `${py}-${String(pm).padStart(2, "0")}-01`;
+const prevEnd = `${py}-${String(pm).padStart(2, "0")}-${new Date(py, pm, 0).getDate()}`;
   // ===============================
   // 📦 거래처별 누적 매출 집계
   // ===============================
@@ -16712,7 +16231,7 @@ function SettlementTop10Drop({ rows = [] }) {
           전월 대비 매출 감소 TOP10
         </h3>
         <span className="text-[11px] font-medium text-indigo-600">
-          기준: 각 월 1일 ~ 오늘 누적
+          기준: 해당 월 1일 ~ 말일 (선택 월 기준)
         </span>
       </div>
 
