@@ -1376,7 +1376,7 @@ const placeList = React.useMemo(() => {
     const row = toRow(raw);
     const key = normalizeKey(row.업체명);
     if (!key) return;
-    if (!firestoreKeys.has(key)) return; // ⭐ 여기 핵심
+if (!firestoreKeys.has(key) && !raw.__temp) return;
     if (!map.has(key)) map.set(key, row);
   });
 
@@ -1637,8 +1637,9 @@ const [placeActive, setPlaceActive] = React.useState(0);
 
 // ⭐ 업체명 "완전 동일"만 기존으로 판단
 const findPlaceByName = (name) => {
+  const nk = normalizeKey(name);
   return placeList.find(
-    (p) => String(p.업체명 || "").trim() === String(name || "").trim()
+    (p) => normalizeKey(p.업체명 || "") === nk
   );
 };
 // ⭐ 대표 담당자 추출 유틸 (🔥 반드시 필요)
@@ -1726,7 +1727,10 @@ const handleRegisterPickupManager = async () => {
       if (idx >= 0) list[idx] = updated;
       localStorage.setItem("hachaPlaces_v1", JSON.stringify(list));
     } catch (e) {}
-
+// 🔥 신규/업데이트 후 자동완성 즉시 반영
+const newLocal = JSON.parse(localStorage.getItem("hachaPlaces_v1") || "[]");
+setPickupOptions(newLocal);
+setPlaceOptions(newLocal);
     // 자동완성 즉시 업데이트
     try {
       const newLocal = JSON.parse(localStorage.getItem("hachaPlaces_v1") || "[]");
@@ -1741,14 +1745,17 @@ const handleRegisterPickupManager = async () => {
 
     return; // 업데이트 끝
   }
-  
-// ======================
-// ② 신규 업체 생성
-// ======================
+// ✅ 신규 업체 생성 (담당자까지 같이 저장해야 함)
 upsertPlace({
   업체명: name,
   주소: addr,
-  담당자목록: exist.담당자목록 ?? []
+  담당자목록: manager && phone
+    ? [{
+        이름: manager,
+        번호: phone,
+        대표: true,
+      }]
+    : [],
 });
 
 // 🔥 신규 생성 후에도 반드시 트리거
@@ -1786,8 +1793,6 @@ const mergedClients = React.useMemo(() => {
 
   return Array.from(map.values());
 }, [placeList, clients]);
-
-
 
     // 이름 기준으로 하차지/기본거래처 찾기
     const findClient = (name = "") => {
@@ -2280,27 +2285,33 @@ const primary = getPrimaryManager(p);
 
 // ⭐ 상차지에 적용 (여기 넣는 것! ← 바로 위 applyClientSelect 밑!!)
 function applyToPickup(place) {
+  const primary = getPrimaryManager(place); // ⭐ 핵심
+
   setForm(prev => ({
     ...prev,
     거래처명: place.업체명,
     상차지명: place.업체명,
-    상차지주소: place.주소,
-    상차지담당자: place.담당자,
-    상차지담당자번호: place.담당자번호,
+    상차지주소: place.주소 || "",
+    상차지담당자: primary?.이름 || "",
+    상차지담당자번호: primary?.번호 || "",
   }));
+
   setPlaceTargetPopup({ open: false, place: null });
 }
 
 // ⭐ 하차지에 적용 (applyToPickup 바로 아래)
 function applyToDrop(place) {
+  const primary = getPrimaryManager(place);
+
   setForm(prev => ({
     ...prev,
     거래처명: place.업체명,
     하차지명: place.업체명,
     하차지주소: place.주소,
-    하차지담당자: place.담당자,
-    하차지담당자번호: place.담당자번호,
+    하차지담당자: primary?.이름 || "",
+    하차지담당자번호: primary?.번호 || "",
   }));
+
   setPlaceTargetPopup({ open: false, place: null });
 }
 // 🔁 상차지 ↔ 하차지 교체
@@ -5122,8 +5133,6 @@ if (res?.success) {
   }}
 >
 
-
-
     {/* Header + 알림시간 설정 */}
     <div className="flex justify-between items-center mb-4">
       <h3 className="text-lg font-semibold text-gray-900">Today Dashboard</h3>
@@ -5742,10 +5751,57 @@ if (res?.success) {
           ×
         </button>
       </div>
+{/* ================= 요약 정보 (Grid) ================= */}
+<div className="mb-6 grid grid-cols-2 gap-3 text-sm">
 
-      {/* 요약 정보 */}
-      <div className="text-sm space-y-1 text-gray-800 mb-5">
-        {(() => {
+  <div className="p-3 rounded-lg bg-gray-50">
+    <div className="text-xs text-gray-500">조회된 데이터</div>
+    <div className="text-lg font-bold">{fareResult.count}건</div>
+  </div>
+
+  <div className="p-3 rounded-lg bg-gray-50">
+    <div className="text-xs text-gray-500">차량톤수</div>
+    <div className="text-lg font-bold">{form.차량톤수 || "-"}</div>
+  </div>
+
+  <div className="p-3 rounded-lg bg-gray-50">
+    <div className="text-xs text-gray-500">최소 운임</div>
+    <div className="font-semibold">
+      {fareResult.min.toLocaleString()}원
+    </div>
+  </div>
+
+  <div className="p-3 rounded-lg bg-gray-50">
+    <div className="text-xs text-gray-500">최대 운임</div>
+    <div className="font-semibold">
+      {fareResult.max.toLocaleString()}원
+    </div>
+  </div>
+
+  <div className="p-3 rounded-lg bg-gray-50">
+    <div className="text-xs text-gray-500">최신 운임</div>
+    <div className="font-semibold text-blue-700">
+      {fareResult.latestFare?.toLocaleString()}원
+    </div>
+  </div>
+
+  <div className="p-3 rounded-lg bg-gray-50">
+    <div className="text-xs text-gray-500">최신 상차일</div>
+    <div className="font-semibold">
+      {fareResult.latestDate}
+    </div>
+  </div>
+
+  <div className="p-3 rounded-lg bg-gray-50 col-span-2">
+    <div className="text-xs text-gray-500">최근 화물</div>
+    <div className="font-semibold">
+      {fareResult.latestCargo}
+    </div>
+  </div>
+
+</div>
+
+{(() => {
   const aiResult = getAiRecommendedFare({
     historyList: fareResult.pastHistoryList,
     form,
@@ -5779,16 +5835,6 @@ if (res?.success) {
     </div>
   );
 })()}
-
-        <div>조회된 데이터: <b>{fareResult.count}</b>건</div>
-        <div>최소 운임: <b>{fareResult.min.toLocaleString()}원</b></div>
-        <div>최대 운임: <b>{fareResult.max.toLocaleString()}원</b></div>
-        <div>최신 운임: <b>{fareResult.latestFare?.toLocaleString()}원</b></div>
-        <div>최신 상차일: <b>{fareResult.latestDate}</b></div>
-        <div>최근 화물: <b>{fareResult.latestCargo}</b></div>
-        <div>차량톤수: <b>{form.차량톤수 || "-"}</b></div>
-      </div>
-
       {/* 📜 과거 운송 기록 */}
       {fareResult.pastHistoryList?.length > 0 && (() => {
         // 🔥 유사도 계산
