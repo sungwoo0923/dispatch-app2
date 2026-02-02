@@ -19,6 +19,7 @@ import FixedClients from "./FixedClients";
 import FleetManagement from "./FleetManagement";
 import HomeDashboard from "./HomeDashboard";
 import StandardFare from "./StandardFare";
+import DispatchFormNew from "./DispatchFormNew";
 
 /* -------------------------------------------------
    발행사(우리 회사) 고정 정보
@@ -1070,6 +1071,7 @@ function ToggleBadge({ active, onClick, activeCls, inactiveCls, children }) {
     role = "admin",
     isTest = false,  // ★ 추가!
   }) {
+      const [useNewForm, setUseNewForm] = React.useState(false);
     function getAiRecommendedFare({ historyList, form }) {
   if (!historyList || historyList.length === 0) {
     return { fare: null, reason: "NO_HISTORY" };
@@ -1360,8 +1362,6 @@ const placeList = React.useMemo(() => {
       }]
     : [],
 });
-
-
   const map = new Map();
 
   // ✅ Firestore 먼저
@@ -2207,8 +2207,6 @@ function makeAiExplain(ai) {
     `입력한 운임은 통계 범위 내의 적정 금액입니다.`
   );
 }
-
-
     // =====================
     // ⭐ 거래처 = 하차지거래처 기반으로 자동완성
     // =====================
@@ -2370,8 +2368,6 @@ function swapPickupDrop() {
       }));
       setAutoPickMatched(false);
     };
-
-
     const handleDropName = (value) => {
       setForm((p) => ({
         ...p,
@@ -2379,8 +2375,6 @@ function swapPickupDrop() {
       }));
       setAutoDropMatched(false);
     };
-
-
     const handlePickupAddrManual = (v) => { setForm((p) => ({ ...p, 상차지주소: v })); setAutoPickMatched(false); };
     const handleDropAddrManual = (v) => { setForm((p) => ({ ...p, 하차지주소: v })); setAutoDropMatched(false); };
 
@@ -3742,7 +3736,7 @@ function calcHistoryScore(row, form) {
     const renderForm = () => (
       <>
         <h2 className="text-lg font-bold mb-3">배차관리</h2>
-
+   
         {/* 입력 폼 */}
   {/* ================== 프리미엄 액션바 ================== */}
 <div 
@@ -4710,9 +4704,6 @@ setForm((prev) => ({
     </div>
   </div>
 )}
-
-
-
   {/* 차량정보 */}
   <div>
     <label className={labelCls}>차량번호</label>
@@ -4909,8 +4900,6 @@ if (res?.success) {
   </div>
 
 </form>
-
-
         {/* ------------------------------  
       🔵 오더복사 팝업 (완성본)
 -------------------------------- */}
@@ -4956,8 +4945,6 @@ if (res?.success) {
     </button>
   </div>
 </div>
-
-
               {/* 검색바 */}
               <div className="flex gap-2 mb-3">
 
@@ -5142,8 +5129,45 @@ if (res?.success) {
 <div className="flex items-start gap-6 w-full">
   
 
-  {/* 왼쪽 입력폼 (절대 변경 금지) */}
-  <div className="flex-1">{renderForm()}</div>
+<div className="flex-1">
+
+  {/* 🔁 기존 / 신규 버튼 (항상 보이게) */}
+  <div className="flex justify-end mb-2">
+    <button
+      type="button"
+      onClick={() => setUseNewForm(false)}
+      className={`px-3 py-1 text-sm rounded-l ${
+        !useNewForm ? "bg-blue-600 text-white" : "bg-gray-200"
+      }`}
+    >
+      기존
+    </button>
+    <button
+      type="button"
+      onClick={() => setUseNewForm(true)}
+      className={`px-3 py-1 text-sm rounded-r ${
+        useNewForm ? "bg-blue-600 text-white" : "bg-gray-200"
+      }`}
+    >
+      신규
+    </button>
+  </div>
+
+  {/* 🔽 실제 폼만 교체 */}
+  {useNewForm ? (
+    <DispatchFormNew
+      form={form}
+      onChange={onChange}
+      doSave={doSave}
+      drivers={drivers}
+      clients={clients}
+      placeRows={placeRows}
+      role={role}
+    />
+  ) : (
+    renderForm()
+  )}
+</div>
 
   {/* ================= Premium Today Dashboard v4 ================= */}
  <div
@@ -6578,17 +6602,22 @@ ${fare.toLocaleString()}원 ${payLabel} 배차되었습니다.`;
       .join("\n\n");
 
     navigator.clipboard.writeText(text);
+    setSelected([]);
+setCopyModalOpen(false); 
     setCopyModalOpen(false);
     // 🔥 복사 완료 후 "전달상태 변경" 확인 팝업 띄우기
-    const rowId = selected[0];
-    const row = rows.find(r => r._id === rowId);
+const rowId = selected[0];
+const row = rows.find(r => r._id === rowId);
 
-    setDeliveryConfirm({
-      rowId,
-      before: row?.업체전달상태 || "미전달",
-      after: "전달완료",
-      reason: "copy", // ⭐ 기사복사에서 왔다는 표시
-    });
+// ✅ 이미 전달완료면 팝업 띄우지 않음
+if (row && row.업체전달상태 !== "전달완료") {
+  setDeliveryConfirm({
+    rowId,
+    before: row?.업체전달상태 || "미전달",
+    after: "전달완료",
+    reason: "copy",
+  });
+}
 
     // ⭐⭐⭐ 복사 후 자동 타이머 (여기가 정확한 위치)
     setTimeout(async () => {
@@ -9375,8 +9404,6 @@ ${url}
           </div>
         </div>
       )}
-
-      
       {/* ===================== 선택수정(팝업) ===================== */}
 
       {editPopupOpen && editTarget && (
@@ -11731,26 +11758,27 @@ ${fare.toLocaleString()}원 ${payLabel} 배차되었습니다.`;
       .join("\n\n");
 
     navigator.clipboard.writeText(text);
+    setSelected(new Set());
     setCopyModalOpen(false);
 
-    // 🔔 기사복사 후 전달상태 변경 팝업
-    const rowId = [...selected][0];
-    const row = dispatchData.find((d) => getId(d) === rowId);
+// 🔔 기사복사 후 전달상태 변경 팝업 (조건부)
+const rowId = [...selected][0];
+const row = dispatchData.find((d) => getId(d) === rowId);
 
-    setConfirmChange({
-      id: rowId,
-      field: "업체전달상태",
-      before: row?.업체전달상태 || "미전달",
-      after: "전달완료",
-      reason: "copy",
-    });
-  };
-
-
+// ✅ 이미 전달완료면 아무 것도 하지 않음
+if (row?.업체전달상태 !== "전달완료") {
+  setConfirmChange({
+    id: rowId,
+    field: "업체전달상태",
+    before: row?.업체전달상태 || "미전달",
+    after: "전달완료",
+    reason: "copy",
+  });
+}
+};
   // 🚀 운임 조회 실행 함수
   const handleFareSearch = () => {
     if (!editTarget) return;
-
     const pickup = String(editTarget.상차지명 || "");
     const drop = String(editTarget.하차지명 || "");
     const cargo = String(editTarget.화물내용 || "");
