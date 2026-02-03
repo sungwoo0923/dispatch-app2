@@ -1,4 +1,17 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
+// ✅ 서버 카카오 경로 계산 (컴포넌트 밖!)
+const calcRouteByServer = async (fromAddr, toAddr) => {
+  const res = await fetch("/api/route-calc", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ fromAddr, toAddr }),
+  });
+
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "경로 계산 실패");
+  return data;
+};
+
 // DispatchFormNew.jsx
 const VEHICLE_TYPES = [
   "라보/다마스",
@@ -14,19 +27,119 @@ const VEHICLE_TYPES = [
   "기타",
 ];
 
-const LOAD_TYPES = ["지게차", "수작업", "크레인", "직접수작업"];
-const PAY_TYPES = ["선불", "후불", "월말정산"];
-const DISPATCH_TYPES = ["일반", "긴급", "예약"];
-
+const LOAD_TYPES = ["지게차", "수작업", "직접수작업", "수도움","크레인"];
+const PAY_TYPES = ["계산서", "착불","선불", "손실","개인","기타"];
+const DISPATCH_TYPES = ["24시", "직접배차", "인성","24시(외주업체)"];
+function isLikelyFullAddress(addr) {
+  return /\d/.test(addr) && addr.length >= 8;
+}
 export default function DispatchFormNew({
   form,
   onChange,
   doSave,
   placeRows = [],   // ⭐ 추가
 }) {
+  const [routeError, setRouteError] = useState(null);
+  const [fareResult, setFareResult] = useState({
+  distanceKm: null,
+  durationMin: null,
+  baseFare: 0,
+});
+const handleFareLookup = () => {
+  const { 차량종류 } = form;
+
+  if (!차량종류) {
+    alert("차량종류를 선택해주세요.");
+    return;
+  }
+
+  const baseFareTable = {
+    "오토바이": 30000,
+    "라보/다마스": 50000,
+    "카고": 70000,
+    "윙바디": 90000,
+    "탑차": 80000,
+  };
+
+  const baseFare = baseFareTable[차량종류] || 0;
+
+setFareResult((prev) => ({
+  ...prev,
+  baseFare,
+}));
+
+  onChange("청구운임", baseFare);
+};
+// ===============================
+// 📏 상차/하차 주소 기반 자동 거리 계산
+// ===============================
+const handleAutoRouteCalc = async () => {
+  if (!form.상차지주소 || !form.하차지주소) return;
+
+  try {
+    const result = await calcRouteByServer(
+      form.상차지주소,
+      form.하차지주소
+    );
+
+    setRouteError(null);
+    setFareResult(prev => ({
+      ...prev,
+      distanceKm: result.distanceKm,
+      durationMin: result.durationMin,
+    }));
+  } catch (e) {
+    setRouteError("주소 기반 거리 계산 실패");
+    setFareResult(prev => ({
+      ...prev,
+      distanceKm: null,
+      durationMin: null,
+    }));
+  }
+};
+
+// const calcRouteByServer = async (fromAddr, toAddr) => {
+//   try {
+//     const res = await fetch(
+//       `/api/route?from=${encodeURIComponent(fromAddr)}&to=${encodeURIComponent(toAddr)}`
+//     );
+//     const data = await res.json();
+//   } catch (e) {
+//     console.error(e);
+//   }
+// };
+  const upNameRef = useRef(null);
+const upAddrRef = useRef(null);
+const upManRef = useRef(null);
+const upTelRef = useRef(null);
+const downNameRef = useRef(null);
+
   // 🔹 상/하차 자동완성 구분용
   const [activePlaceType, setActivePlaceType] = useState(null); // "상차" | "하차"
 const [highlightIndex, setHighlightIndex] = useState(-1);
+const handlePlaceKeyDown = (e) => {
+  if (!filteredPlaces.length) return;
+
+  if (e.key === "ArrowDown") {
+    e.preventDefault();
+    setHighlightIndex((i) =>
+      i < filteredPlaces.length - 1 ? i + 1 : 0
+    );
+  }
+
+  if (e.key === "ArrowUp") {
+    e.preventDefault();
+    setHighlightIndex((i) =>
+      i > 0 ? i - 1 : filteredPlaces.length - 1
+    );
+  }
+
+  if (e.key === "Enter" && highlightIndex >= 0) {
+    e.preventDefault();
+    selectPlace(filteredPlaces[highlightIndex]);
+    setHighlightIndex(-1);
+  }
+};
   const lineInput =
     "w-full border-b border-gray-400 px-1 py-2 text-sm text-gray-900 " +
     "placeholder:text-gray-500 " +
@@ -111,9 +224,20 @@ useEffect(() => {
     document.removeEventListener("keydown", keyHandler);
   };
 }, []);
+// 상차/하차 주소 바뀌면 자동 거리 계산
+useEffect(() => {
+  if (!form.상차지주소 || !form.하차지주소) return;
+
+  const t = setTimeout(() => {
+    handleAutoRouteCalc();
+  }, 800); // ⭐ 중요
+
+  return () => clearTimeout(t);
+}, [form.상차지주소, form.하차지주소]);
+
 
   return (
-    <div className="grid grid-cols-[1fr_360px] gap-10">
+    <div className="grid grid-cols-[1fr_minmax(420px,520px)] gap-10">
       {/* ================= LEFT : 입력 ================= */}
       <div className="space-y-12">
 
@@ -176,160 +300,162 @@ useEffect(() => {
           <div className="grid grid-cols-2 gap-10 max-w-[760px]">
 
             {/* ================= 상차 ================= */}
-            <div className="space-y-5">
-              <div className="relative">
-                <input
-  className={lineInput}
-  placeholder="상차지명"
-  value={form.상차지명 || ""}
-  onFocus={() => setActivePlaceType("상차")}
-  onChange={(e) => {
-    const v = e.target.value;
-    onChange("상차지명", v);
-    setActivePlaceType("상차");
+<div className="space-y-5">
+  <div className="relative">
+    <input
+      ref={upNameRef}
+      className={lineInput}
+      placeholder="상차지명"
+      value={form.상차지명 || ""}
+      onFocus={() => setActivePlaceType("상차")}
+      onChange={(e) => {
+        const v = e.target.value;
+        onChange("상차지명", v);
+        setActivePlaceType("상차");
 
-    if (!v.trim()) {
-      onChange("상차지주소", "");
-      onChange("상차담당자", "");
-      onChange("상차연락처", "");
-    }
-  }}
-  onKeyDown={(e) => {
-    if (!filteredPlaces.length) return;
+        if (!v.trim()) {
+          onChange("상차지주소", "");
+          onChange("상차담당자", "");
+          onChange("상차연락처", "");
+        }
+      }}
+      onKeyDown={(e) => {
+        // 🔹 자동완성 방향키 / Enter
+        handlePlaceKeyDown(e);
 
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      setHighlightIndex((i) =>
-        i < filteredPlaces.length - 1 ? i + 1 : 0
-      );
-    }
+        // 🔹 TAB 이동 로직
+        if (e.key !== "Tab") return;
 
-    if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setHighlightIndex((i) =>
-        i > 0 ? i - 1 : filteredPlaces.length - 1
-      );
-    }
+        const emptyTargets = [
+          { v: form.상차지주소, ref: upAddrRef },
+          { v: form.상차담당자, ref: upManRef },
+          { v: form.상차연락처, ref: upTelRef },
+        ].filter(x => !x.v?.trim());
 
-    if (e.key === "Enter" && highlightIndex >= 0) {
-      e.preventDefault();
-      selectPlace(filteredPlaces[highlightIndex]);
-      setHighlightIndex(-1);
-    }
-  }}
-/>
+        e.preventDefault();
 
-                {activePlaceType === "상차" && filteredPlaces.length > 0 && (
-                  <ul className="absolute z-20 mt-1 w-full bg-white border rounded-md shadow">
-                    {filteredPlaces.map((p, idx) => (
-                      <li
-                        key={idx}
-                        onMouseDown={() => selectPlace(p)}
-                        className={
-  "px-3 py-2 text-sm cursor-pointer " +
-  (idx === highlightIndex
-    ? "bg-blue-100"
-    : "hover:bg-blue-50")
-}
-onMouseEnter={() => setHighlightIndex(idx)}
-                      >
-                        <div className="font-medium text-gray-900">{p.지명}</div>
-                        <div className="text-xs text-gray-500">{p.주소}</div>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
+        if (emptyTargets.length > 0) {
+          emptyTargets[0].ref.current?.focus();
+        } else {
+          downNameRef.current?.focus();
+        }
+      }}
+    />
 
-              <input
-                className={lineInput}
-                placeholder="상차지 주소"
-                value={form.상차지주소 || ""}
-                onChange={(e) => onChange("상차지주소", e.target.value)}
-              />
+    {activePlaceType === "상차" && filteredPlaces.length > 0 && (
+      <ul className="absolute z-20 mt-1 w-full bg-white border rounded-md shadow">
+        {filteredPlaces.map((p, idx) => (
+          <li
+            key={idx}
+            onMouseDown={() => selectPlace(p)}
+            onMouseEnter={() => setHighlightIndex(idx)}
+            className={
+              "px-3 py-2 text-sm cursor-pointer " +
+              (idx === highlightIndex
+                ? "bg-blue-100"
+                : "hover:bg-blue-50")
+            }
+          >
+            <div className="font-medium text-gray-900">{p.지명}</div>
+            <div className="text-xs text-gray-500">{p.주소}</div>
+          </li>
+        ))}
+      </ul>
+    )}
+  </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <input
-                  className={lineInput}
-                  placeholder="상차 담당자"
-                  value={form.상차담당자 || ""}
-                  onChange={(e) => onChange("상차담당자", e.target.value)}
-                />
-                <input
-                  className={lineInput}
-                  placeholder="상차 연락처"
-                  value={form.상차연락처 || ""}
-                  onChange={(e) => onChange("상차연락처", e.target.value)}
-                />
-              </div>
-            </div>
+  <input
+    ref={upAddrRef}
+    className={lineInput}
+    placeholder="상차지 주소"
+    value={form.상차지주소 || ""}
+    onChange={(e) => onChange("상차지주소", e.target.value)}
+  />
 
+  <div className="grid grid-cols-2 gap-4">
+    <input
+      ref={upManRef}
+      className={lineInput}
+      placeholder="상차 담당자"
+      value={form.상차담당자 || ""}
+      onChange={(e) => onChange("상차담당자", e.target.value)}
+    />
+    <input
+      ref={upTelRef}
+      className={lineInput}
+      placeholder="상차 연락처"
+      value={form.상차연락처 || ""}
+      onChange={(e) => onChange("상차연락처", e.target.value)}
+    />
+  </div>
+</div>
             {/* ================= 하차 ================= */}
-            <div className="space-y-5">
-              <div className="relative">
-                <input
-                  className={lineInput}
-                  placeholder="하차지명"
-                  value={form.하차지명 || ""}
-                  onFocus={() => setActivePlaceType("하차")}
-                  onChange={(e) => {
-  const v = e.target.value;
-  onChange("하차지명", v);
-  setActivePlaceType("하차");
+<div className="space-y-5">
+  <div className="relative">
+    <input
+      ref={downNameRef}
+      className={lineInput}
+      placeholder="하차지명"
+      value={form.하차지명 || ""}
+      onFocus={() => setActivePlaceType("하차")}
+      onChange={(e) => {
+        const v = e.target.value;
+        onChange("하차지명", v);
+        setActivePlaceType("하차");
 
-  if (!v.trim()) {
-    onChange("하차지주소", "");
-    onChange("하차담당자", "");
-    onChange("하차연락처", "");
-  }
-}}
-                />
+        if (!v.trim()) {
+          onChange("하차지주소", "");
+          onChange("하차담당자", "");
+          onChange("하차연락처", "");
+        }
+      }}
+      onKeyDown={handlePlaceKeyDown}
+    />
 
-                {activePlaceType === "하차" && filteredPlaces.length > 0 && (
-                  <ul className="absolute z-20 mt-1 w-full bg-white border rounded-md shadow">
-                    {filteredPlaces.map((p, idx) => (
-                      <li
-                        key={idx}
-                        onMouseDown={() => selectPlace(p)}
-                        className={
-  "px-3 py-2 text-sm cursor-pointer " +
-  (idx === highlightIndex
-    ? "bg-blue-100"
-    : "hover:bg-blue-50")
-}
-onMouseEnter={() => setHighlightIndex(idx)}
-                      >
-                        <div className="font-medium text-gray-900">{p.지명}</div>
-                        <div className="text-xs text-gray-500">{p.주소}</div>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
+    {activePlaceType === "하차" && filteredPlaces.length > 0 && (
+      <ul className="absolute z-20 mt-1 w-full bg-white border rounded-md shadow">
+        {filteredPlaces.map((p, idx) => (
+          <li
+            key={idx}
+            onMouseDown={() => selectPlace(p)}
+            onMouseEnter={() => setHighlightIndex(idx)}
+            className={
+              "px-3 py-2 text-sm cursor-pointer " +
+              (idx === highlightIndex
+                ? "bg-blue-100"
+                : "hover:bg-blue-50")
+            }
+          >
+            <div className="font-medium text-gray-900">{p.지명}</div>
+            <div className="text-xs text-gray-500">{p.주소}</div>
+          </li>
+        ))}
+      </ul>
+    )}
+  </div>
 
-              <input
-                className={lineInput}
-                placeholder="하차지 주소"
-                value={form.하차지주소 || ""}
-                onChange={(e) => onChange("하차지주소", e.target.value)}
-              />
+  <input
+    className={lineInput}
+    placeholder="하차지 주소"
+    value={form.하차지주소 || ""}
+    onChange={(e) => onChange("하차지주소", e.target.value)}
+  />
 
-              <div className="grid grid-cols-2 gap-4">
-                <input
-                  className={lineInput}
-                  placeholder="하차 담당자"
-                  value={form.하차담당자 || ""}
-                  onChange={(e) => onChange("하차담당자", e.target.value)}
-                />
-                <input
-                  className={lineInput}
-                  placeholder="하차 연락처"
-                  value={form.하차연락처 || ""}
-                  onChange={(e) => onChange("하차연락처", e.target.value)}
-                />
-              </div>
-            </div>
-
+  <div className="grid grid-cols-2 gap-4">
+    <input
+      className={lineInput}
+      placeholder="하차 담당자"
+      value={form.하차담당자 || ""}
+      onChange={(e) => onChange("하차담당자", e.target.value)}
+    />
+    <input
+      className={lineInput}
+      placeholder="하차 연락처"
+      value={form.하차연락처 || ""}
+      onChange={(e) => onChange("하차연락처", e.target.value)}
+    />
+  </div>
+</div>
           </div>
         </section>
         {/* ================= 화물 / 차량 ================= */}
@@ -439,40 +565,97 @@ onMouseEnter={() => setHighlightIndex(idx)}
       </div>
 
       {/* ================= RIGHT : 요약 ================= */}
-      <aside className="sticky top-[120px] h-fit">
-        <div className="border rounded-2xl p-6 bg-white shadow-sm space-y-4">
-          <h4 className="font-bold text-gray-800">요약</h4>
+<aside className="sticky top-[120px] h-fit">
+  <div className="border rounded-2xl p-6 bg-white shadow-sm space-y-6">
 
-          <div className="text-sm space-y-2 text-gray-600">
-            <div className="flex justify-between">
-              <span>차량</span>
-              <b>{form.차량종류 || "-"}</b>
-            </div>
-            <div className="flex justify-between">
-              <span>톤수</span>
-              <b>{form.차량톤수 || "-"}</b>
-            </div>
-            <div className="flex justify-between">
-              <span>청구운임</span>
-              <b>{Number(form.청구운임 || 0).toLocaleString()}원</b>
-            </div>
-            <div className="flex justify-between">
-              <span>기사운임</span>
-              <b>{Number(form.기사운임 || 0).toLocaleString()}원</b>
-            </div>
+    {/* 제목 */}
+    <div className="flex items-center justify-between">
+      <h4 className="text-lg font-bold text-gray-900">예상 운임료</h4>
+      <button
+        type="button"
+        className="text-sm text-blue-600 hover:underline"
+      >
+        초기화
+      </button>
+    </div>
+{routeError && (
+  <div className="text-xs text-red-500 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+    {routeError}
+  </div>
+)}
+    {/* 기본 정보 */}
+    <div className="space-y-2 text-sm">
+      <div className="flex justify-between text-gray-500">
+        <span>총거리(예상)</span>
+        <span>
+{fareResult.distanceKm !== null
+  ? `${fareResult.distanceKm} km`
+  : "-"}
+</span>
+      </div>
+      <div className="flex justify-between text-gray-500">
+        <span>소요시간(예상)</span>
+        <span>
+{fareResult.durationMin !== null
+  ? `${fareResult.durationMin} 분`
+  : "-"}
+</span>
+      </div>
+      <div className="flex justify-between items-center">
+        <span className="text-gray-500">차량</span>
+        <span className="font-bold text-gray-900">
+          {form.차량종류 || "-"}
+        </span>
+      </div>
+    </div>
 
-            <div className="border-t pt-2 flex justify-between font-bold text-blue-600">
-              <span>수수료</span>
-              <span>
-                {(
-                  Number(form.청구운임 || 0) -
-                  Number(form.기사운임 || 0)
-                ).toLocaleString()}원
-              </span>
-            </div>
-          </div>
-        </div>
-      </aside>
+    {/* 옵션 버튼 (1번째 이미지 느낌) */}
+    <div className="flex gap-2 flex-wrap">
+      {["주간", "평일", "일반", "편도"].map((v) => (
+        <button
+          key={v}
+          type="button"
+          className="px-3 py-1.5 rounded-full border text-xs font-semibold
+                     border-blue-500 text-blue-600 bg-blue-50"
+        >
+          {v}
+        </button>
+      ))}
+    </div>
+
+    {/* 운임 정보 */}
+    <div className="space-y-2 text-sm">
+      <div className="flex justify-between text-gray-600">
+        <span>기본 운임</span>
+        <span>{fareResult.baseFare.toLocaleString()}원</span>
+      </div>
+      <div className="flex justify-between text-gray-600">
+        <span>추가 운임</span>
+        <span>0원</span>
+      </div>
+    </div>
+
+    {/* 실시간 예상 운임 */}
+    <div className="border-t pt-4">
+      <div className="text-sm text-gray-500 mb-1">
+        실시간 예상 운임
+      </div>
+      <div className="text-3xl font-extrabold text-blue-600">
+        {fareResult.baseFare.toLocaleString()}원
+      </div>
+    </div>
+
+    {/* CTA 버튼 */}
+    <button
+  type="button"
+  onClick={handleFareLookup}
+  className="w-full mt-2 py-3 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700"
+>
+  운임 조회
+</button>
+  </div>
+</aside>
+
     </div>
   );
 }

@@ -2,10 +2,20 @@ import fetch from "node-fetch";
 
 export default async function handler(req, res) {
   try {
-    const { fromAddr, toAddr } = req.body;
+    const body =
+      typeof req.body === "string"
+        ? JSON.parse(req.body)
+        : req.body;
+
+    const { fromAddr, toAddr } = body;
+
     if (!fromAddr || !toAddr) {
       return res.status(400).json({ error: "주소 누락" });
     }
+console.log("FROM:", fromAddr);
+console.log("TO:", toAddr);
+console.log("KAKAO KEY:", process.env.KAKAO_REST_KEY);
+
 
     const KAKAO_KEY = process.env.KAKAO_REST_KEY;
 
