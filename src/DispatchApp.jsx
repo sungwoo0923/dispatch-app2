@@ -1065,6 +1065,13 @@ function ToggleBadge({ active, onClick, activeCls, inactiveCls, children }) {
     isTest = false,  // ★ 추가!
   }) {
       const [useNewForm, setUseNewForm] = React.useState(false);
+      // ⏱ 상/하차 시간 + 이전/이후 표시용
+function renderTimeWithCond(time, cond) {
+  if (!time) return "-";
+  if (cond === "BEFORE") return `${time} 이전`;
+  if (cond === "AFTER")  return `${time} 이후`;
+  return time; // 조건 없으면 그냥 시간
+}
     function getAiRecommendedFare({ historyList, form }) {
   if (!historyList || historyList.length === 0) {
     return { fare: null, reason: "NO_HISTORY" };
@@ -1939,8 +1946,10 @@ const filterVehicles = (q) => {
       하차방법: "",
       상차일: _todayStr(),
       상차시간: "",
+      상차시간기준: null,
       하차일: _todayStr(),
       하차시간: "",
+      하차시간기준: null,
       청구운임: "",
       기사운임: "",
       수수료: "",
@@ -1956,6 +1965,7 @@ const filterVehicles = (q) => {
       긴급: false,
       운임보정: null,
     };
+    
 
     const [form, setForm] = React.useState(() => {
   try {
@@ -3404,7 +3414,9 @@ const applyCopy = (r) => {
     상차일: today,
     하차일: today,
     상차시간: r.상차시간 || "",
+    상차시간조건: r.상차시간조건 ?? null,
     하차시간: r.하차시간 || "",
+    하차시간조건: r.하차시간조건 ?? null,
     지급방식: r.지급방식 || "",
     배차방식: r.배차방식 || "",
     메모: r.메모 || "",
@@ -3892,52 +3904,180 @@ function calcHistoryScore(row, form) {
   <div className="w-px h-7 bg-gray-200" />
 
   {/* 날짜 시간 ▼ */}
-  <div className="flex items-center gap-3 text-sm">
-    <label className="text-gray-600 font-medium">상차</label>
-    <input type="date" value={form.상차일} className="inp small" onChange={(e)=>onChange("상차일",e.target.value)}/>
-    <select value={form.상차시간} className="inp small" onChange={(e)=>onChange("상차시간",e.target.value)}>
+<div className="flex items-center gap-3 text-sm">
+
+  {/* ================= 상차 ================= */}
+  <label className="text-gray-600 font-medium">상차</label>
+
+  <input
+    type="date"
+    value={form.상차일 || ""}
+    className="inp small"
+    onChange={(e) => onChange("상차일", e.target.value)}
+  />
+
+  {/* 상차 시간 + 이전/이후 */}
+  <div className="flex items-center gap-1">
+    <select
+      value={form.상차시간 || ""}
+      className="inp small"
+      onChange={(e) => {
+        const v = e.target.value;
+        onChange("상차시간", v);
+        if (v && !form.상차시간기준) {
+          onChange("상차시간기준", "이전"); // 기본값
+        }
+      }}
+    >
       <option value="">시간</option>
-      {localTimeOptions.map((t)=><option key={t} value={t}>{t}</option>)}
+      {localTimeOptions.map((t) => (
+        <option key={t} value={t}>{t}</option>
+      ))}
     </select>
-      {/* 🔹 상차: 당일/내일 */}
-  <button
-    type="button"
-    className="px-2 py-1 text-xs rounded bg-blue-100 text-blue-600 hover:bg-blue-200"
-    onClick={() => onChange("상차일", _todayStr())}
-  >
-    당일
-  </button>
 
-  <button
-    type="button"
-    className="px-2 py-1 text-xs rounded bg-blue-100 text-blue-600 hover:bg-blue-200"
-    onClick={() => onChange("상차일", _tomorrowStr())}
-  >
-    내일
-  </button>
+    {form.상차시간 && (
+      <div className="flex gap-1">
+        <button
+          type="button"
+          className={`px-2 py-1 text-xs rounded border ${
+            form.상차시간기준 === "이전"
+              ? "bg-gray-700 text-white border-gray-700"
+              : "bg-gray-50 text-gray-600 border-gray-200"
+          }`}
+          onClick={() =>
+            onChange(
+              "상차시간기준",
+              form.상차시간기준 === "이전" ? null : "이전"
+            )
+          }
+        >
+          이전
+        </button>
 
-    <label className="text-gray-600 font-medium ml-6">하차</label>
-    <input type="date" value={form.하차일} className="inp small" onChange={(e)=>onChange("하차일",e.target.value)}/>
-    <select value={form.하차시간} className="inp small" onChange={(e)=>onChange("하차시간",e.target.value)}>
+        <button
+          type="button"
+          className={`px-2 py-1 text-xs rounded border ${
+            form.상차시간기준 === "이후"
+              ? "bg-gray-700 text-white border-gray-700"
+              : "bg-gray-50 text-gray-600 border-gray-200"
+          }`}
+          onClick={() =>
+            onChange(
+              "상차시간기준",
+              form.상차시간기준 === "이후" ? null : "이후"
+            )
+          }
+        >
+          이후
+        </button>
+      </div>
+    )}
+  </div>
+
+  {/* 상차: 당일 / 내일 */}
+  <div className="flex gap-1 ml-3">
+    <button
+      type="button"
+      className="px-2 py-1 text-xs rounded bg-blue-100 text-blue-600 hover:bg-blue-200"
+      onClick={() => onChange("상차일", _todayStr())}
+    >
+      당일
+    </button>
+    <button
+      type="button"
+      className="px-2 py-1 text-xs rounded bg-blue-100 text-blue-600 hover:bg-blue-200"
+      onClick={() => onChange("상차일", _tomorrowStr())}
+    >
+      내일
+    </button>
+  </div>
+
+  {/* ================= 하차 ================= */}
+  <label className="text-gray-600 font-medium ml-6">하차</label>
+
+  <input
+    type="date"
+    value={form.하차일 || ""}
+    className="inp small"
+    onChange={(e) => onChange("하차일", e.target.value)}
+  />
+
+  {/* 하차 시간 + 이전/이후 */}
+  <div className="flex items-center gap-1">
+    <select
+      value={form.하차시간 || ""}
+      className="inp small"
+      onChange={(e) => {
+        const v = e.target.value;
+        onChange("하차시간", v);
+        if (v && !form.하차시간기준) {
+          onChange("하차시간기준", "이전"); // 기본값
+        }
+      }}
+    >
       <option value="">시간</option>
-      {localTimeOptions.map((t)=><option key={t} value={t}>{t}</option>)}
+      {localTimeOptions.map((t) => (
+        <option key={t} value={t}>{t}</option>
+      ))}
     </select>
-      {/* 🔹 하차: 당일/내일 */}
-  <button
-    type="button"
-    className="px-2 py-1 text-xs rounded bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
-    onClick={() => onChange("하차일", _todayStr())}
-  >
-    당일
-  </button>
 
-  <button
-    type="button"
-    className="px-2 py-1 text-xs rounded bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
-    onClick={() => onChange("하차일", _tomorrowStr())}
-  >
-    내일
-  </button>
+    {form.하차시간 && (
+      <div className="flex gap-1">
+        <button
+          type="button"
+          className={`px-2 py-1 text-xs rounded border ${
+            form.하차시간기준 === "이전"
+              ? "bg-gray-700 text-white border-gray-700"
+              : "bg-gray-50 text-gray-600 border-gray-200"
+          }`}
+          onClick={() =>
+            onChange(
+              "하차시간기준",
+              form.하차시간기준 === "이전" ? null : "이전"
+            )
+          }
+        >
+          이전
+        </button>
+
+        <button
+          type="button"
+          className={`px-2 py-1 text-xs rounded border ${
+            form.하차시간기준 === "이후"
+              ? "bg-gray-700 text-white border-gray-700"
+              : "bg-gray-50 text-gray-600 border-gray-200"
+          }`}
+          onClick={() =>
+            onChange(
+              "하차시간기준",
+              form.하차시간기준 === "이후" ? null : "이후"
+            )
+          }
+        >
+          이후
+        </button>
+      </div>
+    )}
+  </div>
+
+  {/* 하차: 당일 / 내일 */}
+  <div className="flex gap-1 ml-3">
+    <button
+      type="button"
+      className="px-2 py-1 text-xs rounded bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
+      onClick={() => onChange("하차일", _todayStr())}
+    >
+      당일
+    </button>
+    <button
+      type="button"
+      className="px-2 py-1 text-xs rounded bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
+      onClick={() => onChange("하차일", _tomorrowStr())}
+    >
+      내일
+    </button>
+  </div>
+
 <button
   type="button"
   onClick={swapPickupDrop}
@@ -6369,262 +6509,205 @@ function RealtimeStatus({
   // "yesterday" | "today" | "tomorrow"
   // 🔔 업로드 알림 리스트
   const [uploadAlerts, setUploadAlerts] = React.useState([]);
-  {/* =================== 기사복사 모달 상태 =================== */ }
-  const [copyModalOpen, setCopyModalOpen] = useState(false);
+  /* =================== 기사복사 모달 상태 =================== */
+const [copyModalOpen, setCopyModalOpen] = useState(false);
 
-  const getYoil = (dateStr) => {
-    const date = new Date(dateStr);
-    return ["일요일", "월요일", "화요일", "수요일", "목요일", "금요일", "토요일"][
-      date.getDay()
-    ];
-  };
+const getYoil = (dateStr) => {
+  const date = new Date(dateStr);
+  return ["일요일", "월요일", "화요일", "수요일", "목요일", "금요일", "토요일"][
+    date.getDay()
+  ];
+};
 
-  // 📦 화물내용에서 파렛트 수 추출
-  const getPalletCount = (text = "") => {
-    const m = String(text).match(/(\d+)\s*파렛/);
-    return m ? Number(m[1]) : null;
-  };
+// 📦 화물내용에서 파렛트 수 추출
+const getPalletCount = (text = "") => {
+  const m = String(text).match(/(\d+)\s*파렛/);
+  return m ? Number(m[1]) : null;
+};
 
-  // 🔁 운임 중복 제거 Key
-  const makeFareDedupKey = (r) => {
-    const pallet = getPalletCount(r.화물내용);
-    const fare = Number(String(r.청구운임 || "0").replace(/[^\d]/g, ""));
-    return [
-      r.상차지명,
-      r.하차지명,
-      pallet,
-      fare,
-    ].join("|");
-  };
-  const formatPhone = (value) => {
-    const digits = String(value ?? "").replace(/\D/g, "");
+// 🔁 운임 중복 제거 Key
+const makeFareDedupKey = (r) => {
+  const pallet = getPalletCount(r.화물내용);
+  const fare = Number(String(r.청구운임 || "0").replace(/[^\d]/g, ""));
+  return [r.상차지명, r.하차지명, pallet, fare].join("|");
+};
 
-    // 11자리 → 010-0000-0000
-    if (digits.length === 11) {
-      return digits.replace(/(\d{3})(\d{4})(\d{4})/, "$1-$2-$3");
-    }
+const formatPhone = (value) => {
+  const digits = String(value ?? "").replace(/\D/g, "");
+  if (digits.length === 11) return digits.replace(/(\d{3})(\d{4})(\d{4})/, "$1-$2-$3");
+  if (digits.length === 10) {
+    if (digits.startsWith("02"))
+      return digits.replace(/(\d{2})(\d{4})(\d{4})/, "$1-$2-$3");
+    return digits.replace(/(\d{3})(\d{3})(\d{4})/, "$1-$2-$3");
+  }
+  if (digits.length === 8) return digits.replace(/(\d{4})(\d{4})/, "$1-$2");
+  return digits;
+};
 
-    // 10자리 → 지역번호 고려
-    if (digits.length === 10) {
-      // 02로 시작 → (서울)
-      if (digits.startsWith("02")) {
-        return digits.replace(/(\d{2})(\d{4})(\d{4})/, "$1-$2-$3");
+const buildContactLine = (name, phone) => {
+  if (!name && !phone) return "";
+  return phone
+    ? `담당자 : ${name || ""} (${formatPhone(phone)})`
+    : `담당자 : ${name}`;
+};
+
+const copyMessage = (mode) => {
+  if (!selected.length) {
+    alert("복사할 항목을 선택하세요.");
+    return;
+  }
+
+  const text = selected
+    .map((id) => {
+      const r = rows.find((x) => x._id === id);
+      if (!r) return "";
+
+      const plate = r.차량번호 || "";
+      const name = r.이름 || "";
+      const phone = formatPhone(r.전화번호);
+      const fare = Number(String(r.청구운임 || "").replace(/[^\d]/g, ""));
+      const pay = r.지급방식 || "";
+      const yoil = r.상차일 ? getYoil(r.상차일) : "";
+
+      const payLabel =
+        pay === "계산서" ? "부가세별도" : pay === "선불" || pay === "착불" ? pay : "";
+
+      /* ================= BASIC ================= */
+      if (mode === "basic") {
+        return `${plate} ${name} ${phone}`;
       }
-      // 일반 지역번호 (031, 051, 055…)
-      return digits.replace(/(\d{3})(\d{3})(\d{4})/, "$1-$2-$3");
-    }
 
-    // 8자리 → 0000-0000
-    if (digits.length === 8) {
-      return digits.replace(/(\d{4})(\d{4})/, "$1-$2");
-    }
-
-    return digits;
-  };
-  const buildContactLine = (name, phone) => {
-    if (!name && !phone) return "";
-    if (phone) {
-      return `담당자 : ${name || ""} (${formatPhone(phone)})`;
-    }
-    return `담당자 : ${name}`;
-  };
-
-  const copyMessage = (mode) => {
-    if (!selected.length) {
-      alert("복사할 항목을 선택하세요.");
-      return;
-    }
-
-    const text = selected
-      .map((id) => {
-        const r = rows.find((x) => x._id === id);
-        if (!r) return "";
-
-        const plate = r.차량번호 || "";
-        const name = r.이름 || "";
-        const phone = formatPhone(r.전화번호);
-        const fare = Number(String(r.청구운임 || "").replace(/[^\d]/g, ""));
-        const pay = r.지급방식 || "";
-        const yoil = r.상차일 ? getYoil(r.상차일) : "";
-
-        let payLabel =
-          pay === "계산서"
-            ? "부가세별도"
-            : pay === "선불" || pay === "착불"
-              ? pay
-              : "";
-
-        if (mode === "basic") {
-          return `${plate} ${name} ${phone}`;
-        }
-
-        if (mode === "fare") {
-          return `${plate} ${name} ${phone}
+      /* ================= FARE ================= */
+      if (mode === "fare") {
+        return `${plate} ${name} ${phone}
 ${fare.toLocaleString()}원 ${payLabel} 배차되었습니다.`;
-        }
-        if (mode === "driver") {
-          const yoil = getYoil(r.상차일);
-          const dateText = `${r.상차일 || ""} ${yoil}`;
-          let dateNotice = "";
-          let dropTimeText = r.하차시간 || "즉시";
+      }
 
-          if (r.상차일 && r.하차일) {
-            const s = new Date(r.상차일);
-            const e = new Date(r.하차일);
+      /* ================= DRIVER ================= */
+      if (mode === "driver") {
+        const dateText = `${r.상차일 || ""} ${yoil}`;
+        let dateNotice = "";
+        let dropTimeText = r.하차시간 || "즉시";
 
-            const s0 = new Date(s.getFullYear(), s.getMonth(), s.getDate());
-            const e0 = new Date(e.getFullYear(), e.getMonth(), e.getDate());
+        if (r.상차일 && r.하차일) {
+          const s = new Date(r.상차일);
+          const e = new Date(r.하차일);
+          const diff =
+            (new Date(e.getFullYear(), e.getMonth(), e.getDate()) -
+              new Date(s.getFullYear(), s.getMonth(), s.getDate())) /
+            (1000 * 60 * 60 * 24);
 
-            const diffDays = Math.round(
-              (e0 - s0) / (1000 * 60 * 60 * 24)
-            );
-
-            const sm = s.getMonth() + 1;
-            const sd = s.getDate();
-            const em = e.getMonth() + 1;
-            const ed = e.getDate();
-
-            if (diffDays === 1) {
-              dateNotice = `익일 하차 건 (상차: ${sm}/${sd} → 하차: ${em}/${ed})\n\n`;
-              dropTimeText = `${em}/${ed} ${dropTimeText}`;
-            } else if (diffDays >= 2) {
-              dateNotice = `지정일 하차 건 (상차: ${sm}/${sd} → 하차: ${em}/${ed})\n\n`;
-              dropTimeText = `${em}/${ed} ${dropTimeText}`;
-            }
+          if (diff >= 1) {
+            dateNotice =
+              diff === 1
+                ? `익일 하차 건\n\n`
+                : `지정일 하차 건\n\n`;
+            dropTimeText = `${e.getMonth() + 1}/${e.getDate()} ${dropTimeText}`;
           }
+        }
 
-          // ❄️ 차량종류 기준 필독 문구 선택
-          const DRIVER_NOTICE = isColdVehicle(r.차량종류)
-            ? COLD_NOTICE
-            : NORMAL_NOTICE;
+        const DRIVER_NOTICE = isColdVehicle(r.차량종류)
+          ? COLD_NOTICE
+          : NORMAL_NOTICE;
 
-          // 전달사항
-          const driverNote =
-            edited[r._id]?.전달사항 ??
-            r.전달사항 ??
-            "";
+        const driverNote =
+          edited[r._id]?.전달사항 ??
+          r.전달사항 ??
+          "";
 
-          const driverNoteText = driverNote.trim()
-            ? `\n\n📢 전달사항\n${driverNote.trim()}`
-            : "";
+        const driverNoteText = driverNote.trim()
+          ? `\n\n📢 전달사항\n${driverNote.trim()}`
+          : "";
 
-          return `${DRIVER_NOTICE}
+        return `${DRIVER_NOTICE}
 
 ${dateNotice}${dateText}
 
 상차지 : ${r.상차지명 || "-"}
 ${r.상차지주소 || "-"}
-${(() => {
-              const line = buildContactLine(r.상차지담당자, r.상차지담당자번호);
-              return line ? `${line}\n` : "";
-            })()}상차시간 : ${r.상차시간 || "즉시"}
+${buildContactLine(r.상차지담당자, r.상차지담당자번호)}
+상차시간 : ${r.상차시간 || "즉시"}${r.상차시간기준 ? ` (${r.상차시간기준})` : ""}
+상차방법 : ${r.상차방법 || "-"}
 
 하차지 : ${r.하차지명 || "-"}
 ${r.하차지주소 || "-"}
-${(() => {
-              const line = buildContactLine(r.하차지담당자, r.하차지담당자번호);
-              return line ? `${line}\n` : "";
-            })()}하차시간 : ${dropTimeText}
+${buildContactLine(r.하차지담당자, r.하차지담당자번호)}
+하차시간 : ${dropTimeText}${r.하차시간기준 ? ` (${r.하차시간기준})` : ""}
+하차방법 : ${r.하차방법 || "-"}
 
-중량 : ${r.차량톤수 || "-"}${r.화물내용 ? ` / ${r.화물내용}` : ""
-            } ${r.차량종류 || ""}${driverNoteText}`;
+중량 : ${r.차량톤수 || "-"}${r.화물내용 ? ` / ${r.화물내용}` : ""} ${r.차량종류 || ""}
+${driverNoteText}`;
+      }
+
+      /* ================= FULL ================= */
+      const pickupTime = r.상차시간?.trim() || "즉시";
+      const dropTimeRaw = r.하차시간?.trim() || "즉시";
+      let dateNotice = "";
+      let dropTimeText = dropTimeRaw;
+
+      if (r.상차일 && r.하차일) {
+        const s = new Date(r.상차일);
+        const e = new Date(r.하차일);
+        const diff =
+          (new Date(e.getFullYear(), e.getMonth(), e.getDate()) -
+            new Date(s.getFullYear(), s.getMonth(), s.getDate())) /
+          (1000 * 60 * 60 * 24);
+
+        if (diff >= 1) {
+          dateNotice =
+            diff === 1 ? `익일 하차 건\n\n` : `지정일 하차 건\n\n`;
+          dropTimeText = `${e.getMonth() + 1}/${e.getDate()} ${dropTimeRaw}`;
         }
-        /* =======================
-           FULL MODE (기사복사)
-        ======================= */
+      }
 
-        const pickupTime = r.상차시간?.trim() || "즉시";
-        const dropTimeRaw = r.하차시간?.trim() || "즉시";
-
-        let dateNotice = "";
-        let dropTimeText = dropTimeRaw;
-
-        if (r.상차일 && r.하차일) {
-          const s = new Date(r.상차일);
-          const e = new Date(r.하차일);
-
-          const s0 = new Date(s.getFullYear(), s.getMonth(), s.getDate());
-          const e0 = new Date(e.getFullYear(), e.getMonth(), e.getDate());
-
-          const diffDays = Math.round(
-            (e0 - s0) / (1000 * 60 * 60 * 24)
-          );
-
-          const sm = s.getMonth() + 1;
-          const sd = s.getDate();
-          const em = e.getMonth() + 1;
-          const ed = e.getDate();
-
-          if (diffDays === 1) {
-            dateNotice = `익일 하차 건 (상차: ${sm}/${sd} → 하차: ${em}/${ed})\n\n`;
-            dropTimeText = `${em}/${ed} ${dropTimeRaw}`;
-          } else if (diffDays >= 2) {
-            dateNotice = `지정일 하차 건 (상차: ${sm}/${sd} → 하차: ${em}/${ed})\n\n`;
-            dropTimeText = `${em}/${ed} ${dropTimeRaw}`;
-          }
-        }
-
-        return `${dateNotice}${r.상차일 || ""} ${yoil}
+      return `${dateNotice}${r.상차일 || ""} ${yoil}
 
 상차지 : ${r.상차지명 || "-"}
 ${r.상차지주소 || "-"}
-${(() => {
-            const line = buildContactLine(
-              r.상차지담당자,
-              r.상차지담당자번호
-            );
-            return line ? `${line}\n` : "";
-          })()}상차시간 : ${pickupTime}
+${buildContactLine(r.상차지담당자, r.상차지담당자번호)}
+상차시간 : ${pickupTime}${r.상차시간기준 ? ` (${r.상차시간기준})` : ""}
+상차방법 : ${r.상차방법 || "-"}
 
 하차지 : ${r.하차지명 || "-"}
 ${r.하차지주소 || "-"}
-${(() => {
-            const line = buildContactLine(
-              r.하차지담당자,
-              r.하차지담당자번호
-            );
-            return line ? `${line}\n` : "";
-          })()}하차시간 : ${dropTimeText}
+${buildContactLine(r.하차지담당자, r.하차지담당자번호)}
+하차시간 : ${dropTimeText}${r.하차시간기준 ? ` (${r.하차시간기준})` : ""}
+하차방법 : ${r.하차방법 || "-"}
 
-중량 : ${r.차량톤수 || "-"}${r.화물내용 ? ` / ${r.화물내용}` : ""
-          } ${r.차량종류 || ""}
+중량 : ${r.차량톤수 || "-"}${r.화물내용 ? ` / ${r.화물내용}` : ""} ${r.차량종류 || ""}
 
 ${plate} ${name} ${phone}
 ${fare.toLocaleString()}원 ${payLabel} 배차되었습니다.`;
-      })
-      .join("\n\n");
+    })
+    .join("\n\n");
 
-    navigator.clipboard.writeText(text);
-    setSelected([]);
-setCopyModalOpen(false); 
-    setCopyModalOpen(false);
-    // 🔥 복사 완료 후 "전달상태 변경" 확인 팝업 띄우기
-const rowId = selected[0];
-const row = rows.find(r => r._id === rowId);
+  navigator.clipboard.writeText(text);
+  setSelected([]);
+  setCopyModalOpen(false);
 
-// ✅ 이미 전달완료면 팝업 띄우지 않음
-if (row && row.업체전달상태 !== "전달완료") {
-  setDeliveryConfirm({
-    rowId,
-    before: row?.업체전달상태 || "미전달",
-    after: "전달완료",
-    reason: "copy",
-  });
-}
+  const rowId = selected[0];
+  const row = rows.find((r) => r._id === rowId);
 
-    // ⭐⭐⭐ 복사 후 자동 타이머 (여기가 정확한 위치)
-    setTimeout(async () => {
-      try {
-        const latest = await navigator.clipboard.readText();
-        if (latest === text) {
-          alert("⏱ 아직 전달되지 않은 것 같습니다.\n카톡에 붙여넣기 하셨나요?");
-        }
-      } catch (e) {
-        console.error("Clipboard read error", e);
+  if (row && row.업체전달상태 !== "전달완료") {
+    setDeliveryConfirm({
+      rowId,
+      before: row?.업체전달상태 || "미전달",
+      after: "전달완료",
+      reason: "copy",
+    });
+  }
+
+  setTimeout(async () => {
+    try {
+      const latest = await navigator.clipboard.readText();
+      if (latest === text) {
+        alert("⏱ 아직 전달되지 않은 것 같습니다.\n카톡에 붙여넣기 하셨나요?");
       }
-    }, 3000);
-  };
-
+    } catch (e) {
+      console.error("Clipboard read error", e);
+    }
+  }, 3000);
+};
 
   // 이미 본 알림(id 저장)
   const [seenAlerts, setSeenAlerts] = React.useState(() => {
@@ -6808,9 +6891,11 @@ React.useEffect(() => {
     상차일: "",
     상차_AMPM: "오전",
     상차시간: "",
+    상차시간기준: "",
     하차일: "",
     하차_AMPM: "오전",
     하차시간: "",
+    하차시간기준: "",
     거래처명: "",
     상차지명: "",
     상차지주소: "",
@@ -8305,10 +8390,18 @@ ${url}
                   <td className={cell}>{r.등록일}</td>
 
                   <td className={cell}>{editableInput("상차일", r.상차일, r._id)}</td>
-                  <td className={cell}>{editableInput("상차시간", r.상차시간, r._id)}</td>
+                  <td className={cell}>
+  {r.상차시간
+    ? `${r.상차시간}${r.상차시간기준 ? ` ${r.상차시간기준}` : ""}`
+    : ""}
+</td>
 
                   <td className={cell}>{editableInput("하차일", r.하차일, r._id)}</td>
-                  <td className={cell}>{editableInput("하차시간", r.하차시간, r._id)}</td>
+                 <td className={cell}>
+  {r.하차시간
+    ? `${r.하차시간}${r.하차시간기준 ? ` ${r.하차시간기준}` : ""}`
+    : ""}
+</td>
 
                   <td className={cell}>{editableInput("거래처명", r.거래처명, r._id)}</td>
                   <td className={cell}>
@@ -9737,110 +9830,134 @@ ${url}
                 </div>
               )}
             </div>
-
-
             {/* ------------------------------------------------ */}
-            {/* 🔵 상/하차일 & 시간 */}
-            {/* ------------------------------------------------ */}
-            <div className="grid grid-cols-2 gap-3 mb-3">
-              <div>
-                <label>상차일</label>
-                <input
-                  type="date"
-                  className="border p-2 rounded w-full"
-                  value={editTarget.상차일 || ""}
-                  onChange={(e) =>
-                    setEditTarget((p) => ({ ...p, 상차일: e.target.value }))
-                  }
-                />
-              </div>
+{/* 🔵 상/하차일 & 시간 */}
+{/* ------------------------------------------------ */}
+<div className="grid grid-cols-2 gap-3 mb-3">
+  {/* ================= 상차일 ================= */}
+  <div>
+    <label>상차일</label>
+    <input
+      type="date"
+      className="border p-2 rounded w-full"
+      value={editTarget.상차일 || ""}
+      onChange={(e) =>
+        setEditTarget((p) => ({ ...p, 상차일: e.target.value }))
+      }
+    />
+  </div>
 
-              <div>
-                <label>상차시간</label>
-                <select
-                  className="border p-2 rounded w-full"
-                  value={editTarget.상차시간 || ""}
-                  onChange={(e) =>
-                    setEditTarget((p) => ({ ...p, 상차시간: e.target.value }))
-                  }
-                >
-                  <option value="">선택없음</option>
+  {/* ================= 상차시간 + 기준 ================= */}
+  <div>
+    <label>상차시간</label>
+    <select
+      className="border p-2 rounded w-full"
+      value={editTarget.상차시간 || ""}
+      onChange={(e) =>
+        setEditTarget((p) => ({ ...p, 상차시간: e.target.value }))
+      }
+    >
+      <option value="">선택없음</option>
+      {[
+        "오전 6시","오전 6시30분",
+        "오전 7시","오전 7시30분",
+        "오전 8시","오전 8시30분",
+        "오전 9시","오전 9시30분",
+        "오전 10시","오전 10시30분",
+        "오전 11시","오전 11시30분",
+        "오후 12시","오후 12시30분",
+        "오후 13시","오후 13시30분",
+        "오후 14시","오후 14시30분",
+        "오후 15시","오후 15시30분",
+        "오후 16시","오후 16시30분",
+        "오후 17시","오후 17시30분",
+        "오후 18시","오후 18시30분",
+        "오후 19시","오후 19시30분",
+        "오후 20시","오후 20시30분",
+        "오후 21시","오후 21시30분",
+        "오후 22시","오후 22시30분",
+        "오후 23시","오후 23시30분",
+      ].map((t) => (
+        <option key={t} value={t}>{t}</option>
+      ))}
+    </select>
 
-                  {[
-                    "오전 6:00", "오전 6:30",
-                    "오전 7:00", "오전 7:30",
-                    "오전 8:00", "오전 8:30",
-                    "오전 9:00", "오전 9:30",
-                    "오전 10:00", "오전 10:30",
-                    "오전 11:00", "오전 11:30",
-                    "오후 12:00", "오후 12:30",
-                    "오후 1:00", "오후 1:30",
-                    "오후 2:00", "오후 2:30",
-                    "오후 3:00", "오후 3:30",
-                    "오후 4:00", "오후 4:30",
-                    "오후 5:00", "오후 5:30",
-                    "오후 6:00", "오후 6:30",
-                    "오후 7:00", "오후 7:30",
-                    "오후 8:00", "오후 8:30",
-                    "오후 9:00", "오후 9:30",
-                    "오후 10:00", "오후 10:30",
-                    "오후 11:00", "오후 11:30",
-                  ].map((t) => (
-                    <option key={t} value={t}>
-                      {t}
-                    </option>
-                  ))}
-                </select>
+    {/* ✅ 상차시간 기준 */}
+    <select
+      className="border p-2 rounded w-full mt-1 text-sm"
+      value={editTarget.상차시간기준 || ""}
+      onChange={(e) =>
+        setEditTarget((p) => ({ ...p, 상차시간기준: e.target.value }))
+      }
+    >
+      <option value="">기준없음</option>
+      <option value="이전">이전</option>
+      <option value="이후">이후</option>
+    </select>
+  </div>
 
-              </div>
+  {/* ================= 하차일 ================= */}
+  <div>
+    <label>하차일</label>
+    <input
+      type="date"
+      className="border p-2 rounded w-full"
+      value={editTarget.하차일 || ""}
+      onChange={(e) =>
+        setEditTarget((p) => ({ ...p, 하차일: e.target.value }))
+      }
+    />
+  </div>
 
-              <div>
-                <label>하차일</label>
-                <input
-                  type="date"
-                  className="border p-2 rounded w-full"
-                  value={editTarget.하차일 || ""}
-                  onChange={(e) =>
-                    setEditTarget((p) => ({ ...p, 하차일: e.target.value }))
-                  }
-                />
-              </div>
+  {/* ================= 하차시간 + 기준 ================= */}
+  <div>
+    <label>하차시간</label>
+    <select
+      className="border p-2 rounded w-full"
+      value={editTarget.하차시간 || ""}
+      onChange={(e) =>
+        setEditTarget((p) => ({ ...p, 하차시간: e.target.value }))
+      }
+    >
+      <option value="">선택없음</option>
+      {[
+        "오전 6시","오전 6시30분",
+        "오전 7시","오전 7시30분",
+        "오전 8시","오전 8시30분",
+        "오전 9시","오전 9시30분",
+        "오전 10시","오전 10시30분",
+        "오전 11시","오전 11시30분",
+        "오후 12시","오후 12시30분",
+        "오후 13시","오후 13시30분",
+        "오후 14시","오후 14시30분",
+        "오후 15시","오후 15시30분",
+        "오후 16시","오후 16시30분",
+        "오후 17시","오후 17시30분",
+        "오후 18시","오후 18시30분",
+        "오후 19시","오후 19시30분",
+        "오후 20시","오후 20시30분",
+        "오후 21시","오후 21시30분",
+        "오후 22시","오후 22시30분",
+        "오후 23시","오후 23시30분",
+      ].map((t) => (
+        <option key={t} value={t}>{t}</option>
+      ))}
+    </select>
 
-              <div>
-                <label>하차시간</label>
-                <select
-                  className="border p-2 rounded w-full"
-                  value={editTarget.하차시간 || ""}
-                  onChange={(e) =>
-                    setEditTarget((p) => ({ ...p, 하차시간: e.target.value }))
-                  }
-                >
-                  <option value="">선택없음</option>
-                  {[
-                    "오전 6:00", "오전 6:30",
-                    "오전 7:00", "오전 7:30",
-                    "오전 8:00", "오전 8:30",
-                    "오전 9:00", "오전 9:30",
-                    "오전 10:00", "오전 10:30",
-                    "오전 11:00", "오전 11:30",
-                    "오후 12:00", "오후 12:30",
-                    "오후 1:00", "오후 1:30",
-                    "오후 2:00", "오후 2:30",
-                    "오후 3:00", "오후 3:30",
-                    "오후 4:00", "오후 4:30",
-                    "오후 5:00", "오후 5:30",
-                    "오후 6:00", "오후 6:30",
-                    "오후 7:00", "오후 7:30",
-                    "오후 8:00", "오후 8:30",
-                    "오후 9:00", "오후 9:30",
-                    "오후 10:00", "오후 10:30",
-                    "오후 11:00", "오후 11:30"
-                  ].map(t => (
-                    <option key={t} value={t}>{t}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
+    {/* ✅ 하차시간 기준 */}
+    <select
+      className="border p-2 rounded w-full mt-1 text-sm"
+      value={editTarget.하차시간기준 || ""}
+      onChange={(e) =>
+        setEditTarget((p) => ({ ...p, 하차시간기준: e.target.value }))
+      }
+    >
+      <option value="">기준없음</option>
+      <option value="이전">이전</option>
+      <option value="이후">이후</option>
+    </select>
+  </div>
+</div>
 
             {/* ------------------------------------------------ */}
             {/* 🔵 상하차지 */}
@@ -10403,8 +10520,8 @@ ${url}
                   // 1) Firestore에 저장
                   const ALLOWED_FIELDS = [
                     "등록일",
-                    "상차일", "상차시간",
-                    "하차일", "하차시간",
+                    "상차일", "상차시간", "상차시간기준",
+                    "하차일", "하차시간", "하차시간기준",
                     "거래처명",
                     "상차지명", "상차지주소",
                     "하차지명", "하차지주소",
