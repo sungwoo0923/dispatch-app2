@@ -3903,7 +3903,7 @@ function calcHistoryScore(row, form) {
 
   <div className="w-px h-7 bg-gray-200" />
 
-  {/* 날짜 시간 ▼ */}
+  {/* ================= 날짜 · 시간 ================= */}
 <div className="flex items-center gap-3 text-sm">
 
   {/* ================= 상차 ================= */}
@@ -3924,17 +3924,22 @@ function calcHistoryScore(row, form) {
       onChange={(e) => {
         const v = e.target.value;
         onChange("상차시간", v);
-        if (v && !form.상차시간기준) {
-          onChange("상차시간기준", "이전"); // 기본값
+
+        // ⭐ 시간 삭제 시 기준도 같이 정리
+        if (!v) {
+          onChange("상차시간기준", null);
         }
       }}
     >
       <option value="">시간</option>
       {localTimeOptions.map((t) => (
-        <option key={t} value={t}>{t}</option>
+        <option key={t} value={t}>
+          {t}
+        </option>
       ))}
     </select>
 
+    {/* 이전 / 이후 (시간 있을 때만 표시) */}
     {form.상차시간 && (
       <div className="flex gap-1">
         <button
@@ -4010,17 +4015,22 @@ function calcHistoryScore(row, form) {
       onChange={(e) => {
         const v = e.target.value;
         onChange("하차시간", v);
-        if (v && !form.하차시간기준) {
-          onChange("하차시간기준", "이전"); // 기본값
+
+        // ⭐ 시간 삭제 시 기준도 같이 정리
+        if (!v) {
+          onChange("하차시간기준", null);
         }
       }}
     >
       <option value="">시간</option>
       {localTimeOptions.map((t) => (
-        <option key={t} value={t}>{t}</option>
+        <option key={t} value={t}>
+          {t}
+        </option>
       ))}
     </select>
 
+    {/* 이전 / 이후 (시간 있을 때만 표시) */}
     {form.하차시간 && (
       <div className="flex gap-1">
         <button
@@ -6597,13 +6607,19 @@ ${fare.toLocaleString()}원 ${payLabel} 배차되었습니다.`;
               new Date(s.getFullYear(), s.getMonth(), s.getDate())) /
             (1000 * 60 * 60 * 24);
 
-          if (diff >= 1) {
-            dateNotice =
-              diff === 1
-                ? `익일 하차 건\n\n`
-                : `지정일 하차 건\n\n`;
-            dropTimeText = `${e.getMonth() + 1}/${e.getDate()} ${dropTimeText}`;
-          }
+          const sm = s.getMonth() + 1;
+const sd = s.getDate();
+const em = e.getMonth() + 1;
+const ed = e.getDate();
+
+if (diff === 1) {
+  dateNotice = `익일 하차 건 (상차: ${sm}/${sd} → 하차: ${em}/${ed})\n\n`;
+  dropTimeText = `${em}/${ed} ${dropTimeText}`;
+} else if (diff >= 2) {
+  dateNotice = `지정일 하차 건 (상차: ${sm}/${sd} → 하차: ${em}/${ed})\n\n`;
+  dropTimeText = `${em}/${ed} ${dropTimeText}`;
+}
+
         }
 
         const DRIVER_NOTICE = isColdVehicle(r.차량종류)
@@ -6653,11 +6669,16 @@ ${driverNoteText}`;
             new Date(s.getFullYear(), s.getMonth(), s.getDate())) /
           (1000 * 60 * 60 * 24);
 
-        if (diff >= 1) {
-          dateNotice =
-            diff === 1 ? `익일 하차 건\n\n` : `지정일 하차 건\n\n`;
-          dropTimeText = `${e.getMonth() + 1}/${e.getDate()} ${dropTimeRaw}`;
-        }
+        const sm = s.getMonth() + 1;
+const sd = s.getDate();
+const em = e.getMonth() + 1;
+const ed = e.getDate();
+
+if (diff === 1) {
+  dateNotice = `익일 하차 건 (상차: ${sm}/${sd} → 하차: ${em}/${ed})\n\n`;
+} else if (diff >= 2) {
+  dateNotice = `지정일 하차 건 (상차: ${sm}/${sd} → 하차: ${em}/${ed})\n\n`;
+}
       }
 
       return `${dateNotice}${r.상차일 || ""} ${yoil}
@@ -10980,13 +11001,13 @@ ${url}
                 onClick={() => copyMessage("full")}
                 className="w-full py-2 bg-green-200 rounded hover:bg-green-300"
               >
-                전체 상세 (상하차 + 화물정보 + 차량)
+                전체 상세 (업체전달용)
               </button>
               <button
                 onClick={() => copyMessage("driver")}
                 className="w-full py-2 bg-emerald-200 rounded hover:bg-emerald-300 font-semibold text-emerald-900"
               >
-                기사 전달용 (상세 + 전달메시지)
+                기사 전달용 (기사용)
               </button>
             </div>
 
@@ -11640,6 +11661,16 @@ const getPalletCount = (text = "") => {
 
     return digits;
   };
+  // ⏱ 상/하차 시간 + 이전/이후 표시 유틸 (PART 5 전용)
+const formatTimeWithCond = (time, cond) => {
+  if (!time) return "-";
+
+  if (cond === "이전") return `${time} 이전`;
+  if (cond === "이후") return `${time} 이후`;
+
+  return time;
+};
+
   // =======================
   // 📞 담당자 라인 생성 (기사복사용)
   // =======================
@@ -11784,86 +11815,107 @@ ${r.상차지주소 || "-"}${(() => {
               return line ? `\n${line}` : "";
             })()
             }
-상차시간 : ${r.상차시간 || "즉시"}
+상차시간 : ${formatTimeWithCond(r.상차시간, r.상차시간기준)}
+상차방법 : ${r.상차방법 || "-"}
 
 하차지 : ${r.하차지명 || "-"}
 ${r.하차지주소 || "-"}${(() => {
-              const line = buildContactLine(
-                r.하차지담당자,
-                r.하차지담당자번호
-              );
-              return line ? `\n${line}` : "";
-            })()
-            }
-하차시간 : ${dropTimeText}
+  const line = buildContactLine(
+    r.하차지담당자,
+    r.하차지담당자번호
+  );
+  return line ? `\n${line}` : "";
+})()}
+하차시간 : ${formatTimeWithCond(dropTimeText, r.하차시간기준)}
+하차방법 : ${r.하차방법 || "-"}
 
 중량 : ${r.차량톤수 || "-"}${r.화물내용 ? ` / ${r.화물내용}` : ""}
 차량 : ${r.차량종류 || "-"}
+
 
 ${driverNoteText}`;
         }
 
         // =====================
-        // 전체 상세 (기사복사)
-        // =====================
-        const pickupTime = r.상차시간?.trim() || "즉시";
-        const dropTimeRaw = r.하차시간?.trim() || "즉시";
+// 전체 상세 (기사복사)
+// =====================
 
-        let dateNotice = "";
-        let dropTimeText = dropTimeRaw;
+// 1️⃣ 기본 시간 원본
+let pickupTimeRaw = r.상차시간 || "";
+let dropTimeRaw   = r.하차시간 || "";
 
-        if (r.상차일 && r.하차일) {
-          const s = new Date(r.상차일);
-          const e = new Date(r.하차일);
+// 2️⃣ 날짜 관련 안내
+let dateNotice = "";
+let dropTimeText = dropTimeRaw;
 
-          const s0 = new Date(s.getFullYear(), s.getMonth(), s.getDate());
-          const e0 = new Date(e.getFullYear(), e.getMonth(), e.getDate());
+if (r.상차일 && r.하차일) {
+  const s = new Date(r.상차일);
+  const e = new Date(r.하차일);
 
-          const diffDays = Math.round(
-            (e0 - s0) / (1000 * 60 * 60 * 24)
-          );
+  const s0 = new Date(s.getFullYear(), s.getMonth(), s.getDate());
+  const e0 = new Date(e.getFullYear(), e.getMonth(), e.getDate());
 
-          const sm = s.getMonth() + 1;
-          const sd = s.getDate();
-          const em = e.getMonth() + 1;
-          const ed = e.getDate();
+  const diffDays = Math.round(
+    (e0 - s0) / (1000 * 60 * 60 * 24)
+  );
 
-          if (diffDays === 1) {
-            dateNotice = `익일 하차 건 (상차: ${sm}/${sd} → 하차: ${em}/${ed})\n\n`;
-            dropTimeText = `${em}/${ed} ${dropTimeRaw}`;
-          } else if (diffDays >= 2) {
-            dateNotice = `지정일 하차 건 (상차: ${sm}/${sd} → 하차: ${em}/${ed})\n\n`;
-            dropTimeText = `${em}/${ed} ${dropTimeRaw}`;
-          }
-        }
+  const sm = s.getMonth() + 1;
+  const sd = s.getDate();
+  const em = e.getMonth() + 1;
+  const ed = e.getDate();
+
+  if (diffDays === 1) {
+    dateNotice = `익일 하차 건 (상차: ${sm}/${sd} → 하차: ${em}/${ed})\n\n`;
+    dropTimeText = `${em}/${ed} ${dropTimeRaw}`;
+  } else if (diffDays >= 2) {
+    dateNotice = `지정일 하차 건 (상차: ${sm}/${sd} → 하차: ${em}/${ed})\n\n`;
+    dropTimeText = `${em}/${ed} ${dropTimeRaw}`;
+  }
+}
+
+// 3️⃣ 이전 / 이후 적용 (🔥 이게 핵심)
+const pickupTime = formatTimeWithCond(
+  pickupTimeRaw,
+  r.상차시간기준
+);
+
+const dropTime = formatTimeWithCond(
+  dropTimeText,
+  r.하차시간기준
+);
+
 
         return `${dateNotice}${r.상차일 || ""} ${yoil}
 
 상차지 : ${r.상차지명 || "-"}
 ${r.상차지주소 || "-"}${r.상차지담당자 || r.상차지담당자번호
-            ? `\n담당자 : ${r.상차지담당자 || ""}${r.상차지담당자번호
-              ? ` (${formatPhone(r.상차지담당자번호)})`
-              : ""
-            }`
-            : ""
-          }
+  ? `\n담당자 : ${r.상차지담당자 || ""}${
+      r.상차지담당자번호
+        ? ` (${formatPhone(r.상차지담당자번호)})`
+        : ""
+    }`
+  : ""
+}
 상차시간 : ${pickupTime}
+상차방법 : ${r.상차방법 || "-"}
 
 하차지 : ${r.하차지명 || "-"}
 ${r.하차지주소 || "-"}${r.하차지담당자 || r.하차지담당자번호
-            ? `\n담당자 : ${r.하차지담당자 || ""}${r.하차지담당자번호
-              ? ` (${formatPhone(r.하차지담당자번호)})`
-              : ""
-            }`
-            : ""
-          }
-하차시간 : ${dropTimeText}
+  ? `\n담당자 : ${r.하차지담당자 || ""}${
+      r.하차지담당자번호
+        ? ` (${formatPhone(r.하차지담당자번호)})`
+        : ""
+    }`
+  : ""
+}
+하차시간 : ${dropTime}
+하차방법 : ${r.하차방법 || "-"}
 
-중량 : ${r.차량톤수 || "-"}${r.화물내용 ? ` / ${r.화물내용}` : ""
-          } ${r.차량종류 || ""}
-
+중량 : ${r.차량톤수 || "-"}${r.화물내용 ? ` / ${r.화물내용}` : ""}
 ${plate} ${name} ${phone}
 ${fare.toLocaleString()}원 ${payLabel} 배차되었습니다.`;
+
+
       })
       .join("\n\n");
 
@@ -13123,9 +13175,13 @@ else if (palletDiff !== null) priority = 1;
                             </span>
                           )}
                         </div>
-                      ) : (
-                        row[key]
-                      )}
+                     ) : key === "상차시간" ? (
+  formatTimeWithCond(row.상차시간, row.상차시간기준)
+) : key === "하차시간" ? (
+  formatTimeWithCond(row.하차시간, row.하차시간기준)
+) : (
+  row[key]
+)}
 
                     </td>
                   ))}

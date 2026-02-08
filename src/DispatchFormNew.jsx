@@ -443,11 +443,11 @@ useEffect(() => {
     )}
 
       {/* ================= LEFT : 입력 ================= */}
-      <div className="space-y-12">
+      <div className="bg-white border rounded-2xl p-6 shadow-sm space-y-8">
 
         {/* ================= 거래 / 날짜 ================= */}
-<section className="pl-6 py-5 border-l-4 border-blue-200">
-  <h3 className="text-base font-bold mb-6">오더 정보</h3>
+<section className="pt-4 border-t border-gray-200">
+<h3 className="text-sm font-bold mb-3 text-gray-800">오더 정보</h3>
 
   <div className="grid grid-cols-3 gap-8 max-w-[760px]">
 
@@ -626,7 +626,7 @@ useEffect(() => {
 </section>
 
         {/* ================= 상/하차 ================= */}
-        <section className="pl-6 py-5 border-l-4 border-blue-200">
+       <section className="pt-4 border-t border-gray-200">
           <h3 className="flex items-center gap-2 text-base font-bold mb-4">
   <span>
     상 · 하차 정보 <span className="text-red-500">*</span>
@@ -836,8 +836,8 @@ useEffect(() => {
           </div>
         </section>
         {/* ================= 화물 / 차량 ================= */}
-        <section className="pl-6 py-5 border-l-4 border-blue-200">
-          <h3 className="text-base font-bold mb-6">
+       <section className="pt-4 border-t border-gray-200">
+          <h3 className="text-sm font-bold mb-3 text-gray-800">
             화물 · 차량 정보
           </h3>
 
@@ -870,8 +870,8 @@ useEffect(() => {
         </section>
 
         {/* ================= 상/하차 방법 ================= */}
-        <section className="pl-6 py-5 border-l-4 border-blue-200">
-          <h3 className="text-base font-bold mb-6">
+       <section className="pt-4 border-t border-gray-200">
+   <h3 className="text-sm font-bold mb-3 text-gray-800">
             작업 방식
           </h3>
 
@@ -915,8 +915,8 @@ useEffect(() => {
           </div>
         </section>
 {/* ================= 차량 정보 ================= */}
-<section className="pl-6 py-5 border-l-4 border-blue-200">
-  <h3 className="text-base font-bold mb-6">
+<section className="pt-4 border-t border-gray-200">
+  <h3 className="text-sm font-bold mb-3 text-gray-800">
     차량 정보
   </h3>
 
@@ -944,8 +944,8 @@ useEffect(() => {
   </div>
 </section>
 {/* ================= 운임 정보 ================= */}
-<section className="pl-6 py-5 border-l-4 border-blue-200">
-  <h3 className="text-base font-bold mb-6">
+<section className="pt-4 border-t border-gray-200">
+  <h3 className="text-sm font-bold mb-3 text-gray-800">
     운임 정보
   </h3>
 
