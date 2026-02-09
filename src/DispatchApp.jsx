@@ -20428,9 +20428,10 @@ function ClientManagement({ clients = [], upsertClient, removeClient }) {
 
   // ✅ Firestore 하차지 컬렉션 helpers
   const PLACES_COLL = "places";
-// 🔑 신규 하차지용 고정 ID 생성기
-const makePlaceId = () =>
-  "place_" + Math.random().toString(36).slice(2, 10);
+// 🔑 하차지 고정 ID (업체명 + 주소 기반)
+const makePlaceId = (name = "", addr = "") =>
+  normalizeCompanyName(name) + "__" + normalizePlace(addr);
+
   const upsertPlace = async (row) => {
   // ⭐ 기존 row.id가 있으면 무조건 그 문서 덮어씀
   const id = row.id || makePlaceId();
@@ -20564,7 +20565,7 @@ const makePlaceId = () =>
         const addr = (data.주소 || "").trim();
         if (!addr) return;
 
-        const addrId = makePlaceId(addr);
+        const addrId = makePlaceId(data.업체명 || "", addr);
 
         // 이미 같은 주소가 있으면 스킵 (과거 찌꺼기 제거)
         if (addrMap.has(addrId)) return;
@@ -20635,7 +20636,7 @@ const makePlaceId = () =>
 
     // 🔥 그냥 저장 (같은 주소면 덮어씀)
 await upsertPlace({
-  id: makePlaceId(),
+  id: makePlaceId(업체명, placeNewForm.주소),
   ...placeNewForm,
   업체명,
 });
