@@ -1354,14 +1354,15 @@ const placeList = React.useMemo(() => {
   주소: p.주소 || "",
   담당자목록: Array.isArray(p.담당자목록)
     ? p.담당자목록
-    : p.담당자 && p.담당자번호
+    : p.담당자번호
     ? [{
-        이름: p.담당자,
+        이름: p.담당자 || "담당자",
         번호: p.담당자번호,
         대표: true,
       }]
     : [],
 });
+
   const map = new Map();
 
   // ✅ Firestore 먼저
@@ -2796,35 +2797,49 @@ if (
     needPlaceUpdate = true;
   }
 }
-// 상차지
+// ⭐ 상차지 (FIX)
 if (form.상차지명?.trim()) {
-  await upsertPlace({
-    업체명: form.상차지명.trim(),
-    주소: form.상차지주소 || "",
-    담당자목록:
-      form.상차지담당자 && form.상차지담당자번호
-        ? [{
+  const nextManagers =
+    form.상차지담당자 && form.상차지담당자번호
+      ? [
+          ...pickupManagers.filter(
+            m => m.번호 !== form.상차지담당자번호
+          ).map(m => ({ ...m, 대표: false })),
+          {
             이름: form.상차지담당자,
             번호: form.상차지담당자번호,
             대표: true,
-          }]
-        : [],
+          },
+        ]
+      : pickupManagers;
+
+  await upsertPlace({
+    업체명: form.상차지명.trim(),
+    주소: form.상차지주소 || "",
+    담당자목록: nextManagers,
   });
 }
 
-// 하차지
+// 하차지 (FIX)
 if (form.하차지명?.trim()) {
-  await upsertPlace({
-    업체명: form.하차지명.trim(),
-    주소: form.하차지주소 || "",
-    담당자목록:
-      form.하차지담당자 && form.하차지담당자번호
-        ? [{
+  const nextDropManagers =
+    form.하차지담당자 && form.하차지담당자번호
+      ? [
+          ...dropManagers.filter(
+            m => m.번호 !== form.하차지담당자번호
+          ).map(m => ({ ...m, 대표: false })),
+          {
             이름: form.하차지담당자,
             번호: form.하차지담당자번호,
             대표: true,
-          }]
-        : [],
+          },
+        ]
+      : dropManagers;
+
+  await upsertPlace({
+    업체명: form.하차지명.trim(),
+    주소: form.하차지주소 || "",
+    담당자목록: nextDropManagers,
   });
 }
 
@@ -3903,7 +3918,7 @@ function calcHistoryScore(row, form) {
 
   <div className="w-px h-7 bg-gray-200" />
 
-  {/* ================= 날짜 · 시간 ================= */}
+  {/* 날짜 시간 ▼ */}
 <div className="flex items-center gap-3 text-sm">
 
   {/* ================= 상차 ================= */}
@@ -3924,22 +3939,17 @@ function calcHistoryScore(row, form) {
       onChange={(e) => {
         const v = e.target.value;
         onChange("상차시간", v);
-
-        // ⭐ 시간 삭제 시 기준도 같이 정리
-        if (!v) {
-          onChange("상차시간기준", null);
+        if (v && !form.상차시간기준) {
+          onChange("상차시간기준", "이전"); // 기본값
         }
       }}
     >
       <option value="">시간</option>
       {localTimeOptions.map((t) => (
-        <option key={t} value={t}>
-          {t}
-        </option>
+        <option key={t} value={t}>{t}</option>
       ))}
     </select>
 
-    {/* 이전 / 이후 (시간 있을 때만 표시) */}
     {form.상차시간 && (
       <div className="flex gap-1">
         <button
@@ -4015,22 +4025,17 @@ function calcHistoryScore(row, form) {
       onChange={(e) => {
         const v = e.target.value;
         onChange("하차시간", v);
-
-        // ⭐ 시간 삭제 시 기준도 같이 정리
-        if (!v) {
-          onChange("하차시간기준", null);
+        if (v && !form.하차시간기준) {
+          onChange("하차시간기준", "이전"); // 기본값
         }
       }}
     >
       <option value="">시간</option>
       {localTimeOptions.map((t) => (
-        <option key={t} value={t}>
-          {t}
-        </option>
+        <option key={t} value={t}>{t}</option>
       ))}
     </select>
 
-    {/* 이전 / 이후 (시간 있을 때만 표시) */}
     {form.하차시간 && (
       <div className="flex gap-1">
         <button
@@ -6607,19 +6612,13 @@ ${fare.toLocaleString()}원 ${payLabel} 배차되었습니다.`;
               new Date(s.getFullYear(), s.getMonth(), s.getDate())) /
             (1000 * 60 * 60 * 24);
 
-          const sm = s.getMonth() + 1;
-const sd = s.getDate();
-const em = e.getMonth() + 1;
-const ed = e.getDate();
-
-if (diff === 1) {
-  dateNotice = `익일 하차 건 (상차: ${sm}/${sd} → 하차: ${em}/${ed})\n\n`;
-  dropTimeText = `${em}/${ed} ${dropTimeText}`;
-} else if (diff >= 2) {
-  dateNotice = `지정일 하차 건 (상차: ${sm}/${sd} → 하차: ${em}/${ed})\n\n`;
-  dropTimeText = `${em}/${ed} ${dropTimeText}`;
-}
-
+          if (diff >= 1) {
+            dateNotice =
+              diff === 1
+                ? `익일 하차 건\n\n`
+                : `지정일 하차 건\n\n`;
+            dropTimeText = `${e.getMonth() + 1}/${e.getDate()} ${dropTimeText}`;
+          }
         }
 
         const DRIVER_NOTICE = isColdVehicle(r.차량종류)
@@ -6669,16 +6668,11 @@ ${driverNoteText}`;
             new Date(s.getFullYear(), s.getMonth(), s.getDate())) /
           (1000 * 60 * 60 * 24);
 
-        const sm = s.getMonth() + 1;
-const sd = s.getDate();
-const em = e.getMonth() + 1;
-const ed = e.getDate();
-
-if (diff === 1) {
-  dateNotice = `익일 하차 건 (상차: ${sm}/${sd} → 하차: ${em}/${ed})\n\n`;
-} else if (diff >= 2) {
-  dateNotice = `지정일 하차 건 (상차: ${sm}/${sd} → 하차: ${em}/${ed})\n\n`;
-}
+        if (diff >= 1) {
+          dateNotice =
+            diff === 1 ? `익일 하차 건\n\n` : `지정일 하차 건\n\n`;
+          dropTimeText = `${e.getMonth() + 1}/${e.getDate()} ${dropTimeRaw}`;
+        }
       }
 
       return `${dateNotice}${r.상차일 || ""} ${yoil}
@@ -11001,13 +10995,13 @@ ${url}
                 onClick={() => copyMessage("full")}
                 className="w-full py-2 bg-green-200 rounded hover:bg-green-300"
               >
-                전체 상세 (업체전달용)
+                전체 상세 (상하차 + 화물정보 + 차량)
               </button>
               <button
                 onClick={() => copyMessage("driver")}
                 className="w-full py-2 bg-emerald-200 rounded hover:bg-emerald-300 font-semibold text-emerald-900"
               >
-                기사 전달용 (기사용)
+                기사 전달용 (상세 + 전달메시지)
               </button>
             </div>
 
@@ -11661,16 +11655,6 @@ const getPalletCount = (text = "") => {
 
     return digits;
   };
-  // ⏱ 상/하차 시간 + 이전/이후 표시 유틸 (PART 5 전용)
-const formatTimeWithCond = (time, cond) => {
-  if (!time) return "-";
-
-  if (cond === "이전") return `${time} 이전`;
-  if (cond === "이후") return `${time} 이후`;
-
-  return time;
-};
-
   // =======================
   // 📞 담당자 라인 생성 (기사복사용)
   // =======================
@@ -11815,107 +11799,86 @@ ${r.상차지주소 || "-"}${(() => {
               return line ? `\n${line}` : "";
             })()
             }
-상차시간 : ${formatTimeWithCond(r.상차시간, r.상차시간기준)}
-상차방법 : ${r.상차방법 || "-"}
+상차시간 : ${r.상차시간 || "즉시"}
 
 하차지 : ${r.하차지명 || "-"}
 ${r.하차지주소 || "-"}${(() => {
-  const line = buildContactLine(
-    r.하차지담당자,
-    r.하차지담당자번호
-  );
-  return line ? `\n${line}` : "";
-})()}
-하차시간 : ${formatTimeWithCond(dropTimeText, r.하차시간기준)}
-하차방법 : ${r.하차방법 || "-"}
+              const line = buildContactLine(
+                r.하차지담당자,
+                r.하차지담당자번호
+              );
+              return line ? `\n${line}` : "";
+            })()
+            }
+하차시간 : ${dropTimeText}
 
 중량 : ${r.차량톤수 || "-"}${r.화물내용 ? ` / ${r.화물내용}` : ""}
 차량 : ${r.차량종류 || "-"}
-
 
 ${driverNoteText}`;
         }
 
         // =====================
-// 전체 상세 (기사복사)
-// =====================
+        // 전체 상세 (기사복사)
+        // =====================
+        const pickupTime = r.상차시간?.trim() || "즉시";
+        const dropTimeRaw = r.하차시간?.trim() || "즉시";
 
-// 1️⃣ 기본 시간 원본
-let pickupTimeRaw = r.상차시간 || "";
-let dropTimeRaw   = r.하차시간 || "";
+        let dateNotice = "";
+        let dropTimeText = dropTimeRaw;
 
-// 2️⃣ 날짜 관련 안내
-let dateNotice = "";
-let dropTimeText = dropTimeRaw;
+        if (r.상차일 && r.하차일) {
+          const s = new Date(r.상차일);
+          const e = new Date(r.하차일);
 
-if (r.상차일 && r.하차일) {
-  const s = new Date(r.상차일);
-  const e = new Date(r.하차일);
+          const s0 = new Date(s.getFullYear(), s.getMonth(), s.getDate());
+          const e0 = new Date(e.getFullYear(), e.getMonth(), e.getDate());
 
-  const s0 = new Date(s.getFullYear(), s.getMonth(), s.getDate());
-  const e0 = new Date(e.getFullYear(), e.getMonth(), e.getDate());
+          const diffDays = Math.round(
+            (e0 - s0) / (1000 * 60 * 60 * 24)
+          );
 
-  const diffDays = Math.round(
-    (e0 - s0) / (1000 * 60 * 60 * 24)
-  );
+          const sm = s.getMonth() + 1;
+          const sd = s.getDate();
+          const em = e.getMonth() + 1;
+          const ed = e.getDate();
 
-  const sm = s.getMonth() + 1;
-  const sd = s.getDate();
-  const em = e.getMonth() + 1;
-  const ed = e.getDate();
-
-  if (diffDays === 1) {
-    dateNotice = `익일 하차 건 (상차: ${sm}/${sd} → 하차: ${em}/${ed})\n\n`;
-    dropTimeText = `${em}/${ed} ${dropTimeRaw}`;
-  } else if (diffDays >= 2) {
-    dateNotice = `지정일 하차 건 (상차: ${sm}/${sd} → 하차: ${em}/${ed})\n\n`;
-    dropTimeText = `${em}/${ed} ${dropTimeRaw}`;
-  }
-}
-
-// 3️⃣ 이전 / 이후 적용 (🔥 이게 핵심)
-const pickupTime = formatTimeWithCond(
-  pickupTimeRaw,
-  r.상차시간기준
-);
-
-const dropTime = formatTimeWithCond(
-  dropTimeText,
-  r.하차시간기준
-);
-
+          if (diffDays === 1) {
+            dateNotice = `익일 하차 건 (상차: ${sm}/${sd} → 하차: ${em}/${ed})\n\n`;
+            dropTimeText = `${em}/${ed} ${dropTimeRaw}`;
+          } else if (diffDays >= 2) {
+            dateNotice = `지정일 하차 건 (상차: ${sm}/${sd} → 하차: ${em}/${ed})\n\n`;
+            dropTimeText = `${em}/${ed} ${dropTimeRaw}`;
+          }
+        }
 
         return `${dateNotice}${r.상차일 || ""} ${yoil}
 
 상차지 : ${r.상차지명 || "-"}
 ${r.상차지주소 || "-"}${r.상차지담당자 || r.상차지담당자번호
-  ? `\n담당자 : ${r.상차지담당자 || ""}${
-      r.상차지담당자번호
-        ? ` (${formatPhone(r.상차지담당자번호)})`
-        : ""
-    }`
-  : ""
-}
+            ? `\n담당자 : ${r.상차지담당자 || ""}${r.상차지담당자번호
+              ? ` (${formatPhone(r.상차지담당자번호)})`
+              : ""
+            }`
+            : ""
+          }
 상차시간 : ${pickupTime}
-상차방법 : ${r.상차방법 || "-"}
 
 하차지 : ${r.하차지명 || "-"}
 ${r.하차지주소 || "-"}${r.하차지담당자 || r.하차지담당자번호
-  ? `\n담당자 : ${r.하차지담당자 || ""}${
-      r.하차지담당자번호
-        ? ` (${formatPhone(r.하차지담당자번호)})`
-        : ""
-    }`
-  : ""
-}
-하차시간 : ${dropTime}
-하차방법 : ${r.하차방법 || "-"}
+            ? `\n담당자 : ${r.하차지담당자 || ""}${r.하차지담당자번호
+              ? ` (${formatPhone(r.하차지담당자번호)})`
+              : ""
+            }`
+            : ""
+          }
+하차시간 : ${dropTimeText}
 
-중량 : ${r.차량톤수 || "-"}${r.화물내용 ? ` / ${r.화물내용}` : ""}
+중량 : ${r.차량톤수 || "-"}${r.화물내용 ? ` / ${r.화물내용}` : ""
+          } ${r.차량종류 || ""}
+
 ${plate} ${name} ${phone}
 ${fare.toLocaleString()}원 ${payLabel} 배차되었습니다.`;
-
-
       })
       .join("\n\n");
 
@@ -13175,13 +13138,9 @@ else if (palletDiff !== null) priority = 1;
                             </span>
                           )}
                         </div>
-                     ) : key === "상차시간" ? (
-  formatTimeWithCond(row.상차시간, row.상차시간기준)
-) : key === "하차시간" ? (
-  formatTimeWithCond(row.하차시간, row.하차시간기준)
-) : (
-  row[key]
-)}
+                      ) : (
+                        row[key]
+                      )}
 
                     </td>
                   ))}
@@ -20469,35 +20428,27 @@ function ClientManagement({ clients = [], upsertClient, removeClient }) {
 
   // ✅ Firestore 하차지 컬렉션 helpers
   const PLACES_COLL = "places";
-  // 🔑 주소 → Firestore 문서 ID (유일 키)
-  const makePlaceId = (addr = "") =>
-    normalizePlace(addr)
-      .replace(/(대한민국|한국|경기도|서울특별시)/g, "")
-      .slice(0, 120);
+// 🔑 신규 하차지용 고정 ID 생성기
+const makePlaceId = () =>
+  "place_" + Math.random().toString(36).slice(2, 10);
   const upsertPlace = async (row) => {
-    const addr = row.주소?.trim();
-    if (!addr) return;
+  // ⭐ 기존 row.id가 있으면 무조건 그 문서 덮어씀
+  const id = row.id || makePlaceId();
 
-    const id = makePlaceId(addr); // ★ 여기서 ID 고정
-
-    console.log("UPSERT PLACE ID =", id); // ← 디버그용 (확인 후 제거 가능)
-
-    await setDoc(
-      doc(db, PLACES_COLL, id),
-      {
-        id,
-        업체명: row.업체명 || "",
-        주소: addr,
-        담당자: row.담당자 || "",
-        담당자번호: row.담당자번호 || "",
-        메모: row.메모 || "",
-        updatedAt: serverTimestamp(),
-      },
-      { merge: true }
-    );
-  };
-
-
+  await setDoc(
+    doc(db, PLACES_COLL, id),
+    {
+      id,
+      업체명: row.업체명 || "",
+      주소: (row.주소 || "").trim(),
+      담당자: row.담당자 || "",
+      담당자번호: row.담당자번호 || "",
+      메모: row.메모 || "",
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true } // ✅ 항상 덮어쓰기
+  );
+};
 
   const removePlace = async (id) => {
     if (!id) return;
@@ -20683,10 +20634,11 @@ function ClientManagement({ clients = [], upsertClient, removeClient }) {
     }
 
     // 🔥 그냥 저장 (같은 주소면 덮어씀)
-    await upsertPlace({
-      ...placeNewForm,
-      업체명,
-    });
+await upsertPlace({
+  id: makePlaceId(),
+  ...placeNewForm,
+  업체명,
+});
 
     setPlaceNewForm({
       업체명: "",
