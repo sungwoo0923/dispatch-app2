@@ -1349,20 +1349,26 @@ const placeList = React.useMemo(() => {
     fromLocal = JSON.parse(localStorage.getItem("hachaPlaces_v1") || "[]");
   } catch {}
 
-  const toRow = (p = {}) => ({
-  업체명: p.업체명 || "",
-  주소: p.주소 || "",
-  담당자목록: Array.isArray(p.담당자목록)
-    ? p.담당자목록
-    : p.담당자번호
-    ? [{
-        이름: p.담당자 || "담당자",
-        번호: p.담당자번호,
-        대표: true,
-      }]
-    : [],
-});
+const toRow = (p = {}) => {
+  // 🔥 단일 담당자 구조 보정
+  let managers = [];
 
+  if (Array.isArray(p.담당자목록) && p.담당자목록.length > 0) {
+    managers = p.담당자목록;
+  } else if (p.담당자 || p.담당자번호) {
+    managers = [{
+      이름: p.담당자 || "담당자",
+      번호: p.담당자번호 || "",
+      대표: true,
+    }];
+  }
+
+  return {
+    업체명: p.업체명 || "",
+    주소: p.주소 || "",
+    담당자목록: managers,
+  };
+};
   const map = new Map();
 
   // ✅ Firestore 먼저
@@ -1646,7 +1652,13 @@ const findPlaceByName = (name) => {
 // ⭐ 대표 담당자 추출 유틸 (🔥 반드시 필요)
 function getPrimaryManager(place) {
   if (!place || !Array.isArray(place.담당자목록)) return null;
-  return place.담당자목록.find(m => m.대표) || null;
+
+  // 1️⃣ 대표 우선
+  const primary = place.담당자목록.find(m => m.대표);
+  if (primary) return primary;
+
+  // 2️⃣ 대표 없으면 첫 번째 담당자라도 사용
+  return place.담당자목록[0] || null;
 }
 const openNewPlacePrompt = (name) => {
   const addr = prompt("주소 (선택)");
@@ -1681,25 +1693,7 @@ const openNewPlacePrompt = (name) => {
 
 // ⭐ 업체 업데이트 + 신규 생성 자동 처리
 const savePlaceSmart = (name, addr, manager, phone) => {
-  // ================================
-// ➕ 상차지 신규 담당자 등록
-// ================================
-const handleRegisterPickupManager = async () => {
-  if (!pickupPlace) return;
-
-  await upsertPlace({
-    업체명: pickupPlace.업체명,
-    주소: pickupPlace.주소,
-    담당자: form.상차지담당자,
-    담당자번호: form.상차지담당자번호,
-  });
-
-  try {
-    setPlaceRowsTrigger(Date.now());
-  } catch {}
-
-  alert("상차지 신규 담당자가 등록되었습니다.");
-};
+  
   if (!name) return;
 
   const exist = findPlaceByName(name);
@@ -1812,16 +1806,15 @@ const filterVehicles = (q) => {
     normalizeKey(v).includes(nq)
   );
 };
-    // 🔍 하차지 자동완성 필터 함수
-    const filterPlaces = (q) => {
-      
+    // 🔍 하차지 / 상차지 자동완성 필터 함수 (정답)
+const filterPlaces = (q) => {
   const query = String(q || "").trim();
   if (!query) return [];
 
   const nq = normalizeKey(query);
   const nLower = query.toLowerCase();
 
-  return mergedClients
+  return placeList
     .map((p) => {
       const name = p.업체명 || "";
       const nName = name.toLowerCase();
@@ -1829,14 +1822,10 @@ const filterVehicles = (q) => {
 
       let score = 0;
 
-      // 1️⃣ 완전 동일
       if (name === query) score = 100;
-      // 2️⃣ normalizeKey 동일 (띄어쓰기/철자차이)
       else if (nk === nq) score = 90;
-      // 3️⃣ 시작 문자열
       else if (nName.startsWith(nLower)) score = 80;
       else if (nk.startsWith(nq)) score = 70;
-      // 4️⃣ 포함
       else if (nName.includes(nLower)) score = 60;
       else if (nk.includes(nq)) score = 50;
 
@@ -1845,7 +1834,6 @@ const filterVehicles = (q) => {
     .filter(Boolean)
     .sort((a, b) => b.__score - a.__score);
 };
-
 
     const _tomorrowStr = (typeof tomorrowStr === "function")
       ? tomorrowStr
@@ -2255,7 +2243,12 @@ function applyClientSelect(name) {
   const p = placeList.find(
     x => norm(x.업체명 || "") === norm(name)
   );
-const primary = getPrimaryManager(p);
+const latest = findPlaceByName(p.업체명);
+const managers = Array.isArray(latest?.담당자목록)
+  ? latest.담당자목록
+  : [];
+
+const auto = managers.find(m => m.대표) || managers[0] || null;
   // ✅ 거래처 → 상차지 자동 적용
   if (p) {
     setForm(prev => ({
@@ -2265,8 +2258,8 @@ const primary = getPrimaryManager(p);
       // 🔥 상차지 자동 세팅
       상차지명: p.업체명,
       상차지주소: p.주소 || "",
-      상차지담당자: primary?.이름 || "",
-      상차지담당자번호: primary?.번호 || "",
+      상차지담당자: auto?.이름 || "",
+상차지담당자번호: auto?.번호 || "",
     }));
   } else {
     // 🔹 placeList에 없을 경우 (신규 입력)
@@ -2283,19 +2276,21 @@ const primary = getPrimaryManager(p);
   // 자동매칭 뱃지 상태 초기화
   setAutoPickMatched(!!p);
 }
-
-
 // ⭐ 상차지에 적용 (여기 넣는 것! ← 바로 위 applyClientSelect 밑!!)
 function applyToPickup(place) {
-  const primary = getPrimaryManager(place); // ⭐ 핵심
+  const managers = Array.isArray(place?.담당자목록)
+  ? place.담당자목록
+  : [];
+const auto = managers.find(m => m.대표) || managers[0] || null;
+
 
   setForm(prev => ({
     ...prev,
     거래처명: place.업체명,
     상차지명: place.업체명,
     상차지주소: place.주소 || "",
-    상차지담당자: primary?.이름 || "",
-    상차지담당자번호: primary?.번호 || "",
+    상차지담당자: auto?.이름 || "",
+상차지담당자번호: auto?.번호 || "",
   }));
 
   setPlaceTargetPopup({ open: false, place: null });
@@ -2764,123 +2759,28 @@ const rec = {
       }
     : null,
 };
-
-let needPlaceUpdate = false;
-let nextManagers = pickupManagers;
-
-if (
-  pickupPlace &&
-  form.상차지담당자 &&
-  form.상차지담당자번호
-) {
-  const name = form.상차지담당자.trim();
-  const phone = form.상차지담당자번호.trim();
-
-  const exactIdx = pickupManagers.findIndex(
-    (m) => m.이름 === name && m.번호 === phone
-  );
-
-  const sameNameIdx = pickupManagers.findIndex(
-    (m) => m.이름 === name && m.번호 !== phone
-  );
-
-  if (exactIdx === -1 && sameNameIdx === -1) {
-    nextManagers = [
-      ...pickupManagers,
-      { 이름: name, 번호: phone, 대표: false },
-    ];
-    needPlaceUpdate = true;
-  } else if (sameNameIdx !== -1) {
-    nextManagers = pickupManagers.map((m, i) =>
-      i === sameNameIdx ? { ...m, 번호: phone } : m
-    );
-    needPlaceUpdate = true;
-  }
-}
-// ⭐ 상차지 (FIX)
-if (form.상차지명?.trim()) {
-  const nextManagers =
-    form.상차지담당자 && form.상차지담당자번호
-      ? [
-          ...pickupManagers.filter(
-            m => m.번호 !== form.상차지담당자번호
-          ).map(m => ({ ...m, 대표: false })),
-          {
-            이름: form.상차지담당자,
-            번호: form.상차지담당자번호,
-            대표: true,
-          },
-        ]
-      : pickupManagers;
-
-  await upsertPlace({
-    업체명: form.상차지명.trim(),
-    주소: form.상차지주소 || "",
-    담당자목록: nextManagers,
-  });
-}
-
-// 하차지 (FIX)
-if (form.하차지명?.trim()) {
-  const nextDropManagers =
-    form.하차지담당자 && form.하차지담당자번호
-      ? [
-          ...dropManagers.filter(
-            m => m.번호 !== form.하차지담당자번호
-          ).map(m => ({ ...m, 대표: false })),
-          {
-            이름: form.하차지담당자,
-            번호: form.하차지담당자번호,
-            대표: true,
-          },
-        ]
-      : dropManagers;
-
-  await upsertPlace({
-    업체명: form.하차지명.trim(),
-    주소: form.하차지주소 || "",
-    담당자목록: nextDropManagers,
-  });
-}
-
-// 🔁 placeRows 강제 갱신
-setPlaceRowsTrigger(Date.now());
-// ✅ 이제 오더 저장
-await addDispatch(rec);
-
-// ✅ 2️⃣ 담당자 업데이트는 실패해도 무시
-if (needPlaceUpdate) {
-  try {
-    await upsertPlace({
-      업체명: pickupPlace.업체명,
-      주소: pickupPlace.주소,
-      담당자목록: nextManagers,
-    });
-    setPlaceRowsTrigger(Date.now());
-  } catch (e) {
-    console.error("상차지 담당자 업데이트 실패 (무시됨):", e);
-  }
-}
-
-
 // ⭐ 상/하차지 담당자 정보 → 기존 업체 있으면 업데이트만 함
 if (typeof upsertPlace === "function") {
+// ✅ 오더 저장
+await addDispatch(rec);
+
+// ================================
+// 🔥 하차지거래처(place) 직접 동기화 (PART 11과 동일 ID)
+// ================================
+if (form.하차지명 && form.하차지주소) {
+  // 🔥 하차지거래처는 PART 11 규칙으로만 업데이트
+await upsertPlace({
+  // ❗ id 직접 만들지 말 것 (PART 11 upsertPlace가 내부에서 처리)
+  업체명: form.하차지명,
+  주소: form.하차지주소,
+
+  // ✅ PART 11이 실제로 쓰는 필드
+  담당자: form.하차지담당자 || "",
+  담당자번호: form.하차지담당자번호 || "",
+});
 
 }
-// ★★★ 여기 아래에 추가!! ★★★
-const updatedPickup = findPlaceByName(form.상차지명);
-const updatedDrop = findPlaceByName(form.하차지명);
-
-setForm((p) => ({
-  ...p,
-  상차지주소: updatedPickup?.주소 || p.상차지주소,
-  상차지담당자: updatedPickup?.담당자 || p.상차지담당자,
-  상차지담당자번호: updatedPickup?.담당자번호 || p.상차지담당자번호,
-  하차지주소: updatedDrop?.주소 || p.하차지주소,
-  하차지담당자: updatedDrop?.담당자 || p.하차지담당자,
-  하차지담당자번호: updatedDrop?.담당자번호 || p.하차지담당자번호,
-}));
-
+}
   const reset = {
     ...emptyForm,
     _id: crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`,
@@ -3666,19 +3566,57 @@ const pickupManagers = useMemo(() => {
 
   return [];
 }, [pickupPlace]);
-const hasMultiplePickupManagers = pickupManagers.length > 1;
-const isNewPickupManager = useMemo(() => {
-  if (!form.상차지담당자번호) return false;
+const syncPlaceManager = async (placeName, addr, manager, phone) => {
+  if (!placeName || !manager || !phone) return;
 
-  // ✅ 번호 기준으로 먼저 판단
-  const samePhone = pickupManagers.some(
-    (m) => m.번호 === form.상차지담당자번호
+  const place = findPlaceByName(placeName);
+  if (!place) return;
+
+  const list = Array.isArray(place.담당자목록)
+    ? place.담당자목록
+    : [];
+
+  const sameNameIdx = list.findIndex(
+    (m) => m.이름 === manager
   );
 
-  if (samePhone) return false;
+  let nextManagers;
+  if (sameNameIdx >= 0) {
+    nextManagers = list.map((m, i) =>
+      i === sameNameIdx ? { ...m, 번호: phone } : m
+    );
+  } else {
+    nextManagers = [
+      ...list,
+      { 이름: manager, 번호: phone, 대표: false },
+    ];
+  }
 
-  return !!form.상차지담당자;
-}, [pickupManagers, form.상차지담당자, form.상차지담당자번호]);
+  await upsertPlace({
+    업체명: place.업체명,
+    주소: addr || place.주소,
+    담당자목록: nextManagers,
+  });
+
+  // localStorage 동기화
+  try {
+    const ls = JSON.parse(
+      localStorage.getItem("hachaPlaces_v1") || "[]"
+    );
+    const idx = ls.findIndex(
+      (p) => normalizeKey(p.업체명) === normalizeKey(place.업체명)
+    );
+    if (idx >= 0) {
+      ls[idx] = { ...ls[idx], 담당자목록: nextManagers };
+      localStorage.setItem(
+        "hachaPlaces_v1",
+        JSON.stringify(ls)
+      );
+    }
+  } catch {}
+
+  setPlaceRowsTrigger(Date.now());
+};
 // ================================
 // 🔑 하차지 담당자 파생 상태 (추가)
 // ================================
@@ -3710,9 +3648,6 @@ const dropManagers = useMemo(() => {
 
   return [];
 }, [dropPlace]);
-
-const hasMultipleDropManagers = dropManagers.length > 1;
-
 const isNewDropManager = useMemo(() => {
   if (!form.하차지담당자번호) return false;
 
@@ -3937,12 +3872,11 @@ function calcHistoryScore(row, form) {
       value={form.상차시간 || ""}
       className="inp small"
       onChange={(e) => {
-        const v = e.target.value;
-        onChange("상차시간", v);
-        if (v && !form.상차시간기준) {
-          onChange("상차시간기준", "이전"); // 기본값
-        }
-      }}
+  const v = e.target.value;
+  onChange("상차시간", v);
+  // ❌ 기준 자동 설정 제거
+}}
+
     >
       <option value="">시간</option>
       {localTimeOptions.map((t) => (
@@ -4023,12 +3957,10 @@ function calcHistoryScore(row, form) {
       value={form.하차시간 || ""}
       className="inp small"
       onChange={(e) => {
-        const v = e.target.value;
-        onChange("하차시간", v);
-        if (v && !form.하차시간기준) {
-          onChange("하차시간기준", "이전"); // 기본값
-        }
-      }}
+  const v = e.target.value;
+  onChange("하차시간", v);
+  // ❌ 기준 자동 설정 제거
+}}
     >
       <option value="">시간</option>
       {localTimeOptions.map((t) => (
@@ -4349,46 +4281,16 @@ setForm((prev) => ({
 <div>
   <label className={labelCls}>
     상차지 담당자
-    {isNewPickupManager && (
-      <span className="ml-2 text-xs text-emerald-600 font-semibold">
-        신규 담당자
-      </span>
-    )}
+    
   </label>
-
-  {/* 여러 명일 때 드롭다운 */}
-  {hasMultiplePickupManagers && (
-    <select
-      className={`${inputCls} mb-1`}
-      value={`${form.상차지담당자}|${form.상차지담당자번호}`}
-      onChange={(e) => {
-        const [이름, 번호] = e.target.value.split("|");
-        setForm((p) => ({
-          ...p,
-          상차지담당자: 이름,
-          상차지담당자번호: 번호,
-        }));
-      }}
-    >
-      {pickupManagers.map((m, i) => (
-        <option key={i} value={`${m.이름}|${m.번호}`}>
-          {m.이름}{m.대표 ? " (대표)" : ""}
-        </option>
-      ))}
-    </select>
-  )}
-
   {/* ✅ 입력 + 대표담당자 버튼 (하나만 존재) */}
   <div className="relative">
-    <input
-      className={`${inputCls} pr-20`}
-      value={form.상차지담당자}
-      onChange={(e) =>
-        onChange("상차지담당자", e.target.value)
-        
-      }
-      placeholder="담당자 이름"
-    />
+<input
+  className={`${inputCls} pr-20`}
+  value={form.상차지담당자}
+  onChange={(e) => onChange("상차지담당자", e.target.value)}
+  placeholder="담당자 이름"
+/>
 
     {pickupPlace && form.상차지담당자 && (
       <div className="absolute right-2 top-1/2 -translate-y-1/2">
@@ -4427,7 +4329,23 @@ setForm((prev) => ({
     주소: pickupPlace.주소,
     담당자목록: nextManagers,
   });
+try {
+  const list = JSON.parse(
+    localStorage.getItem("hachaPlaces_v1") || "[]"
+  );
 
+  const idx = list.findIndex(
+    (p) => normalizeKey(p.업체명) === normalizeKey(pickupPlace.업체명)
+  );
+
+  if (idx >= 0) {
+    list[idx] = {
+      ...list[idx],
+      담당자목록: nextManagers,
+    };
+    localStorage.setItem("hachaPlaces_v1", JSON.stringify(list));
+  }
+} catch {}
   setPlaceRowsTrigger(Date.now());
   alert("대표 담당자로 지정되었습니다.");
 }}
@@ -4553,28 +4471,7 @@ setForm((prev) => ({
     )}
   </label>
 
-  {/* 여러 명일 때 드롭다운 */}
-  {hasMultipleDropManagers && (
-    <select
-      className={`${inputCls} mb-1`}
-      value={`${form.하차지담당자}|${form.하차지담당자번호}`}
-      onChange={(e) => {
-        const [이름, 번호] = e.target.value.split("|");
-        setForm((p) => ({
-          ...p,
-          하차지담당자: 이름,
-          하차지담당자번호: 번호,
-        }));
-      }}
-    >
-      {dropManagers.map((m, i) => (
-        <option key={i} value={`${m.이름}|${m.번호}`}>
-          {m.이름}{m.대표 ? " (대표)" : ""}
-        </option>
-      ))}
-    </select>
-  )}
-
+  
   {/* 입력 + 대표 버튼 */}
   <div className="relative">
     <input
@@ -4623,6 +4520,23 @@ setForm((prev) => ({
               주소: dropPlace.주소,
               담당자목록: nextManagers,
             });
+            try {
+  const list = JSON.parse(
+    localStorage.getItem("hachaPlaces_v1") || "[]"
+  );
+
+  const idx = list.findIndex(
+    (p) => normalizeKey(p.업체명) === normalizeKey(dropPlace.업체명)
+  );
+
+  if (idx >= 0) {
+    list[idx] = {
+      ...list[idx],
+      담당자목록: nextManagers,
+    };
+    localStorage.setItem("hachaPlaces_v1", JSON.stringify(list));
+  }
+} catch {}
 
             setPlaceRowsTrigger(Date.now());
             alert("대표 담당자로 지정되었습니다.");
@@ -6379,38 +6293,57 @@ function RealtimeStatus({
   // 🔥 거래처 자동완성 전체 풀 (clients + dispatchData)
   // ==========================
   const allClientPool = React.useMemo(() => {
-    const map = new Map();
+  const map = new Map();
 
-    // 1️⃣ 거래처 관리
-    (clients || []).forEach((c) => {
-      const name =
-        c.거래처명 || c.name || c.회사명 || c.상호 || c.title || "";
-      if (!name) return;
+  // 1️⃣ 기본 거래처 (clients)
+  (clients || []).forEach((c) => {
+    const name = c.거래처명 || c.name || "";
+    if (!name) return;
 
+    map.set(name, {
+      거래처명: name,
+      주소: c.주소 || "",
+      담당자: c.담당자 || "",
+      연락처: c.연락처 || "",
+      __source: "client",
+    });
+  });
+
+  // 2️⃣ 하차지 거래처 (places) 🔥🔥🔥 핵심
+  (placeRows || []).forEach((p) => {
+    const name = p.업체명;
+    if (!name) return;
+
+    // ⚠️ 이미 clients에 있으면 덮어쓰지 않음
+    if (map.has(name)) return;
+
+    map.set(name, {
+      거래처명: name,
+      주소: p.주소 || "",
+      담당자: p.담당자 || "",
+      연락처: p.담당자번호 || "",
+      __source: "place",
+    });
+  });
+
+  // 3️⃣ 과거 배차 데이터 (dispatchData)
+  (dispatchData || []).forEach((r) => {
+    const name = r.거래처명 || r.상차지명 || r.하차지명;
+    if (!name) return;
+
+    if (!map.has(name)) {
       map.set(name, {
         거래처명: name,
-        주소: c.주소 || "",
-        담당자: c.담당자 || "",
-        연락처: c.연락처 || "",
+        주소: r.상차지주소 || r.하차지주소 || "",
+        담당자: r.상차지담당자 || r.하차지담당자 || "",
+        연락처: r.상차지연락처 || r.하차지연락처 || "",
+        __source: "history",
       });
-    });
+    }
+  });
 
-    // 2️⃣ 기존 배차 데이터에서 거래처 보강
-    (dispatchData || []).forEach((r) => {
-      const name = r.거래처명;
-      if (!name || map.has(name)) return;
-
-      map.set(name, {
-        거래처명: name,
-        주소: "",
-        담당자: "",
-        연락처: "",
-      });
-    });
-
-    return Array.from(map.values());
-  }, [clients, dispatchData]);
-
+  return [...map.values()];
+}, [clients, placeRows, dispatchData]);
 
   // ==========================
   // 📌 날짜 유틸 (반드시 최상단)
@@ -11341,6 +11274,18 @@ function DispatchStatus({
   removeDispatch,
   upsertDriver,
 }) {
+const renderTimeText = (time, cond) => {
+  if (!time) return "-";
+
+  // 🔥 시간 문자열 자체에 포함된 경우
+  if (String(time).includes("이전")) return time;
+  if (String(time).includes("이후")) return time;
+
+  if (cond === "BEFORE") return `${time} 이전`;
+  if (cond === "AFTER") return `${time} 이후`;
+
+  return time;
+};
   // ==========================
   // 🔥 거래처 자동완성 전체 풀 (clients + dispatchData)
   // ==========================
@@ -11375,7 +11320,7 @@ function DispatchStatus({
     });
 
     return Array.from(map.values());
-  }, [clients, dispatchData]);
+}, [clients, placeRows, dispatchData]);
 
   // 📌 오늘 날짜 정확하게 (KST 기준)
   const todayKST = () => {
@@ -13057,101 +13002,92 @@ else if (palletDiff !== null) priority = 1;
                   <td className="border text-center whitespace-nowrap">{row.등록일}</td>
 
                   {/* -------------------- 반복 입력 컬럼 -------------------- */}
-                  {[
-                    "상차일", "상차시간", "하차일", "하차시간",
-                    "거래처명", "상차지명", "상차지주소",
-                    "하차지명", "하차지주소",
-                    "화물내용", "차량종류", "차량톤수",
-                  ].map((key) => (
-                    <td key={`${id}-${key}`} className="border text-center whitespace-nowrap">
+{[
+  "상차일", "상차시간", "하차일", "하차시간",
+  "거래처명", "상차지명", "상차지주소",
+  "하차지명", "하차지주소",
+  "화물내용", "차량종류", "차량톤수",
+].map((key) => (
+  <td
+    key={`${id}-${key}`}
+    className="border text-center whitespace-nowrap"
+  >
 
-                      {/* ✅ 차량종류 즉시변경 드롭다운 */}
-                      {key === "차량종류" ? (
-                        <select
-                          className="border rounded px-1 py-0.5 w-full text-center"
-                          value={row.차량종류 || ""}
-                          onChange={(e) =>
-                            handleImmediateSelectChange(row, "차량종류", e.target.value)
-                          }
-                        >
-                          <option value="">선택없음</option>
-                          <option value="라보/다마스">라보/다마스</option>
-                          <option value="카고">카고</option>
-                          <option value="윙바디">윙바디</option>
-                          <option value="리프트">리프트</option>
-                          <option value="탑차">탑차</option>
-                          <option value="냉장탑">냉장탑</option>
-                          <option value="냉동탑">냉동탑</option>
-                          <option value="냉장윙">냉장윙</option>
-                          <option value="냉동윙">냉동윙</option>
-                          <option value="오토바이">오토바이</option>
-                          <option value="기타">기타</option>
-                        </select>
+    {/* ✅ 차량종류 즉시변경 드롭다운 */}
+    {key === "차량종류" ? (
+      <select
+        className="border rounded px-1 py-0.5 w-full text-center"
+        value={row.차량종류 || ""}
+        onChange={(e) =>
+          handleImmediateSelectChange(row, "차량종류", e.target.value)
+        }
+      >
+        <option value="">선택없음</option>
+        <option value="라보/다마스">라보/다마스</option>
+        <option value="카고">카고</option>
+        <option value="윙바디">윙바디</option>
+        <option value="리프트">리프트</option>
+        <option value="탑차">탑차</option>
+        <option value="냉장탑">냉장탑</option>
+        <option value="냉동탑">냉동탑</option>
+        <option value="냉장윙">냉장윙</option>
+        <option value="냉동윙">냉동윙</option>
+        <option value="오토바이">오토바이</option>
+        <option value="기타">기타</option>
+      </select>
 
-                      ) : key === "상차지주소" || key === "하차지주소" ? (
-                        <AddressCell text={row[key] || ""} max={5} />
+    ) : key === "상차지주소" || key === "하차지주소" ? (
+      <AddressCell text={row[key] || ""} max={5} />
 
-                      ) : editMode && selected.has(id) && editableKeys.includes(key) ? (
-                        <div className="relative w-full">
-                          <input
-                            className="border rounded px-1 py-0.5 w-full text-center"
-                            defaultValue={row[key] || ""}
-                            onChange={(e) => {
-                              updateEdited(row, key, e.target.value);
-                            }}
-                          />
-                        </div>
+    ) : editMode && selected.has(id) && editableKeys.includes(key) ? (
+      <div className="relative w-full">
+        <input
+          className="border rounded px-1 py-0.5 w-full text-center"
+          defaultValue={row[key] || ""}
+          onChange={(e) => {
+            updateEdited(row, key, e.target.value);
+          }}
+        />
+      </div>
 
-                      ) : key === "상차지명" ? (
-                        <div className="inline-flex items-center gap-1">
-                          <span>{row.상차지명}</span>
+    ) : key === "상차지명" ? (
+      <div className="inline-flex items-center gap-1">
+        <span>{row.상차지명}</span>
 
-                          {/* 왕복 */}
-                          {row.운행유형 === "왕복" && (
-                            <span
-                              className="
-          px-1.5 py-0.5
-          text-[10px] font-bold
-          rounded-full
-          bg-indigo-100 text-indigo-700
-          border border-indigo-300
-          whitespace-nowrap
-        "
-                            >
-                              왕복
-                            </span>
-                          )}
+        {/* 왕복 */}
+        {row.운행유형 === "왕복" && (
+          <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-indigo-100 text-indigo-700 border border-indigo-300 whitespace-nowrap">
+            왕복
+          </span>
+        )}
 
-                          {/* 경유 (상차 기준) */}
-                          {Array.isArray(row.경유지_상차) && row.경유지_상차.length > 0 && (
-                            <span
-                              className="
-          px-1.5 py-0.5
-          text-[10px] font-bold
-          rounded-full
-          bg-emerald-100 text-emerald-700
-          border border-emerald-300
-          whitespace-nowrap
-        "
-                            >
-                              경유 {row.경유지_상차.length}
-                            </span>
-                          )}
-                        </div>
-                      ) : (
-                        row[key]
-                      )}
+        {/* 경유 (상차 기준) */}
+        {Array.isArray(row.경유지_상차) && row.경유지_상차.length > 0 && (
+          <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-emerald-100 text-emerald-700 border border-emerald-300 whitespace-nowrap">
+            경유 {row.경유지_상차.length}
+          </span>
+        )}
+      </div>
 
-                    </td>
-                  ))}
+) : key === "상차시간" ? (
+  row.상차시간
+    ? `${row.상차시간}${row.상차시간기준 ? ` ${row.상차시간기준}` : ""}`
+    : ""
+) : key === "하차시간" ? (
+  row.하차시간
+    ? `${row.하차시간}${row.하차시간기준 ? ` ${row.하차시간기준}` : ""}`
+    : ""
+) : (
+  row[key]
+    )}
 
-
+  </td>
+))}
 
                   {/* 혼적 여부(Y) */}
                   <td className="border text-center">
                     {row.혼적 ? "Y" : ""}
                   </td>
-
 
                   {/* 차량번호(항상 활성화) */}
                   <td className="border text-center whitespace-nowrap w-[120px] max-w-[120px]">
@@ -13170,13 +13106,13 @@ else if (palletDiff !== null) priority = 1;
                         }));
                       }}
                       onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          handleCarInput(id, row.차량번호);
-                        }
-                      }}
-                      onBlur={() => {
-                        handleCarInput(id, row.차량번호);
-                      }}
+  if (e.key === "Enter") {
+    handleCarInput(id, e.target.value);
+  }
+}}
+onBlur={(e) => {
+  handleCarInput(id, e.target.value);
+}}
                     />
                   </td>
                   <td className="border text-center">{row.이름}</td>
@@ -13512,103 +13448,155 @@ else if (palletDiff !== null) priority = 1;
 
 
             {/* ------------------------------------------------ */}
-            {/* 🔵 상/하차일 & 시간 */}
-            {/* ------------------------------------------------ */}
-            <div className="grid grid-cols-2 gap-3 mb-3">
-              <div>
-                <label>상차일</label>
-                <input
-                  type="date"
-                  className="border p-2 rounded w-full"
-                  value={editTarget.상차일 || ""}
-                  onChange={(e) =>
-                    setEditTarget((p) => ({ ...p, 상차일: e.target.value }))
-                  }
-                />
-              </div>
+{/* 🔵 상/하차일 & 시간 (선택수정) */}
+{/* ------------------------------------------------ */}
+<div className="grid grid-cols-2 gap-3 mb-3">
 
-              <div>
-                <label>상차시간</label>
-                <select
-                  className="border p-2 rounded w-full"
-                  value={editTarget.상차시간 || ""}
-                  onChange={(e) =>
-                    setEditTarget((p) => ({ ...p, 상차시간: e.target.value }))
-                  }
-                >
-                  <option value="">선택없음</option>
-                  {[
-                    "오전 6:00", "오전 6:30",
-                    "오전 7:00", "오전 7:30",
-                    "오전 8:00", "오전 8:30",
-                    "오전 9:00", "오전 9:30",
-                    "오전 10:00", "오전 10:30",
-                    "오전 11:00", "오전 11:30",
-                    "오후 12:00", "오후 12:30",
-                    "오후 1:00", "오후 1:30",
-                    "오후 2:00", "오후 2:30",
-                    "오후 3:00", "오후 3:30",
-                    "오후 4:00", "오후 4:30",
-                    "오후 5:00", "오후 5:30",
-                    "오후 6:00", "오후 6:30",
-                    "오후 7:00", "오후 7:30",
-                    "오후 8:00", "오후 8:30",
-                    "오후 9:00", "오후 9:30",
-                    "오후 10:00", "오후 10:30",
-                    "오후 11:00", "오후 11:30"
-                  ].map(t => (
-                    <option key={t} value={t}>{t}</option>
-                  ))}
-                </select>
-              </div>
+  {/* 상차일 */}
+  <div>
+    <label className="text-sm font-medium">상차일</label>
+    <input
+      type="date"
+      className="border p-2 rounded w-full"
+      value={editTarget.상차일 || ""}
+      onChange={(e) =>
+        setEditTarget((p) => ({ ...p, 상차일: e.target.value }))
+      }
+    />
+  </div>
 
-              <div>
-                <label>하차일</label>
-                <input
-                  type="date"
-                  className="border p-2 rounded w-full"
-                  value={editTarget.하차일 || ""}
-                  onChange={(e) =>
-                    setEditTarget((p) => ({ ...p, 하차일: e.target.value }))
-                  }
-                />
-              </div>
+  {/* 상차시간 + 이전/이후 */}
+  <div>
+    <label className="text-sm font-medium">상차시간</label>
+    <select
+      className="border p-2 rounded w-full"
+      value={editTarget.상차시간 || ""}
+      onChange={(e) =>
+        setEditTarget((p) => ({ ...p, 상차시간: e.target.value }))
+      }
+    >
+      <option value="">선택없음</option>
+      {[
+        "오전 6시", "오전 6시 30분",
+        "오전 7시", "오전 7시 30분",
+        "오전 8시", "오전 8시 30분",
+        "오전 9시", "오전 9시 30분",
+        "오전 10시", "오전 10시 30분",
+        "오전 11시", "오전 11시 30분",
+        "오후 12시", "오후 12시 30분",
+        "오후 1시", "오후 1시 30분",
+        "오후 2시", "오후 2시 30분",
+        "오후 3시", "오후 3시 30분",
+        "오후 4시", "오후 4시 30분",
+        "오후 5시", "오후 5시 30분",
+        "오후 6시", "오후 6시 30분",
+        "오후 7시", "오후 7시 30분",
+        "오후 8시", "오후 8시 30분",
+        "오후 9시", "오후 9시 30분",
+        "오후 10시", "오후 10시 30분",
+        "오후 11시", "오후 11시 30분",
+      ].map((t) => (
+        <option key={t} value={t}>{t}</option>
+      ))}
+    </select>
 
-              <div>
-                <label>하차시간</label>
-                <select
-                  className="border p-2 rounded w-full"
-                  value={editTarget.하차시간 || ""}
-                  onChange={(e) =>
-                    setEditTarget((p) => ({ ...p, 하차시간: e.target.value }))
-                  }
-                >
-                  <option value="">선택없음</option>
-                  {[
-                    "오전 6:00", "오전 6:30",
-                    "오전 7:00", "오전 7:30",
-                    "오전 8:00", "오전 8:30",
-                    "오전 9:00", "오전 9:30",
-                    "오전 10:00", "오전 10:30",
-                    "오전 11:00", "오전 11:30",
-                    "오후 12:00", "오후 12:30",
-                    "오후 1:00", "오후 1:30",
-                    "오후 2:00", "오후 2:30",
-                    "오후 3:00", "오후 3:30",
-                    "오후 4:00", "오후 4:30",
-                    "오후 5:00", "오후 5:30",
-                    "오후 6:00", "오후 6:30",
-                    "오후 7:00", "오후 7:30",
-                    "오후 8:00", "오후 8:30",
-                    "오후 9:00", "오후 9:30",
-                    "오후 10:00", "오후 10:30",
-                    "오후 11:00", "오후 11:30"
-                  ].map(t => (
-                    <option key={t} value={t}>{t}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
+    {/* ⏱ 이전 / 이후 */}
+    <div className="flex gap-2 mt-1">
+      {["이전", "이후"].map((v) => (
+        <button
+          key={v}
+          type="button"
+          className={`px-2 py-0.5 text-xs rounded border
+            ${editTarget.상차시간기준 === v
+              ? "bg-gray-800 text-white border-gray-800"
+              : "bg-gray-100 text-gray-600 border-gray-300"}
+          `}
+          onClick={() =>
+            setEditTarget((p) => ({
+              ...p,
+              상차시간기준: p.상차시간기준 === v ? null : v,
+            }))
+          }
+        >
+          {v}
+        </button>
+      ))}
+    </div>
+  </div>
+
+  {/* 하차일 */}
+  <div>
+    <label className="text-sm font-medium">하차일</label>
+    <input
+      type="date"
+      className="border p-2 rounded w-full"
+      value={editTarget.하차일 || ""}
+      onChange={(e) =>
+        setEditTarget((p) => ({ ...p, 하차일: e.target.value }))
+      }
+    />
+  </div>
+
+  {/* 하차시간 + 이전/이후 */}
+  <div>
+    <label className="text-sm font-medium">하차시간</label>
+    <select
+      className="border p-2 rounded w-full"
+      value={editTarget.하차시간 || ""}
+      onChange={(e) =>
+        setEditTarget((p) => ({ ...p, 하차시간: e.target.value }))
+      }
+    >
+      <option value="">선택없음</option>
+      {[
+        "오전 6시", "오전 6시 30분",
+        "오전 7시", "오전 7시 30분",
+        "오전 8시", "오전 8시 30분",
+        "오전 9시", "오전 9시 30분",
+        "오전 10시", "오전 10시 30분",
+        "오전 11시", "오전 11시 30분",
+        "오후 12시", "오후 12시 30분",
+        "오후 1시", "오후 1시 30분",
+        "오후 2시", "오후 2시 30분",
+        "오후 3시", "오후 3시 30분",
+        "오후 4시", "오후 4시 30분",
+        "오후 5시", "오후 5시 30분",
+        "오후 6시", "오후 6시 30분",
+        "오후 7시", "오후 7시 30분",
+        "오후 8시", "오후 8시 30분",
+        "오후 9시", "오후 9시 30분",
+        "오후 10시", "오후 10시 30분",
+        "오후 11시", "오후 11시 30분",
+      ].map((t) => (
+        <option key={t} value={t}>{t}</option>
+      ))}
+    </select>
+
+    {/* ⏱ 이전 / 이후 */}
+    <div className="flex gap-2 mt-1">
+      {["이전", "이후"].map((v) => (
+        <button
+          key={v}
+          type="button"
+          className={`px-2 py-0.5 text-xs rounded border
+            ${editTarget.하차시간기준 === v
+              ? "bg-gray-800 text-white border-gray-800"
+              : "bg-gray-100 text-gray-600 border-gray-300"}
+          `}
+          onClick={() =>
+            setEditTarget((p) => ({
+              ...p,
+              하차시간기준: p.하차시간기준 === v ? null : v,
+            }))
+          }
+        >
+          {v}
+        </button>
+      ))}
+    </div>
+  </div>
+
+</div>
 
             {/* ------------------------------------------------ */}
             {/* 🔵 상하차지 (자동완성 동일 UX) */}
@@ -14229,8 +14217,8 @@ else if (palletDiff !== null) priority = 1;
                   // 1) Firestore 저장
                   const ALLOWED_FIELDS = [
                     "등록일",
-                    "상차일", "상차시간",
-                    "하차일", "하차시간",
+                    "상차일", "상차시간", "상차시간기준",
+                    "하차일", "하차시간", "하차시간기준",
                     "거래처명",
                     "상차지명", "상차지주소",
                     "하차지명", "하차지주소",
@@ -20193,8 +20181,6 @@ const handleBlur = async (row, key, val) => {
   );
 }
 // ===================== DispatchApp.jsx (PART 10/10) — END =====================
-
-
 // ===================== DispatchApp.jsx (PART 11/11) — START =====================
 // 거래처관리 (ClientManagement) — 기본 거래처 + 하차지 거래처 서브탭 포함
 
@@ -20257,12 +20243,9 @@ function ClientManagement({ clients = [], upsertClient, removeClient }) {
     연락처: "",
     메모: "",
   });
-
   React.useEffect(() => {
-    const normalized = normalizeClients ? normalizeClients(clients) : clients || [];
-    setRows(normalized.map((c) => ({ ...c })));
-  }, [clients]);
-
+  setRows((clients || []).map((c) => ({ ...c })));
+}, [clients]);
   const filtered = React.useMemo(() => {
     if (!q.trim()) return rows;
     const nq = norm(q);
@@ -20295,39 +20278,15 @@ function ClientManagement({ clients = [], upsertClient, removeClient }) {
   };
 
   const handleBlur = async (row, key, val) => {
-    const currentId = row.id;
-    const correctId = row.차량번호;
+  const id = row.id || row.거래처명;
+  if (!id) return;
 
-    if (!currentId || !correctId) return;
-
-    // ⭐ 이름/전화/메모 수정
-    if (key !== "차량번호") {
-      await upsertDriver({
-        ...row,
-        id: correctId,
-        [key]: val,
-      });
-
-      // 🔥 과거 random ID 문서 제거
-      if (currentId !== correctId) {
-        await removeDriver(currentId);
-      }
-      return;
-    }
-
-    // ⭐ 차량번호 변경 = 문서 이동
-    const newId = val.trim();
-    if (!newId || newId === correctId) return;
-
-    await upsertDriver({
-      ...row,
-      id: newId,
-      차량번호: newId,
-    });
-    await removeDriver(currentId);
-  };
-
-
+  await upsertClient({
+    ...row,
+    id,
+    [key]: val,
+  });
+};
   const addNew = async () => {
     const 거래처명 = (newForm.거래처명 || "").trim();
     if (!거래처명) return alert("거래처명은 필수입니다.");
@@ -21139,19 +21098,19 @@ await upsertPlace({
                         </td>
                         <td className={cell}>
                           <button
-                            onClick={() => {
-                              if (!r.id) {
-                                alert("문서 ID가 없어 삭제할 수 없습니다.\n(과거 데이터)");
-                                return;
-                              }
-                              if (window.confirm("삭제하시겠습니까?")) {
-                                removeDriver(r.id);
-                              }
-                            }}
-                            className="px-2 py-1 bg-red-600 text-white rounded"
-                          >
-                            삭제
-                          </button>
+  onClick={() => {
+    const id = r.id || r.거래처명;
+    if (!id) return;
+
+    if (window.confirm("삭제하시겠습니까?")) {
+      removeClient(id);
+    }
+  }}
+  className="px-2 py-1 bg-red-600 text-white rounded"
+>
+  삭제
+</button>
+
 
                         </td>
                       </tr>
