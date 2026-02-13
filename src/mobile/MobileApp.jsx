@@ -364,6 +364,7 @@ const quickRange = (days) => {
   
   const [drivers, setDrivers] = useState([]);
   const [clients, setClients] = useState([]);
+  const [places, setPlaces] = useState([]);
 // 🔥 모든 로그인 사용자 FCM 토큰 저장
 useEffect(() => {
   import("../firebase").then(({ saveFcmToken }) => {
@@ -572,51 +573,33 @@ useEffect(() => {
     return () => unsub();
   }, []);
 
-  useEffect(() => {
-    const unsub = onSnapshot(collection(db, "clients"), (snap) => {
-      const list = snap.docs.map((d) => ({
-        id: d.id,
-        ...d.data(),
-      }));
-      setClients(list);
-    });
-    return () => unsub();
-  }, []);
-
   // 🔥 하차지 거래처(places)도 clients에 병합
 useEffect(() => {
   const unsub = onSnapshot(collection(db, "places"), (snap) => {
-    const list = snap.docs.map((d) => ({
-      id: d.id,
-      거래처명:
-        d.data().거래처명 ||
-        d.data().상차지명 ||
-        d.data().하차지명 ||
-        "",
-      주소:
-        d.data().주소 ||
-        d.data().상차지주소 ||
-        d.data().하차지주소 ||
-        "",
-    }));
+   const list = snap.docs.map((d) => {
+  const data = d.data();
 
-    setClients((prev) => {
-      const merged = [...prev];
+  const name =
+    data.거래처명 ||
+    data.업체명 ||
+    data.상차지명 ||
+    data.하차지명 ||
+    "";
 
-      list.forEach((item) => {
-        if (
-          !merged.some(
-            (c) =>
-              normalizeCompany(c.거래처명) ===
-              normalizeCompany(item.거래처명)
-          )
-        ) {
-          merged.push(item);
-        }
-      });
+  const address =
+    data.주소 ||
+    data.상차지주소 ||
+    data.하차지주소 ||
+    "";
 
-      return merged;
-    });
+  return {
+    id: d.id,
+    거래처명: name,
+    주소: address,
+  };
+});
+
+    setPlaces(list);
   });
 
   return () => unsub();
@@ -706,8 +689,12 @@ const [unassignedTypeFilter, setUnassignedTypeFilter] = useState("전체");
     하차시간: "",
     상차지명: "",
     상차지주소: "",
+    상차지담당자: "",
+상차지담당자번호: "",
     하차지명: "",
     하차지주소: "",
+    하차지담당자: "",
+하차지담당자번호: "",
     톤수: "",
     차종: "",
     화물내용: "",
@@ -951,8 +938,12 @@ const undeliveredOrders = useMemo(() => {
       거래처명: form.거래처명 || "",
       상차지명: form.상차지명,
       상차지주소: form.상차지주소 || "",
+      상차지담당자: form.상차지담당자 || "",
+상차지담당자번호: form.상차지담당자번호 || "",
       하차지명: form.하차지명,
       하차지주소: form.하차지주소 || "",
+      하차지담당자: form.하차지담당자 || "",
+하차지담당자번호: form.하차지담당자번호 || "",
       화물내용: form.화물내용 || "",
       차량종류: form.차종 || "",
       차량톤수: form.톤수 || "",
@@ -1572,7 +1563,7 @@ setOpenMemo={setOpenMemo}
           <MobileOrderForm
             form={form}
             setForm={setForm}
-            clients={clients}
+            clients={places}
             onSave={handleSave}
             setPage={setPage}
             showToast={showToast}
@@ -2234,7 +2225,9 @@ const dropTime = order.하차시간 || "시간 없음";
       {/* ⚠ 상차 임박 */}
       {(() => {
         if (!order.상차일 || !order.상차시간) return null;
-        const now = new Date();
+        const now = new Date(
+  new Date().getTime() + 9 * 60 * 60 * 1000
+);
        const [y, m, d] = order.상차일.split("-").map(Number);
 const [hh, mm] = normalizeKoreanTime(order.상차시간)
   .split(":")
@@ -2770,8 +2763,12 @@ const [expandMemo, setExpandMemo] = useState(false);
               하차시간: order.하차시간 || "",
               상차지명: order.상차지명 || "",
               상차지주소: order.상차지주소 || "",
+              상차지담당자: order.상차지담당자 || "",
+상차지담당자번호: order.상차지담당자번호 || "",
               하차지명: order.하차지명 || "",
               하차지주소: order.하차지주소 || "",
+              하차지담당자: order.하차지담당자 || "",
+하차지담당자번호: order.하차지담당자번호 || "",
               톤수: order.톤수 || order.차량톤수 || "",
               차종: order.차종 || order.차량종류 || "",
               화물내용: order.화물내용 || "",
@@ -2930,6 +2927,23 @@ function MobileOrderForm({
   drivers,
   upsertDriver,
 }) {
+    const handleSwapPickupDrop = () => {
+    setForm((prev) => ({
+      ...prev,
+
+      상차지명: prev.하차지명,
+      상차지주소: prev.하차지주소,
+      상차지담당자: prev.하차지담당자,
+      상차지담당자번호: prev.하차지담당자번호,
+      상차시간: prev.하차시간,
+
+      하차지명: prev.상차지명,
+      하차지주소: prev.상차지주소,
+      하차지담당자: prev.상차지담당자,
+      하차지담당자번호: prev.상차지담당자번호,
+      하차시간: prev.상차시간,
+    }));
+  };
   // 🔍 거래처 자동검색 state
 const [clientQuery, setClientQuery] = useState("");
 const [matchedClients, setMatchedClients] = useState([]);
@@ -2939,18 +2953,43 @@ const [matchedClients, setMatchedClients] = useState([]);
 
 // 🔍 거래처 검색 함수
 const searchClient = (q) => {
-const nq = normalizeCompany(q);
+  if (!q.trim()) {
+    setMatchedClients([]);
+    return;
+  }
 
-const list = clients
-  .filter(c =>
-    normalizeCompany(c.거래처명).includes(nq)
-  )
-  .slice(0, 10);
+  const nq = normalizeCompany(q);
 
+  const exact = [];
+  const starts = [];
+  const includes = [];
 
-  setMatchedClients(list);
+  clients.forEach((c) => {
+    const nameRaw = c.거래처명 || "";
+    const name = normalizeCompany(nameRaw);
+
+    // 1️⃣ 완전 동일 (원문)
+    if (nameRaw.trim() === q.trim()) {
+      exact.push(c);
+    }
+    // 2️⃣ 정규화 동일
+    else if (name === nq) {
+      exact.push(c);
+    }
+    // 3️⃣ 시작일치
+    else if (name.startsWith(nq)) {
+      starts.push(c);
+    }
+    // 4️⃣ 포함
+    else if (name.includes(nq)) {
+      includes.push(c);
+    }
+  });
+
+  const sorted = [...exact, ...starts, ...includes].slice(0, 10);
+
+  setMatchedClients(sorted);
 };
-
 // 🔄 거래처 선택 시 주소 자동반영
 const chooseClient = (c) => {
   setMatchedClients([]);
@@ -2965,6 +3004,7 @@ const chooseClient = (c) => {
     setForm((p) => ({ ...p, [key]: value }));
 
   const updateMoney = (key, value) =>
+    
     setForm((p) => {
       const next = { ...p, [key]: toNumber(value) };
       if (key === "청구운임" || key === "기사운임") {
@@ -2983,23 +3023,70 @@ const chooseClient = (c) => {
   const norm = (s = "") =>
     String(s).toLowerCase().replace(/\s+/g, "");
 
-  const pickupOptions = useMemo(() => {
-    if (!queryPickup) return [];
-    return clients
-      .filter((c) =>
-        norm(c.거래처명 || c.상호 || "").includes(norm(queryPickup))
-      )
-      .slice(0, 10);
-  }, [clients, queryPickup]);
+const pickupOptions = useMemo(() => {
+  const base = queryPickup || form.상차지명;
+  if (!base) return [];
 
-  const dropOptions = useMemo(() => {
-    if (!queryDrop) return [];
-    return clients
-      .filter((c) =>
-        norm(c.거래처명 || c.상호 || "").includes(norm(queryDrop))
-      )
-      .slice(0, 10);
-  }, [clients, queryDrop]);
+  const nq = normalizeCompany(base);
+
+  const exact = [];
+  const starts = [];
+  const includes = [];
+  const addrMatch = [];
+
+  clients.forEach((c) => {
+    const nameRaw = c.거래처명 || "";
+    const name = normalizeCompany(nameRaw);
+    const addr = normalizeCompany(c.주소 || "");
+
+    if (nameRaw.trim() === base.trim()) {
+      exact.push(c);
+    } else if (name === nq) {
+      exact.push(c);
+    } else if (name.startsWith(nq)) {
+      starts.push(c);
+    } else if (name.includes(nq)) {
+      includes.push(c);
+    } else if (addr.includes(nq)) {
+      addrMatch.push(c);
+    }
+  });
+
+  return [...exact, ...starts, ...includes, ...addrMatch].slice(0, 10);
+
+}, [clients, queryPickup, form.상차지명]);
+const dropOptions = useMemo(() => {
+  if (!queryDrop) return [];
+
+  const nq = normalizeCompany(queryDrop);
+
+  const exact = [];
+  const starts = [];
+  const includes = [];
+  const addrMatch = [];
+
+  clients.forEach((c) => {
+    const nameRaw = c.거래처명 || "";
+    const name = normalizeCompany(nameRaw);
+    const addr = normalizeCompany(c.주소 || "");
+
+    // 🔥 입력값과 완전 동일 (원문 기준도 체크)
+    if (nameRaw.trim() === queryDrop.trim()) {
+      exact.push(c);
+    } else if (name === nq) {
+      exact.push(c);
+    } else if (name.startsWith(nq)) {
+      starts.push(c);
+    } else if (name.includes(nq)) {
+      includes.push(c);
+    } else if (addr.includes(nq)) {
+      addrMatch.push(c);
+    }
+  });
+
+  return [...exact, ...starts, ...includes, ...addrMatch].slice(0, 10);
+
+}, [clients, queryDrop]);
 
   const pickPickup = (c) => {
     update("거래처명", c.거래처명 || "");
@@ -3145,19 +3232,16 @@ const chooseClient = (c) => {
       "📌 등록되지 않은 거래처입니다.\n신규 등록할까요?"
     );
     if (ok) {
-      await addDoc(collection(db, "clients"), {
-        거래처명: val,
-        주소: "",
-        createdAt: serverTimestamp(),
-      });
+      await addDoc(collection(db, "places"), {
+  거래처명: val,
+  주소: "",
+  createdAt: serverTimestamp(),
+});
       showToast("신규 거래처 등록 완료!");
     }
   }
 }}
-
-
         />
-
         {/* 🔽 자동완성 리스트 */}
         {matchedClients.length > 0 && (
           <ul className="absolute z-50 bg-white border shadow rounded mt-1 w-full max-h-40 overflow-auto">
@@ -3200,139 +3284,218 @@ const chooseClient = (c) => {
 
 
       {/* 상/하차 + 주소 + 자동완성 */}
-      <div className="bg-white rounded-lg border shadow-sm">
-        <RowLabelInput
-          label="상차지"
-          input={
-            <div className="space-y-1">
-              <input
-  className="w-full border rounded px-2 py-1 text-sm"
-  value={form.상차지명}
-  onChange={(e) => {
-    const val = e.target.value;
-    update("상차지명", val);
-    setQueryPickup(val);
-    setShowPickupList(true);
+<div className="bg-white rounded-lg border shadow-sm p-3 space-y-3">
 
-    if (!val.trim()) {
-      update("상차지주소", "");
-      return;
-    }
+  {/* 🔵 상차지 */}
+  <RowLabelInput
+    label="상차지"
+      right={
+    <button
+      type="button"
+      onClick={handleSwapPickupDrop}
+      className="ml-1 w-6 h-6 rounded-full bg-blue-50 border border-blue-300 text-blue-600 flex items-center justify-center text-[11px] active:scale-95"
+    >
+      🔄
+    </button>
+  }
+    input={
+      <div className="space-y-1">
 
-    const normVal = normalizeCompany(val);
+        {/* 상차지명 + 드롭다운 전용 */}
+        <div className="relative">
+          <input
+            className="w-full border rounded px-2 py-1 text-sm"
+            value={form.상차지명}
+            onChange={(e) => {
+              const val = e.target.value;
+              update("상차지명", val);
+              setQueryPickup(val);
+              setShowPickupList(true);
 
-    const found = clients.find(
-      (c) => normalizeCompany(c.거래처명) === normVal
-    );
+              if (!val.trim()) {
+                update("상차지주소", "");
+                update("상차지담당자", "");
+                update("상차지담당자번호", "");
+                return;
+              }
 
-    if (found) {
-      update(
-        "상차지주소",
-        found.주소 || found.상차지주소 || found.하차지주소 || ""
-      );
-    }
-  }}
-  onFocus={() => {
-    if (form.상차지명) setShowPickupList(true);
-  }}
-/>
+              const normVal = normalizeCompany(val);
+              const found = clients.find(
+                (c) => normalizeCompany(c.거래처명) === normVal
+              );
 
-              <input
-                className="w-full border rounded px-2 py-1 text-xs text-gray-700"
-                placeholder="상차지 주소"
-                value={form.상차지주소}
-                onChange={(e) =>
-                  update("상차지주소", e.target.value)
-                }
-              />
-              {showPickupList && pickupOptions.length > 0 && (
-                <div className="border rounded bg-white max-h-40 overflow-y-auto text-xs">
-                  {pickupOptions.map((c) => (
-                    <button
-                      key={c.id}
-                      type="button"
-                      className="w-full text-left px-2 py-1 hover:bg-gray-100"
-                      onClick={() => pickPickup(c)}
-                    >
-                      <div className="font-semibold">
-                        {c.거래처명 || c.상호 || "-"}
-                      </div>
-                      <div className="text-[11px] text-gray-500">
-                        {c.주소 || ""}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
+              if (found) {
+  update("상차지주소", found.주소 || "");
+
+  const primary =
+    Array.isArray(found.담당자목록)
+      ? found.담당자목록.find(m => m.대표) ||
+        found.담당자목록[0]
+      : null;
+
+  update("상차지담당자", primary?.이름 || "");
+  update("상차지담당자번호", primary?.번호 || "");
+}
+
+            }}
+            onFocus={() => {
+              if (form.상차지명) setShowPickupList(true);
+            }}
+          />
+
+          {showPickupList && pickupOptions.length > 0 && (
+            <div className="absolute z-50 w-full bg-white border rounded shadow max-h-40 overflow-y-auto text-xs">
+              {pickupOptions.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  className="w-full text-left px-2 py-1 hover:bg-gray-100"
+                  onClick={() => pickPickup(c)}
+                >
+                  <div className="font-semibold">
+                    {c.거래처명 || c.상호 || "-"}
+                  </div>
+                  <div className="text-[11px] text-gray-500">
+                    {c.주소 || ""}
+                  </div>
+                </button>
+              ))}
             </div>
+          )}
+        </div>
+
+        <input
+          className="w-full border rounded px-2 py-1 text-xs"
+          placeholder="상차지 주소"
+          value={form.상차지주소}
+          onChange={(e) =>
+            update("상차지주소", e.target.value)
           }
         />
-        <RowLabelInput
-          label="하차지"
-          input={
-            <div className="space-y-1">
-              <input
-  className="w-full border rounded px-2 py-1 text-sm"
-  value={form.하차지명}
-  onChange={(e) => {
-    const val = e.target.value;
-    update("하차지명", val);
-    setQueryDrop(val);
-    setShowDropList(true);
 
-    if (!val.trim()) {
-      update("하차지주소", "");
-      return;
-    }
-
-    const normVal = normalizeCompany(val);
-
-    const found = clients.find(
-      (c) => normalizeCompany(c.거래처명) === normVal
-    );
-
-    if (found) {
-      update(
-        "하차지주소",
-        found.주소 || found.하차지주소 || found.상차지주소 || ""
-      );
-    }
-  }}
-  onFocus={() => {
-    if (form.하차지명) setShowDropList(true);
-  }}
-/>
-
-              <input
-                className="w-full border rounded px-2 py-1 text-xs text-gray-700"
-                placeholder="하차지 주소"
-                value={form.하차지주소}
-                onChange={(e) =>
-                  update("하차지주소", e.target.value)
-                }
-              />
-              {showDropList && dropOptions.length > 0 && (
-                <div className="border rounded bg-white max-h-40 overflow-y-auto text-xs">
-                  {dropOptions.map((c) => (
-                    <button
-                      key={c.id}
-                      type="button"
-                      className="w-full text-left px-2 py-1 hover:bg-gray-100"
-                      onClick={() => pickDrop(c)}
-                    >
-                      <div className="font-semibold">
-                        {c.거래처명 || c.상호 || "-"}
-                      </div>
-                      <div className="text-[11px] text-gray-500">
-                        {c.주소 || ""}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+        <input
+          className="w-full border rounded px-2 py-1 text-xs"
+          placeholder="상차지 담당자"
+          value={form.상차지담당자 || ""}
+          onChange={(e) =>
+            update("상차지담당자", e.target.value)
           }
         />
+
+        <input
+          className="w-full border rounded px-2 py-1 text-xs"
+          placeholder="상차지 담당자번호"
+          value={form.상차지담당자번호 || ""}
+          onChange={(e) =>
+            update("상차지담당자번호", e.target.value)
+          }
+        />
+      </div>
+    }
+  />
+  {/* 🔴 하차지 */}
+  <RowLabelInput
+    label="하차지"
+    input={
+      <div className="space-y-1">
+
+        {/* 하차지명 + 드롭다운 전용 */}
+        <div className="relative">
+          <input
+            className="w-full border rounded px-2 py-1 text-sm"
+            value={form.하차지명}
+            onChange={(e) => {
+              const val = e.target.value;
+              update("하차지명", val);
+              setQueryDrop(val);
+              setShowDropList(true);
+
+              if (!val.trim()) {
+                update("하차지주소", "");
+                update("하차지담당자", "");
+                update("하차지담당자번호", "");
+                return;
+              }
+
+              const normVal = normalizeCompany(val);
+              const found = clients.find(
+                (c) => normalizeCompany(c.거래처명) === normVal
+              );
+
+              if (found) {
+  update(
+    "하차지주소",
+    found.주소 ||
+      found.하차지주소 ||
+      found.상차지주소 ||
+      ""
+  );
+
+  const primary =
+    Array.isArray(found.담당자목록)
+      ? found.담당자목록.find(m => m.대표) ||
+        found.담당자목록[0]
+      : null;
+
+  update("하차지담당자", primary?.이름 || "");
+  update("하차지담당자번호", primary?.번호 || "");
+}
+            }}
+            onFocus={() => {
+              if (form.하차지명) setShowDropList(true);
+            }}
+          />
+
+          {showDropList && dropOptions.length > 0 && (
+            <div className="absolute z-50 w-full bg-white border rounded shadow max-h-40 overflow-y-auto text-xs">
+              {dropOptions.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  className="w-full text-left px-2 py-1 hover:bg-gray-100"
+                  onClick={() => pickDrop(c)}
+                >
+                  <div className="font-semibold">
+                    {c.거래처명 || c.상호 || "-"}
+                  </div>
+                  <div className="text-[11px] text-gray-500">
+                    {c.주소 || ""}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <input
+          className="w-full border rounded px-2 py-1 text-xs"
+          placeholder="하차지 주소"
+          value={form.하차지주소}
+          onChange={(e) =>
+            update("하차지주소", e.target.value)
+          }
+        />
+
+        <input
+          className="w-full border rounded px-2 py-1 text-xs"
+          placeholder="하차지 담당자"
+          value={form.하차지담당자 || ""}
+          onChange={(e) =>
+            update("하차지담당자", e.target.value)
+          }
+        />
+
+        <input
+          className="w-full border rounded px-2 py-1 text-xs"
+          placeholder="하차지 담당자번호"
+          value={form.하차지담당자번호 || ""}
+          onChange={(e) =>
+            update("하차지담당자번호", e.target.value)
+          }
+        />
+      </div>
+    }
+  />
       </div>
 
       {/* 톤수/차종/화물내용 */}
@@ -4002,11 +4165,12 @@ onClose();
 // ======================================================================
 // 공통 RowLabelInput
 // ======================================================================
-function RowLabelInput({ label, input }) {
+function RowLabelInput({ label, input, right }) {
   return (
     <div className="flex border-b last:border-b-0">
-      <div className="w-24 px-3 py-2 text-xs text-gray-600 bg-gray-50 flex items-center">
-        {label}
+      <div className="w-24 px-3 py-2 text-xs text-gray-600 bg-gray-50 flex items-center justify-between">
+        <span>{label}</span>
+        {right}
       </div>
       <div className="flex-1 px-3 py-2">{input}</div>
     </div>
@@ -4019,6 +4183,7 @@ function RowLabelInput({ label, input }) {
 function MobileStandardFare({ onBack }) {
   useEffect(() => {
   if (!window.__farePreset__) return;
+  if (!dispatchData.length) return;
 
   const p = window.__farePreset__;
 
@@ -4029,20 +4194,11 @@ function MobileStandardFare({ onBack }) {
   setTon(p.ton || "");
   setCargo(p.cargo || "");
 
-  // 1회성 사용
   window.__farePreset__ = null;
+  window.__forceFareSearch__ = true;
 
-  // 자동 조회
-setTimeout(() => {
-  if (
-    dispatchData.length &&
-    (p.pickup || p.pickupAddr) &&
-    (p.drop || p.dropAddr)
-  ) {
-    calcFareMobile();
-  }
-}, 0);
-}, []);
+  calcFareMobile();
+}, [dispatchData]);
   const [dispatchData, setDispatchData] = useState([]);
   const [pickup, setPickup] = useState("");
   const [pickupAddr, setPickupAddr] = useState(""); // ✅ 추가
