@@ -1712,6 +1712,8 @@ const mergedClients = React.useMemo(() => {
     }
   });
 
+
+  
   return Array.from(map.values());
 }, [placeList, clients]);
 
