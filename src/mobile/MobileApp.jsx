@@ -4181,39 +4181,48 @@ function RowLabelInput({ label, input, right }) {
 // 📌 모바일 표준운임표 — 흰 화면 100% 해결 버전
 // ======================================================================
 function MobileStandardFare({ onBack }) {
-  useEffect(() => {
-  if (!window.__farePreset__) return;
-  if (!dispatchData.length) return;
 
-  const p = window.__farePreset__;
-
-  setPickup(p.pickup || "");
-  setPickupAddr(p.pickupAddr || "");
-  setDrop(p.drop || "");
-  setDropAddr(p.dropAddr || "");
-  setTon(p.ton || "");
-  setCargo(p.cargo || "");
-
-  window.__farePreset__ = null;
-  window.__forceFareSearch__ = true;
-
-  calcFareMobile();
-}, [dispatchData]);
   const [dispatchData, setDispatchData] = useState([]);
-  const [pickup, setPickup] = useState("");
-  const [pickupAddr, setPickupAddr] = useState(""); // ✅ 추가
-  const [drop, setDrop] = useState("");
-  const [dropAddr, setDropAddr] = useState("");     // ✅ 추가
 
+  const [pickup, setPickup] = useState("");
+  const [pickupAddr, setPickupAddr] = useState("");
+  const [drop, setDrop] = useState("");
+  const [dropAddr, setDropAddr] = useState("");
   const [cargo, setCargo] = useState("");
   const [ton, setTon] = useState("");
   const [vehicle, setVehicle] = useState("전체");
-  
-
   const [matchedRows, setMatchedRows] = useState([]);
   const [result, setResult] = useState(null);
   const [aiFare, setAiFare] = useState(null);
 
+  // 🔥 Firestore 로딩
+  useEffect(() => {
+    (async () => {
+      const snap = await getDocs(collection(db, collName));
+      const arr = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      setDispatchData(arr);
+    })();
+  }, []);
+
+  // 🔥 preset 자동 조회 (dispatchData 선언 아래에 위치해야 함)
+  useEffect(() => {
+    if (!window.__farePreset__) return;
+    if (!dispatchData.length) return;
+
+    const p = window.__farePreset__;
+
+    setPickup(p.pickup || "");
+    setPickupAddr(p.pickupAddr || "");
+    setDrop(p.drop || "");
+    setDropAddr(p.dropAddr || "");
+    setTon(p.ton || "");
+    setCargo(p.cargo || "");
+
+    window.__farePreset__ = null;
+    window.__forceFareSearch__ = true;
+
+    calcFareMobile();
+  }, [dispatchData]);
  const clean = (s = "") =>
   String(s || "").trim().toLowerCase().replace(/\s+/g, "");
 

@@ -1336,66 +1336,27 @@ ${Number(form.청구운임 || 0).toLocaleString()}원 부가세별도 배차되�
 }
 
 const placeList = React.useMemo(() => {
-  
   const fromFirestore = Array.isArray(placeRows) ? placeRows : [];
 
-  // 🔥 Firestore 기준 key 목록
-  const firestoreKeys = new Set(
-    fromFirestore.map(p => normalizeKey(p.업체명 || ""))
-  );
-
-  let fromLocal = [];
-  try {
-    fromLocal = JSON.parse(localStorage.getItem("hachaPlaces_v1") || "[]");
-  } catch {}
-
-const toRow = (p = {}) => {
-  // 🔥 단일 담당자 구조 보정
-  let managers = [];
-
-  if (Array.isArray(p.담당자목록) && p.담당자목록.length > 0) {
-    managers = p.담당자목록;
-  } else if (p.담당자 || p.담당자번호) {
-    managers = [{
-      이름: p.담당자 || "담당자",
-      번호: p.담당자번호 || "",
-      대표: true,
-    }];
-  }
-
-  return {
+  const toRow = (p = {}) => ({
     업체명: p.업체명 || "",
     주소: p.주소 || "",
-    담당자목록: managers,
-  };
-};
+    담당자: p.담당자 || "",
+    담당자번호: p.담당자번호 || "",
+  });
+
   const map = new Map();
 
-  // ✅ Firestore 먼저
+  // ✅ Firestore 데이터만 사용
   fromFirestore.forEach(raw => {
     const row = toRow(raw);
     const key = normalizeKey(row.업체명);
     if (key) map.set(key, row);
   });
 
-  // ✅ localStorage는 Firestore에 존재하는 것만 허용
-  fromLocal.forEach(raw => {
-    const row = toRow(raw);
-    const key = normalizeKey(row.업체명);
-    if (!key) return;
-if (!firestoreKeys.has(key) && !raw.__temp) return;
-    if (!map.has(key)) map.set(key, row);
-  });
+  return Array.from(map.values());
+}, [placeRows]);
 
-  const merged = Array.from(map.values());
-
-  // 🔥 localStorage 정리 저장
-  try {
-    localStorage.setItem("hachaPlaces_v1", JSON.stringify(merged));
-  } catch {}
-
-  return merged;
-}, [placeRows, placeRowsTrigger]);
 
     // 관리자 여부 체크
 const isAdmin = role === "admin";
@@ -1649,17 +1610,7 @@ const findPlaceByName = (name) => {
     (p) => normalizeKey(p.업체명 || "") === nk
   );
 };
-// ⭐ 대표 담당자 추출 유틸 (🔥 반드시 필요)
-function getPrimaryManager(place) {
-  if (!place || !Array.isArray(place.담당자목록)) return null;
 
-  // 1️⃣ 대표 우선
-  const primary = place.담당자목록.find(m => m.대표);
-  if (primary) return primary;
-
-  // 2️⃣ 대표 없으면 첫 번째 담당자라도 사용
-  return place.담당자목록[0] || null;
-}
 const openNewPlacePrompt = (name) => {
   const addr = prompt("주소 (선택)");
   if (addr === null) return;
@@ -1701,65 +1652,40 @@ const savePlaceSmart = (name, addr, manager, phone) => {
   // ======================
   // ① 기존 업체 있을 때 (업데이트)
   // ======================
-  if (exist) {
-    const updated = {
-      업체명: exist.업체명,
-      주소: addr || exist.주소,
-      담당자: manager || exist.담당자,
-      담당자번호: phone || exist.담당자번호,
-    };
+if (exist) {
+  const updated = {
+    업체명: exist.업체명,
+    주소: addr ?? "",
+    담당자: manager ?? "",
+    담당자번호: phone ?? "",
+  };
 
-    // Firestore 저장
-    upsertPlace(updated);
+  upsertPlace(updated);
 
-    // localStorage 최신화
-    try {
-      const list = JSON.parse(localStorage.getItem("hachaPlaces_v1") || "[]");
-      const idx = list.findIndex(
-        (x) => normalizeKey(x.업체명) === normalizeKey(updated.업체명)
-      );
+  // ✅ 즉시 메모리 반영 (핵심)
+  setPlaceRows(prev =>
+    prev.map(p =>
+      normalizeKey(p.업체명) === normalizeKey(updated.업체명)
+        ? { ...p, ...updated }
+        : p
+    )
+  );
 
-      if (idx >= 0) list[idx] = updated;
-      localStorage.setItem("hachaPlaces_v1", JSON.stringify(list));
-    } catch (e) {}
-// 🔥 신규/업데이트 후 자동완성 즉시 반영
-const newLocal = JSON.parse(localStorage.getItem("hachaPlaces_v1") || "[]");
-setPickupOptions(newLocal);
-setPlaceOptions(newLocal);
-    // 자동완성 즉시 업데이트
-    try {
-      const newLocal = JSON.parse(localStorage.getItem("hachaPlaces_v1") || "[]");
-      setPickupOptions(newLocal);
-      setPlaceOptions(newLocal);
-    } catch (e) {}
+  return;
+}
 
-    // placeRows 강제 갱신 트리거
-    try {
-      setPlaceRowsTrigger(Date.now());
-    } catch (e) {}
+  // ======================
+  // ② 신규 업체 생성
+  // ======================
+  const newRow = {
+    업체명: name,
+    주소: addr ?? "",
+    담당자: manager ?? "",
+    담당자번호: phone ?? "",
+  };
 
-    return; // 업데이트 끝
-  }
-// ✅ 신규 업체 생성 (담당자까지 같이 저장해야 함)
-upsertPlace({
-  업체명: name,
-  주소: addr,
-  담당자목록: manager && phone
-    ? [{
-        이름: manager,
-        번호: phone,
-        대표: true,
-      }]
-    : [],
-});
-
-// 🔥 신규 생성 후에도 반드시 트리거
-try {
-  setPlaceRowsTrigger(Date.now());
-} catch {}
-
+  upsertPlace(newRow);
 };
-
     // 기본 clients + 하차지 모두 포함한 통합 검색 풀
 const mergedClients = React.useMemo(() => {
   const map = new Map();
@@ -2243,12 +2169,6 @@ function applyClientSelect(name) {
   const p = placeList.find(
     x => norm(x.업체명 || "") === norm(name)
   );
-const latest = findPlaceByName(p.업체명);
-const managers = Array.isArray(latest?.담당자목록)
-  ? latest.담당자목록
-  : [];
-
-const auto = managers.find(m => m.대표) || managers[0] || null;
   // ✅ 거래처 → 상차지 자동 적용
   if (p) {
     setForm(prev => ({
@@ -2258,8 +2178,9 @@ const auto = managers.find(m => m.대표) || managers[0] || null;
       // 🔥 상차지 자동 세팅
       상차지명: p.업체명,
       상차지주소: p.주소 || "",
-      상차지담당자: auto?.이름 || "",
-상차지담당자번호: auto?.번호 || "",
+      상차지담당자: p.담당자 || "",
+상차지담당자번호: p.담당자번호 || "",
+
     }));
   } else {
     // 🔹 placeList에 없을 경우 (신규 입력)
@@ -2278,38 +2199,29 @@ const auto = managers.find(m => m.대표) || managers[0] || null;
 }
 // ⭐ 상차지에 적용 (여기 넣는 것! ← 바로 위 applyClientSelect 밑!!)
 function applyToPickup(place) {
-  const managers = Array.isArray(place?.담당자목록)
-  ? place.담당자목록
-  : [];
-const auto = managers.find(m => m.대표) || managers[0] || null;
-
-
   setForm(prev => ({
     ...prev,
     거래처명: place.업체명,
     상차지명: place.업체명,
     상차지주소: place.주소 || "",
-    상차지담당자: auto?.이름 || "",
-상차지담당자번호: auto?.번호 || "",
+    상차지담당자: place.담당자 || "",
+    상차지담당자번호: place.담당자번호 || "",
   }));
 
-  setPlaceTargetPopup({ open: false, place: null });
 }
 
 // ⭐ 하차지에 적용 (applyToPickup 바로 아래)
 function applyToDrop(place) {
-  const primary = getPrimaryManager(place);
 
   setForm(prev => ({
     ...prev,
     거래처명: place.업체명,
     하차지명: place.업체명,
     하차지주소: place.주소,
-    하차지담당자: primary?.이름 || "",
-    하차지담당자번호: primary?.번호 || "",
+    하차지담당자: place.담당자 || "",
+하차지담당자번호: place.담당자번호 || "",
   }));
 
-  setPlaceTargetPopup({ open: false, place: null });
 }
 // 🔁 상차지 ↔ 하차지 교체
 function swapPickupDrop() {
@@ -2763,23 +2675,25 @@ const rec = {
 if (typeof upsertPlace === "function") {
 // ✅ 오더 저장
 await addDispatch(rec);
-
-// ================================
-// 🔥 하차지거래처(place) 직접 동기화 (PART 11과 동일 ID)
-// ================================
-if (form.하차지명 && form.하차지주소) {
-  // 🔥 하차지거래처는 PART 11 규칙으로만 업데이트
-await upsertPlace({
-  // ❗ id 직접 만들지 말 것 (PART 11 upsertPlace가 내부에서 처리)
-  업체명: form.하차지명,
-  주소: form.하차지주소,
-
-  // ✅ PART 11이 실제로 쓰는 필드
-  담당자: form.하차지담당자 || "",
-  담당자번호: form.하차지담당자번호 || "",
-});
-
+// 🔥 상차지 동기화
+if (form.상차지명) {
+  await upsertPlace({
+    업체명: form.상차지명,
+    주소: form.상차지주소 || "",
+    담당자: form.상차지담당자 || "",
+    담당자번호: form.상차지담당자번호 || "",
+  });
 }
+
+if (form.하차지명) {
+  await upsertPlace({
+    업체명: form.하차지명,
+    주소: form.하차지주소 || "",
+    담당자: form.하차지담당자 || "",
+    담당자번호: form.하차지담당자번호 || "",
+  });
+}
+
 }
   const reset = {
     ...emptyForm,
@@ -3286,11 +3200,6 @@ const applyCopy = (r) => {
   // placeList에서 업체 찾기
   const pickupPlace = findPlaceByName(r.상차지명);
   const dropPlace   = findPlaceByName(r.하차지명);
-
-  // 대표 담당자 추출
-  const pickupPrimary = getPrimaryManager(pickupPlace);
-  const dropPrimary   = getPrimaryManager(dropPlace);
-
   const today = _todayStr();
 
   const keep = {
@@ -3300,25 +3209,26 @@ const applyCopy = (r) => {
     상차지명: r.상차지명 || "",
     상차지주소: r.상차지주소 || pickupPlace?.주소 || "",
     상차지담당자:
-      r.상차지담당자 ||
-      pickupPrimary?.이름 ||
-      "",
-    상차지담당자번호:
-      r.상차지담당자번호 ||
-      pickupPrimary?.번호 ||
-      "",
+  r.상차지담당자 ||
+  pickupPlace?.담당자 ||
+  "",
+상차지담당자번호:
+  r.상차지담당자번호 ||
+  pickupPlace?.담당자번호 ||
+  "",
 
     // ✅ 하차지
     하차지명: r.하차지명 || "",
     하차지주소: r.하차지주소 || dropPlace?.주소 || "",
     하차지담당자:
-      r.하차지담당자 ||
-      dropPrimary?.이름 ||
-      "",
-    하차지담당자번호:
-      r.하차지담당자번호 ||
-      dropPrimary?.번호 ||
-      "",
+  r.하차지담당자 ||
+  dropPlace?.담당자 ||
+  "",
+하차지담당자번호:
+  r.하차지담당자번호 ||
+  dropPlace?.담당자번호 ||
+  "",
+
 
     // 기타
     화물내용: r.화물내용 || "",
@@ -3535,129 +3445,6 @@ function FuelSlideWidget() {
     </div>
   );
 }
-// ================================
-// 🔑 상차지 담당자 파생 상태
-// ================================
-const pickupPlace = useMemo(() => {
-  return placeList.find(
-    (p) => normalizeKey(p.업체명) === normalizeKey(form.상차지명)
-  );
-}, [placeList, form.상차지명]);
-
-const pickupManagers = useMemo(() => {
-  if (!pickupPlace) return [];
-
-  if (Array.isArray(pickupPlace.담당자목록)) {
-    return pickupPlace.담당자목록.map((m) => ({
-      이름: m.이름,
-      번호: m.번호,
-      대표: !!m.대표,
-    }));
-  }
-
-  // 🔥 구형 데이터 대응
-  if (pickupPlace.담당자 && pickupPlace.담당자번호) {
-    return [{
-      이름: pickupPlace.담당자,
-      번호: pickupPlace.담당자번호,
-      대표: true,
-    }];
-  }
-
-  return [];
-}, [pickupPlace]);
-const syncPlaceManager = async (placeName, addr, manager, phone) => {
-  if (!placeName || !manager || !phone) return;
-
-  const place = findPlaceByName(placeName);
-  if (!place) return;
-
-  const list = Array.isArray(place.담당자목록)
-    ? place.담당자목록
-    : [];
-
-  const sameNameIdx = list.findIndex(
-    (m) => m.이름 === manager
-  );
-
-  let nextManagers;
-  if (sameNameIdx >= 0) {
-    nextManagers = list.map((m, i) =>
-      i === sameNameIdx ? { ...m, 번호: phone } : m
-    );
-  } else {
-    nextManagers = [
-      ...list,
-      { 이름: manager, 번호: phone, 대표: false },
-    ];
-  }
-
-  await upsertPlace({
-    업체명: place.업체명,
-    주소: addr || place.주소,
-    담당자목록: nextManagers,
-  });
-
-  // localStorage 동기화
-  try {
-    const ls = JSON.parse(
-      localStorage.getItem("hachaPlaces_v1") || "[]"
-    );
-    const idx = ls.findIndex(
-      (p) => normalizeKey(p.업체명) === normalizeKey(place.업체명)
-    );
-    if (idx >= 0) {
-      ls[idx] = { ...ls[idx], 담당자목록: nextManagers };
-      localStorage.setItem(
-        "hachaPlaces_v1",
-        JSON.stringify(ls)
-      );
-    }
-  } catch {}
-
-  setPlaceRowsTrigger(Date.now());
-};
-// ================================
-// 🔑 하차지 담당자 파생 상태 (추가)
-// ================================
-const dropPlace = useMemo(() => {
-  return placeList.find(
-    (p) => normalizeKey(p.업체명) === normalizeKey(form.하차지명)
-  );
-}, [placeList, form.하차지명]);
-
-const dropManagers = useMemo(() => {
-  if (!dropPlace) return [];
-
-  if (Array.isArray(dropPlace.담당자목록)) {
-    return dropPlace.담당자목록.map((m) => ({
-      이름: m.이름,
-      번호: m.번호,
-      대표: !!m.대표,
-    }));
-  }
-
-  // 🔥 구형 데이터 대응
-  if (dropPlace.담당자 && dropPlace.담당자번호) {
-    return [{
-      이름: dropPlace.담당자,
-      번호: dropPlace.담당자번호,
-      대표: true,
-    }];
-  }
-
-  return [];
-}, [dropPlace]);
-const isNewDropManager = useMemo(() => {
-  if (!form.하차지담당자번호) return false;
-
-  const samePhone = dropManagers.some(
-    (m) => m.번호 === form.하차지담당자번호
-  );
-
-  if (samePhone) return false;
-  return !!form.하차지담당자;
-}, [dropManagers, form.하차지담당자, form.하차지담당자번호]);
 function calcHistoryScore(row, form) {
   let score = 0;
 
@@ -4216,14 +4003,12 @@ const similar = placeList.filter(p => {
         if (e.key === "Enter") {
           const p = list[pickupActive];
           if (!p) return;
-const primary = getPrimaryManager(p);
-
 setForm((prev) => ({
   ...prev,
   상차지명: p.업체명,
   상차지주소: p.주소,
-  상차지담당자: primary?.이름 || "",
-  상차지담당자번호: primary?.번호 || "",
+  상차지담당자: p.담당자 || "",
+상차지담당자번호: p.담당자번호 || "",
 }));
           setShowPickupDropdown(false);
         } else if (e.key === "ArrowDown") {
@@ -4236,27 +4021,26 @@ setForm((prev) => ({
     />
 
     {showPickupDropdown && pickupOptions.length > 0 && (
-      <div className="absolute z-50 bg-white border rounded-lg shadow-lg w-full max-h-48 overflow-auto">
-        {pickupOptions.map((p, i) => (
-          <div
-            key={i}
-            className={`px-2 py-1 cursor-pointer ${
-              i === pickupActive ? "bg-blue-50" : "hover:bg-gray-50"
-            }`}
-            onMouseDown={() => {
-  const primary = getPrimaryManager(p);
+  <div className="absolute z-50 bg-white border rounded-lg shadow-lg w-full max-h-48 overflow-auto">
+    {pickupOptions.map((p, i) => (
+      <div
+        key={i}
+        className={`px-2 py-1 cursor-pointer ${
+          i === pickupActive ? "bg-blue-50" : "hover:bg-gray-50"
+        }`}
+        onMouseDown={() => {
+          setForm((prev) => ({
+            ...prev,
+            상차지명: p.업체명,
+            상차지주소: p.주소 || "",
+            상차지담당자: p.담당자 || "",
+            상차지담당자번호: p.담당자번호 || "",
+          }));
 
-  setForm((prev) => ({
-    ...prev,
-    상차지명: p.업체명,
-    상차지주소: p.주소,
-    상차지담당자: primary?.이름 || "",
-    상차지담당자번호: primary?.번호 || "",
-  }));
+          setShowPickupDropdown(false);
+        }}
+      >
 
-  setShowPickupDropdown(false);
-}}
-          >
             <b>{p.업체명}</b>
             {p.주소 && <div className="text-xs text-gray-500">{p.주소}</div>}
           </div>
@@ -4292,71 +4076,6 @@ setForm((prev) => ({
   placeholder="담당자 이름"
 />
 
-    {pickupPlace && form.상차지담당자 && (
-      <div className="absolute right-2 top-1/2 -translate-y-1/2">
-        <ToggleBadge
-          active={pickupManagers.some(
-            (m) =>
-              m.이름 === form.상차지담당자 &&
-              m.번호 === form.상차지담당자번호 &&
-              m.대표
-          )}
-          onClick={async () => {
-  const exists = pickupManagers.some(
-    (m) =>
-      m.이름 === form.상차지담당자 &&
-      m.번호 === form.상차지담당자번호
-  );
-
-  const nextManagers = exists
-    ? pickupManagers.map((m) => ({
-        ...m,
-        대표:
-          m.이름 === form.상차지담당자 &&
-          m.번호 === form.상차지담당자번호,
-      }))
-    : [
-        ...pickupManagers.map((m) => ({ ...m, 대표: false })),
-        {
-          이름: form.상차지담당자,
-          번호: form.상차지담당자번호,
-          대표: true,
-        },
-      ];
-
-  await upsertPlace({
-    업체명: pickupPlace.업체명,
-    주소: pickupPlace.주소,
-    담당자목록: nextManagers,
-  });
-try {
-  const list = JSON.parse(
-    localStorage.getItem("hachaPlaces_v1") || "[]"
-  );
-
-  const idx = list.findIndex(
-    (p) => normalizeKey(p.업체명) === normalizeKey(pickupPlace.업체명)
-  );
-
-  if (idx >= 0) {
-    list[idx] = {
-      ...list[idx],
-      담당자목록: nextManagers,
-    };
-    localStorage.setItem("hachaPlaces_v1", JSON.stringify(list));
-  }
-} catch {}
-  setPlaceRowsTrigger(Date.now());
-  alert("대표 담당자로 지정되었습니다.");
-}}
-
-          activeCls="bg-blue-600 text-white border-blue-600"
-          inactiveCls="bg-blue-50 text-blue-700 border-blue-200"
-        >
-          대표
-        </ToggleBadge>
-      </div>
-    )}
   </div>
 </div>
 {/* 상차지 연락처 */}
@@ -4396,19 +4115,19 @@ try {
           e.preventDefault();
         }
         if (e.key === "Enter") {
-          const p = list[placeActive];
-          if (!p) return;
-          const primary = getPrimaryManager(p);
+  const p = list[placeActive];
+  if (!p) return;
 
-setForm((prev) => ({
-  ...prev,
-  하차지명: p.업체명,
-  하차지주소: p.주소,
-  하차지담당자: primary?.이름 || "",
-  하차지담당자번호: primary?.번호 || "",
-}));
+  setForm((prev) => ({
+    ...prev,
+    하차지명: p.업체명,
+    하차지주소: p.주소 || "",
+    하차지담당자: p.담당자 || "",
+    하차지담당자번호: p.담당자번호 || "",
+  }));
 
-          setShowPlaceDropdown(false);
+  setShowPlaceDropdown(false);
+
         } else if (e.key === "ArrowDown") {
           setPlaceActive((i) => Math.min(i + 1, list.length - 1));
         } else if (e.key === "ArrowUp") {
@@ -4419,27 +4138,27 @@ setForm((prev) => ({
     />
 
     {showPlaceDropdown && placeOptions.length > 0 && (
-      <div className="absolute z-50 bg-white border rounded-lg shadow-lg w-full max-h-48 overflow-auto">
-        {placeOptions.map((p, i) => (
-          <div
-            key={p.업체명 + "_" + i}
-            className={`px-2 py-1 cursor-pointer ${
-              i === placeActive ? "bg-blue-50" : "hover:bg-gray-50"
-            }`}
-            onMouseEnter={() => setPlaceActive(i)}
-            onMouseDown={() => {
-              const primary = getPrimaryManager(p);
+  <div className="absolute z-50 bg-white border rounded-lg shadow-lg w-full max-h-48 overflow-auto">
+    {placeOptions.map((p, i) => (
+      <div
+        key={p.업체명 + "_" + i}
+        className={`px-2 py-1 cursor-pointer ${
+          i === placeActive ? "bg-blue-50" : "hover:bg-gray-50"
+        }`}
+        onMouseEnter={() => setPlaceActive(i)}
+        onMouseDown={() => {
+          setForm((prev) => ({
+            ...prev,
+            하차지명: p.업체명,
+            하차지주소: p.주소 || "",
+            하차지담당자: p.담당자 || "",
+            하차지담당자번호: p.담당자번호 || "",
+          }));
 
-setForm((prev) => ({
-  ...prev,
-  하차지명: p.업체명,
-  하차지주소: p.주소,
-  하차지담당자: primary?.이름 || "",
-  하차지담당자번호: primary?.번호 || "",
-}));
-              setShowPlaceDropdown(false);
-            }}
-          >
+          setShowPlaceDropdown(false);
+        }}
+      >
+
             <b>{p.업체명}</b>
             {p.주소 && <div className="text-xs text-gray-500">{p.주소}</div>}
           </div>
@@ -4464,11 +4183,6 @@ setForm((prev) => ({
 <div>
   <label className={labelCls}>
     하차지 담당자
-    {isNewDropManager && (
-      <span className="ml-2 text-xs text-emerald-600 font-semibold">
-        신규 담당자
-      </span>
-    )}
   </label>
 
   
@@ -4482,72 +4196,6 @@ setForm((prev) => ({
       }
       placeholder="담당자 이름"
     />
-
-    {dropPlace && form.하차지담당자 && (
-      <div className="absolute right-2 top-1/2 -translate-y-1/2">
-        <ToggleBadge
-          active={dropManagers.some(
-            (m) =>
-              m.이름 === form.하차지담당자 &&
-              m.번호 === form.하차지담당자번호 &&
-              m.대표
-          )}
-          onClick={async () => {
-            const exists = dropManagers.some(
-              (m) =>
-                m.이름 === form.하차지담당자 &&
-                m.번호 === form.하차지담당자번호
-            );
-
-            const nextManagers = exists
-              ? dropManagers.map((m) => ({
-                  ...m,
-                  대표:
-                    m.이름 === form.하차지담당자 &&
-                    m.번호 === form.하차지담당자번호,
-                }))
-              : [
-                  ...dropManagers.map((m) => ({ ...m, 대표: false })),
-                  {
-                    이름: form.하차지담당자,
-                    번호: form.하차지담당자번호,
-                    대표: true,
-                  },
-                ];
-
-            await upsertPlace({
-              업체명: dropPlace.업체명,
-              주소: dropPlace.주소,
-              담당자목록: nextManagers,
-            });
-            try {
-  const list = JSON.parse(
-    localStorage.getItem("hachaPlaces_v1") || "[]"
-  );
-
-  const idx = list.findIndex(
-    (p) => normalizeKey(p.업체명) === normalizeKey(dropPlace.업체명)
-  );
-
-  if (idx >= 0) {
-    list[idx] = {
-      ...list[idx],
-      담당자목록: nextManagers,
-    };
-    localStorage.setItem("hachaPlaces_v1", JSON.stringify(list));
-  }
-} catch {}
-
-            setPlaceRowsTrigger(Date.now());
-            alert("대표 담당자로 지정되었습니다.");
-          }}
-          activeCls="bg-blue-600 text-white border-blue-600"
-          inactiveCls="bg-blue-50 text-blue-700 border-blue-200"
-        >
-          대표
-        </ToggleBadge>
-      </div>
-    )}
   </div>
 </div>
 <div>
@@ -15781,9 +15429,9 @@ const dispatchRows = Array.isArray(dispatchData)
   ? dispatchData
       .filter(
         (r) =>
-          (r.배차상태 || "") === "배차완료" &&
-          !String(r.거래처명 || "").includes("채석강")
+          (r.배차상태 || "") === "배차완료"
       )
+
       .map((r) => {
         const sale = toInt(r.청구운임);
         const driver = toInt(r.기사운임);
@@ -15870,14 +15518,17 @@ const rangeProfitRate =
     (r.상차일 || "").startsWith(monthKey)
   );
 
-  const yearRows = rows.filter((r) => {
-    const d = r.상차일;
-    if (!d) return false;
-    const endOfMonth = new Date(yearKey, monthNum, 0)
-      .toISOString()
-      .slice(0, 10);
-    return d >= `${yearKey}-01-01` && d <= endOfMonth;
-  });
+const yearRows = rows.filter((r) => {
+  if (!r.상차일) return false;
+
+  const date = new Date(r.상차일);
+
+  const startOfYear = new Date(yearKey, 0, 1);
+  const endOfYear = new Date(yearKey, 11, 31);
+
+  return date >= startOfYear && date <= endOfYear;
+});
+
 
   const prevMonthRows = rows.filter((r) =>
     (r.상차일 || "").startsWith(prevMonthKey)
@@ -20313,6 +19964,12 @@ function ClientManagement({ clients = [], upsertClient, removeClient }) {
       .toLowerCase()
       .replace(/\s+/g, "")
       .replace(/[^\uAC00-\uD7A3]/g, "");
+      // 🔥 업체명 통합 키 생성용
+const normalizeKey = (s = "") =>
+  String(s)
+    .toLowerCase()
+    .replace(/\s+/g, "")
+    .replace(/[^\uAC00-\uD7A3a-z0-9]/gi, "");
 
   /* -----------------------------------------------------------
      공통 유틸/스타일
@@ -20488,20 +20145,10 @@ function ClientManagement({ clients = [], upsertClient, removeClient }) {
 
     reader.readAsArrayBuffer(file);
   };
-
-  /* -----------------------------------------------------------
-     🔵 [2] 하차지 거래처 관리 (Firestore: places 컬렉션)
-  ----------------------------------------------------------- */
-
   // ✅ Firestore 하차지 컬렉션 helpers
   const PLACES_COLL = "places";
-// 🔑 하차지 고정 ID (업체명 + 주소 기반)
-const makePlaceId = (name = "", addr = "") =>
-  normalizeCompanyName(name) + "__" + normalizePlace(addr);
-
-  const upsertPlace = async (row) => {
-  // ⭐ 기존 row.id가 있으면 무조건 그 문서 덮어씀
-  const id = row.id || makePlaceId();
+const upsertPlace = async (row) => {
+  const id = normalizeKey(row.업체명); // ⭐ 주소 제거
 
   await setDoc(
     doc(db, PLACES_COLL, id),
@@ -20511,12 +20158,12 @@ const makePlaceId = (name = "", addr = "") =>
       주소: (row.주소 || "").trim(),
       담당자: row.담당자 || "",
       담당자번호: row.담당자번호 || "",
-      메모: row.메모 || "",
       updatedAt: serverTimestamp(),
     },
-    { merge: true } // ✅ 항상 덮어쓰기
+    { merge: true }
   );
 };
+
 
   const removePlace = async (id) => {
     if (!id) return;
@@ -20623,38 +20270,36 @@ const makePlaceId = (name = "", addr = "") =>
 
   // 🔄 Firestore 실시간 구독
   React.useEffect(() => {
-    const unsub = onSnapshot(collection(db, PLACES_COLL), (snap) => {
-      const arr = [];
-      const addrMap = new Map(); // 🔥 주소 ID 기준
+  const unsub = onSnapshot(collection(db, PLACES_COLL), (snap) => {
+    const arr = [];
+    const nameMap = new Map(); // 🔥 업체명 기준
 
-      snap.docs.forEach((d) => {
-        const data = d.data() || {};
-        const addr = (data.주소 || "").trim();
-        if (!addr) return;
+    snap.docs.forEach((d) => {
+      const data = d.data() || {};
+      const nameKey = normalizeKey(data.업체명 || "");
 
-        const addrId = makePlaceId(data.업체명 || "", addr);
+      if (!nameKey) return;
+      if (nameMap.has(nameKey)) return; // 같은 업체명 중복 제거
 
-        // 이미 같은 주소가 있으면 스킵 (과거 찌꺼기 제거)
-        if (addrMap.has(addrId)) return;
+      const row = {
+        id: d.id,
+        업체명: data.업체명 || "",
+        주소: (data.주소 || "").trim(),
+        담당자: data.담당자 || "",
+        담당자번호: data.담당자번호 || "",
+        메모: data.메모 || "",
+      };
 
-        const row = {
-          id: d.id,
-          업체명: data.업체명 || "",
-          주소: addr,
-          담당자: data.담당자 || "",
-          담당자번호: data.담당자번호 || data.연락처 || "",
-          메모: data.메모 || "",
-        };
-
-        addrMap.set(addrId, row);
-        arr.push(row);
-      });
-
-      setPlaceRows(arr);
+      nameMap.set(nameKey, row);
+      arr.push(row);
     });
 
-    return () => unsub();
-  }, []);
+    setPlaceRows(arr);
+  });
+
+  return () => unsub();
+}, []);
+
 
   const filteredPlaces = React.useMemo(() => {
     if (!placeQ.trim()) return placeRows;
