@@ -113,7 +113,14 @@ const HANDOVER_USERS = [
   "박주상대표",
   "이도경대리",
 ];
+// ===================== 인수인계 UID 매핑 =====================
+const USER_UID_MAP = {
+  "박성우팀장": "여기에_박성우_uid",
+  "박주상대표": "여기에_박주상_uid",
+  "이도경대리": "여기에_이도경_uid",
+};
 
+const getUidByName = (name) => USER_UID_MAP[name] || null;
 /* ===================== HOME DASHBOARD ===================== */
 export default function HomeDashboard({
   role,
@@ -182,29 +189,11 @@ const [schedulePage, setSchedulePage] = useState(1);
 
   // ===================== 인수인계 팝업 =====================
 const [handoverOpen, setHandoverOpen] = useState(false);
-const today = new Date().toISOString().slice(0, 10);
-const todayHandovers = useMemo(() => {
-  return handovers.filter(h => {
-    // 1️⃣ date 필드가 있으면 그걸 사용
-    if (h.date) return h.date === today;
-
-    // 2️⃣ 없으면 createdAt 기준으로 계산
-    if (h.createdAt?.seconds) {
-      const d = new Date(h.createdAt.seconds * 1000)
-        .toISOString()
-        .slice(0, 10);
-      return d === today;
-    }
-
-    return false;
-  });
-}, [handovers, today]);
-
 const [handoverForm, setHandoverForm] = useState({
   text: "",
   author: user?.displayName || "작성자",
   receiver: "",
-  date: today,
+  date: todayStr,
 });
 const [selectedHandover, setSelectedHandover] = useState(null);
 
@@ -304,6 +293,19 @@ const pagedSchedules = useMemo(() => {
   const start = (schedulePage - 1) * SCHEDULE_PAGE_SIZE;
   return schedules.slice(start, start + SCHEDULE_PAGE_SIZE);
 }, [schedules, schedulePage]);
+// 🔹 인수인계 페이지네이션
+const HANDOVER_PAGE_SIZE = 5;
+const [handoverPage, setHandoverPage] = useState(1);
+
+const handoverTotalPages = Math.ceil(
+  handovers.length / HANDOVER_PAGE_SIZE
+);
+
+const pagedHandovers = useMemo(() => {
+  const start = (handoverPage - 1) * HANDOVER_PAGE_SIZE;
+  return handovers.slice(start, start + HANDOVER_PAGE_SIZE);
+}, [handovers, handoverPage]);
+
 // ===================== 인수인계 실시간 구독 + 토스트 =====================
 React.useEffect(() => {
   const q = query(
@@ -1204,17 +1206,17 @@ const recentOrders = useMemo(() => {
 )}
   {/* ================= 인수인계 ================= */}
 <Card
-  title="오늘 인수인계"
+  title="인수인계 게시판"
   action={
     <button
       onClick={() => {
         setSelectedHandover(null); // 🔥 신규 등록 시 수정 잔여값 방지
         setHandoverForm({
-          text: "",
-          author: "",
-          receiver: "",
-          date: today,
-        });
+  text: "",
+  author: "",
+  receiver: "",
+  date: todayStr,
+});
         setHandoverOpen(true);
       }}
       className="px-3 py-1 bg-blue-600 text-white rounded text-sm"
@@ -1320,9 +1322,11 @@ const recentOrders = useMemo(() => {
               );
             } else {
               await addDoc(collection(db, "handovers"), {
-                ...handoverForm,
-                createdAt: serverTimestamp(),
-              });
+  ...handoverForm,
+  createdAt: serverTimestamp(),
+  readBy: [],
+  receiverUid: getUidByName(handoverForm.receiver),
+});
             }
 
             // 🔁 초기화
@@ -1330,7 +1334,7 @@ const recentOrders = useMemo(() => {
               text: "",
               author: "",
               receiver: "",
-              date: today,
+              date: todayStr,
             });
 
             setHandoverOpen(false);
@@ -1345,27 +1349,98 @@ const recentOrders = useMemo(() => {
     </Modal>
   )}
 
-  {/* ================= 오늘 인수인계 리스트 ================= */}
-  {todayHandovers.length === 0 ? (
-    <div className="text-sm text-gray-400">
-      오늘 인수인계 없음
-    </div>
-  ) : (
-    <ul className="space-y-1 text-sm">
-      {todayHandovers.map((h) => (
-        <li
-          key={h.id}
-          onClick={() => setSelectedHandover(h)}
-          className="border-b pb-2 cursor-pointer hover:bg-slate-50 rounded px-1"
-        >
-          <div className="text-xs text-gray-500">
-            {h.date} · {h.author} → {h.receiver}
+  {/* ================= 인수인계 전체 리스트 ================= */}
+{handovers.length === 0 ? (
+  <div className="text-sm text-gray-400">
+    등록된 인수인계가 없습니다
+  </div>
+) : (
+  <>
+    <ul className="space-y-2 text-sm">
+  {pagedHandovers.map((h) => {
+const receiverRead =
+  h.readBy?.includes(h.receiverUid);
+
+const isReceiver =
+  user?.uid === h.receiverUid;
+
+    const isAuthor =
+      user?.displayName === h.author;
+
+    const dateStr =
+      h.date || formatCreatedAt(h.createdAt) || "";
+
+    const formattedDate = dateStr
+      ? `${dateStr.replaceAll("-", "")} 인수인계`
+      : "인수인계";
+
+    return (
+      <li
+        key={h.id}
+        onClick={async () => {
+          setSelectedHandover(h);
+
+          // 🔥 받는 사람이 클릭하면 읽음 처리
+          if (isReceiver && !receiverRead) {
+  await updateDoc(doc(db, "handovers", h.id), {
+    readBy: [
+      ...(h.readBy || []),
+      user.uid,
+    ],
+  });
+}
+        }}
+        className="border-b pb-2 cursor-pointer hover:bg-slate-50 rounded px-1"
+      >
+        <div className="flex justify-between items-center">
+          <div className="font-semibold">
+            {formattedDate}
           </div>
-          <div className="truncate">{h.text}</div>
-        </li>
-      ))}
-    </ul>
-  )}
+
+          {/* 🔴🟢 항상 표시 */}
+          <span
+            className={`text-xs px-2 py-0.5 rounded-full
+              ${
+                receiverRead
+                  ? "bg-green-500 text-white"
+                  : "bg-red-500 text-white"
+              }`}
+          >
+            {receiverRead ? "읽음" : "안읽음"}
+          </span>
+        </div>
+
+        <div className="text-xs text-gray-400">
+          {h.author} → {h.receiver}
+        </div>
+      </li>
+    );
+  })}
+</ul>
+    {/* 🔹 페이지네이션 */}
+    {handoverTotalPages > 1 && (
+      <div className="flex justify-center gap-1 pt-3">
+        {Array.from({ length: handoverTotalPages }).map((_, idx) => {
+          const page = idx + 1;
+          return (
+            <button
+              key={page}
+              onClick={() => setHandoverPage(page)}
+              className={`px-2 py-1 text-xs rounded
+                ${
+                  page === handoverPage
+                    ? "bg-blue-600 text-white"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                }`}
+            >
+              {page}
+            </button>
+          );
+        })}
+      </div>
+    )}
+  </>
+)}
 </Card>
 </div>
       {/* ================= 하단 ================= */}
