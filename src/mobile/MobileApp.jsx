@@ -111,9 +111,12 @@ const getSanjae = (o = {}) => o.산재보험료 ?? 0;
 // 짧은 주소 (시/구까지만)
 const shortAddr = (addr = "") => {
   const parts = String(addr).split(/\s+/);
-  if (parts.length >= 2) return `${parts[0]} ${parts[1]}`;
-  if (parts.length === 1) return parts[0];
-  return "";
+  if (!parts.length) return "";
+
+  return parts[0]
+    .replace("광역시", "")
+    .replace("특별시", "")
+    .replace("도", "");
 };
 
 // 날짜 헤더: 2025-11-24 → 11.24(월)
@@ -4273,49 +4276,142 @@ if (!isForced && (!hasPickup || !hasDrop)) {
   return;
 }
 
-
 const normPickup = clean(pickup) || clean(pickupAddr);
 const normDrop   = clean(drop)   || clean(dropAddr);
   const inputTonNum = extractTonNum(ton);
 
-  let filtered = dispatchData
-  .map((r) => {
-    const rp = clean(r.상차지명 || "") + clean(r.상차지주소 || "");
-    const rd = clean(r.하차지명 || "") + clean(r.하차지주소 || "");
+const inputCargoNum = extractCargoNumber(cargo);
+const inputTonNum2 = extractTonNum(ton);
 
-    if (!rp.includes(normPickup) || !rd.includes(normDrop)) return null;
+let filtered = dispatchData.map(r => {
 
-    // 주소 점수
-    const addrScore =
-      (rp.startsWith(normPickup) ? 3 : 1) +
-      (rd.startsWith(normDrop) ? 3 : 1);
+  const rp = clean(r.상차지명 || "") + clean(r.상차지주소 || "");
+  const rd = clean(r.하차지명 || "") + clean(r.하차지주소 || "");
 
-    // 차량종류 필터
-    if (vehicle !== "전체") {
-      const rv = clean(r.차량종류 || "");
-      if (!rv.includes(clean(vehicle))) return null;
+  // =========================
+// 1️⃣ 루트 점수 (완전 동일 매칭만 허용)
+// =========================
+
+let routeScore = 0;
+
+const inputPickupName = clean(pickup);
+const inputPickupAddr = clean(pickupAddr);
+const inputDropName   = clean(drop);
+const inputDropAddr   = clean(dropAddr);
+
+const rowPickupName = clean(r.상차지명);
+const rowPickupAddr = clean(r.상차지주소);
+const rowDropName   = clean(r.하차지명);
+const rowDropAddr   = clean(r.하차지주소);
+
+// 🔥 빈값은 비교에서 제외
+const pickupMatch =
+  (inputPickupName && rowPickupName.includes(inputPickupName)) ||
+  (inputPickupAddr && rowPickupAddr.includes(inputPickupAddr));
+
+const dropMatch =
+  (inputDropName && rowDropName.includes(inputDropName)) ||
+  (inputDropAddr && rowDropAddr.includes(inputDropAddr));
+
+if (pickupMatch && dropMatch) {
+  routeScore = 2;
+} else {
+  return null;
+}
+  // =========================
+  // 2️⃣ 파렛 차이
+  // =========================
+  const rowCargoNum = extractCargoNumber(r.화물내용);
+  let cargoDiff = 999;
+
+  if (inputCargoNum != null && rowCargoNum != null) {
+    cargoDiff = Math.abs(inputCargoNum - rowCargoNum);
+  }
+
+  // =========================
+  // 3️⃣ 톤수 차이
+  // =========================
+  const rowTonNum = extractTonNum(r.차량톤수 || "");
+  let tonDiff = 999;
+
+  if (inputTonNum2 != null && rowTonNum != null) {
+    tonDiff = Math.abs(inputTonNum2 - rowTonNum);
+  }
+
+  return {
+    ...r,
+    _routeScore: routeScore,
+    _cargoDiff: cargoDiff,
+    _tonDiff: tonDiff,
+  };
+
+}).filter(Boolean);
+// 🔥 차종 필터
+if (vehicle && vehicle !== "전체") {
+
+  filtered = filtered.filter(r => {
+    const car = clean(r.차량종류 || "");
+
+    // 라보/다마스
+    if (vehicle === "라보/다마스") {
+      return car.includes("라보") || car.includes("다마스");
     }
 
-    // 톤수 필터 (있으면만)
-    if (inputTonNum != null) {
-      const rTon = extractTonNum(r.차량톤수 || "");
-      if (rTon != null && Math.abs(rTon - inputTonNum) > 1) return null;
+    // 카고 그룹
+    if (vehicle === "카고") {
+      return (
+        car.includes("카고") ||
+        car.includes("윙") ||
+        car.includes("탑")
+      );
     }
 
-    // 🔥 화물 유사도
-    const cargoScore = cargoSimilarityScore(cargo, r.화물내용);
+    // 냉장 그룹
+    if (vehicle === "냉장") {
+      return (
+        car.includes("냉장") ||
+        car.includes("냉동")
+      );
+    }
 
-    return {
-      ...r,
-      _addrScore: addrScore,
-      _cargoScore: cargoScore,
-    };
-  })
-  .filter(Boolean);
+    return car.includes(clean(vehicle));
+  });
+}
+if (inputTonNum2 != null) {
+  filtered = filtered.filter(r => {
+    const rowTon = extractTonNum(r.차량톤수 || "");
+    return rowTon === inputTonNum2;
+  });
+}
+if (inputCargoNum != null) {
+  filtered = filtered.filter(r => {
+    const rowCargo = extractCargoNumber(r.화물내용 || "");
+    return rowCargo === inputCargoNum;
+  });
+}
+filtered = filtered.filter(r => r._routeScore === 2);
+// 🔥 계층 정렬
+filtered.sort((a, b) => {
 
+  // 1️⃣ 루트 우선 (둘다매칭 > 하나매칭)
+  if (a._routeScore !== b._routeScore) {
+    return b._routeScore - a._routeScore;
+  }
 
+  // 2️⃣ 파렛 동일 → 근접순
+  if (a._cargoDiff !== b._cargoDiff) {
+    return a._cargoDiff - b._cargoDiff;
+  }
+
+  // 3️⃣ 톤수 동일 → 근접순
+  if (a._tonDiff !== b._tonDiff) {
+    return a._tonDiff - b._tonDiff;
+  }
+
+  // 4️⃣ 날짜 최신순
+  return new Date(b.상차일 || 0) - new Date(a.상차일 || 0);
+});
 if (!filtered.length) {
-  // 🔥 자동 운임조회(preset)일 때는 alert 띄우지 않음
   if (!isForced) {
     alert("검색된 데이터가 없습니다.");
   }
@@ -4325,28 +4421,19 @@ if (!filtered.length) {
   setAiFare(null);
   return;
 }
-
-
-filtered.sort((a, b) => {
-  // 1️⃣ 화물 유사도 최우선
-  if (b._cargoScore !== a._cargoScore) {
-    return b._cargoScore - a._cargoScore;
-  }
-
-  // 2️⃣ 주소 정확도
-  if (b._addrScore !== a._addrScore) {
-    return b._addrScore - a._addrScore;
-  }
-
-  // 3️⃣ 최신 날짜
-  return new Date(b.상차일 || 0) - new Date(a.상차일 || 0);
-});
-
   setMatchedRows(filtered);
 
-  const fares = filtered.map((r) =>
-    Number(String(r.청구운임 || 0).replace(/[^\d]/g, ""))
-  );
+// 🔥 화물내용 숫자 동일한 것만 평균 계산
+const sameCargoRows = filtered.filter(r => {
+  const rowCargoNum = extractCargoNumber(r.화물내용);
+  return rowCargoNum === inputCargoNum;
+});
+
+const baseRows = sameCargoRows.length ? sameCargoRows : filtered;
+
+const fares = baseRows.map((r) =>
+  Number(String(r.청구운임 || 0).replace(/[^\d]/g, ""))
+);
   const avg = Math.round(fares.reduce((a, b) => a + b, 0) / fares.length);
 
   const latest = filtered[0];
@@ -4474,46 +4561,112 @@ filtered.sort((a, b) => {
             과거 운임 기록:
           </div>
           {/* 📌 과거 운임 카드형 UI */}
-          <div className="mt-4 space-y-3">
-            {matchedRows.map((r) => {
-              const fare = Number(r.청구운임 || 0).toLocaleString();
-              const driver = Number(r.기사운임 || 0).toLocaleString();
-              const profit = Number(r.청구운임 || 0) - Number(r.기사운임 || 0);
+<div className="mt-4 space-y-3">
+  {matchedRows.map((r) => {
 
-              return (
-                <div
-                  key={r.id}
-                  className="bg-white shadow-sm rounded-xl p-3 border"
-                >
-                  {/* 날짜 + 금액 */}
-                  <div className="flex justify-between text-sm font-semibold">
-                    <span>{r.상차일?.slice(5) || "-"}</span>
-                    <span className="text-blue-600">{fare}원</span>
-                  </div>
+    const rawFare = Number(r.청구운임 || 0);
+    const fare = rawFare.toLocaleString();
 
-                  {/* 경로 */}
-                  <div className="text-xs text-gray-600 mt-1">
-                    {r.상차지명} → {r.하차지명}
-                  </div>
+    const driverRaw = Number(r.기사운임 || 0);
+    const driver = driverRaw.toLocaleString();
+    const profit = rawFare - driverRaw;
 
-                  {/* 사양 */}
-                  <div className="text-[11px] text-gray-500 mt-1 leading-tight">
-                    {[r.화물내용, r.차량종류, r.차량톤수]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  </div>
+    // 🔥 이 오더의 파렛트 숫자
+    const rowCargoNum = extractCargoNumber(r.화물내용);
 
-                  {/* 수수료 */}
-                  <div className="text-[11px] text-gray-500 mt-1">
-                    기사 {driver}원 · 수수료 {profit.toLocaleString()}원
-                  </div>
-                </div>
-              );
-            })}
+    // 🔥 같은 파렛트끼리만 그룹 생성
+    const samePalletGroup = matchedRows.filter(item => {
+      const num = extractCargoNumber(item.화물내용);
+      return num === rowCargoNum;
+    });
+
+    // 🔥 같은 파렛 그룹 평균 계산
+    const palletAvg = samePalletGroup.length
+      ? Math.round(
+          samePalletGroup.reduce((sum, item) =>
+            sum + Number(String(item.청구운임 || 0).replace(/[^\d]/g, "")),
+          0) / samePalletGroup.length
+        )
+      : rawFare;
+
+    const diff = rawFare - palletAvg;
+    const percent = palletAvg
+      ? Math.round((diff / palletAvg) * 100)
+      : 0;
+
+    const isHigh = percent > 3;
+    const isLow  = percent < -3;
+
+    return (
+      <div
+        key={r.id}
+        className="bg-white shadow-sm rounded-xl p-4 border border-gray-200"
+      >
+        {/* 날짜 + 금액 */}
+        <div className="flex justify-between items-center">
+          <span className="text-sm text-gray-500">
+            {r.상차일?.slice(5) || "-"}
+          </span>
+
+          <span
+            className={`text-lg font-semibold ${
+              isHigh
+                ? "text-red-600"
+                : isLow
+                ? "text-blue-600"
+                : "text-gray-800"
+            }`}
+          >
+            {fare}원
+            {isHigh && " 🔺"}
+            {isLow && " 🔻"}
+          </span>
+        </div>
+
+        {result?.avg && (
+          <div
+            className={`text-xs mt-1 ${
+              isHigh
+                ? "text-red-500"
+                : isLow
+                ? "text-blue-500"
+                : "text-gray-400"
+            }`}
+          >
+            평균 대비 {percent > 0 ? "+" : ""}
+            {percent}%
+          </div>
+        )}
+
+        {/* 경로 */}
+        <div className="mt-3">
+          <div className="text-sm font-semibold text-gray-800">
+            {r.상차지명 || "-"} → {r.하차지명 || "-"}
           </div>
 
+          <div className="text-xs text-gray-500 mt-1">
+            {shortAddr(r.상차지주소)} → {shortAddr(r.하차지주소)}
+          </div>
+        </div>
 
+        {/* 사양 */}
+        <div className="mt-3 text-xs text-gray-700 font-medium">
+          {r.화물내용 || "-"}
+          <span className="mx-2 text-gray-300">|</span>
+          {r.차량톤수 || "-"}
+          <span className="mx-2 text-gray-300">|</span>
+          {r.차량종류 || "-"}
+        </div>
 
+        {/* 수수료 */}
+        <div className="mt-3 text-xs text-gray-600 border-t pt-2 flex justify-between">
+          <span>기사 {driver}원</span>
+          <span>수수료 {profit.toLocaleString()}원</span>
+        </div>
+      </div>
+    );
+  })}
+</div>
         </div>
       )}
     </div>

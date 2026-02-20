@@ -1711,9 +1711,6 @@ const mergedClients = React.useMemo(() => {
       });
     }
   });
-
-
-  
   return Array.from(map.values());
 }, [placeList, clients]);
 
@@ -2542,7 +2539,13 @@ function calcFareMatchScore(row, input) {
   }
 
   // 차량종류
-  if (input.vehicle && row.차량종류 === input.vehicle) score += 20;
+if (
+  input.vehicle &&
+  normalizeVehicleGroup(row.차량종류) ===
+    normalizeVehicleGroup(input.vehicle)
+) {
+  score += 20;
+}
 
   // 톤수 (±0.5)
   if (input.ton != null) {
@@ -2727,7 +2730,9 @@ const handleFareSearch = () => {
   const drop   = (form.하차지명 || "").trim();
   const tonStr = (form.차량톤수 || "").trim();
   const cargo  = (form.화물내용 || "").trim();
-  const vehicle = (form.차량종류 || "").trim();
+ const vehicle = (
+  vehicleQuery?.trim() || form.차량종류 || ""
+).trim();
 
   if (!pickup || !drop) {
     alert("상차지명과 하차지명을 입력해주세요.");
@@ -2742,6 +2747,15 @@ const handleFareSearch = () => {
 const pastHistoryList = fullData
   .filter(r => {
     if ((r.운행유형 || "편도") !== form.운행유형) return false;
+        // ⭐ 차량 그룹 강제 추가 (이게 핵심)
+    if (vehicle) {
+      if (
+        normalizeVehicleGroup(r.차량종류) !==
+        normalizeVehicleGroup(vehicle)
+      ) {
+        return false;
+      }
+    }
     if (!r.상차지명 || !r.하차지명) return false;
 
     const inputPickupStops = parseStops(pickup);
@@ -2917,13 +2931,13 @@ if (!matchPickup || !matchDrop) return false;
 
         if (!matchPickup || !matchDrop) return false;
 
-        const matchVehicle =
+const matchVehicle =
   !vehicle
     ? true
     : normalizeVehicleGroup(r.차량종류) ===
       normalizeVehicleGroup(vehicle);
 
-        if (!matchVehicle) return false;
+if (!matchVehicle) return false;
 
         // 톤수 비교
         let matchTon = true;
@@ -2998,10 +3012,23 @@ if (!matchPickup || !matchDrop) return false;
     const rPickup = String(r.상차지명).trim();
     const rDrop = String(r.하차지명).trim();
 
-    return (
+const sameRoute =
   normalizeKey(rPickup) === normalizeKey(pickup) &&
-  normalizeKey(rDrop) === normalizeKey(drop)
-);
+  normalizeKey(rDrop) === normalizeKey(drop);
+
+if (!sameRoute) return false;
+
+// ⭐ 차량 그룹 강제 추가
+if (vehicle) {
+  if (
+    normalizeVehicleGroup(r.차량종류) !==
+    normalizeVehicleGroup(vehicle)
+  ) {
+    return false;
+  }
+}
+
+return true;
   });
 }
       if (!filtered.length) {
@@ -4072,7 +4099,7 @@ setForm((prev) => ({
   {/* ✅ 입력 + 대표담당자 버튼 (하나만 존재) */}
   <div className="relative">
 <input
-  className={`${inputCls} pr-20`}
+  className={inputCls}
   value={form.상차지담당자}
   onChange={(e) => onChange("상차지담당자", e.target.value)}
   placeholder="담당자 이름"
@@ -4191,7 +4218,7 @@ setForm((prev) => ({
   {/* 입력 + 대표 버튼 */}
   <div className="relative">
     <input
-      className={`${inputCls} pr-20`}
+  className={inputCls}
       value={form.하차지담당자}
       onChange={(e) =>
         onChange("하차지담당자", e.target.value)
