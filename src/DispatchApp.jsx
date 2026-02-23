@@ -10901,6 +10901,7 @@ setRows(prev => {
                   "하차지명",
                   "차량번호",
                   "배차상태",
+                  "배차방식",
                   "청구운임",
                   "기사운임",
                   "수수료",
@@ -14734,6 +14735,7 @@ onBlur={(e) => {
                   "하차지명",
                   "차량번호",
                   "배차상태",
+                  "배차방식",
                   "청구운임",
                   "기사운임",
                   "수수료",
@@ -15547,18 +15549,14 @@ const rangeProfitRate =
     (r.상차일 || "").startsWith(monthKey)
   );
 
+const startKey = `${yearKey}-01-01`;
+const endKey = `${targetMonth}-${String(new Date(yearKey, monthNum, 0).getDate()).padStart(2, "0")}`;
+
 const yearRows = rows.filter((r) => {
-  if (!r.상차일) return false;
-
-  const date = new Date(r.상차일);
-
-  const startOfYear = new Date(yearKey, 0, 1);
-  const endOfYear = new Date(yearKey, 11, 31);
-
-  return date >= startOfYear && date <= endOfYear;
+  const d = r.상차일;
+  if (!d) return false;
+  return d >= startKey && d <= endKey;
 });
-
-
   const prevMonthRows = rows.filter((r) =>
     (r.상차일 || "").startsWith(prevMonthKey)
   );
@@ -15613,8 +15611,8 @@ const isExcludedClient = (name = "") =>
 const stat = (list) => {
   const sale = sum(list, "청구운임");
   const driver = sum(list, "기사운임");
-  const fee = sum(list, "수수료");
-  return { sale, driver, profit: fee };
+  const profit = sale - driver;  // 🔥 통일
+  return { sale, driver, profit };
 };
 
   const d = stat(dayRows);
