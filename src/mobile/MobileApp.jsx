@@ -108,15 +108,42 @@ const getClaim = (o = {}) => o.청구운임 ?? o.인수증 ?? 0;
 // 산재보험료
 const getSanjae = (o = {}) => o.산재보험료 ?? 0;
 
-// 짧은 주소 (시/구까지만)
 const shortAddr = (addr = "") => {
-  const parts = String(addr).split(/\s+/);
-  if (!parts.length) return "";
+  const parts = String(addr).trim().split(/\s+/);
+  if (parts.length < 2) return "";
 
-  return parts[0]
-    .replace("광역시", "")
+  // 1️⃣ 광역단위 축약
+  let region = parts[0]
     .replace("특별시", "")
+    .replace("광역시", "")
+    .replace("자치시", "")
+    .replace("특별자치시", "")
     .replace("도", "");
+
+  // 🔹 경기도 → 경기
+  if (region.endsWith("도")) {
+    region = region.replace("도", "");
+  }
+
+  // 2️⃣ 두번째 행정단위 (시 or 구)
+  const second = parts[1];
+
+  // 서울 강남구
+  if (second.endsWith("구")) {
+    return `${region} ${second}`;
+  }
+
+  // 경기도 수원시
+  if (second.endsWith("시")) {
+    return `${region} ${second}`;
+  }
+
+  // 군 단위도 대응
+  if (second.endsWith("군")) {
+    return `${region} ${second}`;
+  }
+
+  return `${region} ${second}`;
 };
 
 // 날짜 헤더: 2025-11-24 → 11.24(월)
