@@ -2119,6 +2119,73 @@ setAiRecommend({
   form.차량종류,
   dispatchData,
 ]);
+// =====================================================
+// 💰 기존 운임 대비 비교 표시 (🔥 여기 추가)
+// =====================================================
+const [fareCompare, setFareCompare] = React.useState({
+  sale: null,
+  driver: null,
+});
+
+React.useEffect(() => {
+  const pickup = normalizeKey(form.상차지명);
+  const drop   = normalizeKey(form.하차지명);
+  const ton    = extractTonNum(form.차량톤수);
+
+  if (!pickup || !drop || !ton) {
+    setFareCompare({ sale: null, driver: null });
+    return;
+  }
+
+  const similar = (dispatchData || []).filter(r =>
+    normalizeKey(r.상차지명) === pickup &&
+    normalizeKey(r.하차지명) === drop &&
+    extractTonNum(r.차량톤수) === ton &&
+    r.청구운임 &&
+    r.기사운임
+  );
+
+  if (similar.length === 0) {
+    setFareCompare({ sale: null, driver: null });
+    return;
+  }
+
+  const avg = arr =>
+    Math.round(arr.reduce((a,b)=>a+b,0) / arr.length);
+
+  const saleAvg = avg(similar.map(r =>
+    Number(String(r.청구운임).replace(/[^\d]/g,""))
+  ));
+
+  const driverAvg = avg(similar.map(r =>
+    Number(String(r.기사운임).replace(/[^\d]/g,""))
+  ));
+
+  const inputSale = Number(form.청구운임 || 0);
+  const inputDriver = Number(form.기사운임 || 0);
+
+  const compare = (input, avg) => {
+    if (!input) return null;
+    const diffRate = (input - avg) / avg;
+
+    if (Math.abs(diffRate) < 0.05) return "similar";
+    if (diffRate > 0) return "high";
+    return "low";
+  };
+
+  setFareCompare({
+    sale: compare(inputSale, saleAvg),
+    driver: compare(inputDriver, driverAvg),
+  });
+
+}, [
+  form.상차지명,
+  form.하차지명,
+  form.차량톤수,
+  form.청구운임,
+  form.기사운임,
+  dispatchData
+]);
 // ===============================
 // 🤖 AI 설명 문장 생성
 // ===============================
@@ -4285,8 +4352,28 @@ setForm((prev) => ({
   {/* 금액 */}
 {isAdmin && (
   <>
+    {/* 청구운임 */}
     <div>
-      <label className={labelCls}>청구운임</label>
+      <label className={`${labelCls} flex items-center gap-2`}>
+        청구운임
+
+        {fareCompare.sale === "high" && (
+          <span className="text-[11px] font-semibold text-red-600">
+            기존보다 높음
+          </span>
+        )}
+        {fareCompare.sale === "low" && (
+          <span className="text-[11px] font-semibold text-blue-600">
+            기존보다 낮음
+          </span>
+        )}
+        {fareCompare.sale === "similar" && (
+          <span className="text-[11px] font-semibold text-emerald-600">
+            기존과 유사
+          </span>
+        )}
+      </label>
+
       <input
         className={inputCls}
         value={form.청구운임}
@@ -4296,8 +4383,28 @@ setForm((prev) => ({
       />
     </div>
 
+    {/* 기사운임 */}
     <div>
-      <label className={labelCls}>기사운임</label>
+      <label className={`${labelCls} flex items-center gap-2`}>
+        기사운임
+
+        {fareCompare.driver === "high" && (
+          <span className="text-[11px] font-semibold text-red-600">
+            기존보다 높음
+          </span>
+        )}
+        {fareCompare.driver === "low" && (
+          <span className="text-[11px] font-semibold text-blue-600">
+            기존보다 낮음
+          </span>
+        )}
+        {fareCompare.driver === "similar" && (
+          <span className="text-[11px] font-semibold text-emerald-600">
+            기존과 유사
+          </span>
+        )}
+      </label>
+
       <input
         className={inputCls}
         value={form.기사운임}
@@ -4307,6 +4414,7 @@ setForm((prev) => ({
       />
     </div>
 
+    {/* 수수료 */}
     <div>
       <label className={labelCls}>수수료</label>
       <input
