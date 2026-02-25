@@ -361,10 +361,11 @@ setClients(normalizeClients(arr));
 /* -------------------------------------------------
    하차지 Key 생성 함수 (⭐ 반드시 필요)
 --------------------------------------------------*/
-function makePlaceKey(name = "", addr = "") {
-  const n = String(name).trim().toLowerCase().replace(/\s+/g, "");
-  const a = String(addr).trim().toLowerCase().replace(/\s+/g, "");
-  return `${n}_${a}`;
+function makePlaceKey(name = "") {
+  return String(name)
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "");
 }
 /* -------------------------------------------------
    하차지 저장 (upsertPlace) — Firestore (최종 안정버전)
@@ -376,7 +377,7 @@ const upsertPlace = async (place) => {
     if (!name) return;
 
 const addr = (place.주소 || "").trim();
-const key = makePlaceKey(name, addr);
+const key = makePlaceKey(name);
     const ref = doc(db, "places", key);
     const snap = await getDoc(ref);
 
@@ -2412,13 +2413,16 @@ const [driverActive, setDriverActive] = React.useState(0);
     const handleCarNoChange = (value) => {
   const clean = (value || "").trim().replace(/\s+/g, "");
 
-  const list = driverMap.get(clean);
+  setForm((p) => ({
+    ...p,
+    차량번호: clean,
+  }));
 
-  // 차량번호 없음
-  if (!list || list.length === 0) {
+  // 🔥 차량번호 비우면 기사정보 즉시 초기화
+  if (!clean) {
     setForm((p) => ({
       ...p,
-      차량번호: clean,
+      차량번호: "",
       이름: "",
       전화번호: "",
       배차상태: "배차중",
@@ -2427,36 +2431,66 @@ const [driverActive, setDriverActive] = React.useState(0);
     return;
   }
 
-  // 🔹 기사 1명만 있으면 바로 자동입력
-  if (list.length === 1) {
-    const found = list[0];
+  const list = driverMap.get(clean);
 
+  // 🔹 기존 기사 2명 이상 → 드롭다운
+  if (list && list.length > 1) {
+    setDriverCandidates(list);
+    setDriverActive(0);
+    setDriverDropdownOpen(true);
+    return;
+  }
+
+  // 🔹 기존 기사 1명 → 자동세팅
+  if (list && list.length === 1) {
     setForm((p) => ({
       ...p,
       차량번호: clean,
-      이름: found.이름,
-      전화번호: formatPhone(found.전화번호),
+      이름: list[0].이름 || "",
+      전화번호: list[0].전화번호 || "",
       배차상태: "배차완료",
     }));
-
     setDriverDropdownOpen(false);
     return;
   }
 
-  // 🔥 2명 이상이면 드롭다운 띄움
+  // 🔥 기존 기사 없음 → 입력 중에는 아무것도 안함
   setForm((p) => ({
     ...p,
-    차량번호: clean,
     이름: "",
     전화번호: "",
     배차상태: "배차중",
   }));
 
-  setDriverCandidates(list);
-  setDriverActive(0); 
-  setDriverDropdownOpen(true);
+  setDriverDropdownOpen(false);
 };
-    const nextSeq = () => Math.max(0, ...(dispatchData || []).map((r) => Number(r.순번) || 0)) + 1;
+const checkNewDriver = (carNo) => {
+  const clean = (carNo || "").trim().replace(/\s+/g, "");
+
+  if (!clean) return;
+
+  const list = driverMap.get(clean);
+
+  // 🔥 기존 없으면 무조건 팝업
+  if (!list || list.length === 0) {
+    setDriverModal({
+      open: true,
+      carNo: clean,
+      name: "",
+      phone: "",
+    });
+
+    setForm((p) => ({
+      ...p,
+      차량번호: clean,
+      이름: "",
+      전화번호: "",
+      배차상태: "배차중",
+    }));
+  }
+};
+const nextSeq = () =>
+  Math.max(0, ...(dispatchData || []).map((r) => Number(r.순번) || 0)) + 1;
 // ================================
 // ⛔ 기사 중복 배차 체크 유틸
 // ================================
@@ -4514,83 +4548,86 @@ setForm((prev) => ({
   <label className={labelCls}>차량번호</label>
 
   <input
-    className={inputCls}
-    value={form.차량번호}
-    onChange={(e) => handleCarNoChange(e.target.value)}
-    onKeyDown={(e) => {
-      if (!driverDropdownOpen) {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          handleCarNoEnter?.(e.currentTarget.value);
-        }
-        return;
-      }
+  className={inputCls}
+  value={form.차량번호}
+  onChange={(e) => handleCarNoChange(e.target.value)}
 
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        setDriverActive((i) =>
-          Math.min(i + 1, driverCandidates.length - 1)
-        );
-      }
-
-      if (e.key === "ArrowUp") {
-        e.preventDefault();
-        setDriverActive((i) =>
-          Math.max(i - 1, 0)
-        );
-      }
-
+  onKeyDown={(e) => {
+    if (!driverDropdownOpen) {
       if (e.key === "Enter") {
         e.preventDefault();
-        const selected = driverCandidates[driverActive];
-        if (!selected) return;
-
-        setForm((p) => ({
-          ...p,
-          이름: selected.이름,
-          전화번호: formatPhone(selected.전화번호),
-          배차상태: "배차완료",
-        }));
-
-        setDriverDropdownOpen(false);
+        checkNewDriver(e.currentTarget.value);
       }
-    }}
-    onBlur={(e) => {
-      handleCarNoEnter?.(e.currentTarget.value);
-      setTimeout(() => setDriverDropdownOpen(false), 150);
-    }}
-  />
-  {/* ============================= */}
-  {/* 🔥 다중 기사 선택 드롭다운 */}
-  {/* ============================= */}
-  {driverDropdownOpen && driverCandidates.length > 1 && (
-    <div className="absolute z-50 bg-white border rounded-lg shadow-lg w-full max-h-48 overflow-auto">
-      {driverCandidates.map((d, i) => (
-        <div
-          key={i}
-          className={`px-3 py-2 text-sm cursor-pointer ${
-            i === driverActive
-              ? "bg-blue-50"
-              : "hover:bg-gray-50"
-          }`}
-          onMouseDown={() => {
-            setForm((p) => ({
-              ...p,
-              이름: d.이름,
-              전화번호: formatPhone(d.전화번호),
-              배차상태: "배차완료",
-            }));
-            setDriverDropdownOpen(false);
-          }}
-        >
-          <div className="font-medium">{d.이름}</div>
-          <div className="text-xs text-gray-500">
-            {formatPhone(d.전화번호)}
+      return;
+    }
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setDriverActive((i) =>
+        Math.min(i + 1, driverCandidates.length - 1)
+      );
+    }
+
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setDriverActive((i) =>
+        Math.max(i - 1, 0)
+      );
+    }
+
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const selected = driverCandidates[driverActive];
+      if (!selected) return;
+
+      setForm((p) => ({
+        ...p,
+        이름: selected.이름,
+        전화번호: formatPhone(selected.전화번호),
+        배차상태: "배차완료",
+      }));
+
+      setDriverDropdownOpen(false);
+    }
+  }}
+
+  onBlur={(e) => {
+    checkNewDriver(e.currentTarget.value);
+    setTimeout(() => setDriverDropdownOpen(false), 150);
+  }}
+/>
+  {/* 🔽 다중 기사 선택 드롭다운 */}
+  {driverDropdownOpen &&
+    driverCandidates &&
+    driverCandidates.length > 1 && (
+      <div className="absolute z-50 bg-white border rounded-lg shadow-lg w-full max-h-48 overflow-auto">
+        {driverCandidates.map((d, i) => (
+          <div
+            key={i}
+            className={`px-3 py-2 text-sm cursor-pointer ${
+              i === driverActive
+                ? "bg-blue-50"
+                : "hover:bg-gray-50"
+            }`}
+            onMouseEnter={() => setDriverActive(i)}
+            onMouseDown={() => {
+              setForm((p) => ({
+                ...p,
+                이름: d.이름,
+                전화번호: formatPhone(d.전화번호),
+                배차상태: "배차완료",
+              }));
+              setDriverDropdownOpen(false);
+            }}
+          >
+            <div className="font-medium">{d.이름}</div>
+            <div className="text-xs text-gray-500">
+              {formatPhone(d.전화번호)}
+            </div>
           </div>
-        </div>
-      ))}
-    </div>
-  )}
+        ))}
+      </div>
+    )}
 </div>
   <div>
     <label className={labelCls}>기사명</label>
@@ -20134,7 +20171,9 @@ const normalizeKey = (s = "") =>
     .toLowerCase()
     .replace(/\s+/g, "")
     .replace(/[^\uAC00-\uD7A3a-z0-9]/gi, "");
-
+// 🔥 업체명 기준 문서ID 생성 (주소 제거!)
+const makePlaceId = (name = "") =>
+  normalizeCompanyName(name);
   /* -----------------------------------------------------------
      공통 유틸/스타일
   ----------------------------------------------------------- */
@@ -20314,28 +20353,49 @@ const normalizeKey = (s = "") =>
 const upsertPlace = async (row) => {
   const name = (row.업체명 || "").trim();
   const addr = (row.주소 || "").trim();
-  if (!name || !addr) return;
+  if (!name) return;
 
-  // 🔥 업체명 + 주소 기반으로 통일
-  const key = normalizeKey(name + "_" + addr);
+const key = row.id || crypto.randomUUID();
+  const ref = doc(db, PLACES_COLL, key);
 
-  const ref = doc(db, "places", key);
+  // 🔥 기존 문서 읽기
+  const snap = await getDoc(ref);
+  const prev = snap.exists() ? snap.data() : {};
 
-  const data = {
-    업체명: name,
-    주소: addr,
-    contacts: [
-      {
+  const prevContacts = Array.isArray(prev.contacts)
+    ? prev.contacts
+    : [];
+
+  // 🔥 기존 담당자 유지 + 새 담당자 추가
+  let contacts = [...prevContacts];
+
+  if (row.담당자 || row.담당자번호) {
+    const exists = contacts.some(
+      (c) =>
+        c.name === row.담당자 &&
+        c.phone === row.담당자번호
+    );
+
+    if (!exists) {
+      contacts.push({
         name: row.담당자 || "",
         phone: row.담당자번호 || "",
-        isPrimary: true,
-      },
-    ],
-    메모: row.메모 || "",
-    updatedAt: serverTimestamp(),
-  };
+        isPrimary: contacts.length === 0,
+      });
+    }
+  }
 
-  await setDoc(ref, data, { merge: true });
+  await setDoc(
+    ref,
+    {
+      업체명: name,
+      주소: addr || prev.주소 || "",
+      contacts,
+      메모: row.메모 || prev.메모 || "",
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true }
+  );
 };
   const [placeRows, setPlaceRows] = React.useState([]);
   const [showDupPreview, setShowDupPreview] = React.useState(false);
@@ -20485,11 +20545,13 @@ const upsertPlace = async (row) => {
   };
 
   const handlePlaceBlur = async (row, key, val) => {
-    await upsertPlace({
-      ...row,
-      [key]: val,
-    });
-  };
+  if ((row[key] || "") === val) return;  // 🔥 값 변경 없으면 저장 금지
+
+  await upsertPlace({
+    ...row,
+    [key]: val,
+  });
+};
 
   const addNewPlace = async () => {
     const 업체명 = (placeNewForm.업체명 || "").trim();
@@ -20502,7 +20564,6 @@ const upsertPlace = async (row) => {
 
     // 🔥 그냥 저장 (같은 주소면 덮어씀)
 await upsertPlace({
-  id: makePlaceId(업체명, placeNewForm.주소),
   ...placeNewForm,
   업체명,
 });
