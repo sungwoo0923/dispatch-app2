@@ -363,51 +363,48 @@ setClients(normalizeClients(arr));
 --------------------------------------------------*/
 function makePlaceKey(name = "") {
   return String(name)
-    .trim()
     .toLowerCase()
-    .replace(/\s+/g, "");
+    .replace(/\(주\)|㈜/g, "")
+    .replace(/\s+/g, "")
+    .replace(/[^\uAC00-\uD7A3a-z0-9]/gi, "")
+    .trim();
 }
 /* -------------------------------------------------
    하차지 저장 (upsertPlace) — Firestore (최종 안정버전)
 --------------------------------------------------*/
 const upsertPlace = async (place) => {
   try {
-    const rawName = place?.업체명 || "";
-    const name = rawName.trim();
+    const name = (place?.업체명 || "").trim();
     if (!name) return;
 
-const addr = (place.주소 || "").trim();
-const key = makePlaceKey(name);
+    const key = makePlaceKey(name);
     const ref = doc(db, "places", key);
-    const snap = await getDoc(ref);
 
     const data = {
       업체명: name,
       주소: (place.주소 || "").trim(),
       contacts: Array.isArray(place.contacts)
-   ? place.contacts
-   : [{
-       name: (place.담당자 || "").trim(),
-       phone: (place.담당자번호 || "").trim(),
-       isPrimary: true,
-     }],
-      isActive: place.isActive !== false, // ⭐ 추가
-      updatedAt: Date.now(),
+        ? place.contacts
+        : (
+            place.담당자 || place.담당자번호
+              ? [{
+                  name: (place.담당자 || "").trim(),
+                  phone: (place.담당자번호 || "").trim(),
+                  isPrimary: true,
+                }]
+              : []
+          ),
+      isActive: place.isActive !== false,
+      updatedAt: serverTimestamp(),
     };
 
-    if (snap.exists()) {
-      await updateDoc(ref, data);
-      console.log("🔥 기존 업체 업데이트:", key);
-    } else {
-      await setDoc(ref, data);
-      console.log("🆕 신규 업체 등록:", key);
-    }
+    // 🔥 exists() 체크 제거
+    await setDoc(ref, data, { merge: true });
 
   } catch (e) {
     console.error("⛔ upsertPlace 오류:", e);
   }
 };
-
 /* -------------------------------------------------
    공통
 --------------------------------------------------*/
@@ -1355,10 +1352,10 @@ const placeList = React.useMemo(() => {
   const fromFirestore = Array.isArray(placeRows) ? placeRows : [];
 
 const toRow = (p = {}) => {
-  const primary =
-    Array.isArray(p.contacts) && p.contacts.length
-      ? p.contacts.find(c => c.isPrimary) || p.contacts[0]
-      : null;
+const primary =
+  Array.isArray(p.contacts) && p.contacts.length
+    ? p.contacts.find(c => c.isPrimary === true) || p.contacts[0]
+    : null;
 
   return {
     업체명: p.업체명 || "",
@@ -20166,14 +20163,13 @@ function ClientManagement({ clients = [], upsertClient, removeClient }) {
       .replace(/\s+/g, "")
       .replace(/[^\uAC00-\uD7A3]/g, "");
       // 🔥 업체명 통합 키 생성용
-const normalizeKey = (s = "") =>
-  String(s)
+const makePlaceKey = (name = "") =>
+  String(name)
     .toLowerCase()
+    .replace(/\(주\)|㈜/g, "")
     .replace(/\s+/g, "")
-    .replace(/[^\uAC00-\uD7A3a-z0-9]/gi, "");
-// 🔥 업체명 기준 문서ID 생성 (주소 제거!)
-const makePlaceId = (name = "") =>
-  normalizeCompanyName(name);
+    .replace(/[^\uAC00-\uD7A3a-z0-9]/gi, "")
+    .trim();
   /* -----------------------------------------------------------
      공통 유틸/스타일
   ----------------------------------------------------------- */
@@ -20350,48 +20346,35 @@ const makePlaceId = (name = "") =>
   };
   // ✅ Firestore 하차지 컬렉션 helpers
   const PLACES_COLL = "places";
+  const removePlace = async (id) => {
+  if (!id) return;
+  await deleteDoc(doc(db, PLACES_COLL, id));
+};
 const upsertPlace = async (row) => {
   const name = (row.업체명 || "").trim();
   const addr = (row.주소 || "").trim();
   if (!name) return;
 
-const key = row.id || crypto.randomUUID();
+  const key = makePlaceKey(name);  // ⭐ 랜덤 쓰지마라
   const ref = doc(db, PLACES_COLL, key);
 
-  // 🔥 기존 문서 읽기
-  const snap = await getDoc(ref);
-  const prev = snap.exists() ? snap.data() : {};
-
-  const prevContacts = Array.isArray(prev.contacts)
-    ? prev.contacts
-    : [];
-
-  // 🔥 기존 담당자 유지 + 새 담당자 추가
-  let contacts = [...prevContacts];
+  const contacts = [];
 
   if (row.담당자 || row.담당자번호) {
-    const exists = contacts.some(
-      (c) =>
-        c.name === row.담당자 &&
-        c.phone === row.담당자번호
-    );
-
-    if (!exists) {
-      contacts.push({
-        name: row.담당자 || "",
-        phone: row.담당자번호 || "",
-        isPrimary: contacts.length === 0,
-      });
-    }
+    contacts.push({
+      name: (row.담당자 || "").trim(),
+      phone: (row.담당자번호 || "").trim(),
+      isPrimary: true,
+    });
   }
 
   await setDoc(
     ref,
     {
       업체명: name,
-      주소: addr || prev.주소 || "",
+      주소: addr,
       contacts,
-      메모: row.메모 || prev.메모 || "",
+      메모: row.메모 || "",
       updatedAt: serverTimestamp(),
     },
     { merge: true }
