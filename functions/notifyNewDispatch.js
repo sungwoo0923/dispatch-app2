@@ -1,4 +1,9 @@
-import { onDocumentCreated } from "firebase-functions/v2/firestore";
+import * as functions from "firebase-functions";
+
+export const notifyNewDispatch =
+  functions.firestore
+    .document("{col}/{dispatchId}")
+    .onCreate(async (snap, context) => {
 import { initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { getMessaging } from "firebase-admin/messaging";
