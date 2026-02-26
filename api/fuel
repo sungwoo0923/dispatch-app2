@@ -3,9 +3,6 @@ export default async function handler(req, res) {
   try {
     const key = process.env.VITE_OPINET_API_KEY;
     const area = req.query.area || "01"; // 전국 = 01
-
-    const url = `https://www.opinet.co.kr/api/avgAllPrice.do?out=json&code=${key}&area=${area}`;
-
     const response = await fetch(url);
     const data = await response.json();
 

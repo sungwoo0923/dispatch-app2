@@ -377,7 +377,7 @@ const upsertPlace = async (place) => {
     const name = (place?.업체명 || "").trim();
     if (!name) return;
 
-    const key = makePlaceKey(name);
+    const key = place._id || makePlaceKey(name);
     const ref = doc(db, "places", key);
 
     const data = {
@@ -1048,7 +1048,6 @@ export default function DispatchApp({ role, user }) {
   );
 }
 // ===================== DispatchApp.jsx (PART 2/8) — END =====================
-
 // ===================== DispatchApp.jsx (PART 3/8) — START =====================
 function ToggleBadge({ active, onClick, activeCls, inactiveCls, children }) {
   return (
@@ -1069,6 +1068,115 @@ function ToggleBadge({ active, onClick, activeCls, inactiveCls, children }) {
     </button>
   );
 }
+// ----------------------------
+// ⛽ 자동 슬라이드 유가 배너
+// ----------------------------
+const AREA_OPTIONS = [
+  { code: "", name: "전국" },
+  { code: "04", name: "인천" },
+  { code: "09", name: "경기" },
+  { code: "01", name: "서울" },
+];
+
+const FuelSlideWidget = React.memo(function FuelSlideWidget() {
+  const [prices, setPrices] = React.useState([]);
+  const [page, setPage] = React.useState(0);
+  const [area, setArea] = React.useState("");
+
+  // 🔹 유가 로드
+  React.useEffect(() => {
+    async function loadFuel() {
+      try {
+        const res = await fetch(
+          `/api/fuel?out=json&code=F251130200&area=${area || "01"}`
+        );
+        const data = await res.json();
+        setPrices(data?.RESULT?.OIL || []);
+      } catch (e) {
+        console.warn("유가 조회 실패:", e);
+        setPrices([]);
+      }
+    }
+    loadFuel();
+  }, [area]);
+
+  // 🔹 유가 정리 (여기 위치 중요!!)
+  const premium = prices.find(o => o.PRODNM.includes("고급"));
+  const diesel = prices.find(o => o.PRODNM.includes("경유"));
+  const gasoline = prices.find(
+    o => o.PRODNM.includes("휘발유") && !o.PRODNM.includes("고급")
+  );
+
+  const items = [premium, gasoline, diesel].filter(Boolean);
+
+  // 🔹 자동 슬라이드
+  React.useEffect(() => {
+    if (!items.length) return;
+
+    const timer = setInterval(() => {
+      setPage((p) => (p + 1) % items.length);
+    }, 3000);
+
+    return () => clearInterval(timer);
+  }, [items.length]);
+
+  // 🔹 로딩 UI (null 반환 금지)
+  if (!prices.length) {
+    return (
+      <div className="h-10 flex items-center px-5 text-sm text-gray-400">
+        유가 불러오는 중...
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-6 bg-gradient-to-r from-blue-600 to-blue-700 text-white px-5 py-2 rounded-xl shadow-md text-sm overflow-hidden">
+
+      <select
+        value={area}
+        onChange={(e) => setArea(e.target.value)}
+        className="bg-white text-black text-xs rounded px-2 py-1"
+      >
+        {AREA_OPTIONS.map(a => (
+          <option key={a.code} value={a.code}>{a.name}</option>
+        ))}
+      </select>
+
+      <div className="relative h-6 overflow-hidden flex-1">
+        <div
+          className="transition-transform duration-700 ease-in-out"
+          style={{
+            transform: `translateY(-${page * 24}px)`
+          }}
+        >
+          {items.map((item, idx) => {
+            const diff = item?.DIFF ?? 0;
+            const up = diff > 0;
+
+            return (
+              <div
+                key={idx}
+                className="h-6 flex items-center justify-between"
+              >
+                <div className="font-semibold w-24">
+                  {item.PRODNM}
+                </div>
+
+                <div className="font-bold">
+                  {Number(item.PRICE).toLocaleString()} 원/L
+                </div>
+
+                <div className={`font-bold ${up ? "text-rose-200" : "text-green-200"}`}>
+                  {up ? "▲" : "▼"} {Math.abs(diff)}원
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+});
   function DispatchManagement({
     dispatchData, drivers, clients, timeOptions, tonOptions,
     addDispatch, upsertDriver, upsertClient, upsertPlace,
@@ -1358,6 +1466,7 @@ const primary =
     : null;
 
   return {
+    _id: p._id,
     업체명: p.업체명 || "",
     주소: p.주소 || "",
     담당자: primary?.name || "",
@@ -1662,52 +1771,30 @@ const openNewPlacePrompt = (name) => {
   alert("신규 거래처 등록이 완료되었습니다.");
 };
 
-const savePlaceSmart = async (name, addr, manager, phone) => {
+const savePlaceSmart = async (name, addr, manager, phone, placeId) => {
   if (!name) return;
 
-  const nk = normalizeKey(name);
+  const key = placeId || makePlaceKey(name);
 
-  // 🔎 기존 거래처 찾기
+  // 🔥 placeList 기준으로 찾는다 (UI와 동일 기준)
   const existing = placeList.find(
-    p => normalizeKey(p.업체명) === nk
+    p => p._id === key || normalizeKey(p.업체명) === normalizeKey(name)
   );
 
-  // ==============================
-  // 1️⃣ 기존 거래처 없음 → 신규 생성
-  // ==============================
-  if (!existing) {
-    await upsertPlace({
-      업체명: name,
-      주소: addr || "",
-      담당자: manager || "",
-      담당자번호: phone || "",
-    });
-    return;
-  }
+  const contacts = [
+    {
+      name: manager || "",
+      phone: phone || "",
+      isPrimary: true,
+    },
+  ];
 
-  // ==============================
-  // 2️⃣ 기존 거래처 있음 → 변경 여부 체크
-  // ==============================
-
-  const clean = (v="") => v.trim();
-  const cleanPhone = (v="") => v.replace(/[^\d]/g, "");
-
-  const isSame =
-    clean(existing.주소) === clean(addr) &&
-    clean(existing.담당자) === clean(manager) &&
-    cleanPhone(existing.담당자번호) === cleanPhone(phone);
-
-  // 🔥 변경 없음 → 아무것도 안함 (중복 방지)
-  if (isSame) return;
-
-  // ==============================
-  // 3️⃣ 기존 + 정보 변경 → 업데이트
-  // ==============================
+  // 🔥 무조건 같은 key로 저장 (신규/기존 구분 필요 없음)
   await upsertPlace({
+    _id: existing?._id || key,   // ⭐ 핵심
     업체명: name,
     주소: addr || "",
-    담당자: manager || "",
-    담당자번호: phone || "",
+    contacts,
   });
 };
     // 기본 clients + 하차지 모두 포함한 통합 검색 풀
@@ -1866,10 +1953,12 @@ const filterPlaces = (q) => {
       등록일: _todayStr(),
       거래처명: "",
       상차지명: "",
+      상차지Id: "",
       상차지주소: "",
       상차지담당자: "",
       상차지담당자번호: "",
       하차지명: "",
+      하차지Id: "",
       하차지주소: "",
       하차지담당자: "",
       하차지담당자번호: "",
@@ -2824,20 +2913,20 @@ const rec = {
 if (typeof upsertPlace === "function") {
 // ✅ 오더 저장
 await addDispatch(rec);
-// 🔥 상차지 동기화
 await savePlaceSmart(
   form.상차지명,
   form.상차지주소,
   form.상차지담당자,
-  form.상차지담당자번호
+  form.상차지담당자번호,
+  form.상차지Id     // ⭐ 반드시 전달
 );
 
-// 🔥 하차지 동기화
 await savePlaceSmart(
   form.하차지명,
   form.하차지주소,
   form.하차지담당자,
-  form.하차지담당자번호
+  form.하차지담당자번호,
+  form.하차지Id     // ⭐ 반드시 전달
 );
 }
   const reset = {
@@ -3308,10 +3397,13 @@ const [copySelected, setCopySelected] = React.useState([]);
 
 // 🔥 오더 복사 전용 (유일한 진입점)
 const applyCopy = (r) => {
-  // placeList에서 업체 찾기
   const pickupPlace = findPlaceByName(r.상차지명);
   const dropPlace   = findPlaceByName(r.하차지명);
-  const today = _todayStr();
+
+  // ✅ 복사하는 순간의 "실시간 현재 날짜" 강제 생성
+  const now = new Date();
+  now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+  const todayStr = now.toISOString().slice(0, 10);
 
   const keep = {
     거래처명: isDateLike(r.거래처명) ? "" : (r.거래처명 || ""),
@@ -3333,8 +3425,8 @@ const applyCopy = (r) => {
     차량톤수: r.차량톤수 || "",
     상차방법: r.상차방법 || "",
     하차방법: r.하차방법 || "",
-    상차일: today,
-    하차일: today,
+    상차일: todayStr,
+    하차일: todayStr,
     상차시간: r.상차시간 || "",
     상차시간기준: r.상차시간기준 ?? null,
     하차시간: r.하차시간 || "",
@@ -3425,28 +3517,23 @@ const labelCls =
   "block text-[13px] font-semibold text-black mb-1";
     const reqStar = <span className="text-red-500">*</span>;
     const AutoBadge = ({ show }) => show ? <span className="ml-2 text-[12px] text-emerald-700">(자동매칭됨)</span> : null;
-// ---------------------------------------------
-// ⭐ 오늘 유가 정보 가져오기 (휘발유/경유)
-// ---------------------------------------------
-async function fetchFuelPrices(apiKey) {
-  const KEY = apiKey || "DEMO_KEY"; // ← 실제 키 없으면 DEMO
-  const url = `https://www.opinet.co.kr/api/avgAllPrice.do?out=json&code=${KEY}`;
-  try {
-    const resp = await fetch(url);
-    const json = await resp.json();
-    return json.RESULT?.OIL || [];
-  } catch (e) {
-    console.warn("유가 조회 실패:", e);
-    return [];
-  }
-}
-
 function FuelPriceWidget({ apiKey }) {
   const [prices, setPrices] = React.useState([]);
 
-  React.useEffect(() => {
-    fetchFuelPrices(apiKey).then(setPrices);
-  }, [apiKey]);
+React.useEffect(() => {
+  async function loadFuel() {
+    try {
+      const res = await fetch(`/api/fuel?out=json&code=F251130200&area=${area || "01"}`)
+      const data = await res.json();
+      setPrices(data?.RESULT?.OIL || []);
+    } catch (e) {
+      console.warn("유가 조회 실패:", e);
+      setPrices([]);
+    }
+  }
+
+  loadFuel();
+}, []);
 
   return (
     <div className="mb-4 bg-white rounded-xl shadow-lg border p-4 w-[280px]">
@@ -3467,69 +3554,7 @@ function FuelPriceWidget({ apiKey }) {
     </div>
   );
 }
-// ----------------------------
-// ⛽ 자동 슬라이드 유가 배너
-// ----------------------------
-const AREA_OPTIONS = [
-  { code: "", name: "전국" },
-  { code: "04", name: "인천" },
-  { code: "09", name: "경기" },
-  { code: "01", name: "서울" },
-];
 
-function FuelSlideWidget() {
-  const [prices, setPrices] = React.useState([]);
-  const [page, setPage] = React.useState(0);
-  const [area, setArea] = React.useState("");
-
-  React.useEffect(() => {
-    fetchFuelPrices(area).then(setPrices).catch(console.error);
-  }, [area]);
-
-  React.useEffect(() => {
-    const timer = setInterval(() => {
-      setPage((p) => (p + 1) % 3);
-    }, 3000);
-    return () => clearInterval(timer);
-  }, []);
-
-  if (!prices.length) return null;
-
-  const items = [
-    prices.find(o => o.PRODNM.includes("휘발유")),
-    prices.find(o => o.PRODNM.includes("경유")),
-    prices.find(o => o.PRODNM.includes("고급")),
-  ].filter(Boolean);
-
-  const item = items[page];
-  const diff = item?.DIFF ?? 0;
-  const up = diff > 0;
-
-  return (
-    <div className="mb-6">
-      <select
-        value={area}
-        onChange={(e) => setArea(e.target.value)}
-        className="border rounded px-2 py-1 text-xs mb-2"
-      >
-        {AREA_OPTIONS.map(a => (
-          <option key={a.code} value={a.code}>{a.name}</option>
-        ))}
-      </select>
-
-      <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white text-center rounded-xl py-4 shadow-lg transition-all duration-500">
-        <div className="text-xs opacity-90">{item.PRODNM}</div>
-        <div className="text-xl font-extrabold mt-1">
-          {Number(item.PRICE).toLocaleString()} 원/L
-        </div>
-
-        <div className={`text-xs font-bold mt-1 ${up ? "text-rose-200" : "text-green-200"}`}>
-          {up ? "▲" : "▼"} {Math.abs(diff)}원
-        </div>
-      </div>
-    </div>
-  );
-}
 function calcHistoryScore(row, form) {
   let score = 0;
 
@@ -3562,7 +3587,13 @@ function calcHistoryScore(row, form) {
 }
     const renderForm = () => (
       <>
-        <h2 className="text-lg font-bold mb-3">배차관리</h2>
+        <div className="flex items-center gap-4 mb-3">
+
+  <h2 className="text-lg font-bold">배차관리</h2>
+
+  <FuelSlideWidget />
+
+</div>
    
         {/* 입력 폼 */}
   {/* ================== 프리미엄 액션바 ================== */}
@@ -3576,8 +3607,6 @@ function calcHistoryScore(row, form) {
   "
   style={{ minHeight: "52px" }}
 >
-
-
   {/* 좌측 버튼 그룹 */}
   <div className="flex items-center gap-2">
     <button className="premium-btn indigo" onClick={() => { setCopyOpen(true); setCopySelected([]); }}>
@@ -3722,22 +3751,18 @@ function calcHistoryScore(row, form) {
     </div>
   )}
 </div>
-
   <div className="w-px h-7 bg-gray-200" />
-
   {/* 날짜 시간 ▼ */}
 <div className="flex items-center gap-3 text-sm">
 
   {/* ================= 상차 ================= */}
   <label className="text-gray-600 font-medium">상차</label>
-
   <input
     type="date"
     value={form.상차일 || ""}
     className="inp small"
     onChange={(e) => onChange("상차일", e.target.value)}
   />
-
   {/* 상차 시간 + 이전/이후 */}
   <div className="flex items-center gap-1">
     <select
@@ -4091,9 +4116,10 @@ const similar = placeList.filter(p => {
 setForm((prev) => ({
   ...prev,
   상차지명: p.업체명,
+  상차지Id: p._id || "",   // ⭐ 추가
   상차지주소: p.주소,
   상차지담당자: p.담당자 || "",
-상차지담당자번호: p.담당자번호 || "",
+  상차지담당자번호: p.담당자번호 || "",
 }));
           setShowPickupDropdown(false);
         } else if (e.key === "ArrowDown") {
@@ -4114,13 +4140,14 @@ setForm((prev) => ({
           i === pickupActive ? "bg-blue-50" : "hover:bg-gray-50"
         }`}
         onMouseDown={() => {
-          setForm((prev) => ({
-            ...prev,
-            상차지명: p.업체명,
-            상차지주소: p.주소 || "",
-            상차지담당자: p.담당자 || "",
-            상차지담당자번호: p.담당자번호 || "",
-          }));
+  setForm((prev) => ({
+    ...prev,
+    상차지명: p.업체명,
+    상차지Id: p._id || "",   // ⭐ 반드시 추가
+    상차지주소: p.주소 || "",
+    상차지담당자: p.담당자 || "",
+    상차지담당자번호: p.담당자번호 || "",
+  }));
 
           setShowPickupDropdown(false);
         }}
@@ -4206,6 +4233,7 @@ setForm((prev) => ({
   setForm((prev) => ({
     ...prev,
     하차지명: p.업체명,
+    하차지Id: p._id || "",
     하차지주소: p.주소 || "",
     하차지담당자: p.담당자 || "",
     하차지담당자번호: p.담당자번호 || "",
@@ -4235,6 +4263,7 @@ setForm((prev) => ({
           setForm((prev) => ({
             ...prev,
             하차지명: p.업체명,
+            하차지Id: p._id || "",
             하차지주소: p.주소 || "",
             하차지담당자: p.담당자 || "",
             하차지담당자번호: p.담당자번호 || "",
@@ -5041,8 +5070,15 @@ if (res?.success) {
 
 <div className="flex-1">
 
-  {/* 🔁 기존 / 신규 버튼 (항상 보이게) */}
-  <div className="flex justify-end mb-2">
+  {/* 🔁 기존 / 신규 버튼 + 유가 슬라이드 */}
+<div className="flex items-center justify-between mb-3">
+
+  {/* ⛽ 유가 슬라이드 (왼쪽) */}
+  <div className="flex items-center">
+  </div>
+
+  {/* 기존 / 신규 버튼 (오른쪽) */}
+  <div className="flex items-center">
     <button
       type="button"
       onClick={() => setUseNewForm(false)}
@@ -5052,6 +5088,7 @@ if (res?.success) {
     >
       기존
     </button>
+
     <button
       type="button"
       onClick={() => setUseNewForm(true)}
@@ -5062,6 +5099,7 @@ if (res?.success) {
       신규
     </button>
   </div>
+</div>
 
   {/* 🔽 실제 폼만 교체 */}
   {useNewForm ? (
@@ -20349,36 +20387,6 @@ const makePlaceKey = (name = "") =>
   const removePlace = async (id) => {
   if (!id) return;
   await deleteDoc(doc(db, PLACES_COLL, id));
-};
-const upsertPlace = async (row) => {
-  const name = (row.업체명 || "").trim();
-  const addr = (row.주소 || "").trim();
-  if (!name) return;
-
-  const key = makePlaceKey(name);  // ⭐ 랜덤 쓰지마라
-  const ref = doc(db, PLACES_COLL, key);
-
-  const contacts = [];
-
-  if (row.담당자 || row.담당자번호) {
-    contacts.push({
-      name: (row.담당자 || "").trim(),
-      phone: (row.담당자번호 || "").trim(),
-      isPrimary: true,
-    });
-  }
-
-  await setDoc(
-    ref,
-    {
-      업체명: name,
-      주소: addr,
-      contacts,
-      메모: row.메모 || "",
-      updatedAt: serverTimestamp(),
-    },
-    { merge: true }
-  );
 };
   const [placeRows, setPlaceRows] = React.useState([]);
   const [showDupPreview, setShowDupPreview] = React.useState(false);
