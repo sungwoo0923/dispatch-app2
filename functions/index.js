@@ -74,7 +74,7 @@ export const notifyUrgentDispatchOnCreate =
 // ============================================================
 // ⛽ 2. 유가 조회 Proxy API (v1)
 // ============================================================
-
+const fetch = require("node-fetch");
 export const fuel = functions.https.onRequest(async (req, res) => {
   try {
     const area = req.query.area || "01";

@@ -3523,7 +3523,7 @@ function FuelPriceWidget({ apiKey }) {
 React.useEffect(() => {
   async function loadFuel() {
     try {
-      const res = await fetch(`/api/fuel?out=json&code=F251130200&area=${area || "01"}`)
+      const res = await fetch(`https://us-central1-dispatch-app-9b92f.cloudfunctions.net/Fuel?area=${area || "01"}`)
       const data = await res.json();
       setPrices(data?.RESULT?.OIL || []);
     } catch (e) {
