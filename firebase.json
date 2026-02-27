@@ -1,19 +1,18 @@
 {
+  "functions": {
+    "source": "functions"
+  },
   "hosting": {
     "public": "dist",
-    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
     "rewrites": [
       {
-        "source": "!/manifest.json",
-        "destination": "/index.html"
-      },
-      {
-        "source": "!/firebase-messaging-sw.js",
-        "destination": "/index.html"
-      },
-      {
-        "source": "!/sw.js",
-        "destination": "/index.html"
+        "source": "/fuel",
+        "function": "fuel"
       },
       {
         "source": "**",

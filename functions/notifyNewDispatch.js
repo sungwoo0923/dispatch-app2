@@ -1,58 +1,48 @@
 import * as functions from "firebase-functions";
-
-export const notifyNewDispatch =
-  functions.firestore
-    .document("{col}/{dispatchId}")
-    .onCreate(async (snap, context) => {
 import { initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { getMessaging } from "firebase-admin/messaging";
 
 initializeApp();
+
 const db = getFirestore();
+const messaging = getMessaging();
 
-export const notifyNewDispatch = onDocumentCreated(
-  {
-    document: "{col}/{dispatchId}",
-    region: "asia-northeast3",
-  },
-  async (event) => {
-    const { col, dispatchId } = event.params;
+export const notifyNewDispatch =
+  functions.firestore
+    .document("{col}/{dispatchId}")
+    .onCreate(async (snap, context) => {
 
-    // ✅ dispatch / dispatch_test 둘 다 허용
-    if (!["dispatch", "dispatch_test"].includes(col)) return;
+      const { col, dispatchId } = context.params;
 
-    const data = event.data?.data();
-    if (!data) return;
+      if (!["dispatch", "dispatch_test"].includes(col)) return;
 
-    console.log("📦 신규 오더 감지:", col, dispatchId);
+      const data = snap.data();
+      if (!data) return;
 
-    // 🔔 FCM 토큰 수집
-    const tokenSnap = await db.collection("fcmTokens").get();
-    const tokens = tokenSnap.docs
-      .map((d) => d.data().token || d.id)
-      .filter(Boolean);
+      console.log("📦 신규 오더 감지:", col, dispatchId);
 
-    if (!tokens.length) {
-      console.log("🚫 FCM 토큰 없음");
-      return;
-    }
+      const tokenSnap = await db.collection("fcmTokens").get();
+      const tokens = tokenSnap.docs
+        .map((d) => d.data().token || d.id)
+        .filter(Boolean);
 
-    // 📣 알림 내용
-    const title = "📦 신규 오더 등록";
-    const body = `${data["상차지명"] || "-"} → ${data["하차지명"] || "-"}`;
+      if (!tokens.length) {
+        console.log("🚫 FCM 토큰 없음");
+        return;
+      }
 
-    await getMessaging().sendToDevice(tokens, {
-      notification: {
-        title,
-        body,
-      },
-      data: {
-        type: "NEW_DISPATCH",
-        dispatchId,
-      },
+      const title = "📦 신규 오더 등록";
+      const body = `${data["상차지명"] || "-"} → ${data["하차지명"] || "-"}`;
+
+      await messaging.sendMulticast({
+        tokens,
+        notification: { title, body },
+        data: {
+          type: "NEW_DISPATCH",
+          dispatchId,
+        },
+      });
+
+      console.log("✅ 신규 오더 알림 발송 완료");
     });
-
-    console.log("✅ 신규 오더 알림 발송 완료");
-  }
-);

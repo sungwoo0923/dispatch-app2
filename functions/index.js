@@ -1,80 +1,57 @@
-/**
- * ============================================================
- * Firebase Cloud Functions - Dispatch Notification System (v1)
- * ============================================================
- */
-
 import * as functions from "firebase-functions";
 import { initializeApp } from "firebase-admin/app";
-import { getFirestore, FieldValue, Timestamp } from "firebase-admin/firestore";
+import { getFirestore } from "firebase-admin/firestore";
 import { getMessaging } from "firebase-admin/messaging";
-
-// ============================================================
-// Firebase Admin 초기화
-// ============================================================
+import fetch from "node-fetch";
 
 initializeApp();
 
 const db = getFirestore();
 const messaging = getMessaging();
 
-// ============================================================
-// 🔑 모든 유저 FCM 토큰 수집
-// ============================================================
-
-async function getAllTokens() {
-  const snap = await db.collection("users").get();
-  return snap.docs
-    .map((d) => d.data().fcmToken)
-    .filter(Boolean);
-}
-
-// ============================================================
-// 🚨 1. 긴급 오더 생성 즉시 알림 (v1)
-// ============================================================
-
-export const notifyUrgentDispatchOnCreate =
+/* ==============================
+   🔔 신규 오더 알림
+============================== */
+export const notifyNewDispatch =
   functions.firestore
-    .document("dispatch/{dispatchId}")
+    .document("{col}/{dispatchId}")
     .onCreate(async (snap, context) => {
 
+      const { col, dispatchId } = context.params;
+
+      if (!["dispatch", "dispatch_test"].includes(col)) return;
+
       const data = snap.data();
-      const dispatchId = context.params.dispatchId;
+      if (!data) return;
 
-      if (!data || data.긴급 !== true) return;
-      if (data.urgentAlertSent === true) return;
+      const tokenSnap = await db.collection("fcmTokens").get();
+      const tokens = tokenSnap.docs
+        .map((d) => d.data().token || d.id)
+        .filter(Boolean);
 
-      const tokens = await getAllTokens();
       if (!tokens.length) {
         console.log("🚫 FCM 토큰 없음");
         return;
       }
 
-      console.log("🚨 긴급 오더 감지:", dispatchId);
-
       await messaging.sendMulticast({
         tokens,
         notification: {
-          title: "🚨 긴급 오더 등록",
-          body: `${data.상차지명 || ""} → ${data.하차지명 || ""}`,
+          title: "📦 신규 오더 등록",
+          body: `${data["상차지명"] || "-"} → ${data["하차지명"] || "-"}`,
         },
         data: {
-          type: "URGENT_DISPATCH_CREATED",
+          type: "NEW_DISPATCH",
           dispatchId,
         },
       });
 
-      await snap.ref.update({
-        urgentAlertSent: true,
-      });
-
-      console.log("✅ 긴급 오더 알림 발송 완료:", dispatchId);
+      console.log("✅ 신규 오더 알림 완료");
     });
 
-// ============================================================
-// ⛽ 2. 유가 조회 Proxy API (v1)
-// ============================================================
-const fetch = require("node-fetch");
+/* ==============================
+   ⛽ 유가 API Proxy
+============================== */
 export const fuel = functions.https.onRequest(async (req, res) => {
   try {
     const area = req.query.area || "01";
