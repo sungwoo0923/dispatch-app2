@@ -8352,13 +8352,12 @@ ${url}
     key={r._id || r.id || `idx-${idx}`}
     id={`row-${r._id}`}
 
-    onDoubleClick={(e) => {
+onDoubleClick={(e) => {
   if (e.target.closest("input")) return;
-
   if (copyPanelOpen) return;
 
+  setCopyTarget({ ...r });   // ✅ 그냥 객체
   setCopyPanelOpen(true);
-  setCopyTarget(() => ({ ...r })); // 함수형으로
 }}
 
     className={`
@@ -8638,16 +8637,38 @@ ${url}
 
         {/* HEADER */}
         <div className="flex justify-between items-center border-b pb-5">
-          <h2 className="text-2xl font-bold text-slate-800">
-            오더 복사 패널
-          </h2>
-          <button
-            onClick={() => setCopyPanelOpen(false)}
-            className="text-slate-500 hover:text-red-500 text-xl"
-          >
-            ✕
-          </button>
-        </div>
+  <h2 className="text-2xl font-bold text-slate-800">
+    오더 복사 패널
+  </h2>
+
+  <div className="flex gap-3 items-center">
+    <button
+      onClick={async () => {
+        const payload = {
+          ...copyTarget,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          배차상태: "배차중",
+          업체전달상태: "미전달",
+        };
+
+        await addDispatch(payload);
+        alert("복사 등록 완료");
+        setCopyPanelOpen(false);
+      }}
+      className="px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold"
+    >
+      복사 등록
+    </button>
+
+    <button
+      onClick={() => setCopyPanelOpen(false)}
+      className="text-slate-500 hover:text-red-500 text-xl"
+    >
+      ✕
+    </button>
+  </div>
+</div>
 
         {/* ================= 상하차 정보 ================= */}
 <section className="bg-white p-8 rounded-xl shadow-sm">
@@ -8908,14 +8929,108 @@ ${url}
 
   </div>
 </section>
+{/* ================= 기사정보 ================= */}
+<section className="bg-white p-8 rounded-xl shadow-sm">
+  <h3 className="text-lg font-bold text-slate-700 mb-8 border-b pb-3">
+    기사정보
+  </h3>
 
+  <div className="grid grid-cols-3 gap-6">
+
+    <Field label="차량번호">
+      <input
+        className="inputStyle"
+        value={copyTarget?.차량번호 ?? ""}
+        onChange={(e)=>{
+  const v = e.target.value;
+  const plate = normalizePlate(v);
+
+  const match = (drivers || []).find(
+    d => normalizePlate(d.차량번호) === plate
+  );
+
+  setCopyTarget(prev => ({
+    ...prev,
+    차량번호: v,
+    이름: match?.이름 || "",
+    전화번호: match?.전화번호 || "",
+  }));
+}}
+      />
+    </Field>
+
+    <Field label="기사명">
+      <input
+        className="inputStyle bg-gray-100"
+        value={copyTarget?.이름 ?? ""}
+        readOnly
+      />
+    </Field>
+
+    <Field label="전화번호">
+      <input
+        className="inputStyle bg-gray-100"
+        value={copyTarget?.전화번호 ?? ""}
+        readOnly
+      />
+    </Field>
+
+  </div>
+</section>
+{/* ================= 화물정보 ================= */}
+<section className="bg-white p-8 rounded-xl shadow-sm">
+  <h3 className="text-lg font-bold text-slate-700 mb-8 border-b pb-3">
+    화물정보
+  </h3>
+
+  <div className="grid grid-cols-3 gap-6">
+
+    <Field label="차량종류">
+      <select
+        className="inputStyle"
+        value={copyTarget?.차량종류 ?? ""}
+        onChange={(e)=>setCopyTarget(p=>({...p, 차량종류:e.target.value}))}
+      >
+        <option value="">선택</option>
+        <option value="라보/다마스">라보/다마스</option>
+        <option value="카고">카고</option>
+        <option value="윙바디">윙바디</option>
+        <option value="탑차">탑</option>
+        <option value="냉장탑">냉장탑</option>
+        <option value="냉동탑">냉동탑</option>
+        <option value="냉장윙">냉장윙</option>
+        <option value="냉동윙">냉동</option>
+        <option value="리프트">리프트</option>
+        <option value="오토바이">오토바이</option>
+        <option value="기타">기타</option>
+      </select>
+    </Field>
+
+    <Field label="차량톤수">
+      <input
+        className="inputStyle"
+        value={copyTarget?.차량톤수 ?? ""}
+        onChange={(e)=>setCopyTarget(p=>({...p, 차량톤수:e.target.value}))}
+      />
+    </Field>
+
+    <Field label="화물내용">
+      <input
+        className="inputStyle"
+        value={copyTarget?.화물내용 ?? ""}
+        onChange={(e)=>setCopyTarget(p=>({...p, 화물내용:e.target.value}))}
+      />
+    </Field>
+
+  </div>
+</section>
         {/* ================= 결제 정보 ================= */}
         <section className="bg-white p-8 rounded-xl shadow-sm">
           <h3 className="text-lg font-bold text-slate-700 mb-8 border-b pb-3">
             결제 정보
           </h3>
 
-          <div className="grid grid-cols-3 gap-8">
+          <div className="grid grid-cols-5 gap-8">
 
             <Field label="청구운임">
               <input
@@ -8944,10 +9059,48 @@ ${url}
                 ).toLocaleString()} 원
               </div>
             </Field>
+<Field label="지급방식">
+  <select
+    className="inputStyle"
+    value={copyTarget?.지급방식 ?? ""}
+    onChange={(e)=>setCopyTarget(p=>({...p, 지급방식:e.target.value}))}
+  >
+    <option value="">선택</option>
+    <option value="계산서">계산서</option>
+    <option value="착불">착불</option>
+    <option value="선불">선불</option>
+    <option value="손실">손실</option>
+    <option value="개인">개인</option>
+    <option value="기타">기</option>
+  </select>
+</Field>
 
+<Field label="배차방식">
+  <select
+    className="inputStyle"
+    value={copyTarget?.배차방식 ?? ""}
+    onChange={(e)=>setCopyTarget(p=>({...p, 배차방식:e.target.value}))}
+  >
+    <option value="">선택</option>
+    <option value="24시">24시</option>
+    <option value="직접배차">직접배차</option>
+    <option value="인성">인성</option>
+  </select>
+</Field>
           </div>
         </section>
+{/* ================= 메모 ================= */}
+<section className="bg-white p-8 rounded-xl shadow-sm">
+  <h3 className="text-lg font-bold text-slate-700 mb-6 border-b pb-3">
+    메모
+  </h3>
 
+  <textarea
+    className="inputStyle h-24"
+    value={copyTarget?.메모 ?? ""}
+    onChange={(e)=>setCopyTarget(p=>({...p, 메모:e.target.value}))}
+  />
+</section>
       </div>
     </div>
   </div>
@@ -14974,8 +15127,6 @@ onBlur={(e) => {
           </div>
         </div>
       )}
-
-      {/* ===================== 기사선택 팝업 ===================== */}
       {/* ===================== 기사선택 팝업 (적용/취소 방식) ===================== */}
       {driverSelectInfo && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[9999]">
