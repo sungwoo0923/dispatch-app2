@@ -1114,11 +1114,9 @@ React.useEffect(() => {
 }, [area]);
 
 // 🔹 유가 정리 (안정 버전)
-const premium = prices.find(o => o?.PRODNM?.includes("고급"));
-const diesel = prices.find(o => o?.PRODNM?.includes("경유"));
-const gasoline = prices.find(
-  o => o?.PRODNM?.includes("휘발유") && !o?.PRODNM?.includes("고급")
-);
+const premium = prices.find(o => o?.PRODNM === "C004"); // 고급휘발유
+const gasoline = prices.find(o => o?.PRODNM === "B027"); // 휘발유
+const diesel = prices.find(o => o?.PRODNM === "D047"); // 경유
 
 // 🔹 화면에 사용할 데이터
 const items = [premium, gasoline, diesel].filter(Boolean);
