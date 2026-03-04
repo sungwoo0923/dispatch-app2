@@ -1096,50 +1096,61 @@ const FuelSlideWidget = React.memo(function FuelSlideWidget() {
   const [area, setArea] = React.useState("");
 
   // 🔹 유가 로드
-  React.useEffect(() => {
-    async function loadFuel() {
-      try {
-        const res = await fetch(
-          `/api/fuel?out=json&code=F251130200&area=${area || "01"}`
-        );
-        const data = await res.json();
-        setPrices(Array.isArray(data?.RESULT?.OIL) ? data.RESULT.OIL : []);
-      } catch (e) {
-        console.warn("유가 조회 실패:", e);
-        setPrices([]);
-      }
-    }
-    loadFuel();
-  }, [area]);
+React.useEffect(() => {
+  async function loadFuel() {
+    try {
+      const res = await fetch(`/api/fuel?area=${area || "01"}`);
+      const data = await res.json();
 
-  // 🔹 유가 정리 (여기 위치 중요!!)
+      const oil = Array.isArray(data?.RESULT?.OIL) ? data.RESULT.OIL : [];
+      setPrices(oil);
+    } catch (e) {
+      console.warn("유가 조회 실패:", e);
+      setPrices([]);
+    }
+  }
+
+  loadFuel();
+}, [area]);
+
+// 🔹 유가 정리 (안정 버전)
 const premium = prices.find(o => o?.PRODNM?.includes("고급"));
 const diesel = prices.find(o => o?.PRODNM?.includes("경유"));
 const gasoline = prices.find(
   o => o?.PRODNM?.includes("휘발유") && !o?.PRODNM?.includes("고급")
 );
 
-  const items = [premium, gasoline, diesel].filter(Boolean);
+// 🔹 화면에 사용할 데이터
+const items = [premium, gasoline, diesel].filter(Boolean);
 
-  // 🔹 자동 슬라이드
-  React.useEffect(() => {
-    if (!items.length) return;
+// 🔹 자동 슬라이드
+React.useEffect(() => {
+  if (!items.length) return;
 
-    const timer = setInterval(() => {
-      setPage((p) => (p + 1) % items.length);
-    }, 3000);
+  const timer = setInterval(() => {
+    setPage(p => (p + 1) % items.length);
+  }, 3000);
 
-    return () => clearInterval(timer);
-  }, [items.length]);
+  return () => clearInterval(timer);
+}, [items.length]);
 
-  // 🔹 로딩 UI (null 반환 금지)
-  if (!prices.length) {
-    return (
-      <div className="h-10 flex items-center px-5 text-sm text-gray-400">
-        유가 불러오는 중...
-      </div>
-    );
-  }
+// 🔹 로딩 UI
+if (!prices.length) {
+  return (
+    <div className="h-10 flex items-center px-5 text-sm text-gray-400">
+      유가 불러오는 중...
+    </div>
+  );
+}
+
+// 🔹 데이터 없음 대비
+if (!items.length) {
+  return (
+    <div className="h-10 flex items-center px-5 text-sm text-gray-400">
+      유가 데이터 없음
+    </div>
+  );
+}
 
   return (
     <div className="flex items-center gap-6 bg-gradient-to-r from-blue-600 to-blue-700 text-white px-5 py-2 rounded-xl shadow-md text-sm overflow-hidden">
