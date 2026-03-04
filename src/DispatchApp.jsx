@@ -1114,10 +1114,17 @@ React.useEffect(() => {
 }, [area]);
 
 // 🔹 유가 정리 (안정 버전)
+// 🔹 유가 정리
 const premium = prices.find(o => o?.PRODNM?.includes("고급"));
-const gasoline = prices.find(o => o?.PRODNM?.includes("휘발유"));
+
+const gasoline = prices.find(
+  o =>
+    o?.PRODNM?.includes("휘발유") &&
+    !o?.PRODNM?.includes("고급")
+);
+
 const diesel = prices.find(
-  o => o?.PRODNM?.includes("경유") || o?.PRODNM?.includes("디젤")
+  o => o?.PRODNM?.includes("경유")
 );
 
 // 🔹 화면에 사용할 데이터
