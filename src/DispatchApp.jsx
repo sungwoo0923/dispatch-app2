@@ -1099,9 +1099,7 @@ const FuelSlideWidget = React.memo(function FuelSlideWidget() {
 React.useEffect(() => {
   async function loadFuel() {
     try {
-      const res = await fetch(
-  `https://us-central1-dispatch-app-9b92f.cloudfunctions.net/Fuel?area=${area || "01"}`
-);
+      const res = await fetch(`/api/fuel?area=${area || "01"}`);
       const data = await res.json();
 
       const oil = Array.isArray(data?.RESULT?.OIL) ? data.RESULT.OIL : [];
