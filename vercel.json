@@ -1,7 +1,5 @@
 {
   "routes": [
-    { "src": "/api/(.*)", "dest": "/api/$1" },
-
     {
       "src": "/firebase-messaging-sw.js",
       "headers": {
