@@ -12327,6 +12327,7 @@ ${r.상차지주소 || "-"}${(() => {
             })()
             }
 상차시간 : ${r.상차시간 || "즉시"}
+상차방법 : ${r.상차방법 || "-"}
 
 하차지 : ${r.하차지명 || "-"}
 ${r.하차지주소 || "-"}${(() => {
@@ -12338,10 +12339,10 @@ ${r.하차지주소 || "-"}${(() => {
             })()
             }
 하차시간 : ${dropTimeText}
+하차방법 : ${r.하차방법 || "-"}
 
 중량 : ${r.차량톤수 || "-"}${r.화물내용 ? ` / ${r.화물내용}` : ""}
 차량 : ${r.차량종류 || "-"}
-
 ${driverNoteText}`;
         }
 
@@ -12390,6 +12391,7 @@ ${r.상차지주소 || "-"}${r.상차지담당자 || r.상차지담당자번호
             : ""
           }
 상차시간 : ${pickupTime}
+상차방법 : ${r.상차방법 || "-"}
 
 하차지 : ${r.하차지명 || "-"}
 ${r.하차지주소 || "-"}${r.하차지담당자 || r.하차지담당자번호
@@ -12400,6 +12402,7 @@ ${r.하차지주소 || "-"}${r.하차지담당자 || r.하차지담당자번호
             : ""
           }
 하차시간 : ${dropTimeText}
+하차방법 : ${r.하차방법 || "-"}
 
 중량 : ${r.차량톤수 || "-"}${r.화물내용 ? ` / ${r.화물내용}` : ""
           } ${r.차량종류 || ""}
@@ -12788,9 +12791,6 @@ else if (palletDiff !== null) priority = 1;
       plate: v,
     });
   };
-
-
-
   const _patch =
     patchDispatch ||
     ((id, patch) =>
@@ -12802,28 +12802,6 @@ else if (palletDiff !== null) priority = 1;
     removeDispatch ||
     ((row) =>
       setDispatchData((p) => p.filter((r) => getId(r) !== getId(row))));
-  // 📲 카카오톡 전송
-  const sendKakao = (row) => {
-    const msg = `
-📦 배차 정보
-
-거래처: ${row.거래처명}
-상차: ${row.상차지명} (${row.상차지주소})
-하차: ${row.하차지명} (${row.하차지주소})
-
-상차시간: ${row.상차일} ${row.상차시간}
-하차시간: ${row.하차일} ${row.하차시간}
-
-차량: ${row.차량번호}
-기사: ${row.이름} (${row.전화번호})
-
-운임: ${Number(row.기사운임).toLocaleString()}원
-`.trim();
-
-    const url = "kakaotalk://send?text=" + encodeURIComponent(msg);
-    window.location.href = url;
-  };
-
 
   // 🚀 자동 기사 추천 함수
   const recommendDriver = (row) => {
@@ -12860,8 +12838,6 @@ else if (palletDiff !== null) priority = 1;
 
     alert(`🚚 자동 기사 추천 결과\n\n${top}`);
   };
-
-
   // ================================  
   // 🔵 선택수정 / 수정완료 (팝업 방식)  
   // ================================
