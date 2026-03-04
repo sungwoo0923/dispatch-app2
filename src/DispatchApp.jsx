@@ -1103,7 +1103,7 @@ const FuelSlideWidget = React.memo(function FuelSlideWidget() {
           `/api/fuel?out=json&code=F251130200&area=${area || "01"}`
         );
         const data = await res.json();
-        setPrices(data?.RESULT?.OIL || []);
+        setPrices(Array.isArray(data?.RESULT?.OIL) ? data.RESULT.OIL : []);
       } catch (e) {
         console.warn("유가 조회 실패:", e);
         setPrices([]);
@@ -1113,11 +1113,11 @@ const FuelSlideWidget = React.memo(function FuelSlideWidget() {
   }, [area]);
 
   // 🔹 유가 정리 (여기 위치 중요!!)
-  const premium = prices.find(o => o.PRODNM.includes("고급"));
-  const diesel = prices.find(o => o.PRODNM.includes("경유"));
-  const gasoline = prices.find(
-    o => o.PRODNM.includes("휘발유") && !o.PRODNM.includes("고급")
-  );
+const premium = prices.find(o => o?.PRODNM?.includes("고급"));
+const diesel = prices.find(o => o?.PRODNM?.includes("경유"));
+const gasoline = prices.find(
+  o => o?.PRODNM?.includes("휘발유") && !o?.PRODNM?.includes("고급")
+);
 
   const items = [premium, gasoline, diesel].filter(Boolean);
 
