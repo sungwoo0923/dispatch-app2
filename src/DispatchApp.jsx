@@ -488,7 +488,19 @@ export default function DispatchApp({ role, user }) {
   const navigate = useNavigate();
   // ⭐ 고정거래처 매출 실시간 구독
   const [fixedRows, setFixedRows] = useState([]);
+// ⭐ 고정거래처 매출 Firestore 실시간 구독
+useEffect(() => {
+  const unsub = onSnapshot(collection(db, "fixedClients"), (snap) => {
+    const arr = snap.docs.map(d => ({
+      id: d.id,
+      ...d.data()
+    }));
 
+    setFixedRows(arr);
+  });
+
+  return () => unsub();
+}, []);
   // ⭐ 여기 추가!
   const [subMenu, setSubMenu] = useState("고정거래처관리");
   // ⭐ 내 정보 패널 ON/OFF
