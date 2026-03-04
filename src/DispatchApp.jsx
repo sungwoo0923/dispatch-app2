@@ -1093,13 +1093,15 @@ const AREA_OPTIONS = [
 const FuelSlideWidget = React.memo(function FuelSlideWidget() {
   const [prices, setPrices] = React.useState([]);
   const [page, setPage] = React.useState(0);
-  const [area, setArea] = React.useState("");
+  const [area, setArea] = React.useState("01");
 
   // 🔹 유가 로드
 React.useEffect(() => {
   async function loadFuel() {
     try {
-      const res = await fetch(`/api/fuel?area=${area || "01"}`);
+      const res = await fetch(
+  `https://us-central1-dispatch-app-9b92f.cloudfunctions.net/Fuel?area=${area || "01"}`
+);
       const data = await res.json();
 
       const oil = Array.isArray(data?.RESULT?.OIL) ? data.RESULT.OIL : [];
