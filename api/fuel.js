@@ -5,7 +5,7 @@ export default async function handler(req, res) {
     const key = "F251130200";
     const area = req.query.area || "01";
 
-    const url = `https://www.opinet.co.kr/api/avgSidoPrice.do?out=json&code=${key}&area=${area}`;
+    const url = `https://www.opinet.co.kr/api/avgAllPrice.do?out=json&code=${key}`;
 
     const response = await fetch(url, {
       headers: {
