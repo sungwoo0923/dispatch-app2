@@ -41,6 +41,16 @@ const DISPATCH_TYPES = ["24시", "인성", "직접배차", "24시(외부업체)"
 const cellBase = "border px-2 py-1 text-center whitespace-nowrap align-middle min-w-[100px]";
 const headBase = "border px-2 py-2 whitespace-nowrap bg-gray-100";
 const inputBase = "border p-1 rounded w-36 text-center";
+const inputStyle =
+  "w-full h-[42px] border border-slate-300 rounded-lg px-3 text-sm bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition";
+  const Field = ({ label, children }) => (
+    <div className="space-y-1">
+      <div className="text-xs font-semibold text-slate-500">
+        {label}
+      </div>
+      {children}
+    </div>
+  );
 
 const todayStr = () => {
   const d = new Date();
@@ -295,11 +305,13 @@ setClients(normalizeClients(arr));
 
 
     // ✅ updateDoc 사용 (merge + undefined 문제 제거)
-    await updateDoc(ref, {
-      ...cleanPatch,
-      작성자: auth.currentUser?.email || "",
-      history: [...(prev.history || []), ...histories],
-    });
+const historyArr = Array.isArray(prev.history) ? prev.history : [];
+
+await updateDoc(ref, {
+  ...cleanPatch,
+  작성자: auth.currentUser?.email || "",
+  history: [...historyArr, ...histories],
+});
   };
 
 
@@ -7155,14 +7167,7 @@ const generateTimeOptions = () => {
   }
   return result;
 };
-  const Field = ({ label, children }) => (
-    <div className="space-y-1">
-      <div className="text-xs font-semibold text-slate-500">
-        {label}
-      </div>
-      {children}
-    </div>
-  );
+
   // ------------------------
   // 상차 임박 경고 (오전·오후 지원)
   // ------------------------
@@ -7654,7 +7659,7 @@ setDriverConfirmRowId(null);
   // 📌 선택수정 저장
   // ------------------------
   const handleSaveSelected = async () => {
-    const ids = selected.length ? selected : Object.keys(edited);
+    const ids = Object.keys(edited);
     if (!ids.length) return alert("변경된 내용이 없습니다.");
 
     for (const id of ids) {
@@ -8679,19 +8684,32 @@ onDoubleClick={(e) => {
 
   <div className="flex gap-3 items-center">
     <button
-      onClick={async () => {
-        const payload = {
-          ...copyTarget,
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-          배차상태: "배차중",
-          업체전달상태: "미전달",
-        };
+onClick={async () => {
 
-        await addDispatch(payload);
-        alert("복사 등록 완료");
-        setCopyPanelOpen(false);
-      }}
+const payload = {
+  ...copyTarget,
+
+  createdAt: Date.now(),
+  updatedAt: Date.now(),
+
+  배차상태:
+    copyTarget?.차량번호?.trim()
+      ? "배차완료"
+      : "배차중",
+
+업체전달상태: "미전달",
+};
+
+// ⭐ 기존 id 제거 (새 오더 생성)
+delete payload._id;
+
+  await addDispatch(payload);
+
+  alert("복사 등록 완료");
+
+  setCopyPanelOpen(false);
+
+}}
       className="px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold"
     >
       복사 등록
@@ -8985,12 +9003,13 @@ onDoubleClick={(e) => {
     d => normalizePlate(d.차량번호) === plate
   );
 
-  setCopyTarget(prev => ({
-    ...prev,
-    차량번호: v,
-    이름: match?.이름 || "",
-    전화번호: match?.전화번호 || "",
-  }));
+setCopyTarget(prev => ({
+  ...prev,
+  차량번호: v,
+  이름: match?.이름 || "",
+  전화번호: match?.전화번호 || "",
+  배차상태: match ? "배차완료" : "배차중",
+}));
 }}
       />
     </Field>
@@ -10655,8 +10674,6 @@ setRows(prev => {
                 }
               />
             </div>
-
-
             {/* ------------------------------------------------ */}
             {/* 🔵 화물내용 */}
             {/* ------------------------------------------------ */}
