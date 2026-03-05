@@ -2995,6 +2995,7 @@ const rec = {
 if (typeof upsertPlace === "function") {
 // ✅ 오더 저장
 await addDispatch(rec);
+
 await savePlaceSmart(
   form.상차지명,
   form.상차지주소,
@@ -20430,13 +20431,8 @@ function DriverManagement({ drivers = [], upsertDriver, removeDriver }) {
 
   // ===================== 인라인 수정 =====================
   const handleBlur = async (row, key, val) => {
-    const oldId = row.id; // ⭐ Firestore 문서 ID
-    if (!oldId) {
-      alert("문서 ID가 없어 수정/삭제할 수 없습니다.");
-      return;
-    }
-const handleBlur = async (row, key, val) => {
   const oldId = row.id;
+
   if (!oldId) {
     alert("문서 ID가 없어 수정/삭제할 수 없습니다.");
     return;
@@ -20447,13 +20443,6 @@ const handleBlur = async (row, key, val) => {
     [key]: val,
   });
 };
-
-    // 일반 필드 수정
-    await upsertDriver({
-      ...row,
-      [key]: val,
-    });
-  };
 
   // ===================== 신규 추가 =====================
   const addNew = async () => {

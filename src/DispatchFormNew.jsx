@@ -58,12 +58,15 @@ const getNextMonday = () => {
   d.setDate(d.getDate() + diff);
   return formatDate(d);
 };
-
+const normalizePlate = (v = "") =>
+  v.replace(/\s/g, "").toUpperCase();
 export default function DispatchFormNew({
   form,
   onChange,
   doSave,
-  placeRows = [],   // ⭐ 추가
+  placeRows = [],
+  drivers = [],
+  upsertDriver
 }) {
   // 📅 날짜 퀵버튼 활성 상태
 const [pickupQuick, setPickupQuick] = useState(null); // "today" | "tomorrow" | "monday"
@@ -132,6 +135,8 @@ useEffect(() => {
 
   const [routeError, setRouteError] = useState(null);
   const [showNewClientModal, setShowNewClientModal] = useState(false);
+  const [showNewDriverModal, setShowNewDriverModal] = useState(false);
+const [pendingPlate, setPendingPlate] = useState("");
   const [fareResult, setFareResult] = useState({
   distanceKm: null,
   durationMin: null,
@@ -226,7 +231,23 @@ const handleAutoRouteCalc = async () => {
     }));
   }
 };
+ const checkDriverMatch = () => {
+    const plate = normalizePlate(form.차량번호 || "");
 
+    if (!plate) return;
+
+    const match = (drivers || []).find(
+      d => normalizePlate(d.차량번호) === plate
+    );
+
+    if (match) {
+      onChange("기사명", match.이름 || "");
+      onChange("기사연락처", match.전화번호 || "");
+    } else {
+      setPendingPlate(form.차량번호);
+      setShowNewDriverModal(true);
+    }
+  };
 // const calcRouteByServer = async (fromAddr, toAddr) => {
 //   try {
 //     const res = await fetch(
@@ -438,6 +459,29 @@ useEffect(() => {
           onChange("상차담당자", client.담당자);
           onChange("상차연락처", client.담당자연락처);
           setShowNewClientModal(false);
+        }}
+      />
+    )}
+    {/* 🔥 여기 추가 */}
+    {showNewDriverModal && (
+      <NewDriverModal
+        plate={pendingPlate}
+        onClose={() => setShowNewDriverModal(false)}
+        onSave={(driver) => {
+          onChange("차량번호", driver.차량번호);
+          onChange("기사명", driver.이름);
+          onChange("기사연락처", driver.전화번호);
+
+const plateId = normalizePlate(driver.차량번호);
+
+upsertDriver?.({
+  id: plateId,
+  차량번호: plateId,
+  이름: driver.이름,
+  전화번호: driver.전화번호
+});
+
+          setShowNewDriverModal(false);
         }}
       />
     )}
@@ -922,25 +966,45 @@ useEffect(() => {
 
   <div className="grid grid-cols-3 gap-8 max-w-[760px]">
     <input
-      className={lineInput}
-      placeholder="차량번호"
-      value={form.차량번호 || ""}
-      onChange={(e) => onChange("차량번호", e.target.value)}
-    />
+  className={lineInput}
+  placeholder="차량번호"
+  value={form.차량번호 || ""}
+
+  onChange={(e) => {
+  const v = e.target.value;
+
+  onChange("차량번호", v);
+
+  // 차량번호 비우면 기사정보도 초기화
+  if (!v.trim()) {
+    onChange("기사명", "");
+    onChange("기사연락처", "");
+  }
+}}
+onBlur={checkDriverMatch}
+
+onKeyDown={(e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    checkDriverMatch();
+    e.target.blur();
+  }
+}}
+/>
 
     <input
-      className={lineInput}
-      placeholder="기사명"
-      value={form.기사명 || ""}
-      onChange={(e) => onChange("기사명", e.target.value)}
-    />
+  className={`${lineInput} bg-gray-100`}
+  placeholder="기사명"
+  value={form.기사명 || ""}
+  readOnly
+/>
 
     <input
-      className={lineInput}
-      placeholder="기사 연락처"
-      value={form.기사연락처 || ""}
-      onChange={(e) => onChange("기사연락처", e.target.value)}
-    />
+  className={`${lineInput} bg-gray-100`}
+  placeholder="기사 연락처"
+  value={form.기사연락처 || ""}
+  readOnly
+/>
   </div>
 </section>
 {/* ================= 운임 정보 ================= */}
@@ -1175,5 +1239,77 @@ function NewClientModal({ initialName, onClose, onSave }) {
         </div>
       </div>
     </div>
+  );
+}
+function NewDriverModal({ plate, onClose, onSave }) {
+
+  const [form,setForm] = useState({
+    차량번호: plate || "",
+    이름:"",
+    전화번호:"",
+  });
+
+  const change = (k,v)=>{
+    setForm(prev=>({...prev,[k]:v}))
+  }
+
+  return (
+<div className="fixed inset-0 z-50 flex items-center justify-center">
+
+<div
+className="absolute inset-0 bg-black/40"
+onClick={onClose}
+/>
+
+<div className="relative w-[380px] bg-white rounded-xl shadow-lg p-6">
+
+<h3 className="text-base font-bold mb-5">
+신규 기사 등록
+</h3>
+
+<div className="space-y-4">
+
+<input
+className="w-full border rounded-md px-3 py-2 text-sm bg-gray-100"
+value={form.차량번호}
+readOnly
+/>
+
+<input
+className="w-full border rounded-md px-3 py-2 text-sm"
+placeholder="기사명"
+value={form.이름}
+onChange={(e)=>change("이름",e.target.value)}
+/>
+
+<input
+className="w-full border rounded-md px-3 py-2 text-sm"
+placeholder="연락처"
+value={form.전화번호}
+onChange={(e)=>change("전화번호",e.target.value)}
+/>
+
+</div>
+
+<div className="flex justify-end gap-2 mt-6">
+
+<button
+onClick={onClose}
+className="px-4 py-2 text-sm rounded-md border bg-gray-100"
+>
+취소
+</button>
+
+<button
+onClick={()=>onSave(form)}
+className="px-4 py-2 text-sm rounded-md bg-blue-600 text-white"
+>
+등록
+</button>
+
+</div>
+
+</div>
+</div>
   );
 }
