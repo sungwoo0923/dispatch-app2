@@ -14,6 +14,7 @@ import HomeDashboard from "./HomeDashboard";
 import StandardFare from "./StandardFare";
 import DispatchFormNew from "./DispatchFormNew";
 
+
 /* -------------------------------------------------
    발행사(우리 회사) 고정 정보
 --------------------------------------------------*/
@@ -54,13 +55,22 @@ const inputStyle =
 
 const todayStr = () => {
   const d = new Date();
-  d.setHours(d.getHours() + 9); // 한국시간 보정
-  return d.toISOString().slice(0, 10);
+
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+
+  return `${y}-${m}-${day}`;
 };
 const tomorrowStr = () => {
   const d = new Date();
-  d.setHours(d.getHours() + 33); // 9 + 24
-  return d.toISOString().slice(0, 10);
+  d.setDate(d.getDate() + 1);
+
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+
+  return `${y}-${m}-${day}`;
 };
 
 /* -------------------------------------------------
@@ -444,6 +454,13 @@ function formatPhone(phone) {
   }
 
   return p;
+}
+// 차량번호 정규화 (공백 / 하이픈 제거 + 소문자)
+function normalizePlate(v = "") {
+  return String(v)
+    .toLowerCase()
+    .replace(/\s/g, "")
+    .replace(/-/g, "");
 }
 // ===================== TOAST SYSTEM (GLOBAL) =====================
 const ToastContext = React.createContext(null);
@@ -1970,7 +1987,7 @@ const filterPlaces = (q) => {
       "계산서", "착불", "선불", "손실", "개인", "기타"
     ];
     const DISPATCH_TYPES = (typeof window !== "undefined" && window.RUN25_DISPATCH_TYPES) || [
-      "24시", "직접배차", "인성", "24(외주업체)"
+      "24시", "직접배차", "인성", "고정기사"
     ];
     const StatusBadge = ({ s }) => {
       const map = {
@@ -2586,7 +2603,6 @@ const [driverActive, setDriverActive] = React.useState(0);
     차량번호: clean,
   }));
 
-  // 🔥 차량번호 비우면 기사정보 즉시 초기화
   if (!clean) {
     setForm((p) => ({
       ...p,
@@ -2600,7 +2616,6 @@ const [driverActive, setDriverActive] = React.useState(0);
   }
 
   const list = driverMap.get(clean);
-
   // 🔹 기존 기사 2명 이상 → 드롭다운
   if (list && list.length > 1) {
     setDriverCandidates(list);
@@ -4729,7 +4744,9 @@ setForm((prev) => ({
               setDriverDropdownOpen(false);
             }}
           >
-            <div className="font-medium">{d.이름}</div>
+            <div className="font-medium">
+  {d.이름} · {d.차량번호}
+</div>
             <div className="text-xs text-gray-500">
               {formatPhone(d.전화번호)}
             </div>
@@ -7826,7 +7843,7 @@ setDriverConfirmRowId(null);
           <option value="24시">24시</option>
           <option value="직접배차">직접배차</option>
           <option value="인성">인성</option>
-          <option value="24시(외주업체)">24시(외주업체)</option>
+          <option value="고정기사">24시(고정기사)</option>
         </select>
       );
     }
@@ -8997,22 +9014,64 @@ delete payload._id;
       <input
         className="inputStyle"
         value={copyTarget?.차량번호 ?? ""}
-        onChange={(e)=>{
-  const v = e.target.value;
-  const plate = normalizePlate(v);
 
-  const match = (drivers || []).find(
-    d => normalizePlate(d.차량번호) === plate
-  );
+        onKeyDown={(e) => {
+          if (e.key !== "Enter") return;
 
-setCopyTarget(prev => ({
-  ...prev,
-  차량번호: v,
-  이름: match?.이름 || "",
-  전화번호: match?.전화번호 || "",
-  배차상태: match ? "배차완료" : "배차중",
-}));
-}}
+          const plate = normalizePlate(e.target.value);
+          if (!plate) return;
+
+          const match = (drivers || []).find(
+            d => normalizePlate(d.차량번호) === plate
+          );
+
+          // 기존 기사면 아무 작업 안함
+          if (match) return;
+
+          const ok = window.confirm(
+            `[${e.target.value}] 등록된 기사가 없습니다.\n신규 기사로 등록하시겠습니까?`
+          );
+          if (!ok) return;
+
+          const name = prompt("기사명 입력");
+          if (!name) return;
+
+          const phone = prompt("전화번호 입력");
+          if (!phone) return;
+
+          // 기사 등록
+          upsertDriver({
+            차량번호: e.target.value,
+            이름: name,
+            전화번호: phone
+          });
+
+          // 복사패널 상태 업데이트
+          setCopyTarget(prev => ({
+            ...prev,
+            차량번호: e.target.value,
+            이름: name,
+            전화번호: phone,
+            배차상태: "배차완료"
+          }));
+        }}
+
+        onChange={(e) => {
+          const v = e.target.value;
+          const plate = normalizePlate(v);
+
+          const match = (drivers || []).find(
+            d => normalizePlate(d.차량번호) === plate
+          );
+
+          setCopyTarget(prev => ({
+            ...prev,
+            차량번호: v,
+            이름: match?.이름 || "",
+            전화번호: match?.전화번호 || "",
+            배차상태: match ? "배차완료" : "배차중",
+          }));
+        }}
       />
     </Field>
 
@@ -9923,7 +9982,7 @@ setCopyTarget(prev => ({
                     <option value="24시">24시</option>
                     <option value="직접배차">직접배차</option>
                     <option value="인성">인성</option>
-                    <option value="24시(외주업체)">24시(외주업체)</option>
+                    <option value="고정기사">고정기사</option>
                   </select>
                 </div>
               </div>
@@ -10942,7 +11001,7 @@ setRows(prev => {
                   <option value="24시">24시</option>
                   <option value="직접배차">직접배차</option>
                   <option value="인성">인성</option>
-                  <option value="24시(외주업체)">24시(외주업체)</option>
+                  <option value="고정기사">고정기사</option>
                 </select>
               </div>
             </div>
@@ -11862,6 +11921,14 @@ function MemoMore({ text = "" }) {
 }
 // ===================== PART 4/8 — END =====================
 // ===================== DispatchApp.jsx (PART 5/8 — 차량번호 항상 활성화 + 선택수정→수정완료 통합버튼 + 주소/메모 더보기 + 대용량업로드 + 신규 오더 등록) =====================
+function generateTimeOptions() {
+  const list = [];
+  for (let h = 0; h < 24; h++) {
+    list.push(`${String(h).padStart(2, "0")}:00`);
+    list.push(`${String(h).padStart(2, "0")}:30`);
+  }
+  return list;
+}
 function DispatchStatus({
   dispatchData = [],
   setDispatchData,
@@ -11874,6 +11941,7 @@ function DispatchStatus({
   removeDispatch,
   upsertDriver,
 }) {
+  
 const renderTimeText = (time, cond) => {
   if (!time) return "-";
 
@@ -11988,6 +12056,12 @@ const renderTimeText = (time, cond) => {
   const [sortModalOpen, setSortModalOpen] = React.useState(false);
   const [selected, setSelected] = React.useState(new Set());
   const [editMode, setEditMode] = React.useState(false);
+  const [copyPanelOpen, setCopyPanelOpen] = React.useState(false);
+const [copyTarget, setCopyTarget] = React.useState(null);
+const [copyPlaceOptions, setCopyPlaceOptions] = React.useState([]);
+const [copyPlaceType, setCopyPlaceType] = React.useState(null); // pickup | drop
+const [showCopyPlaceDropdown, setShowCopyPlaceDropdown] = React.useState(false);
+const [copyActiveIndex, setCopyActiveIndex] = React.useState(0);
   // 🔔 즉시 변경 확인 팝업 + 히스토리
   const [confirmChange, setConfirmChange] = React.useState(null);
   /*
@@ -13556,16 +13630,25 @@ else if (palletDiff !== null) priority = 1;
               ];
 
               return (
-                <tr
-                  key={id}
-                  id={`row-${id}`}
-                  className={`
+<tr
+  key={id}
+  id={`row-${id}`}
+  onDoubleClick={() => {
+    setCopyTarget({ ...row });
+    setCopyPanelOpen(true);
+  }}
+  className={`
+    hover:bg-indigo-50
+    cursor-pointer
+    transition
+    duration-150
+
     ${r.긴급 === true && row.배차상태 === "배차중"
-                      ? "bg-red-50 border-l-4 border-red-400"
-                      : i % 2 === 0
-                        ? "bg-white"
-                        : "bg-gray-50"
-                    }
+      ? "bg-red-50 border-l-4 border-red-400"
+      : i % 2 === 0
+      ? "bg-white"
+      : "bg-gray-50"}
+
 
     ${selected.has(id) ? "bg-yellow-200 border-2 border-yellow-500" : ""}
     ${savedHighlightIds.has(id) ? "row-highlight" : ""}
@@ -13767,7 +13850,7 @@ onBlur={(e) => {
                       <option value="24시">24시</option>
                       <option value="직접배차">직접배차</option>
                       <option value="인성">인성</option>
-                      <option value="24시(외주업체)">24시(외주업체)</option>
+                      <option value="고정기사">고정기사</option>
                     </select>
                   </td>
 
@@ -14635,7 +14718,7 @@ onBlur={(e) => {
                   <option value="24시">24시</option>
                   <option value="직접배차">직접배차</option>
                   <option value="인성">인성</option>
-                  <option value="24시(외주업체)">24시(외주업체)</option>
+                  <option value="고정기사">고정기사</option>
                 </select>
               </div>
             </div>
@@ -14878,6 +14961,552 @@ onBlur={(e) => {
           </div>
         </div>
       )}
+      {/* ================= 복사 슬라이드 패널 (FULL LABEL VERSION) ================= */}
+{copyPanelOpen && copyTarget && (
+  <div className="fixed inset-0 z-[99999]">
+    <div
+      className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+      onClick={() => setCopyPanelOpen(false)}
+    />
+
+    <div className="absolute top-0 right-0 h-full w-[1100px] bg-slate-100 shadow-2xl border-l overflow-y-auto">
+
+      <div className="p-10 space-y-10">
+
+        {/* HEADER */}
+        <div className="flex justify-between items-center border-b pb-5">
+  <h2 className="text-2xl font-bold text-slate-800">
+    오더 복사 패널
+  </h2>
+
+  <div className="flex gap-3 items-center">
+    <button
+onClick={async () => {
+
+const payload = {
+  ...copyTarget,
+
+  createdAt: Date.now(),
+  updatedAt: Date.now(),
+
+  배차상태:
+    copyTarget?.차량번호?.trim()
+      ? "배차완료"
+      : "배차중",
+
+업체전달상태: "미전달",
+};
+
+// ⭐ 기존 id 제거 (새 오더 생성)
+delete payload._id;
+
+  await addDispatch(payload);
+
+  alert("복사 등록 완료");
+
+  setCopyPanelOpen(false);
+
+}}
+      className="px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold"
+    >
+      복사 등록
+    </button>
+
+    <button
+      onClick={() => setCopyPanelOpen(false)}
+      className="text-slate-500 hover:text-red-500 text-xl"
+    >
+      ✕
+    </button>
+  </div>
+</div>
+
+        {/* ================= 상하차 정보 ================= */}
+<section className="bg-white p-8 rounded-xl shadow-sm">
+  <h3 className="text-lg font-bold text-slate-700 mb-8 border-b pb-3">
+    상하차 정보
+  </h3>
+
+  <div className="grid grid-cols-2 gap-16">
+
+    {/* ================= 상차 ================= */}
+    <div className="space-y-6">
+
+      <Field label="상차일">
+        <input
+          type="date"
+          className="inputStyle"
+          value={copyTarget?.상차일 ?? ""}
+          onChange={(e)=>setCopyTarget(p=>({...p, 상차일:e.target.value}))}
+        />
+      </Field>
+
+      <Field label="상차시간">
+        <select
+          className="inputStyle"
+          value={copyTarget?.상차시간 ?? ""}
+          onChange={(e)=>setCopyTarget(p=>({...p, 상차시간:e.target.value}))}
+        >
+          <option value="">선택</option>
+          {generateTimeOptions().map(t=>(
+            <option key={t} value={t}>{t}</option>
+          ))}
+        </select>
+      </Field>
+
+      {/* 🔥 상차지명 자동완성 */}
+      <Field label="상차지명">
+        <div className="relative">
+          <input
+            className="inputStyle"
+            value={copyTarget?.상차지명 ?? ""}
+            onChange={(e)=>{
+              const v = e.target.value;
+              setCopyTarget(p=>({...p, 상차지명:v}));
+              setCopyPlaceType("pickup");
+
+              const list = filterEditPlaces(v);
+              setCopyPlaceOptions(list);
+              setShowCopyPlaceDropdown(true);
+              setCopyActiveIndex(0);
+            }}
+            onKeyDown={(e)=>{
+              if(!showCopyPlaceDropdown || copyPlaceType!=="pickup") return;
+
+              if(e.key==="ArrowDown"){
+                e.preventDefault();
+                setCopyActiveIndex(i=>Math.min(i+1, copyPlaceOptions.length-1));
+              }
+              if(e.key==="ArrowUp"){
+                e.preventDefault();
+                setCopyActiveIndex(i=>Math.max(i-1,0));
+              }
+              if(e.key==="Enter"){
+                e.preventDefault();
+                const p = copyPlaceOptions[copyActiveIndex];
+                if(!p) return;
+
+                setCopyTarget(prev=>({
+                  ...prev,
+                  상차지명:p.업체명,
+                  상차지주소:p.주소 || "",
+                  상차지담당자:p.담당자 || "",
+                  상차지담당자번호:p.담당자번호 || "",
+                }));
+                setShowCopyPlaceDropdown(false);
+              }
+            }}
+            onBlur={()=>setTimeout(()=>setShowCopyPlaceDropdown(false),150)}
+          />
+
+          {showCopyPlaceDropdown && copyPlaceType==="pickup" && (
+            <div className="absolute z-50 bg-white border w-full max-h-40 overflow-y-auto shadow rounded-md">
+              {copyPlaceOptions.map((p,i)=>(
+                <div
+                  key={i}
+                  className={`px-3 py-2 cursor-pointer ${
+                    i===copyActiveIndex ? "bg-blue-100" : "hover:bg-gray-50"
+                  }`}
+                  onMouseDown={()=>{
+                    setCopyTarget(prev=>({
+                      ...prev,
+                      상차지명:p.업체명,
+                      상차지주소:p.주소 || "",
+                      상차지담당자:p.담당자 || "",
+                      상차지담당자번호:p.담당자번호 || "",
+                    }));
+                    setShowCopyPlaceDropdown(false);
+                  }}
+                >
+                  <div className="font-semibold">{p.업체명}</div>
+                  <div className="text-xs text-gray-500">{p.주소}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </Field>
+
+      {/* 🔥 다시 추가된 칸들 */}
+      <Field label="상차지주소">
+        <input
+          className="inputStyle"
+          value={copyTarget?.상차지주소 ?? ""}
+          onChange={(e)=>setCopyTarget(p=>({...p, 상차지주소:e.target.value}))}
+        />
+      </Field>
+
+      <Field label="상차 담당자명">
+        <input
+          className="inputStyle"
+          value={copyTarget?.상차지담당자 ?? ""}
+          onChange={(e)=>setCopyTarget(p=>({...p, 상차지담당자:e.target.value}))}
+        />
+      </Field>
+
+      <Field label="상차 연락처">
+        <input
+          className="inputStyle"
+          value={copyTarget?.상차지담당자번호 ?? ""}
+          onChange={(e)=>setCopyTarget(p=>({...p, 상차지담당자번호:e.target.value}))}
+        />
+      </Field>
+
+    </div>
+
+    {/* ================= 하차 ================= */}
+    <div className="space-y-6">
+
+      <Field label="하차일">
+        <input
+          type="date"
+          className="inputStyle"
+          value={copyTarget?.하차일 ?? ""}
+          onChange={(e)=>setCopyTarget(p=>({...p, 하차일:e.target.value}))}
+        />
+      </Field>
+
+      <Field label="하차시간">
+        <select
+          className="inputStyle"
+          value={copyTarget?.하차시간 ?? ""}
+          onChange={(e)=>setCopyTarget(p=>({...p, 하차시간:e.target.value}))}
+        >
+          <option value="">선택</option>
+          {generateTimeOptions().map(t=>(
+            <option key={t} value={t}>{t}</option>
+          ))}
+        </select>
+      </Field>
+
+      <Field label="하차지명">
+        <div className="relative">
+          <input
+            className="inputStyle"
+            value={copyTarget?.하차지명 ?? ""}
+            onChange={(e)=>{
+              const v = e.target.value;
+              setCopyTarget(p=>({...p, 하차지명:v}));
+              setCopyPlaceType("drop");
+
+              const list = filterEditPlaces(v);
+              setCopyPlaceOptions(list);
+              setShowCopyPlaceDropdown(true);
+              setCopyActiveIndex(0);
+            }}
+            onKeyDown={(e)=>{
+              if(!showCopyPlaceDropdown || copyPlaceType!=="drop") return;
+
+              if(e.key==="ArrowDown"){
+                e.preventDefault();
+                setCopyActiveIndex(i=>Math.min(i+1, copyPlaceOptions.length-1));
+              }
+              if(e.key==="ArrowUp"){
+                e.preventDefault();
+                setCopyActiveIndex(i=>Math.max(i-1,0));
+              }
+              if(e.key==="Enter"){
+                e.preventDefault();
+                const p = copyPlaceOptions[copyActiveIndex];
+                if(!p) return;
+
+                setCopyTarget(prev=>({
+                  ...prev,
+                  하차지명:p.업체명,
+                  하차지주소:p.주소 || "",
+                  하차지담당자:p.담당자 || "",
+                  하차지담당자번호:p.담당자번호 || "",
+                }));
+                setShowCopyPlaceDropdown(false);
+              }
+            }}
+            onBlur={()=>setTimeout(()=>setShowCopyPlaceDropdown(false),150)}
+          />
+
+          {showCopyPlaceDropdown && copyPlaceType==="drop" && (
+            <div className="absolute z-50 bg-white border w-full max-h-40 overflow-y-auto shadow rounded-md">
+              {copyPlaceOptions.map((p,i)=>(
+                <div
+                  key={i}
+                  className={`px-3 py-2 cursor-pointer ${
+                    i===copyActiveIndex ? "bg-blue-100" : "hover:bg-gray-50"
+                  }`}
+                  onMouseDown={()=>{
+                    setCopyTarget(prev=>({
+                      ...prev,
+                      하차지명:p.업체명,
+                      하차지주소:p.주소 || "",
+                      하차지담당자:p.담당자 || "",
+                      하차지담당자번호:p.담당자번호 || "",
+                    }));
+                    setShowCopyPlaceDropdown(false);
+                  }}
+                >
+                  <div className="font-semibold">{p.업체명}</div>
+                  <div className="text-xs text-gray-500 truncate">{p.주소}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </Field>
+
+      {/* 🔥 다시 추가된 하차 칸들 */}
+      <Field label="하차지주소">
+        <input
+          className="inputStyle"
+          value={copyTarget?.하차지주소 ?? ""}
+          onChange={(e)=>setCopyTarget(p=>({...p, 하차지주소:e.target.value}))}
+        />
+      </Field>
+
+      <Field label="하차 담당자명">
+        <input
+          className="inputStyle"
+          value={copyTarget?.하차지담당자 ?? ""}
+          onChange={(e)=>setCopyTarget(p=>({...p, 하차지담당자:e.target.value}))}
+        />
+      </Field>
+
+      <Field label="하차 연락처">
+        <input
+          className="inputStyle"
+          value={copyTarget?.하차지담당자번호 ?? ""}
+          onChange={(e)=>setCopyTarget(p=>({...p, 하차지담당자번호:e.target.value}))}
+        />
+      </Field>
+
+    </div>
+
+  </div>
+</section>
+{/* ================= 기사정보 ================= */}
+<section className="bg-white p-8 rounded-xl shadow-sm">
+  <h3 className="text-lg font-bold text-slate-700 mb-8 border-b pb-3">
+    기사정보
+  </h3>
+
+  <div className="grid grid-cols-3 gap-6">
+
+   <Field label="차량번호">
+<input
+  className="inputStyle"
+  value={copyTarget?.차량번호 || ""}
+
+  onKeyDown={(e)=>{
+    if(e.key === "Enter"){
+      e.preventDefault();
+      e.target.blur(); // 🔥 Enter → blur 강제 발생
+    }
+  }}
+    
+    onChange={(e) => {
+
+      const v = e.target.value;
+      const plate = normalizePlate(v);
+
+      const match = (drivers || []).find(
+        d => normalizePlate(d.차량번호) === plate
+      );
+
+      setCopyTarget(prev => ({
+        ...(prev || {}),
+        차량번호: v,
+        이름: match?.이름 || "",
+        전화번호: match?.전화번호 || "",
+        배차상태: match ? "배차완료" : "배차중",
+      }));
+
+    }}
+
+    onBlur={() => {
+
+      const plate = normalizePlate(copyTarget?.차량번호 || "");
+
+      if (!plate) return;
+
+      const match = (drivers || []).find(
+        d => normalizePlate(d.차량번호) === plate
+      );
+
+      // 기존 기사 있으면 끝
+      if (match) return;
+
+      const ok = window.confirm(
+        `[${copyTarget?.차량번호}] 등록된 기사가 없습니다.\n신규 기사로 등록하시겠습니까?`
+      );
+
+      if (!ok) return;
+
+      const name = prompt("기사명 입력");
+      if (!name) return;
+
+      const phone = prompt("전화번호 입력");
+      if (!phone) return;
+
+      upsertDriver({
+        차량번호: copyTarget?.차량번호,
+        이름: name,
+        전화번호: phone
+      });
+
+      setCopyTarget(prev => ({
+        ...prev,
+        이름: name,
+        전화번호: phone,
+        배차상태: "배차완료"
+      }));
+
+    }}
+  />
+</Field>
+
+    <Field label="기사명">
+      <input
+        className="inputStyle bg-gray-100"
+        value={copyTarget?.이름 || ""}
+        readOnly
+      />
+    </Field>
+
+    <Field label="전화번호">
+      <input
+        className="inputStyle bg-gray-100"
+        value={copyTarget?.전화번호 || ""}
+        readOnly
+      />
+    </Field>
+
+  </div>
+</section>
+{/* ================= 화물정보 ================= */}
+<section className="bg-white p-8 rounded-xl shadow-sm">
+  <h3 className="text-lg font-bold text-slate-700 mb-8 border-b pb-3">
+    화물정보
+  </h3>
+
+  <div className="grid grid-cols-3 gap-6">
+
+    <Field label="차량종류">
+      <select
+        className="inputStyle"
+        value={copyTarget?.차량종류 ?? ""}
+        onChange={(e)=>setCopyTarget(p=>({...p, 차량종류:e.target.value}))}
+      >
+        <option value="">선택</option>
+        <option value="라보/다마스">라보/다마스</option>
+        <option value="카고">카고</option>
+        <option value="윙바디">윙바디</option>
+        <option value="탑차">탑</option>
+        <option value="냉장탑">냉장탑</option>
+        <option value="냉동탑">냉동탑</option>
+        <option value="냉장윙">냉장윙</option>
+        <option value="냉동윙">냉동</option>
+        <option value="리프트">리프트</option>
+        <option value="오토바이">오토바이</option>
+        <option value="기타">기타</option>
+      </select>
+    </Field>
+
+    <Field label="차량톤수">
+      <input
+        className="inputStyle"
+        value={copyTarget?.차량톤수 ?? ""}
+        onChange={(e)=>setCopyTarget(p=>({...p, 차량톤수:e.target.value}))}
+      />
+    </Field>
+
+    <Field label="화물내용">
+      <input
+        className="inputStyle"
+        value={copyTarget?.화물내용 ?? ""}
+        onChange={(e)=>setCopyTarget(p=>({...p, 화물내용:e.target.value}))}
+      />
+    </Field>
+
+  </div>
+</section>
+        {/* ================= 결제 정보 ================= */}
+        <section className="bg-white p-8 rounded-xl shadow-sm">
+          <h3 className="text-lg font-bold text-slate-700 mb-8 border-b pb-3">
+            결제 정보
+          </h3>
+
+          <div className="grid grid-cols-5 gap-8">
+
+            <Field label="청구운임">
+              <input
+                className="inputStyle"
+                value={copyTarget.청구운임 || ""}
+                onChange={(e)=>
+                  setCopyTarget(p=>({...p,청구운임:e.target.value.replace(/[^\d]/g,"")}))
+                }
+              />
+            </Field>
+
+            <Field label="기사운임">
+              <input
+                className="inputStyle"
+                value={copyTarget.기사운임 || ""}
+                onChange={(e)=>
+                  setCopyTarget(p=>({...p,기사운임:e.target.value.replace(/[^\d]/g,"")}))
+                }
+              />
+            </Field>
+
+            <Field label="수수료">
+              <div className="bg-slate-100 rounded-lg px-4 py-3 font-bold text-blue-700 text-lg text-center">
+                {(Number(copyTarget.청구운임||0) -
+                  Number(copyTarget.기사운임||0)
+                ).toLocaleString()} 원
+              </div>
+            </Field>
+<Field label="지급방식">
+  <select
+    className="inputStyle"
+    value={copyTarget?.지급방식 ?? ""}
+    onChange={(e)=>setCopyTarget(p=>({...p, 지급방식:e.target.value}))}
+  >
+    <option value="">선택</option>
+    <option value="계산서">계산서</option>
+    <option value="착불">착불</option>
+    <option value="선불">선불</option>
+    <option value="손실">손실</option>
+    <option value="개인">개인</option>
+    <option value="기타">기</option>
+  </select>
+</Field>
+
+<Field label="배차방식">
+  <select
+    className="inputStyle"
+    value={copyTarget?.배차방식 ?? ""}
+    onChange={(e)=>setCopyTarget(p=>({...p, 배차방식:e.target.value}))}
+  >
+    <option value="">선택</option>
+    <option value="24시">24시</option>
+    <option value="직접배차">직접배차</option>
+    <option value="인성">인성</option>
+  </select>
+</Field>
+          </div>
+        </section>
+{/* ================= 메모 ================= */}
+<section className="bg-white p-8 rounded-xl shadow-sm">
+  <h3 className="text-lg font-bold text-slate-700 mb-6 border-b pb-3">
+    메모
+  </h3>
+
+  <textarea
+    className="inputStyle h-24"
+    value={copyTarget?.메모 ?? ""}
+    onChange={(e)=>setCopyTarget(p=>({...p, 메모:e.target.value}))}
+  />
+</section>
+      </div>
+    </div>
+  </div>
+)}
       {/* 📦 운임조회 결과 모달 (선택수정용) */}
 {fareModalOpen && fareResult && (
   <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[99999]">
@@ -15501,6 +16130,7 @@ onBlur={(e) => {
           </div>
         </div>
       )}
+      
       {sortModalOpen && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[100000]">
           <div className="bg-white rounded-xl w-[420px] p-6 shadow-xl">
@@ -16119,7 +16749,7 @@ function NewOrderPopup({
                 <option value="24시">24시</option>
                 <option value="직접배차">직접배차</option>
                 <option value="인성">인성</option>
-                <option value="24시(외주업체)">24시(외주업체)</option>
+                <option value="고정기사">고정기사</option>
               </select>
             </div>
 
