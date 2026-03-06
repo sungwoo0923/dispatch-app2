@@ -15065,8 +15065,8 @@ delete payload._id;
               setCopyTarget(p=>({...p, 상차지명:v}));
               setCopyPlaceType("pickup");
 
-              const list = filterEditPlaces(v);
-              setCopyPlaceOptions(list);
+              const list = rankPlaces(filterPlaces(v), v);
+setCopyPlaceOptions(list);
               setShowCopyPlaceDropdown(true);
               setCopyActiveIndex(0);
             }}
@@ -15189,8 +15189,8 @@ delete payload._id;
               setCopyTarget(p=>({...p, 하차지명:v}));
               setCopyPlaceType("drop");
 
-              const list = filterEditPlaces(v);
-              setCopyPlaceOptions(list);
+              const list = rankPlaces(filterPlaces(v), v);
+setCopyPlaceOptions(list);
               setShowCopyPlaceDropdown(true);
               setCopyActiveIndex(0);
             }}
