@@ -6061,22 +6061,23 @@ if (res?.success) {
 )}
         {/* ⭐ 4파트 동일한 실시간배차현황 테이블 */} 
 <div id="realtime-status-area">
-  <RealtimeStatus
-    role={role}
-    dispatchData={dispatchData}
-    drivers={drivers}
-    clients={clients}
-    timeOptions={timeOptions}
-    tonOptions={tonOptions}
-    addDispatch={addDispatch}
-    patchDispatch={patchDispatch}
-    removeDispatch={removeDispatch}
-    upsertDriver={upsertDriver}
-    filterType={filterType}
-    filterValue={filterValue}
-    setConfirmChange={setConfirmChange}
-   PAY_TYPES={PAY_TYPES}
-  />
+<RealtimeStatus
+  role={role}
+  dispatchData={dispatchData}
+  drivers={drivers}
+  clients={clients}
+  placeRows={placeRows}
+  timeOptions={timeOptions}
+  tonOptions={tonOptions}
+  addDispatch={addDispatch}
+  patchDispatch={patchDispatch}
+  removeDispatch={removeDispatch}
+  upsertDriver={upsertDriver}
+  filterType={filterType}
+  filterValue={filterValue}
+  setConfirmChange={setConfirmChange}
+  PAY_TYPES={PAY_TYPES}
+/>
 </div>
 
       </>
