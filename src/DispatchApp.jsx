@@ -3605,10 +3605,11 @@ const applyCopy = (r) => {
 
 // 입력창 (카카오T 스타일)
 const inputCls =
-  "w-full px-3 py-2 rounded-lg text-sm border " +
-  "border-gray-300 bg-white " +
-  "focus:border-blue-600 focus:ring-1 focus:ring-blue-200 " +
-  "placeholder:text-gray-400 transition";
+  "w-full px-3 py-2.5 rounded-lg text-sm border-[2.5px] " +
+  "border-gray-400 bg-white " +
+  "hover:border-gray-500 " +
+  "focus:border-blue-600 focus:ring-2 focus:ring-blue-200 " +
+  "placeholder:text-gray-500 transition";
 
 // 라벨 (카카오T 스타일)
 const labelCls =
@@ -4045,14 +4046,24 @@ function calcHistoryScore(row, form) {
  
 <form
   onSubmit={handleSubmit}
-  className="
-    grid grid-cols-8 gap-3
-    bg-white
-    border border-[#EDEDED]
-    rounded-2xl p-5
-    shadow-[0_2px_12px_rgba(0,0,0,0.06)]
-  "
+className="
+grid grid-cols-8 gap-4
+bg-white
+border border-[#E6ECF5]
+rounded-2xl
+p-6
+shadow-sm
+"
 >
+  
+  {/* ================== 오더 정보 ================== */}
+<div className="col-span-8 flex items-center gap-2 mt-4 mb-2">
+  <span className="text-indigo-600 text-sm">📄</span>
+  <span className="text-[14px] font-semibold text-[#2F3A4C]">
+    오더 정보
+  </span>
+  <div className="flex-1 border-b border-[#E6ECF5]"></div>
+</div>
   {/* 거래처 + 신규등록 */}
   <div className="col-span-2">
     <label className={labelCls}>거래처 {reqStar}</label>
@@ -4424,6 +4435,7 @@ setForm((prev) => ({
     placeholder="010-0000-0000"
   />
 </div>
+
   {/* 화물내용 */}
   <div>
     <label className={labelCls}>화물내용</label>
