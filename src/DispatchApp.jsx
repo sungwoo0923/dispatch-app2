@@ -3606,15 +3606,14 @@ const applyCopy = (r) => {
 
 // 입력창 (카카오T 스타일)
 const inputCls =
-  "w-full px-3 py-2.5 rounded-lg text-sm border-[2.5px] " +
-  "border-gray-400 bg-white " +
-  "hover:border-gray-500 " +
-  "focus:border-blue-600 focus:ring-2 focus:ring-blue-200 " +
-  "placeholder:text-gray-500 transition";
+"w-full px-3 py-2 text-sm rounded-lg border " +
+"border-gray-200 shadow-sm bg-white " +
+"focus:border-blue-500 focus:ring-2 focus:ring-blue-100 " +
+"placeholder:text-gray-400 transition";
 
 // 라벨 (카카오T 스타일)
 const labelCls =
-  "block text-[13px] font-semibold text-black mb-1";
+  "block text-[15px] font-semibold text-black mb-1";
     const reqStar = <span className="text-red-500">*</span>;
     const AutoBadge = ({ show }) => show ? <span className="ml-2 text-[12px] text-emerald-700">(자동매칭됨)</span> : null;
 function FuelPriceWidget({ apiKey }) {
@@ -3733,46 +3732,46 @@ function calcHistoryScore(row, form) {
   <div className="flex items-center gap-2">
 
   {/* 독차 */}
-  <ToggleBadge
-    active={form.독차}
-    onClick={() => onChange("독차", !form.독차)}
-    activeCls="bg-indigo-600 text-white border-indigo-600"
-    inactiveCls="bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100"
-  >
-     독차
-  </ToggleBadge>
+<ToggleBadge
+  active={form.독차}
+  onClick={() => onChange("독차", !form.독차)}
+  activeCls="bg-blue-600 text-white border-blue-600"
+  inactiveCls="bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
+>
+  독차
+</ToggleBadge>
 
-  {/* 혼적 */}
-  <ToggleBadge
-    active={form.혼적}
-    onClick={() => onChange("혼적", !form.혼적)}
-    activeCls="bg-emerald-600 text-white border-emerald-600"
-    inactiveCls="bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
-  >
-     혼적
-  </ToggleBadge>
+{/* 혼적 */}
+<ToggleBadge
+  active={form.혼적}
+  onClick={() => onChange("혼적", !form.혼적)}
+  activeCls="bg-blue-600 text-white border-blue-600"
+  inactiveCls="bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
+>
+  혼적
+</ToggleBadge>
 
-  {/* 왕복 */}
-  <ToggleBadge
-    active={form.운행유형 === "왕복"}
-    onClick={() =>
-      onChange("운행유형", form.운행유형 === "왕복" ? "편도" : "왕복")
-    }
-    activeCls="bg-purple-600 text-white border-purple-600"
-    inactiveCls="bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100"
-  >
-     왕복
-  </ToggleBadge>
+{/* 왕복 */}
+<ToggleBadge
+  active={form.운행유형 === "왕복"}
+  onClick={() =>
+    onChange("운행유형", form.운행유형 === "왕복" ? "편도" : "왕복")
+  }
+  activeCls="bg-blue-600 text-white border-blue-600"
+  inactiveCls="bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
+>
+  왕복
+</ToggleBadge>
 
-  {/* 🚨 긴급 (기존 유지, 통일감만) */}
-  <ToggleBadge
-    active={form.긴급}
-    onClick={() => onChange("긴급", !form.긴급)}
-    activeCls="bg-red-600 text-white border-red-600 animate-pulse"
-    inactiveCls="bg-red-50 text-red-600 border-red-300 hover:bg-red-100"
-  >
-     긴급
-  </ToggleBadge>
+{/* 긴급 */}
+<ToggleBadge
+  active={form.긴급}
+  onClick={() => onChange("긴급", !form.긴급)}
+  activeCls="bg-blue-600 text-white border-blue-600"
+  inactiveCls="bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
+>
+  긴급
+</ToggleBadge>
   {areaFareHint && (
     <div
       className="
@@ -4023,24 +4022,24 @@ function calcHistoryScore(row, form) {
   </div>
 
 <button
-  type="button"
-  onClick={swapPickupDrop}
-  className="
-    ml-2
-    inline-flex items-center gap-1
-    px-3 py-1.5
-    text-xs font-semibold
-    rounded-full
-    border border-indigo-200
-    bg-indigo-50
-    text-indigo-700
-    hover:bg-indigo-100
-    active:scale-95
-    transition
-  "
-  title="상차지 ↔ 하차지 교체"
+type="button"
+onClick={swapPickupDrop}
+className="
+  ml-2
+  inline-flex items-center gap-1
+  px-3 py-1.5
+  text-xs font-semibold
+  rounded-full
+  border border-blue-200
+  bg-blue-100
+  text-blue-700
+  hover:bg-blue-200
+  active:scale-95
+  transition
+"
+title="상차지 ↔ 하차지 교체"
 >
-  ⇄ 상·하차 교체
+⇄ 상·하차 교체
 </button>
   </div>
 </div>
@@ -4059,7 +4058,7 @@ shadow-sm
   
   {/* ================== 오더 정보 ================== */}
 <div className="col-span-8 flex items-center gap-2 mt-4 mb-2">
-  <span className="text-indigo-600 text-sm">📄</span>
+  <span className="text-indigo-600 text-sm"></span>
   <span className="text-[14px] font-semibold text-[#2F3A4C]">
     오더 정보
   </span>
@@ -4201,7 +4200,9 @@ const similar = placeList.filter(p => {
 
   {/* 상차지명 + 자동완성 */}
   <div className="relative">
-    <label className={labelCls}>상차지명 {reqStar}</label>
+    <label className="block text-[16px] font-bold text-blue-600 mb-1">
+  상차지 {reqStar}
+</label>
 
     <input
       className={inputCls}
@@ -4317,7 +4318,9 @@ setForm((prev) => ({
 
   {/* 하차지명 + 자동완성 */}
   <div className="relative">
-    <label className={labelCls}>하차지명 {reqStar}</label>
+    <label className="block text-[16px] font-bold text-red-500 mb-1">
+  하차지 {reqStar}
+</label>
 
     <input
       className={inputCls}
@@ -4829,78 +4832,95 @@ setForm((prev) => ({
     </select>
   </div>
 
-{/* ===============================
-    📝 메모 / 📢 전달사항 (입력폼)
+{/* =============================== 
+    📝 메모 / 📢 전달사항 (카카오 스타일)
    =============================== */}
-<div className="col-span-8">
-  <div className="grid grid-cols-2 gap-4">
+<div className="col-span-8 grid grid-cols-2 gap-4">
 
-    {/* ▶ 왼쪽 : 메모 */}
-    <div>
-      <label className={labelCls}>메모</label>
+  {/* 메모 */}
+  <div>
+    <label className={labelCls}>메모</label>
 
-      <div className="flex items-center gap-2 mb-1">
-        <ToggleBadge
-          active={form.메모중요도 === "NORMAL"}
-          onClick={() => onChange("메모중요도", "NORMAL")}
-          activeCls="bg-gray-600 text-white border-gray-600"
-          inactiveCls="bg-gray-100 text-gray-600 border-gray-200"
-        >
-          일반
-        </ToggleBadge>
+    <div className="flex items-center gap-2 mb-2">
+      {/* 일반 */}
+<ToggleBadge
+  active={form.메모중요도 === "NORMAL"}
+  onClick={() => onChange("메모중요도", "NORMAL")}
+  activeCls="bg-blue-600 text-white border-blue-600"
+  inactiveCls="bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-200"
+>
+  일반
+</ToggleBadge>
 
-        <ToggleBadge
-          active={form.메모중요도 === "HIGH"}
-          onClick={() => onChange("메모중요도", "HIGH")}
-          activeCls="bg-orange-600 text-white border-orange-600"
-          inactiveCls="bg-orange-100 text-orange-700 border-orange-200"
-        >
-          중요
-        </ToggleBadge>
+{/* 중요 */}
+<ToggleBadge
+  active={form.메모중요도 === "HIGH"}
+  onClick={() => onChange("메모중요도", "HIGH")}
+  activeCls="bg-blue-600 text-white border-blue-600"
+  inactiveCls="bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-200"
+>
+  중요
+</ToggleBadge>
 
-        <ToggleBadge
-          active={form.메모중요도 === "CRITICAL"}
-          onClick={() => onChange("메모중요도", "CRITICAL")}
-          activeCls="bg-red-600 text-white border-red-600"
-          inactiveCls="bg-red-100 text-red-600 border-red-200"
-        >
-          긴급
-        </ToggleBadge>
-      </div>
+{/* 긴급 */}
+<ToggleBadge
+  active={form.메모중요도 === "CRITICAL"}
+  onClick={() => onChange("메모중요도", "CRITICAL")}
+  activeCls="bg-blue-600 text-white border-blue-600"
+  inactiveCls="bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-200"
+>
+  긴급
+</ToggleBadge>
+    </div>
 
-      <textarea
-        className={`${inputCls} h-20`}
-        placeholder="내부 메모"
+    <div className="flex items-center border rounded-xl px-3 py-2 bg-white">
+      <input
+        className="flex-1 outline-none text-sm"
+        placeholder="내부 메모 입력"
         value={form.메모}
         onChange={(e) => onChange("메모", e.target.value)}
       />
+
+      <button
+        className="text-blue-600 text-sm font-semibold hover:underline"
+      >
+        입력
+      </button>
+    </div>
+  </div>
+
+
+  {/* 전달사항 */}
+  <div>
+    <label className={labelCls}>전달사항</label>
+
+    <div className="flex items-center gap-2 mb-2">
+      <ToggleBadge
+        active={form.전달사항고정}
+        onClick={() => onChange("전달사항고정", !form.전달사항고정)}
+        activeCls="bg-blue-600 text-white border-blue-600"
+        inactiveCls="bg-blue-100 text-blue-700 border-blue-200"
+      >
+        고정
+      </ToggleBadge>
     </div>
 
-    {/* ▶ 오른쪽 : 전달사항 */}
-    <div>
-      <label className={labelCls}>전달사항</label>
-
-      {/* 🔒 고정 버튼 */}
-      <div className="flex items-center gap-2 mb-1">
-        <ToggleBadge
-          active={form.전달사항고정}
-          onClick={() => onChange("전달사항고정", !form.전달사항고정)}
-          activeCls="bg-blue-600 text-white border-blue-600"
-          inactiveCls="bg-blue-100 text-blue-700 border-blue-200"
-        >
-          고정
-        </ToggleBadge>
-      </div>
-
-      <textarea
-        className={`${inputCls} h-20 bg-blue-50`}
-        placeholder="기사 전달사항"
+    <div className="flex items-center border rounded-xl px-3 py-2 bg-white">
+      <input
+        className="flex-1 outline-none text-sm"
+        placeholder="운송 기사님께 전달 내용을 입력하세요"
         value={form.전달사항}
         onChange={(e) => onChange("전달사항", e.target.value)}
       />
-    </div>
 
+      <button
+        className="text-blue-600 text-sm font-semibold hover:underline"
+      >
+        입력
+      </button>
+    </div>
   </div>
+
 </div>
 {/* ================= 차량 제원표 모달 ================= */}
 {vehicleSpecOpen && (
