@@ -1334,6 +1334,7 @@ function renderTimeWithCond(time, cond) {
       const [areaFareHint, setAreaFareHint] = React.useState(null);
       const [fareHistoryOpen, setFareHistoryOpen] = React.useState(false);
       const [guideHistoryList, setGuideHistoryList] = React.useState([]);
+      const [vehicleSpecOpen, setVehicleSpecOpen] = React.useState(false);
 // ===== 복사패널 자동완성 =====
 const [clientOptions, setClientOptions] = React.useState([]);
 const [clientIndex, setClientIndex] = React.useState(0);
@@ -4442,8 +4443,25 @@ setForm((prev) => ({
     <input className={inputCls} value={form.화물내용} onChange={(e) => onChange("화물내용", e.target.value)} />
   </div>
 
- <div className="relative">
-  <label className={labelCls}>차량종류</label>
+<div className="relative">
+  <label className={`${labelCls} flex items-center gap-2`}>
+    차량종류
+    <button
+      type="button"
+      onClick={() => setVehicleSpecOpen(true)}
+      className="
+        text-[11px]
+        px-2 py-[2px]
+        rounded
+        bg-indigo-50
+        border border-indigo-200
+        text-indigo-700
+        hover:bg-indigo-100
+      "
+    >
+      차량제원
+    </button>
+  </label>
 
   <input
     className={inputCls}
@@ -4884,8 +4902,143 @@ setForm((prev) => ({
 
   </div>
 </div>
+{/* ================= 차량 제원표 모달 ================= */}
+{vehicleSpecOpen && (
+  <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[9999]">
+    <div className="bg-white rounded-xl shadow-xl p-6 w-[900px] max-h-[85vh] overflow-auto">
 
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-lg font-bold">차량 제원표</h2>
+        <button
+          onClick={() => setVehicleSpecOpen(false)}
+          className="text-gray-400 hover:text-black text-lg"
+        >
+          ✕
+        </button>
+      </div>
 
+      {/* ================= 퀵 차량 ================= */}
+      <div className="mb-8">
+        <div className="flex justify-between items-center mb-2">
+          <h3 className="font-semibold text-sm">퀵 차량 제원표</h3>
+          <span className="text-xs text-gray-400">*1100 × 1100 파렛트 규격 기준</span>
+        </div>
+
+        <table className="w-full text-sm border border-gray-300">
+          <thead className="bg-blue-50 text-blue-900">
+            <tr>
+              <th className="border px-2 py-1">차량톤수</th>
+              <th className="border px-2 py-1">길이 (mm)</th>
+              <th className="border px-2 py-1">너비 (mm)</th>
+              <th className="border px-2 py-1">높이 (mm)</th>
+              <th className="border px-2 py-1">최대 적재 중량</th>
+              <th className="border px-2 py-1">최대 적재 파렛</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td className="border px-2 py-1 text-center">오토바이</td>
+              <td className="border px-2 py-1 text-center">500</td>
+              <td className="border px-2 py-1 text-center">500</td>
+              <td className="border px-2 py-1 text-center">500</td>
+              <td className="border px-2 py-1 text-center">25 k</td>
+              <td className="border px-2 py-1 text-center">서류 및 작은 박스</td>
+            </tr>
+
+            <tr>
+              <td className="border px-2 py-1 text-center">다마스</td>
+              <td className="border px-2 py-1 text-center">1,600</td>
+              <td className="border px-2 py-1 text-center">1,100</td>
+              <td className="border px-2 py-1 text-center">1,100</td>
+              <td className="border px-2 py-1 text-center">300 k</td>
+              <td className="border px-2 py-1 text-center">박스</td>
+            </tr>
+
+            <tr>
+              <td className="border px-2 py-1 text-center">라보</td>
+              <td className="border px-2 py-1 text-center">1,800</td>
+              <td className="border px-2 py-1 text-center">1,100</td>
+              <td className="border px-2 py-1 text-center">1,300</td>
+              <td className="border px-2 py-1 text-center">550 k</td>
+              <td className="border px-2 py-1 text-center">1개</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      {/* ================= 카고 차량 ================= */}
+      <div>
+        <div className="flex justify-between items-center mb-2">
+          <h3 className="font-semibold text-sm">카고 차량 제원표</h3>
+          <span className="text-xs text-gray-400">*1100 × 1100 파렛트 규격 기준</span>
+        </div>
+
+        <table className="w-full text-sm border border-gray-300">
+          <thead className="bg-blue-50 text-blue-900">
+            <tr>
+              <th className="border px-2 py-1">차량톤수</th>
+              <th className="border px-2 py-1">길이 (mm)</th>
+              <th className="border px-2 py-1">너비 (mm)</th>
+              <th className="border px-2 py-1">높이 (mm)</th>
+              <th className="border px-2 py-1">최대 적재 중량</th>
+              <th className="border px-2 py-1">최대 적재 파렛</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            <tr><td className="border px-2 py-1 text-center">1톤</td><td className="border px-2 py-1 text-center">2,750</td><td className="border px-2 py-1 text-center">1,600</td><td className="border px-2 py-1 text-center">1,800</td><td className="border px-2 py-1 text-center">1.3 t</td><td className="border px-2 py-1 text-center">2개</td></tr>
+            <tr><td className="border px-2 py-1 text-center">1.2톤</td><td className="border px-2 py-1 text-center">3,100</td><td className="border px-2 py-1 text-center">1,700</td><td className="border px-2 py-1 text-center">1,800</td><td className="border px-2 py-1 text-center">2 t</td><td className="border px-2 py-1 text-center">2개</td></tr>
+            <tr><td className="border px-2 py-1 text-center">2.5톤</td><td className="border px-2 py-1 text-center">4,300</td><td className="border px-2 py-1 text-center">1,800</td><td className="border px-2 py-1 text-center">2,000</td><td className="border px-2 py-1 text-center">3 t</td><td className="border px-2 py-1 text-center">3개</td></tr>
+            <tr><td className="border px-2 py-1 text-center">3.5톤</td><td className="border px-2 py-1 text-center">4,700</td><td className="border px-2 py-1 text-center">1,920</td><td className="border px-2 py-1 text-center">2,000</td><td className="border px-2 py-1 text-center">4 t</td><td className="border px-2 py-1 text-center">4개</td></tr>
+            <tr><td className="border px-2 py-1 text-center">5톤</td><td className="border px-2 py-1 text-center">6,200</td><td className="border px-2 py-1 text-center">2,340</td><td className="border px-2 py-1 text-center">2,300</td><td className="border px-2 py-1 text-center">7 t</td><td className="border px-2 py-1 text-center">10개</td></tr>
+            <tr><td className="border px-2 py-1 text-center">5톤플러스</td><td className="border px-2 py-1 text-center">7,500</td><td className="border px-2 py-1 text-center">2,340</td><td className="border px-2 py-1 text-center">2,300</td><td className="border px-2 py-1 text-center">7 t</td><td className="border px-2 py-1 text-center">12개</td></tr>
+            <tr><td className="border px-2 py-1 text-center">5톤축</td><td className="border px-2 py-1 text-center">7,500</td><td className="border px-2 py-1 text-center">2,340</td><td className="border px-2 py-1 text-center">2,300</td><td className="border px-2 py-1 text-center">11 t</td><td className="border px-2 py-1 text-center">12개</td></tr>
+            <tr><td className="border px-2 py-1 text-center">11톤</td><td className="border px-2 py-1 text-center">9,100</td><td className="border px-2 py-1 text-center">2,340</td><td className="border px-2 py-1 text-center">2,500</td><td className="border px-2 py-1 text-center">12 t</td><td className="border px-2 py-1 text-center">16개</td></tr>
+            <tr><td className="border px-2 py-1 text-center">11톤축</td><td className="border px-2 py-1 text-center">9,600</td><td className="border px-2 py-1 text-center">2,340</td><td className="border px-2 py-1 text-center">2,500</td><td className="border px-2 py-1 text-center">12 t</td><td className="border px-2 py-1 text-center">16개</td></tr>
+            <tr><td className="border px-2 py-1 text-center">18톤</td><td className="border px-2 py-1 text-center">10,200</td><td className="border px-2 py-1 text-center">2,340</td><td className="border px-2 py-1 text-center">2,500</td><td className="border px-2 py-1 text-center">20 t</td><td className="border px-2 py-1 text-center">18개</td></tr>
+            <tr><td className="border px-2 py-1 text-center">25톤</td><td className="border px-2 py-1 text-center">10,200</td><td className="border px-2 py-1 text-center">2,400</td><td className="border px-2 py-1 text-center">2,500</td><td className="border px-2 py-1 text-center">27 t</td><td className="border px-2 py-1 text-center">18개</td></tr>
+            <tr><td className="border px-2 py-1 text-center">트레일러</td><td className="border px-2 py-1 text-center">12,000</td><td className="border px-2 py-1 text-center">2,400</td><td className="border px-2 py-1 text-center">2,500</td><td className="border px-2 py-1 text-center">27 t</td><td className="border px-2 py-1 text-center">18개</td></tr>
+          </tbody>
+        </table>
+        {/* ================= 윙바디 차량 ================= */}
+<div className="mt-8">
+  <div className="flex justify-between items-center mb-2">
+    <h3 className="font-semibold text-sm">윙바디 차량 제원표</h3>
+    <span className="text-xs text-gray-400">*1100 × 1100 파렛트 규격 기준</span>
+  </div>
+
+  <table className="w-full text-sm border border-gray-300">
+    <thead className="bg-blue-50 text-blue-900">
+      <tr>
+        <th className="border px-2 py-1">차량톤수</th>
+        <th className="border px-2 py-1">길이 (mm)</th>
+        <th className="border px-2 py-1">너비 (mm)</th>
+        <th className="border px-2 py-1">높이 (mm)</th>
+        <th className="border px-2 py-1">최대 적재 중량</th>
+        <th className="border px-2 py-1">최대 적재 파렛</th>
+      </tr>
+    </thead>
+
+    <tbody>
+      <tr><td className="border px-2 py-1 text-center">1톤</td><td className="border px-2 py-1 text-center">2,750</td><td className="border px-2 py-1 text-center">1,600</td><td className="border px-2 py-1 text-center">1,800</td><td className="border px-2 py-1 text-center">1.3 t</td><td className="border px-2 py-1 text-center">2개</td></tr>
+      <tr><td className="border px-2 py-1 text-center">1.2톤</td><td className="border px-2 py-1 text-center">3,100</td><td className="border px-2 py-1 text-center">1,700</td><td className="border px-2 py-1 text-center">1,800</td><td className="border px-2 py-1 text-center">2 t</td><td className="border px-2 py-1 text-center">2개</td></tr>
+      <tr><td className="border px-2 py-1 text-center">2.5톤</td><td className="border px-2 py-1 text-center">4,300</td><td className="border px-2 py-1 text-center">1,800</td><td className="border px-2 py-1 text-center">2,000</td><td className="border px-2 py-1 text-center">3 t</td><td className="border px-2 py-1 text-center">3개</td></tr>
+      <tr><td className="border px-2 py-1 text-center">3.5톤</td><td className="border px-2 py-1 text-center">4,700</td><td className="border px-2 py-1 text-center">1,920</td><td className="border px-2 py-1 text-center">2,000</td><td className="border px-2 py-1 text-center">4 t</td><td className="border px-2 py-1 text-center">4개</td></tr>
+      <tr><td className="border px-2 py-1 text-center">5톤</td><td className="border px-2 py-1 text-center">6,200</td><td className="border px-2 py-1 text-center">2,340</td><td className="border px-2 py-1 text-center">2,300</td><td className="border px-2 py-1 text-center">7 t</td><td className="border px-2 py-1 text-center">10개</td></tr>
+      <tr><td className="border px-2 py-1 text-center">5톤플러스</td><td className="border px-2 py-1 text-center">7,500</td><td className="border px-2 py-1 text-center">2,340</td><td className="border px-2 py-1 text-center">2,300</td><td className="border px-2 py-1 text-center">7 t</td><td className="border px-2 py-1 text-center">12개</td></tr>
+      <tr><td className="border px-2 py-1 text-center">5톤축</td><td className="border px-2 py-1 text-center">8,500</td><td className="border px-2 py-1 text-center">2,340</td><td className="border px-2 py-1 text-center">2,300</td><td className="border px-2 py-1 text-center">11 t</td><td className="border px-2 py-1 text-center">12개</td></tr>
+      <tr><td className="border px-2 py-1 text-center">11톤</td><td className="border px-2 py-1 text-center">9,600</td><td className="border px-2 py-1 text-center">2,340</td><td className="border px-2 py-1 text-center">2,500</td><td className="border px-2 py-1 text-center">12 t</td><td className="border px-2 py-1 text-center">16개</td></tr>
+      <tr><td className="border px-2 py-1 text-center">11톤축</td><td className="border px-2 py-1 text-center">10,200</td><td className="border px-2 py-1 text-center">2,340</td><td className="border px-2 py-1 text-center">2,500</td><td className="border px-2 py-1 text-center">12 t</td><td className="border px-2 py-1 text-center">18개</td></tr>
+      <tr><td className="border px-2 py-1 text-center">18톤</td><td className="border px-2 py-1 text-center">10,200</td><td className="border px-2 py-1 text-center">2,340</td><td className="border px-2 py-1 text-center">2,500</td><td className="border px-2 py-1 text-center">20 t</td><td className="border px-2 py-1 text-center">18개</td></tr>
+      <tr><td className="border px-2 py-1 text-center">25톤</td><td className="border px-2 py-1 text-center">10,200</td><td className="border px-2 py-1 text-center">2,400</td><td className="border px-2 py-1 text-center">2,500</td><td className="border px-2 py-1 text-center">27 t</td><td className="border px-2 py-1 text-center">18개</td></tr>
+    </tbody>
+  </table>
+</div>
+      </div>
+
+    </div>
+  </div>
+)}
   {/* 버튼 */}
   <div className="col-span-6 flex justify-end mt-2">
     <button
