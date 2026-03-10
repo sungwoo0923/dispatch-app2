@@ -1,6 +1,9 @@
 .dispatch-container {
   padding: 20px;
-  font-family: Pretendard, sans-serif;
+  font-family: "Pretendard", -apple-system, BlinkMacSystemFont, "Noto Sans KR", sans-serif;
+  font-size: 14px;
+  letter-spacing: -0.2px;
+  color: #333;
 }
 .nav {
   margin-top: 10px;

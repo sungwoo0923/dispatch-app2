@@ -13,10 +13,14 @@
 }
 
 /* ================= 전역 ================= */
-body {
-  font-family: 'Inter', 'Pretendard', sans-serif;
+html, body, #root {
+  font-family: "Pretendard", -apple-system, BlinkMacSystemFont,
+               "Segoe UI", "Noto Sans KR", Arial, sans-serif;
   background-color: #f9fafb;
   color: #111827;
+  letter-spacing: -0.2px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 button {
@@ -27,9 +31,16 @@ button:hover {
   opacity: 0.85;
 }
 
+/* ================= 애니메이션 ================= */
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(-10px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .animate-fadeIn {

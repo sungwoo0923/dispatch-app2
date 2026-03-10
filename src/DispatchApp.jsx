@@ -868,6 +868,7 @@ useEffect(() => {
 
         {menu === "배차관리" && (
           <DispatchManagement
+          menu={menu}
             dispatchData={dispatchDataFiltered}
             drivers={drivers}
             clients={clients}
@@ -887,6 +888,7 @@ useEffect(() => {
         {menu === "실시간배차현황" && (
           <RealtimeStatus
             role={role}
+            menu={menu}
             dispatchData={dispatchDataFiltered}   // ★ 변경!
             timeOptions={timeOptions}
             tonOptions={tonOptions}
@@ -1243,7 +1245,7 @@ if (!items.length) {
   );
 });
   function DispatchManagement({
-    dispatchData, drivers, clients, timeOptions, tonOptions,
+    dispatchData, drivers, clients, menu, timeOptions, tonOptions,
     addDispatch, upsertDriver, upsertClient, upsertPlace,
     patchDispatch, removeDispatch,
     placeRows = [],
@@ -1826,9 +1828,13 @@ const [showPlaceDropdown, setShowPlaceDropdown] = React.useState(false);
 const [placeOptions, setPlaceOptions] = React.useState([]);
 const [placeActive, setPlaceActive] = React.useState(0);
     // ---------- 🔧 안전 폴백 유틸(다른 파트 미정의 시 자체 사용) ----------
-    const _todayStr = (typeof todayStr === "function")
-      ? todayStr
-      : () => new Date().toISOString().slice(0, 10);
+const _todayStr = (typeof todayStr === "function")
+  ? todayStr
+  : () => {
+      const d = new Date();
+      d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+      return d.toISOString().slice(0, 10);
+    };
     
        // ===================== 하차지(placeRows) + 로컬 병합 placeList 끝 =====================
 
@@ -3615,7 +3621,7 @@ const inputCls =
 const labelCls =
   "block text-[15px] font-semibold text-black mb-1";
     const reqStar = <span className="text-red-500">*</span>;
-    const AutoBadge = ({ show }) => show ? <span className="ml-2 text-[12px] text-emerald-700">(자동매칭됨)</span> : null;
+    const AutoBadge = ({ show }) => show ? <span className="ml-2 text-[12px] text-emerald-700">(자동매칭)</span> : null;
 function FuelPriceWidget({ apiKey }) {
   const [prices, setPrices] = React.useState([]);
 
@@ -3696,37 +3702,92 @@ function calcHistoryScore(row, form) {
    
         {/* 입력 폼 */}
   {/* ================== 프리미엄 액션바 ================== */}
-<div 
+<div
   className="
-    bg-white 
-    rounded-xl shadow-lg border 
-    px-4 py-3 
-    flex flex-wrap items-center gap-3 mb-5 
-    max-w-[1500px]    // 입력폼과 동일 폭
+    bg-white
+    rounded-xl shadow-lg border
+    px-4 py-3
+    flex flex-wrap items-center gap-3 mb-5
+    max-w-[1500px]
   "
   style={{ minHeight: "52px" }}
 >
+
   {/* 좌측 버튼 그룹 */}
   <div className="flex items-center gap-2">
-    <button className="premium-btn indigo" onClick={() => { setCopyOpen(true); setCopySelected([]); }}>
+
+    {/* 오더복사 */}
+    <button
+      onClick={() => { setCopyOpen(true); setCopySelected([]); }}
+      className="
+        inline-flex items-center gap-1
+        px-3 py-1.5
+        text-sm font-semibold
+        rounded-lg
+        bg-blue-600 text-white
+        hover:bg-blue-700
+        shadow-sm
+        transition
+      "
+    >
       📄 오더복사
     </button>
-    <button className="premium-btn gray" onClick={resetForm}>
+
+    {/* 초기화 */}
+    <button
+      onClick={resetForm}
+      className="
+        inline-flex items-center gap-1
+        px-3 py-1.5
+        text-sm font-semibold
+        rounded-lg
+        bg-gray-100 text-gray-700
+        border border-gray-200
+        hover:bg-gray-200
+        transition
+      "
+    >
       🔄 초기화
     </button>
-    <button className="premium-btn yellow" onClick={handleFareSearch}>
+
+    {/* 운임조회 */}
+    <button
+      onClick={handleFareSearch}
+      className="
+        inline-flex items-center gap-1
+        px-3 py-1.5
+        text-sm font-semibold
+        rounded-lg
+        border border-blue-200
+        bg-blue-50 text-blue-700
+        hover:bg-blue-100
+        transition
+      "
+    >
       💰 운임조회
     </button>
-     {/* ⭐ 여기 추가 */}
-  <button
-    type="button"
-    disabled={!aiRecommend}
-    onClick={() => setAiPopupOpen(true)}
-    className="premium-btn blue disabled:opacity-40"
-  >
-    🤖 AI 추천
-  </button>
-</div>
+
+    {/* AI 추천 */}
+    <button
+      type="button"
+      disabled={!aiRecommend}
+      onClick={() => setAiPopupOpen(true)}
+      className="
+        inline-flex items-center gap-1
+        px-3 py-1.5
+        text-sm font-semibold
+        rounded-lg
+        bg-blue-600 text-white
+        hover:bg-blue-700
+        disabled:opacity-40
+        shadow-sm
+        transition
+      "
+    >
+      🤖 AI 추천
+    </button>
+
+  </div>
 
   {/* 구분선 */}
   <div className="flex items-center gap-2">
@@ -4043,7 +4104,7 @@ title="상차지 ↔ 하차지 교체"
 </button>
   </div>
 </div>
- 
+
 <form
   onSubmit={handleSubmit}
 className="
@@ -4453,14 +4514,15 @@ setForm((prev) => ({
       type="button"
       onClick={() => setVehicleSpecOpen(true)}
       className="
-        text-[11px]
-        px-2 py-[2px]
-        rounded
-        bg-indigo-50
-        border border-indigo-200
-        text-indigo-700
-        hover:bg-indigo-100
-      "
+  text-[11px]
+  px-2 py-[2px]
+  rounded
+  bg-blue-100
+  border border-blue-200
+  text-blue-700
+  hover:bg-blue-200
+  transition
+"
     >
       차량제원
     </button>
@@ -6262,25 +6324,28 @@ if (res?.success) {
   </div>
 )}
         {/* ⭐ 4파트 동일한 실시간배차현황 테이블 */} 
-<div id="realtime-status-area">
-<RealtimeStatus
-  role={role}
-  dispatchData={dispatchData}
-  drivers={drivers}
-  clients={clients}
-  placeRows={placeRows}
-  timeOptions={timeOptions}
-  tonOptions={tonOptions}
-  addDispatch={addDispatch}
-  patchDispatch={patchDispatch}
-  removeDispatch={removeDispatch}
-  upsertDriver={upsertDriver}
-  filterType={filterType}
-  filterValue={filterValue}
-  setConfirmChange={setConfirmChange}
-  PAY_TYPES={PAY_TYPES}
-/>
-</div>
+{role !== "dispatchManagement" && (
+  <div id="realtime-status-area">
+    <RealtimeStatus
+      role={role}
+      menu={menu}
+      dispatchData={dispatchData}
+      drivers={drivers}
+      clients={clients}
+      placeRows={placeRows}
+      timeOptions={timeOptions}
+      tonOptions={tonOptions}
+      addDispatch={addDispatch}
+      patchDispatch={patchDispatch}
+      removeDispatch={removeDispatch}
+      upsertDriver={upsertDriver}
+      filterType={filterType}
+      filterValue={filterValue}
+      setConfirmChange={setConfirmChange}
+      PAY_TYPES={PAY_TYPES}
+    />
+  </div>
+)}
 
       </>
     );
@@ -6405,7 +6470,6 @@ function StopCountBadge({ count }) {
 }
 
 function RealtimeStatus({
-
   dispatchData,
   drivers,
   clients,
@@ -6418,40 +6482,60 @@ function RealtimeStatus({
   upsertDriver,
   upsertClient,
   role = "admin",
+  menu,
 }) {
+  const alertAudio = React.useRef(null);
+
+React.useEffect(() => {
+  alertAudio.current = new Audio("/sound/alert.wav");
+}, []);
   // ❄️ 냉장 / 냉동 차량 판별
   const isColdVehicle = (type = "") => {
     const t = String(type);
     return t.includes("냉장") || t.includes("냉동");
   };
   // =======================
-  // 🚚 기사 전달용 공통 문구
-  // =======================
-  // ❄️ 냉장/냉동 차량 안내 (끝에 줄바꿈 ❌)
-  const COLD_NOTICE = `★★★필독★★★ 냉장(0~10도 유지), 냉동(-18도 이하)
+// 🚚 기사 전달용 공통 문구
+// =======================
+// ❄️ 냉장/냉동 차량 안내 (끝에 줄바꿈 ❌)
+const COLD_NOTICE = `★★★필독★★★
 
-1.인수증 및 거래명세서, 타코메타 기록지까지 꼭!! 한 장씩 찍어서 보내주세요. 인수증은 증명서입니다. 
-반드시 사진 촬영 후 문자 전송 부탁드립니다. 
+📌 전체보기 또는 더보기 누르시면
+맨 아래 상/하차 정보 있습니다!
+반드시 눌러서 확인하세요!
+
+냉장(0~10도 유지), 냉동(-18도 이하)
+
+1. 인수증 및 거래명세서, 타코메타 기록지까지 꼭!! 한 장씩 찍어서 보내주세요. 
+인수증은 증명서입니다.
+반드시 사진 촬영 후 문자 전송 부탁드립니다.
 미공유 시 운임 지급이 지연될 수 있습니다.
 
-2. 상/하차 후 상하차 사진도 꼭 찍어서 공유 주시거나 보관하시면 문제 발생 시 도움 될 수 있습니다.
+2. 상/하차 후 상하차 사진도 꼭 찍어서 공유 주시거나 보관하시면
+문제 발생 시 도움 될 수 있습니다.
 상/하차지 이슈 발생 시 반드시 사전 연락 바랍니다.
 (사진 전송 후 전화는 안 주셔도 됩니다)
 
-3. 운임결제는 24시콜 기준 계산서 발행 후 익일 결제입니다. 금요일 계산서 발행인 경우 익주 월요일
-결제 됩니다. (공휴일도 동일하게 적용됩니다)`;
+3. 운임결제는 24시콜 기준 계산서 발행 후 익일 결제입니다.
+금요일 계산서 발행인 경우 익주 월요일 결제 됩니다.
+(공휴일도 동일하게 적용됩니다)`;
 
-  // 🚚 일반 차량용
-  const NORMAL_NOTICE = `★★★필독★★★ 미공유 시 운임 지급이 지연될 수 있습니다.
+// 🚚 일반 차량용
+const NORMAL_NOTICE = `★★★필독★★★ 
+전체보기 또는 더보기 누르시면 맨 아래 상/하차 정보 있습니다!!!!! 눌러서 확인하세요!
 
-1.인수증(파렛전표) 또는 거래명세서는 반드시 서명 후 문자 전송 바랍니다. 하차지에 전달하는 경우 사진 먼저 촬영 후 업체에 전달해 주시면 됩니다.
+미공유 시 운임 지급이 지연될 수 있습니다.
 
-2.상/하차 사진 찍어서 보관 또는 공유주시면 문제 발생 시 
-도움 될 수 있습니다. 사진 꼭 찍어놔주세요.
+1. 인수증(파렛전표) 또는 거래명세서는 반드시 서명 후 문자 전송 바랍니다. 
+하차지에 전달하는 경우 사진 먼저 촬영 후 업체에 전달해 주시면 됩니다.
+
+2. 상/하차 사진 찍어서 보관 또는 공유주시면 문제 발생 시 도움 될 수 있습니다. 
+사진 꼭 찍어놔주세요.
 상·하차 이슈 발생 시 반드시 사전 연락 바랍니다.
 
-3. 운임결제는 24시콜 기준 계산서 발행 후 익일 결제입니다. 금요일 계산서 발행인 경우 익주 월요일
-결제 됩니다. (공휴일도 동일하게 적용됩니다)`;
+3. 운임결제는 24시콜 기준 계산서 발행 후 익일 결제입니다. 
+금요일 계산서 발행인 경우 익주 월요일 결제 됩니다. 
+(공휴일도 동일하게 적용됩니다)`;
 
   // 📤 업체 전달 상태 변경 확인 팝업
   const [deliveryConfirm, setDeliveryConfirm] = React.useState(null);
@@ -6903,6 +6987,7 @@ const sortRows = (list = []) => {
 };
 
 const [rows, setRows] = React.useState(() =>
+  
   sortRows(dispatchData || [])
 );
 
@@ -7186,7 +7271,7 @@ React.useEffect(() => {
 
   // 상차 임박 경고
   const [warningList, setWarningList] = React.useState([]);
-
+  const [urgentPopup, setUrgentPopup] = React.useState([]);
   // 첨부파일 개수
   const [attachCount, setAttachCount] = React.useState({});
 
@@ -7333,31 +7418,39 @@ React.useEffect(() => {
     load();
   }, [dispatchData, showCreate]);   // ← rows 제거
 
+// ------------------------
+// 오전/오후 → 24시간 변환
+// ------------------------
+const normalizeTime = (t) => {
+  if (!t) return "";
 
+  let s = String(t).trim();
 
-  // ------------------------
-  // 오전/오후 → 24시간 변환
-  // ------------------------
-  const normalizeTime = (t) => {
-    if (!t) return "";
-    let s = t.trim();
+  // "오후 4시30분" → "오후 4:30"
+  s = s.replace("시 ", ":")
+       .replace("시", ":")
+       .replace("분", "");
 
-    if (/^\d{1,2}:\d{2}$/.test(s)) {
-      return s.padStart(5, "0");
-    }
+  // "오후 4:" → "오후 4:00"
+  if (/:\s*$/.test(s)) s += "00";
 
-    const m = s.match(/(오전|오후)\s*(\d{1,2}):?(\d{2})?/);
-    if (!m) return "";
+  if (/^\d{1,2}:\d{2}$/.test(s)) {
+    return s.padStart(5, "0");
+  }
 
-    let [, ampm, hh, mm] = m;
-    mm = mm ?? "00";
-    hh = parseInt(hh, 10);
+  const m = s.match(/(오전|오후)\s*(\d{1,2}):?(\d{2})?/);
+  if (!m) return "";
 
-    if (ampm === "오후" && hh < 12) hh += 12;
-    if (ampm === "오전" && hh === 12) hh = 0;
+  let [, ampm, hh, mm] = m;
 
-    return `${String(hh).padStart(2, "0")}:${mm}`;
-  };
+  mm = mm ?? "00";
+  hh = parseInt(hh, 10);
+
+  if (ampm === "오후" && hh < 12) hh += 12;
+  if (ampm === "오전" && hh === 12) hh = 0;
+
+  return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
+};
 const generateTimeOptions = () => {
   const result = [];
   for (let h = 6; h <= 23; h++) {
@@ -7402,7 +7495,48 @@ const generateTimeOptions = () => {
 
     setWarningList(temp);
   }, [rows]);
+React.useEffect(() => {
+  if (!rows.length) return;
 
+  const now = new Date();
+
+  const urgent = rows.filter((r) => {
+
+    if (r.배차상태 !== "배차중") return false;
+
+    if (!r.상차일 || !r.상차시간) return false;
+
+    const t24 = normalizeTime(r.상차시간);
+    if (!t24) return false;
+
+    const dt = new Date(`${r.상차일}T${t24}:00`);
+
+    const diff = dt.getTime() - now.getTime();
+
+    // 1시간 이내 임박
+    return diff > 0 && diff <= 30 * 60 * 1000;
+  });
+
+  if (!urgent.length) return;
+
+  // 이미 본 오더 제외
+  const email = auth.currentUser?.email || "guest";
+const urgentKey = `urgentSeen_${email}`;
+
+const seen = JSON.parse(localStorage.getItem(urgentKey) || "[]");
+
+  const newOnes = urgent.filter((r) => !seen.includes(r._id));
+
+if (newOnes.length > 0) {
+  setUrgentPopup(newOnes);
+
+  if (alertAudio.current) {
+    alertAudio.current.currentTime = 0;
+    alertAudio.current.play().catch(() => {});
+  }
+}
+
+}, [rows]);
   // ------------------------
   // 🔁 동일 노선 추천 불러오기
   // ------------------------
@@ -8155,7 +8289,7 @@ ${url}
   // 테이블 스타일
   // ------------------------
   const head =
-    "border px-2 py-2 bg-slate-100 text-slate-800 text-center whitespace-nowrap";
+  "border px-2 py-2 bg-slate-200 text-slate-800 text-center font-semibold whitespace-nowrap";
 
   const cell =
     "border px-2 py-[2px] text-center align-middle whitespace-nowrap overflow-hidden text-ellipsis leading-tight";
@@ -8165,30 +8299,58 @@ ${url}
   // 📌 화면 렌더링
   // ------------------------
   return (
-    <div className="p-3 w-full">
-      {/* ======================== 상단 KPI ======================== */}
-      <div className="flex items-center gap-5 text-sm font-semibold mb-1">
-        <div>총 {kpi.cnt}건</div>
-        <div className="text-blue-600">청구 {kpi.sale.toLocaleString()}원</div>
-        <div className="text-green-600">기사 {kpi.drv.toLocaleString()}원</div>
-        <div className="text-orange-600">수수료 {kpi.fee.toLocaleString()}원</div>
+  <div className="px-3 pt-1 w-full">
+
+    {/* ⚠ 상차 임박 경고 배너 */}
+{warningList.length > 0 && (
+  <div
+    className="
+      inline-flex items-start gap-2
+      bg-blue-50
+      border border-blue-200
+      border-l-4 border-blue-500
+      rounded-lg
+      px-3 py-2
+      mb-2
+      text-[12px]
+      w-fit
+    "
+  >
+    <div className="text-blue-600 text-lg mt-[2px]">⚠</div>
+
+    <div>
+      <div className="font-semibold text-blue-800 mb-1">
+        배차 경고
+        <span className="ml-1 text-blue-700">
+          상차 2시간 이하
+          <b className="ml-1">{warningList.length}건</b>
+          이 미배차 상태입니다.
+        </span>
       </div>
-      {/* ⚠ 상차 임박 경고 배너 */}
-      {warningList.length > 0 && (
-        <div className="bg-red-100 border border-red-400 text-red-800 p-3 rounded mb-3 text-sm">
-          <b>⚠ 배차 경고!</b> 상차 2시간 이하 남았는데{" "}
-          <b>{warningList.length}</b>건이 미배차 상태입니다.
-          <ul className="list-disc ml-5 mt-1">
-            {warningList.map((r) => (
-              <li key={r._id}>
-                [{r.상차일} {r.상차시간}] {r.상차지명} (거래처: {r.거래처명})
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+
+      <ul className="text-[12px] text-blue-700 space-y-[2px]">
+        {warningList.map((r) => (
+          <li key={r.id}>
+            • [{r.상차일} {r.상차시간}] {r.상차지명}
+            <span className="text-gray-500">
+              {" "} (거래처: {r.거래처명})
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  </div>
+)}
+
+{/* ======================== KPI ======================== */}
+<div className="flex items-center gap-5 text-sm font-semibold mb-3">
+  <div>총 {kpi.cnt}건</div>
+  <div className="text-blue-600">청구 {kpi.sale.toLocaleString()}원</div>
+  <div className="text-green-600">기사 {kpi.drv.toLocaleString()}원</div>
+  <div className="text-orange-600">수수료 {kpi.fee.toLocaleString()}원</div>
+</div>
       {/* ======================== 검색 + 날짜 ======================== */}
-      <div className="flex items-center gap-2 mb-2">
+      <div className="flex items-center gap-2 mb-0 pb-0">
         {/* 🔍 검색 */}
         <input
           type="text"
@@ -8229,72 +8391,73 @@ ${url}
           내일
         </button>
         {/* 👉 상태 필터 */}
-        <div className="flex items-center gap-1 ml-3 text-[11px] font-semibold">
+<div className="flex items-center gap-1 text-[11px] font-semibold">
 
-          {/* 전체 */}
-          <button
-            onClick={() => setStatusFilter("ALL")}
-            className={`px-2 py-1 rounded-full border
+  {/* 전체 */}
+  <button
+    onClick={() => setStatusFilter("ALL")}
+    className={`px-2 py-1 rounded-full border transition
       ${statusFilter === "ALL"
-                ? "bg-gray-800 text-white border-gray-800"
-                : "bg-gray-100 text-gray-600 border-gray-300"}
+        ? "bg-blue-600 text-white border-blue-600"
+        : "bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-200"}
     `}
-          >
-            전체 {filtered.length}
-          </button>
+  >
+    전체 {filtered.length}
+  </button>
 
-          {/* 미배차 */}
-          <button
-            onClick={() => setStatusFilter("UNASSIGNED")}
-            className={`px-2 py-1 rounded-full border
+  {/* 미배차 */}
+  <button
+    onClick={() => setStatusFilter("UNASSIGNED")}
+    className={`px-2 py-1 rounded-full border transition
       ${statusFilter === "UNASSIGNED"
-                ? "bg-yellow-500 text-white border-yellow-500"
-                : "bg-yellow-50 text-yellow-700 border-yellow-300"}
+        ? "bg-blue-600 text-white border-blue-600"
+        : "bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-200"}
     `}
-          >
-            미배차 {statusSummary.미배차}
-          </button>
+  >
+    미배차 {statusSummary.미배차}
+  </button>
 
-          {/* 배차완료 */}
-          <button
-            onClick={() => setStatusFilter("ASSIGNED")}
-            className={`px-2 py-1 rounded-full border
+  {/* 배차완료 */}
+  <button
+    onClick={() => setStatusFilter("ASSIGNED")}
+    className={`px-2 py-1 rounded-full border transition
       ${statusFilter === "ASSIGNED"
-                ? "bg-green-600 text-white border-green-600"
-                : "bg-green-50 text-green-700 border-green-300"}
+        ? "bg-blue-600 text-white border-blue-600"
+        : "bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-200"}
     `}
-          >
-            완료 {statusSummary.배차완료}
-          </button>
+  >
+    완료 {statusSummary.배차완료}
+  </button>
 
-          {/* 긴급 */}
-          {statusSummary.긴급미배차 > 0 && (
-            <button
-              onClick={() => setStatusFilter("URGENT")}
-              className={`px-2 py-1 rounded-full border animate-pulse
+  {/* 긴급 */}
+  {statusSummary.긴급미배차 > 0 && (
+    <button
+      onClick={() => setStatusFilter("URGENT")}
+      className={`px-2 py-1 rounded-full border transition animate-pulse
         ${statusFilter === "URGENT"
-                  ? "bg-red-600 text-white border-red-600"
-                  : "bg-red-50 text-red-700 border-red-300"}
+          ? "bg-red-600 text-white border-red-600"
+          : "bg-red-100 text-red-700 border-red-200 hover:bg-red-200"}
       `}
-            >
-              긴급 {statusSummary.긴급미배차}
-            </button>
-          )}
+    >
+      긴급 {statusSummary.긴급미배차}
+    </button>
+  )}
 
-          {/* 업체 미전달 */}
-          {statusSummary.업체미전달 > 0 && (
-            <button
-              onClick={() => setStatusFilter("UNDELIVERED")}
-              className={`px-2 py-1 rounded-full border
+  {/* 업체 미전달 */}
+  {statusSummary.업체미전달 > 0 && (
+    <button
+      onClick={() => setStatusFilter("UNDELIVERED")}
+      className={`px-2 py-1 rounded-full border transition
         ${statusFilter === "UNDELIVERED"
-                  ? "bg-indigo-600 text-white border-indigo-600"
-                  : "bg-indigo-50 text-indigo-700 border-indigo-300"}
+          ? "bg-blue-600 text-white border-blue-600"
+          : "bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-200"}
       `}
-            >
-              미전달 {statusSummary.업체미전달}
-            </button>
-          )}
-        </div>
+    >
+      미전달 {statusSummary.업체미전달}
+    </button>
+  )}
+
+</div>
       </div>
 
       {/* 상단 버튼 */}
@@ -8868,6 +9031,61 @@ onDoubleClick={(e) => {
           </tbody>
         </table>
       </div>
+{/* ================= 임박 미배차 팝업 ================= */}
+{menu === "실시간배차현황" && urgentPopup.length > 0 && (
+  <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[99999]">
+
+    <div className="bg-white w-[420px] rounded-xl shadow-2xl border border-blue-200">
+
+      <div className="bg-blue-600 text-white px-4 py-3 rounded-t-xl font-semibold">
+        배차 알림
+      </div>
+
+      <div className="p-4 text-sm">
+
+        <div className="mb-3 text-blue-800 font-semibold">
+          시간이 임박한 배차가 <b>{urgentPopup.length}건</b> 있습니다.
+        </div>
+
+        <ul className="space-y-1 text-gray-700 max-h-[200px] overflow-y-auto">
+          {urgentPopup.map((r) => (
+            <li key={r._id}>
+              • {r.상차시간} {r.상차지명}
+              <span className="text-gray-400">
+                {" "}({r.거래처명})
+              </span>
+            </li>
+          ))}
+        </ul>
+
+        <div className="mt-4 flex justify-end">
+          <button
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg"
+            onClick={() => {
+
+              const email = auth.currentUser?.email || "guest";
+const urgentKey = `urgentSeen_${email}`;
+
+const seen = JSON.parse(localStorage.getItem(urgentKey) || "[]");
+
+const updated = [
+  ...seen,
+  ...urgentPopup.map((r) => r._id)
+];
+
+localStorage.setItem(urgentKey, JSON.stringify(updated));
+
+setUrgentPopup([]);
+            }}
+          >
+            확인
+          </button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+)}
 {/* ================= 복사 슬라이드 패널 (FULL LABEL VERSION) ================= */}
 {copyPanelOpen && copyTarget && (
   <div className="fixed inset-0 z-[99999]">
@@ -12518,25 +12736,48 @@ ${fare.toLocaleString()}원 ${payLabel} 배차되었습니다.`;
         // =====================
         if (mode === "driver") {
 
-          // ❄️ 냉장/냉동 차량 안내 (끝에 줄바꿈 ❌)
-          const COLD_NOTICE = `★★★필독★★★ 냉장(0~10도 유지), 냉동(-18도 이하)
+// =======================
+// 🚚 기사 전달용 공통 문구
+// =======================
+// ❄️ 냉장/냉동 차량 안내 (끝에 줄바꿈 ❌)
+const COLD_NOTICE = `★★★필독★★★
 
-인수증 및 거래명세서, 타코메타 기록지까지 꼭!! 한 장씩 찍어서 보내주세요. 인수증은 증명서입니다. 
-반드시 사진 촬영 후 문자 전송 부탁드립니다. 
+📌 전체보기 또는 더보기 누르시면
+맨 아래 상/하차 정보 있습니다!
+반드시 눌러서 확인하세요!
+
+냉장(0~10도 유지), 냉동(-18도 이하)
+
+1. 인수증 및 거래명세서, 타코메타 기록지까지 꼭!! 한 장씩 찍어서 보내주세요. 
+인수증은 증명서입니다.
+반드시 사진 촬영 후 문자 전송 부탁드립니다.
 미공유 시 운임 지급이 지연될 수 있습니다.
 
-상/하차 후 상하차 사진도 꼭 찍어서 공유 주시거나 보관하시면 문제 발생 시 도움 될 수 있습니다.
+2. 상/하차 후 상하차 사진도 꼭 찍어서 공유 주시거나 보관하시면
+문제 발생 시 도움 될 수 있습니다.
 상/하차지 이슈 발생 시 반드시 사전 연락 바랍니다.
-(사진 전송 후 전화는 안 주셔도 됩니다)`;
+(사진 전송 후 전화는 안 주셔도 됩니다)
 
-          // 🚚 일반 차량용
-          const NORMAL_NOTICE = `★★★필독★★★ 미공유 시 운임 지급이 지연될 수 있습니다.
+3. 운임결제는 24시콜 기준 계산서 발행 후 익일 결제입니다.
+금요일 계산서 발행인 경우 익주 월요일 결제 됩니다.
+(공휴일도 동일하게 적용됩니다)`;
 
-인수증(파렛전표) 또는 거래명세서는 반드시 서명 후 문자 전송 바랍니다. 하차지에 전달하는 경우 사진 먼저 촬영 후 업체에 전달해 주시면 됩니다.
+// 🚚 일반 차량용
+const NORMAL_NOTICE = `★★★필독★★★ 
+전체보기 또는 더보기 누르시면 맨 아래 상/하차 정보 있습니다!!!!! 눌러서 확인하세요!
 
-상/하차 사진 찍어서 보관 또는 공유주시면 문제 발생 시 
-도움 될 수 있습니다. 사진 꼭 찍어놔주세요.
-상·하차 이슈 발생 시 반드시 사전 연락 바랍니다. 감사합니다.`;
+미공유 시 운임 지급이 지연될 수 있습니다.
+
+1. 인수증(파렛전표) 또는 거래명세서는 반드시 서명 후 문자 전송 바랍니다. 
+하차지에 전달하는 경우 사진 먼저 촬영 후 업체에 전달해 주시면 됩니다.
+
+2. 상/하차 사진 찍어서 보관 또는 공유주시면 문제 발생 시 도움 될 수 있습니다. 
+사진 꼭 찍어놔주세요.
+상·하차 이슈 발생 시 반드시 사전 연락 바랍니다.
+
+3. 운임결제는 24시콜 기준 계산서 발행 후 익일 결제입니다. 
+금요일 계산서 발행인 경우 익주 월요일 결제 됩니다. 
+(공휴일도 동일하게 적용됩니다)`;
 
           const vehicleType = String(r.차량종류 || "").trim();
 
@@ -13534,23 +13775,23 @@ else if (palletDiff !== null) priority = 1;
       {/* 🔵 상태 요약 칩 (PART 5 추가) */}
       <div className="flex items-center gap-1 text-[11px] font-semibold mb-2">
 
-        <span className="px-2 py-1 rounded-full bg-slate-800 text-white">
-          전체 {statusSummary.전체}
-        </span>
+  <span className="px-2 py-1 rounded-full bg-blue-600 text-white">
+    전체 {statusSummary.전체}
+  </span>
 
-        <span className="px-2 py-1 rounded-full bg-yellow-100 text-yellow-700 border border-yellow-300">
-          미배차 {statusSummary.미배차}
-        </span>
+  <span className="px-2 py-1 rounded-full bg-blue-100 text-blue-700 border border-blue-200">
+    미배차 {statusSummary.미배차}
+  </span>
 
-        <span className="px-2 py-1 rounded-full bg-green-100 text-green-700 border border-green-300">
-          완료 {statusSummary.완료}
-        </span>
+  <span className="px-2 py-1 rounded-full bg-blue-100 text-blue-700 border border-blue-200">
+    완료 {statusSummary.완료}
+  </span>
 
-        <span className="px-2 py-1 rounded-full bg-indigo-100 text-indigo-700 border border-indigo-300">
-          미전달 {statusSummary.미전달}
-        </span>
+  <span className="px-2 py-1 rounded-full bg-blue-100 text-blue-700 border border-blue-200">
+    미전달 {statusSummary.미전달}
+  </span>
 
-      </div>
+</div>
       <div className="flex flex-wrap items-center gap-5 text-sm mb-2">
         <div>총 <b>{summary.totalCount}</b>건</div>
         <div>청구 <b className="text-blue-600">{summary.totalSale.toLocaleString()}</b>원</div>

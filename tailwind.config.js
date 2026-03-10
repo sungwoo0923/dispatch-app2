@@ -12,7 +12,7 @@ export default {
         accent: "#111827",
       },
       fontFamily: {
-        sans: ["Inter", "Pretendard", "sans-serif"],
+        sans: ["Pretendard", "Noto Sans KR", "system-ui", "sans-serif"],
       },
     },
   },
