@@ -6500,7 +6500,7 @@ React.useEffect(() => {
 // ❄️ 냉장/냉동 차량 안내 (끝에 줄바꿈 ❌)
 const COLD_NOTICE = `★★★필독★★★
 
-📌 전체보기 또는 더보기 누르시면
+📌 전체보기 또는 모두보기 누르시면
 맨 아래 상/하차 정보 있습니다!
 반드시 눌러서 확인하세요!
 
@@ -6522,7 +6522,7 @@ const COLD_NOTICE = `★★★필독★★★
 
 // 🚚 일반 차량용
 const NORMAL_NOTICE = `★★★필독★★★ 
-전체보기 또는 더보기 누르시면 맨 아래 상/하차 정보 있습니다!!!!! 눌러서 확인하세요!
+전체보기 또는 모두보기 누르시면 맨 아래 상/하차 정보 있습니다!!!!! 눌러서 확인하세요!
 
 미공유 시 운임 지급이 지연될 수 있습니다.
 
@@ -12742,7 +12742,7 @@ ${fare.toLocaleString()}원 ${payLabel} 배차되었습니다.`;
 // ❄️ 냉장/냉동 차량 안내 (끝에 줄바꿈 ❌)
 const COLD_NOTICE = `★★★필독★★★
 
-📌 전체보기 또는 더보기 누르시면
+📌 전체보기 또는 모두보기 누르시면
 맨 아래 상/하차 정보 있습니다!
 반드시 눌러서 확인하세요!
 
@@ -12764,7 +12764,7 @@ const COLD_NOTICE = `★★★필독★★★
 
 // 🚚 일반 차량용
 const NORMAL_NOTICE = `★★★필독★★★ 
-전체보기 또는 더보기 누르시면 맨 아래 상/하차 정보 있습니다!!!!! 눌러서 확인하세요!
+전체보기 또는 모두보기 누르시면 맨 아래 상/하차 정보 있습니다!!!!! 눌러서 확인하세요!
 
 미공유 시 운임 지급이 지연될 수 있습니다.
 
@@ -13799,8 +13799,47 @@ else if (palletDiff !== null) priority = 1;
         <div>수수료 <b className="text-amber-600">{summary.totalFee.toLocaleString()}</b>원</div>
       </div>
 
-      <div className="flex justify-between items-center gap-3 mb-3">
+      <div className="flex justify-between items-end gap-3 mb-1">
+{/* ⭐ 페이지 이동 버튼 */}
+      <div className="flex items-center gap-4 my-3 select-none">
 
+        {/* ◀ 이전 */}
+        <button
+          className={`
+      px-4 py-2 rounded-lg text-sm font-semibold border 
+      transition-all duration-150
+      ${page === 0
+              ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
+              : "bg-white hover:bg-gray-100 text-gray-700 border-gray-300 shadow-sm"}
+    `}
+          disabled={page === 0}
+          onClick={() => setPage((p) => Math.max(0, p - 1))}
+        >
+          ◀ 이전
+        </button>
+
+        {/* 페이지 번호 */}
+        <span className="text-sm font-semibold text-gray-600">
+          {page + 1}
+          <span className="text-gray-400"> / {Math.ceil(filtered.length / pageSize)}</span>
+        </span>
+
+        {/* 다음 ▶ */}
+        <button
+          className={`
+      px-4 py-2 rounded-lg text-sm font-semibold border 
+      transition-all duration-150
+      ${(page + 1) * pageSize >= filtered.length
+              ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
+              : "bg-white hover:bg-gray-100 text-gray-700 border-gray-300 shadow-sm"}
+    `}
+          disabled={(page + 1) * pageSize >= filtered.length}
+          onClick={() => setPage((p) => p + 1)}
+        >
+          다음 ▶
+        </button>
+
+      </div>
         <div className="flex items-center gap-2">
           {/* 🔍 검색 필터 */}
           <select
@@ -13897,124 +13936,91 @@ else if (palletDiff !== null) priority = 1;
           >
             전체
           </button>
-
-
         </div>
+      
+{/* 우측 버튼 묶음 */}
+<div className="flex items-center gap-1.5 ml-auto">
 
-        {/* 우측 버튼 묶음 */}
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setSortModalOpen(true)}
-            className="px-4 py-2 rounded-lg bg-slate-600 text-white shadow-md hover:bg-slate-700"
-          >
-            정렬
-          </button>
+  {/* 정렬 */}
+  <button
+    onClick={() => setSortModalOpen(true)}
+    className="px-3 py-1.5 rounded-md bg-blue-600 text-white shadow hover:bg-blue-700 text-sm"
+  >
+    정렬
+  </button>
 
-          {/* 📋 기사복사 */}
-          <button
-            onClick={() => {
-              if (selected.size === 0) {
-                return alert("📋 복사할 항목을 선택하세요.");
-              }
-              if (selected.size > 1) {
-                return alert("⚠️ 1개의 항목만 선택할 수 있습니다.");
-              }
-              setCopyModalOpen(true);
-            }}
-            className="px-4 py-2 rounded-lg bg-purple-600 text-white shadow-md hover:bg-purple-700 transition-all"
-          >
-            📋 기사복사
-          </button>
+  {/* 기사복사 */}
+  <button
+    onClick={() => {
+      if (selected.size === 0) {
+        return alert("📋 복사할 항목을 선택하세요.");
+      }
+      if (selected.size > 1) {
+        return alert("⚠️ 1개의 항목만 선택할 수 있습니다.");
+      }
+      setCopyModalOpen(true);
+    }}
+    className="px-3 py-1.5 rounded-md bg-blue-600 text-white shadow hover:bg-blue-700 text-sm"
+  >
+    📋 기사복사
+  </button>
 
-          <button
-            onClick={() => setShowCreate(true)}
-            className="px-4 py-2 rounded-lg bg-indigo-600 text-white shadow-md hover:bg-indigo-700 transition-all"
+  {/* 신규 오더 */}
+  <button
+    onClick={() => setShowCreate(true)}
+    className="px-3 py-1.5 rounded-md bg-blue-600 text-white shadow hover:bg-blue-700 text-sm"
+  >
+    + 신규 오더 등록
+  </button>
 
+  {/* 대용량 업로드 */}
+  <label className="px-3 py-1.5 rounded-md bg-blue-600 text-white shadow hover:bg-blue-700 cursor-pointer text-sm">
+    대용량 업로드
+    <input
+      type="file"
+      accept=".xlsx,.xls"
+      hidden
+      onChange={handleBulkFile}
+    />
+  </label>
 
-          >
+  {/* 선택수정 */}
+  <button
+    className="px-3 py-1.5 rounded-md bg-blue-600 text-white shadow hover:bg-blue-700 text-sm"
+    onClick={handleEditToggle}
+  >
+    {editMode ? "수정완료" : "선택수정"}
+  </button>
 
-            + 신규 오더 등록
-          </button>
+  {/* 선택삭제 */}
+  <button
+    className="px-3 py-1.5 rounded-md bg-red-600 text-white shadow hover:bg-red-700 text-sm"
+    onClick={() => {
+      if (!selected.size) return alert("삭제할 항목이 없습니다.");
+      setShowDeletePopup(true);
+    }}
+  >
+    선택삭제
+  </button>
 
-          <label className="px-4 py-2 rounded-lg bg-blue-600 text-white shadow-md hover:bg-blue-700 transition-all cursor-pointer">
-            대용량 업로드
-            <input type="file" accept=".xlsx,.xls" hidden onChange={handleBulkFile} />
-          </label>
+  {/* 선택초기화 */}
+  <button
+    className="px-3 py-1.5 rounded-md bg-gray-500 text-white shadow hover:bg-gray-600 text-sm"
+    onClick={() => setSelected(new Set())}
+  >
+    선택초기화
+  </button>
 
-          <button
-            className="px-4 py-2 rounded-lg bg-yellow-500 text-white shadow-md hover:bg-yellow-600 transition-all"
-            onClick={handleEditToggle}
-          >
-            {editMode ? "수정완료" : "선택수정"}
-          </button>
+  {/* 엑셀 */}
+  <button
+    className="px-3 py-1.5 rounded-md bg-emerald-600 text-white shadow hover:bg-emerald-700 text-sm"
+    onClick={downloadExcel}
+  >
+    엑셀다운
+  </button>
 
-          <button
-            className="px-4 py-2 rounded-lg bg-red-600 text-white shadow-md hover:bg-red-700 transition-all"
-            onClick={() => {
-              if (!selected.size) return alert("삭제할 항목이 없습니다.");
-              setShowDeletePopup(true);
-            }}
-          >
-            선택삭제
-          </button>
-
-          <button
-            className="px-4 py-2 rounded-lg bg-gray-400 text-white shadow-md hover:bg-gray-500 transition-all"
-            onClick={() => setSelected(new Set())}
-          >
-            선택초기화
-          </button>
-
-          <button
-            className="px-4 py-2 rounded-lg bg-emerald-600 text-white shadow-md hover:bg-emerald-700 transition-all"
-            onClick={downloadExcel}
-          >
-            엑셀다운
-          </button>
-
-        </div>
-      </div>   {/* 🔥 이 div가 검색+버튼 전체를 감싸는 div — 여기로 끝 */}
-
-      {/* ⭐ 페이지 이동 버튼 */}
-      <div className="flex items-center gap-4 my-3 select-none">
-
-        {/* ◀ 이전 */}
-        <button
-          className={`
-      px-4 py-2 rounded-lg text-sm font-semibold border 
-      transition-all duration-150
-      ${page === 0
-              ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
-              : "bg-white hover:bg-gray-100 text-gray-700 border-gray-300 shadow-sm"}
-    `}
-          disabled={page === 0}
-          onClick={() => setPage((p) => Math.max(0, p - 1))}
-        >
-          ◀ 이전
-        </button>
-
-        {/* 페이지 번호 */}
-        <span className="text-sm font-semibold text-gray-600">
-          {page + 1}
-          <span className="text-gray-400"> / {Math.ceil(filtered.length / pageSize)}</span>
-        </span>
-
-        {/* 다음 ▶ */}
-        <button
-          className={`
-      px-4 py-2 rounded-lg text-sm font-semibold border 
-      transition-all duration-150
-      ${(page + 1) * pageSize >= filtered.length
-              ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
-              : "bg-white hover:bg-gray-100 text-gray-700 border-gray-300 shadow-sm"}
-    `}
-          disabled={(page + 1) * pageSize >= filtered.length}
-          onClick={() => setPage((p) => p + 1)}
-        >
-          다음 ▶
-        </button>
-
-      </div>
+</div>
+</div>   {/* 🔥 이 div가 검색+버튼 전체를 감싸는 div — 여기로 끝 */}
 
 
       {/* ---------------- 테이블 ---------------- */}
