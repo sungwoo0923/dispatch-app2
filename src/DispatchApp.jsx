@@ -8769,22 +8769,24 @@ onDoubleClick={(e) => {
 }}
 
     className={`
-      cursor-pointer hover:bg-slate-100
+cursor-pointer hover:bg-slate-100
 
-      ${
-        r.긴급 === true &&
-        r.배차상태 === "배차중" &&
-        (!r.차량번호 || String(r.차량번호).trim() === "")
-          ? "bg-red-50 border-l-4 border-red-500"
-          : idx % 2
-          ? "bg-gray-50"
-          : "bg-white"
-      }
+${
+  r.긴급 === true &&
+  r.배차상태 === "배차중" &&
+  (!r.차량번호 || String(r.차량번호).trim() === "")
+    ? "bg-red-50 border-l-4 border-red-500"
+    : idx % 2
+    ? "bg-gray-50"
+    : "bg-white"
+}
 
-      ${selected.includes(r._id) ? "bg-yellow-200 border-2 border-yellow-500" : ""}
-      ${highlightIds.has(r._id) ? "animate-pulse bg-green-200" : ""}
-      ${savedHighlightIds.has(r._id) ? "row-highlight" : ""}
-    `}
+${highlightIds.has(r._id) ? "animate-pulse bg-blue-200" : ""}
+
+${selected.includes(r._id) ? "!bg-blue-100 border-2 border-blue-500" : ""}
+
+${savedHighlightIds.has(r._id) ? "row-highlight" : ""}
+`}
   >
 
                   <td className={cell}>
@@ -14050,48 +14052,58 @@ else if (palletDiff !== null) priority = 1;
 
           <tbody>
             {pageRows.map((r, i) => {
-              const id = getId(r);
-              const row = edited[id] ? { ...r, ...edited[id] } : r;
-              const fee = toInt(row.청구운임) - toInt(row.기사운임);
+  const id = getId(r);
+  const row = edited[id] ? { ...r, ...edited[id] } : r;
+  const fee = toInt(row.청구운임) - toInt(row.기사운임);
 
-              const editableKeys = [
-                "상차일", "상차시간", "하차일", "하차시간",
-                "거래처명", "상차지명", "상차지주소",
-                "하차지명", "하차지주소", "화물내용", "차량종류",
-                "차량톤수", "지급방식", "배차방식", "메모", "청구운임", "기사운임",
-              ];
+  const editableKeys = [
+    "상차일", "상차시간", "하차일", "하차시간",
+    "거래처명", "상차지명", "상차지주소",
+    "하차지명", "하차지주소", "화물내용", "차량종류",
+    "차량톤수", "지급방식", "배차방식", "메모", "청구운임", "기사운임",
+  ];
 
-              return (
-<tr
-  key={id}
-  id={`row-${id}`}
-  onDoubleClick={() => {
-    setCopyTarget({ ...row });
-    setCopyPanelOpen(true);
-  }}
-  className={`
-    hover:bg-indigo-50
-    cursor-pointer
-    transition
-    duration-150
-
-    ${r.긴급 === true && row.배차상태 === "배차중"
+  const baseRowColor =
+    r.긴급 === true && row.배차상태 === "배차중"
       ? "bg-red-50 border-l-4 border-red-400"
       : i % 2 === 0
       ? "bg-white"
-      : "bg-gray-50"}
+      : "bg-gray-50";
 
+  return (
+    <tr
+      key={id}
+      id={`row-${id}`}
+      onDoubleClick={() => {
+        setCopyTarget({ ...row });
+        setCopyPanelOpen(true);
+      }}
+      className={`
+  hover:bg-indigo-50
+  cursor-pointer
+  transition
+  duration-150
+  ${selected.has(id)
+    ? "bg-blue-100 border-2 border-blue-500"
+    : baseRowColor}
+  ${savedHighlightIds.has(id) ? "row-highlight" : ""}
+`}
+    >
+      <td className="border text-center">
+        <input
+          type="checkbox"
+          checked={selected.has(id)}
+          onChange={() => toggleOne(id)}
+        />
+      </td>
 
-    ${selected.has(id) ? "bg-yellow-200 border-2 border-yellow-500" : ""}
-    ${savedHighlightIds.has(id) ? "row-highlight" : ""}
-  `}
-                >
-                  <td className="border text-center">
-                    <input type="checkbox" checked={selected.has(id)} onChange={() => toggleOne(id)} />
-                  </td>
+      <td className="border text-center">
+        {(page * pageSize) + i + 1}
+      </td>
 
-                  <td className="border text-center">{(page * pageSize) + i + 1}</td>
-                  <td className="border text-center whitespace-nowrap">{row.등록일}</td>
+      <td className="border text-center whitespace-nowrap">
+        {row.등록일}
+      </td>
 
                   {/* -------------------- 반복 입력 컬럼 -------------------- */}
 {[
