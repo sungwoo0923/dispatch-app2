@@ -30,16 +30,23 @@
     <link rel="icon" href="/icons/icon-192x192.png" />
   </head>
 
-  <body>
-    <div id="root"></div>
+<body>
 
-    <!-- React Entry -->
-    <script type="module" src="/src/main.jsx"></script>
+<div id="root"></div>
 
-    <!-- 🗺 카카오 지도 SDK -->
-    <script
-      src="//dapi.kakao.com/v2/maps/sdk.js?appkey=bd50dacf0c9ef4d03e905a2e14e7279a&libraries=services"
-      defer
-    ></script>
-  </body>
+<!-- ⭐ Tmap 먼저 로딩 -->
+<script
+src="https://apis.openapi.sk.com/tmap/jsv2?version=1&appKey=CkqGN7AtFUTI856TWs64L4hl8Wbqc9bxr5LtYYo3&libraries=services"
+></script>
+
+<!-- React -->
+<script type="module" src="/src/main.jsx"></script>
+
+<!-- 카카오 지도 -->
+<script
+  src="//dapi.kakao.com/v2/maps/sdk.js?appkey=bd50dacf0c9ef4d03e905a2e14e7279a&libraries=services"
+  defer
+></script>
+
+</body>
 </html>

@@ -14,6 +14,36 @@ import HomeDashboard from "./HomeDashboard";
 import StandardFare from "./StandardFare";
 import DispatchFormNew from "./DispatchFormNew";
 
+// ================= 카운트 애니메이션 =================
+function CountUp({ value, duration = 900 }) {
+  const [display, setDisplay] = React.useState(0);
+
+  React.useEffect(() => {
+    const end = Number(value) || 0;
+
+    if (end === 0) {
+      setDisplay(0);
+      return;
+    }
+
+    const totalFrames = Math.round(duration / 16);
+    const increment = end / totalFrames;
+
+    let frame = 0;
+
+    const timer = setInterval(() => {
+      frame++;
+      const next = Math.min(Math.round(increment * frame), end);
+      setDisplay(next);
+
+      if (frame >= totalFrames) clearInterval(timer);
+    }, 16);
+
+    return () => clearInterval(timer);
+  }, [value, duration]);
+
+  return <>{display.toLocaleString()}</>;
+}
 
 /* -------------------------------------------------
    발행사(우리 회사) 고정 정보
@@ -454,6 +484,112 @@ function formatPhone(phone) {
   }
 
   return p;
+}
+function makeFullDetailText(r) {
+
+  const pickupTime = r.상차시간?.trim() || "즉시";
+  const dropTimeRaw = r.하차시간?.trim() || "즉시";
+
+  const plate = r.차량번호 || "-";
+  const name = r.이름 || "-";
+  const phone = formatPhone(r.전화번호 || "");
+
+  const fare = Number(r.청구운임 || 0);
+  const payLabel = r.지급방식 || "";
+
+  // =====================
+  // 요일 계산
+  // =====================
+  const yoilList = ["일요일","월요일","화요일","수요일","목요일","금요일","토요일"];
+  let yoil = "";
+
+  if (r.상차일) {
+    const d = new Date(r.상차일);
+    yoil = yoilList[d.getDay()];
+  }
+
+  // =====================
+  // 하차 날짜 계산
+  // =====================
+  let dateNotice = "";
+  let dropTimeText = dropTimeRaw;
+
+  if (r.상차일 && r.하차일) {
+
+    const s = new Date(r.상차일);
+    const e = new Date(r.하차일);
+
+    const s0 = new Date(s.getFullYear(), s.getMonth(), s.getDate());
+    const e0 = new Date(e.getFullYear(), e.getMonth(), e.getDate());
+
+    const diffDays = Math.round(
+      (e0 - s0) / (1000 * 60 * 60 * 24)
+    );
+
+    const sm = s.getMonth() + 1;
+    const sd = s.getDate();
+
+    const em = e.getMonth() + 1;
+    const ed = e.getDate();
+
+    if (diffDays === 1) {
+
+      dateNotice =
+        `익일 하차 건 (상차: ${sm}/${sd} → 하차: ${em}/${ed})\n\n`;
+
+      dropTimeText =
+        `${em}/${ed} ${dropTimeRaw}`;
+
+    }
+
+    else if (diffDays >= 2) {
+
+      dateNotice =
+        `지정일 하차 건 (상차: ${sm}/${sd} → 하차: ${em}/${ed})\n\n`;
+
+      dropTimeText =
+        `${em}/${ed} ${dropTimeRaw}`;
+
+    }
+
+  }
+
+  // =====================
+  // 메시지 생성
+  // =====================
+  return `${dateNotice}${r.상차일 || ""} ${yoil}
+
+상차지 : ${r.상차지명 || "-"}
+${r.상차지주소 || "-"}${
+  r.상차지담당자 || r.상차지담당자번호
+    ? `\n담당자 : ${r.상차지담당자 || ""}${
+        r.상차지담당자번호
+          ? ` (${formatPhone(r.상차지담당자번호)})`
+          : ""
+      }`
+    : ""
+}
+상차시간 : ${pickupTime}
+상차방법 : ${r.상차방법 || "-"}
+
+하차지 : ${r.하차지명 || "-"}
+${r.하차지주소 || "-"}${
+  r.하차지담당자 || r.하차지담당자번호
+    ? `\n담당자 : ${r.하차지담당자 || ""}${
+        r.하차지담당자번호
+          ? ` (${formatPhone(r.하차지담당자번호)})`
+          : ""
+      }`
+    : ""
+}
+하차시간 : ${dropTimeText}
+하차방법 : ${r.하차방법 || "-"}
+
+중량 : ${r.차량톤수 || "-"}${r.화물내용 ? ` / ${r.화물내용}` : ""} ${r.차량종류 || ""}
+
+${plate} ${name} ${phone}
+${fare.toLocaleString()}원 ${payLabel} 배차되었습니다.`;
+
 }
 // 차량번호 정규화 (공백 / 하이픈 제거 + 소문자)
 function normalizePlate(v = "") {
@@ -1337,6 +1473,11 @@ function renderTimeWithCond(time, cond) {
       const [fareHistoryOpen, setFareHistoryOpen] = React.useState(false);
       const [guideHistoryList, setGuideHistoryList] = React.useState([]);
       const [vehicleSpecOpen, setVehicleSpecOpen] = React.useState(false);
+const [confirmOpen, setConfirmOpen] = React.useState(false);
+ const [routeInfo, setRouteInfo] = React.useState(null);
+
+
+
 // ===== 복사패널 자동완성 =====
 const [clientOptions, setClientOptions] = React.useState([]);
 const [clientIndex, setClientIndex] = React.useState(0);
@@ -1605,8 +1746,7 @@ const [driverModal, setDriverModal] = React.useState({
   name: "",
   phone: "",
 });
- // ⭐ 등록 확인 팝업 상태
-const [confirmOpen, setConfirmOpen] = React.useState(false);
+
 // ⭐ 실시간배차현황(하단 테이블) 상태 변경 확인 팝업
 const [confirmChange, setConfirmChange] = React.useState(null);
 /*
@@ -2099,7 +2239,6 @@ const filterPlaces = (q) => {
       운임보정: null,
     };
     
-
     const [form, setForm] = React.useState(() => {
   try {
     const saved = localStorage.getItem("dispatchForm");
@@ -2112,6 +2251,141 @@ const filterPlaces = (q) => {
   } catch {}
   return { ...emptyForm };
 });
+React.useEffect(() => {
+
+  console.log("useEffect 실행", confirmOpen);
+  console.log("주소 확인", form?.상차지주소, form?.하차지주소);
+
+  if (!confirmOpen) return;
+  if (!window.Tmapv2) return;
+
+  if (!form?.상차지주소) return;
+if (!form?.하차지주소) return;
+  async function loadRoute() {
+await new Promise(r => setTimeout(r, 120));
+    try {
+
+      // 1️⃣ 주소 → 좌표 변환
+      const startAddr = form.상차지주소 || form.상차지명;
+      const endAddr = form.하차지주소 || form.하차지명;
+
+// 1️⃣ 주소 → 좌표 변환
+const geoStartRes = await fetch(
+  `https://apis.openapi.sk.com/tmap/geo/geocoding?version=1&appKey=CkqGN7AtFUTI856TWs64L4hl8Wbqc9bxr5LtYYo3&address=${encodeURIComponent(startAddr)}`
+);
+
+const geoStart = await geoStartRes.json();
+
+const geoEndRes = await fetch(
+  `https://apis.openapi.sk.com/tmap/geo/geocoding?version=1&appKey=CkqGN7AtFUTI856TWs64L4hl8Wbqc9bxr5LtYYo3&address=${encodeURIComponent(endAddr)}`
+);
+
+const geoEnd = await geoEndRes.json();
+
+// 좌표 추출
+const startCoord = geoStart?.coordinateInfo?.coordinate?.[0];
+const endCoord = geoEnd?.coordinateInfo?.coordinate?.[0];
+
+if (!startCoord || !endCoord) {
+  console.warn("좌표 변환 실패", geoStart, geoEnd);
+  return;
+}
+
+const startX = startCoord.lon;
+const startY = startCoord.lat;
+
+const endX = endCoord.lon;
+const endY = endCoord.lat;
+
+      // 2️⃣ 지도 생성
+const mapDiv = document.getElementById("route-map");
+if (!mapDiv) return;
+
+mapDiv.innerHTML = "";
+
+if (!window.Tmapv2) {
+  console.error("Tmap SDK 로딩 안됨");
+  return;
+}
+
+const map = new window.Tmapv2.Map("route-map", {
+  center: new window.Tmapv2.LatLng(startY, startX),
+  width: "100%",
+  height: "100%",
+  zoom: 10
+});
+
+      // 3️⃣ 경로 계산
+const route = await fetch(
+  "https://apis.openapi.sk.com/tmap/routes?version=1&format=json&appKey=CkqGN7AtFUTI856TWs64L4hl8Wbqc9bxr5LtYYo3",
+  {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      startX,
+      startY,
+      endX,
+      endY,
+      startName: "출발지",
+      endName: "도착지",
+      reqCoordType: "WGS84GEO",
+      resCoordType: "WGS84GEO"
+    })
+  }
+).then(r => r.json());
+
+console.log("route result", route);
+
+if (!route.features) {
+  console.warn("경로 계산 실패", route);
+  return;
+}
+
+const distance = route.features[0].properties.totalDistance;
+const time = route.features[0].properties.totalTime;
+
+      setRouteInfo({
+        distance,
+        time
+      });
+
+      // 4️⃣ 지도 경로 그리기
+      route.features.forEach(item => {
+
+        if (item.geometry.type === "LineString") {
+
+          const path = item.geometry.coordinates.map(c =>
+            new window.Tmapv2.LatLng(c[1], c[0])
+          );
+
+          new window.Tmapv2.Polyline({
+            path,
+            strokeColor: "#2563eb",
+            strokeWeight: 4,
+            map
+          });
+
+        }
+
+      });
+
+    } catch (e) {
+      console.error("경로 계산 실패", e);
+    }
+
+  }
+
+  loadRoute();
+
+}, [
+  confirmOpen,
+  form?.상차지주소,
+  form?.하차지주소,
+  form?.상차지명,
+  form?.하차지명
+]);
 // ===============================
 // 💡 주소/조건 기반 자동 운임 가이드
 // ===============================
@@ -5753,68 +6027,185 @@ if (res?.success) {
   </div>
 )}
 
-{/* ================= 등록 확인 팝업 ================= */}
+{/* ================= 배차요청 확인 팝업 ================= */}
 {confirmOpen && (
-  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]"
+  <div
+    className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]"
     onKeyDown={(e) => {
       if (e.key === "Enter") {
         e.preventDefault();
         document.getElementById("confirm-save-btn")?.click();
       }
     }}
-    tabIndex={0} // Enter 감지 위해 포커스 가능
+    tabIndex={0}
   >
-    <div className="bg-white rounded-xl p-6 w-[380px] shadow-xl border border-gray-200">
-      
-      <h3 className="text-base font-bold mb-4">등록하시겠습니까?</h3>
+    <div className="bg-white rounded-xl shadow-xl w-[1100px] h-[650px] flex overflow-hidden border">
 
-      <div className="text-sm text-gray-700 mb-4 leading-6">
-        <p>거래처: <b>{form.거래처명}</b></p>
-        <p>
-  {form.운행유형 === "왕복"
-    ? `${form.상차지명} ↔ ${form.하차지명}`
-    : `${form.상차지명} → ${form.하차지명}`}
-</p>
-        {isAdmin && (
-          <p>청구운임: <b>{Number(form.청구운임 || 0).toLocaleString()}원</b></p>
-        )}
-      </div>
+      {/* ================= 지도 영역 ================= */}
+      <div className="flex-1 bg-gray-100 relative">
 
+        {/* 실제 지도 */}
+        <div
+          id="route-map"
+          className="absolute inset-0 w-full h-full"
+        />
 
-  {/* ⭐ 즉시공유 */}
-  <button
-    type="button"
-    className="px-3 py-1.5 bg-emerald-600 text-white rounded"
-    onClick={async () => {
-      const text = makeInstantShareText(form);
+        {/* 지도 위 경로 정보 */}
+        <div className="absolute bottom-4 left-4 bg-white px-4 py-3 rounded shadow text-sm space-y-1">
 
-      try {
-        await navigator.clipboard.writeText(text);
-        alert("📋 즉시공유 내용이 복사되었습니다.");
-      } catch {
-        prompt("아래 내용을 복사하세요.", text);
-      }
-    }}
-  >
-    즉시공유
-  </button>
-  
-      <div className="flex justify-end gap-2">
-  <button
-    className="px-3 py-1.5 bg-gray-200 rounded"
-    onClick={() => setConfirmOpen(false)}
-  >
-    취소
-  </button>
-  {/* 기존 저장 */}
-  <button
-    id="confirm-save-btn"
-    className="px-3 py-1.5 bg-blue-600 text-white rounded"
-    onClick={doSave}
-  >
-    확인
-  </button>
+          <div>
+            거리 :
+            <b className="ml-1">
+              {routeInfo
+                ? (routeInfo.distance / 1000).toFixed(1) + " km"
+                : "계산중"}
+            </b>
+          </div>
+
+          <div>
+            소요시간 :
+            <b className="ml-1">
+              {routeInfo
+                ? Math.round(routeInfo.time / 60) + "분"
+                : "계산중"}
+            </b>
+          </div>
+
+          <div className="text-blue-600 font-semibold">
+            예상운임 :
+            <b className="ml-1">
+              {routeInfo
+                ? Math.round((routeInfo.distance / 1000) * 1200).toLocaleString() + "원"
+                : "-"}
+            </b>
+          </div>
+
+        </div>
+
+      </div>  {/* ⭐ 지도 영역 닫기 */}
+
+      {/* ================= 오른쪽 정보 패널 ================= */}
+<div className="w-[360px] border-l p-6 flex flex-col bg-white">
+
+  {/* 제목 */}
+  <h3 className="text-xl font-bold mb-6">
+    배차요청 확인
+  </h3>
+
+  {/* 결제예정금액 */}
+  <div className="text-sm text-gray-500 mb-2">
+    결제예정금액 (VAT별도)
+  </div>
+
+  <div className="text-[34px] font-extrabold text-blue-600 mb-6">
+    <CountUp value={Number(form.청구운임 || 0)} />
+    <span className="ml-1">원~</span>
+  </div>
+
+  {/* 소요시간 */}
+  <div className="flex justify-between items-center text-[15px] mb-2">
+    <span className="text-gray-500">
+      소요시간 (예상)
+    </span>
+
+    <span className="font-semibold text-gray-700">
+      {routeInfo
+        ? Math.round(routeInfo.time / 60) + "분"
+        : "-"}
+    </span>
+  </div>
+
+  {/* 총거리 */}
+  <div className="flex justify-between items-center text-[15px] mb-6">
+    <span className="text-gray-500">
+      총거리 (예상)
+    </span>
+
+    <span className="font-semibold text-gray-700">
+      {routeInfo
+        ? (routeInfo.distance / 1000).toFixed(0) + "km"
+        : "-"}
+    </span>
+  </div>
+
+  <div className="border-b mb-5"></div>
+
+  {/* 상차지 */}
+  <div className="border rounded-lg p-4 mb-3 bg-white shadow-sm">
+
+    <div className="text-sm text-blue-600 font-semibold mb-1">
+      상차지
+    </div>
+
+    <div className="font-semibold text-[15px]">
+      {form.상차지명 || "-"}
+    </div>
+
+    <div className="text-sm text-gray-500 mt-1">
+      {form.상차지주소 || "-"}
+    </div>
+
+  </div>
+
+  {/* 하차지 */}
+  <div className="border rounded-lg p-4 mb-5 bg-white shadow-sm">
+
+    <div className="text-sm text-red-600 font-semibold mb-1">
+      하차지
+    </div>
+
+    <div className="font-semibold text-[15px]">
+      {form.하차지명 || "-"}
+    </div>
+
+    <div className="text-sm text-gray-500 mt-1">
+      {form.하차지주소 || "-"}
+    </div>
+
+  </div>
+
+  {/* 즉시공유 */}
+<button
+  type="button"
+  className="mb-5 py-2.5 bg-emerald-600 text-white rounded font-semibold text-[15px]"
+  onClick={async () => {
+
+    const text = makeFullDetailText(form);
+
+    try {
+      await navigator.clipboard.writeText(text);
+      alert("📋 전체 상세 메시지가 복사되었습니다.");
+    } catch {
+      prompt("아래 내용을 복사하세요.", text);
+    }
+
+  }}
+>
+  즉시공유
+</button>
+
+  {/* 버튼 */}
+  <div className="mt-auto flex gap-3">
+
+    <button
+      className="flex-1 py-2.5 rounded bg-gray-200 font-medium hover:bg-gray-300 transition"
+      onClick={() => setConfirmOpen(false)}
+    >
+      취소
+    </button>
+
+    <button
+      id="confirm-save-btn"
+      className="flex-1 py-2.5 rounded bg-blue-600 text-white font-semibold hover:bg-blue-700 transition"
+      onClick={doSave}
+    >
+      배차요청하기
+    </button>
+
+  </div>
+
 </div>
+
     </div>
   </div>
 )}
