@@ -1388,6 +1388,19 @@ if (!items.length) {
     role = "admin",
     isTest = false,  // ★ 추가!
   }) {
+      React.useEffect(() => {
+    if (window.Tmapv2) return;
+
+const script = document.createElement("script");
+  script.src = "https://apis.openapi.sk.com/tmap/jsv2?version=1&appKey=CkqGN7AtFUTI856TWs64L4hl8Wbqc9bxr5LtYYo3&libraries=services";
+  script.async = true;
+
+    script.onload = () => {
+      console.log("Tmap SDK 로딩 완료");
+    };
+
+    document.head.appendChild(script);
+  }, []);
       const [useNewForm, setUseNewForm] = React.useState(false);
       // ⏱ 상/하차 시간 + 이전/이후 표시용
 function renderTimeWithCond(time, cond) {
@@ -2239,7 +2252,17 @@ const filterPlaces = (q) => {
       운임보정: null,
     };
     
-    const [form, setForm] = React.useState(() => {
+    // ⭐ route-map DOM 생성 대기
+async function waitMapDiv() {
+  for (let i = 0; i < 20; i++) {
+    const el = document.getElementById("route-map");
+    if (el) return el;
+    await new Promise(r => setTimeout(r, 50));
+  }
+  return null;
+}
+
+const [form, setForm] = React.useState(() => {
   try {
     const saved = localStorage.getItem("dispatchForm");
     if (saved) {
@@ -2251,133 +2274,148 @@ const filterPlaces = (q) => {
   } catch {}
   return { ...emptyForm };
 });
-React.useEffect(() => {
 
+React.useEffect(() => {
+if (!confirmOpen) return;
   console.log("useEffect 실행", confirmOpen);
   console.log("주소 확인", form?.상차지주소, form?.하차지주소);
 
-  if (!confirmOpen) return;
-  if (!window.Tmapv2) return;
-
+  if (!window.Tmapv2?.Map) return;
   if (!form?.상차지주소) return;
-if (!form?.하차지주소) return;
-  async function loadRoute() {
-await new Promise(r => setTimeout(r, 120));
-    try {
+  if (!form?.하차지주소) return;
 
-      // 1️⃣ 주소 → 좌표 변환
-      const startAddr = form.상차지주소 || form.상차지명;
-      const endAddr = form.하차지주소 || form.하차지명;
+async function loadRoute() {
+  try {
 
-// 1️⃣ 주소 → 좌표 변환
-const geoStartRes = await fetch(
-  `https://apis.openapi.sk.com/tmap/geo/geocoding?version=1&appKey=CkqGN7AtFUTI856TWs64L4hl8Wbqc9bxr5LtYYo3&address=${encodeURIComponent(startAddr)}`
-);
-
-const geoStart = await geoStartRes.json();
-
-const geoEndRes = await fetch(
-  `https://apis.openapi.sk.com/tmap/geo/geocoding?version=1&appKey=CkqGN7AtFUTI856TWs64L4hl8Wbqc9bxr5LtYYo3&address=${encodeURIComponent(endAddr)}`
-);
-
-const geoEnd = await geoEndRes.json();
-
-// 좌표 추출
-const startCoord = geoStart?.coordinateInfo?.coordinate?.[0];
-const endCoord = geoEnd?.coordinateInfo?.coordinate?.[0];
-
-if (!startCoord || !endCoord) {
-  console.warn("좌표 변환 실패", geoStart, geoEnd);
-  return;
-}
-
-const startX = startCoord.lon;
-const startY = startCoord.lat;
-
-const endX = endCoord.lon;
-const endY = endCoord.lat;
-
-      // 2️⃣ 지도 생성
-const mapDiv = document.getElementById("route-map");
+    // ⭐ route-map DOM 대기
+const mapDiv = await waitMapDiv();
 if (!mapDiv) return;
 
-mapDiv.innerHTML = "";
-
-if (!window.Tmapv2) {
-  console.error("Tmap SDK 로딩 안됨");
+if (mapDiv.clientWidth === 0 || mapDiv.clientHeight === 0) {
+  console.warn("지도 div size 0 → 지도 생성 중단");
   return;
 }
 
-const map = new window.Tmapv2.Map("route-map", {
-  center: new window.Tmapv2.LatLng(startY, startX),
-  width: "100%",
-  height: "100%",
-  zoom: 10
-});
+    const startAddr = form.상차지주소 || form.상차지명;
+    const endAddr = form.하차지주소 || form.하차지명;
 
-      // 3️⃣ 경로 계산
-const route = await fetch(
-  "https://apis.openapi.sk.com/tmap/routes?version=1&format=json&appKey=CkqGN7AtFUTI856TWs64L4hl8Wbqc9bxr5LtYYo3",
-  {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      startX,
-      startY,
-      endX,
-      endY,
-      startName: "출발지",
-      endName: "도착지",
-      reqCoordType: "WGS84GEO",
-      resCoordType: "WGS84GEO"
-    })
-  }
-).then(r => r.json());
+    const geocoder = new window.Tmapv2.services.Geocoder();
 
-console.log("route result", route);
+    // 1️⃣ 출발지 좌표
+    geocoder.fullAddrGeo(
+      { fullAddr: startAddr },
+      function(startResult) {
 
-if (!route.features) {
-  console.warn("경로 계산 실패", route);
+        if (!startResult?.coordinateInfo?.coordinate?.length) {
+  console.warn("출발지 좌표 실패", startResult);
   return;
 }
 
-const distance = route.features[0].properties.totalDistance;
-const time = route.features[0].properties.totalTime;
+        // 2️⃣ 도착지 좌표
+        geocoder.fullAddrGeo(
+          { fullAddr: endAddr },
+          async function(endResult) {
 
-      setRouteInfo({
-        distance,
-        time
-      });
+            try {
 
-      // 4️⃣ 지도 경로 그리기
-      route.features.forEach(item => {
+              if (!endResult?.coordinateInfo?.coordinate?.length) {
+  console.warn("도착지 좌표 실패", endResult);
+  return;
+}
 
-        if (item.geometry.type === "LineString") {
+              const startCoord = startResult.coordinateInfo.coordinate[0];
+const endCoord = endResult.coordinateInfo.coordinate[0];
 
-          const path = item.geometry.coordinates.map(c =>
-            new window.Tmapv2.LatLng(c[1], c[0])
-          );
+              const startX = startCoord.lon;
+              const startY = startCoord.lat;
 
-          new window.Tmapv2.Polyline({
-            path,
-            strokeColor: "#2563eb",
-            strokeWeight: 4,
-            map
-          });
+              const endX = endCoord.lon;
+              const endY = endCoord.lat;
 
-        }
+              console.log("start", startX, startY);
+              console.log("end", endX, endY);
 
-      });
+              // ⭐ 지도 생성
+              mapDiv.innerHTML = "";
 
-    } catch (e) {
-      console.error("경로 계산 실패", e);
-    }
+              const map = new window.Tmapv2.Map("route-map", {
+                center: new window.Tmapv2.LatLng(startY, startX),
+                width: "100%",
+                height: "100%",
+                zoom: 11
+              });
 
+              // ⭐ 경로 계산
+              const route = await fetch(
+                "https://apis.openapi.sk.com/tmap/routes?version=1&format=json",
+                {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "appKey": "CkqGN7AtFUTI856TWs64L4hl8Wbqc9bxr5LtYYo3"
+                  },
+                  body: JSON.stringify({
+                    startX,
+                    startY,
+                    endX,
+                    endY,
+                    startName: "출발지",
+                    endName: "도착지",
+                    reqCoordType: "WGS84GEO",
+                    resCoordType: "WGS84GEO"
+                  })
+                }
+              ).then(r => r.json());
+
+              if (!route.features) {
+                console.warn("경로 계산 실패", route);
+                return;
+              }
+
+              const distance = route.features[0].properties.totalDistance;
+              const time = route.features[0].properties.totalTime;
+
+              setRouteInfo({
+                distance,
+                time
+              });
+
+              // ⭐ 경로 그리기
+              route.features.forEach(item => {
+
+                if (item.geometry.type === "LineString") {
+
+                  const path = item.geometry.coordinates.map(c =>
+                    new window.Tmapv2.LatLng(c[1], c[0])
+                  );
+
+                  new window.Tmapv2.Polyline({
+                    path,
+                    strokeColor: "#2563eb",
+                    strokeWeight: 4,
+                    map
+                  });
+
+                }
+
+              });
+
+            } catch (err) {
+              console.error("경로 계산 실패", err);
+            }
+
+          }
+        );
+
+      }
+    );
+
+  } catch (e) {
+    console.error("지도 로딩 실패", e);
   }
 
-  loadRoute();
+}
+  setTimeout(loadRoute, 200);
 
 }, [
   confirmOpen,
@@ -5818,7 +5856,7 @@ if (res?.success) {
     {/* Trend Graph */}
     <div className="bg-white border border-gray-200 rounded-xl p-3 mb-6">
       <div className="text-[11px] text-gray-600 mb-2">시간대별 요청건수</div>
-      <div className="h-[110px]">
+      <div className="h-[110px] min-h-[110px]">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={trendData}>
             <CartesianGrid strokeDasharray="3 3" />
@@ -6008,13 +6046,14 @@ if (res?.success) {
     <div className="bg-white rounded-xl shadow-xl w-[1100px] h-[650px] flex overflow-hidden border">
 
       {/* ================= 지도 영역 ================= */}
-      <div className="flex-1 bg-gray-100 relative">
+      <div className="flex-1 bg-gray-100 relative min-h-[320px]">
 
         {/* 실제 지도 */}
-        <div
-          id="route-map"
-          className="absolute inset-0 w-full h-full"
-        />
+       <div
+  id="route-map"
+  className="absolute inset-0 w-full h-full"
+  style={{ minHeight: "400px" }}
+/>
 
         {/* 지도 위 경로 정보 */}
         <div className="absolute bottom-4 left-4 bg-white px-4 py-3 rounded shadow text-sm space-y-1">

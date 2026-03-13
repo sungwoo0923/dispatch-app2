@@ -1,17 +1,4 @@
 import { useState, useMemo, useEffect, useRef } from "react";
-// ✅ 서버 카카오 경로 계산 (컴포넌트 밖!)
-const calcRouteByServer = async (fromAddr, toAddr) => {
-  const res = await fetch("/api/route-calc", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ fromAddr, toAddr }),
-  });
-
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || "경로 계산 실패");
-  return data;
-};
-
 // DispatchFormNew.jsx
 const VEHICLE_TYPES = [
   "라보/다마스",
@@ -29,7 +16,7 @@ const VEHICLE_TYPES = [
 
 const LOAD_TYPES = ["지게차", "수작업", "직접수작업", "수도움","크레인"];
 const PAY_TYPES = ["계산서", "착불","선불", "손실","개인","기타"];
-const DISPATCH_TYPES = ["24시", "직접배차", "인성","24시(외주업체)"];
+const DISPATCH_TYPES = ["24시", "직접배차", "인성","2고정기사"];
 function isLikelyFullAddress(addr) {
   return /\d/.test(addr) && addr.length >= 8;
 }
@@ -142,6 +129,81 @@ const [pendingPlate, setPendingPlate] = useState("");
   durationMin: null,
   baseFare: 0,
 });
+// ===============================
+// 📏 TMAP 거리 계산
+// ===============================
+// ===============================
+// 📏 TMAP 거리 계산 (서버 API 호출)
+// ===============================
+const calcTmapRoute = async (startAddr, endAddr) => {
+  try {
+
+    const res = await fetch("/api/route-calc", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        fromAddr: startAddr,
+        toAddr: endAddr
+      })
+    });
+
+    if (!res.ok) {
+      throw new Error("서버 거리 계산 실패");
+    }
+
+    const data = await res.json();
+
+    return {
+      distanceKm: data.distanceKm,
+      durationMin: data.durationMin
+    };
+
+  } catch (e) {
+    console.error("TMAP 거리 계산 실패", e);
+    throw e;
+  }
+};
+// 상차/하차 주소 변경 시 거리 계산
+useEffect(() => {
+
+  if (!form.상차지주소 || !form.하차지주소) return;
+
+  const timer = setTimeout(async () => {
+
+    try {
+
+      const result = await calcTmapRoute(
+        form.상차지주소,
+        form.하차지주소
+      );
+
+      setRouteError(null);
+
+      setFareResult(prev => ({
+        ...prev,
+        distanceKm: result.distanceKm,
+        durationMin: result.durationMin
+      }));
+
+    } catch (e) {
+
+      setRouteError("거리 계산 실패");
+
+      setFareResult(prev => ({
+        ...prev,
+        distanceKm: null,
+        durationMin: null
+      }));
+
+    }
+
+  }, 600);
+
+  return () => clearTimeout(timer);
+
+}, [form.상차지주소, form.하차지주소]);
 const handleResetAll = () => {
   const today = getToday();
 
@@ -203,33 +265,6 @@ setFareResult((prev) => ({
 }));
 
   onChange("청구운임", baseFare);
-};
-// ===============================
-// 📏 상차/하차 주소 기반 자동 거리 계산
-// ===============================
-const handleAutoRouteCalc = async () => {
-  if (!form.상차지주소 || !form.하차지주소) return;
-
-  try {
-    const result = await calcRouteByServer(
-      form.상차지주소,
-      form.하차지주소
-    );
-
-    setRouteError(null);
-    setFareResult(prev => ({
-      ...prev,
-      distanceKm: result.distanceKm,
-      durationMin: result.durationMin,
-    }));
-  } catch (e) {
-    setRouteError("주소 기반 거리 계산 실패");
-    setFareResult(prev => ({
-      ...prev,
-      distanceKm: null,
-      durationMin: null,
-    }));
-  }
 };
  const checkDriverMatch = () => {
     const plate = normalizePlate(form.차량번호 || "");
@@ -434,18 +469,6 @@ useEffect(() => {
     document.removeEventListener("keydown", keyHandler);
   };
 }, []);
-// 상차/하차 주소 바뀌면 자동 거리 계산
-useEffect(() => {
-  if (!form.상차지주소 || !form.하차지주소) return;
-
-  const t = setTimeout(() => {
-    handleAutoRouteCalc();
-  }, 800); // ⭐ 중요
-
-  return () => clearTimeout(t);
-}, [form.상차지주소, form.하차지주소]);
-
-
   return (
     <div className="grid grid-cols-[1fr_minmax(420px,520px)] gap-10">
           {showNewClientModal && (
