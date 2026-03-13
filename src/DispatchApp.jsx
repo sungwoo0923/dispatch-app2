@@ -3053,7 +3053,7 @@ function parseStops(text = "") {
   if (!raw) return [];
 
   // ① "1.원진 2.우리유통" / "1 원진 2 우리유통"
-  const regex = /(\d+)\s*\.?\s*([^\d]+)/g;
+  const regex = /(\d+)\.\s*([^\d]+)/g;
   const matches = [...raw.matchAll(regex)];
 
   if (matches.length > 0) {
@@ -3175,16 +3175,13 @@ function makeFareDedupKey(row) {
   const fare = Number(String(row.청구운임 || "0").replace(/[^\d]/g, ""));
 
   return [
-    normalizeKey(row.상차지명),
-    normalizeKey(row.하차지명),
+    row.상차지명?.trim(),
+row.하차지명?.trim(),
     pallet ?? "",              // ⭐ 파렛트 수
     row.차량종류 || "",        // ⭐ 차량종류
     fare                        // ⭐ 청구운임
   ].join("|");
 }
-
-
-
 const palletFareRules = {
   double: [ // 2곳 하차 (푸드플래닛 + 신미)
     { min: 4, max: 5, fare: 350000 },
@@ -3373,10 +3370,10 @@ const pastHistoryList = fullData
     if (inputDropStops.length !== rowDropStops.length) return false;
 
     const sameStops = (a, b) =>
-      a.length === b.length &&
-      a.every((name, i) =>
-        normalizeKey(name) === normalizeKey(b[i])
-      );
+  a.length === b.length &&
+  a.every((name, i) =>
+    name.trim() === b[i].trim()
+  );
 
     if (!sameStops(inputPickupStops, rowPickupStops)) return false;
     if (!sameStops(inputDropStops, rowDropStops)) return false;
@@ -3499,7 +3496,7 @@ if (inputDropStops.length !== rowDropStops.length) return false;
 const sameStops = (a, b) =>
   a.length === b.length &&
   a.every((name, i) =>
-    normalizeKey(name) === normalizeKey(b[i])
+    name.trim() === b[i].trim()
   );
 if (!sameStops(inputPickupStops, rowPickupStops)) return false;
 if (!sameStops(inputDropStops, rowDropStops)) return false;
@@ -3511,10 +3508,14 @@ if (!sameStops(inputDropStops, rowDropStops)) return false;
 
 // ✅ 상차 / 하차 "완전 동일"만 허용
 const matchPickup =
-  normalizeKey(rPickup) === normalizeKey(pickup);
+  (r.상차지Id && form.상차지Id)
+    ? r.상차지Id === form.상차지Id
+    : rPickup === pickup;
 
 const matchDrop =
-  normalizeKey(rDrop) === normalizeKey(drop);
+  (r.하차지Id && form.하차지Id)
+    ? r.하차지Id === form.하차지Id
+    : rDrop === drop;
 
 if (!matchPickup || !matchDrop) return false;
 const matchVehicle =
@@ -3566,41 +3567,6 @@ if (!matchVehicle) return false;
         }
         return matchVehicle && matchTon && matchCargo;
       });
-      if (!filtered.length) {
-  filtered = fullData.filter((r) => {
-
-    // ⭐⭐⭐ 반드시 동일하게 ⭐⭐⭐
-    if ((r.운행유형 || "편도") !== form.운행유형) return false;
-    if (!r.상차지명 || !r.하차지명) return false;
-
-    // 🔴 경유/단일 판별 다시 강제
-    const inputPickupStops = parseStops(pickup);
-    const inputDropStops   = parseStops(drop);
-    const rowPickupStops   = parseStops(r.상차지명);
-    const rowDropStops     = parseStops(r.하차지명);
-
-    if (inputPickupStops.length !== rowPickupStops.length) return false;
-    if (inputDropStops.length !== rowDropStops.length) return false;
-
-    const sameStops = (a, b) =>
-      a.length === b.length &&
-      a.every((name, i) =>
-        normalizeKey(name) === normalizeKey(b[i])
-      );
-    if (!sameStops(inputPickupStops, rowPickupStops)) return false;
-    if (!sameStops(inputDropStops, rowDropStops)) return false;
-
-    // 그 다음에야 문자열 비교
-    const rPickup = String(r.상차지명).trim();
-    const rDrop = String(r.하차지명).trim();
-
-const sameRoute =
-  normalizeKey(rPickup) === normalizeKey(pickup) &&
-  normalizeKey(rDrop) === normalizeKey(drop);
-if (!sameRoute) return false;
-return true;
-  });
-}
       if (!filtered.length) {
         alert("유사한 과거 운임 데이터를 찾지 못했습니다.");
         return;

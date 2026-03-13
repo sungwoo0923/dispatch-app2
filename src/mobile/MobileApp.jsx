@@ -3629,7 +3629,7 @@ const dropOptions = useMemo(() => {
                 <option value="24시">24시</option>
                 <option value="직접배차">직접배차</option>
                 <option value="인성">인성</option>
-                <option value="24시(외주업체)">24시(외주업체)</option>
+                <option value="고정기사">고정기사</option>
               </select>
             </div>
           }
