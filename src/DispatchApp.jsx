@@ -1388,19 +1388,7 @@ if (!items.length) {
     role = "admin",
     isTest = false,  // ★ 추가!
   }) {
-      React.useEffect(() => {
-    if (window.Tmapv2) return;
 
-const script = document.createElement("script");
-  script.src = "https://apis.openapi.sk.com/tmap/jsv2?version=1&appKey=CkqGN7AtFUTI856TWs64L4hl8Wbqc9bxr5LtYYo3&libraries=services";
-  script.async = true;
-
-    script.onload = () => {
-      console.log("Tmap SDK 로딩 완료");
-    };
-
-    document.head.appendChild(script);
-  }, []);
       const [useNewForm, setUseNewForm] = React.useState(false);
       // ⏱ 상/하차 시간 + 이전/이후 표시용
 function renderTimeWithCond(time, cond) {
@@ -2251,18 +2239,7 @@ const filterPlaces = (q) => {
       긴급: false,
       운임보정: null,
     };
-    
-    // ⭐ route-map DOM 생성 대기
-async function waitMapDiv() {
-  for (let i = 0; i < 20; i++) {
-    const el = document.getElementById("route-map");
-    if (el) return el;
-    await new Promise(r => setTimeout(r, 50));
-  }
-  return null;
-}
-
-const [form, setForm] = React.useState(() => {
+    const [form, setForm] = React.useState(() => {
   try {
     const saved = localStorage.getItem("dispatchForm");
     if (saved) {
@@ -2274,156 +2251,136 @@ const [form, setForm] = React.useState(() => {
   } catch {}
   return { ...emptyForm };
 });
+    // ⭐ route-map DOM 생성 대기
+async function waitMapDiv() {
+  for (let i = 0; i < 20; i++) {
+    const el = document.getElementById("route-map");
+    if (el) return el;
+    await new Promise(r => setTimeout(r, 50));
+  }
+  return null;
+}
 
 React.useEffect(() => {
-if (!confirmOpen) return;
-  console.log("useEffect 실행", confirmOpen);
-  console.log("주소 확인", form?.상차지주소, form?.하차지주소);
 
-  if (!window.Tmapv2?.Map) return;
-  if (!form?.상차지주소) return;
-  if (!form?.하차지주소) return;
+  if (!confirmOpen || !form?.상차지주소 || !form?.하차지주소) return;
 
-async function loadRoute() {
-  try {
+  const renderTmap = async () => {
 
-    // ⭐ route-map DOM 대기
-const mapDiv = await waitMapDiv();
-if (!mapDiv) return;
+    try {
 
-if (mapDiv.clientWidth === 0 || mapDiv.clientHeight === 0) {
-  console.warn("지도 div size 0 → 지도 생성 중단");
-  return;
-}
+      console.log("📍 지도 렌더 시작");
 
-    const startAddr = form.상차지주소 || form.상차지명;
-    const endAddr = form.하차지주소 || form.하차지명;
+      const mapDiv = await waitMapDiv();
+      if (!mapDiv) return;
 
-    const geocoder = new window.Tmapv2.services.Geocoder();
+      // ⭐ 주소 → 좌표 변환 (Tmap REST API)
+      const getCoords = async (addr) => {
 
-    // 1️⃣ 출발지 좌표
-    geocoder.fullAddrGeo(
-      { fullAddr: startAddr },
-      function(startResult) {
+        const url =
+          "https://apis.openapi.sk.com/tmap/geo/fullAddrGeo" +
+          "?version=1" +
+          "&format=json" +
+          "&fullAddr=" +
+          encodeURIComponent(addr);
 
-        if (!startResult?.coordinateInfo?.coordinate?.length) {
-  console.warn("출발지 좌표 실패", startResult);
-  return;
-}
-
-        // 2️⃣ 도착지 좌표
-        geocoder.fullAddrGeo(
-          { fullAddr: endAddr },
-          async function(endResult) {
-
-            try {
-
-              if (!endResult?.coordinateInfo?.coordinate?.length) {
-  console.warn("도착지 좌표 실패", endResult);
-  return;
-}
-
-              const startCoord = startResult.coordinateInfo.coordinate[0];
-const endCoord = endResult.coordinateInfo.coordinate[0];
-
-              const startX = startCoord.lon;
-              const startY = startCoord.lat;
-
-              const endX = endCoord.lon;
-              const endY = endCoord.lat;
-
-              console.log("start", startX, startY);
-              console.log("end", endX, endY);
-
-              // ⭐ 지도 생성
-              mapDiv.innerHTML = "";
-
-              const map = new window.Tmapv2.Map("route-map", {
-                center: new window.Tmapv2.LatLng(startY, startX),
-                width: "100%",
-                height: "100%",
-                zoom: 11
-              });
-
-              // ⭐ 경로 계산
-              const route = await fetch(
-                "https://apis.openapi.sk.com/tmap/routes?version=1&format=json",
-                {
-                  method: "POST",
-                  headers: {
-                    "Content-Type": "application/json",
-                    "appKey": "CkqGN7AtFUTI856TWs64L4hl8Wbqc9bxr5LtYYo3"
-                  },
-                  body: JSON.stringify({
-                    startX,
-                    startY,
-                    endX,
-                    endY,
-                    startName: "출발지",
-                    endName: "도착지",
-                    reqCoordType: "WGS84GEO",
-                    resCoordType: "WGS84GEO"
-                  })
-                }
-              ).then(r => r.json());
-
-              if (!route.features) {
-                console.warn("경로 계산 실패", route);
-                return;
-              }
-
-              const distance = route.features[0].properties.totalDistance;
-              const time = route.features[0].properties.totalTime;
-
-              setRouteInfo({
-                distance,
-                time
-              });
-
-              // ⭐ 경로 그리기
-              route.features.forEach(item => {
-
-                if (item.geometry.type === "LineString") {
-
-                  const path = item.geometry.coordinates.map(c =>
-                    new window.Tmapv2.LatLng(c[1], c[0])
-                  );
-
-                  new window.Tmapv2.Polyline({
-                    path,
-                    strokeColor: "#2563eb",
-                    strokeWeight: 4,
-                    map
-                  });
-
-                }
-
-              });
-
-            } catch (err) {
-              console.error("경로 계산 실패", err);
-            }
-
+        const res = await fetch(url, {
+          method: "GET",
+          headers: {
+            Accept: "application/json",
+            appKey: "CkqGN7AtFUTI856TWs64L4hl8Wbqc9bxr5LtYYo3"
           }
-        );
+        });
 
-      }
-    );
+        const data = await res.json();
 
-  } catch (e) {
-    console.error("지도 로딩 실패", e);
-  }
+        const coord = data?.coordinateInfo?.coordinate?.[0];
 
-}
-  setTimeout(loadRoute, 200);
+        if (!coord) return null;
 
-}, [
-  confirmOpen,
-  form?.상차지주소,
-  form?.하차지주소,
-  form?.상차지명,
-  form?.하차지명
-]);
+        return {
+          lat: parseFloat(coord.lat),
+          lon: parseFloat(coord.lon)
+        };
+      };
+
+      const start = await getCoords(form.상차지주소 || form.상차지명);
+      const end = await getCoords(form.하차지주소 || form.하차지명);
+
+      if (!start || !end) return;
+
+      mapDiv.innerHTML = "";
+
+      const map = new window.Tmapv2.Map("route-map", {
+        center: new window.Tmapv2.LatLng(start.lat, start.lon),
+        width: "100%",
+        height: "100%",
+        zoom: 11
+      });
+
+      const startLatLng = new window.Tmapv2.LatLng(start.lat, start.lon);
+      const endLatLng = new window.Tmapv2.LatLng(end.lat, end.lon);
+
+      // ⭐ 마커
+      new window.Tmapv2.Marker({
+        position: startLatLng,
+        map
+      });
+
+      new window.Tmapv2.Marker({
+        position: endLatLng,
+        map
+      });
+
+      // ⭐ 직선 경로
+      new window.Tmapv2.Polyline({
+        path: [startLatLng, endLatLng],
+        strokeColor: "#2563eb",
+        strokeWeight: 5,
+        map
+      });
+
+      // ⭐ 거리 계산 (Haversine)
+      const R = 6371;
+      const dLat = (end.lat - start.lat) * Math.PI / 180;
+      const dLon = (end.lon - start.lon) * Math.PI / 180;
+
+      const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(start.lat * Math.PI / 180) *
+        Math.cos(end.lat * Math.PI / 180) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+      const km = Math.round(R * c);
+
+      // ⭐ 시간 계산 (평균 60km/h)
+      const time = Math.round((km / 60) * 60);
+
+      setRouteInfo({
+        distance: km,
+        time
+      });
+
+      const bounds = new window.Tmapv2.LatLngBounds();
+      bounds.extend(startLatLng);
+      bounds.extend(endLatLng);
+      map.fitBounds(bounds);
+
+      console.log("✨ 지도 표시 완료");
+
+    } catch (err) {
+
+      console.error("❌ 경로 지도 실패:", err);
+
+    }
+
+  };
+
+  setTimeout(renderTmap, 200);
+
+}, [confirmOpen, form?.상차지주소, form?.하차지주소]);
 // ===============================
 // 💡 주소/조건 기반 자동 운임 가이드
 // ===============================
@@ -2459,17 +2416,12 @@ React.useEffect(() => {
 // ⭐ 폼 최초 로딩 시 날짜 자동 보정
 // ===============================
 React.useEffect(() => {
-  const today = _todayStr();
-
-  if (form.상차일 && form.상차일 < today) {
-    setForm((p) => ({
-      ...p,
-      등록일: today,
-      상차일: today,
-      하차일: today,
-    }));
-  }
-  // eslint-disable-next-line
+  setForm((p) => ({
+    ...p,
+    등록일: _todayStr(),
+    상차일: _todayStr(),
+    하차일: _todayStr(),
+  }));
 }, []);
 // ===============================
 // 💰 주소 기반 전국 평균 운임 계산 (정확 톤수 기준)
@@ -3579,30 +3531,28 @@ if (!matchVehicle) return false;
         const normRowCargo = norm(rowCargo);
 
         if (inputPallets != null) {
-          const rowPallets =
-            extractPalletNum(rowCargo) ?? extractLeadingNum(rowCargo);
-          if (rowPallets != null) {
-            matchCargo = Math.abs(rowPallets - inputPallets) <= 1;
-          } else {
-            matchCargo = false;
-          }
-        } else if (inputCargoNum != null) {
-          const rowNum = extractLeadingNum(rowCargo);
-          if (rowNum != null) {
-            matchCargo = Math.abs(rowNum - inputCargoNum) <= 1;
-          } else {
-            matchCargo = false;
-          }
-        } else {
-          if (
-            normRowCargo.includes(normInputCargo) ||
-            normInputCargo.includes(normRowCargo)
-          ) {
-            matchCargo = true;
-          } else {
-            matchCargo = matchTon;
-          }
-        }
+  const rowPallets =
+    extractPalletNum(rowCargo) ?? extractLeadingNum(rowCargo);
+
+  // ⭐ 파렛트 수량이 달라도 후보에 포함
+  matchCargo = true;
+
+} else if (inputCargoNum != null) {
+  const rowNum = extractLeadingNum(rowCargo);
+
+  // ⭐ 박스 수량 달라도 후보 포함
+  matchCargo = true;
+
+} else {
+  if (
+    normRowCargo.includes(normInputCargo) ||
+    normInputCargo.includes(normRowCargo)
+  ) {
+    matchCargo = true;
+  } else {
+    matchCargo = matchTon;
+  }
+}
         return matchVehicle && matchTon && matchCargo;
       });
       if (!filtered.length) {
@@ -5543,7 +5493,9 @@ if (res?.success) {
       return alert("복사할 항목을 선택하세요.");
 
     const r = copySelected[0];
-    const today = new Date().toISOString().slice(0, 10);
+    const now = new Date();
+now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+const today = now.toISOString().slice(0, 10);
 
     // 1️⃣ 핵심: 담당자/번호 포함 복사 (단일 진입점)
     applyCopy(r);
@@ -6046,48 +5998,52 @@ if (res?.success) {
     <div className="bg-white rounded-xl shadow-xl w-[1100px] h-[650px] flex overflow-hidden border">
 
       {/* ================= 지도 영역 ================= */}
-      <div className="flex-1 bg-gray-100 relative min-h-[320px]">
+<div className="flex-1 bg-gray-200 relative" style={{ minWidth: '500px', height: '500px' }}>
+  
+  {/* 실제 지도: id="route-map" 요소에 반드시 높이가 있어야 함 */}
+  <div
+    id="route-map"
+    className="w-full h-full"
+    style={{ 
+      width: '100%', 
+      height: '100%', 
+      position: 'absolute', 
+      top: 0, 
+      left: 0,
+      backgroundColor: '#eeeeee' 
+    }}
+  />
 
-        {/* 실제 지도 */}
-       <div
-  id="route-map"
-  className="absolute inset-0 w-full h-full"
-  style={{ minHeight: "400px" }}
-/>
+  {/* 지도 위 경로 정보 (z-index 추가하여 지도 위로 띄움) */}
+  <div 
+    className="absolute bottom-6 left-6 bg-white/95 backdrop-blur px-5 py-4 rounded-xl shadow-2xl text-sm space-y-2 border border-gray-200"
+    style={{ zIndex: 1001 }}
+  >
+    <div className="flex justify-between items-center gap-6">
+      <span className="text-gray-500 font-medium">총 거리</span>
+      <b className="text-gray-900 text-base">
+        {routeInfo ? (routeInfo.distance / 1000).toFixed(1) + " km" : "계산 중..."}
+      </b>
+    </div>
 
-        {/* 지도 위 경로 정보 */}
-        <div className="absolute bottom-4 left-4 bg-white px-4 py-3 rounded shadow text-sm space-y-1">
+    <div className="flex justify-between items-center gap-6">
+      <span className="text-gray-500 font-medium">예상 시간</span>
+      <b className="text-gray-900 text-base">
+        {routeInfo ? Math.round(routeInfo.time / 60) + "분" : "계산 중..."}
+      </b>
+    </div>
 
-          <div>
-            거리 :
-            <b className="ml-1">
-              {routeInfo
-                ? (routeInfo.distance / 1000).toFixed(1) + " km"
-                : "계산중"}
-            </b>
-          </div>
-
-          <div>
-            소요시간 :
-            <b className="ml-1">
-              {routeInfo
-                ? Math.round(routeInfo.time / 60) + "분"
-                : "계산중"}
-            </b>
-          </div>
-
-          <div className="text-blue-600 font-semibold">
-            예상운임 :
-            <b className="ml-1">
-              {routeInfo
-                ? Math.round((routeInfo.distance / 1000) * 1200).toLocaleString() + "원"
-                : "-"}
-            </b>
-          </div>
-
-        </div>
-
-      </div>  {/* ⭐ 지도 영역 닫기 */}
+    <div className="pt-2 border-t border-gray-100 flex justify-between items-center gap-6 text-blue-600">
+      <span className="font-bold">예상 운임</span>
+      <b className="text-lg">
+        {routeInfo 
+          ? Math.round((routeInfo.distance / 1000) * 1200).toLocaleString() + "원" 
+          : "-"}
+      </b>
+    </div>
+  </div>
+</div>
+{/* ⭐ 지도 영역 닫기 */}
 
       {/* ================= 오른쪽 정보 패널 ================= */}
 <div className="w-[360px] border-l p-6 flex flex-col bg-white">

@@ -3,7 +3,6 @@
   <head>
     <meta charset="UTF-8" />
 
-    <!-- 모바일 화면 고정 -->
     <meta
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
@@ -11,39 +10,33 @@
 
     <title>dispatch-app</title>
 
-    <!-- 🔥 Pretendard 폰트 추가 -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" />
 
-    <!-- ================= PWA 필수 ================= -->
-    <!-- Manifest -->
-    <link rel="manifest" href="/manifest.json" />
-
-    <!-- iOS PWA 설정 -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="dispatch-app" />
 
-    <!-- iOS 홈화면 아이콘 -->
     <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
-
-    <!-- 파비콘 -->
     <link rel="icon" href="/icons/icon-192x192.png" />
+    <link rel="manifest" href="/manifest.json" />
+
+    <!-- ⭐ Tmap SDK -->
+    <script src="https://apis.openapi.sk.com/tmap/jsv2?version=1&appKey=CkqGN7AtFUTI856TWs64L4hl8Wbqc9bxr5LtYYo3"></script>
+
   </head>
 
-<body>
+  <body>
 
-<div id="root"></div>
+    <div id="root"></div>
 
-<!-- React -->
-<script type="module" src="/src/main.jsx"></script>
+    <!-- 카카오 지도 -->
+    <script
+      src="//dapi.kakao.com/v2/maps/sdk.js?appkey=bd50dacf0c9ef4d03e905a2e14e7279a&libraries=services"
+      defer
+    ></script>
 
-<!-- Tmap SDK -->
-  <script src="https://apis.openapi.sk.com/tmap/jsv2?version=1&appKey=CkqGN7AtFUTI856TWs64L4hl8Wbqc9bxr5LtYYo3"></script>
-<!-- 카카오 지도 -->
-<script
-  src="//dapi.kakao.com/v2/maps/sdk.js?appkey=bd50dacf0c9ef4d03e905a2e14e7279a&libraries=services"
-  defer
-></script>
+    <!-- React -->
+    <script type="module" src="/src/main.jsx"></script>
 
-</body>
+  </body>
 </html>
