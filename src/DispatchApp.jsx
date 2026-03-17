@@ -3866,7 +3866,7 @@ const inputCls =
 const labelCls =
   "block text-[15px] font-semibold text-black mb-1";
     const reqStar = <span className="text-red-500">*</span>;
-    const AutoBadge = ({ show }) => show ? <span className="ml-2 text-[12px] text-emerald-700">(자동매칭)</span> : null;
+    const AutoBadge = ({ show }) => show ? <span className="ml-2 text-[12px] text-emerald-700">(매칭)</span> : null;
 function FuelPriceWidget({ apiKey }) {
   const [prices, setPrices] = React.useState([]);
 
