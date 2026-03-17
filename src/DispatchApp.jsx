@@ -1119,6 +1119,8 @@ useEffect(() => {
           <Settlement
             dispatchData={dispatchData}
             fixedRows={fixedRows}   // ★ 추가
+            clients={clients}
+  places={places}
           />
         )}
 
@@ -9453,53 +9455,82 @@ setUrgentPopup([]);
       <div className="p-10 space-y-10">
 
         {/* HEADER */}
-        <div className="flex justify-between items-center border-b pb-5">
+<div className="flex justify-between items-center border-b pb-5">
   <h2 className="text-2xl font-bold text-slate-800">
-    오더 복사 패널
+    오더 복사 / 수정 패널
   </h2>
 
   <div className="flex gap-3 items-center">
+
+    {/* 수정 저장 */}
     <button
-onClick={async () => {
+      onClick={async () => {
 
-const payload = {
-  ...copyTarget,
+        if (!copyTarget?._id) {
+          alert("수정할 오더 ID가 없습니다.");
+          return;
+        }
 
-  createdAt: Date.now(),
-  updatedAt: Date.now(),
+        const payload = {
+          ...copyTarget,
+          updatedAt: Date.now(),
+        };
 
-  배차상태:
-    copyTarget?.차량번호?.trim()
-      ? "배차완료"
-      : "배차중",
+        await patchDispatch(copyTarget._id, payload);
 
-업체전달상태: "미전달",
-};
+        alert("오더 수정 완료");
 
-// ⭐ 기존 id 제거 (새 오더 생성)
-delete payload._id;
+        setCopyPanelOpen(false);
 
-  await addDispatch(payload);
+      }}
+      className="px-4 py-2 bg-green-600 text-white rounded-lg font-semibold"
+    >
+      수정 저장
+    </button>
 
-  alert("복사 등록 완료");
+    {/* 복사 등록 */}
+    <button
+      onClick={async () => {
 
-  setCopyPanelOpen(false);
+        const payload = {
+          ...copyTarget,
 
-}}
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+
+          배차상태:
+            copyTarget?.차량번호?.trim()
+              ? "배차완료"
+              : "배차중",
+
+          업체전달상태: "미전달",
+        };
+
+        // ⭐ 기존 id 제거 (새 오더 생성)
+        delete payload._id;
+
+        await addDispatch(payload);
+
+        alert("복사 등록 완료");
+
+        setCopyPanelOpen(false);
+
+      }}
       className="px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold"
     >
       복사 등록
     </button>
 
+    {/* 닫기 */}
     <button
       onClick={() => setCopyPanelOpen(false)}
       className="text-slate-500 hover:text-red-500 text-xl"
     >
       ✕
     </button>
+
   </div>
 </div>
-
         {/* ================= 상하차 정보 ================= */}
 <section className="bg-white p-8 rounded-xl shadow-sm">
   <h3 className="text-lg font-bold text-slate-700 mb-8 border-b pb-3">
@@ -9532,6 +9563,20 @@ delete payload._id;
           ))}
         </select>
       </Field>
+      <Field label="상차방법">
+  <select
+    className="inputStyle"
+    value={copyTarget?.상차방법 ?? ""}
+    onChange={(e)=>setCopyTarget(p=>({...p, 상차방법:e.target.value}))}
+  >
+    <option value="">선택</option>
+    <option value="지게차">지게차</option>
+    <option value="수작업">수작업</option>
+    <option value="직접수작업">직접수작업</option>
+    <option value="수도움">수도움</option>
+    <option value="크레인">크레인</option>
+  </select>
+</Field>
 
       {/* 🔥 상차지명 자동완성 */}
       <Field label="상차지명">
@@ -9657,7 +9702,20 @@ delete payload._id;
           ))}
         </select>
       </Field>
-
+<Field label="하차방법">
+  <select
+    className="inputStyle"
+    value={copyTarget?.하차방법 ?? ""}
+    onChange={(e)=>setCopyTarget(p=>({...p, 하차방법:e.target.value}))}
+  >
+    <option value="">선택</option>
+    <option value="지게차">지게차</option>
+    <option value="수작업">수작업</option>
+    <option value="직접수작업">직접수작업</option>
+    <option value="수도움">수도움</option>
+    <option value="크레인">크레인</option>
+  </select>
+</Field>
       <Field label="하차지명">
         <div className="relative">
           <input
@@ -15770,50 +15828,80 @@ onBlur={(e) => {
       <div className="p-10 space-y-10">
 
         {/* HEADER */}
-        <div className="flex justify-between items-center border-b pb-5">
+<div className="flex justify-between items-center border-b pb-5">
   <h2 className="text-2xl font-bold text-slate-800">
-    오더 복사 패널
+    오더 복사 / 수정 패널
   </h2>
 
   <div className="flex gap-3 items-center">
+
+    {/* 수정 저장 */}
     <button
-onClick={async () => {
+      onClick={async () => {
 
-const payload = {
-  ...copyTarget,
+        if (!copyTarget?._id) {
+          alert("수정할 오더 ID가 없습니다.");
+          return;
+        }
 
-  createdAt: Date.now(),
-  updatedAt: Date.now(),
+        const payload = {
+          ...copyTarget,
+          updatedAt: Date.now(),
+        };
 
-  배차상태:
-    copyTarget?.차량번호?.trim()
-      ? "배차완료"
-      : "배차중",
+        await patchDispatch(copyTarget._id, payload);
 
-업체전달상태: "미전달",
-};
+        alert("오더 수정 완료");
 
-// ⭐ 기존 id 제거 (새 오더 생성)
-delete payload._id;
+        setCopyPanelOpen(false);
 
-  await addDispatch(payload);
+      }}
+      className="px-4 py-2 bg-green-600 text-white rounded-lg font-semibold"
+    >
+      수정 저장
+    </button>
 
-  alert("복사 등록 완료");
+    {/* 복사 등록 */}
+    <button
+      onClick={async () => {
 
-  setCopyPanelOpen(false);
+        const payload = {
+          ...copyTarget,
 
-}}
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+
+          배차상태:
+            copyTarget?.차량번호?.trim()
+              ? "배차완료"
+              : "배차중",
+
+          업체전달상태: "미전달",
+        };
+
+        // ⭐ 기존 id 제거 (새 오더 생성)
+        delete payload._id;
+
+        await addDispatch(payload);
+
+        alert("복사 등록 완료");
+
+        setCopyPanelOpen(false);
+
+      }}
       className="px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold"
     >
       복사 등록
     </button>
 
+    {/* 닫기 */}
     <button
       onClick={() => setCopyPanelOpen(false)}
       className="text-slate-500 hover:text-red-500 text-xl"
     >
       ✕
     </button>
+
   </div>
 </div>
 
@@ -15849,6 +15937,20 @@ delete payload._id;
           ))}
         </select>
       </Field>
+      <Field label="상차방법">
+  <select
+    className="inputStyle"
+    value={copyTarget?.상차방법 ?? ""}
+    onChange={(e)=>setCopyTarget(p=>({...p, 상차방법:e.target.value}))}
+  >
+    <option value="">선택</option>
+    <option value="지게차">지게차</option>
+    <option value="수작업">수작업</option>
+    <option value="직접수작업">직접수작업</option>
+    <option value="수도움">수도움</option>
+    <option value="크레인">크레인</option>
+  </select>
+</Field>
 
       {/* 🔥 상차지명 자동완성 */}
       <Field label="상차지명">
@@ -15974,7 +16076,20 @@ setCopyPlaceOptions(list);
           ))}
         </select>
       </Field>
-
+<Field label="하차방법">
+  <select
+    className="inputStyle"
+    value={copyTarget?.하차방법 ?? ""}
+    onChange={(e)=>setCopyTarget(p=>({...p, 하차방법:e.target.value}))}
+  >
+    <option value="">선택</option>
+    <option value="지게차">지게차</option>
+    <option value="수작업">수작업</option>
+    <option value="직접수작업">직접수작업</option>
+    <option value="수도움">수도움</option>
+    <option value="크레인">크레인</option>
+  </select>
+</Field>
       <Field label="하차지명">
         <div className="relative">
           <input
@@ -17583,14 +17698,22 @@ function NewOrderPopup({
 
 // ===================== DispatchApp.jsx (PART 5/8 — END) =====================
 // ===================== DispatchApp.jsx (PART 6/8 — Settlement Premium) — START =====================
-function Settlement({ dispatchData, fixedRows = [] }) {
+function Settlement({ dispatchData, fixedRows = [], clients = [], places = [] }) {
+
   const [rangeStart, setRangeStart] = React.useState("2026-01");
-const [rangeEnd, setRangeEnd] = React.useState("2026-02");
-const [rangeClient, setRangeClient] = React.useState("ALL");
+  const [rangeEnd, setRangeEnd] = React.useState("2026-02");
+const [rangeClients, setRangeClients] = React.useState([]);
+const [clientSearch, setClientSearch] = React.useState("");
   const [targetMonth, setTargetMonth] = React.useState(
     new Date().toISOString().slice(0, 7)
   );
-
+const toggleClient = (c) => {
+  setRangeClients((prev) =>
+    prev.includes(c)
+      ? prev.filter((v) => v !== c)
+      : [...prev, c]
+  );
+};
   const [selectedYear, setSelectedYear] = React.useState(
     new Date().getFullYear()
   );
@@ -17717,13 +17840,38 @@ const fixedMapped = (fixedRows || []).map((r) => {
   };
 });
   const rows = [...dispatchRows, ...fixedMapped];
+const allClients = React.useMemo(() => {
+  return Array.from(
+    new Set([
+      ...rows.map((r) => r.거래처명 || ""),
+      ...clients.map((c) => c.거래처명 || ""),
+      ...places.map((p) => p.업체명 || ""),
+    ].filter(Boolean))
+  ).sort();
+}, [rows, clients, places]);
+const filteredClients = React.useMemo(() => {
+  if (!clientSearch) return [];
+
+  return allClients
+    .filter((c) =>
+      c.toLowerCase().includes(clientSearch.toLowerCase())
+    )
+    .slice(0, 10);
+}, [clientSearch, allClients]);
   const rangeRows = rows.filter((r) => {
   if (!r.상차일) return false;
 
   const ym = r.상차일.slice(0, 7);
   if (ym < rangeStart || ym > rangeEnd) return false;
 
-  if (rangeClient !== "ALL" && r.거래처명 !== rangeClient) return false;
+if (rangeClients.length > 0) {
+const ok = rangeClients.some((c) =>
+  (r.거래처명 || "").includes(c) ||
+  (r.상차지명 || "").includes(c) ||
+  (r.하차지명 || "").includes(c)
+);
+  if (!ok) return false;
+}
 
   return true;
 });
@@ -18294,43 +18442,92 @@ const monthProfitRate =
     기간별 매출 · 운임 · 수수료 추이
   </h3>
 
+
   {/* 조회 조건 */}
-  <div className="grid grid-cols-3 gap-3">
+<div className="grid grid-cols-3 gap-3">
+
+  {/* 시작 월 */}
+  <input
+    type="month"
+    value={rangeStart}
+    onChange={(e) => setRangeStart(e.target.value)}
+    className="border rounded-lg p-2 text-sm"
+  />
+
+  {/* 종료 월 */}
+  <input
+    type="month"
+    value={rangeEnd}
+    onChange={(e) => setRangeEnd(e.target.value)}
+    className="border rounded-lg p-2 text-sm"
+  />
+
+  {/* 거래처 검색 */}
+  <div className="col-span-3 space-y-3">
+
+    <div className="text-xs font-semibold text-gray-600">
+      거래처 검색
+    </div>
+
+    {/* 검색창 */}
     <input
-      type="month"
-      value={rangeStart}
-      onChange={(e) => setRangeStart(e.target.value)}
-      className="border rounded-lg p-2 text-sm"
+      type="text"
+      placeholder="거래처 검색 (예: 태영, 케이씨)"
+      value={clientSearch}
+      onChange={(e) => setClientSearch(e.target.value)}
+      className="border rounded-lg p-2 text-sm w-full"
     />
-    <input
-      type="month"
-      value={rangeEnd}
-      onChange={(e) => setRangeEnd(e.target.value)}
-      className="border rounded-lg p-2 text-sm"
-    />
-    <select
-      value={rangeClient}
-      onChange={(e) => setRangeClient(e.target.value)}
-      className="border rounded-lg p-2 text-sm"
-    >
-      <option value="ALL">전체 거래처</option>
-      {Array.from(new Set(rows.map((r) => r.거래처명)))
-        .filter(Boolean)
-        .map((c) => (
-          <option key={c} value={c}>{c}</option>
-        ))}
-    </select>
-  </div>
 
-  {/* 그래프 */}
-  <PeriodTrendChart data={rangeMonthly} />
-  <PeriodSummaryTable data={rangeMonthly} />
-</div>
-
-        </div>
-
+    {/* 검색 결과 */}
+    {clientSearch && (
+      <div className="flex flex-wrap gap-2">
+        {allClients
+          .filter((c) =>
+            c.toLowerCase().includes(clientSearch.toLowerCase())
+          )
+          .slice(0, 10)
+          .map((c) => (
+            <button
+              key={c}
+              onClick={() => toggleClient(c)}
+              className="px-3 py-1 text-xs rounded-full border
+              bg-white text-gray-700 border-gray-300 hover:bg-gray-100"
+            >
+              {c}
+            </button>
+          ))}
       </div>
+    )}
 
+    {/* 선택된 거래처 */}
+    {rangeClients.length > 0 && (
+      <div className="flex flex-wrap gap-2">
+        {rangeClients.map((c) => (
+          <button
+            key={c}
+            onClick={() => toggleClient(c)}
+            className="px-3 py-1 text-xs rounded-full
+            bg-indigo-600 text-white border border-indigo-600"
+          >
+            {c} ✕
+          </button>
+        ))}
+      </div>
+    )}
+
+    <div className="text-xs text-gray-400">
+      선택: {rangeClients.length}개
+    </div>
+  </div>
+</div>
+{/* 그래프 */}
+<PeriodTrendChart data={rangeMonthly} />
+
+{/* 요약 테이블 */}
+<PeriodSummaryTable data={rangeMonthly} />
+</div>
+        </div>
+      </div>
       {/* ================= DETAIL POPUP ================= */}
       {detailClient && (
         <SettlementDetailPopup
@@ -18352,8 +18549,6 @@ const monthProfitRate =
     </div>
   );
 }
-
-
 /* ================================================================= */
 /* ================== 이하 컴포넌트 정의 (디자인만 정리) ================= */
 /* ================================================================= */
