@@ -1477,6 +1477,16 @@ function renderTimeWithCond(time, cond) {
       const [guideHistoryList, setGuideHistoryList] = React.useState([]);
       const [vehicleSpecOpen, setVehicleSpecOpen] = React.useState(false);
 const [confirmOpen, setConfirmOpen] = React.useState(false);
+const [stopPopupOpen, setStopPopupOpen] = React.useState(false);
+const [stopType, setStopType] = React.useState("");
+
+const [stopForm, setStopForm] = React.useState({
+  업체명:"",
+  주소:"",
+  담당자:"",
+  담당자번호:"",
+  메모:""
+});
  const [routeInfo, setRouteInfo] = React.useState(null);
 
 
@@ -1970,6 +1980,9 @@ const [pickupActive, setPickupActive] = React.useState(0);
 const [showPlaceDropdown, setShowPlaceDropdown] = React.useState(false);
 const [placeOptions, setPlaceOptions] = React.useState([]);
 const [placeActive, setPlaceActive] = React.useState(0);
+const [stopPlaceOptions, setStopPlaceOptions] = React.useState([]);
+const [stopPlaceActive, setStopPlaceActive] = React.useState(0);
+const [showStopDropdown, setShowStopDropdown] = React.useState(false);
     // ---------- 🔧 안전 폴백 유틸(다른 파트 미정의 시 자체 사용) ----------
 const _todayStr = (typeof todayStr === "function")
   ? todayStr
@@ -2206,11 +2219,13 @@ const filterPlaces = (q) => {
       상차지주소: "",
       상차지담당자: "",
       상차지담당자번호: "",
+      경유상차: "",
       하차지명: "",
       하차지Id: "",
       하차지주소: "",
       하차지담당자: "",
       하차지담당자번호: "",
+      경유하차: "",
       화물내용: "",
       운행유형: "편도",   // ⭐ 추가 (기본값)
       차량종류: "",
@@ -2290,7 +2305,7 @@ React.useEffect(() => {
           method: "GET",
           headers: {
             Accept: "application/json",
-            appKey: "CkqGN7AtFUTI856TWs64L4hl8Wbqc9bxr5LtYYo3"
+            appKey: "rmzwkLwH9N4i9ayxDj9GR6l8hyFDaEk52ZQs4yer"
           }
         });
 
@@ -4393,8 +4408,6 @@ shadow-sm
   const k = normalizeKey(p.업체명);
   return k.includes(key) || key.includes(k);
 });
-
-
       if (similar.length > 0) {
         setDupPopup({
           open: true,
@@ -4563,35 +4576,51 @@ setForm((prev) => ({
     )}
   </div>
 
-  {/* 상차지주소 */}
-  <div>
+{/* 상차지주소 */}
+<div>
+  <div className="flex items-center justify-between">
     <label className={labelCls}>
       상차지주소 <AutoBadge show={autoPickMatched} />
     </label>
-    <input
-      className={inputCls}
-      value={form.상차지주소}
-      onChange={(e) => handlePickupAddrManual(e.target.value)}
-      placeholder="자동매칭 또는 수기입력"
-    />
+
+    {/* ⭐ 여기로 이동 (핵심) */}
+    <button
+      type="button"
+      className="text-[11px] px-2 py-1 rounded bg-blue-100 text-blue-700 border border-blue-200 hover:bg-blue-200"
+      onClick={() => {
+        setStopType("pickup")
+        setStopPopupOpen(true)
+      }}
+    >
+      + 사용X
+    </button>
   </div>
- {/* 상차지 담당자 */}
+
+  <input
+    className={inputCls}
+    value={form.상차지주소}
+    onChange={(e) => handlePickupAddrManual(e.target.value)}
+    placeholder="자동매칭 또는 수기입력"
+  />
+</div>
+
+{/* 상차지 담당자 */}
 <div>
   <label className={labelCls}>
     상차지 담당자
-    
   </label>
 
+  {/* 담당자 입력 */}
   <div className="relative">
-<input
-  className={inputCls}
-  value={form.상차지담당자}
-  onChange={(e) => onChange("상차지담당자", e.target.value)}
-  placeholder="담당자 이름"
-/>
-
+    <input
+      className={inputCls}
+      value={form.상차지담당자}
+      onChange={(e) => onChange("상차지담당자", e.target.value)}
+      placeholder="담당자 이름"
+    />
   </div>
 </div>
+
 {/* 상차지 연락처 */}
 <div>
   <label className={labelCls}>상차지 연락처</label>
@@ -4603,119 +4632,134 @@ setForm((prev) => ({
     }
     placeholder="010-0000-0000"
   />
-
 </div>
 
+{/* 하차지명 + 자동완성 */}
+<div className="relative">
+  <label className="block text-[16px] font-bold text-red-500 mb-1">
+    하차지 {reqStar}
+  </label>
 
-  {/* 하차지명 + 자동완성 */}
-  <div className="relative">
-    <label className="block text-[16px] font-bold text-red-500 mb-1">
-  하차지 {reqStar}
-</label>
+  <input
+    className={inputCls}
+    placeholder="하차지 검색"
+    value={form.하차지명}
+    onChange={(e) => {
+      const v = e.target.value
+      handleDropName(v)
+      setPlaceOptions(filterPlaces(v))
+      setShowPlaceDropdown(true)
+      setPlaceActive(0)
+    }}
+    onKeyDown={(e) => {
+      const list = placeOptions
+      if (!list.length) return
 
-    <input
-      className={inputCls}
-      placeholder="하차지 검색"
-      value={form.하차지명}
-      onChange={(e) => {
-        const v = e.target.value;
-        handleDropName(v);
-        setPlaceOptions(filterPlaces(v));
-        setShowPlaceDropdown(true);
-        setPlaceActive(0);
-      }}
-      onKeyDown={(e) => {
-        const list = placeOptions;
-        if (!list.length) return;
-        if (["ArrowDown", "ArrowUp", "Enter"].includes(e.key)) {
-          e.preventDefault();
-        }
-        if (e.key === "Enter") {
-  const p = list[placeActive];
-  if (!p) return;
+      if (["ArrowDown", "ArrowUp", "Enter"].includes(e.key)) {
+        e.preventDefault()
+      }
 
-  setForm((prev) => ({
-    ...prev,
-    하차지명: p.업체명,
-    하차지Id: p._id || "",
-    하차지주소: p.주소 || "",
-    하차지담당자: p.담당자 || "",
-    하차지담당자번호: p.담당자번호 || "",
-  }));
+      if (e.key === "Enter") {
+        const p = list[placeActive]
+        if (!p) return
 
-  setShowPlaceDropdown(false);
+        setForm((prev) => ({
+          ...prev,
+          하차지명: p.업체명,
+          하차지Id: p._id || "",
+          하차지주소: p.주소 || "",
+          하차지담당자: p.담당자 || "",
+          하차지담당자번호: p.담당자번호 || "",
+        }))
 
-        } else if (e.key === "ArrowDown") {
-          setPlaceActive((i) => Math.min(i + 1, list.length - 1));
-        } else if (e.key === "ArrowUp") {
-          setPlaceActive((i) => Math.max(i - 1, 0));
-        }
-      }}
-      onBlur={() => setTimeout(() => setShowPlaceDropdown(false), 200)}
-    />
+        setShowPlaceDropdown(false)
+      } else if (e.key === "ArrowDown") {
+        setPlaceActive((i) => Math.min(i + 1, list.length - 1))
+      } else if (e.key === "ArrowUp") {
+        setPlaceActive((i) => Math.max(i - 1, 0))
+      }
+    }}
+    onBlur={() => setTimeout(() => setShowPlaceDropdown(false), 200)}
+  />
 
-    {showPlaceDropdown && placeOptions.length > 0 && (
-  <div className="absolute z-50 bg-white border rounded-lg shadow-lg w-full max-h-48 overflow-auto">
-    {placeOptions.map((p, i) => (
-      <div
-        key={p.업체명 + "_" + i}
-        className={`px-2 py-1 cursor-pointer ${
-          i === placeActive ? "bg-blue-50" : "hover:bg-gray-50"
-        }`}
-        onMouseEnter={() => setPlaceActive(i)}
-        onMouseDown={() => {
-          setForm((prev) => ({
-            ...prev,
-            하차지명: p.업체명,
-            하차지Id: p._id || "",
-            하차지주소: p.주소 || "",
-            하차지담당자: p.담당자 || "",
-            하차지담당자번호: p.담당자번호 || "",
-          }));
+  {showPlaceDropdown && placeOptions.length > 0 && (
+    <div className="absolute z-50 bg-white border rounded-lg shadow-lg w-full max-h-48 overflow-auto">
+      {placeOptions.map((p, i) => (
+        <div
+          key={p.업체명 + "_" + i}
+          className={`px-2 py-1 cursor-pointer ${
+            i === placeActive ? "bg-blue-50" : "hover:bg-gray-50"
+          }`}
+          onMouseEnter={() => setPlaceActive(i)}
+          onMouseDown={() => {
+            setForm((prev) => ({
+              ...prev,
+              하차지명: p.업체명,
+              하차지Id: p._id || "",
+              하차지주소: p.주소 || "",
+              하차지담당자: p.담당자 || "",
+              하차지담당자번호: p.담당자번호 || "",
+            }))
 
-          setShowPlaceDropdown(false);
-        }}
-      >
+            setShowPlaceDropdown(false)
+          }}
+        >
+          <b>{p.업체명}</b>
+          {p.주소 && (
+            <div className="text-xs text-gray-500">{p.주소}</div>
+          )}
+        </div>
+      ))}
+    </div>
+  )}
+</div>
 
-            <b>{p.업체명}</b>
-            {p.주소 && <div className="text-xs text-gray-500">{p.주소}</div>}
-          </div>
-        ))}
-      </div>
-    )}
-  </div>
-
-  {/* 하차지주소 */}
-  <div>
+{/* 하차지주소 */}
+<div>
+  <div className="flex items-center justify-between">
     <label className={labelCls}>
       하차지주소 <AutoBadge show={autoDropMatched} />
     </label>
-    <input
-      className={inputCls}
-      value={form.하차지주소}
-      onChange={(e) => handleDropAddrManual(e.target.value)}
-      placeholder="자동매칭 또는 수기입력"
-    />
+
+    {/* ⭐ 여기로 이동 */}
+    <button
+      type="button"
+      className="text-[11px] px-2 py-1 rounded bg-blue-100 text-blue-700 border border-blue-200 hover:bg-blue-200"
+      onClick={() => {
+        setStopType("drop")
+        setStopPopupOpen(true)
+      }}
+    >
+      + 사용X
+    </button>
   </div>
-  {/* 하차지 담당자 */}
+
+  <input
+    className={inputCls}
+    value={form.하차지주소}
+    onChange={(e) => handleDropAddrManual(e.target.value)}
+    placeholder="자동매칭 또는 수기입력"
+  />
+</div>
+
+{/* 하차지 담당자 */}
 <div>
   <label className={labelCls}>
     하차지 담당자
   </label>
 
+  <input
+    className={inputCls}
+    value={form.하차지담당자}
+    onChange={(e) =>
+      onChange("하차지담당자", e.target.value)
+    }
+    placeholder="담당자 이름"
+  />
+
   
-  {/* 입력 + 대표 버튼 */}
-  <div className="relative">
-    <input
-  className={inputCls}
-      value={form.하차지담당자}
-      onChange={(e) =>
-        onChange("하차지담당자", e.target.value)
-      }
-      placeholder="담당자 이름"
-    />
-  </div>
 </div>
+
 <div>
   <label className={labelCls}>하차지 연락처</label>
   <input
@@ -4991,6 +5035,195 @@ setForm((prev) => ({
       </div>
     </div>
   </div>
+)}
+{/* ================= 경유지 추가 팝업 ================= */}
+{stopPopupOpen && (
+<div className="fixed inset-0 z-[99999]">
+
+<div
+className="absolute inset-0 bg-black/40"
+onClick={()=>setStopPopupOpen(false)}
+/>
+
+<div className="absolute top-1/2 left-1/2 w-[520px] -translate-x-1/2 -translate-y-1/2 bg-white rounded-xl shadow-xl p-6 space-y-4">
+
+<h3 className="text-lg font-bold">
+{stopType==="pickup" ? "경유 상차지 추가" : "경유 하차지 추가"}
+</h3>
+
+<div>
+<label className="text-xs font-semibold">경유지명</label>
+<div className="relative">
+
+<input
+  className={inputCls}
+  value={stopForm.업체명}
+  placeholder="업체명 입력"
+
+  onChange={(e)=>{
+
+    const v = e.target.value
+
+    setStopForm(prev=>({
+      ...prev,
+      업체명:v
+    }))
+
+    const list = filterPlaces(v)
+
+    setStopPlaceOptions(list)
+    setShowStopDropdown(true)
+    setStopPlaceActive(0)
+
+  }}
+
+  onKeyDown={(e)=>{
+
+    const list = stopPlaceOptions
+    if(!list.length) return
+
+    if(["ArrowDown","ArrowUp","Enter"].includes(e.key)){
+      e.preventDefault()
+    }
+
+    if(e.key==="Enter"){
+
+      const p = list[stopPlaceActive]
+      if(!p) return
+
+      setStopForm(prev=>({
+        ...prev,
+        업체명:p.업체명,
+        주소:p.주소 || "",
+        담당자:p.담당자 || "",
+        담당자번호:p.담당자번호 || ""
+      }))
+
+      setShowStopDropdown(false)
+    }
+
+    else if(e.key==="ArrowDown"){
+      setStopPlaceActive(i=>Math.min(i+1,list.length-1))
+    }
+
+    else if(e.key==="ArrowUp"){
+      setStopPlaceActive(i=>Math.max(i-1,0))
+    }
+
+  }}
+
+  onBlur={()=>setTimeout(()=>setShowStopDropdown(false),200)}
+/>
+
+{showStopDropdown && stopPlaceOptions.length>0 && (
+
+<div className="absolute z-50 bg-white border rounded-lg shadow-lg w-full max-h-48 overflow-auto">
+
+{stopPlaceOptions.map((p,i)=>(
+<div
+key={p.업체명+"_"+i}
+className={`px-2 py-1 cursor-pointer ${
+i===stopPlaceActive ? "bg-blue-50":"hover:bg-gray-50"
+}`}
+onMouseEnter={()=>setStopPlaceActive(i)}
+onMouseDown={()=>{
+
+setStopForm(prev=>({
+...prev,
+업체명:p.업체명,
+주소:p.주소 || "",
+담당자:p.담당자 || "",
+담당자번호:p.담당자번호 || ""
+}))
+
+setShowStopDropdown(false)
+
+}}
+>
+
+<b>{p.업체명}</b>
+{p.주소 && (
+<div className="text-xs text-gray-500">
+{p.주소}
+</div>
+)}
+
+</div>
+))}
+
+</div>
+)}
+
+</div>
+</div>
+
+<div>
+<label className="text-xs font-semibold">주소</label>
+<input
+className={inputCls}
+value={stopForm.주소}
+onChange={(e)=>setStopForm(p=>({...p,주소:e.target.value}))}
+/>
+</div>
+
+<div>
+<label className="text-xs font-semibold">담당자</label>
+<input
+className={inputCls}
+value={stopForm.담당자}
+onChange={(e)=>setStopForm(p=>({...p,담당자:e.target.value}))}
+/>
+</div>
+
+<div>
+<label className="text-xs font-semibold">연락처</label>
+<input
+className={inputCls}
+value={stopForm.담당자번호}
+onChange={(e)=>setStopForm(p=>({...p,담당자번호:e.target.value}))}
+/>
+</div>
+
+<div>
+<label className="text-xs font-semibold">메모</label>
+<input
+className={inputCls}
+value={stopForm.메모}
+onChange={(e)=>setStopForm(p=>({...p,메모:e.target.value}))}
+/>
+</div>
+
+<div className="flex justify-end gap-2 pt-3">
+<button
+className="px-3 py-1.5 text-sm border rounded"
+onClick={()=>setStopPopupOpen(false)}
+>
+취소
+</button>
+
+<button
+className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded"
+onClick={()=>{
+
+const text = stopForm.업체명;
+
+if(stopType==="pickup"){
+onChange("경유상차",(form.경유상차||"")+" "+text);
+}else{
+onChange("경유하차",(form.경유하차||"")+" "+text);
+}
+
+setStopForm({업체명:"",주소:"",담당자:"",담당자번호:"",메모:""});
+setStopPopupOpen(false);
+
+}}
+>
+추가
+</button>
+</div>
+
+</div>
+</div>
 )}
   {/* 차량정보 */}
 <div className="relative">
