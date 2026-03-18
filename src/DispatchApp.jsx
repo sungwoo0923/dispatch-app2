@@ -2292,39 +2292,61 @@ React.useEffect(() => {
       if (!mapDiv) return;
 
       // ⭐ 주소 → 좌표 변환 (Tmap REST API)
-      const getCoords = async (addr) => {
+const getCoords = async (addr) => {
 
-        const url =
-          "https://apis.openapi.sk.com/tmap/geo/fullAddrGeo" +
-          "?version=1" +
-          "&format=json" +
-          "&fullAddr=" +
-          encodeURIComponent(addr);
+  if (!addr || !addr.trim()) {
+    console.warn("❌ 주소 없음:", addr);
+    return null;
+  }
 
-        const res = await fetch(url, {
-          method: "GET",
-          headers: {
-            Accept: "application/json",
+  try {
+    const url =
+      "https://apis.openapi.sk.com/tmap/geo/fullAddrGeo" +
+      "?version=1" +
+      "&format=json" +
+      "&fullAddr=" +
+      encodeURIComponent(addr);
+
+    const res = await fetch(url, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
             appKey: "rmzwkLwH9N4i9ayxDj9GR6l8hyFDaEk52ZQs4yer"
           }
         });
 
-        const data = await res.json();
+         const data = await res.json();
 
-        const coord = data?.coordinateInfo?.coordinate?.[0];
+    console.log("📍 좌표 응답:", addr, data);
 
-        if (!coord) return null;
+    const coord = data?.coordinateInfo?.coordinate?.[0];
 
-        return {
-          lat: parseFloat(coord.lat),
-          lon: parseFloat(coord.lon)
-        };
-      };
+    if (!coord) {
+      console.warn("❌ 좌표 변환 실패:", addr);
+      return null;
+    }
 
-      const start = await getCoords(form.상차지주소 || form.상차지명);
-      const end = await getCoords(form.하차지주소 || form.하차지명);
+    return {
+      lat: parseFloat(coord.lat),
+      lon: parseFloat(coord.lon)
+    };
 
-      if (!start || !end) return;
+  } catch (e) {
+    console.error("❌ 좌표 API 에러:", addr, e);
+    return null;
+  }
+};
+
+const start = await getCoords(form.상차지주소);
+const end = await getCoords(form.하차지주소);
+
+      if (!start || !end) {
+  console.warn("❌ 지도 좌표 생성 실패 → routeInfo 초기화");
+
+  setRouteInfo(null);   // ⭐ NaN 방지
+
+  return;
+}
 
       mapDiv.innerHTML = "";
 
@@ -2370,10 +2392,15 @@ React.useEffect(() => {
 
       const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
-      const km = Math.round(R * c);
+      const km = R * c;
+
+setRouteInfo({
+  distance: km * 1000,   // ⭐ meter로 통일
+  time
+});
 
       // ⭐ 시간 계산 (평균 60km/h)
-      const time = Math.round((km / 60) * 60);
+      const time = Math.round(km * 1.2); // 평균 50km/h 기준
 
       setRouteInfo({
         distance: km,
@@ -3866,7 +3893,7 @@ const inputCls =
 const labelCls =
   "block text-[15px] font-semibold text-black mb-1";
     const reqStar = <span className="text-red-500">*</span>;
-    const AutoBadge = ({ show }) => show ? <span className="ml-2 text-[12px] text-emerald-700">(자동매칭)</span> : null;
+    const AutoBadge = ({ show }) => show ? <span className="ml-2 text-[12px] text-emerald-700">(매칭)</span> : null;
 function FuelPriceWidget({ apiKey }) {
   const [prices, setPrices] = React.useState([]);
 

@@ -58,6 +58,8 @@ export default function ShipperOrder() {
   }, [user]);
 
   // ================= form (🔥 기존 항목 전부 유지) =================
+  const [searchType, setSearchType] = useState("전체");
+const [keyword, setKeyword] = useState("");
   const [form, setForm] = useState({
     status: "요청",
     청구운임: "",
@@ -119,13 +121,18 @@ export default function ShipperOrder() {
 
     navigate("/shipper/status");
   };
-
+const handleSearch = () => {
+  console.log("검색:", searchType, keyword);
+};
   if (loading) {
     return <div className="py-20 text-center text-gray-400">불러오는 중…</div>;
   }
 
-  return (
-    <div className="max-w-3xl mx-auto bg-white rounded-2xl border shadow-sm p-8">
+return (
+  <div className="flex gap-6 w-full max-w-[1400px]">
+    {/* ================= 왼쪽: 오더 입력 ================= */}
+<div className="flex-1 bg-white rounded-2xl border shadow-sm p-8">
+    {/* ================= 상단 바 ================= */}
       <h2 className="text-xl font-bold mb-6">
               {/* ================= 거래처 정보 ================= */}
       <section className="mb-8">
@@ -383,5 +390,35 @@ export default function ShipperOrder() {
         </button>
       </div>
     </div>
+    {/* ================= 오른쪽: 오더 불러오기 ================= */}
+<div className="w-[420px] bg-white rounded-2xl border shadow-sm p-5">
+
+  <div className="flex justify-between items-center mb-4">
+    <h3 className="text-lg font-bold">오더 불러오기</h3>
+    <button className="text-gray-400 hover:text-black">✕</button>
+  </div>
+
+  <div className="flex gap-2 mb-3">
+    <input
+      placeholder="거래처 / 주소 검색"
+      className="flex-1 border rounded-lg px-3 py-2 text-sm"
+    />
+    <button className="px-4 py-2 bg-blue-500 text-white rounded-lg text-sm">
+      조회
+    </button>
+  </div>
+
+  <div className="space-y-2 max-h-[500px] overflow-y-auto">
+    <div className="border rounded-xl p-3 hover:bg-gray-50 cursor-pointer">
+      <div className="font-semibold text-sm">서울 → 부산</div>
+      <div className="text-xs text-gray-500">윙바디 / 5톤</div>
+      <div className="text-xs text-gray-400">2026-03-18 08:00</div>
+    </div>
+  </div>
+
+</div> 
+
+</div> 
+
   );
 }

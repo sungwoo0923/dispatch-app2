@@ -9,6 +9,7 @@ import { doc, getDoc } from "firebase/firestore";
 import ShipperHome from "./pages/ShipperHome";
 import ShipperOrder from "./pages/ShipperOrder";
 import ShipperStatus from "./pages/ShipperStatus";
+import TransportManagement from "./pages/TransportManagement";
 
 export default function ShipperApp() {
   const navigate = useNavigate();
@@ -56,49 +57,100 @@ const location = useLocation();
   }
 
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="min-h-screen bg-[#f3f4f6]">
       {/* ================= HEADER ================= */}
-      <header className="bg-white border-b shadow-sm">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex justify-between items-center">
-          {/* 🔙 홈으로 */}
-          <button
-            onClick={() => navigate("/shipper")}
-            className="text-xl font-extrabold text-blue-600 hover:opacity-80"
-          >
-            RUN25 화주 포털
-          </button>
+      <header className="bg-[#2f3e55] text-white">
+  <div className="px-8 py-4 flex items-center justify-between">
 
-          <div className="flex items-center gap-4">
-            <div className="text-right">
-              <div className="text-sm font-semibold">{companyName}</div>
-              <div className="text-xs text-gray-500">{user.email}</div>
-            </div>
+    {/* 좌측 로고 + 메뉴 */}
+    <div className="flex items-center gap-10">
 
-            <button
-              onClick={logout}
-              className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-md text-sm"
-            >
-              로그아웃
-            </button>
-          </div>
-        </div>
-      </header>
+      {/* 로고 */}
+      <div
+        onClick={() => navigate("/shipper")}
+        className="text-lg font-bold cursor-pointer"
+      >
+        RUN25
+      </div>
 
+      {/* 🔥 메뉴 */}
+      <nav className="flex gap-6 text-sm font-semibold">
+
+        <MenuBtn
+          label="대시보드"
+          active={location.pathname === "/shipper"}
+          onClick={() => navigate("/shipper")}
+        />
+
+        <MenuBtn
+          label="운송"
+          active={location.pathname.includes("/shipper/transport")}
+          onClick={() => navigate("/shipper/transport")}
+        />
+
+        <MenuBtn
+          label="정산"
+          active={location.pathname.includes("/shipper/settlement")}
+          onClick={() => alert("정산 준비중")}
+        />
+
+        <MenuBtn
+          label="마스터설정"
+          active={location.pathname.includes("/shipper/settings")}
+          onClick={() => alert("설정 준비중")}
+        />
+
+      </nav>
+    </div>
+
+    {/* 우측 */}
+    <div className="flex items-center gap-4">
+      <div className="text-sm text-right">
+        <div>{companyName}</div>
+        <div className="text-xs text-gray-300">{user.email}</div>
+      </div>
+
+      <button
+        onClick={logout}
+        className="bg-red-500 hover:bg-red-600 px-3 py-1 rounded text-sm"
+      >
+        로그아웃
+      </button>
+    </div>
+  </div>
+</header>
       {/* ================= CONTENT ================= */}
       <main
   className={
-    location.pathname.startsWith("/shipper/status")
+    location.pathname.startsWith("/shipper/status") ||
+location.pathname.startsWith("/shipper/transport")
       ? "w-full px-8 py-6"
-      : "max-w-6xl mx-auto p-6"
+      : "w-full px-8 py-6"
   }
 >
         <Routes>
           <Route index element={<ShipperHome />} />
           <Route path="order" element={<ShipperOrder />} />
           <Route path="status" element={<ShipperStatus />} />
+          <Route path="transport" element={<ShipperStatus />} />
           <Route path="*" element={<Navigate to="/shipper" replace />} />
         </Routes>
       </main>
     </div>
+  );
+}
+function MenuBtn({ label, active, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`
+        px-3 py-1.5 rounded-md transition
+        ${active
+          ? "bg-white/20"
+          : "hover:bg-white/10 text-gray-200"}
+      `}
+    >
+      {label}
+    </button>
   );
 }
