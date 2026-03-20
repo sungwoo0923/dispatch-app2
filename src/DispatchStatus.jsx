@@ -1,10 +1,27 @@
 import React, { useState, useEffect } from "react";
 import { db } from "./firebase";
 import { collection, doc, onSnapshot, setDoc, serverTimestamp } from "firebase/firestore";
-
+import { updateDoc } from "firebase/firestore";
+import { auth } from "../firebase";
 const toNumber = (v) => parseInt(String(v).replace(/[^\d]/g, ""), 10) || 0;
 const toComma = (v) => (v ? v.toLocaleString() : "");
+const assignDriver = async (orderId, order) => {
+  try {
+    await updateDoc(doc(db, "orders", orderId), {
+      차량번호: order.차량번호 || "",
+      이름: order.이름 || "",
+      전화번호: order.전화번호 || "",
 
+      차량종류: order.차량종류 || "",
+      차량톤수: order.차량톤수 || "",
+
+      상태: "배차완료",
+      dispatcherUid: auth.currentUser.uid,
+    });
+  } catch (err) {
+    console.error(err);
+  }
+};
 export default function DispatchManagement({
   dispatchData,
   setDispatchData,

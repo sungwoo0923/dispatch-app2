@@ -9,7 +9,6 @@ import {
   deleteDoc,
 } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
-
 /* ================= 상태 UI ================= */
 const STATUS = {
   요청: { label: "요청", cls: "bg-blue-100 text-blue-700" },
@@ -161,7 +160,7 @@ bg-gray-100 border-r transition-all duration-300
 
           {/* 헤더 */}
           <div className="
-  grid grid-cols-[60px_110px_90px_110px_90px_140px_140px_200px_140px_200px_140px_120px_90px_120px_120px_120px_110px_110px_90px]
+  grid grid-cols-[60px_110px_90px_110px_90px_140px_140px_200px_140px_200px_140px_120px_90px_120px_120px_120px_110px_110px_120px_90px]
   bg-[#eef3fb]
   text-[16px] font-extrabold text-gray-800
   px-4 py-4
@@ -181,10 +180,11 @@ bg-gray-100 border-r transition-all duration-300
             <div>차량</div>
            <div>톤수</div>
 <div>차량번호</div>
-<div>기사명</div>
+<div>이름</div>
 <div>전화번호</div>
-<div>지급</div>
+<div>지급방식</div>
             <div>상태</div>
+            <div>운송사</div>
             <div className="text-right">관리</div>
           </div>
 
@@ -195,7 +195,7 @@ bg-gray-100 border-r transition-all duration-300
               <div
                 key={o.id}
                 className="
-  grid grid-cols-[60px_110px_90px_110px_90px_140px_140px_200px_140px_200px_140px_120px_90px_120px_120px_120px_110px_110px_90px]
+  grid grid-cols-[60px_110px_90px_110px_90px_140px_140px_200px_140px_200px_140px_120px_90px_120px_120px_120px_110px_110px_120px_90px]
   px-4 py-5
   border-t
   text-[16px] text-gray-800
@@ -228,13 +228,18 @@ bg-gray-100 border-r transition-all duration-300
 <div>{o.기사전화 || "-"}</div>
 <div>{o.지급방식}</div>
 
-                <div>
-                  <span className={`px-3 py-1 rounded-full text-[14px] px-3 py-1.5 font-bold ${st.cls}`}>
-                    {st.label}
-                  </span>
-                </div>
+<div>
+  <span className={`px-3 py-1 rounded-full text-[14px] font-bold ${st.cls}`}>
+    {st.label}
+  </span>
+</div>
 
-                <div className="flex gap-3 justify-center text-[15px] font-semibold">
+{/* 🔥 여기 추가 */}
+<div className="font-semibold text-gray-900">
+  {o.운송사명 || "-"}
+</div>
+
+<div className="flex gap-3 justify-center text-[15px] font-semibold">
                   {o.status === "요청" && (
                     <>
                       <button

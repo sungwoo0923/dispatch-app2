@@ -197,13 +197,13 @@ import { auth, db } from "./firebase";
    Firestore 실시간 동기화 훅
 --------------------------------------------------*/
 const COLL = {
-  dispatch: "dispatch",
+  dispatch: "orders",
   drivers: "drivers",
   clients: "clients",
 };
 // 🔐 테스트 계정이면 다른 컬렉션 사용
-const getCollectionName = (role) =>
-  role === "test" ? "dispatch_test" : "dispatch";
+const getCollectionName = (role) => "orders";
+  role === "test" ? "orders_test" : "orders";
 
 
 function useRealtimeCollections(user) {
@@ -234,18 +234,43 @@ function useRealtimeCollections(user) {
     const collName = getCollectionName(userRole);
 
     unsubs.push(
-      onSnapshot(collection(db, collName), (snap) => {
-        const arr = snap.docs.map(d => {
-          const data = d.data() || {};
-          return {
-            _id: d.id, // ⭐⭐⭐ 이게 핵심
-            ...data,
-            경유지_상차: Array.isArray(data.경유지_상차) ? data.경유지_상차 : [],
-            경유지_하차: Array.isArray(data.경유지_하차) ? data.경유지_하차 : [],
-          };
-        });
+  onSnapshot(collection(db, collName), (snap) => {
+    const arr = snap.docs.map(d => {
+      const data = d.data() || {};
+      return {
+        _id: d.id,
+        ...data,
+        경유지_상차: Array.isArray(data.경유지_상차) ? data.경유지_상차 : [],
+        경유지_하차: Array.isArray(data.경유지_하차) ? data.경유지_하차 : [],
+      };
+    });
 
-        setDispatchData(arr);
+    setDispatchData(prev => {
+      const merged = [...arr, ...(prev || [])];
+      const map = new Map();
+      merged.forEach(item => map.set(item._id, item));
+      return Array.from(map.values());
+    });
+  })
+);
+
+// ⭐⭐⭐🔥 여기 추가 (이거 하나 빠져있음)🔥⭐⭐⭐
+unsubs.push(
+  onSnapshot(collection(db, "dispatch"), (snap) => {
+    const arr2 = snap.docs.map(d => {
+      const data = d.data() || {};
+      return {
+        _id: d.id,
+        ...data,
+      };
+    });
+
+    setDispatchData(prev => {
+      const merged = [...(prev || []), ...arr2];
+      const map = new Map();
+      merged.forEach(item => map.set(item._id, item));
+      return Array.from(map.values());
+    });
         safeSave("dispatchData", arr);
       })
     );
@@ -304,7 +329,12 @@ setClients(normalizeClients(arr));
   const patchDispatch = async (_id, patch) => {
     if (!_id) return;
 
-    const ref = doc(db, COLL.dispatch, _id);
+    const isOrder = dispatchData.find(d => d._id === _id && d.source === "shipper");
+
+// 기본은 dispatch
+const collectionName = isOrder ? "orders" : "dispatch";
+
+const ref = doc(db, collectionName, _id);
     const snap = await getDoc(ref);
     if (!snap.exists()) return;
 
@@ -2255,6 +2285,7 @@ const filterPlaces = (q) => {
       혼적: false,
       긴급: false,
       운임보정: null,
+      
     };
     const [form, setForm] = React.useState(() => {
   try {
@@ -13018,6 +13049,7 @@ function DispatchStatus({
 }) {
   
 const renderTimeText = (time, cond) => {
+  
   if (!time) return "-";
 
   // 🔥 시간 문자열 자체에 포함된 경우

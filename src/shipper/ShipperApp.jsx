@@ -10,6 +10,7 @@ import ShipperHome from "./pages/ShipperHome";
 import ShipperOrder from "./pages/ShipperOrder";
 import ShipperStatus from "./pages/ShipperStatus";
 import TransportManagement from "./pages/TransportManagement";
+import ShipperSettings from "./pages/ShipperSettings";
 
 export default function ShipperApp() {
   const navigate = useNavigate();
@@ -95,10 +96,10 @@ const location = useLocation();
         />
 
         <MenuBtn
-          label="마스터설정"
-          active={location.pathname.includes("/shipper/settings")}
-          onClick={() => alert("설정 준비중")}
-        />
+  label="마스터설정"
+  active={location.pathname.includes("/shipper/settings")}
+  onClick={() => navigate("/shipper/settings")}
+/>
 
       </nav>
     </div>
@@ -133,6 +134,7 @@ location.pathname.startsWith("/shipper/transport")
           <Route path="order" element={<ShipperOrder />} />
           <Route path="status" element={<ShipperStatus />} />
           <Route path="transport" element={<ShipperStatus />} />
+          <Route path="settings" element={<ShipperSettings />} />
           <Route path="*" element={<Navigate to="/shipper" replace />} />
         </Routes>
       </main>
