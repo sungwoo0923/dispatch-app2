@@ -242,16 +242,18 @@ useEffect(() => {
   // ✅ 1️⃣ orders (화주 + 신규)
   unsubs.push(
     onSnapshot(collection(db, collName), (snap) => {
-      const arr = snap.docs.map(d => {
-        const data = d.data() || {};
-        return {
-          _id: d.id,
-          __col: collName,   // ⭐ 핵심
-          ...data,
-          경유지_상차: Array.isArray(data.경유지_상차) ? data.경유지_상차 : [],
-          경유지_하차: Array.isArray(data.경유지_하차) ? data.경유지_하차 : [],
-        };
-      });
+      const arr = snap.docs
+  .map(d => {
+    const data = d.data() || {};
+    return {
+      _id: d.id,
+      __col: collName,
+      ...data,
+      경유지_상차: Array.isArray(data.경유지_상차) ? data.경유지_상차 : [],
+      경유지_하차: Array.isArray(data.경유지_하차) ? data.경유지_하차 : [],
+    };
+  })
+  .filter(o => o.상태 !== "취소"); // 🔥 이거 추가
 
       setDispatchData(prev => {
         const merged = [...(prev || []), ...arr];
@@ -267,14 +269,16 @@ useEffect(() => {
   // ✅ 2️⃣ 기존 dispatch 데이터
   unsubs.push(
     onSnapshot(collection(db, "dispatch"), (snap) => {
-      const arr2 = snap.docs.map(d => {
-        const data = d.data() || {};
-        return {
-          _id: d.id,
-          __col: "dispatch",   // ⭐ 핵심
-          ...data,
-        };
-      });
+const arr2 = snap.docs
+  .map(d => {
+    const data = d.data() || {};
+    return {
+      _id: d.id,
+      __col: "dispatch",
+      ...data,
+    };
+  })
+  .filter(o => o.상태 !== "취소");
 
     setDispatchData(prev => {
       const merged = [...(prev || []), ...arr2];
@@ -341,6 +345,22 @@ setClients(normalizeClients(arr));
     if (!_id) return;
 
 const item = dispatchData.find(d => d._id === _id);
+if (patch.차량번호) {
+  const driver = drivers.find(
+    (d) =>
+      normalizePlate(d.차량번호) === normalizePlate(patch.차량번호)
+  );
+
+  if (driver) {
+    patch.이름 = driver.이름 || "";
+    patch.전화번호 = driver.전화번호 || "";
+  }
+}
+
+if (!patch.차량번호) {
+  patch.이름 = "";
+  patch.전화번호 = "";
+}
 
 if (!item?.__col) {
   console.error("❌ __col 없음 → 수정 실패", item);

@@ -30,7 +30,7 @@ const getDate = (offset = 0) => {
   return d.toISOString().slice(0, 10);
 };
 
-export default function ShipperOrder() {
+export default function ShipperOrder({ editData, onClose }) {
   const user = auth.currentUser;
   const navigate = useNavigate();
   const [params] = useSearchParams();
@@ -142,7 +142,16 @@ const [keyword, setKeyword] = useState("");
 
     load();
   }, [editId]);
+useEffect(() => {
+  if (!editData) return;
 
+  setForm(prev => ({
+    ...prev,
+    ...editData
+  }));
+
+  setLoading(false);
+}, [editData]);
   // ================= 저장 =================
   // ✅ resetForm 먼저 선언
 const resetForm = () => {
@@ -234,12 +243,14 @@ await upsertPlace({
   담당자번호: form.하차담당자번호,
   메모: form.하차메모,
 }, "하차");
-    if (editId) {
-      await updateDoc(doc(db, "orders", editId), {
-        ...form,
-        updatedAt: serverTimestamp(),
-      });
-    } else {
+if (editId || editData?.id) {
+  const id = editId || editData.id;
+
+  await updateDoc(doc(db, "orders", id), {
+    ...form,
+    updatedAt: serverTimestamp(),
+  });
+} else {
 
       await addDoc(collection(db, "orders"), {
   ...form,
@@ -262,7 +273,18 @@ await upsertPlace({
 });
     }
 
-    navigate("/shipper/status");
+if (editId || editData) {
+  alert("수정 완료");
+
+  if (onClose) {
+    onClose();   // 팝업 닫기
+  } else {
+    navigate("/shipper/status"); // 페이지모드
+  }
+
+} else {
+  navigate("/shipper/status");
+}
   };
 const handleSearch = async () => {
   if (!user) return;
@@ -913,7 +935,13 @@ return (
       {/* ================= 버튼 ================= */}
       <div className="flex justify-end gap-3">
         <button
-          onClick={() => navigate(-1)}
+          onClick={() => {
+  if (onClose) {
+    onClose();   // 팝업이면 닫기
+  } else {
+    navigate(-1); // 페이지면 뒤로가기
+  }
+}}
           className="px-6 py-2 rounded bg-gray-200"
         >
           취소
@@ -922,7 +950,7 @@ return (
           onClick={submit}
           className="px-6 py-2 rounded bg-blue-600 text-white"
         >
-          {editId ? "수정 저장" : "오더 등록"}
+          {editId || editData ? "저장" : "오더 등록"}
         </button>
       </div>
     </div>

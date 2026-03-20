@@ -1,7 +1,69 @@
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { db, auth } from "../../firebase";
+import { collection, query, where, onSnapshot } from "firebase/firestore";
 
 export default function ShipperHome() {
   const [tab, setTab] = useState("dashboard");
+
+  const [orders, setOrders] = useState([]);
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [keyword, setKeyword] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+
+  const user = auth.currentUser;
+
+  /* ================= 데이터 로드 ================= */
+  useEffect(() => {
+    if (!user) return;
+
+    const q = query(
+      collection(db, "orders"),
+      where("shipperUid", "==", user.uid)
+    );
+
+    const unsub = onSnapshot(q, (snap) => {
+      setOrders(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    });
+
+    return () => unsub();
+  }, [user]);
+
+  /* ================= 상태 계산 ================= */
+  const getStatus = (o) => {
+    if (o.차량번호) return "배차완료";
+    return "요청";
+  };
+
+  /* ================= KPI ================= */
+  const kpi = useMemo(() => ({
+    total: orders.length,
+    배차중: orders.filter(o => !o.차량번호).length,
+    운송중: orders.filter(o => o.상태 === "운송중").length,
+    운송완료: orders.filter(o => o.상태 === "완료" || o.차량번호).length,
+  }), [orders]);
+
+  /* ================= 필터 ================= */
+  const rows = useMemo(() => {
+    return orders.filter(o => {
+
+      if (startDate && o.상차일 < startDate) return false;
+      if (endDate && o.상차일 > endDate) return false;
+
+      if (statusFilter && getStatus(o) !== statusFilter) return false;
+
+      if (keyword) {
+        const v = keyword.toLowerCase();
+        return (
+          o.거래처명?.toLowerCase().includes(v) ||
+          o.차량번호?.toLowerCase().includes(v) ||
+          o.이름?.toLowerCase().includes(v)
+        );
+      }
+
+      return true;
+    });
+  }, [orders, startDate, endDate, keyword, statusFilter]);
 
   return (
     <div className="flex gap-6">
@@ -38,23 +100,23 @@ export default function ShipperHome() {
 
         {/* KPI */}
         <div className="grid grid-cols-6 gap-4">
-          <Kpi title="전체 운송 건수" value="0" />
-          <Kpi title="배차중" value="0" color="text-gray-700" />
-          <Kpi title="운송중" value="0" color="text-blue-600" />
-          <Kpi title="운송완료" value="0" color="text-green-600" />
+          <Kpi title="전체 운송 건수" value={kpi.total} />
+          <Kpi title="배차중" value={kpi.배차중} color="text-gray-700" />
+          <Kpi title="운송중" value={kpi.운송중} color="text-blue-600" />
+          <Kpi title="운송완료" value={kpi.운송완료} color="text-green-600" />
           <Kpi title="예외상황" value="0" color="text-red-500" />
           <Kpi title="CS 문의" value="0" color="text-orange-500" />
         </div>
 
         {/* 🔥 핵심: 좌우 분할 */}
-<div className="flex gap-4">
+        <div className="flex gap-4">
 
-  {/* 지도 */}
-  <div className="w-[62%] bg-white rounded-lg border border-gray-100 h-[450px] shadow-sm flex flex-col items-center justify-center text-gray-400 text-sm">
-    <div className="text-lg mb-2">🚧</div>
-    <div className="font-medium">지도 기능 준비중입니다</div>
-    <div className="text-xs mt-1">곧 업데이트 예정</div>
-  </div>
+          {/* 지도 */}
+          <div className="w-[62%] bg-white rounded-lg border border-gray-100 h-[450px] shadow-sm flex flex-col items-center justify-center text-gray-400 text-sm">
+            <div className="text-lg mb-2"></div>
+            <div className="font-medium">지도 기능 준비중입니다</div>
+            <div className="text-xs mt-1">곧 업데이트 예정</div>
+          </div>
 
           {/* ================= 우측 패널 ================= */}
           <div className="w-[38%] bg-white rounded-lg border border-gray-100 shadow-sm flex flex-col">
@@ -63,7 +125,24 @@ export default function ShipperHome() {
             <div className="p-3 border-b">
 
               <div className="flex justify-between items-center mb-2 text-sm text-gray-500">
-                <div>총 0 건</div>
+                <div>총 {rows.length} 건</div>
+
+                {/* 🔥 날짜 필터 추가 */}
+                <div className="flex gap-2">
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={(e)=>setStartDate(e.target.value)}
+                    className="border rounded px-2 py-1 text-xs"
+                  />
+                  <span>~</span>
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={(e)=>setEndDate(e.target.value)}
+                    className="border rounded px-2 py-1 text-xs"
+                  />
+                </div>
               </div>
 
               <div className="flex items-center gap-2">
@@ -71,16 +150,21 @@ export default function ShipperHome() {
                 <div className="flex items-center border border-gray-300 rounded-md px-3 h-9 flex-1 bg-white">
                   <span className="text-gray-400 text-sm mr-2">🔍</span>
                   <input
+                    value={keyword}
+                    onChange={(e)=>setKeyword(e.target.value)}
                     placeholder="오더번호, 차량, 기사 검색"
                     className="flex-1 text-sm outline-none bg-transparent"
                   />
                 </div>
 
-                <select className="border border-gray-300 rounded-md h-9 px-3 text-sm bg-white">
-                  <option>운송상태</option>
-                  <option>요청</option>
-                  <option>운송중</option>
-                  <option>완료</option>
+                <select
+                  value={statusFilter}
+                  onChange={(e)=>setStatusFilter(e.target.value)}
+                  className="border border-gray-300 rounded-md h-9 px-3 text-sm bg-white"
+                >
+                  <option value="">운송상태</option>
+                  <option value="요청">요청</option>
+                  <option value="배차완료">배차완료</option>
                 </select>
 
                 <button className="h-9 px-4 bg-blue-500 text-white text-sm rounded-md hover:bg-blue-600">
@@ -91,8 +175,24 @@ export default function ShipperHome() {
             </div>
 
             {/* 🔥 리스트 영역 */}
-<div className="flex-1 flex items-center justify-center text-gray-400 text-sm">
-  검색된 내역이 없습니다.
+            <div className="flex-1 overflow-auto">
+              {rows.length === 0 ? (
+                <div className="flex items-center justify-center h-full text-gray-400 text-sm">
+                  검색된 내역이 없습니다.
+                </div>
+              ) : (
+                rows.map((o) => (
+                  <div key={o.id} className="p-3 border-b text-sm">
+                    <div className="font-semibold">{o.거래처명}</div>
+                    <div className="text-gray-500 text-xs">
+                      {o.상차지명} → {o.하차지명}
+                    </div>
+                    <div className="text-xs mt-1">
+                      🚚 {o.차량번호 || "-"} / {o.이름 || "-"}
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
 
           </div>
