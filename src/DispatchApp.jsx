@@ -211,59 +211,70 @@ function useRealtimeCollections(user) {
   const [drivers, setDrivers] = useState([]);
   const [clients, setClients] = useState([]);
   // ===================== 하차지(places) Firestore 실시간 구독 =====================
-  const [places, setPlaces] = useState([]);
+const [places, setPlaces] = useState([]);
 
-  useEffect(() => {
-    const coll = collection(db, "places");
-    const unsub = onSnapshot(coll, (snap) => {
-      const arr = snap.docs.map((d) => ({
-        _id: d.id,
-        ...(d.data() || {}),
-      }));
-      setPlaces(arr);
-    });
+useEffect(() => {
+  const coll = collection(db, "places");
+  const unsub = onSnapshot(coll, (snap) => {
+    const arr = snap.docs.map((d) => ({
+      _id: d.id,
+      ...(d.data() || {}),
+    }));
+    setPlaces(arr);
+  });
 
-    return () => unsub();
-  }, []);
+  return () => unsub();
+}, []);
 
-  useEffect(() => {
-    if (!user) { setDispatchData([]); setDrivers([]); setClients([]); return; }
+// ===================== 메인 실시간 =====================
+useEffect(() => {
+  if (!user) {
+    setDispatchData([]);
+    setDrivers([]);
+    setClients([]);
+    return;
+  }
 
-    const unsubs = [];
-    const userRole = localStorage.getItem("role") || "user";
-    const collName = getCollectionName(userRole);
+  const unsubs = [];
+  const userRole = localStorage.getItem("role") || "user";
+  const collName = getCollectionName(userRole);
 
-    unsubs.push(
-  onSnapshot(collection(db, collName), (snap) => {
-    const arr = snap.docs.map(d => {
-      const data = d.data() || {};
-      return {
-        _id: d.id,
-        ...data,
-        경유지_상차: Array.isArray(data.경유지_상차) ? data.경유지_상차 : [],
-        경유지_하차: Array.isArray(data.경유지_하차) ? data.경유지_하차 : [],
-      };
-    });
+  // ✅ 1️⃣ orders (화주 + 신규)
+  unsubs.push(
+    onSnapshot(collection(db, collName), (snap) => {
+      const arr = snap.docs.map(d => {
+        const data = d.data() || {};
+        return {
+          _id: d.id,
+          __col: collName,   // ⭐ 핵심
+          ...data,
+          경유지_상차: Array.isArray(data.경유지_상차) ? data.경유지_상차 : [],
+          경유지_하차: Array.isArray(data.경유지_하차) ? data.경유지_하차 : [],
+        };
+      });
 
-    setDispatchData(prev => {
-      const merged = [...arr, ...(prev || [])];
-      const map = new Map();
-      merged.forEach(item => map.set(item._id, item));
-      return Array.from(map.values());
-    });
-  })
-);
+      setDispatchData(prev => {
+        const merged = [...(prev || []), ...arr];
+        const map = new Map();
+        merged.forEach(item => map.set(item._id, item));
+        return Array.from(map.values());
+      });
 
-// ⭐⭐⭐🔥 여기 추가 (이거 하나 빠져있음)🔥⭐⭐⭐
-unsubs.push(
-  onSnapshot(collection(db, "dispatch"), (snap) => {
-    const arr2 = snap.docs.map(d => {
-      const data = d.data() || {};
-      return {
-        _id: d.id,
-        ...data,
-      };
-    });
+      safeSave("dispatchData", arr);
+    })
+  );
+
+  // ✅ 2️⃣ 기존 dispatch 데이터
+  unsubs.push(
+    onSnapshot(collection(db, "dispatch"), (snap) => {
+      const arr2 = snap.docs.map(d => {
+        const data = d.data() || {};
+        return {
+          _id: d.id,
+          __col: "dispatch",   // ⭐ 핵심
+          ...data,
+        };
+      });
 
     setDispatchData(prev => {
       const merged = [...(prev || []), ...arr2];
@@ -271,7 +282,7 @@ unsubs.push(
       merged.forEach(item => map.set(item._id, item));
       return Array.from(map.values());
     });
-        safeSave("dispatchData", arr);
+        safeSave("dispatchData", arr2);
       })
     );
     unsubs.push(
@@ -329,10 +340,14 @@ setClients(normalizeClients(arr));
   const patchDispatch = async (_id, patch) => {
     if (!_id) return;
 
-    const isOrder = dispatchData.find(d => d._id === _id && d.source === "shipper");
+const item = dispatchData.find(d => d._id === _id);
 
-// 기본은 dispatch
-const collectionName = isOrder ? "orders" : "dispatch";
+if (!item?.__col) {
+  console.error("❌ __col 없음 → 수정 실패", item);
+  return;
+}
+
+const collectionName = item.__col;
 
 const ref = doc(db, collectionName, _id);
     const snap = await getDoc(ref);
@@ -385,11 +400,19 @@ await updateDoc(ref, {
   };
 
 
-  const removeDispatch = async (arg) => {
-    const id = typeof arg === "string" ? arg : arg?._id;
-    if (!id) return;
-    await deleteDoc(doc(db, COLL.dispatch, id));
-  };
+const removeDispatch = async (arg) => {
+  const id = typeof arg === "string" ? arg : arg?._id;
+  if (!id) return;
+
+  const item = dispatchData.find(d => d._id === id);
+
+  if (!item?.__col) {
+    console.error("❌ __col 없음 → 삭제 실패", item);
+    return;
+  }
+
+  await deleteDoc(doc(db, item.__col, id));
+};
 
 
   const upsertDriver = async (driver) => {
