@@ -15,7 +15,7 @@ import { db, auth } from "../firebase";
 
 // 🔥 role 기반 컬렉션 분기
 const role = localStorage.getItem("role") || "user";
-const collName = role === "test" ? "dispatch_test" : "dispatch";
+const collName = "dispatch";
 // 🔙 뒤로가기 아이콘 버튼
 function BackIconButton({ onClick }) {
   return (
@@ -433,23 +433,30 @@ useEffect(() => {
 
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, collName), (snap) => {
+  const unsubs = [];
+
+  const collections = ["dispatch", "orders"]; // 🔥 핵심
+
+  collections.forEach((name) => {
+    const unsub = onSnapshot(collection(db, name), (snap) => {
       const list = snap.docs.map((d) => ({
         _id: d.id,
         id: d.id,
+        __col: name, // 🔥 출처 저장
         ...d.data(),
       }));
-      // 상차일/등록일 기준으로 최신순 정렬
-      list.sort((a, b) => {
-        const da = getPickupDate(a);
-        const db = getPickupDate(b);
-        return (db || "").localeCompare(da || "");
-      });
 
-      setOrders(list);
+      setOrders((prev) => {
+        const filtered = prev.filter((o) => o.__col !== name);
+        return [...filtered, ...list];
+      });
     });
-    return () => unsub();
-  }, []);
+
+    unsubs.push(unsub);
+  });
+
+  return () => unsubs.forEach((u) => u());
+}, []);
   // --------------------------------------------------
 // 🔔 PC 공지사항 실시간 구독 (이 위치!)
 // --------------------------------------------------
@@ -1010,7 +1017,7 @@ const undeliveredOrders = useMemo(() => {
 
     // 🔹 수정 모드
     if (form._editId) {
-      await updateDoc(doc(db, collName, form._editId), {
+      await updateDoc(doc(db, selectedOrder.__col, form._editId), {
         ...docData,
         _id: form._editId,
         id: form._editId,
@@ -1153,7 +1160,7 @@ const handleOrderDuplicate = (order) => {
       };
     }
 
-    await updateDoc(doc(db, collName, selectedOrder.id), {
+    await updateDoc(doc(db, selectedOrder.__col, selectedOrder.id), {
       기사명: driver.이름,
       차량번호: driver.차량번호,
       전화번호: driver.전화번호,
@@ -1179,7 +1186,7 @@ const handleOrderDuplicate = (order) => {
     if (!selectedOrder) return;
 
     // 🔥 차량번호/기사정보만 제거 → 상태는 자동으로 "배차중"
-    await updateDoc(doc(db, collName, selectedOrder.id), {
+    await updateDoc(doc(db, selectedOrder.__col, selectedOrder.id), {
       기사명: "",
       차량번호: "",
       전화번호: "",
@@ -1211,7 +1218,7 @@ const handleOrderDuplicate = (order) => {
     )
       return;
 
-    await deleteDoc(doc(db, collName, selectedOrder.id));
+    await deleteDoc(doc(db, selectedOrder.__col, selectedOrder.id));
     setSelectedOrder(null);
     setPage("list");
     alert("오더가 삭제되었습니다.");
