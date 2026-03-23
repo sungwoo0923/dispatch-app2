@@ -15,6 +15,7 @@ import ShipperSettings from "./pages/ShipperSettings";
 export default function ShipperApp() {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
+  const [userData, setUserData] = useState(null);
   const [companyName, setCompanyName] = useState("");
 const location = useLocation();
   // ================= 화주 권한 확인 =================
@@ -26,17 +27,25 @@ const location = useLocation();
       }
 
       const snap = await getDoc(doc(db, "users", u.uid));
-      if (!snap.exists() || snap.data().role !== "shipper") {
-        navigate("/no-access");
-        return;
-      }
 
-      setUser(u);
-      setCompanyName(
-        snap.data().companyName ||
-        snap.data().company ||
-        "화주사"
-      );
+if (!snap.exists()) {
+  navigate("/no-access");
+  return;
+}
+
+const data = snap.data();
+if (!data.approved) {
+  navigate("/shipper-pending");
+  return;
+}
+setUser(u);
+setUserData(data);
+
+setCompanyName(
+  data.companyName ||
+  data.company ||
+  "화주사"
+);
     });
 
     return () => unsub();
@@ -74,34 +83,42 @@ const location = useLocation();
         RUN25
       </div>
 
-      {/* 🔥 메뉴 */}
-      <nav className="flex gap-6 text-sm font-semibold">
+<nav className="flex gap-6 text-sm font-semibold">
 
-        <MenuBtn
-          label="대시보드"
-          active={location.pathname === "/shipper"}
-          onClick={() => navigate("/shipper")}
-        />
+  {/* 대시보드 */}
+  <MenuBtn
+    label="대시보드"
+    active={location.pathname === "/shipper"}
+    onClick={() => navigate("/shipper")}
+  />
 
-        <MenuBtn
-          label="운송"
-          active={location.pathname.includes("/shipper/transport")}
-          onClick={() => navigate("/shipper/transport")}
-        />
+  {/* 🔥 shipper = 전체 허용 */}
+  {(userData?.role === "shipper" || userData?.permissions?.dispatch) && (
+    <MenuBtn
+      label="운송"
+      active={location.pathname.includes("/shipper/transport")}
+      onClick={() => navigate("/shipper/transport")}
+    />
+  )}
 
-        <MenuBtn
-          label="정산"
-          active={location.pathname.includes("/shipper/settlement")}
-          onClick={() => alert("정산 준비중")}
-        />
+  {(userData?.role === "shipper" || userData?.permissions?.settlement) && (
+    <MenuBtn
+      label="정산"
+      active={location.pathname.includes("/shipper/settlement")}
+      onClick={() => alert("정산 준비중")}
+    />
+  )}
 
-        <MenuBtn
-  label="마스터설정"
-  active={location.pathname.includes("/shipper/settings")}
-  onClick={() => navigate("/shipper/settings")}
-/>
+  {/* 🔥 shipper만 설정 접근 */}
+  {userData?.role === "shipper" && (
+    <MenuBtn
+      label="마스터설정"
+      active={location.pathname.includes("/shipper/settings")}
+      onClick={() => navigate("/shipper/settings")}
+    />
+  )}
 
-      </nav>
+</nav>
     </div>
 
     {/* 우측 */}

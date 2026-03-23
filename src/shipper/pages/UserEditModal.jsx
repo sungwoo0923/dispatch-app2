@@ -1,7 +1,7 @@
 import { useState } from "react";
 
-export default function UserEditModal({ open, onClose }) {
-  const [tab, setTab] = useState("기본정보");
+export default function UserEditModal({ open, user, onClose, mode }) {
+ const [tab, setTab] = useState(mode === "permission" ? "권한 및 그룹관리" : "기본정보");
 
   if (!open) return null;
 

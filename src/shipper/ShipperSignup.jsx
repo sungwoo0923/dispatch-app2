@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { auth, db } from "../firebase";
-import { doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { doc, setDoc, serverTimestamp, collection, getDocs } from "firebase/firestore";
 
 export default function ShipperSignup() {
   const navigate = useNavigate();
@@ -13,7 +13,12 @@ export default function ShipperSignup() {
   const [password, setPassword] = useState("");
   const [company, setCompany] = useState("");
   const [error, setError] = useState("");
+  const [name, setName] = useState("");
+const [phone, setPhone] = useState("");
+const [department, setDepartment] = useState("");
+const [position, setPosition] = useState("");
   const [loading, setLoading] = useState(false);
+  
 
   const handleSignup = async (e) => {
     e.preventDefault();
@@ -24,14 +29,32 @@ export default function ShipperSignup() {
       const res = await createUserWithEmailAndPassword(auth, email, password);
       const uid = res.user.uid;
 
-      // 🔐 승인 대기 상태로 생성
-      await setDoc(doc(db, "users", uid), {
-        email,
-        company,
-        role: "shipper",
-approved: false,
-        createdAt: serverTimestamp(),
-      });
+     // 🔥 같은 회사 기존 유저 있는지 확인
+const snap = await getDocs(collection(db, "users"));
+
+const sameCompany = snap.docs.filter(
+  d => d.data().company === company
+);
+
+// 👉 최초 가입자 여부
+const isFirst = sameCompany.length === 0;
+
+await setDoc(doc(db, "users", uid), {
+  uid,
+  email,
+  company,
+  name,
+  phone,
+  department,
+  position,
+
+  // 🔥 핵심
+role: "shipper",
+permissions: {},
+
+  approved: false,
+  createdAt: serverTimestamp(),
+});
 
       navigate("/shipper-pending", { replace: true });
 
@@ -76,7 +99,35 @@ approved: false,
             required
             className="w-full border px-3 py-2 rounded"
           />
+<input
+  placeholder="이름"
+  value={name}
+  onChange={(e) => setName(e.target.value)}
+  required
+  className="w-full border px-3 py-2 rounded"
+/>
 
+<input
+  placeholder="핸드폰번호"
+  value={phone}
+  onChange={(e) => setPhone(e.target.value)}
+  required
+  className="w-full border px-3 py-2 rounded"
+/>
+
+<input
+  placeholder="부서"
+  value={department}
+  onChange={(e) => setDepartment(e.target.value)}
+  className="w-full border px-3 py-2 rounded"
+/>
+
+<input
+  placeholder="직책"
+  value={position}
+  onChange={(e) => setPosition(e.target.value)}
+  className="w-full border px-3 py-2 rounded"
+/>
           {error && <div className="text-red-600 text-sm">{error}</div>}
 
           <button
