@@ -37,6 +37,16 @@ const [expandedRows, setExpandedRows] = useState({});
 const [selectedIds, setSelectedIds] = useState([]);
 const [editOpen, setEditOpen] = useState(false);
 const [editData, setEditData] = useState(null);
+const [hideCanceled, setHideCanceled] = useState(false);
+const [confirmOpen, setConfirmOpen] = useState(false);
+const [confirmConfig, setConfirmConfig] = useState({
+  message: "",
+  onConfirm: null,
+});
+const openConfirm = (message, onConfirm) => {
+  setConfirmConfig({ message, onConfirm });
+  setConfirmOpen(true);
+};
   /* ================= 데이터 로드 ================= */
   useEffect(() => {
     if (!user) return;
@@ -55,15 +65,16 @@ const [editData, setEditData] = useState(null);
   }, [user]);
 
   /* ================= KPI ================= */
+const activeOrders = orders.filter(o => o.상태 !== "취소");
+
 const kpi = useMemo(
   () => ({
-    total: orders.length,
-    요청: orders.filter((o) => !o.차량번호).length,
+    total: activeOrders.length,
+    요청: activeOrders.filter((o) => !o.차량번호).length,
     배차중: 0,
-    배차완료: orders.filter((o) => o.차량번호).length,
+    배차완료: activeOrders.filter((o) => o.차량번호).length,
 
-    // 🔥 추가
-    총금액: orders.reduce((sum, o) => {
+    총금액: activeOrders.reduce((sum, o) => {
       return sum + (Number(o.청구운임) || 0);
     }, 0),
   }),
@@ -122,7 +133,7 @@ const handleEditSelected = () => {
   /* ================= 필터링 ================= */
 const rows = useMemo(() => {
   return orders.filter((o) => {
-
+if (hideCanceled && filter !== "배차취소" && o.상태 === "취소") return false;
     // 상태 필터
 const currentStatus = getStatus(o);
 if (filter !== "전체" && currentStatus !== filter) return false;
@@ -160,16 +171,40 @@ if (filter !== "전체" && currentStatus !== filter) return false;
         );
     }
   });
-}, [orders, filter, keyword, startDate, endDate, searchType]);
+}, [orders, filter, keyword, startDate, endDate, searchType, hideCanceled]);
 
-const cancelOrder = async (id) => {
-  if (!window.confirm("오더를 취소하시겠습니까?")) return;
+const restoreOrder = (order) => {
+  openConfirm("오더를 재등록하시겠습니까?", () => {
+    setDetailOpen(false);
 
-  await updateDoc(doc(db, "orders", id), {
-    상태: "취소",
+    setEditData({
+      ...order,
+      상태: "요청",
+    });
+
+    setEditOpen(true);
+    setConfirmOpen(false);
   });
 };
+const cancelOrder = (id) => {
+  openConfirm("오더를 취소하시겠습니까?", async () => {
+    await updateDoc(doc(db, "orders", id), {
+      상태: "취소",
+    });
 
+    setSelectedOrder(prev => {
+      if (!prev) return prev;
+      if (prev.id !== id) return prev;
+
+      return {
+        ...prev,
+        상태: "취소",
+      };
+    });
+
+    setConfirmOpen(false);
+  });
+};
   if (loading) {
     return <div className="py-24 text-center text-gray-400">불러오는 중…</div>;
   }
@@ -245,7 +280,15 @@ bg-gray-100 border-r transition-all duration-300
         {s}
       </button>
     ))}
-  </div>
+      <label className="flex items-center gap-2 text-sm ml-4">
+    <input
+      type="checkbox"
+      checked={hideCanceled}
+      onChange={(e) => setHideCanceled(e.target.checked)}
+    />
+    취소 오더 숨기기
+  </label>
+</div>
 
   <div className="flex justify-between items-center flex-wrap gap-2">
 
@@ -347,7 +390,17 @@ bg-gray-100 border-r transition-all duration-300
   text-center
 ">
   <div>
-  <input type="checkbox" />
+  <input
+  type="checkbox"
+  checked={selectedIds.length === rows.length && rows.length > 0}
+  onChange={(e) => {
+    if (e.target.checked) {
+      setSelectedIds(rows.map(o => o.id));
+    } else {
+      setSelectedIds([]);
+    }
+  }}
+/>
 </div>
             <div>순번</div>
             <div>상차일</div>
@@ -489,33 +542,63 @@ className={`
         <div className="flex items-center justify-between px-5 py-4 border-b">
 
   {/* 왼쪽: 상태 */}
-  <div className="text-[18px] font-bold text-blue-600">
-    {selectedOrder?.차량번호 && selectedOrder?.차량번호.trim()
-      ? "배차완료 되었습니다."
-      : "배차중 입니다."}
-  </div>
+<div className={`text-[18px] font-bold ${
+  selectedOrder?.상태 === "취소"
+    ? "text-red-600"
+    : "text-blue-600"
+}`}>
+  {selectedOrder?.상태 === "취소"
+    ? "배차취소 되었습니다."
+    : selectedOrder?.차량번호
+    ? "배차완료 되었습니다."
+    : "배차중 입니다."}
+</div>
 
   {/* 🔥 가운데: 액션 버튼 */}
   <div className="flex gap-2">
 
-    <button
-      onClick={() => {
-        setEditData(selectedOrder);
-        setEditOpen(true);
-      }}
-      className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700"
-    >
-      수정
-    </button>
+  {/* 수정 */}
+  <button
+    disabled={selectedOrder?.상태 === "취소"}
+    onClick={() => {
+      setEditData(selectedOrder);
+      setEditOpen(true);
+    }}
+    className={`px-4 py-2 rounded-lg text-sm font-semibold
+      ${
+        selectedOrder?.상태 === "취소"
+          ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+          : "bg-blue-600 text-white hover:bg-blue-700"
+      }`}
+  >
+    수정
+  </button>
 
-    <button
-      onClick={() => cancelOrder(selectedOrder.id)}
-      className="px-4 py-2 bg-red-500 text-white rounded-lg text-sm font-semibold hover:bg-red-600"
-    >
-      오더취소
-    </button>
+  {/* 오더취소 */}
+  <button
+    disabled={selectedOrder?.상태 === "취소"}
+    onClick={() => cancelOrder(selectedOrder.id)}
+    className={`px-4 py-2 rounded-lg text-sm font-semibold
+      ${
+        selectedOrder?.상태 === "취소"
+          ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+          : "bg-red-500 text-white hover:bg-red-600"
+      }`}
+  >
+    오더취소
+  </button>
 
-  </div>
+  {/* 🔥 재등록 (취소된 경우만) */}
+  {selectedOrder?.상태 === "취소" && (
+    <button
+      onClick={() => restoreOrder(selectedOrder)}
+      className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700"
+    >
+      재등록
+    </button>
+  )}
+
+</div>
 
   {/* 오른쪽: 닫기 */}
   <button
@@ -580,7 +663,13 @@ className={`
 
         </div>
       )}
-
+{confirmOpen && (
+  <ConfirmModal
+    message={confirmConfig.message}
+    onConfirm={confirmConfig.onConfirm}
+    onClose={() => setConfirmOpen(false)}
+  />
+)}
     </div>
   );
 }
@@ -851,6 +940,63 @@ function Timeline({ order }) {
         `}
       </style>
 
+    </div>
+  );
+}
+function ConfirmModal({ message, onConfirm, onClose }) {
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.key === "Enter") {
+        onConfirm && onConfirm();
+      }
+      if (e.key === "Escape") {
+        onClose();
+      }
+    };
+
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [onConfirm, onClose]);
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-[999] flex items-center justify-center">
+      <div className="bg-white w-[360px] rounded-2xl shadow-2xl p-6 animate-fadeIn">
+
+        <div className="text-lg font-bold text-gray-800 mb-3">
+          확인
+        </div>
+
+        <div className="text-sm text-gray-600 mb-6">
+          {message}
+        </div>
+
+        <div className="flex justify-end gap-2">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-sm"
+          >
+            취소 (ESC)
+          </button>
+
+          <button
+            onClick={onConfirm}
+            className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 text-sm font-semibold"
+          >
+            확인 (ENTER)
+          </button>
+        </div>
+
+      </div>
+
+      <style>{`
+        .animate-fadeIn {
+          animation: fadeIn 0.2s ease;
+        }
+        @keyframes fadeIn {
+          from { opacity: 0; transform: scale(0.95); }
+          to { opacity: 1; transform: scale(1); }
+        }
+      `}</style>
     </div>
   );
 }

@@ -174,26 +174,84 @@ export default function ShipperHome() {
               </div>
             </div>
 
-            {/* 🔥 리스트 영역 */}
-            <div className="flex-1 overflow-auto">
-              {rows.length === 0 ? (
-                <div className="flex items-center justify-center h-full text-gray-400 text-sm">
-                  검색된 내역이 없습니다.
+            {/* 🔥 실시간 배차현황 */}
+<div className="flex-1 flex flex-col">
+
+  {/* 🔥 타이틀 */}
+  <div className="px-3 py-2 border-b font-semibold text-sm bg-gray-50">
+    실시간 배차현황
+  </div>
+
+  {/* 🔥 컬럼 헤더 */}
+  <div className="grid grid-cols-[120px_1fr_1fr_1fr_100px] text-[13px] font-bold text-blue-900 px-3 py-3 border-b bg-blue-50 text-center">
+    <div>상차일</div>
+    <div>운송사</div>
+    <div>상차지</div>
+    <div>하차지</div>
+    <div className="text-right">상태</div>
+  </div>
+
+  {/* 🔥 데이터 영역 */}
+  <div className="flex-1 overflow-hidden relative">
+
+    {rows.length === 0 ? (
+      <div className="flex items-center justify-center h-full text-gray-400 text-sm">
+        검색된 내역이 없습니다.
+      </div>
+    ) : (
+      <div className="absolute inset-0 overflow-hidden">
+        <div className="animate-scrollUp">
+
+          {rows.map((o, idx) => {
+            const status = getStatus(o);
+
+            return (
+              <div
+                key={idx}
+                className="grid grid-cols-[120px_1fr_1fr_1fr_100px] text-[13px] px-3 py-3 border-b items-center hover:bg-gray-50 transition"
+              >
+                {/* 상차일 */}
+                <div className="font-semibold text-gray-800">
+                  {o.상차일 || "-"}
                 </div>
-              ) : (
-                rows.map((o) => (
-                  <div key={o.id} className="p-3 border-b text-sm">
-                    <div className="font-semibold">{o.거래처명}</div>
-                    <div className="text-gray-500 text-xs">
-                      {o.상차지명} → {o.하차지명}
-                    </div>
-                    <div className="text-xs mt-1">
-                      🚚 {o.차량번호 || "-"} / {o.이름 || "-"}
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
+
+                {/* 운송사 */}
+                <div className="font-medium truncate">
+                  {o.거래처명}
+                </div>
+
+                {/* 상차지 */}
+                <div className="text-gray-1000 truncate">
+                  {o.상차지명}
+                </div>
+
+                {/* 하차지 */}
+                <div className="text-gray-1000 truncate">
+                  {o.하차지명}
+                </div>
+
+                {/* 상태 */}
+                <div className="text-right">
+<span
+  className={`px-2 py-1 rounded-full text-[12px] font-semibold
+    ${
+      status === "배차완료"
+        ? "bg-green-500 text-white"
+        : "bg-blue-500 text-white"
+    }`}
+>
+  {status}
+</span>
+                </div>
+              </div>
+            );
+          })}
+
+        </div>
+      </div>
+    )}
+  </div>
+</div>
 
           </div>
 
