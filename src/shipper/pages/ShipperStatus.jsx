@@ -812,13 +812,13 @@ function Timeline({ order }) {
     },
     {
       title: "배차중",
-      company: order?.운송사명 || "로지스팟",
+      company: order?.운송사명 || "돌캐",
       date: order?.상차일,
       time: order?.상차시간,
     },
     {
       title: "배차완료",
-      company: order?.운송사명 || "로지스팟",
+      company: order?.운송사명 || "돌캐",
     },
     {
       title: "상차완료",

@@ -35,14 +35,14 @@ export default function SettingsTransport() {
     const saved = localStorage.getItem("transportList");
     return saved ? JSON.parse(saved) : [
       {
-        name: "로지스팟",
-        address: "서울 강남구 테헤란로33길",
-        phone: "1800-8528",
-        ceo: "박재용, 박준규",
+        name: "돌캐",
+        address: "인천광역시 서구 청마로19번길21, 4층(성주빌딩)",
+        phone: "1533-2525",
+        ceo: "박주상",
         type: "운수/운송주선업",
         biz: "",
-        bank: "신한은행 100021349953",
-        email: "kookie5678@hometax.go.kr",
+        bank: "기업은행 955-040276-04-018",
+        email: "r15332525@daum.net",
         price: "",
         memo: "",
       },
