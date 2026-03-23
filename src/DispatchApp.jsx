@@ -337,83 +337,85 @@ setClients(normalizeClients(arr));
   };
 
   const patchDispatch = async (_id, patch) => {
-    if (!_id) return;
+  if (!_id) return;
 
-const item = dispatchData.find(d => d._id === _id);
+  const item = dispatchData.find(d => d._id === _id);
 
-if (patch.차량번호) {
-  const driver = drivers.find(
-    (d) =>
-      normalizePlate(d.차량번호) === normalizePlate(patch.차량번호)
-  );
-
-  if (driver && (!patch.이름 && !patch.전화번호)) {
-    patch.이름 = driver.이름 || "";
-    patch.전화번호 = driver.전화번호 || "";
+  if (!item?.__col) {
+    console.error("❌ __col 없음 → 수정 실패", item);
+    return;
   }
-}
 
-if (!patch.차량번호) {
-  patch.이름 = "";
-  patch.전화번호 = "";
-}
+  const collectionName = item.__col;
+  const ref = doc(db, collectionName, _id);
 
-if (!item?.__col) {
-  console.error("❌ __col 없음 → 수정 실패", item);
-  return;
-}
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return;
 
-const collectionName = item.__col;
+  const prev = snap.data();
 
-const ref = doc(db, collectionName, _id);
-    const snap = await getDoc(ref);
-    if (!snap.exists()) return;
+  // 🔥 1️⃣ 차량번호 기준 무조건 driver 재매칭 (핵심)
+  const basePlate = patch.차량번호 || prev?.차량번호;
 
-    const prev = snap.data();
+  if (basePlate) {
+    const driver = drivers.find(
+      (d) =>
+        normalizePlate(d.차량번호) === normalizePlate(basePlate)
+    );
 
-    const cleanPatch = stripUndefinedDeep({
-      ...patch,
-      경유지_상차: Array.isArray(patch.경유지_상차)
-        ? patch.경유지_상차
-        : prev.경유지_상차 || [],
-      경유지_하차: Array.isArray(patch.경유지_하차)
-        ? patch.경유지_하차
-        : prev.경유지_하차 || [],
-    });
+    if (driver) {
+      patch.이름 = driver.이름 || "";
+      patch.전화번호 = driver.전화번호 || "";
+    }
+  }
 
+  // 🔥 2️⃣ 차량번호도 없으면만 초기화
+  if (!basePlate) {
+    patch.이름 = "";
+    patch.전화번호 = "";
+  }
 
-    const histories = [];
+  // 🔥 3️⃣ cleanPatch 생성 (항상 마지막)
+  const cleanPatch = stripUndefinedDeep({
+    ...patch,
+    경유지_상차: Array.isArray(patch.경유지_상차)
+      ? patch.경유지_상차
+      : prev.경유지_상차 || [],
+    경유지_하차: Array.isArray(patch.경유지_하차)
+      ? patch.경유지_하차
+      : prev.경유지_하차 || [],
+  });
 
-    Object.keys(cleanPatch).forEach((key) => {
-      if (IGNORE_HISTORY_FIELDS.has(key)) return;
-      if (cleanPatch.__system === true) return;
+  // 🔥 4️⃣ 이력 생성
+  const histories = [];
 
-      // 🔥 전달상태 변경은 이력에 남기지 않음 (정렬 고정)
-      if (key === "업체전달상태") return;
-      if (key === "업체전달일시") return;
+  Object.keys(cleanPatch).forEach((key) => {
+    if (IGNORE_HISTORY_FIELDS.has(key)) return;
+    if (cleanPatch.__system === true) return;
 
-      if (prev[key] !== cleanPatch[key]) {
-        histories.push(
-          makeDispatchHistory({
-            userEmail: auth.currentUser?.email,
-            field: key,
-            before: prev[key] ?? null,
-            after: cleanPatch[key] ?? null,
-          })
-        );
-      }
-    });
+    if (key === "업체전달상태") return;
+    if (key === "업체전달일시") return;
 
+    if (prev[key] !== cleanPatch[key]) {
+      histories.push(
+        makeDispatchHistory({
+          userEmail: auth.currentUser?.email,
+          field: key,
+          before: prev[key] ?? null,
+          after: cleanPatch[key] ?? null,
+        })
+      );
+    }
+  });
 
-    // ✅ updateDoc 사용 (merge + undefined 문제 제거)
-const historyArr = Array.isArray(prev.history) ? prev.history : [];
+  const historyArr = Array.isArray(prev.history) ? prev.history : [];
 
-await updateDoc(ref, {
-  ...cleanPatch,
-  작성자: auth.currentUser?.email || "",
-  history: [...historyArr, ...histories],
-});
-  };
+  await updateDoc(ref, {
+    ...cleanPatch,
+    작성자: auth.currentUser?.email || "",
+    history: [...historyArr, ...histories],
+  });
+};
 
 
 const removeDispatch = async (arg) => {
