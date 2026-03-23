@@ -210,6 +210,8 @@ function useRealtimeCollections(user) {
   const [dispatchData, setDispatchData] = useState([]);
   const [drivers, setDrivers] = useState([]);
   const [clients, setClients] = useState([]);
+  let ordersCache = [];
+let dispatchCache = [];
   // ===================== 하차지(places) Firestore 실시간 구독 =====================
 const [places, setPlaces] = useState([]);
 
@@ -237,7 +239,8 @@ useEffect(() => {
 
   const unsubs = [];
   const userRole = localStorage.getItem("role") || "user";
-  const collName = getCollectionName(userRole);
+const collName = "orders";
+
 
   // ✅ 1️⃣ orders (화주 + 신규)
   unsubs.push(
@@ -255,12 +258,8 @@ useEffect(() => {
   })
   .filter(o => o.상태 !== "취소"); // 🔥 이거 추가
 
-      setDispatchData(prev => {
-        const merged = [...(prev || []), ...arr];
-        const map = new Map();
-        merged.forEach(item => map.set(item._id, item));
-        return Array.from(map.values());
-      });
+ordersCache = arr;
+setDispatchData([...ordersCache, ...dispatchCache]);
 
       safeSave("dispatchData", arr);
     })
@@ -280,12 +279,8 @@ const arr2 = snap.docs
   })
   .filter(o => o.상태 !== "취소");
 
-    setDispatchData(prev => {
-      const merged = [...(prev || []), ...arr2];
-      const map = new Map();
-      merged.forEach(item => map.set(item._id, item));
-      return Array.from(map.values());
-    });
+dispatchCache = arr2;
+setDispatchData([...ordersCache, ...dispatchCache]);
         safeSave("dispatchData", arr2);
       })
     );
@@ -345,13 +340,14 @@ setClients(normalizeClients(arr));
     if (!_id) return;
 
 const item = dispatchData.find(d => d._id === _id);
+
 if (patch.차량번호) {
   const driver = drivers.find(
     (d) =>
       normalizePlate(d.차량번호) === normalizePlate(patch.차량번호)
   );
 
-  if (driver) {
+  if (driver && (!patch.이름 && !patch.전화번호)) {
     patch.이름 = driver.이름 || "";
     patch.전화번호 = driver.전화번호 || "";
   }
