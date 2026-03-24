@@ -325,9 +325,15 @@ const toggleAlarm = () => {
 // 🔔 공지 / 일정 (PC 연동)
 const [notices, setNotices] = useState([]);
 const [schedules, setSchedules] = useState([]);
+const sortedSchedules = [...schedules].sort((a, b) => {
+  const da = a.startDate || a.start || "";
+  const db = b.startDate || b.start || "";
+  return db.localeCompare(da);
+});
 // 🆕 NEW 뱃지 상태
 const [hasNewNotice, setHasNewNotice] = useState(false);
 const [hasNewSchedule, setHasNewSchedule] = useState(false);
+const [selectedSchedule, setSelectedSchedule] = useState(null);
   // -------------------------------------------------------------
   // 🔥 추가: 빠른 날짜 선택 (1/3/7/15일 버튼)
   // -------------------------------------------------------------
@@ -691,7 +697,11 @@ useEffect(() => {
     )
   );
 
-  setHasNewSchedule(latest > lastRead);
+setHasNewSchedule(
+  schedules.some(s =>
+    (s.createdAt?.seconds || 0) > lastRead
+  )
+);
 }, [schedules]);
 
 
@@ -1398,7 +1408,10 @@ const title =
     );
 
     if (latest > 0) {
-      localStorage.setItem("lastReadNoticeAt", latest);
+      localStorage.setItem(
+  "lastReadNoticeAt",
+  Math.floor(Date.now() / 1000)
+);
     }
   }
 
@@ -1418,7 +1431,10 @@ onGoSchedule={() => {
     );
 
     if (latest > 0) {
-      localStorage.setItem("lastReadScheduleAt", latest);
+      localStorage.setItem(
+  "lastReadScheduleAt",
+  Math.floor(Date.now() / 1000)
+);
     }
   }
 
@@ -1496,7 +1512,7 @@ onGoSchedule={() => {
       </div>
     )}
 
-    {schedules.map(s => {
+    {sortedSchedules.map(s => {
       const type = s.type || s.title;
       const writer = s.writer || s.name;
       const startDate = s.startDate || s.start;
@@ -1505,34 +1521,64 @@ onGoSchedule={() => {
 
       return (
         <div
-          key={s.id}
-          className="bg-white rounded-xl border shadow-sm p-4"
-        >
-          <div className="flex justify-between items-center">
-            <div className="text-sm font-semibold">{type}</div>
-            {writer && (
-              <div className="text-[11px] text-gray-500">{writer}</div>
-            )}
-          </div>
+  key={s.id}
+  onClick={() => setSelectedSchedule(s)}
+  className="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm
+             active:scale-[0.98] transition"
+>
+  <div className="flex items-center justify-between">
+    <div className="text-sm font-bold text-blue-600">
+      {type}
+    </div>
+    <div className="text-sm font-semibold text-blue-600">
+  {writer}
+</div>
+  </div>
 
-          {(startDate || endDate) && (
-            <div className="mt-1 text-xs text-gray-600">
-              {startDate}
-              {endDate && endDate !== startDate && ` ~ ${endDate}`}
-            </div>
-          )}
+  <div className="mt-2 text-xs text-gray-500">
+    📅 {startDate}
+    {endDate && endDate !== startDate && ` ~ ${endDate}`}
+  </div>
 
-          {memo && (
-            <div className="mt-2 text-sm text-gray-700 whitespace-pre-wrap">
-              {memo}
-            </div>
-          )}
-        </div>
+  {memo && (
+    <div className="mt-2 text-sm text-gray-700 line-clamp-2">
+      {memo}
+    </div>
+  )}
+</div>
       );
     })}
   </div>
 )}
+{/* 🔥 일정 상세 팝업 */}
+{selectedSchedule && (
+  <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center">
+    <div className="bg-white w-[90%] rounded-2xl p-5">
 
+      <div className="text-lg font-bold mb-2">
+        {selectedSchedule.type || selectedSchedule.title}
+      </div>
+
+      <div className="text-sm text-gray-500 mb-2">
+        {(selectedSchedule.startDate || selectedSchedule.start)}
+        {" ~ "}
+        {(selectedSchedule.endDate || selectedSchedule.end)}
+      </div>
+
+      <div className="text-sm text-gray-700 whitespace-pre-wrap">
+        {selectedSchedule.memo || selectedSchedule.reason}
+      </div>
+
+      <button
+        className="mt-4 w-full bg-blue-600 text-white py-2 rounded-xl"
+        onClick={() => setSelectedSchedule(null)}
+      >
+        닫기
+      </button>
+
+    </div>
+  </div>
+)}
 {/* ================= 인수인계 ================= */}
 {page === "handover" && (
   <div className="px-4 py-3 space-y-3">
@@ -1891,9 +1937,9 @@ function MenuItem({ label, onClick, badge }) {
       <span>{label}</span>
 
       {badge && (
-        <span className="ml-2 px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-red-500 text-white">
-          {badge}
-        </span>
+<span className="ml-2 px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-blue-500 text-white">
+  {badge}
+</span>
       )}
     </button>
   );

@@ -1,5 +1,5 @@
 // ======================= src/Login.jsx (PREMIUM V6.1 FIXED) =======================
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { auth } from "./firebase";
 import {
   signInWithEmailAndPassword,
@@ -15,24 +15,65 @@ export default function Login() {
   const [error, setError] = useState(null);
   const [msg, setMsg] = useState(null);
   const navigate = useNavigate();
+const [showPopup, setShowPopup] = useState(false);
+const [countdown, setCountdown] = useState(3);
+const [loginTime, setLoginTime] = useState("");
+useEffect(() => {
+  if (!showPopup) return;
 
-  const login = async () => {
-    setError(null);
-    setMsg(null);
-    if (!email.trim() || !pw.trim()) {
-      return setError("이메일 / 비밀번호를 입력해주세요.");
-    }
-
-    try {
-      setLoading(true);
-      await signInWithEmailAndPassword(auth, email, pw);
-      navigate("/app");
-    } catch (err) {
-      setError("로그인 실패. 이메일과 비밀번호를 확인해주세요.");
-      console.error(err);
-      setLoading(false);
+  const handleKey = (e) => {
+    if (e.key === "Enter") {
+      sessionStorage.removeItem("skipLoginPopup");
+      navigate("/app", { replace: true });
     }
   };
+
+  window.addEventListener("keydown", handleKey);
+  return () => window.removeEventListener("keydown", handleKey);
+}, [showPopup, navigate]);
+useEffect(() => {
+  if (!showPopup) return;
+
+  if (countdown === 0) {
+    navigate("/app", { replace: true });
+    return;
+  }
+
+  const timer = setTimeout(() => {
+    setCountdown((prev) => prev - 1);
+  }, 1000);
+
+  return () => clearTimeout(timer);
+}, [countdown, showPopup]);
+  const login = async () => {
+  setError(null);
+  setMsg(null);
+
+  if (!email.trim() || !pw.trim()) {
+    return setError("이메일 / 비밀번호를 입력해주세요.");
+  }
+
+  try {
+    setLoading(true);
+
+    await signInWithEmailAndPassword(auth, email, pw);
+sessionStorage.setItem("skipLoginPopup", "true");
+    // 🔥 로그인 시간
+    const now = new Date();
+    setLoginTime(now.toLocaleString("ko-KR"));
+
+    // 🔥 팝업 실행
+    setShowPopup(true);
+    setCountdown(3);
+
+  } catch (err) {
+    setError("로그인 실패. 이메일과 비밀번호를 확인해주세요.");
+    console.error(err);
+  } finally {
+    // 🔥 이거 반드시 필요
+    setLoading(false);
+  }
+};
 
   const resetPw = async () => {
     if (!email.trim()) return setError("이메일을 먼저 입력해주세요.");
@@ -54,7 +95,7 @@ export default function Login() {
 
         {/* 타이틀 */}
         <h1 className="text-2xl font-extrabold text-[#0D2B66] mb-3">
-          Dispatcher Platform
+          RUN25 배차프로그램
         </h1>
 
         <p className="text-gray-600 mb-6 text-sm">
@@ -140,6 +181,54 @@ export default function Login() {
         </div>
 
       </div>
+      {showPopup && (
+  <div className="fixed inset-0 bg-black/40 z-[999] flex items-center justify-center">
+    <div className="bg-white w-[320px] rounded-2xl shadow-xl p-6 text-center">
+
+      <div className="text-lg font-bold mb-3">로그인 완료</div>
+
+      <div className="text-sm text-gray-600 mb-1">로그인 일시</div>
+      <div className="text-sm font-semibold mb-2">{loginTime}</div>
+
+      <div className="text-sm text-gray-600 mb-1">로그인 아이디</div>
+      <div className="text-sm font-semibold mb-3">{email}</div>
+
+      <div className="relative w-20 h-20 mx-auto mb-4">
+        <svg className="w-20 h-20 -rotate-90">
+          <circle cx="40" cy="40" r="34" stroke="#e5e7eb" strokeWidth="6" fill="none"/>
+          <circle
+            cx="40"
+            cy="40"
+            r="34"
+            stroke="#2563eb"
+            strokeWidth="6"
+            fill="none"
+            strokeDasharray={2 * Math.PI * 34}
+            strokeDashoffset={(2 * Math.PI * 34 * countdown) / 3}
+            strokeLinecap="round"
+            style={{ transition: "stroke-dashoffset 1s linear" }}
+          />
+        </svg>
+
+        <div className="absolute inset-0 flex items-center justify-center text-lg font-bold text-blue-600">
+          {countdown}
+        </div>
+      </div>
+
+      <div className="text-xs text-gray-500 mb-4">
+        오늘도 좋은 하루 되세요!
+      </div>
+
+      <button
+        onClick={() => navigate("/app", { replace: true })}
+        className="w-full bg-blue-600 text-white py-2 rounded"
+      >
+        확인
+      </button>
+
+    </div>
+  </div>
+)}
     </div>
   );
 }

@@ -158,20 +158,26 @@ return (
 
         {/* ================= 로그인 ================= */}
         <Route
-          path="/login"
-          element={
-            user
-              ? role === "driver"
-                ? <Navigate to="/driver-home" replace />
-                : role === "shipper"
-                  ? (approved
-                      ? <Navigate to="/shipper" replace />
-                      : <Navigate to="/shipper-pending" replace />
-                    )
-                  : <Navigate to="/app" replace />
-              : <Login />
-          }
-        />
+  path="/login"
+  element={
+    (() => {
+      const skip = sessionStorage.getItem("skipLoginPopup");
+
+      if (user && skip !== "true") {
+        return role === "driver"
+          ? <Navigate to="/driver-home" replace />
+          : role === "shipper"
+            ? (approved
+                ? <Navigate to="/shipper" replace />
+                : <Navigate to="/shipper-pending" replace />
+              )
+            : <Navigate to="/app" replace />;
+      }
+
+      return <Login />;
+    })()
+  }
+/>
 
         <Route path="/signup" element={<Signup />} />
 
