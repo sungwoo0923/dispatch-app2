@@ -307,24 +307,22 @@ setClients(normalizeClients(arr));
     return () => unsubs.forEach(u => u && u());
   }, [user]);
 
-  const addDispatch = async (record) => {
-    const _id =
-      record._id ||
-      crypto?.randomUUID?.() ||
-      `${Date.now()}-${Math.random()}`;
+const addDispatch = async (record) => {
+  const _id = crypto.randomUUID(); // ⭐ 무조건 새로 생성
 
-    // 🔥 undefined 제거 (이게 핵심)
-    const cleanRecord = stripUndefinedDeep({
-      ...record,
-      _id,
-      작성자: auth.currentUser?.email || "",
-    });
+  const cleanRecord = stripUndefinedDeep({
+    ...record,
+    _id,
+    작성자: auth.currentUser?.email || "",
+  });
 
-    await setDoc(
-      doc(db, COLL.dispatch, _id),
-      cleanRecord
-    );
-  };
+  await setDoc(
+    doc(db, COLL.dispatch, _id),
+    cleanRecord
+  );
+
+  return _id;
+};
   // 🔥 undefined 깊이 제거 (중첩 객체까지 안전)
   const stripUndefinedDeep = (obj) => {
     if (obj === null || typeof obj !== "object") return obj;
@@ -339,22 +337,25 @@ setClients(normalizeClients(arr));
   const patchDispatch = async (_id, patch) => {
   if (!_id) return;
 
-  const item = dispatchData.find(d => d._id === _id);
+  // 🔥 1️⃣ 무조건 dispatch 먼저 확인
+  let ref = doc(db, "dispatch", _id);
+  let snap = await getDoc(ref);
 
-  if (!item?.__col) {
-    console.error("❌ __col 없음 → 수정 실패", item);
+  // 🔥 2️⃣ 없으면 orders 확인
+  if (!snap.exists()) {
+    ref = doc(db, "orders", _id);
+    snap = await getDoc(ref);
+  }
+
+  // ❌ 둘 다 없으면 종료
+  if (!snap.exists()) {
+    console.error("❌ 문서 없음", _id);
     return;
   }
 
-  const collectionName = item.__col;
-  const ref = doc(db, collectionName, _id);
-
-  const snap = await getDoc(ref);
-  if (!snap.exists()) return;
-
   const prev = snap.data();
 
-  // 🔥 1️⃣ 차량번호 기준 무조건 driver 재매칭 (핵심)
+  // 🔥 차량번호 재매칭
   const basePlate = patch.차량번호 || prev?.차량번호;
 
   if (basePlate) {
@@ -367,15 +368,11 @@ setClients(normalizeClients(arr));
       patch.이름 = driver.이름 || "";
       patch.전화번호 = driver.전화번호 || "";
     }
-  }
-
-  // 🔥 2️⃣ 차량번호도 없으면만 초기화
-  if (!basePlate) {
+  } else {
     patch.이름 = "";
     patch.전화번호 = "";
   }
 
-  // 🔥 3️⃣ cleanPatch 생성 (항상 마지막)
   const cleanPatch = stripUndefinedDeep({
     ...patch,
     경유지_상차: Array.isArray(patch.경유지_상차)
@@ -386,13 +383,11 @@ setClients(normalizeClients(arr));
       : prev.경유지_하차 || [],
   });
 
-  // 🔥 4️⃣ 이력 생성
   const histories = [];
 
   Object.keys(cleanPatch).forEach((key) => {
     if (IGNORE_HISTORY_FIELDS.has(key)) return;
     if (cleanPatch.__system === true) return;
-
     if (key === "업체전달상태") return;
     if (key === "업체전달일시") return;
 
@@ -410,28 +405,32 @@ setClients(normalizeClients(arr));
 
   const historyArr = Array.isArray(prev.history) ? prev.history : [];
 
+  // ✅ 마지막에만 update
   await updateDoc(ref, {
     ...cleanPatch,
     작성자: auth.currentUser?.email || "",
     history: [...historyArr, ...histories],
   });
 };
-
-
 const removeDispatch = async (arg) => {
   const id = typeof arg === "string" ? arg : arg?._id;
   if (!id) return;
 
-  const item = dispatchData.find(d => d._id === id);
+  let ref = doc(db, "dispatch", id);
+  let snap = await getDoc(ref);
 
-  if (!item?.__col) {
-    console.error("❌ __col 없음 → 삭제 실패", item);
+  if (!snap.exists()) {
+    ref = doc(db, "orders", id);
+    snap = await getDoc(ref);
+  }
+
+  if (!snap.exists()) {
+    console.error("❌ 삭제 대상 없음", id);
     return;
   }
 
-  await deleteDoc(doc(db, item.__col, id));
+  await deleteDoc(ref);
 };
-
 
   const upsertDriver = async (driver) => {
   const id = driver.id || crypto.randomUUID();
@@ -3393,7 +3392,9 @@ const rec = {
 // ⭐ 상/하차지 담당자 정보 → 기존 업체 있으면 업데이트만 함
 if (typeof upsertPlace === "function") {
 // ✅ 오더 저장
-await addDispatch(rec);
+const newId = await addDispatch(rec);
+
+rec._id = newId; // ⭐ 이거 추가 (핵심)
 
 await savePlaceSmart(
   form.상차지명,
@@ -9841,7 +9842,10 @@ setUrgentPopup([]);
         // ⭐ 기존 id 제거 (새 오더 생성)
         delete payload._id;
 
-        await addDispatch(payload);
+       await setDoc(
+  doc(db, copyTarget.__col || "orders", crypto.randomUUID()),
+  payload
+);
 
         alert("복사 등록 완료");
 
@@ -16215,7 +16219,10 @@ onBlur={(e) => {
         // ⭐ 기존 id 제거 (새 오더 생성)
         delete payload._id;
 
-        await addDispatch(payload);
+        await setDoc(
+  doc(db, copyTarget.__col || "orders", crypto.randomUUID()),
+  payload
+);
 
         alert("복사 등록 완료");
 
