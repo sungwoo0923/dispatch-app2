@@ -53,6 +53,7 @@ role: "shipper",
 permissions: {},
 
   approved: false,
+  isPrimary: isFirst,
   createdAt: serverTimestamp(),
 });
 

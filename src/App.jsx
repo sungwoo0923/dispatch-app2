@@ -176,17 +176,22 @@ return (
         <Route path="/signup" element={<Signup />} />
 
         {/* ================= 화주 로그인 ================= */}
-        <Route
-          path="/shipper-login"
-          element={
-            user && role === "shipper"
-              ? (approved
-                  ? <Navigate to="/shipper" replace />
-                  : <Navigate to="/shipper-pending" replace />
-                )
-              : <ShipperLogin />
-          }
-        />
+<Route
+  path="/shipper-login"
+  element={
+    (() => {
+      const skip = sessionStorage.getItem("skipLoginPopup");
+
+      if (user && role === "shipper" && skip !== "true") {
+        return approved
+          ? <Navigate to="/shipper" replace />
+          : <Navigate to="/shipper-pending" replace />;
+      }
+
+      return <ShipperLogin />;
+    })()
+  }
+/>
 
         {/* ================= 회원가입 ================= */}
         <Route path="/shipper-signup" element={<ShipperSignup />} />

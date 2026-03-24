@@ -13,6 +13,9 @@ export default function AdminMenu() {
   const [users, setUsers] = useState([]);
   const [search, setSearch] = useState("");
   const [roleTarget, setRoleTarget] = useState(null);
+  const [roleFilter, setRoleFilter] = useState("all");
+
+const ROLES = ["admin", "driver", "shipper", "test", "user"];
 
   // 🔥 모바일 미리보기 토글
   const [showMobilePreview, setShowMobilePreview] = useState(false);
@@ -34,15 +37,22 @@ export default function AdminMenu() {
   }, []);
 
   // 검색
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return users;
-    return users.filter((u) =>
-      Object.values(u).some((v) =>
-        String(v || "").toLowerCase().includes(q)
-      )
-    );
-  }, [search, users]);
+const filtered = useMemo(() => {
+  const q = search.trim().toLowerCase();
+
+  return users.filter((u) => {
+    const matchSearch = !q
+      ? true
+      : Object.values(u).some((v) =>
+          String(v || "").toLowerCase().includes(q)
+        );
+
+    const matchRole =
+      roleFilter === "all" ? true : u.role === roleFilter;
+
+    return matchSearch && matchRole;
+  });
+}, [search, users, roleFilter]);
 
   // 승인 토글
   const toggleApprove = async (u) => {
@@ -103,18 +113,49 @@ export default function AdminMenu() {
           </button>
         </div>
 
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="사용자 검색 (이메일 / 역할)"
-          className="border p-2 rounded w-80 mb-3"
-        />
+<div className="flex items-center gap-2 mb-3 flex-wrap">
+
+  <input
+    value={search}
+    onChange={(e) => setSearch(e.target.value)}
+    placeholder="사용자 검색 (이메일 / 역할)"
+    className="border p-2 rounded w-64"
+  />
+
+  {/* 전체 */}
+  <button
+    onClick={() => setRoleFilter("all")}
+    className={`px-3 py-1 rounded text-sm border
+      ${roleFilter === "all"
+        ? "bg-black text-white"
+        : "bg-gray-100 text-gray-700"}`}
+  >
+    전체
+  </button>
+
+  {/* 권한 버튼 */}
+  {ROLES.map((r) => (
+    <button
+      key={r}
+      onClick={() => setRoleFilter(r)}
+      className={`px-3 py-1 rounded text-sm border
+        ${
+          roleFilter === r
+            ? "bg-blue-600 text-white"
+            : "bg-gray-100 text-gray-700 hover:bg-blue-100"
+        }`}
+    >
+      {r}
+    </button>
+  ))}
+</div>
 
         <table className="w-full text-sm border">
           <thead>
             <tr>
               <th className={headBase}>이메일</th>
               <th className={headBase}>권한</th>
+              <th className={headBase}>회사명</th>
               <th className={headBase}>승인여부</th>
               <th className={headBase}>관리</th>
             </tr>
@@ -146,6 +187,11 @@ export default function AdminMenu() {
                         {u.role || "user"}
                       </span>
                     </td>
+                    <td className={cellBase}>
+  {u.role === "shipper"
+    ? (u.companyName || u.company || "미등록")
+    : "-"}
+</td>
                     <td className={cellBase}>
                       <span
                         className={`px-2 py-1 rounded text-xs ${
@@ -181,7 +227,7 @@ export default function AdminMenu() {
 
                           {roleTarget === u.id && (
                             <div className="absolute bg-white border shadow rounded mt-1 w-24 z-10">
-                              {["user", "driver", "admin"].map((r) => (
+                              {ROLES.map((r) => (
                                 <button
                                   key={r}
                                   onClick={() => updateRole(u, r)}

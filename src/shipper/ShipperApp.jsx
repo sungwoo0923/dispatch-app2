@@ -34,6 +34,12 @@ if (!snap.exists()) {
 }
 
 const data = snap.data();
+if (data.deleted) {
+  alert("삭제된 계정입니다.");
+  await signOut(auth);
+  navigate("/shipper-login");
+  return;
+}
 if (!data.approved) {
   navigate("/shipper-pending");
   return;
@@ -85,15 +91,14 @@ setCompanyName(
 
 <nav className="flex gap-6 text-sm font-semibold">
 
-  {/* 대시보드 */}
   <MenuBtn
     label="대시보드"
     active={location.pathname === "/shipper"}
     onClick={() => navigate("/shipper")}
   />
 
-  {/* 🔥 shipper = 전체 허용 */}
-  {(userData?.role === "shipper" || userData?.permissions?.dispatch) && (
+  {/* 운송 */}
+  {userData?.permissions?.transport && (
     <MenuBtn
       label="운송"
       active={location.pathname.includes("/shipper/transport")}
@@ -101,7 +106,8 @@ setCompanyName(
     />
   )}
 
-  {(userData?.role === "shipper" || userData?.permissions?.settlement) && (
+  {/* 정산 */}
+  {userData?.permissions?.settlement && (
     <MenuBtn
       label="정산"
       active={location.pathname.includes("/shipper/settlement")}
@@ -109,8 +115,8 @@ setCompanyName(
     />
   )}
 
-  {/* 🔥 shipper만 설정 접근 */}
-  {userData?.role === "shipper" && (
+  {/* 마스터 */}
+  {userData?.permissions?.master && (
     <MenuBtn
       label="마스터설정"
       active={location.pathname.includes("/shipper/settings")}

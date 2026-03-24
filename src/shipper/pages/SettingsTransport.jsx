@@ -32,21 +32,31 @@ const generateCode = () => {
 export default function SettingsTransport() {
 
   const [list, setList] = useState(() => {
-    const saved = localStorage.getItem("transportList");
-    return saved ? JSON.parse(saved) : [
-      {
-        name: "돌캐",
-        address: "인천광역시 서구 청마로19번길21, 4층(성주빌딩)",
-        phone: "1533-2525",
-        ceo: "박주상",
-        type: "운수/운송주선업",
-        biz: "",
-        bank: "기업은행 955-040276-04-018",
-        email: "r15332525@daum.net",
-        price: "",
-        memo: "",
-      },
-    ];
+const saved = localStorage.getItem("transportList");
+let parsed = saved ? JSON.parse(saved) : [];
+
+// 🔥 로지스팟 제거
+parsed = parsed.filter(item => item.name !== "로지스팟");
+
+// 🔥 돌캐 없으면 강제 삽입
+const hasDolcar = parsed.some(item => item.name === "돌캐");
+
+if (!hasDolcar) {
+  parsed.unshift({
+    name: "돌캐",
+    address: "인천광역시 서구 청마로19번길21, 4층(성주빌딩)",
+    phone: "1533-2525",
+    ceo: "박주상",
+    type: "운수/운송주선업",
+    biz: "",
+    bank: "기업은행 955-040276-04-018",
+    email: "r15332525@daum.net",
+    price: "",
+    memo: "",
+  });
+}
+
+return parsed;
   });
 
   const [selected, setSelected] = useState(list[0]);
