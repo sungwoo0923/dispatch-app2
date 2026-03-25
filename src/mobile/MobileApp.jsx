@@ -302,6 +302,8 @@ const normalizePhone = (p = "") =>
 
 export default function MobileApp() {
   const [page, setPage] = useState("list");
+  const [showSimilarPopup, setShowSimilarPopup] = useState(false);
+const [fallbackData, setFallbackData] = useState([]);
   // 🔕 알림 ON/OFF 상태 (기본 ON)
 const [alarmEnabled, setAlarmEnabled] = useState(
   localStorage.getItem("alarmEnabled") !== "false"
@@ -1978,7 +1980,29 @@ function MobileOrderList({
   const dates = Array.from(groupedByDate.keys()).sort((a, b) =>
     a.localeCompare(b)
   );
+// 🔥 KPI 요약 (여기에 추가)
+const summary = useMemo(() => {
+  let totalClaim = 0;
+  let totalDriver = 0;
+  let totalFee = 0;
 
+  groupedByDate.forEach(list => {
+    list.forEach(o => {
+      const claim = Number(o.청구운임 || 0);
+      const driver = Number(o.기사운임 || 0);
+
+      totalClaim += claim;
+      totalDriver += driver;
+      totalFee += (claim - driver);
+    });
+  });
+
+  return {
+    totalClaim,
+    totalDriver,
+    totalFee
+  };
+}, [groupedByDate]);
   return (
     <div>
       {/* 상태 탭 */}
@@ -2000,6 +2024,29 @@ function MobileOrderList({
       {/* 날짜/퀵범위/필터 */}
       <div className="bg-white border-b px-4 py-3 space-y-2">
         {/* 상단 범위 텍스트 (11.24 ~ 11.24) */}
+        {/* 🔥 KPI 요약 */}
+<div className="grid grid-cols-3 gap-2 mt-2">
+  <div className="bg-blue-50 rounded-xl p-2 text-center">
+    <div className="text-[11px] text-gray-500">청구</div>
+    <div className="text-sm font-bold text-blue-700">
+      {summary.totalClaim.toLocaleString()}원
+    </div>
+  </div>
+
+  <div className="bg-gray-100 rounded-xl p-2 text-center">
+    <div className="text-[11px] text-gray-500">기사</div>
+    <div className="text-sm font-bold text-gray-700">
+      {summary.totalDriver.toLocaleString()}원
+    </div>
+  </div>
+
+  <div className="bg-green-50 rounded-xl p-2 text-center">
+    <div className="text-[11px] text-gray-500">수수료</div>
+    <div className="text-sm font-bold text-green-700">
+      {summary.totalFee.toLocaleString()}원
+    </div>
+  </div>
+</div>
         <div className="flex items-center justify-between">
   {/* 조회 기간 텍스트 */}
   <div className="text-xs font-semibold text-gray-600">
@@ -4243,8 +4290,6 @@ onClose();
     </div>
   );
 }
-
-
 // ======================================================================
 // 공통 RowLabelInput
 // ======================================================================
@@ -4268,6 +4313,12 @@ function MobileStandardFare({ onBack }) {
   const [dispatchData, setDispatchData] = useState([]);
 
   const [pickup, setPickup] = useState("");
+  const [showSimilarPopup, setShowSimilarPopup] = useState(false);
+const [fallbackData, setFallbackData] = useState([]);
+  const [showFareSummaryPopup, setShowFareSummaryPopup] = useState(false);
+  const [fareSummary, setFareSummary] = useState(null);
+  const [showNoResultPopup, setShowNoResultPopup] = useState(false);
+const [showAddressConfirmPopup, setShowAddressConfirmPopup] = useState(false);
   const [pickupAddr, setPickupAddr] = useState("");
   const [drop, setDrop] = useState("");
   const [dropAddr, setDropAddr] = useState("");
@@ -4287,47 +4338,115 @@ function MobileStandardFare({ onBack }) {
     })();
   }, []);
 
-  // 🔥 preset 자동 조회 (dispatchData 선언 아래에 위치해야 함)
-  useEffect(() => {
-    if (!window.__farePreset__) return;
-    if (!dispatchData.length) return;
+  // 🔥 preset 자동 입력
+useEffect(() => {
+  if (!window.__farePreset__) return;
+  if (!dispatchData.length) return;
 
-    const p = window.__farePreset__;
+  const p = window.__farePreset__;
 
-    setPickup(p.pickup || "");
-    setPickupAddr(p.pickupAddr || "");
-    setDrop(p.drop || "");
-    setDropAddr(p.dropAddr || "");
-    setTon(p.ton || "");
-    setCargo(p.cargo || "");
+  setPickup(p.pickup || "");
+  setPickupAddr(p.pickupAddr || "");
+  setDrop(p.drop || "");
+  setDropAddr(p.dropAddr || "");
+  setTon(p.ton || "");
+  setCargo(p.cargo || "");
 
-    window.__farePreset__ = null;
-    window.__forceFareSearch__ = true;
+  window.__farePreset__ = null;
+window.__forceFareSearch__ = true;
+}, [dispatchData]);
+// 🔥 값 세팅 후 자동 조회 (핵심)
+useEffect(() => {
+  if (!pickup || !drop) return;
 
+  if (window.__forceFareSearch__) {
+    window.__forceFareSearch__ = false;
     calcFareMobile();
-  }, [dispatchData]);
- const clean = (s = "") =>
+  }
+
+}, [pickup, drop]);
+
+// =======================
+// 🔥 공통 유틸 함수 (정상 구조)
+// =======================
+
+// 문자열 정리
+const clean = (s = "") =>
   String(s || "").trim().toLowerCase().replace(/\s+/g, "");
 
+// 🔥 경유지 제거 + 메인 장소 추출
+const extractMainPlace = (s = "") => {
+  return String(s || "")
+    .replace(/^\d+\./, "")
+    .split(/\d+\./)[0]
+    .trim();
+};
+
+// 🔥 검색용 정규화
+const normalizePlace = (s = "") =>
+  extractMainPlace(s)
+    .toLowerCase()
+    .replace(/\s+/g, "");
+
+// 🔥 기존 코드 호환
+const removeStopPrefix = (s = "") => extractMainPlace(s);
+
+// 🔥 화물 숫자 추출
 const extractCargoNumber = (text = "") => {
   const m = String(text).match(/(\d+)/);
   return m ? Number(m[1]) : null;
 };
+
+// 🔥 톤수 추출
 const extractTonNum = (text = "") => {
+  
   const cleanText = String(text).replace(/톤|t/gi, "");
-  const m = cleanText.match(/(\d+(?:\.\d+)?)/);  // ← 정규식 확정본
+  const m = cleanText.match(/(\d+(?:\.\d+)?)/);
   return m ? Number(m[1]) : null;
 };
+
+// =======================
+// 🔥 주소 fallback용 (여기 따로 있어야 함)
+// =======================
+
+const extractRegion = (addr = "") => {
+  const parts = addr.split(" ");
+  return parts[1] || parts[0] || "";
+};
+
+const searchByAddress = () => {
+
+  const pickupRegion = extractRegion(pickupAddr);
+  const dropRegion = extractRegion(dropAddr);
+
+  const result = dispatchData.filter(r => {
+
+    const pAddr = r.상차지주소 || "";
+    const dAddr = r.하차지주소 || "";
+
+    return (
+      pAddr.includes(pickupRegion) &&
+      dAddr.includes(dropRegion)
+    );
+  });
+
+  setMatchedRows(result);
+};
+
+// =======================
+// 🔥 화물 유사도 (이건 따로)
+// =======================
+
 const cargoSimilarityScore = (inputCargo, rowCargo) => {
+
   const inputNum = extractCargoNumber(inputCargo);
   const rowNum = extractCargoNumber(rowCargo);
 
-  // 숫자 추출 불가 시 기본 점수
   if (inputNum == null || rowNum == null) return 30;
 
   const diff = Math.abs(inputNum - rowNum);
 
-  if (diff === 0) return 100;   // 완전 동일
+  if (diff === 0) return 100;
   if (diff <= 1) return 80;
   if (diff <= 2) return 65;
   if (diff <= 4) return 45;
@@ -4343,7 +4462,27 @@ const cargoSimilarityScore = (inputCargo, rowCargo) => {
   })();
 }, []);
 
+// 🔥 파렛트 여부 판단
+const isPalletCargo = (text = "") => {
+  const t = String(text).toLowerCase();
 
+  return (
+    /파렛|파레트|plt/.test(t) ||
+    /^\d+$/.test(t)
+  );
+};
+
+// 🔥 박스/잡짐 판단
+const isBoxCargo = (text = "") => {
+  const t = String(text).toLowerCase();
+
+  return (
+    t.includes("박스") ||
+    t.includes("box") ||
+    t.includes("롤") ||
+    t.includes("짐")
+  );
+};
 const calcFareMobile = () => {
   const isForced = window.__forceFareSearch__;
   window.__forceFareSearch__ = false;
@@ -4356,76 +4495,37 @@ if (!isForced && (!hasPickup || !hasDrop)) {
   return;
 }
 
-const normPickup = clean(pickup) || clean(pickupAddr);
-const normDrop   = clean(drop)   || clean(dropAddr);
+const normPickup = clean(pickup);
+const normDrop   = clean(drop);
   const inputTonNum = extractTonNum(ton);
 
 const inputCargoNum = extractCargoNumber(cargo);
 const inputTonNum2 = extractTonNum(ton);
 
-let filtered = dispatchData.map(r => {
+let filtered = dispatchData.filter(r => {
 
-  const rp = clean(r.상차지명 || "") + clean(r.상차지주소 || "");
-  const rd = clean(r.하차지명 || "") + clean(r.하차지주소 || "");
-
-  // =========================
-// 1️⃣ 루트 점수 (완전 동일 매칭만 허용)
-// =========================
-
-let routeScore = 0;
-
-const inputPickupName = clean(pickup);
-const inputPickupAddr = clean(pickupAddr);
-const inputDropName   = clean(drop);
-const inputDropAddr   = clean(dropAddr);
-
-const rowPickupName = clean(r.상차지명);
-const rowPickupAddr = clean(r.상차지주소);
-const rowDropName   = clean(r.하차지명);
-const rowDropAddr   = clean(r.하차지주소);
-
-// 🔥 빈값은 비교에서 제외
-const pickupMatch =
-  (inputPickupName && rowPickupName.includes(inputPickupName)) ||
-  (inputPickupAddr && rowPickupAddr.includes(inputPickupAddr));
-
-const dropMatch =
-  (inputDropName && rowDropName.includes(inputDropName)) ||
-  (inputDropAddr && rowDropAddr.includes(inputDropAddr));
-
-if (pickupMatch && dropMatch) {
-  routeScore = 2;
-} else {
-  return null;
-}
-  // =========================
-  // 2️⃣ 파렛 차이
-  // =========================
-  const rowCargoNum = extractCargoNumber(r.화물내용);
-  let cargoDiff = 999;
-
-  if (inputCargoNum != null && rowCargoNum != null) {
-    cargoDiff = Math.abs(inputCargoNum - rowCargoNum);
+  // 🔥 경유지 제거 유지 (이건 남기는게 좋다)
+  if (/\d+\./.test(r.상차지명 || "") || /\d+\./.test(r.하차지명 || "")) {
+    return false;
   }
 
-  // =========================
-  // 3️⃣ 톤수 차이
-  // =========================
-  const rowTonNum = extractTonNum(r.차량톤수 || "");
-  let tonDiff = 999;
+  const rowPickup = normalizePlace(r.상차지명 || "");
+  const rowDrop   = normalizePlace(r.하차지명 || "");
 
-  if (inputTonNum2 != null && rowTonNum != null) {
-    tonDiff = Math.abs(inputTonNum2 - rowTonNum);
-  }
+  const inputPickup = normalizePlace(pickup);
+  const inputDrop   = normalizePlace(drop);
 
-  return {
-    ...r,
-    _routeScore: routeScore,
-    _cargoDiff: cargoDiff,
-    _tonDiff: tonDiff,
-  };
+  // 🔥 핵심: 부분 매칭 (양방향)
+  const pickupMatch =
+    inputPickup &&
+    (rowPickup.includes(inputPickup) || inputPickup.includes(rowPickup));
 
-}).filter(Boolean);
+  const dropMatch =
+    inputDrop &&
+    (rowDrop.includes(inputDrop) || inputDrop.includes(rowDrop));
+
+  return pickupMatch && dropMatch;
+});
 // 🔥 차종 필터
 if (vehicle && vehicle !== "전체") {
 
@@ -4457,59 +4557,205 @@ if (vehicle && vehicle !== "전체") {
     return car.includes(clean(vehicle));
   });
 }
+// =======================
+// 🔥 입력값 필터 (수정버전)
+// =======================
+
+// 🔥 1️⃣ 톤수 있으면 → 톤수만 필터 (핵심)
 if (inputTonNum2 != null) {
+
   filtered = filtered.filter(r => {
     const rowTon = extractTonNum(r.차량톤수 || "");
     return rowTon === inputTonNum2;
   });
 }
-if (inputCargoNum != null) {
+
+// 🔥 2️⃣ 톤수 없을 때만 화물 필터
+else if (cargo) {
+
+  const inputCargoNum = extractCargoNumber(cargo);
+
   filtered = filtered.filter(r => {
-    const rowCargo = extractCargoNumber(r.화물내용 || "");
+    const rowCargoNum = extractCargoNumber(r.화물내용);
+    return rowCargoNum === inputCargoNum;
+  });
+}
+// =======================
+// 🔥 점수 기반 정렬 (핵심)
+// =======================
+
+filtered = filtered.map(r => {
+
+  let score = 0;
+
+  const rowPickup = normalizePlace(r.상차지명 || "");
+  const rowDrop   = normalizePlace(r.하차지명 || "");
+
+  const inputPickup = normalizePlace(pickup);
+  const inputDrop   = normalizePlace(drop);
+
+  // 1️⃣ 지명 (최우선)
+  if (rowPickup.includes(inputPickup)) score += 100;
+  if (rowDrop.includes(inputDrop)) score += 100;
+
+  // 2️⃣ 화물
+  if (cargo) {
+    const cargoScore = cargoSimilarityScore(cargo, r.화물내용);
+    score += cargoScore;
+  }
+
+  // 3️⃣ 톤수
+  if (inputTonNum2 != null) {
+    const rowTon = extractTonNum(r.차량톤수 || "");
+    const diff = Math.abs((rowTon ?? 999) - inputTonNum2);
+    score += (100 - diff * 10);
+  }
+
+  // 4️⃣ 차량
+  if (vehicle && vehicle !== "전체") {
+    const car = clean(r.차량종류 || "");
+
+    if (
+      (vehicle === "냉장탑" || vehicle === "냉동탑") &&
+      (car.includes("냉장") || car.includes("냉동"))
+    ) {
+      score += 80;
+    }
+
+    else if (
+      (vehicle === "카고" || vehicle === "윙바디") &&
+      (car.includes("카고") || car.includes("윙") || car.includes("탑"))
+    ) {
+      score += 70;
+    }
+
+    else if (vehicle === "라보/다마스") {
+      if (car.includes("라보") || car.includes("다마스")) {
+        score += 60;
+      }
+    }
+
+    else if (car.includes(clean(vehicle))) {
+      score += 50;
+    }
+  }
+
+  return {
+    ...r,
+    _score: score,
+    _date: new Date(r.상차일 || 0).getTime()
+  };
+});
+
+// 🔥 최종 정렬
+filtered.sort((a, b) => {
+  if (b._score !== a._score) return b._score - a._score;
+  return b._date - a._date;
+});
+// ❗ 1️⃣ 지명 기준으로 아예 없는 경우만
+if (!filtered.length) {
+  setMatchedRows([]);
+  setShowNoResultPopup(true);
+  return;
+}
+
+// ❗ 2️⃣ 무조건 리스트 보여줌 (핵심)
+setMatchedRows(filtered);
+
+// ❗ 3️⃣ 동일 화물만 따로 체크
+const sameExactRows = filtered.filter(r => {
+  const rowCargo = extractCargoNumber(r.화물내용);
+  const rowTon   = extractTonNum(r.차량톤수 || "");
+
+  const isInputPallet = isPalletCargo(cargo);
+  const isRowPallet   = isPalletCargo(r.화물내용);
+
+  const isInputBox = isBoxCargo(cargo);
+  const isRowBox   = isBoxCargo(r.화물내용);
+
+// 🔥 톤수 없으면 화물만 비교
+if (inputTonNum2 == null) {
+  return rowCargo === inputCargoNum;
+}
+
+// 🔥 박스/잡짐 → 톤수만 비교
+if (isInputBox || isRowBox) {
+  return rowTon === inputTonNum2;
+}
+
+// 🔥 파렛트 아닌 경우 → 톤수만
+if (!isInputPallet || !isRowPallet) {
+  return rowTon === inputTonNum2;
+}
+
+// 🔥 파렛트 → 화물 + 톤수
+return (
+  rowCargo === inputCargoNum &&
+  rowTon === inputTonNum2
+);
+});
+// ===============================
+// 🔥 단계별 후보군 생성
+// ===============================
+
+let baseRows = sameExactRows;
+
+// 2️⃣ 화물만 동일
+if (!baseRows.length) {
+  baseRows = filtered.filter(r => {
+    const rowCargo = extractCargoNumber(r.화물내용);
     return rowCargo === inputCargoNum;
   });
 }
-filtered = filtered.filter(r => r._routeScore === 2);
-// 🔥 계층 정렬
-filtered.sort((a, b) => {
 
-  // 1️⃣ 루트 우선 (둘다매칭 > 하나매칭)
-  if (a._routeScore !== b._routeScore) {
-    return b._routeScore - a._routeScore;
-  }
+// 3️⃣ 파렛트 근접 (🔥 가장 가까운 것만)
+if (!baseRows.length && isPalletCargo(cargo)) {
 
-  // 2️⃣ 파렛 동일 → 근접순
-  if (a._cargoDiff !== b._cargoDiff) {
-    return a._cargoDiff - b._cargoDiff;
-  }
+  const diffs = filtered.map(r => {
+    const rowCargo = extractCargoNumber(r.화물내용);
+    return Math.abs((rowCargo ?? 999) - (inputCargoNum ?? 0));
+  });
 
-  // 3️⃣ 톤수 동일 → 근접순
-  if (a._tonDiff !== b._tonDiff) {
-    return a._tonDiff - b._tonDiff;
-  }
+  const minDiff = Math.min(...diffs);
 
-  // 4️⃣ 날짜 최신순
-  return new Date(b.상차일 || 0) - new Date(a.상차일 || 0);
-});
-if (!filtered.length) {
-  if (!isForced) {
-    alert("검색된 데이터가 없습니다.");
-  }
+  baseRows = filtered.filter(r => {
+    const rowCargo = extractCargoNumber(r.화물내용);
+    const diff = Math.abs((rowCargo ?? 999) - (inputCargoNum ?? 0));
 
-  setMatchedRows([]);
-  setResult(null);
-  setAiFare(null);
-  return;
+    return diff === minDiff; // 🔥 핵심
+  });
 }
-  setMatchedRows(filtered);
 
-// 🔥 화물내용 숫자 동일한 것만 평균 계산
-const sameCargoRows = filtered.filter(r => {
-  const rowCargoNum = extractCargoNumber(r.화물내용);
-  return rowCargoNum === inputCargoNum;
+// 4️⃣ 톤수 보정
+if (!baseRows.length && inputTonNum2 != null) {
+  baseRows = filtered
+    .map(r => {
+      const rowTon = extractTonNum(r.차량톤수 || "");
+      const diff = Math.abs((rowTon ?? 999) - inputTonNum2);
+      return { ...r, _tonDiff: diff };
+    })
+    .filter(r => r._tonDiff <= 1)
+    .sort((a, b) => a._tonDiff - b._tonDiff);
+}
+
+// 5️⃣ fallback
+if (!baseRows.length) {
+  baseRows = filtered;
+}
+
+// ===============================
+// 🔥 최고/최저 계산
+// ===============================
+const sortedByFare = [...baseRows].sort((a, b) => {
+  return Number(a.청구운임 || 0) - Number(b.청구운임 || 0);
 });
 
-const baseRows = sameCargoRows.length ? sameCargoRows : filtered;
+setFareSummary({
+  lowest: sortedByFare[0],
+  highest: sortedByFare[sortedByFare.length - 1]
+});
+
+setShowFareSummaryPopup(true);
 
 const fares = baseRows.map((r) =>
   Number(String(r.청구운임 || 0).replace(/[^\d]/g, ""))
@@ -4542,53 +4788,77 @@ const fares = baseRows.map((r) =>
         ◀
       </button>
 
-      {/* 입력 */}
-      <div className="bg-white border rounded-xl p-4 space-y-3 shadow-sm">
-        <input
-  className="w-full border rounded px-3 py-2 text-sm"
-  placeholder="상차지"
-  value={pickup}
-  onChange={(e) => setPickup(e.target.value)}
-/>
+      <div className="bg-white border rounded-xl p-4 shadow-sm space-y-3">
 
-<input
-  className="w-full border rounded px-3 py-2 text-sm"
-  placeholder="상차지 주소"
-  value={pickupAddr}
-  onChange={(e) => setPickupAddr(e.target.value)}
-/>
+  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
 
-<input
-  className="w-full border rounded px-3 py-2 text-sm"
-  placeholder="하차지"
-  value={drop}
-  onChange={(e) => setDrop(e.target.value)}
-/>
+    {/* 1️⃣ 상/하차지명 */}
+    <div className="space-y-2">
+      <div className="text-sm font-semibold text-blue-600">
+        상/하차지명
+      </div>
 
-<input
-  className="w-full border rounded px-3 py-2 text-sm"
-  placeholder="하차지 주소"
-  value={dropAddr}
-  onChange={(e) => setDropAddr(e.target.value)}
-/>
+      <input
+        className="w-full border rounded px-2 py-2 text-sm"
+        placeholder="상차지명"
+        value={pickup}
+        onChange={(e) => setPickup(e.target.value)}
+      />
 
-        <input
-          className="w-full border rounded px-3 py-2 text-sm"
-          placeholder="톤수 (예: 1톤)"
-          value={ton}
-          onChange={(e) => setTon(e.target.value)}
-        />
-        <input
-  className="w-full border rounded px-3 py-2 text-sm"
-  placeholder="화물내용 (예: 16파렛)"
-  value={cargo}
-  onChange={(e) => setCargo(e.target.value)}
-/>
-        <select
-          className="w-full border rounded px-3 py-2 text-sm"
-          value={vehicle}
-          onChange={(e) => setVehicle(e.target.value)}
-        >
+      <input
+        className="w-full border rounded px-2 py-2 text-sm"
+        placeholder="하차지명"
+        value={drop}
+        onChange={(e) => setDrop(e.target.value)}
+      />
+    </div>
+
+    {/* 2️⃣ 상/하차지주소 */}
+    <div className="space-y-2">
+      <div className="text-sm font-semibold text-blue-600">
+        상/하차지주소
+      </div>
+
+      <input
+        className="w-full border rounded px-2 py-2 text-sm"
+        placeholder="상차지주소"
+        value={pickupAddr}
+        onChange={(e) => setPickupAddr(e.target.value)}
+      />
+
+      <input
+        className="w-full border rounded px-2 py-2 text-sm"
+        placeholder="하차지주소"
+        value={dropAddr}
+        onChange={(e) => setDropAddr(e.target.value)}
+      />
+    </div>
+
+    {/* 3️⃣ 화물 / 차량 */}
+    <div className="space-y-2">
+      <div className="text-sm font-semibold text-blue-600">
+        화물 / 차량
+      </div>
+
+      <input
+        className="w-full border rounded px-2 py-2 text-sm"
+        placeholder="톤수"
+        value={ton}
+        onChange={(e) => setTon(e.target.value)}
+      />
+
+      <input
+        className="w-full border rounded px-2 py-2 text-sm"
+        placeholder="화물내용"
+        value={cargo}
+        onChange={(e) => setCargo(e.target.value)}
+      />
+
+      <select
+        className="w-full border rounded px-2 py-2 text-sm"
+        value={vehicle}
+        onChange={(e) => setVehicle(e.target.value)}
+      >
           <option value="전체">전체</option>
           <option value="라보/다마스">라보/다마스</option>
           <option value="카고">카고</option>
@@ -4598,158 +4868,325 @@ const fares = baseRows.map((r) =>
           <option value="냉장윙">냉장윙</option>
           <option value="냉동윙">냉동윙</option>
           <option value="오토바이">오토바이</option>
-          
-        </select>
+      </select>
+    </div>
+
+  </div>
+
+  {/* 🔥 운임 조회 버튼 유지 */}
+  <button
+    id="fare-search-button"
+    onClick={calcFareMobile}
+    className="w-full bg-blue-600 text-white py-2 rounded-lg text-sm font-semibold"
+  >
+    🔍 운임조회
+  </button>
+
+</div>
+
+      {/* 결과 */}
+{(result || matchedRows.length > 0) && (
+  <div className="bg-white border p-4 rounded-xl shadow-sm space-y-3">
+
+    <div className="font-semibold">
+      건수: {matchedRows.length}건
+    </div>
+
+    {/* ✅ result 있을 때만 평균 */}
+    {result && (
+      <>
+        <div>평균운임: {result.avg.toLocaleString()}원</div>
+        <div>
+          최근운임: {result.latestFare.toLocaleString()}원 (
+          {result.latest?.상차일?.slice(0, 10) || "-"})
+        </div>
+      </>
+    )}
+
+    {/* 🔥 fallback일 때 안내 */}
+    {!result && (
+      <div className="text-sm text-orange-500 font-semibold">
+        ⚠️ 동일 조건 없음 → 유사 데이터 표시
+      </div>
+    )}
+
+    {/* AI 추천 */}
+    {result && aiFare && (
+      <div className="mt-3 p-3 rounded-lg bg-indigo-50 border border-indigo-200">
+        <div className="text-sm text-indigo-800">
+          🔮 추천 운임(예측):{" "}
+          <span className="font-bold">
+            {aiFare.aiValue.toLocaleString()}원
+          </span>
+        </div>
+        <div className="text-xs text-indigo-500">
+          정확도 {aiFare.confidence}%
+        </div>
+      </div>
+    )}
+
+    <div className="text-xs text-gray-600">
+      과거 운임 기록:
+    </div>
+
+    {/* 리스트 */}
+    <div className="mt-4 space-y-3">
+      {matchedRows.map((r) => {
+
+        const rawFare = Number(r.청구운임 || 0);
+        const fare = rawFare.toLocaleString();
+
+        const driverRaw = Number(r.기사운임 || 0);
+        const driver = driverRaw.toLocaleString();
+        const profit = rawFare - driverRaw;
+
+        const rowCargoNum = extractCargoNumber(r.화물내용);
+
+        const samePalletGroup = matchedRows.filter(item => {
+          const num = extractCargoNumber(item.화물내용);
+          return num === rowCargoNum;
+        });
+
+        const palletAvg = samePalletGroup.length
+          ? Math.round(
+              samePalletGroup.reduce((sum, item) =>
+                sum + Number(String(item.청구운임 || 0).replace(/[^\d]/g, "")),
+              0) / samePalletGroup.length
+            )
+          : rawFare;
+
+        const diff = rawFare - palletAvg;
+        const percent = palletAvg
+          ? Math.round((diff / palletAvg) * 100)
+          : 0;
+
+        const isHigh = percent > 3;
+        const isLow  = percent < -3;
+
+        return (
+          <div
+            key={r.id}
+            className="bg-white shadow-sm rounded-xl p-4 border border-gray-200"
+          >
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-gray-500">
+                {r.상차일?.slice(5) || "-"}
+              </span>
+
+              <span
+                className={`text-lg font-semibold ${
+                  isHigh
+                    ? "text-red-600"
+                    : isLow
+                    ? "text-blue-600"
+                    : "text-gray-800"
+                }`}
+              >
+                {fare}원
+                {isHigh && " 🔺"}
+                {isLow && " 🔻"}
+              </span>
+            </div>
+
+            {result && (
+              <div
+                className={`text-xs mt-1 ${
+                  isHigh
+                    ? "text-red-500"
+                    : isLow
+                    ? "text-blue-500"
+                    : "text-gray-400"
+                }`}
+              >
+                평균 대비 {percent > 0 ? "+" : ""}
+                {percent}%
+              </div>
+            )}
+
+            <div className="mt-3">
+              <div className="text-sm font-semibold text-gray-800">
+                {r.상차지명 || "-"} → {r.하차지명 || "-"}
+              </div>
+
+              <div className="text-xs text-gray-500 mt-1">
+                {shortAddr(r.상차지주소)} → {shortAddr(r.하차지주소)}
+              </div>
+            </div>
+
+            <div className="mt-3 text-xs text-gray-700 font-medium">
+              {r.화물내용 || "-"}
+              <span className="mx-2 text-gray-300">|</span>
+              {r.차량톤수 || "-"}
+              <span className="mx-2 text-gray-300">|</span>
+              {r.차량종류 || "-"}
+            </div>
+
+            <div className="mt-3 text-xs text-gray-600 border-t pt-2 flex justify-between">
+              <span>기사 {driver}원</span>
+              <span>수수료 {profit.toLocaleString()}원</span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+
+  </div>
+)}
+      {showSimilarPopup && (
+  <div className="fixed inset-0 bg-black/40 z-[60] flex items-center justify-center">
+    <div className="bg-white w-[320px] rounded-2xl p-5">
+
+      <div className="text-lg font-bold mb-2">
+        🔍 검색 결과 없음
+      </div>
+
+      <div className="text-sm text-gray-600 mb-4">
+        동일한 화물 기록이 없습니다.<br />
+        비슷한 조건으로 검색합니다.
+      </div>
+
+      <button
+        onClick={() => {
+          setShowSimilarPopup(false);
+          setMatchedRows(fallbackData);
+        }}
+        className="w-full bg-blue-600 text-white py-2 rounded-lg"
+      >
+        확인
+      </button>
+
+    </div>
+  </div>
+)}
+{showNoResultPopup && (
+  <div className="fixed inset-0 bg-black/40 z-[70] flex items-center justify-center">
+    <div className="bg-white p-5 rounded-xl w-[320px]">
+
+      <div className="text-lg font-bold mb-2">
+        조회 결과 없음
+      </div>
+
+      <div className="text-sm text-gray-600 mb-4">
+        해당 상/하차지 기록이 없습니다.
+      </div>
+
+      <button
+        onClick={() => setShowNoResultPopup(false)}
+        className="w-full py-2 bg-gray-600 text-white rounded-lg"
+      >
+        확인
+      </button>
+
+    </div>
+  </div>
+)}
+{showAddressConfirmPopup && (
+  <div className="fixed inset-0 bg-black/40 z-[70] flex items-center justify-center">
+    <div className="bg-white p-5 rounded-xl w-[340px]">
+
+      <div className="text-lg font-bold mb-2">
+        조회 결과 없음
+      </div>
+
+      <div className="text-sm text-gray-600 mb-4">
+        동일한 상/하차지 기록이 없습니다.<br />
+        주소 기준으로 조회하시겠습니까?
+      </div>
+
+      <div className="flex gap-2">
+        <button
+          onClick={() => setShowAddressConfirmPopup(false)}
+          className="flex-1 py-2 bg-gray-200 rounded-lg"
+        >
+          취소
+        </button>
 
         <button
-          id="fare-search-button"
-          onClick={calcFareMobile}
-          className="w-full bg-blue-500 text-white py-2 rounded-lg text-sm font-semibold"
+          onClick={() => {
+            setShowAddressConfirmPopup(false);
+            searchByAddress();
+          }}
+          className="flex-1 py-2 bg-blue-600 text-white rounded-lg"
         >
-          🔍 운임조회
+          확인
         </button>
       </div>
 
-      {/* 결과 */}
-      {result && (
-        <div className="bg-white border p-4 rounded-xl shadow-sm space-y-3">
-          <div className="font-semibold">
-            건수: {matchedRows.length}건
-          </div>
-          <div>평균운임: {result.avg.toLocaleString()}원</div>
-          <div>
-            최근운임: {result.latestFare.toLocaleString()}원 (
-            {result.latest?.상차일?.slice(0, 10) || "-"})
-          </div>
+    </div>
+  </div>
+)}
+{showFareSummaryPopup && fareSummary && (
+  <div className="fixed inset-0 bg-black/40 z-[70] flex items-center justify-center">
 
-          {aiFare && (
-            <div className="mt-3 p-3 rounded-lg bg-indigo-50 border border-indigo-200">
-              <div className="text-sm text-indigo-800">
-                🔮 추천 운임(예측):{" "}
-                <span className="font-bold">
-                  {aiFare.aiValue.toLocaleString()}원
-                </span>
-              </div>
-              <div className="text-xs text-indigo-500">
-                정확도 {aiFare.confidence}%
-              </div>
-            </div>
-          )}
+    <div className="bg-white w-[360px] rounded-2xl p-5 shadow-2xl">
 
-          {/* 과거 금액 리스트 */}
-          <div className="text-xs text-gray-600">
-            과거 운임 기록:
-          </div>
-          {/* 📌 과거 운임 카드형 UI */}
-<div className="mt-4 space-y-3">
-  {matchedRows.map((r) => {
+      <div className="text-lg font-bold mb-4 text-gray-800">
+        📊 운임 이력 비교
+      </div>
 
-    const rawFare = Number(r.청구운임 || 0);
-    const fare = rawFare.toLocaleString();
+      <div className="mb-4 p-4 rounded-xl bg-red-50 border border-red-200">
+  <div className="text-sm text-red-500 font-semibold mb-1">
+    최고 운임
+  </div>
 
-    const driverRaw = Number(r.기사운임 || 0);
-    const driver = driverRaw.toLocaleString();
-    const profit = rawFare - driverRaw;
+  <div className="text-xl font-bold text-red-600">
+    {Number(fareSummary.highest.청구운임 || 0).toLocaleString()}원
+  </div>
 
-    // 🔥 이 오더의 파렛트 숫자
-    const rowCargoNum = extractCargoNumber(r.화물내용);
+  <div className="text-sm text-gray-600 mt-1">
+    {fareSummary.highest.상차일?.slice(0,10)}
+  </div>
 
-    // 🔥 같은 파렛트끼리만 그룹 생성
-    const samePalletGroup = matchedRows.filter(item => {
-      const num = extractCargoNumber(item.화물내용);
-      return num === rowCargoNum;
-    });
+  <div className="text-base mt-2 font-semibold">
+    {fareSummary.highest.상차지명} → {fareSummary.highest.하차지명}
+  </div>
 
-    // 🔥 같은 파렛 그룹 평균 계산
-    const palletAvg = samePalletGroup.length
-      ? Math.round(
-          samePalletGroup.reduce((sum, item) =>
-            sum + Number(String(item.청구운임 || 0).replace(/[^\d]/g, "")),
-          0) / samePalletGroup.length
-        )
-      : rawFare;
+  <div className="text-sm text-gray-700 mt-1">
+    {fareSummary.highest.화물내용 || "-"} / {fareSummary.highest.차량톤수 || "-"}
+  </div>
 
-    const diff = rawFare - palletAvg;
-    const percent = palletAvg
-      ? Math.round((diff / palletAvg) * 100)
-      : 0;
+  <div className="text-sm text-gray-500 mt-2">
+    {fareSummary.highest.메모 || "메모 없음"}
+  </div>
+</div>
 
-    const isHigh = percent > 3;
-    const isLow  = percent < -3;
-
-    return (
-      <div
-        key={r.id}
-        className="bg-white shadow-sm rounded-xl p-4 border border-gray-200"
-      >
-        {/* 날짜 + 금액 */}
-        <div className="flex justify-between items-center">
-          <span className="text-sm text-gray-500">
-            {r.상차일?.slice(5) || "-"}
-          </span>
-
-          <span
-            className={`text-lg font-semibold ${
-              isHigh
-                ? "text-red-600"
-                : isLow
-                ? "text-blue-600"
-                : "text-gray-800"
-            }`}
-          >
-            {fare}원
-            {isHigh && " 🔺"}
-            {isLow && " 🔻"}
-          </span>
+      <div className="mb-4 p-4 rounded-xl bg-blue-50 border border-blue-200">
+        <div className="text-xs text-blue-500 font-semibold mb-1">
+          최저 운임
         </div>
 
-        {result?.avg && (
-          <div
-            className={`text-xs mt-1 ${
-              isHigh
-                ? "text-red-500"
-                : isLow
-                ? "text-blue-500"
-                : "text-gray-400"
-            }`}
-          >
-            평균 대비 {percent > 0 ? "+" : ""}
-            {percent}%
-          </div>
-        )}
-
-        {/* 경로 */}
-        <div className="mt-3">
-          <div className="text-sm font-semibold text-gray-800">
-            {r.상차지명 || "-"} → {r.하차지명 || "-"}
-          </div>
-
-          <div className="text-xs text-gray-500 mt-1">
-            {shortAddr(r.상차지주소)} → {shortAddr(r.하차지주소)}
-          </div>
+        <div className="text-lg font-bold text-blue-600">
+          {Number(fareSummary.lowest.청구운임 || 0).toLocaleString()}원
         </div>
 
-        {/* 사양 */}
-        <div className="mt-3 text-xs text-gray-700 font-medium">
-          {r.화물내용 || "-"}
-          <span className="mx-2 text-gray-300">|</span>
-          {r.차량톤수 || "-"}
-          <span className="mx-2 text-gray-300">|</span>
-          {r.차량종류 || "-"}
+        <div className="text-sm text-gray-600 mt-1">
+          {fareSummary.lowest.상차일?.slice(0,10)}
         </div>
 
-        {/* 수수료 */}
-        <div className="mt-3 text-xs text-gray-600 border-t pt-2 flex justify-between">
-          <span>기사 {driver}원</span>
-          <span>수수료 {profit.toLocaleString()}원</span>
+        <div className="text-base mt-2 font-semibold">
+          {fareSummary.lowest.상차지명} → {fareSummary.lowest.하차지명}
+        </div>
+          <div className="text-sm text-gray-700 mt-1">
+    {fareSummary.highest.화물내용 || "-"} / {fareSummary.highest.차량톤수 || "-"}
+  </div>
+
+        <div className="text-sm text-gray-500 mt-2">
+          {fareSummary.lowest.메모 || "메모 없음"}
         </div>
       </div>
-    );
-  })}
-</div>
-        </div>
-      )}
+
+      <button
+        onClick={() => setShowFareSummaryPopup(false)}
+        className="w-full bg-blue-600 text-white py-2 rounded-lg font-semibold"
+      >
+        확인
+      </button>
+
     </div>
+  </div>
+)}
+    </div>
+    
   );
 }
 
@@ -5101,5 +5538,4 @@ const source = rawSource.filter((o) => {
 
     </div>
   );
-
 }
