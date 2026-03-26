@@ -13568,6 +13568,21 @@ const renderTimeText = (time, cond) => {
   const [editMode, setEditMode] = React.useState(false);
   const [copyPanelOpen, setCopyPanelOpen] = React.useState(false);
 const [copyTarget, setCopyTarget] = React.useState(null);
+React.useEffect(() => {
+  if (!copyTarget?.차량톤수) return;
+
+  // 🔥 이미 분리된 경우 실행 금지 (핵심)
+  if (copyTarget.톤수값 && copyTarget.톤수타입) return;
+
+  const num = copyTarget.차량톤수.match(/[\d.]+/)?.[0] || "";
+  const type = copyTarget.차량톤수.includes("kg") ? "kg" : "톤";
+
+  setCopyTarget(prev => ({
+    ...prev,
+    톤수값: num,
+    톤수타입: type,
+  }));
+}, [copyTarget?.차량톤수]);
 const [copyPlaceOptions, setCopyPlaceOptions] = React.useState([]);
 const [copyPlaceType, setCopyPlaceType] = React.useState(null); // pickup | drop
 const [showCopyPlaceDropdown, setShowCopyPlaceDropdown] = React.useState(false);
@@ -15998,12 +16013,10 @@ onBlur={(e) => {
                 }
               />
             </div>
-            <Field label="화물내용">
-
-  {/* 🔥 이 div가 기준이 되어야 함 */}
+            {/* 🔥 화물내용 (단독 한 줄) */}
+<Field label="화물내용">
   <div className="relative w-full">
 
-    {/* 입력창 */}
     <input
       className="border p-2 rounded w-full pr-[95px]"
       value={editTarget?.화물수량 || ""}
@@ -16018,20 +16031,8 @@ onBlur={(e) => {
       }}
     />
 
-    {/* 🔥 input 안쪽에 딱 붙는 드롭다운 */}
     <select
-      className="
-        absolute right-1 top-1/2 -translate-y-1/2
-        h-[30px]
-        min-w-[70px]
-        px-2
-        text-xs font-semibold
-        rounded
-        bg-blue-50
-        text-blue-700
-        border border-blue-200
-        cursor-pointer
-      "
+      className="absolute right-1 top-1/2 -translate-y-1/2 h-[30px] min-w-[70px] px-2 text-xs rounded bg-blue-50 border border-blue-200 text-blue-700"
       value={editTarget?.화물타입 || ""}
       onChange={(e) => {
         const type = e.target.value;
@@ -16052,46 +16053,79 @@ onBlur={(e) => {
     </select>
 
   </div>
-
 </Field>
-            {/* 🔵 차량정보 */}
-            <div className="grid grid-cols-2 gap-3 mb-3">
-              <div>
-                <label>차량종류</label>
-                <select
-                  className="border p-2 rounded w-full"
-                  value={editTarget.차량종류 || ""}
-                  onChange={(e) =>
-                    setEditTarget((p) => ({ ...p, 차량종류: e.target.value }))
-                  }
-                >
-                  <option value="">선택 없음</option>
-                  <option value="라보/다마스">라보/다마스</option>
-                  <option value="카고">카고</option>
-                  <option value="윙바디">윙바디</option>
-                  <option value="리프트">리프트</option>
-                  <option value="탑차">탑차</option>
-                  <option value="냉장탑">냉장탑</option>
-                  <option value="냉동탑">냉동탑</option>
-                  <option value="냉장윙">냉장윙</option>
-                  <option value="냉동윙">냉동윙</option>
-                  <option value="오토바이">오토바이</option>
-                  <option value="기타">기타</option>
-                </select>
-              </div>
 
-              <div>
-                <label>차량톤수</label>
-                <input
-                  className="border p-2 rounded w-full"
-                  value={editTarget.차량톤수 || ""}
-                  onChange={(e) =>
-                    setEditTarget((p) => ({ ...p, 차량톤수: e.target.value }))
-                  }
-                />
-              </div>
-            </div>
 
+{/* 🔥 차량종류 + 차량톤수 (같은 줄) */}
+<div className="grid grid-cols-2 gap-3">
+
+  <Field label="차량종류">
+    <select
+      className="border p-2 rounded w-full"
+      value={editTarget?.차량종류 || ""}
+      onChange={(e) =>
+        setEditTarget((p) => ({ ...p, 차량종류: e.target.value }))
+      }
+    >
+        <option value="">선택</option>
+        <option value="라보/다마스">라보/다마스</option>
+        <option value="카고">카고</option>
+        <option value="윙바디">윙바디</option>
+        <option value="탑차">탑</option>
+        <option value="냉장탑">냉장탑</option>
+        <option value="냉동탑">냉동탑</option>
+        <option value="냉장윙">냉장윙</option>
+        <option value="냉동윙">냉동</option>
+        <option value="리프트">리프트</option>
+        <option value="오토바이">오토바이</option>
+        <option value="기타">기타</option>
+    </select>
+  </Field>
+
+
+  <Field label="차량톤수">
+    <div className="relative w-full">
+
+      <input
+        className="border p-2 rounded w-full pr-[95px]"
+        value={editTarget?.톤수값 || ""}
+        onChange={(e) => {
+          const v = e.target.value;
+
+          setEditTarget((p) => ({
+            ...p,
+            톤수값: v,
+            차량톤수: p.톤수타입
+              ? `${v}${p.톤수타입}`
+              : v,
+          }));
+        }}
+      />
+
+      <select
+        className="absolute right-1 top-1/2 -translate-y-1/2 h-[30px] min-w-[70px] px-2 text-xs rounded bg-blue-50 border border-blue-200 text-blue-700"
+        value={editTarget?.톤수타입 || ""}
+        onChange={(e) => {
+          const type = e.target.value;
+
+          setEditTarget((p) => ({
+            ...p,
+            톤수타입: type,
+            차량톤수: type
+              ? `${p.톤수값 || ""}${type}`
+              : (p.톤수값 || ""),
+          }));
+        }}
+      >
+        <option value="">선택</option>
+        <option value="톤">톤</option>
+        <option value="kg">kg</option>
+      </select>
+
+    </div>
+  </Field>
+
+</div>
             {/* ------------------------------------------------ */}
             {/* 🔵 차량번호 (자동매칭) */}
             {/* ------------------------------------------------ */}
@@ -17089,21 +17123,60 @@ setCopyPlaceOptions(list);
       </select>
     </Field>
 
-    <Field label="차량톤수">
-      <input
-        className="inputStyle"
-        value={copyTarget?.차량톤수 ?? ""}
-        onChange={(e)=>setCopyTarget(p=>({...p, 차량톤수:e.target.value}))}
-      />
-    </Field>
+ <Field label="차량톤수">
+
+  <div className="flex items-center border rounded-lg overflow-hidden bg-white">
+
+    {/* 숫자 */}
+    <input
+      className="flex-1 px-3 py-2 outline-none"
+      value={copyTarget?.톤수값 || ""}
+      onChange={(e) => {
+        const v = e.target.value;
+
+        setCopyTarget(p => ({
+          ...p,
+          톤수값: v,
+          차량톤수: p.톤수타입
+            ? `${v}${p.톤수타입}`
+            : v
+        }));
+      }}
+      placeholder="1"
+    />
+
+    {/* 단위 */}
+    <select
+      className="px-3 py-2 bg-blue-50 text-blue-700 border-l cursor-pointer"
+      value={copyTarget?.톤수타입 || ""}
+      onChange={(e) => {
+        const type = e.target.value;
+
+        setCopyTarget(p => ({
+          ...p,
+          톤수타입: type,
+          차량톤수: type
+            ? `${p.톤수값 || ""}${type}`
+            : (p.톤수값 || "")
+        }));
+      }}
+    >
+      <option value="">선택</option>
+      <option value="톤">톤</option>
+      <option value="kg">kg</option>
+    </select>
+
+  </div>
+
+</Field>
 
 <Field label="화물내용">
 
-  <div className="relative w-full">
+  <div className="flex items-center border rounded-lg overflow-hidden bg-white">
 
-    {/* 🔥 수량 입력 */}
+    {/* 수량 */}
     <input
-      className="inputStyle pr-[95px]"
+      className="flex-1 px-3 py-2 outline-none"
       value={copyTarget?.화물수량 || ""}
       onChange={(e) => {
         const v = e.target.value;
@@ -17111,25 +17184,17 @@ setCopyPlaceOptions(list);
         setCopyTarget(p => ({
           ...p,
           화물수량: v,
-          화물내용: p.화물타입 ? `${v}${p.화물타입}` : v
+          화물내용: p.화물타입
+            ? `${v}${p.화물타입}`
+            : v
         }));
       }}
+      placeholder="1"
     />
 
-    {/* 🔥 드롭다운 (input 안쪽) */}
+    {/* 타입 */}
     <select
-      className="
-        absolute right-1 top-1/2 -translate-y-1/2
-        h-[30px]
-        min-w-[70px]
-        px-2
-        text-xs font-semibold
-        rounded
-        bg-blue-50
-        text-blue-700
-        border border-blue-200
-        cursor-pointer
-      "
+      className="px-3 py-2 bg-blue-50 text-blue-700 border-l cursor-pointer"
       value={copyTarget?.화물타입 || ""}
       onChange={(e) => {
         const type = e.target.value;
