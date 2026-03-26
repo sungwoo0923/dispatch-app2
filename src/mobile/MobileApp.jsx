@@ -4404,7 +4404,19 @@ const extractTonNum = (text = "") => {
   const m = cleanText.match(/(\d+(?:\.\d+)?)/);
   return m ? Number(m[1]) : null;
 };
+// 🔥 kg → ton 변환 (여기에 추가!!)
+const convertKgToTon = (text = "") => {
+  const t = String(text).toLowerCase();
 
+  if (!t.includes("kg")) return null;
+
+  const m = t.match(/(\d+(?:\.\d+)?)/);
+  if (!m) return null;
+
+  const kg = Number(m[1]);
+
+  return kg / 1000; // 🔥 핵심
+};
 // =======================
 // 🔥 주소 fallback용 (여기 따로 있어야 함)
 // =======================
@@ -4498,9 +4510,14 @@ if (!isForced && (!hasPickup || !hasDrop)) {
 const normPickup = clean(pickup);
 const normDrop   = clean(drop);
   const inputTonNum = extractTonNum(ton);
-
 const inputCargoNum = extractCargoNumber(cargo);
-const inputTonNum2 = extractTonNum(ton);
+
+let inputTonNum2 = extractTonNum(ton);
+
+// 🔥 kg 입력 시 자동 변환 (여기!!)
+if (inputTonNum2 == null) {
+  inputTonNum2 = convertKgToTon(cargo);
+}
 
 let filtered = dispatchData.filter(r => {
 
@@ -4558,26 +4575,28 @@ if (vehicle && vehicle !== "전체") {
   });
 }
 // =======================
-// 🔥 입력값 필터 (수정버전)
+// 🔥 화물 필터 (완전 수정)
 // =======================
 
-// 🔥 1️⃣ 톤수 있으면 → 톤수만 필터 (핵심)
-if (inputTonNum2 != null) {
+if (cargo) {
+
+  const isInputPallet = isPalletCargo(cargo);
+  const isInputBox = isBoxCargo(cargo);
 
   filtered = filtered.filter(r => {
-    const rowTon = extractTonNum(r.차량톤수 || "");
-    return rowTon === inputTonNum2;
-  });
-}
 
-// 🔥 2️⃣ 톤수 없을 때만 화물 필터
-else if (cargo) {
+    const rowCargo = r.화물내용 || "";
 
-  const inputCargoNum = extractCargoNumber(cargo);
+    const isRowPallet = isPalletCargo(rowCargo);
+    const isRowBox = isBoxCargo(rowCargo);
 
-  filtered = filtered.filter(r => {
-    const rowCargoNum = extractCargoNumber(r.화물내용);
-    return rowCargoNum === inputCargoNum;
+    // 🔥 1️⃣ 파렛트 → 같은 그룹만
+    if (isInputPallet) {
+      return isRowPallet;
+    }
+
+    // 🔥 2️⃣ 박스/일반짐 → 전부 포함 (핵심)
+    return !isRowPallet;
   });
 }
 // =======================
@@ -4673,9 +4692,19 @@ const sameExactRows = filtered.filter(r => {
   const isInputBox = isBoxCargo(cargo);
   const isRowBox   = isBoxCargo(r.화물내용);
 
-// 🔥 톤수 없으면 화물만 비교
+// 🔥 톤수 없으면 → 파렛트만 숫자 비교
 if (inputTonNum2 == null) {
-  return rowCargo === inputCargoNum;
+
+  const isInputPallet = isPalletCargo(cargo);
+  const isRowPallet = isPalletCargo(r.화물내용);
+
+  // ✅ 파렛트 → 숫자 비교
+  if (isInputPallet && isRowPallet) {
+    return rowCargo === inputCargoNum;
+  }
+
+  // ✅ 일반짐 → 전부 허용 (핵심)
+  return true;
 }
 
 // 🔥 박스/잡짐 → 톤수만 비교

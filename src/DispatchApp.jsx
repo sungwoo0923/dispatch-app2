@@ -4553,6 +4553,7 @@ shadow-sm
                   }`}
                   onMouseEnter={() => setClientActive(idx)}
                   onMouseDown={(e) => {
+                    
                     e.preventDefault();
                     applyClientSelect(p.업체명);
                   }}
@@ -4684,16 +4685,13 @@ setForm((prev) => ({
     </label>
 
     {/* ⭐ 여기로 이동 (핵심) */}
-    <button
-      type="button"
-      className="text-[11px] px-2 py-1 rounded bg-blue-100 text-blue-700 border border-blue-200 hover:bg-blue-200"
-      onClick={() => {
-        setStopType("pickup")
-        setStopPopupOpen(true)
-      }}
-    >
-      + 사용X
-    </button>
+<button
+  type="button"
+  disabled
+  className="text-[11px] px-2 py-1 rounded bg-gray-100 text-gray-400 border cursor-not-allowed"
+>
+  + 사용X
+</button>
   </div>
 
   <input
@@ -4822,16 +4820,13 @@ setForm((prev) => ({
     </label>
 
     {/* ⭐ 여기로 이동 */}
-    <button
-      type="button"
-      className="text-[11px] px-2 py-1 rounded bg-blue-100 text-blue-700 border border-blue-200 hover:bg-blue-200"
-      onClick={() => {
-        setStopType("drop")
-        setStopPopupOpen(true)
-      }}
-    >
-      + 사용X
-    </button>
+<button
+  type="button"
+  disabled
+  className="text-[11px] px-2 py-1 rounded bg-gray-100 text-gray-400 border cursor-not-allowed"
+>
+  + 사용X
+</button>
   </div>
 
   <input
@@ -4875,32 +4870,101 @@ setForm((prev) => ({
   />
 </div>
 
-  {/* 화물내용 */}
-  <div>
-    <label className={labelCls}>화물내용</label>
-    <input className={inputCls} value={form.화물내용} onChange={(e) => onChange("화물내용", e.target.value)} />
+<div className="relative">
+  <label className={labelCls}>화물내용</label>
+
+  <div className="relative">
+
+    {/* 입력 */}
+    <input
+      className={`${inputCls} pr-[110px] text-base`}
+      placeholder="예: 2"
+      value={form.화물수량 || ""}
+      onChange={(e) => {
+        const v = e.target.value;
+        onChange("화물수량", v);
+
+        if (form.화물타입) {
+          onChange("화물내용", `${v}${form.화물타입}`);
+        }
+      }}
+    />
+
+    {/* 🔥 버튼형 드롭다운 */}
+    <div className="absolute top-0 right-0 h-full flex items-center pr-2">
+
+      <select
+        className="
+          h-[70%]
+          px-3
+          text-sm font-semibold
+          rounded-lg
+          bg-blue-50
+          text-blue-700
+          border border-blue-200
+          appearance-none
+          cursor-pointer
+          shadow-sm
+        "
+        value={form.화물타입 || ""}
+        onChange={(e) => {
+          const type = e.target.value;
+          onChange("화물타입", type);
+
+          if (!type) {
+            onChange("화물내용", form.화물수량 || "");
+            return;
+          }
+
+          onChange("화물내용", `${form.화물수량 || ""}${type}`);
+        }}
+      >
+        <option value="">없음</option>
+        <option value="파레트">파레트</option>
+        <option value="박스">박스</option>
+        <option value="통">통</option>
+      </select>
+
+      {/* 화살표 */}
+      <span className="absolute right-3 text-blue-500 text-xs pointer-events-none">
+        ▾
+      </span>
+
+    </div>
+
   </div>
+</div>
 
 <div className="relative">
-  <label className={`${labelCls} flex items-center gap-2`}>
+  <div
+  className="flex items-center gap-2"
+  onClick={(e) => e.stopPropagation()}
+>
+  <label className={labelCls}>
     차량종류
-    <button
-      type="button"
-      onClick={() => setVehicleSpecOpen(true)}
-      className="
-  text-[11px]
-  px-2 py-[2px]
-  rounded
-  bg-blue-100
-  border border-blue-200
-  text-blue-700
-  hover:bg-blue-200
-  transition
-"
-    >
-      차량제원
-    </button>
   </label>
+
+  <button
+    type="button"
+    onClick={(e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setVehicleSpecOpen(true);
+    }}
+    className="
+      text-[11px]
+      px-2 py-[2px]
+      rounded
+      bg-blue-100
+      border border-blue-200
+      text-blue-700
+      hover:bg-blue-200
+      transition
+    "
+  >
+    차량제원
+  </button>
+</div>
 
   <input
     className={inputCls}
@@ -4970,10 +5034,67 @@ setForm((prev) => ({
   
 </div>
 
-  <div>
-    <label className={labelCls}>차량톤수</label>
-    <input className={inputCls} placeholder="예: 1톤 / 2.5톤" value={form.차량톤수} onChange={(e) => onChange("차량톤수", e.target.value)} />
+<div className="relative">
+  <label className={labelCls}>차량톤수</label>
+
+  <div className="relative">
+
+    {/* 입력 */}
+    <input
+      className={`${inputCls} pr-[100px] text-base`}
+      placeholder="예: 1"
+      value={form.톤수값 || ""}
+      onChange={(e) => {
+        const v = e.target.value;
+        onChange("톤수값", v);
+
+        if (form.톤수타입) {
+          onChange("차량톤수", `${v}${form.톤수타입}`);
+        }
+      }}
+    />
+
+    {/* 🔥 드롭다운 */}
+    <div className="absolute top-0 right-0 h-full flex items-center pr-2">
+
+      <select
+        className="
+          h-[70%]
+          px-2
+          text-[13px] font-medium antialiased leading-none
+          rounded-lg
+          bg-blue-50
+          text-blue-700
+          border border-blue-200
+          appearance-none
+          cursor-pointer
+        "
+        value={form.톤수타입 || ""}
+        onChange={(e) => {
+          const type = e.target.value;
+          onChange("톤수타입", type);
+
+          if (!type) {
+            onChange("차량톤수", form.톤수값 || "");
+            return;
+          }
+
+          onChange("차량톤수", `${form.톤수값 || ""}${type}`);
+        }}
+      >
+        <option value="">선택없음</option>
+        <option value="톤">톤</option>
+        <option value="kg">kg</option>
+      </select>
+
+      <span className="absolute right-2 text-blue-500 text-[11px] pointer-events-none">
+  ▾
+</span>
+
+    </div>
+
   </div>
+</div>
 
 
   {/* 금액 */}
@@ -9221,15 +9342,23 @@ ${url}
         {/* 선택수정 */}
         <button
           onClick={() => {
-            if (selected.length !== 1)
-              return alert("수정할 항목은 1개만 선택해야 합니다.");
+  if (selected.length !== 1)
+    return alert("수정할 항목은 1개만 선택해야 합니다.");
 
-            const row = rows.find((r) => r._id === selected[0]);
-            if (!row) return;
+  const row = rows.find((r) => r._id === selected[0]);
+  if (!row) return;
 
-            setEditTarget({ ...row }); // 팝업에 띄울 데이터
-            setEditPopupOpen(true);    // 팝업 열기
-          }}
+  // 🔥 여기 추가
+  const match = (row.화물내용 || "").match(/(\d+)(.*)/);
+
+  setEditTarget({
+    ...row,
+    화물수량: match ? match[1] : "",
+    화물타입: match ? match[2] : "",
+  });
+
+  setEditPopupOpen(true);
+}}
           className="px-4 py-2 rounded-lg bg-gray-600 text-white text-sm font-semibold shadow hover:opacity-90"
         >
           선택수정
@@ -9799,63 +9928,82 @@ setUrgentPopup([]);
     <button
       onClick={async () => {
 
-        if (!copyTarget?._id) {
-          alert("수정할 오더 ID가 없습니다.");
-          return;
-        }
+  if (!copyTarget?._id) {
+    alert("수정할 오더 ID가 없습니다.");
+    return;
+  }
 
-        const payload = {
-          ...copyTarget,
-          updatedAt: Date.now(),
-        };
+  // 🔥 핵심 추가
+  const finalCargo = copyTarget.화물타입
+    ? `${copyTarget.화물수량 || ""}${copyTarget.화물타입}`
+    : (copyTarget.화물수량 || "");
 
-        await patchDispatch(copyTarget._id, payload);
+  const payload = {
+    ...copyTarget,
+    화물내용: finalCargo,   // 🔥 이거 한 줄
+    updatedAt: Date.now(),
+  };
 
-        alert("오더 수정 완료");
+  await patchDispatch(copyTarget._id, payload);
 
-        setCopyPanelOpen(false);
+  alert("오더 수정 완료");
 
-      }}
+  setCopyPanelOpen(false);
+
+}}
       className="px-4 py-2 bg-green-600 text-white rounded-lg font-semibold"
     >
       수정 저장
     </button>
 
     {/* 복사 등록 */}
-    <button
-      onClick={async () => {
+<button
+  onClick={async () => {
 
-        const payload = {
-          ...copyTarget,
+    if (!copyTarget) {
+      alert("복사할 데이터가 없습니다.");
+      return;
+    }
 
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
+    // 🔥 핵심: 화물내용 재조합
+    const finalCargo = copyTarget.화물타입
+      ? `${copyTarget.화물수량 || ""}${copyTarget.화물타입}`
+      : (copyTarget.화물수량 || "");
 
-          배차상태:
-            copyTarget?.차량번호?.trim()
-              ? "배차완료"
-              : "배차중",
+    const payload = {
+      ...copyTarget,
 
-          업체전달상태: "미전달",
-        };
+      // 🔥 반드시 넣어야 함
+      화물내용: finalCargo,
 
-        // ⭐ 기존 id 제거 (새 오더 생성)
-        delete payload._id;
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
 
-       await setDoc(
-  doc(db, copyTarget.__col || "orders", crypto.randomUUID()),
-  payload
-);
+      배차상태:
+        copyTarget?.차량번호?.trim()
+          ? "배차완료"
+          : "배차중",
 
-        alert("복사 등록 완료");
+      업체전달상태: "미전달",
+    };
 
-        setCopyPanelOpen(false);
+    // ⭐ 기존 id 제거 (새 오더 생성)
+    delete payload._id;
 
-      }}
-      className="px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold"
-    >
-      복사 등록
-    </button>
+    await setDoc(
+      doc(db, copyTarget.__col || "orders", crypto.randomUUID()),
+      payload
+    );
+
+    alert("복사 등록 완료");
+
+    setCopyPanelOpen(false);
+
+  }}
+  className="px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold"
+>
+  복사 등록
+</button>
 
     {/* 닫기 */}
     <button
@@ -10273,21 +10421,119 @@ setUrgentPopup([]);
       </select>
     </Field>
 
-    <Field label="차량톤수">
+<Field label="차량톤수">
+
+  <div className="relative w-full">
+
+    {/* 🔹 통합 박스 */}
+    <div className="flex items-center border rounded-lg overflow-hidden bg-white">
+
+      {/* 입력 */}
       <input
-        className="inputStyle"
-        value={copyTarget?.차량톤수 ?? ""}
-        onChange={(e)=>setCopyTarget(p=>({...p, 차량톤수:e.target.value}))}
+        className="flex-1 px-3 py-2 outline-none"
+        value={copyTarget?.톤수값 || ""}
+        onChange={(e) => {
+          const v = e.target.value;
+
+          setCopyTarget(p => ({
+            ...p,
+            톤수값: v,
+            차량톤수: p.톤수타입
+              ? `${v}${p.톤수타입}`
+              : v
+          }));
+        }}
+        placeholder="1"
       />
-    </Field>
+
+      {/* 드롭다운 */}
+      <select
+        className="
+          px-3 py-2
+          bg-blue-50
+          text-blue-700
+          border-l
+          outline-none
+          cursor-pointer
+        "
+        value={copyTarget?.톤수타입 || ""}
+        onChange={(e) => {
+          const type = e.target.value;
+
+          setCopyTarget(p => ({
+            ...p,
+            톤수타입: type,
+            차량톤수: type
+              ? `${p.톤수값 || ""}${type}`
+              : (p.톤수값 || "")
+          }));
+        }}
+      >
+        <option value="">선택</option>
+        <option value="톤">톤</option>
+        <option value="kg">kg</option>
+      </select>
+
+    </div>
+
+  </div>
+
+</Field>
 
     <Field label="화물내용">
-      <input
-        className="inputStyle"
-        value={copyTarget?.화물내용 ?? ""}
-        onChange={(e)=>setCopyTarget(p=>({...p, 화물내용:e.target.value}))}
-      />
-    </Field>
+
+  <div className="flex items-center border rounded-lg overflow-hidden bg-white">
+
+    {/* 입력 */}
+    <input
+      className="flex-1 px-3 py-2 outline-none"
+      value={copyTarget?.화물수량 || ""}
+      onChange={(e) => {
+        const v = e.target.value;
+
+        setCopyTarget(p => ({
+          ...p,
+          화물수량: v,
+          화물내용: p.화물타입
+            ? `${v}${p.화물타입}`
+            : v
+        }));
+      }}
+      placeholder="1"
+    />
+
+    {/* 드롭다운 */}
+    <select
+      className="
+        px-3 py-2
+        bg-blue-50
+        text-blue-700
+        border-l
+        outline-none
+        cursor-pointer
+      "
+      value={copyTarget?.화물타입 || ""}
+      onChange={(e) => {
+        const type = e.target.value;
+
+        setCopyTarget(p => ({
+          ...p,
+          화물타입: type,
+          화물내용: type
+            ? `${p.화물수량 || ""}${type}`
+            : (p.화물수량 || "")
+        }));
+      }}
+    >
+      <option value="">없음</option>
+      <option value="파레트">파레트</option>
+      <option value="박스">박스</option>
+      <option value="통">통</option>
+    </select>
+
+  </div>
+
+</Field>
 
   </div>
 </section>
@@ -11889,54 +12135,166 @@ setRows(prev => {
             {/* ------------------------------------------------ */}
             {/* 🔵 화물내용 */}
             {/* ------------------------------------------------ */}
-            <div className="mb-3">
-              <label>화물내용</label>
-              <input
-                className="border p-2 rounded w-full"
-                value={editTarget.화물내용 || ""}
-                onChange={(e) =>
-                  setEditTarget((p) => ({ ...p, 화물내용: e.target.value }))
-                }
-              />
-            </div>
+            <label>화물내용</label>
+
+<div className="relative">
+
+  {/* 입력 */}
+  <input
+    className="border p-2 rounded w-full pr-[110px]"
+    value={editTarget.화물수량 || ""}
+    onChange={(e) => {
+      const v = e.target.value;
+
+      setEditTarget((p) => ({
+        ...p,
+        화물수량: v,
+        화물내용: p.화물타입 ? `${v}${p.화물타입}` : v,
+      }));
+    }}
+  />
+
+  {/* 버튼형 드롭다운 */}
+  <div className="absolute top-0 right-0 h-full flex items-center pr-2">
+
+    <select
+      className="
+        h-[80%]
+        px-3
+        text-sm font-semibold
+        rounded-lg
+        bg-blue-50
+        text-blue-700
+        border border-blue-200
+        appearance-none
+        cursor-pointer
+      "
+      value={editTarget.화물타입 || ""}
+      onChange={(e) => {
+        const type = e.target.value;
+
+        setEditTarget((p) => ({
+          ...p,
+          화물타입: type,
+          화물내용: type
+            ? `${p.화물수량 || ""}${type}`
+            : (p.화물수량 || ""),
+        }));
+      }}
+    >
+      <option value="">없음</option>
+      <option value="파레트">파레트</option>
+      <option value="박스">박스</option>
+      <option value="통">통</option>
+    </select>
+
+    <span className="absolute right-3 text-blue-500 text-xs pointer-events-none">
+      ▾
+    </span>
+
+  </div>
+
+</div>
 
             {/* 🔵 차량정보 */}
-            <div className="grid grid-cols-2 gap-3 mb-3">
-              <div>
-                <label>차량종류</label>
-                <select
-                  className="border p-2 rounded w-full"
-                  value={editTarget.차량종류 || ""}
-                  onChange={(e) =>
-                    setEditTarget((p) => ({ ...p, 차량종류: e.target.value }))
-                  }
-                >
-                  <option value="">선택 없음</option>
-                  <option value="라보/다마스">라보/다마스</option>
-                  <option value="카고">카고</option>
-                  <option value="윙바디">윙바디</option>
-                  <option value="리프트">리프트</option>
-                  <option value="탑차">탑차</option>
-                  <option value="냉장탑">냉장탑</option>
-                  <option value="냉동탑">냉동탑</option>
-                  <option value="냉장윙">냉장윙</option>
-                  <option value="냉동윙">냉동윙</option>
-                  <option value="오토바이">오토바이</option>
-                  <option value="기타">기타</option>
-                </select>
-              </div>
+<div className="grid grid-cols-2 gap-3 mb-3">
 
-              <div>
-                <label>차량톤수</label>
-                <input
-                  className="border p-2 rounded w-full"
-                  value={editTarget.차량톤수 || ""}
-                  onChange={(e) =>
-                    setEditTarget((p) => ({ ...p, 차량톤수: e.target.value }))
-                  }
-                />
-              </div>
-            </div>
+  {/* ================= 차량종류 ================= */}
+  <div>
+    <label>차량종류</label>
+    <select
+      className="border p-2 rounded w-full"
+      value={editTarget.차량종류 || ""}
+      onChange={(e) =>
+        setEditTarget((p) => ({
+          ...p,
+          차량종류: e.target.value,
+        }))
+      }
+    >
+      <option value="">선택 없음</option>
+      <option value="라보/다마스">라보/다마스</option>
+      <option value="카고">카고</option>
+      <option value="윙바디">윙바디</option>
+      <option value="리프트">리프트</option>
+      <option value="탑차">탑차</option>
+      <option value="냉장탑">냉장탑</option>
+      <option value="냉동탑">냉동탑</option>
+      <option value="냉장윙">냉장윙</option>
+      <option value="냉동윙">냉동윙</option>
+      <option value="오토바이">오토바이</option>
+      <option value="기타">기타</option>
+    </select>
+  </div>
+
+  {/* ================= 차량톤수 ================= */}
+<div>
+  <label>차량톤수</label>
+
+  <div className="relative">
+
+    {/* 🔹 입력창 */}
+    <input
+      className="border p-2 rounded w-full pr-[70px]"
+      value={editTarget.차량톤수 || ""}
+      onChange={(e) =>
+        setEditTarget((p) => ({
+          ...p,
+          차량톤수: e.target.value,
+        }))
+      }
+      placeholder="예: 1"
+    />
+
+    {/* 🔹 내부 드롭다운 */}
+    <div className="absolute top-0 right-0 h-full flex items-center pr-1">
+
+<select
+  className="
+    h-full         
+    px-3          
+    text-sm             
+    rounded-md
+    bg-blue-50
+    border border-blue-200
+    text-blue-700
+    appearance-none
+    cursor-pointer
+  "
+        value={
+          editTarget.차량톤수?.includes("kg")
+            ? "kg"
+            : editTarget.차량톤수?.includes("톤")
+            ? "톤"
+            : ""
+        }
+        onChange={(e) => {
+          const type = e.target.value;
+
+          const num =
+            editTarget.차량톤수?.match(/[\d.]+/)?.[0] || "";
+
+          setEditTarget((p) => ({
+            ...p,
+            차량톤수: num ? `${num}${type}` : type,
+          }));
+        }}
+      >
+        <option value="">선택</option>
+        <option value="톤">톤</option>
+        <option value="kg">kg</option>
+      </select>
+
+      {/* ▼ 아이콘 */}
+      <span className="absolute right-2 text-blue-400 text-[10px] pointer-events-none">
+        ▾
+      </span>
+
+    </div>
+
+  </div>
+</div>
+</div>
             {/* ------------------------------------------------ */}
             {/* 🔵 차량번호 (자동매칭) */}
             {/* ------------------------------------------------ */}
@@ -15640,20 +15998,62 @@ onBlur={(e) => {
                 }
               />
             </div>
-            {/* ------------------------------------------------ */}
-            {/* 🔵 화물내용 */}
-            {/* ------------------------------------------------ */}
-            <div className="mb-3">
-              <label>화물내용</label>
-              <input
-                className="border p-2 rounded w-full"
-                value={editTarget.화물내용 || ""}
-                onChange={(e) =>
-                  setEditTarget((p) => ({ ...p, 화물내용: e.target.value }))
-                }
-              />
-            </div>
+            <Field label="화물내용">
 
+  {/* 🔥 이 div가 기준이 되어야 함 */}
+  <div className="relative w-full">
+
+    {/* 입력창 */}
+    <input
+      className="border p-2 rounded w-full pr-[95px]"
+      value={editTarget?.화물수량 || ""}
+      onChange={(e) => {
+        const v = e.target.value;
+
+        setEditTarget((p) => ({
+          ...p,
+          화물수량: v,
+          화물내용: p.화물타입 ? `${v}${p.화물타입}` : v,
+        }));
+      }}
+    />
+
+    {/* 🔥 input 안쪽에 딱 붙는 드롭다운 */}
+    <select
+      className="
+        absolute right-1 top-1/2 -translate-y-1/2
+        h-[30px]
+        min-w-[70px]
+        px-2
+        text-xs font-semibold
+        rounded
+        bg-blue-50
+        text-blue-700
+        border border-blue-200
+        cursor-pointer
+      "
+      value={editTarget?.화물타입 || ""}
+      onChange={(e) => {
+        const type = e.target.value;
+
+        setEditTarget((p) => ({
+          ...p,
+          화물타입: type,
+          화물내용: type
+            ? `${p.화물수량 || ""}${type}`
+            : (p.화물수량 || ""),
+        }));
+      }}
+    >
+      <option value="">없음</option>
+      <option value="파레트">파레트</option>
+      <option value="박스">박스</option>
+      <option value="통">통</option>
+    </select>
+
+  </div>
+
+</Field>
             {/* 🔵 차량정보 */}
             <div className="grid grid-cols-2 gap-3 mb-3">
               <div>
@@ -16110,7 +16510,11 @@ onBlur={(e) => {
                     alert("❌ 저장 실패: 오더 ID를 찾을 수 없습니다.");
                     return;
                   }
+const finalCargo = editTarget.화물타입
+  ? `${editTarget.화물수량 || ""}${editTarget.화물타입}`
+  : (editTarget.화물수량 || "");
 
+payload.화물내용 = finalCargo;
                   await patchDispatch(targetId, payload);
 
 
@@ -16173,74 +16577,100 @@ onBlur={(e) => {
   <div className="flex gap-3 items-center">
 
     {/* 수정 저장 */}
-    <button
-      onClick={async () => {
+<button
+  onClick={async () => {
 
-        if (!copyTarget?._id) {
-          alert("수정할 오더 ID가 없습니다.");
-          return;
-        }
+    if (!copyTarget?._id) {
+      alert("수정할 오더 ID가 없습니다.");
+      return;
+    }
 
-        const payload = {
-          ...copyTarget,
-          updatedAt: Date.now(),
-        };
+    // 🔥 화물내용 재조합 (핵심)
+    const finalCargo = copyTarget.화물타입
+      ? `${copyTarget.화물수량 || ""}${copyTarget.화물타입}`
+      : (copyTarget.화물수량 || "");
 
-        await patchDispatch(copyTarget._id, payload);
+    const payload = {
+      ...copyTarget,
 
-        alert("오더 수정 완료");
+      // 🔥 반드시 넣어야 반영됨
+      화물내용: finalCargo,
 
-        setCopyPanelOpen(false);
+      updatedAt: Date.now(),
+    };
 
-      }}
-      className="px-4 py-2 bg-green-600 text-white rounded-lg font-semibold"
-    >
-      수정 저장
-    </button>
+    await patchDispatch(copyTarget._id, payload);
 
-    {/* 복사 등록 */}
-    <button
-      onClick={async () => {
+    alert("오더 수정 완료");
 
-        const payload = {
-          ...copyTarget,
+    setCopyPanelOpen(false);
 
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
+  }}
+  className="px-4 py-2 bg-green-600 text-white rounded-lg font-semibold"
+>
+  수정 저장
+</button>
 
-          배차상태:
-            copyTarget?.차량번호?.trim()
-              ? "배차완료"
-              : "배차중",
 
-          업체전달상태: "미전달",
-        };
 
-        // ⭐ 기존 id 제거 (새 오더 생성)
-        delete payload._id;
+{/* 복사 등록 */}
+<button
+  onClick={async () => {
 
-        await setDoc(
-  doc(db, copyTarget.__col || "orders", crypto.randomUUID()),
-  payload
-);
+    if (!copyTarget) {
+      alert("복사할 데이터가 없습니다.");
+      return;
+    }
 
-        alert("복사 등록 완료");
+    // 🔥 화물내용 재조합 (핵심)
+    const finalCargo = copyTarget.화물타입
+      ? `${copyTarget.화물수량 || ""}${copyTarget.화물타입}`
+      : (copyTarget.화물수량 || "");
 
-        setCopyPanelOpen(false);
+    const payload = {
+      ...copyTarget,
 
-      }}
-      className="px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold"
-    >
-      복사 등록
-    </button>
+      // 🔥 반드시 넣어야 함
+      화물내용: finalCargo,
 
-    {/* 닫기 */}
-    <button
-      onClick={() => setCopyPanelOpen(false)}
-      className="text-slate-500 hover:text-red-500 text-xl"
-    >
-      ✕
-    </button>
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+
+      배차상태:
+        copyTarget?.차량번호?.trim()
+          ? "배차완료"
+          : "배차중",
+
+      업체전달상태: "미전달",
+    };
+
+    // ⭐ 기존 id 제거 (새 오더 생성)
+    delete payload._id;
+
+    await setDoc(
+      doc(db, copyTarget.__col || "orders", crypto.randomUUID()),
+      payload
+    );
+
+    alert("복사 등록 완료");
+
+    setCopyPanelOpen(false);
+
+  }}
+  className="px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold"
+>
+  복사 등록
+</button>
+
+
+
+{/* 닫기 */}
+<button
+  onClick={() => setCopyPanelOpen(false)}
+  className="text-slate-500 hover:text-red-500 text-xl"
+>
+  ✕
+</button>
 
   </div>
 </div>
@@ -16667,13 +17097,61 @@ setCopyPlaceOptions(list);
       />
     </Field>
 
-    <Field label="화물내용">
-      <input
-        className="inputStyle"
-        value={copyTarget?.화물내용 ?? ""}
-        onChange={(e)=>setCopyTarget(p=>({...p, 화물내용:e.target.value}))}
-      />
-    </Field>
+<Field label="화물내용">
+
+  <div className="relative w-full">
+
+    {/* 🔥 수량 입력 */}
+    <input
+      className="inputStyle pr-[95px]"
+      value={copyTarget?.화물수량 || ""}
+      onChange={(e) => {
+        const v = e.target.value;
+
+        setCopyTarget(p => ({
+          ...p,
+          화물수량: v,
+          화물내용: p.화물타입 ? `${v}${p.화물타입}` : v
+        }));
+      }}
+    />
+
+    {/* 🔥 드롭다운 (input 안쪽) */}
+    <select
+      className="
+        absolute right-1 top-1/2 -translate-y-1/2
+        h-[30px]
+        min-w-[70px]
+        px-2
+        text-xs font-semibold
+        rounded
+        bg-blue-50
+        text-blue-700
+        border border-blue-200
+        cursor-pointer
+      "
+      value={copyTarget?.화물타입 || ""}
+      onChange={(e) => {
+        const type = e.target.value;
+
+        setCopyTarget(p => ({
+          ...p,
+          화물타입: type,
+          화물내용: type
+            ? `${p.화물수량 || ""}${type}`
+            : (p.화물수량 || "")
+        }));
+      }}
+    >
+      <option value="">없음</option>
+      <option value="파레트">파레트</option>
+      <option value="박스">박스</option>
+      <option value="통">통</option>
+    </select>
+
+  </div>
+
+</Field>
 
   </div>
 </section>
