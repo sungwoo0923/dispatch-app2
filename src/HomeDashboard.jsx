@@ -177,7 +177,7 @@ const [schedulePage, setSchedulePage] = useState(1);
 const [handoverOpen, setHandoverOpen] = useState(false);
 const [handoverForm, setHandoverForm] = useState({
   text: "",
-  author: user?.name || "",
+  author: "",
   authorUid: user?.uid || "",
   receiver: "",
   receiverUid: "",
@@ -507,8 +507,38 @@ const top10Summary = useMemo(() => {
   return { total, avg, topName };
 }, [topClients]);
 
-// ===================== Recent Orders (오늘 상차 · 금액 TOP 5) =====================
+/* ===================== 🚨 당일 미배차 ===================== */
+const todayPendingOrders = useMemo(() => {
+  const today = new Date().toISOString().slice(0, 10);
+
+  return dispatchData
+    .filter((d) => {
+      const loadDate =
+        d?.상차일자 ||
+        d?.상차일 ||
+        d?.상차;
+
+      if (!loadDate) return false;
+
+      const dateStr = String(loadDate).slice(0, 10);
+
+      return (
+        dateStr === today &&
+        d?.배차상태 !== "배차완료"
+      );
+    })
+    .sort((a, b) => {
+      const ta = new Date(a?.상차일자 || 0).getTime();
+      const tb = new Date(b?.상차일자 || 0).getTime();
+      return ta - tb;
+    })
+    .slice(0, 7);
+}, [dispatchData]);
+
+/* ===================== 기존 코드 유지 ===================== */
 const recentOrders = useMemo(() => {
+  /* ===================== 🚨 당일 미배차 ===================== */
+
   const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
 
   return dispatchData
@@ -764,35 +794,64 @@ const recentOrders = useMemo(() => {
     </button>
   }
 >
-  {notices.length === 0 ? (
+  {/* ================= 공지사항 리스트 ================= */}
+{notices.length === 0 ? (
   <div className="text-sm text-gray-400">등록된 공지가 없습니다</div>
 ) : (
   <>
-    <ul className="space-y-2 text-sm">
-      {pagedNotices.map((n) => (
-        <li
-          key={n.id}
-          onClick={() => setSelectedNotice(n)}
-          className="border-b pb-2 cursor-pointer hover:bg-slate-50 rounded px-1"
-        >
-          <div className="font-semibold">{n.title}</div>
-          <div className="text-xs text-gray-400">
-            {n.date} · 공지사항
+    {/* 🔹 헤더 */}
+    <div className="border-b flex px-3 py-3 bg-slate-100 text-sm font-semibold text-gray-700 text-center">
+      <div className="w-[70px]">순번</div>
+      <div className="w-[140px]">작성날짜</div>
+      <div className="w-[140px]">작성자</div>
+      <div className="flex-1">제목</div>
+    </div>
+
+    {/* 🔹 리스트 */}
+    <div className="divide-y text-sm">
+      {pagedNotices.map((n, idx) => {
+        return (
+          <div
+            key={n.id}
+            onClick={() => setSelectedNotice(n)}
+            className="flex items-center px-3 py-3 cursor-pointer transition text-base hover:bg-slate-50"
+          >
+            {/* 순번 */}
+            <div className="w-[70px] text-gray-400 text-center font-medium">
+              {notices.length - ((noticePage - 1) * NOTICE_PAGE_SIZE + idx)}
+            </div>
+
+            {/* 날짜 */}
+            <div className="w-[140px] text-gray-700 text-center font-medium">
+              {n.date?.replaceAll("-", ".")}
+            </div>
+
+            {/* 작성자 */}
+            <div className="w-[140px] text-gray-800 text-center font-semibold">
+              {n.author}
+            </div>
+
+            {/* 제목 (🔥 고정) */}
+            <div className="flex-1 flex justify-center items-center">
+              <span className="font-semibold text-gray-900">
+                공지사항
+              </span>
+            </div>
           </div>
-        </li>
-      ))}
-    </ul>
+        );
+      })}
+    </div>
 
     {/* 🔹 페이지네이션 */}
     {noticeTotalPages > 1 && (
-      <div className="flex justify-center gap-1 pt-3">
+      <div className="flex justify-center gap-2 pt-4">
         {Array.from({ length: noticeTotalPages }).map((_, idx) => {
           const page = idx + 1;
           return (
             <button
               key={page}
               onClick={() => setNoticePage(page)}
-              className={`px-2 py-1 text-xs rounded
+              className={`px-3 py-1 text-sm rounded
                 ${
                   page === noticePage
                     ? "bg-blue-600 text-white"
@@ -948,33 +1007,64 @@ const recentOrders = useMemo(() => {
     <div className="text-sm text-gray-400">등록된 일정이 없습니다</div>
   ) : (
     <>
-      <ul className="space-y-2 text-sm">
-        {pagedSchedules.map((s) => (
-          <li
+      {/* 🔹 헤더 */}
+      <div className="border-b flex px-3 py-3 bg-slate-100 text-sm font-semibold text-gray-700 text-center">
+        <div className="w-[70px]">순번</div>
+        <div className="w-[140px]">작성날짜</div>
+        <div className="w-[140px]">작성자</div>
+        <div className="w-[140px]">구분</div>
+        <div className="flex-1">일정</div>
+      </div>
+
+      {/* 🔹 리스트 */}
+      <div className="divide-y text-sm">
+        {pagedSchedules.map((s, idx) => (
+          <div
             key={s.id}
             onClick={() => setSelectedSchedule(s)}
-            className="border-b pb-2 cursor-pointer hover:bg-slate-50 rounded px-1"
+            className="flex items-center px-3 py-3 cursor-pointer transition text-base hover:bg-slate-50"
           >
-            <div className="font-semibold">
-              [{s.type}] {s.name}
+            {/* 순번 */}
+            <div className="w-[70px] text-gray-400 text-center font-medium">
+              {schedules.length - ((schedulePage - 1) * SCHEDULE_PAGE_SIZE + idx)}
             </div>
-            <div className="text-xs text-gray-500">
-              {s.start} ~ {s.end}
+
+            {/* 작성날짜 */}
+           <div className="w-[140px] text-gray-700 text-center font-medium">
+  {s.createdAt?.toDate
+    ? s.createdAt.toDate().toISOString().slice(0, 10).replaceAll("-", ".")
+    : "-"}
+</div>
+{/* 작성자 (🔥 추가) */}
+<div className="w-[140px] text-gray-800 text-center font-semibold">
+  {s.name || "-"}
+</div>
+
+            {/* 구분 */}
+            <div className="w-[140px] text-gray-800 text-center font-semibold">
+              {s.type}
             </div>
-          </li>
+
+            {/* 일정 (🔥 날짜 고정) */}
+            <div className="flex-1 flex justify-center items-center">
+              <span className="font-semibold text-gray-900">
+                {s.start?.replaceAll("-", ".")}
+              </span>
+            </div>
+          </div>
         ))}
-      </ul>
+      </div>
 
       {/* 🔹 페이지네이션 */}
       {scheduleTotalPages > 1 && (
-        <div className="flex justify-center gap-1 pt-3">
+        <div className="flex justify-center gap-2 pt-4">
           {Array.from({ length: scheduleTotalPages }).map((_, idx) => {
             const page = idx + 1;
             return (
               <button
                 key={page}
                 onClick={() => setSchedulePage(page)}
-                className={`px-2 py-1 text-xs rounded
+                className={`px-3 py-1 text-sm rounded
                   ${
                     page === schedulePage
                       ? "bg-blue-600 text-white"
@@ -991,13 +1081,15 @@ const recentOrders = useMemo(() => {
   )}
 </Card>
 
+{/* ================= 등록 모달 ================= */}
 {scheduleOpen && (
   <Modal
-
     title="휴가 / 외근 일정 등록"
     onClose={() => setScheduleOpen(false)}
   >
     <div className="space-y-3">
+
+      {/* 구분 */}
       <select
         className="w-full border px-2 py-1 rounded"
         value={scheduleForm.type}
@@ -1011,15 +1103,9 @@ const recentOrders = useMemo(() => {
         <option>병가</option>
       </select>
 
-      <input
-        placeholder="이름"
-        className="w-full border px-2 py-1 rounded"
-        value={scheduleForm.name}
-        onChange={(e) =>
-          setScheduleForm({ ...scheduleForm, name: e.target.value })
-        }
-      />
+      {/* 🔥 이름 입력 제거됨 */}
 
+      {/* 날짜 */}
       <div className="flex gap-2">
         <input
           type="date"
@@ -1039,6 +1125,7 @@ const recentOrders = useMemo(() => {
         />
       </div>
 
+      {/* 메모 */}
       <textarea
         placeholder="메모 (선택)"
         rows={3}
@@ -1050,55 +1137,61 @@ const recentOrders = useMemo(() => {
       />
 
       <button
-  onClick={async () => {
-  if (selectedSchedule?.id) {
-    await updateDoc(doc(db, "schedules", selectedSchedule.id), {
-      type: scheduleForm.type,
-      name: scheduleForm.name,
-      start: scheduleForm.start,
-      end: scheduleForm.end,
-      memo: scheduleForm.memo,
-    });
-  } else {
-    await addDoc(collection(db, "schedules"), {
-      ...scheduleForm,
-      createdAt: serverTimestamp(),
-    });
-  }
+        onClick={async () => {
+          const userName = auth.currentUser?.displayName || "사용자";
 
-  setScheduleForm({
-    type: "휴가",
-    name: "",
-    start: "",
-    end: "",
-    memo: "",
-  });
-  setScheduleOpen(false);
-}}
+          if (selectedSchedule?.id) {
+            await updateDoc(doc(db, "schedules", selectedSchedule.id), {
+              type: scheduleForm.type,
+              name: userName,
+              start: scheduleForm.start,
+              end: scheduleForm.end,
+              memo: scheduleForm.memo,
+            });
+          } else {
+            await addDoc(collection(db, "schedules"), {
+              type: scheduleForm.type,
+              name: userName, // 🔥 자동 작성자
+              start: scheduleForm.start,
+              end: scheduleForm.end,
+              memo: scheduleForm.memo,
+              createdAt: serverTimestamp(),
+            });
+          }
 
-  className="w-full bg-blue-600 text-white py-2 rounded"
->
-  저장
-</button>
+          setScheduleForm({
+            type: "휴가",
+            start: "",
+            end: "",
+            memo: "",
+          });
+
+          setScheduleOpen(false);
+        }}
+        className="w-full bg-blue-600 text-white py-2 rounded"
+      >
+        저장
+      </button>
 
     </div>
   </Modal>
 )}
+
+{/* ================= 상세 ================= */}
 {selectedSchedule && (
   <Modal
-    title="휴가 / 외근 일정 상세"
+    title="일정 상세"
     onClose={() => setSelectedSchedule(null)}
   >
     <div className="space-y-4 text-sm">
+
       <div>
         <div className="text-xs text-gray-500">구분</div>
-        <div className="font-semibold">
-          {selectedSchedule.type}
-        </div>
+        <div className="font-semibold">{selectedSchedule.type}</div>
       </div>
 
       <div>
-        <div className="text-xs text-gray-500">이름</div>
+        <div className="text-xs text-gray-500">작성자</div>
         <div>{selectedSchedule.name}</div>
       </div>
 
@@ -1119,18 +1212,15 @@ const recentOrders = useMemo(() => {
       )}
     </div>
 
-    {/* 🔻 하단 버튼 */}
+    {/* 버튼 */}
     <div className="flex justify-center gap-3 pt-6 mt-6 border-t">
       <button
         onClick={async () => {
-          if (!window.confirm("일정을 삭제할까요?")) return;
-          await deleteDoc(
-            doc(db, "schedules", selectedSchedule.id)
-          );
+          if (!window.confirm("삭제할까요?")) return;
+          await deleteDoc(doc(db, "schedules", selectedSchedule.id));
           setSelectedSchedule(null);
-          setSchedulePage(1);
         }}
-        className="px-4 py-2 text-sm rounded border text-red-600 hover:bg-red-50"
+        className="px-4 py-2 text-sm rounded border text-red-600"
       >
         삭제
       </button>
@@ -1139,7 +1229,6 @@ const recentOrders = useMemo(() => {
         onClick={() => {
           setScheduleForm({
             type: selectedSchedule.type,
-            name: selectedSchedule.name,
             start: selectedSchedule.start,
             end: selectedSchedule.end,
             memo: selectedSchedule.memo || "",
@@ -1304,13 +1393,23 @@ if (!handoverForm.authorUid) {
 
             // 🔄 수정 / 신규 분기
             if (selectedHandover?.id) {
-              await updateDoc(
-                doc(db, "handovers", selectedHandover.id),
-                { ...handoverForm }
-              );
+              const me = users.find(u => u.id === user?.uid);
+
+await updateDoc(
+  doc(db, "handovers", selectedHandover.id),
+  {
+    ...handoverForm,
+    author: me?.name || me?.이름 || "사용자",
+    authorUid: user?.uid,
+  }
+);
             } else {
-              await addDoc(collection(db, "handovers"), {
+              const me = users.find(u => u.id === user?.uid);
+
+await addDoc(collection(db, "handovers"), {
   ...handoverForm,
+  author: me?.name || me?.이름 || "사용자",   // 🔥 핵심
+  authorUid: user?.uid,
   createdAt: serverTimestamp(),
   readBy: [],
 });
@@ -1345,85 +1444,95 @@ if (!handoverForm.authorUid) {
   </div>
 ) : (
   <>
-    <ul className="space-y-2 text-sm">
-      {pagedHandovers.map((h) => {
-        const receiverRead =
-          h.readBy?.includes(h.receiverUid);
+    {/* 🔹 헤더 */}
+    <div className="border-b flex px-3 py-3 bg-slate-100 text-sm font-semibold text-gray-700 text-center">
+      <div className="w-[70px]">순번</div>
+      <div className="w-[140px]">작성날짜</div>
+      <div className="w-[140px]">작성자</div>
+      <div className="flex-1">제목</div>
+    </div>
 
-        const isReceiver =
-          user?.uid === h.receiverUid;
-
-        const isAuthor =
-          user?.uid === h.authorUid;
+    {/* 🔹 리스트 */}
+    <div className="divide-y text-sm">
+      {pagedHandovers.map((h, idx) => {
+        const receiverRead = h.readBy?.includes(h.receiverUid);
+        const isReceiver = user?.uid === h.receiverUid;
+        const isAuthor = user?.uid === h.authorUid;
 
         const dateStr =
           h.date || formatCreatedAt(h.createdAt) || "";
 
         const formattedDate = dateStr
-          ? `${dateStr.replaceAll("-", "")} 인수인계`
-          : "인수인계";
+          ? dateStr.replaceAll("-", ".")
+          : "-";
 
         return (
-          <li
+          <div
             key={h.id}
             onClick={async () => {
               setSelectedHandover(h);
 
-              // 🔥 받는 사람이 클릭하면 읽음 처리
               if (isReceiver && !receiverRead) {
                 await updateDoc(doc(db, "handovers", h.id), {
-                  readBy: [
-                    ...(h.readBy || []),
-                    user.uid,
-                  ],
+                  readBy: [...(h.readBy || []), user.uid],
                 });
               }
             }}
-            className="border-b pb-2 cursor-pointer hover:bg-slate-50 rounded px-1"
+            className={`
+              flex items-center px-3 py-3 cursor-pointer transition text-base
+              hover:bg-slate-50
+              ${!receiverRead && isReceiver ? "bg-red-50" : ""}
+            `}
           >
-            <div className="flex justify-between items-center">
-              <div className="font-semibold">
-                {formattedDate}
-              </div>
-
-              {/* 🔥 상태 영역 (핵심) */}
-              <div className="flex gap-1">
-
-                {/* ✅ 작성자/수신자 모두 읽음 상태 표시 */}
-                {(user?.uid === h.receiverUid || user?.uid === h.authorUid) && (
-                  <span
-                    className={`text-xs px-2 py-0.5 rounded-full
-                      ${
-                        receiverRead
-                          ? "bg-blue-500 text-white"
-                          : "bg-red-500 text-white"
-                      }`}
-                  >
-                    {receiverRead ? "읽음" : "안읽음"}
-                  </span>
-                )}
-
-              </div>
+            {/* 순번 */}
+            <div className="w-[70px] text-gray-400 text-center font-medium">
+              {handovers.length - ((handoverPage - 1) * HANDOVER_PAGE_SIZE + idx)}
             </div>
 
-            <div className="text-xs text-gray-400">
-              {h.author} → {h.receiver}
+            {/* 날짜 */}
+            <div className="w-[140px] text-gray-700 text-center font-medium">
+              {formattedDate}
             </div>
-          </li>
+
+            {/* 작성자 */}
+            <div className="w-[140px] text-gray-800 text-center font-semibold">
+              {h.author}
+            </div>
+
+            {/* 제목 */}
+            <div className="flex-1 flex justify-center items-center gap-2">
+              <span className="font-semibold text-gray-900">
+                인수인계
+              </span>
+
+              {(isReceiver || isAuthor) && (
+                <span
+                  className={`text-xs px-2 py-1 rounded-full font-semibold
+                    ${
+                      receiverRead
+                        ? "bg-blue-500 text-white"
+                        : "bg-red-500 text-white"
+                    }`}
+                >
+                  {receiverRead ? "읽음" : "안읽음"}
+                </span>
+              )}
+            </div>
+          </div>
         );
       })}
-    </ul>
+    </div>
 
     {/* 🔹 페이지네이션 */}
     {handoverTotalPages > 1 && (
-      <div className="flex justify-center gap-1 pt-3">
+      <div className="flex justify-center gap-2 pt-4">
         {Array.from({ length: handoverTotalPages }).map((_, idx) => {
           const page = idx + 1;
           return (
             <button
               key={page}
               onClick={() => setHandoverPage(page)}
-              className={`px-2 py-1 text-xs rounded
+              className={`px-3 py-1 text-sm rounded
                 ${
                   page === handoverPage
                     ? "bg-blue-600 text-white"
@@ -1445,61 +1554,109 @@ if (!handoverForm.authorUid) {
 
         {/* 최근 오더 */}
         <div className="lg:col-span-2">
-  <Card title="청구 top5">
-    <div className="h-[400px] flex flex-col">
+  <Card title="당일 미배차 현황">
+  <div className="h-[400px] flex flex-col">
 
-      {/* 🔹 테이블 헤더 */}
+    {/* 🔹 헤더 */}
+    <table className="w-full text-sm table-fixed">
+<thead className="bg-slate-50 text-gray-500 text-xs">
+  <tr className="flex">
+    <th className="px-2 py-2 w-[90px]">상차일</th>
+    <th className="px-2 py-2 w-[70px]">상차시간</th>
+    <th className="px-2 py-2 w-[90px]">하차일</th>
+    <th className="px-2 py-2 w-[70px]">하차시간</th>
+    <th className="px-2 py-2 flex-1 text-left">상차지</th>
+    <th className="px-2 py-2 flex-1 text-left">하차지</th>
+    <th className="px-2 py-2 w-[110px]">화물</th>
+    <th className="px-2 py-2 w-[90px]">차량</th>
+    <th className="px-2 py-2 w-[70px]">톤수</th>
+    <th className="px-2 py-2 w-[140px]">메모</th>
+    <th className="px-2 py-2 w-[80px]">상태</th>
+  </tr>
+</thead>
+    </table>
+
+    {/* 🔹 본문 */}
+    <div className="flex-1 overflow-y-auto">
       <table className="w-full text-sm table-fixed">
-        <thead className="bg-slate-50 text-gray-500">
-          <tr className="flex">
-            <th className="px-3 py-2 text-left flex-1">거래처</th>
-            <th className="px-3 py-2 text-left flex-1">상차지</th>
-            <th className="px-3 py-2 text-left flex-1">하차지</th>
-            <th className="px-3 py-2 text-right w-32">청구운임</th>
-          </tr>
-        </thead>
+        <tbody>
+  {todayPendingOrders.map((d, i) => (
+    <tr
+      key={i}
+      className="flex items-center border-t hover:bg-red-50 transition text-xs"
+    >
+      {/* 상차일 */}
+      <td className="px-2 py-2 w-[90px] text-gray-700">
+        {d?.상차일자?.slice(5) || "-"}
+      </td>
+
+      {/* 상차시간 */}
+      <td className="px-2 py-2 w-[70px] text-gray-600">
+        {d?.상차시간 || "-"}
+      </td>
+
+      {/* 하차일 */}
+      <td className="px-2 py-2 w-[90px] text-gray-700">
+        {d?.하차일자?.slice(5) || "-"}
+      </td>
+
+      {/* 하차시간 */}
+      <td className="px-2 py-2 w-[70px] text-gray-600">
+        {d?.하차시간 || "-"}
+      </td>
+
+      {/* 상차지 */}
+      <td className="px-2 py-2 flex-1 truncate font-medium">
+        {d?.상차지명 || "-"}
+      </td>
+
+      {/* 하차지 */}
+      <td className="px-2 py-2 flex-1 truncate text-gray-600">
+        {d?.하차지명 || "-"}
+      </td>
+
+      {/* 화물 */}
+      <td className="px-2 py-2 w-[110px] truncate">
+        {d?.화물내용 || "-"}
+      </td>
+
+      {/* 차량 */}
+      <td className="px-2 py-2 w-[90px] text-center">
+        {d?.차량종류 || "-"}
+      </td>
+
+      {/* 톤수 */}
+      <td className="px-2 py-2 w-[70px] text-center">
+        {d?.차량톤수 || "-"}
+      </td>
+
+      {/* 메모 */}
+      <td className="px-2 py-2 w-[140px] truncate text-gray-500">
+        {d?.메모 || "-"}
+      </td>
+
+      {/* 상태 */}
+      <td className="px-2 py-2 w-[80px] text-center">
+        <span className="bg-red-500 text-white px-2 py-1 rounded-full text-[10px]">
+          미배차
+        </span>
+      </td>
+    </tr>
+  ))}
+
+          {/* 데이터 없을 때 */}
+          {todayPendingOrders.length === 0 && (
+            <tr className="flex items-center justify-center h-full">
+              <td className="text-sm text-gray-400 py-10">
+                조회된 미배차 오더가 없습니다.
+              </td>
+            </tr>
+          )}
+        </tbody>
       </table>
-
-      {/* 🔹 본문 */}
-      <div className="flex-1">
-        <table className="w-full h-full text-sm table-fixed">
-          <tbody className="flex flex-col h-full">
-            {recentOrders.map((d, i) => (
-              <tr
-                key={i}
-                className="flex items-center flex-1 border-t hover:bg-slate-50"
-              >
-                <td className="px-3 py-2 flex-1 font-medium truncate">
-                  {d?.거래처명 || d?.거래처}
-                </td>
-
-                <td className="px-3 py-2 flex-1 text-gray-600 truncate">
-                  {d?.상차지명 || d?.상차지 || "-"}
-                </td>
-
-                <td className="px-3 py-2 flex-1 text-gray-600 truncate">
-                  {d?.하차지명 || d?.하차지 || "-"}
-                </td>
-
-                <td className="px-3 py-2 w-32 text-right font-semibold text-blue-600">
-                  ₩{Number(d?.청구운임 || 0).toLocaleString()}
-                </td>
-              </tr>
-            ))}
-
-            {/* 🔹 데이터 없을 때도 높이 유지 */}
-            {recentOrders.length === 0 && (
-              <tr className="flex items-center justify-center flex-1">
-                <td className="text-sm text-gray-400">
-                  오늘 접수된 오더가 없습니다
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
     </div>
-  </Card>
+  </div>
+</Card>
 </div>
 
         {/* TOP 10 거래처 */}
