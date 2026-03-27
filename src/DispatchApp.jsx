@@ -4879,7 +4879,7 @@ setForm((prev) => ({
 
     {/* 입력 */}
     <input
-      className={`${inputCls} pr-[110px] text-base`}
+      className={`${inputCls} pr-[60px] text-base`} // 🔥 줄임 (110 → 80)
       placeholder="예: 2"
       value={form.화물수량 || ""}
       onChange={(e) => {
@@ -4892,22 +4892,22 @@ setForm((prev) => ({
       }}
     />
 
-    {/* 🔥 버튼형 드롭다운 */}
-    <div className="absolute top-0 right-0 h-full flex items-center pr-2">
-
-      <select
-        className="
-          h-[70%]
-          px-3
-          text-sm font-semibold
-          rounded-lg
-          bg-blue-50
-          text-blue-700
-          border border-blue-200
-          appearance-none
-          cursor-pointer
-          shadow-sm
-        "
+    {/* 드롭다운 */}
+    <div className="absolute top-0 right-1 h-full flex items-center">
+  <select
+    className="
+      w-[55px]        // 🔥 핵심: 최대한 줄임
+      h-[65%]
+      px-1            // 🔥 padding 최소화
+      text-xs         // 🔥 글자도 줄임
+      font-semibold
+      rounded-md
+      bg-blue-50
+      text-blue-700
+      border border-blue-200
+      appearance-none
+      cursor-pointer
+    "
         value={form.화물타입}
         onChange={(e) => {
           const type = e.target.value;
@@ -4928,10 +4928,9 @@ setForm((prev) => ({
       </select>
 
       {/* 화살표 */}
-      <span className="absolute right-3 text-blue-500 text-xs pointer-events-none">
+      <span className="absolute right-2 text-blue-500 text-xs pointer-events-none">
         ▾
       </span>
-
     </div>
 
   </div>
@@ -5043,7 +5042,7 @@ setForm((prev) => ({
 
     {/* 입력 */}
     <input
-      className={`${inputCls} pr-[100px] text-base`}
+      className={`${inputCls} pr-[55px] text-base`} // 🔥 100 → 55로 축소
       placeholder="예: 1"
       value={form.톤수값 || ""}
       onChange={(e) => {
@@ -5056,15 +5055,17 @@ setForm((prev) => ({
       }}
     />
 
-    {/* 🔥 드롭다운 */}
-    <div className="absolute top-0 right-0 h-full flex items-center pr-2">
+    {/* 드롭다운 */}
+    <div className="absolute top-0 right-1 h-full flex items-center">
 
       <select
         className="
-          h-[70%]
-          px-2
-          text-[13px] font-medium antialiased leading-none
-          rounded-lg
+          w-[45px]        // 🔥 핵심: 최소화
+          h-[65%]
+          px-1            // 🔥 padding 최소
+          text-xs
+          font-semibold
+          rounded-md
           bg-blue-50
           text-blue-700
           border border-blue-200
@@ -5084,20 +5085,20 @@ setForm((prev) => ({
           onChange("차량톤수", `${form.톤수값 || ""}${type}`);
         }}
       >
-        <option value="">선택없음</option>
+        <option value="">없음</option>
         <option value="톤">톤</option>
         <option value="kg">kg</option>
       </select>
 
-      <span className="absolute right-2 text-blue-500 text-[11px] pointer-events-none">
-  ▾
-</span>
+      {/* 화살표 */}
+      <span className="absolute right-1 text-[10px] text-blue-500 pointer-events-none">
+        ▾
+      </span>
 
     </div>
 
   </div>
 </div>
-
 
   {/* 금액 */}
 {isAdmin && (

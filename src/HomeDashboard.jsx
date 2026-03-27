@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useRef } from "react";
+import React, { useMemo, useState, useRef, useEffect } from "react";
 import {
   AreaChart,
   Area,
@@ -107,20 +107,6 @@ function formatCreatedAt(createdAt) {
 
   return null;
 }
-// ===================== 인수인계 작성자/수신자 목록 =====================
-const HANDOVER_USERS = [
-  "박성우팀장",
-  "박주상대표",
-  "이도경대리",
-];
-// ===================== 인수인계 UID 매핑 =====================
-const USER_UID_MAP = {
-  "박성우팀장": "여기에_박성우_uid",
-  "박주상대표": "여기에_박주상_uid",
-  "이도경대리": "여기에_이도경_uid",
-};
-
-const getUidByName = (name) => USER_UID_MAP[name] || null;
 /* ===================== HOME DASHBOARD ===================== */
 export default function HomeDashboard({
   role,
@@ -191,14 +177,29 @@ const [schedulePage, setSchedulePage] = useState(1);
 const [handoverOpen, setHandoverOpen] = useState(false);
 const [handoverForm, setHandoverForm] = useState({
   text: "",
-  author: user?.displayName || "작성자",
+  author: user?.name || "",
+  authorUid: user?.uid || "",
   receiver: "",
+  receiverUid: "",
   date: todayStr,
 });
 const [selectedHandover, setSelectedHandover] = useState(null);
 
 const [selectedNotice, setSelectedNotice] = useState(null);
 const [selectedSchedule, setSelectedSchedule] = useState(null);
+const [users, setUsers] = useState([]);
+
+useEffect(() => {
+  const unsub = onSnapshot(collection(db, "users"), (snap) => {
+    const list = snap.docs.map(d => ({
+      id: d.id,
+      ...d.data(),
+    }));
+    setUsers(list);
+  });
+
+  return () => unsub();
+}, []);
 React.useEffect(() => {
   const q = query(
     collection(db, "schedules"),
@@ -1188,10 +1189,12 @@ const recentOrders = useMemo(() => {
       <button
         onClick={() => {
           isEditingHandoverRef.current = true;
-          setHandoverForm({
+setHandoverForm({
   text: selectedHandover.text,
   author: selectedHandover.author,
+  authorUid: selectedHandover.authorUid,
   receiver: selectedHandover.receiver,
+  receiverUid: selectedHandover.receiverUid,
   date: selectedHandover.date,
 });
           setHandoverOpen(true);
@@ -1213,8 +1216,10 @@ const recentOrders = useMemo(() => {
         setSelectedHandover(null); // 🔥 신규 등록 시 수정 잔여값 방지
         setHandoverForm({
   text: "",
-  author: "",
+  author: user?.name || "",
+  authorUid: user?.uid || "",
   receiver: "",
+  receiverUid: "",
   date: todayStr,
 });
         setHandoverOpen(true);
@@ -1232,42 +1237,26 @@ const recentOrders = useMemo(() => {
     >
       <div className="space-y-3">
 
-        {/* 작성자 */}
-        <select
-          className="w-full border px-2 py-1 rounded"
-          value={handoverForm.author}
-          onChange={(e) =>
-            setHandoverForm({
-              ...handoverForm,
-              author: e.target.value,
-            })
-          }
-        >
-          <option value="">작성자 선택</option>
-          {HANDOVER_USERS.map((name) => (
-            <option key={name} value={name}>
-              {name}
-            </option>
-          ))}
-        </select>
-
         {/* 받는 사람 */}
         <select
           className="w-full border px-2 py-1 rounded"
           value={handoverForm.receiver}
-          onChange={(e) =>
-            setHandoverForm({
-              ...handoverForm,
-              receiver: e.target.value,
-            })
-          }
+          onChange={(e) => {
+  const selected = users.find(u => u.name === e.target.value);
+
+  setHandoverForm({
+    ...handoverForm,
+    receiver: selected?.name || "",
+    receiverUid: selected?.uid || selected?.id,
+  });
+}}
         >
           <option value="">받는 사람 선택</option>
-          {HANDOVER_USERS.map((name) => (
-            <option key={name} value={name}>
-              {name}
-            </option>
-          ))}
+          {users.map((u) => (
+  <option key={u.id} value={u.name}>
+    {u.name}
+  </option>
+))}
         </select>
 
         {/* 기준 날짜 */}
@@ -1300,11 +1289,10 @@ const recentOrders = useMemo(() => {
         {/* 저장 */}
         <button
           onClick={async () => {
-            // 🔥 필수값 검증
-            if (!handoverForm.author) {
-              alert("작성자를 선택하세요");
-              return;
-            }
+if (!handoverForm.authorUid) {
+  alert("로그인 정보가 없습니다. 다시 로그인하세요.");
+  return;
+}
             if (!handoverForm.receiver) {
               alert("받는 사람을 선택하세요");
               return;
@@ -1325,17 +1313,18 @@ const recentOrders = useMemo(() => {
   ...handoverForm,
   createdAt: serverTimestamp(),
   readBy: [],
-  receiverUid: getUidByName(handoverForm.receiver),
 });
             }
 
             // 🔁 초기화
-            setHandoverForm({
-              text: "",
-              author: "",
-              receiver: "",
-              date: todayStr,
-            });
+           setHandoverForm({
+  text: "",
+  author: user?.name || "",
+  authorUid: user?.uid || "",
+  receiver: "",
+  receiverUid: "",
+  date: todayStr,
+});
 
             setHandoverOpen(false);
             setSelectedHandover(null);
@@ -1357,66 +1346,74 @@ const recentOrders = useMemo(() => {
 ) : (
   <>
     <ul className="space-y-2 text-sm">
-  {pagedHandovers.map((h) => {
-const receiverRead =
-  h.readBy?.includes(h.receiverUid);
+      {pagedHandovers.map((h) => {
+        const receiverRead =
+          h.readBy?.includes(h.receiverUid);
 
-const isReceiver =
-  user?.uid === h.receiverUid;
+        const isReceiver =
+          user?.uid === h.receiverUid;
 
-    const isAuthor =
-      user?.displayName === h.author;
+        const isAuthor =
+          user?.uid === h.authorUid;
 
-    const dateStr =
-      h.date || formatCreatedAt(h.createdAt) || "";
+        const dateStr =
+          h.date || formatCreatedAt(h.createdAt) || "";
 
-    const formattedDate = dateStr
-      ? `${dateStr.replaceAll("-", "")} 인수인계`
-      : "인수인계";
+        const formattedDate = dateStr
+          ? `${dateStr.replaceAll("-", "")} 인수인계`
+          : "인수인계";
 
-    return (
-      <li
-        key={h.id}
-        onClick={async () => {
-          setSelectedHandover(h);
+        return (
+          <li
+            key={h.id}
+            onClick={async () => {
+              setSelectedHandover(h);
 
-          // 🔥 받는 사람이 클릭하면 읽음 처리
-          if (isReceiver && !receiverRead) {
-  await updateDoc(doc(db, "handovers", h.id), {
-    readBy: [
-      ...(h.readBy || []),
-      user.uid,
-    ],
-  });
-}
-        }}
-        className="border-b pb-2 cursor-pointer hover:bg-slate-50 rounded px-1"
-      >
-        <div className="flex justify-between items-center">
-          <div className="font-semibold">
-            {formattedDate}
-          </div>
-
-          {/* 🔴🟢 항상 표시 */}
-          <span
-            className={`text-xs px-2 py-0.5 rounded-full
-              ${
-                receiverRead
-                  ? "bg-green-500 text-white"
-                  : "bg-red-500 text-white"
-              }`}
+              // 🔥 받는 사람이 클릭하면 읽음 처리
+              if (isReceiver && !receiverRead) {
+                await updateDoc(doc(db, "handovers", h.id), {
+                  readBy: [
+                    ...(h.readBy || []),
+                    user.uid,
+                  ],
+                });
+              }
+            }}
+            className="border-b pb-2 cursor-pointer hover:bg-slate-50 rounded px-1"
           >
-            {receiverRead ? "읽음" : "안읽음"}
-          </span>
-        </div>
+            <div className="flex justify-between items-center">
+              <div className="font-semibold">
+                {formattedDate}
+              </div>
 
-        <div className="text-xs text-gray-400">
-          {h.author} → {h.receiver}
-        </div>
-      </li>
-    );
-  })}
-</ul>
+              {/* 🔥 상태 영역 (핵심) */}
+              <div className="flex gap-1">
+
+                {/* ✅ 작성자/수신자 모두 읽음 상태 표시 */}
+                {(user?.uid === h.receiverUid || user?.uid === h.authorUid) && (
+                  <span
+                    className={`text-xs px-2 py-0.5 rounded-full
+                      ${
+                        receiverRead
+                          ? "bg-blue-500 text-white"
+                          : "bg-red-500 text-white"
+                      }`}
+                  >
+                    {receiverRead ? "읽음" : "안읽음"}
+                  </span>
+                )}
+
+              </div>
+            </div>
+
+            <div className="text-xs text-gray-400">
+              {h.author} → {h.receiver}
+            </div>
+          </li>
+        );
+      })}
+    </ul>
+
     {/* 🔹 페이지네이션 */}
     {handoverTotalPages > 1 && (
       <div className="flex justify-center gap-1 pt-3">

@@ -4328,6 +4328,7 @@ const [showAddressConfirmPopup, setShowAddressConfirmPopup] = useState(false);
   const [matchedRows, setMatchedRows] = useState([]);
   const [result, setResult] = useState(null);
   const [aiFare, setAiFare] = useState(null);
+  const [strictMatchOnly, setStrictMatchOnly] = useState(false);
 
   // 🔥 Firestore 로딩
   useEffect(() => {
@@ -4526,20 +4527,33 @@ let filtered = dispatchData.filter(r => {
     return false;
   }
 
-  const rowPickup = normalizePlace(r.상차지명 || "");
-  const rowDrop   = normalizePlace(r.하차지명 || "");
+const rowPickup = normalizePlace(r.상차지명 || "");
+const rowDrop   = normalizePlace(r.하차지명 || "");
 
-  const inputPickup = normalizePlace(pickup);
-  const inputDrop   = normalizePlace(drop);
+const rowPickupAddr = clean(r.상차지주소 || "");
+const rowDropAddr   = clean(r.하차지주소 || "");
 
-  // 🔥 핵심: 부분 매칭 (양방향)
-  const pickupMatch =
-    inputPickup &&
-    (rowPickup.includes(inputPickup) || inputPickup.includes(rowPickup));
+// 🔥 입력값 (지명 or 주소 둘 다 대응)
+const inputPickup = normalizePlace(pickup || pickupAddr);
+const inputDrop   = normalizePlace(drop || dropAddr);
 
-  const dropMatch =
-    inputDrop &&
-    (rowDrop.includes(inputDrop) || inputDrop.includes(rowDrop));
+const inputPickupAddr = clean(pickupAddr);
+const inputDropAddr   = clean(dropAddr);
+
+// 🔥 지명 + 주소 둘 다 허용 (핵심)
+const pickupMatch =
+  (inputPickup &&
+    (rowPickup.includes(inputPickup) || inputPickup.includes(rowPickup)))
+  ||
+  (inputPickupAddr &&
+    rowPickupAddr.includes(inputPickupAddr));
+
+const dropMatch =
+  (inputDrop &&
+    (rowDrop.includes(inputDrop) || inputDrop.includes(rowDrop)))
+  ||
+  (inputDropAddr &&
+    rowDropAddr.includes(inputDropAddr));
 
   return pickupMatch && dropMatch;
 });
@@ -4599,23 +4613,64 @@ if (cargo) {
     return !isRowPallet;
   });
 }
-// =======================
-// 🔥 점수 기반 정렬 (핵심)
-// =======================
+// 🔥 완전일치 필터 (여기 넣는다)
+if (strictMatchOnly) {
+  filtered = filtered.filter(r => {
+    const cargoMatch =
+      cargo &&
+      r.화물내용 &&
+      r.화물내용.includes(cargo);
 
+    const tonMatch =
+      ton &&
+      r.차량톤수 &&
+      r.차량톤수 === ton;
+
+    return cargoMatch || tonMatch;
+  });
+}
+
+// 🔥 그 다음 정렬
 filtered = filtered.map(r => {
 
   let score = 0;
 
+  // 🔵 지명
   const rowPickup = normalizePlace(r.상차지명 || "");
   const rowDrop   = normalizePlace(r.하차지명 || "");
 
-  const inputPickup = normalizePlace(pickup);
-  const inputDrop   = normalizePlace(drop);
+  // 🔵 주소
+  const rowPickupAddr = clean(r.상차지주소 || "");
+  const rowDropAddr   = clean(r.하차지주소 || "");
 
-  // 1️⃣ 지명 (최우선)
-  if (rowPickup.includes(inputPickup)) score += 100;
-  if (rowDrop.includes(inputDrop)) score += 100;
+  // 🔵 입력값 (지명 or 주소 대응)
+  const inputPickup = normalizePlace(pickup || pickupAddr);
+  const inputDrop   = normalizePlace(drop || dropAddr);
+
+  const inputPickupAddr = clean(pickupAddr);
+  const inputDropAddr   = clean(dropAddr);
+
+  // =========================
+  // 1️⃣ 지명 + 주소 (최우선)
+  // =========================
+  if (
+    (inputPickup &&
+      (rowPickup.includes(inputPickup) || inputPickup.includes(rowPickup))) ||
+    (inputPickupAddr &&
+      (rowPickupAddr.includes(inputPickupAddr) || inputPickupAddr.includes(rowPickupAddr)))
+  ) {
+    score += 100;
+  }
+
+  if (
+    (inputDrop &&
+      (rowDrop.includes(inputDrop) || inputDrop.includes(rowDrop))) ||
+    (inputDropAddr &&
+      (rowDropAddr.includes(inputDropAddr) || inputDropAddr.includes(rowDropAddr)))
+  ) {
+    score += 100;
+  }
+
 
   // 2️⃣ 화물
   if (cargo) {
@@ -4882,6 +4937,14 @@ const fares = baseRows.map((r) =>
         value={cargo}
         onChange={(e) => setCargo(e.target.value)}
       />
+<label className="flex items-center gap-2 text-sm mt-1">
+  <input
+    type="checkbox"
+    checked={strictMatchOnly}
+    onChange={(e) => setStrictMatchOnly(e.target.checked)}
+  />
+  화물/톤수 완전일치만 보기
+</label>
 
       <select
         className="w-full border rounded px-2 py-2 text-sm"

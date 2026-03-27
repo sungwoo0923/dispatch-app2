@@ -10,11 +10,14 @@ export default function Signup() {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const navigate = useNavigate();
+  const [name, setName] = useState("");
+const [phone, setPhone] = useState("");
 
   const handleSignup = async (e) => {
     e.preventDefault();
-    if (!email || !password) return alert("이메일과 비밀번호를 입력하세요.");
-    if (password !== confirm) return alert("비밀번호가 일치하지 않습니다.");
+if (!email || !password) return alert("이메일과 비밀번호를 입력하세요.");
+if (!name || !phone) return alert("이름과 핸드폰번호를 입력하세요.");
+if (password !== confirm) return alert("비밀번호가 일치하지 않습니다.");
 
     try {
       const result = await createUserWithEmailAndPassword(auth, email, password);
@@ -23,7 +26,8 @@ export default function Signup() {
       await setDoc(doc(db, "users", user.uid), {
         uid: user.uid,
         email: user.email,
-        name: "신규사용자",
+        name: name,
+phone: phone,
         role: "test",      // 🆕 기본 권한: test!
         approved: false,   // 승인 전 로그인 제한 유지
         createdAt: serverTimestamp(),
@@ -43,6 +47,23 @@ export default function Signup() {
       <h1 className="text-2xl font-bold mb-4">회원가입</h1>
 
       <form onSubmit={handleSignup} className="flex flex-col gap-3 w-72">
+        <input
+  type="text"
+  placeholder="이름"
+  value={name}
+  onChange={(e) => setName(e.target.value)}
+  className="border p-2 rounded"
+  required
+/>
+
+<input
+  type="text"
+  placeholder="핸드폰번호"
+  value={phone}
+  onChange={(e) => setPhone(e.target.value)}
+  className="border p-2 rounded"
+  required
+/>
         <input
           type="email"
           placeholder="이메일"

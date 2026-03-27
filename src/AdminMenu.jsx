@@ -14,6 +14,9 @@ export default function AdminMenu() {
   const [search, setSearch] = useState("");
   const [roleTarget, setRoleTarget] = useState(null);
   const [roleFilter, setRoleFilter] = useState("all");
+  const [editUser, setEditUser] = useState(null);
+const [editName, setEditName] = useState("");
+const [editPhone, setEditPhone] = useState("");
 
 const ROLES = ["admin", "driver", "shipper", "test", "user"];
 
@@ -43,9 +46,16 @@ const filtered = useMemo(() => {
   return users.filter((u) => {
     const matchSearch = !q
       ? true
-      : Object.values(u).some((v) =>
-          String(v || "").toLowerCase().includes(q)
-        );
+      : [
+  u.email,
+  u.name,
+  u.phone,
+  u.role,
+  u.companyName,
+]
+  .join(" ")
+  .toLowerCase()
+  .includes(q);
 
     const matchRole =
       roleFilter === "all" ? true : u.role === roleFilter;
@@ -154,10 +164,12 @@ const filtered = useMemo(() => {
           <thead>
             <tr>
               <th className={headBase}>이메일</th>
-              <th className={headBase}>권한</th>
-              <th className={headBase}>회사명</th>
-              <th className={headBase}>승인여부</th>
-              <th className={headBase}>관리</th>
+<th className={headBase}>이름</th>
+<th className={headBase}>핸드폰</th>
+<th className={headBase}>권한</th>
+<th className={headBase}>회사명</th>
+<th className={headBase}>승인여부</th>
+<th className={headBase}>관리</th>
             </tr>
           </thead>
           <tbody>
@@ -174,7 +186,10 @@ const filtered = useMemo(() => {
                 return (
                   <tr key={u.id} className="odd:bg-white even:bg-gray-50">
                     <td className={cellBase}>{u.email}</td>
-                    <td className={cellBase}>
+<td className={cellBase}>{u.name || "-"}</td>
+<td className={cellBase}>{u.phone || "-"}</td>
+
+<td className={cellBase}>
                       <span
                         className={`px-2 py-1 rounded text-xs font-semibold ${
                           u.role === "admin"
@@ -243,7 +258,16 @@ const filtered = useMemo(() => {
                             </div>
                           )}
                         </div>
-
+<button
+  onClick={() => {
+    setEditUser(u);
+    setEditName(u.name || "");
+    setEditPhone(u.phone || "");
+  }}
+  className="bg-indigo-500 text-white px-2 py-1 rounded text-xs"
+>
+  수정
+</button>
                         <button
                           onClick={() => removeUser(u)}
                           disabled={isMe}
@@ -281,6 +305,78 @@ const filtered = useMemo(() => {
           </div>
         </div>
       )}
+      {editUser && (
+  <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+    <div className="bg-white p-5 rounded-lg w-80 shadow-lg">
+      <h3 className="text-lg font-bold mb-3">사용자 정보 수정</h3>
+
+      <input
+        placeholder="이름"
+        value={editName}
+        onChange={(e) => setEditName(e.target.value)}
+        className="border p-2 rounded w-full mb-2"
+      />
+
+      <input
+        placeholder="핸드폰번호"
+        value={editPhone}
+        onChange={(e) => {
+  let v = e.target.value.replace(/[^0-9]/g, "");
+
+  if (v.length <= 3) {
+    // 그대로
+  } else if (v.length <= 7) {
+    v = v.replace(/(\d{3})(\d+)/, "$1-$2");
+  } else {
+    v = v.replace(/(\d{3})(\d{4})(\d+)/, "$1-$2-$3");
+  }
+
+  setEditPhone(v);
+}}
+        className="border p-2 rounded w-full mb-3"
+      />
+
+      <div className="flex justify-end gap-2">
+        <button
+          onClick={() => setEditUser(null)}
+          className="px-3 py-1 bg-gray-300 rounded"
+        >
+          취소
+        </button>
+
+        <button
+          onClick={async () => {
+            if (!editName || !editPhone) {
+              return alert("이름과 핸드폰번호를 입력하세요.");
+            }
+
+            await setDoc(
+              doc(db, "users", editUser.id),
+              {
+                name: editName,
+                phone: editPhone,
+              },
+              { merge: true }
+            );
+
+            setUsers((prev) =>
+              prev.map((x) =>
+                x.id === editUser.id
+                  ? { ...x, name: editName, phone: editPhone }
+                  : x
+              )
+            );
+
+            setEditUser(null);
+          }}
+          className="px-3 py-1 bg-blue-600 text-white rounded"
+        >
+          저장
+        </button>
+      </div>
+    </div>
+  </div>
+)}
     </div>
   );
 }
