@@ -2297,6 +2297,8 @@ const filterPlaces = (q) => {
       하차지담당자번호: "",
       경유하차: "",
       화물내용: "",
+      화물타입: "파레트",
+      톤수타입: "톤",
       운행유형: "편도",   // ⭐ 추가 (기본값)
       차량종류: "",
       차량톤수: "",
@@ -4906,7 +4908,7 @@ setForm((prev) => ({
           cursor-pointer
           shadow-sm
         "
-        value={form.화물타입 || ""}
+        value={form.화물타입}
         onChange={(e) => {
           const type = e.target.value;
           onChange("화물타입", type);
@@ -5069,7 +5071,7 @@ setForm((prev) => ({
           appearance-none
           cursor-pointer
         "
-        value={form.톤수타입 || ""}
+        value={form.톤수타입}
         onChange={(e) => {
           const type = e.target.value;
           onChange("톤수타입", type);
@@ -6616,7 +6618,7 @@ const today = now.toISOString().slice(0, 10);
       className="flex-1 py-2.5 rounded bg-blue-600 text-white font-semibold hover:bg-blue-700 transition"
       onClick={doSave}
     >
-      배차요청하기
+      배차등록하기
     </button>
 
   </div>
@@ -7798,6 +7800,7 @@ const [rows, setRows] = React.useState(() =>
   
   sortRows(dispatchData || [])
 );
+
 
   const [selected, setSelected] = React.useState([]);
   const [selectedEditMode, setSelectedEditMode] = React.useState(false);
@@ -9348,14 +9351,30 @@ ${url}
   const row = rows.find((r) => r._id === selected[0]);
   if (!row) return;
 
-  // 🔥 여기 추가
-  const match = (row.화물내용 || "").match(/(\d+)(.*)/);
+const raw = row.화물내용 || "";
+const match = raw.match(/(\d+)(.*)/);
 
-  setEditTarget({
-    ...row,
-    화물수량: match ? match[1] : "",
-    화물타입: match ? match[2] : "",
-  });
+// 🔥 톤수 분해 추가
+const ton = row.차량톤수 || "";
+const tonValue = ton.match(/[\d.]+/)?.[0] || "";
+const tonType = ton.includes("kg")
+  ? "kg"
+  : ton.includes("톤")
+  ? "톤"
+  : "";
+
+setEditTarget({
+  ...row,
+
+  // 화물
+  화물수량: match ? match[1] : raw,
+  화물타입: match ? match[2] : "",
+  화물내용원본: raw,
+
+  // 🔥 톤수 추가 (이거 핵심)
+  톤수값: tonValue,
+  톤수타입: tonType,
+});
 
   setEditPopupOpen(true);
 }}
@@ -9578,9 +9597,27 @@ ${url}
 
 onDoubleClick={(e) => {
   if (e.target.closest("input")) return;
-  if (copyPanelOpen) return;
 
-  setCopyTarget({ ...r });   // ✅ 그냥 객체
+  const latest = dispatchData.find(d => d._id === r._id);
+
+const rawCargo = String(latest?.화물내용 || "");
+  const cargoMatch = rawCargo.match(/(\d+)(.*)/);
+
+  const rawTon = String(latest?.차량톤수 || "");
+  const tonMatch = rawTon.match(/([\d.]+)(.*)/);
+
+  setCopyTarget({
+    ...latest,
+
+    // 🔥 화물 분해
+    화물수량: cargoMatch ? cargoMatch[1] : "",
+    화물타입: cargoMatch ? cargoMatch[2] : "",
+
+    // 🔥 톤수 분해
+    톤수값: tonMatch ? tonMatch[1] : "",
+    톤수타입: tonMatch ? tonMatch[2] : "",
+  });
+
   setCopyPanelOpen(true);
 }}
 
@@ -10487,7 +10524,7 @@ setUrgentPopup([]);
     {/* 입력 */}
     <input
       className="flex-1 px-3 py-2 outline-none"
-      value={copyTarget?.화물수량 || ""}
+value={copyTarget?.화물수량 || ""}
       onChange={(e) => {
         const v = e.target.value;
 
@@ -12236,13 +12273,18 @@ setRows(prev => {
     {/* 🔹 입력창 */}
     <input
       className="border p-2 rounded w-full pr-[70px]"
-      value={editTarget.차량톤수 || ""}
-      onChange={(e) =>
-        setEditTarget((p) => ({
-          ...p,
-          차량톤수: e.target.value,
-        }))
-      }
+      value={editTarget.톤수값 || ""}
+      onChange={(e) => {
+  const v = e.target.value;
+
+  setEditTarget((p) => ({
+    ...p,
+    톤수값: v,
+    차량톤수: p.톤수타입
+      ? `${v}${p.톤수타입}`
+      : v,
+  }));
+}}
       placeholder="예: 1"
     />
 
@@ -14494,10 +14536,28 @@ else if (palletDiff !== null) priority = 1;
 
       const first = filtered.find((r) => selected.has(getId(r)));
 
-      if (first) {
-        setEditTarget(first);
-        setEditPopupOpen(true);
-      }
+if (first) {
+const raw = String(first.화물내용 || "");
+const match = raw.match(/(\d+)(.*)/);
+
+// 🔥 톤수 분해 추가
+const rawTon = String(first.차량톤수 || "");
+const tonMatch = rawTon.match(/([\d.]+)(.*)/);
+
+setEditTarget({
+  ...first,
+
+  // ✅ 화물
+  화물수량: match ? match[1] : "",
+  화물타입: match ? match[2] : "",
+
+  // ✅ 톤수 (🔥 이거 추가)
+  톤수값: tonMatch ? tonMatch[1] : "",
+  톤수타입: tonMatch ? tonMatch[2] : "",
+});
+
+  setEditPopupOpen(true);
+}
       return;
     }
 
@@ -15195,9 +15255,26 @@ else if (palletDiff !== null) priority = 1;
       key={id}
       id={`row-${id}`}
       onDoubleClick={() => {
-        setCopyTarget({ ...row });
-        setCopyPanelOpen(true);
-      }}
+  const rawCargo = String(row.화물내용 || "");
+  const cargoMatch = rawCargo.match(/(\d+)(.*)/);
+
+  const rawTon = String(row.차량톤수 || "");
+  const tonMatch = rawTon.match(/([\d.]+)(.*)/);
+
+  setCopyTarget({
+    ...row,
+
+    // 🔥 화물 분해
+    화물수량: cargoMatch ? cargoMatch[1] : "",
+    화물타입: cargoMatch ? cargoMatch[2] : "",
+
+    // 🔥 톤수 분해
+    톤수값: tonMatch ? tonMatch[1] : "",
+    톤수타입: tonMatch ? tonMatch[2] : "",
+  });
+
+  setCopyPanelOpen(true);
+}}
       className={`
   hover:bg-indigo-50
   cursor-pointer
@@ -16019,14 +16096,20 @@ onBlur={(e) => {
 
     <input
       className="border p-2 rounded w-full pr-[95px]"
-      value={editTarget?.화물수량 || ""}
+      value={
+  editTarget?.화물수량 ||
+  editTarget?.화물내용 ||
+  ""
+}
       onChange={(e) => {
         const v = e.target.value;
 
         setEditTarget((p) => ({
           ...p,
           화물수량: v,
-          화물내용: p.화물타입 ? `${v}${p.화물타입}` : v,
+          화물내용: p.화물타입
+  ? `${v}${p.화물타입}`
+  : (v || p.화물내용),
         }));
       }}
     />
