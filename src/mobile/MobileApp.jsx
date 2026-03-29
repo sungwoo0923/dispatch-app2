@@ -4771,21 +4771,29 @@ if (inputTonNum2 == null) {
   // ✅ 일반짐 → 전부 허용 (핵심)
   return true;
 }
+const isTonSimilar = (inputTon, rowTon) => {
+  if (inputTon == null || rowTon == null) return false;
 
-// 🔥 박스/잡짐 → 톤수만 비교
+  // 🔵 0.1 ~ 1.9톤 → 전부 같은 그룹
+  if (inputTon < 2 && rowTon < 2) return true;
+
+  // 🔵 그 이상 → ±0.5톤 허용
+  return Math.abs(inputTon - rowTon) <= 0.5;
+};
+// 🔥 박스/잡짐 → 톤수 범위 비교
 if (isInputBox || isRowBox) {
-  return rowTon === inputTonNum2;
+  return isTonSimilar(inputTonNum2, rowTon);
 }
 
-// 🔥 파렛트 아닌 경우 → 톤수만
+// 🔥 파렛트 아닌 경우 → 톤수 범위 비교
 if (!isInputPallet || !isRowPallet) {
-  return rowTon === inputTonNum2;
+  return isTonSimilar(inputTonNum2, rowTon);
 }
 
-// 🔥 파렛트 → 화물 + 톤수
+// 🔥 파렛트 → 화물 + 톤수 범위
 return (
   rowCargo === inputCargoNum &&
-  rowTon === inputTonNum2
+  isTonSimilar(inputTonNum2, rowTon)
 );
 });
 // ===============================
