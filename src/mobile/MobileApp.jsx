@@ -302,6 +302,7 @@ const normalizePhone = (p = "") =>
 
 export default function MobileApp() {
   const [page, setPage] = useState("list");
+  const [prevPage, setPrevPage] = useState("list");
   const [showSimilarPopup, setShowSimilarPopup] = useState(false);
 const [fallbackData, setFallbackData] = useState([]);
   // 🔕 알림 ON/OFF 상태 (기본 ON)
@@ -957,15 +958,22 @@ const undeliveredOrders = useMemo(() => {
 }, [orders]);
 
   // 날짜별 그룹핑 메모
-  const groupedByDate = useMemo(() => {
-    const map = new Map();
-    for (const o of filteredOrders) {
-      const d = getPickupDate(o) || "기타";
-      if (!map.has(d)) map.set(d, []);
-      map.get(d).push(o);
-    }
-    return map;
-  }, [filteredOrders]);
+const groupedByDate = useMemo(() => {
+  const map = new Map();
+
+  for (const o of filteredOrders) {
+
+    const d = getPickupDate(o);
+
+    // 🔥🔥🔥 이거 추가 (핵심)
+    if (!d) continue;
+
+    if (!map.has(d)) map.set(d, []);
+    map.get(d).push(o);
+  }
+
+  return map;
+}, [filteredOrders]);
 
   // --------------------------------------------------
   // 5. 저장 / 수정
@@ -1035,7 +1043,7 @@ const undeliveredOrders = useMemo(() => {
         id: form._editId,
       });
       showToast("수정 완료!");
-      setPage("list");
+      setPage(prevPage);
       return;
     }
 
@@ -1232,7 +1240,7 @@ const handleOrderDuplicate = (order) => {
 
     await deleteDoc(doc(db, selectedOrder.__col, selectedOrder.id));
     setSelectedOrder(null);
-    setPage("list");
+    setPage(prevPage);
     alert("오더가 삭제되었습니다.");
   };
 
@@ -1670,6 +1678,7 @@ setOpenMemo={setOpenMemo}
             setSelectedOrder={setSelectedOrder}
             showToast={showToast}
             upsertDriver={upsertDriver}
+            setPrevPage={setPrevPage}
           />
         )}
 
@@ -1701,6 +1710,7 @@ setOpenMemo={setOpenMemo}
     setPage={setPage}
     setDetailFrom={setDetailFrom}
     setOpenMemo={setOpenMemo}
+    setPrevPage={setPrevPage}
   />
 )}
 
@@ -5404,6 +5414,7 @@ function MobileUnassignedList({
   setPage,
   setDetailFrom,
   setOpenMemo,
+  setPrevPage,
 }) {
     // ============================
   // 🔢 미배차 요약 계산
@@ -5572,6 +5583,7 @@ const source = rawSource.filter((o) => {
             key={o.id}
             order={o}
             onSelect={() => {
+              setPrevPage("unassigned");
               setSelectedOrder(o);
               setDetailFrom("unassigned");
               setPage("detail");

@@ -108,9 +108,10 @@ const handleDeleteSelected = async () => {
 
   if (!window.confirm("정말 삭제하시겠습니까?")) return;
 
-  for (let id of selectedIds) {
-    await deleteDoc(doc(db, "orders", id));
-  }
+for (let id of selectedIds) {
+  await deleteDoc(doc(db, "orders", id));
+  await deleteDoc(doc(db, "dispatch", id)); // 🔥 추가
+}
 
   setSelectedIds([]);
 };
