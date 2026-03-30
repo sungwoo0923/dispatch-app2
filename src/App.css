@@ -1,52 +1,169 @@
+/* ================================
+   ✅ 글로벌 폰트 & 렌더링 개선
+================================ */
+@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css");
+
+body {
+  font-family: "Pretendard", "Noto Sans KR", -apple-system, BlinkMacSystemFont, sans-serif;
+
+  /* 🔥 글씨 깨짐 방지 핵심 */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+
+  background: #f9fafb;
+  color: #222;
+}
+
+
+/* ================================
+   📦 기본 컨테이너
+================================ */
 .dispatch-container {
   padding: 20px;
-  font-family: "Pretendard", -apple-system, BlinkMacSystemFont, "Noto Sans KR", sans-serif;
-  font-size: 14px;
-  letter-spacing: -0.2px;
-  color: #333;
 }
+
+
+/* ================================
+   🚀 상단 메뉴 (핵심 개선)
+================================ */
 .nav {
   margin-top: 10px;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 6px;
 }
+
 .nav button {
-  margin-right: 8px;
-  padding: 6px 12px;
-  border: 1px solid #ccc;
-  background: white;
-  cursor: pointer;
-}
-.nav button.excel {
-  background: #0078ff;
-  color: white;
+  position: relative;
+  padding: 8px 14px;
+
   border: none;
+  background: transparent;
+  cursor: pointer;
+
+  /* 🔥 가독성 핵심 */
+  font-size: 15px;
+  font-weight: 600;
+  color: #374151;
+  letter-spacing: -0.2px;
+
+  transition: all 0.2s ease;
 }
+
+/* 🔥 hover */
+.nav button:hover {
+  color: #1B64FF;
+}
+
+/* 🔥 활성 메뉴 */
+.nav button.active {
+  color: #1B64FF;
+  font-weight: 700;
+}
+
+/* 🔥 활성 밑줄 (토스 느낌) */
+.nav button.active::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -7px;
+  width: 100%;
+  height: 3px;
+  background: #1B64FF;
+  border-radius: 2px;
+}
+
+/* 엑셀 버튼 */
+.nav button.excel {
+  background: #1B64FF;
+  color: white;
+  border-radius: 6px;
+  padding: 8px 14px;
+}
+
+.nav button.excel:hover {
+  background: #1554d1;
+}
+
+
+/* ================================
+   📋 입력 폼
+================================ */
 .form-grid {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
-  gap: 8px;
-  margin-bottom: 10px;
+  gap: 10px;
+  margin-bottom: 14px;
 }
+
+.form-grid input,
+.form-grid select {
+  height: 40px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 0 10px;
+  font-size: 14px;
+}
+
+.form-grid input:focus,
+.form-grid select:focus {
+  outline: none;
+  border-color: #1B64FF;
+  box-shadow: 0 0 0 2px rgba(27, 100, 255, 0.15);
+}
+
+
+/* ================================
+   💾 저장 버튼
+================================ */
 .save-btn {
-  background: #2e7d32;
+  background: #16a34a;
   color: white;
-  padding: 8px 20px;
+  padding: 10px 22px;
   border: none;
-  border-radius: 4px;
+  border-radius: 8px;
   cursor: pointer;
+  font-weight: 600;
+  transition: 0.2s;
 }
+
+.save-btn:hover {
+  background: #15803d;
+}
+
+
+/* ================================
+   📊 테이블
+================================ */
 .table-section table {
   width: 100%;
   border-collapse: collapse;
+  font-size: 14px;
 }
+
 .table-section th,
 .table-section td {
-  border: 1px solid #ccc;
-  padding: 6px;
+  border: 1px solid #e5e7eb;
+  padding: 8px;
   text-align: center;
 }
+
 .table-section th {
-  background: #f2f2f2;
+  background: #f3f4f6;
+  font-weight: 600;
 }
+
+.table-section tr:hover {
+  background: #f9fafb;
+}
+
+
+/* ================================
+   ✨ 하이라이트 애니메이션
+================================ */
 @keyframes flashHighlight {
   0% { background-color: rgba(0, 200, 255, 0.6); }
   100% { background-color: transparent; }
@@ -55,8 +172,11 @@
 .flash-highlight {
   animation: flashHighlight 1.2s ease-out forwards;
 }
-/* === Premium Dashboard Dark Theme === */
 
+
+/* ================================
+   🌙 다크 테마 (프리미엄 느낌)
+================================ */
 .dashboard-dark {
   background: #1b1b1b;
   min-height: 100vh;
@@ -92,7 +212,7 @@
   transform: scale(1.05);
 }
 
-/* KPI Box */
+/* KPI */
 .kpi-box {
   border-radius: 14px;
   padding: 20px;

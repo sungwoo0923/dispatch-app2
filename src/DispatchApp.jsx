@@ -1011,7 +1011,7 @@ useEffect(() => {
 
         </div>
       </header>
-      <nav className="w-full bg-white shadow-sm border-b border-gray-200 px-4 py-2 mb-5">
+      <nav className="nav w-full bg-white shadow-sm border-b border-gray-200 px-4 py-2 mb-5">
         <div className="flex gap-4 overflow-x-auto whitespace-nowrap">
 
           {[
@@ -1037,12 +1037,12 @@ useEffect(() => {
                 key={m}
                 disabled={isBlocked}
                 onClick={() => handleMenuClick(m)}
-                className={`relative px-3 pb-2 pt-1 text-sm font-medium transition-all 
+                className={`relative px-3 pb-2 pt-1 text-sm font-semibold transition-all 
             ${isBlocked
                     ? "text-gray-300 cursor-not-allowed"
                     : isActive
                       ? "text-blue-600 font-semibold"
-                      : "text-gray-600 hover:text-blue-600"
+                      : "text-gray-800 hover:text-blue-600"
                   }
           `}
               >

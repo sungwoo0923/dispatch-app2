@@ -22,7 +22,7 @@ import {
  deleteDoc,
  updateDoc,
 } from "firebase/firestore";
-import { db } from "./firebase";
+import { db, auth } from "./firebase";
 /* ===================== 공통 Modal ===================== */
 function Modal({ title, onClose, children }) {
   return (
@@ -1138,7 +1138,8 @@ const recentOrders = useMemo(() => {
 
       <button
         onClick={async () => {
-          const userName = auth.currentUser?.displayName || "사용자";
+          const me = users.find(u => u.id === user?.uid);
+const userName = me?.name || "사용자";
 
           if (selectedSchedule?.id) {
             await updateDoc(doc(db, "schedules", selectedSchedule.id), {
@@ -1302,10 +1303,11 @@ setHandoverForm({
   action={
     <button
       onClick={() => {
+        const me = users.find(u => u.id === user?.uid);
         setSelectedHandover(null); // 🔥 신규 등록 시 수정 잔여값 방지
         setHandoverForm({
   text: "",
-  author: user?.name || "",
+  author: me?.name || "",
   authorUid: user?.uid || "",
   receiver: "",
   receiverUid: "",
@@ -1416,9 +1418,10 @@ await addDoc(collection(db, "handovers"), {
             }
 
             // 🔁 초기화
+            const me = users.find(u => u.id === user?.uid);
            setHandoverForm({
   text: "",
-  author: user?.name || "",
+ author: me?.name || "",
   authorUid: user?.uid || "",
   receiver: "",
   receiverUid: "",
