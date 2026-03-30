@@ -818,7 +818,7 @@ const recentOrders = useMemo(() => {
           >
             {/* 순번 */}
             <div className="w-[70px] text-gray-400 text-center font-medium">
-              {notices.length - ((noticePage - 1) * NOTICE_PAGE_SIZE + idx)}
+              {(noticePage - 1) * NOTICE_PAGE_SIZE + idx + 1}
             </div>
 
             {/* 날짜 */}
@@ -1026,7 +1026,7 @@ const recentOrders = useMemo(() => {
           >
             {/* 순번 */}
             <div className="w-[70px] text-gray-400 text-center font-medium">
-              {schedules.length - ((schedulePage - 1) * SCHEDULE_PAGE_SIZE + idx)}
+              {(schedulePage - 1) * SCHEDULE_PAGE_SIZE + idx + 1}
             </div>
 
             {/* 작성날짜 */}
@@ -1489,7 +1489,7 @@ await addDoc(collection(db, "handovers"), {
           >
             {/* 순번 */}
             <div className="w-[70px] text-gray-400 text-center font-medium">
-              {handovers.length - ((handoverPage - 1) * HANDOVER_PAGE_SIZE + idx)}
+              {(handoverPage - 1) * HANDOVER_PAGE_SIZE + idx + 1}
             </div>
 
             {/* 날짜 */}
