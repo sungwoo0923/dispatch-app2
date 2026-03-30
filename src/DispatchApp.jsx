@@ -7910,6 +7910,11 @@ setFarePanelOpen(true);
   const [editPopupOpen, setEditPopupOpen] = React.useState(false);
   const [copyPanelOpen, setCopyPanelOpen] = React.useState(false);
 const [copyTarget, setCopyTarget] = React.useState(null);
+const [clientApplyPopup, setClientApplyPopup] = React.useState(null);
+const [copyClientOptions, setCopyClientOptions] = useState([]);
+const [showCopyClientDropdown, setShowCopyClientDropdown] = useState(false);
+const [copyClientIndex, setCopyClientIndex] = useState(0);
+const copyClientListRef = React.useRef(null);
 const [copyPlaceOptions, setCopyPlaceOptions] = React.useState([]);
 const [showCopyPlaceDropdown, setShowCopyPlaceDropdown] = React.useState(false);
 const [copyPlaceType, setCopyPlaceType] = React.useState(null); // "pickup" | "drop"
@@ -7918,6 +7923,27 @@ const [copyActiveIndex, setCopyActiveIndex] = React.useState(0);
   const [farePanelOpen, setFarePanelOpen] = React.useState(false);
   const [driverPick, setDriverPick] = React.useState(null);
   const [markDeliveredOnSave, setMarkDeliveredOnSave] = React.useState(false);
+  React.useEffect(() => {
+  if (!copyClientListRef.current) return;
+
+  const list = copyClientListRef.current;
+  const item = list.children[copyClientIndex];
+  if (!item) return;
+
+  const itemTop = item.offsetTop;
+  const itemBottom = itemTop + item.offsetHeight;
+
+  const viewTop = list.scrollTop;
+  const viewBottom = viewTop + list.clientHeight;
+
+  if (itemBottom > viewBottom) {
+    list.scrollTop = itemBottom - list.clientHeight;
+  }
+
+  if (itemTop < viewTop) {
+    list.scrollTop = itemTop;
+  }
+}, [copyClientIndex]);
   // 🔥 운임조회 모달 ESC 닫기
 React.useEffect(() => {
   if (!farePanelOpen) return;
@@ -10053,6 +10079,90 @@ setUrgentPopup([]);
 
   </div>
 </div>
+{/* ================= 거래처 정보 ================= */}
+<section className="bg-white p-8 rounded-xl shadow-sm">
+  <h3 className="text-lg font-bold text-slate-700 mb-8 border-b pb-3">
+    거래처 정보
+  </h3>
+
+  <Field label="거래처명">
+    <div className="relative">
+      <input
+        className="inputStyle"
+        value={copyTarget?.거래처명 ?? ""}
+        onChange={(e)=>{
+          const v = e.target.value;
+
+          setCopyTarget(p=>({...p, 거래처명:v}));
+
+          const list = filterEditClients(v);   // ⭐ 이거 중요
+          setCopyClientOptions(list);
+          setShowCopyClientDropdown(true);
+          setCopyClientIndex(0);
+        }}
+
+        onKeyDown={(e)=>{
+          if(!showCopyClientDropdown) return;
+
+          if(e.key==="ArrowDown"){
+            e.preventDefault();
+            setCopyClientIndex(i=>Math.min(i+1, copyClientOptions.length-1));
+          }
+          if(e.key==="ArrowUp"){
+            e.preventDefault();
+            setCopyClientIndex(i=>Math.max(i-1,0));
+          }
+          if(e.key==="Enter"){
+  e.preventDefault();
+
+  const c = copyClientOptions[copyClientIndex];
+  if(!c) return;
+
+  // 👉 기존처럼 값 넣고
+  setCopyTarget(prev=>({
+    ...prev,
+    거래처명: c.거래처명,
+    거래처전화번호: c.연락처 || "",
+    거래처담당자: c.담당자 || "",
+  }));
+
+  // 🔥 여기 추가 (핵심)
+  setClientApplyPopup(c);
+
+  setShowCopyClientDropdown(false);
+}
+        }}
+
+        onBlur={()=>setTimeout(()=>setShowCopyClientDropdown(false),150)}
+      />
+
+      {showCopyClientDropdown && (
+        <div className="absolute z-50 bg-white border w-full max-h-40 overflow-y-auto shadow rounded-md">
+          {copyClientOptions.map((c,i)=>(
+            <div
+              key={i}
+              className={`px-3 py-2 cursor-pointer ${
+                i===copyClientIndex ? "bg-blue-100" : "hover:bg-gray-50"
+              }`}
+              onMouseDown={()=>{
+                setCopyTarget(prev=>({
+                  ...prev,
+                  거래처명: c.거래처명,
+                  거래처전화번호: c.연락처 || "",
+                  거래처담당자: c.담당자 || "",
+                }));
+                setShowCopyClientDropdown(false);
+              }}
+            >
+              <div className="font-semibold">{c.거래처명}</div>
+              <div className="text-xs text-gray-500">{c.주소}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  </Field>
+</section>
         {/* ================= 상하차 정보 ================= */}
 <section className="bg-white p-8 rounded-xl shadow-sm">
   <h3 className="text-lg font-bold text-slate-700 mb-8 border-b pb-3">
@@ -10656,9 +10766,62 @@ value={copyTarget?.화물수량 || ""}
     onChange={(e)=>setCopyTarget(p=>({...p, 메모:e.target.value}))}
   />
 </section>
+
+{clientApplyPopup && (
+  <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+    <div className="bg-white p-6 rounded-xl shadow-lg w-[300px] text-center">
+
+      <h3 className="font-bold mb-4">거래처 적용</h3>
+
+      <div className="flex flex-col gap-2">
+
+        <button
+          className="bg-blue-500 text-white py-2 rounded"
+          onClick={() => {
+            setCopyTarget(p => ({
+              ...p,
+              상차지명: clientApplyPopup.거래처명,
+              상차지주소: clientApplyPopup.주소 || "",
+              상차지담당자: clientApplyPopup.담당자 || "",
+              상차지담당자번호: clientApplyPopup.연락처 || "",
+            }));
+            setClientApplyPopup(null);
+          }}
+        >
+          상차지 적용
+        </button>
+
+        <button
+          className="bg-green-500 text-white py-2 rounded"
+          onClick={() => {
+            setCopyTarget(p => ({
+              ...p,
+              하차지명: clientApplyPopup.거래처명,
+              하차지주소: clientApplyPopup.주소 || "",
+              하차지담당자: clientApplyPopup.담당자 || "",
+              하차지담당자번호: clientApplyPopup.연락처 || "",
+            }));
+            setClientApplyPopup(null);
+          }}
+        >
+          하차지 적용
+        </button>
+
+        <button
+          className="bg-gray-400 text-white py-2 rounded"
+          onClick={() => setClientApplyPopup(null)}
+        >
+          선택안함
+        </button>
+
       </div>
     </div>
   </div>
+)}
+
+</div>
+</div>
+</div>
 )}
       {/* ---------------------------------------------------------
           🔵 신규 오더 등록 팝업 (업그레이드 완성본)
@@ -13548,7 +13711,7 @@ const renderTimeText = (time, cond) => {
 
       map.set(name, {
         거래처명: name,
-        주소: "",
+        주소: r.상차지주소 || r.하차지주소 || "",
         담당자: "",
         연락처: "",
       });
@@ -13625,6 +13788,10 @@ const renderTimeText = (time, cond) => {
   const [editMode, setEditMode] = React.useState(false);
   const [copyPanelOpen, setCopyPanelOpen] = React.useState(false);
 const [copyTarget, setCopyTarget] = React.useState(null);
+const [copyClientOptions, setCopyClientOptions] = React.useState([]);
+const [showCopyClientDropdown, setShowCopyClientDropdown] = React.useState(false);
+const [copyClientIndex, setCopyClientIndex] = React.useState(0);
+const [clientApplyPopup, setClientApplyPopup] = React.useState(null);
 React.useEffect(() => {
   if (!copyTarget?.차량톤수) return;
 
@@ -16816,7 +16983,88 @@ payload.화물내용 = finalCargo;
 
   </div>
 </div>
+{/* ================= 거래처 정보 ================= */}
+<section className="bg-white p-8 rounded-xl shadow-sm">
+  <h3 className="text-lg font-bold text-slate-700 mb-8 border-b pb-3">
+    거래처 정보
+  </h3>
 
+  <Field label="거래처명">
+    <div className="relative">
+      <input
+        className="inputStyle"
+        value={copyTarget?.거래처명 ?? ""}
+        onChange={(e)=>{
+          const v = e.target.value;
+
+          setCopyTarget(p=>({...p, 거래처명:v}));
+
+          const list = filterClients(v);
+          setCopyClientOptions(list);
+          setShowCopyClientDropdown(true);
+          setCopyClientIndex(0);
+        }}
+
+        onKeyDown={(e)=>{
+          if(!showCopyClientDropdown) return;
+
+          if(e.key==="ArrowDown"){
+            e.preventDefault();
+            setCopyClientIndex(i=>Math.min(i+1, copyClientOptions.length-1));
+          }
+          if(e.key==="ArrowUp"){
+            e.preventDefault();
+            setCopyClientIndex(i=>Math.max(i-1,0));
+          }
+          if(e.key==="Enter"){
+  e.preventDefault();
+
+  const c = copyClientOptions[copyClientIndex];
+  if(!c) return;
+
+  setCopyTarget(prev=>({
+    ...prev,
+    거래처명: c.거래처명,
+    거래처전화번호: c.연락처 || "",
+    거래처담당자: c.담당자 || "",
+  }));
+
+  setClientApplyPopup(c);   // 🔥 이거 추가 (핵심)
+
+  setShowCopyClientDropdown(false);
+}
+        }}
+
+        onBlur={()=>setTimeout(()=>setShowCopyClientDropdown(false),150)}
+      />
+
+      {showCopyClientDropdown && (
+        <div className="absolute z-50 bg-white border w-full max-h-40 overflow-y-auto shadow rounded-md">
+          {copyClientOptions.map((c,i)=>(
+            <div
+              key={i}
+              className={`px-3 py-2 cursor-pointer ${
+                i===copyClientIndex ? "bg-blue-100" : "hover:bg-gray-50"
+              }`}
+              onMouseDown={()=>{
+                setCopyTarget(prev=>({
+                  ...prev,
+                  거래처명: c.거래처명,
+                  거래처전화번호: c.연락처 || "",
+                  거래처담당자: c.담당자 || "",
+                }));
+                setShowCopyClientDropdown(false);
+              }}
+            >
+              <div className="font-semibold">{c.거래처명}</div>
+              <div className="text-xs text-gray-500">{c.주소}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  </Field>
+</section>
         {/* ================= 상하차 정보 ================= */}
 <section className="bg-white p-8 rounded-xl shadow-sm">
   <h3 className="text-lg font-bold text-slate-700 mb-8 border-b pb-3">
@@ -17412,9 +17660,61 @@ setCopyTarget(prev => ({
     onChange={(e)=>setCopyTarget(p=>({...p, 메모:e.target.value}))}
   />
 </section>
+{clientApplyPopup && (
+  <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+    <div className="bg-white p-6 rounded-xl shadow-lg w-[300px] text-center">
+
+      <h3 className="font-bold mb-4">거래처 적용</h3>
+
+      <div className="flex flex-col gap-2">
+
+        <button
+          className="bg-blue-500 text-white py-2 rounded"
+          onClick={() => {
+            setCopyTarget(p => ({
+              ...p,
+              상차지명: clientApplyPopup.거래처명,
+              상차지주소: clientApplyPopup.주소 || "",
+              상차지담당자: clientApplyPopup.담당자 || "",
+              상차지담당자번호: clientApplyPopup.연락처 || "",
+            }));
+            setClientApplyPopup(null);
+          }}
+        >
+          상차지 적용
+        </button>
+
+        <button
+          className="bg-green-500 text-white py-2 rounded"
+          onClick={() => {
+            setCopyTarget(p => ({
+              ...p,
+              하차지명: clientApplyPopup.거래처명,
+              하차지주소: clientApplyPopup.주소 || "",
+              하차지담당자: clientApplyPopup.담당자 || "",
+              하차지담당자번호: clientApplyPopup.연락처 || "",
+            }));
+            setClientApplyPopup(null);
+          }}
+        >
+          하차지 적용
+        </button>
+
+        <button
+          className="bg-gray-400 text-white py-2 rounded"
+          onClick={() => setClientApplyPopup(null)}
+        >
+          선택안함
+        </button>
+
       </div>
     </div>
   </div>
+)}
+
+</div>
+</div>
+</div>
 )}
       {/* 📦 운임조회 결과 모달 (선택수정용) */}
 {fareModalOpen && fareResult && (
@@ -23072,7 +23372,7 @@ function DriverManagement({ drivers = [], upsertDriver, removeDriver }) {
   id: crypto.randomUUID(), // ✅ 여기
   차량번호,
   이름: newForm.이름,
-  전화번호: newForm.전화번호,
+ 전화번호: rawPhone,
   메모: newForm.메모,
 });
     setNewForm({ 차량번호: "", 이름: "", 전화번호: "", 메모: "" });
@@ -23197,8 +23497,11 @@ function DriverManagement({ drivers = [], upsertDriver, removeDriver }) {
           placeholder="전화번호"
           value={newForm.전화번호}
           onChange={(e) =>
-            setNewForm((p) => ({ ...p, 전화번호: e.target.value }))
-          }
+  setNewForm((p) => ({
+    ...p,
+    전화번호: formatPhone(e.target.value), // 🔥 핵심
+  }))
+}
         />
         <input
           className="border px-2 py-1 rounded text-sm w-64"
@@ -23295,15 +23598,14 @@ function DriverManagement({ drivers = [], upsertDriver, removeDriver }) {
                       <span
                         contentEditable
                         suppressContentEditableWarning
-                        onBlur={(e) =>
-                          handleBlur(
-                            r,
-                            "전화번호",
-                            e.currentTarget.innerText.trim()
-                          )
-                        }
+                        onBlur={(e) => {
+  const val = e.currentTarget.innerText.trim();
+  const raw = val.replace(/[^\d]/g, ""); // 🔥 숫자만 추출
+
+  handleBlur(r, "전화번호", raw);
+}}
                       >
-                        {r.전화번호 || "-"}
+                        {formatPhone(r.전화번호) || "-"}
                       </span>
                     </td>
 

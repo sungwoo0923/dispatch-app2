@@ -28,8 +28,14 @@ export default function ShipperStatus() {
   const [filter, setFilter] = useState("전체");
   const [keyword, setKeyword] = useState("");
   const [open, setOpen] = useState(true); // 🔥 슬라이드 상태
-  const [startDate, setStartDate] = useState("");
-const [endDate, setEndDate] = useState("");
+const getTodayKST = () => {
+  const now = new Date();
+  const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+  return kst.toISOString().slice(0, 10);
+};
+
+const [startDate, setStartDate] = useState(getTodayKST());
+const [endDate, setEndDate] = useState(getTodayKST());
 const [searchType, setSearchType] = useState("통합");
 const [selectedOrder, setSelectedOrder] = useState(null);
 const [detailOpen, setDetailOpen] = useState(false);
@@ -38,6 +44,8 @@ const [selectedIds, setSelectedIds] = useState([]);
 const [editOpen, setEditOpen] = useState(false);
 const [editData, setEditData] = useState(null);
 const [hideCanceled, setHideCanceled] = useState(false);
+const [page, setPage] = useState(1);
+const pageSize = 100;   
 const [confirmOpen, setConfirmOpen] = useState(false);
 const [confirmConfig, setConfirmConfig] = useState({
   message: "",
@@ -47,6 +55,30 @@ const openConfirm = (message, onConfirm) => {
   setConfirmConfig({ message, onConfirm });
   setConfirmOpen(true);
 };
+useEffect(() => {
+  const updateDate = () => {
+    const today = getTodayKST();
+    setStartDate(today);
+    setEndDate(today);
+  };
+
+  // 최초 실행
+  updateDate();
+
+  // 자정 계산
+  const now = new Date();
+  const nextMidnight = new Date();
+  nextMidnight.setHours(24, 0, 0, 0);
+
+  const timeout = nextMidnight.getTime() - now.getTime();
+
+  const timer = setTimeout(() => {
+    updateDate();
+    setInterval(updateDate, 24 * 60 * 60 * 1000);
+  }, timeout);
+
+  return () => clearTimeout(timer);
+}, []);
   /* ================= 데이터 로드 ================= */
   useEffect(() => {
     if (!user) return;
@@ -140,8 +172,8 @@ const currentStatus = getStatus(o);
 if (filter !== "전체" && currentStatus !== filter) return false;
 
     // 📅 날짜 필터 (상차일 기준)
-    if (startDate && o.상차일 < startDate) return false;
-    if (endDate && o.상차일 > endDate) return false;
+    if (startDate && o.상차일 && o.상차일 < startDate) return false;
+if (endDate && o.상차일 && o.상차일 > endDate) return false;
 
     // 🔍 검색 필터
     if (!keyword) return true;
@@ -173,7 +205,16 @@ if (filter !== "전체" && currentStatus !== filter) return false;
     }
   });
 }, [orders, filter, keyword, startDate, endDate, searchType, hideCanceled]);
+useEffect(() => {
+  setPage(1);
+}, [startDate, endDate, filter, keyword]);
+const pagedRows = useMemo(() => {
+  const start = (page - 1) * pageSize;
+  return rows.slice(start, start + pageSize);
+}, [rows, page]);
 
+// 🔥 총 페이지 수
+const totalPages = Math.ceil(rows.length / pageSize);
 const restoreOrder = (order) => {
   openConfirm("오더를 재등록하시겠습니까?", () => {
     setDetailOpen(false);
@@ -312,7 +353,8 @@ bg-gray-100 border-r transition-all duration-300
 
     <button
       onClick={() => {
-        const today = new Date().toISOString().slice(0, 10);
+        const kst = new Date(new Date().getTime() + 9 * 60 * 60 * 1000);
+const today = kst.toISOString().slice(0, 10);
         setStartDate(today);
         setEndDate(today);
       }}
@@ -323,12 +365,15 @@ bg-gray-100 border-r transition-all duration-300
 
     <button
       onClick={() => {
-        const d = new Date();
-        d.setDate(d.getDate() + 1);
-        const tmr = d.toISOString().slice(0, 10);
-        setStartDate(tmr);
-        setEndDate(tmr);
-      }}
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+
+  const kst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+  const tmr = kst.toISOString().slice(0, 10);
+
+  setStartDate(tmr);
+  setEndDate(tmr);
+}}
       className="px-3 py-2 bg-gray-100 rounded-lg text-sm hover:bg-gray-200"
     >
       내일
@@ -427,7 +472,7 @@ bg-gray-100 border-r transition-all duration-300
 
           {/* ROW */}
           
-          {rows.map((o, i) => {
+          {pagedRows.map((o, i) => {
             const st = STATUS[getStatus(o)];
             return (
  <div
@@ -529,6 +574,29 @@ className={`
               </div>
             );
           })}
+          <div className="flex justify-center items-center gap-4 py-6 border-t bg-white">
+
+  <button
+    disabled={page === 1}
+    onClick={() => setPage(prev => prev - 1)}
+    className="px-4 py-2 bg-gray-200 rounded disabled:opacity-30"
+  >
+    이전
+  </button>
+
+  <div className="text-sm font-semibold">
+    {page} / {totalPages}
+  </div>
+
+  <button
+    disabled={page === totalPages || totalPages === 0}
+    onClick={() => setPage(prev => prev + 1)}
+    className="px-4 py-2 bg-gray-200 rounded disabled:opacity-30"
+  >
+    다음
+  </button>
+
+</div>
         </div>
       </div>
       {detailOpen && selectedOrder && (
