@@ -4728,8 +4728,8 @@ setForm((prev) => ({
     className={inputCls}
     value={form.상차지담당자번호}
     onChange={(e) =>
-      onChange("상차지담당자번호", e.target.value.replace(/[^\d-]/g, ""))
-    }
+  onChange("상차지담당자번호", formatPhone(e.target.value))
+}
     placeholder="010-0000-0000"
   />
 </div>
@@ -4863,11 +4863,11 @@ setForm((prev) => ({
     className={inputCls}
     value={form.하차지담당자번호}
     onChange={(e) =>
-      onChange(
-        "하차지담당자번호",
-        e.target.value.replace(/[^\d-]/g, "")
-      )
-    }
+  onChange(
+    "하차지담당자번호",
+    formatPhone(e.target.value)
+  )
+}
     placeholder="010-0000-0000"
   />
 </div>
@@ -5756,9 +5756,9 @@ setStopPopupOpen(false);
 
           <tbody>
             <tr><td className="border px-2 py-1 text-center">1톤</td><td className="border px-2 py-1 text-center">2,750</td><td className="border px-2 py-1 text-center">1,600</td><td className="border px-2 py-1 text-center">1,800</td><td className="border px-2 py-1 text-center">1.3 t</td><td className="border px-2 py-1 text-center">2개</td></tr>
-            <tr><td className="border px-2 py-1 text-center">1.2톤</td><td className="border px-2 py-1 text-center">3,100</td><td className="border px-2 py-1 text-center">1,700</td><td className="border px-2 py-1 text-center">1,800</td><td className="border px-2 py-1 text-center">2 t</td><td className="border px-2 py-1 text-center">2개</td></tr>
-            <tr><td className="border px-2 py-1 text-center">2.5톤</td><td className="border px-2 py-1 text-center">4,300</td><td className="border px-2 py-1 text-center">1,800</td><td className="border px-2 py-1 text-center">2,000</td><td className="border px-2 py-1 text-center">3 t</td><td className="border px-2 py-1 text-center">3개</td></tr>
-            <tr><td className="border px-2 py-1 text-center">3.5톤</td><td className="border px-2 py-1 text-center">4,700</td><td className="border px-2 py-1 text-center">1,920</td><td className="border px-2 py-1 text-center">2,000</td><td className="border px-2 py-1 text-center">4 t</td><td className="border px-2 py-1 text-center">4개</td></tr>
+            <tr><td className="border px-2 py-1 text-center">1.2톤</td><td className="border px-2 py-1 text-center">3,100</td><td className="border px-2 py-1 text-center">1,700</td><td className="border px-2 py-1 text-center">1,800</td><td className="border px-2 py-1 text-center">2 t</td><td className="border px-2 py-1 text-center">2~3개</td></tr>
+            <tr><td className="border px-2 py-1 text-center">2.5톤</td><td className="border px-2 py-1 text-center">4,300</td><td className="border px-2 py-1 text-center">1,800</td><td className="border px-2 py-1 text-center">2,000</td><td className="border px-2 py-1 text-center">3 t</td><td className="border px-2 py-1 text-center">3~4개</td></tr>
+            <tr><td className="border px-2 py-1 text-center">3.5톤</td><td className="border px-2 py-1 text-center">4,700</td><td className="border px-2 py-1 text-center">1,920</td><td className="border px-2 py-1 text-center">2,000</td><td className="border px-2 py-1 text-center">4 t</td><td className="border px-2 py-1 text-center">6개</td></tr>
             <tr><td className="border px-2 py-1 text-center">5톤</td><td className="border px-2 py-1 text-center">6,200</td><td className="border px-2 py-1 text-center">2,340</td><td className="border px-2 py-1 text-center">2,300</td><td className="border px-2 py-1 text-center">7 t</td><td className="border px-2 py-1 text-center">10개</td></tr>
             <tr><td className="border px-2 py-1 text-center">5톤플러스</td><td className="border px-2 py-1 text-center">7,500</td><td className="border px-2 py-1 text-center">2,340</td><td className="border px-2 py-1 text-center">2,300</td><td className="border px-2 py-1 text-center">7 t</td><td className="border px-2 py-1 text-center">12개</td></tr>
             <tr><td className="border px-2 py-1 text-center">5톤축</td><td className="border px-2 py-1 text-center">7,500</td><td className="border px-2 py-1 text-center">2,340</td><td className="border px-2 py-1 text-center">2,300</td><td className="border px-2 py-1 text-center">11 t</td><td className="border px-2 py-1 text-center">12개</td></tr>
@@ -5790,9 +5790,9 @@ setStopPopupOpen(false);
 
     <tbody>
       <tr><td className="border px-2 py-1 text-center">1톤</td><td className="border px-2 py-1 text-center">2,750</td><td className="border px-2 py-1 text-center">1,600</td><td className="border px-2 py-1 text-center">1,800</td><td className="border px-2 py-1 text-center">1.3 t</td><td className="border px-2 py-1 text-center">2개</td></tr>
-      <tr><td className="border px-2 py-1 text-center">1.2톤</td><td className="border px-2 py-1 text-center">3,100</td><td className="border px-2 py-1 text-center">1,700</td><td className="border px-2 py-1 text-center">1,800</td><td className="border px-2 py-1 text-center">2 t</td><td className="border px-2 py-1 text-center">2개</td></tr>
-      <tr><td className="border px-2 py-1 text-center">2.5톤</td><td className="border px-2 py-1 text-center">4,300</td><td className="border px-2 py-1 text-center">1,800</td><td className="border px-2 py-1 text-center">2,000</td><td className="border px-2 py-1 text-center">3 t</td><td className="border px-2 py-1 text-center">3개</td></tr>
-      <tr><td className="border px-2 py-1 text-center">3.5톤</td><td className="border px-2 py-1 text-center">4,700</td><td className="border px-2 py-1 text-center">1,920</td><td className="border px-2 py-1 text-center">2,000</td><td className="border px-2 py-1 text-center">4 t</td><td className="border px-2 py-1 text-center">4개</td></tr>
+      <tr><td className="border px-2 py-1 text-center">1.2톤</td><td className="border px-2 py-1 text-center">3,100</td><td className="border px-2 py-1 text-center">1,700</td><td className="border px-2 py-1 text-center">1,800</td><td className="border px-2 py-1 text-center">2 t</td><td className="border px-2 py-1 text-center">2~3개</td></tr>
+      <tr><td className="border px-2 py-1 text-center">2.5톤</td><td className="border px-2 py-1 text-center">4,300</td><td className="border px-2 py-1 text-center">1,800</td><td className="border px-2 py-1 text-center">2,000</td><td className="border px-2 py-1 text-center">3 t</td><td className="border px-2 py-1 text-center">3~4개</td></tr>
+      <tr><td className="border px-2 py-1 text-center">3.5톤</td><td className="border px-2 py-1 text-center">4,700</td><td className="border px-2 py-1 text-center">1,920</td><td className="border px-2 py-1 text-center">2,000</td><td className="border px-2 py-1 text-center">4 t</td><td className="border px-2 py-1 text-center">6개</td></tr>
       <tr><td className="border px-2 py-1 text-center">5톤</td><td className="border px-2 py-1 text-center">6,200</td><td className="border px-2 py-1 text-center">2,340</td><td className="border px-2 py-1 text-center">2,300</td><td className="border px-2 py-1 text-center">7 t</td><td className="border px-2 py-1 text-center">10개</td></tr>
       <tr><td className="border px-2 py-1 text-center">5톤플러스</td><td className="border px-2 py-1 text-center">7,500</td><td className="border px-2 py-1 text-center">2,340</td><td className="border px-2 py-1 text-center">2,300</td><td className="border px-2 py-1 text-center">7 t</td><td className="border px-2 py-1 text-center">12개</td></tr>
       <tr><td className="border px-2 py-1 text-center">5톤축</td><td className="border px-2 py-1 text-center">8,500</td><td className="border px-2 py-1 text-center">2,340</td><td className="border px-2 py-1 text-center">2,300</td><td className="border px-2 py-1 text-center">11 t</td><td className="border px-2 py-1 text-center">12개</td></tr>
@@ -6338,11 +6338,11 @@ const today = now.toISOString().slice(0, 10);
             placeholder="숫자(하이픈) 입력"
             value={driverModal.phone}
             onChange={(e) =>
-              setDriverModal((p) => ({
-                ...p,
-                phone: e.target.value.replace(/[^\d-]/g, ""),
-              }))
-            }
+  setDriverModal((p) => ({
+    ...p,
+    phone: formatPhone(e.target.value),
+  }))
+}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 e.preventDefault();
@@ -10373,24 +10373,28 @@ setUrgentPopup([]);
           const name = prompt("기사명 입력");
           if (!name) return;
 
-          const phone = prompt("전화번호 입력");
-          if (!phone) return;
+const phone = prompt("전화번호 입력");
+if (!phone) return;
 
-          // 기사 등록
-          upsertDriver({
-            차량번호: e.target.value,
-            이름: name,
-            전화번호: phone
-          });
+// 🔥 핵심
+const formattedPhone = formatPhone(phone);
+const rawPhone = formattedPhone.replace(/[^\d]/g, "");
 
-          // 복사패널 상태 업데이트
-          setCopyTarget(prev => ({
-            ...prev,
-            차량번호: e.target.value,
-            이름: name,
-            전화번호: phone,
-            배차상태: "배차완료"
-          }));
+// 기사 등록
+upsertDriver({
+  차량번호: e.target.value,
+  이름: name,
+  전화번호: rawPhone, // DB는 숫자만
+});
+
+// 복사패널 상태 업데이트
+setCopyTarget(prev => ({
+  ...prev,
+  차량번호: e.target.value,
+  이름: name,
+  전화번호: formattedPhone, // UI는 하이픈 포함
+  배차상태: "배차완료"
+}));
         }}
 
         onChange={(e) => {
@@ -10405,7 +10409,7 @@ setUrgentPopup([]);
             ...prev,
             차량번호: v,
             이름: match?.이름 || "",
-            전화번호: match?.전화번호 || "",
+            전화번호: formatPhone(match?.전화번호 || ""),
             배차상태: match ? "배차완료" : "배차중",
           }));
         }}
@@ -10423,7 +10427,7 @@ setUrgentPopup([]);
     <Field label="전화번호">
       <input
         className="inputStyle bg-gray-100"
-        value={copyTarget?.전화번호 ?? ""}
+        value={formatPhone(copyTarget?.전화번호 ?? "")}
         readOnly
       />
     </Field>
@@ -12405,19 +12409,29 @@ setRows(prev => {
   const 이름 = prompt("기사명 입력");
   if (!이름) return;
 
-  const 전화번호 = prompt("전화번호 입력");
-  if (!전화번호) return;
+const 전화번호 = prompt("전화번호 입력");
+if (!전화번호) return;
 
-  upsertDriver({ 차량번호: raw, 이름, 전화번호 });
+// 🔥 1. 포맷 적용 (UI용)
+const formattedPhone = formatPhone(전화번호);
 
-  setEditTarget((p) => ({
-    ...p,
-    차량번호: raw,
-    이름,
-    전화번호,
-    배차상태: "배차완료",
-    updatedAt: Date.now(),
-  }));
+// 🔥 2. 숫자만 추출 (DB 저장용)
+const rawPhone = formattedPhone.replace(/[^\d]/g, "");
+
+  upsertDriver({
+  차량번호: raw,
+  이름,
+  전화번호: rawPhone, // DB는 숫자만
+});
+
+setEditTarget((p) => ({
+  ...p,
+  차량번호: raw,
+  이름,
+  전화번호: formattedPhone, // UI는 하이픈 포함
+  배차상태: "배차완료",
+  updatedAt: Date.now(),
+}));
 }}
               />
               {driverPick && (
@@ -15207,8 +15221,8 @@ setEditTarget({
 
 
       {/* ---------------- 테이블 ---------------- */}
-      <div className="overflow-x-auto">
-        <table className="w-auto min-w-max text-sm border table-auto">
+      <div className="overflow-x-auto w-full">
+  <table className="w-full min-w-max text-sm border table-auto">
           <thead className="bg-slate-100 text-slate-800">
             <tr>
               {[
@@ -15418,7 +15432,9 @@ onBlur={(e) => {
                     />
                   </td>
                   <td className="border text-center">{row.이름}</td>
-                  <td className="border text-center">{row.전화번호}</td>
+                  <td className="border text-center">
+  {formatPhone(row.전화번호)}
+</td>
 
                   <td className="border text-center">
                     <div className="flex items-center justify-center gap-1">
@@ -16254,7 +16270,7 @@ onBlur={(e) => {
     setEditTarget((p) => ({
       ...p,
       이름: d.이름,
-      전화번호: d.전화번호,
+      전화번호: formatPhone(d.전화번호),
       배차상태: "배차완료",
     }));
     return;
@@ -16273,18 +16289,26 @@ onBlur={(e) => {
   if (!ok) return;
 
   const 이름 = prompt("기사명 입력:");
-  const 전화번호 = prompt("전화번호 입력:");
-  if (!이름 || !전화번호) return;
+const 전화번호 = prompt("전화번호 입력:");
+if (!이름 || !전화번호) return;
 
-  upsertDriver({ 차량번호: raw, 이름, 전화번호 });
+// 🔥 추가
+const formattedPhone = formatPhone(전화번호);
+const rawPhone = formattedPhone.replace(/[^\d]/g, "");
+
+  upsertDriver({
+  차량번호: raw,
+  이름,
+  전화번호: rawPhone, // 숫자만 저장
+});
 
   setMatchedDrivers([]);
-  setEditTarget((p) => ({
-    ...p,
-    이름,
-    전화번호,
-    배차상태: "배차완료",
-  }));
+setEditTarget((p) => ({
+  ...p,
+  이름,
+  전화번호: formattedPhone, // 하이픈 포함
+  배차상태: "배차완료",
+}));
 }}
 
               />
@@ -16303,7 +16327,7 @@ onBlur={(e) => {
           setEditTarget((p) => ({
             ...p,
             이름: d.이름,
-            전화번호: d.전화번호,
+            전화번호: formatPhone(d.전화번호),
             배차상태: "배차완료",
           }));
           setMatchedDrivers([]);
@@ -16332,7 +16356,7 @@ onBlur={(e) => {
                 <label>전화번호</label>
                 <input
                   className="border p-2 rounded w-full bg-gray-100"
-                  value={editTarget.전화번호 || ""}
+                  value={formatPhone(editTarget.전화번호 || "")}
                   readOnly
                 />
               </div>
@@ -17112,7 +17136,7 @@ setCopyPlaceOptions(list);
         ...(prev || {}),
         차량번호: v,
         이름: match?.이름 || "",
-        전화번호: match?.전화번호 || "",
+        전화번호: formatPhone(match?.전화번호 || ""),
         배차상태: match ? "배차완료" : "배차중",
       }));
 
@@ -17140,21 +17164,28 @@ setCopyPlaceOptions(list);
       const name = prompt("기사명 입력");
       if (!name) return;
 
-      const phone = prompt("전화번호 입력");
-      if (!phone) return;
+const phone = prompt("전화번호 입력");
+if (!phone) return;
 
-      upsertDriver({
-        차량번호: copyTarget?.차량번호,
-        이름: name,
-        전화번호: phone
-      });
+// 🔥 핵심
+const formattedPhone = formatPhone(phone);
+const rawPhone = formattedPhone.replace(/[^\d]/g, "");
 
-      setCopyTarget(prev => ({
-        ...prev,
-        이름: name,
-        전화번호: phone,
-        배차상태: "배차완료"
-      }));
+// DB 저장
+upsertDriver({
+  차량번호: copyTarget?.차량번호,
+  이름: name,
+  전화번호: rawPhone,
+});
+
+// UI 반영
+setCopyTarget(prev => ({
+  ...prev,
+  차량번호: copyTarget?.차량번호,
+  이름: name,
+  전화번호: formattedPhone, // ✅ 여기!
+  배차상태: "배차완료"
+}));
 
     }}
   />
@@ -17171,7 +17202,7 @@ setCopyPlaceOptions(list);
     <Field label="전화번호">
       <input
         className="inputStyle bg-gray-100"
-        value={copyTarget?.전화번호 || ""}
+       value={formatPhone(copyTarget?.전화번호 || "")}
         readOnly
       />
     </Field>
