@@ -67,13 +67,22 @@ const filtered = useMemo(() => {
   // 승인 토글
   const toggleApprove = async (u) => {
     const status = !u.approved;
+// 🔥 승인 + 마스터 자동 부여
+const updateData = {
+  approved: status,
+};
 
-    await setDoc(doc(db, "users", u.id), { approved: status }, { merge: true });
+if (u.role === "shipper" && status === true) {
+  updateData.isMaster = true;
+}
 
-    setUsers((prev) =>
-      prev.map((x) => (x.id === u.id ? { ...x, approved: status } : x))
-    );
+await setDoc(doc(db, "users", u.id), updateData, { merge: true });
 
+setUsers((prev) =>
+  prev.map((x) =>
+    x.id === u.id ? { ...x, ...updateData } : x
+  )
+);
     // drivers.active 자동 반영
     await setDoc(
       doc(db, "drivers", u.id),

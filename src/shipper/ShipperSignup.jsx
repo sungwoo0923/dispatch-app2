@@ -48,9 +48,19 @@ await setDoc(doc(db, "users", uid), {
   department,
   position,
 
-  // 🔥 핵심
-role: "shipper",
-permissions: {},
+  role: "shipper",
+
+  // ⭐ 핵심
+  isMaster: isFirst,
+
+  // ⭐ 마스터면 전체 권한 자동
+  permissions: isFirst
+    ? {
+        transport: true,
+        settlement: true,
+        master: true,
+      }
+    : {},
 
   approved: false,
   isPrimary: isFirst,

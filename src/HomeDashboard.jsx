@@ -41,7 +41,13 @@ function Modal({ title, onClose, children }) {
 /* ===================== 카드 공통 ===================== */
 function Card({ title, action, children }) {
   return (
-    <div className="bg-white rounded-xl border shadow-sm">
+    <div className="
+  bg-gradient-to-br from-white to-slate-50
+  rounded-2xl
+  border border-slate-200/70
+  shadow-[0_10px_30px_rgba(0,0,0,0.08)]
+  backdrop-blur-sm
+">
       {title && (
         <div className="px-5 py-3 border-b flex items-center justify-between">
           <h3 className="text-sm font-bold">{title}</h3>
@@ -579,7 +585,10 @@ const recentOrders = useMemo(() => {
 
 
   return (
-    <div className="bg-slate-100 min-h-screen p-6 space-y-6">
+    <div className="
+  bg-gradient-to-br from-slate-100 via-slate-50 to-slate-100
+  min-h-screen p-6 space-y-6
+">
 
       {/* ================= KPI ================= */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -627,11 +636,15 @@ const recentOrders = useMemo(() => {
   >
     {/* 🔹 그라데이션 */}
     <defs>
+    
       <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stopColor="#6366f1" stopOpacity={0.4} />
-        <stop offset="100%" stopColor="#6366f1" stopOpacity={0.03} />
+        <stop offset="0%" stopColor="#6366f1" stopOpacity={0.6} />
+<stop offset="100%" stopColor="#6366f1" stopOpacity={0.02} />
       </linearGradient>
-    </defs>
+        <filter id="shadow">
+    <feDropShadow dx="0" dy="6" stdDeviation="8" floodColor="#6366f1" floodOpacity="0.25"/>
+  </filter>
+</defs>
 
     {/* ❌ Grid 제거 */}
 
@@ -651,24 +664,31 @@ const recentOrders = useMemo(() => {
       formatter={(v) => `${Number(v).toLocaleString()}원`}
       labelStyle={{ fontSize: 12 }}
       contentStyle={{
-        borderRadius: 8,
-        border: "none",
-        boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-      }}
+  borderRadius: 12,
+  border: "none",
+  boxShadow: "0 8px 25px rgba(0,0,0,0.15)",
+  fontSize: 12
+}}
     />
 
     {/* 🔹 메인 Area */}
-    <Area
-      type="natural"
-      dataKey="value"
-      stroke="#6366f1"
-      strokeWidth={2.5}
-      fill="url(#colorRevenue)"
-      dot={false}
-      activeDot={{ r: 6 }}
-      isAnimationActive
-      animationDuration={1200}
-    />
+   <Area
+  type="natural"
+  dataKey="value"
+  stroke="#6366f1"
+  strokeWidth={3}   // 🔥 더 두껍게
+  fill="url(#colorRevenue)"
+  dot={false}
+  activeDot={{
+    r: 7,
+    fill: "#6366f1",
+    stroke: "#fff",
+    strokeWidth: 2
+  }}
+  filter="url(#shadow)"   // 🔥 핵심 (고급 느낌)
+  isAnimationActive
+  animationDuration={1200}
+/>
 
     {/* 🔴 오늘 포인트 */}
     {salesTrend.length === 7 && (
@@ -685,10 +705,10 @@ const recentOrders = useMemo(() => {
 </ResponsiveContainer>
 
       {/* 🔹 KPI 하단 */}
-      <div className="mt-4 text-sm text-gray-500">
+     <div className="mt-6 pt-4 border-t border-slate-100">
         Total Revenue
         <span className="block text-xl font-extrabold text-black">
-  ₩{yearRevenue.toLocaleString()}
+  {yearRevenue.toLocaleString()}
 </span>
 
         {/* 최근 7일 증감 */}

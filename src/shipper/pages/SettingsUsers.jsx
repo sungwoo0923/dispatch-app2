@@ -132,34 +132,42 @@ setRejectedList(rejectedList);
   <div className="flex justify-center gap-2">
 
     {/* 마스터 */}
-    {u.permissions?.master && (
-      <span className="px-3 py-[4px] text-[13px] rounded bg-purple-100 text-purple-700">
-        마스터
-      </span>
-    )}
+{u.permissions?.master && (
+  <span className="px-3 py-[4px] text-[13px] rounded bg-purple-100 text-purple-700">
+    마스터
+  </span>
+)}
 
-    {/* 정산 */}
-    {u.permissions?.settlement && (
-      <span className="px-3 py-[4px] text-[13px] rounded bg-green-100 text-green-700">
-        정산
-      </span>
-    )}
+{/* 부마스터 */}
+{u.permissions?.subMaster && (
+  <span className="px-3 py-[4px] text-[13px] rounded bg-indigo-100 text-indigo-700">
+    부마스터
+  </span>
+)}
 
-    {/* 운송 */}
-    {u.permissions?.transport && (
-      <span className="px-3 py-[4px] text-[13px] rounded bg-blue-100 text-blue-700">
-        운송
-      </span>
-    )}
+{/* 정산 */}
+{u.permissions?.settlement && (
+  <span className="px-3 py-[4px] text-[13px] rounded bg-green-100 text-green-700">
+    정산
+  </span>
+)}
 
-    {/* 권한 없음 */}
-    {!u.permissions?.master &&
-     !u.permissions?.settlement &&
-     !u.permissions?.transport && (
-      <span className="px-3 py-[4px] text-[13px] rounded bg-gray-100 text-gray-500">
-        없음
-      </span>
-    )}
+{/* 운송 */}
+{u.permissions?.transport && (
+  <span className="px-3 py-[4px] text-[13px] rounded bg-blue-100 text-blue-700">
+    운송
+  </span>
+)}
+
+{/* 권한 없음 */}
+{!u.permissions?.master &&
+ !u.permissions?.subMaster &&
+ !u.permissions?.settlement &&
+ !u.permissions?.transport && (
+  <span className="px-3 py-[4px] text-[13px] rounded bg-gray-100 text-gray-500">
+    없음
+  </span>
+)}
 
   </div>
 </td>

@@ -84,7 +84,10 @@ setCompanyName(
       </div>
     );
   }
+const isMaster =
+  userData?.permissions?.master || userData?.role === "shipper";
 
+const isSubMaster = userData?.permissions?.subMaster;
   return (
     <div className="min-h-screen bg-[#f3f4f6]">
       {/* ================= HEADER ================= */}
@@ -110,32 +113,32 @@ setCompanyName(
     onClick={() => navigate("/shipper")}
   />
 
-  {/* 운송 */}
-  {userData?.permissions?.transport && (
-    <MenuBtn
-      label="운송"
-      active={location.pathname.includes("/shipper/transport")}
-      onClick={() => navigate("/shipper/transport")}
-    />
-  )}
+{/* 운송 */}
+{(isMaster || isSubMaster || userData?.permissions?.transport) && (
+  <MenuBtn
+    label="운송"
+    active={location.pathname.includes("/shipper/transport")}
+    onClick={() => navigate("/shipper/transport")}
+  />
+)}
 
-  {/* 정산 */}
-  {userData?.permissions?.settlement && (
-    <MenuBtn
-      label="정산"
-      active={location.pathname.includes("/shipper/settlement")}
-      onClick={() => alert("정산 준비중")}
-    />
-  )}
+{/* 정산 */}
+{(isMaster || isSubMaster || userData?.permissions?.settlement) && (
+  <MenuBtn
+    label="정산"
+    active={location.pathname.includes("/shipper/settlement")}
+    onClick={() => alert("정산 준비중")}
+  />
+)}
 
-  {/* 마스터 */}
-  {userData?.permissions?.master && (
-    <MenuBtn
-      label="마스터설정"
-      active={location.pathname.includes("/shipper/settings")}
-      onClick={() => navigate("/shipper/settings")}
-    />
-  )}
+{/* 마스터 */}
+{(isMaster || isSubMaster) && (
+  <MenuBtn
+    label="마스터설정"
+    active={location.pathname.includes("/shipper/settings")}
+    onClick={() => navigate("/shipper/settings")}
+  />
+)}
 
 </nav>
     </div>
@@ -220,8 +223,8 @@ location.pathname.startsWith("/shipper/transport")
       <div className="mb-3">
         <label className="text-sm">부서</label>
         <select
-          value={form.department}
-          disabled={!userData?.permissions?.master}
+  value={form.department}
+  disabled={!(isMaster || isSubMaster)}
           className="w-full border px-3 py-2 rounded"
         >
           <option>선택</option>
@@ -241,8 +244,8 @@ location.pathname.startsWith("/shipper/transport")
       <div className="mb-3">
         <label className="text-sm">직책</label>
         <select
-          value={form.position}
-          disabled={!userData?.permissions?.master}
+  value={form.position}
+  disabled={!(isMaster || isSubMaster)}
           className="w-full border px-3 py-2 rounded"
         >
           <option>선택</option>

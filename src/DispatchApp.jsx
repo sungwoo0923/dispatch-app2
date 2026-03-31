@@ -252,8 +252,13 @@ const collName = "orders";
       _id: d.id,
       __col: collName,
       ...data,
-      경유지_상차: Array.isArray(data.경유지_상차) ? data.경유지_상차 : [],
-      경유지_하차: Array.isArray(data.경유지_하차) ? data.경유지_하차 : [],
+경유지_상차: Array.isArray(data.경유지_상차)
+  ? data.경유지_상차
+  : (Array.isArray(data.경유상차목록) ? data.경유상차목록 : []),
+
+경유지_하차: Array.isArray(data.경유지_하차)
+  ? data.경유지_하차
+  : (Array.isArray(data.경유하차목록) ? data.경유하차목록 : []),
     };
   })
   .filter(o => o.상태 !== "취소"); // 🔥 이거 추가
@@ -1549,7 +1554,11 @@ function renderTimeWithCond(time, cond) {
 const [confirmOpen, setConfirmOpen] = React.useState(false);
 const [stopPopupOpen, setStopPopupOpen] = React.useState(false);
 const [stopType, setStopType] = React.useState("");
-
+const [activeStopIdx, setActiveStopIdx] = React.useState(null);
+const [stopList, setStopList] = React.useState([
+  
+  { 업체명:"", 주소:"", 담당자:"", 담당자번호:"", 메모:"" }
+]);
 const [stopForm, setStopForm] = React.useState({
   업체명:"",
   주소:"",
@@ -1558,9 +1567,6 @@ const [stopForm, setStopForm] = React.useState({
   메모:""
 });
  const [routeInfo, setRouteInfo] = React.useState(null);
-
-
-
 // ===== 복사패널 자동완성 =====
 const [clientOptions, setClientOptions] = React.useState([]);
 const [clientIndex, setClientIndex] = React.useState(0);
@@ -2053,6 +2059,7 @@ const [placeActive, setPlaceActive] = React.useState(0);
 const [stopPlaceOptions, setStopPlaceOptions] = React.useState([]);
 const [stopPlaceActive, setStopPlaceActive] = React.useState(0);
 const [showStopDropdown, setShowStopDropdown] = React.useState(false);
+
     // ---------- 🔧 안전 폴백 유틸(다른 파트 미정의 시 자체 사용) ----------
 const _todayStr = (typeof todayStr === "function")
   ? todayStr
@@ -2289,13 +2296,13 @@ const filterPlaces = (q) => {
       상차지주소: "",
       상차지담당자: "",
       상차지담당자번호: "",
-      경유상차: "",
+      경유상차목록: [],
       하차지명: "",
       하차지Id: "",
       하차지주소: "",
       하차지담당자: "",
       하차지담당자번호: "",
-      경유하차: "",
+      경유하차목록: [],
       화물내용: "",
       화물타입: "파레트",
       톤수타입: "톤",
@@ -2330,6 +2337,7 @@ const filterPlaces = (q) => {
       
     };
     const [form, setForm] = React.useState(() => {
+      
   try {
     const saved = localStorage.getItem("dispatchForm");
     if (saved) {
@@ -2529,6 +2537,13 @@ React.useEffect(() => {
 ]);
 
     React.useEffect(() => _safeSave("dispatchForm", form), [form]);
+    const pickupStops = form.경유상차목록 || [];
+const pickupCount = pickupStops.filter(s => s.업체명?.trim()).length;
+const hasPickupStops = pickupCount > 0;
+
+const dropStops = form.경유하차목록 || [];
+const dropCount = dropStops.filter(s => s.업체명?.trim()).length;
+const hasDropStops = dropCount > 0;
     // ===============================
 // ⭐ 폼 최초 로딩 시 날짜 자동 보정
 // ===============================
@@ -3311,10 +3326,6 @@ const palletFareRules = {
     { min: 9, max: 10, fare: 300000 },
   ],
 };
-
-
-
-
     const handleSubmit = async (e) => {
   e.preventDefault();
   if (!validateRequired(form)) return;
@@ -3360,20 +3371,27 @@ const autoPriority =
   form.메모?.startsWith("!")  ? "HIGH" :
   form.메모중요도 || "NORMAL";
  
+const pickupStops = (form.경유상차목록 || []).filter(s => s.업체명?.trim());
+const dropStops   = (form.경유하차목록 || []).filter(s => s.업체명?.trim());
+
 const rec = {
+  
   ...form,
+
+  경유지_상차: pickupStops,
+  경유지_하차: dropStops,
+
   메모중요도: autoPriority,
   운임보정: fareAdjustment,
-  
+
   ...moneyPatch,
+
   상차일: lockYear(form.상차일),
   하차일: lockYear(form.하차일),
   순번: nextSeq(),
   배차상태: status,
 
-  // ===============================
-  // 🤖 AI 판단 로그 (영구 저장)
-  // ===============================
+  // 🔥 여기 안으로 넣어
   aiLog: aiRecommend
     ? {
         pickup: form.상차지명,
@@ -4687,12 +4705,32 @@ setForm((prev) => ({
     </label>
 
     {/* ⭐ 여기로 이동 (핵심) */}
+    
 <button
   type="button"
-  disabled
-  className="text-[11px] px-2 py-1 rounded bg-gray-100 text-gray-400 border cursor-not-allowed"
+  tabIndex={-1}   // ⭐ 탭 제외 유지
+  onClick={() => {
+  setStopType("pickup");
+
+const arr = form.경유상차목록 || [];
+setStopList(
+  arr.length ? arr : [{ 업체명:"", 주소:"", 담당자:"", 담당자번호:"", 메모:"" }]
+);
+  setStopList(arr.length ? arr : [
+    { 업체명:"", 주소:"", 담당자:"", 담당자번호:"", 메모:"" }
+  ]);
+
+  setStopPopupOpen(true);
+}}
+ className={`
+  text-[11px] px-2 py-1 rounded border transition
+  ${hasPickupStops
+    ? "bg-red-100 text-red-600 border-red-200 hover:bg-red-200"
+    : "bg-blue-100 text-blue-600 border-blue-200 hover:bg-blue-200"
+  }
+`}
 >
-  + 사용X
+{hasPickupStops ? `경유${pickupCount}` : "+ 경유"}
 </button>
   </div>
 
@@ -4816,7 +4854,9 @@ setForm((prev) => ({
 
 {/* 하차지주소 */}
 <div>
+  
   <div className="flex items-center justify-between">
+    
     <label className={labelCls}>
       하차지주소 <AutoBadge show={autoDropMatched} />
     </label>
@@ -4824,10 +4864,29 @@ setForm((prev) => ({
     {/* ⭐ 여기로 이동 */}
 <button
   type="button"
-  disabled
-  className="text-[11px] px-2 py-1 rounded bg-gray-100 text-gray-400 border cursor-not-allowed"
+  tabIndex={-1}
+  onClick={() => {
+  setStopType("drop");
+
+  const arr = form.경유하차목록 || [];
+
+  setStopList(
+    arr.length
+      ? arr
+      : [{ 업체명:"", 주소:"", 담당자:"", 담당자번호:"", 메모:"" }]
+  );
+
+  setStopPopupOpen(true);
+}}
+className={`
+  text-[11px] px-2 py-1 rounded border transition
+  ${hasDropStops
+    ? "bg-red-100 text-red-600 border-red-200 hover:bg-red-200"
+    : "bg-blue-100 text-blue-600 border-blue-200 hover:bg-blue-200"
+  }
+`}
 >
-  + 사용X
+{hasDropStops ? `경유${dropCount}` : "+ 경유"}
 </button>
   </div>
 
@@ -5260,87 +5319,110 @@ setForm((prev) => ({
     </div>
   </div>
 )}
-{/* ================= 경유지 추가 팝업 ================= */}
+{/* ================= 경유지 추가 팝업 (멀티 입력) ================= */}
 {stopPopupOpen && (
 <div className="fixed inset-0 z-[99999]">
 
-<div
-className="absolute inset-0 bg-black/40"
-onClick={()=>setStopPopupOpen(false)}
-/>
+  <div
+    className="absolute inset-0 bg-black/40"
+    onClick={()=>setStopPopupOpen(false)}
+  />
 
-<div className="absolute top-1/2 left-1/2 w-[520px] -translate-x-1/2 -translate-y-1/2 bg-white rounded-xl shadow-xl p-6 space-y-4">
+  <div className="absolute top-1/2 left-1/2 w-[520px] -translate-x-1/2 -translate-y-1/2 bg-white rounded-xl shadow-xl p-6 space-y-4">
 
-<h3 className="text-lg font-bold">
-{stopType==="pickup" ? "경유 상차지 추가" : "경유 하차지 추가"}
-</h3>
+    <h3 className="text-lg font-bold">
+      {stopType==="pickup" ? "경유 상차지 추가" : "경유 하차지 추가"}
+    </h3>
 
-<div>
-<label className="text-xs font-semibold">경유지명</label>
-<div className="relative">
+    {stopList.map((stop, idx) => (
+      <div key={idx} className="border rounded-lg p-3 space-y-2 bg-gray-50">
+
+        <div className="relative">
 
 <input
   className={inputCls}
-  value={stopForm.업체명}
-  placeholder="업체명 입력"
+  placeholder="경유지명"
+  value={stop.업체명}
 
   onChange={(e)=>{
+  const v = e.target.value;
 
-    const v = e.target.value
+  setStopList(prev=>{
+    const copy=[...prev];
 
-    setStopForm(prev=>({
-      ...prev,
-      업체명:v
-    }))
+    copy[idx] = {
+      ...copy[idx],
+      업체명: v,
 
-    const list = filterPlaces(v)
+      // 🔥 추가 (핵심)
+      ...(v.trim() === "" && {
+        주소: "",
+        담당자: "",
+        담당자번호: ""
+      })
+    };
 
-    setStopPlaceOptions(list)
-    setShowStopDropdown(true)
-    setStopPlaceActive(0)
+    return copy;
+  });
 
-  }}
+  const list = filterPlaces(v);
+  setStopPlaceOptions(list);
+  setActiveStopIdx(idx);
+  setShowStopDropdown(true);
+  setStopPlaceActive(0);
 
-  onKeyDown={(e)=>{
+  // 🔥 추가 (UX)
+  if (v.trim() === "") {
+    setShowStopDropdown(false);
+  }
+}}
+onKeyDown={(e)=>{
+  const list = stopPlaceOptions;
 
-    const list = stopPlaceOptions
-    if(!list.length) return
+  // 🔥 추가 (핵심)
+  if (!showStopDropdown || !list.length) return;
 
-    if(["ArrowDown","ArrowUp","Enter"].includes(e.key)){
-      e.preventDefault()
+  if(e.key==="Enter"){
+    e.preventDefault();
+
+    const p = list[stopPlaceActive];
+
+    if(p){
+      setStopList(prev=>{
+        const copy=[...prev];
+        copy[idx] = {
+          ...copy[idx],
+          업체명:p.업체명,
+          주소:p.주소 || "",
+          담당자:p.담당자 || "",
+          담당자번호:p.담당자번호 || ""
+        };
+        return copy;
+      });
+
+      setShowStopDropdown(false);
+      setActiveStopIdx(null);
     }
 
-    if(e.key==="Enter"){
+    return;
+  }
 
-      const p = list[stopPlaceActive]
-      if(!p) return
+  if(e.key==="ArrowDown"){
+    e.preventDefault();
+    setStopPlaceActive(i=>Math.min(i+1,list.length-1));
+  }
 
-      setStopForm(prev=>({
-        ...prev,
-        업체명:p.업체명,
-        주소:p.주소 || "",
-        담당자:p.담당자 || "",
-        담당자번호:p.담당자번호 || ""
-      }))
+  else if(e.key==="ArrowUp"){
+    e.preventDefault();
+    setStopPlaceActive(i=>Math.max(i-1,0));
+  }
+}}
 
-      setShowStopDropdown(false)
-    }
-
-    else if(e.key==="ArrowDown"){
-      setStopPlaceActive(i=>Math.min(i+1,list.length-1))
-    }
-
-    else if(e.key==="ArrowUp"){
-      setStopPlaceActive(i=>Math.max(i-1,0))
-    }
-
-  }}
-
-  onBlur={()=>setTimeout(()=>setShowStopDropdown(false),200)}
+onBlur={()=>setTimeout(()=>setActiveStopIdx(null),200)}
 />
 
-{showStopDropdown && stopPlaceOptions.length>0 && (
-
+{/* 드롭다운 */}
+{activeStopIdx === idx && stopPlaceOptions.length > 0 && (
 <div className="absolute z-50 bg-white border rounded-lg shadow-lg w-full max-h-48 overflow-auto">
 
 {stopPlaceOptions.map((p,i)=>(
@@ -5352,16 +5434,20 @@ i===stopPlaceActive ? "bg-blue-50":"hover:bg-gray-50"
 onMouseEnter={()=>setStopPlaceActive(i)}
 onMouseDown={()=>{
 
-setStopForm(prev=>({
-...prev,
-업체명:p.업체명,
-주소:p.주소 || "",
-담당자:p.담당자 || "",
-담당자번호:p.담당자번호 || ""
-}))
+setStopList(prev=>{
+  const copy=[...prev];
+  copy[idx] = {
+    ...copy[idx],
+    업체명:p.업체명,
+    주소:p.주소 || "",
+    담당자:p.담당자 || "",
+    담당자번호:p.담당자번호 || ""
+  };
+  return copy;
+});
 
-setShowStopDropdown(false)
-
+setShowStopDropdown(false);
+setActiveStopIdx(null);
 }}
 >
 
@@ -5379,74 +5465,113 @@ setShowStopDropdown(false)
 )}
 
 </div>
-</div>
 
-<div>
-<label className="text-xs font-semibold">주소</label>
-<input
-className={inputCls}
-value={stopForm.주소}
-onChange={(e)=>setStopForm(p=>({...p,주소:e.target.value}))}
-/>
-</div>
+        <input
+          className={inputCls}
+          placeholder="주소"
+          value={stop.주소}
+          onChange={(e)=>{
+            const v = e.target.value;
+            setStopList(prev=>{
+              const copy=[...prev];
+              copy[idx].주소=v;
+              return copy;
+            });
+          }}
+        />
 
-<div>
-<label className="text-xs font-semibold">담당자</label>
-<input
-className={inputCls}
-value={stopForm.담당자}
-onChange={(e)=>setStopForm(p=>({...p,담당자:e.target.value}))}
-/>
-</div>
+        <input
+          className={inputCls}
+          placeholder="담당자"
+          value={stop.담당자}
+          onChange={(e)=>{
+            const v = e.target.value;
+            setStopList(prev=>{
+              const copy=[...prev];
+              copy[idx].담당자=v;
+              return copy;
+            });
+          }}
+        />
 
-<div>
-<label className="text-xs font-semibold">연락처</label>
-<input
-className={inputCls}
-value={stopForm.담당자번호}
-onChange={(e)=>setStopForm(p=>({...p,담당자번호:e.target.value}))}
-/>
-</div>
+        <input
+          className={inputCls}
+          placeholder="연락처"
+          value={stop.담당자번호}
+          onChange={(e)=>{
+            const v = e.target.value;
+            setStopList(prev=>{
+              const copy=[...prev];
+              copy[idx].담당자번호=v;
+              return copy;
+            });
+          }}
+        />
 
-<div>
-<label className="text-xs font-semibold">메모</label>
-<input
-className={inputCls}
-value={stopForm.메모}
-onChange={(e)=>setStopForm(p=>({...p,메모:e.target.value}))}
-/>
-</div>
+        {stopList.length > 1 && (
+          <div className="text-right">
+            <button
+              className="text-xs text-red-500"
+              onClick={()=>{
+                setStopList(prev=>prev.filter((_,i)=>i!==idx));
+              }}
+            >
+              삭제
+            </button>
+          </div>
+        )}
 
-<div className="flex justify-end gap-2 pt-3">
-<button
-className="px-3 py-1.5 text-sm border rounded"
-onClick={()=>setStopPopupOpen(false)}
->
-취소
-</button>
+      </div>
+    ))}
 
-<button
-className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded"
-onClick={()=>{
+    <div className="flex justify-between pt-3">
 
-const text = stopForm.업체명;
+      <button
+        className="px-3 py-1.5 text-sm border rounded"
+        onClick={()=>{
+          setStopList(prev=>[
+            ...prev,
+            { 업체명:"", 주소:"", 담당자:"", 담당자번호:"", 메모:"" }
+          ]);
+        }}
+      >
+        + 경유 추가
+      </button>
 
-if(stopType==="pickup"){
-onChange("경유상차",(form.경유상차||"")+" "+text);
-}else{
-onChange("경유하차",(form.경유하차||"")+" "+text);
-}
+      <div className="flex gap-2">
+        <button
+          className="px-3 py-1.5 text-sm border rounded"
+          onClick={()=>setStopPopupOpen(false)}
+        >
+          취소
+        </button>
 
-setStopForm({업체명:"",주소:"",담당자:"",담당자번호:"",메모:""});
-setStopPopupOpen(false);
+        <button
+          className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded"
+          onClick={()=>{
+  if(stopType==="pickup"){
+    onChange("경유상차목록", stopList);
 
+    // 🔥 추가 (핵심)
+    handleChange?.("경유상차목록", stopList);
+
+  }else{
+    onChange("경유하차목록", stopList);
+
+    // 🔥 추가 (핵심)
+    handleChange?.("경유하차목록", stopList);
+  }
+
+  setStopPopupOpen(false);
 }}
->
-추가
-</button>
-</div>
+        >
+          저장
+        </button>
+      </div>
 
-</div>
+    </div>
+
+  </div>
 </div>
 )}
   {/* 차량정보 */}
@@ -6058,9 +6183,25 @@ const today = now.toISOString().slice(0, 10);
         왕복
       </span>
     )}
+    <StopBadge
+      count={(row.경유상차목록 || row.경유지_상차 || []).length}
+      list={row.경유상차목록 || row.경유지_상차 || []}
+    />
+
   </div>
 </td>
-                            <td className="p-2">{row.하차지명}</td>
+                           <td className="p-2">
+  <div className="inline-flex items-center gap-1">
+
+    <span>{row.하차지명}</span>
+
+    <StopBadge
+      count={(row.경유하차목록 || row.경유지_하차 || []).length}
+      list={row.경유하차목록 || row.경유지_하차 || []}
+    />
+
+  </div>
+</td>
                             <td className="p-2">{row.화물내용}</td>
                             <td className="p-2">{row.차량종류}</td>
                             <td className="p-2">{row.차량톤수}</td>
@@ -6505,107 +6646,127 @@ const today = now.toISOString().slice(0, 10);
 {/* ⭐ 지도 영역 닫기 */}
 
       {/* ================= 오른쪽 정보 패널 ================= */}
-<div className="w-[360px] border-l p-6 flex flex-col bg-white">
+<div className="w-[360px] border-l flex flex-col bg-white">
 
-  {/* 제목 */}
-  <h3 className="text-xl font-bold mb-6">
-    배차요청 확인
-  </h3>
+  {/* ⭐ 스크롤 영역 */}
+  <div className="flex-1 overflow-y-auto p-6">
 
-  {/* 결제예정금액 */}
-  <div className="text-sm text-gray-500 mb-2">
-    결제예정금액 (VAT별도)
-  </div>
+    {/* 제목 */}
+    <h3 className="text-xl font-bold mb-6">
+      배차요청 확인
+    </h3>
 
-  <div className="text-[34px] font-extrabold text-blue-600 mb-6">
-    <CountUp value={Number(form.청구운임 || 0)} />
-    <span className="ml-1">원~</span>
-  </div>
-
-  {/* 소요시간 */}
-  <div className="flex justify-between items-center text-[15px] mb-2">
-    <span className="text-gray-500">
-      소요시간 (예상)
-    </span>
-
-    <span className="font-semibold text-gray-700">
-      {routeInfo
-        ? Math.round(routeInfo.time / 60) + "분"
-        : "-"}
-    </span>
-  </div>
-
-  {/* 총거리 */}
-  <div className="flex justify-between items-center text-[15px] mb-6">
-    <span className="text-gray-500">
-      총거리 (예상)
-    </span>
-
-    <span className="font-semibold text-gray-700">
-      {routeInfo
-        ? (routeInfo.distance / 1000).toFixed(0) + "km"
-        : "-"}
-    </span>
-  </div>
-
-  <div className="border-b mb-5"></div>
-
-  {/* 상차지 */}
-  <div className="border rounded-lg p-4 mb-3 bg-white shadow-sm">
-
-    <div className="text-sm text-blue-600 font-semibold mb-1">
-      상차지
+    {/* 결제예정금액 */}
+    <div className="text-sm text-gray-500 mb-2">
+      결제예정금액 (VAT별도)
     </div>
 
-    <div className="font-semibold text-[15px]">
-      {form.상차지명 || "-"}
+    <div className="text-[34px] font-extrabold text-blue-600 mb-6">
+      <CountUp value={Number(form.청구운임 || 0)} />
+      <span className="ml-1">원~</span>
     </div>
 
-    <div className="text-sm text-gray-500 mt-1">
-      {form.상차지주소 || "-"}
+    {/* 소요시간 */}
+    <div className="flex justify-between items-center text-[15px] mb-2">
+      <span className="text-gray-500">소요시간 (예상)</span>
+      <span className="font-semibold text-gray-700">
+        {routeInfo ? Math.round(routeInfo.time / 60) + "분" : "-"}
+      </span>
     </div>
+
+    {/* 총거리 */}
+    <div className="flex justify-between items-center text-[15px] mb-6">
+      <span className="text-gray-500">총거리 (예상)</span>
+      <span className="font-semibold text-gray-700">
+        {routeInfo ? (routeInfo.distance / 1000).toFixed(0) + "km" : "-"}
+      </span>
+    </div>
+
+    <div className="border-b mb-5"></div>
+
+    {/* ================= 상차지 ================= */}
+    <div className="border rounded-lg p-4 mb-3 bg-white shadow-sm">
+
+      <div className="text-sm text-blue-600 font-semibold mb-1">
+        상차지
+      </div>
+
+      <div className="font-semibold text-[16px]">
+        {form.상차지명 || "-"}
+      </div>
+
+      <div className="text-sm text-gray-500 mt-1">
+        {form.상차지주소 || "-"}
+      </div>
+
+      {(form.경유상차목록 || []).length > 0 && (
+        <div className="mt-3 space-y-2">
+          {form.경유상차목록.map((s, i) => (
+            <div
+              key={i}
+              className="flex items-center text-[13px] text-blue-700 bg-blue-50 px-3 py-2 rounded-lg"
+            >
+              <span className="mr-2 font-semibold">경유{i + 1}</span>
+              <span className="truncate">{s.업체명 || "-"}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+    </div>
+
+    {/* ================= 하차지 ================= */}
+    <div className="border rounded-lg p-4 mb-5 bg-white shadow-sm">
+
+      <div className="text-sm text-red-600 font-semibold mb-1">
+        하차지
+      </div>
+
+      <div className="font-semibold text-[16px]">
+        {form.하차지명 || "-"}
+      </div>
+
+      <div className="text-sm text-gray-500 mt-1">
+        {form.하차지주소 || "-"}
+      </div>
+
+      {(form.경유하차목록 || []).length > 0 && (
+        <div className="mt-3 space-y-2">
+          {form.경유하차목록.map((s, i) => (
+            <div
+              key={i}
+              className="flex items-center text-[13px] text-red-700 bg-red-50 px-3 py-2 rounded-lg"
+            >
+              <span className="mr-2 font-semibold">경유{i + 1}</span>
+              <span className="truncate">{s.업체명 || "-"}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+    </div>
+
+    {/* 즉시공유 */}
+    <button
+      type="button"
+      className="w-full mb-5 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-semibold text-[15px] transition"
+      onClick={async () => {
+        const text = makeFullDetailText(form);
+        try {
+          await navigator.clipboard.writeText(text);
+          alert("📋 전체 상세 메시지가 복사되었습니다.");
+        } catch {
+          prompt("아래 내용을 복사하세요.", text);
+        }
+      }}
+    >
+      즉시공유
+    </button>
 
   </div>
 
-  {/* 하차지 */}
-  <div className="border rounded-lg p-4 mb-5 bg-white shadow-sm">
-
-    <div className="text-sm text-red-600 font-semibold mb-1">
-      하차지
-    </div>
-
-    <div className="font-semibold text-[15px]">
-      {form.하차지명 || "-"}
-    </div>
-
-    <div className="text-sm text-gray-500 mt-1">
-      {form.하차지주소 || "-"}
-    </div>
-
-  </div>
-
-  {/* 즉시공유 */}
-<button
-  type="button"
-  className="mb-5 py-2.5 bg-emerald-600 text-white rounded font-semibold text-[15px]"
-  onClick={async () => {
-
-    const text = makeFullDetailText(form);
-
-    try {
-      await navigator.clipboard.writeText(text);
-      alert("📋 전체 상세 메시지가 복사되었습니다.");
-    } catch {
-      prompt("아래 내용을 복사하세요.", text);
-    }
-
-  }}
->
-  즉시공유
-</button>
-
-  {/* 버튼 */}
-  <div className="mt-auto flex gap-3">
+  {/* ⭐ 하단 고정 버튼 */}
+  <div className="p-4 border-t bg-white flex gap-3">
 
     <button
       className="flex-1 py-2.5 rounded bg-gray-200 font-medium hover:bg-gray-300 transition"
@@ -9612,7 +9773,6 @@ setEditTarget({
 
           <tbody>
             {filtered.map((r, idx) => {
-
               const sale = toInt(edited[r._id]?.청구운임 ?? r.청구운임);
               const drv = toInt(edited[r._id]?.기사운임 ?? r.기사운임);
               const fee = sale - drv;
@@ -9699,14 +9859,17 @@ ${savedHighlightIds.has(r._id) ? "row-highlight" : ""}
                     <div className="inline-flex items-center gap-1">
                       <span>{r.상차지명}</span>
 
-                      {Array.isArray(r.경유지_상차) && r.경유지_상차.length > 0 && (
-                        <StopBadge
-                          count={r.경유지_상차.length}
-                          list={r.경유지_상차}
-                        />
-                      )}
+{((r.경유상차목록 && r.경유상차목록.length > 0) ||
+  (r.경유지_상차 && r.경유지_상차.length > 0)) && (
+  <StopBadge
+    count={
+      (r.경유상차목록?.length || r.경유지_상차?.length || 0)
+    }
+    list={r.경유상차목록 || r.경유지_상차 || []}
+  />
+)}
 
-                      {r.운행유형 === "왕복" && <RoundTripBadge />}
+{r.운행유형 === "왕복" && <RoundTripBadge />}
                     </div>
                   </td>
                   <td className={addrCell}>
@@ -9717,12 +9880,15 @@ ${savedHighlightIds.has(r._id) ? "row-highlight" : ""}
                     <div className="inline-flex items-center gap-1">
                       <span>{r.하차지명}</span>
 
-                      {Array.isArray(r.경유지_하차) && r.경유지_하차.length > 0 && (
-                        <StopBadge
-                          count={r.경유지_하차.length}
-                          list={r.경유지_하차}
-                        />
-                      )}
+{((r.경유하차목록 && r.경유하차목록.length > 0) ||
+  (r.경유지_하차 && r.경유지_하차.length > 0)) && (
+  <StopBadge
+    count={
+      (r.경유하차목록?.length || r.경유지_하차?.length || 0)
+    }
+    list={r.경유하차목록 || r.경유지_하차 || []}
+  />
+)}
                     </div>
                   </td>
                   <td className={addrCell}>
@@ -18549,14 +18715,6 @@ function NewOrderPopup({
     try {
       await addDispatch({
         ...newOrder,
-        // ⭐⭐⭐ 이 두 줄이 핵심 (이거 없어서 안 떴던 거다)
-        경유지_상차: Array.isArray(newOrder.경유지_상차)
-          ? newOrder.경유지_상차
-          : [],
-
-        경유지_하차: Array.isArray(newOrder.경유지_하차)
-          ? newOrder.경유지_하차
-          : [],
         메모중요도: "일반",
         운행유형: newOrder.운행유형 || "편도",
         등록일: new Date().toISOString().slice(0, 10),
