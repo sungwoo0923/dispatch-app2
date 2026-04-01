@@ -363,20 +363,21 @@ const addDispatch = async (record) => {
   // 🔥 차량번호 재매칭
   const basePlate = patch.차량번호 || prev?.차량번호;
 
-  if (basePlate) {
-    const driver = drivers.find(
-      (d) =>
-        normalizePlate(d.차량번호) === normalizePlate(basePlate)
-    );
+ if (basePlate) {
+  const matches = drivers.filter(
+    (d) =>
+      normalizePlate(d.차량번호) === normalizePlate(basePlate)
+  );
 
-    if (driver) {
-      patch.이름 = driver.이름 || "";
-      patch.전화번호 = driver.전화번호 || "";
-    }
-  } else {
-    patch.이름 = "";
-    patch.전화번호 = "";
+  // 🔥 1명일 때만 자동 매칭
+  if (matches.length === 1) {
+    const driver = matches[0];
+    patch.이름 = driver.이름;
+    patch.전화번호 = driver.전화번호;
   }
+
+  // 🔥 여러 명이면 절대 덮어쓰지 않음
+}
 
   const cleanPatch = stripUndefinedDeep({
     ...patch,
