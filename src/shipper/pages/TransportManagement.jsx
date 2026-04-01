@@ -9,7 +9,14 @@ const getDate = (offset = 0) => {
 };
 
 export default function TransportManagement() {
-  const user = auth.currentUser;
+const [user, setUser] = useState(null);
+
+useEffect(() => {
+  const unsub = auth.onAuthStateChanged((u) => {
+    setUser(u);
+  });
+  return () => unsub();
+}, []);
 
   const [startDate, setStartDate] = useState(getDate(-1));
   const [endDate, setEndDate] = useState(getDate(0));
@@ -18,7 +25,7 @@ export default function TransportManagement() {
   const [list, setList] = useState([]);
 
   const load = async () => {
-    if (!user) return;
+   if (!user?.uid) return;
 
     const q = query(
       collection(db, "shipper_orders"),

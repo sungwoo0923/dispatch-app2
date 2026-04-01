@@ -207,11 +207,11 @@ function ShipperOrderQueue() {
   const [orders, setOrders] = useState([]);
 
   useEffect(() => {
-    const q = query(
-      collection(db, "shipper_orders"),
-      where("status", "==", "요청"),
-      orderBy("createdAt", "desc")
-    );
+   const q = query(
+  collection(db, "orders"),
+  where("배차상태", "==", "요청"),
+  orderBy("createdAt", "desc")
+);
 
     const unsub = onSnapshot(q, (snap) => {
       setOrders(
@@ -297,11 +297,11 @@ async function createDispatchFromShipperOrder(order) {
   });
 
   // 2️⃣ 화주 오더 상태 변경
-  await setDoc(
-    doc(db, "shipper_orders", order.id),
-    { status: "배차중" },
-    { merge: true }
-  );
+await setDoc(
+  doc(db, "orders", order.id),
+  { 배차상태: "배차중" },
+  { merge: true }
+);
 }
 /* ===================================================================
    ✅ 배차 완료 처리 (dispatch + shipper_orders 동기화)

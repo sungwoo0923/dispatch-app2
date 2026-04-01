@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { db, auth } from "../../firebase";
 import ShipperOrder from "./ShipperOrder";
+import { useRef } from "react";
 import {
   collection,
   query,
@@ -33,7 +34,22 @@ const getTodayKST = () => {
   const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
   return kst.toISOString().slice(0, 10);
 };
+const scrollRef = useRef(null);
+useEffect(() => {
+  const el = scrollRef.current;
+  if (!el) return;
 
+  const handleWheel = (e) => {
+    if (e.shiftKey) {
+      e.preventDefault();
+      el.scrollLeft += e.deltaY;
+    }
+  };
+
+  el.addEventListener("wheel", handleWheel, { passive: false });
+
+  return () => el.removeEventListener("wheel", handleWheel);
+}, []);
 const [startDate, setStartDate] = useState(getTodayKST());
 const [endDate, setEndDate] = useState(getTodayKST());
 const [searchType, setSearchType] = useState("통합");
@@ -424,17 +440,20 @@ const today = kst.toISOString().slice(0, 10);
 </div>
 </div>
 
-        {/* 테이블 */}
-        <div className="bg-white rounded-xl shadow-sm">
+<div
+  ref={scrollRef}
+  className="bg-white rounded-xl shadow-sm overflow-x-auto"
+>
+  <div className="min-w-[2000px]">
 
-          {/* 헤더 */}
-          <div className="
-  grid grid-cols-[40px_60px_110px_90px_110px_90px_140px_140px_200px_140px_200px_140px_120px_90px_120px_120px_120px_110px_110px_120px_90px]
-  bg-[#eef3fb]
-  text-[16px] font-extrabold text-gray-800
-  px-4 py-4
-  text-center
-">
+    {/* 헤더 */}
+    <div className="
+      grid grid-cols-[40px_60px_110px_90px_110px_90px_140px_140px_200px_140px_200px_140px_120px_90px_120px_120px_120px_110px_110px_120px_90px]
+      bg-[#eef3fb]
+      text-[16px] font-extrabold text-gray-800
+      px-4 py-4
+      text-center
+    ">
   <div>
   <input
   type="checkbox"
@@ -599,6 +618,8 @@ className={`
 </div>
         </div>
       </div>
+       </div>
+
       {detailOpen && selectedOrder && (
         
       <div className="

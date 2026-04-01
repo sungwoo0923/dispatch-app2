@@ -15,31 +15,30 @@ import { db, auth } from "../../firebase";
 export default function SettingsUsers() {
     const [open, setOpen] = useState(false);
     const [users, setUsers] = useState([]);
-    const [selectedUser, setSelectedUser] = useState(null);
+    const [selectedUserId, setSelectedUserId] = useState(null);
+    const selectedUser = users.find(u => u.uid === selectedUserId);
     const [mode, setMode] = useState("edit");
     const [rejectedList, setRejectedList] = useState([]);
+    const [me, setMe] = useState(null); 
     useEffect(() => {
   if (!auth.currentUser) return;
 
   const unsub = onSnapshot(collection(db, "users"), (snap) => {
-    const arr = snap.docs.map(d => ({
-      id: d.id,
-      ...d.data()
-    }));
+const arr = snap.docs.map(d => ({
+  uid: d.id,   // 핵심: uid = 문서ID로 강제
+  ...d.data()
+}));
 
-const me =
-  arr.find(u => u.uid === auth.currentUser.uid) ||
-  arr.find(u => u.email === auth.currentUser.email);
+const me = arr.find(u => u.uid === auth.currentUser.uid);
 
 if (!me) {
   console.log("❌ 내 계정 못찾음");
   return;
 }
-
+setMe(me);
 const filtered = arr.filter(
   u =>
     u.company === me.company &&
-    !u.isPrimary &&
     !u.rejected &&
     !u.deleted
 );
@@ -119,7 +118,7 @@ setRejectedList(rejectedList);
           {/* 바디 */}
           <tbody>
 {(mode === "rejected" ? rejectedList : users).map((u) => (
-    <tr key={u.id} className="border-t text-center hover:bg-gray-50">
+    <tr key={u.uid} className="border-t text-center hover:bg-gray-50">
 
       <td className="py-3 font-medium text-gray-800">{u.name || "-"}</td>
       <td>{u.department || "-"} / {u.position || "-"}</td>
@@ -183,7 +182,7 @@ setRejectedList(rejectedList);
   {!u.approved && mode !== "rejected" && (
     <button
       onClick={() => {
-        setSelectedUser(u);
+        setSelectedUserId(u.uid);
         setMode("approve");
         setOpen(true);
       }}
@@ -193,26 +192,30 @@ setRejectedList(rejectedList);
     </button>
   )}
 
-  {/* ✅ 2. 승인된 사용자 → 수정 + 삭제 */}
-  {u.approved && mode !== "rejected" && (
-    <>
+{u.approved && mode !== "rejected" && (
+  <>
+    {u.permissions?.master && !me?.permissions?.master ? (
+      // ❌ 부마스터는 마스터 수정 못함
+      <span className="text-gray-400 text-sm">수정불가</span>
+    ) : (
       <button
         onClick={() => {
-          setSelectedUser(u);
+          setSelectedUserId(u.uid);
           setMode("edit");
           setOpen(true);
         }}
       >
         수정
       </button>
-    </>
-  )}
+    )}
+  </>
+)}
 
   {/* ✅ 3. 거절목록 → 재승인 */}
   {mode === "rejected" && (
 <button
   onClick={() => {
-    setSelectedUser(u);
+    setSelectedUserId(u.uid);
     setMode("reApprove");
     setOpen(true);
   }}
@@ -239,12 +242,16 @@ setRejectedList(rejectedList);
         <button className="px-2 py-1 border rounded text-gray-400">{'>'}</button>
         <button className="px-2 py-1 border rounded text-gray-400">{'>>'}</button>
       </div>
-<UserEditModal
-  open={open}
-  user={selectedUser}
-  mode={mode}
-  onClose={() => setOpen(false)}
-/>
+{me && selectedUser && (
+  <UserEditModal
+    key={selectedUser.uid}   // 🔥 이거 추가 (핵심)
+    open={open}
+    user={selectedUser}
+    mode={mode}
+    currentUserData={me}
+    onClose={() => setOpen(false)}
+  />
+)}
     </div>
   );
 }

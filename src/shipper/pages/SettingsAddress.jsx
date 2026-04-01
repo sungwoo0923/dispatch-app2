@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { db, auth } from "../../firebase";
+import { getDoc } from "firebase/firestore";
 import {
   collection,
   query,
@@ -11,15 +12,25 @@ import {
 
 export default function SettingsAddress() {
   const [addressBook, setAddressBook] = useState([]);
+  const [userData, setUserData] = useState(null);
+useEffect(() => {
+  const user = auth.currentUser;
+  if (!user) return;
 
+  getDoc(doc(db, "users", user.uid)).then((snap) => {
+    if (snap.exists()) {
+      setUserData(snap.data());
+    }
+  });
+}, []);
   /* ================= 주소록 불러오기 ================= */
   const loadAddress = async () => {
     const user = auth.currentUser;
-    if (!user) return;
+    if (!user || !userData?.company) return;
 
     const q = query(
       collection(db, "places"),
-      where("userId", "==", user.uid)
+      where("company", "==", userData.company)
     );
 
     const snap = await getDocs(q);
@@ -67,9 +78,11 @@ export default function SettingsAddress() {
     setAddressBook(Array.from(map.values()));
   };
 
-  useEffect(() => {
+useEffect(() => {
+  if (userData) {
     loadAddress();
-  }, []);
+  }
+}, [userData]);
 
   /* ================= 삭제 ================= */
   const handleDelete = async (id) => {

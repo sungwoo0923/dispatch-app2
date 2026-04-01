@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { doc, updateDoc } from "firebase/firestore";
 import { db } from "../../firebase";
 import { auth } from "../../firebase";
@@ -13,13 +13,33 @@ const [form, setForm] = useState({
   fax: user?.fax || "",
   phone: user?.phone || "",
 });
+useEffect(() => {
+  if (!user) return;
+
+  setForm({
+    department: user.department || "",
+    position: user.position || "",
+    tel: user.tel || "",
+    fax: user.fax || "",
+    phone: user.phone || "",
+  });
+}, [user]);
 const [permissions, setPermissions] = useState({
 master: user?.permissions?.master || false,
 subMaster: user?.permissions?.subMaster || false,
 settlement: user?.permissions?.settlement || false,
 transport: user?.permissions?.transport || false,
 });
+useEffect(() => {
+  if (!user) return;
 
+  setPermissions({
+    master: user?.permissions?.master || false,
+    subMaster: user?.permissions?.subMaster || false,
+    settlement: user?.permissions?.settlement || false,
+    transport: user?.permissions?.transport || false,
+  });
+}, [user]);
 // 🔥 이거 반드시 있어야 함
 const isTargetMaster = user?.permissions?.master;
 
@@ -33,7 +53,9 @@ const isLoginMaster =
 
 const isLoginSubMaster =
   currentUserData?.permissions?.subMaster === true;
-  const canEdit = isLoginMaster || isLoginSubMaster;
+
+const canEdit =
+  isLoginMaster || isLoginSubMaster || false;
 // ✅ approve (여기 추가)
 const approve = async () => {
 
@@ -83,7 +105,7 @@ await updateDoc(doc(db, "users", user.uid), {
   tel: form.tel,
   fax: form.fax,
   phone: form.phone,
-  permissions: permissions,
+  permissions: permissions
 });
 
     alert("수정 완료");
@@ -110,15 +132,6 @@ const removeUser = async () => {
   }
 };
 if (!open) return null;
-
-if (
-  user?.permissions?.master &&
-  !isSelf
-) {
-  alert("마스터 계정은 본인만 수정 가능합니다.");
-  onClose();
-  return null;
-}
   if (mode === "approve") {
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
@@ -581,6 +594,21 @@ disabled={!canEdit}
             </div>
           </div>
         )}
+        <div className="flex justify-end gap-3 mt-6">
+  <button
+    onClick={onClose}
+    className="px-5 py-2 border rounded text-gray-600"
+  >
+    취소
+  </button>
+
+  <button
+    onClick={save}
+    className="px-5 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+  >
+    저장
+  </button>
+</div>
       </div>
     </div>
   );
