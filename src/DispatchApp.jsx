@@ -241,7 +241,18 @@ useEffect(() => {
   const userRole = localStorage.getItem("role") || "user";
 const collName = "orders";
 
+const getSixMonthsAgo = () => {
+  const d = new Date();
+  d.setMonth(d.getMonth() - 6);
 
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+
+  return `${y}-${m}-${day}`;
+};
+
+const sixMonthsAgo = getSixMonthsAgo();
   // ✅ 1️⃣ orders (화주 + 신규)
   unsubs.push(
     onSnapshot(collection(db, collName), (snap) => {
@@ -261,7 +272,6 @@ const collName = "orders";
   : (Array.isArray(data.경유하차목록) ? data.경유하차목록 : []),
     };
   })
-  .filter(o => o.상태 !== "취소"); // 🔥 이거 추가
 
 ordersCache = arr;
 setDispatchData([...ordersCache, ...dispatchCache]);
@@ -282,7 +292,6 @@ const arr2 = snap.docs
       ...data,
     };
   })
-  .filter(o => o.상태 !== "취소");
 
 dispatchCache = arr2;
 setDispatchData([...ordersCache, ...dispatchCache]);

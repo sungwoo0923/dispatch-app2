@@ -6,12 +6,15 @@ import {
   collection,
   query,
   where,
-  onSnapshot,
   doc,
   deleteDoc,
+  getDoc,
+  getDocs,
+  limit,
+  onSnapshot,
+  updateDoc
 } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
-import { updateDoc } from "firebase/firestore";
 /* ================= 상태 UI ================= */
 const STATUS = {
   요청: { label: "요청", cls: "bg-blue-100 text-blue-700" },
@@ -22,9 +25,11 @@ const STATUS = {
 
 export default function ShipperStatus() {
   const user = auth.currentUser;
+  const [userData, setUserData] = useState(null);
   const navigate = useNavigate();
 
   const [orders, setOrders] = useState([]);
+  
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("전체");
   const [keyword, setKeyword] = useState("");
@@ -45,11 +50,17 @@ useEffect(() => {
       el.scrollLeft += e.deltaY;
     }
   };
-
   el.addEventListener("wheel", handleWheel, { passive: false });
 
   return () => el.removeEventListener("wheel", handleWheel);
 }, []);
+  const get3MonthsAgo = () => {
+  const d = new Date();
+  d.setMonth(d.getMonth() - 3);
+
+  const kst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+  return kst.toISOString().slice(0, 10);
+};
 const [startDate, setStartDate] = useState(getTodayKST());
 const [endDate, setEndDate] = useState(getTodayKST());
 const [searchType, setSearchType] = useState("통합");
@@ -95,22 +106,59 @@ useEffect(() => {
 
   return () => clearTimeout(timer);
 }, []);
+/* ================= 유저 정보 로드 ================= */
+useEffect(() => {
+  if (!user) return;
+
+  getDoc(doc(db, "users", user.uid)).then((snap) => {
+    if (snap.exists()) {
+      setUserData(snap.data());
+    }
+  });
+}, [user]);
   /* ================= 데이터 로드 ================= */
-  useEffect(() => {
-    if (!user) return;
+useEffect(() => {
+  if (!user || !userData) return;
 
-    const q = query(
-  collection(db, "orders"),
-  where("shipperUid", "==", user.uid)
-);
+  let q;
 
-    const unsub = onSnapshot(q, (snap) => {
-      setOrders(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-      setLoading(false);
-    });
+  const isMaster = userData?.role === "master";
+  const isSubMaster = userData?.role === "subMaster";
+  const isTransport = userData?.role === "transport";
 
-    return () => unsub();
-  }, [user]);
+  if (isMaster || isSubMaster) {
+    q = query(
+      collection(db, "orders"),
+      where("shipperCompany", "==", userData.company)
+    );
+  } else if (isTransport) {
+    const threeMonthsAgo = get3MonthsAgo();
+
+    q = query(
+      collection(db, "orders"),
+      where("shipperCompany", "==", userData.company),
+      where("상차일", ">=", threeMonthsAgo)
+    );
+  } else {
+    q = query(
+      collection(db, "orders"),
+      where("shipperCompany", "==", userData.company),
+      where("작성자", "==", user.email)
+    );
+  }
+
+  const unsub = onSnapshot(q, (snap) => {
+    setOrders(
+      snap.docs.map((d) => ({
+        id: d.id,
+        ...d.data(),
+      }))
+    );
+    setLoading(false);
+  });
+
+  return () => unsub();
+}, [user, userData]);
 
   /* ================= KPI ================= */
 const activeOrders = orders.filter(o => o.상태 !== "취소");
@@ -130,8 +178,15 @@ const kpi = useMemo(
 );
 // 🔥 상태 자동 계산 함수 (추가)
 const getStatus = (o) => {
-  if (o.상태 === "취소") return "배차취소"; // 🔥 이거 추가
+  if (
+    o.상태 === "취소" ||
+    o.상태 === "배차취소" ||
+    o.상태 === "오더취소" ||
+    o.상태 === "취소됨"
+  ) return "배차취소";
+
   if (o.차량번호 && o.차량번호.trim()) return "배차완료";
+
   return "요청";
 };
 const toggleExpand = (id, type) => {
@@ -179,6 +234,20 @@ const handleEditSelected = () => {
   setEditData(target);
   setEditOpen(true);
 };
+// 🔥 날짜 변환 함수 (여기에 넣어라)
+const toYMD = (d) => {
+  if (!d) return "";
+
+  if (d?.toDate) {
+    return d.toDate().toISOString().slice(0, 10);
+  }
+
+  if (d instanceof Date) {
+    return d.toISOString().slice(0, 10);
+  }
+
+  return String(d).slice(0, 10);
+};
   /* ================= 필터링 ================= */
 const rows = useMemo(() => {
   return orders.filter((o) => {
@@ -187,9 +256,10 @@ if (hideCanceled && filter !== "배차취소" && o.상태 === "취소") return f
 const currentStatus = getStatus(o);
 if (filter !== "전체" && currentStatus !== filter) return false;
 
-    // 📅 날짜 필터 (상차일 기준)
-    if (startDate && o.상차일 && o.상차일 < startDate) return false;
-if (endDate && o.상차일 && o.상차일 > endDate) return false;
+const orderDate = toYMD(o.상차일);
+
+if (startDate && orderDate < startDate) return false;
+if (endDate && orderDate > endDate) return false;
 
     // 🔍 검색 필터
     if (!keyword) return true;

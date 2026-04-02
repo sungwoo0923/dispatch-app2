@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { db, auth } from "../../firebase";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
-
+import { doc, getDoc } from "firebase/firestore";
 export default function ShipperHome() {
   const [tab, setTab] = useState("dashboard");
 
@@ -10,24 +10,37 @@ export default function ShipperHome() {
   const [endDate, setEndDate] = useState("");
   const [keyword, setKeyword] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
-
+const [userData, setUserData] = useState(null);
   const user = auth.currentUser;
+/* ================= 유저 정보 로드 ================= */
+useEffect(() => {
+  if (!user) return;
 
-  /* ================= 데이터 로드 ================= */
-  useEffect(() => {
-    if (!user) return;
+  getDoc(doc(db, "users", user.uid)).then((snap) => {
+    if (snap.exists()) {
+      setUserData(snap.data());
+    }
+  });
+}, [user]);
 
-    const q = query(
-      collection(db, "orders"),
-      where("shipperUid", "==", user.uid)
-    );
+/* ================= 오더 로드 ================= */
+useEffect(() => {
+  if (!user || !userData) return;
 
-    const unsub = onSnapshot(q, (snap) => {
-      setOrders(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-    });
+  const q = query(
+    collection(db, "orders"),
+    where("shipperCompany", "==", userData.company)
+  );
 
-    return () => unsub();
-  }, [user]);
+  const unsub = onSnapshot(q, (snap) => {
+    setOrders(snap.docs.map((d) => ({
+      id: d.id,
+      ...d.data()
+    })));
+  });
+
+  return () => unsub();
+}, [user, userData]);
 
   /* ================= 상태 계산 ================= */
   const getStatus = (o) => {
