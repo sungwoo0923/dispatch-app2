@@ -1,6 +1,14 @@
 // ======================= src/mobile/MobileApp.jsx (PART 1/3) =======================
 import React, { useState, useMemo, useEffect } from "react";
-
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  CartesianGrid,
+  ResponsiveContainer
+} from "recharts";
 import {
   collection,
   getDocs,
@@ -400,10 +408,28 @@ const quickRange = (days) => {
   // 1. Firestore 실시간 연동 (🔥 전체 데이터 — PC와 동일)
   // --------------------------------------------------
   const [orders, setOrders] = useState([]);
-  
+  const [pullStartY, setPullStartY] = useState(0);
+const [pulling, setPulling] = useState(false);
+const [pullDistance, setPullDistance] = useState(0);
+const [isRefreshing, setIsRefreshing] = useState(false);
   const [drivers, setDrivers] = useState([]);
   const [clients, setClients] = useState([]);
   const [places, setPlaces] = useState([]);
+  const [refreshKey, setRefreshKey] = useState(0);
+const handleRefresh = () => {
+  if (isRefreshing) return;
+
+  setIsRefreshing(true);
+  showToast("새로고침 중...");
+
+  setTimeout(() => {
+    setRefreshKey(prev => prev + 1); // ⭐ 핵심
+    setIsRefreshing(false);
+    setPullDistance(0);
+
+    showToast("최신 데이터 반영 완료");
+  }, 500);
+};
 // 🔥 모든 로그인 사용자 FCM 토큰 저장
 useEffect(() => {
   import("../firebase").then(({ saveFcmToken }) => {
@@ -414,6 +440,7 @@ useEffect(() => {
     });
   });
 }, []);
+
 // 🔔 앱 켜져 있을 때 알림 표시 (FCM 포그라운드)
 useEffect(() => {
   let unsubscribe;
@@ -465,7 +492,48 @@ useEffect(() => {
   });
 
   return () => unsubs.forEach((u) => u());
-}, []);
+}, [refreshKey]);
+useEffect(() => {
+  let startY = 0;
+
+  const handleTouchStart = (e) => {
+    if (window.scrollY === 0) {
+      startY = e.touches[0].clientY;
+      setPullStartY(startY);
+    }
+  };
+
+  const handleTouchMove = (e) => {
+    if (window.scrollY !== 0) return;
+
+    const currentY = e.touches[0].clientY;
+    const diff = currentY - pullStartY;
+
+    if (diff > 0) {
+      setPulling(true);
+      setPullDistance(diff);
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (pullDistance > 80) {
+      handleRefresh();
+    }
+
+    setPulling(false);
+    setPullDistance(0);
+  };
+
+  window.addEventListener("touchstart", handleTouchStart);
+  window.addEventListener("touchmove", handleTouchMove);
+  window.addEventListener("touchend", handleTouchEnd);
+
+  return () => {
+    window.removeEventListener("touchstart", handleTouchStart);
+    window.removeEventListener("touchmove", handleTouchMove);
+    window.removeEventListener("touchend", handleTouchEnd);
+  };
+}, [pullStartY, pullDistance]);
   // --------------------------------------------------
 // 🔔 PC 공지사항 실시간 구독 (이 위치!)
 // --------------------------------------------------
@@ -1083,9 +1151,14 @@ const handleOrderDuplicate = (order) => {
     하차시간: order.하차시간 || "",
 
     상차지명: order.상차지명 || "",
-    상차지주소: order.상차지주소 || "",
-    하차지명: order.하차지명 || "",
-    하차지주소: order.하차지주소 || "",
+상차지주소: order.상차지주소 || "",
+상차지담당자: order.상차지담당자 || "",     
+상차지담당자번호: order.상차지담당자번호 || "",
+
+하차지명: order.하차지명 || "",
+하차지주소: order.하차지주소 || "",
+하차지담당자: order.하차지담당자 || "", 
+하차지담당자번호: order.하차지담당자번호 || "",
 
     톤수: order.톤수 || order.차량톤수 || "",
     차종: order.차종 || order.차량종류 || "",
@@ -1243,10 +1316,6 @@ const handleOrderDuplicate = (order) => {
     setPage(prevPage);
     alert("오더가 삭제되었습니다.");
   };
-
-  const handleRefresh = () => {
-    window.location.reload();
-  };
   // 🔴 전체삭제 비활성화
   const deleteAllOrders = async () => {
     alert("🚫 전체 삭제 기능이 비활성화되었습니다.");
@@ -1358,8 +1427,14 @@ const title =
 />
       {showMenu && (
         <MobileSideMenu
-          onClose={() => setShowMenu(false)}
-          onGoList={() => {
+  onClose={() => setShowMenu(false)}
+
+  onGoSales={() => {
+    setPage("sales");
+    setShowMenu(false);
+  }}
+
+  onGoList={() => {
     setPage("list");
     setShowMenu(false);
   }}
@@ -1651,7 +1726,12 @@ setOpenMemo={setOpenMemo}
             setSearchText={setSearchText}
           />
         )}
-
+{page === "sales" && (
+  <MobileSalesPage
+    data={orders}   // ⚠ dispatchData 아님 → orders 써야함
+    onBack={() => setPage("list")}
+  />
+)}
         {page === "form" && (
           <MobileOrderForm
             form={form}
@@ -1761,6 +1841,204 @@ setOpenMemo={setOpenMemo}
   </div>
 );
 }
+function MobileSalesPage({ data = [], onBack }) {
+
+  const [month, setMonth] = useState(
+    new Date().toISOString().slice(0,7)
+  );
+  const [searchClient, setSearchClient] = useState("");
+
+  // 🔥 숫자 변환 (핵심)
+  const toInt = (v) =>
+    Number(String(v || "").replace(/[^\d]/g, "")) || 0;
+
+  // =========================
+  // 🔹 필터
+  // =========================
+const rows = data.filter(r => {
+
+  if (!r.상차일) return false;
+
+  // 🔥 후레쉬물류 제외 (핵심)
+  if ((r.거래처명 || "").includes("후레쉬물류")) return false;
+
+  if (!r.상차일.startsWith(month)) return false;
+
+  if (searchClient) {
+    return (r.거래처명 || "").includes(searchClient);
+  }
+
+  return true;
+});
+
+  // =========================
+  // 🔹 KPI 계산
+  // =========================
+  const total = rows.reduce((acc, r) => {
+    const sale = toInt(r.청구운임);
+    const driver = toInt(r.기사운임);
+    const fee = sale - driver;
+
+    acc.sale += sale;
+    acc.driver += driver;
+    acc.fee += fee;
+
+    return acc;
+  }, { sale:0, driver:0, fee:0 });
+
+  // =========================
+  // 🔹 전월 비교
+  // =========================
+  const prevMonth = (() => {
+    const d = new Date(month + "-01");
+    d.setMonth(d.getMonth() - 1);
+    return d.toISOString().slice(0,7);
+  })();
+
+const prevTotal = data
+  .filter(r => 
+    r.상차일?.startsWith(prevMonth) &&
+    !(r.거래처명 || "").includes("후레쉬") // 🔥 핵심 추가
+  )
+  .reduce((acc, r) => {
+    acc.sale += toInt(r.청구운임);
+    return acc;
+  }, { sale:0 });
+
+  const diff = total.sale - prevTotal.sale;
+  const diffRate = prevTotal.sale === 0
+    ? 0
+    : ((diff / prevTotal.sale) * 100);
+
+  // =========================
+  // 🔹 거래처 TOP5
+  // =========================
+  const byClient = {};
+
+  rows.forEach(r => {
+    const c = r.거래처명 || "미지정";
+
+    if (!byClient[c]) {
+      byClient[c] = 0;
+    }
+
+    byClient[c] += toInt(r.청구운임);
+  });
+
+  const topClients = Object.entries(byClient)
+    .map(([name, sale]) => ({ name, sale }))
+    .sort((a,b) => b.sale - a.sale)
+    .slice(0,5);
+
+  // =========================
+  // UI
+  // =========================
+  return (
+    <div className="p-4 space-y-4 bg-gray-50 min-h-screen">
+
+      {/* 헤더 */}
+      <div className="flex justify-between items-center">
+        <button onClick={onBack}>←</button>
+        <div className="font-bold text-lg text-blue-600">매출관리</div>
+        <div />
+      </div>
+
+      {/* 월 선택 */}
+      <input
+        type="month"
+        value={month}
+        onChange={(e)=>setMonth(e.target.value)}
+        className="w-full border border-blue-200 p-2 rounded-xl bg-white"
+      />
+
+      {/* 거래처 검색 */}
+      <input
+        placeholder="거래처 검색"
+        value={searchClient}
+        onChange={(e)=>setSearchClient(e.target.value)}
+        className="w-full border border-blue-200 p-2 rounded-xl bg-white"
+      />
+
+      {/* KPI (다이얼 스타일) */}
+      <div className="grid grid-cols-3 gap-4">
+  <DialCard title="총매출" value={total.sale} />
+  <DialCard title="기사운임" value={total.driver} />
+  <DialCard title="수익" value={total.fee} />
+</div>
+
+      {/* 전월 대비 */}
+      <div className={`text-sm font-semibold px-3 py-2 rounded-xl text-center ${
+        diff >= 0
+          ? "bg-blue-50 text-blue-600"
+          : "bg-red-50 text-red-500"
+      }`}>
+        전월 대비 {diff >= 0 ? "▲" : "▼"}{" "}
+        {Math.abs(diff).toLocaleString()}원 ({diffRate.toFixed(1)}%)
+      </div>
+
+      {/* 거래처 TOP5 */}
+      <div className="bg-white rounded-2xl shadow p-4 border border-blue-100">
+
+        <div className="text-sm font-bold mb-3 text-blue-600">
+          거래처 TOP5
+        </div>
+
+        {topClients.map((c,i)=>(
+          <div key={i} className="flex justify-between py-1 text-sm">
+            <span className="text-gray-700">
+              {i+1}. {c.name}
+            </span>
+            <span className="font-semibold text-blue-600">
+              {c.sale.toLocaleString()}원
+            </span>
+          </div>
+        ))}
+
+      </div>
+
+    </div>
+  );
+}
+
+function DialCard({ title, value }) {
+
+  const formatted = Number(value).toLocaleString();
+
+  return (
+    <div className="bg-white rounded-2xl shadow-md p-4 text-center border border-blue-100 flex flex-col items-center">
+
+      {/* 타이틀 */}
+      <div className="text-[15px] font-bold text-blue-600 mb-3">
+        {title}
+      </div>
+
+      {/* 다이얼 */}
+      <div className="relative w-28 h-28 flex items-center justify-center">
+
+        <div className="absolute inset-0 rounded-full border-[10px] border-blue-100"></div>
+
+        {/* 🔥 숫자 (조금 더 키움 + 자동 조절) */}
+        <div
+          className="px-2 text-blue-600 font-extrabold leading-none whitespace-nowrap"
+          style={{
+            fontSize:
+              formatted.length > 9 ? "14px" :
+              formatted.length > 7 ? "16px" :
+              "18px"
+          }}
+        >
+          {formatted}
+        </div>
+
+      </div>
+
+      <div className="text-[12px] text-gray-400 mt-2">
+        원
+      </div>
+
+    </div>
+  );
+}
 // ======================= src/mobile/MobileApp.jsx (PART 2/3) =======================
 
 // ----------------------------------------------------------------------
@@ -1808,6 +2086,7 @@ function MobileSideMenu({
   onGoList,
   onGoCreate,
   onGoFare,
+  onGoSales,
   onGoStatus,
   onGoUnassigned,
   onGoNotice,     // ✅ 추가
@@ -1875,6 +2154,7 @@ function MobileSideMenu({
   <MenuItem label="표준운임표" onClick={onGoFare} />
   <MenuItem label="배차현황" onClick={onGoStatus} />
   <MenuItem label="미배차현황" onClick={onGoUnassigned} />
+  <MenuItem label="매출관리" onClick={onGoSales} />
 </MenuSection>
 
 
@@ -4598,6 +4878,7 @@ if (vehicle && vehicle !== "전체") {
     return car.includes(clean(vehicle));
   });
 }
+
 // =======================
 // 🔥 화물 필터 (완전 수정)
 // =======================
