@@ -55,13 +55,20 @@ useEffect(() => {
     운송중: orders.filter(o => o.상태 === "운송중").length,
     운송완료: orders.filter(o => o.상태 === "완료" || o.차량번호).length,
   }), [orders]);
-
+const toYMD = (d) => {
+  if (!d) return "";
+  if (d?.toDate) return d.toDate().toISOString().slice(0, 10);
+  if (d instanceof Date) return d.toISOString().slice(0, 10);
+  return String(d).slice(0, 10);
+};
   /* ================= 필터 ================= */
   const rows = useMemo(() => {
     return orders.filter(o => {
+const orderDate = toYMD(o.상차일);
 
-      if (startDate && o.상차일 < startDate) return false;
-      if (endDate && o.상차일 > endDate) return false;
+// 🔥 핵심: 값 있을 때만 비교
+if (startDate && orderDate && orderDate < startDate) return false;
+if (endDate && orderDate && orderDate > endDate) return false;
 
       if (statusFilter && getStatus(o) !== statusFilter) return false;
 

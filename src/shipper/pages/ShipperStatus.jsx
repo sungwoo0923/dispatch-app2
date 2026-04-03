@@ -258,8 +258,9 @@ if (filter !== "전체" && currentStatus !== filter) return false;
 
 const orderDate = toYMD(o.상차일);
 
-if (startDate && orderDate < startDate) return false;
-if (endDate && orderDate > endDate) return false;
+// 🔥 이걸로 교체
+if (startDate && orderDate && orderDate < startDate) return false;
+if (endDate && orderDate && orderDate > endDate) return false;
 
     // 🔍 검색 필터
     if (!keyword) return true;
