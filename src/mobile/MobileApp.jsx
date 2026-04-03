@@ -1532,10 +1532,7 @@ onGoSchedule={() => {
             setPage("fare");
             setShowMenu(false);
           }}
-          onGoStatus={() => {
-            setPage("status");
-            setShowMenu(false);
-          }}
+
           onGoUnassigned={() => {
             setUnassignedTypeFilter("전체");
             setPage("unassigned");
@@ -1765,15 +1762,6 @@ setOpenMemo={setOpenMemo}
         {page === "fare" && (
           <MobileStandardFare onBack={() => setPage("list")} />
         )}
-
-        {page === "status" && (
-          <MobileStatusTable
-            title="배차현황"
-            orders={filteredStatusOrders}
-            onBack={() => setPage("list")}
-          />
-        )}
-
         {page === "unassigned" && (
   <MobileUnassignedList
     title="미배차 / 정보미전달"
@@ -2087,7 +2075,6 @@ function MobileSideMenu({
   onGoCreate,
   onGoFare,
   onGoSales,
-  onGoStatus,
   onGoUnassigned,
   onGoNotice,     // ✅ 추가
   onGoSchedule,
@@ -2152,7 +2139,6 @@ function MobileSideMenu({
 
 <MenuSection title="현황 / 운임표">
   <MenuItem label="표준운임표" onClick={onGoFare} />
-  <MenuItem label="배차현황" onClick={onGoStatus} />
   <MenuItem label="미배차현황" onClick={onGoUnassigned} />
   <MenuItem label="매출관리" onClick={onGoSales} />
 </MenuSection>
@@ -2270,6 +2256,21 @@ function MobileOrderList({
   const dates = Array.from(groupedByDate.keys()).sort((a, b) =>
     a.localeCompare(b)
   );
+  const statusCount = useMemo(() => {
+  let ing = 0;
+  let done = 0;
+
+  groupedByDate.forEach(list => {
+    list.forEach(o => {
+      const status = o.차량번호 ? "배차완료" : "배차중";
+
+      if (status === "배차완료") done++;
+      else ing++;
+    });
+  });
+
+  return { ing, done };
+}, [groupedByDate]);
 // 🔥 KPI 요약 (여기에 추가)
 const summary = useMemo(() => {
   let totalClaim = 0;
@@ -2454,10 +2455,43 @@ const summary = useMemo(() => {
           const list = groupedByDate.get(dateKey) || [];
           return (
             <div key={dateKey}>
-              {/* 날짜 헤더 (카드 바깥 상단) */}
-              <div className="text-sm font-bold text-gray-700 mb-2 px-1">
-                {formatDateHeader(dateKey)}
-              </div>
+            <div className="flex items-center justify-between mb-2 px-1">
+
+  {/* 날짜 */}
+  <div className="text-sm font-bold text-gray-700">
+    {formatDateHeader(dateKey)}
+  </div>
+
+  {/* 🔥 여기 → 빨간 표시 위치 */}
+  <div className="flex gap-1">
+
+    {statusTab === "전체" && (
+      <>
+        <span className="text-[11px] px-2 py-1 rounded-full bg-blue-50 text-blue-600 font-semibold">
+          배차중 {statusCount.ing}
+        </span>
+
+        <span className="text-[11px] px-2 py-1 rounded-full bg-gray-100 text-gray-600 font-semibold">
+          완료 {statusCount.done}
+        </span>
+      </>
+    )}
+
+    {statusTab === "배차중" && (
+      <span className="text-[11px] px-2 py-1 rounded-full bg-blue-50 text-blue-600 font-semibold">
+        배차중 {statusCount.ing}
+      </span>
+    )}
+
+    {statusTab === "배차완료" && (
+      <span className="text-[11px] px-2 py-1 rounded-full bg-gray-100 text-gray-600 font-semibold">
+        완료 {statusCount.done}
+      </span>
+    )}
+
+  </div>
+
+</div>
               <div className="space-y-3">
                 {list.map((o) => (
                   <div key={o.id}>
