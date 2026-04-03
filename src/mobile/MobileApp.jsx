@@ -1885,8 +1885,8 @@ const rows = data.filter(r => {
 
 const prevTotal = data
   .filter(r => 
-    r.상차일?.startsWith(prevMonth) &&
-    !(r.거래처명 || "").includes("후레쉬") // 🔥 핵심 추가
+    r.상차일?.slice(0,7) === prevMonth &&
+    !(r.거래처명 || "").includes("후레쉬물류") // 🔥 핵심 추가
   )
   .reduce((acc, r) => {
     acc.sale += toInt(r.청구운임);

@@ -1577,6 +1577,37 @@ const [stopForm, setStopForm] = React.useState({
   메모:""
 });
  const [routeInfo, setRouteInfo] = React.useState(null);
+ useEffect(() => {
+  let cancelled = false;
+
+  async function loadRoute() {
+    if (!stopForm?.상차지주소 || !stopForm?.하차지주소) {
+      setRouteInfo(null);
+      return;
+    }
+
+    const res = await fetch("/api/route", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        fromAddr: stopForm.상차지주소,
+        toAddr: stopForm.하차지주소,
+      }),
+    });
+
+    const data = await res.json();
+
+    if (!cancelled) setRouteInfo(data);
+  }
+
+  loadRoute();
+
+  return () => {
+    cancelled = true;
+  };
+}, [stopForm?.상차지주소, stopForm?.하차지주소]);
 // ===== 복사패널 자동완성 =====
 const [clientOptions, setClientOptions] = React.useState([]);
 const [clientIndex, setClientIndex] = React.useState(0);

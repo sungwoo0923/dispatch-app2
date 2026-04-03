@@ -52,10 +52,20 @@ export default async function handler(req, res) {
     const routeJson = await routeRes.json();
     const summary = routeJson.routes[0].summary;
 
-    return res.status(200).json({
-      distanceKm: (summary.distance / 1000).toFixed(1),
-      durationMin: Math.round(summary.duration / 60),
-    });
+const routeData = routeJson.routes[0];
+
+const summary = routeData.summary;
+
+// ⭐ 핵심 추가
+const path = routeData.sections[0].roads.flatMap(r => r.vertexes);
+
+return res.status(200).json({
+  distanceKm: (summary.distance / 1000).toFixed(1),
+  durationMin: Math.round(summary.duration / 60),
+
+  // ⭐ 이거 추가
+  path,
+});
   } catch (e) {
     return res.status(500).json({ error: e.message });
   }
