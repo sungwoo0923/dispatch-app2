@@ -2401,21 +2401,16 @@ async function waitMapDiv() {
 }
 
 React.useEffect(() => {
-
   if (!confirmOpen || !form?.상차지주소 || !form?.하차지주소) return;
 
   const renderTmap = async () => {
-
     try {
-
       console.log("📍 지도 렌더 시작");
 
       const mapDiv = await waitMapDiv();
       if (!mapDiv) return;
 
-      // ⭐ 주소 → 좌표 변환
       const getCoords = async (addr) => {
-
         if (!addr || !addr.trim()) return null;
 
         try {
@@ -2428,8 +2423,8 @@ React.useEffect(() => {
             method: "GET",
             headers: {
               Accept: "application/json",
-              appKey: "rmzwkLwH9N4i9ayxDj9GR6l8hyFDaEk52ZQs4yer"
-            }
+              appKey: "rmzwkLwH9N4i9ayxDj9GR6l8hyFDaEk52ZQs4yer",
+            },
           });
 
           const data = await res.json();
@@ -2439,9 +2434,8 @@ React.useEffect(() => {
 
           return {
             lat: parseFloat(coord.lat),
-            lon: parseFloat(coord.lon)
+            lon: parseFloat(coord.lon),
           };
-
         } catch (e) {
           console.error("좌표 API 에러:", e);
           return null;
@@ -2462,65 +2456,61 @@ React.useEffect(() => {
         center: new window.Tmapv2.LatLng(start.lat, start.lon),
         width: "100%",
         height: "100%",
-        zoom: 11
+        zoom: 11,
       });
 
       const startLatLng = new window.Tmapv2.LatLng(start.lat, start.lon);
       const endLatLng = new window.Tmapv2.LatLng(end.lat, end.lon);
 
-      // =========================
-      // ⭐ 출발 / 도착 마커 + 라벨
-      // =========================
-
       new window.Tmapv2.Marker({
         position: startLatLng,
         map,
         icon: "https://tmapapi.tmapmobility.com/upload/tmap/marker/pin_b_m_s.png",
-        iconSize: new window.Tmapv2.Size(24, 38)
+        iconSize: new window.Tmapv2.Size(24, 38),
       });
 
       new window.Tmapv2.Label({
         position: startLatLng,
         map,
         text: "<div style='background:#3b82f6;color:#fff;padding:4px 8px;border-radius:6px;font-size:12px;'>출발</div>",
-        offset: new window.Tmapv2.Point(-25, -50)
+        offset: new window.Tmapv2.Point(-25, -50),
       });
 
       new window.Tmapv2.Marker({
         position: endLatLng,
         map,
         icon: "https://tmapapi.tmapmobility.com/upload/tmap/marker/pin_r_m_e.png",
-        iconSize: new window.Tmapv2.Size(24, 38)
+        iconSize: new window.Tmapv2.Size(24, 38),
       });
 
       new window.Tmapv2.Label({
         position: endLatLng,
         map,
         text: "<div style='background:#ef4444;color:#fff;padding:4px 8px;border-radius:6px;font-size:12px;'>도착</div>",
-        offset: new window.Tmapv2.Point(-25, -50)
+        offset: new window.Tmapv2.Point(-25, -50),
       });
-
-      // =========================
-      // ⭐🔥 도로 경로 (핵심)
-      // =========================
-
-      const API_BASE = import.meta.env.VITE_API_BASE || "";
 
       const routeRes = await fetch(`${API_BASE}/api/route`, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           fromAddr: form.상차지주소,
-          toAddr: form.하차지주소
-        })
+          toAddr: form.하차지주소,
+        }),
       });
+
+      if (!routeRes.ok) {
+        const errText = await routeRes.text();
+        throw new Error(`route api 실패: ${routeRes.status} ${errText}`);
+      }
 
       const routeData = await routeRes.json();
 
-      if (!routeData?.path) {
+      if (!routeData?.path?.length) {
         console.warn("경로 없음");
+        setRouteInfo(null);
         return;
       }
 
@@ -2532,31 +2522,28 @@ React.useEffect(() => {
         path: linePath,
         strokeColor: "#2563eb",
         strokeWeight: 5,
-        map
+        map,
       });
 
-      // ⭐ 거리 / 시간
       setRouteInfo({
-        distance: routeData.distanceKm,
-        time: routeData.durationMin
+        distanceKm: Number(routeData.distanceKm || 0),
+        durationMin: Number(routeData.durationMin || 0),
       });
 
-      // ⭐ 화면 맞춤
       const bounds = new window.Tmapv2.LatLngBounds();
-      linePath.forEach(p => bounds.extend(p));
+      linePath.forEach((p) => bounds.extend(p));
       map.fitBounds(bounds);
 
       console.log("✅ 지도 + 경로 완료");
-
     } catch (err) {
       console.error("경로 지도 실패:", err);
+      setRouteInfo(null);
     }
-
   };
 
   setTimeout(renderTmap, 200);
-
 }, [confirmOpen, form?.상차지주소, form?.하차지주소]);
+
 // ===============================
 // 💡 주소/조건 기반 자동 운임 가이드
 // ===============================
@@ -6673,23 +6660,23 @@ const today = now.toISOString().slice(0, 10);
     <div className="flex justify-between items-center gap-6">
       <span className="text-gray-500 font-medium">총 거리</span>
       <b className="text-gray-900 text-base">
-        {routeInfo ? (routeInfo.distance / 1000).toFixed(1) + " km" : "계산 중..."}
+        {routeInfo ? routeInfo.distanceKm.toFixed(1) + " km" : "계산 중..."}
       </b>
     </div>
 
     <div className="flex justify-between items-center gap-6">
       <span className="text-gray-500 font-medium">예상 시간</span>
       <b className="text-gray-900 text-base">
-        {routeInfo ? Math.round(routeInfo.time / 60) + "분" : "계산 중..."}
+       {routeInfo ? routeInfo.durationMin + "분" : "계산 중..."}
       </b>
     </div>
 
     <div className="pt-2 border-t border-gray-100 flex justify-between items-center gap-6 text-blue-600">
       <span className="font-bold">예상 운임</span>
       <b className="text-lg">
-        {routeInfo 
-          ? Math.round((routeInfo.distance / 1000) * 1200).toLocaleString() + "원" 
-          : "-"}
+        {routeInfo
+  ? Math.round(routeInfo.distanceKm * 1200).toLocaleString() + "원"
+  : "-"}
       </b>
     </div>
   </div>
@@ -6721,7 +6708,7 @@ const today = now.toISOString().slice(0, 10);
     <div className="flex justify-between items-center text-[15px] mb-2">
       <span className="text-gray-500">소요시간 (예상)</span>
       <span className="font-semibold text-gray-700">
-        {routeInfo ? Math.round(routeInfo.time / 60) + "분" : "-"}
+        {routeInfo ? routeInfo.durationMin + "분" : "-"}
       </span>
     </div>
 
@@ -6729,7 +6716,7 @@ const today = now.toISOString().slice(0, 10);
     <div className="flex justify-between items-center text-[15px] mb-6">
       <span className="text-gray-500">총거리 (예상)</span>
       <span className="font-semibold text-gray-700">
-        {routeInfo ? (routeInfo.distance / 1000).toFixed(0) + "km" : "-"}
+       {routeInfo ? routeInfo.distanceKm.toFixed(1) + "km" : "-"}
       </span>
     </div>
 
