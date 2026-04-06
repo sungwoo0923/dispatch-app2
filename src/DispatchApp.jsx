@@ -158,7 +158,7 @@ function makeDispatchHistory({ userEmail, field, before, after }) {
     before,
     after,
   };
-}
+}``
 /* -------------------------------------------------
    🔕 수정이력 제외 필드 (전역 공통)  ⭐⭐⭐ 여기!!!
 --------------------------------------------------*/
@@ -2413,62 +2413,48 @@ React.useEffect(() => {
       const mapDiv = await waitMapDiv();
       if (!mapDiv) return;
 
-      // ⭐ 주소 → 좌표 변환 (Tmap REST API)
-const getCoords = async (addr) => {
+      // ⭐ 주소 → 좌표 변환
+      const getCoords = async (addr) => {
 
-  if (!addr || !addr.trim()) {
-    console.warn("❌ 주소 없음:", addr);
-    return null;
-  }
+        if (!addr || !addr.trim()) return null;
 
-  try {
-    const url =
-      "https://apis.openapi.sk.com/tmap/geo/fullAddrGeo" +
-      "?version=1" +
-      "&format=json" +
-      "&fullAddr=" +
-      encodeURIComponent(addr);
+        try {
+          const url =
+            "https://apis.openapi.sk.com/tmap/geo/fullAddrGeo" +
+            "?version=1&format=json&fullAddr=" +
+            encodeURIComponent(addr);
 
-    const res = await fetch(url, {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-            appKey: "rmzwkLwH9N4i9ayxDj9GR6l8hyFDaEk52ZQs4yer"
-          }
-        });
+          const res = await fetch(url, {
+            method: "GET",
+            headers: {
+              Accept: "application/json",
+              appKey: "rmzwkLwH9N4i9ayxDj9GR6l8hyFDaEk52ZQs4yer"
+            }
+          });
 
-         const data = await res.json();
+          const data = await res.json();
+          const coord = data?.coordinateInfo?.coordinate?.[0];
 
-    console.log("📍 좌표 응답:", addr, data);
+          if (!coord) return null;
 
-    const coord = data?.coordinateInfo?.coordinate?.[0];
+          return {
+            lat: parseFloat(coord.lat),
+            lon: parseFloat(coord.lon)
+          };
 
-    if (!coord) {
-      console.warn("❌ 좌표 변환 실패:", addr);
-      return null;
-    }
+        } catch (e) {
+          console.error("좌표 API 에러:", e);
+          return null;
+        }
+      };
 
-    return {
-      lat: parseFloat(coord.lat),
-      lon: parseFloat(coord.lon)
-    };
-
-  } catch (e) {
-    console.error("❌ 좌표 API 에러:", addr, e);
-    return null;
-  }
-};
-
-const start = await getCoords(form.상차지주소);
-const end = await getCoords(form.하차지주소);
+      const start = await getCoords(form.상차지주소);
+      const end = await getCoords(form.하차지주소);
 
       if (!start || !end) {
-  console.warn("❌ 지도 좌표 생성 실패 → routeInfo 초기화");
-
-  setRouteInfo(null);   // ⭐ NaN 방지
-
-  return;
-}
+        setRouteInfo(null);
+        return;
+      }
 
       mapDiv.innerHTML = "";
 
@@ -2482,64 +2468,88 @@ const end = await getCoords(form.하차지주소);
       const startLatLng = new window.Tmapv2.LatLng(start.lat, start.lon);
       const endLatLng = new window.Tmapv2.LatLng(end.lat, end.lon);
 
-      // ⭐ 마커
+      // =========================
+      // ⭐ 출발 / 도착 마커 + 라벨
+      // =========================
+
       new window.Tmapv2.Marker({
         position: startLatLng,
-        map
+        map,
+        icon: "https://tmapapi.tmapmobility.com/upload/tmap/marker/pin_b_m_s.png",
+        iconSize: new window.Tmapv2.Size(24, 38)
+      });
+
+      new window.Tmapv2.Label({
+        position: startLatLng,
+        map,
+        text: "<div style='background:#3b82f6;color:#fff;padding:4px 8px;border-radius:6px;font-size:12px;'>출발</div>",
+        offset: new window.Tmapv2.Point(-25, -50)
       });
 
       new window.Tmapv2.Marker({
         position: endLatLng,
-        map
+        map,
+        icon: "https://tmapapi.tmapmobility.com/upload/tmap/marker/pin_r_m_e.png",
+        iconSize: new window.Tmapv2.Size(24, 38)
       });
 
-      // ⭐ 직선 경로
+      new window.Tmapv2.Label({
+        position: endLatLng,
+        map,
+        text: "<div style='background:#ef4444;color:#fff;padding:4px 8px;border-radius:6px;font-size:12px;'>도착</div>",
+        offset: new window.Tmapv2.Point(-25, -50)
+      });
+
+      // =========================
+      // ⭐🔥 도로 경로 (핵심)
+      // =========================
+
+      const API_BASE = import.meta.env.VITE_API_BASE || "";
+
+      const routeRes = await fetch(`${API_BASE}/api/route`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          fromAddr: form.상차지주소,
+          toAddr: form.하차지주소
+        })
+      });
+
+      const routeData = await routeRes.json();
+
+      if (!routeData?.path) {
+        console.warn("경로 없음");
+        return;
+      }
+
+      const linePath = routeData.path.map(
+        ([lng, lat]) => new window.Tmapv2.LatLng(lat, lng)
+      );
+
       new window.Tmapv2.Polyline({
-        path: [startLatLng, endLatLng],
+        path: linePath,
         strokeColor: "#2563eb",
         strokeWeight: 5,
         map
       });
 
-      // ⭐ 거리 계산 (Haversine)
-      const R = 6371;
-      const dLat = (end.lat - start.lat) * Math.PI / 180;
-      const dLon = (end.lon - start.lon) * Math.PI / 180;
-
-      const a =
-        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-        Math.cos(start.lat * Math.PI / 180) *
-        Math.cos(end.lat * Math.PI / 180) *
-        Math.sin(dLon / 2) * Math.sin(dLon / 2);
-
-      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-      const km = R * c;
-
-setRouteInfo({
-  distance: km * 1000,   // ⭐ meter로 통일
-  time
-});
-
-      // ⭐ 시간 계산 (평균 60km/h)
-      const time = Math.round(km * 1.2); // 평균 50km/h 기준
-
+      // ⭐ 거리 / 시간
       setRouteInfo({
-        distance: km,
-        time
+        distance: routeData.distanceKm,
+        time: routeData.durationMin
       });
 
+      // ⭐ 화면 맞춤
       const bounds = new window.Tmapv2.LatLngBounds();
-      bounds.extend(startLatLng);
-      bounds.extend(endLatLng);
+      linePath.forEach(p => bounds.extend(p));
       map.fitBounds(bounds);
 
-      console.log("✨ 지도 표시 완료");
+      console.log("✅ 지도 + 경로 완료");
 
     } catch (err) {
-
-      console.error("❌ 경로 지도 실패:", err);
-
+      console.error("경로 지도 실패:", err);
     }
 
   };
@@ -23616,19 +23626,23 @@ function DriverManagement({ drivers = [], upsertDriver, removeDriver }) {
 };
 
   // ===================== 신규 추가 =====================
-  const addNew = async () => {
-    const 차량번호 = (newForm.차량번호 || "").replace(/\s+/g, "");
-    if (!차량번호) return alert("차량번호는 필수입니다.");
-    await upsertDriver({
-  id: crypto.randomUUID(), // ✅ 여기
-  차량번호,
-  이름: newForm.이름,
- 전화번호: rawPhone,
-  메모: newForm.메모,
-});
-    setNewForm({ 차량번호: "", 이름: "", 전화번호: "", 메모: "" });
-    alert("등록 완료");
-  };
+ const addNew = async () => {
+  const 차량번호 = (newForm.차량번호 || "").replace(/\s+/g, "");
+  if (!차량번호) return alert("차량번호는 필수입니다.");
+
+  const rawPhone = (newForm.전화번호 || "").replace(/\D/g, "");
+
+  await upsertDriver({
+    id: crypto.randomUUID(),
+    차량번호,
+    이름: newForm.이름,
+    전화번호: rawPhone,
+    메모: newForm.메모,
+  });
+
+  setNewForm({ 차량번호: "", 이름: "", 전화번호: "", 메모: "" });
+  alert("등록 완료");
+};
 
   // ===================== 선택 삭제 =====================
   const removeSelected = async () => {
