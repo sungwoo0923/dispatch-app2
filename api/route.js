@@ -4,7 +4,6 @@
 function cleanAddress(addr = "") {
   return String(addr)
     .replace(/\(.*?\)/g, "")
-    .replace(/[^가-힣0-9\s-]/g, "")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -22,6 +21,40 @@ const handler = async (req, res) => {
     }
 
     const TMAP_KEY = "rmzwkLwH9N4i9ayxDj9GR6l8hyFDaEk52ZQs4yer";
+
+    // =========================
+    // 🔥 0️⃣ 도로명 → 지번 변환 (핵심)
+    // =========================
+    const convertToJibun = async (addr) => {
+      try {
+        const res = await fetch(
+          "https://apis.openapi.sk.com/tmap/geo/convertAddress?version=1&format=json",
+          {
+            method: "POST",
+            headers: {
+              appKey: TMAP_KEY,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              address: addr,
+              coordType: "WGS84GEO",
+            }),
+          }
+        );
+
+        if (!res.ok) return addr;
+
+        const data = await res.json();
+
+        const jibun =
+          data?.addressInfo?.fullAddress ||
+          data?.addressInfo?.buildingName;
+
+        return jibun || addr;
+      } catch {
+        return addr;
+      }
+    };
 
     // =========================
     // 1️⃣ 주소 → 좌표
@@ -51,22 +84,33 @@ const handler = async (req, res) => {
     };
 
     // =========================
-    // 1-1️⃣ fallback 주소 보정
+    // 🔥 1-1️⃣ 강화된 fallback
     // =========================
     const tryGeocode = async (addr) => {
-      let result = await geocode(addr);
+  // 🔥 1️⃣ 원본
+  let result = await geocode(addr);
 
-      if (!result) {
-        const parts = addr.split(" ");
-        if (parts.length > 2) {
-          const short = parts.slice(0, -1).join(" ");
-          result = await geocode(short);
-        }
-      }
+  // 🔥 2️⃣ 지번 변환 (항상 같이 시도)
+  const jibun = await convertToJibun(addr);
+  const jibunResult = await geocode(jibun);
 
-      return result;
-    };
+  // 👉 더 안정적인 좌표 선택
+  if (jibunResult) return jibunResult;
+  if (result) return result;
 
+  // 🔥 3️⃣ 주소 축소
+  const parts = addr.split(" ");
+  for (let i = parts.length - 1; i >= 2; i--) {
+    const short = parts.slice(0, i).join(" ");
+    result = await geocode(short);
+    if (result) return result;
+  }
+
+  return null;
+};
+    // =========================
+    // 🔥 실제 적용
+    // =========================
     const from = await tryGeocode(cleanAddress(fromAddr));
     const to = await tryGeocode(cleanAddress(toAddr));
 
@@ -80,86 +124,89 @@ const handler = async (req, res) => {
     }
 
     // =========================
-    // 2️⃣ 🔥 경로 재탐색 함수 (핵심)
+    // 🔥 경로 시도 함수
     // =========================
-    // =========================
-// 🔥 경로 시도 함수 (추가)
-// =========================
-const tryRoute = async (startX, startY, endX, endY) => {
-  try {
-    const routeRes = await fetch(
-      "https://apis.openapi.sk.com/tmap/routes?version=1&format=json",
-      {
-        method: "POST",
-        headers: {
-          appKey: TMAP_KEY,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          startX,
-          startY,
-          endX,
-          endY,
-          reqCoordType: "WGS84GEO",
-          resCoordType: "WGS84GEO",
-        }),
+    const tryRoute = async (startX, startY, endX, endY) => {
+      try {
+        const routeRes = await fetch(
+          "https://apis.openapi.sk.com/tmap/routes?version=1&format=json",
+          {
+            method: "POST",
+            headers: {
+              appKey: TMAP_KEY,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              startX,
+              startY,
+              endX,
+              endY,
+              reqCoordType: "WGS84GEO",
+              resCoordType: "WGS84GEO",
+            }),
+          }
+        );
+
+        if (!routeRes.ok) return null;
+
+        const json = await routeRes.json();
+        const features = json?.features;
+
+        return features && features.length ? features : null;
+      } catch {
+        return null;
       }
-    );
+    };
 
-    if (!routeRes.ok) return null;
+    // =========================
+    // 🔥 경로 재시도 (도로 스냅 효과)
+    // =========================
+    const getRoute = async (start, end) => {
+      const offsets = [
+        [0, 0],
+        [0.0005, 0],
+        [-0.0005, 0],
+        [0, 0.0005],
+        [0, -0.0005],
+        [0.001, 0],
+        [0, 0.001],
+      ];
 
-    const json = await routeRes.json();
-    const features = json?.features;
+      // 출발 이동
+      for (const [dx, dy] of offsets) {
+        const res = await tryRoute(
+          start.lon + dx,
+          start.lat + dy,
+          end.lon,
+          end.lat
+        );
+        if (res) return res;
+      }
 
-    if (features && features.length) {
-      return features;
-    }
+      // 도착 이동
+      for (const [dx, dy] of offsets) {
+        const res = await tryRoute(
+          start.lon,
+          start.lat,
+          end.lon + dx,
+          end.lat + dy
+        );
+        if (res) return res;
+      }
 
-    return null;
-  } catch {
-    return null;
-  }
-};
+      // 둘 다 이동
+      for (const [dx, dy] of offsets) {
+        const res = await tryRoute(
+          start.lon + dx,
+          start.lat + dy,
+          end.lon + dx,
+          end.lat + dy
+        );
+        if (res) return res;
+      }
 
-// =========================
-// 🔥 핵심 개선된 getRoute
-// =========================
-const getRoute = async (start, end) => {
-  const offsets = [
-    [0, 0],
-    [0.0005, 0],
-    [-0.0005, 0],
-    [0, 0.0005],
-    [0, -0.0005],
-    [0.001, 0],
-    [0, 0.001],
-  ];
-
-  // 1️⃣ 출발만 이동
-  for (const [dx, dy] of offsets) {
-    const res = await tryRoute(start.lon + dx, start.lat + dy, end.lon, end.lat);
-    if (res) return res;
-  }
-
-  // 2️⃣ 도착만 이동
-  for (const [dx, dy] of offsets) {
-    const res = await tryRoute(start.lon, start.lat, end.lon + dx, end.lat + dy);
-    if (res) return res;
-  }
-
-  // 3️⃣ 둘 다 이동
-  for (const [dx, dy] of offsets) {
-    const res = await tryRoute(
-      start.lon + dx,
-      start.lat + dy,
-      end.lon + dx,
-      end.lat + dy
-    );
-    if (res) return res;
-  }
-
-  return null;
-};
+      return null;
+    };
 
     const features = await getRoute(from, to);
 
@@ -173,7 +220,7 @@ const getRoute = async (start, end) => {
     }
 
     // =========================
-    // 3️⃣ 경로 좌표 추출
+    // 경로 좌표
     // =========================
     const path = [];
 
@@ -186,7 +233,7 @@ const getRoute = async (start, end) => {
     });
 
     // =========================
-    // 4️⃣ 거리 / 시간
+    // 거리 / 시간
     // =========================
     const summaryFeature =
       features.find((f) => f.properties?.totalDistance) ||
@@ -202,9 +249,6 @@ const getRoute = async (start, end) => {
       ? Math.round(summary.totalTime / 60)
       : 0;
 
-    // =========================
-    // 5️⃣ 응답
-    // =========================
     return res.status(200).json({
       distanceKm,
       durationMin,
