@@ -2537,9 +2537,9 @@ React.useEffect(() => {
 
       // ⭐ 거리 / 시간
       setRouteInfo({
-        distance: routeData.distanceKm,
-        time: routeData.durationMin
-      });
+  distanceKm: Number(routeData.distanceKm),
+  durationMin: Number(routeData.durationMin)
+});
 
       // ⭐ 화면 맞춤
       const bounds = new window.Tmapv2.LatLngBounds();
@@ -2981,8 +2981,6 @@ function swapPickupDrop() {
   setAutoPickMatched(false);
   setAutoDropMatched(false);
 }
-
-
     // ✅ 주소 자동매칭 뱃지
     const [autoPickMatched, setAutoPickMatched] = React.useState(false);
     const [autoDropMatched, setAutoDropMatched] = React.useState(false);
@@ -6665,34 +6663,41 @@ const today = now.toISOString().slice(0, 10);
     }}
   />
 
-  {/* 지도 위 경로 정보 (z-index 추가하여 지도 위로 띄움) */}
-  <div 
-    className="absolute bottom-6 left-6 bg-white/95 backdrop-blur px-5 py-4 rounded-xl shadow-2xl text-sm space-y-2 border border-gray-200"
-    style={{ zIndex: 1001 }}
-  >
-    <div className="flex justify-between items-center gap-6">
-      <span className="text-gray-500 font-medium">총 거리</span>
-      <b className="text-gray-900 text-base">
-        {routeInfo ? (routeInfo.distance / 1000).toFixed(1) + " km" : "계산 중..."}
-      </b>
-    </div>
-
-    <div className="flex justify-between items-center gap-6">
-      <span className="text-gray-500 font-medium">예상 시간</span>
-      <b className="text-gray-900 text-base">
-        {routeInfo ? Math.round(routeInfo.time / 60) + "분" : "계산 중..."}
-      </b>
-    </div>
-
-    <div className="pt-2 border-t border-gray-100 flex justify-between items-center gap-6 text-blue-600">
-      <span className="font-bold">예상 운임</span>
-      <b className="text-lg">
-        {routeInfo 
-          ? Math.round((routeInfo.distance / 1000) * 1200).toLocaleString() + "원" 
-          : "-"}
-      </b>
-    </div>
+ {/* 지도 위 경로 정보 */}
+<div 
+  className="absolute bottom-6 left-6 bg-white/95 backdrop-blur px-5 py-4 rounded-xl shadow-2xl text-sm space-y-2 border border-gray-200"
+  style={{ zIndex: 1001 }}
+>
+  {/* 총 거리 */}
+  <div className="flex justify-between items-center gap-6">
+    <span className="text-gray-500 font-medium">총 거리</span>
+    <b className="text-gray-900 text-base">
+      {routeInfo 
+        ? `${routeInfo.distanceKm.toFixed(1)} km`
+        : "계산 중..."}
+    </b>
   </div>
+
+  {/* 예상 시간 */}
+  <div className="flex justify-between items-center gap-6">
+    <span className="text-gray-500 font-medium">예상 시간</span>
+    <b className="text-gray-900 text-base">
+      {routeInfo 
+        ? `${routeInfo.durationMin}분`
+        : "계산 중..."}
+    </b>
+  </div>
+
+  {/* 예상 운임 */}
+  <div className="pt-2 border-t border-gray-100 flex justify-between items-center gap-6 text-blue-600">
+    <span className="font-bold">예상 운임</span>
+    <b className="text-lg">
+      {routeInfo 
+        ? Math.round(routeInfo.distanceKm * 1200).toLocaleString() + "원"
+        : "-"}
+    </b>
+  </div>
+</div>
 </div>
 {/* ⭐ 지도 영역 닫기 */}
 
