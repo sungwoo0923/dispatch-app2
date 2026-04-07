@@ -1686,9 +1686,16 @@ setFareStats({
       }),
     });
 
-    const data = await res.json();
+const data = await res.json();
 
-    if (!cancelled) setRouteInfo(data);
+// 🔥 추가 (핵심)
+if (!data || !data.path || data.path.length === 0) {
+  console.warn("❌ 경로 없음:", data?.error);
+  setRouteInfo(null);
+  return;
+}
+
+if (!cancelled) setRouteInfo(data);
   }
 
   loadRoute();

@@ -1,5 +1,11 @@
 // route.js
-
+function cleanAddress(addr = "") {
+  return String(addr)
+    .replace(/\(.*?\)/g, "")        // 괄호 제거
+    .replace(/[^가-힣0-9\s-]/g, "") // 특수문자 제거
+    .replace(/\s+/g, " ")
+    .trim();
+}
 const handler = async (req, res) => {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method Not Allowed" });
@@ -35,16 +41,29 @@ const handler = async (req, res) => {
       const j = await r.json();
       const coord = j?.coordinateInfo?.coordinate?.[0];
 
-      if (!coord) throw new Error("주소 인식 실패");
+if (!coord) {
+  console.warn("⚠️ 주소 변환 실패:", addr);
+  return null; // 🔥 핵심
+}
 
-      return {
-        lat: parseFloat(coord.lat),
-        lon: parseFloat(coord.lon),
-      };
+return {
+  lat: parseFloat(coord.lat),
+  lon: parseFloat(coord.lon),
+};
     };
 
-    const from = await geocode(fromAddr);
-    const to = await geocode(toAddr);
+const from = await geocode(cleanAddress(fromAddr));
+const to = await geocode(cleanAddress(toAddr));
+
+// 🔥 추가 (핵심)
+if (!from || !to) {
+  return res.status(200).json({
+    distanceKm: "0.0",
+    durationMin: 0,
+    path: [],
+    error: "GEOCODE_FAIL",
+  });
+}
 
     // =========================
     // 2️⃣ 길찾기 API
@@ -95,13 +114,9 @@ const handler = async (req, res) => {
     // =========================
     // 4️⃣ 거리 / 시간 (🔥 핵심 수정)
     // =========================
-    const summaryFeature = features.find(
-      (f) => f.properties?.totalDistance
-    );
-
-    if (!summaryFeature) {
-      throw new Error("거리 계산 실패");
-    }
+const summaryFeature =
+  features.find((f) => f.properties?.totalDistance) ||
+  features[0]; // 🔥 fallback
 
     const summary = summaryFeature.properties;
 
