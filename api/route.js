@@ -51,9 +51,25 @@ return {
   lon: parseFloat(coord.lon),
 };
     };
+const tryGeocode = async (addr) => {
+  let result = await geocode(addr);
 
-const from = await geocode(cleanAddress(fromAddr));
-const to = await geocode(cleanAddress(toAddr));
+  if (!result) {
+    console.warn("1차 실패 → fallback 시도:", addr);
+
+    const parts = addr.split(" ");
+
+    // 🔥 최소 2단어 이상일 때만 fallback
+    if (parts.length > 2) {
+      const short = parts.slice(0, -1).join(" ");
+      result = await geocode(short);
+    }
+  }
+
+  return result;
+};
+const from = await tryGeocode(cleanAddress(fromAddr));
+const to = await tryGeocode(cleanAddress(toAddr));
 
 // 🔥 추가 (핵심)
 if (!from || !to) {
@@ -93,10 +109,19 @@ if (!from || !to) {
 
     const routeJson = await routeRes.json();
 
-    const features = routeJson?.features;
-    if (!features || !features.length) {
-      throw new Error("경로 없음");
-    }
+const features = routeJson?.features;
+
+// 🔥 핵심 수정
+if (!features || !features.length) {
+  console.warn("❌ 경로 없음", routeJson);
+
+  return res.status(200).json({
+    distanceKm: "0.0",
+    durationMin: 0,
+    path: [],
+    error: "ROUTE_FAIL",
+  });
+}
 
     // =========================
     // 3️⃣ 경로 좌표 추출
@@ -118,7 +143,7 @@ const summaryFeature =
   features.find((f) => f.properties?.totalDistance) ||
   features[0]; // 🔥 fallback
 
-    const summary = summaryFeature.properties;
+    const summary = summaryFeature?.properties || {};
 
     const distanceKm = summary.totalDistance
       ? (summary.totalDistance / 1000).toFixed(1)
