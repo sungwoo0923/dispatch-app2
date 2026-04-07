@@ -1,11 +1,14 @@
-// route.js
+// =========================
+// 주소 정리
+// =========================
 function cleanAddress(addr = "") {
   return String(addr)
-    .replace(/\(.*?\)/g, "")        // 괄호 제거
-    .replace(/[^가-힣0-9\s-]/g, "") // 특수문자 제거
+    .replace(/\(.*?\)/g, "")
+    .replace(/[^가-힣0-9\s-]/g, "")
     .replace(/\s+/g, " ")
     .trim();
 }
+
 const handler = async (req, res) => {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method Not Allowed" });
@@ -21,7 +24,7 @@ const handler = async (req, res) => {
     const TMAP_KEY = "rmzwkLwH9N4i9ayxDj9GR6l8hyFDaEk52ZQs4yer";
 
     // =========================
-    // 1️⃣ 주소 → 좌표 변환
+    // 1️⃣ 주소 → 좌표
     // =========================
     const geocode = async (addr) => {
       const url =
@@ -31,97 +34,114 @@ const handler = async (req, res) => {
 
       const r = await fetch(url, {
         method: "GET",
-        headers: {
-          appKey: TMAP_KEY,
-        },
+        headers: { appKey: TMAP_KEY },
       });
 
-      if (!r.ok) throw new Error("좌표 API 실패");
+      if (!r.ok) return null;
 
       const j = await r.json();
       const coord = j?.coordinateInfo?.coordinate?.[0];
 
-if (!coord) {
-  console.warn("⚠️ 주소 변환 실패:", addr);
-  return null; // 🔥 핵심
-}
+      if (!coord) return null;
 
-return {
-  lat: parseFloat(coord.lat),
-  lon: parseFloat(coord.lon),
-};
+      return {
+        lat: parseFloat(coord.lat),
+        lon: parseFloat(coord.lon),
+      };
     };
-const tryGeocode = async (addr) => {
-  let result = await geocode(addr);
-
-  if (!result) {
-    console.warn("1차 실패 → fallback 시도:", addr);
-
-    const parts = addr.split(" ");
-
-    // 🔥 최소 2단어 이상일 때만 fallback
-    if (parts.length > 2) {
-      const short = parts.slice(0, -1).join(" ");
-      result = await geocode(short);
-    }
-  }
-
-  return result;
-};
-const from = await tryGeocode(cleanAddress(fromAddr));
-const to = await tryGeocode(cleanAddress(toAddr));
-
-// 🔥 추가 (핵심)
-if (!from || !to) {
-  return res.status(200).json({
-    distanceKm: "0.0",
-    durationMin: 0,
-    path: [],
-    error: "GEOCODE_FAIL",
-  });
-}
 
     // =========================
-    // 2️⃣ 길찾기 API
+    // 1-1️⃣ fallback 주소 보정
     // =========================
-    const routeRes = await fetch(
-      "https://apis.openapi.sk.com/tmap/routes?version=1&format=json",
-      {
-        method: "POST",
-        headers: {
-          appKey: TMAP_KEY,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          startX: from.lon,
-          startY: from.lat,
-          endX: to.lon,
-          endY: to.lat,
-          reqCoordType: "WGS84GEO",
-          resCoordType: "WGS84GEO",
-        }),
+    const tryGeocode = async (addr) => {
+      let result = await geocode(addr);
+
+      if (!result) {
+        const parts = addr.split(" ");
+        if (parts.length > 2) {
+          const short = parts.slice(0, -1).join(" ");
+          result = await geocode(short);
+        }
       }
-    );
 
-    if (!routeRes.ok) {
-      throw new Error("Tmap 길찾기 API 실패");
+      return result;
+    };
+
+    const from = await tryGeocode(cleanAddress(fromAddr));
+    const to = await tryGeocode(cleanAddress(toAddr));
+
+    if (!from || !to) {
+      return res.status(200).json({
+        distanceKm: "0.0",
+        durationMin: 0,
+        path: [],
+        error: "GEOCODE_FAIL",
+      });
     }
 
-    const routeJson = await routeRes.json();
+    // =========================
+    // 2️⃣ 🔥 경로 재탐색 함수 (핵심)
+    // =========================
+    const getRoute = async (start, end) => {
+      const offsets = [
+        [0, 0],
+        [0.0005, 0],
+        [-0.0005, 0],
+        [0, 0.0005],
+        [0, -0.0005],
+        [0.001, 0],
+        [0, 0.001],
+      ];
 
-const features = routeJson?.features;
+      for (let i = 0; i < offsets.length; i++) {
+        const [dx, dy] = offsets[i];
 
-// 🔥 핵심 수정
-if (!features || !features.length) {
-  console.warn("❌ 경로 없음", routeJson);
+        try {
+          const routeRes = await fetch(
+            "https://apis.openapi.sk.com/tmap/routes?version=1&format=json",
+            {
+              method: "POST",
+              headers: {
+                appKey: TMAP_KEY,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                startX: start.lon + dx,
+                startY: start.lat + dy,
+                endX: end.lon + dx,
+                endY: end.lat + dy,
+                reqCoordType: "WGS84GEO",
+                resCoordType: "WGS84GEO",
+              }),
+            }
+          );
 
-  return res.status(200).json({
-    distanceKm: "0.0",
-    durationMin: 0,
-    path: [],
-    error: "ROUTE_FAIL",
-  });
-}
+          if (!routeRes.ok) continue;
+
+          const json = await routeRes.json();
+          const features = json?.features;
+
+          if (features && features.length) {
+            return features; // ✅ 성공
+          }
+        } catch (e) {
+          console.warn("재시도 실패:", i);
+        }
+      }
+
+      return null;
+    };
+
+    const features = await getRoute(from, to);
+
+    if (!features) {
+      return res.status(200).json({
+        distanceKm: "0.0",
+        durationMin: 0,
+        path: [],
+        error: "ROUTE_RETRY_FAIL",
+      });
+    }
 
     // =========================
     // 3️⃣ 경로 좌표 추출
@@ -137,11 +157,11 @@ if (!features || !features.length) {
     });
 
     // =========================
-    // 4️⃣ 거리 / 시간 (🔥 핵심 수정)
+    // 4️⃣ 거리 / 시간
     // =========================
-const summaryFeature =
-  features.find((f) => f.properties?.totalDistance) ||
-  features[0]; // 🔥 fallback
+    const summaryFeature =
+      features.find((f) => f.properties?.totalDistance) ||
+      features[0];
 
     const summary = summaryFeature?.properties || {};
 
@@ -165,11 +185,11 @@ const summaryFeature =
   } catch (e) {
     console.error("❌ route error:", e);
 
-    return res.status(500).json({
-      error: e.message,
+    return res.status(200).json({
       distanceKm: "0.0",
       durationMin: 0,
       path: [],
+      error: "SERVER_FAIL",
     });
   }
 };
