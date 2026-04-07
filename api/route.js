@@ -82,55 +82,84 @@ const handler = async (req, res) => {
     // =========================
     // 2️⃣ 🔥 경로 재탐색 함수 (핵심)
     // =========================
-    const getRoute = async (start, end) => {
-      const offsets = [
-        [0, 0],
-        [0.0005, 0],
-        [-0.0005, 0],
-        [0, 0.0005],
-        [0, -0.0005],
-        [0.001, 0],
-        [0, 0.001],
-      ];
-
-      for (let i = 0; i < offsets.length; i++) {
-        const [dx, dy] = offsets[i];
-
-        try {
-          const routeRes = await fetch(
-            "https://apis.openapi.sk.com/tmap/routes?version=1&format=json",
-            {
-              method: "POST",
-              headers: {
-                appKey: TMAP_KEY,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                startX: start.lon + dx,
-                startY: start.lat + dy,
-                endX: end.lon + dx,
-                endY: end.lat + dy,
-                reqCoordType: "WGS84GEO",
-                resCoordType: "WGS84GEO",
-              }),
-            }
-          );
-
-          if (!routeRes.ok) continue;
-
-          const json = await routeRes.json();
-          const features = json?.features;
-
-          if (features && features.length) {
-            return features; // ✅ 성공
-          }
-        } catch (e) {
-          console.warn("재시도 실패:", i);
-        }
+    // =========================
+// 🔥 경로 시도 함수 (추가)
+// =========================
+const tryRoute = async (startX, startY, endX, endY) => {
+  try {
+    const routeRes = await fetch(
+      "https://apis.openapi.sk.com/tmap/routes?version=1&format=json",
+      {
+        method: "POST",
+        headers: {
+          appKey: TMAP_KEY,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          startX,
+          startY,
+          endX,
+          endY,
+          reqCoordType: "WGS84GEO",
+          resCoordType: "WGS84GEO",
+        }),
       }
+    );
 
-      return null;
-    };
+    if (!routeRes.ok) return null;
+
+    const json = await routeRes.json();
+    const features = json?.features;
+
+    if (features && features.length) {
+      return features;
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+};
+
+// =========================
+// 🔥 핵심 개선된 getRoute
+// =========================
+const getRoute = async (start, end) => {
+  const offsets = [
+    [0, 0],
+    [0.0005, 0],
+    [-0.0005, 0],
+    [0, 0.0005],
+    [0, -0.0005],
+    [0.001, 0],
+    [0, 0.001],
+  ];
+
+  // 1️⃣ 출발만 이동
+  for (const [dx, dy] of offsets) {
+    const res = await tryRoute(start.lon + dx, start.lat + dy, end.lon, end.lat);
+    if (res) return res;
+  }
+
+  // 2️⃣ 도착만 이동
+  for (const [dx, dy] of offsets) {
+    const res = await tryRoute(start.lon, start.lat, end.lon + dx, end.lat + dy);
+    if (res) return res;
+  }
+
+  // 3️⃣ 둘 다 이동
+  for (const [dx, dy] of offsets) {
+    const res = await tryRoute(
+      start.lon + dx,
+      start.lat + dy,
+      end.lon + dx,
+      end.lat + dy
+    );
+    if (res) return res;
+  }
+
+  return null;
+};
 
     const features = await getRoute(from, to);
 
