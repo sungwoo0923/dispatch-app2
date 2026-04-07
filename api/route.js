@@ -9,6 +9,7 @@ function cleanAddress(addr = "") {
 }
 
 const handler = async (req, res) => {
+  console.log("🔥🔥🔥 route API 실행됨");
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method Not Allowed" });
   }
