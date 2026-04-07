@@ -2597,52 +2597,103 @@ React.useEffect(() => {
       });
 
       // =========================
-      // ⭐🔥 도로 경로 (핵심)
-      // =========================
+// ⭐🔥 도로 경로 (완성)
+// =========================
 
-      const API_BASE = import.meta.env.VITE_API_BASE || "";
+const API_BASE = import.meta.env.VITE_API_BASE || "";
 
-      const routeRes = await fetch(`${API_BASE}/api/route`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          fromAddr: form.상차지주소,
-          toAddr: form.하차지주소
-        })
-      });
+const routeRes = await fetch(`${API_BASE}/api/route`, {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json"
+  },
+  body: JSON.stringify({
+    fromAddr: form.상차지주소,
+    toAddr: form.하차지주소
+  })
+});
 
-      const routeData = await routeRes.json();
+let routeData = null;
 
-      if (!routeData?.path) {
-        console.warn("경로 없음");
-        return;
-      }
+try {
+  routeData = await routeRes.json();
+} catch (e) {
+  console.warn("❌ route JSON 파싱 실패");
 
-      const linePath = routeData.path.map(
-        ([lng, lat]) => new window.Tmapv2.LatLng(lat, lng)
-      );
+  setRouteInfo({
+    distanceKm: 0,
+    durationMin: 0
+  });
 
-      new window.Tmapv2.Polyline({
-        path: linePath,
-        strokeColor: "#2563eb",
-        strokeWeight: 5,
-        map
-      });
+  return;
+}
 
-      // ⭐ 거리 / 시간
-      setRouteInfo({
+// =========================
+// 🔥 1차 방어 (핵심)
+// =========================
+if (!routeData?.path || routeData.path.length === 0) {
+  console.warn("❌ 경로 없음:", routeData?.error);
+
+  // 👉 경로 없을 때도 정보는 표시
+  setRouteInfo({
+    distanceKm: 0,
+    durationMin: 0
+  });
+
+  // 👉 지도는 건드리지 않음 (에러 방지 핵심)
+  return;
+}
+
+// =========================
+// 🔥 path → LatLng 변환
+// =========================
+const linePath = routeData.path.map(
+  ([lng, lat]) => new window.Tmapv2.LatLng(lat, lng)
+);
+
+// =========================
+// 🔥 2차 방어 (혹시 데이터 이상)
+// =========================
+if (!linePath || linePath.length === 0) {
+  console.warn("❌ linePath 없음");
+  return;
+}
+
+// =========================
+// ⭐ 경로 그리기
+// =========================
+new window.Tmapv2.Polyline({
+  path: linePath,
+  strokeColor: "#2563eb",
+  strokeWeight: 5,
+  map
+});
+
+// =========================
+// ⭐ 거리 / 시간
+// =========================
+setRouteInfo({
   distanceKm: Number(routeData.distanceKm),
   durationMin: Number(routeData.durationMin)
 });
 
-      // ⭐ 화면 맞춤
-      const bounds = new window.Tmapv2.LatLngBounds();
-      linePath.forEach(p => bounds.extend(p));
-      map.fitBounds(bounds);
+// =========================
+// 🔥 bounds 안전 처리 (핵심)
+// =========================
+const bounds = new window.Tmapv2.LatLngBounds();
 
-      console.log("✅ 지도 + 경로 완료");
+linePath.forEach(p => {
+  if (p) bounds.extend(p);
+});
+
+// 👉 bounds 비어있으면 절대 fitBounds 하지 말 것
+if (!bounds.isEmpty()) {
+  map.fitBounds(bounds);
+} else {
+  console.warn("❌ bounds 비어있음 → fitBounds 스킵");
+}
+
+console.log("✅ 지도 + 경로 완료");
 
     } catch (err) {
       console.error("경로 지도 실패:", err);
@@ -6841,7 +6892,7 @@ const today = now.toISOString().slice(0, 10);
 
     {/* 제목 */}
     <h3 className="text-xl font-bold mb-6">
-      배차요청 확인
+      배차요청장
     </h3>
 
     {/* 결제예정금액 */}
