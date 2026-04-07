@@ -1577,6 +1577,7 @@ const [stopForm, setStopForm] = React.useState({
   메모:""
 });
  const [routeInfo, setRouteInfo] = React.useState(null);
+ const [fareStats, setFareStats] = React.useState(null);
  useEffect(() => {
   let cancelled = false;
 
@@ -1585,7 +1586,95 @@ const [stopForm, setStopForm] = React.useState({
       setRouteInfo(null);
       return;
     }
+// ============================
+// 🔥 예상운임 계산 (핵심)
+// ============================
+useEffect(() => {
+  if (!form?.상차지주소 || !form?.하차지주소) {
+    setFareStats(null);
+    return;
+  }
 
+  const fullData = Array.isArray(dispatchData) ? dispatchData : [];
+
+  // 🔹 1️⃣ 주소 기반 필터
+  let filtered = fullData.filter(r => {
+    if (!r.상차지주소 || !r.하차지주소) return false;
+
+    return (
+      isAreaMatch(form.상차지주소, r.상차지주소) &&
+      isAreaMatch(form.하차지주소, r.하차지주소)
+    );
+  });
+
+  // 🔹 2️⃣ 차량종류
+  if (form.차량종류) {
+    filtered = filtered.filter(r =>
+      normalizeVehicleGroup(r.차량종류) ===
+      normalizeVehicleGroup(form.차량종류)
+    );
+  }
+
+  // 🔹 3️⃣ 톤수
+  const curTon = extractTonNum(form.차량톤수);
+  if (curTon != null) {
+    filtered = filtered.filter(r => {
+      const t = extractTonNum(r.차량톤수);
+      return t != null && Math.abs(t - curTon) <= 0.5;
+    });
+  }
+
+  // 🔹 4️⃣ 화물내용 (있으면만)
+  if (form.화물내용) {
+    filtered = filtered.filter(r =>
+      String(r.화물내용 || "").includes(form.화물내용)
+    );
+  }
+
+  // 🔹 5️⃣ 최신순 정렬
+  filtered.sort(
+    (a, b) => new Date(b.상차일) - new Date(a.상차일)
+  );
+
+  if (filtered.length === 0) {
+    setFareStats(null);
+    return;
+  }
+
+  // 🔥 핵심: 최신 운임
+  const latest = filtered[0];
+
+// 🔹 최근 5건
+const recent5 = filtered.slice(0, 5);
+
+// 🔹 평균 계산
+const avg =
+  recent5.reduce((sum, r) => {
+    const v = Number(r.청구운임 || 0);
+    return sum + (isNaN(v) ? 0 : v);
+  }, 0) / (recent5.length || 1);
+
+// 🔹 최신
+const latestFare = Number(filtered[0].청구운임 || 0);
+
+// 🔹 반올림 (만원 단위)
+const round = (n) => Math.round(n / 10000) * 10000;
+
+setFareStats({
+  fare: round(avg),           // 👉 기본 표시값 (평균 기준)
+  avg: round(avg),
+  latest: round(latestFare),
+  count: filtered.length
+});
+
+}, [
+  form?.상차지주소,
+  form?.하차지주소,
+  form?.차량종류,
+  form?.차량톤수,
+  form?.화물내용,
+  dispatchData
+]);
     const res = await fetch("/api/route", {
       method: "POST",
       headers: {
@@ -6646,10 +6735,9 @@ const today = now.toISOString().slice(0, 10);
   >
     <div className="bg-white rounded-xl shadow-xl w-[1100px] h-[650px] flex overflow-hidden border">
 
-      {/* ================= 지도 영역 ================= */}
+     {/* ================= 지도 영역 ================= */}
 <div className="flex-1 bg-gray-200 relative" style={{ minWidth: '500px', height: '500px' }}>
   
-  {/* 실제 지도: id="route-map" 요소에 반드시 높이가 있어야 함 */}
   <div
     id="route-map"
     className="w-full h-full"
@@ -6663,41 +6751,78 @@ const today = now.toISOString().slice(0, 10);
     }}
   />
 
- {/* 지도 위 경로 정보 */}
-<div 
-  className="absolute bottom-6 left-6 bg-white/95 backdrop-blur px-5 py-4 rounded-xl shadow-2xl text-sm space-y-2 border border-gray-200"
-  style={{ zIndex: 1001 }}
->
-  {/* 총 거리 */}
-  <div className="flex justify-between items-center gap-6">
-    <span className="text-gray-500 font-medium">총 거리</span>
-    <b className="text-gray-900 text-base">
-      {routeInfo 
-        ? `${routeInfo.distanceKm.toFixed(1)} km`
-        : "계산 중..."}
-    </b>
-  </div>
+  {/* 지도 위 경로 정보 */}
+  <div 
+    className="absolute bottom-6 left-6 bg-white/95 backdrop-blur px-5 py-4 rounded-xl shadow-2xl text-sm space-y-2 border border-gray-200"
+    style={{ zIndex: 1001 }}
+  >
+    {/* 총 거리 */}
+    <div className="flex justify-between items-center gap-6">
+      <span className="text-gray-500 font-medium">총 거리</span>
+      <b className="text-gray-900 text-base">
+        {routeInfo 
+          ? `${routeInfo.distanceKm.toFixed(1)} km`
+          : "계산 중..."}
+      </b>
+    </div>
 
-  {/* 예상 시간 */}
-  <div className="flex justify-between items-center gap-6">
-    <span className="text-gray-500 font-medium">예상 시간</span>
-    <b className="text-gray-900 text-base">
-      {routeInfo 
-        ? `${routeInfo.durationMin}분`
-        : "계산 중..."}
-    </b>
-  </div>
+    {/* 예상 시간 */}
+    <div className="flex justify-between items-center gap-6">
+      <span className="text-gray-500 font-medium">예상 시간</span>
+      <b className="text-gray-900 text-base">
+        {routeInfo 
+          ? `${routeInfo.durationMin}분`
+          : "계산 중..."}
+      </b>
+    </div>
 
-  {/* 예상 운임 */}
-  <div className="pt-2 border-t border-gray-100 flex justify-between items-center gap-6 text-blue-600">
-    <span className="font-bold">예상 운임</span>
-    <b className="text-lg">
-      {routeInfo 
-        ? Math.round(routeInfo.distanceKm * 1200).toLocaleString() + "원"
-        : "-"}
-    </b>
+    {/* ================= 🔥 예상 운임 ================= */}
+    <div className="pt-2 border-t border-gray-100 flex justify-between items-center gap-6 text-blue-600">
+      <span className="font-bold">예상 운임</span>
+
+      <b className="text-lg">
+        {fareStats?.fare
+          ? `${fareStats.fare.toLocaleString()}원~`
+          : "데이터 없음"}
+      </b>
+    </div>
+
+    {/* ================= 🔥 추천 근거 ================= */}
+    {fareStats && (
+      <div className="text-[12px] text-gray-500 space-y-1 pt-1">
+
+        <div className="flex justify-between">
+          <span>최근 5건 평균</span>
+          <b className="text-gray-800">
+            {fareStats.avg.toLocaleString()}원
+          </b>
+        </div>
+
+        <div className="flex justify-between">
+          <span>최신 운임</span>
+          <b className="text-gray-800">
+            {fareStats.latest.toLocaleString()}원
+          </b>
+        </div>
+
+        <div className="flex justify-between">
+          <span>표본</span>
+          <b className="text-gray-800">
+            {fareStats.count}건
+          </b>
+        </div>
+
+        {/* 변동 감지 */}
+        {Math.abs(fareStats.latest - fareStats.avg) > 20000 && (
+          <div className="text-red-500 text-[11px]">
+            ⚠ 최근 운임 변동 있음
+          </div>
+        )}
+
+      </div>
+    )}
+
   </div>
-</div>
 </div>
 {/* ⭐ 지도 영역 닫기 */}
 
@@ -6721,24 +6846,48 @@ const today = now.toISOString().slice(0, 10);
       <CountUp value={Number(form.청구운임 || 0)} />
       <span className="ml-1">원~</span>
     </div>
+{/* ================= 배차정보 요약 ================= */}
+<div className="mb-5">
+  <div className="text-sm font-semibold text-gray-700 mb-2">
+    배차정보 요약
+  </div>
 
-    {/* 소요시간 */}
-    <div className="flex justify-between items-center text-[15px] mb-2">
-      <span className="text-gray-500">소요시간 (예상)</span>
-      <span className="font-semibold text-gray-700">
-        {routeInfo ? Math.round(routeInfo.time / 60) + "분" : "-"}
+  <div className="bg-white border border-gray-300 rounded-xl p-4 space-y-3 shadow-sm">
+
+    {/* 화물 */}
+    <div className="flex justify-between items-center">
+      <span className="text-gray-700 text-[14px] font-medium">
+        화물
+      </span>
+      <span className="font-bold text-gray-900 text-[15px]">
+        {form.화물내용 || "-"}
       </span>
     </div>
 
-    {/* 총거리 */}
-    <div className="flex justify-between items-center text-[15px] mb-6">
-      <span className="text-gray-500">총거리 (예상)</span>
-      <span className="font-semibold text-gray-700">
-        {routeInfo ? (routeInfo.distance / 1000).toFixed(0) + "km" : "-"}
+    {/* 차량 */}
+    <div className="flex justify-between items-center">
+      <span className="text-gray-700 text-[14px] font-medium">
+        차량
+      </span>
+      <span className="font-bold text-gray-900 text-[15px]">
+        {form.차량종류 || "-"}
       </span>
     </div>
 
-    <div className="border-b mb-5"></div>
+    {/* 톤수 */}
+    <div className="flex justify-between items-center">
+      <span className="text-gray-700 text-[14px] font-medium">
+        톤수
+      </span>
+      <span className="font-bold text-gray-900 text-[15px]">
+        {form.차량톤수 || "-"}
+      </span>
+    </div>
+
+  </div>
+</div>
+
+<div className="border-b mb-5"></div>
 
     {/* ================= 상차지 ================= */}
     <div className="border rounded-lg p-4 mb-3 bg-white shadow-sm">
