@@ -25,7 +25,16 @@ function cleanAddress(addr = "") {
     .replace(/\s+/g, " ")
     .trim();
 }
+function simplifyAddress(addr = "") {
+  const cleaned = cleanAddress(addr);
+  const parts = cleaned.split(" ");
 
+  if (parts.length >= 3) {
+    return parts.slice(0, 3).join(" ");
+  }
+
+  return cleaned;
+}
 // =========================
 // 🔥 도로명 → 지번 변환
 // =========================
@@ -100,11 +109,14 @@ let jibun = await convertToJibun(cleaned);
 if (!jibun || jibun === cleaned) {
   jibun = cleaned;
 }
-  console.log("원본:", addr);
-  console.log("정제:", cleaned);
-  console.log("지번:", jibun);
-  let result = await geocode(jibun);
-  if (result) return result;
+
+let result = await geocode(jibun);
+if (result) return result;
+
+// 🔥 도로명 fallback → 축소 주소 사용
+const simple = simplifyAddress(cleaned);
+result = await geocode(simple);
+if (result) return result;
 
   // 🔥 2️⃣ 도로명 fallback
   result = await geocode(cleaned);
