@@ -29,6 +29,13 @@ function simplifyAddress(addr = "") {
   const cleaned = cleanAddress(addr);
   const parts = cleaned.split(" ");
 
+  // 🔥 1️⃣ "동" 있으면 거기까지
+  const dongIndex = parts.findIndex(p => p.endsWith("동"));
+  if (dongIndex !== -1) {
+    return parts.slice(0, dongIndex + 1).join(" ");
+  }
+
+  // 🔥 2️⃣ 없으면 시/군/구까지만
   if (parts.length >= 3) {
     return parts.slice(0, 3).join(" ");
   }
