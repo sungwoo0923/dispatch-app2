@@ -1,3 +1,14 @@
+// =========================
+// 주소 정리
+// =========================
+function cleanAddress(addr = "") {
+  return String(addr)
+    .replace(/\(.*?\)/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+
 const handler = async (req, res) => {
   
   if (req.method !== "POST") {
@@ -12,150 +23,85 @@ const handler = async (req, res) => {
     }
 
     const TMAP_KEY = "rmzwkLwH9N4i9ayxDj9GR6l8hyFDaEk52ZQs4yer";
-// =========================
-// 🔥 주소 정리 (강화 버전)
-// =========================
-function cleanAddress(addr = "") {
-  return String(addr)
-    .replace(/\(.*?\)/g, "")         // 괄호 제거
-    .replace(/지하\s*\d+층?/g, "")   // 지하1층 제거
-    .replace(/\d+층/g, "")           // 1층, 2층 제거
-    .replace(/B\d+/gi, "")           // B1, B2 제거
-    .replace(/[^가-힣0-9\s-]/g, "")  // 특수문자 제거
-    .replace(/\s+/g, " ")
-    .trim();
-}
-function simplifyAddress(addr = "") {
-  const cleaned = cleanAddress(addr);
-  const parts = cleaned.split(" ");
 
-  // 🔥 1️⃣ "동" 있으면 거기까지
-  const dongIndex = parts.findIndex(p => p.endsWith("동"));
-  if (dongIndex !== -1) {
-    return parts.slice(0, dongIndex + 1).join(" ");
-  }
+    // =========================
+    // 🔥 0️⃣ 도로명 → 지번 변환 (핵심)
+    // =========================
+    const convertToJibun = async (addr) => {
+      try {
+        const res = await fetch(
+          "https://apis.openapi.sk.com/tmap/geo/convertAddress?version=1&format=json",
+          {
+            method: "POST",
+            headers: {
+              appKey: TMAP_KEY,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              address: addr,
+              coordType: "WGS84GEO",
+            }),
+          }
+        );
 
-  // 🔥 2️⃣ 없으면 시/군/구까지만
-  if (parts.length >= 3) {
-    return parts.slice(0, 3).join(" ");
-  }
+        if (!res.ok) return addr;
 
-  return cleaned;
-}
-// =========================
-// 🔥 도로명 → 지번 변환
-// =========================
-const convertToJibun = async (addr) => {
-  try {
-    const res = await fetch(
-      "https://apis.openapi.sk.com/tmap/geo/convertAddress?version=1&format=json",
-      {
-        method: "POST",
-        headers: {
-          appKey: TMAP_KEY,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          address: addr,
-        }),
+        const data = await res.json();
+
+        const jibun =
+          data?.addressInfo?.fullAddress ||
+          data?.addressInfo?.buildingName;
+
+        return jibun || addr;
+      } catch {
+        return addr;
       }
-    );
+    };
 
-    if (!res.ok) return addr;
-
-    const data = await res.json();
-
-    // 🔥 핵심: 지번만 사용
-    const jibun =
-      data?.addressInfo?.legalDong ||
-      data?.addressInfo?.adminDong ||
-      data?.addressInfo?.buildingAddress;
-
-    return jibun || addr;
-
-  } catch {
-    return addr;
-  }
-};
     // =========================
     // 1️⃣ 주소 → 좌표
     // =========================
     const geocode = async (addr) => {
-  try {
-    // 1️⃣ fullAddrGeo 먼저 시도
-    const url =
-      "https://apis.openapi.sk.com/tmap/geo/fullAddrGeo" +
-      "?version=1&format=json&fullAddr=" +
-      encodeURIComponent(addr);
+      const url =
+        "https://apis.openapi.sk.com/tmap/geo/fullAddrGeo" +
+        "?version=1&format=json&fullAddr=" +
+        encodeURIComponent(addr);
 
-    const r = await fetch(url, {
-      method: "GET",
-      headers: { appKey: "rmzwkLwH9N4i9ayxDj9GR6l8hyFDaEk52ZQs4yer" },
-    });
+      const r = await fetch(url, {
+        method: "GET",
+        headers: { appKey: TMAP_KEY },
+      });
 
-    if (r.ok) {
+      if (!r.ok) return null;
+
       const j = await r.json();
       const coord = j?.coordinateInfo?.coordinate?.[0];
 
-      if (coord) {
-        return {
-          lat: parseFloat(coord.lat),
-          lon: parseFloat(coord.lon),
-        };
-      }
-    }
+      if (!coord) return null;
 
-    // 🔥 2️⃣ 실패하면 POI 검색 (핵심)
-    const poiRes = await fetch(
-      `https://apis.openapi.sk.com/tmap/pois?version=1&format=json&searchKeyword=${encodeURIComponent(addr)}`,
-      {
-        headers: { appKey: "rmzwkLwH9N4i9ayxDj9GR6l8hyFDaEk52ZQs4yer" },
-      }
-    );
-
-    if (!poiRes.ok) return null;
-
-    const poiJson = await poiRes.json();
-    const poi = poiJson?.searchPoiInfo?.pois?.poi?.[0];
-
-    if (!poi) return null;
-
-    return {
-      lat: parseFloat(poi.frontLat),
-      lon: parseFloat(poi.frontLon),
+      return {
+        lat: parseFloat(coord.lat),
+        lon: parseFloat(coord.lon),
+      };
     };
 
-  } catch {
-    return null;
-  }
-};
     // =========================
     // 🔥 1-1️⃣ 강화된 fallback
     // =========================
     const tryGeocode = async (addr) => {
-  const cleaned = cleanAddress(addr);
+  // 🔥 1️⃣ 원본
+  let result = await geocode(addr);
 
-  // 🔥 1️⃣ 지번 먼저
-let jibun = await convertToJibun(cleaned);
+  // 🔥 2️⃣ 지번 변환 (항상 같이 시도)
+  const jibun = await convertToJibun(addr);
+  const jibunResult = await geocode(jibun);
 
-if (!jibun || jibun === cleaned) {
-  jibun = cleaned;
-}
-
-let result = await geocode(jibun);
-if (result) return result;
-
-// 🔥 도로명 fallback → 축소 주소 사용
-const simple = simplifyAddress(cleaned);
-result = await geocode(simple);
-if (result) return result;
-
-  // 🔥 2️⃣ 도로명 fallback
-  result = await geocode(cleaned);
+  // 👉 더 안정적인 좌표 선택
+  if (jibunResult) return jibunResult;
   if (result) return result;
 
   // 🔥 3️⃣ 주소 축소
-  const parts = cleaned.split(" ");
+  const parts = addr.split(" ");
   for (let i = parts.length - 1; i >= 2; i--) {
     const short = parts.slice(0, i).join(" ");
     result = await geocode(short);
@@ -167,11 +113,8 @@ if (result) return result;
     // =========================
     // 🔥 실제 적용
     // =========================
-let from = await tryGeocode(fromAddr);
-let to = await tryGeocode(toAddr);
-
-from = await snapToRoad(from.lon, from.lat);
-to = await snapToRoad(to.lon, to.lat);
+    const from = await tryGeocode(cleanAddress(fromAddr));
+    const to = await tryGeocode(cleanAddress(toAddr));
 
     if (!from || !to) {
       return res.status(200).json({
@@ -222,18 +165,14 @@ to = await snapToRoad(to.lon, to.lat);
     // =========================
     const getRoute = async (start, end) => {
       const offsets = [
-  [0, 0],
-  [0.0003, 0],
-  [-0.0003, 0],
-  [0, 0.0003],
-  [0, -0.0003],
-  [0.0007, 0],
-  [-0.0007, 0],
-  [0, 0.0007],
-  [0, -0.0007],
-  [0.0015, 0],
-  [0, 0.0015],
-];
+        [0, 0],
+        [0.0005, 0],
+        [-0.0005, 0],
+        [0, 0.0005],
+        [0, -0.0005],
+        [0.001, 0],
+        [0, 0.001],
+      ];
 
       // 출발 이동
       for (const [dx, dy] of offsets) {
