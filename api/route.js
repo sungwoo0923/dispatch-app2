@@ -49,11 +49,14 @@ const convertToJibun = async (addr) => {
 
     const data = await res.json();
 
-    return (
-      data?.addressInfo?.fullAddress ||
+    // 🔥 핵심: 지번만 사용
+    const jibun =
       data?.addressInfo?.legalDong ||
-      addr
-    );
+      data?.addressInfo?.adminDong ||
+      data?.addressInfo?.buildingAddress;
+
+    return jibun || addr;
+
   } catch {
     return addr;
   }
