@@ -1,14 +1,3 @@
-// =========================
-// 주소 정리
-// =========================
-function cleanAddress(addr = "") {
-  return String(addr)
-    .replace(/\(.*?\)/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-
 const handler = async (req, res) => {
   
   if (req.method !== "POST") {
@@ -23,40 +12,6 @@ const handler = async (req, res) => {
     }
 
     const TMAP_KEY = "rmzwkLwH9N4i9ayxDj9GR6l8hyFDaEk52ZQs4yer";
-
-    // =========================
-    // 🔥 0️⃣ 도로명 → 지번 변환 (핵심)
-    // =========================
-    const convertToJibun = async (addr) => {
-      try {
-        const res = await fetch(
-          "https://apis.openapi.sk.com/tmap/geo/convertAddress?version=1&format=json",
-          {
-            method: "POST",
-            headers: {
-              appKey: TMAP_KEY,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              address: addr,
-              coordType: "WGS84GEO",
-            }),
-          }
-        );
-
-        if (!res.ok) return addr;
-
-        const data = await res.json();
-
-        const jibun =
-          data?.addressInfo?.fullAddress ||
-          data?.addressInfo?.buildingName;
-
-        return jibun || addr;
-      } catch {
-        return addr;
-      }
-    };
 // =========================
 // 🔥 주소 정리 (강화 버전)
 // =========================
@@ -137,7 +92,11 @@ const convertToJibun = async (addr) => {
   const cleaned = cleanAddress(addr);
 
   // 🔥 1️⃣ 지번 먼저
-  const jibun = await convertToJibun(cleaned);
+let jibun = await convertToJibun(cleaned);
+
+if (!jibun || jibun === cleaned) {
+  jibun = cleaned;
+}
   console.log("원본:", addr);
   console.log("정제:", cleaned);
   console.log("지번:", jibun);
@@ -161,8 +120,8 @@ const convertToJibun = async (addr) => {
     // =========================
     // 🔥 실제 적용
     // =========================
-    const from = await tryGeocode(cleanAddress(fromAddr));
-    const to = await tryGeocode(cleanAddress(toAddr));
+const from = await tryGeocode(fromAddr);
+const to = await tryGeocode(toAddr);
 
     if (!from || !to) {
       return res.status(200).json({
