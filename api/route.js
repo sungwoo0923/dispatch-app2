@@ -81,29 +81,54 @@ const convertToJibun = async (addr) => {
     // 1️⃣ 주소 → 좌표
     // =========================
     const geocode = async (addr) => {
-      const url =
-        "https://apis.openapi.sk.com/tmap/geo/fullAddrGeo" +
-        "?version=1&format=json&fullAddr=" +
-        encodeURIComponent(addr);
+  try {
+    // 1️⃣ fullAddrGeo 먼저 시도
+    const url =
+      "https://apis.openapi.sk.com/tmap/geo/fullAddrGeo" +
+      "?version=1&format=json&fullAddr=" +
+      encodeURIComponent(addr);
 
-      const r = await fetch(url, {
-        method: "GET",
-        headers: { appKey: TMAP_KEY },
-      });
+    const r = await fetch(url, {
+      method: "GET",
+      headers: { appKey: "rmzwkLwH9N4i9ayxDj9GR6l8hyFDaEk52ZQs4yer" },
+    });
 
-      if (!r.ok) return null;
-
+    if (r.ok) {
       const j = await r.json();
       const coord = j?.coordinateInfo?.coordinate?.[0];
 
-      if (!coord) return null;
+      if (coord) {
+        return {
+          lat: parseFloat(coord.lat),
+          lon: parseFloat(coord.lon),
+        };
+      }
+    }
 
-      return {
-        lat: parseFloat(coord.lat),
-        lon: parseFloat(coord.lon),
-      };
+    // 🔥 2️⃣ 실패하면 POI 검색 (핵심)
+    const poiRes = await fetch(
+      `https://apis.openapi.sk.com/tmap/pois?version=1&format=json&searchKeyword=${encodeURIComponent(addr)}`,
+      {
+        headers: { appKey: "rmzwkLwH9N4i9ayxDj9GR6l8hyFDaEk52ZQs4yer" },
+      }
+    );
+
+    if (!poiRes.ok) return null;
+
+    const poiJson = await poiRes.json();
+    const poi = poiJson?.searchPoiInfo?.pois?.poi?.[0];
+
+    if (!poi) return null;
+
+    return {
+      lat: parseFloat(poi.frontLat),
+      lon: parseFloat(poi.frontLon),
     };
 
+  } catch {
+    return null;
+  }
+};
     // =========================
     // 🔥 1-1️⃣ 강화된 fallback
     // =========================
@@ -142,8 +167,11 @@ if (result) return result;
     // =========================
     // 🔥 실제 적용
     // =========================
-const from = await tryGeocode(fromAddr);
-const to = await tryGeocode(toAddr);
+let from = await tryGeocode(fromAddr);
+let to = await tryGeocode(toAddr);
+
+from = await snapToRoad(from.lon, from.lat);
+to = await snapToRoad(to.lon, to.lat);
 
     if (!from || !to) {
       return res.status(200).json({
