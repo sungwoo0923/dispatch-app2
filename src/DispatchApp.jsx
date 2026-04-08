@@ -14236,6 +14236,8 @@ const renderTimeText = (time, cond) => {
   const [searchType, setSearchType] = React.useState("all");
   const [startDate, setStartDate] = React.useState("");
   const [endDate, setEndDate] = React.useState("");
+  const [appliedStartDate, setAppliedStartDate] = React.useState("");
+const [appliedEndDate, setAppliedEndDate] = React.useState("");
   const [sortKey, setSortKey] = React.useState("");
   const [sortDir, setSortDir] = React.useState("asc");
   const [sortKey2, setSortKey2] = React.useState("");
@@ -14294,8 +14296,49 @@ const [copyActiveIndex, setCopyActiveIndex] = React.useState(0);
   const [bulkRows, setBulkRows] = React.useState([]);
   const [loaded, setLoaded] = React.useState(false);   // ⭐ 복구완료 여부
   const [matchedDrivers, setMatchedDrivers] = React.useState([]);
+  React.useEffect(() => {
+  const t = todayKST();
 
-  // 🔵 선택수정 팝업 상태 (★ 여기에 추가!)
+  setStartDate(t);
+  setEndDate(t);
+
+  // 🔥 실제 조회값도 같이 세팅
+  setAppliedStartDate(t);
+  setAppliedEndDate(t);
+
+  setLoaded(true); // 🔥 자동 조회 상태
+
+}, []);
+// ==========================
+// 🔥 조회 로직
+// ==========================
+const getMonthDiff = (start, end) => {
+  const s = new Date(start);
+  const e = new Date(end);
+
+  return Math.abs(
+    (e.getFullYear() - s.getFullYear()) * 12 +
+    (e.getMonth() - s.getMonth())
+  );
+};
+
+const handleSearch = () => {
+  if (!startDate || !endDate) {
+    alert("조회 기간을 입력해주세요.");
+    return;
+  }
+
+  const diff = getMonthDiff(startDate, endDate);
+
+  if (diff > 2) {
+    alert("⚠️ 조회는 최대 3개월까지만 가능합니다.");
+    return;
+  }
+setAppliedStartDate(startDate); // 🔥 핵심
+  setAppliedEndDate(endDate);     // 🔥 핵심
+  setPage(0);
+  setLoaded(true);
+};
   // ⭐ 페이지네이션 상태
   const [page, setPage] = React.useState(0);
   const pageSize = 100;
@@ -15468,64 +15511,81 @@ setEditTarget({
   };
 
 
-  // ===================== 필터 + 정렬 (최종 단일본) =====================
   const filtered = React.useMemo(() => {
-    let data = [...dispatchData];
+  let data = [...dispatchData];
 
-    // 📅 날짜 필터
-    if (startDate) data = data.filter(r => (r.상차일 || "") >= startDate);
-    if (endDate) data = data.filter(r => (r.상차일 || "") <= endDate);
+  // 🔥 조회 버튼 누르기 전 → 전체
+  if (!loaded) return data;
 
-    // 🔍 검색 필터
-    if (q.trim()) {
-      const keyword = q.toLowerCase();
+  // =========================
+  // 📅 날짜 필터 (조회 버튼 기준)
+  // =========================
+  data = data.filter((r) => {
+    const date = r.상차일 || r.상차일자 || "";
+    if (!date) return false;
 
-      data = data.filter((r) => {
-        const get = (v) => String(v || "").toLowerCase();
-
-        switch (searchType) {
-          case "client":
-            return get(r.거래처명).includes(keyword);
-          case "pickup":
-            return get(r.상차지명).includes(keyword);
-          case "drop":
-            return get(r.하차지명).includes(keyword);
-          case "pay":
-            return get(r.지급방식).includes(keyword);
-          case "dispatch":
-            return get(r.배차방식).includes(keyword);
-          case "car":
-            return get(r.차량번호).includes(keyword);
-          case "driver":
-            return get(r.이름).includes(keyword);
-          case "all":
-          default:
-            return (
-              get(r.거래처명).includes(keyword) ||
-              get(r.상차지명).includes(keyword) ||
-              get(r.하차지명).includes(keyword) ||
-              get(r.차량번호).includes(keyword) ||
-              get(r.이름).includes(keyword) ||
-              get(r.지급방식).includes(keyword) ||
-              get(r.배차방식).includes(keyword)
-            );
-        }
-      });
+    if (appliedStartDate <= appliedEndDate) {
+      return date >= appliedStartDate && date <= appliedEndDate;
     }
 
-    // 🔽 정렬
-    data.sort(compareBy(sortKey, sortDir));
+    // 🔥 12월 → 1월
+    return date >= appliedStartDate || date <= appliedEndDate;
+  });
 
-    return data;
-  }, [
-    dispatchData,
-    q,
-    searchType,
-    startDate,
-    endDate,
-    sortKey,
-    sortDir,
-  ]);
+  // =========================
+  // 🔍 검색 필터
+  // =========================
+  if (q.trim()) {
+    const keyword = q.toLowerCase();
+
+    data = data.filter((r) => {
+      const get = (v) => String(v || "").toLowerCase();
+
+      switch (searchType) {
+        case "client":
+          return get(r.거래처명).includes(keyword);
+        case "pickup":
+          return get(r.상차지명).includes(keyword);
+        case "drop":
+          return get(r.하차지명).includes(keyword);
+        case "pay":
+          return get(r.지급방식).includes(keyword);
+        case "dispatch":
+          return get(r.배차방식).includes(keyword);
+        case "car":
+          return get(r.차량번호).includes(keyword);
+        case "driver":
+          return get(r.이름).includes(keyword);
+        default:
+          return (
+            get(r.거래처명).includes(keyword) ||
+            get(r.상차지명).includes(keyword) ||
+            get(r.하차지명).includes(keyword) ||
+            get(r.차량번호).includes(keyword) ||
+            get(r.이름).includes(keyword) ||
+            get(r.지급방식).includes(keyword) ||
+            get(r.배차방식).includes(keyword)
+          );
+      }
+    });
+  }
+
+  // =========================
+  // 🔽 정렬
+  // =========================
+  data.sort(compareBy(sortKey, sortDir));
+
+  return data;
+}, [
+  dispatchData,
+  q,
+  searchType,
+  appliedStartDate, // 🔥 변경
+  appliedEndDate,   // 🔥 변경
+  sortKey,
+  sortDir,
+  loaded,
+]);
   // ⭐⭐⭐ 페이지 데이터 (정렬된 filtered 기준)
   const pageRows = React.useMemo(() => {
     const start = page * pageSize;
@@ -15730,57 +15790,86 @@ setEditTarget({
             value={endDate}
             onChange={(e) => setEndDate(e.target.value)}
           />
-          <button
-            onClick={() => {
-              const t = todayKST();
-              setStartDate(t);
-              setEndDate(t);
-              setQ("");       // 🔥 검색어 초기화
-              setPage(0);
-            }}
-            className="px-3 py-1 rounded bg-blue-600 text-white text-sm"
-          >
-            당일
-          </button>
-          <button
-            onClick={() => {
-              const t = tomorrowKST();
-              setStartDate(t);
-              setEndDate(t);
-              setQ("");       // 검색어 초기화
-              setPage(0);
-            }}
-            className="px-3 py-1 rounded bg-emerald-600 text-white text-sm"
-          >
-            내일
-          </button>
+          {/* 🔥 여기 추가 */}
+<button
+  onClick={handleSearch}
+  className="px-3 py-1 rounded bg-indigo-600 text-white text-sm"
+>
+  조회
+</button>
+         <button
+  onClick={() => {
+    const t = todayKST();
 
-          <button
-            onClick={() => {
-              const { first, last } = getMonthRange();
-              setStartDate(first);
-              setEndDate(last);
-              setQ("");
-              setPage(0);
+    setStartDate(t);
+    setEndDate(t);
 
-              // ⭐ 모든 검색 조건 초기화 저장!
-              localStorage.setItem(
-                "dispatchStatusState",
-                JSON.stringify({
-                  q: "",
-                  startDate: first,
-                  endDate: last,
-                  page: 0,
-                  selected: [],
-                  edited: {},
-                  editMode: false,
-                })
-              );
-            }}
-            className="px-3 py-1 rounded bg-gray-500 text-white text-sm"
-          >
-            전체
-          </button>
+    // 🔥 즉시 조회 적용
+    setAppliedStartDate(t);
+    setAppliedEndDate(t);
+
+    setQ("");
+    setPage(0);
+    setLoaded(true); // 🔥 핵심
+  }}
+  className="px-3 py-1 rounded bg-blue-600 text-white text-sm"
+>
+  당일
+</button>
+
+<button
+  onClick={() => {
+    const t = tomorrowKST();
+
+    setStartDate(t);
+    setEndDate(t);
+
+    // 🔥 즉시 조회 적용
+    setAppliedStartDate(t);
+    setAppliedEndDate(t);
+
+    setQ("");
+    setPage(0);
+    setLoaded(true); // 🔥 핵심
+  }}
+  className="px-3 py-1 rounded bg-emerald-600 text-white text-sm"
+>
+  내일
+</button>
+
+<button
+  onClick={() => {
+    const { first, last } = getMonthRange();
+
+    setStartDate(first);
+    setEndDate(last);
+
+    // 🔥 즉시 조회 적용
+    setAppliedStartDate(first);
+    setAppliedEndDate(last);
+
+    setQ("");
+    setPage(0);
+    setLoaded(true); // ❗ 기존 false → true로 변경
+
+    // ⭐ 상태 저장
+    localStorage.setItem(
+      "dispatchStatusState",
+      JSON.stringify({
+        q: "",
+        startDate: first,
+        endDate: last,
+        page: 0,
+        selected: [],
+        edited: {},
+        editMode: false,
+      })
+    );
+  }}
+  className="px-3 py-1 rounded bg-gray-500 text-white text-sm"
+>
+  전체
+</button>
         </div>
       
 {/* 우측 버튼 묶음 */}

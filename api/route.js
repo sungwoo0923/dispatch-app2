@@ -57,7 +57,52 @@ const handler = async (req, res) => {
         return addr;
       }
     };
+// =========================
+// 🔥 주소 정리 (강화 버전)
+// =========================
+function cleanAddress(addr = "") {
+  return String(addr)
+    .replace(/\(.*?\)/g, "")         // 괄호 제거
+    .replace(/지하\s*\d+층?/g, "")   // 지하1층 제거
+    .replace(/\d+층/g, "")           // 1층, 2층 제거
+    .replace(/B\d+/gi, "")           // B1, B2 제거
+    .replace(/[^가-힣0-9\s-]/g, "")  // 특수문자 제거
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
+// =========================
+// 🔥 도로명 → 지번 변환
+// =========================
+const convertToJibun = async (addr) => {
+  try {
+    const res = await fetch(
+      "https://apis.openapi.sk.com/tmap/geo/convertAddress?version=1&format=json",
+      {
+        method: "POST",
+        headers: {
+          appKey: TMAP_KEY,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          address: addr,
+        }),
+      }
+    );
+
+    if (!res.ok) return addr;
+
+    const data = await res.json();
+
+    return (
+      data?.addressInfo?.fullAddress ||
+      data?.addressInfo?.legalDong ||
+      addr
+    );
+  } catch {
+    return addr;
+  }
+};
     // =========================
     // 1️⃣ 주소 → 좌표
     // =========================
@@ -89,19 +134,22 @@ const handler = async (req, res) => {
     // 🔥 1-1️⃣ 강화된 fallback
     // =========================
     const tryGeocode = async (addr) => {
-  // 🔥 1️⃣ 원본
-  let result = await geocode(addr);
+  const cleaned = cleanAddress(addr);
 
-  // 🔥 2️⃣ 지번 변환 (항상 같이 시도)
-  const jibun = await convertToJibun(addr);
-  const jibunResult = await geocode(jibun);
+  // 🔥 1️⃣ 지번 먼저
+  const jibun = await convertToJibun(cleaned);
+  console.log("원본:", addr);
+  console.log("정제:", cleaned);
+  console.log("지번:", jibun);
+  let result = await geocode(jibun);
+  if (result) return result;
 
-  // 👉 더 안정적인 좌표 선택
-  if (jibunResult) return jibunResult;
+  // 🔥 2️⃣ 도로명 fallback
+  result = await geocode(cleaned);
   if (result) return result;
 
   // 🔥 3️⃣ 주소 축소
-  const parts = addr.split(" ");
+  const parts = cleaned.split(" ");
   for (let i = parts.length - 1; i >= 2; i--) {
     const short = parts.slice(0, i).join(" ");
     result = await geocode(short);
