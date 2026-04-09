@@ -998,7 +998,7 @@ useEffect(() => {
               RUN25 배차프로그램(Park)
             </span>
             <span className="text-xs font-mono bg-blue-100 text-blue-700 px-2 py-1 rounded">
-              v1.0.0
+              v1.0.1
             </span>
           </div>
           <span className="text-xs text-gray-500">물류 배차·정산 통합관리 시스템</span>
@@ -21667,6 +21667,14 @@ function SettlementDetailPopup({ client, rows = [], onClose }) {
 
 // ===================== DispatchApp.jsx (PART 7/8 — 거래처명/차량종류 필터 추가 완성) =====================
 function UnassignedStatus({ dispatchData, drivers = [], patchDispatch, clients = [], places = [], upsertDriver }) {
+  // 🔥 Field 컴포넌트 정의
+  const Field = ({ label, children }) => (
+    <div className="space-y-2">
+      <label className="block text-sm font-semibold text-gray-700">{label}</label>
+      {children}
+    </div>
+  );
+  
   const [q, setQ] = React.useState("");
   const [startDate, setStartDate] = React.useState("");
   const [endDate, setEndDate] = React.useState("");
@@ -21695,11 +21703,69 @@ function UnassignedStatus({ dispatchData, drivers = [], patchDispatch, clients =
   const [copyPanelOpen, setCopyPanelOpen] = React.useState(false);
   const [copyTarget, setCopyTarget] = React.useState(null);
   
+  // 🔥 거래처/장소 자동완성 관련 상태
+  const [clientApplyPopup, setClientApplyPopup] = React.useState(null);
+  const [copyClientOptions, setCopyClientOptions] = React.useState([]);
+  const [showCopyClientDropdown, setShowCopyClientDropdown] = React.useState(false);
+  const [copyClientIndex, setCopyClientIndex] = React.useState(0);
+  const [copyPlaceOptions, setCopyPlaceOptions] = React.useState([]);
+  const [showCopyPlaceDropdown, setShowCopyPlaceDropdown] = React.useState(false);
+  const [copyPlaceType, setCopyPlaceType] = React.useState(null);
+  const [copyActiveIndex, setCopyActiveIndex] = React.useState(0);
+  
   // 🔔 토스트 알림
   const [toast, setToast] = React.useState(null);
   const showToast = (msg, type = "ok") => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3000);
+  };
+  
+  // 🔥 자동완성 필터 함수
+  const filterEditClients = (value) => {
+    const v = value.toLowerCase();
+    return (clients || []).filter(c =>
+      String(c.거래처명 || "").toLowerCase().includes(v)
+    );
+  };
+  
+  const filterEditPlaces = (value) => {
+    const v = value.toLowerCase();
+    return (places || []).filter(p =>
+      String(p.업체명 || "").toLowerCase().includes(v)
+    );
+  };
+  
+  // 🔥 차량번호 정규화
+  const normalizePlate = (v = "") => {
+    return String(v)
+      .toUpperCase()
+      .replace(/[\s\-]/g, "")
+      .replace(/[^0-9A-Z가-힣]/g, "");
+  };
+  
+  // 🔥 전화번호 포맷
+  const formatPhone = (phone = "") => {
+    const clean = String(phone).replace(/[^\d]/g, "");
+    if (clean.length === 11) {
+      return clean.replace(/(\d{3})(\d{4})(\d{4})/, "$1-$2-$3");
+    }
+    if (clean.length === 10) {
+      return clean.replace(/(\d{3})(\d{3})(\d{4})/, "$1-$2-$3");
+    }
+    return clean;
+  };
+  
+  // 🔥 시간 옵션 생성
+  const generateTimeOptions = () => {
+    const options = [];
+    for (let h = 0; h < 24; h++) {
+      for (let m = 0; m < 60; m += 30) {
+        const hh = String(h).padStart(2, "0");
+        const mm = String(m).padStart(2, "0");
+        options.push(`${hh}:${mm}`);
+      }
+    }
+    return options;
   };
 
   // ✅ 필터 + 정렬
@@ -21987,21 +22053,6 @@ function UnassignedStatus({ dispatchData, drivers = [], patchDispatch, clients =
                 return (
                   <tr
                     key={r._id || i}
-                    onClick={() => {
-                      if (deleteMode) return;
-
-                      setSelectedOrder(r);
-
-                      // 🔥 이전 상태 완전 초기화
-                      setVehicleNo("");
-                      setDriverName("");
-                      setDriverPhone("");
-                      setMatchedDriver(null);
-                      setNewDriverPopup(false);
-
-                      setQuickAssignOpen(true);
-                    }}
-                    
                     onDoubleClick={(e) => {
                       if (deleteMode) return;
                       if (e.target.closest("input")) return;
@@ -22286,14 +22337,14 @@ function UnassignedStatus({ dispatchData, drivers = [], patchDispatch, clients =
             onClick={() => setCopyPanelOpen(false)}
           />
           
-          <div className="absolute top-0 right-0 h-full w-[600px] bg-white shadow-2xl border-l overflow-y-auto">
-            <div className="p-6">
-              <div className="flex justify-between items-center mb-6 border-b pb-4">
-                <h2 className="text-xl font-bold text-gray-800">
-                  오더 수정
+          <div className="absolute top-0 right-0 h-full w-[1100px] bg-slate-100 shadow-2xl border-l overflow-y-auto">
+            <div className="p-10 space-y-10">
+              <div className="flex justify-between items-center border-b pb-5">
+                <h2 className="text-2xl font-bold text-slate-800">
+                  오더 복사 / 수정 패널
                 </h2>
                 
-                <div className="flex gap-2">
+                <div className="flex gap-3 items-center">
                   <button
                     onClick={async () => {
                       if (!copyTarget?._id) {
@@ -22301,143 +22352,466 @@ function UnassignedStatus({ dispatchData, drivers = [], patchDispatch, clients =
                         return;
                       }
                       
-                      await patchDispatch(copyTarget._id, {
+                      // 🔥 핵심 추가
+                      const finalCargo = copyTarget.화물타입
+                        ? `${copyTarget.화물수량 || ""}${copyTarget.화물타입}`
+                        : (copyTarget.화물수량 || "");
+                      
+                      const payload = {
                         ...copyTarget,
+                        화물내용: finalCargo,
                         updatedAt: Date.now(),
-                      });
+                      };
+                      
+                      await patchDispatch(copyTarget._id, payload);
                       
                       alert("오더 수정 완료");
                       setCopyPanelOpen(false);
                     }}
-                    className="px-4 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700"
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg font-semibold"
                   >
                     수정 저장
                   </button>
                   
                   <button
+                    onClick={async () => {
+                      if (!copyTarget) {
+                        alert("복사할 데이터가 없습니다.");
+                        return;
+                      }
+                      
+                      // 🔥 핵심: 화물내용 재조합
+                      const finalCargo = copyTarget.화물타입
+                        ? `${copyTarget.화물수량 || ""}${copyTarget.화물타입}`
+                        : (copyTarget.화물수량 || "");
+                      
+                      const payload = {
+                        ...copyTarget,
+                        화물내용: finalCargo,
+                        createdAt: Date.now(),
+                        updatedAt: Date.now(),
+                        배차상태: copyTarget?.차량번호?.trim() ? "배차완료" : "배차중",
+                        업체전달상태: "미전달",
+                      };
+                      
+                      // ⭐ 기존 id 제거 (새 오더 생성)
+                      delete payload._id;
+                      
+                      await setDoc(
+                        doc(db, copyTarget.__col || "orders", crypto.randomUUID()),
+                        payload
+                      );
+                      
+                      alert("복사 등록 완료");
+                      setCopyPanelOpen(false);
+                    }}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold"
+                  >
+                    복사 등록
+                  </button>
+                  
+                  <button
                     onClick={() => setCopyPanelOpen(false)}
-                    className="text-gray-500 hover:text-red-500 text-xl px-2"
+                    className="text-slate-500 hover:text-red-500 text-xl"
                   >
                     ✕
                   </button>
                 </div>
               </div>
               
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">
-                    거래처명
-                  </label>
+              {/* ================= 거래처 정보 ================= */}
+              <section className="bg-white p-8 rounded-xl shadow-sm">
+                <h3 className="text-lg font-bold text-slate-700 mb-8 border-b pb-3">
+                  거래처 정보
+                </h3>
+                
+                <Field label="거래처명">
                   <input
                     className="w-full border rounded-lg px-3 py-2"
                     value={copyTarget?.거래처명 ?? ""}
                     onChange={(e) => setCopyTarget(p => ({...p, 거래처명: e.target.value}))}
                   />
-                </div>
+                </Field>
+              </section>
+              
+              {/* ================= 상하차 정보 ================= */}
+              <section className="bg-white p-8 rounded-xl shadow-sm">
+                <h3 className="text-lg font-bold text-slate-700 mb-8 border-b pb-3">
+                  상하차 정보
+                </h3>
                 
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">
-                    상차지명
-                  </label>
-                  <input
-                    className="w-full border rounded-lg px-3 py-2"
-                    value={copyTarget?.상차지명 ?? ""}
-                    onChange={(e) => setCopyTarget(p => ({...p, 상차지명: e.target.value}))}
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">
-                    상차지주소
-                  </label>
-                  <input
-                    className="w-full border rounded-lg px-3 py-2"
-                    value={copyTarget?.상차지주소 ?? ""}
-                    onChange={(e) => setCopyTarget(p => ({...p, 상차지주소: e.target.value}))}
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">
-                    하차지명
-                  </label>
-                  <input
-                    className="w-full border rounded-lg px-3 py-2"
-                    value={copyTarget?.하차지명 ?? ""}
-                    onChange={(e) => setCopyTarget(p => ({...p, 하차지명: e.target.value}))}
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">
-                    하차지주소
-                  </label>
-                  <input
-                    className="w-full border rounded-lg px-3 py-2"
-                    value={copyTarget?.하차지주소 ?? ""}
-                    onChange={(e) => setCopyTarget(p => ({...p, 하차지주소: e.target.value}))}
-                  />
-                </div>
-                
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-1">
-                      상차일
-                    </label>
-                    <input
-                      type="date"
-                      className="w-full border rounded-lg px-3 py-2"
-                      value={copyTarget?.상차일 ?? ""}
-                      onChange={(e) => setCopyTarget(p => ({...p, 상차일: e.target.value}))}
-                    />
+                <div className="grid grid-cols-2 gap-16">
+                  {/* ================= 상차 ================= */}
+                  <div className="space-y-6">
+                    <Field label="상차일">
+                      <input
+                        type="date"
+                        className="w-full border rounded-lg px-3 py-2"
+                        value={copyTarget?.상차일 ?? ""}
+                        onChange={(e) => setCopyTarget(p => ({...p, 상차일: e.target.value}))}
+                      />
+                    </Field>
+                    
+                    <Field label="상차시간">
+                      <select
+                        className="w-full border rounded-lg px-3 py-2"
+                        value={copyTarget?.상차시간 ?? ""}
+                        onChange={(e) => setCopyTarget(p => ({...p, 상차시간: e.target.value}))}
+                      >
+                        <option value="">선택</option>
+                        {generateTimeOptions().map(t => (
+                          <option key={t} value={t}>{t}</option>
+                        ))}
+                      </select>
+                    </Field>
+                    
+                    <Field label="상차방법">
+                      <select
+                        className="w-full border rounded-lg px-3 py-2"
+                        value={copyTarget?.상차방법 ?? ""}
+                        onChange={(e) => setCopyTarget(p => ({...p, 상차방법: e.target.value}))}
+                      >
+                        <option value="">선택</option>
+                        <option value="지게차">지게차</option>
+                        <option value="수작업">수작업</option>
+                        <option value="직접수작업">직접수작업</option>
+                        <option value="수도움">수도움</option>
+                        <option value="크레인">크레인</option>
+                      </select>
+                    </Field>
+                    
+                    <Field label="상차지명">
+                      <input
+                        className="w-full border rounded-lg px-3 py-2"
+                        value={copyTarget?.상차지명 ?? ""}
+                        onChange={(e) => setCopyTarget(p => ({...p, 상차지명: e.target.value}))}
+                      />
+                    </Field>
+                    
+                    <Field label="상차지주소">
+                      <input
+                        className="w-full border rounded-lg px-3 py-2"
+                        value={copyTarget?.상차지주소 ?? ""}
+                        onChange={(e) => setCopyTarget(p => ({...p, 상차지주소: e.target.value}))}
+                      />
+                    </Field>
+                    
+                    <Field label="상차 담당자명">
+                      <input
+                        className="w-full border rounded-lg px-3 py-2"
+                        value={copyTarget?.상차지담당자 ?? ""}
+                        onChange={(e) => setCopyTarget(p => ({...p, 상차지담당자: e.target.value}))}
+                      />
+                    </Field>
+                    
+                    <Field label="상차 연락처">
+                      <input
+                        className="w-full border rounded-lg px-3 py-2"
+                        value={copyTarget?.상차지담당자번호 ?? ""}
+                        onChange={(e) => setCopyTarget(p => ({...p, 상차지담당자번호: e.target.value}))}
+                      />
+                    </Field>
                   </div>
                   
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-1">
-                      상차시간
-                    </label>
-                    <input
-                      type="time"
-                      className="w-full border rounded-lg px-3 py-2"
-                      value={copyTarget?.상차시간 ?? ""}
-                      onChange={(e) => setCopyTarget(p => ({...p, 상차시간: e.target.value}))}
-                    />
+                  {/* ================= 하차 ================= */}
+                  <div className="space-y-6">
+                    <Field label="하차일">
+                      <input
+                        type="date"
+                        className="w-full border rounded-lg px-3 py-2"
+                        value={copyTarget?.하차일 ?? ""}
+                        onChange={(e) => setCopyTarget(p => ({...p, 하차일: e.target.value}))}
+                      />
+                    </Field>
+                    
+                    <Field label="하차시간">
+                      <select
+                        className="w-full border rounded-lg px-3 py-2"
+                        value={copyTarget?.하차시간 ?? ""}
+                        onChange={(e) => setCopyTarget(p => ({...p, 하차시간: e.target.value}))}
+                      >
+                        <option value="">선택</option>
+                        {generateTimeOptions().map(t => (
+                          <option key={t} value={t}>{t}</option>
+                        ))}
+                      </select>
+                    </Field>
+                    
+                    <Field label="하차방법">
+                      <select
+                        className="w-full border rounded-lg px-3 py-2"
+                        value={copyTarget?.하차방법 ?? ""}
+                        onChange={(e) => setCopyTarget(p => ({...p, 하차방법: e.target.value}))}
+                      >
+                        <option value="">선택</option>
+                        <option value="지게차">지게차</option>
+                        <option value="수작업">수작업</option>
+                        <option value="직접수작업">직접수작업</option>
+                        <option value="수도움">수도움</option>
+                        <option value="크레인">크레인</option>
+                      </select>
+                    </Field>
+                    
+                    <Field label="하차지명">
+                      <input
+                        className="w-full border rounded-lg px-3 py-2"
+                        value={copyTarget?.하차지명 ?? ""}
+                        onChange={(e) => setCopyTarget(p => ({...p, 하차지명: e.target.value}))}
+                      />
+                    </Field>
+                    
+                    <Field label="하차지주소">
+                      <input
+                        className="w-full border rounded-lg px-3 py-2"
+                        value={copyTarget?.하차지주소 ?? ""}
+                        onChange={(e) => setCopyTarget(p => ({...p, 하차지주소: e.target.value}))}
+                      />
+                    </Field>
+                    
+                    <Field label="하차 담당자명">
+                      <input
+                        className="w-full border rounded-lg px-3 py-2"
+                        value={copyTarget?.하차지담당자 ?? ""}
+                        onChange={(e) => setCopyTarget(p => ({...p, 하차지담당자: e.target.value}))}
+                      />
+                    </Field>
+                    
+                    <Field label="하차 연락처">
+                      <input
+                        className="w-full border rounded-lg px-3 py-2"
+                        value={copyTarget?.하차지담당자번호 ?? ""}
+                        onChange={(e) => setCopyTarget(p => ({...p, 하차지담당자번호: e.target.value}))}
+                      />
+                    </Field>
                   </div>
                 </div>
+              </section>
+              
+              {/* ================= 기사정보 ================= */}
+              <section className="bg-white p-8 rounded-xl shadow-sm">
+                <h3 className="text-lg font-bold text-slate-700 mb-8 border-b pb-3">
+                  기사정보
+                </h3>
                 
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">
-                    차량종류
-                  </label>
-                  <input
-                    className="w-full border rounded-lg px-3 py-2"
-                    value={copyTarget?.차량종류 ?? ""}
-                    onChange={(e) => setCopyTarget(p => ({...p, 차량종류: e.target.value}))}
-                  />
+                <div className="grid grid-cols-3 gap-6">
+                  <Field label="차량번호">
+                    <input
+                      className="w-full border rounded-lg px-3 py-2"
+                      value={copyTarget?.차량번호 ?? ""}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        const plate = normalizePlate(v);
+                        
+                        const match = (drivers || []).find(
+                          d => normalizePlate(d.차량번호) === plate
+                        );
+                        
+                        setCopyTarget(prev => ({
+                          ...prev,
+                          차량번호: v,
+                          이름: match?.이름 || "",
+                          전화번호: formatPhone(match?.전화번호 || ""),
+                          배차상태: match ? "배차완료" : "배차중",
+                        }));
+                      }}
+                    />
+                  </Field>
+                  
+                  <Field label="기사명">
+                    <input
+                      className="w-full border rounded-lg px-3 py-2 bg-gray-100"
+                      value={copyTarget?.이름 ?? ""}
+                      readOnly
+                    />
+                  </Field>
+                  
+                  <Field label="전화번호">
+                    <input
+                      className="w-full border rounded-lg px-3 py-2 bg-gray-100"
+                      value={formatPhone(copyTarget?.전화번호 ?? "")}
+                      readOnly
+                    />
+                  </Field>
                 </div>
+              </section>
+              
+              {/* ================= 화물정보 ================= */}
+              <section className="bg-white p-8 rounded-xl shadow-sm">
+                <h3 className="text-lg font-bold text-slate-700 mb-8 border-b pb-3">
+                  화물정보
+                </h3>
                 
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">
-                    화물내용
-                  </label>
-                  <input
-                    className="w-full border rounded-lg px-3 py-2"
-                    value={copyTarget?.화물내용 ?? ""}
-                    onChange={(e) => setCopyTarget(p => ({...p, 화물내용: e.target.value}))}
-                  />
+                <div className="grid grid-cols-3 gap-6">
+                  <Field label="차량종류">
+                    <select
+                      className="w-full border rounded-lg px-3 py-2"
+                      value={copyTarget?.차량종류 ?? ""}
+                      onChange={(e) => setCopyTarget(p => ({...p, 차량종류: e.target.value}))}
+                    >
+                      <option value="">선택</option>
+                      <option value="라보/다마스">라보/다마스</option>
+                      <option value="카고">카고</option>
+                      <option value="윙바디">윙바디</option>
+                      <option value="탑차">탑차</option>
+                      <option value="냉장탑">냉장탑</option>
+                      <option value="냉동탑">냉동탑</option>
+                      <option value="냉장윙">냉장윙</option>
+                      <option value="냉동윙">냉동윙</option>
+                      <option value="리프트">리프트</option>
+                      <option value="오토바이">오토바이</option>
+                      <option value="기타">기타</option>
+                    </select>
+                  </Field>
+                  
+                  <Field label="차량톤수">
+                    <div className="flex items-center border rounded-lg overflow-hidden bg-white">
+                      <input
+                        className="flex-1 px-3 py-2 outline-none"
+                        value={copyTarget?.톤수값 || ""}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setCopyTarget(p => ({
+                            ...p,
+                            톤수값: v,
+                            차량톤수: p.톤수타입 ? `${v}${p.톤수타입}` : v
+                          }));
+                        }}
+                        placeholder="1"
+                      />
+                      
+                      <select
+                        className="px-3 py-2 bg-blue-50 text-blue-700 border-l outline-none cursor-pointer"
+                        value={copyTarget?.톤수타입 || ""}
+                        onChange={(e) => {
+                          const type = e.target.value;
+                          setCopyTarget(p => ({
+                            ...p,
+                            톤수타입: type,
+                            차량톤수: type ? `${p.톤수값 || ""}${type}` : (p.톤수값 || "")
+                          }));
+                        }}
+                      >
+                        <option value="">선택</option>
+                        <option value="톤">톤</option>
+                        <option value="kg">kg</option>
+                      </select>
+                    </div>
+                  </Field>
+                  
+                  <Field label="화물내용">
+                    <div className="flex items-center border rounded-lg overflow-hidden bg-white">
+                      <input
+                        className="flex-1 px-3 py-2 outline-none"
+                        value={copyTarget?.화물수량 || ""}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setCopyTarget(p => ({
+                            ...p,
+                            화물수량: v,
+                            화물내용: p.화물타입 ? `${v}${p.화물타입}` : v
+                          }));
+                        }}
+                        placeholder="1"
+                      />
+                      
+                      <select
+                        className="px-3 py-2 bg-blue-50 text-blue-700 border-l outline-none cursor-pointer"
+                        value={copyTarget?.화물타입 || ""}
+                        onChange={(e) => {
+                          const type = e.target.value;
+                          setCopyTarget(p => ({
+                            ...p,
+                            화물타입: type,
+                            화물내용: type ? `${p.화물수량 || ""}${type}` : (p.화물수량 || "")
+                          }));
+                        }}
+                      >
+                        <option value="">없음</option>
+                        <option value="파레트">파레트</option>
+                        <option value="박스">박스</option>
+                        <option value="통">통</option>
+                      </select>
+                    </div>
+                  </Field>
                 </div>
+              </section>
+              
+              {/* ================= 결제 정보 ================= */}
+              <section className="bg-white p-8 rounded-xl shadow-sm">
+                <h3 className="text-lg font-bold text-slate-700 mb-8 border-b pb-3">
+                  결제 정보
+                </h3>
                 
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">
-                    메모
-                  </label>
-                  <textarea
-                    className="w-full border rounded-lg px-3 py-2 h-24"
-                    value={copyTarget?.메모 ?? ""}
-                    onChange={(e) => setCopyTarget(p => ({...p, 메모: e.target.value}))}
-                  />
+                <div className="grid grid-cols-5 gap-8">
+                  <Field label="청구운임">
+                    <input
+                      className="w-full border rounded-lg px-3 py-2"
+                      value={copyTarget.청구운임 || ""}
+                      onChange={(e) =>
+                        setCopyTarget(p => ({...p, 청구운임: e.target.value.replace(/[^\d]/g, "")}))
+                      }
+                    />
+                  </Field>
+                  
+                  <Field label="기사운임">
+                    <input
+                      className="w-full border rounded-lg px-3 py-2"
+                      value={copyTarget.기사운임 || ""}
+                      onChange={(e) =>
+                        setCopyTarget(p => ({...p, 기사운임: e.target.value.replace(/[^\d]/g, "")}))
+                      }
+                    />
+                  </Field>
+                  
+                  <Field label="수수료">
+                    <div className="bg-slate-100 rounded-lg px-4 py-3 font-bold text-blue-700 text-lg text-center">
+                      {(Number(copyTarget.청구운임 || 0) - Number(copyTarget.기사운임 || 0)).toLocaleString()} 원
+                    </div>
+                  </Field>
+                  
+                  <Field label="지급방식">
+                    <select
+                      className="w-full border rounded-lg px-3 py-2"
+                      value={copyTarget?.지급방식 ?? ""}
+                      onChange={(e) => setCopyTarget(p => ({...p, 지급방식: e.target.value}))}
+                    >
+                      <option value="">선택</option>
+                      <option value="계산서">계산서</option>
+                      <option value="착불">착불</option>
+                      <option value="선불">선불</option>
+                      <option value="손실">손실</option>
+                      <option value="개인">개인</option>
+                      <option value="기타">기타</option>
+                    </select>
+                  </Field>
+                  
+                  <Field label="배차방식">
+                    <select
+                      className="w-full border rounded-lg px-3 py-2"
+                      value={copyTarget?.배차방식 ?? ""}
+                      onChange={(e) => setCopyTarget(p => ({...p, 배차방식: e.target.value}))}
+                    >
+                      <option value="">선택</option>
+                      <option value="24시">24시</option>
+                      <option value="직접배차">직접배차</option>
+                      <option value="인성">인성</option>
+                    </select>
+                  </Field>
                 </div>
-              </div>
+              </section>
+              
+              {/* ================= 메모 ================= */}
+              <section className="bg-white p-8 rounded-xl shadow-sm">
+                <h3 className="text-lg font-bold text-slate-700 mb-6 border-b pb-3">
+                  메모
+                </h3>
+                
+                <textarea
+                  className="w-full border rounded-lg px-3 py-2 h-24"
+                  value={copyTarget?.메모 ?? ""}
+                  onChange={(e) => setCopyTarget(p => ({...p, 메모: e.target.value}))}
+                />
+              </section>
             </div>
           </div>
         </div>
