@@ -85,57 +85,27 @@ const handler = async (req, res) => {
       };
     };
 
-    // 🔥 도로명 주소 전용 geocode 함수 추가
-const geocodeByRoadName = async (addr) => {
-  try {
-    const url =
-      "https://apis.openapi.sk.com/tmap/geo/geocoding" +
-      "?version=1&format=json" +
-      "&roadAddr=" + encodeURIComponent(addr);
+    // =========================
+    // 🔥 1-1️⃣ 강화된 fallback
+    // =========================
+    const tryGeocode = async (addr) => {
+  // 🔥 1️⃣ 원본
+  let result = await geocode(addr);
 
-    const r = await fetch(url, {
-      method: "GET",
-      headers: { appKey: TMAP_KEY },
-    });
+  // 🔥 2️⃣ 지번 변환 (항상 같이 시도)
+  const jibun = await convertToJibun(addr);
+  const jibunResult = await geocode(jibun);
 
-    if (!r.ok) return null;
-
-    const j = await r.json();
-    const result = j?.coordinateInfo?.coordinate?.[0];
-
-    if (!result) return null;
-
-    return {
-      lat: parseFloat(result.lat || result.newLat),
-      lon: parseFloat(result.lon || result.newLon),
-    };
-  } catch {
-    return null;
-  }
-};
-
-const tryGeocode = async (addr) => {
-  // 1️⃣ 도로명 전용 API 먼저 시도
-  const roadResult = await geocodeByRoadName(addr);
-  if (roadResult) return roadResult;
-
-  // 2️⃣ 기존 fullAddrGeo (지번용) 시도
-  const result = await geocode(addr);
+  // 👉 더 안정적인 좌표 선택
+  if (jibunResult) return jibunResult;
   if (result) return result;
 
-  // 3️⃣ 지번 변환 후 재시도
-  const jibun = await convertToJibun(addr);
-  if (jibun !== addr) {
-    const jibunResult = await geocode(jibun);
-    if (jibunResult) return jibunResult;
-  }
-
-  // 4️⃣ 주소 축소 fallback
+  // 🔥 3️⃣ 주소 축소
   const parts = addr.split(" ");
   for (let i = parts.length - 1; i >= 2; i--) {
     const short = parts.slice(0, i).join(" ");
-    const r = await geocode(short);
-    if (r) return r;
+    result = await geocode(short);
+    if (result) return result;
   }
 
   return null;

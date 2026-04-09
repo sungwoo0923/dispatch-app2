@@ -2511,65 +2511,38 @@ React.useEffect(() => {
 
       // ⭐ 주소 → 좌표 변환
       const getCoords = async (addr) => {
-  if (!addr || !addr.trim()) return null;
 
-  const TMAP_KEY = "rmzwkLwH9N4i9ayxDj9GR6l8hyFDaEk52ZQs4yer";
+        if (!addr || !addr.trim()) return null;
 
-  try {
-    // 1️⃣ 도로명 전용 API 먼저 시도
-    const roadUrl =
-      "https://apis.openapi.sk.com/tmap/geo/geocoding" +
-      "?version=1&format=json" +
-      "&roadAddr=" + encodeURIComponent(addr);
+        try {
+          const url =
+            "https://apis.openapi.sk.com/tmap/geo/fullAddrGeo" +
+            "?version=1&format=json&fullAddr=" +
+            encodeURIComponent(addr);
 
-    const roadRes = await fetch(roadUrl, {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-        appKey: TMAP_KEY
-      }
-    });
+          const res = await fetch(url, {
+            method: "GET",
+            headers: {
+              Accept: "application/json",
+              appKey: "rmzwkLwH9N4i9ayxDj9GR6l8hyFDaEk52ZQs4yer"
+            }
+          });
 
-    if (roadRes.ok) {
-      const roadData = await roadRes.json();
-      const roadCoord = roadData?.coordinateInfo?.coordinate?.[0];
-      if (roadCoord) {
-        return {
-          lat: parseFloat(roadCoord.lat || roadCoord.newLat),
-          lon: parseFloat(roadCoord.lon || roadCoord.newLon)
-        };
-      }
-    }
+          const data = await res.json();
+          const coord = data?.coordinateInfo?.coordinate?.[0];
 
-    // 2️⃣ 지번 전용 API fallback
-    const url =
-      "https://apis.openapi.sk.com/tmap/geo/fullAddrGeo" +
-      "?version=1&format=json&fullAddr=" +
-      encodeURIComponent(addr);
+          if (!coord) return null;
 
-    const res = await fetch(url, {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-        appKey: TMAP_KEY
-      }
-    });
+          return {
+            lat: parseFloat(coord.lat),
+            lon: parseFloat(coord.lon)
+          };
 
-    const data = await res.json();
-    const coord = data?.coordinateInfo?.coordinate?.[0];
-
-    if (!coord) return null;
-
-    return {
-      lat: parseFloat(coord.lat),
-      lon: parseFloat(coord.lon)
-    };
-
-  } catch (e) {
-    console.error("좌표 API 에러:", e);
-    return null;
-  }
-};
+        } catch (e) {
+          console.error("좌표 API 에러:", e);
+          return null;
+        }
+      };
 
       const start = await getCoords(form.상차지주소);
       const end = await getCoords(form.하차지주소);
