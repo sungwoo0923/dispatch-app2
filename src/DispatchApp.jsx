@@ -1146,7 +1146,15 @@ useEffect(() => {
 
 
         {menu === "미배차현황" && (
-          <UnassignedStatus role={role} dispatchData={dispatchData} />
+          <UnassignedStatus 
+            role={role} 
+            dispatchData={dispatchData} 
+            patchDispatch={patchDispatch}
+            drivers={drivers}
+            clients={clients}
+            places={places}
+            upsertDriver={upsertDriver}
+          />
         )}
         {menu === "표준운임표" && (
           <StandardFare dispatchData={dispatchData} />
@@ -21658,7 +21666,7 @@ function SettlementDetailPopup({ client, rows = [], onClose }) {
 // ===================== DispatchApp.jsx (PART 6/8 — END) =====================
 
 // ===================== DispatchApp.jsx (PART 7/8 — 거래처명/차량종류 필터 추가 완성) =====================
-function UnassignedStatus({ dispatchData, drivers = [] }) {
+function UnassignedStatus({ dispatchData, drivers = [], patchDispatch, clients = [], places = [], upsertDriver }) {
   const [q, setQ] = React.useState("");
   const [startDate, setStartDate] = React.useState("");
   const [endDate, setEndDate] = React.useState("");
@@ -21682,6 +21690,11 @@ function UnassignedStatus({ dispatchData, drivers = [] }) {
   const [matchedDriver, setMatchedDriver] = React.useState(null);
   const [newDriverPopup, setNewDriverPopup] = React.useState(false);
   const [selectedOrder, setSelectedOrder] = React.useState(null);
+  
+  // 🔥 오더 복사/수정 패널 추가
+  const [copyPanelOpen, setCopyPanelOpen] = React.useState(false);
+  const [copyTarget, setCopyTarget] = React.useState(null);
+  
   // 🔔 토스트 알림
   const [toast, setToast] = React.useState(null);
   const showToast = (msg, type = "ok") => {
@@ -21988,6 +22001,33 @@ function UnassignedStatus({ dispatchData, drivers = [] }) {
 
                       setQuickAssignOpen(true);
                     }}
+                    
+                    onDoubleClick={(e) => {
+                      if (deleteMode) return;
+                      if (e.target.closest("input")) return;
+
+                      const latest = dispatchData.find(d => d._id === r._id);
+
+                      const rawCargo = String(latest?.화물내용 || "");
+                      const cargoMatch = rawCargo.match(/(\d+)(.*)/);
+
+                      const rawTon = String(latest?.차량톤수 || "");
+                      const tonMatch = rawTon.match(/([\d.]+)(.*)/);
+
+                      setCopyTarget({
+                        ...latest,
+
+                        // 🔥 화물 분해
+                        화물수량: cargoMatch ? cargoMatch[1] : "",
+                        화물타입: cargoMatch ? cargoMatch[2] : "",
+
+                        // 🔥 톤수 분해
+                        톤수값: tonMatch ? tonMatch[1] : "",
+                        톤수타입: tonMatch ? tonMatch[2] : "",
+                      });
+
+                      setCopyPanelOpen(true);
+                    }}
 
                     className={`${i % 2 === 0 ? "bg-white" : "bg-gray-50"} cursor-pointer hover:bg-indigo-50`}
                   >
@@ -22233,6 +22273,171 @@ function UnassignedStatus({ dispatchData, drivers = [] }) {
               >
                 배차완료
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* 🔥 오더 복사/수정 패널 */}
+      {copyPanelOpen && copyTarget && (
+        <div className="fixed inset-0 z-[99999]">
+          <div
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            onClick={() => setCopyPanelOpen(false)}
+          />
+          
+          <div className="absolute top-0 right-0 h-full w-[600px] bg-white shadow-2xl border-l overflow-y-auto">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-6 border-b pb-4">
+                <h2 className="text-xl font-bold text-gray-800">
+                  오더 수정
+                </h2>
+                
+                <div className="flex gap-2">
+                  <button
+                    onClick={async () => {
+                      if (!copyTarget?._id) {
+                        alert("수정할 오더 ID가 없습니다.");
+                        return;
+                      }
+                      
+                      await patchDispatch(copyTarget._id, {
+                        ...copyTarget,
+                        updatedAt: Date.now(),
+                      });
+                      
+                      alert("오더 수정 완료");
+                      setCopyPanelOpen(false);
+                    }}
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700"
+                  >
+                    수정 저장
+                  </button>
+                  
+                  <button
+                    onClick={() => setCopyPanelOpen(false)}
+                    className="text-gray-500 hover:text-red-500 text-xl px-2"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">
+                    거래처명
+                  </label>
+                  <input
+                    className="w-full border rounded-lg px-3 py-2"
+                    value={copyTarget?.거래처명 ?? ""}
+                    onChange={(e) => setCopyTarget(p => ({...p, 거래처명: e.target.value}))}
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">
+                    상차지명
+                  </label>
+                  <input
+                    className="w-full border rounded-lg px-3 py-2"
+                    value={copyTarget?.상차지명 ?? ""}
+                    onChange={(e) => setCopyTarget(p => ({...p, 상차지명: e.target.value}))}
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">
+                    상차지주소
+                  </label>
+                  <input
+                    className="w-full border rounded-lg px-3 py-2"
+                    value={copyTarget?.상차지주소 ?? ""}
+                    onChange={(e) => setCopyTarget(p => ({...p, 상차지주소: e.target.value}))}
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">
+                    하차지명
+                  </label>
+                  <input
+                    className="w-full border rounded-lg px-3 py-2"
+                    value={copyTarget?.하차지명 ?? ""}
+                    onChange={(e) => setCopyTarget(p => ({...p, 하차지명: e.target.value}))}
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">
+                    하차지주소
+                  </label>
+                  <input
+                    className="w-full border rounded-lg px-3 py-2"
+                    value={copyTarget?.하차지주소 ?? ""}
+                    onChange={(e) => setCopyTarget(p => ({...p, 하차지주소: e.target.value}))}
+                  />
+                </div>
+                
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">
+                      상차일
+                    </label>
+                    <input
+                      type="date"
+                      className="w-full border rounded-lg px-3 py-2"
+                      value={copyTarget?.상차일 ?? ""}
+                      onChange={(e) => setCopyTarget(p => ({...p, 상차일: e.target.value}))}
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">
+                      상차시간
+                    </label>
+                    <input
+                      type="time"
+                      className="w-full border rounded-lg px-3 py-2"
+                      value={copyTarget?.상차시간 ?? ""}
+                      onChange={(e) => setCopyTarget(p => ({...p, 상차시간: e.target.value}))}
+                    />
+                  </div>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">
+                    차량종류
+                  </label>
+                  <input
+                    className="w-full border rounded-lg px-3 py-2"
+                    value={copyTarget?.차량종류 ?? ""}
+                    onChange={(e) => setCopyTarget(p => ({...p, 차량종류: e.target.value}))}
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">
+                    화물내용
+                  </label>
+                  <input
+                    className="w-full border rounded-lg px-3 py-2"
+                    value={copyTarget?.화물내용 ?? ""}
+                    onChange={(e) => setCopyTarget(p => ({...p, 화물내용: e.target.value}))}
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">
+                    메모
+                  </label>
+                  <textarea
+                    className="w-full border rounded-lg px-3 py-2 h-24"
+                    value={copyTarget?.메모 ?? ""}
+                    onChange={(e) => setCopyTarget(p => ({...p, 메모: e.target.value}))}
+                  />
+                </div>
+              </div>
             </div>
           </div>
         </div>
