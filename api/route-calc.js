@@ -8,6 +8,24 @@ function cleanAddress(addr = "") {
     .trim();
 }
 
+// =========================
+// 도로명 주소 감지
+// =========================
+function isRoadAddress(addr = "") {
+  const roadKeywords = ["길", "로", "대로", "거리"];
+  return roadKeywords.some(keyword => addr.includes(keyword));
+}
+
+// =========================
+// 도로명 주소 → 시/구/동 추출
+// =========================
+function extractCityDistrictDong(addr = "") {
+  const parts = addr.split(" ");
+  // 최대 3개 부분만 추출 (시/도, 구/군, 동/읍/면)
+  const extracted = parts.slice(0, 3).join(" ");
+  return extracted;
+}
+
 
 const handler = async (req, res) => {
   
@@ -79,9 +97,16 @@ const handler = async (req, res) => {
 
       if (!coord) return null;
 
+      // 🔥 도로명 주소는 newLat/newLon, 지번 주소는 lat/lon 사용
+      let lat = coord.newLat || coord.lat;
+      let lon = coord.newLon || coord.lon;
+
+      // 빈 문자열 체크
+      if (!lat || !lon || lat === "" || lon === "") return null;
+
       return {
-        lat: parseFloat(coord.lat),
-        lon: parseFloat(coord.lon),
+        lat: parseFloat(lat),
+        lon: parseFloat(lon),
       };
     };
 
@@ -89,18 +114,49 @@ const handler = async (req, res) => {
     // 🔥 1-1️⃣ 강화된 fallback
     // =========================
     const tryGeocode = async (addr) => {
-  // 🔥 1️⃣ 원본
+  const isRoad = isRoadAddress(addr);
+
+  // 🔥 1️⃣ 도로명 주소인 경우 지번 변환 우선
+  if (isRoad) {
+    console.log("🚦 도로명 주소 감지:", addr);
+    
+    // 지번 변환 시도
+    const jibun = await convertToJibun(addr);
+    console.log("📍 지번 변환 결과:", jibun);
+    
+    if (jibun && jibun !== addr) {
+      const jibunResult = await geocode(jibun);
+      if (jibunResult) {
+        console.log("✅ 지번으로 좌표 획득 성공");
+        return jibunResult;
+      }
+    }
+
+    // 지번 변환 실패 시 시/구/동까지만 추출
+    const cityDistrictDong = extractCityDistrictDong(addr);
+    console.log("🏙️ 시/구/동 추출:", cityDistrictDong);
+    
+    if (cityDistrictDong && cityDistrictDong !== addr) {
+      const shortResult = await geocode(cityDistrictDong);
+      if (shortResult) {
+        console.log("✅ 시/구/동으로 좌표 획득 성공");
+        return shortResult;
+      }
+    }
+  }
+
+  // 🔥 2️⃣ 원본 주소로 시도 (지번 주소인 경우)
   let result = await geocode(addr);
-
-  // 🔥 2️⃣ 지번 변환 (항상 같이 시도)
-  const jibun = await convertToJibun(addr);
-  const jibunResult = await geocode(jibun);
-
-  // 👉 더 안정적인 좌표 선택
-  if (jibunResult) return jibunResult;
   if (result) return result;
 
-  // 🔥 3️⃣ 주소 축소
+  // 🔥 3️⃣ 지번 변환 시도 (도로명이 아니었던 경우에도)
+  if (!isRoad) {
+    const jibun = await convertToJibun(addr);
+    const jibunResult = await geocode(jibun);
+    if (jibunResult) return jibunResult;
+  }
+
+  // 🔥 4️⃣ 주소 축소 (일반적인 경우)
   const parts = addr.split(" ");
   for (let i = parts.length - 1; i >= 2; i--) {
     const short = parts.slice(0, i).join(" ");
