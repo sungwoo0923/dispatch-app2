@@ -2521,37 +2521,131 @@ React.useEffect(() => {
       const mapDiv = await waitMapDiv();
       if (!mapDiv) return;
 
-      // ⭐ 주소 → 좌표 변환
+      // ⭐ 주소 → 좌표 변환 (도로명 주소 대응 강화)
       const getCoords = async (addr) => {
 
         if (!addr || !addr.trim()) return null;
 
+        const TMAP_KEY = "rmzwkLwH9N4i9ayxDj9GR6l8hyFDaEk52ZQs4yer";
+
+        // 🔥 주소 정제 함수
+        const cleanAddr = (a) => {
+          return String(a)
+            .replace(/\(.*?\)/g, "")  // 괄호 제거
+            .replace(/\s+/g, " ")      // 다중 공백 제거
+            .trim();
+        };
+
+        // 🔥 기본 Geocoding
+        const geocode = async (address) => {
+          try {
+            const url =
+              "https://apis.openapi.sk.com/tmap/geo/fullAddrGeo" +
+              "?version=1&format=json&fullAddr=" +
+              encodeURIComponent(address);
+
+            const res = await fetch(url, {
+              method: "GET",
+              headers: {
+                Accept: "application/json",
+                appKey: TMAP_KEY
+              }
+            });
+
+            const data = await res.json();
+            const coord = data?.coordinateInfo?.coordinate?.[0];
+
+            if (!coord) return null;
+
+            return {
+              lat: parseFloat(coord.lat),
+              lon: parseFloat(coord.lon)
+            };
+          } catch (e) {
+            console.error("Geocoding 에러:", e);
+            return null;
+          }
+        };
+
+        // 🔥 도로명 → 지번 변환 시도
+        const convertToJibun = async (address) => {
+          try {
+            const res = await fetch(
+              "https://apis.openapi.sk.com/tmap/geo/convertAddress?version=1&format=json",
+              {
+                method: "POST",
+                headers: {
+                  appKey: TMAP_KEY,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  address: address,
+                  coordType: "WGS84GEO",
+                }),
+              }
+            );
+
+            if (!res.ok) return null;
+
+            const data = await res.json();
+            const jibun = data?.addressInfo?.fullAddress;
+            
+            return jibun || null;
+          } catch {
+            return null;
+          }
+        };
+
+        // 🔥 주소 축소 (도/시/구/동 레벨까지 단계적으로)
+        const shortenAddress = (address) => {
+          const parts = address.split(" ");
+          const results = [];
+          
+          // 예: "서울특별시 영등포구 선유로3길 10"
+          // → ["서울특별시 영등포구 선유로3길 10", "서울특별시 영등포구 선유로3길", "서울특별시 영등포구"]
+          
+          for (let i = parts.length; i >= 2; i--) {
+            results.push(parts.slice(0, i).join(" "));
+          }
+          
+          return results;
+        };
+
         try {
-          const url =
-            "https://apis.openapi.sk.com/tmap/geo/fullAddrGeo" +
-            "?version=1&format=json&fullAddr=" +
-            encodeURIComponent(addr);
+          const cleaned = cleanAddr(addr);
+          
+          // 1️⃣ 원본 주소로 시도
+          let result = await geocode(cleaned);
+          if (result) {
+            console.log("✅ 원본 주소로 좌표 획득:", cleaned);
+            return result;
+          }
 
-          const res = await fetch(url, {
-            method: "GET",
-            headers: {
-              Accept: "application/json",
-              appKey: "rmzwkLwH9N4i9ayxDj9GR6l8hyFDaEk52ZQs4yer"
+          // 2️⃣ 지번 변환 시도
+          const jibun = await convertToJibun(cleaned);
+          if (jibun) {
+            result = await geocode(jibun);
+            if (result) {
+              console.log("✅ 지번 변환 후 좌표 획득:", jibun);
+              return result;
             }
-          });
+          }
 
-          const data = await res.json();
-          const coord = data?.coordinateInfo?.coordinate?.[0];
+          // 3️⃣ 주소 축소하며 재시도 (도로명 주소 대응)
+          const shortened = shortenAddress(cleaned);
+          for (const shortAddr of shortened) {
+            result = await geocode(shortAddr);
+            if (result) {
+              console.log("✅ 축소 주소로 좌표 획득:", shortAddr);
+              return result;
+            }
+          }
 
-          if (!coord) return null;
-
-          return {
-            lat: parseFloat(coord.lat),
-            lon: parseFloat(coord.lon)
-          };
+          console.warn("❌ 모든 방법으로 좌표 획득 실패:", addr);
+          return null;
 
         } catch (e) {
-          console.error("좌표 API 에러:", e);
+          console.error("좌표 변환 전체 실패:", e);
           return null;
         }
       };
@@ -2560,9 +2654,25 @@ React.useEffect(() => {
       const end = await getCoords(form.하차지주소);
 
       if (!start || !end) {
-        setRouteInfo(null);
+        console.warn("❌ 출발/도착 좌표 획득 실패");
+        setRouteInfo({
+          distanceKm: 0,
+          durationMin: 0
+        });
+        
+        // 🔥 좌표 없을 때도 기본 지도는 표시
+        mapDiv.innerHTML = "";
+        new window.Tmapv2.Map("route-map", {
+          center: new window.Tmapv2.LatLng(37.5665, 126.9780), // 서울시청
+          width: "100%",
+          height: "100%",
+          zoom: 10
+        });
+        
         return;
       }
+
+      console.log("✅ 좌표 획득 성공:", { start, end });
 
       mapDiv.innerHTML = "";
 
