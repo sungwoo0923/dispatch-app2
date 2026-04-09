@@ -1,3 +1,5 @@
+// route-calc.js (통합 버전)
+
 // =========================
 // 주소 정리
 // =========================
@@ -8,9 +10,7 @@ function cleanAddress(addr = "") {
     .trim();
 }
 
-
 const handler = async (req, res) => {
-  
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method Not Allowed" });
   }
@@ -25,7 +25,7 @@ const handler = async (req, res) => {
     const TMAP_KEY = "rmzwkLwH9N4i9ayxDj9GR6l8hyFDaEk52ZQs4yer";
 
     // =========================
-    // 🔥 0️⃣ 도로명 → 지번 변환 (핵심)
+    // 도로명 → 지번 변환
     // =========================
     const convertToJibun = async (addr) => {
       try {
@@ -47,7 +47,6 @@ const handler = async (req, res) => {
         if (!res.ok) return addr;
 
         const data = await res.json();
-
         const jibun =
           data?.addressInfo?.fullAddress ||
           data?.addressInfo?.buildingName;
@@ -59,7 +58,7 @@ const handler = async (req, res) => {
     };
 
     // =========================
-    // 1️⃣ 주소 → 좌표
+    // 주소 → 좌표
     // =========================
     const geocode = async (addr) => {
       const url =
@@ -86,32 +85,33 @@ const handler = async (req, res) => {
     };
 
     // =========================
-    // 🔥 1-1️⃣ 강화된 fallback
+    // 강화된 지오코딩 (원본 + 지번 변환 + 축소)
     // =========================
     const tryGeocode = async (addr) => {
-  // 🔥 1️⃣ 원본
-  let result = await geocode(addr);
+      // 1️⃣ 원본 주소로 시도
+      let result = await geocode(addr);
+      if (result) return result;
 
-  // 🔥 2️⃣ 지번 변환 (항상 같이 시도)
-  const jibun = await convertToJibun(addr);
-  const jibunResult = await geocode(jibun);
+      // 2️⃣ 지번 변환 후 시도 (도로명/지번 모두 대응)
+      const jibun = await convertToJibun(addr);
+      if (jibun !== addr) {
+        const jibunResult = await geocode(jibun);
+        if (jibunResult) return jibunResult;
+      }
 
-  // 👉 더 안정적인 좌표 선택
-  if (jibunResult) return jibunResult;
-  if (result) return result;
+      // 3️⃣ 주소 축소 시도
+      const parts = addr.split(" ");
+      for (let i = parts.length - 1; i >= 2; i--) {
+        const short = parts.slice(0, i).join(" ");
+        result = await geocode(short);
+        if (result) return result;
+      }
 
-  // 🔥 3️⃣ 주소 축소
-  const parts = addr.split(" ");
-  for (let i = parts.length - 1; i >= 2; i--) {
-    const short = parts.slice(0, i).join(" ");
-    result = await geocode(short);
-    if (result) return result;
-  }
+      return null;
+    };
 
-  return null;
-};
     // =========================
-    // 🔥 실제 적용
+    // 실제 적용
     // =========================
     const from = await tryGeocode(cleanAddress(fromAddr));
     const to = await tryGeocode(cleanAddress(toAddr));
@@ -126,7 +126,7 @@ const handler = async (req, res) => {
     }
 
     // =========================
-    // 🔥 경로 시도 함수
+    // 경로 API 호출
     // =========================
     const tryRoute = async (startX, startY, endX, endY) => {
       try {
@@ -161,7 +161,7 @@ const handler = async (req, res) => {
     };
 
     // =========================
-    // 🔥 경로 재시도 (도로 스냅 효과)
+    // 도로 스냅 재시도
     // =========================
     const getRoute = async (start, end) => {
       const offsets = [
@@ -174,7 +174,6 @@ const handler = async (req, res) => {
         [0, 0.001],
       ];
 
-      // 출발 이동
       for (const [dx, dy] of offsets) {
         const res = await tryRoute(
           start.lon + dx,
@@ -185,7 +184,6 @@ const handler = async (req, res) => {
         if (res) return res;
       }
 
-      // 도착 이동
       for (const [dx, dy] of offsets) {
         const res = await tryRoute(
           start.lon,
@@ -196,7 +194,6 @@ const handler = async (req, res) => {
         if (res) return res;
       }
 
-      // 둘 다 이동
       for (const [dx, dy] of offsets) {
         const res = await tryRoute(
           start.lon + dx,
@@ -222,10 +219,9 @@ const handler = async (req, res) => {
     }
 
     // =========================
-    // 경로 좌표
+    // 경로 좌표 추출
     // =========================
     const path = [];
-
     features.forEach((f) => {
       if (f.geometry?.type === "LineString") {
         f.geometry.coordinates.forEach(([lng, lat]) => {
@@ -235,7 +231,7 @@ const handler = async (req, res) => {
     });
 
     // =========================
-    // 거리 / 시간
+    // 거리 / 시간 계산
     // =========================
     const summaryFeature =
       features.find((f) => f.properties?.totalDistance) ||

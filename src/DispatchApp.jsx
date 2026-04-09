@@ -1735,10 +1735,11 @@ const filterClients = (keyword) => {
 const updateSale = (v) => {
   const sale = Number(v || 0);
   const drv = Number(copyTarget?.기사운임 || 0);
+  const commission = Math.max(0, sale - drv); // 음수 방지
   setCopyTarget(p => ({
     ...p,
     청구운임: sale,
-    수수료: sale - drv
+    수수료: commission
   }));
 };
 
@@ -1748,7 +1749,7 @@ const updateDriver = (v) => {
   setCopyTarget(p => ({
     ...p,
     기사운임: drv,
-    수수료: sale - drv
+    수수료: sale - drv  // ❌ 음수 가능
   }));
 };
       // ================================
@@ -14419,17 +14420,28 @@ const [copyActiveIndex, setCopyActiveIndex] = React.useState(0);
   const [loaded, setLoaded] = React.useState(false);   // ⭐ 복구완료 여부
   const [matchedDrivers, setMatchedDrivers] = React.useState([]);
   React.useEffect(() => {
+  try {
+    const saved = JSON.parse(localStorage.getItem("dispatchDateState"));
+
+    if (saved) {
+      setStartDate(saved.startDate || "");
+      setEndDate(saved.endDate || "");
+      setAppliedStartDate(saved.appliedStartDate || "");
+      setAppliedEndDate(saved.appliedEndDate || "");
+      setLoaded(true);
+      return;
+    }
+  } catch {}
+
+  // 🔽 저장된 값 없을 때만 오늘
   const t = todayKST();
 
   setStartDate(t);
   setEndDate(t);
-
-  // 🔥 실제 조회값도 같이 세팅
   setAppliedStartDate(t);
   setAppliedEndDate(t);
 
-  setLoaded(true); // 🔥 자동 조회 상태
-
+  setLoaded(true);
 }, []);
 // ==========================
 // 🔥 조회 로직
@@ -14456,10 +14468,22 @@ const handleSearch = () => {
     alert("⚠️ 조회는 최대 3개월까지만 가능합니다.");
     return;
   }
-setAppliedStartDate(startDate); // 🔥 핵심
-  setAppliedEndDate(endDate);     // 🔥 핵심
-  setPage(0);
-  setLoaded(true);
+setAppliedStartDate(startDate);
+setAppliedEndDate(endDate);
+
+// 🔥 추가 (여기가 핵심)
+localStorage.setItem(
+  "dispatchDateState",
+  JSON.stringify({
+    startDate,
+    endDate,
+    appliedStartDate: startDate,
+    appliedEndDate: endDate,
+  })
+);
+
+setPage(0);
+setLoaded(true);
 };
   // ⭐ 페이지네이션 상태
   const [page, setPage] = React.useState(0);
@@ -15010,40 +15034,6 @@ else if (palletDiff !== null) priority = 1;
     setFareResult({ count: records.length, avg, min, max, records });
     setFareModalOpen(true);
   };
-
-  // ⭐ 화면 진입 시 상태 복구 + 이번 달 기본값
-  React.useEffect(() => {
-    // 1) 이번 달 기본 날짜 계산
-    const { first: firstDay, last: lastDay } = getMonthRange(); // 🔥 정확한 계산
-
-    // 2) localStorage 에서 이전 상태 불러오기
-    let saved = {};
-    try {
-      saved = JSON.parse(localStorage.getItem("dispatchStatusState") || "{}");
-    } catch (err) {
-      console.error("DispatchStatus 상태 복구 실패", err);
-    }
-
-    // 3) 검색어 / 날짜 / 페이지 복원 (없으면 이번 달 기본값)
-    if (typeof saved.q === "string") setQ(saved.q);
-    setStartDate(saved.startDate || firstDay);
-    setEndDate(saved.endDate || lastDay);
-    setPage(saved.page || 0);
-
-    // 4) 선택된 체크박스, 수정 중 상태, 수정모드 복원
-    if (Array.isArray(saved.selected)) {
-      setSelected(new Set(saved.selected));
-    }
-    if (saved.edited && typeof saved.edited === "object") {
-      setEdited(saved.edited);
-    }
-    if (typeof saved.editMode === "boolean") {
-      setEditMode(saved.editMode);
-    }
-    setLoaded(true);
-  }, []);
-
-
   // ======================= 신규 오더 등록 팝업 상태 =======================
   const [showCreate, setShowCreate] = React.useState(false);
   const [newOrder, setNewOrder] = React.useState({
@@ -15764,22 +15754,21 @@ setEditTarget({
   };
 
   // ⭐ 상태 변경될 때마다 localStorage 저장
-  React.useEffect(() => {
-    const save = {
-      q,
-      startDate,
-      endDate,
-      page,
-      selected: Array.from(selected),
-      edited,
-      editMode,
-    };
-    try {
-      localStorage.setItem("dispatchStatusState", JSON.stringify(save));
-    } catch (err) {
-      console.error("DispatchStatus 상태 저장 실패", err);
-    }
-  }, [q, startDate, endDate, page, selected, edited, editMode]);
+ React.useEffect(() => {
+const save = {
+  q,
+  page,
+  selected: Array.from(selected),
+  edited,
+  editMode,
+};
+  try {
+    localStorage.setItem("dispatchStatusState", JSON.stringify(save));
+  } catch (err) {
+    console.error("DispatchStatus 상태 저장 실패", err);
+  }
+}, [q, startDate, endDate, appliedStartDate, appliedEndDate, page, selected, edited, editMode]);
+
   if (!loaded) return null;
 
   return (
@@ -15921,19 +15910,27 @@ setEditTarget({
 </button>
          <button
   onClick={() => {
-    const t = todayKST();
+  const t = todayKST();
 
-    setStartDate(t);
-    setEndDate(t);
+  setStartDate(t);
+  setEndDate(t);
+  setAppliedStartDate(t);
+  setAppliedEndDate(t);
 
-    // 🔥 즉시 조회 적용
-    setAppliedStartDate(t);
-    setAppliedEndDate(t);
+  // 🔥 추가
+  localStorage.setItem(
+    "dispatchDateState",
+    JSON.stringify({
+      startDate: t,
+      endDate: t,
+      appliedStartDate: t,
+      appliedEndDate: t,
+    })
+  );
 
-    setQ("");
-    setPage(0);
-    setLoaded(true); // 🔥 핵심
-  }}
+  setQ("");
+  setPage(0);
+}}
   className="px-3 py-1 rounded bg-blue-600 text-white text-sm"
 >
   당일
@@ -15941,19 +15938,26 @@ setEditTarget({
 
 <button
   onClick={() => {
-    const t = tomorrowKST();
+  const t = tomorrowKST();
 
-    setStartDate(t);
-    setEndDate(t);
+  setStartDate(t);
+  setEndDate(t);
+  setAppliedStartDate(t);
+  setAppliedEndDate(t);
 
-    // 🔥 즉시 조회 적용
-    setAppliedStartDate(t);
-    setAppliedEndDate(t);
+  localStorage.setItem(
+    "dispatchDateState",
+    JSON.stringify({
+      startDate: t,
+      endDate: t,
+      appliedStartDate: t,
+      appliedEndDate: t,
+    })
+  );
 
-    setQ("");
-    setPage(0);
-    setLoaded(true); // 🔥 핵심
-  }}
+  setQ("");
+  setPage(0);
+}}
   className="px-3 py-1 rounded bg-emerald-600 text-white text-sm"
 >
   내일
@@ -15961,33 +15965,43 @@ setEditTarget({
 
 <button
   onClick={() => {
-    const { first, last } = getMonthRange();
+  const { first, last } = getMonthRange();
 
-    setStartDate(first);
-    setEndDate(last);
+  // 🔹 화면 입력값
+  setStartDate(first);
+  setEndDate(last);
 
-    // 🔥 즉시 조회 적용
-    setAppliedStartDate(first);
-    setAppliedEndDate(last);
+  // 🔹 실제 조회값
+  setAppliedStartDate(first);
+  setAppliedEndDate(last);
 
-    setQ("");
-    setPage(0);
-    setLoaded(true); // ❗ 기존 false → true로 변경
+  setQ("");
+  setPage(0);
+  setLoaded(true);
 
-    // ⭐ 상태 저장
-    localStorage.setItem(
-      "dispatchStatusState",
-      JSON.stringify({
-        q: "",
-        startDate: first,
-        endDate: last,
-        page: 0,
-        selected: [],
-        edited: {},
-        editMode: false,
-      })
-    );
-  }}
+  // 🔥 날짜 유지용 (핵심)
+  localStorage.setItem(
+    "dispatchDateState",
+    JSON.stringify({
+      startDate: first,
+      endDate: last,
+      appliedStartDate: first,
+      appliedEndDate: last,
+    })
+  );
+
+  // 🔹 기존 상태 저장 유지 (검색어 등)
+ localStorage.setItem(
+  "dispatchStatusState",
+  JSON.stringify({
+    q: "",
+    page: 0,
+    selected: [],
+    edited: {},
+    editMode: false,
+  })
+);
+}}
   className="px-3 py-1 rounded bg-gray-500 text-white text-sm"
 >
   전체
