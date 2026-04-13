@@ -4417,7 +4417,7 @@ function calcHistoryScore(row, form) {
         transition
       "
     >
-      📄 오더복사
+      오더복사
     </button>
 
     {/* 초기화 */}
@@ -6335,7 +6335,7 @@ if (res?.success) {
               <div className="flex items-center justify-between pb-2 mb-3 border-b">
   {/* 왼쪽: 제목 */}
   <div>
-    <h2 className="text-lg font-bold">📄 오더복사</h2>
+    <h2 className="text-lg font-bold">오더복사</h2>
     <p className="text-xs text-gray-500">
       더블클릭: 수정 | 체크 후 복사
     </p>
