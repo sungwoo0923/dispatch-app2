@@ -2691,33 +2691,87 @@ React.useEffect(() => {
       // ⭐ 출발 / 도착 마커 + 라벨
       // =========================
 
-      new window.Tmapv2.Marker({
-        position: startLatLng,
-        map,
-        icon: "https://tmapapi.tmapmobility.com/upload/tmap/marker/pin_b_m_s.png",
-        iconSize: new window.Tmapv2.Size(24, 38)
-      });
+      // ✅ 출발 마커 (파란 원형 핀)
+new window.Tmapv2.Marker({
+  position: startLatLng,
+  map,
+  iconHTML: `
+    <div style="
+      position:relative;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+    ">
+      <div style="
+        background:#2563eb;
+        color:#fff;
+        font-size:12px;
+        font-weight:700;
+        padding:4px 10px;
+        border-radius:20px;
+        white-space:nowrap;
+        box-shadow:0 2px 6px rgba(0,0,0,0.3);
+        margin-bottom:4px;
+      ">
+        출발
+      </div>
+      <div style="
+        width:16px;height:16px;
+        background:#2563eb;
+        border:3px solid #fff;
+        border-radius:50%;
+        box-shadow:0 2px 6px rgba(0,0,0,0.4);
+      "></div>
+      <div style="
+        width:2px;height:12px;
+        background:#2563eb;
+      "></div>
+    </div>
+  `,
+  iconSize: new window.Tmapv2.Size(60, 70),
+  iconAnchor: new window.Tmapv2.Point(30, 70),
+});
 
-      new window.Tmapv2.Label({
-        position: startLatLng,
-        map,
-        text: "<div style='background:#3b82f6;color:#fff;padding:4px 8px;border-radius:6px;font-size:12px;'>출발</div>",
-        offset: new window.Tmapv2.Point(-25, -50)
-      });
-
-      new window.Tmapv2.Marker({
-        position: endLatLng,
-        map,
-        icon: "https://tmapapi.tmapmobility.com/upload/tmap/marker/pin_r_m_e.png",
-        iconSize: new window.Tmapv2.Size(24, 38)
-      });
-
-      new window.Tmapv2.Label({
-        position: endLatLng,
-        map,
-        text: "<div style='background:#ef4444;color:#fff;padding:4px 8px;border-radius:6px;font-size:12px;'>도착</div>",
-        offset: new window.Tmapv2.Point(-25, -50)
-      });
+// ✅ 도착 마커 (빨간 원형 핀)
+new window.Tmapv2.Marker({
+  position: endLatLng,
+  map,
+  iconHTML: `
+    <div style="
+      position:relative;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+    ">
+      <div style="
+        background:#dc2626;
+        color:#fff;
+        font-size:12px;
+        font-weight:700;
+        padding:4px 10px;
+        border-radius:20px;
+        white-space:nowrap;
+        box-shadow:0 2px 6px rgba(0,0,0,0.3);
+        margin-bottom:4px;
+      ">
+        도착
+      </div>
+      <div style="
+        width:16px;height:16px;
+        background:#dc2626;
+        border:3px solid #fff;
+        border-radius:50%;
+        box-shadow:0 2px 6px rgba(0,0,0,0.4);
+      "></div>
+      <div style="
+        width:2px;height:12px;
+        background:#dc2626;
+      "></div>
+    </div>
+  `,
+  iconSize: new window.Tmapv2.Size(60, 70),
+  iconAnchor: new window.Tmapv2.Point(30, 70),
+});
 
       // =========================
 // ⭐🔥 도로 경로 (완성)
@@ -6947,15 +7001,15 @@ const today = now.toISOString().slice(0, 10);
       </b>
     </div>
 
-    {/* 예상 시간 */}
-    <div className="flex justify-between items-center gap-6">
-      <span className="text-gray-500 font-medium">예상 시간</span>
-      <b className="text-gray-900 text-base">
-        {routeInfo 
-          ? `${routeInfo.durationMin}분`
-          : "계산 중..."}
-      </b>
-    </div>
+   {/* 예상 시간 */}
+<div className="flex justify-between items-center gap-6">
+  <span className="text-gray-500 font-medium">예상 시간</span>
+  <b className="text-gray-900 text-base">
+    {routeInfo 
+      ? (routeInfo.durationText || `${routeInfo.durationMin}분`)
+      : "계산 중..."}
+  </b>
+</div>
 
     {/* ================= 🔥 예상 운임 ================= */}
     <div className="pt-2 border-t border-gray-100 flex justify-between items-center gap-6 text-blue-600">

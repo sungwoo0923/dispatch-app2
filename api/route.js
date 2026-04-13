@@ -272,14 +272,25 @@ export default async function handler(req, res) {
       : "0.0";
 
     const durationMin = summary.totalTime
-      ? Math.round(summary.totalTime / 60)
-      : 0;
+  ? Math.round(summary.totalTime / 60)
+  : 0;
 
-    return res.status(200).json({
-      distanceKm,
-      durationMin,
-      path,
-    });
+// 🔥 분 → "X시간 X분" 텍스트 변환
+const formatDuration = (min) => {
+  if (!min || min <= 0) return "0분";
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  if (h === 0) return `${m}분`;
+  if (m === 0) return `${h}시간`;
+  return `${h}시간 ${m}분`;
+};
+
+return res.status(200).json({
+  distanceKm,
+  durationMin,                        // 기존 숫자값 유지 (혹시 다른 곳에서 쓸 경우 대비)
+  durationText: formatDuration(durationMin),  // 🔥 새로 추가
+  path,
+});
 
   } catch (e) {
     console.error("❌ route error:", e);
