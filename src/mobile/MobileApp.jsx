@@ -1,5 +1,5 @@
 // ======================= src/mobile/MobileApp.jsx (PART 1/3) =======================
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import {
   LineChart,
   Line,
@@ -313,6 +313,12 @@ export default function MobileApp() {
   const [prevPage, setPrevPage] = useState("list");
   const [showSimilarPopup, setShowSimilarPopup] = useState(false);
 const [fallbackData, setFallbackData] = useState([]);
+const [showUnassignedEntryPopup, setShowUnassignedEntryPopup] = useState(false);
+const [ordersLoaded, setOrdersLoaded] = useState(false);
+const popupLastShownDateRef = useRef(null);        // 마지막으로 팝업을 띄운 KST 날짜(YYYY-MM-DD)
+const pendingPopupRef = useRef(false);             // 자정에 list가 아니면, list로 돌아왔을 때 띄우기
+const pageRef = useRef("list");                    // 현재 page 추적
+const unassignedCountRef = useRef(0);              // 자정 타이머에서 최신 미배차 건수 참조
   // 🔕 알림 ON/OFF 상태 (기본 ON)
 const [alarmEnabled, setAlarmEnabled] = useState(
   localStorage.getItem("alarmEnabled") !== "false"
@@ -481,7 +487,7 @@ useEffect(() => {
         __col: name, // 🔥 출처 저장
         ...d.data(),
       }));
-
+ setOrdersLoaded(true);
       setOrders((prev) => {
         const filtered = prev.filter((o) => o.__col !== name);
         return [...filtered, ...list];
@@ -1024,7 +1030,87 @@ const undeliveredOrders = useMemo(() => {
       return da.localeCompare(db);
     });
 }, [orders]);
+useEffect(() => {
+  unassignedCountRef.current = unassignedOrders.length;
+}, [unassignedOrders.length]);
 
+// ✅ page ref 최신화 + pending 처리(list로 돌아오면 띄우기)
+useEffect(() => {
+  pageRef.current = page;
+
+  if (page === "list" && pendingPopupRef.current) {
+    pendingPopupRef.current = false;
+
+    const today = todayKST();
+    const hideKey = "hideUnassignedPopupDate";
+    const hiddenDate = localStorage.getItem(hideKey);
+
+    // 오늘 숨김이면 스킵
+    if (hiddenDate === today) return;
+
+    // 미배차 없으면 스킵
+    if (unassignedOrders.length === 0) return;
+
+    // 오늘 이미 한 번 띄웠으면 스킵(자정 지나면 ref 초기화됨)
+    if (popupLastShownDateRef.current === today) return;
+
+    popupLastShownDateRef.current = today;
+    setShowUnassignedEntryPopup(true);
+  }
+}, [page, ordersLoaded, unassignedOrders.length]);
+
+// ✅ 접속(로드) 시 1회 팝업: (오늘 숨김이 아니고) 미배차가 있으면 띄움
+useEffect(() => {
+  if (!ordersLoaded) return;
+
+  const today = todayKST();
+  const hideKey = "hideUnassignedPopupDate";
+  const hiddenDate = localStorage.getItem(hideKey);
+
+  if (hiddenDate === today) return;           // 오늘 하루 열지 않기면 스킵
+  if (unassignedOrders.length === 0) return;  // 미배차 없으면 스킵
+  if (page !== "list") return;                // 접속 시 list에서만 띄우기
+  if (popupLastShownDateRef.current === today) return;
+
+  popupLastShownDateRef.current = today;
+  setShowUnassignedEntryPopup(true);
+}, [ordersLoaded, unassignedOrders.length, page]);
+
+// ✅ 자정(KST) 지나면: 숨김은 "오늘"만 적용이므로 날짜 바뀌면 다시 띄울 수 있어야 함
+useEffect(() => {
+  if (!ordersLoaded) return;
+
+  const hideKey = "hideUnassignedPopupDate";
+  let lastDay = todayKST();
+
+  const timer = setInterval(() => {
+    const nowDay = todayKST();
+    if (nowDay === lastDay) return;
+
+    // ✅ 날짜 바뀜(자정 넘어감)
+    lastDay = nowDay;
+
+    // 오늘 기준으로 다시 띄울 수 있게 초기화
+    popupLastShownDateRef.current = null;
+
+    // 오늘 숨김이면 스킵
+    const hiddenDate = localStorage.getItem(hideKey);
+    if (hiddenDate === nowDay) return;
+
+    // 미배차가 있는 경우에만
+    if (unassignedCountRef.current <= 0) return;
+
+    // list면 즉시 띄우고, 아니면 pending
+    if (pageRef.current === "list") {
+      popupLastShownDateRef.current = nowDay;
+      setShowUnassignedEntryPopup(true);
+    } else {
+      pendingPopupRef.current = true;
+    }
+  }, 30 * 1000); // 30초마다 체크(자정 직후 빠르게 반응)
+
+  return () => clearInterval(timer);
+}, [ordersLoaded]);
   // 날짜별 그룹핑 메모
 const groupedByDate = useMemo(() => {
   const map = new Map();
@@ -1397,7 +1483,108 @@ const title =
 </button>
   </div>
 )}
+{showUnassignedEntryPopup && page === "list" && (
+  <div
+    className="fixed inset-0 z-[80] bg-black/40 flex items-center justify-center"
+    onClick={() => setShowUnassignedEntryPopup(false)} // 바깥 클릭 = 그냥 닫기
+  >
+    <div
+      className="bg-white w-[92%] max-w-md rounded-2xl shadow-xl overflow-hidden"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="px-4 py-3 border-b">
+        <div className="text-base font-bold text-gray-900">미배차현황</div>
+        <div className="text-xs text-gray-500 mt-0.5">
+          미배차 {unassignedOrders.length}건 · 정보미전달 {undeliveredOrders.length}건
+        </div>
+      </div>
 
+      {/* ✅ 미리보기 */}
+      <div className="px-4 py-3 max-h-[55vh] overflow-y-auto">
+        {unassignedOrders.length === 0 ? (
+          <div className="text-sm text-gray-500 py-6 text-center">
+            현재 미배차 오더가 없습니다.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {[...unassignedOrders]
+              .sort((a, b) => {
+                const da = getPickupDate(a) || "";
+                const db = getPickupDate(b) || "";
+                if (da !== db) return da.localeCompare(db);
+                // 시간 정렬은 데이터 형식이 섞여있을 수 있어 안전하게 문자열 비교만
+                return String(a.상차시간 || "").localeCompare(String(b.상차시간 || ""));
+              })
+              .slice(0, 8)
+              .map((o) => (
+                <button
+                  key={o.id}
+                  className="w-full text-left border rounded-xl px-3 py-2 bg-gray-50 active:scale-[0.99]"
+                  onClick={() => {
+                    // ✅ 미리보기 누르면 미배차현황 메뉴로 바로 이동
+                    setUnassignedTypeFilter("전체");
+                    setPage("unassigned");
+                    setShowUnassignedEntryPopup(false);
+                    window.scrollTo(0, 0);
+                  }}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-sm font-semibold text-gray-800 truncate">
+                      {o.상차지명 || "-"} → {o.하차지명 || "-"}
+                    </div>
+                    <div className="text-[11px] text-gray-500 whitespace-nowrap">
+                      {formatDateHeader(getPickupDate(o))}
+                    </div>
+                  </div>
+
+                  <div className="text-[11px] text-gray-600 mt-0.5">
+                    {o.상차시간 || ""} · {o.차량톤수 || o.톤수 || ""}{" "}
+                    {o.차량종류 || o.차종 || ""}
+                  </div>
+                </button>
+              ))}
+          </div>
+        )}
+      </div>
+
+      <div className="px-4 py-3 border-t grid grid-cols-2 gap-2">
+        <button
+          className="py-2 rounded-xl bg-gray-200 text-gray-800 text-sm font-semibold"
+          onClick={() => {
+            // ✅ 오늘 하루 열지 않기: 오늘(KST) 저장 → 오늘은 어떤 재접속에도 안 뜸
+            localStorage.setItem("hideUnassignedPopupDate", todayKST());
+            setShowUnassignedEntryPopup(false);
+          }}
+        >
+          오늘 하루 열지 않기(닫기)
+        </button>
+
+        <button
+          className="py-2 rounded-xl bg-blue-600 text-white text-sm font-semibold"
+          onClick={() => {
+            // ✅ 그냥 닫기: 다음 접속(새로고침/재접속) 때 다시 뜸
+            setShowUnassignedEntryPopup(false);
+          }}
+        >
+          닫기
+        </button>
+
+        {/* (선택) 전체보기 버튼을 따로 두고 싶으면 사용 */}
+        <button
+          className="col-span-2 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold"
+          onClick={() => {
+            setUnassignedTypeFilter("전체");
+            setPage("unassigned");
+            setShowUnassignedEntryPopup(false);
+            window.scrollTo(0, 0);
+          }}
+        >
+          미배차현황 전체 보기
+        </button>
+      </div>
+    </div>
+  </div>
+)}
       <MobileHeader
   title={title}
   onBack={
