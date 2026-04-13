@@ -998,8 +998,8 @@ useEffect(() => {
               RUN25 배차프로그램(Park)
             </span>
             <span className="text-xs font-mono bg-blue-100 text-blue-700 px-2 py-1 rounded">
-              v1.0.1
-            </span>
+  v{__APP_VERSION__}
+</span>
           </div>
           <span className="text-xs text-gray-500">물류 배차·정산 통합관리 시스템</span>
         </div>

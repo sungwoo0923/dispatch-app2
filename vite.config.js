@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import pkg from "./package.json";
 
 export default defineConfig({
   plugins: [react()],
@@ -26,9 +27,10 @@ export default defineConfig({
   },
 
   define: {
-    __APP_VERSION__: JSON.stringify(
-      process.env.VERCEL_GIT_COMMIT_SHA || "local"
-    ),
+    // 🔥 핵심 (버전 자동)
+    __APP_VERSION__: JSON.stringify(pkg.version),
+
+    // 🔥 빌드 시간 (유지)
     __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
   },
 });
