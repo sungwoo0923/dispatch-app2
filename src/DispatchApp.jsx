@@ -2713,24 +2713,59 @@ const makePinIcon = (label, color) => {
   return "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svg);
 };
 
-// ✅ 출발 마커
-new window.Tmapv2.Marker({
-  position: startLatLng,
-  map,
-  icon: makePinIcon("출발", "#2563eb"),
-  iconSize: new window.Tmapv2.Size(60, 80),
-  iconAnchor: new window.Tmapv2.Point(30, 80),
+// 1. 경로 그리기
+new window.Tmapv2.Polyline({
+  path: linePath,
+  strokeColor: "#2563eb",
+  strokeWeight: 5,
+  map
 });
 
-// ✅ 도착 마커
-new window.Tmapv2.Marker({
-  position: endLatLng,
-  map,
-  icon: makePinIcon("도착", "#dc2626"),
-  iconSize: new window.Tmapv2.Size(60, 80),
-  iconAnchor: new window.Tmapv2.Point(30, 80),
-});
+// 2. fitBounds
+const bounds = new window.Tmapv2.LatLngBounds();
+linePath.forEach(p => { if (p) bounds.extend(p); });
+if (!bounds.isEmpty()) {
+  map.fitBounds(bounds);
+}
 
+// 3. 🔥 마커는 fitBounds 이후에 추가 (핵심!)
+setTimeout(() => {
+  const makePinIcon = (label, color) => {
+    const svg = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="60" height="80" viewBox="0 0 60 80">
+        <rect x="2" y="2" width="56" height="26" rx="13" ry="13"
+          fill="${color}" stroke="white" stroke-width="2"/>
+        <text x="30" y="20" text-anchor="middle"
+          font-size="13" font-weight="bold"
+          font-family="sans-serif" fill="white">
+          ${label}
+        </text>
+        <polygon points="25,26 35,26 30,36" fill="${color}"/>
+        <circle cx="30" cy="60" r="9"
+          fill="${color}" stroke="white" stroke-width="3"/>
+        <line x1="30" y1="36" x2="30" y2="51"
+          stroke="${color}" stroke-width="3"/>
+      </svg>
+    `;
+    return "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svg);
+  };
+
+  new window.Tmapv2.Marker({
+    position: startLatLng,
+    map,
+    icon: makePinIcon("출발", "#2563eb"),
+    iconSize: new window.Tmapv2.Size(60, 80),
+    iconAnchor: new window.Tmapv2.Point(30, 80),
+  });
+
+  new window.Tmapv2.Marker({
+    position: endLatLng,
+    map,
+    icon: makePinIcon("도착", "#dc2626"),
+    iconSize: new window.Tmapv2.Size(60, 80),
+    iconAnchor: new window.Tmapv2.Point(30, 80),
+  });
+}, 500); // 🔥 fitBounds 완료 후 0.5초 뒤에 마커 추가
       // =========================
 // ⭐🔥 도로 경로 (완성)
 // =========================
@@ -6963,10 +6998,10 @@ const today = now.toISOString().slice(0, 10);
 <div className="flex justify-between items-center gap-6">
   <span className="text-gray-500 font-medium">예상 시간</span>
   <b className="text-gray-900 text-base">
-    {routeInfo 
-      ? (routeInfo.durationText || `${routeInfo.durationMin}분`)
-      : "계산 중..."}
-  </b>
+  {routeInfo
+    ? (routeInfo.durationText || `${routeInfo.durationMin}분`)
+    : "계산 중..."}
+</b>
 </div>
 
     {/* ================= 🔥 예상 운임 ================= */}
