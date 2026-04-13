@@ -2688,89 +2688,47 @@ React.useEffect(() => {
       const endLatLng = new window.Tmapv2.LatLng(end.lat, end.lon);
 
       // =========================
-      // ⭐ 출발 / 도착 마커 + 라벨
-      // =========================
+// ⭐ 출발 / 도착 마커 + 라벨
+// =========================
 
-      // ✅ 출발 마커 (파란 원형 핀)
+// 🔥 SVG → Data URL 변환 함수
+const makePinIcon = (label, color) => {
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="60" height="80" viewBox="0 0 60 80">
+      <rect x="2" y="2" width="56" height="26" rx="13" ry="13"
+        fill="${color}" stroke="white" stroke-width="2"/>
+      <text x="30" y="20" text-anchor="middle"
+        font-size="13" font-weight="bold"
+        font-family="sans-serif" fill="white">
+        ${label}
+      </text>
+      <polygon points="25,26 35,26 30,36"
+        fill="${color}"/>
+      <circle cx="30" cy="60" r="9"
+        fill="${color}" stroke="white" stroke-width="3"/>
+      <line x1="30" y1="36" x2="30" y2="51"
+        stroke="${color}" stroke-width="3"/>
+    </svg>
+  `;
+  return "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svg);
+};
+
+// ✅ 출발 마커
 new window.Tmapv2.Marker({
   position: startLatLng,
   map,
-  iconHTML: `
-    <div style="
-      position:relative;
-      display:flex;
-      flex-direction:column;
-      align-items:center;
-    ">
-      <div style="
-        background:#2563eb;
-        color:#fff;
-        font-size:12px;
-        font-weight:700;
-        padding:4px 10px;
-        border-radius:20px;
-        white-space:nowrap;
-        box-shadow:0 2px 6px rgba(0,0,0,0.3);
-        margin-bottom:4px;
-      ">
-        출발
-      </div>
-      <div style="
-        width:16px;height:16px;
-        background:#2563eb;
-        border:3px solid #fff;
-        border-radius:50%;
-        box-shadow:0 2px 6px rgba(0,0,0,0.4);
-      "></div>
-      <div style="
-        width:2px;height:12px;
-        background:#2563eb;
-      "></div>
-    </div>
-  `,
-  iconSize: new window.Tmapv2.Size(60, 70),
-  iconAnchor: new window.Tmapv2.Point(30, 70),
+  icon: makePinIcon("출발", "#2563eb"),
+  iconSize: new window.Tmapv2.Size(60, 80),
+  iconAnchor: new window.Tmapv2.Point(30, 80),
 });
 
-// ✅ 도착 마커 (빨간 원형 핀)
+// ✅ 도착 마커
 new window.Tmapv2.Marker({
   position: endLatLng,
   map,
-  iconHTML: `
-    <div style="
-      position:relative;
-      display:flex;
-      flex-direction:column;
-      align-items:center;
-    ">
-      <div style="
-        background:#dc2626;
-        color:#fff;
-        font-size:12px;
-        font-weight:700;
-        padding:4px 10px;
-        border-radius:20px;
-        white-space:nowrap;
-        box-shadow:0 2px 6px rgba(0,0,0,0.3);
-        margin-bottom:4px;
-      ">
-        도착
-      </div>
-      <div style="
-        width:16px;height:16px;
-        background:#dc2626;
-        border:3px solid #fff;
-        border-radius:50%;
-        box-shadow:0 2px 6px rgba(0,0,0,0.4);
-      "></div>
-      <div style="
-        width:2px;height:12px;
-        background:#dc2626;
-      "></div>
-    </div>
-  `,
-  iconSize: new window.Tmapv2.Size(60, 70),
-  iconAnchor: new window.Tmapv2.Point(30, 70),
+  icon: makePinIcon("도착", "#dc2626"),
+  iconSize: new window.Tmapv2.Size(60, 80),
+  iconAnchor: new window.Tmapv2.Point(30, 80),
 });
 
       // =========================
