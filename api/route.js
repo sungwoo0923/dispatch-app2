@@ -8,9 +8,17 @@ function cleanAddress(addr = "") {
     .trim();
 }
 
+export default async function handler(req, res) {
 
-const handler = async (req, res) => {
-  
+  // ✅ CORS 헤더
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method Not Allowed" });
   }
@@ -25,11 +33,11 @@ const handler = async (req, res) => {
     const TMAP_KEY = "rmzwkLwH9N4i9ayxDj9GR6l8hyFDaEk52ZQs4yer";
 
     // =========================
-    // 🔥 0️⃣ 도로명 → 지번 변환 (핵심)
+    // 0️⃣ 도로명 → 지번 변환
     // =========================
     const convertToJibun = async (addr) => {
       try {
-        const res = await fetch(
+        const r = await fetch(
           "https://apis.openapi.sk.com/tmap/geo/convertAddress?version=1&format=json",
           {
             method: "POST",
@@ -44,10 +52,9 @@ const handler = async (req, res) => {
           }
         );
 
-        if (!res.ok) return addr;
+        if (!r.ok) return addr;
 
-        const data = await res.json();
-
+        const data = await r.json();
         const jibun =
           data?.addressInfo?.fullAddress ||
           data?.addressInfo?.buildingName;
@@ -60,6 +67,8 @@ const handler = async (req, res) => {
 
     // =========================
     // 1️⃣ 주소 → 좌표
+    // 🔥 TMAP: newLat/newLon 필드가 실제 좌표값
+    //    lat = 위도(Y) 33~38, lon = 경도(X) 126~130
     // =========================
     const geocode = async (addr) => {
       const url =
@@ -79,42 +88,52 @@ const handler = async (req, res) => {
 
       if (!coord) return null;
 
+      // 🔥 핵심 수정: newLat/newLon 우선 사용
+      const rawLat = parseFloat(coord.newLat || coord.lat);
+      const rawLon = parseFloat(coord.newLon || coord.lon);
+
+      if (!rawLat || !rawLon) return null;
+
+      // 🔥 한국 좌표 범위 검증 (lat: 33~38, lon: 126~130)
+      if (rawLat < 33 || rawLat > 38 || rawLon < 126 || rawLon > 130) {
+        console.warn("⚠️ 좌표 범위 이상 — lat:", rawLat, "lon:", rawLon, "addr:", addr);
+        return null;
+      }
+
       return {
-        lat: parseFloat(coord.lat),
-        lon: parseFloat(coord.lon),
+        lat: rawLat,  // 위도 Y
+        lon: rawLon,  // 경도 X
       };
     };
 
     // =========================
-    // 🔥 1-1️⃣ 강화된 fallback
+    // 1-1️⃣ 강화된 fallback
     // =========================
     const tryGeocode = async (addr) => {
-  // 🔥 1️⃣ 원본
-  let result = await geocode(addr);
+      let result = await geocode(addr);
 
-  // 🔥 2️⃣ 지번 변환 (항상 같이 시도)
-  const jibun = await convertToJibun(addr);
-  const jibunResult = await geocode(jibun);
+      const jibun = await convertToJibun(addr);
+      const jibunResult = await geocode(jibun);
 
-  // 👉 더 안정적인 좌표 선택
-  if (jibunResult) return jibunResult;
-  if (result) return result;
+      if (jibunResult) return jibunResult;
+      if (result) return result;
 
-  // 🔥 3️⃣ 주소 축소
-  const parts = addr.split(" ");
-  for (let i = parts.length - 1; i >= 2; i--) {
-    const short = parts.slice(0, i).join(" ");
-    result = await geocode(short);
-    if (result) return result;
-  }
+      const parts = addr.split(" ");
+      for (let i = parts.length - 1; i >= 2; i--) {
+        const short = parts.slice(0, i).join(" ");
+        result = await geocode(short);
+        if (result) return result;
+      }
 
-  return null;
-};
-    // =========================
-    // 🔥 실제 적용
-    // =========================
+      return null;
+    };
+
     const from = await tryGeocode(cleanAddress(fromAddr));
-    const to = await tryGeocode(cleanAddress(toAddr));
+    const to   = await tryGeocode(cleanAddress(toAddr));
+
+    // 🔥 좌표 디버그 로그
+    console.log("📍 from:", from, "| 원본주소:", fromAddr);
+    console.log("📍 to  :", to,   "| 원본주소:", toAddr);
 
     if (!from || !to) {
       return res.status(200).json({
@@ -126,7 +145,8 @@ const handler = async (req, res) => {
     }
 
     // =========================
-    // 🔥 경로 시도 함수
+    // 2️⃣ 경로 시도 함수
+    // 🔥 TMAP Routes: startX = 경도(lon), startY = 위도(lat)
     // =========================
     const tryRoute = async (startX, startY, endX, endY) => {
       try {
@@ -139,12 +159,14 @@ const handler = async (req, res) => {
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
-              startX,
-              startY,
-              endX,
-              endY,
+              startX,          // 🔥 경도(lon)
+              startY,          // 🔥 위도(lat)
+              endX,            // 🔥 경도(lon)
+              endY,            // 🔥 위도(lat)
               reqCoordType: "WGS84GEO",
               resCoordType: "WGS84GEO",
+              searchOption: "0",          // ✅ 추가: 최적경로
+              tollgateFareOption: "16",   // ✅ 추가: 경로 탐색 성공률 향상
             }),
           }
         );
@@ -161,7 +183,8 @@ const handler = async (req, res) => {
     };
 
     // =========================
-    // 🔥 경로 재시도 (도로 스냅 효과)
+    // 3️⃣ 경로 재시도 (도로 스냅 효과)
+    // 🔥 lon = X, lat = Y 순서 엄격히 지킴
     // =========================
     const getRoute = async (start, end) => {
       const offsets = [
@@ -174,37 +197,37 @@ const handler = async (req, res) => {
         [0, 0.001],
       ];
 
-      // 출발 이동
+      // 출발지 이동
       for (const [dx, dy] of offsets) {
-        const res = await tryRoute(
-          start.lon + dx,
-          start.lat + dy,
-          end.lon,
-          end.lat
+        const r = await tryRoute(
+          start.lon + dx,   // startX = 경도
+          start.lat + dy,   // startY = 위도
+          end.lon,          // endX   = 경도
+          end.lat           // endY   = 위도
         );
-        if (res) return res;
+        if (r) return r;
       }
 
-      // 도착 이동
+      // 도착지 이동
       for (const [dx, dy] of offsets) {
-        const res = await tryRoute(
+        const r = await tryRoute(
           start.lon,
           start.lat,
           end.lon + dx,
           end.lat + dy
         );
-        if (res) return res;
+        if (r) return r;
       }
 
       // 둘 다 이동
       for (const [dx, dy] of offsets) {
-        const res = await tryRoute(
+        const r = await tryRoute(
           start.lon + dx,
           start.lat + dy,
           end.lon + dx,
           end.lat + dy
         );
-        if (res) return res;
+        if (r) return r;
       }
 
       return null;
@@ -213,6 +236,7 @@ const handler = async (req, res) => {
     const features = await getRoute(from, to);
 
     if (!features) {
+      console.error("❌ 경로 없음: ROUTE_RETRY_FAIL", { from, to });
       return res.status(200).json({
         distanceKm: "0.0",
         durationMin: 0,
@@ -222,7 +246,7 @@ const handler = async (req, res) => {
     }
 
     // =========================
-    // 경로 좌표
+    // 경로 좌표 추출
     // =========================
     const path = [];
 
@@ -267,6 +291,4 @@ const handler = async (req, res) => {
       error: "SERVER_FAIL",
     });
   }
-};
-
-export default handler;
+}
