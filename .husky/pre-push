@@ -1,0 +1,54 @@
+#!/bin/sh
+
+# ============================================================
+# pre-push hook: git push 시 patch 버전 자동 증가
+# e.g. 1.0.1 → 1.0.2
+#
+# SKIP_BUMP=1 환경변수로 재귀 호출 방지
+# ============================================================
+
+if [ "$SKIP_BUMP" = "1" ]; then
+  exit 0
+fi
+
+REMOTE="$1"
+BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null)
+
+# push할 커밋이 실제로 있는지 확인 (stdin에서 ref 정보 읽기)
+HAS_PUSH=0
+while IFS=' ' read -r local_ref local_sha remote_ref remote_sha; do
+  if [ -n "$local_sha" ] && [ "$local_sha" != "0000000000000000000000000000000000000000" ]; then
+    HAS_PUSH=1
+  fi
+done
+
+if [ "$HAS_PUSH" = "0" ]; then
+  exit 0
+fi
+
+echo ""
+echo "🔖 Auto-bumping patch version..."
+
+# package.json의 patch 버전 증가 (1.0.1 → 1.0.2)
+node -e "
+const fs = require('fs');
+const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+const parts = pkg.version.split('.').map(Number);
+parts[2]++;
+pkg.version = parts.join('.');
+fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+process.stdout.write('   version: ' + pkg.version + '\n');
+"
+
+VERSION=$(node -p "require('./package.json').version")
+git add package.json
+git commit -m "chore: version $VERSION"
+
+echo "✅ Committed version $VERSION"
+echo ""
+
+# 버전 커밋 포함해서 push (재귀 방지 플래그 사용)
+SKIP_BUMP=1 git push -u "$REMOTE" "$BRANCH"
+EXIT_CODE=$?
+
+exit $EXIT_CODE
