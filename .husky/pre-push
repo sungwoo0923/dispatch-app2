@@ -6,4 +6,6 @@ echo "🚀 버전 자동 증가 실행"
 npm run version:auto
 
 git add package.json public/version.json
-git commit -m "auto: version bump"
+
+# 변경 있을 때만 commit
+git diff --cached --quiet || git commit -m "auto: version bump"
