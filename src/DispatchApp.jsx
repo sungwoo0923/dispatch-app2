@@ -2784,7 +2784,46 @@ if (!bounds.isEmpty()) {
 }
 
 console.log("✅ 지도 + 경로 완료");
+// =========================
+// ⭐ 출발 / 도착 마커 추가
+// =========================
+const makePinIcon = (label, color) => {
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="60" height="80" viewBox="0 0 60 80">
+      <rect x="2" y="2" width="56" height="26" rx="13" ry="13"
+        fill="${color}" stroke="white" stroke-width="2"/>
+      <text x="30" y="20" text-anchor="middle"
+        font-size="13" font-weight="bold"
+        font-family="sans-serif" fill="white">
+        ${label}
+      </text>
+      <polygon points="25,26 35,26 30,36" fill="${color}"/>
+      <circle cx="30" cy="60" r="9"
+        fill="${color}" stroke="white" stroke-width="3"/>
+      <line x1="30" y1="36" x2="30" y2="51"
+        stroke="${color}" stroke-width="3"/>
+    </svg>
+  `;
+  return "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svg);
+};
 
+setTimeout(() => {
+  new window.Tmapv2.Marker({
+    position: startLatLng,
+    map,
+    icon: makePinIcon("출발", "#2563eb"),
+    iconSize: new window.Tmapv2.Size(60, 80),
+    iconAnchor: new window.Tmapv2.Point(30, 80),
+  });
+
+  new window.Tmapv2.Marker({
+    position: endLatLng,
+    map,
+    icon: makePinIcon("도착", "#dc2626"),
+    iconSize: new window.Tmapv2.Size(60, 80),
+    iconAnchor: new window.Tmapv2.Point(30, 80),
+  });
+}, 500);
     } catch (err) {
       console.error("경로 지도 실패:", err);
     }
