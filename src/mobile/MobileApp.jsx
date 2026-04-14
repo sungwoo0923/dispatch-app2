@@ -1074,6 +1074,7 @@ useEffect(() => {
   if (page !== "list") return;                // 접속 시 list에서만 띄우기
   if (popupLastShownDateRef.current === today) return;
 
+  
   popupLastShownDateRef.current = today;
   setShowUnassignedEntryPopup(true);
 }, [ordersLoaded, unassignedOrders.length, page]);
