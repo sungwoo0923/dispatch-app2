@@ -2808,8 +2808,14 @@ const makePinIcon = (label, color) => {
 };
 
 setTimeout(() => {
+  // 🔥 경로의 실제 시작/끝 좌표 사용 (도로명 주소 대응 핵심)
+  const markerStart = linePath[0];
+  const markerEnd   = linePath[linePath.length - 1];
+
+  if (!markerStart || !markerEnd) return;
+
   new window.Tmapv2.Marker({
-    position: startLatLng,
+    position: markerStart,
     map,
     icon: makePinIcon("출발", "#2563eb"),
     iconSize: new window.Tmapv2.Size(60, 80),
@@ -2817,7 +2823,7 @@ setTimeout(() => {
   });
 
   new window.Tmapv2.Marker({
-    position: endLatLng,
+    position: markerEnd,
     map,
     icon: makePinIcon("도착", "#dc2626"),
     iconSize: new window.Tmapv2.Size(60, 80),
