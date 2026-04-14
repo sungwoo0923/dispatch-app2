@@ -2687,13 +2687,7 @@ React.useEffect(() => {
       const startLatLng = new window.Tmapv2.LatLng(start.lat, start.lon);
       const endLatLng = new window.Tmapv2.LatLng(end.lat, end.lon);
 
-      // =========================
-// ⭐ 출발 / 도착 마커 + 라벨
-// (Marker 기본 핀 + InfoWindow 색상 라벨)
-// =========================
-
-<<<<<<< HEAD
-// 🔥 SVG → Data URL 변환 함수
+      // 🔥 SVG → Data URL 변환 함수
 const makePinIcon = (label, color) => {
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="60" height="80" viewBox="0 0 60 80">
@@ -2704,8 +2698,7 @@ const makePinIcon = (label, color) => {
         font-family="sans-serif" fill="white">
         ${label}
       </text>
-      <polygon points="25,26 35,26 30,36"
-        fill="${color}"/>
+      <polygon points="25,26 35,26 30,36" fill="${color}"/>
       <circle cx="30" cy="60" r="9"
         fill="${color}" stroke="white" stroke-width="3"/>
       <line x1="30" y1="36" x2="30" y2="51"
@@ -2730,28 +2723,8 @@ if (!bounds.isEmpty()) {
   map.fitBounds(bounds);
 }
 
-// 3. 🔥 마커는 fitBounds 이후에 추가 (핵심!)
+// 3. 마커는 fitBounds 이후에 추가
 setTimeout(() => {
-  const makePinIcon = (label, color) => {
-    const svg = `
-      <svg xmlns="http://www.w3.org/2000/svg" width="60" height="80" viewBox="0 0 60 80">
-        <rect x="2" y="2" width="56" height="26" rx="13" ry="13"
-          fill="${color}" stroke="white" stroke-width="2"/>
-        <text x="30" y="20" text-anchor="middle"
-          font-size="13" font-weight="bold"
-          font-family="sans-serif" fill="white">
-          ${label}
-        </text>
-        <polygon points="25,26 35,26 30,36" fill="${color}"/>
-        <circle cx="30" cy="60" r="9"
-          fill="${color}" stroke="white" stroke-width="3"/>
-        <line x1="30" y1="36" x2="30" y2="51"
-          stroke="${color}" stroke-width="3"/>
-      </svg>
-    `;
-    return "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svg);
-  };
-
   new window.Tmapv2.Marker({
     position: startLatLng,
     map,
@@ -2767,39 +2740,7 @@ setTimeout(() => {
     iconSize: new window.Tmapv2.Size(60, 80),
     iconAnchor: new window.Tmapv2.Point(30, 80),
   });
-}, 500); // 🔥 fitBounds 완료 후 0.5초 뒤에 마커 추가
-=======
-// 출발 마커
-const startMarker = new window.Tmapv2.Marker({
-  position: startLatLng,
-  map,
-  title: "출발",
-});
-
-// 출발 InfoWindow 라벨
-const startInfo = new window.Tmapv2.InfoWindow({
-  position: startLatLng,
-  content: '<div style="background:#2563eb;color:white;padding:4px 14px;border-radius:20px;font-size:13px;font-weight:bold;box-shadow:0 2px 6px rgba(0,0,0,0.35);white-space:nowrap;letter-spacing:0.5px;">출발</div>',
-  type: 2,
-});
-startInfo.open(map, startMarker);
-
-// 도착 마커
-const endMarker = new window.Tmapv2.Marker({
-  position: endLatLng,
-  map,
-  title: "도착",
-});
-
-// 도착 InfoWindow 라벨
-const endInfo = new window.Tmapv2.InfoWindow({
-  position: endLatLng,
-  content: '<div style="background:#dc2626;color:white;padding:4px 14px;border-radius:20px;font-size:13px;font-weight:bold;box-shadow:0 2px 6px rgba(0,0,0,0.35);white-space:nowrap;letter-spacing:0.5px;">도착</div>',
-  type: 2,
-});
-endInfo.open(map, endMarker);
-
->>>>>>> claude/auto-version-map-markers-RDQ6O
+}, 500);
       // =========================
 // ⭐🔥 도로 경로 (완성)
 // =========================
