@@ -317,6 +317,7 @@ export default function MobileApp() {
 const [fallbackData, setFallbackData] = useState([]);
 const [showUnassignedEntryPopup, setShowUnassignedEntryPopup] = useState(false);
 const [ordersLoaded, setOrdersLoaded] = useState(false);
+const [focusUnassignedOrderId, setFocusUnassignedOrderId] = useState(null);
 const popupLastShownDateRef = useRef(null);        // 마지막으로 팝업을 띄운 KST 날짜(YYYY-MM-DD)
 const pendingPopupRef = useRef(false);             // 자정에 list가 아니면, list로 돌아왔을 때 띄우기
 const pageRef = useRef("list");                    // 현재 page 추적
@@ -1074,7 +1075,7 @@ useEffect(() => {
   if (page !== "list") return;                // 접속 시 list에서만 띄우기
   if (popupLastShownDateRef.current === today) return;
 
-  
+
   popupLastShownDateRef.current = today;
   setShowUnassignedEntryPopup(true);
 }, [ordersLoaded, unassignedOrders.length, page]);
@@ -1524,12 +1525,15 @@ const title =
                   key={o.id}
                   className="w-full text-left border rounded-xl px-3 py-2 bg-gray-50 active:scale-[0.99]"
                   onClick={() => {
-                    // ✅ 미리보기 누르면 미배차현황 메뉴로 바로 이동
-                    setUnassignedTypeFilter("전체");
-                    setPage("unassigned");
-                    setShowUnassignedEntryPopup(false);
-                    window.scrollTo(0, 0);
-                  }}
+  setUnassignedTypeFilter("전체");
+
+  // ✅ 어떤 오더를 눌렀는지 저장
+  setFocusUnassignedOrderId(o.id);
+
+  setPage("unassigned");
+  setShowUnassignedEntryPopup(false);
+  window.scrollTo(0, 0);
+}}
                 >
                   <div className="flex items-center justify-between gap-2">
                     <div className="text-sm font-semibold text-gray-800 truncate">
@@ -1576,6 +1580,7 @@ const title =
         <button
           className="col-span-2 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold"
           onClick={() => {
+            setFocusUnassignedOrderId(null);
             setUnassignedTypeFilter("전체");
             setPage("unassigned");
             setShowUnassignedEntryPopup(false);
@@ -1956,19 +1961,23 @@ setOpenMemo={setOpenMemo}
   <MobileUnassignedList
     title="미배차 / 정보미전달"
     orders={{
-      unassigned: unassignedOrders,     // 차량번호 없음
-      undelivered: undeliveredOrders,   // 배차완료 포함
+      unassigned: unassignedOrders,
+      undelivered: undeliveredOrders,
     }}
     unassignedTypeFilter={unassignedTypeFilter}
     setUnassignedTypeFilter={setUnassignedTypeFilter}
     setTodayRange={setTodayRange}
-  setTomorrowRange={setTomorrowRange}
+    setTomorrowRange={setTomorrowRange}
     onBack={() => setPage("list")}
     setSelectedOrder={setSelectedOrder}
     setPage={setPage}
     setDetailFrom={setDetailFrom}
     setOpenMemo={setOpenMemo}
     setPrevPage={setPrevPage}
+
+    // ✅ 추가: 클릭한 오더 포커스(스크롤+하이라이트)
+    focusOrderId={focusUnassignedOrderId}
+    onFocusDone={() => setFocusUnassignedOrderId(null)}
   />
 )}
 
@@ -2762,6 +2771,7 @@ function MobileOrderCard({
   onOpenMemo,
   showUndeliveredOnly,
   onConfirmDeliver,
+  flash = false,
 }) {
   const claim = getClaim(order);
   const fee = order.기사운임 ?? 0;
@@ -2808,10 +2818,15 @@ const dropTime = order.하차시간 || "시간 없음";
     String(order.차량종류 || order.차종 || "").includes("냉동");
 
   return (
-    <div
-      className="relative bg-white rounded-2xl shadow border px-3 py-3"
-      onClick={onSelect}
-    >
+   <div
+  className={
+    "relative bg-white rounded-2xl shadow border px-3 py-3 transition-colors " +
+    (flash
+      ? "border-blue-400 order-flash-blue shadow-[0_0_0_4px_rgba(59,130,246,0.18),0_0_18px_rgba(59,130,246,0.35)]"
+      : "border-gray-200")
+  }
+  onClick={onSelect}
+>
       {/* 📝 메모 뱃지 */}
 {(order.메모 || order.적요) && (
   <div
@@ -5928,6 +5943,8 @@ function MobileUnassignedList({
   setDetailFrom,
   setOpenMemo,
   setPrevPage,
+  focusOrderId,
+  onFocusDone,
 }) {
     // ============================
   // 🔢 미배차 요약 계산
@@ -5941,6 +5958,52 @@ function MobileUnassignedList({
 
   const totalCount = unassigned.length;
   const normalCount = totalCount - coldCount;
+  // ✅ 포커스 스크롤/하이라이트용 ref + 상태
+  const orderRefs = useRef({}); // { [orderId]: HTMLElement }
+  const [flashId, setFlashId] = useState(null);
+
+  // ✅ focusOrderId가 들어오면: 해당 카드로 스크롤 → 파란 glow 1회 → 종료
+  useEffect(() => {
+    if (!focusOrderId) return;
+
+    // 혹시 필터 때문에 카드가 안 보일 수 있으니(안전장치)
+    setUnassignedTypeFilter("전체");
+
+    let rafId;
+    let tries = 0;
+    let timeoutId;
+
+    const run = () => {
+      const el = orderRefs.current[focusOrderId];
+
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+
+        setFlashId(focusOrderId);
+
+        timeoutId = setTimeout(() => {
+          setFlashId(null);
+          onFocusDone?.();
+        }, 1200);
+
+        return;
+      }
+
+      // 렌더 타이밍으로 ref가 아직 없을 수 있어 재시도
+      if (tries++ < 20) {
+        rafId = requestAnimationFrame(run);
+      } else {
+        onFocusDone?.();
+      }
+    };
+
+    rafId = requestAnimationFrame(run);
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      clearTimeout(timeoutId);
+    };
+  }, [focusOrderId, setUnassignedTypeFilter, onFocusDone]);
 
 
   const [confirmTarget, setConfirmTarget] = useState(null);
@@ -6007,8 +6070,19 @@ const source = rawSource.filter((o) => {
   }
   const sortedDates = Array.from(dateMap.keys()).sort();
 
-  return (
-    <div className="px-3 py-3">
+return (
+  <div className="px-3 py-3">
+    {/* ✅ 포커스 하이라이트(파란 glow) 애니메이션 */}
+    <style>{`
+      @keyframes flashGlowBlue {
+        0%   { box-shadow: 0 0 0 rgba(59,130,246,0); }
+        25%  { box-shadow: 0 0 0 4px rgba(59,130,246,.22), 0 0 18px rgba(59,130,246,.35); }
+        100% { box-shadow: 0 0 0 rgba(59,130,246,0); }
+      }
+      .order-flash-blue {
+        animation: flashGlowBlue 1.2s ease-out;
+      }
+    `}</style>
       
       {/* 🔥 미배차 / 정보미전달 탭 */}
 <div className="flex rounded-xl overflow-hidden mb-4 border bg-gray-100">
@@ -6092,21 +6166,31 @@ const source = rawSource.filter((o) => {
 
       <div className="space-y-3">
         {list.map((o) => (
-          <MobileOrderCard
-            key={o.id}
-            order={o}
-            onSelect={() => {
-              setPrevPage("unassigned");
-              setSelectedOrder(o);
-              setDetailFrom("unassigned");
-              setPage("detail");
-              window.scrollTo(0, 0);
-            }}
-            onOpenMemo={setOpenMemo}
-            showUndeliveredOnly={tab === "정보미전달"}
-            onConfirmDeliver={() => setConfirmTarget(o)}
-          />
-        ))}
+  <div
+    key={o.id}
+    ref={(el) => {
+      if (el) orderRefs.current[o.id] = el;
+    }}
+    style={{ scrollMarginTop: 90 }} // ✅ sticky header에 가리지 않게
+  >
+    <MobileOrderCard
+      order={o}
+      onSelect={() => {
+        setPrevPage("unassigned");
+        setSelectedOrder(o);
+        setDetailFrom("unassigned");
+        setPage("detail");
+        window.scrollTo(0, 0);
+      }}
+      onOpenMemo={setOpenMemo}
+      showUndeliveredOnly={tab === "정보미전달"}
+      onConfirmDeliver={() => setConfirmTarget(o)}
+
+      // ✅ 추가: 포커스 대상이면 하이라이트
+      flash={flashId === o.id}
+    />
+  </div>
+))}
       </div>
     </div>
   );

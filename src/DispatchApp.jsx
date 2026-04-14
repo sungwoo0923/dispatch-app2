@@ -5857,9 +5857,10 @@ setActiveStopIdx(null);
 
     <div className="flex justify-between pt-3">
 
-      <button
-        className="px-3 py-1.5 text-sm border rounded"
-        onClick={()=>{
+     <button
+  type="button"
+  className="px-3 py-1.5 text-sm border rounded"
+  onClick={()=>{
           setStopList(prev=>[
             ...prev,
             { 업체명:"", 주소:"", 담당자:"", 담당자번호:"", 메모:"" }
@@ -5870,29 +5871,23 @@ setActiveStopIdx(null);
       </button>
 
       <div className="flex gap-2">
-        <button
-          className="px-3 py-1.5 text-sm border rounded"
-          onClick={()=>setStopPopupOpen(false)}
+       <button
+  type="button"
+  className="px-3 py-1.5 text-sm border rounded"
+  onClick={()=>setStopPopupOpen(false)}
         >
           취소
         </button>
 
-        <button
+           <button
+          type="button"
           className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded"
-          onClick={()=>{
+                    onClick={()=>{
   if(stopType==="pickup"){
     onChange("경유상차목록", stopList);
-
-    // 🔥 추가 (핵심)
-    handleChange?.("경유상차목록", stopList);
-
   }else{
     onChange("경유하차목록", stopList);
-
-    // 🔥 추가 (핵심)
-    handleChange?.("경유하차목록", stopList);
   }
-
   setStopPopupOpen(false);
 }}
         >
@@ -10285,15 +10280,13 @@ ${savedHighlightIds.has(r._id) ? "row-highlight" : ""}
                     <div className="inline-flex items-center gap-1">
                       <span>{r.상차지명}</span>
 
-{((r.경유상차목록 && r.경유상차목록.length > 0) ||
-  (r.경유지_상차 && r.경유지_상차.length > 0)) && (
-  <StopBadge
-    count={
-      (r.경유상차목록?.length || r.경유지_상차?.length || 0)
-    }
-    list={r.경유상차목록 || r.경유지_상차 || []}
-  />
-)}
+{(() => {
+  const a = Array.isArray(r.경유상차목록) ? r.경유상차목록 : [];
+  const b = Array.isArray(r.경유지_상차) ? r.경유지_상차 : [];
+  const list = [...a, ...b].filter(s => s?.업체명?.trim())
+    .filter((s, i, arr) => arr.findIndex(x => x.업체명 === s.업체명) === i);
+  return list.length > 0 ? <StopBadge count={list.length} list={list} /> : null;
+})()}
 
 {r.운행유형 === "왕복" && <RoundTripBadge />}
                     </div>
@@ -10306,15 +10299,13 @@ ${savedHighlightIds.has(r._id) ? "row-highlight" : ""}
                     <div className="inline-flex items-center gap-1">
                       <span>{r.하차지명}</span>
 
-{((r.경유하차목록 && r.경유하차목록.length > 0) ||
-  (r.경유지_하차 && r.경유지_하차.length > 0)) && (
-  <StopBadge
-    count={
-      (r.경유하차목록?.length || r.경유지_하차?.length || 0)
-    }
-    list={r.경유하차목록 || r.경유지_하차 || []}
-  />
-)}
+{(() => {
+  const a = Array.isArray(r.경유하차목록) ? r.경유하차목록 : [];
+  const b = Array.isArray(r.경유지_하차) ? r.경유지_하차 : [];
+  const list = [...a, ...b].filter(s => s?.업체명?.trim())
+    .filter((s, i, arr) => arr.findIndex(x => x.업체명 === s.업체명) === i);
+  return list.length > 0 ? <StopBadge count={list.length} list={list} /> : null;
+})()}
                     </div>
                   </td>
                   <td className={addrCell}>
@@ -15764,7 +15755,31 @@ setEditTarget({
       </span>
     );
   };
+const StopBadge = ({ count, list = [] }) => {
+  if (!count || count === 0) return null;
 
+  const names = list
+    .filter(s => s.업체명?.trim())
+    .map(s => s.업체명)
+    .join(" → ");
+
+  return (
+    <span
+      title={names}
+      className="
+        ml-1 px-1.5 py-0.5
+        text-[10px] font-semibold
+        rounded-full
+        bg-orange-100 text-orange-700
+        border border-orange-300
+        whitespace-nowrap
+        cursor-help
+      "
+    >
+      경유{count}
+    </span>
+  );
+};
   // ⭐ 상태 변경될 때마다 localStorage 저장
  React.useEffect(() => {
 const save = {
@@ -16251,37 +16266,48 @@ const save = {
         />
       </div>
 
-    ) : key === "상차지명" ? (
-      <div className="inline-flex items-center gap-1">
-        <span>{row.상차지명}</span>
+   ) : key === "상차지명" ? (
+  <div className="inline-flex items-center gap-1">
+    <span>{row.상차지명}</span>
+    {row.운행유형 === "왕복" && (
+      <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-indigo-100 text-indigo-700 border border-indigo-300 whitespace-nowrap">
+        왕복
+      </span>
+    )}
+    {(() => {
+const raw = row.경유상차목록 || row.경유지_상차;
+const list = (Array.isArray(raw) ? raw : []).filter(s => s?.업체명?.trim());
+      return list.length > 0 ? <StopBadge count={list.length} list={list} /> : null;
+    })()}
+  </div>
 
-        {/* 왕복 */}
-        {row.운행유형 === "왕복" && (
-          <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-indigo-100 text-indigo-700 border border-indigo-300 whitespace-nowrap">
-            왕복
-          </span>
-        )}
-
-        {/* 경유 (상차 기준) */}
-        {Array.isArray(row.경유지_상차) && row.경유지_상차.length > 0 && (
-          <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-emerald-100 text-emerald-700 border border-emerald-300 whitespace-nowrap">
-            경유 {row.경유지_상차.length}
-          </span>
-        )}
-      </div>
+) : key === "하차지명" ? (
+  <div className="inline-flex items-center gap-1">
+    <span>{row.하차지명}</span>
+    {(() => {
+      const raw = row.경유하차목록 || row.경유지_하차;
+const list = (Array.isArray(raw) ? raw : []).filter(s => s?.업체명?.trim());
+      return list.length > 0 ? <StopBadge count={list.length} list={list} /> : null;
+    })()}
+  </div>
 
 ) : key === "상차시간" ? (
-  row.상차시간
-    ? `${row.상차시간}${row.상차시간기준 ? ` ${row.상차시간기준}` : ""}`
-    : ""
+  <span>
+    {row.상차시간
+      ? `${row.상차시간}${row.상차시간기준 ? ` ${row.상차시간기준}` : ""}`
+      : ""}
+  </span>
+
 ) : key === "하차시간" ? (
-  row.하차시간
-    ? `${row.하차시간}${row.하차시간기준 ? ` ${row.하차시간기준}` : ""}`
-    : ""
+  <span>
+    {row.하차시간
+      ? `${row.하차시간}${row.하차시간기준 ? ` ${row.하차시간기준}` : ""}`
+      : ""}
+  </span>
+
 ) : (
   row[key]
-    )}
-
+)}
   </td>
 ))}
 
