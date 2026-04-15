@@ -350,7 +350,21 @@ const addDispatch = async (record) => {
 
 const patchDispatch = async (_id, patch) => {
   if (!_id) return;
-  
+    // 🚫 블랙 기사 차량번호 입력 시 경고
+  if (patch.차량번호) {
+    const plate = String(patch.차량번호).replace(/\s+/g, "");
+    const blackDriver = drivers.find(
+      (d) => d.등급 === "블랙" &&
+      String(d.차량번호 || "").replace(/\s+/g, "") === plate
+    );
+    if (blackDriver) {
+      window.__blackDriverAlert__ = blackDriver;
+      setTimeout(() => {
+        const ev = new CustomEvent("blackDriverDetected", { detail: blackDriver });
+        window.dispatchEvent(ev);
+      }, 100);
+    }
+  }
   // 🔥 등록시간 절대 덮어쓰기 방지
   delete patch.createdAt;
   delete patch.등록일시;
