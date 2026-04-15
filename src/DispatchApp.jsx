@@ -6023,7 +6023,11 @@ setActiveStopIdx(null);
    <select className={inputCls} value={form.지급방식} onChange={(e) => {
   const v = e.target.value;
   onChange("지급방식", v);
-  if (v === "취소") onChange("배차상태", "배차취소");
+ if (v === "취소") {
+  onChange("배차상태", "배차취소");
+} else if (form.배차상태 === "배차취소") {
+  onChange("배차상태", form.차량번호 && (form.이름 || form.전화번호) ? "배차완료" : "배차중");
+}
 }}>
       <option value="">선택 ▾</option>
       {PAY_TYPES.map(v => <option key={v} value={v}>{v}</option>)}
@@ -6902,8 +6906,15 @@ const today = now.toISOString().slice(0, 10);
           className="px-3 py-1.5 bg-blue-600 text-white rounded"
           onClick={async () => {
             const patch = { [confirmChange.key]: confirmChange.after };
-if (confirmChange.key === "지급방식" && confirmChange.after === "취소") {
-  patch.배차상태 = "배차취소";
+if (confirmChange.key === "지급방식") {
+  if (confirmChange.after === "취소") {
+    patch.배차상태 = "배차취소";
+  } else {
+    const row = rows.find(r => r._id === confirmChange.rowId);
+    if (row?.배차상태 === "배차취소") {
+      patch.배차상태 = row?.차량번호 && (row?.이름 || row?.전화번호) ? "배차완료" : "배차중";
+    }
+  }
 }
 await patchDispatch(confirmChange.rowId, patch);
 setConfirmChange(null);
@@ -8373,23 +8384,39 @@ ${fare.toLocaleString()}원 ${payLabel} 배차되었습니다.`;
   // 🔔 이전 첨부 개수 저장
   const prevAttachRef = React.useRef({});
   const [filterValue, setFilterValue] = React.useState("");
-const sortRows = (list = []) => {
-  return [...list].sort((a, b) => {
-    if (a.배차상태 !== b.배차상태) {
-      return a.배차상태 === "배차중" ? -1 : 1;
-    }
+// ✅ 배차상태 우선순위: 배차중 -> 배차완료 -> 배차취소(맨 아래)
+const getStatusRank = (s) => {
+  const v = String(s || "");
+  if (v === "배차중") return 0;
+  if (v === "배차완료") return 1;
+  if (v === "배차취소") return 2;
+  return 3; // 기타/빈값
+};
 
-    if (a.배차상태 === "배차완료") {
+const getCreated = (r) =>
+  r.createdAt ? r.createdAt : new Date(r.등록일 || 0).getTime();
+
+const sortDispatchRows = (list = []) => {
+  return [...list].sort((a, b) => {
+    const ra = getStatusRank(a.배차상태);
+    const rb = getStatusRank(b.배차상태);
+
+    // 1) 상태 우선순위 고정 (취소는 항상 마지막)
+    if (ra !== rb) return ra - rb;
+
+    // 2) 같은 상태 내 정렬
+    // 배차완료/배차취소: updatedAt 최신순
+    if (ra === 1 || ra === 2) {
       return (b.updatedAt || 0) - (a.updatedAt || 0);
     }
 
-    return (b.createdAt || 0) - (a.createdAt || 0);
+    // 배차중: createdAt(또는 등록일) 최신순
+    return getCreated(b) - getCreated(a);
   });
 };
 
 const [rows, setRows] = React.useState(() =>
-  
-  sortRows(dispatchData || [])
+  sortDispatchRows(dispatchData || [])
 );
 
 
@@ -8727,29 +8754,10 @@ React.useEffect(() => {
 
     const merged = [...kept, ...newOnes];
 
-    // 🔥 최종 정렬
-merged.sort((a, b) => {
-  // 1️⃣ 배차중 우선
-  if (a.배차상태 !== b.배차상태) {
-    return a.배차상태 === "배차중" ? -1 : 1;
-  }
-
-  // 2️⃣ 배차완료 그룹은 updatedAt 최신순
-  if (a.배차상태 === "배차완료") {
-    return (b.updatedAt || 0) - (a.updatedAt || 0);
-  }
-
-  // 3️⃣ 배차중 → createdAt 최신순 (fallback 포함)
-  const getCreated = (r) =>
-    r.createdAt
-      ? r.createdAt
-      : new Date(r.등록일 || 0).getTime();
-
-  return getCreated(b) - getCreated(a);
-});
-    return merged;
-  });
+    return sortDispatchRows(merged);
+  }); // ✅ 이게 빠져있어서 에러났던 거
 }, [dispatchData, deletedIds]);
+
 // 🔥 rows 갱신 후 edited 데이터 반영
 React.useEffect(() => {
   if (!Object.keys(edited).length) return;
@@ -9206,27 +9214,15 @@ if (newOnes.length > 0) {
 
 await patchDispatch(driverConfirmRowId, updated);
 
-// 🔥🔥🔥 여기 추가
 setRows(prev =>
-  prev
-    .map(r =>
+  sortDispatchRows(
+    prev.map(r =>
       r._id === driverConfirmRowId
         ? { ...r, ...updated }
         : r
     )
-    .sort((a, b) => {
-      if (a.배차상태 !== b.배차상태) {
-        return a.배차상태 === "배차중" ? -1 : 1;
-      }
-
-      if (a.배차상태 === "배차완료") {
-        return (b.updatedAt || 0) - (a.updatedAt || 0);
-      }
-
-      return (b.createdAt || 0) - (a.createdAt || 0);
-    })
+  )
 );
-
 setDriverConfirmOpen(false);
 setDriverConfirmInfo(null);
 setDriverConfirmRowId(null);
@@ -9372,9 +9368,11 @@ setDriverConfirmRowId(null);
     }
 
     // 정렬
-    if (sortKey) {
-      data.sort(compareBy(sortKey, sortDir));
-    }
+if (sortKey) {
+  data.sort(compareBy(sortKey, sortDir));
+} else {
+  data = sortDispatchRows(data); // ✅ 기본정렬에서만 취소 맨 아래
+}
 
     return data;
   }, [rows, q, sortKey, sortDir, dayMode, statusFilter]);
@@ -12238,22 +12236,7 @@ const newRow = {
   ...payload,
   _id: newId,    // 🔥 반드시 추가
 };
-
-setRows(prev => {
-  const merged = [...prev, newRow];
-
-  return merged.sort((a, b) => {
-    if (a.배차상태 !== b.배차상태) {
-      return a.배차상태 === "배차중" ? -1 : 1;
-    }
-
-    if (a.배차상태 === "배차완료") {
-      return (b.updatedAt || 0) - (a.updatedAt || 0);
-    }
-
-    return (b.createdAt || 0) - (a.createdAt || 0);
-  });
-});
+setRows(prev => sortDispatchRows([...prev, newRow]));
                     alert("신규 오더가 등록되었습니다.");
                     setShowCreate(false);
                     setNewOrder({
@@ -13969,11 +13952,18 @@ setEditTarget((p) => ({
                         : null;
                     patch.업체전달방법 = "수동";
                   }
-if (confirmChange.key === "지급방식" && confirmChange.after === "취소") {
-  patch.배차상태 = "배차취소";
+if (confirmChange.key === "지급방식") {
+  if (confirmChange.after === "취소") {
+    patch.배차상태 = "배차취소";
+  } else {
+    const row = dispatchData.find(r => r._id === confirmChange.rowId);
+    if (row?.배차상태 === "배차취소") {
+      patch.배차상태 = row?.차량번호 && (row?.이름 || row?.전화번호) ? "배차완료" : "배차중";
+    }
+  }
 }
-                  await patchDispatch(confirmChange.rowId, patch);
-                  setConfirmChange(null);
+await patchDispatch(confirmChange.rowId, patch);
+setConfirmChange(null);
                 }}
               >
                 변경
@@ -15601,42 +15591,50 @@ setEditTarget({
       .replace(/[0-9]/g, "")
       .replace(/[^a-z0-9가-힣]/g, "");
 
-  // =====================
-  // 🔽 정렬 비교 함수 (최종 확정본)
-  // =====================
-  const compareBy = (key, dir = "asc") => (a, b) => {
+  // ✅ 배차상태 우선순위 (기본정렬에서만 사용)
+const getStatusRank = (s) => {
+  const v = String(s || "");
+  if (v === "배차중") return 0;
+  if (v === "배차완료") return 1;
+  if (v === "배차취소") return 2; // 항상 맨 아래로
+  return 3; // 기타 상태
+};
 
-    // ✅ 기본 정렬 (정렬 해제 상태)
-    if (!key) {
-      // 1️⃣ 배차중 최우선
-      if (a.배차상태 === "배차중" && b.배차상태 !== "배차중") return -1;
-      if (a.배차상태 !== "배차중" && b.배차상태 === "배차중") return 1;
+// =====================
+// 🔽 정렬 비교 함수 (최종 확정본)
+// =====================
+const compareBy = (key, dir = "asc") => (a, b) => {
 
-      // 2️⃣ 상차일 내림차순 (미래 → 과거)
-      const d1 = a.상차일 || "";
-      const d2 = b.상차일 || "";
-      if (d1 !== d2) return d2.localeCompare(d1);
+  // ✅ 기본 정렬 (정렬 해제 상태)
+  if (!key) {
+    // 0) 배차상태 우선순위: 배차중 → 배차완료 → 배차취소 → 기타
+    const ra = getStatusRank(a.배차상태);
+    const rb = getStatusRank(b.배차상태);
+    if (ra !== rb) return ra - rb;
 
-      // 3️⃣ 상차시간 내림차순 (늦은 시간 → 이른 시간)
-      const t1 = a.상차시간 || "";
-      const t2 = b.상차시간 || "";
-      return t2.localeCompare(t1);
-    }
+    // 1) (같은 상태끼리) 기존 로직 유지: 상차일 ↓, 상차시간 ↓
+    const d1 = a.상차일 || "";
+    const d2 = b.상차일 || "";
+    if (d1 !== d2) return d2.localeCompare(d1);
 
-    // ✅ 사용자 선택 정렬
-    let av = a[key];
-    let bv = b[key];
+    const t1 = a.상차시간 || "";
+    const t2 = b.상차시간 || "";
+    return t2.localeCompare(t1);
+  }
 
-    if (key === "거래처명") {
-      av = normalizeClient(av);
-      bv = normalizeClient(bv);
-    }
+  // ✅ 사용자 선택 정렬 (상태 우선순위 강제 X)
+  let av = a[key];
+  let bv = b[key];
 
-    return dir === "asc"
-      ? String(av ?? "").localeCompare(String(bv ?? ""), "ko")
-      : String(bv ?? "").localeCompare(String(av ?? ""), "ko");
-  };
+  if (key === "거래처명") {
+    av = normalizeClient(av);
+    bv = normalizeClient(bv);
+  }
 
+  return dir === "asc"
+    ? String(av ?? "").localeCompare(String(bv ?? ""), "ko")
+    : String(bv ?? "").localeCompare(String(av ?? ""), "ko");
+};
 
   const filtered = React.useMemo(() => {
   let data = [...dispatchData];
@@ -19026,21 +19024,26 @@ setCopyTarget(prev => ({
   [confirmChange.field]: confirmChange.after,
   lastUpdated: new Date().toISOString(),
 };
-if (confirmChange.field === "지급방식" && confirmChange.after === "취소") {
-  patch.배차상태 = "배차취소";
+if (confirmChange.field === "지급방식") {
+  if (confirmChange.after === "취소") {
+    patch.배차상태 = "배차취소";
+  } else {
+    const row = dispatchData.find(r => r._id === confirmChange.id);
+    if (row?.배차상태 === "배차취소") {
+      patch.배차상태 = row?.차량번호 && (row?.이름 || row?.전화번호) ? "배차완료" : "배차중";
+    }
+  }
 }
 
-              if (confirmChange.field === "업체전달상태") {
-                patch.업체전달일시 =
-                  confirmChange.after === "전달완료" ? Date.now() : null;
-                patch.업체전달방법 =
-                  confirmChange.after === "전달완료" ? "기사복사" : null;
-              }
-if (confirmChange.field === "지급방식" && confirmChange.after === "취소") {
-  patch.배차상태 = "배차취소";
+if (confirmChange.field === "업체전달상태") {
+  patch.업체전달일시 =
+    confirmChange.after === "전달완료" ? Date.now() : null;
+  patch.업체전달방법 =
+    confirmChange.after === "전달완료" ? "기사복사" : null;
 }
-              await patchDispatch(confirmChange.id, patch);
-              setConfirmChange(null);
+
+await patchDispatch(confirmChange.id, patch);
+setConfirmChange(null);
             }
           }}
         >
