@@ -348,8 +348,14 @@ const addDispatch = async (record) => {
     );
   };
 
-  const patchDispatch = async (_id, patch) => {
+const patchDispatch = async (_id, patch) => {
   if (!_id) return;
+
+  // 🔥 등록시간 절대 덮어쓰기 방지
+  delete patch.createdAt;
+  delete patch.등록일시;
+  delete patch.등록시간;
+  delete patch.createdTime;
 
   // 🔥 1️⃣ 무조건 dispatch 먼저 확인
   let ref = doc(db, "dispatch", _id);
@@ -419,7 +425,9 @@ const addDispatch = async (record) => {
   });
 
   const historyArr = Array.isArray(prev.history) ? prev.history : [];
-
+  if (!prev.createdAt) {
+    cleanPatch.createdAt = prev.updatedAt || prev.createdTime || Date.now();
+  }
   // ✅ 마지막에만 update
   await updateDoc(ref, {
     ...cleanPatch,
@@ -8421,14 +8429,12 @@ const toMs = (v) => {
 
 // 🔥 “등록시간”을 뽑는 함수: createdAt 최우선, 없으면 updatedAt/등록일 fallback
 const getCreatedMs = (r) => {
-  // 프로젝트에 따라 필드명이 섞일 수 있어서 후보를 조금 넓게 잡음
   return (
     toMs(r?.createdAt) ||
     toMs(r?.등록일시) ||
     toMs(r?.등록시간) ||
     toMs(r?.createdTime) ||
-    toMs(r?.updatedAt) ||                 // (fallback) 그래도 없으면 업데이트 시간
-    toMs(r?.등록일 ? `${r.등록일}T00:00:00` : null) // 날짜만 있으면 00:00으로
+    toMs(r?.등록일 ? `${r.등록일}T00:00:00` : null)
   );
 };
 // ✅ ms → 보기 좋은 문자열(한국시간)
@@ -9795,7 +9801,7 @@ ${url}
   // 📌 화면 렌더링
   // ------------------------
   return (
-<div className="px-3 pt-1 w-full overflow-x-auto">
+<div className="px-3 pt-1 w-full" style={{overflowX: "auto", overflowY: "unset"}}>
 
     {/* ⚠ 상차 임박 경고 배너 */}
 {warningList.length > 0 && (
@@ -10226,7 +10232,7 @@ setEditTarget({
       </div>
 
       {/* 테이블 */}
-      <div className="overflow-x-auto w-full" style={{overflowY: "visible"}}>
+      <div style={{overflowX: "auto", overflowY: "unset", width: "100%"}}>
   <table className="w-auto min-w-max text-sm border table-auto">
           <thead>
             <tr>
