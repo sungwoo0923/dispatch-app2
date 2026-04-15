@@ -3706,23 +3706,23 @@ const autoPriority =
  
 const pickupStops = (form.경유상차목록 || []).filter(s => s.업체명?.trim());
 const dropStops   = (form.경유하차목록 || []).filter(s => s.업체명?.trim());
-
+const now = Date.now();
 const rec = {
-  
   ...form,
-
   경유지_상차: pickupStops,
   경유지_하차: dropStops,
-
   메모중요도: autoPriority,
   운임보정: fareAdjustment,
-
   ...moneyPatch,
-
   상차일: lockYear(form.상차일),
   하차일: lockYear(form.하차일),
   순번: nextSeq(),
   배차상태: status,
+  createdAt: now,
+  updatedAt: now,
+  createdByUid: auth.currentUser?.uid || null,
+  createdByEmail: auth.currentUser?.email || null,
+  createdByName: auth.currentUser?.displayName || auth.currentUser?.email || null,
 
   // 🔥 여기 안으로 넣어
   aiLog: aiRecommend
@@ -8475,12 +8475,13 @@ const sortDispatchRows = (list = []) => {
     const rb = getStatusRank(b?.배차상태);
     if (ra !== rb) return ra - rb;
 
-    const ta = getCreatedMs(a);
-    const tb = getCreatedMs(b);
-    if (tb !== ta) return tb - ta; // 최신 등록이 위
+    // 배차완료 → updatedAt 최신순 (수정시간 기준)
+    if (a?.배차상태 === "배차완료") {
+      return toMs(b?.updatedAt) - toMs(a?.updatedAt);
+    }
 
-    // (동률 방지용) 마지막 타이브레이커: updatedAt 최신순
-    return toMs(b?.updatedAt) - toMs(a?.updatedAt);
+    // 배차중 → createdAt 최신순 (등록시간 기준)
+    return getCreatedMs(b) - getCreatedMs(a);
   });
 };
 
@@ -9317,12 +9318,13 @@ setDriverConfirmRowId(null);
     // 차량번호 삭제 → 기사 정보 초기화
     if (!v) {
 
-      const updated = {
-        차량번호: "",
-        이름: "",
-        전화번호: "",
-        배차상태: "배차중",
-      };
+const updated = {
+  차량번호: "",
+  이름: "",
+  전화번호: "",
+  배차상태: "배차중",
+  updatedAt: Date.now(),
+};
 
       setRows((prev) =>
         prev.map((r) => (r._id === id ? { ...r, ...updated } : r))
