@@ -3679,7 +3679,9 @@ const doSave = async () => {
     return;
   }
 
-  const status = form.차량번호 && (form.이름 || form.전화번호)
+const status = form.지급방식 === "취소"
+    ? "배차취소"
+    : form.차량번호 && (form.이름 || form.전화번호)
     ? "배차완료"
     : "배차중";
 
@@ -6018,7 +6020,11 @@ setActiveStopIdx(null);
   {/* 결제 */}
   <div>
     <label className={labelCls}>지급방식</label>
-    <select className={inputCls} value={form.지급방식} onChange={(e) => onChange("지급방식", e.target.value)}>
+   <select className={inputCls} value={form.지급방식} onChange={(e) => {
+  const v = e.target.value;
+  onChange("지급방식", v);
+  if (v === "취소") onChange("배차상태", "배차취소");
+}}>
       <option value="">선택 ▾</option>
       {PAY_TYPES.map(v => <option key={v} value={v}>{v}</option>)}
     </select>
@@ -6895,10 +6901,12 @@ const today = now.toISOString().slice(0, 10);
         <button
           className="px-3 py-1.5 bg-blue-600 text-white rounded"
           onClick={async () => {
-            await patchDispatch(confirmChange.rowId, {
-              [confirmChange.key]: confirmChange.after,
-            });
-            setConfirmChange(null);
+            const patch = { [confirmChange.key]: confirmChange.after };
+if (confirmChange.key === "지급방식" && confirmChange.after === "취소") {
+  patch.배차상태 = "배차취소";
+}
+await patchDispatch(confirmChange.rowId, patch);
+setConfirmChange(null);
           }}
         >
           확인
@@ -10376,8 +10384,10 @@ ${savedHighlightIds.has(r._id) ? "row-highlight" : ""}
                       {/* 배차상태 */}
                       <span
                         className={`px-2 py-0.5 rounded text-xs font-semibold ${r.배차상태 === "배차완료"
-                          ? "bg-green-100 text-green-700 border border-green-400"
-                          : "bg-yellow-100 text-yellow-700 border border-yellow-400"
+  ? "bg-green-100 text-green-700 border border-green-400"
+  : r.배차상태 === "배차취소"
+  ? "bg-red-100 text-red-700 border border-red-400"
+  : "bg-yellow-100 text-yellow-700 border border-yellow-400"
                           }`}
                       >
                         {r.배차상태}
@@ -13959,7 +13969,9 @@ setEditTarget((p) => ({
                         : null;
                     patch.업체전달방법 = "수동";
                   }
-
+if (confirmChange.key === "지급방식" && confirmChange.after === "취소") {
+  patch.배차상태 = "배차취소";
+}
                   await patchDispatch(confirmChange.rowId, patch);
                   setConfirmChange(null);
                 }}
@@ -15741,12 +15753,14 @@ setEditTarget({
 
 
   const StatusBadge = ({ s }) => {
-    const color =
-      s === "배차완료"
-        ? "bg-green-100 text-green-700 border-green-400"
-        : s === "배차중"
-          ? "bg-yellow-100 text-yellow-800 border-yellow-400"
-          : "hidden";
+const color =
+  s === "배차완료"
+    ? "bg-green-100 text-green-700 border-green-400"
+    : s === "배차중"
+      ? "bg-yellow-100 text-yellow-800 border-yellow-400"
+      : s === "배차취소"
+        ? "bg-red-100 text-red-700 border-red-400"
+        : "hidden";
     return (
       <span
         className={`border px-2 py-0.5 rounded text-xs font-semibold whitespace-nowrap ${color}`}
@@ -19008,10 +19022,13 @@ setCopyTarget(prev => ({
               e.preventDefault();
               e.stopPropagation();
 
-              const patch = {
-                [confirmChange.field]: confirmChange.after,
-                lastUpdated: new Date().toISOString(),
-              };
+       const patch = {
+  [confirmChange.field]: confirmChange.after,
+  lastUpdated: new Date().toISOString(),
+};
+if (confirmChange.field === "지급방식" && confirmChange.after === "취소") {
+  patch.배차상태 = "배차취소";
+}
 
               if (confirmChange.field === "업체전달상태") {
                 patch.업체전달일시 =
@@ -19019,7 +19036,9 @@ setCopyTarget(prev => ({
                 patch.업체전달방법 =
                   confirmChange.after === "전달완료" ? "기사복사" : null;
               }
-
+if (confirmChange.field === "지급방식" && confirmChange.after === "취소") {
+  patch.배차상태 = "배차취소";
+}
               await patchDispatch(confirmChange.id, patch);
               setConfirmChange(null);
             }
@@ -19061,10 +19080,13 @@ setCopyTarget(prev => ({
               <button
                 className="flex-1 py-2 rounded bg-blue-600 text-white"
                 onClick={async () => {
-                  const patch = {
-                    [confirmChange.field]: confirmChange.after,
-                    lastUpdated: new Date().toISOString(),
-                  };
+                const patch = {
+  [confirmChange.field]: confirmChange.after,
+  lastUpdated: new Date().toISOString(),
+};
+if (confirmChange.field === "지급방식" && confirmChange.after === "취소") {
+  patch.배차상태 = "배차취소";
+}
 
                   if (confirmChange.field === "업체전달상태") {
                     patch.업체전달일시 =
