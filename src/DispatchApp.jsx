@@ -9795,7 +9795,7 @@ ${url}
   // 📌 화면 렌더링
   // ------------------------
   return (
-  <div className="px-3 pt-1 w-full">
+<div className="px-3 pt-1 w-full overflow-x-auto">
 
     {/* ⚠ 상차 임박 경고 배너 */}
 {warningList.length > 0 && (
@@ -10226,7 +10226,7 @@ setEditTarget({
       </div>
 
       {/* 테이블 */}
-      <div className="overflow-x-auto overflow-y-visible w-full">
+      <div className="overflow-x-auto w-full" style={{overflowY: "visible"}}>
   <table className="w-auto min-w-max text-sm border table-auto">
           <thead>
             <tr>
@@ -10425,24 +10425,34 @@ ${savedHighlightIds.has(r._id) ? "row-highlight" : ""}
                       value={r.차량번호 || ""}
                       className="border p-1 rounded w-[110px]"
                       onChange={(e) => {
-                        const v = e.target.value;
+  const v = e.target.value;
+  const isEmpty = v.trim() === "";
 
-                        setRows(prev =>
-                          prev.map(row =>
-                            row._id === r._id
-                              ? {
-                                ...row,
-                                차량번호: v,
-                                ...(v.trim() === "" && {
-                                  이름: "",
-                                  전화번호: "",
-                                  배차상태: "배차중",
-                                }),
-                              }
-                              : row
-                          )
-                        );
-                      }}
+  setRows(prev =>
+    prev.map(row =>
+      row._id === r._id
+        ? {
+          ...row,
+          차량번호: v,
+          이름: isEmpty ? "" : row.이름,
+          전화번호: isEmpty ? "" : row.전화번호,
+          배차상태: isEmpty ? "배차중" : row.배차상태,
+        }
+        : row
+    )
+  );
+
+  // 🔥 즉시 DB 반영
+  if (isEmpty) {
+    patchDispatch(r._id, {
+      차량번호: "",
+      이름: "",
+      전화번호: "",
+      배차상태: "배차중",
+      updatedAt: Date.now(),
+    });
+  }
+}}
                       onKeyDown={(e) =>
                         e.key === "Enter" &&
                         handleCarInput(r._id, e.currentTarget.value, e)
@@ -10677,12 +10687,12 @@ setUrgentPopup([]);
     ? `${copyTarget.화물수량 || ""}${copyTarget.화물타입}`
     : (copyTarget.화물수량 || "");
 
-  const payload = {
-    ...copyTarget,
-    화물내용: finalCargo,   // 🔥 이거 한 줄
-    updatedAt: Date.now(),
-  };
-
+const payload = {
+  ...copyTarget,
+  화물내용: finalCargo,
+  updatedAt: Date.now(),
+};
+delete payload.createdAt;  // 🔥 핵심
 await patchDispatch(copyTarget._id, payload);
 setCopyPanelOpen(false);
 
@@ -13574,7 +13584,8 @@ setEditTarget((p) => ({
                     }),
                   });
 payload.updatedAt = Date.now();
-                  await patchDispatch(editTarget._id, payload);
+delete payload.createdAt;  // 🔥 핵심: 등록시간 덮어쓰기 방지
+await patchDispatch(editTarget._id, payload);
                   // ===============================
                   // 🔥 거래처 정보 최신화 (선택수정 시)
                   // ===============================
