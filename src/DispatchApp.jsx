@@ -350,7 +350,7 @@ const addDispatch = async (record) => {
 
 const patchDispatch = async (_id, patch) => {
   if (!_id) return;
-
+  
   // 🔥 등록시간 절대 덮어쓰기 방지
   delete patch.createdAt;
   delete patch.등록일시;
@@ -1586,6 +1586,7 @@ const [stopPopupOpen, setStopPopupOpen] = React.useState(false);
 const [stopType, setStopType] = React.useState("");
 const [activeStopIdx, setActiveStopIdx] = React.useState(null);
 const [stopList, setStopList] = React.useState([
+  
   
   { 업체명:"", 주소:"", 담당자:"", 담당자번호:"", 메모:"" }
 ]);
@@ -3310,6 +3311,7 @@ function swapPickupDrop() {
       }));
       setAutoDropMatched(false);
     };
+
     const handlePickupAddrManual = (v) => { setForm((p) => ({ ...p, 상차지주소: v })); setAutoPickMatched(false); };
     const handleDropAddrManual = (v) => { setForm((p) => ({ ...p, 하차지주소: v })); setAutoDropMatched(false); };
 
@@ -3333,7 +3335,12 @@ function swapPickupDrop() {
 
   return m;
 }, [drivers]);
-
+const [blackAlert, setBlackAlert] = React.useState(null);
+React.useEffect(() => {
+  const handler = (e) => setBlackAlert(e.detail);
+  window.addEventListener("blackDriverDetected", handler);
+  return () => window.removeEventListener("blackDriverDetected", handler);
+}, []);
 const [driverDropdownOpen, setDriverDropdownOpen] = React.useState(false);
 const [driverCandidates, setDriverCandidates] = React.useState([]);
 const [driverActive, setDriverActive] = React.useState(0);
@@ -3368,6 +3375,10 @@ const [driverActive, setDriverActive] = React.useState(0);
 
   // 🔹 기존 기사 1명 → 자동세팅
   if (list && list.length === 1) {
+    // 🚫 블랙 체크
+    if (list[0].등급 === "블랙") {
+      window.dispatchEvent(new CustomEvent("blackDriverDetected", { detail: list[0] }));
+    }
     setForm((p) => ({
       ...p,
       차량번호: clean,
@@ -5978,6 +5989,9 @@ setActiveStopIdx(null);
             }`}
             onMouseEnter={() => setDriverActive(i)}
             onMouseDown={() => {
+              if (d.등급 === "블랙") {
+                window.dispatchEvent(new CustomEvent("blackDriverDetected", { detail: d }));
+              }
               setForm((p) => ({
                 ...p,
                 이름: d.이름,
@@ -6781,6 +6795,37 @@ const today = now.toISOString().slice(0, 10);
   </div>
 
 </div>
+{blackAlert && (
+  <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999999]">
+    <div className="bg-white rounded-2xl shadow-2xl w-[400px] overflow-hidden">
+      <div className="bg-gray-900 px-6 py-4 flex items-center gap-3">
+        <span className="text-2xl">🚫</span>
+        <h3 className="text-white text-lg font-bold">블랙 기사 알림</h3>
+      </div>
+      <div className="px-6 py-5 space-y-3">
+        <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm space-y-1">
+          <div><span className="text-gray-500">차량번호</span> <b className="ml-2">{blackAlert.차량번호}</b></div>
+          <div><span className="text-gray-500">이름</span> <b className="ml-2 text-red-600">{blackAlert.이름 || "-"}</b></div>
+          <div><span className="text-gray-500">전화번호</span> <b className="ml-2">{blackAlert.전화번호 || "-"}</b></div>
+          {blackAlert.메모 && (
+            <div><span className="text-gray-500">메모</span> <span className="ml-2 text-red-600">{blackAlert.메모}</span></div>
+          )}
+        </div>
+        <p className="text-sm text-gray-600 text-center font-semibold">
+          해당 기사는 <span className="text-red-600 font-bold">블랙 등급</span>으로 등록된 기사입니다.
+        </p>
+      </div>
+      <div className="px-6 pb-5">
+        <button
+          className="w-full py-3 bg-gray-900 text-white rounded-xl font-bold text-sm"
+          onClick={() => setBlackAlert(null)}
+        >
+          확인
+        </button>
+      </div>
+    </div>
+  </div>
+)}
 {/* ================= 신규 기사 등록 모달 ================= */}
 {driverModal.open && (
   <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[99999]">
@@ -7877,7 +7922,14 @@ function RealtimeStatus({
   menu,
 }) {
   const alertAudio = React.useRef(null);
+// 🚫 블랙 기사 알림 팝업 상태
+const [blackAlert, setBlackAlert] = React.useState(null);
 
+React.useEffect(() => {
+  const handler = (e) => setBlackAlert(e.detail);
+  window.addEventListener("blackDriverDetected", handler);
+  return () => window.removeEventListener("blackDriverDetected", handler);
+}, []);
 React.useEffect(() => {
   alertAudio.current = new Audio("/sound/alert.wav");
 }, []);
@@ -9802,7 +9854,38 @@ ${url}
   // ------------------------
   return (
 <div className="px-3 pt-1 w-full" style={{overflowX: "auto", overflowY: "unset"}}>
-
+{/* 🚫 블랙 기사 알림 팝업 */}
+{blackAlert && (
+  <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999999]">
+    <div className="bg-white rounded-2xl shadow-2xl w-[400px] overflow-hidden">
+      <div className="bg-gray-900 px-6 py-4 flex items-center gap-3">
+        <span className="text-2xl">🚫</span>
+        <h3 className="text-white text-lg font-bold">블랙 기사 알림</h3>
+      </div>
+      <div className="px-6 py-5 space-y-3">
+        <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm space-y-1">
+          <div><span className="text-gray-500">차량번호</span> <b className="ml-2">{blackAlert.차량번호}</b></div>
+          <div><span className="text-gray-500">이름</span> <b className="ml-2 text-red-600">{blackAlert.이름 || "-"}</b></div>
+          <div><span className="text-gray-500">전화번호</span> <b className="ml-2">{blackAlert.전화번호 || "-"}</b></div>
+          {blackAlert.메모 && (
+            <div><span className="text-gray-500">메모</span> <span className="ml-2 text-red-600">{blackAlert.메모}</span></div>
+          )}
+        </div>
+        <p className="text-sm text-gray-600 text-center font-semibold">
+          해당 기사는 <span className="text-red-600 font-bold">블랙 등급</span>으로 등록된 기사입니다.
+        </p>
+      </div>
+      <div className="px-6 pb-5">
+        <button
+          className="w-full py-3 bg-gray-900 text-white rounded-xl font-bold text-sm"
+          onClick={() => setBlackAlert(null)}
+        >
+          확인
+        </button>
+      </div>
+    </div>
+  </div>
+)}
     {/* ⚠ 상차 임박 경고 배너 */}
 {warningList.length > 0 && (
   <div
@@ -14469,7 +14552,20 @@ const renderTimeText = (time, cond) => {
     return korea.toISOString().slice(0, 10);
   };
 
+const [blackAlert, setBlackAlert] = React.useState(null);
+React.useEffect(() => {
+  const handler = (e) => setBlackAlert(e.detail);
+  window.addEventListener("blackDriverDetected", handler);
+  return () => window.removeEventListener("blackDriverDetected", handler);
+}, []);
+const normalizePlate = (s = "") =>
+  String(s).toUpperCase().replace(/\s+/g, "").replace(/[-.]/g, "");
 
+const emitBlackIfNeeded = (driver) => {
+  if (!driver) return;
+  if (String(driver.등급 || "").trim() !== "블랙") return;
+  window.dispatchEvent(new CustomEvent("blackDriverDetected", { detail: driver }));
+};
   const [q, setQ] = React.useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem("dispatchStatusState") || "{}");
@@ -15397,6 +15493,10 @@ else if (palletDiff !== null) priority = 1;
     // 4️⃣ 기사 1명 → 기사 확인 팝업
     // =====================================================
     if (matches.length === 1) {
+      // 🚫 블랙 체크
+      if (matches[0].등급 === "블랙") {
+        window.dispatchEvent(new CustomEvent("blackDriverDetected", { detail: matches[0] }));
+      }
       setDriverConfirmInfo({
         type: "select",
         rowId: id,
@@ -15477,27 +15577,27 @@ else if (palletDiff !== null) priority = 1;
       const first = filtered.find((r) => selected.has(getId(r)));
 
 if (first) {
-const raw = String(first.화물내용 || "");
-const match = raw.match(/(\d+)(.*)/);
+  const latestFirst = edited[getId(first)]
+    ? { ...first, ...edited[getId(first)] }
+    : first;
 
-// 🔥 톤수 분해 추가
-const rawTon = String(first.차량톤수 || "");
-const tonMatch = rawTon.match(/([\d.]+)(.*)/);
+  const cargoRaw = String(latestFirst.화물내용 || "");
+  const cargoMatch = cargoRaw.match(/(\d+)(.*)/);
 
-setEditTarget({
-  ...first,
+  const tonRaw = String(latestFirst.차량톤수 || "");
+  const tonMatch = tonRaw.match(/([\d.]+)(.*)/);
 
-  // ✅ 화물
-  화물수량: match ? match[1] : "",
-  화물타입: match ? match[2] : "",
-
-  // ✅ 톤수 (🔥 이거 추가)
-  톤수값: tonMatch ? tonMatch[1] : "",
-  톤수타입: tonMatch ? tonMatch[2] : "",
-});
+  setEditTarget({
+    ...latestFirst,
+    화물수량: cargoMatch ? cargoMatch[1] : "",
+    화물타입: cargoMatch ? cargoMatch[2] : "",
+    톤수값: tonMatch ? tonMatch[1] : "",
+    톤수타입: tonMatch ? tonMatch[2] : "",
+  });
 
   setEditPopupOpen(true);
 }
+
       return;
     }
 
@@ -15929,7 +16029,37 @@ const save = {
 
   return (
     <div className="p-3">
-
+{blackAlert && (
+  <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999999]">
+    <div className="bg-white rounded-2xl shadow-2xl w-[400px] overflow-hidden">
+      <div className="bg-gray-900 px-6 py-4 flex items-center gap-3">
+        <span className="text-2xl">🚫</span>
+        <h3 className="text-white text-lg font-bold">블랙 기사 알림</h3>
+      </div>
+      <div className="px-6 py-5 space-y-3">
+        <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm space-y-1">
+          <div><span className="text-gray-500">차량번호</span> <b className="ml-2">{blackAlert.차량번호}</b></div>
+          <div><span className="text-gray-500">이름</span> <b className="ml-2 text-red-600">{blackAlert.이름 || "-"}</b></div>
+          <div><span className="text-gray-500">전화번호</span> <b className="ml-2">{blackAlert.전화번호 || "-"}</b></div>
+          {blackAlert.메모 && (
+            <div><span className="text-gray-500">메모</span> <span className="ml-2 text-red-600">{blackAlert.메모}</span></div>
+          )}
+        </div>
+        <p className="text-sm text-gray-600 text-center font-semibold">
+          해당 기사는 <span className="text-red-600 font-bold">블랙 등급</span>으로 등록된 기사입니다.
+        </p>
+      </div>
+      <div className="px-6 pb-5">
+        <button
+          className="w-full py-3 bg-gray-900 text-white rounded-xl font-bold text-sm"
+          onClick={() => setBlackAlert(null)}
+        >
+          확인
+        </button>
+      </div>
+    </div>
+  </div>
+)}
       <style>{`
   @keyframes highlightFlash {
     0%   { background-color: #fff7c2; }
@@ -16452,14 +16582,22 @@ const list = (Array.isArray(raw) ? raw : []).filter(s => s?.업체명?.trim());
                       value={row.차량번호 || ""}
                       onChange={(e) => {
                         const v = e.target.value;
-                        // 화면 값만 변경 (저장은 아직 X)
+                        const isEmpty = v.trim() === "";
                         setEdited(prev => ({
                           ...prev,
                           [id]: {
                             ...(prev[id] || {}),
                             차량번호: v,
+                            ...(isEmpty && { 이름: "", 전화번호: "", 배차상태: "배차중" }),
                           }
                         }));
+                        // 🔥 즉시 DB 반영
+                        if (isEmpty) {
+                          patchDispatch(id, {
+                            차량번호: "", 이름: "", 전화번호: "",
+                            배차상태: "배차중", updatedAt: Date.now(),
+                          });
+                        }
                       }}
                       onKeyDown={(e) => {
   if (e.key === "Enter") {
@@ -17670,9 +17808,10 @@ setEditTarget((p) => ({
                     "배차상태",
                   ];
 
+                  // 🔥 editTarget이 edited보다 우선 (팝업에서 직접 수정한 값 보호)
                   const merged = {
-                    ...editTarget,
                     ...(edited[getId(editTarget)] || {}),
+                    ...editTarget,
                   };
 
                   const payload = ALLOWED_FIELDS.reduce((acc, k) => {
@@ -17682,11 +17821,7 @@ setEditTarget((p) => ({
                     }
                     return acc;
                   }, {});
-                  if (payload.배차상태 === "배차중") {
-                    delete payload.차량번호;
-                    delete payload.이름;
-                    delete payload.전화번호;
-                  }
+
                   const targetId = getId(editTarget);
                   if (!targetId) {
                     alert("❌ 저장 실패: 오더 ID를 찾을 수 없습니다.");
@@ -17698,7 +17833,22 @@ const finalCargo = editTarget.화물타입
 
 payload.화물내용 = finalCargo;
                   await patchDispatch(targetId, payload);
+                  const savedPlate = normalizePlate(payload.차량번호 || "");
+if (savedPlate) {
+  const d = (drivers || []).find(x => normalizePlate(x.차량번호) === savedPlate);
+  emitBlackIfNeeded(d);
+}
 
+setEdited(prev => {
+  const next = { ...prev };
+  delete next[targetId];
+  return next;
+});
+ setEdited(prev => {
+                    const next = { ...prev };
+                    delete next[targetId];
+                    return next;
+                  });
 
                   // 2) 방금 저장한 행을 반짝이게
                   setSavedHighlightIds((prev) => {
@@ -17762,30 +17912,43 @@ payload.화물내용 = finalCargo;
 <button
   onClick={async () => {
 
-    if (!copyTarget?._id) {
-      alert("수정할 오더 ID가 없습니다.");
-      return;
-    }
+    const id = getId(copyTarget);
+if (!id) {
+  alert("수정할 오더 ID가 없습니다.");
+  return;
+}
 
-    // 🔥 화물내용 재조합 (핵심)
-    const finalCargo = copyTarget.화물타입
-      ? `${copyTarget.화물수량 || ""}${copyTarget.화물타입}`
-      : (copyTarget.화물수량 || "");
+const finalCargo = copyTarget.화물타입
+  ? `${copyTarget.화물수량 || ""}${copyTarget.화물타입}`
+  : (copyTarget.화물수량 || "");
 
-    const payload = {
-      ...copyTarget,
+const payload = {
+  ...copyTarget,
+  화물내용: finalCargo,
+  // ✅ 전화번호는 저장시 숫자만 권장(표시는 formatPhone이 해줌)
+  전화번호: String(copyTarget.전화번호 || "").replace(/\D/g, ""),
+  updatedAt: Date.now(),
+};
 
-      // 🔥 반드시 넣어야 반영됨
-      화물내용: finalCargo,
+await patchDispatch(id, payload);
 
-      updatedAt: Date.now(),
-    };
+// ✅ (중요) 복사패널로 저장했으면, 테이블에서 edited가 덮어쓰지 않게 제거
+setEdited(prev => {
+  const next = { ...prev };
+  delete next[id];
+  return next;
+});
 
-    await patchDispatch(copyTarget._id, payload);
+// ✅ 저장 후 블랙 체크
+const plate = normalizePlate(payload.차량번호 || "");
+if (plate) {
+  const d = (drivers || []).find(x => normalizePlate(x.차량번호) === plate);
+  emitBlackIfNeeded(d);
+}
 
-    alert("오더 수정 완료");
+alert("오더 수정 완료");
+setCopyPanelOpen(false);
 
-    setCopyPanelOpen(false);
 
   }}
   className="px-4 py-2 bg-green-600 text-white rounded-lg font-semibold"
@@ -18740,19 +18903,28 @@ setCopyTarget(prev => ({
           onKeyDown={(e) => {
             if (e.key === "Enter" && driverConfirmInfo.type !== "new") {
               const d = driverConfirmInfo.driver;
-              patchDispatch(driverConfirmInfo.rowId, {
+              const rowId = driverConfirmInfo.rowId;
+              setEdited(prev => ({
+                ...prev,
+                [rowId]: {
+                  ...(prev[rowId] || {}),
+                  차량번호: d.차량번호,
+                  이름: d.이름,
+                  전화번호: d.전화번호,
+                  배차상태: "배차완료",
+                }
+              }));
+              patchDispatch(rowId, {
                 차량번호: d.차량번호,
                 이름: d.이름,
                 전화번호: d.전화번호,
                 배차상태: "배차완료",
+                updatedAt: Date.now(),
               });
               setDriverConfirmInfo(null);
             }
           }}
         >
-
-
-
           {/* 팝업 컨테이너 */}
           <div className="bg-white rounded-xl p-7 w-[420px] shadow-xl border border-gray-200">
 
@@ -18852,12 +19024,24 @@ setCopyTarget(prev => ({
                   }`}
                 onClick={async () => {
                   const d = driverConfirmInfo.driver;
-                  await patchDispatch(driverConfirmInfo.rowId, {
+                  const rowId = driverConfirmInfo.rowId;
+                  // 🔥 화면 즉시 반영
+                  setEdited(prev => ({
+                    ...prev,
+                    [rowId]: {
+                      ...(prev[rowId] || {}),
+                      차량번호: d.차량번호,
+                      이름: d.이름,
+                      전화번호: d.전화번호,
+                      배차상태: "배차완료",
+                    }
+                  }));
+                  await patchDispatch(rowId, {
                     차량번호: d.차량번호,
                     이름: d.이름,
                     전화번호: d.전화번호,
                     배차상태: "배차완료",
-                    lastUpdated: new Date().toISOString(), // ⭐ 추가
+                    updatedAt: Date.now(),
                   });
                   setDriverConfirmInfo(null);
                 }}
@@ -22668,7 +22852,14 @@ function UnassignedStatus({ dispatchData, drivers = [], patchDispatch, clients =
                       };
                       
                       await patchDispatch(copyTarget._id, payload);
-                      
+
+                      // 🔥 edited 캐시 클리어
+                      setEdited(prev => {
+                        const next = { ...prev };
+                        delete next[copyTarget._id];
+                        return next;
+                      });
+
                       alert("오더 수정 완료");
                       setCopyPanelOpen(false);
                     }}
@@ -24736,49 +24927,36 @@ function PaymentManagement({ dispatchData = [], clients = [], drivers = [] }) {
 
 // ===================== DispatchApp.jsx (PART 9/9 — 지급관리 V5 최종본) — END =====================
 // ===================== DispatchApp.jsx (PART 10/10) — START =====================
-// 기사관리 (DriverManagement)
 function DriverManagement({ drivers = [], upsertDriver, removeDriver }) {
   const [q, setQ] = React.useState("");
+  const [searched, setSearched] = React.useState(false);
   const [selected, setSelected] = React.useState(new Set());
   const [newForm, setNewForm] = React.useState({
-    차량번호: "",
-    이름: "",
-    전화번호: "",
-    메모: "",
+    차량번호: "", 이름: "", 전화번호: "", 메모: "", 등급: "일반",
   });
 
-  // ===================== 검색 정규화 (⚠ 반드시 위에 있어야 함) =====================
-  const norm = (s = "") =>
-    String(s).toLowerCase().replace(/\s+/g, "");
+  const norm = (s = "") => String(s).toLowerCase().replace(/\s+/g, "");
 
-  // ===================== 검색 필터 =====================
   const filtered = React.useMemo(() => {
-    if (!q.trim()) return drivers;
+    if (!searched || !q.trim()) return [];
     const nq = norm(q);
     return drivers.filter((r) =>
       ["차량번호", "이름", "전화번호", "메모"].some((k) =>
         norm(r[k] || "").includes(nq)
       )
     );
-  }, [drivers, q]);
+  }, [drivers, q, searched]);
 
-  // ===================== 페이지네이션 =====================
   const [page, setPage] = React.useState(1);
   const perPage = 100;
-
-  React.useEffect(() => {
-    setPage(1);
-  }, [q]);
+  React.useEffect(() => { setPage(1); }, [q]);
 
   const paged = React.useMemo(() => {
     const start = (page - 1) * perPage;
     return filtered.slice(start, start + perPage);
   }, [filtered, page]);
-
   const totalPages = Math.ceil(filtered.length / perPage);
-  // =====================================================
 
-  // ===================== 선택 =====================
   const toggleOne = (id) => {
     setSelected((prev) => {
       const n = new Set(prev);
@@ -24786,95 +24964,62 @@ function DriverManagement({ drivers = [], upsertDriver, removeDriver }) {
       return n;
     });
   };
-
   const toggleAll = () => {
-    const allIds = filtered
-      .map((r) => r.id)
-      .filter(Boolean);
-    if (selected.size === allIds.length) {
-      setSelected(new Set());
-    } else {
-      setSelected(new Set(allIds));
-    }
+    const allIds = filtered.map((r) => r.id).filter(Boolean);
+    if (selected.size === allIds.length) setSelected(new Set());
+    else setSelected(new Set(allIds));
   };
 
-  // ===================== 인라인 수정 =====================
   const handleBlur = async (row, key, val) => {
-  const oldId = row.id;
+    if (!row.id) return alert("문서 ID가 없어 수정할 수 없습니다.");
+    await upsertDriver({ ...row, [key]: val });
+  };
 
-  if (!oldId) {
-    alert("문서 ID가 없어 수정/삭제할 수 없습니다.");
-    return;
-  }
+  const addNew = async () => {
+    const 차량번호 = (newForm.차량번호 || "").replace(/\s+/g, "");
+    if (!차량번호) return alert("차량번호는 필수입니다.");
+    const rawPhone = (newForm.전화번호 || "").replace(/\D/g, "");
+    await upsertDriver({
+      id: crypto.randomUUID(),
+      차량번호,
+      이름: newForm.이름,
+      전화번호: rawPhone,
+      메모: newForm.메모,
+      등급: newForm.등급 || "일반",
+    });
+    setNewForm({ 차량번호: "", 이름: "", 전화번호: "", 메모: "", 등급: "일반" });
+    alert("등록 완료");
+  };
 
-  await upsertDriver({
-    ...row,
-    [key]: val,
-  });
-};
-
-  // ===================== 신규 추가 =====================
- const addNew = async () => {
-  const 차량번호 = (newForm.차량번호 || "").replace(/\s+/g, "");
-  if (!차량번호) return alert("차량번호는 필수입니다.");
-
-  const rawPhone = (newForm.전화번호 || "").replace(/\D/g, "");
-
-  await upsertDriver({
-    id: crypto.randomUUID(),
-    차량번호,
-    이름: newForm.이름,
-    전화번호: rawPhone,
-    메모: newForm.메모,
-  });
-
-  setNewForm({ 차량번호: "", 이름: "", 전화번호: "", 메모: "" });
-  alert("등록 완료");
-};
-
-  // ===================== 선택 삭제 =====================
   const removeSelected = async () => {
     if (!selected.size) return alert("선택된 항목이 없습니다.");
     if (!window.confirm(`${selected.size}건 삭제할까요?`)) return;
-
-    for (const id of selected) {
-      await removeDriver(id);
-    }
+    for (const id of selected) await removeDriver(id);
     setSelected(new Set());
     alert("삭제 완료");
   };
 
-  // ===================== 엑셀 업로드 =====================
   const onExcel = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     const reader = new FileReader();
     reader.onload = async (evt) => {
       try {
-        const wb = XLSX.read(new Uint8Array(evt.target.result), {
-          type: "array",
-        });
+        const wb = XLSX.read(new Uint8Array(evt.target.result), { type: "array" });
         const sheet = wb.SheetNames[0];
-        const json = XLSX.utils.sheet_to_json(wb.Sheets[sheet], {
-          defval: "",
-        });
-
+        const json = XLSX.utils.sheet_to_json(wb.Sheets[sheet], { defval: "" });
         let ok = 0;
         for (const r of json) {
-          const 차량번호 = String(
-            r.차량번호 || r["차량 번호"] || r["차량번호 "] || ""
-          ).replace(/\s+/g, "");
+          const 차량번호 = String(r.차량번호 || r["차량 번호"] || "").replace(/\s+/g, "");
           if (!차량번호) continue;
-
           await upsertDriver({
-  id: crypto.randomUUID(), // ✅ 여기
-  차량번호,
-  이름: r.이름 || r["기사명"] || "",
-  전화번호: r.전화번호 || r["전화"] || r["휴대폰"] || "",
-  메모: r.메모 || r["비고"] || "",
-});
-
+            id: crypto.randomUUID(),
+            차량번호,
+            이름: r.이름 || r["기사명"] || "",
+            전화번호: r.전화번호 || r["전화"] || r["휴대폰"] || "",
+            메모: r.메모 || r["비고"] || "",
+            등급: r.등급 || "일반",
+          });
           ok++;
         }
         alert(`총 ${ok}건 반영`);
@@ -24888,16 +25033,17 @@ function DriverManagement({ drivers = [], upsertDriver, removeDriver }) {
     reader.readAsArrayBuffer(file);
   };
 
-  // ===================== 스타일 =====================
-  const head =
-    "border px-2 py-1 bg-slate-100 text-slate-700 text-xs font-semibold text-center whitespace-nowrap";
-  const cell =
-    "border px-2 py-[2px] text-sm text-slate-800 text-center whitespace-nowrap align-middle";
-  const input =
-    inputBase ||
-    "border px-1 py-[2px] text-sm rounded-sm w-28 text-center";
+  const 등급색상 = (g) => {
+    if (g === "블랙") return "bg-gray-900 text-white";
+    if (g === "직영") return "bg-blue-100 text-blue-700";
+    if (g === "지입") return "bg-green-100 text-green-700";
+    return "bg-gray-100 text-gray-600";
+  };
 
-  // ===================== UI =====================
+  const head = "border px-2 py-1 bg-slate-100 text-slate-700 text-xs font-semibold text-center whitespace-nowrap";
+  const cell = "border px-2 py-[2px] text-sm text-slate-800 text-center whitespace-nowrap align-middle";
+  const input = "border px-1 py-[2px] text-sm rounded-sm w-28 text-center";
+
   return (
     <div>
       <h2 className="text-lg font-bold mb-3">기사관리</h2>
@@ -24908,16 +25054,18 @@ function DriverManagement({ drivers = [], upsertDriver, removeDriver }) {
           className="border p-2 rounded w-64"
           placeholder="검색 (차량번호/이름/전화/메모)"
           value={q}
-          onChange={(e) => setQ(e.target.value)}
+          onChange={(e) => { setQ(e.target.value); setSearched(false); }}
+          onKeyDown={(e) => { if (e.key === "Enter") setSearched(true); }}
         />
+        <button
+          onClick={() => setSearched(true)}
+          className="px-4 py-2 bg-blue-600 text-white rounded text-sm font-semibold"
+        >
+          🔍 검색
+        </button>
         <label className="px-3 py-1 border rounded cursor-pointer text-sm">
           📁 엑셀 업로드
-          <input
-            type="file"
-            accept=".xlsx,.xls"
-            onChange={onExcel}
-            className="hidden"
-          />
+          <input type="file" accept=".xlsx,.xls" onChange={onExcel} className="hidden" />
         </label>
         <button
           onClick={removeSelected}
@@ -24933,36 +25081,35 @@ function DriverManagement({ drivers = [], upsertDriver, removeDriver }) {
           className="border px-2 py-1 rounded text-sm w-40"
           placeholder="차량번호*"
           value={newForm.차량번호}
-          onChange={(e) =>
-            setNewForm((p) => ({ ...p, 차량번호: e.target.value }))
-          }
+          onChange={(e) => setNewForm((p) => ({ ...p, 차량번호: e.target.value }))}
         />
         <input
           className="border px-2 py-1 rounded text-sm w-28"
           placeholder="이름"
           value={newForm.이름}
-          onChange={(e) =>
-            setNewForm((p) => ({ ...p, 이름: e.target.value }))
-          }
+          onChange={(e) => setNewForm((p) => ({ ...p, 이름: e.target.value }))}
         />
         <input
           className="border px-2 py-1 rounded text-sm w-36"
           placeholder="전화번호"
           value={newForm.전화번호}
-          onChange={(e) =>
-  setNewForm((p) => ({
-    ...p,
-    전화번호: formatPhone(e.target.value), // 🔥 핵심
-  }))
-}
+          onChange={(e) => setNewForm((p) => ({ ...p, 전화번호: formatPhone(e.target.value) }))}
         />
+        <select
+          className="border px-2 py-1 rounded text-sm w-24"
+          value={newForm.등급}
+          onChange={(e) => setNewForm((p) => ({ ...p, 등급: e.target.value }))}
+        >
+          <option value="일반">일반</option>
+          <option value="지입">지입</option>
+          <option value="직영">직영</option>
+          <option value="블랙">블랙</option>
+        </select>
         <input
           className="border px-2 py-1 rounded text-sm w-64"
           placeholder="메모"
           value={newForm.메모}
-          onChange={(e) =>
-            setNewForm((p) => ({ ...p, 메모: e.target.value }))
-          }
+          onChange={(e) => setNewForm((p) => ({ ...p, 메모: e.target.value }))}
         />
         <button
           onClick={addNew}
@@ -24972,45 +25119,45 @@ function DriverManagement({ drivers = [], upsertDriver, removeDriver }) {
         </button>
       </div>
 
+      {/* 검색 전 안내 */}
+      {!searched && (
+        <div className="text-center py-16 text-gray-400 text-sm">
+          검색어를 입력하고 🔍 검색 버튼을 누르세요
+        </div>
+      )}
+
+      {/* 검색 결과 없음 */}
+      {searched && filtered.length === 0 && (
+        <div className="text-center py-16 text-gray-400 text-sm">
+          검색 결과가 없습니다.
+        </div>
+      )}
+
       {/* 표 */}
-      <div className="overflow-x-auto">
-        <table className="min-w-[900px] text-sm border">
-          <thead>
-            <tr>
-              <th className={head}>
-                <input
-                  type="checkbox"
-                  onChange={toggleAll}
-                  checked={
-                    filtered.length > 0 &&
-                    selected.size === filtered.length
-                  }
-                />
-              </th>
-              {["차량번호", "이름", "전화번호", "메모", "삭제"].map((h) => (
-                <th key={h} className={head}>
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {paged.length === 0 ? (
+      {searched && filtered.length > 0 && (
+        <div className="overflow-x-auto">
+          <table className="min-w-[900px] text-sm border">
+            <thead>
               <tr>
-                <td
-                  className="text-center text-gray-500 py-6"
-                  colSpan={6}
-                >
-                  표시할 데이터가 없습니다.
-                </td>
+                <th className={head}>
+                  <input
+                    type="checkbox"
+                    onChange={toggleAll}
+                    checked={filtered.length > 0 && selected.size === filtered.length}
+                  />
+                </th>
+                {["차량번호", "이름", "전화번호", "등급", "메모", "삭제"].map((h) => (
+                  <th key={h} className={head}>{h}</th>
+                ))}
               </tr>
-            ) : (
-              paged.map((r, i) => {
+            </thead>
+            <tbody>
+              {paged.map((r, i) => {
                 const docId = r.id;
                 if (!docId) return null;
-
+                const grade = r.등급 || "일반";
                 return (
-                  <tr key={`${docId}_${i}`}>
+                  <tr key={`${docId}_${i}`} className={grade === "블랙" ? "bg-gray-100" : ""}>
                     <td className={cell}>
                       <input
                         type="checkbox"
@@ -25018,102 +25165,79 @@ function DriverManagement({ drivers = [], upsertDriver, removeDriver }) {
                         onChange={() => toggleOne(docId)}
                       />
                     </td>
-
                     <td className={cell}>
                       <span
                         contentEditable
                         suppressContentEditableWarning
-                        onBlur={(e) =>
-                          handleBlur(
-                            r,
-                            "차량번호",
-                            e.currentTarget.innerText.trim()
-                          )
-                        }
+                        onBlur={(e) => handleBlur(r, "차량번호", e.currentTarget.innerText.trim())}
                       >
                         {r.차량번호 || "-"}
                       </span>
                     </td>
-
                     <td className={cell}>
                       <span
                         contentEditable
                         suppressContentEditableWarning
-                        onBlur={(e) =>
-                          handleBlur(r, "이름", e.currentTarget.innerText)
-                        }
+                        onBlur={(e) => handleBlur(r, "이름", e.currentTarget.innerText)}
                       >
                         {r.이름 || "-"}
                       </span>
                     </td>
-
                     <td className={cell}>
                       <span
                         contentEditable
                         suppressContentEditableWarning
                         onBlur={(e) => {
-  const val = e.currentTarget.innerText.trim();
-  const raw = val.replace(/[^\d]/g, ""); // 🔥 숫자만 추출
-
-  handleBlur(r, "전화번호", raw);
-}}
+                          const val = e.currentTarget.innerText.trim();
+                          handleBlur(r, "전화번호", val.replace(/[^\d]/g, ""));
+                        }}
                       >
                         {formatPhone(r.전화번호) || "-"}
                       </span>
                     </td>
-
+                    <td className={cell}>
+                      <select
+                        className={`px-2 py-0.5 rounded text-xs font-semibold border-0 ${등급색상(grade)}`}
+                        value={grade}
+                        onChange={(e) => handleBlur(r, "등급", e.target.value)}
+                      >
+                        <option value="일반">일반</option>
+                        <option value="지입">지입</option>
+                        <option value="직영">직영</option>
+                        <option value="블랙">블랙</option>
+                      </select>
+                    </td>
                     <td className={cell}>
                       <input
                         className={`${input} w-48 text-left`}
                         defaultValue={r.메모 || ""}
-                        onBlur={(e) =>
-                          handleBlur(r, "메모", e.target.value)
-                        }
+                        onBlur={(e) => handleBlur(r, "메모", e.target.value)}
                       />
                     </td>
-
                     <td className={cell}>
                       <button
                         className="px-2 py-[2px] text-xs border border-red-400 text-red-600 rounded"
-                        onClick={() => {
-                          if (
-                            window.confirm("삭제하시겠습니까?")
-                          ) {
-                            removeDriver(docId);
-                          }
-                        }}
+                        onClick={() => { if (window.confirm("삭제하시겠습니까?")) removeDriver(docId); }}
                       >
                         삭제
                       </button>
                     </td>
                   </tr>
                 );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* 페이지 버튼 */}
-      <div className="flex items-center justify-center gap-4 mt-4 text-sm">
-        <button
-          className="px-4 py-1 border rounded"
-          disabled={page === 1}
-          onClick={() => setPage((p) => Math.max(1, p - 1))}
-        >
-          ◀ 이전
-        </button>
-        <span>
-          {page} / {totalPages || 1}
-        </span>
-        <button
-          className="px-4 py-1 border rounded"
-          disabled={page === totalPages || totalPages === 0}
-          onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-        >
-          다음 ▶
-        </button>
-      </div>
+      {searched && totalPages > 1 && (
+        <div className="flex items-center justify-center gap-4 mt-4 text-sm">
+          <button className="px-4 py-1 border rounded" disabled={page === 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>◀ 이전</button>
+          <span>{page} / {totalPages}</span>
+          <button className="px-4 py-1 border rounded" disabled={page === totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>다음 ▶</button>
+        </div>
+      )}
     </div>
   );
 }
