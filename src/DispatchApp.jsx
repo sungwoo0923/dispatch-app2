@@ -2374,7 +2374,7 @@ const filterPlaces = (q) => {
       "라보/다마스", "카고", "윙바디", "탑차", "냉장탑", "냉동탑", "냉장윙", "냉동윙", "리프트", "오토바이", "기타"
     ];
     const PAY_TYPES = (typeof window !== "undefined" && window.RUN25_PAY_TYPES) || [
-      "계산서", "착불", "선불", "손실", "개인", "기타"
+      "계산서", "착불", "선불", "손실", "개인", "취소"
     ];
     const DISPATCH_TYPES = (typeof window !== "undefined" && window.RUN25_DISPATCH_TYPES) || [
       "24시", "직접배차", "인성", "고정기사"
@@ -9555,7 +9555,7 @@ setDriverConfirmRowId(null);
           <option value="선불">선불</option>
           <option value="손실">손실</option>
           <option value="개인">개인</option>
-          <option value="기타">기타</option>
+          <option value="취소">취소</option>
         </select>
       );
     }
@@ -11319,7 +11319,7 @@ value={copyTarget?.화물수량 || ""}
     <option value="선불">선불</option>
     <option value="손실">손실</option>
     <option value="개인">개인</option>
-    <option value="기타">기</option>
+    <option value="취소">취소</option>
   </select>
 </Field>
 
@@ -12147,7 +12147,7 @@ value={copyTarget?.화물수량 || ""}
                     <option value="선불">선불</option>
                     <option value="손실">손실</option>
                     <option value="개인">개인</option>
-                    <option value="기타">기타</option>
+                    <option value="취소">취소</option>
                   </select>
                 </div>
 
@@ -13296,7 +13296,7 @@ setEditTarget((p) => ({
                   <option value="선불">선불</option>
                   <option value="손실">손실</option>
                   <option value="개인">개인</option>
-                  <option value="기타">기타</option>
+                  <option value="취소">취소</option>
                 </select>
               </div>
 
@@ -16402,7 +16402,7 @@ onBlur={(e) => {
                       <option value="선불">선불</option>
                       <option value="손실">손실</option>
                       <option value="개인">개인</option>
-                      <option value="기타">기타</option>
+                      <option value="취소">취소</option>
                     </select>
                   </td>
 
@@ -17345,7 +17345,7 @@ setEditTarget((p) => ({
                   <option value="선불">선불</option>
                   <option value="손실">손실</option>
                   <option value="개인">개인</option>
-                  <option value="기타">기타</option>
+                  <option value="취소">취소</option>
                 </select>
               </div>
 
@@ -18374,7 +18374,7 @@ setCopyTarget(prev => ({
     <option value="선불">선불</option>
     <option value="손실">손실</option>
     <option value="개인">개인</option>
-    <option value="기타">기</option>
+    <option value="취소">취소</option>
   </select>
 </Field>
 
@@ -19678,7 +19678,7 @@ function NewOrderPopup({
                 <option value="선불">선불</option>
                 <option value="손실">손실</option>
                 <option value="개인">개인</option>
-                <option value="기타">기타</option>
+                <option value="취소">취소</option>
               </select>
             </div>
 
@@ -22943,7 +22943,7 @@ function UnassignedStatus({ dispatchData, drivers = [], patchDispatch, clients =
                       <option value="선불">선불</option>
                       <option value="손실">손실</option>
                       <option value="개인">개인</option>
-                      <option value="기타">기타</option>
+                      <option value="취소">취소</option>
                     </select>
                   </Field>
                   

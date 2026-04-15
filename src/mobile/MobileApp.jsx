@@ -4247,7 +4247,7 @@ const dropOptions = useMemo(() => {
                 <option value="선불">선불</option>
                 <option value="손실">손실</option>
                 <option value="개인">개인</option>
-                <option value="기타">기타</option>
+                <option value="취소">취소</option>
               </select>
               <select
                 className="flex-1 border rounded px-2 py-1 text-sm"
