@@ -10226,8 +10226,8 @@ setEditTarget({
       </div>
 
       {/* 테이블 */}
-      <div className="overflow-x-auto w-full">
-        <table className="w-auto min-w-max text-sm border table-auto">
+      <div className="overflow-x-auto overflow-y-visible w-full">
+  <table className="w-auto min-w-max text-sm border table-auto">
           <thead>
             <tr>
               {[
@@ -10683,11 +10683,25 @@ setUrgentPopup([]);
     updatedAt: Date.now(),
   };
 
-  await patchDispatch(copyTarget._id, payload);
+await patchDispatch(copyTarget._id, payload);
+setCopyPanelOpen(false);
 
-  alert("오더 수정 완료");
+setSavedHighlightIds((prev) => {
+  const n = new Set(prev);
+  n.add(copyTarget._id);
+  return n;
+});
+setTimeout(() => {
+  setSavedHighlightIds((prev) => {
+    const n = new Set(prev);
+    n.delete(copyTarget._id);
+    return n;
+  });
+  const el = document.getElementById(`row-${copyTarget._id}`);
+  if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+}, 2500);
 
-  setCopyPanelOpen(false);
+alert("오더 수정 완료");
 
 }}
       className="px-4 py-2 bg-green-600 text-white rounded-lg font-semibold"
@@ -13559,7 +13573,7 @@ setEditTarget((p) => ({
                       업체전달자: sender,
                     }),
                   });
-
+payload.updatedAt = Date.now();
                   await patchDispatch(editTarget._id, payload);
                   // ===============================
                   // 🔥 거래처 정보 최신화 (선택수정 시)
@@ -14263,8 +14277,8 @@ setConfirmChange(null);
   }
   
   .row-highlight {
-    animation: highlightFlash 0.6s ease-in-out infinite;
-  }
+  animation: highlightFlash 0.8s ease-in-out 2;
+}
 `}</style>
 
     </div>
