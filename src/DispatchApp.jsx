@@ -8385,41 +8385,109 @@ ${fare.toLocaleString()}원 ${payLabel} 배차되었습니다.`;
   const prevAttachRef = React.useRef({});
   const [filterValue, setFilterValue] = React.useState("");
 // ✅ 배차상태 우선순위: 배차중 -> 배차완료 -> 배차취소(맨 아래)
+// ✅ 배차상태 우선순위: 배차중 -> 배차완료 -> 배차취소(맨 아래)
 const getStatusRank = (s) => {
   const v = String(s || "");
   if (v === "배차중") return 0;
   if (v === "배차완료") return 1;
   if (v === "배차취소") return 2;
-  return 3; // 기타/빈값
+  return 3;
 };
 
-const getCreated = (r) =>
-  r.createdAt ? r.createdAt : new Date(r.등록일 || 0).getTime();
+// 🔥 어떤 타입이 와도 ms(number)로 바꿔주는 유틸 (Firestore Timestamp 대응)
+const toMs = (v) => {
+  if (v == null) return 0;
 
+  // number(ms)
+  if (typeof v === "number") return Number.isFinite(v) ? v : 0;
+
+  // string(ISO 등)
+  if (typeof v === "string") {
+    const t = Date.parse(v);
+    return Number.isNaN(t) ? 0 : t;
+  }
+
+  // Date
+  if (v instanceof Date) return v.getTime();
+
+  // Firestore Timestamp (toMillis)
+  if (typeof v?.toMillis === "function") return v.toMillis();
+
+  // Firestore Timestamp shape {seconds, nanoseconds}
+  if (typeof v?.seconds === "number") return v.seconds * 1000;
+
+  return 0;
+};
+
+// 🔥 “등록시간”을 뽑는 함수: createdAt 최우선, 없으면 updatedAt/등록일 fallback
+const getCreatedMs = (r) => {
+  // 프로젝트에 따라 필드명이 섞일 수 있어서 후보를 조금 넓게 잡음
+  return (
+    toMs(r?.createdAt) ||
+    toMs(r?.등록일시) ||
+    toMs(r?.등록시간) ||
+    toMs(r?.createdTime) ||
+    toMs(r?.updatedAt) ||                 // (fallback) 그래도 없으면 업데이트 시간
+    toMs(r?.등록일 ? `${r.등록일}T00:00:00` : null) // 날짜만 있으면 00:00으로
+  );
+};
+// ✅ ms → 보기 좋은 문자열(한국시간)
+const formatKstDateTime = (ms) => {
+  if (!ms) return "-";
+  try {
+    return new Date(ms).toLocaleString("ko-KR", {
+      timeZone: "Asia/Seoul",
+      hour12: false,
+    });
+  } catch {
+    return "-";
+  }
+};
+
+// ✅ 마지막 수정시간 후보(updatedAt / lastUpdated 등) 통합
+const getUpdatedMs = (r) => {
+  return (
+    toMs(r?.updatedAt) ||
+    toMs(r?.lastUpdated) ||
+    toMs(r?.수정일시) ||
+    toMs(r?.modifiedAt) ||
+    0
+  );
+};
+
+// ✅ 등록자 이름/식별자 후보 통합 (있는 것부터 표시)
+const getCreatorLabel = (r) => {
+  return (
+    r?.등록자명 ||
+    r?.createdByName ||
+    r?.등록자 ||
+    r?.createdByEmail ||
+    r?.createdBy ||
+    r?.createdByUid ||
+    "-"
+  );
+};
+
+// ✅ 최종: 상태순서 고정 + 같은 상태 안에서는 “등록시간(createdAt)” 최신순
 const sortDispatchRows = (list = []) => {
   return [...list].sort((a, b) => {
-    const ra = getStatusRank(a.배차상태);
-    const rb = getStatusRank(b.배차상태);
-
-    // 1) 상태 우선순위 고정 (취소는 항상 마지막)
+    const ra = getStatusRank(a?.배차상태);
+    const rb = getStatusRank(b?.배차상태);
     if (ra !== rb) return ra - rb;
 
-    // 2) 같은 상태 내 정렬
-    // 배차완료/배차취소: updatedAt 최신순
-    if (ra === 1 || ra === 2) {
-      return (b.updatedAt || 0) - (a.updatedAt || 0);
-    }
+    const ta = getCreatedMs(a);
+    const tb = getCreatedMs(b);
+    if (tb !== ta) return tb - ta; // 최신 등록이 위
 
-    // 배차중: createdAt(또는 등록일) 최신순
-    return getCreated(b) - getCreated(a);
+    // (동률 방지용) 마지막 타이브레이커: updatedAt 최신순
+    return toMs(b?.updatedAt) - toMs(a?.updatedAt);
   });
 };
+
 
 const [rows, setRows] = React.useState(() =>
   sortDispatchRows(dispatchData || [])
 );
-
-
   const [selected, setSelected] = React.useState([]);
   const [selectedEditMode, setSelectedEditMode] = React.useState(false);
   const [edited, setEdited] = React.useState({});
@@ -10265,7 +10333,21 @@ ${savedHighlightIds.has(r._id) ? "row-highlight" : ""}
                   </td>
 
                   <td className={cell}>{idx + 1}</td>
-                  <td className={cell}>{r.등록일}</td>
+  <td className={`${cell} overflow-visible`}>
+  <div className="relative inline-block group">
+    <span className="underline decoration-dotted underline-offset-2 cursor-default">
+      {r.등록일 || "-"}
+    </span>
+
+    <div className="pointer-events-none invisible group-hover:visible absolute left-1/2 -translate-x-1/2 top-full mt-1 z-[99999] w-max">
+      <div className="bg-gray-800 text-white text-[11px] rounded-lg px-3 py-2 shadow-xl leading-5 border border-gray-700">
+        <div>📅 등록시간: <span className="text-yellow-300">{formatKstDateTime(getCreatedMs(r))}</span></div>
+        <div>✏️ 마지막수정: <span className="text-green-300">{formatKstDateTime(getUpdatedMs(r))}</span></div>
+        <div>👤 등록자: <span className="text-blue-300">{getCreatorLabel(r)}</span></div>
+      </div>
+    </div>
+  </div>
+</td>
 
                   <td className={cell}>{editableInput("상차일", r.상차일, r._id)}</td>
                   <td className={cell}>
@@ -12222,7 +12304,9 @@ value={copyTarget?.화물수량 || ""}
       // 🔥🔥🔥 정렬용 핵심 필드
       createdAt: now,
       updatedAt: now,
-
+  createdByUid: me?.uid || null,
+  createdByEmail: me?.email || null,
+  createdByName: me?.displayName || null, 
       배차상태: "배차중",
 
       차량번호: "",
