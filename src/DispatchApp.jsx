@@ -1350,11 +1350,10 @@ useEffect(() => {
         </div>
       )}
     {/* AI 비서 */}
-      <AiAssistant 
-        dispatches={dispatchData}
-        clients={clients} 
-        calcFare={calcFare}
-      />
+<AiAssistant 
+  dispatches={dispatchData}
+  clients={clients} 
+/>
     </ToastProvider>
   );
 }
