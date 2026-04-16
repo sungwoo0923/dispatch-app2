@@ -13,6 +13,7 @@ import FleetManagement from "./FleetManagement";
 import HomeDashboard from "./HomeDashboard";
 import StandardFare from "./StandardFare";
 import DispatchFormNew from "./DispatchFormNew";
+import AiAssistant from "./AiAssistant";
 
 // ================= 카운트 애니메이션 =================
 function CountUp({ value, duration = 900 }) {
@@ -553,6 +554,9 @@ const upsertPlace = async (place) => {
                 }]
               : []
           ),
+      등급: place.등급 || "일반",
+      등급변경일: place.등급변경일 || null,
+      메모: place.메모 || "",
       isActive: place.isActive !== false,
       updatedAt: serverTimestamp(),
     };
@@ -1195,6 +1199,7 @@ useEffect(() => {
             clients={clients}
             upsertClient={upsertClient}
             removeClient={removeClient}
+            upsertPlace={upsertPlace}
           />
         )}
 
@@ -1976,7 +1981,11 @@ const primary =
     주소: p.주소 || "",
     담당자: primary?.name || "",
     담당자번호: primary?.phone || "",
+    등급: p.등급 || "일반",
+    등급변경일: p.등급변경일 || null,
+    메모: p.메모 || "",
   };
+
 };
 
   const map = new Map();
@@ -2301,12 +2310,15 @@ const savePlaceSmart = async (name, addr, manager, phone, placeId) => {
     },
   ];
 
-  // 🔥 무조건 같은 key로 저장 (신규/기존 구분 필요 없음)
+  // 🔥 기존 등급/메모 보존 (덮어쓰지 않음)
   await upsertPlace({
-    _id: existing?._id || key,   // ⭐ 핵심
+    _id: existing?._id || key,
     업체명: name,
     주소: addr || "",
     contacts,
+    등급: existing?.등급 || "일반",      // 🔥 기존 등급 유지
+    등급변경일: existing?.등급변경일 || null,
+    메모: existing?.메모 || "",
   });
 };
     // 기본 clients + 하차지 모두 포함한 통합 검색 풀
@@ -3200,7 +3212,27 @@ function makeAiExplain(ai) {
     .filter(p => p.__score > 0)
     .sort((a, b) => b.__score - a.__score);
 }, [clientQuery, placeList]);
+const focusById = (id) => {
+  if (!id) return false;
+  const el = document.getElementById(id);
+  if (!el) return false;
+  el.focus();
+  if (typeof el.select === "function") el.select();
+  return true;
+};
 
+const getNextFocusIdFromForm = (f) => {
+  // 상차지
+  if (!String(f.상차지담당자 || "").trim()) return "pickup-manager";
+  if (!String(f.상차지담당자번호 || "").trim()) return "pickup-phone";
+
+  // 하차지
+  if (!String(f.하차지명 || "").trim()) return "drop-place-input";
+  if (!String(f.하차지담당자 || "").trim()) return "drop-manager";
+  if (!String(f.하차지담당자번호 || "").trim()) return "drop-phone";
+
+  return null;
+};
 // ⭐ 거래처 선택 시 → 어디에 적용할지 팝업 오픈
 function applyClientSelect(name) {
   const p = placeList.find(
@@ -3230,7 +3262,18 @@ function applyClientSelect(name) {
 
   setClientQuery(name);
   setIsClientOpen(false);
+// p는 위에서 찾은 placeList의 업체(없을 수도 있음)
+const nextDraft = {
+  ...form,
+  거래처명: p?.업체명 || name,
+  상차지명: p?.업체명 || name,
+  상차지주소: p?.주소 || "",
+  상차지담당자: p?.담당자 || "",
+  상차지담당자번호: p?.담당자번호 || "",
+};
 
+const nextId = getNextFocusIdFromForm(nextDraft);
+checkClientGrade(name, nextId);
   // 자동매칭 뱃지 상태 초기화
   setAutoPickMatched(!!p);
 }
@@ -3350,6 +3393,18 @@ function swapPickupDrop() {
   return m;
 }, [drivers]);
 const [blackAlert, setBlackAlert] = React.useState(null);
+const [clientAlert, setClientAlert] = React.useState(null);
+
+// 🚫 거래처/상하차지 등급 체크 함수
+const checkClientGrade = (name, nextFocusId = null) => {
+  if (!name) return;
+  const target = (placeRows || []).find(
+    (p) => (p.업체명 || "") === name.trim() && (p.등급 === "블랙" || p.등급 === "주의")
+  );
+  if (target) {
+    setClientAlert({ ...target, _nextFocusId: nextFocusId });
+  }
+};
 React.useEffect(() => {
   const handler = (e) => setBlackAlert(e.detail);
   window.addEventListener("blackDriverDetected", handler);
@@ -4280,8 +4335,19 @@ const applyCopy = (r) => {
   setVehicleQuery(keep.차량종류 || "");
   setAutoPickMatched(true);
   setAutoDropMatched(true);
-  setCopyOpen(false);
+setCopyOpen(false);
   setCopySelected([]);
+
+  // 🚫 복사된 오더 거래처 등급 체크
+  const namesToCheck = [keep.거래처명, keep.상차지명, keep.하차지명]
+    .filter(Boolean)
+    .filter((v, i, arr) => arr.indexOf(v) === i); // 중복 제거
+  for (const n of namesToCheck) {
+    const found = (placeRows || []).find(
+      p => (p.업체명 || "") === n.trim() && (p.등급 === "블랙" || p.등급 === "주의")
+    );
+    if (found) { setClientAlert(found); break; }
+  }
 };
 
     // ------------------ 초기화 ------------------
@@ -5018,11 +5084,15 @@ const similar = placeList.filter(p => {
 setForm((prev) => ({
   ...prev,
   상차지명: p.업체명,
-  상차지Id: p._id || "",   // ⭐ 추가
+  상차지Id: p._id || "",
   상차지주소: p.주소,
   상차지담당자: p.담당자 || "",
   상차지담당자번호: p.담당자번호 || "",
 }));
+       if (!clientAlert) checkClientGrade(
+  p.업체명,
+  p.담당자 && p.담당자번호 ? "drop-place-input" : p.담당자 ? "pickup-phone" : "pickup-manager"
+);
           setShowPickupDropdown(false);
         } else if (e.key === "ArrowDown") {
           setPickupActive((i) => Math.min(i + 1, list.length - 1));
@@ -5045,12 +5115,15 @@ setForm((prev) => ({
   setForm((prev) => ({
     ...prev,
     상차지명: p.업체명,
-    상차지Id: p._id || "",   // ⭐ 반드시 추가
+    상차지Id: p._id || "",
     상차지주소: p.주소 || "",
     상차지담당자: p.담당자 || "",
     상차지담당자번호: p.담당자번호 || "",
   }));
-
+          if (!clientAlert) checkClientGrade(
+  p.업체명,
+  p.담당자 && p.담당자번호 ? "drop-place-input" : p.담당자 ? "pickup-phone" : "pickup-manager"
+);
           setShowPickupDropdown(false);
         }}
       >
@@ -5116,7 +5189,8 @@ setStopList(
 
   {/* 담당자 입력 */}
   <div className="relative">
-    <input
+        <input
+      id="pickup-manager"
       className={inputCls}
       value={form.상차지담당자}
       onChange={(e) => onChange("상차지담당자", e.target.value)}
@@ -5129,6 +5203,7 @@ setStopList(
 <div>
   <label className={labelCls}>상차지 연락처</label>
   <input
+    id="pickup-phone"
     className={inputCls}
     value={form.상차지담당자번호}
     onChange={(e) =>
@@ -5146,6 +5221,7 @@ setStopList(
 
   <input
     className={inputCls}
+       id="drop-place-input"
     placeholder="하차지 검색"
     value={form.하차지명}
     onChange={(e) => {
@@ -5175,8 +5251,11 @@ setStopList(
           하차지담당자: p.담당자 || "",
           하차지담당자번호: p.담당자번호 || "",
         }))
-
-        setShowPlaceDropdown(false)
+        if (!clientAlert) checkClientGrade(
+          p.업체명,
+          !p.담당자 ? "drop-manager" : !p.담당자번호 ? "drop-phone" : null
+        );
+        setShowPlaceDropdown(false);
       } else if (e.key === "ArrowDown") {
         setPlaceActive((i) => Math.min(i + 1, list.length - 1))
       } else if (e.key === "ArrowUp") {
@@ -5204,8 +5283,11 @@ setStopList(
               하차지담당자: p.담당자 || "",
               하차지담당자번호: p.담당자번호 || "",
             }))
-
-            setShowPlaceDropdown(false)
+           if (!clientAlert) checkClientGrade(
+            p.업체명,
+            !p.담당자 ? "drop-manager" : !p.담당자번호 ? "drop-phone" : null
+          );
+          setShowPlaceDropdown(false);
           }}
         >
           <b>{p.업체명}</b>
@@ -5270,7 +5352,8 @@ className={`
     하차지 담당자
   </label>
 
-  <input
+    <input
+    id="drop-manager"
     className={inputCls}
     value={form.하차지담당자}
     onChange={(e) =>
@@ -5285,6 +5368,7 @@ className={`
 <div>
   <label className={labelCls}>하차지 연락처</label>
   <input
+    id="drop-phone"
     className={inputCls}
     value={form.하차지담당자번호}
     onChange={(e) =>
@@ -5370,8 +5454,9 @@ className={`
     차량종류
   </label>
 
-  <button
+ <button
     type="button"
+    tabIndex={-1}
     onClick={(e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -6840,6 +6925,68 @@ const today = now.toISOString().slice(0, 10);
     </div>
   </div>
 )}
+{/* 🚫 거래처 블랙/주의 알림 */}
+{clientAlert && (
+  <div
+    className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999999]"
+    tabIndex={-1}
+    ref={(el) => { if (el) setTimeout(() => el.focus(), 0); }}
+   onKeyDown={(e) => {
+      if (e.key === "Enter" || e.key === "Escape") {
+const nextId = clientAlert._nextFocusId || getNextFocusIdFromForm(form);
+setClientAlert(null);
+setTimeout(() => {
+  // 못 찾으면 drop-place-input 같은 기본값을 한 번 더 시도해도 됨
+  focusById(nextId) || focusById("drop-place-input");
+}, 50);
+
+      }
+    }}
+  >
+    <div className="bg-white rounded-2xl shadow-2xl w-[420px] overflow-hidden">
+      <div className={`px-6 py-4 flex items-center gap-3 ${clientAlert.등급 === "블랙" ? "bg-gray-900" : "bg-orange-500"}`}>
+        <span className="text-2xl">{clientAlert.등급 === "블랙" ? "🚫" : "⚠️"}</span>
+        <h3 className="text-white text-lg font-bold">
+          {clientAlert.등급 === "블랙" ? "블랙 거래처 알림" : "주의 거래처 알림"}
+        </h3>
+      </div>
+      <div className="px-6 py-5 space-y-3">
+        <div className={`border rounded-lg px-4 py-3 text-sm space-y-1.5 ${clientAlert.등급 === "블랙" ? "bg-red-50 border-red-200" : "bg-orange-50 border-orange-200"}`}>
+          <div><span className="text-gray-500">거래처명</span> <b className="ml-2">{clientAlert.업체명}</b></div>
+          <div><span className="text-gray-500">등급</span>
+            <span className={`ml-2 px-2 py-0.5 rounded text-xs font-bold ${clientAlert.등급 === "블랙" ? "bg-gray-900 text-white" : "bg-orange-500 text-white"}`}>
+              {clientAlert.등급}
+            </span>
+          </div>
+          {clientAlert.등급변경일 && (
+            <div><span className="text-gray-500">지정일</span> <span className="ml-2">{clientAlert.등급변경일}</span></div>
+          )}
+          {clientAlert.주소 && (
+            <div><span className="text-gray-500">주소</span> <span className="ml-2 text-gray-700">{clientAlert.주소}</span></div>
+          )}
+          {clientAlert.메모 && (
+            <div><span className="text-gray-500">메모</span> <span className={`ml-2 font-semibold ${clientAlert.등급 === "블랙" ? "text-red-600" : "text-orange-600"}`}>{clientAlert.메모}</span></div>
+          )}
+        </div>
+        <p className="text-sm text-gray-600 text-center font-semibold">
+          해당 거래처는 <span className={`font-bold ${clientAlert.등급 === "블랙" ? "text-red-600" : "text-orange-500"}`}>{clientAlert.등급}</span> 등급으로 지정된 거래처입니다.
+        </p>
+      </div>
+      <div className="px-6 pb-5">
+        <button className={`w-full py-3 text-white rounded-xl font-bold text-sm ${clientAlert.등급 === "블랙" ? "bg-gray-900" : "bg-orange-500"}`}
+          onClick={() => {
+const nextId = clientAlert._nextFocusId || getNextFocusIdFromForm(form);
+setClientAlert(null);
+setTimeout(() => {
+  // 못 찾으면 drop-place-input 같은 기본값을 한 번 더 시도해도 됨
+  focusById(nextId) || focusById("drop-place-input");
+}, 50);
+
+          }}>확인</button>
+      </div>
+    </div>
+  </div>
+)}
 {/* ================= 신규 기사 등록 모달 ================= */}
 {driverModal.open && (
   <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[99999]">
@@ -7006,6 +7153,7 @@ setConfirmChange(null);
       }
     }}
     tabIndex={0}
+    ref={(el) => { if (el) setTimeout(() => el.focus(), 0); }}
   >
     <div className="bg-white rounded-xl shadow-xl w-[1100px] h-[650px] flex overflow-hidden border">
 
@@ -22169,14 +22317,6 @@ function SettlementDetailPopup({ client, rows = [], onClose }) {
 
 // ===================== DispatchApp.jsx (PART 7/8 — 거래처명/차량종류 필터 추가 완성) =====================
 function UnassignedStatus({ dispatchData, drivers = [], patchDispatch, clients = [], places = [], upsertDriver }) {
-  // 🔥 Field 컴포넌트 정의
-  const Field = ({ label, children }) => (
-    <div className="space-y-2">
-      <label className="block text-sm font-semibold text-gray-700">{label}</label>
-      {children}
-    </div>
-  );
-  
   const [q, setQ] = React.useState("");
   const [startDate, setStartDate] = React.useState("");
   const [endDate, setEndDate] = React.useState("");
@@ -22206,15 +22346,82 @@ function UnassignedStatus({ dispatchData, drivers = [], patchDispatch, clients =
   const [copyTarget, setCopyTarget] = React.useState(null);
   
   // 🔥 거래처/장소 자동완성 관련 상태
-  const [clientApplyPopup, setClientApplyPopup] = React.useState(null);
-  const [copyClientOptions, setCopyClientOptions] = React.useState([]);
-  const [showCopyClientDropdown, setShowCopyClientDropdown] = React.useState(false);
-  const [copyClientIndex, setCopyClientIndex] = React.useState(0);
-  const [copyPlaceOptions, setCopyPlaceOptions] = React.useState([]);
-  const [showCopyPlaceDropdown, setShowCopyPlaceDropdown] = React.useState(false);
-  const [copyPlaceType, setCopyPlaceType] = React.useState(null);
-  const [copyActiveIndex, setCopyActiveIndex] = React.useState(0);
+// 🔥 거래처/장소 자동완성 상태
+const [clientDropdown, setClientDropdown] = React.useState([]);
+const [clientDropdownOpen, setClientDropdownOpen] = React.useState(false);
+const [clientActiveIdx, setClientActiveIdx] = React.useState(0);
+
+const [loadPlaceDropdown, setLoadPlaceDropdown] = React.useState([]);
+const [loadPlaceDropdownOpen, setLoadPlaceDropdownOpen] = React.useState(false);
+const [loadPlaceActiveIdx, setLoadPlaceActiveIdx] = React.useState(0);
+
+const [unloadPlaceDropdown, setUnloadPlaceDropdown] = React.useState([]);
+const [unloadPlaceDropdownOpen, setUnloadPlaceDropdownOpen] = React.useState(false);
+const [unloadPlaceActiveIdx, setUnloadPlaceActiveIdx] = React.useState(0);
+
+// 🔥 블랙/주의업체 팝업
+const [warningPopup, setWarningPopup] = React.useState(null);
+const [newDriverPopupOpen, setNewDriverPopupOpen] = React.useState(false);
+const [newDriverData, setNewDriverData] = React.useState({ 이름: "", 전화번호: "", 차량번호: "" });
+
+// 🔥 거래처 자동완성 (다른 파트와 동일)
+const [copyClientOptions, setCopyClientOptions] = React.useState([]);
+const [showCopyClientDropdown, setShowCopyClientDropdown] = React.useState(false);
+const [copyClientIndex, setCopyClientIndex] = React.useState(0);
+const copyClientListRef = React.useRef(null);
+
+// 🔥 장소 자동완성 (다른 파트와 동일)
+const [copyPlaceOptions, setCopyPlaceOptions] = React.useState([]);
+const [showCopyPlaceDropdown, setShowCopyPlaceDropdown] = React.useState(false);
+const [copyPlaceType, setCopyPlaceType] = React.useState(null); // "pickup" | "drop"
+const [copyActiveIndex, setCopyActiveIndex] = React.useState(0);
+// 🔥 드롭다운 스크롤 ref
+const clientListRef = React.useRef(null);
+const loadPlaceListRef = React.useRef(null);
+const unloadPlaceListRef = React.useRef(null);
+
+// 🔥 places 필드 추출 헬퍼 (다양한 필드명 대응)
+const getPlaceField = (place, ...keys) => {
+  // 🔥 디버깅: 실제 필드명 확인 (콘솔에서 확인 후 삭제)
+  // console.log("place 필드:", Object.keys(place), place);
   
+  for (const k of keys) {
+    if (place[k] !== undefined && place[k] !== null && place[k] !== "") {
+      return place[k];
+    }
+  }
+  return "";
+};
+
+// 🔥 담당자명 추출 (실제 필드: 담당자)
+const getManagerName = (place) => {
+  const keys = [
+    "담당자", "담당자명", "담당", "manager", "managerName",
+    "상차담당자", "하차담당자", "contact", "contactName",
+    "책임자", "책임자명", "담당자이름", "이름"
+  ];
+  for (const k of keys) {
+    if (place[k] !== undefined && place[k] !== null && place[k] !== "") {
+      return place[k];
+    }
+  }
+  return "";
+};
+
+// 🔥 연락처 추출 (실제 필드: 담당자번호)
+const getManagerPhone = (place) => {
+  const keys = [
+    "담당자번호", "전화번호", "연락처", "phone", "tel", "mobile",
+    "담당자연락처", "담당자전화", "담당자전화번호",
+    "핸드폰", "휴대폰", "휴대전화", "contact", "연락처번호"
+  ];
+  for (const k of keys) {
+    if (place[k] !== undefined && place[k] !== null && place[k] !== "") {
+      return place[k];
+    }
+  }
+  return "";
+};
   // 🔔 토스트 알림
   const [toast, setToast] = React.useState(null);
   const showToast = (msg, type = "ok") => {
@@ -22236,7 +22443,37 @@ function UnassignedStatus({ dispatchData, drivers = [], patchDispatch, clients =
       String(p.업체명 || "").toLowerCase().includes(v)
     );
   };
-  
+  // 🔥 거래처 필터 (다른 파트와 동일)
+const filterClients = (value) => {
+  const v = (value || "").toLowerCase();
+  if (!v) return [];
+  return (clients || []).filter(c =>
+    String(c.거래처명 || "").toLowerCase().includes(v)
+  ).slice(0, 10);
+};
+
+// 🔥 장소 필터 (다른 파트와 동일)
+const filterPlaces = (value) => {
+  const v = (value || "").toLowerCase();
+  if (!v) return [];
+  return (places || []).filter(p =>
+    String(p.업체명 || "").toLowerCase().includes(v)
+  );
+};
+
+// 🔥 유사도 정렬 (startsWith 우선)
+const rankPlaces = (list, keyword) => {
+  const k = (keyword || "").toLowerCase();
+  return [...list].sort((a, b) => {
+    const aName = String(a.업체명 || "").toLowerCase();
+    const bName = String(b.업체명 || "").toLowerCase();
+    const aStarts = aName.startsWith(k);
+    const bStarts = bName.startsWith(k);
+    if (aStarts && !bStarts) return -1;
+    if (!aStarts && bStarts) return 1;
+    return aName.localeCompare(bName);
+  }).slice(0, 10);
+};
   // 🔥 차량번호 정규화
   const normalizePlate = (v = "") => {
     return String(v)
@@ -22244,7 +22481,24 @@ function UnassignedStatus({ dispatchData, drivers = [], patchDispatch, clients =
       .replace(/[\s\-]/g, "")
       .replace(/[^0-9A-Z가-힣]/g, "");
   };
-  
+  // 🔥 블랙/주의업체 체크
+const checkWarningStatus = (name, type) => {
+  // clients에서 체크
+  const foundClient = (clients || []).find(c => c.거래처명 === name);
+  if (foundClient) {
+    if (foundClient.업체상태 === "블랙" || foundClient.업체상태 === "주의") {
+      setWarningPopup({ name, status: foundClient.업체상태, type });
+      return;
+    }
+  }
+  // places에서 체크
+  const foundPlace = (places || []).find(p => p.업체명 === name);
+  if (foundPlace) {
+    if (foundPlace.업체상태 === "블랙" || foundPlace.업체상태 === "주의") {
+      setWarningPopup({ name, status: foundPlace.업체상태, type });
+    }
+  }
+};
   // 🔥 전화번호 포맷
   const formatPhone = (phone = "") => {
     const clean = String(phone).replace(/[^\d]/g, "");
@@ -22258,13 +22512,14 @@ function UnassignedStatus({ dispatchData, drivers = [], patchDispatch, clients =
   };
   
   // 🔥 시간 옵션 생성
-  const generateTimeOptions = () => {
+const generateTimeOptions = () => {
     const options = [];
     for (let h = 0; h < 24; h++) {
       for (let m = 0; m < 60; m += 30) {
-        const hh = String(h).padStart(2, "0");
-        const mm = String(m).padStart(2, "0");
-        options.push(`${hh}:${mm}`);
+        const period = h < 12 ? "오전" : "오후";
+        const displayH = h === 0 ? 12 : h > 12 ? h - 12 : h;
+        const displayM = m === 0 ? "" : `${m}분`;
+        options.push(`${period} ${displayH}시${displayM}`);
       }
     }
     return options;
@@ -22830,7 +23085,143 @@ function UnassignedStatus({ dispatchData, drivers = [], patchDispatch, clients =
           </div>
         </div>
       )}
+      {/* 🔥 기사 신규등록 팝업 */}
+{newDriverPopupOpen && (
+  <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/50">
+    <div className="bg-white rounded-xl shadow-2xl p-8 w-[400px]">
+      <h3 className="text-xl font-bold mb-6 text-slate-800">
+        🚚 신규 기사 등록
+      </h3>
       
+      <div className="space-y-4">
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-1">차량번호</label>
+          <input
+            className="w-full border rounded-lg px-3 py-2 bg-gray-100"
+            value={newDriverData.차량번호}
+            readOnly
+          />
+        </div>
+        
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-1">기사명 *</label>
+          <input
+            className="w-full border rounded-lg px-3 py-2"
+            value={newDriverData.이름}
+            onChange={(e) => setNewDriverData(p => ({...p, 이름: e.target.value}))}
+            placeholder="기사명 입력"
+          />
+        </div>
+        
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-1">전화번호 *</label>
+          <input
+            className="w-full border rounded-lg px-3 py-2"
+            value={newDriverData.전화번호}
+            onChange={(e) => setNewDriverData(p => ({...p, 전화번호: e.target.value}))}
+            placeholder="010-0000-0000"
+          />
+        </div>
+      </div>
+      
+      <div className="flex justify-end gap-3 mt-8">
+        <button
+          onClick={() => {
+            setNewDriverPopupOpen(false);
+            setNewDriverData({ 이름: "", 전화번호: "", 차량번호: "" });
+          }}
+          className="px-4 py-2 border rounded-lg hover:bg-gray-100"
+        >
+          취소
+        </button>
+        <button
+          onClick={async () => {
+            if (!newDriverData.이름.trim()) {
+              alert("기사명을 입력하세요.");
+              return;
+            }
+            if (!newDriverData.전화번호.trim()) {
+              alert("전화번호를 입력하세요.");
+              return;
+            }
+            
+            try {
+              // 🔥 upsertDriver가 있으면 사용, 없으면 직접 Firestore 저장
+              if (typeof upsertDriver === "function") {
+                await upsertDriver({
+                  차량번호: newDriverData.차량번호,
+                  이름: newDriverData.이름,
+                  전화번호: newDriverData.전화번호,
+                  createdAt: Date.now(),
+                });
+              } else if (typeof db !== "undefined" && db) {
+                await setDoc(
+                  doc(db, "drivers", crypto.randomUUID()),
+                  {
+                    차량번호: newDriverData.차량번호,
+                    이름: newDriverData.이름,
+                    전화번호: newDriverData.전화번호,
+                    createdAt: Date.now(),
+                  }
+                );
+              }
+              
+              // 🔥 copyTarget에 기사정보 반영
+              setCopyTarget(prev => ({
+                ...prev,
+                이름: newDriverData.이름,
+                전화번호: formatPhone(newDriverData.전화번호),
+                배차상태: "배차완료",
+              }));
+              
+              alert("✅ 기사 등록 완료");
+              setNewDriverPopupOpen(false);
+              setNewDriverData({ 이름: "", 전화번호: "", 차량번호: "" });
+            } catch (err) {
+              console.error(err);
+              alert("등록 중 오류 발생");
+            }
+          }}
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700"
+        >
+          저장
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+      {/* 🔥 블랙/주의업체 경고 팝업 */}
+{warningPopup && (
+  <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/50">
+    <div className={`bg-white rounded-xl shadow-2xl p-8 max-w-md ${warningPopup.status === "블랙" ? "border-4 border-red-500" : "border-4 border-yellow-500"}`}>
+      <div className="text-center">
+        <div className={`text-6xl mb-4 ${warningPopup.status === "블랙" ? "text-red-500" : "text-yellow-500"}`}>
+          {warningPopup.status === "블랙" ? "🚫" : "⚠️"}
+        </div>
+        <h3 className={`text-2xl font-bold mb-2 ${warningPopup.status === "블랙" ? "text-red-600" : "text-yellow-600"}`}>
+          {warningPopup.status} 업체
+        </h3>
+        <p className="text-lg text-gray-700 mb-4">
+          <b>{warningPopup.name}</b>은(는)<br />
+          <span className={warningPopup.status === "블랙" ? "text-red-600 font-bold" : "text-yellow-600 font-bold"}>
+            {warningPopup.status} 업체
+          </span>로 등록되어 있습니다.
+        </p>
+        <p className="text-sm text-gray-500 mb-6">
+          {warningPopup.status === "블랙" 
+            ? "거래 시 각별한 주의가 필요합니다." 
+            : "거래 전 확인이 필요합니다."}
+        </p>
+        <button
+          onClick={() => setWarningPopup(null)}
+          className={`px-6 py-3 rounded-lg text-white font-semibold ${warningPopup.status === "블랙" ? "bg-red-600 hover:bg-red-700" : "bg-yellow-500 hover:bg-yellow-600"}`}
+        >
+          확인
+        </button>
+      </div>
+    </div>
+  </div>
+)}
       {/* 🔥 오더 복사/수정 패널 */}
       {copyPanelOpen && copyTarget && (
         <div className="fixed inset-0 z-[99999]">
@@ -22935,12 +23326,89 @@ function UnassignedStatus({ dispatchData, drivers = [], patchDispatch, clients =
                 </h3>
                 
                 <Field label="거래처명">
-                  <input
-                    className="w-full border rounded-lg px-3 py-2"
-                    value={copyTarget?.거래처명 ?? ""}
-                    onChange={(e) => setCopyTarget(p => ({...p, 거래처명: e.target.value}))}
-                  />
-                </Field>
+  <div className="relative">
+    <input
+      className="w-full border rounded-lg px-3 py-2"
+      value={copyTarget?.거래처명 ?? ""}
+      onChange={(e) => {
+        const v = e.target.value;
+        setCopyTarget(p => ({...p, 거래처명: v}));
+        
+        if (v.trim()) {
+          // clients가 없으면 places에서 검색
+          const hasClients = (clients || []).length > 0;
+          let list = [];
+          
+          if (hasClients) {
+            list = filterClients(v);
+          } else {
+            list = rankPlaces(filterPlaces(v), v);
+          }
+          
+          setCopyClientOptions(list);
+          setShowCopyClientDropdown(list.length > 0);
+          setCopyClientIndex(0);
+        } else {
+          setShowCopyClientDropdown(false);
+        }
+      }}
+      onKeyDown={(e) => {
+        if (!showCopyClientDropdown) return;
+        
+        if (e.key === "ArrowDown") {
+          e.preventDefault();
+          setCopyClientIndex(i => Math.min(i + 1, copyClientOptions.length - 1));
+        }
+        if (e.key === "ArrowUp") {
+          e.preventDefault();
+          setCopyClientIndex(i => Math.max(i - 1, 0));
+        }
+        if (e.key === "Enter") {
+          e.preventDefault();
+          const c = copyClientOptions[copyClientIndex];
+          if (!c) return;
+          
+          const name = c.거래처명 || c.업체명 || "";
+          setCopyTarget(prev => ({
+            ...prev,
+            거래처명: name
+          }));
+          setShowCopyClientDropdown(false);
+          checkWarningStatus(name, "거래처");
+        }
+        if (e.key === "Escape") {
+          setShowCopyClientDropdown(false);
+        }
+      }}
+      onBlur={() => setTimeout(() => setShowCopyClientDropdown(false), 150)}
+    />
+    
+    {showCopyClientDropdown && copyClientOptions.length > 0 && (
+      <div className="absolute z-50 bg-white border w-full max-h-40 overflow-y-auto shadow rounded-md">
+        {copyClientOptions.map((c, i) => {
+          const name = c.거래처명 || c.업체명 || "";
+          return (
+            <div
+              key={c._id || c.id || i}
+              className={`px-3 py-2 cursor-pointer ${i === copyClientIndex ? "bg-blue-500 text-white" : "hover:bg-gray-50"}`}
+              onMouseDown={() => {
+                setCopyTarget(prev => ({
+                  ...prev,
+                  거래처명: name
+                }));
+                setShowCopyClientDropdown(false);
+                checkWarningStatus(name, "거래처");
+              }}
+            >
+              <div className="font-semibold">{name}</div>
+              <div className={`text-xs ${i === copyClientIndex ? "text-blue-100" : "text-gray-500"}`}>{c.주소}</div>
+            </div>
+          );
+        })}
+      </div>
+    )}
+  </div>
+</Field>
               </section>
               
               {/* ================= 상하차 정보 ================= */}
@@ -22990,12 +23458,97 @@ function UnassignedStatus({ dispatchData, drivers = [], patchDispatch, clients =
                     </Field>
                     
                     <Field label="상차지명">
-                      <input
-                        className="w-full border rounded-lg px-3 py-2"
-                        value={copyTarget?.상차지명 ?? ""}
-                        onChange={(e) => setCopyTarget(p => ({...p, 상차지명: e.target.value}))}
-                      />
-                    </Field>
+  <div className="relative">
+    <input
+      className="w-full border rounded-lg px-3 py-2"
+      value={copyTarget?.상차지명 ?? ""}
+      onChange={(e) => {
+        const v = e.target.value;
+        
+        if (!v.trim()) {
+          setCopyTarget(p => ({
+            ...p,
+            상차지명: "",
+            상차지주소: "",
+            상차지담당자: "",
+            상차지담당자번호: ""
+          }));
+          setShowCopyPlaceDropdown(false);
+          return;
+        }
+        
+        setCopyTarget(p => ({...p, 상차지명: v}));
+        setCopyPlaceType("pickup");
+        
+        const list = rankPlaces(filterPlaces(v), v);
+        setCopyPlaceOptions(list);
+        setShowCopyPlaceDropdown(list.length > 0);
+        setCopyActiveIndex(0);
+      }}
+      onKeyDown={(e) => {
+        if (!showCopyPlaceDropdown || copyPlaceType !== "pickup") return;
+        
+        if (e.key === "ArrowDown") {
+          e.preventDefault();
+          setCopyActiveIndex(i => Math.min(i + 1, copyPlaceOptions.length - 1));
+        }
+        if (e.key === "ArrowUp") {
+          e.preventDefault();
+          setCopyActiveIndex(i => Math.max(i - 1, 0));
+        }
+        if (e.key === "Enter") {
+          e.preventDefault();
+          const p = copyPlaceOptions[copyActiveIndex];
+          if (!p) return;
+          
+          setCopyTarget(prev => ({
+            ...prev,
+            상차지명: p.업체명 || "",
+            상차지주소: p.주소 || "",
+            상차지담당자: p.담당자 || "",
+            상차지담당자번호: p.담당자번호 || ""
+          }));
+          setShowCopyPlaceDropdown(false);
+          checkWarningStatus(p.업체명, "상차지");
+        }
+        if (e.key === "Escape") {
+          setShowCopyPlaceDropdown(false);
+        }
+      }}
+      onBlur={() => setTimeout(() => setShowCopyPlaceDropdown(false), 150)}
+    />
+    
+    {showCopyPlaceDropdown && copyPlaceType === "pickup" && copyPlaceOptions.length > 0 && (
+      <div className="absolute z-50 bg-white border w-full max-h-40 overflow-y-auto shadow rounded-md">
+        {copyPlaceOptions.map((p, i) => (
+          <div
+            key={p._id || i}
+            className={`px-3 py-2 cursor-pointer ${i === copyActiveIndex ? "bg-blue-500 text-white" : "hover:bg-gray-50"}`}
+            onMouseDown={() => {
+  // 🔥 디버깅: 선택한 place 전체 필드 확인
+  console.log("선택한 place 전체:", p);
+  console.log("담당자 필드값:", p.담당자);
+  console.log("담당자번호 필드값:", p.담당자번호);
+  
+  setCopyTarget(prev => ({
+    ...prev,
+    상차지명: p.업체명 || "",
+    상차지주소: p.주소 || "",
+    상차지담당자: p.담당자 || "",
+    상차지담당자번호: p.담당자번호 || ""
+  }));
+              setShowCopyPlaceDropdown(false);
+              checkWarningStatus(p.업체명, "상차지");
+            }}
+          >
+            <div className="font-semibold">{p.업체명}</div>
+            <div className={`text-xs ${i === copyActiveIndex ? "text-blue-100" : "text-gray-500"}`}>{p.주소}</div>
+          </div>
+        ))}
+      </div>
+    )}
+  </div>
+</Field>
                     
                     <Field label="상차지주소">
                       <input
@@ -23061,13 +23614,93 @@ function UnassignedStatus({ dispatchData, drivers = [], patchDispatch, clients =
                       </select>
                     </Field>
                     
-                    <Field label="하차지명">
-                      <input
-                        className="w-full border rounded-lg px-3 py-2"
-                        value={copyTarget?.하차지명 ?? ""}
-                        onChange={(e) => setCopyTarget(p => ({...p, 하차지명: e.target.value}))}
-                      />
-                    </Field>
+                   <Field label="하차지명">
+  <div className="relative">
+    <input
+      className="w-full border rounded-lg px-3 py-2"
+      value={copyTarget?.하차지명 ?? ""}
+      onChange={(e) => {
+        const v = e.target.value;
+        
+        if (!v.trim()) {
+          setCopyTarget(p => ({
+            ...p,
+            하차지명: "",
+            하차지주소: "",
+            하차지담당자: "",
+            하차지담당자번호: ""
+          }));
+          setShowCopyPlaceDropdown(false);
+          return;
+        }
+        
+        setCopyTarget(p => ({...p, 하차지명: v}));
+        setCopyPlaceType("drop");
+        
+        const list = rankPlaces(filterPlaces(v), v);
+        setCopyPlaceOptions(list);
+        setShowCopyPlaceDropdown(list.length > 0);
+        setCopyActiveIndex(0);
+      }}
+      onKeyDown={(e) => {
+        if (!showCopyPlaceDropdown || copyPlaceType !== "drop") return;
+        
+        if (e.key === "ArrowDown") {
+          e.preventDefault();
+          setCopyActiveIndex(i => Math.min(i + 1, copyPlaceOptions.length - 1));
+        }
+        if (e.key === "ArrowUp") {
+          e.preventDefault();
+          setCopyActiveIndex(i => Math.max(i - 1, 0));
+        }
+        if (e.key === "Enter") {
+          e.preventDefault();
+          const p = copyPlaceOptions[copyActiveIndex];
+          if (!p) return;
+          
+          setCopyTarget(prev => ({
+            ...prev,
+            하차지명: p.업체명 || "",
+            하차지주소: p.주소 || "",
+            하차지담당자: p.담당자 || "",
+            하차지담당자번호: p.담당자번호 || ""
+          }));
+          setShowCopyPlaceDropdown(false);
+          checkWarningStatus(p.업체명, "하차지");
+        }
+        if (e.key === "Escape") {
+          setShowCopyPlaceDropdown(false);
+        }
+      }}
+      onBlur={() => setTimeout(() => setShowCopyPlaceDropdown(false), 150)}
+    />
+    
+    {showCopyPlaceDropdown && copyPlaceType === "drop" && copyPlaceOptions.length > 0 && (
+      <div className="absolute z-50 bg-white border w-full max-h-40 overflow-y-auto shadow rounded-md">
+        {copyPlaceOptions.map((p, i) => (
+          <div
+            key={p._id || i}
+            className={`px-3 py-2 cursor-pointer ${i === copyActiveIndex ? "bg-blue-500 text-white" : "hover:bg-gray-50"}`}
+            onMouseDown={() => {
+              setCopyTarget(prev => ({
+                ...prev,
+                하차지명: p.업체명 || "",
+                하차지주소: p.주소 || "",
+                하차지담당자: p.담당자 || "",
+                하차지담당자번호: p.담당자번호 || ""
+              }));
+              setShowCopyPlaceDropdown(false);
+              checkWarningStatus(p.업체명, "하차지");
+            }}
+          >
+            <div className="font-semibold">{p.업체명}</div>
+            <div className={`text-xs ${i === copyActiveIndex ? "text-blue-100" : "text-gray-500"}`}>{p.주소}</div>
+          </div>
+        ))}
+      </div>
+    )}
+  </div>
+</Field>
                     
                     <Field label="하차지주소">
                       <input
@@ -23104,27 +23737,50 @@ function UnassignedStatus({ dispatchData, drivers = [], patchDispatch, clients =
                 
                 <div className="grid grid-cols-3 gap-6">
                   <Field label="차량번호">
-                    <input
-                      className="w-full border rounded-lg px-3 py-2"
-                      value={copyTarget?.차량번호 ?? ""}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        const plate = normalizePlate(v);
-                        
-                        const match = (drivers || []).find(
-                          d => normalizePlate(d.차량번호) === plate
-                        );
-                        
-                        setCopyTarget(prev => ({
-                          ...prev,
-                          차량번호: v,
-                          이름: match?.이름 || "",
-                          전화번호: formatPhone(match?.전화번호 || ""),
-                          배차상태: match ? "배차완료" : "배차중",
-                        }));
-                      }}
-                    />
-                  </Field>
+  <div className="flex gap-2">
+    <input
+      className="flex-1 border rounded-lg px-3 py-2"
+      value={copyTarget?.차량번호 ?? ""}
+      onChange={(e) => {
+        const v = e.target.value;
+        const plate = normalizePlate(v);
+        
+        const match = (drivers || []).find(
+          d => normalizePlate(d.차량번호) === plate
+        );
+        
+        setCopyTarget(prev => ({
+          ...prev,
+          차량번호: v,
+          이름: match?.이름 || "",
+          전화번호: formatPhone(match?.전화번호 || ""),
+          배차상태: match ? "배차완료" : "배차중",
+        }));
+      }}
+    />
+    {copyTarget?.차량번호 && normalizePlate(copyTarget.차량번호).length >= 4 && !copyTarget?.이름 && (
+      <button
+        type="button"
+        onClick={() => {
+          setNewDriverData({
+            이름: "",
+            전화번호: "",
+            차량번호: copyTarget.차량번호
+          });
+          setNewDriverPopupOpen(true);
+        }}
+        className="px-3 py-2 bg-amber-500 text-white rounded-lg text-sm font-semibold whitespace-nowrap hover:bg-amber-600"
+      >
+        신규등록
+      </button>
+    )}
+  </div>
+  {copyTarget?.차량번호 && normalizePlate(copyTarget.차량번호).length >= 4 && !copyTarget?.이름 && (
+    <div className="text-xs text-amber-600 mt-1">
+      ⚠️ 등록되지 않은 차량입니다
+    </div>
+  )}
+</Field>
                   
                   <Field label="기사명">
                     <input
@@ -23618,7 +24274,7 @@ function ClientSettlement({ dispatchData, clients = [], setClients }) {
           <div className="flex flex-wrap items-end gap-3 mb-4">
             {/* 🔍 거래처 검색 + 조회 버튼 */}
             <div className="flex flex-col">
-              <label className="text-xs text-gray-500 mb-1">거래처 검색</label>
+              <label className="text-sm text-gray-600 mb-1 font-medium">거래처 검색</label>
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -23651,7 +24307,7 @@ function ClientSettlement({ dispatchData, clients = [], setClients }) {
             </div>
 
             <div className="flex flex-col">
-              <label className="text-xs text-gray-500 mb-1">시작일</label>
+              <label className="text-sm text-gray-600 mb-1 font-medium">시작일</label>
               <input
                 type="date"
                 className="border p-2 rounded"
@@ -23661,7 +24317,7 @@ function ClientSettlement({ dispatchData, clients = [], setClients }) {
             </div>
 
             <div className="flex flex-col">
-              <label className="text-xs text-gray-500 mb-1">종료일</label>
+              <label className="text-sm text-gray-600 mb-1 font-medium">종료일</label>
               <input
                 type="date"
                 className="border p-2 rounded"
@@ -23930,7 +24586,7 @@ function ClientSettlement({ dispatchData, clients = [], setClients }) {
           {/* 필터/액션 */}
           <div className="flex flex-wrap items-end gap-2 mb-3">
             <div className="flex flex-col">
-              <label className="text-xs text-gray-500 mb-1">거래처</label>
+              <label className="text-sm text-gray-600 mb-1 font-medium">거래처</label>
               <select
                 className="border p-2 rounded min-w-[220px]"
                 value={selClient}
@@ -23949,7 +24605,7 @@ function ClientSettlement({ dispatchData, clients = [], setClients }) {
             </div>
 
             <div className="flex flex-col">
-              <label className="text-xs text-gray-500 mb-1">월</label>
+              <label className="text-sm text-gray-600 mb-1 font-medium">월</label>
               <select
                 className="border p-2 rounded min-w-[120px]"
                 value={monthFilter}
@@ -23967,7 +24623,7 @@ function ClientSettlement({ dispatchData, clients = [], setClients }) {
             </div>
 
             <div className="flex flex-col">
-              <label className="text-xs text-gray-500 mb-1">정산상태</label>
+              <label className="text-sm text-gray-600 mb-1 font-medium">정산상태</label>
               <select
                 className="border p-2 rounded min-w-[120px]"
                 value={statusFilter}
@@ -24551,7 +25207,7 @@ function PaymentManagement({ dispatchData = [], clients = [], drivers = [] }) {
 
         {/* 지급상태 */}
         <div className="flex flex-col">
-          <label className="text-xs text-gray-500 mb-1">지급상태</label>
+          <label className="text-sm text-gray-600 mb-1 font-medium">지급상태</label>
           <select className="border p-2 rounded min-w-[120px]"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
@@ -24564,7 +25220,7 @@ function PaymentManagement({ dispatchData = [], clients = [], drivers = [] }) {
 
         {/* 지급방식 필터 */}
         <div className="flex flex-col">
-          <label className="text-xs text-gray-500 mb-1">지급방식</label>
+          <label className="text-sm text-gray-600 mb-1 font-medium">지급방식</label>
           <select
             className="border p-2 rounded min-w-[120px]"
             value={payMethodFilter}
@@ -24579,7 +25235,7 @@ function PaymentManagement({ dispatchData = [], clients = [], drivers = [] }) {
 
         {/* 배차방식 필터 */}
         <div className="flex flex-col">
-          <label className="text-xs text-gray-500 mb-1">배차방식</label>
+          <label className="text-sm text-gray-600 mb-1 font-medium">배차방식</label>
           <select
             className="border p-2 rounded min-w-[120px]"
             value={dispatchMethodFilter}
@@ -24594,7 +25250,7 @@ function PaymentManagement({ dispatchData = [], clients = [], drivers = [] }) {
 
         {/* 지급일 시작 */}
         <div className="flex flex-col">
-          <label className="text-xs text-gray-500 mb-1">지급일 시작</label>
+          <label className="text-sm text-gray-600 mb-1 font-medium">지급일 시작</label>
           <input type="date" className="border p-2 rounded"
             value={payStart}
             onChange={(e) => setPayStart(e.target.value)}
@@ -24603,7 +25259,7 @@ function PaymentManagement({ dispatchData = [], clients = [], drivers = [] }) {
 
         {/* 지급일 종료 */}
         <div className="flex flex-col">
-          <label className="text-xs text-gray-500 mb-1">지급일 종료</label>
+          <label className="text-sm text-gray-600 mb-1 font-medium">지급일 종료</label>
           <input type="date" className="border p-2 rounded"
             value={payEnd}
             onChange={(e) => setPayEnd(e.target.value)}
@@ -24612,7 +25268,7 @@ function PaymentManagement({ dispatchData = [], clients = [], drivers = [] }) {
 
         {/* 상차일 필터 */}
         <div className="flex flex-col">
-          <label className="text-xs text-gray-500 mb-1">상차일 시작</label>
+          <label className="text-sm text-gray-600 mb-1 font-medium">상차일 시작</label>
           <input type="date" className="border p-2 rounded"
             value={loadStart}
             onChange={(e) => setLoadStart(e.target.value)}
@@ -24620,7 +25276,7 @@ function PaymentManagement({ dispatchData = [], clients = [], drivers = [] }) {
         </div>
 
         <div className="flex flex-col">
-          <label className="text-xs text-gray-500 mb-1">상차일 종료</label>
+          <label className="text-sm text-gray-600 mb-1 font-medium">상차일 종료</label>
           <input type="date" className="border p-2 rounded"
             value={loadEnd}
             onChange={(e) => setLoadEnd(e.target.value)}
@@ -24658,7 +25314,7 @@ function PaymentManagement({ dispatchData = [], clients = [], drivers = [] }) {
 
           {/* 지급일 적용 */}
           <div className="flex flex-col">
-            <label className="text-xs text-gray-500 mb-1">지급일(적용)</label>
+            <label className="text-sm text-gray-600 mb-1 font-medium">지급일(적용)</label>
             <input type="date" className="border p-2 rounded"
               value={selectedPayDate}
               onChange={(e) => setSelectedPayDate(e.target.value)}
@@ -25257,147 +25913,76 @@ function DriverManagement({ drivers = [], upsertDriver, removeDriver }) {
 }
 // ===================== DispatchApp.jsx (PART 10/10) — END =====================
 // ===================== DispatchApp.jsx (PART 11/11) — START =====================
-// 거래처관리 (ClientManagement) — 기본 거래처 + 하차지 거래처 서브탭 포함
-
-function ClientManagement({ clients = [], upsertClient, removeClient }) {
-  // 🔧 주소 정규화 (ID / 중복판단 / 저장 전부 공통)
+function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlace }) {
   const normalizePlace = (s = "") =>
-    s
-      .toString()
-      .normalize("NFC")                      // ★ 유니코드 정규화
-      .replace(/[\u200B-\u200D\uFEFF]/g, "") // ★ zero-width 제거
-      .replace(/[‐-‒–—−]/g, "-")             // ★ 모든 하이픈 통일
-      .replace(/[０-９]/g, (d) =>
-        String.fromCharCode(d.charCodeAt(0) - 0xFEE0)
-      )                                      // ★ 전각 숫자 → 반각
-      .toLowerCase()
-      .replace(/\s+/g, "")
-      .replace(/[^\w가-힣-]/g, "");
+    s.toString().normalize("NFC")
+      .replace(/[\u200B-\u200D\uFEFF]/g, "")
+      .replace(/[‐-‒–—−]/g, "-")
+      .replace(/[０-９]/g, (d) => String.fromCharCode(d.charCodeAt(0) - 0xFEE0))
+      .toLowerCase().replace(/\s+/g, "").replace(/[^\w가-힣-]/g, "");
 
-  // ✅ 여기
   const normalizeCompanyName = (s = "") =>
-    String(s)
-      .toLowerCase()
-      .replace(/\s+/g, "")
-      .replace(/[^\uAC00-\uD7A3]/g, "");
-      // 🔥 업체명 통합 키 생성용
-const makePlaceKey = (name = "") =>
-  String(name)
-    .toLowerCase()
-    .replace(/\(주\)|㈜/g, "")
-    .replace(/\s+/g, "")
-    .replace(/[^\uAC00-\uD7A3a-z0-9]/gi, "")
-    .trim();
-  /* -----------------------------------------------------------
-     공통 유틸/스타일
-  ----------------------------------------------------------- */
+    String(s).toLowerCase().replace(/\s+/g, "").replace(/[^\uAC00-\uD7A3]/g, "");
+
   const norm = (s = "") => String(s).toLowerCase().replace(/\s+/g, "");
-  const head =
-    headBase ||
-    "border px-2 py-2 bg-gray-100 text-center whitespace-nowrap";
-  const cell =
-    cellBase ||
-    "border px-2 py-1 text-center whitespace-nowrap align-middle";
-  const input = inputBase || "border p-1 rounded w-36 text-center";
 
-  /* -----------------------------------------------------------
-     상단 서브탭 (기본 / 하차지)
-  ----------------------------------------------------------- */
-  const [subTab, setSubTab] = React.useState("기본"); // "기본" | "하차지"
+const head = "border px-3 py-2.5 bg-slate-100 text-slate-700 text-sm font-semibold text-center whitespace-nowrap";
+  const cell = "border px-2 py-2 text-sm text-slate-800 text-center whitespace-nowrap align-middle";
+  const inp = "border px-2 py-1.5 rounded text-sm w-full focus:ring-1 focus:ring-blue-400 outline-none";
 
-  /* -----------------------------------------------------------
-     🔵 [1] 기본 거래처관리 상태 (Firestore: clients 컬렉션)
-  ----------------------------------------------------------- */
+  const 등급색상 = (g) => {
+    if (g === "블랙") return "bg-gray-900 text-white";
+    if (g === "주의") return "bg-orange-100 text-orange-700 border border-orange-300";
+    if (g === "이탈") return "bg-red-100 text-red-700 border border-red-300";
+    return "bg-blue-50 text-blue-600 border border-blue-200";
+  };
+
+  const [subTab, setSubTab] = React.useState("하차지");
+
+  // ===== 기본 거래처 =====
   const [q, setQ] = React.useState("");
-  const [rows, setRows] = React.useState(() =>
-    (clients || []).map((c) => ({ ...c }))
-  );
+  const [rows, setRows] = React.useState(() => (clients || []).map((c) => ({ ...c })));
   const [selected, setSelected] = React.useState(new Set());
-
   const [newForm, setNewForm] = React.useState({
-    거래처명: "",
-    사업자번호: "",
-    대표자: "",
-    업태: "",
-    종목: "",
-    주소: "",
-    담당자: "",
-    연락처: "",
-    메모: "",
+    거래처명: "", 사업자번호: "", 대표자: "", 업태: "", 종목: "",
+    주소: "", 담당자: "", 연락처: "", 메모: "",
   });
-  React.useEffect(() => {
-  setRows((clients || []).map((c) => ({ ...c })));
-}, [clients]);
+
+  React.useEffect(() => { setRows((clients || []).map((c) => ({ ...c }))); }, [clients]);
+
   const filtered = React.useMemo(() => {
     if (!q.trim()) return rows;
     const nq = norm(q);
     return rows.filter((r) =>
-      [
-        "거래처명",
-        "사업자번호",
-        "대표자",
-        "업태",
-        "종목",
-        "주소",
-        "담당자",
-        "연락처",
-        "메모",
-      ].some((k) => norm(r[k] || "").includes(nq))
+      ["거래처명","사업자번호","대표자","주소","담당자","연락처","메모"]
+        .some((k) => norm(r[k] || "").includes(nq))
     );
   }, [rows, q]);
 
-  const toggleOne = (id) => {
-    setSelected((prev) => {
-      const n = new Set(prev);
-      n.has(id) ? n.delete(id) : n.add(id);
-      return n;
-    });
-  };
-
+  const toggleOne = (id) => setSelected((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const toggleAll = () => {
     if (selected.size === filtered.length) setSelected(new Set());
     else setSelected(new Set(filtered.map((r) => r.거래처명).filter(Boolean)));
   };
 
   const handleBlur = async (row, key, val) => {
-  const id = row.id || row.거래처명;
-  if (!id) return;
+    const id = row.id || row.거래처명;
+    if (!id) return;
+    await upsertClient({ ...row, id, [key]: val });
+  };
 
-  await upsertClient({
-    ...row,
-    id,
-    [key]: val,
-  });
-};
   const addNew = async () => {
     const 거래처명 = (newForm.거래처명 || "").trim();
     if (!거래처명) return alert("거래처명은 필수입니다.");
-
     await upsertClient?.({ ...newForm, id: 거래처명 });
-
-    setNewForm({
-      거래처명: "",
-      사업자번호: "",
-      대표자: "",
-      업태: "",
-      종목: "",
-      주소: "",
-      담당자: "",
-      연락처: "",
-      메모: "",
-    });
-
+    setNewForm({ 거래처명: "", 사업자번호: "", 대표자: "", 업태: "", 종목: "", 주소: "", 담당자: "", 연락처: "", 메모: "" });
     alert("등록 완료");
   };
 
   const removeSelectedFn = async () => {
     if (!selected.size) return alert("선택된 항목이 없습니다.");
     if (!confirm(`${selected.size}건 삭제하시겠습니까?`)) return;
-
-    for (const id of selected) {
-      await removeClient?.(id);
-    }
-
+    for (const id of selected) await removeClient?.(id);
     setSelected(new Set());
     alert("삭제 완료");
   };
@@ -25405,1079 +25990,345 @@ const makePlaceKey = (name = "") =>
   const onExcel = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     const reader = new FileReader();
     reader.onload = async (evt) => {
       try {
-        const wb = XLSX.read(new Uint8Array(evt.target.result), {
-          type: "array",
-        });
-        const sheet = wb.SheetNames[0];
-        const json = XLSX.utils.sheet_to_json(wb.Sheets[sheet], {
-          defval: "",
-        });
-
+        const wb = XLSX.read(new Uint8Array(evt.target.result), { type: "array" });
+        const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "" });
         let ok = 0;
-
         for (const r of json) {
-          const row = normalizeClient
-            ? normalizeClient(r)
-            : {
-              거래처명:
-                r.거래처명 ||
-                r["상호"] ||
-                r["회사명"] ||
-                r["업체명"] ||
-                r["거래처"] ||
-                "",
-              사업자번호:
-                r.사업자번호 ||
-                r["사업자 등록번호"] ||
-                r["사업자등록번호"] ||
-                "",
-              대표자: r.대표자 || r["대표자명"] || r["대표"] || "",
-              업태: r.업태 || "",
-              종목: r.종목 || "",
-              주소: r.주소 || "",
-              담당자: r.담당자 || r["담당"] || "",
-              연락처: r.연락처 || r["전화"] || r["휴대폰"] || "",
-              메모: r.메모 || r["비고"] || "",
-            };
-
-          const 거래처명 = (row.거래처명 || "").trim();
+          const 거래처명 = (r.거래처명 || r["상호"] || r["회사명"] || "").trim();
           if (!거래처명) continue;
-
-          await upsertClient?.({ ...row, id: 거래처명 });
+          await upsertClient?.({ 거래처명, 사업자번호: r.사업자번호||"", 대표자: r.대표자||"", 업태: r.업태||"", 종목: r.종목||"", 주소: r.주소||"", 담당자: r.담당자||"", 연락처: r.연락처||"", 메모: r.메모||"", id: 거래처명 });
           ok++;
         }
-
         alert(`총 ${ok}건 반영 완료`);
-      } catch (err) {
-        console.error(err);
-        alert("엑셀 처리 오류");
-      } finally {
-        e.target.value = "";
-      }
+      } catch (err) { alert("엑셀 처리 오류"); } finally { e.target.value = ""; }
     };
-
     reader.readAsArrayBuffer(file);
   };
-  // ✅ Firestore 하차지 컬렉션 helpers
+
+  // ===== 하차지 거래처 =====
   const PLACES_COLL = "places";
-  const removePlace = async (id) => {
-  if (!id) return;
-  await deleteDoc(doc(db, PLACES_COLL, id));
-};
+  const removePlace = async (id) => { if (!id) return; await deleteDoc(doc(db, PLACES_COLL, id)); };
   const [placeRows, setPlaceRows] = React.useState([]);
-  const [showDupPreview, setShowDupPreview] = React.useState(false);
-  // 🔥 중복 미리보기에서 선택한 삭제 대상
-  const [dupSelected, setDupSelected] = React.useState(new Set());
-
-  // 🔁 하차지 주소 기준 중복 그룹 계산
-  const duplicatePlaceGroups = React.useMemo(() => {
-    const used = new Set();
-    const groups = [];
-
-    // 주소 정규화
-    const normAddr = (s = "") =>
-      normalizePlace(s)
-        .replace(/(대한민국|한국|경기도|서울특별시)/g, "")
-        .replace(/[^\w가-힣]/g, "");
-
-    // 🔒 광역 주소 판별 (아주 짧은 것만)
-    const isBroadAddress = (addr = "") => {
-      const a = addr.replace(/\s+/g, "");
-      return a.length <= 6; // 곤지암, 김해, 구미, 양산 등
-    };
-
-    for (let i = 0; i < placeRows.length; i++) {
-      const a = placeRows[i];
-      if (!a?.주소 || used.has(a.id)) continue;
-
-      const aAddr = normAddr(a.주소);
-      const aName = normalizeCompanyName(a.업체명 || "");
-      const aBroad = isBroadAddress(aAddr);
-
-      const group = [a];
-
-      for (let j = i + 1; j < placeRows.length; j++) {
-        const b = placeRows[j];
-        if (!b?.주소 || used.has(b.id)) continue;
-
-        // 🔒 안전 필터 1: 업체명 동일 (느슨한 비교)
-        if (normalizeCompanyName(b.업체명 || "") !== aName) continue;
-
-        const bAddr = normAddr(b.주소);
-        const bBroad = isBroadAddress(bAddr);
-
-        // 1️⃣ 완전 동일
-        const isSame = aAddr === bAddr;
-
-        // 2️⃣ 포함 관계 (광역 ↔ 상세)
-        const isInclude =
-          aAddr.includes(bAddr) || bAddr.includes(aAddr);
-
-        if (isSame || isInclude) {
-          group.push(b);
-          used.add(b.id);
-        }
-      }
-
-      if (group.length > 1) {
-        group.forEach((p) => used.add(p.id));
-
-        group.sort((a, b) => {
-          const aHasContact = !!(a.담당자 || a.담당자번호);
-          const bHasContact = !!(b.담당자 || b.담당자번호);
-
-          // 1️⃣ 담당자/번호 있는 쪽 우선
-          if (aHasContact !== bHasContact) {
-            return bHasContact - aHasContact;
-          }
-
-          // 2️⃣ 주소 길이 긴 쪽 우선
-          return (b.주소 || "").length - (a.주소 || "").length;
-        });
-
-        groups.push(group);
-      }
-    }
-
-    return groups;
-  }, [placeRows]);
-
-
-  const [placeSelected, setPlaceSelected] = React.useState(new Set());
   const [placeQ, setPlaceQ] = React.useState("");
+  const [placeSearched, setPlaceSearched] = React.useState(false);
   const [placeFilterType, setPlaceFilterType] = React.useState("업체명");
+  const [placeSelected, setPlaceSelected] = React.useState(new Set());
+  const [showDupPreview, setShowDupPreview] = React.useState(false);
+  const [dupSelected, setDupSelected] = React.useState(new Set());
+  const [placeNewForm, setPlaceNewForm] = React.useState({ 업체명: "", 주소: "", 담당자: "", 담당자번호: "", 등급: "일반", 메모: "" });
 
-  const [placeNewForm, setPlaceNewForm] = React.useState({
-    업체명: "",
-    주소: "",
-    담당자: "",
-    담당자번호: "",
-    메모: "",
-  });
-
-  // 🔄 Firestore 실시간 구독
   React.useEffect(() => {
-  const unsub = onSnapshot(collection(db, PLACES_COLL), (snap) => {
-    const arr = snap.docs.map((d) => {
-      const data = d.data() || {};
-
-      const primary =
-        Array.isArray(data.contacts) && data.contacts.length
-          ? data.contacts.find(c => c.isPrimary) || data.contacts[0]
-          : null;
-
-      return {
-        id: d.id,
-        업체명: data.업체명 || "",
-        주소: (data.주소 || "").trim(),
-        담당자: primary?.name || "",
-        담당자번호: primary?.phone || "",
-        메모: data.메모 || "",
-        updatedAt: data.updatedAt || null,
-      };
+    const unsub = onSnapshot(collection(db, PLACES_COLL), (snap) => {
+      const arr = snap.docs.map((d) => {
+        const data = d.data() || {};
+        const primary = Array.isArray(data.contacts) && data.contacts.length
+          ? data.contacts.find(c => c.isPrimary) || data.contacts[0] : null;
+        return {
+          id: d.id, 업체명: data.업체명 || "", 주소: (data.주소 || "").trim(),
+          담당자: primary?.name || "", 담당자번호: primary?.phone || "",
+          등급: data.등급 || "일반", 등급변경일: data.등급변경일 || null,
+          메모: data.메모 || "", updatedAt: data.updatedAt || null,
+        };
+      });
+      setPlaceRows(arr);
     });
+    return () => unsub();
+  }, []);
 
-    setPlaceRows(arr);
-  });
-
-  return () => unsub();
-}, []);
   const filteredPlaces = React.useMemo(() => {
-    if (!placeQ.trim()) return placeRows;
+    if (!placeSearched || !placeQ.trim()) return [];
     const nq = norm(placeQ);
-
-    if (placeFilterType === "업체명") {
-      return placeRows.filter((r) => norm(r.업체명 || "").includes(nq));
-    }
-    if (placeFilterType === "주소") {
-      return placeRows.filter((r) => norm(r.주소 || "").includes(nq));
-    }
+    if (placeFilterType === "업체명") return placeRows.filter((r) => norm(r.업체명 || "").includes(nq));
+    if (placeFilterType === "주소") return placeRows.filter((r) => norm(r.주소 || "").includes(nq));
     return placeRows;
-  }, [placeRows, placeQ, placeFilterType]);
+  }, [placeRows, placeQ, placeSearched, placeFilterType]);
 
-  const togglePlaceOne = (id) => {
-    setPlaceSelected((prev) => {
-      const n = new Set(prev);
-      n.has(id) ? n.delete(id) : n.add(id);
-      return n;
-    });
-  };
-
+  const togglePlaceOne = (id) => setPlaceSelected((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const togglePlaceAll = () => {
     if (placeSelected.size === filteredPlaces.length) setPlaceSelected(new Set());
-    else
-      setPlaceSelected(
-        new Set(filteredPlaces.map((p) => p.id || p.업체명).filter(Boolean))
-      );
+    else setPlaceSelected(new Set(filteredPlaces.map((p) => p.id || p.업체명).filter(Boolean)));
   };
 
-  const handlePlaceBlur = async (row, key, val) => {
-  if ((row[key] || "") === val) return;  // 🔥 값 변경 없으면 저장 금지
+const handlePlaceBlur = async (row, key, val) => {
+    if (key !== "등급" && (row[key] || "") === val) return;
 
-  await upsertPlace({
-    ...row,
-    [key]: val,
-  });
-};
+    // 🔥 즉시 화면 반영 (Firestore 응답 기다리지 않음)
+    setPlaceRows(prev =>
+      prev.map(p => p.id === row.id ? { ...p, [key]: val } : p)
+    );
 
+    const updateData = { ...row, [key]: val };
+    if (key === "등급" && val !== "일반") {
+      updateData.등급변경일 = new Date().toISOString().slice(0, 10);
+    }
+    await upsertPlace?.(updateData);
+  };
   const addNewPlace = async () => {
     const 업체명 = (placeNewForm.업체명 || "").trim();
     if (!업체명) return alert("업체명은 필수입니다.");
-
-    if (!placeNewForm.주소?.trim()) {
-      alert("주소는 필수입니다.");
-      return;
-    }
-
-    // 🔥 그냥 저장 (같은 주소면 덮어씀)
-await upsertPlace({
-  ...placeNewForm,
-  업체명,
-});
-
-    setPlaceNewForm({
-      업체명: "",
-      주소: "",
-      담당자: "",
-      담당자번호: "",
-      메모: "",
-    });
-
+    if (!placeNewForm.주소?.trim()) return alert("주소는 필수입니다.");
+    await upsertPlace?.({ ...placeNewForm, 업체명, 등급: placeNewForm.등급 || "일반" });
+    setPlaceNewForm({ 업체명: "", 주소: "", 담당자: "", 담당자번호: "", 등급: "일반", 메모: "" });
     alert("등록 완료");
   };
-
 
   const removeSelectedPlaces = async () => {
     if (!placeSelected.size) return alert("선택된 항목이 없습니다.");
     if (!confirm(`${placeSelected.size}건 삭제할까요?`)) return;
-
-    const ids = Array.from(placeSelected);
-    for (const id of ids) {
-      await removePlace(id);
-    }
-
+    for (const id of placeSelected) await removePlace(id);
     setPlaceSelected(new Set());
     alert("삭제 완료");
   };
 
-  // 🔁 하차지 엑셀 업로드 (주소 기준 중복 제거 + Firestore 저장)
-  const onExcelPlaces = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const duplicatePlaceGroups = React.useMemo(() => {
+    const used = new Set(); const groups = [];
+    const normAddr = (s = "") => normalizePlace(s).replace(/(대한민국|한국|경기도|서울특별시)/g, "").replace(/[^\w가-힣]/g, "");
+    const isBroad = (addr = "") => addr.replace(/\s+/g, "").length <= 6;
+    for (let i = 0; i < placeRows.length; i++) {
+      const a = placeRows[i];
+      if (!a?.주소 || used.has(a.id)) continue;
+      const aAddr = normAddr(a.주소); const aName = normalizeCompanyName(a.업체명 || "");
+      const group = [a];
+      for (let j = i + 1; j < placeRows.length; j++) {
+        const b = placeRows[j];
+        if (!b?.주소 || used.has(b.id)) continue;
+        if (normalizeCompanyName(b.업체명 || "") !== aName) continue;
+        const bAddr = normAddr(b.주소);
+        if (aAddr === bAddr || aAddr.includes(bAddr) || bAddr.includes(aAddr)) { group.push(b); used.add(b.id); }
+      }
+      if (group.length > 1) { group.forEach((p) => used.add(p.id)); group.sort((a, b) => (b.주소||"").length - (a.주소||"").length); groups.push(group); }
+    }
+    return groups;
+  }, [placeRows]);
 
+  const removeDuplicatePlaces = async () => {
+    if (dupSelected.size === 0) return alert("삭제할 중복 항목을 선택하세요.");
+    for (const id of dupSelected) await deleteDoc(doc(db, PLACES_COLL, id));
+    setDupSelected(new Set()); alert(`${dupSelected.size}건 삭제 완료`);
+  };
+
+  const onExcelPlaces = (e) => {
+    const file = e.target.files?.[0]; if (!file) return;
     const reader = new FileReader();
     reader.onload = async (evt) => {
       try {
-        const wb = XLSX.read(new Uint8Array(evt.target.result), {
-          type: "array",
-        });
-        const sheet = wb.SheetNames[0];
-        const json = XLSX.utils.sheet_to_json(wb.Sheets[sheet], {
-          defval: "",
-        });
-
-        let ok = 0;
-
-        // ① 현재 Firestore에 올라와 있는 데이터 기준으로 주소 Map 생성
+        const wb = XLSX.read(new Uint8Array(evt.target.result), { type: "array" });
+        const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "" });
         const addrMap = new Map();
-        for (const p of placeRows) {
-          const addrKey = normalizePlace(p.주소 || "");
-          if (!addrKey) continue;
-          if (!addrMap.has(addrKey)) {
-            addrMap.set(addrKey, p);
-          }
-        }
-
-        // ② 엑셀 데이터 처리
-        const newRows = [];
-
+        for (const p of placeRows) { const k = normalizePlace(p.주소 || ""); if (k) addrMap.set(k, p); }
+        let ok = 0;
         for (const r of json) {
-          // --- 업체명 (하차지명/상호 등 최대한 잡기) ---
-          const 업체명 = (
-            r.업체명 ||
-            r["하차지명"] ||
-            r["하차지"] ||
-            r["상호"] ||
-            r["회사명"] ||
-            r["업체"] ||
-            r["업체명"] ||
-            ""
-          )
-            .toString()
-            .trim();
-
-          // 업체명은 없어도, 주소만으로 관리하고 싶으면 이 줄은 지워도 됨
-          if (!업체명) continue;
-
-          // --- 주소 ---
-          const 주소 = (
-            r.주소 ||
-            r["주소지"] ||
-            r["하차지주소"] ||
-            r["상세주소"] ||
-            ""
-          )
-            .toString()
-            .trim();
-
-          const 담당자 = (
-            r.담당자 ||
-            r["인수자"] ||
-            r["이름"] ||
-            r["담당"] ||
-            ""
-          )
-            .toString()
-            .trim();
-
-          const 담당자번호 = (
-            r.담당자번호 ||
-            r["전화"] ||
-            r["전화번호"] ||
-            r["연락처"] ||
-            r["핸드폰"] ||
-            r["휴대폰"] ||
-            ""
-          )
-            .toString()
-            .trim();
-
-          const 메모 = (r.메모 || r["비고"] || "").toString().trim();
-
-          // 주소가 아예 없으면 중복 기준이 없으니 스킵
-          const addrKey = normalizePlace(주소);
-          if (!addrKey) {
-            console.log("주소 없음 → 스킵:", 업체명);
-            continue;
-          }
-
-          // 이미 동일/유사 주소가 있으면 중복 처리 → 스킵
-          if (addrMap.has(addrKey)) {
-            console.log("중복 주소 스킵:", 업체명, "/", 주소);
-            continue;
-          }
-
-          const row = {
-            업체명,
-            주소,
-            담당자,
-            담당자번호,
-            메모,
-          };
-
-          addrMap.set(addrKey, row);
-          newRows.push(row);
+          const 업체명 = (r.업체명||r["하차지명"]||r["상호"]||"").toString().trim(); if (!업체명) continue;
+          const 주소 = (r.주소||r["하차지주소"]||"").toString().trim();
+          const k = normalizePlace(주소); if (!k || addrMap.has(k)) continue;
+          await upsertPlace?.({ 업체명, 주소, 담당자: (r.담당자||"").toString().trim(), 담당자번호: (r.담당자번호||r["전화번호"]||"").toString().trim(), 메모: (r.메모||"").toString().trim(), 등급: "일반" });
+          addrMap.set(k, { 업체명, 주소 }); ok++;
         }
-
-        // ③ Firestore 저장
-        for (const row of newRows) {
-          await upsertPlace(row);
-          ok++;
-        }
-
-        alert(`총 ${ok}건 신규 반영 (주소 기준 중복 자동 제외됨)`);
-      } catch (err) {
-        console.error(err);
-        alert("엑셀 처리 오류");
-      } finally {
-        e.target.value = "";
-      }
+        alert(`총 ${ok}건 신규 반영`);
+      } catch (err) { alert("엑셀 처리 오류"); } finally { e.target.value = ""; }
     };
-
     reader.readAsArrayBuffer(file);
   };
-  // 🔥 주소 기준 중복 하차지 자동 정리
-  // ================================
-  // 🔥 주소 포함 관계 기반 중복 자동 정리
-  // - 각 그룹당 1건(가장 긴 주소) 유지
-  // ================================
-  const removeDuplicatePlaces = async () => {
-    if (dupSelected.size === 0) {
-      alert("삭제할 중복 항목을 선택하세요.");
-      return;
-    }
 
-    let removed = 0;
-
-    for (const id of dupSelected) {
-      await deleteDoc(doc(db, PLACES_COLL, id));
-      removed++;
-    }
-
-    setDupSelected(new Set());
-    alert(`선택한 중복 ${removed}건 삭제 완료`);
-  };
-
-
-  const bulkEditPlaces = async () => {
-
-
-    if (!placeSelected.size) {
-      alert("선택된 항목이 없습니다.");
-      return;
-    }
-
-    const 업체명 = prompt("업체명 (비워두면 기존값 유지):", "");
-    const 주소 = prompt("주소 (비워두면 기존값 유지):", "");
-    const 담당자 = prompt("담당자 (비워두면 기존값 유지):", "");
-    const 담당자번호 = prompt("담당자번호 (비워두면 기존값 유지):", "");
-    const 메모 = prompt("메모 (비워두면 기존값 유지):", "");
-
-    const targets = placeRows.filter(
-      (p) => placeSelected.has(p.id || p.업체명)
-    );
-
-    for (const p of targets) {
-      await upsertPlace({
-        ...p,
-        업체명: 업체명 || p.업체명,
-        주소: 주소 || p.주소,
-        담당자: 담당자 || p.담당자,
-        담당자번호: 담당자번호 || p.담당자번호,
-        메모: 메모 || p.메모,
-      });
-    }
-
-    alert("선택 항목 수정 완료");
-  };
-
-  /* -----------------------------------------------------------
-     렌더링
-  ----------------------------------------------------------- */
   return (
-    <div>
-      <h2 className="text-lg font-bold mb-3">거래처관리</h2>
-
-      {/* 상단 서브탭 버튼 */}
-      <div className="flex gap-2 mb-4">
-        <button
-          className={
-            "px-4 py-2 rounded text-sm " +
-            (subTab === "기본"
-              ? "bg-blue-600 text-white"
-              : "bg-gray-100 text-gray-700")
-          }
-          onClick={() => setSubTab("기본")}
-        >
-          기본 거래처
-        </button>
-        <button
-          className={
-            "px-4 py-2 rounded text-sm " +
-            (subTab === "하차지"
-              ? "bg-blue-600 text-white"
-              : "bg-gray-100 text-gray-700")
-          }
-          onClick={() => setSubTab("하차지")}
-        >
-          하차지 거래처
-        </button>
+    <div className="p-4 bg-gray-50 min-h-screen">
+      {/* 헤더 */}
+      <div className="flex items-center gap-3 mb-5">
+        <div className="w-1 h-7 bg-blue-600 rounded-full" />
+        <h2 className="text-xl font-bold text-slate-800">거래처 관리</h2>
+        <span className="text-xs text-gray-400 mt-1">기본 거래처 및 하차지 거래처를 관리합니다</span>
       </div>
+      {/* ===== 하차지 거래처 ===== */}
+      {subTab === "하차지" && (
+        <div className="space-y-4">
+          {duplicatePlaceGroups.length > 0 && (
+            <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-800">
+              ⚠️ 주소 기준 중복 하차지 <b>{duplicatePlaceGroups.length}건</b> 발견됨
+              <button onClick={() => setShowDupPreview(true)} className="ml-2 px-3 py-1 bg-amber-500 text-white rounded-lg text-xs font-semibold">미리보기</button>
+            </div>
+          )}
 
-      {/* ================== 🔵 탭 1: 기존 거래처관리 ================== */}
-      {subTab === "기본" && (
-        <>
-          {/* 상단 바 */}
-          <div className="flex flex-wrap items-center gap-2 mb-3">
-            <input
-              className="border p-2 rounded w-80"
-              placeholder="검색 (거래처/대표자/주소/담당자/연락처...)"
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-            />
-            <label className="px-3 py-1 border rounded cursor-pointer text-sm">
-              📁 엑셀 업로드
-              <input
-                type="file"
-                accept=".xlsx,.xls"
-                onChange={onExcel}
-                className="hidden"
-              />
-            </label>
-            <button
-              onClick={removeSelectedFn}
-              className="px-3 py-1 rounded bg-red-600 text-white text-sm"
-            >
-              선택삭제
-            </button>
+          {/* 검색 */}
+          <div className="bg-white rounded-xl border shadow-sm p-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <select className="border px-3 py-2 rounded-lg text-sm focus:ring-1 focus:ring-blue-400 outline-none"
+                value={placeFilterType} onChange={(e) => setPlaceFilterType(e.target.value)}>
+                <option value="업체명">업체명</option>
+                <option value="주소">주소</option>
+              </select>
+              <input className="border px-3 py-2 rounded-lg text-sm w-72 focus:ring-2 focus:ring-blue-400 outline-none"
+                placeholder={`${placeFilterType} 검색 후 Enter`}
+                value={placeQ}
+                onChange={(e) => { setPlaceQ(e.target.value); setPlaceSearched(false); }}
+                onKeyDown={(e) => { if (e.key === "Enter") setPlaceSearched(true); }} />
+              <button onClick={() => setPlaceSearched(true)}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700">🔍 검색</button>
+              <label className="px-3 py-2 border rounded-lg cursor-pointer text-sm text-gray-600 hover:bg-gray-50">
+                📁 엑셀 업로드
+                <input type="file" accept=".xlsx,.xls" onChange={onExcelPlaces} className="hidden" />
+              </label>
+              <button onClick={removeSelectedPlaces}
+                className="px-3 py-2 rounded-lg bg-red-500 text-white text-sm font-semibold hover:bg-red-600">🗑 선택삭제</button>
+              {placeSearched && <span className="text-xs text-gray-400 ml-auto">검색결과 {filteredPlaces.length}건</span>}
+            </div>
           </div>
 
           {/* 신규 등록 */}
-          <div className="grid grid-cols-4 gap-2 mb-4">
-            <div>
-              <div className="text-xs text-gray-500 mb-1">거래처명*</div>
-              <input
-                className="border p-2 rounded w-full"
-                value={newForm.거래처명}
-                onChange={(e) =>
-                  setNewForm((p) => ({ ...p, 거래처명: e.target.value }))
-                }
-              />
-            </div>
-            <div>
-              <div className="text-xs text-gray-500 mb-1">사업자번호</div>
-              <input
-                className="border p-2 rounded w-full"
-                value={newForm.사업자번호}
-                onChange={(e) =>
-                  setNewForm((p) => ({ ...p, 사업자번호: e.target.value }))
-                }
-              />
-            </div>
-            <div>
-              <div className="text-xs text-gray-500 mb-1">대표자</div>
-              <input
-                className="border p-2 rounded w-full"
-                value={newForm.대표자}
-                onChange={(e) =>
-                  setNewForm((p) => ({ ...p, 대표자: e.target.value }))
-                }
-              />
-            </div>
-            <div>
-              <div className="text-xs text-gray-500 mb-1">담당자</div>
-              <input
-                className="border p-2 rounded w-full"
-                value={newForm.담당자}
-                onChange={(e) =>
-                  setNewForm((p) => ({ ...p, 담당자: e.target.value }))
-                }
-              />
-            </div>
-            <div className="col-span-2">
-              <div className="text-xs text-gray-500 mb-1">주소</div>
-              <input
-                className="border p-2 rounded w-full"
-                value={newForm.주소}
-                onChange={(e) =>
-                  setNewForm((p) => ({ ...p, 주소: e.target.value }))
-                }
-              />
-            </div>
-            <div>
-              <div className="text-xs text-gray-500 mb-1">연락처</div>
-              <input
-                className="border p-2 rounded w-full"
-                value={newForm.연락처}
-                onChange={(e) =>
-                  setNewForm((p) => ({ ...p, 연락처: e.target.value }))
-                }
-              />
-            </div>
-            <div>
-              <div className="text-xs text-gray-500 mb-1">업태</div>
-              <input
-                className="border p-2 rounded w-full"
-                value={newForm.업태}
-                onChange={(e) =>
-                  setNewForm((p) => ({ ...p, 업태: e.target.value }))
-                }
-              />
-            </div>
-            <div>
-              <div className="text-xs text-gray-500 mb-1">종목</div>
-              <input
-                className="border p-2 rounded w-full"
-                value={newForm.종목}
-                onChange={(e) =>
-                  setNewForm((p) => ({ ...p, 종목: e.target.value }))
-                }
-              />
-            </div>
-            <div className="col-span-4">
-              <div className="text-xs text-gray-500 mb-1">메모</div>
-              <input
-                className="border p-2 rounded w-full"
-                value={newForm.메모}
-                onChange={(e) =>
-                  setNewForm((p) => ({ ...p, 메모: e.target.value }))
-                }
-              />
-            </div>
-            <div className="col-span-4 flex justify-end">
-              <button
-                onClick={addNew}
-                className="px-4 py-2 rounded bg-blue-600 text-white"
-              >
-                + 신규등록
-              </button>
+          <div className="bg-white rounded-xl border shadow-sm p-3">
+            <div className="text-sm font-semibold text-slate-600 mb-2">+ 신규 하차지 등록</div>
+            <div className="flex flex-wrap items-end gap-2">
+              <div className="w-[140px]">
+                <div className="text-sm text-gray-600 mb-1 font-medium">업체명*</div>
+                <input className="border px-2 py-1.5 rounded text-sm w-full focus:ring-1 focus:ring-blue-400 outline-none"
+                  value={placeNewForm.업체명} onChange={(e) => setPlaceNewForm((p) => ({ ...p, 업체명: e.target.value }))} />
+              </div>
+              <div className="w-[280px]">
+                <div className="text-sm text-gray-600 mb-1 font-medium">주소*</div>
+                <input className="border px-2 py-1.5 rounded text-sm w-full focus:ring-1 focus:ring-blue-400 outline-none"
+                  value={placeNewForm.주소} onChange={(e) => setPlaceNewForm((p) => ({ ...p, 주소: e.target.value }))} />
+              </div>
+              <div className="w-[100px]">
+                <div className="text-sm text-gray-600 mb-1 font-medium">담당자</div>
+                <input className="border px-2 py-1.5 rounded text-sm w-full focus:ring-1 focus:ring-blue-400 outline-none"
+                  value={placeNewForm.담당자} onChange={(e) => setPlaceNewForm((p) => ({ ...p, 담당자: e.target.value }))} />
+              </div>
+              <div className="w-[130px]">
+                <div className="text-sm text-gray-600 mb-1 font-medium">담당자번호</div>
+                <input className="border px-2 py-1.5 rounded text-sm w-full focus:ring-1 focus:ring-blue-400 outline-none"
+                  value={placeNewForm.담당자번호} onChange={(e) => setPlaceNewForm((p) => ({ ...p, 담당자번호: e.target.value }))} />
+              </div>
+              <div className="w-[90px]">
+                <div className="text-sm text-gray-600 mb-1 font-medium">등급</div>
+                <select className="border px-2 py-1.5 rounded text-sm w-full focus:ring-1 focus:ring-blue-400 outline-none"
+                  value={placeNewForm.등급} onChange={(e) => setPlaceNewForm((p) => ({ ...p, 등급: e.target.value }))}>
+                  <option value="일반">일반</option>
+                  <option value="블랙">블랙</option>
+                  <option value="주의">주의</option>
+                  <option value="이탈">이탈</option>
+                </select>
+              </div>
+              <div className="flex-1 min-w-[100px]">
+                <div className="text-sm text-gray-600 mb-1 font-medium">메모</div>
+                <input className="border px-2 py-1.5 rounded text-sm w-full focus:ring-1 focus:ring-blue-400 outline-none"
+                  value={placeNewForm.메모} onChange={(e) => setPlaceNewForm((p) => ({ ...p, 메모: e.target.value }))} />
+              </div>
+              <button onClick={addNewPlace} className="px-4 py-1.5 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 whitespace-nowrap">+ 등록</button>
             </div>
           </div>
 
-          {/* 표 */}
-          <div className="overflow-x-auto">
-            <table className="min-w-[1400px] text-sm border">
-              <thead>
-                <tr>
-                  <th className={head}>
-                    <input
-                      type="checkbox"
-                      onChange={toggleAll}
-                      checked={
-                        filtered.length > 0 &&
-                        selected.size === filtered.length
-                      }
-                    />
-                  </th>
-                  {[
-                    "거래처명",
-                    "사업자번호",
-                    "대표자",
-                    "업태",
-                    "종목",
-                    "주소",
-                    "담당자",
-                    "연락처",
-                    "메모",
-                    "삭제",
-                  ].map((h) => (
-                    <th key={h} className={head}>
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.length === 0 ? (
-                  <tr>
-                    <td
-                      className="text-center text-gray-500 py-6"
-                      colSpan={10}
-                    >
-                      표시할 데이터가 없습니다.
-                    </td>
-                  </tr>
-                ) : (
-                  filtered.map((r, i) => {
-                    const id = r.거래처명 || r.id || `${i}`;
-                    return (
-                      <tr key={id} className={i % 2 ? "bg-gray-50" : ""}>
-                        <td className={cell}>
-                          <input
-                            type="checkbox"
-                            checked={selected.has(id)}
-                            onChange={() => toggleOne(id)}
-                          />
-                        </td>
-                        <td className={`${cell} min-w-[180px]`}>
-                          <input
-                            className={`${input} w-48`}
-                            defaultValue={r.거래처명 || ""}
-                            onBlur={(e) =>
-                              handleBlur(r, "거래처명", e.target.value)
-                            }
-                          />
-                        </td>
-                        <td className={cell}>
-                          <input
-                            className={input}
-                            defaultValue={r.사업자번호 || ""}
-                            onBlur={(e) =>
-                              handleBlur(r, "사업자번호", e.target.value)
-                            }
-                          />
-                        </td>
-                        <td className={cell}>
-                          <input
-                            className={input}
-                            defaultValue={r.대표자 || ""}
-                            onBlur={(e) =>
-                              handleBlur(r, "대표자", e.target.value)
-                            }
-                          />
-                        </td>
-                        <td className={cell}>
-                          <input
-                            className={input}
-                            defaultValue={r.업태 || ""}
-                            onBlur={(e) =>
-                              handleBlur(r, "업태", e.target.value)
-                            }
-                          />
-                        </td>
-                        <td className={`${cell} min-w-[260px]`}>
-                          <input
-                            className={`${input} w-64 text-left`}
-                            defaultValue={r.주소 || ""}
-                            onBlur={(e) =>
-                              handleBlur(r, "주소", e.target.value)
-                            }
-                          />
-                        </td>
-                        <td className={cell}>
-                          <input
-                            className={input}
-                            defaultValue={r.담당자 || ""}
-                            onBlur={(e) =>
-                              handleBlur(r, "담당자", e.target.value)
-                            }
-                          />
-                        </td>
-                        <td className={cell}>
-                          <input
-                            className={input}
-                            defaultValue={r.연락처 || ""}
-                            onBlur={(e) =>
-                              handleBlur(r, "연락처", e.target.value)
-                            }
-                          />
-                        </td>
-                        <td className={`${cell} min-w-[220px]`}>
-                          <input
-                            className={`${input} w-56 text-left`}
-                            defaultValue={r.메모 || ""}
-                            onBlur={(e) =>
-                              handleBlur(r, "메모", e.target.value)
-                            }
-                          />
-                        </td>
-                        <td className={cell}>
-                          <button
-  onClick={() => {
-    const id = r.id || r.거래처명;
-    if (!id) return;
-
-    if (window.confirm("삭제하시겠습니까?")) {
-      removeClient(id);
-    }
-  }}
-  className="px-2 py-1 bg-red-600 text-white rounded"
->
-  삭제
-</button>
-
-
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-        </>
-      )}
-
-      {/* ================== 🔵 탭 2: 하차지 거래처관리 ================== */}
-      {subTab === "하차지" && (
-        <>
-          {duplicatePlaceGroups.length > 0 && (
-            <div className="mb-3 p-3 rounded bg-yellow-50 border border-yellow-300 text-sm text-yellow-800">
-              ⚠️ 주소 기준 중복 하차지 <b>{duplicatePlaceGroups.length}</b>건 발견됨
+          {/* 검색 전 안내 */}
+          {!placeSearched && (
+            <div className="bg-white rounded-xl border shadow-sm text-center py-16 text-gray-400 text-sm">
+              검색어를 입력하고 🔍 검색 버튼을 누르세요
             </div>
           )}
-          {/* 상단 바 */}
-          <div className="flex flex-wrap items-center gap-2 mb-3">
-            <select
-              className="border p-2 rounded"
-              value={placeFilterType}
-              onChange={(e) => setPlaceFilterType(e.target.value)}
-            >
-              <option value="업체명">업체명</option>
-              <option value="주소">주소</option>
-            </select>
 
-            <input
-              className="border p-2 rounded w-80"
-              placeholder={`${placeFilterType} 검색`}
-              value={placeQ}
-              onChange={(e) => setPlaceQ(e.target.value)}
-            />
+          {/* 검색 결과 없음 */}
+          {placeSearched && filteredPlaces.length === 0 && (
+            <div className="bg-white rounded-xl border shadow-sm text-center py-16 text-gray-400 text-sm">
+              검색 결과가 없습니다
+            </div>
+          )}
 
-            <label className="px-3 py-1 border rounded cursor-pointer text-sm">
-              📁 엑셀 업로드
-              <input
-                type="file"
-                accept=".xlsx,.xls"
-                onChange={onExcelPlaces}
-                className="hidden"
-              />
-            </label>
+          {/* 테이블 */}
+          {placeSearched && filteredPlaces.length > 0 && (
+            <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="min-w-[1000px] text-sm border-collapse w-full">
+                  <thead>
+                    <tr className="bg-slate-100">
+                      <th className={head}><input type="checkbox" onChange={togglePlaceAll} checked={filteredPlaces.length > 0 && placeSelected.size === filteredPlaces.length} /></th>
+                      {["업체명","주소","담당자","담당자번호","등급","메모","삭제"].map((h) => <th key={h} className={head}>{h}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredPlaces.map((r, i) => {
+                      const id = r.id || r.업체명 || `${i}`;
+                      const grade = r.등급 || "일반";
+                      return (
+                        <tr key={id} className={`hover:bg-blue-50 transition ${grade === "블랙" ? "bg-gray-100" : grade === "주의" ? "bg-orange-50" : i % 2 ? "bg-gray-50" : "bg-white"}`}>
+                          <td className={cell}><input type="checkbox" checked={placeSelected.has(id)} onChange={() => togglePlaceOne(id)} /></td>
+                          <td className={cell}><input className={`${inp} w-[250px]`} defaultValue={r.업체명||""} onBlur={(e) => handlePlaceBlur(r,"업체명",e.target.value)} /></td>
+                          <td className={cell}><input className={`${inp} w-[250px]`} defaultValue={r.주소||""} onBlur={(e) => handlePlaceBlur(r,"주소",e.target.value)} /></td>
+                          <td className={cell}><input className={`${inp} w-[70px]`} defaultValue={r.담당자||""} onBlur={(e) => handlePlaceBlur(r,"담당자",e.target.value)} /></td>
+                          <td className={cell}><input className={`${inp} w-[120px]`} defaultValue={r.담당자번호||""} onBlur={(e) => handlePlaceBlur(r,"담당자번호",e.target.value)} /></td>
+                          <td className={cell}>
+                            <select className={`px-2 py-1.5 rounded text-sm font-semibold ${등급색상(grade)} cursor-pointer w-[80px]`}
+                              value={grade}
+                              onChange={(e) => handlePlaceBlur(r,"등급",e.target.value)}>
+                              <option value="일반">일반</option>
+                              <option value="블랙">블랙</option>
+                              <option value="주의">주의</option>
+                              <option value="이탈">이탈</option>
+                            </select>
+                            {r.등급변경일 && grade !== "일반" && (
+                              <div className="text-[10px] text-gray-400 mt-0.5">{r.등급변경일}</div>
+                            )}
+                          </td>
+                          <td className={cell}><input className={`${inp} min-w-[180px]`} defaultValue={r.메모||""} onBlur={(e) => handlePlaceBlur(r,"메모",e.target.value)} /></td>
+                          <td className={cell}>
+                            <button onClick={() => { if (confirm("삭제하시겠습니까?")) removePlace(id); }}
+                              className="px-2 py-1 bg-red-500 text-white rounded text-xs hover:bg-red-600">삭제</button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
-            <button
-              onClick={bulkEditPlaces}
-              className="px-3 py-1 rounded bg-green-600 text-white text-sm"
-            >
-              선택수정
-            </button>
-
-            <button
-              onClick={removeSelectedPlaces}
-              className="px-3 py-1 rounded bg-red-600 text-white text-sm"
-            >
-
-              선택삭제
-            </button>
-            <button
-              onClick={() => setShowDupPreview(true)}
-              className="px-3 py-1 rounded bg-orange-600 text-white text-sm"
-            >
-              중복 미리보기
-            </button>
-
-          </div>
+          {/* 중복 미리보기 팝업 */}
           {showDupPreview && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-              <div className="bg-white rounded-lg shadow-lg w-[900px] max-h-[80vh] overflow-hidden">
-
-                <div className="flex justify-between items-center px-4 py-3 border-b">
-                  <h3 className="font-bold">
-                    주소 포함 기준 중복 미리보기 ({duplicatePlaceGroups.length}건)
-                  </h3>
-                  <button onClick={() => setShowDupPreview(false)}>✕</button>
+              <div className="bg-white rounded-xl shadow-xl w-[900px] max-h-[80vh] overflow-hidden flex flex-col">
+                <div className="flex justify-between items-center px-5 py-4 border-b">
+                  <h3 className="font-bold text-slate-800">중복 미리보기 ({duplicatePlaceGroups.length}건)</h3>
+                  <button onClick={() => setShowDupPreview(false)} className="text-gray-400 hover:text-red-500 text-xl">✕</button>
                 </div>
-
-                <div className="p-4 overflow-y-auto max-h-[60vh] text-sm">
+                <div className="p-4 overflow-y-auto flex-1 text-sm space-y-4">
                   {duplicatePlaceGroups.map((group, gi) => (
-                    <div key={gi} className="mb-6 border rounded">
-                      <div className="bg-gray-100 px-3 py-2 font-semibold">
-                        업체명: {group[0].업체명}
-                      </div>
-
-                      <table className="w-full border-t">
+                    <div key={gi} className="border rounded-lg overflow-hidden">
+                      <div className="bg-slate-100 px-3 py-2 font-semibold text-slate-700">{group[0].업체명}</div>
+                      <table className="w-full">
                         <tbody>
-                          {group.map((p, i) => {
-                            const isKeep = i === 0;
-                            return (
-                              <tr
-                                key={p.id}
-                                className={
-                                  isKeep
-                                    ? "bg-green-50 text-green-800"
-                                    : "bg-red-50 text-red-700"
-                                }
-                              >
-                                <td className="border px-2 py-1 w-24 text-center font-bold">
-                                  {isKeep ? (
-                                    "유지"
-                                  ) : (
-                                    <input
-                                      type="checkbox"
-                                      checked={dupSelected.has(p.id)}
-                                      onChange={() => {
-                                        setDupSelected((prev) => {
-                                          const n = new Set(prev);
-                                          n.has(p.id) ? n.delete(p.id) : n.add(p.id);
-                                          return n;
-                                        });
-                                      }}
-                                    />
-                                  )}
-                                </td>
-
-                                <td className="border px-2 py-1">{p.주소}</td>
-                                <td className="border px-2 py-1">{p.담당자}</td>
-                                <td className="border px-2 py-1">{p.담당자번호}</td>
-                              </tr>
-                            );
-                          })}
+                          {group.map((p, i) => (
+                            <tr key={p.id} className={i === 0 ? "bg-green-50 text-green-800" : "bg-red-50 text-red-700"}>
+                              <td className="border px-2 py-1 w-20 text-center font-bold text-xs">
+                                {i === 0 ? "유지" : <input type="checkbox" checked={dupSelected.has(p.id)} onChange={() => setDupSelected((prev) => { const n = new Set(prev); n.has(p.id) ? n.delete(p.id) : n.add(p.id); return n; })} />}
+                              </td>
+                              <td className="border px-2 py-1">{p.주소}</td>
+                              <td className="border px-2 py-1">{p.담당자}</td>
+                              <td className="border px-2 py-1">{p.담당자번호}</td>
+                            </tr>
+                          ))}
                         </tbody>
                       </table>
                     </div>
                   ))}
                 </div>
-
-                <div className="flex justify-end gap-2 px-4 py-3 border-t">
-                  <button onClick={() => setShowDupPreview(false)}>
-                    취소
-                  </button>
-                  <button
-                    onClick={async () => {
-                      await removeDuplicatePlaces();
-                      setShowDupPreview(false);
-                    }}
-                    className="bg-red-600 text-white px-4 py-2 rounded"
-                  >
-                    중복 정리 실행
-                  </button>
+                <div className="flex justify-end gap-2 px-5 py-4 border-t">
+                  <button onClick={() => setShowDupPreview(false)} className="px-4 py-2 border rounded-lg text-sm">취소</button>
+                  <button onClick={async () => { await removeDuplicatePlaces(); setShowDupPreview(false); }}
+                    className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-semibold">중복 정리 실행</button>
                 </div>
               </div>
             </div>
           )}
-
-
-          {/* 신규 등록 */}
-          <div className="grid grid-cols-4 gap-2 mb-4">
-            <div>
-              <div className="text-xs text-gray-500 mb-1">업체명*</div>
-              <input
-                className="border p-2 rounded w-full"
-                value={placeNewForm.업체명}
-                onChange={(e) =>
-                  setPlaceNewForm((p) => ({ ...p, 업체명: e.target.value }))
-                }
-              />
-            </div>
-            <div className="col-span-2">
-              <div className="text-xs text-gray-500 mb-1">주소</div>
-              <input
-                className="border p-2 rounded w-full"
-                value={placeNewForm.주소}
-                onChange={(e) =>
-                  setPlaceNewForm((p) => ({ ...p, 주소: e.target.value }))
-                }
-              />
-            </div>
-            <div>
-              <div className="text-xs text-gray-500 mb-1">담당자</div>
-              <input
-                className="border p-2 rounded w-full"
-                value={placeNewForm.담당자}
-                onChange={(e) =>
-                  setPlaceNewForm((p) => ({ ...p, 담당자: e.target.value }))
-                }
-              />
-            </div>
-            <div>
-              <div className="text-xs text-gray-500 mb-1">담당자번호</div>
-              <input
-                className="border p-2 rounded w-full"
-                value={placeNewForm.담당자번호}
-                onChange={(e) =>
-                  setPlaceNewForm((p) => ({
-                    ...p,
-                    담당자번호: e.target.value,
-                  }))
-                }
-              />
-            </div>
-            <div className="col-span-3">
-              <div className="text-xs text-gray-500 mb-1">메모</div>
-              <input
-                className="border p-2 rounded w-full"
-                value={placeNewForm.메모}
-                onChange={(e) =>
-                  setPlaceNewForm((p) => ({ ...p, 메모: e.target.value }))
-                }
-              />
-            </div>
-            <div className="col-span-4 flex justify-end">
-              <button
-                onClick={addNewPlace}
-                className="px-4 py-2 rounded bg-blue-600 text-white"
-              >
-                + 신규등록
-              </button>
-            </div>
-          </div>
-
-          {/* 표 */}
-          <div className="overflow-x-auto">
-            <table className="min-w-[1000px] text-sm border">
-              <thead>
-                <tr>
-                  <th className={head}>
-                    <input
-                      type="checkbox"
-                      onChange={togglePlaceAll}
-                      checked={
-                        filteredPlaces.length > 0 &&
-                        placeSelected.size === filteredPlaces.length
-                      }
-                    />
-                  </th>
-                  {["업체명", "주소", "담당자", "담당자번호", "메모", "삭제"].map(
-                    (h) => (
-                      <th key={h} className={head}>
-                        {h}
-                      </th>
-                    )
-                  )}
-                </tr>
-              </thead>
-              <tbody>
-                {filteredPlaces.length === 0 ? (
-                  <tr>
-                    <td
-                      className="text-center text-gray-500 py-6"
-                      colSpan={7}
-                    >
-                      표시할 데이터가 없습니다.
-                    </td>
-                  </tr>
-                ) : (
-                  filteredPlaces.map((r, i) => {
-                    const id = r.id || r.업체명 || `${i}`;
-                    return (
-                      <tr key={id} className={i % 2 ? "bg-gray-50" : ""}>
-                        <td className={cell}>
-                          <input
-                            type="checkbox"
-                            checked={placeSelected.has(id)}
-                            onChange={() => togglePlaceOne(id)}
-                          />
-                        </td>
-                        <td className={`${cell} min-w-[180px]`}>
-                          <input
-                            className={`${input} w-48`}
-                            defaultValue={r.업체명 || ""}
-                            onBlur={(e) =>
-                              handlePlaceBlur(r, "업체명", e.target.value)
-                            }
-                          />
-                        </td>
-                        <td className={`${cell} min-w-[260px]`}>
-                          <input
-                            className={`${input} w-64 text-left`}
-                            defaultValue={r.주소 || ""}
-                            onBlur={(e) =>
-                              handlePlaceBlur(r, "주소", e.target.value)
-                            }
-                          />
-                        </td>
-                        <td className={cell}>
-                          <input
-                            className={input}
-                            defaultValue={r.담당자 || ""}
-                            onBlur={(e) =>
-                              handlePlaceBlur(r, "담당자", e.target.value)
-                            }
-                          />
-                        </td>
-                        <td className={cell}>
-                          <input
-                            className={input}
-                            defaultValue={r.담당자번호 || ""}
-                            onBlur={(e) =>
-                              handlePlaceBlur(r, "담당자번호", e.target.value)
-                            }
-                          />
-                        </td>
-                        <td className={`${cell} min-w-[220px]`}>
-                          <input
-                            className={`${input} w-56 text-left`}
-                            defaultValue={r.메모 || ""}
-                            onBlur={(e) =>
-                              handlePlaceBlur(r, "메모", e.target.value)
-                            }
-                          />
-                        </td>
-                        <td className={cell}>
-                          <button
-                            onClick={() => {
-                              if (!confirm("삭제하시겠습니까?")) return;
-                              removePlace(id);
-                            }}
-                            className="px-2 py-1 bg-red-600 text-white rounded"
-                          >
-                            삭제
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-        </>
+       </div>
       )}
+      
+      {/* AI 비서 */}
+      <AiAssistant 
+        dispatches={dispatchData}
+        clients={clients} 
+        calcFare={calcFare}
+      />
     </div>
   );
 }
-
 // ===================== DispatchApp.jsx (PART 11/11) — END =====================

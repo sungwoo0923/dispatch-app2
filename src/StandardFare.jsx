@@ -20,11 +20,62 @@ const VEHICLE_TYPES = [
 // 문자열 정규화
 const clean = (s) => String(s || "").replace(/\s+/g, "").trim().toLowerCase();
 
+// ✅ 날짜 정규화: 어떤 타입이 와도 YYYY-MM-DD 로 변환
+function toYMD(v) {
+  if (!v) return "";
+
+  // Firestore Timestamp (toDate 지원)
+  if (v?.toDate && typeof v.toDate === "function") {
+    const d = v.toDate();
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    return d.toISOString().slice(0, 10);
+  }
+
+  // Date
+  if (v instanceof Date) {
+    const d = new Date(v);
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    return d.toISOString().slice(0, 10);
+  }
+
+  // string
+  const s = String(v).trim();
+  if (!s) return "";
+
+  // YYYY-MM-DD / YYYY-M-D / YYYY.MM.DD / YYYY/MM/DD
+  const m1 = s.match(/^(\d{4})[-./](\d{1,2})[-./](\d{1,2})/);
+  if (m1) {
+    const yyyy = m1[1];
+    const mm = String(m1[2]).padStart(2, "0");
+    const dd = String(m1[3]).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  // MM-DD (4월부터 이런 식으로 저장된 데이터가 있으면 최신 판단이 3월로 깨짐)
+  const m2 = s.match(/^(\d{1,2})[-./](\d{1,2})$/);
+  if (m2) {
+    const yyyy = String(new Date().getFullYear());
+    const mm = String(m2[1]).padStart(2, "0");
+    const dd = String(m2[2]).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  // 그 외: 파싱 시도
+  const d = new Date(s);
+  if (!isNaN(d.getTime())) {
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    return d.toISOString().slice(0, 10);
+  }
+
+  return s; // 마지막 폴백(그래도 값은 보여주기)
+}
+
 // 화물내용 숫자 추출
 const extractCargoNumber = (text) => {
   const m = String(text).match(/(\d+)/);
   return m ? Number(m[1]) : null;
 };
+
 // =======================
 // 📅 공휴일 / 특이일 판별
 // =======================
@@ -176,14 +227,26 @@ const implicitFare = React.useMemo(() => {
 }, [client, vehicle, ton, dispatchData]);
 
   // Firestore 실시간 구독
-  useEffect(() => {
-    const unsub = onSnapshot(collection(db, "dispatch"), (snap) => {
-      const arr = snap.docs.map((d) => ({ _id: d.id, ...d.data() }));
-      setDispatchData(arr);
-    });
-    return () => unsub();
-  }, []);
+useEffect(() => {
+  const unsub = onSnapshot(collection(db, "dispatch"), (snap) => {
+    const arr = snap.docs.map((d) => {
+      const data = d.data();
+      return {
+        _id: d.id,
+        ...data,
 
+        // ✅ 날짜 필드 무조건 문자열(YYYY-MM-DD)로 통일
+        등록일: toYMD(data.등록일),
+        상차일: toYMD(data.상차일),
+        하차일: toYMD(data.하차일),
+      };
+    });
+
+    setDispatchData(arr);
+  });
+
+  return () => unsub();
+}, []);
   // 입력값 localStorage 저장
   useEffect(() => {
     localStorage.setItem("sf_pickup", pickup);
@@ -213,9 +276,9 @@ useEffect(() => {
   const min = Math.min(...fares);
   const max = Math.max(...fares);
 
-  const latest = rows
-    .slice()
-    .sort((a, b) => (b.상차일 || "").localeCompare(a.상차일 || ""))[0];
+const latest = rows
+  .slice()
+  .sort((a, b) => (toYMD(b.상차일) || "").localeCompare(toYMD(a.상차일) || ""))[0];
 
   const latestFare = Number(
     String(latest?.청구운임 || 0).replace(/[^\d]/g, "")
@@ -413,11 +476,11 @@ const levelRank = {
 
 withFareLevel.sort((a, b) => {
   switch (sortKey) {
-    case "date_asc":
-      return (a.상차일 || "").localeCompare(b.상차일 || "");
+case "date_desc":
+  return (toYMD(b.상차일) || "").localeCompare(toYMD(a.상차일) || "");
+case "date_asc":
+  return (toYMD(a.상차일) || "").localeCompare(toYMD(b.상차일) || "");
 
-    case "date_desc":
-      return (b.상차일 || "").localeCompare(a.상차일 || "");
 
     // 🔥 화물내용 순 (숫자 우선)
     case "cargo_asc": {
