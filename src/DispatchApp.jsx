@@ -1349,6 +1349,12 @@ useEffect(() => {
           </div>
         </div>
       )}
+    {/* AI 비서 */}
+      <AiAssistant 
+        dispatches={dispatchData}
+        clients={clients} 
+        calcFare={calcFare}
+      />
     </ToastProvider>
   );
 }
@@ -26322,12 +26328,6 @@ const handlePlaceBlur = async (row, key, val) => {
        </div>
       )}
       
-      {/* AI 비서 */}
-      <AiAssistant 
-        dispatches={dispatchData}
-        clients={clients} 
-        calcFare={calcFare}
-      />
     </div>
   );
 }
