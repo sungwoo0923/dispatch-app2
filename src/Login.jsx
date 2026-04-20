@@ -95,7 +95,7 @@ sessionStorage.setItem("skipLoginPopup", "true");
 
         {/* 로고 */}
         <img
-          src="/src/assets/sflow-icon.png"
+          src="/sflow-icon.png"
           alt="S-Flow"
           className="w-16 h-16 mx-auto mb-3 rounded-2xl"
         />
