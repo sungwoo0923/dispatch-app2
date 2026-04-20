@@ -8324,7 +8324,28 @@ const BANCHAN_NOTICE = `
       .sort((a, b) => b.score - a.score)
       .slice(0, 8);
   };
-
+const lastWarnedRef = React.useRef(null);
+const checkWarningStatus = (name, type) => {
+  const now = Date.now();
+  if (lastWarnedRef.current?.name === name && now - lastWarnedRef.current.time < 3000) return;
+    const foundClient = (clients || []).find(c => c.거래처명 === name);
+    if (foundClient) {
+      const status = foundClient.업체상태 || foundClient.등급;
+      if (status === "블랙" || status === "주의") {
+        lastWarnedRef.current = { name, time: Date.now() };
+        setWarningPopup({ name, status, type, info: foundClient });
+        return;
+      }
+    }
+    const foundPlace = (placeRows || []).find(p => p.업체명 === name);
+    if (foundPlace) {
+      const status = foundPlace.업체상태 || foundPlace.등급;
+      if (status === "블랙" || status === "주의") {
+        lastWarnedRef.current = { name, time: Date.now() };
+        setWarningPopup({ name, status, type, info: foundPlace });
+      }
+    }
+  };
   // ==========================
   // 🔵 선택수정 상/하차지 자동완성 상태
   // ==========================
@@ -8338,6 +8359,7 @@ const BANCHAN_NOTICE = `
   const [editClientOptions, setEditClientOptions] = React.useState([]);
   const [showEditClientDropdown, setShowEditClientDropdown] = React.useState(false);
   const [editClientActiveIndex, setEditClientActiveIndex] = React.useState(0);
+  const [warningPopup, setWarningPopup] = React.useState(null);
 
   // ------------------------
   // 상태들
@@ -11083,7 +11105,7 @@ alert("오더 수정 완료");
 
   // 🔥 여기 추가 (핵심)
   setClientApplyPopup(c);
-
+checkWarningStatus(c.거래처명, "거래처");
   setShowCopyClientDropdown(false);
 }
         }}
@@ -11106,6 +11128,7 @@ alert("오더 수정 완료");
                   거래처전화번호: c.연락처 || "",
                   거래처담당자: c.담당자 || "",
                 }));
+                checkWarningStatus(c.거래처명, "거래처");
                 setShowCopyClientDropdown(false);
               }}
             >
@@ -11204,6 +11227,7 @@ alert("오더 수정 완료");
                   상차지담당자:p.담당자 || "",
                   상차지담당자번호:p.담당자번호 || "",
                 }));
+                checkWarningStatus(p.업체명, "상차지");
                 setShowCopyPlaceDropdown(false);
               }
             }}
@@ -11226,6 +11250,7 @@ alert("오더 수정 완료");
                       상차지담당자:p.담당자 || "",
                       상차지담당자번호:p.담당자번호 || "",
                     }));
+                    checkWarningStatus(p.업체명, "상차지");
                     setShowCopyPlaceDropdown(false);
                   }}
                 >
@@ -11341,6 +11366,7 @@ alert("오더 수정 완료");
                   하차지담당자:p.담당자 || "",
                   하차지담당자번호:p.담당자번호 || "",
                 }));
+                checkWarningStatus(p.업체명, "하차지");
                 setShowCopyPlaceDropdown(false);
               }
             }}
@@ -11363,6 +11389,7 @@ alert("오더 수정 완료");
                       하차지담당자:p.담당자 || "",
                       하차지담당자번호:p.담당자번호 || "",
                     }));
+                    checkWarningStatus(p.업체명, "하차지");
                     setShowCopyPlaceDropdown(false);
                   }}
                 >
@@ -11740,6 +11767,7 @@ value={copyTarget?.화물수량 || ""}
               상차지담당자: clientApplyPopup.담당자 || "",
               상차지담당자번호: clientApplyPopup.연락처 || "",
             }));
+            checkWarningStatus(clientApplyPopup.거래처명, "상차지");
             setClientApplyPopup(null);
           }}
         >
@@ -11756,6 +11784,7 @@ value={copyTarget?.화물수량 || ""}
               하차지담당자: clientApplyPopup.담당자 || "",
               하차지담당자번호: clientApplyPopup.연락처 || "",
             }));
+            checkWarningStatus(clientApplyPopup.거래처명, "하차지");
             setClientApplyPopup(null);
           }}
         >
@@ -12936,6 +12965,7 @@ setRows(prev => sortDispatchRows([...prev, newRow]));
                       상차지주소: c.주소 || prev.상차지주소,
                     }));
                     setShowEditClientDropdown(false);
+                    checkWarningStatus(c.거래처명, "거래처");
                   }
                 }}
                 onBlur={() =>
@@ -12969,6 +12999,7 @@ setRows(prev => sortDispatchRows([...prev, newRow]));
                             상차지주소: c.주소 || prev.상차지주소,
                           }));
                           setShowEditClientDropdown(false);
+                          checkWarningStatus(c.거래처명, "거래처");
                         }}
                       >
                         <div className="font-semibold">{c.거래처명}</div>
@@ -13151,10 +13182,11 @@ setRows(prev => sortDispatchRows([...prev, newRow]));
                     setEditTarget((prev) => ({
                       ...prev,
                       상차지명: p.업체명,
-                      상차지주소: p.주소 || "",
+                     상차지주소: p.주소 || "",
                     }));
 
                     setShowEditPlaceDropdown(false);
+                    checkWarningStatus(p.업체명, "상차지");
                   }
                 }}
                 onBlur={() =>
@@ -13176,6 +13208,7 @@ setRows(prev => sortDispatchRows([...prev, newRow]));
                           상차지주소: p.주소 || "",
                         }));
                         setShowEditPlaceDropdown(false);
+                        checkWarningStatus(p.업체명, "상차지");
                       }}
                     >
                       <div className="font-semibold">{p.업체명}</div>
@@ -13238,6 +13271,7 @@ setRows(prev => sortDispatchRows([...prev, newRow]));
                     }));
 
                     setShowEditPlaceDropdown(false);
+                    checkWarningStatus(p.업체명, "하차지");
                   }
                 }}
                 onBlur={() =>
@@ -13259,6 +13293,7 @@ setRows(prev => sortDispatchRows([...prev, newRow]));
                           하차지주소: p.주소 || "",
                         }));
                         setShowEditPlaceDropdown(false);
+                        checkWarningStatus(p.업체명, "하차지");
                       }}
                     >
                       <div className="font-semibold">{p.업체명}</div>
@@ -14548,6 +14583,84 @@ setConfirmChange(null);
 }
 `}</style>
 
+{/* 🔥 블랙/주의업체 팝업 */}
+      {warningPopup && (
+        <div
+          className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/50"
+          tabIndex={-1}
+          ref={(el) => el && setTimeout(() => el.focus(), 0)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              setWarningPopup(null);
+            }
+          }}
+        >
+          <div className="bg-white rounded-2xl shadow-2xl w-[400px] overflow-hidden">
+
+            {/* 헤더 */}
+            <div className={`px-6 py-4 flex items-center gap-3 ${warningPopup.status === "블랙" ? "bg-gray-900" : "bg-orange-400"}`}>
+              <span className="text-2xl">{warningPopup.status === "블랙" ? "🚫" : "⚠️"}</span>
+              <h3 className="text-white text-lg font-bold">
+                {warningPopup.status === "블랙" ? "블랙" : "주의"} 거래처 알림
+              </h3>
+            </div>
+
+            {/* 내용 */}
+            <div className="px-6 py-5 space-y-3">
+              <div className={`border rounded-lg px-4 py-3 text-sm space-y-1 ${warningPopup.status === "블랙" ? "bg-red-50 border-red-200" : "bg-yellow-50 border-yellow-200"}`}>
+                <div>
+                  <span className="text-gray-500">거래처명</span>
+                  <b className="ml-2">{warningPopup.name}</b>
+                </div>
+                <div className="flex items-center">
+                  <span className="text-gray-500">등급</span>
+                  <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-bold text-white ${warningPopup.status === "블랙" ? "bg-gray-900" : "bg-orange-400"}`}>
+                    {warningPopup.status}
+                  </span>
+                </div>
+                {warningPopup.info?.지정일 && (
+                  <div>
+                    <span className="text-gray-500">지정일</span>
+                    <span className="ml-2">{warningPopup.info.지정일}</span>
+                  </div>
+                )}
+                {(warningPopup.info?.주소) && (
+                  <div>
+                    <span className="text-gray-500">주소</span>
+                    <span className="ml-2">{warningPopup.info.주소}</span>
+                  </div>
+                )}
+                {warningPopup.info?.메모 && (
+                  <div>
+                    <span className="text-gray-500">메모</span>
+                    <span className={`ml-2 ${warningPopup.status === "블랙" ? "text-red-600" : "text-yellow-600"}`}>
+                      {warningPopup.info.메모}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <p className="text-sm text-gray-600 text-center font-semibold">
+                해당 거래처는{" "}
+                <span className={`font-bold ${warningPopup.status === "블랙" ? "text-red-600" : "text-yellow-600"}`}>
+                  {warningPopup.status} 등급
+                </span>으로 지정된 거래처입니다.
+              </p>
+            </div>
+
+            <div className="px-6 pb-5">
+              <button
+                className={`w-full py-3 text-white rounded-xl font-bold text-sm ${warningPopup.status === "블랙" ? "bg-gray-900" : "bg-orange-400"}`}
+                onClick={() => setWarningPopup(null)}
+              >
+                확인
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
@@ -14725,6 +14838,35 @@ React.useEffect(() => {
   window.addEventListener("blackDriverDetected", handler);
   return () => window.removeEventListener("blackDriverDetected", handler);
 }, []);
+
+const [warningPopup, setWarningPopup] = React.useState(null);
+const lastWarnedRef = React.useRef(null);
+const checkWarningStatus = (name, type) => {
+  const now = Date.now();
+  if (lastWarnedRef.current?.name === name && now - lastWarnedRef.current.time < 3000) return;
+
+  // 거래처 목록 체크
+  const foundClient = (clients || []).find(c => c.거래처명 === name);
+  if (foundClient) {
+    const status = foundClient.업체상태 || foundClient.등급;
+    if (status === "블랙" || status === "주의") {
+      lastWarnedRef.current = { name, time: Date.now() };
+      setWarningPopup({ name, status, type, info: foundClient });
+      return;
+    }
+  }
+
+  // places + placeRows 둘 다 체크
+  const allPlaces = [...(places || []), ...(placeRows || [])];
+  const foundPlace = allPlaces.find(p => (p.업체명 || p.name) === name);
+  if (foundPlace) {
+    const status = foundPlace.업체상태 || foundPlace.등급;
+    if (status === "블랙" || status === "주의") {
+      lastWarnedRef.current = { name, time: Date.now() };
+      setWarningPopup({ name, status, type, info: foundPlace });
+    }
+  }
+};
 const normalizePlate = (s = "") =>
   String(s).toUpperCase().replace(/\s+/g, "").replace(/[-.]/g, "");
 
@@ -14874,8 +15016,23 @@ setLoaded(true);
   const [page, setPage] = React.useState(0);
   const pageSize = 100;
   // 🔵 거래처 자동완성 상태
-  const [clientOptions, setClientOptions] = React.useState([]);
+const [clientOptions, setClientOptions] = React.useState([]);
   const [showClientDropdown, setShowClientDropdown] = React.useState(false);
+  const [clientActiveIndex, setClientActiveIndex] = React.useState(0);
+  const clientListRef = React.useRef(null);
+
+  React.useEffect(() => {
+    if (!clientListRef.current) return;
+    const list = clientListRef.current;
+    const item = list.children[clientActiveIndex];
+    if (!item) return;
+    const itemTop = item.offsetTop;
+    const itemBottom = itemTop + item.offsetHeight;
+    const viewTop = list.scrollTop;
+    const viewBottom = viewTop + list.clientHeight;
+    if (itemBottom > viewBottom) list.scrollTop = itemBottom - list.clientHeight;
+    if (itemTop < viewTop) list.scrollTop = itemTop;
+  }, [clientActiveIndex]);
   // 🔵 자동완성(상/하차지) 상태  ← ★★★ 여기 추가
   const [placeQuery, setPlaceQuery] = React.useState("");
   const [placeOptions, setPlaceOptions] = React.useState([]);
@@ -17087,29 +17244,68 @@ onBlur={(e) => {
                   setEditTarget((p) => ({ ...p, 거래처명: v }));
                   setClientOptions(filterClients(v));
                   setShowClientDropdown(true);
+                  setClientActiveIndex(0);
+                }}
+                onKeyDown={(e) => {
+                  if (!showClientDropdown) return;
+
+                  if (e.key === "ArrowDown") {
+                    e.preventDefault();
+                    setClientActiveIndex(i => Math.min(i + 1, clientOptions.length - 1));
+                  }
+                  if (e.key === "ArrowUp") {
+                    e.preventDefault();
+                    setClientActiveIndex(i => Math.max(i - 1, 0));
+                  }
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    const c = clientOptions[clientActiveIndex];
+                    if (!c) return;
+
+                    setEditTarget((prev) => ({
+                      ...prev,
+                      거래처명: c.거래처명,
+                      상차지명: c.거래처명,
+                      상차지주소: c.주소 || prev.상차지주소,
+                    }));
+                    checkWarningStatus(c.거래처명, "거래처");
+                    setShowClientDropdown(false);
+                  }
                 }}
                 onBlur={() => setTimeout(() => setShowClientDropdown(false), 150)}
               />
 
               {showClientDropdown && clientOptions.length > 0 && (
-                <div className="absolute z-50 bg-white border w-full max-h-40 overflow-y-auto">
+                <div
+                  ref={clientListRef}
+                  className="absolute z-50 bg-white border w-full max-h-40 overflow-y-auto"
+                >
                   {clientOptions.map((c, i) => (
                     <div
                       key={i}
-                      className="px-3 py-1 cursor-pointer hover:bg-gray-100"
+                      className={`px-3 py-1 cursor-pointer ${
+                        i === clientActiveIndex ? "bg-blue-100" : "hover:bg-gray-100"
+                      }`}
                       onMouseDown={() => {
-                        setEditTarget((p) => ({ ...p, 거래처명: c.거래처명 }));
+                        setEditTarget((prev) => ({
+                          ...prev,
+                          거래처명: c.거래처명,
+                          상차지명: c.거래처명,
+                          상차지주소: c.주소 || prev.상차지주소,
+                        }));
+                        checkWarningStatus(c.거래처명, "거래처");
                         setShowClientDropdown(false);
                       }}
                     >
-                      {c.거래처명}
+                      <div className="font-semibold">{c.거래처명}</div>
+                      {c.주소 && (
+                        <div className="text-xs text-gray-500">{c.주소}</div>
+                      )}
                     </div>
                   ))}
                 </div>
               )}
             </div>
-
-
             {/* ------------------------------------------------ */}
 {/* 🔵 상/하차일 & 시간 (선택수정) */}
 {/* ------------------------------------------------ */}
@@ -17312,6 +17508,7 @@ onBlur={(e) => {
                       상차지명: p.업체명,
                       상차지주소: p.주소 || "",
                     }));
+                    checkWarningStatus(p.업체명, "상차지");
                     setActivePlaceField(null);
                   }
                 }}
@@ -17336,6 +17533,7 @@ onBlur={(e) => {
                           상차지명: p.업체명,
                           상차지주소: p.주소 || "",
                         }));
+                        checkWarningStatus(p.업체명, "상차지");
                         setActivePlaceField(null);
                       }}
                     >
@@ -17406,6 +17604,7 @@ onBlur={(e) => {
                       하차지명: p.업체명,
                       하차지주소: p.주소 || "",
                     }));
+                    checkWarningStatus(p.업체명, "하차지");
                     setActivePlaceField(null);
                   }
                 }}
@@ -17430,6 +17629,7 @@ onBlur={(e) => {
                           하차지명: p.업체명,
                           하차지주소: p.주소 || "",
                         }));
+                        checkWarningStatus(p.업체명, "하차지");
                         setActivePlaceField(null);
                       }}
                     >
@@ -18225,15 +18425,15 @@ setCopyPanelOpen(false);
   const c = copyClientOptions[copyClientIndex];
   if(!c) return;
 
-  setCopyTarget(prev=>({
+setCopyTarget(prev=>({
     ...prev,
     거래처명: c.거래처명,
     거래처전화번호: c.연락처 || "",
     거래처담당자: c.담당자 || "",
   }));
 
-  setClientApplyPopup(c);   // 🔥 이거 추가 (핵심)
-
+  setClientApplyPopup(c);
+  checkWarningStatus(c.거래처명, "거래처");
   setShowCopyClientDropdown(false);
 }
         }}
@@ -18256,6 +18456,7 @@ setCopyPanelOpen(false);
                   거래처전화번호: c.연락처 || "",
                   거래처담당자: c.담당자 || "",
                 }));
+                checkWarningStatus(c.거래처명, "거래처");
                 setShowCopyClientDropdown(false);
               }}
             >
@@ -18354,6 +18555,7 @@ setCopyPlaceOptions(list);
                   상차지담당자:p.담당자 || "",
                   상차지담당자번호:p.담당자번호 || "",
                 }));
+                checkWarningStatus(p.업체명, "상차지");
                 setShowCopyPlaceDropdown(false);
               }
             }}
@@ -18376,6 +18578,7 @@ setCopyPlaceOptions(list);
                       상차지담당자:p.담당자 || "",
                       상차지담당자번호:p.담당자번호 || "",
                     }));
+                    checkWarningStatus(p.업체명, "상차지");
                     setShowCopyPlaceDropdown(false);
                   }}
                 >
@@ -18491,6 +18694,7 @@ setCopyPlaceOptions(list);
                   하차지담당자:p.담당자 || "",
                   하차지담당자번호:p.담당자번호 || "",
                 }));
+                checkWarningStatus(p.업체명, "하차지");
                 setShowCopyPlaceDropdown(false);
               }
             }}
@@ -18513,6 +18717,7 @@ setCopyPlaceOptions(list);
                       하차지담당자:p.담당자 || "",
                       하차지담당자번호:p.담당자번호 || "",
                     }));
+                    checkWarningStatus(p.업체명, "하차지");
                     setShowCopyPlaceDropdown(false);
                   }}
                 >
@@ -18881,6 +19086,7 @@ setCopyTarget(prev => ({
               상차지담당자: clientApplyPopup.담당자 || "",
               상차지담당자번호: clientApplyPopup.연락처 || "",
             }));
+            checkWarningStatus(clientApplyPopup.거래처명, "상차지");
             setClientApplyPopup(null);
           }}
         >
@@ -18897,6 +19103,7 @@ setCopyTarget(prev => ({
               하차지담당자: clientApplyPopup.담당자 || "",
               하차지담당자번호: clientApplyPopup.연락처 || "",
             }));
+            checkWarningStatus(clientApplyPopup.거래처명, "하차지");
             setClientApplyPopup(null);
           }}
         >
@@ -19666,6 +19873,61 @@ if (confirmChange.field === "지급방식" && confirmChange.after === "취소") 
               </button>
             </div>
 
+          </div>
+        </div>
+      )}
+
+    {/* 🔥 블랙/주의업체 팝업 */}
+      {warningPopup && (
+        <div
+          className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/50"
+          tabIndex={-1}
+          ref={(el) => el && setTimeout(() => el.focus(), 0)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              setWarningPopup(null);
+            }
+          }}
+        >
+          <div className="bg-white rounded-2xl shadow-2xl w-[400px] overflow-hidden">
+            <div className={`px-6 py-4 flex items-center gap-3 ${warningPopup.status === "블랙" ? "bg-gray-900" : "bg-orange-400"}`}>
+              <span className="text-2xl">{warningPopup.status === "블랙" ? "🚫" : "⚠️"}</span>
+              <h3 className="text-white text-lg font-bold">
+                {warningPopup.status === "블랙" ? "블랙" : "주의"} 거래처 알림
+              </h3>
+            </div>
+            <div className="px-6 py-5 space-y-3">
+              <div className={`border rounded-lg px-4 py-3 text-sm space-y-1 ${warningPopup.status === "블랙" ? "bg-red-50 border-red-200" : "bg-yellow-50 border-yellow-200"}`}>
+                <div><span className="text-gray-500">거래처명</span><b className="ml-2">{warningPopup.name}</b></div>
+                <div className="flex items-center">
+                  <span className="text-gray-500">등급</span>
+                  <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-bold text-white ${warningPopup.status === "블랙" ? "bg-gray-900" : "bg-orange-400"}`}>
+                    {warningPopup.status}
+                  </span>
+                </div>
+                {warningPopup.info?.지정일 && (
+                  <div><span className="text-gray-500">지정일</span><span className="ml-2">{warningPopup.info.지정일}</span></div>
+                )}
+                {warningPopup.info?.주소 && (
+                  <div><span className="text-gray-500">주소</span><span className="ml-2">{warningPopup.info.주소}</span></div>
+                )}
+                {warningPopup.info?.메모 && (
+                  <div><span className="text-gray-500">메모</span><span className={`ml-2 ${warningPopup.status === "블랙" ? "text-red-600" : "text-orange-600"}`}>{warningPopup.info.메모}</span></div>
+                )}
+              </div>
+              <p className="text-sm text-gray-600 text-center font-semibold">
+                해당 거래처는 <span className={`font-bold ${warningPopup.status === "블랙" ? "text-red-600" : "text-orange-500"}`}>{warningPopup.status} 등급</span>으로 지정된 거래처입니다.
+              </p>
+            </div>
+            <div className="px-6 pb-5">
+              <button
+                className={`w-full py-3 text-white rounded-xl font-bold text-sm ${warningPopup.status === "블랙" ? "bg-gray-900" : "bg-orange-400"}`}
+                onClick={() => setWarningPopup(null)}
+              >
+                확인
+              </button>
+            </div>
           </div>
         </div>
       )}
