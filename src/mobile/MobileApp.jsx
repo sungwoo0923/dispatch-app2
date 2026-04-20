@@ -2295,7 +2295,7 @@ function MobileSideMenu({
 
   // 앱 전체 새로고침 + 올바른 로그인 화면으로 이동
   setTimeout(() => {
-    window.location.replace("/driver-login");
+    window.location.replace("/login");
   }, 100);
 };
 
@@ -2355,7 +2355,7 @@ function MobileSideMenu({
           : "bg-gray-300 text-gray-700"
       }`}
   >
-    {alarmEnabled ? "🔔 알림 켜짐" : "🔕 알림 꺼짐"}
+    {alarmEnabled ? "알림 켜짐" : "알림 꺼짐"}
   </button>
 </div>
 {/* 🔍 화면 크기 조절 */}

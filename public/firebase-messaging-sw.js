@@ -32,8 +32,8 @@ messaging.onBackgroundMessage((payload) => {
 
   self.registration.showNotification(title, {
     body,
-    icon: "/icons/icon-192x192.png",
-    badge: "/icons/icon-192x192.png",
+    icon: "/icons/sflow-icon.png",
+    badge: "/icons/sflow-icon.png",
     data: payload?.data || {},
   });
 });
