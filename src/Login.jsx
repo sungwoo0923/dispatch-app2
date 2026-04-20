@@ -86,19 +86,23 @@ sessionStorage.setItem("skipLoginPopup", "true");
     }
   };
 
+  // 교체 후
   return (
     <div className="min-h-screen flex items-center justify-center
-      bg-gradient-to-br from-[#061832] via-[#0B2554] to-[#0D2B66] px-4">
+      bg-gradient-to-br from-[#061832] via-[#0B2554] to-[#0D2B66] px-4 relative">
+
+      {/* 우측 상단 로고 */}
+      <div className="fixed top-4 right-4 z-50">
+        <img
+          src="/icons/sflow-icon.png"
+          alt="S-Flow"
+          className="w-20 h-20 rounded-2xl shadow-lg"
+        />
+      </div>
 
       <div className="bg-white/95 rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.15)]
         p-10 w-full max-w-md border border-gray-100 backdrop-blur-md text-center">
 
-        {/* 로고 */}
-        <img
-          src="/sflow-icon.png"
-          alt="S-Flow"
-          className="w-16 h-16 mx-auto mb-3 rounded-2xl"
-        />
         {/* 타이틀 */}
         <h1 className="text-2xl font-extrabold text-[#0D2B66] mb-3">
           S-Flow Logistics

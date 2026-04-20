@@ -68,7 +68,8 @@ export default function App() {
       const timer = setTimeout(() => setSplashDone(true), 3000);
       return () => clearTimeout(timer);
     } else {
-      setSplashDone(true); // PC는 즉시 통과
+      const timer = setTimeout(() => setSplashDone(true), 1500); // PC 1.5초
+      return () => clearTimeout(timer);
     }
   }, []);
 
