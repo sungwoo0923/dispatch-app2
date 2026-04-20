@@ -58,6 +58,13 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [approved, setApproved] = useState(false);
   const [updateReady, setUpdateReady] = useState(false);
+  const [splashDone, setSplashDone] = useState(false);
+
+  // 🔥 모바일 스플래시 최소 2.5초 유지
+  useEffect(() => {
+    const timer = setTimeout(() => setSplashDone(true), 3000);
+    return () => clearTimeout(timer);
+  }, []);
 
   // 🔒 업데이트 배너 1회만 표시하기 위한 락
   const updateShownRef = useRef(false);
@@ -117,14 +124,42 @@ useEffect(() => {
 }, []);
 
   // 🔒 role 확정 전 차단
-if (loading) {
+if (loading || !splashDone) {
     return (
-      <div className="flex items-center justify-center h-screen text-gray-500">
-        권한 확인 중...
+      <div
+        className="flex flex-col items-center justify-center h-screen"
+        style={{ backgroundColor: "#ffffff" }}
+      >
+        <style>{`
+          @keyframes fadeInUp {
+            0%   { opacity: 0; transform: translateY(16px); }
+            100% { opacity: 1; transform: translateY(0); }
+          }
+          .splash-logo {
+            animation: fadeInUp 0.9s ease-out forwards;
+          }
+          .splash-sub {
+            animation: fadeInUp 0.9s ease-out 0.5s forwards;
+            opacity: 0;
+          }
+        `}</style>
+
+        <img
+          src="/src/assets/sflow-logo.png"
+          alt="S-Flow Logistics"
+          className="splash-logo"
+          style={{ width: "60vw", maxWidth: "320px" }}
+        />
+
+        <div
+          className="splash-sub text-sm mt-4"
+          style={{ color: "#aaaaaa" }}
+        >
+          {loading ? "권한 확인 중..." : ""}
+        </div>
       </div>
     );
   }
-
   const isMobile = isSmartPhone();
 
 return (

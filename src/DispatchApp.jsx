@@ -1021,7 +1021,7 @@ useEffect(() => {
         <div className="flex flex-col leading-tight">
           <div className="flex items-center gap-3">
             <span className="text-xl font-extrabold text-gray-800 tracking-tight">
-              RUN25 배차프로그램(Park)
+              S-Flow Logistics
             </span>
             <span className="text-xs font-mono bg-blue-100 text-blue-700 px-2 py-1 rounded">
   v{__APP_VERSION__}

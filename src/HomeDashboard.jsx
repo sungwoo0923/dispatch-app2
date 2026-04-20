@@ -190,6 +190,7 @@ const [handoverForm, setHandoverForm] = useState({
   date: todayStr,
 });
 const [selectedHandover, setSelectedHandover] = useState(null);
+const [handoverEditMode, setHandoverEditMode] = useState(false);
 
 const [selectedNotice, setSelectedNotice] = useState(null);
 const [selectedSchedule, setSelectedSchedule] = useState(null);
@@ -1001,7 +1002,6 @@ const recentOrders = useMemo(() => {
             content: selectedNotice.content,
           });
           setNoticeOpen(true);
-          setSelectedNotice(null);
         }}
         className="px-4 py-2 text-sm rounded bg-blue-600 text-white"
       >
@@ -1255,7 +1255,6 @@ const userName = me?.name || "사용자";
             memo: selectedSchedule.memo || "",
           });
           setScheduleOpen(true);
-          setSelectedSchedule(null);
         }}
         className="px-4 py-2 text-sm rounded bg-blue-600 text-white"
       >
@@ -1267,54 +1266,108 @@ const userName = me?.name || "사용자";
 
 {selectedHandover && (
   <Modal
-    title="인수인계 상세"
-    onClose={() => setSelectedHandover(null)}
+    title={handoverEditMode ? "인수인계 수정" : "인수인계 상세"}
+    onClose={() => { setSelectedHandover(null); setHandoverEditMode(false); }}
   >
-    <div className="space-y-4 text-sm">
-      <div className="space-y-3 text-sm">
-  <div><b>작성자</b> : {selectedHandover.author}</div>
-  <div><b>받는 사람</b> : {selectedHandover.receiver}</div>
-  <div><b>기준 날짜</b> : {selectedHandover.date}</div>
+    {handoverEditMode ? (
+      <div className="space-y-3">
+        <select
+          className="w-full border px-2 py-1 rounded"
+          value={handoverForm.receiver}
+          onChange={(e) => {
+            const selected = users.find(u => u.name === e.target.value);
+            setHandoverForm({
+              ...handoverForm,
+              receiver: selected?.name || "",
+              receiverUid: selected?.uid || selected?.id,
+            });
+          }}
+        >
+          <option value="">받는 사람 선택</option>
+          {users.map((u) => (
+            <option key={u.id} value={u.name}>{u.name}</option>
+          ))}
+        </select>
 
-  <div className="pt-2 border-t whitespace-pre-wrap">
-    {selectedHandover.text}
-  </div>
-</div>
-    </div>
+        <input
+          type="date"
+          className="w-full border px-2 py-1 rounded"
+          value={handoverForm.date}
+          onChange={(e) => setHandoverForm({ ...handoverForm, date: e.target.value })}
+        />
 
-    <div className="flex justify-center gap-3 pt-6 mt-6 border-t">
-      <button
-        onClick={async () => {
-          if (!window.confirm("인수인계를 삭제할까요?")) return;
-          await deleteDoc(
-            doc(db, "handovers", selectedHandover.id)
-          );
-          setSelectedHandover(null);
-        }}
-        className="px-4 py-2 text-sm rounded border text-red-600 hover:bg-red-50"
-      >
-        삭제
-      </button>
+        <textarea
+          rows={4}
+          className="w-full border px-2 py-1 rounded"
+          value={handoverForm.text}
+          onChange={(e) => setHandoverForm({ ...handoverForm, text: e.target.value })}
+        />
 
-      <button
-        onClick={() => {
-          isEditingHandoverRef.current = true;
-setHandoverForm({
-  text: selectedHandover.text,
-  author: selectedHandover.author,
-  authorUid: selectedHandover.authorUid,
-  receiver: selectedHandover.receiver,
-  receiverUid: selectedHandover.receiverUid,
-  date: selectedHandover.date,
-});
-          setHandoverOpen(true);
-          
-        }}
-        className="px-4 py-2 text-sm rounded bg-blue-600 text-white"
-      >
-        수정
-      </button>
-    </div>
+        <div className="flex gap-2 pt-2">
+          <button
+            className="flex-1 py-2 rounded bg-gray-200 text-sm"
+            onClick={() => setHandoverEditMode(false)}
+          >
+            취소
+          </button>
+          <button
+            className="flex-1 py-2 rounded bg-blue-600 text-white text-sm"
+            onClick={async () => {
+              const me = users.find(u => u.id === user?.uid);
+              await updateDoc(doc(db, "handovers", selectedHandover.id), {
+                ...handoverForm,
+                author: me?.name || me?.이름 || "사용자",
+                authorUid: user?.uid,
+              });
+              setHandoverEditMode(false);
+              setSelectedHandover(null);
+            }}
+          >
+            저장
+          </button>
+        </div>
+      </div>
+    ) : (
+      <>
+        <div className="space-y-3 text-sm">
+          <div><b>작성자</b> : {selectedHandover.author}</div>
+          <div><b>받는 사람</b> : {selectedHandover.receiver}</div>
+          <div><b>기준 날짜</b> : {selectedHandover.date}</div>
+          <div className="pt-2 border-t whitespace-pre-wrap">{selectedHandover.text}</div>
+        </div>
+
+        <div className="flex justify-center gap-3 pt-6 mt-6 border-t">
+          <button
+            onClick={async () => {
+              if (!window.confirm("인수인계를 삭제할까요?")) return;
+              await deleteDoc(doc(db, "handovers", selectedHandover.id));
+              setSelectedHandover(null);
+              setHandoverEditMode(false);
+            }}
+            className="px-4 py-2 text-sm rounded border text-red-600 hover:bg-red-50"
+          >
+            삭제
+          </button>
+          <button
+            onClick={() => {
+              isEditingHandoverRef.current = true;
+              setHandoverForm({
+                text: selectedHandover.text,
+                author: selectedHandover.author,
+                authorUid: selectedHandover.authorUid,
+                receiver: selectedHandover.receiver,
+                receiverUid: selectedHandover.receiverUid,
+                date: selectedHandover.date,
+              });
+              setHandoverEditMode(true);
+            }}
+            className="px-4 py-2 text-sm rounded bg-blue-600 text-white"
+          >
+            수정
+          </button>
+        </div>
+      </>
+    )}
   </Modal>
 )}
   {/* ================= 인수인계 ================= */}
@@ -1684,58 +1737,71 @@ await addDoc(collection(db, "handovers"), {
 
         {/* TOP 10 거래처 */}
         <Card title="Top 10 거래처">
-  {/* 🔹 KPI 요약 영역 */}
-  <div className="grid grid-cols-3 gap-4 mb-4">
-    <div>
-      <div className="text-xs text-gray-500">총 매출</div>
-      <div className="text-lg font-extrabold">
+  {/* KPI 요약 */}
+  <div className="grid grid-cols-3 gap-3 mb-5">
+    <div className="bg-indigo-50 rounded-xl px-3 py-2">
+      <div className="text-[11px] text-indigo-400 font-semibold">총 매출</div>
+      <div className="text-sm font-extrabold text-indigo-700 mt-0.5">
         ₩{top10Summary.total.toLocaleString()}
       </div>
     </div>
-
-    <div>
-      <div className="text-xs text-gray-500">평균 매출</div>
-      <div className="text-lg font-extrabold">
+    <div className="bg-indigo-50 rounded-xl px-3 py-2">
+      <div className="text-[11px] text-indigo-400 font-semibold">평균 매출</div>
+      <div className="text-sm font-extrabold text-indigo-700 mt-0.5">
         ₩{top10Summary.avg.toLocaleString()}
       </div>
     </div>
-
-    <div>
-      <div className="text-xs text-gray-500">최고 거래처</div>
-      <div className="text-sm font-bold truncate">
+    <div className="bg-indigo-50 rounded-xl px-3 py-2">
+      <div className="text-[11px] text-indigo-400 font-semibold">최고 거래처</div>
+      <div className="text-sm font-extrabold text-indigo-700 mt-0.5 truncate">
         {top10Summary.topName}
       </div>
     </div>
   </div>
 
-  {/* 🔹 Bar Chart */}
-  <ResponsiveContainer width="100%" height={260}>
-    <BarChart
-      data={topClients}
-      margin={{ top: 10, right: 20, left: 10, bottom: 40 }}
-    >
-      <XAxis
-        dataKey="name"
-        interval={0}
-        angle={-25}
-        textAnchor="end"
-        tick={{ fontSize: 11 }}
-      />
-      <YAxis tickFormatter={(v) => v.toLocaleString()} />
-      <Tooltip
-        formatter={(v) => `${Number(v).toLocaleString()}원`}
-      />
-      <Bar
-        dataKey="value"
-        fill="#6366f1"
-        radius={[6, 6, 0, 0]}
-        barSize={28}
-      />
-    </BarChart>
-  </ResponsiveContainer>
+  {/* 커스텀 가로 바 차트 */}
+  <div className="space-y-2.5">
+    {topClients.map((c, i) => {
+      const max = topClients[0]?.value || 1;
+      const pct = Math.round((c.value / max) * 100);
+      const colors = [
+        "bg-indigo-600", "bg-indigo-500", "bg-indigo-400",
+        "bg-violet-500", "bg-violet-400", "bg-purple-400",
+        "bg-blue-500", "bg-blue-400", "bg-sky-500", "bg-sky-400",
+      ];
+
+      return (
+        <div key={i} className="flex items-center gap-2 group">
+          {/* 순위 */}
+          <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0
+            ${i === 0 ? "bg-indigo-600" : i === 1 ? "bg-indigo-400" : i === 2 ? "bg-violet-400" : "bg-slate-300"}`}>
+            {i + 1}
+          </div>
+
+          {/* 거래처명 */}
+          <div className="w-[72px] text-[11px] font-semibold text-gray-700 truncate flex-shrink-0" title={c.name}>
+            {c.name}
+          </div>
+
+          {/* 바 */}
+          <div className="flex-1 bg-slate-100 rounded-full h-4 overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all duration-700 ${colors[i] || "bg-indigo-400"}`}
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+
+          {/* 금액 */}
+          <div className="w-[78px] text-right text-[11px] font-bold text-gray-700 flex-shrink-0">
+            {c.value >= 1000000
+              ? `${(c.value / 1000000).toFixed(1)}M`
+              : c.value.toLocaleString()}
+          </div>
+        </div>
+      );
+    })}
+  </div>
 </Card>
-
-
   </div> 
   {/* ================= 🔔 우측 하단 토스트 ================= */}
 {toast && (

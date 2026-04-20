@@ -93,9 +93,15 @@ sessionStorage.setItem("skipLoginPopup", "true");
       <div className="bg-white/95 rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.15)]
         p-10 w-full max-w-md border border-gray-100 backdrop-blur-md text-center">
 
+        {/* 로고 */}
+        <img
+          src="/src/assets/sflow-icon.png"
+          alt="S-Flow"
+          className="w-16 h-16 mx-auto mb-3 rounded-2xl"
+        />
         {/* 타이틀 */}
         <h1 className="text-2xl font-extrabold text-[#0D2B66] mb-3">
-          RUN25 배차프로그램
+          S-Flow Logistics
         </h1>
 
         <p className="text-gray-600 mb-6 text-sm">
