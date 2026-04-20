@@ -9,6 +9,17 @@ initializeApp();
 const db = getFirestore();
 const messaging = getMessaging();
 
+// 🔥 users 컬렉션에서 fcmToken 전부 수집
+async function getAllTokens() {
+  const snap = await db.collection("users").get();
+  const tokens = [];
+  snap.docs.forEach((d) => {
+    const token = d.data().fcmToken;
+    if (token) tokens.push(token);
+  });
+  return tokens;
+}
+
 /* ==============================
    🔔 신규 오더 알림
 ============================== */
@@ -16,37 +27,64 @@ export const notifyNewDispatch =
   functions.firestore
     .document("{col}/{dispatchId}")
     .onCreate(async (snap, context) => {
-
-      const { col, dispatchId } = context.params;
-
-      if (!["dispatch", "dispatch_test"].includes(col)) return;
+      const { col } = context.params;
+      if (!["dispatch", "orders"].includes(col)) return;
 
       const data = snap.data();
       if (!data) return;
 
-      const tokenSnap = await db.collection("fcmTokens").get();
-      const tokens = tokenSnap.docs
-        .map((d) => d.data().token || d.id)
-        .filter(Boolean);
-
+      const tokens = await getAllTokens();
       if (!tokens.length) {
         console.log("🚫 FCM 토큰 없음");
         return;
       }
 
-      await messaging.sendMulticast({
+      await messaging.sendEachForMulticast({
         tokens,
         notification: {
           title: "📦 신규 오더 등록",
-          body: `${data["상차지명"] || "-"} → ${data["하차지명"] || "-"}`,
+          body: `${data["거래처명"] || ""} ${data["상차지명"] || "-"} → ${data["하차지명"] || "-"}`,
         },
-        data: {
-          type: "NEW_DISPATCH",
-          dispatchId,
-        },
+        android: { priority: "high" },
+        apns: { payload: { aps: { sound: "default" } } },
       });
 
       console.log("✅ 신규 오더 알림 완료");
+    });
+
+/* ==============================
+   🚚 배차완료 알림
+============================== */
+export const notifyDispatchDone =
+  functions.firestore
+    .document("{col}/{dispatchId}")
+    .onUpdate(async (change, context) => {
+      const { col } = context.params;
+      if (!["dispatch", "orders"].includes(col)) return;
+
+      const before = change.before.data();
+      const after = change.after.data();
+      if (!before || !after) return;
+
+      // 차량번호가 새로 생긴 경우만
+      const prevCar = String(before["차량번호"] || "").trim();
+      const nextCar = String(after["차량번호"] || "").trim();
+      if (prevCar || !nextCar) return;
+
+      const tokens = await getAllTokens();
+      if (!tokens.length) return;
+
+      await messaging.sendEachForMulticast({
+        tokens,
+        notification: {
+          title: "🚚 배차완료",
+          body: `${after["거래처명"] || ""} ${after["상차지명"] || "-"} → ${after["하차지명"] || "-"}\n${after["기사명"] || ""} (${nextCar})`,
+        },
+        android: { priority: "high" },
+        apns: { payload: { aps: { sound: "default" } } },
+      });
+
+      console.log("✅ 배차완료 알림 완료");
     });
 
 /* ==============================
@@ -56,47 +94,12 @@ export const fuel = functions.https.onRequest(async (req, res) => {
   try {
     const area = req.query.area || "01";
     const key = "F251130200";
-
     const url = `https://www.opinet.co.kr/api/avgSidoPrice.do?out=json&code=${key}&area=${area}`;
-
     const response = await fetch(url);
     const data = await response.json();
-
     res.status(200).json(data);
   } catch (err) {
     console.error("🔥 Fuel API Error:", err);
     res.status(500).json({ error: "Fuel fetch failed" });
-  }
-});
-/* ==============================
-   🤖 Claude API Proxy
-============================== */
-export const claude = functions.https.onRequest(async (req, res) => {
-  // CORS 허용
-  res.set("Access-Control-Allow-Origin", "*");
-  res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.set("Access-Control-Allow-Headers", "Content-Type");
-
-  if (req.method === "OPTIONS") {
-    res.status(204).send("");
-    return;
-  }
-
-  try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": functions.config().anthropic.key,
-        "anthropic-version": "2023-06-01"
-      },
-      body: JSON.stringify(req.body)
-    });
-
-    const data = await response.json();
-    res.status(200).json(data);
-  } catch (err) {
-    console.error("🔥 Claude API Error:", err);
-    res.status(500).json({ error: "Claude API failed" });
   }
 });
