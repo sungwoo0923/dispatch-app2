@@ -1,22 +1,24 @@
 {
-  "name": "dispatch-app",
-  "short_name": "dispatch",
+  "name": "S-Flow Logistics",
+  "short_name": "S-Flow",
   "start_url": "/app",
   "scope": "/",
   "display": "standalone",
   "background_color": "#ffffff",
-  "theme_color": "#000000",
+  "theme_color": "#ffffff",
   "orientation": "portrait",
-  "icons": [
+"icons": [
     {
-      "src": "/icons/icon-192x192.png",
+      "src": "/icons/sflow-icon.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     },
     {
-      "src": "/icons/icon-512x512.png",
+      "src": "/icons/sflow-icon.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ]
 }

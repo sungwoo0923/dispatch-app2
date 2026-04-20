@@ -61,9 +61,15 @@ export default function App() {
   const [splashDone, setSplashDone] = useState(false);
 
   // 🔥 모바일 스플래시 최소 2.5초 유지
+// 교체 후
+  // 🔥 모바일만 스플래시 3초, PC는 즉시
   useEffect(() => {
-    const timer = setTimeout(() => setSplashDone(true), 3000);
-    return () => clearTimeout(timer);
+    if (isSmartPhone()) {
+      const timer = setTimeout(() => setSplashDone(true), 3000);
+      return () => clearTimeout(timer);
+    } else {
+      setSplashDone(true); // PC는 즉시 통과
+    }
   }, []);
 
   // 🔒 업데이트 배너 1회만 표시하기 위한 락
@@ -145,7 +151,7 @@ if (loading || !splashDone) {
         `}</style>
 
         <img
-          src="/src/assets/sflow-logo.png"
+          src="/icons/sflow-logo.png"
           alt="S-Flow Logistics"
           className="splash-logo"
           style={{ width: "60vw", maxWidth: "320px" }}
