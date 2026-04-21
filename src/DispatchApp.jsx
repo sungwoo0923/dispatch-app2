@@ -159,9 +159,9 @@ function makeDispatchHistory({ userEmail, field, before, after }) {
     before,
     after,
   };
-}``
+}
 /* -------------------------------------------------
-   🔕 수정이력 제외 필드 (전역 공통)  ⭐⭐⭐ 여기!!!
+   🔕 수정이력 제외 필드
 --------------------------------------------------*/
 const IGNORE_HISTORY_FIELDS = new Set([
   "history",
@@ -781,6 +781,16 @@ useEffect(() => {
   const [subMenu, setSubMenu] = useState("고정거래처관리");
   // ⭐ 내 정보 패널 ON/OFF
   const [showMyInfo, setShowMyInfo] = useState(false);
+  const [darkMode, setDarkMode] = useState(
+    localStorage.getItem("theme") === "dark"
+  );
+  const toggleTheme = () => {
+    setDarkMode(prev => {
+      const next = !prev;
+      localStorage.setItem("theme", next ? "dark" : "light");
+      return next;
+    });
+  };
   // ❌ 삭제 (중복 선언 오류 원인)
   // const [dispatchData, setDispatchData] = useState([]);  
   // ---------------- Firestore 실시간 훅 ----------------
@@ -1015,96 +1025,96 @@ useEffect(() => {
   // ---------------- 메뉴 UI ----------------
   return (
     <ToastProvider>
-      <header className="sticky top-0 z-50 bg-white shadow-md rounded-b-xl px-6 py-4 mb-6 flex items-center justify-between">
+      {/* ===== 통합 헤더 네비 ===== */}
+      <header className="sticky top-0 z-50 bg-[#1B2B4B] shadow-lg mb-6">
 
-        {/* 좌측 서비스명 */}
-        <div className="flex flex-col leading-tight">
-          <div className="flex items-center gap-3">
-            <span className="text-xl font-extrabold text-gray-800 tracking-tight">
-              S-Flow Logistics
+        {/* 상단바: 로고 + 메뉴 + 유저 */}
+        <div className="flex items-center px-6 h-14">
+
+          {/* 좌측 로고 */}
+          <div className="flex items-center gap-2 min-w-[180px]">
+            <img src="/icons/sflow-icon.png" alt="S-Flow" className="w-7 h-7 rounded-lg" />
+            <span className="text-white font-extrabold text-base tracking-tight">
+              S-Flow
             </span>
-            <span className="text-xs font-mono bg-blue-100 text-blue-700 px-2 py-1 rounded">
-  v{__APP_VERSION__}
-</span>
+            <span
+              className="text-[10px] font-mono bg-white/10 text-white/60 px-1.5 py-0.5 rounded ml-1"
+            >
+              v{__APP_VERSION__}
+            </span>
           </div>
-          <span className="text-xs text-gray-500">물류 배차·정산 통합관리 시스템</span>
-        </div>
 
-        {/* 우측 사용자 영역 */}
-        <div className="flex items-center gap-4">
+          {/* 중앙 메뉴 */}
+           <nav className="flex-1 flex items-center justify-center gap-1 overflow-x-auto [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: "none" }}>
+            {[
+              "HOME",
+              "배차관리",
+              "실시간배차현황",
+              "배차현황",
+              "미배차현황",
+              "표준운임표",
+              "기사관리",
+              "거래처관리",
+              "고정거래처관리",
+              "매출관리",
+              "거래처정산",
+              "지급관리",
+              "관리자메뉴",
+            ].map((m) => {
+              const isBlocked = role === "user" && blockedMenus.includes(m);
+              const isActive = menu === m;
+              return (
+                <button
+                  key={m}
+                  disabled={isBlocked}
+                  onClick={() => handleMenuClick(m)}
+                  className={`relative px-3 py-1.5 rounded-md text-[15px] font-medium whitespace-nowrap transition-all
+                    ${isBlocked
+                      ? "text-white/20 cursor-not-allowed"
+                      : isActive
+                        ? "bg-white/15 text-white font-semibold"
+                        : "text-white/60 hover:text-white hover:bg-white/10"
+                    }`}
+                >
+                  {m}
+                  {!isBlocked && isActive && (
+                    <span className="absolute left-1/2 -translate-x-1/2 -bottom-[3px] w-4 h-[2px] bg-blue-400 rounded-full" />
+                  )}
+                </button>
+              );
+            })}
+          </nav>
 
-          {/* 내 정보 버튼 */}
-          <button
-            onClick={() => setShowMyInfo(true)}
-            className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md text-sm shadow-sm transition"
-          >
-            내 정보
-          </button>
-
-          {/* 이메일 */}
-          <span className="text-gray-700 text-sm bg-gray-100 px-3 py-1 rounded-full">
-            {user?.email}
-          </span>
-
-          {/* 로그아웃 */}
-          <button
-            onClick={logout}
-            className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-md text-sm shadow-sm transition"
-          >
-            로그아웃
-          </button>
+          {/* 우측 유저 영역 */}
+          <div className="flex items-center gap-3 min-w-[180px] justify-end">
+            <span className="text-white/50 text-xs hidden xl:block truncate max-w-[120px]">
+              {user?.email}
+            </span>
+            <button
+              onClick={() => setShowMyInfo(true)}
+              className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white text-sm flex items-center justify-center transition"
+              title="내 정보"
+            >
+              👤
+            </button>
+            <button
+              onClick={toggleTheme}
+              className="px-3 py-1.5 rounded-md bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition"
+            >
+              {darkMode ? "☀️ 라이트" : "🌙 다크"}
+            </button>
+            <button
+              onClick={logout}
+              className="px-3 py-1.5 rounded-md bg-red-500/80 hover:bg-red-500 text-white text-xs font-semibold transition"
+            >
+              로그아웃
+            </button>
+          </div>
 
         </div>
       </header>
-      <nav className="nav w-full bg-white shadow-sm border-b border-gray-200 px-4 py-2 mb-5">
-        <div className="flex gap-4 overflow-x-auto whitespace-nowrap">
-
-          {[
-            "HOME",
-            "배차관리",
-            "실시간배차현황",
-            "배차현황",
-            "미배차현황",
-            "표준운임표",
-            "기사관리",
-            "거래처관리",
-            "고정거래처관리",
-            "매출관리",
-            "거래처정산",
-            "지급관리",
-            "관리자메뉴",
-          ].map((m) => {
-            const isBlocked = role === "user" && blockedMenus.includes(m);
-            const isActive = menu === m;
-
-            return (
-              <button
-                key={m}
-                disabled={isBlocked}
-                onClick={() => handleMenuClick(m)}
-                className={`relative px-3 pb-2 pt-1 text-sm font-semibold transition-all 
-            ${isBlocked
-                    ? "text-gray-300 cursor-not-allowed"
-                    : isActive
-                      ? "text-blue-600 font-semibold"
-                      : "text-gray-800 hover:text-blue-600"
-                  }
-          `}
-              >
-                {m}
-
-                {/* 활성 메뉴 바(토스 느낌) */}
-                {!isBlocked && isActive && (
-                  <span className="absolute left-0 right-0 -bottom-[1px] h-[3px] bg-[#1B64FF] rounded-full"></span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-      </nav>
       {/* ---------------- 화면 렌더링 ---------------- */}
-
-      <main className="bg-white rounded shadow p-4">
+      <main className={`rounded shadow p-4 ${darkMode ? "bg-gray-900 text-gray-100" : "bg-white text-gray-900"}`}>
         {menu === "HOME" && (
           <HomeDashboard
             role={role}
@@ -1140,7 +1150,7 @@ useEffect(() => {
           <RealtimeStatus
             role={role}
             menu={menu}
-            dispatchData={dispatchDataFiltered}   // ★ 변경!
+            dispatchData={dispatchDataFiltered}
             timeOptions={timeOptions}
             tonOptions={tonOptions}
             drivers={drivers}
@@ -1150,6 +1160,7 @@ useEffect(() => {
             patchDispatch={patchDispatch}
             removeDispatch={removeDispatch}
             upsertDriver={upsertDriver}
+            darkMode={darkMode}
             key={menu}
           />
         )}
@@ -3389,9 +3400,12 @@ function swapPickupDrop() {
       m.set(key, []);
     }
 
-    m.get(key).push({
+       m.get(key).push({
       이름: d.이름 || "",
       전화번호: d.전화번호 || "",
+      등급: d.등급 || d.grade || "",
+      메모: d.메모 || "",
+      차량번호: d.차량번호 || "",
     });
   });
 
@@ -3448,10 +3462,11 @@ const [driverActive, setDriverActive] = React.useState(0);
   }
 
   // 🔹 기존 기사 1명 → 자동세팅
-  if (list && list.length === 1) {
-    // 🚫 블랙 체크
-    if (list[0].등급 === "블랙") {
-      window.dispatchEvent(new CustomEvent("blackDriverDetected", { detail: list[0] }));
+   if (list && list.length === 1) {
+    // 🚫 블랙 체크 (필드명 다양하게 대응)
+     const grade = list[0]?.등급 || list[0]?.grade || list[0]?.상태 || "";
+    if (grade === "블랙") {
+      setBlackAlert(list[0]);
     }
     setForm((p) => ({
       ...p,
@@ -6093,8 +6108,9 @@ setActiveStopIdx(null);
             }`}
             onMouseEnter={() => setDriverActive(i)}
             onMouseDown={() => {
-              if (d.등급 === "블랙") {
-                window.dispatchEvent(new CustomEvent("blackDriverDetected", { detail: d }));
+              const grade = d?.등급 || d?.grade || d?.상태 || "";
+              if (grade === "블랙") {
+                setBlackAlert(d);
               }
               setForm((p) => ({
                 ...p,
@@ -6900,7 +6916,12 @@ const today = now.toISOString().slice(0, 10);
 
 </div>
 {blackAlert && (
-  <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999999]">
+  <div
+    className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999999]"
+    tabIndex={-1}
+    ref={(el) => el && setTimeout(() => el.focus(), 0)}
+    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); setBlackAlert(null); } }}
+  >
     <div className="bg-white rounded-2xl shadow-2xl w-[400px] overflow-hidden">
       <div className="bg-gray-900 px-6 py-4 flex items-center gap-3">
         <span className="text-2xl">🚫</span>
@@ -8080,13 +8101,14 @@ function RealtimeStatus({
   placeRows,
   timeOptions,
   tonOptions,
-  addDispatch,     // ⭐⭐⭐⭐⭐ 요거 반드시 필요
+  addDispatch,
   patchDispatch,
   removeDispatch,
   upsertDriver,
   upsertClient,
   role = "admin",
   menu,
+  darkMode = false,
 }) {
   const alertAudio = React.useRef(null);
 // 🚫 블랙 기사 알림 팝업 상태
@@ -9971,17 +9993,23 @@ if (sortKey) {
 
     const stKey = `${rowId}_${key}`;
     const expanded = !!expandedAddr[stKey];
-    const display =
-      text.length <= 12 || expanded ? text : text.slice(0, 12) + "...";
+    const LIMIT = 14;
+    const isLong = text.length > LIMIT;
+    const display = isLong && !expanded ? text.slice(0, LIMIT) + "…" : text;
 
     return (
-      <div className="flex items-center gap-1">
-        <span className="whitespace-pre-line break-words">{display}</span>
-
-        {text.length > 12 && (
+      <div className="flex items-center justify-center gap-1 min-w-0">
+        <span
+          className="whitespace-nowrap overflow-hidden text-ellipsis"
+          style={{ maxWidth: 160 }}
+          title={text}
+        >
+          {display}
+        </span>
+        {isLong && (
           <button
             type="button"
-            className="text-xs text-blue-600 underline"
+            className="text-[11px] text-blue-500 underline shrink-0"
             onClick={() =>
               setExpandedAddr((prev) => ({
                 ...prev,
@@ -9995,8 +10023,6 @@ if (sortKey) {
       </div>
     );
   };
-
-
   // ------------------------
   // 📌 공유 메시지 (기존 함수)
   // ------------------------
@@ -10031,12 +10057,19 @@ ${url}
   // ------------------------
   // 테이블 스타일
   // ------------------------
-  const head =
-  "border px-2 py-2 bg-slate-200 text-slate-800 text-center font-semibold whitespace-nowrap";
+  const isDark = darkMode;
 
-  const cell =
-    "border px-2 py-[2px] text-center align-middle whitespace-nowrap overflow-hidden text-ellipsis leading-tight";
-  const addrCell = `${cell} min-w-[80px] max-w-[160px]`;
+const head = isDark
+    ? "px-3 py-3 text-center text-[14px] font-bold text-white/90 whitespace-nowrap bg-transparent border-b border-white/10"
+    : "px-3 py-3 text-center text-[14px] font-bold text-white whitespace-nowrap bg-transparent border-b border-white/10";
+
+ const cell = isDark
+    ? "px-3 py-3 text-[14px] text-gray-200 align-middle text-center whitespace-nowrap border-b border-gray-700"
+    : "px-3 py-3 text-[14px] text-gray-800 align-middle text-center whitespace-nowrap border-b border-gray-200";
+
+  const addrCell = isDark
+    ? "px-3 py-3 text-[14px] text-gray-200 align-middle text-center whitespace-nowrap overflow-hidden text-ellipsis border-b border-gray-700 max-w-[180px]"
+    : "px-3 py-3 text-[14px] text-gray-800 align-middle text-center whitespace-nowrap overflow-hidden text-ellipsis border-b border-gray-200 max-w-[180px]";
 
   // ------------------------
   // 📌 화면 렌더링
@@ -10045,7 +10078,12 @@ ${url}
 <div className="px-3 pt-1 w-full" style={{overflowX: "auto", overflowY: "unset"}}>
 {/* 🚫 블랙 기사 알림 팝업 */}
 {blackAlert && (
-  <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999999]">
+  <div
+    className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999999]"
+    tabIndex={-1}
+    ref={(el) => el && setTimeout(() => el.focus(), 0)}
+    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); setBlackAlert(null); } }}
+  >
     <div className="bg-white rounded-2xl shadow-2xl w-[400px] overflow-hidden">
       <div className="bg-gray-900 px-6 py-4 flex items-center gap-3">
         <span className="text-2xl">🚫</span>
@@ -10504,9 +10542,10 @@ setEditTarget({
       </div>
 
       {/* 테이블 */}
-      <div style={{overflowX: "auto", overflowY: "unset", width: "100%"}}>
-  <table className="w-auto min-w-max text-sm border table-auto">
-          <thead>
+      <div style={{overflowX: "auto", overflowY: "unset", width: "100%"}}
+        className={`rounded-xl overflow-hidden shadow border ${isDark ? "border-gray-700" : "border-gray-200"}`}>
+  <table className="w-auto min-w-max table-auto">
+          <thead className={isDark ? "bg-[#0f172a]" : "bg-[#1B2B4B]"}>
             <tr>
               {[
                 "선택",
@@ -10584,22 +10623,21 @@ const rawCargo = String(latest?.화물내용 || "");
 }}
 
     className={`
-cursor-pointer hover:bg-slate-100
-
+cursor-pointer transition-colors duration-100
 ${
   r.긴급 === true &&
   r.배차상태 === "배차중" &&
   (!r.차량번호 || String(r.차량번호).trim() === "")
-    ? "bg-red-50 border-l-4 border-red-500"
+    ? isDark
+      ? "bg-red-900/30 border-l-2 border-l-red-500 hover:bg-red-900/50"
+      : "bg-red-50 border-l-2 border-l-red-400 hover:bg-red-100"
+    : selected.includes(r._id)
+    ? isDark ? "bg-blue-900/40" : "bg-blue-50"
     : idx % 2
-    ? "bg-gray-50"
-    : "bg-white"
+    ? isDark ? "bg-gray-800 hover:bg-gray-700" : "bg-gray-50 hover:bg-blue-50/60"
+    : isDark ? "bg-gray-900 hover:bg-gray-700" : "bg-white hover:bg-blue-50/60"
 }
-
-${highlightIds.has(r._id) ? "animate-pulse bg-blue-200" : ""}
-
-${selected.includes(r._id) ? "!bg-blue-100 border-2 border-blue-500" : ""}
-
+${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
 ${savedHighlightIds.has(r._id) ? "row-highlight" : ""}
 `}
   >
@@ -11272,7 +11310,7 @@ checkWarningStatus(c.거래처명, "거래처");
         />
       </Field>
 
-      <Field label="상차 담당자명">
+      <Field label="상차지 담당자명">
         <input
           className="inputStyle"
           value={copyTarget?.상차지담당자 ?? ""}
@@ -11280,7 +11318,7 @@ checkWarningStatus(c.거래처명, "거래처");
         />
       </Field>
 
-      <Field label="상차 연락처">
+      <Field label="상차지 연락처">
         <input
           className="inputStyle"
           value={copyTarget?.상차지담당자번호 ?? ""}
@@ -11411,7 +11449,7 @@ checkWarningStatus(c.거래처명, "거래처");
         />
       </Field>
 
-      <Field label="하차 담당자명">
+      <Field label="하차지 담당자명">
         <input
           className="inputStyle"
           value={copyTarget?.하차지담당자 ?? ""}
@@ -11419,7 +11457,7 @@ checkWarningStatus(c.거래처명, "거래처");
         />
       </Field>
 
-      <Field label="하차 연락처">
+      <Field label="상차지 연락처">
         <input
           className="inputStyle"
           value={copyTarget?.하차지담당자번호 ?? ""}
@@ -11488,7 +11526,6 @@ setCopyTarget(prev => ({
   배차상태: "배차완료"
 }));
         }}
-
         onChange={(e) => {
           const v = e.target.value;
           const plate = normalizePlate(v);
@@ -11496,6 +11533,14 @@ setCopyTarget(prev => ({
           const match = (drivers || []).find(
             d => normalizePlate(d.차량번호) === plate
           );
+
+          // 🔥 블랙 기사 팝업
+          if (match) {
+            const grade = match?.등급 || match?.grade || "";
+            if (grade === "블랙") {
+              setBlackAlert(match);
+            }
+          }
 
           setCopyTarget(prev => ({
             ...prev,
@@ -12675,18 +12720,26 @@ setRows(prev => sortDispatchRows([...prev, newRow]));
       {editPopupOpen && editTarget && (
 
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white p-5 rounded shadow-xl w-[480px] max-h-[90vh] overflow-y-auto">
+          <div className="bg-slate-100 rounded-2xl shadow-2xl w-[740px] max-h-[92vh] overflow-y-auto flex flex-col">
 
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-bold">선택한 오더 수정</h3>
-
-              <button
-                onClick={handleFareSearch}
-                className="px-3 py-1 rounded bg-amber-500 text-white"
-              >
-                운임조회
-              </button>
+            {/* ===== 헤더 ===== */}
+            <div className="flex justify-between items-center px-6 py-4 bg-[#1B2B4B] rounded-t-2xl shrink-0">
+              <h3 className="text-white text-lg font-bold">선택한 오더 수정</h3>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleFareSearch}
+                  className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold"
+                >
+                  운임조회
+                </button>
+                <button
+                  className="text-white/70 hover:text-white text-xl"
+                  onClick={() => setEditPopupOpen(false)}
+                >✕</button>
+              </div>
             </div>
+
+            <div className="p-6 space-y-4 overflow-y-auto">
             {/* ===================== 📦 운임조회 중앙 모달 ===================== */}
 {farePanelOpen && fareResult && (
   
@@ -12818,99 +12871,37 @@ setRows(prev => sortDispatchRows([...prev, newRow]));
 
             {/* ================= 선택수정: 상태 버튼 그룹 ================= */}
             <div className="flex items-center gap-2 mb-4 flex-wrap">
-
-              {/* 🚨 긴급 */}
               <button
                 type="button"
-                onClick={() =>
-                  setEditTarget((p) => ({
-                    ...p,
-                    긴급: !p.긴급,
-                    운임보정: !p.긴급
-                      ? { type: "긴급", rate: 0.2, memo: "긴급 오더" }
-                      : null,
-                  }))
-                }
-                className={`
-      px-3 py-1.5 rounded-full text-xs font-semibold border
-      ${editTarget.긴급
-                    ? "bg-red-600 text-white border-red-600 animate-pulse"
-                    : "bg-red-50 text-red-600 border-red-300 hover:bg-red-100"}
-    `}
+                onClick={() => setEditTarget((p) => ({ ...p, 긴급: !p.긴급, 운임보정: !p.긴급 ? { type: "긴급", rate: 0.2, memo: "긴급 오더" } : null }))}
+                className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all ${editTarget.긴급 ? "bg-red-600 text-white border-red-600" : "bg-white text-red-600 border-red-300 hover:bg-red-50"}`}
               >
-                🚨 긴급
+                긴급
               </button>
-
               <button
                 type="button"
-                onClick={() =>
-                  setEditTarget((p) => {
-                    const next = p.운행유형 === "왕복" ? "편도" : "왕복";
-
-                    // 🔥 추가된 딱 한 군데 (저장되게 만드는 핵심)
-                    setEdited((prev) => ({
-                      ...prev,
-                      [p._id]: {
-                        ...(prev[p._id] || {}),
-                        운행유형: next,
-                      },
-                    }));
-
-                    return {
-                      ...p,
-                      운행유형: next,
-                    };
-                  })
-                }
-                className={`
-    px-3 py-1.5 rounded-full text-xs font-semibold border
-    ${editTarget.운행유형 === "왕복"
-                    ? "bg-purple-600 text-white border-purple-600"
-                    : "bg-purple-50 text-purple-700 border-purple-300 hover:bg-purple-100"}
-  `}
+                onClick={() => setEditTarget((p) => {
+                  const next = p.운행유형 === "왕복" ? "편도" : "왕복";
+                  setEdited((prev) => ({ ...prev, [p._id]: { ...(prev[p._id] || {}), 운행유형: next } }));
+                  return { ...p, 운행유형: next };
+                })}
+                className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all ${editTarget.운행유형 === "왕복" ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-indigo-600 border-indigo-300 hover:bg-indigo-50"}`}
               >
-                🔁 왕복
+                왕복
               </button>
-
-
-              {/* 📦 혼적 */}
               <button
                 type="button"
-                onClick={() =>
-                  setEditTarget((p) => ({
-                    ...p,
-                    혼적: !p.혼적,
-                    독차: p.혼적 ? p.독차 : false, // ⭐ 혼적 켜면 독차 해제
-                  }))
-                }
-                className={`
-      px-3 py-1.5 rounded-full text-xs font-semibold border
-      ${editTarget.혼적
-                    ? "bg-emerald-600 text-white border-emerald-600"
-                    : "bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100"}
-    `}
+                onClick={() => setEditTarget((p) => ({ ...p, 혼적: !p.혼적, 독차: p.혼적 ? p.독차 : false }))}
+                className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all ${editTarget.혼적 ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-emerald-600 border-emerald-300 hover:bg-emerald-50"}`}
               >
-                📦 혼적
+                혼적
               </button>
-              {/* 📤 업체 전달 */}
               <button
                 type="button"
-                onClick={() => {
-                  setDeliveryConfirm({
-                    rowId: editTarget._id,
-                    before: editTarget.업체전달상태 || "미전달",
-                    after:
-                      editTarget.업체전달상태 === "전달완료"
-                        ? "미전달"
-                        : "전달완료",
-                  });
-                }}
-                className="
-    px-3 py-1.5 rounded-full text-xs font-semibold border
-    bg-green-50 text-green-700 border-green-300 hover:bg-green-100
-  "
+                onClick={() => setDeliveryConfirm({ rowId: editTarget._id, before: editTarget.업체전달상태 || "미전달", after: editTarget.업체전달상태 === "전달완료" ? "미전달" : "전달완료" })}
+                className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all ${editTarget.업체전달상태 === "전달완료" ? "bg-green-600 text-white border-green-600" : "bg-white text-green-600 border-green-300 hover:bg-green-50"}`}
               >
-                📤 업체 전달
+                업체전달
               </button>
             </div>
 
@@ -13152,11 +13143,14 @@ setRows(prev => sortDispatchRows([...prev, newRow]));
                 value={editTarget.상차지명 || ""}
                 onChange={(e) => {
                   const v = e.target.value;
-
-                  setEditTarget((p) => ({ ...p, 상차지명: v }));
+                  setEditTarget((p) => ({
+                    ...p,
+                    상차지명: v,
+                    ...(v.trim() === "" && { 상차지주소: "", 상차지담당자: "", 상차지담당자번호: "" })
+                  }));
                   setEditPlaceType("pickup");
                   setEditPlaceOptions(filterEditPlaces(v));
-                  setShowEditPlaceDropdown(true);
+                  setShowEditPlaceDropdown(v.trim() !== "");
                   setEditActiveIndex(0);
                 }}
                 onKeyDown={(e) => {
@@ -13182,9 +13176,10 @@ setRows(prev => sortDispatchRows([...prev, newRow]));
                     setEditTarget((prev) => ({
                       ...prev,
                       상차지명: p.업체명,
-                     상차지주소: p.주소 || "",
+                      상차지주소: p.주소 || "",
+                      상차지담당자: p.담당자 || "",
+                      상차지담당자번호: p.담당자번호 || "",
                     }));
-
                     setShowEditPlaceDropdown(false);
                     checkWarningStatus(p.업체명, "상차지");
                   }
@@ -13206,6 +13201,8 @@ setRows(prev => sortDispatchRows([...prev, newRow]));
                           ...prev,
                           상차지명: p.업체명,
                           상차지주소: p.주소 || "",
+                          상차지담당자: p.담당자 || "",
+                          상차지담당자번호: p.담당자번호 || "",
                         }));
                         setShowEditPlaceDropdown(false);
                         checkWarningStatus(p.업체명, "상차지");
@@ -13229,6 +13226,27 @@ setRows(prev => sortDispatchRows([...prev, newRow]));
                 }
               />
             </div>
+            <div className="grid grid-cols-3 gap-3 mb-3">
+              <div>
+                <label className="text-sm font-medium">상차지 담당자</label>
+                <input className="border p-2 rounded w-full" value={editTarget.상차지담당자 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 상차지담당자: e.target.value }))} />
+              </div>
+              <div>
+                <label className="text-sm font-medium">상차지 연락처</label>
+                <input className="border p-2 rounded w-full" value={editTarget.상차지담당자번호 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 상차지담당자번호: e.target.value }))} />
+              </div>
+              <div>
+                <label className="text-sm font-medium">상차방법</label>
+                <select className="border p-2 rounded w-full" value={editTarget.상차방법 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 상차방법: e.target.value }))}>
+                  <option value="">선택</option>
+                  <option value="지게차">지게차</option>
+                  <option value="수작업">수작업</option>
+                  <option value="직접수작업">직접수작업</option>
+                  <option value="수도움">수도움</option>
+                  <option value="크레인">크레인</option>
+                </select>
+              </div>
+            </div>
             {/* ===================== 하차지 ===================== */}
             <div className="mb-3 relative">
               <label>하차지명</label>
@@ -13237,11 +13255,14 @@ setRows(prev => sortDispatchRows([...prev, newRow]));
                 value={editTarget.하차지명 || ""}
                 onChange={(e) => {
                   const v = e.target.value;
-
-                  setEditTarget((p) => ({ ...p, 하차지명: v }));
+                  setEditTarget((p) => ({
+                    ...p,
+                    하차지명: v,
+                    ...(v.trim() === "" && { 하차지주소: "", 하차지담당자: "", 하차지담당자번호: "" })
+                  }));
                   setEditPlaceType("drop");
                   setEditPlaceOptions(filterEditPlaces(v));
-                  setShowEditPlaceDropdown(true);
+                  setShowEditPlaceDropdown(v.trim() !== "");
                   setEditActiveIndex(0);
                 }}
                 onKeyDown={(e) => {
@@ -13268,8 +13289,9 @@ setRows(prev => sortDispatchRows([...prev, newRow]));
                       ...prev,
                       하차지명: p.업체명,
                       하차지주소: p.주소 || "",
+                      하차지담당자: p.담당자 || "",
+                      하차지담당자번호: p.담당자번호 || "",
                     }));
-
                     setShowEditPlaceDropdown(false);
                     checkWarningStatus(p.업체명, "하차지");
                   }
@@ -13291,6 +13313,8 @@ setRows(prev => sortDispatchRows([...prev, newRow]));
                           ...prev,
                           하차지명: p.업체명,
                           하차지주소: p.주소 || "",
+                          하차지담당자: p.담당자 || "",
+                          하차지담당자번호: p.담당자번호 || "",
                         }));
                         setShowEditPlaceDropdown(false);
                         checkWarningStatus(p.업체명, "하차지");
@@ -13313,6 +13337,27 @@ setRows(prev => sortDispatchRows([...prev, newRow]));
                   setEditTarget((p) => ({ ...p, 하차지주소: e.target.value }))
                 }
               />
+            </div>
+            <div className="grid grid-cols-3 gap-3 mb-3">
+              <div>
+                <label className="text-sm font-medium">하차지 담당자</label>
+                <input className="border p-2 rounded w-full" value={editTarget.하차지담당자 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 하차지담당자: e.target.value }))} />
+              </div>
+              <div>
+                <label className="text-sm font-medium">상차지 연락처</label>
+                <input className="border p-2 rounded w-full" value={editTarget.하차지담당자번호 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 하차지담당자번호: e.target.value }))} />
+              </div>
+              <div>
+                <label className="text-sm font-medium">하차방법</label>
+                <select className="border p-2 rounded w-full" value={editTarget.하차방법 || ""} onChange={(e) => setEditTarget((p) => ({ ...p, 하차방법: e.target.value }))}>
+                  <option value="">선택</option>
+                  <option value="지게차">지게차</option>
+                  <option value="수작업">수작업</option>
+                  <option value="직접수작업">직접수작업</option>
+                  <option value="수도움">수도움</option>
+                  <option value="크레인">크레인</option>
+                </select>
+              </div>
             </div>
             {/* ------------------------------------------------ */}
             {/* 🔵 화물내용 */}
@@ -13519,6 +13564,10 @@ setRows(prev => sortDispatchRows([...prev, newRow]));
   // 1명 → 바로 적용
   if (matches.length === 1) {
     const d = matches[0];
+    const grade = d?.등급 || d?.grade || "";
+    if (grade === "블랙") {
+      setBlackAlert(d);
+    }
     setEditTarget((p) => ({
       ...p,
       차량번호: raw,
@@ -13721,45 +13770,16 @@ setEditTarget((p) => ({
 
                 {/* 🔴 메모 중요도 버튼 */}
                 <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setEditTarget((p) => ({ ...p, 메모중요도: "NORMAL" }))
-                    }
-                    className={`px-2 py-0.5 rounded-full text-[11px] font-semibold border
-          ${editTarget.메모중요도 === "NORMAL"
-                        ? "bg-gray-700 text-white border-gray-700"
-                        : "bg-gray-100 text-gray-600 border-gray-300"}
-        `}
-                  >
+                  <button type="button" onClick={() => setEditTarget((p) => ({ ...p, 메모중요도: "NORMAL" }))}
+                    className={`px-3 py-1 rounded-lg text-xs font-semibold border transition-all ${editTarget.메모중요도 === "NORMAL" ? "bg-gray-700 text-white border-gray-700" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
                     일반
                   </button>
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setEditTarget((p) => ({ ...p, 메모중요도: "HIGH" }))
-                    }
-                    className={`px-2 py-0.5 rounded-full text-[11px] font-semibold border
-          ${editTarget.메모중요도 === "HIGH"
-                        ? "bg-orange-500 text-white border-orange-500"
-                        : "bg-orange-100 text-orange-700 border-orange-300"}
-        `}
-                  >
+                  <button type="button" onClick={() => setEditTarget((p) => ({ ...p, 메모중요도: "HIGH" }))}
+                    className={`px-3 py-1 rounded-lg text-xs font-semibold border transition-all ${editTarget.메모중요도 === "HIGH" ? "bg-orange-500 text-white border-orange-500" : "bg-white text-orange-600 border-orange-300 hover:bg-orange-50"}`}>
                     중요
                   </button>
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setEditTarget((p) => ({ ...p, 메모중요도: "CRITICAL" }))
-                    }
-                    className={`px-2 py-0.5 rounded-full text-[11px] font-semibold border
-          ${editTarget.메모중요도 === "CRITICAL"
-                        ? "bg-red-600 text-white border-red-600 animate-pulse"
-                        : "bg-red-100 text-red-600 border-red-300"}
-        `}
-                  >
+                  <button type="button" onClick={() => setEditTarget((p) => ({ ...p, 메모중요도: "CRITICAL" }))}
+                    className={`px-3 py-1 rounded-lg text-xs font-semibold border transition-all ${editTarget.메모중요도 === "CRITICAL" ? "bg-red-600 text-white border-red-600" : "bg-white text-red-600 border-red-300 hover:bg-red-50"}`}>
                     긴급
                   </button>
                 </div>
@@ -13818,16 +13838,16 @@ setEditTarget((p) => ({
             {/* ------------------------------------------------ */}
             {/* 🔵 저장/취소 */}
             {/* ------------------------------------------------ */}
-            <div className="flex justify-end gap-3 mt-4">
+            <div className="flex justify-end gap-3 mt-4 pt-4 border-t">
               <button
-                className="px-3 py-1 rounded bg-gray-300"
+                className="px-5 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold"
                 onClick={() => setEditPopupOpen(false)}
               >
                 취소
               </button>
 
               <button
-                className="px-3 py-1 rounded bg-blue-600 text-white"
+                className="px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold"
                 onClick={async () => {
                   // 1) Firestore에 저장
                   const ALLOWED_FIELDS = [
@@ -13847,6 +13867,12 @@ setEditTarget((p) => ({
                     "메모",
                     "메모중요도",
                     "전달사항",
+                    "상차지담당자",
+                    "상차지담당자번호",
+                    "상차방법",
+                    "하차지담당자",
+                    "하차지담당자번호",
+                    "하차방법",
                     "운행유형",
                     "혼적", "독차",
                     "긴급", "운임보정",
@@ -13928,7 +13954,7 @@ await patchDispatch(editTarget._id, payload);
               </button>
             </div>
 
-
+            </div>{/* p-6 space-y-4 끝 */}
           </div>
         </div>
       )}
@@ -15817,9 +15843,9 @@ else if (palletDiff !== null) priority = 1;
     // 4️⃣ 기사 1명 → 기사 확인 팝업
     // =====================================================
     if (matches.length === 1) {
-      // 🚫 블랙 체크
-      if (matches[0].등급 === "블랙") {
-        window.dispatchEvent(new CustomEvent("blackDriverDetected", { detail: matches[0] }));
+      const grade = matches[0]?.등급 || matches[0]?.grade || "";
+      if (grade === "블랙") {
+        setBlackAlert(matches[0]);
       }
       setDriverConfirmInfo({
         type: "select",
@@ -16354,7 +16380,12 @@ const save = {
   return (
     <div className="p-3">
 {blackAlert && (
-  <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999999]">
+  <div
+    className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999999]"
+    tabIndex={-1}
+    ref={(el) => el && setTimeout(() => el.focus(), 0)}
+    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); setBlackAlert(null); } }}
+  >
     <div className="bg-white rounded-2xl shadow-2xl w-[400px] overflow-hidden">
       <div className="bg-gray-900 px-6 py-4 flex items-center gap-3">
         <span className="text-2xl">🚫</span>
@@ -16704,9 +16735,9 @@ const save = {
 
 
       {/* ---------------- 테이블 ---------------- */}
-      <div className="overflow-x-auto w-full">
-  <table className="w-full min-w-max text-sm border table-auto">
-          <thead className="bg-slate-100 text-slate-800">
+      <div className="overflow-x-auto w-full rounded-xl overflow-hidden shadow border border-gray-200">
+  <table className="w-full min-w-max table-auto">
+          <thead className="bg-[#1B2B4B]">
             <tr>
               {[
                 "선택", "순번", "등록일", "상차일", "상차시간", "하차일", "하차시간",
@@ -16715,7 +16746,7 @@ const save = {
                 "배차상태", "청구운임", "기사운임", "수수료", "지급방식", "배차방식", "메모", "전달상태",
 
               ].map((h) => (
-                <th key={h} className="border px-2 py-2 text-center whitespace-nowrap">
+                <th key={h} className="px-3 py-3 text-center text-[14px] font-bold text-white whitespace-nowrap border-b border-white/10 border-r border-r-white/10 last:border-r-0">
                   {h === "선택" ? (
                     <input
                       type="checkbox"
@@ -16743,10 +16774,10 @@ const save = {
 
   const baseRowColor =
     r.긴급 === true && row.배차상태 === "배차중"
-      ? "bg-red-50 border-l-4 border-red-400"
+      ? "bg-red-50 border-l-2 border-l-red-400"
       : i % 2 === 0
       ? "bg-white"
-      : "bg-gray-50";
+      : "bg-gray-50/60";
 
   return (
     <tr
@@ -16774,17 +16805,15 @@ const save = {
   setCopyPanelOpen(true);
 }}
       className={`
-  hover:bg-indigo-50
-  cursor-pointer
-  transition
-  duration-150
+  cursor-pointer transition-colors duration-100
   ${selected.has(id)
-    ? "bg-blue-100 border-2 border-blue-500"
+    ? "bg-blue-50"
     : baseRowColor}
+  hover:bg-blue-50/60
   ${savedHighlightIds.has(id) ? "row-highlight" : ""}
 `}
     >
-      <td className="border text-center">
+      <td className="px-3 py-3 text-center border-b border-gray-200 border-r border-r-gray-100 last:border-r-0">
         <input
           type="checkbox"
           checked={selected.has(id)}
@@ -16792,11 +16821,11 @@ const save = {
         />
       </td>
 
-      <td className="border text-center">
+      <td className="px-3 py-3 text-[14px] font-medium text-gray-800 text-center border-b border-gray-200 border-r border-r-gray-100 whitespace-nowrap">
         {(page * pageSize) + i + 1}
       </td>
 
-      <td className="border text-center whitespace-nowrap">
+      <td className="px-3 py-3 text-[14px] font-medium text-gray-800 text-center border-b border-gray-200 border-r border-r-gray-100 whitespace-nowrap">
         {row.등록일}
       </td>
 
@@ -16809,7 +16838,7 @@ const save = {
 ].map((key) => (
   <td
     key={`${id}-${key}`}
-    className="border text-center whitespace-nowrap"
+    className="px-3 py-3 text-[14px] font-medium text-gray-800 text-center border-b border-gray-200 border-r border-r-gray-100 last:border-r-0 whitespace-nowrap"
   >
 
     {/* ✅ 차량종류 즉시변경 드롭다운 */}
@@ -16895,7 +16924,7 @@ const list = (Array.isArray(raw) ? raw : []).filter(s => s?.업체명?.trim());
 ))}
 
                   {/* 혼적 여부(Y) */}
-                  <td className="border text-center">
+                  <td className="px-3 py-3 text-[14px] text-center border-b border-gray-200 border-r border-r-gray-100">
                     {row.혼적 ? "Y" : ""}
                   </td>
 
@@ -17111,76 +17140,35 @@ onBlur={(e) => {
       {/* ===================== 선택수정(팝업) ===================== */}
       {editPopupOpen && editTarget && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-slate-100 rounded-2xl shadow-2xl w-[740px] max-h-[92vh] overflow-y-auto flex flex-col">
 
+            {/* ===== 헤더 ===== */}
+            <div className="flex justify-between items-center px-6 py-4 bg-[#1B2B4B] rounded-t-2xl">
+              <h3 className="text-white text-lg font-bold">선택한 오더 수정</h3>
+              <button
+                className="text-white/70 hover:text-white text-xl"
+                onClick={() => setEditPopupOpen(false)}
+              >✕</button>
+            </div>
 
-          {/* ===================== 선택 수정 팝업 본체 ===================== */}
-          <div className="bg-white p-5 rounded shadow-xl w-[480px] max-h-[90vh] overflow-y-auto">
-            {/* ================= 선택한 오더 수정 타이틀 ================= */}
-            <h3 className="text-lg font-bold mb-3">
-              선택한 오더 수정
-            </h3>
-
+            <div className="p-6 space-y-4 overflow-y-auto">
             {/* ================= 상태 버튼 그룹 ================= */}
-            <div className="flex items-center gap-2 mb-4 flex-wrap">
-
-              {/* 🚨 긴급 */}
-              <button
-                type="button"
-                onClick={() =>
-                  setEditTarget((p) => ({
-                    ...p,
-                    긴급: !p.긴급,
-                  }))
-                }
-                className={`
-      px-3 py-1.5 rounded-full text-xs font-semibold border
-      ${editTarget.긴급
-                    ? "bg-red-600 text-white border-red-600"
-                    : "bg-red-50 text-red-600 border-red-300 hover:bg-red-100"}
-    `}
-              >
-                🚨 긴급
+              <div className="flex items-center gap-2 mb-4 flex-wrap">
+              <button type="button"
+                onClick={() => setEditTarget((p) => ({ ...p, 긴급: !p.긴급 }))}
+                className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all ${editTarget.긴급 ? "bg-red-600 text-white border-red-600" : "bg-white text-red-600 border-red-300 hover:bg-red-50"}`}>
+                긴급
               </button>
-
-              {/* 🔁 왕복 */}
-              <button
-                type="button"
-                onClick={() =>
-                  setEditTarget((p) => ({
-                    ...p,
-                    운행유형: p.운행유형 === "왕복" ? "편도" : "왕복",
-                  }))
-                }
-                className={`
-      px-3 py-1.5 rounded-full text-xs font-semibold border
-      ${editTarget.운행유형 === "왕복"
-                    ? "bg-purple-600 text-white border-purple-600"
-                    : "bg-purple-50 text-purple-700 border-purple-300 hover:bg-purple-100"}
-    `}
-              >
-                🔁 왕복
+              <button type="button"
+                onClick={() => setEditTarget((p) => ({ ...p, 운행유형: p.운행유형 === "왕복" ? "편도" : "왕복" }))}
+                className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all ${editTarget.운행유형 === "왕복" ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-indigo-600 border-indigo-300 hover:bg-indigo-50"}`}>
+                왕복
               </button>
-
-              {/* 📦 혼적 */}
-              <button
-                type="button"
-                onClick={() =>
-                  setEditTarget((p) => ({
-                    ...p,
-                    혼적: !p.혼적,
-                    독차: p.혼적 ? p.독차 : false, // 혼적 ON → 독차 OFF
-                  }))
-                }
-                className={`
-      px-3 py-1.5 rounded-full text-xs font-semibold border
-      ${editTarget.혼적
-                    ? "bg-emerald-600 text-white border-emerald-600"
-                    : "bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100"}
-    `}
-              >
-                📦 혼적
+              <button type="button"
+                onClick={() => setEditTarget((p) => ({ ...p, 혼적: !p.혼적, 독차: p.혼적 ? p.독차 : false }))}
+                className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all ${editTarget.혼적 ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-emerald-600 border-emerald-300 hover:bg-emerald-50"}`}>
+                혼적
               </button>
-
             </div>
             {/* ================= 업체 전달 상태 ================= */}
             <div className="mb-4">
@@ -17467,21 +17455,18 @@ onBlur={(e) => {
               <input
                 className="border p-2 rounded w-full"
                 value={editTarget.상차지명 || ""}
+
                 onChange={(e) => {
                   const v = e.target.value;
-                  setEditTarget((p) => ({ ...p, 상차지명: v }));
-
+                  setEditTarget((p) => ({
+                    ...p,
+                    상차지명: v,
+                    ...(v.trim() === "" && { 상차지주소: "", 상차지담당자: "", 상차지담당자번호: "" })
+                  }));
                   const ranked = rankPlaces(filterPlaces(v), v);
                   setPlaceOptions(ranked);
                   setPlaceActiveIndex(0);
-                  setActivePlaceField("상차");
-                }}
-                onFocus={(e) => {
-                  const v = e.target.value;
-                  const ranked = rankPlaces(filterPlaces(v), v);
-                  setPlaceOptions(ranked);
-                  setPlaceActiveIndex(0);
-                  setActivePlaceField("상차");
+                  setActivePlaceField(v.trim() ? "상차" : null);
                 }}
                 onKeyDown={(e) => {
                   if (!placeOptions.length) return;
@@ -17507,6 +17492,8 @@ onBlur={(e) => {
                       ...prev,
                       상차지명: p.업체명,
                       상차지주소: p.주소 || "",
+                      상차지담당자: p.담당자 || "",
+                      상차지담당자번호: p.담당자번호 || "",
                     }));
                     checkWarningStatus(p.업체명, "상차지");
                     setActivePlaceField(null);
@@ -17532,6 +17519,8 @@ onBlur={(e) => {
                           ...prev,
                           상차지명: p.업체명,
                           상차지주소: p.주소 || "",
+                          상차지담당자: p.담당자 || "",
+                          상차지담당자번호: p.담당자번호 || "",
                         }));
                         checkWarningStatus(p.업체명, "상차지");
                         setActivePlaceField(null);
@@ -17544,7 +17533,6 @@ onBlur={(e) => {
                 </div>
               )}
             </div>
-
             {/* ================= 상차지주소 ================= */}
             <div className="mb-3">
               <label>상차지주소</label>
@@ -17557,6 +17545,41 @@ onBlur={(e) => {
               />
             </div>
 
+            {/* ================= 상차지 담당자/연락처/방법 ================= */}
+            <div className="grid grid-cols-3 gap-3 mb-3">
+              <div>
+                <label className="text-sm font-medium">상차지 담당자</label>
+                <input
+                  className="border p-2 rounded w-full"
+                  value={editTarget.상차지담당자 || ""}
+                  onChange={(e) => setEditTarget((p) => ({ ...p, 상차지담당자: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">상차지 연락처</label>
+                <input
+                  className="border p-2 rounded w-full"
+                  value={editTarget.상차지담당자번호 || ""}
+                  onChange={(e) => setEditTarget((p) => ({ ...p, 상차지담당자번호: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">상차 방법</label>
+                <select
+                  className="border p-2 rounded w-full"
+                  value={editTarget.상차방법 || ""}
+                  onChange={(e) => setEditTarget((p) => ({ ...p, 상차방법: e.target.value }))}
+                >
+                  <option value="">선택</option>
+                  <option value="지게차">지게차</option>
+                  <option value="수작업">수작업</option>
+                  <option value="직접수작업">직접수작업</option>
+                  <option value="수도움">수도움</option>
+                  <option value="크레인">크레인</option>
+                </select>
+              </div>
+            </div>
+
             {/* ================= 하차지명 ================= */}
             <div className="mb-3 relative">
               <label>하차지명</label>
@@ -17565,19 +17588,15 @@ onBlur={(e) => {
                 value={editTarget.하차지명 || ""}
                 onChange={(e) => {
                   const v = e.target.value;
-                  setEditTarget((p) => ({ ...p, 하차지명: v }));
-
+                  setEditTarget((p) => ({
+                    ...p,
+                    하차지명: v,
+                    ...(v.trim() === "" && { 하차지주소: "", 하차지담당자: "", 하차지담당자번호: "" })
+                  }));
                   const ranked = rankPlaces(filterPlaces(v), v);
                   setPlaceOptions(ranked);
                   setPlaceActiveIndex(0);
-                  setActivePlaceField("하차");
-                }}
-                onFocus={(e) => {
-                  const v = e.target.value;
-                  const ranked = rankPlaces(filterPlaces(v), v);
-                  setPlaceOptions(ranked);
-                  setPlaceActiveIndex(0);
-                  setActivePlaceField("하차");
+                  setActivePlaceField(v.trim() ? "하차" : null);
                 }}
                 onKeyDown={(e) => {
                   if (!placeOptions.length) return;
@@ -17603,6 +17622,8 @@ onBlur={(e) => {
                       ...prev,
                       하차지명: p.업체명,
                       하차지주소: p.주소 || "",
+                      하차지담당자: p.담당자 || "",
+                      하차지담당자번호: p.담당자번호 || "",
                     }));
                     checkWarningStatus(p.업체명, "하차지");
                     setActivePlaceField(null);
@@ -17623,11 +17644,13 @@ onBlur={(e) => {
                         "px-3 py-1 cursor-pointer " +
                         (idx === placeActiveIndex ? "bg-blue-100" : "hover:bg-gray-100")
                       }
-                      onMouseDown={() => {
+                     onMouseDown={() => {
                         setEditTarget((prev) => ({
                           ...prev,
                           하차지명: p.업체명,
                           하차지주소: p.주소 || "",
+                          하차지담당자: p.담당자 || "",
+                          하차지담당자번호: p.담당자번호 || "",
                         }));
                         checkWarningStatus(p.업체명, "하차지");
                         setActivePlaceField(null);
@@ -17640,7 +17663,6 @@ onBlur={(e) => {
                 </div>
               )}
             </div>
-
             {/* ================= 하차지주소 ================= */}
             <div className="mb-3">
               <label>하차지주소</label>
@@ -17652,6 +17674,42 @@ onBlur={(e) => {
                 }
               />
             </div>
+
+            {/* ================= 하차지 담당자/연락처/방법 ================= */}
+            <div className="grid grid-cols-3 gap-3 mb-3">
+              <div>
+                <label className="text-sm font-medium">하차지 담당자</label>
+                <input
+                  className="border p-2 rounded w-full"
+                  value={editTarget.하차지담당자 || ""}
+                  onChange={(e) => setEditTarget((p) => ({ ...p, 하차지담당자: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">상차지 연락처</label>
+                <input
+                  className="border p-2 rounded w-full"
+                  value={editTarget.하차지담당자번호 || ""}
+                  onChange={(e) => setEditTarget((p) => ({ ...p, 하차지담당자번호: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">하차 방법</label>
+                <select
+                  className="border p-2 rounded w-full"
+                  value={editTarget.하차방법 || ""}
+                  onChange={(e) => setEditTarget((p) => ({ ...p, 하차방법: e.target.value }))}
+                >
+                  <option value="">선택</option>
+                  <option value="지게차">지게차</option>
+                  <option value="수작업">수작업</option>
+                  <option value="직접수작업">직접수작업</option>
+                  <option value="수도움">수도움</option>
+                  <option value="크레인">크레인</option>
+                </select>
+              </div>
+            </div>
+
             {/* 🔥 화물내용 (단독 한 줄) */}
 <Field label="화물내용">
   <div className="relative w-full">
@@ -17809,8 +17867,12 @@ onBlur={(e) => {
   );
 
   // ✅ 1명만 있으면 바로 자동 매칭
-  if (matches.length === 1) {
+ if (matches.length === 1) {
     const d = matches[0];
+    const grade = d?.등급 || d?.grade || "";
+    if (grade === "블랙") {
+      setBlackAlert(d);
+    }
     setMatchedDrivers([]);
     setEditTarget((p) => ({
       ...p,
@@ -17953,11 +18015,11 @@ setEditTarget((p) => ({
               </div>
             </div>
             {/* 🔍 운임조회 */}
-            <button
-              className="px-3 py-2 rounded bg-amber-600 text-white mb-4 w-full"
+           <button
+              className="px-4 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold border border-amber-500 mb-4 transition-all"
               onClick={handleFareSearch}
             >
-              📦 운임조회
+              운임조회
             </button>
 
             {/* ------------------------------------------------ */}
@@ -18011,78 +18073,21 @@ setEditTarget((p) => ({
 
                 <div className="flex items-center gap-1">
                   {/* 일반 */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditTarget((p) => ({ ...p, 메모중요도: "일반" }));
-
-                      setEdited((prev) => ({
-                        ...prev,
-                        [getId(editTarget)]: {
-                          ...(prev[getId(editTarget)] || {}),
-                          메모중요도: "일반",
-                        },
-                      }));
-                    }}
-                    className={`
-          px-2 py-0.5 rounded-full text-[11px] font-semibold border
-          ${editTarget.메모중요도 === "일반"
-                        ? "bg-gray-700 text-white border-gray-700"
-                        : "bg-gray-100 text-gray-600 border-gray-300"
-                      }
-        `}
-                  >
+                  <button type="button"
+                    onClick={() => { setEditTarget((p) => ({ ...p, 메모중요도: "일반" })); setEdited((prev) => ({ ...prev, [getId(editTarget)]: { ...(prev[getId(editTarget)] || {}), 메모중요도: "일반" } })); }}
+                    className={`px-3 py-1 rounded-lg text-xs font-semibold border transition-all ${editTarget.메모중요도 === "일반" ? "bg-gray-700 text-white border-gray-700" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
                     일반
                   </button>
 
                   {/* 중요 */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditTarget((p) => ({ ...p, 메모중요도: "HIGH" }));
-
-                      setEdited((prev) => ({
-                        ...prev,
-                        [getId(editTarget)]: {
-                          ...(prev[getId(editTarget)] || {}),
-                          메모중요도: "HIGH",
-                        },
-                      }));
-                    }}
-                    className={`
-    px-2 py-0.5 rounded-full text-[11px] font-semibold border
-    ${editTarget.메모중요도 === "HIGH"
-                        ? "bg-orange-500 text-white border-orange-500"
-                        : "bg-orange-100 text-orange-700 border-orange-300"
-                      }
-  `}
-                  >
+                  <button type="button"
+                    onClick={() => { setEditTarget((p) => ({ ...p, 메모중요도: "HIGH" })); setEdited((prev) => ({ ...prev, [getId(editTarget)]: { ...(prev[getId(editTarget)] || {}), 메모중요도: "HIGH" } })); }}
+                    className={`px-3 py-1 rounded-lg text-xs font-semibold border transition-all ${editTarget.메모중요도 === "HIGH" ? "bg-orange-500 text-white border-orange-500" : "bg-white text-orange-600 border-orange-300 hover:bg-orange-50"}`}>
                     중요
                   </button>
-
-                  {/* 긴급 */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      // ✅ ENUM으로만 저장
-                      setEditTarget((p) => ({ ...p, 메모중요도: "CRITICAL" }));
-
-                      setEdited((prev) => ({
-                        ...prev,
-                        [getId(editTarget)]: {
-                          ...(prev[getId(editTarget)] || {}),
-                          메모중요도: "CRITICAL",
-                        },
-                      }));
-                    }}
-                    className={`
-    px-2 py-0.5 rounded-full text-[11px] font-semibold border
-    ${editTarget.메모중요도 === "CRITICAL"
-                        ? "bg-red-600 text-white border-red-600 animate-pulse"
-                        : "bg-red-100 text-red-600 border-red-300"
-                      }
-  `}
-                  >
+                  <button type="button"
+                    onClick={() => { setEditTarget((p) => ({ ...p, 메모중요도: "CRITICAL" })); setEdited((prev) => ({ ...prev, [getId(editTarget)]: { ...(prev[getId(editTarget)] || {}), 메모중요도: "CRITICAL" } })); }}
+                    className={`px-3 py-1 rounded-lg text-xs font-semibold border transition-all ${editTarget.메모중요도 === "CRITICAL" ? "bg-red-600 text-white border-red-600" : "bg-white text-red-600 border-red-300 hover:bg-red-50"}`}>
                     긴급
                   </button>
                 </div>
@@ -18141,16 +18146,16 @@ setEditTarget((p) => ({
             {/* ------------------------------------------------ */}
             {/* 🔵 저장/취소 */}
             {/* ------------------------------------------------ */}
-            <div className="flex justify-end gap-3 mt-4">
+            <div className="flex justify-end gap-3 mt-4 pt-4 border-t">
               <button
-                className="px-3 py-1 rounded bg-gray-300"
+                className="px-5 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold"
                 onClick={() => setEditPopupOpen(false)}
               >
                 취소
               </button>
 
               <button
-                className="px-3 py-1 rounded bg-blue-600 text-white"
+                className="px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold"
                 onClick={async () => {
                   // 1) Firestore 저장
                   const ALLOWED_FIELDS = [
@@ -18165,9 +18170,15 @@ setEditTarget((p) => ({
                     "차량번호", "이름", "전화번호",
                     "청구운임", "기사운임",
                     "지급방식", "배차방식",
-                    "메모",
+                   "메모",
                     "메모중요도",
                     "전달사항",
+                    "상차지담당자",
+                    "상차지담당자번호",
+                    "상차방법",
+                    "하차지담당자",
+                    "하차지담당자번호",
+                    "하차방법",
                     "운행유형",
                     "혼적", "독차",
                     "긴급",          // 🔥 여기
@@ -18249,9 +18260,9 @@ setEdited(prev => {
               >
                 저장
               </button>
-
             </div>
 
+            </div>{/* space-y-4 끝 */}
           </div>
         </div>
       )}
@@ -18600,7 +18611,7 @@ setCopyPlaceOptions(list);
         />
       </Field>
 
-      <Field label="상차 담당자명">
+      <Field label="상차지 담당자명">
         <input
           className="inputStyle"
           value={copyTarget?.상차지담당자 ?? ""}
@@ -18608,7 +18619,7 @@ setCopyPlaceOptions(list);
         />
       </Field>
 
-      <Field label="상차 연락처">
+      <Field label="상차지 연락처">
         <input
           className="inputStyle"
           value={copyTarget?.상차지담당자번호 ?? ""}
@@ -18739,7 +18750,7 @@ setCopyPlaceOptions(list);
         />
       </Field>
 
-      <Field label="하차 담당자명">
+      <Field label="하차지 담당자명">
         <input
           className="inputStyle"
           value={copyTarget?.하차지담당자 ?? ""}
@@ -18747,7 +18758,7 @@ setCopyPlaceOptions(list);
         />
       </Field>
 
-      <Field label="하차 연락처">
+      <Field label="상차지 연락처">
         <input
           className="inputStyle"
           value={copyTarget?.하차지담당자번호 ?? ""}
@@ -18787,6 +18798,14 @@ setCopyPlaceOptions(list);
       const match = (drivers || []).find(
         d => normalizePlate(d.차량번호) === plate
       );
+
+      // 🔥 블랙 기사 팝업
+      if (match) {
+        const grade = match?.등급 || match?.grade || "";
+        if (grade === "블랙") {
+          setBlackAlert(match);
+        }
+      }
 
       setCopyTarget(prev => ({
         ...(prev || {}),
@@ -22628,6 +22647,8 @@ const [unloadPlaceActiveIdx, setUnloadPlaceActiveIdx] = React.useState(0);
 
 // 🔥 블랙/주의업체 팝업
 const [warningPopup, setWarningPopup] = React.useState(null);
+const warningPopupRef = React.useRef(null);
+const [blackDriverAlert, setBlackDriverAlert] = React.useState(null);
 const [newDriverPopupOpen, setNewDriverPopupOpen] = React.useState(false);
 const [newDriverData, setNewDriverData] = React.useState({ 이름: "", 전화번호: "", 차량번호: "" });
 
@@ -22664,7 +22685,7 @@ const getPlaceField = (place, ...keys) => {
 const getManagerName = (place) => {
   const keys = [
     "담당자", "담당자명", "담당", "manager", "managerName",
-    "상차담당자", "하차담당자", "contact", "contactName",
+    "상차지담당자", "하차지담당자", "contact", "contactName",
     "책임자", "책임자명", "담당자이름", "이름"
   ];
   for (const k of keys) {
@@ -22695,6 +22716,13 @@ const getManagerPhone = (place) => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3000);
   };
+
+  // ✅ warningPopup 뜨면 포커스 잡아서 Enter로 닫히게
+  React.useEffect(() => {
+    if (warningPopup) {
+      setTimeout(() => warningPopupRef.current?.focus(), 0);
+    }
+  }, [warningPopup]);
   
   // 🔥 자동완성 필터 함수
   const filterEditClients = (value) => {
@@ -22748,18 +22776,22 @@ const rankPlaces = (list, keyword) => {
       .replace(/[\s\-]/g, "")
       .replace(/[^0-9A-Z가-힣]/g, "");
   };
-  // 🔥 블랙/주의업체 체크
+// 🔥 블랙/주의업체 체크
 const checkWarningStatus = (name, type) => {
+  name = String(name || "").trim();
+  if (!name) return;
+
   // clients에서 체크
-  const foundClient = (clients || []).find(c => c.거래처명 === name);
+  const foundClient = (clients || []).find(c => String(c.거래처명 || "").trim() === name);
   if (foundClient) {
     if (foundClient.업체상태 === "블랙" || foundClient.업체상태 === "주의") {
       setWarningPopup({ name, status: foundClient.업체상태, type });
       return;
     }
   }
+
   // places에서 체크
-  const foundPlace = (places || []).find(p => p.업체명 === name);
+  const foundPlace = (places || []).find(p => String(p.업체명 || "").trim() === name);
   if (foundPlace) {
     if (foundPlace.업체상태 === "블랙" || foundPlace.업체상태 === "주의") {
       setWarningPopup({ name, status: foundPlace.업체상태, type });
@@ -23458,32 +23490,73 @@ const generateTimeOptions = () => {
   </div>
 )}
       {/* 🔥 블랙/주의업체 경고 팝업 */}
-{warningPopup && (
-  <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/50">
-    <div className={`bg-white rounded-xl shadow-2xl p-8 max-w-md ${warningPopup.status === "블랙" ? "border-4 border-red-500" : "border-4 border-yellow-500"}`}>
-      <div className="text-center">
-        <div className={`text-6xl mb-4 ${warningPopup.status === "블랙" ? "text-red-500" : "text-yellow-500"}`}>
-          {warningPopup.status === "블랙" ? "🚫" : "⚠️"}
+      {blackDriverAlert && (
+  <div
+    className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999999]"
+    tabIndex={-1}
+    ref={(el) => el && setTimeout(() => el.focus(), 0)}
+    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); setBlackDriverAlert(null); } }}
+  >
+    <div className="bg-white rounded-2xl shadow-2xl w-[400px] overflow-hidden">
+      <div className="bg-gray-900 px-6 py-4 flex items-center gap-3">
+        <span className="text-2xl">🚫</span>
+        <h3 className="text-white text-lg font-bold">블랙 기사 알림</h3>
+      </div>
+      <div className="px-6 py-5 space-y-3">
+        <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm space-y-1">
+          <div><span className="text-gray-500">차량번호</span><b className="ml-2">{blackDriverAlert.차량번호}</b></div>
+          <div><span className="text-gray-500">이름</span><b className="ml-2 text-red-600">{blackDriverAlert.이름 || "-"}</b></div>
+          <div><span className="text-gray-500">전화번호</span><b className="ml-2">{blackDriverAlert.전화번호 || "-"}</b></div>
+          {blackDriverAlert.메모 && (
+            <div><span className="text-gray-500">메모</span><span className="ml-2 text-red-600">{blackDriverAlert.메모}</span></div>
+          )}
         </div>
-        <h3 className={`text-2xl font-bold mb-2 ${warningPopup.status === "블랙" ? "text-red-600" : "text-yellow-600"}`}>
-          {warningPopup.status} 업체
+        <p className="text-sm text-gray-600 text-center font-semibold">
+          해당 기사는 <span className="text-red-600 font-bold">블랙 등급</span>으로 등록된 기사입니다.
+        </p>
+      </div>
+      <div className="px-6 pb-5">
+        <button className="w-full py-3 bg-gray-900 text-white rounded-xl font-bold text-sm" onClick={() => setBlackDriverAlert(null)}>
+          확인 (Enter)
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+{warningPopup && (
+  <div
+    className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/50"
+    tabIndex={-1}
+    ref={warningPopupRef}
+    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); setWarningPopup(null); } }}
+  >
+    <div className="bg-white rounded-2xl shadow-2xl w-[400px] overflow-hidden">
+      <div className={`px-6 py-4 flex items-center gap-3 ${warningPopup.status === "블랙" ? "bg-gray-900" : "bg-orange-400"}`}>
+        <span className="text-2xl">{warningPopup.status === "블랙" ? "🚫" : "⚠️"}</span>
+        <h3 className="text-white text-lg font-bold">
+          {warningPopup.status === "블랙" ? "블랙" : "주의"} 거래처 알림
         </h3>
-        <p className="text-lg text-gray-700 mb-4">
-          <b>{warningPopup.name}</b>은(는)<br />
-          <span className={warningPopup.status === "블랙" ? "text-red-600 font-bold" : "text-yellow-600 font-bold"}>
-            {warningPopup.status} 업체
-          </span>로 등록되어 있습니다.
+      </div>
+      <div className="px-6 py-5 space-y-3">
+        <div className={`border rounded-lg px-4 py-3 text-sm space-y-1 ${warningPopup.status === "블랙" ? "bg-red-50 border-red-200" : "bg-yellow-50 border-yellow-200"}`}>
+          <div><span className="text-gray-500">업체명</span><b className="ml-2">{warningPopup.name}</b></div>
+          <div className="flex items-center">
+            <span className="text-gray-500">등급</span>
+            <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-bold text-white ${warningPopup.status === "블랙" ? "bg-gray-900" : "bg-orange-400"}`}>
+              {warningPopup.status}
+            </span>
+          </div>
+        </div>
+        <p className="text-sm text-gray-600 text-center font-semibold">
+          해당 업체는 <span className={`font-bold ${warningPopup.status === "블랙" ? "text-red-600" : "text-orange-500"}`}>{warningPopup.status} 등급</span>으로 지정된 업체입니다.
         </p>
-        <p className="text-sm text-gray-500 mb-6">
-          {warningPopup.status === "블랙" 
-            ? "거래 시 각별한 주의가 필요합니다." 
-            : "거래 전 확인이 필요합니다."}
-        </p>
+      </div>
+      <div className="px-6 pb-5">
         <button
+          className={`w-full py-3 text-white rounded-xl font-bold text-sm ${warningPopup.status === "블랙" ? "bg-gray-900" : "bg-orange-400"}`}
           onClick={() => setWarningPopup(null)}
-          className={`px-6 py-3 rounded-lg text-white font-semibold ${warningPopup.status === "블랙" ? "bg-red-600 hover:bg-red-700" : "bg-yellow-500 hover:bg-yellow-600"}`}
         >
-          확인
+          확인 (Enter)
         </button>
       </div>
     </div>
@@ -23825,7 +23898,7 @@ const generateTimeOptions = () => {
                       />
                     </Field>
                     
-                    <Field label="상차 담당자명">
+                    <Field label="상차지 담당자명">
                       <input
                         className="w-full border rounded-lg px-3 py-2"
                         value={copyTarget?.상차지담당자 ?? ""}
@@ -23833,7 +23906,7 @@ const generateTimeOptions = () => {
                       />
                     </Field>
                     
-                    <Field label="상차 연락처">
+                    <Field label="상차지 연락처">
                       <input
                         className="w-full border rounded-lg px-3 py-2"
                         value={copyTarget?.상차지담당자번호 ?? ""}
@@ -23977,7 +24050,7 @@ const generateTimeOptions = () => {
                       />
                     </Field>
                     
-                    <Field label="하차 담당자명">
+                    <Field label="하차지 담당자명">
                       <input
                         className="w-full border rounded-lg px-3 py-2"
                         value={copyTarget?.하차지담당자 ?? ""}
@@ -23985,7 +24058,7 @@ const generateTimeOptions = () => {
                       />
                     </Field>
                     
-                    <Field label="하차 연락처">
+                    <Field label="상차지 연락처">
                       <input
                         className="w-full border rounded-lg px-3 py-2"
                         value={copyTarget?.하차지담당자번호 ?? ""}
@@ -24015,6 +24088,14 @@ const generateTimeOptions = () => {
         const match = (drivers || []).find(
           d => normalizePlate(d.차량번호) === plate
         );
+
+        // 🔥 블랙 기사 전용 팝업
+        if (match) {
+          const grade = match?.등급 || match?.grade || "";
+          if (grade === "블랙") {
+            setBlackDriverAlert(match);
+          }
+        }
         
         setCopyTarget(prev => ({
           ...prev,

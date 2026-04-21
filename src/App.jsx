@@ -15,6 +15,7 @@ import { doc, onSnapshot } from "firebase/firestore";
 // Main Apps
 import DispatchApp from "./DispatchApp";
 import MobileApp from "./mobile/MobileApp";
+import ShipperMobileApp from "./mobile/ShipperMobileApp";
 
 // Driver / Employee
 import DriverHome from "./driver/DriverHome";
@@ -258,12 +259,12 @@ return (
         />
 
         {/* ================= 화주 메인 ================= */}
-        <Route
+         <Route
           path="/shipper/*"
           element={
             user && role === "shipper"
               ? (approved
-                  ? <ShipperApp />
+                  ? (isMobile ? <ShipperMobileApp /> : <ShipperApp />)
                   : <Navigate to="/shipper-pending" replace />
                 )
               : <Navigate to="/shipper-login" replace />

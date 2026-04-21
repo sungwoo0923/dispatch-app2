@@ -1,10 +1,7 @@
-/* ================================
-   ✅ 글로벌 폰트 & 렌더링 개선
-================================ */
-@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css");
 
 body {
-  font-family: "Pretendard", "Noto Sans KR", -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: "맑은 고딕", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+  font-weight: 500;
 
   /* 🔥 글씨 깨짐 방지 핵심 */
   -webkit-font-smoothing: antialiased;
@@ -142,6 +139,7 @@ body {
   width: 100%;
   border-collapse: collapse;
   font-size: 14px;
+  font-family: "Pretendard", "Noto Sans KR", sans-serif;
 }
 
 .table-section th,
@@ -223,4 +221,20 @@ body {
 
 .kpi-box:hover {
   transform: translateY(-4px);
+}
+/* 테이블 행 최소 높이 + 글씨 선명도 */
+table tbody tr {
+  height: 48px;
+  line-height: 1.5;
+}
+
+table thead th {
+  height: 44px;
+  letter-spacing: 0.01em;
+}
+
+/* 주소 셀 줄바꿈 강제 방지 */
+table td {
+  white-space: nowrap !important;
+  word-break: keep-all;
 }

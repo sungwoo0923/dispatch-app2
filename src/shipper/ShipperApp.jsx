@@ -156,6 +156,13 @@ const isSubMaster = userData?.permissions?.subMaster;
   내정보
 </button>
       <button
+        onClick={() => window.open("/shipper-mobile-preview", "_blank", "width=390,height=844")}
+        className="bg-gray-500 hover:bg-gray-600 px-3 py-1 rounded text-sm"
+      >
+        📱 모바일 미리보기
+      </button>
+
+      <button
         onClick={logout}
         className="bg-red-500 hover:bg-red-600 px-3 py-1 rounded text-sm"
       >

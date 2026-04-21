@@ -320,8 +320,10 @@ const [ordersLoaded, setOrdersLoaded] = useState(false);
 const [focusUnassignedOrderId, setFocusUnassignedOrderId] = useState(null);
 const popupLastShownDateRef = useRef(null);        // 마지막으로 팝업을 띄운 KST 날짜(YYYY-MM-DD)
 const pendingPopupRef = useRef(false);             // 자정에 list가 아니면, list로 돌아왔을 때 띄우기
-const pageRef = useRef("list");                    // 현재 page 추적
-const unassignedCountRef = useRef(0);              // 자정 타이머에서 최신 미배차 건수 참조
+const pageRef = useRef("list");
+const unassignedCountRef = useRef(0);
+const alarmEnabledRef = useRef(true);              // 🔔 알람 ref
+const initialLoadDoneRef = useRef({});             // 🔔 최초로드 구분
   // 🔕 알림 ON/OFF 상태 (기본 ON)
 const [alarmEnabled, setAlarmEnabled] = useState(
   localStorage.getItem("alarmEnabled") !== "false"
@@ -341,7 +343,17 @@ const toggleAlarm = () => {
     return next;
   });
 };
+// 🔔 alarmEnabled → ref 동기화
+useEffect(() => {
+  alarmEnabledRef.current = alarmEnabled;
+}, [alarmEnabled]);
 
+// 🔔 알림 권한 요청 (최초 1회)
+useEffect(() => {
+  if (typeof Notification !== "undefined" && Notification.permission === "default") {
+    Notification.requestPermission();
+  }
+}, []);
 // 🔔 공지 / 일정 (PC 연동)
 const [notices, setNotices] = useState([]);
 const [schedules, setSchedules] = useState([]);
@@ -482,18 +494,70 @@ useEffect(() => {
 
   const collections = ["dispatch", "orders"]; // 🔥 핵심
 
+  // 교체
   collections.forEach((name) => {
     const unsub = onSnapshot(collection(db, name), (snap) => {
       const list = snap.docs.map((d) => ({
         _id: d.id,
         id: d.id,
-        __col: name, // 🔥 출처 저장
+        __col: name,
         ...d.data(),
       }));
- setOrdersLoaded(true);
+      setOrdersLoaded(true);
       setOrders((prev) => {
         const filtered = prev.filter((o) => o.__col !== name);
         return [...filtered, ...list];
+      });
+
+      // 교체 후
+      // 🔔 알림 감지 (최초 로드는 스킵)
+      if (!initialLoadDoneRef.current[name]) {
+        initialLoadDoneRef.current[name] = true;
+        return;
+      }
+
+      if (!alarmEnabledRef.current) return;
+
+      // 🔥 모든 FCM 토큰 수집
+      const sendPush = async (title, body) => {
+        try {
+          const snap = await getDocs(collection(db, "users"));
+          const tokens = snap.docs
+            .map(d => d.data().fcmToken)
+            .filter(Boolean);
+          if (!tokens.length) return;
+
+          await fetch("/api/notify", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ tokens, title, body }),
+          });
+        } catch (e) {
+          console.error("푸시 실패", e);
+        }
+      };
+
+      snap.docChanges().forEach((change) => {
+        const data = { id: change.doc.id, ...change.doc.data() };
+
+        if (change.type === "added" && data.상차지명) {
+          sendPush(
+            "📦 신규 오더 등록",
+            `${data.거래처명 || ""} ${data.상차지명} → ${data.하차지명 || ""}`
+          );
+        }
+
+        if (change.type === "modified") {
+          const prevCar = change.doc._document?.data?.value?.mapValue
+            ?.fields?.차량번호?.stringValue || "";
+          const nextCar = String(data.차량번호 || "").trim();
+          if (!prevCar && nextCar) {
+            sendPush(
+              "🚚 배차완료",
+              `${data.거래처명 || ""} ${data.상차지명} → ${data.하차지명 || ""} | ${data.기사명 || ""} (${nextCar})`
+            );
+          }
+        }
       });
     });
 
