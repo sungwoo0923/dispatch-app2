@@ -8340,7 +8340,17 @@ const BANCHAN_NOTICE = `
         else if (nk.startsWith(nq)) score = 80;
         else if (nk.includes(nq)) score = 50;
 
-        return { ...p, score };
+        // contacts 배열에서 담당자/번호 추출
+        const primary = Array.isArray(p.contacts) && p.contacts.length
+          ? p.contacts.find(c => c.isPrimary) || p.contacts[0]
+          : null;
+
+        return {
+          ...p,
+          담당자: primary?.name || p.담당자 || "",
+          담당자번호: primary?.phone || p.담당자번호 || "",
+          score,
+        };
       })
       .filter((p) => p.score > 0)
       .sort((a, b) => b.score - a.score)
@@ -15133,11 +15143,22 @@ const [clientOptions, setClientOptions] = React.useState([]);
     const q = String(text || "").trim().toLowerCase();
     if (!q) return [];
 
-    return (places || []).filter((p) =>
-      String(p.업체명 || p.name || "")
-        .toLowerCase()
-        .includes(q)
-    );
+    return (places || [])
+      .filter((p) =>
+        String(p.업체명 || p.name || "")
+          .toLowerCase()
+          .includes(q)
+      )
+      .map((p) => {
+        const primary = Array.isArray(p.contacts) && p.contacts.length
+          ? p.contacts.find(c => c.isPrimary) || p.contacts[0]
+          : null;
+        return {
+          ...p,
+          담당자: primary?.name || p.담당자 || "",
+          담당자번호: primary?.phone || p.담당자번호 || "",
+        };
+      });
   };
   // 🔥 입력값과 가장 유사한 항목을 위로 정렬
   // 완전일치 > 시작일치 > 포함일치
