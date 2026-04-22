@@ -20461,33 +20461,27 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [] })
 
   const [rangeStart, setRangeStart] = React.useState("2026-01");
   const [rangeEnd, setRangeEnd] = React.useState("2026-02");
-const [rangeClients, setRangeClients] = React.useState([]);
-const [clientSearch, setClientSearch] = React.useState("");
+  const [rangeClients, setRangeClients] = React.useState([]);
+  const [clientSearch, setClientSearch] = React.useState("");
   const [targetMonth, setTargetMonth] = React.useState(
     new Date().toISOString().slice(0, 7)
   );
-const toggleClient = (c) => {
-  setRangeClients((prev) =>
-    prev.includes(c)
-      ? prev.filter((v) => v !== c)
-      : [...prev, c]
-  );
-};
+  const toggleClient = (c) => {
+    setRangeClients((prev) =>
+      prev.includes(c) ? prev.filter((v) => v !== c) : [...prev, c]
+    );
+  };
   const [selectedYear, setSelectedYear] = React.useState(
     new Date().getFullYear()
   );
-
   const [detailClient, setDetailClient] = React.useState(null);
   const [aiMode, setAiMode] = React.useState(null);
-  // null | "summary" | "suggest" | "report"
+
   const toInt = (v) =>
     parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
-
   const sum = (list, key) => list.reduce((a, r) => a + toInt(r[key]), 0);
-
   const profitRate = (sale, profit) =>
     sale === 0 ? 0 : (profit / sale) * 100;
-
   const ratePct = (n) => `${n.toFixed(1)}%`;
 
   // ================================
@@ -20495,17 +20489,8 @@ const toggleClient = (c) => {
   // ================================
   const exportSettlementCapture = async (type = "png") => {
     const el = document.getElementById("settlement-capture");
-    if (!el) {
-      alert("캡쳐 영역을 찾을 수 없습니다.");
-      return;
-    }
-
-    const canvas = await html2canvas(el, {
-      scale: 2,
-      useCORS: true,
-      backgroundColor: "#ffffff",
-    });
-
+    if (!el) { alert("캡쳐 영역을 찾을 수 없습니다."); return; }
+    const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
     if (type === "png") {
       const link = document.createElement("a");
       link.download = `매출관리_${targetMonth}.png`;
@@ -20513,28 +20498,22 @@ const toggleClient = (c) => {
       link.click();
       return;
     }
-
     const imgData = canvas.toDataURL("image/png");
     const pdf = new jsPDF("p", "mm", "a4");
-
     const pdfWidth = 210;
     const pdfHeight = 297;
     const imgWidth = pdfWidth;
     const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
     let heightLeft = imgHeight;
     let position = 0;
-
     pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
     heightLeft -= pdfHeight;
-
     while (heightLeft > 0) {
       position = heightLeft - imgHeight;
       pdf.addPage();
       pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
       heightLeft -= pdfHeight;
     }
-
     pdf.save(`매출관리_${targetMonth}.pdf`);
   };
 
@@ -20553,340 +20532,222 @@ const toggleClient = (c) => {
     prevMonthDate.getMonth() + 1
   ).padStart(2, "0")}`;
 
-const dispatchRows = Array.isArray(dispatchData)
-  ? dispatchData
-      .filter(
-        (r) =>
-          (r.배차상태 || "") === "배차완료"
-      )
+  const dispatchRows = Array.isArray(dispatchData)
+    ? dispatchData
+        .filter((r) => (r.배차상태 || "") === "배차완료")
+        .map((r) => {
+          const sale = toInt(r.청구운임);
+          const driver = toInt(r.기사운임);
+          return {
+            ...r,
+            수수료:
+              r.수수료 !== undefined && r.수수료 !== null && String(r.수수료).trim() !== ""
+                ? toInt(r.수수료)
+                : Math.max(sale - driver, 0),
+          };
+        })
+    : [];
 
-      .map((r) => {
-        const sale = toInt(r.청구운임);
-        const driver = toInt(r.기사운임);
-
-        return {
-          ...r,
-          수수료:
-            r.수수료 !== undefined &&
-            r.수수료 !== null &&
-            String(r.수수료).trim() !== ""
-              ? toInt(r.수수료)
-              : Math.max(sale - driver, 0),
-        };
-      })
-  : [];
-const fixedMapped = (fixedRows || []).map((r) => {
-  const sale = toInt(r.청구운임);
-  const driver = toInt(r.기사운임);
-
-  // ✅ 수수료가 비어 있으면 자동 계산
-  const fee =
-    r.수수료 !== undefined &&
-    r.수수료 !== null &&
-    String(r.수수료).trim() !== ""
-      ? toInt(r.수수료)
-      : Math.max(sale - driver, 0);
-
-  return {
-    상차일: r.날짜,
-    출발지: r.출발지 || "",
-    도착지: r.도착지 || "",
-    거래처명: r.거래처명 || "",
-    청구운임: sale,
-    기사운임: driver,
-    수수료: fee,
-    배차상태: "배차완료",
-  };
-});
-  const rows = [...dispatchRows, ...fixedMapped];
-const allClients = React.useMemo(() => {
-  return Array.from(
-    new Set([
-      ...rows.map((r) => r.거래처명 || ""),
-      ...clients.map((c) => c.거래처명 || ""),
-      ...places.map((p) => p.업체명 || ""),
-    ].filter(Boolean))
-  ).sort();
-}, [rows, clients, places]);
-const filteredClients = React.useMemo(() => {
-  if (!clientSearch) return [];
-
-  return allClients
-    .filter((c) =>
-      c.toLowerCase().includes(clientSearch.toLowerCase())
-    )
-    .slice(0, 10);
-}, [clientSearch, allClients]);
-  const rangeRows = rows.filter((r) => {
-  if (!r.상차일) return false;
-
-  const ym = r.상차일.slice(0, 7);
-  if (ym < rangeStart || ym > rangeEnd) return false;
-
-if (rangeClients.length > 0) {
-const ok = rangeClients.some((c) =>
-  (r.거래처명 || "").includes(c) ||
-  (r.상차지명 || "").includes(c) ||
-  (r.하차지명 || "").includes(c)
-);
-  if (!ok) return false;
-}
-
-  return true;
-});
-const rangeMonthly = React.useMemo(() => {
-  const map = {};
-
-  rangeRows.forEach((r) => {
-    const ym = r.상차일.slice(0, 7);
-    if (!map[ym]) {
-      map[ym] = { ym, sale: 0, driver: 0, fee: 0 };
-    }
-    map[ym].sale += toInt(r.청구운임);
-    map[ym].driver += toInt(r.기사운임);
-    map[ym].fee += toInt(r.수수료);
+  const fixedMapped = (fixedRows || []).map((r) => {
+    const sale = toInt(r.청구운임);
+    const driver = toInt(r.기사운임);
+    const fee =
+      r.수수료 !== undefined && r.수수료 !== null && String(r.수수료).trim() !== ""
+        ? toInt(r.수수료)
+        : Math.max(sale - driver, 0);
+    return {
+      상차일: r.날짜,
+      출발지: r.출발지 || "",
+      도착지: r.도착지 || "",
+      거래처명: r.거래처명 || "",
+      청구운임: sale,
+      기사운임: driver,
+      수수료: fee,
+      배차상태: "배차완료",
+    };
   });
 
-  return Object.values(map).sort((a, b) => a.ym.localeCompare(b.ym));
-}, [rangeRows]);
-const rangeSummary = rangeMonthly.reduce(
-  (a, r) => {
-    a.sale += r.sale;
-    a.driver += r.driver;
-    a.fee += r.fee;
-    return a;
-  },
-  { sale: 0, driver: 0, fee: 0 }
-);
+  const rows = [...dispatchRows, ...fixedMapped];
 
-const rangeProfit = rangeSummary.fee;
-const rangeProfitRate =
-  rangeSummary.sale === 0
-    ? 0
-    : (rangeSummary.fee / rangeSummary.sale) * 100;
+  const allClients = React.useMemo(() => {
+    return Array.from(
+      new Set(
+        [
+          ...rows.map((r) => r.거래처명 || ""),
+          ...clients.map((c) => c.거래처명 || ""),
+          ...places.map((p) => p.업체명 || ""),
+        ].filter(Boolean)
+      )
+    ).sort();
+  }, [rows, clients, places]);
 
+  const filteredClients = React.useMemo(() => {
+    if (!clientSearch) return [];
+    return allClients
+      .filter((c) => c.toLowerCase().includes(clientSearch.toLowerCase()))
+      .slice(0, 10);
+  }, [clientSearch, allClients]);
+
+  const rangeRows = rows.filter((r) => {
+    if (!r.상차일) return false;
+    const ym = r.상차일.slice(0, 7);
+    if (ym < rangeStart || ym > rangeEnd) return false;
+    if (rangeClients.length > 0) {
+      const ok = rangeClients.some(
+        (c) =>
+          (r.거래처명 || "").includes(c) ||
+          (r.상차지명 || "").includes(c) ||
+          (r.하차지명 || "").includes(c)
+      );
+      if (!ok) return false;
+    }
+    return true;
+  });
+
+  const rangeMonthly = React.useMemo(() => {
+    const map = {};
+    rangeRows.forEach((r) => {
+      const ym = r.상차일.slice(0, 7);
+      if (!map[ym]) map[ym] = { ym, sale: 0, driver: 0, fee: 0 };
+      map[ym].sale += toInt(r.청구운임);
+      map[ym].driver += toInt(r.기사운임);
+      map[ym].fee += toInt(r.수수료);
+    });
+    return Object.values(map).sort((a, b) => a.ym.localeCompare(b.ym));
+  }, [rangeRows]);
+
+  const rangeSummary = rangeMonthly.reduce(
+    (a, r) => { a.sale += r.sale; a.driver += r.driver; a.fee += r.fee; return a; },
+    { sale: 0, driver: 0, fee: 0 }
+  );
+  const rangeProfit = rangeSummary.fee;
+  const rangeProfitRate = rangeSummary.sale === 0 ? 0 : (rangeSummary.fee / rangeSummary.sale) * 100;
 
   const dayRows = rows.filter((r) => (r.상차일 || "") === kpiDay);
-  const monthRows = rows.filter((r) =>
-    (r.상차일 || "").startsWith(monthKey)
-  );
+  const monthRows = rows.filter((r) => (r.상차일 || "").startsWith(monthKey));
 
-const startKey = `${yearKey}-01-01`;
-const endKey = `${targetMonth}-${String(new Date(yearKey, monthNum, 0).getDate()).padStart(2, "0")}`;
+  const startKey = `${yearKey}-01-01`;
+  const endKey = `${targetMonth}-${String(new Date(yearKey, monthNum, 0).getDate()).padStart(2, "0")}`;
+  const yearRows = rows.filter((r) => {
+    const d = r.상차일;
+    if (!d) return false;
+    return d >= startKey && d <= endKey;
+  });
 
-const yearRows = rows.filter((r) => {
-  const d = r.상차일;
-  if (!d) return false;
-  return d >= startKey && d <= endKey;
-});
-  const prevMonthRows = rows.filter((r) =>
-    (r.상차일 || "").startsWith(prevMonthKey)
-  );
+  const prevMonthRows = rows.filter((r) => (r.상차일 || "").startsWith(prevMonthKey));
 
-  const isValidClientName = (c) =>
-    c &&
-    !/^2\d{1,2}년/.test(c) &&
-    !c.includes("후레쉬물류");
-
+  const isValidClientName = (c) => c && !/^2\d{1,2}년/.test(c) && !c.includes("후레쉬물류");
   const firstAppearMap = new Map();
-
   rows.forEach((r) => {
     const c = r.거래처명 || "";
     const d = r.상차일 || "";
     if (!isValidClientName(c) || !d) return;
-
-    if (!firstAppearMap.has(c) || d < firstAppearMap.get(c)) {
-      firstAppearMap.set(c, d);
-    }
+    if (!firstAppearMap.has(c) || d < firstAppearMap.get(c)) firstAppearMap.set(c, d);
   });
 
   const newClients = [];
-
   firstAppearMap.forEach((firstDate, client) => {
     if (firstDate.startsWith(monthKey)) {
-      const clientRows = monthRows.filter(
-        (r) => r.거래처명 === client
-      );
-
+      const clientRows = monthRows.filter((r) => r.거래처명 === client);
       const sale = sum(clientRows, "청구운임");
       const driver = sum(clientRows, "기사운임");
       const fee = sum(clientRows, "수수료");
       const profit = sale - driver;
-
-      newClients.push({
-        client,
-        firstDate,
-        cnt: clientRows.length,
-        sale,
-        profit,
-        fee,
-      });
+      newClients.push({ client, firstDate, cnt: clientRows.length, sale, profit, fee });
     }
   });
 
   const won = (n) => `${(n || 0).toLocaleString()}원`;
+  const isFresh = (r) => String(r.거래처명 || "").includes("후레쉬물류");
+  const isExcludedClient = (name = "") => name.includes("후레쉬물류") || name.includes("채석강");
 
-  const isFresh = (r) =>
-    String(r.거래처명 || "").includes("후레쉬물류");
-const isExcludedClient = (name = "") =>
-  name.includes("후레쉬물류") || name.includes("채석강");
-const stat = (list) => {
-  const sale = sum(list, "청구운임");
-  const driver = sum(list, "기사운임");
-  const profit = sale - driver;  // 🔥 통일
-  return { sale, driver, profit };
-};
+  const stat = (list) => {
+    const sale = sum(list, "청구운임");
+    const driver = sum(list, "기사운임");
+    const profit = sale - driver;
+    return { sale, driver, profit };
+  };
 
   const d = stat(dayRows);
   const m = stat(monthRows);
   const y = stat(yearRows);
   const pm = stat(prevMonthRows);
+
   const monthSummary = {
-  sale: sum(monthRows, "청구운임"),
-  driver: sum(monthRows, "기사운임"),
-  fee: sum(monthRows, "수수료"),
-};
-
-const monthProfit = monthSummary.fee;
-
-const monthProfitRate =
-  monthSummary.sale === 0
-    ? 0
-    : (monthProfit / monthSummary.sale) * 100;
-
-  // ================================
-  // 📊 월 예상 매출 / 수익 / 건수
-  // ================================
+    sale: sum(monthRows, "청구운임"),
+    driver: sum(monthRows, "기사운임"),
+    fee: sum(monthRows, "수수료"),
+  };
+  const monthProfit = monthSummary.fee;
+  const monthProfitRate = monthSummary.sale === 0 ? 0 : (monthProfit / monthSummary.sale) * 100;
 
   const today = new Date().toISOString().slice(0, 10);
   const daysInMonth = new Date(yearKey, monthNum, 0).getDate();
-
   const elapsedDays =
-    new Set(
-      monthRows
-        .map((r) => r.상차일)
-        .filter((d) => d && d <= today)
-    ).size || 1;
-
+    new Set(monthRows.map((r) => r.상차일).filter((d) => d && d <= today)).size || 1;
   const curSale = m.sale;
   const curProfit = m.profit;
   const curCnt = monthRows.length;
-
   const avgSalePerDay = curSale / elapsedDays;
   const avgProfitPerDay = curProfit / elapsedDays;
   const avgCntPerDay = curCnt / elapsedDays;
-
   const forecast = {
     sale: Math.round(avgSalePerDay * daysInMonth),
     profit: Math.round(avgProfitPerDay * daysInMonth),
     count: Math.round(avgCntPerDay * daysInMonth),
   };
 
-  // ================================
-  // 🔹 순수 운송 / 후레쉬 분리
-  // ================================
-
   const pmPure = stat(prevMonthRows.filter((r) => !isFresh(r)));
-
   const dPure = stat(dayRows.filter((r) => !isFresh(r)));
   const mPure = stat(monthRows.filter((r) => !isFresh(r)));
   const yPure = stat(yearRows.filter((r) => !isFresh(r)));
 
-  // ================================
-  // 🔮 2026 매출 예측 (BEST PRACTICE)
-  // ================================
-
   const baseYear = yearKey - 1;
-
   const lastYearRows = rows.filter((r) => {
     const d = r.상차일;
     if (!d) return false;
     return d.startsWith(String(baseYear));
   });
 
-  // ================================
-  // 📦 작년 월별 후레쉬물류 지입 매출
-  // ================================
-
   const lastYearFreshByMonth = Array.from({ length: 12 }, (_, i) => ({
     month: `${i + 1}월`,
     sale: 0,
     profit: 0,
   }));
-
   lastYearRows.forEach((r) => {
     if (!isFresh(r)) return;
     const d = r.상차일;
     if (!d) return;
-
     const mIdx = Number(d.slice(5, 7)) - 1;
     const sale = toInt(r.청구운임);
     const driver = toInt(r.기사운임);
-
     lastYearFreshByMonth[mIdx].sale += sale;
     lastYearFreshByMonth[mIdx].profit += sale - driver;
   });
 
-  const lastYearPure = stat(
-    lastYearRows.filter((r) => !isFresh(r))
-  );
-
-  // ================================
-  // 🎯 연간 목표 대비 실적
-  // ================================
-
+  const lastYearPure = stat(lastYearRows.filter((r) => !isFresh(r)));
   const PURE_TARGET_2026 = 2098451820;
-
-  const lastYearFresh = stat(
-    lastYearRows.filter((r) => isFresh(r))
-  );
-
+  const lastYearFresh = stat(lastYearRows.filter((r) => isFresh(r)));
   const yFresh = stat(yearRows.filter((r) => isFresh(r)));
-
   const FRESH_GROWTH_RATE = 0.03;
-
-  const FRESH_TARGET_2026 = Math.round(
-    lastYearFresh.sale * (1 + FRESH_GROWTH_RATE)
-  );
-
-  const achieveRate = (cur, target) =>
-    target > 0 ? (cur / target) * 100 : 0;
-
+  const FRESH_TARGET_2026 = Math.round(lastYearFresh.sale * (1 + FRESH_GROWTH_RATE));
+  const achieveRate = (cur, target) => (target > 0 ? (cur / target) * 100 : 0);
   const baseYearSale = lastYearPure.sale;
-
-  const growth2026 = {
-    conservative: 0.05,
-    normal: 0.1,
-    aggressive: 0.18,
-  };
-
+  const growth2026 = { conservative: 0.05, normal: 0.1, aggressive: 0.18 };
   const forecast2026 = {
-    conservative: Math.round(
-      baseYearSale * (1 + growth2026.conservative)
-    ),
-    normal: Math.round(
-      baseYearSale * (1 + growth2026.normal)
-    ),
-    aggressive: Math.round(
-      baseYearSale * (1 + growth2026.aggressive)
-    ),
+    conservative: Math.round(baseYearSale * (1 + growth2026.conservative)),
+    normal: Math.round(baseYearSale * (1 + growth2026.normal)),
+    aggressive: Math.round(baseYearSale * (1 + growth2026.aggressive)),
   };
 
-  // ================================
-  // 📉 전월 대비
-  // ================================
-  // === [당일 vs 전월 동일일 비교 TOP10용] ===
   const todayDate = new Date();
   const todayKey2 = todayDate.toISOString().slice(0, 10);
-
   const prevMonthSameDay = (() => {
     const y = todayDate.getFullYear();
-    const m = todayDate.getMonth(); // 0-based
-    const d = todayDate.getDate();
-    const lastDay = new Date(y, m, 0).getDate();
-    return new Date(y, m - 1, Math.min(d, lastDay))
-      .toISOString()
-      .slice(0, 10);
+    const mo = todayDate.getMonth();
+    const dd = todayDate.getDate();
+    const lastDay = new Date(y, mo, 0).getDate();
+    return new Date(y, mo - 1, Math.min(dd, lastDay)).toISOString().slice(0, 10);
   })();
 
   const groupByClientDay = (list) => {
@@ -20899,422 +20760,349 @@ const monthProfitRate =
     });
     return map;
   };
-
-  const todayMap = groupByClientDay(
-    rows.filter((r) => r.상차일 === todayKey2)
-  );
-
-  const prevMap = groupByClientDay(
-    rows.filter((r) => r.상차일 === prevMonthSameDay)
-  );
-
+  const todayMap = groupByClientDay(rows.filter((r) => r.상차일 === todayKey2));
+  const prevMap = groupByClientDay(rows.filter((r) => r.상차일 === prevMonthSameDay));
   const dayDropTop10 = Object.keys({ ...todayMap, ...prevMap })
     .map((client) => {
       const t = todayMap[client] || { sale: 0, cnt: 0 };
       const p = prevMap[client] || { sale: 0, cnt: 0 };
-      return {
-        client,
-        todaySale: t.sale,
-        todayCnt: t.cnt,
-        prevSale: p.sale,
-        prevCnt: p.cnt,
-        diff: t.sale - p.sale,
-      };
+      return { client, todaySale: t.sale, todayCnt: t.cnt, prevSale: p.sale, prevCnt: p.cnt, diff: t.sale - p.sale };
     })
     .filter((r) => r.diff < 0)
     .sort((a, b) => a.diff - b.diff)
     .slice(0, 10);
 
-  const diffRate = (cur, prev) =>
-    prev === 0 ? 0 : ((cur - prev) / prev) * 100;
-
-  const vr = {
-    month: diffRate(m.profit, pm.profit),
-  };
-
-  const vrPure = {
-    month: diffRate(mPure.profit, pmPure.profit),
-  };
-
-  const rateText = (n) =>
-    `${n >= 0 ? "▲" : "▼"} ${Math.abs(n).toFixed(1)}%`;
-
-  const rateClass = (n) =>
-    n >= 0 ? "text-emerald-600" : "text-rose-600";
+  const diffRate = (cur, prev) => (prev === 0 ? 0 : ((cur - prev) / prev) * 100);
+  const vr = { month: diffRate(m.profit, pm.profit) };
+  const vrPure = { month: diffRate(mPure.profit, pmPure.profit) };
+  const rateText = (n) => `${n >= 0 ? "▲" : "▼"} ${Math.abs(n).toFixed(1)}%`;
+  const rateClass = (n) => (n >= 0 ? "text-emerald-600" : "text-rose-600");
 
   // ================================
-  // 🧩 UI RENDER START
+  // 🧩 UI RENDER
   // ================================
-
   return (
-    <div
-      id="settlement-capture"
-      className="bg-gray-50 p-6 grid grid-cols-1 lg:grid-cols-2 gap-6"
-    >
-      {/* ================= LEFT PANEL ================= */}
-      <div className="space-y-6 flex-1">
+    <div id="settlement-capture" className="bg-gray-50 min-h-screen">
 
-        {/* 캡쳐 버튼 */}
-        <div className="flex gap-2">
-          <button
-            onClick={() => exportSettlementCapture("png")}
-            className="px-4 py-2 rounded-lg bg-gray-800 text-white text-sm hover:bg-gray-700"
-          >
-            PNG 캡쳐
-          </button>
-          <button
-            onClick={() => exportSettlementCapture("pdf")}
-            className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm hover:bg-indigo-500"
-          >
-            PDF 저장
-          </button>
-        </div>
-        <SettlementMonthlyHeader
-          targetMonth={targetMonth}
-          setTargetMonth={setTargetMonth}
-          monthRows={monthRows}
-          forecast={forecast}
-          forecast2026={forecast2026}
-        />
-
-        {/* ================= 🎯 연간 목표 대비 실적 · 2026 매출 전망 ================= */}
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 space-y-8">
-
-          <h3 className="text-base font-bold text-gray-900">
-            연간 목표 대비 실적 · 2026 매출 전망
-          </h3>
-
-          {/* ================= 순수 운송 매출 ================= */}
-          <div className="rounded-xl border border-gray-200 bg-gray-50 p-5">
-            <p className="text-sm font-semibold text-gray-800 mb-4">
-              순수 운송 매출
-            </p>
-
-            <div className="grid grid-cols-4 gap-4 text-center">
-              <Metric label="작년" value={won(lastYearPure.sale)} />
-              <Metric
-                label="목표"
-                value={won(PURE_TARGET_2026)}
-                valueClass="text-indigo-700"
-              />
-              <Metric
-                label="현재"
-                value={won(yPure.sale)}
-                valueClass="text-gray-900"
-              />
-              <Metric
-                label="달성률"
-                value={`${achieveRate(yPure.sale, PURE_TARGET_2026).toFixed(1)}%`}
-                valueClass="text-indigo-800"
-              />
-            </div>
-          </div>
-
-          {/* ================= 후레쉬 물류 매출 ================= */}
-          <div className="rounded-xl border border-gray-200 bg-gray-50 p-5">
-            <p className="text-sm font-semibold text-gray-700 mb-4">
-              후레쉬 물류 매출
-            </p>
-
-            <div className="grid grid-cols-4 gap-4 text-center">
-              <Metric label="작년" value={won(lastYearFresh.sale)} />
-              <Metric
-                label="목표"
-                value={won(FRESH_TARGET_2026)}
-                valueClass="text-indigo-700"
-              />
-              <Metric
-                label="현재"
-                value={won(yFresh.sale)}
-                valueClass="text-gray-900"
-              />
-              <Metric
-                label="달성률"
-                value={`${achieveRate(yFresh.sale, FRESH_TARGET_2026).toFixed(1)}%`}
-                valueClass="text-indigo-800"
-              />
-            </div>
-          </div>
-
-          {/* ================= 구분선 ================= */}
-          <div className="flex items-center gap-3 pt-2">
-            <span className="text-xs font-semibold text-gray-500">
-              2026 매출 전망 (순수 운송)
-            </span>
-            <div className="flex-1 border-t border-gray-300" />
-          </div>
-
-          {/* ================= 2026 매출 전망 ================= */}
-          <div className="grid grid-cols-3 gap-4 text-center">
-            <ScenarioCard
-              title="보수적 시나리오"
-              value={forecast2026.conservative}
-              tone="gray"
-            />
-            <ScenarioCard
-              title="기준 시나리오"
-              value={forecast2026.normal}
-              tone="indigo"
-              highlight
-            />
-            <ScenarioCard
-              title="공격적 시나리오"
-              value={forecast2026.aggressive}
-              tone="gray"
-            />
-          </div>
-        </div>
-
-        {/* ================= KPI – 총 운송료 ================= */}
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-semibold text-gray-800">
-              총 운송료 (후레쉬 포함)
-            </h3>
-            <span className="text-[11px] text-gray-400">
-              배차 + 고정거래처
-            </span>
-          </div>
-
-          <table className="w-full text-sm border-collapse text-center">
-            <thead className="bg-gray-50 text-gray-600">
-              <tr>
-                <th className="border p-2">구분</th>
-                <th className="border p-2">매출</th>
-                <th className="border p-2">운반비</th>
-                <th className="border p-2">수익</th>
-                <th className="border p-2">수익률</th>
-                <th className="border p-2">전월대비</th>
-              </tr>
-            </thead>
-            <tbody>
-              {[
-                ["월", m, "month"],
-                ["년", y, null],
-              ].map(([label, data, key], i) => (
-                <tr key={i} className="font-semibold">
-                  <td className="border p-2 bg-gray-50">{label}</td>
-                  <td className="border p-2 text-indigo-700">
-                    {won(data.sale)}
-                  </td>
-                  <td className="border p-2 text-gray-600">
-                    {won(data.driver)}
-                  </td>
-                  <td className="border p-2 text-emerald-600">
-                    {won(data.profit)}
-                  </td>
-                  <td className="border p-2 text-indigo-700">
-                    {ratePct(profitRate(data.sale, data.profit))}
-                  </td>
-                  <td
-                    className={`border p-2 ${key ? rateClass(vr[key]) : "text-gray-400"
-                      }`}
-                  >
-                    {key ? rateText(vr[key]) : "—"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {/* ================= KPI – 순수 운송 ================= */}
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-          <h3 className="text-sm font-semibold mb-4 text-emerald-700">
-            순수 운송료 (후레쉬 미포함)
-          </h3>
-
-          <table className="w-full text-sm border-collapse text-center">
-            <thead className="bg-gray-50 text-gray-600">
-              <tr>
-                <th className="border p-2">구분</th>
-                <th className="border p-2">매출</th>
-                <th className="border p-2">운반비</th>
-                <th className="border p-2">수익</th>
-                <th className="border p-2">수익률</th>
-                <th className="border p-2">전월대비</th>
-              </tr>
-            </thead>
-            <tbody>
-              {[
-                ["일", dPure, null],
-                ["월", mPure, "month"],
-                ["년", yPure, null],
-              ].map(([label, data, key], i) => (
-                <tr key={i} className="font-semibold">
-                  <td className="border p-2 bg-gray-50">{label}</td>
-                  <td className="border p-2 text-indigo-700">
-                    {won(data.sale)}
-                  </td>
-                  <td className="border p-2 text-gray-600">
-                    {won(data.driver)}
-                  </td>
-                  <td className="border p-2 text-emerald-600">
-                    {won(data.profit)}
-                  </td>
-                  <td className="border p-2 text-indigo-700">
-                    {ratePct(profitRate(data.sale, data.profit))}
-                  </td>
-                  <td
-                    className={`border p-2 ${key ? rateClass(vrPure[key]) : "text-gray-400"
-                      }`}
-                  >
-                    {key ? rateText(vrPure[key]) : "—"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-       <SettlementClientAnalysis
-  topRows={monthRows.filter(
-    (r) => !isExcludedClient(r.거래처명)
-  )}
-  dropRows={rows.filter(
-    (r) => !isExcludedClient(r.거래처명)
-  )}
-  newClients={newClients}
-  targetMonth={targetMonth}
-/>
-
-      </div>
-      {/* ================= RIGHT PANEL ================= */}
-      <div className="flex flex-col gap-6 flex-1 h-full self-stretch">
-
-        {/* 상단 정렬 슬롯 (왼쪽 버튼 높이 맞춤) */}
-        <div className="h-[44px] flex items-center justify-end">
-          <span className="text-sm text-gray-400">
-            매출관리 리포트
-          </span>
-        </div>
-
-        {/* 실제 리포트 카드 */}
-        <div className="flex-1">
-          <YearlySummaryChart
-            rows={rows}
-            year={selectedYear}
-            setYear={setSelectedYear}
-            onAI={(mode) => setAiMode(mode)}
-          />
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 space-y-5">
-  <h3 className="text-sm font-semibold text-gray-800">
-    기간별 매출 · 운임 · 수수료 추이
-  </h3>
-
-
-  {/* 조회 조건 */}
-<div className="grid grid-cols-3 gap-3">
-
-  {/* 시작 월 */}
-  <input
-    type="month"
-    value={rangeStart}
-    onChange={(e) => setRangeStart(e.target.value)}
-    className="border rounded-lg p-2 text-sm"
-  />
-
-  {/* 종료 월 */}
-  <input
-    type="month"
-    value={rangeEnd}
-    onChange={(e) => setRangeEnd(e.target.value)}
-    className="border rounded-lg p-2 text-sm"
-  />
-
-  {/* 거래처 검색 */}
-  <div className="col-span-3 space-y-3">
-
-    <div className="text-xs font-semibold text-gray-600">
-      거래처 검색
+      {/* ================= 페이지 헤더 ================= */}
+      <div className="bg-white px-8 py-6 border-b border-gray-200">
+  <div className="flex items-center justify-between">
+    <div>
+      <h1 className="text-[20px] font-bold text-[#1B2B4B] tracking-tight">매출관리</h1>
+      <p className="text-[12px] text-gray-400 mt-1">매출 · 수익 · 거래처 분석 리포트</p>
     </div>
+    <div className="flex items-center gap-2">
+      <button
+        onClick={() => exportSettlementCapture("png")}
+        className="px-4 py-2 rounded-lg bg-gray-100 text-gray-700 text-[13px] font-semibold hover:bg-gray-200 transition border border-gray-200"
+      >
+        PNG 캡쳐
+      </button>
+      <button
+        onClick={() => exportSettlementCapture("pdf")}
+        className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-[13px] font-semibold hover:bg-indigo-500 transition"
+      >
+        PDF 저장
+      </button>
+      <button
+        onClick={() => {
 
-    {/* 검색창 */}
-    <input
-      type="text"
-      placeholder="거래처 검색 (예: 태영, 케이씨)"
-      value={clientSearch}
-      onChange={(e) => setClientSearch(e.target.value)}
-      className="border rounded-lg p-2 text-sm w-full"
-    />
-
-    {/* 검색 결과 */}
-    {clientSearch && (
-      <div className="flex flex-wrap gap-2">
-        {allClients
-          .filter((c) =>
-            c.toLowerCase().includes(clientSearch.toLowerCase())
-          )
-          .slice(0, 10)
-          .map((c) => (
-            <button
-              key={c}
-              onClick={() => toggleClient(c)}
-              className="px-3 py-1 text-xs rounded-full border
-              bg-white text-gray-700 border-gray-300 hover:bg-gray-100"
+                const headers = ["상차일","거래처명","상차지명","하차지명","청구운임","기사운임","수수료","배차상태"];
+                const csvRows = [headers.join(",")];
+                monthRows.forEach((r) => {
+                  csvRows.push(headers.map((h) => `"${String(r[h] || "").replace(/"/g, '""')}"`).join(","));
+                });
+                const blob = new Blob(["\uFEFF" + csvRows.join("\n")], { type: "text/csv;charset=utf-8;" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `매출관리_${targetMonth}.csv`;
+                a.click();
+              }}
+               className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-[13px] font-semibold hover:bg-emerald-500 transition"
             >
-              {c}
+              CSV 내보내기
             </button>
-          ))}
-      </div>
-    )}
-
-    {/* 선택된 거래처 */}
-    {rangeClients.length > 0 && (
-      <div className="flex flex-wrap gap-2">
-        {rangeClients.map((c) => (
-          <button
-            key={c}
-            onClick={() => toggleClient(c)}
-            className="px-3 py-1 text-xs rounded-full
-            bg-indigo-600 text-white border border-indigo-600"
-          >
-            {c} ✕
-          </button>
-        ))}
-      </div>
-    )}
-
-    <div className="text-xs text-gray-400">
-      선택: {rangeClients.length}개
-    </div>
-  </div>
-</div>
-{/* 그래프 */}
-<PeriodTrendChart data={rangeMonthly} />
-
-{/* 요약 테이블 */}
-<PeriodSummaryTable data={rangeMonthly} />
-</div>
+          </div>
         </div>
       </div>
-      {/* ================= DETAIL POPUP ================= */}
-      {detailClient && (
-        <SettlementDetailPopup
-          client={detailClient}
-          rows={monthRows.filter(
-            (r) => r.거래처명 === detailClient
-          )}
-          onClose={() => setDetailClient(null)}
-        />
-      )}
-      {aiMode && (
-        <AIInsightModal
-          mode={aiMode}
-          monthRows={monthRows}
-          forecast2026={forecast2026}
-          onClose={() => setAiMode(null)}
-        />
-      )}
+
+      {/* ================= 콘텐츠 영역 ================= */}
+      <div className="px-8 py-6 grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+
+        {/* ================= LEFT PANEL ================= */}
+        <div className="space-y-6 flex-1">
+
+          <SettlementMonthlyHeader
+            targetMonth={targetMonth}
+            setTargetMonth={setTargetMonth}
+            monthRows={monthRows}
+            forecast={forecast}
+            forecast2026={forecast2026}
+          />
+
+          {/* ================= 🎯 연간 목표 대비 실적 · 2026 매출 전망 ================= */}
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+            <div className="bg-[#1B2B4B] px-6 py-4">
+              <h3 className="text-[15px] font-bold text-white">연간 목표 대비 실적 · 2026 매출 전망</h3>
+              <p className="text-[11px] text-white/50 mt-0.5">전년 대비 성장 분석 및 시나리오 예측</p>
+            </div>
+            <div className="p-6 space-y-8">
+
+              {/* 순수 운송 매출 */}
+              <div className="rounded-xl border border-gray-200 bg-gray-50 p-5">
+                <p className="text-sm font-semibold text-gray-800 mb-4">순수 운송 매출</p>
+                <div className="grid grid-cols-4 gap-4 text-center">
+                  <Metric label="작년" value={won(lastYearPure.sale)} />
+                  <Metric label="목표" value={won(PURE_TARGET_2026)} valueClass="text-indigo-700" />
+                  <Metric label="현재" value={won(yPure.sale)} valueClass="text-gray-900" />
+                  <Metric label="달성률" value={`${achieveRate(yPure.sale, PURE_TARGET_2026).toFixed(1)}%`} valueClass="text-indigo-800" />
+                </div>
+              </div>
+
+              {/* 후레쉬 물류 매출 */}
+              <div className="rounded-xl border border-gray-200 bg-gray-50 p-5">
+                <p className="text-sm font-semibold text-gray-700 mb-4">후레쉬 물류 매출</p>
+                <div className="grid grid-cols-4 gap-4 text-center">
+                  <Metric label="작년" value={won(lastYearFresh.sale)} />
+                  <Metric label="목표" value={won(FRESH_TARGET_2026)} valueClass="text-indigo-700" />
+                  <Metric label="현재" value={won(yFresh.sale)} valueClass="text-gray-900" />
+                  <Metric label="달성률" value={`${achieveRate(yFresh.sale, FRESH_TARGET_2026).toFixed(1)}%`} valueClass="text-indigo-800" />
+                </div>
+              </div>
+
+              {/* 구분선 */}
+              <div className="flex items-center gap-3 pt-2">
+                <span className="text-xs font-semibold text-gray-500">2026 매출 전망 (순수 운송)</span>
+                <div className="flex-1 border-t border-gray-300" />
+              </div>
+
+              {/* 2026 매출 전망 */}
+              <div className="grid grid-cols-3 gap-4 text-center">
+                <ScenarioCard title="보수적 시나리오" value={forecast2026.conservative} tone="gray" />
+                <ScenarioCard title="기준 시나리오" value={forecast2026.normal} tone="indigo" highlight />
+                <ScenarioCard title="공격적 시나리오" value={forecast2026.aggressive} tone="gray" />
+              </div>
+
+            </div>
+          </div>
+
+          {/* ================= KPI – 총 운송료 ================= */}
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+            <div className="bg-[#1B2B4B] px-6 py-3 flex items-center justify-between">
+              <h3 className="text-[14px] font-bold text-white">총 운송료 (후레쉬 포함)</h3>
+              <span className="text-[11px] text-white/40">배차 + 고정거래처</span>
+            </div>
+            <div className="p-6">
+              <table className="w-full text-[13px] border-collapse text-center">
+                <thead className="bg-gray-50 text-gray-600">
+                  <tr>
+                    <th className="border p-2">구분</th>
+                    <th className="border p-2">매출</th>
+                    <th className="border p-2">운반비</th>
+                    <th className="border p-2">수익</th>
+                    <th className="border p-2">수익률</th>
+                    <th className="border p-2">전월대비</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[
+                    ["월", m, "month"],
+                    ["년", y, null],
+                  ].map(([label, data, key], i) => (
+                    <tr key={i} className="font-semibold">
+                      <td className="border p-2 bg-gray-50">{label}</td>
+                      <td className="border p-2 text-indigo-700">{won(data.sale)}</td>
+                      <td className="border p-2 text-gray-600">{won(data.driver)}</td>
+                      <td className="border p-2 text-emerald-600">{won(data.profit)}</td>
+                      <td className="border p-2 text-indigo-700">{ratePct(profitRate(data.sale, data.profit))}</td>
+                      <td className={`border p-2 ${key ? rateClass(vr[key]) : "text-gray-400"}`}>
+                        {key ? rateText(vr[key]) : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* ================= KPI – 순수 운송 ================= */}
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+            <div className="bg-[#1B2B4B] px-6 py-3">
+              <h3 className="text-[14px] font-bold text-white">순수 운송료 (후레쉬 미포함)</h3>
+            </div>
+            <div className="p-6">
+              <table className="w-full text-[13px] border-collapse text-center">
+                <thead className="bg-gray-50 text-gray-600">
+                  <tr>
+                    <th className="border p-2">구분</th>
+                    <th className="border p-2">매출</th>
+                    <th className="border p-2">운반비</th>
+                    <th className="border p-2">수익</th>
+                    <th className="border p-2">수익률</th>
+                    <th className="border p-2">전월대비</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[
+                    ["일", dPure, null],
+                    ["월", mPure, "month"],
+                    ["년", yPure, null],
+                  ].map(([label, data, key], i) => (
+                    <tr key={i} className="font-semibold">
+                      <td className="border p-2 bg-gray-50">{label}</td>
+                      <td className="border p-2 text-indigo-700">{won(data.sale)}</td>
+                      <td className="border p-2 text-gray-600">{won(data.driver)}</td>
+                      <td className="border p-2 text-emerald-600">{won(data.profit)}</td>
+                      <td className="border p-2 text-indigo-700">{ratePct(profitRate(data.sale, data.profit))}</td>
+                      <td className={`border p-2 ${key ? rateClass(vrPure[key]) : "text-gray-400"}`}>
+                        {key ? rateText(vrPure[key]) : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <SettlementClientAnalysis
+            topRows={monthRows.filter((r) => !isExcludedClient(r.거래처명))}
+            dropRows={rows.filter((r) => !isExcludedClient(r.거래처명))}
+            newClients={newClients}
+            targetMonth={targetMonth}
+          />
+
+        </div>
+
+        {/* ================= RIGHT PANEL ================= */}
+        <div className="flex flex-col gap-6 flex-1">
+
+          {/* 상단 퀵뷰 */}
+          <div className="flex items-center justify-end">
+            <div className="bg-white rounded-xl border border-gray-200 px-4 py-2 flex items-center gap-3">
+              <span className="text-[12px] text-gray-500">당월 수익률</span>
+              <span className={`text-[16px] font-bold ${monthProfitRate >= 15 ? "text-emerald-600" : monthProfitRate >= 10 ? "text-blue-600" : "text-rose-600"}`}>
+                {monthProfitRate.toFixed(1)}%
+              </span>
+              <div className="w-px h-5 bg-gray-200" />
+              <span className="text-[12px] text-gray-500">당월 수익</span>
+              <span className="text-[16px] font-bold text-emerald-600">
+                {monthProfit.toLocaleString()}원
+              </span>
+            </div>
+          </div>
+
+          {/* 연간 요약 차트 */}
+          <div className="flex-1 space-y-6">
+            <YearlySummaryChart
+              rows={rows}
+              year={selectedYear}
+              setYear={setSelectedYear}
+              onAI={(mode) => setAiMode(mode)}
+            />
+
+            {/* 기간별 추이 */}
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+              <div className="bg-[#1B2B4B] px-6 py-4">
+                <h3 className="text-[15px] font-bold text-white">기간별 매출 · 운임 · 수수료 추이</h3>
+                <p className="text-[11px] text-white/50 mt-0.5">거래처별 필터링 및 월별 트렌드 분석</p>
+              </div>
+              <div className="p-6 space-y-5">
+
+                {/* 조회 조건 */}
+                <div className="grid grid-cols-3 gap-3">
+                  <input
+                    type="month"
+                    value={rangeStart}
+                    onChange={(e) => setRangeStart(e.target.value)}
+                    className="border border-gray-200 rounded-lg p-2 text-[13px] focus:outline-none focus:border-blue-400"
+                  />
+                  <input
+                    type="month"
+                    value={rangeEnd}
+                    onChange={(e) => setRangeEnd(e.target.value)}
+                    className="border border-gray-200 rounded-lg p-2 text-[13px] focus:outline-none focus:border-blue-400"
+                  />
+                  <div className="col-span-3 space-y-3">
+                    <div className="text-[12px] font-semibold text-gray-600">거래처 검색</div>
+                    <input
+                      type="text"
+                      placeholder="거래처 검색 (예: 태영, 케이씨)"
+                      value={clientSearch}
+                      onChange={(e) => setClientSearch(e.target.value)}
+                      className="border border-gray-200 rounded-lg p-2 text-[13px] w-full focus:outline-none focus:border-blue-400"
+                    />
+                    {clientSearch && (
+                      <div className="flex flex-wrap gap-2">
+                        {allClients
+                          .filter((c) => c.toLowerCase().includes(clientSearch.toLowerCase()))
+                          .slice(0, 10)
+                          .map((c) => (
+                            <button
+                              key={c}
+                              onClick={() => toggleClient(c)}
+                              className="px-3 py-1 text-xs rounded-full border bg-white text-gray-700 border-gray-300 hover:bg-gray-100 transition"
+                            >
+                              {c}
+                            </button>
+                          ))}
+                      </div>
+                    )}
+                    {rangeClients.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {rangeClients.map((c) => (
+                          <button
+                            key={c}
+                            onClick={() => toggleClient(c)}
+                            className="px-3 py-1 text-xs rounded-full bg-indigo-600 text-white border border-indigo-600"
+                          >
+                            {c} ✕
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    <div className="text-[11px] text-gray-400">선택: {rangeClients.length}개</div>
+                  </div>
+                </div>
+
+                <PeriodTrendChart data={rangeMonthly} />
+                <PeriodSummaryTable data={rangeMonthly} />
+
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ================= DETAIL POPUP ================= */}
+        {detailClient && (
+          <SettlementDetailPopup
+            client={detailClient}
+            rows={monthRows.filter((r) => r.거래처명 === detailClient)}
+            onClose={() => setDetailClient(null)}
+          />
+        )}
+        {aiMode && (
+          <AIInsightModal
+            mode={aiMode}
+            monthRows={monthRows}
+            forecast2026={forecast2026}
+            onClose={() => setAiMode(null)}
+          />
+        )}
+
+      </div>
     </div>
   );
 }
+
 /* ================================================================= */
-/* ================== 이하 컴포넌트 정의 (디자인만 정리) ================= */
+/* ================== 서브 컴포넌트 ================================== */
 /* ================================================================= */
+
 function PeriodTrendChart({ data = [] }) {
   if (!data.length) {
     return (
-      <div className="h-[260px] flex items-center justify-center text-sm text-gray-400">
+      <div className="h-[260px] flex items-center justify-center text-[13px] text-gray-400">
         조회된 데이터가 없습니다
       </div>
     );
@@ -21324,91 +21112,47 @@ function PeriodTrendChart({ data = [] }) {
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={data}>
           <Legend
-  verticalAlign="top"
-  align="right"
-  iconType="circle"
-  wrapperStyle={{
-    fontSize: 12,
-    color: "#374151",
-    paddingBottom: 8,
-  }}
-  formatter={(value) => {
-    if (value === "sale") return "청구운임";
-    if (value === "driver") return "기사운임";
-    if (value === "fee") return "수수료";
-    return value;
-  }}
-/>
-
-          <CartesianGrid stroke="#E5E7EB" strokeDasharray="3 3" />
-
-          <XAxis
-            dataKey="ym"
-            tick={{ fontSize: 11, fill: "#9CA3AF" }}
-            axisLine={false}
-            tickLine={false}
-          />
-
-          <YAxis
-            tickFormatter={(v) => `${(v / 1_000_000).toFixed(0)}M`}
-            tick={{ fontSize: 11, fill: "#9CA3AF" }}
-            axisLine={false}
-            tickLine={false}
-          />
-
-          <Tooltip
-            contentStyle={{
-              background: "#fff",
-              borderRadius: 12,
-              border: "1px solid #E5E7EB",
-              fontSize: 12,
+            verticalAlign="top"
+            align="right"
+            iconType="circle"
+            wrapperStyle={{ fontSize: 12, color: "#374151", paddingBottom: 8 }}
+            formatter={(value) => {
+              if (value === "sale") return "청구운임";
+              if (value === "driver") return "기사운임";
+              if (value === "fee") return "수수료";
+              return value;
             }}
+          />
+          <CartesianGrid stroke="#E5E7EB" strokeDasharray="3 3" />
+          <XAxis dataKey="ym" tick={{ fontSize: 11, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
+          <YAxis tickFormatter={(v) => `${(v / 1_000_000).toFixed(0)}M`} tick={{ fontSize: 11, fill: "#9CA3AF" }} axisLine={false} tickLine={false} />
+          <Tooltip
+            contentStyle={{ background: "#fff", borderRadius: 12, border: "1px solid #E5E7EB", fontSize: 12 }}
             formatter={(v, n) => [
               `${v.toLocaleString()}원`,
               n === "sale" ? "청구운임" : n === "driver" ? "기사운임" : "수수료",
             ]}
           />
-
-          <Line
-            type="monotone"
-            dataKey="sale"
-            stroke="#6366F1"
-            strokeWidth={2.5}
-            dot={false}
-            activeDot={{ r: 5 }}
-          />
-          <Line
-            type="monotone"
-            dataKey="driver"
-            stroke="#10B981"
-            strokeWidth={2}
-            dot={false}
-          />
-          <Line
-            type="monotone"
-            dataKey="fee"
-            stroke="#F59E0B"
-            strokeWidth={2}
-            dot={false}
-          />
+          <Line type="monotone" dataKey="sale" stroke="#6366F1" strokeWidth={2.5} dot={false} activeDot={{ r: 5 }} />
+          <Line type="monotone" dataKey="driver" stroke="#10B981" strokeWidth={2} dot={false} />
+          <Line type="monotone" dataKey="fee" stroke="#F59E0B" strokeWidth={2} dot={false} />
         </LineChart>
       </ResponsiveContainer>
     </div>
   );
 }
+
 function PeriodSummaryTable({ data = [] }) {
   if (!data.length) return null;
-
-  const sum = (key) => data.reduce((a, r) => a + r[key], 0);
-const totalSale = sum("sale");
-const totalDriver = sum("driver"); // ✅ 추가
-const totalFee = sum("fee");
-const totalRate = totalSale ? (totalFee / totalSale) * 100 : 0;
-
+  const sumKey = (key) => data.reduce((a, r) => a + r[key], 0);
+  const totalSale = sumKey("sale");
+  const totalDriver = sumKey("driver");
+  const totalFee = sumKey("fee");
+  const totalRate = totalSale ? (totalFee / totalSale) * 100 : 0;
 
   return (
     <div className="overflow-auto">
-      <table className="w-full text-sm border-collapse text-center">
+      <table className="w-full text-[13px] border-collapse text-center">
         <thead className="bg-gray-50 text-gray-600">
           <tr>
             <th className="border p-2">월</th>
@@ -21418,50 +21162,26 @@ const totalRate = totalSale ? (totalFee / totalSale) * 100 : 0;
             <th className="border p-2">수익률</th>
           </tr>
         </thead>
-
         <tbody>
           {data.map((r) => {
             const rate = r.sale ? (r.fee / r.sale) * 100 : 0;
-
             return (
               <tr key={r.ym} className="hover:bg-gray-50">
                 <td className="border p-2 font-semibold">{r.ym}</td>
-                <td className="border p-2 text-indigo-600">
-                  {r.sale.toLocaleString()}원
-                </td>
-                <td className="border p-2">
-                  {r.driver.toLocaleString()}원
-                </td>
-                <td className="border p-2 text-emerald-600 font-semibold">
-                  {r.fee.toLocaleString()}원
-                </td>
-                <td className="border p-2">
-                  {rate.toFixed(1)}%
-                </td>
+                <td className="border p-2 text-indigo-600">{r.sale.toLocaleString()}원</td>
+                <td className="border p-2">{r.driver.toLocaleString()}원</td>
+                <td className="border p-2 text-emerald-600 font-semibold">{r.fee.toLocaleString()}원</td>
+                <td className="border p-2">{rate.toFixed(1)}%</td>
               </tr>
             );
           })}
-
           <tr className="font-bold bg-gray-100">
-  <td className="border p-2">합계</td>
-
-  <td className="border p-2 text-indigo-700">
-    {totalSale.toLocaleString()}원
-  </td>
-
-  <td className="border p-2 text-gray-700">
-    {totalDriver.toLocaleString()}원
-  </td>
-
-  <td className="border p-2 text-emerald-700">
-    {totalFee.toLocaleString()}원
-  </td>
-
-  <td className="border p-2">
-    {totalRate.toFixed(1)}%
-  </td>
-</tr>
-
+            <td className="border p-2">합계</td>
+            <td className="border p-2 text-indigo-700">{totalSale.toLocaleString()}원</td>
+            <td className="border p-2 text-gray-700">{totalDriver.toLocaleString()}원</td>
+            <td className="border p-2 text-emerald-700">{totalFee.toLocaleString()}원</td>
+            <td className="border p-2">{totalRate.toFixed(1)}%</td>
+          </tr>
         </tbody>
       </table>
     </div>
@@ -21469,176 +21189,108 @@ const totalRate = totalSale ? (totalFee / totalSale) * 100 : 0;
 }
 
 function AIInsightModal({ mode, monthRows = [], forecast2026, onClose }) {
-  const toInt = (v) =>
-    parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
-
-  const sale = monthRows.reduce(
-    (a, r) => a + toInt(r.청구운임),
-    0
-  );
-  const driver = monthRows.reduce(
-    (a, r) => a + toInt(r.기사운임),
-    0
-  );
+  const toInt = (v) => parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
+  const sale = monthRows.reduce((a, r) => a + toInt(r.청구운임), 0);
+  const driver = monthRows.reduce((a, r) => a + toInt(r.기사운임), 0);
   const profit = sale - driver;
   const rate = sale ? (profit / sale) * 100 : 0;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center">
-      <div className="bg-white rounded-2xl w-[520px] p-6 shadow-xl space-y-4">
-        <div className="flex justify-between items-center">
-          <h3 className="text-sm font-bold text-gray-800">
-            {mode === "summary" && "AI 요약"}
-            {mode === "suggest" && "AI 액션 제안"}
-            {mode === "report" && "AI 보고서"}
-          </h3>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-700"
-          >
-            ✕
-          </button>
+    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center">
+      <div className="bg-white rounded-2xl w-[520px] shadow-2xl overflow-hidden">
+        <div className="bg-[#1B2B4B] px-6 py-4 flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">
+              <span className="text-[14px]">🤖</span>
+            </div>
+            <h3 className="text-[14px] font-bold text-white">
+              {mode === "summary" && "AI 요약"}
+              {mode === "suggest" && "AI 액션 제안"}
+              {mode === "report" && "AI 보고서"}
+            </h3>
+          </div>
+          <button onClick={onClose} className="w-7 h-7 rounded-lg bg-white/10 flex items-center justify-center text-white/60 hover:text-white hover:bg-white/20 transition">✕</button>
         </div>
-
-        {mode === "summary" && (
-          <p className="text-sm text-gray-700 leading-relaxed">
-            당월 매출 <b>{sale.toLocaleString()}원</b>,
-            수익 <b>{profit.toLocaleString()}원</b>,
-            수익률 <b>{rate.toFixed(1)}%</b>입니다.
-            <br />
-            현재 추세 기준 2026년 예상 매출은{" "}
-            <b className="text-indigo-700">
-              {forecast2026.normal.toLocaleString()}원
-            </b>
-            입니다.
-          </p>
-        )}
-
-        {mode === "suggest" && (
-          <ul className="list-disc pl-5 text-sm text-gray-700 space-y-1">
-            <li>상위 거래처 운임 재협상 검토</li>
-            <li>수익률 10% 미만 거래처 관리 필요</li>
-            <li>고정 거래처 비중 확대 권장</li>
-          </ul>
-        )}
-
-        {mode === "report" && (
-          <textarea
-            readOnly
-            className="w-full h-40 border rounded-lg p-3 text-sm"
-            value={`2026년 매출 요약 보고
-
-총 매출: ${sale.toLocaleString()}원
-총 수익: ${profit.toLocaleString()}원
-수익률: ${rate.toFixed(1)}%
-
-전반적으로 안정적인 성장 흐름을 유지 중입니다.`}
-          />
-        )}
+        <div className="p-6 space-y-4">
+          {mode === "summary" && (
+            <p className="text-[13px] text-gray-700 leading-relaxed">
+              당월 매출 <b>{sale.toLocaleString()}원</b>, 수익 <b>{profit.toLocaleString()}원</b>, 수익률 <b>{rate.toFixed(1)}%</b>입니다.
+              <br />현재 추세 기준 2026년 예상 매출은{" "}
+              <b className="text-indigo-700">{forecast2026.normal.toLocaleString()}원</b>입니다.
+            </p>
+          )}
+          {mode === "suggest" && (
+            <ul className="list-disc pl-5 text-[13px] text-gray-700 space-y-1">
+              <li>상위 거래처 운임 재협상 검토</li>
+              <li>수익률 10% 미만 거래처 관리 필요</li>
+              <li>고정 거래처 비중 확대 권장</li>
+            </ul>
+          )}
+          {mode === "report" && (
+            <textarea
+              readOnly
+              className="w-full h-40 border border-gray-200 rounded-lg p-3 text-[13px] bg-gray-50"
+              value={`2026년 매출 요약 보고\n\n총 매출: ${sale.toLocaleString()}원\n총 수익: ${profit.toLocaleString()}원\n수익률: ${rate.toFixed(1)}%\n\n전반적으로 안정적인 성장 흐름을 유지 중입니다.`}
+            />
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
-function SettlementClientAnalysis({
-  topRows = [],
-  dropRows = [],
-  newClients = [],
-  targetMonth,
-}) {
+function SettlementClientAnalysis({ topRows = [], dropRows = [], newClients = [], targetMonth }) {
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 space-y-8">
+    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="bg-[#1B2B4B] px-6 py-4">
+        <h3 className="text-[15px] font-bold text-white">거래처 분석 요약</h3>
+        <p className="text-[11px] text-white/50 mt-0.5">Top 10 · 매출 감소 · 신규 거래처</p>
+      </div>
+      <div className="p-6 space-y-8">
 
-      {/* 카드 타이틀 */}
-      <h3 className="text-sm font-semibold text-gray-800">
-        거래처 분석 요약
-      </h3>
+        <section>
+          <h4 className="text-[13px] font-bold text-[#1B2B4B] mb-3">월 매출 Top 10 거래처</h4>
+          <SettlementTop10 rows={topRows} allRows={dropRows} targetMonth={targetMonth} />
+        </section>
 
-      {/* ================= ① 월 매출 Top 10 ================= */}
-      <section>
-        <h4 className="text-xs font-semibold text-gray-600 mb-3">
-          월 매출 Top 10 거래처
-        </h4>
-        <SettlementTop10
-          rows={topRows}
-          allRows={dropRows} // 🔥 전체 rows 전달 (전월 비교용)
-          targetMonth={targetMonth}
-        />
+        <div className="border-t border-gray-200" />
 
-      </section>
+        <section>
+          <h4 className="text-[13px] font-bold text-[#1B2B4B] mb-3">전월 대비 매출 감소 TOP10</h4>
+          <SettlementTop10Drop rows={dropRows} targetMonth={targetMonth} />
+        </section>
 
-      {/* 구분선 */}
-      <div className="border-t border-gray-200" />
+        <div className="border-t border-gray-200" />
 
-      {/* ================= ② 전월 대비 매출 감소 ================= */}
-      <section>
-        <div className="flex justify-between items-end mb-3">
-          <h4 className="text-xs font-semibold text-gray-600">
-            전월 대비 매출 감소 TOP10
-          </h4>
-          <span className="text-[11px] text-gray-400">
+        <section>
+          <h4 className="text-[13px] font-bold text-[#1B2B4B] mb-3">신규 거래처 (당월)</h4>
+          {newClients.length ? (
+            <SettlementNewClients rows={newClients} />
+          ) : (
+            <div className="text-[13px] text-gray-400 text-center py-4">신규 거래처가 없습니다</div>
+          )}
+        </section>
 
-          </span>
-        </div>
-        <SettlementTop10Drop
-  rows={dropRows}
-  targetMonth={targetMonth}
-/>
-      </section>
-
-      {/* 구분선 */}
-      <div className="border-t border-gray-200" />
-
-      {/* ================= ③ 신규 거래처 ================= */}
-      <section>
-        <h4 className="text-xs font-semibold text-gray-600 mb-3">
-          신규 거래처 (당월)
-        </h4>
-
-        {newClients.length ? (
-          <SettlementNewClients rows={newClients} />
-        ) : (
-          <div className="text-sm text-gray-400 text-center py-4">
-            신규 거래처가 없습니다
-          </div>
-        )}
-      </section>
+      </div>
     </div>
   );
 }
 
-function SettlementMonthlyHeader({
-  targetMonth,
-  setTargetMonth,
-  monthRows,
-  forecast,
-  forecast2026,
-}) {
-  const toInt = (v) =>
-    parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
-
-  const totalSale = monthRows.reduce(
-    (a, r) => a + toInt(r.청구운임),
-    0
-  );
+function SettlementMonthlyHeader({ targetMonth, setTargetMonth, monthRows, forecast, forecast2026 }) {
+  const toInt = (v) => parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
+  const totalSale = monthRows.reduce((a, r) => a + toInt(r.청구운임), 0);
   const totalCnt = monthRows.length;
   const avgSale = totalCnt ? totalSale / totalCnt : 0;
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 space-y-6">
-
-      {/* ✅ 섹션 타이틀 (연간 목표 대비 실적과 동일) */}
-      <h3 className="text-base font-bold text-gray-900">
-        누적현황 및 월 예상지표
-      </h3>
-
-      {/* 조회 월 */}
-      <div>
-        <p className="text-sm font-semibold text-gray-800 mb-1">
-          조회 월
-        </p>
+    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
+        <div>
+          <h3 className="text-[15px] font-bold text-white">누적현황 및 월 예상지표</h3>
+          <p className="text-[11px] text-white/50 mt-0.5">선택 월 기준 실적 및 예측</p>
+        </div>
         <select
-          className="border border-gray-300 rounded-lg p-2 w-full text-sm"
+          className="bg-white/10 border border-white/20 text-white rounded-lg px-3 py-1.5 text-[13px] focus:outline-none"
           value={targetMonth}
           onChange={(e) => setTargetMonth(e.target.value)}
         >
@@ -21646,7 +21298,7 @@ function SettlementMonthlyHeader({
             const d = new Date();
             d.setMonth(d.getMonth() - i);
             return (
-              <option key={i}>
+              <option key={i} className="text-gray-900">
                 {d.toISOString().slice(0, 7)}
               </option>
             );
@@ -21654,91 +21306,54 @@ function SettlementMonthlyHeader({
         </select>
       </div>
 
-      {/* ===== 현재 누적 실적 ===== */}
-      <div className="grid grid-cols-3 gap-4 text-center">
-        <StatCard
-          title="총 매출"
-          value={`${totalSale.toLocaleString()}원`}
-        />
-        <StatCard
-          title="총 오더수"
-          value={`${totalCnt}건`}
-        />
-        <StatCard
-          title="평균매출/건"
-          value={`${Math.round(avgSale).toLocaleString()}원`}
-        />
-      </div>
+      <div className="p-6 space-y-6">
 
-      {/* ===== 구분선 ===== */}
-      <div className="flex items-center gap-3 my-2">
-        <span className="text-xs font-semibold text-indigo-600">
-          예상 지표
-        </span>
-        <div className="flex-1 border-t border-dashed border-indigo-300" />
-      </div>
+        {/* 현재 누적 실적 */}
+        <div className="grid grid-cols-3 gap-4 text-center">
+          <StatCard title="총 매출" value={`${totalSale.toLocaleString()}원`} />
+          <StatCard title="총 오더수" value={`${totalCnt}건`} />
+          <StatCard title="평균매출/건" value={`${Math.round(avgSale).toLocaleString()}원`} />
+        </div>
 
-      {/* ===== 월 예상 ===== */}
-      <div className="grid grid-cols-3 gap-4 text-center">
-        <StatCard
-          title="예상 매출"
-          value={`${forecast.sale.toLocaleString()}원`}
-          variant="forecast"
-        />
-        <StatCard
-          title="예상 건수"
-          value={`${forecast.count}건`}
-          variant="forecast"
-        />
-        <StatCard
-          title="예상 수익"
-          value={`${forecast.profit.toLocaleString()}원`}
-          variant="forecast"
-        />
+        {/* 구분선 */}
+        <div className="flex items-center gap-3 my-2">
+          <span className="text-xs font-semibold text-indigo-600">예상 지표</span>
+          <div className="flex-1 border-t border-dashed border-indigo-300" />
+        </div>
+
+        {/* 월 예상 */}
+        <div className="grid grid-cols-3 gap-4 text-center">
+          <StatCard title="예상 매출" value={`${forecast.sale.toLocaleString()}원`} variant="forecast" />
+          <StatCard title="예상 건수" value={`${forecast.count}건`} variant="forecast" />
+          <StatCard title="예상 수익" value={`${forecast.profit.toLocaleString()}원`} variant="forecast" />
+        </div>
+
+        {/* AI 인사이트 */}
+        <AIPremiumInsight rows={monthRows} targetMonth={targetMonth} forecast2026={forecast2026} yPure={null} />
+
       </div>
-      {/* ===== AI 프리미엄 인사이트 ===== */}
-      <AIPremiumInsight
-        rows={monthRows}
-        targetMonth={targetMonth}
-        forecast2026={forecast2026}
-        yPure={null}
-      />
     </div>
   );
 }
 
 function SettlementTop10({ rows = [], allRows = [], targetMonth }) {
-  const toInt = (v) =>
-    parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
+  const toInt = (v) => parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
+  const [y, m] = targetMonth.split("-").map(Number);
+  const curStart = `${y}-${String(m).padStart(2, "0")}-01`;
+  const curEnd = `${y}-${String(m).padStart(2, "0")}-${new Date(y, m, 0).getDate()}`;
+  const prev = new Date(y, m - 2, 1);
+  const py = prev.getFullYear();
+  const pm = prev.getMonth() + 1;
+  const prevStart = `${py}-${String(pm).padStart(2, "0")}-01`;
+  const prevEnd = `${py}-${String(pm).padStart(2, "0")}-${new Date(py, pm, 0).getDate()}`;
 
-  // ===============================
-  // 📅 전월 동일 기간 계산
-  // ===============================
-const [y, m] = targetMonth.split("-").map(Number);
-
-const curStart = `${y}-${String(m).padStart(2, "0")}-01`;
-const curEnd = `${y}-${String(m).padStart(2, "0")}-${new Date(y, m, 0).getDate()}`;
-
-const prev = new Date(y, m - 2, 1);
-const py = prev.getFullYear();
-const pm = prev.getMonth() + 1;
-
-const prevStart = `${py}-${String(pm).padStart(2, "0")}-01`;
-const prevEnd = `${py}-${String(pm).padStart(2, "0")}-${new Date(py, pm, 0).getDate()}`;
-
-
-  // ===============================
-  // 📦 거래처별 집계 함수
-  // ===============================
   const groupByClient = (list) => {
     const map = {};
     list.forEach((r) => {
       const c = r.거래처명 || "미지정";
       if (!map[c]) map[c] = { sale: 0, profit: 0, cnt: 0 };
-
       const sale = toInt(r.청구운임);
       const driver = toInt(r.기사운임);
-
       map[c].sale += sale;
       map[c].profit += sale - driver;
       map[c].cnt += 1;
@@ -21746,34 +21361,21 @@ const prevEnd = `${py}-${String(pm).padStart(2, "0")}-${new Date(py, pm, 0).getD
     return map;
   };
 
-  // 당월 / 전월 맵
-  const curMap = groupByClient(
-    allRows.filter((r) => r.상차일 >= curStart && r.상차일 <= curEnd)
-  );
-  const prevMap = groupByClient(
-    allRows.filter((r) => r.상차일 >= prevStart && r.상차일 <= prevEnd)
-  );
+  const curMap = groupByClient(allRows.filter((r) => r.상차일 >= curStart && r.상차일 <= curEnd));
+  const prevMap = groupByClient(allRows.filter((r) => r.상차일 >= prevStart && r.상차일 <= prevEnd));
 
-  // ===============================
-  // 📊 당월 Top10 + ▲▼ 계산
-  // ===============================
   const top10 = Object.keys(curMap)
     .map((client) => {
       const cur = curMap[client];
-      const prev = prevMap[client] || { sale: 0, profit: 0, cnt: 0 };
-
+      const pv = prevMap[client] || { sale: 0, profit: 0, cnt: 0 };
       return {
         client,
         sale: cur.sale,
         profit: cur.profit,
         cnt: cur.cnt,
-        saleRate:
-          prev.sale === 0 ? 0 : ((cur.sale - prev.sale) / prev.sale) * 100,
-        profitRate:
-          prev.profit === 0
-            ? 0
-            : ((cur.profit - prev.profit) / prev.profit) * 100,
-        cntDiff: cur.cnt - prev.cnt,
+        saleRate: pv.sale === 0 ? 0 : ((cur.sale - pv.sale) / pv.sale) * 100,
+        profitRate: pv.profit === 0 ? 0 : ((cur.profit - pv.profit) / pv.profit) * 100,
+        cntDiff: cur.cnt - pv.cnt,
       };
     })
     .sort((a, b) => b.sale - a.sale)
@@ -21781,19 +21383,11 @@ const prevEnd = `${py}-${String(pm).padStart(2, "0")}-${new Date(py, pm, 0).getD
 
   const won = (n) => `${n.toLocaleString()}원`;
   const arrow = (n) => (n >= 0 ? "▲" : "▼");
-  const rateCls = (n) =>
-    n >= 0 ? "text-emerald-600" : "text-rose-600";
+  const rateCls = (n) => (n >= 0 ? "text-emerald-600" : "text-rose-600");
 
-  // ===============================
-  // 🧩 UI
-  // ===============================
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-      <h3 className="text-sm font-semibold text-gray-800 mb-4">
-        월 매출 Top 10 거래처 (전월/전일대비)
-      </h3>
-
-      <table className="w-full text-sm border-collapse text-center">
+    <div className="rounded-xl border border-gray-200 bg-gray-50/50 p-5">
+      <table className="w-full text-[13px] border-collapse text-center">
         <thead className="bg-gray-50 text-gray-600">
           <tr>
             <th className="border p-2">순위</th>
@@ -21807,40 +21401,24 @@ const prevEnd = `${py}-${String(pm).padStart(2, "0")}-${new Date(py, pm, 0).getD
           {top10.map((r, i) => (
             <tr key={r.client} className="hover:bg-gray-50">
               <td className="border p-2 font-semibold">{i + 1}</td>
-
-              <td className="border p-2 text-indigo-700 font-semibold">
-                {r.client}
-              </td>
-
+              <td className="border p-2 text-indigo-700 font-semibold">{r.client}</td>
               <td className="border p-2">
                 <span className="inline-flex items-center gap-1">
                   <span>{won(r.sale)}</span>
-                  <span className={`text-xs ${rateCls(r.saleRate)}`}>
-                    {arrow(r.saleRate)}{Math.abs(r.saleRate).toFixed(1)}%
-                  </span>
+                  <span className={`text-[11px] ${rateCls(r.saleRate)}`}>{arrow(r.saleRate)}{Math.abs(r.saleRate).toFixed(1)}%</span>
                 </span>
               </td>
-
               <td className="border p-2 text-emerald-600">
                 <span className="inline-flex items-center gap-1">
                   <span>{won(r.profit)}</span>
-                  <span className={`text-xs ${rateCls(r.profitRate)}`}>
-                    {arrow(r.profitRate)}{Math.abs(r.profitRate).toFixed(1)}%
-                  </span>
+                  <span className={`text-[11px] ${rateCls(r.profitRate)}`}>{arrow(r.profitRate)}{Math.abs(r.profitRate).toFixed(1)}%</span>
                 </span>
               </td>
-
               <td className="border p-2">
                 <span className="inline-flex items-center gap-1">
                   <span>{r.cnt}</span>
-                  <span
-                    className={`text-xs ${r.cntDiff >= 0
-                      ? "text-emerald-600"
-                      : "text-rose-600"
-                      }`}
-                  >
-                    ({r.cntDiff >= 0 ? "+" : ""}
-                    {r.cntDiff})
+                  <span className={`text-[11px] ${r.cntDiff >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                    ({r.cntDiff >= 0 ? "+" : ""}{r.cntDiff})
                   </span>
                 </span>
               </td>
@@ -21853,26 +21431,16 @@ const prevEnd = `${py}-${String(pm).padStart(2, "0")}-${new Date(py, pm, 0).getD
 }
 
 function SettlementTop10Drop({ rows = [], targetMonth }) {
-  const toInt = (v) =>
-    parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
+  const toInt = (v) => parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
+  const [y, m] = targetMonth.split("-").map(Number);
+  const curStart = `${y}-${String(m).padStart(2, "0")}-01`;
+  const curEnd = `${y}-${String(m).padStart(2, "0")}-${new Date(y, m, 0).getDate()}`;
+  const prev = new Date(y, m - 2, 1);
+  const py = prev.getFullYear();
+  const pm = prev.getMonth() + 1;
+  const prevStart = `${py}-${String(pm).padStart(2, "0")}-01`;
+  const prevEnd = `${py}-${String(pm).padStart(2, "0")}-${new Date(py, pm, 0).getDate()}`;
 
-  // ===============================
-  // 📅 전월 동일 기간 계산
-  // ===============================
-const [y, m] = targetMonth.split("-").map(Number);
-
-const curStart = `${y}-${String(m).padStart(2, "0")}-01`;
-const curEnd = `${y}-${String(m).padStart(2, "0")}-${new Date(y, m, 0).getDate()}`;
-
-const prev = new Date(y, m - 2, 1);
-const py = prev.getFullYear();
-const pm = prev.getMonth() + 1;
-
-const prevStart = `${py}-${String(pm).padStart(2, "0")}-01`;
-const prevEnd = `${py}-${String(pm).padStart(2, "0")}-${new Date(py, pm, 0).getDate()}`;
-  // ===============================
-  // 📦 거래처별 누적 매출 집계
-  // ===============================
   const groupByClient = (list) => {
     const map = {};
     list.forEach((r) => {
@@ -21884,48 +21452,28 @@ const prevEnd = `${py}-${String(pm).padStart(2, "0")}-${new Date(py, pm, 0).getD
     return map;
   };
 
-  const curMap = groupByClient(
-    rows.filter((r) => r.상차일 >= curStart && r.상차일 <= curEnd)
-  );
-  const prevMap = groupByClient(
-    rows.filter((r) => r.상차일 >= prevStart && r.상차일 <= prevEnd)
-  );
+  const curMap = groupByClient(rows.filter((r) => r.상차일 >= curStart && r.상차일 <= curEnd));
+  const prevMap = groupByClient(rows.filter((r) => r.상차일 >= prevStart && r.상차일 <= prevEnd));
 
-  // ===============================
-  // 🏷 원인 분석 태깅
-  // ===============================
   const reasonTag = ({ prevCnt, curCnt, prevSale, curSale }) => {
     if (prevCnt > 0 && curCnt === 0) return "거래 중단 의심";
     if (curCnt <= prevCnt * 0.6) return "거래량 급감";
-    if (
-      curCnt > 0 &&
-      curSale / curCnt < (prevSale / Math.max(prevCnt, 1)) * 0.7
-    )
-      return "단가 하락";
+    if (curCnt > 0 && curSale / curCnt < (prevSale / Math.max(prevCnt, 1)) * 0.7) return "단가 하락";
     return "기타";
   };
 
-  // ===============================
-  // 📉 전월 대비 매출 감소 TOP10 (누적)
-  // ===============================
   const drops = Object.keys({ ...curMap, ...prevMap })
     .map((client) => {
       const cur = curMap[client] || { sale: 0, cnt: 0 };
-      const prev = prevMap[client] || { sale: 0, cnt: 0 };
-
+      const pv = prevMap[client] || { sale: 0, cnt: 0 };
       return {
         client,
-        prevSale: prev.sale,
+        prevSale: pv.sale,
         curSale: cur.sale,
-        prevCnt: prev.cnt,
+        prevCnt: pv.cnt,
         curCnt: cur.cnt,
-        diff: cur.sale - prev.sale,
-        reason: reasonTag({
-          prevCnt: prev.cnt,
-          curCnt: cur.cnt,
-          prevSale: prev.sale,
-          curSale: cur.sale,
-        }),
+        diff: cur.sale - pv.sale,
+        reason: reasonTag({ prevCnt: pv.cnt, curCnt: cur.cnt, prevSale: pv.sale, curSale: cur.sale }),
       };
     })
     .filter((r) => r.diff < 0)
@@ -21935,27 +21483,18 @@ const prevEnd = `${py}-${String(pm).padStart(2, "0")}-${new Date(py, pm, 0).getD
 
   if (!drops.length) return null;
 
-  // ===============================
-  // 🧩 UI
-  // ===============================
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+    <div className="rounded-xl border border-gray-200 bg-gray-50/50 p-5">
       <div className="flex justify-between items-end mb-3">
-        <h3 className="text-sm font-semibold text-gray-800">
-          전월 대비 매출 감소 TOP10
-        </h3>
-        <span className="text-[11px] font-medium text-indigo-600">
-          기준: 해당 월 1일 ~ 말일 (선택 월 기준)
-        </span>
+        <span className="text-[11px] font-medium text-indigo-600">기준: 해당 월 1일 ~ 말일</span>
       </div>
-
-      <table className="w-full text-sm border-collapse text-center">
+      <table className="w-full text-[13px] border-collapse text-center">
         <thead className="bg-gray-50 text-gray-600">
           <tr>
             <th className="border p-2">순위</th>
             <th className="border p-2">거래처</th>
-            <th className="border p-2">전월 누적 매출</th>
-            <th className="border p-2">당월 누적 매출</th>
+            <th className="border p-2">전월 매출</th>
+            <th className="border p-2">당월 매출</th>
             <th className="border p-2">거래량</th>
             <th className="border p-2">감소액</th>
             <th className="border p-2">원인 분석</th>
@@ -21964,27 +21503,13 @@ const prevEnd = `${py}-${String(pm).padStart(2, "0")}-${new Date(py, pm, 0).getD
         <tbody>
           {drops.map((r) => (
             <tr key={r.client} className="hover:bg-gray-50">
-              <td className="border p-2 font-semibold">
-                {r.rank}
-              </td>
-              <td className="border p-2 font-semibold">
-                {r.client}
-              </td>
-              <td className="border p-2 text-indigo-600 font-semibold">
-                {r.prevSale.toLocaleString()}원
-              </td>
-              <td className="border p-2 text-rose-600 font-semibold">
-                {r.curSale.toLocaleString()}원
-              </td>
-              <td className="border p-2">
-                {r.prevCnt} → {r.curCnt}
-              </td>
-              <td className="border p-2 text-rose-600 font-bold">
-                {r.diff.toLocaleString()}원
-              </td>
-              <td className="border p-2 text-xs font-medium text-gray-700">
-                {r.reason}
-              </td>
+              <td className="border p-2 font-semibold">{r.rank}</td>
+              <td className="border p-2 font-semibold">{r.client}</td>
+              <td className="border p-2 text-indigo-600 font-semibold">{r.prevSale.toLocaleString()}원</td>
+              <td className="border p-2 text-rose-600 font-semibold">{r.curSale.toLocaleString()}원</td>
+              <td className="border p-2">{r.prevCnt} → {r.curCnt}</td>
+              <td className="border p-2 text-rose-600 font-bold">{r.diff.toLocaleString()}원</td>
+              <td className="border p-2 text-[11px] font-medium text-gray-700">{r.reason}</td>
             </tr>
           ))}
         </tbody>
@@ -21992,16 +21517,12 @@ const prevEnd = `${py}-${String(pm).padStart(2, "0")}-${new Date(py, pm, 0).getD
     </div>
   );
 }
+
 function SettlementNewClients({ rows = [] }) {
   if (!rows.length) return null;
-
   return (
-    <div className="bg-white rounded-2xl border p-6">
-      <h3 className="text-sm font-semibold text-indigo-700 mb-3">
-        신규 거래처 (당월)
-      </h3>
-
-      <table className="w-full text-sm text-center border-collapse">
+    <div className="rounded-xl border border-gray-200 bg-gray-50/50 p-5">
+      <table className="w-full text-[13px] text-center border-collapse">
         <thead className="bg-gray-50">
           <tr>
             <th className="border p-2">거래처</th>
@@ -22013,16 +21534,12 @@ function SettlementNewClients({ rows = [] }) {
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.client}>
+            <tr key={r.client} className="hover:bg-gray-50">
               <td className="border p-2 font-semibold">{r.client}</td>
               <td className="border p-2">{r.firstDate}</td>
               <td className="border p-2">{r.cnt}</td>
-              <td className="border p-2">
-                {r.sale.toLocaleString()}원
-              </td>
-              <td className="border p-2 text-emerald-600">
-                {r.profit.toLocaleString()}원
-              </td>
+              <td className="border p-2">{r.sale.toLocaleString()}원</td>
+              <td className="border p-2 text-emerald-600">{r.profit.toLocaleString()}원</td>
             </tr>
           ))}
         </tbody>
@@ -22031,517 +21548,205 @@ function SettlementNewClients({ rows = [] }) {
   );
 }
 
-
 function SettlementOverallStats({ rows }) {
-  const toInt = (v) =>
-    parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) ||
-    0;
+  const toInt = (v) => parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
   const won = (n) => `${(n || 0).toLocaleString()}원`;
-
   const totalCnt = rows.length;
-  const totalSale = rows.reduce(
-    (a, r) => a + toInt(r.청구운임),
-    0
-  );
+  const totalSale = rows.reduce((a, r) => a + toInt(r.청구운임), 0);
   const avgSale = totalCnt ? totalSale / totalCnt : 0;
-
   return (
     <div className="grid grid-cols-3 gap-4 text-center">
       <StatCard title="총 매출" value={won(totalSale)} />
       <StatCard title="총 오더수" value={`${totalCnt}건`} />
-      <StatCard
-        title="평균매출/오더"
-        value={won(avgSale)}
-      />
+      <StatCard title="평균매출/오더" value={won(avgSale)} />
     </div>
   );
 }
 
-function StatCard({
-  title,
-  value,
-  variant = "current", // current | forecast
-}) {
+function StatCard({ title, value, variant = "current", sub = null }) {
   const isForecast = variant === "forecast";
-
   return (
-    <div
-      className={`
-        rounded-xl border p-4
-        ${isForecast
-          ? "bg-indigo-50 border-indigo-200"
-          : "bg-white border-gray-200"}
-      `}
-
-    >
-      {/* 라벨 */}
-      <p
-        className={`
-          text-sm font-semibold tracking-tight
-          ${isForecast ? "text-indigo-700" : "text-gray-800"}
-        `}
-      >
-        {title}
-      </p>
-
-      {/* 값 */}
-      <p
-        className={`
-          mt-1 tracking-tight
-          ${isForecast
-            ? "text-lg font-semibold text-indigo-800"
-            : "text-xl font-bold text-gray-900"}
-        `}
-      >
-        {value}
-      </p>
+    <div className={`rounded-xl border p-4 transition-all hover:shadow-md ${isForecast ? "bg-gradient-to-br from-indigo-50 to-blue-50 border-indigo-200" : "bg-white border-gray-200"}`}>
+      <div className="flex items-center gap-2 mb-1">
+        {isForecast && <span className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse" />}
+        <p className={`text-[12px] font-semibold tracking-tight ${isForecast ? "text-indigo-600" : "text-gray-500"}`}>{title}</p>
+      </div>
+      <p className={`tracking-tight ${isForecast ? "text-[17px] font-bold text-indigo-800" : "text-[19px] font-bold text-gray-900"}`}>{value}</p>
+      {sub && <p className="text-[11px] text-gray-400 mt-1">{sub}</p>}
     </div>
   );
 }
+
 function Metric({ label, value, valueClass = "text-gray-900" }) {
   return (
-    <div>
-      <p className="text-sm font-semibold text-gray-600">{label}</p>
-      <p className={`text-lg font-bold ${valueClass}`}>{value}</p>
+    <div className="rounded-lg bg-white border border-gray-100 px-3 py-2">
+      <p className="text-[11px] font-semibold text-gray-500 mb-0.5">{label}</p>
+      <p className={`text-[16px] font-bold ${valueClass}`}>{value}</p>
     </div>
   );
 }
 
 function ScenarioCard({ title, value, tone, highlight = false }) {
   const toneMap = {
-    gray: "bg-gray-50 border-gray-300 text-gray-900",
-    indigo: "bg-indigo-50 border-indigo-300 text-indigo-800",
-    emerald: "bg-emerald-50 border-emerald-300 text-emerald-800",
+    gray: "bg-gray-50 border-gray-200 text-gray-800",
+    indigo: "bg-gradient-to-br from-indigo-50 to-blue-50 border-indigo-300 text-indigo-800",
+    emerald: "bg-gradient-to-br from-emerald-50 to-green-50 border-emerald-300 text-emerald-800",
   };
+  const labelMap = { gray: "text-gray-500", indigo: "text-indigo-600", emerald: "text-emerald-600" };
 
   return (
-    <div
-      className={`
-        rounded-xl border p-4
-        ${toneMap[tone]}
-        ${highlight ? "ring-2 ring-indigo-300" : ""}
-      `}
-    >
-      <p className="text-sm font-semibold mb-1">{title}</p>
-      <p className="text-lg font-bold">
-        {value.toLocaleString()}원
-      </p>
+    <div className={`rounded-xl border p-5 transition-all hover:shadow-md ${toneMap[tone]} ${highlight ? "ring-2 ring-indigo-400 shadow-lg scale-[1.02]" : ""}`}>
+      <p className={`text-[12px] font-semibold mb-2 ${labelMap[tone]}`}>{title}</p>
+      <p className="text-[18px] font-bold">{value.toLocaleString()}원</p>
+      {highlight && (
+        <span className="inline-block mt-2 px-2 py-0.5 text-[10px] font-bold bg-indigo-600 text-white rounded-full">기준 시나리오</span>
+      )}
     </div>
   );
 }
 
-function AIPremiumInsight({
-  rows = [],
-  targetMonth,
-  forecast2026,
-  yPure,
-}) {
-  const toInt = (v) =>
-    parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
-
-  const totalSale = rows.reduce(
-    (a, r) => a + toInt(r.청구운임),
-    0
-  );
-  const totalDriver = rows.reduce(
-    (a, r) => a + toInt(r.기사운임),
-    0
-  );
+function AIPremiumInsight({ rows = [], targetMonth, forecast2026, yPure }) {
+  const toInt = (v) => parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
+  const totalSale = rows.reduce((a, r) => a + toInt(r.청구운임), 0);
+  const totalDriver = rows.reduce((a, r) => a + toInt(r.기사운임), 0);
   const profit = totalSale - totalDriver;
-
-  const profitRate =
-    totalSale === 0 ? 0 : (profit / totalSale) * 100;
+  const profitRate = totalSale === 0 ? 0 : (profit / totalSale) * 100;
 
   return (
-    <div className="bg-gradient-to-br from-indigo-50 to-white rounded-2xl border border-indigo-200 shadow-sm p-6 space-y-4">
-      <h3 className="text-sm font-semibold text-indigo-700">
-        AI 프리미엄 인사이트
-      </h3>
-
-      <p className="text-sm text-gray-700 leading-relaxed">
-        {targetMonth} 기준 순수 운송 매출은{" "}
-        <b>{totalSale.toLocaleString()}원</b>,
-        수익은 <b>{profit.toLocaleString()}원</b>으로
-        수익률 <b>{profitRate.toFixed(1)}%</b>를 기록 중입니다.
-      </p>
-
-      <p className="text-sm text-gray-700 leading-relaxed">
-        현재 추세가 유지될 경우 2026년 예상 매출은
-        <b className="text-indigo-700">
-          {" "}
-          {forecast2026.normal.toLocaleString()}원
-        </b>{" "}
-        수준으로 예상됩니다.
-      </p>
-
-      <div className="bg-white border rounded-xl p-4 text-sm">
-        <p className="font-semibold text-gray-800 mb-1">
-          AI 요약 코멘트
+    <div className="bg-gradient-to-br from-indigo-50 via-blue-50 to-white rounded-2xl border border-indigo-200 shadow-sm overflow-hidden">
+      <div className="px-6 py-4 border-b border-indigo-100 flex items-center gap-3">
+        <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center">
+          <span className="text-[14px]">🤖</span>
+        </div>
+        <div>
+          <h3 className="text-[14px] font-bold text-indigo-800">AI 프리미엄 인사이트</h3>
+          <p className="text-[11px] text-indigo-500">데이터 기반 자동 분석</p>
+        </div>
+      </div>
+      <div className="p-6 space-y-4">
+        <p className="text-[13px] text-gray-700 leading-relaxed">
+          {targetMonth} 기준 순수 운송 매출은 <b>{totalSale.toLocaleString()}원</b>, 수익은 <b>{profit.toLocaleString()}원</b>으로 수익률 <b>{profitRate.toFixed(1)}%</b>를 기록 중입니다.
         </p>
-        <p className="text-gray-600">
-          고정 거래처 비중이 안정적이며,
-          전년 대비 성장 여력이 충분합니다.
-          상위 거래처 집중 관리 시
-          연간 목표 달성 가능성이 높습니다.
+        <p className="text-[13px] text-gray-700 leading-relaxed">
+          현재 추세가 유지될 경우 2026년 예상 매출은
+          <b className="text-indigo-700"> {forecast2026.normal.toLocaleString()}원</b> 수준으로 예상됩니다.
         </p>
+        <div className="bg-white border border-indigo-100 rounded-xl p-4 text-[13px]">
+          <p className="font-semibold text-gray-800 mb-1">AI 요약 코멘트</p>
+          <p className="text-gray-600">
+            고정 거래처 비중이 안정적이며, 전년 대비 성장 여력이 충분합니다. 상위 거래처 집중 관리 시 연간 목표 달성 가능성이 높습니다.
+          </p>
+        </div>
       </div>
     </div>
   );
 }
 
 function YearlySummaryChart({ rows = [], year, setYear, onAI }) {
-  const toInt = (v) =>
-    parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
-
-  const isFresh = (r) =>
-    String(r.거래처명 || "").includes("후레쉬물류");
-
+  const toInt = (v) => parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
+  const isFresh = (r) => String(r.거래처명 || "").includes("후레쉬물류");
   const months = Array.from({ length: 12 }, (_, i) => i + 1);
 
   const summary = months.map((m) => {
     const key = `${year}-${String(m).padStart(2, "0")}`;
-    const list = rows.filter((r) =>
-      (r.상차일 || "").startsWith(key)
-    );
-
+    const list = rows.filter((r) => (r.상차일 || "").startsWith(key));
     const sale = list.reduce((a, r) => a + toInt(r.청구운임), 0);
     const driver = list.reduce((a, r) => a + toInt(r.기사운임), 0);
     const profit = sale - driver;
-
     const pureList = list.filter((r) => !isFresh(r));
-    const pureSale = pureList.reduce(
-      (a, r) => a + toInt(r.청구운임),
-      0
-    );
-    const pureDriver = pureList.reduce(
-      (a, r) => a + toInt(r.기사운임),
-      0
-    );
+    const pureSale = pureList.reduce((a, r) => a + toInt(r.청구운임), 0);
+    const pureDriver = pureList.reduce((a, r) => a + toInt(r.기사운임), 0);
     const pureProfit = pureSale - pureDriver;
-
     const freshList = list.filter((r) => isFresh(r));
-    const freshSale = freshList.reduce(
-      (a, r) => a + toInt(r.청구운임),
-      0
-    );
-    const freshDriver = freshList.reduce(
-      (a, r) => a + toInt(r.기사운임),
-      0
-    );
+    const freshSale = freshList.reduce((a, r) => a + toInt(r.청구운임), 0);
+    const freshDriver = freshList.reduce((a, r) => a + toInt(r.기사운임), 0);
     const freshProfit = freshSale - freshDriver;
-
     return {
-      month: `${m}월`,
-      sale,
-      profit,
+      month: `${m}월`, sale, profit,
       rate: sale ? (profit / sale) * 100 : 0,
-      pureSale,
-      pureProfit,
+      pureSale, pureProfit,
       pureRate: pureSale ? (pureProfit / pureSale) * 100 : 0,
-      freshSale,
-      freshProfit,
+      freshSale, freshProfit,
       freshRate: freshSale ? (freshProfit / freshSale) * 100 : 0,
     };
   });
 
   const total = summary.reduce(
     (a, r) => ({
-      sale: a.sale + r.sale,
-      profit: a.profit + r.profit,
-      pureSale: a.pureSale + r.pureSale,
-      pureProfit: a.pureProfit + r.pureProfit,
-      freshSale: a.freshSale + r.freshSale,
-      freshProfit: a.freshProfit + r.freshProfit,
+      sale: a.sale + r.sale, profit: a.profit + r.profit,
+      pureSale: a.pureSale + r.pureSale, pureProfit: a.pureProfit + r.pureProfit,
+      freshSale: a.freshSale + r.freshSale, freshProfit: a.freshProfit + r.freshProfit,
     }),
     { sale: 0, profit: 0, pureSale: 0, pureProfit: 0, freshSale: 0, freshProfit: 0 }
   );
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-semibold text-gray-800">
-          {year}년 월별 매출 · 수익 · 수익률 요약
-        </h3>
-
+    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
+        <div>
+          <h3 className="text-[15px] font-bold text-white">{year}년 월별 매출 · 수익 · 수익률 요약</h3>
+          <p className="text-[11px] text-white/50 mt-0.5">전체 / 순수 운송 / 후레쉬 물류 구분</p>
+        </div>
         <div className="flex items-center gap-2">
-          {/* 🤖 AI 버튼 */}
-          <button
-            onClick={() => onAI("summary")}
-            className="px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs hover:bg-indigo-500"
-          >
-            요약
-          </button>
-
-          <button
-            onClick={() => onAI("suggest")}
-            className="px-3 py-1.5 rounded-lg bg-emerald-100 text-emerald-700 text-xs hover:bg-emerald-200"
-          >
-            제안
-          </button>
-
-          <button
-            onClick={() => onAI("report")}
-            className="px-3 py-1.5 rounded-lg bg-gray-100 text-gray-700 text-xs hover:bg-gray-200"
-          >
-            보고서
-          </button>
-
-
-          {/* 연도 선택 */}
+          <button onClick={() => onAI("summary")} className="px-3 py-1.5 rounded-lg bg-white/10 text-white text-[12px] font-semibold hover:bg-white/20 transition border border-white/20">AI 요약</button>
+          <button onClick={() => onAI("suggest")} className="px-3 py-1.5 rounded-lg bg-emerald-500/80 text-white text-[12px] font-semibold hover:bg-emerald-500 transition">AI 제안</button>
+          <button onClick={() => onAI("report")} className="px-3 py-1.5 rounded-lg bg-white/10 text-white text-[12px] font-semibold hover:bg-white/20 transition border border-white/20">보고서</button>
           <select
-            className="border rounded-lg px-2 py-1 text-sm ml-1"
+            className="bg-white/10 border border-white/20 text-white rounded-lg px-3 py-1.5 text-[13px] focus:outline-none ml-1"
             value={year}
             onChange={(e) => setYear(Number(e.target.value))}
           >
-            {Array.from(
-              new Set(
-                rows
-                  .map((r) => r.상차일?.slice(0, 4))
-                  .filter(Boolean)
-              )
-            )
+            {Array.from(new Set(rows.map((r) => r.상차일?.slice(0, 4)).filter(Boolean)))
               .sort((a, b) => b - a)
               .map((y) => (
-                <option key={y} value={Number(y)}>
-                  {y}년
-                </option>
+                <option key={y} value={Number(y)} className="text-gray-900">{y}년</option>
               ))}
           </select>
         </div>
       </div>
-      <table className="w-full text-sm border-collapse text-center">
-        <thead>
-          {/* ===== 1줄: 그룹 헤더 ===== */}
-          <tr className="bg-gray-100 text-gray-700 text-sm">
-            <th rowSpan={2} className="border p-2">월</th>
 
-            <th colSpan={3} className="border p-2 bg-indigo-50">
-              전체 매출
-            </th>
-
-            <th colSpan={3} className="border p-2 bg-emerald-50">
-              순수 운송 (후레쉬 제외)
-            </th>
-
-            <th colSpan={3} className="border p-2 bg-rose-50">
-              후레쉬 물류
-            </th>
-          </tr>
-
-          {/* ===== 2줄: 실제 컬럼 ===== */}
-          <tr className="bg-gray-50 text-gray-600 text-xs">
-            <th className="border p-2">매출</th>
-            <th className="border p-2">수익</th>
-            <th className="border p-2">수익률</th>
-
-            <th className="border p-2">매출</th>
-            <th className="border p-2">수익</th>
-            <th className="border p-2">수익률</th>
-
-            <th className="border p-2">매출</th>
-            <th className="border p-2">수익</th>
-            <th className="border p-2">수익률</th>
-          </tr>
-        </thead>
-
-        <tbody>
-          {summary.map((r) => (
-            <tr key={r.month}>
-              <td className="border p-2 font-semibold">{r.month}</td>
-              <td className="border p-2 text-indigo-600">
-                {r.sale.toLocaleString()}원
-              </td>
-              <td className="border p-2 text-emerald-600">
-                {r.profit.toLocaleString()}원
-              </td>
-              <td className="border p-2">
-                {r.rate.toFixed(1)}%
-              </td>
-              <td className="border p-2 text-indigo-600">
-                {r.pureSale.toLocaleString()}원
-              </td>
-              <td className="border p-2 text-emerald-600">
-                {r.pureProfit.toLocaleString()}원
-              </td>
-              <td className="border p-2">
-                {r.pureRate.toFixed(1)}%
-              </td>
-              <td className="border p-2 text-rose-600">
-                {r.freshSale.toLocaleString()}원
-              </td>
-              <td className="border p-2 text-rose-600">
-                {r.freshProfit.toLocaleString()}원
-              </td>
-              <td className="border p-2">
-                {r.freshRate.toFixed(1)}%
-              </td>
+      <div className="p-6">
+        <table className="w-full text-[13px] border-collapse text-center">
+          <thead>
+            <tr className="bg-gray-100 text-gray-700 text-[13px]">
+              <th rowSpan={2} className="border p-2">월</th>
+              <th colSpan={3} className="border p-2 bg-indigo-50">전체 매출</th>
+              <th colSpan={3} className="border p-2 bg-emerald-50">순수 운송 (후레쉬 제외)</th>
+              <th colSpan={3} className="border p-2 bg-rose-50">후레쉬 물류</th>
             </tr>
-          ))}
-
-          <tr className="font-bold bg-gray-50">
-            <td className="border p-2">합계</td>
-            <td className="border p-2 text-indigo-700">
-              {total.sale.toLocaleString()}원
-            </td>
-            <td className="border p-2 text-emerald-700">
-              {total.profit.toLocaleString()}원
-            </td>
-            <td className="border p-2">
-              {total.sale
-                ? ((total.profit / total.sale) * 100).toFixed(1)
-                : "0.0"}
-              %
-            </td>
-            <td className="border p-2 text-indigo-700">
-              {total.pureSale.toLocaleString()}원
-            </td>
-            <td className="border p-2 text-emerald-700">
-              {total.pureProfit.toLocaleString()}원
-            </td>
-            <td className="border p-2">
-              {total.pureSale
-                ? ((total.pureProfit / total.pureSale) * 100).toFixed(1)
-                : "0.0"}
-              %
-            </td>
-            <td className="border p-2 text-rose-600">
-              {total.freshSale.toLocaleString()}원
-            </td>
-            <td className="border p-2 text-rose-600">
-              {total.freshProfit.toLocaleString()}원
-            </td>
-            <td className="border p-2">
-              {total.freshSale
-                ? ((total.freshProfit / total.freshSale) * 100).toFixed(1)
-                : "0.0"}
-              %
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function ClientInsight({ rows = [] }) {
-  const toInt = (v) =>
-    parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
-
-  if (!rows.length) {
-    return (
-      <div className="text-sm text-gray-400 text-center py-6">
-        데이터가 없습니다
-      </div>
-    );
-  }
-
-  const sale = rows.reduce(
-    (a, r) => a + toInt(r.청구운임),
-    0
-  );
-  const driver = rows.reduce(
-    (a, r) => a + toInt(r.기사운임),
-    0
-  );
-  const profit = sale - driver;
-  const rate = sale === 0 ? 0 : (profit / sale) * 100;
-
-  return (
-    <div className="bg-gray-50 border rounded-xl p-4 space-y-2">
-      <div className="flex justify-between text-sm">
-        <span className="text-gray-600">매출</span>
-        <span className="font-semibold">
-          {sale.toLocaleString()}원
-        </span>
-      </div>
-      <div className="flex justify-between text-sm">
-        <span className="text-gray-600">운반비</span>
-        <span>
-          {driver.toLocaleString()}원
-        </span>
-      </div>
-      <div className="flex justify-between text-sm font-semibold">
-        <span className="text-gray-700">수익</span>
-        <span className="text-emerald-600">
-          {profit.toLocaleString()}원
-        </span>
-      </div>
-      <div className="text-xs text-gray-500 text-right">
-        수익률 {rate.toFixed(1)}%
-      </div>
-    </div>
-  );
-}
-function SettlementDetailPopup({ client, rows = [], onClose }) {
-  const toInt = (v) =>
-    parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
-
-  const sale = rows.reduce(
-    (a, r) => a + toInt(r.청구운임),
-    0
-  );
-  const driver = rows.reduce(
-    (a, r) => a + toInt(r.기사운임),
-    0
-  );
-  const profit = sale - driver;
-
-  return (
-    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center">
-      <div className="bg-white rounded-2xl w-[420px] max-h-[80vh] overflow-auto p-6 shadow-xl">
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-sm font-semibold text-gray-800">
-            거래처 상세 · {client}
-          </h3>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-700"
-          >
-            ✕
-          </button>
-        </div>
-
-        <div className="space-y-2 text-sm mb-4">
-          <div className="flex justify-between">
-            <span>총 매출</span>
-            <span className="font-semibold">
-              {sale.toLocaleString()}원
-            </span>
-          </div>
-          <div className="flex justify-between">
-            <span>총 운반비</span>
-            <span>
-              {driver.toLocaleString()}원
-            </span>
-          </div>
-          <div className="flex justify-between font-semibold">
-            <span>총 수익</span>
-            <span className="text-emerald-600">
-              {profit.toLocaleString()}원
-            </span>
-          </div>
-        </div>
-
-        <table className="w-full text-xs border-collapse text-center">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="border p-1">상차일</th>
-              <th className="border p-1">매출</th>
-              <th className="border p-1">수익</th>
+            <tr className="bg-gray-50 text-gray-600 text-[11px]">
+              <th className="border p-2">매출</th><th className="border p-2">수익</th><th className="border p-2">수익률</th>
+              <th className="border p-2">매출</th><th className="border p-2">수익</th><th className="border p-2">수익률</th>
+              <th className="border p-2">매출</th><th className="border p-2">수익</th><th className="border p-2">수익률</th>
             </tr>
           </thead>
           <tbody>
-            {rows.map((r, i) => (
-              <tr key={i}>
-                <td className="border p-1">{r.상차일}</td>
-                <td className="border p-1">
-                  {toInt(r.청구운임).toLocaleString()}
-                </td>
-                <td className="border p-1 text-emerald-600">
-                  {(toInt(r.청구운임) - toInt(r.기사운임)).toLocaleString()}
-                </td>
+            {summary.map((r) => (
+              <tr key={r.month} className="hover:bg-gray-50">
+                <td className="border p-2 font-semibold">{r.month}</td>
+                <td className="border p-2 text-indigo-600">{r.sale.toLocaleString()}원</td>
+                <td className="border p-2 text-emerald-600">{r.profit.toLocaleString()}원</td>
+                <td className="border p-2">{r.rate.toFixed(1)}%</td>
+                <td className="border p-2 text-indigo-600">{r.pureSale.toLocaleString()}원</td>
+                <td className="border p-2 text-emerald-600">{r.pureProfit.toLocaleString()}원</td>
+                <td className="border p-2">{r.pureRate.toFixed(1)}%</td>
+                <td className="border p-2 text-rose-600">{r.freshSale.toLocaleString()}원</td>
+                <td className="border p-2 text-rose-600">{r.freshProfit.toLocaleString()}원</td>
+                <td className="border p-2">{r.freshRate.toFixed(1)}%</td>
               </tr>
             ))}
+            <tr className="font-bold bg-gray-50">
+              <td className="border p-2">합계</td>
+              <td className="border p-2 text-indigo-700">{total.sale.toLocaleString()}원</td>
+              <td className="border p-2 text-emerald-700">{total.profit.toLocaleString()}원</td>
+              <td className="border p-2">{total.sale ? ((total.profit / total.sale) * 100).toFixed(1) : "0.0"}%</td>
+              <td className="border p-2 text-indigo-700">{total.pureSale.toLocaleString()}원</td>
+              <td className="border p-2 text-emerald-700">{total.pureProfit.toLocaleString()}원</td>
+              <td className="border p-2">{total.pureSale ? ((total.pureProfit / total.pureSale) * 100).toFixed(1) : "0.0"}%</td>
+              <td className="border p-2 text-rose-600">{total.freshSale.toLocaleString()}원</td>
+              <td className="border p-2 text-rose-600">{total.freshProfit.toLocaleString()}원</td>
+              <td className="border p-2">{total.freshSale ? ((total.freshProfit / total.freshSale) * 100).toFixed(1) : "0.0"}%</td>
+            </tr>
           </tbody>
         </table>
       </div>
@@ -22549,8 +21754,68 @@ function SettlementDetailPopup({ client, rows = [], onClose }) {
   );
 }
 
+function ClientInsight({ rows = [] }) {
+  const toInt = (v) => parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
+  if (!rows.length) return <div className="text-[13px] text-gray-400 text-center py-6">데이터가 없습니다</div>;
+  const sale = rows.reduce((a, r) => a + toInt(r.청구운임), 0);
+  const driver = rows.reduce((a, r) => a + toInt(r.기사운임), 0);
+  const profit = sale - driver;
+  const rate = sale === 0 ? 0 : (profit / sale) * 100;
+  return (
+    <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-2">
+      <div className="flex justify-between text-[13px]"><span className="text-gray-600">매출</span><span className="font-semibold">{sale.toLocaleString()}원</span></div>
+      <div className="flex justify-between text-[13px]"><span className="text-gray-600">운반비</span><span>{driver.toLocaleString()}원</span></div>
+      <div className="flex justify-between text-[13px] font-semibold"><span className="text-gray-700">수익</span><span className="text-emerald-600">{profit.toLocaleString()}원</span></div>
+      <div className="text-[11px] text-gray-500 text-right">수익률 {rate.toFixed(1)}%</div>
+    </div>
+  );
+}
+
+function SettlementDetailPopup({ client, rows = [], onClose }) {
+  const toInt = (v) => parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
+  const sale = rows.reduce((a, r) => a + toInt(r.청구운임), 0);
+  const driver = rows.reduce((a, r) => a + toInt(r.기사운임), 0);
+  const profit = sale - driver;
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center">
+      <div className="bg-white rounded-2xl w-[480px] max-h-[80vh] overflow-hidden shadow-2xl">
+        <div className="bg-[#1B2B4B] px-6 py-4 flex justify-between items-center">
+          <h3 className="text-[14px] font-bold text-white">거래처 상세 · {client}</h3>
+          <button onClick={onClose} className="w-7 h-7 rounded-lg bg-white/10 flex items-center justify-center text-white/60 hover:text-white hover:bg-white/20 transition">✕</button>
+        </div>
+        <div className="p-6 overflow-y-auto max-h-[calc(80vh-60px)]">
+          <div className="space-y-2 text-[13px] mb-4">
+            <div className="flex justify-between"><span>총 매출</span><span className="font-semibold">{sale.toLocaleString()}원</span></div>
+            <div className="flex justify-between"><span>총 운반비</span><span>{driver.toLocaleString()}원</span></div>
+            <div className="flex justify-between font-semibold"><span>총 수익</span><span className="text-emerald-600">{profit.toLocaleString()}원</span></div>
+          </div>
+          <table className="w-full text-[12px] border-collapse text-center">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="border p-1.5">상차일</th>
+                <th className="border p-1.5">매출</th>
+                <th className="border p-1.5">수익</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, i) => (
+                <tr key={i} className="hover:bg-gray-50">
+                  <td className="border p-1.5">{r.상차일}</td>
+                  <td className="border p-1.5">{toInt(r.청구운임).toLocaleString()}</td>
+                  <td className="border p-1.5 text-emerald-600">{(toInt(r.청구운임) - toInt(r.기사운임)).toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ===================== DispatchApp.jsx (PART 6/8 — END) =====================
+
 // ===================== DispatchApp.jsx (PART 7/8 — 미배차현황) =====================
 function UnassignedStatus({ dispatchData, drivers = [], patchDispatch, clients = [], places = [], upsertDriver }) {
   const [q, setQ] = React.useState("");
