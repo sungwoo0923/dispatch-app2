@@ -12,6 +12,7 @@ import FixedClients from "./FixedClients";
 import FleetManagement from "./FleetManagement";
 import HomeDashboard from "./HomeDashboard";
 import StandardFare from "./StandardFare";
+import RateCard from "./RateCard";
 import DispatchFormNew from "./DispatchFormNew";
 import AiAssistant from "./AiAssistant";
 
@@ -1053,6 +1054,7 @@ useEffect(() => {
               "배차현황",
               "미배차현황",
               "표준운임표",
+              "단가표",
               "기사관리",
               "거래처관리",
               "고정거래처관리",
@@ -1193,8 +1195,12 @@ useEffect(() => {
             upsertDriver={upsertDriver}
           />
         )}
-        {menu === "표준운임표" && (
+         {menu === "표준운임표" && (
           <StandardFare dispatchData={dispatchData} />
+        )}
+
+        {menu === "단가표" && (
+          <RateCard dispatchData={dispatchData} />
         )}
 
         {menu === "기사관리" && role === "admin" && (

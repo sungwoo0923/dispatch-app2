@@ -1479,6 +1479,7 @@ const handleOrderDuplicate = (order) => {
 
 const title =
   page === "list" ? "등록내역"
+  : page === "ratecard" ? "단가표"
   : page === "form" ? (form._editId ? "수정하기" : "화물등록")
   : page === "notice" ? "공지사항"
   : page === "schedule" ? "일정"
@@ -1791,6 +1792,10 @@ onGoSchedule={() => {
             setPage("fare");
             setShowMenu(false);
           }}
+          onGoRateCard={() => {
+            setPage("ratecard");
+            setShowMenu(false);
+          }}
 
           onGoUnassigned={() => {
             setUnassignedTypeFilter("전체");
@@ -2018,8 +2023,14 @@ setOpenMemo={setOpenMemo}
           />
         )}
 
-        {page === "fare" && (
+       {page === "fare" && (
           <MobileStandardFare onBack={() => setPage("list")} />
+        )}
+        {page === "ratecard" && (
+          <MobileRateCard
+            dispatchData={orders}
+            onBack={() => setPage("list")}
+          />
         )}
         {page === "unassigned" && (
   <MobileUnassignedList
@@ -2337,6 +2348,7 @@ function MobileSideMenu({
   onGoList,
   onGoCreate,
   onGoFare,
+  onGoRateCard,
   onGoSales,
   onGoUnassigned,
   onGoNotice,     // ✅ 추가
@@ -2402,6 +2414,7 @@ function MobileSideMenu({
 
 <MenuSection title="현황 / 운임표">
   <MenuItem label="표준운임표" onClick={onGoFare} />
+  <MenuItem label="단가표" onClick={onGoRateCard} />
   <MenuItem label="미배차현황" onClick={onGoUnassigned} />
   <MenuItem label="매출관리" onClick={onGoSales} />
 </MenuSection>
@@ -5883,7 +5896,316 @@ const fares = baseRows.map((r) =>
     
   );
 }
+// ======================================================================
+// 📌 모바일 단가표
+// ======================================================================
+function MobileRateCard({ dispatchData = [], onBack }) {
+  const TON_BUCKETS = [
+    { label: "다마스/라보", min: 0,    max: 0.6,  display: "다마스/라보" },
+    { label: "1톤",         min: 0.6,  max: 1.2,  display: "1톤" },
+    { label: "1.4톤",       min: 1.2,  max: 1.9,  display: "1.4톤" },
+    { label: "2.5톤",       min: 1.9,  max: 3.0,  display: "2.5톤" },
+    { label: "3.5톤",       min: 3.0,  max: 4.5,  display: "3.5톤" },
+    { label: "5톤",         min: 4.5,  max: 6.5,  display: "5톤" },
+    { label: "7.5톤",       min: 6.5,  max: 9.5,  display: "7.5톤" },
+    { label: "11톤",        min: 9.5,  max: 13.5, display: "11톤" },
+    { label: "15톤",        min: 13.5, max: 17.0, display: "15톤" },
+    { label: "18톤",        min: 17.0, max: 22.0, display: "18톤" },
+    { label: "25톤",        min: 22.0, max: 99,   display: "25톤" },
+  ];
+  const PALLET_BUCKETS = Array.from({ length: 18 }, (_, i) => ({
+    label: `${i+1}파렛`, count: i+1, display: `${i+1}파렛`,
+  }));
+  const VEHICLE_GROUPS = [
+    { label: "냉장/냉동 (탑·윙)", value: "COLD",  keywords: ["냉장","냉동"] },
+    { label: "카고/윙바디/탑차",   value: "TRUCK", keywords: ["카고","윙바디","탑차","윙"] },
+    { label: "다마스/라보",        value: "SMALL", keywords: ["다마스","라보"] },
+    { label: "오토바이",           value: "BIKE",  keywords: ["오토바이"] },
+    { label: "리프트",             value: "LIFT",  keywords: ["리프트"] },
+  ];
 
+  const cleanStr = (s) => String(s||"").replace(/\s/g,"").toLowerCase();
+  const extractTon = (text) => {
+    const s = String(text||"").trim();
+    if (/kg/i.test(s)) { const m = s.match(/(\d+(\.\d+)?)\s*kg/i); return m ? Number(m[1])/1000 : null; }
+    const m = s.replace(/톤|t/gi,"").match(/(\d+(\.\d+)?)/);
+    return m ? Number(m[1]) : null;
+  };
+  const extractPallet = (text) => {
+    const s = String(text||"").replace(/\s/g,"").toLowerCase();
+    const m = s.match(/(\d+)\s*(파레트|파렛트|파렛|파레|파|pallet|p)/i);
+    return m ? Number(m[1]) : null;
+  };
+  const getTonBucket = (t) => { if (t==null) return null; return TON_BUCKETS.find(b=>t>=b.min&&t<b.max)||null; };
+  const getVehicleGroup = (v) => { const s=String(v||"").toLowerCase(); for (const g of VEHICLE_GROUPS) { if (g.keywords.some(k=>s.includes(k))) return g.value; } return "ETC"; };
+  const roundDown10k = (n) => Math.floor(n/10000)*10000;
+
+  const trimmedStats = (fares, rawRows) => {
+    if (!fares.length) return null;
+    if (fares.length<=2) { const avg=roundDown10k(fares.reduce((a,b)=>a+b,0)/fares.length); return {avg,min:Math.min(...fares),max:Math.max(...fares),count:fares.length,variance:0,rows:rawRows,trimmed:false}; }
+    const sorted=[...fares].sort((a,b)=>a-b);
+    const q1=sorted[Math.floor(sorted.length*0.25)], q3=sorted[Math.floor(sorted.length*0.75)];
+    const iqr=q3-q1, lo=q1-1.5*iqr, hi=q3+1.5*iqr;
+    const filtered=sorted.filter(v=>v>=lo&&v<=hi);
+    const useFares=filtered.length>=2?filtered:sorted;
+    const avg=roundDown10k(useFares.reduce((a,b)=>a+b,0)/useFares.length);
+    return {avg,min:Math.min(...fares),max:Math.max(...fares),count:fares.length,trimmed:useFares.length<fares.length,variance:avg>0?Math.round(((Math.max(...useFares)-Math.min(...useFares))/avg)*100):0,rows:rawRows};
+  };
+
+  const [pickup, setPickup] = useState("");
+  const [drop, setDrop] = useState("");
+  const [vGroup, setVGroup] = useState("");
+  const [mixedFilter, setMixedFilter] = useState("전체");
+  const [fareField, setFareField] = useState("청구운임");
+  const [viewMode, setViewMode] = useState("톤수별");
+  const [result, setResult] = useState(null);
+  const [searched, setSearched] = useState(false);
+  const [detailModal, setDetailModal] = useState(null);
+
+  const handleSearch = () => {
+    if (!pickup.trim()||!drop.trim()||!vGroup) { alert("상차지역, 하차지역, 차량종류를 모두 입력하세요."); return; }
+    const pu=cleanStr(pickup), dr=cleanStr(drop);
+    let matched = dispatchData.filter(r => {
+      const pm=cleanStr(r.상차지명||"")+cleanStr(r.상차지주소||"");
+      const dm=cleanStr(r.하차지명||"")+cleanStr(r.하차지주소||"");
+      if (!pm.includes(pu)||!dm.includes(dr)) return false;
+      if (getVehicleGroup(r.차량종류)!==vGroup) return false;
+      return !!Number(String(r[fareField]||0).replace(/[^\d]/g,""));
+    });
+    if (mixedFilter==="혼적") matched=matched.filter(r=>r.혼적===true||r.혼적==="true"||r.혼적===1);
+    else if (mixedFilter==="독차") matched=matched.filter(r=>!r.혼적||r.혼적===false||r.혼적==="false"||r.혼적===0);
+
+    const BUCKETS = viewMode==="파렛수별" ? PALLET_BUCKETS : TON_BUCKETS;
+    const bucketMap={}, bucketRowMap={};
+    BUCKETS.forEach(b=>{bucketMap[b.label]=[];bucketRowMap[b.label]=[];});
+    matched.forEach(r=>{
+      const fare=Number(String(r[fareField]||0).replace(/[^\d]/g,""));
+      if (!fare) return;
+      if (viewMode==="파렛수별") {
+        const p=extractPallet(r.화물내용); if (!p||p<1||p>18) return;
+        const key=`${p}파렛`; if (!bucketMap[key]) return;
+        bucketMap[key].push(fare); bucketRowMap[key].push(r);
+      } else {
+        const ton=extractTon(r.차량톤수), bucket=getTonBucket(ton); if (!bucket) return;
+        bucketMap[bucket.label].push(fare); bucketRowMap[bucket.label].push(r);
+      }
+    });
+    const rows=BUCKETS.map(b=>({...b,stats:trimmedStats(bucketMap[b.label],bucketRowMap[b.label])})).filter(b=>b.stats!==null);
+    const groupLabel=VEHICLE_GROUPS.find(g=>g.value===vGroup)?.label||vGroup;
+    setResult({rows,totalCount:matched.length,groupLabel,pickup:pickup.trim(),drop:drop.trim(),fareField,mixedFilter,viewMode});
+    setSearched(true);
+  };
+
+  const confLabel = (c) => c>=10?"높음":c>=4?"보통":"낮음";
+  const confColor = (c) => c>=10?"text-emerald-600":c>=4?"text-amber-500":"text-red-500";
+
+  return (
+    <div className="px-4 py-4 space-y-4 bg-gray-50 min-h-screen pb-20">
+
+      {/* 검색 카드 */}
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+        <div className="bg-[#1B2B4B] px-4 py-3">
+          <div className="text-[13px] font-bold text-white">노선 조건 입력</div>
+        </div>
+        <div className="p-4 space-y-3">
+          {/* 상/하차 */}
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <div className="text-[11px] font-semibold text-gray-500 mb-1">상차지역 *</div>
+              <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400 bg-gray-50" placeholder="예: 인천" value={pickup} onChange={e=>setPickup(e.target.value)} />
+            </div>
+            <div>
+              <div className="text-[11px] font-semibold text-gray-500 mb-1">하차지역 *</div>
+              <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400 bg-gray-50" placeholder="예: 부산" value={drop} onChange={e=>setDrop(e.target.value)} />
+            </div>
+          </div>
+
+          {/* 차량종류 */}
+          <div>
+            <div className="text-[11px] font-semibold text-gray-500 mb-1">차량종류 *</div>
+            <select className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] bg-gray-50 focus:outline-none focus:border-blue-400" value={vGroup} onChange={e=>setVGroup(e.target.value)}>
+              <option value="">선택</option>
+              {VEHICLE_GROUPS.map(g=><option key={g.value} value={g.value}>{g.label}</option>)}
+            </select>
+          </div>
+
+          {/* 조회 방식 */}
+          <div>
+            <div className="text-[11px] font-semibold text-gray-500 mb-1">조회 방식</div>
+            <div className="flex gap-2">
+              {["톤수별","파렛수별"].map(opt=>(
+                <button key={opt} type="button" onClick={()=>setViewMode(opt)}
+                  className={`flex-1 py-2 rounded-xl text-[12px] font-semibold border transition-all ${viewMode===opt?"bg-[#1B2B4B] text-white border-[#1B2B4B]":"bg-white text-gray-600 border-gray-200"}`}>
+                  {opt}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 혼적 여부 */}
+          <div>
+            <div className="text-[11px] font-semibold text-gray-500 mb-1">혼적 여부</div>
+            <div className="flex gap-2">
+              {["전체","독차","혼적"].map(opt=>(
+                <button key={opt} type="button" onClick={()=>setMixedFilter(opt)}
+                  className={`flex-1 py-2 rounded-xl text-[12px] font-semibold border transition-all ${mixedFilter===opt?"bg-[#1B2B4B] text-white border-[#1B2B4B]":"bg-white text-gray-600 border-gray-200"}`}>
+                  {opt}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 조회 기준 */}
+          <div>
+            <div className="text-[11px] font-semibold text-gray-500 mb-1">조회 기준</div>
+            <div className="flex gap-2">
+              {[["청구운임","청구가"],["기사운임","기사운임"]].map(([val,label])=>(
+                <button key={val} type="button" onClick={()=>setFareField(val)}
+                  className={`flex-1 py-2 rounded-xl text-[12px] font-semibold border transition-all ${fareField===val?"bg-blue-600 text-white border-blue-600":"bg-white text-gray-600 border-gray-200"}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 버튼 */}
+          <div className="flex gap-2 pt-1">
+            <button onClick={handleSearch} className="flex-1 py-3 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-xl active:scale-95 transition">
+              단가표 생성
+            </button>
+            <button onClick={()=>{setPickup("");setDrop("");setVGroup("");setMixedFilter("전체");setFareField("청구운임");setViewMode("톤수별");setResult(null);setSearched(false);}}
+              className="px-4 py-3 bg-white border border-gray-200 text-gray-500 text-[13px] rounded-xl active:scale-95 transition">
+              초기화
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* 결과 */}
+      {searched && result && (
+        <div className="space-y-3">
+          {/* 헤더 정보 */}
+          <div className="bg-[#1B2B4B] rounded-2xl px-4 py-4">
+            <div className="text-[20px] font-black text-white tracking-tight mb-1">RUN25</div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-white font-bold text-[14px]">{result.pickup}</span>
+              <span className="text-blue-300 font-bold">→</span>
+              <span className="text-white font-bold text-[14px]">{result.drop}</span>
+            </div>
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              <span className="px-2 py-0.5 rounded-full bg-white/20 text-white text-[11px] font-semibold">{result.groupLabel}</span>
+              <span className="px-2 py-0.5 rounded-full bg-white/20 text-white text-[11px] font-semibold">{result.viewMode}</span>
+              {result.mixedFilter!=="전체" && <span className="px-2 py-0.5 rounded-full bg-violet-400/60 text-white text-[11px] font-semibold">{result.mixedFilter}</span>}
+              <span className="px-2 py-0.5 rounded-full bg-blue-400/50 text-white text-[11px] font-semibold">{result.fareField==="청구운임"?"청구가 기준":"기사운임 기준"}</span>
+              <span className="px-2 py-0.5 rounded-full bg-white/20 text-white text-[11px]">조회 {result.totalCount}건</span>
+            </div>
+          </div>
+
+          {/* 단가 카드 목록 */}
+          {result.rows.length===0 ? (
+            <div className="bg-white rounded-2xl border border-gray-200 py-12 text-center text-gray-400 text-[13px]">
+              해당 조건에 맞는 데이터가 없습니다
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {result.rows.map((row, i) => {
+                const s = row.stats;
+                const vLevel = s.variance>40?"높음":s.variance>20?"보통":"낮음";
+                const vColor = s.variance>40?"text-red-500":s.variance>20?"text-amber-500":"text-emerald-600";
+                return (
+                  <div key={i} className="bg-white rounded-2xl border border-gray-200 shadow-sm px-4 py-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[15px] font-bold text-[#1B2B4B]">{row.display}</span>
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[11px] font-semibold ${confColor(s.count)}`}>{confLabel(s.count)}</span>
+                        <span className={`text-[11px] font-semibold ${vColor}`}>{vLevel}</span>
+                      </div>
+                    </div>
+                    <div className="text-[22px] font-black text-blue-700 mb-1">
+                      {s.avg.toLocaleString()}<span className="text-[13px] font-semibold text-gray-400 ml-1">원</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] text-gray-400">{roundDown10k(s.min).toLocaleString()} ~ {roundDown10k(s.max).toLocaleString()}원</span>
+                      <button onClick={()=>setDetailModal({rows:s.rows,bucket:row.display})}
+                        className="text-[12px] font-bold text-blue-600 bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-full active:scale-95">
+                        {s.count}건 상세보기
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* 안내 */}
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3">
+            <div className="text-[12px] font-bold text-amber-800 mb-1">📌 안내사항</div>
+            <ul className="text-[11px] text-amber-700 space-y-0.5 leading-relaxed">
+              <li>• 과거 실적 기반 참고 단가 (1만원 단위 절사)</li>
+              <li>• 유가·수급 상황에 따라 실제 운임은 달라질 수 있습니다</li>
+              <li>• 신뢰도 "낮음"은 샘플이 적어 변동 가능성이 높습니다</li>
+            </ul>
+          </div>
+
+          {/* 하단 서명 */}
+          <div className="bg-white rounded-2xl border border-gray-200 px-4 py-3 flex items-center justify-between">
+            <div className="text-[11px] text-gray-400">본 자료는 영업 참고용입니다</div>
+            <div className="flex items-center gap-2">
+              <div className="text-right text-[11px] text-gray-600">
+                <div className="font-bold text-[#1B2B4B]">RUN25</div>
+                <div>박성우 팀장 010-5504-1821</div>
+              </div>
+              <div className="w-10 h-10 rounded-full border-2 border-[#1B2B4B] flex items-center justify-center text-[9px] font-black text-[#1B2B4B] text-center leading-tight">RUN<br/>25</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 상세 팝업 */}
+      {detailModal && (
+        <div className="fixed inset-0 bg-black/60 z-[9999] flex items-center justify-center" onClick={()=>setDetailModal(null)}>
+          <div className="bg-white rounded-2xl w-[96%] max-h-[80vh] overflow-hidden flex flex-col shadow-2xl" onClick={e=>e.stopPropagation()}>
+            <div className="bg-[#1B2B4B] px-4 py-3 flex items-center justify-between">
+              <div>
+                <div className="text-white font-bold text-[14px]">{detailModal.bucket} 상세 내역</div>
+                <div className="text-white/60 text-[11px]">총 {detailModal.rows.length}건</div>
+              </div>
+              <button onClick={()=>setDetailModal(null)} className="text-white/60 hover:text-white text-xl leading-none">✕</button>
+            </div>
+            <div className="overflow-y-auto flex-1 p-3 space-y-2">
+              {detailModal.rows.map((r,i)=>{
+                const fare=Number(String(r.청구운임||0).replace(/[^\d]/g,""));
+                const driver=Number(String(r.기사운임||0).replace(/[^\d]/g,""));
+                const margin=fare-driver;
+                return (
+                  <div key={i} className={`border rounded-xl px-3 py-2.5 ${i%2===0?"bg-white":"bg-gray-50"}`}>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[11px] text-gray-400">{r.상차일||"-"} · {r.거래처명||"-"}</span>
+                      <span className="text-[14px] font-black text-blue-700">{fare.toLocaleString()}원</span>
+                    </div>
+                    <div className="text-[12px] font-semibold text-gray-800 mb-1">{r.상차지명||"-"} → {r.하차지명||"-"}</div>
+                    <div className="flex items-center justify-between text-[11px] text-gray-500">
+                      <span>{r.차량종류||"-"} · {r.차량톤수||"-"} · {r.화물내용||"-"}</span>
+                      <span>{r.혼적?<span className="text-emerald-600 font-semibold">혼적</span>:<span className="text-gray-400">독차</span>}</span>
+                    </div>
+                    <div className="flex gap-3 text-[11px] mt-1 pt-1 border-t border-dashed border-gray-200">
+                      <span className="text-emerald-600">기사 {driver.toLocaleString()}원</span>
+                      <span className="text-gray-500">수수료 {margin.toLocaleString()}원</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="border-t border-gray-100 px-4 py-2.5 bg-gray-50 flex gap-4 text-[11px] text-gray-600">
+              <span>평균 청구: <b className="text-blue-700">{Math.floor(detailModal.rows.reduce((s,r)=>s+Number(String(r.청구운임||0).replace(/[^\d]/g,"")),0)/detailModal.rows.length/10000)*10000}원</b></span>
+              <span>평균 기사: <b className="text-emerald-600">{Math.floor(detailModal.rows.reduce((s,r)=>s+Number(String(r.기사운임||0).replace(/[^\d]/g,"")),0)/detailModal.rows.length/10000)*10000}원</b></span>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 // ======================================================================
 // 모바일 배차현황 / 미배차현황 테이블 (날짜별 그룹형 UI)
 // ======================================================================
