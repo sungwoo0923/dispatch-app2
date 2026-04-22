@@ -4533,19 +4533,10 @@ function calcHistoryScore(row, form) {
   {/* 좌측 버튼 그룹 */}
   <div className="flex items-center gap-2">
 
-    {/* 오더복사 */}
+     {/* 오더복사 */}
     <button
       onClick={() => { setCopyOpen(true); setCopySelected([]); }}
-      className="
-        inline-flex items-center gap-1
-        px-3 py-1.5
-        text-sm font-semibold
-        rounded-lg
-        bg-blue-600 text-white
-        hover:bg-blue-700
-        shadow-sm
-        transition
-      "
+      className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-[#1B2B4B] text-white hover:bg-[#243a60] transition"
     >
       오더복사
     </button>
@@ -4553,35 +4544,17 @@ function calcHistoryScore(row, form) {
     {/* 초기화 */}
     <button
       onClick={resetForm}
-      className="
-        inline-flex items-center gap-1
-        px-3 py-1.5
-        text-sm font-semibold
-        rounded-lg
-        bg-gray-100 text-gray-700
-        border border-gray-200
-        hover:bg-gray-200
-        transition
-      "
+      className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-white text-gray-600 border border-gray-300 hover:bg-gray-50 transition"
     >
-      🔄 초기화
+      초기화
     </button>
 
     {/* 운임조회 */}
     <button
       onClick={handleFareSearch}
-      className="
-        inline-flex items-center gap-1
-        px-3 py-1.5
-        text-sm font-semibold
-        rounded-lg
-        border border-blue-200
-        bg-blue-50 text-blue-700
-        hover:bg-blue-100
-        transition
-      "
+      className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-white text-blue-600 border border-blue-300 hover:bg-blue-50 transition"
     >
-      💰 운임조회
+      운임조회
     </button>
 
     {/* AI 추천 */}
@@ -4589,19 +4562,9 @@ function calcHistoryScore(row, form) {
       type="button"
       disabled={!aiRecommend}
       onClick={() => setAiPopupOpen(true)}
-      className="
-        inline-flex items-center gap-1
-        px-3 py-1.5
-        text-sm font-semibold
-        rounded-lg
-        bg-blue-600 text-white
-        hover:bg-blue-700
-        disabled:opacity-40
-        shadow-sm
-        transition
-      "
+      className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-white text-indigo-600 border border-indigo-300 hover:bg-indigo-50 disabled:opacity-40 transition"
     >
-      🤖 AI 추천
+      AI 추천
     </button>
 
   </div>
@@ -4610,46 +4573,28 @@ function calcHistoryScore(row, form) {
   <div className="flex items-center gap-2">
 
   {/* 독차 */}
-<ToggleBadge
-  active={form.독차}
-  onClick={() => onChange("독차", !form.독차)}
-  activeCls="bg-blue-600 text-white border-blue-600"
-  inactiveCls="bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
->
+<button type="button" onClick={() => onChange("독차", !form.독차)}
+  className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all ${form.독차 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
   독차
-</ToggleBadge>
+</button>
 
 {/* 혼적 */}
-<ToggleBadge
-  active={form.혼적}
-  onClick={() => onChange("혼적", !form.혼적)}
-  activeCls="bg-blue-600 text-white border-blue-600"
-  inactiveCls="bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
->
+<button type="button" onClick={() => onChange("혼적", !form.혼적)}
+  className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all ${form.혼적 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
   혼적
-</ToggleBadge>
+</button>
 
 {/* 왕복 */}
-<ToggleBadge
-  active={form.운행유형 === "왕복"}
-  onClick={() =>
-    onChange("운행유형", form.운행유형 === "왕복" ? "편도" : "왕복")
-  }
-  activeCls="bg-blue-600 text-white border-blue-600"
-  inactiveCls="bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
->
+<button type="button" onClick={() => onChange("운행유형", form.운행유형 === "왕복" ? "편도" : "왕복")}
+  className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all ${form.운행유형 === "왕복" ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
   왕복
-</ToggleBadge>
+</button>
 
 {/* 긴급 */}
-<ToggleBadge
-  active={form.긴급}
-  onClick={() => onChange("긴급", !form.긴급)}
-  activeCls="bg-blue-600 text-white border-blue-600"
-  inactiveCls="bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
->
+<button type="button" onClick={() => onChange("긴급", !form.긴급)}
+  className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all ${form.긴급 ? "bg-red-600 text-white border-red-600" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
   긴급
-</ToggleBadge>
+</button>
   {areaFareHint && (
     <div
       className="
@@ -6193,37 +6138,21 @@ setActiveStopIdx(null);
   <div>
     <label className={labelCls}>메모</label>
 
-    <div className="flex items-center gap-2 mb-2">
-      {/* 일반 */}
-<ToggleBadge
-  active={form.메모중요도 === "NORMAL"}
-  onClick={() => onChange("메모중요도", "NORMAL")}
-  activeCls="bg-blue-600 text-white border-blue-600"
-  inactiveCls="bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-200"
->
-  일반
-</ToggleBadge>
-
-{/* 중요 */}
-<ToggleBadge
-  active={form.메모중요도 === "HIGH"}
-  onClick={() => onChange("메모중요도", "HIGH")}
-  activeCls="bg-blue-600 text-white border-blue-600"
-  inactiveCls="bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-200"
->
-  중요
-</ToggleBadge>
-
-{/* 긴급 */}
-<ToggleBadge
-  active={form.메모중요도 === "CRITICAL"}
-  onClick={() => onChange("메모중요도", "CRITICAL")}
-  activeCls="bg-blue-600 text-white border-blue-600"
-  inactiveCls="bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-200"
->
-  긴급
-</ToggleBadge>
+    <div className="flex items-center gap-1 mb-1.5">
+      <button type="button" onClick={() => onChange("메모중요도", "NORMAL")}
+        className={`px-3 py-1 rounded-full text-xs font-semibold border transition-all ${form.메모중요도 === "NORMAL" ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-500 border-gray-300 hover:bg-gray-50"}`}>
+        일반
+      </button>
+      <button type="button" onClick={() => onChange("메모중요도", "HIGH")}
+        className={`px-3 py-1 rounded-full text-xs font-semibold border transition-all ${form.메모중요도 === "HIGH" ? "bg-orange-500 text-white border-orange-500" : "bg-white text-orange-500 border-orange-300 hover:bg-orange-50"}`}>
+        중요
+      </button>
+      <button type="button" onClick={() => onChange("메모중요도", "CRITICAL")}
+        className={`px-3 py-1 rounded-full text-xs font-semibold border transition-all ${form.메모중요도 === "CRITICAL" ? "bg-red-600 text-white border-red-600" : "bg-white text-red-500 border-red-300 hover:bg-red-50"}`}>
+        긴급
+      </button>
     </div>
+
 
     <div className="flex items-center border rounded-xl px-3 py-2 bg-white">
       <input
@@ -6412,10 +6341,10 @@ setActiveStopIdx(null);
   </div>
 )}
   {/* 버튼 */}
-  <div className="col-span-6 flex justify-end mt-2">
+  <div className="col-span-8 flex justify-end gap-2 mt-2 pt-2 border-t border-gray-100">
     <button
       type="submit"
-      className="bg-blue-600 text-white px-6 py-2 rounded-lg text-sm hover:bg-blue-700"
+      className="px-6 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition"
     >
       저장
     </button>
@@ -6469,7 +6398,7 @@ if (res?.success) {
 }
 
       }}
-      className="ml-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-sm text-white rounded-lg"
+      className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-sm font-semibold text-white rounded-lg transition flex items-center gap-1"
     >
       📡 24시전송
     </button>
@@ -10987,17 +10916,17 @@ setUrgentPopup([]);
       onClick={() => setCopyPanelOpen(false)}
     />
 
-    <div className="absolute top-0 right-0 h-full w-[1100px] bg-slate-100 shadow-2xl border-l overflow-y-auto">
+    <div className="absolute top-0 right-0 h-full w-[1100px] bg-gray-50 shadow-2xl border-l overflow-y-auto">
 
       <div className="p-10 space-y-10">
 
         {/* HEADER */}
-<div className="flex justify-between items-center border-b pb-5">
-  <h2 className="text-2xl font-bold text-slate-800">
-    오더 복사 / 수정 패널
-  </h2>
-
-  <div className="flex gap-3 items-center">
+<div className="flex justify-between items-center bg-white rounded-xl border border-gray-200 px-6 py-4 shadow-sm">
+  <div>
+    <h2 className="text-[18px] font-bold text-[#1B2B4B]">오더 복사 / 수정 패널</h2>
+    <p className="text-[12px] text-gray-400 mt-0.5">{copyTarget?.거래처명} · {copyTarget?.상차지명} → {copyTarget?.하차지명}</p>
+  </div>
+  <div className="flex gap-2 items-center">
 
     {/* 수정 저장 */}
     <button
@@ -11040,7 +10969,7 @@ setTimeout(() => {
 alert("오더 수정 완료");
 
 }}
-      className="px-4 py-2 bg-green-600 text-white rounded-lg font-semibold"
+      className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-[13px] font-bold hover:bg-emerald-700 transition"
     >
       수정 저장
     </button>
@@ -11089,15 +11018,15 @@ alert("오더 수정 완료");
     setCopyPanelOpen(false);
 
   }}
-  className="px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold"
+    className="px-4 py-2 bg-[#1B2B4B] text-white rounded-lg text-[13px] font-bold hover:bg-[#243a60] transition"
 >
   복사 등록
 </button>
 
     {/* 닫기 */}
-    <button
+     <button
       onClick={() => setCopyPanelOpen(false)}
-      className="text-slate-500 hover:text-red-500 text-xl"
+      className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:text-red-500 hover:border-red-200 transition text-lg"
     >
       ✕
     </button>
@@ -11105,10 +11034,9 @@ alert("오더 수정 완료");
   </div>
 </div>
 {/* ================= 거래처 정보 ================= */}
-<section className="bg-white p-8 rounded-xl shadow-sm">
-  <h3 className="text-lg font-bold text-slate-700 mb-8 border-b pb-3">
-    거래처 정보
-  </h3>
+<section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+  <div className="bg-[#1B2B4B] px-6 py-3"><h3 className="text-[14px] font-bold text-white">거래처 정보</h3></div>
+  <div className="p-6">
 
   <Field label="거래처명">
     <div className="relative">
@@ -11188,18 +11116,18 @@ checkWarningStatus(c.거래처명, "거래처");
       )}
     </div>
   </Field>
+  </div>
 </section>
         {/* ================= 상하차 정보 ================= */}
-<section className="bg-white p-8 rounded-xl shadow-sm">
-  <h3 className="text-lg font-bold text-slate-700 mb-8 border-b pb-3">
-    상하차 정보
-  </h3>
+<section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+  <div className="bg-[#1B2B4B] px-6 py-3"><h3 className="text-[14px] font-bold text-white">상하차 정보</h3></div>
+  <div className="p-6">
 
   <div className="grid grid-cols-2 gap-16">
 
-    {/* ================= 상차 ================= */}
-    <div className="space-y-6">
-
+    {/* 상차 */}
+    <div className="space-y-4">
+      <div className="text-[12px] font-bold text-blue-600 pb-1 border-b border-blue-100">상차</div>
       <Field label="상차일">
         <input
           type="date"
@@ -11338,9 +11266,9 @@ checkWarningStatus(c.거래처명, "거래처");
 
     </div>
 
-    {/* ================= 하차 ================= */}
-    <div className="space-y-6">
-
+{/* 하차 */}
+    <div className="space-y-4">
+      <div className="text-[12px] font-bold text-red-500 pb-1 border-b border-red-100">하차</div>
       <Field label="하차일">
         <input
           type="date"
@@ -11478,12 +11406,12 @@ checkWarningStatus(c.거래처명, "거래처");
     </div>
 
   </div>
+</div>
 </section>
 {/* ================= 기사정보 ================= */}
-<section className="bg-white p-8 rounded-xl shadow-sm">
-  <h3 className="text-lg font-bold text-slate-700 mb-8 border-b pb-3">
-    기사정보
-  </h3>
+<section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+  <div className="bg-[#1B2B4B] px-6 py-3"><h3 className="text-[14px] font-bold text-white">기사정보</h3></div>
+  <div className="p-6">
 
   <div className="grid grid-cols-3 gap-6">
 
@@ -11580,12 +11508,12 @@ setCopyTarget(prev => ({
     </Field>
 
   </div>
+</div>
 </section>
 {/* ================= 화물정보 ================= */}
-<section className="bg-white p-8 rounded-xl shadow-sm">
-  <h3 className="text-lg font-bold text-slate-700 mb-8 border-b pb-3">
-    화물정보
-  </h3>
+<section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+  <div className="bg-[#1B2B4B] px-6 py-3"><h3 className="text-[14px] font-bold text-white">화물정보</h3></div>
+  <div className="p-6">
 
   <div className="grid grid-cols-3 gap-6">
 
@@ -11725,12 +11653,12 @@ value={copyTarget?.화물수량 || ""}
 </Field>
 
   </div>
+</div>
 </section>
         {/* ================= 결제 정보 ================= */}
-        <section className="bg-white p-8 rounded-xl shadow-sm">
-          <h3 className="text-lg font-bold text-slate-700 mb-8 border-b pb-3">
-            결제 정보
-          </h3>
+        <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="bg-[#1B2B4B] px-6 py-3"><h3 className="text-[14px] font-bold text-white">결제 정보</h3></div>
+          <div className="p-6">
 
           <div className="grid grid-cols-5 gap-8">
 
@@ -11790,18 +11718,19 @@ value={copyTarget?.화물수량 || ""}
   </select>
 </Field>
           </div>
+        </div>
         </section>
 {/* ================= 메모 ================= */}
-<section className="bg-white p-8 rounded-xl shadow-sm">
-  <h3 className="text-lg font-bold text-slate-700 mb-6 border-b pb-3">
-    메모
-  </h3>
+<section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+  <div className="bg-[#1B2B4B] px-6 py-3"><h3 className="text-[14px] font-bold text-white">메모</h3></div>
+  <div className="p-6">
 
   <textarea
     className="inputStyle h-24"
     value={copyTarget?.메모 ?? ""}
     onChange={(e)=>setCopyTarget(p=>({...p, 메모:e.target.value}))}
   />
+  </div>
 </section>
 
 {clientApplyPopup && (
@@ -18295,17 +18224,17 @@ setEdited(prev => {
       onClick={() => setCopyPanelOpen(false)}
     />
 
-    <div className="absolute top-0 right-0 h-full w-[1100px] bg-slate-100 shadow-2xl border-l overflow-y-auto">
+    <div className="absolute top-0 right-0 h-full w-[1100px] bg-gray-50 shadow-2xl border-l overflow-y-auto">
 
       <div className="p-10 space-y-10">
 
         {/* HEADER */}
-<div className="flex justify-between items-center border-b pb-5">
-  <h2 className="text-2xl font-bold text-slate-800">
-    오더 복사 / 수정 패널
-  </h2>
-
-  <div className="flex gap-3 items-center">
+<div className="flex justify-between items-center bg-white rounded-xl border border-gray-200 px-6 py-4 shadow-sm">
+  <div>
+    <h2 className="text-[18px] font-bold text-[#1B2B4B]">오더 복사 / 수정 패널</h2>
+    <p className="text-[12px] text-gray-400 mt-0.5">{copyTarget?.거래처명} · {copyTarget?.상차지명} → {copyTarget?.하차지명}</p>
+  </div>
+  <div className="flex gap-2 items-center">
 
     {/* 수정 저장 */}
 <button
@@ -18401,7 +18330,7 @@ setCopyPanelOpen(false);
     setCopyPanelOpen(false);
 
   }}
-  className="px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold"
+    className="px-4 py-2 bg-[#1B2B4B] text-white rounded-lg text-[13px] font-bold hover:bg-[#243a60] transition"
 >
   복사 등록
 </button>
@@ -18419,10 +18348,9 @@ setCopyPanelOpen(false);
   </div>
 </div>
 {/* ================= 거래처 정보 ================= */}
-<section className="bg-white p-8 rounded-xl shadow-sm">
-  <h3 className="text-lg font-bold text-slate-700 mb-8 border-b pb-3">
-    거래처 정보
-  </h3>
+<section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+  <div className="bg-[#1B2B4B] px-6 py-3"><h3 className="text-[14px] font-bold text-white">거래처 정보</h3></div>
+  <div className="p-6">
 
   <Field label="거래처명">
     <div className="relative">
@@ -18500,18 +18428,18 @@ setCopyTarget(prev=>({
       )}
     </div>
   </Field>
+  </div>
 </section>
         {/* ================= 상하차 정보 ================= */}
-<section className="bg-white p-8 rounded-xl shadow-sm">
-  <h3 className="text-lg font-bold text-slate-700 mb-8 border-b pb-3">
-    상하차 정보
-  </h3>
+<section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+  <div className="bg-[#1B2B4B] px-6 py-3"><h3 className="text-[14px] font-bold text-white">상하차 정보</h3></div>
+  <div className="p-6">
 
   <div className="grid grid-cols-2 gap-16">
 
-    {/* ================= 상차 ================= */}
-    <div className="space-y-6">
-
+    {/* 상차 */}
+    <div className="space-y-4">
+      <div className="text-[12px] font-bold text-blue-600 pb-1 border-b border-blue-100">상차</div>
       <Field label="상차일">
         <input
           type="date"
@@ -18650,9 +18578,9 @@ setCopyPlaceOptions(list);
 
     </div>
 
-    {/* ================= 하차 ================= */}
-    <div className="space-y-6">
-
+{/* 하차 */}
+    <div className="space-y-4">
+      <div className="text-[12px] font-bold text-red-500 pb-1 border-b border-red-100">하차</div>
       <Field label="하차일">
         <input
           type="date"
@@ -18790,12 +18718,12 @@ setCopyPlaceOptions(list);
     </div>
 
   </div>
+</div>
 </section>
 {/* ================= 기사정보 ================= */}
-<section className="bg-white p-8 rounded-xl shadow-sm">
-  <h3 className="text-lg font-bold text-slate-700 mb-8 border-b pb-3">
-    기사정보
-  </h3>
+<section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+  <div className="bg-[#1B2B4B] px-6 py-3"><h3 className="text-[14px] font-bold text-white">기사정보</h3></div>
+  <div className="p-6">
 
   <div className="grid grid-cols-3 gap-6">
 
@@ -18904,12 +18832,12 @@ setCopyTarget(prev => ({
     </Field>
 
   </div>
+</div>
 </section>
 {/* ================= 화물정보 ================= */}
-<section className="bg-white p-8 rounded-xl shadow-sm">
-  <h3 className="text-lg font-bold text-slate-700 mb-8 border-b pb-3">
-    화물정보
-  </h3>
+<section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+  <div className="bg-[#1B2B4B] px-6 py-3"><h3 className="text-[14px] font-bold text-white">화물정보</h3></div>
+  <div className="p-6">
 
   <div className="grid grid-cols-3 gap-6">
 
@@ -19030,12 +18958,12 @@ setCopyTarget(prev => ({
 </Field>
 
   </div>
+</div>
 </section>
         {/* ================= 결제 정보 ================= */}
-        <section className="bg-white p-8 rounded-xl shadow-sm">
-          <h3 className="text-lg font-bold text-slate-700 mb-8 border-b pb-3">
-            결제 정보
-          </h3>
+      <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="bg-[#1B2B4B] px-6 py-3"><h3 className="text-[14px] font-bold text-white">결제 정보</h3></div>
+          <div className="p-6">
 
           <div className="grid grid-cols-5 gap-8">
 
@@ -19095,19 +19023,21 @@ setCopyTarget(prev => ({
   </select>
 </Field>
           </div>
+</div>
         </section>
 {/* ================= 메모 ================= */}
-<section className="bg-white p-8 rounded-xl shadow-sm">
-  <h3 className="text-lg font-bold text-slate-700 mb-6 border-b pb-3">
-    메모
-  </h3>
+<section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+  <div className="bg-[#1B2B4B] px-6 py-3"><h3 className="text-[14px] font-bold text-white">메모</h3></div>
+  <div className="p-6">
 
   <textarea
     className="inputStyle h-24"
     value={copyTarget?.메모 ?? ""}
     onChange={(e)=>setCopyTarget(p=>({...p, 메모:e.target.value}))}
   />
+  </div>
 </section>
+
 {clientApplyPopup && (
   <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
     <div className="bg-white p-6 rounded-xl shadow-lg w-[300px] text-center">
@@ -22621,218 +22551,163 @@ function SettlementDetailPopup({ client, rows = [], onClose }) {
 
 
 // ===================== DispatchApp.jsx (PART 6/8 — END) =====================
-
-// ===================== DispatchApp.jsx (PART 7/8 — 거래처명/차량종류 필터 추가 완성) =====================
+// ===================== DispatchApp.jsx (PART 7/8 — 미배차현황) =====================
 function UnassignedStatus({ dispatchData, drivers = [], patchDispatch, clients = [], places = [], upsertDriver }) {
   const [q, setQ] = React.useState("");
   const [startDate, setStartDate] = React.useState("");
   const [endDate, setEndDate] = React.useState("");
   const [deleteMode, setDeleteMode] = React.useState(false);
   const [selectedIds, setSelectedIds] = React.useState(new Set());
-
-  // ✅ 추가: 거래처명/차량종류 전용 필터
   const [filterType, setFilterType] = React.useState("거래처명");
   const [filterValue, setFilterValue] = React.useState("");
-
-  // ✅ 주소 더보기 상태관리
   const [openLoadAddrs, setOpenLoadAddrs] = React.useState(new Set());
   const [openUnloadAddrs, setOpenUnloadAddrs] = React.useState(new Set());
   const [openMemos, setOpenMemos] = React.useState(new Set());
   const [quickAssignOpen, setQuickAssignOpen] = React.useState(false);
-  // 🚚 차량 / 기사 자동매칭
   const [vehicleNo, setVehicleNo] = React.useState("");
   const [driverName, setDriverName] = React.useState("");
   const [driverPhone, setDriverPhone] = React.useState("");
-
   const [matchedDriver, setMatchedDriver] = React.useState(null);
   const [newDriverPopup, setNewDriverPopup] = React.useState(false);
   const [selectedOrder, setSelectedOrder] = React.useState(null);
-  
-  // 🔥 오더 복사/수정 패널 추가
   const [copyPanelOpen, setCopyPanelOpen] = React.useState(false);
   const [copyTarget, setCopyTarget] = React.useState(null);
-  
-  // 🔥 거래처/장소 자동완성 관련 상태
-// 🔥 거래처/장소 자동완성 상태
-const [clientDropdown, setClientDropdown] = React.useState([]);
-const [clientDropdownOpen, setClientDropdownOpen] = React.useState(false);
-const [clientActiveIdx, setClientActiveIdx] = React.useState(0);
+  const [clientDropdown, setClientDropdown] = React.useState([]);
+  const [clientDropdownOpen, setClientDropdownOpen] = React.useState(false);
+  const [clientActiveIdx, setClientActiveIdx] = React.useState(0);
+  const [loadPlaceDropdown, setLoadPlaceDropdown] = React.useState([]);
+  const [loadPlaceDropdownOpen, setLoadPlaceDropdownOpen] = React.useState(false);
+  const [loadPlaceActiveIdx, setLoadPlaceActiveIdx] = React.useState(0);
+  const [unloadPlaceDropdown, setUnloadPlaceDropdown] = React.useState([]);
+  const [unloadPlaceDropdownOpen, setUnloadPlaceDropdownOpen] = React.useState(false);
+  const [unloadPlaceActiveIdx, setUnloadPlaceActiveIdx] = React.useState(0);
+  const [warningPopup, setWarningPopup] = React.useState(null);
+  const warningPopupRef = React.useRef(null);
+  const [blackDriverAlert, setBlackDriverAlert] = React.useState(null);
+  const [newDriverPopupOpen, setNewDriverPopupOpen] = React.useState(false);
+  const [newDriverData, setNewDriverData] = React.useState({ 이름: "", 전화번호: "", 차량번호: "" });
+  const [copyClientOptions, setCopyClientOptions] = React.useState([]);
+  const [showCopyClientDropdown, setShowCopyClientDropdown] = React.useState(false);
+  const [copyClientIndex, setCopyClientIndex] = React.useState(0);
+  const copyClientListRef = React.useRef(null);
+  const [copyPlaceOptions, setCopyPlaceOptions] = React.useState([]);
+  const [showCopyPlaceDropdown, setShowCopyPlaceDropdown] = React.useState(false);
+  const [copyPlaceType, setCopyPlaceType] = React.useState(null);
+  const [copyActiveIndex, setCopyActiveIndex] = React.useState(0);
+  const clientListRef = React.useRef(null);
+  const loadPlaceListRef = React.useRef(null);
+  const unloadPlaceListRef = React.useRef(null);
 
-const [loadPlaceDropdown, setLoadPlaceDropdown] = React.useState([]);
-const [loadPlaceDropdownOpen, setLoadPlaceDropdownOpen] = React.useState(false);
-const [loadPlaceActiveIdx, setLoadPlaceActiveIdx] = React.useState(0);
-
-const [unloadPlaceDropdown, setUnloadPlaceDropdown] = React.useState([]);
-const [unloadPlaceDropdownOpen, setUnloadPlaceDropdownOpen] = React.useState(false);
-const [unloadPlaceActiveIdx, setUnloadPlaceActiveIdx] = React.useState(0);
-
-// 🔥 블랙/주의업체 팝업
-const [warningPopup, setWarningPopup] = React.useState(null);
-const warningPopupRef = React.useRef(null);
-const [blackDriverAlert, setBlackDriverAlert] = React.useState(null);
-const [newDriverPopupOpen, setNewDriverPopupOpen] = React.useState(false);
-const [newDriverData, setNewDriverData] = React.useState({ 이름: "", 전화번호: "", 차량번호: "" });
-
-// 🔥 거래처 자동완성 (다른 파트와 동일)
-const [copyClientOptions, setCopyClientOptions] = React.useState([]);
-const [showCopyClientDropdown, setShowCopyClientDropdown] = React.useState(false);
-const [copyClientIndex, setCopyClientIndex] = React.useState(0);
-const copyClientListRef = React.useRef(null);
-
-// 🔥 장소 자동완성 (다른 파트와 동일)
-const [copyPlaceOptions, setCopyPlaceOptions] = React.useState([]);
-const [showCopyPlaceDropdown, setShowCopyPlaceDropdown] = React.useState(false);
-const [copyPlaceType, setCopyPlaceType] = React.useState(null); // "pickup" | "drop"
-const [copyActiveIndex, setCopyActiveIndex] = React.useState(0);
-// 🔥 드롭다운 스크롤 ref
-const clientListRef = React.useRef(null);
-const loadPlaceListRef = React.useRef(null);
-const unloadPlaceListRef = React.useRef(null);
-
-// 🔥 places 필드 추출 헬퍼 (다양한 필드명 대응)
-const getPlaceField = (place, ...keys) => {
-  // 🔥 디버깅: 실제 필드명 확인 (콘솔에서 확인 후 삭제)
-  // console.log("place 필드:", Object.keys(place), place);
-  
-  for (const k of keys) {
-    if (place[k] !== undefined && place[k] !== null && place[k] !== "") {
-      return place[k];
+  const getPlaceField = (place, ...keys) => {
+    for (const k of keys) {
+      if (place[k] !== undefined && place[k] !== null && place[k] !== "") return place[k];
     }
+    return "";
+  };
+
+  const getManagerName = (place) => {
+  // contacts 배열 우선 확인
+  if (Array.isArray(place.contacts) && place.contacts.length) {
+    const primary = place.contacts.find(c => c.isPrimary) || place.contacts[0];
+    if (primary?.name) return primary.name;
+  }
+  const keys = ["담당자","담당자명","담당","manager","managerName","상차지담당자","하차지담당자","contact","contactName","책임자","책임자명","담당자이름","이름"];
+  for (const k of keys) {
+    if (place[k] !== undefined && place[k] !== null && place[k] !== "") return place[k];
   }
   return "";
 };
 
-// 🔥 담당자명 추출 (실제 필드: 담당자)
-const getManagerName = (place) => {
-  const keys = [
-    "담당자", "담당자명", "담당", "manager", "managerName",
-    "상차지담당자", "하차지담당자", "contact", "contactName",
-    "책임자", "책임자명", "담당자이름", "이름"
-  ];
+  const getManagerPhone = (place) => {
+  // contacts 배열 우선 확인
+  if (Array.isArray(place.contacts) && place.contacts.length) {
+    const primary = place.contacts.find(c => c.isPrimary) || place.contacts[0];
+    if (primary?.phone) return primary.phone;
+  }
+  const keys = ["담당자번호","전화번호","연락처","phone","tel","mobile","담당자연락처","담당자전화","담당자전화번호","핸드폰","휴대폰","휴대전화","contact","연락처번호"];
   for (const k of keys) {
-    if (place[k] !== undefined && place[k] !== null && place[k] !== "") {
-      return place[k];
-    }
+    if (place[k] !== undefined && place[k] !== null && place[k] !== "") return place[k];
   }
   return "";
 };
 
-// 🔥 연락처 추출 (실제 필드: 담당자번호)
-const getManagerPhone = (place) => {
-  const keys = [
-    "담당자번호", "전화번호", "연락처", "phone", "tel", "mobile",
-    "담당자연락처", "담당자전화", "담당자전화번호",
-    "핸드폰", "휴대폰", "휴대전화", "contact", "연락처번호"
-  ];
-  for (const k of keys) {
-    if (place[k] !== undefined && place[k] !== null && place[k] !== "") {
-      return place[k];
-    }
-  }
-  return "";
-};
-  // 🔔 토스트 알림
   const [toast, setToast] = React.useState(null);
   const showToast = (msg, type = "ok") => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3000);
   };
 
-  // ✅ warningPopup 뜨면 포커스 잡아서 Enter로 닫히게
   React.useEffect(() => {
-    if (warningPopup) {
-      setTimeout(() => warningPopupRef.current?.focus(), 0);
-    }
+    if (warningPopup) setTimeout(() => warningPopupRef.current?.focus(), 0);
   }, [warningPopup]);
-  
-  // 🔥 자동완성 필터 함수
+
   const filterEditClients = (value) => {
     const v = value.toLowerCase();
-    return (clients || []).filter(c =>
-      String(c.거래처명 || "").toLowerCase().includes(v)
-    );
+    return (clients || []).filter(c => String(c.거래처명 || "").toLowerCase().includes(v));
   };
-  
+
   const filterEditPlaces = (value) => {
     const v = value.toLowerCase();
-    return (places || []).filter(p =>
-      String(p.업체명 || "").toLowerCase().includes(v)
-    );
+    return (places || []).filter(p => String(p.업체명 || "").toLowerCase().includes(v));
   };
-  // 🔥 거래처 필터 (다른 파트와 동일)
-const filterClients = (value) => {
-  const v = (value || "").toLowerCase();
-  if (!v) return [];
-  return (clients || []).filter(c =>
-    String(c.거래처명 || "").toLowerCase().includes(v)
-  ).slice(0, 10);
-};
 
-// 🔥 장소 필터 (다른 파트와 동일)
-const filterPlaces = (value) => {
-  const v = (value || "").toLowerCase();
-  if (!v) return [];
-  return (places || []).filter(p =>
-    String(p.업체명 || "").toLowerCase().includes(v)
-  );
-};
+  const filterClients = (value) => {
+    const v = (value || "").toLowerCase();
+    if (!v) return [];
+    return (clients || []).filter(c => String(c.거래처명 || "").toLowerCase().includes(v)).slice(0, 10);
+  };
 
-// 🔥 유사도 정렬 (startsWith 우선)
-const rankPlaces = (list, keyword) => {
-  const k = (keyword || "").toLowerCase();
-  return [...list].sort((a, b) => {
-    const aName = String(a.업체명 || "").toLowerCase();
-    const bName = String(b.업체명 || "").toLowerCase();
-    const aStarts = aName.startsWith(k);
-    const bStarts = bName.startsWith(k);
-    if (aStarts && !bStarts) return -1;
-    if (!aStarts && bStarts) return 1;
-    return aName.localeCompare(bName);
-  }).slice(0, 10);
-};
-  // 🔥 차량번호 정규화
+  const filterPlaces = (value) => {
+    const v = (value || "").toLowerCase();
+    if (!v) return [];
+    return (places || []).filter(p => String(p.업체명 || "").toLowerCase().includes(v));
+  };
+
+  const rankPlaces = (list, keyword) => {
+    const k = (keyword || "").toLowerCase();
+    return [...list].sort((a, b) => {
+      const aName = String(a.업체명 || "").toLowerCase();
+      const bName = String(b.업체명 || "").toLowerCase();
+      const aStarts = aName.startsWith(k);
+      const bStarts = bName.startsWith(k);
+      if (aStarts && !bStarts) return -1;
+      if (!aStarts && bStarts) return 1;
+      return aName.localeCompare(bName);
+    }).slice(0, 10);
+  };
+
   const normalizePlate = (v = "") => {
-    return String(v)
-      .toUpperCase()
-      .replace(/[\s\-]/g, "")
-      .replace(/[^0-9A-Z가-힣]/g, "");
+    return String(v).toUpperCase().replace(/[\s\-]/g, "").replace(/[^0-9A-Z가-힣]/g, "");
   };
-// 🔥 블랙/주의업체 체크
+
 const checkWarningStatus = (name, type) => {
   name = String(name || "").trim();
   if (!name) return;
-
-  // clients에서 체크
   const foundClient = (clients || []).find(c => String(c.거래처명 || "").trim() === name);
   if (foundClient) {
-    if (foundClient.업체상태 === "블랙" || foundClient.업체상태 === "주의") {
-      setWarningPopup({ name, status: foundClient.업체상태, type });
+    const status = foundClient.업체상태 || foundClient.등급;
+    if (status === "블랙" || status === "주의") {
+      setWarningPopup({ name, status, type, info: foundClient });
       return;
     }
   }
-
-  // places에서 체크
   const foundPlace = (places || []).find(p => String(p.업체명 || "").trim() === name);
   if (foundPlace) {
-    if (foundPlace.업체상태 === "블랙" || foundPlace.업체상태 === "주의") {
-      setWarningPopup({ name, status: foundPlace.업체상태, type });
+    const status = foundPlace.업체상태 || foundPlace.등급;
+    if (status === "블랙" || status === "주의") {
+      setWarningPopup({ name, status, type, info: foundPlace });
     }
   }
 };
-  // 🔥 전화번호 포맷
+
   const formatPhone = (phone = "") => {
     const clean = String(phone).replace(/[^\d]/g, "");
-    if (clean.length === 11) {
-      return clean.replace(/(\d{3})(\d{4})(\d{4})/, "$1-$2-$3");
-    }
-    if (clean.length === 10) {
-      return clean.replace(/(\d{3})(\d{3})(\d{4})/, "$1-$2-$3");
-    }
+    if (clean.length === 11) return clean.replace(/(\d{3})(\d{4})(\d{4})/, "$1-$2-$3");
+    if (clean.length === 10) return clean.replace(/(\d{3})(\d{3})(\d{4})/, "$1-$2-$3");
     return clean;
   };
-  
-  // 🔥 시간 옵션 생성
-const generateTimeOptions = () => {
+
+  const generateTimeOptions = () => {
     const options = [];
     for (let h = 0; h < 24; h++) {
       for (let m = 0; m < 60; m += 30) {
@@ -22845,35 +22720,18 @@ const generateTimeOptions = () => {
     return options;
   };
 
-  // ✅ 필터 + 정렬
   const filtered = React.useMemo(() => {
     let result = (dispatchData || []).filter((r) => (r.배차상태 || "") === "배차중");
-
-    // 날짜필터
     if (startDate && endDate) {
-      result = result.filter(
-        (r) => (r.상차일 || "") >= startDate && (r.상차일 || "") <= endDate
-      );
+      result = result.filter((r) => (r.상차일 || "") >= startDate && (r.상차일 || "") <= endDate);
     }
-
-    // 거래처명/차량종류 전용 필터
     if (filterValue.trim()) {
-      result = result.filter((r) =>
-        String(r[filterType] || "")
-          .toLowerCase()
-          .includes(filterValue.toLowerCase())
-      );
+      result = result.filter((r) => String(r[filterType] || "").toLowerCase().includes(filterValue.toLowerCase()));
     }
-
-    // 통합검색(q)
     if (q.trim()) {
       const lower = q.toLowerCase();
-      result = result.filter((r) =>
-        Object.values(r).some((v) => String(v || "").toLowerCase().includes(lower))
-      );
+      result = result.filter((r) => Object.values(r).some((v) => String(v || "").toLowerCase().includes(lower)));
     }
-
-    // 날짜/시간 정렬
     return result.sort((a, b) => {
       const d1 = a.상차일 || "";
       const d2 = b.상차일 || "";
@@ -22882,14 +22740,12 @@ const generateTimeOptions = () => {
     });
   }, [dispatchData, q, startDate, endDate, filterType, filterValue]);
 
-  // ✅ 테이블 헤더
   const headers = [
-    "순번", "등록일", "상차일", "상차시간", "하차시간", "거래처명",
-    "상차지명", "상차지주소", "하차지명", "하차지주소",
-    "차량종류", "차량톤수", "화물내용", "배차상태", "메모",
+    "순번","등록일","상차일","상차시간","하차시간","거래처명",
+    "상차지명","상차지주소","하차지명","하차지주소",
+    "차량종류","차량톤수","화물내용","배차상태","메모",
   ];
 
-  // ✅ 삭제 관련 유틸
   const toggleAll = () => {
     if (selectedIds.size === filtered.length) setSelectedIds(new Set());
     else setSelectedIds(new Set(filtered.map((r) => r._id)));
@@ -22901,30 +22757,16 @@ const generateTimeOptions = () => {
       return next;
     });
   };
+  const exitDeleteMode = () => { setDeleteMode(false); setSelectedIds(new Set()); };
 
-  const exitDeleteMode = () => {
-    setDeleteMode(false);
-    setSelectedIds(new Set());
-  };
-
-  // ✅ Firestore 삭제
   const removeDocs = async (ids) => {
-    if (!ids.length) {
-      showToast("선택된 항목이 없습니다.", "err");
-      return;
-    }
+    if (!ids.length) { showToast("선택된 항목이 없습니다.", "err"); return; }
     try {
       const hasDb = typeof db !== "undefined" && db;
-      const coll =
-        typeof COLL !== "undefined" && COLL?.dispatch
-          ? COLL.dispatch
-          : "dispatch";
-
+      const coll = typeof COLL !== "undefined" && COLL?.dispatch ? COLL.dispatch : "dispatch";
       if (hasDb && typeof deleteDoc === "function") {
-        const jobs = ids.map((id) => deleteDoc(doc(db, coll, id)));
-        await Promise.all(jobs);
+        await Promise.all(ids.map((id) => deleteDoc(doc(db, coll, id))));
       }
-
       showToast(`✅ ${ids.length}건 삭제 완료`);
       exitDeleteMode();
     } catch (e) {
@@ -22932,1429 +22774,693 @@ const generateTimeOptions = () => {
       showToast("삭제 중 오류 발생", "err");
     }
   };
-  // 🚚 차량번호 정규화
+
   function normalizeVehicleNo(v = "") {
-    return String(v)
-      .toUpperCase()
-      .replace(/[\s\-]/g, "")   // 공백 + 하이픈 제거
-      .replace(/[^0-9A-Z가-힣]/g, ""); // 기타 문자 제거
+    return String(v).toUpperCase().replace(/[\s\-]/g, "").replace(/[^0-9A-Z가-힣]/g, "");
   }
 
-  // 🚚 차량번호로 기사 찾기
   function findDriverByVehicleNo(vehicleNo) {
     const key = normalizeVehicleNo(vehicleNo);
     if (!key) return null;
-
     return drivers.find(d => {
-      const candidates = [
-        d.차량번호,
-        d.carNo,
-        d.vehicle,
-        d.차량,
-
-        // 🔥 중첩 구조 대응
-        d.car?.number,
-        d.car?.차량번호,
-        d.차량정보?.차량번호,
-        d.vehicleInfo?.number,
-      ];
-
-      return candidates.some(v =>
-        normalizeVehicleNo(v) === key
-      );
+      const candidates = [d.차량번호, d.carNo, d.vehicle, d.차량, d.car?.number, d.car?.차량번호, d.차량정보?.차량번호, d.vehicleInfo?.number];
+      return candidates.some(v => normalizeVehicleNo(v) === key);
     }) || null;
   }
 
-
-  const headBase =
-    "border bg-gray-100 text-center text-sm font-semibold px-2 py-2 whitespace-nowrap";
-  const cellBase =
-    "border text-center px-2 py-1 whitespace-nowrap align-middle";
+  const headBase = "bg-[#1B2B4B] text-white text-center text-[13px] font-semibold px-3 py-3 whitespace-nowrap border-b border-white/10";
+  const cellBase = "text-center px-3 py-2.5 whitespace-nowrap align-middle text-[13px] border-b border-gray-100";
 
   return (
     <div className="relative">
-      {/* 🔔 토스트 */}
       {toast && (
-        <div
-          className={`fixed right-5 top-20 z-50 px-4 py-2 rounded shadow ${toast.type === "ok"
-            ? "bg-emerald-600 text-white"
-            : "bg-rose-600 text-white"
-            }`}
-        >
+        <div className={`fixed right-5 top-20 z-50 px-4 py-2 rounded-lg shadow-lg text-[13px] font-semibold ${toast.type === "ok" ? "bg-emerald-600 text-white" : "bg-rose-600 text-white"}`}>
           {toast.msg}
         </div>
       )}
 
-      <h2 className="text-lg font-bold mb-3">미배차현황</h2>
-
-      {/* ✅ 상단 바 */}
-      <div className="flex flex-wrap items-center gap-2 mb-3">
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="통합검색 (거래처명 / 상차지명 / 차량번호 등)"
-          className="border p-2 rounded w-80"
-        />
-
-        {/* 날짜 필터 */}
-        <div className="flex items-center gap-1 text-sm">
-          <input
-            type="date"
-            className="border p-1 rounded"
-            value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-          />
-          <span>~</span>
-          <input
-            type="date"
-            className="border p-1 rounded"
-            value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
-          />
+      {/* 페이지 헤더 */}
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h2 className="text-[18px] font-bold text-[#1B2B4B]">미배차현황</h2>
+          <p className="text-[12px] text-gray-400 mt-0.5">배차 대기 중인 오더 목록 — 더블클릭으로 수정/복사</p>
         </div>
-
-        {/* 거래처명/차량종류 필터 */}
-        <div className="flex items-center gap-1 text-sm ml-3">
-          <select
-            value={filterType}
-            onChange={(e) => setFilterType(e.target.value)}
-            className="border p-2 rounded"
-          >
-            <option value="거래처명">거래처명</option>
-            <option value="차량종류">차량종류</option>
-          </select>
-          <input
-            value={filterValue}
-            onChange={(e) => setFilterValue(e.target.value)}
-            placeholder={`${filterType} 검색`}
-            className="border p-2 rounded w-48"
-          />
+        <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-2">
+          <span className="text-[12px] text-gray-500">대기</span>
+          <span className="text-[18px] font-bold text-red-600 ml-2">{filtered.length}</span>
+          <span className="text-[12px] text-gray-500 ml-1">건</span>
         </div>
+      </div>
 
-        <button
-          onClick={() => {
-            setQ("");
-            setStartDate("");
-            setEndDate("");
-            setFilterValue("");
-          }}
-          className="bg-gray-200 hover:bg-gray-300 px-3 py-2 rounded"
-        >
-          초기화
-        </button>
-
-        <div className="ml-auto" />
-
-        {!deleteMode ? (
-          <button
-            onClick={() => setDeleteMode(true)}
-            className="px-4 py-2 rounded bg-red-600 text-white hover:bg-red-700"
-          >
-            삭제
-          </button>
-        ) : (
-          <div className="flex items-center gap-2">
-
-            <button
-              onClick={() => removeDocs(Array.from(selectedIds))}
-              className="px-4 py-2 rounded bg-red-700 text-white hover:bg-red-800"
-            >
-              선택 삭제
-            </button>
-            <button
-              onClick={exitDeleteMode}
-              className="px-4 py-2 rounded border hover:bg-gray-100"
-            >
-              취소
-            </button>
+      {/* 검색바 */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-3 mb-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="통합검색 (거래처명 / 상차지명 / 차량번호 등)"
+            className="border border-gray-200 rounded-lg px-3 py-1.5 text-[13px] w-72 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100"
+          />
+          <div className="flex items-center gap-1">
+            <input type="date" className="border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] focus:outline-none focus:border-blue-400" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+            <span className="text-gray-400 text-[13px]">~</span>
+            <input type="date" className="border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] focus:outline-none focus:border-blue-400" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
           </div>
-        )}
-      </div>
-
-      {deleteMode && (
-        <div className="flex items-center gap-3 text-sm mb-2">
-          <span className="px-2 py-1 rounded bg-rose-50 text-rose-700 border border-rose-200">
-            삭제 모드 — 선택 <b>{selectedIds.size}</b>건
-          </span>
-          <button
-            onClick={() => setSelectedIds(new Set())}
-            className="px-2 py-1 border rounded hover:bg-gray-50"
-          >
-            선택 해제
+          <div className="flex items-center gap-1">
+            <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] focus:outline-none focus:border-blue-400">
+              <option value="거래처명">거래처명</option>
+              <option value="차량종류">차량종류</option>
+            </select>
+            <input value={filterValue} onChange={(e) => setFilterValue(e.target.value)} placeholder={`${filterType} 검색`} className="border border-gray-200 rounded-lg px-3 py-1.5 text-[13px] w-40 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100" />
+          </div>
+          <button onClick={() => { setQ(""); setStartDate(""); setEndDate(""); setFilterValue(""); }} className="px-3 py-1.5 text-[13px] font-semibold rounded-lg bg-white border border-gray-200 text-gray-500 hover:bg-gray-50 transition">
+            초기화
           </button>
-        </div>
-      )}
-
-      {/* ✅ 테이블 */}
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm border">
-          <thead>
-            <tr>
-              {deleteMode && (
-                <th className={headBase}>
-                  <input
-                    type="checkbox"
-                    onChange={toggleAll}
-                    checked={
-                      selectedIds.size > 0 &&
-                      selectedIds.size === filtered.length
-                    }
-                  />
-                </th>
-              )}
-              {headers.map((h) => (
-                <th key={h} className={headBase}>
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-
-          <tbody>
-            {filtered.length === 0 ? (
-              <tr>
-                <td
-                  className="text-center py-4"
-                  colSpan={headers.length + (deleteMode ? 1 : 0)}
-                >
-                  🚛 모든 오더가 배차완료 상태입니다
-                </td>
-              </tr>
+          <div className="ml-auto flex items-center gap-2">
+            {!deleteMode ? (
+              <button onClick={() => setDeleteMode(true)} className="px-3 py-1.5 text-[13px] font-semibold rounded-lg bg-white border border-red-200 text-red-600 hover:bg-red-50 transition">
+                삭제
+              </button>
             ) : (
-              filtered.map((r, i) => {
-                const isEarly =
-                  r.상차시간 &&
-                  r.상차시간 >= "05:00" &&
-                  r.상차시간 <= "09:00";
-
-                return (
-                  <tr
-                    key={r._id || i}
-                    onDoubleClick={(e) => {
-                      if (deleteMode) return;
-                      if (e.target.closest("input")) return;
-
-                      const latest = dispatchData.find(d => d._id === r._id);
-
-                      const rawCargo = String(latest?.화물내용 || "");
-                      const cargoMatch = rawCargo.match(/(\d+)(.*)/);
-
-                      const rawTon = String(latest?.차량톤수 || "");
-                      const tonMatch = rawTon.match(/([\d.]+)(.*)/);
-
-                      setCopyTarget({
-                        ...latest,
-
-                        // 🔥 화물 분해
-                        화물수량: cargoMatch ? cargoMatch[1] : "",
-                        화물타입: cargoMatch ? cargoMatch[2] : "",
-
-                        // 🔥 톤수 분해
-                        톤수값: tonMatch ? tonMatch[1] : "",
-                        톤수타입: tonMatch ? tonMatch[2] : "",
-                      });
-
-                      setCopyPanelOpen(true);
-                    }}
-
-                    className={`${i % 2 === 0 ? "bg-white" : "bg-gray-50"} cursor-pointer hover:bg-indigo-50`}
-                  >
-                    {deleteMode && (
-                      <td className={cellBase}>
-                        <input
-                          type="checkbox"
-                          checked={selectedIds.has(r._id)}
-                          onChange={() => toggleOne(r._id)}
-                        />
-                      </td>
-                    )}
-                    <td className={cellBase}>{i + 1}</td>
-                    <td className={cellBase}>{r.등록일 || ""}</td>
-                    <td className={cellBase}>{r.상차일 || ""}</td>
-                    <td
-                      className={cellBase}
-                      style={isEarly ? { color: "red", fontWeight: 600 } : {}}
-                    >
-                      {r.상차시간 || ""}
-                    </td>
-                    <td className={cellBase}>{r.하차시간 || ""}</td>
-                    <td className={cellBase}>{r.거래처명 || ""}</td>
-
-                    {/* 상차지명 */}
-                    <td className={cellBase}>{r.상차지명 || ""}</td>
-
-                    {/* 상차지주소 */}
-                    <td className={cellBase}>
-                      {r.상차지주소 && r.상차지주소.length > 10 ? (
-                        openLoadAddrs.has(r._id) ? (
-                          <span>
-                            {r.상차지주소}{" "}
-                            <button
-                              onClick={() =>
-                                setOpenLoadAddrs((prev) => {
-                                  const next = new Set(prev);
-                                  next.delete(r._id);
-                                  return next;
-                                })
-                              }
-                              className="text-blue-600 underline text-xs"
-                            >
-                              접기
-                            </button>
-                          </span>
-                        ) : (
-                          <span>
-                            {r.상차지주소.slice(0, 10)}...
-                            <button
-                              onClick={() =>
-                                setOpenLoadAddrs(
-                                  (prev) => new Set(prev).add(r._id)
-                                )
-                              }
-                              className="text-blue-600 underline text-xs"
-                            >
-                              더보기
-                            </button>
-                          </span>
-                        )
-                      ) : (
-                        r.상차지주소 || ""
-                      )}
-                    </td>
-
-                    {/* 하차지명 */}
-                    <td className={cellBase}>{r.하차지명 || ""}</td>
-
-                    {/* 하차지주소 */}
-                    <td className={cellBase}>
-                      {r.하차지주소 && r.하차지주소.length > 10 ? (
-                        openUnloadAddrs.has(r._id) ? (
-                          <span>
-                            {r.하차지주소}{" "}
-                            <button
-                              onClick={() =>
-                                setOpenUnloadAddrs((prev) => {
-                                  const next = new Set(prev);
-                                  next.delete(r._id);
-                                  return next;
-                                })
-                              }
-                              className="text-blue-600 underline text-xs"
-                            >
-                              접기
-                            </button>
-                          </span>
-                        ) : (
-                          <span>
-                            {r.하차지주소.slice(0, 10)}...
-                            <button
-                              onClick={() =>
-                                setOpenUnloadAddrs(
-                                  (prev) => new Set(prev).add(r._id)
-                                )
-                              }
-                              className="text-blue-600 underline text-xs"
-                            >
-                              더보기
-                            </button>
-                          </span>
-                        )
-                      ) : (
-                        r.하차지주소 || ""
-                      )}
-                    </td>
-
-                    {/* 차량종류 */}
-                    <td className={cellBase}>{r.차량종류 || ""}</td>
-
-                    {/* 차량톤수 */}
-                    <td className={cellBase}>{r.차량톤수 || ""}</td>
-
-                    <td className={cellBase}>{r.화물내용 || ""}</td>
-                    <td className={cellBase}>
-                      <StatusBadge s={r.배차상태} />
-                    </td>
-                    <td className={`${cellBase} max-w-[260px]`}>
-                      {r.메모 && r.메모.length > 40 ? (
-                        openMemos.has(r._id) ? (
-                          <span className="whitespace-pre-wrap">
-                            {r.메모}{" "}
-                            <button
-                              onClick={() =>
-                                setOpenMemos(prev => {
-                                  const next = new Set(prev);
-                                  next.delete(r._id);
-                                  return next;
-                                })
-                              }
-                              className="text-blue-600 underline text-xs ml-1"
-                            >
-                              접기
-                            </button>
-                          </span>
-                        ) : (
-                          <span>
-                            {r.메모.slice(0, 40)}...
-                            <button
-                              onClick={() =>
-                                setOpenMemos(prev => new Set(prev).add(r._id))
-                              }
-                              className="text-blue-600 underline text-xs ml-1"
-                            >
-                              더보기
-                            </button>
-                          </span>
-                        )
-                      ) : (
-                        r.메모 || ""
-                      )}
-                    </td>
-
-                  </tr>
-                );
-              })
+              <>
+                <span className="text-[12px] px-2 py-1 rounded-lg bg-red-50 text-red-700 border border-red-200 font-semibold">선택 {selectedIds.size}건</span>
+                <button onClick={() => removeDocs(Array.from(selectedIds))} className="px-3 py-1.5 text-[13px] font-semibold rounded-lg bg-red-600 text-white hover:bg-red-700 transition">선택 삭제</button>
+                <button onClick={() => setSelectedIds(new Set())} className="px-3 py-1.5 text-[13px] rounded-lg border border-gray-200 hover:bg-gray-50 transition">선택 해제</button>
+                <button onClick={exitDeleteMode} className="px-3 py-1.5 text-[13px] rounded-lg border border-gray-200 hover:bg-gray-50 transition">취소</button>
+              </>
             )}
-          </tbody>
-        </table>
+          </div>
+        </div>
       </div>
-      {/* ✅ 여기부터 빠른 배차 팝업 */}
+
+      {/* 테이블 */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-[13px]">
+            <thead>
+              <tr>
+                {deleteMode && (
+                  <th className={headBase}>
+                    <input type="checkbox" onChange={toggleAll} checked={selectedIds.size > 0 && selectedIds.size === filtered.length} />
+                  </th>
+                )}
+                {headers.map((h) => (
+                  <th key={h} className={headBase}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.length === 0 ? (
+                <tr>
+                  <td className="text-center py-16 text-[13px] text-gray-400 font-medium" colSpan={headers.length + (deleteMode ? 1 : 0)}>
+                    배차 대기 중인 오더가 없습니다
+                  </td>
+                </tr>
+              ) : (
+                filtered.map((r, i) => {
+                  const isEarly = r.상차시간 && r.상차시간 >= "05:00" && r.상차시간 <= "09:00";
+                  return (
+                    <tr
+                      key={r._id || i}
+                      onDoubleClick={(e) => {
+                        if (deleteMode) return;
+                        if (e.target.closest("input")) return;
+                        const latest = dispatchData.find(d => d._id === r._id);
+                        const rawCargo = String(latest?.화물내용 || "");
+                        const cargoMatch = rawCargo.match(/(\d+)(.*)/);
+                        const rawTon = String(latest?.차량톤수 || "");
+                        const tonMatch = rawTon.match(/([\d.]+)(.*)/);
+                        setCopyTarget({
+                          ...latest,
+                          화물수량: cargoMatch ? cargoMatch[1] : "",
+                          화물타입: cargoMatch ? cargoMatch[2] : "",
+                          톤수값: tonMatch ? tonMatch[1] : "",
+                          톤수타입: tonMatch ? tonMatch[2] : "",
+                        });
+                        setCopyPanelOpen(true);
+                      }}
+                      className={`${i % 2 === 0 ? "bg-white" : "bg-gray-50/50"} cursor-pointer hover:bg-blue-50/50 transition`}
+                    >
+                      {deleteMode && (
+                        <td className={cellBase}>
+                          <input type="checkbox" checked={selectedIds.has(r._id)} onChange={() => toggleOne(r._id)} />
+                        </td>
+                      )}
+                      <td className={cellBase}>{i + 1}</td>
+                      <td className={cellBase}>{r.등록일 || ""}</td>
+                      <td className={cellBase}>{r.상차일 || ""}</td>
+                      <td className={cellBase} style={isEarly ? { color: "red", fontWeight: 600 } : {}}>{r.상차시간 || ""}</td>
+                      <td className={cellBase}>{r.하차시간 || ""}</td>
+                      <td className={`${cellBase} font-semibold text-gray-800`}>{r.거래처명 || ""}</td>
+                      <td className={`${cellBase} font-medium`}>{r.상차지명 || ""}</td>
+                      <td className={cellBase}>
+                        {r.상차지주소 && r.상차지주소.length > 10 ? (
+                          openLoadAddrs.has(r._id) ? (
+                            <span>{r.상차지주소}{" "}<button onClick={() => setOpenLoadAddrs((prev) => { const next = new Set(prev); next.delete(r._id); return next; })} className="text-blue-500 underline text-xs">접기</button></span>
+                          ) : (
+                            <span>{r.상차지주소.slice(0, 10)}...<button onClick={() => setOpenLoadAddrs((prev) => new Set(prev).add(r._id))} className="text-blue-500 underline text-xs">더보기</button></span>
+                          )
+                        ) : (r.상차지주소 || "")}
+                      </td>
+                      <td className={`${cellBase} font-medium`}>{r.하차지명 || ""}</td>
+                      <td className={cellBase}>
+                        {r.하차지주소 && r.하차지주소.length > 10 ? (
+                          openUnloadAddrs.has(r._id) ? (
+                            <span>{r.하차지주소}{" "}<button onClick={() => setOpenUnloadAddrs((prev) => { const next = new Set(prev); next.delete(r._id); return next; })} className="text-blue-500 underline text-xs">접기</button></span>
+                          ) : (
+                            <span>{r.하차지주소.slice(0, 10)}...<button onClick={() => setOpenUnloadAddrs((prev) => new Set(prev).add(r._id))} className="text-blue-500 underline text-xs">더보기</button></span>
+                          )
+                        ) : (r.하차지주소 || "")}
+                      </td>
+                      <td className={cellBase}>{r.차량종류 || ""}</td>
+                      <td className={cellBase}>{r.차량톤수 || ""}</td>
+                      <td className={cellBase}>{r.화물내용 || ""}</td>
+                      <td className={cellBase}><StatusBadge s={r.배차상태} /></td>
+                      <td className={`${cellBase} max-w-[260px] text-left`}>
+                        {r.메모 && r.메모.length > 40 ? (
+                          openMemos.has(r._id) ? (
+                            <span className="whitespace-pre-wrap">{r.메모}{" "}<button onClick={() => setOpenMemos(prev => { const next = new Set(prev); next.delete(r._id); return next; })} className="text-blue-500 underline text-xs ml-1">접기</button></span>
+                          ) : (
+                            <span>{r.메모.slice(0, 40)}...<button onClick={() => setOpenMemos(prev => new Set(prev).add(r._id))} className="text-blue-500 underline text-xs ml-1">더보기</button></span>
+                          )
+                        ) : (r.메모 || "")}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* 빠른 배차 팝업 */}
       {quickAssignOpen && selectedOrder && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="bg-white rounded-xl shadow-xl w-[520px] p-6">
-            <h3 className="text-lg font-bold mb-4">
-              🚚 빠른 배차 등록
-            </h3>
-
+            <h3 className="text-lg font-bold mb-4">빠른 배차 등록</h3>
             <div className="text-sm mb-3 text-gray-600">
-              <b>{selectedOrder.거래처명}</b> /
-              {selectedOrder.상차지명} → {selectedOrder.하차지명}
+              <b>{selectedOrder.거래처명}</b> / {selectedOrder.상차지명} → {selectedOrder.하차지명}
             </div>
-
-            <input
-              placeholder="차량번호"
-              value={vehicleNo}
-              onChange={(e) => {
-                const v = e.target.value;
-                setVehicleNo(v);
-
-                const found = findDriverByVehicleNo(v);
-
-                if (found) {
-                  setMatchedDriver(found);
-                  setDriverName(found.name || found.기사명 || "");
-                  setDriverPhone(found.phone || found.전화번호 || "");
-                  setNewDriverPopup(false);
-                } else {
-                  setMatchedDriver(null);
-                  setDriverName("");
-                  setDriverPhone("");
-                  setNewDriverPopup(normalizeVehicleNo(v).length >= 6);
-                }
-
-              }}
-              className="border p-2 rounded w-full mb-2"
-            />
-
-
-            <input
-              placeholder="기사명"
-              value={driverName}
-              onChange={(e) => setDriverName(e.target.value)}
-              className="border p-2 rounded w-full mb-2"
-            />
-
-            <input
-              placeholder="기사 연락처"
-              value={driverPhone}
-              onChange={(e) => setDriverPhone(e.target.value)}
-              className="border p-2 rounded w-full mb-2"
-            />
-            {matchedDriver && (
-              <div className="text-xs text-emerald-600 mb-2">
-                ✔ 기존 등록 차량 / 기사 자동 매칭됨
-              </div>
-            )}
-
-            {!matchedDriver && newDriverPopup && (
-              <div className="text-xs text-amber-600 mb-2">
-                ➕ 등록되지 않은 차량입니다. 신규 기사로 등록됩니다.
-              </div>
-            )}
-            <input
-              placeholder="지불운임"
-              className="border p-2 rounded w-full mb-4"
-            />
-
+            <input placeholder="차량번호" value={vehicleNo} onChange={(e) => { const v = e.target.value; setVehicleNo(v); const found = findDriverByVehicleNo(v); if (found) { setMatchedDriver(found); setDriverName(found.name || found.기사명 || ""); setDriverPhone(found.phone || found.전화번호 || ""); setNewDriverPopup(false); } else { setMatchedDriver(null); setDriverName(""); setDriverPhone(""); setNewDriverPopup(normalizeVehicleNo(v).length >= 6); } }} className="border p-2 rounded w-full mb-2" />
+            <input placeholder="기사명" value={driverName} onChange={(e) => setDriverName(e.target.value)} className="border p-2 rounded w-full mb-2" />
+            <input placeholder="기사 연락처" value={driverPhone} onChange={(e) => setDriverPhone(e.target.value)} className="border p-2 rounded w-full mb-2" />
+            {matchedDriver && <div className="text-xs text-emerald-600 mb-2">✔ 기존 등록 차량 / 기사 자동 매칭됨</div>}
+            {!matchedDriver && newDriverPopup && <div className="text-xs text-amber-600 mb-2">➕ 등록되지 않은 차량입니다. 신규 기사로 등록됩니다.</div>}
+            <input placeholder="지불운임" className="border p-2 rounded w-full mb-4" />
             <div className="flex justify-end gap-2">
-              <button
-                onClick={() => setQuickAssignOpen(false)}
-                className="px-4 py-2 border rounded"
-              >
-                취소
-              </button>
-              <button
-                onClick={() => {
-                  // 👉 patchDispatch 여기서 호출
-                  setQuickAssignOpen(false);
-                }}
-                className="px-4 py-2 bg-indigo-600 text-white rounded"
-              >
-                배차완료
-              </button>
+              <button onClick={() => setQuickAssignOpen(false)} className="px-4 py-2 border rounded">취소</button>
+              <button onClick={() => setQuickAssignOpen(false)} className="px-4 py-2 bg-indigo-600 text-white rounded">배차완료</button>
             </div>
           </div>
         </div>
       )}
-      {/* 🔥 기사 신규등록 팝업 */}
-{newDriverPopupOpen && (
-  <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/50">
-    <div className="bg-white rounded-xl shadow-2xl p-8 w-[400px]">
-      <h3 className="text-xl font-bold mb-6 text-slate-800">
-        🚚 신규 기사 등록
-      </h3>
-      
-      <div className="space-y-4">
-        <div>
-          <label className="block text-sm font-semibold text-gray-700 mb-1">차량번호</label>
-          <input
-            className="w-full border rounded-lg px-3 py-2 bg-gray-100"
-            value={newDriverData.차량번호}
-            readOnly
-          />
-        </div>
-        
-        <div>
-          <label className="block text-sm font-semibold text-gray-700 mb-1">기사명 *</label>
-          <input
-            className="w-full border rounded-lg px-3 py-2"
-            value={newDriverData.이름}
-            onChange={(e) => setNewDriverData(p => ({...p, 이름: e.target.value}))}
-            placeholder="기사명 입력"
-          />
-        </div>
-        
-        <div>
-          <label className="block text-sm font-semibold text-gray-700 mb-1">전화번호 *</label>
-          <input
-            className="w-full border rounded-lg px-3 py-2"
-            value={newDriverData.전화번호}
-            onChange={(e) => setNewDriverData(p => ({...p, 전화번호: e.target.value}))}
-            placeholder="010-0000-0000"
-          />
-        </div>
-      </div>
-      
-      <div className="flex justify-end gap-3 mt-8">
-        <button
-          onClick={() => {
-            setNewDriverPopupOpen(false);
-            setNewDriverData({ 이름: "", 전화번호: "", 차량번호: "" });
-          }}
-          className="px-4 py-2 border rounded-lg hover:bg-gray-100"
-        >
-          취소
-        </button>
-        <button
-          onClick={async () => {
-            if (!newDriverData.이름.trim()) {
-              alert("기사명을 입력하세요.");
-              return;
-            }
-            if (!newDriverData.전화번호.trim()) {
-              alert("전화번호를 입력하세요.");
-              return;
-            }
-            
-            try {
-              // 🔥 upsertDriver가 있으면 사용, 없으면 직접 Firestore 저장
-              if (typeof upsertDriver === "function") {
-                await upsertDriver({
-                  차량번호: newDriverData.차량번호,
-                  이름: newDriverData.이름,
-                  전화번호: newDriverData.전화번호,
-                  createdAt: Date.now(),
-                });
-              } else if (typeof db !== "undefined" && db) {
-                await setDoc(
-                  doc(db, "drivers", crypto.randomUUID()),
-                  {
-                    차량번호: newDriverData.차량번호,
-                    이름: newDriverData.이름,
-                    전화번호: newDriverData.전화번호,
-                    createdAt: Date.now(),
+
+      {/* 기사 신규등록 팝업 */}
+      {newDriverPopupOpen && (
+        <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-2xl shadow-2xl overflow-hidden w-[400px]">
+            <div className="bg-[#1B2B4B] px-6 py-4">
+              <h3 className="text-white text-[16px] font-bold">신규 기사 등록</h3>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-[12px] font-semibold text-gray-500 mb-1">차량번호</label>
+                <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] bg-gray-100" value={newDriverData.차량번호} readOnly />
+              </div>
+              <div>
+                <label className="block text-[12px] font-semibold text-gray-500 mb-1">기사명 *</label>
+                <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={newDriverData.이름} onChange={(e) => setNewDriverData(p => ({...p, 이름: e.target.value}))} placeholder="기사명 입력" />
+              </div>
+              <div>
+                <label className="block text-[12px] font-semibold text-gray-500 mb-1">전화번호 *</label>
+                <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={newDriverData.전화번호} onChange={(e) => setNewDriverData(p => ({...p, 전화번호: e.target.value}))} placeholder="010-0000-0000" />
+              </div>
+            </div>
+            <div className="flex gap-2 px-6 pb-6">
+              <button onClick={() => { setNewDriverPopupOpen(false); setNewDriverData({ 이름: "", 전화번호: "", 차량번호: "" }); }} className="flex-1 py-2.5 rounded-lg border border-gray-200 text-[13px] font-semibold hover:bg-gray-50 transition">취소</button>
+              <button onClick={async () => {
+                if (!newDriverData.이름.trim()) { alert("기사명을 입력하세요."); return; }
+                if (!newDriverData.전화번호.trim()) { alert("전화번호를 입력하세요."); return; }
+                try {
+                  if (typeof upsertDriver === "function") {
+                    await upsertDriver({ 차량번호: newDriverData.차량번호, 이름: newDriverData.이름, 전화번호: newDriverData.전화번호, createdAt: Date.now() });
+                  } else if (typeof db !== "undefined" && db) {
+                    await setDoc(doc(db, "drivers", crypto.randomUUID()), { 차량번호: newDriverData.차량번호, 이름: newDriverData.이름, 전화번호: newDriverData.전화번호, createdAt: Date.now() });
                   }
-                );
-              }
-              
-              // 🔥 copyTarget에 기사정보 반영
-              setCopyTarget(prev => ({
-                ...prev,
-                이름: newDriverData.이름,
-                전화번호: formatPhone(newDriverData.전화번호),
-                배차상태: "배차완료",
-              }));
-              
-              alert("✅ 기사 등록 완료");
-              setNewDriverPopupOpen(false);
-              setNewDriverData({ 이름: "", 전화번호: "", 차량번호: "" });
-            } catch (err) {
-              console.error(err);
-              alert("등록 중 오류 발생");
-            }
-          }}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700"
-        >
-          저장
-        </button>
-      </div>
-    </div>
-  </div>
-)}
-      {/* 🔥 블랙/주의업체 경고 팝업 */}
-      {blackDriverAlert && (
-  <div
-    className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999999]"
-    tabIndex={-1}
-    ref={(el) => el && setTimeout(() => el.focus(), 0)}
-    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); setBlackDriverAlert(null); } }}
-  >
-    <div className="bg-white rounded-2xl shadow-2xl w-[400px] overflow-hidden">
-      <div className="bg-gray-900 px-6 py-4 flex items-center gap-3">
-        <span className="text-2xl">🚫</span>
-        <h3 className="text-white text-lg font-bold">블랙 기사 알림</h3>
-      </div>
-      <div className="px-6 py-5 space-y-3">
-        <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm space-y-1">
-          <div><span className="text-gray-500">차량번호</span><b className="ml-2">{blackDriverAlert.차량번호}</b></div>
-          <div><span className="text-gray-500">이름</span><b className="ml-2 text-red-600">{blackDriverAlert.이름 || "-"}</b></div>
-          <div><span className="text-gray-500">전화번호</span><b className="ml-2">{blackDriverAlert.전화번호 || "-"}</b></div>
-          {blackDriverAlert.메모 && (
-            <div><span className="text-gray-500">메모</span><span className="ml-2 text-red-600">{blackDriverAlert.메모}</span></div>
-          )}
+                  setCopyTarget(prev => ({ ...prev, 이름: newDriverData.이름, 전화번호: formatPhone(newDriverData.전화번호), 배차상태: "배차완료" }));
+                  alert("✅ 기사 등록 완료");
+                  setNewDriverPopupOpen(false);
+                  setNewDriverData({ 이름: "", 전화번호: "", 차량번호: "" });
+                } catch (err) { console.error(err); alert("등록 중 오류 발생"); }
+              }} className="flex-1 py-2.5 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition">저장</button>
+            </div>
+          </div>
         </div>
-        <p className="text-sm text-gray-600 text-center font-semibold">
-          해당 기사는 <span className="text-red-600 font-bold">블랙 등급</span>으로 등록된 기사입니다.
-        </p>
-      </div>
-      <div className="px-6 pb-5">
-        <button className="w-full py-3 bg-gray-900 text-white rounded-xl font-bold text-sm" onClick={() => setBlackDriverAlert(null)}>
-          확인 (Enter)
-        </button>
-      </div>
-    </div>
-  </div>
-)}
-{warningPopup && (
-  <div
-    className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/50"
-    tabIndex={-1}
-    ref={warningPopupRef}
-    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); setWarningPopup(null); } }}
-  >
+      )}
+
+      {/* 블랙 기사 경고 팝업 */}
+      {blackDriverAlert && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999999]" tabIndex={-1} ref={(el) => el && setTimeout(() => el.focus(), 0)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); setBlackDriverAlert(null); } }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-[400px] overflow-hidden">
+            <div className="bg-gray-900 px-6 py-4 flex items-center gap-3">
+              <span className="text-2xl">🚫</span>
+              <h3 className="text-white text-lg font-bold">블랙 기사 알림</h3>
+            </div>
+            <div className="px-6 py-5 space-y-3">
+              <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm space-y-1">
+                <div><span className="text-gray-500">차량번호</span><b className="ml-2">{blackDriverAlert.차량번호}</b></div>
+                <div><span className="text-gray-500">이름</span><b className="ml-2 text-red-600">{blackDriverAlert.이름 || "-"}</b></div>
+                <div><span className="text-gray-500">전화번호</span><b className="ml-2">{blackDriverAlert.전화번호 || "-"}</b></div>
+                {blackDriverAlert.메모 && <div><span className="text-gray-500">메모</span><span className="ml-2 text-red-600">{blackDriverAlert.메모}</span></div>}
+              </div>
+              <p className="text-sm text-gray-600 text-center font-semibold">해당 기사는 <span className="text-red-600 font-bold">블랙 등급</span>으로 등록된 기사입니다.</p>
+            </div>
+            <div className="px-6 pb-5">
+              <button className="w-full py-3 bg-gray-900 text-white rounded-xl font-bold text-sm" onClick={() => setBlackDriverAlert(null)}>확인 (Enter)</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 블랙/주의 업체 경고 팝업 */}
+      {warningPopup && (
+  <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/50" tabIndex={-1} ref={warningPopupRef} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); setWarningPopup(null); } }}>
     <div className="bg-white rounded-2xl shadow-2xl w-[400px] overflow-hidden">
       <div className={`px-6 py-4 flex items-center gap-3 ${warningPopup.status === "블랙" ? "bg-gray-900" : "bg-orange-400"}`}>
         <span className="text-2xl">{warningPopup.status === "블랙" ? "🚫" : "⚠️"}</span>
-        <h3 className="text-white text-lg font-bold">
-          {warningPopup.status === "블랙" ? "블랙" : "주의"} 거래처 알림
-        </h3>
+        <h3 className="text-white text-lg font-bold">{warningPopup.status === "블랙" ? "블랙" : "주의"} 거래처 알림</h3>
       </div>
       <div className="px-6 py-5 space-y-3">
         <div className={`border rounded-lg px-4 py-3 text-sm space-y-1 ${warningPopup.status === "블랙" ? "bg-red-50 border-red-200" : "bg-yellow-50 border-yellow-200"}`}>
-          <div><span className="text-gray-500">업체명</span><b className="ml-2">{warningPopup.name}</b></div>
+          <div><span className="text-gray-500">거래처명</span><b className="ml-2">{warningPopup.name}</b></div>
           <div className="flex items-center">
             <span className="text-gray-500">등급</span>
-            <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-bold text-white ${warningPopup.status === "블랙" ? "bg-gray-900" : "bg-orange-400"}`}>
-              {warningPopup.status}
-            </span>
+            <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-bold text-white ${warningPopup.status === "블랙" ? "bg-gray-900" : "bg-orange-400"}`}>{warningPopup.status}</span>
           </div>
+          {warningPopup.info?.지정일 && (
+            <div><span className="text-gray-500">지정일</span><span className="ml-2">{warningPopup.info.지정일}</span></div>
+          )}
+          {warningPopup.info?.주소 && (
+            <div><span className="text-gray-500">주소</span><span className="ml-2">{warningPopup.info.주소}</span></div>
+          )}
+          {warningPopup.info?.메모 && (
+            <div><span className="text-gray-500">메모</span><span className={`ml-2 ${warningPopup.status === "블랙" ? "text-red-600" : "text-yellow-600"}`}>{warningPopup.info.메모}</span></div>
+          )}
         </div>
-        <p className="text-sm text-gray-600 text-center font-semibold">
-          해당 업체는 <span className={`font-bold ${warningPopup.status === "블랙" ? "text-red-600" : "text-orange-500"}`}>{warningPopup.status} 등급</span>으로 지정된 업체입니다.
-        </p>
+        <p className="text-sm text-gray-600 text-center font-semibold">해당 거래처는{" "}<span className={`font-bold ${warningPopup.status === "블랙" ? "text-red-600" : "text-yellow-600"}`}>{warningPopup.status} 등급</span>으로 지정된 거래처입니다.</p>
       </div>
       <div className="px-6 pb-5">
-        <button
-          className={`w-full py-3 text-white rounded-xl font-bold text-sm ${warningPopup.status === "블랙" ? "bg-gray-900" : "bg-orange-400"}`}
-          onClick={() => setWarningPopup(null)}
-        >
-          확인 (Enter)
-        </button>
+        <button className={`w-full py-3 text-white rounded-xl font-bold text-sm ${warningPopup.status === "블랙" ? "bg-gray-900" : "bg-orange-400"}`} onClick={() => setWarningPopup(null)}>확인 (Enter)</button>
       </div>
     </div>
   </div>
 )}
-      {/* 🔥 오더 복사/수정 패널 */}
+
+      {/* 오더 복사/수정 패널 */}
       {copyPanelOpen && copyTarget && (
         <div className="fixed inset-0 z-[99999]">
-          <div
-            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-            onClick={() => setCopyPanelOpen(false)}
-          />
-          
-          <div className="absolute top-0 right-0 h-full w-[1100px] bg-slate-100 shadow-2xl border-l overflow-y-auto">
-            <div className="p-10 space-y-10">
-              <div className="flex justify-between items-center border-b pb-5">
-                <h2 className="text-2xl font-bold text-slate-800">
-                  오더 복사 / 수정 패널
-                </h2>
-                
-                <div className="flex gap-3 items-center">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setCopyPanelOpen(false)} />
+          <div className="absolute top-0 right-0 h-full w-[1100px] bg-gray-50 shadow-2xl border-l overflow-y-auto">
+            <div className="p-8 space-y-6">
+
+              {/* 패널 헤더 */}
+              <div className="flex justify-between items-center bg-white rounded-xl border border-gray-200 px-6 py-4 shadow-sm">
+                <div>
+                  <h2 className="text-[18px] font-bold text-[#1B2B4B]">오더 복사 / 수정 패널</h2>
+                  <p className="text-[12px] text-gray-400 mt-0.5">{copyTarget.거래처명} · {copyTarget.상차지명} → {copyTarget.하차지명}</p>
+                </div>
+                <div className="flex gap-2 items-center">
                   <button
                     onClick={async () => {
-                      if (!copyTarget?._id) {
-                        alert("수정할 오더 ID가 없습니다.");
-                        return;
-                      }
-                      
-                      // 🔥 핵심 추가
-                      const finalCargo = copyTarget.화물타입
-                        ? `${copyTarget.화물수량 || ""}${copyTarget.화물타입}`
-                        : (copyTarget.화물수량 || "");
-                      
-                      const payload = {
-                        ...copyTarget,
-                        화물내용: finalCargo,
-                        updatedAt: Date.now(),
-                      };
-                      
+                      if (!copyTarget?._id) { alert("수정할 오더 ID가 없습니다."); return; }
+                      const finalCargo = copyTarget.화물타입 ? `${copyTarget.화물수량 || ""}${copyTarget.화물타입}` : (copyTarget.화물수량 || "");
+                      const payload = { ...copyTarget, 화물내용: finalCargo, updatedAt: Date.now() };
                       await patchDispatch(copyTarget._id, payload);
-
-                      // 🔥 edited 캐시 클리어
-                      setEdited(prev => {
-                        const next = { ...prev };
-                        delete next[copyTarget._id];
-                        return next;
-                      });
-
                       alert("오더 수정 완료");
                       setCopyPanelOpen(false);
                     }}
-                    className="px-4 py-2 bg-green-600 text-white rounded-lg font-semibold"
+                    className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-[13px] font-bold hover:bg-emerald-700 transition"
                   >
                     수정 저장
                   </button>
-                  
                   <button
                     onClick={async () => {
-                      if (!copyTarget) {
-                        alert("복사할 데이터가 없습니다.");
-                        return;
-                      }
-                      
-                      // 🔥 핵심: 화물내용 재조합
-                      const finalCargo = copyTarget.화물타입
-                        ? `${copyTarget.화물수량 || ""}${copyTarget.화물타입}`
-                        : (copyTarget.화물수량 || "");
-                      
-                      const payload = {
-                        ...copyTarget,
-                        화물내용: finalCargo,
-                        createdAt: Date.now(),
-                        updatedAt: Date.now(),
-                        배차상태: copyTarget?.차량번호?.trim() ? "배차완료" : "배차중",
-                        업체전달상태: "미전달",
-                      };
-                      
-                      // ⭐ 기존 id 제거 (새 오더 생성)
+                      if (!copyTarget) { alert("복사할 데이터가 없습니다."); return; }
+                      const finalCargo = copyTarget.화물타입 ? `${copyTarget.화물수량 || ""}${copyTarget.화물타입}` : (copyTarget.화물수량 || "");
+                      const payload = { ...copyTarget, 화물내용: finalCargo, createdAt: Date.now(), updatedAt: Date.now(), 배차상태: copyTarget?.차량번호?.trim() ? "배차완료" : "배차중", 업체전달상태: "미전달" };
                       delete payload._id;
-                      
-                      await setDoc(
-                        doc(db, copyTarget.__col || "orders", crypto.randomUUID()),
-                        payload
-                      );
-                      
+                      await setDoc(doc(db, copyTarget.__col || "orders", crypto.randomUUID()), payload);
                       alert("복사 등록 완료");
                       setCopyPanelOpen(false);
                     }}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold"
+                    className="px-4 py-2 bg-[#1B2B4B] text-white rounded-lg text-[13px] font-bold hover:bg-[#243a60] transition"
                   >
                     복사 등록
                   </button>
-                  
-                  <button
-                    onClick={() => setCopyPanelOpen(false)}
-                    className="text-slate-500 hover:text-red-500 text-xl"
-                  >
-                    ✕
-                  </button>
+                  <button onClick={() => setCopyPanelOpen(false)} className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:text-red-500 hover:border-red-200 transition text-lg">✕</button>
                 </div>
               </div>
-              
-              {/* ================= 거래처 정보 ================= */}
-              <section className="bg-white p-8 rounded-xl shadow-sm">
-                <h3 className="text-lg font-bold text-slate-700 mb-8 border-b pb-3">
-                  거래처 정보
-                </h3>
-                
-                <Field label="거래처명">
-  <div className="relative">
-    <input
-      className="w-full border rounded-lg px-3 py-2"
-      value={copyTarget?.거래처명 ?? ""}
-      onChange={(e) => {
-        const v = e.target.value;
-        setCopyTarget(p => ({...p, 거래처명: v}));
-        
-        if (v.trim()) {
-          // clients가 없으면 places에서 검색
-          const hasClients = (clients || []).length > 0;
-          let list = [];
-          
-          if (hasClients) {
-            list = filterClients(v);
-          } else {
-            list = rankPlaces(filterPlaces(v), v);
-          }
-          
-          setCopyClientOptions(list);
-          setShowCopyClientDropdown(list.length > 0);
-          setCopyClientIndex(0);
-        } else {
-          setShowCopyClientDropdown(false);
-        }
-      }}
-      onKeyDown={(e) => {
-        if (!showCopyClientDropdown) return;
-        
-        if (e.key === "ArrowDown") {
-          e.preventDefault();
-          setCopyClientIndex(i => Math.min(i + 1, copyClientOptions.length - 1));
-        }
-        if (e.key === "ArrowUp") {
-          e.preventDefault();
-          setCopyClientIndex(i => Math.max(i - 1, 0));
-        }
-        if (e.key === "Enter") {
-          e.preventDefault();
-          const c = copyClientOptions[copyClientIndex];
-          if (!c) return;
-          
-          const name = c.거래처명 || c.업체명 || "";
-          setCopyTarget(prev => ({
-            ...prev,
-            거래처명: name
-          }));
-          setShowCopyClientDropdown(false);
-          checkWarningStatus(name, "거래처");
-        }
-        if (e.key === "Escape") {
-          setShowCopyClientDropdown(false);
-        }
-      }}
-      onBlur={() => setTimeout(() => setShowCopyClientDropdown(false), 150)}
-    />
-    
-    {showCopyClientDropdown && copyClientOptions.length > 0 && (
-      <div className="absolute z-50 bg-white border w-full max-h-40 overflow-y-auto shadow rounded-md">
-        {copyClientOptions.map((c, i) => {
-          const name = c.거래처명 || c.업체명 || "";
-          return (
-            <div
-              key={c._id || c.id || i}
-              className={`px-3 py-2 cursor-pointer ${i === copyClientIndex ? "bg-blue-500 text-white" : "hover:bg-gray-50"}`}
-              onMouseDown={() => {
-                setCopyTarget(prev => ({
-                  ...prev,
-                  거래처명: name
-                }));
-                setShowCopyClientDropdown(false);
-                checkWarningStatus(name, "거래처");
-              }}
-            >
-              <div className="font-semibold">{name}</div>
-              <div className={`text-xs ${i === copyClientIndex ? "text-blue-100" : "text-gray-500"}`}>{c.주소}</div>
-            </div>
-          );
-        })}
-      </div>
-    )}
-  </div>
-</Field>
-              </section>
-              
-              {/* ================= 상하차 정보 ================= */}
-              <section className="bg-white p-8 rounded-xl shadow-sm">
-                <h3 className="text-lg font-bold text-slate-700 mb-8 border-b pb-3">
-                  상하차 정보
-                </h3>
-                
-                <div className="grid grid-cols-2 gap-16">
-                  {/* ================= 상차 ================= */}
-                  <div className="space-y-6">
-                    <Field label="상차일">
-                      <input
-                        type="date"
-                        className="w-full border rounded-lg px-3 py-2"
-                        value={copyTarget?.상차일 ?? ""}
-                        onChange={(e) => setCopyTarget(p => ({...p, 상차일: e.target.value}))}
-                      />
-                    </Field>
-                    
-                    <Field label="상차시간">
-                      <select
-                        className="w-full border rounded-lg px-3 py-2"
-                        value={copyTarget?.상차시간 ?? ""}
-                        onChange={(e) => setCopyTarget(p => ({...p, 상차시간: e.target.value}))}
-                      >
-                        <option value="">선택</option>
-                        {generateTimeOptions().map(t => (
-                          <option key={t} value={t}>{t}</option>
-                        ))}
-                      </select>
-                    </Field>
-                    
-                    <Field label="상차방법">
-                      <select
-                        className="w-full border rounded-lg px-3 py-2"
-                        value={copyTarget?.상차방법 ?? ""}
-                        onChange={(e) => setCopyTarget(p => ({...p, 상차방법: e.target.value}))}
-                      >
-                        <option value="">선택</option>
-                        <option value="지게차">지게차</option>
-                        <option value="수작업">수작업</option>
-                        <option value="직접수작업">직접수작업</option>
-                        <option value="수도움">수도움</option>
-                        <option value="크레인">크레인</option>
-                      </select>
-                    </Field>
-                    
-                    <Field label="상차지명">
-  <div className="relative">
-    <input
-      className="w-full border rounded-lg px-3 py-2"
-      value={copyTarget?.상차지명 ?? ""}
-      onChange={(e) => {
-        const v = e.target.value;
-        
-        if (!v.trim()) {
-          setCopyTarget(p => ({
-            ...p,
-            상차지명: "",
-            상차지주소: "",
-            상차지담당자: "",
-            상차지담당자번호: ""
-          }));
-          setShowCopyPlaceDropdown(false);
-          return;
-        }
-        
-        setCopyTarget(p => ({...p, 상차지명: v}));
-        setCopyPlaceType("pickup");
-        
-        const list = rankPlaces(filterPlaces(v), v);
-        setCopyPlaceOptions(list);
-        setShowCopyPlaceDropdown(list.length > 0);
-        setCopyActiveIndex(0);
-      }}
-      onKeyDown={(e) => {
-        if (!showCopyPlaceDropdown || copyPlaceType !== "pickup") return;
-        
-        if (e.key === "ArrowDown") {
-          e.preventDefault();
-          setCopyActiveIndex(i => Math.min(i + 1, copyPlaceOptions.length - 1));
-        }
-        if (e.key === "ArrowUp") {
-          e.preventDefault();
-          setCopyActiveIndex(i => Math.max(i - 1, 0));
-        }
-        if (e.key === "Enter") {
-          e.preventDefault();
-          const p = copyPlaceOptions[copyActiveIndex];
-          if (!p) return;
-          
-          setCopyTarget(prev => ({
-            ...prev,
-            상차지명: p.업체명 || "",
-            상차지주소: p.주소 || "",
-            상차지담당자: p.담당자 || "",
-            상차지담당자번호: p.담당자번호 || ""
-          }));
-          setShowCopyPlaceDropdown(false);
-          checkWarningStatus(p.업체명, "상차지");
-        }
-        if (e.key === "Escape") {
-          setShowCopyPlaceDropdown(false);
-        }
-      }}
-      onBlur={() => setTimeout(() => setShowCopyPlaceDropdown(false), 150)}
-    />
-    
-    {showCopyPlaceDropdown && copyPlaceType === "pickup" && copyPlaceOptions.length > 0 && (
-      <div className="absolute z-50 bg-white border w-full max-h-40 overflow-y-auto shadow rounded-md">
-        {copyPlaceOptions.map((p, i) => (
-          <div
-            key={p._id || i}
-            className={`px-3 py-2 cursor-pointer ${i === copyActiveIndex ? "bg-blue-500 text-white" : "hover:bg-gray-50"}`}
-            onMouseDown={() => {
-  // 🔥 디버깅: 선택한 place 전체 필드 확인
-  console.log("선택한 place 전체:", p);
-  console.log("담당자 필드값:", p.담당자);
-  console.log("담당자번호 필드값:", p.담당자번호);
-  
-  setCopyTarget(prev => ({
-    ...prev,
-    상차지명: p.업체명 || "",
-    상차지주소: p.주소 || "",
-    상차지담당자: p.담당자 || "",
-    상차지담당자번호: p.담당자번호 || ""
-  }));
-              setShowCopyPlaceDropdown(false);
-              checkWarningStatus(p.업체명, "상차지");
-            }}
-          >
-            <div className="font-semibold">{p.업체명}</div>
-            <div className={`text-xs ${i === copyActiveIndex ? "text-blue-100" : "text-gray-500"}`}>{p.주소}</div>
-          </div>
-        ))}
-      </div>
-    )}
-  </div>
-</Field>
-                    
-                    <Field label="상차지주소">
-                      <input
-                        className="w-full border rounded-lg px-3 py-2"
-                        value={copyTarget?.상차지주소 ?? ""}
-                        onChange={(e) => setCopyTarget(p => ({...p, 상차지주소: e.target.value}))}
-                      />
-                    </Field>
-                    
-                    <Field label="상차지 담당자명">
-                      <input
-                        className="w-full border rounded-lg px-3 py-2"
-                        value={copyTarget?.상차지담당자 ?? ""}
-                        onChange={(e) => setCopyTarget(p => ({...p, 상차지담당자: e.target.value}))}
-                      />
-                    </Field>
-                    
-                    <Field label="상차지 연락처">
-                      <input
-                        className="w-full border rounded-lg px-3 py-2"
-                        value={copyTarget?.상차지담당자번호 ?? ""}
-                        onChange={(e) => setCopyTarget(p => ({...p, 상차지담당자번호: e.target.value}))}
-                      />
-                    </Field>
-                  </div>
-                  
-                  {/* ================= 하차 ================= */}
-                  <div className="space-y-6">
-                    <Field label="하차일">
-                      <input
-                        type="date"
-                        className="w-full border rounded-lg px-3 py-2"
-                        value={copyTarget?.하차일 ?? ""}
-                        onChange={(e) => setCopyTarget(p => ({...p, 하차일: e.target.value}))}
-                      />
-                    </Field>
-                    
-                    <Field label="하차시간">
-                      <select
-                        className="w-full border rounded-lg px-3 py-2"
-                        value={copyTarget?.하차시간 ?? ""}
-                        onChange={(e) => setCopyTarget(p => ({...p, 하차시간: e.target.value}))}
-                      >
-                        <option value="">선택</option>
-                        {generateTimeOptions().map(t => (
-                          <option key={t} value={t}>{t}</option>
-                        ))}
-                      </select>
-                    </Field>
-                    
-                    <Field label="하차방법">
-                      <select
-                        className="w-full border rounded-lg px-3 py-2"
-                        value={copyTarget?.하차방법 ?? ""}
-                        onChange={(e) => setCopyTarget(p => ({...p, 하차방법: e.target.value}))}
-                      >
-                        <option value="">선택</option>
-                        <option value="지게차">지게차</option>
-                        <option value="수작업">수작업</option>
-                        <option value="직접수작업">직접수작업</option>
-                        <option value="수도움">수도움</option>
-                        <option value="크레인">크레인</option>
-                      </select>
-                    </Field>
-                    
-                   <Field label="하차지명">
-  <div className="relative">
-    <input
-      className="w-full border rounded-lg px-3 py-2"
-      value={copyTarget?.하차지명 ?? ""}
-      onChange={(e) => {
-        const v = e.target.value;
-        
-        if (!v.trim()) {
-          setCopyTarget(p => ({
-            ...p,
-            하차지명: "",
-            하차지주소: "",
-            하차지담당자: "",
-            하차지담당자번호: ""
-          }));
-          setShowCopyPlaceDropdown(false);
-          return;
-        }
-        
-        setCopyTarget(p => ({...p, 하차지명: v}));
-        setCopyPlaceType("drop");
-        
-        const list = rankPlaces(filterPlaces(v), v);
-        setCopyPlaceOptions(list);
-        setShowCopyPlaceDropdown(list.length > 0);
-        setCopyActiveIndex(0);
-      }}
-      onKeyDown={(e) => {
-        if (!showCopyPlaceDropdown || copyPlaceType !== "drop") return;
-        
-        if (e.key === "ArrowDown") {
-          e.preventDefault();
-          setCopyActiveIndex(i => Math.min(i + 1, copyPlaceOptions.length - 1));
-        }
-        if (e.key === "ArrowUp") {
-          e.preventDefault();
-          setCopyActiveIndex(i => Math.max(i - 1, 0));
-        }
-        if (e.key === "Enter") {
-          e.preventDefault();
-          const p = copyPlaceOptions[copyActiveIndex];
-          if (!p) return;
-          
-          setCopyTarget(prev => ({
-            ...prev,
-            하차지명: p.업체명 || "",
-            하차지주소: p.주소 || "",
-            하차지담당자: p.담당자 || "",
-            하차지담당자번호: p.담당자번호 || ""
-          }));
-          setShowCopyPlaceDropdown(false);
-          checkWarningStatus(p.업체명, "하차지");
-        }
-        if (e.key === "Escape") {
-          setShowCopyPlaceDropdown(false);
-        }
-      }}
-      onBlur={() => setTimeout(() => setShowCopyPlaceDropdown(false), 150)}
-    />
-    
-    {showCopyPlaceDropdown && copyPlaceType === "drop" && copyPlaceOptions.length > 0 && (
-      <div className="absolute z-50 bg-white border w-full max-h-40 overflow-y-auto shadow rounded-md">
-        {copyPlaceOptions.map((p, i) => (
-          <div
-            key={p._id || i}
-            className={`px-3 py-2 cursor-pointer ${i === copyActiveIndex ? "bg-blue-500 text-white" : "hover:bg-gray-50"}`}
-            onMouseDown={() => {
-              setCopyTarget(prev => ({
-                ...prev,
-                하차지명: p.업체명 || "",
-                하차지주소: p.주소 || "",
-                하차지담당자: p.담당자 || "",
-                하차지담당자번호: p.담당자번호 || ""
-              }));
-              setShowCopyPlaceDropdown(false);
-              checkWarningStatus(p.업체명, "하차지");
-            }}
-          >
-            <div className="font-semibold">{p.업체명}</div>
-            <div className={`text-xs ${i === copyActiveIndex ? "text-blue-100" : "text-gray-500"}`}>{p.주소}</div>
-          </div>
-        ))}
-      </div>
-    )}
-  </div>
-</Field>
-                    
-                    <Field label="하차지주소">
-                      <input
-                        className="w-full border rounded-lg px-3 py-2"
-                        value={copyTarget?.하차지주소 ?? ""}
-                        onChange={(e) => setCopyTarget(p => ({...p, 하차지주소: e.target.value}))}
-                      />
-                    </Field>
-                    
-                    <Field label="하차지 담당자명">
-                      <input
-                        className="w-full border rounded-lg px-3 py-2"
-                        value={copyTarget?.하차지담당자 ?? ""}
-                        onChange={(e) => setCopyTarget(p => ({...p, 하차지담당자: e.target.value}))}
-                      />
-                    </Field>
-                    
-                    <Field label="상차지 연락처">
-                      <input
-                        className="w-full border rounded-lg px-3 py-2"
-                        value={copyTarget?.하차지담당자번호 ?? ""}
-                        onChange={(e) => setCopyTarget(p => ({...p, 하차지담당자번호: e.target.value}))}
-                      />
-                    </Field>
-                  </div>
-                </div>
-              </section>
-              
-              {/* ================= 기사정보 ================= */}
-              <section className="bg-white p-8 rounded-xl shadow-sm">
-                <h3 className="text-lg font-bold text-slate-700 mb-8 border-b pb-3">
-                  기사정보
-                </h3>
-                
-                <div className="grid grid-cols-3 gap-6">
-                  <Field label="차량번호">
-  <div className="flex gap-2">
-    <input
-      className="flex-1 border rounded-lg px-3 py-2"
-      value={copyTarget?.차량번호 ?? ""}
-      onChange={(e) => {
-        const v = e.target.value;
-        const plate = normalizePlate(v);
-        
-        const match = (drivers || []).find(
-          d => normalizePlate(d.차량번호) === plate
-        );
 
-        // 🔥 블랙 기사 전용 팝업
-        if (match) {
-          const grade = match?.등급 || match?.grade || "";
-          if (grade === "블랙") {
-            setBlackDriverAlert(match);
-          }
-        }
-        
-        setCopyTarget(prev => ({
-          ...prev,
-          차량번호: v,
-          이름: match?.이름 || "",
-          전화번호: formatPhone(match?.전화번호 || ""),
-          배차상태: match ? "배차완료" : "배차중",
-        }));
-      }}
-    />
-    {copyTarget?.차량번호 && normalizePlate(copyTarget.차량번호).length >= 4 && !copyTarget?.이름 && (
-      <button
-        type="button"
-        onClick={() => {
-          setNewDriverData({
-            이름: "",
-            전화번호: "",
-            차량번호: copyTarget.차량번호
-          });
-          setNewDriverPopupOpen(true);
-        }}
-        className="px-3 py-2 bg-amber-500 text-white rounded-lg text-sm font-semibold whitespace-nowrap hover:bg-amber-600"
-      >
-        신규등록
-      </button>
-    )}
-  </div>
-  {copyTarget?.차량번호 && normalizePlate(copyTarget.차량번호).length >= 4 && !copyTarget?.이름 && (
-    <div className="text-xs text-amber-600 mt-1">
-      ⚠️ 등록되지 않은 차량입니다
-    </div>
-  )}
-</Field>
-                  
-                  <Field label="기사명">
-                    <input
-                      className="w-full border rounded-lg px-3 py-2 bg-gray-100"
-                      value={copyTarget?.이름 ?? ""}
-                      readOnly
-                    />
-                  </Field>
-                  
-                  <Field label="전화번호">
-                    <input
-                      className="w-full border rounded-lg px-3 py-2 bg-gray-100"
-                      value={formatPhone(copyTarget?.전화번호 ?? "")}
-                      readOnly
-                    />
-                  </Field>
+              {/* 섹션 공통 스타일 */}
+              {/* 거래처 정보 */}
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                <div className="bg-[#1B2B4B] px-6 py-3">
+                  <h3 className="text-[14px] font-bold text-white">거래처 정보</h3>
                 </div>
-              </section>
-              
-              {/* ================= 화물정보 ================= */}
-              <section className="bg-white p-8 rounded-xl shadow-sm">
-                <h3 className="text-lg font-bold text-slate-700 mb-8 border-b pb-3">
-                  화물정보
-                </h3>
-                
-                <div className="grid grid-cols-3 gap-6">
-                  <Field label="차량종류">
-                    <select
-                      className="w-full border rounded-lg px-3 py-2"
-                      value={copyTarget?.차량종류 ?? ""}
-                      onChange={(e) => setCopyTarget(p => ({...p, 차량종류: e.target.value}))}
-                    >
-                      <option value="">선택</option>
-                      <option value="라보/다마스">라보/다마스</option>
-                      <option value="카고">카고</option>
-                      <option value="윙바디">윙바디</option>
-                      <option value="탑차">탑차</option>
-                      <option value="냉장탑">냉장탑</option>
-                      <option value="냉동탑">냉동탑</option>
-                      <option value="냉장윙">냉장윙</option>
-                      <option value="냉동윙">냉동윙</option>
-                      <option value="리프트">리프트</option>
-                      <option value="오토바이">오토바이</option>
-                      <option value="기타">기타</option>
-                    </select>
-                  </Field>
-                  
-                  <Field label="차량톤수">
-                    <div className="flex items-center border rounded-lg overflow-hidden bg-white">
+                <div className="p-6">
+                  <Field label="거래처명">
+                    <div className="relative">
                       <input
-                        className="flex-1 px-3 py-2 outline-none"
-                        value={copyTarget?.톤수값 || ""}
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100"
+                        value={copyTarget?.거래처명 ?? ""}
                         onChange={(e) => {
                           const v = e.target.value;
-                          setCopyTarget(p => ({
-                            ...p,
-                            톤수값: v,
-                            차량톤수: p.톤수타입 ? `${v}${p.톤수타입}` : v
-                          }));
+                          setCopyTarget(p => ({...p, 거래처명: v}));
+                          if (v.trim()) {
+                            const hasClients = (clients || []).length > 0;
+                            const list = hasClients ? filterClients(v) : rankPlaces(filterPlaces(v), v);
+                            setCopyClientOptions(list);
+                            setShowCopyClientDropdown(list.length > 0);
+                            setCopyClientIndex(0);
+                          } else {
+                            setShowCopyClientDropdown(false);
+                          }
                         }}
-                        placeholder="1"
+                        onKeyDown={(e) => {
+                          if (!showCopyClientDropdown) return;
+                          if (e.key === "ArrowDown") { e.preventDefault(); setCopyClientIndex(i => Math.min(i + 1, copyClientOptions.length - 1)); }
+                          if (e.key === "ArrowUp") { e.preventDefault(); setCopyClientIndex(i => Math.max(i - 1, 0)); }
+                          if (e.key === "Enter") { e.preventDefault(); const c = copyClientOptions[copyClientIndex]; if (!c) return; const name = c.거래처명 || c.업체명 || ""; setCopyTarget(prev => ({...prev, 거래처명: name})); setShowCopyClientDropdown(false); checkWarningStatus(name, "거래처"); }
+                          if (e.key === "Escape") setShowCopyClientDropdown(false);
+                        }}
+                        onBlur={() => setTimeout(() => setShowCopyClientDropdown(false), 150)}
                       />
-                      
-                      <select
-                        className="px-3 py-2 bg-blue-50 text-blue-700 border-l outline-none cursor-pointer"
-                        value={copyTarget?.톤수타입 || ""}
-                        onChange={(e) => {
-                          const type = e.target.value;
-                          setCopyTarget(p => ({
-                            ...p,
-                            톤수타입: type,
-                            차량톤수: type ? `${p.톤수값 || ""}${type}` : (p.톤수값 || "")
-                          }));
-                        }}
-                      >
+                      {showCopyClientDropdown && copyClientOptions.length > 0 && (
+                        <div className="absolute z-50 bg-white border border-gray-200 w-full max-h-40 overflow-y-auto shadow-xl rounded-lg mt-1">
+                          {copyClientOptions.map((c, i) => {
+                            const name = c.거래처명 || c.업체명 || "";
+                            return (
+                              <div key={c._id || c.id || i} className={`px-3 py-2.5 cursor-pointer text-[13px] ${i === copyClientIndex ? "bg-blue-500 text-white" : "hover:bg-gray-50"}`} onMouseDown={() => { setCopyTarget(prev => ({...prev, 거래처명: name})); setShowCopyClientDropdown(false); checkWarningStatus(name, "거래처"); }}>
+                                <div className="font-semibold">{name}</div>
+                                <div className={`text-xs ${i === copyClientIndex ? "text-blue-100" : "text-gray-400"}`}>{c.주소}</div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </Field>
+                </div>
+              </div>
+
+              {/* 상하차 정보 */}
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                <div className="bg-[#1B2B4B] px-6 py-3">
+                  <h3 className="text-[14px] font-bold text-white">상하차 정보</h3>
+                </div>
+                <div className="p-6">
+                  <div className="grid grid-cols-2 gap-10">
+                    {/* 상차 */}
+                    <div className="space-y-4">
+                      <div className="text-[12px] font-bold text-blue-600 pb-1 border-b border-blue-100">상차</div>
+                      <Field label="상차일">
+                        <input type="date" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.상차일 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차일: e.target.value}))} />
+                      </Field>
+                      <Field label="상차시간">
+                        <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.상차시간 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차시간: e.target.value}))}>
+                          <option value="">선택</option>
+                          {generateTimeOptions().map(t => <option key={t} value={t}>{t}</option>)}
+                        </select>
+                      </Field>
+                      <Field label="상차방법">
+                        <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.상차방법 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차방법: e.target.value}))}>
+                          <option value="">선택</option>
+                          <option value="지게차">지게차</option><option value="수작업">수작업</option><option value="직접수작업">직접수작업</option><option value="수도움">수도움</option><option value="크레인">크레인</option>
+                        </select>
+                      </Field>
+                      <Field label="상차지명">
+                        <div className="relative">
+                          <input
+                            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400"
+                            value={copyTarget?.상차지명 ?? ""}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              if (!v.trim()) {
+                                setCopyTarget(p => ({...p, 상차지명: "", 상차지주소: "", 상차지담당자: "", 상차지담당자번호: ""}));
+                                setShowCopyPlaceDropdown(false);
+                                return;
+                              }
+                              setCopyTarget(p => ({...p, 상차지명: v}));
+                              setCopyPlaceType("pickup");
+                              const list = rankPlaces(filterPlaces(v), v);
+                              setCopyPlaceOptions(list);
+                              setShowCopyPlaceDropdown(list.length > 0);
+                              setCopyActiveIndex(0);
+                            }}
+                            onKeyDown={(e) => {
+                              if (!showCopyPlaceDropdown || copyPlaceType !== "pickup") return;
+                              if (e.key === "ArrowDown") { e.preventDefault(); setCopyActiveIndex(i => Math.min(i + 1, copyPlaceOptions.length - 1)); }
+                              if (e.key === "ArrowUp") { e.preventDefault(); setCopyActiveIndex(i => Math.max(i - 1, 0)); }
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                const p = copyPlaceOptions[copyActiveIndex];
+                                if (!p) return;
+                                setCopyTarget(prev => ({...prev, 상차지명: p.업체명 || "", 상차지주소: p.주소 || "", 상차지담당자: getManagerName(p), 상차지담당자번호: getManagerPhone(p)}));
+                                setShowCopyPlaceDropdown(false);
+                                checkWarningStatus(p.업체명, "상차지");
+                              }
+                              if (e.key === "Escape") setShowCopyPlaceDropdown(false);
+                            }}
+                            onBlur={() => setTimeout(() => setShowCopyPlaceDropdown(false), 150)}
+                          />
+                          {showCopyPlaceDropdown && copyPlaceType === "pickup" && copyPlaceOptions.length > 0 && (
+                            <div className="absolute z-50 bg-white border border-gray-200 w-full max-h-40 overflow-y-auto shadow-xl rounded-lg mt-1">
+                              {copyPlaceOptions.map((p, i) => (
+                                <div key={p._id || i} className={`px-3 py-2.5 cursor-pointer text-[13px] ${i === copyActiveIndex ? "bg-blue-500 text-white" : "hover:bg-gray-50"}`}
+                                  onMouseDown={() => { setCopyTarget(prev => ({...prev, 상차지명: p.업체명 || "", 상차지주소: p.주소 || "", 상차지담당자: getManagerName(p), 상차지담당자번호: getManagerPhone(p)})); setShowCopyPlaceDropdown(false); checkWarningStatus(p.업체명, "상차지"); }}>
+                                  <div className="font-semibold">{p.업체명}</div>
+                                  <div className={`text-xs ${i === copyActiveIndex ? "text-blue-100" : "text-gray-400"}`}>{p.주소}</div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </Field>
+                      <Field label="상차지주소">
+                        <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.상차지주소 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차지주소: e.target.value}))} />
+                      </Field>
+                      <Field label="상차지 담당자명">
+                        <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.상차지담당자 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차지담당자: e.target.value}))} />
+                      </Field>
+                      <Field label="상차지 연락처">
+                        <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.상차지담당자번호 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차지담당자번호: e.target.value}))} />
+                      </Field>
+                    </div>
+
+                    {/* 하차 */}
+                    <div className="space-y-4">
+                      <div className="text-[12px] font-bold text-red-500 pb-1 border-b border-red-100">하차</div>
+                      <Field label="하차일">
+                        <input type="date" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.하차일 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차일: e.target.value}))} />
+                      </Field>
+                      <Field label="하차시간">
+                        <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.하차시간 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차시간: e.target.value}))}>
+                          <option value="">선택</option>
+                          {generateTimeOptions().map(t => <option key={t} value={t}>{t}</option>)}
+                        </select>
+                      </Field>
+                      <Field label="하차방법">
+                        <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.하차방법 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차방법: e.target.value}))}>
+                          <option value="">선택</option>
+                          <option value="지게차">지게차</option><option value="수작업">수작업</option><option value="직접수작업">직접수작업</option><option value="수도움">수도움</option><option value="크레인">크레인</option>
+                        </select>
+                      </Field>
+                      <Field label="하차지명">
+                        <div className="relative">
+                          <input
+                            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400"
+                            value={copyTarget?.하차지명 ?? ""}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              if (!v.trim()) {
+                                setCopyTarget(p => ({...p, 하차지명: "", 하차지주소: "", 하차지담당자: "", 하차지담당자번호: ""}));
+                                setShowCopyPlaceDropdown(false);
+                                return;
+                              }
+                              setCopyTarget(p => ({...p, 하차지명: v}));
+                              setCopyPlaceType("drop");
+                              const list = rankPlaces(filterPlaces(v), v);
+                              setCopyPlaceOptions(list);
+                              setShowCopyPlaceDropdown(list.length > 0);
+                              setCopyActiveIndex(0);
+                            }}
+                            onKeyDown={(e) => {
+                              if (!showCopyPlaceDropdown || copyPlaceType !== "drop") return;
+                              if (e.key === "ArrowDown") { e.preventDefault(); setCopyActiveIndex(i => Math.min(i + 1, copyPlaceOptions.length - 1)); }
+                              if (e.key === "ArrowUp") { e.preventDefault(); setCopyActiveIndex(i => Math.max(i - 1, 0)); }
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                const p = copyPlaceOptions[copyActiveIndex];
+                                if (!p) return;
+                                setCopyTarget(prev => ({...prev, 하차지명: p.업체명 || "", 하차지주소: p.주소 || "", 하차지담당자: getManagerName(p), 하차지담당자번호: getManagerPhone(p)}));
+                                setShowCopyPlaceDropdown(false);
+                                checkWarningStatus(p.업체명, "하차지");
+                              }
+                              if (e.key === "Escape") setShowCopyPlaceDropdown(false);
+                            }}
+                            onBlur={() => setTimeout(() => setShowCopyPlaceDropdown(false), 150)}
+                          />
+                          {showCopyPlaceDropdown && copyPlaceType === "drop" && copyPlaceOptions.length > 0 && (
+                            <div className="absolute z-50 bg-white border border-gray-200 w-full max-h-40 overflow-y-auto shadow-xl rounded-lg mt-1">
+                              {copyPlaceOptions.map((p, i) => (
+                                <div key={p._id || i} className={`px-3 py-2.5 cursor-pointer text-[13px] ${i === copyActiveIndex ? "bg-blue-500 text-white" : "hover:bg-gray-50"}`}
+                                  onMouseDown={() => { setCopyTarget(prev => ({...prev, 하차지명: p.업체명 || "", 하차지주소: p.주소 || "", 하차지담당자: getManagerName(p), 하차지담당자번호: getManagerPhone(p)})); setShowCopyPlaceDropdown(false); checkWarningStatus(p.업체명, "하차지"); }}>
+                                  <div className="font-semibold">{p.업체명}</div>
+                                  <div className={`text-xs ${i === copyActiveIndex ? "text-blue-100" : "text-gray-400"}`}>{p.주소}</div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </Field>
+                      <Field label="하차지주소">
+                        <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.하차지주소 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차지주소: e.target.value}))} />
+                      </Field>
+                      <Field label="하차지 담당자명">
+                        <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.하차지담당자 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차지담당자: e.target.value}))} />
+                      </Field>
+                      <Field label="하차지 연락처">
+                        <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.하차지담당자번호 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차지담당자번호: e.target.value}))} />
+                      </Field>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 기사정보 */}
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                <div className="bg-[#1B2B4B] px-6 py-3">
+                  <h3 className="text-[14px] font-bold text-white">기사정보</h3>
+                </div>
+                <div className="p-6">
+                  <div className="grid grid-cols-3 gap-6">
+                    <Field label="차량번호">
+                      <div className="flex gap-2">
+                        <input
+                          className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400"
+                          value={copyTarget?.차량번호 ?? ""}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            const plate = normalizePlate(v);
+                            const match = (drivers || []).find(d => normalizePlate(d.차량번호) === plate);
+                            if (match) {
+                              const grade = match?.등급 || match?.grade || "";
+                              if (grade === "블랙") setBlackDriverAlert(match);
+                            }
+                            setCopyTarget(prev => ({...prev, 차량번호: v, 이름: match?.이름 || "", 전화번호: formatPhone(match?.전화번호 || ""), 배차상태: match ? "배차완료" : "배차중"}));
+                          }}
+                        />
+                        {copyTarget?.차량번호 && normalizePlate(copyTarget.차량번호).length >= 4 && !copyTarget?.이름 && (
+                          <button type="button" onClick={() => { setNewDriverData({ 이름: "", 전화번호: "", 차량번호: copyTarget.차량번호 }); setNewDriverPopupOpen(true); }} className="px-3 py-2 bg-amber-500 text-white rounded-lg text-[13px] font-semibold whitespace-nowrap hover:bg-amber-600 transition">신규등록</button>
+                        )}
+                      </div>
+                      {copyTarget?.차량번호 && normalizePlate(copyTarget.차량번호).length >= 4 && !copyTarget?.이름 && (
+                        <div className="text-xs text-amber-600 mt-1">⚠️ 등록되지 않은 차량입니다</div>
+                      )}
+                    </Field>
+                    <Field label="기사명">
+                      <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] bg-gray-50" value={copyTarget?.이름 ?? ""} readOnly />
+                    </Field>
+                    <Field label="전화번호">
+                      <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] bg-gray-50" value={formatPhone(copyTarget?.전화번호 ?? "")} readOnly />
+                    </Field>
+                  </div>
+                </div>
+              </div>
+
+              {/* 화물정보 */}
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                <div className="bg-[#1B2B4B] px-6 py-3">
+                  <h3 className="text-[14px] font-bold text-white">화물정보</h3>
+                </div>
+                <div className="p-6">
+                  <div className="grid grid-cols-3 gap-6">
+                    <Field label="차량종류">
+                      <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.차량종류 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 차량종류: e.target.value}))}>
                         <option value="">선택</option>
-                        <option value="톤">톤</option>
-                        <option value="kg">kg</option>
+                        <option value="라보/다마스">라보/다마스</option><option value="카고">카고</option><option value="윙바디">윙바디</option><option value="탑차">탑차</option><option value="냉장탑">냉장탑</option><option value="냉동탑">냉동탑</option><option value="냉장윙">냉장윙</option><option value="냉동윙">냉동윙</option><option value="리프트">리프트</option><option value="오토바이">오토바이</option><option value="기타">기타</option>
                       </select>
-                    </div>
-                  </Field>
-                  
-                  <Field label="화물내용">
-                    <div className="flex items-center border rounded-lg overflow-hidden bg-white">
-                      <input
-                        className="flex-1 px-3 py-2 outline-none"
-                        value={copyTarget?.화물수량 || ""}
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          setCopyTarget(p => ({
-                            ...p,
-                            화물수량: v,
-                            화물내용: p.화물타입 ? `${v}${p.화물타입}` : v
-                          }));
-                        }}
-                        placeholder="1"
-                      />
-                      
-                      <select
-                        className="px-3 py-2 bg-blue-50 text-blue-700 border-l outline-none cursor-pointer"
-                        value={copyTarget?.화물타입 || ""}
-                        onChange={(e) => {
-                          const type = e.target.value;
-                          setCopyTarget(p => ({
-                            ...p,
-                            화물타입: type,
-                            화물내용: type ? `${p.화물수량 || ""}${type}` : (p.화물수량 || "")
-                          }));
-                        }}
-                      >
-                        <option value="">없음</option>
-                        <option value="파레트">파레트</option>
-                        <option value="박스">박스</option>
-                        <option value="통">통</option>
+                    </Field>
+                    <Field label="차량톤수">
+                      <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden bg-white">
+                        <input className="flex-1 px-3 py-2 text-[13px] outline-none" value={copyTarget?.톤수값 || ""} onChange={(e) => { const v = e.target.value; setCopyTarget(p => ({...p, 톤수값: v, 차량톤수: p.톤수타입 ? `${v}${p.톤수타입}` : v})); }} placeholder="1" />
+                        <select className="px-3 py-2 bg-blue-50 text-blue-700 border-l outline-none cursor-pointer text-[13px]" value={copyTarget?.톤수타입 || ""} onChange={(e) => { const type = e.target.value; setCopyTarget(p => ({...p, 톤수타입: type, 차량톤수: type ? `${p.톤수값 || ""}${type}` : (p.톤수값 || "")})); }}>
+                          <option value="">선택</option><option value="톤">톤</option><option value="kg">kg</option>
+                        </select>
+                      </div>
+                    </Field>
+                    <Field label="화물내용">
+                      <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden bg-white">
+                        <input className="flex-1 px-3 py-2 text-[13px] outline-none" value={copyTarget?.화물수량 || ""} onChange={(e) => { const v = e.target.value; setCopyTarget(p => ({...p, 화물수량: v, 화물내용: p.화물타입 ? `${v}${p.화물타입}` : v})); }} placeholder="1" />
+                        <select className="px-3 py-2 bg-blue-50 text-blue-700 border-l outline-none cursor-pointer text-[13px]" value={copyTarget?.화물타입 || ""} onChange={(e) => { const type = e.target.value; setCopyTarget(p => ({...p, 화물타입: type, 화물내용: type ? `${p.화물수량 || ""}${type}` : (p.화물수량 || "")})); }}>
+                          <option value="">없음</option><option value="파레트">파레트</option><option value="박스">박스</option><option value="통">통</option>
+                        </select>
+                      </div>
+                    </Field>
+                  </div>
+                </div>
+              </div>
+
+              {/* 결제 정보 */}
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                <div className="bg-[#1B2B4B] px-6 py-3">
+                  <h3 className="text-[14px] font-bold text-white">결제 정보</h3>
+                </div>
+                <div className="p-6">
+                  <div className="grid grid-cols-5 gap-6">
+                    <Field label="청구운임">
+                      <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget.청구운임 || ""} onChange={(e) => setCopyTarget(p => ({...p, 청구운임: e.target.value.replace(/[^\d]/g, "")}))} />
+                    </Field>
+                    <Field label="기사운임">
+                      <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget.기사운임 || ""} onChange={(e) => setCopyTarget(p => ({...p, 기사운임: e.target.value.replace(/[^\d]/g, "")}))} />
+                    </Field>
+                    <Field label="수수료">
+                      <div className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-[14px] font-bold text-blue-700 text-center">
+                        {(Number(copyTarget.청구운임 || 0) - Number(copyTarget.기사운임 || 0)).toLocaleString()}원
+                      </div>
+                    </Field>
+                    <Field label="지급방식">
+                      <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.지급방식 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 지급방식: e.target.value}))}>
+                        <option value="">선택</option><option value="계산서">계산서</option><option value="착불">착불</option><option value="선불">선불</option><option value="손실">손실</option><option value="개인">개인</option><option value="취소">취소</option>
                       </select>
-                    </div>
-                  </Field>
+                    </Field>
+                    <Field label="배차방식">
+                      <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.배차방식 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 배차방식: e.target.value}))}>
+                        <option value="">선택</option><option value="24시">24시</option><option value="직접배차">직접배차</option><option value="인성">인성</option>
+                      </select>
+                    </Field>
+                  </div>
                 </div>
-              </section>
-              
-              {/* ================= 결제 정보 ================= */}
-              <section className="bg-white p-8 rounded-xl shadow-sm">
-                <h3 className="text-lg font-bold text-slate-700 mb-8 border-b pb-3">
-                  결제 정보
-                </h3>
-                
-                <div className="grid grid-cols-5 gap-8">
-                  <Field label="청구운임">
-                    <input
-                      className="w-full border rounded-lg px-3 py-2"
-                      value={copyTarget.청구운임 || ""}
-                      onChange={(e) =>
-                        setCopyTarget(p => ({...p, 청구운임: e.target.value.replace(/[^\d]/g, "")}))
-                      }
-                    />
-                  </Field>
-                  
-                  <Field label="기사운임">
-                    <input
-                      className="w-full border rounded-lg px-3 py-2"
-                      value={copyTarget.기사운임 || ""}
-                      onChange={(e) =>
-                        setCopyTarget(p => ({...p, 기사운임: e.target.value.replace(/[^\d]/g, "")}))
-                      }
-                    />
-                  </Field>
-                  
-                  <Field label="수수료">
-                    <div className="bg-slate-100 rounded-lg px-4 py-3 font-bold text-blue-700 text-lg text-center">
-                      {(Number(copyTarget.청구운임 || 0) - Number(copyTarget.기사운임 || 0)).toLocaleString()} 원
-                    </div>
-                  </Field>
-                  
-                  <Field label="지급방식">
-                    <select
-                      className="w-full border rounded-lg px-3 py-2"
-                      value={copyTarget?.지급방식 ?? ""}
-                      onChange={(e) => setCopyTarget(p => ({...p, 지급방식: e.target.value}))}
-                    >
-                      <option value="">선택</option>
-                      <option value="계산서">계산서</option>
-                      <option value="착불">착불</option>
-                      <option value="선불">선불</option>
-                      <option value="손실">손실</option>
-                      <option value="개인">개인</option>
-                      <option value="취소">취소</option>
-                    </select>
-                  </Field>
-                  
-                  <Field label="배차방식">
-                    <select
-                      className="w-full border rounded-lg px-3 py-2"
-                      value={copyTarget?.배차방식 ?? ""}
-                      onChange={(e) => setCopyTarget(p => ({...p, 배차방식: e.target.value}))}
-                    >
-                      <option value="">선택</option>
-                      <option value="24시">24시</option>
-                      <option value="직접배차">직접배차</option>
-                      <option value="인성">인성</option>
-                    </select>
-                  </Field>
+              </div>
+
+              {/* 메모 */}
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                <div className="bg-[#1B2B4B] px-6 py-3">
+                  <h3 className="text-[14px] font-bold text-white">메모</h3>
                 </div>
-              </section>
-              
-              {/* ================= 메모 ================= */}
-              <section className="bg-white p-8 rounded-xl shadow-sm">
-                <h3 className="text-lg font-bold text-slate-700 mb-6 border-b pb-3">
-                  메모
-                </h3>
-                
-                <textarea
-                  className="w-full border rounded-lg px-3 py-2 h-24"
-                  value={copyTarget?.메모 ?? ""}
-                  onChange={(e) => setCopyTarget(p => ({...p, 메모: e.target.value}))}
-                />
-              </section>
+                <div className="p-6">
+                  <textarea className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] h-24 focus:outline-none focus:border-blue-400 resize-none" value={copyTarget?.메모 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 메모: e.target.value}))} />
+                </div>
+              </div>
+
             </div>
           </div>
         </div>
       )}
     </div>
-
   );
 }
-
 // ===================== DispatchApp.jsx (PART 7/8) — END =====================
 
 // ===================== DispatchApp.jsx (PART 8/8) — 거래명세서 + 미수금관리(월집계/토글/선택/전체정산) — START =====================

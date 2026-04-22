@@ -1,7 +1,5 @@
-// ===================== public/sw.js =====================
-const VERSION = "2026-01-07-05";
+const VERSION = "BUILD_PLACEHOLDER";
 const CACHE_NAME = `dispatch-app-cache-${VERSION}`;
-const OFFLINE_URL = "/app";
 
 console.log("[SW] Loaded", VERSION);
 
@@ -15,24 +13,27 @@ self.addEventListener("message", (event) => {
 });
 
 // --------------------------------------------------
-// INSTALL — 실패하면 안 됨
+// INSTALL — waiting 상태로 대기 (skipWaiting 제거!)
 // --------------------------------------------------
 self.addEventListener("install", () => {
-  console.log("[SW] Installing...");
-  self.skipWaiting();
+  console.log("[SW] Installing...", VERSION);
+  // 🔥 자동 skipWaiting 제거 — 사용자가 "업데이트" 버튼 눌러야 적용
 });
 
 // --------------------------------------------------
-// ACTIVATE — 이전 캐시 정리
+// ACTIVATE — 이전 캐시 전부 삭제 + 즉시 제어권 확보
 // --------------------------------------------------
 self.addEventListener("activate", (event) => {
-  console.log("[SW] Activating...");
+  console.log("[SW] Activating...", VERSION);
   event.waitUntil(
     caches.keys().then((keys) =>
       Promise.all(
         keys
           .filter((key) => key !== CACHE_NAME)
-          .map((key) => caches.delete(key))
+          .map((key) => {
+            console.log("[SW] Deleting old cache:", key);
+            return caches.delete(key);
+          })
       )
     )
   );
@@ -40,32 +41,39 @@ self.addEventListener("activate", (event) => {
 });
 
 // --------------------------------------------------
-// FETCH — HTML은 네트워크 / 나머지는 캐시
+// FETCH — HTML은 항상 네트워크 / 나머지는 캐시 우선
 // --------------------------------------------------
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
 
-  // 🔥 HTML 절대 캐시 금지 (구버전 고착 방지)
+  const url = new URL(event.request.url);
+
+  // sw.js 자체는 캐시하지 않음
+  if (url.pathname === "/sw.js") return;
+
+  // HTML은 항상 네트워크
   if (event.request.headers.get("accept")?.includes("text/html")) {
-    event.respondWith(fetch(event.request));
+    event.respondWith(
+      fetch(event.request).catch(() => caches.match("/index.html"))
+    );
     return;
   }
 
+  // 나머지: 캐시 우선, 없으면 네트워크
   event.respondWith(
     caches.match(event.request).then((cached) => {
       if (cached) return cached;
 
       return fetch(event.request)
         .then((res) => {
+          if (!res || res.status !== 200) return res;
           const clone = res.clone();
           caches.open(CACHE_NAME).then((cache) => {
             cache.put(event.request, clone);
           });
           return res;
         })
-        .catch(() => caches.match(OFFLINE_URL));
+        .catch(() => new Response("Offline", { status: 503 }));
     })
   );
 });
-
-// ===================== END =====================
