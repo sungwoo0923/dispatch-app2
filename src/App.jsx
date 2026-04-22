@@ -174,24 +174,58 @@ return (
   <>
     {/* ======================= UPDATE BANNER ======================= */}
     {updateReady && (
-      <div className="fixed bottom-6 right-6 bg-white shadow-xl border rounded-lg p-4 z-[9999] w-72">
-        <div className="font-bold mb-2">🔄 새 업데이트가 있습니다</div>
-        <div className="text-sm text-gray-600 mb-3">
-          최신 버전을 적용하려면 업데이트를 눌러주세요.
+  <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[99999]">
+    <div className="bg-white rounded-2xl shadow-2xl w-[380px] overflow-hidden animate-[fadeInUp_0.3s_ease-out]">
+
+      {/* 헤더 */}
+      <div className="bg-[#1B2B4B] px-6 py-4 flex items-center gap-3">
+        <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center">
+          <svg className="w-5 h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
         </div>
-        <button
-          className="w-full bg-black text-white py-2 rounded-md"
-          onClick={() => {
-            setUpdateReady(false);
-            if (window.__APPLYING_UPDATE__) return;
-            window.__APPLYING_UPDATE__ = true;
-            window.applyAppUpdate?.();
-          }}
-        >
-          지금 업데이트
-        </button>
+        <div>
+          <h3 className="text-white text-[15px] font-bold">새 업데이트가 있습니다</h3>
+          <p className="text-white/50 text-[11px] mt-0.5">S-Flow Logistics</p>
+        </div>
       </div>
-    )}
+
+      {/* 본문 */}
+      <div className="px-6 py-5">
+        <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 mb-4">
+          <div className="flex items-start gap-2">
+            <span className="text-blue-500 text-sm mt-0.5">💡</span>
+            <div className="text-[12px] text-blue-700 leading-relaxed">
+              최신 버전이 준비되었습니다.<br />
+              업데이트를 적용하면 자동으로 새로고침됩니다.
+            </div>
+          </div>
+        </div>
+
+        <div className="flex gap-2">
+          <button
+            className="flex-1 py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-500 hover:bg-gray-50 transition"
+            onClick={() => setUpdateReady(false)}
+          >
+            나중에
+          </button>
+          <button
+            className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition"
+            onClick={() => {
+              setUpdateReady(false);
+              if (window.__APPLYING_UPDATE__) return;
+              window.__APPLYING_UPDATE__ = true;
+              window.applyAppUpdate?.();
+            }}
+          >
+            지금 업데이트
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+)}
 
     <Router>
       <Routes>
