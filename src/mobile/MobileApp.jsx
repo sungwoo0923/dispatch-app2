@@ -1235,6 +1235,7 @@ const groupedByDate = useMemo(() => {
       지급방식: form.지급방식 || "",
       배차방식: form.배차방식 || "",
       혼적여부: form.혼적여부 || "독차",
+      혼적: form.혼적여부 === "혼적",   // ← PC boolean 호환
       적요: form.적요 || "",
       메모: form.적요 || "",
 
@@ -1407,10 +1408,14 @@ const handleOrderDuplicate = (order) => {
       };
     }
 
-    await updateDoc(doc(db, selectedOrder.__col, selectedOrder.id), {
+     await updateDoc(doc(db, selectedOrder.__col, selectedOrder.id), {
       기사명: driver.이름,
+      이름: driver.이름,           // PC 호환
       차량번호: driver.차량번호,
       전화번호: driver.전화번호,
+      전화: driver.전화번호,       // PC 호환
+      배차상태: "배차완료",
+      상태: "배차완료",
     });
 
     setSelectedOrder((prev) =>
@@ -3081,6 +3086,88 @@ function MobileOrderDetail({
   upsertDriver,
 }) {
   const [confirmDeliver, setConfirmDeliver] = useState(false);
+  const [smartQuery, setSmartQuery] = useState("");
+  const [smartMatched, setSmartMatched] = useState([]);
+
+  // 텍스트에서 차량번호/이름/전화번호 파싱
+  const parseDriverText = (text) => {
+    const phoneMatch = text.match(/0\d{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4}/);
+    const phone = phoneMatch
+      ? phoneMatch[0].replace(/[-.\s]/g, "").replace(/^(\d{3})(\d{3,4})(\d{4})$/, "$1-$2-$3")
+      : "";
+
+    const plateMatch = text.match(/[가-힣]{2,3}\d{2}[가-힣]\d{4}|\d{2,3}[가-힣]\d{4}/);
+    const plate = plateMatch ? plateMatch[0] : "";
+
+    // 이름: 차량번호 한글/숫자 제거 후 2~4자 한글
+    const stripped = text
+      .replace(phoneMatch?.[0] || "", "")
+      .replace(plate || "", "");
+    const nameMatch = stripped.match(/[가-힣]{2,4}/g) || [];
+    // 차량번호 지역명("강원","인천" 등 2자) 제거
+    const name = nameMatch.find(n => n.length >= 2 && !["강원","서울","경기","인천","부산","대구","광주","대전","울산","세종","경북","경남","전북","전남","충북","충남","제주"].includes(n)) || "";
+
+    return { phone, plate, name };
+  };
+
+  // 스마트 검색
+  const handleSmartSearch = (text) => {
+    setSmartQuery(text);
+    if (!text.trim()) { setSmartMatched([]); return; }
+
+    const norm = (s = "") => String(s).replace(/[-.\s]/g, "").toLowerCase();
+    const { phone, plate, name } = parseDriverText(text);
+    const q = norm(text);
+
+    const results = drivers.filter(d => {
+      if (plate && norm(d.차량번호).includes(norm(plate))) return true;
+      if (phone && norm(d.전화번호).includes(norm(phone))) return true;
+      if (name && norm(d.이름).includes(norm(name))) return true;
+      // 전체 텍스트 통합 검색
+      if (norm(d.이름).includes(q) || norm(d.차량번호).includes(q) || norm(d.전화번호).includes(q)) return true;
+      return false;
+    });
+
+    setSmartMatched(results.slice(0, 8));
+  };
+
+  // 스마트 검색 결과 선택
+  const selectSmartDriver = (d) => {
+    setCarNo(d.차량번호 || "");
+    setName(d.이름 || "");
+    setPhone(d.전화번호 || "");
+    setSmartQuery("");
+    setSmartMatched([]);
+  };
+
+  // 복붙 텍스트에서 신규기사 자동 등록
+  const handleSmartPaste = async (text) => {
+    if (!text.trim()) return;
+    const { phone, plate, name } = parseDriverText(text);
+    if (!plate && !name && !phone) return;
+
+    const norm = (s = "") => String(s).replace(/[-.\s]/g, "").toLowerCase();
+    const found = drivers.find(d =>
+      (plate && norm(d.차량번호) === norm(plate)) ||
+      (phone && norm(d.전화번호) === norm(phone))
+    );
+
+    if (found) {
+      // 기존 기사 자동 매칭
+      setCarNo(found.차량번호 || "");
+      setName(found.이름 || "");
+      setPhone(found.전화번호 || "");
+      setSmartQuery("");
+      setSmartMatched([]);
+      showToast(`✅ ${found.이름} 기사 자동 매칭`);
+    } else if (plate || name || phone) {
+      // 신규 자동 등록
+      await upsertDriver({ 차량번호: plate, 이름: name, 전화번호: phone });
+      setCarNo(plate); setName(name); setPhone(phone);
+      setSmartQuery(""); setSmartMatched([]);
+      showToast(`🚚 신규 기사 자동 등록: ${name || plate}`);
+    }
+  };
   const [showCopyModal, setShowCopyModal] = useState(false);
     const [confirmUndoDeliver, setConfirmUndoDeliver] = useState(false);
 const [expandMemo, setExpandMemo] = useState(false);
@@ -3404,24 +3491,68 @@ const [expandMemo, setExpandMemo] = useState(false);
         </div>
 
         <div className="space-y-2 text-sm">
-          <input
-            className="w-full border rounded px-2 py-1"
-            placeholder="차량번호"
-            value={carNo}
-            onChange={(e) => setCarNo(e.target.value)}
-          />
-          <input
-            className="w-full border rounded px-2 py-1"
-            placeholder="기사 이름"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-          <input
-            className="w-full border rounded px-2 py-1"
-            placeholder="기사 연락처"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-          />
+          {/* 스마트 검색창 */}
+          <div className="relative">
+            <div className="text-xs font-semibold text-blue-600 mb-1">기사 검색 (이름 · 차량번호 · 연락처 · 문자복붙)</div>
+            <textarea
+              className="w-full border-2 border-blue-300 rounded-xl px-3 py-2.5 text-sm resize-none bg-blue-50 focus:outline-none focus:border-blue-500"
+              rows={2}
+              placeholder={"예) 김상원 010-7916-2258 강원82사1203\n또는 카카오 문자 전체 복붙 가능"}
+              value={smartQuery}
+              onChange={e => handleSmartSearch(e.target.value)}
+              onBlur={e => {
+                if (e.target.value.trim().length > 4) {
+                  handleSmartPaste(e.target.value);
+                }
+              }}
+            />
+            {/* 검색 결과 드롭다운 */}
+            {smartMatched.length > 0 && (
+              <div className="absolute z-50 w-full bg-white border-2 border-blue-200 rounded-xl shadow-xl mt-1 overflow-hidden">
+                {smartMatched.map((d, i) => (
+                  <button
+                    key={d.id || i}
+                    type="button"
+                    className="w-full text-left px-4 py-3 hover:bg-blue-50 active:bg-blue-100 border-b border-gray-100 last:border-0"
+                    onMouseDown={() => selectSmartDriver(d)}
+                  >
+                    <div className="font-bold text-gray-900 text-[14px]">{d.이름 || "-"}</div>
+                    <div className="text-[12px] text-gray-500 mt-0.5">
+                      {d.차량번호 || ""} &nbsp;|&nbsp; {d.전화번호 || ""}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* 선택된 기사 확인 표시 */}
+          {(carNo || name || phone) && (
+            <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2.5">
+              <span className="text-emerald-600 text-[18px]">✓</span>
+              <div className="flex-1">
+                <div className="font-bold text-gray-900 text-[14px]">{name || "-"}</div>
+                <div className="text-[12px] text-gray-500">{carNo} &nbsp;|&nbsp; {phone}</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setCarNo(""); setName(""); setPhone(""); setSmartQuery(""); }}
+                className="text-gray-400 hover:text-red-500 text-[18px] leading-none px-1"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
+          {/* 직접 입력 (숨김/토글) */}
+          <details className="text-[12px]">
+            <summary className="text-gray-400 cursor-pointer select-none py-1">직접 입력</summary>
+            <div className="space-y-2 mt-2">
+              <input className="w-full border rounded-lg px-3 py-2" placeholder="차량번호" value={carNo} onChange={e => setCarNo(e.target.value)} />
+              <input className="w-full border rounded-lg px-3 py-2" placeholder="기사 이름" value={name} onChange={e => setName(e.target.value)} />
+              <input className="w-full border rounded-lg px-3 py-2" placeholder="기사 연락처" value={phone} onChange={e => setPhone(e.target.value)} />
+            </div>
+          </details>
         </div>
 
         <button
@@ -3569,7 +3700,7 @@ const [expandMemo, setExpandMemo] = useState(false);
         <button
           onClick={async () => {
             await updateDoc(
-              doc(db, collName, order.id),
+              doc(db, order.__col || collName, order.id),
               {
                 업체전달상태: "전달완료",
                 전달완료일시: serverTimestamp(),
@@ -3620,12 +3751,12 @@ const [expandMemo, setExpandMemo] = useState(false);
         <button
           onClick={async () => {
             await updateDoc(
-              doc(db, collName, order.id),
+              doc(db, order.__col || collName, order.id),
               {
                 업체전달상태: "미전달",
                 정보전달완료: false,
                 정보전달상태: "미전달",
-                전달완료일시: null, // ⭐ 핵심
+                전달완료일시: null,
               }
             );
 
@@ -6393,11 +6524,12 @@ function MobileUnassignedList({
 
 
   const [confirmTarget, setConfirmTarget] = useState(null);
-  const handleConfirmDeliver = async () => {
+ const handleConfirmDeliver = async () => {
   if (!confirmTarget) return;
 
   await updateDoc(
-    doc(db, collName, confirmTarget.id),
+    doc(db, confirmTarget.__col || collName, confirmTarget.id),
+
    {
   업체전달상태: "전달완료",
   전달완료일시: serverTimestamp(),
