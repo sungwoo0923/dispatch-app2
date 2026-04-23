@@ -6267,7 +6267,7 @@ setActiveStopIdx(null);
     <textarea
       className="w-full border-2 border-[#1B2B4B] rounded-xl px-4 py-3 text-[13px] resize-none bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-200 placeholder:text-gray-400"
       rows={3}
-      placeholder={"🔍 기사 스마트 검색 — 이름·차량번호·전화번호 또는 문자 전체 복붙\n예) 김상원 010-7916-2258 강원82사1203\n예) [차주정보] 김상원 / 01079162258  [차량] 냉동탑 5톤 강원82사1203"}
+      placeholder={"기사 스마트 검색 "}
       value={smartDriverQuery}
       onChange={e => handleSmartDriverInput(e.target.value)}
       onKeyDown={e => {
