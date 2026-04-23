@@ -3522,6 +3522,54 @@ const checkNewDriver = (carNo) => {
     }));
   }
 };
+
+// ================================
+// 🔥 기사 정보 충돌 체크 (차량번호 동일 + 이름/전화 다를 때)
+// ================================
+const checkDriverConflict = () => {
+  const plate = (form.차량번호 || "").trim().replace(/\s+/g, "");
+  const name = (form.이름 || "").trim();
+  const phone = (form.전화번호 || "").replace(/[^\d]/g, "");
+
+  // 차량번호나 이름이 없으면 체크 불필요
+  if (!plate || !name) return;
+
+  const list = driverMap.get(plate);
+
+  // 🔹 기존 기사가 없으면 → 신규 등록 여부 확인
+  if (!list || list.length === 0) {
+    // 차량번호 + 이름 + 전화번호가 모두 있으면 자동 등록 제안
+    if (name && phone) {
+      setDriverConflictPopup({
+        mode: "new_driver",
+        existing: null,
+        input: { plate, name, phone: formatPhone(phone) },
+      });
+    }
+    return;
+  }
+
+  // 🔹 기존 기사가 있으면 → 이름/전화번호 비교
+  const existing = list[0];
+  const existName = (existing.이름 || "").trim();
+  const existPhone = (existing.전화번호 || "").replace(/[^\d]/g, "");
+
+  const sameName = existName === name;
+  const samePhone = existPhone === phone;
+
+  // 완전 동일하면 무시
+  if (sameName && samePhone) return;
+
+  // 🔥 차량번호 같은데 이름 또는 전화번호가 다름 → 충돌 팝업
+  if (!sameName || !samePhone) {
+    setDriverConflictPopup({
+      mode: !sameName ? "name_diff" : "phone_diff",
+      existing,
+      input: { plate, name, phone: formatPhone(phone) },
+    });
+  }
+};
+
 const nextSeq = () =>
   Math.max(0, ...(dispatchData || []).map((r) => Number(r.순번) || 0)) + 1;
 // ================================
@@ -4520,60 +4568,117 @@ function calcHistoryScore(row, form) {
 // ===============================
 const [smartDriverQuery, setSmartDriverQuery] = React.useState("");
 const [smartDriverMatched, setSmartDriverMatched] = React.useState([]);
-const [showSmartDriver, setShowSmartDriver] = React.useState(false);
+const [driverConflictPopup, setDriverConflictPopup] = React.useState(null);
+// { mode: "overwrite"|"new", existing: driver, input: {plate,name,phone} }
 
-// 텍스트에서 차량번호/이름/전화번호 파싱
 const parseDriverText = (text) => {
   const phoneMatch = text.match(/0\d{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4}/);
   const phone = phoneMatch
-    ? phoneMatch[0].replace(/[-.\s]/g, "").replace(/^(\d{3})(\d{3,4})(\d{4})$/, "$1-$2-$3")
+    ? phoneMatch[0].replace(/[-.\s]/g,"").replace(/^(\d{3})(\d{3,4})(\d{4})$/,"$1-$2-$3")
     : "";
   const plateMatch = text.match(/[가-힣]{2,3}\d{2}[가-힣]\d{4}|\d{2,3}[가-힣]\d{4}/);
   const plate = plateMatch ? plateMatch[0] : "";
-  const stripped = text.replace(phoneMatch?.[0] || "", "").replace(plate || "", "");
+  const stripped = text.replace(phoneMatch?.[0]||"","").replace(plate||"","");
   const nameMatch = stripped.match(/[가-힣]{2,4}/g) || [];
   const excludeRegions = ["강원","서울","경기","인천","부산","대구","광주","대전","울산","세종","경북","경남","전북","전남","충북","충남","제주","냉장","냉동","카고","윙바디"];
   const name = nameMatch.find(n => n.length >= 2 && !excludeRegions.includes(n)) || "";
   return { phone, plate, name };
 };
 
-const handleSmartDriverSearch = (text) => {
+const normD = (s="") => String(s).replace(/[-.\s]/g,"").toLowerCase();
+
+const handleSmartDriverInput = (text) => {
   setSmartDriverQuery(text);
-  if (!text.trim()) { setSmartDriverMatched([]); return; }
-  const normV = (s="") => String(s).replace(/[-.\s]/g,"").toLowerCase();
+  if (!text.trim()) {
+    setSmartDriverMatched([]);
+    return;
+  }
   const { phone, plate, name } = parseDriverText(text);
-  const q = normV(text);
-  const results = (drivers || []).filter(d => {
-    if (plate && normV(d.차량번호).includes(normV(plate))) return true;
-    if (phone && normV(d.전화번호).includes(normV(phone))) return true;
-    if (name && normV(d.이름).includes(normV(name))) return true;
-    if (normV(d.이름).includes(q) || normV(d.차량번호).includes(q) || normV(d.전화번호).includes(q)) return true;
+  const q = normD(text);
+  const results = (drivers||[]).filter(d => {
+    if (plate && normD(d.차량번호).includes(normD(plate))) return true;
+    if (phone && normD(d.전화번호).includes(normD(phone))) return true;
+    if (name && normD(d.이름).includes(normD(name))) return true;
+    if (normD(d.이름).includes(q)||normD(d.차량번호).includes(q)||normD(d.전화번호).includes(q)) return true;
     return false;
   });
   setSmartDriverMatched(results.slice(0, 8));
 };
 
-const handleSmartDriverPaste = async (text) => {
+// 스마트 검색 결과 선택
+const selectSmartDriver = (d) => {
+  handleCarNoChange(d.차량번호);
+  setSmartDriverQuery("");
+  setSmartDriverMatched([]);
+};
+
+// 입력값으로 자동 적용 (blur 또는 엔터)
+const applySmartDriverInput = async (text) => {
   if (!text.trim()) return;
   const { phone, plate, name } = parseDriverText(text);
   if (!plate && !name && !phone) return;
-  const normV = (s="") => String(s).replace(/[-.\s]/g,"").toLowerCase();
-  const found = (drivers || []).find(d =>
-    (plate && normV(d.차량번호) === normV(plate)) ||
-    (phone && normV(d.전화번호) === normV(phone))
-  );
-  if (found) {
-    handleCarNoChange(found.차량번호);
-    setSmartDriverQuery("");
-    setSmartDriverMatched([]);
-  } else if (plate || name || phone) {
+
+  // 차량번호 기준 기존 기사 검색
+  const byPlate = plate
+    ? (drivers||[]).filter(d => normD(d.차량번호) === normD(plate))
+    : [];
+
+  if (byPlate.length > 0) {
+    const existing = byPlate[0];
+    const sameNamePhone =
+      normD(existing.이름) === normD(name) &&
+      normD(existing.전화번호) === normD(phone);
+
+    if (sameNamePhone) {
+      // 완전히 동일 → 그냥 매칭
+      handleCarNoChange(existing.차량번호);
+      setSmartDriverQuery("");
+      setSmartDriverMatched([]);
+
+    } else if (normD(existing.이름) === normD(name) && normD(existing.전화번호) !== normD(phone)) {
+      // 🔥 이름 같고 전화번호 다름 → 충돌 팝업
+      setSmartDriverQuery("");
+      setSmartDriverMatched([]);
+      setDriverConflictPopup({
+        mode: "phone_diff",
+        existing,
+        input: { plate, name, phone },
+      });
+
+    } else if (normD(existing.이름) !== normD(name) && name) {
+      // 🔥🔥🔥 핵심 수정: 차량번호 같고 이름 다름 → 충돌 팝업
+      setSmartDriverQuery("");
+      setSmartDriverMatched([]);
+      setDriverConflictPopup({
+        mode: "name_diff",
+        existing,
+        input: { plate, name, phone },
+      });
+
+    } else {
+      // 그 외 기존 매칭
+      handleCarNoChange(existing.차량번호);
+      setSmartDriverQuery("");
+      setSmartDriverMatched([]);
+    }
+    return;
+  }
+
+  // 기존 없음 → 신규 자동 등록
+  if (plate || name || phone) {
     await upsertDriver({ 차량번호: plate, 이름: name, 전화번호: phone });
-    setForm(p => ({ ...p, 차량번호: plate, 이름: name, 전화번호: formatPhone(phone), 배차상태: "배차완료" }));
+    setForm(p => ({
+      ...p,
+      차량번호: plate,
+      이름: name,
+      전화번호: formatPhone(phone),
+      배차상태: plate ? "배차완료" : "배차중",
+    }));
     setSmartDriverQuery("");
     setSmartDriverMatched([]);
-    alert(`🚚 신규 기사 자동 등록: ${name || plate}`);
   }
 };
+
 
 // ===============================
 // 📋 오더 자동 파싱 상태
@@ -4583,49 +4688,28 @@ const [showOrderParser, setShowOrderParser] = React.useState(false);
 
 const parseOrderText = (text) => {
   const lines = text.split(/\n/).map(l => l.trim()).filter(Boolean);
-  const result = {};
-
-  // 상차/하차 섹션 분리
-  const pickupIdx = lines.findIndex(l => /상차지?$/i.test(l) || /^1\.\s*상차/i.test(l));
-  const dropIdx   = lines.findIndex(l => /하차지?$/i.test(l) || /^하차지/i.test(l));
-
+  const pickupIdx = lines.findIndex(l => /상차지?$/.test(l) || /^1\.\s*상차/.test(l));
+  const dropIdx   = lines.findIndex(l => /하차지?$/.test(l) || /^하차지/.test(l));
   const pickupLines = pickupIdx >= 0 && dropIdx > pickupIdx
-    ? lines.slice(pickupIdx + 1, dropIdx)
-    : lines.slice(0, Math.floor(lines.length / 2));
+    ? lines.slice(pickupIdx+1, dropIdx) : lines.slice(0, Math.floor(lines.length/2));
   const dropLines = dropIdx >= 0
-    ? lines.slice(dropIdx + 1)
-    : lines.slice(Math.floor(lines.length / 2));
+    ? lines.slice(dropIdx+1) : lines.slice(Math.floor(lines.length/2));
 
   const extractFromLines = (sectionLines) => {
     const info = {};
-    sectionLines.forEach((line, i) => {
-      // 주소 (시/도 포함)
-      if (/^(서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주)/.test(line)) {
-        info.주소 = line;
-      }
-      // 상차/하차 시간
-      const timeMatch = line.match(/상차시간\s*[:：]?\s*(.+)/i);
-      if (timeMatch) info.상차시간 = timeMatch[1].trim();
-      const dropTimeMatch = line.match(/하차시간\s*[:：]?\s*(.+)/i);
-      if (dropTimeMatch) info.하차시간 = dropTimeMatch[1].trim();
-      // 전화번호
-      const phoneMatch = line.match(/0\d{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4}/);
-      if (phoneMatch) info.전화번호 = phoneMatch[0].replace(/[^\d]/g,"").replace(/^(\d{3})(\d{3,4})(\d{4})$/,"$1-$2-$3");
-      // 담당자 (이름 패턴: 2~4자 한글 + 직함)
-      const managerMatch = line.match(/([가-힣]{2,4})\s*(대표|주임|팀장|부장|과장|실장|사원|이사|님|대리)/);
-      if (managerMatch) info.담당자 = managerMatch[1];
-      // 중량/파렛트
-      const weightMatch = line.match(/(\d[\d,]+)\s*kg/i);
-      if (weightMatch) info.중량 = weightMatch[1].replace(/,/g,"");
-      const palletMatch = line.match(/(\d+)\s*(파렛트?|파레트|PLT|p)/i);
-      if (palletMatch) info.파렛 = palletMatch[1];
-      // 차량종류
+    sectionLines.forEach(line => {
+      if (/^(서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주)/.test(line)) info.주소 = line;
+      const timeM = line.match(/상차시간\s*[:：]?\s*(.+)/i); if (timeM) info.상차시간 = timeM[1].trim();
+      const dropT = line.match(/하차시간\s*[:：]?\s*(.+)/i); if (dropT) info.하차시간 = dropT[1].trim();
+      const phoneM = line.match(/0\d{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4}/); if (phoneM) info.전화번호 = phoneM[0].replace(/[^\d]/g,"").replace(/^(\d{3})(\d{3,4})(\d{4})$/,"$1-$2-$3");
+      const manM = line.match(/([가-힣]{2,4})\s*(대표|주임|팀장|부장|과장|실장|사원|이사|님|대리)/); if (manM) info.담당자 = manM[1];
+      const wM = line.match(/(\d[\d,]+)\s*kg/i); if (wM) info.중량 = wM[1].replace(/,/g,"");
+      const pM = line.match(/(\d+)\s*(파렛트?|파레트|PLT|p)/i); if (pM) info.파렛 = pM[1];
       if (/냉동/.test(line)) info.차량종류 = "냉동탑";
-      if (/냉장/.test(line)) info.차량종류 = "냉장탑";
-      if (/윙바디/.test(line)) info.차량종류 = "윙바디";
-      if (/카고/.test(line)) info.차량종류 = "카고";
+      else if (/냉장/.test(line)) info.차량종류 = "냉장탑";
+      else if (/윙바디/.test(line)) info.차량종류 = "윙바디";
+      else if (/카고/.test(line)) info.차량종류 = "카고";
     });
-    // 업체명: 주소/시간 등 키워드 없는 첫 줄
     const nameLine = sectionLines.find(l =>
       !/(상차|하차|시간|주소|[:：\d]|kg|파렛|냉동|냉장|윙|카고|타코|중량)/.test(l) &&
       l.length >= 2 && l.length <= 20
@@ -4633,54 +4717,41 @@ const parseOrderText = (text) => {
     if (nameLine) info.업체명 = nameLine;
     return info;
   };
-
   const pickup = extractFromLines(pickupLines);
   const drop   = extractFromLines(dropLines);
-
-  // 익일/당일 하차 처리
   const isNextDay = /익일|다음날/.test(text);
-
-  // 상차시간 파싱 (16시 → 오후 4시)
   const parseTime = (t="") => {
     if (!t) return "";
-    const numMatch = t.replace(/익일|당일|다음날/g,"").match(/(\d+)/);
-    if (!numMatch) return "";
-    const h = Number(numMatch[1]);
-    if (h >= 0 && h < 12) return `오전 ${h === 0 ? 12 : h}:00`;
+    const n = t.replace(/익일|당일|다음날/g,"").match(/(\d+)/);
+    if (!n) return "";
+    const h = Number(n[1]);
+    if (h >= 0 && h < 12) return `오전 ${h===0?12:h}:00`;
     if (h === 12) return "오후 12:00";
-    if (h > 12 && h <= 23) return `오후 ${h - 12}:00`;
+    if (h > 12 && h <= 23) return `오후 ${h-12}:00`;
     return t;
   };
-
   return {
-    상차지명: pickup.업체명 || "",
-    상차지주소: pickup.주소 || "",
-    상차지담당자: pickup.담당자 || "",
-    상차지담당자번호: pickup.전화번호 || "",
-    상차시간: parseTime(pickup.상차시간 || ""),
-    하차지명: drop.업체명 || "",
-    하차지주소: drop.주소 || "",
-    하차지담당자: drop.담당자 || "",
-    하차지담당자번호: drop.전화번호 || "",
-    하차시간: parseTime(drop.하차시간 || ""),
+    상차지명: pickup.업체명||"", 상차지주소: pickup.주소||"",
+    상차지담당자: pickup.담당자||"", 상차지담당자번호: pickup.전화번호||"",
+    상차시간: parseTime(pickup.상차시간||""),
+    하차지명: drop.업체명||"", 하차지주소: drop.주소||"",
+    하차지담당자: drop.담당자||"", 하차지담당자번호: drop.전화번호||"",
+    하차시간: parseTime(drop.하차시간||""),
     하차일: isNextDay ? _tomorrowStr() : _todayStr(),
-    화물내용: drop.파렛 ? `${drop.파렛}파렛트` : (pickup.파렛 ? `${pickup.파렛}파렛트` : ""),
-    차량톤수: drop.중량 ? `${drop.중량}kg` : (pickup.중량 ? `${pickup.중량}kg` : ""),
-    차량종류: drop.차량종류 || pickup.차량종류 || "",
+    화물내용: drop.파렛?`${drop.파렛}파렛트`:(pickup.파렛?`${pickup.파렛}파렛트`:""),
+    차량톤수: drop.중량?`${drop.중량}kg`:(pickup.중량?`${pickup.중량}kg`:""),
+    차량종류: drop.차량종류||pickup.차량종류||"",
   };
 };
-
 const applyOrderParse = () => {
   if (!orderParseText.trim()) return;
   const parsed = parseOrderText(orderParseText);
-  const isEmpty = Object.values(parsed).every(v => !v);
-  if (isEmpty) { alert("분석 가능한 내용을 찾지 못했습니다."); return; }
-  setForm(p => ({ ...p, ...parsed }));
+  if (Object.values(parsed).every(v=>!v)) { alert("분석 가능한 내용을 찾지 못했습니다."); return; }
+  setForm(p=>({...p,...parsed}));
   if (parsed.상차지명) setAutoPickMatched(true);
   if (parsed.하차지명) setAutoDropMatched(true);
   if (parsed.차량종류) setVehicleQuery(parsed.차량종류);
-  setOrderParseText("");
-  setShowOrderParser(false);
+  setOrderParseText(""); setShowOrderParser(false);
   alert("✅ 오더 내용이 자동으로 입력되었습니다. 확인 후 저장하세요.");
 };
     const renderForm = () => (
@@ -6188,101 +6259,130 @@ setActiveStopIdx(null);
   </div>
 </div>
 )}
-  {/* 차량정보 */}
+ {/* ===== 스마트검색 (독립 컬럼) ===== */}
 <div className="relative">
-  <div className="flex items-center justify-between mb-1">
-    <label className={labelCls} style={{marginBottom:0}}>차량번호</label>
-    <button type="button" onClick={() => setShowSmartDriver(v => !v)}
-      className="text-[11px] px-2 py-0.5 rounded-full border bg-indigo-50 text-indigo-600 border-indigo-200 hover:bg-indigo-100">
-      {showSmartDriver ? "▲ 스마트검색 닫기" : "스마트검색"}
-    </button>
+  <label className={labelCls}>스마트검색</label>
+
+  <div className="relative">
+    <textarea
+      className="w-full border-2 border-[#1B2B4B] rounded-xl px-4 py-3 text-[13px] resize-none bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-200 placeholder:text-gray-400"
+      rows={3}
+      placeholder={"🔍 기사 스마트 검색 — 이름·차량번호·전화번호 또는 문자 전체 복붙\n예) 김상원 010-7916-2258 강원82사1203\n예) [차주정보] 김상원 / 01079162258  [차량] 냉동탑 5톤 강원82사1203"}
+      value={smartDriverQuery}
+      onChange={e => handleSmartDriverInput(e.target.value)}
+      onKeyDown={e => {
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault();
+          applySmartDriverInput(smartDriverQuery);
+        }
+      }}
+      onBlur={e => {
+        setTimeout(() => {
+          if (e.target.value.trim().length > 4) {
+            applySmartDriverInput(e.target.value);
+          }
+          setSmartDriverMatched([]);
+        }, 200);
+      }}
+    />
+    {/* 검색 결과 드롭다운 */}
+    {smartDriverMatched.length > 0 && (
+      <div className="absolute z-50 w-full bg-white border-2 border-[#1B2B4B] rounded-xl shadow-2xl mt-0.5 overflow-hidden">
+        <div className="px-3 py-1.5 bg-[#1B2B4B] text-white text-[11px] font-semibold">
+          등록된 기사 {smartDriverMatched.length}명
+        </div>
+        {smartDriverMatched.map((d, i) => (
+          <div key={i}
+            className="px-4 py-3 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-0 flex items-center justify-between"
+            onMouseDown={() => selectSmartDriver(d)}
+          >
+            <div>
+              <div className="font-bold text-gray-900 text-[14px]">{d.이름 || "-"}</div>
+              <div className="text-[12px] text-gray-500 mt-0.5">{d.차량번호} &nbsp;|&nbsp; {formatPhone(d.전화번호)}</div>
+            </div>
+            {d.등급 === "블랙" && (
+              <span className="px-2 py-0.5 bg-gray-900 text-white text-[10px] rounded-full font-bold">블랙</span>
+            )}
+          </div>
+        ))}
+      </div>
+    )}
   </div>
 
-  {/* 스마트 기사 검색창 */}
-  {showSmartDriver && (
-    <div className="mb-2 relative">
-      <textarea
-        className="w-full border-2 border-indigo-300 rounded-lg px-3 py-2 text-sm resize-none bg-indigo-50 focus:outline-none focus:border-indigo-500"
-        rows={2}
-        placeholder={"이름·차량번호·전화번호 또는 문자 복붙\n예) 김상원 010-7916-2258 강원82사1203"}
-        value={smartDriverQuery}
-        onChange={e => handleSmartDriverSearch(e.target.value)}
-        onBlur={e => {
-          if (e.target.value.trim().length > 4) {
-            setTimeout(() => handleSmartDriverPaste(e.target.value), 100);
-          }
+  {/* 매칭 확인 표시 */}
+  {(form.차량번호 || form.이름) && (
+    <div className="flex items-center gap-2 mt-2 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2">
+      <span className="text-emerald-600 text-[16px]">✓</span>
+      <div className="flex-1 text-[13px]">
+        <span className="font-bold text-gray-900">{form.이름 || "-"}</span>
+        <span className="text-gray-400 mx-1">|</span>
+        <span className="text-gray-600">{form.차량번호}</span>
+        <span className="text-gray-400 mx-1">|</span>
+        <span className="text-gray-600">{form.전화번호}</span>
+      </div>
+      <button type="button"
+        onClick={() => {
+          setForm(p=>({...p, 차량번호:"", 이름:"", 전화번호:"", 배차상태:"배차중"}));
+          setSmartDriverQuery("");
         }}
-      />
-      {smartDriverMatched.length > 0 && (
-        <div className="absolute z-50 w-full bg-white border-2 border-indigo-200 rounded-lg shadow-xl mt-0.5 overflow-hidden">
-          {smartDriverMatched.map((d, i) => (
-            <div key={i}
-              className="px-3 py-2.5 hover:bg-indigo-50 cursor-pointer border-b border-gray-100 last:border-0"
-              onMouseDown={() => {
-                handleCarNoChange(d.차량번호);
-                setSmartDriverQuery("");
-                setSmartDriverMatched([]);
-                setShowSmartDriver(false);
-              }}
-            >
-              <div className="font-bold text-gray-900 text-sm">{d.이름 || "-"}</div>
-              <div className="text-xs text-gray-500">{d.차량번호} | {d.전화번호}</div>
-            </div>
-          ))}
-        </div>
-      )}
+        className="text-gray-400 hover:text-red-500 text-[16px] leading-none px-1"
+      >✕</button>
     </div>
   )}
+</div>
+
+{/* ===== 차량번호 (독립 컬럼) ===== */}
+<div className="relative">
+  <label className={labelCls}>차량번호</label>
 
   <input
-  className={inputCls}
-  value={form.차량번호}
-  onChange={(e) => handleCarNoChange(e.target.value)}
+    className={inputCls}
+    value={form.차량번호}
+    onChange={(e) => handleCarNoChange(e.target.value)}
+    onKeyDown={(e) => {
+      if (!driverDropdownOpen) {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          checkNewDriver(e.currentTarget.value);
+        }
+        return;
+      }
 
-  onKeyDown={(e) => {
-    if (!driverDropdownOpen) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setDriverActive((i) =>
+          Math.min(i + 1, driverCandidates.length - 1)
+        );
+      }
+
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setDriverActive((i) =>
+          Math.max(i - 1, 0)
+        );
+      }
+
       if (e.key === "Enter") {
         e.preventDefault();
-        checkNewDriver(e.currentTarget.value);
+        const selected = driverCandidates[driverActive];
+        if (!selected) return;
+
+        setForm((p) => ({
+          ...p,
+          이름: selected.이름,
+          전화번호: formatPhone(selected.전화번호),
+          배차상태: "배차완료",
+        }));
+
+        setDriverDropdownOpen(false);
       }
-      return;
-    }
+    }}
+    onBlur={(e) => {
+      checkNewDriver(e.currentTarget.value);
+      setTimeout(() => setDriverDropdownOpen(false), 150);
+    }}
+  />
 
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      setDriverActive((i) =>
-        Math.min(i + 1, driverCandidates.length - 1)
-      );
-    }
-
-    if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setDriverActive((i) =>
-        Math.max(i - 1, 0)
-      );
-    }
-
-    if (e.key === "Enter") {
-      e.preventDefault();
-      const selected = driverCandidates[driverActive];
-      if (!selected) return;
-
-      setForm((p) => ({
-        ...p,
-        이름: selected.이름,
-        전화번호: formatPhone(selected.전화번호),
-        배차상태: "배차완료",
-      }));
-
-      setDriverDropdownOpen(false);
-    }
-  }}
-
-  onBlur={(e) => {
-    checkNewDriver(e.currentTarget.value);
-    setTimeout(() => setDriverDropdownOpen(false), 150);
-  }}
-/>
   {/* 🔽 다중 기사 선택 드롭다운 */}
   {driverDropdownOpen &&
     driverCandidates &&
@@ -6312,8 +6412,8 @@ setActiveStopIdx(null);
             }}
           >
             <div className="font-medium">
-  {d.이름} · {d.차량번호}
-</div>
+              {d.이름} · {d.차량번호}
+            </div>
             <div className="text-xs text-gray-500">
               {formatPhone(d.전화번호)}
             </div>
@@ -6322,15 +6422,30 @@ setActiveStopIdx(null);
       </div>
     )}
 </div>
-  <div>
-    <label className={labelCls}>기사명</label>
-    <input className={`${inputCls} bg-gray-100`} value={form.이름} readOnly />
-  </div>
 
-  <div>
-    <label className={labelCls}>전화번호</label>
-    <input className={`${inputCls} bg-gray-100`} value={form.전화번호} readOnly />
-  </div>
+{/* ===== 기사명 (수정 가능) ===== */}
+<div>
+  <label className={labelCls}>기사명</label>
+  <input
+    className={inputCls}
+    value={form.이름}
+    placeholder="기사명 입력"
+    onChange={(e) => onChange("이름", e.target.value)}
+    onBlur={() => checkDriverConflict()}
+  />
+</div>
+
+{/* ===== 전화번호 (수정 가능) ===== */}
+<div>
+  <label className={labelCls}>전화번호</label>
+  <input
+    className={inputCls}
+    value={form.전화번호}
+    placeholder="전화번호 입력"
+    onChange={(e) => onChange("전화번호", formatPhone(e.target.value))}
+    onBlur={() => checkDriverConflict()}
+  />
+</div>
 
   {/* 상/하차 방법 */}
   <div>
@@ -7187,6 +7302,121 @@ setTimeout(() => {
     </div>
   </div>
 )}
+{/* ===== 기사 정보 충돌 팝업 ===== */}
+{driverConflictPopup && (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
+    <div className="bg-white rounded-2xl shadow-2xl w-[440px] overflow-hidden border">
+      <div className="bg-[#1B2B4B] px-6 py-4">
+        <h3 className="text-white font-bold text-[15px]">
+          {driverConflictPopup.existing ? "⚠️ 기사 정보 충돌" : "🆕 신규 기사 등록 확인"}
+        </h3>
+        <p className="text-white/60 text-[12px] mt-0.5">
+          {driverConflictPopup.existing
+            ? "동일 차량번호에 다른 기사 정보가 감지되었습니다"
+            : "등록되지 않은 기사입니다. 신규 등록하시겠습니까?"
+          }
+        </p>
+      </div>
+      <div className="px-6 py-5 space-y-4">
+        {/* 기존 정보 (있을 때만 표시) */}
+        {driverConflictPopup.existing && (
+          <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+            <div className="text-[11px] font-semibold text-gray-500 mb-2">기존 등록 정보</div>
+            <div className="text-[14px] font-bold text-gray-800">{driverConflictPopup.existing.이름}</div>
+            <div className="text-[13px] text-gray-600 mt-1">
+              {driverConflictPopup.existing.차량번호} &nbsp;|&nbsp; {formatPhone(driverConflictPopup.existing.전화번호)}
+            </div>
+          </div>
+        )}
+        {/* 신규 입력 정보 */}
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+          <div className="text-[11px] font-semibold text-blue-600 mb-2">
+            {driverConflictPopup.existing ? "새로 입력한 정보" : "신규 등록할 정보"}
+          </div>
+          <div className="text-[14px] font-bold text-gray-800">{driverConflictPopup.input.name}</div>
+          <div className="text-[13px] text-gray-600 mt-1">
+            {driverConflictPopup.input.plate} &nbsp;|&nbsp; {formatPhone(driverConflictPopup.input.phone)}
+          </div>
+        </div>
+      </div>
+
+      <div className="px-6 pb-6 space-y-3">
+
+        {/* ===== 기존 기사가 있는 경우: 3버튼 ===== */}
+        {driverConflictPopup.existing && (
+          <>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                className="py-2.5 rounded-xl bg-white border-2 border-gray-300 text-gray-700 text-[13px] font-semibold hover:bg-gray-50 transition"
+                onClick={() => {
+                  handleCarNoChange(driverConflictPopup.existing.차량번호);
+                  setSmartDriverQuery(""); setSmartDriverMatched([]);
+                  setDriverConflictPopup(null);
+                }}
+              >
+                기존 정보 사용
+              </button>
+              <button
+                className="py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition"
+                onClick={async () => {
+                  const { plate, name, phone } = driverConflictPopup.input;
+                  await upsertDriver({ 차량번호: plate, 이름: name, 전화번호: phone });
+                  setForm(p=>({...p, 차량번호: plate, 이름: name, 전화번호: formatPhone(phone), 배차상태:"배차완료"}));
+                  setSmartDriverQuery(""); setSmartDriverMatched([]);
+                  setDriverConflictPopup(null);
+                }}
+              >
+                기존 정보 덮어쓰기
+              </button>
+            </div>
+            <button
+              className="w-full py-2.5 rounded-xl bg-emerald-600 text-white text-[13px] font-bold hover:bg-emerald-700 transition"
+              onClick={async () => {
+                const { plate, name, phone } = driverConflictPopup.input;
+                const newPlate = plate + "_" + Date.now();
+                await upsertDriver({ 차량번호: plate, 이름: name, 전화번호: phone });
+                setForm(p=>({...p, 차량번호: plate, 이름: name, 전화번호: formatPhone(phone), 배차상태:"배차완료"}));
+                setSmartDriverQuery(""); setSmartDriverMatched([]);
+                setDriverConflictPopup(null);
+              }}
+            >
+              신규 기사로 별도 등록
+            </button>
+          </>
+        )}
+
+        {/* ===== 기존 기사가 없는 경우(완전 신규): 2버튼 ===== */}
+        {!driverConflictPopup.existing && (
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              className="py-2.5 rounded-xl bg-white border-2 border-gray-300 text-gray-700 text-[13px] font-semibold hover:bg-gray-50 transition"
+              onClick={() => {
+                setDriverConflictPopup(null);
+              }}
+            >
+              취소
+            </button>
+            <button
+              className="py-2.5 rounded-xl bg-emerald-600 text-white text-[13px] font-bold hover:bg-emerald-700 transition"
+              onClick={async () => {
+                const { plate, name, phone } = driverConflictPopup.input;
+                await upsertDriver({ 차량번호: plate, 이름: name, 전화번호: phone });
+                setForm(p=>({...p, 차량번호: plate, 이름: name, 전화번호: formatPhone(phone), 배차상태:"배차완료"}));
+                setSmartDriverQuery(""); setSmartDriverMatched([]);
+                setDriverConflictPopup(null);
+                alert("✅ 신규 기사가 등록되었습니다.");
+              }}
+            >
+              신규 기사 등록
+            </button>
+          </div>
+        )}
+
+      </div>
+    </div>
+  </div>
+)}
+
 {/* ================= 신규 기사 등록 모달 ================= */}
 {driverModal.open && (
   <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[99999]">
