@@ -7519,16 +7519,22 @@ setTimeout(() => {
 {driverConflictPopup && (
   <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
     <div className="bg-white rounded-2xl shadow-2xl w-[440px] overflow-hidden border">
-      <div className="bg-[#1B2B4B] px-6 py-4">
-        <h3 className="text-white font-bold text-[15px]">
-          {driverConflictPopup.existing ? "⚠️ 기사 정보 충돌" : "🆕 신규 기사 등록 확인"}
-        </h3>
-        <p className="text-white/60 text-[12px] mt-0.5">
-          {driverConflictPopup.existing
-            ? "동일 차량번호에 다른 기사 정보가 감지되었습니다"
-            : "등록되지 않은 기사입니다. 신규 등록하시겠습니까?"
-          }
-        </p>
+      <div className="bg-[#1B2B4B] px-6 py-4 flex items-start justify-between">
+        <div>
+          <h3 className="text-white font-bold text-[15px]">
+            {driverConflictPopup.existing ? "⚠️ 기사 정보 충돌" : "🆕 신규 기사 등록 확인"}
+          </h3>
+          <p className="text-white/60 text-[12px] mt-0.5">
+            {driverConflictPopup.existing
+              ? "동일 차량번호에 다른 기사 정보가 감지되었습니다"
+              : "등록되지 않은 기사입니다. 신규 등록하시겠습니까?"
+            }
+          </p>
+        </div>
+        <button
+          onClick={() => setDriverConflictPopup(null)}
+          className="text-white/50 hover:text-white text-xl leading-none ml-4 mt-0.5 flex-shrink-0"
+        >✕</button>
       </div>
       <div className="px-6 py-5 space-y-4">
         {/* 기존 정보 (있을 때만 표시) */}
