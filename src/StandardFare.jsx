@@ -192,15 +192,43 @@ export default function StandardFare() {
   const [aiFare, setAiFare] = useState(null);
   const [searched, setSearched] = useState(false);
 
-  useEffect(() => {
-    const unsub = onSnapshot(collection(db, "dispatch"), (snap) => {
-      const arr = snap.docs.map((d) => {
-        const data = d.data();
-        return { _id: d.id, ...data, 등록일: toYMD(data.등록일), 상차일: toYMD(data.상차일), 하차일: toYMD(data.하차일) };
-      });
-      setDispatchData(arr);
+   useEffect(() => {
+    let dispatchCache = [];
+    let ordersCache = [];
+
+    const merge = () => {
+      // _id 기준 중복 제거 (orders 우선)
+      const map = new Map();
+      dispatchCache.forEach(r => map.set(r._id, r));
+      ordersCache.forEach(r => map.set(r._id, r));
+      setDispatchData(Array.from(map.values()));
+    };
+
+    const mapDoc = (d) => {
+      const data = d.data();
+      return {
+        _id: d.id,
+        ...data,
+        등록일: toYMD(data.등록일),
+        상차일: toYMD(data.상차일),
+        하차일: toYMD(data.하차일),
+      };
+    };
+
+    const unsub1 = onSnapshot(collection(db, "dispatch"), (snap) => {
+      dispatchCache = snap.docs.map(mapDoc);
+      merge();
     });
-    return () => unsub();
+
+    const unsub2 = onSnapshot(collection(db, "orders"), (snap) => {
+      ordersCache = snap.docs.map(mapDoc);
+      merge();
+    });
+
+    return () => {
+      unsub1();
+      unsub2();
+    };
   }, []);
 
   useEffect(() => {

@@ -255,51 +255,159 @@ const getSixMonthsAgo = () => {
 };
 
 const sixMonthsAgo = getSixMonthsAgo();
-  // ✅ 1️⃣ orders (화주 + 신규)
+      // ✅ 1️⃣ orders (화주 + 신규) + 알림 감지
+  let ordersFirstLoad = true;
+  const ordersPrev = new Map();
+
   unsubs.push(
     onSnapshot(collection(db, collName), (snap) => {
-      const arr = snap.docs
-  .map(d => {
-    const data = d.data() || {};
-    return {
-      _id: d.id,
-      __col: collName,
-      ...data,
-경유지_상차: Array.isArray(data.경유지_상차)
-  ? data.경유지_상차
-  : (Array.isArray(data.경유상차목록) ? data.경유상차목록 : []),
+      const arr = snap.docs.map(d => {
+        const data = d.data() || {};
+        return {
+          _id: d.id,
+          __col: collName,
+          ...data,
+          경유지_상차: Array.isArray(data.경유지_상차)
+            ? data.경유지_상차
+            : (Array.isArray(data.경유상차목록) ? data.경유상차목록 : []),
+          경유지_하차: Array.isArray(data.경유지_하차)
+            ? data.경유지_하차
+            : (Array.isArray(data.경유하차목록) ? data.경유하차목록 : []),
+        };
+      });
 
-경유지_하차: Array.isArray(data.경유지_하차)
-  ? data.경유지_하차
-  : (Array.isArray(data.경유하차목록) ? data.경유하차목록 : []),
-    };
-  })
-
-ordersCache = arr;
-setDispatchData([...ordersCache, ...dispatchCache]);
-
+      ordersCache = arr;
+      setDispatchData([...ordersCache, ...dispatchCache]);
       safeSave("dispatchData", arr);
+
+      // 🔔 최초 로드: prevMap 구축만
+      if (ordersFirstLoad) {
+        ordersFirstLoad = false;
+        arr.forEach(r => {
+          ordersPrev.set(r._id, {
+            car: (r.차량번호 || "").trim(),
+            status: (r.배차상태 || "").trim(),
+          });
+        });
+        return;
+      }
+
+            // 🔔 변경 감지
+      snap.docChanges().forEach((ch) => {
+        const d = ch.doc.data() || {};
+        const id = ch.doc.id;
+
+        if (ch.type === "added" && !ordersPrev.has(id)) {
+          if (d.상차지명 || d.거래처명) {
+            sflowToast(
+              `${d.거래처명 || ""} | ${d.상차지명 || "-"} → ${d.하차지명 || "-"}`,
+              "order",
+              { orderId: id }
+            );
+          }
+        }
+
+        if (ch.type === "modified") {
+          const prev = ordersPrev.get(id);
+          const wasNotDone = prev && prev.status !== "배차완료";
+          const isNowDone = (d.배차상태 || "").trim() === "배차완료" && (d.차량번호 || "").trim();
+
+          if (wasNotDone && isNowDone) {
+            sflowToast(
+              `${d.거래처명 || ""} | ${d.상차지명 || "-"} → ${d.하차지명 || "-"} | ${d.이름 || ""} (${(d.차량번호 || "").trim()})`,
+              "dispatch",
+              { orderId: id }
+            );
+          }
+        }
+
+        if (ch.type === "removed") {
+          ordersPrev.delete(id);
+        } else {
+          ordersPrev.set(id, {
+            car: (d.차량번호 || "").trim(),
+            status: (d.배차상태 || "").trim(),
+          });
+        }
+      });
+
     })
   );
 
-  // ✅ 2️⃣ 기존 dispatch 데이터
+    // ✅ 2️⃣ 기존 dispatch 데이터 + 알림 감지
+  let dispatchFirstLoad = true;
+  const dispatchPrev = new Map();
+
   unsubs.push(
     onSnapshot(collection(db, "dispatch"), (snap) => {
-const arr2 = snap.docs
-  .map(d => {
-    const data = d.data() || {};
-    return {
-      _id: d.id,
-      __col: "dispatch",
-      ...data,
-    };
-  })
+      const arr2 = snap.docs.map(d => {
+        const data = d.data() || {};
+        return {
+          _id: d.id,
+          __col: "dispatch",
+          ...data,
+        };
+      });
 
-dispatchCache = arr2;
-setDispatchData([...ordersCache, ...dispatchCache]);
-        safeSave("dispatchData", arr2);
-      })
-    );
+      dispatchCache = arr2;
+      setDispatchData([...ordersCache, ...dispatchCache]);
+      safeSave("dispatchData", arr2);
+
+      // 🔔 최초 로드: prevMap 구축만
+      if (dispatchFirstLoad) {
+        dispatchFirstLoad = false;
+        arr2.forEach(r => {
+          dispatchPrev.set(r._id, {
+            car: (r.차량번호 || "").trim(),
+            status: (r.배차상태 || "").trim(),
+          });
+        });
+        return;
+      }
+
+            // 🔔 변경 감지
+      snap.docChanges().forEach((ch) => {
+        const d = ch.doc.data() || {};
+        const id = ch.doc.id;
+
+        if (ch.type === "added" && !dispatchPrev.has(id)) {
+          if (d.상차지명 || d.거래처명) {
+            sflowToast(
+              `${d.거래처명 || ""} | ${d.상차지명 || "-"} → ${d.하차지명 || "-"}`,
+              "order",
+              { orderId: id }
+            );
+          }
+        }
+
+        if (ch.type === "modified") {
+          const prev = dispatchPrev.get(id);
+          const wasNotDone = prev && prev.status !== "배차완료";
+          const isNowDone = (d.배차상태 || "").trim() === "배차완료" && (d.차량번호 || "").trim();
+
+          if (wasNotDone && isNowDone) {
+            sflowToast(
+              `${d.거래처명 || ""} | ${d.상차지명 || "-"} → ${d.하차지명 || "-"} | ${d.이름 || ""} (${(d.차량번호 || "").trim()})`,
+              "dispatch",
+              { orderId: id }
+            );
+          }
+        }
+
+        if (ch.type === "removed") {
+          dispatchPrev.delete(id);
+        } else {
+          dispatchPrev.set(id, {
+            car: (d.차량번호 || "").trim(),
+            status: (d.배차상태 || "").trim(),
+          });
+        }
+      });
+
+    })
+  );
+
+
     unsubs.push(
       onSnapshot(collection(db, COLL.drivers), (snap) => {
         const arr = snap.docs.map(d => ({
@@ -714,31 +822,136 @@ function normalizePlate(v = "") {
 }
 // ===================== TOAST SYSTEM (GLOBAL) =====================
 const ToastContext = React.createContext(null);
+window.__sflowToastQueue = window.__sflowToastQueue || [];
 
+function sflowToast(message, type, meta) {
+  if (window.__sflowShowToast) {
+    window.__sflowShowToast(message, type, meta);
+  } else {
+    window.__sflowToastQueue.push({ message, type, meta });
+  }
+}
 function ToastProvider({ children }) {
   const [toasts, setToasts] = React.useState([]);
 
-  const showToast = (message, type = "success") => {
+  const showToast = (message, type = "success", meta = null) => {
     const id = crypto.randomUUID();
-    setToasts((prev) => [...prev, { id, message, type }]);
+    setToasts((prev) => [...prev, { id, message, type, meta, createdAt: Date.now() }]);
 
+    // 3초 후 자동 제거
     setTimeout(() => {
       setToasts((prev) => prev.filter(t => t.id !== id));
     }, 3000);
+  };
+
+  const removeToast = (id) => {
+    setToasts((prev) => prev.filter(t => t.id !== id));
+  };
+
+  // 알림 클릭 → 해당 오더로 스크롤 + 하이라이트
+  const handleToastClick = (toast) => {
+  // 🔔 showToast를 window에 노출 + 큐에 쌓인 알림 즉시 처리
+  React.useEffect(() => {
+    window.__sflowShowToast = showToast;
+
+    // 마운트 전에 쌓인 알림 처리
+    if (window.__sflowToastQueue && window.__sflowToastQueue.length > 0) {
+      window.__sflowToastQueue.forEach(({ message, type, meta }) => {
+        showToast(message, type, meta);
+      });
+      window.__sflowToastQueue = [];
+    }
+
+    return () => { delete window.__sflowShowToast; };
+  }, []);
+
+    if (!toast.meta?.orderId) return;
+    removeToast(toast.id);
+
+    const rowEl = document.getElementById(`row-${toast.meta.orderId}`);
+    if (rowEl) {
+      rowEl.scrollIntoView({ behavior: "smooth", block: "center" });
+      rowEl.classList.add("toast-flash-border");
+      setTimeout(() => rowEl.classList.remove("toast-flash-border"), 2000);
+    }
   };
 
   return (
     <ToastContext.Provider value={{ showToast }}>
       {children}
 
-      {/* 오른쪽 하단 배너 알림 */}
-      <div className="fixed bottom-6 right-6 z-[9999] space-y-2">
+      {/* 알림 배너 CSS */}
+      <style>{`
+        @keyframes toastSlideDown {
+          0%   { opacity: 0; transform: translateY(-100%); }
+          100% { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes toastSlideUp {
+          0%   { opacity: 1; transform: translateY(0); }
+          100% { opacity: 0; transform: translateY(-100%); }
+        }
+        .toast-enter {
+          animation: toastSlideDown 0.35s ease-out forwards;
+        }
+        @keyframes toastFlashBorder {
+          0%   { box-shadow: 0 0 0 0 rgba(59,130,246,0); }
+          30%  { box-shadow: 0 0 0 4px rgba(59,130,246,0.4), 0 0 20px rgba(59,130,246,0.3); }
+          100% { box-shadow: 0 0 0 0 rgba(59,130,246,0); }
+        }
+        .toast-flash-border {
+          animation: toastFlashBorder 1s ease-in-out 2;
+        }
+      `}</style>
+
+      {/* 상단 중앙 알림 배너 */}
+      <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[99999] space-y-2 pointer-events-none" style={{ width: "420px", maxWidth: "90vw" }}>
         {toasts.map(t => (
           <div
             key={t.id}
-            className="bg-slate-800 text-white px-4 py-3 rounded-lg shadow-lg text-sm"
+            className="toast-enter pointer-events-auto cursor-pointer rounded-2xl shadow-2xl border overflow-hidden"
+            style={{
+              background: t.type === "dispatch"
+                ? "linear-gradient(135deg, #1B2B4B 0%, #2d4a7a 100%)"
+                : t.type === "order"
+                ? "linear-gradient(135deg, #065f46 0%, #10b981 100%)"
+                : "#1e293b",
+            }}
+            onClick={() => handleToastClick(t)}
           >
-            {t.message}
+            <div className="flex items-start gap-3 px-4 py-3">
+              {/* 아이콘 */}
+              <div className="w-9 h-9 rounded-full bg-white/15 flex items-center justify-center shrink-0 mt-0.5">
+                <span className="text-[16px]">
+                  {t.type === "dispatch" ? "🚚" : t.type === "order" ? "📦" : "🔔"}
+                </span>
+              </div>
+
+              {/* 내용 */}
+              <div className="flex-1 min-w-0">
+                <div className="text-white text-[13px] font-bold leading-snug">
+                  {t.type === "dispatch" ? "배차 완료" : t.type === "order" ? "신규 오더 등록" : "알림"}
+                </div>
+                <div className="text-white/80 text-[12px] mt-0.5 leading-relaxed truncate">
+                  {t.message}
+                </div>
+                {t.meta?.orderId && (
+                  <div className="text-white/50 text-[10px] mt-1">
+                    클릭하면 해당 오더로 이동합니다
+                  </div>
+                )}
+              </div>
+
+              {/* 닫기 */}
+              <button
+                className="text-white/40 hover:text-white text-[18px] leading-none shrink-0 mt-0.5 px-1"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  removeToast(t.id);
+                }}
+              >
+                ✕
+              </button>
+            </div>
           </div>
         ))}
       </div>
@@ -18469,7 +18682,6 @@ setEditTarget((p) => ({
   }}
 />
               </div>
-
               <div>
                 <label>수수료</label>
                 <input
