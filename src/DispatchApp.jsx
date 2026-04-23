@@ -12139,22 +12139,30 @@ value={copyTarget?.화물수량 || ""}
 
             <Field label="청구운임">
               <input
-                className="inputStyle"
-                value={copyTarget.청구운임 || ""}
-                onChange={(e)=>
-                  setCopyTarget(p=>({...p,청구운임:e.target.value.replace(/[^\d]/g,"")}))
-                }
-              />
+  className="inputStyle"
+  value={copyTarget.청구운임 || ""}
+  onChange={(e)=>{
+    const v = e.target.value
+      .replace(/[^\d-]/g, "")   // 숫자 + - 허용
+      .replace(/(?!^)-/g, "");  // -는 맨 앞만 허용
+
+    setCopyTarget(p=>({...p, 청구운임: v}))
+  }}
+/>
             </Field>
 
             <Field label="기사운임">
               <input
-                className="inputStyle"
-                value={copyTarget.기사운임 || ""}
-                onChange={(e)=>
-                  setCopyTarget(p=>({...p,기사운임:e.target.value.replace(/[^\d]/g,"")}))
-                }
-              />
+  className="inputStyle"
+  value={copyTarget.기사운임 || ""}
+  onChange={(e)=>{
+    const v = e.target.value
+      .replace(/[^\d-]/g, "")
+      .replace(/(?!^)-/g, "");
+
+    setCopyTarget(p=>({...p, 기사운임: v}))
+  }}
+/>
             </Field>
 
             <Field label="수수료">
@@ -14095,33 +14103,49 @@ setEditTarget((p) => ({
               <div>
                 <label>청구운임</label>
                 <input
-                  className="border p-2 rounded w-full"
-                  value={editTarget.청구운임 || ""}
-                  onChange={(e) => {
-                    const v = Number(e.target.value.replace(/[^0-9]/g, ""));
-                    setEditTarget((p) => ({
-                      ...p,
-                      청구운임: v,
-                      수수료: Number(v) - Number(p.기사운임 || 0),
-                    }));
-                  }}
-                />
+  className="border p-2 rounded w-full"
+  value={editTarget.청구운임 ?? ""}
+  onChange={(e) => {
+    const raw = e.target.value
+      .replace(/[^\d-]/g, "")   // 숫자 + -
+      .replace(/(?!^)-/g, "");  // -는 맨 앞만
+
+    setEditTarget((p) => {
+      const 청구 = parseInt(raw || "0", 10);
+      const 기사 = parseInt(p.기사운임 || "0", 10);
+
+      return {
+        ...p,
+        청구운임: raw, // 문자열 유지
+        수수료: 청구 - 기사,
+      };
+    });
+  }}
+/>
               </div>
 
               <div>
                 <label>기사운임</label>
                 <input
-                  className="border p-2 rounded w-full"
-                  value={editTarget.기사운임 || ""}
-                  onChange={(e) => {
-                    const v = Number(e.target.value.replace(/[^0-9]/g, ""));
-                    setEditTarget((p) => ({
-                      ...p,
-                      기사운임: v,
-                      수수료: Number(p.청구운임 || 0) - Number(v),
-                    }));
-                  }}
-                />
+  className="border p-2 rounded w-full"
+  value={editTarget.기사운임 ?? ""}
+  onChange={(e) => {
+    const raw = e.target.value
+      .replace(/[^\d-]/g, "")
+      .replace(/(?!^)-/g, "");
+
+    setEditTarget((p) => {
+      const 청구 = parseInt(p.청구운임 || "0", 10);
+      const 기사 = parseInt(raw || "0", 10);
+
+      return {
+        ...p,
+        기사운임: raw,
+        수수료: 청구 - 기사,
+      };
+    });
+  }}
+/>
               </div>
 
               <div>
@@ -18401,33 +18425,49 @@ setEditTarget((p) => ({
               <div>
                 <label>청구운임</label>
                 <input
-                  className="border p-2 rounded w-full"
-                  value={editTarget.청구운임 || ""}
-                  onChange={(e) => {
-                    const v = Number(e.target.value.replace(/[^0-9]/g, ""));
-                    setEditTarget((p) => ({
-                      ...p,
-                      청구운임: v,
-                      수수료: Number(v) - Number(p.기사운임 || 0),
-                    }));
-                  }}
-                />
+  className="border p-2 rounded w-full"
+  value={editTarget.청구운임 ?? ""}
+  onChange={(e) => {
+    const raw = e.target.value
+      .replace(/[^\d-]/g, "")   // 숫자 + -
+      .replace(/(?!^)-/g, "");  // -는 맨 앞만
+
+    setEditTarget((p) => {
+      const 청구 = parseInt(raw || "0", 10);
+      const 기사 = parseInt(p.기사운임 || "0", 10);
+
+      return {
+        ...p,
+        청구운임: raw, // 문자열 유지
+        수수료: 청구 - 기사,
+      };
+    });
+  }}
+/>
               </div>
 
               <div>
                 <label>기사운임</label>
                 <input
-                  className="border p-2 rounded w-full"
-                  value={editTarget.기사운임 || ""}
-                  onChange={(e) => {
-                    const v = Number(e.target.value.replace(/[^0-9]/g, ""));
-                    setEditTarget((p) => ({
-                      ...p,
-                      기사운임: v,
-                      수수료: Number(p.청구운임 || 0) - Number(v),
-                    }));
-                  }}
-                />
+  className="border p-2 rounded w-full"
+  value={editTarget.기사운임 ?? ""}
+  onChange={(e) => {
+    const raw = e.target.value
+      .replace(/[^\d-]/g, "")
+      .replace(/(?!^)-/g, "");
+
+    setEditTarget((p) => {
+      const 청구 = parseInt(p.청구운임 || "0", 10);
+      const 기사 = parseInt(raw || "0", 10);
+
+      return {
+        ...p,
+        기사운임: raw,
+        수수료: 청구 - 기사,
+      };
+    });
+  }}
+/>
               </div>
 
               <div>
@@ -19444,22 +19484,30 @@ setCopyTarget(prev => ({
 
             <Field label="청구운임">
               <input
-                className="inputStyle"
-                value={copyTarget.청구운임 || ""}
-                onChange={(e)=>
-                  setCopyTarget(p=>({...p,청구운임:e.target.value.replace(/[^\d]/g,"")}))
-                }
-              />
+  className="inputStyle"
+  value={copyTarget.청구운임 || ""}
+  onChange={(e)=>{
+    const v = e.target.value
+      .replace(/[^\d-]/g, "")   // 숫자 + - 허용
+      .replace(/(?!^)-/g, "");  // -는 맨 앞만 허용
+
+    setCopyTarget(p=>({...p, 청구운임: v}))
+  }}
+/>
             </Field>
 
             <Field label="기사운임">
               <input
-                className="inputStyle"
-                value={copyTarget.기사운임 || ""}
-                onChange={(e)=>
-                  setCopyTarget(p=>({...p,기사운임:e.target.value.replace(/[^\d]/g,"")}))
-                }
-              />
+  className="inputStyle"
+  value={copyTarget.기사운임 || ""}
+  onChange={(e)=>{
+    const v = e.target.value
+      .replace(/[^\d-]/g, "")
+      .replace(/(?!^)-/g, "");
+
+    setCopyTarget(p=>({...p, 기사운임: v}))
+  }}
+/>
             </Field>
 
             <Field label="수수료">
