@@ -449,9 +449,8 @@ const quickRange = (days) => {
   // 1. Firestore 실시간 연동 (🔥 전체 데이터 — PC와 동일)
   // --------------------------------------------------
   const [orders, setOrders] = useState([]);
-  const [pullStartY, setPullStartY] = useState(0);
-const [pulling, setPulling] = useState(false);
-const [pullDistance, setPullDistance] = useState(0);
+  const pullStartYRef = useRef(0);
+  const pullDistanceRef = useRef(0);
 const [isRefreshing, setIsRefreshing] = useState(false);
   const [drivers, setDrivers] = useState([]);
   const [clients, setClients] = useState([]);
@@ -466,7 +465,7 @@ const handleRefresh = () => {
   setTimeout(() => {
     setRefreshKey(prev => prev + 1); // ⭐ 핵심
     setIsRefreshing(false);
-    setPullDistance(0);
+    pullDistanceRef.current = 0;
 
     showToast("최신 데이터 반영 완료");
   }, 500);
@@ -587,34 +586,25 @@ useEffect(() => {
   return () => unsubs.forEach((u) => u());
 }, [refreshKey]);
 useEffect(() => {
-  let startY = 0;
-
   const handleTouchStart = (e) => {
     if (window.scrollY === 0) {
-      startY = e.touches[0].clientY;
-      setPullStartY(startY);
+      pullStartYRef.current = e.touches[0].clientY;
     }
   };
 
   const handleTouchMove = (e) => {
     if (window.scrollY !== 0) return;
-
-    const currentY = e.touches[0].clientY;
-    const diff = currentY - pullStartY;
-
+    const diff = e.touches[0].clientY - pullStartYRef.current;
     if (diff > 0) {
-      setPulling(true);
-      setPullDistance(diff);
+      pullDistanceRef.current = diff;
     }
   };
 
   const handleTouchEnd = () => {
-    if (pullDistance > 80) {
+    if (pullDistanceRef.current > 80) {
       handleRefresh();
     }
-
-    setPulling(false);
-    setPullDistance(0);
+    pullDistanceRef.current = 0;
   };
 
   window.addEventListener("touchstart", handleTouchStart);
@@ -626,7 +616,7 @@ useEffect(() => {
     window.removeEventListener("touchmove", handleTouchMove);
     window.removeEventListener("touchend", handleTouchEnd);
   };
-}, [pullStartY, pullDistance]);
+}, []);
   // --------------------------------------------------
 // 🔔 PC 공지사항 실시간 구독 (이 위치!)
 // --------------------------------------------------
