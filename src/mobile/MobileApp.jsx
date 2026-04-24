@@ -312,6 +312,20 @@ const normalizePhone = (p = "") =>
 
 export default function MobileApp() {
   const [page, setPage] = useState("list");
+  // 🎨 테마 상태 (기본: navy)
+const [theme, setTheme] = useState(
+  localStorage.getItem("appTheme") || "navy"
+);
+
+// 🎨 테마 적용
+useEffect(() => {
+  document.documentElement.setAttribute("data-theme", theme);
+  localStorage.setItem("appTheme", theme);
+}, [theme]);
+
+const toggleTheme = () => {
+  setTheme(prev => prev === "navy" ? "white" : "navy");
+};
   const [prevPage, setPrevPage] = useState("list");
   const [showSimilarPopup, setShowSimilarPopup] = useState(false);
 const [fallbackData, setFallbackData] = useState([]);
@@ -1497,7 +1511,8 @@ const title =
   // 렌더링
   // ------------------------------------------------------------------
  return (
-  <div className="w-full max-w-md mx-auto min-h-screen bg-gray-50 flex flex-col relative">
+<div className="w-full max-w-md mx-auto min-h-screen flex flex-col relative"
+  style={{ backgroundColor: "var(--bg-app)", color: "var(--text-primary)", transition: "background-color 0.3s, color 0.3s" }}>
     {/* 📝 메모 전체 보기 모달 */}
 {openMemo && (
   <div
@@ -2346,8 +2361,6 @@ function MobileHeader({ title, onBack, onRefresh, onMenu }) {
     </div>
   );
 }
-
-
 function MobileSideMenu({
   onClose,
   onGoList,
@@ -2356,132 +2369,137 @@ function MobileSideMenu({
   onGoRateCard,
   onGoSales,
   onGoUnassigned,
-  onGoNotice,     // ✅ 추가
+  onGoNotice,
   onGoSchedule,
-    hasNewNotice,        // ⭐ 추가
-  hasNewSchedule,      // ⭐ 추가
+  hasNewNotice,
+  hasNewSchedule,
   onDeleteAll,
   onGoHandover,
-  setUiScale,   // ⭐ 추가
-  uiScale, 
+  setUiScale,
+  uiScale,
   alarmEnabled,
- toggleAlarm,
+  toggleAlarm,
 }) {
-
   const logout = () => {
-  if (!window.confirm("로그아웃 하시겠습니까?")) return;
-
-  // 모든 캐시 제거
-  localStorage.clear();
-
-  // 앱 전체 새로고침 + 올바른 로그인 화면으로 이동
-  setTimeout(() => {
-    window.location.replace("/login");
-  }, 100);
-};
-
+    if (!window.confirm("로그아웃 하시겠습니까?")) return;
+    localStorage.clear();
+    setTimeout(() => {
+      window.location.replace("/login");
+    }, 100);
+  };
 
   return (
     <div className="fixed inset-0 z-40">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="absolute left-0 top-0 bottom-0 w-64 bg-white shadow-xl flex flex-col">
+      <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
+     <div className="absolute left-0 top-0 bottom-0 w-72 bg-white shadow-2xl flex flex-col border-r border-gray-200">
 
-        <div className="px-4 py-3 border-b flex items-center justify-between">
-          <div className="font-semibold text-base">(주)돌캐 모바일</div>
-          <button className="text-gray-500 text-xl" onClick={onClose}>
-            ×
+        {/* 헤더 */}
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+          <div>
+            <div className="text-[15px] font-extrabold text-[#1B2B4B] tracking-tight">(주)S-Flow 모바일</div>
+            <div className="text-[11px] text-gray-400 mt-0.5">DISPATCH MANAGEMENT</div>
+          </div>
+          <button
+            className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 hover:bg-gray-200 transition"
+            onClick={onClose}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto">
+        {/* 메뉴 본문 */}
+        <div className="flex-1 overflow-y-auto py-1">
+
           <MenuSection title="모바일">
             <MenuItem label="등록내역" onClick={onGoList} />
             <MenuItem label="화물등록" onClick={onGoCreate} />
           </MenuSection>
 
           <MenuSection title="공지 / 일정">
-  <MenuItem
-  label="공지사항"
-  onClick={onGoNotice}
-  badge={hasNewNotice ? "NEW" : null}
-/>
-<MenuItem
-  label="일정"
-  onClick={onGoSchedule}
-  badge={hasNewSchedule ? "NEW" : null}
-/>
-  <MenuItem
-  label="인수인계"
-  onClick={onGoHandover}
-/>
+            <MenuItem label="공지사항" onClick={onGoNotice} badge={hasNewNotice ? "NEW" : null} />
+            <MenuItem label="일정" onClick={onGoSchedule} badge={hasNewSchedule ? "NEW" : null} />
+            <MenuItem label="인수인계" onClick={onGoHandover} />
+          </MenuSection>
 
-</MenuSection>
-
-<MenuSection title="현황 / 운임표">
-  <MenuItem label="표준운임표" onClick={onGoFare} />
-  <MenuItem label="단가표" onClick={onGoRateCard} />
-  <MenuItem label="미배차현황" onClick={onGoUnassigned} />
-  <MenuItem label="매출관리" onClick={onGoSales} />
-</MenuSection>
-
+          <MenuSection title="현황 / 운임표">
+            <MenuItem label="표준운임표" onClick={onGoFare} />
+            <MenuItem label="단가표" onClick={onGoRateCard} />
+            <MenuItem label="미배차현황" onClick={onGoUnassigned} />
+            <MenuItem label="매출관리" onClick={onGoSales} />
+          </MenuSection>
 
         </div>
-        {/* 🔕 알림 ON/OFF */}
-<div className="border-t px-4 py-3">
-  <button
-    onClick={toggleAlarm}
-    className={`w-full py-2 rounded-lg text-sm font-semibold
-      ${
-        alarmEnabled
-          ? "bg-green-500 text-white"
-          : "bg-gray-300 text-gray-700"
-      }`}
-  >
-    {alarmEnabled ? "알림 켜짐" : "알림 꺼짐"}
-  </button>
-</div>
-{/* 🔍 화면 크기 조절 */}
-<div className="border-t px-4 py-3">
-  <div className="text-xs text-gray-400 mb-2">화면 크기</div>
-  <div className="flex gap-2">
-    {[1, 1.1, 1.2].map((v) => (
-      <button
-        key={v}
-        onClick={() => {
-          setUiScale(v);
-          localStorage.setItem("uiScale", v);
-        }}
-        className={`flex-1 py-1.5 rounded-full text-xs font-semibold border
-          ${
-            uiScale === v
-              ? "bg-blue-500 text-white border-blue-500"
-              : "bg-white text-gray-600 border-gray-300"
-          }`}
-      >
-        {v === 1 ? "기본" : v === 1.1 ? "크게" : "아주 크게"}
-      </button>
-    ))}
-  </div>
-</div>
-        {/* 🔥 로그아웃 버튼 추가 */}
-        <div className="border-t px-4 py-3">
-          <button
-            onClick={logout}
-            className="w-full py-2 bg-red-500 text-white rounded-lg text-sm font-semibold active:scale-95"
-          >
-            로그아웃
-          </button>
+
+        {/* 하단 컨트롤 */}
+        <div className="border-t border-gray-100">
+
+          {/* 알림 토글 */}
+          <div className="px-5 py-3 flex items-center justify-between">
+            <span className="text-[13px] font-semibold text-gray-700">알림</span>
+            <button
+              onClick={toggleAlarm}
+              className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${
+                alarmEnabled ? "bg-emerald-500" : "bg-gray-300"
+              }`}
+            >
+              <span
+                className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+                  alarmEnabled ? "translate-x-5" : "translate-x-0"
+                }`}
+              />
+            </button>
+          </div>
+
+          {/* 화면 크기 */}
+          <div className="px-5 py-3 border-t border-gray-50">
+            <div className="text-[11px] font-semibold text-gray-400 tracking-wider mb-2">화면 크기</div>
+            <div className="flex gap-1.5">
+              {[
+                { v: 1, label: "기본" },
+                { v: 1.1, label: "크게" },
+                { v: 1.2, label: "아주 크게" },
+              ].map(({ v, label }) => (
+                <button
+                  key={v}
+                  onClick={() => {
+                    setUiScale(v);
+                    localStorage.setItem("uiScale", v);
+                  }}
+                  className={`flex-1 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${
+                    uiScale === v
+                      ? "bg-[#1B2B4B] text-white shadow-sm"
+                      : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 로그아웃 */}
+          <div className="px-5 py-3 border-t border-gray-100">
+            <button
+              onClick={logout}
+              className="w-full py-2.5 bg-red-50 text-red-600 rounded-xl text-[13px] font-bold border border-red-200 hover:bg-red-100 active:scale-[0.98] transition"
+            >
+              로그아웃
+            </button>
+          </div>
         </div>
       </div>
     </div>
   );
 }
-  
 
 function MenuSection({ title, children }) {
   return (
-    <div className="mt-2">
-      <div className="px-4 py-1 text-xs text-gray-400">{title}</div>
+    <div className="mt-1 mb-1">
+      <div className="px-5 pt-4 pb-1.5 text-[11px] font-bold text-gray-400 uppercase tracking-widest">
+        {title}
+      </div>
       <div className="flex flex-col">{children}</div>
     </div>
   );
@@ -2490,19 +2508,24 @@ function MenuSection({ title, children }) {
 function MenuItem({ label, onClick, badge }) {
   return (
     <button
-      className="w-full flex items-center justify-between px-4 py-2 text-sm hover:bg-gray-100"
+      className="w-full flex items-center justify-between px-5 py-2.5 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 active:bg-gray-100 transition-colors"
       onClick={onClick}
     >
       <span>{label}</span>
-
-      {badge && (
-<span className="ml-2 px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-blue-500 text-white">
-  {badge}
-</span>
-      )}
+      <div className="flex items-center gap-2">
+        {badge && (
+          <span className="px-1.5 py-0.5 text-[9px] font-extrabold rounded bg-blue-500 text-white leading-none">
+            {badge}
+          </span>
+        )}
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="2" strokeLinecap="round">
+          <path d="M9 6l6 6-6 6" />
+        </svg>
+      </div>
     </button>
   );
 }
+
 
 // ======================================================================
 // 등록내역 리스트
@@ -3086,769 +3109,583 @@ function MobileOrderDetail({
   upsertDriver,
 }) {
   const [confirmDeliver, setConfirmDeliver] = useState(false);
+  const [confirmUndoDeliver, setConfirmUndoDeliver] = useState(false);
+  const [expandMemo, setExpandMemo] = useState(false);
+  const [showCopyModal, setShowCopyModal] = useState(false);
   const [smartQuery, setSmartQuery] = useState("");
   const [smartMatched, setSmartMatched] = useState([]);
+  const [carNo, setCarNo] = useState(order.차량번호 || "");
+  const [name, setName] = useState(order.기사명 || "");
+  const [phone, setPhone] = useState(order.전화번호 || "");
 
-      // 텍스트에서 차량번호/이름/전화번호 파싱
+  const claim = getClaim(order);
+  const sanjae = getSanjae(order);
+  const state = getStatus(order);
+  const isDelivered =
+    order?.업체전달상태 === "전달완료" || order?.정보전달완료 === true;
+
+  const 상차일시 =
+    order.상차일시 || `${order.상차일 || ""} ${order.상차시간 || ""}`.trim();
+  const 하차일시 =
+    order.하차일시 || `${order.하차일 || ""} ${order.하차시간 || ""}`.trim();
+
+  // 차량번호 자동매칭
+  useEffect(() => {
+    const norm = (s = "") => String(s).replace(/\s+/g, "").toLowerCase();
+    if (!carNo) return;
+    const d = drivers.find((dr) => norm(dr.차량번호) === norm(carNo));
+    if (d) { setName(d.이름 || ""); setPhone(d.전화번호 || ""); }
+  }, [carNo]);
+
+  useEffect(() => {
+    if (!carNo) { setName(""); setPhone(""); }
+  }, [carNo]);
+
   const parseDriverText = (text) => {
     let name = "", phone = "", plate = "";
-
-    // ──────────────────────────────────────────────
-    // 1️⃣ 구조화된 태그가 있는 경우 (카카오 복붙 등)
-    //    [차주정보] 김철용 / 01092903077
-    //    [차량정보] 초장축윙 / 1.4톤 / 경기87바7492
-    // ──────────────────────────────────────────────
-    const hasTag =
-      text.includes("[차주정보]") ||
-      text.includes("[차량정보]") ||
-      text.includes("[기사정보]");
-
+    const hasTag = text.includes("[차주정보]") || text.includes("[차량정보]") || text.includes("[기사정보]");
     if (hasTag) {
-      // 🔥 차주정보(또는 기사정보)에서 이름 + 전화번호 추출
-      const ownerMatch = text.match(
-        /\[(차주정보|기사정보)\]\s*([^\n/]+?)[\s/]+(\d{2,4}[-.\s]?\d{3,4}[-.\s]?\d{4})/
-      );
+      const ownerMatch = text.match(/\[(차주정보|기사정보)\]\s*([^\n/]+?)[\s/]+(\d{2,4}[-.\s]?\d{3,4}[-.\s]?\d{4})/);
       if (ownerMatch) {
         name = ownerMatch[2].trim();
-        phone = ownerMatch[3].replace(/[-.\s]/g, "")
-          .replace(/^(\d{3})(\d{3,4})(\d{4})$/, "$1-$2-$3");
+        phone = ownerMatch[3].replace(/[-.\s]/g, "").replace(/^(\d{3})(\d{3,4})(\d{4})$/, "$1-$2-$3");
       }
-
-      // 🔥 차량정보 끝에서 차량번호만 추출
       const vehicleLine = text.match(/\[차량정보\]\s*([^\n]+)/);
       if (vehicleLine) {
-        const plateInLine = vehicleLine[1].match(
-          /[가-힣]{0,3}\d{2,3}[가-힣]\d{4}/
-        );
+        const plateInLine = vehicleLine[1].match(/[가-힣]{0,3}\d{2,3}[가-힣]\d{4}/);
         if (plateInLine) plate = plateInLine[0];
       }
-
-      // 태그 없는 쪽에서도 보완
       if (!phone) {
         const pm = text.match(/0\d{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4}/);
-        if (pm) phone = pm[0].replace(/[-.\s]/g, "")
-          .replace(/^(\d{3})(\d{3,4})(\d{4})$/, "$1-$2-$3");
+        if (pm) phone = pm[0].replace(/[-.\s]/g, "").replace(/^(\d{3})(\d{3,4})(\d{4})$/, "$1-$2-$3");
       }
       if (!plate) {
         const plm = text.match(/[가-힣]{0,3}\d{2,3}[가-힣]\d{4}/);
         if (plm) plate = plm[0];
       }
-
       return { phone, plate, name };
     }
-
-    // ──────────────────────────────────────────────
-    // 2️⃣ 태그 없는 일반 텍스트 (기존 로직 개선)
-    //    예) 김상원 010-7916-2258 강원82사1203
-    // ──────────────────────────────────────────────
     const phoneMatch = text.match(/0\d{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4}/);
-    phone = phoneMatch
-      ? phoneMatch[0].replace(/[-.\s]/g, "").replace(/^(\d{3})(\d{3,4})(\d{4})$/, "$1-$2-$3")
-      : "";
-
+    phone = phoneMatch ? phoneMatch[0].replace(/[-.\s]/g, "").replace(/^(\d{3})(\d{3,4})(\d{4})$/, "$1-$2-$3") : "";
     const plateMatch = text.match(/[가-힣]{2,3}\d{2}[가-힣]\d{4}|\d{2,3}[가-힣]\d{4}/);
     plate = plateMatch ? plateMatch[0] : "";
-
-    const stripped = text
-      .replace(phoneMatch?.[0] || "", "")
-      .replace(plate || "", "");
+    const stripped = text.replace(phoneMatch?.[0] || "", "").replace(plate || "", "");
     const nameMatch = stripped.match(/[가-힣]{2,4}/g) || [];
-
-    const EXCLUDE = [
-      "강원","서울","경기","인천","부산","대구","광주","대전","울산","세종",
-      "경북","경남","전북","전남","충북","충남","제주",
-      "서구","동구","남구","북구","중구","연수구","남동구","부평구","계양구","미추홀",
-      "강남구","강동구","강북구","강서구","관악구","광진구","구로구","금천구",
-      "노원구","도봉구","동대문","동작구","마포구","서대문","서초구","성동구",
-      "성북구","송파구","양천구","영등포","용산구","은평구","종로구","중랑구",
-      "해운대","사하구","사상구","금정구","연제구","수영구","기장군","영도구",
-      "동래구","부산진","달서구","수성구","달성군","유성구","대덕구","광산구",
-      "수원","수원시","성남","성남시","안양","안양시","부천","부천시",
-      "광명","광명시","평택","평택시","안산","안산시","과천","과천시",
-      "오산","오산시","시흥","시흥시","군포","군포시","의왕","의왕시",
-      "하남","하남시","용인","용인시","파주","파주시","이천","이천시",
-      "김포","김포시","화성","화성시","광주시","양주","양주시","포천",
-      "여주","여주시","연천","연천군","가평","가평군","양평","양평군",
-      "고양","고양시","남양주","의정부","동두천","구리","구리시",
-      "초장축윙","초장축","장축","윙바디","카고","탑차",
-      "냉장탑","냉동탑","냉장윙","냉동윙","냉장","냉동",
-      "리프트","축윙","다마스","라보",
-      "차주정보","차량정보","기사정보","상차지","하차지",
-    ];
-
-    name = nameMatch.find(n =>
-      n.length >= 2 && !EXCLUDE.includes(n)
-    ) || "";
-
+    const EXCLUDE = ["강원","서울","경기","인천","부산","대구","광주","대전","울산","세종","경북","경남","전북","전남","충북","충남","제주","초장축윙","초장축","장축","윙바디","카고","탑차","냉장탑","냉동탑","냉장윙","냉동윙","냉장","냉동","리프트","다마스","라보"];
+    name = nameMatch.find(n => n.length >= 2 && !EXCLUDE.includes(n)) || "";
     return { phone, plate, name };
   };
 
-  // 스마트 검색
   const handleSmartSearch = (text) => {
     setSmartQuery(text);
     if (!text.trim()) { setSmartMatched([]); return; }
-
     const norm = (s = "") => String(s).replace(/[-.\s]/g, "").toLowerCase();
     const { phone, plate, name } = parseDriverText(text);
     const q = norm(text);
-
     const results = drivers.filter(d => {
       if (plate && norm(d.차량번호).includes(norm(plate))) return true;
       if (phone && norm(d.전화번호).includes(norm(phone))) return true;
       if (name && norm(d.이름).includes(norm(name))) return true;
-      // 전체 텍스트 통합 검색
       if (norm(d.이름).includes(q) || norm(d.차량번호).includes(q) || norm(d.전화번호).includes(q)) return true;
       return false;
     });
-
     setSmartMatched(results.slice(0, 8));
   };
 
-  // 스마트 검색 결과 선택
   const selectSmartDriver = (d) => {
-    setCarNo(d.차량번호 || "");
-    setName(d.이름 || "");
-    setPhone(d.전화번호 || "");
-    setSmartQuery("");
-    setSmartMatched([]);
+    setCarNo(d.차량번호 || ""); setName(d.이름 || ""); setPhone(d.전화번호 || "");
+    setSmartQuery(""); setSmartMatched([]);
   };
 
-  // 복붙 텍스트에서 신규기사 자동 등록
   const handleSmartPaste = async (text) => {
     if (!text.trim()) return;
     const { phone, plate, name } = parseDriverText(text);
     if (!plate && !name && !phone) return;
-
     const norm = (s = "") => String(s).replace(/[-.\s]/g, "").toLowerCase();
     const found = drivers.find(d =>
-      (plate && norm(d.차량번호) === norm(plate)) ||
-      (phone && norm(d.전화번호) === norm(phone))
+      (plate && norm(d.차량번호) === norm(plate)) || (phone && norm(d.전화번호) === norm(phone))
     );
-
     if (found) {
-      // 기존 기사 자동 매칭
-      setCarNo(found.차량번호 || "");
-      setName(found.이름 || "");
-      setPhone(found.전화번호 || "");
-      setSmartQuery("");
-      setSmartMatched([]);
+      setCarNo(found.차량번호 || ""); setName(found.이름 || ""); setPhone(found.전화번호 || "");
+      setSmartQuery(""); setSmartMatched([]);
       showToast(`✅ ${found.이름} 기사 자동 매칭`);
     } else if (plate || name || phone) {
-      // 신규 자동 등록
       await upsertDriver({ 차량번호: plate, 이름: name, 전화번호: phone });
       setCarNo(plate); setName(name); setPhone(phone);
       setSmartQuery(""); setSmartMatched([]);
-      showToast(`🚚 신규 기사 자동 등록: ${name || plate}`);
+      showToast(`신규 기사 자동 등록: ${name || plate}`);
     }
   };
-  const [showCopyModal, setShowCopyModal] = useState(false);
-    const [confirmUndoDeliver, setConfirmUndoDeliver] = useState(false);
-const [expandMemo, setExpandMemo] = useState(false);
-  const [carNo, setCarNo] = useState(order.차량번호 || "");
-  const [name, setName] = useState(order.기사명 || "");
-  const [phone, setPhone] = useState(order.전화번호 || "");
-
-  // 차량번호 입력 시 기사 자동매칭
-  useEffect(() => {
-    const norm = (s = "") =>
-      String(s).replace(/\s+/g, "").toLowerCase();
-    if (!carNo) return;
-    const d = drivers.find(
-      (dr) => norm(dr.차량번호) === norm(carNo)
-    );
-    if (d) {
-      setName(d.이름 || "");
-      setPhone(d.전화번호 || "");
-    }
-  }, [carNo]); // 🔥 수정: drivers 제거!
-
-  // 차량번호 지우면 이름/전화번호 자동 초기화
-  useEffect(() => {
-    if (!carNo) {
-      setName("");
-      setPhone("");
-    }
-  }, [carNo]);
 
   const openMap = (type) => {
-    const addr =
-      type === "pickup"
-        ? order.상차지주소 || order.상차지명
-        : order.하차지주소 || order.하차지명;
-    if (!addr) {
-      alert("주소 정보가 없습니다.");
-      return;
-    }
-    const url = `https://map.kakao.com/?q=${encodeURIComponent(addr)}`;
-    window.open(url, "_blank");
+    const addr = type === "pickup" ? order.상차지주소 || order.상차지명 : order.하차지주소 || order.하차지명;
+    if (!addr) { alert("주소 정보가 없습니다."); return; }
+    window.open(`https://map.kakao.com/?q=${encodeURIComponent(addr)}`, "_blank");
   };
-
-  
-
-  const claim = getClaim(order);
-  const sanjae = getSanjae(order);
-  const state = getStatus(order); // 🔥 상태 계산 일원화
-    const isDelivered =
-    order?.업체전달상태 === "전달완료" ||
-    order?.정보전달완료 === true;
-
-  const 상차일시 =
-    order.상차일시 ||
-    `${order.상차일 || ""} ${order.상차시간 || ""}`.trim();
-  const 하차일시 =
-    order.하차일시 ||
-    `${order.하차일 || ""} ${order.하차시간 || ""}`.trim();
 
   const handleAssignClick = () => {
-    if (!carNo) {
-      alert("차량번호를 입력해주세요.");
-      return;
-    }
+    if (!carNo) { alert("차량번호를 입력해주세요."); return; }
     if (!name || !phone) {
-      if (
-        !window.confirm(
-          "기사 이름/연락처가 비어 있습니다. 그대로 배차하시겠습니까?"
-        )
-      )
-        return;
+      if (!window.confirm("기사 이름/연락처가 비어 있습니다. 그대로 배차하시겠습니까?")) return;
     }
-    onAssignDriver({
-      차량번호: carNo,
-      이름: name,
-      전화번호: phone,
-    });
+    onAssignDriver({ 차량번호: carNo, 이름: name, 전화번호: phone });
   };
 
+  // ── 섹션 헤더 컴포넌트
+  const SectionHeader = ({ label }) => (
+    <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2 px-1">
+      {label}
+    </div>
+  );
+
+  // ── 카드 래퍼
+  const Card = ({ children, className = "" }) => (
+    <div className={`bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-4 ${className}`}>
+      {children}
+    </div>
+  );
+
   return (
-    <div className="px-4 py-3 space-y-4">
-      {/* 기본 정보 */}
-      <div className="bg-white border rounded-xl px-4 py-3 shadow-sm">
-        {/* 📝 메모 (접힘/펼치기) */}
-{(order.메모 || order.적요) && (
-  <div className="mb-3 bg-yellow-50 border border-yellow-300 rounded-xl px-4 py-3">
-    <div
-      className="text-sm font-semibold text-yellow-800 mb-1 cursor-pointer"
-      onClick={() => setExpandMemo(v => !v)}
-    >
-      📝 메모 {expandMemo ? "▲" : "▼"}
-    </div>
+    <div className="px-4 py-4 space-y-5 bg-gray-50 pb-10">
 
-    <div
-      className={`text-sm text-gray-800 whitespace-pre-wrap ${
-        expandMemo ? "" : "line-clamp-3"
-      }`}
-    >
-      {order.메모 || order.적요}
-    </div>
-  </div>
-)}
-
-        <div className="flex justify-between items-start mb-2">
-          <div>
-            <div className="text-xs text-gray-400 mb-1">
-              {order.거래처명 || "-"}
-            </div>
-            <div className="text-sm font-semibold text-blue-600">
-              {order.상차지명}
-            </div>
-            {order.상차지주소 && (
-              <div className="text-xs text-gray-500">
-                {order.상차지주소}
-              </div>
-            )}
-
-            <div className="mt-2 text-sm text-gray-800">
-              {order.하차지명}
-            </div>
-            {order.하차지주소 && (
-              <div className="text-xs text-gray-500">
-                {order.하차지주소}
-              </div>
-            )}
+      {/* ── 메모 ── */}
+      {(order.메모 || order.적요) && (
+        <div
+          className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 cursor-pointer"
+          onClick={() => setExpandMemo(v => !v)}
+        >
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs font-bold text-amber-700">📝 메모</span>
+            <span className="text-xs text-amber-500">{expandMemo ? "접기 ▲" : "펼치기 ▼"}</span>
           </div>
-
-          <span className="px-2 py-0.5 text-xs rounded-full bg-gray-100 border text-gray-700">
-            {state}
-          </span>
-        </div>
-
-        <div className="text-xs text-gray-500 mb-1">
-          상차일시: {상차일시 || "-"}
-        </div>
-        <div className="text-xs text-gray-500 mb-2">
-          하차일시: {하차일시 || "-"}
-        </div>
-
-        <div className="flex flex-wrap gap-2 text-xs text-gray-700 mb-3">
-          {(order.차량톤수 || order.톤수) && (
-            <span className="border rounded-full px-2 py-0.5 bg-gray-50">
-              {order.차량톤수 || order.톤수}
-            </span>
-          )}
-          {(order.차량종류 || order.차종) && (
-            <span className="border rounded-full px-2 py-0.5 bg-gray-50">
-              {order.차량종류 || order.차종}
-            </span>
-          )}
-          {order.화물내용 && (
-            <span className="border rounded-full px-2 py-0.5 bg-gray-50">
-              {order.화물내용}
-            </span>
-          )}
-        </div>
-
-        <div className="flex items-center gap-2 text-sm mb-1">
-          <span className="px-2 py-0.5 rounded-full bg-gray-200 text-gray-700 text-xs">
-            청구운임
-          </span>
-          <span className="font-semibold">
-            {fmtMoney(claim)}
-          </span>
-        </div>
-
-        <div className="flex items-center gap-2 text-sm mb-1">
-          <span className="px-2 py-0.5 rounded-full bg-gray-200 text-gray-700 text-xs">
-            기사운임
-          </span>
-          <span className="font-semibold">
-            {fmtMoney(order.기사운임 || 0)}
-          </span>
-        </div>
-
-        <div className="flex items-center gap-2 text-sm mb-2">
-          <span className="px-2 py-0.5 rounded-full bg-green-600 text-white text-xs">
-            산재보험료
-          </span>
-          <span className="font-semibold">
-            {fmtMoney(sanjae)}
-          </span>
-        </div>
-
-        {order.혼적여부 && (
-          <div className="mt-1 text-xs text-gray-600">
-            혼적/독차: {order.혼적여부}
+          <div className={`text-sm text-gray-700 whitespace-pre-wrap leading-relaxed ${expandMemo ? "" : "line-clamp-2"}`}>
+            {order.메모 || order.적요}
           </div>
-        )}
-      </div>
-      {/* 📌 공유 & 운임조회 (지도보다 위로 이동!) */}
-<div className="bg-white border rounded-xl px-4 py-3 shadow-sm">
-  <div className="text-sm font-semibold mb-2">공유 & 운임조회</div>
-<div className="flex gap-2">
-  {/* 오더복사 */}
-<button
-  onClick={() => onDuplicate(order)}
-  className="flex-1 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold"
->
-  📦 오더복사
-</button>
-
-
-  {/* 기존 복사 */}
-  <button
-    onClick={() => setShowCopyModal(true)}
-    className="flex-1 py-2 rounded-lg bg-gray-700 text-white text-sm font-semibold"
-  >
-    📋 복사하기
-  </button>
-
-{/* 운임조회 */}
-<button
-  onClick={() => {
-    // 🔥 운임조회 자동 입력용 preset 저장
-    window.__farePreset__ = {
-      pickup: order.상차지명 || "",
-      pickupAddr: order.상차지주소 || "",
-      drop: order.하차지명 || "",
-      dropAddr: order.하차지주소 || "",
-      ton: order.차량톤수 || order.톤수 || "",
-      cargo: order.화물내용 || "",
-    };
-
-    // 🔥 자동 조회 플래그
-    window.__forceFareSearch__ = true;
-
-    window.scrollTo(0, 0);
-    setPage("fare");
-  }}
-  className="flex-1 py-2 rounded-lg bg-indigo-500 text-white text-sm font-semibold"
->
-  운임조회
-</button>
-
-  </div>
-</div>
-{/* 🚚 업체 전달 상태 변경 */}
-<div className="bg-white border rounded-xl px-4 py-3 shadow-sm">
-  <div className="text-sm font-semibold mb-2">업체 전달 상태</div>
-
-  {!isDelivered ? (
-    <button
-      onClick={() => setConfirmDeliver(true)}
-      className="w-full py-3 rounded-lg
-                 bg-emerald-500 text-white
-                 text-sm font-semibold"
-    >
-      전달완료로 변경
-    </button>
-  ) : (
-    <button
-      onClick={() => setConfirmUndoDeliver(true)}
-      className="w-full py-3 rounded-lg
-                 bg-red-500 text-white
-                 text-sm font-semibold"
-    >
-      전달완료 취소 (미전달)
-    </button>
-  )}
-</div>
-
-{/* 📞 전화 / 💬 문자 */}
-{order.전화번호 && (
-  <div className="bg-white border rounded-xl px-4 py-3 shadow-sm">
-    <div className="text-sm font-semibold mb-2">기사 연락</div>
-    <div className="flex gap-2">
-      <a
-  href={`tel:${normalizePhone(order.전화번호)}`}
-  className="flex-1 py-2 rounded-lg bg-emerald-500 text-white text-sm font-semibold text-center"
->
-  📞 전화
-</a>
-
-<a
-  href={`sms:${normalizePhone(order.전화번호)}`}
-  className="flex-1 py-2 rounded-lg bg-sky-500 text-white text-sm font-semibold text-center"
->
-        💬 문자
-      </a>
-    </div>
-  </div>
-)}
-      {/* 지도 */}
-      <div className="bg-white border rounded-xl px-4 py-3 shadow-sm">
-        <div className="text-sm font-semibold mb-2">지도 보기</div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => openMap("pickup")}
-            className="flex-1 py-2 rounded-lg bg-blue-500 text-white text-sm font-medium"
-          >
-            상차지 지도
-          </button>
-          <button
-            onClick={() => openMap("drop")}
-            className="flex-1 py-2 rounded-lg bg-indigo-500 text-white text-sm font-medium"
-          >
-            하차지 지도
-          </button>
         </div>
-      </div>
-      {/* 기사 배차 */}
-      <div className="bg-white border rounded-xl px-4 py-3 shadow-sm space-y-3">
-        <div className="text-sm font-semibold mb-1">기사 배차</div>
+      )}
 
-        <div className="text-xs text-gray-500 mb-1">
-          현재 상태:{" "}
-          <span
-            className={
+      {/* ── 오더 정보 ── */}
+      <div>
+        <SectionHeader label="오더 정보" />
+        <Card>
+          {/* 상태 뱃지 */}
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs" style={{ color: "var(--text-secondary)" }}>{order.거래처명 || "-"}</span>
+            <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${
               state === "배차완료"
-                ? "text-green-600 font-semibold"
-                : "text-gray-700"
-            }
-          >
-            {state}
-          </span>
-          {order.기사명 && (
-            <>
-              {" / "}기사: {order.기사명}({order.차량번호})
-            </>
-          )}
-        </div>
+                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                : "bg-blue-50 text-blue-700 border-blue-200"
+            }`}>
+              {state}
+            </span>
+          </div>
 
-        <div className="space-y-2 text-sm">
-          {/* 스마트 검색창 */}
-          <div className="relative">
-            <div className="text-xs font-semibold text-blue-600 mb-1">기사 검색 (이름 · 차량번호 · 연락처 · 문자복붙)</div>
+          {/* 상차지 */}
+          <div className="flex gap-2 mb-2">
+            <span className="mt-0.5 w-5 h-5 rounded-full bg-blue-600 text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0">상</span>
+            <div>
+             <div className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>{order.상차지명 || "-"}</div>
+              {order.상차지주소 && <div className="text-xs mt-0.5" style={{ color: "var(--text-secondary)" }}>{order.상차지주소}</div>}
+              <div className="text-xs mt-0.5" style={{ color: "var(--text-tertiary)" }}>{상차일시 || "-"}</div>
+            </div>
+          </div>
+
+          {/* 구분선 */}
+          <div className="ml-2.5 w-px h-3 bg-gray-200 ml-[10px] mb-2" />
+
+          {/* 하차지 */}
+          <div className="flex gap-2 mb-3">
+            <span className="mt-0.5 w-5 h-5 rounded-full bg-gray-600 text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0">하</span>
+            <div>
+              <div className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>{order.하차지명 || "-"}</div>
+              {order.하차지주소 && <div className="text-xs mt-0.5" style={{ color: "var(--text-secondary)" }}>{order.하차지주소}</div>}
+              <div className="text-xs mt-0.5" style={{ color: "var(--text-tertiary)" }}>{하차일시 || "-"}</div>
+            </div>
+          </div>
+
+          {/* 차량/화물 태그 */}
+          <div className="flex flex-wrap gap-1.5 pt-3 border-t border-gray-100">
+            {(order.차량톤수 || order.톤수) && (
+              <span className="px-2 py-0.5 rounded-md text-xs font-medium"
+                style={{ backgroundColor: "var(--bg-tag)", color: "var(--text-tag)" }}>
+                {order.차량톤수 || order.톤수}
+              </span>
+            )}
+            {(order.차량종류 || order.차종) && (
+              <span className="px-2 py-0.5 rounded-md text-xs font-medium"
+                style={{ backgroundColor: "var(--bg-tag)", color: "var(--text-tag)" }}>
+                {order.차량종류 || order.차종}
+              </span>
+            )}
+            {order.화물내용 && (
+              <span className="px-2 py-0.5 rounded-md text-xs font-medium"
+                style={{ backgroundColor: "var(--bg-tag)", color: "var(--text-tag)" }}>
+                {order.화물내용}
+              </span>
+            )}
+            {order.혼적여부 && (
+              <span className="px-2 py-0.5 rounded-md text-xs font-medium"
+                style={{ backgroundColor: "var(--bg-tag)", color: "var(--text-tag)" }}>
+                {order.혼적여부}
+              </span>
+            )}
+          </div>
+        </Card>
+      </div>
+
+      {/* ── 운임 정보 ── */}
+      <div>
+        <SectionHeader label="운임 정보" />
+        <Card>
+          <div className="grid grid-cols-3 divide-x divide-gray-100 text-center">
+            <div className="px-2">
+              <div className="text-[11px] mb-1" style={{ color: "var(--text-secondary)" }}>청구운임</div>
+              <div className="text-sm font-bold" style={{ color: "var(--text-kpi-claim)" }}>{Number(claim || 0).toLocaleString()}</div>
+              <div className="text-[10px]" style={{ color: "var(--text-secondary)" }}>원</div>
+            </div>
+            <div className="px-2">
+              <div className="text-[11px] mb-1" style={{ color: "var(--text-secondary)" }}>기사운임</div>
+              <div className="text-sm font-bold" style={{ color: "var(--text-kpi-driver)" }}>{Number(order.기사운임 || 0).toLocaleString()}</div>
+              <div className="text-[10px]" style={{ color: "var(--text-secondary)" }}>원</div>
+            </div>
+            <div className="px-2">
+              <div className="text-[11px] mb-1" style={{ color: "var(--text-secondary)" }}>산재보험</div>
+              <div className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>{Number(sanjae || 0).toLocaleString()}</div>
+              <div className="text-[10px]" style={{ color: "var(--text-secondary)" }}>원</div>
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      {/* ── 액션 버튼 ── */}
+      <div>
+        <SectionHeader label="액션" />
+        <Card>
+          <div className="grid grid-cols-3 gap-2 mb-2">
+            <button
+              onClick={() => onDuplicate(order)}
+              className="py-2.5 rounded-xl bg-[#1B2B4B] text-white text-xs font-bold"
+            >
+              오더복사
+            </button>
+            <button
+              onClick={() => setShowCopyModal(true)}
+              className="py-2.5 rounded-xl bg-[#1B2B4B] text-white text-xs font-bold"
+            >
+              기사복사하기
+            </button>
+            <button
+              onClick={() => {
+                window.__farePreset__ = {
+                  pickup: order.상차지명 || "",
+                  pickupAddr: order.상차지주소 || "",
+                  drop: order.하차지명 || "",
+                  dropAddr: order.하차지주소 || "",
+                  ton: order.차량톤수 || order.톤수 || "",
+                  cargo: order.화물내용 || "",
+                };
+                window.__forceFareSearch__ = true;
+                window.scrollTo(0, 0);
+                setPage("fare");
+              }}
+              className="py-2.5 rounded-xl border border-[#1B2B4B] text-[#1B2B4B] text-xs font-bold"
+            >
+              운임조회
+            </button>
+          </div>
+
+          {/* 지도 */}
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => openMap("pickup")}
+              className="py-2 rounded-xl bg-gray-100 text-gray-700 text-xs font-semibold"
+            >
+              상차지 지도
+            </button>
+            <button
+              onClick={() => openMap("drop")}
+              className="py-2 rounded-xl bg-gray-100 text-gray-700 text-xs font-semibold"
+            >
+              하차지 지도
+            </button>
+          </div>
+        </Card>
+      </div>
+
+      {/* ── 업체 전달 상태 ── */}
+      <div>
+        <SectionHeader label="업체 전달 상태" />
+        <Card>
+          {!isDelivered ? (
+            <button
+              onClick={() => setConfirmDeliver(true)}
+              className="w-full py-3 rounded-xl bg-emerald-600 text-white text-sm font-bold"
+            >
+              전달완료로 변경
+            </button>
+          ) : (
+            <div className="space-y-2">
+              <div className="text-center text-xs text-emerald-600 font-bold py-1">✓ 전달완료</div>
+              <button
+                onClick={() => setConfirmUndoDeliver(true)}
+                className="w-full py-2.5 rounded-xl border border-red-300 text-red-500 text-sm font-semibold"
+              >
+                전달완료 취소
+              </button>
+            </div>
+          )}
+        </Card>
+      </div>
+
+      {/* ── 기사 연락 ── */}
+<div>
+  <SectionHeader label="기사 연락" />
+  <Card>
+    <div className="flex items-center justify-between mb-3">
+      <div>
+        <div className="text-sm font-bold text-gray-900">{order.기사명 || "-"}</div>
+        <div className="text-xs text-gray-400">{order.차량번호 || ""}</div>
+      </div>
+      <div className="text-xs text-gray-500">{order.전화번호 || "-"}</div>
+    </div>
+    {order.전화번호 ? (
+      <div className="grid grid-cols-2 gap-2">
+        <a
+          href={`tel:${normalizePhone(order.전화번호)}`}
+          className="py-2.5 rounded-xl bg-[#1B2B4B] text-white text-xs font-bold text-center"
+        >
+          📞 전화
+        </a>
+        <a
+          href={`sms:${normalizePhone(order.전화번호)}`}
+          className="py-2.5 rounded-xl border border-[#1B2B4B] text-[#1B2B4B] text-xs font-bold text-center"
+        >
+          💬 문자
+        </a>
+      </div>
+    ) : (
+      <div className="text-xs text-gray-400 text-center py-2">
+        배차 후 연락처가 표시됩니다
+      </div>
+    )}
+  </Card>
+</div>
+
+      {/* ── 기사 배차 ── */}
+      <div>
+        <SectionHeader label="기사 배차" />
+        <Card>
+          {/* 현재 상태 */}
+          <div className="flex items-center justify-between mb-3 pb-3" style={{ borderBottom: "1px solid var(--border-divider)" }}>
+            <span className="text-xs" style={{ color: "var(--text-secondary)" }}>현재 상태</span>
+            <span className={`text-xs font-bold ${state === "배차완료" ? "text-emerald-600" : "text-blue-600"}`}>
+              {state}
+              {order.기사명 && ` · ${order.기사명} (${order.차량번호})`}
+            </span>
+          </div>
+
+          {/* 스마트 검색 */}
+          <div className="text-xs font-semibold text-gray-500 mb-1.5">기사 검색 (이름 · 차량번호 · 연락처 · 문자복붙)</div>
+          <div className="relative mb-3">
             <textarea
-              className="w-full border-2 border-blue-300 rounded-xl px-3 py-2.5 text-sm resize-none bg-blue-50 focus:outline-none focus:border-blue-500"
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm resize-none bg-gray-50 focus:outline-none focus:border-[#1B2B4B]"
               rows={2}
-              placeholder={"예) 김상원 010-7916-2258 강원82사1203\n또는 카카오 문자 전체 복붙 가능"}
+              placeholder={"예) 김상원 010-7916-2258 강원82사1203\n카카오 문자 전체 복붙 가능"}
               value={smartQuery}
               onChange={e => handleSmartSearch(e.target.value)}
-              onBlur={e => {
-                if (e.target.value.trim().length > 4) {
-                  handleSmartPaste(e.target.value);
-                }
-              }}
+              onBlur={e => { if (e.target.value.trim().length > 4) handleSmartPaste(e.target.value); }}
             />
-            {/* 검색 결과 드롭다운 */}
             {smartMatched.length > 0 && (
-              <div className="absolute z-50 w-full bg-white border-2 border-blue-200 rounded-xl shadow-xl mt-1 overflow-hidden">
+              <div className="absolute z-50 w-full bg-white border border-gray-200 rounded-xl shadow-xl mt-1 overflow-hidden">
                 {smartMatched.map((d, i) => (
                   <button
                     key={d.id || i}
                     type="button"
-                    className="w-full text-left px-4 py-3 hover:bg-blue-50 active:bg-blue-100 border-b border-gray-100 last:border-0"
+                    className="w-full text-left px-4 py-3 hover:bg-gray-50 border-b border-gray-100 last:border-0"
                     onMouseDown={() => selectSmartDriver(d)}
                   >
-                    <div className="font-bold text-gray-900 text-[14px]">{d.이름 || "-"}</div>
-                    <div className="text-[12px] text-gray-500 mt-0.5">
-                      {d.차량번호 || ""} &nbsp;|&nbsp; {d.전화번호 || ""}
-                    </div>
+                    <div className="font-bold text-gray-900 text-[13px]">{d.이름 || "-"}</div>
+                    <div className="text-[11px] text-gray-400 mt-0.5">{d.차량번호} · {d.전화번호}</div>
                   </button>
                 ))}
               </div>
             )}
           </div>
 
-          {/* 선택된 기사 확인 표시 */}
+          {/* 선택된 기사 */}
           {(carNo || name || phone) && (
-            <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2.5">
-              <span className="text-emerald-600 text-[18px]">✓</span>
+            <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2.5 mb-3">
+              <span className="text-emerald-500 text-base">✓</span>
               <div className="flex-1">
-                <div className="font-bold text-gray-900 text-[14px]">{name || "-"}</div>
-                <div className="text-[12px] text-gray-500">{carNo} &nbsp;|&nbsp; {phone}</div>
+                <div className="font-bold text-gray-900 text-[13px]">{name || "-"}</div>
+                <div className="text-[11px] text-gray-500">{carNo} · {phone}</div>
               </div>
               <button
                 type="button"
                 onClick={() => { setCarNo(""); setName(""); setPhone(""); setSmartQuery(""); }}
-                className="text-gray-400 hover:text-red-500 text-[18px] leading-none px-1"
-              >
-                ✕
-              </button>
+                className="text-gray-300 hover:text-red-400 text-base px-1"
+              >✕</button>
             </div>
           )}
 
-          {/* 직접 입력 (숨김/토글) */}
-          <details className="text-[12px]">
-            <summary className="text-gray-400 cursor-pointer select-none py-1">직접 입력</summary>
+          {/* 직접 입력 */}
+          <details className="text-xs mb-3">
+            <summary className="text-gray-400 cursor-pointer py-1">직접 입력</summary>
             <div className="space-y-2 mt-2">
-              <input className="w-full border rounded-lg px-3 py-2" placeholder="차량번호" value={carNo} onChange={e => setCarNo(e.target.value)} />
-              <input className="w-full border rounded-lg px-3 py-2" placeholder="기사 이름" value={name} onChange={e => setName(e.target.value)} />
-              <input className="w-full border rounded-lg px-3 py-2" placeholder="기사 연락처" value={phone} onChange={e => setPhone(e.target.value)} />
+              <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B2B4B]" placeholder="차량번호" value={carNo} onChange={e => setCarNo(e.target.value)} />
+              <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B2B4B]" placeholder="기사 이름" value={name} onChange={e => setName(e.target.value)} />
+              <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B2B4B]" placeholder="기사 연락처" value={phone} onChange={e => setPhone(e.target.value)} />
             </div>
           </details>
-        </div>
 
-        <button
-          onClick={handleAssignClick}
-          className="w-full py-2 rounded-lg bg-emerald-500 text-white text-sm font-semibold mt-2"
-        >
-          기사 배차하기
-        </button>
+          {/* 배차 버튼 */}
+          <button
+            onClick={handleAssignClick}
+            className="w-full py-3 rounded-xl bg-[#1B2B4B] text-white text-sm font-bold"
+          >
+            기사 배차하기
+          </button>
 
-        {/* 신규 기사 등록 버튼 */}
-        {carNo && !drivers.some((d) => d.차량번호 === carNo) && (
-          <div className="mt-2">
+          {carNo && !drivers.some((d) => d.차량번호 === carNo) && (
             <button
               onClick={() => {
-                upsertDriver({
-                  차량번호: carNo,
-                  이름: name || "",
-                  전화번호: phone || "",
-                });
+                upsertDriver({ 차량번호: carNo, 이름: name || "", 전화번호: phone || "" });
                 showToast("신규 기사 등록 완료");
               }}
-              className="w-full py-2 bg-green-600 text-white rounded-lg text-sm font-semibold"
+              className="w-full py-2.5 rounded-xl border border-gray-300 text-gray-600 text-sm font-semibold mt-2"
             >
-              🚚 신규 기사 등록하기
+              신규 기사 등록
             </button>
+          )}
+
+          {state === "배차완료" && (
+            <button
+              onClick={onCancelAssign}
+              className="w-full py-2.5 rounded-xl border border-gray-200 text-gray-500 text-sm font-semibold mt-2"
+            >
+              배차 취소
+            </button>
+          )}
+        </Card>
+      </div>
+
+      {/* ── 오더 관리 ── */}
+      <div>
+        <SectionHeader label="오더 관리" />
+        <Card>
+          <div className="flex items-center gap-2 mb-3 pb-3 border-b border-gray-100">
+            <input
+              type="checkbox"
+              id="keepDriver"
+              checked={order._keepDriver || false}
+              onChange={(e) => setSelectedOrder((prev) => ({ ...prev, _keepDriver: e.target.checked }))}
+            />
+           <label htmlFor="keepDriver" className="text-xs" style={{ color: "var(--text-secondary)" }}>
+              배차정보(기사/차량/연락처) 유지하고 수정
+            </label>
           </div>
-        )}
 
-        {state === "배차완료" && (
           <button
-            onClick={onCancelAssign}
-            className="w-full py-2 rounded-lg bg-gray-200 text-gray-700 text-sm font-semibold mt-1"
-          >
-            배차 취소하기
-          </button>
-        )}
-
-        <button
-          onClick={onCancelOrder}
-          className="w-full py-2 rounded-lg bg-red-100 text-red-700 text-sm font-semibold mt-1"
-        >
-          오더 취소(삭제)
-        </button>
-      </div>
-
-      {/* 수정하기 / 배차정보 유지 옵션 */}
-      <div className="bg-white border rounded-xl px-4 py-3 shadow-sm space-y-2">
-        <div className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            id="keepDriver"
-            checked={order._keepDriver || false}
-            onChange={(e) => {
-              setSelectedOrder((prev) => ({
-                ...prev,
-                _keepDriver: e.target.checked,
-              }));
+            onClick={() => {
+              window.scrollTo(0, 0);
+              setPage("form");
+              setForm({
+                거래처명: order.거래처명 || "",
+                상차일: order.상차일 || "",
+                상차시간: order.상차시간 || "",
+                하차일: order.하차일 || "",
+                하차시간: order.하차시간 || "",
+                상차지명: order.상차지명 || "",
+                상차지주소: order.상차지주소 || "",
+                상차지담당자: order.상차지담당자 || "",
+                상차지담당자번호: order.상차지담당자번호 || "",
+                하차지명: order.하차지명 || "",
+                하차지주소: order.하차지주소 || "",
+                하차지담당자: order.하차지담당자 || "",
+                하차지담당자번호: order.하차지담당자번호 || "",
+                톤수: order.톤수 || order.차량톤수 || "",
+                차종: order.차종 || order.차량종류 || "",
+                화물내용: order.화물내용 || "",
+                상차방법: order.상차방법 || "",
+                하차방법: order.하차방법 || "",
+                지급방식: order.지급방식 || "",
+                배차방식: order.배차방식 || "",
+                청구운임: order.청구운임 || 0,
+                기사운임: order.기사운임 || 0,
+                수수료: order.수수료 || 0,
+                산재보험료: order.산재보험료 || 0,
+                차량번호: order.차량번호 || "",
+                혼적여부: order.혼적여부 || "독차",
+                적요: order.메모 || "",
+                기사명: order._keepDriver ? order.기사명 : "",
+                전화번호: order._keepDriver ? order.전화번호 : "",
+                _editId: order.id,
+                _returnToDetail: true,
+              });
             }}
-          />
-          <label htmlFor="keepDriver" className="text-sm text-gray-700">
-            배차정보(기사/차량번호/연락처) 유지하고 수정하기
-          </label>
+            className="w-full py-3 rounded-xl bg-gray-800 text-white text-sm font-bold mb-2"
+          >
+            수정하기
+          </button>
+
+          <button
+            onClick={onCancelOrder}
+            className="w-full py-2.5 rounded-xl border border-red-200 text-red-500 text-sm font-semibold"
+          >
+            오더 삭제
+          </button>
+        </Card>
+      </div>
+
+      {/* ── 모달들 ── */}
+      {showCopyModal && (
+        <CopySelectModal
+          order={order}
+          onClose={() => setShowCopyModal(false)}
+          onAfterFullCopy={() => { setShowCopyModal(false); setConfirmDeliver(true); }}
+        />
+      )}
+
+      {confirmDeliver && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center px-6">
+          <div className="bg-white rounded-2xl p-5 w-full max-w-xs">
+            <div className="text-sm font-bold text-gray-900 mb-1">복사 완료</div>
+            <div className="text-sm text-gray-500 mb-4">전달상태를 <b className="text-gray-900">전달완료</b>로 변경할까요?</div>
+            <div className="flex gap-2">
+              <button onClick={() => setConfirmDeliver(false)} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 text-sm font-semibold">아니오</button>
+              <button
+                onClick={async () => {
+                  await updateDoc(doc(db, order.__col || collName, order.id), { 업체전달상태: "전달완료", 전달완료일시: serverTimestamp(), 정보전달완료: true, 정보전달상태: "전달완료" });
+                  setConfirmDeliver(false);
+                  showToast("전달완료 처리되었습니다");
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-bold"
+              >확인</button>
+            </div>
+          </div>
         </div>
+      )}
 
-        <button
-          onClick={() => {
-            window.scrollTo(0, 0);
-            setPage("form");
-
-            setForm({
-              거래처명: order.거래처명 || "",
-              상차일: order.상차일 || "",
-              상차시간: order.상차시간 || "",
-              하차일: order.하차일 || "",
-              하차시간: order.하차시간 || "",
-              상차지명: order.상차지명 || "",
-              상차지주소: order.상차지주소 || "",
-              상차지담당자: order.상차지담당자 || "",
-상차지담당자번호: order.상차지담당자번호 || "",
-              하차지명: order.하차지명 || "",
-              하차지주소: order.하차지주소 || "",
-              하차지담당자: order.하차지담당자 || "",
-하차지담당자번호: order.하차지담당자번호 || "",
-              톤수: order.톤수 || order.차량톤수 || "",
-              차종: order.차종 || order.차량종류 || "",
-              화물내용: order.화물내용 || "",
-              상차방법: order.상차방법 || "",
-              하차방법: order.하차방법 || "",
-              지급방식: order.지급방식 || "",
-              배차방식: order.배차방식 || "",
-              청구운임: order.청구운임 || 0,
-              기사운임: order.기사운임 || 0,
-              수수료: order.수수료 || 0,
-              산재보험료: order.산재보험료 || 0,
-              차량번호: order.차량번호 || "",
-              혼적여부: order.혼적여부 || "독차",
-              적요: order.메모 || "",
-              기사명: order._keepDriver ? order.기사명 : "",
-              전화번호: order._keepDriver ? order.전화번호 : "",
-              _editId: order.id,
-              _returnToDetail: true,
-            });
-          }}
-          className="w-full py-2 rounded-lg bg-orange-500 text-white text-sm font-semibold mt-2"
-        >
-          수정하기
-          
-        </button>
-          {showCopyModal && (
-  <CopySelectModal
-    order={order}
-    onClose={() => setShowCopyModal(false)}
-    onAfterFullCopy={() => {
-      setShowCopyModal(false);
-      setConfirmDeliver(true); // 🔥 여기서 팝업 띄움
-    }}
-  />
-)}
-{confirmDeliver && (
-  <div
-    className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center"
-    onClick={() => setConfirmDeliver(false)}
-  >
-    <div
-      className="bg-white rounded-xl p-5 w-[80%] max-w-xs"
-      onClick={(e) => e.stopPropagation()}
-    >
-      <div className="text-sm font-semibold mb-2">
-        복사되었습니다
-      </div>
-
-      <div className="text-sm text-gray-600 mb-4">
-        전달상태를<br />
-        <b className="text-gray-900">전달완료</b>로 변경할까요?
-      </div>
-
-      <div className="flex gap-2">
-        <button
-          onClick={() => setConfirmDeliver(false)}
-          className="flex-1 py-2 rounded-lg bg-gray-200 text-gray-700 text-sm font-semibold"
-        >
-          아니오 (ESC)
-        </button>
-
-        <button
-          onClick={async () => {
-            await updateDoc(
-              doc(db, order.__col || collName, order.id),
-              {
-                업체전달상태: "전달완료",
-                전달완료일시: serverTimestamp(),
-                정보전달완료: true,
-                정보전달상태: "전달완료",
-              }
-            );
-
-            setConfirmDeliver(false);
-            showToast("전달완료 처리되었습니다");
-          }}
-          className="flex-1 py-2 rounded-lg bg-emerald-500 text-white text-sm font-semibold"
-        >
-          확인 (Enter)
-        </button>
-      </div>
+      {confirmUndoDeliver && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center px-6">
+          <div className="bg-white rounded-2xl p-5 w-full max-w-xs">
+            <div className="text-sm font-bold text-red-600 mb-1">전달완료 취소</div>
+            <div className="text-sm text-gray-500 mb-4">전달상태를 <b className="text-gray-900">미전달</b>로 되돌릴까요?</div>
+            <div className="flex gap-2">
+              <button onClick={() => setConfirmUndoDeliver(false)} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 text-sm font-semibold">아니오</button>
+              <button
+                onClick={async () => {
+                  await updateDoc(doc(db, order.__col || collName, order.id), { 업체전달상태: "미전달", 정보전달완료: false, 정보전달상태: "미전달", 전달완료일시: null });
+                  setConfirmUndoDeliver(false);
+                  showToast("미전달로 되돌렸습니다");
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-red-500 text-white text-sm font-bold"
+              >확인</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
-  </div>
-)}
-{confirmUndoDeliver && (
-  <div
-    className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center"
-    onClick={() => setConfirmUndoDeliver(false)}
-  >
-    <div
-      className="bg-white rounded-xl p-5 w-[80%] max-w-xs"
-      onClick={(e) => e.stopPropagation()}
-    >
-      <div className="text-sm font-semibold mb-2 text-red-600">
-        전달완료 취소
-      </div>
-
-      <div className="text-sm text-gray-600 mb-4">
-        전달상태를<br />
-        <b className="text-gray-900">미전달</b>로 되돌릴까요?
-      </div>
-
-      <div className="flex gap-2">
-        <button
-          onClick={() => setConfirmUndoDeliver(false)}
-          className="flex-1 py-2 rounded-lg
-                     bg-gray-200 text-gray-700
-                     text-sm font-semibold"
-        >
-          아니오
-        </button>
-
-        <button
-          onClick={async () => {
-            await updateDoc(
-              doc(db, order.__col || collName, order.id),
-              {
-                업체전달상태: "미전달",
-                정보전달완료: false,
-                정보전달상태: "미전달",
-                전달완료일시: null,
-              }
-            );
-
-            setConfirmUndoDeliver(false);
-            showToast("미전달로 되돌렸습니다");
-          }}
-          className="flex-1 py-2 rounded-lg
-                     bg-red-500 text-white
-                     text-sm font-semibold"
-        >
-          확인
-        </button>
-      </div>
-    </div>
-  </div>
-)}
-      </div>
-    </div>
-    
   );
 }
 
