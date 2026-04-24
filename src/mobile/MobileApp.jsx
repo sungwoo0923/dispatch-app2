@@ -343,6 +343,12 @@ const [alarmEnabled, setAlarmEnabled] = useState(
   localStorage.getItem("alarmEnabled") !== "false"
 );
 const [handovers, setHandovers] = useState([]);
+const [currentUser, setCurrentUser] = useState(null);
+const [mobileUsers, setMobileUsers] = useState([]);
+const [handoverOpen, setHandoverOpen] = useState(false);
+const [handoverForm, setHandoverForm] = useState({ text: "", receiver: "", receiverUid: "", date: todayKST() });
+const [selectedHandover, setSelectedHandover] = useState(null);
+const [handoverEditMode, setHandoverEditMode] = useState(false);
 // 🔁 토글 함수
 const toggleAlarm = () => {
   setAlarmEnabled((prev) => {
@@ -686,7 +692,22 @@ useEffect(() => {
   return () => unsub();
 }, []);
 
-  
+// 👤 현재 로그인 사용자 추적
+useEffect(() => {
+  const unsub = auth.onAuthStateChanged((u) => {
+    setCurrentUser(u || null);
+  });
+  return () => unsub();
+}, []);
+
+// 👥 전체 사용자 목록 구독
+useEffect(() => {
+  const unsub = onSnapshot(collection(db, "users"), (snap) => {
+    setMobileUsers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+  });
+  return () => unsub();
+}, []);
+
 // 🔔 상차 임박 2시간 이내 감지 (⏱ 시간 흐름 포함)
 useEffect(() => {
   if (!orders.length || !alarmEnabled) return;
@@ -1505,6 +1526,7 @@ const title =
   : page === "fare" ? "표준운임표"
   : page === "status" ? "배차현황"
   : page === "unassigned" ? "미배차현황"
+  : page === "handover" ? "인수인계"
   : "상세보기";
 
   // ------------------------------------------------------------------
@@ -1698,7 +1720,7 @@ const title =
             setPage("list");
           }
         }
-      : page === "notice" || page === "schedule" || page === "unassigned"
+      : page === "notice" || page === "schedule" || page === "unassigned" || page === "handover"
 ? () => setPage("list")
 : undefined
   }
@@ -1829,7 +1851,7 @@ onGoSchedule={() => {
         />
       )}
 
-      <div className="flex-1 overflow-y-auto pb-24">
+      <div className="flex-1 overflow-y-auto pb-24" style={{ WebkitOverflowScrolling: "touch" }}>
         {page === "notice" && (
   <div className="px-4 py-3 space-y-3">
     {notices.length === 0 && (
@@ -1948,31 +1970,234 @@ onGoSchedule={() => {
 {/* ================= 인수인계 ================= */}
 {page === "handover" && (
   <div className="px-4 py-3 space-y-3">
+    {/* 등록 버튼 */}
+    <button
+      onClick={() => {
+        const me = mobileUsers.find(u => u.id === currentUser?.uid);
+        setSelectedHandover(null);
+        setHandoverEditMode(false);
+        setHandoverForm({ text: "", receiver: "", receiverUid: "", date: todayKST() });
+        setHandoverOpen(true);
+      }}
+      className="w-full py-2.5 rounded-xl bg-[#1B2B4B] text-white text-sm font-semibold"
+    >
+      + 인수인계 등록
+    </button>
+
+    {/* 범례 */}
+    <div className="flex items-center gap-3 px-1">
+      <div className="flex items-center gap-1.5">
+        <div className="w-3 h-3 rounded-sm bg-red-400"></div>
+        <span className="text-xs text-gray-500">미확인</span>
+      </div>
+      <div className="flex items-center gap-1.5">
+        <div className="w-3 h-3 rounded-sm bg-emerald-400"></div>
+        <span className="text-xs text-gray-500">확인완료</span>
+      </div>
+    </div>
+
     {handovers.length === 0 && (
-      <div className="text-sm text-gray-400 text-center">
+      <div className="text-sm text-gray-400 text-center py-4">
         등록된 인수인계가 없습니다.
       </div>
     )}
 
-    {handovers.map(h => (
-      <div
-        key={h.id}
-        className="bg-white rounded-xl border shadow-sm p-4"
-      >
-        <div className="flex justify-between text-xs text-gray-500 mb-1">
-          <span>작성자: {h.author || "-"}</span>
-          <span>{getHandoverDate(h)}</span>
+    {handovers.map(h => {
+      const receiverRead = h.readBy?.includes(h.receiverUid);
+      const isReceiver = currentUser?.uid === h.receiverUid;
+      const isAuthor = currentUser?.uid === h.authorUid;
+      const unread = isReceiver && !receiverRead;
+      return (
+        <div
+          key={h.id}
+          onClick={async () => {
+            setSelectedHandover(h);
+            setHandoverEditMode(false);
+            setHandoverForm({
+              text: h.text || "",
+              receiver: h.receiver || "",
+              receiverUid: h.receiverUid || "",
+              date: h.date || todayKST(),
+            });
+            if (isReceiver && !receiverRead) {
+              await updateDoc(doc(db, "handovers", h.id), {
+                readBy: [...(h.readBy || []), currentUser.uid],
+              });
+            }
+          }}
+          className={`bg-white rounded-xl border shadow-sm p-4 relative overflow-hidden cursor-pointer ${unread ? "bg-red-50" : ""}`}
+        >
+          {/* 왼쪽 컬러 바 */}
+          {(isReceiver || isAuthor) && (
+            <div className={`absolute left-0 top-0 bottom-0 w-1 ${receiverRead ? "bg-emerald-400" : "bg-red-400"}`} />
+          )}
+          <div className="flex justify-between text-xs text-gray-500 mb-1 pl-1">
+            <span>작성자: {h.author || "-"}</span>
+            <span>{getHandoverDate(h)}</span>
+          </div>
+          <div className="text-sm font-semibold mb-1 pl-1">
+            받는사람: {h.receiver || "-"}
+            {(isReceiver || isAuthor) && (
+              <span className={`ml-2 text-xs px-1.5 py-0.5 rounded font-semibold ${receiverRead ? "bg-emerald-100 text-emerald-600" : "bg-red-100 text-red-600"}`}>
+                {receiverRead ? "확인" : "미확인"}
+              </span>
+            )}
+          </div>
+          <div className="text-sm text-gray-700 whitespace-pre-wrap pl-1">
+            {h.text || ""}
+          </div>
         </div>
+      );
+    })}
+  </div>
+)}
 
-        <div className="text-sm font-semibold mb-1">
-          받는사람: {h.receiver || "-"}
-        </div>
-
-        <div className="text-sm text-gray-700 whitespace-pre-wrap">
-          {h.text || ""}
-        </div>
+{/* ===== 인수인계 등록 모달 ===== */}
+{handoverOpen && (
+  <div className="fixed inset-0 bg-black/50 flex items-end justify-center z-50" onClick={() => setHandoverOpen(false)}>
+    <div className="bg-white rounded-t-2xl w-full max-w-md p-5 space-y-3" onClick={e => e.stopPropagation()}>
+      <div className="flex justify-between items-center mb-1">
+        <h3 className="font-bold text-base text-gray-800">인수인계 등록</h3>
+        <button onClick={() => setHandoverOpen(false)} className="text-gray-400 text-xl leading-none">✕</button>
       </div>
-    ))}
+      <select
+        className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none"
+        value={handoverForm.receiver}
+        onChange={e => {
+          const s = mobileUsers.find(u => u.name === e.target.value);
+          setHandoverForm({ ...handoverForm, receiver: s?.name || "", receiverUid: s?.uid || s?.id || "" });
+        }}
+      >
+        <option value="">받는 사람 선택</option>
+        {mobileUsers.map(u => <option key={u.id} value={u.name}>{u.name}</option>)}
+      </select>
+      <input
+        type="date"
+        className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none"
+        value={handoverForm.date}
+        onChange={e => setHandoverForm({ ...handoverForm, date: e.target.value })}
+      />
+      <textarea
+        rows={4}
+        placeholder="인수인계 내용을 입력하세요"
+        className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none resize-none"
+        value={handoverForm.text}
+        onChange={e => setHandoverForm({ ...handoverForm, text: e.target.value })}
+      />
+      <button
+        onClick={async () => {
+          if (!handoverForm.receiver) { alert("받는 사람을 선택하세요"); return; }
+          if (!handoverForm.text.trim()) { alert("내용을 입력하세요"); return; }
+          const me = mobileUsers.find(u => u.id === currentUser?.uid);
+          await addDoc(collection(db, "handovers"), {
+            ...handoverForm,
+            author: me?.name || "사용자",
+            authorUid: currentUser?.uid || "",
+            createdAt: serverTimestamp(),
+            readBy: [],
+          });
+          setHandoverForm({ text: "", receiver: "", receiverUid: "", date: todayKST() });
+          setHandoverOpen(false);
+        }}
+        className="w-full py-3 rounded-xl bg-[#1B2B4B] text-white text-sm font-semibold"
+      >
+        저장
+      </button>
+    </div>
+  </div>
+)}
+
+{/* ===== 인수인계 상세 / 수정 모달 ===== */}
+{selectedHandover && (
+  <div className="fixed inset-0 bg-black/50 flex items-end justify-center z-50" onClick={() => { setSelectedHandover(null); setHandoverEditMode(false); }}>
+    <div className="bg-white rounded-t-2xl w-full max-w-md p-5 space-y-3" onClick={e => e.stopPropagation()}>
+      <div className="flex justify-between items-center mb-1">
+        <h3 className="font-bold text-base text-gray-800">{handoverEditMode ? "인수인계 수정" : "인수인계 상세"}</h3>
+        <button onClick={() => { setSelectedHandover(null); setHandoverEditMode(false); }} className="text-gray-400 text-xl leading-none">✕</button>
+      </div>
+      {handoverEditMode ? (
+        <>
+          <select
+            className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none"
+            value={handoverForm.receiver}
+            onChange={e => {
+              const s = mobileUsers.find(u => u.name === e.target.value);
+              setHandoverForm({ ...handoverForm, receiver: s?.name || "", receiverUid: s?.uid || s?.id || "" });
+            }}
+          >
+            <option value="">받는 사람 선택</option>
+            {mobileUsers.map(u => <option key={u.id} value={u.name}>{u.name}</option>)}
+          </select>
+          <input
+            type="date"
+            className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none"
+            value={handoverForm.date}
+            onChange={e => setHandoverForm({ ...handoverForm, date: e.target.value })}
+          />
+          <textarea
+            rows={4}
+            className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none resize-none"
+            value={handoverForm.text}
+            onChange={e => setHandoverForm({ ...handoverForm, text: e.target.value })}
+          />
+          <div className="flex gap-2">
+            <button onClick={() => setHandoverEditMode(false)} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-600 text-sm font-semibold">취소</button>
+            <button
+              onClick={async () => {
+                const me = mobileUsers.find(u => u.id === currentUser?.uid);
+                await updateDoc(doc(db, "handovers", selectedHandover.id), {
+                  ...handoverForm,
+                  author: me?.name || "사용자",
+                  authorUid: currentUser?.uid || "",
+                });
+                setHandoverEditMode(false);
+                setSelectedHandover(null);
+              }}
+              className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-sm font-semibold"
+            >
+              저장
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="space-y-3 text-sm">
+            <div><div className="text-xs text-gray-400 mb-0.5">작성자</div><div className="font-semibold">{selectedHandover.author}</div></div>
+            <div><div className="text-xs text-gray-400 mb-0.5">받는 사람</div><div>{selectedHandover.receiver}</div></div>
+            <div><div className="text-xs text-gray-400 mb-0.5">기준 날짜</div><div>{selectedHandover.date}</div></div>
+            <div><div className="text-xs text-gray-400 mb-0.5">내용</div><div className="whitespace-pre-wrap bg-gray-50 rounded-xl p-3 leading-relaxed">{selectedHandover.text}</div></div>
+          </div>
+          {currentUser?.uid === selectedHandover.authorUid && (
+            <div className="flex gap-2 pt-2 border-t">
+              <button
+                onClick={async () => {
+                  if (!window.confirm("삭제할까요?")) return;
+                  await deleteDoc(doc(db, "handovers", selectedHandover.id));
+                  setSelectedHandover(null);
+                }}
+                className="flex-1 py-2.5 rounded-xl border border-red-200 text-red-600 text-sm font-semibold"
+              >
+                삭제
+              </button>
+              <button
+                onClick={() => {
+                  setHandoverForm({
+                    text: selectedHandover.text || "",
+                    receiver: selectedHandover.receiver || "",
+                    receiverUid: selectedHandover.receiverUid || "",
+                    date: selectedHandover.date || todayKST(),
+                  });
+                  setHandoverEditMode(true);
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-sm font-semibold"
+              >
+                수정
+              </button>
+            </div>
+          )}
+        </>
+      )}
+    </div>
   </div>
 )}
 
@@ -3364,17 +3589,20 @@ function MobileOrderDetail({
           <div className="grid grid-cols-3 gap-2 mb-2">
             <button
               onClick={() => onDuplicate(order)}
+              style={{ touchAction: "manipulation" }}
               className="py-2.5 rounded-xl bg-[#1B2B4B] text-white text-xs font-bold"
             >
               오더복사
             </button>
             <button
               onClick={() => setShowCopyModal(true)}
+              style={{ touchAction: "manipulation" }}
               className="py-2.5 rounded-xl bg-[#1B2B4B] text-white text-xs font-bold"
             >
               기사복사하기
             </button>
             <button
+              style={{ touchAction: "manipulation" }}
               onClick={() => {
                 window.__farePreset__ = {
                   pickup: order.상차지명 || "",
@@ -3398,12 +3626,14 @@ function MobileOrderDetail({
           <div className="grid grid-cols-2 gap-2">
             <button
               onClick={() => openMap("pickup")}
+              style={{ touchAction: "manipulation" }}
               className="py-2 rounded-xl bg-gray-100 text-gray-700 text-xs font-semibold"
             >
               상차지 지도
             </button>
             <button
               onClick={() => openMap("drop")}
+              style={{ touchAction: "manipulation" }}
               className="py-2 rounded-xl bg-gray-100 text-gray-700 text-xs font-semibold"
             >
               하차지 지도
