@@ -1851,7 +1851,7 @@ onGoSchedule={() => {
         />
       )}
 
-      <div className="flex-1 overflow-y-auto pb-24">
+      <div className="flex-1 overflow-y-auto pb-24" style={{ WebkitOverflowScrolling: "touch" }}>
         {page === "notice" && (
   <div className="px-4 py-3 space-y-3">
     {notices.length === 0 && (
@@ -3589,17 +3589,20 @@ function MobileOrderDetail({
           <div className="grid grid-cols-3 gap-2 mb-2">
             <button
               onClick={() => onDuplicate(order)}
+              style={{ touchAction: "manipulation" }}
               className="py-2.5 rounded-xl bg-[#1B2B4B] text-white text-xs font-bold"
             >
               오더복사
             </button>
             <button
               onClick={() => setShowCopyModal(true)}
+              style={{ touchAction: "manipulation" }}
               className="py-2.5 rounded-xl bg-[#1B2B4B] text-white text-xs font-bold"
             >
               기사복사하기
             </button>
             <button
+              style={{ touchAction: "manipulation" }}
               onClick={() => {
                 window.__farePreset__ = {
                   pickup: order.상차지명 || "",
@@ -3623,12 +3626,14 @@ function MobileOrderDetail({
           <div className="grid grid-cols-2 gap-2">
             <button
               onClick={() => openMap("pickup")}
+              style={{ touchAction: "manipulation" }}
               className="py-2 rounded-xl bg-gray-100 text-gray-700 text-xs font-semibold"
             >
               상차지 지도
             </button>
             <button
               onClick={() => openMap("drop")}
+              style={{ touchAction: "manipulation" }}
               className="py-2 rounded-xl bg-gray-100 text-gray-700 text-xs font-semibold"
             >
               하차지 지도
