@@ -10879,7 +10879,7 @@ const head = isDark
     <button onClick={()=>{setTempSortKey(sortKey||"");setTempSortDir(sortDir||"asc");setSortModalOpen(true);}} className="px-3 py-1.5 rounded-lg bg-slate-500 text-white text-sm font-semibold shadow hover:opacity-90">정렬</button>
     <button onClick={()=>{if(!selected.length)return alert("복사할 오더를 선택하세요.");if(selected.length>1)return alert("복사는 1개의 오더만 가능합니다.");setCopyModalOpen(true);}} className="px-3 py-1.5 rounded-lg bg-gray-800 text-white text-sm font-semibold shadow hover:opacity-90">📋 기사복사</button>
     <button onClick={async()=>{if(!selected.length)return alert("전송할 항목을 선택하세요.");const ids=[...selected];let success=0,fail=0;for(const id of ids){const row=dispatchData.find(r=>r._id===id);if(!row)continue;if(!row.상차지주소||!row.하차지주소){alert(`[${row.상차지명} → ${row.하차지명}]\n주소가 없습니다.`);fail++;continue;}try{const res=await sendOrderTo24(row);if(res?.success)success++;else fail++;}catch(e){console.error("24시콜 오류:",e);fail++;}}alert(`📡 24시콜 선택전송 완료!\n성공: ${success}건\n실패: ${fail}건`);}} className="px-3 py-1.5 rounded-lg bg-gray-700 text-white text-sm font-semibold shadow hover:opacity-90">📡 선택전송</button>
-    <button onClick={()=>{if(selected.length!==1)return alert("수정할 항목은 1개만 선택해야 합니다.");const row=rows.find(r=>r._id===selected[0]);if(!row)return;const raw=row.화물내용||"";const match=raw.match(/(\d+)(.*)/);const ton=row.차량톤수||"";const tonValue=ton.match(/[\d.]+/)?.[0]||"";const tonType=ton.includes("kg")?"kg":ton.includes("톤")?"톤":"";setEditTarget({...row,화물수량:match?match[1]:raw,화물타입:match?match[2]:"",화물내용원본:raw,톤수값:tonValue,톤수타입:tonType});setEditPopupOpen(true);}} className="px-3 py-1.5 rounded-lg bg-gray-600 text-white text-sm font-semibold shadow hover:opacity-90">선택수정</button>
+    <button onClick={()=>{if(selected.length!==1)return alert("수정할 항목은 1개만 선택해야 합니다.");const row=rows.find(r=>r._id===selected[0]);if(!row)return;const raw=row.화물내용||"";const match=raw.match(/(\d+)(.*)/);const ton=row.차량톤수||"";const tonValue=ton.match(/[\d.]+/)?.[0]||"";const tonType=ton.includes("kg")?"kg":ton.includes("톤")?"톤":"";setEditTarget({...row,화물수량:match?match[1]:raw,화물타입:match?match[2].trim():"",화물내용원본:raw,톤수값:tonValue,톤수타입:tonType});setEditPopupOpen(true);}} className="px-3 py-1.5 rounded-lg bg-gray-600 text-white text-sm font-semibold shadow hover:opacity-90">선택수정</button>
     <button onClick={handleSaveSelected} className="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-sm font-semibold shadow hover:opacity-90">저장</button>
     <button onClick={()=>{if(!selected.length)return alert("삭제할 항목을 선택하세요.");const list=rows.filter(r=>selected.includes(r._id));setDeleteList(list);setDeleteConfirmOpen(true);}} className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-sm font-semibold shadow hover:opacity-90">선택삭제</button>
     <button onClick={()=>setSelected([])} className="px-3 py-1.5 rounded-lg bg-gray-300 text-gray-800 text-sm font-semibold shadow hover:opacity-90">선택초기화</button>
@@ -10958,7 +10958,7 @@ const rawCargo = String(latest?.화물내용 || "");
 
     // 🔥 화물 분해
     화물수량: cargoMatch ? cargoMatch[1] : "",
-    화물타입: cargoMatch ? cargoMatch[2] : "",
+    화물타입: cargoMatch ? cargoMatch[2].trim() : "",
 
     // 🔥 톤수 분해
     톤수값: tonMatch ? tonMatch[1] : "",
@@ -15552,7 +15552,7 @@ if (first) {
   setEditTarget({
     ...latestFirst,
     화물수량: cargoMatch ? cargoMatch[1] : "",
-    화물타입: cargoMatch ? cargoMatch[2] : "",
+    화물타입: cargoMatch ? cargoMatch[2].trim() : "",
     톤수값: tonMatch ? tonMatch[1] : "",
     톤수타입: tonMatch ? tonMatch[2] : "",
   });
@@ -16196,7 +16196,7 @@ const save = {
 
     // 🔥 화물 분해
     화물수량: cargoMatch ? cargoMatch[1] : "",
-    화물타입: cargoMatch ? cargoMatch[2] : "",
+    화물타입: cargoMatch ? cargoMatch[2].trim() : "",
 
     // 🔥 톤수 분해
     톤수값: tonMatch ? tonMatch[1] : "",
@@ -21671,7 +21671,7 @@ const checkWarningStatus = (name, type) => {
                         setCopyTarget({
                           ...latest,
                           화물수량: cargoMatch ? cargoMatch[1] : "",
-                          화물타입: cargoMatch ? cargoMatch[2] : "",
+                          화물타입: cargoMatch ? cargoMatch[2].trim() : "",
                           톤수값: tonMatch ? tonMatch[1] : "",
                           톤수타입: tonMatch ? tonMatch[2] : "",
                         });

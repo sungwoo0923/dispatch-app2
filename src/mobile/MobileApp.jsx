@@ -1462,11 +1462,14 @@ const handleOrderDuplicate = (order) => {
   const cancelAssign = async () => {
     if (!selectedOrder) return;
 
-    // 🔥 차량번호/기사정보만 제거 → 상태는 자동으로 "배차중"
     await updateDoc(doc(db, selectedOrder.__col, selectedOrder.id), {
       기사명: "",
+      이름: "",
       차량번호: "",
       전화번호: "",
+      전화: "",
+      배차상태: "배차중",
+      상태: "배차중",
     });
 
     setSelectedOrder((prev) =>
@@ -3330,6 +3333,9 @@ function MobileOrderDetail({
   const [smartQuery, setSmartQuery] = useState("");
   const [smartMatched, setSmartMatched] = useState([]);
   const [driverConflictPopup, setDriverConflictPopup] = useState(null);
+  const [editingDriverId, setEditingDriverId] = useState(null);
+  const [editingDriverData, setEditingDriverData] = useState({ 이름: "", 전화번호: "" });
+  const smartComposingRef = useRef(false);
   const [carNo, setCarNo] = useState(order.차량번호 || "");
   const [name, setName] = useState(order.기사명 || "");
   const [phone, setPhone] = useState(order.전화번호 || "");
@@ -3404,15 +3410,13 @@ function MobileOrderDetail({
   const handleSmartSearch = (text) => {
     setSmartQuery(text);
     if (!text.trim()) { setSmartMatched([]); return; }
-    const { phone: ph, plate: pl, name: nm } = parseDriverText(text);
-    const q = normD(text);
-    const results = drivers.filter(d => {
-      if (pl && normD(d.차량번호).includes(normD(pl))) return true;
-      if (ph && normD(d.전화번호).includes(normD(ph))) return true;
-      if (nm && normD(d.이름).includes(normD(nm))) return true;
-      if (normD(d.이름).includes(q) || normD(d.차량번호).includes(q) || normD(d.전화번호).includes(q)) return true;
-      return false;
-    });
+    const { plate: pl } = parseDriverText(text);
+    if (!pl) {
+      // 차량번호 없으면 드롭다운 표시 안 함
+      setSmartMatched([]);
+      return;
+    }
+    const results = drivers.filter(d => normD(d.차량번호).includes(normD(pl)));
     setSmartMatched(results.slice(0, 8));
   };
 
@@ -3421,32 +3425,33 @@ function MobileOrderDetail({
     setSmartQuery(""); setSmartMatched([]);
   };
 
-  // PC 버전과 동일한 applySmartDriverInput: blur/엔터 시 충돌 체크
+  // blur/엔터 시 충돌 체크 (차량번호 우선, 전화번호 무시)
   const applySmartDriverInput = async (text) => {
     if (!text.trim()) return;
     const { phone: ph, plate: pl, name: nm } = parseDriverText(text);
     if (!pl && !nm && !ph) return;
 
+    if (!pl) {
+      // 차량번호 없으면 그냥 신규로 직접 입력 적용
+      if (nm || ph) {
+        setCarNo(""); setName(nm || ""); setPhone(ph || "");
+        setSmartQuery(""); setSmartMatched([]);
+      }
+      return;
+    }
+
     // 차량번호 기준 기존 기사 검색
-    const byPlate = pl
-      ? drivers.filter(d => normD(d.차량번호) === normD(pl))
-      : [];
+    const byPlate = drivers.filter(d => normD(d.차량번호) === normD(pl));
 
     if (byPlate.length > 0) {
       const existing = byPlate[0];
-      const sameNamePhone =
-        normD(existing.이름) === normD(nm) &&
-        normD(existing.전화번호) === normD(ph);
+      const sameName = normD(existing.이름) === normD(nm);
 
-      if (sameNamePhone) {
-        // 완전 동일 → 그냥 매칭
+      if (sameName) {
+        // 이름 동일 → 그냥 매칭 (전화번호는 무시)
         setCarNo(existing.차량번호); setName(existing.이름); setPhone(existing.전화번호);
         setSmartQuery(""); setSmartMatched([]);
-      } else if (normD(existing.이름) === normD(nm) && normD(existing.전화번호) !== normD(ph)) {
-        // 이름 같고 전화번호 다름 → 충돌 팝업
-        setSmartQuery(""); setSmartMatched([]);
-        setDriverConflictPopup({ mode: "phone_diff", existing, input: { plate: pl, name: nm, phone: ph } });
-      } else if (normD(existing.이름) !== normD(nm) && nm) {
+      } else if (nm) {
         // 차량번호 같고 이름 다름 → 충돌 팝업
         setSmartQuery(""); setSmartMatched([]);
         setDriverConflictPopup({ mode: "name_diff", existing, input: { plate: pl, name: nm, phone: ph } });
@@ -3458,10 +3463,8 @@ function MobileOrderDetail({
     }
 
     // 기존 없음 → 신규 등록 확인 팝업
-    if (pl || nm || ph) {
-      setSmartQuery(""); setSmartMatched([]);
-      setDriverConflictPopup({ mode: "new_driver", existing: null, input: { plate: pl, name: nm, phone: ph } });
-    }
+    setSmartQuery(""); setSmartMatched([]);
+    setDriverConflictPopup({ mode: "new_driver", existing: null, input: { plate: pl, name: nm, phone: ph } });
   };
 
   const openMap = (type) => {
@@ -3744,21 +3747,85 @@ function MobileOrderDetail({
               rows={2}
               placeholder={"예) 김상원 010-7916-2258 강원82사1203\n카카오 문자 전체 복붙 가능"}
               value={smartQuery}
-              onChange={e => handleSmartSearch(e.target.value)}
+              onCompositionStart={() => { smartComposingRef.current = true; }}
+              onCompositionEnd={(e) => {
+                smartComposingRef.current = false;
+                handleSmartSearch(e.target.value);
+              }}
+              onChange={e => {
+                const val = e.target.value;
+                if (!smartComposingRef.current) {
+                  handleSmartSearch(val);
+                } else {
+                  setSmartQuery(val);
+                }
+              }}
               onBlur={e => { if (e.target.value.trim().length > 4) applySmartDriverInput(e.target.value); }}
             />
             {smartMatched.length > 0 && (
               <div className="absolute z-50 w-full bg-white border border-gray-200 rounded-xl shadow-xl mt-1 overflow-hidden">
                 {smartMatched.map((d, i) => (
-                  <button
-                    key={d.id || i}
-                    type="button"
-                    className="w-full text-left px-4 py-3 hover:bg-gray-50 border-b border-gray-100 last:border-0"
-                    onMouseDown={() => selectSmartDriver(d)}
-                  >
-                    <div className="font-bold text-gray-900 text-[13px]">{d.이름 || "-"}</div>
-                    <div className="text-[11px] text-gray-400 mt-0.5">{d.차량번호} · {d.전화번호}</div>
-                  </button>
+                  <div key={d.id || i} className="border-b border-gray-100 last:border-0">
+                    {editingDriverId === (d.id || i) ? (
+                      <div className="px-4 py-3 bg-blue-50">
+                        <div className="text-[11px] font-semibold text-gray-500 mb-1">{d.차량번호}</div>
+                        <input
+                          className="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm mb-1.5 focus:outline-none focus:border-blue-400"
+                          placeholder="기사 이름"
+                          value={editingDriverData.이름}
+                          onChange={e => setEditingDriverData(p => ({ ...p, 이름: e.target.value }))}
+                          onMouseDown={e => e.stopPropagation()}
+                        />
+                        <input
+                          className="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm mb-2 focus:outline-none focus:border-blue-400"
+                          placeholder="전화번호"
+                          value={editingDriverData.전화번호}
+                          onChange={e => setEditingDriverData(p => ({ ...p, 전화번호: e.target.value }))}
+                          onMouseDown={e => e.stopPropagation()}
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            className="flex-1 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-bold"
+                            onMouseDown={async (e) => {
+                              e.stopPropagation();
+                              if (!editingDriverData.이름.trim()) return;
+                              await updateDoc(doc(db, "drivers", d.id), {
+                                이름: editingDriverData.이름,
+                                전화번호: editingDriverData.전화번호,
+                              });
+                              setEditingDriverId(null);
+                            }}
+                          >저장</button>
+                          <button
+                            type="button"
+                            className="px-3 py-1.5 rounded-lg bg-gray-200 text-gray-700 text-xs"
+                            onMouseDown={e => { e.stopPropagation(); setEditingDriverId(null); }}
+                          >취소</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center">
+                        <button
+                          type="button"
+                          className="flex-1 text-left px-4 py-3 hover:bg-gray-50"
+                          onMouseDown={() => selectSmartDriver(d)}
+                        >
+                          <div className="font-bold text-gray-900 text-[13px]">{d.이름 || "-"}</div>
+                          <div className="text-[11px] text-gray-400 mt-0.5">{d.차량번호} · {d.전화번호}</div>
+                        </button>
+                        <button
+                          type="button"
+                          className="px-3 py-3 text-gray-400 hover:text-blue-500 text-xs"
+                          onMouseDown={e => {
+                            e.stopPropagation();
+                            setEditingDriverId(d.id || i);
+                            setEditingDriverData({ 이름: d.이름 || "", 전화번호: d.전화번호 || "" });
+                          }}
+                        >수정</button>
+                      </div>
+                    )}
+                  </div>
                 ))}
               </div>
             )}
