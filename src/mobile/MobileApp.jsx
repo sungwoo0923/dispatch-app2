@@ -3329,6 +3329,7 @@ function MobileOrderDetail({
   const [showCopyModal, setShowCopyModal] = useState(false);
   const [smartQuery, setSmartQuery] = useState("");
   const [smartMatched, setSmartMatched] = useState([]);
+  const [driverConflictPopup, setDriverConflictPopup] = useState(null);
   const [carNo, setCarNo] = useState(order.차량번호 || "");
   const [name, setName] = useState(order.기사명 || "");
   const [phone, setPhone] = useState(order.전화번호 || "");
@@ -3391,17 +3392,25 @@ function MobileOrderDetail({
     return { phone, plate, name };
   };
 
+  const normD = (s = "") => String(s).replace(/[-.\s]/g, "").toLowerCase();
+
+  const fmtPhone = (p = "") => {
+    const d = String(p).replace(/[^\d]/g, "");
+    if (d.length === 11) return `${d.slice(0,3)}-${d.slice(3,7)}-${d.slice(7)}`;
+    if (d.length === 10) return `${d.slice(0,3)}-${d.slice(3,6)}-${d.slice(6)}`;
+    return p;
+  };
+
   const handleSmartSearch = (text) => {
     setSmartQuery(text);
     if (!text.trim()) { setSmartMatched([]); return; }
-    const norm = (s = "") => String(s).replace(/[-.\s]/g, "").toLowerCase();
-    const { phone, plate, name } = parseDriverText(text);
-    const q = norm(text);
+    const { phone: ph, plate: pl, name: nm } = parseDriverText(text);
+    const q = normD(text);
     const results = drivers.filter(d => {
-      if (plate && norm(d.차량번호).includes(norm(plate))) return true;
-      if (phone && norm(d.전화번호).includes(norm(phone))) return true;
-      if (name && norm(d.이름).includes(norm(name))) return true;
-      if (norm(d.이름).includes(q) || norm(d.차량번호).includes(q) || norm(d.전화번호).includes(q)) return true;
+      if (pl && normD(d.차량번호).includes(normD(pl))) return true;
+      if (ph && normD(d.전화번호).includes(normD(ph))) return true;
+      if (nm && normD(d.이름).includes(normD(nm))) return true;
+      if (normD(d.이름).includes(q) || normD(d.차량번호).includes(q) || normD(d.전화번호).includes(q)) return true;
       return false;
     });
     setSmartMatched(results.slice(0, 8));
@@ -3412,23 +3421,46 @@ function MobileOrderDetail({
     setSmartQuery(""); setSmartMatched([]);
   };
 
-  const handleSmartPaste = async (text) => {
+  // PC 버전과 동일한 applySmartDriverInput: blur/엔터 시 충돌 체크
+  const applySmartDriverInput = async (text) => {
     if (!text.trim()) return;
-    const { phone, plate, name } = parseDriverText(text);
-    if (!plate && !name && !phone) return;
-    const norm = (s = "") => String(s).replace(/[-.\s]/g, "").toLowerCase();
-    const found = drivers.find(d =>
-      (plate && norm(d.차량번호) === norm(plate)) || (phone && norm(d.전화번호) === norm(phone))
-    );
-    if (found) {
-      setCarNo(found.차량번호 || ""); setName(found.이름 || ""); setPhone(found.전화번호 || "");
+    const { phone: ph, plate: pl, name: nm } = parseDriverText(text);
+    if (!pl && !nm && !ph) return;
+
+    // 차량번호 기준 기존 기사 검색
+    const byPlate = pl
+      ? drivers.filter(d => normD(d.차량번호) === normD(pl))
+      : [];
+
+    if (byPlate.length > 0) {
+      const existing = byPlate[0];
+      const sameNamePhone =
+        normD(existing.이름) === normD(nm) &&
+        normD(existing.전화번호) === normD(ph);
+
+      if (sameNamePhone) {
+        // 완전 동일 → 그냥 매칭
+        setCarNo(existing.차량번호); setName(existing.이름); setPhone(existing.전화번호);
+        setSmartQuery(""); setSmartMatched([]);
+      } else if (normD(existing.이름) === normD(nm) && normD(existing.전화번호) !== normD(ph)) {
+        // 이름 같고 전화번호 다름 → 충돌 팝업
+        setSmartQuery(""); setSmartMatched([]);
+        setDriverConflictPopup({ mode: "phone_diff", existing, input: { plate: pl, name: nm, phone: ph } });
+      } else if (normD(existing.이름) !== normD(nm) && nm) {
+        // 차량번호 같고 이름 다름 → 충돌 팝업
+        setSmartQuery(""); setSmartMatched([]);
+        setDriverConflictPopup({ mode: "name_diff", existing, input: { plate: pl, name: nm, phone: ph } });
+      } else {
+        setCarNo(existing.차량번호); setName(existing.이름); setPhone(existing.전화번호);
+        setSmartQuery(""); setSmartMatched([]);
+      }
+      return;
+    }
+
+    // 기존 없음 → 신규 등록 확인 팝업
+    if (pl || nm || ph) {
       setSmartQuery(""); setSmartMatched([]);
-      showToast(`✅ ${found.이름} 기사 자동 매칭`);
-    } else if (plate || name || phone) {
-      await upsertDriver({ 차량번호: plate, 이름: name, 전화번호: phone });
-      setCarNo(plate); setName(name); setPhone(phone);
-      setSmartQuery(""); setSmartMatched([]);
-      showToast(`신규 기사 자동 등록: ${name || plate}`);
+      setDriverConflictPopup({ mode: "new_driver", existing: null, input: { plate: pl, name: nm, phone: ph } });
     }
   };
 
@@ -3713,7 +3745,7 @@ function MobileOrderDetail({
               placeholder={"예) 김상원 010-7916-2258 강원82사1203\n카카오 문자 전체 복붙 가능"}
               value={smartQuery}
               onChange={e => handleSmartSearch(e.target.value)}
-              onBlur={e => { if (e.target.value.trim().length > 4) handleSmartPaste(e.target.value); }}
+              onBlur={e => { if (e.target.value.trim().length > 4) applySmartDriverInput(e.target.value); }}
             />
             {smartMatched.length > 0 && (
               <div className="absolute z-50 w-full bg-white border border-gray-200 rounded-xl shadow-xl mt-1 overflow-hidden">
@@ -3901,6 +3933,113 @@ function MobileOrderDetail({
                 }}
                 className="flex-1 py-2.5 rounded-xl bg-red-500 text-white text-sm font-bold"
               >확인</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== 기사 정보 충돌 팝업 ===== */}
+      {driverConflictPopup && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end justify-center" onClick={() => setDriverConflictPopup(null)}>
+          <div className="bg-white rounded-t-2xl w-full max-w-md pb-6" onClick={e => e.stopPropagation()}>
+            {/* 헤더 */}
+            <div className="bg-[#1B2B4B] px-5 py-4 rounded-t-2xl flex items-start justify-between">
+              <div>
+                <div className="text-white font-bold text-sm">
+                  {driverConflictPopup.existing ? "⚠️ 기사 정보 충돌" : "🆕 신규 기사 등록 확인"}
+                </div>
+                <div className="text-white/60 text-xs mt-0.5">
+                  {driverConflictPopup.existing
+                    ? "동일 차량번호에 다른 기사 정보가 감지되었습니다"
+                    : "등록되지 않은 기사입니다. 신규 등록하시겠습니까?"}
+                </div>
+              </div>
+              <button onClick={() => setDriverConflictPopup(null)} className="text-white/50 text-xl leading-none ml-3">✕</button>
+            </div>
+
+            <div className="px-5 pt-4 space-y-3">
+              {/* 기존 정보 */}
+              {driverConflictPopup.existing && (
+                <div className="bg-gray-50 border border-gray-200 rounded-xl p-3">
+                  <div className="text-xs font-semibold text-gray-500 mb-1">기존 등록 정보</div>
+                  <div className="text-sm font-bold text-gray-800">{driverConflictPopup.existing.이름}</div>
+                  <div className="text-xs text-gray-500 mt-0.5">
+                    {driverConflictPopup.existing.차량번호} · {fmtPhone(driverConflictPopup.existing.전화번호)}
+                  </div>
+                </div>
+              )}
+              {/* 신규 입력 정보 */}
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
+                <div className="text-xs font-semibold text-blue-600 mb-1">
+                  {driverConflictPopup.existing ? "새로 입력한 정보" : "신규 등록할 정보"}
+                </div>
+                <div className="text-sm font-bold text-gray-800">{driverConflictPopup.input.name}</div>
+                <div className="text-xs text-gray-500 mt-0.5">
+                  {driverConflictPopup.input.plate} · {fmtPhone(driverConflictPopup.input.phone)}
+                </div>
+              </div>
+            </div>
+
+            <div className="px-5 pt-4 space-y-2">
+              {/* 기존 기사가 있을 때: 3버튼 */}
+              {driverConflictPopup.existing && (
+                <>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      style={{ touchAction: "manipulation" }}
+                      className="py-3 rounded-xl bg-gray-100 text-gray-700 text-sm font-semibold"
+                      onClick={() => {
+                        const d = driverConflictPopup.existing;
+                        setCarNo(d.차량번호); setName(d.이름); setPhone(d.전화번호);
+                        setDriverConflictPopup(null);
+                      }}
+                    >기존 정보 사용</button>
+                    <button
+                      style={{ touchAction: "manipulation" }}
+                      className="py-3 rounded-xl bg-[#1B2B4B] text-white text-sm font-bold"
+                      onClick={async () => {
+                        const { plate, name: nm, phone: ph } = driverConflictPopup.input;
+                        await upsertDriver({ 차량번호: plate, 이름: nm, 전화번호: ph });
+                        setCarNo(plate); setName(nm); setPhone(fmtPhone(ph));
+                        setDriverConflictPopup(null);
+                        showToast("기사 정보를 덮어썼습니다");
+                      }}
+                    >기존 정보 덮어쓰기</button>
+                  </div>
+                  <button
+                    style={{ touchAction: "manipulation" }}
+                    className="w-full py-3 rounded-xl bg-emerald-600 text-white text-sm font-bold"
+                    onClick={async () => {
+                      const { plate, name: nm, phone: ph } = driverConflictPopup.input;
+                      await upsertDriver({ 차량번호: plate, 이름: nm, 전화번호: ph });
+                      setCarNo(plate); setName(nm); setPhone(fmtPhone(ph));
+                      setDriverConflictPopup(null);
+                      showToast(`신규 기사 등록: ${nm || plate}`);
+                    }}
+                  >신규 기사로 별도 등록</button>
+                </>
+              )}
+              {/* 완전 신규: 2버튼 */}
+              {!driverConflictPopup.existing && (
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    style={{ touchAction: "manipulation" }}
+                    className="py-3 rounded-xl bg-gray-100 text-gray-700 text-sm font-semibold"
+                    onClick={() => setDriverConflictPopup(null)}
+                  >취소</button>
+                  <button
+                    style={{ touchAction: "manipulation" }}
+                    className="py-3 rounded-xl bg-emerald-600 text-white text-sm font-bold"
+                    onClick={async () => {
+                      const { plate, name: nm, phone: ph } = driverConflictPopup.input;
+                      await upsertDriver({ 차량번호: plate, 이름: nm, 전화번호: ph });
+                      setCarNo(plate); setName(nm); setPhone(fmtPhone(ph));
+                      setDriverConflictPopup(null);
+                      showToast(`✅ 신규 기사 등록: ${nm || plate}`);
+                    }}
+                  >신규 기사 등록</button>
+                </div>
+              )}
             </div>
           </div>
         </div>
