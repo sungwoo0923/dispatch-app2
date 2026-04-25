@@ -3330,12 +3330,15 @@ function MobileOrderDetail({
   const [confirmUndoDeliver, setConfirmUndoDeliver] = useState(false);
   const [expandMemo, setExpandMemo] = useState(false);
   const [showCopyModal, setShowCopyModal] = useState(false);
-  const [smartQuery, setSmartQuery] = useState("");
   const [smartMatched, setSmartMatched] = useState([]);
   const [driverConflictPopup, setDriverConflictPopup] = useState(null);
   const [editingDriverId, setEditingDriverId] = useState(null);
   const [editingDriverData, setEditingDriverData] = useState({ 이름: "", 전화번호: "" });
-  const smartComposingRef = useRef(false);
+  const smartTextareaRef = useRef(null);
+  const clearSmartInput = () => {
+    if (smartTextareaRef.current) smartTextareaRef.current.value = "";
+    setSmartMatched([]);
+  };
   const [carNo, setCarNo] = useState(order.차량번호 || "");
   const [name, setName] = useState(order.기사명 || "");
   const [phone, setPhone] = useState(order.전화번호 || "");
@@ -3408,7 +3411,6 @@ function MobileOrderDetail({
   };
 
   const handleSmartSearch = (text) => {
-    setSmartQuery(text);
     if (!text.trim()) { setSmartMatched([]); return; }
     const { plate: pl } = parseDriverText(text);
     if (!pl) {
@@ -3422,7 +3424,7 @@ function MobileOrderDetail({
 
   const selectSmartDriver = (d) => {
     setCarNo(d.차량번호 || ""); setName(d.이름 || ""); setPhone(d.전화번호 || "");
-    setSmartQuery(""); setSmartMatched([]);
+    clearSmartInput();
   };
 
   // blur/엔터 시 충돌 체크 (차량번호 우선, 전화번호 무시)
@@ -3435,7 +3437,7 @@ function MobileOrderDetail({
       // 차량번호 없으면 그냥 신규로 직접 입력 적용
       if (nm || ph) {
         setCarNo(""); setName(nm || ""); setPhone(ph || "");
-        setSmartQuery(""); setSmartMatched([]);
+        clearSmartInput();
       }
       return;
     }
@@ -3450,20 +3452,20 @@ function MobileOrderDetail({
       if (sameName) {
         // 이름 동일 → 그냥 매칭 (전화번호는 무시)
         setCarNo(existing.차량번호); setName(existing.이름); setPhone(existing.전화번호);
-        setSmartQuery(""); setSmartMatched([]);
+        clearSmartInput();
       } else if (nm) {
         // 차량번호 같고 이름 다름 → 충돌 팝업
-        setSmartQuery(""); setSmartMatched([]);
+        clearSmartInput();
         setDriverConflictPopup({ mode: "name_diff", existing, input: { plate: pl, name: nm, phone: ph } });
       } else {
         setCarNo(existing.차량번호); setName(existing.이름); setPhone(existing.전화번호);
-        setSmartQuery(""); setSmartMatched([]);
+        clearSmartInput();
       }
       return;
     }
 
     // 기존 없음 → 신규 등록 확인 팝업
-    setSmartQuery(""); setSmartMatched([]);
+    clearSmartInput();
     setDriverConflictPopup({ mode: "new_driver", existing: null, input: { plate: pl, name: nm, phone: ph } });
   };
 
@@ -3743,23 +3745,11 @@ function MobileOrderDetail({
           <div className="text-xs font-semibold text-gray-500 mb-1.5">기사 검색 (이름 · 차량번호 · 연락처 · 문자복붙)</div>
           <div className="relative mb-3">
             <textarea
+              ref={smartTextareaRef}
               className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm resize-none bg-gray-50 focus:outline-none focus:border-[#1B2B4B]"
               rows={2}
               placeholder={"예) 김상원 010-7916-2258 강원82사1203\n카카오 문자 전체 복붙 가능"}
-              value={smartQuery}
-              onCompositionStart={() => { smartComposingRef.current = true; }}
-              onCompositionEnd={(e) => {
-                smartComposingRef.current = false;
-                handleSmartSearch(e.target.value);
-              }}
-              onChange={e => {
-                const val = e.target.value;
-                if (!smartComposingRef.current) {
-                  handleSmartSearch(val);
-                } else {
-                  setSmartQuery(val);
-                }
-              }}
+              onChange={e => handleSmartSearch(e.target.value)}
               onBlur={e => { if (e.target.value.trim().length > 4) applySmartDriverInput(e.target.value); }}
             />
             {smartMatched.length > 0 && (
@@ -3841,7 +3831,7 @@ function MobileOrderDetail({
               </div>
               <button
                 type="button"
-                onClick={() => { setCarNo(""); setName(""); setPhone(""); setSmartQuery(""); }}
+                onClick={() => { setCarNo(""); setName(""); setPhone(""); clearSmartInput(); }}
                 className="text-gray-300 hover:text-red-400 text-base px-1"
               >✕</button>
             </div>
