@@ -167,7 +167,7 @@ export default function HomeDashboard({ role, user, pending, delayed, dispatchDa
   const [selectedSchedule, setSelectedSchedule] = useState(null);
   const [users, setUsers] = useState([]);
 
-  React.useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 5000); return () => clearTimeout(t); }, [toast]);
+React.useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 10000); return () => clearTimeout(t); }, [toast]);
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "users"), (snap) => {
@@ -176,56 +176,125 @@ export default function HomeDashboard({ role, user, pending, delayed, dispatchDa
     return () => unsub();
   }, []);
 
+  // 오늘(KST) 날짜 문자열
+  const todayKST = () => {
+    const now = new Date();
+    return new Date(now.getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  };
+
+  // localStorage 기반 열람 기록 (날짜 바뀌면 자동 초기화)
+  const getSeenToasts = () => {
+    const today = todayKST();
+    try {
+      const saved = JSON.parse(localStorage.getItem("seenToasts") || "{}");
+      // 오늘 날짜 키가 없으면 초기화
+      if (saved._date !== today) {
+        localStorage.setItem("seenToasts", JSON.stringify({ _date: today }));
+        return {};
+      }
+      return saved;
+    } catch { return {}; }
+  };
+
+  const markToastSeen = (key) => {
+    const today = todayKST();
+    try {
+      const saved = JSON.parse(localStorage.getItem("seenToasts") || "{}");
+      const base = saved._date === today ? saved : { _date: today };
+      base[key] = true;
+      localStorage.setItem("seenToasts", JSON.stringify(base));
+    } catch {}
+  };
+
+  const showTodayToast = React.useCallback((type, items) => {
+    const today = todayKST();
+    const seen = getSeenToasts();
+
+    // 오늘 날짜 기준으로 가장 최근 항목 찾기
+    const todayItem = items.find(item => {
+      const sec = item.createdAt?.seconds;
+      if (!sec) return false;
+      const kst = new Date(new Date(sec * 1000).getTime() + 9 * 60 * 60 * 1000)
+        .toISOString().slice(0, 10);
+      return kst === today;
+    });
+    if (!todayItem) return;
+
+    // localStorage에 이미 본 기록 있으면 스킵
+    const shownKey = `${type}_${todayItem.id}`;
+    if (seen[shownKey]) return;
+
+    setTimeout(() => {
+      setToast({
+        type,
+        data: { ...todayItem, date: formatCreatedAt(todayItem.createdAt) }
+      });
+      markToastSeen(shownKey); // 표시 즉시 기록
+    }, type === "notice" ? 500 : type === "schedule" ? 1500 : 2500);
+  }, []);
+
   React.useEffect(() => {
     const q = query(collection(db, "schedules"), orderBy("createdAt", "desc"));
+    let initialLoad = true;
     const unsub = onSnapshot(q, (snap) => {
-      setSchedules(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      if (snap.docChanges().some(c => c.type === "added")) {
-        const latest = snap.docChanges().find(c => c.type === "added")?.doc;
-        if (!latest) return;
-        const lastId = localStorage.getItem("last_schedule_id");
-        if (latest.id !== lastId) {
-          localStorage.setItem("last_schedule_id", latest.id);
-          setToast({ type: "schedule", data: { id: latest.id, ...latest.data() } });
-        }
+      const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setSchedules(list);
+      if (initialLoad) {
+        initialLoad = false;
+        showTodayToast("schedule", list); // 접속 시 오늘 항목 알림
+        return;
       }
+      // 실시간 신규 등록 알림
+      const added = snap.docChanges().find(c => c.type === "added" && !c.doc.metadata.hasPendingWrites);
+      if (!added) return;
+      const data = { id: added.doc.id, ...added.doc.data() };
+      markToastSeen(`schedule_${data.id}`);
+      setToast({ type: "schedule", data });
     });
     return () => unsub();
-  }, []);
+  }, [showTodayToast]);
 
   React.useEffect(() => {
     const q = query(collection(db, "notices"), orderBy("createdAt", "desc"));
+    let initialLoad = true;
     const unsub = onSnapshot(q, (snap) => {
       const list = snap.docs.map(d => { const data = d.data(); const date = formatCreatedAt(data.createdAt); if (!date) return null; return { id: d.id, ...data, date }; }).filter(Boolean);
       setNotices(list);
-      if (snap.docChanges().some(c => c.type === "added")) {
-        const latest = snap.docChanges().find(c => c.type === "added")?.doc;
-        if (!latest) return;
-        const lastId = localStorage.getItem("last_notice_id");
-        if (latest.id !== lastId) {
-          localStorage.setItem("last_notice_id", latest.id);
-          setToast({ type: "notice", data: { id: latest.id, ...latest.data(), date: formatCreatedAt(latest.data().createdAt) } });
-        }
+      if (initialLoad) {
+        initialLoad = false;
+        showTodayToast("notice", list); // 접속 시 오늘 항목 알림
+        return;
       }
+      // 실시간 신규 등록 알림
+      const added = snap.docChanges().find(c => c.type === "added" && !c.doc.metadata.hasPendingWrites);
+      if (!added) return;
+      const data = { id: added.doc.id, ...added.doc.data(), date: formatCreatedAt(added.doc.data().createdAt) };
+      markToastSeen(`notice_${data.id}`);
+      setToast({ type: "notice", data });
     });
     return () => unsub();
-  }, []);
+  }, [showTodayToast]);
 
   React.useEffect(() => {
     const q = query(collection(db, "handovers"), orderBy("createdAt", "desc"));
+    let initialLoad = true;
     const unsub = onSnapshot(q, (snap) => {
-      setHandovers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setHandovers(list);
+      if (initialLoad) {
+        initialLoad = false;
+        showTodayToast("handover", list); // 접속 시 오늘 항목 알림
+        return;
+      }
+      // 실시간 신규 등록 알림 (내가 직접 편집 중인 건 제외)
       const added = snap.docChanges().find(c => c.type === "added" && !c.doc.metadata.hasPendingWrites && !isEditingHandoverRef.current);
       if (!added) return;
-      const latest = added.doc;
-      const lastId = localStorage.getItem("last_handover_id");
-      if (latest.id !== lastId) {
-        localStorage.setItem("last_handover_id", latest.id);
-        setToast({ type: "handover", data: { id: latest.id, ...latest.data() } });
-      }
+         const data = { id: added.doc.id, ...added.doc.data() };
+      markToastSeen(`handover_${data.id}`);
+      setToast({ type: "handover", data });
     });
     return () => unsub();
-  }, []);
+  }, [showTodayToast]);
 
   const noticeTotalPages = Math.ceil(notices.length / NOTICE_PAGE_SIZE);
   const pagedNotices = useMemo(() => { const s = (noticePage - 1) * NOTICE_PAGE_SIZE; return notices.slice(s, s + NOTICE_PAGE_SIZE); }, [notices, noticePage]);
@@ -721,17 +790,83 @@ export default function HomeDashboard({ role, user, pending, delayed, dispatchDa
         </Modal>
       )}
 
-      {/* ===== 토스트 ===== */}
-      {toast && (
-        <div className="fixed bottom-5 right-5 z-50 bg-white border border-gray-200 shadow-xl rounded-xl px-4 py-3 cursor-pointer w-[260px]" onClick={() => { if (toast.type === "notice") setSelectedNotice(toast.data); else if (toast.type === "schedule") setSelectedSchedule(toast.data); else if (toast.type === "handover") setSelectedHandover(toast.data); setToast(null); }}>
-          <button onClick={e => { e.stopPropagation(); setToast(null); }} className="absolute top-2.5 right-3 text-gray-400 hover:text-gray-700 text-sm">✕</button>
-          <div className="flex items-center gap-2 mb-1">
-            <span>{toast.type === "notice" ? "📢" : toast.type === "schedule" ? "📅" : "📝"}</span>
-            <span className="text-[13px] font-bold text-gray-800">{toast.type === "notice" ? "공지사항 등록" : toast.type === "schedule" ? "일정 등록" : "인수인계 등록"}</span>
+     {/* ===== 토스트 ===== */}
+      <style>{`
+        @keyframes toastSlideIn {
+          from { transform: translateX(120%); opacity: 0; }
+          to   { transform: translateX(0);   opacity: 1; }
+        }
+      @keyframes toastProgress {
+          from { width: 100%; }
+          to   { width: 0%; }
+        }
+        .toast-enter { animation: toastSlideIn 0.35s cubic-bezier(0.34,1.56,0.64,1) forwards; }
+        .toast-bar   { animation: toastProgress 10s linear forwards; }
+      `}</style>
+
+      {toast && (() => {
+        const cfg = {
+          notice:   { icon: "📢", label: "공지사항 등록",  accent: "#3B82F6", bg: "#EFF6FF", body: toast.data.title },
+          schedule: { icon: "📅", label: "일정 등록",      accent: "#10B981", bg: "#ECFDF5", body: `[${toast.data.type}] ${toast.data.name || ""}` },
+          handover: { icon: "📝", label: "인수인계 등록",  accent: "#F59E0B", bg: "#FFFBEB", body: toast.data.text },
+        }[toast.type] || {};
+
+        return (
+          <div
+            className="toast-enter fixed bottom-6 right-6 z-50 cursor-pointer select-none"
+            style={{ width: 320 }}
+            onClick={() => {
+              if (toast.type === "notice") setSelectedNotice(toast.data);
+              else if (toast.type === "schedule") setSelectedSchedule(toast.data);
+              else if (toast.type === "handover") setSelectedHandover(toast.data);
+              setToast(null);
+            }}
+          >
+            <div className="rounded-2xl overflow-hidden shadow-2xl border border-gray-100"
+              style={{ background: "#fff" }}>
+
+              {/* 상단 헤더 */}
+              <div className="flex items-center justify-between px-4 py-3"
+                style={{ background: "#1B2B4B" }}>
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl flex items-center justify-center text-[18px]"
+                    style={{ background: "rgba(255,255,255,0.15)" }}>
+                    {cfg.icon}
+                  </div>
+                  <div>
+                    <div className="text-white font-bold text-[13px] leading-tight">새 알림</div>
+                    <div className="text-white/60 text-[11px]">{cfg.label}</div>
+                  </div>
+                </div>
+                <button
+                  onClick={e => { e.stopPropagation(); setToast(null); }}
+                  className="w-6 h-6 rounded-full flex items-center justify-center text-white/50 hover:text-white hover:bg-white/20 transition text-[14px]"
+                >✕</button>
+              </div>
+
+              {/* 본문 */}
+              <div className="px-4 py-3" style={{ background: cfg.bg }}>
+                <div className="text-[13px] font-semibold text-gray-800 line-clamp-2 leading-relaxed">
+                  {cfg.body}
+                </div>
+                <div className="flex items-center gap-1 mt-2">
+                  <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full text-white"
+                    style={{ background: cfg.accent }}>
+                    {cfg.label}
+                  </span>
+                  <span className="text-[11px] text-gray-400">· 클릭하여 확인</span>
+                </div>
+              </div>
+
+              {/* 하단 진행바 */}
+              <div className="h-1" style={{ background: "#f1f5f9" }}>
+                <div className="toast-bar h-full rounded-full"
+                  style={{ background: cfg.accent }} />
+              </div>
+            </div>
           </div>
-          <div className="text-[12px] text-gray-500 truncate">{toast.type === "notice" ? toast.data.title : toast.type === "schedule" ? `[${toast.data.type}] ${toast.data.name}` : toast.data.text}</div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

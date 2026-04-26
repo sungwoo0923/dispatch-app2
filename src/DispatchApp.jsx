@@ -4142,6 +4142,17 @@ await savePlaceSmart(
   form.하차지Id     // ⭐ 반드시 전달
 );
 }
+  // 신규 기사면 저장 시점에 등록
+  if (form.차량번호 && form.이름) {
+    const existing = driverMap.get(form.차량번호.replace(/\s+/g,""));
+    if (!existing || existing.length === 0) {
+      await upsertDriver({
+        차량번호: form.차량번호,
+        이름: form.이름,
+        전화번호: form.전화번호,
+      });
+    }
+  }
   const reset = {
     ...emptyForm,
     _id: crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`,
@@ -4791,10 +4802,22 @@ const parseDriverText = (text) => {
     : "";
   const plateMatch = text.match(/[가-힣]{2,3}\d{2}[가-힣]\d{4}|\d{2,3}[가-힣]\d{4}/);
   const plate = plateMatch ? plateMatch[0] : "";
-  const stripped = text.replace(phoneMatch?.[0]||"","").replace(plate||"","");
-  const nameMatch = stripped.match(/[가-힣]{2,4}/g) || [];
-  const excludeRegions = ["강원","서울","경기","인천","부산","대구","광주","대전","울산","세종","경북","경남","전북","전남","충북","충남","제주","냉장","냉동","카고","윙바디"];
-  const name = nameMatch.find(n => n.length >= 2 && !excludeRegions.includes(n)) || "";
+
+  // [차주정보] 블록에서 이름 우선 추출
+  let name = "";
+  const ownerBlock = text.match(/\[차주정보\]\s*([가-힣]{2,4})/);
+  if (ownerBlock) {
+    name = ownerBlock[1];
+  } else {
+    const stripped = text.replace(phoneMatch?.[0]||"","").replace(plate||"","");
+    const nameMatch = stripped.match(/[가-힣]{2,4}/g) || [];
+    const excludeRegions = ["강원","서울","경기","인천","부산","대구","광주","대전","울산","세종","경북","경남","전북","전남","충북","충남","제주","냉장","냉동","카고","윙바디"];
+    name = nameMatch.find(n =>
+      n.length >= 2 &&
+      !excludeRegions.includes(n) &&
+      !/[구시군동읍면로]$/.test(n)
+    ) || "";
+  }
   return { phone, plate, name };
 };
 
@@ -4808,14 +4831,20 @@ const handleSmartDriverInput = (text) => {
   }
   const { phone, plate, name } = parseDriverText(text);
   const q = normD(text);
-  const results = (drivers||[]).filter(d => {
-    if (plate && normD(d.차량번호).includes(normD(plate))) return true;
-    if (phone && normD(d.전화번호).includes(normD(phone))) return true;
-    if (name && normD(d.이름).includes(normD(name))) return true;
-    if (normD(d.이름).includes(q)||normD(d.차량번호).includes(q)||normD(d.전화번호).includes(q)) return true;
-    return false;
-  });
-  setSmartDriverMatched(results.slice(0, 8));
+  // 차량번호 기준으로만 후보 추출
+const results = plate
+  ? (drivers||[])
+      .filter(d => normD(d.차량번호) === normD(plate))
+      .sort((a, b) => {
+        // 이름+전화 모두 같으면 맨 위
+        const aExact = normD(a.이름) === normD(name) && normD(a.전화번호) === normD(phone);
+        const bExact = normD(b.이름) === normD(name) && normD(b.전화번호) === normD(phone);
+        if (aExact && !bExact) return -1;
+        if (!aExact && bExact) return 1;
+        return 0;
+      })
+  : [];
+setSmartDriverMatched(results.slice(0, 8));
 };
 
 // 스마트 검색 결과 선택
@@ -4877,9 +4906,8 @@ const applySmartDriverInput = async (text) => {
     return;
   }
 
-  // 기존 없음 → 신규 자동 등록
+  // 기존 없음 → form에만 세팅 (실제 등록은 doSave에서)
   if (plate || name || phone) {
-    await upsertDriver({ 차량번호: plate, 이름: name, 전화번호: phone });
     setForm(p => ({
       ...p,
       차량번호: plate,
@@ -10143,10 +10171,16 @@ const parseDriverText4 = (text) => {
   const phone = phoneMatch ? phoneMatch[0].replace(/[-.\s]/g,"").replace(/^(\d{3})(\d{3,4})(\d{4})$/,"$1-$2-$3") : "";
   const plateMatch = text.match(/[가-힣]{2,3}\d{2}[가-힣]\d{4}|\d{2,3}[가-힣]\d{4}/);
   const plate = plateMatch ? plateMatch[0] : "";
-  const stripped = text.replace(phoneMatch?.[0]||"","").replace(plate||"","");
-  const excl = ["강원","서울","경기","인천","부산","대구","광주","대전","울산","세종","경북","경남","전북","전남","충북","충남","제주","냉장","냉동","카고","윙바디"];
-  const nameMatch = stripped.match(/[가-힣]{2,4}/g)||[];
-  const name = nameMatch.find(n=>n.length>=2&&!excl.includes(n))||"";
+  let name = "";
+  const ownerBlock = text.match(/\[차주정보\]\s*([가-힣]{2,4})/);
+  if (ownerBlock) {
+    name = ownerBlock[1];
+  } else {
+    const stripped = text.replace(phoneMatch?.[0]||"","").replace(plate||"","");
+    const excl = ["강원","서울","경기","인천","부산","대구","광주","대전","울산","세종","경북","경남","전북","전남","충북","충남","제주","냉장","냉동","카고","윙바디"];
+    const nameMatch = stripped.match(/[가-힣]{2,4}/g)||[];
+    name = nameMatch.find(n => n.length>=2 && !excl.includes(n) && !/[구시군동읍면로]$/.test(n)) || "";
+  }
   return { phone, plate, name };
 };
 const nd4 = (s="") => String(s).replace(/[-.\s]/g,"").toLowerCase();
@@ -10156,13 +10190,18 @@ const handleSmart4Input = (text) => {
   if (!text.trim()) { setSmartList4([]); return; }
   const { phone, plate, name } = parseDriverText4(text);
   const q = nd4(text);
-  const results = (drivers||[]).filter(d => {
-    if (plate && nd4(d.차량번호).includes(nd4(plate))) return true;
-    if (phone && nd4(d.전화번호).includes(nd4(phone))) return true;
-    if (name && nd4(d.이름).includes(nd4(name))) return true;
-    return nd4(d.이름).includes(q)||nd4(d.차량번호).includes(q)||nd4(d.전화번호).includes(q);
-  });
-  setSmartList4(results.slice(0,8));
+const results = plate
+  ? (drivers||[])
+      .filter(d => nd4(d.차량번호) === nd4(plate))
+      .sort((a, b) => {
+        const aExact = nd4(a.이름) === nd4(name) && nd4(a.전화번호) === nd4(phone);
+        const bExact = nd4(b.이름) === nd4(name) && nd4(b.전화번호) === nd4(phone);
+        if (aExact && !bExact) return -1;
+        if (!aExact && bExact) return 1;
+        return 0;
+      })
+  : [];
+setSmartList4(results.slice(0,8));
 };
 
 const applySmart4 = async (target, setTarget, text) => {
@@ -10182,8 +10221,7 @@ const applySmart4 = async (target, setTarget, text) => {
     } else {
       setSmart4ConflictPopup({ existing: ex, input: { plate, name, phone }, setTarget });
     }
-  } else if (plate||name||phone) {
-    await upsertDriver({ 차량번호:plate, 이름:name, 전화번호:phone });
+   } else if (plate||name||phone) {
     setTarget(p=>({...p, 차량번호:plate, 이름:name, 전화번호:formatPhone(phone), 배차상태:"배차완료"}));
   }
   setSmartQ4(""); setSmartList4([]);
@@ -13485,6 +13523,13 @@ setEditTarget((p) => ({
                   });
 payload.updatedAt = Date.now();
 delete payload.createdAt;  // 🔥 핵심: 등록시간 덮어쓰기 방지
+// 신규 기사면 저장 시점에 등록
+if (payload.차량번호 && payload.이름) {
+  const existingD = driverMap.get((payload.차량번호||"").replace(/\s+/g,""));
+  if (!existingD || existingD.length === 0) {
+    await upsertDriver({ 차량번호: payload.차량번호, 이름: payload.이름, 전화번호: payload.전화번호||"" });
+  }
+}
 await patchDispatch(editTarget._id, payload);
                   // ===============================
                   // 🔥 거래처 정보 최신화 (선택수정 시)
@@ -14741,10 +14786,16 @@ const parseDriverText5 = (text) => {
   const phone = phoneMatch ? phoneMatch[0].replace(/[-.\s]/g,"").replace(/^(\d{3})(\d{3,4})(\d{4})$/,"$1-$2-$3") : "";
   const plateMatch = text.match(/[가-힣]{2,3}\d{2}[가-힣]\d{4}|\d{2,3}[가-힣]\d{4}/);
   const plate = plateMatch ? plateMatch[0] : "";
-  const stripped = text.replace(phoneMatch?.[0]||"","").replace(plate||"","");
-  const excl = ["강원","서울","경기","인천","부산","대구","광주","대전","울산","세종","경북","경남","전북","전남","충북","충남","제주","냉장","냉동","카고","윙바디"];
-  const nameMatch = stripped.match(/[가-힣]{2,4}/g)||[];
-  const name = nameMatch.find(n=>n.length>=2&&!excl.includes(n))||"";
+  let name = "";
+  const ownerBlock = text.match(/\[차주정보\]\s*([가-힣]{2,4})/);
+  if (ownerBlock) {
+    name = ownerBlock[1];
+  } else {
+    const stripped = text.replace(phoneMatch?.[0]||"","").replace(plate||"","");
+    const excl = ["강원","서울","경기","인천","부산","대구","광주","대전","울산","세종","경북","경남","전북","전남","충북","충남","제주","냉장","냉동","카고","윙바디"];
+    const nameMatch = stripped.match(/[가-힣]{2,4}/g)||[];
+    name = nameMatch.find(n => n.length>=2 && !excl.includes(n) && !/[구시군동읍면로]$/.test(n)) || "";
+  }
   return { phone, plate, name };
 };
 const nd5 = (s="") => String(s).replace(/[-.\s]/g,"").toLowerCase();
@@ -14754,13 +14805,18 @@ const handleSmart5Input = (text) => {
   if (!text.trim()) { setSmartList5([]); return; }
   const { phone, plate, name } = parseDriverText5(text);
   const q = nd5(text);
-  const results = (drivers||[]).filter(d => {
-    if (plate && nd5(d.차량번호).includes(nd5(plate))) return true;
-    if (phone && nd5(d.전화번호).includes(nd5(phone))) return true;
-    if (name && nd5(d.이름).includes(nd5(name))) return true;
-    return nd5(d.이름).includes(q)||nd5(d.차량번호).includes(q)||nd5(d.전화번호).includes(q);
-  });
-  setSmartList5(results.slice(0,8));
+const results = plate
+  ? (drivers||[])
+      .filter(d => nd5(d.차량번호) === nd5(plate))
+      .sort((a, b) => {
+        const aExact = nd5(a.이름) === nd5(name) && nd5(a.전화번호) === nd5(phone);
+        const bExact = nd5(b.이름) === nd5(name) && nd5(b.전화번호) === nd5(phone);
+        if (aExact && !bExact) return -1;
+        if (!aExact && bExact) return 1;
+        return 0;
+      })
+  : [];
+setSmartList5(results.slice(0,8));
 };
 
 const applySmart5 = async (target, setTarget, text) => {
@@ -14780,8 +14836,7 @@ const applySmart5 = async (target, setTarget, text) => {
     } else {
       setSmart5ConflictPopup({ existing: ex, input: { plate, name, phone }, setTarget });
     }
-  } else if (plate||name||phone) {
-    await upsertDriver({ 차량번호:plate, 이름:name, 전화번호:phone });
+ } else if (plate||name||phone) {
     setTarget(p=>({...p, 차량번호:plate, 이름:name, 전화번호:formatPhone(phone), 배차상태:"배차완료"}));
   }
   setSmartQ5(""); setSmartList5([]);
@@ -17670,7 +17725,14 @@ const finalCargo = editTarget.화물타입
 
 payload.화물내용 = finalCargo;
                   await patchDispatch(targetId, payload);
-                  const savedPlate = normalizePlate(payload.차량번호 || "");
+// 신규 기사면 저장 시점에 등록
+if (payload.차량번호 && payload.이름) {
+  const existingD = (drivers||[]).find(d => normalizePlate(d.차량번호) === normalizePlate(payload.차량번호));
+  if (!existingD) {
+    await upsertDriver({ 차량번호: payload.차량번호, 이름: payload.이름, 전화번호: payload.전화번호||"" });
+  }
+}
+const savedPlate = normalizePlate(payload.차량번호 || "");
 if (savedPlate) {
   const d = (drivers || []).find(x => normalizePlate(x.차량번호) === savedPlate);
   emitBlackIfNeeded(d);

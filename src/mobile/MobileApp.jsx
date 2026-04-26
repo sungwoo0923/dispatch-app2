@@ -3552,6 +3552,44 @@ const dt = new Date(y, m - 1, d, hh, mm);
 // ======================================================================
 // 상세보기
 // ======================================================================
+function SectionHeader({ label }) {
+  return (
+    <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2 px-1">
+      {label}
+    </div>
+  );
+}
+
+function DetailCard({ children, className = "" }) {
+  return (
+    <div className={`bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-4 ${className}`}>
+      {children}
+    </div>
+  );
+}
+
+const SmartTextarea = React.memo(function SmartTextarea({ onSearch, textareaRef }) {
+  const timerRef = React.useRef(null);
+  return (
+    <textarea
+      ref={textareaRef}
+      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm resize-none bg-gray-50 focus:outline-none focus:border-[#1B2B4B]"
+      rows={2}
+      placeholder="기사 스마트 검색 "
+      autoComplete="off"
+      autoCorrect="off"
+      autoCapitalize="none"
+      spellCheck="false"
+      inputMode="text"
+      onChange={e => {
+        const val = e.target.value;
+        if (timerRef.current) clearTimeout(timerRef.current);
+        timerRef.current = setTimeout(() => onSearch(val), 150);
+      }}
+    />
+  );
+});
+
 function MobileOrderDetail({
   order,
   drivers,
@@ -3574,13 +3612,14 @@ function MobileOrderDetail({
   const [editingDriverId, setEditingDriverId] = useState(null);
   const [editingDriverData, setEditingDriverData] = useState({ 이름: "", 전화번호: "" });
   const smartTextareaRef = useRef(null);
-  const clearSmartInput = () => {
+   const clearSmartInput = () => {
     if (smartTextareaRef.current) smartTextareaRef.current.value = "";
     setSmartMatched([]);
   };
   const [carNo, setCarNo] = useState(order.차량번호 || "");
   const [name, setName] = useState(order.기사명 || "");
   const [phone, setPhone] = useState(order.전화번호 || "");
+  const [isNewDriver, setIsNewDriver] = useState(false);
 
   const claim = getClaim(order);
   const sanjae = getSanjae(order);
@@ -3607,12 +3646,21 @@ function MobileOrderDetail({
 
   const parseDriverText = (text) => {
     let name = "", phone = "", plate = "";
-    const hasTag = text.includes("[차주정보]") || text.includes("[차량정보]") || text.includes("[기사정보]");
+   const hasTag = text.includes("[차주정보]") || text.includes("[차량정보]") || text.includes("[기사정보]");
     if (hasTag) {
-      const ownerMatch = text.match(/\[(차주정보|기사정보)\]\s*([^\n/]+?)[\s/]+(\d{2,4}[-.\s]?\d{3,4}[-.\s]?\d{4})/);
+      // 구분자 있는 경우: [차주정보] 이름 010-1234-5678
+      let ownerMatch = text.match(/\[(차주정보|기사정보)\]\s*([^\n/]+?)[\s/]+(\d{2,4}[-.\s]?\d{3,4}[-.\s]?\d{4})/);
       if (ownerMatch) {
         name = ownerMatch[2].trim();
         phone = ownerMatch[3].replace(/[-.\s]/g, "").replace(/^(\d{3})(\d{3,4})(\d{4})$/, "$1-$2-$3");
+      } else {
+        // 구분자 없는 경우: [차주정보] 이름01012345678 (이름+전화 붙어있음)
+        const noSepMatch = text.match(/\[(차주정보|기사정보)\]\s*([가-힣a-zA-Z]+)(\d{10,11})/);
+        if (noSepMatch) {
+          name = noSepMatch[2].trim();
+          const rawPhone = noSepMatch[3];
+          phone = rawPhone.replace(/^(\d{3})(\d{3,4})(\d{4})$/, "$1-$2-$3");
+        }
       }
       const vehicleLine = text.match(/\[차량정보\]\s*([^\n]+)/);
       if (vehicleLine) {
@@ -3636,7 +3684,7 @@ function MobileOrderDetail({
     const stripped = text.replace(phoneMatch?.[0] || "", "").replace(plate || "", "");
     const nameMatch = stripped.match(/[가-힣]{2,4}/g) || [];
     const EXCLUDE = ["강원","서울","경기","인천","부산","대구","광주","대전","울산","세종","경북","경남","전북","전남","충북","충남","제주","초장축윙","초장축","장축","윙바디","카고","탑차","냉장탑","냉동탑","냉장윙","냉동윙","냉장","냉동","리프트","다마스","라보"];
-    name = nameMatch.find(n => n.length >= 2 && !EXCLUDE.includes(n)) || "";
+    name = nameMatch.find(n => n.length >= 2 && !EXCLUDE.includes(n) && !/[구시군동읍면로]$/.test(n)) || "";
     return { phone, plate, name };
   };
 
@@ -3648,7 +3696,6 @@ function MobileOrderDetail({
     if (d.length === 10) return `${d.slice(0,3)}-${d.slice(3,6)}-${d.slice(6)}`;
     return p;
   };
-
   const handleSmartSearch = (text) => {
     if (!text.trim()) { setSmartMatched([]); return; }
     const { plate: pl } = parseDriverText(text);
@@ -3660,9 +3707,58 @@ function MobileOrderDetail({
     const results = drivers.filter(d => normD(d.차량번호).includes(normD(pl)));
     setSmartMatched(results.slice(0, 8));
   };
+  const driversRef = React.useRef(drivers);
+  React.useEffect(() => { driversRef.current = drivers; }, [drivers]);
 
+ const handleSmartInputCb = React.useCallback((val) => {
+    if (!val.trim()) { setSmartMatched([]); setIsNewDriver(false); return; }
+    const { plate: pl, name: nm, phone: ph } = parseDriverText(val);
+    if (!pl) { setSmartMatched([]); setIsNewDriver(false); return; }
+
+    const nd = (s = "") => String(s).replace(/[-.\s]/g, "").toLowerCase();
+
+    // 차량번호 완전일치만 드롭다운 표시 (PC 3/4/5파트와 동일)
+    const results = driversRef.current
+      .filter(d => nd(d.차량번호) === nd(pl))
+      .sort((a, b) => {
+        // 이름+전화 모두 일치하면 맨 위
+        const aExact = nd(a.이름) === nd(nm) && nd(a.전화번호) === nd(ph);
+        const bExact = nd(b.이름) === nd(nm) && nd(b.전화번호) === nd(ph);
+        if (aExact && !bExact) return -1;
+        if (!aExact && bExact) return 1;
+        return 0;
+      });
+
+    setSmartMatched(results.slice(0, 8));
+
+    // 기존 기사 없으면 → 신규 자동 세팅
+    if (results.length === 0) {
+      setCarNo(pl);
+      setName(nm || "");
+      setPhone(ph || "");
+      setIsNewDriver(true);
+    } else {
+      // 이름까지 완전 일치하는 기사 있으면 바로 세팅
+      const exactMatch = results.find(d => nd(d.이름) === nd(nm));
+      if (exactMatch) {
+        setCarNo(exactMatch.차량번호);
+        setName(exactMatch.이름 || "");
+        setPhone(exactMatch.전화번호 || "");
+        setIsNewDriver(false);
+      } else {
+        // 차량번호만 일치 → 첫번째 기사 세팅
+        setCarNo(results[0].차량번호);
+        setName(results[0].이름 || "");
+        setPhone(results[0].전화번호 || "");
+        setIsNewDriver(false);
+      }
+    }
+  }, []);
   const selectSmartDriver = (d) => {
-    setCarNo(d.차량번호 || ""); setName(d.이름 || ""); setPhone(d.전화번호 || "");
+    setCarNo(d.차량번호 || "");
+    setName(d.이름 || "");
+    setPhone(d.전화번호 || "");
+    setIsNewDriver(false);
     clearSmartInput();
   };
 
@@ -3714,7 +3810,7 @@ function MobileOrderDetail({
     window.open(`https://map.kakao.com/?q=${encodeURIComponent(addr)}`, "_blank");
   };
 
-  const handleAssignClick = () => {
+const handleAssignClick = () => {
     if (!carNo) { alert("차량번호를 입력해주세요."); return; }
     if (!name || !phone) {
       if (!window.confirm("기사 이름/연락처가 비어 있습니다. 그대로 배차하시겠습니까?")) return;
@@ -3722,20 +3818,41 @@ function MobileOrderDetail({
     onAssignDriver({ 차량번호: carNo, 이름: name, 전화번호: phone });
   };
 
-  // ── 섹션 헤더 컴포넌트
-  const SectionHeader = ({ label }) => (
-    <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2 px-1">
-      {label}
-    </div>
-  );
+ const handleSaveDriverToOrder = async () => {
+    if (!carNo) { alert("차량번호를 입력해주세요."); return; }
+    try {
+      const colName = order.__col || collName;
+      const docId = order._id || order.id;
 
-  // ── 카드 래퍼
-  const Card = ({ children, className = "" }) => (
-    <div className={`bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-4 ${className}`}>
-      {children}
-    </div>
-  );
+      await updateDoc(doc(db, colName, docId), {
+        차량번호: carNo,
+        기사명: name || "",
+        이름: name || "",
+        전화번호: phone || "",
+        전화: phone || "",
+        배차상태: "배차완료",
+        상태: "배차완료",
+        updatedAt: serverTimestamp(),
+      });
 
+      // 신규 기사면 기사관리에 등록
+      if (isNewDriver && carNo) {
+        const nd = (s = "") => String(s).replace(/\s+/g, "").toLowerCase();
+        const existing = driversRef.current.find(d => nd(d.차량번호) === nd(carNo));
+        if (!existing) {
+          await upsertDriver({ 차량번호: carNo, 이름: name || "", 전화번호: phone || "" });
+        }
+      }
+
+      setIsNewDriver(false);
+      if (smartTextareaRef.current) smartTextareaRef.current.value = "";
+      setSmartMatched([]);
+      showToast("✅ 저장 완료!");
+    } catch (e) {
+      console.error("저장 오류:", e);
+      alert("저장 실패: " + e.message);
+    }
+  };
   return (
     <div className="px-4 py-4 space-y-5 bg-gray-50 pb-10">
 
@@ -3758,7 +3875,7 @@ function MobileOrderDetail({
       {/* ── 오더 정보 ── */}
       <div>
         <SectionHeader label="오더 정보" />
-        <Card>
+        <DetailCard>
           {/* 상태 뱃지 */}
           <div className="flex items-center justify-between mb-3">
             <span className="text-xs" style={{ color: "var(--text-secondary)" }}>{order.거래처명 || "-"}</span>
@@ -3821,13 +3938,13 @@ function MobileOrderDetail({
               </span>
             )}
           </div>
-        </Card>
+        </DetailCard>
       </div>
 
       {/* ── 운임 정보 ── */}
       <div>
         <SectionHeader label="운임 정보" />
-        <Card>
+        <DetailCard>
           <div className="grid grid-cols-3 divide-x divide-gray-100 text-center">
             <div className="px-2">
               <div className="text-[11px] mb-1" style={{ color: "var(--text-secondary)" }}>청구운임</div>
@@ -3845,13 +3962,13 @@ function MobileOrderDetail({
               <div className="text-[10px]" style={{ color: "var(--text-secondary)" }}>원</div>
             </div>
           </div>
-        </Card>
+        </DetailCard>
       </div>
 
       {/* ── 액션 버튼 ── */}
       <div>
         <SectionHeader label="액션" />
-        <Card>
+        <DetailCard>
           <div className="grid grid-cols-3 gap-2 mb-2">
             <button
               onClick={() => onDuplicate(order)}
@@ -3905,13 +4022,13 @@ function MobileOrderDetail({
               하차지 지도
             </button>
           </div>
-        </Card>
+        </DetailCard>
       </div>
 
       {/* ── 업체 전달 상태 ── */}
       <div>
         <SectionHeader label="업체 전달 상태" />
-        <Card>
+        <DetailCard>
           {!isDelivered ? (
             <button
               onClick={() => setConfirmDeliver(true)}
@@ -3930,70 +4047,28 @@ function MobileOrderDetail({
               </button>
             </div>
           )}
-        </Card>
+        </DetailCard>
       </div>
-
-      {/* ── 기사 연락 ── */}
-<div>
-  <SectionHeader label="기사 연락" />
-  <Card>
-    <div className="flex items-center justify-between mb-3">
-      <div>
-        <div className="text-sm font-bold text-gray-900">{order.기사명 || "-"}</div>
-        <div className="text-xs text-gray-400">{order.차량번호 || ""}</div>
-      </div>
-      <div className="text-xs text-gray-500">{order.전화번호 || "-"}</div>
-    </div>
-    {order.전화번호 ? (
-      <div className="grid grid-cols-2 gap-2">
-        <a
-          href={`tel:${normalizePhone(order.전화번호)}`}
-          className="py-2.5 rounded-xl bg-[#1B2B4B] text-white text-xs font-bold text-center"
-        >
-          📞 전화
-        </a>
-        <a
-          href={`sms:${normalizePhone(order.전화번호)}`}
-          className="py-2.5 rounded-xl border border-[#1B2B4B] text-[#1B2B4B] text-xs font-bold text-center"
-        >
-          💬 문자
-        </a>
-      </div>
-    ) : (
-      <div className="text-xs text-gray-400 text-center py-2">
-        배차 후 연락처가 표시됩니다
-      </div>
-    )}
-  </Card>
-</div>
 
       {/* ── 기사 배차 ── */}
       <div>
         <SectionHeader label="기사 배차" />
-        <Card>
-          {/* 현재 상태 */}
+        <DetailCard>
+        {/* 현재 상태 */}
           <div className="flex items-center justify-between mb-3 pb-3" style={{ borderBottom: "1px solid var(--border-divider)" }}>
             <span className="text-xs" style={{ color: "var(--text-secondary)" }}>현재 상태</span>
-            <span className={`text-xs font-bold ${state === "배차완료" ? "text-emerald-600" : "text-blue-600"}`}>
-              {state}
-              {order.기사명 && ` · ${order.기사명} (${order.차량번호})`}
+            <span className={`text-xs font-bold ${carNo ? "text-emerald-600" : "text-blue-600"}`}>
+              {carNo ? "배차완료" : "배차중"}
+              {name && ` · ${name} (${carNo})`}
             </span>
           </div>
 
           {/* 스마트 검색 */}
           <div className="text-xs font-semibold text-gray-500 mb-1.5">기사 검색 (이름 · 차량번호 · 연락처 · 문자복붙)</div>
           <div className="relative mb-3">
-            <textarea
-              ref={smartTextareaRef}
-              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm resize-none bg-gray-50 focus:outline-none focus:border-[#1B2B4B]"
-              rows={2}
-              placeholder={"예) 김상원 010-7916-2258 강원82사1203\n카카오 문자 전체 복붙 가능"}
-              autoComplete="off"
-              autoCorrect="off"
-              autoCapitalize="none"
-              spellCheck="false"
-              inputMode="text"
-              onChange={e => handleSmartSearch(e.target.value)}
+            <SmartTextarea
+              textareaRef={smartTextareaRef}
+              onSearch={handleSmartInputCb}
             />
             {smartMatched.length > 0 && (
               <div className="absolute z-50 w-full bg-white border border-gray-200 rounded-xl shadow-xl mt-1 overflow-hidden">
@@ -4017,45 +4092,30 @@ function MobileOrderDetail({
                           onPointerDown={e => e.stopPropagation()}
                         />
                         <div className="flex gap-2">
-                          <button
-                            type="button"
-                            className="flex-1 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-bold"
+                          <button type="button" className="flex-1 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-bold"
                             onPointerDown={async (e) => {
                               e.preventDefault();
                               if (!editingDriverData.이름.trim()) return;
-                              await updateDoc(doc(db, "drivers", d.id), {
-                                이름: editingDriverData.이름,
-                                전화번호: editingDriverData.전화번호,
-                              });
+                              await updateDoc(doc(db, "drivers", d.id), { 이름: editingDriverData.이름, 전화번호: editingDriverData.전화번호 });
                               setEditingDriverId(null);
-                            }}
-                          >저장</button>
-                          <button
-                            type="button"
-                            className="px-3 py-1.5 rounded-lg bg-gray-200 text-gray-700 text-xs"
-                            onPointerDown={e => { e.preventDefault(); setEditingDriverId(null); }}
-                          >취소</button>
+                            }}>저장</button>
+                          <button type="button" className="px-3 py-1.5 rounded-lg bg-gray-200 text-gray-700 text-xs"
+                            onPointerDown={e => { e.preventDefault(); setEditingDriverId(null); }}>취소</button>
                         </div>
                       </div>
                     ) : (
                       <div className="flex items-center">
-                        <button
-                          type="button"
-                          className="flex-1 text-left px-4 py-3 hover:bg-gray-50"
-                          onPointerDown={e => { e.preventDefault(); selectSmartDriver(d); }}
-                        >
+                        <button type="button" className="flex-1 text-left px-4 py-3 hover:bg-gray-50"
+                          onPointerDown={e => { e.preventDefault(); selectSmartDriver(d); }}>
                           <div className="font-bold text-gray-900 text-[13px]">{d.이름 || "-"}</div>
                           <div className="text-[11px] text-gray-400 mt-0.5">{d.차량번호} · {d.전화번호}</div>
                         </button>
-                        <button
-                          type="button"
-                          className="px-3 py-3 text-gray-400 hover:text-blue-500 text-xs"
+                        <button type="button" className="px-3 py-3 text-gray-400 hover:text-blue-500 text-xs"
                           onPointerDown={e => {
                             e.preventDefault();
                             setEditingDriverId(d.id || i);
                             setEditingDriverData({ 이름: d.이름 || "", 전화번호: d.전화번호 || "" });
-                          }}
-                        >수정</button>
+                          }}>수정</button>
                       </div>
                     )}
                   </div>
@@ -4064,129 +4124,117 @@ function MobileOrderDetail({
             )}
           </div>
 
-          {/* 선택된 기사 */}
-          {(carNo || name || phone) && (
-            <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2.5 mb-3">
-              <span className="text-emerald-500 text-base">✓</span>
-              <div className="flex-1">
-                <div className="font-bold text-gray-900 text-[13px]">{name || "-"}</div>
-                <div className="text-[11px] text-gray-500">{carNo} · {phone}</div>
+        {/* 직접 입력 (항상 열림) */}
+          <div className="space-y-2 mb-3">
+            {isNewDriver && (
+              <div className="flex items-center gap-1.5 px-1 mb-1">
+                <span className="px-2 py-0.5 rounded-full bg-orange-100 text-orange-600 text-[11px] font-bold border border-orange-300">🆕 신규 기사</span>
+                <span className="text-[11px] text-gray-400">저장 시 기사관리에 등록됩니다</span>
               </div>
-              <button
-                type="button"
-                onClick={() => { setCarNo(""); setName(""); setPhone(""); clearSmartInput(); }}
-                className="text-gray-300 hover:text-red-400 text-base px-1"
-              >✕</button>
+            )}
+            <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B2B4B]" placeholder="차량번호" value={carNo} onChange={e => { setCarNo(e.target.value); setIsNewDriver(false); }} />
+            <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B2B4B]" placeholder="기사 이름" value={name} onChange={e => setName(e.target.value)} />
+            <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B2B4B]" placeholder="기사 연락처" value={phone} onChange={e => setPhone(e.target.value)} />
+          </div>
+
+          {/* 전화 / 문자 */}
+          {phone && (
+            <div className="grid grid-cols-2 gap-2 mb-3">
+              <a href={`tel:${normalizePhone(phone)}`}
+                className="py-2.5 rounded-xl bg-[#1B2B4B] text-white text-xs font-bold text-center">
+                📞 전화
+              </a>
+              <a href={`sms:${normalizePhone(phone)}`}
+                className="py-2.5 rounded-xl border border-[#1B2B4B] text-[#1B2B4B] text-xs font-bold text-center">
+                💬 문자
+              </a>
             </div>
           )}
-
-          {/* 직접 입력 */}
-          <details className="text-xs mb-3">
-            <summary className="text-gray-400 cursor-pointer py-1">직접 입력</summary>
-            <div className="space-y-2 mt-2">
-              <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B2B4B]" placeholder="차량번호" value={carNo} onChange={e => setCarNo(e.target.value)} />
-              <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B2B4B]" placeholder="기사 이름" value={name} onChange={e => setName(e.target.value)} />
-              <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B2B4B]" placeholder="기사 연락처" value={phone} onChange={e => setPhone(e.target.value)} />
-            </div>
-          </details>
 
           {/* 배차 버튼 */}
-          <button
-            onClick={handleAssignClick}
-            className="w-full py-3 rounded-xl bg-[#1B2B4B] text-white text-sm font-bold"
-          >
-            기사 배차하기
-          </button>
-
-          {carNo && !drivers.some((d) => d.차량번호 === carNo) && (
-            <button
-              onClick={() => {
-                upsertDriver({ 차량번호: carNo, 이름: name || "", 전화번호: phone || "" });
-                showToast("신규 기사 등록 완료");
-              }}
-              className="w-full py-2.5 rounded-xl border border-gray-300 text-gray-600 text-sm font-semibold mt-2"
-            >
-              신규 기사 등록
+          {state !== "배차완료" ? (
+            <>
+              <button onClick={handleAssignClick} className="w-full py-3 rounded-xl bg-[#1B2B4B] text-white text-sm font-bold">
+                기사 배차하기
+              </button>
+              {carNo && !drivers.some((d) => d.차량번호 === carNo) && (
+                <button
+                  onClick={() => { upsertDriver({ 차량번호: carNo, 이름: name || "", 전화번호: phone || "" }); showToast("신규 기사 등록 완료"); }}
+                  className="w-full py-2.5 rounded-xl border border-gray-300 text-gray-600 text-sm font-semibold mt-2"
+                >신규 기사 등록</button>
+              )}
+            </>
+          ) : (
+            <button onClick={onCancelAssign} className="w-full py-3 rounded-xl border border-red-300 text-red-500 text-sm font-bold">
+              기사 배차 취소
             </button>
           )}
-
-          {state === "배차완료" && (
-            <button
-              onClick={onCancelAssign}
-              className="w-full py-2.5 rounded-xl border border-gray-200 text-gray-500 text-sm font-semibold mt-2"
-            >
-              배차 취소
-            </button>
-          )}
-        </Card>
+        </DetailCard>
       </div>
 
       {/* ── 오더 관리 ── */}
       <div>
         <SectionHeader label="오더 관리" />
-        <Card>
-          <div className="flex items-center gap-2 mb-3 pb-3 border-b border-gray-100">
-            <input
-              type="checkbox"
-              id="keepDriver"
-              checked={order._keepDriver || false}
-              onChange={(e) => setSelectedOrder((prev) => ({ ...prev, _keepDriver: e.target.checked }))}
-            />
-           <label htmlFor="keepDriver" className="text-xs" style={{ color: "var(--text-secondary)" }}>
-              배차정보(기사/차량/연락처) 유지하고 수정
-            </label>
+       <DetailCard>
+          <div className="grid grid-cols-3 gap-2">
+            <button
+              onClick={() => {
+                window.scrollTo(0, 0);
+                setPage("form");
+                setForm({
+                  거래처명: order.거래처명 || "",
+                  상차일: order.상차일 || "",
+                  상차시간: order.상차시간 || "",
+                  하차일: order.하차일 || "",
+                  하차시간: order.하차시간 || "",
+                  상차지명: order.상차지명 || "",
+                  상차지주소: order.상차지주소 || "",
+                  상차지담당자: order.상차지담당자 || "",
+                  상차지담당자번호: order.상차지담당자번호 || "",
+                  하차지명: order.하차지명 || "",
+                  하차지주소: order.하차지주소 || "",
+                  하차지담당자: order.하차지담당자 || "",
+                  하차지담당자번호: order.하차지담당자번호 || "",
+                  톤수: order.톤수 || order.차량톤수 || "",
+                  차종: order.차종 || order.차량종류 || "",
+                  화물내용: order.화물내용 || "",
+                  상차방법: order.상차방법 || "",
+                  하차방법: order.하차방법 || "",
+                  지급방식: order.지급방식 || "",
+                  배차방식: order.배차방식 || "",
+                  청구운임: order.청구운임 || 0,
+                  기사운임: order.기사운임 || 0,
+                  수수료: order.수수료 || 0,
+                  산재보험료: order.산재보험료 || 0,
+                  차량번호: carNo || "",
+                  혼적여부: order.혼적여부 || "독차",
+                  적요: order.메모 || "",
+                  기사명: name || "",
+                  전화번호: phone || "",
+                  _editId: order.id,
+                  _returnToDetail: true,
+                });
+              }}
+              className="py-3 rounded-xl bg-gray-700 text-white text-sm font-bold"
+            >
+              수정하기
+            </button>
+
+            <button
+              onClick={handleSaveDriverToOrder}
+              className="py-3 rounded-xl bg-[#1B2B4B] text-white text-sm font-bold"
+            >
+              저장
+            </button>
+
+            <button
+              onClick={onCancelOrder}
+              className="py-3 rounded-xl border border-red-200 text-red-500 text-sm font-semibold"
+            >
+              오더 삭제
+            </button>
           </div>
-
-          <button
-            onClick={() => {
-              window.scrollTo(0, 0);
-              setPage("form");
-              setForm({
-                거래처명: order.거래처명 || "",
-                상차일: order.상차일 || "",
-                상차시간: order.상차시간 || "",
-                하차일: order.하차일 || "",
-                하차시간: order.하차시간 || "",
-                상차지명: order.상차지명 || "",
-                상차지주소: order.상차지주소 || "",
-                상차지담당자: order.상차지담당자 || "",
-                상차지담당자번호: order.상차지담당자번호 || "",
-                하차지명: order.하차지명 || "",
-                하차지주소: order.하차지주소 || "",
-                하차지담당자: order.하차지담당자 || "",
-                하차지담당자번호: order.하차지담당자번호 || "",
-                톤수: order.톤수 || order.차량톤수 || "",
-                차종: order.차종 || order.차량종류 || "",
-                화물내용: order.화물내용 || "",
-                상차방법: order.상차방법 || "",
-                하차방법: order.하차방법 || "",
-                지급방식: order.지급방식 || "",
-                배차방식: order.배차방식 || "",
-                청구운임: order.청구운임 || 0,
-                기사운임: order.기사운임 || 0,
-                수수료: order.수수료 || 0,
-                산재보험료: order.산재보험료 || 0,
-                차량번호: order.차량번호 || "",
-                혼적여부: order.혼적여부 || "독차",
-                적요: order.메모 || "",
-                기사명: order._keepDriver ? order.기사명 : "",
-                전화번호: order._keepDriver ? order.전화번호 : "",
-                _editId: order.id,
-                _returnToDetail: true,
-              });
-            }}
-            className="w-full py-3 rounded-xl bg-gray-800 text-white text-sm font-bold mb-2"
-          >
-            수정하기
-          </button>
-
-          <button
-            onClick={onCancelOrder}
-            className="w-full py-2.5 rounded-xl border border-red-200 text-red-500 text-sm font-semibold"
-          >
-            오더 삭제
-          </button>
-        </Card>
+        </DetailCard>
       </div>
 
       {/* ── 모달들 ── */}
