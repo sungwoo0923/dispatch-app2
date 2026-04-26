@@ -386,6 +386,11 @@ const sortedSchedules = [...schedules].sort((a, b) => {
 const [hasNewNotice, setHasNewNotice] = useState(false);
 const [hasNewSchedule, setHasNewSchedule] = useState(false);
 const [selectedSchedule, setSelectedSchedule] = useState(null);
+const [selectedNotice, setSelectedNotice] = useState(null);
+const [noticeOpen, setNoticeOpen] = useState(false);
+const [noticeForm, setNoticeForm] = useState({ title: "", author: "", content: "" });
+const [scheduleOpen, setScheduleOpen] = useState(false);
+const [scheduleForm, setScheduleForm] = useState({ type: "휴가", start: "", end: "", memo: "" });
   // -------------------------------------------------------------
   // 🔥 추가: 빠른 날짜 선택 (1/3/7/15일 버튼)
   // -------------------------------------------------------------
@@ -1847,8 +1852,20 @@ onGoSchedule={() => {
       <div className="flex-1 overflow-y-auto pb-24" style={{ WebkitOverflowScrolling: "touch" }}>
         {page === "notice" && (
   <div className="px-4 py-3 space-y-3">
+    {/* 등록 버튼 */}
+    <button
+      onClick={() => {
+        setSelectedNotice(null);
+        setNoticeForm({ title: "", author: mobileUsers.find(u => u.id === currentUser?.uid)?.name || "", content: "" });
+        setNoticeOpen(true);
+      }}
+      className="w-full py-2.5 rounded-xl bg-[#1B2B4B] text-white text-sm font-semibold"
+    >
+      + 공지사항 등록
+    </button>
+
     {notices.length === 0 && (
-      <div className="text-sm text-gray-400 text-center">
+      <div className="text-sm text-gray-400 text-center py-4">
         등록된 공지가 없습니다.
       </div>
     )}
@@ -1856,7 +1873,8 @@ onGoSchedule={() => {
     {notices.map(n => (
       <div
         key={n.id}
-        className="bg-white rounded-xl border shadow-sm p-4"
+        onClick={() => setSelectedNotice(n)}
+        className="bg-white rounded-xl border shadow-sm p-4 active:scale-[0.98] transition cursor-pointer"
       >
         {/* 제목 */}
         <div className="text-sm font-semibold text-gray-900">
@@ -1870,13 +1888,14 @@ onGoSchedule={() => {
               ? new Date(n.createdAt.seconds * 1000).toLocaleDateString("ko-KR")
               : ""}
           </span>
-          <span className="px-1.5 py-0.5 rounded bg-gray-100">
-            공지
-          </span>
+          {n.author && (
+            <span className="px-1.5 py-0.5 rounded bg-gray-100">{n.author}</span>
+          )}
+          <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-600">공지</span>
         </div>
 
-        {/* 내용 */}
-        <div className="mt-2 text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
+        {/* 내용 미리보기 */}
+        <div className="mt-2 text-sm text-gray-700 line-clamp-2 leading-relaxed">
           {n.content}
         </div>
       </div>
@@ -1887,8 +1906,20 @@ onGoSchedule={() => {
 {/* ================= 일정 ================= */}
 {page === "schedule" && (
   <div className="px-4 py-3 space-y-3">
+    {/* 등록 버튼 */}
+    <button
+      onClick={() => {
+        setSelectedSchedule(null);
+        setScheduleForm({ type: "휴가", start: "", end: "", memo: "" });
+        setScheduleOpen(true);
+      }}
+      className="w-full py-2.5 rounded-xl bg-[#1B2B4B] text-white text-sm font-semibold"
+    >
+      + 일정 등록
+    </button>
+
     {schedules.length === 0 && (
-      <div className="text-sm text-gray-400 text-center">
+      <div className="text-sm text-gray-400 text-center py-4">
         등록된 일정이 없습니다.
       </div>
     )}
@@ -1932,31 +1963,136 @@ onGoSchedule={() => {
   </div>
 )}
 {/* 🔥 일정 상세 팝업 */}
-{selectedSchedule && (
-  <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center">
-    <div className="bg-white w-[90%] rounded-2xl p-5">
-
-      <div className="text-lg font-bold mb-2">
-        {selectedSchedule.type || selectedSchedule.title}
+{selectedSchedule && !scheduleOpen && (
+  <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center px-4">
+    <div className="bg-white w-full max-w-sm rounded-2xl overflow-hidden shadow-2xl">
+      <div className="flex justify-between items-center px-5 py-4 bg-[#1B2B4B]">
+        <h3 className="font-bold text-white">일정 상세</h3>
+        <button onClick={() => setSelectedSchedule(null)} className="text-white/60 hover:text-white text-xl leading-none">✕</button>
       </div>
-
-      <div className="text-sm text-gray-500 mb-2">
-        {(selectedSchedule.startDate || selectedSchedule.start)}
-        {" ~ "}
-        {(selectedSchedule.endDate || selectedSchedule.end)}
+      <div className="p-5 space-y-3 text-sm">
+        <div>
+          <div className="text-[11px] text-gray-400 mb-0.5">구분</div>
+          <div className="font-semibold">{selectedSchedule.type || selectedSchedule.title}</div>
+        </div>
+        <div>
+          <div className="text-[11px] text-gray-400 mb-0.5">작성자</div>
+          <div>{selectedSchedule.name || selectedSchedule.writer || "-"}</div>
+        </div>
+        <div>
+          <div className="text-[11px] text-gray-400 mb-0.5">기간</div>
+          <div>{(selectedSchedule.startDate || selectedSchedule.start)} ~ {(selectedSchedule.endDate || selectedSchedule.end)}</div>
+        </div>
+        {(selectedSchedule.memo || selectedSchedule.reason) && (
+          <div>
+            <div className="text-[11px] text-gray-400 mb-0.5">메모</div>
+            <div className="whitespace-pre-wrap bg-gray-50 rounded-lg p-3 text-gray-700">
+              {selectedSchedule.memo || selectedSchedule.reason}
+            </div>
+          </div>
+        )}
+        <div className="flex gap-2 pt-2 border-t border-gray-100">
+          <button
+            onClick={async () => {
+              if (!window.confirm("삭제할까요?")) return;
+              await deleteDoc(doc(db, "schedules", selectedSchedule.id));
+              setSelectedSchedule(null);
+            }}
+            className="flex-1 py-2.5 rounded-xl border border-red-200 text-red-500 text-sm font-semibold"
+          >삭제</button>
+          <button
+            onClick={() => {
+              setScheduleForm({
+                type: selectedSchedule.type || "휴가",
+                start: selectedSchedule.startDate || selectedSchedule.start || "",
+                end: selectedSchedule.endDate || selectedSchedule.end || "",
+                memo: selectedSchedule.memo || selectedSchedule.reason || "",
+              });
+              setScheduleOpen(true);
+            }}
+            className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-sm font-semibold"
+          >수정</button>
+        </div>
       </div>
+    </div>
+  </div>
+)}
 
-      <div className="text-sm text-gray-700 whitespace-pre-wrap">
-        {selectedSchedule.memo || selectedSchedule.reason}
+{/* 🔥 일정 등록/수정 모달 */}
+{scheduleOpen && (
+  <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center px-4">
+    <div className="bg-white w-full max-w-sm rounded-2xl overflow-hidden shadow-2xl">
+      <div className="flex justify-between items-center px-5 py-4 bg-[#1B2B4B]">
+        <h3 className="font-bold text-white">{selectedSchedule ? "일정 수정" : "일정 등록"}</h3>
+        <button onClick={() => { setScheduleOpen(false); }} className="text-white/60 hover:text-white text-xl leading-none">✕</button>
       </div>
-
-      <button
-        className="mt-4 w-full bg-blue-600 text-white py-2 rounded-xl"
-        onClick={() => setSelectedSchedule(null)}
-      >
-        닫기
-      </button>
-
+      <div className="p-5 space-y-3">
+        <select
+          className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B2B4B]"
+          value={scheduleForm.type}
+          onChange={e => setScheduleForm(f => ({ ...f, type: e.target.value }))}
+        >
+          <option>휴가</option>
+          <option>외근</option>
+          <option>반차</option>
+          <option>병가</option>
+        </select>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <div className="text-[11px] text-gray-400 mb-1">시작일</div>
+            <input
+              type="date"
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B2B4B]"
+              value={scheduleForm.start}
+              onChange={e => setScheduleForm(f => ({ ...f, start: e.target.value }))}
+            />
+          </div>
+          <div>
+            <div className="text-[11px] text-gray-400 mb-1">종료일</div>
+            <input
+              type="date"
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B2B4B]"
+              value={scheduleForm.end}
+              onChange={e => setScheduleForm(f => ({ ...f, end: e.target.value }))}
+            />
+          </div>
+        </div>
+        <textarea
+          rows={3}
+          placeholder="메모 (선택)"
+          className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm resize-none focus:outline-none focus:border-[#1B2B4B]"
+          value={scheduleForm.memo}
+          onChange={e => setScheduleForm(f => ({ ...f, memo: e.target.value }))}
+        />
+        <button
+          onClick={async () => {
+            if (!scheduleForm.start) { alert("시작일을 선택해주세요."); return; }
+            const me = mobileUsers.find(u => u.id === currentUser?.uid);
+            const userName = me?.name || "사용자";
+            if (selectedSchedule?.id) {
+              await updateDoc(doc(db, "schedules", selectedSchedule.id), {
+                type: scheduleForm.type,
+                name: userName,
+                start: scheduleForm.start,
+                end: scheduleForm.end || scheduleForm.start,
+                memo: scheduleForm.memo,
+              });
+            } else {
+              await addDoc(collection(db, "schedules"), {
+                type: scheduleForm.type,
+                name: userName,
+                start: scheduleForm.start,
+                end: scheduleForm.end || scheduleForm.start,
+                memo: scheduleForm.memo,
+                createdAt: serverTimestamp(),
+              });
+            }
+            setScheduleOpen(false);
+            setSelectedSchedule(null);
+          }}
+          className="w-full py-3 rounded-xl bg-[#1B2B4B] text-white text-sm font-bold"
+        >저장</button>
+      </div>
     </div>
   </div>
 )}
@@ -2042,6 +2178,109 @@ onGoSchedule={() => {
         </div>
       );
     })}
+  </div>
+)}
+
+{/* ===== 공지사항 상세 모달 ===== */}
+{selectedNotice && !noticeOpen && (
+  <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center px-4">
+    <div className="bg-white w-full max-w-sm rounded-2xl overflow-hidden shadow-2xl">
+      <div className="flex justify-between items-center px-5 py-4 bg-[#1B2B4B]">
+        <h3 className="font-bold text-white">공지사항 상세</h3>
+        <button onClick={() => setSelectedNotice(null)} className="text-white/60 hover:text-white text-xl leading-none">✕</button>
+      </div>
+      <div className="p-5 space-y-3 text-sm">
+        <div>
+          <div className="text-[11px] text-gray-400 mb-0.5">제목</div>
+          <div className="font-semibold">{selectedNotice.title}</div>
+        </div>
+        <div>
+          <div className="text-[11px] text-gray-400 mb-0.5">작성자</div>
+          <div>{selectedNotice.author}</div>
+        </div>
+        <div>
+          <div className="text-[11px] text-gray-400 mb-0.5">작성일</div>
+          <div>{selectedNotice.createdAt?.seconds ? new Date(selectedNotice.createdAt.seconds * 1000).toLocaleDateString("ko-KR") : "-"}</div>
+        </div>
+        <div>
+          <div className="text-[11px] text-gray-400 mb-0.5">내용</div>
+          <div className="whitespace-pre-wrap bg-gray-50 rounded-lg p-3 text-gray-700 leading-relaxed">{selectedNotice.content}</div>
+        </div>
+        <div className="flex gap-2 pt-2 border-t border-gray-100">
+          <button
+            onClick={async () => {
+              if (!window.confirm("삭제할까요?")) return;
+              await deleteDoc(doc(db, "notices", selectedNotice.id));
+              setSelectedNotice(null);
+            }}
+            className="flex-1 py-2.5 rounded-xl border border-red-200 text-red-500 text-sm font-semibold"
+          >삭제</button>
+          <button
+            onClick={() => {
+              setNoticeForm({ title: selectedNotice.title, author: selectedNotice.author, content: selectedNotice.content });
+              setNoticeOpen(true);
+            }}
+            className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-sm font-semibold"
+          >수정</button>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
+
+{/* ===== 공지사항 등록/수정 모달 ===== */}
+{noticeOpen && (
+  <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center px-4">
+    <div className="bg-white w-full max-w-sm rounded-2xl overflow-hidden shadow-2xl">
+      <div className="flex justify-between items-center px-5 py-4 bg-[#1B2B4B]">
+        <h3 className="font-bold text-white">{selectedNotice ? "공지사항 수정" : "공지사항 등록"}</h3>
+        <button onClick={() => setNoticeOpen(false)} className="text-white/60 hover:text-white text-xl leading-none">✕</button>
+      </div>
+      <div className="p-5 space-y-3">
+        <input
+          placeholder="제목"
+          className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B2B4B]"
+          value={noticeForm.title}
+          onChange={e => setNoticeForm(f => ({ ...f, title: e.target.value }))}
+        />
+        <input
+          placeholder="작성자"
+          className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1B2B4B]"
+          value={noticeForm.author}
+          onChange={e => setNoticeForm(f => ({ ...f, author: e.target.value }))}
+        />
+        <textarea
+          rows={4}
+          placeholder="내용"
+          className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm resize-none focus:outline-none focus:border-[#1B2B4B]"
+          value={noticeForm.content}
+          onChange={e => setNoticeForm(f => ({ ...f, content: e.target.value }))}
+        />
+        <button
+          onClick={async () => {
+            if (!noticeForm.title.trim()) { alert("제목을 입력해주세요."); return; }
+            if (selectedNotice?.id) {
+              await updateDoc(doc(db, "notices", selectedNotice.id), {
+                title: noticeForm.title,
+                author: noticeForm.author,
+                content: noticeForm.content,
+              });
+            } else {
+              await addDoc(collection(db, "notices"), {
+                title: noticeForm.title,
+                author: noticeForm.author,
+                content: noticeForm.content,
+                createdAt: serverTimestamp(),
+              });
+            }
+            setNoticeOpen(false);
+            setSelectedNotice(null);
+            setNoticeForm({ title: "", author: "", content: "" });
+          }}
+          className="w-full py-3 rounded-xl bg-[#1B2B4B] text-white text-sm font-bold"
+        >저장</button>
+      </div>
+    </div>
   </div>
 )}
 
@@ -3749,8 +3988,12 @@ function MobileOrderDetail({
               className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm resize-none bg-gray-50 focus:outline-none focus:border-[#1B2B4B]"
               rows={2}
               placeholder={"예) 김상원 010-7916-2258 강원82사1203\n카카오 문자 전체 복붙 가능"}
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="none"
+              spellCheck="false"
+              inputMode="text"
               onChange={e => handleSmartSearch(e.target.value)}
-              onBlur={e => { if (e.target.value.trim().length > 4) applySmartDriverInput(e.target.value); }}
             />
             {smartMatched.length > 0 && (
               <div className="absolute z-50 w-full bg-white border border-gray-200 rounded-xl shadow-xl mt-1 overflow-hidden">
@@ -3764,21 +4007,21 @@ function MobileOrderDetail({
                           placeholder="기사 이름"
                           value={editingDriverData.이름}
                           onChange={e => setEditingDriverData(p => ({ ...p, 이름: e.target.value }))}
-                          onMouseDown={e => e.stopPropagation()}
+                          onPointerDown={e => e.stopPropagation()}
                         />
                         <input
                           className="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm mb-2 focus:outline-none focus:border-blue-400"
                           placeholder="전화번호"
                           value={editingDriverData.전화번호}
                           onChange={e => setEditingDriverData(p => ({ ...p, 전화번호: e.target.value }))}
-                          onMouseDown={e => e.stopPropagation()}
+                          onPointerDown={e => e.stopPropagation()}
                         />
                         <div className="flex gap-2">
                           <button
                             type="button"
                             className="flex-1 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-bold"
-                            onMouseDown={async (e) => {
-                              e.stopPropagation();
+                            onPointerDown={async (e) => {
+                              e.preventDefault();
                               if (!editingDriverData.이름.trim()) return;
                               await updateDoc(doc(db, "drivers", d.id), {
                                 이름: editingDriverData.이름,
@@ -3790,7 +4033,7 @@ function MobileOrderDetail({
                           <button
                             type="button"
                             className="px-3 py-1.5 rounded-lg bg-gray-200 text-gray-700 text-xs"
-                            onMouseDown={e => { e.stopPropagation(); setEditingDriverId(null); }}
+                            onPointerDown={e => { e.preventDefault(); setEditingDriverId(null); }}
                           >취소</button>
                         </div>
                       </div>
@@ -3799,7 +4042,7 @@ function MobileOrderDetail({
                         <button
                           type="button"
                           className="flex-1 text-left px-4 py-3 hover:bg-gray-50"
-                          onMouseDown={() => selectSmartDriver(d)}
+                          onPointerDown={e => { e.preventDefault(); selectSmartDriver(d); }}
                         >
                           <div className="font-bold text-gray-900 text-[13px]">{d.이름 || "-"}</div>
                           <div className="text-[11px] text-gray-400 mt-0.5">{d.차량번호} · {d.전화번호}</div>
@@ -3807,8 +4050,8 @@ function MobileOrderDetail({
                         <button
                           type="button"
                           className="px-3 py-3 text-gray-400 hover:text-blue-500 text-xs"
-                          onMouseDown={e => {
-                            e.stopPropagation();
+                          onPointerDown={e => {
+                            e.preventDefault();
                             setEditingDriverId(d.id || i);
                             setEditingDriverData({ 이름: d.이름 || "", 전화번호: d.전화번호 || "" });
                           }}
