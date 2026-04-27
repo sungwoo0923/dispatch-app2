@@ -1,5 +1,5 @@
 // ===================== FixedClients.jsx =====================
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import * as XLSX from "xlsx";
 import { db } from "./firebase";
 import { collection, onSnapshot, setDoc, doc, deleteDoc } from "firebase/firestore";
@@ -27,7 +27,7 @@ function KpiCard({ title, value, unit = "원", color = "blue" }) {
 
 const tonList = ["다마스", "1톤", "1.4톤", "2.5톤", "3.5톤", "5톤", "11톤", "25톤"];
 
-// 이번 달 기본값
+// 이번 달 기본값 (버튼용)
 const thisMonthStart = () => {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
@@ -37,6 +37,81 @@ const thisMonthEnd = () => {
   return new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
 };
 
+// ─── 기사 검색 드롭다운 (빠른등록 & 테이블 공용) ───
+function DriverSearchInput({ value, onChange, onSelect, drivers, placeholder = "차량번호 또는 이름 검색", className = "" }) {
+
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState(value || "");
+  const wrapperRef = useRef(null);
+
+  // 외부 클릭 시 닫기
+  useEffect(() => {
+    const handleClick = (e) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  // 부모에서 value가 변경되면 반영
+  useEffect(() => { setQuery(value || ""); }, [value]);
+
+  const suggestions = useMemo(() => {
+    const q = (query || "").replace(/\s+/g, "").toLowerCase();
+    if (!q) return [];
+    return drivers.filter(d =>
+      (d.차량번호 || "").replace(/\s+/g, "").toLowerCase().includes(q) ||
+      (d.이름 || "").toLowerCase().includes(q)
+    ).slice(0, 8);
+  }, [query, drivers]);
+
+  return (
+    <div ref={wrapperRef} className={`relative ${className}`}>
+      <input
+        className="w-full border border-gray-200 rounded-lg px-2 py-1 text-[12px] text-center"
+        placeholder={placeholder}
+        value={query}
+        onChange={e => {
+          setQuery(e.target.value);
+          onChange(e.target.value);
+          setOpen(true);
+        }}
+        onFocus={() => { if (query) setOpen(true); }}
+        onKeyDown={e => {
+          if (e.key === "Enter") {
+            if (suggestions.length > 0) {
+              onSelect(suggestions[0]);
+              setQuery(suggestions[0].차량번호);
+              setOpen(false);
+            }
+          }
+        }}
+      />
+      {open && suggestions.length > 0 && (
+        <div className="absolute z-50 left-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto min-w-[200px]">
+
+          {suggestions.map((d, i) => (
+            <div
+              key={i}
+              className="px-3 py-2 hover:bg-blue-50 cursor-pointer flex items-center gap-2 text-[12px]"
+              onMouseDown={() => {
+                onSelect(d);
+                setQuery(d.차량번호);
+                setOpen(false);
+              }}
+            >
+              <span className="font-bold text-[#1B2B4B]">{d.이름}</span>
+              <span className="text-gray-400">|</span>
+              <span className="text-gray-600">{d.차량번호}</span>
+              {d.전화번호 && <span className="text-gray-400 ml-auto">{d.전화번호}</span>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function FixedClients({ drivers = [], upsertDriver }) {
   const coll = collection(db, "fixedClients");
 
@@ -45,10 +120,17 @@ export default function FixedClients({ drivers = [], upsertDriver }) {
   const [editMode, setEditMode] = useState(false);
   const [search, setSearch] = useState("");
   const [showDoneOnly, setShowDoneOnly] = useState(false);
-  const [startDate, setStartDate] = useState(thisMonthStart);
-  const [endDate, setEndDate] = useState(thisMonthEnd);
+
+  // ★ 변경 1: 초기값 빈 문자열 → 처음 진입 시 데이터 안 보임
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+
   const [fastOpen, setFastOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
+
+  // ★ 변경 3: 정렬 state
+  const [sortKey, setSortKey] = useState(null);      // 정렬 컬럼
+  const [sortDir, setSortDir] = useState("asc");      // "asc" | "desc"
 
   const [fastRows, setFastRows] = useState([{
     날짜: new Date().toISOString().slice(0, 10),
@@ -69,18 +151,19 @@ export default function FixedClients({ drivers = [], upsertDriver }) {
   const removeRow = async (id) => await deleteDoc(doc(coll, id));
   const updateRow = (id, patch) => setRows(prev => prev.map(r => r.id === id ? { ...r, ...patch } : r));
 
-  const handleCarInput = async (id, val) => {
-    const v = String(val || "").replace(/\s+/g, "");
-    const match = drivers.find(d => d.차량번호 === v);
-    if (match) {
-      const patch = { 차량번호: match.차량번호, 이름: match.이름, 핸드폰번호: match.전화번호 };
-      updateRow(id, patch);
-      const row = rows.find(r => r.id === id);
-      if (row) await saveRow({ ...row, ...patch });
-    }
+  // ★ 변경 2-a: 테이블 내 차량번호 → 이름으로도 기사 매칭
+  const handleDriverSelect = async (id, driver) => {
+    const patch = { 차량번호: driver.차량번호, 이름: driver.이름, 핸드폰번호: driver.전화번호 };
+    updateRow(id, patch);
+    const row = rows.find(r => r.id === id);
+    if (row) await saveRow({ ...row, ...patch });
   };
 
+  // ★ 변경 1: 날짜가 둘 다 비어있으면 아무것도 표시하지 않음
   const filtered = useMemo(() => {
+    // 날짜가 하나도 설정되지 않으면 빈 배열
+    if (!startDate && !endDate) return [];
+
     let list = [...rows];
     if (startDate) list = list.filter(r => r.날짜 >= startDate);
     if (endDate) list = list.filter(r => r.날짜 <= endDate);
@@ -89,8 +172,28 @@ export default function FixedClients({ drivers = [], upsertDriver }) {
       list = list.filter(r => Object.values(r).some(v => String(v).toLowerCase().includes(q)));
     }
     if (showDoneOnly) list = list.filter(r => r.정산완료);
+
+    // ★ 변경 3: 정렬 적용
+    if (sortKey) {
+      list.sort((a, b) => {
+        let va = a[sortKey] ?? "";
+        let vb = b[sortKey] ?? "";
+        // 숫자 컬럼은 숫자로 비교
+        if (["수량", "청구운임", "기사운임", "수수료"].includes(sortKey)) {
+          va = Number(va) || 0;
+          vb = Number(vb) || 0;
+        } else {
+          va = String(va).toLowerCase();
+          vb = String(vb).toLowerCase();
+        }
+        if (va < vb) return sortDir === "asc" ? -1 : 1;
+        if (va > vb) return sortDir === "asc" ? 1 : -1;
+        return 0;
+      });
+    }
+
     return list;
-  }, [rows, search, startDate, endDate, showDoneOnly]);
+  }, [rows, search, startDate, endDate, showDoneOnly, sortKey, sortDir]);
 
   const totalSale = filtered.reduce((a, b) => a + Number(b.청구운임 || 0), 0);
   const totalDrv = filtered.reduce((a, b) => a + Number(b.기사운임 || 0), 0);
@@ -146,12 +249,13 @@ export default function FixedClients({ drivers = [], upsertDriver }) {
     });
   };
 
-  const matchFastDriver = (idx, car) => {
-    const v = (car || "").replace(/\s+/g, "");
-    const match = drivers.find(d => d.차량번호 === v);
+  // ★ 변경 2-b: 빠른등록에서 기사 선택 시 반영
+  const selectFastDriver = (idx, driver) => {
     setFastRows(prev => {
       const updated = [...prev];
-      if (match) { updated[idx].차량번호 = match.차량번호; updated[idx].이름 = match.이름; updated[idx].핸드폰번호 = match.전화번호; }
+      updated[idx].차량번호 = driver.차량번호;
+      updated[idx].이름 = driver.이름;
+      updated[idx].핸드폰번호 = driver.전화번호;
       const qty = Number(updated[idx].수량 || 0);
       updated[idx].기사운임 = qty * Number(updated[idx].기사단가 || 0);
       updated[idx].수수료 = qty * Number(updated[idx].수수료단가 || 0);
@@ -170,8 +274,40 @@ export default function FixedClients({ drivers = [], upsertDriver }) {
     setFastOpen(false);
   };
 
-  const head = "px-3 py-3 text-center text-[13px] font-semibold text-white whitespace-nowrap bg-transparent border-b border-white/10";
+  // ★ 변경 3: 정렬 핸들러
+  const handleSort = (key) => {
+    if (sortKey === key) {
+      // 같은 컬럼 다시 클릭 → 방향 전환, 3번째 클릭 → 정렬 해제
+      if (sortDir === "asc") setSortDir("desc");
+      else { setSortKey(null); setSortDir("asc"); }
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  };
+
+  const sortIcon = (key) => {
+    if (sortKey !== key) return <span className="ml-1 text-white/30">↕</span>;
+    return <span className="ml-1">{sortDir === "asc" ? "↑" : "↓"}</span>;
+  };
+
+  const head = "px-3 py-3 text-center text-[13px] font-semibold text-white whitespace-nowrap bg-transparent border-b border-white/10 cursor-pointer select-none hover:bg-white/10 transition";
   const cell = "px-3 py-2.5 text-[13px] text-gray-800 text-center whitespace-nowrap border-b border-gray-100 align-middle";
+
+  // 정렬 가능한 헤더 정의: [표시이름, 데이터키]
+  const sortableHeaders = [
+    ["정산", "정산완료"],
+    ["날짜", "날짜"],
+    ["거래처명", "거래처명"],
+    ["톤수", "톤수"],
+    ["수량", "수량"],
+    ["차량번호", "차량번호"],
+    ["기사명", "이름"],
+    ["핸드폰", "핸드폰번호"],
+    ["청구운임", "청구운임"],
+    ["기사운임", "기사운임"],
+    ["수수료", "수수료"],
+  ];
 
   return (
     <div className="bg-gray-50 min-h-screen p-5 space-y-4">
@@ -209,6 +345,10 @@ export default function FixedClients({ drivers = [], upsertDriver }) {
             <input type="date" className="border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] focus:outline-none focus:border-[#1B2B4B]" value={endDate} onChange={e => setEndDate(e.target.value)} />
           </div>
           <button onClick={() => { setStartDate(thisMonthStart()); setEndDate(thisMonthEnd()); }} className="px-3 py-1.5 rounded-lg border border-gray-200 text-[13px] text-gray-500 hover:bg-gray-50 transition">이번 달</button>
+          {/* ★ 날짜 초기화 버튼 */}
+          {(startDate || endDate) && (
+            <button onClick={() => { setStartDate(""); setEndDate(""); }} className="px-3 py-1.5 rounded-lg border border-red-200 text-[13px] text-red-500 hover:bg-red-50 transition">날짜 초기화</button>
+          )}
           <button onClick={() => setShowDoneOnly(p => !p)} className={`px-3 py-1.5 rounded-lg border text-[13px] font-semibold transition ${showDoneOnly ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
             {showDoneOnly ? "✓ 정산완료만" : "정산완료만"}
           </button>
@@ -230,13 +370,35 @@ export default function FixedClients({ drivers = [], upsertDriver }) {
             <table className="w-full text-[13px]">
               <thead className="bg-[#1B2B4B]">
                 <tr>
-                  <th className={head}><input type="checkbox" onChange={() => selected.length === filtered.length ? setSelected([]) : setSelected(filtered.map(r => r.id))} checked={selected.length > 0 && selected.length === filtered.length} /></th>
-                  {["정산","날짜","거래처명","톤수","수량","차량번호","기사명","핸드폰","청구운임","기사운임","수수료"].map(h => <th key={h} className={head}>{h}</th>)}
+                  <th className="px-3 py-3 text-center text-[13px] font-semibold text-white whitespace-nowrap bg-transparent border-b border-white/10">
+                    <input type="checkbox" onChange={() => selected.length === filtered.length ? setSelected([]) : setSelected(filtered.map(r => r.id))} checked={selected.length > 0 && selected.length === filtered.length} />
+                  </th>
+                  {sortableHeaders.map(([label, key]) => (
+                    <th key={label} className={head} onClick={() => handleSort(key)}>
+                      {label}{sortIcon(key)}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
-                {filtered.length === 0 ? (
-                  <tr><td colSpan={12} className="py-16 text-center text-[13px] text-gray-400">데이터가 없습니다</td></tr>
+                {/* ★ 변경 1: 날짜 미설정 시 안내 문구 */}
+                {!startDate && !endDate ? (
+                  <tr>
+                    <td colSpan={12} className="py-16 text-center text-[14px] text-gray-400">
+                      <div className="flex flex-col items-center gap-2">
+                        <span className="text-3xl"></span>
+                        <span>조회할 기간을 설정해주세요</span>
+                        <button
+                          onClick={() => { setStartDate(thisMonthStart()); setEndDate(thisMonthEnd()); }}
+                          className="mt-2 px-4 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition"
+                        >
+                          이번 달 조회
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ) : filtered.length === 0 ? (
+                  <tr><td colSpan={12} className="py-16 text-center text-[13px] text-gray-400">해당 기간에 데이터가 없습니다</td></tr>
                 ) : filtered.map((r, idx) => (
                   <tr key={r.id} className={`transition hover:bg-blue-50/40 ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"} ${r.정산완료 ? "opacity-60" : ""}`}>
                     <td className={cell}><input type="checkbox" checked={selected.includes(r.id)} onChange={() => setSelected(p => p.includes(r.id) ? p.filter(x => x !== r.id) : [...p, r.id])} /></td>
@@ -249,9 +411,18 @@ export default function FixedClients({ drivers = [], upsertDriver }) {
                     <td className={`${cell} font-semibold`}>{editMode ? <input className="border border-gray-200 rounded-lg px-2 py-1 text-[12px] w-28" value={r.거래처명} onChange={e => updateRow(r.id, { 거래처명: e.target.value })} onBlur={() => saveRow(rows.find(x => x.id === r.id))} /> : r.거래처명}</td>
                     <td className={cell}>{editMode ? <select className="border border-gray-200 rounded-lg px-2 py-1 text-[12px]" value={r.톤수} onChange={e => updateRow(r.id, { 톤수: e.target.value })} onBlur={() => saveRow(rows.find(x => x.id === r.id))}><option value="">선택</option>{tonList.map(t => <option key={t}>{t}</option>)}</select> : r.톤수}</td>
                     <td className={cell}>{editMode ? <input type="number" className="border border-gray-200 rounded-lg px-2 py-1 text-[12px] w-16 text-center" value={r.수량} onChange={e => updateRow(r.id, { 수량: e.target.value })} onBlur={() => saveRow(rows.find(x => x.id === r.id))} /> : r.수량}</td>
-                    <td className={cell}>
-                      <input className="border border-gray-200 rounded-lg px-2 py-1 text-[12px] w-28 text-center" value={r.차량번호} onChange={e => updateRow(r.id, { 차량번호: e.target.value })} onKeyDown={e => e.key === "Enter" && handleCarInput(r.id, e.currentTarget.value)} onBlur={e => handleCarInput(r.id, e.target.value)} />
+                    {/* ★ 변경 2-a: 테이블 차량번호 → 이름/차량번호 검색 드롭다운 */}
+                                        <td className={cell}>
+                      <DriverSearchInput
+                        value={r.차량번호}
+                        drivers={drivers}
+                        placeholder="차량번호·이름"
+                        className="w-28"
+                        onChange={(val) => updateRow(r.id, { 차량번호: val })}
+                        onSelect={(d) => handleDriverSelect(r.id, d)}
+                      />
                     </td>
+
                     <td className={`${cell} font-semibold`}>{r.이름}</td>
                     <td className={cell}>{r.핸드폰번호}</td>
                     {["청구운임","기사운임","수수료"].map(f => (
@@ -353,9 +524,16 @@ export default function FixedClients({ drivers = [], upsertDriver }) {
                         )}
                       </div>
                     ))}
+                    {/* ★ 변경 2-b: 빠른등록 차량번호 → 이름/차량번호 검색 드롭다운 */}
                     <div>
-                      <label className="block text-[11px] font-semibold text-gray-500 mb-1">차량번호</label>
-                      <input className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px]" value={row.차량번호} onChange={e => updateFastField(idx, "차량번호", e.target.value)} onBlur={e => matchFastDriver(idx, e.target.value)} onKeyDown={e => e.key === "Enter" && matchFastDriver(idx, e.target.value)} />
+                      <label className="block text-[11px] font-semibold text-gray-500 mb-1">차량번호 / 기사명</label>
+                      <DriverSearchInput
+                        value={row.차량번호}
+                        drivers={drivers}
+                        placeholder="차량번호 또는 이름 입력"
+                        onChange={(val) => updateFastField(idx, "차량번호", val)}
+                        onSelect={(d) => selectFastDriver(idx, d)}
+                      />
                     </div>
                     <div>
                       <label className="block text-[11px] font-semibold text-gray-500 mb-1">기사명</label>

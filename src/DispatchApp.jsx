@@ -5868,16 +5868,15 @@ className={`
 
     {/* 입력 */}
     <input
-      className={`${inputCls} pr-[60px] text-base`} // 🔥 줄임 (110 → 80)
-      placeholder="예: 2"
-      value={form.화물수량 || ""}
+      className={`${inputCls} pr-[60px] text-base`}
+      placeholder="예: 2 또는 변압기"
+      value={form.화물내용 || ""}
       onChange={(e) => {
         const v = e.target.value;
+        // 화물내용을 직접 바인딩
+        onChange("화물내용", v);
+        // 화물수량도 동기화 (하위 호환)
         onChange("화물수량", v);
-
-        if (form.화물타입) {
-          onChange("화물내용", `${v}${form.화물타입}`);
-        }
       }}
     />
 
@@ -5885,10 +5884,10 @@ className={`
     <div className="absolute top-0 right-1 h-full flex items-center">
   <select
     className="
-      w-[55px]        // 🔥 핵심: 최대한 줄임
+      w-[55px]
       h-[65%]
-      px-1            // 🔥 padding 최소화
-      text-xs         // 🔥 글자도 줄임
+      px-1
+      text-xs
       font-semibold
       rounded-md
       bg-blue-50
@@ -5897,17 +5896,26 @@ className={`
       appearance-none
       cursor-pointer
     "
-        value={form.화물타입}
+        value={form.화물타입 || ""}
         onChange={(e) => {
           const type = e.target.value;
           onChange("화물타입", type);
 
-          if (!type) {
-            onChange("화물내용", form.화물수량 || "");
-            return;
-          }
+          // 기존 suffix 제거
+          const raw = form.화물내용 || "";
+          const cleaned = raw
+            .replace(/파레트$/, "")
+            .replace(/박스$/, "")
+            .replace(/통$/, "")
+            .trim();
 
-          onChange("화물내용", `${form.화물수량 || ""}${type}`);
+          if (!type) {
+            // "없음" 선택 → suffix 없이 원본만 유지
+            onChange("화물내용", cleaned);
+          } else {
+            // 타입 선택 → 원본 + suffix
+            onChange("화물내용", `${cleaned}${type}`);
+          }
         }}
       >
         <option value="">없음</option>
@@ -5924,6 +5932,7 @@ className={`
 
   </div>
 </div>
+
 
 <div className="relative">
   <div
