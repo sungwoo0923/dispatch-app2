@@ -8761,7 +8761,15 @@ function RealtimeStatus({
   menu,
   darkMode = false,
 }) {
-  const alertAudio = React.useRef(null);
+const alertAudio = React.useRef(null);
+
+  // ⚡ 탭 진입 시 끊김 방지 - 다음 프레임으로 무거운 렌더링 미루기
+  const [ready, setReady] = React.useState(false);
+  React.useEffect(() => {
+    const id = requestAnimationFrame(() => setReady(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
+
 // 🚫 블랙 기사 알림 팝업 상태
 const [blackAlert, setBlackAlert] = React.useState(null);
 
@@ -9416,9 +9424,15 @@ const sortDispatchRows = (list = []) => {
 };
 
 
-const [rows, setRows] = React.useState(() =>
-  sortDispatchRows(dispatchData || [])
-);
+const [rows, setRows] = React.useState([]);
+
+// 최초 1회 비동기 초기화
+React.useEffect(() => {
+  const id = requestAnimationFrame(() => {
+    setRows(sortDispatchRows(dispatchData || []));
+  });
+  return () => cancelAnimationFrame(id);
+}, []); // eslint-disable-line
   const [selected, setSelected] = React.useState([]);
   const [selectedEditMode, setSelectedEditMode] = React.useState(false);
   const [edited, setEdited] = React.useState({});
@@ -10790,6 +10804,15 @@ const head = isDark
   // ------------------------
   // 📌 화면 렌더링
   // ------------------------
+  if (!ready) return (
+    <div className="flex items-center justify-center h-48">
+      <div className="flex flex-col items-center gap-3">
+        <div className="w-8 h-8 border-4 border-[#1B2B4B] border-t-transparent rounded-full animate-spin" />
+        <div className="text-[13px] font-semibold text-gray-400">데이터 불러오는 중...</div>
+      </div>
+    </div>
+  );
+
   return (
 <div className="px-3 pt-1 w-full" style={{overflowX: "auto", overflowY: "unset"}}>
 {/* 🚫 블랙 기사 알림 팝업 */}
@@ -21438,6 +21461,14 @@ function UnassignedStatus({ dispatchData, drivers = [], patchDispatch, clients =
   const loadPlaceListRef = React.useRef(null);
   const unloadPlaceListRef = React.useRef(null);
 
+  // 스마트 기사 검색 (Part 7)
+  const [smartQ7, setSmartQ7] = React.useState("");
+  const [smartList7, setSmartList7] = React.useState([]);
+  const [editingDriver7Id, setEditingDriver7Id] = React.useState(null);
+  const [editingDriver7Data, setEditingDriver7Data] = React.useState({ 이름: "", 전화번호: "" });
+  const lastWarnedRef7 = React.useRef({ key: "", time: 0 });
+  const smart7Ref = React.useRef(null);
+
   const getPlaceField = (place, ...keys) => {
     for (const k of keys) {
       if (place[k] !== undefined && place[k] !== null && place[k] !== "") return place[k];
@@ -21546,7 +21577,95 @@ const checkWarningStatus = (name, type) => {
     if (clean.length === 10) return clean.replace(/(\d{3})(\d{3})(\d{4})/, "$1-$2-$3");
     return clean;
   };
+const nd7 = (s = "") => String(s).replace(/[-.\s]/g, "").toLowerCase();
 
+  const parseDriverText7 = (text) => {
+    let name = "", phone = "", plate = "";
+    const hasTag = text.includes("[차주정보]") || text.includes("[차량정보]") || text.includes("[기사정보]");
+    if (hasTag) {
+      let ownerMatch = text.match(/\[(차주정보|기사정보)\]\s*([^\n/]+?)[\s/]+(\d{2,4}[-.\s]?\d{3,4}[-.\s]?\d{4})/);
+      if (ownerMatch) {
+        name = ownerMatch[2].trim();
+        phone = ownerMatch[3].replace(/[-.\s]/g, "").replace(/^(\d{3})(\d{3,4})(\d{4})$/, "$1-$2-$3");
+      } else {
+        const noSepMatch = text.match(/\[(차주정보|기사정보)\]\s*([가-힣a-zA-Z]+)(\d{10,11})/);
+        if (noSepMatch) {
+          name = noSepMatch[2].trim();
+          phone = noSepMatch[3].replace(/^(\d{3})(\d{3,4})(\d{4})$/, "$1-$2-$3");
+        }
+      }
+      const vehicleLine = text.match(/\[차량정보\]\s*([^\n]+)/);
+      if (vehicleLine) {
+        const plateInLine = vehicleLine[1].match(/[가-힣]{0,3}\d{2,3}[가-힣]\d{4}/);
+        if (plateInLine) plate = plateInLine[0];
+      }
+      if (!phone) {
+        const pm = text.match(/0\d{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4}/);
+        if (pm) phone = pm[0].replace(/[-.\s]/g, "").replace(/^(\d{3})(\d{3,4})(\d{4})$/, "$1-$2-$3");
+      }
+      if (!plate) {
+        const plm = text.match(/[가-힣]{0,3}\d{2,3}[가-힣]\d{4}/);
+        if (plm) plate = plm[0];
+      }
+      return { phone, plate, name };
+    }
+    const phoneMatch = text.match(/0\d{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4}/);
+    phone = phoneMatch ? phoneMatch[0].replace(/[-.\s]/g, "").replace(/^(\d{3})(\d{3,4})(\d{4})$/, "$1-$2-$3") : "";
+    const plateMatch = text.match(/[가-힣]{2,3}\d{2}[가-힣]\d{4}|\d{2,3}[가-힣]\d{4}/);
+    plate = plateMatch ? plateMatch[0] : "";
+    const stripped = text.replace(phoneMatch?.[0] || "", "").replace(plate || "", "");
+    const nameMatch = stripped.match(/[가-힣]{2,4}/g) || [];
+    const EXCLUDE = ["강원","서울","경기","인천","부산","대구","광주","대전","울산","세종","경북","경남","전북","전남","충북","충남","제주","초장축윙","초장축","장축","윙바디","카고","탑차","냉장탑","냉동탑","냉장윙","냉동윙","냉장","냉동","리프트","다마스","라보"];
+    name = nameMatch.find(n => n.length >= 2 && !EXCLUDE.includes(n) && !/[구시군동읍면로]$/.test(n)) || "";
+    return { phone, plate, name };
+  };
+
+  const handleSmart7Input = (val) => {
+    setSmartQ7(val);
+    if (!val.trim()) { setSmartList7([]); return; }
+    const { plate } = parseDriverText7(val);
+    if (!plate) { setSmartList7([]); return; }
+    const results = (drivers || [])
+      .filter(d => nd7(d.차량번호) === nd7(plate))
+      .sort((a, b) => {
+        const { name: nm, phone: ph } = parseDriverText7(val);
+        const aExact = nd7(a.이름) === nd7(nm) && nd7(a.전화번호) === nd7(ph);
+        const bExact = nd7(b.이름) === nd7(nm) && nd7(b.전화번호) === nd7(ph);
+        if (aExact && !bExact) return -1;
+        if (!aExact && bExact) return 1;
+        return 0;
+      });
+    setSmartList7(results.slice(0, 8));
+  };
+
+  const applySmart7 = async () => {
+    const val = smartQ7;
+    if (!val.trim()) return;
+    const { phone: ph, plate: pl, name: nm } = parseDriverText7(val);
+    if (!pl && !nm && !ph) return;
+
+    if (!pl) {
+      if (nm || ph) {
+        setCopyTarget(prev => ({ ...prev, 차량번호: "", 이름: nm || "", 전화번호: formatPhone(ph || ""), 배차상태: "배차중" }));
+        setSmartQ7(""); setSmartList7([]);
+      }
+      return;
+    }
+
+    const byPlate = (drivers || []).filter(d => nd7(d.차량번호) === nd7(pl));
+    if (byPlate.length > 0) {
+      const existing = byPlate[0];
+      const sameName = nd7(existing.이름) === nd7(nm);
+      if (sameName || !nm) {
+        setCopyTarget(prev => ({ ...prev, 차량번호: existing.차량번호, 이름: existing.이름, 전화번호: formatPhone(existing.전화번호 || ""), 배차상태: "배차완료" }));
+      } else {
+        setCopyTarget(prev => ({ ...prev, 차량번호: existing.차량번호, 이름: existing.이름, 전화번호: formatPhone(existing.전화번호 || ""), 배차상태: "배차완료" }));
+      }
+    } else {
+      setCopyTarget(prev => ({ ...prev, 차량번호: pl, 이름: nm || "", 전화번호: formatPhone(ph || ""), 배차상태: pl ? "배차완료" : "배차중" }));
+    }
+    setSmartQ7(""); setSmartList7([]);
+  };
   const generateTimeOptions = () => {
     const options = [];
     for (let h = 0; h < 24; h++) {
@@ -22178,12 +22297,77 @@ const checkWarningStatus = (name, type) => {
                 </div>
               </div>
 
-              {/* 기사정보 */}
+             {/* 기사정보 */}
               <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
                 <div className="bg-[#1B2B4B] px-6 py-3">
                   <h3 className="text-[14px] font-bold text-white">기사정보</h3>
                 </div>
-                <div className="p-6">
+                <div className="p-6 space-y-4">
+
+                  {/* 스마트 검색 */}
+                  <Field label="스마트 검색">
+                    <div className="relative">
+                      <textarea
+                        ref={smart7Ref}
+                        rows={2}
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400 resize-none"
+                        placeholder="차량번호 · 기사명 · 연락처 · 문자 복붙"
+                        value={smartQ7}
+                        onChange={(e) => handleSmart7Input(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); applySmart7(); } }}
+                      />
+                      {smartList7.length > 0 && (
+                        <div className="absolute z-50 w-full bg-white border border-gray-200 rounded-xl shadow-xl mt-1 overflow-hidden">
+                          {smartList7.map((d, i) => (
+                            <div key={d.id || i} className="border-b border-gray-100 last:border-0">
+                              {editingDriver7Id === (d.id || i) ? (
+                                <div className="px-4 py-3 bg-blue-50">
+                                  <div className="text-[11px] font-semibold text-gray-500 mb-1">{d.차량번호}</div>
+                                  <input
+                                    className="w-full border border-gray-300 rounded-lg px-2 py-1 text-[13px] mb-1.5 focus:outline-none focus:border-blue-400"
+                                    placeholder="기사 이름"
+                                    value={editingDriver7Data.이름}
+                                    onChange={e => setEditingDriver7Data(p => ({ ...p, 이름: e.target.value }))}
+                                  />
+                                  <input
+                                    className="w-full border border-gray-300 rounded-lg px-2 py-1 text-[13px] mb-2 focus:outline-none focus:border-blue-400"
+                                    placeholder="전화번호"
+                                    value={editingDriver7Data.전화번호}
+                                    onChange={e => setEditingDriver7Data(p => ({ ...p, 전화번호: e.target.value }))}
+                                  />
+                                  <div className="flex gap-2">
+                                    <button type="button" className="flex-1 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-bold"
+                                      onClick={async () => {
+                                        if (!editingDriver7Data.이름.trim()) return;
+                                        await updateDoc(doc(db, "drivers", d.id), { 이름: editingDriver7Data.이름, 전화번호: editingDriver7Data.전화번호 });
+                                        setEditingDriver7Id(null);
+                                      }}>저장</button>
+                                    <button type="button" className="px-3 py-1.5 rounded-lg bg-gray-200 text-gray-700 text-xs"
+                                      onClick={() => setEditingDriver7Id(null)}>취소</button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="flex items-center hover:bg-gray-50">
+                                  <button type="button" className="flex-1 text-left px-4 py-3"
+                                    onClick={() => {
+                                      setCopyTarget(prev => ({ ...prev, 차량번호: d.차량번호, 이름: d.이름 || "", 전화번호: formatPhone(d.전화번호 || ""), 배차상태: "배차완료" }));
+                                      setSmartQ7(""); setSmartList7([]);
+                                    }}>
+                                    <div className="font-bold text-gray-900 text-[13px]">{d.이름 || "-"}</div>
+                                    <div className="text-[11px] text-gray-400 mt-0.5">{d.차량번호} · {d.전화번호}</div>
+                                  </button>
+                                  <button type="button" className="px-3 py-3 text-gray-400 hover:text-blue-500 text-xs"
+                                    onClick={() => { setEditingDriver7Id(d.id || i); setEditingDriver7Data({ 이름: d.이름 || "", 전화번호: d.전화번호 || "" }); }}>수정</button>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </Field>
+
+                  {/* 직접 입력 */}
                   <div className="grid grid-cols-3 gap-6">
                     <Field label="차량번호">
                       <div className="flex gap-2">
@@ -22198,7 +22382,7 @@ const checkWarningStatus = (name, type) => {
                               const grade = match?.등급 || match?.grade || "";
                               if (grade === "블랙") setBlackDriverAlert(match);
                             }
-                            setCopyTarget(prev => ({...prev, 차량번호: v, 이름: match?.이름 || "", 전화번호: formatPhone(match?.전화번호 || ""), 배차상태: match ? "배차완료" : "배차중"}));
+                            setCopyTarget(prev => ({ ...prev, 차량번호: v, 이름: match?.이름 || "", 전화번호: formatPhone(match?.전화번호 || ""), 배차상태: match ? "배차완료" : "배차중" }));
                           }}
                         />
                         {copyTarget?.차량번호 && normalizePlate(copyTarget.차량번호).length >= 4 && !copyTarget?.이름 && (
