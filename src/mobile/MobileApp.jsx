@@ -2570,7 +2570,8 @@ setOpenMemo={setOpenMemo}
             setSelectedOrder(null);
             setPage("form");
           }}
-          className="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-blue-500 text-white text-3xl flex items-center justify-center shadow-lg active:scale-95"
+                    className="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-[#1B2B4B] text-white text-3xl flex items-center justify-center shadow-xl active:scale-95 border-2 border-white/20"
+
         >
           +
         </button>
@@ -2787,28 +2788,37 @@ function MobileHeader({ title, onBack, onRefresh, onMenu }) {
   const isListPage = title === "등록내역";
 
   return (
-    <div className="flex items-center justify-between px-4 py-3 bg-white border-b sticky top-0 z-30">
+    <div className="flex items-center justify-between px-4 py-3 bg-[#1B2B4B] sticky top-0 z-30">
       <div className="w-12">
         {isListPage ? (
           <button
             onClick={onMenu}
-            className="text-sm font-semibold text-blue-600"
+            className="text-xs font-bold text-white/80 tracking-widest"
           >
             MENU
           </button>
         ) : (
-          onBack && <BackIconButton onClick={onBack} />
+          onBack && (
+            <button
+              onClick={onBack}
+              className="w-8 h-8 flex items-center justify-center rounded-full active:scale-95 bg-white/10"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" stroke="white" strokeWidth="2.3" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M15 6l-6 6 6 6" />
+              </svg>
+            </button>
+          )
         )}
       </div>
 
-      <div className="font-semibold text-base text-gray-800">
+      <div className="font-bold text-[15px] text-white tracking-tight">
         {title}
       </div>
 
       <div className="w-8 flex justify-end">
         {onRefresh && (
           <button
-            className="w-8 h-8 flex items-center justify-center rounded-full"
+            className="w-8 h-8 flex items-center justify-center rounded-full bg-white/10 text-white"
             onClick={onRefresh}
           >
             ⟳
@@ -2818,6 +2828,7 @@ function MobileHeader({ title, onBack, onRefresh, onMenu }) {
     </div>
   );
 }
+
 function MobileSideMenu({
   onClose,
   onGoList,
@@ -3057,48 +3068,49 @@ const summary = useMemo(() => {
 }, [groupedByDate]);
   return (
     <div>
-      {/* 상태 탭 */}
-      <div className="flex bg-white border-b">
+            {/* 상태 탭 */}
+      <div className="flex bg-[#1B2B4B]">
         {tabs.map((t) => (
           <button
             key={t}
             onClick={() => setStatusTab(t)}
-            className={`flex-1 py-2 text-sm font-medium border-b-2 ${statusTab === t
-                ? "border-blue-500 text-blue-600"
-                : "border-transparent text-gray-500"
-              }`}
+            className={`flex-1 py-2.5 text-[13px] font-bold transition-all ${
+              statusTab === t
+                ? "bg-white text-[#1B2B4B]"
+                : "text-white/60 hover:text-white/90"
+            }`}
           >
             {t}
           </button>
         ))}
       </div>
 
+
       {/* 날짜/퀵범위/필터 */}
       <div className="bg-white border-b px-4 py-3 space-y-2">
         {/* 상단 범위 텍스트 (11.24 ~ 11.24) */}
-        {/* 🔥 KPI 요약 */}
+                {/* KPI 요약 */}
 <div className="grid grid-cols-3 gap-2 mt-2">
-  <div className="bg-blue-50 rounded-xl p-2 text-center">
-    <div className="text-[11px] text-gray-500">청구</div>
-    <div className="text-sm font-bold text-blue-700">
+  <div className="bg-[#1B2B4B]/5 rounded-xl p-2 text-center border border-[#1B2B4B]/10">
+    <div className="text-[10px] text-gray-500 font-semibold mb-0.5">청구</div>
+    <div className="text-[12px] font-bold text-[#1B2B4B]">
       {summary.totalClaim.toLocaleString()}원
     </div>
   </div>
-
-  <div className="bg-gray-100 rounded-xl p-2 text-center">
-    <div className="text-[11px] text-gray-500">기사</div>
-    <div className="text-sm font-bold text-gray-700">
+  <div className="bg-emerald-50 rounded-xl p-2 text-center border border-emerald-100">
+    <div className="text-[10px] text-gray-500 font-semibold mb-0.5">기사</div>
+    <div className="text-[12px] font-bold text-emerald-700">
       {summary.totalDriver.toLocaleString()}원
     </div>
   </div>
-
-  <div className="bg-green-50 rounded-xl p-2 text-center">
-    <div className="text-[11px] text-gray-500">수수료</div>
-    <div className="text-sm font-bold text-green-700">
+  <div className="bg-orange-50 rounded-xl p-2 text-center border border-orange-100">
+    <div className="text-[10px] text-gray-500 font-semibold mb-0.5">수수료</div>
+    <div className="text-[12px] font-bold text-orange-600">
       {summary.totalFee.toLocaleString()}원
     </div>
   </div>
 </div>
+
         <div className="flex items-center justify-between">
   {/* 조회 기간 텍스트 */}
   <div className="text-xs font-semibold text-gray-600">
@@ -3382,13 +3394,15 @@ const dropTime = order.하차시간 || "시간 없음";
   return (
    <div
   className={
-    "relative bg-white rounded-2xl shadow border px-3 py-3 transition-colors " +
+    "relative bg-white rounded-2xl border px-3 py-3 transition-all " +
     (flash
-      ? "border-blue-400 order-flash-blue shadow-[0_0_0_4px_rgba(59,130,246,0.18),0_0_18px_rgba(59,130,246,0.35)]"
-      : "border-gray-200")
+      ? "border-blue-400 order-flash-blue shadow-[0_0_0_4px_rgba(59,130,246,0.18)]"
+      : "border-gray-200 shadow-sm")
   }
   onClick={onSelect}
+  style={{ borderLeft: state === "배차완료" ? "3px solid #10b981" : "3px solid #f59e0b" }}
 >
+
       {/* 📝 메모 뱃지 */}
 {(order.메모 || order.적요) && (
   <div
@@ -5256,9 +5270,9 @@ const dropOptions = useMemo(() => {
       </div>
 
       <div className="mt-4 mb-8 space-y-2">
-        <button
+              <button
           onClick={onSave}
-          className="w-full py-3 rounded-lg bg-blue-500 text-white text-base font-semibold shadow"
+          className="w-full py-3 rounded-xl bg-[#1B2B4B] text-white text-[14px] font-bold shadow-md active:scale-[0.99]"
         >
           {form._editId ? "수정하기" : "등록하기"}
         </button>
