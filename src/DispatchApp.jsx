@@ -5005,19 +5005,11 @@ const applyOrderParse = () => {
 
 </div>
    
-        {/* 입력 폼 */}
-  {/* ================== 프리미엄 액션바 ================== */}
-<div
-  className="
-    bg-white
-    rounded-xl shadow-lg border
-    px-4 py-3
-    flex flex-wrap items-center gap-3 mb-5
-    max-w-[1500px]
-  "
-  style={{ minHeight: "52px" }}
->
+   {/* ================== 통합 입력 카드 ================== */}
+<div className="bg-white rounded-2xl shadow-md border border-gray-200 mb-4 max-w-[1500px] overflow-hidden min-h-[840px]">
 
+{/* 액션바 */}
+<div className="px-4 py-2.5 flex flex-wrap items-center gap-3 border-b border-gray-100 bg-gray-50/60" style={{ minHeight: "44px" }}>
   {/* 좌측 버튼 그룹 */}
   <div className="flex items-center gap-2">
 
@@ -7015,6 +7007,7 @@ if (res?.success) {
   </div>
 
 </form>
+</div>
         {/* ------------------------------  
       🔵 오더복사 팝업 (완성본)
 -------------------------------- */}
@@ -7262,7 +7255,7 @@ const today = now.toISOString().slice(0, 10);
 <div className="flex items-start gap-6 w-full">
   
 
-<div className="flex-1">
+<div className="flex-1 flex flex-col overflow-hidden">
 
   {/* 🔁 기존 / 신규 버튼 + 유가 슬라이드 */}
 <div className="flex items-center justify-between mb-3">
@@ -7311,147 +7304,184 @@ const today = now.toISOString().slice(0, 10);
   )}
 </div>
 
-  {/* ================= Premium Today Dashboard v4 ================= */}
- <div
-  className="
-    w-[1000px]
-    rounded-3xl
-    bg-white
-    shadow-xl
-    border border-gray-200
-    pt-2 pb-6 px-6
-    sticky top-[200px]
-    flex-shrink-0
-    self-stretch        /* ① 자동 높이 맞춤 */
-    overflow-hidden     /* ② 스크롤 영역 컨트롤 */
-  "
-  style={{
-    maxHeight: "calc(100vh - 130px)", /* ③ 화면 초과 방지 */
-    display: "flex",
-    flexDirection: "column",
-  }}
+  {/* ================= Premium Today Dashboard v7 — Bold & Clear ================= */}
+<div
+  className="w-[1300px] flex-shrink-0 rounded-2xl overflow-hidden border border-gray-200/50 bg-[#fafafa] flex flex-col self-start"
+  style={{ maxHeight: "fit-content" }}
 >
 
-    {/* Header + 알림시간 설정 */}
-    <div className="flex justify-between items-center mb-4">
-      <h3 className="text-lg font-semibold text-gray-900">Today Dashboard</h3>
+  {/* ── 헤더 ── */}
+  <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between shrink-0">
+    <div className="flex items-center gap-2.5">
+      <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+      <span className="text-[15px] font-bold text-white">Today</span>
+    </div>
+    <div className="flex items-center gap-3">
+      <span className="text-white/35 text-[13px] font-mono">{today}</span>
       <input
         type="time"
         value={alertTime}
-        onChange={(e) => {
-          setAlertTime(e.target.value);
-          setAlertShown(false);
-        }}
-        className="border rounded px-1 py-0.5 text-[10px]"
+        onChange={(e) => { setAlertTime(e.target.value); setAlertShown(false); }}
+        className="bg-white/8 text-white/70 text-[12px] rounded-md px-2 py-1 outline-none border border-white/10 w-[80px]"
       />
     </div>
-
-    {/* Progress */}
-    <div className="mb-6">
-      <div className="flex justify-between text-[11px] text-gray-500 mb-1">
-        <span>배차진행률</span><span>{rate}%</span>
-      </div>
-      <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
-        <div className="h-full bg-blue-600" style={{ width: `${rate}%` }} />
-      </div>
-    </div>
-
-    {/* Quick Status */}
-<div className="grid grid-cols-3 gap-2 mb-6 text-[12px]">
-
-  {/* 임박 */}
-  <button
-    onClick={() =>
-      setStatusPopup({
-        title: "임박 리스트",
-        list: todayRows.filter(r => r.배차상태 === "배차중")
-      })
-    }
-    className={`bg-amber-50 hover:bg-amber-100 border border-amber-200 py-2 rounded-xl text-center font-medium
-      ${doing > 0 ? "animate-pulse" : ""}`}
-  >
-    ⏳ 임박 {doing}
-  </button>
-
-  {/* 미배차 */}
-  <button
-    onClick={() =>
-      setStatusPopup({
-        title: "미배차 리스트",
-        list: todayRows.filter(r => !r.차량번호?.trim())
-      })
-    }
-    className="bg-gray-50 hover:bg-gray-100 border border-gray-200 py-2 rounded-xl text-center font-medium"
-  >
-    🚧 미배차 {pending}
-  </button>
-
-  {/* 지연 */}
-  <button
-    onClick={() =>
-      setStatusPopup({
-        title: "지연 리스트",
-        list: todayRows.filter(r => r.배차상태 === "지연")
-      })
-    }
-    className={`bg-rose-50 hover:bg-rose-100 border border-rose-200 py-2 rounded-xl text-center font-medium
-      ${delayed > 0 ? "animate-pulse" : ""}`}
-  >
-    ⚠ 지연 {delayed}
-  </button>
-
-</div>
-
-
-    {/* KPI */}
-    <div className="grid grid-cols-3 gap-3 text-center mb-6">
-      <div><div className="text-[11px] text-gray-500">총오더</div><div className="text-base font-bold">{total}</div></div>
-      <div><div className="text-[11px] text-gray-500">완료</div><div className="text-base font-bold text-blue-600">{done}</div></div>
-      <div><div className="text-[11px] text-gray-500">진행</div><div className="text-base font-bold text-blue-600">{doing}</div></div>
-      <div><div className="text-[11px] text-gray-500">기사수</div><div className="text-base font-semibold">{driverCount}</div></div>
-      <div><div className="text-[11px] text-gray-500">신규거래</div><div className="text-base font-semibold text-emerald-600">{newClients}</div></div>
-      <div><div className="text-[11px] text-gray-500">신규하차</div><div className="text-base font-semibold text-emerald-600">{newPlaces}</div></div>
-    </div>
-
-    {/* Financial */}
-    <div className="space-y-1.5 text-[13px] mb-6">
-      <div className="flex justify-between"><span>매출</span><b>{todayRevenue.toLocaleString()}원</b></div>
-      <div className="flex justify-between"><span>기사비용</span><b>{todayDriverCost.toLocaleString()}원</b></div>
-      <div className="flex justify-between"><span>마진율</span>
-        <b className={todayMarginRate >= 0 ? "text-emerald-600" : "text-red-600"}>{todayMarginRate.toFixed(0)}%</b>
-      </div>
-    </div>
-
-    {/* Trend Graph */}
-    <div className="bg-white border border-gray-200 rounded-xl p-3 mb-6">
-      <div className="text-[11px] text-gray-600 mb-2">시간대별 요청건수</div>
-      <div className="h-[110px] min-h-[110px]">
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={trendData}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="hour" stroke="#888" fontSize={10} />
-            <YAxis allowDecimals={false} stroke="#888" fontSize={10} />
-            <Tooltip />
-            <Line type="monotone" dataKey="count" stroke="#2563eb" strokeWidth={2} dot={false} />
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
-    </div>
-
-    {/* Top 3 Buttons */}
-    <div className="grid grid-cols-3 gap-2">
-      <button onClick={() => setPopupType("driver")} className="bg-gray-50 border border-gray-200 rounded-lg py-2 text-[12px] font-medium hover:bg-gray-100">
-        기사 Top 3
-      </button>
-      <button onClick={() => setPopupType("client")} className="bg-gray-50 border border-gray-200 rounded-lg py-2 text-[12px] font-medium hover:bg-gray-100">
-        상차지 Top 3
-      </button>
-      <button onClick={() => setPopupType("place")} className="bg-gray-50 border border-gray-200 rounded-lg py-2 text-[12px] font-medium hover:bg-gray-100">
-        하차지 Top 3
-      </button>
-    </div>
-
   </div>
+  <div className="flex-1 overflow-y-auto p-4 space-y-3">
+
+    {/* ── 배차 진행률 ── */}
+    <div className="bg-white rounded-xl border border-gray-100 p-5">
+      <div className="flex items-end justify-between mb-3">
+        <div>
+          <div className="text-[13px] text-gray-500 font-semibold mb-1">배차 진행률</div>
+          <div className="flex items-baseline gap-1">
+            <span className="text-[36px] font-black text-[#1B2B4B] leading-none">{rate}</span>
+            <span className="text-[16px] font-bold text-gray-300">%</span>
+          </div>
+        </div>
+        <div className="text-[14px] text-gray-400 font-semibold">
+          <span className="font-bold text-[#1B2B4B]">{done}</span>
+          <span className="text-gray-300"> / </span>
+          <span>{total}</span>
+        </div>
+      </div>
+      <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+        <div
+          className="h-full rounded-full bg-[#1B2B4B] transition-all duration-1000"
+          style={{ width: `${rate}%` }}
+        />
+      </div>
+    </div>
+
+    {/* ── 상태 카드 3개 ── */}
+    <div className="grid grid-cols-3 gap-3">
+      {[
+        {
+          label: "배차중", val: doing,
+          sub: doing > 0 ? "진행 중" : "없음",
+          dot: "bg-[#1B2B4B]",
+          pulse: doing > 0,
+          list: todayRows.filter(r => r.배차상태 === "배차중"),
+        },
+        {
+          label: "미배차", val: pending,
+          sub: pending > 0 ? "대기 중" : "없음",
+          dot: "bg-gray-400",
+          pulse: false,
+          list: todayRows.filter(r => !r.차량번호?.trim()),
+        },
+        {
+          label: "긴급",
+          val: todayRows.filter(r => r.긴급 && r.배차상태 !== "배차완료").length,
+          sub: todayRows.filter(r => r.긴급 && r.배차상태 !== "배차완료").length > 0 ? "즉시 처리" : "없음",
+          dot: "bg-red-500",
+          pulse: todayRows.filter(r => r.긴급 && r.배차상태 !== "배차완료").length > 0,
+          list: todayRows.filter(r => r.긴급 && r.배차상태 !== "배차완료"),
+        },
+      ].map(({ label, val, sub, dot, pulse, list }) => (
+        <button
+          key={label}
+          type="button"
+          onClick={() => setStatusPopup({ title: `${label} 리스트`, list })}
+          className="bg-white rounded-xl border border-gray-100 p-4 text-left transition-all hover:shadow-md hover:-translate-y-0.5"
+        >
+          <div className="flex items-center gap-2 mb-2">
+            <div className={`w-2 h-2 rounded-full ${dot} ${pulse ? "animate-pulse" : ""}`} />
+            <span className="text-[13px] font-semibold text-gray-400">{label}</span>
+          </div>
+          <div className="text-[28px] font-black text-[#1B2B4B] leading-none">{val}</div>
+          <div className="text-[11px] text-gray-300 mt-1.5 font-medium">{sub}</div>
+        </button>
+      ))}
+    </div>
+
+    {/* ── KPI 스트립 ── */}
+    <div className="grid grid-cols-4 gap-2">
+      {[
+        { label: "총 오더", val: total, unit: "건" },
+        { label: "완료", val: done, unit: "건" },
+        { label: "기사수", val: driverCount, unit: "명" },
+        { label: "진행중", val: doing, unit: "건" },
+      ].map(({ label, val, unit }) => (
+        <div key={label} className="bg-white rounded-lg border border-gray-100 py-3 px-4 text-center">
+          <div className="text-[20px] font-extrabold text-[#1B2B4B] leading-none">
+            {val}<span className="text-[12px] font-semibold text-gray-300 ml-1">{unit}</span>
+          </div>
+          <div className="text-[12px] text-gray-400 mt-1.5 font-semibold">{label}</div>
+        </div>
+      ))}
+    </div>
+
+    {/* ── 오늘 운임 ── */}
+    <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+      <div className="px-5 py-3.5 border-b border-gray-50">
+        <span className="text-[14px] font-bold text-[#1B2B4B]">오늘 운임</span>
+      </div>
+      <div className="divide-y divide-gray-50">
+        {[
+          { label: "청구", val: todayRevenue },
+          { label: "기사비용", val: todayDriverCost },
+          { label: "수수료", val: todayRevenue - todayDriverCost },
+        ].map(({ label, val }) => (
+          <div key={label} className="px-5 py-3 flex justify-between items-center">
+            <span className="text-[13px] text-gray-500 font-medium">{label}</span>
+            <span className="text-[15px] font-bold text-[#1B2B4B] tabular-nums">
+              {val.toLocaleString()}<span className="text-gray-300 font-normal text-[12px] ml-0.5">원</span>
+            </span>
+          </div>
+        ))}
+      </div>
+      <div className="px-5 py-3.5 bg-[#1B2B4B] flex justify-between items-center">
+        <span className="text-[13px] text-white/60 font-semibold">마진율</span>
+        <span className="text-[18px] font-black text-white">{todayMarginRate.toFixed(1)}%</span>
+      </div>
+    </div>
+
+        {/* ── 거래처 TOP 5 (세로 막대 차트) ── */}
+    <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+      <div className="px-5 py-3.5 border-b border-gray-50 flex items-center justify-between">
+        <span className="text-[14px] font-bold text-[#1B2B4B]">거래처 TOP 5</span>
+        <span className="text-[11px] text-gray-300 font-medium">오늘 오더 기준</span>
+      </div>
+      <div className="px-5 py-4">
+        {(() => {
+          const counts = {};
+          todayRows.forEach(r => {
+            const name = r.거래처명?.trim();
+            if (name) counts[name] = (counts[name] || 0) + 1;
+          });
+          const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 5);
+          const max = sorted[0]?.[1] || 1;
+
+          if (sorted.length === 0) {
+            return <div className="text-center py-6 text-[13px] text-gray-300">오늘 오더가 없습니다</div>;
+          }
+
+          return (
+            <div className="flex items-end justify-between gap-6" style={{ height: "140px" }}>
+              {sorted.map(([name, count], i) => {
+                const heightPct = (count / max) * 100;
+                const opacities = [1, 0.8, 0.6, 0.45, 0.35];
+                return (
+                  <div key={name} className="flex-1 flex flex-col items-center gap-1.5 h-full justify-end max-w-[120px]">
+                    <span className="text-[13px] font-bold text-[#1B2B4B]">{count}건</span>
+                    <div
+                      className="w-10 rounded-t-md transition-all duration-700 bg-[#1B2B4B]"
+                      style={{
+                        height: `${Math.max(heightPct, 10)}%`,
+                        opacity: opacities[i] || 0.3,
+                      }}
+                    />
+                    <span className="text-[13px] text-gray-600 font-semibold truncate w-full text-center mt-1">{name}</span>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()}
+      </div>
+    </div>
+  </div>
+</div>
 
 </div>
 {blackAlert && (
@@ -9546,6 +9576,61 @@ React.useEffect(() => {
     });
 setFarePanelOpen(true);
   };
+    // === 복사/수정 패널 전용 운임조회 (업그레이드) ===
+  const handleCopyFareSearch = () => {
+    if (!copyTarget) return alert("먼저 오더를 선택해주세요.");
+
+    const pickup = copyTarget.상차지명?.trim();
+    const drop = copyTarget.하차지명?.trim();
+    if (!pickup || !drop) return alert("상/하차지를 입력해주세요.");
+
+    const targetCargo = String(copyTarget.화물내용 || "").trim();
+    const targetTon = String(copyTarget.차량톤수 || "").trim();
+
+    const base = (dispatchData || []).filter(r => {
+      if (!r.청구운임) return false;
+      return (
+        String(r.상차지명 || "").includes(pickup) &&
+        String(r.하차지명 || "").includes(drop)
+      );
+    });
+
+    if (!base.length) {
+      alert("📭 동일 상/하차지 운임 이력이 없습니다.");
+      return;
+    }
+
+    const scored = base.map(r => {
+      const cargoMatch = targetCargo && r.화물내용 && r.화물내용.includes(targetCargo);
+      const tonMatch = targetTon && r.차량톤수 && r.차량톤수 === targetTon;
+      return {
+        ...r,
+        _score: (cargoMatch ? 100 : 0) + (tonMatch ? 100 : 0),
+        _match: { cargo: cargoMatch, ton: tonMatch },
+        _time: r.updatedAt || r.등록일 || 0,
+      };
+    });
+
+    scored.sort((a, b) => {
+      if (b._score !== a._score) return b._score - a._score;
+      return b._time - a._time;
+    });
+
+    const fares = scored.map(r =>
+      Number(String(r.청구운임 || "0").replace(/[^\d]/g, ""))
+    );
+
+    setFareResult({
+      records: scored,
+      count: fares.length,
+      avg: Math.round(fares.reduce((a, b) => a + b, 0) / fares.length),
+      min: Math.min(...fares),
+      max: Math.max(...fares),
+      latest: scored[0],
+    });
+    setCopyFarePanelOpen(true);
+  };
+
   const [editPopupOpen, setEditPopupOpen] = React.useState(false);
   const [copyPanelOpen, setCopyPanelOpen] = React.useState(false);
 const [copyTarget, setCopyTarget] = React.useState(null);
@@ -9560,6 +9645,7 @@ const [copyPlaceType, setCopyPlaceType] = React.useState(null); // "pickup" | "d
 const [copyActiveIndex, setCopyActiveIndex] = React.useState(0);
   const [editTarget, setEditTarget] = React.useState(null);
   const [farePanelOpen, setFarePanelOpen] = React.useState(false);
+  const [copyFarePanelOpen, setCopyFarePanelOpen] = React.useState(false);
   const [driverPick, setDriverPick] = React.useState(null);
   const [markDeliveredOnSave, setMarkDeliveredOnSave] = React.useState(false);
   React.useEffect(() => {
@@ -9599,6 +9685,15 @@ React.useEffect(() => {
     window.removeEventListener("keydown", handleKeyDown);
   };
 }, [farePanelOpen]);
+// 🔥 복사패널 운임조회 모달 ESC 닫기
+React.useEffect(() => {
+  if (!copyFarePanelOpen) return;
+  const handleKeyDown = (e) => {
+    if (e.key === "Escape") setCopyFarePanelOpen(false);
+  };
+  window.addEventListener("keydown", handleKeyDown);
+  return () => window.removeEventListener("keydown", handleKeyDown);
+}, [copyFarePanelOpen]);
 
   // 🔵 동일 노선 추천 리스트
   const [similarOrders, setSimilarOrders] = React.useState([]);
@@ -11404,7 +11499,18 @@ setUrgentPopup([]);
     <p className="text-[12px] text-gray-400 mt-0.5">{copyTarget?.거래처명} · {copyTarget?.상차지명} → {copyTarget?.하차지명}</p>
   </div>
   <div className="flex gap-2 items-center">
-
+    {/* 운임조회 */}
+    <button
+      onClick={handleCopyFareSearch}
+      className="
+        px-4 py-2 rounded-lg text-[13px] font-bold transition
+        bg-gradient-to-r from-amber-500 to-orange-500
+        hover:from-amber-600 hover:to-orange-600
+        text-white shadow-md hover:shadow-lg
+      "
+    >
+      운임조회
+    </button>
     {/* 수정 저장 */}
     <button
       onClick={async () => {
@@ -12249,6 +12355,158 @@ value={copyTarget?.화물수량 || ""}
   />
   </div>
 </section>
+{/* ===================== 복사패널 운임조회 모달 ===================== */}
+{copyFarePanelOpen && fareResult && (
+  <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/50">
+    <div className="bg-white w-[580px] max-h-[82vh] rounded-2xl shadow-2xl overflow-hidden flex flex-col">
+
+      {/* ── 헤더 ── */}
+      <div className="bg-[#1B2B4B] px-6 py-4 flex justify-between items-center shrink-0">
+        <div>
+          <h3 className="text-white font-extrabold text-[17px] tracking-tight">운임 조회 결과</h3>
+          <p className="text-white/60 text-[13px] font-semibold mt-0.5">
+            {copyTarget?.상차지명} → {copyTarget?.하차지명}
+          </p>
+        </div>
+        <button
+          className="text-white/60 hover:text-white text-xl font-bold"
+          onClick={() => setCopyFarePanelOpen(false)}
+        >✕</button>
+      </div>
+
+      {/* ── 요약 카드 ── */}
+      <div className="px-6 py-4 border-b border-gray-100 bg-gray-50 shrink-0">
+        <div className="grid grid-cols-4 gap-3 text-center">
+          <div className="bg-white rounded-xl border border-gray-200 p-3">
+            <div className="text-[12px] text-gray-500 font-bold">총 건수</div>
+            <div className="text-[22px] font-black text-[#1B2B4B] mt-1">{fareResult.count}건</div>
+          </div>
+          <div className="bg-white rounded-xl border-2 border-blue-400 p-3">
+            <div className="text-[12px] text-blue-500 font-bold">평균 운임</div>
+            <div className="text-[22px] font-black text-blue-600 mt-1">{fareResult.avg.toLocaleString()}</div>
+          </div>
+          <div className="bg-white rounded-xl border border-gray-200 p-3">
+            <div className="text-[12px] text-gray-500 font-bold">최저</div>
+            <div className="text-[20px] font-extrabold text-gray-700 mt-1">{fareResult.min.toLocaleString()}</div>
+          </div>
+          <div className="bg-white rounded-xl border border-gray-200 p-3">
+            <div className="text-[12px] text-gray-500 font-bold">최고</div>
+            <div className="text-[20px] font-extrabold text-gray-700 mt-1">{fareResult.max.toLocaleString()}</div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── 리스트 ── */}
+      <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
+        {fareResult.records.map((rec, idx) => (
+          <div
+            key={rec._id || idx}
+            className="bg-white border border-gray-200 rounded-xl p-5 hover:border-blue-300 hover:shadow-md transition"
+          >
+            {/* 상단: 날짜 + 뱃지 */}
+            <div className="flex justify-between items-center mb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-[14px] font-bold text-[#1B2B4B]">{rec.상차일}</span>
+                <span className="text-[13px] font-semibold text-gray-500">{rec.거래처명}</span>
+              </div>
+                            <div className="flex gap-1.5">
+                {(rec._match?.cargo || rec._match?.ton) && (
+                  <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-[#1B2B4B] text-white">최적</span>
+                )}
+                {rec._match?.cargo && (
+                  <span className="px-2.5 py-1 text-[11px] font-bold rounded-full bg-gray-100 text-[#1B2B4B] border border-gray-300">화물동일</span>
+                )}
+                {rec._match?.ton && (
+                  <span className="px-2.5 py-1 text-[11px] font-bold rounded-full bg-gray-100 text-[#1B2B4B] border border-gray-300">톤수동일</span>
+                )}
+              </div>
+
+            </div>
+
+            {/* 중간: 차량/화물/기사 정보 */}
+            <div className="grid grid-cols-3 gap-3 mb-3">
+              <div className="bg-gray-50 rounded-lg px-3 py-2">
+                <div className="text-[11px] font-bold text-gray-400">차량</div>
+                <div className="text-[14px] font-bold text-gray-800 mt-0.5">{rec.차량종류 || "-"} / {rec.차량톤수 || "-"}</div>
+              </div>
+              <div className="bg-gray-50 rounded-lg px-3 py-2">
+                <div className="text-[11px] font-bold text-gray-400">화물</div>
+                <div className="text-[14px] font-bold text-gray-800 mt-0.5">{rec.화물내용 || "-"}</div>
+              </div>
+              <div className="bg-gray-50 rounded-lg px-3 py-2">
+                <div className="text-[11px] font-bold text-gray-400">기사</div>
+                <div className="text-[14px] font-bold text-gray-800 mt-0.5">{rec.이름 || "-"}</div>
+              </div>
+            </div>
+
+            {/* 하단: 금액 + 적용 */}
+            <div className="flex justify-between items-center pt-3 border-t border-gray-100">
+              <div className="flex items-center gap-6">
+                <div>
+                  <div className="text-[11px] font-bold text-gray-400">청구운임</div>
+                  <div className="text-[20px] font-black text-blue-600">
+                    {Number(rec.청구운임 || 0).toLocaleString()}원
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[11px] font-bold text-gray-400">기사운임</div>
+                  <div className="text-[18px] font-extrabold text-emerald-600">
+                    {Number(rec.기사운임 || 0).toLocaleString()}원
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg text-[13px] font-bold hover:bg-blue-700 transition shadow"
+                  onClick={() => {
+                    setCopyTarget(p => ({
+                      ...p,
+                      청구운임: String(rec.청구운임 || 0),
+                    }));
+                    setCopyFarePanelOpen(false);
+                  }}
+                >
+                  청구 적용
+                </button>
+                <button
+                  className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-[13px] font-bold hover:bg-emerald-700 transition shadow"
+                  onClick={() => {
+                    setCopyTarget(p => ({
+                      ...p,
+                      청구운임: String(rec.청구운임 || 0),
+                      기사운임: String(rec.기사운임 || 0),
+                    }));
+                    setCopyFarePanelOpen(false);
+                  }}
+                >
+                  전체 적용
+                </button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* ── 하단 평균 적용 ── */}
+      <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 shrink-0">
+        <button
+          className="w-full py-3.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[15px] font-extrabold rounded-xl hover:from-amber-600 hover:to-orange-600 transition shadow-lg"
+          onClick={() => {
+            setCopyTarget(p => ({
+              ...p,
+              청구운임: String(fareResult.avg),
+            }));
+            setCopyFarePanelOpen(false);
+          }}
+        >
+          평균 운임 적용 ({fareResult.avg.toLocaleString()}원)
+        </button>
+      </div>
+
+    </div>
+  </div>
+)}
 
 {clientApplyPopup && (
   <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
@@ -12376,23 +12634,24 @@ value={copyTarget?.화물수량 || ""}
           {rec.상차일}
         </div>
 
-        <div className="flex gap-1">
+                <div className="flex gap-1.5">
           {(rec._match?.cargo || rec._match?.ton) && (
-            <span className="px-2 py-0.5 text-xs font-bold rounded-full bg-red-600 text-white">
-              최적 매칭
+            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-[#1B2B4B] text-white">
+              최적
             </span>
           )}
           {rec._match?.cargo && (
-            <span className="px-2 py-0.5 text-xs rounded-full bg-indigo-200 text-indigo-900">
-              화물 동일
+            <span className="px-2.5 py-1 text-[11px] font-bold rounded-full bg-gray-100 text-[#1B2B4B] border border-gray-300">
+              화물동일
             </span>
           )}
           {rec._match?.ton && (
-            <span className="px-2 py-0.5 text-xs rounded-full bg-emerald-200 text-emerald-900">
-              톤수 동일
+            <span className="px-2.5 py-1 text-[11px] font-bold rounded-full bg-gray-100 text-[#1B2B4B] border border-gray-300">
+              톤수동일
             </span>
           )}
         </div>
+
       </div>
 
       {/* 2️⃣ 상/하차 */}
