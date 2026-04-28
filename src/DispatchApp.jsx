@@ -13561,17 +13561,7 @@ value={copyTarget?.화물수량 || ""}
   <div className="absolute top-0 right-0 h-full flex items-center pr-2">
 
     <select
-      className="
-        h-[80%]
-        px-3
-        text-sm font-semibold
-        rounded-lg
-        bg-blue-50
-        text-blue-700
-        border border-blue-200
-        appearance-none
-        cursor-pointer
-      "
+      className="w-[58px] h-[calc(100%-2px)] px-1 text-[11px] font-bold rounded-r-lg bg-[#1B2B4B] text-white border-0 appearance-none cursor-pointer"
       value={editTarget.화물타입 || ""}
       onChange={(e) => {
         const type = e.target.value;
@@ -13658,17 +13648,7 @@ value={copyTarget?.화물수량 || ""}
     <div className="absolute top-0 right-0 h-full flex items-center pr-1">
 
 <select
-  className="
-    h-full         
-    px-3          
-    text-sm             
-    rounded-md
-    bg-blue-50
-    border border-blue-200
-    text-blue-700
-    appearance-none
-    cursor-pointer
-  "
+  className="h-full px-2 text-[11px] font-bold rounded-r-lg bg-[#1B2B4B] text-white border-0 appearance-none cursor-pointer"
         value={
           editTarget.차량톤수?.includes("kg")
             ? "kg"
@@ -17920,8 +17900,8 @@ onBlur={(e) => {
     />
 
     <select
-      className="absolute right-1 top-1/2 -translate-y-1/2 h-[30px] min-w-[70px] px-2 text-xs rounded bg-blue-50 border border-blue-200 text-blue-700"
-      value={editTarget?.화물타입 || ""}
+        className="absolute right-1 top-1/2 -translate-y-1/2 h-[30px] w-[58px] px-1 text-[11px] font-bold rounded-r-lg bg-[#1B2B4B] text-white border-0 appearance-none cursor-pointer"
+        value={editTarget?.화물타입 || ""}
       onChange={(e) => {
         const type = e.target.value;
 
@@ -17990,8 +17970,8 @@ onBlur={(e) => {
         }}
       />
 
-      <select
-        className="absolute right-1 top-1/2 -translate-y-1/2 h-[30px] min-w-[70px] px-2 text-xs rounded bg-blue-50 border border-blue-200 text-blue-700"
+       <select
+        className="absolute right-1 top-1/2 -translate-y-1/2 h-[30px] w-[58px] px-1 text-[11px] font-bold rounded-r-lg bg-[#1B2B4B] text-white border-0 appearance-none cursor-pointer"
         value={editTarget?.톤수타입 || ""}
         onChange={(e) => {
           const type = e.target.value;
@@ -23390,45 +23370,42 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
 }
 // ===================== DispatchApp.jsx (PART 7/8) — END =====================
 
-// ===================== DispatchApp.jsx (PART 8/8) — 거래명세서 + 미수금관리(월집계/토글/선택/전체정산) — START =====================
+// ===================== DispatchApp.jsx (PART 8/8) — START =====================
 function ClientSettlement({ dispatchData, clients = [], setClients }) {
-  // ---------------- 공통 유틸 ----------------
   const todayStr8 = () => new Date().toISOString().slice(0, 10);
-  const THIS_YEAR = new Date().getFullYear(); // 예: 2025
+  const THIS_YEAR = new Date().getFullYear();
   const toInt = (v) => parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10) || 0;
-  const won = (n) => (toInt(n)).toLocaleString();
+  const won = (n) => toInt(n).toLocaleString();
 
-  // 🔧 Firestore patch (월별 정산상태/정산일 전용)
   const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
     try {
       if (!id || !yyyymm) return;
       if (typeof db !== "undefined" && db && typeof setDoc === "function" && typeof doc === "function") {
         const coll = (typeof COLL !== "undefined" && COLL?.dispatch) ? COLL.dispatch : "dispatch";
         const patch = {};
-        patch[`정산상태.${yyyymm}`] = status;          // "정산완료" | "미정산"
-        patch[`정산일.${yyyymm}`] = dateStr || "";      // YYYY-MM-DD
+        patch[`정산상태.${yyyymm}`] = status;
+        patch[`정산일.${yyyymm}`] = dateStr || "";
         await setDoc(doc(db, coll, id), patch, { merge: true });
       }
-    } catch (e) {
-      console.warn("patchMonthOnDoc error:", e);
-    }
+    } catch (e) { console.warn("patchMonthOnDoc error:", e); }
   };
 
-  // ---------------- 탭 상태 ----------------
-  const [tab, setTab] = useState("invoice"); // 'invoice' | 'unsettledMonth'
+  const [tab, setTab] = useState("invoice");
 
-  // ---------------- 거래명세서(기존) 상태 ----------------
+  // ── 거래명세서 상태 ──
+  const [searchType, setSearchType] = useState("거래처명");
+  const [searchInput, setSearchInput] = useState("");
   const [client, setClient] = useState("");
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
   const [editInfo, setEditInfo] = useState({});
   const [showEdit, setShowEdit] = useState(false);
+  const [searched, setSearched] = useState(false); // 🔥 검색 전 빈 화면
 
   const found = useMemo(
     () => (clients || []).find((c) => c.거래처명 === client) || {},
     [client, clients]
   );
-
   const [cInfo, setCInfo] = useState({});
   useEffect(() => {
     setCInfo({
@@ -23443,42 +23420,38 @@ function ClientSettlement({ dispatchData, clients = [], setClients }) {
     });
   }, [found, client]);
 
-  const inRangeInvoice = (d) => (!start || d >= start) && (!end || d <= end);
-
   const rowsInvoice = useMemo(() => {
+    if (!searched) return [];
     let list = Array.isArray(dispatchData) ? dispatchData : [];
-    list = list.filter((r) => (r.배차상태 || "") === "배차완료");
-    if (client) list = list.filter((r) => (r.거래처명 || "") === client);
-    if (start || end) list = list.filter((r) => inRangeInvoice(r.상차일 || "")); // 상차일 기준
+    list = list.filter(r => (r.배차상태 || "") === "배차완료");
+    if (searchType === "거래처명" && client) list = list.filter(r => (r.거래처명 || "") === client);
+    if (searchType === "기사명" && client) list = list.filter(r => (r.이름 || "").includes(client));
+    if (start) list = list.filter(r => (r.상차일 || "") >= start);
+    if (end) list = list.filter(r => (r.상차일 || "") <= end);
     return list.sort((a, b) => (a.상차일 || "").localeCompare(b.상차일 || ""));
-  }, [dispatchData, client, start, end]);
+  }, [dispatchData, client, start, end, searched, searchType]);
 
   const mapped = rowsInvoice.map((r, i) => ({
     idx: i + 1,
-    상하차지: `${r.상차지명 || ""} - ${r.하차지명 || ""}`,
+    상차일: r.상차일 || "",
+    상하차지: `${r.상차지명 || ""} → ${r.하차지명 || ""}`,
     화물명: r.화물내용 || "",
     기사명: r.이름 || "",
     공급가액: toInt(r.청구운임),
     세액: Math.round(toInt(r.청구운임) * 0.1),
   }));
-
   const 합계공급가 = mapped.reduce((a, b) => a + b.공급가액, 0);
   const 합계세액 = mapped.reduce((a, b) => a + b.세액, 0);
 
   const COMPANY_PRINT = {
-    name: "(주)돌케",
-    ceo: "고현정",
-    bizNo: "329-81-00967",
-    type: "운수업",
-    item: "화물운송주선",
+    name: "(주)돌케", ceo: "고현정", bizNo: "329-81-00967",
+    type: "운수업", item: "화물운송주선",
     addr: "인천 서구 청마로19번길 21 4층 402호",
     contact: "TEL 1533-2525 / FAX 032-569-8881",
     bank: "기업은행 955-040276-04-018",
-    email: "r15332525@run25.co.kr",
-    seal: "/seal.png",
+    email: "r15332525@run25.co.kr", seal: "/seal.png",
   };
 
-  // ✅ PDF 저장 (거래명세서 - 기존 유지)
   const savePDF = async () => {
     const area = document.getElementById("invoiceArea");
     const canvas = await html2canvas(area, { scale: 2, backgroundColor: "#ffffff", useCORS: true });
@@ -23498,78 +23471,62 @@ function ClientSettlement({ dispatchData, clients = [], setClients }) {
     pdf.save(`${client || "거래명세서"}.pdf`);
   };
 
-  // ✅ 엑셀 다운로드 (거래명세서 - 기존 유지)
   const downloadInvoiceExcel = () => {
-    const table = document.getElementById("invoiceArea");
-    if (!table) return alert("내보낼 테이블을 찾을 수 없습니다.");
-    try {
-      const wb = XLSX.utils.table_to_book(table, { sheet: "거래명세서" });
-      XLSX.writeFile(wb, `거래명세서_${cInfo.거래처명 || "미지정"}_${start || "all"}~${end || "all"}.xlsx`);
-    } catch (err) {
-      console.error(err);
-      alert("엑셀 저장 중 오류가 발생했습니다.");
-    }
+    if (!searched || !rowsInvoice.length) return alert("먼저 조회를 실행하세요.");
+    const rows = mapped.map(m => ({
+      No: m.idx, 상차일: m.상차일, 상하차지: m.상하차지,
+      화물명: m.화물명, 기사명: m.기사명,
+      공급가액: m.공급가액, 세액: m.세액,
+      합계: m.공급가액 + m.세액,
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "거래명세서");
+    XLSX.writeFile(wb, `거래명세서_${client || "전체"}_${start||"all"}~${end||"all"}.xlsx`);
   };
 
   const saveEdit = () => {
-    setClients((prev) => prev.map((c) => (c.거래처명 === client ? { ...c, ...editInfo } : c)));
+    setClients(prev => prev.map(c => c.거래처명 === client ? { ...c, ...editInfo } : c));
     alert("거래처 정보 수정 완료!");
     setShowEdit(false);
   };
 
-  // ---------------- 미수금관리(월집계) — 토글/선택/전체 정산 ----------------
-
-  // 거래처 옵션
+  // ── 미수금관리 상태 ──
   const clientOptions8 = useMemo(() => {
-    const set = new Set((clients || []).map((c) => c.거래처명).filter(Boolean));
+    const set = new Set((clients || []).map(c => c.거래처명).filter(Boolean));
     if (set.size === 0) (dispatchData || []).forEach(r => r.거래처명 && set.add(r.거래처명));
-    return Array.from(set).sort((a, b) => a.localeCompare(b, 'ko'));
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "ko"));
   }, [clients, dispatchData]);
 
-  // UI 상태
   const [selClient, setSelClient] = useState("");
-  const [monthFilter, setMonthFilter] = useState("all"); // "all" | "01".."12"
-  const [statusFilter, setStatusFilter] = useState("전체"); // 전체 | 미정산 | 정산완료
+  const [monthFilter, setMonthFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("전체");
+  const [selectedMonths, setSelectedMonths] = useState(new Set());
+  const [memoMap, setMemoMap] = useState({});
 
-  // 선택(체크박스)
-  const [selectedMonths, setSelectedMonths] = useState(new Set()); // Set<"YYYY-MM">
-
-  const toggleMonthSelect = (yyyymm) => {
-    setSelectedMonths(prev => {
-      const nxt = new Set(prev);
-      nxt.has(yyyymm) ? nxt.delete(yyyymm) : nxt.add(yyyymm);
-      return nxt;
-    });
-  };
-  const toggleAllMonths = (rows) => {
-    setSelectedMonths(prev => {
-      if (prev.size === rows.length) return new Set();
-      return new Set(rows.map(r => r.yyyymm));
-    });
-  };
+  const toggleMonthSelect = (yyyymm) => setSelectedMonths(prev => {
+    const n = new Set(prev); n.has(yyyymm) ? n.delete(yyyymm) : n.add(yyyymm); return n;
+  });
+  const toggleAllMonths = (rows) => setSelectedMonths(prev =>
+    prev.size === rows.length ? new Set() : new Set(rows.map(r => r.yyyymm))
+  );
   const clearSel = () => setSelectedMonths(new Set());
 
-  // 선택 거래처의 12개월 집계 (상차일 기준)
   const monthRowsRaw = useMemo(() => {
     if (!selClient) return [];
     const list = Array.isArray(dispatchData) ? dispatchData : [];
-    const base = list.filter(r => (r.배차상태 || "") === "배차완료" && (r.거래처명 || "") === selClient);
-
-    // 01..12 생성
-    const months = Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, "0"));
-    return months.map(mm => {
+    const base = list.filter(r => (r.배차상태||"") === "배차완료" && (r.거래처명||"") === selClient);
+    return Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, "0")).map(mm => {
       const yyyymm = `${THIS_YEAR}-${mm}`;
-      const rows = base.filter(r => String(r.상차일 || "").startsWith(yyyymm));
+      const rows = base.filter(r => String(r.상차일||"").startsWith(yyyymm));
       const total = rows.reduce((s, r) => s + toInt(r.청구운임), 0);
-      const allDone = rows.length > 0 && rows.every(r => r.정산상태 && r.정산상태[yyyymm] === "정산완료");
+      const allDone = rows.length > 0 && rows.every(r => r.정산상태?.[yyyymm] === "정산완료");
       const status = allDone ? "정산완료" : "미정산";
-      const dates = rows.map(r => (r.정산일 && r.정산일[yyyymm]) ? r.정산일[yyyymm] : "").filter(Boolean).sort();
-      const settledAt = dates.at(-1) || "";
-      return { yyyymm, mm, 거래처명: selClient, 총청구금액: total, 정산상태: status, 정산일: settledAt, _rows: rows };
+      const dates = rows.map(r => r.정산일?.[yyyymm]).filter(Boolean).sort();
+      return { yyyymm, mm, 거래처명: selClient, 건수: rows.length, 총청구금액: total, 정산상태: status, 정산일: dates.at(-1)||"", _rows: rows };
     });
   }, [dispatchData, selClient, THIS_YEAR]);
 
-  // 필터링: 월 / 상태
   const monthRows = useMemo(() => {
     let rows = [...monthRowsRaw];
     if (monthFilter !== "all") rows = rows.filter(r => r.yyyymm.endsWith(`-${monthFilter}`));
@@ -23577,404 +23534,269 @@ function ClientSettlement({ dispatchData, clients = [], setClients }) {
     return rows;
   }, [monthRowsRaw, monthFilter, statusFilter]);
 
-  // KPI
-  const kpi = useMemo(() => {
-    const cnt = monthRows.length;
-    const amt = monthRows.reduce((s, r) => s + toInt(r.총청구금액), 0);
-    return { cnt, amt };
-  }, [monthRows]);
+  const kpi = useMemo(() => ({
+    전체건수: monthRows.reduce((s, r) => s + r.건수, 0),
+    총청구: monthRows.reduce((s, r) => s + r.총청구금액, 0),
+    미정산월: monthRows.filter(r => r.정산상태 === "미정산").length,
+    미정산금: monthRows.filter(r => r.정산상태 === "미정산").reduce((s, r) => s + r.총청구금액, 0),
+    완료금: monthRows.filter(r => r.정산상태 === "정산완료").reduce((s, r) => s + r.총청구금액, 0),
+  }), [monthRows]);
 
-  // 상태 배지
-  const StatusBadge = ({ status }) => (
-    <span className={`px-2 py-1 rounded text-xs ${status === "정산완료" ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"}`}>
-      {status === "정산완료" ? "🟩 정산완료" : "🟥 미정산"}
-    </span>
-  );
-
-  // 상태 토글(셀 클릭) — 미정산 ↔ 정산완료
   const toggleMonthStatus = async (row) => {
     const next = row.정산상태 === "정산완료" ? "미정산" : "정산완료";
     const dateStr = next === "정산완료" ? todayStr8() : "";
-    const targets = row._rows || [];
-    if (!targets.length) return;
-    for (const r of targets) {
+    for (const r of row._rows || []) {
       if (!r._id) continue;
       await patchMonthOnDoc(r._id, row.yyyymm, next, dateStr);
     }
-    alert(`${row.yyyymm} ${row.거래처명} → ${next} 처리 (${targets.length}건)`);
+    alert(`${row.yyyymm} → ${next} (${row._rows.length}건)`);
   };
 
-  // 선택/전체 정산완료
   const settleSelected = async () => {
     const targets = monthRows.filter(r => selectedMonths.has(r.yyyymm));
     if (!targets.length) return alert("선택된 월이 없습니다.");
-    for (const row of targets) {
-      const dateStr = todayStr8();
-      for (const r of row._rows || []) {
-        if (!r._id) continue;
-        await patchMonthOnDoc(r._id, row.yyyymm, "정산완료", dateStr);
-      }
-    }
-    alert(`선택 정산완료: ${targets.length}개 월`);
-    clearSel();
-  };
-  const settleAll = async () => {
-    if (!monthRows.length) return alert("현재 표시된 월이 없습니다.");
-    for (const row of monthRows) {
-      const dateStr = todayStr8();
-      for (const r of row._rows || []) {
-        if (!r._id) continue;
-        await patchMonthOnDoc(r._id, row.yyyymm, "정산완료", dateStr);
-      }
-    }
-    alert(`전체 정산완료: ${monthRows.length}개 월`);
-    clearSel();
+    for (const row of targets)
+      for (const r of row._rows || [])
+        if (r._id) await patchMonthOnDoc(r._id, row.yyyymm, "정산완료", todayStr8());
+    alert(`선택 ${targets.length}개월 정산완료`); clearSel();
   };
 
-  // 엑셀 (현재 표시 목록 기준)
+  const settleAll = async () => {
+    if (!monthRows.length) return alert("표시된 월이 없습니다.");
+    for (const row of monthRows)
+      for (const r of row._rows || [])
+        if (r._id) await patchMonthOnDoc(r._id, row.yyyymm, "정산완료", todayStr8());
+    alert(`전체 ${monthRows.length}개월 정산완료`); clearSel();
+  };
+
   const downloadMonthExcel = () => {
     if (!selClient) return alert("거래처를 선택하세요.");
     const rows = monthRows.map((row, idx) => ({
-      선택: selectedMonths.has(row.yyyymm) ? "Y" : "",
-      순번: idx + 1,
-      청구월: row.yyyymm,
-      거래처명: row.거래처명,
-      총청구금액: toInt(row.총청구금액),
-      정산상태: row.정산상태,
-      정산일: row.정산일 || "",
-      메모: ""
+      순번: idx + 1, 청구월: row.yyyymm, 거래처명: row.거래처명,
+      건수: row.건수, 총청구금액: toInt(row.총청구금액),
+      정산상태: row.정산상태, 정산일: row.정산일 || "",
+      메모: memoMap[row.yyyymm] || "",
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "미수금_월집계");
-    const mmLabel = monthFilter === "all" ? "ALL" : monthFilter;
-    XLSX.writeFile(wb, `미수금_월집계_${selClient || "전체"}_${THIS_YEAR}-${mmLabel}.xlsx`);
+    XLSX.writeFile(wb, `미수금_${selClient}_${THIS_YEAR}.xlsx`);
   };
 
-  // ---------------- 렌더 ----------------
+  // 탭 공통 스타일
+  const tabBtn = (key, label) => (
+    <button
+      key={key}
+      onClick={() => setTab(key)}
+      className={`px-5 py-2.5 text-[14px] font-bold rounded-lg transition ${
+        tab === key
+          ? "bg-[#1B2B4B] text-white shadow"
+          : "bg-white text-[#1B2B4B] border border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"
+      }`}
+    >
+      {label}
+    </button>
+  );
+
   return (
-    <div>
+    <div className="p-4">
       {/* 탭 */}
-      <div className="flex gap-2 mb-4">
-        <button
-          className={`px-4 py-2 rounded border ${tab === "invoice" ? "bg-blue-600 text-white border-blue-600" : "bg-white"}`}
-          onClick={() => setTab("invoice")}
-        >
-          거래명세서
-        </button>
-        <button
-          className={`px-4 py-2 rounded border ${tab === "unsettledMonth" ? "bg-blue-600 text-white border-blue-600" : "bg-white"}`}
-          onClick={() => setTab("unsettledMonth")}
-        >
-          미수금관리(월집계)
-        </button>
+      <div className="flex gap-2 mb-5">
+        {tabBtn("invoice", "거래명세서")}
+        {tabBtn("unsettledMonth", "미수금관리")}
       </div>
 
-      {/* ========== 탭: 거래명세서 (검색식) ========== */}
+      {/* ══════════════ 거래명세서 탭 ══════════════ */}
       {tab === "invoice" && (
         <>
-          <div className="flex flex-wrap items-end gap-3 mb-4">
-            {/* 🔍 거래처 검색 + 조회 버튼 */}
-            <div className="flex flex-col">
-              <label className="text-sm text-gray-600 mb-1 font-medium">거래처 검색</label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  className="border p-2 rounded min-w-[220px]"
-                  placeholder="거래처명을 입력하세요"
-                  value={client}
-                  onChange={(e) => setClient(e.target.value)}
-                />
-                <button
-                  className="px-3 py-2 rounded bg-blue-600 text-white"
-                  onClick={() => {
-                    const kw = client.trim();
-                    if (!kw) return alert("거래처명을 입력하세요.");
-
-                    const foundClient = clients.find((c) =>
-                      String(c.거래처명 || "").includes(kw)
-                    );
-
-                    if (!foundClient) {
-                      alert("일치하는 거래처가 없습니다.");
-                      return;
-                    }
-
-                    setClient(foundClient.거래처명);
-                  }}
+          {/* 검색 바 */}
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mb-4">
+            <div className="flex flex-wrap items-end gap-3">
+              {/* 검색 타입 + 입력 */}
+              <div className="flex items-center border-2 border-[#1B2B4B] rounded-lg overflow-hidden h-[38px]">
+                <select
+                  className="px-2 h-full text-[13px] bg-[#1B2B4B] text-white outline-none cursor-pointer"
+                  value={searchType}
+                  onChange={e => { setSearchType(e.target.value); setSearchInput(""); setClient(""); setSearched(false); }}
                 >
-                  조회
-                </button>
+                  <option value="거래처명">거래처명</option>
+                  <option value="기사명">기사명</option>
+                </select>
+                <input
+                  className="px-3 h-full text-[13px] w-44 outline-none"
+                  placeholder={`${searchType} 입력`}
+                  value={searchInput}
+                  onChange={e => setSearchInput(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key !== "Enter") return;
+                    if (!searchInput.trim()) return alert("검색어를 입력하세요.");
+                    setClient(searchInput.trim());
+                    setSearched(true);
+                  }}
+                />
+              </div>
+              <div className="flex flex-col">
+                <label className="text-[12px] font-semibold text-gray-500 mb-1">시작일</label>
+                <input type="date" className="border-2 border-[#1B2B4B] rounded-lg px-2 py-1.5 text-[13px] outline-none" value={start} onChange={e => setStart(e.target.value)} />
+              </div>
+              <div className="flex flex-col">
+                <label className="text-[12px] font-semibold text-gray-500 mb-1">종료일</label>
+                <input type="date" className="border-2 border-[#1B2B4B] rounded-lg px-2 py-1.5 text-[13px] outline-none" value={end} onChange={e => setEnd(e.target.value)} />
+              </div>
+              <button
+                className="px-4 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition"
+                onClick={() => {
+                  if (!searchInput.trim()) return alert("검색어를 입력하세요.");
+                  setClient(searchInput.trim());
+                  setSearched(true);
+                }}
+              >
+                조회
+              </button>
+              <button
+                className="px-3 py-2 rounded-lg bg-gray-200 text-gray-700 text-[13px] font-semibold hover:bg-gray-300 transition"
+                onClick={() => { setSearchInput(""); setClient(""); setStart(""); setEnd(""); setSearched(false); }}
+              >
+                초기화
+              </button>
+              <div className="ml-auto flex gap-2">
+                <button onClick={downloadInvoiceExcel} className="px-3 py-2 rounded-lg bg-emerald-600 text-white text-[13px] font-semibold hover:bg-emerald-700 transition">엑셀</button>
+                <button onClick={savePDF} className="px-3 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition">PDF</button>
+                <button onClick={() => { setEditInfo({ ...cInfo }); setShowEdit(true); }} className="px-3 py-2 rounded-lg border border-[#1B2B4B] text-[#1B2B4B] text-[13px] font-semibold hover:bg-[#1B2B4B] hover:text-white transition">거래처 정보</button>
               </div>
             </div>
 
-            <div className="flex flex-col">
-              <label className="text-sm text-gray-600 mb-1 font-medium">시작일</label>
-              <input
-                type="date"
-                className="border p-2 rounded"
-                value={start}
-                onChange={(e) => setStart(e.target.value)}
-              />
-            </div>
-
-            <div className="flex flex-col">
-              <label className="text-sm text-gray-600 mb-1 font-medium">종료일</label>
-              <input
-                type="date"
-                className="border p-2 rounded"
-                value={end}
-                onChange={(e) => setEnd(e.target.value)}
-              />
-            </div>
-
-            <div className="ml-auto flex gap-2">
-              <button
-                onClick={downloadInvoiceExcel}
-                className="bg-emerald-600 text-white px-3 py-2 rounded"
-              >
-                📊 엑셀 다운로드
-              </button>
-              <button
-                onClick={savePDF}
-                className="bg-blue-600 text-white px-3 py-2 rounded"
-              >
-                📄 PDF 저장
-              </button>
-              <button
-                onClick={() => setShowEdit(true)}
-                className="border px-3 py-2 rounded"
-              >
-                거래처 정보
-              </button>
-            </div>
-          </div>
-
-          <div
-            id="invoiceArea"
-            className="w-[1200px] mx-auto bg-white border-2 border-blue-400 rounded-2xl shadow-md overflow-hidden text-[15px]"
-          >
-            <h2 className="text-3xl font-extrabold text-blue-800 text-center mt-6 mb-1">
-              거래명세서
-            </h2>
-            {(start || end) && (
-              <p className="text-center text-gray-600 font-medium mb-2">
-                거래기간 : {start || "시작일"} ~ {end || "종료일"}
-              </p>
+            {/* 조회 결과 요약 */}
+            {searched && (
+              <div className="flex gap-4 mt-3 text-[13px] font-semibold">
+                <span className="text-[#1B2B4B]">총 <b>{mapped.length}건</b></span>
+                <span className="text-blue-600">공급가액 합계 <b>{won(합계공급가)}원</b></span>
+                <span className="text-emerald-600">세액 합계 <b>{won(합계세액)}원</b></span>
+                <span className="text-orange-600">청구 합계 <b>{won(합계공급가 + 합계세액)}원</b></span>
+              </div>
             )}
-            <p className="text-center text-gray-500 mb-4">
-              (공급자 및 공급받는자 기재)
-            </p>
-
-            <div className="grid grid-cols-2 border-t-2 border-blue-400 mx-6 mb-6 rounded overflow-hidden">
-              <table className="w-full border border-blue-200 text-sm">
-                <thead>
-                  <tr>
-                    <th
-                      colSpan="2"
-                      className="bg-blue-100 text-blue-900 font-bold text-center p-2 border-b"
-                    >
-                      공급받는자
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {[
-                    ["상호", cInfo.거래처명],
-                    ["대표자", cInfo.대표자],
-                    ["사업자번호", cInfo.사업자번호],
-                    ["주소", cInfo.주소],
-                    ["업태", cInfo.업태],
-                    ["종목", cInfo.종목],
-                  ].map(([k, v]) => (
-                    <tr key={k}>
-                      <td className="border p-2 bg-blue-50 text-blue-900 font-semibold text-center w-28">
-                        {k}
-                      </td>
-                      <td className="border p-2">{v || "-"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-
-              <table className="w-full border border-blue-200 text-sm">
-                <thead>
-                  <tr>
-                    <th
-                      colSpan="2"
-                      className="bg-blue-100 text-blue-900 font-bold text-center p-2 border-b"
-                    >
-                      공급자
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td className="border p-2 bg-blue-50 text-blue-900 font-semibold text-center w-28">
-                      상호
-                    </td>
-                    <td className="border p-2">{COMPANY_PRINT.name}</td>
-                  </tr>
-                  <tr>
-                    <td className="border p-2 bg-blue-50 text-blue-900 font-semibold text-center">
-                      대표자
-                    </td>
-                    <td className="border p-2 relative">
-                      {COMPANY_PRINT.ceo} (인)
-                      <img
-                        src={COMPANY_PRINT.seal}
-                        alt="seal"
-                        className="absolute right-4 top-1 h-8 w-8 opacity-80"
-                      />
-                    </td>
-                  </tr>
-                  <tr>
-                    <td className="border p-2 bg-blue-50 text-blue-900 font-semibold text-center">
-                      사업자번호
-                    </td>
-                    <td className="border p-2">{COMPANY_PRINT.bizNo}</td>
-                  </tr>
-                  <tr>
-                    <td className="border p-2 bg-blue-50 text-blue-900 font-semibold text-center">
-                      주소
-                    </td>
-                    <td className="border p-2">{COMPANY_PRINT.addr}</td>
-                  </tr>
-                  <tr>
-                    <td className="border p-2 bg-blue-50 text-blue-900 font-semibold text-center">
-                      업태
-                    </td>
-                    <td className="border p-2">{COMPANY_PRINT.type}</td>
-                  </tr>
-                  <tr>
-                    <td className="border p-2 bg-blue-50 text-blue-900 font-semibold text-center">
-                      종목
-                    </td>
-                    <td className="border p-2">{COMPANY_PRINT.item}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-
-            {/* 상세 내역 */}
-            <div className="overflow-x-auto px-6 pb-6">
-              <table className="w-full text-sm border border-blue-300">
-                <thead>
-                  <tr className="bg-blue-50 text-blue-900 font-semibold text-center">
-                    {["No", "상하차지", "화물명", "기사명", "공급가액", "세액(10%)"].map(
-                      (h) => (
-                        <th
-                          key={h}
-                          className="border border-blue-300 p-2"
-                        >
-                          {h}
-                        </th>
-                      )
-                    )}
-                  </tr>
-                </thead>
-                <tbody>
-                  {mapped.length === 0 ? (
-                    <tr>
-                      <td
-                        colSpan={6}
-                        className="text-center text-gray-500 py-8"
-                      >
-                        표시할 내역이 없습니다.
-                      </td>
-                    </tr>
-                  ) : (
-                    mapped.map((m) => (
-                      <tr
-                        key={m.idx}
-                        className="odd:bg-white even:bg-blue-50"
-                      >
-                        <td className="border border-blue-300 p-2 text-center">
-                          {m.idx}
-                        </td>
-                        <td className="border border-blue-300 p-2">
-                          {m.상하차지}
-                        </td>
-                        <td className="border border-blue-300 p-2">
-                          {m.화물명}
-                        </td>
-                        <td className="border border-blue-300 p-2 text-center">
-                          {m.기사명}
-                        </td>
-                        <td className="border border-blue-300 p-2 text-right">
-                          {won(m.공급가액)}
-                        </td>
-                        <td className="border border-blue-300 p-2 text-right">
-                          {won(m.세액)}
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                  {mapped.length > 0 && (
-                    <tr className="bg-blue-100 font-bold">
-                      <td
-                        colSpan={4}
-                        className="border border-blue-300 p-2 text-center"
-                      >
-                        합계
-                      </td>
-                      <td className="border border-blue-300 p-2 text-right">
-                        {won(합계공급가)}
-                      </td>
-                      <td className="border border-blue-300 p-2 text-right">
-                        {won(합계세액)}
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="text-sm text-gray-600 text-center border-t py-3">
-              입금계좌: {COMPANY_PRINT.bank} | 문의: {COMPANY_PRINT.email}
-            </div>
           </div>
 
+          {/* 미조회 상태 */}
+          {!searched && (
+            <div className="flex flex-col items-center justify-center py-20 text-gray-400">
+              <div className="text-4xl mb-3"></div>
+              <div className="text-[15px] font-semibold">거래처명 또는 기사명을 입력 후 조회하세요.</div>
+            </div>
+          )}
+
+          {/* 거래명세서 본문 */}
+          {searched && (
+            <div id="invoiceArea" className="w-full max-w-[1100px] mx-auto bg-white border border-gray-200 rounded-2xl shadow overflow-hidden">
+              {/* 헤더 */}
+              <div className="bg-[#1B2B4B] px-8 py-5 flex items-center justify-between">
+                <div>
+                  <h2 className="text-[22px] font-extrabold text-white">거래명세서</h2>
+                  {(start || end) && (
+                    <p className="text-white/60 text-[13px] mt-1">거래기간 : {start||"시작일"} ~ {end||"종료일"}</p>
+                  )}
+                </div>
+                <div className="text-right text-white/70 text-[12px] leading-6">
+                  <div>{COMPANY_PRINT.name} · 대표 {COMPANY_PRINT.ceo}</div>
+                  <div>{COMPANY_PRINT.contact}</div>
+                  <div>{COMPANY_PRINT.bank}</div>
+                </div>
+              </div>
+
+              {/* 공급자/받는자 */}
+              <div className="grid grid-cols-2 gap-0 border-b border-gray-200">
+                <div className="p-5 border-r border-gray-200">
+                  <div className="text-[11px] font-bold text-gray-400 mb-2 uppercase tracking-wider">공급받는자</div>
+                  <table className="w-full text-[13px]">
+                    <tbody>
+                      {[["상호",cInfo.거래처명],["대표자",cInfo.대표자],["사업자번호",cInfo.사업자번호],["주소",cInfo.주소],["업태",cInfo.업태],["종목",cInfo.종목]].map(([k,v])=>(
+                        <tr key={k} className="border-b border-gray-100 last:border-0">
+                          <td className="py-1.5 pr-3 font-semibold text-gray-500 w-24">{k}</td>
+                          <td className="py-1.5 font-medium text-gray-900">{v||"-"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="p-5">
+                  <div className="text-[11px] font-bold text-gray-400 mb-2 uppercase tracking-wider">공급자</div>
+                  <table className="w-full text-[13px]">
+                    <tbody>
+                      {[["상호",COMPANY_PRINT.name],["대표자",COMPANY_PRINT.ceo],["사업자번호",COMPANY_PRINT.bizNo],["주소",COMPANY_PRINT.addr],["업태",COMPANY_PRINT.type],["종목",COMPANY_PRINT.item]].map(([k,v])=>(
+                        <tr key={k} className="border-b border-gray-100 last:border-0">
+                          <td className="py-1.5 pr-3 font-semibold text-gray-500 w-24">{k}</td>
+                          <td className="py-1.5 font-medium text-gray-900">{v||"-"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* 내역 테이블 */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-[13px]">
+                  <thead>
+                    <tr className="bg-[#1B2B4B]">
+                      {["No","상차일","상하차지","화물명","기사명","공급가액","세액(10%)","합계"].map(h=>(
+                        <th key={h} className="px-3 py-3 text-white font-bold text-center whitespace-nowrap">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {mapped.length === 0 ? (
+                      <tr><td colSpan={8} className="text-center text-gray-400 py-12 text-[14px]">조회 결과가 없습니다.</td></tr>
+                    ) : (
+                      mapped.map((m, i) => (
+                        <tr key={m.idx} className={i%2===0?"bg-white":"bg-gray-50/60"}>
+                          <td className="px-3 py-2.5 text-center text-gray-500">{m.idx}</td>
+                          <td className="px-3 py-2.5 text-center whitespace-nowrap">{m.상차일}</td>
+                          <td className="px-3 py-2.5">{m.상하차지}</td>
+                          <td className="px-3 py-2.5">{m.화물명}</td>
+                          <td className="px-3 py-2.5 text-center">{m.기사명}</td>
+                          <td className="px-3 py-2.5 text-right font-semibold">{won(m.공급가액)}</td>
+                          <td className="px-3 py-2.5 text-right text-blue-600">{won(m.세액)}</td>
+                          <td className="px-3 py-2.5 text-right font-bold text-[#1B2B4B]">{won(m.공급가액+m.세액)}</td>
+                        </tr>
+                      ))
+                    )}
+                    {mapped.length > 0 && (
+                      <tr className="bg-[#1B2B4B]">
+                        <td colSpan={5} className="px-3 py-3 text-white font-bold text-center">합 계</td>
+                        <td className="px-3 py-3 text-right text-white font-bold">{won(합계공급가)}</td>
+                        <td className="px-3 py-3 text-right text-blue-300 font-bold">{won(합계세액)}</td>
+                        <td className="px-3 py-3 text-right text-yellow-300 font-extrabold">{won(합계공급가+합계세액)}</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <div className="px-6 py-3 bg-gray-50 text-[12px] text-gray-500 border-t text-center">
+                입금계좌: {COMPANY_PRINT.bank} &nbsp;|&nbsp; 문의: {COMPANY_PRINT.email}
+              </div>
+            </div>
+          )}
+
+          {/* 거래처 정보 수정 팝업 */}
           {showEdit && (
-            <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-              <div className="bg-white p-6 rounded-lg shadow-lg w-[420px]">
-                <h3 className="text-lg font-bold mb-4">거래처 정보 수정</h3>
-                {[
-                  "거래처명",
-                  "사업자번호",
-                  "대표자",
-                  "업태",
-                  "종목",
-                  "주소",
-                  "담당자",
-                  "연락처",
-                ].map((k) => (
-                  <div key={k} className="mb-3">
-                    <label className="block text-sm font-medium mb-1">
-                      {k}
-                    </label>
-                    <input
-                      className="border p-2 w-full rounded"
-                      value={editInfo[k] || ""}
-                      onChange={(e) =>
-                        setEditInfo({ ...editInfo, [k]: e.target.value })
-                      }
-                    />
-                  </div>
-                ))}
-                <div className="flex justify-end gap-2 mt-4">
-                  <button
-                    onClick={() => setShowEdit(false)}
-                    className="px-3 py-2 border rounded"
-                  >
-                    닫기
-                  </button>
-                  <button
-                    onClick={saveEdit}
-                    className="px-3 py-2 bg-blue-600 text-white rounded"
-                  >
-                    저장
-                  </button>
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
+              <div className="bg-white rounded-2xl shadow-2xl w-[460px] overflow-hidden">
+                <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
+                  <h3 className="text-white font-bold text-[15px]">거래처 정보 수정</h3>
+                  <button className="text-white/60 hover:text-white text-lg" onClick={()=>setShowEdit(false)}>✕</button>
+                </div>
+                <div className="p-6 space-y-3">
+                  {["거래처명","사업자번호","대표자","업태","종목","주소","담당자","연락처"].map(k=>(
+                    <div key={k}>
+                      <label className="text-[12px] font-semibold text-gray-500 mb-1 block">{k}</label>
+                      <input className="border-2 border-gray-200 rounded-lg px-3 py-2 w-full text-[13px] focus:border-[#1B2B4B] outline-none"
+                        value={editInfo[k]||""} onChange={e=>setEditInfo({...editInfo,[k]:e.target.value})} />
+                    </div>
+                  ))}
+                </div>
+                <div className="px-6 pb-5 flex gap-3">
+                  <button className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 font-semibold" onClick={()=>setShowEdit(false)}>취소</button>
+                  <button className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white font-bold" onClick={saveEdit}>저장</button>
                 </div>
               </div>
             </div>
@@ -23982,239 +23804,138 @@ function ClientSettlement({ dispatchData, clients = [], setClients }) {
         </>
       )}
 
-      {/* ========== 탭: 미수금관리(월집계) ========== */}
+      {/* ══════════════ 미수금관리 탭 ══════════════ */}
       {tab === "unsettledMonth" && (
         <div>
-          {/* 필터/액션 */}
-          <div className="flex flex-wrap items-end gap-2 mb-3">
-            <div className="flex flex-col">
-              <label className="text-sm text-gray-600 mb-1 font-medium">거래처</label>
-              <select
-                className="border p-2 rounded min-w-[220px]"
-                value={selClient}
-                onChange={(e) => {
-                  setSelClient(e.target.value);
-                  clearSel();
-                }}
-              >
-                <option value="">거래처 선택</option>
-                {clientOptions8.map((v) => (
-                  <option key={v} value={v}>
-                    {v}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="flex flex-col">
-              <label className="text-sm text-gray-600 mb-1 font-medium">월</label>
-              <select
-                className="border p-2 rounded min-w-[120px]"
-                value={monthFilter}
-                onChange={(e) => setMonthFilter(e.target.value)}
-              >
-                <option value="all">전체</option>
-                {Array.from({ length: 12 }, (_, i) =>
-                  String(i + 1).padStart(2, "0")
-                ).map((mm) => (
-                  <option key={mm} value={mm}>
-                    {parseInt(mm, 10)}월
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="flex flex-col">
-              <label className="text-sm text-gray-600 mb-1 font-medium">정산상태</label>
-              <select
-                className="border p-2 rounded min-w-[120px]"
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-              >
-                <option value="전체">전체</option>
-                <option value="미정산">미정산</option>
-                <option value="정산완료">정산완료</option>
-              </select>
-            </div>
-
-            <button
-              onClick={() => {
-                setSelClient("");
-                setMonthFilter("all");
-                setStatusFilter("전체");
-                clearSel();
-              }}
-              className="px-3 py-2 rounded bg-gray-200"
-            >
-              필터 초기화
-            </button>
-
-            <div className="ml-auto flex gap-2">
-              <button
-                onClick={settleSelected}
-                className={`px-3 py-2 rounded text-white ${selectedMonths.size
-                  ? "bg-emerald-600"
-                  : "bg-emerald-600/50 cursor-not-allowed"
-                  }`}
-                disabled={!selectedMonths.size}
-              >
-                선택 정산완료
+          {/* 필터 바 */}
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mb-4">
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="flex flex-col">
+                <label className="text-[12px] font-semibold text-gray-500 mb-1">거래처</label>
+                <select className="border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-semibold text-[#1B2B4B] outline-none min-w-[200px]"
+                  value={selClient} onChange={e=>{setSelClient(e.target.value);clearSel();}}>
+                  <option value="">거래처 선택</option>
+                  {clientOptions8.map(v=><option key={v} value={v}>{v}</option>)}
+                </select>
+              </div>
+              <div className="flex flex-col">
+                <label className="text-[12px] font-semibold text-gray-500 mb-1">월</label>
+                <select className="border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-semibold text-[#1B2B4B] outline-none"
+                  value={monthFilter} onChange={e=>setMonthFilter(e.target.value)}>
+                  <option value="all">전체</option>
+                  {Array.from({length:12},(_,i)=>String(i+1).padStart(2,"0")).map(mm=>(
+                    <option key={mm} value={mm}>{parseInt(mm,10)}월</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-col">
+                <label className="text-[12px] font-semibold text-gray-500 mb-1">정산상태</label>
+                <select className="border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-semibold text-[#1B2B4B] outline-none"
+                  value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}>
+                  <option value="전체">전체</option>
+                  <option value="미정산">미정산</option>
+                  <option value="정산완료">정산완료</option>
+                </select>
+              </div>
+              <button className="px-3 py-2 rounded-lg bg-gray-200 text-gray-700 text-[13px] font-semibold hover:bg-gray-300 transition"
+                onClick={()=>{setSelClient("");setMonthFilter("all");setStatusFilter("전체");clearSel();}}>
+                초기화
               </button>
-              <button
-                onClick={settleAll}
-                className={`px-3 py-2 rounded text-white ${monthRows.length
-                  ? "bg-emerald-700"
-                  : "bg-emerald-700/50 cursor-not-allowed"
-                  }`}
-                disabled={!monthRows.length}
-              >
-                전체 정산완료
-              </button>
-              <button
-                onClick={downloadMonthExcel}
-                className="px-3 py-2 rounded bg-blue-600 text-white"
-              >
-                📥 엑셀 다운로드
-              </button>
+              <div className="ml-auto flex gap-2">
+                <button onClick={settleSelected} disabled={!selectedMonths.size}
+                  className={`px-3 py-2 rounded-lg text-[13px] font-bold text-white transition ${selectedMonths.size?"bg-emerald-600 hover:bg-emerald-700":"bg-emerald-600/40 cursor-not-allowed"}`}>
+                  선택 정산완료
+                </button>
+                <button onClick={settleAll} disabled={!monthRows.length}
+                  className={`px-3 py-2 rounded-lg text-[13px] font-bold text-white transition ${monthRows.length?"bg-[#1B2B4B] hover:bg-[#243a60]":"bg-[#1B2B4B]/40 cursor-not-allowed"}`}>
+                  전체 정산완료
+                </button>
+                <button onClick={downloadMonthExcel} className="px-3 py-2 rounded-lg bg-teal-600 text-white text-[13px] font-semibold hover:bg-teal-700 transition">📥 엑셀</button>
+              </div>
             </div>
           </div>
 
-          {/* KPI */}
-          <div className="flex flex-wrap gap-2 text-xs md:text-sm mb-3">
-            <span className="px-2 py-1 rounded bg-gray-100">
-              연도 <b>{THIS_YEAR}</b>
-            </span>
-            <span className="px-2 py-1 rounded bg-blue-50 text-blue-800">
-              거래처 <b>{selClient || "-"}</b>
-            </span>
-            <span className="px-2 py-1 rounded bg-indigo-50 text-indigo-800">
-              표시 월{" "}
-              <b>
-                {monthFilter === "all" ? "전체" : `${THIS_YEAR}-${monthFilter}`}
-              </b>
-            </span>
-            <span className="px-2 py-1 rounded bg-rose-50 text-rose-700">
-              총 청구금액 <b>{kpi.amt.toLocaleString()}</b>원
-            </span>
-            <span className="px-2 py-1 rounded bg-emerald-50 text-emerald-700">
-              선택 월 <b>{selectedMonths.size}</b>개
-            </span>
-          </div>
+          {/* KPI 카드 */}
+          {selClient && (
+            <div className="grid grid-cols-5 gap-3 mb-4">
+              {[
+                {label:"총 오더건수", val:`${kpi.전체건수}건`, color:"text-[#1B2B4B]"},
+                {label:"총 청구금액", val:`${won(kpi.총청구)}원`, color:"text-blue-600"},
+                {label:"미정산 월수", val:`${kpi.미정산월}개월`, color:"text-amber-500"},
+                {label:"미정산 금액", val:`${won(kpi.미정산금)}원`, color:"text-red-500"},
+                {label:"정산완료 금액", val:`${won(kpi.완료금)}원`, color:"text-emerald-600"},
+              ].map(({label,val,color})=>(
+                <div key={label} className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+                  <div className="text-[11px] font-bold text-gray-400 mb-1">{label}</div>
+                  <div className={`text-[18px] font-extrabold ${color}`}>{val}</div>
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* 테이블 */}
-          <div className="overflow-x-auto">
-            <table className="min-w-[900px] text-sm border">
-              <thead className="bg-gray-100">
-                <tr>
-                  <th className="px-3 py-2 border text-center">
-                    <input
-                      type="checkbox"
-                      onChange={() => toggleAllMonths(monthRows)}
-                      checked={
-                        selectedMonths.size > 0 &&
-                        selectedMonths.size === monthRows.length
-                      }
-                      aria-label="전체선택"
-                    />
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr className="bg-[#1B2B4B]">
+                  <th className="px-3 py-3 text-white text-center">
+                    <input type="checkbox" onChange={()=>toggleAllMonths(monthRows)}
+                      checked={selectedMonths.size>0&&selectedMonths.size===monthRows.length} />
                   </th>
-                  {[
-                    "순번",
-                    "청구월",
-                    "거래처명",
-                    "총 청구금액",
-                    "정산상태",
-                    "정산일",
-                    "메모",
-                  ].map((h) => (
-                    <th key={h} className="px-3 py-2 border">
-                      {h}
-                    </th>
+                  {["순번","청구월","건수","총 청구금액","정산상태","정산일","메모"].map(h=>(
+                    <th key={h} className="px-3 py-3 text-white font-bold text-center whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {!selClient ? (
-                  <tr>
-                    <td
-                      className="text-center text-gray-500 py-6"
-                      colSpan={8}
-                    >
-                      거래처를 선택하세요.
-                    </td>
-                  </tr>
+                  <tr><td colSpan={8} className="text-center text-gray-400 py-16 text-[14px]">거래처를 선택하세요.</td></tr>
                 ) : monthRows.length === 0 ? (
-                  <tr>
-                    <td
-                      className="text-center text-gray-500 py-6"
-                      colSpan={8}
-                    >
-                      표시할 데이터가 없습니다.
-                    </td>
-                  </tr>
+                  <tr><td colSpan={8} className="text-center text-gray-400 py-16 text-[14px]">표시할 데이터가 없습니다.</td></tr>
                 ) : (
                   monthRows.map((row, idx) => (
-                    <tr
-                      key={row.yyyymm}
-                      className={idx % 2 === 0 ? "bg-white" : "bg-gray-50"}
-                    >
-                      {/* 선택 */}
-                      <td className="px-3 py-2 border text-center">
+                    <tr key={row.yyyymm} className={idx%2===0?"bg-white":"bg-gray-50/60"}>
+                      <td className="px-3 py-3 text-center border-b border-gray-100">
+                        <input type="checkbox" checked={selectedMonths.has(row.yyyymm)} onChange={()=>toggleMonthSelect(row.yyyymm)} />
+                      </td>
+                      <td className="px-3 py-3 text-center text-gray-500 border-b border-gray-100">{idx+1}</td>
+                      <td className="px-3 py-3 text-center font-bold text-[#1B2B4B] border-b border-gray-100">{row.yyyymm}</td>
+                      <td className="px-3 py-3 text-center border-b border-gray-100">{row.건수}건</td>
+                      <td className="px-3 py-3 text-right font-bold border-b border-gray-100">
+                        <span className={row.총청구금액>0?"text-[#1B2B4B]":"text-gray-400"}>
+                          {won(row.총청구금액)}원
+                        </span>
+                      </td>
+                      <td className="px-3 py-3 text-center border-b border-gray-100 cursor-pointer select-none"
+                        onClick={()=>toggleMonthStatus(row)} title="클릭하여 상태 전환">
+                        <span className={`px-3 py-1 rounded-lg text-[13px] font-bold text-white ${
+                          row.정산상태==="정산완료"?"bg-emerald-600":"bg-amber-500"
+                        }`}>
+                          {row.정산상태}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3 text-center text-gray-500 border-b border-gray-100">{row.정산일||"-"}</td>
+                      <td className="px-3 py-3 border-b border-gray-100">
                         <input
-                          type="checkbox"
-                          checked={selectedMonths.has(row.yyyymm)}
-                          onChange={() => toggleMonthSelect(row.yyyymm)}
+                          className="border rounded-lg px-2 py-1 text-[12px] w-full outline-none focus:border-[#1B2B4B]"
+                          placeholder="메모 입력"
+                          value={memoMap[row.yyyymm]||""}
+                          onChange={e=>setMemoMap(p=>({...p,[row.yyyymm]:e.target.value}))}
                         />
                       </td>
-                      <td className="px-3 py-2 border text-center">
-                        {idx + 1}
-                      </td>
-                      <td className="px-3 py-2 border text-center">
-                        {row.yyyymm}
-                      </td>
-                      <td className="px-3 py-2 border text-center">
-                        {row.거래처명}
-                      </td>
-                      <td className="px-3 py-2 border text-right">
-                        {won(row.총청구금액)}
-                      </td>
-
-                      {/* 정산상태 — 클릭 토글 */}
-                      <td
-                        className="px-3 py-2 border text-center cursor-pointer select-none"
-                        title="클릭하여 미정산/정산완료 전환"
-                        onClick={() => toggleMonthStatus(row)}
-                      >
-                        <StatusBadge status={row.정산상태} />
-                      </td>
-
-                      <td className="px-3 py-2 border text-center">
-                        {row.정산일 || ""}
-                      </td>
-                      <td className="px-3 py-2 border"></td>
                     </tr>
                   ))
                 )}
               </tbody>
             </table>
           </div>
-
-          <div className="mt-2 text-xs text-gray-500">
-            · 상태 클릭 시 해당 <b>거래처·월</b>의 모든 오더에
-            <code className="mx-1 px-1 bg-gray-100 rounded">
-              정산상태["YYYY-MM"]
-            </code>
-            /
-            <code className="mx-1 px-1 bg-gray-100 rounded">
-              정산일["YYYY-MM"]
-            </code>
-            이 저장됩니다. (상차일 기준)
-          </div>
+          <div className="mt-2 text-[12px] text-gray-400">· 정산상태 클릭 시 해당 월 전체 오더에 정산상태/정산일이 저장됩니다.</div>
         </div>
       )}
     </div>
   );
 }
-// ===================== DispatchApp.jsx (PART 8/8) — 거래명세서 + 미수금관리(월집계/토글/선택/전체정산) — END =====================
+// ===================== DispatchApp.jsx (PART 8/8) — END =====================
 // ===================== DispatchApp.jsx (PART 9/9 — 지급관리 V5 최종본) — START =====================
 function PaymentManagement({ dispatchData = [], clients = [], drivers = [] }) {
 

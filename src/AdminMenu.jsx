@@ -110,16 +110,8 @@ setUsers((prev) =>
     setUsers((prev) => prev.filter((x) => x.id !== u.id));
   };
 
-  const roleBadge = (role) => {
-    const map = {
-      admin:   "bg-blue-100 text-blue-700 border border-blue-300",
-      driver:  "bg-emerald-100 text-emerald-700 border border-emerald-300",
-      shipper: "bg-purple-100 text-purple-700 border border-purple-300",
-      test:    "bg-orange-100 text-orange-700 border border-orange-300",
-      user:    "bg-gray-100 text-gray-600 border border-gray-300",
-    };
-    return map[role] || "bg-gray-100 text-gray-600 border border-gray-300";
-  };
+const roleBadge = () => "bg-[#1B2B4B]/10 text-[#1B2B4B] border border-[#1B2B4B]/30";
+  const [openMenu, setOpenMenu] = useState(null); // 관리 드롭다운 열린 user id
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
@@ -190,7 +182,7 @@ setUsers((prev) =>
           </div>
 
           {/* 테이블 */}
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-visible">
             <table className="w-full text-[13px]">
               <thead>
                 <tr className="bg-[#1B2B4B]">
@@ -250,57 +242,74 @@ setUsers((prev) =>
                         </span>
                       </td>
 
-                      {/* 관리 버튼 */}
-                      <td className="px-4 py-3">
-                        <div className="flex items-center justify-center gap-1.5 flex-wrap">
-                          {/* 승인/해제 */}
-                          <button onClick={() => toggleApprove(u)}
-                            className={`px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition ${
-                              u.approved
-                                ? "bg-amber-100 text-amber-700 hover:bg-amber-200 border border-amber-300"
-                                : "bg-emerald-100 text-emerald-700 hover:bg-emerald-200 border border-emerald-300"
-                            }`}>
-                            {u.approved ? "승인해제" : "승인"}
-                          </button>
-
-                          {/* 권한 변경 드롭다운 */}
-                          <div className="relative">
-                            <button
-                              onClick={() => setRoleTarget(roleTarget === u.id ? null : u.id)}
-                              className="px-2.5 py-1.5 rounded-lg text-[11px] font-semibold bg-[#1B2B4B]/10 text-[#1B2B4B] hover:bg-[#1B2B4B]/20 border border-[#1B2B4B]/20 transition">
-                              권한 ▾
-                            </button>
-                            {roleTarget === u.id && (
-                              <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 shadow-xl rounded-xl overflow-hidden z-50 min-w-[100px]">
-                                <div className="px-3 py-2 bg-[#1B2B4B] text-white text-[11px] font-semibold">권한 선택</div>
-                                {ROLES.map(r => (
-                                  <button key={r} onClick={() => updateRole(u, r)}
-                                    className={`block w-full text-left px-3 py-2 text-[12px] hover:bg-blue-50 transition ${
-                                      u.role === r ? "font-bold text-blue-600 bg-blue-50" : "text-gray-700"
-                                    }`}>
-                                    {u.role === r ? "✓ " : ""}{r}
-                                  </button>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-
-                          {/* 수정 */}
+                      {/* 관리 버튼 — 통합 드롭다운 */}
+                      <td className="px-4 py-3 text-center">
+                        <div className="relative inline-block">
                           <button
-                            onClick={() => { setEditUser(u); setEditName(u.name || ""); setEditPhone(u.phone || ""); }}
-                            className="px-2.5 py-1.5 rounded-lg text-[11px] font-semibold bg-indigo-100 text-indigo-700 hover:bg-indigo-200 border border-indigo-300 transition">
-                            수정
+                            onClick={() => setOpenMenu(openMenu === u.id ? null : u.id)}
+                            className="px-4 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-bold hover:bg-[#243a60] transition"
+                          >
+                            관리 ▾
                           </button>
 
-                          {/* 삭제 */}
-                          <button onClick={() => removeUser(u)} disabled={isMe}
-                            className={`px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition ${
-                              isMe
-                                ? "bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200"
-                                : "bg-red-100 text-red-600 hover:bg-red-200 border border-red-300"
-                            }`}>
-                            삭제
-                          </button>
+                          {openMenu === u.id && (
+                            <>
+                              {/* 바깥 클릭 닫기 */}
+                              <div className="fixed inset-0 z-40" onClick={() => setOpenMenu(null)} />
+
+                              <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 shadow-2xl rounded-xl overflow-hidden z-50 w-[160px]">
+                                <div className="bg-[#1B2B4B] px-3 py-2">
+                                  <div className="text-white text-[11px] font-bold">{u.name || u.email}</div>
+                                  <div className="text-white/50 text-[10px]">{u.role || "user"}</div>
+                                </div>
+
+                                {/* 승인/해제 */}
+                                <button
+                                  onClick={() => { toggleApprove(u); setOpenMenu(null); }}
+                                  className="w-full text-left px-4 py-2.5 text-[12px] font-semibold hover:bg-gray-50 border-b border-gray-100 transition"
+                                >
+                                  {u.approved
+                                    ? <span className="text-amber-600">✕ 승인 해제</span>
+                                    : <span className="text-emerald-600">✓ 승인</span>
+                                  }
+                                </button>
+
+                                {/* 권한 변경 서브메뉴 */}
+                                <div className="border-b border-gray-100">
+                                  <div className="px-4 py-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-wider">권한 변경</div>
+                                  {ROLES.map(r => (
+                                    <button key={r}
+                                      onClick={() => { updateRole(u, r); setOpenMenu(null); }}
+                                      className={`w-full text-left px-4 py-2 text-[12px] hover:bg-[#1B2B4B]/5 transition ${
+                                        u.role === r ? "font-bold text-[#1B2B4B] bg-[#1B2B4B]/5" : "text-gray-600"
+                                      }`}
+                                    >
+                                      {u.role === r ? "✓ " : <span className="inline-block w-4" />}{r}
+                                    </button>
+                                  ))}
+                                </div>
+
+                                {/* 수정 */}
+                                <button
+                                  onClick={() => { setEditUser(u); setEditName(u.name||""); setEditPhone(u.phone||""); setOpenMenu(null); }}
+                                  className="w-full text-left px-4 py-2.5 text-[12px] font-semibold text-[#1B2B4B] hover:bg-gray-50 border-b border-gray-100 transition"
+                                >
+                                  정보 수정
+                                </button>
+
+                                {/* 삭제 */}
+                                <button
+                                  onClick={() => { removeUser(u); setOpenMenu(null); }}
+                                  disabled={isMe}
+                                  className={`w-full text-left px-4 py-2.5 text-[12px] font-semibold transition ${
+                                    isMe ? "text-gray-300 cursor-not-allowed" : "text-red-500 hover:bg-red-50"
+                                  }`}
+                                >
+                                  🗑 삭제
+                                </button>
+                              </div>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>
