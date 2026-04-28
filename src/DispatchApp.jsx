@@ -3827,24 +3827,32 @@ const checkNewDriver = (carNo) => {
 
   const list = driverMap.get(clean);
 
-  // 🔥 기존 없으면 무조건 팝업
+  // 🔥 기존 없으면 팝업 — 단, 이미 이름이 세팅되어 있으면 스킵
   if (!list || list.length === 0) {
-    setDriverModal({
-      open: true,
-      carNo: clean,
-      name: "",
-      phone: "",
+    // ✅ 스마트검색에서 이미 이름을 세팅한 경우 리셋하지 않음
+    setForm((p) => {
+      if (p.이름 && p.이름.trim()) {
+        // 이미 이름이 있으면 (스마트검색으로 세팅됨) → 건드리지 않음
+        return p;
+      }
+      // 이름이 없을 때만 신규 기사 등록 모달
+      setDriverModal({
+        open: true,
+        carNo: clean,
+        name: "",
+        phone: "",
+      });
+      return {
+        ...p,
+        차량번호: clean,
+        이름: "",
+        전화번호: "",
+        배차상태: "배차중",
+      };
     });
-
-    setForm((p) => ({
-      ...p,
-      차량번호: clean,
-      이름: "",
-      전화번호: "",
-      배차상태: "배차중",
-    }));
   }
 };
+
 
 // ================================
 // 🔥 기사 정보 충돌 체크 (차량번호 동일 + 이름/전화 다를 때)
@@ -4929,24 +4937,38 @@ const parseDriverText = (text) => {
   const plateMatch = text.match(/[가-힣]{2,3}\d{2}[가-힣]\d{4}|\d{2,3}[가-힣]\d{4}/);
   const plate = plateMatch ? plateMatch[0] : "";
 
-  // [차주정보] 블록에서 이름 우선 추출
   let name = "";
   const ownerBlock = text.match(/\[차주정보\]\s*([가-힣]{2,4})/);
   if (ownerBlock) {
     name = ownerBlock[1];
   } else {
-    const stripped = text.replace(phoneMatch?.[0]||"","").replace(plate||"","");
-    const nameMatch = stripped.match(/[가-힣]{2,4}/g) || [];
-    const excludeRegions = ["강원","서울","경기","인천","부산","대구","광주","대전","울산","세종","경북","경남","전북","전남","충북","충남","제주","냉장","냉동","카고","윙바디"];
-    name = nameMatch.find(n =>
+    // 차량번호, 전화번호 완전 제거 후 이름 추출
+    let stripped = text;
+    if (phoneMatch?.[0]) stripped = stripped.replace(phoneMatch[0], " ");
+    if (plate) stripped = stripped.replace(plate, " ");
+
+    const excludeRegions = [
+      "강원","서울","경기","인천","부산","대구","광주","대전","울산",
+      "세종","경북","경남","전북","전남","충북","충남","제주",
+      "냉장","냉동","카고","윙바디"
+    ];
+
+    const nameMatches = stripped.match(/[가-힣]{2,4}/g) || [];
+
+    // 1순위: 제외 목록에 없고 지역 어미도 아닌 것
+    name = nameMatches.find(n =>
       n.length >= 2 &&
       !excludeRegions.includes(n) &&
       !/[구시군동읍면로]$/.test(n)
     ) || "";
+
+    // 2순위: 그래도 못 찾으면 2~4글자 한글 첫번째
+    if (!name) {
+      name = nameMatches.find(n => n.length >= 2 && n.length <= 4) || "";
+    }
   }
   return { phone, plate, name };
 };
-
 const normD = (s="") => String(s).replace(/[-.\s]/g,"").toLowerCase();
 
 const handleSmartDriverInput = (text) => {
@@ -4975,10 +4997,19 @@ setSmartDriverMatched(results.slice(0, 8));
 
 // 스마트 검색 결과 선택
 const selectSmartDriver = (d) => {
-  handleCarNoChange(d.차량번호);
+  const grade = d?.등급 || d?.grade || "";
+  if (grade === "블랙") setBlackAlert(d);
+  setForm(p => ({
+    ...p,
+    차량번호: d.차량번호,
+    이름: d.이름 || "",
+    전화번호: formatPhone(d.전화번호 || ""),
+    배차상태: "배차완료",
+  }));
   setSmartDriverQuery("");
   setSmartDriverMatched([]);
 };
+
 
 // 입력값으로 자동 적용 (blur 또는 엔터)
 const applySmartDriverInput = async (text) => {
@@ -4993,18 +5024,25 @@ const applySmartDriverInput = async (text) => {
 
   if (byPlate.length > 0) {
     const existing = byPlate[0];
-    const sameNamePhone =
-      normD(existing.이름) === normD(name) &&
-      normD(existing.전화번호) === normD(phone);
+    const sameName = normD(existing.이름) === normD(name);
+    const samePhone = normD(existing.전화번호) === normD(phone);
 
-    if (sameNamePhone) {
-      // 완전히 동일 → 그냥 매칭
-      handleCarNoChange(existing.차량번호);
+    if (sameName && samePhone) {
+      // 완전히 동일 → 기존 기사 정보로 세팅
+      const grade = existing?.등급 || existing?.grade || "";
+      if (grade === "블랙") setBlackAlert(existing);
+      setForm(p => ({
+        ...p,
+        차량번호: existing.차량번호,
+        이름: existing.이름,
+        전화번호: formatPhone(existing.전화번호),
+        배차상태: "배차완료",
+      }));
       setSmartDriverQuery("");
       setSmartDriverMatched([]);
 
-    } else if (normD(existing.이름) === normD(name) && normD(existing.전화번호) !== normD(phone)) {
-      // 🔥 이름 같고 전화번호 다름 → 충돌 팝업
+    } else if (sameName && !samePhone) {
+      // 이름 같고 전화번호 다름 → 충돌 팝업
       setSmartDriverQuery("");
       setSmartDriverMatched([]);
       setDriverConflictPopup({
@@ -5013,8 +5051,8 @@ const applySmartDriverInput = async (text) => {
         input: { plate, name, phone },
       });
 
-    } else if (normD(existing.이름) !== normD(name) && name) {
-      // 🔥🔥🔥 핵심 수정: 차량번호 같고 이름 다름 → 충돌 팝업
+    } else if (!sameName && name) {
+      // 차량번호 같고 이름 다름 → 충돌 팝업
       setSmartDriverQuery("");
       setSmartDriverMatched([]);
       setDriverConflictPopup({
@@ -5024,15 +5062,23 @@ const applySmartDriverInput = async (text) => {
       });
 
     } else {
-      // 그 외 기존 매칭
-      handleCarNoChange(existing.차량번호);
+      // 그 외 (이름 파싱 안 됨 등) → 기존 기사 정보로 세팅
+      const grade = existing?.등급 || existing?.grade || "";
+      if (grade === "블랙") setBlackAlert(existing);
+      setForm(p => ({
+        ...p,
+        차량번호: existing.차량번호,
+        이름: existing.이름,
+        전화번호: formatPhone(existing.전화번호),
+        배차상태: "배차완료",
+      }));
       setSmartDriverQuery("");
       setSmartDriverMatched([]);
     }
     return;
   }
 
-  // 기존 없음 → form에만 세팅 (실제 등록은 doSave에서)
+  // 기존 없음 → 파싱된 정보로 form 세팅 (실제 등록은 doSave에서)
   if (plate || name || phone) {
     setForm(p => ({
       ...p,
@@ -5045,7 +5091,6 @@ const applySmartDriverInput = async (text) => {
     setSmartDriverMatched([]);
   }
 };
-
 
 // ===============================
 // 📋 오더 자동 파싱 상태
@@ -5523,8 +5568,8 @@ shadow-sm
   </div>
 </div>
 
-  {/* 거래처 + 신규등록 — 여기부터 좌우 패딩 적용 */}
-  <div className="col-span-2 pl-6">
+{/* 거래처 + 신규등록 */}
+<div className="col-span-2">
 
     <label className={labelCls}>거래처 {reqStar}</label>
     <div className="flex gap-2">
@@ -6680,9 +6725,13 @@ setActiveStopIdx(null);
       }
     }}
     onBlur={(e) => {
-      checkNewDriver(e.currentTarget.value);
+      // ✅ 스마트검색으로 이미 세팅된 경우 checkNewDriver 스킵
+      if (!form.이름?.trim()) {
+        checkNewDriver(e.currentTarget.value);
+      }
       setTimeout(() => setDriverDropdownOpen(false), 150);
     }}
+
   />
 
   {/* 🔽 다중 기사 선택 드롭다운 */}
@@ -10461,10 +10510,26 @@ const parseDriverText4 = (text) => {
   if (ownerBlock) {
     name = ownerBlock[1];
   } else {
-    const stripped = text.replace(phoneMatch?.[0]||"","").replace(plate||"","");
-    const excl = ["강원","서울","경기","인천","부산","대구","광주","대전","울산","세종","경북","경남","전북","전남","충북","충남","제주","냉장","냉동","카고","윙바디"];
-    const nameMatch = stripped.match(/[가-힣]{2,4}/g)||[];
-    name = nameMatch.find(n => n.length>=2 && !excl.includes(n) && !/[구시군동읍면로]$/.test(n)) || "";
+    let stripped = text;
+    if (phoneMatch?.[0]) stripped = stripped.replace(phoneMatch[0], " ");
+    if (plate) stripped = stripped.replace(plate, " ");
+
+    const excl = [
+      "강원","서울","경기","인천","부산","대구","광주","대전","울산",
+      "세종","경북","경남","전북","전남","충북","충남","제주",
+      "냉장","냉동","카고","윙바디"
+    ];
+    const nameMatches = stripped.match(/[가-힣]{2,4}/g)||[];
+
+    name = nameMatches.find(n =>
+      n.length>=2 &&
+      !excl.includes(n) &&
+      !/[구시군동읍면로]$/.test(n)
+    ) || "";
+
+    if (!name) {
+      name = nameMatches.find(n => n.length >= 2 && n.length <= 4) || "";
+    }
   }
   return { phone, plate, name };
 };
@@ -10503,14 +10568,23 @@ const applySmart4 = async (target, setTarget, text) => {
       if (grade==="블랙") setBlackAlert(ex);
       setTarget(p=>({...p, 차량번호:ex.차량번호, 이름:ex.이름, 전화번호:formatPhone(ex.전화번호), 배차상태:"배차완료"}));
       setSmartQ4(""); setSmartList4([]);
-    } else {
+    } else if (!sameName && name) {
       setSmart4ConflictPopup({ existing: ex, input: { plate, name, phone }, setTarget });
+    } else if (sameName && !samePhone) {
+      setSmart4ConflictPopup({ existing: ex, input: { plate, name, phone }, setTarget });
+    } else {
+      // 이름 파싱 안 됨 등 → 기존 기사 정보 사용
+      const grade = ex?.등급||ex?.grade||"";
+      if (grade==="블랙") setBlackAlert(ex);
+      setTarget(p=>({...p, 차량번호:ex.차량번호, 이름:ex.이름, 전화번호:formatPhone(ex.전화번호), 배차상태:"배차완료"}));
+      setSmartQ4(""); setSmartList4([]);
     }
    } else if (plate||name||phone) {
     setTarget(p=>({...p, 차량번호:plate, 이름:name, 전화번호:formatPhone(phone), 배차상태:"배차완료"}));
   }
   setSmartQ4(""); setSmartList4([]);
 };
+
   // ==========================================
   // 🚚 기사 확인 모달 상태 + 적용 함수 추가 (START)
   // ==========================================
@@ -13699,11 +13773,14 @@ value={copyTarget?.화물수량 || ""}
     return;
   }
 
-  // 0명 → 신규 등록
+  // 0명 → 신규 등록 (단, 이미 이름이 있으면 스킵)
+  if (editTarget?.이름?.trim()) return;
+
   const ok = window.confirm(
     `[${raw}] 등록된 기사가 없습니다.\n신규 기사로 추가할까요?`
   );
   if (!ok) return;
+
 
   const 이름 = prompt("기사명 입력");
   if (!이름) return;
@@ -15303,10 +15380,26 @@ const parseDriverText5 = (text) => {
   if (ownerBlock) {
     name = ownerBlock[1];
   } else {
-    const stripped = text.replace(phoneMatch?.[0]||"","").replace(plate||"","");
-    const excl = ["강원","서울","경기","인천","부산","대구","광주","대전","울산","세종","경북","경남","전북","전남","충북","충남","제주","냉장","냉동","카고","윙바디"];
-    const nameMatch = stripped.match(/[가-힣]{2,4}/g)||[];
-    name = nameMatch.find(n => n.length>=2 && !excl.includes(n) && !/[구시군동읍면로]$/.test(n)) || "";
+    let stripped = text;
+    if (phoneMatch?.[0]) stripped = stripped.replace(phoneMatch[0], " ");
+    if (plate) stripped = stripped.replace(plate, " ");
+
+    const excl = [
+      "강원","서울","경기","인천","부산","대구","광주","대전","울산",
+      "세종","경북","경남","전북","전남","충북","충남","제주",
+      "냉장","냉동","카고","윙바디"
+    ];
+    const nameMatches = stripped.match(/[가-힣]{2,4}/g)||[];
+
+    name = nameMatches.find(n =>
+      n.length>=2 &&
+      !excl.includes(n) &&
+      !/[구시군동읍면로]$/.test(n)
+    ) || "";
+
+    if (!name) {
+      name = nameMatches.find(n => n.length >= 2 && n.length <= 4) || "";
+    }
   }
   return { phone, plate, name };
 };
@@ -15345,14 +15438,23 @@ const applySmart5 = async (target, setTarget, text) => {
       if (grade==="블랙") setBlackAlert(ex);
       setTarget(p=>({...p, 차량번호:ex.차량번호, 이름:ex.이름, 전화번호:formatPhone(ex.전화번호), 배차상태:"배차완료"}));
       setSmartQ5(""); setSmartList5([]);
-    } else {
+    } else if (!sameName && name) {
       setSmart5ConflictPopup({ existing: ex, input: { plate, name, phone }, setTarget });
+    } else if (sameName && !samePhone) {
+      setSmart5ConflictPopup({ existing: ex, input: { plate, name, phone }, setTarget });
+    } else {
+      // 이름 파싱 안 됨 등 → 기존 기사 정보 사용
+      const grade = ex?.등급||ex?.grade||"";
+      if (grade==="블랙") setBlackAlert(ex);
+      setTarget(p=>({...p, 차량번호:ex.차량번호, 이름:ex.이름, 전화번호:formatPhone(ex.전화번호), 배차상태:"배차완료"}));
+      setSmartQ5(""); setSmartList5([]);
     }
  } else if (plate||name||phone) {
     setTarget(p=>({...p, 차량번호:plate, 이름:name, 전화번호:formatPhone(phone), 배차상태:"배차완료"}));
   }
   setSmartQ5(""); setSmartList5([]);
 };
+
   // 🚚 기사 선택 / 확인 팝업 상태 추가  ⭐⭐
   const [driverConfirmInfo, setDriverConfirmInfo] = React.useState(null);
   const [driverSelectInfo, setDriverSelectInfo] = React.useState(null);
@@ -16036,12 +16138,19 @@ else if (palletDiff !== null) priority = 1;
 
     // =====================================================
     // 5️⃣ 기사 없음 → 신규 기사 등록 유도 팝업
+    // ✅ 스마트검색으로 이미 이름이 세팅된 행이면 스킵
     // =====================================================
+    const currentRow = dispatchData.find((r) => getId(r) === id);
+    const editedRow = edited[id];
+    const currentName = editedRow?.이름 || currentRow?.이름 || "";
+    if (currentName.trim()) return;
+
     setDriverConfirmInfo({
       type: "new",
       rowId: id,
       plate: v,
     });
+
   };
   const _patch =
     patchDispatch ||
@@ -18922,6 +19031,9 @@ setCopyPlaceOptions(list);
 
       if (!plate) return;
 
+      // ✅ 스마트검색으로 이미 이름이 세팅된 경우 → 신규 등록 팝업 스킵
+      if (copyTarget?.이름?.trim()) return;
+
       const match = (drivers || []).find(
         d => normalizePlate(d.차량번호) === plate
       );
@@ -18932,6 +19044,7 @@ setCopyPlaceOptions(list);
       const ok = window.confirm(
         `[${copyTarget?.차량번호}] 등록된 기사가 없습니다.\n신규 기사로 등록하시겠습니까?`
       );
+
 
       if (!ok) return;
 
