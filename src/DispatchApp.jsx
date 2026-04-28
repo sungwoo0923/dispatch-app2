@@ -8920,15 +8920,15 @@ function StopBadge({ count = 0, list = [] }) {
 function DeliveryStatusBadge({ row, onConfirm }) {
   const status = row.업체전달상태 || "미전달";
 
-  const styleMap = {
-    미전달: "bg-yellow-100 text-yellow-700 border-yellow-400",
-    전달완료: "bg-green-100 text-green-700 border-green-400",
-  };
+const styleMap = {
+  미전달: "bg-gray-500 text-white",
+  전달완료: "bg-emerald-600 text-white",
+};
 
   return (
     <button
       type="button"
-      className={`px-2 py-0.5 rounded text-xs font-semibold border ${styleMap[status]}`}
+      className={`px-3 py-1 rounded-lg text-[13px] font-bold ${styleMap[status]}`}
       onClick={() => {
         onConfirm({
           rowId: row._id,
@@ -11587,11 +11587,11 @@ ${savedHighlightIds.has(r._id) ? "row-highlight" : ""}
                     <div className="flex items-center justify-center gap-1">
                       {/* 배차상태 */}
                       <span
-                        className={`px-2 py-0.5 rounded text-xs font-semibold ${r.배차상태 === "배차완료"
-  ? "bg-green-100 text-green-700 border border-green-400"
+                        className={`px-3 py-1 rounded-lg text-[13px] font-bold ${r.배차상태 === "배차완료"
+  ? "bg-[#1B2B4B] text-white"
   : r.배차상태 === "배차취소"
-  ? "bg-red-100 text-red-700 border border-red-400"
-  : "bg-yellow-100 text-yellow-700 border border-yellow-400"
+  ? "bg-red-600 text-white"
+  : "bg-amber-500 text-white"
                           }`}
                       >
                         {r.배차상태}
@@ -13208,24 +13208,24 @@ value={copyTarget?.화물수량 || ""}
     >
       <option value="">선택없음</option>
       {[
-        "오전 6시","오전 6시30분",
-        "오전 7시","오전 7시30분",
-        "오전 8시","오전 8시30분",
-        "오전 9시","오전 9시30분",
-        "오전 10시","오전 10시30분",
-        "오전 11시","오전 11시30분",
-        "오후 12시","오후 12시30분",
-        "오후 13시","오후 13시30분",
-        "오후 14시","오후 14시30분",
-        "오후 15시","오후 15시30분",
-        "오후 16시","오후 16시30분",
-        "오후 17시","오후 17시30분",
-        "오후 18시","오후 18시30분",
-        "오후 19시","오후 19시30분",
-        "오후 20시","오후 20시30분",
-        "오후 21시","오후 21시30분",
-        "오후 22시","오후 22시30분",
-        "오후 23시","오후 23시30분",
+       "오전 6시","오전 6시 30분",
+        "오전 7시","오전 7시 30분",
+        "오전 8시","오전 8시 30분",
+        "오전 9시","오전 9시 30분",
+        "오전 10시","오전 10시 30분",
+        "오전 11시","오전 11시 30분",
+        "오후 12시","오후 12시 30분",
+        "오후 1시","오후 1시 30분",
+        "오후 2시","오후 2시 30분",
+        "오후 3시","오후 3시 30분",
+        "오후 4시","오후 4시 30분",
+        "오후 5시","오후 5시 30분",
+        "오후 6시","오후 6시 30분",
+        "오후 7시","오후 7시 30분",
+        "오후 8시","오후 8시 30분",
+        "오후 9시","오후 9시 30분",
+        "오후 10시","오후 10시 30분",
+        "오후 11시","오후 11시 30분",
       ].map((t) => (
         <option key={t} value={t}>{t}</option>
       ))}
@@ -13270,24 +13270,24 @@ value={copyTarget?.화물수량 || ""}
     >
       <option value="">선택없음</option>
       {[
-        "오전 6시","오전 6시30분",
-        "오전 7시","오전 7시30분",
-        "오전 8시","오전 8시30분",
-        "오전 9시","오전 9시30분",
-        "오전 10시","오전 10시30분",
-        "오전 11시","오전 11시30분",
-        "오후 12시","오후 12시30분",
-        "오후 13시","오후 13시30분",
-        "오후 14시","오후 14시30분",
-        "오후 15시","오후 15시30분",
-        "오후 16시","오후 16시30분",
-        "오후 17시","오후 17시30분",
-        "오후 18시","오후 18시30분",
-        "오후 19시","오후 19시30분",
-        "오후 20시","오후 20시30분",
-        "오후 21시","오후 21시30분",
-        "오후 22시","오후 22시30분",
-        "오후 23시","오후 23시30분",
+       "오전 6시","오전 6시 30분",
+        "오전 7시","오전 7시 30분",
+        "오전 8시","오전 8시 30분",
+        "오전 9시","오전 9시 30분",
+        "오전 10시","오전 10시 30분",
+        "오전 11시","오전 11시 30분",
+        "오후 12시","오후 12시 30분",
+        "오후 1시","오후 1시 30분",
+        "오후 2시","오후 2시 30분",
+        "오후 3시","오후 3시 30분",
+        "오후 4시","오후 4시 30분",
+        "오후 5시","오후 5시 30분",
+        "오후 6시","오후 6시 30분",
+        "오후 7시","오후 7시 30분",
+        "오후 8시","오후 8시 30분",
+        "오후 9시","오후 9시 30분",
+        "오후 10시","오후 10시 30분",
+        "오후 11시","오후 11시 30분",
       ].map((t) => (
         <option key={t} value={t}>{t}</option>
       ))}
@@ -16713,15 +16713,15 @@ const compareBy = (key, dir = "asc") => (a, b) => {
   const StatusBadge = ({ s }) => {
 const color =
   s === "배차완료"
-    ? "bg-green-100 text-green-700 border-green-400"
+    ? "bg-[#1B2B4B] text-white"
     : s === "배차중"
-      ? "bg-yellow-100 text-yellow-800 border-yellow-400"
+      ? "bg-amber-500 text-white"
       : s === "배차취소"
-        ? "bg-red-100 text-red-700 border-red-400"
+        ? "bg-red-600 text-white"
         : "hidden";
     return (
       <span
-        className={`border px-2 py-0.5 rounded text-xs font-semibold whitespace-nowrap ${color}`}
+        className={`px-3 py-1 rounded-lg text-[13px] font-bold whitespace-nowrap ${color}`}
       >
         {s}
       </span>
@@ -17277,10 +17277,10 @@ onBlur={(e) => {
 
                       return (
                         <button
-                          className={`px-2 py-0.5 text-xs font-semibold rounded border
+                        className={`px-3 py-1 rounded-lg text-[13px] font-bold
           ${deliveryStatus === "전달완료"
-                              ? "bg-green-100 text-green-700 border-green-400"
-                              : "bg-yellow-100 text-yellow-700 border-yellow-400"
+                              ? "bg-emerald-600 text-white"
+                              : "bg-gray-500 text-white"
                             }`}
                           onClick={() => {
                             const next =
