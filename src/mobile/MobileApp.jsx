@@ -4500,22 +4500,30 @@ const chooseClient = (c) => {
     if ((form.톤수||"").includes("톤")) return "톤";
     return "";
   });
-  // 화물내용 분리 state
+ // 화물내용 분리 state
   const CARGO_TYPES = ["파레트","박스","통"];
-  const [화물수량, set화물수량] = useState(() => {
-    const raw = form.화물내용||"";
-    for (const s of ["파레트","박스","통"]) {
-      if (raw.endsWith(s)) return raw.slice(0,-s.length).trim();
-    }
-    return raw;
-  });
-  const [화물타입, set화물타입] = useState(() => {
-    const raw = form.화물내용||"";
-    for (const s of ["파레트","박스","통"]) {
-      if (raw.endsWith(s)) return s;
-    }
+
+  const detectCargoType = (raw = "") => {
+    const s = raw.toLowerCase().replace(/\s+/g, "");
+    // 파레트 계열
+    if (/파렛|파레트|파레|파|plt|p$/.test(s)) return "파레트";
+    // 박스
+    if (/박스|box/.test(s)) return "박스";
+    // 통
+    if (/통$/.test(s)) return "통";
     return "";
-  });
+  };
+
+  const detectCargoNum = (raw = "") => {
+    const type = detectCargoType(raw);
+    if (!type) return raw; // 타입 없으면 전체 텍스트 그대로
+    // 숫자+타입키워드 패턴에서 숫자만 추출
+    const m = raw.match(/^(\d+)/);
+    return m ? m[1] : raw.replace(/(파렛|파레트|파레|파|plt|p|박스|box|통)/gi, "").trim();
+  };
+
+  const [화물수량, set화물수량] = useState(() => detectCargoNum(form.화물내용||""));
+  const [화물타입, set화물타입] = useState(() => detectCargoType(form.화물내용||""));
   const update = (key, value) =>
     setForm((p) => ({ ...p, [key]: value }));
 
