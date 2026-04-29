@@ -12276,7 +12276,7 @@ checkWarningStatus(c.거래처명, "거래처");
 </section>
 {/* ===== 스마트 기사 검색 (복사패널) ===== */}
 <section className="bg-white rounded-xl border border-gray-200 shadow-sm">
-  <div className="bg-[#1B2B4B] px-6 py-3 rounded-t-xl"><h3 className="text-[14px] font-bold text-white">🔍 기사 스마트 검색</h3></div>
+  <div className="bg-[#1B2B4B] px-6 py-3 rounded-t-xl"><h3 className="text-[14px] font-bold text-white">기사 스마트 검색</h3></div>
 <div className="p-4">
     <div className="relative" style={{overflow: "visible"}}>
       <input
@@ -13685,7 +13685,7 @@ value={copyTarget?.화물수량 || ""}
 </div>
            {/* ===== 스마트 기사 검색 ===== */}
             <div className="mb-3">
-              <label className="block text-[13px] font-semibold text-[#1B2B4B] mb-1">🔍 기사 스마트 검색</label>
+              <label className="block text-[13px] font-semibold text-[#1B2B4B] mb-1">기사 스마트 검색</label>
               <div className="relative">
                 <input
                   className="w-full border-2 border-[#1B2B4B] rounded-xl px-4 py-2.5 text-[13px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-200 placeholder:text-gray-400"
@@ -17996,7 +17996,7 @@ onBlur={(e) => {
 </div>
             {/* ===== 스마트 기사 검색 ===== */}
             <div className="mb-3">
-              <label className="block text-[13px] font-semibold text-[#1B2B4B] mb-1">🔍 기사 스마트 검색</label>
+              <label className="block text-[13px] font-semibold text-[#1B2B4B] mb-1">기사 스마트 검색</label>
               <div className="relative">
                 <input
                   className="w-full border-2 border-[#1B2B4B] rounded-xl px-4 py-2.5 text-[13px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-200 placeholder:text-gray-400"
@@ -19020,7 +19020,7 @@ setCopyPlaceOptions(list);
 </section>
 {/* ===== 스마트 기사 검색 (복사패널) ===== */}
 <section className="bg-white rounded-xl border border-gray-200 shadow-sm">
-  <div className="bg-[#1B2B4B] px-6 py-3 rounded-t-xl"><h3 className="text-[14px] font-bold text-white">🔍 기사 스마트 검색</h3></div>
+  <div className="bg-[#1B2B4B] px-6 py-3 rounded-t-xl"><h3 className="text-[14px] font-bold text-white">기사 스마트 검색</h3></div>
   <div className="p-4">
     <div className="relative">
       <input
@@ -24724,43 +24724,42 @@ function DriverManagement({ drivers = [], upsertDriver, removeDriver }) {
   const [q, setQ] = React.useState("");
   const [searched, setSearched] = React.useState(false);
   const [selected, setSelected] = React.useState(new Set());
-  const [newForm, setNewForm] = React.useState({
-    차량번호: "", 이름: "", 전화번호: "", 메모: "", 등급: "일반",
-  });
-
-  const norm = (s = "") => String(s).toLowerCase().replace(/\s+/g, "");
-
-  const filtered = React.useMemo(() => {
-    if (!searched || !q.trim()) return [];
-    const nq = norm(q);
-    return drivers.filter((r) =>
-      ["차량번호", "이름", "전화번호", "메모"].some((k) =>
-        norm(r[k] || "").includes(nq)
-      )
-    );
-  }, [drivers, q, searched]);
-
+  const [gradeFilter, setGradeFilter] = React.useState("전체");
+  const [newForm, setNewForm] = React.useState({ 차량번호:"", 이름:"", 전화번호:"", 메모:"", 등급:"일반" });
+  const [showAddForm, setShowAddForm] = React.useState(false);
+  const [showAll, setShowAll] = React.useState(false);
   const [page, setPage] = React.useState(1);
   const perPage = 100;
-  React.useEffect(() => { setPage(1); }, [q]);
 
-  const paged = React.useMemo(() => {
-    const start = (page - 1) * perPage;
-    return filtered.slice(start, start + perPage);
-  }, [filtered, page]);
+  const norm = (s="") => String(s).toLowerCase().replace(/\s+/g,"");
+
+  const filtered = React.useMemo(() => {
+    if (q.trim() && searched) {
+      const nq = norm(q);
+      let list = drivers.filter(r =>
+        ["차량번호","이름","전화번호","메모"].some(k => norm(r[k]||"").includes(nq))
+      );
+      if (gradeFilter !== "전체") list = list.filter(r => (r.등급||"일반") === gradeFilter);
+      return list;
+    }
+    if (showAll) {
+      if (gradeFilter !== "전체") return drivers.filter(r => (r.등급||"일반") === gradeFilter);
+      return drivers;
+    }
+    return [];
+  }, [drivers, q, searched, gradeFilter, showAll]);
+
+  React.useEffect(() => setPage(1), [q, gradeFilter, showAll, searched]);
+
+  const paged = React.useMemo(() => filtered.slice((page-1)*perPage, page*perPage), [filtered, page]);
   const totalPages = Math.ceil(filtered.length / perPage);
 
-  const toggleOne = (id) => {
-    setSelected((prev) => {
-      const n = new Set(prev);
-      n.has(id) ? n.delete(id) : n.add(id);
-      return n;
-    });
-  };
+  const toggleOne = (id) => setSelected(prev => {
+    const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n;
+  });
   const toggleAll = () => {
-    const allIds = filtered.map((r) => r.id).filter(Boolean);
-    if (selected.size === allIds.length) setSelected(new Set());
-    else setSelected(new Set(allIds));
+    const ids = filtered.map(r => r.id).filter(Boolean);
+    setSelected(selected.size === ids.length ? new Set() : new Set(ids));
   };
 
   const handleBlur = async (row, key, val) => {
@@ -24769,18 +24768,18 @@ function DriverManagement({ drivers = [], upsertDriver, removeDriver }) {
   };
 
   const addNew = async () => {
-    const 차량번호 = (newForm.차량번호 || "").replace(/\s+/g, "");
+    const 차량번호 = (newForm.차량번호||"").replace(/\s+/g,"");
     if (!차량번호) return alert("차량번호는 필수입니다.");
-    const rawPhone = (newForm.전화번호 || "").replace(/\D/g, "");
     await upsertDriver({
       id: crypto.randomUUID(),
       차량번호,
       이름: newForm.이름,
-      전화번호: rawPhone,
+      전화번호: (newForm.전화번호||"").replace(/\D/g,""),
       메모: newForm.메모,
       등급: newForm.등급 || "일반",
     });
-    setNewForm({ 차량번호: "", 이름: "", 전화번호: "", 메모: "", 등급: "일반" });
+    setNewForm({ 차량번호:"", 이름:"", 전화번호:"", 메모:"", 등급:"일반" });
+    setShowAddForm(false);
     alert("등록 완료");
   };
 
@@ -24792,226 +24791,260 @@ function DriverManagement({ drivers = [], upsertDriver, removeDriver }) {
     alert("삭제 완료");
   };
 
+  const downloadExcel = () => {
+    if (!filtered.length) return alert("내보낼 데이터가 없습니다.");
+    const rows = filtered.map((r,i) => ({
+      순번:i+1, 차량번호:r.차량번호||"", 이름:r.이름||"",
+      전화번호:r.전화번호||"", 등급:r.등급||"일반", 메모:r.메모||"",
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "기사관리");
+    XLSX.writeFile(wb, "기사관리.xlsx");
+  };
+
   const onExcel = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = async (evt) => {
       try {
-        const wb = XLSX.read(new Uint8Array(evt.target.result), { type: "array" });
-        const sheet = wb.SheetNames[0];
-        const json = XLSX.utils.sheet_to_json(wb.Sheets[sheet], { defval: "" });
+        const wb = XLSX.read(new Uint8Array(evt.target.result), { type:"array" });
+        const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval:"" });
         let ok = 0;
         for (const r of json) {
-          const 차량번호 = String(r.차량번호 || r["차량 번호"] || "").replace(/\s+/g, "");
+          const 차량번호 = String(r.차량번호||r["차량 번호"]||"").replace(/\s+/g,"");
           if (!차량번호) continue;
           await upsertDriver({
             id: crypto.randomUUID(),
             차량번호,
-            이름: r.이름 || r["기사명"] || "",
-            전화번호: r.전화번호 || r["전화"] || r["휴대폰"] || "",
-            메모: r.메모 || r["비고"] || "",
-            등급: r.등급 || "일반",
+            이름: r.이름||r["기사명"]||"",
+            전화번호: r.전화번호||r["전화"]||r["휴대폰"]||"",
+            메모: r.메모||r["비고"]||"",
+            등급: r.등급||"일반",
           });
           ok++;
         }
         alert(`총 ${ok}건 반영`);
-      } catch (err) {
-        console.error(err);
-        alert("엑셀 처리 중 오류");
-      } finally {
-        e.target.value = "";
-      }
+      } catch(err) {
+        console.error(err); alert("엑셀 처리 중 오류");
+      } finally { e.target.value = ""; }
     };
     reader.readAsArrayBuffer(file);
   };
 
-  const 등급색상 = (g) => {
+  const gradeBadge = (g) => {
     if (g === "블랙") return "bg-gray-900 text-white";
-    if (g === "직영") return "bg-blue-100 text-blue-700";
-    if (g === "지입") return "bg-green-100 text-green-700";
-    return "bg-gray-100 text-gray-600";
+    if (g === "직영") return "bg-[#1B2B4B] text-white";
+    if (g === "지입") return "bg-[#1B2B4B]/20 text-[#1B2B4B]";
+    return "bg-gray-100 text-gray-500";
   };
 
-  const head = "border px-2 py-1 bg-slate-100 text-slate-700 text-xs font-semibold text-center whitespace-nowrap";
-  const cell = "border px-2 py-[2px] text-sm text-slate-800 text-center whitespace-nowrap align-middle";
-  const input = "border px-1 py-[2px] text-sm rounded-sm w-28 text-center";
+  const kpi = React.useMemo(() => ({
+    전체: drivers.length,
+    일반: drivers.filter(d=>(d.등급||"일반")==="일반").length,
+    직영: drivers.filter(d=>d.등급==="직영").length,
+    지입: drivers.filter(d=>d.등급==="지입").length,
+    블랙: drivers.filter(d=>d.등급==="블랙").length,
+  }), [drivers]);
 
   return (
-    <div>
-      <h2 className="text-lg font-bold mb-3">기사관리</h2>
+    <div className="p-4">
 
-      {/* 상단 바 */}
-      <div className="flex flex-wrap items-center gap-2 mb-3">
-        <input
-          className="border p-2 rounded w-64"
-          placeholder="검색 (차량번호/이름/전화/메모)"
-          value={q}
-          onChange={(e) => { setQ(e.target.value); setSearched(false); }}
-          onKeyDown={(e) => { if (e.key === "Enter") setSearched(true); }}
-        />
-        <button
-          onClick={() => setSearched(true)}
-          className="px-4 py-2 bg-blue-600 text-white rounded text-sm font-semibold"
-        >
-          🔍 검색
-        </button>
-        <label className="px-3 py-1 border rounded cursor-pointer text-sm">
-          📁 엑셀 업로드
-          <input type="file" accept=".xlsx,.xls" onChange={onExcel} className="hidden" />
-        </label>
-        <button
-          onClick={removeSelected}
-          className="px-3 py-1 rounded bg-red-600 text-white text-sm"
-        >
-          선택삭제
-        </button>
+      {/* 헤더 */}
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-[18px] font-bold text-[#1B2B4B]">기사관리</h2>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowAddForm(v=>!v)}
+            className={`px-4 py-2 rounded-lg text-[13px] font-bold transition ${showAddForm ? "bg-gray-200 text-gray-700" : "bg-[#1B2B4B] text-white hover:bg-[#243a60]"}`}
+          >
+            {showAddForm ? "닫기" : "+ 기사 등록"}
+          </button>
+          <button
+            onClick={() => { setShowAll(v=>!v); setQ(""); setSearched(false); setGradeFilter("전체"); }}
+            className={`px-4 py-2 rounded-lg text-[13px] font-bold transition ${showAll ? "bg-[#1B2B4B] text-white" : "bg-white border border-[#1B2B4B] text-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"}`}
+          >
+            {showAll ? "전체보기 닫기" : "전체보기"}
+          </button>
+          <label className="px-4 py-2 rounded-lg bg-white border border-[#1B2B4B] text-[#1B2B4B] text-[13px] font-bold cursor-pointer hover:bg-[#1B2B4B] hover:text-white transition">
+            엑셀 업로드
+            <input type="file" accept=".xlsx,.xls" onChange={onExcel} className="hidden" />
+          </label>
+          <button onClick={downloadExcel} className="px-4 py-2 rounded-lg bg-teal-600 text-white text-[13px] font-bold hover:bg-teal-700 transition">
+            엑셀 다운로드
+          </button>
+          <button onClick={removeSelected} className="px-4 py-2 rounded-lg bg-red-600 text-white text-[13px] font-bold hover:bg-red-700 transition">
+            선택 삭제
+          </button>
+        </div>
       </div>
 
-      {/* 신규 등록 */}
-      <div className="flex items-end gap-2 mb-4 bg-slate-50 px-2 py-1.5 rounded-md border">
-        <input
-          className="border px-2 py-1 rounded text-sm w-40"
-          placeholder="차량번호*"
-          value={newForm.차량번호}
-          onChange={(e) => setNewForm((p) => ({ ...p, 차량번호: e.target.value }))}
-        />
-        <input
-          className="border px-2 py-1 rounded text-sm w-28"
-          placeholder="이름"
-          value={newForm.이름}
-          onChange={(e) => setNewForm((p) => ({ ...p, 이름: e.target.value }))}
-        />
-        <input
-          className="border px-2 py-1 rounded text-sm w-36"
-          placeholder="전화번호"
-          value={newForm.전화번호}
-          onChange={(e) => setNewForm((p) => ({ ...p, 전화번호: formatPhone(e.target.value) }))}
-        />
-        <select
-          className="border px-2 py-1 rounded text-sm w-24"
-          value={newForm.등급}
-          onChange={(e) => setNewForm((p) => ({ ...p, 등급: e.target.value }))}
-        >
-          <option value="일반">일반</option>
-          <option value="지입">지입</option>
-          <option value="직영">직영</option>
-          <option value="블랙">블랙</option>
-        </select>
-        <input
-          className="border px-2 py-1 rounded text-sm w-64"
-          placeholder="메모"
-          value={newForm.메모}
-          onChange={(e) => setNewForm((p) => ({ ...p, 메모: e.target.value }))}
-        />
-        <button
-          onClick={addNew}
-          className="px-3 py-1 rounded-md bg-blue-600 text-white text-sm"
-        >
-          + 추가
-        </button>
+      {/* KPI 카드 */}
+      <div className="grid grid-cols-5 gap-3 mb-4">
+        {[
+          {label:"전체", val:kpi.전체, key:"전체"},
+          {label:"일반", val:kpi.일반, key:"일반"},
+          {label:"직영", val:kpi.직영, key:"직영"},
+          {label:"지입", val:kpi.지입, key:"지입"},
+          {label:"블랙", val:kpi.블랙, key:"블랙"},
+        ].map(({label,val,key}) => (
+          <button key={key} onClick={() => setGradeFilter(key)}
+            className={`rounded-xl border p-4 text-center shadow-sm transition ${gradeFilter===key ? "bg-[#1B2B4B] border-[#1B2B4B]" : "bg-white border-gray-200 hover:border-[#1B2B4B]"}`}>
+            <div className={`text-[24px] font-extrabold ${gradeFilter===key ? "text-white" : "text-[#1B2B4B]"}`}>{val}</div>
+            <div className={`text-[12px] font-semibold mt-0.5 ${gradeFilter===key ? "text-white/70" : "text-gray-400"}`}>{label}</div>
+          </button>
+        ))}
       </div>
 
-      {/* 검색 전 안내 */}
-      {!searched && (
-        <div className="text-center py-16 text-gray-400 text-sm">
-          검색어를 입력하고 🔍 검색 버튼을 누르세요
+      {/* 신규 등록 폼 */}
+      {showAddForm && (
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 mb-4">
+          <div className="text-[13px] font-bold text-[#1B2B4B] mb-3">신규 기사 등록</div>
+          <div className="grid grid-cols-5 gap-3">
+            {[
+              {label:"차량번호 *", key:"차량번호", placeholder:"예: 서울12가3456", border:"border-[#1B2B4B]"},
+              {label:"이름", key:"이름", placeholder:"기사명"},
+              {label:"전화번호", key:"전화번호", placeholder:"010-0000-0000"},
+              {label:"메모", key:"메모", placeholder:"메모"},
+            ].map(({label,key,placeholder,border}) => (
+              <div key={key}>
+                <label className="text-[11px] font-semibold text-gray-400 mb-1 block">{label}</label>
+                <input
+                  className={`border-2 ${border||"border-gray-200"} rounded-lg px-3 py-2 w-full text-[13px] outline-none focus:border-[#1B2B4B]`}
+                  placeholder={placeholder}
+                  value={newForm[key]}
+                  onChange={e => setNewForm(p => ({
+                    ...p,
+                    [key]: key==="전화번호" ? formatPhone(e.target.value) : e.target.value
+                  }))}
+                />
+              </div>
+            ))}
+            <div>
+              <label className="text-[11px] font-semibold text-gray-400 mb-1 block">등급</label>
+              <select className="border-2 border-gray-200 rounded-lg px-3 py-2 w-full text-[13px] outline-none focus:border-[#1B2B4B]"
+                value={newForm.등급} onChange={e=>setNewForm(p=>({...p,등급:e.target.value}))}>
+                <option value="일반">일반</option>
+                <option value="지입">지입</option>
+                <option value="직영">직영</option>
+                <option value="블랙">블랙</option>
+              </select>
+            </div>
+          </div>
+          <div className="flex justify-end mt-3 gap-2">
+            <button onClick={()=>setShowAddForm(false)} className="px-4 py-2 rounded-lg bg-gray-100 text-gray-600 text-[13px] font-semibold">취소</button>
+            <button onClick={addNew} className="px-6 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition">등록</button>
+          </div>
         </div>
       )}
 
-      {/* 검색 결과 없음 */}
-      {searched && filtered.length === 0 && (
-        <div className="text-center py-16 text-gray-400 text-sm">
-          검색 결과가 없습니다.
+      {/* 검색 + 필터 */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-3 mb-4 flex items-center gap-3 flex-wrap">
+        <div className="flex items-center border-2 border-[#1B2B4B] rounded-lg overflow-hidden h-[38px]">
+          <input
+            className="px-3 h-full text-[13px] w-52 outline-none"
+            placeholder="차량번호 / 이름 / 전화번호 검색"
+            value={q}
+            onChange={e => { setQ(e.target.value); setSearched(false); }}
+            onKeyDown={e => { if (e.key==="Enter") setSearched(true); }}
+          />
+          <button onClick={()=>setSearched(true)}
+            className="px-4 h-full bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition">
+            검색
+          </button>
+        </div>
+        <div className="flex gap-1.5">
+          {["전체","일반","직영","지입","블랙"].map(g => (
+            <button key={g} onClick={() => setGradeFilter(g)}
+              className={`h-[34px] px-3 rounded-full text-[12px] font-semibold border transition ${gradeFilter===g ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
+              {g}
+            </button>
+          ))}
+        </div>
+        <div className="ml-auto text-[13px] text-gray-400 font-medium">
+          총 <b className="text-[#1B2B4B]">{filtered.length}</b>명
+        </div>
+      </div>
+
+      {/* 미조회 상태 */}
+      {!showAll && !searched && (
+        <div className="flex flex-col items-center justify-center py-20 text-gray-400">
+          <div className="text-[15px] font-semibold">검색어를 입력하거나 전체보기 버튼을 누르세요.</div>
         </div>
       )}
 
-      {/* 표 */}
-      {searched && filtered.length > 0 && (
-        <div className="overflow-x-auto">
-          <table className="min-w-[900px] text-sm border">
+      {/* 테이블 */}
+      {(showAll || searched) && (
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          <table className="w-full text-[13px]">
             <thead>
-              <tr>
-                <th className={head}>
-                  <input
-                    type="checkbox"
-                    onChange={toggleAll}
-                    checked={filtered.length > 0 && selected.size === filtered.length}
-                  />
+              <tr className="bg-[#1B2B4B]">
+                <th className="px-3 py-3 text-white text-center w-10">
+                  <input type="checkbox" onChange={toggleAll}
+                    checked={filtered.length>0 && selected.size===filtered.length} />
                 </th>
-                {["차량번호", "이름", "전화번호", "등급", "메모", "삭제"].map((h) => (
-                  <th key={h} className={head}>{h}</th>
+                {["순번","차량번호","이름","전화번호","등급","메모","삭제"].map(h => (
+                  <th key={h} className="px-3 py-3 text-white font-bold text-center whitespace-nowrap">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {paged.map((r, i) => {
+              {paged.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="text-center py-16 text-gray-400 text-[14px]">
+                    {q.trim() ? "검색 결과가 없습니다." : "데이터가 없습니다."}
+                  </td>
+                </tr>
+              ) : paged.map((r, i) => {
                 const docId = r.id;
                 if (!docId) return null;
                 const grade = r.등급 || "일반";
                 return (
-                  <tr key={`${docId}_${i}`} className={grade === "블랙" ? "bg-gray-100" : ""}>
-                    <td className={cell}>
-                      <input
-                        type="checkbox"
-                        checked={selected.has(docId)}
-                        onChange={() => toggleOne(docId)}
-                      />
+                  <tr key={`${docId}_${i}`}
+                    className={`border-b border-gray-100 transition hover:bg-blue-50/40 ${grade==="블랙" ? "bg-gray-100" : i%2===0 ? "bg-white" : "bg-gray-50/50"}`}>
+                    <td className="px-3 py-2.5 text-center">
+                      <input type="checkbox" checked={selected.has(docId)} onChange={()=>toggleOne(docId)} />
                     </td>
-                    <td className={cell}>
-                      <span
-                        contentEditable
-                        suppressContentEditableWarning
-                        onBlur={(e) => handleBlur(r, "차량번호", e.currentTarget.innerText.trim())}
-                      >
-                        {r.차량번호 || "-"}
+                    <td className="px-3 py-2.5 text-center text-gray-400">{(page-1)*perPage+i+1}</td>
+                    <td className="px-3 py-2.5 text-center font-semibold text-[#1B2B4B]">
+                      <span contentEditable suppressContentEditableWarning
+                        onBlur={e=>handleBlur(r,"차량번호",e.currentTarget.innerText.trim())}>
+                        {r.차량번호||"-"}
                       </span>
                     </td>
-                    <td className={cell}>
-                      <span
-                        contentEditable
-                        suppressContentEditableWarning
-                        onBlur={(e) => handleBlur(r, "이름", e.currentTarget.innerText)}
-                      >
-                        {r.이름 || "-"}
+                    <td className="px-3 py-2.5 text-center">
+                      <span contentEditable suppressContentEditableWarning
+                        onBlur={e=>handleBlur(r,"이름",e.currentTarget.innerText.trim())}>
+                        {r.이름||"-"}
                       </span>
                     </td>
-                    <td className={cell}>
-                      <span
-                        contentEditable
-                        suppressContentEditableWarning
-                        onBlur={(e) => {
-                          const val = e.currentTarget.innerText.trim();
-                          handleBlur(r, "전화번호", val.replace(/[^\d]/g, ""));
-                        }}
-                      >
-                        {formatPhone(r.전화번호) || "-"}
+                    <td className="px-3 py-2.5 text-center">
+                      <span contentEditable suppressContentEditableWarning
+                        onBlur={e=>handleBlur(r,"전화번호",e.currentTarget.innerText.trim().replace(/[^\d]/g,""))}>
+                        {formatPhone(r.전화번호)||"-"}
                       </span>
                     </td>
-                    <td className={cell}>
+                    <td className="px-3 py-2.5 text-center">
                       <select
-                        className={`px-2 py-0.5 rounded text-xs font-semibold border-0 ${등급색상(grade)}`}
+                        className={`px-2.5 py-1 rounded-lg text-[12px] font-bold border-0 cursor-pointer ${gradeBadge(grade)}`}
                         value={grade}
-                        onChange={(e) => handleBlur(r, "등급", e.target.value)}
-                      >
+                        onChange={e=>handleBlur(r,"등급",e.target.value)}>
                         <option value="일반">일반</option>
                         <option value="지입">지입</option>
                         <option value="직영">직영</option>
                         <option value="블랙">블랙</option>
                       </select>
                     </td>
-                    <td className={cell}>
-                      <input
-                        className={`${input} w-48 text-left`}
-                        defaultValue={r.메모 || ""}
-                        onBlur={(e) => handleBlur(r, "메모", e.target.value)}
-                      />
+                    <td className="px-3 py-2.5">
+                      <input className="border border-gray-200 rounded-lg px-2 py-1 text-[12px] w-full outline-none focus:border-[#1B2B4B]"
+                        defaultValue={r.메모||""}
+                        onBlur={e=>handleBlur(r,"메모",e.target.value)} />
                     </td>
-                    <td className={cell}>
+                    <td className="px-3 py-2.5 text-center">
                       <button
-                        className="px-2 py-[2px] text-xs border border-red-400 text-red-600 rounded"
-                        onClick={() => { if (window.confirm("삭제하시겠습니까?")) removeDriver(docId); }}
-                      >
+                        className="px-3 py-1 rounded-lg bg-red-600 text-white text-[11px] font-bold hover:bg-red-700 transition"
+                        onClick={()=>{ if(window.confirm("삭제하시겠습니까?")) removeDriver(docId); }}>
                         삭제
                       </button>
                     </td>
@@ -25023,14 +25056,23 @@ function DriverManagement({ drivers = [], upsertDriver, removeDriver }) {
         </div>
       )}
 
-      {/* 페이지 버튼 */}
-      {searched && totalPages > 1 && (
-        <div className="flex items-center justify-center gap-4 mt-4 text-sm">
-          <button className="px-4 py-1 border rounded" disabled={page === 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>◀ 이전</button>
-          <span>{page} / {totalPages}</span>
-          <button className="px-4 py-1 border rounded" disabled={page === totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>다음 ▶</button>
+      {/* 페이지네이션 */}
+      {(showAll || searched) && totalPages > 1 && (
+        <div className="flex items-center justify-center gap-3 mt-4">
+          <button disabled={page===1} onClick={()=>setPage(p=>Math.max(1,p-1))}
+            className={`px-4 py-2 rounded-lg text-[13px] font-semibold border transition ${page===1 ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed" : "bg-white text-[#1B2B4B] border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"}`}>
+            이전
+          </button>
+          <span className="text-[13px] font-semibold text-gray-600">
+            {page} <span className="text-gray-400">/ {totalPages}</span>
+          </span>
+          <button disabled={page===totalPages} onClick={()=>setPage(p=>Math.min(totalPages,p+1))}
+            className={`px-4 py-2 rounded-lg text-[13px] font-semibold border transition ${page===totalPages ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed" : "bg-white text-[#1B2B4B] border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"}`}>
+            다음
+          </button>
         </div>
       )}
+
     </div>
   );
 }

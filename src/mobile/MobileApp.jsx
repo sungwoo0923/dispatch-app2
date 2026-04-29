@@ -1719,8 +1719,10 @@ const title =
           }
         }
       : page === "notice" || page === "schedule" || page === "unassigned" || page === "handover"
-? () => setPage("list")
-: undefined
+      ? () => setPage("list")
+      : page === "fare"
+      ? () => setPage(prevPage || "list")
+      : undefined
   }
   onRefresh={page === "list" ? handleRefresh : undefined}
   onMenu={page === "list" ? () => setShowMenu(true) : undefined}
@@ -2497,6 +2499,10 @@ setOpenMemo={setOpenMemo}
             showToast={showToast}
             upsertDriver={upsertDriver}
             setPrevPage={setPrevPage}
+            onGoFare={() => {
+              setPrevPage("detail");
+              setPage("fare");
+            }}
           />
         )}
 
@@ -3602,6 +3608,8 @@ function MobileOrderDetail({
   setSelectedOrder,
   showToast,
   upsertDriver,
+  setPrevPage,
+  onGoFare,
 }) {
   const [confirmDeliver, setConfirmDeliver] = useState(false);
   const [confirmUndoDeliver, setConfirmUndoDeliver] = useState(false);
@@ -3986,7 +3994,7 @@ const handleAssignClick = () => {
             </button>
             <button
               style={{ touchAction: "manipulation" }}
-              onClick={() => {
+             onClick={() => {
                 window.__farePreset__ = {
                   pickup: order.상차지명 || "",
                   pickupAddr: order.상차지주소 || "",
@@ -3997,7 +4005,7 @@ const handleAssignClick = () => {
                 };
                 window.__forceFareSearch__ = true;
                 window.scrollTo(0, 0);
-                setPage("fare");
+                onGoFare?.();
               }}
               className="py-2.5 rounded-xl border border-[#1B2B4B] text-[#1B2B4B] text-xs font-bold"
             >
@@ -4483,7 +4491,31 @@ const chooseClient = (c) => {
 };
 
   const [showNewDriver, setShowNewDriver] = useState(false);
-
+// 톤수 분리 state
+  const [톤수값, set톤수값] = useState(() => {
+    return String(form.톤수||"").replace(/톤|kg/gi,"").trim();
+  });
+  const [톤수타입, set톤수타입] = useState(() => {
+    if ((form.톤수||"").includes("kg")) return "kg";
+    if ((form.톤수||"").includes("톤")) return "톤";
+    return "";
+  });
+  // 화물내용 분리 state
+  const CARGO_TYPES = ["파레트","박스","통"];
+  const [화물수량, set화물수량] = useState(() => {
+    const raw = form.화물내용||"";
+    for (const s of ["파레트","박스","통"]) {
+      if (raw.endsWith(s)) return raw.slice(0,-s.length).trim();
+    }
+    return raw;
+  });
+  const [화물타입, set화물타입] = useState(() => {
+    const raw = form.화물내용||"";
+    for (const s of ["파레트","박스","통"]) {
+      if (raw.endsWith(s)) return s;
+    }
+    return "";
+  });
   const update = (key, value) =>
     setForm((p) => ({ ...p, [key]: value }));
 
@@ -4982,41 +5014,90 @@ const dropOptions = useMemo(() => {
   />
       </div>
 
-      {/* 톤수/차종/화물내용 */}
+      {/* 차량종류 */}
       <div className="bg-white rounded-lg border shadow-sm">
         <RowLabelInput
-          label="톤수 / 차종 / 화물"
+          label="차량종류"
           input={
-            <div className="grid grid-cols-3 gap-2">
+            <select
+              className="w-full border rounded px-2 py-1 text-sm"
+              value={form.차종}
+              onChange={(e) => update("차종", e.target.value)}
+            >
+              <option value="">차량종류 선택</option>
+              <option value="라보/다마스">라보/다마스</option>
+              <option value="카고">카고</option>
+              <option value="윙바디">윙바디</option>
+              <option value="탑차">탑차</option>
+              <option value="냉장탑">냉장탑</option>
+              <option value="냉동탑">냉동탑</option>
+              <option value="냉장윙">냉장윙</option>
+              <option value="냉동윙">냉동윙</option>
+              <option value="오토바이">오토바이</option>
+              <option value="기타">기타</option>
+            </select>
+          }
+        />
+        {/* 톤수 */}
+        <RowLabelInput
+          label="톤수"
+          input={
+            <div className="flex items-center border rounded-lg overflow-hidden">
               <input
-                className="border rounded px-2 py-1 text-sm"
-                placeholder="톤수"
-                value={form.톤수}
-                onChange={(e) => update("톤수", e.target.value)}
+                className="flex-1 px-2 py-1 text-sm outline-none"
+                placeholder="예: 1"
+                value={톤수값}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  set톤수값(v);
+                  update("톤수", 톤수타입 ? `${v}${톤수타입}` : v);
+                }}
               />
               <select
-                className="border rounded px-2 py-1 text-sm"
-                value={form.차종}
-                onChange={(e) => update("차종", e.target.value)}
+                className="h-full px-1 text-[11px] font-bold bg-[#1B2B4B] text-white border-0 outline-none cursor-pointer"
+                value={톤수타입}
+                onChange={(e) => {
+                  const t = e.target.value;
+                  set톤수타입(t);
+                  update("톤수", t ? `${톤수값}${t}` : 톤수값);
+                }}
               >
-                <option value="">차량종류</option>
-                <option value="라보/다마스">라보/다마스</option>
-                <option value="카고">카고</option>
-                <option value="윙바디">윙바디</option>
-                <option value="탑차">탑차</option>
-                <option value="냉장탑">냉장탑</option>
-                <option value="냉동탑">냉동탑</option>
-                <option value="냉장윙">냉장윙</option>
-                <option value="냉동윙">냉동윙</option>
-                <option value="오토바이">오토바이</option>
-                <option value="기타">기타</option>
+                <option value="">단위</option>
+                <option value="톤">톤</option>
+                <option value="kg">kg</option>
               </select>
+            </div>
+          }
+        />
+        {/* 화물내용 */}
+        <RowLabelInput
+          label="화물내용"
+          input={
+            <div className="flex items-center border rounded-lg overflow-hidden">
               <input
-                className="border rounded px-2 py-1 text-sm"
-                placeholder="화물내용"
-                value={form.화물내용}
-                onChange={(e) => update("화물내용", e.target.value)}
+                className="flex-1 px-2 py-1 text-sm outline-none"
+                placeholder="예: 3"
+                value={화물수량}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  set화물수량(v);
+                  update("화물내용", 화물타입 ? `${v}${화물타입}` : v);
+                }}
               />
+              <select
+                className="h-full px-1 text-[11px] font-bold bg-[#1B2B4B] text-white border-0 outline-none cursor-pointer"
+                value={화물타입}
+                onChange={(e) => {
+                  const t = e.target.value;
+                  set화물타입(t);
+                  update("화물내용", t ? `${화물수량}${t}` : 화물수량);
+                }}
+              >
+                <option value="">없음</option>
+                <option value="파레트">파레트</option>
+                <option value="박스">박스</option>
+                <option value="통">통</option>
+              </select>
             </div>
           }
         />
@@ -6226,118 +6307,82 @@ const fares = baseRows.map((r) =>
 
 
   return (
-    <div className="px-4 py-4 space-y-4">
-      {/* 뒤로가기 */}
-      <button
-        onClick={onBack}
-        className="px-3 py-1 bg-gray-200 text-sm rounded"
-      >
-        ◀
-      </button>
-
-      <div className="bg-white border rounded-xl p-4 shadow-sm space-y-3">
-
-  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-
-    {/* 1️⃣ 상/하차지명 */}
-    <div className="space-y-2">
-      <div className="text-sm font-semibold text-blue-600">
-        상/하차지명
+    <div className="bg-gray-50 min-h-screen pb-10">
+      {/* 검색 카드 */}
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mx-4 mt-4">
+        <div className="bg-[#1B2B4B] px-4 py-3">
+          <div className="text-[13px] font-bold text-white">운임 조회 조건</div>
+          <div className="text-[11px] text-white/50 mt-0.5">상/하차지 입력 후 조회</div>
+        </div>
+        <div className="p-4 space-y-3">
+          {/* 상/하차지명 */}
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <div className="text-[11px] font-semibold text-gray-500 mb-1">상차지명</div>
+              <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B] bg-gray-50"
+                placeholder="예: 인천 후레쉬2공장" value={pickup} onChange={e=>setPickup(e.target.value)} />
+            </div>
+            <div>
+              <div className="text-[11px] font-semibold text-gray-500 mb-1">하차지명</div>
+              <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B] bg-gray-50"
+                placeholder="예: 반찬단지" value={drop} onChange={e=>setDrop(e.target.value)} />
+            </div>
+          </div>
+          {/* 상/하차지주소 */}
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <div className="text-[11px] font-semibold text-gray-500 mb-1">상차지주소 (선택)</div>
+              <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B] bg-gray-50"
+                placeholder="주소 입력" value={pickupAddr} onChange={e=>setPickupAddr(e.target.value)} />
+            </div>
+            <div>
+              <div className="text-[11px] font-semibold text-gray-500 mb-1">하차지주소 (선택)</div>
+              <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B] bg-gray-50"
+                placeholder="주소 입력" value={dropAddr} onChange={e=>setDropAddr(e.target.value)} />
+            </div>
+          </div>
+          {/* 톤수/화물/차종 */}
+          <div className="grid grid-cols-3 gap-2">
+            <div>
+              <div className="text-[11px] font-semibold text-gray-500 mb-1">톤수</div>
+              <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B] bg-gray-50"
+                placeholder="예: 1톤" value={ton} onChange={e=>setTon(e.target.value)} />
+            </div>
+            <div>
+              <div className="text-[11px] font-semibold text-gray-500 mb-1">화물내용</div>
+              <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B] bg-gray-50"
+                placeholder="예: 3파레트" value={cargo} onChange={e=>setCargo(e.target.value)} />
+            </div>
+            <div>
+              <div className="text-[11px] font-semibold text-gray-500 mb-1">차종</div>
+              <select className="w-full border border-gray-200 rounded-xl px-2 py-2 text-[12px] bg-gray-50 focus:outline-none focus:border-[#1B2B4B]"
+                value={vehicle} onChange={e=>setVehicle(e.target.value)}>
+                <option value="전체">전체</option>
+                <option value="라보/다마스">라보/다마스</option>
+                <option value="카고">카고</option>
+                <option value="윙바디">윙바디</option>
+                <option value="냉장탑">냉장탑</option>
+                <option value="냉동탑">냉동탑</option>
+                <option value="냉장윙">냉장윙</option>
+                <option value="냉동윙">냉동윙</option>
+                <option value="오토바이">오토바이</option>
+              </select>
+            </div>
+          </div>
+          {/* 완전일치 */}
+          <label className="flex items-center gap-2 text-[12px] text-gray-600">
+            <input type="checkbox" checked={strictMatchOnly} onChange={e=>setStrictMatchOnly(e.target.checked)}
+              className="w-4 h-4 accent-[#1B2B4B]" />
+            화물/톤수 완전일치만 보기
+          </label>
+          {/* 조회 버튼 */}
+          <button id="fare-search-button" onClick={calcFareMobile}
+            className="w-full py-3 bg-[#1B2B4B] text-white text-[14px] font-bold rounded-xl active:scale-95 transition">
+            운임 조회
+          </button>
+        </div>
       </div>
-
-      <input
-        className="w-full border rounded px-2 py-2 text-sm"
-        placeholder="상차지명"
-        value={pickup}
-        onChange={(e) => setPickup(e.target.value)}
-      />
-
-      <input
-        className="w-full border rounded px-2 py-2 text-sm"
-        placeholder="하차지명"
-        value={drop}
-        onChange={(e) => setDrop(e.target.value)}
-      />
-    </div>
-
-    {/* 2️⃣ 상/하차지주소 */}
-    <div className="space-y-2">
-      <div className="text-sm font-semibold text-blue-600">
-        상/하차지주소
-      </div>
-
-      <input
-        className="w-full border rounded px-2 py-2 text-sm"
-        placeholder="상차지주소"
-        value={pickupAddr}
-        onChange={(e) => setPickupAddr(e.target.value)}
-      />
-
-      <input
-        className="w-full border rounded px-2 py-2 text-sm"
-        placeholder="하차지주소"
-        value={dropAddr}
-        onChange={(e) => setDropAddr(e.target.value)}
-      />
-    </div>
-
-    {/* 3️⃣ 화물 / 차량 */}
-    <div className="space-y-2">
-      <div className="text-sm font-semibold text-blue-600">
-        화물 / 차량
-      </div>
-
-      <input
-        className="w-full border rounded px-2 py-2 text-sm"
-        placeholder="톤수"
-        value={ton}
-        onChange={(e) => setTon(e.target.value)}
-      />
-
-      <input
-        className="w-full border rounded px-2 py-2 text-sm"
-        placeholder="화물내용"
-        value={cargo}
-        onChange={(e) => setCargo(e.target.value)}
-      />
-<label className="flex items-center gap-2 text-sm mt-1">
-  <input
-    type="checkbox"
-    checked={strictMatchOnly}
-    onChange={(e) => setStrictMatchOnly(e.target.checked)}
-  />
-  화물/톤수 완전일치만 보기
-</label>
-
-      <select
-        className="w-full border rounded px-2 py-2 text-sm"
-        value={vehicle}
-        onChange={(e) => setVehicle(e.target.value)}
-      >
-          <option value="전체">전체</option>
-          <option value="라보/다마스">라보/다마스</option>
-          <option value="카고">카고</option>
-          <option value="윙바디">윙바디</option>
-          <option value="냉장탑">냉장탑</option>
-          <option value="냉동탑">냉동탑</option>
-          <option value="냉장윙">냉장윙</option>
-          <option value="냉동윙">냉동윙</option>
-          <option value="오토바이">오토바이</option>
-      </select>
-    </div>
-
-  </div>
-
-  {/* 🔥 운임 조회 버튼 유지 */}
-  <button
-    id="fare-search-button"
-    onClick={calcFareMobile}
-    className="w-full bg-blue-600 text-white py-2 rounded-lg text-sm font-semibold"
-  >
-    🔍 운임조회
-  </button>
-
-</div>
+      <div className="px-4 py-4 space-y-3">
 
       {/* 결과 */}
 {(result || matchedRows.length > 0) && (
@@ -6641,7 +6686,7 @@ const fares = baseRows.map((r) =>
   </div>
 )}
     </div>
-    
+    </div>
   );
 }
 // ======================================================================
