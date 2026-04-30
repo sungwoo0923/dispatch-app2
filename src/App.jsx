@@ -154,7 +154,7 @@ if (loading || !splashDone) {
 
         <img
           src="/icons/sflow-logo.png"
-          alt="S-Flow Logistics"
+          alt="KP-Flow Logistics"
           className="splash-logo"
           style={{ width: "60vw", maxWidth: "320px" }}
         />
@@ -186,7 +186,7 @@ return (
         </div>
         <div>
           <h3 className="text-white text-[15px] font-bold">새 업데이트가 있습니다</h3>
-          <p className="text-white/50 text-[11px] mt-0.5">S-Flow Logistics</p>
+          <p className="text-white/50 text-[11px] mt-0.5">KP-Flow Logistics</p>
         </div>
       </div>
 

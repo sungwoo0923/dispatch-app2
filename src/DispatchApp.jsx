@@ -1283,9 +1283,9 @@ useEffect(() => {
 
           {/* 좌측 로고 */}
           <div className="flex items-center gap-2 min-w-[180px]">
-            <img src="/icons/sflow-icon.png" alt="S-Flow" className="w-7 h-7 rounded-lg" />
+            <img src="/icons/sflow-icon.png" alt="KP-Flow" className="w-7 h-7 rounded-lg" />
             <span className="text-white font-extrabold text-base tracking-tight">
-              S-Flow
+              KP-Flow
             </span>
             <span
               className="text-[10px] font-mono bg-white/10 text-white/60 px-1.5 py-0.5 rounded ml-1"
@@ -24767,7 +24767,112 @@ function ClientSettlement({ dispatchData, clients = [], setClients }) {
   const [end, setEnd] = useState("");
   const [editInfo, setEditInfo] = useState({});
   const [showEdit, setShowEdit] = useState(false);
-  const [searched, setSearched] = useState(false); // 🔥 검색 전 빈 화면
+  const [searched, setSearched] = useState(false);
+
+  // ★ 드롭다운 상태
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [dropdownIdx, setDropdownIdx] = useState(0);
+  const dropdownRef = React.useRef(null);
+  const inputRef = React.useRef(null);
+
+  // ★ 거래처명/기사명 후보 목록 생성
+  const dropdownOptions = useMemo(() => {
+    const q = (searchInput || "").trim().toLowerCase();
+    if (!q) return [];
+
+    if (searchType === "거래처명") {
+      const set = new Set();
+      (clients || []).forEach(c => c.거래처명 && set.add(c.거래처명));
+      (dispatchData || []).forEach(r => r.거래처명 && set.add(r.거래처명));
+      const arr = Array.from(set).sort((a, b) => a.localeCompare(b, "ko"));
+
+      const exact = [];
+      const startsWith = [];
+      const includes = [];
+      const norm = (s) => s.toLowerCase().replace(/\s+/g, "");
+      const nq = norm(q);
+      arr.forEach(name => {
+        const nn = norm(name);
+        if (nn === nq) exact.push(name);
+        else if (nn.startsWith(nq)) startsWith.push(name);
+        else if (nn.includes(nq)) includes.push(name);
+      });
+      return [...exact, ...startsWith, ...includes].slice(0, 15);
+    }
+
+    if (searchType === "기사명") {
+      const set = new Set();
+      (dispatchData || []).forEach(r => {
+        const name = (r.이름 || r.기사명 || "").trim();
+        if (name) set.add(name);
+      });
+      const arr = Array.from(set).sort((a, b) => a.localeCompare(b, "ko"));
+      const norm = (s) => s.toLowerCase().replace(/\s+/g, "");
+      const nq = norm(q);
+      return arr.filter(name => norm(name).includes(nq)).slice(0, 15);
+    }
+
+    return [];
+  }, [searchInput, searchType, clients, dispatchData]);
+
+  // ★ 외부 클릭 시 드롭다운 닫기
+  React.useEffect(() => {
+    const handler = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  // ★ 드롭다운에서 선택
+  const selectDropdownItem = (value) => {
+    setSearchInput(value);
+    setClient(value);
+    setSearched(true);
+    setDropdownOpen(false);
+    setDropdownIdx(0);
+  };
+
+  // ★ 키보드 네비게이션
+  const handleInputKeyDown = (e) => {
+    if (!dropdownOpen || dropdownOptions.length === 0) {
+      if (e.key === "Enter") {
+        if (!searchInput.trim()) return alert("검색어를 입력하세요.");
+        setClient(searchInput.trim());
+        setSearched(true);
+        setDropdownOpen(false);
+      }
+      if (e.key === "ArrowDown" && dropdownOptions.length > 0) {
+        setDropdownOpen(true);
+        setDropdownIdx(0);
+      }
+      return;
+    }
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setDropdownIdx(i => Math.min(i + 1, dropdownOptions.length - 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setDropdownIdx(i => Math.max(i - 1, 0));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      const pick = dropdownOptions[dropdownIdx];
+      if (pick) selectDropdownItem(pick);
+    } else if (e.key === "Escape") {
+      setDropdownOpen(false);
+    }
+  };
+
+  // ★ 드롭다운 스크롤 동기화
+  const dropdownItemRefs = React.useRef([]);
+  React.useEffect(() => {
+    if (!dropdownOpen) return;
+    const el = dropdownItemRefs.current[dropdownIdx];
+    if (el) el.scrollIntoView({ block: "nearest" });
+  }, [dropdownIdx, dropdownOpen]);
 
   const found = useMemo(
     () => (clients || []).find((c) => c.거래처명 === client) || {},
@@ -24787,10 +24892,13 @@ function ClientSettlement({ dispatchData, clients = [], setClients }) {
     });
   }, [found, client]);
 
+  // ★ 청구운임 0 제외 필터 추가
   const rowsInvoice = useMemo(() => {
     if (!searched) return [];
     let list = Array.isArray(dispatchData) ? dispatchData : [];
     list = list.filter(r => (r.배차상태 || "") === "배차완료");
+    // ★ 청구운임이 0이거나 없는 오더 제외
+    list = list.filter(r => toInt(r.청구운임) > 0);
     if (searchType === "거래처명" && client) list = list.filter(r => (r.거래처명 || "") === client);
     if (searchType === "기사명" && client) list = list.filter(r => (r.이름 || "").includes(client));
     if (start) list = list.filter(r => (r.상차일 || "") >= start);
@@ -24806,9 +24914,47 @@ function ClientSettlement({ dispatchData, clients = [], setClients }) {
     기사명: r.이름 || "",
     공급가액: toInt(r.청구운임),
     세액: Math.round(toInt(r.청구운임) * 0.1),
+    // ★ 추가 필드 (톤수, 차량종류)
+    톤수: r.차량톤수 || "",
+    차량종류: r.차량종류 || "",
   }));
   const 합계공급가 = mapped.reduce((a, b) => a + b.공급가액, 0);
   const 합계세액 = mapped.reduce((a, b) => a + b.세액, 0);
+
+  // ★ 월별 소계 계산
+  const monthlySubtotals = useMemo(() => {
+    const map = new Map();
+    mapped.forEach(m => {
+      const ym = m.상차일.slice(0, 7); // "2025-01"
+      if (!ym) return;
+      if (!map.has(ym)) map.set(ym, { 공급가액: 0, 세액: 0, 건수: 0 });
+      const entry = map.get(ym);
+      entry.공급가액 += m.공급가액;
+      entry.세액 += m.세액;
+      entry.건수 += 1;
+    });
+    return map;
+  }, [mapped]);
+
+  // ★ 기간 퀵셀렉트
+  const setThisMonth = () => {
+    const ym = new Date().toISOString().slice(0, 7);
+    setStart(`${ym}-01`);
+    const lastDay = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
+    setEnd(`${ym}-${lastDay}`);
+  };
+  const setLastMonth = () => {
+    const d = new Date();
+    d.setMonth(d.getMonth() - 1);
+    const ym = d.toISOString().slice(0, 7);
+    setStart(`${ym}-01`);
+    const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+    setEnd(`${ym}-${lastDay}`);
+  };
+  const setThisYear = () => {
+    setStart(`${THIS_YEAR}-01-01`);
+    setEnd(`${THIS_YEAR}-12-31`);
+  };
 
   const COMPANY_PRINT = {
     name: "(주)돌케", ceo: "고현정", bizNo: "329-81-00967",
@@ -24843,13 +24989,37 @@ function ClientSettlement({ dispatchData, clients = [], setClients }) {
     const rows = mapped.map(m => ({
       No: m.idx, 상차일: m.상차일, 상하차지: m.상하차지,
       화물명: m.화물명, 기사명: m.기사명,
+      톤수: m.톤수, 차량종류: m.차량종류,
       공급가액: m.공급가액, 세액: m.세액,
       합계: m.공급가액 + m.세액,
     }));
-    const ws = XLSX.utils.json_to_sheet(rows);
+    // ★ 월별 소계 시트 추가
+    const monthRows = Array.from(monthlySubtotals.entries()).map(([ym, v]) => ({
+      월: ym, 건수: v.건수, 공급가액: v.공급가액, 세액: v.세액, 합계: v.공급가액 + v.세액,
+    }));
+    const ws1 = XLSX.utils.json_to_sheet(rows);
+    const ws2 = XLSX.utils.json_to_sheet(monthRows);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "거래명세서");
+    XLSX.utils.book_append_sheet(wb, ws1, "거래명세서");
+    XLSX.utils.book_append_sheet(wb, ws2, "월별소계");
     XLSX.writeFile(wb, `거래명세서_${client || "전체"}_${start||"all"}~${end||"all"}.xlsx`);
+  };
+
+  // ★ 인쇄 기능
+  const handlePrint = () => {
+    const area = document.getElementById("invoiceArea");
+    if (!area) return alert("인쇄할 내용이 없습니다.");
+    const win = window.open("", "_blank");
+    win.document.write(`
+      <html><head><title>거래명세서 - ${client || ""}</title>
+      <style>body{margin:0;padding:20px;font-family:sans-serif;}table{border-collapse:collapse;width:100%;}
+      th,td{border:1px solid #ccc;padding:6px 8px;font-size:12px;text-align:center;}
+      th{background:#1B2B4B;color:#fff;}.text-right{text-align:right;}
+      @media print{@page{margin:10mm;}}</style></head><body>
+      ${area.innerHTML}</body></html>
+    `);
+    win.document.close();
+    setTimeout(() => { win.print(); win.close(); }, 500);
   };
 
   const saveEdit = () => {
@@ -24870,6 +25040,63 @@ function ClientSettlement({ dispatchData, clients = [], setClients }) {
   const [statusFilter, setStatusFilter] = useState("전체");
   const [selectedMonths, setSelectedMonths] = useState(new Set());
   const [memoMap, setMemoMap] = useState({});
+
+  // ★ 미수금관리 거래처 드롭다운
+  const [arDropOpen, setArDropOpen] = useState(false);
+  const [arDropIdx, setArDropIdx] = useState(0);
+  const [arInput, setArInput] = useState("");
+  const arDropRef = React.useRef(null);
+  const arInputRef = React.useRef(null);
+  const arItemRefs = React.useRef([]);
+
+  const arOptions = useMemo(() => {
+    const q = (arInput || "").trim().toLowerCase();
+    if (!q) return clientOptions8;
+    const norm = (s) => s.toLowerCase().replace(/\s+/g, "");
+    const nq = norm(q);
+    const exact = [], starts = [], includes = [];
+    clientOptions8.forEach(name => {
+      const nn = norm(name);
+      if (nn === nq) exact.push(name);
+      else if (nn.startsWith(nq)) starts.push(name);
+      else if (nn.includes(nq)) includes.push(name);
+    });
+    return [...exact, ...starts, ...includes].slice(0, 15);
+  }, [arInput, clientOptions8]);
+
+  React.useEffect(() => {
+    const handler = (e) => {
+      if (arDropRef.current && !arDropRef.current.contains(e.target)) setArDropOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  React.useEffect(() => {
+    if (!arDropOpen) return;
+    const el = arItemRefs.current[arDropIdx];
+    if (el) el.scrollIntoView({ block: "nearest" });
+  }, [arDropIdx, arDropOpen]);
+
+  const selectArClient = (value) => {
+    setArInput(value);
+    setSelClient(value);
+    setArDropOpen(false);
+    setArDropIdx(0);
+    clearSel();
+  };
+
+  const handleArKeyDown = (e) => {
+    if (!arDropOpen || arOptions.length === 0) {
+      if (e.key === "ArrowDown" && arOptions.length > 0) { setArDropOpen(true); setArDropIdx(0); }
+      if (e.key === "Enter" && arInput.trim()) { selectArClient(arInput.trim()); }
+      return;
+    }
+    if (e.key === "ArrowDown") { e.preventDefault(); setArDropIdx(i => Math.min(i + 1, arOptions.length - 1)); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setArDropIdx(i => Math.max(i - 1, 0)); }
+    else if (e.key === "Enter") { e.preventDefault(); const pick = arOptions[arDropIdx]; if (pick) selectArClient(pick); }
+    else if (e.key === "Escape") { setArDropOpen(false); }
+  };
 
   const toggleMonthSelect = (yyyymm) => setSelectedMonths(prev => {
     const n = new Set(prev); n.has(yyyymm) ? n.delete(yyyymm) : n.add(yyyymm); return n;
@@ -24950,27 +25177,37 @@ function ClientSettlement({ dispatchData, clients = [], setClients }) {
     XLSX.writeFile(wb, `미수금_${selClient}_${THIS_YEAR}.xlsx`);
   };
 
-  // 탭 공통 스타일
-  const tabBtn = (key, label) => (
+  const tabBtn = (key, label, badge) => (
     <button
       key={key}
       onClick={() => setTab(key)}
-      className={`px-5 py-2.5 text-[14px] font-bold rounded-lg transition ${
+      className={`px-5 py-2.5 text-[14px] font-bold rounded-lg transition relative ${
         tab === key
           ? "bg-[#1B2B4B] text-white shadow"
           : "bg-white text-[#1B2B4B] border border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"
       }`}
     >
       {label}
+      {badge > 0 && (
+        <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+          {badge > 9 ? "9+" : badge}
+        </span>
+      )}
     </button>
   );
+
+  // ★ 미수금 미정산 월 수 (배지용)
+  const unsettledBadge = useMemo(() => {
+    if (!selClient) return 0;
+    return monthRowsRaw.filter(r => r.정산상태 === "미정산" && r.건수 > 0).length;
+  }, [monthRowsRaw, selClient]);
 
   return (
     <div className="p-4">
       {/* 탭 */}
       <div className="flex gap-2 mb-5">
-        {tabBtn("invoice", "거래명세서")}
-        {tabBtn("unsettledMonth", "미수금관리")}
+        {tabBtn("invoice", "거래명세서", 0)}
+        {tabBtn("unsettledMonth", "미수금관리", unsettledBadge)}
       </div>
 
       {/* ══════════════ 거래명세서 탭 ══════════════ */}
@@ -24979,29 +25216,67 @@ function ClientSettlement({ dispatchData, clients = [], setClients }) {
           {/* 검색 바 */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mb-4">
             <div className="flex flex-wrap items-end gap-3">
-              {/* 검색 타입 + 입력 */}
-              <div className="flex items-center border-2 border-[#1B2B4B] rounded-lg overflow-hidden h-[38px]">
-                <select
-                  className="px-2 h-full text-[13px] bg-[#1B2B4B] text-white outline-none cursor-pointer"
-                  value={searchType}
-                  onChange={e => { setSearchType(e.target.value); setSearchInput(""); setClient(""); setSearched(false); }}
-                >
-                  <option value="거래처명">거래처명</option>
-                  <option value="기사명">기사명</option>
-                </select>
-                <input
-                  className="px-3 h-full text-[13px] w-44 outline-none"
-                  placeholder={`${searchType} 입력`}
-                  value={searchInput}
-                  onChange={e => setSearchInput(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key !== "Enter") return;
-                    if (!searchInput.trim()) return alert("검색어를 입력하세요.");
-                    setClient(searchInput.trim());
-                    setSearched(true);
-                  }}
-                />
+              {/* ★ 검색 타입 + 입력 + 드롭다운 */}
+              <div className="relative" ref={dropdownRef}>
+                <div className="flex items-center border-2 border-[#1B2B4B] rounded-lg overflow-hidden h-[38px]">
+                  <select
+                    className="px-2 h-full text-[13px] bg-[#1B2B4B] text-white outline-none cursor-pointer"
+                    value={searchType}
+                    onChange={e => { setSearchType(e.target.value); setSearchInput(""); setClient(""); setSearched(false); setDropdownOpen(false); }}
+                  >
+                    <option value="거래처명">거래처명</option>
+                    <option value="기사명">기사명</option>
+                  </select>
+                  <input
+                    ref={inputRef}
+                    className="px-3 h-full text-[13px] w-52 outline-none"
+                    placeholder={`${searchType} 입력 (자동완성)`}
+                    value={searchInput}
+                    onChange={e => {
+                      setSearchInput(e.target.value);
+                      setDropdownOpen(true);
+                      setDropdownIdx(0);
+                    }}
+                    onFocus={() => {
+                      if (searchInput.trim()) { setDropdownOpen(true); setDropdownIdx(0); }
+                    }}
+                    onKeyDown={handleInputKeyDown}
+                  />
+                </div>
+                {/* ★ 드롭다운 목록 */}
+                {dropdownOpen && dropdownOptions.length > 0 && (
+                  <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-xl max-h-[260px] overflow-y-auto">
+                    {dropdownOptions.map((name, i) => (
+                      <div
+                        key={name + i}
+                        ref={el => dropdownItemRefs.current[i] = el}
+                        className={`px-4 py-2.5 text-[13px] cursor-pointer transition ${
+                          i === dropdownIdx ? "bg-blue-50 text-blue-700 font-semibold" : "text-gray-700 hover:bg-gray-50"
+                        }`}
+                        onMouseEnter={() => setDropdownIdx(i)}
+                        onMouseDown={e => { e.preventDefault(); selectDropdownItem(name); }}
+                      >
+                        {/* ★ 검색어 하이라이트 */}
+                        {(() => {
+                          const q = searchInput.trim();
+                          if (!q) return name;
+                          const idx = name.toLowerCase().indexOf(q.toLowerCase());
+                          if (idx < 0) return name;
+                          return (
+                            <>
+                              {name.slice(0, idx)}
+                              <span className="text-blue-600 font-bold">{name.slice(idx, idx + q.length)}</span>
+                              {name.slice(idx + q.length)}
+                            </>
+                          );
+                        })()}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
+
+              {/* ★ 기간 퀵셀렉트 */}
               <div className="flex flex-col">
                 <label className="text-[12px] font-semibold text-gray-500 mb-1">시작일</label>
                 <input type="date" className="border-2 border-[#1B2B4B] rounded-lg px-2 py-1.5 text-[13px] outline-none" value={start} onChange={e => setStart(e.target.value)} />
@@ -25010,25 +25285,32 @@ function ClientSettlement({ dispatchData, clients = [], setClients }) {
                 <label className="text-[12px] font-semibold text-gray-500 mb-1">종료일</label>
                 <input type="date" className="border-2 border-[#1B2B4B] rounded-lg px-2 py-1.5 text-[13px] outline-none" value={end} onChange={e => setEnd(e.target.value)} />
               </div>
+              <div className="flex gap-1">
+                <button onClick={setThisMonth} className="px-2.5 py-1.5 rounded-lg bg-gray-100 text-gray-600 text-[12px] font-semibold hover:bg-gray-200 transition">이번달</button>
+                <button onClick={setLastMonth} className="px-2.5 py-1.5 rounded-lg bg-gray-100 text-gray-600 text-[12px] font-semibold hover:bg-gray-200 transition">지난달</button>
+                <button onClick={setThisYear} className="px-2.5 py-1.5 rounded-lg bg-gray-100 text-gray-600 text-[12px] font-semibold hover:bg-gray-200 transition">올해전체</button>
+              </div>
               <button
                 className="px-4 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition"
                 onClick={() => {
                   if (!searchInput.trim()) return alert("검색어를 입력하세요.");
                   setClient(searchInput.trim());
                   setSearched(true);
+                  setDropdownOpen(false);
                 }}
               >
                 조회
               </button>
               <button
                 className="px-3 py-2 rounded-lg bg-gray-200 text-gray-700 text-[13px] font-semibold hover:bg-gray-300 transition"
-                onClick={() => { setSearchInput(""); setClient(""); setStart(""); setEnd(""); setSearched(false); }}
+                onClick={() => { setSearchInput(""); setClient(""); setStart(""); setEnd(""); setSearched(false); setDropdownOpen(false); }}
               >
                 초기화
               </button>
               <div className="ml-auto flex gap-2">
                 <button onClick={downloadInvoiceExcel} className="px-3 py-2 rounded-lg bg-emerald-600 text-white text-[13px] font-semibold hover:bg-emerald-700 transition">엑셀</button>
                 <button onClick={savePDF} className="px-3 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition">PDF</button>
+                <button onClick={handlePrint} className="px-3 py-2 rounded-lg bg-violet-600 text-white text-[13px] font-semibold hover:bg-violet-700 transition">🖨 인쇄</button>
                 <button onClick={() => { setEditInfo({ ...cInfo }); setShowEdit(true); }} className="px-3 py-2 rounded-lg border border-[#1B2B4B] text-[#1B2B4B] text-[13px] font-semibold hover:bg-[#1B2B4B] hover:text-white transition">거래처 정보</button>
               </div>
             </div>
@@ -25047,8 +25329,28 @@ function ClientSettlement({ dispatchData, clients = [], setClients }) {
           {/* 미조회 상태 */}
           {!searched && (
             <div className="flex flex-col items-center justify-center py-20 text-gray-400">
-              <div className="text-4xl mb-3"></div>
+              <div className="text-4xl mb-3">📋</div>
               <div className="text-[15px] font-semibold">거래처명 또는 기사명을 입력 후 조회하세요.</div>
+              <div className="text-[13px] mt-1 text-gray-300">검색창에 입력하면 자동완성 목록이 표시됩니다</div>
+            </div>
+          )}
+
+          {/* ★ 월별 소계 카드 (조회 결과 위에) */}
+          {searched && monthlySubtotals.size > 0 && (
+            <div className="mb-4">
+              <div className="text-[12px] font-bold text-gray-400 mb-2 uppercase tracking-wider px-1">월별 소계</div>
+              <div className="flex gap-2 flex-wrap">
+                {Array.from(monthlySubtotals.entries())
+                  .sort(([a], [b]) => a.localeCompare(b))
+                  .map(([ym, v]) => (
+                    <div key={ym} className="bg-white rounded-xl border border-gray-200 px-4 py-3 shadow-sm min-w-[160px]">
+                      <div className="text-[13px] font-bold text-[#1B2B4B]">{ym}</div>
+                      <div className="text-[11px] text-gray-500 mt-0.5">{v.건수}건</div>
+                      <div className="text-[14px] font-extrabold text-blue-700 mt-1">{won(v.공급가액)}원</div>
+                      <div className="text-[11px] text-gray-400">세액 {won(v.세액)}원</div>
+                    </div>
+                  ))}
+              </div>
             </div>
           )}
 
@@ -25112,7 +25414,7 @@ function ClientSettlement({ dispatchData, clients = [], setClients }) {
                   </thead>
                   <tbody>
                     {mapped.length === 0 ? (
-                      <tr><td colSpan={8} className="text-center text-gray-400 py-12 text-[14px]">조회 결과가 없습니다.</td></tr>
+                      <tr><td colSpan={8} className="text-center text-gray-400 py-12 text-[14px]">조회 결과가 없습니다. (청구운임 0원인 오더는 제외됩니다)</td></tr>
                     ) : (
                       mapped.map((m, i) => (
                         <tr key={m.idx} className={i%2===0?"bg-white":"bg-gray-50/60"}>
@@ -25177,13 +25479,37 @@ function ClientSettlement({ dispatchData, clients = [], setClients }) {
           {/* 필터 바 */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mb-4">
             <div className="flex flex-wrap items-end gap-3">
+              {/* ★ 거래처 드롭다운 검색 */}
               <div className="flex flex-col">
                 <label className="text-[12px] font-semibold text-gray-500 mb-1">거래처</label>
-                <select className="border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-semibold text-[#1B2B4B] outline-none min-w-[200px]"
-                  value={selClient} onChange={e=>{setSelClient(e.target.value);clearSel();}}>
-                  <option value="">거래처 선택</option>
-                  {clientOptions8.map(v=><option key={v} value={v}>{v}</option>)}
-                </select>
+                <div className="relative" ref={arDropRef}>
+                  <input
+                    ref={arInputRef}
+                    className="border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-semibold text-[#1B2B4B] outline-none min-w-[200px]"
+                    placeholder="거래처 검색"
+                    value={arInput}
+                    onChange={e => { setArInput(e.target.value); setArDropOpen(true); setArDropIdx(0); }}
+                    onFocus={() => { setArDropOpen(true); setArDropIdx(0); }}
+                    onKeyDown={handleArKeyDown}
+                  />
+                  {arDropOpen && arOptions.length > 0 && (
+                    <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-xl max-h-[240px] overflow-y-auto">
+                      {arOptions.map((name, i) => (
+                        <div
+                          key={name + i}
+                          ref={el => arItemRefs.current[i] = el}
+                          className={`px-4 py-2.5 text-[13px] cursor-pointer transition ${
+                            i === arDropIdx ? "bg-blue-50 text-blue-700 font-semibold" : "text-gray-700 hover:bg-gray-50"
+                          }`}
+                          onMouseEnter={() => setArDropIdx(i)}
+                          onMouseDown={e => { e.preventDefault(); selectArClient(name); }}
+                        >
+                          {name}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
               <div className="flex flex-col">
                 <label className="text-[12px] font-semibold text-gray-500 mb-1">월</label>
@@ -25205,7 +25531,7 @@ function ClientSettlement({ dispatchData, clients = [], setClients }) {
                 </select>
               </div>
               <button className="px-3 py-2 rounded-lg bg-gray-200 text-gray-700 text-[13px] font-semibold hover:bg-gray-300 transition"
-                onClick={()=>{setSelClient("");setMonthFilter("all");setStatusFilter("전체");clearSel();}}>
+                onClick={()=>{setSelClient("");setArInput("");setMonthFilter("all");setStatusFilter("전체");clearSel();setArDropOpen(false);}}>
                 초기화
               </button>
               <div className="ml-auto flex gap-2">
@@ -25256,7 +25582,7 @@ function ClientSettlement({ dispatchData, clients = [], setClients }) {
               </thead>
               <tbody>
                 {!selClient ? (
-                  <tr><td colSpan={8} className="text-center text-gray-400 py-16 text-[14px]">거래처를 선택하세요.</td></tr>
+                  <tr><td colSpan={8} className="text-center text-gray-400 py-16 text-[14px]">거래처를 검색하세요.</td></tr>
                 ) : monthRows.length === 0 ? (
                   <tr><td colSpan={8} className="text-center text-gray-400 py-16 text-[14px]">표시할 데이터가 없습니다.</td></tr>
                 ) : (
@@ -25303,6 +25629,7 @@ function ClientSettlement({ dispatchData, clients = [], setClients }) {
   );
 }
 // ===================== DispatchApp.jsx (PART 8/8) — END =====================
+
 // ===================== DispatchApp.jsx (PART 9/9 — 지급관리 V5 최종본) — START =====================
 function PaymentManagement({ dispatchData = [], clients = [], drivers = [] }) {
 

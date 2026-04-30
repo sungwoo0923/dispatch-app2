@@ -793,28 +793,41 @@ useEffect(() => {
   // 🔥 하차지 거래처(places)도 clients에 병합
 useEffect(() => {
   const unsub = onSnapshot(collection(db, "places"), (snap) => {
-   const list = snap.docs.map((d) => {
-  const data = d.data();
+    const list = snap.docs.map((d) => {
+      const data = d.data();
 
-  const name =
-    data.거래처명 ||
-    data.업체명 ||
-    data.상차지명 ||
-    data.하차지명 ||
-    "";
+      const name =
+        data.거래처명 ||
+        data.업체명 ||
+        data.상차지명 ||
+        data.하차지명 ||
+        "";
 
-  const address =
-    data.주소 ||
-    data.상차지주소 ||
-    data.하차지주소 ||
-    "";
+      const address =
+        data.주소 ||
+        data.상차지주소 ||
+        data.하차지주소 ||
+        "";
 
-  return {
-    id: d.id,
-    거래처명: name,
-    주소: address,
-  };
-});
+      // ★ contacts 배열에서 대표 담당자 추출 (PC 호환)
+      const contacts = Array.isArray(data.contacts) ? data.contacts : [];
+      const primary = contacts.find(c => c.isPrimary) || contacts[0] || null;
+
+      // ★ 구형 포맷(담당자 직접 필드)도 호환
+      const managerName = primary?.name || data.담당자 || "";
+      const managerPhone = primary?.phone || data.담당자번호 || "";
+
+      return {
+        id: d.id,
+        거래처명: name,
+        주소: address,
+        담당자: managerName,
+        담당자번호: managerPhone,
+        contacts: contacts,  // ★ 전체 contacts도 보관
+        등급: data.등급 || "일반",
+        메모: data.메모 || "",
+      };
+    });
 
     setPlaces(list);
   });
@@ -1226,6 +1239,76 @@ const groupedByDate = useMemo(() => {
 
   return map;
 }, [filteredOrders]);
+  // ★ PC 거래처관리(places) 자동 동기화
+  const syncPlaceFromOrder = async (docData) => {
+    const normalizeKey = (s = "") =>
+      String(s).toLowerCase().replace(/\s+/g, "").replace(/[^\uAC00-\uD7A3a-z0-9]/g, "");
+
+    const syncOne = async (placeName, addr, manager, phone) => {
+      if (!placeName?.trim()) return;
+
+      const key = normalizeKey(placeName);
+
+      // places 컬렉션에서 동일 업체 찾기
+      const existing = places.find(
+        (p) => normalizeKey(p.거래처명) === key
+      );
+
+      if (existing) {
+        // 기존 업체: contacts 배열 업데이트
+        let contacts = Array.isArray(existing.contacts) ? [...existing.contacts] : [];
+
+        if (manager?.trim()) {
+          const sameIdx = contacts.findIndex(c => (c.name || "").trim() === manager.trim());
+          if (sameIdx >= 0) {
+            // 동일 이름 → 전화번호 최신화 + primary 이동
+            contacts = contacts.map((c, i) => ({
+              ...c,
+              phone: i === sameIdx ? (phone || c.phone) : c.phone,
+              isPrimary: i === sameIdx,
+            }));
+          } else {
+            // 새 담당자 → 추가
+            contacts = contacts.map(c => ({ ...c, isPrimary: false }));
+            contacts.push({ name: manager.trim(), phone: phone || "", isPrimary: true });
+          }
+        }
+
+        const updatePayload = {
+          업체명: placeName,
+          주소: addr || existing.주소 || "",
+          contacts: contacts,
+          updatedAt: serverTimestamp(),
+        };
+
+        // 구형 필드도 동기화
+        const primary = contacts.find(c => c.isPrimary) || contacts[0];
+        if (primary) {
+          updatePayload.담당자 = primary.name || "";
+          updatePayload.담당자번호 = primary.phone || "";
+        }
+
+        await updateDoc(doc(db, "places", existing.id), updatePayload);
+      }
+      // 기존 업체가 없으면 신규 등록은 하지 않음 (PC에서 등록된 것만 동기화)
+    };
+
+    // 상차지 동기화
+    await syncOne(
+      docData.상차지명,
+      docData.상차지주소,
+      docData.상차지담당자,
+      docData.상차지담당자번호
+    );
+
+    // 하차지 동기화
+    await syncOne(
+      docData.하차지명,
+      docData.하차지주소,
+      docData.하차지담당자,
+      docData.하차지담당자번호
+    );
+  };
 
   // --------------------------------------------------
   // 5. 저장 / 수정
@@ -1295,10 +1378,15 @@ const groupedByDate = useMemo(() => {
         _id: form._editId,
         id: form._editId,
       });
+
+      // ★ PC 거래처관리(places) 동기화
+      await syncPlaceFromOrder(docData);
+
       showToast("수정 완료!");
       setPage(prevPage);
       return;
     }
+
 
     // 🔹 신규 등록
     try {
@@ -1316,8 +1404,12 @@ const groupedByDate = useMemo(() => {
         id: ref.id,
       });
 
+      // ★ PC 거래처관리(places) 동기화
+      await syncPlaceFromOrder(docData);
+
       showToast("등록 완료!");
       setPage("list");
+
     } catch (e) {
       console.error(e);
       alert("등록 실패!");
@@ -2875,9 +2967,10 @@ function MobileSideMenu({
         {/* 메뉴 본문 */}
         <div className="flex-1 overflow-y-auto py-1">
 
-          <MenuSection title="모바일">
+          <MenuSection title="배차관리">
             <MenuItem label="등록내역" onClick={onGoList} />
             <MenuItem label="화물등록" onClick={onGoCreate} />
+            <MenuItem label="미배차현황" onClick={onGoUnassigned} />
           </MenuSection>
 
           <MenuSection title="공지 / 일정">
@@ -2886,10 +2979,9 @@ function MobileSideMenu({
             <MenuItem label="인수인계" onClick={onGoHandover} />
           </MenuSection>
 
-          <MenuSection title="현황 / 운임표">
+          <MenuSection title="매출 / 운임표">
             <MenuItem label="표준운임표" onClick={onGoFare} />
             <MenuItem label="단가표" onClick={onGoRateCard} />
-            <MenuItem label="미배차현황" onClick={onGoUnassigned} />
             <MenuItem label="매출관리" onClick={onGoSales} />
           </MenuSection>
 
@@ -4488,6 +4580,12 @@ const chooseClient = (c) => {
   update("거래처명", c.거래처명);
   update("상차지명", c.거래처명);
   update("상차지주소", c.주소 || c.상차지주소 || c.하차지주소 || "");
+
+  // ★ 담당자/연락처도 반영
+  const contacts = Array.isArray(c.contacts) ? c.contacts : [];
+  const primary = contacts.find(ct => ct.isPrimary) || contacts[0] || null;
+  update("상차지담당자", primary?.name || c.담당자 || "");
+  update("상차지담당자번호", primary?.phone || c.담당자번호 || "");
 };
 
   const [showNewDriver, setShowNewDriver] = useState(false);
@@ -4612,17 +4710,30 @@ const dropOptions = useMemo(() => {
 
 }, [clients, queryDrop]);
 
-  const pickPickup = (c) => {
+const pickPickup = (c) => {
     update("거래처명", c.거래처명 || "");
     update("상차지명", c.거래처명 || "");
     update("상차지주소", c.주소 || "");
+
+    // ★ 담당자/연락처도 반영
+    const contacts = Array.isArray(c.contacts) ? c.contacts : [];
+    const primary = contacts.find(ct => ct.isPrimary) || contacts[0] || null;
+    update("상차지담당자", primary?.name || c.담당자 || "");
+    update("상차지담당자번호", primary?.phone || c.담당자번호 || "");
+
     setQueryPickup("");
     setShowPickupList(false);
   };
-
-  const pickDrop = (c) => {
+const pickDrop = (c) => {
   update("하차지명", c.거래처명 || c.하차지명 || "");
   update("하차지주소", c.주소 || c.하차지주소 || c.상차지주소 || "");
+
+  // ★ 담당자/연락처도 반영
+  const contacts = Array.isArray(c.contacts) ? c.contacts : [];
+  const primary = contacts.find(ct => ct.isPrimary) || contacts[0] || null;
+  update("하차지담당자", primary?.name || c.담당자 || "");
+  update("하차지담당자번호", primary?.phone || c.담당자번호 || "");
+
   setQueryDrop("");
   setShowDropList(false);
 };
@@ -4851,14 +4962,12 @@ const dropOptions = useMemo(() => {
               if (found) {
   update("상차지주소", found.주소 || "");
 
-  const primary =
-    Array.isArray(found.담당자목록)
-      ? found.담당자목록.find(m => m.대표) ||
-        found.담당자목록[0]
-      : null;
+  // ★ contacts 배열 우선, 없으면 담당자 직접 필드
+  const contacts = Array.isArray(found.contacts) ? found.contacts : [];
+  const primary = contacts.find(c => c.isPrimary) || contacts[0] || null;
 
-  update("상차지담당자", primary?.이름 || "");
-  update("상차지담당자번호", primary?.번호 || "");
+  update("상차지담당자", primary?.name || found.담당자 || "");
+  update("상차지담당자번호", primary?.phone || found.담당자번호 || "");
 }
 
             }}
@@ -4955,15 +5064,14 @@ const dropOptions = useMemo(() => {
       ""
   );
 
-  const primary =
-    Array.isArray(found.담당자목록)
-      ? found.담당자목록.find(m => m.대표) ||
-        found.담당자목록[0]
-      : null;
+  // ★ contacts 배열 우선, 없으면 담당자 직접 필드
+  const contacts = Array.isArray(found.contacts) ? found.contacts : [];
+  const primary = contacts.find(c => c.isPrimary) || contacts[0] || null;
 
-  update("하차지담당자", primary?.이름 || "");
-  update("하차지담당자번호", primary?.번호 || "");
+  update("하차지담당자", primary?.name || found.담당자 || "");
+  update("하차지담당자번호", primary?.phone || found.담당자번호 || "");
 }
+
             }}
             onFocus={() => {
               if (form.하차지명) setShowDropList(true);
@@ -5070,7 +5178,7 @@ const dropOptions = useMemo(() => {
                   update("톤수", t ? `${톤수값}${t}` : 톤수값);
                 }}
               >
-                <option value="">단위</option>
+                <option value="">없음</option>
                 <option value="톤">톤</option>
                 <option value="kg">kg</option>
               </select>

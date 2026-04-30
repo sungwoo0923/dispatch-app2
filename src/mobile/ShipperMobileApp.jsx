@@ -125,7 +125,7 @@ export default function ShipperMobileApp() {
           <div className="absolute inset-0 bg-black/40" onClick={() => setShowMenu(false)} />
           <div className="absolute left-0 top-0 bottom-0 w-64 bg-white shadow-xl flex flex-col">
             <div className="px-4 py-4 border-b flex items-center justify-between bg-[#1e3a5f]">
-              <div className="text-white font-bold">S-Flow 화주</div>
+              <div className="text-white font-bold">KP-Flow 화주</div>
               <button className="text-white text-xl" onClick={() => setShowMenu(false)}>×</button>
             </div>
             <div className="flex-1 px-4 py-4 space-y-1">
@@ -152,7 +152,7 @@ export default function ShipperMobileApp() {
         <button onClick={() => setShowMenu(true)} className="text-white text-sm font-semibold">
           MENU
         </button>
-        <div className="text-white font-bold text-base">S-Flow 화주</div>
+        <div className="text-white font-bold text-base">KP-Flow 화주</div>
         <div className="w-12" />
       </div>
 
