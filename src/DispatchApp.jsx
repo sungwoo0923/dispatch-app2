@@ -1777,6 +1777,7 @@ return (
     </div>
   );
 });
+
   function DispatchManagement({
     dispatchData, drivers, clients, menu, timeOptions, tonOptions,
     addDispatch, upsertDriver, upsertClient, upsertPlace,
@@ -4818,7 +4819,7 @@ const applyCopy = (r) => {
   const detectedType = detectCargoType(rawCargo);
   const cargoBase = extractCargoBase(rawCargo);
 
-  const keep = {
+    const keep = {
     거래처명: isDateLike(r.거래처명) ? "" : (r.거래처명 || ""),
 
     // ✅ 상차지
@@ -4832,9 +4833,16 @@ const applyCopy = (r) => {
     하차지주소: dropPlace?.주소 || r.하차지주소 || "",
     하차지담당자: dropPlace?.담당자 || r.하차지담당자 || "",
     하차지담당자번호: dropPlace?.담당자번호 || r.하차지담당자번호 || "",
+
+    // ✅ 경유지 초기화 (오더복사 시 원본 경유 제거)
+    경유상차목록: [],
+    경유하차목록: [],
+    경유지_상차: [],
+    경유지_하차: [],
+
     // 기타
-    화물내용: cargoBase,        // 🔥 변경: suffix 제거된 순수값
-    화물타입: detectedType,     // 🔥 추가: 드롭다운 자동 설정
+    화물내용: cargoBase,
+    화물타입: detectedType,
     차량종류: r.차량종류 || "",
     차량톤수: r.차량톤수 || "",
     상차방법: r.상차방법 || "",
@@ -6767,21 +6775,39 @@ className={`
           취소
         </button>
 
-        <button
+                <button
           type="button"
           className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded"
           onClick={() => {
+            // 🔥 저장 전 화물내용/톤수에 타입 합치기
+            const finalList = stopList.map(s => {
+              const cargo = s.화물내용 || "";
+              const cargoType = s.화물타입 || "";
+              const tonVal = s.톤수값 || "";
+              const tonType = s.톤수타입 || "";
+
+              return {
+                ...s,
+                화물내용: cargoType && cargoType !== "없음"
+                  ? `${cargo}${cargoType}`
+                  : cargo,
+                차량톤수: tonType && tonType !== "없음"
+                  ? `${tonVal}${tonType}`
+                  : tonVal,
+              };
+            });
+
             if (stopType === "pickup") {
-              onChange("경유상차목록", stopList);
+              onChange("경유상차목록", finalList);
             } else {
-              onChange("경유하차목록", stopList);
+              onChange("경유하차목록", finalList);
             }
-            // 🔥 저장 후 팝업만 닫힘 (오더 저장 X)
             setStopPopupOpen(false);
           }}
         >
           저장
         </button>
+
       </div>
     </div>
 
@@ -7513,10 +7539,22 @@ const today = now.toISOString().slice(0, 10);
         왕복
       </span>
     )}
-    <StopBadge
-      count={(row.경유상차목록 || row.경유지_상차 || []).length}
-      list={row.경유상차목록 || row.경유지_상차 || []}
-    />
+   {(() => {
+  const safeParse = v => {
+    if (Array.isArray(v)) return v;
+    if (typeof v === "string") { try { const p = JSON.parse(v); return Array.isArray(p) ? p : []; } catch { return []; } }
+    return [];
+  };
+  const arr = [
+    ...safeParse(row.경유상차목록),
+    ...safeParse(row.경유지_상차),
+    ...safeParse(row.경유지상차),
+  ].filter(Boolean);
+  const unique = [...new Map(arr.map(s => [JSON.stringify(s), s])).values()];
+  if (unique.length === 0) return null;
+  return <StopBadge count={unique.length} list={unique} type="pickup" />;
+})()}
+
 
   </div>
 </td>
@@ -7525,10 +7563,22 @@ const today = now.toISOString().slice(0, 10);
 
     <span>{row.하차지명}</span>
 
-    <StopBadge
-      count={(row.경유하차목록 || row.경유지_하차 || []).length}
-      list={row.경유하차목록 || row.경유지_하차 || []}
-    />
+   {(() => {
+  const safeParse = v => {
+    if (Array.isArray(v)) return v;
+    if (typeof v === "string") { try { const p = JSON.parse(v); return Array.isArray(p) ? p : []; } catch { return []; } }
+    return [];
+  };
+  const arr = [
+    ...safeParse(row.경유하차목록),
+    ...safeParse(row.경유지_하차),
+    ...safeParse(row.경유지하차),
+  ].filter(Boolean);
+  const unique = [...new Map(arr.map(s => [JSON.stringify(s), s])).values()];
+  if (unique.length === 0) return null;
+  return <StopBadge count={unique.length} list={unique} type="drop" />;
+})()}
+
 
   </div>
 </td>
@@ -8437,10 +8487,14 @@ setConfirmChange(null);
           )}
         </div>
         {(form.경유상차목록||[]).filter(s=>s.업체명?.trim()).length > 0 && (
-          <span className="text-[10px] text-gray-500 font-semibold border border-gray-300 px-1.5 py-0.5 rounded">
-            경유 {(form.경유상차목록||[]).filter(s=>s.업체명?.trim()).length}곳
-          </span>
-        )}
+  <button
+    type="button"
+    onClick={() => { setStopEditType("pickup"); setStopEditOpen(true); }}
+    className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-[#1B2B4B] text-white hover:bg-[#243a60] transition"
+  >
+    경유+{(form.경유상차목록||[]).filter(s=>s.업체명?.trim()).length}
+  </button>
+)}
       </div>
       <div className="pl-4 border-l-2 border-[#1B2B4B]">
         <div className="font-bold text-[14px] text-gray-900">{form.상차지명 || "-"}</div>
@@ -8479,10 +8533,14 @@ setConfirmChange(null);
           )}
         </div>
         {(form.경유하차목록||[]).filter(s=>s.업체명?.trim()).length > 0 && (
-          <span className="text-[10px] text-gray-500 font-semibold border border-gray-300 px-1.5 py-0.5 rounded">
-            경유 {(form.경유하차목록||[]).filter(s=>s.업체명?.trim()).length}곳
-          </span>
-        )}
+  <button
+    type="button"
+    onClick={() => { setStopEditType("drop"); setStopEditOpen(true); }}
+    className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-[#1B2B4B] text-white hover:bg-[#243a60] transition"
+  >
+    경유+{(form.경유하차목록||[]).filter(s=>s.업체명?.trim()).length}
+  </button>
+)}
       </div>
       <div className="pl-4 border-l-2 border-gray-400">
         <div className="font-bold text-[14px] text-gray-900">{form.하차지명 || "-"}</div>
@@ -9172,185 +9230,119 @@ const RoundTripBadge = () => (
   </span>
 );
 
-function StopBadge({ count = 0, list = [] }) {
+function StopBadge({ count, list, type = "pickup" }) {
   const [open, setOpen] = React.useState(false);
-  if (!count) return null;
+  const [copied, setCopied] = React.useState(false);
 
-  return (
-    <span
-      className="relative ml-1 inline-flex"
-      onMouseEnter={() => setOpen(true)}
-      onMouseLeave={() => setOpen(false)}
-    >
-      {/* 뱃지 */}
-      <span className="
-        px-1.5 py-0.5
-        text-[10px] font-semibold
-        rounded-full
-        bg-indigo-100 text-indigo-700
-        border border-indigo-300
-        whitespace-nowrap
-      ">
-        경유 {count}
-      </span>
+  const validList = (list || []).filter(s => s?.업체명?.trim());
+  if (!validList.length) return null;
 
-      {/* hover 팝업 */}
-      {open && (
-        <div className="
-          absolute top-full left-0 mt-1
-          z-50
-          bg-white border rounded-md shadow-lg
-          text-xs text-gray-700
-          p-2
-          min-w-[220px]
-        ">
-          {list.map((s, i) => (
-            <div key={i} className="mb-1 last:mb-0">
-              <div className="font-semibold">
-                {i + 1}. {s.업체명 || "-"}
-              </div>
-              {s.주소 && (
-                <div className="text-gray-500">
-                  {s.주소}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-    </span>
-  );
-}
+  const label = type === "pickup" ? "상차경유" : "하차경유";
 
-function StopInlineBadge({ count = 0, list = [], type = "pickup" }) {
-  const [open, setOpen] = React.useState(false);
-  if (!count) return null;
+  function buildCopyText() {
+    return validList.map((s, i) => {
+      const lines = [`${i + 1}. ${label}지 : ${s.업체명 || "-"}`];
+      if (s.주소) lines.push(`  ${s.주소}`);
+      if (s.담당자) {
+        const tel = s.담당자번호 ? ` (${s.담당자번호})` : "";
+        lines.push(`  담당자 : ${s.담당자}${tel}`);
+      }
+      const timeVal = type === "pickup" ? s.상차시간 : s.하차시간;
+      if (timeVal) lines.push(`  ${type === "pickup" ? "상차" : "하차"}시간 : ${timeVal}`);
+      if (s.화물내용) lines.push(`  화물내용 : ${s.화물내용}`);
+      if (s.차량톤수 || s.톤수값) lines.push(`  화물톤수 : ${s.차량톤수 || s.톤수값}`);
+      return lines.join("\n");
+    }).join("\n\n");
+  }
 
-  const isPickup = type === "pickup";
+  function handleCopy() {
+    navigator.clipboard.writeText(buildCopyText()).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
 
   return (
     <>
-      {/* +N 뱃지 (클릭으로 팝업 오픈) */}
       <button
         type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          setOpen(true);
-        }}
-        className={`
-          ml-0.5 px-1.5 py-0.5
-          text-[11px] font-bold
-          rounded
-          whitespace-nowrap
-          cursor-pointer
-          transition
-          ${isPickup
-            ? "bg-blue-100 text-blue-700 border border-blue-300 hover:bg-blue-200"
-            : "bg-red-100 text-red-700 border border-red-300 hover:bg-red-200"
-          }
-        `}
+        onClick={(e) => { e.stopPropagation(); setOpen(true); }}
+        className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-[#1B2B4B] text-white whitespace-nowrap hover:bg-[#243a60] transition"
       >
-        +{count}
+        경유+{validList.length}
       </button>
 
-      {/* 클릭 팝업 */}
       {open && (
-        <div
-          className="fixed inset-0 bg-black/40 flex items-center justify-center z-[99999]"
-          onClick={() => setOpen(false)}
-        >
-          <div
-            className="bg-white rounded-2xl shadow-2xl w-[420px] max-h-[70vh] overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* 팝업 헤더 */}
-            <div className={`px-6 py-4 flex items-center justify-between ${isPickup ? "bg-blue-600" : "bg-red-500"}`}>
-              <div className="flex items-center gap-2">
-                <span className="text-white text-lg">{isPickup ? "📦" : "📍"}</span>
-                <h3 className="text-white font-bold text-[15px]">
-                  {isPickup ? "경유 상차지" : "경유 하차지"} ({count}곳)
-                </h3>
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center" onClick={() => setOpen(false)}>
+          <div className="absolute inset-0 bg-black/50" />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-[480px] max-h-[80vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="bg-[#1B2B4B] px-5 py-4 flex items-center justify-between shrink-0">
+              <div>
+                <div className="text-white font-bold text-[15px]">경유 {type === "pickup" ? "상차지" : "하차지"} ({validList.length}곳)</div>
+                <div className="text-white/50 text-[11px] mt-0.5">전체 경유지 상세 정보</div>
               </div>
-              <button
-                onClick={() => setOpen(false)}
-                className="text-white/70 hover:text-white text-xl leading-none"
-              >
-                ✕
-              </button>
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={handleCopy}
+                  className={`px-3 py-1.5 rounded-lg text-[12px] font-bold transition ${copied ? "bg-emerald-500 text-white" : "bg-white/15 text-white hover:bg-white/25"}`}>
+                  {copied ? "✓ 복사됨" : "📋 복사"}
+                </button>
+                <button type="button" onClick={() => setOpen(false)}
+                  className="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 text-white text-lg flex items-center justify-center">×</button>
+              </div>
             </div>
-
-            {/* 팝업 본문 */}
-            <div className="p-5 space-y-3 overflow-y-auto max-h-[50vh]">
-              {list.map((s, i) => (
-                <div
-                  key={i}
-                  className={`rounded-xl border-2 p-4 ${isPickup ? "border-blue-200 bg-blue-50/50" : "border-red-200 bg-red-50/50"}`}
-                >
-                  {/* 순번 + 업체명 */}
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold text-white ${isPickup ? "bg-blue-600" : "bg-red-500"}`}>
-                      {i + 1}
-                    </span>
-                    <span className="text-[14px] font-bold text-gray-900">{s.업체명 || "-"}</span>
+            <div className="overflow-y-auto flex-1 p-4 space-y-3">
+              {validList.map((s, i) => {
+                const timeVal = type === "pickup" ? s.상차시간 : s.하차시간;
+                const timeLabel = type === "pickup" ? "상차시간" : "하차시간";
+                return (
+                  <div key={i} className="bg-gray-50 border border-gray-200 rounded-xl overflow-hidden">
+                    <div className="bg-[#1B2B4B]/8 px-4 py-2 border-b border-gray-200 flex items-center gap-2">
+                      <div className="w-5 h-5 rounded-full bg-[#1B2B4B] text-white text-[10px] font-bold flex items-center justify-center shrink-0">{i + 1}</div>
+                      <span className="text-[13px] font-bold text-[#1B2B4B]">{s.업체명}</span>
+                    </div>
+                    <div className="px-4 py-3 space-y-2">
+                      {s.주소 && (
+                        <div className="flex gap-2">
+                          <span className="text-[10px] font-bold text-gray-400 w-14 shrink-0">주소</span>
+                          <span className="text-[12px] text-gray-700">{s.주소}</span>
+                        </div>
+                      )}
+                      {(s.담당자 || s.담당자번호) && (
+                        <div className="flex gap-2">
+                          <span className="text-[10px] font-bold text-gray-400 w-14 shrink-0">담당자</span>
+                          <span className="text-[12px] text-gray-700">{s.담당자}{s.담당자번호 ? ` (${s.담당자번호})` : ""}</span>
+                        </div>
+                      )}
+                      {timeVal && (
+                        <div className="flex gap-2">
+                          <span className="text-[10px] font-bold text-gray-400 w-14 shrink-0">{timeLabel}</span>
+                          <span className="text-[12px] font-semibold text-[#1B2B4B]">{timeVal}</span>
+                        </div>
+                      )}
+                      {(s.화물내용 || s.차량톤수 || s.톤수값) && (
+                        <div className="flex gap-3 pt-1 border-t border-gray-100">
+                          {s.화물내용 && (
+                            <div className="bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-center">
+                              <div className="text-[9px] text-gray-400 font-bold mb-0.5">화물내용</div>
+                              <div className="text-[13px] font-bold text-gray-800">{s.화물내용}</div>
+                            </div>
+                          )}
+                          {(s.차량톤수 || s.톤수값) && (
+                            <div className="bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-center">
+                              <div className="text-[9px] text-gray-400 font-bold mb-0.5">화물톤수</div>
+                              <div className="text-[13px] font-bold text-gray-800">{s.차량톤수 || s.톤수값}</div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
-
-                  {/* 주소 */}
-                  {s.주소 && (
-                    <div className="text-[12px] text-gray-600 mb-1.5 pl-8">
-                      {s.주소}
-                    </div>
-                  )}
-
-                  {/* 담당자 / 연락처 */}
-                  {(s.담당자 || s.담당자번호) && (
-                    <div className="text-[12px] text-gray-500 pl-8">
-                      {s.담당자 && <span className="font-semibold text-gray-700">{s.담당자}</span>}
-                      {s.담당자번호 && <span className="ml-1.5 text-gray-500">({s.담당자번호})</span>}
-                    </div>
-                  )}
-
-                  {/* 화물/톤수/시간 (경유 팝업에서 입력한 추가 정보) */}
-                  {(s.화물내용 || s.차량톤수 || s.상차시간 || s.하차시간) && (
-                    <div className="mt-2 pl-8 flex flex-wrap gap-2">
-                      {s.화물내용 && (
-                        <span className="px-2 py-0.5 rounded-full bg-white border border-gray-200 text-[11px] text-gray-600">
-                          화물: {s.화물내용}{s.화물타입 || ""}
-                        </span>
-                      )}
-                      {s.차량톤수 && (
-                        <span className="px-2 py-0.5 rounded-full bg-white border border-gray-200 text-[11px] text-gray-600">
-                          톤수: {s.차량톤수}
-                        </span>
-                      )}
-                      {s.상차시간 && (
-                        <span className="px-2 py-0.5 rounded-full bg-white border border-gray-200 text-[11px] text-gray-600">
-                          상차: {s.상차시간}
-                        </span>
-                      )}
-                      {s.하차시간 && (
-                        <span className="px-2 py-0.5 rounded-full bg-white border border-gray-200 text-[11px] text-gray-600">
-                          하차: {s.하차시간}
-                        </span>
-                      )}
-                    </div>
-                  )}
-
-                  {/* 메모 */}
-                  {s.메모 && (
-                    <div className="mt-2 pl-8 text-[11px] text-gray-500 italic">
-                      {s.메모}
-                    </div>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
-
-            {/* 팝업 하단 */}
-            <div className="px-5 py-4 border-t border-gray-100 bg-gray-50">
-              <button
-                onClick={() => setOpen(false)}
-                className="w-full py-2.5 rounded-xl bg-gray-200 hover:bg-gray-300 text-[#1B2B4B] text-[13px] font-bold transition"
-              >
+            <div className="px-4 py-3 border-t border-gray-100 bg-gray-50 shrink-0">
+              <button type="button" onClick={() => setOpen(false)}
+                className="w-full py-2 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition">
                 닫기
               </button>
             </div>
@@ -9360,7 +9352,555 @@ function StopInlineBadge({ count = 0, list = [], type = "pickup" }) {
     </>
   );
 }
+function StopInlineBadge({ count = 0, list = [], type = "pickup", onEdit, editable = false }) {
+  const [open, setOpen] = React.useState(false);
+  const [editMode, setEditMode] = React.useState(false);
+  const [editList, setEditList] = React.useState([]);
+  const [copied, setCopied] = React.useState(false);
 
+  if (!count) return null;
+  const isPickup = type === "pickup";
+  const label = isPickup ? "상차경유지" : "하차경유지";
+
+  /* ── 복사 텍스트 생성 ── */
+  const buildCopyText = () => {
+    return list.map((s, i) => {
+      const lines = [`${i + 1}. ${label} : ${s.업체명 || "-"}`];
+      if (s.주소) lines.push(`주소 : ${s.주소}`);
+      if (s.담당자 || s.담당자번호) {
+        let t = "담당자 : " + (s.담당자 || "");
+        if (s.담당자번호) t += ` (${s.담당자번호})`;
+        lines.push(t);
+      }
+      if (s.상차시간) lines.push(`상차시간 : ${s.상차시간}`);
+      if (s.하차시간) lines.push(`하차시간 : ${s.하차시간}`);
+      const cargo = (() => {
+        const raw = s.화물내용 || "";
+        if (/파레트|파렛트|박스|통/.test(raw)) return raw;
+        const qty = raw || s.화물수량 || "";
+        const tp = s.화물타입 || "";
+        if (!qty) return "";
+        return tp && tp !== "없음" ? `${qty}${tp}` : qty;
+      })();
+      if (cargo) lines.push(`화물내용 : ${cargo}`);
+      const ton = (() => {
+        const raw = s.차량톤수 || "";
+        if (/톤|kg/.test(raw)) return raw;
+        const val = s.톤수값 || raw || "";
+        const tp = s.톤수타입 || "";
+        if (!val) return "";
+        return tp && tp !== "없음" ? `${val}${tp}` : val;
+      })();
+      if (ton) lines.push(`화물톤수 : ${ton}`);
+      if (s.메모) lines.push(`메모 : ${s.메모}`);
+      return lines.join("\n");
+    }).join("\n\n");
+  };
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(buildCopyText());
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch { /* fallback */ }
+  };
+
+  const openPopup = (e) => {
+    e.stopPropagation();
+    setEditList(JSON.parse(JSON.stringify(list)));
+    setEditMode(false);
+    setOpen(true);
+  };
+
+  const handleSave = () => {
+    if (onEdit) onEdit(editList);
+    setEditMode(false);
+  };
+
+  return (
+    <>
+      {/* ── +N 버튼 ── */}
+      <button onClick={openPopup}
+        className="ml-1 px-1.5 py-0.5 text-[11px] font-bold rounded
+          bg-gray-100 text-gray-700 border border-gray-300
+          hover:bg-gray-200 cursor-pointer whitespace-nowrap">
+        +{count}
+      </button>
+
+      {/* ── 팝업 모달 ── */}
+      {open && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[99999]"
+          onClick={() => setOpen(false)}
+          onKeyDown={e => { if (e.key === "Enter") e.stopPropagation(); }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-[460px] max-h-[75vh] overflow-hidden"
+            onClick={e => e.stopPropagation()}>
+
+            {/* ── 헤더 ── */}
+            <div className="px-6 py-4 flex items-center justify-between bg-[#1B2B4B]">
+              <h3 className="text-white font-bold text-[16px]">
+                {label} ({count}곳)
+              </h3>
+              <button onClick={() => setOpen(false)}
+                className="text-white/70 hover:text-white text-xl leading-none">X</button>
+            </div>
+
+            {/* ── 본문 ── */}
+            <div className="p-5 space-y-4 overflow-y-auto max-h-[50vh]">
+              {(editMode ? editList : list).map((s, i) => (
+                <div key={i}
+                  className="rounded-xl border border-gray-200 p-5 bg-gray-50">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="w-7 h-7 rounded-full flex items-center justify-center
+                      text-[12px] font-bold text-white bg-[#1B2B4B]">{i + 1}</span>
+                    {editMode ? (
+                      <input value={editList[i]?.업체명 || ""}
+                        onChange={e => {
+                          const next = [...editList];
+                          next[i] = { ...next[i], 업체명: e.target.value };
+                          setEditList(next);
+                        }}
+                        className="flex-1 text-[15px] font-bold text-gray-900 border-b
+                          border-gray-300 bg-transparent outline-none px-1 py-0.5" />
+                    ) : (
+                      <span className="text-[15px] font-bold text-gray-900">
+                        {s.업체명 || "-"}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* 주소 */}
+                  {editMode ? (
+                    <input value={editList[i]?.주소 || ""}
+                      onChange={e => {
+                        const next = [...editList];
+                        next[i] = { ...next[i], 주소: e.target.value };
+                        setEditList(next);
+                      }}
+                      className="w-full text-[14px] text-gray-700 border-b border-gray-200
+                        bg-transparent outline-none mb-2 px-1 py-0.5" />
+                  ) : (
+                    s.주소 && <div className="text-[14px] text-gray-700 mb-2">{s.주소}</div>
+                  )}
+
+                  {/* 담당자 */}
+                  {editMode ? (
+                    <div className="flex gap-2 mb-2">
+                      <input placeholder="담당자"
+                        value={editList[i]?.담당자 || ""}
+                        onChange={e => {
+                          const next = [...editList];
+                          next[i] = { ...next[i], 담당자: e.target.value };
+                          setEditList(next);
+                        }}
+                        className="flex-1 text-[13px] border-b border-gray-200 bg-transparent
+                          outline-none px-1 py-0.5" />
+                      <input placeholder="전화번호"
+                        value={editList[i]?.담당자번호 || ""}
+                        onChange={e => {
+                          const next = [...editList];
+                          next[i] = { ...next[i], 담당자번호: e.target.value };
+                          setEditList(next);
+                        }}
+                        className="flex-1 text-[13px] border-b border-gray-200 bg-transparent
+                          outline-none px-1 py-0.5" />
+                    </div>
+                  ) : (
+                    (s.담당자 || s.담당자번호) && (
+                      <div className="text-[13px] text-gray-600 mb-2">
+                        담당자 : {s.담당자 || "-"}
+                        {s.담당자번호 && ` (${s.담당자번호})`}
+                      </div>
+                    )
+                  )}
+
+                  {/* 시간 / 화물 / 톤수 */}
+                  {editMode ? (
+                    <div className="grid grid-cols-2 gap-2 mt-2">
+                      <input placeholder="상차시간"
+                        value={editList[i]?.상차시간 || ""}
+                        onChange={e => {
+                          const next = [...editList];
+                          next[i] = { ...next[i], 상차시간: e.target.value };
+                          setEditList(next);
+                        }}
+                        className="text-[13px] border-b border-gray-200 bg-transparent
+                          outline-none px-1 py-0.5" />
+                      <input placeholder="하차시간"
+                        value={editList[i]?.하차시간 || ""}
+                        onChange={e => {
+                          const next = [...editList];
+                          next[i] = { ...next[i], 하차시간: e.target.value };
+                          setEditList(next);
+                        }}
+                        className="text-[13px] border-b border-gray-200 bg-transparent
+                          outline-none px-1 py-0.5" />
+                      <input placeholder="화물내용"
+                        value={editList[i]?.화물내용 || ""}
+                        onChange={e => {
+                          const next = [...editList];
+                          next[i] = { ...next[i], 화물내용: e.target.value };
+                          setEditList(next);
+                        }}
+                        className="text-[13px] border-b border-gray-200 bg-transparent
+                          outline-none px-1 py-0.5" />
+                      <input placeholder="차량톤수"
+                        value={editList[i]?.차량톤수 || ""}
+                        onChange={e => {
+                          const next = [...editList];
+                          next[i] = { ...next[i], 차량톤수: e.target.value };
+                          setEditList(next);
+                        }}
+                        className="text-[13px] border-b border-gray-200 bg-transparent
+                          outline-none px-1 py-0.5" />
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {s.상차시간 && (
+                        <span className="px-2 py-0.5 rounded-full bg-white border
+                          border-gray-200 text-[12px] text-gray-600">
+                          상차시간 : {s.상차시간}
+                        </span>
+                      )}
+                      {s.하차시간 && (
+                        <span className="px-2 py-0.5 rounded-full bg-white border
+                          border-gray-200 text-[12px] text-gray-600">
+                          하차시간 : {s.하차시간}
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {s.메모 && !editMode && (
+                    <div className="mt-2 text-[12px] text-gray-500">메모 : {s.메모}</div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* ── 하단 버튼 영역 ── */}
+            <div className="px-5 py-4 border-t border-gray-100 bg-gray-50
+              flex items-center gap-3">
+              <button onClick={handleCopy}
+                className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60]
+                  text-white text-[13px] font-bold">
+                {copied ? "복사 완료" : "내용 복사"}
+              </button>
+              {editable && !editMode && (
+                <button onClick={() => setEditMode(true)}
+                  className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600
+                    text-white text-[13px] font-bold">수정</button>
+              )}
+              {editable && editMode && (
+                <>
+                  <button onClick={handleSave}
+                    className="flex-1 py-2.5 rounded-xl bg-green-600 hover:bg-green-700
+                      text-white text-[13px] font-bold">저장</button>
+                  <button onClick={() => setEditMode(false)}
+                    className="flex-1 py-2.5 rounded-xl bg-gray-400 hover:bg-gray-500
+                      text-white text-[13px] font-bold">수정취소</button>
+                </>
+              )}
+              <button onClick={() => setOpen(false)}
+                className="flex-1 py-2.5 rounded-xl bg-gray-200 hover:bg-gray-300
+                  text-[#1B2B4B] text-[13px] font-bold">닫기</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+// ===================== StopEditModal (경유지 수정 팝업) =====================
+function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], timeOptions = [] }) {
+  const [editList, setEditList] = React.useState([]);
+  const [editingIdx, setEditingIdx] = React.useState(null);
+  const [tempEdit, setTempEdit] = React.useState(null);
+  const [placeOpts, setPlaceOpts] = React.useState([]);
+  const [showDrop, setShowDrop] = React.useState(false);
+  const [saved, setSaved] = React.useState(false);
+
+  React.useEffect(() => {
+    if (open) {
+      setEditList((list || []).filter(s => s?.업체명?.trim()));
+      setEditingIdx(null);
+      setTempEdit(null);
+    }
+  }, [open, list]);
+
+  if (!open) return null;
+
+  const label = type === "pickup" ? "상차" : "하차";
+  const timeKey = type === "pickup" ? "상차시간" : "하차시간";
+
+  function filterPlaces(q) {
+    if (!q.trim()) return [];
+    const lq = q.toLowerCase();
+    return (placeRows || [])
+      .filter(p => (p.업체명 || "").toLowerCase().includes(lq))
+      .slice(0, 8);
+  }
+
+  function startEdit(idx) {
+    setEditingIdx(idx);
+    setTempEdit({ ...editList[idx] });
+    setPlaceOpts([]);
+    setShowDrop(false);
+  }
+
+  function cancelEdit() {
+    setEditingIdx(null);
+    setTempEdit(null);
+  }
+
+  function saveEdit(idx) {
+    const next = [...editList];
+    next[idx] = { ...tempEdit };
+    setEditList(next);
+    setEditingIdx(null);
+    setTempEdit(null);
+  }
+
+  function handleSaveAll() {
+    onSave(editList);
+    setSaved(true);
+    setTimeout(() => { setSaved(false); onClose(); }, 800);
+  }
+
+  const localTimes = timeOptions.length
+    ? timeOptions
+    : ["즉시","오전 6시","오전 7시","오전 8시","오전 9시","오전 10시","오전 11시","오후 12시","오후 1시","오후 2시","오후 3시","오후 4시","오후 5시","오후 6시","오후 7시","오후 8시"];
+
+  return (
+    <div className="fixed inset-0 z-[99999] flex items-center justify-center" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/50" />
+      <div
+        className="relative bg-white rounded-2xl shadow-2xl w-[520px] max-h-[85vh] flex flex-col overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* 헤더 */}
+        <div className="bg-[#1B2B4B] px-5 py-4 flex items-center justify-between shrink-0">
+          <div>
+            <div className="text-white font-bold text-[15px]">
+              경유 {label}지 수정 ({editList.length}곳)
+            </div>
+            <div className="text-white/50 text-[11px] mt-0.5">수정 후 저장하세요</div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 text-white text-lg flex items-center justify-center"
+          >×</button>
+        </div>
+
+        {/* 목록 */}
+        <div className="overflow-y-auto flex-1 p-4 space-y-3">
+          {editList.map((s, i) => {
+            const isEditing = editingIdx === i;
+            const timeVal = s[timeKey] || "";
+            return (
+              <div key={i} className="border border-gray-200 rounded-xl overflow-hidden">
+                {/* 경유지 번호 헤더 */}
+                <div className="bg-[#1B2B4B]/8 border-b border-gray-200 px-4 py-2.5 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-5 h-5 rounded-full bg-[#1B2B4B] text-white text-[10px] font-bold flex items-center justify-center">
+                      {i + 1}
+                    </div>
+                    <span className="text-[13px] font-bold text-[#1B2B4B]">{s.업체명}</span>
+                  </div>
+                  {!isEditing ? (
+                    <button
+                      type="button"
+                      onClick={() => startEdit(i)}
+                      className="px-3 py-1 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-bold hover:bg-[#243a60] transition"
+                    >
+                      수정
+                    </button>
+                  ) : (
+                    <div className="flex gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => cancelEdit()}
+                        className="px-2.5 py-1 rounded-lg border border-gray-300 text-gray-600 text-[11px] font-bold hover:bg-gray-50 transition"
+                      >
+                        수정취소
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => saveEdit(i)}
+                        className="px-2.5 py-1 rounded-lg bg-emerald-600 text-white text-[11px] font-bold hover:bg-emerald-700 transition"
+                      >
+                        저장
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* 뷰 모드 */}
+                {!isEditing && (
+                  <div className="px-4 py-3 space-y-1.5 bg-white">
+                    {s.주소 && (
+                      <div className="flex gap-2">
+                        <span className="text-[10px] font-bold text-gray-400 w-14 shrink-0">주소</span>
+                        <span className="text-[12px] text-gray-700">{s.주소}</span>
+                      </div>
+                    )}
+                    {(s.담당자 || s.담당자번호) && (
+                      <div className="flex gap-2">
+                        <span className="text-[10px] font-bold text-gray-400 w-14 shrink-0">담당자</span>
+                        <span className="text-[12px] text-gray-700">
+                          {s.담당자}{s.담당자번호 ? ` (${s.담당자번호})` : ""}
+                        </span>
+                      </div>
+                    )}
+                    {timeVal && (
+                      <div className="flex gap-2">
+                        <span className="text-[10px] font-bold text-gray-400 w-14 shrink-0">{label}시간</span>
+                        <span className="text-[12px] font-semibold text-[#1B2B4B]">{timeVal}</span>
+                      </div>
+                    )}
+                    {(s.화물내용 || s.차량톤수) && (
+                      <div className="flex gap-2">
+                        <span className="text-[10px] font-bold text-gray-400 w-14 shrink-0">화물</span>
+                        <span className="text-[12px] text-gray-700">
+                          {s.화물내용}{s.차량톤수 ? ` / ${s.차량톤수}` : ""}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* 수정 모드 */}
+                {isEditing && tempEdit && (
+                  <div className="px-4 py-3 bg-blue-50/50 space-y-2.5">
+                    {/* 업체명 (자동완성) */}
+                    <div className="relative">
+                      <label className="text-[10px] font-bold text-gray-500 block mb-0.5">업체명</label>
+                      <input
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
+                        value={tempEdit.업체명 || ""}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setTempEdit(p => ({ ...p, 업체명: v }));
+                          const opts = filterPlaces(v);
+                          setPlaceOpts(opts);
+                          setShowDrop(opts.length > 0 && v.trim() !== "");
+                        }}
+                        onBlur={() => setTimeout(() => setShowDrop(false), 200)}
+                      />
+                      {showDrop && placeOpts.length > 0 && (
+                        <div className="absolute z-50 top-full left-0 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-40 overflow-auto">
+                          {placeOpts.map((p, pi) => (
+                            <div
+                              key={pi}
+                              className="px-3 py-2 cursor-pointer hover:bg-blue-50"
+                              onMouseDown={() => {
+                                setTempEdit(prev => ({
+                                  ...prev,
+                                  업체명: p.업체명,
+                                  주소: p.주소 || "",
+                                  담당자: p.담당자 || "",
+                                  담당자번호: p.담당자번호 || "",
+                                }));
+                                setShowDrop(false);
+                              }}
+                            >
+                              <div className="text-[12px] font-bold text-gray-800">{p.업체명}</div>
+                              {p.주소 && <div className="text-[10px] text-gray-500">{p.주소}</div>}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 주소 */}
+                    <div>
+                      <label className="text-[10px] font-bold text-gray-500 block mb-0.5">주소</label>
+                      <input
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
+                        value={tempEdit.주소 || ""}
+                        onChange={(e) => setTempEdit(p => ({ ...p, 주소: e.target.value }))}
+                      />
+                    </div>
+
+                    {/* 담당자 / 연락처 */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[10px] font-bold text-gray-500 block mb-0.5">담당자</label>
+                        <input
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
+                          value={tempEdit.담당자 || ""}
+                          onChange={(e) => setTempEdit(p => ({ ...p, 담당자: e.target.value }))}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-gray-500 block mb-0.5">연락처</label>
+                        <input
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
+                          value={tempEdit.담당자번호 || ""}
+                          onChange={(e) => setTempEdit(p => ({ ...p, 담당자번호: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+
+                    {/* 시간 */}
+                    <div>
+                      <label className="text-[10px] font-bold text-gray-500 block mb-0.5">{label}시간</label>
+                      <select
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
+                        value={tempEdit[timeKey] || ""}
+                        onChange={(e) => setTempEdit(p => ({ ...p, [timeKey]: e.target.value }))}
+                      >
+                        <option value="">시간 선택</option>
+                        {localTimes.map(t => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                    </div>
+
+                    {/* 화물내용 / 톤수 */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[10px] font-bold text-gray-500 block mb-0.5">화물내용</label>
+                        <input
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
+                          value={tempEdit.화물내용 || ""}
+                          onChange={(e) => setTempEdit(p => ({ ...p, 화물내용: e.target.value }))}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-gray-500 block mb-0.5">화물톤수</label>
+                        <input
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
+                          value={tempEdit.차량톤수 || ""}
+                          onChange={(e) => setTempEdit(p => ({ ...p, 차량톤수: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* 하단 저장 */}
+        <div className="px-4 py-3 border-t border-gray-100 bg-gray-50 shrink-0">
+          <button
+            type="button"
+            onClick={handleSaveAll}
+            className={`w-full py-2.5 rounded-xl text-[13px] font-bold transition ${
+              saved
+                ? "bg-emerald-500 text-white"
+                : "bg-[#1B2B4B] text-white hover:bg-[#243a60]"
+            }`}
+          >
+            {saved ? "✓ 저장 완료" : "전체 저장"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+// ===================== /StopEditModal =====================
 function DeliveryStatusBadge({ row, onConfirm }) {
 
   const status = row.업체전달상태 || "미전달";
@@ -9859,50 +10399,96 @@ const DRIVER_NOTICE = isBanchan
     r.하차지담당자번호
   );
 
-  // 경유지 텍스트 생성 (driver 모드)
+    // 경유지 안전 파싱
+const _safeStops = (v) => {
+  if (Array.isArray(v) && v.length > 0) return v;
+  if (v && typeof v === "object" && !Array.isArray(v)) {
+    const keys = Object.keys(v);
+    if (keys.length > 0 && keys.every(k => /^\d+$/.test(k))) {
+      return keys.sort((a,b) => Number(a) - Number(b)).map(k => v[k]);
+    }
+  }
+  return [];
+};
+
+// 화물내용 조합 (타입이 "없음"이거나 없으면 숫자만)
+const _cargoText = (s) => {
+  // 화물내용 자체에 이미 단위가 붙어있으면 그대로 사용
+  const raw = s.화물내용 || "";
+  if (/파레트|파렛트|박스|통/.test(raw)) return raw;
+
+  const qty = raw || s.화물수량 || "";
+  const type = s.화물타입 || "";
+  if (!qty) return "";
+  return type && type !== "없음" && type !== "" ? `${qty}${type}` : qty;
+};
+
+const _tonText = (s) => {
+  // 차량톤수에 이미 단위가 붙어있으면 그대로 사용
+  const raw = s.차량톤수 || "";
+  if (/톤|kg/.test(raw)) return raw;
+
+  const val = s.톤수값 || raw || "";
+  const type = s.톤수타입 || "";
+  if (!val) return "";
+  return type && type !== "없음" && type !== "" ? `${val}${type}` : val;
+};
+
 const pickupStopsD = [
-  ...(Array.isArray(r.경유상차목록) ? r.경유상차목록 : []),
-  ...(Array.isArray(r.경유지_상차) ? r.경유지_상차 : []),
+  ..._safeStops(r.경유상차목록),
+  ..._safeStops(r.경유지_상차),
 ].filter(s => s?.업체명?.trim());
 
 const dropStopsD = [
-  ...(Array.isArray(r.경유하차목록) ? r.경유하차목록 : []),
-  ...(Array.isArray(r.경유지_하차) ? r.경유지_하차 : []),
+  ..._safeStops(r.경유하차목록),
+  ..._safeStops(r.경유지_하차),
 ].filter(s => s?.업체명?.trim());
 
-const pickupStopsTextD = pickupStopsD.length > 0
-  ? pickupStopsD.map((s, i) => `
-[경유상차지 ${i+1}] ${s.업체명 || "-"}
-${s.주소 || "-"}${s.담당자 ? `\n담당자 : ${s.담당자}${s.담당자번호 ? ` (${formatPhone(s.담당자번호)})` : ""}` : ""}`).join("")
+const hasPickupStopsD = pickupStopsD.length > 0;
+const hasDropStopsD = dropStopsD.length > 0;
+
+// 상차 텍스트 (경유 있으면 번호 붙임)
+const pickupMainNumD = hasPickupStopsD ? "1." : "";
+const pickupStopsTextD = hasPickupStopsD
+  ? pickupStopsD.map((s, i) => {
+    const cargo = _cargoText(s);
+    const ton = _tonText(s);
+    return `${i + 2}.상차경유지 : ${s.업체명 || "-"}
+${s.주소 || "-"}${s.담당자 ? `\n담당자 : ${s.담당자}${s.담당자번호 ? ` (${formatPhone(s.담당자번호)})` : ""}` : ""}${s.상차시간 ? `\n상차시간 : ${s.상차시간}` : ""}${cargo ? `\n화물내용 : ${cargo}` : ""}${ton ? `\n화물톤수 : ${ton}` : ""}`;
+  }).join("\n")
   : "";
 
-const dropStopsTextD = dropStopsD.length > 0
-  ? dropStopsD.map((s, i) => `
-[경유하차지 ${i+1}] ${s.업체명 || "-"}
-${s.주소 || "-"}${s.담당자 ? `\n담당자 : ${s.담당자}${s.담당자번호 ? ` (${formatPhone(s.담당자번호)})` : ""}` : ""}`).join("")
+// 하차 텍스트
+const dropMainNumD = hasDropStopsD ? "1." : "";
+const dropStopsTextD = hasDropStopsD
+  ? dropStopsD.map((s, i) => {
+    const cargo = _cargoText(s);
+    const ton = _tonText(s);
+    return `${i + 2}.하차경유지 : ${s.업체명 || "-"}
+${s.주소 || "-"}${s.담당자 ? `\n담당자 : ${s.담당자}${s.담당자번호 ? ` (${formatPhone(s.담당자번호)})` : ""}` : ""}${s.하차시간 ? `\n하차시간 : ${s.하차시간}` : ""}${cargo ? `\n화물내용 : ${cargo}` : ""}${ton ? `\n화물톤수 : ${ton}` : ""}`;
+  }).join("\n")
   : "";
-
 return `${DRIVER_NOTICE}
 
 ${dateNotice}${dateText}
 
-상차지 : ${r.상차지명 || "-"}
+${pickupMainNumD}상차지 : ${r.상차지명 || "-"}
 ${r.상차지주소 || "-"}${(() => {
   const line = buildContactLine(r.상차지담당자, r.상차지담당자번호);
   return line ? `\n${line}` : "";
 })()}
 상차시간 : ${r.상차시간 || "즉시"}${r.상차시간기준 ? ` (${r.상차시간기준})` : ""}
-상차방법 : ${r.상차방법 || "-"}${pickupStopsTextD}
+상차방법 : ${r.상차방법 || "-"}${pickupStopsTextD ? `\n\n${pickupStopsTextD}` : ""}
 
-하차지 : ${r.하차지명 || "-"}
+${dropMainNumD}하차지 : ${r.하차지명 || "-"}
 ${r.하차지주소 || "-"}${(() => {
   const line = buildContactLine(r.하차지담당자, r.하차지담당자번호);
   return line ? `\n${line}` : "";
 })()}
 하차시간 : ${dropTimeText}${r.하차시간기준 ? ` (${r.하차시간기준})` : ""}
-하차방법 : ${r.하차방법 || "-"}${dropStopsTextD}
+하차방법 : ${r.하차방법 || "-"}${dropStopsTextD ? `\n\n${dropStopsTextD}` : ""}
 
-중량 : ${r.차량톤수 || "-"}${r.화물내용 ? ` / ${r.화물내용}` : ""} ${r.차량종류 || ""}${driverNoteText}`;
+중량 : ${r.차량톤수 || "-"}${r.화물내용 ? ` / ${r.화물내용}` : ""} ${r.차량종류 || r.차종}${driverNoteText}`.replace(/\n{2,}/g, "\n\n").trim();
 }
 
 /* ================= FULL ================= */
@@ -9943,40 +10529,80 @@ const dropContact = buildContactLine(
   r.하차지담당자번호
 );
 
-// 경유상차지 텍스트 생성
+const _safeStopsF = (v) => {
+  if (Array.isArray(v) && v.length > 0) return v;
+  if (v && typeof v === "object" && !Array.isArray(v)) {
+    const keys = Object.keys(v);
+    if (keys.length > 0 && keys.every(k => /^\d+$/.test(k))) {
+      return keys.sort((a,b) => Number(a) - Number(b)).map(k => v[k]);
+    }
+  }
+  return [];
+};
+
+const _cargoTextF = (s) => {
+  const raw = s.화물내용 || "";
+  if (/파레트|파렛트|박스|통/.test(raw)) return raw;
+  const qty = raw || s.화물수량 || "";
+  const type = s.화물타입 || "";
+  if (!qty) return "";
+  return type && type !== "없음" && type !== "" ? `${qty}${type}` : qty;
+};
+
+const _tonTextF = (s) => {
+  const raw = s.차량톤수 || "";
+  if (/톤|kg/.test(raw)) return raw;
+  const val = s.톤수값 || raw || "";
+  const type = s.톤수타입 || "";
+  if (!val) return "";
+  return type && type !== "없음" && type !== "" ? `${val}${type}` : val;
+};
+
+
 const pickupStops = [
-  ...(Array.isArray(r.경유상차목록) ? r.경유상차목록 : []),
-  ...(Array.isArray(r.경유지_상차) ? r.경유지_상차 : []),
+  ..._safeStopsF(r.경유상차목록),
+  ..._safeStopsF(r.경유지_상차),
 ].filter(s => s?.업체명?.trim());
 
 const dropStops = [
-  ...(Array.isArray(r.경유하차목록) ? r.경유하차목록 : []),
-  ...(Array.isArray(r.경유지_하차) ? r.경유지_하차 : []),
+  ..._safeStopsF(r.경유하차목록),
+  ..._safeStopsF(r.경유지_하차),
 ].filter(s => s?.업체명?.trim());
 
-const pickupStopsText = pickupStops.length > 0
-  ? pickupStops.map((s, i) => `
-[경유상차지 ${i+1}] ${s.업체명 || "-"}
-${s.주소 || "-"}${s.담당자 ? `\n담당자 : ${s.담당자}${s.담당자번호 ? ` (${formatPhone(s.담당자번호)})` : ""}` : ""}`).join("")
+const hasPickupStops = pickupStops.length > 0;
+const hasDropStops = dropStops.length > 0;
+
+const pickupMainNum = hasPickupStops ? "1." : "";
+const pickupStopsText = hasPickupStops
+  ? pickupStops.map((s, i) => {
+    const cargo = _cargoTextF(s);
+    const ton = _tonTextF(s);
+    return `${i + 2}.상차경유지 : ${s.업체명 || "-"}
+${s.주소 || "-"}${s.담당자 ? `\n담당자 : ${s.담당자}${s.담당자번호 ? ` (${formatPhone(s.담당자번호)})` : ""}` : ""}${s.상차시간 ? `\n상차시간 : ${s.상차시간}` : ""}${cargo ? `\n화물내용 : ${cargo}` : ""}${ton ? `\n화물톤수 : ${ton}` : ""}`;
+  }).join("\n")
   : "";
 
-const dropStopsText = dropStops.length > 0
-  ? dropStops.map((s, i) => `
-[경유하차지 ${i+1}] ${s.업체명 || "-"}
-${s.주소 || "-"}${s.담당자 ? `\n담당자 : ${s.담당자}${s.담당자번호 ? ` (${formatPhone(s.담당자번호)})` : ""}` : ""}`).join("")
+const dropMainNum = hasDropStops ? "1." : "";
+const dropStopsText = hasDropStops
+  ? dropStops.map((s, i) => {
+    const cargo = _cargoTextF(s);
+    const ton = _tonTextF(s);
+    return `${i + 2}.하차경유지 : ${s.업체명 || "-"}
+${s.주소 || "-"}${s.담당자 ? `\n담당자 : ${s.담당자}${s.담당자번호 ? ` (${formatPhone(s.담당자번호)})` : ""}` : ""}${s.하차시간 ? `\n하차시간 : ${s.하차시간}` : ""}${cargo ? `\n화물내용 : ${cargo}` : ""}${ton ? `\n화물톤수 : ${ton}` : ""}`;
+  }).join("\n")
   : "";
 
 return `${dateNotice}${r.상차일 || ""} ${yoil}
 
-상차지 : ${r.상차지명 || "-"}
+${pickupMainNum}상차지 : ${r.상차지명 || "-"}
 ${r.상차지주소 || "-"}${pickupContact ? `\n${pickupContact}` : ""}
 상차시간 : ${pickupTime}${r.상차시간기준 ? ` (${r.상차시간기준})` : ""}
-상차방법 : ${r.상차방법 || "-"}${pickupStopsText}
+상차방법 : ${r.상차방법 || "-"}${pickupStopsText ? `\n\n${pickupStopsText}` : ""}
 
-하차지 : ${r.하차지명 || "-"}
+${dropMainNum}하차지 : ${r.하차지명 || "-"}
 ${r.하차지주소 || "-"}${dropContact ? `\n${dropContact}` : ""}
 하차시간 : ${dropTimeText}${r.하차시간기준 ? ` (${r.하차시간기준})` : ""}
-하차방법 : ${r.하차방법 || "-"}${dropStopsText}
+하차방법 : ${r.하차방법 || "-"}${dropStopsText ? `\n\n${dropStopsText}` : ""}
 
 중량 : ${r.차량톤수 || "-"}${r.화물내용 ? ` / ${r.화물내용}` : ""} ${r.차량종류 || ""}
 
@@ -10284,7 +10910,8 @@ setFarePanelOpen(true);
     });
     setCopyFarePanelOpen(true);
   };
-
+const [editStopOpen, setEditStopOpen] = React.useState(false);
+const [editStopType, setEditStopType] = React.useState("pickup");
   const [editPopupOpen, setEditPopupOpen] = React.useState(false);
   const [copyPanelOpen, setCopyPanelOpen] = React.useState(false);
 const [copyTarget, setCopyTarget] = React.useState(null);
@@ -12003,26 +12630,11 @@ ${savedHighlightIds.has(r._id) ? "row-highlight" : ""}
                     {renderAddrCell("상차지주소", r.상차지주소, r._id)}
                   </td>
 
-                 <td className={cell}>
+                                  <td className={cell}>
   <div className="inline-flex items-center gap-0 flex-wrap">
     <span>{r.하차지명}</span>
 
 {(() => {
-  // 🔥 디버그: 첫 번째 행만 출력 (콘솔 폭주 방지)
-  if (idx === 0) {
-    console.log("🔍 PART4 경유 디버그 (첫 번째 행)", {
-      "_id": r._id,
-      "r.경유상차목록": r.경유상차목록,
-      "r.경유지_상차": r.경유지_상차,
-      "r.경유지상차": r.경유지상차,
-      "type 경유상차목록": typeof r.경유상차목록,
-      "type 경유지_상차": typeof r.경유지_상차,
-      "isArray 경유상차목록": Array.isArray(r.경유상차목록),
-      "isArray 경유지_상차": Array.isArray(r.경유지_상차),
-      "all keys": Object.keys(r).filter(k => k.includes("경유")),
-    });
-  }
-
   const safeParse = (v) => {
     if (Array.isArray(v) && v.length > 0) return v;
     if (typeof v === "string" && v.trim().startsWith("[")) {
@@ -12038,10 +12650,9 @@ ${savedHighlightIds.has(r._id) ? "row-highlight" : ""}
     return [];
   };
 
-
-  const a = safeParse(r.경유상차목록);
-  const b = safeParse(r.경유지_상차);
-  const c = safeParse(r.경유지상차);
+  const a = safeParse(r.경유하차목록);
+  const b = safeParse(r.경유지_하차);
+  const c = safeParse(r.경유지하차);
 
   const list = [...a, ...b, ...c]
     .filter(s => s && typeof s === "object" && (s.업체명?.trim() || s.주소?.trim()))
@@ -12050,13 +12661,9 @@ ${savedHighlightIds.has(r._id) ? "row-highlight" : ""}
       return arr.findIndex(x => (x.업체명 || x.주소 || JSON.stringify(x)) === key) === i;
     });
 
-  if (idx === 0) {
-    console.log("🔍 PART4 경유 결과", { a, b, c, list });
-  }
-
   if (list.length === 0) return null;
   return (
-    <StopInlineBadge count={list.length} list={list} type="pickup" />
+    <StopInlineBadge count={list.length} list={list} type="drop" />
   );
 })()}
 
@@ -12682,7 +13289,7 @@ checkWarningStatus(c.거래처명, "거래처");
         />
       </Field>
 
-      <Field label="상차지 연락처">
+            <Field label="상차지 연락처">
         <input
           className="inputStyle"
           value={copyTarget?.상차지담당자번호 ?? ""}
@@ -12690,7 +13297,44 @@ checkWarningStatus(c.거래처명, "거래처");
         />
       </Field>
 
+      {/* ── 상차 경유지 표시 + 수정 ── */}
+      {(() => {
+        const safeParse = (v) => {
+          if (Array.isArray(v) && v.length > 0) return v;
+          if (typeof v === "string" && v.trim().startsWith("[")) {
+            try { const p = JSON.parse(v); if (Array.isArray(p)) return p; } catch {}
+          }
+          if (v && typeof v === "object" && !Array.isArray(v)) {
+            const keys = Object.keys(v);
+            if (keys.length > 0 && keys.every(k => /^\d+$/.test(k)))
+              return keys.sort((a,b) => Number(a) - Number(b)).map(k => v[k]);
+            if (v.업체명) return [v];
+          }
+          return [];
+        };
+        const stops = [
+          ...safeParse(copyTarget?.경유상차목록),
+          ...safeParse(copyTarget?.경유지_상차),
+        ].filter(s => s && (s.업체명?.trim() || s.주소?.trim()))
+         .filter((s, i, arr) => arr.findIndex(x => (x.업체명 || x.주소) === (s.업체명 || s.주소)) === i);
+
+        if (!stops.length) return null;
+
+        return (
+          <div className="mt-3 flex items-center gap-2">
+            <span className="text-[12px] text-gray-500 font-medium">상차경유지</span>
+            <StopBadge count={stops.length} list={stops} type="pickup" />
+            <button
+              type="button"
+              onClick={() => { setEditStopType("pickup"); setEditStopOpen(true); }}
+              className="px-2 py-0.5 text-[11px] font-bold rounded bg-amber-500 text-white hover:bg-amber-600"
+            >수정</button>
+          </div>
+        );
+      })()}
+
     </div>
+
 
 {/* 하차 */}
     <div className="space-y-4">
@@ -12821,7 +13465,7 @@ checkWarningStatus(c.거래처명, "거래처");
         />
       </Field>
 
-      <Field label="상차지 연락처">
+           <Field label="하차지 연락처">
         <input
           className="inputStyle"
           value={copyTarget?.하차지담당자번호 ?? ""}
@@ -12829,7 +13473,44 @@ checkWarningStatus(c.거래처명, "거래처");
         />
       </Field>
 
+      {/* ── 하차 경유지 표시 + 수정 ── */}
+      {(() => {
+        const safeParse = (v) => {
+          if (Array.isArray(v) && v.length > 0) return v;
+          if (typeof v === "string" && v.trim().startsWith("[")) {
+            try { const p = JSON.parse(v); if (Array.isArray(p)) return p; } catch {}
+          }
+          if (v && typeof v === "object" && !Array.isArray(v)) {
+            const keys = Object.keys(v);
+            if (keys.length > 0 && keys.every(k => /^\d+$/.test(k)))
+              return keys.sort((a,b) => Number(a) - Number(b)).map(k => v[k]);
+            if (v.업체명) return [v];
+          }
+          return [];
+        };
+        const stops = [
+          ...safeParse(copyTarget?.경유하차목록),
+          ...safeParse(copyTarget?.경유지_하차),
+        ].filter(s => s && (s.업체명?.trim() || s.주소?.trim()))
+         .filter((s, i, arr) => arr.findIndex(x => (x.업체명 || x.주소) === (s.업체명 || s.주소)) === i);
+
+        if (!stops.length) return null;
+
+        return (
+          <div className="mt-3 flex items-center gap-2">
+            <span className="text-[12px] text-gray-500 font-medium">하차경유지</span>
+            <StopBadge count={stops.length} list={stops} type="drop" />
+            <button
+              type="button"
+              onClick={() => { setEditStopType("drop"); setEditStopOpen(true); }}
+              className="px-2 py-0.5 text-[11px] font-bold rounded bg-amber-500 text-white hover:bg-amber-600"
+            >수정</button>
+          </div>
+        );
+      })()}
+
     </div>
+
 
   </div>
 </div>
@@ -13354,9 +14035,58 @@ value={copyTarget?.화물수량 || ""}
     </div>
   );
 })()}
+{/* ── 경유지 수정 모달 ── */}
+<StopEditModal
+  open={editStopOpen}
+  onClose={() => setEditStopOpen(false)}
+  onSave={(newList) => {
+    if (editStopType === "pickup") {
+      setCopyTarget(p => ({
+        ...p,
+        경유상차목록: newList,
+        경유지_상차: newList,
+      }));
+    } else {
+      setCopyTarget(p => ({
+        ...p,
+        경유하차목록: newList,
+        경유지_하차: newList,
+      }));
+    }
+  }}
+  list={(() => {
+    const safeParse = (v) => {
+      if (Array.isArray(v) && v.length > 0) return v;
+      if (typeof v === "string" && v.trim().startsWith("[")) {
+        try { const p = JSON.parse(v); if (Array.isArray(p)) return p; } catch {}
+      }
+      if (v && typeof v === "object" && !Array.isArray(v)) {
+        const keys = Object.keys(v);
+        if (keys.length > 0 && keys.every(k => /^\d+$/.test(k)))
+          return keys.sort((a,b) => Number(a) - Number(b)).map(k => v[k]);
+        if (v.업체명) return [v];
+      }
+      return [];
+    };
+    if (editStopType === "pickup") {
+      return [
+        ...safeParse(copyTarget?.경유상차목록),
+        ...safeParse(copyTarget?.경유지_상차),
+      ].filter(s => s?.업체명?.trim());
+    }
+    return [
+      ...safeParse(copyTarget?.경유하차목록),
+      ...safeParse(copyTarget?.경유지_하차),
+    ].filter(s => s?.업체명?.trim());
+  })()}
+  type={editStopType}
+  placeRows={placeRows}
+  timeOptions={timeOptions}
+/>
 
 {clientApplyPopup && (
   <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+
     <div className="bg-white p-6 rounded-xl shadow-lg w-[300px] text-center">
 
       <h3 className="font-bold mb-4">거래처 적용</h3>
@@ -13983,11 +14713,44 @@ value={copyTarget?.화물수량 || ""}
                   <option value="수도움">수도움</option>
                   <option value="크레인">크레인</option>
                 </select>
-              </div>
+                            </div>
             </div>
+
+            {/* ── 선택수정: 상차 경유지 표시 ── */}
+            {(() => {
+              const safeParse = (v) => {
+                if (Array.isArray(v) && v.length > 0) return v;
+                if (typeof v === "string" && v.trim().startsWith("[")) {
+                  try { const p = JSON.parse(v); if (Array.isArray(p)) return p; } catch {}
+                }
+                if (v && typeof v === "object" && !Array.isArray(v)) {
+                  const keys = Object.keys(v);
+                  if (keys.length > 0 && keys.every(k => /^\d+$/.test(k)))
+                    return keys.sort((a,b) => Number(a) - Number(b)).map(k => v[k]);
+                  if (v.업체명) return [v];
+                }
+                return [];
+              };
+              const stops = [
+                ...safeParse(editTarget?.경유상차목록),
+                ...safeParse(editTarget?.경유지_상차),
+              ].filter(s => s?.업체명?.trim())
+               .filter((s, i, arr) => arr.findIndex(x => x.업체명 === s.업체명) === i);
+
+              if (!stops.length) return null;
+
+              return (
+                <div className="mb-3 flex items-center gap-2">
+                  <span className="text-[12px] text-gray-500 font-medium">상차경유지</span>
+                  <StopBadge count={stops.length} list={stops} type="pickup" />
+                </div>
+              );
+            })()}
+
             {/* ===================== 하차지 ===================== */}
             <div className="mb-3 relative">
               <label>하차지명</label>
+
               <input
                 className="border p-2 rounded w-full"
                 value={editTarget.하차지명 || ""}
@@ -14095,12 +14858,45 @@ value={copyTarget?.화물수량 || ""}
                   <option value="수도움">수도움</option>
                   <option value="크레인">크레인</option>
                 </select>
-              </div>
+                            </div>
             </div>
+
+            {/* ── 선택수정: 하차 경유지 표시 ── */}
+            {(() => {
+              const safeParse = (v) => {
+                if (Array.isArray(v) && v.length > 0) return v;
+                if (typeof v === "string" && v.trim().startsWith("[")) {
+                  try { const p = JSON.parse(v); if (Array.isArray(p)) return p; } catch {}
+                }
+                if (v && typeof v === "object" && !Array.isArray(v)) {
+                  const keys = Object.keys(v);
+                  if (keys.length > 0 && keys.every(k => /^\d+$/.test(k)))
+                    return keys.sort((a,b) => Number(a) - Number(b)).map(k => v[k]);
+                  if (v.업체명) return [v];
+                }
+                return [];
+              };
+              const stops = [
+                ...safeParse(editTarget?.경유하차목록),
+                ...safeParse(editTarget?.경유지_하차),
+              ].filter(s => s?.업체명?.trim())
+               .filter((s, i, arr) => arr.findIndex(x => x.업체명 === s.업체명) === i);
+
+              if (!stops.length) return null;
+
+              return (
+                <div className="mb-3 flex items-center gap-2">
+                  <span className="text-[12px] text-gray-500 font-medium">하차경유지</span>
+                  <StopBadge count={stops.length} list={stops} type="drop" />
+                </div>
+              );
+            })()}
+
             {/* ------------------------------------------------ */}
             {/* 🔵 화물내용 */}
             {/* ------------------------------------------------ */}
             <label>화물내용</label>
+
 
 <div className="relative">
 
@@ -25901,7 +26697,7 @@ const handlePlaceBlur = async (row, key, val) => {
                 onChange={(e) => { setPlaceQ(e.target.value); setPlaceSearched(false); }}
                 onKeyDown={(e) => { if (e.key === "Enter") setPlaceSearched(true); }} />
               <button onClick={() => setPlaceSearched(true)}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700">🔍 검색</button>
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700">검색</button>
               <label className="px-3 py-2 border rounded-lg cursor-pointer text-sm text-gray-600 hover:bg-gray-50">
                 📁 엑셀 업로드
                 <input type="file" accept=".xlsx,.xls" onChange={onExcelPlaces} className="hidden" />
@@ -25958,7 +26754,7 @@ const handlePlaceBlur = async (row, key, val) => {
           {/* 검색 전 안내 */}
           {!placeSearched && (
             <div className="bg-white rounded-xl border shadow-sm text-center py-16 text-gray-400 text-sm">
-              검색어를 입력하고 🔍 검색 버튼을 누르세요
+              검색어를 입력하고 검색 버튼을 누르세요
             </div>
           )}
 
