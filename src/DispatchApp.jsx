@@ -3744,6 +3744,8 @@ const [blackAlert, setBlackAlert] = React.useState(null);
 const [contactPopup, setContactPopup] = React.useState(null);
 const [contactActive, setContactActive] = React.useState(0);
 const [contactQueue, setContactQueue] = React.useState([]);
+const [editingContactIdx, setEditingContactIdx] = React.useState(null);
+const [editContactData, setEditContactData] = React.useState({ name: "", phone: "" });
 const [clientAlert, setClientAlert] = React.useState(null);
 
 // 🚫 거래처/상하차지 등급 체크 함수
@@ -3825,6 +3827,16 @@ const closeContactPopup = (selectedContact) => {
       if (cargoInput) cargoInput.focus();
     }
   }, 60);
+};
+
+const updateContactInPlace = async (placeId, newContacts) => {
+  if (!placeId) return;
+  try {
+    await updateDoc(doc(db, "places", placeId), { contacts: newContacts });
+    setContactPopup(prev => prev ? { ...prev, contacts: newContacts } : null);
+  } catch (e) {
+    alert("저장 실패: " + e.message);
+  }
 };
 
 React.useEffect(() => {
@@ -7891,16 +7903,90 @@ const today = now.toISOString().slice(0, 10);
         {contactPopup.contacts.map((c, i) => (
           <div
             key={i}
-            className={`px-4 py-3 rounded-xl border-2 cursor-pointer transition ${
+            className={`rounded-xl border-2 transition ${
               i === contactActive
                 ? "border-blue-500 bg-blue-50"
-                : "border-gray-200 hover:border-blue-300 hover:bg-gray-50"
+                : "border-gray-200"
             }`}
-            onMouseEnter={() => setContactActive(i)}
-            onClick={() => closeContactPopup(c)}
+            onMouseEnter={() => { if (editingContactIdx === null) setContactActive(i); }}
           >
-            <div className="font-bold text-gray-900">{c.name || "-"}</div>
-            <div className="text-sm text-gray-500 mt-0.5">{c.phone || "-"}</div>
+            {editingContactIdx === i ? (
+              /* ── 인라인 수정 폼 ── */
+              <div className="px-4 py-3 space-y-2" onClick={e => e.stopPropagation()}>
+                <input
+                  autoFocus
+                  className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-[#1B2B4B]"
+                  placeholder="이름"
+                  value={editContactData.name}
+                  onChange={e => setEditContactData(p => ({ ...p, name: e.target.value }))}
+                  onKeyDown={e => { if (e.key === "Enter") e.preventDefault(); }}
+                />
+                <input
+                  className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-[#1B2B4B]"
+                  placeholder="전화번호"
+                  value={editContactData.phone}
+                  onChange={e => setEditContactData(p => ({ ...p, phone: e.target.value }))}
+                  onKeyDown={e => { if (e.key === "Enter") e.preventDefault(); }}
+                />
+                <div className="flex gap-2 pt-1">
+                  <button
+                    className="flex-1 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-xs font-bold"
+                    onClick={async () => {
+                      if (!editContactData.name.trim()) return alert("이름을 입력하세요.");
+                      const updated = contactPopup.contacts.map((x, idx) =>
+                        idx === i ? { ...x, name: editContactData.name.trim(), phone: editContactData.phone.trim() } : x
+                      );
+                      await updateContactInPlace(contactPopup.place._id, updated);
+                      setEditingContactIdx(null);
+                    }}
+                  >저장</button>
+                  <button
+                    className="px-4 py-1.5 rounded-lg bg-gray-200 text-gray-700 text-xs"
+                    onClick={() => setEditingContactIdx(null)}
+                  >취소</button>
+                </div>
+              </div>
+            ) : (
+              /* ── 일반 표시 ── */
+              <div className="flex items-center">
+                {/* 선택 영역 */}
+                <div
+                  className="flex-1 px-4 py-3 cursor-pointer"
+                  onClick={() => closeContactPopup(c)}
+                >
+                  <div className="font-bold text-gray-900">{c.name || "-"}</div>
+                  <div className="text-sm text-gray-500 mt-0.5">{c.phone || "-"}</div>
+                </div>
+                {/* 수정/삭제 버튼 */}
+                <div className="flex gap-1 pr-3 shrink-0">
+                  <button
+                    className="px-2.5 py-1 rounded-lg bg-gray-100 hover:bg-blue-100 text-gray-500 hover:text-blue-600 text-xs font-semibold transition"
+                    onClick={e => {
+                      e.stopPropagation();
+                      setEditContactData({ name: c.name || "", phone: c.phone || "" });
+                      setEditingContactIdx(i);
+                      setContactActive(i);
+                    }}
+                  >수정</button>
+                  <button
+                    className="px-2.5 py-1 rounded-lg bg-gray-100 hover:bg-red-100 text-gray-500 hover:text-red-600 text-xs font-semibold transition"
+                    onClick={async e => {
+                      e.stopPropagation();
+                      if (!window.confirm(`"${c.name}" 담당자를 삭제할까요?`)) return;
+                      const updated = contactPopup.contacts.filter((_, idx) => idx !== i);
+                      if (updated.length === 0) {
+                        alert("담당자가 1명 이하면 삭제할 수 없습니다.");
+                        return;
+                      }
+                      // 삭제 후 primary 재지정
+                      const hasPrimary = updated.some(x => x.isPrimary);
+                      const final = hasPrimary ? updated : updated.map((x, idx) => ({ ...x, isPrimary: idx === 0 }));
+                      await updateContactInPlace(contactPopup.place._id, final);
+                    }}
+                  >삭제</button>
+                </div>
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -25329,7 +25415,7 @@ function ClientSettlement({ dispatchData, clients = [], setClients }) {
           {/* 미조회 상태 */}
           {!searched && (
             <div className="flex flex-col items-center justify-center py-20 text-gray-400">
-              <div className="text-4xl mb-3">📋</div>
+              <div className="text-4xl mb-3"></div>
               <div className="text-[15px] font-semibold">거래처명 또는 기사명을 입력 후 조회하세요.</div>
               <div className="text-[13px] mt-1 text-gray-300">검색창에 입력하면 자동완성 목록이 표시됩니다</div>
             </div>
