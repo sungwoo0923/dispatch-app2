@@ -995,7 +995,31 @@ function ToastProvider({ children }) {
 
 const useToast = () => React.useContext(ToastContext);
 // ===================== TOAST SYSTEM END =====================
+// ===================== 커스텀 Alert 모달 =====================
+function CustomAlert({ message, onClose }) {
+  useEffect(() => {
+    const handleKey = (e) => { if (e.key === "Enter") onClose(); };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [onClose]);
 
+  if (!message) return null;
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
+      <div className="bg-[#1e2530] border border-gray-600 rounded-xl shadow-2xl p-6 w-[320px] text-center">
+        <p className="text-white text-[15px] mb-5 whitespace-pre-line">{message}</p>
+        <button
+          autoFocus
+          onClick={onClose}
+          className="px-6 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-[14px] font-semibold rounded-lg transition"
+        >
+          확인
+        </button>
+      </div>
+    </div>
+  );
+}
+// ============================================================
 export {
   cellBase, COMPANY, DISPATCH_TYPES,
   headBase, inputBase, PAY_TYPES, todayStr, VEHICLE_TYPES
@@ -1228,7 +1252,7 @@ useEffect(() => {
   const logout = async () => {
     await signOut(auth);
     localStorage.removeItem("role");
-    alert("로그아웃되었습니다.");
+    showAlert("로그아웃되었습니다.");
     navigate("/login");
   };
 
@@ -1245,7 +1269,9 @@ useEffect(() => {
 
   const tonOptions = useMemo(() => Array.from({ length: 25 }, (_, i) => `${i + 1}톤`), []);
 
-  const [menu, setMenu] = useState("HOME");
+ const [menu, setMenu] = useState("HOME");
+const [alertMsg, setAlertMsg] = useState(null);
+const showAlert = (msg) => setAlertMsg(msg);
 
   // ---------------- user 차단 메뉴 ----------------
   const blockedMenus = [
@@ -1273,8 +1299,9 @@ useEffect(() => {
     );
   }
   // ---------------- 메뉴 UI ----------------
-  return (
+return (
     <ToastProvider>
+      <CustomAlert message={alertMsg} onClose={() => setAlertMsg(null)} />
       {/* ===== 통합 헤더 네비 ===== */}
       <header className="sticky top-0 z-50 bg-[#1B2B4B] shadow-lg mb-6">
 
@@ -1295,7 +1322,17 @@ useEffect(() => {
           </div>
 
           {/* 중앙 메뉴 */}
-           <nav className="flex-1 flex items-center justify-center gap-1 overflow-x-auto [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: "none" }}>
+                     {/* ★ 태블릿/PC 공용 메뉴 — 전체 가로 스크롤 보장 */}
+          <nav
+            className="flex-1 flex items-center gap-1 overflow-x-auto"
+            style={{
+              WebkitOverflowScrolling: "touch",
+              scrollbarWidth: "thin",
+              msOverflowStyle: "auto",
+              flexWrap: "nowrap",
+              minWidth: 0,
+            }}
+          >
             {[
               "HOME",
               "배차관리",
@@ -1319,7 +1356,7 @@ useEffect(() => {
                   key={m}
                   disabled={isBlocked}
                   onClick={() => handleMenuClick(m)}
-                  className={`relative px-3 py-1.5 rounded-md text-[15px] font-medium whitespace-nowrap transition-all
+                  className={`relative px-3 py-1.5 rounded-md text-[13px] font-medium whitespace-nowrap transition-all flex-shrink-0
                     ${isBlocked
                       ? "text-white/20 cursor-not-allowed"
                       : isActive
@@ -1335,6 +1372,7 @@ useEffect(() => {
               );
             })}
           </nav>
+
 
           {/* 우측 유저 영역 */}
           <div className="flex items-center gap-3 min-w-[180px] justify-end">
@@ -1393,6 +1431,7 @@ useEffect(() => {
             placeRows={places}
             role={role}
             isTest={isTest}   // ★ 추가!
+            showAlert={showAlert}
           />
 
         )}
@@ -1778,13 +1817,14 @@ return (
   );
 });
 
-  function DispatchManagement({
+ function DispatchManagement({
     dispatchData, drivers, clients, menu, timeOptions, tonOptions,
     addDispatch, upsertDriver, upsertClient, upsertPlace,
     patchDispatch, removeDispatch,
     placeRows = [],
     role = "admin",
-    isTest = false,  // ★ 추가!
+    isTest = false,
+    showAlert = (msg) => showAlert(msg),  // ★ 추가 (폴백 포함)
   }) {
 
       const [useNewForm, setUseNewForm] = React.useState(false);
@@ -2497,7 +2537,7 @@ React.useEffect(() => {
     const cur = `${hh}:${mm}`;
 
     if (!alertShown && cur === alertTime) {
-      alert(`⏰ 알림: ${alertTime}\n미배차 ${pending}건, 지연 ${delayed}건 확인!`);
+      showAlert(`⏰ 알림: ${alertTime}\n미배차 ${pending}건, 지연 ${delayed}건 확인!`);
       setAlertShown(true);
     }
   }, 10000);
@@ -2612,7 +2652,7 @@ const openNewPlacePrompt = (name) => {
     phone || ""
   );
 
-  alert("신규 거래처 등록이 완료되었습니다.");
+  showAlert("신규 거래처 등록이 완료되었습니다.");
 };
 
 const savePlaceSmart = async (name, addr, manager, phone, placeId) => {
@@ -3835,7 +3875,7 @@ const updateContactInPlace = async (placeId, newContacts) => {
     await updateDoc(doc(db, "places", placeId), { contacts: newContacts });
     setContactPopup(prev => prev ? { ...prev, contacts: newContacts } : null);
   } catch (e) {
-    alert("저장 실패: " + e.message);
+   showAlert("저장 실패: " + e.message);
   }
 };
 
@@ -4050,7 +4090,7 @@ function checkDuplicateDispatch(form, dispatchData) {
       if (!f.상차지명?.trim()) miss.push("상차지명");
       if (!f.하차지명?.trim()) miss.push("하차지명");
       if (miss.length) {
-        alert(`필수 항목 누락: ${miss.join(", ")}\n(*) 표시된 항목을 모두 입력하세요.`);
+        showAlert(`필수 항목 누락: ${miss.join(", ")}\n(*) 표시된 항목을 모두 입력하세요.`);
         return false;
       }
       return true;
@@ -4064,7 +4104,7 @@ function checkDuplicateDispatch(form, dispatchData) {
 
 
       if (miss.length > 0) {
-        alert(`⛔ 날짜가 입력되지 않았습니다.\n[ ${miss.join(", ")} ] 은(는) 반드시 입력해야 합니다.`);
+        showAlert(`⛔ 날짜가 입력되지 않았습니다.\n[ ${miss.join(", ")} ] 은(는) 반드시 입력해야 합니다.`);
         return false;
       }
       return true;
@@ -4252,12 +4292,13 @@ const doSave = async () => {
     // ⛔ 기사 중복 배차 방지
   const dup = checkDuplicateDispatch(form, dispatchData);
   if (dup) {
-    alert(
-      `⛔ 기사 중복 배차 감지\n\n` +
-      `차량번호: ${form.차량번호}\n` +
-      `기존 상차시간: ${dup.상차시간 || "-"}\n` +
-      `기존 하차시간: ${dup.하차시간 || "-"}`
-    );
+    // 교체 후
+showAlert(
+  `⛔ 기사 중복 배차 감지\n\n` +
+  `차량번호: ${form.차량번호}\n` +
+  `기존 상차시간: ${dup.상차시간 || "-"}\n` +
+  `기존 하차시간: ${dup.하차시간 || "-"}`
+);
     setIsSaving(false);
     return;
   }
@@ -4397,7 +4438,7 @@ await savePlaceSmart(
     setConfirmOpen(false);
   try { localStorage.removeItem("dispatchForm"); } catch {}
   setIsSaving(false);
-  alert("등록되었습니다.");
+showAlert("등록되었습니다.");
 };
 const isRoundTrip = form.운행유형 === "왕복";
 const ROUND_DISCOUNT = 0.9; // ⭐ 10% 할인 (조정 가능)
@@ -4417,7 +4458,7 @@ const handleFareSearch = () => {
 ).trim();
 
   if (!pickup || !drop) {
-    alert("상차지명과 하차지명을 입력해주세요.");
+    showAlert("상차지명과 하차지명을 입력해주세요.");
     return;
   }
   // ⭐ 전체 데이터
@@ -4550,11 +4591,7 @@ const hasSinmi = (
             ...prev,
             청구운임: String(selectedFare),
           }));
-          alert(
-            `송원 전용 자동요율이 적용되었습니다.\n\n적용 운임: ${Number(
-              selectedFare
-            ).toLocaleString()}원`
-          );
+          showAlert(`송원 전용 자동요율이 적용되었습니다.\n\n적용 운임: ${Number(selectedFare).toLocaleString()}원`);
           return; // ⬅ AI 통계 로직으로 내려가지 않음
         }
       }
@@ -4644,7 +4681,8 @@ if (!matchVehicle) return false;
         return matchVehicle && matchTon && matchCargo;
       });
       if (!filtered.length) {
-        alert("유사한 과거 운임 데이터를 찾지 못했습니다.");
+        showAlert("유사한 과거 운임 데이터를 찾지 못했습니다.");
+
         return;
       }
       const fares = filtered
@@ -4683,7 +4721,7 @@ const similarTop = scoredList
   .slice(0, 3);
 
       if (!fares.length) {
-        alert("해당 조건의 과거 데이터에 청구운임 정보가 없습니다.");
+       showAlert("해당 조건의 과거 데이터에 청구운임 정보가 없습니다.");
         return;
       }
       const avg = Math.round(
@@ -4943,7 +4981,7 @@ setCopyOpen(false);
       }
       try {
         await navigator.clipboard.writeText(text);
-        alert("공유 문구가 클립보드에 복사되었습니다. (카톡/메신저에 붙여넣기)");
+       showAlert("공유 문구가 클립보드에 복사되었습니다. (카톡/메신저에 붙여넣기)");
       } catch {
         prompt("아래 내용을 복사하세요.", text);
       }
@@ -5280,13 +5318,13 @@ const parseOrderText = (text) => {
 const applyOrderParse = () => {
   if (!orderParseText.trim()) return;
   const parsed = parseOrderText(orderParseText);
-  if (Object.values(parsed).every(v=>!v)) { alert("분석 가능한 내용을 찾지 못했습니다."); return; }
+  if (Object.values(parsed).every(v=>!v)) { showAlert("분석 가능한 내용을 찾지 못했습니다."); return; }
   setForm(p=>({...p,...parsed}));
   if (parsed.상차지명) setAutoPickMatched(true);
   if (parsed.하차지명) setAutoDropMatched(true);
   if (parsed.차량종류) setVehicleQuery(parsed.차량종류);
   setOrderParseText(""); setShowOrderParser(false);
-  alert("✅ 오더 내용이 자동으로 입력되었습니다. 확인 후 저장하세요.");
+showAlert("✅ 오더 내용이 자동으로 입력되었습니다. 확인 후 저장하세요.");
 };
     const renderForm = () => (
       <>
@@ -5749,7 +5787,7 @@ shadow-sm
   type="button"
   onClick={() => {
     const name = (clientQuery || "").trim();
-    if (!name) return alert("업체명을 입력하세요.");
+   if (!name) return showAlert("업체명을 입력하세요.");
 
   const nk = normalizeKey(name);
 
@@ -7308,8 +7346,8 @@ className={`
       type="button"
       onClick={async () => {
         const { 거래처명, 상차지명, 하차지명, 상차일, 상차시간, 하차일, 하차시간 } = form;
-        if (!거래처명 || !상차지명 || !하차지명) return alert("거래처/상차지명/하차지명을 입력해주세요.");
-        if (!상차일 || !하차일) return alert("상차일/하차일은 반드시 필요합니다.");
+        if (!거래처명 || !상차지명 || !하차지명) return showAlert("거래처/상차지명/하차지명을 입력해주세요.");
+        if (!상차일 || !하차일) return showAlert("상차일/하차일은 반드시 필요합니다.");
        const res = await sendOrderTo24(form);
 
 // 🔹 기존 로그 불러오기
@@ -7335,11 +7373,11 @@ if (res?.success) {
     배차상태: "24시전송완료",
   });
 
-  alert(
-    `📡 24시콜 전송 완료!\n\n` +
-    `전송건수: 1건\n실패건수: 0건\n` +
-    `메시지: ${res.resultMsg || "성공"}`
-  );
+showAlert(
+  `📡 24시콜 전송 완료!\n\n` +
+  `전송건수: 1건\n실패건수: 0건\n` +
+  `메시지: ${res.resultMsg || "성공"}`
+);
 } else {
   // ❌ 실패
   await patchDispatch(form._id, {
@@ -7347,7 +7385,7 @@ if (res?.success) {
     "24시전송로그": [...prevLogs, newLog],
   });
 
-  alert(
+  showAlert(
     `⛔ 24시콜 전송 실패!\n\n` +
     `사유: ${res?.resultMsg || "알 수 없는 오류"}`
   );
@@ -7442,7 +7480,7 @@ if (res?.success) {
   className="px-4 py-2 bg-blue-600 text-white rounded"
   onClick={() => {
     if (copySelected.length === 0)
-      return alert("복사할 항목을 선택하세요.");
+      return showAlert("복사할 항목을 선택하세요.");
 
     const r = copySelected[0];
     const now = new Date();
@@ -7467,7 +7505,7 @@ const today = now.toISOString().slice(0, 10);
     setIsCopyMode(true);
     setCopyOpen(false);
 
-    alert("오더 내용이 입력창에 복사되었습니다!");
+    showAlert("오더 내용이 입력창에 복사되었습니다!");
   }}
 >
   복사
@@ -7932,7 +7970,7 @@ const today = now.toISOString().slice(0, 10);
                   <button
                     className="flex-1 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-xs font-bold"
                     onClick={async () => {
-                      if (!editContactData.name.trim()) return alert("이름을 입력하세요.");
+                      if (!editContactData.name.trim()) return showAlert("이름을 입력하세요.");
                       const updated = contactPopup.contacts.map((x, idx) =>
                         idx === i ? { ...x, name: editContactData.name.trim(), phone: editContactData.phone.trim() } : x
                       );
@@ -7974,10 +8012,7 @@ const today = now.toISOString().slice(0, 10);
                       e.stopPropagation();
                       if (!window.confirm(`"${c.name}" 담당자를 삭제할까요?`)) return;
                       const updated = contactPopup.contacts.filter((_, idx) => idx !== i);
-                      if (updated.length === 0) {
-                        alert("담당자가 1명 이하면 삭제할 수 없습니다.");
-                        return;
-                      }
+                      if (updated.length === 0) { showAlert("담당자가 1명 이하면 삭제할 수 없습니다."); return; }
                       // 삭제 후 primary 재지정
                       const hasPrimary = updated.some(x => x.isPrimary);
                       const final = hasPrimary ? updated : updated.map((x, idx) => ({ ...x, isPrimary: idx === 0 }));
@@ -8204,7 +8239,7 @@ setTimeout(() => {
                 setForm(p=>({...p, 차량번호: plate, 이름: name, 전화번호: formatPhone(phone), 배차상태:"배차완료"}));
                 setSmartDriverQuery(""); setSmartDriverMatched([]);
                 setDriverConflictPopup(null);
-                alert("✅ 신규 기사가 등록되었습니다.");
+               showAlert("✅ 신규 기사가 등록되었습니다.");
               }}
             >
               신규 기사 등록
@@ -8286,11 +8321,11 @@ setTimeout(() => {
           id="driver-save-btn"
           className="px-4 py-2 rounded bg-blue-600 text-white"
           onClick={async () => {
-            if (!driverModal.name.trim()) return alert("기사명을 입력하세요.");
-            if (!driverModal.phone.replace(/[^\d]/g, "").trim()) return alert("전화번호를 입력하세요.");
+           if (!driverModal.name.trim()) return showAlert("기사명을 입력하세요.");
+           if (!driverModal.phone.replace(/[^\d]/g, "").trim()) return showAlert("전화번호를 입력하세요.");
 
             const rawPhone = driverModal.phone.replace(/[^\d]/g, "");
-            if (!rawPhone || rawPhone.length < 10) return alert("전화번호를 정확히 입력하세요.");
+           if (!rawPhone || rawPhone.length < 10) return showAlert("전화번호를 정확히 입력하세요.");
 
             await upsertDriver({
               _id: driverModal.carNo,
@@ -8714,7 +8749,7 @@ setConfirmChange(null);
           const text = makeFullDetailText(form);
           try {
             await navigator.clipboard.writeText(text);
-            alert("전체 상세 메시지가 복사되었습니다.");
+            showAlert("전체 상세 메시지가 복사되었습니다.");
           } catch {
             prompt("아래 내용을 복사하세요.", text);
           }
@@ -10059,7 +10094,8 @@ const alertAudio = React.useRef(null);
 
 // 🚫 블랙 기사 알림 팝업 상태
 const [blackAlert, setBlackAlert] = React.useState(null);
-
+const [alertMsg, setAlertMsg] = React.useState(null);
+const showAlert = (msg) => setAlertMsg(msg);
 React.useEffect(() => {
   const handler = (e) => setBlackAlert(e.detail);
   window.addEventListener("blackDriverDetected", handler);
@@ -10398,7 +10434,7 @@ const buildContactLine = (name, phone) => {
 
 const copyMessage = (mode) => {
   if (!selected.length) {
-    alert("복사할 항목을 선택하세요.");
+    showAlert("복사할 항목을 선택하세요.");
     return;
   }
 
@@ -10714,7 +10750,7 @@ ${fare.toLocaleString()}원 ${payLabel} 배차되었습니다.`;
     try {
       const latest = await navigator.clipboard.readText();
       if (latest === text) {
-        alert("⏱ 아직 전달되지 않은 것 같습니다.\n카톡에 붙여넣기 하셨나요?");
+        showAlert("⏱ 아직 전달되지 않은 것 같습니다.\n카톡에 붙여넣기 하셨나요?");
       }
     } catch (e) {
       console.error("Clipboard read error", e);
@@ -10866,11 +10902,11 @@ React.useEffect(() => {
   // === 유사 운임조회 (선택수정 전용 업그레이드) ===
   const handleFareSearch = () => {
     const row = editTarget;
-    if (!row) return alert("먼저 수정할 오더를 선택해주세요.");
+    if (!row) return showAlert("먼저 수정할 오더를 선택해주세요.");
 
     const pickup = row.상차지명?.trim();
     const drop = row.하차지명?.trim();
-    if (!pickup || !drop) return alert("상/하차지를 입력해주세요.");
+    if (!pickup || !drop) return showAlert("상/하차지를 입력해주세요.");
 
     const targetCargo = String(row.화물내용 || "").trim();
     const targetTon = String(row.차량톤수 || "").trim();
@@ -10885,7 +10921,7 @@ React.useEffect(() => {
     });
 
     if (!base.length) {
-      alert("📭 동일 상/하차지 운임 이력이 없습니다.");
+      showAlert("📭 동일 상/하차지 운임 이력이 없습니다.");
       return;
     }
 
@@ -10944,11 +10980,11 @@ setFarePanelOpen(true);
   };
     // === 복사/수정 패널 전용 운임조회 (업그레이드) ===
   const handleCopyFareSearch = () => {
-    if (!copyTarget) return alert("먼저 오더를 선택해주세요.");
+    if (!copyTarget) return showAlert("먼저 오더를 선택해주세요.");
 
     const pickup = copyTarget.상차지명?.trim();
     const drop = copyTarget.하차지명?.trim();
-    if (!pickup || !drop) return alert("상/하차지를 입력해주세요.");
+    if (!pickup || !drop) return showAlert("상/하차지를 입력해주세요.");
 
     const targetCargo = String(copyTarget.화물내용 || "").trim();
     const targetTon = String(copyTarget.차량톤수 || "").trim();
@@ -10962,7 +10998,7 @@ setFarePanelOpen(true);
     });
 
     if (!base.length) {
-      alert("📭 동일 상/하차지 운임 이력이 없습니다.");
+      showAlert("📭 동일 상/하차지 운임 이력이 없습니다.");
       return;
     }
 
@@ -11487,7 +11523,7 @@ if (newOnes.length > 0) {
   // ⭐ 운임조회 실행 함수
   const handleFareCheck = () => {
     if (!newOrder.상차지명 || !newOrder.하차지명) {
-      alert("상차지명과 하차지명을 입력해야 운임조회가 가능합니다.");
+      showAlert("상차지명과 하차지명을 입력해야 운임조회가 가능합니다.");
       return;
     }
 
@@ -11500,7 +11536,7 @@ if (newOnes.length > 0) {
     });
 
     if (!result) {
-      alert("유사 운임 데이터를 찾을 수 없습니다.");
+      showAlert("유사 운임 데이터를 찾을 수 없습니다.");
       return;
     }
 
@@ -11594,7 +11630,7 @@ if (newOnes.length > 0) {
       전화번호,
     }));
 
-    alert("신규 기사 등록 완료!");
+    showAlert("신규 기사 등록 완료!");
   };
   // ------------------------
   // driverMap 생성  ← 🔥 여기!
@@ -11992,7 +12028,7 @@ if (sortKey) {
   // ------------------------
   const handleSaveSelected = async () => {
     const ids = Object.keys(edited);
-    if (!ids.length) return alert("변경된 내용이 없습니다.");
+    if (!ids.length) return showAlert("변경된 내용이 없습니다.");
 
     for (const id of ids) {
       const ch = edited[id];
@@ -12016,7 +12052,7 @@ if (sortKey) {
     }, 2000);   // ← 2초로 변경
 
 
-    alert("저장 완료");
+    showAlert("저장 완료");
     setEdited({});
     setSelectedEditMode(false);
   };
@@ -12279,7 +12315,7 @@ ${url}
 `.trim();
 
     navigator.clipboard.writeText(msg);
-    alert("📋 공유 메시지가 복사되었습니다!");
+    showAlert("📋 공유 메시지가 복사되었습니다!");
   };
 
 
@@ -12312,8 +12348,9 @@ const head = isDark
     </div>
   );
 
-  return (
+ return (
 <div className="px-3 pt-1 w-full" style={{overflowX: "auto", overflowY: "unset"}}>
+<CustomAlert message={alertMsg} onClose={() => setAlertMsg(null)} />
 {/* 🚫 블랙 기사 알림 팝업 */}
 {blackAlert && (
   <div
@@ -12465,13 +12502,13 @@ const head = isDark
       }
     }
   }
-  alert(`✅ 기사 ${count}명 등록 완료\n기사관리 페이지에서 확인하세요.`);
+  showAlert(`✅ 기사 ${count}명 등록 완료\n기사관리 페이지에서 확인하세요.`);
 }} className="px-3 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-sm font-semibold shadow hover:bg-[#243a60] transition">일괄동기화</button>
     <button onClick={()=>{setTempSortKey(sortKey||"");setTempSortDir(sortDir||"asc");setSortModalOpen(true);}} className="px-3 py-1.5 rounded-lg bg-slate-500 text-white text-sm font-semibold shadow hover:opacity-90">정렬</button>
-    <button onClick={()=>{if(!selected.length)return alert("복사할 오더를 선택하세요.");if(selected.length>1)return alert("복사는 1개의 오더만 가능합니다.");setCopyModalOpen(true);}} className="px-3 py-1.5 rounded-lg bg-gray-800 text-white text-sm font-semibold shadow hover:opacity-90">기사복사</button>
-    <button onClick={async()=>{if(!selected.length)return alert("전송할 항목을 선택하세요.");const ids=[...selected];let success=0,fail=0;for(const id of ids){const row=dispatchData.find(r=>r._id===id);if(!row)continue;if(!row.상차지주소||!row.하차지주소){alert(`[${row.상차지명} → ${row.하차지명}]\n주소가 없습니다.`);fail++;continue;}try{const res=await sendOrderTo24(row);if(res?.success)success++;else fail++;}catch(e){console.error("24시콜 오류:",e);fail++;}}alert(`📡 24시콜 선택전송 완료!\n성공: ${success}건\n실패: ${fail}건`);}} className="px-3 py-1.5 rounded-lg bg-gray-700 text-white text-sm font-semibold shadow hover:opacity-90">선택전송</button>
+    <button onClick={()=>{if(!selected.length)return showAlert("복사할 오더를 선택하세요.");if(selected.length>1)return showAlert("복사는 1개의 오더만 가능합니다.");setCopyModalOpen(true);}} className="px-3 py-1.5 rounded-lg bg-gray-800 text-white text-sm font-semibold shadow hover:opacity-90">기사복사</button>
+    <button onClick={async()=>{if(!selected.length)return showAlert("전송할 항목을 선택하세요.");const ids=[...selected];let success=0,fail=0;for(const id of ids){const row=dispatchData.find(r=>r._id===id);if(!row)continue;if(!row.상차지주소||!row.하차지주소){showAlert(`[${row.상차지명} → ${row.하차지명}]\n주소가 없습니다.`);fail++;continue;}try{const res=await sendOrderTo24(row);if(res?.success)success++;else fail++;}catch(e){console.error("24시콜 오류:",e);fail++;}}showAlert(`📡 24시콜 선택전송 완료!\n성공: ${success}건\n실패: ${fail}건`);}} className="px-3 py-1.5 rounded-lg bg-gray-700 text-white text-sm font-semibold shadow hover:opacity-90">선택전송</button>
     <button onClick={()=>{
-  if(selected.length!==1)return alert("수정할 항목은 1개만 선택해야 합니다.");
+  if(selected.length!==1)return showAlert("수정할 항목은 1개만 선택해야 합니다.");
   const row=rows.find(r=>r._id===selected[0]);
   if(!row)return;
   const latest = dispatchData.find(d => d._id === row._id);
@@ -12508,9 +12545,9 @@ const head = isDark
 }} className="px-3 py-1.5 rounded-lg bg-gray-600 text-white text-sm font-semibold shadow hover:opacity-90">선택수정</button>
 
     <button onClick={handleSaveSelected} className="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-sm font-semibold shadow hover:opacity-90">저장</button>
-    <button onClick={()=>{if(!selected.length)return alert("삭제할 항목을 선택하세요.");const list=rows.filter(r=>selected.includes(r._id));setDeleteList(list);setDeleteConfirmOpen(true);}} className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-sm font-semibold shadow hover:opacity-90">선택삭제</button>
+    <button onClick={()=>{if(!selected.length)return showAlert("삭제할 항목을 선택하세요.");const list=rows.filter(r=>selected.includes(r._id));setDeleteList(list);setDeleteConfirmOpen(true);}} className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-sm font-semibold shadow hover:opacity-90">선택삭제</button>
     <button onClick={()=>setSelected([])} className="px-3 py-1.5 rounded-lg bg-gray-300 text-gray-800 text-sm font-semibold shadow hover:opacity-90">선택초기화</button>
-    <button onClick={()=>{if(!filtered.length)return alert("내보낼 데이터가 없습니다.");const rowsExcel=filtered.map((r,idx)=>({순번:idx+1,등록일:r.등록일||"",상차일:r.상차일||"",상차시간:r.상차시간||"",하차일:r.하차일||"",하차시간:r.하차시간||"",거래처명:r.거래처명||"",상차지명:r.상차지명||"",하차지명:r.하차지명||"",차량번호:r.차량번호||"",기사명:r.이름||"",전화번호:r.전화번호||"",배차상태:r.배차상태||"",청구운임:toMoney(r.청구운임),기사운임:toMoney(r.기사운임),수수료:toMoney(r.청구운임)-toMoney(r.기사운임),지급방식:r.지급방식||"",배차방식:r.배차방식||"",메모:r.메모||""}));const ws=XLSX.utils.json_to_sheet(rowsExcel);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"실시간배차현황");XLSX.writeFile(wb,"실시간배차현황.xlsx");}} className="px-3 py-1.5 rounded-lg bg-teal-600 text-white text-sm font-semibold shadow hover:opacity-90">엑셀다운</button>
+    <button onClick={()=>{if(!filtered.length)return showAlert("내보낼 데이터가 없습니다.");const rowsExcel=filtered.map((r,idx)=>({순번:idx+1,등록일:r.등록일||"",상차일:r.상차일||"",상차시간:r.상차시간||"",하차일:r.하차일||"",하차시간:r.하차시간||"",거래처명:r.거래처명||"",상차지명:r.상차지명||"",하차지명:r.하차지명||"",차량번호:r.차량번호||"",기사명:r.이름||"",전화번호:r.전화번호||"",배차상태:r.배차상태||"",청구운임:toMoney(r.청구운임),기사운임:toMoney(r.기사운임),수수료:toMoney(r.청구운임)-toMoney(r.기사운임),지급방식:r.지급방식||"",배차방식:r.배차방식||"",메모:r.메모||""}));const ws=XLSX.utils.json_to_sheet(rowsExcel);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"실시간배차현황");XLSX.writeFile(wb,"실시간배차현황.xlsx");}} className="px-3 py-1.5 rounded-lg bg-teal-600 text-white text-sm font-semibold shadow hover:opacity-90">엑셀다운</button>
     </div>
 </div>
 
@@ -13053,7 +13090,7 @@ setUrgentPopup([]);
     <button
   onClick={async () => {
     if (!copyTarget?._id) {
-      alert("수정할 오더 ID가 없습니다.");
+      showAlert("수정할 오더 ID가 없습니다.");
       return;
     }
 
@@ -13090,7 +13127,7 @@ setUrgentPopup([]);
       if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
     }, 2500);
 
-    alert("오더 수정 완료");
+    showAlert("오더 수정 완료");
   }}
   className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-[13px] font-bold hover:bg-emerald-700 transition"
 >
@@ -13102,7 +13139,7 @@ setUrgentPopup([]);
 <button
   onClick={async () => {
     if (!copyTarget) {
-      alert("복사할 데이터가 없습니다.");
+      showAlert("복사할 데이터가 없습니다.");
       return;
     }
 
@@ -13133,7 +13170,7 @@ setUrgentPopup([]);
       payload
     );
 
-    alert("복사 등록 완료");
+    showAlert("복사 등록 완료");
     setCopyPanelOpen(false);
   }}
   className="px-4 py-2 bg-[#1B2B4B] text-white rounded-lg text-[13px] font-bold hover:bg-[#243a60] transition"
@@ -15614,7 +15651,7 @@ await patchDispatch(editTarget._id, payload);
                   }, 3000);
 
                   // 4) 팝업 닫기 + 선택 초기화
-                  alert("수정이 저장되었습니다.");
+                  showAlert("수정이 저장되었습니다.");
                   setEditPopupOpen(false);
                   setSelected([]);
                   const savedId = editTarget._id;
@@ -16495,7 +16532,8 @@ const renderTimeText = (time, cond) => {
     korea.setDate(korea.getDate() + 1);
     return korea.toISOString().slice(0, 10);
   };
-
+const [alertMsg, setAlertMsg] = React.useState(null);
+const showAlert = (msg) => setAlertMsg(msg);
 const [blackAlert, setBlackAlert] = React.useState(null);
 React.useEffect(() => {
   const handler = (e) => setBlackAlert(e.detail);
@@ -16650,14 +16688,14 @@ const getMonthDiff = (start, end) => {
 
 const handleSearch = () => {
   if (!startDate || !endDate) {
-    alert("조회 기간을 입력해주세요.");
+    showAlert("조회 기간을 입력해주세요.");
     return;
   }
 
   const diff = getMonthDiff(startDate, endDate);
 
   if (diff > 2) {
-    alert("⚠️ 조회는 최대 3개월까지만 가능합니다.");
+    showAlert("⚠️ 조회는 최대 3개월까지만 가능합니다.");
     return;
   }
 setAppliedStartDate(startDate);
@@ -17001,7 +17039,7 @@ const getPalletCount = (text = "") => {
   // ===============================
   const copyMessage = (mode) => {
     if (!selected.size) {
-      alert("복사할 항목을 선택하세요.");
+      showAlert("복사할 항목을 선택하세요.");
       return;
     }
 
@@ -17293,7 +17331,7 @@ if (row?.업체전달상태 !== "전달완료") {
     );
 
     if (!base.length) {
-      alert("📭 유사 운임 데이터가 없습니다.");
+      showAlert("📭 유사 운임 데이터가 없습니다.");
       return;
     }
 
@@ -17348,10 +17386,10 @@ else if (palletDiff !== null) priority = 1;
   };
   // 🚀 복사패널 운임조회 함수 (5파트 신규)
   const handleCopyFareSearch = () => {
-    if (!copyTarget) return alert("먼저 오더를 선택해주세요.");
+    if (!copyTarget) return showAlert("먼저 오더를 선택해주세요.");
     const pickup = copyTarget.상차지명?.trim();
     const drop = copyTarget.하차지명?.trim();
-    if (!pickup || !drop) return alert("상/하차지를 입력해주세요.");
+    if (!pickup || !drop) return showAlert("상/하차지를 입력해주세요.");
 
     const base = (dispatchData || []).filter(r => {
       if (!r.청구운임) return false;
@@ -17361,7 +17399,7 @@ else if (palletDiff !== null) priority = 1;
       );
     });
 
-    if (!base.length) { alert("📭 동일 상/하차지 운임 이력이 없습니다."); return; }
+    if (!base.length) { showAlert("📭 동일 상/하차지 운임 이력이 없습니다."); return; }
 
     const targetCargo = String(copyTarget.화물내용 || "").trim();
     const targetTon = String(copyTarget.차량톤수 || "").trim();
@@ -17524,7 +17562,7 @@ else if (palletDiff !== null) priority = 1;
       });
 
       if (!mapped.length) {
-        alert("❌ 엑셀 데이터가 없습니다.");
+        showAlert("❌ 엑셀 데이터가 없습니다.");
         return;
       }
 
@@ -17534,10 +17572,10 @@ else if (palletDiff !== null) priority = 1;
         for (const item of mapped) {
           await patchDispatch(item._id, item);
         }
-        alert("✅ 대용량 업로드 완료되었습니다.");
+        showAlert("✅ 대용량 업로드 완료되었습니다.");
       } catch (err) {
         console.error(err);
-        alert("❌ 업로드 중 오류 발생");
+        showAlert("❌ 업로드 중 오류 발생");
       }
     };
 
@@ -17703,7 +17741,7 @@ else if (palletDiff !== null) priority = 1;
       )
       .join("\n");
 
-    alert(`🚚 자동 기사 추천 결과\n\n${top}`);
+    showAlert(`🚚 자동 기사 추천 결과\n\n${top}`);
   };
   // ================================  
   // 🔵 선택수정 / 수정완료 (팝업 방식)  
@@ -17711,12 +17749,12 @@ else if (palletDiff !== null) priority = 1;
   const handleEditToggle = async () => {
     // 🔐 여러 건 선택 시 경고
     if (!editMode && selected.size > 1) {
-      return alert("⚠️ 1개의 항목만 선택해주세요.\n(지금은 선택수정 모드입니다)");
+      return showAlert("⚠️ 1개의 항목만 선택해주세요.\n(지금은 선택수정 모드입니다)");
     }
 
     // 1) 수정 모드 OFF → 선택수정 버튼 처음 누른 상태
     if (!editMode) {
-      if (!selected.size) return alert("수정할 항목을 선택하세요.");
+      if (!selected.size) return showAlert("수정할 항목을 선택하세요.");
 
       const first = filtered.find((r) => selected.has(getId(r)));
 
@@ -17763,7 +17801,7 @@ if (first) {
     const ids = Object.keys(edited);
     if (!ids.length) {
       setEditMode(false);
-      return alert("변경된 내용이 없습니다.");
+      return showAlert("변경된 내용이 없습니다.");
     }
 
     if (!confirm("수정된 내용을 저장하시겠습니까?")) return;
@@ -17807,7 +17845,7 @@ if (first) {
     }
 
     setTimeout(() => setJustSaved([]), 1200);
-    alert("수정 완료되었습니다.");
+    showAlert("수정 완료되었습니다.");
   };
   // ==========================
   // 삭제 실행(되돌리기 기능 포함)
@@ -18194,8 +18232,9 @@ const save = {
 
   if (!loaded) return null;
 
-  return (
+return (
     <div className="p-3">
+<CustomAlert message={alertMsg} onClose={() => setAlertMsg(null)} />
 {blackAlert && (
   <div
     className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999999]"
@@ -18321,10 +18360,10 @@ const save = {
         {/* 우측 버튼들 */}
         <div className="ml-auto flex items-center gap-1.5">
           <button onClick={()=>setSortModalOpen(true)} className="px-3 py-1.5 rounded-lg bg-slate-500 text-white text-sm font-semibold shadow hover:opacity-90">정렬</button>
-          <button onClick={()=>{if(selected.size===0)return alert("복사할 항목을 선택하세요.");if(selected.size>1)return alert("1개만 선택할 수 있습니다.");setCopyModalOpen(true);}} className="px-3 py-1.5 rounded-lg bg-gray-800 text-white text-sm font-semibold shadow hover:opacity-90">📋 기사복사</button>
+          <button onClick={()=>{if(selected.size===0)return showAlert("복사할 항목을 선택하세요.");if(selected.size>1)return showAlert("1개만 선택할 수 있습니다.");setCopyModalOpen(true);}} className="px-3 py-1.5 rounded-lg bg-gray-800 text-white text-sm font-semibold shadow hover:opacity-90">📋 기사복사</button>
           <label className="px-3 py-1.5 rounded-lg bg-gray-700 text-white text-sm font-semibold shadow hover:opacity-90 cursor-pointer">대용량 업로드<input type="file" accept=".xlsx,.xls" hidden onChange={handleBulkFile}/></label>
           <button className="px-3 py-1.5 rounded-lg bg-gray-600 text-white text-sm font-semibold shadow hover:opacity-90" onClick={handleEditToggle}>{editMode?"수정완료":"선택수정"}</button>
-          <button className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-sm font-semibold shadow hover:opacity-90" onClick={()=>{if(!selected.size)return alert("삭제할 항목이 없습니다.");setShowDeletePopup(true);}}>선택삭제</button>
+          <button className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-sm font-semibold shadow hover:opacity-90" onClick={()=>{if(!selected.size)return showAlert("삭제할 항목이 없습니다.");setShowDeletePopup(true);}}>선택삭제</button>
           <button className="px-3 py-1.5 rounded-lg bg-gray-300 text-gray-800 text-sm font-semibold shadow hover:opacity-90" onClick={()=>setSelected(new Set())}>선택초기화</button>
           <button className="px-3 py-1.5 rounded-lg bg-teal-600 text-white text-sm font-semibold shadow hover:opacity-90" onClick={downloadExcel}>엑셀다운</button>
         </div>
@@ -19875,7 +19914,7 @@ setEditTarget((p) => ({
 
     const targetId = getId(editTarget);
     if (!targetId) {
-      alert("❌ 저장 실패: 오더 ID를 찾을 수 없습니다.");
+      showAlert("❌ 저장 실패: 오더 ID를 찾을 수 없습니다.");
       return;
     }
 
@@ -19923,7 +19962,7 @@ setEdited(prev => {
                   }, 3000);
 
                   // 3) 팝업 종료
-                  alert("수정이 저장되었습니다.");
+                  showAlert("수정이 저장되었습니다.");
                   const savedId = targetId;
 
                   setEditPopupOpen(false);
@@ -19986,7 +20025,7 @@ setEdited(prev => {
 
     const id = getId(copyTarget);
     if (!id) {
-      alert("수정할 오더 ID가 없습니다.");
+      showAlert("수정할 오더 ID가 없습니다.");
       return;
     }
 
@@ -20023,7 +20062,7 @@ if (plate) {
   emitBlackIfNeeded(d);
 }
 
-alert("오더 수정 완료");
+showAlert("오더 수정 완료");
 setCopyPanelOpen(false);
 
 
@@ -20040,7 +20079,7 @@ setCopyPanelOpen(false);
   onClick={async () => {
 
     if (!copyTarget) {
-      alert("복사할 데이터가 없습니다.");
+      showAlert("복사할 데이터가 없습니다.");
       return;
     }
 
@@ -20074,7 +20113,7 @@ setCopyPanelOpen(false);
       doc(db, copyTarget.__col || "orders", crypto.randomUUID()),
       payload
     );
-    alert("복사 등록 완료");
+    showAlert("복사 등록 완료");
 
     setCopyPanelOpen(false);
 
@@ -21504,7 +21543,7 @@ setCopyTarget(prev => ({
                 await patchDispatch(row._id, row);
               }
               setUndoVisible(false);
-              alert("삭제가 복구되었습니다.");
+              showAlert("삭제가 복구되었습니다.");
             }}
           >
             되돌리기
@@ -21967,7 +22006,7 @@ function NewOrderPopup({
       });
 
 
-      alert("신규 오더가 등록되었습니다.");
+      showAlert("신규 오더가 등록되었습니다.");
       setShowCreate(false);
 
       // 초기화
@@ -21995,7 +22034,7 @@ function NewOrderPopup({
       });
     } catch (err) {
       console.error(err);
-      alert("등록 실패");
+      showAlert("등록 실패");
     }
   };
 
@@ -22423,7 +22462,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [] })
   // ================================
   const exportSettlementCapture = async (type = "png") => {
     const el = document.getElementById("settlement-capture");
-    if (!el) { alert("캡쳐 영역을 찾을 수 없습니다."); return; }
+    if (!el) { showAlert("캡쳐 영역을 찾을 수 없습니다."); return; }
     const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
     if (type === "png") {
       const link = document.createElement("a");
@@ -24295,8 +24334,8 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
             <div className="flex gap-2 px-6 pb-6">
               <button onClick={() => { setNewDriverPopupOpen(false); setNewDriverData({ 이름: "", 전화번호: "", 차량번호: "" }); }} className="flex-1 py-2.5 rounded-lg border border-gray-200 text-[13px] font-semibold hover:bg-gray-50 transition">취소</button>
               <button onClick={async () => {
-                if (!newDriverData.이름.trim()) { alert("기사명을 입력하세요."); return; }
-                if (!newDriverData.전화번호.trim()) { alert("전화번호를 입력하세요."); return; }
+                if (!newDriverData.이름.trim()) { showAlert("기사명을 입력하세요."); return; }
+                if (!newDriverData.전화번호.trim()) { showAlert("전화번호를 입력하세요."); return; }
                 try {
                   if (typeof upsertDriver === "function") {
                     await upsertDriver({ 차량번호: newDriverData.차량번호, 이름: newDriverData.이름, 전화번호: newDriverData.전화번호, createdAt: Date.now() });
@@ -24304,10 +24343,10 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                     await setDoc(doc(db, "drivers", crypto.randomUUID()), { 차량번호: newDriverData.차량번호, 이름: newDriverData.이름, 전화번호: newDriverData.전화번호, createdAt: Date.now() });
                   }
                   setCopyTarget(prev => ({ ...prev, 이름: newDriverData.이름, 전화번호: formatPhone(newDriverData.전화번호), 배차상태: "배차완료" }));
-                  alert("✅ 기사 등록 완료");
+                  showAlert("✅ 기사 등록 완료");
                   setNewDriverPopupOpen(false);
                   setNewDriverData({ 이름: "", 전화번호: "", 차량번호: "" });
-                } catch (err) { console.error(err); alert("등록 중 오류 발생"); }
+                } catch (err) { console.error(err); showAlert("등록 중 오류 발생"); }
               }} className="flex-1 py-2.5 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition">저장</button>
             </div>
           </div>
@@ -24388,11 +24427,11 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                 <div className="flex gap-2 items-center">
                   <button
                     onClick={async () => {
-                      if (!copyTarget?._id) { alert("수정할 오더 ID가 없습니다."); return; }
+                      if (!copyTarget?._id) { showAlert("수정할 오더 ID가 없습니다."); return; }
                       const finalCargo = copyTarget.화물타입 ? `${copyTarget.화물수량 || ""}${copyTarget.화물타입}` : (copyTarget.화물수량 || "");
                       const payload = { ...copyTarget, 화물내용: finalCargo, updatedAt: Date.now() };
                       await patchDispatch(copyTarget._id, payload);
-                      alert("오더 수정 완료");
+                      showAlert("오더 수정 완료");
                       setCopyPanelOpen(false);
                     }}
                     className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-[13px] font-bold hover:bg-emerald-700 transition"
@@ -24401,12 +24440,12 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                   </button>
                   <button
                     onClick={async () => {
-                      if (!copyTarget) { alert("복사할 데이터가 없습니다."); return; }
+                      if (!copyTarget) { showAlert("복사할 데이터가 없습니다."); return; }
                       const finalCargo = copyTarget.화물타입 ? `${copyTarget.화물수량 || ""}${copyTarget.화물타입}` : (copyTarget.화물수량 || "");
                       const payload = { ...copyTarget, 화물내용: finalCargo, createdAt: Date.now(), updatedAt: Date.now(), 배차상태: copyTarget?.차량번호?.trim() ? "배차완료" : "배차중", 업체전달상태: "미전달" };
                       delete payload._id;
                       await setDoc(doc(db, copyTarget.__col || "orders", crypto.randomUUID()), payload);
-                      alert("복사 등록 완료");
+                      showAlert("복사 등록 완료");
                       setCopyPanelOpen(false);
                     }}
                     className="px-4 py-2 bg-[#1B2B4B] text-white rounded-lg text-[13px] font-bold hover:bg-[#243a60] transition"
@@ -24925,7 +24964,7 @@ function ClientSettlement({ dispatchData, clients = [], setClients }) {
   const handleInputKeyDown = (e) => {
     if (!dropdownOpen || dropdownOptions.length === 0) {
       if (e.key === "Enter") {
-        if (!searchInput.trim()) return alert("검색어를 입력하세요.");
+        if (!searchInput.trim()) return showAlert("검색어를 입력하세요.");
         setClient(searchInput.trim());
         setSearched(true);
         setDropdownOpen(false);
@@ -25071,7 +25110,7 @@ function ClientSettlement({ dispatchData, clients = [], setClients }) {
   };
 
   const downloadInvoiceExcel = () => {
-    if (!searched || !rowsInvoice.length) return alert("먼저 조회를 실행하세요.");
+    if (!searched || !rowsInvoice.length) return showAlert("먼저 조회를 실행하세요.");
     const rows = mapped.map(m => ({
       No: m.idx, 상차일: m.상차일, 상하차지: m.상하차지,
       화물명: m.화물명, 기사명: m.기사명,
@@ -25094,7 +25133,7 @@ function ClientSettlement({ dispatchData, clients = [], setClients }) {
   // ★ 인쇄 기능
   const handlePrint = () => {
     const area = document.getElementById("invoiceArea");
-    if (!area) return alert("인쇄할 내용이 없습니다.");
+    if (!area) return showAlert("인쇄할 내용이 없습니다.");
     const win = window.open("", "_blank");
     win.document.write(`
       <html><head><title>거래명세서 - ${client || ""}</title>
@@ -25110,7 +25149,7 @@ function ClientSettlement({ dispatchData, clients = [], setClients }) {
 
   const saveEdit = () => {
     setClients(prev => prev.map(c => c.거래처명 === client ? { ...c, ...editInfo } : c));
-    alert("거래처 정보 수정 완료!");
+    showAlert("거래처 정보 수정 완료!");
     setShowEdit(false);
   };
 
@@ -25229,28 +25268,28 @@ function ClientSettlement({ dispatchData, clients = [], setClients }) {
       if (!r._id) continue;
       await patchMonthOnDoc(r._id, row.yyyymm, next, dateStr);
     }
-    alert(`${row.yyyymm} → ${next} (${row._rows.length}건)`);
+    showAlert(`${row.yyyymm} → ${next} (${row._rows.length}건)`);
   };
 
   const settleSelected = async () => {
     const targets = monthRows.filter(r => selectedMonths.has(r.yyyymm));
-    if (!targets.length) return alert("선택된 월이 없습니다.");
+    if (!targets.length) return showAlert("선택된 월이 없습니다.");
     for (const row of targets)
       for (const r of row._rows || [])
         if (r._id) await patchMonthOnDoc(r._id, row.yyyymm, "정산완료", todayStr8());
-    alert(`선택 ${targets.length}개월 정산완료`); clearSel();
+    showAlert(`선택 ${targets.length}개월 정산완료`); clearSel();
   };
 
   const settleAll = async () => {
-    if (!monthRows.length) return alert("표시된 월이 없습니다.");
+    if (!monthRows.length) return showAlert("표시된 월이 없습니다.");
     for (const row of monthRows)
       for (const r of row._rows || [])
         if (r._id) await patchMonthOnDoc(r._id, row.yyyymm, "정산완료", todayStr8());
-    alert(`전체 ${monthRows.length}개월 정산완료`); clearSel();
+    showAlert(`전체 ${monthRows.length}개월 정산완료`); clearSel();
   };
 
   const downloadMonthExcel = () => {
-    if (!selClient) return alert("거래처를 선택하세요.");
+    if (!selClient) return showAlert("거래처를 선택하세요.");
     const rows = monthRows.map((row, idx) => ({
       순번: idx + 1, 청구월: row.yyyymm, 거래처명: row.거래처명,
       건수: row.건수, 총청구금액: toInt(row.총청구금액),
@@ -25379,7 +25418,7 @@ function ClientSettlement({ dispatchData, clients = [], setClients }) {
               <button
                 className="px-4 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition"
                 onClick={() => {
-                  if (!searchInput.trim()) return alert("검색어를 입력하세요.");
+                  if (!searchInput.trim()) return showAlert("검색어를 입력하세요.");
                   setClient(searchInput.trim());
                   setSearched(true);
                   setDropdownOpen(false);
@@ -25869,7 +25908,7 @@ function PaymentManagement({ dispatchData = [], clients = [], drivers = [] }) {
 
   // ---------- 선택 지급/미지급 ----------
   const bulkPayDone = async (ids) => {
-    if (!ids.length) return alert("선택된 항목이 없습니다.");
+    if (!ids.length) return showAlert("선택된 항목이 없습니다.");
     const payDate = selectedPayDate || todayStr9();
 
     for (const id of ids) {
@@ -25878,11 +25917,11 @@ function PaymentManagement({ dispatchData = [], clients = [], drivers = [] }) {
         지급일: payDate,
       });
     }
-    alert(`지급완료 처리: ${ids.length}건`);
+    showAlert(`지급완료 처리: ${ids.length}건`);
   };
 
   const bulkPayUndone = async (ids) => {
-    if (!ids.length) return alert("선택된 항목이 없습니다.");
+    if (!ids.length) return showAlert("선택된 항목이 없습니다.");
 
     for (const id of ids) {
       await patchDispatchDirect(id, {
@@ -25890,7 +25929,7 @@ function PaymentManagement({ dispatchData = [], clients = [], drivers = [] }) {
         지급일: "",
       });
     }
-    alert(`미지급 처리: ${ids.length}건`);
+    showAlert(`미지급 처리: ${ids.length}건`);
   };
 
   // ---------- 개별 토글 ----------
@@ -25969,7 +26008,7 @@ function PaymentManagement({ dispatchData = [], clients = [], drivers = [] }) {
         return;
       } catch { }
     }
-    alert("신규 기사 등록창이 연결되지 않았습니다.");
+    showAlert("신규 기사 등록창이 연결되지 않았습니다.");
   };
 
   const onCarKeyDown = (row) => (e) => {
@@ -26019,7 +26058,7 @@ function PaymentManagement({ dispatchData = [], clients = [], drivers = [] }) {
 
     if (jobs.length) await Promise.all(jobs);
 
-    alert("저장되었습니다");
+    showAlert("저장되었습니다");
     setEditMode(false);
     setDraft({});
   };
@@ -26037,7 +26076,7 @@ function PaymentManagement({ dispatchData = [], clients = [], drivers = [] }) {
   // ---------- 엑셀 다운로드 ----------
   const downloadExcel = () => {
     if (!filtered.length) {
-      alert("내보낼 데이터가 없습니다.");
+      showAlert("내보낼 데이터가 없습니다.");
       return;
     }
 
@@ -26543,13 +26582,13 @@ function DriverManagement({ drivers = [], upsertDriver, removeDriver }) {
   };
 
   const handleBlur = async (row, key, val) => {
-    if (!row.id) return alert("문서 ID가 없어 수정할 수 없습니다.");
+    if (!row.id) return showAlert("문서 ID가 없어 수정할 수 없습니다.");
     await upsertDriver({ ...row, [key]: val });
   };
 
   const addNew = async () => {
     const 차량번호 = (newForm.차량번호||"").replace(/\s+/g,"");
-    if (!차량번호) return alert("차량번호는 필수입니다.");
+    if (!차량번호) return showAlert("차량번호는 필수입니다.");
     await upsertDriver({
       id: crypto.randomUUID(),
       차량번호,
@@ -26560,19 +26599,19 @@ function DriverManagement({ drivers = [], upsertDriver, removeDriver }) {
     });
     setNewForm({ 차량번호:"", 이름:"", 전화번호:"", 메모:"", 등급:"일반" });
     setShowAddForm(false);
-    alert("등록 완료");
+    showAlert("등록 완료");
   };
 
   const removeSelected = async () => {
-    if (!selected.size) return alert("선택된 항목이 없습니다.");
+    if (!selected.size) return showAlert("선택된 항목이 없습니다.");
     if (!window.confirm(`${selected.size}건 삭제할까요?`)) return;
     for (const id of selected) await removeDriver(id);
     setSelected(new Set());
-    alert("삭제 완료");
+    showAlert("삭제 완료");
   };
 
   const downloadExcel = () => {
-    if (!filtered.length) return alert("내보낼 데이터가 없습니다.");
+    if (!filtered.length) return showAlert("내보낼 데이터가 없습니다.");
     const rows = filtered.map((r,i) => ({
       순번:i+1, 차량번호:r.차량번호||"", 이름:r.이름||"",
       전화번호:r.전화번호||"", 등급:r.등급||"일반", 메모:r.메모||"",
@@ -26605,9 +26644,9 @@ function DriverManagement({ drivers = [], upsertDriver, removeDriver }) {
           });
           ok++;
         }
-        alert(`총 ${ok}건 반영`);
+        showAlert(`총 ${ok}건 반영`);
       } catch(err) {
-        console.error(err); alert("엑셀 처리 중 오류");
+        console.error(err); showAlert("엑셀 처리 중 오류");
       } finally { e.target.value = ""; }
     };
     reader.readAsArrayBuffer(file);
@@ -26918,18 +26957,18 @@ const head = "border px-3 py-2.5 bg-slate-100 text-slate-700 text-sm font-semibo
 
   const addNew = async () => {
     const 거래처명 = (newForm.거래처명 || "").trim();
-    if (!거래처명) return alert("거래처명은 필수입니다.");
+    if (!거래처명) return showAlert("거래처명은 필수입니다.");
     await upsertClient?.({ ...newForm, id: 거래처명 });
     setNewForm({ 거래처명: "", 사업자번호: "", 대표자: "", 업태: "", 종목: "", 주소: "", 담당자: "", 연락처: "", 메모: "" });
-    alert("등록 완료");
+    showAlert("등록 완료");
   };
 
   const removeSelectedFn = async () => {
-    if (!selected.size) return alert("선택된 항목이 없습니다.");
+    if (!selected.size) return showAlert("선택된 항목이 없습니다.");
     if (!confirm(`${selected.size}건 삭제하시겠습니까?`)) return;
     for (const id of selected) await removeClient?.(id);
     setSelected(new Set());
-    alert("삭제 완료");
+    showAlert("삭제 완료");
   };
 
   const onExcel = (e) => {
@@ -26947,8 +26986,8 @@ const head = "border px-3 py-2.5 bg-slate-100 text-slate-700 text-sm font-semibo
           await upsertClient?.({ 거래처명, 사업자번호: r.사업자번호||"", 대표자: r.대표자||"", 업태: r.업태||"", 종목: r.종목||"", 주소: r.주소||"", 담당자: r.담당자||"", 연락처: r.연락처||"", 메모: r.메모||"", id: 거래처명 });
           ok++;
         }
-        alert(`총 ${ok}건 반영 완료`);
-      } catch (err) { alert("엑셀 처리 오류"); } finally { e.target.value = ""; }
+        showAlert(`총 ${ok}건 반영 완료`);
+      } catch (err) { showAlert("엑셀 처리 오류"); } finally { e.target.value = ""; }
     };
     reader.readAsArrayBuffer(file);
   };
@@ -27013,19 +27052,19 @@ const handlePlaceBlur = async (row, key, val) => {
   };
   const addNewPlace = async () => {
     const 업체명 = (placeNewForm.업체명 || "").trim();
-    if (!업체명) return alert("업체명은 필수입니다.");
-    if (!placeNewForm.주소?.trim()) return alert("주소는 필수입니다.");
+    if (!업체명) return showAlert("업체명은 필수입니다.");
+    if (!placeNewForm.주소?.trim()) return showAlert("주소는 필수입니다.");
     await upsertPlace?.({ ...placeNewForm, 업체명, 등급: placeNewForm.등급 || "일반" });
     setPlaceNewForm({ 업체명: "", 주소: "", 담당자: "", 담당자번호: "", 등급: "일반", 메모: "" });
-    alert("등록 완료");
+    showAlert("등록 완료");
   };
 
   const removeSelectedPlaces = async () => {
-    if (!placeSelected.size) return alert("선택된 항목이 없습니다.");
+    if (!placeSelected.size) return showAlert("선택된 항목이 없습니다.");
     if (!confirm(`${placeSelected.size}건 삭제할까요?`)) return;
     for (const id of placeSelected) await removePlace(id);
     setPlaceSelected(new Set());
-    alert("삭제 완료");
+    showAlert("삭제 완료");
   };
 
   const duplicatePlaceGroups = React.useMemo(() => {
@@ -27050,9 +27089,9 @@ const handlePlaceBlur = async (row, key, val) => {
   }, [placeRows]);
 
   const removeDuplicatePlaces = async () => {
-    if (dupSelected.size === 0) return alert("삭제할 중복 항목을 선택하세요.");
+    if (dupSelected.size === 0) return showAlert("삭제할 중복 항목을 선택하세요.");
     for (const id of dupSelected) await deleteDoc(doc(db, PLACES_COLL, id));
-    setDupSelected(new Set()); alert(`${dupSelected.size}건 삭제 완료`);
+    setDupSelected(new Set()); showAlert(`${dupSelected.size}건 삭제 완료`);
   };
 
   const onExcelPlaces = (e) => {
@@ -27072,8 +27111,8 @@ const handlePlaceBlur = async (row, key, val) => {
           await upsertPlace?.({ 업체명, 주소, 담당자: (r.담당자||"").toString().trim(), 담당자번호: (r.담당자번호||r["전화번호"]||"").toString().trim(), 메모: (r.메모||"").toString().trim(), 등급: "일반" });
           addrMap.set(k, { 업체명, 주소 }); ok++;
         }
-        alert(`총 ${ok}건 신규 반영`);
-      } catch (err) { alert("엑셀 처리 오류"); } finally { e.target.value = ""; }
+        showAlert(`총 ${ok}건 신규 반영`);
+      } catch (err) { showAlert("엑셀 처리 오류"); } finally { e.target.value = ""; }
     };
     reader.readAsArrayBuffer(file);
   };
