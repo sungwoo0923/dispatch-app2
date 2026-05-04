@@ -96,10 +96,14 @@ const normalizeKoreanTime = (t = "") => {
 const buildHalfHourTimes = () => {
   const list = [];
   for (let h = 0; h < 24; h++) {
-    for (const m of ["00", "30"]) {
+    for (const m of [0, 30]) {
       const hour12 = h % 12 === 0 ? 12 : h % 12;
       const ampm = h < 12 ? "오전" : "오후";
-      list.push(`${ampm} ${hour12}:${m}`);
+      if (m === 0) {
+        list.push(`${ampm} ${hour12}시`);
+      } else {
+        list.push(`${ampm} ${hour12}시 ${m}분`);
+      }
     }
   }
   return list;
@@ -2951,7 +2955,7 @@ function MobileSideMenu({
         {/* 헤더 */}
         <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
           <div>
-            <div className="text-[15px] font-extrabold text-[#1B2B4B] tracking-tight">(주)S-Flow 모바일</div>
+            <div className="text-[15px] font-extrabold text-[#1B2B4B] tracking-tight">(주)KP-Flow 모바일</div>
             <div className="text-[11px] text-gray-400 mt-0.5">DISPATCH MANAGEMENT</div>
           </div>
           <button
