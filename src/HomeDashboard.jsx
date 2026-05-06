@@ -676,10 +676,10 @@ React.useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(
       {selectedNotice && (
         <Modal title="공지사항 상세" onClose={() => setSelectedNotice(null)}>
           <div className="space-y-3 text-[14px]">
-            <div><div className="text-[11px] text-gray-400 mb-0.5">제목</div><div className="font-semibold">{selectedNotice.title}</div></div>
-            <div><div className="text-[11px] text-gray-400 mb-0.5">작성자</div><div>{selectedNotice.author}</div></div>
-            <div><div className="text-[11px] text-gray-400 mb-0.5">작성일</div><div>{selectedNotice.date}</div></div>
-            <div><div className="text-[11px] text-gray-400 mb-0.5">내용</div><div className="whitespace-pre-wrap leading-relaxed bg-gray-50 rounded-lg p-3">{selectedNotice.content}</div></div>
+            <div><div className="text-[13px] text-gray-400 mb-0.5">제목</div><div className="font-semibold">{selectedNotice.title}</div></div>
+            <div><div className="text-[13px] text-gray-400 mb-0.5">작성자</div><div>{selectedNotice.author}</div></div>
+            <div><div className="text-[13px] text-gray-400 mb-0.5">작성일</div><div>{selectedNotice.date}</div></div>
+            <div><div className="text-[13px] text-gray-400 mb-0.5">내용</div><div className="whitespace-pre-wrap leading-relaxed bg-gray-50 rounded-lg p-3">{selectedNotice.content}</div></div>
           </div>
           <div className="flex gap-2 mt-4 pt-4 border-t">
             <button onClick={async () => { if (!window.confirm("삭제할까요?")) return; await deleteDoc(doc(db, "notices", selectedNotice.id)); setSelectedNotice(null); }} className="flex-1 py-2 rounded-lg border border-red-200 text-red-600 text-[13px] font-semibold hover:bg-red-50 transition">삭제</button>
@@ -716,10 +716,10 @@ React.useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(
       {selectedSchedule && (
         <Modal title="일정 상세" onClose={() => setSelectedSchedule(null)}>
           <div className="space-y-3 text-[14px]">
-            <div><div className="text-[11px] text-gray-400 mb-0.5">구분</div><div className="font-semibold">{selectedSchedule.type}</div></div>
-            <div><div className="text-[11px] text-gray-400 mb-0.5">작성자</div><div>{selectedSchedule.name}</div></div>
-            <div><div className="text-[11px] text-gray-400 mb-0.5">기간</div><div>{selectedSchedule.start} ~ {selectedSchedule.end}</div></div>
-            {selectedSchedule.memo && <div><div className="text-[11px] text-gray-400 mb-0.5">메모</div><div className="whitespace-pre-wrap bg-gray-50 rounded-lg p-3">{selectedSchedule.memo}</div></div>}
+            <div><div className="text-[13px] text-gray-400 mb-0.5">구분</div><div className="font-semibold">{selectedSchedule.type}</div></div>
+            <div><div className="text-[13px] text-gray-400 mb-0.5">작성자</div><div>{selectedSchedule.name}</div></div>
+            <div><div className="text-[13px] text-gray-400 mb-0.5">기간</div><div>{selectedSchedule.start} ~ {selectedSchedule.end}</div></div>
+            {selectedSchedule.memo && <div><div className="text-[13px] text-gray-400 mb-0.5">메모</div><div className="whitespace-pre-wrap bg-gray-50 rounded-lg p-3">{selectedSchedule.memo}</div></div>}
           </div>
           <div className="flex gap-2 mt-4 pt-4 border-t">
             <button onClick={async () => { if (!window.confirm("삭제할까요?")) return; await deleteDoc(doc(db, "schedules", selectedSchedule.id)); setSelectedSchedule(null); }} className="flex-1 py-2 rounded-lg border border-red-200 text-red-600 text-[13px] font-semibold hover:bg-red-50 transition">삭제</button>
@@ -776,10 +776,10 @@ React.useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(
           ) : (
             <>
               <div className="space-y-3 text-[14px]">
-                <div><div className="text-[11px] text-gray-400 mb-0.5">작성자</div><div className="font-semibold">{selectedHandover.author}</div></div>
-                <div><div className="text-[11px] text-gray-400 mb-0.5">받는 사람</div><div>{selectedHandover.receiver}</div></div>
-                <div><div className="text-[11px] text-gray-400 mb-0.5">기준 날짜</div><div>{selectedHandover.date}</div></div>
-                <div><div className="text-[11px] text-gray-400 mb-0.5">내용</div><div className="whitespace-pre-wrap bg-gray-50 rounded-lg p-3 leading-relaxed">{selectedHandover.text}</div></div>
+                <div><div className="text-[13px] text-gray-400 mb-0.5">작성자</div><div className="font-semibold">{selectedHandover.author}</div></div>
+                <div><div className="text-[13px] text-gray-400 mb-0.5">받는 사람</div><div>{selectedHandover.receiver}</div></div>
+                <div><div className="text-[13px] text-gray-400 mb-0.5">기준 날짜</div><div>{selectedHandover.date}</div></div>
+                <div><div className="text-[13px] text-gray-400 mb-0.5">내용</div><div className="whitespace-pre-wrap bg-gray-50 rounded-lg p-3 leading-relaxed">{selectedHandover.text}</div></div>
               </div>
               <div className="flex gap-2 mt-4 pt-4 border-t">
                 <button onClick={async () => { if (!window.confirm("삭제할까요?")) return; await deleteDoc(doc(db, "handovers", selectedHandover.id)); setSelectedHandover(null); setHandoverEditMode(false); }} className="flex-1 py-2 rounded-lg border border-red-200 text-red-600 text-[13px] font-semibold hover:bg-red-50 transition">삭제</button>

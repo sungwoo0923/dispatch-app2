@@ -651,6 +651,7 @@ const removeDispatch = async (arg) => {
 
   return {
     dispatchData,
+    setDispatchData,   // ★ 추가
     drivers,
     clients,
     places,
@@ -663,6 +664,7 @@ const removeDispatch = async (arg) => {
     removeClient,
   };
 }  // ← ⭐ 이거 반드시 필요
+
 /* -------------------------------------------------
    하차지 Key 생성 함수 (⭐ 반드시 필요)
 --------------------------------------------------*/
@@ -1070,6 +1072,7 @@ useEffect(() => {
   // ---------------- Firestore 실시간 훅 ----------------
   const {
     dispatchData,
+    setDispatchData,   // ★ 추가
     drivers,
     clients,
     places,
@@ -1081,6 +1084,7 @@ useEffect(() => {
     upsertClient,
     removeClient,
   } = useRealtimeCollections(user);
+
 
   // 🔍 admin = 전체 데이터, 일반 user = 본인 작성 데이터만
   const dispatchDataFiltered = useMemo(() => {
@@ -1270,6 +1274,34 @@ useEffect(() => {
   const tonOptions = useMemo(() => Array.from({ length: 25 }, (_, i) => `${i + 1}톤`), []);
 
  const [menu, setMenu] = useState("HOME");
+   // ★ 거래명세서에서 오더 클릭 시 해당 오더로 이동하기 위한 전역 함수
+  const [highlightOrderId, setHighlightOrderId] = useState(null);
+
+    // ★ 특정 오더 ID로 필터링 (거래명세서에서 이동 시)
+  const [focusOrderId, setFocusOrderId] = useState(null);
+
+  useEffect(() => {
+    window.__setMainTab = (tab) => setMenu(tab);
+    window.__selectOrder = (id) => {
+      setFocusOrderId(id);  // ★ 해당 오더만 표시하도록 필터 설정
+      setMenu("배차현황");
+      setTimeout(() => {
+        const rowEl = document.getElementById(`row-${id}`);
+        if (rowEl) {
+          rowEl.scrollIntoView({ behavior: "smooth", block: "center" });
+          rowEl.classList.add("toast-flash-border");
+          setTimeout(() => {
+            rowEl.classList.remove("toast-flash-border");
+          }, 2500);
+        }
+      }, 400);
+    };
+    return () => {
+      delete window.__setMainTab;
+      delete window.__selectOrder;
+    };
+  }, []);
+
 const [alertMsg, setAlertMsg] = useState(null);
 const showAlert = (msg) => setAlertMsg(msg);
 
@@ -1455,10 +1487,10 @@ return (
           />
         )}
 
-        {menu === "배차현황" && (
+                {menu === "배차현황" && (
           <DispatchStatus
             role={role}
-            dispatchData={dispatchDataFiltered}   // ★ 변경!
+            dispatchData={dispatchDataFiltered}
             timeOptions={timeOptions}
             tonOptions={tonOptions}
             drivers={drivers}
@@ -1468,8 +1500,11 @@ return (
             patchDispatch={patchDispatch}
             removeDispatch={removeDispatch}
             upsertDriver={upsertDriver}
+            focusOrderId={focusOrderId}
+            clearFocusOrder={() => setFocusOrderId(null)}
           />
         )}
+
 
 
         {menu === "미배차현황" && (
@@ -1554,14 +1589,16 @@ return (
           />
         )}
 
-        {menu === "거래처정산" && role === "admin" && (
+                  <div style={{ display: menu === "거래처정산" && role === "admin" ? "block" : "none" }}>
           <ClientSettlement
             dispatchData={dispatchData}
+             setDispatchData={setDispatchData}
             clients={clients}
             setClients={(next) => next.forEach(upsertClient)}
+            showAlert={showAlert}
+            patchDispatch={patchDispatch}
           />
-        )}
-
+        </div>
         {menu === "지급관리" && role === "admin" && (
           <PaymentManagement
             dispatchData={dispatchData}
@@ -11779,9 +11816,12 @@ const applySmart4 = async (target, setTarget, text) => {
   // ==========================================
   // 🚚 기사 확인 모달 상태 + 적용 함수 추가 (START)
   // ==========================================
-  const [driverConfirmOpen, setDriverConfirmOpen] = React.useState(false);
-  const [driverConfirmInfo, setDriverConfirmInfo] = React.useState(null);
-  const [driverConfirmRowId, setDriverConfirmRowId] = React.useState(null);
+const [driverConfirmOpen, setDriverConfirmOpen] = React.useState(false);
+const [driverConfirmInfo, setDriverConfirmInfo] = React.useState(null);
+const [driverConfirmRowId, setDriverConfirmRowId] = React.useState(null);
+const [quickRegMode, setQuickRegMode] = React.useState(false);
+const [quickRegName, setQuickRegName] = React.useState("");
+const [quickRegPhone, setQuickRegPhone] = React.useState("");
   // 모달 포커스용
   const modalRef = useRef(null);
 
@@ -11836,91 +11876,112 @@ setDriverConfirmRowId(null);
   // 📌 차량번호 입력(auto-match + 신규기사 등록)
   // ------------------------
   const handleCarInput = async (id, rawVal, keyEvent) => {
-    // 🚨 엔터 입력 시 → 기본동작 + 이벤트 전파 모두 차단
-    if (keyEvent && keyEvent.key === "Enter") {
-      keyEvent.preventDefault();
-      keyEvent.stopPropagation();
-    }
+  if (keyEvent && keyEvent.key === "Enter") {
+    keyEvent.preventDefault();
+    keyEvent.stopPropagation();
+  }
 
-    if (isRegistering) return;
+  if (isRegistering) return;
 
-    const v = normalizePlate(rawVal);
-    const idx = rows.findIndex((r) => r._id === id);
-    if (idx === -1) return;
+  const v = normalizePlate(rawVal);
+  const idx = rows.findIndex((r) => r._id === id);
+  if (idx === -1) return;
 
-    const oldRow = rows[idx];
+  const oldRow = rows[idx];
 
-    // 차량번호 삭제 → 기사 정보 초기화
-    if (!v) {
+  // 차량번호 삭제 → 기사 정보 초기화
+  if (!v) {
+    const updated = {
+      차량번호: "",
+      이름: "",
+      전화번호: "",
+      배차상태: "배차중",
+      updatedAt: Date.now(),
+    };
 
-const updated = {
-  차량번호: "",
-  이름: "",
-  전화번호: "",
-  배차상태: "배차중",
-  updatedAt: Date.now(),
-};
+    setRows((prev) =>
+      prev.map((r) => (r._id === id ? { ...r, ...updated } : r))
+    );
 
-      setRows((prev) =>
-        prev.map((r) => (r._id === id ? { ...r, ...updated } : r))
-      );
+    await patchDispatch?.(id, updated);
+    setTimeout(() => {
+      const el = document.querySelector(`[data-id="${id}"] input[name="차량번호"]`);
+      if (el) {
+        el.focus();
+        el.select();
+      }
+    }, 80);
 
-      await patchDispatch?.(id, updated);
-      // 🔥 포커스 유지
-      setTimeout(() => {
-        const el = document.querySelector(`[data-id="${id}"] input[name="차량번호"]`);
-        if (el) {
-          el.focus();
-          el.select();
-        }
-      }, 80);
+    setRows(prev =>
+      prev.map(r =>
+        r._id === id ? { ...r, updatedAt: Date.now() } : r
+      )
+    );
 
-      // 최근 업데이트 기준 화면 rows 최신화
-      setRows(prev =>
-        prev.map(r =>
-          r._id === id ? { ...r, updatedAt: Date.now() } : r
-        )
-      );
+    return;
+  }
 
-      return;
+  const matches = driverMap.get(v) || [];
 
-    }
+  // 🔹 기존 기사 1명 매칭
+  if (matches.length === 1) {
+    const match = matches[0];
+    const existingName = (oldRow.이름 || "").trim();
+    const existingPhone = (oldRow.전화번호 || "").replace(/[^\d]/g, "");
+    const matchPhone = (match.전화번호 || "").replace(/[^\d]/g, "");
 
-    const matches = driverMap.get(v) || [];
-
-    // 🔹 기존 기사 1명 → 팝업 표시(자동매칭)
-    if (matches.length === 1) {
-      const match = matches[0];
+    // ★★★ 핵심: 현재 행에 기사정보가 있고, DB 기사와 다른 경우 → 불일치 팝업
+    if (
+      existingName &&
+      (existingName !== match.이름 || existingPhone !== matchPhone)
+    ) {
       setDriverConfirmInfo({
         이름: match.이름,
         차량번호: rawVal,
         전화번호: match.전화번호,
+        // ★ 불일치 관련 추가 정보
+        type: "mismatch",
+        currentName: existingName,
+        currentPhone: oldRow.전화번호 || "",
       });
       setDriverConfirmRowId(id);
       setDriverConfirmOpen(true);
-      return; // 🚫 confirmDriverApply 실행 금지(팝업에서 엔터로!)
-    }
-
-    // 🔹 기존 기사 여러 명 → 기사 선택 모달
-    if (matches.length > 1) {
-      setDriverSelectInfo({
-        rowId: id,
-        list: matches,
-        selectedDriver: null,
-      });
       return;
     }
 
-    // 🔹 신규 기사 → 팝업
+    // 기존과 동일하거나 행에 기사정보 없음 → 일반 확인 팝업
     setDriverConfirmInfo({
-      이름: "",
+      이름: match.이름,
       차량번호: rawVal,
-      전화번호: "",
+      전화번호: match.전화번호,
     });
     setDriverConfirmRowId(id);
     setDriverConfirmOpen(true);
     return;
-  };
+  }
+
+  // 🔹 기존 기사 여러 명 → 기사 선택 모달
+  if (matches.length > 1) {
+    setDriverSelectInfo({
+      rowId: id,
+      list: matches,
+      selectedDriver: null,
+    });
+    return;
+  }
+
+  // 🔹 신규 기사 → 팝업
+  setDriverConfirmInfo({
+    이름: "",
+    차량번호: rawVal,
+    전화번호: "",
+    type: "new",
+  });
+  setDriverConfirmRowId(id);
+  setDriverConfirmOpen(true);
+  return;
+};
+
 
   // 🔽 정렬 상태
   const [sortKey, setSortKey] = React.useState("");
@@ -15687,10 +15748,101 @@ await patchDispatch(editTarget._id, payload);
         ))}
 
       </div>
+      {/* =================== 기사 선택 모달 (동일 차량번호 여러 기사) =================== */}
+{driverSelectInfo && (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]"
+    onClick={() => setDriverSelectInfo(null)}>
+    <div className="bg-white rounded-2xl shadow-2xl w-[440px] overflow-hidden"
+      onClick={e => e.stopPropagation()}
+      tabIndex={-1}
+      ref={el => { if(el) setTimeout(() => el.focus(), 0); }}
+      onKeyDown={e => { if(e.key === "Escape") setDriverSelectInfo(null); }}>
+
+      <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
+        <div>
+          <div className="text-white font-bold text-[15px]">기사 선택</div>
+          <div className="text-white/50 text-[11px] mt-0.5">
+            동일 차량번호에 기사 {driverSelectInfo.list?.length}명이 등록되어 있습니다
+          </div>
+        </div>
+        <button
+          className="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 text-white text-lg flex items-center justify-center transition"
+          onClick={() => setDriverSelectInfo(null)}>×</button>
+      </div>
+
+      <div className="px-4 py-2 bg-amber-50 border-b border-amber-100">
+        <p className="text-[12px] text-amber-700 font-semibold">
+          차량번호 {driverSelectInfo.list?.[0]?.차량번호} — 배차할 기사를 선택하세요
+        </p>
+      </div>
+
+      <div className="p-4 space-y-2 max-h-[340px] overflow-y-auto">
+        {(driverSelectInfo.list || []).map((d, i) => (
+          <button
+            key={i}
+            className="w-full text-left px-4 py-3 rounded-xl border border-gray-200 bg-[#f8f9fb] hover:bg-blue-50 hover:border-[#1B2B4B]/30 transition group"
+            onClick={async () => {
+              const grade = d?.등급 || d?.grade || "";
+              if (grade === "블랙") setBlackAlert(d);
+              const updated = {
+                차량번호: d.차량번호,
+                이름: d.이름,
+                전화번호: d.전화번호,
+                배차상태: "배차완료",
+                updatedAt: Date.now(),
+              };
+              await patchDispatch(driverSelectInfo.rowId, updated);
+              setRows(prev => sortDispatchRows(prev.map(r =>
+                r._id === driverSelectInfo.rowId ? { ...r, ...updated } : r
+              )));
+              setDriverSelectInfo(null);
+            }}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-[#1B2B4B]/10 group-hover:bg-[#1B2B4B] flex items-center justify-center transition shrink-0">
+                  <span className="text-[11px] font-bold text-[#1B2B4B] group-hover:text-white transition">
+                    {(d.이름 || "-").slice(0, 1)}
+                  </span>
+                </div>
+                <div>
+                  <div className="font-bold text-[14px] text-gray-900">{d.이름 || "-"}</div>
+                  <div className="text-[12px] text-gray-500 mt-0.5">
+                    {d.차량번호} &nbsp;|&nbsp; {formatPhone(d.전화번호)}
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {d.등급 === "블랙" && (
+                  <span className="px-2 py-0.5 rounded-lg bg-gray-900 text-white text-[10px] font-bold">
+                    블랙
+                  </span>
+                )}
+                {d.등급 === "주의" && (
+                  <span className="px-2 py-0.5 rounded-lg bg-amber-100 text-amber-700 text-[10px] font-bold">
+                    주의
+                  </span>
+                )}
+                <span className="text-gray-300 group-hover:text-[#1B2B4B] text-lg transition">›</span>
+              </div>
+            </div>
+          </button>
+        ))}
+      </div>
+
+      <div className="px-4 py-3 border-t border-gray-100 bg-gray-50">
+        <button
+          className="w-full py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-600 font-semibold text-[13px] transition"
+          onClick={() => setDriverSelectInfo(null)}>
+          취소 (ESC)
+        </button>
+      </div>
+    </div>
+  </div>
+)}
       {/* ===================== 기사확인 팝업 (RealtimeStatus) ===================== */}
       {driverConfirmOpen && driverConfirmInfo && (
         <div
-          className="fixed inset-0 flex items-center justify-center z-[9999]"
+          className="fixed inset-0 bg-black/40 flex items-center justify-center z-[9999]"
           tabIndex={-1}
           ref={(el) => {
             if (el) setTimeout(() => el.focus(), 0);
@@ -15706,194 +15858,222 @@ await patchDispatch(editTarget._id, payload);
               });
               setDriverConfirmOpen(false);
             }
+            if (e.key === "Escape") {
+              setDriverConfirmOpen(false);
+            }
           }}
+          onClick={() => setDriverConfirmOpen(false)}
         >
 
           {/* 팝업 컨테이너 */}
-          <div className="bg-white rounded-xl p-7 w-[420px] shadow-xl border border-gray-200">
+          <div
+            className="bg-white rounded-2xl w-[440px] shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
 
-            {/* 제목 */}
-            <h3 className="text-lg font-bold text-center mb-5 flex items-center justify-center gap-2">
-              🚚 기사 정보 확인
-            </h3>
-
-            {/* 입력 UI */}
-            <div className="space-y-4">
-
-              {/* 차량번호 */}
-              <div>
-                <label className="text-sm font-semibold text-gray-700">차량번호</label>
-                <input
-                  className="border rounded-lg p-2 mt-1 w-full bg-gray-100 text-gray-700 text-center cursor-not-allowed"
-                  value={driverConfirmInfo.차량번호 || ""}
-                  readOnly
-                />
-              </div>
-
-              {/* 기사명 */}
-              <div>
-                <label className="text-sm font-semibold text-gray-700">기사명</label>
-                <input
-                  className="border rounded-lg p-2 mt-1 w-full bg-gray-100 text-gray-700 text-center cursor-not-allowed"
-                  value={driverConfirmInfo.이름 || ""}
-                  readOnly
-                />
-              </div>
-
-              {/* 연락처 */}
-              <div>
-                <label className="text-sm font-semibold text-gray-700">연락처</label>
-                <input
-                  className="border rounded-lg p-2 mt-1 w-full bg-gray-100 text-gray-700 text-center cursor-not-allowed"
-                  value={driverConfirmInfo.전화번호 || ""}
-                  readOnly
-                />
-              </div>
-
-            </div>
-
-            {/* 안내 */}
-            <p className="text-sm text-gray-600 text-center mt-6">
-              위 정보가 맞습니까?
-            </p>
-
-            {/* 버튼 영역 */}
-            <div className="flex justify-between gap-2 mt-6">
-
-              {/* 취소 */}
+            {/* 헤더 */}
+            <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
+              <h3 className="text-white font-bold text-[15px]">기사 정보 확인</h3>
               <button
-                className="flex-1 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 border"
+                className="text-white/50 hover:text-white text-lg transition"
                 onClick={() => setDriverConfirmOpen(false)}
               >
-                취소
+                ✕
               </button>
-
-              {/* 빠른 기사 등록 */}
-              <button
-                className="flex-1 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white font-semibold"
-                onClick={async () => {
-                  const 이름 = prompt("기사명 입력");
-                  if (!이름) return;
-
-                  const 전화번호 = prompt("전화번호 입력");
-                  if (!전화번호) return;
-
-                  await upsertDriver({
-                    차량번호: driverConfirmInfo.차량번호,
-                    이름,
-                    전화번호,
-                  });
-
-                  await patchDispatch(driverConfirmRowId, {
-                    차량번호: driverConfirmInfo.차량번호,
-                    이름,
-                    전화번호,
-                    배차상태: "배차완료",
-                  });
-
-                  setDriverConfirmOpen(false);
-                }}
-              >
-                빠른기사등록
-              </button>
-
-              {/* 확인 */}
-              <button
-                className={`flex-1 py-2 rounded-lg text-white ${driverConfirmInfo.type === "new"
-                  ? "bg-gray-400 cursor-not-allowed"
-                  : "bg-blue-600 hover:bg-blue-700"
-                  }`}
-                disabled={driverConfirmInfo.type === "new"}
-                onClick={() => {
-                  const d = driverConfirmInfo;
-                  patchDispatch(driverConfirmRowId, {
-                    차량번호: d.차량번호,
-                    이름: d.이름,
-                    전화번호: d.전화번호,
-                    배차상태: "배차완료",
-                  });
-                  setDriverConfirmOpen(false);
-                }}
-              >
-                확인
-              </button>
-
             </div>
 
+            {/* 상태 표시 */}
+<div className="px-6 py-3 bg-gray-50 border-b border-gray-200">
+  <div className="flex items-center gap-2">
+    {driverConfirmInfo.type === "new" ? (
+      <span className="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-700 text-[12px] font-bold">
+        미등록 차량
+      </span>
+    ) : driverConfirmInfo.type === "mismatch" ? (
+      <span className="px-2.5 py-1 rounded-lg bg-red-100 text-red-700 text-[12px] font-bold">
+        기사정보 불일치
+      </span>
+    ) : (
+      <span className="px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-700 text-[12px] font-bold">
+        등록 기사
+      </span>
+    )}
+    <span className="text-[12px] text-gray-500">
+      {driverConfirmInfo.type === "new"
+        ? "기사 정보가 없습니다. 빠른등록 후 배차하세요."
+        : driverConfirmInfo.type === "mismatch"
+        ? "동일 차량에 다른 기사가 등록되어 있습니다."
+        : "아래 정보로 배차를 진행합니다."}
+    </span>
+  </div>
+</div>
+
+            {/* 정보 카드 */}
+<div className="px-6 py-5">
+
+  {/* ★ 불일치 시 비교 테이블 */}
+  {driverConfirmInfo.type === "mismatch" && (
+    <div className="mb-4 border border-red-200 rounded-xl overflow-hidden">
+      <table className="w-full text-[13px]">
+        <thead className="bg-red-50">
+          <tr>
+            <th className="px-3 py-2 text-left text-gray-500 font-medium">구분</th>
+            <th className="px-3 py-2 text-left text-gray-500 font-medium">기사명</th>
+            <th className="px-3 py-2 text-left text-gray-500 font-medium">연락처</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr className="border-t border-red-100">
+            <td className="px-3 py-2 font-bold text-red-600">현재 입력</td>
+            <td className="px-3 py-2">{driverConfirmInfo.currentName || "-"}</td>
+            <td className="px-3 py-2">{formatPhone(driverConfirmInfo.currentPhone) || "-"}</td>
+          </tr>
+          <tr className="border-t border-red-100 bg-blue-50/50">
+            <td className="px-3 py-2 font-bold text-[#1B2B4B]">DB 등록</td>
+            <td className="px-3 py-2">{driverConfirmInfo.이름 || "-"}</td>
+            <td className="px-3 py-2">{formatPhone(driverConfirmInfo.전화번호) || "-"}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  )}
+
+  <div className="bg-[#f8f9fb] border border-gray-200 rounded-xl p-4 space-y-3">
+    <div className="flex items-center justify-between">
+      <span className="text-[13px] font-semibold text-gray-500 w-20">차량번호</span>
+      <span className="flex-1 text-[14px] font-bold text-[#1B2B4B] text-right">
+        {driverConfirmInfo.차량번호 || "-"}
+      </span>
+    </div>
+    <div className="border-t border-gray-200"></div>
+    <div className="flex items-center justify-between">
+      <span className="text-[13px] font-semibold text-gray-500 w-20">기사명</span>
+      <span className={`flex-1 text-[14px] font-bold text-right ${
+        driverConfirmInfo.이름 ? "text-[#1B2B4B]" : "text-gray-400"
+      }`}>
+        {driverConfirmInfo.이름 || "정보 없음"}
+      </span>
+    </div>
+    <div className="border-t border-gray-200"></div>
+    <div className="flex items-center justify-between">
+      <span className="text-[13px] font-semibold text-gray-500 w-20">연락처</span>
+      <span className={`flex-1 text-[14px] font-bold text-right ${
+        driverConfirmInfo.전화번호 ? "text-[#1B2B4B]" : "text-gray-400"
+      }`}>
+        {formatPhone(driverConfirmInfo.전화번호) || "정보 없음"}
+      </span>
+    </div>
+  </div>
+</div>
+
+            {/* 버튼 영역 */}
+<div className="px-6 pb-5 space-y-3">
+
+  {/* 빠른기사등록 인라인 폼 */}
+  {quickRegMode ? (
+    <div className="border border-amber-200 rounded-xl overflow-hidden">
+      <div className="bg-amber-50 px-4 py-2.5 border-b border-amber-200">
+        <span className="text-[12px] font-bold text-amber-700">신규 기사 정보 입력</span>
+        <span className="text-[11px] text-amber-600 ml-2">{driverConfirmInfo.차량번호}</span>
+      </div>
+      <div className="p-4 space-y-2.5">
+        <div>
+          <label className="text-[11px] font-bold text-gray-500 block mb-1">기사명</label>
+          <input
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
+            placeholder="홍길동"
+            value={quickRegName}
+            onChange={e => setQuickRegName(e.target.value)}
+            autoFocus
+            onKeyDown={async e => {
+              if (e.key === "Enter" && quickRegName.trim() && quickRegPhone.trim()) {
+                const formatted = formatPhone(quickRegPhone);
+                const raw = formatted.replace(/[^\d]/g, "");
+                await upsertDriver({ 차량번호: driverConfirmInfo.차량번호, 이름: quickRegName, 전화번호: raw });
+                await patchDispatch(driverConfirmRowId, { 차량번호: driverConfirmInfo.차량번호, 이름: quickRegName, 전화번호: raw, 배차상태: "배차완료", updatedAt: Date.now() });
+                setRows(prev => sortDispatchRows(prev.map(r => r._id === driverConfirmRowId ? { ...r, 차량번호: driverConfirmInfo.차량번호, 이름: quickRegName, 전화번호: raw, 배차상태: "배차완료", updatedAt: Date.now() } : r)));
+                setQuickRegMode(false); setQuickRegName(""); setQuickRegPhone("");
+                setDriverConfirmOpen(false);
+                showAlert(`기사 "${quickRegName}" 등록 완료`);
+              }
+            }}
+          />
+        </div>
+        <div>
+          <label className="text-[11px] font-bold text-gray-500 block mb-1">전화번호</label>
+          <input
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
+            placeholder="010-0000-0000"
+            value={quickRegPhone}
+            onChange={e => setQuickRegPhone(e.target.value)}
+          />
+        </div>
+        <div className="flex gap-2 pt-1">
+          <button
+            className="flex-1 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 text-[12px] font-semibold transition"
+            onClick={() => { setQuickRegMode(false); setQuickRegName(""); setQuickRegPhone(""); }}>
+            취소
+          </button>
+          <button
+            className={`flex-1 py-2 rounded-lg text-[12px] font-bold transition text-white ${
+              quickRegName.trim() && quickRegPhone.trim()
+                ? "bg-amber-500 hover:bg-amber-600"
+                : "bg-gray-300 cursor-not-allowed"
+            }`}
+            disabled={!quickRegName.trim() || !quickRegPhone.trim()}
+            onClick={async () => {
+              const formatted = formatPhone(quickRegPhone);
+              const raw = formatted.replace(/[^\d]/g, "");
+              await upsertDriver({ 차량번호: driverConfirmInfo.차량번호, 이름: quickRegName, 전화번호: raw });
+              await patchDispatch(driverConfirmRowId, { 차량번호: driverConfirmInfo.차량번호, 이름: quickRegName, 전화번호: raw, 배차상태: "배차완료", updatedAt: Date.now() });
+              setRows(prev => sortDispatchRows(prev.map(r => r._id === driverConfirmRowId ? { ...r, 차량번호: driverConfirmInfo.차량번호, 이름: quickRegName, 전화번호: raw, 배차상태: "배차완료", updatedAt: Date.now() } : r)));
+              setQuickRegMode(false); setQuickRegName(""); setQuickRegPhone("");
+              setDriverConfirmOpen(false);
+              showAlert(`기사 "${quickRegName}" 등록 완료`);
+            }}>
+            등록 완료
+          </button>
+        </div>
+      </div>
+    </div>
+  ) : (
+    <div className="flex gap-3">
+      <button
+        className="flex-1 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-[13px] transition"
+        onClick={() => { setDriverConfirmOpen(false); setQuickRegName(""); setQuickRegPhone(""); }}>
+        {driverConfirmInfo.type === "mismatch" ? "현재 기사 유지" : "취소"}
+      </button>
+
+      <button
+        className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-[13px] transition"
+        onClick={() => setQuickRegMode(true)}>
+        빠른 기사 등록
+      </button>
+
+      <button
+        className={`flex-1 py-2.5 rounded-xl font-bold text-[13px] transition ${
+          driverConfirmInfo.type === "new"
+            ? "bg-[#1B2B4B]/20 text-gray-400 cursor-not-allowed"
+            : "bg-[#1B2B4B] hover:bg-[#243a60] text-white"
+        }`}
+        disabled={driverConfirmInfo.type === "new"}
+        onClick={async () => {
+          const d = driverConfirmInfo;
+          const updated = { 차량번호: d.차량번호, 이름: d.이름, 전화번호: d.전화번호, 배차상태: "배차완료", updatedAt: Date.now() };
+          await patchDispatch(driverConfirmRowId, updated);
+          setRows(prev => sortDispatchRows(prev.map(r => r._id === driverConfirmRowId ? { ...r, ...updated } : r)));
+          setDriverConfirmOpen(false);
+          if (driverConfirmInfo.type === "mismatch") showAlert(`기사정보를 "${d.이름}"(으)로 변경했습니다.`);
+        }}>
+        {driverConfirmInfo.type === "mismatch" ? "DB 기사로 변경" : "확인 (배차완료)"}
+      </button>
+    </div>
+  )}
+</div>
           </div>
         </div>
       )}
 
-      {/* ===================== 기사 선택 모달 (PART 5 동일) ===================== */}
-      {driverSelectInfo && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[99999]">
-          <div className="bg-white p-5 rounded-xl shadow-xl w-[380px] max-h-[80vh] overflow-y-auto">
-            <h3 className="text-lg font-bold mb-3">🚚 기사 선택</h3>
-
-            {driverSelectInfo.list.map((d) => (
-              <button
-                key={d._id}
-                className={`w-full text-left border p-2 mb-2 rounded
-            ${driverSelectInfo.selectedDriver === d
-                    ? "bg-blue-100 border-blue-500"
-                    : "hover:bg-blue-50"
-                  }`}
-                onClick={() =>
-                  setDriverSelectInfo((prev) => ({
-                    ...prev,
-                    selectedDriver: d,
-                  }))
-                }
-              >
-                {d.차량번호} / {d.이름} / {d.전화번호}
-              </button>
-            ))}
-
-            <div className="flex gap-2 mt-4">
-              {/* 취소 */}
-              <button
-                className="flex-1 py-2 bg-gray-200 rounded"
-                onClick={() => setDriverSelectInfo(null)}
-              >
-                취소
-              </button>
-
-              {/* 적용 */}
-              <button
-                disabled={!driverSelectInfo.selectedDriver}
-                className="flex-1 py-2 bg-blue-600 text-white rounded disabled:bg-gray-400"
-                onClick={async () => {
-                  const d = driverSelectInfo.selectedDriver;
-                  const rowId = driverSelectInfo.rowId;
-
-                  await patchDispatch?.(rowId, {
-                    차량번호: d.차량번호,
-                    이름: d.이름,
-                    전화번호: d.전화번호,
-                    배차상태: "배차완료",
-                    updatedAt: Date.now(),
-                  });
-
-                  setDriverSelectInfo(null);
-
-                  // 🔥 PART 5와 동일: 저장 후 해당 행으로 스크롤
-                  setTimeout(() => {
-                    const el = document.getElementById(`row-${rowId}`);
-                    if (el) {
-                      el.scrollIntoView({
-                        behavior: "smooth",
-                        block: "center",
-                      });
-                    }
-                  }, 300);
-                }}
-              >
-                적용
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* ===== 스마트 검색 충돌 팝업 (PART 4) ===== */}
       {smart4ConflictPopup && (
@@ -16427,6 +16607,8 @@ function generateTimeOptions() {
 }
 function DispatchStatus({
   dispatchData = [],
+  focusOrderId, 
+  clearFocusOrder,
   setDispatchData,
   drivers = [],
   clients = [],
@@ -16959,7 +17141,10 @@ const applySmart5 = async (target, setTarget, text) => {
 
   // 🚚 기사 선택 / 확인 팝업 상태 추가  ⭐⭐
   const [driverConfirmInfo, setDriverConfirmInfo] = React.useState(null);
-  const [driverSelectInfo, setDriverSelectInfo] = React.useState(null);
+const [driverSelectInfo, setDriverSelectInfo] = React.useState(null);
+const [quickRegMode5, setQuickRegMode5] = React.useState(false);
+const [quickRegName5, setQuickRegName5] = React.useState("");
+const [quickRegPhone5, setQuickRegPhone5] = React.useState("");
     React.useEffect(() => {
     if (!fareModalOpen) return;
 
@@ -18050,11 +18235,16 @@ const compareBy = (key, dir = "asc") => (a, b) => {
 };
 
   const filtered = React.useMemo(() => {
-  let data = [...dispatchData];
+    // ★ focusOrderId가 있으면 해당 오더 1건만 표시
+    if (focusOrderId) {
+      const found = (dispatchData || []).find(d => getId(d) === focusOrderId);
+      return found ? [found] : [];
+    }
+
+    let data = [...dispatchData];
 
   // 🔥 조회 버튼 누르기 전 → 전체
   if (!loaded) return data;
-
   // =========================
   // 📅 날짜 필터 (조회 버튼 기준)
   // =========================
@@ -18127,13 +18317,15 @@ const compareBy = (key, dir = "asc") => (a, b) => {
   dispatchData,
   q,
   searchType,
-  appliedStartDate, // 🔥 변경
-  appliedEndDate,   // 🔥 변경
+  appliedStartDate,
+  appliedEndDate,
   sortKey,
   sortDir,
   loaded,
   statusFilter,
+  focusOrderId,
 ]);
+
   // ⭐⭐⭐ 페이지 데이터 (정렬된 filtered 기준)
   const pageRows = React.useMemo(() => {
     const start = page * pageSize;
@@ -18230,6 +18422,19 @@ const save = {
     console.error("DispatchStatus 상태 저장 실패", err);
   }
 }, [q, startDate, endDate, appliedStartDate, appliedEndDate, page, selected, edited, editMode]);
+  // ★ focusOrderId 하이라이트 + 스크롤
+  React.useEffect(() => {
+    if (!focusOrderId) return;
+    const timer = setTimeout(() => {
+      const el = document.getElementById(`row-${focusOrderId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.classList.add("row-highlight");
+        setTimeout(() => el.classList.remove("row-highlight"), 3000);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [focusOrderId]);
 
   if (!loaded) return null;
 
@@ -18370,8 +18575,22 @@ return (
         </div>
       </div>
 
+      {/* ★ 포커스 해제 버튼 */}
+      {focusOrderId && (
+        <div className="mb-3 flex items-center gap-2">
+          <button
+            onClick={clearFocusOrder}
+            className="px-4 py-2 bg-orange-500 text-white text-sm font-semibold rounded-lg shadow hover:bg-orange-600 transition"
+          >
+            ← 전체 목록으로 돌아가기
+          </button>
+          <span className="text-sm text-gray-500">현재 선택된 오더 1건만 표시 중</span>
+        </div>
+      )}
+
       {/* ---------------- 테이블 ---------------- */}
       <div className="overflow-x-auto w-full rounded-xl overflow-hidden shadow border border-gray-200">
+
   <table className="w-full min-w-max table-auto">
           <thead className="bg-[#1B2B4B]">
             <tr>
@@ -21249,236 +21468,265 @@ setCopyTarget(prev => ({
       {/* ===================== 기사확인 팝업 ===================== */}
       {driverConfirmInfo && (
         <div
-          className="fixed inset-0 flex items-center justify-center z-[9999]"
+          className="fixed inset-0 bg-black/40 flex items-center justify-center z-[9999]"
           tabIndex={-1}
-          ref={(el) => {
-            if (el) setTimeout(() => el.focus(), 0);
-          }}
+          ref={el => { if(el) setTimeout(() => el.focus(), 0); }}
           onKeyDown={(e) => {
             if (e.key === "Enter" && driverConfirmInfo.type !== "new") {
               const d = driverConfirmInfo.driver;
               const rowId = driverConfirmInfo.rowId;
               setEdited(prev => ({
                 ...prev,
-                [rowId]: {
-                  ...(prev[rowId] || {}),
-                  차량번호: d.차량번호,
-                  이름: d.이름,
-                  전화번호: d.전화번호,
-                  배차상태: "배차완료",
-                }
+                [rowId]: { ...(prev[rowId] || {}), 차량번호: d.차량번호, 이름: d.이름, 전화번호: d.전화번호, 배차상태: "배차완료" }
               }));
-              patchDispatch(rowId, {
-                차량번호: d.차량번호,
-                이름: d.이름,
-                전화번호: d.전화번호,
-                배차상태: "배차완료",
-                updatedAt: Date.now(),
-              });
+              patchDispatch(rowId, { 차량번호: d.차량번호, 이름: d.이름, 전화번호: d.전화번호, 배차상태: "배차완료", updatedAt: Date.now() });
               setDriverConfirmInfo(null);
             }
+            if (e.key === "Escape") setDriverConfirmInfo(null);
           }}
+          onClick={() => setDriverConfirmInfo(null)}
         >
-          {/* 팝업 컨테이너 */}
-          <div className="bg-white rounded-xl p-7 w-[420px] shadow-xl border border-gray-200">
-
-            {/* 제목 */}
-            <h3 className="text-lg font-bold text-center mb-5 flex items-center justify-center gap-2">
-              🚚 기사 정보 확인
-            </h3>
-
-            {/* Form */}
-            <div className="space-y-4">
-
-              {/* 차량번호 */}
-              <div>
-                <label className="text-sm font-semibold text-gray-700">
-                  차량번호
-                </label>
-                <input
-                  className="border rounded-lg p-2 mt-1 w-full bg-gray-100 text-gray-600 cursor-not-allowed text-center"
-                  value={driverConfirmInfo.driver?.차량번호 || driverConfirmInfo.plate || ""}
-                  readOnly
-                />
-              </div>
-
-              {/* 기사명 */}
-              <div>
-                <label className="text-sm font-semibold text-gray-700">
-                  기사명
-                </label>
-                <input
-                  className="border rounded-lg p-2 mt-1 w-full bg-gray-100 text-gray-600 text-center"
-                  value={driverConfirmInfo.driver?.이름 || ""}
-                  readOnly
-                />
-              </div>
-
-              {/* 연락처 */}
-              <div>
-                <label className="text-sm font-semibold text-gray-700">
-                  연락처
-                </label>
-                <input
-                  className="border rounded-lg p-2 mt-1 w-full bg-gray-100 text-gray-600 text-center"
-                  value={driverConfirmInfo.driver?.전화번호 || ""}
-                  readOnly
-                />
-              </div>
-
+          <div
+            className="bg-white rounded-2xl w-[440px] shadow-2xl overflow-hidden"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* 헤더 */}
+            <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
+              <h3 className="text-white font-bold text-[15px]">기사 정보 확인</h3>
+              <button
+                className="text-white/50 hover:text-white text-lg transition"
+                onClick={() => { setDriverConfirmInfo(null); setQuickRegMode5(false); setQuickRegName5(""); setQuickRegPhone5(""); }}>
+                ✕
+              </button>
             </div>
 
-            {/* 안내 문구 */}
-            <p className="text-sm text-gray-500 text-center mt-6">
-              위 정보가 맞습니까?
-            </p>
+            {/* 상태 표시 */}
+            <div className="px-6 py-3 bg-gray-50 border-b border-gray-200">
+              <div className="flex items-center gap-2">
+                {driverConfirmInfo.type === "new" ? (
+                  <span className="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-700 text-[12px] font-bold">미등록 차량</span>
+                ) : (
+                  <span className="px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-700 text-[12px] font-bold">등록 기사</span>
+                )}
+                <span className="text-[12px] text-gray-500">
+                  {driverConfirmInfo.type === "new"
+                    ? "기사 정보가 없습니다. 빠른등록 후 배차하세요."
+                    : "아래 정보로 배차를 진행합니다."}
+                </span>
+              </div>
+            </div>
 
-            {/* 버튼 */}
-            <div className="flex justify-between gap-2 mt-6">
+            {/* 정보 카드 */}
+            <div className="px-6 py-5">
+              <div className="bg-[#f8f9fb] border border-gray-200 rounded-xl p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[13px] font-semibold text-gray-500 w-20">차량번호</span>
+                  <span className="flex-1 text-[14px] font-bold text-[#1B2B4B] text-right">
+                    {driverConfirmInfo.driver?.차량번호 || driverConfirmInfo.plate || "-"}
+                  </span>
+                </div>
+                <div className="border-t border-gray-200" />
+                <div className="flex items-center justify-between">
+                  <span className="text-[13px] font-semibold text-gray-500 w-20">기사명</span>
+                  <span className={`flex-1 text-[14px] font-bold text-right ${driverConfirmInfo.driver?.이름 ? "text-[#1B2B4B]" : "text-gray-400"}`}>
+                    {driverConfirmInfo.driver?.이름 || "정보 없음"}
+                  </span>
+                </div>
+                <div className="border-t border-gray-200" />
+                <div className="flex items-center justify-between">
+                  <span className="text-[13px] font-semibold text-gray-500 w-20">연락처</span>
+                  <span className={`flex-1 text-[14px] font-bold text-right ${driverConfirmInfo.driver?.전화번호 ? "text-[#1B2B4B]" : "text-gray-400"}`}>
+                    {formatPhone(driverConfirmInfo.driver?.전화번호 || "") || "정보 없음"}
+                  </span>
+                </div>
+              </div>
+            </div>
 
-              {/* 취소 */}
+            {/* 버튼 영역 */}
+            <div className="px-6 pb-5 space-y-3">
+              {quickRegMode5 ? (
+                <div className="border border-amber-200 rounded-xl overflow-hidden">
+                  <div className="bg-amber-50 px-4 py-2.5 border-b border-amber-200">
+                    <span className="text-[12px] font-bold text-amber-700">신규 기사 정보 입력</span>
+                    <span className="text-[11px] text-amber-600 ml-2">{driverConfirmInfo.plate}</span>
+                  </div>
+                  <div className="p-4 space-y-2.5">
+                    <div>
+                      <label className="text-[11px] font-bold text-gray-500 block mb-1">기사명</label>
+                      <input
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
+                        placeholder="홍길동"
+                        value={quickRegName5}
+                        onChange={e => setQuickRegName5(e.target.value)}
+                        autoFocus
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-bold text-gray-500 block mb-1">전화번호</label>
+                      <input
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
+                        placeholder="010-0000-0000"
+                        value={quickRegPhone5}
+                        onChange={e => setQuickRegPhone5(e.target.value)}
+                      />
+                    </div>
+                    <div className="flex gap-2 pt-1">
+                      <button
+                        className="flex-1 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 text-[12px] font-semibold transition"
+                        onClick={() => { setQuickRegMode5(false); setQuickRegName5(""); setQuickRegPhone5(""); }}>
+                        취소
+                      </button>
+                      <button
+                        className={`flex-1 py-2 rounded-lg text-[12px] font-bold transition text-white ${
+                          quickRegName5.trim() && quickRegPhone5.trim()
+                            ? "bg-amber-500 hover:bg-amber-600"
+                            : "bg-gray-300 cursor-not-allowed"
+                        }`}
+                        disabled={!quickRegName5.trim() || !quickRegPhone5.trim()}
+                        onClick={async () => {
+                          const formatted = formatPhone(quickRegPhone5);
+                          const raw = formatted.replace(/[^\d]/g, "");
+                          await upsertDriver({ 차량번호: driverConfirmInfo.plate, 이름: quickRegName5, 전화번호: raw });
+                          await patchDispatch(driverConfirmInfo.rowId, {
+                            차량번호: driverConfirmInfo.plate, 이름: quickRegName5, 전화번호: raw,
+                            배차상태: "배차완료", updatedAt: Date.now(),
+                          });
+                          setQuickRegMode5(false); setQuickRegName5(""); setQuickRegPhone5("");
+                          setDriverConfirmInfo(null);
+                          showAlert(`기사 "${quickRegName5}" 등록 완료`);
+                        }}>
+                        등록 완료
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex gap-3">
+                  <button
+                    className="flex-1 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-[13px] transition"
+                    onClick={() => { setDriverConfirmInfo(null); setQuickRegName5(""); setQuickRegPhone5(""); }}>
+                    취소
+                  </button>
+                  <button
+                    className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-[13px] transition"
+                    onClick={() => setQuickRegMode5(true)}>
+                    빠른 기사 등록
+                  </button>
+                  <button
+                    disabled={driverConfirmInfo.type === "new"}
+                    className={`flex-1 py-2.5 rounded-xl font-bold text-[13px] transition ${
+                      driverConfirmInfo.type === "new"
+                        ? "bg-[#1B2B4B]/20 text-gray-400 cursor-not-allowed"
+                        : "bg-[#1B2B4B] hover:bg-[#243a60] text-white"
+                    }`}
+                    onClick={async () => {
+                      const d = driverConfirmInfo.driver;
+                      const rowId = driverConfirmInfo.rowId;
+                      setEdited(prev => ({
+                        ...prev,
+                        [rowId]: { ...(prev[rowId] || {}), 차량번호: d.차량번호, 이름: d.이름, 전화번호: d.전화번호, 배차상태: "배차완료" }
+                      }));
+                      await patchDispatch(rowId, {
+                        차량번호: d.차량번호, 이름: d.이름, 전화번호: d.전화번호,
+                        배차상태: "배차완료", updatedAt: Date.now(),
+                      });
+                      setDriverConfirmInfo(null);
+                    }}>
+                    확인 (배차완료)
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ===================== 기사선택 팝업 ===================== */}
+      {driverSelectInfo && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]"
+          onClick={() => setDriverSelectInfo(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-[440px] overflow-hidden"
+            onClick={e => e.stopPropagation()}
+            tabIndex={-1}
+            ref={el => { if(el) setTimeout(() => el.focus(), 0); }}
+            onKeyDown={e => { if(e.key === "Escape") setDriverSelectInfo(null); }}>
+
+            <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
+              <div>
+                <div className="text-white font-bold text-[15px]">기사 선택</div>
+                <div className="text-white/50 text-[11px] mt-0.5">
+                  동일 차량번호에 기사 {driverSelectInfo.list?.length}명이 등록되어 있습니다
+                </div>
+              </div>
               <button
-                className="flex-1 py-2 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 border"
-                onClick={() => setDriverConfirmInfo(null)}
-              >
-                취소
-              </button>
+                className="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 text-white text-lg flex items-center justify-center transition"
+                onClick={() => setDriverSelectInfo(null)}>×</button>
+            </div>
 
-              {/* 빠른 기사 등록 */}
-              <button
-                className="flex-1 py-2 rounded-lg bg-red-500 text-white hover:bg-red-600"
-                onClick={async () => {
-                  const plate = driverConfirmInfo.plate;
+            <div className="px-4 py-2 bg-amber-50 border-b border-amber-100">
+              <p className="text-[12px] text-amber-700 font-semibold">
+                차량번호 {driverSelectInfo.list?.[0]?.차량번호} — 배차할 기사를 선택하세요
+              </p>
+            </div>
 
-                  const name = prompt("기사명 입력");
-                  if (!name) return; // 팝업 유지
-
-                  const phone = prompt("전화번호 입력");
-                  if (!phone) return; // 팝업 유지
-
-                  await upsertDriver({ 차량번호: plate, 이름: name, 전화번호: phone });
-                  await patchDispatch(driverConfirmInfo.rowId, {
-                    차량번호: plate,
-                    이름: name,
-                    전화번호: phone,
-                    배차상태: "배차완료",
-                    lastUpdated: new Date().toISOString(), // ⭐ 추가
-                  });
-                }}
-              >
-                빠른기사등록
-              </button>
-
-              {/* 확인 */}
-              <button
-                disabled={driverConfirmInfo.type === "new"}
-                className={`flex-1 py-2 rounded-lg text-white ${driverConfirmInfo.type === "new"
-                  ? "bg-gray-400 cursor-not-allowed"
-                  : "bg-blue-600 hover:bg-blue-700"
-                  }`}
-                onClick={async () => {
-                  const d = driverConfirmInfo.driver;
-                  const rowId = driverConfirmInfo.rowId;
-                  // 🔥 화면 즉시 반영
-                  setEdited(prev => ({
-                    ...prev,
-                    [rowId]: {
-                      ...(prev[rowId] || {}),
+            <div className="p-4 space-y-2 max-h-[340px] overflow-y-auto">
+              {(driverSelectInfo.list || []).map((d, i) => (
+                <button
+                  key={i}
+                  className="w-full text-left px-4 py-3 rounded-xl border border-gray-200 bg-[#f8f9fb] hover:bg-blue-50 hover:border-[#1B2B4B]/30 transition group"
+                  onClick={async () => {
+                    const grade = d?.등급 || d?.grade || "";
+                    if (grade === "블랙") setBlackAlert(d);
+                    await patchDispatch(driverSelectInfo.rowId, {
                       차량번호: d.차량번호,
                       이름: d.이름,
                       전화번호: d.전화번호,
                       배차상태: "배차완료",
-                    }
-                  }));
-                  await patchDispatch(rowId, {
-                    차량번호: d.차량번호,
-                    이름: d.이름,
-                    전화번호: d.전화번호,
-                    배차상태: "배차완료",
-                    updatedAt: Date.now(),
-                  });
-                  setDriverConfirmInfo(null);
-                }}
-              >
-                확인
-              </button>
-
+                      updatedAt: Date.now(),
+                    });
+                    setDriverSelectInfo(null);
+                    setTimeout(() => {
+                      const el = document.getElementById(`row-${driverSelectInfo.rowId}`);
+                      if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+                    }, 300);
+                  }}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-[#1B2B4B]/10 group-hover:bg-[#1B2B4B] flex items-center justify-center transition shrink-0">
+                        <span className="text-[11px] font-bold text-[#1B2B4B] group-hover:text-white transition">
+                          {(d.이름 || "-").slice(0, 1)}
+                        </span>
+                      </div>
+                      <div>
+                        <div className="font-bold text-[14px] text-gray-900">{d.이름 || "-"}</div>
+                        <div className="text-[12px] text-gray-500 mt-0.5">
+                          {d.차량번호} &nbsp;|&nbsp; {formatPhone(d.전화번호)}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {d.등급 === "블랙" && (
+                        <span className="px-2 py-0.5 rounded-lg bg-gray-900 text-white text-[10px] font-bold">블랙</span>
+                      )}
+                      {d.등급 === "주의" && (
+                        <span className="px-2 py-0.5 rounded-lg bg-amber-100 text-amber-700 text-[10px] font-bold">주의</span>
+                      )}
+                      <span className="text-gray-300 group-hover:text-[#1B2B4B] text-lg transition">›</span>
+                    </div>
+                  </div>
+                </button>
+              ))}
             </div>
-          </div>
-        </div>
-      )}
-      {/* ===================== 기사선택 팝업 (적용/취소 방식) ===================== */}
-      {driverSelectInfo && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[9999]">
-          <div className="bg-white p-5 rounded-lg w-[380px] shadow-xl">
-            <h3 className="text-lg font-bold mb-3 text-center">🚚 기사 선택</h3>
 
-            {driverSelectInfo.list.map((d, i) => (
+            <div className="px-4 py-3 border-t border-gray-100 bg-gray-50">
               <button
-                key={i}
-                onClick={() =>
-                  setDriverSelectInfo(p => ({ ...p, selectedDriver: d }))
-                }
-                className={`w-full text-left px-3 py-2 mb-2 rounded border
-            ${driverSelectInfo.selectedDriver === d
-                    ? "bg-blue-100 border-blue-500"
-                    : "hover:bg-gray-100"
-                  }
-          `}
-              >
-                {d.이름} ({d.차량번호}) {d.전화번호}
-              </button>
-            ))}
-
-            <div className="flex gap-2 mt-4">
-              {/* 취소 */}
-              <button
-                className="flex-1 py-2 rounded bg-gray-200"
-                onClick={() => setDriverSelectInfo(null)}
-              >
-                취소
-              </button>
-
-              {/* 적용 */}
-              <button
-                disabled={!driverSelectInfo.selectedDriver}
-                className="flex-1 py-2 rounded bg-blue-600 text-white disabled:bg-gray-400"
-                onClick={async () => {
-                  const d = driverSelectInfo.selectedDriver;
-                  const rowId = driverSelectInfo.rowId;
-
-                  // 1️⃣ Firestore 저장
-                  await patchDispatch(rowId, {
-                    차량번호: d.차량번호,
-                    이름: d.이름,
-                    전화번호: d.전화번호,
-                    배차상태: "배차완료",
-                    lastUpdated: new Date().toISOString(),
-                  });
-
-                  // 2️⃣ 팝업 닫기
-                  setDriverSelectInfo(null);
-
-                  // 3️⃣ 🔥 정렬 반영 후 해당 행으로 스크롤 이동 (← 여기!)
-                  setTimeout(() => {
-                    const el = document.getElementById(`row-${rowId}`);
-                    if (el) {
-                      el.scrollIntoView({
-                        behavior: "smooth",
-                        block: "center",
-                      });
-                    }
-                  }, 300);
-                }}
-              >
-                적용
+                className="w-full py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-600 font-semibold text-[13px] transition"
+                onClick={() => setDriverSelectInfo(null)}>
+                취소 (ESC)
               </button>
             </div>
           </div>
         </div>
       )}
-
-
       {/* ========================== 선택삭제 팝업 ========================== */}
       {showDeletePopup && (
         <div
@@ -24825,25 +25073,65 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
 // ===================== DispatchApp.jsx (PART 7/8) — END =====================
 
 // ===================== DispatchApp.jsx (PART 8/8) — START =====================
-function ClientSettlement({ dispatchData, clients = [], setClients }) {
+function ClientSettlement({ dispatchData, setDispatchData, clients = [], setClients, showAlert = (m) => alert(m), patchDispatch }) {
+
+  // ★ 오더 상세 팝업
+  const [orderPopup, setOrderPopup] = useState(null);
+  const [orderPopupEdit, setOrderPopupEdit] = useState({});
   const todayStr8 = () => new Date().toISOString().slice(0, 10);
   const THIS_YEAR = new Date().getFullYear();
   const toInt = (v) => parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10) || 0;
   const won = (n) => toInt(n).toLocaleString();
+  const numberToKorean = (num) => {
+    if (!num || num === 0) return "영";
+    const units = ["", "만", "억", "조"];
+    const nums = ["", "일", "이", "삼", "사", "오", "육", "칠", "팔", "구"];
+    const tens = ["", "십", "백", "천"];
+    
+    let result = "";
+    let n = Math.abs(toInt(num));
+    let unitIndex = 0;
 
-  const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
-    try {
-      if (!id || !yyyymm) return;
-      if (typeof db !== "undefined" && db && typeof setDoc === "function" && typeof doc === "function") {
-        const coll = (typeof COLL !== "undefined" && COLL?.dispatch) ? COLL.dispatch : "dispatch";
-        const patch = {};
-        patch[`정산상태.${yyyymm}`] = status;
-        patch[`정산일.${yyyymm}`] = dateStr || "";
-        await setDoc(doc(db, coll, id), patch, { merge: true });
+    while (n > 0) {
+      const chunk = n % 10000;
+      if (chunk > 0) {
+        let chunkStr = "";
+        let c = chunk;
+        for (let i = 0; i < 4; i++) {
+          const digit = c % 10;
+          if (digit > 0) {
+            // '일'은 십, 백, 천 앞에서는 생략 (일십 → 십)
+            const digitStr = (digit === 1 && i > 0) ? "" : nums[digit];
+            chunkStr = digitStr + tens[i] + chunkStr;
+          }
+          c = Math.floor(c / 10);
+        }
+        result = chunkStr + units[unitIndex] + result;
       }
-    } catch (e) { console.warn("patchMonthOnDoc error:", e); }
-  };
+      n = Math.floor(n / 10000);
+      unitIndex++;
+    }
 
+    return num < 0 ? "마이너스 " + result : result;
+  };
+const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
+  try {
+    if (!id || !yyyymm) return;
+    const coll = (typeof COLL !== "undefined" && COLL?.dispatch) ? COLL.dispatch : "dispatch";
+    const patch = {};
+    patch[`정산상태.${yyyymm}`] = status;
+    patch[`정산일.${yyyymm}`] = dateStr || "";
+
+    // ★ Firestore 업데이트
+    if (typeof db !== "undefined" && db && typeof updateDoc === "function" && typeof doc === "function") {
+      await updateDoc(doc(db, coll, id), patch);
+    } else if (typeof db !== "undefined" && db && typeof setDoc === "function" && typeof doc === "function") {
+      await setDoc(doc(db, coll, id), patch, { merge: true });
+    }
+  } catch (e) {
+    console.error("patchMonthOnDoc error:", e);
+  }
+};
   const [tab, setTab] = useState("invoice");
 
   // ── 거래명세서 상태 ──
@@ -24996,15 +25284,17 @@ function ClientSettlement({ dispatchData, clients = [], setClients }) {
   const mapped = rowsInvoice.map((r, i) => ({
     idx: i + 1,
     상차일: r.상차일 || "",
-    상하차지: `${r.상차지명 || ""} → ${r.하차지명 || ""}`,
+    상차지: r.상차지명 || r.상차지 || "",
+    하차지: r.하차지명 || r.하차지 || "",
     화물명: r.화물내용 || "",
-    기사명: r.이름 || "",
+    기사명: r.이름 || r.기사명 || "",
+    차량번호: r.차량번호 || "",
     공급가액: toInt(r.청구운임),
     세액: Math.round(toInt(r.청구운임) * 0.1),
-    // ★ 추가 필드 (톤수, 차량종류)
     톤수: r.차량톤수 || "",
     차량종류: r.차량종류 || "",
   }));
+
   const 합계공급가 = mapped.reduce((a, b) => a + b.공급가액, 0);
   const 합계세액 = mapped.reduce((a, b) => a + b.세액, 0);
 
@@ -25073,23 +25363,47 @@ function ClientSettlement({ dispatchData, clients = [], setClients }) {
 
   const downloadInvoiceExcel = () => {
     if (!searched || !rowsInvoice.length) return showAlert("먼저 조회를 실행하세요.");
-    const rows = mapped.map(m => ({
-      No: m.idx, 상차일: m.상차일, 상하차지: m.상하차지,
-      화물명: m.화물명, 기사명: m.기사명,
-      톤수: m.톤수, 차량종류: m.차량종류,
-      공급가액: m.공급가액, 세액: m.세액,
-      합계: m.공급가액 + m.세액,
-    }));
-    // ★ 월별 소계 시트 추가
-    const monthRows = Array.from(monthlySubtotals.entries()).map(([ym, v]) => ({
-      월: ym, 건수: v.건수, 공급가액: v.공급가액, 세액: v.세액, 합계: v.공급가액 + v.세액,
-    }));
-    const ws1 = XLSX.utils.json_to_sheet(rows);
-    const ws2 = XLSX.utils.json_to_sheet(monthRows);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws1, "거래명세서");
-    XLSX.utils.book_append_sheet(wb, ws2, "월별소계");
-    XLSX.writeFile(wb, `거래명세서_${client || "전체"}_${start||"all"}~${end||"all"}.xlsx`);
+
+    // ★ 화면 그대로 엑셀로 내보내기 (HTML → xls)
+    const area = document.getElementById("invoiceArea");
+    if (!area) return showAlert("내용이 없습니다.");
+
+    const styles = `
+      <style>
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #333; padding: 6px 8px; font-size: 11pt; text-align: center; }
+        th { background: #1B2B4B; color: #fff; font-weight: bold; }
+        .text-right { text-align: right; }
+      </style>
+    `;
+
+    const html = `
+      <html xmlns:o="urn:schemas-microsoft-com:office:office"
+            xmlns:x="urn:schemas-microsoft-com:office:excel"
+            xmlns="http://www.w3.org/TR/REC-html40">
+      <head>
+        <meta charset="utf-8"/>
+        <!--[if gte mso 9]><xml>
+          <x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet>
+            <x:Name>거래명세서</x:Name>
+            <x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions>
+          </x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook>
+        </xml><![endif]-->
+        ${styles}
+      </head>
+      <body>${area.innerHTML}</body>
+      </html>
+    `;
+
+    const blob = new Blob([html], { type: "application/vnd.ms-excel;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `거래명세서_${client || "전체"}_${start || "all"}~${end || "all"}.xls`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   // ★ 인쇄 기능
@@ -25224,31 +25538,100 @@ function ClientSettlement({ dispatchData, clients = [], setClients }) {
   }), [monthRows]);
 
   const toggleMonthStatus = async (row) => {
-    const next = row.정산상태 === "정산완료" ? "미정산" : "정산완료";
-    const dateStr = next === "정산완료" ? todayStr8() : "";
-    for (const r of row._rows || []) {
-      if (!r._id) continue;
-      await patchMonthOnDoc(r._id, row.yyyymm, next, dateStr);
-    }
-    showAlert(`${row.yyyymm} → ${next} (${row._rows.length}건)`);
-  };
+  const next = row.정산상태 === "정산완료" ? "미정산" : "정산완료";
+  const dateStr = next === "정산완료" ? todayStr8() : "";
+
+  for (const r of row._rows || []) {
+    if (!r._id) continue;
+    await patchMonthOnDoc(r._id, row.yyyymm, next, dateStr);
+  }
+
+  // ★ 로컬 즉시 반영 (안전한 버전)
+  setDispatchData(prev => prev.map(d => {
+    const isTarget = (row._rows || []).some(r => r._id === d._id);
+    if (!isTarget) return d;
+    const oldStatus = (typeof d.정산상태 === "object" && d.정산상태) ? d.정산상태 : {};
+    const oldDate = (typeof d.정산일 === "object" && d.정산일) ? d.정산일 : {};
+    return {
+      ...d,
+      정산상태: { ...oldStatus, [row.yyyymm]: next },
+      정산일: { ...oldDate, [row.yyyymm]: dateStr },
+    };
+  }));
+
+  showAlert(`${row.yyyymm} → ${next} (${(row._rows||[]).length}건)`);
+};
 
   const settleSelected = async () => {
-    const targets = monthRows.filter(r => selectedMonths.has(r.yyyymm));
-    if (!targets.length) return showAlert("선택된 월이 없습니다.");
-    for (const row of targets)
-      for (const r of row._rows || [])
-        if (r._id) await patchMonthOnDoc(r._id, row.yyyymm, "정산완료", todayStr8());
-    showAlert(`선택 ${targets.length}개월 정산완료`); clearSel();
-  };
+  const targets = monthRows.filter(r => selectedMonths.has(r.yyyymm));
+  if (!targets.length) return showAlert("선택된 월이 없습니다.");
+
+  const allIds = [];
+  const patchMap = {}; // id → { yyyymm → status }
+
+  for (const row of targets) {
+    for (const r of row._rows || []) {
+      if (!r._id) continue;
+      allIds.push(r._id);
+      if (!patchMap[r._id]) patchMap[r._id] = {};
+      patchMap[r._id][row.yyyymm] = "정산완료";
+      await patchMonthOnDoc(r._id, row.yyyymm, "정산완료", todayStr8());
+    }
+  }
+
+  // ★ 로컬 즉시 반영
+  if (typeof setDispatchData === "function") {
+    setDispatchData(prev => prev.map(d => {
+      if (!allIds.includes(d._id)) return d;
+      const newStatus = { ...(typeof d.정산상태 === "object" ? d.정산상태 : {}) };
+      const newDate = { ...(typeof d.정산일 === "object" ? d.정산일 : {}) };
+      Object.entries(patchMap[d._id] || {}).forEach(([ym]) => {
+        newStatus[ym] = "정산완료";
+        newDate[ym] = todayStr8();
+      });
+      return { ...d, 정산상태: newStatus, 정산일: newDate };
+    }));
+  }
+
+  showAlert(`선택 ${targets.length}개월 정산완료`);
+  clearSel();
+};
+
 
   const settleAll = async () => {
-    if (!monthRows.length) return showAlert("표시된 월이 없습니다.");
-    for (const row of monthRows)
-      for (const r of row._rows || [])
-        if (r._id) await patchMonthOnDoc(r._id, row.yyyymm, "정산완료", todayStr8());
-    showAlert(`전체 ${monthRows.length}개월 정산완료`); clearSel();
-  };
+  if (!monthRows.length) return showAlert("표시된 월이 없습니다.");
+  if (!window.confirm(`${monthRows.length}개월 전체 정산완료 처리하시겠습니까?`)) return;
+
+  const allIds = [];
+  const patchMap = {};
+
+  for (const row of monthRows) {
+    for (const r of row._rows || []) {
+      if (!r._id) continue;
+      allIds.push(r._id);
+      if (!patchMap[r._id]) patchMap[r._id] = {};
+      patchMap[r._id][row.yyyymm] = "정산완료";
+      await patchMonthOnDoc(r._id, row.yyyymm, "정산완료", todayStr8());
+    }
+  }
+
+  // ★ 로컬 즉시 반영
+  if (typeof setDispatchData === "function") {
+    setDispatchData(prev => prev.map(d => {
+      if (!allIds.includes(d._id)) return d;
+      const newStatus = { ...(typeof d.정산상태 === "object" ? d.정산상태 : {}) };
+      const newDate = { ...(typeof d.정산일 === "object" ? d.정산일 : {}) };
+      Object.entries(patchMap[d._id] || {}).forEach(([ym]) => {
+        newStatus[ym] = "정산완료";
+        newDate[ym] = todayStr8();
+      });
+      return { ...d, 정산상태: newStatus, 정산일: newDate };
+    }));
+  }
+
+  showAlert(`전체 ${monthRows.length}개월 정산완료`);
+  clearSel();
+};
 
   const downloadMonthExcel = () => {
     if (!selClient) return showAlert("거래처를 선택하세요.");
@@ -25264,7 +25647,142 @@ function ClientSettlement({ dispatchData, clients = [], setClients }) {
     XLSX.writeFile(wb, `미수금_${selClient}_${THIS_YEAR}.xlsx`);
   };
 
+  // ★ 입금 엑셀 업로드 → 자동 매칭 → 정산완료
+  const [bankMatchResult, setBankMatchResult] = useState(null);
+
+  const handleBankExcelUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      const data = new Uint8Array(evt.target.result);
+      const workbook = XLSX.read(data, { type: "array" });
+      const sheetName = workbook.SheetNames[0];
+      const ws = workbook.Sheets[sheetName];
+      const json = XLSX.utils.sheet_to_json(ws, { defval: "" });
+
+      if (!json.length) return showAlert("엑셀 데이터가 없습니다.");
+
+      // ★ 입금 내역 파싱 (기업은행 엑셀 형식 대응)
+      const deposits = json.map(row => {
+        // 다양한 컬럼명 대응
+        const rawAmount =
+          row["입금액"] || row["입금"] || row["금액"] || row["거래금액"] ||
+          row["입금(원)"] || row["입금금액"] || row["credit"] || "";
+        const rawName =
+          row["적요"] || row["거래처"] || row["입금자명"] || row["보내는분"] ||
+          row["이름"] || row["비고"] || row["메모"] || row["상대방"] || "";
+        const rawDate =
+          row["거래일"] || row["거래일자"] || row["날짜"] || row["일자"] || row["date"] || "";
+
+        const amount = parseInt(String(rawAmount).replace(/[^\d]/g, ""), 10) || 0;
+        const name = String(rawName).trim();
+        const date = String(rawDate).trim();
+
+        return { amount, name, date, _raw: row };
+      }).filter(d => d.amount > 0);
+
+      if (!deposits.length) return showAlert("입금 내역을 찾을 수 없습니다.\n(입금액, 적요/입금자명 컬럼이 필요합니다)");
+
+      // ★ 미정산 월별 데이터와 매칭
+      const unsettled = monthRowsRaw.filter(r => r.정산상태 === "미정산" && r.총청구금액 > 0);
+
+      const matches = [];
+      const unmatched = [];
+
+      deposits.forEach(dep => {
+        // 1) 금액 정확 일치 (세액 포함 합계 = 공급가 * 1.1)
+        const found = unsettled.find(row => {
+          const totalWithTax = Math.round(row.총청구금액 * 1.1);
+          const totalNoTax = row.총청구금액;
+          return (
+            dep.amount === totalWithTax ||
+            dep.amount === totalNoTax ||
+            Math.abs(dep.amount - totalWithTax) <= 10 // ±10원 오차 허용
+          );
+        });
+
+        if (found) {
+          // 2) 입금자명과 거래처명 유사도 체크 (보너스 확인)
+          const nameMatch = dep.name &&
+            (dep.name.includes(found.거래처명) ||
+             found.거래처명.includes(dep.name) ||
+             normalizeForMatch(dep.name) === normalizeForMatch(found.거래처명));
+
+          matches.push({
+            deposit: dep,
+            matched: found,
+            confidence: nameMatch ? "높음" : "금액일치",
+          });
+        } else {
+          unmatched.push(dep);
+        }
+      });
+
+      setBankMatchResult({ matches, unmatched, deposits });
+    };
+
+    reader.readAsArrayBuffer(file);
+  };
+
+  // ★ 매칭용 정규화
+  const normalizeForMatch = (s = "") =>
+    String(s)
+      .replace(/\(주\)|㈜|주식회사|유한회사/g, "")
+      .replace(/\s+/g, "")
+      .replace(/[^가-힣a-zA-Z0-9]/g, "")
+      .toLowerCase();
+
+  // ★ 매칭 결과에서 정산완료 처리
+  const applyBankMatch = async (matchItem) => {
+  const row = matchItem.matched;
+  const dateStr = todayStr8();
+  const ids = [];
+
+  for (const r of row._rows || []) {
+    if (!r._id) continue;
+    ids.push(r._id);
+    await patchMonthOnDoc(r._id, row.yyyymm, "정산완료", dateStr);
+  }
+
+  // ★ 로컬 반영
+  if (typeof setDispatchData === "function") {
+    setDispatchData(prev => prev.map(d => {
+      if (!ids.includes(d._id)) return d;
+      return {
+        ...d,
+        정산상태: { ...(typeof d.정산상태 === "object" ? d.정산상태 : {}), [row.yyyymm]: "정산완료" },
+        정산일: { ...(typeof d.정산일 === "object" ? d.정산일 : {}), [row.yyyymm]: dateStr },
+      };
+    }));
+  }
+
+  setBankMatchResult(prev => ({
+    ...prev,
+    matches: prev.matches.filter(m => m !== matchItem),
+  }));
+  showAlert(`${row.거래처명} ${row.yyyymm} → 정산완료 (입금액: ${matchItem.deposit.amount.toLocaleString()}원)`);
+};
+
+
+  // ★ 전체 매칭 일괄 적용
+  const applyAllBankMatches = async () => {
+    if (!bankMatchResult?.matches?.length) return;
+    const dateStr = todayStr8();
+    for (const m of bankMatchResult.matches) {
+      for (const r of m.matched._rows || []) {
+        if (!r._id) continue;
+        await patchMonthOnDoc(r._id, m.matched.yyyymm, "정산완료", dateStr);
+      }
+    }
+    showAlert(`${bankMatchResult.matches.length}건 일괄 정산완료 처리됨`);
+    setBankMatchResult(null);
+  };
+
   const tabBtn = (key, label, badge) => (
+
     <button
       key={key}
       onClick={() => setTab(key)}
@@ -25475,17 +25993,75 @@ function ClientSettlement({ dispatchData, clients = [], setClients }) {
                   </table>
                 </div>
                 <div className="p-5">
-                  <div className="text-[11px] font-bold text-gray-400 mb-2 uppercase tracking-wider">공급자</div>
-                  <table className="w-full text-[13px]">
-                    <tbody>
-                      {[["상호",COMPANY_PRINT.name],["대표자",COMPANY_PRINT.ceo],["사업자번호",COMPANY_PRINT.bizNo],["주소",COMPANY_PRINT.addr],["업태",COMPANY_PRINT.type],["종목",COMPANY_PRINT.item]].map(([k,v])=>(
-                        <tr key={k} className="border-b border-gray-100 last:border-0">
-                          <td className="py-1.5 pr-3 font-semibold text-gray-500 w-24">{k}</td>
-                          <td className="py-1.5 font-medium text-gray-900">{v||"-"}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+  <div className="text-[11px] font-bold text-gray-400 mb-2 uppercase tracking-wider">공급자</div>
+  <table className="w-full text-[13px]">
+    <tbody>
+      {/* 상호 */}
+      <tr className="border-b border-gray-100">
+        <td className="py-1.5 pr-3 font-semibold text-gray-500 w-24">상호</td>
+        <td className="py-1.5 font-medium text-gray-900">{COMPANY_PRINT.name}</td>
+      </tr>
+      {/* ★ 대표자 + (인) + 도장 — 두 번째 위치 */}
+      <tr className="border-b border-gray-100">
+        <td className="py-1.5 pr-3 font-semibold text-gray-500 w-24">대표자</td>
+        <td className="py-1.5 font-medium text-gray-900">
+          <div style={{ display: "flex", alignItems: "center" }}>
+            <span style={{ flex: 1 }}>{COMPANY_PRINT.ceo}</span>
+            <span style={{
+              position: "relative",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 52,
+              height: 52,
+              marginRight: 4,
+            }}>
+              <img
+                src="/stamp.png"
+                alt="직인"
+                style={{
+                  position: "absolute",
+                  top: "50%",
+                  left: "50%",
+                  transform: "translate(-50%, -50%)",
+                  width: 46,
+                  height: 46,
+                  opacity: 0.9,
+                  pointerEvents: "none",
+                  mixBlendMode: "multiply",
+                }}
+              />
+              <span style={{ position: "relative", zIndex: 1, fontSize: 13, color: "#333" }}>(인)</span>
+            </span>
+          </div>
+        </td>
+      </tr>
+      {/* 나머지 순서대로 */}
+      {[["사업자번호",COMPANY_PRINT.bizNo],["주소",COMPANY_PRINT.addr],["업태",COMPANY_PRINT.type],["종목",COMPANY_PRINT.item]].map(([k,v])=>(
+        <tr key={k} className="border-b border-gray-100 last:border-0">
+          <td className="py-1.5 pr-3 font-semibold text-gray-500 w-24">{k}</td>
+          <td className="py-1.5 font-medium text-gray-900">{v||"-"}</td>
+        </tr>
+      ))}
+    </tbody>
+  </table>
+</div>
+
+              </div>
+
+                            {/* ★ 합계금액 한글 표시 (공급자 정보와 내역 테이블 사이) */}
+              <div className="px-6 py-3 border-b border-gray-200 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-[13px] font-bold text-gray-600">합계금액</span>
+                  <span className="text-[12px] text-gray-400">(공급가액+부가세)</span>
+                </div>
+                <div className="flex items-center gap-4">
+                  <span className="text-[14px] font-bold text-[#1B2B4B]">
+                    일금 {numberToKorean(합계공급가 + 합계세액)} 원정
+                  </span>
+                  <span className="text-[14px] font-extrabold text-blue-700">
+                    (￦ {won(합계공급가 + 합계세액)})
+                  </span>
                 </div>
               </div>
 
@@ -25494,31 +26070,54 @@ function ClientSettlement({ dispatchData, clients = [], setClients }) {
                 <table className="w-full text-[13px]">
                   <thead>
                     <tr className="bg-[#1B2B4B]">
-                      {["No","상차일","상하차지","화물명","기사명","공급가액","세액(10%)","합계"].map(h=>(
+                      {["No","날짜","상차지","하차지","화물명","기사명","차량번호","공급가액","세액(10%)","합계"].map(h=>(
                         <th key={h} className="px-3 py-3 text-white font-bold text-center whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {mapped.length === 0 ? (
-                      <tr><td colSpan={8} className="text-center text-gray-400 py-12 text-[14px]">조회 결과가 없습니다. (청구운임 0원인 오더는 제외됩니다)</td></tr>
+                      <tr><td colSpan={10} className="text-center text-gray-400 py-12 text-[14px]">조회 결과가 없습니다. (청구운임 0원인 오더는 제외됩니다)</td></tr>
                     ) : (
-                      mapped.map((m, i) => (
-                        <tr key={m.idx} className={i%2===0?"bg-white":"bg-gray-50/60"}>
+                                                                 mapped.map((m, i) => (
+                        <tr
+                          key={m.idx}
+                          className={`${i%2===0?"bg-white":"bg-gray-50/60"} hover:bg-blue-50 cursor-pointer transition`}
+                          onClick={() => {
+                            const order = rowsInvoice[i];
+                            setOrderPopup(order);
+                            setOrderPopupEdit({
+                              상차지명: order.상차지명 || "",
+                              하차지명: order.하차지명 || "",
+                              화물내용: order.화물내용 || "",
+                              이름: order.이름 || "",
+                              차량번호: order.차량번호 || "",
+                              청구운임: String(order.청구운임 || ""),
+                              기사운임: String(order.기사운임 || ""),
+                              상차시간: order.상차시간 || "",
+                              하차시간: order.하차시간 || "",
+                              비고: order.비고 || "",
+                            });
+                          }}
+                          title="클릭하여 상세보기"
+                        >
                           <td className="px-3 py-2.5 text-center text-gray-500">{m.idx}</td>
                           <td className="px-3 py-2.5 text-center whitespace-nowrap">{m.상차일}</td>
-                          <td className="px-3 py-2.5">{m.상하차지}</td>
-                          <td className="px-3 py-2.5">{m.화물명}</td>
+                          <td className="px-3 py-2.5 text-center">{m.상차지}</td>
+                          <td className="px-3 py-2.5 text-center">{m.하차지}</td>
+                          <td className="px-3 py-2.5 text-center">{m.화물명}</td>
                           <td className="px-3 py-2.5 text-center">{m.기사명}</td>
+                          <td className="px-3 py-2.5 text-center text-[12px]">{m.차량번호}</td>
                           <td className="px-3 py-2.5 text-right font-semibold">{won(m.공급가액)}</td>
                           <td className="px-3 py-2.5 text-right text-blue-600">{won(m.세액)}</td>
                           <td className="px-3 py-2.5 text-right font-bold text-[#1B2B4B]">{won(m.공급가액+m.세액)}</td>
                         </tr>
                       ))
+
                     )}
                     {mapped.length > 0 && (
                       <tr className="bg-[#1B2B4B]">
-                        <td colSpan={5} className="px-3 py-3 text-white font-bold text-center">합 계</td>
+                        <td colSpan={7} className="px-3 py-3 text-white font-bold text-center">소 계</td>
                         <td className="px-3 py-3 text-right text-white font-bold">{won(합계공급가)}</td>
                         <td className="px-3 py-3 text-right text-blue-300 font-bold">{won(합계세액)}</td>
                         <td className="px-3 py-3 text-right text-yellow-300 font-extrabold">{won(합계공급가+합계세액)}</td>
@@ -25527,8 +26126,91 @@ function ClientSettlement({ dispatchData, clients = [], setClients }) {
                   </tbody>
                 </table>
               </div>
+
               <div className="px-6 py-3 bg-gray-50 text-[12px] text-gray-500 border-t text-center">
                 입금계좌: {COMPANY_PRINT.bank} &nbsp;|&nbsp; 문의: {COMPANY_PRINT.email}
+              </div>
+            </div>
+          )}
+          {/* ★ 오더 상세 팝업 */}
+          {orderPopup && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]" onClick={() => setOrderPopup(null)}>
+              <div className="bg-white rounded-2xl shadow-2xl w-[560px] max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                {/* 헤더 */}
+                <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between rounded-t-2xl">
+                  <h3 className="text-white font-bold text-[15px]">오더 상세</h3>
+                  <button className="text-white/60 hover:text-white text-lg" onClick={() => setOrderPopup(null)}>✕</button>
+                </div>
+
+                {/* 오더 요약 (읽기전용) */}
+                <div className="px-6 py-3 bg-gray-50 border-b text-[13px] text-gray-600">
+                  <span className="font-bold text-[#1B2B4B]">{orderPopup.상차일 || ""}</span>
+                  <span className="mx-2">|</span>
+                  <span>{orderPopup.거래처명 || ""}</span>
+                  <span className="mx-2">|</span>
+                  <span>{orderPopup.배차상태 || ""}</span>
+                </div>
+
+                {/* 수정 가능 필드 */}
+                <div className="p-6 space-y-3">
+                  {[
+                    { key: "상차지명", label: "상차지" },
+                    { key: "하차지명", label: "하차지" },
+                    { key: "화물내용", label: "화물명" },
+                    { key: "이름", label: "기사명" },
+                    { key: "차량번호", label: "차량번호" },
+                    { key: "청구운임", label: "청구운임" },
+                    { key: "기사운임", label: "기사운임" },
+                    { key: "상차시간", label: "상차시간" },
+                    { key: "하차시간", label: "하차시간" },
+                    { key: "비고", label: "비고" },
+                  ].map(({ key, label }) => (
+                    <div key={key}>
+                      <label className="text-[12px] font-semibold text-gray-500 mb-1 block">{label}</label>
+                      <input
+                        className="border-2 border-gray-200 rounded-lg px-3 py-2 w-full text-[13px] focus:border-[#1B2B4B] outline-none"
+                        value={orderPopupEdit[key] || ""}
+                        onChange={e => setOrderPopupEdit(prev => ({ ...prev, [key]: e.target.value }))}
+                      />
+                    </div>
+                  ))}
+                </div>
+
+                {/* 하단 버튼 */}
+                <div className="px-6 pb-5 flex gap-3">
+                  <button
+                    className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 font-semibold hover:bg-gray-200 transition"
+                    onClick={() => setOrderPopup(null)}
+                  >
+                    닫기
+                  </button>
+                  <button
+                    className="flex-1 py-2.5 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 transition"
+                    onClick={async () => {
+                      if (!orderPopup._id) return showAlert("저장할 수 없는 오더입니다.");
+                      if (typeof patchDispatch === "function") {
+                        await patchDispatch(orderPopup._id, orderPopupEdit);
+                        showAlert("수정 저장 완료!");
+                        setOrderPopup(null);
+                      } else {
+                        showAlert("patchDispatch가 연결되지 않았습니다.");
+                      }
+                    }}
+                  >
+                    수정 저장
+                  </button>
+                  <button
+                    className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white font-bold hover:bg-[#243a60] transition"
+                    onClick={() => {
+                      if (orderPopup._id && typeof window.__selectOrder === "function") {
+                        setOrderPopup(null);
+                        window.__selectOrder(orderPopup._id);
+                      }
+                    }}
+                  >
+                    오더로 이동
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -25630,11 +26312,14 @@ function ClientSettlement({ dispatchData, clients = [], setClients }) {
                   className={`px-3 py-2 rounded-lg text-[13px] font-bold text-white transition ${monthRows.length?"bg-[#1B2B4B] hover:bg-[#243a60]":"bg-[#1B2B4B]/40 cursor-not-allowed"}`}>
                   전체 정산완료
                 </button>
-                <button onClick={downloadMonthExcel} className="px-3 py-2 rounded-lg bg-teal-600 text-white text-[13px] font-semibold hover:bg-teal-700 transition">📥 엑셀</button>
+                                <button onClick={downloadMonthExcel} className="px-3 py-2 rounded-lg bg-teal-600 text-white text-[13px] font-semibold hover:bg-teal-700 transition">엑셀</button>
+                <label className="px-3 py-2 rounded-lg bg-indigo-600 text-white text-[13px] font-semibold hover:bg-indigo-700 transition cursor-pointer">
+                  입금확인 (엑셀)
+                  <input type="file" accept=".xlsx,.xls,.csv" hidden onChange={handleBankExcelUpload} />
+                </label>
               </div>
             </div>
           </div>
-
           {/* KPI 카드 */}
           {selClient && (
             <div className="grid grid-cols-5 gap-3 mb-4">
@@ -25709,12 +26394,182 @@ function ClientSettlement({ dispatchData, clients = [], setClients }) {
               </tbody>
             </table>
           </div>
-          <div className="mt-2 text-[12px] text-gray-400">· 정산상태 클릭 시 해당 월 전체 오더에 정산상태/정산일이 저장됩니다.</div>
+                            <div className="mt-2 text-[12px] text-gray-400">· 정산상태 클릭 시 해당 월 전체 오더에 정산상태/정산일이 저장됩니다.</div>
+
+                             {/* ★ 입금 엑셀 업로드 가이드 */}
+          <div className="mt-6 p-6 bg-[#f8f9fb] border border-gray-200 rounded-2xl shadow-sm">
+            <p className="font-extrabold mb-3 text-[16px] text-[#1B2B4B]">입금확인 엑셀 양식 안내</p>
+            <p className="mb-4 text-[14px] text-gray-600 leading-relaxed">
+              아래와 같은 형식의 <b className="text-[#1B2B4B]">기업은행 거래내역 엑셀</b> 파일을 업로드하면 자동으로 미정산 건과 매칭합니다.
+            </p>
+
+            {/* 예시 테이블 */}
+            <div className="overflow-x-auto mb-5">
+              <table className="w-full border-2 border-gray-300 text-center text-[14px]">
+                <thead className="bg-[#1B2B4B] text-white">
+                  <tr>
+                    <th className="border border-[#2d4a7a] px-4 py-3 font-bold">거래일</th>
+                    <th className="border border-[#2d4a7a] px-4 py-3 font-bold">적요(입금자명)</th>
+                    <th className="border border-[#2d4a7a] px-4 py-3 font-bold">입금액</th>
+                    <th className="border border-[#2d4a7a] px-4 py-3 font-bold">잔액</th>
+                    <th className="border border-[#2d4a7a] px-4 py-3 font-bold">비고</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="bg-white">
+                    <td className="border border-gray-200 px-4 py-3 font-medium text-gray-700">2026-04-25</td>
+                    <td className="border border-gray-200 px-4 py-3 font-bold text-[#1B2B4B]">거해</td>
+                    <td className="border border-gray-200 px-4 py-3 font-extrabold text-emerald-700">3,234,000</td>
+                    <td className="border border-gray-200 px-4 py-3 text-gray-500">15,420,000</td>
+                    <td className="border border-gray-200 px-4 py-3 text-gray-400"></td>
+                  </tr>
+                  <tr className="bg-gray-50/80">
+                    <td className="border border-gray-200 px-4 py-3 font-medium text-gray-700">2026-04-28</td>
+                    <td className="border border-gray-200 px-4 py-3 font-bold text-[#1B2B4B]">㈜대한물류</td>
+                    <td className="border border-gray-200 px-4 py-3 font-extrabold text-emerald-700">5,500,000</td>
+                    <td className="border border-gray-200 px-4 py-3 text-gray-500">20,920,000</td>
+                    <td className="border border-gray-200 px-4 py-3 text-gray-400"></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            {/* 사용 방법 */}
+            <div className="space-y-2.5 mb-5">
+              <div className="flex items-start gap-3 bg-white border border-gray-200 rounded-xl px-4 py-3">
+                <span className="w-7 h-7 rounded-full bg-[#1B2B4B] text-white text-[13px] font-bold flex items-center justify-center shrink-0 mt-0.5">1</span>
+                <span className="text-[14px] text-gray-700 font-medium">
+                  기업은행 인터넷뱅킹 → <b className="text-[#1B2B4B]">조회</b> → <b className="text-[#1B2B4B]">거래내역조회</b> → 기간 설정 후 <b className="text-[#1B2B4B]">엑셀저장</b>
+                </span>
+              </div>
+              <div className="flex items-start gap-3 bg-white border border-gray-200 rounded-xl px-4 py-3">
+                <span className="w-7 h-7 rounded-full bg-[#1B2B4B] text-white text-[13px] font-bold flex items-center justify-center shrink-0 mt-0.5">2</span>
+                <span className="text-[14px] text-gray-700 font-medium">
+                  위 <b className="text-[#1B2B4B] bg-[#1B2B4B]/10 px-1.5 py-0.5 rounded">입금확인 (엑셀)</b> 버튼 클릭 → 저장한 파일 선택
+                </span>
+              </div>
+              <div className="flex items-start gap-3 bg-white border border-gray-200 rounded-xl px-4 py-3">
+                <span className="w-7 h-7 rounded-full bg-[#1B2B4B] text-white text-[13px] font-bold flex items-center justify-center shrink-0 mt-0.5">3</span>
+                <span className="text-[14px] text-gray-700 font-medium">
+                  <b className="text-emerald-700">입금액</b>과 미정산 월 청구금액(세액포함)이 일치하면 <b className="text-emerald-700">자동 매칭</b>됩니다
+                </span>
+              </div>
+              <div className="flex items-start gap-3 bg-white border border-gray-200 rounded-xl px-4 py-3">
+                <span className="w-7 h-7 rounded-full bg-[#1B2B4B] text-white text-[13px] font-bold flex items-center justify-center shrink-0 mt-0.5">4</span>
+                <span className="text-[14px] text-gray-700 font-medium">
+                  <b className="text-[#1B2B4B]">적요(입금자명)</b>와 거래처명이 유사하면 신뢰도 <b className="text-emerald-700">"높음"</b>으로 표시됩니다
+                </span>
+              </div>
+            </div>
+
+            {/* 매칭 기준 요약 */}
+            <div className="p-4 bg-[#1B2B4B]/5 border border-[#1B2B4B]/20 rounded-xl">
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-[13px] text-[#1B2B4B] font-semibold">
+                <span>💡 <b>매칭 기준:</b> 입금액 = 월 총청구금액 × 1.1 (세액포함) ±10원 허용</span>
+                <span className="text-gray-300">|</span>
+                <span><b>지원 파일:</b> .xlsx, .xls, .csv</span>
+                <span className="text-gray-300">|</span>
+                <span><b>필수 컬럼:</b> 입금액 + 적요(또는 입금자명)</span>
+              </div>
+            </div>
+          </div>
+
+
+          {/* ★ 입금 매칭 결과 팝업 */}
+
+          {bankMatchResult && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]" onClick={() => setBankMatchResult(null)}>
+              <div className="bg-white rounded-2xl shadow-2xl w-[700px] max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                {/* 헤더 */}
+                <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between rounded-t-2xl">
+                  <div>
+                    <h3 className="text-white font-bold text-[15px]">입금 매칭 결과</h3>
+                    <p className="text-white/60 text-[12px] mt-0.5">
+                      업로드 {bankMatchResult.deposits.length}건 중 매칭 {bankMatchResult.matches.length}건
+                    </p>
+                  </div>
+                  <button className="text-white/60 hover:text-white text-lg" onClick={() => setBankMatchResult(null)}>✕</button>
+                </div>
+
+                {/* 매칭 성공 목록 */}
+                {bankMatchResult.matches.length > 0 && (
+                  <div className="p-5">
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="text-[14px] font-bold text-emerald-700">✅ 매칭 성공 ({bankMatchResult.matches.length}건)</h4>
+                      <button
+                        onClick={applyAllBankMatches}
+                        className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-[13px] font-bold hover:bg-emerald-700 transition"
+                      >
+                        전체 정산완료 적용
+                      </button>
+                    </div>
+                    <div className="space-y-2">
+                      {bankMatchResult.matches.map((m, i) => (
+                        <div key={i} className="border border-emerald-200 rounded-xl p-4 bg-emerald-50/50 flex items-center justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="font-bold text-[#1B2B4B] text-[14px]">{m.matched.거래처명}</span>
+                              <span className="text-[12px] text-gray-500">{m.matched.yyyymm}</span>
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                m.confidence === "높음" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
+                              }`}>
+                                신뢰도: {m.confidence}
+                              </span>
+                            </div>
+                            <div className="text-[12px] text-gray-600">
+                              입금: <b className="text-blue-600">{m.deposit.amount.toLocaleString()}원</b>
+                              {m.deposit.name && <span className="ml-2">({m.deposit.name})</span>}
+                              <span className="mx-2">→</span>
+                              청구(세포함): <b>{Math.round(m.matched.총청구금액 * 1.1).toLocaleString()}원</b>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => applyBankMatch(m)}
+                            className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-[12px] font-bold hover:bg-emerald-700 transition ml-3"
+                          >
+                            적용
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 매칭 실패 목록 */}
+                {bankMatchResult.unmatched.length > 0 && (
+                  <div className="p-5 border-t">
+                    <h4 className="text-[14px] font-bold text-gray-500 mb-3">❌ 매칭 실패 ({bankMatchResult.unmatched.length}건)</h4>
+                    <div className="space-y-1.5">
+                      {bankMatchResult.unmatched.map((d, i) => (
+                        <div key={i} className="flex items-center gap-4 text-[12px] text-gray-600 bg-gray-50 rounded-lg px-4 py-2.5">
+                          <span className="font-semibold text-gray-800">{d.amount.toLocaleString()}원</span>
+                          <span>{d.name || "-"}</span>
+                          <span className="text-gray-400">{d.date}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-[11px] text-gray-400 mt-2">* 미정산 월 금액(세액포함)과 일치하지 않는 입금 건입니다. 수동으로 확인하세요.</p>
+                  </div>
+                )}
+
+                {/* 하단 */}
+                <div className="px-5 py-4 border-t bg-gray-50 rounded-b-2xl">
+                  <button
+                    onClick={() => setBankMatchResult(null)}
+                    className="w-full py-2.5 rounded-xl bg-gray-200 text-gray-700 font-semibold hover:bg-gray-300 transition"
+                  >
+                    닫기
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
   );
 }
+
 // ===================== DispatchApp.jsx (PART 8/8) — END =====================
 
 // ===================== DispatchApp.jsx (PART 9/9 — 지급관리 V5 최종본) — START =====================
@@ -26237,7 +27092,7 @@ function PaymentManagement({ dispatchData = [], clients = [], drivers = [] }) {
           <button onClick={() => bulkPayDone(Array.from(selectedIds))} className="px-3 py-2 rounded bg-emerald-600 text-white">선택 지급</button>
           <button onClick={() => bulkPayUndone(Array.from(selectedIds))} className="px-3 py-2 rounded bg-red-600 text-white">선택 미지급</button>
           <button onClick={() => bulkPayDone(filtered.map(r => r._id))} className="px-3 py-2 rounded bg-emerald-700 text-white">전체 지급</button>
-          <button onClick={downloadExcel} className="px-3 py-2 rounded bg-blue-600 text-white">📥 엑셀 다운로드</button>
+          <button onClick={downloadExcel} className="px-3 py-2 rounded bg-blue-600 text-white">엑셀 다운로드</button>
 
         </div>
       </div>
