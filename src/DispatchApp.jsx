@@ -10429,6 +10429,8 @@ const checkWarningStatus = (name, type) => {
   const [uploadAlerts, setUploadAlerts] = React.useState([]);
   /* =================== 기사복사 모달 상태 =================== */
 const [copyModalOpen, setCopyModalOpen] = useState(false);
+const [filterErrorIds, setFilterErrorIds] = useState(null); // null=전체, 배열=오류오더만
+const [reVerifyToast, setReVerifyToast] = useState(null);   // 재검증 완료 토스트
 
 const getYoil = (dateStr) => {
   const date = new Date(dateStr);
@@ -10936,6 +10938,13 @@ React.useEffect(() => {
 
   const [undoStack, setUndoStack] = React.useState([]);
   const [showUndo, setShowUndo] = React.useState(false);
+
+  // ===================== 일마감 상태 =====================
+  const [dailyCloseOpen, setDailyCloseOpen] = React.useState(false);
+  const [dailyCloseResult, setDailyCloseResult] = React.useState(null);
+  const [dailyCloseFilter, setDailyCloseFilter] = React.useState("all");
+  const [closeFileResult, setCloseFileResult] = React.useState(null);
+
 
   // === 유사 운임조회 (선택수정 전용 업그레이드) ===
   const handleFareSearch = () => {
@@ -12033,6 +12042,11 @@ setDriverConfirmRowId(null);
       );
     }
 
+ // 오류오더만 보기 필터
+    if (filterErrorIds !== null) {
+      data = data.filter(r => filterErrorIds.includes(r._id));
+    }
+
     // 정렬
 if (sortKey) {
   data.sort(compareBy(sortKey, sortDir));
@@ -12041,7 +12055,7 @@ if (sortKey) {
 }
 
     return data;
-  }, [rows, q, sortKey, sortDir, dayMode, statusFilter]);
+  }, [rows, q, sortKey, sortDir, dayMode, statusFilter, filterErrorIds]);
   // =========================
   // 📊 상태 요약 (추가 위치)
   // =========================
@@ -12118,10 +12132,689 @@ if (sortKey) {
     setEdited({});
     setSelectedEditMode(false);
   };
+  // ===================== 일마감 검증 로직 =====================
+const runDailyClose = () => {
+  let targetDate = todayKST();
+  if (dayMode === "yesterday") targetDate = yesterdayKST();
+  if (dayMode === "tomorrow") targetDate = tomorrowKST();
+
+  const todayRows = rows.filter(r => r.상차일 === targetDate);
+  const errors = [];
+  const warnings = [];
+
+  todayRows.forEach((row, idx) => {
+    const seq = idx + 1;
+    const label = `${seq}번 [${row.거래처명 || "-"}] ${row.상차지명 || ""} → ${row.하차지명 || ""}`;
+
+    // 1. 필수값 누락 체크
+    const requiredFields = [
+      { key: "차량번호", name: "차량번호" },
+      { key: "이름", name: "기사명" },
+      { key: "전화번호", name: "전화번호" },
+      { key: "청구운임", name: "청구운임" },
+      { key: "기사운임", name: "기사운임" },
+      { key: "배차방식", name: "배차방식" },
+      { key: "지급방식", name: "지급방식" },
+    ];
+
+    const missing = requiredFields.filter(f => {
+      const v = String(row[f.key] || "").trim();
+      return !v || v === "0";
+    });
+
+    if (missing.length > 0) {
+      errors.push({
+        rowId: row._id,
+        seq,
+        label,
+        type: "missing",
+        msg: `필수값 누락: ${missing.map(m => m.name).join(", ")}`,
+      });
+    }
+
+    // 2. 운임 정합성 체크
+    const charge = Number(String(row.청구운임 || "0").replace(/[^\d-]/g, ""));
+    const pay = Number(String(row.기사운임 || "0").replace(/[^\d-]/g, ""));
+
+    if (charge > 0 && pay > 0 && charge < pay) {
+      warnings.push({
+        rowId: row._id,
+        seq,
+        label,
+        type: "margin",
+        msg: `마진 역전 (청구 ${charge.toLocaleString()} < 기사 ${pay.toLocaleString()})`,
+      });
+    }
+
+    if (charge === 0 && row.지급방식 !== "취소" && row.배차상태 !== "배차취소") {
+      warnings.push({
+        rowId: row._id,
+        seq,
+        label,
+        type: "zero",
+        msg: "청구운임이 0원입니다",
+      });
+    }
+
+    if (pay === 0 && row.배차상태 === "배차완료") {
+      warnings.push({
+        rowId: row._id,
+        seq,
+        label,
+        type: "zero",
+        msg: "기사운임이 0원입니다 (배차완료 상태)",
+      });
+    }
+
+    if (charge > 5000000) {
+      warnings.push({
+        rowId: row._id,
+        seq,
+        label,
+        type: "high",
+        msg: `청구운임 비정상적으로 높음 (${charge.toLocaleString()}원)`,
+      });
+    }
+
+        // 3. 기사정보 정합성 체크
+    const plate = normalizePlate(row.차량번호 || "");
+    if (plate) {
+      const dbMatches = driverMap.get(plate) || [];
+
+      if (dbMatches.length > 0) {
+        const rowName = String(row.이름 || "").trim();
+        const rowPhone = String(row.전화번호 ?? "").replace(/[^\d]/g, "");
+
+        const exactMatch = dbMatches.find(d => {
+          const dName = String(d.이름 || "").trim();
+          const dPhone = String(d.전화번호 ?? "").replace(/[^\d]/g, "");
+          return dName === rowName && dPhone === rowPhone;
+        });
+
+        if (!exactMatch && rowName) {
+          const dbNames = dbMatches.map(d => d.이름).join("/");
+          warnings.push({
+            rowId: row._id,
+            seq,
+            label,
+            type: "driver",
+            msg: `기사정보 불일치 — 입력: "${rowName}" / DB: "${dbNames}"`,
+          });
+        }
+      }
+
+      // 전화번호 자릿수 체크
+      const phoneDigits = String(row.전화번호 ?? "").replace(/[^\d]/g, "");
+      if (phoneDigits && phoneDigits.length !== 11) {
+        warnings.push({
+          rowId: row._id,
+          seq,
+          label,
+          type: "phone",
+          msg: `전화번호 ${phoneDigits.length}자리 (정상: 11자리)`,
+        });
+      }
+    }
+
+  });
+
+  // 업체별 요약
+  const clientMap = new Map();
+  todayRows.forEach(row => {
+    const name = row.거래처명 || "(미입력)";
+    if (!clientMap.has(name)) {
+      clientMap.set(name, { count: 0, charge: 0, pay: 0 });
+    }
+    const c = clientMap.get(name);
+    c.count++;
+    c.charge += Number(String(row.청구운임 || "0").replace(/[^\d-]/g, "")) || 0;
+    c.pay += Number(String(row.기사운임 || "0").replace(/[^\d-]/g, "")) || 0;
+  });
+
+  const clientSummary = [...clientMap.entries()].map(([name, data]) => ({
+    name,
+    ...data,
+    margin: data.charge - data.pay,
+  }));
+
+  setDailyCloseResult({
+    date: targetDate,
+    total: todayRows.length,
+    errors,
+    warnings,
+    passed: todayRows.length - errors.length,
+    clientSummary,
+  });
+};
+
+React.useEffect(() => {
+  if (dailyCloseOpen) runDailyClose();
+}, [dailyCloseOpen]);
+// ===================== 일마감 보고서 출력 =====================
+const handleDailyReport = () => {
+  if (!dailyCloseResult) return;
+  const targetDate = dailyCloseResult.date;
+  const targetRows = rows.filter(r => r.상차일 === targetDate);
+
+  const prevDate = (() => {
+    const d = new Date(targetDate);
+    d.setDate(d.getDate() - 1);
+    return d.toISOString().slice(0, 10);
+  })();
+  const prevRows = rows.filter(r => r.상차일 === prevDate);
+
+  const calc = (arr) => {
+    const charge = arr.reduce((a, r) => a + (Number(String(r.청구운임 || "0").replace(/[^\d-]/g, "")) || 0), 0);
+    const pay    = arr.reduce((a, r) => a + (Number(String(r.기사운임  || "0").replace(/[^\d-]/g, "")) || 0), 0);
+    const fee    = charge - pay;
+    const margin = charge > 0 ? (fee / charge * 100) : 0;
+    return { charge, pay, fee, margin, count: arr.length };
+  };
+
+  const cur  = calc(targetRows);
+  const prev = calc(prevRows);
+
+  const diff = (a, b) => {
+    const d = a - b;
+    const pct = b > 0 ? ((d / b) * 100).toFixed(1) : null;
+    return { d, pct, sign: d >= 0 ? "▲" : "▼", cls: d >= 0 ? "up" : "down" };
+  };
+  const dCharge = diff(cur.charge, prev.charge);
+  const dPay    = diff(cur.pay,    prev.pay);
+  const dFee    = diff(cur.fee,    prev.fee);
+  const dMargin = diff(cur.margin, prev.margin);
+  const dCount  = diff(cur.count,  prev.count);
+  const marginRate = cur.charge > 0 ? (cur.fee / cur.charge * 100).toFixed(1) : "0.0";
+  const hasPrev = prev.count > 0;
+
+  const fmtD = (d, unit="원") => !hasPrev
+    ? `<span class="neutral">전일 없음</span>`
+    : `<span class="${d.cls}">${d.sign} ${Math.abs(d.d).toLocaleString()}${unit}${d.pct !== null ? ` (${d.pct}%)` : ""}</span>`;
+  const fmtDC = (d) => !hasPrev
+    ? `<span class="neutral">전일 없음</span>`
+    : `<span class="${d.cls}">${d.sign} ${Math.abs(d.d)}건${d.pct !== null ? ` (${d.pct}%)` : ""}</span>`;
+  const fmtDM = (d) => !hasPrev
+    ? `<span class="neutral">전일 없음</span>`
+    : `<span class="${d.cls}">${d.sign} ${Math.abs(d.d).toFixed(1)}%pt${d.pct !== null ? ` (${d.pct}%)` : ""}</span>`;
+
+  const dateLabel = targetDate.replace(/-/g, ". ");
+  const prevLabel = prevDate.replace(/-/g, ". ");
+  const now = new Date();
+  const printDate = `${now.getFullYear()}. ${String(now.getMonth()+1).padStart(2,"0")}. ${String(now.getDate()).padStart(2,"0")}`;
+
+  const rows_html = targetRows.map((r, i) => {
+    const charge = Number(String(r.청구운임 || "0").replace(/[^\d-]/g, "")) || 0;
+    const pay    = Number(String(r.기사운임  || "0").replace(/[^\d-]/g, "")) || 0;
+    const fee    = charge - pay;
+    const rate   = charge > 0 ? Math.round(fee / charge * 100) : null;
+    const rateClass = rate === null ? "" : rate >= 20 ? "rate-good" : rate < 10 ? "rate-bad" : "";
+    return `<tr>
+      <td class="center">${i + 1}</td>
+      <td class="center">${r.상차일 || ""}</td>
+      <td class="center">${r.거래처명 || ""}</td>
+      <td class="center">${r.화물내용 || ""}</td>
+      <td class="center">${r.차량번호 || ""}</td>
+      <td class="center">${r.이름 || ""}</td>
+      <td class="center">${r.전화번호 || ""}</td>
+      <td class="num">${charge ? charge.toLocaleString() : "-"}</td>
+      <td class="num">${pay ? pay.toLocaleString() : "-"}</td>
+      <td class="num">${fee ? fee.toLocaleString() : "-"}</td>
+      <td class="num ${rateClass}">${rate !== null ? rate + "%" : "-"}</td>
+      <td class="center">${r.지급방식 || ""}</td>
+      <td class="center">${r.배차방식 || ""}</td>
+    </tr>`;
+  }).join("");
+
+  const html = `<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>일일업무보고_${targetDate}</title>
+<style id="orient-style">@page { size: A4 landscape; margin: 6mm 8mm; }</style>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap');
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Noto Sans KR',sans-serif; font-size:11px; color:#111827; background:#f9fafb; }
+
+  /* ── 툴바 (화면 전용, 인쇄 시 숨김) ── */
+  .toolbar {
+    position:fixed; top:0; left:0; right:0; z-index:9999;
+    background:#1B2B4B; padding:8px 20px;
+    display:flex; align-items:center; gap:10px;
+    box-shadow:0 2px 8px rgba(0,0,0,0.3);
+  }
+  .toolbar-title { color:#fff; font-size:12px; font-weight:700; margin-right:auto; letter-spacing:-0.3px; }
+  .tb-btn {
+    padding:6px 16px; border-radius:6px; border:none; cursor:pointer;
+    font-size:11px; font-weight:700; font-family:'Noto Sans KR',sans-serif;
+    transition:opacity 0.15s;
+  }
+  .tb-btn:hover { opacity:0.85; }
+  .tb-btn.orient { background:#fff; color:#1B2B4B; }
+  .tb-btn.print  { background:#3b82f6; color:#fff; }
+  .tb-btn.pdf    { background:#059669; color:#fff; }
+  .tb-btn.img    { background:#7c3aed; color:#fff; }
+  .orient-label { color:#94a3b8; font-size:10px; }
+  .divider { width:1px; height:20px; background:#374151; margin:0 4px; }
+
+  /* ── 본문 ── */
+  .page-wrap { padding:28px 28px 20px; max-width:1400px; margin:0 auto; margin-top:48px; }
+
+  /* ── 상단 헤더 ── */
+  .top-header { display:flex; justify-content:space-between; align-items:flex-end; padding-bottom:10px; border-bottom:2.5px solid #1B2B4B; margin-bottom:14px; }
+  .logo { font-size:24px; font-weight:900; color:#1B2B4B; letter-spacing:-1px; }
+  .tagline { font-size:9.5px; color:#9ca3af; margin-top:3px; }
+  .contact { text-align:right; font-size:9.5px; color:#6b7280; line-height:1.8; }
+
+  /* ── 타이틀 + 날짜 ── */
+  .title-bar { display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; }
+  .doc-title { font-size:22px; font-weight:900; color:#111827; letter-spacing:-0.8px; }
+  .doc-meta-box {
+    background:#1B2B4B; border-radius:8px; padding:7px 16px;
+    display:flex; gap:20px; align-items:center;
+  }
+  .doc-meta-item { display:flex; flex-direction:column; align-items:center; }
+  .doc-meta-label { font-size:8.5px; color:#93c5fd; font-weight:700; letter-spacing:0.5px; margin-bottom:2px; }
+  .doc-meta-value { font-size:12px; color:#fff; font-weight:700; letter-spacing:0.2px; }
+  .doc-meta-divider { width:1px; height:28px; background:#374151; }
+
+  /* ── KPI + 결재 ── */
+  .kpi-approval { display:flex; align-items:stretch; gap:14px; margin-bottom:16px; }
+  .kpi-grid { display:flex; gap:8px; flex:1; }
+
+  .kpi-card {
+    flex:1; border:1px solid #e5e7eb; border-radius:10px;
+    padding:10px 14px 10px; background:#fff; position:relative; overflow:hidden;
+    box-shadow:0 1px 4px rgba(0,0,0,0.05);
+  }
+  .kpi-card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; background:#1B2B4B; border-radius:10px 10px 0 0; }
+  .kpi-label { font-size:9px; font-weight:700; color:#9ca3af; letter-spacing:0.4px; text-transform:uppercase; margin-bottom:5px; }
+  .kpi-value { font-size:18px; font-weight:900; color:#111827; letter-spacing:-0.5px; line-height:1.1; }
+  .kpi-value.pos { color:#059669; }
+  .kpi-value.neg { color:#dc2626; }
+  .kpi-diff { font-size:9px; font-weight:500; margin-top:6px; padding-top:5px; border-top:1px dashed #f3f4f6; color:#6b7280; }
+  .kpi-diff .up   { color:#059669; font-weight:700; }
+  .kpi-diff .down { color:#dc2626; font-weight:700; }
+  .kpi-diff .neutral { color:#9ca3af; }
+  .kpi-sub { font-size:8.5px; color:#d1d5db; margin-top:2px; }
+
+  /* ── 결재란 ── */
+  .approval { border:1.5px solid #1B2B4B; border-radius:8px; overflow:hidden; min-width:230px; }
+  .approval-title { background:#1B2B4B; color:#fff; font-size:12px; font-weight:700; text-align:center; padding:6px 0; letter-spacing:4px; }
+  .approval-row { display:flex; height:80px; }
+  .approval-cell { flex:1; border-right:1px solid #cbd5e1; display:flex; flex-direction:column; }
+  .approval-cell:last-child { border-right:none; }
+  .a-role { background:#f1f5f9; font-size:11px; font-weight:700; color:#1B2B4B; text-align:center; padding:5px 0; border-bottom:1px solid #cbd5e1; }
+  .a-sign { flex:1; }
+
+  /* ── 구분 라벨 ── */
+  .section-label { font-size:11px; font-weight:700; color:#1B2B4B; padding-left:8px; border-left:3px solid #1B2B4B; margin-bottom:7px; }
+
+  /* ── 테이블 ── */
+  table { width:100%; border-collapse:collapse; font-size:10.5px; table-layout:auto; }
+  thead tr { background:#1B2B4B; }
+  thead th { color:#fff; padding:7px 6px; font-size:10px; font-weight:700; text-align:center; white-space:nowrap; border:1px solid #263f61; }
+  tbody td { padding:6px 6px; border-bottom:1px solid #f3f4f6; border-left:1px solid #f3f4f6; border-right:1px solid #f3f4f6; color:#111827; font-size:10.5px; white-space:nowrap; }
+  tbody tr:nth-child(even) td { background:#fafafa; }
+  td.center { text-align:center; }
+  td.num { text-align:right; padding-right:8px; font-variant-numeric:tabular-nums; }
+  td.rate-good { color:#059669; font-weight:700; }
+  td.rate-bad  { color:#dc2626; font-weight:700; }
+  tr.total-row td { background:#eef2f7 !important; font-weight:900; color:#1B2B4B; font-size:11px; border-top:2px solid #1B2B4B; }
+
+  /* ── 하단 ── */
+  .report-footer { margin-top:12px; display:flex; justify-content:space-between; }
+  .footer-note { font-size:9px; color:#d1d5db; }
+  .footer-right { font-size:9px; color:#9ca3af; text-align:right; line-height:1.8; }
+
+  /* ── 인쇄 시 ── */
+@media print {
+    .toolbar { display:none !important; }
+    body { background:#fff; }
+    .page-wrap { margin-top:0; padding:0; max-width:100%; }
+    tbody tr:hover td { background:inherit !important; }
+
+    /* 테이블 선 굵게 */
+    table { border:2px solid #000 !important; }
+    thead th {
+      border:1.5px solid #000 !important;
+      -webkit-print-color-adjust:exact;
+      print-color-adjust:exact;
+    }
+    tbody td {
+      border:1px solid #555 !important;
+      border-bottom:1px solid #555 !important;
+    }
+    tr.total-row td {
+      border-top:2.5px solid #000 !important;
+      border-bottom:1.5px solid #000 !important;
+    }
+
+    /* 결재란 선 굵게 */
+    .approval {
+      border:2px solid #000 !important;
+    }
+    .approval-cell {
+      border-right:1.5px solid #000 !important;
+    }
+    .a-role {
+      border-bottom:1.5px solid #000 !important;
+      background:#e5e7eb !important;
+      -webkit-print-color-adjust:exact;
+      print-color-adjust:exact;
+    }
+    .approval-row {
+      border-top:1.5px solid #000 !important;
+    }
+
+    /* KPI 카드 선 */
+    .kpi-card {
+      border:1.5px solid #555 !important;
+    }
+    .kpi-card::before {
+      background:#000 !important;
+      -webkit-print-color-adjust:exact;
+      print-color-adjust:exact;
+    }
+
+    /* 구분 라벨 선 */
+    .section-label {
+      border-left:4px solid #000 !important;
+    }
+
+    /* 상단 헤더 선 */
+    .top-header {
+      border-bottom:2.5px solid #000 !important;
+    }
+
+    /* 날짜 박스 */
+    .doc-meta-box {
+      border:1.5px solid #000 !important;
+      background:#e5e7eb !important;
+      -webkit-print-color-adjust:exact;
+      print-color-adjust:exact;
+    }
+    .doc-meta-label { color:#000 !important; }
+    .doc-meta-value { color:#000 !important; }
+    .doc-meta-divider { background:#000 !important; }
+  }
+</style>
+</head>
+<body>
+
+<!-- 툴바 -->
+<div class="toolbar" id="toolbar">
+  <span class="toolbar-title">일일 업무보고 &nbsp;—&nbsp; ${dateLabel}</span>
+  <span class="orient-label">용지 방향</span>
+  <button class="tb-btn orient" id="orientBtn" onclick="toggleOrient()">가로형 (현재)</button>
+  <div class="divider"></div>
+  <button class="tb-btn print" onclick="window.print()">인쇄</button>
+  <button class="tb-btn pdf" onclick="savePDF()">PDF 저장</button>
+  <button class="tb-btn img" onclick="saveImage()">이미지 저장</button>
+</div>
+
+<div class="page-wrap" id="pageWrap">
+
+  <!-- 상단 헤더 -->
+  <div class="top-header">
+    <div>
+      <div class="logo">RUN25</div>
+      <div class="tagline">화물 운송 전문</div>
+    </div>
+    <div class="contact">
+      010-5504-1821 &nbsp;|&nbsp; FAX 1533-2525<br>
+      sungwoo0923@nate.com<br>
+      인천 서구 청마로19번길 21 (성주빌딩) 4층
+    </div>
+  </div>
+
+  <!-- 타이틀 + 날짜 -->
+  <div class="title-bar">
+    <div class="doc-title">일 일 &nbsp; 업 무 보 고</div>
+    <div class="doc-meta-box">
+      <div class="doc-meta-item">
+        <div class="doc-meta-label">기준일</div>
+        <div class="doc-meta-value">${dateLabel}</div>
+      </div>
+      <div class="doc-meta-divider"></div>
+      <div class="doc-meta-item">
+        <div class="doc-meta-label">발행일</div>
+        <div class="doc-meta-value">${printDate}</div>
+      </div>
+      <div class="doc-meta-divider"></div>
+      <div class="doc-meta-item">
+        <div class="doc-meta-label">전일 비교</div>
+        <div class="doc-meta-value">${prevLabel}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- KPI + 결재란 -->
+  <div class="kpi-approval">
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-label">발주건수</div>
+        <div class="kpi-value">${cur.count}건</div>
+        <div class="kpi-diff">전일 대비 &nbsp;${fmtDC(dCount)}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">총 청구운임</div>
+        <div class="kpi-value">${cur.charge.toLocaleString()}원</div>
+        <div class="kpi-diff">전일 대비 &nbsp;${fmtD(dCharge)}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">총 기사운임</div>
+        <div class="kpi-value">${cur.pay.toLocaleString()}원</div>
+        <div class="kpi-diff">전일 대비 &nbsp;${fmtD(dPay)}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">매출이익 (수수료)</div>
+        <div class="kpi-value ${cur.fee >= 0 ? "pos" : "neg"}">${cur.fee.toLocaleString()}원</div>
+        <div class="kpi-diff">전일 대비 &nbsp;${fmtD(dFee)}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">매 익 율</div>
+        <div class="kpi-value ${Number(marginRate) >= 20 ? "pos" : Number(marginRate) < 10 ? "neg" : ""}">${marginRate}%</div>
+        <div class="kpi-diff">전일 대비 &nbsp;${fmtDM(dMargin)}</div>
+        <div class="kpi-sub">목표 20% 이상</div>
+      </div>
+    </div>
+    <div class="approval">
+      <div class="approval-title">결 &nbsp; 재</div>
+      <div class="approval-row">
+        <div class="approval-cell"><div class="a-role">팀 장</div><div class="a-sign"></div></div>
+        <div class="approval-cell"><div class="a-role">임 원</div><div class="a-sign"></div></div>
+        <div class="approval-cell"><div class="a-role">대 표</div><div class="a-sign"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 테이블 -->
+  <div class="section-label">배차 상세 내역</div>
+  <table>
+    <thead>
+      <tr>
+        <th>순번</th><th>상차일</th><th>거래처</th><th>화물내용</th>
+        <th>차량번호</th><th>기사명</th><th>전화번호</th>
+        <th>청구운임</th><th>기사운임</th><th>수수료</th><th>매익율</th>
+        <th>지급방식</th><th>배차방식</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${rows_html}
+      <tr class="total-row">
+        <td colspan="7" class="center">합 &nbsp; 계</td>
+        <td class="num">${cur.charge.toLocaleString()}</td>
+        <td class="num">${cur.pay.toLocaleString()}</td>
+        <td class="num">${cur.fee.toLocaleString()}</td>
+        <td class="num">${marginRate}%</td>
+        <td colspan="2"></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="report-footer">
+    <div class="footer-note">본 보고서는 RUN25 배차관리 시스템에서 자동 생성된 문서입니다.</div>
+    <div class="footer-right">출력일시: ${printDate} &nbsp;|&nbsp; 담당자: 박성우 팀장</div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script>
+  let isLandscape = true;
+
+  function toggleOrient() {
+    isLandscape = !isLandscape;
+    const style = document.getElementById('orient-style');
+    const btn   = document.getElementById('orientBtn');
+    if (isLandscape) {
+      style.textContent = '@page { size: A4 landscape; margin: 6mm 8mm; }';
+      btn.textContent = '가로형 (현재)';
+    } else {
+      style.textContent = '@page { size: A4 portrait; margin: 8mm 10mm; }';
+      btn.textContent = '세로형 (현재)';
+    }
+  }
+
+  function savePDF() {
+    const toolbar = document.getElementById('toolbar');
+    toolbar.style.display = 'none';
+    setTimeout(() => {
+      window.print();
+      toolbar.style.display = 'flex';
+    }, 100);
+  }
+
+  function saveImage() {
+    const toolbar = document.getElementById('toolbar');
+    toolbar.style.display = 'none';
+    const wrap = document.getElementById('pageWrap');
+    html2canvas(wrap, { scale: 2, backgroundColor: '#f9fafb', useCORS: true }).then(canvas => {
+      toolbar.style.display = 'flex';
+      const a = document.createElement('a');
+      a.download = '일일업무보고_${targetDate}.png';
+      a.href = canvas.toDataURL('image/png');
+      a.click();
+    });
+  }
+</script>
+</body>
+</html>`;
+
+  const win = window.open("", "_blank", "width=1280,height=900");
+  win.document.write(html);
+  win.document.close();
+};
+// ===================== 24시콜 파일 비교 검증 =====================
+const handleCloseFileUpload = async (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  e.target.value = "";
+
+  const XLSX = window.XLSX || (await import("xlsx"));
+  const data = await file.arrayBuffer();
+  const wb = XLSX.read(data, { type: "array" });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const json = XLSX.utils.sheet_to_json(ws, { header: 1 });
+
+  // 헤더 행 찾기
+  const headerIdx = json.findIndex(row =>
+    row.some(cell => String(cell || "").includes("차량번호"))
+  );
+  if (headerIdx === -1) {
+    showAlert("차량번호 컬럼을 찾을 수 없습니다.");
+    return;
+  }
+
+  const headers = json[headerIdx].map(h => String(h || "").trim());
+  const plateCol = headers.indexOf("차량번호");
+  const nameCol = headers.indexOf("차주이름");
+  const phoneCol = headers.indexOf("차주전화");
+  const feeTypeCol = headers.indexOf("요금구분");
+  const commCol = headers.indexOf("수수료");
+
+  if (plateCol === -1) {
+    showAlert("차량번호 컬럼을 찾을 수 없습니다.");
+    return;
+  }
+
+  let targetDate = todayKST();
+  if (dayMode === "yesterday") targetDate = yesterdayKST();
+  if (dayMode === "tomorrow") targetDate = tomorrowKST();
+  const todayRows = rows.filter(r => r.상차일 === targetDate);
+
+  const fileIssues = [];
+
+  for (let i = headerIdx + 1; i < json.length; i++) {
+    const row = json[i];
+    if (!row || !row[plateCol]) continue;
+
+    const filePlate = normalizePlate(String(row[plateCol] || ""));
+    const fileName = String(row[nameCol] || "").trim();
+    const filePhone = String(row[phoneCol] || "").replace(/[^\d]/g, "");
+    const fileFeeType = String(row[feeTypeCol] || "").trim();
+    const fileComm = Number(row[commCol] || 0);
+
+    if (!filePlate) continue;
+
+    // 내 프로그램에서 같은 차량번호 오더 찾기
+    const matched = todayRows.filter(r => normalizePlate(r.차량번호 || "") === filePlate);
+
+    matched.forEach(mr => {
+      const seq = todayRows.indexOf(mr) + 1;
+      const label = `${seq}번 [${mr.거래처명 || "-"}] ${mr.상차지명 || ""} → ${mr.하차지명 || ""}`;
+
+      // 1. 배차방식 검증: 24시콜 파일에 있으면 배차방식이 "24시"여야 함
+      const dispatch = (mr.배차방식 || "").trim();
+      if (dispatch && dispatch !== "24시" && dispatch !== "24시(고정기사)") {
+        fileIssues.push({
+          rowId: mr._id,
+          seq,
+          label,
+          type: "dispatch",
+          msg: `24시콜 파일에 존재하나 배차방식이 "${dispatch}"(으)로 등록됨 (차량: ${row[plateCol]}, 기사: ${fileName})`,
+        });
+      }
+
+      // 2. 지급방식 검증
+      const programPay = (mr.지급방식 || "").trim();
+
+      if (fileFeeType === "인수증") {
+        if (programPay && programPay !== "계산서") {
+          fileIssues.push({
+            rowId: mr._id,
+            seq,
+            label,
+            type: "payment",
+            msg: `24시콜: 인수증(계산서) / 프로그램: "${programPay}" — 지급방식 불일치 (차량: ${row[plateCol]})`,
+          });
+        }
+      } else if (fileFeeType === "선/착불" || fileFeeType === "선착불") {
+        if (programPay && programPay !== "선불" && programPay !== "착불") {
+          fileIssues.push({
+            rowId: mr._id,
+            seq,
+            label,
+            type: "payment",
+            msg: `24시콜: 선/착불 / 프로그램: "${programPay}" — 지급방식 불일치 (차량: ${row[plateCol]})`,
+          });
+        }
+      }
+
+      if (fileComm > 0 && dispatch === "24시") {
+        // 참고용
+      }
+    });
+  }
+
+  setCloseFileResult(fileIssues);
+};
+
   // =======================
   // 🔥 팝업에서 실제 삭제 실행
   // =======================
   const executeDelete = async () => {
+
     const ids = deleteList.map(r => r._id);
 
     for (const id of ids) {
@@ -12568,7 +13261,8 @@ const head = isDark
 }} className="px-3 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-sm font-semibold shadow hover:bg-[#243a60] transition">일괄동기화</button>
     <button onClick={()=>{setTempSortKey(sortKey||"");setTempSortDir(sortDir||"asc");setSortModalOpen(true);}} className="px-3 py-1.5 rounded-lg bg-slate-500 text-white text-sm font-semibold shadow hover:opacity-90">정렬</button>
     <button onClick={()=>{if(!selected.length)return showAlert("복사할 오더를 선택하세요.");if(selected.length>1)return showAlert("복사는 1개의 오더만 가능합니다.");setCopyModalOpen(true);}} className="px-3 py-1.5 rounded-lg bg-gray-800 text-white text-sm font-semibold shadow hover:opacity-90">기사복사</button>
-    <button onClick={async()=>{if(!selected.length)return showAlert("전송할 항목을 선택하세요.");const ids=[...selected];let success=0,fail=0;for(const id of ids){const row=dispatchData.find(r=>r._id===id);if(!row)continue;if(!row.상차지주소||!row.하차지주소){showAlert(`[${row.상차지명} → ${row.하차지명}]\n주소가 없습니다.`);fail++;continue;}try{const res=await sendOrderTo24(row);if(res?.success)success++;else fail++;}catch(e){console.error("24시콜 오류:",e);fail++;}}showAlert(`📡 24시콜 선택전송 완료!\n성공: ${success}건\n실패: ${fail}건`);}} className="px-3 py-1.5 rounded-lg bg-gray-700 text-white text-sm font-semibold shadow hover:opacity-90">선택전송</button>
+    <button onClick={()=>setDailyCloseOpen(true)} className="px-3 py-1.5 rounded-lg bg-gray-700 text-white text-sm font-semibold shadow hover:opacity-90">일마감</button>
+
     <button onClick={()=>{
   if(selected.length!==1)return showAlert("수정할 항목은 1개만 선택해야 합니다.");
   const row=rows.find(r=>r._id===selected[0]);
@@ -16348,7 +17042,335 @@ setConfirmChange(null);
           </div>
         </div>
       )}
+{/* ===================== 일마감 모달 ===================== */}
+{dailyCloseOpen && (
+  <div
+    className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]"
+    onClick={() => setDailyCloseOpen(false)}
+  >
+    <div
+      className="bg-white rounded-2xl shadow-2xl w-[640px] max-h-[85vh] flex flex-col overflow-hidden"
+      onClick={e => e.stopPropagation()}
+    >
+      {/* 헤더 */}
+      <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between shrink-0">
+        <div>
+          <div className="text-white font-bold text-[16px]">일마감 검증</div>
+          <div className="text-white/50 text-[12px] mt-0.5">
+            {dailyCloseResult?.date || ""} 기준 ({dailyCloseResult?.total || 0}건)
+          </div>
+        </div>
+        <button
+          className="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 text-white text-lg flex items-center justify-center transition"
+          onClick={() => setDailyCloseOpen(false)}
+        >x</button>
+      </div>
 
+      {dailyCloseResult && (
+        <div className="flex-1 overflow-y-auto">
+
+          {/* 요약 카드 */}
+          <div className="px-6 py-4 border-b border-gray-100">
+            <div className="grid grid-cols-4 gap-3">
+              {[
+                { label: "전체", value: dailyCloseResult.total, active: dailyCloseFilter === "all", key: "all" },
+                { label: "정상", value: dailyCloseResult.total - dailyCloseResult.errors.length, active: false, key: null },
+                { label: "오류", value: dailyCloseResult.errors.length, active: dailyCloseFilter === "errors", key: "errors" },
+                { label: "경고", value: dailyCloseResult.warnings.length + (closeFileResult?.length || 0), active: dailyCloseFilter === "warnings", key: "warnings" },
+              ].map(item => (
+                <div
+                  key={item.label}
+                  onClick={() => { if (item.key) setDailyCloseFilter(item.key); }}
+                  className={`border rounded-xl p-3 text-center transition ${
+                    item.key ? "cursor-pointer hover:border-[#1B2B4B]" : ""
+                  } ${item.active ? "border-[#1B2B4B] bg-[#1B2B4B]/5" : "border-gray-200 bg-white"}`}
+                >
+                  <div className="text-[10px] font-bold text-gray-500">{item.label}</div>
+                  <div className="text-[22px] font-black text-[#1B2B4B]">{item.value}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* 24시콜 파일 업로드 영역 */}
+          <div className="px-6 py-3 border-b border-gray-100">
+            <div className="flex items-center gap-3">
+              <label className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 cursor-pointer transition text-[12px] font-semibold text-gray-700">
+                <span>24시콜 파일 비교</span>
+                <input
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  className="hidden"
+                  onChange={handleCloseFileUpload}
+                />
+              </label>
+              {closeFileResult && (
+                <span className="text-[12px] text-gray-500">
+                  {closeFileResult.length > 0
+                    ? `불일치 ${closeFileResult.length}건 감지`
+                    : "불일치 없음"}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* 오류 목록 */}
+          {(dailyCloseFilter === "all" || dailyCloseFilter === "errors") && dailyCloseResult.errors.length > 0 && (
+            <div className="px-6 py-4 border-b border-gray-100">
+              <div className="text-[13px] font-bold text-gray-800 mb-3">
+                오류 ({dailyCloseResult.errors.length}건) - 필수 수정
+              </div>
+              <div className="space-y-2 max-h-[220px] overflow-y-auto">
+                {dailyCloseResult.errors.map((e, i) => (
+                  <div
+                    key={i}
+                    className="flex items-start gap-3 px-4 py-3 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-50 transition"
+                    onClick={() => {
+                      setDailyCloseOpen(false);
+                      setDailyCloseFilter("all");
+                      setTimeout(() => {
+                        const el = document.getElementById(`row-${e.rowId}`);
+                        if (el) {
+                          el.scrollIntoView({ behavior: "smooth", block: "center" });
+                          el.setAttribute("tabindex", "-1");
+                          el.focus({ preventScroll: true });
+                          el.classList.remove("row-highlight");
+                          void el.offsetWidth; // reflow 강제
+                          el.classList.add("row-highlight");
+                          setTimeout(() => el.classList.remove("row-highlight"), 2200);
+                        }
+                      }, 250);
+                    }}
+                  >
+                    <div className="w-6 h-6 rounded-full bg-[#1B2B4B] text-white text-[11px] font-bold flex items-center justify-center shrink-0">
+                      {e.seq}
+                    </div>
+                   <div className="flex-1 min-w-0">
+                      <div className="text-[13px] font-bold text-gray-900 truncate">{e.label}</div>
+                      <div className="text-[12px] font-semibold text-red-600 mt-0.5">{e.msg}</div>
+                    </div>
+                    <span className="shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-red-100 text-red-700">
+                      누락
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 경고 목록 */}
+          {(dailyCloseFilter === "all" || dailyCloseFilter === "warnings") && dailyCloseResult.warnings.length > 0 && (
+            <div className="px-6 py-4 border-b border-gray-100">
+              <div className="text-[13px] font-bold text-gray-800 mb-3">
+                경고 ({dailyCloseResult.warnings.length}건) - 확인 필요
+              </div>
+              <div className="space-y-2 max-h-[220px] overflow-y-auto">
+                {dailyCloseResult.warnings.map((w, i) => (
+                  <div
+                    key={i}
+                    className="flex items-start gap-3 px-4 py-3 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-50 transition"
+                    onClick={() => {
+                      setDailyCloseOpen(false);
+                      setDailyCloseFilter("all");
+                      setTimeout(() => {
+                        const el = document.getElementById(`row-${w.rowId}`);
+                        if (el) {
+                          el.scrollIntoView({ behavior: "smooth", block: "center" });
+                          el.setAttribute("tabindex", "-1");
+                          el.focus({ preventScroll: true });
+                          el.classList.remove("row-highlight");
+                          void el.offsetWidth;
+                          el.classList.add("row-highlight");
+                          setTimeout(() => el.classList.remove("row-highlight"), 2200);
+                        }
+                      }, 250);
+                    }}
+                  >
+                    <div className="w-6 h-6 rounded-full bg-gray-400 text-white text-[11px] font-bold flex items-center justify-center shrink-0">
+                      {w.seq}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[13px] font-bold text-gray-900 truncate">{w.label}</div>
+                      <div className="text-[12px] font-semibold text-orange-600 mt-0.5">{w.msg}</div>
+                    </div>
+                    <span className="shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-orange-100 text-orange-700">
+                      {w.type === "margin" ? "마진" :
+                       w.type === "driver" ? "기사" :
+                       w.type === "phone" ? "번호" :
+                       w.type === "zero" ? "0원" :
+                       w.type === "high" ? "고액" : w.type}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 24시콜 파일 비교 결과 */}
+          {(dailyCloseFilter === "all" || dailyCloseFilter === "warnings") && closeFileResult && closeFileResult.length > 0 && (
+            <div className="px-6 py-4 border-b border-gray-100">
+              <div className="text-[13px] font-bold text-gray-800 mb-3">
+                24시콜 비교 불일치 ({closeFileResult.length}건)
+              </div>
+              <div className="space-y-2 max-h-[220px] overflow-y-auto">
+                {closeFileResult.map((f, i) => (
+                  <div
+                    key={i}
+                    className="flex items-start gap-3 px-4 py-3 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-50 transition"
+                    onClick={() => {
+                      setDailyCloseOpen(false);
+                      setDailyCloseFilter("all");
+                      setTimeout(() => {
+                        const el = document.getElementById(`row-${f.rowId}`);
+                        if (el) {
+                          el.scrollIntoView({ behavior: "smooth", block: "center" });
+                          el.classList.add("row-highlight");
+                          setTimeout(() => el.classList.remove("row-highlight"), 3000);
+                        }
+                      }, 200);
+                    }}
+                  >
+                    <div className="w-6 h-6 rounded-full bg-gray-400 text-white text-[11px] font-bold flex items-center justify-center shrink-0">
+                      {f.seq}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[12px] font-bold text-gray-800 truncate">{f.label}</div>
+                      <div className="text-[12px] text-gray-500 mt-0.5">{f.msg}</div>
+                    </div>
+                    <span className="shrink-0 px-2 py-0.5 rounded text-[10px] font-bold bg-gray-100 text-gray-600">
+                      {f.type === "dispatch" ? "배차방식" : "지급방식"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 전체 정상일 때 */}
+          {dailyCloseResult.errors.length === 0 && dailyCloseResult.warnings.length === 0 && (!closeFileResult || closeFileResult.length === 0) && (
+            <div className="px-6 py-8 text-center">
+              <div className="text-[16px] font-bold text-[#1B2B4B]">모든 오더가 정상입니다</div>
+              <div className="text-[13px] text-gray-500 mt-1">
+                {dailyCloseResult.total}건 전체 검증 통과
+              </div>
+            </div>
+          )}
+
+          {/* 업체별 요약 */}
+          {dailyCloseFilter === "all" && dailyCloseResult.clientSummary && dailyCloseResult.clientSummary.length > 0 && (
+            <div className="px-6 py-4">
+              <div className="text-[13px] font-bold text-[#1B2B4B] mb-3">업체별 요약</div>
+              <div className="border border-gray-200 rounded-xl overflow-hidden">
+                <table className="w-full text-[12px]">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-bold text-gray-600">거래처</th>
+                      <th className="px-3 py-2 text-center font-bold text-gray-600">건수</th>
+                      <th className="px-3 py-2 text-right font-bold text-gray-600">청구합계</th>
+                      <th className="px-3 py-2 text-right font-bold text-gray-600">기사합계</th>
+                      <th className="px-3 py-2 text-right font-bold text-gray-600">마진합계</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dailyCloseResult.clientSummary.map((c, i) => (
+                      <tr key={i} className="border-t border-gray-100">
+                        <td className="px-3 py-2 font-semibold text-gray-800">{c.name}</td>
+                        <td className="px-3 py-2 text-center">{c.count}건</td>
+                        <td className="px-3 py-2 text-right font-semibold">{c.charge.toLocaleString()}</td>
+                        <td className="px-3 py-2 text-right font-semibold">{c.pay.toLocaleString()}</td>
+                        <td className={`px-3 py-2 text-right font-bold ${c.margin < 0 ? "text-red-600" : ""}`}>
+                          {c.margin.toLocaleString()}
+                        </td>
+                      </tr>
+                    ))}
+                    <tr className="border-t-2 border-gray-300 bg-gray-50 font-bold">
+                      <td className="px-3 py-2">합계</td>
+                      <td className="px-3 py-2 text-center">
+                        {dailyCloseResult.clientSummary.reduce((a, c) => a + c.count, 0)}건
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        {dailyCloseResult.clientSummary.reduce((a, c) => a + c.charge, 0).toLocaleString()}
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        {dailyCloseResult.clientSummary.reduce((a, c) => a + c.pay, 0).toLocaleString()}
+                      </td>
+                      <td className={`px-3 py-2 text-right ${
+                        dailyCloseResult.clientSummary.reduce((a, c) => a + c.margin, 0) < 0 ? "text-red-600" : ""
+                      }`}>
+                        {dailyCloseResult.clientSummary.reduce((a, c) => a + c.margin, 0).toLocaleString()}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 재검증/복사 토스트 */}
+      {reVerifyToast && (
+        <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[9999999] pointer-events-none">
+          <div className="bg-gray-900 text-white px-6 py-3 rounded-2xl shadow-2xl text-[14px] font-bold animate-pulse">
+            {reVerifyToast}
+          </div>
+        </div>
+      )}
+
+      {/* 하단 버튼 */}
+      <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 shrink-0 flex gap-3">
+        {dailyCloseFilter !== "all" && (
+          <button
+            className="flex-1 py-2.5 rounded-xl bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-semibold text-[13px] transition"
+            onClick={() => { setDailyCloseFilter("all"); setFilterErrorIds(null); }}
+          >
+            전체 보기
+          </button>
+        )}
+        {(dailyCloseResult?.errors?.length > 0 || dailyCloseResult?.warnings?.length > 0) && dailyCloseFilter === "all" && (
+          <button
+            className="flex-1 py-2.5 rounded-xl bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-semibold text-[13px] transition"
+            onClick={() => {
+              const issueIds = [
+                ...dailyCloseResult.errors.map(e => e.rowId),
+                ...dailyCloseResult.warnings.map(w => w.rowId),
+                ...(closeFileResult || []).map(f => f.rowId),
+              ];
+              const unique = [...new Set(issueIds)];
+              setFilterErrorIds(unique);
+              setDailyCloseOpen(false);
+              setQ("");
+            }}
+          >
+            오류 오더만 보기
+          </button>
+        )}
+        <button
+          className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[13px] transition"
+          onClick={handleDailyReport}
+        >
+          보고서 출력
+        </button>
+        <button
+          className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white font-bold text-[13px] transition"
+          onClick={() => {
+            runDailyClose();
+            setReVerifyToast("재검증이 완료되었습니다");
+            setTimeout(() => setReVerifyToast(null), 2500);
+          }}
+        >
+          재검증
+        </button>
+        <button
+          className="flex-1 py-2.5 rounded-xl bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold text-[13px] transition"
+          onClick={() => { setDailyCloseOpen(false); setDailyCloseFilter("all"); setCloseFileResult(null); }}
+        >
+          닫기
+        </button>
+      </div>
+    </div>
+  </div>
+)}
       {/* ===================== 🔽 정렬 설정 팝업 ===================== */}
       {sortModalOpen && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[99999]">
@@ -16441,11 +17463,29 @@ setConfirmChange(null);
           </div>
         </div>
       )}
-
+{/* 오류오더 필터 활성 배너 */}
+{filterErrorIds !== null && (
+  <div className="flex items-center gap-3 px-4 py-2 mb-2 bg-[#1B2B4B]/8 border border-[#1B2B4B]/30 rounded-xl">
+    <span className="text-[#1B2B4B] font-bold text-[13px]" style={{animation: "filterBlink 1.8s ease-in-out infinite"}}>
+      오류/경고 오더만 표시 중 ({filterErrorIds.length}건)
+    </span>
+    <button
+      className="ml-auto px-3 py-1 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-bold hover:bg-[#243a60] transition"
+      onClick={() => setFilterErrorIds(null)}
+    >
+      전체 보기로 돌아가기
+    </button>
+  </div>
+)}
       <style>{`
   @keyframes fadeInUp {
     from { opacity: 0; transform: translateY(20px);}
     to { opacity: 1; transform: translateY(0);}
+  }
+
+  @keyframes filterBlink {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.3; }
   }
 `}</style>
       <style>{`
@@ -16454,15 +17494,15 @@ setConfirmChange(null);
     to { opacity: 1; transform: translateY(0);}
   }
 
-  @keyframes highlightFlash {
-    0%   { background-color: #fff7c2; }
-    50%  { background-color: #ffe066; }
-    100% { background-color: #fff7c2; }
+  @keyframes highlightGlow {
+    0%   { box-shadow: 0 0 0 3px #3b82f6, 0 0 16px 4px #93c5fd; outline: 2px solid #3b82f6; }
+    60%  { box-shadow: 0 0 0 3px #3b82f6, 0 0 24px 8px #93c5fd; outline: 2px solid #3b82f6; }
+    100% { box-shadow: none; outline: none; }
   }
-  
+
   .row-highlight {
-  animation: highlightFlash 0.8s ease-in-out 2;
-}
+    animation: highlightGlow 2s ease-out forwards;
+  }
 `}</style>
 
 {/* 🔥 블랙/주의업체 팝업 */}
@@ -16725,6 +17765,12 @@ React.useEffect(() => {
 }, []);
 
 const [warningPopup, setWarningPopup] = React.useState(null);
+const [dailyCloseOpen, setDailyCloseOpen] = React.useState(false);
+const [dailyCloseResult, setDailyCloseResult] = React.useState(null);
+const [dailyCloseFilter, setDailyCloseFilter] = React.useState("all");
+const [closeFileResult, setCloseFileResult] = React.useState(null);
+const [filterErrorIds, setFilterErrorIds] = React.useState(null);
+const [reVerifyToast, setReVerifyToast] = React.useState(null);
 const lastWarnedRef = React.useRef(null);
 const checkWarningStatus = (name, type) => {
   const now = Date.now();
@@ -16752,6 +17798,12 @@ const checkWarningStatus = (name, type) => {
     }
   }
 };
+const yesterdayKST = () => {
+  const d = new Date();
+  const korea = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+  korea.setDate(korea.getDate() - 1);
+  return korea.toISOString().slice(0, 10);
+};
 const normalizePlate = (s = "") =>
   String(s).toUpperCase().replace(/\s+/g, "").replace(/[-.]/g, "");
 
@@ -16759,6 +17811,469 @@ const emitBlackIfNeeded = (driver) => {
   if (!driver) return;
   if (String(driver.등급 || "").trim() !== "블랙") return;
   window.dispatchEvent(new CustomEvent("blackDriverDetected", { detail: driver }));
+};
+// ===================== 일마감 검증 로직 =====================
+const driverMap = React.useMemo(() => {
+  const map = new Map();
+  (drivers || []).forEach(d => {
+    const key = normalizePlate(d.차량번호 || "");
+    if (!key) return;
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(d);
+  });
+  return map;
+}, [drivers]);
+
+const runDailyClose = () => {
+  const targetDate = appliedStartDate || todayKST();
+  const todayRows = (dispatchData || []).filter(r => r.상차일 === targetDate);
+  const errors = [];
+  const warnings = [];
+
+  todayRows.forEach((row, idx) => {
+    const seq = idx + 1;
+    const label = `${seq}번 [${row.거래처명 || "-"}] ${row.상차지명 || ""} → ${row.하차지명 || ""}`;
+
+    const requiredFields = [
+      { key: "차량번호", name: "차량번호" },
+      { key: "이름", name: "기사명" },
+      { key: "전화번호", name: "전화번호" },
+      { key: "청구운임", name: "청구운임" },
+      { key: "기사운임", name: "기사운임" },
+      { key: "배차방식", name: "배차방식" },
+      { key: "지급방식", name: "지급방식" },
+    ];
+
+    const missing = requiredFields.filter(f => {
+      const v = String(row[f.key] || "").trim();
+      return !v || v === "0";
+    });
+
+    if (missing.length > 0) {
+      errors.push({
+        rowId: row._id,
+        seq, label,
+        type: "missing",
+        msg: `필수값 누락: ${missing.map(m => m.name).join(", ")}`,
+      });
+    }
+
+    const charge = Number(String(row.청구운임 || "0").replace(/[^\d-]/g, ""));
+    const pay = Number(String(row.기사운임 || "0").replace(/[^\d-]/g, ""));
+
+    if (charge > 0 && pay > 0 && charge < pay) {
+      warnings.push({ rowId: row._id, seq, label, type: "margin", msg: `마진 역전 (청구 ${charge.toLocaleString()} < 기사 ${pay.toLocaleString()})` });
+    }
+    if (charge === 0 && row.지급방식 !== "취소" && row.배차상태 !== "배차취소") {
+      warnings.push({ rowId: row._id, seq, label, type: "zero", msg: "청구운임이 0원입니다" });
+    }
+    if (pay === 0 && row.배차상태 === "배차완료") {
+      warnings.push({ rowId: row._id, seq, label, type: "zero", msg: "기사운임이 0원입니다 (배차완료 상태)" });
+    }
+    if (charge > 5000000) {
+      warnings.push({ rowId: row._id, seq, label, type: "high", msg: `청구운임 비정상적으로 높음 (${charge.toLocaleString()}원)` });
+    }
+
+    const plate = normalizePlate(row.차량번호 || "");
+    if (plate) {
+      const dbMatches = driverMap.get(plate) || [];
+      if (dbMatches.length > 0) {
+        const rowName = String(row.이름 || "").trim();
+        const rowPhone = String(row.전화번호 ?? "").replace(/[^\d]/g, "");
+        const exactMatch = dbMatches.find(d => {
+          const dName = String(d.이름 || "").trim();
+          const dPhone = String(d.전화번호 ?? "").replace(/[^\d]/g, "");
+          return dName === rowName && dPhone === rowPhone;
+        });
+        if (!exactMatch && rowName) {
+          const dbNames = dbMatches.map(d => d.이름).join("/");
+          warnings.push({ rowId: row._id, seq, label, type: "driver", msg: `기사정보 불일치 — 입력: "${rowName}" / DB: "${dbNames}"` });
+        }
+      }
+      const phoneDigits = String(row.전화번호 ?? "").replace(/[^\d]/g, "");
+      if (phoneDigits && phoneDigits.length !== 11) {
+        warnings.push({ rowId: row._id, seq, label, type: "phone", msg: `전화번호 ${phoneDigits.length}자리 (정상: 11자리)` });
+      }
+    }
+  });
+
+  const clientMap = new Map();
+  todayRows.forEach(row => {
+    const name = row.거래처명 || "(미입력)";
+    if (!clientMap.has(name)) clientMap.set(name, { count: 0, charge: 0, pay: 0 });
+    const c = clientMap.get(name);
+    c.count++;
+    c.charge += Number(String(row.청구운임 || "0").replace(/[^\d-]/g, "")) || 0;
+    c.pay += Number(String(row.기사운임 || "0").replace(/[^\d-]/g, "")) || 0;
+  });
+
+  const clientSummary = [...clientMap.entries()].map(([name, data]) => ({
+    name, ...data, margin: data.charge - data.pay,
+  }));
+
+  setDailyCloseResult({
+    date: targetDate,
+    total: todayRows.length,
+    errors, warnings,
+    passed: todayRows.length - errors.length,
+    clientSummary,
+  });
+};
+
+React.useEffect(() => {
+  if (dailyCloseOpen) runDailyClose();
+}, [dailyCloseOpen]);
+// ===================== 일마감 보고서 출력 =====================
+const handleDailyReport = () => {
+  if (!dailyCloseResult) return;
+  const targetDate = dailyCloseResult.date;
+  const targetRows = (dispatchData || []).filter(r => r.상차일 === targetDate);
+
+  const prevDate = (() => {
+    const d = new Date(targetDate);
+    d.setDate(d.getDate() - 1);
+    return d.toISOString().slice(0, 10);
+  })();
+  const prevRows = (dispatchData || []).filter(r => r.상차일 === prevDate);
+
+  const calc = (arr) => {
+    const charge = arr.reduce((a, r) => a + (Number(String(r.청구운임 || "0").replace(/[^\d-]/g, "")) || 0), 0);
+    const pay    = arr.reduce((a, r) => a + (Number(String(r.기사운임  || "0").replace(/[^\d-]/g, "")) || 0), 0);
+    const fee    = charge - pay;
+    const margin = charge > 0 ? (fee / charge * 100) : 0;
+    return { charge, pay, fee, margin, count: arr.length };
+  };
+
+  const cur  = calc(targetRows);
+  const prev = calc(prevRows);
+
+  const diff = (a, b) => {
+    const d = a - b;
+    const pct = b > 0 ? ((d / b) * 100).toFixed(1) : null;
+    return { d, pct, sign: d >= 0 ? "▲" : "▼", cls: d >= 0 ? "up" : "down" };
+  };
+  const dCharge = diff(cur.charge, prev.charge);
+  const dPay    = diff(cur.pay,    prev.pay);
+  const dFee    = diff(cur.fee,    prev.fee);
+  const dMargin = diff(cur.margin, prev.margin);
+  const dCount  = diff(cur.count,  prev.count);
+  const marginRate = cur.charge > 0 ? (cur.fee / cur.charge * 100).toFixed(1) : "0.0";
+  const hasPrev = prev.count > 0;
+
+  const fmtD = (d, unit="원") => !hasPrev
+    ? `<span class="neutral">전일 없음</span>`
+    : `<span class="${d.cls}">${d.sign} ${Math.abs(d.d).toLocaleString()}${unit}${d.pct !== null ? ` (${d.pct}%)` : ""}</span>`;
+  const fmtDC = (d) => !hasPrev
+    ? `<span class="neutral">전일 없음</span>`
+    : `<span class="${d.cls}">${d.sign} ${Math.abs(d.d)}건${d.pct !== null ? ` (${d.pct}%)` : ""}</span>`;
+  const fmtDM = (d) => !hasPrev
+    ? `<span class="neutral">전일 없음</span>`
+    : `<span class="${d.cls}">${d.sign} ${Math.abs(d.d).toFixed(1)}%pt${d.pct !== null ? ` (${d.pct}%)` : ""}</span>`;
+
+  const dateLabel = targetDate.replace(/-/g, ". ");
+  const prevLabel = prevDate.replace(/-/g, ". ");
+  const now = new Date();
+  const printDate = `${now.getFullYear()}. ${String(now.getMonth()+1).padStart(2,"0")}. ${String(now.getDate()).padStart(2,"0")}`;
+
+  const rows_html = targetRows.map((r, i) => {
+    const charge = Number(String(r.청구운임 || "0").replace(/[^\d-]/g, "")) || 0;
+    const pay    = Number(String(r.기사운임  || "0").replace(/[^\d-]/g, "")) || 0;
+    const fee    = charge - pay;
+    const rate   = charge > 0 ? Math.round(fee / charge * 100) : null;
+    const rateClass = rate === null ? "" : rate >= 20 ? "rate-good" : rate < 10 ? "rate-bad" : "";
+    return `<tr>
+      <td class="center">${i + 1}</td>
+      <td class="center">${r.상차일 || ""}</td>
+      <td class="center">${r.거래처명 || ""}</td>
+      <td class="center">${r.화물내용 || ""}</td>
+      <td class="center">${r.차량번호 || ""}</td>
+      <td class="center">${r.이름 || ""}</td>
+      <td class="center">${r.전화번호 || ""}</td>
+      <td class="num">${charge ? charge.toLocaleString() : "-"}</td>
+      <td class="num">${pay ? pay.toLocaleString() : "-"}</td>
+      <td class="num">${fee ? fee.toLocaleString() : "-"}</td>
+      <td class="num ${rateClass}">${rate !== null ? rate + "%" : "-"}</td>
+      <td class="center">${r.지급방식 || ""}</td>
+      <td class="center">${r.배차방식 || ""}</td>
+    </tr>`;
+  }).join("");
+
+  const html = `<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>일일업무보고_${targetDate}</title>
+<style id="orient-style">@page { size: A4 landscape; margin: 6mm 8mm; }</style>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap');
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Noto Sans KR',sans-serif; font-size:11px; color:#111827; background:#f9fafb; }
+  .toolbar { position:fixed; top:0; left:0; right:0; z-index:9999; background:#1B2B4B; padding:8px 20px; display:flex; align-items:center; gap:10px; box-shadow:0 2px 8px rgba(0,0,0,0.3); }
+  .toolbar-title { color:#fff; font-size:12px; font-weight:700; margin-right:auto; letter-spacing:-0.3px; }
+  .tb-btn { padding:6px 16px; border-radius:6px; border:none; cursor:pointer; font-size:11px; font-weight:700; font-family:'Noto Sans KR',sans-serif; transition:opacity 0.15s; }
+  .tb-btn:hover { opacity:0.85; }
+  .tb-btn.orient { background:#fff; color:#1B2B4B; }
+  .tb-btn.print  { background:#3b82f6; color:#fff; }
+  .tb-btn.pdf    { background:#059669; color:#fff; }
+  .tb-btn.img    { background:#7c3aed; color:#fff; }
+  .orient-label { color:#94a3b8; font-size:10px; }
+  .divider { width:1px; height:20px; background:#374151; margin:0 4px; }
+  .page-wrap { padding:28px 28px 20px; max-width:1400px; margin:0 auto; margin-top:48px; }
+  .top-header { display:flex; justify-content:space-between; align-items:flex-end; padding-bottom:10px; border-bottom:2.5px solid #1B2B4B; margin-bottom:14px; }
+  .logo { font-size:24px; font-weight:900; color:#1B2B4B; letter-spacing:-1px; }
+  .tagline { font-size:9.5px; color:#9ca3af; margin-top:3px; }
+  .contact { text-align:right; font-size:9.5px; color:#6b7280; line-height:1.8; }
+  .title-bar { display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; }
+  .doc-title { font-size:22px; font-weight:900; color:#111827; letter-spacing:-0.8px; }
+  .doc-meta-box { background:#1B2B4B; border-radius:8px; padding:7px 16px; display:flex; gap:20px; align-items:center; }
+  .doc-meta-item { display:flex; flex-direction:column; align-items:center; }
+  .doc-meta-label { font-size:8.5px; color:#93c5fd; font-weight:700; letter-spacing:0.5px; margin-bottom:2px; }
+  .doc-meta-value { font-size:12px; color:#fff; font-weight:700; }
+  .doc-meta-divider { width:1px; height:28px; background:#374151; }
+  .kpi-approval { display:flex; align-items:stretch; gap:14px; margin-bottom:16px; }
+  .kpi-grid { display:flex; gap:8px; flex:1; }
+  .kpi-card { flex:1; border:1px solid #e5e7eb; border-radius:10px; padding:10px 14px; background:#fff; position:relative; overflow:hidden; box-shadow:0 1px 4px rgba(0,0,0,0.05); }
+  .kpi-card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; background:#1B2B4B; border-radius:10px 10px 0 0; }
+  .kpi-label { font-size:9px; font-weight:700; color:#9ca3af; letter-spacing:0.4px; text-transform:uppercase; margin-bottom:5px; }
+  .kpi-value { font-size:18px; font-weight:900; color:#111827; letter-spacing:-0.5px; line-height:1.1; }
+  .kpi-value.pos { color:#059669; }
+  .kpi-value.neg { color:#dc2626; }
+  .kpi-diff { font-size:9px; font-weight:500; margin-top:6px; padding-top:5px; border-top:1px dashed #f3f4f6; color:#6b7280; }
+  .kpi-diff .up   { color:#059669; font-weight:700; }
+  .kpi-diff .down { color:#dc2626; font-weight:700; }
+  .kpi-diff .neutral { color:#9ca3af; }
+  .kpi-sub { font-size:8.5px; color:#d1d5db; margin-top:2px; }
+  .approval { border:1.5px solid #1B2B4B; border-radius:8px; overflow:hidden; min-width:230px; }
+  .approval-title { background:#1B2B4B; color:#fff; font-size:12px; font-weight:700; text-align:center; padding:6px 0; letter-spacing:4px; }
+  .approval-row { display:flex; height:80px; }
+  .approval-cell { flex:1; border-right:1px solid #cbd5e1; display:flex; flex-direction:column; }
+  .approval-cell:last-child { border-right:none; }
+  .a-role { background:#f1f5f9; font-size:11px; font-weight:700; color:#1B2B4B; text-align:center; padding:5px 0; border-bottom:1px solid #cbd5e1; }
+  .a-sign { flex:1; }
+  .section-label { font-size:11px; font-weight:700; color:#1B2B4B; padding-left:8px; border-left:3px solid #1B2B4B; margin-bottom:7px; }
+  table { width:100%; border-collapse:collapse; font-size:10.5px; table-layout:auto; }
+  thead tr { background:#1B2B4B; }
+  thead th { color:#fff; padding:7px 6px; font-size:10px; font-weight:700; text-align:center; white-space:nowrap; border:1px solid #263f61; }
+  tbody td { padding:6px 6px; border-bottom:1px solid #f3f4f6; border-left:1px solid #f3f4f6; border-right:1px solid #f3f4f6; color:#111827; font-size:10.5px; white-space:nowrap; }
+  tbody tr:nth-child(even) td { background:#fafafa; }
+  td.center { text-align:center; }
+  td.num { text-align:right; padding-right:8px; font-variant-numeric:tabular-nums; }
+  td.rate-good { color:#059669; font-weight:700; }
+  td.rate-bad  { color:#dc2626; font-weight:700; }
+  tr.total-row td { background:#eef2f7 !important; font-weight:900; color:#1B2B4B; font-size:11px; border-top:2px solid #1B2B4B; }
+  .report-footer { margin-top:12px; display:flex; justify-content:space-between; }
+  .footer-note { font-size:9px; color:#d1d5db; }
+  .footer-right { font-size:9px; color:#9ca3af; text-align:right; line-height:1.8; }
+  @media print {
+    .toolbar { display:none !important; }
+    body { background:#fff; }
+    .page-wrap { margin-top:0; padding:0; max-width:100%; }
+    tbody tr:hover td { background:inherit !important; }
+    table { border:2px solid #000 !important; }
+    thead th { border:1.5px solid #000 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    tbody td { border:1px solid #555 !important; border-bottom:1px solid #555 !important; }
+    tr.total-row td { border-top:2.5px solid #000 !important; border-bottom:1.5px solid #000 !important; }
+    .approval { border:2px solid #000 !important; }
+    .approval-cell { border-right:1.5px solid #000 !important; }
+    .a-role { border-bottom:1.5px solid #000 !important; background:#e5e7eb !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    .approval-row { border-top:1.5px solid #000 !important; }
+    .kpi-card { border:1.5px solid #555 !important; }
+    .kpi-card::before { background:#000 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    .section-label { border-left:4px solid #000 !important; }
+    .top-header { border-bottom:2.5px solid #000 !important; }
+    .doc-meta-box { border:1.5px solid #000 !important; background:#e5e7eb !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    .doc-meta-label { color:#000 !important; }
+    .doc-meta-value { color:#000 !important; }
+    .doc-meta-divider { background:#000 !important; }
+  }
+</style>
+</head>
+<body>
+<div class="toolbar" id="toolbar">
+  <span class="toolbar-title">일일 업무보고 — ${dateLabel}</span>
+  <span class="orient-label">용지 방향</span>
+  <button class="tb-btn orient" id="orientBtn" onclick="toggleOrient()">가로형 (현재)</button>
+  <div class="divider"></div>
+  <button class="tb-btn print" onclick="window.print()">인쇄</button>
+  <button class="tb-btn pdf" onclick="savePDF()">PDF 저장</button>
+  <button class="tb-btn img" onclick="saveImage()">이미지 저장</button>
+</div>
+<div class="page-wrap" id="pageWrap">
+  <div class="top-header">
+    <div><div class="logo">RUN25</div><div class="tagline">화물 운송 전문</div></div>
+    <div class="contact">010-5504-1821 &nbsp;|&nbsp; FAX 1533-2525<br>sungwoo0923@nate.com<br>인천 서구 청마로19번길 21 (성주빌딩) 4층</div>
+  </div>
+  <div class="title-bar">
+    <div class="doc-title">일 일 &nbsp; 업 무 보 고</div>
+    <div class="doc-meta-box">
+      <div class="doc-meta-item"><div class="doc-meta-label">기준일</div><div class="doc-meta-value">${dateLabel}</div></div>
+      <div class="doc-meta-divider"></div>
+      <div class="doc-meta-item"><div class="doc-meta-label">발행일</div><div class="doc-meta-value">${printDate}</div></div>
+      <div class="doc-meta-divider"></div>
+      <div class="doc-meta-item"><div class="doc-meta-label">전일 비교</div><div class="doc-meta-value">${prevLabel}</div></div>
+    </div>
+  </div>
+  <div class="kpi-approval">
+    <div class="kpi-grid">
+      <div class="kpi-card"><div class="kpi-label">발주건수</div><div class="kpi-value">${cur.count}건</div><div class="kpi-diff">전일 대비 &nbsp;${fmtDC(dCount)}</div></div>
+      <div class="kpi-card"><div class="kpi-label">총 청구운임</div><div class="kpi-value">${cur.charge.toLocaleString()}원</div><div class="kpi-diff">전일 대비 &nbsp;${fmtD(dCharge)}</div></div>
+      <div class="kpi-card"><div class="kpi-label">총 기사운임</div><div class="kpi-value">${cur.pay.toLocaleString()}원</div><div class="kpi-diff">전일 대비 &nbsp;${fmtD(dPay)}</div></div>
+      <div class="kpi-card"><div class="kpi-label">매출이익 (수수료)</div><div class="kpi-value ${cur.fee >= 0 ? "pos" : "neg"}">${cur.fee.toLocaleString()}원</div><div class="kpi-diff">전일 대비 &nbsp;${fmtD(dFee)}</div></div>
+      <div class="kpi-card"><div class="kpi-label">매 익 율</div><div class="kpi-value ${Number(marginRate) >= 20 ? "pos" : Number(marginRate) < 10 ? "neg" : ""}">${marginRate}%</div><div class="kpi-diff">전일 대비 &nbsp;${fmtDM(dMargin)}</div><div class="kpi-sub">목표 20% 이상</div></div>
+    </div>
+    <div class="approval">
+      <div class="approval-title">결 &nbsp; 재</div>
+      <div class="approval-row">
+        <div class="approval-cell"><div class="a-role">팀 장</div><div class="a-sign"></div></div>
+        <div class="approval-cell"><div class="a-role">임 원</div><div class="a-sign"></div></div>
+        <div class="approval-cell"><div class="a-role">대 표</div><div class="a-sign"></div></div>
+      </div>
+    </div>
+  </div>
+  <div class="section-label">배차 상세 내역</div>
+  <table>
+    <thead><tr><th>순번</th><th>상차일</th><th>거래처</th><th>화물내용</th><th>차량번호</th><th>기사명</th><th>전화번호</th><th>청구운임</th><th>기사운임</th><th>수수료</th><th>매익율</th><th>지급방식</th><th>배차방식</th></tr></thead>
+    <tbody>
+      ${rows_html}
+      <tr class="total-row">
+        <td colspan="7" class="center">합 &nbsp; 계</td>
+        <td class="num">${cur.charge.toLocaleString()}</td>
+        <td class="num">${cur.pay.toLocaleString()}</td>
+        <td class="num">${cur.fee.toLocaleString()}</td>
+        <td class="num">${marginRate}%</td>
+        <td colspan="2"></td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="report-footer">
+    <div class="footer-note">본 보고서는 RUN25 배차관리 시스템에서 자동 생성된 문서입니다.</div>
+    <div class="footer-right">출력일시: ${printDate} &nbsp;|&nbsp; 담당자: 박성우 팀장</div>
+  </div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script>
+  let isLandscape = true;
+  function toggleOrient() {
+    isLandscape = !isLandscape;
+    const style = document.getElementById('orient-style');
+    const btn   = document.getElementById('orientBtn');
+    if (isLandscape) { style.textContent = '@page { size: A4 landscape; margin: 6mm 8mm; }'; btn.textContent = '가로형 (현재)'; }
+    else { style.textContent = '@page { size: A4 portrait; margin: 8mm 10mm; }'; btn.textContent = '세로형 (현재)'; }
+  }
+  function savePDF() {
+    const toolbar = document.getElementById('toolbar');
+    toolbar.style.display = 'none';
+    setTimeout(() => { window.print(); toolbar.style.display = 'flex'; }, 100);
+  }
+  function saveImage() {
+    const toolbar = document.getElementById('toolbar');
+    toolbar.style.display = 'none';
+    html2canvas(document.getElementById('pageWrap'), { scale:2, backgroundColor:'#f9fafb', useCORS:true }).then(canvas => {
+      toolbar.style.display = 'flex';
+      const a = document.createElement('a');
+      a.download = '일일업무보고_${targetDate}.png';
+      a.href = canvas.toDataURL('image/png');
+      a.click();
+    });
+  }
+</script>
+</body>
+</html>`;
+
+  const win = window.open("", "_blank", "width=1280,height=900");
+  win.document.write(html);
+  win.document.close();
+};
+const handleCloseFileUpload = async (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  e.target.value = "";
+
+  const XLSX = window.XLSX || (await import("xlsx"));
+  const data = await file.arrayBuffer();
+  const wb = XLSX.read(data, { type: "array" });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const json = XLSX.utils.sheet_to_json(ws, { header: 1 });
+
+  // 헤더 행 찾기
+  const headerIdx = json.findIndex(row =>
+    row.some(cell => String(cell || "").includes("차량번호"))
+  );
+  if (headerIdx === -1) { showAlert("차량번호 컬럼을 찾을 수 없습니다."); return; }
+
+  const headers = json[headerIdx].map(h => String(h || "").trim());
+  const plateCol = headers.indexOf("차량번호");
+  const nameCol  = headers.indexOf("차주이름");
+  const phoneCol = headers.indexOf("차주전화");
+  const feeTypeCol = headers.indexOf("요금구분");
+  const commCol  = headers.indexOf("수수료");
+
+  if (plateCol === -1) { showAlert("차량번호 컬럼을 찾을 수 없습니다."); return; }
+
+  const targetDate = appliedStartDate || todayKST();
+  const todayRows = (dispatchData || []).filter(r => r.상차일 === targetDate);
+
+  const fileIssues = [];
+
+  for (let i = headerIdx + 1; i < json.length; i++) {
+    const row = json[i];
+    if (!row || !row[plateCol]) continue;
+
+    const filePlate   = normalizePlate(String(row[plateCol] || ""));
+    const fileName    = String(row[nameCol]    || "").trim();
+    const filePhone   = String(row[phoneCol]   || "").replace(/[^\d]/g, "");
+    const fileFeeType = String(row[feeTypeCol] || "").trim();
+    const fileComm    = Number(row[commCol] || 0);
+
+    if (!filePlate) continue;
+
+    // 내 프로그램에서 같은 차량번호 오더 찾기
+    const matched = todayRows.filter(r => normalizePlate(r.차량번호 || "") === filePlate);
+
+    matched.forEach(mr => {
+      const seq = todayRows.indexOf(mr) + 1;
+      const label = `${seq}번 [${mr.거래처명 || "-"}] ${mr.상차지명 || ""} → ${mr.하차지명 || ""}`;
+
+      // 1. 배차방식 검증: 24시콜 파일에 있으면 배차방식이 "24시"여야 함
+      const dispatch = (mr.배차방식 || "").trim();
+      if (dispatch && dispatch !== "24시" && dispatch !== "24시(고정기사)") {
+        fileIssues.push({
+          rowId: mr._id,
+          seq,
+          label,
+          type: "dispatch",
+          msg: `24시콜 파일에 존재하나 배차방식이 "${dispatch}"(으)로 등록됨 (차량: ${row[plateCol]}, 기사: ${fileName})`,
+        });
+      }
+
+      // 2. 지급방식 검증
+      const programPay = (mr.지급방식 || "").trim();
+
+      if (fileFeeType === "인수증") {
+        if (programPay && programPay !== "계산서") {
+          fileIssues.push({
+            rowId: mr._id,
+            seq,
+            label,
+            type: "payment",
+            msg: `24시콜: 인수증(계산서) / 프로그램: "${programPay}" — 지급방식 불일치 (차량: ${row[plateCol]})`,
+          });
+        }
+      } else if (fileFeeType === "선/착불" || fileFeeType === "선착불") {
+        if (programPay && programPay !== "선불" && programPay !== "착불") {
+          fileIssues.push({
+            rowId: mr._id,
+            seq,
+            label,
+            type: "payment",
+            msg: `24시콜: 선/착불 / 프로그램: "${programPay}" — 지급방식 불일치 (차량: ${row[plateCol]})`,
+          });
+        }
+      }
+    });
+  }
+
+  setCloseFileResult(fileIssues);
 };
 const [statusFilter, setStatusFilter] = React.useState("ALL");
   const [q, setQ] = React.useState(() => {
@@ -17045,7 +18560,7 @@ const [fareResult, setFareResult] = React.useState(null);
     setFareSourceData(dispatchData);
   }, [dispatchData]);
   // ===================== 📋 기사복사 모달 상태 =====================
-  const [copyModalOpen, setCopyModalOpen] = React.useState(false);
+const [copyModalOpen, setCopyModalOpen] = React.useState(false);
   // ===== 스마트 기사 검색 (PART 5) =====
 const [smartQ5, setSmartQ5] = React.useState("");
 const [smartList5, setSmartList5] = React.useState([]);
@@ -18307,6 +19822,11 @@ const compareBy = (key, dir = "asc") => (a, b) => {
     });
   }
 
+// 오류오더만 보기 필터
+  if (filterErrorIds !== null) {
+    data = data.filter(r => filterErrorIds.includes(r._id));
+  }
+
   // =========================
   // 🔽 정렬
   // =========================
@@ -18324,6 +19844,7 @@ const compareBy = (key, dir = "asc") => (a, b) => {
   loaded,
   statusFilter,
   focusOrderId,
+  filterErrorIds,
 ]);
 
   // ⭐⭐⭐ 페이지 데이터 (정렬된 filtered 기준)
@@ -18477,15 +19998,39 @@ return (
     </div>
   </div>
 )}
+{/* 오류오더 필터 활성 배너 */}
+      {filterErrorIds !== null && (
+        <div className="flex items-center gap-3 px-4 py-2 mb-2 bg-[#1B2B4B]/8 border border-[#1B2B4B]/30 rounded-xl">
+          <span className="text-[#1B2B4B] font-bold text-[13px]" style={{animation: "filterBlink 1.8s ease-in-out infinite"}}>
+            오류/경고 오더만 표시 중 ({filterErrorIds.length}건)
+          </span>
+          <button
+            className="ml-auto px-3 py-1 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-bold hover:bg-[#243a60] transition"
+            onClick={() => setFilterErrorIds(null)}
+          >
+            전체 보기로 돌아가기
+          </button>
+        </div>
+      )}
       <style>{`
-  @keyframes highlightFlash {
-    0%   { background-color: #fff7c2; }
-    50%  { background-color: #ffe066; }
-    100% { background-color: #fff7c2; }
+@keyframes highlightGlow {
+    0%   { box-shadow: 0 0 0 3px #3b82f6, 0 0 16px 4px #93c5fd; outline: 2px solid #3b82f6; }
+    60%  { box-shadow: 0 0 0 3px #3b82f6, 0 0 24px 8px #93c5fd; outline: 2px solid #3b82f6; }
+    100% { box-shadow: none; outline: none; }
   }
 
   .row-highlight {
-    animation: highlightFlash 0.8s ease-in-out 3;
+    animation: highlightGlow 2s ease-out forwards;
+  }
+
+  @keyframes filterBlink {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.3; }
+  }
+
+  @keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to   { opacity: 1; transform: translateY(0); }
   }
 `}</style>
       <h2 className="text-lg font-bold mb-2">배차현황</h2>
@@ -18572,6 +20117,7 @@ return (
           <button className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-sm font-semibold shadow hover:opacity-90" onClick={()=>{if(!selected.size)return showAlert("삭제할 항목이 없습니다.");setShowDeletePopup(true);}}>선택삭제</button>
           <button className="px-3 py-1.5 rounded-lg bg-gray-300 text-gray-800 text-sm font-semibold shadow hover:opacity-90" onClick={()=>setSelected(new Set())}>선택초기화</button>
           <button className="px-3 py-1.5 rounded-lg bg-teal-600 text-white text-sm font-semibold shadow hover:opacity-90" onClick={downloadExcel}>엑셀다운</button>
+          <button onClick={() => setDailyCloseOpen(true)} className="px-3 py-1.5 rounded-lg bg-gray-700 text-white text-sm font-semibold shadow hover:opacity-90">일마감</button>
         </div>
       </div>
 
@@ -22069,6 +23615,245 @@ if (confirmChange.field === "지급방식" && confirmChange.after === "취소") 
           </div>
         </div>
       )}
+      {/* ===================== 일마감 모달 ===================== */}
+{dailyCloseOpen && (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]" onClick={() => setDailyCloseOpen(false)}>
+    <div className="bg-white rounded-2xl shadow-2xl w-[640px] max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+
+      {/* 헤더 */}
+      <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between shrink-0">
+        <div>
+          <div className="text-white font-bold text-[16px]">일마감 검증</div>
+          <div className="text-white/50 text-[12px] mt-0.5">{dailyCloseResult?.date || ""} 기준 ({dailyCloseResult?.total || 0}건)</div>
+        </div>
+        <button className="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 text-white text-lg flex items-center justify-center transition" onClick={() => setDailyCloseOpen(false)}>x</button>
+      </div>
+
+      {dailyCloseResult && (
+        <div className="flex-1 overflow-y-auto">
+
+          {/* 요약 카드 */}
+          <div className="px-6 py-4 border-b border-gray-100">
+            <div className="grid grid-cols-4 gap-3">
+              {[
+                { label: "전체", value: dailyCloseResult.total, active: dailyCloseFilter === "all", key: "all" },
+                { label: "정상", value: dailyCloseResult.total - dailyCloseResult.errors.length, active: false, key: null },
+                { label: "오류", value: dailyCloseResult.errors.length, active: dailyCloseFilter === "errors", key: "errors" },
+                { label: "경고", value: dailyCloseResult.warnings.length + (closeFileResult?.length || 0), active: dailyCloseFilter === "warnings", key: "warnings" },
+              ].map(item => (
+                <div key={item.label}
+                  onClick={() => { if (item.key) setDailyCloseFilter(item.key); }}
+                  className={`border rounded-xl p-3 text-center transition ${item.key ? "cursor-pointer hover:border-[#1B2B4B]" : ""} ${item.active ? "border-[#1B2B4B] bg-[#1B2B4B]/5" : "border-gray-200 bg-white"}`}>
+                  <div className="text-[10px] font-bold text-gray-500">{item.label}</div>
+                  <div className="text-[22px] font-black text-[#1B2B4B]">{item.value}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* 24시콜 파일 비교 */}
+          <div className="px-6 py-3 border-b border-gray-100">
+            <div className="flex items-center gap-3">
+              <label className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 cursor-pointer transition text-[12px] font-semibold text-gray-700">
+                <span>24시콜 파일 비교</span>
+                <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleCloseFileUpload} />
+              </label>
+              {closeFileResult && (
+                <span className="text-[12px] text-gray-500">
+                  {closeFileResult.length > 0 ? `불일치 ${closeFileResult.length}건 감지` : "불일치 없음"}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* 오류 목록 */}
+          {(dailyCloseFilter === "all" || dailyCloseFilter === "errors") && dailyCloseResult.errors.length > 0 && (
+            <div className="px-6 py-4 border-b border-gray-100">
+              <div className="text-[13px] font-bold text-gray-800 mb-3">오류 ({dailyCloseResult.errors.length}건) - 필수 수정</div>
+              <div className="space-y-2 max-h-[220px] overflow-y-auto">
+                {dailyCloseResult.errors.map((e, i) => (
+                  <div key={i}
+                    className="flex items-start gap-3 px-4 py-3 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-50 transition"
+                    onClick={() => {
+                      setDailyCloseOpen(false);
+                      setDailyCloseFilter("all");
+                      setTimeout(() => {
+                        const el = document.getElementById(`row-${e.rowId}`);
+                        if (el) {
+                          el.scrollIntoView({ behavior: "smooth", block: "center" });
+                          el.setAttribute("tabindex", "-1");
+                          el.focus({ preventScroll: true });
+                          el.classList.remove("row-highlight");
+                          void el.offsetWidth;
+                          el.classList.add("row-highlight");
+                          setTimeout(() => el.classList.remove("row-highlight"), 2200);
+                        }
+                      }, 250);
+                    }}>
+                    <div className="w-6 h-6 rounded-full bg-[#1B2B4B] text-white text-[11px] font-bold flex items-center justify-center shrink-0">{e.seq}</div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[13px] font-bold text-gray-900 truncate">{e.label}</div>
+                      <div className="text-[12px] font-semibold text-red-600 mt-0.5">{e.msg}</div>
+                    </div>
+                    <span className="shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-red-100 text-red-700">누락</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 경고 목록 */}
+          {(dailyCloseFilter === "all" || dailyCloseFilter === "warnings") && dailyCloseResult.warnings.length > 0 && (
+            <div className="px-6 py-4 border-b border-gray-100">
+              <div className="text-[13px] font-bold text-gray-800 mb-3">경고 ({dailyCloseResult.warnings.length}건) - 확인 필요</div>
+              <div className="space-y-2 max-h-[220px] overflow-y-auto">
+                {dailyCloseResult.warnings.map((w, i) => (
+                  <div key={i}
+                    className="flex items-start gap-3 px-4 py-3 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-50 transition"
+                    onClick={() => {
+                      setDailyCloseOpen(false);
+                      setDailyCloseFilter("all");
+                      setTimeout(() => {
+                        const el = document.getElementById(`row-${w.rowId}`);
+                        if (el) {
+                          el.scrollIntoView({ behavior: "smooth", block: "center" });
+                          el.setAttribute("tabindex", "-1");
+                          el.focus({ preventScroll: true });
+                          el.classList.remove("row-highlight");
+                          void el.offsetWidth;
+                          el.classList.add("row-highlight");
+                          setTimeout(() => el.classList.remove("row-highlight"), 2200);
+                        }
+                      }, 250);
+                    }}>
+                    <div className="w-6 h-6 rounded-full bg-gray-400 text-white text-[11px] font-bold flex items-center justify-center shrink-0">{w.seq}</div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[13px] font-bold text-gray-900 truncate">{w.label}</div>
+                      <div className="text-[12px] font-semibold text-orange-600 mt-0.5">{w.msg}</div>
+                    </div>
+                    <span className="shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-orange-100 text-orange-700">
+                      {w.type === "margin" ? "마진" : w.type === "driver" ? "기사" : w.type === "phone" ? "번호" : w.type === "zero" ? "0원" : w.type === "high" ? "고액" : w.type}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 24시콜 비교 불일치 */}
+          {(dailyCloseFilter === "all" || dailyCloseFilter === "warnings") && closeFileResult && closeFileResult.length > 0 && (
+            <div className="px-6 py-4 border-b border-gray-100">
+              <div className="text-[13px] font-bold text-gray-800 mb-3">24시콜 비교 불일치 ({closeFileResult.length}건)</div>
+              <div className="space-y-2 max-h-[180px] overflow-y-auto">
+                {closeFileResult.map((f, i) => (
+                  <div key={i} className="flex items-start gap-3 px-4 py-3 border border-orange-200 rounded-xl bg-orange-50">
+                    <div className="w-6 h-6 rounded-full bg-orange-400 text-white text-[11px] font-bold flex items-center justify-center shrink-0">{f.seq}</div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[13px] font-bold text-gray-900 truncate">{f.label}</div>
+                      <div className="text-[12px] font-semibold text-orange-600 mt-0.5">{f.plate} — {f.msg}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 업체별 요약 */}
+          {dailyCloseResult.clientSummary?.length > 0 && (
+            <div className="px-6 py-4">
+              <div className="text-[13px] font-bold text-gray-800 mb-3">업체별 요약</div>
+              <div className="border border-gray-200 rounded-xl overflow-hidden">
+                <table className="w-full text-[12px]">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-bold text-gray-600">거래처</th>
+                      <th className="px-3 py-2 text-center font-bold text-gray-600">건수</th>
+                      <th className="px-3 py-2 text-right font-bold text-gray-600">청구합계</th>
+                      <th className="px-3 py-2 text-right font-bold text-gray-600">기사합계</th>
+                      <th className="px-3 py-2 text-right font-bold text-gray-600">마진합계</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dailyCloseResult.clientSummary.map((c, i) => (
+                      <tr key={i} className="border-t border-gray-100">
+                        <td className="px-3 py-2 font-semibold text-gray-800">{c.name}</td>
+                        <td className="px-3 py-2 text-center">{c.count}건</td>
+                        <td className="px-3 py-2 text-right font-semibold">{c.charge.toLocaleString()}</td>
+                        <td className="px-3 py-2 text-right font-semibold">{c.pay.toLocaleString()}</td>
+                        <td className={`px-3 py-2 text-right font-bold ${c.margin < 0 ? "text-red-600" : ""}`}>{c.margin.toLocaleString()}</td>
+                      </tr>
+                    ))}
+                    <tr className="border-t-2 border-gray-300 bg-gray-50 font-bold">
+                      <td className="px-3 py-2">합계</td>
+                      <td className="px-3 py-2 text-center">{dailyCloseResult.clientSummary.reduce((a, c) => a + c.count, 0)}건</td>
+                      <td className="px-3 py-2 text-right">{dailyCloseResult.clientSummary.reduce((a, c) => a + c.charge, 0).toLocaleString()}</td>
+                      <td className="px-3 py-2 text-right">{dailyCloseResult.clientSummary.reduce((a, c) => a + c.pay, 0).toLocaleString()}</td>
+                      <td className={`px-3 py-2 text-right ${dailyCloseResult.clientSummary.reduce((a, c) => a + c.margin, 0) < 0 ? "text-red-600" : ""}`}>
+                        {dailyCloseResult.clientSummary.reduce((a, c) => a + c.margin, 0).toLocaleString()}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 재검증/복사 토스트 */}
+      {reVerifyToast && (
+        <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[9999999] pointer-events-none">
+          <div className="bg-gray-900 text-white px-6 py-3 rounded-2xl shadow-2xl text-[14px] font-bold animate-pulse">
+            {reVerifyToast}
+          </div>
+        </div>
+      )}
+
+      {/* 하단 버튼 */}
+      <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 shrink-0 flex gap-3">
+        {dailyCloseFilter !== "all" && (
+          <button className="flex-1 py-2.5 rounded-xl bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-semibold text-[13px] transition"
+            onClick={() => { setDailyCloseFilter("all"); setFilterErrorIds(null); }}>
+            전체 보기
+          </button>
+        )}
+        {(dailyCloseResult?.errors?.length > 0 || dailyCloseResult?.warnings?.length > 0) && dailyCloseFilter === "all" && (
+          <button className="flex-1 py-2.5 rounded-xl bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-semibold text-[13px] transition"
+            onClick={() => {
+              const issueIds = [
+                ...dailyCloseResult.errors.map(e => e.rowId),
+                ...dailyCloseResult.warnings.map(w => w.rowId),
+                ...(closeFileResult || []).map(f => f.rowId),
+              ];
+              const unique = [...new Set(issueIds)];
+              setFilterErrorIds(unique);
+              setDailyCloseOpen(false);
+              setQ("");
+            }}>
+            오류 오더만 보기
+          </button>
+        )}
+
+        <button className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[13px] transition"
+          onClick={handleDailyReport}>
+          보고서 출력
+        </button>
+        <button className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white font-bold text-[13px] transition"
+          onClick={() => {
+            runDailyClose();
+            setReVerifyToast("🔄 재검증이 완료되었습니다");
+            setTimeout(() => setReVerifyToast(null), 2500);
+          }}>
+          재검증
+        </button>
+        <button className="flex-1 py-2.5 rounded-xl bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold text-[13px] transition"
+          onClick={() => { setDailyCloseOpen(false); setDailyCloseFilter("all"); setCloseFileResult(null); }}>
+          닫기
+        </button>
+      </div>
+    </div>
+  </div>
+)}
     {/* 🔥 블랙/주의업체 팝업 */}
       {warningPopup && (
         <div
@@ -25649,7 +27434,74 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
 
   // ★ 입금 엑셀 업로드 → 자동 매칭 → 정산완료
   const [bankMatchResult, setBankMatchResult] = useState(null);
+// ── 일괄 정산 모달 상태 ──
+  const [batchModalOpen, setBatchModalOpen] = useState(false);
+  const [batchClients, setBatchClients] = useState(new Set());   // 선택된 거래처
+  const [batchFromMM, setBatchFromMM] = useState("01");
+  const [batchToMM,   setBatchToMM]   = useState("12");
+  const [batchClientQ, setBatchClientQ] = useState("");
+    const [batchLoading, setBatchLoading] = useState(false);
+  // ── 일괄 정산 처리 ──
+const handleBatchSettle = async (targetStatus) => {
+    if (!batchClients.size) return showAlert("거래처를 선택하세요.");
+    const fromIdx = parseInt(batchFromMM, 10);
+    const toIdx   = parseInt(batchToMM,   10);
+    if (fromIdx > toIdx) return showAlert("시작월이 종료월보다 클 수 없습니다.");
 
+ // ★ 비동기 실행 전에 현재 값을 스냅샷으로 캡처
+    const clientSnapshot = new Set(batchClients);
+
+    setBatchLoading(true);
+
+    const months = Array.from({ length: toIdx - fromIdx + 1 }, (_, i) =>
+      `${THIS_YEAR}-${String(fromIdx + i).padStart(2, "0")}`
+    );
+
+    const allData = Array.isArray(dispatchData) ? [...dispatchData] : [];
+    const dateStr = targetStatus === "정산완료" ? todayStr8() : "";
+
+    let totalDocs = 0;
+    const patchedIds = new Set();
+
+    for (const clientName of clientSnapshot) {
+      const clientRows = allData.filter(
+        r => (r.배차상태 || "") === "배차완료" && (r.거래처명 || "") === clientName
+      );
+      for (const yyyymm of months) {
+        const targetRows2 = clientRows.filter(r =>
+          String(r.상차일 || "").startsWith(yyyymm)
+        );
+        for (const r of targetRows2) {
+          if (!r._id) continue;
+          try {
+            await patchMonthOnDoc(r._id, yyyymm, targetStatus, dateStr);
+            patchedIds.add(r._id);
+            totalDocs++;
+          } catch (e) {
+            console.error("patchMonthOnDoc 오류:", r._id, yyyymm, e);
+          }
+        }
+      }
+    }
+
+    // 로컬 반영 — Firestore 완료 후 실행
+    setDispatchData(prev => prev.map(d => {
+      if (!clientSnapshot.has(d.거래처명 || "")) return d;
+      const oldStatus = (d.정산상태 && typeof d.정산상태 === "object") ? { ...d.정산상태 } : {};
+      const oldDate   = (d.정산일   && typeof d.정산일   === "object") ? { ...d.정산일   } : {};
+      for (const yyyymm of months) {
+        if (String(d.상차일 || "").startsWith(yyyymm)) {
+          oldStatus[yyyymm] = targetStatus;
+          oldDate[yyyymm]   = dateStr;
+        }
+      }
+      return { ...d, 정산상태: oldStatus, 정산일: oldDate };
+    }));
+    setBatchLoading(false);
+    showAlert(`${batchClients.size}개 거래처 / ${months.length}개월 → ${targetStatus} (총 ${totalDocs}건)`);
+    setBatchModalOpen(false);
+    setBatchClients(new Set());
+  };
   const handleBankExcelUpload = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -26317,6 +28169,12 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
                   입금확인 (엑셀)
                   <input type="file" accept=".xlsx,.xls,.csv" hidden onChange={handleBankExcelUpload} />
                 </label>
+                <button
+                  onClick={() => { setBatchModalOpen(true); setBatchClients(new Set()); setBatchClientQ(""); }}
+                  className="px-3 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition"
+                >
+                  일괄 정산처리
+                </button>
               </div>
             </div>
           </div>
@@ -26340,15 +28198,39 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
 
           {/* 테이블 */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-            <table className="w-full text-[13px]">
+            {selClient && (
+              <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100 bg-[#1B2B4B]/4">
+                <span className="text-[12px] font-bold text-gray-500">조회 거래처</span>
+                <span className="text-[14px] font-extrabold text-[#1B2B4B]">{selClient}</span>
+                <span className="text-[12px] text-gray-400">— {THIS_YEAR}년 월별 정산 현황</span>
+              </div>
+            )}
+            <table className="w-full text-[13px]" style={{tableLayout:"fixed"}}>
+              <colgroup>
+                <col style={{width:"40px"}} />
+                <col style={{width:"48px"}} />
+                <col style={{width:"88px"}} />
+                <col style={{width:"56px"}} />
+                <col style={{width:"120px"}} />
+                <col style={{width:"100px"}} />
+                <col style={{width:"100px"}} />
+                <col />
+              </colgroup>
               <thead>
                 <tr className="bg-[#1B2B4B]">
-                  <th className="px-3 py-3 text-white text-center">
-                    <input type="checkbox" onChange={()=>toggleAllMonths(monthRows)}
-                      checked={selectedMonths.size>0&&selectedMonths.size===monthRows.length} />
+                  <th
+                    className="px-2 py-3 text-white text-center cursor-pointer select-none"
+                    onClick={() => toggleAllMonths(monthRows)}
+                  >
+                    <input
+                      type="checkbox"
+                      onChange={() => toggleAllMonths(monthRows)}
+                      checked={selectedMonths.size > 0 && selectedMonths.size === monthRows.length}
+                      onClick={e => e.stopPropagation()}
+                    />
                   </th>
-                  {["순번","청구월","건수","총 청구금액","정산상태","정산일","메모"].map(h=>(
-                    <th key={h} className="px-3 py-3 text-white font-bold text-center whitespace-nowrap">{h}</th>
+                  {["순번","청구월","건수","총 청구금액","정산상태","정산일","메모"].map(label=>(
+                    <th key={label} className="px-3 py-3 text-white font-bold text-center whitespace-nowrap">{label}</th>
                   ))}
                 </tr>
               </thead>
@@ -26360,8 +28242,16 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
                 ) : (
                   monthRows.map((row, idx) => (
                     <tr key={row.yyyymm} className={idx%2===0?"bg-white":"bg-gray-50/60"}>
-                      <td className="px-3 py-3 text-center border-b border-gray-100">
-                        <input type="checkbox" checked={selectedMonths.has(row.yyyymm)} onChange={()=>toggleMonthSelect(row.yyyymm)} />
+                      <td
+                        className="px-3 py-3 text-center border-b border-gray-100 cursor-pointer select-none"
+                        onClick={() => toggleMonthSelect(row.yyyymm)}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedMonths.has(row.yyyymm)}
+                          onChange={() => toggleMonthSelect(row.yyyymm)}
+                          onClick={e => e.stopPropagation()}
+                        />
                       </td>
                       <td className="px-3 py-3 text-center text-gray-500 border-b border-gray-100">{idx+1}</td>
                       <td className="px-3 py-3 text-center font-bold text-[#1B2B4B] border-b border-gray-100">{row.yyyymm}</td>
@@ -26473,8 +28363,173 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
               </div>
             </div>
           </div>
+{/* 일괄 정산 로딩 */}
+          {batchLoading && (
+            <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999999]">
+              <div className="bg-white rounded-2xl shadow-2xl px-10 py-8 flex flex-col items-center gap-4 min-w-[260px]">
+                <div className="w-12 h-12 border-4 border-[#1B2B4B]/20 border-t-[#1B2B4B] rounded-full animate-spin" />
+                <div className="text-[15px] font-bold text-[#1B2B4B]">정산 처리 중...</div>
+                <div className="text-[12px] text-gray-400 text-center">
+                  데이터 양에 따라 시간이 걸릴 수 있습니다.<br />잠시만 기다려 주세요.
+                </div>
+              </div>
+            </div>
+          )}
+{/* ══ 일괄 정산 모달 ══ */}
+          {batchModalOpen && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]"
+              onClick={() => setBatchModalOpen(false)}>
+              <div className="bg-white rounded-2xl shadow-2xl w-[680px] max-h-[85vh] flex flex-col overflow-hidden"
+                onClick={e => e.stopPropagation()}>
 
+                {/* 헤더 */}
+                <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between shrink-0">
+                  <div>
+                    <div className="text-white font-bold text-[16px]">일괄 정산처리</div>
+                    <div className="text-white/50 text-[12px] mt-0.5">
+                      거래처와 기간을 선택하고 정산완료 또는 미정산으로 일괄 변경합니다
+                    </div>
+                  </div>
+                  <button className="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center text-lg"
+                    onClick={() => setBatchModalOpen(false)}>×</button>
+                </div>
 
+                {/* 월 범위 선택 */}
+                <div className="px-6 py-4 border-b border-gray-100 shrink-0">
+                  <div className="text-[12px] font-bold text-gray-500 mb-2">기간 선택 ({THIS_YEAR}년)</div>
+                  <div className="flex items-center gap-3">
+                    <select
+                      className="border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
+                      value={batchFromMM} onChange={e => setBatchFromMM(e.target.value)}>
+                      {Array.from({length:12},(_,i)=>String(i+1).padStart(2,"0")).map(mm=>(
+                        <option key={mm} value={mm}>{parseInt(mm,10)}월</option>
+                      ))}
+                    </select>
+                    <span className="text-gray-400 font-semibold">부터</span>
+                    <select
+                      className="border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
+                      value={batchToMM} onChange={e => setBatchToMM(e.target.value)}>
+                      {Array.from({length:12},(_,i)=>String(i+1).padStart(2,"0")).map(mm=>(
+                        <option key={mm} value={mm}>{parseInt(mm,10)}월</option>
+                      ))}
+                    </select>
+                    <span className="text-gray-400 font-semibold">까지</span>
+                    <span className="ml-auto text-[12px] text-[#1B2B4B] font-bold bg-[#1B2B4B]/8 px-3 py-1.5 rounded-lg">
+                      {parseInt(batchFromMM,10)}월 ~ {parseInt(batchToMM,10)}월
+                      &nbsp;({parseInt(batchToMM,10) - parseInt(batchFromMM,10) + 1}개월)
+                    </span>
+                  </div>
+                </div>
+
+                {/* 거래처 검색 + 전체선택 */}
+                <div className="px-6 pt-4 shrink-0">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="text-[12px] font-bold text-gray-500">
+                      거래처 선택
+                      <span className="ml-2 text-[#1B2B4B]">({batchClients.size}/{clientOptions8.length})</span>
+                    </div>
+                    <button
+                      className="ml-auto px-3 py-1 rounded-lg border border-[#1B2B4B] text-[#1B2B4B] text-[12px] font-bold hover:bg-[#1B2B4B] hover:text-white transition"
+                      onClick={() => {
+                        if (batchClients.size === clientOptions8.length) setBatchClients(new Set());
+                        else setBatchClients(new Set(clientOptions8));
+                      }}>
+                      {batchClients.size === clientOptions8.length ? "전체 해제" : "전체 선택"}
+                    </button>
+                  </div>
+                  <input
+                    className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B] mb-2"
+                    placeholder="거래처명 검색..."
+                    value={batchClientQ}
+                    onChange={e => setBatchClientQ(e.target.value)}
+                  />
+                </div>
+
+                {/* 거래처 목록 */}
+                <div className="flex-1 overflow-y-auto px-6 pb-4">
+                  <div className="grid grid-cols-2 gap-2">
+                    {clientOptions8
+                      .filter(name => !batchClientQ.trim() || name.toLowerCase().includes(batchClientQ.toLowerCase()))
+                      .map(name => {
+                        const checked = batchClients.has(name);
+                        // 해당 거래처 미정산 월수
+                        const unsettledCount = Array.from({length:12},(_,i)=>`${THIS_YEAR}-${String(i+1).padStart(2,"0")}`)
+                          .filter(ym => {
+                            const rows2 = (dispatchData||[]).filter(r=>r.배차상태==="배차완료"&&r.거래처명===name&&String(r.상차일||"").startsWith(ym));
+                            return rows2.length > 0 && !rows2.every(r=>r.정산상태?.[ym]==="정산완료");
+                          }).length;
+                        return (
+                          <div key={name}
+                            className={`flex items-center gap-3 px-4 py-3 rounded-xl border-2 cursor-pointer transition select-none ${
+                              checked
+                                ? "border-[#1B2B4B] bg-[#1B2B4B]/5"
+                                : "border-gray-200 hover:border-gray-300 bg-white"
+                            }`}
+                            onClick={() => setBatchClients(prev => {
+                              const n = new Set(prev);
+                              n.has(name) ? n.delete(name) : n.add(name);
+                              return n;
+                            })}>
+                            <div className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition ${
+                              checked ? "border-[#1B2B4B] bg-[#1B2B4B]" : "border-gray-300"
+                            }`}>
+                              {checked && <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 12 12"><path d="M1 6l3.5 3.5L11 2"/></svg>}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="text-[13px] font-bold text-gray-800 truncate">{name}</div>
+                            </div>
+                            {unsettledCount > 0 && (
+                              <span className="shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700">
+                                미정산 {unsettledCount}개월
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    {clientOptions8.filter(name => !batchClientQ.trim() || name.toLowerCase().includes(batchClientQ.toLowerCase())).length === 0 && (
+                      <div className="col-span-2 text-center text-gray-400 text-[13px] py-8">검색 결과가 없습니다</div>
+                    )}
+                  </div>
+                </div>
+
+                {/* 하단 버튼 */}
+                <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 shrink-0">
+                  <div className="flex items-center gap-3">
+                    <div className="text-[12px] text-gray-500 font-semibold mr-auto">
+                      {batchClients.size > 0
+                        ? `${batchClients.size}개 거래처 × ${parseInt(batchToMM,10)-parseInt(batchFromMM,10)+1}개월 선택됨`
+                        : "거래처를 선택하세요"}
+                    </div>
+                    <button
+                      className="px-5 py-2.5 rounded-xl bg-white border border-gray-300 text-gray-600 font-semibold text-[13px] hover:bg-gray-100 transition"
+                      onClick={() => setBatchModalOpen(false)}>
+                      취소
+                    </button>
+                    <button
+                      disabled={!batchClients.size}
+                      className={`px-5 py-2.5 rounded-xl font-bold text-[13px] transition ${
+                        batchClients.size
+                          ? "bg-amber-500 hover:bg-amber-600 text-white"
+                          : "bg-gray-200 text-gray-400 cursor-not-allowed"
+                      }`}
+                      onClick={() => handleBatchSettle("미정산")}>
+                      미정산으로 변경
+                    </button>
+                    <button
+                      disabled={!batchClients.size}
+                      className={`px-5 py-2.5 rounded-xl font-bold text-[13px] transition ${
+                        batchClients.size
+                          ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                          : "bg-gray-200 text-gray-400 cursor-not-allowed"
+                      }`}
+                      onClick={() => handleBatchSettle("정산완료")}>
+                      정산완료로 변경
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
           {/* ★ 입금 매칭 결과 팝업 */}
 
           {bankMatchResult && (
@@ -27616,10 +29671,17 @@ function DriverManagement({ drivers = [], upsertDriver, removeDriver }) {
           <table className="w-full text-[13px]">
             <thead>
               <tr className="bg-[#1B2B4B]">
-                <th className="px-3 py-3 text-white text-center w-10">
-                  <input type="checkbox" onChange={toggleAll}
-                    checked={filtered.length>0 && selected.size===filtered.length} />
-                </th>
+                <th
+                    className="px-3 py-3 text-white text-center w-10 cursor-pointer select-none"
+                    onClick={() => toggleAllMonths(monthRows)}
+                  >
+                    <input
+                      type="checkbox"
+                      onChange={() => toggleAllMonths(monthRows)}
+                      checked={selectedMonths.size > 0 && selectedMonths.size === monthRows.length}
+                      onClick={e => e.stopPropagation()}
+                    />
+                  </th>
                 {["순번","차량번호","이름","전화번호","등급","메모","삭제"].map(h => (
                   <th key={h} className="px-3 py-3 text-white font-bold text-center whitespace-nowrap">{h}</th>
                 ))}
