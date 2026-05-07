@@ -27441,6 +27441,344 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
   const [batchToMM,   setBatchToMM]   = useState("12");
   const [batchClientQ, setBatchClientQ] = useState("");
     const [batchLoading, setBatchLoading] = useState(false);
+     const [arReportOpen, setArReportOpen] = useState(false);
+  const [arFromMM, setArFromMM] = useState("01");
+  const [arToMM,   setArToMM]   = useState("12");
+  // ===================== 미수금 보고서 출력 =====================
+const handleARReport = () => {
+  const fromIdx = parseInt(arFromMM, 10);
+  const toIdx   = parseInt(arToMM,   10);
+  if (fromIdx > toIdx) return showAlert("시작월이 종료월보다 클 수 없습니다.");
+
+  const months = Array.from({ length: toIdx - fromIdx + 1 }, (_, i) =>
+    `${THIS_YEAR}-${String(fromIdx + i).padStart(2, "0")}`
+  );
+  const allData = Array.isArray(dispatchData) ? dispatchData : [];
+
+  // 거래처별 월별 집계
+  const companyMap = new Map();
+  clientOptions8.forEach(name => companyMap.set(name, {}));
+
+  allData
+    .filter(r => (r.배차상태 || "") === "배차완료")
+    .forEach(r => {
+      const name = r.거래처명 || "";
+      if (!name) return;
+      const ym = String(r.상차일 || "").slice(0, 7);
+      if (!months.includes(ym)) return;
+      if (!companyMap.has(name)) companyMap.set(name, {});
+      const entry = companyMap.get(name);
+      if (!entry[ym]) entry[ym] = { charge: 0, count: 0, status: "미정산" };
+      entry[ym].charge += toInt(r.청구운임);
+      entry[ym].count  += 1;
+      const settled = r.정산상태?.[ym] === "정산완료";
+      if (!settled) entry[ym].status = "미정산";
+    });
+
+  // 정산상태 재계산 (allDone 방식)
+  allData
+    .filter(r => (r.배차상태 || "") === "배차완료")
+    .forEach(r => {
+      const name = r.거래처명 || "";
+      const ym = String(r.상차일 || "").slice(0, 7);
+      if (!months.includes(ym) || !companyMap.has(name)) return;
+      const entry = companyMap.get(name);
+      if (!entry[ym]) return;
+      if (r.정산상태?.[ym] !== "정산완료") entry[ym].status = "미정산";
+    });
+
+  // 데이터 있는 업체만
+  const reportRows = Array.from(companyMap.entries())
+    .map(([name, mData]) => {
+      const totalCharge = months.reduce((s, m) => s + (mData[m]?.charge || 0), 0);
+      const totalCount  = months.reduce((s, m) => s + (mData[m]?.count  || 0), 0);
+      const unsettled   = months.filter(m => mData[m] && mData[m].status === "미정산" && mData[m].charge > 0);
+      return { name, mData, totalCharge, totalCount, unsettled };
+    })
+    .filter(r => r.totalCount > 0)
+    .sort((a, b) => b.totalCharge - a.totalCharge);
+
+  const grandTotal   = reportRows.reduce((s, r) => s + r.totalCharge, 0);
+  const grandUnsettled = reportRows.reduce((s, r) =>
+    s + months.reduce((ss, m) => ss + (r.mData[m]?.status === "미정산" ? r.mData[m].charge : 0), 0), 0);
+  const grandSettled = grandTotal - grandUnsettled;
+
+  const now = new Date();
+  const printDate = `${now.getFullYear()}. ${String(now.getMonth()+1).padStart(2,"0")}. ${String(now.getDate()).padStart(2,"0")}`;
+  const periodLabel = `${THIS_YEAR}년 ${fromIdx}월 ~ ${toIdx}월`;
+
+  const monthHeaders = months.map(m => `<th>${parseInt(m.slice(5),10)}월</th>`).join("");
+
+  const bodyRows = reportRows.map((r, idx) => {
+    const cells = months.map(m => {
+      const d = r.mData[m];
+      if (!d || d.count === 0) return `<td class="zero">-</td>`;
+      const cls = d.status === "정산완료" ? "settled" : "unsettled";
+      return `<td class="${cls}">
+        <div class="amount">${d.charge.toLocaleString()}</div>
+        <div class="sub">${d.count}건</div>
+      </td>`;
+    }).join("");
+
+    const unsettledAmt = months.reduce((s, m) =>
+      s + (r.mData[m]?.status === "미정산" ? r.mData[m].charge : 0), 0);
+    const settledAmt = r.totalCharge - unsettledAmt;
+
+    return `<tr class="${idx % 2 === 0 ? "even" : "odd"}">
+      <td class="center seq">${idx + 1}</td>
+      <td class="name">${r.name}</td>
+      <td class="center">${r.totalCount}건</td>
+      ${cells}
+      <td class="total">${r.totalCharge.toLocaleString()}</td>
+      <td class="settled-total">${settledAmt > 0 ? settledAmt.toLocaleString() : "-"}</td>
+      <td class="unsettled-total">${unsettledAmt > 0 ? unsettledAmt.toLocaleString() : "-"}</td>
+    </tr>`;
+  }).join("");
+
+  const totalCells = months.map(m => {
+    const total = reportRows.reduce((s, r) => s + (r.mData[m]?.charge || 0), 0);
+    const unsett = reportRows.reduce((s, r) =>
+      s + (r.mData[m]?.status === "미정산" ? r.mData[m].charge : 0), 0);
+    if (total === 0) return `<td class="zero">-</td>`;
+    return `<td class="total-cell">
+      <div>${total.toLocaleString()}</div>
+      ${unsett > 0 ? `<div class="unsettled-sub">미 ${unsett.toLocaleString()}</div>` : ""}
+    </td>`;
+  }).join("");
+
+  const html = `<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>미수금현황_${THIS_YEAR}_${arFromMM}~${arToMM}</title>
+<style id="orient-style">@page { size: A4 landscape; margin: 6mm 8mm; }</style>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap');
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Noto Sans KR',sans-serif; font-size:11px; color:#111827; background:#f9fafb; }
+
+  .toolbar { position:fixed; top:0; left:0; right:0; z-index:9999; background:#1B2B4B; padding:8px 20px;
+    display:flex; align-items:center; gap:10px; box-shadow:0 2px 8px rgba(0,0,0,0.3); }
+  .toolbar-title { color:#fff; font-size:12px; font-weight:700; margin-right:auto; }
+  .tb-btn { padding:6px 16px; border-radius:6px; border:none; cursor:pointer;
+    font-size:11px; font-weight:700; font-family:'Noto Sans KR',sans-serif; transition:opacity 0.15s; }
+  .tb-btn:hover { opacity:0.85; }
+  .tb-btn.orient { background:#fff; color:#1B2B4B; }
+  .tb-btn.print  { background:#3b82f6; color:#fff; }
+  .tb-btn.img    { background:#7c3aed; color:#fff; }
+  .divider { width:1px; height:20px; background:#374151; margin:0 4px; }
+  .orient-label { color:#94a3b8; font-size:10px; }
+
+  .page-wrap { padding:24px 24px 20px; max-width:1600px; margin:0 auto; margin-top:48px; }
+
+  .top-header { display:flex; justify-content:space-between; align-items:flex-end;
+    padding-bottom:10px; border-bottom:2.5px solid #1B2B4B; margin-bottom:14px; }
+  .logo { font-size:24px; font-weight:900; color:#1B2B4B; letter-spacing:-1px; }
+  .tagline { font-size:9.5px; color:#9ca3af; margin-top:3px; }
+  .contact { text-align:right; font-size:9.5px; color:#6b7280; line-height:1.8; }
+
+  .title-bar { display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; }
+  .doc-title { font-size:22px; font-weight:900; color:#111827; letter-spacing:-0.8px; }
+  .doc-meta-box { background:#1B2B4B; border-radius:8px; padding:7px 16px;
+    display:flex; gap:20px; align-items:center; }
+  .doc-meta-item { display:flex; flex-direction:column; align-items:center; }
+  .doc-meta-label { font-size:8.5px; color:#93c5fd; font-weight:700; letter-spacing:0.5px; margin-bottom:2px; }
+  .doc-meta-value { font-size:12px; color:#fff; font-weight:700; }
+  .doc-meta-divider { width:1px; height:28px; background:#374151; }
+
+  .kpi-row { display:flex; gap:8px; margin-bottom:14px; }
+  .kpi-card { flex:1; border:1px solid #e5e7eb; border-radius:10px; padding:10px 14px;
+    background:#fff; position:relative; overflow:hidden; box-shadow:0 1px 4px rgba(0,0,0,0.05); }
+  .kpi-card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px;
+    background:#1B2B4B; border-radius:10px 10px 0 0; }
+  .kpi-card.red::before   { background:#dc2626; }
+  .kpi-card.green::before { background:#059669; }
+  .kpi-card.amber::before { background:#d97706; }
+  .kpi-label { font-size:9px; font-weight:700; color:#9ca3af; letter-spacing:0.4px;
+    text-transform:uppercase; margin-bottom:5px; }
+  .kpi-value { font-size:17px; font-weight:900; color:#111827; line-height:1.1; }
+  .kpi-value.red   { color:#dc2626; }
+  .kpi-value.green { color:#059669; }
+  .kpi-value.amber { color:#d97706; }
+  .kpi-sub { font-size:8.5px; color:#d1d5db; margin-top:2px; }
+
+  .section-label { font-size:11px; font-weight:700; color:#1B2B4B;
+    padding-left:8px; border-left:3px solid #1B2B4B; margin-bottom:7px; }
+
+  table { width:100%; border-collapse:collapse; font-size:10px; table-layout:auto; }
+  thead tr { background:#1B2B4B; }
+  thead th { color:#fff; padding:6px 5px; font-size:9.5px; font-weight:700;
+    text-align:center; white-space:nowrap; border:1px solid #263f61; }
+  tbody td { padding:5px 5px; border:1px solid #e5e7eb; color:#111827;
+    font-size:10px; text-align:center; vertical-align:middle; }
+  tr.even td { background:#fff; }
+  tr.odd  td { background:#f8fafc; }
+  td.name { text-align:left; font-weight:700; padding-left:8px; white-space:nowrap; }
+  td.seq  { color:#9ca3af; font-size:9px; width:28px; }
+  td.zero { color:#d1d5db; font-size:9px; }
+  td.settled   { background:#ecfdf5 !important; }
+  td.unsettled { background:#fffbeb !important; }
+  td.settled   .amount { color:#059669; font-weight:700; }
+  td.unsettled .amount { color:#d97706; font-weight:700; }
+  td .sub { font-size:8.5px; color:#9ca3af; margin-top:1px; }
+  td.total { font-weight:900; color:#1B2B4B; text-align:right; padding-right:6px; background:#f1f5f9 !important; }
+  td.settled-total   { font-weight:700; color:#059669; text-align:right; padding-right:6px; }
+  td.unsettled-total { font-weight:700; color:#dc2626; text-align:right; padding-right:6px; }
+
+  tr.grand-total td { background:#1B2B4B !important; color:#fff !important;
+    font-weight:900; border-top:2px solid #0f1f36; }
+  tr.grand-total td.zero { color:#4b6cb7 !important; }
+  .total-cell { }
+  .total-cell div { font-weight:700; }
+  .unsettled-sub { font-size:8.5px; color:#fbbf24; margin-top:1px; }
+  tr.grand-total .unsettled-sub { color:#fde68a; }
+
+  .report-footer { margin-top:12px; display:flex; justify-content:space-between; }
+  .footer-note { font-size:9px; color:#d1d5db; }
+  .footer-right { font-size:9px; color:#9ca3af; text-align:right; line-height:1.8; }
+
+  .legend { display:flex; gap:12px; margin-bottom:8px; align-items:center; }
+  .legend-item { display:flex; align-items:center; gap:4px; font-size:9.5px; color:#6b7280; }
+  .legend-dot { width:10px; height:10px; border-radius:2px; }
+
+  @media print {
+    .toolbar { display:none !important; }
+    body { background:#fff; }
+    .page-wrap { margin-top:0; padding:0; max-width:100%; }
+    table { border:1.5px solid #000 !important; }
+    thead th { border:1px solid #000 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    tbody td { border:1px solid #ccc !important; }
+    td.settled   { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    td.unsettled { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    tr.grand-total td { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    .kpi-card::before { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    .top-header { border-bottom:2px solid #000 !important; }
+  }
+</style>
+</head>
+<body>
+<div class="toolbar" id="toolbar">
+  <span class="toolbar-title">미수금 현황 보고서 — ${periodLabel}</span>
+  <span class="orient-label">용지 방향</span>
+  <button class="tb-btn orient" id="orientBtn" onclick="toggleOrient()">가로형 (현재)</button>
+  <div class="divider"></div>
+  <button class="tb-btn print" onclick="window.print()">인쇄</button>
+  <button class="tb-btn img" onclick="saveImage()">이미지 저장</button>
+</div>
+
+<div class="page-wrap" id="pageWrap">
+  <div class="top-header">
+    <div><div class="logo">RUN25</div><div class="tagline">화물 운송 전문</div></div>
+    <div class="contact">010-5504-1821 &nbsp;|&nbsp; FAX 1533-2525<br>sungwoo0923@nate.com<br>인천 서구 청마로19번길 21 (성주빌딩) 4층</div>
+  </div>
+
+  <div class="title-bar">
+    <div class="doc-title">미 수 금 &nbsp; 현 황 보 고</div>
+    <div class="doc-meta-box">
+      <div class="doc-meta-item"><div class="doc-meta-label">대상연도</div><div class="doc-meta-value">${THIS_YEAR}년</div></div>
+      <div class="doc-meta-divider"></div>
+      <div class="doc-meta-item"><div class="doc-meta-label">조회기간</div><div class="doc-meta-value">${fromIdx}월 ~ ${toIdx}월</div></div>
+      <div class="doc-meta-divider"></div>
+      <div class="doc-meta-item"><div class="doc-meta-label">거래처수</div><div class="doc-meta-value">${reportRows.length}개사</div></div>
+      <div class="doc-meta-divider"></div>
+      <div class="doc-meta-item"><div class="doc-meta-label">출력일</div><div class="doc-meta-value">${printDate}</div></div>
+    </div>
+  </div>
+
+  <div class="kpi-row">
+    <div class="kpi-card">
+      <div class="kpi-label">조회 거래처</div>
+      <div class="kpi-value">${reportRows.length}개사</div>
+      <div class="kpi-sub">데이터 있는 거래처</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">총 청구금액</div>
+      <div class="kpi-value">${grandTotal.toLocaleString()}원</div>
+    </div>
+    <div class="kpi-card green">
+      <div class="kpi-label">정산완료 금액</div>
+      <div class="kpi-value green">${grandSettled.toLocaleString()}원</div>
+      <div class="kpi-sub">${grandTotal > 0 ? ((grandSettled/grandTotal)*100).toFixed(1) : 0}%</div>
+    </div>
+    <div class="kpi-card red">
+      <div class="kpi-label">미수금 합계</div>
+      <div class="kpi-value red">${grandUnsettled.toLocaleString()}원</div>
+      <div class="kpi-sub">${grandTotal > 0 ? ((grandUnsettled/grandTotal)*100).toFixed(1) : 0}%</div>
+    </div>
+    <div class="kpi-card amber">
+      <div class="kpi-label">미수금 거래처</div>
+      <div class="kpi-value amber">${reportRows.filter(r => r.unsettled.length > 0).length}개사</div>
+      <div class="kpi-sub">1개월 이상 미정산</div>
+    </div>
+  </div>
+
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#ecfdf5;border:1px solid #059669"></div>정산완료</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#fffbeb;border:1px solid #d97706"></div>미정산</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#f3f4f6;border:1px solid #ccc"></div>해당없음</div>
+  </div>
+
+  <div class="section-label">거래처별 월별 미수금 현황</div>
+  <table>
+    <thead>
+      <tr>
+        <th style="width:28px">No</th>
+        <th style="min-width:90px">거래처</th>
+        <th style="width:48px">총건수</th>
+        ${monthHeaders}
+        <th style="width:80px">총 청구액</th>
+        <th style="width:72px">정산완료</th>
+        <th style="width:72px">미수금</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${bodyRows}
+      <tr class="grand-total">
+        <td colspan="3" style="text-align:center">합 &nbsp; 계</td>
+        ${totalCells}
+        <td style="text-align:right;padding-right:6px">${grandTotal.toLocaleString()}</td>
+        <td style="text-align:right;padding-right:6px;color:#86efac">${grandSettled.toLocaleString()}</td>
+        <td style="text-align:right;padding-right:6px;color:#fca5a5">${grandUnsettled.toLocaleString()}</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="report-footer">
+    <div class="footer-note">본 보고서는 RUN25 배차관리 시스템에서 자동 생성된 문서입니다.</div>
+    <div class="footer-right">출력일시: ${printDate} &nbsp;|&nbsp; 담당자: 박성우 팀장</div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script>
+  let isLandscape = true;
+  function toggleOrient() {
+    isLandscape = !isLandscape;
+    const style = document.getElementById('orient-style');
+    const btn   = document.getElementById('orientBtn');
+    if (isLandscape) { style.textContent='@page{size:A4 landscape;margin:6mm 8mm;}'; btn.textContent='가로형 (현재)'; }
+    else { style.textContent='@page{size:A4 portrait;margin:8mm 10mm;}'; btn.textContent='세로형 (현재)'; }
+  }
+  function saveImage() {
+    const toolbar = document.getElementById('toolbar');
+    toolbar.style.display = 'none';
+    html2canvas(document.getElementById('pageWrap'), { scale:2, backgroundColor:'#f9fafb', useCORS:true }).then(canvas => {
+      toolbar.style.display = 'flex';
+      const a = document.createElement('a');
+      a.download = '미수금현황_${THIS_YEAR}_${arFromMM}~${arToMM}.png';
+      a.href = canvas.toDataURL('image/png');
+      a.click();
+    });
+  }
+</script>
+</body>
+</html>`;
+
+  const win = window.open("", "_blank", "width=1400,height=900");
+  win.document.write(html);
+  win.document.close();
+  setArReportOpen(false);
+};
   // ── 일괄 정산 처리 ──
 const handleBatchSettle = async (targetStatus) => {
     if (!batchClients.size) return showAlert("거래처를 선택하세요.");
@@ -28170,6 +28508,12 @@ const handleBatchSettle = async (targetStatus) => {
                   <input type="file" accept=".xlsx,.xls,.csv" hidden onChange={handleBankExcelUpload} />
                 </label>
                 <button
+                  onClick={() => setArReportOpen(true)}
+                  className="px-3 py-2 rounded-lg bg-violet-600 text-white text-[13px] font-semibold hover:bg-violet-700 transition"
+                >
+                  미수금 보고서
+                </button>
+                <button
                   onClick={() => { setBatchModalOpen(true); setBatchClients(new Set()); setBatchClientQ(""); }}
                   className="px-3 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition"
                 >
@@ -28363,6 +28707,66 @@ const handleBatchSettle = async (targetStatus) => {
               </div>
             </div>
           </div>
+          {/* 미수금 보고서 기간 선택 */}
+          {arReportOpen && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]"
+              onClick={() => setArReportOpen(false)}>
+              <div className="bg-white rounded-2xl shadow-2xl w-[400px] overflow-hidden"
+                onClick={e => e.stopPropagation()}>
+                <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
+                  <div>
+                    <div className="text-white font-bold text-[15px]">미수금 보고서 출력</div>
+                    <div className="text-white/50 text-[12px] mt-0.5">기간을 선택하고 출력하세요</div>
+                  </div>
+                  <button className="text-white/60 hover:text-white text-xl"
+                    onClick={() => setArReportOpen(false)}>×</button>
+                </div>
+                <div className="p-6 space-y-4">
+                  <div>
+                    <div className="text-[12px] font-bold text-gray-500 mb-2">조회 기간 ({THIS_YEAR}년)</div>
+                    <div className="flex items-center gap-3">
+                      <select
+                        className="flex-1 border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
+                        value={arFromMM} onChange={e => setArFromMM(e.target.value)}>
+                        {Array.from({length:12},(_,i)=>String(i+1).padStart(2,"0")).map(mm=>(
+                          <option key={mm} value={mm}>{parseInt(mm,10)}월</option>
+                        ))}
+                      </select>
+                      <span className="text-gray-400 font-semibold">~</span>
+                      <select
+                        className="flex-1 border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
+                        value={arToMM} onChange={e => setArToMM(e.target.value)}>
+                        {Array.from({length:12},(_,i)=>String(i+1).padStart(2,"0")).map(mm=>(
+                          <option key={mm} value={mm}>{parseInt(mm,10)}월</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="mt-2 flex gap-2">
+                      {[["상반기","01","06"],["하반기","07","12"],["전체","01","12"]].map(([label,f,t])=>(
+                        <button key={label}
+                          className="flex-1 py-1.5 rounded-lg bg-gray-100 text-gray-600 text-[12px] font-semibold hover:bg-gray-200 transition"
+                          onClick={() => { setArFromMM(f); setArToMM(t); }}>
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="text-[12px] text-gray-400 bg-gray-50 rounded-lg px-4 py-3">
+                    거래처 <b className="text-[#1B2B4B]">{clientOptions8.length}개사</b> 전체 대상<br/>
+                    선택 기간의 미정산/정산완료 금액이 월별로 표시됩니다
+                  </div>
+                </div>
+                <div className="px-6 pb-5 flex gap-3">
+                  <button className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 font-semibold text-[13px] hover:bg-gray-200 transition"
+                    onClick={() => setArReportOpen(false)}>취소</button>
+                  <button className="flex-1 py-2.5 rounded-xl bg-violet-600 text-white font-bold text-[13px] hover:bg-violet-700 transition"
+                    onClick={handleARReport}>
+                    보고서 출력
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 {/* 일괄 정산 로딩 */}
           {batchLoading && (
             <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999999]">
