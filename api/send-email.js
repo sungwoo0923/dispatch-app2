@@ -12,19 +12,19 @@ export default async function handler(req, res) {
 
   try {
     const transporter = nodemailer.createTransport({
-      host: "smtp.daum.net",
+      host: "smtp.naver.com",
       port: 465,
       secure: true,
       auth: {
-        user: "r15332525@daum.net",
-        pass: "run25run25",
+        user: "tjddnqkf@naver.com",
+        pass: "tjddnekdzz1004",
       },
       tls: { rejectUnauthorized: false },
       connectionTimeout: 15000,
     });
 
     await transporter.sendMail({
-      from: '"RUN25 배차팀" <r15332525@daum.net>',
+      from: '"RUN25 배차팀" <tjddnqkf@naver.com>',
       to,
       subject,
       html: html || subject,
