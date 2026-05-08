@@ -28598,7 +28598,7 @@ ${COMPANY_PRINT.contact}`}
                           <p style="font-size:12px;color:#9ca3af">${COMPANY_PRINT.name} | ${COMPANY_PRINT.contact}</p>
                         </div>`;
                       try {
-                        const res = await fetch("/api/send-email", {
+                        const res = await fetch("/api/send-email.cjs", {
                           method: "POST",
                           headers: { "Content-Type": "application/json" },
                           body: JSON.stringify({ to: emailTo, subject, html: bodyHtml }),
@@ -28608,7 +28608,7 @@ ${COMPANY_PRINT.contact}`}
                           setEmailModalOpen(false);
                         } else {
                           const err = await res.json();
-                          showAlert(`발송 실패: ${err.error || "오류 발생"}`);
+                          showAlert(`발송 실패: ${err.error || "오류 발생"}\n코드: ${err.code || ""}\n${err.detail || ""}`);
                         }
                       } catch (e) {
                         showAlert("네트워크 오류로 발송 실패");

@@ -1,7 +1,7 @@
-// api/send-email.js
-import nodemailer from "nodemailer";
+// api/send-email.cjs
+const nodemailer = require("nodemailer");
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).end();
 
   const { to, subject, html } = req.body;
@@ -30,11 +30,7 @@ export default async function handler(req, res) {
     });
     res.status(200).json({ ok: true });
   } catch (e) {
-    console.error("이메일 오류:", e.message, e.code);
-    res.status(500).json({
-      error: e.message,
-      code: e.code,
-      detail: e.responseCode || ""
-    });
+    console.error("이메일 오류:", e.message);
+    res.status(500).json({ error: e.message, code: e.code || "" });
   }
-}
+};
