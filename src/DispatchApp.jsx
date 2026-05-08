@@ -27443,6 +27443,9 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
 
   // ★ 입금 엑셀 업로드 → 자동 매칭 → 정산완료
   const [bankMatchResult, setBankMatchResult] = useState(null);
+  const [emailModalOpen, setEmailModalOpen] = useState(false);
+  const [emailTo, setEmailTo] = useState("");
+  const [emailSending, setEmailSending] = useState(false);
 // ── 일괄 정산 모달 상태 ──
   const [batchModalOpen, setBatchModalOpen] = useState(false);
   const [batchClients, setBatchClients] = useState(new Set());   // 선택된 거래처
@@ -27453,6 +27456,27 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
      const [arReportOpen, setArReportOpen] = useState(false);
   const [arFromMM, setArFromMM] = useState("01");
   const [arToMM,   setArToMM]   = useState("12");
+  // ── 일괄정산 모달용 사전 계산 (렌더마다 재계산 방지)
+  const batchUnsettledMap = useMemo(() => {
+    const map = new Map();
+    const allMonths = Array.from({length:12},(_,i)=>`${THIS_YEAR}-${String(i+1).padStart(2,"0")}`);
+    clientOptions8.forEach(name => {
+      const count = allMonths.filter(ym => {
+        const rows2 = (dispatchData||[]).filter(r=>
+          (r.배차상태||"")==="배차완료" && (r.거래처명||"")===name &&
+          String(r.상차일||"").startsWith(ym)
+        );
+        return rows2.length > 0 && !rows2.every(r=>r.정산상태?.[ym]==="정산완료");
+      }).length;
+      map.set(name, count);
+    });
+    return map;
+  }, [dispatchData, clientOptions8, THIS_YEAR]);
+
+  // 미수금 있는 업체만
+  const batchEligibleClients = useMemo(() =>
+    clientOptions8.filter(name => (batchUnsettledMap.get(name)||0) > 0),
+  [clientOptions8, batchUnsettledMap]);
   // ===================== 미수금 보고서 출력 =====================
 const handleARReport = () => {
   const fromIdx = parseInt(arFromMM, 10);
@@ -27820,27 +27844,31 @@ const handleBatchSettle = async (targetStatus) => {
       }
     }
 
-   // 문서당 1번만 Firestore 쓰기 — dispatch/orders 둘 다 확인
-    let totalDocs = 0;
-    for (const [id, patch] of docPatchMap) {
-      try {
-        // patchDispatch와 동일하게 dispatch 먼저, 없으면 orders
-        let ref = doc(db, "dispatch", id);
-        let snap = await getDoc(ref);
-        if (!snap.exists()) {
-          ref = doc(db, "orders", id);
-          snap = await getDoc(ref);
-        }
-        if (!snap.exists()) {
-          console.error("일괄정산: 문서 없음", id);
-          continue;
-        }
-        await updateDoc(ref, patch);
-        totalDocs++;
-      } catch (e) {
-        console.error("일괄정산 Firestore 오류:", id, e);
-      }
-    }
+   // ★ dispatchData의 __col로 컬렉션 판별 (getDoc 불필요)
+    const docColMap = new Map();
+    allData.forEach(r => {
+      if (r._id && r.__col) docColMap.set(r._id, r.__col);
+    });
+
+    // ★ 모든 쓰기를 동시에 실행 (Promise.all)
+    const writePromises = Array.from(docPatchMap.entries()).map(([id, patch]) => {
+      const coll = docColMap.get(id) || "dispatch";
+      return updateDoc(doc(db, coll, id), patch)
+        .then(() => true)
+        .catch(e => {
+          // fallback: 반대 컬렉션 시도
+          const fallback = coll === "dispatch" ? "orders" : "dispatch";
+          return updateDoc(doc(db, fallback, id), patch)
+            .then(() => true)
+            .catch(e2 => {
+              console.error("일괄정산 오류:", id, e2);
+              return false;
+            });
+        });
+    });
+
+    const results = await Promise.all(writePromises);
+    const totalDocs = results.filter(Boolean).length;
 
     // 로컬 반영
     setDispatchData(prev => prev.map(d => {
@@ -28127,6 +28155,17 @@ const handleBatchSettle = async (targetStatus) => {
                 <button onClick={downloadInvoiceExcel} className="px-3 py-2 rounded-lg bg-emerald-600 text-white text-[13px] font-semibold hover:bg-emerald-700 transition">엑셀</button>
                 <button onClick={savePDF} className="px-3 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition">PDF</button>
                 <button onClick={handlePrint} className="px-3 py-2 rounded-lg bg-violet-600 text-white text-[13px] font-semibold hover:bg-violet-700 transition">🖨 인쇄</button>
+                <button
+                  onClick={() => {
+                    if (!searched || !rowsInvoice.length) return showAlert("먼저 조회를 실행하세요.");
+                    const found = (clients||[]).find(c=>c.거래처명===client);
+                    setEmailTo(found?.연락처이메일 || found?.이메일 || "");
+                    setEmailModalOpen(true);
+                  }}
+                  className="px-3 py-2 rounded-lg bg-sky-600 text-white text-[13px] font-semibold hover:bg-sky-700 transition"
+                >
+                  이메일 발송
+                </button>
                 <button onClick={() => { setEditInfo({ ...cInfo }); setShowEdit(true); }} className="px-3 py-2 rounded-lg border border-[#1B2B4B] text-[#1B2B4B] text-[13px] font-semibold hover:bg-[#1B2B4B] hover:text-white transition">거래처 정보</button>
               </div>
             </div>
@@ -28425,7 +28464,91 @@ const handleBatchSettle = async (targetStatus) => {
               </div>
             </div>
           )}
+{/* 이메일 발송 모달 */}
+          {emailModalOpen && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]"
+              onClick={() => setEmailModalOpen(false)}>
+              <div className="bg-white rounded-2xl shadow-2xl w-[520px] overflow-hidden"
+                onClick={e => e.stopPropagation()}>
+                <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
+                  <div>
+                    <div className="text-white font-bold text-[15px]">거래명세서 이메일 발송</div>
+                    <div className="text-white/50 text-[12px] mt-0.5">{client} — {mapped.length}건 / {won(합계공급가+합계세액)}원</div>
+                  </div>
+                  <button className="text-white/60 hover:text-white text-xl" onClick={() => setEmailModalOpen(false)}>×</button>
+                </div>
+                <div className="p-6 space-y-4">
+                  <div>
+                    <label className="text-[12px] font-bold text-gray-500 mb-1 block">발신 계정</label>
+                    <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-[13px] text-gray-600">
+                      r15332525@daum.net
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[12px] font-bold text-gray-500 mb-1 block">수신 이메일</label>
+                    <input
+                      className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B]"
+                      placeholder="거래처 이메일 입력"
+                      value={emailTo}
+                      onChange={e => setEmailTo(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[12px] font-bold text-gray-500 mb-1 block">발송 내용 미리보기</label>
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-[12px] text-gray-600 leading-relaxed whitespace-pre-line max-h-[160px] overflow-y-auto">
+{`안녕하세요, ${client} 담당자님.
 
+${COMPANY_PRINT.name}입니다.
+
+${start||""}~${end||""} 기간 거래명세서를 발송드립니다.
+
+총 ${mapped.length}건
+공급가액: ${won(합계공급가)}원
+부가세: ${won(합계세액)}원
+합계: ${won(합계공급가+합계세액)}원
+
+입금계좌: ${COMPANY_PRINT.bank}
+
+확인 부탁드립니다.
+감사합니다.
+
+${COMPANY_PRINT.name}
+${COMPANY_PRINT.contact}`}
+                    </div>
+                  </div>
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-[12px] text-amber-700">
+                    발송 버튼 클릭 시 다음메일 작성 창이 열립니다. 거래명세서 PDF를 첨부하려면 인쇄 버튼으로 PDF 저장 후 첨부하세요.
+                  </div>
+                </div>
+                <div className="px-6 pb-5 flex gap-3">
+                  <button
+                    className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 font-semibold text-[13px] hover:bg-gray-200 transition"
+                    onClick={() => setEmailModalOpen(false)}>취소</button>
+                  <button
+                    className="flex-1 py-2.5 rounded-xl bg-gray-200 text-gray-700 font-semibold text-[13px] hover:bg-gray-300 transition"
+                    onClick={() => {
+                      const body = `안녕하세요, ${client} 담당자님.\n\n${COMPANY_PRINT.name}입니다.\n\n${start||""}~${end||""} 기간 거래명세서를 발송드립니다.\n\n총 ${mapped.length}건\n공급가액: ${won(합계공급가)}원\n부가세: ${won(합계세액)}원\n합계: ${won(합계공급가+합계세액)}원\n\n입금계좌: ${COMPANY_PRINT.bank}\n\n확인 부탁드립니다.\n감사합니다.\n\n${COMPANY_PRINT.name}\n${COMPANY_PRINT.contact}`;
+                      navigator.clipboard.writeText(body);
+                      showAlert("내용이 클립보드에 복사되었습니다.");
+                    }}>내용 복사</button>
+                  <button
+                    disabled={!emailTo.trim()}
+                    className={`flex-1 py-2.5 rounded-xl font-bold text-[13px] transition ${emailTo.trim() ? "bg-sky-600 hover:bg-sky-700 text-white" : "bg-gray-200 text-gray-400 cursor-not-allowed"}`}
+                    onClick={() => {
+                      if (!emailTo.trim()) return;
+                      const subject = `[거래명세서] ${client} ${start||""}~${end||""}`;
+                      const body = `안녕하세요, ${client} 담당자님.%0A%0A${COMPANY_PRINT.name}입니다.%0A%0A${start||""}~${end||""} 기간 거래명세서를 발송드립니다.%0A%0A총 ${mapped.length}건%0A공급가액: ${won(합계공급가)}원%0A부가세: ${won(합계세액)}원%0A합계: ${won(합계공급가+합계세액)}원%0A%0A입금계좌: ${COMPANY_PRINT.bank}%0A%0A감사합니다.%0A%0A${COMPANY_PRINT.name}`;
+                      // 다음메일 compose URL
+                      const daumUrl = `https://mail.daum.net/write?to=${encodeURIComponent(emailTo)}&subject=${encodeURIComponent(subject)}&body=${body}`;
+                      window.open(daumUrl, "_blank", "width=900,height=700");
+                      setEmailModalOpen(false);
+                    }}>
+                    다음메일로 발송
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
           {/* 거래처 정보 수정 팝업 */}
           {showEdit && (
             <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
@@ -28851,15 +28974,16 @@ const handleBatchSettle = async (targetStatus) => {
                   <div className="flex items-center gap-3 mb-3">
                     <div className="text-[12px] font-bold text-gray-500">
                       거래처 선택
-                      <span className="ml-2 text-[#1B2B4B]">({batchClients.size}/{clientOptions8.length})</span>
+                      <span className="ml-2 text-[#1B2B4B]">({batchClients.size}/{batchEligibleClients.length})</span>
+                      <span className="ml-1 text-gray-400 font-normal">(미수금 있는 업체만)</span>
                     </div>
                     <button
                       className="ml-auto px-3 py-1 rounded-lg border border-[#1B2B4B] text-[#1B2B4B] text-[12px] font-bold hover:bg-[#1B2B4B] hover:text-white transition"
                       onClick={() => {
-                        if (batchClients.size === clientOptions8.length) setBatchClients(new Set());
-                        else setBatchClients(new Set(clientOptions8));
+                        if (batchClients.size === batchEligibleClients.length) setBatchClients(new Set());
+                        else setBatchClients(new Set(batchEligibleClients));
                       }}>
-                      {batchClients.size === clientOptions8.length ? "전체 해제" : "전체 선택"}
+                      {batchClients.size === batchEligibleClients.length ? "전체 해제" : "전체 선택"}
                     </button>
                   </div>
                   <input
@@ -28873,16 +28997,11 @@ const handleBatchSettle = async (targetStatus) => {
                 {/* 거래처 목록 */}
                 <div className="flex-1 overflow-y-auto px-6 pb-4">
                   <div className="grid grid-cols-2 gap-2">
-                    {clientOptions8
+                    {batchEligibleClients
                       .filter(name => !batchClientQ.trim() || name.toLowerCase().includes(batchClientQ.toLowerCase()))
                       .map(name => {
                         const checked = batchClients.has(name);
-                        // 해당 거래처 미정산 월수
-                        const unsettledCount = Array.from({length:12},(_,i)=>`${THIS_YEAR}-${String(i+1).padStart(2,"0")}`)
-                          .filter(ym => {
-                            const rows2 = (dispatchData||[]).filter(r=>r.배차상태==="배차완료"&&r.거래처명===name&&String(r.상차일||"").startsWith(ym));
-                            return rows2.length > 0 && !rows2.every(r=>r.정산상태?.[ym]==="정산완료");
-                          }).length;
+                        const unsettledCount = batchUnsettledMap.get(name) || 0;
                         return (
                           <div key={name}
                             className={`flex items-center gap-3 px-4 py-3 rounded-xl border-2 cursor-pointer transition select-none ${
@@ -28911,7 +29030,7 @@ const handleBatchSettle = async (targetStatus) => {
                           </div>
                         );
                       })}
-                    {clientOptions8.filter(name => !batchClientQ.trim() || name.toLowerCase().includes(batchClientQ.toLowerCase())).length === 0 && (
+                    {batchEligibleClients.filter(name => !batchClientQ.trim() || name.toLowerCase().includes(batchClientQ.toLowerCase())).length === 0 && (
                       <div className="col-span-2 text-center text-gray-400 text-[13px] py-8">검색 결과가 없습니다</div>
                     )}
                   </div>
@@ -28922,7 +29041,7 @@ const handleBatchSettle = async (targetStatus) => {
                   <div className="flex items-center gap-3">
                     <div className="text-[12px] text-gray-500 font-semibold mr-auto">
                       {batchClients.size > 0
-                        ? `${batchClients.size}개 거래처 × ${parseInt(batchToMM,10)-parseInt(batchFromMM,10)+1}개월 선택됨`
+                        ? `${batchClients.size}개 거래처 × ${parseInt(batchToMM,10)-parseInt(batchFromMM,10)+1}개월 선택됨 (전체 ${batchEligibleClients.length}개 중)`
                         : "거래처를 선택하세요"}
                     </div>
                     <button
