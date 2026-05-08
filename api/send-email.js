@@ -17,7 +17,7 @@ export default async function handler(req, res) {
       secure: true,
       auth: {
         user: "tjddnqkf@naver.com",
-        pass: "tjddnekdzz1004",
+        pass: "U4CWZJVUKDXN",
       },
       tls: { rejectUnauthorized: false },
       connectionTimeout: 15000,
