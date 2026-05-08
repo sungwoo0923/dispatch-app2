@@ -1,7 +1,7 @@
 // api/send-email.js
-const nodemailer = require("nodemailer");
+import nodemailer from "nodemailer";
 
-module.exports = async function handler(req, res) {
+export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).end();
 
   const { to, subject, html } = req.body;
@@ -15,9 +15,13 @@ module.exports = async function handler(req, res) {
       user: "r15332525@daum.net",
       pass: "run25run25",
     },
+    tls: { rejectUnauthorized: false },
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
   });
 
   try {
+    await transporter.verify();
     await transporter.sendMail({
       from: '"RUN25 배차팀" <r15332525@daum.net>',
       to,
@@ -26,7 +30,11 @@ module.exports = async function handler(req, res) {
     });
     res.status(200).json({ ok: true });
   } catch (e) {
-    console.error("이메일 발송 오류:", e.message);
-    res.status(500).json({ error: e.message });
+    console.error("이메일 오류:", e.message, e.code);
+    res.status(500).json({
+      error: e.message,
+      code: e.code,
+      detail: e.responseCode || ""
+    });
   }
-};
+}
