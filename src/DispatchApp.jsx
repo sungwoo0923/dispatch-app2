@@ -26902,17 +26902,26 @@ function ClientSettlement({ dispatchData, setDispatchData, clients = [], setClie
 const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
   try {
     if (!id || !yyyymm) return;
-    const coll = (typeof COLL !== "undefined" && COLL?.dispatch) ? COLL.dispatch : "dispatch";
+
     const patch = {};
     patch[`정산상태.${yyyymm}`] = status;
-    patch[`정산일.${yyyymm}`] = dateStr || "";
+    patch[`정산일.${yyyymm}`]   = dateStr || "";
 
-    // ★ Firestore 업데이트
-    if (typeof db !== "undefined" && db && typeof updateDoc === "function" && typeof doc === "function") {
-      await updateDoc(doc(db, coll, id), patch);
-    } else if (typeof db !== "undefined" && db && typeof setDoc === "function" && typeof doc === "function") {
-      await setDoc(doc(db, coll, id), patch, { merge: true });
+    // ★ patchDispatch와 동일하게 dispatch 먼저, 없으면 orders 확인
+    let ref = doc(db, "dispatch", id);
+    let snap = await getDoc(ref);
+
+    if (!snap.exists()) {
+      ref = doc(db, "orders", id);
+      snap = await getDoc(ref);
     }
+
+    if (!snap.exists()) {
+      console.error("patchMonthOnDoc: 문서 없음", id);
+      return;
+    }
+
+    await updateDoc(ref, patch);
   } catch (e) {
     console.error("patchMonthOnDoc error:", e);
   }
@@ -27514,10 +27523,7 @@ const handleARReport = () => {
       const d = r.mData[m];
       if (!d || d.count === 0) return `<td class="zero">-</td>`;
       const cls = d.status === "정산완료" ? "settled" : "unsettled";
-      return `<td class="${cls}">
-        <div class="amount">${d.charge.toLocaleString()}</div>
-        <div class="sub">${d.count}건</div>
-      </td>`;
+      return `<td class="${cls}"><span class="amount">${d.charge.toLocaleString()}</span> <span class="sub">(${d.count}건)</span></td>`;
     }).join("");
 
     const unsettledAmt = months.reduce((s, m) =>
@@ -27539,11 +27545,8 @@ const handleARReport = () => {
     const total = reportRows.reduce((s, r) => s + (r.mData[m]?.charge || 0), 0);
     const unsett = reportRows.reduce((s, r) =>
       s + (r.mData[m]?.status === "미정산" ? r.mData[m].charge : 0), 0);
-    if (total === 0) return `<td class="zero">-</td>`;
-    return `<td class="total-cell">
-      <div>${total.toLocaleString()}</div>
-      ${unsett > 0 ? `<div class="unsettled-sub">미 ${unsett.toLocaleString()}</div>` : ""}
-    </td>`;
+   if (total === 0) return `<td class="zero">-</td>`;
+    return `<td class="total-cell"><span>${total.toLocaleString()}</span>${unsett > 0 ? ` <span class="unsettled-sub">(미 ${unsett.toLocaleString()})</span>` : ""}</td>`;
   }).join("");
 
   const html = `<!DOCTYPE html>
@@ -27786,20 +27789,18 @@ const handleBatchSettle = async (targetStatus) => {
     const toIdx   = parseInt(batchToMM,   10);
     if (fromIdx > toIdx) return showAlert("시작월이 종료월보다 클 수 없습니다.");
 
- // ★ 비동기 실행 전에 현재 값을 스냅샷으로 캡처
     const clientSnapshot = new Set(batchClients);
-
     setBatchLoading(true);
 
     const months = Array.from({ length: toIdx - fromIdx + 1 }, (_, i) =>
       `${THIS_YEAR}-${String(fromIdx + i).padStart(2, "0")}`
     );
-
     const allData = Array.isArray(dispatchData) ? [...dispatchData] : [];
     const dateStr = targetStatus === "정산완료" ? todayStr8() : "";
+    const coll = (typeof COLL !== "undefined" && COLL?.dispatch) ? COLL.dispatch : "dispatch";
 
-    let totalDocs = 0;
-    const patchedIds = new Set();
+    // ★ 핵심: 문서 ID별로 모든 달 업데이트를 먼저 모은 뒤 1번만 씀
+    const docPatchMap = new Map(); // id → { "정산상태.2026-01": "정산완료", ... }
 
     for (const clientName of clientSnapshot) {
       const clientRows = allData.filter(
@@ -27811,18 +27812,37 @@ const handleBatchSettle = async (targetStatus) => {
         );
         for (const r of targetRows2) {
           if (!r._id) continue;
-          try {
-            await patchMonthOnDoc(r._id, yyyymm, targetStatus, dateStr);
-            patchedIds.add(r._id);
-            totalDocs++;
-          } catch (e) {
-            console.error("patchMonthOnDoc 오류:", r._id, yyyymm, e);
-          }
+          if (!docPatchMap.has(r._id)) docPatchMap.set(r._id, {});
+          const p = docPatchMap.get(r._id);
+          p[`정산상태.${yyyymm}`] = targetStatus;
+          p[`정산일.${yyyymm}`]   = dateStr;
         }
       }
     }
 
-    // 로컬 반영 — Firestore 완료 후 실행
+   // 문서당 1번만 Firestore 쓰기 — dispatch/orders 둘 다 확인
+    let totalDocs = 0;
+    for (const [id, patch] of docPatchMap) {
+      try {
+        // patchDispatch와 동일하게 dispatch 먼저, 없으면 orders
+        let ref = doc(db, "dispatch", id);
+        let snap = await getDoc(ref);
+        if (!snap.exists()) {
+          ref = doc(db, "orders", id);
+          snap = await getDoc(ref);
+        }
+        if (!snap.exists()) {
+          console.error("일괄정산: 문서 없음", id);
+          continue;
+        }
+        await updateDoc(ref, patch);
+        totalDocs++;
+      } catch (e) {
+        console.error("일괄정산 Firestore 오류:", id, e);
+      }
+    }
+
+    // 로컬 반영
     setDispatchData(prev => prev.map(d => {
       if (!clientSnapshot.has(d.거래처명 || "")) return d;
       const oldStatus = (d.정산상태 && typeof d.정산상태 === "object") ? { ...d.정산상태 } : {};
@@ -27835,8 +27855,9 @@ const handleBatchSettle = async (targetStatus) => {
       }
       return { ...d, 정산상태: oldStatus, 정산일: oldDate };
     }));
+
     setBatchLoading(false);
-    showAlert(`${batchClients.size}개 거래처 / ${months.length}개월 → ${targetStatus} (총 ${totalDocs}건)`);
+    showAlert(`${batchClients.size}개 거래처 / ${months.length}개월 → ${targetStatus} (총 ${totalDocs}건 문서 저장)`);
     setBatchModalOpen(false);
     setBatchClients(new Set());
   };
