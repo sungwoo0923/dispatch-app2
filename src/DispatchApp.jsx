@@ -592,6 +592,7 @@ const patchDispatch = async (_id, patch) => {
   await updateDoc(ref, {
     ...cleanPatch,
     작성자: auth.currentUser?.email || "",
+    updatedAt: Date.now(),
     history: [...historyArr, ...histories],
   });
 };
@@ -1007,7 +1008,7 @@ function CustomAlert({ message, onClose }) {
 
   if (!message) return null;
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999999]">
       <div className="bg-[#1e2530] border border-gray-600 rounded-xl shadow-2xl p-6 w-[320px] text-center">
         <p className="text-white text-[15px] mb-5 whitespace-pre-line">{message}</p>
         <button
@@ -12051,7 +12052,17 @@ setDriverConfirmRowId(null);
 if (sortKey) {
   data.sort(compareBy(sortKey, sortDir));
 } else {
-  data = sortDispatchRows(data); // ✅ 기본정렬에서만 취소 맨 아래
+  data = sortDispatchRows(data);
+  // ★ updatedAt 있으면 최신 수정/등록 행을 같은 상태 그룹 내 최상단으로
+  data.sort((a, b) => {
+    const statusOrder = { 배차완료: 0, 배차중: 1, 취소: 2 };
+    const sa = statusOrder[a.배차상태] ?? 1;
+    const sb = statusOrder[b.배차상태] ?? 1;
+    if (sa !== sb) return sa - sb;
+    const ta = Number(a.updatedAt || a.createdAt || 0);
+    const tb = Number(b.updatedAt || b.createdAt || 0);
+    return tb - ta; // 최신 수정이 위로
+  });
 }
 
     return data;
@@ -26329,8 +26340,8 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
             <div className="flex gap-2 px-6 pb-6">
               <button onClick={() => { setNewDriverPopupOpen(false); setNewDriverData({ 이름: "", 전화번호: "", 차량번호: "" }); }} className="flex-1 py-2.5 rounded-lg border border-gray-200 text-[13px] font-semibold hover:bg-gray-50 transition">취소</button>
               <button onClick={async () => {
-                if (!newDriverData.이름.trim()) { showAlert("기사명을 입력하세요."); return; }
-                if (!newDriverData.전화번호.trim()) { showAlert("전화번호를 입력하세요."); return; }
+                if (!newDriverData.이름.trim()) { showToast("기사명을 입력하세요.", "err"); return; }
+                if (!newDriverData.전화번호.trim()) { showToast("전화번호를 입력하세요.", "err"); return; }
                 try {
                   if (typeof upsertDriver === "function") {
                     await upsertDriver({ 차량번호: newDriverData.차량번호, 이름: newDriverData.이름, 전화번호: newDriverData.전화번호, createdAt: Date.now() });
@@ -26338,10 +26349,10 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                     await setDoc(doc(db, "drivers", crypto.randomUUID()), { 차량번호: newDriverData.차량번호, 이름: newDriverData.이름, 전화번호: newDriverData.전화번호, createdAt: Date.now() });
                   }
                   setCopyTarget(prev => ({ ...prev, 이름: newDriverData.이름, 전화번호: formatPhone(newDriverData.전화번호), 배차상태: "배차완료" }));
-                  showAlert("✅ 기사 등록 완료");
+                  showToast("기사 등록 완료");
                   setNewDriverPopupOpen(false);
                   setNewDriverData({ 이름: "", 전화번호: "", 차량번호: "" });
-                } catch (err) { console.error(err); showAlert("등록 중 오류 발생"); }
+                } catch (err) { console.error(err); showToast("등록 중 오류 발생", "err"); }
               }} className="flex-1 py-2.5 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition">저장</button>
             </div>
           </div>
@@ -26422,11 +26433,11 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                 <div className="flex gap-2 items-center">
                   <button
                     onClick={async () => {
-                      if (!copyTarget?._id) { showAlert("수정할 오더 ID가 없습니다."); return; }
+                      if (!copyTarget?._id) { showToast("수정할 오더 ID가 없습니다.", "err"); return; }
                       const finalCargo = copyTarget.화물타입 ? `${copyTarget.화물수량 || ""}${copyTarget.화물타입}` : (copyTarget.화물수량 || "");
                       const payload = { ...copyTarget, 화물내용: finalCargo, updatedAt: Date.now() };
                       await patchDispatch(copyTarget._id, payload);
-                      showAlert("오더 수정 완료");
+                      showToast("오더 수정 완료");
                       setCopyPanelOpen(false);
                     }}
                     className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-[13px] font-bold hover:bg-emerald-700 transition"
@@ -26435,12 +26446,12 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                   </button>
                   <button
                     onClick={async () => {
-                      if (!copyTarget) { showAlert("복사할 데이터가 없습니다."); return; }
+                      if (!copyTarget) { showToast("복사할 데이터가 없습니다.", "err"); return; }
                       const finalCargo = copyTarget.화물타입 ? `${copyTarget.화물수량 || ""}${copyTarget.화물타입}` : (copyTarget.화물수량 || "");
                       const payload = { ...copyTarget, 화물내용: finalCargo, createdAt: Date.now(), updatedAt: Date.now(), 배차상태: copyTarget?.차량번호?.trim() ? "배차완료" : "배차중", 업체전달상태: "미전달" };
                       delete payload._id;
                       await setDoc(doc(db, copyTarget.__col || "orders", crypto.randomUUID()), payload);
-                      showAlert("복사 등록 완료");
+                      showToast("복사 등록 완료");
                       setCopyPanelOpen(false);
                     }}
                     className="px-4 py-2 bg-[#1B2B4B] text-white rounded-lg text-[13px] font-bold hover:bg-[#243a60] transition"
@@ -27301,16 +27312,25 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
   );
   const clearSel = () => setSelectedMonths(new Set());
 
-  const monthRowsRaw = useMemo(() => {
+const monthRowsRaw = useMemo(() => {
     if (!selClient) return [];
     const list = Array.isArray(dispatchData) ? dispatchData : [];
     const base = list.filter(r => (r.배차상태||"") === "배차완료" && (r.거래처명||"") === selClient);
+    const nowMM = new Date().getMonth() + 1; // 현재 월 (1~12)
+    const currentYYYYMM = `${THIS_YEAR}-${String(nowMM).padStart(2,"0")}`;
+
     return Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, "0")).map(mm => {
       const yyyymm = `${THIS_YEAR}-${mm}`;
       const rows = base.filter(r => String(r.상차일||"").startsWith(yyyymm));
       const total = rows.reduce((s, r) => s + toInt(r.청구운임), 0);
       const allDone = rows.length > 0 && rows.every(r => r.정산상태?.[yyyymm] === "정산완료");
-      const status = allDone ? "정산완료" : "미정산";
+
+      // ★ 현재월 이상은 "진행중", 과거만 "미정산"
+      let status;
+      if (allDone) status = "정산완료";
+      else if (yyyymm >= currentYYYYMM) status = "진행중";
+      else status = "미정산";
+
       const dates = rows.map(r => r.정산일?.[yyyymm]).filter(Boolean).sort();
       return { yyyymm, mm, 거래처명: selClient, 건수: rows.length, 총청구금액: total, 정산상태: status, 정산일: dates.at(-1)||"", _rows: rows };
     });
@@ -27459,7 +27479,11 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
   // ── 일괄정산 모달용 사전 계산 (렌더마다 재계산 방지)
   const batchUnsettledMap = useMemo(() => {
     const map = new Map();
-    const allMonths = Array.from({length:12},(_,i)=>`${THIS_YEAR}-${String(i+1).padStart(2,"0")}`);
+    const nowMM = new Date().getMonth() + 1;
+    const currentYYYYMM = `${THIS_YEAR}-${String(nowMM).padStart(2,"0")}`;
+    // ★ 현재월 미만(과거)만 미수금 계산
+    const allMonths = Array.from({length:12},(_,i)=>`${THIS_YEAR}-${String(i+1).padStart(2,"0")}`)
+      .filter(ym => ym < currentYYYYMM);
     clientOptions8.forEach(name => {
       const count = allMonths.filter(ym => {
         const rows2 = (dispatchData||[]).filter(r=>
@@ -27490,35 +27514,38 @@ const handleARReport = () => {
 
   // 거래처별 월별 집계
   const companyMap = new Map();
-  clientOptions8.forEach(name => companyMap.set(name, {}));
+  // ★ 기본거래처(clients)에 등록된 업체만 대상
+  const basicClientNames = new Set(
+    (clients || []).map(c => c.거래처명).filter(Boolean)
+  );
+  basicClientNames.forEach(name => companyMap.set(name, {}));
 
-  allData
-    .filter(r => (r.배차상태 || "") === "배차완료")
-    .forEach(r => {
-      const name = r.거래처명 || "";
-      if (!name) return;
-      const ym = String(r.상차일 || "").slice(0, 7);
-      if (!months.includes(ym)) return;
-      if (!companyMap.has(name)) companyMap.set(name, {});
-      const entry = companyMap.get(name);
-      if (!entry[ym]) entry[ym] = { charge: 0, count: 0, status: "미정산" };
-      entry[ym].charge += toInt(r.청구운임);
-      entry[ym].count  += 1;
-      const settled = r.정산상태?.[ym] === "정산완료";
-      if (!settled) entry[ym].status = "미정산";
-    });
+  const completedData = allData.filter(r => (r.배차상태 || "") === "배차완료");
 
-  // 정산상태 재계산 (allDone 방식)
-  allData
-    .filter(r => (r.배차상태 || "") === "배차완료")
-    .forEach(r => {
-      const name = r.거래처명 || "";
-      const ym = String(r.상차일 || "").slice(0, 7);
-      if (!months.includes(ym) || !companyMap.has(name)) return;
-      const entry = companyMap.get(name);
-      if (!entry[ym]) return;
-      if (r.정산상태?.[ym] !== "정산완료") entry[ym].status = "미정산";
-    });
+  // 1단계: 금액/건수 집계
+  completedData.forEach(r => {
+    const name = r.거래처명 || "";
+    if (!name) return;
+    const ym = String(r.상차일 || "").slice(0, 7);
+    if (!months.includes(ym)) return;
+    if (!companyMap.has(name)) companyMap.set(name, {});
+    const entry = companyMap.get(name);
+    if (!entry[ym]) entry[ym] = { charge: 0, count: 0, status: "미정산" };
+    entry[ym].charge += toInt(r.청구운임);
+    entry[ym].count  += 1;
+  });
+
+  // 2단계: 정산상태 — 해당 월 모든 행이 완료여야 "정산완료"
+  for (const [name, mData] of companyMap) {
+    for (const ym of months) {
+      if (!mData[ym]) continue;
+      const monthRows3 = completedData.filter(r =>
+        (r.거래처명||"") === name && String(r.상차일||"").startsWith(ym)
+      );
+      mData[ym].status = (monthRows3.length > 0 && monthRows3.every(r => r.정산상태?.[ym] === "정산완료"))
+        ? "정산완료" : "미정산";
+    }
+  }
 
   // 데이터 있는 업체만
   const reportRows = Array.from(companyMap.entries())
@@ -27545,9 +27572,12 @@ const handleARReport = () => {
   const bodyRows = reportRows.map((r, idx) => {
     const cells = months.map(m => {
       const d = r.mData[m];
-      if (!d || d.count === 0) return `<td class="zero">-</td>`;
+ if (!d || d.count === 0) return `<td class="zero">-</td>`;
       const cls = d.status === "정산완료" ? "settled" : "unsettled";
-      return `<td class="${cls}"><span class="amount">${d.charge.toLocaleString()}</span> <span class="sub">(${d.count}건)</span></td>`;
+      const badge = d.status === "정산완료"
+        ? `<span class="status-badge settled-badge">완료</span>`
+        : `<span class="status-badge unsettled-badge">미수</span>`;
+      return `<td class="${cls}"><div class="cell-wrap"><span class="amount">${d.charge.toLocaleString()}</span>${badge}<span class="sub">${d.count}건</span></div></td>`;
     }).join("");
 
     const unsettledAmt = months.reduce((s, m) =>
@@ -27569,8 +27599,15 @@ const handleARReport = () => {
     const total = reportRows.reduce((s, r) => s + (r.mData[m]?.charge || 0), 0);
     const unsett = reportRows.reduce((s, r) =>
       s + (r.mData[m]?.status === "미정산" ? r.mData[m].charge : 0), 0);
-   if (total === 0) return `<td class="zero">-</td>`;
-    return `<td class="total-cell"><span>${total.toLocaleString()}</span>${unsett > 0 ? ` <span class="unsettled-sub">(미 ${unsett.toLocaleString()})</span>` : ""}</td>`;
+if (total === 0) return `<td class="zero">-</td>`;
+    const allSettled2 = unsett === 0;
+    return `<td class="total-cell">
+      <span>${total.toLocaleString()}</span>
+      ${allSettled2
+        ? `<span style="font-size:8px;color:#86efac;margin-left:3px">✓전완</span>`
+        : `<span class="unsettled-sub">(미 ${unsett.toLocaleString()})</span>`
+      }
+    </td>`;
   }).join("");
 
   const html = `<!DOCTYPE html>
@@ -27643,11 +27680,15 @@ const handleARReport = () => {
   td.name { text-align:left; font-weight:700; padding-left:8px; white-space:nowrap; }
   td.seq  { color:#9ca3af; font-size:9px; width:28px; }
   td.zero { color:#d1d5db; font-size:9px; }
-  td.settled   { background:#ecfdf5 !important; }
-  td.unsettled { background:#fffbeb !important; }
-  td.settled   .amount { color:#059669; font-weight:700; }
-  td.unsettled .amount { color:#d97706; font-weight:700; }
-  td .sub { font-size:8.5px; color:#9ca3af; margin-top:1px; }
+  td.settled   { background:#f0f4ff !important; }
+  td.unsettled { background:#fff8f0 !important; }
+  td.settled   .amount { color:#1B2B4B; font-weight:800; }
+  td.unsettled .amount { color:#c2410c; font-weight:800; }
+  td .sub { font-size:8px; color:#9ca3af; }
+  .cell-wrap { display:flex; align-items:center; justify-content:center; gap:4px; flex-wrap:nowrap; white-space:nowrap; }
+  .status-badge { font-size:7px; font-weight:800; padding:1px 4px; border-radius:3px; white-space:nowrap; flex-shrink:0; }
+  .settled-badge   { background:#dbe4ff; color:#1B2B4B; border:1px solid #c0ccf0; }
+  .unsettled-badge { background:#fee2d5; color:#9a3412; border:1px solid #fbc4a8; }
   td.total { font-weight:900; color:#1B2B4B; text-align:right; padding-right:6px; background:#f1f5f9 !important; }
   td.settled-total   { font-weight:700; color:#059669; text-align:right; padding-right:6px; }
   td.unsettled-total { font-weight:700; color:#dc2626; text-align:right; padding-right:6px; }
@@ -28534,16 +28575,48 @@ ${COMPANY_PRINT.contact}`}
                   <button
                     disabled={!emailTo.trim()}
                     className={`flex-1 py-2.5 rounded-xl font-bold text-[13px] transition ${emailTo.trim() ? "bg-sky-600 hover:bg-sky-700 text-white" : "bg-gray-200 text-gray-400 cursor-not-allowed"}`}
-                    onClick={() => {
+                    onClick={async () => {
                       if (!emailTo.trim()) return;
+                      setEmailSending(true);
                       const subject = `[거래명세서] ${client} ${start||""}~${end||""}`;
-                      const body = `안녕하세요, ${client} 담당자님.%0A%0A${COMPANY_PRINT.name}입니다.%0A%0A${start||""}~${end||""} 기간 거래명세서를 발송드립니다.%0A%0A총 ${mapped.length}건%0A공급가액: ${won(합계공급가)}원%0A부가세: ${won(합계세액)}원%0A합계: ${won(합계공급가+합계세액)}원%0A%0A입금계좌: ${COMPANY_PRINT.bank}%0A%0A감사합니다.%0A%0A${COMPANY_PRINT.name}`;
-                      // 다음메일 compose URL
-                      const daumUrl = `https://mail.daum.net/write?to=${encodeURIComponent(emailTo)}&subject=${encodeURIComponent(subject)}&body=${body}`;
-                      window.open(daumUrl, "_blank", "width=900,height=700");
-                      setEmailModalOpen(false);
+                      const bodyHtml = `
+                        <div style="font-family:sans-serif;font-size:14px;color:#333;line-height:1.8">
+                          <p>안녕하세요, <b>${client}</b> 담당자님.</p>
+                          <p>${COMPANY_PRINT.name}입니다.</p>
+                          <p>${start||""}~${end||""} 기간 거래명세서를 발송드립니다.</p>
+                          <table style="border-collapse:collapse;margin:16px 0">
+                            <tr><td style="padding:4px 12px 4px 0;color:#666">총 건수</td><td><b>${mapped.length}건</b></td></tr>
+                            <tr><td style="padding:4px 12px 4px 0;color:#666">공급가액</td><td><b>${won(합계공급가)}원</b></td></tr>
+                            <tr><td style="padding:4px 12px 4px 0;color:#666">부가세</td><td><b>${won(합계세액)}원</b></td></tr>
+                            <tr><td style="padding:4px 12px 4px 0;color:#666;font-weight:bold">합계</td><td><b style="font-size:16px;color:#1B2B4B">${won(합계공급가+합계세액)}원</b></td></tr>
+                          </table>
+                          <p style="background:#f8fafc;border-left:4px solid #1B2B4B;padding:8px 12px;margin:12px 0">
+                            입금계좌: <b>${COMPANY_PRINT.bank}</b>
+                          </p>
+                          <p>확인 부탁드립니다. 감사합니다.</p>
+                          <hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0"/>
+                          <p style="font-size:12px;color:#9ca3af">${COMPANY_PRINT.name} | ${COMPANY_PRINT.contact}</p>
+                        </div>`;
+                      try {
+                        const res = await fetch("/api/send-email", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ to: emailTo, subject, html: bodyHtml }),
+                        });
+                        if (res.ok) {
+                          showAlert(`${emailTo} 로 발송 완료`);
+                          setEmailModalOpen(false);
+                        } else {
+                          const err = await res.json();
+                          showAlert(`발송 실패: ${err.error || "오류 발생"}`);
+                        }
+                      } catch (e) {
+                        showAlert("네트워크 오류로 발송 실패");
+                      } finally {
+                        setEmailSending(false);
+                      }
                     }}>
-                    다음메일로 발송
+                    {emailSending ? "발송 중..." : "발송"}
                   </button>
                 </div>
               </div>
@@ -28752,7 +28825,9 @@ ${COMPANY_PRINT.contact}`}
                       <td className="px-3 py-3 text-center border-b border-gray-100 cursor-pointer select-none"
                         onClick={()=>toggleMonthStatus(row)} title="클릭하여 상태 전환">
                         <span className={`px-3 py-1 rounded-lg text-[13px] font-bold text-white ${
-                          row.정산상태==="정산완료"?"bg-emerald-600":"bg-amber-500"
+                          row.정산상태==="정산완료" ? "bg-emerald-600"
+                          : row.정산상태==="진행중"  ? "bg-blue-500"
+                          : "bg-amber-500"
                         }`}>
                           {row.정산상태}
                         </span>
