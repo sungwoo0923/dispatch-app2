@@ -28522,7 +28522,7 @@ const handleBatchSettle = async (targetStatus) => {
                   <div>
                     <label className="text-[12px] font-bold text-gray-500 mb-1 block">발신 계정</label>
                     <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-[13px] text-gray-600">
-                      r15332525@daum.net
+                      tjddnqkf@naver.com
                     </div>
                   </div>
                   <div>
