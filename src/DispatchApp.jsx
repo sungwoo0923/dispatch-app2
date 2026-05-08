@@ -28598,7 +28598,7 @@ ${COMPANY_PRINT.contact}`}
                           <p style="font-size:12px;color:#9ca3af">${COMPANY_PRINT.name} | ${COMPANY_PRINT.contact}</p>
                         </div>`;
                       try {
-                        const res = await fetch("/api/send-email.cjs", {
+                        const res = await fetch("/api/send-email", {
                           method: "POST",
                           headers: { "Content-Type": "application/json" },
                           body: JSON.stringify({ to: emailTo, subject, html: bodyHtml }),
