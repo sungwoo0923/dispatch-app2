@@ -28557,8 +28557,8 @@ ${COMPANY_PRINT.name}
 ${COMPANY_PRINT.contact}`}
                     </div>
                   </div>
-                <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-[12px] text-blue-700">
-                    발송 버튼 클릭 시 거래명세서가 <b>PDF 파일로 자동 첨부</b>되어 발송됩니다.
+                <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-[12px] text-amber-700">
+                    발송 버튼 클릭 시 다음메일 작성 창이 열립니다. 거래명세서 PDF를 첨부하려면 인쇄 버튼으로 PDF 저장 후 첨부하세요.
                   </div>
                 </div>
                 <div className="px-6 pb-5 flex gap-3">
