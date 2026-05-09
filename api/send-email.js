@@ -5,7 +5,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "POST만 허용" });
   }
 
-  const { to, subject, html } = req.body || {};
+  const { to, subject, html, attachment, attachmentName } = req.body || {};
   if (!to || !subject) {
     return res.status(400).json({ error: "수신자 또는 제목 누락" });
   }
@@ -23,12 +23,26 @@ export default async function handler(req, res) {
       connectionTimeout: 15000,
     });
 
-    await transporter.sendMail({
+    const mailOptions = {
       from: '"RUN25 배차팀" <tjddnqkf@naver.com>',
       to,
       subject,
       html: html || subject,
-    });
+    };
+
+    // ★ 이미지 첨부
+    if (attachment) {
+      mailOptions.attachments = [
+        {
+          filename: attachmentName || "거래명세서.png",
+          content: attachment,
+          encoding: "base64",
+          contentType: "application/pdf",
+        },
+      ];
+    }
+
+    await transporter.sendMail(mailOptions);
 
     return res.status(200).json({ ok: true });
   } catch (e) {

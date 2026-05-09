@@ -28578,6 +28578,23 @@ ${COMPANY_PRINT.contact}`}
                     onClick={async () => {
                       if (!emailTo.trim()) return;
                       setEmailSending(true);
+
+                      // ★ 거래명세서 이미지 캡처
+                      let attachmentBase64 = null;
+                      try {
+                        const area = document.getElementById("invoiceArea");
+                        if (area) {
+                          const canvas = await html2canvas(area, {
+                            scale: 2,
+                            backgroundColor: "#ffffff",
+                            useCORS: true,
+                          });
+                          attachmentBase64 = canvas.toDataURL("image/png").split(",")[1];
+                        }
+                      } catch (e) {
+                        console.error("캡처 실패:", e);
+                      }
+
                       const subject = `[거래명세서] ${client} ${start||""}~${end||""}`;
                       const bodyHtml = `
                         <div style="font-family:sans-serif;font-size:14px;color:#333;line-height:1.8">
@@ -28601,7 +28618,13 @@ ${COMPANY_PRINT.contact}`}
                         const res = await fetch("/api/send-email", {
                           method: "POST",
                           headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ to: emailTo, subject, html: bodyHtml }),
+                          body: JSON.stringify({
+                            to: emailTo,
+                            subject,
+                            html: bodyHtml,
+                            attachment: attachmentBase64,
+                            attachmentName: `거래명세서_${client}_${start||""}~${end||""}.png`,
+                          }),
                         });
                         if (res.ok) {
                           showAlert(`${emailTo} 로 발송 완료`);
