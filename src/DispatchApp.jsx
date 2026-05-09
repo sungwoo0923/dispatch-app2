@@ -28586,22 +28586,22 @@ ${COMPANY_PRINT.contact}`}
                         const area = document.getElementById("invoiceArea");
                         if (area) {
                           const canvas = await html2canvas(area, {
-                            scale: 2,
+                            scale: 1.5,
                             backgroundColor: "#ffffff",
                             useCORS: true,
                           });
-                          const imgData = canvas.toDataURL("image/png");
+                          const imgData = canvas.toDataURL("image/jpeg", 0.85);
                           const pdf = new jsPDF("p", "mm", "a4");
                           const imgWidth = 210;
                           const imgHeight = (canvas.height * imgWidth) / canvas.width;
                           let heightLeft = imgHeight;
                           let position = 0;
-                          pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
+                          pdf.addImage(imgData, "JPEG", 0, position, imgWidth, imgHeight);
                           heightLeft -= 297;
                           while (heightLeft > 0) {
                             position = heightLeft - imgHeight;
                             pdf.addPage();
-                            pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
+                            pdf.addImage(imgData, "JPEG", 0, position, imgWidth, imgHeight);
                             heightLeft -= 297;
                           }
                           const pdfBase64 = pdf.output("datauristring").split(",")[1];
