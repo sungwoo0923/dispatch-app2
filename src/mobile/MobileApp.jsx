@@ -1120,7 +1120,10 @@ if (searchType === "메모")
 // ✅ 미배차 오더 (차량번호 없는 것)
 const unassignedOrders = useMemo(() => {
   return orders.filter(
-    (o) => !String(o.차량번호 || "").trim()
+    (o) =>
+      !String(o.차량번호 || "").trim() &&
+      (o.상차지명 || o.하차지명) &&   // ★ 상/하차지 없는 빈 오더 제외
+      getPickupDate(o)                  // ★ 날짜 없는 오더 제외
   );
 }, [orders]);
 
@@ -1712,8 +1715,9 @@ const title =
           </div>
         ) : (
           <div className="space-y-2">
-            {[...unassignedOrders]
-              .sort((a, b) => {
+                          {[...unassignedOrders]
+                .filter(o => o.상차지명 && o.하차지명 && getPickupDate(o))
+                .sort((a, b) => {
                 const da = getPickupDate(a) || "";
                 const db = getPickupDate(b) || "";
                 if (da !== db) return da.localeCompare(db);

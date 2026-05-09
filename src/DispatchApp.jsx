@@ -27474,8 +27474,9 @@ const monthRowsRaw = useMemo(() => {
   const [batchClientQ, setBatchClientQ] = useState("");
     const [batchLoading, setBatchLoading] = useState(false);
      const [arReportOpen, setArReportOpen] = useState(false);
-  const [arFromMM, setArFromMM] = useState("01");
+const [arFromMM, setArFromMM] = useState("01");
   const [arToMM,   setArToMM]   = useState("12");
+  const [arOnlyUnsettled, setArOnlyUnsettled] = useState(false);
   // ── 일괄정산 모달용 사전 계산 (렌더마다 재계산 방지)
   const batchUnsettledMap = useMemo(() => {
     const map = new Map();
@@ -27522,13 +27523,13 @@ const handleARReport = () => {
 
   const completedData = allData.filter(r => (r.배차상태 || "") === "배차완료");
 
-  // 1단계: 금액/건수 집계
+  // 1단계: 금액/건수 집계 (★ 기본거래처에 없으면 스킵)
   completedData.forEach(r => {
     const name = r.거래처명 || "";
     if (!name) return;
+    if (!companyMap.has(name)) return; // ★ 기본거래처 외 업체 제외
     const ym = String(r.상차일 || "").slice(0, 7);
     if (!months.includes(ym)) return;
-    if (!companyMap.has(name)) companyMap.set(name, {});
     const entry = companyMap.get(name);
     if (!entry[ym]) entry[ym] = { charge: 0, count: 0, status: "미정산" };
     entry[ym].charge += toInt(r.청구운임);
@@ -27548,7 +27549,7 @@ const handleARReport = () => {
   }
 
   // 데이터 있는 업체만
-  const reportRows = Array.from(companyMap.entries())
+const reportRows = Array.from(companyMap.entries())
     .map(([name, mData]) => {
       const totalCharge = months.reduce((s, m) => s + (mData[m]?.charge || 0), 0);
       const totalCount  = months.reduce((s, m) => s + (mData[m]?.count  || 0), 0);
@@ -27556,6 +27557,8 @@ const handleARReport = () => {
       return { name, mData, totalCharge, totalCount, unsettled };
     })
     .filter(r => r.totalCount > 0)
+    // ★ 미수금 있는 거래처만 필터
+    .filter(r => !arOnlyUnsettled || r.unsettled.length > 0)
     .sort((a, b) => b.totalCharge - a.totalCharge);
 
   const grandTotal   = reportRows.reduce((s, r) => s + r.totalCharge, 0);
@@ -29007,6 +29010,22 @@ ${COMPANY_PRINT.contact}`}
                           {label}
                         </button>
                       ))}
+                    </div>
+                  </div>
+                  <div
+                    className={`flex items-center gap-3 px-4 py-3 rounded-xl border-2 cursor-pointer transition select-none ${
+                      arOnlyUnsettled ? "border-[#1B2B4B] bg-[#1B2B4B]/5" : "border-gray-200 bg-gray-50"
+                    }`}
+                    onClick={() => setArOnlyUnsettled(p => !p)}
+                  >
+                    <div className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition ${
+                      arOnlyUnsettled ? "border-[#1B2B4B] bg-[#1B2B4B]" : "border-gray-300"
+                    }`}>
+                      {arOnlyUnsettled && <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 12 12"><path d="M1 6l3.5 3.5L11 2"/></svg>}
+                    </div>
+                    <div>
+                      <div className="text-[13px] font-bold text-gray-700">미수금 있는 거래처만 출력</div>
+                      <div className="text-[11px] text-gray-400 mt-0.5">정산완료된 거래처는 보고서에서 제외됩니다</div>
                     </div>
                   </div>
                   <div className="text-[12px] text-gray-400 bg-gray-50 rounded-lg px-4 py-3">
