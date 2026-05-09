@@ -28557,8 +28557,8 @@ ${COMPANY_PRINT.name}
 ${COMPANY_PRINT.contact}`}
                     </div>
                   </div>
-                  <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-[12px] text-amber-700">
-                    발송 버튼 클릭 시 다음메일 작성 창이 열립니다. 거래명세서 PDF를 첨부하려면 인쇄 버튼으로 PDF 저장 후 첨부하세요.
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-[12px] text-blue-700">
+                    발송 버튼 클릭 시 거래명세서가 <b>PDF 파일로 자동 첨부</b>되어 발송됩니다.
                   </div>
                 </div>
                 <div className="px-6 pb-5 flex gap-3">
@@ -28579,8 +28579,9 @@ ${COMPANY_PRINT.contact}`}
                       if (!emailTo.trim()) return;
                       setEmailSending(true);
 
-                      // ★ 거래명세서 이미지 캡처
+                      // ★ 거래명세서 PDF 생성
                       let attachmentBase64 = null;
+                      let attachmentName = `거래명세서_${client}_${start||""}~${end||""}.pdf`;
                       try {
                         const area = document.getElementById("invoiceArea");
                         if (area) {
@@ -28589,10 +28590,25 @@ ${COMPANY_PRINT.contact}`}
                             backgroundColor: "#ffffff",
                             useCORS: true,
                           });
-                          attachmentBase64 = canvas.toDataURL("image/png").split(",")[1];
+                          const imgData = canvas.toDataURL("image/png");
+                          const pdf = new jsPDF("p", "mm", "a4");
+                          const imgWidth = 210;
+                          const imgHeight = (canvas.height * imgWidth) / canvas.width;
+                          let heightLeft = imgHeight;
+                          let position = 0;
+                          pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
+                          heightLeft -= 297;
+                          while (heightLeft > 0) {
+                            position = heightLeft - imgHeight;
+                            pdf.addPage();
+                            pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
+                            heightLeft -= 297;
+                          }
+                          const pdfBase64 = pdf.output("datauristring").split(",")[1];
+                          attachmentBase64 = pdfBase64;
                         }
                       } catch (e) {
-                        console.error("캡처 실패:", e);
+                        console.error("PDF 생성 실패:", e);
                       }
 
                       const subject = `[거래명세서] ${client} ${start||""}~${end||""}`;
@@ -28618,12 +28634,12 @@ ${COMPANY_PRINT.contact}`}
                         const res = await fetch("/api/send-email", {
                           method: "POST",
                           headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({
+                         body: JSON.stringify({
                             to: emailTo,
                             subject,
                             html: bodyHtml,
                             attachment: attachmentBase64,
-                            attachmentName: `거래명세서_${client}_${start||""}~${end||""}.png`,
+                            attachmentName,
                           }),
                         });
                         if (res.ok) {
