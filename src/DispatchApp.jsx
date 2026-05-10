@@ -29304,789 +29304,386 @@ ${COMPANY_PRINT.contact}`}
 
 // ===================== DispatchApp.jsx (PART 8/8) — END =====================
 
-// ===================== DispatchApp.jsx (PART 9/9 — 지급관리 V5 최종본) — START =====================
-function PaymentManagement({ dispatchData = [], clients = [], drivers = [] }) {
+// ===================== DispatchApp.jsx (PART 9/9) — START =====================
+function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], drivers = [] }) {
 
-  // ---------- 유틸 ----------
-  const todayStr9 = () => {
-    try { return typeof todayStr === "function" ? todayStr() : new Date().toISOString().slice(0, 10); }
-    catch { return new Date().toISOString().slice(0, 10); }
+  const todayStr9 = () => new Date().toISOString().slice(0, 10);
+  const thisMonthStr = () => new Date().toISOString().slice(0, 7);
+  const lastMonthStr = () => {
+    const d = new Date(); d.setMonth(d.getMonth() - 1);
+    return d.toISOString().slice(0, 7);
   };
   const toInt = (v) => { const n = parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10); return isNaN(n) ? 0 : n; };
-  const won = (n) => (toInt(n)).toLocaleString();
-  const head = typeof headBase === "string" ? headBase : "px-3 py-2 border";
-  const cell = typeof cellBase === "string" ? cellBase : "px-3 py-2 border text-center";
-  const input = typeof inputBase === "string" ? inputBase : "border rounded px-2 py-1";
-  // 🔒 지급관리 임시 비활성화 플래그
-  const PAYMENT_DISABLED = true;
+  const won = (n) => toInt(n).toLocaleString();
 
-  // ---------- Firestore ----------
-  const patchDispatchDirect = async (id, patch) => {
-    // 🔒 지급관리 비활성화 상태에서는 저장 금지
-    if (PAYMENT_DISABLED) {
-      console.warn("지급관리 비활성화 상태: 저장 차단", { id, patch });
-      return;
-    }
+  // ─── 탭 ───
+  const [activeTab, setActiveTab] = useState("list"); // list | driver
 
-    if (!id || !patch) return;
-    await setDoc(doc(db, COLL.dispatch, id), patch, { merge: true });
-  };
-
-  // ---------- 지급일 공통 달력 ----------
-  const [selectedPayDate, setSelectedPayDate] = React.useState(todayStr9());
-  const [memoPopup, setMemoPopup] = useState({ open: false, text: "" });
-
-  // ---------- 드롭다운 옵션 ----------
-  const PAY_METHODS = ["계산서", "선불", "착불"];
-  const DISPATCH_METHODS = ["24시", "직접배차", "인성"];
-
-  // 지급방식 / 배차방식 필터 추가
+  // ─── 필터 ───
+  const [statusFilter, setStatusFilter] = useState("전체");
   const [payMethodFilter, setPayMethodFilter] = useState("전체");
   const [dispatchMethodFilter, setDispatchMethodFilter] = useState("전체");
-
-  // 거래처 옵션
-  const clientOptions = useMemo(() => {
-    const set = new Set((clients || []).map(c => c.거래처명).filter(Boolean));
-    if (set.size === 0) (dispatchData || []).forEach(r => r.거래처명 && set.add(r.거래처명));
-    return Array.from(set).sort((a, b) => a.localeCompare(b, 'ko'));
-  }, [clients, dispatchData]);
-
-  // 최근 차량번호 datalist
-  const recentCarNos = useMemo(() => {
-    const rows = (dispatchData || [])
-      .filter(r => r.차량번호)
-      .sort((a, b) => (b.상차일 || "").localeCompare(a.상차일 || ""));
-    const seen = new Set();
-    const res = [];
-    for (const r of rows) {
-      if (!seen.has(r.차량번호)) {
-        seen.add(r.차량번호);
-        res.push(r.차량번호);
-      }
-      if (res.length >= 80) break;
-    }
-    return res;
-  }, [dispatchData]);
-
-  // 기사 인덱스
-  const driverByCar = useMemo(() => {
-    const m = new Map();
-    (drivers || []).forEach(d => {
-      const car = String(d.차량번호 || "").trim();
-      if (car) m.set(car, { 이름: d.이름 || "", 전화번호: d.전화번호 || "" });
-    });
-    return m;
-  }, [drivers]);
-
-  // ---------- 필터 ----------
-  const [statusFilter, setStatusFilter] = useState("전체");
-  const [payStart, setPayStart] = useState("");
-  const [payEnd, setPayEnd] = useState("");
+  const [loadStart, setLoadStart] = useState(() => `${thisMonthStr()}-01`);
+  const [loadEnd, setLoadEnd] = useState(todayStr9);
   const [carNoQ, setCarNoQ] = useState("");
   const [nameQ, setNameQ] = useState("");
   const [clientQ, setClientQ] = useState("");
-  const [loadStart, setLoadStart] = useState("");
-  const [loadEnd, setLoadEnd] = useState("");
+  const [selectedPayDate, setSelectedPayDate] = useState(todayStr9());
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [editRow, setEditRow] = useState(null); // { id, data }
 
+  // 빠른 기간 선택
+  const setThisMonth = () => {
+    const ym = thisMonthStr();
+    const lastDay = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
+    setLoadStart(`${ym}-01`); setLoadEnd(`${ym}-${lastDay}`);
+  };
+  const setLastMonth = () => {
+    const ym = lastMonthStr();
+    const d = new Date(ym + "-01");
+    const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+    setLoadStart(`${ym}-01`); setLoadEnd(`${ym}-${lastDay}`);
+  };
+
+  // ─── 기초 데이터 ───
   const base = useMemo(
-    () => Array.isArray(dispatchData) ? dispatchData.filter(r => (r.배차상태 || "") === "배차완료") : [],
+    () => (Array.isArray(dispatchData) ? dispatchData : []).filter(r => (r.배차상태 || "") === "배차완료"),
     [dispatchData]
   );
 
   const filtered = useMemo(() => {
     let rows = [...base];
-
-    if (statusFilter !== "전체")
-      rows = rows.filter(r => (r.지급상태 || "지급중") === statusFilter);
-
-    if (payStart) rows = rows.filter(r => (r.지급일 || "") >= payStart);
-    if (payEnd) rows = rows.filter(r => (r.지급일 || "") <= payEnd);
-
+    if (statusFilter !== "전체") rows = rows.filter(r => (r.지급상태 || "지급중") === statusFilter);
     if (loadStart) rows = rows.filter(r => (r.상차일 || "") >= loadStart);
     if (loadEnd) rows = rows.filter(r => (r.상차일 || "") <= loadEnd);
-
+    if (payMethodFilter !== "전체") rows = rows.filter(r => r.지급방식 === payMethodFilter);
+    if (dispatchMethodFilter !== "전체") rows = rows.filter(r => r.배차방식 === dispatchMethodFilter);
     const car = carNoQ.trim().toLowerCase();
     const name = nameQ.trim().toLowerCase();
-    const client = clientQ.trim().toLowerCase();
-
+    const cl = clientQ.trim().toLowerCase();
     if (car) rows = rows.filter(r => String(r.차량번호 || "").toLowerCase().includes(car));
     if (name) rows = rows.filter(r => String(r.이름 || "").toLowerCase().includes(name));
-    if (client) rows = rows.filter(r => String(r.거래처명 || "").toLowerCase().includes(client));
+    if (cl) rows = rows.filter(r => String(r.거래처명 || "").toLowerCase().includes(cl));
+    return rows.sort((a, b) => (a.상차일 || "").localeCompare(b.상차일 || ""));
+  }, [base, statusFilter, loadStart, loadEnd, payMethodFilter, dispatchMethodFilter, carNoQ, nameQ, clientQ]);
 
-    // 지급방식/배차방식 필터
-    if (payMethodFilter !== "전체")
-      rows = rows.filter(r => r.지급방식 === payMethodFilter);
-
-    if (dispatchMethodFilter !== "전체")
-      rows = rows.filter(r => r.배차방식 === dispatchMethodFilter);
-
-    rows.sort(
-      (a, b) =>
-        (a.상차일 || "").localeCompare(b.상차일 || "") ||
-        (toInt(a.순번) - toInt(b.순번))
-    );
-
-    return rows;
-  }, [
-    base, statusFilter, payStart, payEnd,
-    carNoQ, nameQ, clientQ, loadStart, loadEnd,
-    payMethodFilter, dispatchMethodFilter
-  ]);
-
-  // ---------- 선택 기능 ----------
-  const [selectedIds, setSelectedIds] = useState(new Set());
-
-  const toggleAll = () => {
-    if (selectedIds.size === filtered.length) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(filtered.map(r => r._id)));
-    }
-  };
-
-  const toggleOne = (id) => {
-    setSelectedIds(prev => {
-      const nxt = new Set(prev);
-      if (nxt.has(id)) nxt.delete(id);
-      else nxt.add(id);
-      return nxt;
-    });
-  };
-
-  const clearSelection = () => setSelectedIds(new Set());
-
-  // ---------- 선택 지급/미지급 ----------
-  const bulkPayDone = async (ids) => {
-    if (!ids.length) return showAlert("선택된 항목이 없습니다.");
-    const payDate = selectedPayDate || todayStr9();
-
-    for (const id of ids) {
-      await patchDispatchDirect(id, {
-        지급상태: "지급완료",
-        지급일: payDate,
-      });
-    }
-    showAlert(`지급완료 처리: ${ids.length}건`);
-  };
-
-  const bulkPayUndone = async (ids) => {
-    if (!ids.length) return showAlert("선택된 항목이 없습니다.");
-
-    for (const id of ids) {
-      await patchDispatchDirect(id, {
-        지급상태: "지급중",
-        지급일: "",
-      });
-    }
-    showAlert(`미지급 처리: ${ids.length}건`);
-  };
-
-  // ---------- 개별 토글 ----------
-  const togglePayStatus = async (row) => {
-    const cur = row.지급상태 || "지급중";
-    const next = cur === "지급중" ? "지급완료" : "지급중";
-
-    const payDate =
-      next === "지급완료"
-        ? (selectedPayDate || todayStr9())
-        : "";
-
-    await patchDispatchDirect(row._id, {
-      지급상태: next,
-      지급일: payDate,
-    });
-  };
-
-  // ---------- 수정 모드 ----------
-  const [editMode, setEditMode] = useState(false);
-  const [draft, setDraft] = useState({});
-
-  const enterEdit = () => {
-    const d = {};
-    filtered.forEach(r => {
-      d[r._id] = {
-        상차일: r.상차일 || "",
-        거래처명: r.거래처명 || "",
-        상차지명: r.상차지명 || "",
-        하차지명: r.하차지명 || "",
-        차량번호: r.차량번호 || "",
-        이름: r.이름 || "",
-        전화번호: r.전화번호 || "",
-        지급방식: r.지급방식 || "",
-        배차방식: r.배차방식 || "",
-        청구운임: String(r.청구운임 || ""),
-        기사운임: String(r.기사운임 || ""),
-        지급일: r.지급일 || "",
-        메모: r.메모 || "",
-      };
-    });
-    setDraft(d);
-    setEditMode(true);
-  };
-
-  const cancelEdit = () => {
-    setEditMode(false);
-    setDraft({});
-  };
-
-  const setD = (id, k, v) =>
-    setDraft(prev => ({
-      ...prev,
-      [id]: { ...(prev[id] || {}), [k]: v }
-    }));
-
-  // ---------- 차량번호 자동매칭 ----------
-  const openDriverRegisterModal = (carNo, row) => {
-    if (typeof showDriverRegisterModal === "function") {
-      try {
-        showDriverRegisterModal({
-          차량번호: carNo,
-          이름: row?.이름 || "",
-          전화번호: row?.전화번호 || "",
-        });
-        return;
-      } catch { }
-    }
-    if (typeof openRegisterDriverModal === "function") {
-      try {
-        openRegisterDriverModal({
-          차량번호: carNo,
-          이름: row?.이름 || "",
-          전화번호: row?.전화번호 || "",
-        });
-        return;
-      } catch { }
-    }
-    showAlert("신규 기사 등록창이 연결되지 않았습니다.");
-  };
-
-  const onCarKeyDown = (row) => (e) => {
-    if (e.key !== "Enter") return;
-    const id = row._id;
-    const car = (draft[id]?.차량번호 ?? "").trim();
-    if (!car) return;
-
-    const info = driverByCar.get(car);
-    if (info) {
-      setD(id, "이름", info.이름 || "");
-      setD(id, "전화번호", info.전화번호 || "");
-    } else {
-      openDriverRegisterModal(car, row);
-    }
-  };
-
-  // ---------- 저장 ----------
-  const saveAll = async () => {
-    const jobs = [];
-
-    filtered.forEach(r => {
-      const cur = draft[r._id];
-      if (!cur) return;
-
-      const patch = {};
-      const keys = [
-        "상차일", "거래처명", "상차지명", "하차지명",
-        "차량번호", "이름", "전화번호",
-        "지급방식", "배차방식",
-        "청구운임", "기사운임",
-        "지급일", "메모"
-      ];
-
-      keys.forEach(k => {
-        const orig = (k === "청구운임" || k === "기사운임")
-          ? String(r[k] || "")
-          : (r[k] || "");
-        const val = cur[k] ?? "";
-
-        if (String(val) !== String(orig)) patch[k] = val;
-      });
-
-      if (Object.keys(patch).length)
-        jobs.push(patchDispatchDirect(r._id, patch));
-    });
-
-    if (jobs.length) await Promise.all(jobs);
-
-    showAlert("저장되었습니다");
-    setEditMode(false);
-    setDraft({});
-  };
-
-  // ---------- KPI ----------
+  // ─── KPI ───
   const kpi = useMemo(() => {
-    const cnt = filtered.length;
     const sale = filtered.reduce((s, r) => s + toInt(r.청구운임), 0);
     const driver = filtered.reduce((s, r) => s + toInt(r.기사운임), 0);
-    const fee = sale - driver;
     const done = filtered.filter(r => (r.지급상태 || "지급중") === "지급완료").length;
-    return { cnt, sale, driver, fee, done };
+    const undone = filtered.length - done;
+    const undoneAmt = filtered.filter(r => (r.지급상태 || "지급중") !== "지급완료").reduce((s, r) => s + toInt(r.기사운임), 0);
+    return { cnt: filtered.length, sale, driver, fee: sale - driver, done, undone, undoneAmt };
   }, [filtered]);
 
-  // ---------- 엑셀 다운로드 ----------
+  // ─── 기사별 집계 ───
+  const driverSummary = useMemo(() => {
+    const map = new Map();
+    filtered.forEach(r => {
+      const key = r.차량번호 || "미등록";
+      if (!map.has(key)) map.set(key, { 차량번호: key, 이름: r.이름 || "", 전화번호: r.전화번호 || "", cnt: 0, 기사운임합: 0, 지급완료: 0, 미지급: 0, 미지급액: 0, rows: [] });
+      const e = map.get(key);
+      e.cnt++; e.기사운임합 += toInt(r.기사운임); e.rows.push(r);
+      if ((r.지급상태 || "지급중") === "지급완료") e.지급완료++;
+      else { e.미지급++; e.미지급액 += toInt(r.기사운임); }
+    });
+    return Array.from(map.values()).sort((a, b) => b.기사운임합 - a.기사운임합);
+  }, [filtered]);
+
+  // ─── 지급 처리 ───
+  const pay = async (id, status) => {
+    if (!patchDispatch) return alert("patchDispatch 미연결");
+    await patchDispatch(id, { 지급상태: status, 지급일: status === "지급완료" ? (selectedPayDate || todayStr9()) : "", __system: true });
+  };
+
+  const bulkPay = async (ids, status) => {
+    if (!ids.length) return alert("선택 항목 없음");
+    await Promise.all(ids.map(id => pay(id, status)));
+    setSelectedIds(new Set());
+    alert(`${status} 처리: ${ids.length}건`);
+  };
+
+  // 기사 전체 미지급 일괄 지급
+  const payAllByDriver = async (rows) => {
+    const unpaid = rows.filter(r => (r.지급상태 || "지급중") !== "지급완료");
+    if (!unpaid.length) return alert("미지급 건이 없습니다.");
+    await Promise.all(unpaid.map(r => pay(r._id, "지급완료")));
+    alert(`${unpaid.length}건 지급완료 처리`);
+  };
+
+  // ─── 선택 ───
+  const toggleAll = () => selectedIds.size === filtered.length ? setSelectedIds(new Set()) : setSelectedIds(new Set(filtered.map(r => r._id)));
+  const toggleOne = (id) => setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+
+  // ─── 엑셀 ───
   const downloadExcel = () => {
-    if (!filtered.length) {
-      showAlert("내보낼 데이터가 없습니다.");
-      return;
-    }
-
+    if (!filtered.length) return alert("데이터 없음");
     const rows = filtered.map((r, i) => ({
-      순번: i + 1,
-      상차일: r.상차일 || "",
-      지급상태: r.지급상태 || "지급중",
-      지급일: r.지급일 || "",
-      거래처명: r.거래처명 || "",
-      상차지명: r.상차지명 || "",
-      하차지명: r.하차지명 || "",
-      차량번호: r.차량번호 || "",
-      이름: r.이름 || "",
-      전화번호: r.전화번호 || "",
-      청구운임: toInt(r.청구운임),
-      기사운임: toInt(r.기사운임),
+      순번: i + 1, 상차일: r.상차일 || "", 지급상태: r.지급상태 || "지급중", 지급일: r.지급일 || "",
+      거래처명: r.거래처명 || "", 상차지명: r.상차지명 || "", 하차지명: r.하차지명 || "",
+      차량번호: r.차량번호 || "", 기사명: r.이름 || "", 전화번호: r.전화번호 || "",
+      청구운임: toInt(r.청구운임), 기사운임: toInt(r.기사운임),
       수수료: toInt(r.청구운임) - toInt(r.기사운임),
-      지급방식: r.지급방식 || "",
-      배차방식: r.배차방식 || "",
-      메모: r.메모 || "",
+      지급방식: r.지급방식 || "", 배차방식: r.배차방식 || "", 메모: r.메모 || "",
     }));
-
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "지급관리");
-    XLSX.writeFile(wb, `지급관리_${todayStr9()}.xlsx`);
+    XLSX.writeFile(wb, `지급관리_${loadStart}~${loadEnd}.xlsx`);
   };
 
-  // ---------- 렌더 보조 ----------
-  const roText = (v) => <span className="whitespace-pre">{String(v ?? "")}</span>;
-  const editableCls = "bg-yellow-50";
-  if (PAYMENT_DISABLED) {
-    return (
-      <div className="p-6 border rounded bg-gray-50 text-center">
-        <h2 className="text-lg font-bold mb-2 text-gray-700">
-          지급관리
-        </h2>
-        <p className="text-sm text-gray-500">
-          현재 사용하지 않는 메뉴입니다.<br />
-          추후 활성화 예정입니다.
-        </p>
-      </div>
-    );
-  }
+  const PAY_METHODS = ["계산서", "선불", "착불"];
+  const DISPATCH_METHODS = ["24시", "직접배차", "인성"];
+
   return (
-    <div>
-      <h2 className="text-lg font-bold mb-3">지급관리</h2>
+    <div className="space-y-4">
 
-      {/* KPI */}
-      <div className="flex flex-wrap gap-2 text-xs md:text-sm mb-3">
-        <span className="px-2 py-1 rounded bg-gray-100">
-          총 건수 <b>{kpi.cnt.toLocaleString()}</b>건
-        </span>
-        <span className="px-2 py-1 rounded bg-blue-50 text-blue-700">
-          총 청구 <b>{kpi.sale.toLocaleString()}</b>원
-        </span>
-        <span className="px-2 py-1 rounded bg-emerald-50 text-emerald-700">
-          총 기사 <b>{kpi.driver.toLocaleString()}</b>원
-        </span>
-        <span className="px-2 py-1 rounded bg-indigo-50 text-indigo-700">
-          총 수수료 <b>{kpi.fee.toLocaleString()}</b>원
-        </span>
-        <span className="px-2 py-1 rounded bg-emerald-100 text-emerald-800">
-          지급완료 <b>{kpi.done.toLocaleString()}</b>건
-        </span>
+      {/* ── 헤더 ── */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-[20px] font-bold text-[#1B2B4B]">지급관리</h2>
+          <p className="text-[12px] text-gray-400 mt-0.5">배차완료 오더의 기사운임 지급 현황 관리</p>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={downloadExcel} className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-[13px] font-semibold hover:bg-emerald-700 transition">엑셀 다운로드</button>
+        </div>
       </div>
 
-      {/* 필터/액션 바 */}
-      <div className="flex flex-wrap items-end gap-2 mb-3">
-
-        {/* 지급상태 */}
-        <div className="flex flex-col">
-          <label className="text-sm text-gray-600 mb-1 font-medium">지급상태</label>
-          <select className="border p-2 rounded min-w-[120px]"
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-          >
-            <option value="전체">전체</option>
-            <option value="지급중">지급중</option>
-            <option value="지급완료">지급완료</option>
-          </select>
-        </div>
-
-        {/* 지급방식 필터 */}
-        <div className="flex flex-col">
-          <label className="text-sm text-gray-600 mb-1 font-medium">지급방식</label>
-          <select
-            className="border p-2 rounded min-w-[120px]"
-            value={payMethodFilter}
-            onChange={(e) => setPayMethodFilter(e.target.value)}
-          >
-            <option value="전체">전체</option>
-            {PAY_METHODS.map(m => (
-              <option key={m} value={m}>{m}</option>
-            ))}
-          </select>
-        </div>
-
-        {/* 배차방식 필터 */}
-        <div className="flex flex-col">
-          <label className="text-sm text-gray-600 mb-1 font-medium">배차방식</label>
-          <select
-            className="border p-2 rounded min-w-[120px]"
-            value={dispatchMethodFilter}
-            onChange={(e) => setDispatchMethodFilter(e.target.value)}
-          >
-            <option value="전체">전체</option>
-            {DISPATCH_METHODS.map(m => (
-              <option key={m} value={m}>{m}</option>
-            ))}
-          </select>
-        </div>
-
-        {/* 지급일 시작 */}
-        <div className="flex flex-col">
-          <label className="text-sm text-gray-600 mb-1 font-medium">지급일 시작</label>
-          <input type="date" className="border p-2 rounded"
-            value={payStart}
-            onChange={(e) => setPayStart(e.target.value)}
-          />
-        </div>
-
-        {/* 지급일 종료 */}
-        <div className="flex flex-col">
-          <label className="text-sm text-gray-600 mb-1 font-medium">지급일 종료</label>
-          <input type="date" className="border p-2 rounded"
-            value={payEnd}
-            onChange={(e) => setPayEnd(e.target.value)}
-          />
-        </div>
-
-        {/* 상차일 필터 */}
-        <div className="flex flex-col">
-          <label className="text-sm text-gray-600 mb-1 font-medium">상차일 시작</label>
-          <input type="date" className="border p-2 rounded"
-            value={loadStart}
-            onChange={(e) => setLoadStart(e.target.value)}
-          />
-        </div>
-
-        <div className="flex flex-col">
-          <label className="text-sm text-gray-600 mb-1 font-medium">상차일 종료</label>
-          <input type="date" className="border p-2 rounded"
-            value={loadEnd}
-            onChange={(e) => setLoadEnd(e.target.value)}
-          />
-        </div>
-
-        {/* 검색 */}
-        <input className="border p-2 rounded" placeholder="차량번호"
-          value={carNoQ} onChange={(e) => setCarNoQ(e.target.value)}
-        />
-        <input className="border p-2 rounded" placeholder="기사명"
-          value={nameQ} onChange={(e) => setNameQ(e.target.value)}
-        />
-        <input className="border p-2 rounded" placeholder="거래처명"
-          value={clientQ} onChange={(e) => setClientQ(e.target.value)}
-        />
-
-        {/* 필터 초기화 */}
-        <button
-          onClick={() => {
-            setStatusFilter("전체");
-            setPayStart(""); setPayEnd("");
-            setCarNoQ(""); setNameQ(""); setClientQ("");
-            setLoadStart(""); setLoadEnd("");
-            setPayMethodFilter("전체");
-            setDispatchMethodFilter("전체");
-          }}
-          className="px-3 py-2 rounded bg-gray-200"
-        >
-          필터 초기화
-        </button>
-
-        {/* 우측 액션 */}
-        <div className="ml-auto flex gap-2 items-end">
-
-          {/* 지급일 적용 */}
-          <div className="flex flex-col">
-            <label className="text-sm text-gray-600 mb-1 font-medium">지급일(적용)</label>
-            <input type="date" className="border p-2 rounded"
-              value={selectedPayDate}
-              onChange={(e) => setSelectedPayDate(e.target.value)}
-            />
+      {/* ── KPI 카드 ── */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        {[
+          { label: "총 건수", val: `${kpi.cnt}건`, color: "text-[#1B2B4B]", bg: "bg-white" },
+          { label: "총 청구운임", val: `${won(kpi.sale)}원`, color: "text-blue-700", bg: "bg-blue-50" },
+          { label: "총 기사운임", val: `${won(kpi.driver)}원`, color: "text-gray-700", bg: "bg-gray-50" },
+          { label: "지급완료", val: `${kpi.done}건`, color: "text-emerald-700", bg: "bg-emerald-50" },
+          { label: "미지급 금액", val: `${won(kpi.undoneAmt)}원`, color: "text-red-600", bg: "bg-red-50" },
+        ].map(({ label, val, color, bg }) => (
+          <div key={label} className={`${bg} rounded-xl border border-gray-200 p-4 shadow-sm`}>
+            <div className="text-[11px] font-bold text-gray-400 mb-1">{label}</div>
+            <div className={`text-[17px] font-extrabold ${color}`}>{val}</div>
           </div>
+        ))}
+      </div>
 
-          {!editMode ? (
-            <button onClick={enterEdit} className="px-3 py-2 rounded border">수정</button>
-          ) : (
-            <>
-              <button onClick={saveAll} className="px-3 py-2 rounded bg-blue-600 text-white">저장</button>
-              <button onClick={cancelEdit} className="px-3 py-2 rounded border">취소</button>
-            </>
-          )}
+      {/* ── 탭 ── */}
+      <div className="flex gap-2 border-b border-gray-200 pb-0">
+        {[["list", "전체 목록"], ["driver", "기사별 집계"]].map(([key, label]) => (
+          <button key={key} onClick={() => setActiveTab(key)}
+            className={`px-5 py-2.5 text-[13px] font-bold rounded-t-lg transition -mb-px ${activeTab === key ? "bg-[#1B2B4B] text-white" : "text-gray-500 hover:text-[#1B2B4B]"}`}>
+            {label}
+          </button>
+        ))}
+      </div>
 
-          <button onClick={() => bulkPayDone(Array.from(selectedIds))} className="px-3 py-2 rounded bg-emerald-600 text-white">선택 지급</button>
-          <button onClick={() => bulkPayUndone(Array.from(selectedIds))} className="px-3 py-2 rounded bg-red-600 text-white">선택 미지급</button>
-          <button onClick={() => bulkPayDone(filtered.map(r => r._id))} className="px-3 py-2 rounded bg-emerald-700 text-white">전체 지급</button>
-          <button onClick={downloadExcel} className="px-3 py-2 rounded bg-blue-600 text-white">엑셀 다운로드</button>
+      {/* ── 필터 바 ── */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+        <div className="flex flex-wrap items-end gap-3">
+          {/* 빠른 기간 */}
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-bold text-gray-500">조회 기간</label>
+            <div className="flex gap-1">
+              <button onClick={setThisMonth} className="px-3 py-1.5 rounded-lg bg-gray-100 text-gray-600 text-[12px] font-semibold hover:bg-gray-200 transition">이번달</button>
+              <button onClick={setLastMonth} className="px-3 py-1.5 rounded-lg bg-gray-100 text-gray-600 text-[12px] font-semibold hover:bg-gray-200 transition">지난달</button>
+            </div>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-bold text-gray-500">상차일</label>
+            <div className="flex items-center gap-1">
+              <input type="date" className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] outline-none focus:border-[#1B2B4B]" value={loadStart} onChange={e => setLoadStart(e.target.value)} />
+              <span className="text-gray-400 text-[12px]">~</span>
+              <input type="date" className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] outline-none focus:border-[#1B2B4B]" value={loadEnd} onChange={e => setLoadEnd(e.target.value)} />
+            </div>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-bold text-gray-500">지급상태</label>
+            <select className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] outline-none focus:border-[#1B2B4B]" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+              <option value="전체">전체</option>
+              <option value="지급중">미지급</option>
+              <option value="지급완료">지급완료</option>
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-bold text-gray-500">지급방식</label>
+            <select className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] outline-none focus:border-[#1B2B4B]" value={payMethodFilter} onChange={e => setPayMethodFilter(e.target.value)}>
+              <option value="전체">전체</option>
+              {PAY_METHODS.map(m => <option key={m} value={m}>{m}</option>)}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-bold text-gray-500">배차방식</label>
+            <select className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] outline-none focus:border-[#1B2B4B]" value={dispatchMethodFilter} onChange={e => setDispatchMethodFilter(e.target.value)}>
+              <option value="전체">전체</option>
+              {DISPATCH_METHODS.map(m => <option key={m} value={m}>{m}</option>)}
+            </select>
+          </div>
+          <input placeholder="차량번호" className="border border-gray-200 rounded-lg px-3 py-1.5 text-[12px] w-28 outline-none focus:border-[#1B2B4B]" value={carNoQ} onChange={e => setCarNoQ(e.target.value)} />
+          <input placeholder="기사명" className="border border-gray-200 rounded-lg px-3 py-1.5 text-[12px] w-24 outline-none focus:border-[#1B2B4B]" value={nameQ} onChange={e => setNameQ(e.target.value)} />
+          <input placeholder="거래처명" className="border border-gray-200 rounded-lg px-3 py-1.5 text-[12px] w-28 outline-none focus:border-[#1B2B4B]" value={clientQ} onChange={e => setClientQ(e.target.value)} />
+          <button onClick={() => { setStatusFilter("전체"); setPayMethodFilter("전체"); setDispatchMethodFilter("전체"); setCarNoQ(""); setNameQ(""); setClientQ(""); setThisMonth(); }}
+            className="px-3 py-1.5 rounded-lg bg-gray-100 text-gray-600 text-[12px] font-semibold hover:bg-gray-200 transition">초기화</button>
 
+          {/* 우측 */}
+          <div className="ml-auto flex items-end gap-2">
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-bold text-gray-500">지급일(적용)</label>
+              <input type="date" className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] outline-none focus:border-[#1B2B4B]" value={selectedPayDate} onChange={e => setSelectedPayDate(e.target.value)} />
+            </div>
+            <button onClick={() => bulkPay(Array.from(selectedIds), "지급완료")} disabled={!selectedIds.size}
+              className={`px-4 py-2 rounded-lg text-[13px] font-bold text-white transition ${selectedIds.size ? "bg-emerald-600 hover:bg-emerald-700" : "bg-gray-200 text-gray-400 cursor-not-allowed"}`}>
+              선택 지급완료
+            </button>
+            <button onClick={() => bulkPay(Array.from(selectedIds), "지급중")} disabled={!selectedIds.size}
+              className={`px-4 py-2 rounded-lg text-[13px] font-bold text-white transition ${selectedIds.size ? "bg-amber-500 hover:bg-amber-600" : "bg-gray-200 text-gray-400 cursor-not-allowed"}`}>
+              선택 미지급
+            </button>
+            <button onClick={() => bulkPay(filtered.filter(r => (r.지급상태 || "지급중") !== "지급완료").map(r => r._id), "지급완료")}
+              className="px-4 py-2 rounded-lg bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition">
+              미지급 전체 지급
+            </button>
+          </div>
         </div>
+
+        {/* 선택 상태 */}
+        {activeTab === "list" && (
+          <div className="flex items-center gap-3 mt-3 pt-3 border-t border-gray-100">
+            <input type="checkbox" onChange={toggleAll} checked={selectedIds.size > 0 && selectedIds.size === filtered.length} className="w-4 h-4" />
+            <span className="text-[12px] text-gray-500">전체선택</span>
+            {selectedIds.size > 0 && <span className="text-[12px] font-bold text-[#1B2B4B]">{selectedIds.size}건 선택됨</span>}
+          </div>
+        )}
       </div>
 
-      {/* 선택 상태 표시줄 */}
-      <div className="flex items-center gap-2 mb-2">
-        <button onClick={toggleAll} className="px-3 py-2 rounded border">전체선택/해제</button>
-        <button onClick={clearSelection} className="px-3 py-2 rounded border">선택해제</button>
-        <span className="text-sm text-gray-600">선택: {selectedIds.size}건</span>
-      </div>
-
-      {/* 테이블 */}
-      <div className="overflow-x-auto">
-        <table className="min-w-[1500px] text-sm border">
-          <thead className="bg-gray-100">
-            <tr>
-              <th className={head}>
-                <input
-                  type="checkbox"
-                  onChange={toggleAll}
-                  checked={selectedIds.size > 0 && selectedIds.size === filtered.length}
-                />
-              </th>
-
-              {[
-                "순번",
-                "상차일",
-                "지급상태",   // 앞으로 이동
-                "지급일",     // 앞으로 이동
-                "거래처명",
-                "상차지명",
-                "하차지명",
-                "차량번호",
-                "이름",
-                "전화번호",
-                "청구운임",
-                "기사운임",
-                "수수료",
-                "지급방식",
-                "배차방식",
-                "메모",
-              ].map(h => (
-                <th key={h} className={head}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-
-          <tbody>
-            {filtered.length === 0 ? (
-              <tr>
-                <td className="text-center text-gray-500 py-6" colSpan={16}>
-                  표시할 데이터가 없습니다.
-                </td>
-              </tr>
-            ) : (
-              filtered.map((r, i) => {
-                const d = draft[r._id] || {};
-
-                const fee =
-                  toInt(editMode ? d.청구운임 : r.청구운임) -
-                  toInt(editMode ? d.기사운임 : r.기사운임);
-
-                return (
-                  <tr key={r._id || i} className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-
-                    {/* 선택 */}
-                    <td className={cell}>
-                      <input type="checkbox"
-                        checked={selectedIds.has(r._id)}
-                        onChange={() => toggleOne(r._id)}
-                      />
+      {/* ══ 전체 목록 탭 ══ */}
+      {activeTab === "list" && (
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-[12px]">
+              <thead>
+                <tr className="bg-[#1B2B4B]">
+                  {["", "순번", "상차일", "거래처명", "상차지", "하차지", "차량번호", "기사명", "전화번호", "청구운임", "기사운임", "수수료", "지급방식", "배차방식", "지급상태", "지급일"].map(h => (
+                    <th key={h} className="px-3 py-3 text-white font-bold text-center whitespace-nowrap border-b border-white/10">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.length === 0 ? (
+                  <tr><td colSpan={16} className="text-center py-16 text-gray-400 text-[13px]">조회된 데이터가 없습니다.</td></tr>
+                ) : filtered.map((r, i) => {
+                  const isDone = (r.지급상태 || "지급중") === "지급완료";
+                  const fee = toInt(r.청구운임) - toInt(r.기사운임);
+                  return (
+                    <tr key={r._id || i} className={`${i % 2 === 0 ? "bg-white" : "bg-gray-50/60"} hover:bg-blue-50/40 transition`}>
+                      <td className="px-3 py-2.5 text-center border-b border-gray-100">
+                        <input type="checkbox" checked={selectedIds.has(r._id)} onChange={() => toggleOne(r._id)} className="w-4 h-4" />
+                      </td>
+                      <td className="px-3 py-2.5 text-center text-gray-400 border-b border-gray-100">{i + 1}</td>
+                      <td className="px-3 py-2.5 text-center whitespace-nowrap border-b border-gray-100">{r.상차일 || ""}</td>
+                      <td className="px-3 py-2.5 text-center font-semibold border-b border-gray-100">{r.거래처명 || ""}</td>
+                      <td className="px-3 py-2.5 text-center border-b border-gray-100">{r.상차지명 || ""}</td>
+                      <td className="px-3 py-2.5 text-center border-b border-gray-100">{r.하차지명 || ""}</td>
+                      <td className="px-3 py-2.5 text-center font-mono border-b border-gray-100">{r.차량번호 || ""}</td>
+                      <td className="px-3 py-2.5 text-center border-b border-gray-100">{r.이름 || ""}</td>
+                      <td className="px-3 py-2.5 text-center border-b border-gray-100">{r.전화번호 || ""}</td>
+                      <td className="px-3 py-2.5 text-right border-b border-gray-100">{won(r.청구운임)}</td>
+                      <td className="px-3 py-2.5 text-right font-semibold text-gray-700 border-b border-gray-100">{won(r.기사운임)}</td>
+                      <td className={`px-3 py-2.5 text-right font-bold border-b border-gray-100 ${fee >= 0 ? "text-blue-700" : "text-red-500"}`}>{won(fee)}</td>
+                      <td className="px-3 py-2.5 text-center border-b border-gray-100">{r.지급방식 || ""}</td>
+                      <td className="px-3 py-2.5 text-center border-b border-gray-100">{r.배차방식 || ""}</td>
+                      <td className="px-3 py-2.5 text-center border-b border-gray-100">
+                        <button onClick={() => pay(r._id, isDone ? "지급중" : "지급완료")}
+                          className={`px-3 py-1 rounded-lg text-[11px] font-bold text-white transition ${isDone ? "bg-emerald-600 hover:bg-emerald-700" : "bg-amber-500 hover:bg-amber-600"}`}>
+                          {isDone ? "✓ 지급완료" : "미지급"}
+                        </button>
+                      </td>
+                      <td className="px-3 py-2.5 text-center text-gray-500 border-b border-gray-100">{r.지급일 || "-"}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              {/* 합계 행 */}
+              {filtered.length > 0 && (
+                <tfoot>
+                  <tr className="bg-[#1B2B4B]">
+                    <td colSpan={9} className="px-3 py-3 text-white font-bold text-center">합 계 ({filtered.length}건)</td>
+                    <td className="px-3 py-3 text-right text-white font-bold">{won(kpi.sale)}</td>
+                    <td className="px-3 py-3 text-right text-yellow-300 font-bold">{won(kpi.driver)}</td>
+                    <td className="px-3 py-3 text-right text-blue-300 font-bold">{won(kpi.fee)}</td>
+                    <td colSpan={4} className="px-3 py-3 text-center text-white/60 text-[11px]">
+                      지급완료 {kpi.done}건 / 미지급 {kpi.undone}건 (미지급액 {won(kpi.undoneAmt)}원)
                     </td>
-
-                    {/* 순번 */}
-                    <td className={cell}>{r.순번 || i + 1}</td>
-
-                    {/* 상차일 */}
-                    <td className={cell}>
-                      {!editMode ? roText(r.상차일 || "") : (
-                        <input type="date" className={`${input} ${editableCls}`}
-                          value={d.상차일 ?? ""}
-                          onChange={(e) => setD(r._id, "상차일", e.target.value)}
-                        />
-                      )}
-                    </td>
-
-                    {/* 지급상태 (앞으로 이동) */}
-                    <td className={cell}>
-                      <button
-                        onClick={() => togglePayStatus(r)}
-                        className={`px-2 py-1 rounded text-sm ${(r.지급상태 || "지급중") === "지급완료"
-                          ? "bg-emerald-600 text-white"
-                          : "bg-blue-600 text-white"
-                          }`}
-                      >
-                        {(r.지급상태 || "지급중") === "지급완료" ? "✅ 지급완료" : "🔵 지급중"}
-                      </button>
-                    </td>
-
-                    {/* 지급일 (앞으로 이동) */}
-                    <td className={cell}>
-                      {!editMode ? roText(r.지급일 || "") : (
-                        <input type="date" className={`${input} ${editableCls}`}
-                          value={d.지급일 ?? ""}
-                          onChange={(e) => setD(r._id, "지급일", e.target.value)}
-                        />
-                      )}
-                    </td>
-
-                    {/* 거래처명 */}
-                    <td className={cell}>
-                      {!editMode ? roText(r.거래처명 || "") : (
-                        <select className={`${input} ${editableCls}`}
-                          value={d.거래처명 ?? ""}
-                          onChange={(e) => setD(r._id, "거래처명", e.target.value)}
-                        >
-                          <option value="">선택</option>
-                          {clientOptions.map(v => (
-                            <option key={v} value={v}>{v}</option>
-                          ))}
-                        </select>
-                      )}
-                    </td>
-
-                    {/* 상차지명 */}
-                    <td className={cell}>
-                      {!editMode ? roText(r.상차지명 || "") : (
-                        <input className={`${input} ${editableCls}`}
-                          value={d.상차지명 ?? ""}
-                          onChange={(e) => setD(r._id, "상차지명", e.target.value)}
-                        />
-                      )}
-                    </td>
-
-                    {/* 하차지명 */}
-                    <td className={cell}>
-                      {!editMode ? roText(r.하차지명 || "") : (
-                        <input className={`${input} ${editableCls}`}
-                          value={d.하차지명 ?? ""}
-                          onChange={(e) => setD(r._id, "하차지명", e.target.value)}
-                        />
-                      )}
-                    </td>
-
-                    {/* 차량번호 */}
-                    <td className={cell}>
-                      {!editMode ? roText(r.차량번호 || "") : (
-                        <>
-                          <input
-                            list="carNos-list"
-                            className={`${input} ${editableCls}`}
-                            value={d.차량번호 ?? ""}
-                            onChange={(e) => setD(r._id, "차량번호", e.target.value)}
-                            onKeyDown={onCarKeyDown(r)}
-                          />
-                          <datalist id="carNos-list">
-                            {recentCarNos.map(cn => (
-                              <option key={cn} value={cn} />
-                            ))}
-                          </datalist>
-                        </>
-                      )}
-                    </td>
-
-                    {/* 이름 */}
-                    <td className={cell}>
-                      {roText(editMode ? (d.이름 ?? r.이름) : (r.이름 || ""))}
-                    </td>
-
-                    {/* 전화번호 */}
-                    <td className={cell}>
-                      {roText(editMode ? (d.전화번호 ?? r.전화번호) : (r.전화번호 || ""))}
-                    </td>
-
-                    {/* 청구운임 */}
-                    <td className={cell}>
-                      {!editMode ? roText(won(r.청구운임)) : (
-                        <input className={`${input} text-right ${editableCls}`}
-                          value={d.청구운임 ?? ""}
-                          onChange={(e) => setD(r._id, "청구운임", e.target.value.replace(/[^\d]/g, ""))}
-                        />
-                      )}
-                    </td>
-
-                    {/* 기사운임 */}
-                    <td className={cell}>
-                      {!editMode ? roText(won(r.기사운임)) : (
-                        <input className={`${input} text-right ${editableCls}`}
-                          value={d.기사운임 ?? ""}
-                          onChange={(e) => setD(r._id, "기사운임", e.target.value.replace(/[^\d]/g, ""))}
-                        />
-                      )}
-                    </td>
-
-                    {/* 수수료 */}
-                    <td className={`${cell} text-blue-700 font-semibold`}>
-                      {won(fee)}
-                    </td>
-
-                    {/* 지급방식 */}
-                    <td className={cell}>
-                      {!editMode ? roText(r.지급방식 || "") : (
-                        <select className={`${input} ${editableCls}`}
-                          value={d.지급방식 ?? ""}
-                          onChange={(e) => setD(r._id, "지급방식", e.target.value)}
-                        >
-                          <option value="">선택</option>
-                          {PAY_METHODS.map(o => (
-                            <option key={o} value={o}>{o}</option>
-                          ))}
-                        </select>
-                      )}
-                    </td>
-
-                    {/* 배차방식 */}
-                    <td className={cell}>
-                      {!editMode ? roText(r.배차방식 || "") : (
-                        <select className={`${input} ${editableCls}`}
-                          value={d.배차방식 ?? ""}
-                          onChange={(e) => setD(r._id, "배차방식", e.target.value)}
-                        >
-                          <option value="">선택</option>
-                          {DISPATCH_METHODS.map(o => (
-                            <option key={o} value={o}>{o}</option>
-                          ))}
-                        </select>
-                      )}
-                    </td>
-
-                    {/* 메모 (더보기 팝업 + 너비 축소) */}
-                    <td className={cell + " min-w-[80px] max-w-[80px] truncate"}>
-                      {!editMode ? (
-                        <span
-                          className="cursor-pointer hover:underline"
-                          onClick={() => setMemoPopup({ open: true, text: r.메모 || "" })}
-                        >
-                          {(r.메모 || "").length > 5
-                            ? (r.메모.substring(0, 5) + "…")
-                            : (r.메모 || "")}
-                        </span>
-                      ) : (
-                        <input
-                          className={`${input} ${editableCls}`}
-                          value={d.메모 ?? ""}
-                          onChange={(e) => setD(r._id, "메모", e.target.value)}
-                        />
-                      )}
-                    </td>
-
-
                   </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
+                </tfoot>
+              )}
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ══ 기사별 집계 탭 ══ */}
+      {activeTab === "driver" && (
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-[12px]">
+              <thead>
+                <tr className="bg-[#1B2B4B]">
+                  {["차량번호", "기사명", "전화번호", "총 건수", "기사운임 합계", "지급완료", "미지급 건수", "미지급 금액", "일괄 지급"].map(h => (
+                    <th key={h} className="px-3 py-3 text-white font-bold text-center whitespace-nowrap border-b border-white/10">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {driverSummary.length === 0 ? (
+                  <tr><td colSpan={9} className="text-center py-16 text-gray-400 text-[13px]">데이터가 없습니다.</td></tr>
+                ) : driverSummary.map((d, i) => (
+                  <tr key={d.차량번호} className={`${i % 2 === 0 ? "bg-white" : "bg-gray-50/60"} hover:bg-blue-50/40 transition`}>
+                    <td className="px-3 py-3 text-center font-mono border-b border-gray-100">{d.차량번호}</td>
+                    <td className="px-3 py-3 text-center font-semibold border-b border-gray-100">{d.이름 || "-"}</td>
+                    <td className="px-3 py-3 text-center border-b border-gray-100">{d.전화번호 || "-"}</td>
+                    <td className="px-3 py-3 text-center border-b border-gray-100">{d.cnt}건</td>
+                    <td className="px-3 py-3 text-right font-bold text-[#1B2B4B] border-b border-gray-100">{won(d.기사운임합)}원</td>
+                    <td className="px-3 py-3 text-center border-b border-gray-100">
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-bold text-[11px]">{d.지급완료}건</span>
+                    </td>
+                    <td className="px-3 py-3 text-center border-b border-gray-100">
+                      {d.미지급 > 0 ? <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-bold text-[11px]">{d.미지급}건</span> : <span className="text-gray-300">-</span>}
+                    </td>
+                    <td className="px-3 py-3 text-right font-bold border-b border-gray-100">
+                      {d.미지급액 > 0 ? <span className="text-red-500">{won(d.미지급액)}원</span> : <span className="text-gray-300">-</span>}
+                    </td>
+                    <td className="px-3 py-3 text-center border-b border-gray-100">
+                      {d.미지급 > 0 ? (
+                        <button onClick={() => payAllByDriver(d.rows)}
+                          className="px-3 py-1.5 rounded-lg bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[11px] font-bold transition">
+                          미지급 {d.미지급}건 지급
+                        </button>
+                      ) : (
+                        <span className="text-emerald-600 font-bold text-[11px]">✓ 완료</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              {driverSummary.length > 0 && (
+                <tfoot>
+                  <tr className="bg-[#1B2B4B]">
+                    <td colSpan={4} className="px-3 py-3 text-white font-bold text-center">합 계 ({driverSummary.length}명)</td>
+                    <td className="px-3 py-3 text-right text-yellow-300 font-bold">{won(kpi.driver)}원</td>
+                    <td className="px-3 py-3 text-center text-emerald-300 font-bold">{kpi.done}건</td>
+                    <td className="px-3 py-3 text-center text-amber-300 font-bold">{kpi.undone}건</td>
+                    <td className="px-3 py-3 text-right text-red-300 font-bold">{won(kpi.undoneAmt)}원</td>
+                    <td></td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
-
-// ===================== DispatchApp.jsx (PART 9/9 — 지급관리 V5 최종본) — END =====================
+// ===================== DispatchApp.jsx (PART 9/9) — END =====================
 // ===================== DispatchApp.jsx (PART 10/10) — START =====================
 function DriverManagement({ drivers = [], upsertDriver, removeDriver }) {
   const [q, setQ] = React.useState("");
