@@ -12055,13 +12055,13 @@ if (sortKey) {
   data = sortDispatchRows(data);
   // ★ updatedAt 있으면 최신 수정/등록 행을 같은 상태 그룹 내 최상단으로
   data.sort((a, b) => {
-    const statusOrder = { 배차완료: 0, 배차중: 1, 취소: 2 };
-    const sa = statusOrder[a.배차상태] ?? 1;
-    const sb = statusOrder[b.배차상태] ?? 1;
+    const statusOrder = { 배차중: 0, 배차완료: 1, 취소: 2 };
+    const sa = statusOrder[a.배차상태] ?? 0;
+    const sb = statusOrder[b.배차상태] ?? 0;
     if (sa !== sb) return sa - sb;
     const ta = Number(a.updatedAt || a.createdAt || 0);
     const tb = Number(b.updatedAt || b.createdAt || 0);
-    return tb - ta; // 최신 수정이 위로
+    return tb - ta;
   });
 }
 
