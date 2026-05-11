@@ -27468,6 +27468,7 @@ const [emailModalOpen, setEmailModalOpen] = useState(false);
   const [emailTo, setEmailTo] = useState("");
   const [emailSending, setEmailSending] = useState(false);
   const [emailBody, setEmailBody] = useState("");
+  const [cardImage, setCardImage] = useState(null);
 // ── 일괄 정산 모달 상태 ──
   const [batchModalOpen, setBatchModalOpen] = useState(false);
   const [batchClients, setBatchClients] = useState(new Set());   // 선택된 거래처
@@ -28560,13 +28561,56 @@ const handleBatchSettle = async (targetStatus) => {
                     />
                   </div>
 
-                  {/* 명함 미리보기 */}
-                  <div className="border border-gray-200 rounded-lg overflow-hidden">
-                    <div className="px-3 py-2 bg-gray-50 border-b border-gray-200">
-                      <span className="text-[12px] font-bold text-gray-600">이메일 하단 명함 (자동 첨부)</span>
+                 {/* 명함 — 드래그/붙여넣기/파일선택 */}
+                  <div
+                    className="border-2 border-dashed border-gray-300 rounded-xl overflow-hidden"
+                    onDragOver={e => e.preventDefault()}
+                    onDrop={e => {
+                      e.preventDefault();
+                      const file = e.dataTransfer.files[0];
+                      if (!file || !file.type.startsWith("image/")) return;
+                      const reader = new FileReader();
+                      reader.onload = ev => setCardImage(ev.target.result);
+                      reader.readAsDataURL(file);
+                    }}
+                    onPaste={e => {
+                      const item = Array.from(e.clipboardData.items).find(i => i.type.startsWith("image/"));
+                      if (!item) return;
+                      const reader = new FileReader();
+                      reader.onload = ev => setCardImage(ev.target.result);
+                      reader.readAsDataURL(item.getAsFile());
+                    }}
+                    tabIndex={0}
+                  >
+                    <div className="px-3 py-2 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+                      <span className="text-[12px] font-bold text-gray-600">이메일 하단 명함</span>
+                      <div className="flex gap-2 items-center">
+                        {cardImage && (
+                          <button className="text-[11px] text-red-500 hover:underline"
+                            onClick={() => setCardImage(null)}>초기화</button>
+                        )}
+                        <label className="text-[11px] text-blue-600 cursor-pointer hover:underline">
+                          파일 선택
+                          <input type="file" accept="image/*" className="hidden"
+                            onChange={e => {
+                              const file = e.target.files[0];
+                              if (!file) return;
+                              const reader = new FileReader();
+                              reader.onload = ev => setCardImage(ev.target.result);
+                              reader.readAsDataURL(file);
+                            }} />
+                        </label>
+                      </div>
                     </div>
-                    <div className="p-3">
-                      <img src="/RUN25_모바일명함_업무폰.jpg" alt="명함" className="w-full rounded object-contain max-h-[120px]" />
+                    <div className="p-3 min-h-[80px] flex items-center justify-center">
+                      {cardImage ? (
+                        <img src={cardImage} alt="명함" className="w-full rounded object-contain max-h-[120px]" />
+                      ) : (
+                        <div className="text-center text-gray-400 text-[12px]">
+                          <div className="text-2xl mb-1">🖼️</div>
+                          이미지를 여기에 <b>드래그</b>하거나 <b>Ctrl+V</b> 붙여넣기
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -28653,7 +28697,7 @@ const handleBatchSettle = async (targetStatus) => {
                         <div style="font-family:sans-serif;font-size:14px;color:#333;line-height:1.8;max-width:600px">
                           ${bodyLines}
                           <hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0"/>
-                          <img src="https://dispatch-app2.vercel.app/RUN25_모바일명함_업무폰.jpg"
+                          <img src="${cardImage || 'https://dispatch-app2.vercel.app/RUN25_모바일명함_업무폰.jpg'}"
                             alt="RUN25 명함"
                             style="width:100%;max-width:500px;border-radius:8px;display:block"
                             onerror="this.style.display='none'" />
@@ -28663,7 +28707,31 @@ const handleBatchSettle = async (targetStatus) => {
                         const res = await fetch("/api/send-email", {
                           method: "POST",
                           headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ to: emailTo, subject, html: bodyHtml, attachments: fileAttachments }),
+                          body: JSON.stringify({
+                            to: emailTo,
+                            subject,
+                            html: bodyHtml,
+                            attachments: fileAttachments, // PDF
+                            excelData: {                  // ★ 엑셀은 서버에서 생성
+                              client,
+                              start: start || "",
+                              end: end || "",
+                              rows: mapped.map(m => ({
+                                idx: m.idx || "",
+                                상차일: m.상차일 || "",
+                                상차지: m.상차지 || "",
+                                하차지: m.하차지 || "",
+                                화물명: m.화물명 || "",
+                                기사명: m.기사명 || "",
+                                차량번호: m.차량번호 || "",
+                                공급가액: m.공급가액 || 0,
+                                세액: m.세액 || 0,
+                              })),
+                              totals: { 공급가액: 합계공급가, 세액: 합계세액 },
+                              clientInfo: (clients||[]).find(c => c.거래처명 === client) || {},
+                              companyInfo: COMPANY_PRINT,
+                            },
+                          }),
                         });
                         if (res.ok) {
                           showAlert(`${emailTo} 로 발송 완료`);
@@ -28693,7 +28761,7 @@ const handleBatchSettle = async (targetStatus) => {
                   <button className="text-white/60 hover:text-white text-lg" onClick={()=>setShowEdit(false)}>✕</button>
                 </div>
                 <div className="p-6 space-y-3">
-                  {["거래처명","사업자번호","대표자","업태","종목","주소","담당자","연락처"].map(k=>(
+                  {["거래처명","사업자번호","대표자","업태","종목","주소","담당자","연락처","이메일"].map(k=>(
                     <div key={k}>
                       <label className="text-[12px] font-semibold text-gray-500 mb-1 block">{k}</label>
                       <input className="border-2 border-gray-200 rounded-lg px-3 py-2 w-full text-[13px] focus:border-[#1B2B4B] outline-none"
@@ -29711,7 +29779,6 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
   const [searched, setSearched] = React.useState(false);
   const [selected, setSelected] = React.useState(new Set());
   const [gradeFilter, setGradeFilter] = React.useState("전체");
-  const [newForm, setNewForm] = React.useState({ 차량번호:"", 이름:"", 전화번호:"", 메모:"", 등급:"일반" });
   const [showAddForm, setShowAddForm] = React.useState(false);
   const [showAll, setShowAll] = React.useState(false);
   const [page, setPage] = React.useState(1);
@@ -30136,7 +30203,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
   const [selected, setSelected] = React.useState(new Set());
   const [newForm, setNewForm] = React.useState({
     거래처명: "", 사업자번호: "", 대표자: "", 업태: "", 종목: "",
-    주소: "", 담당자: "", 연락처: "", 메모: "",
+    주소: "", 담당자: "", 연락처: "", 이메일: "", 메모: "",
   });
 
   // ═══════════════════════════════════════════════════
@@ -30178,7 +30245,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
     const 거래처명 = (newForm.거래처명 || "").trim();
     if (!거래처명) return showAlert("거래처명은 필수입니다.");
     await upsertClient?.({ ...newForm, id: 거래처명 });
-    setNewForm({ 거래처명: "", 사업자번호: "", 대표자: "", 업태: "", 종목: "", 주소: "", 담당자: "", 연락처: "", 메모: "" });
+   setNewForm({ 거래처명: "", 사업자번호: "", 대표자: "", 업태: "", 종목: "", 주소: "", 담당자: "", 연락처: "", 이메일: "", 메모: "" });
     showAlert("등록 완료");
   };
 
@@ -30211,6 +30278,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
             주소: String(r.주소 || "").trim(),
             담당자: String(r.담당자 || "").trim(),
             연락처: String(r.연락처 || r["전화번호"] || "").trim(),
+            이메일: String(r.이메일 || r["email"] || "").trim(),
             메모: String(r.메모 || "").trim(),
             id: 거래처명,
           });
@@ -30228,7 +30296,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
     const ws = XLSX.utils.json_to_sheet(data.map(r => ({
       거래처명: r.거래처명||"", 사업자번호: r.사업자번호||"", 대표자: r.대표자||"",
       업태: r.업태||"", 종목: r.종목||"", 주소: r.주소||"",
-      담당자: r.담당자||"", 연락처: r.연락처||"", 메모: r.메모||"",
+      담당자: r.담당자||"", 연락처: r.연락처||"", 이메일: r.이메일||"", 메모: r.메모||"",
     })));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "거래처");
@@ -30756,7 +30824,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
           <div className="bg-white rounded-xl border border-[#1B2B4B]/20 p-4">
             <div className="text-sm font-bold text-[#1B2B4B] mb-3">신규 기본 거래처 등록</div>
             <div className="grid grid-cols-4 gap-3 mb-3">
-              {[["거래처명*","거래처명"],["사업자번호","사업자번호"],["대표자","대표자"],["업태","업태"],["종목","종목"],["주소","주소"],["담당자","담당자"],["연락처","연락처"]].map(([label, key]) => (
+{[["거래처명*","거래처명"],["사업자번호","사업자번호"],["대표자","대표자"],["업태","업태"],["종목","종목"],["주소","주소"],["담당자","담당자"],["연락처","연락처"],["이메일","이메일"]].map(([label, key]) => (
                 <div key={key}>
                   <div className="text-xs text-gray-500 font-semibold mb-1">{label}</div>
                   <input className="border border-gray-300 px-2 py-1.5 rounded-lg text-sm w-full focus:border-[#1B2B4B] outline-none"
@@ -30787,7 +30855,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                         <input type="checkbox" onChange={toggleAll}
                           checked={filtered.length > 0 && selected.size === filtered.length} />
                       </th>
-                      {["거래처명","사업자번호","대표자","업태","종목","주소","담당자","연락처","메모"].map(h => (
+                      {["거래처명","사업자번호","대표자","업태","종목","주소","담당자","연락처","이메일","메모"].map(h => (
                         <th key={h} className="px-3 py-3 text-white font-bold text-center whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
@@ -30800,7 +30868,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                           <td className="px-3 py-2.5 text-center">
                             <input type="checkbox" checked={selected.has(id)} onChange={() => toggleOne(id)} />
                           </td>
-                          {["거래처명","사업자번호","대표자","업태","종목","주소","담당자","연락처","메모"].map(key => (
+                          {["거래처명","사업자번호","대표자","업태","종목","주소","담당자","연락처","이메일","메모"].map(key => (
                             <td key={key} className="px-2 py-2.5">
                               <input className="border border-gray-200 rounded px-2 py-1 text-sm focus:border-[#1B2B4B] outline-none"
                                 style={{ minWidth: key === "주소" ? 200 : key === "거래처명" ? 150 : 90 }}
