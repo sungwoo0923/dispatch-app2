@@ -17,7 +17,7 @@ export default async function handler(req, res) {
       secure: true,
       auth: {
         user: "r15332525@daum.net",
-        pass: "lkgaeomrobpkhdov",
+        pass: "jhlpytvcxffqqncw",
       },
       tls: { rejectUnauthorized: false },
       connectionTimeout: 15000,
