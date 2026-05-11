@@ -28513,8 +28513,7 @@ const handleBatchSettle = async (targetStatus) => {
           )}
 {/* 이메일 발송 모달 */}
           {emailModalOpen && (
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]"
-              onClick={() => setEmailModalOpen(false)}>
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
               <div className="bg-white rounded-2xl shadow-2xl w-[560px] max-h-[90vh] overflow-y-auto"
                 onClick={e => e.stopPropagation()}>
 
@@ -28551,7 +28550,7 @@ const handleBatchSettle = async (targetStatus) => {
                   <div>
                     <div className="flex items-center justify-between mb-1">
                       <label className="text-[13px] font-bold text-gray-700">발송 내용 미리보기 (직접 수정 가능)</label>
-                      <span className="text-[11px] text-blue-600 font-semibold">✏️ 편집 가능</span>
+                      <span className="text-[11px] text-blue-600 font-semibold">편집 가능</span>
                     </div>
                     <textarea
                       className="w-full border-2 border-gray-300 rounded-lg px-4 py-3 text-[13px] text-gray-900 leading-relaxed resize-none outline-none focus:border-[#1B2B4B] bg-white"
@@ -28573,7 +28572,7 @@ const handleBatchSettle = async (targetStatus) => {
 
                   {/* 안내 문구 */}
                   <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-[13px] text-blue-800 font-medium">
-                    📎 발송 버튼 클릭 시 거래명세서가 <b>PDF 파일로 자동 첨부</b>되어 발송됩니다.
+                    발송 버튼 클릭 시 거래명세서가 <b>PDF 파일로 자동 첨부</b>되어 발송됩니다.
                   </div>
                 </div>
 
@@ -28595,9 +28594,10 @@ const handleBatchSettle = async (targetStatus) => {
                       if (!emailTo.trim()) return;
                       setEmailSending(true);
 
-                      // PDF 생성
-                      let attachmentBase64 = null;
-                      let attachmentName = `거래명세서_${client}_${start||""}~${end||""}.pdf`;
+                      // ★ PDF + 엑셀 동시 생성
+                      const fileAttachments = [];
+
+                      // 1) PDF
                       try {
                         const area = document.getElementById("invoiceArea");
                         if (area) {
@@ -28615,9 +28615,37 @@ const handleBatchSettle = async (targetStatus) => {
                             pdf.addImage(imgData, "JPEG", 0, position, imgWidth, imgHeight);
                             heightLeft -= 297;
                           }
-                          attachmentBase64 = pdf.output("datauristring").split(",")[1];
+                          fileAttachments.push({
+                            filename: `거래명세서_${client}_${start||""}~${end||""}.pdf`,
+                            content: pdf.output("datauristring").split(",")[1],
+                            contentType: "application/pdf",
+                          });
                         }
                       } catch (e) { console.error("PDF 생성 실패:", e); }
+
+                      // 2) 엑셀
+                      try {
+                        const wsData = mapped.map(m => ({
+                          No: m.idx,
+                          날짜: m.상차일,
+                          상차지: m.상차지,
+                          하차지: m.하차지,
+                          화물명: m.화물명,
+                          기사명: m.기사명,
+                          차량번호: m.차량번호,
+                          공급가액: m.공급가액,
+                          "세액(10%)": m.세액,
+                          합계: m.공급가액 + m.세액,
+                        }));
+                        const wb2 = XLSX.utils.book_new();
+                        const ws2 = XLSX.utils.json_to_sheet(wsData);
+                        XLSX.utils.book_append_sheet(wb2, ws2, "거래명세서");
+                        fileAttachments.push({
+                          filename: `거래명세서_${client}_${start||""}~${end||""}.xlsx`,
+                          content: XLSX.write(wb2, { bookType: "xlsx", type: "base64" }),
+                          contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        });
+                      } catch (e) { console.error("엑셀 생성 실패:", e); }
 
                       const subject = `[거래명세서] ${client} ${start||""}~${end||""}`;
                       const bodyLines = emailBody.split("\n").map(l => `<p style="margin:0 0 4px 0">${l || "&nbsp;"}</p>`).join("");
@@ -28635,10 +28663,10 @@ const handleBatchSettle = async (targetStatus) => {
                         const res = await fetch("/api/send-email", {
                           method: "POST",
                           headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ to: emailTo, subject, html: bodyHtml, attachment: attachmentBase64, attachmentName }),
+                          body: JSON.stringify({ to: emailTo, subject, html: bodyHtml, attachments: fileAttachments }),
                         });
                         if (res.ok) {
-                          showAlert(`✅ ${emailTo} 로 발송 완료`);
+                          showAlert(`${emailTo} 로 발송 완료`);
                           setEmailModalOpen(false);
                         } else {
                           const err = await res.json();

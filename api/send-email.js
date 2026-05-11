@@ -2,19 +2,15 @@ import nodemailer from "nodemailer";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).end();
-
-  const { to, subject, html, attachment, attachmentName } = req.body || {};
+  const { to, subject, html, attachments: atts } = req.body || {};
   if (!to || !subject) return res.status(400).json({ error: "수신자 누락" });
 
   try {
     const transporter = nodemailer.createTransport({
-      host: "smtp.daum.net",      // ★ 다음 서버로 변경
+      host: "smtp.daum.net",
       port: 465,
       secure: true,
-      auth: {
-        user: "r15332525@daum.net",
-        pass: "kzcvdgefuvltipso",
-      },
+      auth: { user: "r15332525@daum.net", pass: "kzcvdgefuvltipso" },
       tls: { rejectUnauthorized: false },
       connectionTimeout: 15000,
     });
@@ -24,13 +20,13 @@ export default async function handler(req, res) {
       to, subject, html: html || subject,
     };
 
-    if (attachment) {
-      mailOptions.attachments = [{
-        filename: attachmentName || "거래명세서.pdf",
-        content: attachment,
+    if (atts && atts.length) {
+      mailOptions.attachments = atts.map(a => ({
+        filename: a.filename,
+        content: a.content,
         encoding: "base64",
-        contentType: "application/pdf",
-      }];
+        contentType: a.contentType,
+      }));
     }
 
     await transporter.sendMail(mailOptions);
