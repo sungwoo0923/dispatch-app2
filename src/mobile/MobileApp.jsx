@@ -18,6 +18,8 @@ import {
   doc,
   onSnapshot,
   serverTimestamp,
+  query,
+  where,
 } from "firebase/firestore";
 import { db, auth } from "../firebase";
 import { signOut } from "firebase/auth";
@@ -522,11 +524,21 @@ useEffect(() => {
   useEffect(() => {
   const unsubs = [];
 
-  const collections = ["dispatch", "orders"]; // 🔥 핵심
+const collections = ["dispatch", "orders"];
 
-  // 교체
+  // 🔥 최근 3개월 날짜 계산
+  const limitDate = (() => {
+    const d = new Date();
+    d.setMonth(d.getMonth() - 3);
+    return d.toISOString().slice(0, 10); // "YYYY-MM-DD"
+  })();
+
   collections.forEach((name) => {
-    const unsub = onSnapshot(collection(db, name), (snap) => {
+    const q = query(
+      collection(db, name),
+      where("상차일", ">=", limitDate)
+    );
+    const unsub = onSnapshot(q, (snap) => {
       const list = snap.docs.map((d) => ({
         _id: d.id,
         id: d.id,
