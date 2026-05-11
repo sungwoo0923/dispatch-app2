@@ -27464,9 +27464,10 @@ const monthRowsRaw = useMemo(() => {
 
   // ★ 입금 엑셀 업로드 → 자동 매칭 → 정산완료
   const [bankMatchResult, setBankMatchResult] = useState(null);
-  const [emailModalOpen, setEmailModalOpen] = useState(false);
+const [emailModalOpen, setEmailModalOpen] = useState(false);
   const [emailTo, setEmailTo] = useState("");
   const [emailSending, setEmailSending] = useState(false);
+  const [emailBody, setEmailBody] = useState("");
 // ── 일괄 정산 모달 상태 ──
   const [batchModalOpen, setBatchModalOpen] = useState(false);
   const [batchClients, setBatchClients] = useState(new Set());   // 선택된 거래처
@@ -28205,6 +28206,7 @@ const handleBatchSettle = async (targetStatus) => {
                     if (!searched || !rowsInvoice.length) return showAlert("먼저 조회를 실행하세요.");
                     const found = (clients||[]).find(c=>c.거래처명===client);
                     setEmailTo(found?.연락처이메일 || found?.이메일 || "");
+                    setEmailBody(`안녕하세요, ${client} 담당자님.\n\n${COMPANY_PRINT.name}입니다.\n\n${start||""}~${end||""} 기간 거래명세서를 발송드립니다.\n\n총 ${mapped.length}건\n공급가액: ${won(합계공급가)}원\n부가세: ${won(합계세액)}원\n합계: ${won(합계공급가+합계세액)}원\n\n입금계좌: ${COMPANY_PRINT.bank}\n\n확인 부탁드립니다.\n감사합니다.\n\n${COMPANY_PRINT.name}\n${COMPANY_PRINT.contact}`);
                     setEmailModalOpen(true);
                   }}
                   className="px-3 py-2 rounded-lg bg-sky-600 text-white text-[13px] font-semibold hover:bg-sky-700 transition"
@@ -28513,93 +28515,98 @@ const handleBatchSettle = async (targetStatus) => {
           {emailModalOpen && (
             <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]"
               onClick={() => setEmailModalOpen(false)}>
-              <div className="bg-white rounded-2xl shadow-2xl w-[520px] overflow-hidden"
+              <div className="bg-white rounded-2xl shadow-2xl w-[560px] max-h-[90vh] overflow-y-auto"
                 onClick={e => e.stopPropagation()}>
+
+                {/* 헤더 */}
                 <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
                   <div>
                     <div className="text-white font-bold text-[15px]">거래명세서 이메일 발송</div>
-                    <div className="text-white/50 text-[12px] mt-0.5">{client} — {mapped.length}건 / {won(합계공급가+합계세액)}원</div>
+                    <div className="text-white/70 text-[12px] mt-0.5">{client} — {mapped.length}건 / {won(합계공급가+합계세액)}원</div>
                   </div>
                   <button className="text-white/60 hover:text-white text-xl" onClick={() => setEmailModalOpen(false)}>×</button>
                 </div>
+
                 <div className="p-6 space-y-4">
+                  {/* 발신 계정 */}
                   <div>
-                    <label className="text-[12px] font-bold text-gray-500 mb-1 block">발신 계정</label>
-                    <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-[13px] text-gray-600">
-                      r15332525@daum.net
+                    <label className="text-[13px] font-bold text-gray-700 mb-1 block">발신 계정</label>
+                    <div className="flex items-center gap-2 px-3 py-2.5 bg-gray-100 border border-gray-300 rounded-lg text-[13px] text-gray-800 font-medium">
+                      tjddnqkf@naver.com
                     </div>
                   </div>
+
+                  {/* 수신 이메일 */}
                   <div>
-                    <label className="text-[12px] font-bold text-gray-500 mb-1 block">수신 이메일</label>
+                    <label className="text-[13px] font-bold text-gray-700 mb-1 block">수신 이메일</label>
                     <input
-                      className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B]"
+                      className="w-full border-2 border-gray-300 rounded-lg px-3 py-2.5 text-[13px] text-gray-900 outline-none focus:border-[#1B2B4B]"
                       placeholder="거래처 이메일 입력"
                       value={emailTo}
                       onChange={e => setEmailTo(e.target.value)}
                     />
                   </div>
+
+                  {/* 발송 내용 미리보기 — 편집 가능 */}
                   <div>
-                    <label className="text-[12px] font-bold text-gray-500 mb-1 block">발송 내용 미리보기</label>
-                    <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-[12px] text-gray-600 leading-relaxed whitespace-pre-line max-h-[160px] overflow-y-auto">
-{`안녕하세요, ${client} 담당자님.
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[13px] font-bold text-gray-700">발송 내용 미리보기 (직접 수정 가능)</label>
+                      <span className="text-[11px] text-blue-600 font-semibold">✏️ 편집 가능</span>
+                    </div>
+                    <textarea
+                      className="w-full border-2 border-gray-300 rounded-lg px-4 py-3 text-[13px] text-gray-900 leading-relaxed resize-none outline-none focus:border-[#1B2B4B] bg-white"
+                      rows={10}
+                      value={emailBody}
+                      onChange={e => setEmailBody(e.target.value)}
+                    />
+                  </div>
 
-${COMPANY_PRINT.name}입니다.
-
-${start||""}~${end||""} 기간 거래명세서를 발송드립니다.
-
-총 ${mapped.length}건
-공급가액: ${won(합계공급가)}원
-부가세: ${won(합계세액)}원
-합계: ${won(합계공급가+합계세액)}원
-
-입금계좌: ${COMPANY_PRINT.bank}
-
-확인 부탁드립니다.
-감사합니다.
-
-${COMPANY_PRINT.name}
-${COMPANY_PRINT.contact}`}
+                  {/* 명함 미리보기 */}
+                  <div className="border border-gray-200 rounded-lg overflow-hidden">
+                    <div className="px-3 py-2 bg-gray-50 border-b border-gray-200">
+                      <span className="text-[12px] font-bold text-gray-600">이메일 하단 명함 (자동 첨부)</span>
+                    </div>
+                    <div className="p-3">
+                      <img src="/RUN25_모바일명함_업무폰.jpg" alt="명함" className="w-full rounded object-contain max-h-[120px]" />
                     </div>
                   </div>
-                <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-[12px] text-amber-700">
-                    발송 버튼 클릭 시 다음메일 작성 창이 열립니다. 거래명세서 PDF를 첨부하려면 인쇄 버튼으로 PDF 저장 후 첨부하세요.
+
+                  {/* 안내 문구 */}
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-[13px] text-blue-800 font-medium">
+                    📎 발송 버튼 클릭 시 거래명세서가 <b>PDF 파일로 자동 첨부</b>되어 발송됩니다.
                   </div>
                 </div>
-                <div className="px-6 pb-5 flex gap-3">
+
+                {/* 버튼 */}
+                <div className="px-6 pb-6 flex gap-3">
                   <button
-                    className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 font-semibold text-[13px] hover:bg-gray-200 transition"
+                    className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-800 font-semibold text-[13px] hover:bg-gray-200 transition"
                     onClick={() => setEmailModalOpen(false)}>취소</button>
                   <button
-                    className="flex-1 py-2.5 rounded-xl bg-gray-200 text-gray-700 font-semibold text-[13px] hover:bg-gray-300 transition"
+                    className="flex-1 py-2.5 rounded-xl bg-gray-200 text-gray-800 font-semibold text-[13px] hover:bg-gray-300 transition"
                     onClick={() => {
-                      const body = `안녕하세요, ${client} 담당자님.\n\n${COMPANY_PRINT.name}입니다.\n\n${start||""}~${end||""} 기간 거래명세서를 발송드립니다.\n\n총 ${mapped.length}건\n공급가액: ${won(합계공급가)}원\n부가세: ${won(합계세액)}원\n합계: ${won(합계공급가+합계세액)}원\n\n입금계좌: ${COMPANY_PRINT.bank}\n\n확인 부탁드립니다.\n감사합니다.\n\n${COMPANY_PRINT.name}\n${COMPANY_PRINT.contact}`;
-                      navigator.clipboard.writeText(body);
+                      navigator.clipboard.writeText(emailBody);
                       showAlert("내용이 클립보드에 복사되었습니다.");
                     }}>내용 복사</button>
                   <button
-                    disabled={!emailTo.trim()}
-                    className={`flex-1 py-2.5 rounded-xl font-bold text-[13px] transition ${emailTo.trim() ? "bg-sky-600 hover:bg-sky-700 text-white" : "bg-gray-200 text-gray-400 cursor-not-allowed"}`}
+                    disabled={!emailTo.trim() || emailSending}
+                    className={`flex-1 py-2.5 rounded-xl font-bold text-[13px] transition ${emailTo.trim() && !emailSending ? "bg-sky-600 hover:bg-sky-700 text-white" : "bg-gray-200 text-gray-400 cursor-not-allowed"}`}
                     onClick={async () => {
                       if (!emailTo.trim()) return;
                       setEmailSending(true);
 
-                      // ★ 거래명세서 PDF 생성
+                      // PDF 생성
                       let attachmentBase64 = null;
                       let attachmentName = `거래명세서_${client}_${start||""}~${end||""}.pdf`;
                       try {
                         const area = document.getElementById("invoiceArea");
                         if (area) {
-                          const canvas = await html2canvas(area, {
-                            scale: 1.5,
-                            backgroundColor: "#ffffff",
-                            useCORS: true,
-                          });
+                          const canvas = await html2canvas(area, { scale: 1.5, backgroundColor: "#ffffff", useCORS: true });
                           const imgData = canvas.toDataURL("image/jpeg", 0.85);
                           const pdf = new jsPDF("p", "mm", "a4");
                           const imgWidth = 210;
                           const imgHeight = (canvas.height * imgWidth) / canvas.width;
-                          let heightLeft = imgHeight;
-                          let position = 0;
+                          let heightLeft = imgHeight, position = 0;
                           pdf.addImage(imgData, "JPEG", 0, position, imgWidth, imgHeight);
                           heightLeft -= 297;
                           while (heightLeft > 0) {
@@ -28608,50 +28615,34 @@ ${COMPANY_PRINT.contact}`}
                             pdf.addImage(imgData, "JPEG", 0, position, imgWidth, imgHeight);
                             heightLeft -= 297;
                           }
-                          const pdfBase64 = pdf.output("datauristring").split(",")[1];
-                          attachmentBase64 = pdfBase64;
+                          attachmentBase64 = pdf.output("datauristring").split(",")[1];
                         }
-                      } catch (e) {
-                        console.error("PDF 생성 실패:", e);
-                      }
+                      } catch (e) { console.error("PDF 생성 실패:", e); }
 
                       const subject = `[거래명세서] ${client} ${start||""}~${end||""}`;
+                      const bodyLines = emailBody.split("\n").map(l => `<p style="margin:0 0 4px 0">${l || "&nbsp;"}</p>`).join("");
                       const bodyHtml = `
-                        <div style="font-family:sans-serif;font-size:14px;color:#333;line-height:1.8">
-                          <p>안녕하세요, <b>${client}</b> 담당자님.</p>
-                          <p>${COMPANY_PRINT.name}입니다.</p>
-                          <p>${start||""}~${end||""} 기간 거래명세서를 발송드립니다.</p>
-                          <table style="border-collapse:collapse;margin:16px 0">
-                            <tr><td style="padding:4px 12px 4px 0;color:#666">총 건수</td><td><b>${mapped.length}건</b></td></tr>
-                            <tr><td style="padding:4px 12px 4px 0;color:#666">공급가액</td><td><b>${won(합계공급가)}원</b></td></tr>
-                            <tr><td style="padding:4px 12px 4px 0;color:#666">부가세</td><td><b>${won(합계세액)}원</b></td></tr>
-                            <tr><td style="padding:4px 12px 4px 0;color:#666;font-weight:bold">합계</td><td><b style="font-size:16px;color:#1B2B4B">${won(합계공급가+합계세액)}원</b></td></tr>
-                          </table>
-                          <p style="background:#f8fafc;border-left:4px solid #1B2B4B;padding:8px 12px;margin:12px 0">
-                            입금계좌: <b>${COMPANY_PRINT.bank}</b>
-                          </p>
-                          <p>확인 부탁드립니다. 감사합니다.</p>
-                          <hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0"/>
-                          <p style="font-size:12px;color:#9ca3af">${COMPANY_PRINT.name} | ${COMPANY_PRINT.contact}</p>
+                        <div style="font-family:sans-serif;font-size:14px;color:#333;line-height:1.8;max-width:600px">
+                          ${bodyLines}
+                          <hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0"/>
+                          <img src="https://dispatch-app2.vercel.app/RUN25_모바일명함_업무폰.jpg"
+                            alt="RUN25 명함"
+                            style="width:100%;max-width:500px;border-radius:8px;display:block"
+                            onerror="this.style.display='none'" />
                         </div>`;
+
                       try {
                         const res = await fetch("/api/send-email", {
                           method: "POST",
                           headers: { "Content-Type": "application/json" },
-                         body: JSON.stringify({
-                            to: emailTo,
-                            subject,
-                            html: bodyHtml,
-                            attachment: attachmentBase64,
-                            attachmentName,
-                          }),
+                          body: JSON.stringify({ to: emailTo, subject, html: bodyHtml, attachment: attachmentBase64, attachmentName }),
                         });
                         if (res.ok) {
-                          showAlert(`${emailTo} 로 발송 완료`);
+                          showAlert(`✅ ${emailTo} 로 발송 완료`);
                           setEmailModalOpen(false);
                         } else {
                           const err = await res.json();
-                          showAlert(`발송 실패: ${err.error || "오류 발생"}\n코드: ${err.code || ""}\n${err.detail || ""}`);
+                          showAlert(`발송 실패: ${err.error || "오류 발생"}\n코드: ${err.code || ""}`);
                         }
                       } catch (e) {
                         showAlert("네트워크 오류로 발송 실패");
