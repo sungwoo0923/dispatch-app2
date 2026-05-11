@@ -1,5 +1,5 @@
 // ======================= src/mobile/MobileApp.jsx (PART 1/3) =======================
-import React, { useState, useMemo, useEffect, useRef } from "react";
+import React, { useState, useMemo, useEffect, useRef, startTransition } from "react";
 import {
   LineChart,
   Line,
@@ -532,9 +532,11 @@ useEffect(() => {
         ...d.data(),
       }));
       setOrdersLoaded(true);
-      setOrders((prev) => {
-        const filtered = prev.filter((o) => o.__col !== name);
-        return [...filtered, ...list];
+      startTransition(() => {
+        setOrders((prev) => {
+          const filtered = prev.filter((o) => o.__col !== name);
+          return [...filtered, ...list];
+        });
       });
 
       // 교체 후
@@ -1176,7 +1178,7 @@ useEffect(() => {
   }
 }, [page, ordersLoaded, unassignedOrders.length]);
 
-// ✅ 접속(로드) 시 1회 팝업: (오늘 숨김이 아니고) 미배차가 있으면 띄움
+// ✅ 접속(로드) 시 1회 팝업 — 1.5초 지연으로 화면 먼저 렌더링
 useEffect(() => {
   if (!ordersLoaded) return;
 
@@ -1184,14 +1186,18 @@ useEffect(() => {
   const hideKey = "hideUnassignedPopupDate";
   const hiddenDate = localStorage.getItem(hideKey);
 
-  if (hiddenDate === today) return;           // 오늘 하루 열지 않기면 스킵
-  if (unassignedOrders.length === 0) return;  // 미배차 없으면 스킵
-  if (page !== "list") return;                // 접속 시 list에서만 띄우기
+  if (hiddenDate === today) return;
+  if (unassignedOrders.length === 0) return;
+  if (page !== "list") return;
   if (popupLastShownDateRef.current === today) return;
 
-
   popupLastShownDateRef.current = today;
-  setShowUnassignedEntryPopup(true);
+
+  // ★ 화면 렌더링 먼저, 팝업은 1.5초 후
+  const timer = setTimeout(() => {
+    setShowUnassignedEntryPopup(true);
+  }, 1500);
+  return () => clearTimeout(timer);
 }, [ordersLoaded, unassignedOrders.length, page]);
 
 // ✅ 자정(KST) 지나면: 숨김은 "오늘"만 적용이므로 날짜 바뀌면 다시 띄울 수 있어야 함
@@ -3433,7 +3439,7 @@ function dayBadgeClass(label) {
   return "bg-gray-50 text-gray-500 border-gray-200";
 }
 
-function MobileOrderCard({
+const MobileOrderCard = React.memo(function MobileOrderCard({
   order,
   onSelect,
   onOpenMemo,
@@ -3652,9 +3658,9 @@ const dt = new Date(y, m - 1, d, hh, mm);
     </button>
   </div>
 )}
-    </div>
+</div>
   );
-}
+});
 // ======================================================================
 // 상세보기
 // ======================================================================

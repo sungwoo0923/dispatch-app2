@@ -29726,7 +29726,7 @@ const handleBatchSettle = async (targetStatus) => {
                   <div>
                     <label className="text-[13px] font-bold text-gray-700 mb-1 block">발신 계정</label>
                     <div className="px-3 py-2.5 bg-gray-100 border border-gray-300 rounded-lg text-[13px] text-gray-800 font-medium">
-                      tjddnqkf@naver.com
+                      r15332525@daum.net
                     </div>
                   </div>
 
