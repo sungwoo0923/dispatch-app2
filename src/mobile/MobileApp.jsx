@@ -1825,7 +1825,7 @@ const title =
             setPage("list");
           }
         }
-      : page === "notice" || page === "schedule" || page === "unassigned" || page === "handover"
+    : page === "notice" || page === "schedule" || page === "unassigned" || page === "handover" || page === "ratecard"
       ? () => setPage("list")
       : page === "fare"
       ? () => setPage(prevPage || "list")
