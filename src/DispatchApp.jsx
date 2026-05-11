@@ -128,6 +128,7 @@ function normalizeClient(row) {
     주소: row.주소 || "",
     담당자: row.담당자 || "",
     연락처: row.연락처 || "",
+    이메일: row.이메일 || row.email || "",
   };
 }
 function normalizeClients(arr) {
@@ -146,6 +147,7 @@ function normalizeClients(arr) {
       주소: c.주소 || "",
       담당자: c.담당자 || "",
       연락처: c.연락처 || "",
+      이메일: c.이메일 || "",
       메모: c.메모 || ""
     }));
 }
@@ -1536,15 +1538,15 @@ return (
           />
         )}
 
-        {menu === "거래처관리" && role === "admin" && (
-         <ClientManagement
-    clients={clients}
-    upsertClient={upsertClient}
-    removeClient={removeClient}
-    upsertPlace={upsertPlace}
-    showAlert={showAlert}
-  />
-        )}
+        <div style={{ display: menu === "거래처관리" && role === "admin" ? "block" : "none" }}>
+          <ClientManagement
+            clients={clients}
+            upsertClient={upsertClient}
+            removeClient={removeClient}
+            upsertPlace={upsertPlace}
+            showAlert={showAlert}
+          />
+        </div>
 
         {menu === "고정거래처관리" && role === "admin" && (
           <div>
@@ -27467,7 +27469,12 @@ const monthRowsRaw = useMemo(() => {
 const [emailModalOpen, setEmailModalOpen] = useState(false);
   const [emailTo, setEmailTo] = useState("");
   const [emailSending, setEmailSending] = useState(false);
-  const [emailBody, setEmailBody] = useState("");
+const [emailBody, setEmailBody] = useState("");
+const [arEmailOpen, setArEmailOpen] = useState(false);
+// ★ 신규: 이메일 발송 월 범위
+const [arEmailFromMM, setArEmailFromMM] = useState("01");
+const [arEmailToMM, setArEmailToMM]     = useState("12");
+
   const [cardImage, setCardImage] = useState(null);
 // ── 일괄 정산 모달 상태 ──
   const [batchModalOpen, setBatchModalOpen] = useState(false);
@@ -27476,10 +27483,15 @@ const [emailModalOpen, setEmailModalOpen] = useState(false);
   const [batchToMM,   setBatchToMM]   = useState("12");
   const [batchClientQ, setBatchClientQ] = useState("");
     const [batchLoading, setBatchLoading] = useState(false);
-     const [arReportOpen, setArReportOpen] = useState(false);
+const [arReportOpen, setArReportOpen] = useState(false);
 const [arFromMM, setArFromMM] = useState("01");
-  const [arToMM,   setArToMM]   = useState("12");
-  const [arOnlyUnsettled, setArOnlyUnsettled] = useState(false);
+const [arToMM,   setArToMM]   = useState("12");
+const [arOnlyUnsettled, setArOnlyUnsettled] = useState(false);
+// ★ 신규: 거래처 필터
+const [arReportMode, setArReportMode] = useState("all"); // "all" | "selected"
+const [arReportClients, setArReportClients] = useState(new Set());
+const [arReportClientQ, setArReportClientQ] = useState("");
+
   // ── 일괄정산 모달용 사전 계산 (렌더마다 재계산 방지)
   const batchUnsettledMap = useMemo(() => {
     const map = new Map();
@@ -27510,6 +27522,7 @@ const handleARReport = () => {
   const fromIdx = parseInt(arFromMM, 10);
   const toIdx   = parseInt(arToMM,   10);
   if (fromIdx > toIdx) return showAlert("시작월이 종료월보다 클 수 없습니다.");
+  if (arReportMode === "selected" && arReportClients.size === 0) return showAlert("거래처를 선택하세요.");
 
   const months = Array.from({ length: toIdx - fromIdx + 1 }, (_, i) =>
     `${THIS_YEAR}-${String(fromIdx + i).padStart(2, "0")}`
@@ -27522,7 +27535,14 @@ const handleARReport = () => {
   const basicClientNames = new Set(
     (clients || []).map(c => c.거래처명).filter(Boolean)
   );
-  basicClientNames.forEach(name => companyMap.set(name, {}));
+
+  // ★ 특정 거래처 모드일 때 선택된 거래처만 필터
+  if (arReportMode === "selected" && arReportClients.size > 0) {
+    const filtered = new Set([...basicClientNames].filter(name => arReportClients.has(name)));
+    filtered.forEach(name => companyMap.set(name, {}));
+  } else {
+    basicClientNames.forEach(name => companyMap.set(name, {}));
+  }
 
   const completedData = allData.filter(r => (r.배차상태 || "") === "배차완료");
 
@@ -28607,7 +28627,7 @@ const handleBatchSettle = async (targetStatus) => {
                         <img src={cardImage} alt="명함" className="w-full rounded object-contain max-h-[120px]" />
                       ) : (
                         <div className="text-center text-gray-400 text-[12px]">
-                          <div className="text-2xl mb-1">🖼️</div>
+                          <div className="text-2xl mb-1"></div>
                           이미지를 여기에 <b>드래그</b>하거나 <b>Ctrl+V</b> 붙여넣기
                         </div>
                       )}
@@ -28866,6 +28886,24 @@ const handleBatchSettle = async (targetStatus) => {
                 >
                   일괄 정산처리
                 </button>
+                <button
+  disabled={!selClient}
+  onClick={() => {
+    const found = (clients||[]).find(c => c.거래처명 === selClient);
+    setEmailTo(found?.이메일 || found?.연락처이메일 || "");
+    // ★ 월 범위 초기화 (현재 필터와 동기화)
+    setArEmailFromMM(monthFilter !== "all" ? monthFilter : "01");
+    setArEmailToMM(monthFilter !== "all" ? monthFilter : "12");
+    const unpaid = monthRows.filter(r => r.정산상태 === "미정산");
+    const unpaidAmt = unpaid.reduce((s,r) => s + r.총청구금액, 0);
+    setEmailBody(`안녕하세요, ${selClient} 담당자님.\n\n${COMPANY_PRINT.name}입니다.\n\n${THIS_YEAR}년 미수금 현황을 안내드립니다.\n\n미정산 월수: ${unpaid.length}개월\n미정산 금액: ${unpaidAmt.toLocaleString()}원\n\n${unpaid.map(r => `  - ${r.yyyymm} : ${r.총청구금액.toLocaleString()}원`).join("\n")}\n\n입금계좌: ${COMPANY_PRINT.bank}\n\n정산 부탁드립니다.\n감사합니다.\n\n${COMPANY_PRINT.name}\n${COMPANY_PRINT.contact}`);
+    setArEmailOpen(true);
+  }}
+  className={`px-3 py-2 rounded-lg text-[13px] font-semibold text-white transition ${selClient ? "bg-sky-600 hover:bg-sky-700" : "bg-sky-600/40 cursor-not-allowed"}`}
+>
+  이메일 발송
+</button>
+
               </div>
             </div>
           </div>
@@ -29056,82 +29094,185 @@ const handleBatchSettle = async (targetStatus) => {
               </div>
             </div>
           </div>
-          {/* 미수금 보고서 기간 선택 */}
-          {arReportOpen && (
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]"
-              onClick={() => setArReportOpen(false)}>
-              <div className="bg-white rounded-2xl shadow-2xl w-[400px] overflow-hidden"
-                onClick={e => e.stopPropagation()}>
-                <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
-                  <div>
-                    <div className="text-white font-bold text-[15px]">미수금 보고서 출력</div>
-                    <div className="text-white/50 text-[12px] mt-0.5">기간을 선택하고 출력하세요</div>
-                  </div>
-                  <button className="text-white/60 hover:text-white text-xl"
-                    onClick={() => setArReportOpen(false)}>×</button>
-                </div>
-                <div className="p-6 space-y-4">
-                  <div>
-                    <div className="text-[12px] font-bold text-gray-500 mb-2">조회 기간 ({THIS_YEAR}년)</div>
-                    <div className="flex items-center gap-3">
-                      <select
-                        className="flex-1 border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
-                        value={arFromMM} onChange={e => setArFromMM(e.target.value)}>
-                        {Array.from({length:12},(_,i)=>String(i+1).padStart(2,"0")).map(mm=>(
-                          <option key={mm} value={mm}>{parseInt(mm,10)}월</option>
-                        ))}
-                      </select>
-                      <span className="text-gray-400 font-semibold">~</span>
-                      <select
-                        className="flex-1 border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
-                        value={arToMM} onChange={e => setArToMM(e.target.value)}>
-                        {Array.from({length:12},(_,i)=>String(i+1).padStart(2,"0")).map(mm=>(
-                          <option key={mm} value={mm}>{parseInt(mm,10)}월</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="mt-2 flex gap-2">
-                      {[["상반기","01","06"],["하반기","07","12"],["전체","01","12"]].map(([label,f,t])=>(
-                        <button key={label}
-                          className="flex-1 py-1.5 rounded-lg bg-gray-100 text-gray-600 text-[12px] font-semibold hover:bg-gray-200 transition"
-                          onClick={() => { setArFromMM(f); setArToMM(t); }}>
-                          {label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div
-                    className={`flex items-center gap-3 px-4 py-3 rounded-xl border-2 cursor-pointer transition select-none ${
-                      arOnlyUnsettled ? "border-[#1B2B4B] bg-[#1B2B4B]/5" : "border-gray-200 bg-gray-50"
-                    }`}
-                    onClick={() => setArOnlyUnsettled(p => !p)}
-                  >
-                    <div className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition ${
-                      arOnlyUnsettled ? "border-[#1B2B4B] bg-[#1B2B4B]" : "border-gray-300"
-                    }`}>
-                      {arOnlyUnsettled && <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 12 12"><path d="M1 6l3.5 3.5L11 2"/></svg>}
-                    </div>
-                    <div>
-                      <div className="text-[13px] font-bold text-gray-700">미수금 있는 거래처만 출력</div>
-                      <div className="text-[11px] text-gray-400 mt-0.5">정산완료된 거래처는 보고서에서 제외됩니다</div>
-                    </div>
-                  </div>
-                  <div className="text-[12px] text-gray-400 bg-gray-50 rounded-lg px-4 py-3">
-                    거래처 <b className="text-[#1B2B4B]">{clientOptions8.length}개사</b> 전체 대상<br/>
-                    선택 기간의 미정산/정산완료 금액이 월별로 표시됩니다
-                  </div>
-                </div>
-                <div className="px-6 pb-5 flex gap-3">
-                  <button className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 font-semibold text-[13px] hover:bg-gray-200 transition"
-                    onClick={() => setArReportOpen(false)}>취소</button>
-                  <button className="flex-1 py-2.5 rounded-xl bg-violet-600 text-white font-bold text-[13px] hover:bg-violet-700 transition"
-                    onClick={handleARReport}>
-                    보고서 출력
-                  </button>
-                </div>
-              </div>
+          {/* 미수금 보고서 기간 + 거래처 선택 */}
+{arReportOpen && (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]"
+    onClick={() => setArReportOpen(false)}>
+    <div className="bg-white rounded-2xl shadow-2xl w-[580px] max-h-[85vh] flex flex-col overflow-hidden"
+      onClick={e => e.stopPropagation()}>
+
+      {/* 헤더 */}
+      <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between shrink-0">
+        <div>
+          <div className="text-white font-bold text-[15px]">미수금 보고서 출력</div>
+          <div className="text-white/50 text-[12px] mt-0.5">기간과 거래처를 선택하고 출력하세요</div>
+        </div>
+        <button className="text-white/60 hover:text-white text-xl"
+          onClick={() => setArReportOpen(false)}>×</button>
+      </div>
+
+      {/* 기간 선택 */}
+      <div className="px-6 pt-4 pb-3 border-b border-gray-100 shrink-0">
+        <div className="text-[12px] font-bold text-gray-500 mb-2">조회 기간 ({THIS_YEAR}년)</div>
+        <div className="flex items-center gap-3">
+          <select
+            className="flex-1 border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
+            value={arFromMM} onChange={e => setArFromMM(e.target.value)}>
+            {Array.from({length:12},(_,i)=>String(i+1).padStart(2,"0")).map(mm=>(
+              <option key={mm} value={mm}>{parseInt(mm,10)}월</option>
+            ))}
+          </select>
+          <span className="text-gray-400 font-semibold">~</span>
+          <select
+            className="flex-1 border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
+            value={arToMM} onChange={e => setArToMM(e.target.value)}>
+            {Array.from({length:12},(_,i)=>String(i+1).padStart(2,"0")).map(mm=>(
+              <option key={mm} value={mm}>{parseInt(mm,10)}월</option>
+            ))}
+          </select>
+        </div>
+        <div className="mt-2 flex gap-2">
+          {[["상반기","01","06"],["하반기","07","12"],["전체","01","12"]].map(([label,f,t])=>(
+            <button key={label}
+              className="flex-1 py-1.5 rounded-lg bg-gray-100 text-gray-600 text-[12px] font-semibold hover:bg-gray-200 transition"
+              onClick={() => { setArFromMM(f); setArToMM(t); }}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ★ 거래처 범위 선택 */}
+      <div className="px-6 pt-4 pb-3 border-b border-gray-100 shrink-0">
+        <div className="text-[12px] font-bold text-gray-500 mb-2">거래처 범위</div>
+        <div className="flex gap-2 mb-3">
+          <button
+            className={`flex-1 py-2 rounded-lg text-[13px] font-bold transition ${
+              arReportMode === "all"
+                ? "bg-[#1B2B4B] text-white"
+                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+            }`}
+            onClick={() => { setArReportMode("all"); setArReportClients(new Set()); }}
+          >
+            전체 거래처
+          </button>
+          <button
+            className={`flex-1 py-2 rounded-lg text-[13px] font-bold transition ${
+              arReportMode === "selected"
+                ? "bg-[#1B2B4B] text-white"
+                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+            }`}
+            onClick={() => setArReportMode("selected")}
+          >
+            특정 거래처 선택
+          </button>
+        </div>
+
+        {arReportMode === "selected" && (
+          <>
+            <div className="flex items-center gap-2 mb-2">
+              <input
+                className="flex-1 border-2 border-gray-200 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B]"
+                placeholder="거래처명 검색..."
+                value={arReportClientQ}
+                onChange={e => setArReportClientQ(e.target.value)}
+              />
+              <button
+                className="px-3 py-2 rounded-lg border border-[#1B2B4B] text-[#1B2B4B] text-[12px] font-bold hover:bg-[#1B2B4B] hover:text-white transition"
+                onClick={() => {
+                  const filtered = clientOptions8.filter(name =>
+                    !arReportClientQ.trim() || name.toLowerCase().includes(arReportClientQ.toLowerCase())
+                  );
+                  if (arReportClients.size === filtered.length) setArReportClients(new Set());
+                  else setArReportClients(new Set(filtered));
+                }}
+              >
+                {arReportClients.size > 0 ? "전체해제" : "전체선택"}
+              </button>
             </div>
-          )}
+            <div className="max-h-[180px] overflow-y-auto border border-gray-200 rounded-xl p-2 space-y-1">
+              {clientOptions8
+                .filter(name => !arReportClientQ.trim() || name.toLowerCase().includes(arReportClientQ.toLowerCase()))
+                .map(name => {
+                  const checked = arReportClients.has(name);
+                  return (
+                    <div key={name}
+                      className={`flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition select-none ${
+                        checked ? "bg-[#1B2B4B]/5 border border-[#1B2B4B]/30" : "hover:bg-gray-50"
+                      }`}
+                      onClick={() => setArReportClients(prev => {
+                        const n = new Set(prev);
+                        n.has(name) ? n.delete(name) : n.add(name);
+                        return n;
+                      })}
+                    >
+                      <div className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition ${
+                        checked ? "border-[#1B2B4B] bg-[#1B2B4B]" : "border-gray-300"
+                      }`}>
+                        {checked && <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 12 12"><path d="M1 6l3.5 3.5L11 2"/></svg>}
+                      </div>
+                      <span className="text-[13px] font-medium text-gray-800">{name}</span>
+                    </div>
+                  );
+                })}
+            </div>
+            {arReportClients.size > 0 && (
+              <div className="mt-2 text-[12px] text-[#1B2B4B] font-semibold">
+                {arReportClients.size}개 거래처 선택됨
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* 옵션 */}
+      <div className="px-6 pt-3 pb-4 shrink-0 space-y-3">
+        <div
+          className={`flex items-center gap-3 px-4 py-3 rounded-xl border-2 cursor-pointer transition select-none ${
+            arOnlyUnsettled ? "border-[#1B2B4B] bg-[#1B2B4B]/5" : "border-gray-200 bg-gray-50"
+          }`}
+          onClick={() => setArOnlyUnsettled(p => !p)}
+        >
+          <div className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition ${
+            arOnlyUnsettled ? "border-[#1B2B4B] bg-[#1B2B4B]" : "border-gray-300"
+          }`}>
+            {arOnlyUnsettled && <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 12 12"><path d="M1 6l3.5 3.5L11 2"/></svg>}
+          </div>
+          <div>
+            <div className="text-[13px] font-bold text-gray-700">미수금 있는 거래처만 출력</div>
+            <div className="text-[11px] text-gray-400 mt-0.5">정산완료된 거래처는 보고서에서 제외됩니다</div>
+          </div>
+        </div>
+
+        <div className="text-[12px] text-gray-400 bg-gray-50 rounded-lg px-4 py-3">
+          {arReportMode === "all"
+            ? <>거래처 <b className="text-[#1B2B4B]">{clientOptions8.length}개사</b> 전체 대상</>
+            : <>선택된 <b className="text-[#1B2B4B]">{arReportClients.size}개사</b> 대상</>
+          }
+          <br/>선택 기간의 미정산/정산완료 금액이 월별로 표시됩니다
+        </div>
+      </div>
+
+      {/* 하단 버튼 */}
+      <div className="px-6 pb-5 flex gap-3 shrink-0">
+        <button className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 font-semibold text-[13px] hover:bg-gray-200 transition"
+          onClick={() => setArReportOpen(false)}>취소</button>
+        <button
+          disabled={arReportMode === "selected" && arReportClients.size === 0}
+          className={`flex-1 py-2.5 rounded-xl font-bold text-[13px] transition ${
+            arReportMode === "all" || arReportClients.size > 0
+              ? "bg-violet-600 text-white hover:bg-violet-700"
+              : "bg-gray-200 text-gray-400 cursor-not-allowed"
+          }`}
+          onClick={handleARReport}
+        >
+          보고서 출력
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
 {/* 일괄 정산 로딩 */}
           {batchLoading && (
             <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999999]">
@@ -29383,7 +29524,236 @@ const handleBatchSettle = async (targetStatus) => {
                 </div>
               </div>
             </div>
-          )}
+)}
+
+          {/* ══ 미수금 이메일 발송 모달 (월 범위 지정 기능 추가) ══ */}
+{arEmailOpen && (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
+    <div className="bg-white rounded-2xl shadow-2xl w-[560px] max-h-[90vh] overflow-y-auto"
+      onClick={e => e.stopPropagation()}>
+      <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
+        <div>
+          <div className="text-white font-bold text-[15px]">미수금 이메일 발송</div>
+          <div className="text-white/70 text-[12px] mt-0.5">{selClient} — {THIS_YEAR}년 미수금 현황</div>
+        </div>
+        <button className="text-white/60 hover:text-white text-xl" onClick={() => setArEmailOpen(false)}>×</button>
+      </div>
+      <div className="p-6 space-y-4">
+
+        {/* ★ 월 범위 선택 */}
+        <div>
+          <label className="text-[13px] font-bold text-gray-700 mb-2 block">발송 월 범위 ({THIS_YEAR}년)</label>
+          <div className="flex items-center gap-3">
+            <select
+              className="flex-1 border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
+              value={arEmailFromMM}
+              onChange={e => {
+                setArEmailFromMM(e.target.value);
+                // ★ 월 범위 변경 시 본문 자동 갱신
+                const from = parseInt(e.target.value, 10);
+                const to = parseInt(arEmailToMM, 10);
+                const filteredRows = monthRowsRaw.filter(r => {
+                  const m = parseInt(r.mm, 10);
+                  return m >= from && m <= to && r.정산상태 === "미정산";
+                });
+                const amt = filteredRows.reduce((s,r) => s + r.총청구금액, 0);
+                setEmailBody(`안녕하세요, ${selClient} 담당자님.\n\n${COMPANY_PRINT.name}입니다.\n\n${THIS_YEAR}년 ${from}월~${to}월 미수금 현황을 안내드립니다.\n\n미정산 월수: ${filteredRows.length}개월\n미정산 금액: ${amt.toLocaleString()}원\n\n${filteredRows.map(r => `  - ${r.yyyymm} : ${r.총청구금액.toLocaleString()}원`).join("\n")}\n\n입금계좌: ${COMPANY_PRINT.bank}\n\n정산 부탁드립니다.\n감사합니다.\n\n${COMPANY_PRINT.name}\n${COMPANY_PRINT.contact}`);
+              }}
+            >
+              {Array.from({length:12},(_,i)=>String(i+1).padStart(2,"0")).map(mm=>(
+                <option key={mm} value={mm}>{parseInt(mm,10)}월</option>
+              ))}
+            </select>
+            <span className="text-gray-400 font-semibold">~</span>
+            <select
+              className="flex-1 border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
+              value={arEmailToMM}
+              onChange={e => {
+                setArEmailToMM(e.target.value);
+                const from = parseInt(arEmailFromMM, 10);
+                const to = parseInt(e.target.value, 10);
+                const filteredRows = monthRowsRaw.filter(r => {
+                  const m = parseInt(r.mm, 10);
+                  return m >= from && m <= to && r.정산상태 === "미정산";
+                });
+                const amt = filteredRows.reduce((s,r) => s + r.총청구금액, 0);
+                setEmailBody(`안녕하세요, ${selClient} 담당자님.\n\n${COMPANY_PRINT.name}입니다.\n\n${THIS_YEAR}년 ${from}월~${to}월 미수금 현황을 안내드립니다.\n\n미정산 월수: ${filteredRows.length}개월\n미정산 금액: ${amt.toLocaleString()}원\n\n${filteredRows.map(r => `  - ${r.yyyymm} : ${r.총청구금액.toLocaleString()}원`).join("\n")}\n\n입금계좌: ${COMPANY_PRINT.bank}\n\n정산 부탁드립니다.\n감사합니다.\n\n${COMPANY_PRINT.name}\n${COMPANY_PRINT.contact}`);
+              }}
+            >
+              {Array.from({length:12},(_,i)=>String(i+1).padStart(2,"0")).map(mm=>(
+                <option key={mm} value={mm}>{parseInt(mm,10)}월</option>
+              ))}
+            </select>
+          </div>
+          <div className="mt-2 flex gap-2">
+            {[["상반기","01","06"],["하반기","07","12"],["전체","01","12"]].map(([label,f,t])=>(
+              <button key={label}
+                className="flex-1 py-1.5 rounded-lg bg-gray-100 text-gray-600 text-[12px] font-semibold hover:bg-gray-200 transition"
+                onClick={() => {
+                  setArEmailFromMM(f); setArEmailToMM(t);
+                  const from2 = parseInt(f,10), to2 = parseInt(t,10);
+                  const filteredRows = monthRowsRaw.filter(r => {
+                    const m = parseInt(r.mm, 10);
+                    return m >= from2 && m <= to2 && r.정산상태 === "미정산";
+                  });
+                  const amt = filteredRows.reduce((s,r) => s + r.총청구금액, 0);
+                  setEmailBody(`안녕하세요, ${selClient} 담당자님.\n\n${COMPANY_PRINT.name}입니다.\n\n${THIS_YEAR}년 ${from2}월~${to2}월 미수금 현황을 안내드립니다.\n\n미정산 월수: ${filteredRows.length}개월\n미정산 금액: ${amt.toLocaleString()}원\n\n${filteredRows.map(r => `  - ${r.yyyymm} : ${r.총청구금액.toLocaleString()}원`).join("\n")}\n\n입금계좌: ${COMPANY_PRINT.bank}\n\n정산 부탁드립니다.\n감사합니다.\n\n${COMPANY_PRINT.name}\n${COMPANY_PRINT.contact}`);
+                }}>
+                {label}
+              </button>
+            ))}
+          </div>
+          {/* ★ 선택 범위 미리보기 */}
+          {(() => {
+            const from = parseInt(arEmailFromMM, 10);
+            const to = parseInt(arEmailToMM, 10);
+            const filteredRows = monthRowsRaw.filter(r => {
+              const m = parseInt(r.mm, 10);
+              return m >= from && m <= to && r.정산상태 === "미정산";
+            });
+            const amt = filteredRows.reduce((s,r) => s + r.총청구금액, 0);
+            return filteredRows.length > 0 ? (
+              <div className="mt-2 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-[12px] text-red-700 font-semibold">
+                선택 범위 미정산: {filteredRows.length}개월 / {amt.toLocaleString()}원
+              </div>
+            ) : (
+              <div className="mt-2 px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-lg text-[12px] text-emerald-700 font-semibold">
+                선택 범위 내 미정산 건이 없습니다
+              </div>
+            );
+          })()}
+        </div>
+
+        <div>
+          <label className="text-[13px] font-bold text-gray-700 mb-1 block">발신 계정</label>
+          <div className="px-3 py-2.5 bg-gray-100 border border-gray-300 rounded-lg text-[13px] text-gray-800 font-medium">
+            tjddnqkf@naver.com
+          </div>
+        </div>
+        <div>
+          <label className="text-[13px] font-bold text-gray-700 mb-1 block">수신 이메일</label>
+          <input
+            className="w-full border-2 border-gray-300 rounded-lg px-3 py-2.5 text-[13px] text-gray-900 outline-none focus:border-[#1B2B4B]"
+            placeholder="거래처 이메일 입력"
+            value={emailTo}
+            onChange={e => setEmailTo(e.target.value)}
+          />
+        </div>
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <label className="text-[13px] font-bold text-gray-700">발송 내용 (직접 수정 가능)</label>
+            <span className="text-[11px] text-blue-600 font-semibold">편집 가능</span>
+          </div>
+          <textarea
+            className="w-full border-2 border-gray-300 rounded-lg px-4 py-3 text-[13px] text-gray-900 font-medium leading-relaxed resize-none outline-none focus:border-[#1B2B4B] bg-white"
+            rows={12}
+            value={emailBody}
+            onChange={e => setEmailBody(e.target.value)}
+          />
+        </div>
+        <div
+          className="border-2 border-dashed border-gray-300 rounded-xl overflow-hidden"
+          onDragOver={e => e.preventDefault()}
+          onDrop={e => {
+            e.preventDefault();
+            const file = e.dataTransfer.files[0];
+            if (!file || !file.type.startsWith("image/")) return;
+            const reader = new FileReader();
+            reader.onload = ev => setCardImage(ev.target.result);
+            reader.readAsDataURL(file);
+          }}
+          onPaste={e => {
+            const item = Array.from(e.clipboardData.items).find(i => i.type.startsWith("image/"));
+            if (!item) return;
+            const reader = new FileReader();
+            reader.onload = ev => setCardImage(ev.target.result);
+            reader.readAsDataURL(item.getAsFile());
+          }}
+          tabIndex={0}
+        >
+          <div className="px-3 py-2 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+            <span className="text-[12px] font-bold text-gray-600">이메일 하단 명함</span>
+            <div className="flex gap-2 items-center">
+              {cardImage && <button className="text-[11px] text-red-500 hover:underline" onClick={() => setCardImage(null)}>초기화</button>}
+              <label className="text-[11px] text-blue-600 cursor-pointer hover:underline">
+                파일 선택
+                <input type="file" accept="image/*" className="hidden" onChange={e => {
+                  const file = e.target.files[0]; if (!file) return;
+                  const reader = new FileReader();
+                  reader.onload = ev => setCardImage(ev.target.result);
+                  reader.readAsDataURL(file);
+                }} />
+              </label>
+            </div>
+          </div>
+          <div className="p-3 min-h-[70px] flex items-center justify-center">
+            {cardImage
+              ? <img src={cardImage} alt="명함" className="w-full rounded object-contain max-h-[100px]" />
+              : <div className="text-center text-gray-400 text-[12px]"><div className="text-xl mb-1"></div>이미지를 드래그하거나 Ctrl+V 붙여넣기</div>
+            }
+          </div>
+        </div>
+        <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-[13px] text-blue-800 font-medium">
+          선택한 월 범위의 미수금 내역이 <b>엑셀 파일로 자동 첨부</b>되어 발송됩니다.
+        </div>
+      </div>
+      <div className="px-6 pb-6 flex gap-3">
+        <button className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-800 font-semibold text-[13px] hover:bg-gray-200 transition"
+          onClick={() => setArEmailOpen(false)}>취소</button>
+        <button className="flex-1 py-2.5 rounded-xl bg-gray-200 text-gray-800 font-semibold text-[13px] hover:bg-gray-300 transition"
+          onClick={() => { navigator.clipboard.writeText(emailBody); showAlert("복사되었습니다."); }}>내용 복사</button>
+        <button
+          disabled={!emailTo.trim() || emailSending}
+          className={`flex-1 py-2.5 rounded-xl font-bold text-[13px] transition ${emailTo.trim() && !emailSending ? "bg-sky-600 hover:bg-sky-700 text-white" : "bg-gray-200 text-gray-400 cursor-not-allowed"}`}
+          onClick={async () => {
+            if (!emailTo.trim()) return;
+            setEmailSending(true);
+            const fileAttachments = [];
+
+            // ★ 선택한 월 범위만 필터링해서 엑셀 생성
+            const from = parseInt(arEmailFromMM, 10);
+            const to = parseInt(arEmailToMM, 10);
+            const filteredMonthRows = monthRowsRaw.filter(r => {
+              const m = parseInt(r.mm, 10);
+              return m >= from && m <= to;
+            });
+
+            try {
+              const wsData = filteredMonthRows.map(r => ({
+                청구월: r.yyyymm, 건수: r.건수,
+                총청구금액: r.총청구금액, 정산상태: r.정산상태, 정산일: r.정산일 || "",
+              }));
+              const wb2 = XLSX.utils.book_new();
+              XLSX.utils.book_append_sheet(wb2, XLSX.utils.json_to_sheet(wsData), "미수금현황");
+              fileAttachments.push({
+                filename: `미수금현황_${selClient}_${THIS_YEAR}_${from}월~${to}월.xlsx`,
+                content: XLSX.write(wb2, { bookType: "xlsx", type: "base64" }),
+                contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+              });
+            } catch(e) { console.error("엑셀 실패:", e); }
+
+            const subject = `[미수금현황] ${selClient} ${THIS_YEAR}년 ${from}월~${to}월`;
+            const bodyLines = emailBody.split("\n").map(l => `<p style="margin:0 0 4px 0">${l||"&nbsp;"}</p>`).join("");
+            const bodyHtml = `<div style="font-family:sans-serif;font-size:14px;color:#333;line-height:1.8;max-width:600px">${bodyLines}<hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0"/><img src="${cardImage||'https://dispatch-app2.vercel.app/RUN25_모바일명함_업무폰.jpg'}" alt="명함" style="width:100%;max-width:500px;border-radius:8px;display:block" onerror="this.style.display='none'"/></div>`;
+            try {
+              const res = await fetch("/api/send-email", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ to: emailTo, subject, html: bodyHtml, attachments: fileAttachments }),
+              });
+              if (res.ok) { showAlert(`${emailTo} 로 발송 완료`); setArEmailOpen(false); }
+              else { const err = await res.json(); showAlert(`발송 실패: ${err.error||"오류"}\n코드: ${err.code||""}`); }
+            } catch(e) { showAlert("네트워크 오류"); }
+            finally { setEmailSending(false); }
+          }}>
+          {emailSending ? "발송 중..." : "발송"}
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+
         </div>
       )}
     </div>
@@ -30218,7 +30588,16 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
   const importDropRef = React.useRef(null);
   const importItemRefs = React.useRef([]);
 
-  React.useEffect(() => { setRows((clients || []).map((c) => ({ ...c }))); }, [clients]);
+React.useEffect(() => {
+    setRows(prev => {
+      const prevMap = new Map(prev.map(r => [r.id || r.거래처명, r]));
+      return (clients || []).map(c => {
+        const key = c.id || c.거래처명;
+        // ★ 로컬에 있으면 로컬 편집값 우선 보존
+        return prevMap.has(key) ? prevMap.get(key) : { ...c };
+      });
+    });
+  }, [clients]);
 
   const filtered = React.useMemo(() => {
     if (!q.trim()) return rows;
@@ -30872,7 +31251,13 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                             <td key={key} className="px-2 py-2.5">
                               <input className="border border-gray-200 rounded px-2 py-1 text-sm focus:border-[#1B2B4B] outline-none"
                                 style={{ minWidth: key === "주소" ? 200 : key === "거래처명" ? 150 : 90 }}
-                                defaultValue={r[key]||""}
+                                value={r[key] || ""}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setRows(prev => prev.map(r2 =>
+                                    (r2.id || r2.거래처명) === id ? { ...r2, [key]: val } : r2
+                                  ));
+                                }}
                                 onBlur={(e) => handleBlur(r, key, e.target.value)} />
                             </td>
                           ))}
