@@ -526,19 +526,8 @@ useEffect(() => {
 
 const collections = ["dispatch", "orders"];
 
-  // 🔥 최근 3개월 날짜 계산
-  const limitDate = (() => {
-    const d = new Date();
-    d.setMonth(d.getMonth() - 3);
-    return d.toISOString().slice(0, 10); // "YYYY-MM-DD"
-  })();
-
-  collections.forEach((name) => {
-    const q = query(
-      collection(db, name),
-      where("상차일", ">=", limitDate)
-    );
-    const unsub = onSnapshot(q, (snap) => {
+collections.forEach((name) => {
+    const unsub = onSnapshot(collection(db, name), (snap) => {
       const list = snap.docs.map((d) => ({
         _id: d.id,
         id: d.id,
@@ -546,11 +535,9 @@ const collections = ["dispatch", "orders"];
         ...d.data(),
       }));
       setOrdersLoaded(true);
-      startTransition(() => {
-        setOrders((prev) => {
-          const filtered = prev.filter((o) => o.__col !== name);
-          return [...filtered, ...list];
-        });
+      setOrders((prev) => {
+        const filtered = prev.filter((o) => o.__col !== name);
+        return [...filtered, ...list];
       });
 
       // 교체 후
