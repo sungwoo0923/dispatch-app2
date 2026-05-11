@@ -26871,6 +26871,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
 }
 // ===================== DispatchApp.jsx (PART 7/8) — END =====================
 
+
 // ===================== DispatchApp.jsx (PART 8/8) — START =====================
 function ClientSettlement({ dispatchData, setDispatchData, clients = [], setClients, showAlert = (m) => alert(m), patchDispatch }) {
 
@@ -27475,8 +27476,35 @@ const [arEmailOpen, setArEmailOpen] = useState(false);
 const [arEmailFromMM, setArEmailFromMM] = useState("01");
 const [arEmailToMM, setArEmailToMM]     = useState("12");
 
-  const [cardImage, setCardImage] = useState(null);
-// ── 일괄 정산 모달 상태 ──
+ const [cardImage, setCardImage] = useState(null);
+  const [emailLogs, setEmailLogs] = useState([]);
+  const [showEmailHistory, setShowEmailHistory] = useState(false);
+// ── 이메일 발송 이력 ──
+  React.useEffect(() => {
+    const unsub = onSnapshot(
+      collection(db, "emailLogs"),
+      snap => {
+        const arr = snap.docs
+          .map(d => ({ id: d.id, ...d.data() }))
+          .sort((a, b) => (b.sentAt || 0) - (a.sentAt || 0))
+          .slice(0, 30);
+        setEmailLogs(arr);
+      }
+    );
+    return () => unsub();
+  }, []);
+
+  const logEmail = async ({ type, client, to, subject, status, error }) => {
+    const id = crypto.randomUUID();
+    await setDoc(doc(db, "emailLogs", id), {
+      id, type, client, to, subject, status,
+      error: error || null,
+      sentAt: Date.now(),
+      sentBy: auth.currentUser?.email || "",
+    });
+  };
+
+  // ── 일괄 정산 모달 상태 ──
   const [batchModalOpen, setBatchModalOpen] = useState(false);
   const [batchClients, setBatchClients] = useState(new Set());   // 선택된 거래처
   const [batchFromMM, setBatchFromMM] = useState("01");
@@ -27517,7 +27545,57 @@ const [arReportClientQ, setArReportClientQ] = useState("");
   const batchEligibleClients = useMemo(() =>
     clientOptions8.filter(name => (batchUnsettledMap.get(name)||0) > 0),
   [clientOptions8, batchUnsettledMap]);
-  // ===================== 미수금 보고서 출력 =====================
+// ── AR 이메일용 HTML 생성 헬퍼 ──
+const buildArEmailReportHtml = (filteredRows, clientName, year, from, to, companyInfo) => {
+  const rows = filteredRows.map((r, i) => {
+    const bg = i % 2 === 0 ? "#fff" : "#f8f9fd";
+    const statusStyle = r.정산상태 === "정산완료"
+      ? "background:#d1fae5;color:#065f46"
+      : "background:#fee2e2;color:#991b1b";
+    return `<tr style="background:${bg}">
+      <td style="padding:9px 12px;text-align:center;font-size:13px;border-bottom:1px solid #e8ecf5;font-weight:bold">${r.yyyymm}</td>
+      <td style="padding:9px 12px;text-align:center;font-size:13px;border-bottom:1px solid #e8ecf5">${r.건수}건</td>
+      <td style="padding:9px 12px;text-align:right;font-size:13px;border-bottom:1px solid #e8ecf5;font-weight:bold">${r.총청구금액.toLocaleString()}원</td>
+      <td style="padding:9px 12px;text-align:center;border-bottom:1px solid #e8ecf5">
+        <span style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:bold;${statusStyle}">${r.정산상태}</span>
+      </td>
+      <td style="padding:9px 12px;text-align:center;font-size:12px;color:#6b7280;border-bottom:1px solid #e8ecf5">${r.정산일 || "-"}</td>
+    </tr>`;
+  }).join("");
+
+  const totalAmt = filteredRows.reduce((s, r) => s + r.총청구금액, 0);
+  const unpaidAmt = filteredRows.filter(r => r.정산상태 === "미정산").reduce((s, r) => s + r.총청구금액, 0);
+  const now = new Date().toLocaleString("ko-KR");
+
+  return `<div style="font-family:'Malgun Gothic',sans-serif;background:#f9fafb;padding:24px;min-width:700px">
+    <div style="background:#1B2B4B;color:#fff;padding:16px 24px;border-radius:10px 10px 0 0">
+      <div style="font-size:18px;font-weight:900">${clientName} 미수금 현황</div>
+      <div style="font-size:12px;opacity:.7;margin-top:4px">${year}년 ${from}월 ~ ${to}월</div>
+    </div>
+    <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:0 0 10px 10px;overflow:hidden">
+      <thead>
+        <tr style="background:#e8ecf5">
+          <th style="padding:10px 12px;text-align:center;font-size:13px;border-bottom:2px solid #c5cee0">월</th>
+          <th style="padding:10px 12px;text-align:center;font-size:13px;border-bottom:2px solid #c5cee0">건수</th>
+          <th style="padding:10px 12px;text-align:right;font-size:13px;border-bottom:2px solid #c5cee0">청구금액</th>
+          <th style="padding:10px 12px;text-align:center;font-size:13px;border-bottom:2px solid #c5cee0">정산상태</th>
+          <th style="padding:10px 12px;text-align:center;font-size:13px;border-bottom:2px solid #c5cee0">정산일</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+      <tfoot>
+        <tr style="background:#1B2B4B">
+          <td colspan="2" style="padding:11px 12px;text-align:center;color:#fff;font-weight:bold;font-size:13px">합 계</td>
+          <td style="padding:11px 12px;text-align:right;color:#fde68a;font-weight:bold;font-size:14px">${totalAmt.toLocaleString()}원</td>
+          <td colspan="2" style="padding:11px 12px;text-align:center;color:rgba(255,255,255,.6);font-size:12px">미정산: ${unpaidAmt.toLocaleString()}원</td>
+        </tr>
+      </tfoot>
+    </table>
+    <div style="margin-top:12px;text-align:right;font-size:11px;color:#9ca3af">출력일시: ${now} | ${companyInfo.name}</div>
+  </div>`;
+};
+
+// ===================== 미수금 보고서 출력 =====================
 const handleARReport = () => {
   const fromIdx = parseInt(arFromMM, 10);
   const toIdx   = parseInt(arToMM,   10);
@@ -28552,7 +28630,7 @@ const handleBatchSettle = async (targetStatus) => {
                   <div>
                     <label className="text-[13px] font-bold text-gray-700 mb-1 block">발신 계정</label>
                     <div className="flex items-center gap-2 px-3 py-2.5 bg-gray-100 border border-gray-300 rounded-lg text-[13px] text-gray-800 font-medium">
-                      tjddnqkf@naver.com
+                      r15332525@daum.net
                     </div>
                   </div>
 
@@ -28642,9 +28720,14 @@ const handleBatchSettle = async (targetStatus) => {
 
                 {/* 버튼 */}
                 <div className="px-6 pb-6 flex gap-3">
-                  <button
+                <button
                     className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-800 font-semibold text-[13px] hover:bg-gray-200 transition"
                     onClick={() => setEmailModalOpen(false)}>취소</button>
+                  <button
+                    className="px-4 py-2.5 rounded-xl bg-[#1B2B4B]/10 text-[#1B2B4B] font-semibold text-[13px] hover:bg-[#1B2B4B]/20 transition"
+                    onClick={() => setShowEmailHistory(v => !v)}>
+                    발송이력 {emailLogs.filter(l=>l.client===client).length > 0 && `(${emailLogs.filter(l=>l.client===client).length})`}
+                  </button>
                   <button
                     className="flex-1 py-2.5 rounded-xl bg-gray-200 text-gray-800 font-semibold text-[13px] hover:bg-gray-300 transition"
                     onClick={() => {
@@ -28754,10 +28837,12 @@ const handleBatchSettle = async (targetStatus) => {
                           }),
                         });
                         if (res.ok) {
+                          logEmail({ type:"거래명세서", client, to: emailTo, subject, status:"success" });
                           showAlert(`${emailTo} 로 발송 완료`);
                           setEmailModalOpen(false);
                         } else {
                           const err = await res.json();
+                          logEmail({ type:"거래명세서", client, to: emailTo, subject, status:"failed", error: err.error });
                           showAlert(`발송 실패: ${err.error || "오류 발생"}\n코드: ${err.code || ""}`);
                         }
                       } catch (e) {
@@ -28769,8 +28854,33 @@ const handleBatchSettle = async (targetStatus) => {
                     {emailSending ? "발송 중..." : "발송"}
                   </button>
                 </div>
-              </div>
+              {/* 발송 이력 */}
+              {showEmailHistory && (
+                <div className="border-t border-gray-100 px-6 py-4">
+                  <div className="text-[13px] font-bold text-[#1B2B4B] mb-3">발송 이력</div>
+                  {emailLogs.filter(l => l.client === client).length === 0 ? (
+                    <div className="text-[12px] text-gray-400 text-center py-4">발송 이력이 없습니다</div>
+                  ) : (
+                    <div className="space-y-2 max-h-[220px] overflow-y-auto">
+                      {emailLogs.filter(l => l.client === client).map(log => (
+                        <div key={log.id} className={`rounded-lg px-4 py-2.5 border text-[12px] ${log.status === "success" ? "bg-emerald-50 border-emerald-200" : "bg-red-50 border-red-200"}`}>
+                          <div className="flex items-center justify-between">
+                            <span className={`font-bold text-[11px] px-2 py-0.5 rounded ${log.status === "success" ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>
+                              {log.status === "success" ? "성공" : "실패"}
+                            </span>
+                            <span className="text-gray-400 text-[11px]">{log.sentAt ? new Date(log.sentAt).toLocaleString("ko-KR") : ""}</span>
+                          </div>
+                          <div className="mt-1 text-gray-700">수신: {log.to}</div>
+                          <div className="text-gray-500 truncate">{log.subject}</div>
+                          {log.error && <div className="text-red-500 text-[11px] mt-0.5">{log.error}</div>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
+          </div>
           )}
           {/* 거래처 정보 수정 팝업 */}
           {showEdit && (
@@ -29526,234 +29636,342 @@ const handleBatchSettle = async (targetStatus) => {
             </div>
 )}
 
-          {/* ══ 미수금 이메일 발송 모달 (월 범위 지정 기능 추가) ══ */}
-{arEmailOpen && (
-  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
-    <div className="bg-white rounded-2xl shadow-2xl w-[560px] max-h-[90vh] overflow-y-auto"
-      onClick={e => e.stopPropagation()}>
-      <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
-        <div>
-          <div className="text-white font-bold text-[15px]">미수금 이메일 발송</div>
-          <div className="text-white/70 text-[12px] mt-0.5">{selClient} — {THIS_YEAR}년 미수금 현황</div>
-        </div>
-        <button className="text-white/60 hover:text-white text-xl" onClick={() => setArEmailOpen(false)}>×</button>
-      </div>
-      <div className="p-6 space-y-4">
+          {/* ══ 미수금 이메일 발송 모달 ══ */}
+          {arEmailOpen && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
+              <div className="bg-white rounded-2xl shadow-2xl w-[580px] max-h-[92vh] overflow-y-auto">
 
-        {/* ★ 월 범위 선택 */}
-        <div>
-          <label className="text-[13px] font-bold text-gray-700 mb-2 block">발송 월 범위 ({THIS_YEAR}년)</label>
-          <div className="flex items-center gap-3">
-            <select
-              className="flex-1 border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
-              value={arEmailFromMM}
-              onChange={e => {
-                setArEmailFromMM(e.target.value);
-                // ★ 월 범위 변경 시 본문 자동 갱신
-                const from = parseInt(e.target.value, 10);
-                const to = parseInt(arEmailToMM, 10);
-                const filteredRows = monthRowsRaw.filter(r => {
-                  const m = parseInt(r.mm, 10);
-                  return m >= from && m <= to && r.정산상태 === "미정산";
-                });
-                const amt = filteredRows.reduce((s,r) => s + r.총청구금액, 0);
-                setEmailBody(`안녕하세요, ${selClient} 담당자님.\n\n${COMPANY_PRINT.name}입니다.\n\n${THIS_YEAR}년 ${from}월~${to}월 미수금 현황을 안내드립니다.\n\n미정산 월수: ${filteredRows.length}개월\n미정산 금액: ${amt.toLocaleString()}원\n\n${filteredRows.map(r => `  - ${r.yyyymm} : ${r.총청구금액.toLocaleString()}원`).join("\n")}\n\n입금계좌: ${COMPANY_PRINT.bank}\n\n정산 부탁드립니다.\n감사합니다.\n\n${COMPANY_PRINT.name}\n${COMPANY_PRINT.contact}`);
-              }}
-            >
-              {Array.from({length:12},(_,i)=>String(i+1).padStart(2,"0")).map(mm=>(
-                <option key={mm} value={mm}>{parseInt(mm,10)}월</option>
-              ))}
-            </select>
-            <span className="text-gray-400 font-semibold">~</span>
-            <select
-              className="flex-1 border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
-              value={arEmailToMM}
-              onChange={e => {
-                setArEmailToMM(e.target.value);
-                const from = parseInt(arEmailFromMM, 10);
-                const to = parseInt(e.target.value, 10);
-                const filteredRows = monthRowsRaw.filter(r => {
-                  const m = parseInt(r.mm, 10);
-                  return m >= from && m <= to && r.정산상태 === "미정산";
-                });
-                const amt = filteredRows.reduce((s,r) => s + r.총청구금액, 0);
-                setEmailBody(`안녕하세요, ${selClient} 담당자님.\n\n${COMPANY_PRINT.name}입니다.\n\n${THIS_YEAR}년 ${from}월~${to}월 미수금 현황을 안내드립니다.\n\n미정산 월수: ${filteredRows.length}개월\n미정산 금액: ${amt.toLocaleString()}원\n\n${filteredRows.map(r => `  - ${r.yyyymm} : ${r.총청구금액.toLocaleString()}원`).join("\n")}\n\n입금계좌: ${COMPANY_PRINT.bank}\n\n정산 부탁드립니다.\n감사합니다.\n\n${COMPANY_PRINT.name}\n${COMPANY_PRINT.contact}`);
-              }}
-            >
-              {Array.from({length:12},(_,i)=>String(i+1).padStart(2,"0")).map(mm=>(
-                <option key={mm} value={mm}>{parseInt(mm,10)}월</option>
-              ))}
-            </select>
-          </div>
-          <div className="mt-2 flex gap-2">
-            {[["상반기","01","06"],["하반기","07","12"],["전체","01","12"]].map(([label,f,t])=>(
-              <button key={label}
-                className="flex-1 py-1.5 rounded-lg bg-gray-100 text-gray-600 text-[12px] font-semibold hover:bg-gray-200 transition"
-                onClick={() => {
-                  setArEmailFromMM(f); setArEmailToMM(t);
-                  const from2 = parseInt(f,10), to2 = parseInt(t,10);
-                  const filteredRows = monthRowsRaw.filter(r => {
-                    const m = parseInt(r.mm, 10);
-                    return m >= from2 && m <= to2 && r.정산상태 === "미정산";
-                  });
-                  const amt = filteredRows.reduce((s,r) => s + r.총청구금액, 0);
-                  setEmailBody(`안녕하세요, ${selClient} 담당자님.\n\n${COMPANY_PRINT.name}입니다.\n\n${THIS_YEAR}년 ${from2}월~${to2}월 미수금 현황을 안내드립니다.\n\n미정산 월수: ${filteredRows.length}개월\n미정산 금액: ${amt.toLocaleString()}원\n\n${filteredRows.map(r => `  - ${r.yyyymm} : ${r.총청구금액.toLocaleString()}원`).join("\n")}\n\n입금계좌: ${COMPANY_PRINT.bank}\n\n정산 부탁드립니다.\n감사합니다.\n\n${COMPANY_PRINT.name}\n${COMPANY_PRINT.contact}`);
-                }}>
-                {label}
-              </button>
-            ))}
-          </div>
-          {/* ★ 선택 범위 미리보기 */}
-          {(() => {
-            const from = parseInt(arEmailFromMM, 10);
-            const to = parseInt(arEmailToMM, 10);
-            const filteredRows = monthRowsRaw.filter(r => {
-              const m = parseInt(r.mm, 10);
-              return m >= from && m <= to && r.정산상태 === "미정산";
-            });
-            const amt = filteredRows.reduce((s,r) => s + r.총청구금액, 0);
-            return filteredRows.length > 0 ? (
-              <div className="mt-2 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-[12px] text-red-700 font-semibold">
-                선택 범위 미정산: {filteredRows.length}개월 / {amt.toLocaleString()}원
-              </div>
-            ) : (
-              <div className="mt-2 px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-lg text-[12px] text-emerald-700 font-semibold">
-                선택 범위 내 미정산 건이 없습니다
-              </div>
-            );
-          })()}
-        </div>
+                {/* 헤더 */}
+                <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between rounded-t-2xl">
+                  <div>
+                    <div className="text-white font-bold text-[15px]">미수금 이메일 발송</div>
+                    <div className="text-white/70 text-[12px] mt-0.5">{selClient} — {THIS_YEAR}년 미수금 현황</div>
+                  </div>
+                  <button className="text-white/60 hover:text-white text-xl" onClick={() => { setArEmailOpen(false); setShowEmailHistory(false); }}>×</button>
+                </div>
 
-        <div>
-          <label className="text-[13px] font-bold text-gray-700 mb-1 block">발신 계정</label>
-          <div className="px-3 py-2.5 bg-gray-100 border border-gray-300 rounded-lg text-[13px] text-gray-800 font-medium">
-            tjddnqkf@naver.com
-          </div>
-        </div>
-        <div>
-          <label className="text-[13px] font-bold text-gray-700 mb-1 block">수신 이메일</label>
-          <input
-            className="w-full border-2 border-gray-300 rounded-lg px-3 py-2.5 text-[13px] text-gray-900 outline-none focus:border-[#1B2B4B]"
-            placeholder="거래처 이메일 입력"
-            value={emailTo}
-            onChange={e => setEmailTo(e.target.value)}
-          />
-        </div>
-        <div>
-          <div className="flex items-center justify-between mb-1">
-            <label className="text-[13px] font-bold text-gray-700">발송 내용 (직접 수정 가능)</label>
-            <span className="text-[11px] text-blue-600 font-semibold">편집 가능</span>
-          </div>
-          <textarea
-            className="w-full border-2 border-gray-300 rounded-lg px-4 py-3 text-[13px] text-gray-900 font-medium leading-relaxed resize-none outline-none focus:border-[#1B2B4B] bg-white"
-            rows={12}
-            value={emailBody}
-            onChange={e => setEmailBody(e.target.value)}
-          />
-        </div>
-        <div
-          className="border-2 border-dashed border-gray-300 rounded-xl overflow-hidden"
-          onDragOver={e => e.preventDefault()}
-          onDrop={e => {
-            e.preventDefault();
-            const file = e.dataTransfer.files[0];
-            if (!file || !file.type.startsWith("image/")) return;
-            const reader = new FileReader();
-            reader.onload = ev => setCardImage(ev.target.result);
-            reader.readAsDataURL(file);
-          }}
-          onPaste={e => {
-            const item = Array.from(e.clipboardData.items).find(i => i.type.startsWith("image/"));
-            if (!item) return;
-            const reader = new FileReader();
-            reader.onload = ev => setCardImage(ev.target.result);
-            reader.readAsDataURL(item.getAsFile());
-          }}
-          tabIndex={0}
-        >
-          <div className="px-3 py-2 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
-            <span className="text-[12px] font-bold text-gray-600">이메일 하단 명함</span>
-            <div className="flex gap-2 items-center">
-              {cardImage && <button className="text-[11px] text-red-500 hover:underline" onClick={() => setCardImage(null)}>초기화</button>}
-              <label className="text-[11px] text-blue-600 cursor-pointer hover:underline">
-                파일 선택
-                <input type="file" accept="image/*" className="hidden" onChange={e => {
-                  const file = e.target.files[0]; if (!file) return;
-                  const reader = new FileReader();
-                  reader.onload = ev => setCardImage(ev.target.result);
-                  reader.readAsDataURL(file);
-                }} />
-              </label>
+                <div className="p-6 space-y-4">
+
+                  {/* 월 범위 선택 — 이미지1 스타일 */}
+                  <div>
+                    <label className="text-[13px] font-bold text-gray-700 mb-2 block">기간 선택 ({THIS_YEAR}년)</label>
+                    <div className="flex items-center gap-2">
+                      <select
+                        className="border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
+                        value={arEmailFromMM}
+                        onChange={e => {
+                          const f = e.target.value;
+                          setArEmailFromMM(f);
+                          const from2 = parseInt(f,10), to2 = parseInt(arEmailToMM,10);
+                          const fr = monthRowsRaw.filter(r => { const m=parseInt(r.mm,10); return m>=from2&&m<=to2&&r.정산상태==="미정산"; });
+                          const amt = fr.reduce((s,r)=>s+r.총청구금액,0);
+                          setEmailBody(`안녕하세요, ${selClient} 담당자님.\n\n${COMPANY_PRINT.name}입니다.\n\n${THIS_YEAR}년 ${from2}월~${to2}월 미수금 현황을 안내드립니다.\n\n미정산 월수: ${fr.length}개월\n미정산 금액: ${amt.toLocaleString()}원\n\n${fr.map(r=>`  - ${r.yyyymm} : ${r.총청구금액.toLocaleString()}원`).join("\n")}\n\n입금계좌: ${COMPANY_PRINT.bank}\n\n정산 부탁드립니다.\n감사합니다.\n\n${COMPANY_PRINT.name}\n${COMPANY_PRINT.contact}`);
+                        }}
+                      >
+                        {Array.from({length:12},(_,i)=>String(i+1).padStart(2,"0")).map(mm=>(
+                          <option key={mm} value={mm}>{parseInt(mm,10)}월</option>
+                        ))}
+                      </select>
+                      <span className="text-[13px] font-semibold text-gray-600">부터</span>
+                      <select
+                        className="border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
+                        value={arEmailToMM}
+                        onChange={e => {
+                          const t = e.target.value;
+                          setArEmailToMM(t);
+                          const from2 = parseInt(arEmailFromMM,10), to2 = parseInt(t,10);
+                          const fr = monthRowsRaw.filter(r => { const m=parseInt(r.mm,10); return m>=from2&&m<=to2&&r.정산상태==="미정산"; });
+                          const amt = fr.reduce((s,r)=>s+r.총청구금액,0);
+                          setEmailBody(`안녕하세요, ${selClient} 담당자님.\n\n${COMPANY_PRINT.name}입니다.\n\n${THIS_YEAR}년 ${from2}월~${to2}월 미수금 현황을 안내드립니다.\n\n미정산 월수: ${fr.length}개월\n미정산 금액: ${amt.toLocaleString()}원\n\n${fr.map(r=>`  - ${r.yyyymm} : ${r.총청구금액.toLocaleString()}원`).join("\n")}\n\n입금계좌: ${COMPANY_PRINT.bank}\n\n정산 부탁드립니다.\n감사합니다.\n\n${COMPANY_PRINT.name}\n${COMPANY_PRINT.contact}`);
+                        }}
+                      >
+                        {Array.from({length:12},(_,i)=>String(i+1).padStart(2,"0")).map(mm=>(
+                          <option key={mm} value={mm}>{parseInt(mm,10)}월</option>
+                        ))}
+                      </select>
+                      <span className="text-[13px] font-semibold text-gray-600">까지</span>
+                    </div>
+                    <div className="mt-2 flex gap-2">
+                      {[["상반기","01","06"],["하반기","07","12"],["전체","01","12"]].map(([label,f,t])=>(
+                        <button key={label}
+                          className="flex-1 py-1.5 rounded-lg bg-gray-100 text-gray-700 text-[12px] font-semibold hover:bg-[#1B2B4B] hover:text-white transition"
+                          onClick={() => {
+                            setArEmailFromMM(f); setArEmailToMM(t);
+                            const from2=parseInt(f,10), to2=parseInt(t,10);
+                            const fr = monthRowsRaw.filter(r => { const m=parseInt(r.mm,10); return m>=from2&&m<=to2&&r.정산상태==="미정산"; });
+                            const amt = fr.reduce((s,r)=>s+r.총청구금액,0);
+                            setEmailBody(`안녕하세요, ${selClient} 담당자님.\n\n${COMPANY_PRINT.name}입니다.\n\n${THIS_YEAR}년 ${from2}월~${to2}월 미수금 현황을 안내드립니다.\n\n미정산 월수: ${fr.length}개월\n미정산 금액: ${amt.toLocaleString()}원\n\n${fr.map(r=>`  - ${r.yyyymm} : ${r.총청구금액.toLocaleString()}원`).join("\n")}\n\n입금계좌: ${COMPANY_PRINT.bank}\n\n정산 부탁드립니다.\n감사합니다.\n\n${COMPANY_PRINT.name}\n${COMPANY_PRINT.contact}`);
+                          }}>
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    {(() => {
+                      const from=parseInt(arEmailFromMM,10), to=parseInt(arEmailToMM,10);
+                      const fr = monthRowsRaw.filter(r=>{const m=parseInt(r.mm,10);return m>=from&&m<=to&&r.정산상태==="미정산";});
+                      const amt = fr.reduce((s,r)=>s+r.총청구금액,0);
+                      return fr.length > 0 ? (
+                        <div className="mt-2 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-[12px] text-red-700 font-semibold">
+                          선택 범위 미정산: {fr.length}개월 / {amt.toLocaleString()}원
+                        </div>
+                      ) : (
+                        <div className="mt-2 px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-lg text-[12px] text-emerald-700 font-semibold">
+                          선택 범위 내 미정산 건이 없습니다
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  {/* 발신 계정 */}
+                  <div>
+                    <label className="text-[13px] font-bold text-gray-700 mb-1 block">발신 계정</label>
+                    <div className="px-3 py-2.5 bg-gray-100 border border-gray-300 rounded-lg text-[13px] text-gray-800 font-medium">
+                      tjddnqkf@naver.com
+                    </div>
+                  </div>
+
+                  {/* 수신 이메일 */}
+                  <div>
+                    <label className="text-[13px] font-bold text-gray-700 mb-1 block">수신 이메일</label>
+                    <input
+                      className="w-full border-2 border-gray-300 rounded-lg px-3 py-2.5 text-[13px] text-gray-900 outline-none focus:border-[#1B2B4B]"
+                      placeholder="거래처 이메일 입력"
+                      value={emailTo}
+                      onChange={e => setEmailTo(e.target.value)}
+                    />
+                  </div>
+
+                  {/* 발송 내용 */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[13px] font-bold text-gray-700">발송 내용 (직접 수정 가능)</label>
+                      <span className="text-[11px] text-blue-600 font-semibold">편집 가능</span>
+                    </div>
+                    <textarea
+                      className="w-full border-2 border-gray-300 rounded-lg px-4 py-3 text-[13px] text-gray-900 font-medium leading-relaxed resize-none outline-none focus:border-[#1B2B4B] bg-white"
+                      rows={10}
+                      value={emailBody}
+                      onChange={e => setEmailBody(e.target.value)}
+                    />
+                  </div>
+
+                  {/* 명함 */}
+                  <div
+                    className="border-2 border-dashed border-gray-300 rounded-xl overflow-hidden"
+                    onDragOver={e => e.preventDefault()}
+                    onDrop={e => {
+                      e.preventDefault();
+                      const file = e.dataTransfer.files[0];
+                      if (!file||!file.type.startsWith("image/")) return;
+                      const reader = new FileReader();
+                      reader.onload = ev => setCardImage(ev.target.result);
+                      reader.readAsDataURL(file);
+                    }}
+                    onPaste={e => {
+                      const item = Array.from(e.clipboardData.items).find(i=>i.type.startsWith("image/"));
+                      if (!item) return;
+                      const reader = new FileReader();
+                      reader.onload = ev => setCardImage(ev.target.result);
+                      reader.readAsDataURL(item.getAsFile());
+                    }}
+                    tabIndex={0}
+                  >
+                    <div className="px-3 py-2 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+                      <span className="text-[12px] font-bold text-gray-600">이메일 하단 명함</span>
+                      <div className="flex gap-2 items-center">
+                        {cardImage && <button className="text-[11px] text-red-500 hover:underline" onClick={() => setCardImage(null)}>초기화</button>}
+                        <label className="text-[11px] text-blue-600 cursor-pointer hover:underline">
+                          파일 선택
+                          <input type="file" accept="image/*" className="hidden" onChange={e => {
+                            const file = e.target.files[0]; if (!file) return;
+                            const reader = new FileReader();
+                            reader.onload = ev => setCardImage(ev.target.result);
+                            reader.readAsDataURL(file);
+                          }} />
+                        </label>
+                      </div>
+                    </div>
+                    <div className="p-3 min-h-[70px] flex items-center justify-center">
+                      {cardImage
+                        ? <img src={cardImage} alt="명함" className="w-full rounded object-contain max-h-[100px]" />
+                        : <div className="text-center text-gray-400 text-[12px]">이미지를 드래그하거나 Ctrl+V 붙여넣기</div>
+                      }
+                    </div>
+                  </div>
+
+                  {/* 안내 */}
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-[13px] text-blue-800 font-medium">
+                    선택한 월 범위의 미수금 내역이 <b>엑셀 + 미수금 보고서 PDF</b> 로 자동 첨부됩니다.
+                  </div>
+                </div>
+
+                {/* 버튼 */}
+                <div className="px-6 pb-4 flex gap-3">
+                  <button className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-800 font-semibold text-[13px] hover:bg-gray-200 transition"
+                    onClick={() => { setArEmailOpen(false); setShowEmailHistory(false); }}>취소</button>
+                  <button className="px-4 py-2.5 rounded-xl bg-[#1B2B4B]/10 text-[#1B2B4B] font-semibold text-[13px] hover:bg-[#1B2B4B]/20 transition"
+                    onClick={() => setShowEmailHistory(v => !v)}>
+                    발송이력{emailLogs.filter(l=>l.client===selClient).length>0 ? ` (${emailLogs.filter(l=>l.client===selClient).length})` : ""}
+                  </button>
+                  <button className="flex-1 py-2.5 rounded-xl bg-gray-200 text-gray-800 font-semibold text-[13px] hover:bg-gray-300 transition"
+                    onClick={() => { navigator.clipboard.writeText(emailBody); showAlert("복사되었습니다."); }}>내용 복사</button>
+                  <button
+                    disabled={!emailTo.trim() || emailSending}
+                    className={`flex-1 py-2.5 rounded-xl font-bold text-[13px] transition ${emailTo.trim()&&!emailSending ? "bg-sky-600 hover:bg-sky-700 text-white" : "bg-gray-200 text-gray-400 cursor-not-allowed"}`}
+                    onClick={async () => {
+                      if (!emailTo.trim()) return;
+                      setEmailSending(true);
+                      const from=parseInt(arEmailFromMM,10), to=parseInt(arEmailToMM,10);
+                      const filteredMonthRows = monthRowsRaw.filter(r => { const m=parseInt(r.mm,10); return m>=from&&m<=to; });
+                      const subject = `[미수금현황] ${selClient} ${THIS_YEAR}년 ${from}월~${to}월`;
+                      const fileAttachments = [];
+
+                      // 1) 엑셀
+                      try {
+                        const wsData = filteredMonthRows.map(r => ({
+                          청구월: r.yyyymm, 건수: r.건수,
+                          총청구금액: r.총청구금액, 정산상태: r.정산상태, 정산일: r.정산일||"",
+                        }));
+                        const wb2 = XLSX.utils.book_new();
+                        XLSX.utils.book_append_sheet(wb2, XLSX.utils.json_to_sheet(wsData), "미수금현황");
+                        fileAttachments.push({
+                          filename: `미수금현황_${selClient}_${THIS_YEAR}_${from}~${to}월.xlsx`,
+                          content: XLSX.write(wb2, { bookType:"xlsx", type:"base64" }),
+                          contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        });
+                      } catch(e) { console.error("엑셀 실패:", e); }
+
+                      // 2) 미수금 보고서 PDF
+                      try {
+                        const months2 = Array.from({length: to-from+1}, (_,i) => `${THIS_YEAR}-${String(from+i).padStart(2,"0")}`);
+                        const reportHtmlBody = `
+                          <div style="font-family:'Malgun Gothic',sans-serif;background:#f9fafb;padding:24px;min-width:700px">
+                            <div style="background:#1B2B4B;color:#fff;padding:16px 24px;border-radius:10px 10px 0 0">
+                              <div style="font-size:18px;font-weight:900">${selClient} 미수금 현황</div>
+                              <div style="font-size:12px;opacity:.7;margin-top:4px">${THIS_YEAR}년 ${from}월 ~ ${to}월</div>
+                            </div>
+                            <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:0 0 10px 10px;overflow:hidden">
+                              <thead>
+                                <tr style="background:#e8ecf5">
+                                  <th style="padding:10px 12px;text-align:center;font-size:13px;border-bottom:2px solid #c5cee0">월</th>
+                                  <th style="padding:10px 12px;text-align:center;font-size:13px;border-bottom:2px solid #c5cee0">건수</th>
+                                  <th style="padding:10px 12px;text-align:right;font-size:13px;border-bottom:2px solid #c5cee0">청구금액</th>
+                                  <th style="padding:10px 12px;text-align:center;font-size:13px;border-bottom:2px solid #c5cee0">정산상태</th>
+                                  <th style="padding:10px 12px;text-align:center;font-size:13px;border-bottom:2px solid #c5cee0">정산일</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                ${filteredMonthRows.map((r,i) => `
+                                  <tr style="background:${i%2===0?'#fff':'#f8f9fd'}">
+                                    <td style="padding:9px 12px;text-align:center;font-size:13px;border-bottom:1px solid #e8ecf5;font-weight:bold">${r.yyyymm}</td>
+                                    <td style="padding:9px 12px;text-align:center;font-size:13px;border-bottom:1px solid #e8ecf5">${r.건수}건</td>
+                                    <td style="padding:9px 12px;text-align:right;font-size:13px;border-bottom:1px solid #e8ecf5;font-weight:bold">${r.총청구금액.toLocaleString()}원</td>
+                                    <td style="padding:9px 12px;text-align:center;border-bottom:1px solid #e8ecf5">
+                                      <span style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:bold;${r.정산상태==='정산완료'?'background:#d1fae5;color:#065f46':'background:#fee2e2;color:#991b1b'}">
+                                        ${r.정산상태}
+                                      </span>
+                                    </td>
+                                    <td style="padding:9px 12px;text-align:center;font-size:12px;color:#6b7280;border-bottom:1px solid #e8ecf5">${r.정산일||'-'}</td>
+                                  </tr>
+                                `).join("")}
+                              </tbody>
+                              <tfoot>
+                                <tr style="background:#1B2B4B">
+                                  <td colspan="2" style="padding:11px 12px;text-align:center;color:#fff;font-weight:bold;font-size:13px">합 계</td>
+                                  <td style="padding:11px 12px;text-align:right;color:#fde68a;font-weight:bold;font-size:14px">${filteredMonthRows.reduce((s,r)=>s+r.총청구금액,0).toLocaleString()}원</td>
+                                  <td colspan="2" style="padding:11px 12px;text-align:center;color:rgba(255,255,255,.6);font-size:12px">
+                                    미정산: ${filteredMonthRows.filter(r=>r.정산상태==="미정산").reduce((s,r)=>s+r.총청구금액,0).toLocaleString()}원
+                                  </td>
+                                </tr>
+                              </tfoot>
+                            </table>
+                            <div style="margin-top:12px;text-align:right;font-size:11px;color:#9ca3af">
+                              출력일시: ${new Date().toLocaleString("ko-KR")} | ${COMPANY_PRINT.name}
+                            </div>
+                          </div>`;
+
+                        const div = document.createElement("div");
+                        div.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:760px;background:#f9fafb;";
+                        div.innerHTML = reportHtmlBody;
+                        document.body.appendChild(div);
+                        await new Promise(r => setTimeout(r, 300));
+                        const canvas = await html2canvas(div, { scale:1.5, backgroundColor:"#f9fafb", useCORS:true });
+                        document.body.removeChild(div);
+                        const imgData = canvas.toDataURL("image/jpeg", 0.88);
+                        const pdf = new jsPDF("p","mm","a4");
+                        const imgW = 210, imgH = (canvas.height * imgW) / canvas.width;
+                        let left = imgH, pos = 0;
+                        pdf.addImage(imgData,"JPEG",0,pos,imgW,imgH);
+                        left -= 297;
+                        while (left > 0) { pos = left-imgH; pdf.addPage(); pdf.addImage(imgData,"JPEG",0,pos,imgW,imgH); left -= 297; }
+                        fileAttachments.push({
+                          filename: `미수금보고서_${selClient}_${THIS_YEAR}_${from}~${to}월.pdf`,
+                          content: pdf.output("datauristring").split(",")[1],
+                          contentType: "application/pdf",
+                        });
+                      } catch(e) { console.error("PDF 실패:", e); }
+
+                      const bodyLines = emailBody.split("\n").map(l=>`<p style="margin:0 0 4px 0">${l||"&nbsp;"}</p>`).join("");
+                      const bodyHtml = `<div style="font-family:sans-serif;font-size:14px;color:#333;line-height:1.8;max-width:600px">${bodyLines}<hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0"/><img src="${cardImage||'https://dispatch-app2.vercel.app/RUN25_모바일명함_업무폰.jpg'}" alt="명함" style="width:100%;max-width:500px;border-radius:8px;display:block" onerror="this.style.display='none'"/></div>`;
+                      try {
+                        const res = await fetch("/api/send-email", {
+                          method:"POST",
+                          headers:{"Content-Type":"application/json"},
+                          body: JSON.stringify({ to: emailTo, subject, html: bodyHtml, attachments: fileAttachments }),
+                        });
+                        if (res.ok) {
+                          logEmail({ type:"미수금", client:selClient, to:emailTo, subject, status:"success" });
+                          showAlert(`${emailTo} 로 발송 완료`);
+                          setArEmailOpen(false);
+                          setShowEmailHistory(false);
+                        } else {
+                          const err = await res.json();
+                          logEmail({ type:"미수금", client:selClient, to:emailTo, subject, status:"failed", error: err.error });
+                          showAlert(`발송 실패: ${err.error||"오류"}\n코드: ${err.code||""}`);
+                        }
+                      } catch(e) {
+                        logEmail({ type:"미수금", client:selClient, to:emailTo, subject, status:"failed", error: e.message });
+                        showAlert("네트워크 오류");
+                      }
+                      finally { setEmailSending(false); }
+                    }}>
+                    {emailSending ? "발송 중..." : "발송"}
+                  </button>
+                </div>
+
+                {/* 발송 이력 */}
+                {showEmailHistory && (
+                  <div className="border-t border-gray-100 px-6 py-4">
+                    <div className="text-[13px] font-bold text-[#1B2B4B] mb-3">
+                      발송 이력 — {selClient}
+                    </div>
+                    {emailLogs.filter(l=>l.client===selClient).length === 0 ? (
+                      <div className="text-[12px] text-gray-400 text-center py-4">발송 이력이 없습니다</div>
+                    ) : (
+                      <div className="space-y-2 max-h-[220px] overflow-y-auto">
+                        {emailLogs.filter(l=>l.client===selClient).map(log => (
+                          <div key={log.id} className={`rounded-lg px-4 py-2.5 border text-[12px] ${log.status==="success" ? "bg-emerald-50 border-emerald-200" : "bg-red-50 border-red-200"}`}>
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className={`font-bold text-[11px] px-2 py-0.5 rounded ${log.status==="success" ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>
+                                  {log.status==="success" ? "성공" : "실패"}
+                                </span>
+                                <span className="text-[11px] text-gray-500 font-semibold">{log.type}</span>
+                              </div>
+                              <span className="text-gray-400 text-[11px]">{log.sentAt ? new Date(log.sentAt).toLocaleString("ko-KR") : ""}</span>
+                            </div>
+                            <div className="mt-1 text-gray-700">수신: {log.to}</div>
+                            <div className="text-gray-500 truncate">{log.subject}</div>
+                            {log.error && <div className="text-red-500 text-[11px] mt-0.5">{log.error}</div>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-          <div className="p-3 min-h-[70px] flex items-center justify-center">
-            {cardImage
-              ? <img src={cardImage} alt="명함" className="w-full rounded object-contain max-h-[100px]" />
-              : <div className="text-center text-gray-400 text-[12px]"><div className="text-xl mb-1"></div>이미지를 드래그하거나 Ctrl+V 붙여넣기</div>
-            }
-          </div>
-        </div>
-        <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-[13px] text-blue-800 font-medium">
-          선택한 월 범위의 미수금 내역이 <b>엑셀 파일로 자동 첨부</b>되어 발송됩니다.
-        </div>
-      </div>
-      <div className="px-6 pb-6 flex gap-3">
-        <button className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-800 font-semibold text-[13px] hover:bg-gray-200 transition"
-          onClick={() => setArEmailOpen(false)}>취소</button>
-        <button className="flex-1 py-2.5 rounded-xl bg-gray-200 text-gray-800 font-semibold text-[13px] hover:bg-gray-300 transition"
-          onClick={() => { navigator.clipboard.writeText(emailBody); showAlert("복사되었습니다."); }}>내용 복사</button>
-        <button
-          disabled={!emailTo.trim() || emailSending}
-          className={`flex-1 py-2.5 rounded-xl font-bold text-[13px] transition ${emailTo.trim() && !emailSending ? "bg-sky-600 hover:bg-sky-700 text-white" : "bg-gray-200 text-gray-400 cursor-not-allowed"}`}
-          onClick={async () => {
-            if (!emailTo.trim()) return;
-            setEmailSending(true);
-            const fileAttachments = [];
-
-            // ★ 선택한 월 범위만 필터링해서 엑셀 생성
-            const from = parseInt(arEmailFromMM, 10);
-            const to = parseInt(arEmailToMM, 10);
-            const filteredMonthRows = monthRowsRaw.filter(r => {
-              const m = parseInt(r.mm, 10);
-              return m >= from && m <= to;
-            });
-
-            try {
-              const wsData = filteredMonthRows.map(r => ({
-                청구월: r.yyyymm, 건수: r.건수,
-                총청구금액: r.총청구금액, 정산상태: r.정산상태, 정산일: r.정산일 || "",
-              }));
-              const wb2 = XLSX.utils.book_new();
-              XLSX.utils.book_append_sheet(wb2, XLSX.utils.json_to_sheet(wsData), "미수금현황");
-              fileAttachments.push({
-                filename: `미수금현황_${selClient}_${THIS_YEAR}_${from}월~${to}월.xlsx`,
-                content: XLSX.write(wb2, { bookType: "xlsx", type: "base64" }),
-                contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-              });
-            } catch(e) { console.error("엑셀 실패:", e); }
-
-            const subject = `[미수금현황] ${selClient} ${THIS_YEAR}년 ${from}월~${to}월`;
-            const bodyLines = emailBody.split("\n").map(l => `<p style="margin:0 0 4px 0">${l||"&nbsp;"}</p>`).join("");
-            const bodyHtml = `<div style="font-family:sans-serif;font-size:14px;color:#333;line-height:1.8;max-width:600px">${bodyLines}<hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0"/><img src="${cardImage||'https://dispatch-app2.vercel.app/RUN25_모바일명함_업무폰.jpg'}" alt="명함" style="width:100%;max-width:500px;border-radius:8px;display:block" onerror="this.style.display='none'"/></div>`;
-            try {
-              const res = await fetch("/api/send-email", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ to: emailTo, subject, html: bodyHtml, attachments: fileAttachments }),
-              });
-              if (res.ok) { showAlert(`${emailTo} 로 발송 완료`); setArEmailOpen(false); }
-              else { const err = await res.json(); showAlert(`발송 실패: ${err.error||"오류"}\n코드: ${err.code||""}`); }
-            } catch(e) { showAlert("네트워크 오류"); }
-            finally { setEmailSending(false); }
-          }}>
-          {emailSending ? "발송 중..." : "발송"}
-        </button>
-      </div>
-    </div>
-  </div>
-)}
-
-
+          )}
         </div>
       )}
     </div>
