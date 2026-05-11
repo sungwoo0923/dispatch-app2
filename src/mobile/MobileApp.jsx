@@ -20,6 +20,7 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { db, auth } from "../firebase";
+import { signOut } from "firebase/auth";
 
 
 
@@ -349,6 +350,7 @@ const [alarmEnabled, setAlarmEnabled] = useState(
 const [handovers, setHandovers] = useState([]);
 const [currentUser, setCurrentUser] = useState(null);
 const [mobileUsers, setMobileUsers] = useState([]);
+const [loginTime] = useState(() => new Date());
 const [handoverOpen, setHandoverOpen] = useState(false);
 const [handoverForm, setHandoverForm] = useState({ text: "", receiver: "", receiverUid: "", date: todayKST() });
 const [selectedHandover, setSelectedHandover] = useState(null);
@@ -1836,6 +1838,9 @@ const title =
       {showMenu && (
         <MobileSideMenu
   onClose={() => setShowMenu(false)}
+  currentUser={currentUser}
+  mobileUsers={mobileUsers}
+  loginTime={loginTime}
 
   onGoSales={() => {
     setPage("sales");
@@ -2948,13 +2953,33 @@ function MobileSideMenu({
   uiScale,
   alarmEnabled,
   toggleAlarm,
+  currentUser,
+  mobileUsers,
+  loginTime,
 }) {
-  const logout = () => {
+  const myName =
+    mobileUsers?.find(u => u.id === currentUser?.uid)?.name ||
+    currentUser?.email ||
+    "사용자";
+
+  const fmtLoginTime = (date) => {
+    if (!date) return "";
+    return date.toLocaleString("ko-KR", {
+      month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit",
+    });
+  };
+
+  const logout = async () => {
     if (!window.confirm("로그아웃 하시겠습니까?")) return;
+    try {
+      await signOut(auth);
+    } catch (e) {
+      console.error("signOut error:", e);
+    }
     localStorage.clear();
-    setTimeout(() => {
-      window.location.replace("/login");
-    }, 100);
+    sessionStorage.clear();
+    window.location.replace("/login");
   };
 
   return (
@@ -2962,11 +2987,18 @@ function MobileSideMenu({
       <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
      <div className="absolute left-0 top-0 bottom-0 w-72 bg-white shadow-2xl flex flex-col border-r border-gray-200">
 
-        {/* 헤더 */}
+       {/* 헤더 */}
         <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
           <div>
             <div className="text-[15px] font-extrabold text-[#1B2B4B] tracking-tight">(주)KP-Flow 모바일</div>
             <div className="text-[11px] text-gray-400 mt-0.5">DISPATCH MANAGEMENT</div>
+            <div className="mt-2 flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block"></span>
+              <span className="text-[12px] font-bold text-[#1B2B4B]">{myName}</span>
+            </div>
+            <div className="text-[11px] text-gray-400 mt-0.5">
+              접속: {fmtLoginTime(loginTime)}
+            </div>
           </div>
           <button
             className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 hover:bg-gray-200 transition"
