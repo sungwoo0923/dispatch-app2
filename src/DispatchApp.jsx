@@ -478,7 +478,8 @@ const addDispatch = async (record) => {
 
 const patchDispatch = async (_id, patch) => {
   if (!_id) return;
-    // 🚫 블랙 기사 차량번호 입력 시 경고
+
+  // 🚫 블랙 기사 차량번호 입력 시 경고
   if (patch.차량번호) {
     const plate = String(patch.차량번호).replace(/\s+/g, "");
     const blackDriver = drivers.find(
@@ -493,31 +494,38 @@ const patchDispatch = async (_id, patch) => {
       }, 100);
     }
   }
-  // 🔥 등록시간 절대 덮어쓰기 방지
+
   delete patch.createdAt;
   delete patch.등록일시;
   delete patch.등록시간;
   delete patch.createdTime;
 
-  // 🔥 1️⃣ 무조건 dispatch 먼저 확인
-  let ref = doc(db, "dispatch", _id);
-  let snap = await getDoc(ref);
+  // ★ 메모리 캐시에서 먼저 찾기 (getDoc 완전 제거 → 딜레이 없음)
+  const allCache = [...ordersCache, ...dispatchCache];
+  const cached = allCache.find(d => d._id === _id);
 
-  // 🔥 2️⃣ 없으면 orders 확인
-  if (!snap.exists()) {
-    ref = doc(db, "orders", _id);
-    snap = await getDoc(ref);
+  let ref, prev;
+  if (cached) {
+    ref = doc(db, cached.__col || "dispatch", _id);
+    prev = cached;
+  } else {
+    // fallback: getDoc (캐시에 없을 때만)
+    ref = doc(db, "dispatch", _id);
+    let snap = await getDoc(ref);
+    if (!snap.exists()) {
+      ref = doc(db, "orders", _id);
+      snap = await getDoc(ref);
+    }
+    if (!snap.exists()) { console.error("❌ 문서 없음", _id); return; }
+    prev = snap.data();
   }
 
-  // ❌ 둘 다 없으면 종료
-  if (!snap.exists()) {
-    console.error("❌ 문서 없음", _id);
-    return;
-  }
+  // ★ UI 즉시 반영 (optimistic update — Firestore 응답 기다리지 않음)
+  setDispatchData(current => current.map(d =>
+    d._id === _id ? { ...d, ...patch } : d
+  ));
 
-  const prev = snap.data();
-
- // 🔥 차량번호가 명시적으로 빈값 → 이름/전화/배차상태 전부 초기화
+  // 차량번호가 명시적으로 빈값 → 이름/전화/배차상태 전부 초기화
   if ("차량번호" in patch && !String(patch.차량번호 || "").trim()) {
     patch.이름 = "";
     patch.전화번호 = "";
@@ -538,7 +546,6 @@ const patchDispatch = async (_id, patch) => {
     }
   }
 
-  // 🔥 문자열→배열 안전 파싱 (경유지 보호)
   const safeStops = (v) => {
     if (Array.isArray(v) && v.length > 0) return v;
     if (typeof v === "string" && v.trim().startsWith("[")) {
@@ -549,7 +556,7 @@ const patchDispatch = async (_id, patch) => {
 
   const cleanPatch = stripUndefinedDeep({
     ...patch,
-    경유지_상차: safeStops(patch.경유지_상차) .length > 0
+    경유지_상차: safeStops(patch.경유지_상차).length > 0
       ? safeStops(patch.경유지_상차)
       : safeStops(prev.경유지_상차 || prev.경유상차목록),
     경유지_하차: safeStops(patch.경유지_하차).length > 0
@@ -563,24 +570,17 @@ const patchDispatch = async (_id, patch) => {
       : safeStops(prev.경유하차목록 || prev.경유지_하차),
   });
 
-
   const histories = [];
-
   Object.keys(cleanPatch).forEach((key) => {
     if (IGNORE_HISTORY_FIELDS.has(key)) return;
     if (cleanPatch.__system === true) return;
     if (key === "업체전달상태") return;
     if (key === "업체전달일시") return;
-
     if (prev[key] !== cleanPatch[key]) {
-      histories.push(
-        makeDispatchHistory({
-          userEmail: auth.currentUser?.email,
-          field: key,
-          before: prev[key] ?? null,
-          after: cleanPatch[key] ?? null,
-        })
-      );
+      histories.push(makeDispatchHistory({
+        userEmail: auth.currentUser?.email,
+        field: key, before: prev[key] ?? null, after: cleanPatch[key] ?? null,
+      }));
     }
   });
 
@@ -588,13 +588,14 @@ const patchDispatch = async (_id, patch) => {
   if (!prev.createdAt) {
     cleanPatch.createdAt = prev.updatedAt || prev.createdTime || Date.now();
   }
-  // ✅ 마지막에만 update
-  await updateDoc(ref, {
+
+  // Firestore는 백그라운드에서 처리
+  updateDoc(ref, {
     ...cleanPatch,
     작성자: auth.currentUser?.email || "",
     updatedAt: Date.now(),
     history: [...historyArr, ...histories],
-  });
+  }).catch(e => console.error("patchDispatch 저장 오류:", e));
 };
 const removeDispatch = async (arg) => {
   const id = typeof arg === "string" ? arg : arg?._id;
@@ -28525,7 +28526,7 @@ const handleBatchSettle = async (targetStatus) => {
                   <div>
                     <label className="text-[12px] font-bold text-gray-500 mb-1 block">발신 계정</label>
                     <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-[13px] text-gray-600">
-                      tjddnqkf@naver.com
+                      r15332525@daum.net
                     </div>
                   </div>
                   <div>
@@ -29685,7 +29686,8 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
 }
 // ===================== DispatchApp.jsx (PART 9/9) — END =====================
 // ===================== DispatchApp.jsx (PART 10/10) — START =====================
-function DriverManagement({ drivers = [], upsertDriver, removeDriver }) {
+function DriverManagement({ drivers, upsertDriver, removeDriver }) {
+  const [selectedMonths, setSelectedMonths] = React.useState(new Set());
   const [q, setQ] = React.useState("");
   const [searched, setSearched] = React.useState(false);
   const [selected, setSelected] = React.useState(new Set());

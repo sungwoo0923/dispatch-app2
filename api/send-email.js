@@ -16,15 +16,15 @@ export default async function handler(req, res) {
       port: 465,
       secure: true,
       auth: {
-        user: "tjddnqkf@naver.com",
-        pass: "U4CWZJVUKDXN",
+        user: "r15332525@daum.net",
+        pass: "lkgaeomrobpkhdov",
       },
       tls: { rejectUnauthorized: false },
       connectionTimeout: 15000,
     });
 
     const mailOptions = {
-      from: '"RUN25 배차팀" <tjddnqkf@naver.com>',
+      from: '"RUN25 배차팀" <r15332525@daum.net>',
       to,
       subject,
       html: html || subject,
