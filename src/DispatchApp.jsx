@@ -1705,6 +1705,7 @@ return (
   );
 }
 // ===================== DispatchApp.jsx (PART 2/8) — END =====================
+
 // ===================== DispatchApp.jsx (PART 3/8) — START =====================
 function ToggleBadge({ active, onClick, activeCls, inactiveCls, children }) {
   return (
@@ -3501,6 +3502,7 @@ const [fareCompare, setFareCompare] = React.useState({
   driver: null,
 });
 const [isSaving, setIsSaving] = React.useState(false);
+const [multiCount, setMultiCount] = React.useState(1); // ★ 다중 등록 수량
 
 React.useEffect(() => {
   const pickup = normalizeKey(form.상차지명);
@@ -4434,10 +4436,12 @@ const rec = {
 };
 // ⭐ 상/하차지 담당자 정보 → 기존 업체 있으면 업데이트만 함
 if (typeof upsertPlace === "function") {
-// ✅ 오더 저장
-const newId = await addDispatch(rec);
-
-rec._id = newId; // ⭐ 이거 추가 (핵심)
+// ★ 다중 등록: multiCount만큼 동일 오더 생성
+const saveCount = multiCount > 1 ? multiCount : 1;
+for (let i = 0; i < saveCount; i++) {
+  const newId = await addDispatch({ ...rec });
+  rec._id = newId;
+}
 
 await savePlaceSmart(
   form.상차지명,
@@ -4480,13 +4484,17 @@ await savePlaceSmart(
     setConfirmOpen(false);
   try { localStorage.removeItem("dispatchForm"); } catch {}
   setIsSaving(false);
-showAlert("등록되었습니다.");
+const savedCount = multiCount > 1 ? multiCount : 1;
+setMultiCount(1);
+showAlert(savedCount > 1 ? `${savedCount}건 등록되었습니다.` : "등록되었습니다.");
 };
 const isRoundTrip = form.운행유형 === "왕복";
 const ROUND_DISCOUNT = 0.9; // ⭐ 10% 할인 (조정 가능)
     // ⭐ 운임조회 팝업 상태
     const [fareModalOpen, setFareModalOpen] = React.useState(false);
-    const [fareResult, setFareResult] = React.useState(null);
+const [fareResult, setFareResult] = React.useState(null);
+const [fareQuickOpen, setFareQuickOpen] = React.useState(false);
+const [fareQuickMatches, setFareQuickMatches] = React.useState([]);
     const [expandedMemo, setExpandedMemo] = React.useState(null);
     // ⭐ 운임조회 (송원 전용 자동요율 → 그 다음 AI 통계)
 const handleFareSearch = () => {
@@ -4828,11 +4836,42 @@ setFareResult({
   latestCargo,
   exactLike,
   similarTop,
-  filteredList: dedupedList,   // 💰 운임 계산 후보
+  filteredList: dedupedList,
   pastHistoryList: pastDedupedList,
 });
-// 모달 오픈
-setFareModalOpen(true);
+
+// ★ 빠른 선택: 동일 파렛수/화물 + 차량종류 최신 3건
+const _inputPallet = getPalletFromCargoText(form.화물내용);
+const _inputCargoText = (form.화물내용 || "").trim();
+const _inputVehicle = (vehicleQuery?.trim() || form.차량종류 || "").trim().toLowerCase();
+
+const _quickMatches = pastDedupedList
+  .filter(r => {
+    // 화물 일치
+    const rPallet = getPalletFromCargoText(r.화물내용);
+    const cargoMatch = _inputPallet != null && rPallet != null
+      ? rPallet === _inputPallet
+      : (r.화물내용 || "").trim() === _inputCargoText;
+    if (!cargoMatch) return false;
+    // 차량종류 일치 (냉장/냉동은 묶어서 처리)
+    if (_inputVehicle) {
+      const rv = (r.차량종류 || "").toLowerCase();
+      const isCold = _inputVehicle.includes("냉장") || _inputVehicle.includes("냉동");
+      if (isCold) { if (!rv.includes("냉장") && !rv.includes("냉동")) return false; }
+      else { if (!rv.includes(_inputVehicle) && !_inputVehicle.includes(rv)) return false; }
+    }
+    return true;
+  })
+  .sort((a, b) => (b.상차일 || "").localeCompare(a.상차일 || ""))
+  .slice(0, 3);
+
+setFareQuickMatches(_quickMatches);
+
+if (_quickMatches.length > 0) {
+  setFareQuickOpen(true); // 빠른 선택 팝업 먼저
+} else {
+  setFareModalOpen(true); // 바로 전체 목록
+}
 };
     // ------------------ 오더복사 ------------------
 
@@ -8462,7 +8501,7 @@ setConfirmChange(null);
     tabIndex={0}
     ref={(el) => { if (el) setTimeout(() => el.focus(), 0); }}
   >
-    <div className="bg-white rounded-xl shadow-xl w-[1100px] h-[650px] flex overflow-hidden border">
+    <div className="bg-white rounded-xl shadow-xl w-[1300px] h-[650px] flex overflow-hidden border">
 
      {/* ================= 지도 영역 ================= */}
 <div className="flex-1 bg-gray-200 relative" style={{ minWidth: '500px', height: '500px' }}>
@@ -8544,15 +8583,16 @@ setConfirmChange(null);
         {/* 변동 감지 */}
         {Math.abs(fareStats.latest - fareStats.avg) > 20000 && (
           <div className="text-red-500 text-[11px]">
-            ⚠ 최근 운임 변동 있음
+                ⚠ 최근 운임 변동 있음
           </div>
         )}
 
       </div>
     )}
+      </div>
+    </div>
 
-  </div>
-</div>
+
 {/* ⭐ 지도 영역 닫기 */}
 
       {/* ================= 오른쪽 정보 패널 ================= */}
@@ -8566,26 +8606,30 @@ setConfirmChange(null);
         {form.상차일} · {form.거래처명 || "-"}
       </div>
     </div>
-    <div className="flex gap-1.5">
-      {form.긴급 && (
-        <span className="px-2 py-0.5 bg-white/15 text-white text-[10px] font-bold rounded border border-white/20">
-          긴급
-        </span>
-      )}
-      {form.운행유형 === "왕복" && (
-        <span className="px-2 py-0.5 bg-white/15 text-white text-[10px] font-bold rounded border border-white/20">
-          왕복
-        </span>
-      )}
-      {form.혼적 && (
-        <span className="px-2 py-0.5 bg-white/15 text-white text-[10px] font-bold rounded border border-white/20">
-          혼적
-        </span>
-      )}
+    <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1 bg-white/10 rounded-lg px-2 py-1 border border-white/20">
+        <span className="text-white/60 text-[10px] font-semibold mr-1">수량</span>
+        <button type="button" className="w-5 h-5 rounded bg-white/20 text-white text-sm font-bold flex items-center justify-center hover:bg-white/30"
+          onClick={() => setMultiCount(v => Math.max(1, v - 1))}>-</button>
+        <span className="text-white font-bold text-[13px] min-w-[18px] text-center">{multiCount}</span>
+        <button type="button" className="w-5 h-5 rounded bg-white/20 text-white text-sm font-bold flex items-center justify-center hover:bg-white/30"
+          onClick={() => setMultiCount(v => Math.min(10, v + 1))}>+</button>
+      </div>
+      <div className="flex gap-1.5">
+        {form.긴급 && (
+          <span className="px-2 py-0.5 bg-white/15 text-white text-[10px] font-bold rounded border border-white/20">긴급</span>
+        )}
+        {form.운행유형 === "왕복" && (
+          <span className="px-2 py-0.5 bg-white/15 text-white text-[10px] font-bold rounded border border-white/20">왕복</span>
+        )}
+        {form.혼적 && (
+          <span className="px-2 py-0.5 bg-white/15 text-white text-[10px] font-bold rounded border border-white/20">혼적</span>
+        )}
+      </div>
     </div>
   </div>
-
   <div className="flex-1 overflow-y-auto divide-y divide-gray-100">
+
 
     {/* 결제 금액 */}
     <div className="px-6 py-4">
@@ -8815,7 +8859,7 @@ setConfirmChange(null);
       className={`flex-1 py-2.5 rounded-lg text-white font-bold text-[13px] transition
         ${isSaving ? "bg-gray-400 cursor-not-allowed" : "bg-[#1B2B4B] hover:bg-[#243a60]"}`}
       onClick={doSave}>
-      {isSaving ? "저장 중..." : "배차등록하기"}
+      {isSaving ? "저장 중..." : multiCount > 1 ? `${multiCount}건 등록하기` : "배차등록하기"}
     </button>
   </div>
 </div>
@@ -9093,7 +9137,66 @@ setConfirmChange(null);
   </div>
 )}
 
-        {/* ⭐ 운임조회 결과 모달 */}
+{/* ===== 운임 빠른 선택 팝업 ===== */}
+{fareQuickOpen && (
+  <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999999]"
+    onClick={() => setFareQuickOpen(false)}>
+    <div className="bg-white rounded-2xl w-[500px] shadow-2xl overflow-hidden"
+      onClick={e => e.stopPropagation()}>
+      {/* 헤더 */}
+      <div className="bg-[#1B2B4B] px-5 py-4 flex items-center justify-between">
+        <div>
+          <div className="text-white font-bold text-[15px]">동일 조건 운임 이력</div>
+          <div className="text-white/50 text-[11px] mt-0.5">
+            {form.상차지명} → {form.하차지명} · {form.화물내용}
+          </div>
+        </div>
+        <button onClick={() => setFareQuickOpen(false)} className="text-white/40 hover:text-white text-xl leading-none">×</button>
+      </div>
+      {/* 카드 목록 */}
+      <div className="p-4 space-y-2">
+        <div className="text-[11px] text-gray-400 mb-3">클릭하면 청구운임에 바로 적용됩니다</div>
+        {fareQuickMatches.map((r, i) => {
+          const claim = Number(String(r.청구운임||"0").replace(/[^\d]/g,""));
+          const driver = Number(String(r.기사운임||"0").replace(/[^\d]/g,""));
+          const margin = claim - driver;
+          return (
+            <button key={i}
+              className="w-full text-left border-2 border-gray-200 hover:border-[#1B2B4B] rounded-xl px-4 py-3 transition group"
+              onClick={() => {
+                onChange("청구운임", String(claim));
+                setFareQuickOpen(false);
+              }}>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[12px] text-gray-400 font-medium">{r.상차일 || ""}</span>
+                <span className="text-[20px] font-black text-[#1B2B4B] group-hover:text-blue-600 leading-none">
+                  {claim.toLocaleString()}원
+                </span>
+              </div>
+              <div className="flex items-center gap-4 text-[11px]">
+                <span className="text-gray-500">기사 {driver.toLocaleString()}원</span>
+                <span className={margin >= 0 ? "text-emerald-600 font-semibold" : "text-red-500 font-semibold"}>
+                  마진 {margin.toLocaleString()}원
+                </span>
+                {r.차량종류 && <span className="text-gray-400">{r.차량종류}</span>}
+                {r.메모 && <span className="text-amber-600 truncate max-w-[100px]">메모: {r.메모}</span>}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+      {/* 전체 이력 보기 */}
+      <div className="px-4 pb-4">
+        <button
+          className="w-full py-2.5 rounded-xl border border-gray-300 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition"
+          onClick={() => { setFareQuickOpen(false); setFareModalOpen(true); }}>
+          전체 이력 보기
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
 {fareModalOpen && fareResult && (() => {
   const fareMin = fareResult.min;
   const fareMax = fareResult.max;
@@ -9119,11 +9222,73 @@ setConfirmChange(null);
     return score;
   };
 
-  const sortedHistory = [...(fareResult.pastHistoryList || [])].sort((a, b) => {
-    const sd = calcScore(b) - calcScore(a);
-    if (sd !== 0) return sd;
-    return new Date(b.상차일) - new Date(a.상차일);
-  });
+// ★ 화물 타입 감지
+  const _detectType = (s = "") => {
+    const t = s.trim().toLowerCase().replace(/\s+/g, "");
+    if (/\d+(파레트|파렛트|파렛|파레|파|plt)/.test(t)) return "pallet";
+    if (/\d+(박스|box)/.test(t)) return "box";
+    return "text";
+  };
+  const _inputType = _detectType(form.화물내용 || "");
+  const _inputPalletNum = getPalletFromCargoText(form.화물내용);
+  const _inputBoxNum = (() => {
+    const m = (form.화물내용 || "").replace(/\s+/g,"").match(/(\d+)(박스|box)/i);
+    return m ? Number(m[1]) : null;
+  })();
+  const _inputCargoStr = (form.화물내용 || "").trim();
+
+  let sortedHistory;
+  if (_inputType === "pallet" && _inputPalletNum != null) {
+    // 파렛트: 파렛수별 최신 1건, 입력값 근접순 정렬
+    const _byPallet = new Map();
+    for (const r of (fareResult.pastHistoryList || [])) {
+      if (_detectType(r.화물내용) !== "pallet") continue;
+      const rp = getPalletFromCargoText(r.화물내용);
+      if (rp == null) continue;
+      if (!_byPallet.has(rp)) _byPallet.set(rp, []);
+      _byPallet.get(rp).push(r);
+    }
+    sortedHistory = Array.from(_byPallet.entries())
+      .map(([p, recs]) => {
+        const best = [...recs].sort((a, b) => (b.상차일||"").localeCompare(a.상차일||""))[0];
+        return { ...best, _palletCount: p, _groupSize: recs.length };
+      })
+      .sort((a, b) => Math.abs(a._palletCount - _inputPalletNum) - Math.abs(b._palletCount - _inputPalletNum));
+  } else if (_inputType === "box" && _inputBoxNum != null) {
+    // 박스: 박스수별 최신 1건, 입력값 근접순
+    const _byBox = new Map();
+    for (const r of (fareResult.pastHistoryList || [])) {
+      if (_detectType(r.화물내용) !== "box") continue;
+      const rm = (r.화물내용||"").replace(/\s+/g,"").match(/(\d+)(박스|box)/i);
+      const rb = rm ? Number(rm[1]) : -1;
+      if (!_byBox.has(rb)) _byBox.set(rb, []);
+      _byBox.get(rb).push(r);
+    }
+    sortedHistory = Array.from(_byBox.entries())
+      .map(([b, recs]) => {
+        const best = [...recs].sort((a, b) => (b.상차일||"").localeCompare(a.상차일||""))[0];
+        return { ...best, _boxCount: b, _groupSize: recs.length };
+      })
+      .sort((a, b) => Math.abs(a._boxCount - _inputBoxNum) - Math.abs(b._boxCount - _inputBoxNum));
+  } else {
+    // 텍스트/기타: 화물내용별 최신 1건, 동일 내용 우선
+    const _byText = new Map();
+    for (const r of (fareResult.pastHistoryList || [])) {
+      const key = (r.화물내용||"기타").trim();
+      if (!_byText.has(key)) _byText.set(key, []);
+      _byText.get(key).push(r);
+    }
+    sortedHistory = Array.from(_byText.entries())
+      .map(([text, recs]) => {
+        const best = [...recs].sort((a, b) => (b.상차일||"").localeCompare(a.상차일||""))[0];
+        return { ...best, _cargoText: text, _groupSize: recs.length };
+      })
+      .sort((a, b) => {
+        if (a._cargoText === _inputCargoStr && b._cargoText !== _inputCargoStr) return -1;
+        if (b._cargoText === _inputCargoStr && a._cargoText !== _inputCargoStr) return 1;
+        return (b.상차일||"").localeCompare(a.상차일||"");
+      });
+  }
 
   const recent3 = sortedHistory.slice(0, 3).map(r => Number(String(r.청구운임||"0").replace(/[^\d]/g,"")));
   let trend = null;
@@ -9268,14 +9433,29 @@ setConfirmChange(null);
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-[12px] font-bold text-gray-400">{r.상차일}</span>
                           <div className="flex gap-1">
-                            {sameCargo && sameTon && (
-                          <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-[#1B2B4B] text-white tracking-tight">최적매칭</span>
+                            {r._palletCount != null && (
+                          <span className={`px-2.5 py-1 text-[11px] font-extrabold rounded-full tracking-tight ${
+                            r._palletCount === _inputPalletNum
+                              ? "bg-[#1B2B4B] text-white"
+                              : "bg-gray-100 text-gray-600 border border-gray-300"
+                          }`}>{r._palletCount}파렛</span>
                         )}
-                        {sameTon && !sameCargo && (
-                          <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-gray-700 text-white tracking-tight">톤수일치</span>
+                        {r._boxCount != null && r._boxCount >= 0 && (
+                          <span className={`px-2.5 py-1 text-[11px] font-extrabold rounded-full tracking-tight ${
+                            r._boxCount === _inputBoxNum
+                              ? "bg-[#1B2B4B] text-white"
+                              : "bg-gray-100 text-gray-600 border border-gray-300"
+                          }`}>{r._boxCount}박스</span>
                         )}
-                        {sameCargo && !sameTon && (
-                          <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-gray-700 text-white tracking-tight">화물일치</span>
+                        {r._cargoText && (
+                          <span className={`px-2.5 py-1 text-[11px] font-extrabold rounded-full tracking-tight ${
+                            r._cargoText === _inputCargoStr
+                              ? "bg-[#1B2B4B] text-white"
+                              : "bg-gray-100 text-gray-600 border border-gray-300"
+                          }`}>{r._cargoText}</span>
+                        )}
+                        {r._groupSize > 1 && (
+                          <span className="px-2 py-1 text-[10px] text-gray-400 border border-gray-200 rounded-full">이력 {r._groupSize}건</span>
                         )}
                         <span className={`px-2.5 py-1 text-[11px] font-extrabold rounded-full border ${fareCls}`}>{fareLabel}</span>
                           </div>
@@ -12745,7 +12925,12 @@ const handleCloseFileUpload = async (e) => {
   const nameCol = headers.indexOf("차주이름");
   const phoneCol = headers.indexOf("차주전화");
   const feeTypeCol = headers.indexOf("요금구분");
-  const commCol = headers.indexOf("수수료");
+const commCol = headers.indexOf("수수료");
+  // ★ 운송료 컬럼 (다양한 명칭 대응)
+  const fareColNames = ["운송료", "운임", "운임금액", "금액", "결제금액", "배차료", "차주운임", "지급금액"];
+  const fareCol = fareColNames.reduce((found, name) =>
+    found !== -1 ? found : headers.indexOf(name), -1
+  );
 
   if (plateCol === -1) {
     showAlert("차량번호 컬럼을 찾을 수 없습니다.");
@@ -12815,8 +13000,23 @@ const handleCloseFileUpload = async (e) => {
         }
       }
 
-      if (fileComm > 0 && dispatch === "24시") {
+     if (fileComm > 0 && dispatch === "24시") {
         // 참고용
+      }
+
+      // 3. ★ 기사운임 금액 불일치 검증
+      if (fareCol !== -1) {
+        const fileFare = Number(String(row[fareCol] || "0").replace(/[^\d]/g, ""));
+        const programFare = Number(String(mr.기사운임 || "0").replace(/[^\d]/g, ""));
+        if (fileFare > 0 && programFare > 0 && fileFare !== programFare) {
+          fileIssues.push({
+            rowId: mr._id,
+            seq,
+            label,
+            type: "fare",
+            msg: `24시콜 운송료: ${fileFare.toLocaleString()}원 / 프로그램 기사운임: ${programFare.toLocaleString()}원 — 운임 불일치 (차량: ${row[plateCol]})`,
+          });
+        }
       }
     });
   }
@@ -16967,91 +17167,79 @@ setConfirmChange(null);
       {/* ===================== 📤 업체 전달 상태 변경 팝업 ===================== */}
       {deliveryConfirm && (
         <div
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100001]"
+          className="fixed inset-0 bg-black/60 flex items-center justify-center z-[100001]"
           tabIndex={-1}
           ref={(el) => el && el.focus()}
           onKeyDown={(e) => {
-            if (e.key === "Escape") {
-              setDeliveryConfirm(null);
-            }
-
+            if (e.key === "Escape") setDeliveryConfirm(null);
             if (e.key === "Enter") {
               e.preventDefault();
-
-              const sender =
-                auth?.currentUser?.email ??
-                auth?.currentUser?.uid ??
-                "unknown";
-
+              const sender = auth?.currentUser?.email ?? auth?.currentUser?.uid ?? "unknown";
               patchDispatch(deliveryConfirm.rowId, {
                 업체전달상태: deliveryConfirm.after,
-                업체전달일시:
-                  deliveryConfirm.after === "전달완료" ? Date.now() : null,
-                업체전달방법:
-                  deliveryConfirm.after === "전달완료" ? "수동" : null,
-                업체전달자:
-                  deliveryConfirm.after === "전달완료" ? sender : null,
+                업체전달일시: deliveryConfirm.after === "전달완료" ? Date.now() : null,
+                업체전달방법: deliveryConfirm.after === "전달완료" ? "수동" : null,
+                업체전달자: deliveryConfirm.after === "전달완료" ? sender : null,
               });
-
               setDeliveryConfirm(null);
             }
           }}
         >
-          <div className="bg-white rounded-2xl p-6 w-[360px] shadow-xl">
-            <h3 className="text-lg font-bold text-center mb-2">
-              {deliveryConfirm.reason === "copy"
-                ? "📋 복사되었습니다"
-                : "변경하시겠습니까?"}
-            </h3>
-
-            <div className="text-center text-sm mb-5">
+          <div className="bg-[#1B2B4B] rounded-2xl overflow-hidden w-[320px] shadow-2xl">
+            {/* 헤더 */}
+            <div className="px-5 py-4 flex items-center justify-between border-b border-white/10">
+              <div className="flex items-center gap-2">
+                <span className="text-white font-bold text-[14px]">
+                  {deliveryConfirm.reason === "copy" ? "복사 완료" : "전달상태 변경"}
+                </span>
+              </div>
+              <button className="text-white/40 hover:text-white text-lg" onClick={() => setDeliveryConfirm(null)}>✕</button>
+            </div>
+            {/* 본문 */}
+            <div className="px-5 py-5">
               {deliveryConfirm.reason === "copy" ? (
-                <div className="text-gray-700">
-                  전달상태를 <b className="text-blue-600">전달완료</b>로 변경할까요?
+                <div className="text-center text-white/80 text-[14px]">
+                  전달상태를 <span className="text-emerald-400 font-bold">전달완료</span>로 변경할까요?
                 </div>
               ) : (
-                <>
-                  <div className="font-semibold mb-1">업체전달상태</div>
-                  <div className="text-gray-500">
-                    {deliveryConfirm.before} →
-                    <span className="ml-1 text-blue-600 font-bold">
-                      {deliveryConfirm.after}
-                    </span>
-                  </div>
-                </>
+                <div className="flex items-center justify-center gap-3">
+                  <span className={`px-3 py-1.5 rounded-full text-[12px] font-bold ${
+                    deliveryConfirm.before === "전달완료"
+                      ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                      : "bg-white/10 text-white/60 border border-white/20"
+                  }`}>{deliveryConfirm.before || "미전달"}</span>
+                  <span className="text-white/40 text-lg">→</span>
+                  <span className={`px-3 py-1.5 rounded-full text-[12px] font-bold ${
+                    deliveryConfirm.after === "전달완료"
+                      ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                      : "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                  }`}>{deliveryConfirm.after}</span>
+                </div>
               )}
             </div>
-
-
-            <div className="flex gap-3">
+            {/* 버튼 */}
+            <div className="px-5 pb-5 flex gap-2">
               <button
-                className="flex-1 py-2 rounded-lg bg-gray-200 hover:bg-gray-300"
+                className="flex-1 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-semibold text-[13px] transition"
                 onClick={() => setDeliveryConfirm(null)}
-              >
-                아니오 (ESC)
-              </button>
-
+              >취소 (ESC)</button>
               <button
-                className="flex-1 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
+                className={`flex-1 py-2.5 rounded-xl font-bold text-[13px] transition text-white ${
+                  deliveryConfirm.after === "전달완료"
+                    ? "bg-emerald-500 hover:bg-emerald-400"
+                    : "bg-amber-500 hover:bg-amber-400"
+                }`}
                 onClick={() => {
-                  const sender =
-                    auth?.currentUser?.email ??
-                    auth?.currentUser?.uid ??
-                    "unknown";
-
+                  const sender = auth?.currentUser?.email ?? auth?.currentUser?.uid ?? "unknown";
                   patchDispatch(deliveryConfirm.rowId, {
                     업체전달상태: deliveryConfirm.after,
-                    업체전달일시:
-                      deliveryConfirm.after === "전달완료" ? Date.now() : null,
+                    업체전달일시: deliveryConfirm.after === "전달완료" ? Date.now() : null,
                     업체전달방법: "수동",
                     업체전달자: sender,
                   });
-
                   setDeliveryConfirm(null);
                 }}
-              >
-                확인 (Enter)
-              </button>
+              >확인 (Enter)</button>
             </div>
           </div>
         </div>
@@ -17251,8 +17439,12 @@ setConfirmChange(null);
                       <div className="text-[12px] font-bold text-gray-800 truncate">{f.label}</div>
                       <div className="text-[12px] text-gray-500 mt-0.5">{f.msg}</div>
                     </div>
-                    <span className="shrink-0 px-2 py-0.5 rounded text-[10px] font-bold bg-gray-100 text-gray-600">
-                      {f.type === "dispatch" ? "배차방식" : "지급방식"}
+                    <span className={`shrink-0 px-2 py-0.5 rounded text-[10px] font-bold ${
+                      f.type === "fare"
+                        ? "bg-red-100 text-red-700"
+                        : "bg-gray-100 text-gray-600"
+                    }`}>
+                      {f.type === "dispatch" ? "배차방식" : f.type === "fare" ? "운임차이" : "지급방식"}
                     </span>
                   </div>
                 ))}
@@ -17330,6 +17522,50 @@ setConfirmChange(null);
           </div>
         </div>
       )}
+
+    {/* ★ 전달상태 일괄 변경 */}
+      <div className="px-6 py-3 border-t border-gray-100 bg-[#1B2B4B]/5 shrink-0">
+        <div className="text-[11px] font-bold text-[#1B2B4B] mb-2">전달상태 일괄 변경</div>
+        <div className="flex gap-2">
+          <button
+            className="flex-1 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-[12px] font-bold transition"
+            onClick={async () => {
+              const targetDate = dailyCloseResult?.date;
+              if (!targetDate) return;
+              if (!window.confirm(`${targetDate} 전체 오더를 전달완료로 변경하시겠습니까?`)) return;
+              const sender = auth?.currentUser?.email ?? "unknown";
+              const targets = rows.filter(r => r.상차일 === targetDate);
+              for (const r of targets) {
+                patchDispatch(r._id, {
+                  업체전달상태: "전달완료",
+                  업체전달일시: Date.now(),
+                  업체전달방법: "일괄",
+                  업체전달자: sender,
+                });
+              }
+              setDailyCloseOpen(false);
+            }}
+          >전체완료</button>
+          <button
+            className="flex-1 py-2 rounded-xl bg-gray-500 hover:bg-gray-600 text-white text-[12px] font-bold transition"
+            onClick={async () => {
+              const targetDate = dailyCloseResult?.date;
+              if (!targetDate) return;
+              if (!window.confirm(`${targetDate} 전체 오더를 미전달로 변경하시겠습니까?`)) return;
+              const targets = rows.filter(r => r.상차일 === targetDate);
+              for (const r of targets) {
+                patchDispatch(r._id, {
+                  업체전달상태: "미전달",
+                  업체전달일시: null,
+                  업체전달방법: null,
+                  업체전달자: null,
+                });
+              }
+              setDailyCloseOpen(false);
+            }}
+          >전체 미전달</button>
+        </div>
+      </div>
 
       {/* 하단 버튼 */}
       <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 shrink-0 flex gap-3">

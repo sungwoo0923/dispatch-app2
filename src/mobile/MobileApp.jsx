@@ -343,6 +343,39 @@ const popupLastShownDateRef = useRef(null);        // 마지막으로 팝업을 
 const pendingPopupRef = useRef(false);             // 자정에 list가 아니면, list로 돌아왔을 때 띄우기
 const pageRef = useRef("list");
 const unassignedCountRef = useRef(0);
+const backPressCountRef = useRef(0);
+const backPressTimerRef = useRef(null);
+
+// 🔙 안드로이드 뒤로가기 2번 처리
+useEffect(() => {
+  window.history.pushState(null, '', window.location.href);
+
+  const handlePopState = () => {
+    if (pageRef.current !== "list") {
+      setPage("list");
+      window.history.pushState(null, '', window.location.href);
+      backPressCountRef.current = 0;
+    } else {
+      backPressCountRef.current += 1;
+
+      if (backPressCountRef.current === 1) {
+        setToast("한 번 더 누르면 앱이 종료됩니다");
+        if (backPressTimerRef.current) clearTimeout(backPressTimerRef.current);
+        backPressTimerRef.current = setTimeout(() => {
+          backPressCountRef.current = 0;
+          window.history.pushState(null, '', window.location.href);
+        }, 2000);
+      }
+      // 2번째는 history가 없어서 앱 자연 종료
+    }
+  };
+
+  window.addEventListener('popstate', handlePopState);
+  return () => {
+    window.removeEventListener('popstate', handlePopState);
+    if (backPressTimerRef.current) clearTimeout(backPressTimerRef.current);
+  };
+}, []);
 const alarmEnabledRef = useRef(true);              // 🔔 알람 ref
 const initialLoadDoneRef = useRef({});             // 🔔 최초로드 구분
   // 🔕 알림 ON/OFF 상태 (기본 ON)
@@ -2582,7 +2615,7 @@ setOpenMemo={setOpenMemo}
     onBack={() => setPage("list")}
   />
 )}
-        {page === "form" && (
+    {page === "form" && (
           <MobileOrderForm
             form={form}
             setForm={setForm}
@@ -2592,6 +2625,7 @@ setOpenMemo={setOpenMemo}
             showToast={showToast}
             drivers={drivers}
             upsertDriver={upsertDriver}
+            orders={orders}
           />
         )}
 
@@ -4555,6 +4589,7 @@ function MobileOrderForm({
   showToast,
   drivers,
   upsertDriver,
+  orders = [],
 }) {
     const handleSwapPickupDrop = () => {
     setForm((prev) => ({
@@ -4633,7 +4668,11 @@ const chooseClient = (c) => {
   update("상차지담당자번호", primary?.phone || c.담당자번호 || "");
 };
 
-  const [showNewDriver, setShowNewDriver] = useState(false);
+const [showNewDriver, setShowNewDriver] = useState(false);
+const [showOrderCopyModal, setShowOrderCopyModal] = useState(false);
+const [orderCopySearch, setOrderCopySearch] = useState("");
+const [orderCopySearchField, setOrderCopySearchField] = useState("all"); // 이 줄을 추가합니다.
+
 // 톤수 분리 state
   const [톤수값, set톤수값] = useState(() => {
     return String(form.톤수||"").replace(/톤|kg/gi,"").trim();
@@ -4963,7 +5002,16 @@ const pickDrop = (c) => {
 </div>
 
 
-      {/* 상/하차 + 주소 + 자동완성 */}
+{/* 오더 복사 버튼 */}
+      <button
+        type="button"
+        onClick={() => { setOrderCopySearch(""); setShowOrderCopyModal(true); }}
+        className="w-full py-2.5 rounded-xl border-2 border-dashed border-[#1B2B4B]/30 text-[#1B2B4B] text-[13px] font-semibold hover:bg-[#1B2B4B]/5 transition"
+      >
+        기존 오더 불러오기
+      </button>
+
+      {/* 상차/하차 + 주소 + 자동완성 */}
 <div className="bg-white rounded-lg border shadow-sm p-3 space-y-3">
 
   {/* 🔵 상차지 */}
@@ -5564,8 +5612,12 @@ const pickDrop = (c) => {
       <button
         className="w-full py-2 mb-2 bg-blue-500 text-white rounded-lg text-sm"
         onClick={() => {
+          const contacts = Array.isArray(selectedClient.contacts) ? selectedClient.contacts : [];
+          const primary = contacts.find(ct => ct.isPrimary) || contacts[0] || null;
           update("상차지명", selectedClient.거래처명);
           update("상차지주소", selectedClient.주소 || "");
+          update("상차지담당자", primary?.name || selectedClient.담당자 || "");
+          update("상차지담당자번호", primary?.phone || selectedClient.담당자번호 || "");
           setShowClientApplyModal(false);
         }}
       >
@@ -5575,8 +5627,12 @@ const pickDrop = (c) => {
       <button
         className="w-full py-2 mb-2 bg-indigo-500 text-white rounded-lg text-sm"
         onClick={() => {
+          const contacts = Array.isArray(selectedClient.contacts) ? selectedClient.contacts : [];
+          const primary = contacts.find(ct => ct.isPrimary) || contacts[0] || null;
           update("하차지명", selectedClient.거래처명);
           update("하차지주소", selectedClient.주소 || "");
+          update("하차지담당자", primary?.name || selectedClient.담당자 || "");
+          update("하차지담당자번호", primary?.phone || selectedClient.담당자번호 || "");
           setShowClientApplyModal(false);
         }}
       >
@@ -5589,6 +5645,115 @@ const pickDrop = (c) => {
       >
         취소
       </button>
+    </div>
+  </div>
+)}
+
+{/* ===== 오더 복사 모달 ===== */}
+{showOrderCopyModal && (
+  <div className="fixed inset-0 bg-black/50 flex flex-col justify-end z-[9999]" onClick={() => setShowOrderCopyModal(false)}>
+    <div className="bg-white rounded-t-2xl w-full max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+      {/* 헤더 */}
+      <div className="flex items-center justify-between px-4 py-3 border-b">
+        <span className="font-bold text-[15px] text-[#1B2B4B]">기존 오더 불러오기</span>
+        <button onClick={() => setShowOrderCopyModal(false)} className="text-gray-400 text-xl">✕</button>
+      </div>
+            {/* 검색 */}
+      <div className="px-4 py-2 border-b">
+        <div className="flex gap-2">
+          <select
+            className="w-[115px] border border-gray-200 rounded-xl px-2 py-2 text-[13px] bg-white focus:outline-none focus:border-[#1B2B4B]"
+            value={orderCopySearchField}
+            onChange={e => setOrderCopySearchField(e.target.value)}
+          >
+            <option value="all">전체</option>
+            <option value="거래처명">거래처명</option>
+            <option value="상차지명">상차지명</option>
+            <option value="하차지명">하차지명</option>
+            <option value="기사명">기사명</option>
+            <option value="차량번호">차량번호</option>
+          </select>
+
+          <input
+            className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
+            placeholder="검색어를 입력하세요"
+            value={orderCopySearch}
+            onChange={e => setOrderCopySearch(e.target.value)}
+            autoFocus
+          />
+        </div>
+      </div>
+
+      {/* 목록 */}
+      <div className="overflow-y-auto flex-1 px-4 py-2 space-y-2">
+        {[...orders]
+          .filter(o => {
+            if (!o.상차지명 && !o.하차지명) return false;
+
+            const q = orderCopySearch.trim().toLowerCase();
+            if (!q) return true;
+
+            const getValue = key => String(o[key] || "").toLowerCase();
+
+            if (orderCopySearchField === "all") {
+              return (
+                getValue("거래처명").includes(q) ||
+                getValue("상차지명").includes(q) ||
+                getValue("하차지명").includes(q) ||
+                getValue("기사명").includes(q) ||
+                getValue("차량번호").includes(q)
+              );
+            }
+
+            return getValue(orderCopySearchField).includes(q);
+          })
+          .sort((a, b) => (b.상차일 || "").localeCompare(a.상차일 || ""))
+          .slice(0, 30)
+          .map(o => (
+            <button
+              key={o._id || o.id}
+              className="w-full text-left bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 active:scale-[0.99] transition"
+              onClick={() => {
+                setForm(prev => ({
+                  ...prev,
+                  거래처명: o.거래처명 || "",
+                  상차지명: o.상차지명 || "",
+                  상차지주소: o.상차지주소 || "",
+                  상차지담당자: o.상차지담당자 || "",
+                  상차지담당자번호: o.상차지담당자번호 || "",
+                  하차지명: o.하차지명 || "",
+                  하차지주소: o.하차지주소 || "",
+                  하차지담당자: o.하차지담당자 || "",
+                  하차지담당자번호: o.하차지담당자번호 || "",
+                  톤수: o.톤수 || o.차량톤수 || "",
+                  차종: o.차종 || o.차량종류 || "",
+                  화물내용: o.화물내용 || "",
+                  상차방법: o.상차방법 || "",
+                  하차방법: o.하차방법 || "",
+                  지급방식: o.지급방식 || "",
+                  배차방식: o.배차방식 || "",
+                  청구운임: o.청구운임 || 0,
+                  혼적여부: o.혼적여부 || "독차",
+                }));
+                setShowOrderCopyModal(false);
+                showToast("오더 정보가 불러와졌습니다");
+              }}
+            >
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <span className="text-[13px] font-semibold text-gray-800 truncate">
+                  {o.상차지명 || "-"} → {o.하차지명 || "-"}
+                </span>
+                <span className="text-[11px] text-gray-400 shrink-0">{o.상차일 || ""}</span>
+              </div>
+              <div className="text-[11px] text-gray-500">
+                {o.거래처명 || ""}{o.차량톤수 || o.톤수 ? ` · ${o.차량톤수 || o.톤수}` : ""}{o.화물내용 ? ` · ${o.화물내용}` : ""}
+              </div>
+            </button>
+          ))}
+        {orders.filter(o => o.상차지명 || o.하차지명).length === 0 && (
+          <div className="text-center text-gray-400 text-[13px] py-8">오더 데이터가 없습니다</div>
+        )}
+      </div>
     </div>
   </div>
 )}
