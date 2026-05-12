@@ -4851,54 +4851,88 @@ const pickDrop = (c) => {
       {/* 상차/하차 일시 */}
       <div className="bg-white rounded-lg border shadow-sm">
         <RowLabelInput
-          label="상차일시"
-          input={
-            <div className="flex gap-2">
-              <input
-                type="date"
-                className="flex-1 border rounded px-2 py-1 text-sm"
-                value={form.상차일}
-                onChange={(e) => update("상차일", e.target.value)}
-              />
-              <select
-  className="flex-1 border rounded px-2 py-1 text-sm"
-  value={form.상차시간}
-  onChange={(e) => update("상차시간", e.target.value)}
->
-  <option value="">상차시간</option>
-  {HALF_HOUR_TIMES.map((t) => (
-    <option key={t} value={t}>{t}</option>
-  ))}
-</select>
-
-            </div>
-          }
+  label="상차일시"
+  input={
+    <div className="space-y-1.5">
+      <div className="flex gap-2">
+        <input
+          type="date"
+          className="flex-1 border rounded px-2 py-1 text-sm"
+          value={form.상차일}
+          onChange={(e) => update("상차일", e.target.value)}
         />
+        <select
+          className="flex-1 border rounded px-2 py-1 text-sm"
+          value={form.상차시간}
+          onChange={(e) => update("상차시간", e.target.value)}
+        >
+          <option value="">상차시간</option>
+          {HALF_HOUR_TIMES.map((t) => (
+            <option key={t} value={t}>{t}</option>
+          ))}
+        </select>
+      </div>
+      {form.상차시간 && (
+        <div className="flex gap-1.5">
+          {["이전", "이후"].map(v => (
+            <button
+              key={v}
+              type="button"
+              onClick={() => update("상차시간기준", form.상차시간기준 === v ? null : v)}
+              className={`flex-1 py-1.5 rounded-lg text-xs font-bold border transition ${
+                form.상차시간기준 === v
+                  ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
+                  : "bg-white text-[#1B2B4B] border-[#1B2B4B]/40"
+              }`}
+            >{v}</button>
+          ))}
+        </div>
+      )}
+    </div>
+  }
+/>
 
-        <RowLabelInput
-          label="하차일시"
-          input={
-            <div className="flex gap-2">
-              <input
-                type="date"
-                className="flex-1 border rounded px-2 py-1 text-sm"
-                value={form.하차일}
-                onChange={(e) => update("하차일", e.target.value)}
-              />
-              <select
-  className="flex-1 border rounded px-2 py-1 text-sm"
-  value={form.하차시간}
-  onChange={(e) => update("하차시간", e.target.value)}
->
-  <option value="">하차시간</option>
-  {HALF_HOUR_TIMES.map((t) => (
-    <option key={t} value={t}>{t}</option>
-  ))}
-</select>
-
-            </div>
-          }
+<RowLabelInput
+  label="하차일시"
+  input={
+    <div className="space-y-1.5">
+      <div className="flex gap-2">
+        <input
+          type="date"
+          className="flex-1 border rounded px-2 py-1 text-sm"
+          value={form.하차일}
+          onChange={(e) => update("하차일", e.target.value)}
         />
+        <select
+          className="flex-1 border rounded px-2 py-1 text-sm"
+          value={form.하차시간}
+          onChange={(e) => update("하차시간", e.target.value)}
+        >
+          <option value="">하차시간</option>
+          {HALF_HOUR_TIMES.map((t) => (
+            <option key={t} value={t}>{t}</option>
+          ))}
+        </select>
+      </div>
+      {form.하차시간 && (
+        <div className="flex gap-1.5">
+          {["이전", "이후"].map(v => (
+            <button
+              key={v}
+              type="button"
+              onClick={() => update("하차시간기준", form.하차시간기준 === v ? null : v)}
+              className={`flex-1 py-1.5 rounded-lg text-xs font-bold border transition ${
+                form.하차시간기준 === v
+                  ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
+                  : "bg-white text-[#1B2B4B] border-[#1B2B4B]/40"
+              }`}
+            >{v}</button>
+          ))}
+        </div>
+      )}
+    </div>
+  }
+/>
 
       </div>
 

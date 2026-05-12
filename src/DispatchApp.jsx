@@ -3260,13 +3260,9 @@ const makePinIcon = (label, color) => {
   return "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svg);
 };
 
-setTimeout(() => {
-  // 🔥 경로의 실제 시작/끝 좌표 사용 (도로명 주소 대응 핵심)
-  const markerStart = linePath[0];
-  const markerEnd   = linePath[linePath.length - 1];
-
-  if (!markerStart || !markerEnd) return;
-
+const markerStart = linePath[0];
+const markerEnd   = linePath[linePath.length - 1];
+if (markerStart && markerEnd) {
   new window.Tmapv2.Marker({
     position: markerStart,
     map,
@@ -3274,7 +3270,6 @@ setTimeout(() => {
     iconSize: new window.Tmapv2.Size(60, 80),
     iconAnchor: new window.Tmapv2.Point(30, 80),
   });
-
   new window.Tmapv2.Marker({
     position: markerEnd,
     map,
@@ -3282,14 +3277,14 @@ setTimeout(() => {
     iconSize: new window.Tmapv2.Size(60, 80),
     iconAnchor: new window.Tmapv2.Point(30, 80),
   });
-}, 500);
+}
     } catch (err) {
       console.error("경로 지도 실패:", err);
     }
 
   };
 
-  setTimeout(renderTmap, 200);
+renderTmap();
 
 }, [confirmOpen, form?.상차지주소, form?.하차지주소]);
 // ===============================
@@ -4434,59 +4429,45 @@ const rec = {
   경유상차목록: pickupStops,
   경유하차목록: dropStops,
 };
-// ⭐ 상/하차지 담당자 정보 → 기존 업체 있으면 업데이트만 함
-if (typeof upsertPlace === "function") {
-// ★ 다중 등록: multiCount만큼 동일 오더 생성
+// ★ form 값 미리 캡처 (reset 전에)
+const _pName = form.상차지명, _pAddr = form.상차지주소, _pMgr = form.상차지담당자, _pPhone = form.상차지담당자번호, _pId = form.상차지Id;
+const _dName = form.하차지명, _dAddr = form.하차지주소, _dMgr = form.하차지담당자, _dPhone = form.하차지담당자번호, _dId = form.하차지Id;
+const _carNo = form.차량번호, _name = form.이름, _tel = form.전화번호;
+
+// ★ 오더 병렬 저장 (순차→병렬로 속도 개선)
 const saveCount = multiCount > 1 ? multiCount : 1;
-for (let i = 0; i < saveCount; i++) {
-  const newId = await addDispatch({ ...rec });
-  rec._id = newId;
-}
+await Promise.all(Array.from({ length: saveCount }, () => addDispatch({ ...rec })));
 
-await savePlaceSmart(
-  form.상차지명,
-  form.상차지주소,
-  form.상차지담당자,
-  form.상차지담당자번호,
-  form.상차지Id     // ⭐ 반드시 전달
-);
-
-await savePlaceSmart(
-  form.하차지명,
-  form.하차지주소,
-  form.하차지담당자,
-  form.하차지담당자번호,
-  form.하차지Id     // ⭐ 반드시 전달
-);
-}
-  // 신규 기사면 저장 시점에 등록
-  if (form.차량번호 && form.이름) {
-    const existing = driverMap.get(form.차량번호.replace(/\s+/g,""));
-    if (!existing || existing.length === 0) {
-      await upsertDriver({
-        차량번호: form.차량번호,
-        이름: form.이름,
-        전화번호: form.전화번호,
-      });
-    }
-  }
-  const reset = {
-    ...emptyForm,
-    _id: crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`,
-    등록일: _todayStr(),
-    ...(isAdmin ? {} : { 청구운임: "", 기사운임: "", 수수료: "" }),
-  };
-  setForm(reset);
-  setVehicleQuery(""); 
-  setClientQuery("");
-  setAutoPickMatched(false);
-  setAutoDropMatched(false);
-    setConfirmOpen(false);
-  try { localStorage.removeItem("dispatchForm"); } catch {}
-  setIsSaving(false);
-const savedCount = multiCount > 1 ? multiCount : 1;
+// ★ UI 즉시 초기화 (Firestore 백그라운드 기다리지 않음)
+const reset = {
+  ...emptyForm,
+  _id: crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`,
+  등록일: _todayStr(),
+  ...(isAdmin ? {} : { 청구운임: "", 기사운임: "", 수수료: "" }),
+};
+setForm(reset);
+setVehicleQuery("");
+setClientQuery("");
+setAutoPickMatched(false);
+setAutoDropMatched(false);
+setConfirmOpen(false);
+try { localStorage.removeItem("dispatchForm"); } catch {}
+const finalCount = saveCount;
 setMultiCount(1);
-showAlert(savedCount > 1 ? `${savedCount}건 등록되었습니다.` : "등록되었습니다.");
+setIsSaving(false);
+showAlert(finalCount > 1 ? `${finalCount}건 등록되었습니다.` : "등록되었습니다.");
+
+// ★ 백그라운드 저장 (UI 블로킹 없음)
+if (typeof upsertPlace === "function") {
+  savePlaceSmart(_pName, _pAddr, _pMgr, _pPhone, _pId).catch(() => {});
+  savePlaceSmart(_dName, _dAddr, _dMgr, _dPhone, _dId).catch(() => {});
+}
+if (_carNo && _name) {
+  const existing = driverMap.get(_carNo.replace(/\s+/g, ""));
+  if (!existing || existing.length === 0) {
+    upsertDriver({ 차량번호: _carNo, 이름: _name, 전화번호: _tel }).catch(() => {});
+  }
+}
 };
 const isRoundTrip = form.운행유형 === "왕복";
 const ROUND_DISCOUNT = 0.9; // ⭐ 10% 할인 (조정 가능)
@@ -9141,54 +9122,67 @@ setConfirmChange(null);
 {fareQuickOpen && (
   <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999999]"
     onClick={() => setFareQuickOpen(false)}>
-    <div className="bg-white rounded-2xl w-[500px] shadow-2xl overflow-hidden"
+    <div className="bg-white rounded-2xl w-[540px] shadow-2xl overflow-hidden"
       onClick={e => e.stopPropagation()}>
       {/* 헤더 */}
       <div className="bg-[#1B2B4B] px-5 py-4 flex items-center justify-between">
         <div>
-          <div className="text-white font-bold text-[15px]">동일 조건 운임 이력</div>
-          <div className="text-white/50 text-[11px] mt-0.5">
-            {form.상차지명} → {form.하차지명} · {form.화물내용}
+          <div className="text-white font-bold text-[15px] tracking-tight">동일 조건 운임 이력</div>
+          <div className="text-white/50 text-[12px] mt-0.5">
+            {form.상차지명} → {form.하차지명}
+            {form.화물내용 && <span className="ml-2 text-white/35">· {form.화물내용}</span>}
           </div>
         </div>
-        <button onClick={() => setFareQuickOpen(false)} className="text-white/40 hover:text-white text-xl leading-none">×</button>
+        <button onClick={() => setFareQuickOpen(false)} className="text-white/40 hover:text-white text-xl px-1">×</button>
       </div>
-      {/* 카드 목록 */}
-      <div className="p-4 space-y-2">
-        <div className="text-[11px] text-gray-400 mb-3">클릭하면 청구운임에 바로 적용됩니다</div>
+      <div className="px-5 pt-3 pb-1">
+        <div className="text-[11px] text-gray-400">클릭하면 청구운임에 바로 적용됩니다</div>
+      </div>
+      <div className="px-5 pb-3 space-y-2 max-h-[52vh] overflow-y-auto">
         {fareQuickMatches.map((r, i) => {
           const claim = Number(String(r.청구운임||"0").replace(/[^\d]/g,""));
           const driver = Number(String(r.기사운임||"0").replace(/[^\d]/g,""));
           const margin = claim - driver;
+          const marginPct = claim > 0 ? Math.round((margin / claim) * 100) : 0;
           return (
             <button key={i}
-              className="w-full text-left border-2 border-gray-200 hover:border-[#1B2B4B] rounded-xl px-4 py-3 transition group"
-              onClick={() => {
-                onChange("청구운임", String(claim));
-                setFareQuickOpen(false);
-              }}>
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-[12px] text-gray-400 font-medium">{r.상차일 || ""}</span>
-                <span className="text-[20px] font-black text-[#1B2B4B] group-hover:text-blue-600 leading-none">
-                  {claim.toLocaleString()}원
+              className="w-full text-left border border-gray-200 hover:border-[#1B2B4B] rounded-xl overflow-hidden transition group active:scale-[0.99]"
+              onClick={() => { onChange("청구운임", String(claim)); setFareQuickOpen(false); }}>
+              <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50 border-b border-gray-100 group-hover:bg-[#1B2B4B]/5">
+                <span className="text-[12px] text-gray-500 font-medium">{r.상차일 || "-"}</span>
+                <span className="text-[22px] font-black text-[#1B2B4B] leading-none">
+                  {claim.toLocaleString()}<span className="text-[13px] font-semibold text-gray-400 ml-1">원</span>
                 </span>
               </div>
-              <div className="flex items-center gap-4 text-[11px]">
-                <span className="text-gray-500">기사 {driver.toLocaleString()}원</span>
-                <span className={margin >= 0 ? "text-emerald-600 font-semibold" : "text-red-500 font-semibold"}>
-                  마진 {margin.toLocaleString()}원
-                </span>
-                {r.차량종류 && <span className="text-gray-400">{r.차량종류}</span>}
-                {r.메모 && <span className="text-amber-600 truncate max-w-[100px]">메모: {r.메모}</span>}
+              <div className="px-4 py-2.5 space-y-1.5">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {r.화물내용 && (
+                    <span className="px-2 py-0.5 rounded bg-[#1B2B4B]/8 text-[#1B2B4B] text-[11px] font-bold border border-[#1B2B4B]/15">
+                      {r.화물내용}
+                    </span>
+                  )}
+                  {r.차량종류 && <span className="text-[11px] text-gray-400">{r.차량종류}</span>}
+                  {r.차량톤수 && <span className="text-[11px] text-gray-400">{r.차량톤수}</span>}
+                </div>
+                <div className="flex items-center gap-4 text-[11px]">
+                  <span className="text-gray-500">기사 {driver.toLocaleString()}원</span>
+                  <span className={margin >= 0 ? "text-emerald-600 font-bold" : "text-red-500 font-bold"}>
+                    마진 {margin.toLocaleString()}원 ({marginPct}%)
+                  </span>
+                </div>
+                {r.메모 && (
+                  <div className="text-[11px] text-amber-800 bg-amber-50 rounded px-2 py-1 border border-amber-100 truncate">
+                    메모: {r.메모}
+                  </div>
+                )}
               </div>
             </button>
           );
         })}
       </div>
-      {/* 전체 이력 보기 */}
-      <div className="px-4 pb-4">
+      <div className="px-5 pb-5">
         <button
-          className="w-full py-2.5 rounded-xl border border-gray-300 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition"
+          className="w-full py-2.5 rounded-xl border border-gray-200 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition"
           onClick={() => { setFareQuickOpen(false); setFareModalOpen(true); }}>
           전체 이력 보기
         </button>
@@ -9196,7 +9190,6 @@ setConfirmChange(null);
     </div>
   </div>
 )}
-
 {fareModalOpen && fareResult && (() => {
   const fareMin = fareResult.min;
   const fareMax = fareResult.max;
