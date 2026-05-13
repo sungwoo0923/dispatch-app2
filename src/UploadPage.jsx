@@ -39,11 +39,14 @@ export default function UploadPage() {
     const id = new URLSearchParams(window.location.search).get("id");
     if (!id) { setStatus("error"); return; }
     setOrderId(id);
-
+ 
     (async () => {
-      try {
-        // dispatch 먼저 시도 → 없으면 dispatch_test 시도
-        let snap = await getDoc(doc(db, "dispatch", id));
+     try {
+        // orders(신규) → dispatch(기존) → dispatch_test(테스트) 순으로 검색
+        let snap = await getDoc(doc(db, "orders", id));
+        if (!snap.exists()) {
+          snap = await getDoc(doc(db, "dispatch", id));
+        }
         if (!snap.exists()) {
           snap = await getDoc(doc(db, "dispatch_test", id));
         }
@@ -100,7 +103,7 @@ export default function UploadPage() {
           async () => {
             const url = await getDownloadURL(task.snapshot.ref);
             // Firestore 하위 컬렉션에 저장
-            await addDoc(collection(db, order._col || "dispatch", orderId, "attachments"), {
+           await addDoc(collection(db, order._col || "orders", orderId, "attachments"), {
               url,
               name: file.name,
               type: file.type,
