@@ -5,7 +5,7 @@
 // ─────────────────────────────────────────────────────────────
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { db, storage } from "./firebase";
+import { db } from "./firebase";
 import {
   doc,
   getDoc,
@@ -13,11 +13,7 @@ import {
   addDoc,
   serverTimestamp,
 } from "firebase/firestore";
-import {
-  ref as storageRef,
-  uploadBytesResumable,
-  getDownloadURL,
-} from "firebase/storage";
+
 
 // ────────────────────────────────────────
 // 메인 컴포넌트
@@ -81,7 +77,28 @@ export default function UploadPage() {
     setFiles(prev => prev.filter((_, idx) => idx !== i));
     setPreviews(prev => prev.filter((_, idx) => idx !== i));
   };
-
+// ✅ 이미지 압축 (최대 1200px, JPEG 75%)
+  const compressImage = (file) => new Promise((resolve) => {
+    if (file.type === "application/pdf") { resolve(file); return; }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX = 1200;
+        let w = img.width, h = img.height;
+        if (w > MAX || h > MAX) {
+          if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+          else { w = Math.round(w * MAX / h); h = MAX; }
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = w; canvas.height = h;
+        canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+        canvas.toBlob((blob) => resolve(new File([blob], file.name, { type: "image/jpeg" })), "image/jpeg", 0.75);
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
   // ── 업로드 실행 ──────────────────────────────────────────
   const handleUpload = async () => {
     if (!files.length || uploading) return;
@@ -90,33 +107,46 @@ export default function UploadPage() {
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
-      const timestamp = Date.now();
-      const path = `attachments/${orderId}/${timestamp}_${file.name}`;
-      const sRef = storageRef(storage, path);
-      const task = uploadBytesResumable(sRef, file);
+      try {
+        // ✅ 압축
+        setProgress(prev => ({ ...prev, [i]: 10 }));
+        const compressed = await compressImage(file);
 
-      await new Promise((resolve, reject) => {
-        task.on(
-          "state_changed",
-          (snap) => setProgress(prev => ({ ...prev, [i]: Math.round(snap.bytesTransferred / snap.totalBytes * 100) })),
-          reject,
-          async () => {
-            const url = await getDownloadURL(task.snapshot.ref);
-            // Firestore 하위 컬렉션에 저장
-           await addDoc(collection(db, order._col || "orders", orderId, "attachments"), {
-              url,
-              name: file.name,
-              type: file.type,
-              size: file.size,
-              path,
-              uploadedAt: serverTimestamp(),
-              source: "driver_upload",
-            });
-            results.push({ name: file.name, url });
-            resolve();
-          }
-        );
-      });
+        // ✅ base64 변환
+        const base64 = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (e) => resolve(e.target.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(compressed);
+        });
+
+        // ✅ 크기 체크 (1MB = 1,000,000 bytes)
+        const sizeKB = Math.round(base64.length * 0.75 / 1024);
+        if (base64.length > 1_300_000) {
+          alert(`${file.name} 파일이 너무 큽니다 (${sizeKB}KB). 사진을 더 작게 찍거나 다른 사진을 사용하세요.`);
+          setProgress(prev => { const n = {...prev}; delete n[i]; return n; });
+          continue;
+        }
+
+        setProgress(prev => ({ ...prev, [i]: 70 }));
+
+        // ✅ Firestore 저장 (각 사진 = 개별 문서)
+        await addDoc(collection(db, order._col || "orders", orderId, "attachments"), {
+          base64,
+          name: file.name,
+          type: "image/jpeg",
+          sizeKB,
+          uploadedAt: serverTimestamp(),
+          source: "driver_upload",
+        });
+
+        setProgress(prev => ({ ...prev, [i]: 100 }));
+        results.push({ name: file.name, url: base64 });
+
+      } catch (err) {
+        console.error("업로드 오류:", err);
+        alert(`${file.name} 업로드 실패: ${err.message}`);
+      }
     }
 
     setUploaded(results);
@@ -126,7 +156,6 @@ export default function UploadPage() {
     setUploading(false);
     setStatus("done");
   };
-
   // ────────────────────────────────────────────────────────
   // 렌더
   // ────────────────────────────────────────────────────────
@@ -230,11 +259,22 @@ export default function UploadPage() {
                 <div style={{ width: 4, height: 20, background: "#f59e0b", borderRadius: 2 }} />
                 <span style={{ fontWeight: 700, fontSize: 14, color: "#1B2B4B" }}>업로드 안내</span>
               </div>
-              <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 10, padding: "12px 14px", marginBottom: 14, fontSize: 13, color: "#92400e", lineHeight: 1.7 }}>
-                📌 아래 서류를 <strong>한 장씩 선명하게</strong> 촬영하여 업로드해주세요:<br />
-                &nbsp;&nbsp;• 거래명세서<br />
-                &nbsp;&nbsp;• 인수증 (파렛트 전표)<br />
-                &nbsp;&nbsp;• 타코메타 기록지 (냉장/냉동 시)
+              <div style={{ background: "#f0f4f9", border: "1px solid #d1dce8", borderRadius: 10, padding: "14px 16px", marginBottom: 14, fontSize: 13, color: "#1e3a5f", lineHeight: 1.8 }}>
+                아래 서류를 <strong>한 장씩 선명하게</strong> 촬영하여 업로드해주세요:
+                <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 4 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#1B2B4B", flexShrink: 0, display: "inline-block" }} />
+                    <span>거래명세서</span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#1B2B4B", borderRadius: 7, padding: "7px 12px" }}>
+                    <span style={{ color: "#fff", fontSize: 15 }}>⚠️</span>
+                    <span style={{ color: "#ffffff", fontWeight: 800, fontSize: 13 }}>파렛트 전표 — 반드시 서명 받은 후 업로드!</span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#1B2B4B", flexShrink: 0, display: "inline-block" }} />
+                    <span>타코메타 기록지 (냉장/냉동 시)</span>
+                  </div>
+                </div>
               </div>
               <div style={{ borderRadius: 10, overflow: "hidden", border: "1px solid #e2e8f0" }}>
                 <img
