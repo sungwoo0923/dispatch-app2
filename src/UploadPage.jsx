@@ -5,7 +5,7 @@
 // ─────────────────────────────────────────────────────────────
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { db, storage } from "./firebase/firebase"; // 프로젝트 경로에 맞게 조정
+import { db, storage } from "./firebase";
 import {
   doc,
   getDoc,
