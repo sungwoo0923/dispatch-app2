@@ -1,205 +1,381 @@
-import React, { useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
-import { db, storage } from "./firebase";
+// src/UploadPage.jsx
+// ─────────────────────────────────────────────────────────────
+// 공개 인수증 업로드 페이지 — 로그인 불필요, 링크만 있으면 접근 가능
+// 사용: /upload?id={dispatchDocId}
+// ─────────────────────────────────────────────────────────────
+
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import { db, storage } from "./firebase/firebase"; // 프로젝트 경로에 맞게 조정
 import {
   doc,
   getDoc,
   collection,
   addDoc,
   serverTimestamp,
-  getDocs,
-  deleteDoc,
-  updateDoc,
-  increment,
 } from "firebase/firestore";
-import { uploadBytesResumable, getDownloadURL, ref } from "firebase/storage";
+import {
+  ref as storageRef,
+  uploadBytesResumable,
+  getDownloadURL,
+} from "firebase/storage";
 
+// ────────────────────────────────────────
+// 메인 컴포넌트
+// ────────────────────────────────────────
 export default function UploadPage() {
-  const [params] = useSearchParams();
-  const dispatchId = params.get("id");
-
-  const [loading, setLoading] = useState(true);
-  const [dispatch, setDispatch] = useState(null);
-  const [files, setFiles] = useState([]);
-  const [uploaded, setUploaded] = useState([]);
+  const [orderId, setOrderId]     = useState(null);
+  const [order, setOrder]         = useState(null);
+  const [status, setStatus]       = useState("loading"); // loading | ready | error | done
+  const [files, setFiles]         = useState([]);
+  const [previews, setPreviews]   = useState([]);
+  const [progress, setProgress]   = useState({});
   const [uploading, setUploading] = useState(false);
-  const [complete, setComplete] = useState(false);
+  const [uploaded, setUploaded]   = useState([]);
+  const [drag, setDrag]           = useState(false);
+  const inputRef                  = useRef(null);
 
+  // ── URL에서 id 추출 & 오더 조회 ──────────────────────────
   useEffect(() => {
-    const load = async () => {
-      if (!dispatchId) return;
-      const snap = await getDoc(doc(db, "dispatch", dispatchId));
-      if (snap.exists()) setDispatch(snap.data());
+    const id = new URLSearchParams(window.location.search).get("id");
+    if (!id) { setStatus("error"); return; }
+    setOrderId(id);
 
-      const col = collection(db, "dispatch", dispatchId, "attachments");
-      const snaps = await getDocs(col);
-      setUploaded(snaps.docs.map((d) => ({ id: d.id, ...d.data() })));
-      setLoading(false);
-    };
-    load();
-  }, [dispatchId]);
-
-  const onPickFiles = (e) => {
-    const list = Array.from(e.target.files || []);
-    const merged = [...files, ...list];
-
-    if (merged.length + uploaded.length > 5) {
-      alert("최대 5장까지 업로드 가능합니다.");
-      return;
-    }
-
-    for (const f of list) {
-      if (f.size > 10 * 1024 * 1024) {
-        alert(`❌ ${f.name} (10MB 초과)`);
-        return;
+    (async () => {
+      try {
+        const snap = await getDoc(doc(db, "dispatch", id));
+        if (snap.exists()) {
+          setOrder({ _id: id, ...snap.data() });
+          setStatus("ready");
+        } else {
+          setStatus("error");
+        }
+      } catch (e) {
+        console.error(e);
+        setStatus("error");
       }
-    }
-    setFiles(merged);
+    })();
+  }, []);
+
+  // ── 파일 선택 처리 ───────────────────────────────────────
+  const handleFiles = useCallback((newFiles) => {
+    const arr = Array.from(newFiles).filter(f => f.type.startsWith("image/") || f.type === "application/pdf");
+    if (!arr.length) return;
+    setFiles(prev => [...prev, ...arr]);
+    arr.forEach(f => {
+      const reader = new FileReader();
+      reader.onload = (e) => setPreviews(prev => [...prev, { name: f.name, src: e.target.result, type: f.type }]);
+      reader.readAsDataURL(f);
+    });
+  }, []);
+
+  const removeFile = (i) => {
+    setFiles(prev => prev.filter((_, idx) => idx !== i));
+    setPreviews(prev => prev.filter((_, idx) => idx !== i));
   };
 
-  const uploadAll = async () => {
-  if (!files.length) return alert("업로드할 파일을 선택하세요.");
-  setUploading(true);
+  // ── 업로드 실행 ──────────────────────────────────────────
+  const handleUpload = async () => {
+    if (!files.length || uploading) return;
+    setUploading(true);
+    const results = [];
 
-  try {
-    // 🔥 모든 파일 업로드를 동시에 처리
-    const tasks = files.map((file) => {
-      return new Promise((resolve, reject) => {
-        const path = `dispatch/${dispatchId}/attachments/${Date.now()}-${file.name.replace(/\s+/g, "_")}`;
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const timestamp = Date.now();
+      const path = `attachments/${orderId}/${timestamp}_${file.name}`;
+      const sRef = storageRef(storage, path);
+      const task = uploadBytesResumable(sRef, file);
 
-
-        const storageRef = ref(storage, path);
-        const task = uploadBytesResumable(storageRef, file);
-
+      await new Promise((resolve, reject) => {
         task.on(
           "state_changed",
-          null,
+          (snap) => setProgress(prev => ({ ...prev, [i]: Math.round(snap.bytesTransferred / snap.totalBytes * 100) })),
           reject,
           async () => {
-            try {
-              const url = await getDownloadURL(task.snapshot.ref);
-
-              // Firestore attachments 생성
-              await addDoc(
-                collection(db, "dispatch", dispatchId, "attachments"),
-                {
-                  url,
-                  createdAt: serverTimestamp(),
-                }
-              );
-
-              // 🔥 dispatch 문서 첨부갯수 +1
-              await updateDoc(doc(db, "dispatch", dispatchId), {
-                attachmentsCount: increment(1),
-              });
-
-              resolve();
-            } catch (e) {
-              reject(e);
-            }
+            const url = await getDownloadURL(task.snapshot.ref);
+            // Firestore 하위 컬렉션에 저장
+            await addDoc(collection(db, "dispatch", orderId, "attachments"), {
+              url,
+              name: file.name,
+              type: file.type,
+              size: file.size,
+              path,
+              uploadedAt: serverTimestamp(),
+              source: "driver_upload",
+            });
+            results.push({ name: file.name, url });
+            resolve();
           }
         );
       });
-    });
+    }
 
-    // 🔥 핵심: 모든 업로드 Promise를 병렬로 실행
-    await Promise.all(tasks);
-
+    setUploaded(results);
     setFiles([]);
-    setComplete(true);
-  } catch (err) {
-    console.error("업로드 오류:", err);
-    alert("업로드 중 오류가 발생했습니다.");
-  }
-
-  setUploading(false);
-};
-
-
-  const removeFile = async (id) => {
-    if (!window.confirm("삭제할까요?")) return;
-
-    // 삭제
-    await deleteDoc(doc(db, "dispatch", dispatchId, "attachments", id));
-    
-    // 🔥 삭제 시 갯수 -1
-    await updateDoc(doc(db, "dispatch", dispatchId), {
-      attachmentsCount: increment(-1),
-    });
-
-    setUploaded((p) => p.filter((x) => x.id !== id));
+    setPreviews([]);
+    setProgress({});
+    setUploading(false);
+    setStatus("done");
   };
 
-  if (!dispatchId) return <div className="p-5 text-center text-red-600">❌ 잘못된 링크</div>;
-  if (loading) return <div className="p-5 text-center">⏳ 로딩중...</div>;
-  if (!dispatch) return <div className="p-5 text-center text-red-600">❌ 데이터 없음</div>;
-
+  // ────────────────────────────────────────────────────────
+  // 렌더
+  // ────────────────────────────────────────────────────────
   return (
-    <div className="p-6 max-w-xl mx-auto">
-      <h2 className="text-xl font-bold mb-3 text-center">📎 운송장 / 인수증 업로드</h2>
+    <div style={{ fontFamily: "'Noto Sans KR', sans-serif", minHeight: "100vh", background: "#f0f2f5" }}>
+      <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet" />
 
-      <div className="border rounded p-4 text-sm bg-gray-50 mb-4">
-        <div>✅ <b>상차일:</b> {dispatch.상차일}</div>
-        <div>✅ <b>거래처:</b> {dispatch.거래처명}</div>
-        <div>✅ <b>차량:</b> {dispatch.차량번호} ({dispatch.이름 || "-"})</div>
+      {/* ── 헤더 ── */}
+      <div style={{ background: "#1B2B4B", padding: "16px 24px", display: "flex", alignItems: "center", gap: 12 }}>
+        <div style={{ width: 36, height: 36, background: "rgba(255,255,255,0.15)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <span style={{ color: "white", fontSize: 20 }}>📦</span>
+        </div>
+        <div>
+          <div style={{ color: "white", fontWeight: 900, fontSize: 16, letterSpacing: "-0.3px" }}>KP-Flow</div>
+          <div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11 }}>인수증 / 서류 업로드</div>
+        </div>
       </div>
 
-      {!complete ? (
-        <>
-          <input
-            type="file"
-            multiple
-            accept="image/jpeg,image/png"
-            onChange={onPickFiles}
-            className="mb-3"
-          />
+      <div style={{ maxWidth: 480, margin: "0 auto", padding: "20px 16px 40px" }}>
 
-          {files.length > 0 && (
-            <div className="mb-2 text-sm text-gray-600">
-              ✅ 선택된 파일: <b>{files.length}장</b>
+        {/* ── 로딩 ── */}
+        {status === "loading" && (
+          <div style={cardStyle}>
+            <div style={{ textAlign: "center", padding: "40px 0", color: "#6b7280" }}>
+              <div style={{ fontSize: 40, marginBottom: 12 }}>⏳</div>
+              <div style={{ fontWeight: 700, fontSize: 16 }}>배차 정보 불러오는 중...</div>
             </div>
-          )}
-
-          <button
-            onClick={uploadAll}
-            disabled={uploading}
-            className={`w-full py-2 rounded text-white ${uploading ? "bg-gray-400" : "bg-blue-600 hover:bg-blue-700"}`}
-          >
-            {uploading ? "업로드 중..." : "업로드"}
-          </button>
-        </>
-      ) : (
-        <div className="text-center text-lg font-semibold text-emerald-700 py-10">
-          ✅ 업로드 완료! 감사합니다 🙂
-        </div>
-      )}
-
-      {uploaded.length > 0 && (
-        <div className="mt-6">
-          <div className="text-sm font-semibold mb-2">
-            📎 업로드된 파일 ({uploaded.length}/5)
           </div>
+        )}
 
-          <div className="grid grid-cols-3 gap-3">
-            {uploaded.map((f) => (
-              <div key={f.id} className="border rounded p-1 relative">
-                <img
-                  src={f.url}
-                  alt=""
-                  className="w-full h-24 object-cover rounded cursor-pointer"
-                  onClick={() => window.open(f.url, "_blank")}  // 🔥 클릭 → 새창
-                />
-                <button
-                  onClick={() => removeFile(f.id)}
-                  className="absolute top-1 right-1 bg-white/80 px-1 rounded text-xs"
-                >
-                  ✕
-                </button>
+        {/* ── 오류 ── */}
+        {status === "error" && (
+          <div style={cardStyle}>
+            <div style={{ textAlign: "center", padding: "40px 0", color: "#ef4444" }}>
+              <div style={{ fontSize: 40, marginBottom: 12 }}>❌</div>
+              <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 6 }}>링크가 올바르지 않습니다</div>
+              <div style={{ color: "#9ca3af", fontSize: 13 }}>배차 담당자에게 링크를 다시 요청해주세요.</div>
+            </div>
+          </div>
+        )}
+
+        {/* ── 업로드 완료 ── */}
+        {status === "done" && (
+          <div style={cardStyle}>
+            <div style={{ textAlign: "center", padding: "32px 0" }}>
+              <div style={{ fontSize: 56, marginBottom: 12 }}>✅</div>
+              <div style={{ fontWeight: 900, fontSize: 20, color: "#1B2B4B", marginBottom: 6 }}>업로드 완료!</div>
+              <div style={{ color: "#6b7280", fontSize: 14, marginBottom: 20 }}>
+                {uploaded.length}개 파일이 성공적으로 전달되었습니다.
               </div>
-            ))}
+              <div style={{ background: "#f0fdf4", borderRadius: 10, padding: "12px 16px", textAlign: "left" }}>
+                {uploaded.map((f, i) => (
+                  <div key={i} style={{ fontSize: 13, color: "#15803d", padding: "4px 0", display: "flex", alignItems: "center", gap: 6 }}>
+                    <span>📎</span> {f.name}
+                  </div>
+                ))}
+              </div>
+              <button
+                onClick={() => { setStatus("ready"); setUploaded([]); }}
+                style={{ ...btnOutline, marginTop: 20 }}
+              >
+                추가 업로드
+              </button>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+
+        {/* ── 메인 업로드 UI ── */}
+        {status === "ready" && order && (
+          <>
+            {/* 오더 정보 카드 */}
+            <div style={cardStyle}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+                <div style={{ width: 4, height: 20, background: "#1B2B4B", borderRadius: 2 }} />
+                <span style={{ fontWeight: 700, fontSize: 14, color: "#1B2B4B" }}>배차 정보</span>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <InfoBox label="기사명" value={order.이름 || "-"} />
+                <InfoBox label="차량번호" value={order.차량번호 || "-"} />
+                <InfoBox label="연락처" value={order.전화번호 || "-"} />
+                <InfoBox label="상차일" value={order.상차일 || "-"} />
+              </div>
+
+              <div style={{ marginTop: 10, background: "#f8fafc", borderRadius: 8, padding: "10px 12px", display: "flex", alignItems: "center", gap: 10 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600, marginBottom: 2 }}>상차지</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "#1e293b" }}>{order.상차지명 || "-"}</div>
+                </div>
+                <div style={{ color: "#94a3b8", fontSize: 16 }}>→</div>
+                <div style={{ flex: 1, textAlign: "right" }}>
+                  <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600, marginBottom: 2 }}>하차지</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "#1e293b" }}>{order.하차지명 || "-"}</div>
+                </div>
+              </div>
+            </div>
+
+            {/* 안내 이미지 카드 */}
+            <div style={cardStyle}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                <div style={{ width: 4, height: 20, background: "#f59e0b", borderRadius: 2 }} />
+                <span style={{ fontWeight: 700, fontSize: 14, color: "#1B2B4B" }}>업로드 안내</span>
+              </div>
+              <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 10, padding: "12px 14px", marginBottom: 14, fontSize: 13, color: "#92400e", lineHeight: 1.7 }}>
+                📌 아래 서류를 <strong>한 장씩 선명하게</strong> 촬영하여 업로드해주세요:<br />
+                &nbsp;&nbsp;• 거래명세서<br />
+                &nbsp;&nbsp;• 인수증 (파렛트 전표)<br />
+                &nbsp;&nbsp;• 타코메타 기록지 (냉장/냉동 시)
+              </div>
+              <div style={{ borderRadius: 10, overflow: "hidden", border: "1px solid #e2e8f0" }}>
+                <img
+                  src="/거래명세서.png"
+                  alt="거래명세서 예시"
+                  style={{ width: "100%", display: "block" }}
+                  onError={(e) => { e.target.style.display = "none"; }}
+                />
+              </div>
+              <div style={{ textAlign: "center", marginTop: 8, fontSize: 12, color: "#94a3b8" }}>▲ 거래명세서 예시 (이와 같이 선명하게 촬영)</div>
+            </div>
+
+            {/* 업로드 영역 */}
+            <div style={cardStyle}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+                <div style={{ width: 4, height: 20, background: "#3b82f6", borderRadius: 2 }} />
+                <span style={{ fontWeight: 700, fontSize: 14, color: "#1B2B4B" }}>파일 선택</span>
+              </div>
+
+              {/* 드래그앤드롭 영역 */}
+              <div
+                onClick={() => inputRef.current?.click()}
+                onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
+                onDragLeave={() => setDrag(false)}
+                onDrop={(e) => { e.preventDefault(); setDrag(false); handleFiles(e.dataTransfer.files); }}
+                style={{
+                  border: `2px dashed ${drag ? "#3b82f6" : "#cbd5e1"}`,
+                  borderRadius: 12,
+                  padding: "28px 16px",
+                  textAlign: "center",
+                  cursor: "pointer",
+                  background: drag ? "#eff6ff" : "#f8fafc",
+                  transition: "all 0.2s",
+                  marginBottom: 14,
+                }}
+              >
+                <div style={{ fontSize: 36, marginBottom: 8 }}>📷</div>
+                <div style={{ fontWeight: 700, color: "#1B2B4B", fontSize: 15, marginBottom: 4 }}>사진을 탭하여 선택하세요</div>
+                <div style={{ fontSize: 12, color: "#94a3b8" }}>JPG, PNG, PDF 지원 · 여러 장 동시 선택 가능</div>
+                <input
+                  ref={inputRef}
+                  type="file"
+                  accept="image/*,application/pdf"
+                  multiple
+                  capture="environment"
+                  style={{ display: "none" }}
+                  onChange={(e) => handleFiles(e.target.files)}
+                />
+              </div>
+
+              {/* 선택된 파일 미리보기 */}
+              {previews.length > 0 && (
+                <div style={{ marginBottom: 14 }}>
+                  <div style={{ fontSize: 12, color: "#6b7280", fontWeight: 600, marginBottom: 8 }}>선택된 파일 ({previews.length}장)</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+                    {previews.map((p, i) => (
+                      <div key={i} style={{ position: "relative", borderRadius: 8, overflow: "hidden", aspectRatio: "1", background: "#f1f5f9" }}>
+                        {p.type.startsWith("image/") ? (
+                          <img src={p.src} alt={p.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                        ) : (
+                          <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontSize: 28 }}>
+                            📄
+                            <span style={{ fontSize: 10, color: "#6b7280", marginTop: 4 }}>PDF</span>
+                          </div>
+                        )}
+                        {/* 진행률 오버레이 */}
+                        {uploading && progress[i] !== undefined && progress[i] < 100 && (
+                          <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            <span style={{ color: "white", fontWeight: 700, fontSize: 16 }}>{progress[i]}%</span>
+                          </div>
+                        )}
+                        {uploading && progress[i] === 100 && (
+                          <div style={{ position: "absolute", inset: 0, background: "rgba(5,150,105,0.7)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            <span style={{ color: "white", fontSize: 24 }}>✓</span>
+                          </div>
+                        )}
+                        {/* 삭제 버튼 */}
+                        {!uploading && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); removeFile(i); }}
+                            style={{ position: "absolute", top: 4, right: 4, width: 20, height: 20, borderRadius: "50%", background: "rgba(0,0,0,0.6)", color: "white", border: "none", cursor: "pointer", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}
+                          >×</button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 업로드 버튼 */}
+              {files.length > 0 && (
+                <button
+                  onClick={handleUpload}
+                  disabled={uploading}
+                  style={{
+                    width: "100%",
+                    padding: "14px",
+                    borderRadius: 12,
+                    border: "none",
+                    background: uploading ? "#94a3b8" : "#1B2B4B",
+                    color: "white",
+                    fontWeight: 700,
+                    fontSize: 15,
+                    cursor: uploading ? "not-allowed" : "pointer",
+                    fontFamily: "'Noto Sans KR', sans-serif",
+                    transition: "background 0.2s",
+                  }}
+                >
+                  {uploading ? `⏫ 업로드 중...` : `📤 ${files.length}장 업로드하기`}
+                </button>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ────────────────────────────────────────
+// 스타일 상수
+// ────────────────────────────────────────
+const cardStyle = {
+  background: "white",
+  borderRadius: 14,
+  padding: "18px 16px",
+  marginBottom: 14,
+  boxShadow: "0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04)",
+};
+
+const btnOutline = {
+  padding: "10px 24px",
+  borderRadius: 8,
+  border: "1.5px solid #1B2B4B",
+  background: "white",
+  color: "#1B2B4B",
+  fontWeight: 700,
+  fontSize: 14,
+  cursor: "pointer",
+  fontFamily: "'Noto Sans KR', sans-serif",
+};
+
+// ────────────────────────────────────────
+// 서브 컴포넌트
+// ────────────────────────────────────────
+function InfoBox({ label, value }) {
+  return (
+    <div style={{ background: "#f8fafc", borderRadius: 8, padding: "8px 10px" }}>
+      <div style={{ fontSize: 10, color: "#94a3b8", fontWeight: 600, marginBottom: 2 }}>{label}</div>
+      <div style={{ fontSize: 13, fontWeight: 700, color: "#1e293b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{value}</div>
     </div>
   );
 }
