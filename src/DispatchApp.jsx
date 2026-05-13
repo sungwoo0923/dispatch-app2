@@ -10893,7 +10893,12 @@ const dropStopsTextD = hasDropStopsD
 ${s.주소 || "-"}${s.담당자 ? `\n담당자 : ${s.담당자}${s.담당자번호 ? ` (${formatPhone(s.담당자번호)})` : ""}` : ""}${s.하차시간 ? `\n하차시간 : ${s.하차시간}` : ""}${cargo ? `\n화물내용 : ${cargo}` : ""}${ton ? `\n화물톤수 : ${ton}` : ""}`;
   }).join("\n")
   : "";
-return `${DRIVER_NOTICE}
+const uploadUrl = `${window.location.origin}/upload?id=${r._id}`;
+
+return `📎 여기를 눌러서 인수증을 업로드 하세요
+${uploadUrl}
+
+${DRIVER_NOTICE}
 
 ${dateNotice}${dateText}
 
@@ -16683,13 +16688,14 @@ setTimeout(() => {
   if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
 }, 400);
 
-// ✅ 백그라운드 저장
-if (payload.차량번호 && payload.이름) {
-  const existingD = driverMap.get((payload.차량번호||"").replace(/\s+/g,""));
-  // ✅ rows 즉시 반영 (Firebase 응답 전)
+// ✅ rows 즉시 반영 (항상 실행)
 setRows(prev => sortDispatchRows(prev.map(r =>
   r._id === savedId ? { ...r, ...payload } : r
 )));
+
+// ✅ 백그라운드 저장
+if (payload.차량번호 && payload.이름) {
+  const existingD = driverMap.get((payload.차량번호||"").replace(/\s+/g,""));
   if (!existingD || existingD.length === 0) {
     upsertDriver({ 차량번호: payload.차량번호, 이름: payload.이름, 전화번호: payload.전화번호||"" }).catch(console.error);
   }
@@ -19294,7 +19300,12 @@ const DRIVER_NOTICE = isBanchan
             ? `\n\n📢 전달사항\n${driverNote.trim()}`
             : "";
 
-          return `${DRIVER_NOTICE}
+          const uploadUrl = `${window.location.origin}/upload?id=${r._id}`;
+
+return `📎 여기를 눌러서 인수증을 업로드 하세요
+${uploadUrl}
+
+${DRIVER_NOTICE}
 
 ${dateNotice}${dateText}
 
@@ -22033,6 +22044,10 @@ setEditTarget((p) => ({
       "거래처명",
       "상차지명", "상차지주소",
       "하차지명", "하차지주소",
+      "경유상차목록",
+      "경유지_상차",
+      "경유하차목록",
+      "경유지_하차",
       "화물내용",
       "차량종류", "차량톤수",
       "차량번호", "이름", "전화번호",
