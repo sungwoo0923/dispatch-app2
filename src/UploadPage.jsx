@@ -42,9 +42,15 @@ export default function UploadPage() {
 
     (async () => {
       try {
-        const snap = await getDoc(doc(db, "dispatch", id));
+        // dispatch 먼저 시도 → 없으면 dispatch_test 시도
+        let snap = await getDoc(doc(db, "dispatch", id));
+        if (!snap.exists()) {
+          snap = await getDoc(doc(db, "dispatch_test", id));
+        }
         if (snap.exists()) {
-          setOrder({ _id: id, ...snap.data() });
+          // 어느 컬렉션에서 찾았는지 저장
+          setOrderId(id);
+          setOrder({ _id: id, _col: snap.ref.parent.id, ...snap.data() });
           setStatus("ready");
         } else {
           setStatus("error");
@@ -94,7 +100,7 @@ export default function UploadPage() {
           async () => {
             const url = await getDownloadURL(task.snapshot.ref);
             // Firestore 하위 컬렉션에 저장
-            await addDoc(collection(db, "dispatch", orderId, "attachments"), {
+            await addDoc(collection(db, order._col || "dispatch", orderId, "attachments"), {
               url,
               name: file.name,
               type: file.type,
