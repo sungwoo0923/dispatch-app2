@@ -983,8 +983,10 @@ const [unassignedTypeFilter, setUnassignedTypeFilter] = useState("전체");
     차량번호: "",
     기사명: "",
     전화번호: "",
-    혼적여부: "독차",
+   혼적여부: "독차",
     적요: "",
+    상차시간기준: null,
+    하차시간기준: null,
 
     _editId: null,
     _returnToDetail: false,
@@ -1390,8 +1392,10 @@ const groupedByDate = useMemo(() => {
       하차방법: form.하차방법 || "",
       상차일: form.상차일 || "",
       상차시간: form.상차시간 || "",
+      상차시간기준: form.상차시간기준 || null,
       하차일: form.하차일 || "",
       하차시간: form.하차시간 || "",
+      하차시간기준: form.하차시간기준 || null,
       지급방식: form.지급방식 || "",
       배차방식: form.배차방식 || "",
       혼적여부: form.혼적여부 || "독차",
@@ -1471,8 +1475,10 @@ const handleOrderDuplicate = (order) => {
 
     상차일: today,
     상차시간: order.상차시간 || "",
+    상차시간기준: order.상차시간기준 || null,
     하차일: today,
     하차시간: order.하차시간 || "",
+    하차시간기준: order.하차시간기준 || null,
 
     상차지명: order.상차지명 || "",
 상차지주소: order.상차지주소 || "",
@@ -3806,10 +3812,14 @@ function MobileOrderDetail({
   const isDelivered =
     order?.업체전달상태 === "전달완료" || order?.정보전달완료 === true;
 
-  const 상차일시 =
-    order.상차일시 || `${order.상차일 || ""} ${order.상차시간 || ""}`.trim();
-  const 하차일시 =
-    order.하차일시 || `${order.하차일 || ""} ${order.하차시간 || ""}`.trim();
+const pickupTimeText = order.상차시간
+    ? `${order.상차시간}${order.상차시간기준 ? ` ${order.상차시간기준}` : ""}`
+    : "";
+  const dropTimeText = order.하차시간
+    ? `${order.하차시간}${order.하차시간기준 ? ` ${order.하차시간기준}` : ""}`
+    : "";
+  const 상차일시 = order.상차일시 || [order.상차일, pickupTimeText].filter(Boolean).join(" ");
+  const 하차일시 = order.하차일시 || [order.하차일, dropTimeText].filter(Boolean).join(" ");
 
   // 차량번호 자동매칭
   useEffect(() => {
@@ -4070,9 +4080,17 @@ const handleAssignClick = () => {
           {/* 상차지 */}
           <div className="flex gap-2 mb-2">
             <span className="mt-0.5 w-5 h-5 rounded-full bg-blue-600 text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0">상</span>
-            <div>
-             <div className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>{order.상차지명 || "-"}</div>
-              {order.상차지주소 && <div className="text-xs mt-0.5" style={{ color: "var(--text-secondary)" }}>{order.상차지주소}</div>}
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>{order.상차지명 || "-"}</div>
+              {order.상차지주소 && (
+                <div className="flex items-start gap-1 mt-0.5">
+                  <div className="text-xs flex-1" style={{ color: "var(--text-secondary)" }}>{order.상차지주소}</div>
+                  <button onClick={() => openMap("pickup")}
+                    className="shrink-0 px-1.5 py-0.5 rounded text-[10px] bg-blue-50 text-blue-600 border border-blue-200 whitespace-nowrap">
+                    지도
+                  </button>
+                </div>
+              )}
               <div className="text-xs mt-0.5" style={{ color: "var(--text-tertiary)" }}>{상차일시 || "-"}</div>
             </div>
           </div>
@@ -4083,9 +4101,17 @@ const handleAssignClick = () => {
           {/* 하차지 */}
           <div className="flex gap-2 mb-3">
             <span className="mt-0.5 w-5 h-5 rounded-full bg-gray-600 text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0">하</span>
-            <div>
+            <div className="flex-1 min-w-0">
               <div className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>{order.하차지명 || "-"}</div>
-              {order.하차지주소 && <div className="text-xs mt-0.5" style={{ color: "var(--text-secondary)" }}>{order.하차지주소}</div>}
+              {order.하차지주소 && (
+                <div className="flex items-start gap-1 mt-0.5">
+                  <div className="text-xs flex-1" style={{ color: "var(--text-secondary)" }}>{order.하차지주소}</div>
+                  <button onClick={() => openMap("drop")}
+                    className="shrink-0 px-1.5 py-0.5 rounded text-[10px] bg-gray-100 text-gray-600 border border-gray-200 whitespace-nowrap">
+                    지도
+                  </button>
+                </div>
+              )}
               <div className="text-xs mt-0.5" style={{ color: "var(--text-tertiary)" }}>{하차일시 || "-"}</div>
             </div>
           </div>
@@ -4127,18 +4153,15 @@ const handleAssignClick = () => {
           <div className="grid grid-cols-3 divide-x divide-gray-100 text-center">
             <div className="px-2">
               <div className="text-[11px] mb-1" style={{ color: "var(--text-secondary)" }}>청구운임</div>
-              <div className="text-sm font-bold" style={{ color: "var(--text-kpi-claim)" }}>{Number(claim || 0).toLocaleString()}</div>
-              <div className="text-[10px]" style={{ color: "var(--text-secondary)" }}>원</div>
+              <div className="text-sm font-bold whitespace-nowrap" style={{ color: "var(--text-kpi-claim)" }}>{Number(claim || 0).toLocaleString()}원</div>
             </div>
             <div className="px-2">
               <div className="text-[11px] mb-1" style={{ color: "var(--text-secondary)" }}>기사운임</div>
-              <div className="text-sm font-bold" style={{ color: "var(--text-kpi-driver)" }}>{Number(order.기사운임 || 0).toLocaleString()}</div>
-              <div className="text-[10px]" style={{ color: "var(--text-secondary)" }}>원</div>
+              <div className="text-sm font-bold whitespace-nowrap" style={{ color: "var(--text-kpi-driver)" }}>{Number(order.기사운임 || 0).toLocaleString()}원</div>
             </div>
             <div className="px-2">
               <div className="text-[11px] mb-1" style={{ color: "var(--text-secondary)" }}>산재보험</div>
-              <div className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>{Number(sanjae || 0).toLocaleString()}</div>
-              <div className="text-[10px]" style={{ color: "var(--text-secondary)" }}>원</div>
+              <div className="text-sm font-bold whitespace-nowrap" style={{ color: "var(--text-primary)" }}>{Number(sanjae || 0).toLocaleString()}원</div>
             </div>
           </div>
         </DetailCard>
@@ -4184,49 +4207,28 @@ const handleAssignClick = () => {
             </button>
           </div>
 
-          {/* 지도 */}
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              onClick={() => openMap("pickup")}
-              style={{ touchAction: "manipulation" }}
-              className="py-2 rounded-xl bg-gray-100 text-gray-700 text-xs font-semibold"
-            >
-              상차지 지도
-            </button>
-            <button
-              onClick={() => openMap("drop")}
-              style={{ touchAction: "manipulation" }}
-              className="py-2 rounded-xl bg-gray-100 text-gray-700 text-xs font-semibold"
-            >
-              하차지 지도
-            </button>
-          </div>
         </DetailCard>
       </div>
 
-      {/* ── 업체 전달 상태 ── */}
-      <div>
-        <SectionHeader label="업체 전달 상태" />
-        <DetailCard>
-          {!isDelivered ? (
-            <button
-              onClick={() => setConfirmDeliver(true)}
-              className="w-full py-3 rounded-xl bg-emerald-600 text-white text-sm font-bold"
-            >
-              전달완료로 변경
-            </button>
-          ) : (
-            <div className="space-y-2">
-              <div className="text-center text-xs text-emerald-600 font-bold py-1">✓ 전달완료</div>
-              <button
-                onClick={() => setConfirmUndoDeliver(true)}
-                className="w-full py-2.5 rounded-xl border border-red-300 text-red-500 text-sm font-semibold"
-              >
-                전달완료 취소
-              </button>
-            </div>
-          )}
-        </DetailCard>
+      {/* ── 업체 전달 상태 (토글) ── */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-3 flex items-center justify-between">
+        <div>
+          <div className="text-[13px] font-bold text-gray-700">업체 전달</div>
+          <div className={`text-[11px] mt-0.5 font-semibold ${isDelivered ? "text-emerald-600" : "text-gray-400"}`}>
+            {isDelivered ? "전달완료" : "미전달"}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => isDelivered ? setConfirmUndoDeliver(true) : setConfirmDeliver(true)}
+          className={`relative w-14 h-7 rounded-full transition-colors duration-200 focus:outline-none ${
+            isDelivered ? "bg-emerald-500" : "bg-gray-300"
+          }`}
+        >
+          <span className={`absolute top-0.5 left-0.5 w-6 h-6 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+            isDelivered ? "translate-x-7" : "translate-x-0"
+          }`} />
+        </button>
       </div>
 
       {/* ── 기사 배차 ── */}
@@ -4364,8 +4366,10 @@ const handleAssignClick = () => {
                   거래처명: order.거래처명 || "",
                   상차일: order.상차일 || "",
                   상차시간: order.상차시간 || "",
+                  상차시간기준: order.상차시간기준 || null,
                   하차일: order.하차일 || "",
                   하차시간: order.하차시간 || "",
+                  하차시간기준: order.하차시간기준 || null,
                   상차지명: order.상차지명 || "",
                   상차지주소: order.상차지주소 || "",
                   상차지담당자: order.상차지담당자 || "",
@@ -4670,6 +4674,26 @@ const chooseClient = (c) => {
 
 const [showNewDriver, setShowNewDriver] = useState(false);
 const [showOrderCopyModal, setShowOrderCopyModal] = useState(false);
+const [formSmartMatched, setFormSmartMatched] = useState([]);
+const formSmartRef = useRef(null);
+const handleFormSmartSearch = (val) => {
+  if (!val.trim()) { setFormSmartMatched([]); return; }
+  const nd = (s="") => String(s).replace(/[-.\s]/g,"").toLowerCase();
+  const plateM = val.match(/[가-힣]{2,3}\d{2}[가-힣]\d{4}|\d{2,3}[가-힣]\d{4}/);
+  const plate = plateM ? plateM[0] : "";
+  if (!plate) { setFormSmartMatched([]); return; }
+  const results = (drivers||[]).filter(d => nd(d.차량번호) === nd(plate));
+  setFormSmartMatched(results.slice(0,5));
+  if (results.length === 0) {
+    const phoneM = val.match(/0\d{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4}/);
+    const phone = phoneM ? phoneM[0].replace(/[-.\s]/g,"").replace(/^(\d{3})(\d{3,4})(\d{4})$/,"$1-$2-$3") : "";
+    const stripped = val.replace(phoneM?.[0]||"","").replace(plate,"");
+    const nm = (stripped.match(/[가-힣]{2,4}/g)||[]).find(n=>n.length>=2&&!/[구시군동읍면로]$/.test(n))||"";
+    update("차량번호", plate);
+    update("기사명", nm);
+    update("전화번호", phone);
+  }
+};
 const [orderCopySearch, setOrderCopySearch] = useState("");
 const [orderCopySearchField, setOrderCopySearchField] = useState("all"); // 이 줄을 추가합니다.
 
@@ -5479,6 +5503,33 @@ const pickDrop = (c) => {
         />
       </div>
 
+{/* 기사 스마트검색 */}
+      <div className="bg-white rounded-lg border shadow-sm p-3">
+        <div className="text-[11px] text-gray-500 font-semibold mb-1.5">기사 검색 (차량번호/이름/번호 입력)</div>
+        <div className="relative">
+          <SmartTextarea textareaRef={formSmartRef} onSearch={handleFormSmartSearch} />
+          {formSmartMatched.length > 0 && (
+            <div className="absolute z-50 w-full bg-white border border-gray-200 rounded-xl shadow-xl mt-1 overflow-hidden">
+              {formSmartMatched.map((d,i) => (
+                <button key={i} type="button"
+                  className="w-full text-left px-4 py-2.5 hover:bg-gray-50 border-b border-gray-100 last:border-0"
+                  onPointerDown={e => {
+                    e.preventDefault();
+                    update("차량번호", d.차량번호||"");
+                    update("기사명", d.이름||"");
+                    update("전화번호", d.전화번호||"");
+                    setFormSmartMatched([]);
+                    if (formSmartRef.current) formSmartRef.current.value="";
+                  }}>
+                  <div className="font-bold text-[13px] text-gray-900">{d.이름||"-"}</div>
+                  <div className="text-[11px] text-gray-400 mt-0.5">{d.차량번호} · {d.전화번호}</div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* 차량번호 / 기사명 / 연락처 */}
       <div className="bg-white rounded-lg border shadow-sm">
         <RowLabelInput
@@ -6091,11 +6142,11 @@ onClose();
 function RowLabelInput({ label, input, right }) {
   return (
     <div className="flex border-b last:border-b-0">
-      <div className="w-24 px-3 py-2 text-xs text-gray-600 bg-gray-50 flex items-center justify-between">
-        <span>{label}</span>
-        {right}
+      <div className="w-[88px] shrink-0 px-2 py-2 text-[11px] text-gray-600 bg-gray-50 flex items-center justify-between">
+        <span className="whitespace-nowrap">{label}</span>
+        {right && <span className="ml-1">{right}</span>}
       </div>
-      <div className="flex-1 px-3 py-2">{input}</div>
+      <div className="flex-1 px-2 py-2">{input}</div>
     </div>
   );
 }

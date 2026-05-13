@@ -24,7 +24,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { fromAddr, toAddr } = req.body;
+    const { fromAddr, toAddr, viaPoints = [] } = req.body;
 
     if (!fromAddr || !toAddr) {
       return res.status(400).json({ error: "주소 누락" });
@@ -148,8 +148,22 @@ export default async function handler(req, res) {
     // 2️⃣ 경로 시도 함수
     // 🔥 TMAP Routes: startX = 경도(lon), startY = 위도(lat)
     // =========================
-    const tryRoute = async (startX, startY, endX, endY) => {
+    const tryRoute = async (startX, startY, endX, endY, passList = []) => {
       try {
+        const body = {
+          startX,
+          startY,
+          endX,
+          endY,
+          reqCoordType: "WGS84GEO",
+          resCoordType: "WGS84GEO",
+          searchOption: "0",
+          tollgateFareOption: "16",
+        };
+        // 경유지 있으면 추가 (TMAP passList: "경도,위도_경도,위도" 형식)
+        if (passList.length > 0) {
+          body.passList = passList.map(p => `${p.lon},${p.lat}`).join("_");
+        }
         const routeRes = await fetch(
           "https://apis.openapi.sk.com/tmap/routes?version=1&format=json",
           {
@@ -158,16 +172,7 @@ export default async function handler(req, res) {
               appKey: TMAP_KEY,
               "Content-Type": "application/json",
             },
-            body: JSON.stringify({
-              startX,          // 🔥 경도(lon)
-              startY,          // 🔥 위도(lat)
-              endX,            // 🔥 경도(lon)
-              endY,            // 🔥 위도(lat)
-              reqCoordType: "WGS84GEO",
-              resCoordType: "WGS84GEO",
-              searchOption: "0",          // ✅ 추가: 최적경로
-              tollgateFareOption: "16",   // ✅ 추가: 경로 탐색 성공률 향상
-            }),
+            body: JSON.stringify(body),
           }
         );
 
@@ -186,7 +191,7 @@ export default async function handler(req, res) {
     // 3️⃣ 경로 재시도 (도로 스냅 효과)
     // 🔥 lon = X, lat = Y 순서 엄격히 지킴
     // =========================
-    const getRoute = async (start, end) => {
+    const getRoute = async (start, end, viaCoords = []) => {
       const offsets = [
         [0, 0],
         [0.0005, 0],
@@ -200,10 +205,11 @@ export default async function handler(req, res) {
       // 출발지 이동
       for (const [dx, dy] of offsets) {
         const r = await tryRoute(
-          start.lon + dx,   // startX = 경도
-          start.lat + dy,   // startY = 위도
-          end.lon,          // endX   = 경도
-          end.lat           // endY   = 위도
+          start.lon + dx,
+          start.lat + dy,
+          end.lon,
+          end.lat,
+          viaCoords
         );
         if (r) return r;
       }
@@ -214,7 +220,8 @@ export default async function handler(req, res) {
           start.lon,
           start.lat,
           end.lon + dx,
-          end.lat + dy
+          end.lat + dy,
+          viaCoords
         );
         if (r) return r;
       }
@@ -233,7 +240,16 @@ export default async function handler(req, res) {
       return null;
     };
 
-    const features = await getRoute(from, to);
+// 경유지 주소 → 좌표 변환
+    const viaCoords = [];
+    for (const addr of viaPoints) {
+      if (addr?.trim()) {
+        const coord = await tryGeocode(cleanAddress(addr));
+        if (coord) viaCoords.push(coord);
+      }
+    }
+
+    const features = await getRoute(from, to, viaCoords);
 
     if (!features) {
       console.error("❌ 경로 없음: ROUTE_RETRY_FAIL", { from, to });
