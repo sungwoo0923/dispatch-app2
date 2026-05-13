@@ -42,12 +42,14 @@ export default function UploadPage() {
 
     (async () => {
       try {
-        // dispatch 먼저 시도 → 없으면 dispatch_test 시도
-        let snap = await getDoc(doc(db, "dispatch", id));
-        if (!snap.exists()) {
-          snap = await getDoc(doc(db, "dispatch_test", id));
+        // orders → orders_test → dispatch → dispatch_test 순으로 시도
+        const collections = ["orders", "orders_test", "dispatch", "dispatch_test"];
+        let snap = null;
+        for (const col of collections) {
+          const s = await getDoc(doc(db, col, id));
+          if (s.exists()) { snap = s; break; }
         }
-        if (snap.exists()) {
+        if (snap && snap.exists()) {
           // 어느 컬렉션에서 찾았는지 저장
           setOrderId(id);
           setOrder({ _id: id, _col: snap.ref.parent.id, ...snap.data() });
