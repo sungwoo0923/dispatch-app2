@@ -19393,7 +19393,37 @@ ${fare.toLocaleString()}원 ${payLabel} 배차되었습니다.`;
       })
       .join("\n\n");
 
-    navigator.clipboard.writeText(text);
+    // 🖼️ 이미지와 텍스트를 함께 클립보드에 복사하는 함수
+        async function copyWithImage(plainText) {
+      try {
+        // 1. 이미지 가져오기 (누락되었던 부분)
+        const response = await fetch('/거래명세서.jpg');
+        if (!response.ok) throw new Error("이미지를 불러올 수 없습니다.");
+        const blob = await response.blob();
+        
+        // 2. 클립보드 아이템 생성 (텍스트와 이미지를 모두 포함)
+        const data = [new ClipboardItem({
+          "text/plain": new Blob([plainText], { type: "text/plain" }),
+          [blob.type]: blob
+        })];
+        
+        await navigator.clipboard.write(data);
+        showAlert("텍스트와 거래명세서 안내 이미지가 함께 복사되었습니다!");
+      } catch (err) {
+        console.error("이미지 복사 실패:", err);
+        // 실패 시 텍스트만이라도 복사
+        await navigator.clipboard.writeText(plainText);
+        showAlert("이미지 복사 실패로 텍스트만 복사되었습니다.");
+      }
+    }
+
+    // 기사 전달용(driver) 모드일 때 이미지를 포함하여 복사
+    if (mode === "driver") {
+      copyWithImage(text);
+    } else {
+      navigator.clipboard.writeText(text);
+    }
+
     setSelected(new Set());
     setCopyModalOpen(false);
 
@@ -20949,17 +20979,6 @@ onBlur={(e) => {
                 className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all ${editTarget.혼적 ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-emerald-600 border-emerald-300 hover:bg-emerald-50"}`}>
                 혼적
               </button>
-              <button
-  type="button"
-  onClick={() => setCopyTarget(p => ({ ...p, 운행유형: p.운행유형 === "왕복" ? "편도" : "왕복" }))}
-  className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
-    copyTarget.운행유형 === "왕복"
-      ? "bg-indigo-600 text-white border-indigo-600"
-      : "bg-white text-indigo-600 border-indigo-300 hover:bg-indigo-50"
-  }`}
->
-  왕복
-</button>
             </div>
             {/* ================= 업체 전달 상태 ================= */}
             <div className="mb-4">
