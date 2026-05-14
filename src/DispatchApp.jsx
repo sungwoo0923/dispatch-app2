@@ -9637,6 +9637,183 @@ function InlineEditCell({ value, placeholder, onSave }) {
     </div>
   );
 }
+// ── 첨부파일 뷰어 컴포넌트 ──
+// ── 첨부파일 뷰어 컴포넌트 ──
+function AttachmentViewer({ row, onClose, db }) {
+  const [items, setItems] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [selected, setSelected] = React.useState(null);
+  const [copyDone, setCopyDone] = React.useState(null);
+  const [zipLoading, setZipLoading] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!row?._id) return;
+    const col = row.__col || "orders";
+    const colRef = collection(db, col, row._id, "attachments");
+    const unsub = onSnapshot(colRef, (snap) => {
+      setItems(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setLoading(false);
+    });
+    return () => unsub();
+  }, [row]);
+
+  const handleDownload = (item) => {
+    const a = document.createElement("a");
+    a.href = item.base64 || item.url;
+    a.download = item.name || "attachment.jpg";
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  };
+
+  // ✅ 전체 ZIP 다운로드
+  const handleDownloadAll = async () => {
+    if (!items.length) return;
+    setZipLoading(true);
+    try {
+      const JSZip = (await import("jszip")).default;
+      const zip = new JSZip();
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        const src = item.base64 || item.url;
+        const base64Data = src.includes(",") ? src.split(",")[1] : src;
+        const ext = (item.name || "").split(".").pop() || "jpg";
+        zip.file(`${i + 1}_${item.name || `사진${i + 1}.${ext}`}`, base64Data, { base64: true });
+      }
+      const blob = await zip.generateAsync({ type: "blob" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `첨부파일_${row.상차지명 || row._id}.zip`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(a.href);
+    } catch (e) {
+      console.error(e);
+      // zip 실패 시 순차 다운로드
+      items.forEach((item, i) => setTimeout(() => handleDownload(item), i * 400));
+    }
+    setZipLoading(false);
+  };
+
+  const handleCopy = async (item, id) => {
+    try {
+      const res = await fetch(item.base64 || item.url);
+      const blob = await res.blob();
+      await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+      setCopyDone(id); setTimeout(() => setCopyDone(null), 2000);
+    } catch { alert("복사 실패"); }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-[99999] flex items-center justify-center p-4"
+      onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[88vh] flex flex-col"
+        onClick={e => e.stopPropagation()}>
+
+        {/* 헤더 */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-[#1B2B4B] flex items-center justify-center shrink-0">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+              </svg>
+            </div>
+            <div>
+              <div className="font-bold text-[15px] text-[#1B2B4B]">
+                첨부파일 <span className="text-[13px] font-normal text-gray-400">{loading ? "" : `${items.length}장`}</span>
+              </div>
+              <div className="text-[12px] text-gray-400 mt-0.5 truncate max-w-[320px]">
+                {row.상차지명} → {row.하차지명}{row.이름 ? ` · ${row.이름}` : ""}
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {items.length > 1 && (
+              <button
+                onClick={handleDownloadAll}
+                disabled={zipLoading}
+                className="px-3 py-1.5 bg-[#1B2B4B] text-white text-[12px] font-bold rounded-lg hover:opacity-90 transition disabled:opacity-50"
+              >
+                {zipLoading ? "압축중..." : `전체저장 (${items.length}장)`}
+              </button>
+            )}
+            <button onClick={onClose}
+              className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-400 text-lg transition">
+              ×
+            </button>
+          </div>
+        </div>
+
+        {/* 본문 */}
+        <div className="flex-1 overflow-y-auto p-4">
+          {loading && (
+            <div className="flex items-center justify-center py-16 gap-2 text-gray-400">
+              <div className="w-4 h-4 border-2 border-gray-300 border-t-[#1B2B4B] rounded-full animate-spin" />
+              <span className="text-[14px]">불러오는 중...</span>
+            </div>
+          )}
+          {!loading && items.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-16 gap-3">
+              <div className="w-14 h-14 rounded-2xl bg-gray-100 flex items-center justify-center">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+                </svg>
+              </div>
+              <div className="text-[14px] text-gray-400 font-medium">업로드된 파일이 없습니다</div>
+              <div className="text-[12px] text-gray-300">기사님께 인수증 업로드를 요청하세요</div>
+            </div>
+          )}
+          {!loading && items.length > 0 && (
+            <div className="grid grid-cols-2 gap-3">
+              {items.map((item) => (
+                <div key={item.id} className="border border-gray-100 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+                  <div className="aspect-[4/3] bg-gray-50 cursor-zoom-in relative group"
+                    onClick={() => setSelected(item)}>
+                    <img src={item.base64 || item.url} alt={item.name}
+                      className="w-full h-full object-cover"
+                      onError={e => { e.target.parentElement.innerHTML = '<div class="w-full h-full flex items-center justify-center text-gray-300 text-[12px]">미리보기 없음</div>'; }} />
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
+                      <span className="opacity-0 group-hover:opacity-100 text-white text-[11px] font-bold bg-black/40 px-2 py-1 rounded-full transition-opacity">확대보기</span>
+                    </div>
+                  </div>
+                  <div className="px-3 py-2.5 bg-white">
+                    <div className="text-[11px] text-gray-400 truncate mb-2">{item.name || "파일"} {item.sizeKB ? `· ${item.sizeKB}KB` : ""}</div>
+                    <div className="flex gap-1.5">
+                      <button onClick={() => handleDownload(item)}
+                        className="flex-1 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-bold hover:opacity-90 transition">
+                        저장
+                      </button>
+                      <button onClick={() => handleCopy(item, item.id)}
+                        className={`flex-1 py-1.5 rounded-lg text-[11px] font-bold transition border ${
+                          copyDone === item.id
+                            ? "bg-emerald-500 text-white border-emerald-500"
+                            : "border-gray-200 text-gray-500 hover:bg-gray-50"
+                        }`}>
+                        {copyDone === item.id ? "복사됨" : "복사"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 전체화면 뷰 */}
+      {selected && (
+        <div className="fixed inset-0 bg-black/95 z-[999999] flex items-center justify-center"
+          onClick={() => setSelected(null)}>
+          <img src={selected.base64 || selected.url} alt="full"
+            className="max-w-[90vw] max-h-[85vh] object-contain rounded-lg" />
+          <button className="absolute top-4 right-4 w-10 h-10 bg-white/10 hover:bg-white/20 rounded-full text-white text-xl transition"
+            onClick={() => setSelected(null)}>×</button>
+          <button className="absolute bottom-6 right-6 px-5 py-2.5 bg-[#1B2B4B] hover:opacity-90 text-white rounded-xl text-[13px] font-bold transition"
+            onClick={e => { e.stopPropagation(); handleDownload(selected); }}>
+            저장하기
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 const RoundTripBadge = () => (
   <span
     className="
@@ -11572,7 +11749,8 @@ React.useEffect(() => {
   const [warningList, setWarningList] = React.useState([]);
   const [urgentPopup, setUrgentPopup] = React.useState([]);
   // 첨부파일 개수
-  const [attachCount, setAttachCount] = React.useState({});
+const [attachCount, setAttachCount] = React.useState({});
+  const [attachViewer, setAttachViewer] = React.useState(null); // 열린 행
 
   // ------------------------
 // Firestore → rows 반영
@@ -11673,30 +11851,8 @@ React.useEffect(() => {
     }
   }, [rows, attachCount]);
 
-  // ------------------------
-  // 첨부파일 개수 로드
-  // ------------------------
-  React.useEffect(() => {
-    const load = async () => {
-      const result = {};
-      if (!dispatchData) return;
-
-      for (const row of dispatchData) {
-        if (!row?._id) continue;
-        try {
-          const snap = await getDocs(
-            collection(db, "dispatch", row._id, "attachments")
-          );
-          result[row._id] = snap.size;
-        } catch {
-          result[row._id] = 0;
-        }
-      }
-      setAttachCount(result);
-    };
-
-    load();
-  }, [dispatchData, showCreate]);   // ← rows 제거
+// ✅ attachCount는 row.attachCount에서 직접 읽음 (실시간 자동반영)
+  // getDocs 루프 제거 → rows 변경 시 자동으로 최신값 사용
 
 // ------------------------
 // 오전/오후 → 24시간 변환
@@ -13401,6 +13557,13 @@ const head = isDark
  return (
 <div className="px-3 pt-1 w-full" style={{overflowX: "auto", overflowY: "unset"}}>
 <CustomAlert message={alertMsg} onClose={() => setAlertMsg(null)} />
+{attachViewer && (
+  <AttachmentViewer
+    row={attachViewer}
+    db={db}
+    onClose={() => setAttachViewer(null)}
+  />
+)}
 {/* 🚫 블랙 기사 알림 팝업 */}
 {blackAlert && (
   <div
@@ -14025,12 +14188,21 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
                   {/* 첨부 */}
                   <td className={cell}>
                     <button
-                      onClick={() =>
-                        window.open(`/upload?id=${r._id}`, "_blank")
-                      }
-                      className="text-blue-600 underline"
+                      onClick={() => setAttachViewer(r)}
+                      className="relative inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-gray-100 transition mx-auto"
+                      title="첨부파일 보기"
                     >
-                      📎 {attachCount[r._id] || 0}
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                        stroke={(r.attachCount || 0) > 0 ? "#1B2B4B" : "#cbd5e1"}
+                        strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                        <polyline points="14 2 14 8 20 8"/>
+                      </svg>
+                      {(r.attachCount || 0) > 0 && (
+                        <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-[16px] bg-[#1B2B4B] text-white text-[9px] font-bold rounded-full flex items-center justify-center px-0.5 leading-none">
+                          {r.attachCount}
+                        </span>
+                      )}
                     </button>
                   </td>
 
@@ -17972,6 +18144,7 @@ function MemoMore({ text = "" }) {
 }
 // ===================== PART 4/8 — END =====================
 // ===================== DispatchApp.jsx (PART 5/8 — 차량번호 항상 활성화 + 선택수정→수정완료 통합버튼 + 주소/메모 더보기 + 대용량업로드 + 신규 오더 등록) =====================
+
 function generateTimeOptions() {
   function InlineEditCell({ value, placeholder, onSave }) {
   const [editing, setEditing] = React.useState(false);
@@ -18127,6 +18300,7 @@ const renderTimeText = (time, cond) => {
     return korea.toISOString().slice(0, 10);
   };
 const [alertMsg, setAlertMsg] = React.useState(null);
+const [attachViewer, setAttachViewer] = React.useState(null);
 const [localOverrides, setLocalOverrides] = React.useState({});
 const showAlert = (msg) => setAlertMsg(msg);
 const [blackAlert, setBlackAlert] = React.useState(null);
@@ -20387,6 +20561,13 @@ const save = {
 return (
     <div className="p-3">
 <CustomAlert message={alertMsg} onClose={() => setAlertMsg(null)} />
+{attachViewer && (
+  <AttachmentViewer
+    row={attachViewer}
+    db={db}
+    onClose={() => setAttachViewer(null)}
+  />
+)}
 {blackAlert && (
   <div
     className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999999]"
@@ -20569,7 +20750,7 @@ return (
                 "선택", "순번", "등록일", "상차일", "상차시간", "하차일", "하차시간",
                 "거래처명", "상차지명", "상차지주소", "하차지명", "하차지주소",
                 "화물내용", "차량종류", "차량톤수", "혼적", "차량번호", "기사명", "전화번호",
-               "배차상태", "청구운임", "기사운임", "수수료", "지급방식", "배차방식", "메모", "전달사항", "전달상태",
+               "배차상태", "청구운임", "기사운임", "수수료", "지급방식", "배차방식", "메모", "전달사항", "첨부", "전달상태",
 
               ].map((h) => (
                 <th key={h} className="px-3 py-3 text-center text-[14px] font-bold text-white whitespace-nowrap border-b border-white/10 border-r border-r-white/10 last:border-r-0">
@@ -20895,6 +21076,26 @@ onBlur={(e) => {
                         flashRow(id);
                       }}
                     />
+                  </td>
+               {/* 첨부 */}
+                  <td className={cell}>
+                    <button
+                      onClick={() => setAttachViewer(r)}
+                      className="relative inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-gray-100 transition mx-auto"
+                      title="첨부파일 보기"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                        stroke={(r.attachCount || 0) > 0 ? "#1B2B4B" : "#cbd5e1"}
+                        strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                        <polyline points="14 2 14 8 20 8"/>
+                      </svg>
+                      {(r.attachCount || 0) > 0 && (
+                        <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-[16px] bg-[#1B2B4B] text-white text-[9px] font-bold rounded-full flex items-center justify-center px-0.5 leading-none">
+                          {r.attachCount}
+                        </span>
+                      )}
+                    </button>
                   </td>
                   {/* 전달상태 (버튼) */}
                   <td className="border text-center whitespace-nowrap">
