@@ -11863,30 +11863,7 @@ rows.forEach(r => {
     }
   }, [rows]);
 
-// ✅ attachCount 초기화 — 마운트 시 1회만 실행
-const attachInitDone = React.useRef(false);
-React.useEffect(() => {
-  if (attachInitDone.current) return;
-  if (!rows.length) return;
 
-  attachInitDone.current = true;
-
-  const needsCount = rows.filter(r => r.attachCount === undefined || r.attachCount === null);
-  if (!needsCount.length) return;
-
-  // 비동기로 처리 (UI 블로킹 없이)
-  (async () => {
-    for (const r of needsCount) {
-      try {
-        const col = r.__col || "orders";
-        const snap = await getDocs(collection(db, col, r._id, "attachments"));
-        await updateDoc(doc(db, col, r._id), { attachCount: snap.size });
-        // 각 요청 사이 50ms 딜레이 (Firebase 과부하 방지)
-        await new Promise(res => setTimeout(res, 50));
-      } catch {}
-    }
-  })();
-}, [rows.length > 0]);
 // ------------------------
 // 오전/오후 → 24시간 변환
 // ------------------------
