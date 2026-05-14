@@ -11863,30 +11863,30 @@ rows.forEach(r => {
     }
   }, [rows]);
 
-// ✅ attachCount는 row.attachCount에서 직접 읽음 (실시간 자동반영)
-// ✅ attachCount가 없는 오더 → 서브컬렉션 실제 개수로 초기화
+// ✅ attachCount 초기화 — 마운트 시 1회만 실행
+const attachInitDone = React.useRef(false);
 React.useEffect(() => {
-  const init = async () => {
-    const needsCount = rows.filter(r => r.attachCount === undefined || r.attachCount === null);
-    if (!needsCount.length) return;
+  if (attachInitDone.current) return;
+  if (!rows.length) return;
 
+  attachInitDone.current = true;
+
+  const needsCount = rows.filter(r => r.attachCount === undefined || r.attachCount === null);
+  if (!needsCount.length) return;
+
+  // 비동기로 처리 (UI 블로킹 없이)
+  (async () => {
     for (const r of needsCount) {
       try {
         const col = r.__col || "orders";
         const snap = await getDocs(collection(db, col, r._id, "attachments"));
-        if (snap.size > 0) {
-          await updateDoc(doc(db, col, r._id), { attachCount: snap.size });
-        } else {
-          // 0으로 명시적 설정 (다음에 다시 체크 안 하도록)
-          await updateDoc(doc(db, col, r._id), { attachCount: 0 });
-        }
+        await updateDoc(doc(db, col, r._id), { attachCount: snap.size });
+        // 각 요청 사이 50ms 딜레이 (Firebase 과부하 방지)
+        await new Promise(res => setTimeout(res, 50));
       } catch {}
     }
-  };
-  init();
-}, [rows]);
-  // getDocs 루프 제거 → rows 변경 시 자동으로 최신값 사용
-
+  })();
+}, [rows.length > 0]);
 // ------------------------
 // 오전/오후 → 24시간 변환
 // ------------------------
