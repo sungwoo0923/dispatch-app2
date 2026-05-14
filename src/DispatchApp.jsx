@@ -21078,21 +21078,21 @@ onBlur={(e) => {
                     />
                   </td>
                {/* 첨부 */}
-                  <td className={cell}>
+                  <td className="border text-center whitespace-nowrap">
                     <button
-                      onClick={() => setAttachViewer(r)}
+                      onClick={() => setAttachViewer(row)}
                       className="relative inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-gray-100 transition mx-auto"
                       title="첨부파일 보기"
                     >
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                        stroke={(r.attachCount || 0) > 0 ? "#1B2B4B" : "#cbd5e1"}
+                        stroke={(row.attachCount || 0) > 0 ? "#1B2B4B" : "#cbd5e1"}
                         strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                         <polyline points="14 2 14 8 20 8"/>
                       </svg>
-                      {(r.attachCount || 0) > 0 && (
+                      {(row.attachCount || 0) > 0 && (
                         <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-[16px] bg-[#1B2B4B] text-white text-[9px] font-bold rounded-full flex items-center justify-center px-0.5 leading-none">
-                          {r.attachCount}
+                          {row.attachCount}
                         </span>
                       )}
                     </button>
