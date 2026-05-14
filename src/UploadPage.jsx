@@ -9,6 +9,9 @@ import { db } from "./firebase";
 import {
   doc,
   getDoc,
+  updateDoc,
+  increment,
+  deleteDoc,
   collection,
   addDoc,
   serverTimestamp,
@@ -131,7 +134,7 @@ export default function UploadPage() {
         setProgress(prev => ({ ...prev, [i]: 70 }));
 
         // ✅ Firestore 저장 (각 사진 = 개별 문서)
-        await addDoc(collection(db, order._col || "orders", orderId, "attachments"), {
+        const docRef = await addDoc(collection(db, order._col || "orders", orderId, "attachments"), {
           base64,
           name: file.name,
           type: "image/jpeg",
@@ -141,12 +144,20 @@ export default function UploadPage() {
         });
 
         setProgress(prev => ({ ...prev, [i]: 100 }));
-        results.push({ name: file.name, url: base64 });
+        results.push({ name: file.name, url: base64, docId: docRef.id });
 
       } catch (err) {
         console.error("업로드 오류:", err);
         alert(`${file.name} 업로드 실패: ${err.message}`);
       }
+    }
+
+    // ✅ 부모 문서에 attachCount 업데이트 (실시간 카운트용)
+if (results.length > 0) {
+      try {
+        const parentRef = doc(db, order._col || "orders", orderId);
+        await updateDoc(parentRef, { attachCount: increment(results.length) });
+      } catch(e) { console.error("카운트 업데이트 실패:", e); }
     }
 
     setUploaded(results);
@@ -200,26 +211,47 @@ export default function UploadPage() {
         {/* ── 업로드 완료 ── */}
         {status === "done" && (
           <div style={cardStyle}>
-            <div style={{ textAlign: "center", padding: "32px 0" }}>
-              <div style={{ fontSize: 56, marginBottom: 12 }}>✅</div>
-              <div style={{ fontWeight: 900, fontSize: 20, color: "#1B2B4B", marginBottom: 6 }}>업로드 완료!</div>
-              <div style={{ color: "#6b7280", fontSize: 14, marginBottom: 20 }}>
-                {uploaded.length}개 파일이 성공적으로 전달되었습니다.
+            <div style={{ textAlign: "center", paddingTop: 24, paddingBottom: 8 }}>
+              <div style={{ fontSize: 48, marginBottom: 8 }}>✅</div>
+              <div style={{ fontWeight: 900, fontSize: 18, color: "#1B2B4B", marginBottom: 4 }}>업로드 완료!</div>
+              <div style={{ color: "#6b7280", fontSize: 13, marginBottom: 16 }}>
+                {uploaded.length}개 파일이 전달되었습니다.
               </div>
-              <div style={{ background: "#f0fdf4", borderRadius: 10, padding: "12px 16px", textAlign: "left" }}>
-                {uploaded.map((f, i) => (
-                  <div key={i} style={{ fontSize: 13, color: "#15803d", padding: "4px 0", display: "flex", alignItems: "center", gap: 6 }}>
-                    <span>📎</span> {f.name}
-                  </div>
-                ))}
-              </div>
-              <button
-                onClick={() => { setStatus("ready"); setUploaded([]); }}
-                style={{ ...btnOutline, marginTop: 20 }}
-              >
-                추가 업로드
-              </button>
             </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
+              {uploaded.map((f, i) => (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, background: "#f8fafc", borderRadius: 10, padding: "10px 12px" }}>
+                  {f.url && (
+                    <img src={f.url} alt={f.name} style={{ width: 44, height: 44, objectFit: "cover", borderRadius: 6, border: "1px solid #e2e8f0", flexShrink: 0 }} />
+                  )}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12, color: "#1e293b", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</div>
+                    <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>업로드 완료</div>
+                  </div>
+                  {f.docId && (
+                    <button
+                      onClick={async () => {
+                        if (!window.confirm("이 사진을 삭제하시겠습니까?")) return;
+                        try {
+                          await deleteDoc(doc(db, order._col || "orders", orderId, "attachments", f.docId));
+                          await updateDoc(doc(db, order._col || "orders", orderId), { attachCount: increment(-1) });
+                          setUploaded(prev => prev.filter((_, idx) => idx !== i));
+                        } catch(e) { alert("삭제 실패: " + e.message); }
+                      }}
+                      style={{ padding: "5px 10px", borderRadius: 7, border: "1px solid #fca5a5", background: "#fff", color: "#ef4444", fontSize: 12, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}
+                    >
+                      삭제
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={() => { setStatus("ready"); setUploaded([]); }}
+              style={{ ...btnOutline, width: "100%", textAlign: "center" }}
+            >
+              추가 업로드
+            </button>
           </div>
         )}
 

@@ -187,6 +187,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  increment,
   onSnapshot,
   query,
   serverTimestamp,
@@ -9700,7 +9701,14 @@ function AttachmentViewer({ row, onClose, db }) {
       setCopyDone(id); setTimeout(() => setCopyDone(null), 2000);
     } catch { alert("복사 실패"); }
   };
-
+const handleDelete = async (item) => {
+    if (!window.confirm("이 사진을 삭제하시겠습니까?")) return;
+    try {
+      const col = row.__col || "orders";
+      await deleteDoc(doc(db, col, row._id, "attachments", item.id));
+      await updateDoc(doc(db, col, row._id), { attachCount: increment(-1) });
+    } catch(e) { alert("삭제 실패: " + e.message); }
+  };
   return (
     <div className="fixed inset-0 bg-black/50 z-[99999] flex items-center justify-center p-4"
       onClick={onClose}>
@@ -9787,6 +9795,10 @@ function AttachmentViewer({ row, onClose, db }) {
                             : "border-gray-200 text-gray-500 hover:bg-gray-50"
                         }`}>
                         {copyDone === item.id ? "복사됨" : "복사"}
+                      </button>
+                      <button onClick={() => handleDelete(item)}
+                        className="px-2 py-1.5 rounded-lg border border-red-200 text-red-500 text-[11px] font-bold hover:bg-red-50 transition">
+                        삭제
                       </button>
                     </div>
                   </div>
@@ -11803,9 +11815,9 @@ React.useEffect(() => {
 
     const newAlerts = [];
 
-    rows.forEach(r => {
+rows.forEach(r => {
       const id = r._id;
-      const cur = attachCount[id] || 0;
+      const cur = r.attachCount || 0;
       const prev = prevAttachRef.current[id] || 0;
 
       // 첨부파일 증가 체크
@@ -11849,9 +11861,30 @@ React.useEffect(() => {
         );
       }, 6000);
     }
-  }, [rows, attachCount]);
+  }, [rows]);
 
 // ✅ attachCount는 row.attachCount에서 직접 읽음 (실시간 자동반영)
+// ✅ attachCount가 없는 오더 → 서브컬렉션 실제 개수로 초기화
+React.useEffect(() => {
+  const init = async () => {
+    const needsCount = rows.filter(r => r.attachCount === undefined || r.attachCount === null);
+    if (!needsCount.length) return;
+
+    for (const r of needsCount) {
+      try {
+        const col = r.__col || "orders";
+        const snap = await getDocs(collection(db, col, r._id, "attachments"));
+        if (snap.size > 0) {
+          await updateDoc(doc(db, col, r._id), { attachCount: snap.size });
+        } else {
+          // 0으로 명시적 설정 (다음에 다시 체크 안 하도록)
+          await updateDoc(doc(db, col, r._id), { attachCount: 0 });
+        }
+      } catch {}
+    }
+  };
+  init();
+}, [rows]);
   // getDocs 루프 제거 → rows 변경 시 자동으로 최신값 사용
 
 // ------------------------
@@ -14192,14 +14225,14 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
                       className="relative inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-gray-100 transition mx-auto"
                       title="첨부파일 보기"
                     >
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                        stroke={(r.attachCount || 0) > 0 ? "#1B2B4B" : "#cbd5e1"}
+                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                        stroke={(r.attachCount || 0) > 0 ? "#059669" : "#cbd5e1"}
                         strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                         <polyline points="14 2 14 8 20 8"/>
                       </svg>
                       {(r.attachCount || 0) > 0 && (
-                        <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-[16px] bg-[#1B2B4B] text-white text-[9px] font-bold rounded-full flex items-center justify-center px-0.5 leading-none">
+                        <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-[16px] bg-emerald-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-0.5 leading-none">
                           {r.attachCount}
                         </span>
                       )}
@@ -21085,13 +21118,13 @@ onBlur={(e) => {
                       title="첨부파일 보기"
                     >
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                        stroke={(row.attachCount || 0) > 0 ? "#1B2B4B" : "#cbd5e1"}
+                      stroke={(row.attachCount || 0) > 0 ? "#059669" : "#cbd5e1"}
                         strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                         <polyline points="14 2 14 8 20 8"/>
                       </svg>
                       {(row.attachCount || 0) > 0 && (
-                        <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-[16px] bg-[#1B2B4B] text-white text-[9px] font-bold rounded-full flex items-center justify-center px-0.5 leading-none">
+                       <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-[16px] bg-emerald-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-0.5 leading-none">
                           {row.attachCount}
                         </span>
                       )}
