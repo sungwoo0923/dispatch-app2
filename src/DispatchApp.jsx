@@ -13253,6 +13253,32 @@ const commCol = headers.indexOf("수수료");
     });
   }
 
+// ✅ 역방향 검증: 프로그램에서 배차방식이 "24시"인데 24시콜 파일에 없는 경우
+  const filePlates = new Set();
+  for (let i = headerIdx + 1; i < json.length; i++) {
+    const row = json[i];
+    if (row && row[plateCol]) filePlates.add(normalizePlate(String(row[plateCol])));
+  }
+
+  todayRows.forEach(mr => {
+    const dispatch = (mr.배차방식 || "").trim();
+    if (dispatch !== "24시" && dispatch !== "24시(고정기사)") return;
+    if (!mr.차량번호?.trim()) return;
+
+    const plate = normalizePlate(mr.차량번호);
+    if (!filePlates.has(plate)) {
+      const seq = todayRows.indexOf(mr) + 1;
+      const label = `${seq}번 [${mr.거래처명 || "-"}] ${mr.상차지명 || ""} → ${mr.하차지명 || ""}`;
+      fileIssues.push({
+        rowId: mr._id,
+        seq,
+        label,
+        type: "missing",
+        msg: `배차방식이 "24시"이나 24시콜 파일에 차량번호 없음 (차량: ${mr.차량번호}, 기사: ${mr.이름 || "-"}) — 배차방식 오등록 의심`,
+      });
+    }
+  });
+
   setCloseFileResult(fileIssues);
 };
 
@@ -17737,12 +17763,14 @@ setConfirmChange(null);
                     </div>
                     <span className={`shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-bold ${
                       f.type === "fare"
-                        ? "bg-red-100 text-red-700"
-                        : f.type === "dispatch"
-                        ? "bg-amber-100 text-amber-700"
-                        : "bg-blue-100 text-blue-700"
+  ? "bg-red-100 text-red-700"
+  : f.type === "dispatch"
+  ? "bg-amber-100 text-amber-700"
+  : f.type === "missing"
+  ? "bg-rose-100 text-rose-700"
+  : "bg-blue-100 text-blue-700"
                     }`}>
-                      {f.type === "dispatch" ? "배차방식" : f.type === "fare" ? "운임차이" : "지급방식"}
+                      {f.type === "dispatch" ? "배차방식" : f.type === "fare" ? "운임차이" : f.type === "missing" ? "파일누락" : "지급방식"}
                     </span>
                   </div>
                 ))}
@@ -18793,7 +18821,11 @@ const handleCloseFileUpload = async (e) => {
   const nameCol  = headers.indexOf("차주이름");
   const phoneCol = headers.indexOf("차주전화");
   const feeTypeCol = headers.indexOf("요금구분");
-  const commCol  = headers.indexOf("수수료");
+const commCol  = headers.indexOf("수수료");
+  const fareColNames = ["운송료", "운임", "운임금액", "금액", "결제금액", "배차료", "차주운임", "지급금액"];
+  const fareCol = fareColNames.reduce((found, name) =>
+    found !== -1 ? found : headers.indexOf(name), -1
+  );
 
   if (plateCol === -1) { showAlert("차량번호 컬럼을 찾을 수 없습니다."); return; }
 
@@ -18880,6 +18912,32 @@ const handleCloseFileUpload = async (e) => {
       }
     });
   }
+
+// ✅ 역방향 검증
+  const filePlates = new Set();
+  for (let i = headerIdx + 1; i < json.length; i++) {
+    const row = json[i];
+    if (row && row[plateCol]) filePlates.add(normalizePlate(String(row[plateCol])));
+  }
+
+  todayRows.forEach(mr => {
+    const dispatch = (mr.배차방식 || "").trim();
+    if (dispatch !== "24시" && dispatch !== "24시(고정기사)") return;
+    if (!mr.차량번호?.trim()) return;
+
+    const plate = normalizePlate(mr.차량번호);
+    if (!filePlates.has(plate)) {
+      const seq = todayRows.indexOf(mr) + 1;
+      const label = `${seq}번 [${mr.거래처명 || "-"}] ${mr.상차지명 || ""} → ${mr.하차지명 || ""}`;
+      fileIssues.push({
+        rowId: mr._id,
+        seq,
+        label,
+        type: "missing",
+        msg: `배차방식이 "24시"이나 24시콜 파일에 차량번호 없음 (차량: ${mr.차량번호}, 기사: ${mr.이름 || "-"}) — 배차방식 오등록 의심`,
+      });
+    }
+  });
 
   setCloseFileResult(fileIssues);
 };
