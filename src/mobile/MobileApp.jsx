@@ -1098,45 +1098,27 @@ if (searchType === "메모")
 
 
     // 7) 정렬
-    if (statusTab === "전체") {
-  // 전체 = TODAY 최우선 → 차량번호 없는(배차중) → 최신 날짜순
+    // 🟢 After
+if (statusTab === "전체") {
+  // 전체 = 배차중 그룹 먼저, 그룹 내 updatedAt/createdAt 최신순
   base.sort((a, b) => {
-    // 🔔 TODAY 우선
-    const today = todayStr();
-    const aToday = getPickupDate(a) === today;
-    const bToday = getPickupDate(b) === today;
-
-    if (aToday && !bToday) return -1;
-    if (!aToday && bToday) return 1;
-
-    // 🚚 배차중(차량번호 없음) 우선
     const aEmpty = !String(a.차량번호 || "").trim();
     const bEmpty = !String(b.차량번호 || "").trim();
-
     if (aEmpty && !bEmpty) return -1;
     if (!aEmpty && bEmpty) return 1;
-
-    // 📅 날짜 최신순
-    const da = getPickupDate(a) || "";
-    const db = getPickupDate(b) || "";
-    return db.localeCompare(da);
+     // 같은 그룹 내: 수정/등록 최신순
+    const ta = a._lastModified || (a.updatedAt?.seconds || 0) * 1000 || 0;
+    const tb = b._lastModified || (b.updatedAt?.seconds || 0) * 1000 || 0;
+    return tb - ta;
+  });
+} else {
+  // 배차중/배차완료 탭: 수정/등록 최신 상단 (수정하면 바로 상단)
+  base.sort((a, b) => {
+    const ta = a._lastModified || (a.updatedAt?.seconds || 0) * 1000 || 0;
+    const tb = b._lastModified || (b.updatedAt?.seconds || 0) * 1000 || 0;
+    return tb - ta;
   });
 }
- else {
-      // 배차중/배차완료 탭은 최신 날짜순
-      base.sort((a, b) => {
-          const today = todayStr();
-  const aToday = getPickupDate(a) === today;
-  const bToday = getPickupDate(b) === today;
-
-  if (aToday && !bToday) return -1;
-  if (!aToday && bToday) return 1;
-
-        const da = getPickupDate(a) || "";
-        const db = getPickupDate(b) || "";
-        return db.localeCompare(da);
-      });
-    }
 
     return base;
   }, [
@@ -1420,6 +1402,7 @@ const groupedByDate = useMemo(() => {
       상태: (form.차량번호 || "").trim() ? "배차완료" : "배차중",
 
       updatedAt: serverTimestamp(),
+      _lastModified: Date.now(),
     };
 
     // 🔹 수정 모드
@@ -1584,15 +1567,17 @@ const handleOrderDuplicate = (order) => {
     }
 
      await updateDoc(doc(db, selectedOrder.__col, selectedOrder.id), {
-      기사명: driver.이름,
-      이름: driver.이름,           // PC 호환
-      차량번호: driver.차량번호,
-      전화번호: driver.전화번호,
-      전화: driver.전화번호,       // PC 호환
-      배차상태: "배차완료",
-      상태: "배차완료",
-    });
-
+  기사명: driver.이름,
+  이름: driver.이름,
+  차량번호: driver.차량번호,
+  전화번호: driver.전화번호,
+  전화: driver.전화번호,
+  배차상태: "배차완료",
+  상태: "배차완료",
+  배차완료일시: serverTimestamp(),
+  updatedAt: serverTimestamp(),
+  _lastModified: Date.now(),
+});
     setSelectedOrder((prev) =>
       prev
         ? {
@@ -1613,14 +1598,17 @@ const handleOrderDuplicate = (order) => {
     if (!selectedOrder) return;
 
     await updateDoc(doc(db, selectedOrder.__col, selectedOrder.id), {
-      기사명: "",
-      이름: "",
-      차량번호: "",
-      전화번호: "",
-      전화: "",
-      배차상태: "배차중",
-      상태: "배차중",
-    });
+  기사명: "",
+  이름: "",
+  차량번호: "",
+  전화번호: "",
+  전화: "",
+  배차상태: "배차중",
+  상태: "배차중",
+  배차완료일시: null,
+  updatedAt: serverTimestamp(),
+  _lastModified: Date.now(),
+});
 
     setSelectedOrder((prev) =>
       prev
@@ -2696,9 +2684,9 @@ setOpenMemo={setOpenMemo}
           onClick={() => {
             setForm({
               거래처명: "",
-              상차일: "",
+              상차일: todayKST(),
               상차시간: "",
-              하차일: "",
+              하차일: todayKST(),
               하차시간: "",
               상차지명: "",
               상차지주소: "",
@@ -3198,8 +3186,8 @@ function MobileOrderList({
   const tabs = ["전체", "배차중", "배차완료"];
 
   const dates = Array.from(groupedByDate.keys()).sort((a, b) =>
-    a.localeCompare(b)
-  );
+  b.localeCompare(a)
+);
   const statusCount = useMemo(() => {
   let ing = 0;
   let done = 0;
@@ -3900,49 +3888,54 @@ const pickupTimeText = order.상차시간
   React.useEffect(() => { driversRef.current = drivers; }, [drivers]);
 
  const handleSmartInputCb = React.useCallback((val) => {
-    if (!val.trim()) { setSmartMatched([]); setIsNewDriver(false); return; }
-    const { plate: pl, name: nm, phone: ph } = parseDriverText(val);
-    if (!pl) { setSmartMatched([]); setIsNewDriver(false); return; }
+  if (!val.trim()) { setSmartMatched([]); setIsNewDriver(false); return; }
+  const { plate: pl, name: nm, phone: ph } = parseDriverText(val);
+  const nd = (s = "") => String(s).replace(/[-.\s]/g, "").toLowerCase();
 
-    const nd = (s = "") => String(s).replace(/[-.\s]/g, "").toLowerCase();
-
-    // 차량번호 완전일치만 드롭다운 표시 (PC 3/4/5파트와 동일)
+  // 1️⃣ 차량번호 우선 검색
+  if (pl) {
     const results = driversRef.current
       .filter(d => nd(d.차량번호) === nd(pl))
       .sort((a, b) => {
-        // 이름+전화 모두 일치하면 맨 위
         const aExact = nd(a.이름) === nd(nm) && nd(a.전화번호) === nd(ph);
         const bExact = nd(b.이름) === nd(nm) && nd(b.전화번호) === nd(ph);
         if (aExact && !bExact) return -1;
         if (!aExact && bExact) return 1;
         return 0;
       });
-
     setSmartMatched(results.slice(0, 8));
-
-    // 기존 기사 없으면 → 신규 자동 세팅
     if (results.length === 0) {
-      setCarNo(pl);
-      setName(nm || "");
-      setPhone(ph || "");
-      setIsNewDriver(true);
+      setCarNo(pl); setName(nm || ""); setPhone(ph || ""); setIsNewDriver(true);
     } else {
-      // 이름까지 완전 일치하는 기사 있으면 바로 세팅
       const exactMatch = results.find(d => nd(d.이름) === nd(nm));
       if (exactMatch) {
-        setCarNo(exactMatch.차량번호);
-        setName(exactMatch.이름 || "");
-        setPhone(exactMatch.전화번호 || "");
-        setIsNewDriver(false);
+        setCarNo(exactMatch.차량번호); setName(exactMatch.이름 || ""); setPhone(exactMatch.전화번호 || ""); setIsNewDriver(false);
       } else {
-        // 차량번호만 일치 → 첫번째 기사 세팅
-        setCarNo(results[0].차량번호);
-        setName(results[0].이름 || "");
-        setPhone(results[0].전화번호 || "");
-        setIsNewDriver(false);
+        setCarNo(results[0].차량번호); setName(results[0].이름 || ""); setPhone(results[0].전화번호 || ""); setIsNewDriver(false);
       }
     }
-  }, []);
+    return;
+  }
+
+  // 2️⃣ 전화번호로 검색 (010-xxxx-xxxx / 010 xxxx xxxx / 01012341234)
+  if (ph) {
+    const results = driversRef.current.filter(d => nd(d.전화번호) === nd(ph));
+    setSmartMatched(results.slice(0, 8));
+    if (results.length === 0) {
+      setName(nm || ""); setPhone(ph); setIsNewDriver(true);
+    }
+    return;
+  }
+
+  // 3️⃣ 이름으로 검색 (한글 2자 이상)
+  if (nm && nm.length >= 2) {
+    const results = driversRef.current.filter(d => d.이름 && d.이름.includes(nm));
+    setSmartMatched(results.slice(0, 8));
+    return;
+  }
+
+  setSmartMatched([]); setIsNewDriver(false);
+}, []);
   const selectSmartDriver = (d) => {
     setCarNo(d.차량번호 || "");
     setName(d.이름 || "");
@@ -4014,15 +4007,17 @@ const handleAssignClick = () => {
       const docId = order._id || order.id;
 
       await updateDoc(doc(db, colName, docId), {
-        차량번호: carNo,
-        기사명: name || "",
-        이름: name || "",
-        전화번호: phone || "",
-        전화: phone || "",
-        배차상태: "배차완료",
-        상태: "배차완료",
-        updatedAt: serverTimestamp(),
-      });
+  차량번호: carNo,
+  기사명: name || "",
+  이름: name || "",
+  전화번호: phone || "",
+  전화: phone || "",
+  배차상태: "배차완료",
+  상태: "배차완료",
+  배차완료일시: serverTimestamp(),
+  updatedAt: serverTimestamp(),
+  _lastModified: Date.now(),
+});
 
       // 신규 기사면 기사관리에 등록
       if (isNewDriver && carNo) {
@@ -4067,15 +4062,25 @@ const handleAssignClick = () => {
         <DetailCard>
           {/* 상태 뱃지 */}
           <div className="flex items-center justify-between mb-3">
-            <span className="text-xs" style={{ color: "var(--text-secondary)" }}>{order.거래처명 || "-"}</span>
-            <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${
-              state === "배차완료"
-                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                : "bg-blue-50 text-blue-700 border-blue-200"
-            }`}>
-              {state}
-            </span>
-          </div>
+  <span className="text-xs" style={{ color: "var(--text-secondary)" }}>{order.거래처명 || "-"}</span>
+  <div className="flex flex-col items-end gap-0.5">
+    <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${
+      state === "배차완료"
+        ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+        : "bg-blue-50 text-blue-700 border-blue-200"
+    }`}>
+      {state}
+    </span>
+    {state === "배차완료" && order.배차완료일시?.seconds && (
+      <span className="text-[10px] text-emerald-600">
+        ✅ {new Date(order.배차완료일시.seconds * 1000).toLocaleString("ko-KR", {
+          month: "2-digit", day: "2-digit",
+          hour: "2-digit", minute: "2-digit"
+        })} 완료
+      </span>
+    )}
+  </div>
+</div>
 
           {/* 상차지 */}
           <div className="flex gap-2 mb-2">
@@ -4678,21 +4683,53 @@ const [formSmartMatched, setFormSmartMatched] = useState([]);
 const formSmartRef = useRef(null);
 const handleFormSmartSearch = (val) => {
   if (!val.trim()) { setFormSmartMatched([]); return; }
-  const nd = (s="") => String(s).replace(/[-.\s]/g,"").toLowerCase();
+  const nd = (s = "") => String(s).replace(/[-.\s]/g, "").toLowerCase();
+
+  // 차량번호 추출
   const plateM = val.match(/[가-힣]{2,3}\d{2}[가-힣]\d{4}|\d{2,3}[가-힣]\d{4}/);
   const plate = plateM ? plateM[0] : "";
-  if (!plate) { setFormSmartMatched([]); return; }
-  const results = (drivers||[]).filter(d => nd(d.차량번호) === nd(plate));
-  setFormSmartMatched(results.slice(0,5));
-  if (results.length === 0) {
-    const phoneM = val.match(/0\d{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4}/);
-    const phone = phoneM ? phoneM[0].replace(/[-.\s]/g,"").replace(/^(\d{3})(\d{3,4})(\d{4})$/,"$1-$2-$3") : "";
-    const stripped = val.replace(phoneM?.[0]||"","").replace(plate,"");
-    const nm = (stripped.match(/[가-힣]{2,4}/g)||[]).find(n=>n.length>=2&&!/[구시군동읍면로]$/.test(n))||"";
-    update("차량번호", plate);
-    update("기사명", nm);
-    update("전화번호", phone);
+
+  // 전화번호 추출
+  const phoneM = val.match(/0\d{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4}/);
+  const phone = phoneM ? phoneM[0].replace(/[-.\s]/g, "").replace(/^(\d{3})(\d{3,4})(\d{4})$/, "$1-$2-$3") : "";
+
+  // 이름 추출 (차량번호/전화번호 제거 후 남은 한글 2~4자)
+  const EXCLUDE = ["강원","서울","경기","인천","부산","대구","광주","대전","울산","세종","경북","경남","전북","전남","충북","충남","제주","냉장","냉동","카고","윙바디","탑차","다마스","라보"];
+  const stripped = val.replace(plateM?.[0] || "", "").replace(phoneM?.[0] || "", "");
+  const nameMatch = (stripped.match(/[가-힣]{2,4}/g) || []);
+  const name = nameMatch.find(n => n.length >= 2 && !EXCLUDE.includes(n) && !/[구시군동읍면로]$/.test(n)) || "";
+
+  // 1️⃣ 차량번호 우선
+  if (plate) {
+    const results = (drivers || []).filter(d => nd(d.차량번호) === nd(plate));
+    setFormSmartMatched(results.slice(0, 5));
+    if (results.length === 0) {
+      update("차량번호", plate);
+      update("기사명", name);
+      update("전화번호", phone);
+    }
+    return;
   }
+
+  // 2️⃣ 전화번호로 검색
+  if (phone) {
+    const results = (drivers || []).filter(d => nd(d.전화번호) === nd(phone));
+    setFormSmartMatched(results.slice(0, 5));
+    if (results.length === 0) {
+      update("기사명", name);
+      update("전화번호", phone);
+    }
+    return;
+  }
+
+  // 3️⃣ 이름으로 검색
+  if (name.length >= 2) {
+    const results = (drivers || []).filter(d => d.이름 && d.이름.includes(name));
+    setFormSmartMatched(results.slice(0, 5));
+    return;
+  }
+
+  setFormSmartMatched([]);
 };
 const [orderCopySearch, setOrderCopySearch] = useState("");
 const [orderCopySearchField, setOrderCopySearchField] = useState("all"); // 이 줄을 추가합니다.
