@@ -32,8 +32,31 @@ export default function UploadPage() {
   const [uploaded, setUploaded]   = useState([]);
   const [drag, setDrag]           = useState(false);
   const inputRef                  = useRef(null);
-  const [checks, setChecks]       = useState([false, false, false, false]);
-  const allChecked                 = checks.every(Boolean);
+    const sigRef                    = useRef(null);
+  const [signed, setSigned]       = useState(false);
+  const [sigDrawing, setSigDrawing] = useState(false);
+
+const isCold = React.useMemo(() => {
+    const t = String(order?.차량종류 || "");
+    return t.includes("냉장") || t.includes("냉동");
+  }, [order]);
+
+  const checkItems = React.useMemo(() => {
+    const base = [
+      "거래명세서를 선명하게 한 장씩 촬영했습니다",
+      "파렛트 전표에 서명을 받았습니다 (필수)",
+    ];
+    if (isCold) base.push("타코메타 기록지를 촬영했습니다 (냉장/냉동 해당)");
+    base.push("미업로드시 운임 보류에 동의합니다");
+    return base;
+  }, [isCold]);
+
+  const [checks, setChecks]       = useState([]);
+  const allChecked                 = checks.length > 0 && checks.every(Boolean);
+
+  React.useEffect(() => {
+    setChecks(new Array(checkItems.length).fill(false));
+  }, [checkItems.length]);
 
   // ── URL에서 id 추출 & 오더 조회 ──────────────────────────
   useEffect(() => {
@@ -134,7 +157,18 @@ export default function UploadPage() {
         }
 
         setProgress(prev => ({ ...prev, [i]: 70 }));
-
+// ✅ 첫 번째 파일 업로드 시 서명 이미지도 저장
+        if (i === 0 && sigRef.current && signed) {
+          const sigBase64 = sigRef.current.toDataURL("image/png");
+          await addDoc(collection(db, order._col || "orders", orderId, "attachments"), {
+            base64: sigBase64,
+            name: "서명.png",
+            type: "image/png",
+            sizeKB: Math.round(sigBase64.length * 0.75 / 1024),
+            uploadedAt: serverTimestamp(),
+            source: "driver_signature",
+          });
+        }
         // ✅ Firestore 저장 (각 사진 = 개별 문서)
         const docRef = await addDoc(collection(db, order._col || "orders", orderId, "attachments"), {
           base64,
@@ -296,12 +330,7 @@ if (results.length > 0) {
                   {checks.filter(Boolean).length}/{checks.length} 완료
                 </span>
               </div>
-              {[
-                "거래명세서를 선명하게 촬영했습니다",
-                "파렛트 전표에 서명을 받았습니다 (필수)",
-                "타코메타 기록지를 촬영했습니다 (냉장/냉동)",
-                "상/하차 사진을 보관했습니다",
-              ].map((text, i) => (
+              {checkItems.map((text, i) => (
                 <div key={i} onClick={() => setChecks(prev => { const n=[...prev]; n[i]=!n[i]; return n; })}
                   style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px",
                     borderRadius: 10, marginBottom: 8, cursor: "pointer",
@@ -332,6 +361,57 @@ if (results.length > 0) {
                   onError={(e) => { e.target.style.display = "none"; }} />
               </div>
               <div style={{ textAlign: "center", marginTop: 8, fontSize: 12, color: "#94a3b8" }}>거래명세서 예시</div>
+            </div>
+            {/* 서명 카드 */}
+            <div style={cardStyle}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                <div style={{ width: 4, height: 20, background: "#1B2B4B", borderRadius: 2 }} />
+                <span style={{ fontWeight: 700, fontSize: 14, color: "#1B2B4B" }}>서명</span>
+                {signed && <span style={{ marginLeft: "auto", fontSize: 11, color: "#059669", fontWeight: 700 }}>서명 완료</span>}
+              </div>
+              <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 10 }}>
+                아래 칸에 서명해주세요 (손가락으로 서명)
+              </div>
+              <canvas
+                ref={sigRef}
+                width={440}
+                height={120}
+                style={{ width: "100%", height: 120, border: "1.5px solid #cbd5e1", borderRadius: 10, background: "#f8fafc", touchAction: "none", display: "block" }}
+                onPointerDown={(e) => {
+                  setSigDrawing(true);
+                  const rect = sigRef.current.getBoundingClientRect();
+                  const ctx = sigRef.current.getContext("2d");
+                  const scaleX = sigRef.current.width / rect.width;
+                  const scaleY = sigRef.current.height / rect.height;
+                  ctx.beginPath();
+                  ctx.moveTo((e.clientX - rect.left) * scaleX, (e.clientY - rect.top) * scaleY);
+                  setSigned(true);
+                }}
+                onPointerMove={(e) => {
+                  if (!sigDrawing) return;
+                  const rect = sigRef.current.getBoundingClientRect();
+                  const ctx = sigRef.current.getContext("2d");
+                  const scaleX = sigRef.current.width / rect.width;
+                  const scaleY = sigRef.current.height / rect.height;
+                  ctx.lineWidth = 2.5;
+                  ctx.strokeStyle = "#1B2B4B";
+                  ctx.lineCap = "round";
+                  ctx.lineTo((e.clientX - rect.left) * scaleX, (e.clientY - rect.top) * scaleY);
+                  ctx.stroke();
+                }}
+                onPointerUp={() => setSigDrawing(false)}
+                onPointerLeave={() => setSigDrawing(false)}
+              />
+              <button
+                onClick={() => {
+                  const ctx = sigRef.current.getContext("2d");
+                  ctx.clearRect(0, 0, sigRef.current.width, sigRef.current.height);
+                  setSigned(false);
+                }}
+                style={{ marginTop: 8, padding: "6px 14px", borderRadius: 7, border: "1px solid #e2e8f0", background: "white", color: "#6b7280", fontSize: 12, cursor: "pointer" }}
+              >
+                다시 서명
+              </button>
             </div>
             {/* 업로드 영역 */}
             <div style={cardStyle}>
