@@ -6083,32 +6083,30 @@ ${order.차량번호} ${driverName} ${driverPhone}
 ${Number(order.청구운임 || 0).toLocaleString()}원 부가세별도 배차되었습니다.
 `.trim();
     }
-
-    else if (type === "driver") {
-  const carTypeText = String(order.차량종류 || order.차종 || "");
-  const isCold = carTypeText.includes("냉장") || carTypeText.includes("냉동");
-  const isBanchan = (order.거래처명 || "").includes("반찬단지");
-
-  // ── 공지 문구 조합 (PC와 동일)
-  const baseNotice = isCold ? COLD_NOTICE : NORMAL_NOTICE;
-  const BANCHAN_NOTICE = `[반찬단지 주의사항]
+  const BANCHAN_NOTICE_D = `[반찬단지 주의사항]
 - 안전화 착용 필수 (슬리퍼/크록스 금지)
 - 입차 시 지게차 기사님께 하차지명 말씀
 - 임원 주차장/사무동 옆 주차 금지, 도크 옆 주차`;
-  const DRIVER_NOTICE = isBanchan ? `${baseNotice}\n\n${BANCHAN_NOTICE}` : baseNotice;
+
+  const baseNotice = isCold ? COLD_NOTICE_D : NORMAL_NOTICE_D;
+  const DRIVER_NOTICE = isBanchan ? `${baseNotice}\n\n${BANCHAN_NOTICE_D}` : baseNotice;
 
   // ── 업로드 URL (PC와 동일)
   const uploadUrl = `${window.location.origin}/upload?id=${order._id || order.id}`;
 
-  // ── 날짜/시간
+  // ── 날짜/요일
   const yoil = order.상차일 ? getYoil(order.상차일) : "";
+
+  // ── 익일/지정일 하차 처리
   let dateNotice = "";
   let dropTimeText = order.하차시간 || "즉시";
   if (order.상차일 && order.하차일) {
     const s = new Date(order.상차일);
     const e = new Date(order.하차일);
-    const diff = (new Date(e.getFullYear(), e.getMonth(), e.getDate()) -
-      new Date(s.getFullYear(), s.getMonth(), s.getDate())) / (1000 * 60 * 60 * 24);
+    const diff = (
+      new Date(e.getFullYear(), e.getMonth(), e.getDate()) -
+      new Date(s.getFullYear(), s.getMonth(), s.getDate())
+    ) / (1000 * 60 * 60 * 24);
     if (diff >= 1) {
       const sText = `${s.getMonth()+1}/${s.getDate()}`;
       const eText = `${e.getMonth()+1}/${e.getDate()}`;
@@ -6119,11 +6117,21 @@ ${Number(order.청구운임 || 0).toLocaleString()}원 부가세별도 배차되
     }
   }
 
-  // ── 담당자
-  const pickupContact = buildManagerLine(order.상차지담당자, order.상차지담당자번호);
-  const dropContact   = buildManagerLine(order.하차지담당자, order.하차지담당자번호);
+  // ── 담당자 줄
+  const formatPhoneD = (v) => {
+    const d = String(v ?? "").replace(/\D/g, "");
+    if (d.length === 11) return d.replace(/(\d{3})(\d{4})(\d{4})/, "$1-$2-$3");
+    if (d.length === 10) return d.replace(/(\d{3})(\d{3})(\d{4})/, "$1-$2-$3");
+    return d;
+  };
+  const buildContactD = (name, phone) => {
+    if (!name && !phone) return null;
+    return phone ? `담당자 : ${name || ""} (${formatPhoneD(phone)})` : `담당자 : ${name}`;
+  };
+  const pickupContact = buildContactD(order.상차지담당자, order.상차지담당자번호);
+  const dropContact   = buildContactD(order.하차지담당자, order.하차지담당자번호);
 
-  // ── 경유지 (PC와 동일 구조)
+  // ── 경유지 파싱
   const _safeStops = (v) => {
     if (Array.isArray(v) && v.length > 0) return v;
     if (v && typeof v === "object" && !Array.isArray(v)) {
@@ -6133,34 +6141,32 @@ ${Number(order.청구운임 || 0).toLocaleString()}원 부가세별도 배차되
     }
     return [];
   };
-  const formatPhone = (value) => {
-    const digits = String(value ?? "").replace(/\D/g, "");
-    if (digits.length === 11) return digits.replace(/(\d{3})(\d{4})(\d{4})/, "$1-$2-$3");
-    if (digits.length === 10) return digits.replace(/(\d{3})(\d{3})(\d{4})/, "$1-$2-$3");
-    return digits;
-  };
+  const pickupStopsD = [
+    ..._safeStops(order.경유상차목록),
+    ..._safeStops(order.경유지_상차),
+  ].filter(s => s?.업체명?.trim());
+  const dropStopsD = [
+    ..._safeStops(order.경유하차목록),
+    ..._safeStops(order.경유지_하차),
+  ].filter(s => s?.업체명?.trim());
 
-  const pickupStopsD = [..._safeStops(order.경유상차목록), ..._safeStops(order.경유지_상차)]
-    .filter(s => s?.업체명?.trim());
-  const dropStopsD   = [..._safeStops(order.경유하차목록), ..._safeStops(order.경유지_하차)]
-    .filter(s => s?.업체명?.trim());
-
-  const pickupMainNumD  = pickupStopsD.length > 0 ? "1." : "";
-  const pickupStopsTextD = pickupStopsD.length > 0
+  const pickupMainNum = pickupStopsD.length > 0 ? "1." : "";
+  const pickupStopsText = pickupStopsD.length > 0
     ? pickupStopsD.map((s, i) =>
-        `${i+2}.상차경유지 : ${s.업체명 || "-"}\n${s.주소 || "-"}${s.담당자 ? `\n담당자 : ${s.담당자}${s.담당자번호 ? ` (${formatPhone(s.담당자번호)})` : ""}` : ""}${s.상차시간 ? `\n상차시간 : ${s.상차시간}` : ""}`
+        `${i+2}.상차경유지 : ${s.업체명 || "-"}\n${s.주소 || "-"}${s.담당자 ? `\n담당자 : ${s.담당자}${s.담당자번호 ? ` (${formatPhoneD(s.담당자번호)})` : ""}` : ""}${s.상차시간 ? `\n상차시간 : ${s.상차시간}` : ""}`
       ).join("\n") : "";
 
-  const dropMainNumD  = dropStopsD.length > 0 ? "1." : "";
-  const dropStopsTextD = dropStopsD.length > 0
+  const dropMainNum = dropStopsD.length > 0 ? "1." : "";
+  const dropStopsText = dropStopsD.length > 0
     ? dropStopsD.map((s, i) =>
-        `${i+2}.하차경유지 : ${s.업체명 || "-"}\n${s.주소 || "-"}${s.담당자 ? `\n담당자 : ${s.담당자}${s.담당자번호 ? ` (${formatPhone(s.담당자번호)})` : ""}` : ""}${s.하차시간 ? `\n하차시간 : ${s.하차시간}` : ""}`
+        `${i+2}.하차경유지 : ${s.업체명 || "-"}\n${s.주소 || "-"}${s.담당자 ? `\n담당자 : ${s.담당자}${s.담당자번호 ? ` (${formatPhoneD(s.담당자번호)})` : ""}` : ""}${s.하차시간 ? `\n하차시간 : ${s.하차시간}` : ""}`
       ).join("\n") : "";
 
   // ── 전달사항
   const driverNote = (order.전달사항 || "").trim();
   const driverNoteText = driverNote ? `\n\n📢 전달사항\n${driverNote}` : "";
 
+  // ── 최종 텍스트 (PC copyMessage driver와 100% 동일 구조)
   text = `[파렛전표/거래명세서 업로드]
 미 전송시 운임 지연 될 수 있습니다.
 (파렛전표/명세서없으면 미업로드)
@@ -6169,19 +6175,21 @@ ${uploadUrl}
 
 ${dateNotice}${order.상차일 || ""} ${yoil}
 
-${pickupMainNumD}상차 : ${order.상차지명 || "-"} / ${order.상차시간 || "즉시"}${order.상차시간기준 ? ` (${order.상차시간기준})` : ""}
+${pickupMainNum}상차 : ${order.상차지명 || "-"} / ${order.상차시간 || "즉시"}${order.상차시간기준 ? ` (${order.상차시간기준})` : ""}
 ${order.상차지주소 || ""}${pickupContact ? `\n${pickupContact}` : ""}
-상차방법 : ${order.상차방법 || "-"}${pickupStopsTextD ? `\n\n${pickupStopsTextD}` : ""}
+상차방법 : ${order.상차방법 || "-"}${pickupStopsText ? `\n\n${pickupStopsText}` : ""}
 
-${dropMainNumD}하차 : ${order.하차지명 || "-"} / ${dropTimeText}${order.하차시간기준 ? ` (${order.하차시간기준})` : ""}
+${dropMainNum}하차 : ${order.하차지명 || "-"} / ${dropTimeText}${order.하차시간기준 ? ` (${order.하차시간기준})` : ""}
 ${order.하차지주소 || ""}${dropContact ? `\n${dropContact}` : ""}
-하차방법 : ${order.하차방법 || "-"}${dropStopsTextD ? `\n\n${dropStopsTextD}` : ""}
+하차방법 : ${order.하차방법 || "-"}${dropStopsText ? `\n\n${dropStopsText}` : ""}
 
-화물 : ${order.차량톤수 || "-"}${order.화물내용 ? ` / ${order.화물내용}` : ""} ${order.차량종류 || order.차종 || ""}${driverNoteText}${isBanchan ? `\n\n${BANCHAN_NOTICE}` : ""}
+화물 : ${order.차량톤수 || "-"}${order.화물내용 ? ` / ${order.화물내용}` : ""} ${order.차량종류 || order.차종 || ""}${driverNoteText}
+
+${DRIVER_NOTICE}
 
 ※ 인수증(파렛전표) 서명 받은 후 업로드필수
 ※ 거래명세서/타코메타 기록지 함께 촬영업로드
-※ 서류/전표 없는 건이면 업로드 하지마세요.
+※ 서류/전표 없는 건이면 업로드 하지마세요
 ※ 미업로드 시 운임 지급 지연될 수 있습니다`.replace(/\n{3,}/g, "\n\n").trim();
 }
   /* ===============================
