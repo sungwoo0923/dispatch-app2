@@ -351,7 +351,6 @@ if (results.length > 0) {
                   type="file"
                   accept="image/*,application/pdf"
                   multiple
-                  capture="environment"
                   style={{ display: "none" }}
                   onChange={(e) => handleFiles(e.target.files)}
                 />
