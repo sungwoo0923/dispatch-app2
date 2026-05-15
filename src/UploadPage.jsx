@@ -32,6 +32,8 @@ export default function UploadPage() {
   const [uploaded, setUploaded]   = useState([]);
   const [drag, setDrag]           = useState(false);
   const inputRef                  = useRef(null);
+  const [checks, setChecks]       = useState([false, false, false, false]);
+  const allChecked                 = checks.every(Boolean);
 
   // ── URL에서 id 추출 & 오더 조회 ──────────────────────────
   useEffect(() => {
@@ -285,40 +287,52 @@ if (results.length > 0) {
               </div>
             </div>
 
-            {/* 안내 이미지 카드 */}
+            {/* 체크리스트 카드 */}
             <div style={cardStyle}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-                <div style={{ width: 4, height: 20, background: "#f59e0b", borderRadius: 2 }} />
-                <span style={{ fontWeight: 700, fontSize: 14, color: "#1B2B4B" }}>업로드 안내</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+                <div style={{ width: 4, height: 20, background: "#1B2B4B", borderRadius: 2 }} />
+                <span style={{ fontWeight: 700, fontSize: 14, color: "#1B2B4B" }}>업로드 전 확인사항</span>
+                <span style={{ marginLeft: "auto", fontSize: 11, fontWeight: 700, color: allChecked ? "#059669" : "#94a3b8" }}>
+                  {checks.filter(Boolean).length}/{checks.length} 완료
+                </span>
               </div>
-              <div style={{ background: "#f0f4f9", border: "1px solid #d1dce8", borderRadius: 10, padding: "14px 16px", marginBottom: 14, fontSize: 13, color: "#1e3a5f", lineHeight: 1.8 }}>
-                아래 서류를 <strong>한 장씩 선명하게</strong> 촬영하여 업로드해주세요:
-                <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 4 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#1B2B4B", flexShrink: 0, display: "inline-block" }} />
-                    <span>거래명세서</span>
+              {[
+                "거래명세서를 선명하게 촬영했습니다",
+                "파렛트 전표에 서명을 받았습니다 (필수)",
+                "타코메타 기록지를 촬영했습니다 (냉장/냉동)",
+                "상/하차 사진을 보관했습니다",
+              ].map((text, i) => (
+                <div key={i} onClick={() => setChecks(prev => { const n=[...prev]; n[i]=!n[i]; return n; })}
+                  style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px",
+                    borderRadius: 10, marginBottom: 8, cursor: "pointer",
+                    background: checks[i] ? "#f0fdf4" : "#f8fafc",
+                    border: `1.5px solid ${checks[i] ? "#86efac" : "#e2e8f0"}`,
+                    transition: "all 0.15s" }}>
+                  <div style={{ width: 22, height: 22, borderRadius: 6, flexShrink: 0,
+                    background: checks[i] ? "#1B2B4B" : "white",
+                    border: `2px solid ${checks[i] ? "#1B2B4B" : "#cbd5e1"}`,
+                    display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    {checks[i] && <span style={{ color: "white", fontSize: 13, fontWeight: 900, lineHeight: 1 }}>✓</span>}
                   </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#1B2B4B", borderRadius: 7, padding: "7px 12px" }}>
-                    <span style={{ color: "#fff", fontSize: 15 }}>⚠️</span>
-                    <span style={{ color: "#ffffff", fontWeight: 800, fontSize: 13 }}>파렛트 전표 — 반드시 서명 받은 후 업로드!</span>
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#1B2B4B", flexShrink: 0, display: "inline-block" }} />
-                    <span>타코메타 기록지 (냉장/냉동 시)</span>
-                  </div>
+                  <span style={{ fontSize: 13, color: checks[i] ? "#166534" : "#374151",
+                    fontWeight: checks[i] ? 700 : 400 }}>{text}</span>
                 </div>
-              </div>
-              <div style={{ borderRadius: 10, overflow: "hidden", border: "1px solid #e2e8f0" }}>
-                <img
-                  src="/거래명세서.png"
-                  alt="거래명세서 예시"
-                  style={{ width: "100%", display: "block" }}
-                  onError={(e) => { e.target.style.display = "none"; }}
-                />
-              </div>
-              <div style={{ textAlign: "center", marginTop: 8, fontSize: 12, color: "#94a3b8" }}>▲ 거래명세서 예시 (이와 같이 선명하게 촬영)</div>
+              ))}
+              {!allChecked && (
+                <div style={{ textAlign: "center", marginTop: 4, fontSize: 12, color: "#94a3b8" }}>
+                  모든 항목 확인 후 업로드할 수 있습니다
+                </div>
+              )}
             </div>
 
+            {/* 거래명세서 예시 */}
+            <div style={cardStyle}>
+              <div style={{ borderRadius: 10, overflow: "hidden", border: "1px solid #e2e8f0" }}>
+                <img src="/거래명세서.png" alt="거래명세서 예시" style={{ width: "100%", display: "block" }}
+                  onError={(e) => { e.target.style.display = "none"; }} />
+              </div>
+              <div style={{ textAlign: "center", marginTop: 8, fontSize: 12, color: "#94a3b8" }}>거래명세서 예시</div>
+            </div>
             {/* 업로드 영역 */}
             <div style={cardStyle}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
@@ -396,16 +410,22 @@ if (results.length > 0) {
               )}
 
               {/* 업로드 버튼 */}
+           {files.length > 0 && !allChecked && (
+                <div style={{ textAlign: "center", padding: "10px 0 4px", fontSize: 13, color: "#ef4444", fontWeight: 600 }}>
+                  위 확인사항을 모두 체크해주세요
+                </div>
+              )}
               {files.length > 0 && (
                 <button
                   onClick={handleUpload}
-                  disabled={uploading}
+                  disabled={uploading || !allChecked}
                   style={{
                     width: "100%",
                     padding: "14px",
                     borderRadius: 12,
                     border: "none",
-                    background: uploading ? "#94a3b8" : "#1B2B4B",
+                    background: uploading ? "#94a3b8" : !allChecked ? "#cbd5e1" : "#1B2B4B",
+                    opacity: !allChecked ? 0.7 : 1,
                     color: "white",
                     fontWeight: 700,
                     fontSize: 15,
