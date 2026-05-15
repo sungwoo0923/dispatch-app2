@@ -2626,6 +2626,9 @@ setOpenMemo={setOpenMemo}
         {page === "detail" && selectedOrder && (
           <MobileOrderDetail
             order={selectedOrder}
+            onOrderUpdate={(id, patch) => {
+    setOrders(prev => prev.map(o => (o.id === id || o._id === id) ? { ...o, ...patch } : o));
+  }}
             drivers={drivers}
             onDuplicate={handleOrderDuplicate}
             onAssignDriver={assignDriver}
@@ -3763,6 +3766,7 @@ const SmartTextarea = React.memo(function SmartTextarea({ onSearch, textareaRef 
 
 function MobileOrderDetail({
   order,
+  onOrderUpdate,
   drivers,
   onDuplicate,
   onAssignDriver,
@@ -3797,8 +3801,10 @@ function MobileOrderDetail({
   const claim = getClaim(order);
   const sanjae = getSanjae(order);
   const state = getStatus(order);
-  const isDelivered =
-    order?.업체전달상태 === "전달완료" || order?.정보전달완료 === true;
+const [localDelivered, setLocalDelivered] = React.useState(
+    order?.업체전달상태 === "전달완료" || order?.정보전달완료 === true
+  );
+  const isDelivered = localDelivered;
 
 const pickupTimeText = order.상차시간
     ? `${order.상차시간}${order.상차시간기준 ? ` ${order.상차시간기준}` : ""}`
@@ -4443,9 +4449,16 @@ const handleAssignClick = () => {
               <button onClick={() => setConfirmDeliver(false)} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 text-sm font-semibold">아니오</button>
               <button
                 onClick={async () => {
-                  await updateDoc(doc(db, order.__col || collName, order.id), { 업체전달상태: "전달완료", 전달완료일시: serverTimestamp(), 정보전달완료: true, 정보전달상태: "전달완료" });
+                 // ✅ 즉시 UI 반영
                   setConfirmDeliver(false);
+                  setLocalDelivered(true);
                   showToast("전달완료 처리되었습니다");
+                  // 부모 orders 즉시 업데이트
+                  if (typeof onOrderUpdate === "function") {
+                    onOrderUpdate(order.id, { 업체전달상태: "전달완료", 정보전달완료: true, 정보전달상태: "전달완료" });
+                  }
+                  // 백그라운드 저장
+                  updateDoc(doc(db, order.__col || collName, order.id), { 업체전달상태: "전달완료", 전달완료일시: serverTimestamp(), 정보전달완료: true, 정보전달상태: "전달완료" }).catch(console.error);
                 }}
                 className="flex-1 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-bold"
               >확인</button>
@@ -4462,10 +4475,16 @@ const handleAssignClick = () => {
             <div className="flex gap-2">
               <button onClick={() => setConfirmUndoDeliver(false)} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 text-sm font-semibold">아니오</button>
               <button
-                onClick={async () => {
-                  await updateDoc(doc(db, order.__col || collName, order.id), { 업체전달상태: "미전달", 정보전달완료: false, 정보전달상태: "미전달", 전달완료일시: null });
+               onClick={async () => {
+               // ✅ 즉시 UI 반영
                   setConfirmUndoDeliver(false);
+                  setLocalDelivered(false);
                   showToast("미전달로 되돌렸습니다");
+                  if (typeof onOrderUpdate === "function") {
+                    onOrderUpdate(order.id, { 업체전달상태: "미전달", 정보전달완료: false, 정보전달상태: "미전달", 전달완료일시: null });
+                  }
+                  // 백그라운드 저장
+                  updateDoc(doc(db, order.__col || collName, order.id), { 업체전달상태: "미전달", 정보전달완료: false, 정보전달상태: "미전달", 전달완료일시: null }).catch(console.error);
                 }}
                 className="flex-1 py-2.5 rounded-xl bg-red-500 text-white text-sm font-bold"
               >확인</button>

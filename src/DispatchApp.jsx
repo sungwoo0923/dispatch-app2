@@ -10513,28 +10513,27 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
 }
 // ===================== /StopEditModal =====================
 function DeliveryStatusBadge({ row, onConfirm }) {
-
   const status = row.업체전달상태 || "미전달";
-
-const styleMap = {
-  미전달: "bg-gray-500 text-white",
-  전달완료: "bg-emerald-600 text-white",
-};
+  const isOn = status === "전달완료";
 
   return (
-    <button
-      type="button"
-      className={`px-3 py-1 rounded-lg text-[13px] font-bold ${styleMap[status]}`}
-      onClick={() => {
-        onConfirm({
+    <div className="flex flex-col items-center gap-0.5">
+      <button
+        type="button"
+        onClick={() => onConfirm({
           rowId: row._id,
           before: status,
-          after: status === "전달완료" ? "미전달" : "전달완료",
-        });
-      }}
-    >
-      {status}
-    </button>
+          after: isOn ? "미전달" : "전달완료",
+        })}
+        className={`relative w-11 h-6 rounded-full transition-colors duration-200 focus:outline-none ${isOn ? "bg-emerald-500" : "bg-gray-300"}`}
+        title={isOn ? "전달완료 → 클릭 시 미전달" : "미전달 → 클릭 시 전달완료"}
+      >
+        <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200 ${isOn ? "translate-x-5" : "translate-x-0"}`} />
+      </button>
+      <span className={`text-[9px] font-bold ${isOn ? "text-emerald-600" : "text-gray-400"}`}>
+        {status}
+      </span>
+    </div>
   );
 }
 function StopCountBadge({ count }) {
@@ -13820,8 +13819,7 @@ const head = isDark
                 "배차방식",
                 "메모",
                 "전달사항",
-                "첨부",
-                "공유",
+               "첨부",
                 "전달상태",
               ].map((h) => (
                 <th key={h} className={head}>
@@ -14224,16 +14222,6 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
                           {r.attachCount}
                         </span>
                       )}
-                    </button>
-                  </td>
-
-                  {/* 공유 */}
-                  <td className={cell}>
-                    <button
-                      onClick={() => shareDispatch(r)}
-                      className="bg-blue-600 text-white px-3 py-1 rounded"
-                    >
-                      공유
                     </button>
                   </td>
                   {/* 전달상태 */}
@@ -21196,49 +21184,37 @@ onBlur={(e) => {
                       )}
                     </button>
                   </td>
-                  {/* 전달상태 (버튼) */}
-                  <td className="border text-center whitespace-nowrap">
+                  {/* 전달상태 (슬라이드 토글) */}
+                  <td className="border text-center whitespace-nowrap px-2">
                     {(() => {
                       const today = todayKST();
-                      const d =
-                        row?.상차일자 ||
-                        row?.상차일 ||
-                        row?.상차 ||
-                        "";
-
-                      const deliveryStatus =
-                        row.업체전달상태
-                          ? row.업체전달상태
-                          : d && d < today
-                            ? "전달완료"
-                            : "미전달";
+                      const d = row?.상차일자 || row?.상차일 || row?.상차 || "";
+                      const deliveryStatus = row.업체전달상태
+                        ? row.업체전달상태
+                        : d && d < today ? "전달완료" : "미전달";
+                      const isOn = deliveryStatus === "전달완료";
 
                       return (
-                        <button
-                        className={`px-3 py-1 rounded-lg text-[13px] font-bold
-          ${deliveryStatus === "전달완료"
-                              ? "bg-emerald-600 text-white"
-                              : "bg-gray-500 text-white"
-                            }`}
-                          onClick={() => {
-                            const next =
-                              deliveryStatus === "전달완료" ? "미전달" : "전달완료";
-
-                            setConfirmChange({
+                        <div className="flex flex-col items-center gap-0.5">
+                          <button
+                            type="button"
+                            onClick={() => setConfirmChange({
                               id,
                               field: "업체전달상태",
                               before: deliveryStatus,
-                              after: next,
-                            });
-                          }}
-                        >
-                          {deliveryStatus}
-                        </button>
+                              after: isOn ? "미전달" : "전달완료",
+                            })}
+                            className={`relative w-11 h-6 rounded-full transition-colors duration-200 focus:outline-none ${isOn ? "bg-emerald-500" : "bg-gray-300"}`}
+                          >
+                            <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200 ${isOn ? "translate-x-5" : "translate-x-0"}`} />
+                          </button>
+                          <span className={`text-[9px] font-bold ${isOn ? "text-emerald-600" : "text-gray-400"}`}>
+                            {deliveryStatus}
+                          </span>
+                        </div>
                       );
                     })()}
                   </td>
-
-
                 </tr>
               );
             })}
@@ -25120,6 +25096,7 @@ function NewOrderPopup({
 // ===================== DispatchApp.jsx (PART 6/8 — Settlement Premium) — START =====================
 function Settlement({ dispatchData, fixedRows = [], clients = [], places = [] }) {
 
+  const [activeTab, setActiveTab] = React.useState("overview"); // overview | client_compare
   const [rangeStart, setRangeStart] = React.useState("2026-01");
   const [rangeEnd, setRangeEnd] = React.useState("2026-02");
   const [rangeClients, setRangeClients] = React.useState([]);
@@ -25487,8 +25464,53 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [] })
           </div>
         </div>
       </div>
+{/* ================= 탭 네비게이션 ================= */}
+      <div className="px-8 border-b border-gray-200 bg-white flex items-center">
+        <div className="flex gap-0">
+          {[
+            { key: "overview", label: "매출 개요" },
+            { key: "client_compare", label: "거래처 동향 분석" },
+          ].map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={`px-5 py-3 text-[13px] font-semibold border-b-2 transition-colors ${
+                activeTab === tab.key
+                  ? "border-[#1B2B4B] text-[#1B2B4B]"
+                  : "border-transparent text-gray-400 hover:text-gray-600"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+        <div className="ml-auto">
+          <div className="bg-white rounded-xl border border-gray-200 px-4 py-2 flex items-center gap-3">
+            <span className="text-[12px] text-gray-500">당월 수익률</span>
+            <span className={`text-[16px] font-bold ${monthProfitRate >= 15 ? "text-emerald-600" : monthProfitRate >= 10 ? "text-blue-600" : "text-rose-600"}`}>
+              {monthProfitRate.toFixed(1)}%
+            </span>
+            <div className="w-px h-5 bg-gray-200" />
+            <span className="text-[12px] text-gray-500">당월 수익</span>
+            <span className="text-[16px] font-bold text-emerald-600">
+              {monthProfit.toLocaleString()}원
+            </span>
+          </div>
+        </div>
+      </div>
 
-      {/* ================= 콘텐츠 영역 ================= */}
+
+      {/* ================= 거래처 동향 분석 탭 ================= */}
+      {activeTab === "client_compare" && (
+        <ClientCompareDashboard
+          dispatchData={dispatchData}
+          places={places}
+          fixedRows={fixedRows}
+          clients={clients}
+        />
+      )}
+{/* ================= 매출 개요 탭 ================= */}
+      {activeTab === "overview" && (
       <div className="px-8 py-6 grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
 
         {/* ================= LEFT PANEL ================= */}
@@ -25638,23 +25660,9 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [] })
         {/* ================= RIGHT PANEL ================= */}
         <div className="flex flex-col gap-6 flex-1">
 
-          {/* 상단 퀵뷰 */}
-          <div className="flex items-center justify-end">
-            <div className="bg-white rounded-xl border border-gray-200 px-4 py-2 flex items-center gap-3">
-              <span className="text-[12px] text-gray-500">당월 수익률</span>
-              <span className={`text-[16px] font-bold ${monthProfitRate >= 15 ? "text-emerald-600" : monthProfitRate >= 10 ? "text-blue-600" : "text-rose-600"}`}>
-                {monthProfitRate.toFixed(1)}%
-              </span>
-              <div className="w-px h-5 bg-gray-200" />
-              <span className="text-[12px] text-gray-500">당월 수익</span>
-              <span className="text-[16px] font-bold text-emerald-600">
-                {monthProfit.toLocaleString()}원
-              </span>
-            </div>
-          </div>
-
           {/* 연간 요약 차트 */}
           <div className="flex-1 space-y-6">
+
             <YearlySummaryChart
               rows={rows}
               year={selectedYear}
@@ -25751,7 +25759,8 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [] })
           />
         )}
 
-      </div>
+</div>
+      )} {/* overview tab end */}
     </div>
   );
 }
@@ -26474,7 +26483,362 @@ function SettlementDetailPopup({ client, rows = [], onClose }) {
     </div>
   );
 }
+// ===================== 거래처 동향 분석 대시보드 =====================
+function ClientCompareDashboard({ dispatchData = [], places = [], fixedRows = [], clients = [] }) {
+  const toInt = (v) => parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
 
+  // 오늘 기준 날짜 계산
+  const today = new Date();
+  const todayStr = today.toISOString().slice(0, 10);
+  const todayDay = String(today.getDate()).padStart(2, "0");
+
+  const curYear  = today.getFullYear();
+  const curMonth = today.getMonth() + 1;
+
+  // 전월
+  const prevMonthDate = new Date(curYear, curMonth - 2, 1);
+  const prevYear  = prevMonthDate.getFullYear();
+  const prevMonth = prevMonthDate.getMonth() + 1;
+  const prevMonthKey = `${prevYear}-${String(prevMonth).padStart(2, "0")}`;
+  const curMonthKey  = `${curYear}-${String(curMonth).padStart(2, "0")}`;
+  const lastYearKey  = `${curYear - 1}-${String(curMonth).padStart(2, "0")}`;
+
+  // 당월 같은 날짜
+  const prevMonthSameDayMax = new Date(prevYear, prevMonth, 0).getDate();
+  const sameDayPrev = Math.min(today.getDate(), prevMonthSameDayMax);
+  const prevSameDayStr  = `${prevMonthKey}-${String(sameDayPrev).padStart(2, "0")}`;
+  const lastYearSameDayStr = `${lastYearKey}-${todayDay}`;
+
+  // 검색/필터
+  const [search, setSearch] = React.useState("");
+  const [sortKey, setSortKey] = React.useState("curSale");
+  const [sortDir, setSortDir] = React.useState("desc");
+  const [selectedClient, setSelectedClient] = React.useState(null);
+
+// 기본 거래처 업체명만 추출
+  const clientNames = React.useMemo(() => {
+    return Array.from(new Set(
+      (clients || []).map(c => c.거래처명?.trim()).filter(Boolean)
+    )).sort();
+  }, [clients]);
+
+  // dispatchData + fixedRows 병합
+  const allRows = React.useMemo(() => {
+    const fixed = (fixedRows || []).map(r => ({
+      상차일: r.날짜,
+      거래처명: r.거래처명 || "",
+      하차지명: r.도착지 || "",
+      청구운임: toInt(r.청구운임),
+      기사운임: toInt(r.기사운임),
+      배차상태: "배차완료",
+    }));
+    return [...(dispatchData || []).filter(r => r.배차상태 === "배차완료"), ...fixed];
+  }, [dispatchData, fixedRows]);
+
+  // 특정 기간 데이터
+  const getRows = (startKey, endKey) =>
+    allRows.filter(r => r.상차일 >= startKey && r.상차일 <= endKey);
+
+  const curRows    = getRows(`${curMonthKey}-01`, todayStr);
+  const prevRows   = getRows(`${prevMonthKey}-01`, prevSameDayStr);
+  const lastYearRows = getRows(`${lastYearKey}-01`, lastYearSameDayStr);
+
+  // 거래처별 집계
+const aggregate = (rows) => {
+    const map = {};
+    rows.forEach(r => {
+      const name = r.거래처명?.trim() || "";
+      if (!name) return;
+      if (!map[name]) map[name] = { sale: 0, driver: 0, cnt: 0 };
+      map[name].sale   += toInt(r.청구운임);
+      map[name].driver += toInt(r.기사운임);
+      map[name].cnt    += 1;
+    });
+    return map;
+  };
+
+  const curMap      = aggregate(curRows);
+  const prevMap     = aggregate(prevRows);
+  const lastYearMap = aggregate(lastYearRows);
+
+  // places 업체만 필터 후 비교 데이터 생성
+const tableData = React.useMemo(() => {
+    return clientNames
+      .filter(name => !search || name.toLowerCase().includes(search.toLowerCase()))
+      .map(name => {
+        const cur  = curMap[name]      || { sale: 0, driver: 0, cnt: 0 };
+        const prev = prevMap[name]     || { sale: 0, driver: 0, cnt: 0 };
+        const ly   = lastYearMap[name] || { sale: 0, driver: 0, cnt: 0 };
+        const curProfit  = cur.sale  - cur.driver;
+        const prevProfit = prev.sale - prev.driver;
+        const lyProfit   = ly.sale   - ly.driver;
+        const saleDiff   = cur.sale  - prev.sale;
+        const saleDiffLY = cur.sale  - ly.sale;
+        return {
+          name, curSale: cur.sale, curProfit, curCnt: cur.cnt,
+          prevSale: prev.sale, prevProfit, prevCnt: prev.cnt,
+          lySale: ly.sale, lyProfit, lyCnt: ly.cnt,
+          saleDiff, saleDiffLY,
+          trend: cur.sale > prev.sale ? "up" : cur.sale < prev.sale ? "down" : "flat",
+        };
+      })
+      .sort((a, b) => {
+        const v = (sortDir === "desc" ? -1 : 1);
+        return (a[sortKey] - b[sortKey]) * v;
+      });
+}, [clientNames, search, sortKey, sortDir, curMap, prevMap, lastYearMap]);
+
+  const won = (n) => n ? `${n.toLocaleString()}` : "—";
+  const diff = (n) => {
+    if (!n) return <span className="text-gray-300">—</span>;
+    return (
+      <span className={n > 0 ? "text-emerald-600" : "text-rose-500"}>
+        {n > 0 ? "+" : ""}{n.toLocaleString()}
+      </span>
+    );
+  };
+
+  const toggleSort = (key) => {
+    if (sortKey === key) setSortDir(d => d === "desc" ? "asc" : "desc");
+    else { setSortKey(key); setSortDir("desc"); }
+  };
+
+  const SortTh = ({ k, label }) => (
+    <th
+      className="border-b border-gray-200 px-3 py-3 text-[12px] font-bold text-gray-500 cursor-pointer select-none hover:text-[#1B2B4B] whitespace-nowrap"
+      onClick={() => toggleSort(k)}
+    >
+      {label} {sortKey === k ? (sortDir === "desc" ? "↓" : "↑") : ""}
+    </th>
+  );
+
+  // 요약 KPI
+  const totalCur  = curRows.reduce((a, r) => a + toInt(r.청구운임), 0);
+  const totalPrev = prevRows.reduce((a, r) => a + toInt(r.청구운임), 0);
+  const totalLY   = lastYearRows.reduce((a, r) => a + toInt(r.청구운임), 0);
+  const activeClients = tableData.filter(r => r.curSale > 0).length;
+  const newClients    = tableData.filter(r => r.curSale > 0 && r.prevSale === 0).length;
+  const dropClients   = tableData.filter(r => r.curSale === 0 && r.prevSale > 0).length;
+
+  return (
+    <div className="px-8 py-6 space-y-6">
+
+      {/* ── KPI 헤더 ── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {[
+          { label: `당월 누계 (${curMonthKey})`, value: `${totalCur.toLocaleString()}원`, sub: `전월 대비 ${totalCur - totalPrev >= 0 ? "+" : ""}${(totalCur - totalPrev).toLocaleString()}원`, color: "text-[#1B2B4B]" },
+          { label: `전월 동기 (${prevMonthKey})`, value: `${totalPrev.toLocaleString()}원`, color: "text-gray-600" },
+          { label: `작년 동월 (${lastYearKey})`, value: `${totalLY.toLocaleString()}원`, sub: `YoY ${totalCur - totalLY >= 0 ? "+" : ""}${(totalCur - totalLY).toLocaleString()}원`, color: "text-gray-600" },
+          { label: "거래처 현황", value: `${activeClients}개 활성`, sub: `신규 ${newClients}개 / 중단 ${dropClients}개`, color: "text-[#1B2B4B]" },
+        ].map((kpi, i) => (
+          <div key={i} className="bg-white rounded-xl border border-gray-200 px-5 py-4 shadow-sm">
+            <div className="text-[11px] font-semibold text-gray-400 mb-1">{kpi.label}</div>
+            <div className={`text-[18px] font-bold ${kpi.color}`}>{kpi.value}</div>
+            {kpi.sub && <div className="text-[11px] text-gray-400 mt-1">{kpi.sub}</div>}
+          </div>
+        ))}
+      </div>
+
+      {/* ── 검색 & 기준 안내 ── */}
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex items-center gap-3">
+          <input
+            type="text"
+            placeholder="거래처 검색..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-[220px] focus:outline-none focus:border-[#1B2B4B]"
+          />
+          <div className="text-[12px] text-gray-400">
+            {tableData.length}개 거래처
+          </div>
+        </div>
+        <div className="text-[12px] text-gray-400 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+          기준: 당월 1일 ~ {todayStr} / 전월 1일 ~ {prevSameDayStr} / 작년 1일 ~ {lastYearSameDayStr}
+        </div>
+      </div>
+
+      {/* ── 메인 테이블 ── */}
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+        <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
+          <div>
+            <h3 className="text-[15px] font-bold text-white">하차지 거래처별 동기간 비교</h3>
+            <p className="text-[11px] text-white/50 mt-0.5">클릭하면 상세 추이를 확인합니다</p>
+          </div>
+          <div className="text-[11px] text-white/40 flex gap-4">
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-400 inline-block"/>전월 대비 증가</span>
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rose-400 inline-block"/>전월 대비 감소</span>
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-[13px] border-collapse">
+            <thead>
+              <tr className="bg-gray-50 text-center">
+                <th className="border-b border-gray-200 px-3 py-3 text-[12px] font-bold text-gray-500 text-left sticky left-0 bg-gray-50">거래처</th>
+                <th colSpan={3} className="border-b border-l border-gray-200 px-3 py-2 text-[11px] font-bold text-[#1B2B4B] bg-[#1B2B4B]/5">당월</th>
+                <th colSpan={3} className="border-b border-l border-gray-200 px-3 py-2 text-[11px] font-bold text-gray-500 bg-gray-50">전월 동기</th>
+                <th colSpan={3} className="border-b border-l border-gray-200 px-3 py-2 text-[11px] font-bold text-gray-500 bg-gray-50">작년 동월</th>
+                <th colSpan={2} className="border-b border-l border-gray-200 px-3 py-2 text-[11px] font-bold text-indigo-600 bg-indigo-50">증감</th>
+              </tr>
+              <tr className="bg-gray-50 text-center">
+                <th className="border-b border-gray-200 px-3 py-2 text-left sticky left-0 bg-gray-50 text-[11px] text-gray-400">전체 {clientNames.length}개</th>
+
+                <SortTh k="curSale"   label="매출" />
+                <SortTh k="curProfit" label="수익" />
+                <SortTh k="curCnt"    label="건수" />
+                <th className="border-b border-l border-gray-200 px-3 py-2 text-[11px] font-medium text-gray-400">매출</th>
+                <th className="border-b border-gray-200 px-3 py-2 text-[11px] font-medium text-gray-400">수익</th>
+                <th className="border-b border-gray-200 px-3 py-2 text-[11px] font-medium text-gray-400">건수</th>
+                <th className="border-b border-l border-gray-200 px-3 py-2 text-[11px] font-medium text-gray-400">매출</th>
+                <th className="border-b border-gray-200 px-3 py-2 text-[11px] font-medium text-gray-400">수익</th>
+                <th className="border-b border-gray-200 px-3 py-2 text-[11px] font-medium text-gray-400">건수</th>
+                <SortTh k="saleDiff"   label="전월比" />
+                <SortTh k="saleDiffLY" label="작년比" />
+              </tr>
+            </thead>
+            <tbody>
+              {tableData.map((r) => {
+                const isActive = r.curSale > 0;
+                const barWidth = tableData.length ? Math.min((r.curSale / Math.max(...tableData.map(x => x.curSale), 1)) * 100, 100) : 0;
+                return (
+                  <tr
+                    key={r.name}
+                    className={`border-b border-gray-100 cursor-pointer transition-colors ${
+                      selectedClient === r.name ? "bg-[#1B2B4B]/5" : "hover:bg-gray-50"
+                    } ${!isActive ? "opacity-40" : ""}`}
+                    onClick={() => setSelectedClient(prev => prev === r.name ? null : r.name)}
+                  >
+                    <td className="px-3 py-3 font-semibold text-[#1B2B4B] sticky left-0 bg-inherit whitespace-nowrap">
+                      <div className="flex items-center gap-2">
+                        <div
+                          className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                            r.trend === "up" ? "bg-emerald-500" : r.trend === "down" ? "bg-rose-400" : "bg-gray-300"
+                          }`}
+                        />
+                        {r.name}
+                      </div>
+                      {/* 미니 바차트 */}
+                      <div className="mt-1 h-1 bg-gray-100 rounded-full w-[80px]">
+                        <div className="h-1 bg-[#1B2B4B]/30 rounded-full transition-all" style={{ width: `${barWidth}%` }} />
+                      </div>
+                    </td>
+                    <td className="px-3 py-3 text-center font-bold text-[#1B2B4B]">{won(r.curSale)}</td>
+                    <td className="px-3 py-3 text-center text-emerald-600 font-semibold">{won(r.curProfit)}</td>
+                    <td className="px-3 py-3 text-center text-gray-600">{r.curCnt || "—"}</td>
+                    <td className="px-3 py-3 text-center text-gray-500 border-l border-gray-100">{won(r.prevSale)}</td>
+                    <td className="px-3 py-3 text-center text-gray-400">{won(r.prevProfit)}</td>
+                    <td className="px-3 py-3 text-center text-gray-400">{r.prevCnt || "—"}</td>
+                    <td className="px-3 py-3 text-center text-gray-500 border-l border-gray-100">{won(r.lySale)}</td>
+                    <td className="px-3 py-3 text-center text-gray-400">{won(r.lyProfit)}</td>
+                    <td className="px-3 py-3 text-center text-gray-400">{r.lyCnt || "—"}</td>
+                    <td className="px-3 py-3 text-center border-l border-gray-100">{diff(r.saleDiff)}</td>
+                    <td className="px-3 py-3 text-center">{diff(r.saleDiffLY)}</td>
+                  </tr>
+                );
+              })}
+              {!tableData.length && (
+                <tr><td colSpan={12} className="text-center text-gray-400 py-16 text-[14px]">등록된 하차지 거래처가 없습니다</td></tr>
+              )}
+            </tbody>
+            {/* 합계 행 */}
+            {tableData.length > 0 && (() => {
+              const s = tableData.reduce((a, r) => ({
+                cur: a.cur + r.curSale, curP: a.curP + r.curProfit, curC: a.curC + r.curCnt,
+                prev: a.prev + r.prevSale, prevP: a.prevP + r.prevProfit, prevC: a.prevC + r.prevCnt,
+                ly: a.ly + r.lySale, lyP: a.lyP + r.lyProfit, lyC: a.lyC + r.lyCnt,
+              }), { cur: 0, curP: 0, curC: 0, prev: 0, prevP: 0, prevC: 0, ly: 0, lyP: 0, lyC: 0 });
+              return (
+                <tfoot>
+                  <tr className="bg-[#1B2B4B]/5 font-bold text-[13px] text-center border-t-2 border-[#1B2B4B]/20">
+                    <td className="px-3 py-3 text-left text-[#1B2B4B] sticky left-0 bg-[#1B2B4B]/5">합계</td>
+                    <td className="px-3 py-3 text-[#1B2B4B]">{s.cur.toLocaleString()}</td>
+                    <td className="px-3 py-3 text-emerald-700">{s.curP.toLocaleString()}</td>
+                    <td className="px-3 py-3">{s.curC}</td>
+                    <td className="px-3 py-3 border-l border-gray-200">{s.prev.toLocaleString()}</td>
+                    <td className="px-3 py-3">{s.prevP.toLocaleString()}</td>
+                    <td className="px-3 py-3">{s.prevC}</td>
+                    <td className="px-3 py-3 border-l border-gray-200">{s.ly.toLocaleString()}</td>
+                    <td className="px-3 py-3">{s.lyP.toLocaleString()}</td>
+                    <td className="px-3 py-3">{s.lyC}</td>
+                    <td className="px-3 py-3 border-l border-gray-200">{diff(s.cur - s.prev)}</td>
+                    <td className="px-3 py-3">{diff(s.cur - s.ly)}</td>
+                  </tr>
+                </tfoot>
+              );
+            })()}
+          </table>
+        </div>
+      </div>
+
+      {/* ── 선택된 거래처 상세 추이 ── */}
+      {selectedClient && (() => {
+        const clientAllRows = allRows.filter(r =>
+          (r.하차지명?.trim() || r.거래처명?.trim()) === selectedClient
+        );
+        const monthly = {};
+        clientAllRows.forEach(r => {
+          const ym = (r.상차일 || "").slice(0, 7);
+          if (!ym) return;
+          if (!monthly[ym]) monthly[ym] = { sale: 0, profit: 0, cnt: 0 };
+          monthly[ym].sale   += toInt(r.청구운임);
+          monthly[ym].profit += toInt(r.청구운임) - toInt(r.기사운임);
+          monthly[ym].cnt    += 1;
+        });
+        const sortedMonths = Object.keys(monthly).sort().slice(-12);
+        const maxSale = Math.max(...sortedMonths.map(m => monthly[m].sale), 1);
+
+        return (
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+            <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
+              <div>
+                <h3 className="text-[15px] font-bold text-white">{selectedClient} 월별 추이</h3>
+                <p className="text-[11px] text-white/50 mt-0.5">최근 12개월</p>
+              </div>
+              <button onClick={() => setSelectedClient(null)} className="w-7 h-7 bg-white/10 hover:bg-white/20 rounded-lg text-white text-lg flex items-center justify-center transition">×</button>
+            </div>
+            <div className="p-6">
+              <div className="flex items-end gap-2 h-[120px] mb-3">
+                {sortedMonths.map(ym => {
+                  const d = monthly[ym];
+                  const h = Math.max((d.sale / maxSale) * 100, 2);
+                  const isCurrentMonth = ym === curMonthKey;
+                  return (
+                    <div key={ym} className="flex-1 flex flex-col items-center gap-1 group relative">
+                      <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-[#1B2B4B] text-white text-[10px] rounded px-2 py-1 whitespace-nowrap opacity-0 group-hover:opacity-100 transition z-10 pointer-events-none">
+                        {d.sale.toLocaleString()}원
+                      </div>
+                      <div
+                        className={`w-full rounded-t transition-all ${isCurrentMonth ? "bg-[#1B2B4B]" : "bg-[#1B2B4B]/25 group-hover:bg-[#1B2B4B]/50"}`}
+                        style={{ height: `${h}%` }}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="flex gap-2">
+                {sortedMonths.map(ym => (
+                  <div key={ym} className="flex-1 text-center text-[10px] text-gray-400 truncate">{ym.slice(5)}월</div>
+                ))}
+              </div>
+              <div className="mt-4 grid grid-cols-3 gap-3 text-center">
+                {[
+                  { label: "당월 매출", v: (curMap[selectedClient] || {}).sale || 0, color: "text-[#1B2B4B]" },
+                  { label: "전월 매출", v: (prevMap[selectedClient] || {}).sale || 0, color: "text-gray-500" },
+                  { label: "작년 동월", v: (lastYearMap[selectedClient] || {}).sale || 0, color: "text-gray-400" },
+                ].map((item, i) => (
+                  <div key={i} className="bg-gray-50 rounded-xl px-3 py-3 border border-gray-100">
+                    <div className="text-[11px] text-gray-400 mb-1">{item.label}</div>
+                    <div className={`text-[15px] font-bold ${item.color}`}>{item.v ? item.v.toLocaleString() + "원" : "—"}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+    </div>
+  );
+}
 // ===================== DispatchApp.jsx (PART 6/8 — END) =====================
 
 // ===================== DispatchApp.jsx (PART 7/8 — 미배차현황) =====================
