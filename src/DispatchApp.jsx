@@ -11257,11 +11257,9 @@ ${fare.toLocaleString()}원 ${payLabel} 배차되었습니다.`;
 };
 
   // 이미 본 알림(id 저장)
-  const [seenAlerts, setSeenAlerts] = React.useState(() => {
-    return new Set(JSON.parse(localStorage.getItem("seenAlerts") || "[]"));
-  });
-  // 🔔 이전 첨부 개수 저장
-  const prevAttachRef = React.useRef({});
+// 🔔 알림 시스템
+  const prevAttachRef = React.useRef({});      // 이전 attachCount 기억
+  const viewedAttachRef = React.useRef({});    // 사용자가 열어본 attachCount 기억
   const [filterValue, setFilterValue] = React.useState("");
 // ✅ 배차상태 우선순위: 배차중 -> 배차완료 -> 배차취소(맨 아래)
 // ✅ 배차상태 우선순위: 배차중 -> 배차완료 -> 배차취소(맨 아래)
@@ -11808,62 +11806,49 @@ React.useEffect(() => {
   );
 }, [edited]);
   // ========================
-  // 🔔 파일 업로드 감지 (이미 본 건 다시 안 뜸)
-  // ========================
+  // 🔔 파일 업로드 감지
   React.useEffect(() => {
     if (!rows.length) return;
 
     const newAlerts = [];
 
-rows.forEach(r => {
+    rows.forEach(r => {
       const id = r._id;
       const cur = r.attachCount || 0;
-      const prev = prevAttachRef.current[id] || 0;
+      const prev = prevAttachRef.current[id] ?? cur; // 첫 로드 시 현재값으로 초기화
+      const viewed = viewedAttachRef.current[id] || 0;
 
-      // 첨부파일 증가 체크
-      if (cur > prev) {
-        // 이미 본 알림이면 스킵
-        if (!seenAlerts.has(id)) {
-          newAlerts.push({
-            id,
-            date: r.상차일,
-            from: r.상차지명,
-            to: r.하차지명,
-            count: cur - prev,
-            time: Date.now(),
-          });
+      // 이전보다 증가 + 아직 열어보지 않은 개수
+      if (cur > prev && cur > viewed) {
+        newAlerts.push({
+          id,
+          date: r.상차일,
+          from: r.상차지명,
+          to: r.하차지명,
+          driver: r.이름,
+          count: cur - prev,
+          total: cur,
+          time: Date.now(),
+          row: r, // 클릭 시 뷰어 열기용
+        });
 
-          // 알림음
-          const audio = new Audio("/dingdong.mp3");
-          audio.volume = 0.6;
-          audio.play().catch(() => { });
-        }
-
-        // 이전 첨부 개수 업데이트
-        prevAttachRef.current[id] = cur;
+        // 알림음
+        const audio = new Audio("/dingdong.mp3");
+        audio.volume = 0.5;
+        audio.play().catch(() => {});
       }
+
+      prevAttachRef.current[id] = cur;
     });
 
     if (newAlerts.length > 0) {
-      // 알림 추가
       setUploadAlerts(prev => [...prev, ...newAlerts]);
-
-      // 이미 본 알림 목록에 추가
-      const updatedSeen = new Set(seenAlerts);
-      newAlerts.forEach(a => updatedSeen.add(a.id));
-      setSeenAlerts(updatedSeen);
-      localStorage.setItem("seenAlerts", JSON.stringify([...updatedSeen]));
-
-      // 6초 후 화면에서 알림 제거
+      // 10초 후 자동 제거
       setTimeout(() => {
-        setUploadAlerts(prev =>
-          prev.filter(a => Date.now() - a.time < 6000)
-        );
-      }, 6000);
+        setUploadAlerts(prev => prev.filter(a => Date.now() - a.time < 10000));
+      }, 10000);
     }
   }, [rows]);
-
-
 // ------------------------
 // 오전/오후 → 24시간 변환
 // ------------------------
@@ -16898,20 +16883,66 @@ if (editTarget.거래처명) {
         </div>
       )}
       
-      {/* 🔔 첨부파일 업로드 알림 토스트 */}
-      <div className="fixed bottom-5 right-5 flex flex-col gap-2 z-[9999]">
+      {/* 첨부파일 업로드 알림 */}
+      <div className="fixed bottom-5 right-5 flex flex-col gap-2 z-[9999] pointer-events-none">
         {uploadAlerts.map((a) => (
           <div
             key={a.time}
-            className="bg-indigo-600 text-white px-4 py-3 rounded shadow-lg animate-[fadeInUp_0.3s_ease-out]"
+            className="pointer-events-auto w-[300px] bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden cursor-pointer"
+            style={{ animation: "slideInRight 0.3s ease-out" }}
+            onClick={() => {
+              // 열어봤다고 기록
+              viewedAttachRef.current[a.id] = a.total;
+              // 이 알림 제거
+              setUploadAlerts(prev => prev.filter(x => x.time !== a.time));
+              // AttachmentViewer 열기
+              setAttachViewer(a.row);
+            }}
           >
-            <div className="text-sm opacity-80">{a.date}</div>
-            <div className="font-bold">{a.from} → {a.to}</div>
-            <div className="mt-1">📎 {a.count}건 업로드됨</div>
+            {/* 상단 헤더 */}
+            <div className="bg-[#1B2B4B] px-4 py-2.5 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                <span className="text-white text-[12px] font-bold tracking-wide">서류 업로드 알림</span>
+              </div>
+              <button
+                className="text-white/50 hover:text-white text-lg leading-none px-1"
+                onClick={e => {
+                  e.stopPropagation();
+                  setUploadAlerts(prev => prev.filter(x => x.time !== a.time));
+                }}
+              >×</button>
+            </div>
+            {/* 본문 */}
+            <div className="px-4 py-3">
+              <div className="text-[13px] font-bold text-[#1B2B4B] truncate">
+                {a.from} → {a.to}
+              </div>
+              <div className="flex items-center justify-between mt-1.5">
+                <div className="text-[12px] text-gray-500">
+                  {a.driver && <span className="mr-2">{a.driver}</span>}
+                  {a.date}
+                </div>
+                <div className="flex items-center gap-1 bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-bold px-2 py-0.5 rounded-full">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                  </svg>
+                  {a.count}장 업로드
+                </div>
+              </div>
+              <div className="mt-2 text-[11px] text-gray-400">클릭하면 바로 확인할 수 있습니다</div>
+            </div>
           </div>
         ))}
-
       </div>
+
+      <style>{`
+        @keyframes slideInRight {
+          from { opacity: 0; transform: translateX(100%); }
+          to   { opacity: 1; transform: translateX(0); }
+        }
+      `}</style>
       {/* =================== 기사 선택 모달 (동일 차량번호 여러 기사) =================== */}
 {driverSelectInfo && (
   <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]"
