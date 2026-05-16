@@ -4417,12 +4417,6 @@ const handleAssignClick = () => {
               <button onClick={handleAssignClick} className="w-full py-3 rounded-xl bg-[#1B2B4B] text-white text-sm font-bold">
                 기사 배차하기
               </button>
-              {carNo && !drivers.some((d) => d.차량번호 === carNo) && (
-                <button
-                  onClick={() => { upsertDriver({ 차량번호: carNo, 이름: name || "", 전화번호: phone || "" }); showToast("신규 기사 등록 완료"); }}
-                  className="w-full py-2.5 rounded-xl border border-gray-300 text-gray-600 text-sm font-semibold mt-2"
-                >신규 기사 등록</button>
-              )}
             </>
           ) : (
             <button onClick={onCancelAssign} className="w-full py-3 rounded-xl border border-red-300 text-red-500 text-sm font-bold">
@@ -4887,6 +4881,33 @@ const chooseClient = (c) => {
 
 const [showNewDriver, setShowNewDriver] = useState(false);
 const [showOrderCopyModal, setShowOrderCopyModal] = useState(false);
+const [contactPopup, setContactPopup] = useState(null);
+const [contactQueue, setContactQueue] = useState([]);
+
+const openContactPopup = (items) => {
+  if (!items || items.length === 0) return;
+  const [first, ...rest] = items;
+  setContactQueue(rest);
+  setContactPopup(first);
+};
+
+const closeContactPopup = (selected) => {
+  if (selected && contactPopup) {
+    if (contactPopup.type === "pickup") {
+      update("상차지담당자", selected.name || "");
+      update("상차지담당자번호", selected.phone || "");
+    } else {
+      update("하차지담당자", selected.name || "");
+      update("하차지담당자번호", selected.phone || "");
+    }
+  }
+  setContactPopup(null);
+  if (contactQueue.length > 0) {
+    const [next, ...rest] = contactQueue;
+    setContactQueue(rest);
+    setTimeout(() => setContactPopup(next), 80);
+  }
+};
 const [formSmartMatched, setFormSmartMatched] = useState([]);
 const formSmartRef = useRef(null);
 const handleFormSmartSearch = (val) => {
@@ -5068,27 +5089,35 @@ const pickPickup = (c) => {
     update("상차지명", c.거래처명 || "");
     update("상차지주소", c.주소 || "");
 
-    // ★ 담당자/연락처도 반영
-    const contacts = Array.isArray(c.contacts) ? c.contacts : [];
-    const primary = contacts.find(ct => ct.isPrimary) || contacts[0] || null;
+    const contacts = (Array.isArray(c.contacts) ? c.contacts : []).filter(ct => ct.name?.trim());
+    const unique = [...new Map(contacts.map(ct => [ct.name.trim(), ct])).values()];
+    const primary = unique.find(ct => ct.isPrimary) || unique[0] || null;
     update("상차지담당자", primary?.name || c.담당자 || "");
     update("상차지담당자번호", primary?.phone || c.담당자번호 || "");
 
     setQueryPickup("");
     setShowPickupList(false);
+
+    if (unique.length > 1) {
+      openContactPopup([{ type: "pickup", place: c, contacts: unique }]);
+    }
   };
 const pickDrop = (c) => {
   update("하차지명", c.거래처명 || c.하차지명 || "");
   update("하차지주소", c.주소 || c.하차지주소 || c.상차지주소 || "");
 
-  // ★ 담당자/연락처도 반영
-  const contacts = Array.isArray(c.contacts) ? c.contacts : [];
-  const primary = contacts.find(ct => ct.isPrimary) || contacts[0] || null;
+  const contacts = (Array.isArray(c.contacts) ? c.contacts : []).filter(ct => ct.name?.trim());
+  const unique = [...new Map(contacts.map(ct => [ct.name.trim(), ct])).values()];
+  const primary = unique.find(ct => ct.isPrimary) || unique[0] || null;
   update("하차지담당자", primary?.name || c.담당자 || "");
   update("하차지담당자번호", primary?.phone || c.담당자번호 || "");
 
   setQueryDrop("");
   setShowDropList(false);
+
+  if (unique.length > 1) {
+    openContactPopup([{ type: "drop", place: c, contacts: unique }]);
+  }
 };
 
   return (
@@ -5975,6 +6004,53 @@ const pickDrop = (c) => {
       >
         취소
       </button>
+    </div>
+  </div>
+)}
+
+{/* ===== 담당자 선택 팝업 ===== */}
+{contactPopup && (
+  <div className="fixed inset-0 z-[9999] flex flex-col justify-end">
+    <div className="absolute inset-0 bg-black/50" onClick={() => closeContactPopup(null)} />
+    <div className="relative bg-white rounded-t-3xl" onClick={e => e.stopPropagation()}>
+      <div className="flex justify-center pt-3 pb-1">
+        <div className="w-10 h-1 rounded-full bg-gray-300" />
+      </div>
+      <div className="px-5 pt-2 pb-3 border-b border-gray-100">
+        <div className="text-[15px] font-bold text-[#1B2B4B]">
+          담당자 선택
+        </div>
+        <div className="text-[12px] text-gray-400 mt-0.5">
+          {contactPopup.type === "pickup" ? "상차지" : "하차지"} · {contactPopup.place?.업체명 || contactPopup.place?.거래처명 || ""}
+        </div>
+      </div>
+      <div className="px-4 py-3 space-y-2 max-h-[50vh] overflow-y-auto">
+        {contactPopup.contacts.map((ct, i) => (
+          <button
+            key={i}
+            type="button"
+            onClick={() => closeContactPopup(ct)}
+            className="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-gray-200 bg-white active:bg-gray-50 text-left"
+          >
+            <div>
+              <div className="text-sm font-bold text-gray-900">{ct.name}</div>
+              <div className="text-xs text-gray-400 mt-0.5">{ct.phone || "번호 없음"}</div>
+            </div>
+            {ct.isPrimary && (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#1B2B4B] text-white">주담당</span>
+            )}
+          </button>
+        ))}
+      </div>
+      <div className="px-4 pb-6 pt-2">
+        <button
+          type="button"
+          onClick={() => closeContactPopup(null)}
+          className="w-full py-3 rounded-xl bg-gray-100 text-gray-600 text-sm font-semibold"
+        >
+          취소
+        </button>
+      </div>
     </div>
   </div>
 )}
