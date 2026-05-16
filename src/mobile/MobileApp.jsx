@@ -1664,7 +1664,7 @@ const title =
   // 렌더링
   // ------------------------------------------------------------------
  return (
-<div className="w-full max-w-md mx-auto min-h-screen flex flex-col relative"
+<div className="w-full min-h-screen flex flex-col relative"
   style={{ backgroundColor: "var(--bg-app)", color: "var(--text-primary)", transition: "background-color 0.3s, color 0.3s" }}>
     {/* 📝 메모 전체 보기 모달 */}
 {openMemo && (
