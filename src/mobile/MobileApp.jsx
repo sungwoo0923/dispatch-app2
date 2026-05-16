@@ -4883,6 +4883,110 @@ const [showNewDriver, setShowNewDriver] = useState(false);
 const [showOrderCopyModal, setShowOrderCopyModal] = useState(false);
 const [contactPopup, setContactPopup] = useState(null);
 const [contactQueue, setContactQueue] = useState([]);
+const [showFareHistory, setShowFareHistory] = useState(false);
+
+// ── 스마트 운임 조회 매칭 ──
+const fareMatches = useMemo(() => {
+  if (!orders || orders.length === 0) return [];
+  const pickup = (form.상차지명 || "").trim();
+  const drop = (form.하차지명 || "").trim();
+  if (!pickup && !drop) return [];
+
+  const ns = (s = "") => String(s).replace(/\s+/g, "").toLowerCase();
+
+  // 화물내용에서 수량과 단위 추출 ("6파렛트" → {qty:6, unit:"파렛트"})
+  const parseCargoQty = (s = "") => {
+    const m = String(s).match(/(\d+(?:\.\d+)?)\s*(파레트|파렛트|팔레트|박스|통|pallet|box)/i);
+    if (m) return { qty: parseFloat(m[1]), unit: m[2].replace(/팔레트|파렛트/g, "파레트") };
+    const numOnly = String(s).match(/^(\d+(?:\.\d+)?)$/);
+    if (numOnly) return { qty: parseFloat(numOnly[1]), unit: null };
+    return null;
+  };
+
+  const normPickup = ns(pickup);
+  const normDrop = ns(drop);
+  const cargo = (form.화물내용 || "").trim();
+  const ton = (form.톤수 || "").trim();
+  const cargoParsed = parseCargoQty(cargo);
+
+  const results = [];
+
+  orders.forEach(o => {
+    const claim = Number(o.청구운임 || 0);
+    const drv = Number(o.기사운임 || 0);
+    if (!claim && !drv) return;
+
+    let score = 0;
+    const tags = [];
+
+    const oPickup = ns(o.상차지명 || "");
+    const oDrop = ns(o.하차지명 || "");
+
+    // 1순위: 경로 (최대 50pt)
+    const pickMatch = normPickup && (oPickup.includes(normPickup) || normPickup.includes(oPickup));
+    const dropMatch = normDrop && (oDrop.includes(normDrop) || normDrop.includes(oDrop));
+
+    if (normPickup && normDrop) {
+      if (pickMatch && dropMatch) { score += 50; tags.push("경로일치"); }
+      else if (pickMatch) { score += 20; }
+      else if (dropMatch) { score += 15; }
+      else return; // 경로 전혀 안 맞으면 제외
+    } else if (normPickup) {
+      if (pickMatch) score += 30; else return;
+    } else if (normDrop) {
+      if (dropMatch) score += 30; else return;
+    }
+
+    // 2순위: 화물내용 (최대 30pt)
+    if (cargo) {
+      const oCargoParsed = parseCargoQty(o.화물내용 || "");
+      const normCargo = ns(cargo);
+      const normOCargo = ns(o.화물내용 || "");
+
+      if (normOCargo === normCargo) {
+        score += 30; tags.push("화물일치");
+      } else if (cargoParsed && oCargoParsed) {
+        // 같은 단위 or 둘다 단위없음
+        const sameUnit = (!cargoParsed.unit && !oCargoParsed.unit) ||
+          (cargoParsed.unit && oCargoParsed.unit &&
+           ns(cargoParsed.unit) === ns(oCargoParsed.unit));
+        if (sameUnit) {
+          const diff = Math.abs(cargoParsed.qty - oCargoParsed.qty);
+          const pct = cargoParsed.qty > 0 ? diff / cargoParsed.qty : 1;
+          if (diff === 0) { score += 30; tags.push("화물일치"); }
+          else if (diff <= 1) { score += 22; tags.push("화물유사"); }
+          else if (diff <= 2 || pct <= 0.2) { score += 15; tags.push("화물유사"); }
+          else if (pct <= 0.4) { score += 8; tags.push("화물근사"); }
+        } else {
+          // 단위가 다른데 같은 카테고리면 약간만
+          if (cargoParsed.unit && oCargoParsed.unit) score += 5;
+        }
+      } else if (normOCargo.includes(ns(cargo.replace(/\d+/g, "")))) {
+        // 수량 없이 종류만 맞음
+        score += 8;
+      }
+    }
+
+    // 3순위: 톤수 (최대 15pt)
+    if (ton && o.톤수) {
+      if (ns(o.톤수) === ns(ton)) { score += 15; tags.push("톤수일치"); }
+      else {
+        // 숫자만 비교
+        const tn = parseFloat(ton);
+        const otn = parseFloat(o.톤수);
+        if (!isNaN(tn) && !isNaN(otn) && Math.abs(tn - otn) / (tn || 1) <= 0.1) {
+          score += 8;
+        }
+      }
+    }
+
+    const dateStr = o.상차일 || "";
+    results.push({ order: o, score, tags, dateStr, claim, drv });
+  });
+
+  results.sort((a, b) => b.score !== a.score ? b.score - a.score : b.dateStr.localeCompare(a.dateStr));
+  return results.slice(0, 50);
+}, [orders, form.상차지명, form.하차지명, form.화물내용, form.톤수]);
 
 const openContactPopup = (items) => {
   if (!items || items.length === 0) return;
@@ -5739,6 +5843,39 @@ const pickDrop = (c) => {
         />
       </div>
 
+      {/* ── 과거 운임 참고 버튼 ── */}
+      {(form.상차지명 || form.하차지명) && (
+        <button
+          type="button"
+          onClick={() => setShowFareHistory(true)}
+          className="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-[#1B2B4B] text-white shadow-sm active:opacity-80"
+        >
+          <div className="flex items-center gap-2.5">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+            </svg>
+            <div className="text-left">
+              <div className="text-sm font-bold">과거 운임 조회</div>
+              <div className="text-[11px] text-white/70">
+                {fareMatches.length > 0 ? `${fareMatches.length}건의 유사 이력` : "유사 이력 없음"}
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5">
+            {fareMatches.length > 0 && (
+              <span className="bg-white/20 text-white text-[11px] font-bold px-2 py-0.5 rounded-full">
+                {fareMatches.filter(r => r.score >= 50).length > 0
+                  ? `🎯 ${fareMatches.filter(r => r.score >= 50).length}건 완전일치`
+                  : `📍 ${fareMatches.length}건`}
+              </span>
+            )}
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="9 18 15 12 9 6"/>
+            </svg>
+          </div>
+        </button>
+      )}
+
       {/* 금액 */}
       <div className="bg-white rounded-lg border shadow-sm">
         <RowLabelInput
@@ -5951,6 +6088,127 @@ const pickDrop = (c) => {
           </button>
         )}
       </div>
+      {/* ===== 과거 운임 조회 모달 ===== */}
+      {showFareHistory && (
+        <div className="fixed inset-0 z-[9999] flex flex-col justify-end">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setShowFareHistory(false)} />
+          <div className="relative bg-white rounded-t-3xl max-h-[88vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            {/* 핸들바 */}
+            <div className="flex justify-center pt-3 pb-0 shrink-0">
+              <div className="w-10 h-1 rounded-full bg-gray-300" />
+            </div>
+            {/* 헤더 */}
+            <div className="px-5 py-3 border-b border-gray-100 shrink-0">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-[15px] font-bold text-[#1B2B4B]">과거 운임 조회</div>
+                  <div className="text-[11px] text-gray-400 mt-0.5 flex flex-wrap gap-1">
+                    {form.상차지명 && <span className="bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded-md font-medium">{form.상차지명}</span>}
+                    {form.하차지명 && <><span className="text-gray-300">→</span><span className="bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-md font-medium">{form.하차지명}</span></>}
+                    {form.화물내용 && <span className="bg-orange-50 text-orange-500 px-1.5 py-0.5 rounded-md font-medium">{form.화물내용}</span>}
+                    {form.톤수 && <span className="bg-green-50 text-green-600 px-1.5 py-0.5 rounded-md font-medium">{form.톤수}</span>}
+                  </div>
+                </div>
+                <button onClick={() => setShowFareHistory(false)}
+                  className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 text-lg shrink-0">×</button>
+              </div>
+              {/* 범례 */}
+              <div className="flex gap-2 mt-2">
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-bold">🎯 완전일치</span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-bold">📍 경로일치</span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 font-bold">🔍 참고</span>
+              </div>
+            </div>
+            {/* 결과 목록 */}
+            <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2.5">
+              {fareMatches.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-16 gap-3 text-gray-400">
+                  <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                  </svg>
+                  <div className="text-sm">유사한 과거 이력이 없습니다</div>
+                </div>
+              )}
+              {fareMatches.map((r, i) => {
+                const o = r.order;
+                const isTop = r.score >= 50 && r.tags.includes("경로일치");
+                const isMid = r.score >= 30;
+                const tagColor = isTop
+                  ? "bg-emerald-100 text-emerald-700"
+                  : isMid ? "bg-blue-100 text-blue-700"
+                  : "bg-gray-100 text-gray-600";
+                const tagLabel = isTop ? "🎯 완전일치" : isMid ? "📍 경로일치" : "🔍 참고";
+
+                // 날짜 포맷
+                const dateLabel = (() => {
+                  if (!o.상차일) return "-";
+                  const diff = Math.floor((Date.now() - new Date(o.상차일).getTime()) / 86400000);
+                  if (diff === 0) return "오늘";
+                  if (diff === 1) return "어제";
+                  if (diff <= 7) return `${diff}일 전`;
+                  if (diff <= 30) return `${Math.floor(diff/7)}주 전`;
+                  if (diff <= 365) return `${Math.floor(diff/30)}개월 전`;
+                  return `${Math.floor(diff/365)}년 전`;
+                })();
+
+                return (
+                  <div key={i} className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
+                    {/* 카드 정보 */}
+                    <div className="px-4 pt-3 pb-2">
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${tagColor}`}>{tagLabel}</span>
+                            <span className="text-[11px] text-gray-400">{dateLabel} · {o.상차일 || ""}</span>
+                          </div>
+                          {/* 경로 */}
+                          <div className="text-[13px] font-bold text-gray-900 truncate">
+                            {o.상차지명 || "-"} → {o.하차지명 || "-"}
+                          </div>
+                          {/* 화물/톤수 태그 */}
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {o.화물내용 && (
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-medium ${r.tags.includes("화물일치") ? "bg-orange-100 text-orange-700" : r.tags.includes("화물유사") ? "bg-orange-50 text-orange-500" : "bg-gray-100 text-gray-500"}`}>
+                                {o.화물내용}
+                              </span>
+                            )}
+                            {o.톤수 && (
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-medium ${r.tags.includes("톤수일치") ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
+                                {o.톤수}
+                              </span>
+                            )}
+                            {o.차종 && <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-500">{o.차종}</span>}
+                          </div>
+                        </div>
+                        {/* 운임 */}
+                        <div className="text-right shrink-0">
+                          <div className="text-[11px] text-gray-400">청구</div>
+                          <div className="text-[15px] font-extrabold text-[#1B2B4B]">{r.claim.toLocaleString()}원</div>
+                          <div className="text-[11px] text-gray-400 mt-0.5">기사 {r.drv.toLocaleString()}원</div>
+                        </div>
+                      </div>
+                    </div>
+                    {/* 적용 버튼 */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        updateMoney("청구운임", String(r.claim));
+                        updateMoney("기사운임", String(r.drv));
+                        setShowFareHistory(false);
+                        showToast(`운임 적용: 청구 ${r.claim.toLocaleString()}원 / 기사 ${r.drv.toLocaleString()}원`);
+                      }}
+                      className="w-full py-2.5 bg-[#1B2B4B] text-white text-[12px] font-bold text-center active:opacity-80"
+                    >
+                      이 운임 적용하기
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* =============================
     거래처 적용 선택 팝업
 ============================== */}
