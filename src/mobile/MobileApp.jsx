@@ -271,7 +271,7 @@ function buildOrderTemplateCopyText(order) {
   const todayStr = todayKST();
 
   return [
-    `📦 오더복사 (${todayStr})`,
+    `오더복사 (${todayStr})`,
     ``,
     `[상차]`,
     `${order.상차지명 || ""}`,
@@ -307,7 +307,7 @@ const getStatus = (o = {}) => {
   const car = String(o.차량번호 || "").trim();
   return car ? "배차완료" : "배차중";
 };
-// 🚨 긴급 오더 판단 (PC/모바일 공통)
+// 긴급 오더 판단 (PC/모바일 공통)
 const isUrgentOrder = (o = {}) => {
   return o.긴급 === true;
 };
@@ -319,6 +319,15 @@ const normalizePhone = (p = "") =>
 
 export default function MobileApp() {
   const [page, setPage] = useState("list");
+  const listScrollYRef = useRef(0); // 리스트 스크롤 위치 저장
+
+  // 상세→리스트 복귀 시 스크롤 위치 복원
+  useEffect(() => {
+    if (page === "list" && listScrollYRef.current > 0) {
+      const y = listScrollYRef.current;
+      requestAnimationFrame(() => { window.scrollTo(0, y); });
+    }
+  }, [page]);
   // 🎨 테마 상태 (기본: navy)
 const [theme, setTheme] = useState(
   localStorage.getItem("appTheme") || "navy"
@@ -606,7 +615,7 @@ collections.forEach((name) => {
 
         if (change.type === "added" && data.상차지명) {
           sendPush(
-            "📦 신규 오더 등록",
+            "신규 오더 등록",
             `${data.거래처명 || ""} ${data.상차지명} → ${data.하차지명 || ""}`
           );
         }
@@ -617,7 +626,7 @@ collections.forEach((name) => {
           const nextCar = String(data.차량번호 || "").trim();
           if (!prevCar && nextCar) {
             sendPush(
-              "🚚 배차완료",
+              "배차완료",
               `${data.거래처명 || ""} ${data.상차지명} → ${data.하차지명 || ""} | ${data.기사명 || ""} (${nextCar})`
             );
           }
@@ -770,7 +779,7 @@ useEffect(() => {
     if (nearOrders.length > 0) {
   if (toastMuted) return;   // 🔥 이 줄이 핵심
 
-  setToast(`⚠️ 상차 임박 ${nearOrders.length}건! 확인하세요`);
+  setToast(`상차 임박 ${nearOrders.length}건! 확인하세요`);
   navigator.vibrate?.(200);
 }
   };
@@ -783,7 +792,7 @@ useEffect(() => {
 
   return () => clearInterval(timer);
 }, [orders, alarmEnabled]);
-// 🚨 긴급 오더 등록 즉시 알림 (등록되는 순간 1회)
+// 긴급 오더 등록 즉시 알림 (등록되는 순간 1회)
 useEffect(() => {
   if (!alarmEnabled || !orders.length) return;
 
@@ -806,7 +815,7 @@ useEffect(() => {
   const o = newUrgentOrders[0];
 
   setToast(
-    `🚨 긴급 오더 등록\n${o.거래처명 || ""} ${o.상차시간 || ""}`
+    `긴급 오더 등록\n${o.거래처명 || ""} ${o.상차시간 || ""}`
   );
   navigator.vibrate?.([200, 100, 200]);
 
@@ -1676,7 +1685,7 @@ const title =
       className="bg-white rounded-2xl p-4 w-[90%] max-h-[70vh] overflow-y-auto"
       onClick={(e) => e.stopPropagation()}
     >
-      <div className="text-sm font-bold mb-2">📝 메모</div>
+      <div className="text-sm font-bold mb-2">메모</div>
 
       <div className="text-sm whitespace-pre-wrap text-gray-800">
         {openMemo.메모 || openMemo.적요}
@@ -2017,7 +2026,7 @@ onGoSchedule={() => {
       >
         {/* 제목 */}
         <div className="text-sm font-semibold text-gray-900">
-          📢 {n.title}
+          {n.title}
         </div>
 
         {/* 메타 정보 */}
@@ -2087,7 +2096,7 @@ onGoSchedule={() => {
   </div>
 
   <div className="mt-2 text-xs text-gray-500">
-    📅 {startDate}
+    {startDate}
     {endDate && endDate !== startDate && ` ~ ${endDate}`}
   </div>
 
@@ -2587,8 +2596,9 @@ onGoSchedule={() => {
             onlyToday={onlyToday}
 setOnlyToday={setOnlyToday}
 onSelect={(o) => {
+  listScrollYRef.current = window.scrollY;
   setSelectedOrder(o);
-  setDetailFrom("list");   // 🔥 list에서 들어온 거
+  setDetailFrom("list");
   setPage("detail");
   window.scrollTo(0, 0);
 }}
@@ -3595,7 +3605,7 @@ const dropTime = order.하차시간 || "시간 없음";
 
   {!showUndeliveredOnly && isUrgentOrder(order) && (
     <span className="px-2 py-0.5 rounded-full bg-red-600 text-white text-[10px] font-bold">
-      🚨 긴급
+      긴급
     </span>
   )}
 
@@ -3607,7 +3617,7 @@ const dropTime = order.하차시간 || "시간 없음";
 
   {isCold && (
     <span className="px-2 py-0.5 rounded-full bg-cyan-600 text-white text-[10px] font-bold">
-      ❄ 냉장/냉동
+      냉장/냉동
     </span>
   )}
 
@@ -3634,7 +3644,7 @@ const dt = new Date(y, m - 1, d, hh, mm);
           return (
             <div className="text-right mb-0.5">
               <span className="px-2 py-0.5 rounded-full bg-red-500 text-white text-[10px] font-bold">
-                ⚠ 임박
+                임박
               </span>
             </div>
           );
@@ -4065,7 +4075,7 @@ const handleAssignClick = () => {
       setIsNewDriver(false);
       if (smartTextareaRef.current) smartTextareaRef.current.value = "";
       setSmartMatched([]);
-      showToast("✅ 저장 완료!");
+      showToast("저장 완료!");
     } catch (e) {
       console.error("저장 오류:", e);
       alert("저장 실패: " + e.message);
@@ -4081,8 +4091,8 @@ const handleAssignClick = () => {
           onClick={() => setExpandMemo(v => !v)}
         >
           <div className="flex items-center justify-between mb-1">
-            <span className="text-xs font-bold text-amber-700">📝 메모</span>
-            <span className="text-xs text-amber-500">{expandMemo ? "접기 ▲" : "펼치기 ▼"}</span>
+            <span className="text-xs font-bold text-amber-700">메모</span>
+            <span className="text-xs text-amber-500">{expandMemo ? "접기" : "펼치기"}</span>
           </div>
           <div className={`text-sm text-gray-700 whitespace-pre-wrap leading-relaxed ${expandMemo ? "" : "line-clamp-2"}`}>
             {order.메모 || order.적요}
@@ -4107,7 +4117,7 @@ const handleAssignClick = () => {
     </span>
     {state === "배차완료" && order.배차완료일시?.seconds && (
       <span className="text-[10px] text-emerald-600">
-        ✅ {new Date(order.배차완료일시.seconds * 1000).toLocaleString("ko-KR", {
+        {new Date(order.배차완료일시.seconds * 1000).toLocaleString("ko-KR", {
           month: "2-digit", day: "2-digit",
           hour: "2-digit", minute: "2-digit"
         })} 완료
@@ -4388,7 +4398,7 @@ const handleAssignClick = () => {
           <div className="space-y-2 mb-3">
             {isNewDriver && (
               <div className="flex items-center gap-1.5 px-1 mb-1">
-                <span className="px-2 py-0.5 rounded-full bg-orange-100 text-orange-600 text-[11px] font-bold border border-orange-300">🆕 신규 기사</span>
+                <span className="px-2 py-0.5 rounded-full bg-orange-100 text-orange-600 text-[11px] font-bold border border-orange-300">신규 기사</span>
                 <span className="text-[11px] text-gray-400">저장 시 기사관리에 등록됩니다</span>
               </div>
             )}
@@ -4402,11 +4412,11 @@ const handleAssignClick = () => {
             <div className="grid grid-cols-2 gap-2 mb-3">
               <a href={`tel:${normalizePhone(phone)}`}
                 className="py-2.5 rounded-xl bg-[#1B2B4B] text-white text-xs font-bold text-center">
-                📞 전화
+                전화
               </a>
               <a href={`sms:${normalizePhone(phone)}`}
                 className="py-2.5 rounded-xl border border-[#1B2B4B] text-[#1B2B4B] text-xs font-bold text-center">
-                💬 문자
+                문자
               </a>
             </div>
           )}
@@ -4659,7 +4669,7 @@ const handleAssignClick = () => {
               <button
                 className="absolute top-4 left-4 w-10 h-10 bg-white/15 rounded-full text-white text-xl flex items-center justify-center"
                 onClick={() => setAttachSelected(null)}>
-                ←
+                닫기
               </button>
               <button
                 className="absolute bottom-8 right-6 px-5 py-2.5 bg-[#1B2B4B] text-white rounded-xl text-sm font-bold"
@@ -4684,7 +4694,7 @@ const handleAssignClick = () => {
             <div className="bg-[#1B2B4B] px-5 py-4 rounded-t-2xl flex items-start justify-between">
               <div>
                 <div className="text-white font-bold text-sm">
-                  {driverConflictPopup.existing ? "⚠️ 기사 정보 충돌" : "🆕 신규 기사 등록 확인"}
+                  {driverConflictPopup.existing ? "기사 정보 충돌" : "신규 기사 등록 확인"}
                 </div>
                 <div className="text-white/60 text-xs mt-0.5">
                   {driverConflictPopup.existing
@@ -4773,7 +4783,7 @@ const handleAssignClick = () => {
                       await upsertDriver({ 차량번호: plate, 이름: nm, 전화번호: ph });
                       setCarNo(plate); setName(nm); setPhone(fmtPhone(ph));
                       setDriverConflictPopup(null);
-                      showToast(`✅ 신규 기사 등록: ${nm || plate}`);
+                      showToast(`신규 기사 등록: ${nm || plate}`);
                     }}
                   >신규 기사 등록</button>
                 </div>
@@ -5384,7 +5394,7 @@ const pickDrop = (c) => {
   // ✅ 4️⃣ 진짜 신규일 때만 팝업
   if (!existing && val.length >= 2) {
     const ok = window.confirm(
-      "📌 등록되지 않은 거래처입니다.\n신규 등록할까요?"
+      "등록되지 않은 거래처입니다.\n신규 등록할까요?"
     );
     if (ok) {
       await addDoc(collection(db, "places"), {
@@ -5459,7 +5469,7 @@ const pickDrop = (c) => {
       onClick={handleSwapPickupDrop}
       className="ml-1 w-6 h-6 rounded-full bg-blue-50 border border-blue-300 text-blue-600 flex items-center justify-center text-[11px] active:scale-95"
     >
-      🔄
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
     </button>
   }
     input={
@@ -5865,8 +5875,8 @@ const pickDrop = (c) => {
             {fareMatches.length > 0 && (
               <span className="bg-white/20 text-white text-[11px] font-bold px-2 py-0.5 rounded-full">
                 {fareMatches.filter(r => r.score >= 50).length > 0
-                  ? `🎯 ${fareMatches.filter(r => r.score >= 50).length}건 완전일치`
-                  : `📍 ${fareMatches.length}건`}
+                  ? `${fareMatches.filter(r => r.score >= 50).length}건 완전일치`
+                  : `${fareMatches.length}건`}
               </span>
             )}
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -6023,7 +6033,7 @@ const pickDrop = (c) => {
           }}
           className="w-full py-2 mt-2 rounded bg-green-600 text-white text-sm font-semibold"
         >
-          🚚 신규 기사 등록하기
+          신규 기사 등록하기
         </button>
       )}
 
@@ -6114,9 +6124,9 @@ const pickDrop = (c) => {
               </div>
               {/* 범례 */}
               <div className="flex gap-2 mt-2">
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-bold">🎯 완전일치</span>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-bold">📍 경로일치</span>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 font-bold">🔍 참고</span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-bold">완전일치</span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-bold">경로일치</span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 font-bold">참고</span>
               </div>
             </div>
             {/* 결과 목록 */}
@@ -6137,7 +6147,7 @@ const pickDrop = (c) => {
                   ? "bg-emerald-100 text-emerald-700"
                   : isMid ? "bg-blue-100 text-blue-700"
                   : "bg-gray-100 text-gray-600";
-                const tagLabel = isTop ? "🎯 완전일치" : isMid ? "📍 경로일치" : "🔍 참고";
+                const tagLabel = isTop ? "완전일치" : isMid ? "경로일치" : "참고";
 
                 // 날짜 포맷
                 const dateLabel = (() => {
@@ -6644,7 +6654,7 @@ ${Number(order.청구운임 || 0).toLocaleString()}원 부가세별도 배차되
 
       text = `[파렛전표/거래명세서 업로드]
 미 전송시 운임 지연 될 수 있습니다.
-👇👇👇👇👇👇👇👇👇👇👇👇
+
 
 ${uploadUrl}
 
@@ -6698,7 +6708,7 @@ ${order.하차지주소 || ""}${dropMgr ? `\n${dropMgr}` : ""}
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[9999]">
       <div className="bg-white rounded-xl shadow-xl p-5 w-80 space-y-2">
         <div className="text-sm font-semibold text-center">
-          📋 복사 방식 선택
+          복사 방식 선택
         </div>
 
         <button
@@ -7421,7 +7431,7 @@ const fares = baseRows.map((r) =>
     {/* 🔥 fallback일 때 안내 */}
     {!result && (
       <div className="text-sm text-orange-500 font-semibold">
-        ⚠️ 동일 조건 없음 → 유사 데이터 표시
+        동일 조건 없음 → 유사 데이터 표시
       </div>
     )}
 
@@ -7429,7 +7439,7 @@ const fares = baseRows.map((r) =>
     {result && aiFare && (
       <div className="mt-3 p-3 rounded-lg bg-indigo-50 border border-indigo-200">
         <div className="text-sm text-indigo-800">
-          🔮 추천 운임(예측):{" "}
+          추천 운임(예측):{" "}
           <span className="font-bold">
             {aiFare.aiValue.toLocaleString()}원
           </span>
@@ -7498,8 +7508,8 @@ const fares = baseRows.map((r) =>
                 }`}
               >
                 {fare}원
-                {isHigh && " 🔺"}
-                {isLow && " 🔻"}
+                
+                
               </span>
             </div>
 
@@ -7552,7 +7562,7 @@ const fares = baseRows.map((r) =>
     <div className="bg-white w-[320px] rounded-2xl p-5">
 
       <div className="text-lg font-bold mb-2">
-        🔍 검색 결과 없음
+        검색 결과 없음
       </div>
 
       <div className="text-sm text-gray-600 mb-4">
@@ -7636,7 +7646,7 @@ const fares = baseRows.map((r) =>
     <div className="bg-white w-[360px] rounded-2xl p-5 shadow-2xl">
 
       <div className="text-lg font-bold mb-4 text-gray-800">
-        📊 운임 이력 비교
+        운임 이력 비교
       </div>
 
       <div className="mb-4 p-4 rounded-xl bg-red-50 border border-red-200">
@@ -7947,7 +7957,7 @@ function MobileRateCard({ dispatchData = [], onBack }) {
 
           {/* 안내 */}
           <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3">
-            <div className="text-[12px] font-bold text-amber-800 mb-1">📌 안내사항</div>
+            <div className="text-[12px] font-bold text-amber-800 mb-1">안내사항</div>
             <ul className="text-[11px] text-amber-700 space-y-0.5 leading-relaxed">
               <li>• 과거 실적 기반 참고 단가 (1만원 단위 절사)</li>
               <li>• 유가·수급 상황에 따라 실제 운임은 달라질 수 있습니다</li>
@@ -8336,7 +8346,7 @@ return (
     <div className="flex gap-2">
       <span className="px-2 py-0.5 rounded-full
                        bg-cyan-100 text-cyan-700 text-[11px] font-bold">
-        ❄ 냉장/냉동 {coldCount}
+        냉장/냉동 {coldCount}
       </span>
 
       <span className="px-2 py-0.5 rounded-full
