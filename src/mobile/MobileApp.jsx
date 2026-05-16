@@ -3797,6 +3797,11 @@ function MobileOrderDetail({
   const [name, setName] = useState(order.기사명 || "");
   const [phone, setPhone] = useState(order.전화번호 || "");
   const [isNewDriver, setIsNewDriver] = useState(false);
+  const [showAttachments, setShowAttachments] = useState(false);
+  const [attachItems, setAttachItems] = useState([]);
+  const [attachLoading, setAttachLoading] = useState(false);
+  const [attachSelected, setAttachSelected] = useState(null);
+  const [liveAttachCount, setLiveAttachCount] = useState(order.attachCount || 0);
 
   const claim = getClaim(order);
   const sanjae = getSanjae(order);
@@ -3826,6 +3831,29 @@ const pickupTimeText = order.상차시간
   useEffect(() => {
     if (!carNo) { setName(""); setPhone(""); }
   }, [carNo]);
+
+  useEffect(() => {
+    setLiveAttachCount(order.attachCount || 0);
+  }, [order.attachCount]);
+
+  useEffect(() => {
+    if (!showAttachments) {
+      setAttachItems([]);
+      setAttachLoading(false);
+      return;
+    }
+    setAttachLoading(true);
+    const col = order.__col || "orders";
+    const docId = order._id || order.id;
+    const colRef = collection(db, col, docId, "attachments");
+    const unsub = onSnapshot(colRef, (snap) => {
+      const items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setAttachItems(items);
+      setLiveAttachCount(items.length);
+      setAttachLoading(false);
+    });
+    return () => unsub();
+  }, [showAttachments]);
 
   const parseDriverText = (text) => {
     let name = "", phone = "", plate = "";
@@ -4178,6 +4206,46 @@ const handleAssignClick = () => {
         </DetailCard>
       </div>
 
+      {/* ── 첨부파일 ── */}
+      <div>
+        <SectionHeader label="첨부파일" />
+        <DetailCard>
+          <button
+            onClick={() => setShowAttachments(true)}
+            style={{ touchAction: "manipulation" }}
+            className="w-full flex items-center justify-between"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-[#1B2B4B] flex items-center justify-center shrink-0">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                  <line x1="16" y1="13" x2="8" y2="13"/>
+                  <line x1="16" y1="17" x2="8" y2="17"/>
+                  <polyline points="10 9 9 9 8 9"/>
+                </svg>
+              </div>
+              <div className="text-left">
+                <div className="text-sm font-bold text-gray-900">첨부파일 보기</div>
+                <div className="text-xs text-gray-400 mt-0.5">
+                  {liveAttachCount > 0 ? `${liveAttachCount}개의 파일이 있습니다` : "업로드된 파일 없음"}
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {liveAttachCount > 0 && (
+                <span className="min-w-[22px] h-[22px] px-1.5 rounded-full bg-[#1B2B4B] text-white text-[11px] font-bold flex items-center justify-center">
+                  {liveAttachCount}
+                </span>
+              )}
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="9 18 15 12 9 6"/>
+              </svg>
+            </div>
+          </button>
+        </DetailCard>
+      </div>
+
       {/* ── 액션 버튼 ── */}
       <div>
         <SectionHeader label="액션" />
@@ -4494,6 +4562,127 @@ const handleAssignClick = () => {
       )}
 
       {/* ===== 기사 정보 충돌 팝업 ===== */}
+      {/* ── 첨부파일 모달 ── */}
+      {showAttachments && (
+        <div className="fixed inset-0 z-[9999] flex flex-col justify-end">
+          <div className="absolute inset-0 bg-black/60" onClick={() => { setShowAttachments(false); setAttachSelected(null); }} />
+          <div className="relative bg-white rounded-t-3xl max-h-[85vh] flex flex-col"
+            onClick={e => e.stopPropagation()}>
+            {/* 핸들바 */}
+            <div className="flex justify-center pt-3 pb-1 shrink-0">
+              <div className="w-10 h-1 rounded-full bg-gray-300" />
+            </div>
+            {/* 헤더 */}
+            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 shrink-0">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-[#1B2B4B] flex items-center justify-center">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                  </svg>
+                </div>
+                <div>
+                  <div className="font-bold text-[15px] text-[#1B2B4B]">
+                    첨부파일
+                    {!attachLoading && <span className="text-[12px] font-normal text-gray-400 ml-1">{attachItems.length}장</span>}
+                  </div>
+                  <div className="text-[11px] text-gray-400">{order.상차지명} → {order.하차지명}</div>
+                </div>
+              </div>
+              <button onClick={() => { setShowAttachments(false); setAttachSelected(null); }}
+                className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 text-lg">
+                ×
+              </button>
+            </div>
+            {/* 본문 */}
+            <div className="flex-1 overflow-y-auto p-4">
+              {attachLoading && (
+                <div className="flex items-center justify-center py-16 gap-2 text-gray-400">
+                  <div className="w-4 h-4 border-2 border-gray-300 border-t-[#1B2B4B] rounded-full animate-spin" />
+                  <span className="text-sm">불러오는 중...</span>
+                </div>
+              )}
+              {!attachLoading && attachItems.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-16 gap-3">
+                  <div className="w-14 h-14 rounded-2xl bg-gray-100 flex items-center justify-center">
+                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                      <polyline points="14 2 14 8 20 8"/>
+                    </svg>
+                  </div>
+                  <div className="text-sm text-gray-400 font-medium">업로드된 파일이 없습니다</div>
+                  <div className="text-xs text-gray-300">기사님께 인수증 업로드를 요청하세요</div>
+                </div>
+              )}
+              {!attachLoading && attachItems.length > 0 && (
+                <div className="grid grid-cols-2 gap-3">
+                  {attachItems.map((item) => (
+                    <div key={item.id} className="border border-gray-100 rounded-xl overflow-hidden shadow-sm">
+                      <div className="aspect-[4/3] bg-gray-50 cursor-pointer relative"
+                        onClick={() => setAttachSelected(item)}>
+                        <img
+                          src={item.base64 || item.url}
+                          alt={item.name}
+                          className="w-full h-full object-cover"
+                          onError={e => {
+                            e.target.parentElement.innerHTML = '<div class="w-full h-full flex items-center justify-center text-gray-300 text-xs">미리보기 없음</div>';
+                          }}
+                        />
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/0 active:bg-black/10">
+                          <span className="text-white text-[10px] font-bold bg-black/40 px-1.5 py-0.5 rounded-full opacity-0 active:opacity-100">확대</span>
+                        </div>
+                      </div>
+                      <div className="px-2.5 py-2 bg-white">
+                        <div className="text-[10px] text-gray-400 truncate mb-1.5">{item.name || "파일"}{item.sizeKB ? ` · ${item.sizeKB}KB` : ""}</div>
+                        <button
+                          onClick={() => {
+                            const a = document.createElement("a");
+                            a.href = item.base64 || item.url;
+                            a.download = item.name || "attachment.jpg";
+                            document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                          }}
+                          className="w-full py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-bold"
+                        >
+                          저장
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          {/* 전체화면 이미지 뷰 */}
+          {attachSelected && (
+            <div className="absolute inset-0 bg-black/95 z-10 flex flex-col items-center justify-center"
+              onClick={() => setAttachSelected(null)}>
+              <img
+                src={attachSelected.base64 || attachSelected.url}
+                alt="full"
+                className="max-w-full max-h-[75vh] object-contain"
+                onClick={e => e.stopPropagation()}
+              />
+              <button
+                className="absolute top-4 left-4 w-10 h-10 bg-white/15 rounded-full text-white text-xl flex items-center justify-center"
+                onClick={() => setAttachSelected(null)}>
+                ←
+              </button>
+              <button
+                className="absolute bottom-8 right-6 px-5 py-2.5 bg-[#1B2B4B] text-white rounded-xl text-sm font-bold"
+                onClick={e => {
+                  e.stopPropagation();
+                  const a = document.createElement("a");
+                  a.href = attachSelected.base64 || attachSelected.url;
+                  a.download = attachSelected.name || "attachment.jpg";
+                  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                }}>
+                저장하기
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
       {driverConflictPopup && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-end justify-center" onClick={() => setDriverConflictPopup(null)}>
           <div className="bg-white rounded-t-2xl w-full max-w-md pb-6" onClick={e => e.stopPropagation()}>
