@@ -4986,6 +4986,7 @@ const [contactPopup, setContactPopup] = useState(null);
 const [contactQueue, setContactQueue] = useState([]);
 const [stopSheet, setStopSheet] = useState(null); // null | "pickup" | "drop"
 const [stopList, setStopList] = useState([]);
+const [stopDropOpen, setStopDropOpen] = useState(null); // idx of open dropdown
 
 const STOP_TIMES = [
   "","즉시","오전 6시","오전 7시","오전 8시","오전 9시","오전 10시","오전 11시",
@@ -6477,12 +6478,79 @@ const pickDrop = (c) => {
                   className="text-[11px] text-red-500 font-bold px-2 py-0.5 border border-red-200 rounded-full">삭제</button>
               )}
             </div>
-            <input
-              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:border-[#1B2B4B]"
-              placeholder="업체명 / 경유지명"
-              value={stop.업체명 || ""}
-              onChange={e => setStopList(prev => prev.map((s, i) => i === idx ? { ...s, 업체명: e.target.value } : s))}
-            />
+            {/* 업체명 + 자동완성 드롭다운 */}
+            {(() => {
+              const query = stop.업체명 || "";
+              const nq = normalizeCompany(query);
+              const stopOptions = query.trim()
+                ? (() => {
+                    const exact = [], starts = [], includes = [], addrMatch = [];
+                    clients.forEach(c => {
+                      const nameRaw = c.거래처명 || "";
+                      const name = normalizeCompany(nameRaw);
+                      const addr = normalizeCompany(c.주소 || "");
+                      if (nameRaw.trim() === query.trim() || name === nq) exact.push(c);
+                      else if (name.startsWith(nq)) starts.push(c);
+                      else if (name.includes(nq)) includes.push(c);
+                      else if (addr.includes(nq)) addrMatch.push(c);
+                    });
+                    return [...exact, ...starts, ...includes, ...addrMatch].slice(0, 10);
+                  })()
+                : [];
+              const isNewClient = query.trim() && stopOptions.length === 0;
+              const showDrop = stopDropOpen === idx && stopOptions.length > 0;
+              return (
+                <div className="relative">
+                  <div className="flex items-center gap-1">
+                    <input
+                      className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:border-[#1B2B4B]"
+                      placeholder="업체명 / 경유지명"
+                      value={stop.업체명 || ""}
+                      onChange={e => {
+                        const val = e.target.value;
+                        setStopList(prev => prev.map((s, i) => i === idx ? { ...s, 업체명: val } : s));
+                        setStopDropOpen(idx);
+                        if (!val.trim()) {
+                          setStopList(prev => prev.map((s, i) => i === idx ? { ...s, 업체명: val, 주소: "", 담당자: "", 담당자번호: "" } : s));
+                        }
+                      }}
+                      onFocus={() => { if (stop.업체명) setStopDropOpen(idx); }}
+                      onBlur={() => setTimeout(() => setStopDropOpen(null), 150)}
+                    />
+                    {isNewClient && (
+                      <span className="text-[10px] font-bold text-orange-500 bg-orange-50 border border-orange-200 px-1.5 py-0.5 rounded-full whitespace-nowrap">신규</span>
+                    )}
+                  </div>
+                  {showDrop && (
+                    <div className="absolute z-[10000] w-full bg-white border border-gray-200 rounded-xl shadow-lg max-h-40 overflow-y-auto text-xs mt-0.5">
+                      {stopOptions.map(c => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          className="w-full text-left px-3 py-2 hover:bg-blue-50 border-b border-gray-50 last:border-0"
+                          onMouseDown={() => {
+                            const contacts = (Array.isArray(c.contacts) ? c.contacts : []).filter(ct => ct.name?.trim());
+                            const unique = [...new Map(contacts.map(ct => [ct.name.trim(), ct])).values()];
+                            const primary = unique.find(ct => ct.isPrimary) || unique[0] || null;
+                            setStopList(prev => prev.map((s, i) => i === idx ? {
+                              ...s,
+                              업체명: c.거래처명 || "",
+                              주소: c.주소 || "",
+                              담당자: primary?.name || c.담당자 || "",
+                              담당자번호: primary?.phone || c.담당자번호 || "",
+                            } : s));
+                            setStopDropOpen(null);
+                          }}
+                        >
+                          <div className="font-semibold text-gray-800">{c.거래처명 || "-"}</div>
+                          {c.주소 && <div className="text-[11px] text-gray-400 truncate">{c.주소}</div>}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
             <input
               className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:border-[#1B2B4B]"
               placeholder="주소"
