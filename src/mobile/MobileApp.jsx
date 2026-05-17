@@ -122,6 +122,24 @@ const getPickupDate = (o = {}) => {
 // 청구운임 / 인수증
 const getClaim = (o = {}) => o.청구운임 ?? o.인수증 ?? 0;
 
+// 경유지 배열 안전 파싱
+const safeParseStops = (raw) => {
+  if (Array.isArray(raw) && raw.length > 0) return raw;
+  if (typeof raw === "string" && raw.trim().startsWith("[")) {
+    try { const p = JSON.parse(raw); if (Array.isArray(p)) return p; } catch {}
+  }
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+    const keys = Object.keys(raw);
+    if (keys.length > 0 && keys.every(k => /^\d+$/.test(k)))
+      return keys.sort((a, b) => Number(a) - Number(b)).map(k => raw[k]);
+    if (raw.업체명) return [raw];
+  }
+  return [];
+};
+
+const validStops = (raw) =>
+  safeParseStops(raw).filter(s => s && typeof s === "object" && (s.업체명?.trim() || s.주소?.trim()));
+
 // 산재보험료
 const getSanjae = (o = {}) => o.산재보험료 ?? 0;
 
@@ -996,6 +1014,8 @@ const [unassignedTypeFilter, setUnassignedTypeFilter] = useState("전체");
     적요: "",
     상차시간기준: null,
     하차시간기준: null,
+    경유상차목록: [],
+    경유하차목록: [],
 
     _editId: null,
     _returnToDetail: false,
@@ -1410,6 +1430,11 @@ const groupedByDate = useMemo(() => {
       배차상태: (form.차량번호 || "").trim() ? "배차완료" : "배차중",
       상태: (form.차량번호 || "").trim() ? "배차완료" : "배차중",
 
+      경유상차목록: validStops(form.경유상차목록),
+      경유지_상차: validStops(form.경유상차목록),
+      경유하차목록: validStops(form.경유하차목록),
+      경유지_하차: validStops(form.경유하차목록),
+
       updatedAt: serverTimestamp(),
       _lastModified: Date.now(),
     };
@@ -1504,6 +1529,9 @@ const handleOrderDuplicate = (order) => {
 
     혼적여부: order.혼적여부 || "독차",
     적요: "",
+
+    경유상차목록: validStops(order.경유상차목록 || order.경유지_상차),
+    경유하차목록: validStops(order.경유하차목록 || order.경유지_하차),
 
     _editId: null,
     _returnToDetail: false,
@@ -3678,6 +3706,28 @@ const dt = new Date(y, m - 1, d, hh, mm);
         )}
       </div>
 
+      {/* 경유 상차지 */}
+      {validStops(order.경유상차목록 || order.경유지_상차).map((s, i) => (
+        <div key={i} className="flex items-center gap-2 mt-0.5">
+          <span className="px-1.5 py-0.5 rounded-full bg-blue-200 text-blue-800 text-[10px] font-bold shrink-0">
+            상{i + 1}
+          </span>
+          <div className="flex-1 truncate text-[0.9em] text-gray-600">{s.업체명 || "-"}</div>
+          {s.상차시간 && <span className="text-[0.75em] text-gray-400 shrink-0">{s.상차시간}</span>}
+        </div>
+      ))}
+
+      {/* 경유 하차지 */}
+      {validStops(order.경유하차목록 || order.경유지_하차).map((s, i) => (
+        <div key={i} className="flex items-center gap-2 mt-0.5">
+          <span className="px-1.5 py-0.5 rounded-full bg-gray-300 text-gray-700 text-[10px] font-bold shrink-0">
+            하{i + 1}
+          </span>
+          <div className="flex-1 truncate text-[0.9em] text-gray-600">{s.업체명 || "-"}</div>
+          {s.하차시간 && <span className="text-[0.75em] text-gray-400 shrink-0">{s.하차시간}</span>}
+        </div>
+      ))}
+
       {/* ▶ 하차 */}
       <div className="flex items-center gap-2 mt-1">
         <span className="px-1.5 py-0.5 rounded-full bg-gray-500 text-white text-[11px] font-bold">
@@ -4144,7 +4194,46 @@ const handleAssignClick = () => {
             </div>
           </div>
 
+          {/* 경유 상차지 */}
+          {validStops(order.경유상차목록 || order.경유지_상차).map((s, i) => (
+            <div key={i} className="flex gap-2 mb-1 ml-3">
+              <span className="mt-0.5 w-5 h-5 rounded-full bg-blue-300 text-white text-[9px] font-bold flex items-center justify-center flex-shrink-0">상{i+1}</span>
+              <div className="flex-1 min-w-0">
+                <div className="text-xs font-bold text-blue-700">{s.업체명 || "-"}</div>
+                {s.주소 && <div className="text-[11px] text-gray-400">{s.주소}</div>}
+                {s.담당자 && <div className="text-[11px] text-gray-500">{s.담당자}{s.담당자번호 ? ` · ${s.담당자번호}` : ""}</div>}
+                <div className="flex gap-2 mt-0.5 flex-wrap">
+                  {s.화물내용 && <span className="text-[10px] text-orange-600 bg-orange-50 px-1 py-0.5 rounded">{s.화물내용}</span>}
+                  {(s.차량톤수 || s.톤수값) && <span className="text-[10px] text-green-700 bg-green-50 px-1 py-0.5 rounded">{s.차량톤수 || s.톤수값}</span>}
+                  {s.상차시간 && <span className="text-[10px] text-gray-500">{s.상차시간}</span>}
+                </div>
+                {s.메모 && <div className="text-[10px] text-amber-700 bg-amber-50 rounded px-1.5 py-0.5 mt-0.5">{s.메모}</div>}
+              </div>
+            </div>
+          ))}
+
           {/* 구분선 */}
+          <div className="ml-2.5 w-px h-3 bg-gray-200 ml-[10px] mb-2" />
+
+          {/* 경유 하차지 */}
+          {validStops(order.경유하차목록 || order.경유지_하차).map((s, i) => (
+            <div key={i} className="flex gap-2 mb-1 ml-3">
+              <span className="mt-0.5 w-5 h-5 rounded-full bg-gray-400 text-white text-[9px] font-bold flex items-center justify-center flex-shrink-0">하{i+1}</span>
+              <div className="flex-1 min-w-0">
+                <div className="text-xs font-bold text-gray-700">{s.업체명 || "-"}</div>
+                {s.주소 && <div className="text-[11px] text-gray-400">{s.주소}</div>}
+                {s.담당자 && <div className="text-[11px] text-gray-500">{s.담당자}{s.담당자번호 ? ` · ${s.담당자번호}` : ""}</div>}
+                <div className="flex gap-2 mt-0.5 flex-wrap">
+                  {s.화물내용 && <span className="text-[10px] text-orange-600 bg-orange-50 px-1 py-0.5 rounded">{s.화물내용}</span>}
+                  {(s.차량톤수 || s.톤수값) && <span className="text-[10px] text-green-700 bg-green-50 px-1 py-0.5 rounded">{s.차량톤수 || s.톤수값}</span>}
+                  {s.하차시간 && <span className="text-[10px] text-gray-500">{s.하차시간}</span>}
+                </div>
+                {s.메모 && <div className="text-[10px] text-amber-700 bg-amber-50 rounded px-1.5 py-0.5 mt-0.5">{s.메모}</div>}
+              </div>
+            </div>
+          ))}
+
+          {/* 구분선 (하차 전) */}
           <div className="ml-2.5 w-px h-3 bg-gray-200 ml-[10px] mb-2" />
 
           {/* 하차지 */}
@@ -4477,6 +4566,8 @@ const handleAssignClick = () => {
                   적요: order.메모 || "",
                   기사명: name || "",
                   전화번호: phone || "",
+                  경유상차목록: validStops(order.경유상차목록 || order.경유지_상차),
+                  경유하차목록: validStops(order.경유하차목록 || order.경유지_하차),
                   _editId: order.id,
                   _returnToDetail: true,
                 });
@@ -4893,6 +4984,37 @@ const [showNewDriver, setShowNewDriver] = useState(false);
 const [showOrderCopyModal, setShowOrderCopyModal] = useState(false);
 const [contactPopup, setContactPopup] = useState(null);
 const [contactQueue, setContactQueue] = useState([]);
+const [stopSheet, setStopSheet] = useState(null); // null | "pickup" | "drop"
+const [stopList, setStopList] = useState([]);
+
+const STOP_TIMES = [
+  "","즉시","오전 6시","오전 7시","오전 8시","오전 9시","오전 10시","오전 11시",
+  "오후 12시","오후 1시","오후 2시","오후 3시","오후 4시","오후 5시","오후 6시","오후 7시","오후 8시",
+];
+const emptyStop = () => ({ 업체명:"", 주소:"", 담당자:"", 담당자번호:"", 메모:"", 화물내용:"", 화물타입:"", 톤수값:"", 톤수타입:"", 차량톤수:"", 상차시간:"", 하차시간:"" });
+
+const openStopSheet = (type) => {
+  const existing = validStops(type === "pickup" ? form.경유상차목록 : form.경유하차목록);
+  setStopList(existing.length ? existing.map(s => ({ ...emptyStop(), ...s })) : [emptyStop()]);
+  setStopSheet(type);
+};
+
+const saveStopSheet = () => {
+  const key = stopSheet === "pickup" ? "경유상차목록" : "경유하차목록";
+  const cleaned = stopList.map(s => {
+    const cargoVal = s.화물내용 || "";
+    const cargoType = s.화물타입 || "";
+    const tonVal = s.톤수값 || "";
+    const tonType = s.톤수타입 || "";
+    return {
+      ...s,
+      화물내용: cargoType ? `${cargoVal}${cargoType}` : cargoVal,
+      차량톤수: tonType ? `${tonVal}${tonType}` : tonVal,
+    };
+  }).filter(s => s.업체명?.trim() || s.주소?.trim());
+  update(key, cleaned);
+  setStopSheet(null);
+};
 const [showFareHistory, setShowFareHistory] = useState(false);
 
 // ── 스마트 운임 조회 매칭 ──
@@ -5562,10 +5684,36 @@ const pickDrop = (c) => {
             update("상차지담당자번호", e.target.value)
           }
         />
+
+        {/* 경유 상차지 버튼 + 미리보기 */}
+        {(() => {
+          const stops = validStops(form.경유상차목록);
+          return (
+            <div>
+              <button
+                type="button"
+                onClick={() => openStopSheet("pickup")}
+                className={`text-[11px] font-bold px-3 py-1 rounded-full border transition ${
+                  stops.length > 0
+                    ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
+                    : "bg-white text-[#1B2B4B] border-[#1B2B4B]"
+                }`}
+              >
+                {stops.length > 0 ? `경유 상차 ${stops.length}곳` : "+ 경유 상차지"}
+              </button>
+              {stops.map((s, i) => (
+                <div key={i} className="mt-1 pl-3 border-l-2 border-dashed border-blue-300">
+                  <div className="text-[11px] font-bold text-blue-700">경유상차 {i+1}: {s.업체명}</div>
+                  {s.주소 && <div className="text-[10px] text-gray-400">{s.주소}</div>}
+                </div>
+              ))}
+            </div>
+          );
+        })()}
       </div>
     }
   />
-  {/* 🔴 하차지 */}
+  {/* 하차지 */}
   <RowLabelInput
     label="하차지"
     input={
@@ -5664,6 +5812,32 @@ const pickDrop = (c) => {
             update("하차지담당자번호", e.target.value)
           }
         />
+
+        {/* 경유 하차지 버튼 + 미리보기 */}
+        {(() => {
+          const stops = validStops(form.경유하차목록);
+          return (
+            <div>
+              <button
+                type="button"
+                onClick={() => openStopSheet("drop")}
+                className={`text-[11px] font-bold px-3 py-1 rounded-full border transition ${
+                  stops.length > 0
+                    ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
+                    : "bg-white text-[#1B2B4B] border-[#1B2B4B]"
+                }`}
+              >
+                {stops.length > 0 ? `경유 하차 ${stops.length}곳` : "+ 경유 하차지"}
+              </button>
+              {stops.map((s, i) => (
+                <div key={i} className="mt-1 pl-3 border-l-2 border-dashed border-gray-400">
+                  <div className="text-[11px] font-bold text-gray-700">경유하차 {i+1}: {s.업체명}</div>
+                  {s.주소 && <div className="text-[10px] text-gray-400">{s.주소}</div>}
+                </div>
+              ))}
+            </div>
+          );
+        })()}
       </div>
     }
   />
@@ -6272,6 +6446,148 @@ const pickDrop = (c) => {
       >
         취소
       </button>
+    </div>
+  </div>
+)}
+
+{/* ===== 경유지 편집 바텀시트 ===== */}
+{stopSheet && (
+  <div className="fixed inset-0 z-[9999] flex flex-col justify-end">
+    <div className="absolute inset-0 bg-black/60" onClick={() => setStopSheet(null)} />
+    <div className="relative bg-white rounded-t-3xl max-h-[92vh] flex flex-col" onClick={e => e.stopPropagation()}>
+      <div className="flex justify-center pt-3 pb-0 shrink-0">
+        <div className="w-10 h-1 rounded-full bg-gray-300" />
+      </div>
+      {/* 헤더 */}
+      <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 shrink-0">
+        <div className="font-bold text-[15px] text-[#1B2B4B]">
+          {stopSheet === "pickup" ? "경유 상차지 추가" : "경유 하차지 추가"}
+        </div>
+        <button onClick={() => setStopSheet(null)}
+          className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 text-lg">×</button>
+      </div>
+      {/* 경유지 목록 */}
+      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
+        {stopList.map((stop, idx) => (
+          <div key={idx} className="bg-gray-50 border border-gray-200 rounded-2xl p-3 space-y-2">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[12px] font-bold text-[#1B2B4B]">경유지 {idx + 1}</span>
+              {stopList.length > 1 && (
+                <button type="button" onClick={() => setStopList(prev => prev.filter((_, i) => i !== idx))}
+                  className="text-[11px] text-red-500 font-bold px-2 py-0.5 border border-red-200 rounded-full">삭제</button>
+              )}
+            </div>
+            <input
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:border-[#1B2B4B]"
+              placeholder="업체명 / 경유지명"
+              value={stop.업체명 || ""}
+              onChange={e => setStopList(prev => prev.map((s, i) => i === idx ? { ...s, 업체명: e.target.value } : s))}
+            />
+            <input
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:border-[#1B2B4B]"
+              placeholder="주소"
+              value={stop.주소 || ""}
+              onChange={e => setStopList(prev => prev.map((s, i) => i === idx ? { ...s, 주소: e.target.value } : s))}
+            />
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                className="border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:border-[#1B2B4B]"
+                placeholder="담당자"
+                value={stop.담당자 || ""}
+                onChange={e => setStopList(prev => prev.map((s, i) => i === idx ? { ...s, 담당자: e.target.value } : s))}
+              />
+              <input
+                className="border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:border-[#1B2B4B]"
+                placeholder="연락처"
+                value={stop.담당자번호 || ""}
+                onChange={e => setStopList(prev => prev.map((s, i) => i === idx ? { ...s, 담당자번호: e.target.value } : s))}
+              />
+            </div>
+            {/* 화물내용 + 타입 */}
+            <div className="flex border border-gray-200 rounded-xl overflow-hidden bg-white">
+              <input
+                className="flex-1 px-3 py-2 text-sm outline-none"
+                placeholder="화물내용 (예: 3)"
+                value={stop.화물내용 || ""}
+                onChange={e => setStopList(prev => prev.map((s, i) => i === idx ? { ...s, 화물내용: e.target.value } : s))}
+              />
+              <select
+                className="px-2 py-1 text-[11px] font-bold bg-[#1B2B4B] text-white border-0 outline-none"
+                value={stop.화물타입 || ""}
+                onChange={e => setStopList(prev => prev.map((s, i) => i === idx ? { ...s, 화물타입: e.target.value } : s))}
+              >
+                <option value="">없음</option>
+                <option value="파레트">파레트</option>
+                <option value="박스">박스</option>
+                <option value="통">통</option>
+              </select>
+            </div>
+            {/* 톤수 */}
+            <div className="flex border border-gray-200 rounded-xl overflow-hidden bg-white">
+              <input
+                className="flex-1 px-3 py-2 text-sm outline-none"
+                placeholder="톤수 (예: 1)"
+                value={stop.톤수값 || ""}
+                onChange={e => setStopList(prev => prev.map((s, i) => i === idx ? { ...s, 톤수값: e.target.value } : s))}
+              />
+              <select
+                className="px-2 py-1 text-[11px] font-bold bg-[#1B2B4B] text-white border-0 outline-none"
+                value={stop.톤수타입 || ""}
+                onChange={e => setStopList(prev => prev.map((s, i) => i === idx ? { ...s, 톤수타입: e.target.value } : s))}
+              >
+                <option value="">없음</option>
+                <option value="톤">톤</option>
+                <option value="kg">kg</option>
+              </select>
+            </div>
+            {/* 시간 */}
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <div className="text-[10px] text-gray-500 font-semibold mb-1">상차시간</div>
+                <select
+                  className="w-full border border-gray-200 rounded-xl px-2 py-2 text-sm bg-white focus:outline-none"
+                  value={stop.상차시간 || ""}
+                  onChange={e => setStopList(prev => prev.map((s, i) => i === idx ? { ...s, 상차시간: e.target.value } : s))}
+                >
+                  {STOP_TIMES.map(t => <option key={t} value={t}>{t || "시간 선택"}</option>)}
+                </select>
+              </div>
+              <div>
+                <div className="text-[10px] text-gray-500 font-semibold mb-1">하차시간</div>
+                <select
+                  className="w-full border border-gray-200 rounded-xl px-2 py-2 text-sm bg-white focus:outline-none"
+                  value={stop.하차시간 || ""}
+                  onChange={e => setStopList(prev => prev.map((s, i) => i === idx ? { ...s, 하차시간: e.target.value } : s))}
+                >
+                  {STOP_TIMES.map(t => <option key={t} value={t}>{t || "시간 선택"}</option>)}
+                </select>
+              </div>
+            </div>
+            {/* 메모 */}
+            <input
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:border-[#1B2B4B]"
+              placeholder="메모 (예: 백게이트 진입)"
+              value={stop.메모 || ""}
+              onChange={e => setStopList(prev => prev.map((s, i) => i === idx ? { ...s, 메모: e.target.value } : s))}
+            />
+          </div>
+        ))}
+        {/* 경유지 추가 버튼 */}
+        <button
+          type="button"
+          onClick={() => setStopList(prev => [...prev, emptyStop()])}
+          className="w-full py-3 rounded-2xl border-2 border-dashed border-[#1B2B4B]/30 text-[#1B2B4B] text-sm font-semibold"
+        >
+          + 경유지 추가
+        </button>
+      </div>
+      {/* 저장/취소 버튼 */}
+      <div className="px-4 pb-6 pt-3 border-t border-gray-100 grid grid-cols-2 gap-3 shrink-0">
+        <button type="button" onClick={() => setStopSheet(null)}
+          className="py-3 rounded-xl bg-gray-100 text-gray-700 text-sm font-semibold">취소</button>
+        <button type="button" onClick={saveStopSheet}
+          className="py-3 rounded-xl bg-[#1B2B4B] text-white text-sm font-bold">저장</button>
+      </div>
     </div>
   </div>
 )}
