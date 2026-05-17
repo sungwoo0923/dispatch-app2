@@ -2782,7 +2782,7 @@ setOpenMemo={setOpenMemo}
 function MobileSalesPage({ data = [], onBack }) {
   const [month, setMonth] = useState(new Date(new Date().getTime() + 9*60*60*1000).toISOString().slice(0,7));
   const toInt = (v) => Number(String(v || "").replace(/[^\d]/g, "")) || 0;
-  const won = (v) => v >= 1_000_000 ? `${(v/1_000_000).toFixed(1)}M` : v >= 10_000 ? `${Math.round(v/10_000)}만` : v.toLocaleString();
+  const fmtWon = (v) => Number(v).toLocaleString("ko-KR");
 
   const allBase = data.filter(r => r.상차일 && !(r.거래처명||"").includes("후레쉬물류"));
   const rows = allBase.filter(r => r.상차일.startsWith(month));
@@ -2825,64 +2825,140 @@ function MobileSalesPage({ data = [], onBack }) {
     byDay[dow].건수 += 1; byDay[dow].매출 += toInt(r.청구운임);
   });
   const maxDay = Math.max(...byDay.map(d=>d.건수), 1);
+  const busyDayLabel = byDay.find(d=>d.건수===maxDay)?.day;
 
-  // 스마트 인사이트
-  const insights = [];
-  if (saleDiffPct !== null) insights.push({ c: saleDiff>=0?"emerald":"rose", t: `전월 대비 ${saleDiff>=0?"+":""}${saleDiffPct.toFixed(1)}% (${Math.abs(saleDiff).toLocaleString()}원)` });
-  if (top5[0]) insights.push({ c:"indigo", t: `이달 최고 거래처: ${top5[0][0]} (${top5[0][1].toLocaleString()}원)` });
-  insights.push({ c:"blue", t: `건당 평균 ${avgFare.toLocaleString()}원 · 총 ${cur.cnt}건` });
-  insights.push({ c: profitRate>=15?"emerald":profitRate>=10?"amber":"rose", t: `수익률 ${profitRate.toFixed(1)}% · 수익 ${cur.fee.toLocaleString()}원` });
+  // 스마트 인사이트 (모노톤)
+  const insights = [
+    saleDiffPct !== null ? {
+      icon: saleDiff >= 0 ? "▲" : "▼",
+      label: "전월 대비 매출",
+      value: `${saleDiff>=0?"+":""}${saleDiffPct.toFixed(1)}%`,
+      sub: `${Math.abs(saleDiff).toLocaleString()}원 ${saleDiff>=0?"증가":"감소"}`,
+      positive: saleDiff >= 0,
+    } : null,
+    top5[0] ? {
+      icon: "①",
+      label: "이달 최고 거래처",
+      value: top5[0][0],
+      sub: `${top5[0][1].toLocaleString()}원 · 점유 ${Math.round(top5[0][1]/cur.sale*100)||0}%`,
+      positive: true,
+    } : null,
+    {
+      icon: "≈",
+      label: "건당 평균 청구운임",
+      value: `${avgFare.toLocaleString()}원`,
+      sub: `총 ${cur.cnt}건 수주`,
+      positive: true,
+    },
+    {
+      icon: "%",
+      label: "수익률",
+      value: `${profitRate.toFixed(1)}%`,
+      sub: `수익 ${cur.fee.toLocaleString()}원`,
+      positive: profitRate >= 10,
+    },
+  ].filter(Boolean);
 
-  const IC = { emerald:"bg-emerald-50 border-emerald-200 text-emerald-700", rose:"bg-rose-50 border-rose-200 text-rose-700", indigo:"bg-indigo-50 border-indigo-200 text-indigo-700", blue:"bg-blue-50 border-blue-200 text-blue-700", amber:"bg-amber-50 border-amber-200 text-amber-700" };
+  const monthLabel = (() => {
+    const [y, m] = month.split("-");
+    return `${y}년 ${Number(m)}월`;
+  })();
+
+  // SVG 다이얼 게이지 컴포넌트
+  const Dial = ({ pct, color, size = 72 }) => {
+    const r = size * 0.38, cx = size / 2, cy = size / 2;
+    const circ = 2 * Math.PI * r;
+    const dash = Math.min(Math.max(pct, 0), 100) / 100 * circ;
+    return (
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#E5E7EB" strokeWidth="6" />
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke={color} strokeWidth="6"
+          strokeDasharray={`${dash} ${circ}`} strokeLinecap="round"
+          transform={`rotate(-90 ${cx} ${cy})`} />
+        <text x={cx} y={cy+1} textAnchor="middle" dominantBaseline="middle"
+          fontSize={size*0.18} fontWeight="700" fill={color}>{Math.round(pct)}%</text>
+      </svg>
+    );
+  };
+
+  const maxSale = Math.max(cur.sale, prev.sale, 1);
+  const kpiCards = [
+    { label:"총 청구운임", value:cur.sale, sub:`${cur.cnt}건 수주`, pct: Math.min(cur.sale/maxSale*100,100), color:"#1B2B4B" },
+    { label:"수익 (수수료)", value:cur.fee, sub:`수익률 ${profitRate.toFixed(1)}%`, pct: Math.min(profitRate,100), color: profitRate>=15?"#10B981":profitRate>=10?"#F59E0B":"#EF4444" },
+    { label:"기사 운임", value:cur.driver, sub:"지급 합계", pct: cur.sale>0?Math.min(cur.driver/cur.sale*100,100):0, color:"#6B7280" },
+    { label:"건당 평균", value:avgFare, sub:"청구운임 기준", pct: prev.cnt>0?Math.min(avgFare/Math.round(prev.sale/prev.cnt)*100,100):50, color:"#4F46E5" },
+  ];
 
   return (
-    <div className="bg-gray-50 min-h-screen pb-8">
+    <div className="bg-[#f4f5f8] min-h-screen pb-10">
       {/* 헤더 */}
-      <div className="bg-[#1B2B4B] px-4 py-4 flex items-center gap-3">
-        <button onClick={onBack} className="text-white/70 text-lg font-bold w-8">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
-        </button>
-        <div>
-          <div className="text-white font-bold text-[16px]">매출관리</div>
-          <div className="text-white/50 text-[11px]">매출 · 수익 · 거래처 분석</div>
+      <div className="bg-[#1B2B4B] px-4 pt-5 pb-6">
+        <div className="flex items-center gap-3 mb-5">
+          <button onClick={onBack} className="text-white/60">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+          </button>
+          <div>
+            <div className="text-white font-bold text-[16px] tracking-tight">매출관리</div>
+            <div className="text-white/40 text-[11px]">{monthLabel} 실적</div>
+          </div>
+          <div className="ml-auto">
+            <input type="month" value={month} onChange={e=>setMonth(e.target.value)}
+              className="bg-white/10 text-white text-[12px] border border-white/20 rounded-lg px-2 py-1 outline-none" />
+          </div>
+        </div>
+        {/* 헤더 내 핵심 지표 요약 */}
+        <div className="grid grid-cols-3 gap-2">
+          {[
+            { label:"총청구운임", value:cur.sale },
+            { label:"수익", value:cur.fee },
+            { label:"수익률", value:null, text:`${profitRate.toFixed(1)}%` },
+          ].map((item,i) => (
+            <div key={i} className="bg-white/8 rounded-xl px-3 py-2.5 border border-white/10">
+              <div className="text-white/50 text-[10px] mb-1">{item.label}</div>
+              <div className="text-white font-bold text-[13px] leading-tight">
+                {item.text ?? `${fmtWon(item.value)}원`}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 
       <div className="px-4 pt-4 space-y-4">
-        {/* 월 선택 */}
-        <input type="month" value={month} onChange={e=>setMonth(e.target.value)}
-          className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white shadow-sm" />
-
-        {/* KPI 4카드 */}
-        <div className="grid grid-cols-2 gap-3">
-          {[
-            { label:"총 청구운임", value:cur.sale, sub:`${cur.cnt}건`, color:"text-[#1B2B4B]", bg:"bg-white" },
-            { label:"수익 (수수료)", value:cur.fee, sub:`수익률 ${profitRate.toFixed(1)}%`, color: profitRate>=15?"text-emerald-600":profitRate>=10?"text-amber-600":"text-rose-600", bg:"bg-white" },
-            { label:"기사 운임", value:cur.driver, sub:"지급 합계", color:"text-gray-700", bg:"bg-white" },
-            { label:"건당 평균", value:avgFare, sub:"청구운임 기준", color:"text-indigo-600", bg:"bg-white" },
-          ].map((k,i) => (
-            <div key={i} className={`${k.bg} rounded-2xl border border-gray-100 shadow-sm px-4 py-3`}>
-              <div className="text-[11px] text-gray-400 font-semibold mb-1">{k.label}</div>
-              <div className={`text-[18px] font-extrabold leading-tight ${k.color}`}>{won(k.value)}<span className="text-[11px] font-normal text-gray-400 ml-1">원</span></div>
-              <div className="text-[11px] text-gray-400 mt-0.5">{k.sub}</div>
-            </div>
-          ))}
-        </div>
-
         {/* 전월 대비 배너 */}
-        <div className={`rounded-xl px-4 py-2.5 flex items-center justify-between text-sm font-semibold border ${saleDiff>=0?"bg-emerald-50 border-emerald-200 text-emerald-700":"bg-rose-50 border-rose-200 text-rose-600"}`}>
+        <div className={`rounded-xl px-4 py-2.5 flex items-center justify-between text-[13px] font-semibold border ${saleDiff>=0?"bg-emerald-50 border-emerald-200 text-emerald-700":"bg-rose-50 border-rose-200 text-rose-600"}`}>
           <span>전월 대비</span>
           <span>{saleDiff>=0?"▲":"▼"} {Math.abs(saleDiff).toLocaleString()}원 {saleDiffPct!==null?`(${saleDiffPct>=0?"+":""}${saleDiffPct.toFixed(1)}%)`:"(이전 데이터 없음)"}</span>
         </div>
 
+        {/* KPI 4카드 — 다이얼 게이지 */}
+        <div className="grid grid-cols-2 gap-3">
+          {kpiCards.map((k,i) => (
+            <div key={i} className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-3 flex items-center gap-3">
+              <Dial pct={k.pct} color={k.color} size={64} />
+              <div className="flex-1 min-w-0">
+                <div className="text-[10px] text-gray-400 font-semibold mb-0.5">{k.label}</div>
+                <div className="text-[13px] font-extrabold leading-tight text-gray-900 truncate">{fmtWon(k.value)}<span className="text-[10px] font-normal text-gray-400 ml-0.5">원</span></div>
+                <div className="text-[10px] text-gray-400 mt-0.5">{k.sub}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+
         {/* 스마트 인사이트 */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-          <div className="text-[13px] font-bold text-[#1B2B4B] mb-3">스마트 인사이트</div>
-          <div className="space-y-2">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="px-4 py-3 bg-[#1B2B4B]">
+            <div className="text-[13px] font-bold text-white tracking-tight">스마트 인사이트</div>
+            <div className="text-[10px] text-white/40 mt-0.5">AI 기반 월별 분석 요약</div>
+          </div>
+          <div className="divide-y divide-gray-50">
             {insights.map((ins,i) => (
-              <div key={i} className={`flex items-start gap-2 border rounded-xl px-3 py-2 ${IC[ins.c]}`}>
-                <span className="w-1.5 h-1.5 rounded-full bg-current mt-1.5 shrink-0" />
-                <span className="text-[12px] font-semibold">{ins.t}</span>
+              <div key={i} className="flex items-center gap-3 px-4 py-3">
+                <span className={`w-7 h-7 rounded-lg flex items-center justify-center text-[13px] font-bold shrink-0 ${ins.positive?"bg-gray-100 text-gray-600":"bg-rose-50 text-rose-500"}`}>{ins.icon}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[11px] text-gray-400">{ins.label}</div>
+                  <div className={`text-[13px] font-bold truncate ${ins.positive?"text-gray-800":"text-rose-600"}`}>{ins.value}</div>
+                </div>
+                <div className="text-[10px] text-gray-400 text-right shrink-0 max-w-[90px]">{ins.sub}</div>
               </div>
             ))}
           </div>
@@ -2898,14 +2974,14 @@ function MobileSalesPage({ data = [], onBack }) {
                 <XAxis dataKey="ym" tick={{fontSize:10,fill:"#9CA3AF"}} axisLine={false} tickLine={false} />
                 <YAxis tickFormatter={v=>v>=1000000?`${(v/1000000).toFixed(0)}M`:v>=10000?`${Math.round(v/10000)}만`:`${v}`} tick={{fontSize:9,fill:"#9CA3AF"}} axisLine={false} tickLine={false} width={36} />
                 <Tooltip formatter={(v,n)=>[`${v.toLocaleString()}원`, n]} contentStyle={{borderRadius:10,fontSize:11}} />
-                <Line type="monotone" dataKey="매출" stroke="#6366F1" strokeWidth={2.5} dot={false} activeDot={{r:4}} />
-                <Line type="monotone" dataKey="수익" stroke="#10B981" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="매출" stroke="#1B2B4B" strokeWidth={2.5} dot={false} activeDot={{r:4}} />
+                <Line type="monotone" dataKey="수익" stroke="#6B7280" strokeWidth={2} dot={false} strokeDasharray="4 2" />
               </LineChart>
             </ResponsiveContainer>
           </div>
           <div className="flex gap-4 mt-2 justify-center text-[11px] text-gray-500">
-            <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-indigo-500 inline-block" />매출</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-emerald-500 inline-block" />수익</span>
+            <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-[#1B2B4B] inline-block" />매출</span>
+            <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-gray-400 inline-block" />수익</span>
           </div>
         </div>
 
@@ -2918,13 +2994,13 @@ function MobileSalesPage({ data = [], onBack }) {
               <div key={i}>
                 <div className="flex items-center justify-between mb-1">
                   <div className="flex items-center gap-2">
-                    <span className={`text-[11px] font-bold w-5 h-5 rounded-full flex items-center justify-center ${i===0?"bg-[#1B2B4B] text-white":"bg-gray-100 text-gray-600"}`}>{i+1}</span>
+                    <span className={`text-[11px] font-bold w-5 h-5 rounded-full flex items-center justify-center ${i===0?"bg-[#1B2B4B] text-white":"bg-gray-100 text-gray-500"}`}>{i+1}</span>
                     <span className="text-[13px] font-semibold text-gray-800 truncate max-w-[150px]">{name}</span>
                   </div>
-                  <span className="text-[12px] font-bold text-indigo-600">{sale.toLocaleString()}원</span>
+                  <span className="text-[12px] font-bold text-gray-700">{sale.toLocaleString()}원</span>
                 </div>
                 <div className="w-full bg-gray-100 rounded-full h-1.5">
-                  <div className="h-1.5 rounded-full bg-indigo-400" style={{width:`${Math.round(sale/maxClient*100)}%`}} />
+                  <div className="h-1.5 rounded-full bg-[#1B2B4B]" style={{width:`${Math.round(sale/maxClient*100)}%`, opacity: 0.3+0.7*(1-i*0.15)}} />
                 </div>
               </div>
             ))}
@@ -2942,12 +3018,12 @@ function MobileSalesPage({ data = [], onBack }) {
                 <YAxis tick={{fontSize:9,fill:"#9CA3AF"}} axisLine={false} tickLine={false} allowDecimals={false} />
                 <Tooltip contentStyle={{borderRadius:10,fontSize:11}} formatter={(v)=>[`${v}건`,"건수"]} />
                 <Bar dataKey="건수" radius={[4,4,0,0]}>
-                  {byDay.map((d,i) => <Cell key={i} fill={d.건수===maxDay?"#4F46E5":"#C7D2FE"} />)}
+                  {byDay.map((d,i) => <Cell key={i} fill={d.건수===maxDay?"#1B2B4B":"#D1D5DB"} />)}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
-          <div className="mt-2 text-[11px] text-gray-400 text-center">가장 많은 수주 요일: <b className="text-indigo-600">{byDay.find(d=>d.건수===maxDay)?.day}요일</b></div>
+          <div className="mt-2 text-[11px] text-gray-400 text-center">가장 많은 수주 요일: <b className="text-[#1B2B4B]">{busyDayLabel}요일</b></div>
         </div>
 
       </div>
