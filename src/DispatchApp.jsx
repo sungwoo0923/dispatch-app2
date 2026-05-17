@@ -3,7 +3,7 @@ import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
-import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend } from "recharts";
+import { CartesianGrid, Line, LineChart, BarChart, Bar, Cell, PieChart, Pie, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend } from "recharts";
 import * as XLSX from "xlsx";
 import { sendOrderTo24Proxy as sendOrderTo24 } from "../api/24CallProxy";
 import AdminMenu from "./AdminMenu";
@@ -25702,6 +25702,16 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [] })
 
               </div>
             </div>
+
+            {/* 스마트 인사이트 */}
+            <SalesInsightPanel monthRows={monthRows} allRows={rows} targetMonth={targetMonth} />
+
+            {/* 요일별 수주 분석 */}
+            <WeekdayAnalysisChart monthRows={monthRows} />
+
+            {/* 노선 TOP 5 */}
+            <RouteTopChart monthRows={monthRows} />
+
           </div>
         </div>
 
@@ -25817,6 +25827,185 @@ function PeriodSummaryTable({ data = [] }) {
           </tr>
         </tbody>
       </table>
+    </div>
+  );
+}
+
+// ===================== 스마트 인사이트 =====================
+function SalesInsightPanel({ monthRows = [], allRows = [], targetMonth = "" }) {
+  const toInt = (v) => Number(String(v || "").replace(/[^\d]/g, "")) || 0;
+
+  if (!monthRows.length) return null;
+
+  const prevMonth = (() => {
+    const d = new Date(targetMonth + "-01");
+    d.setMonth(d.getMonth() - 1);
+    return d.toISOString().slice(0, 7);
+  })();
+  const prevRows = allRows.filter(r => r.상차일?.startsWith(prevMonth));
+
+  const totalSale = monthRows.reduce((s, r) => s + toInt(r.청구운임), 0);
+  const prevSale = prevRows.reduce((s, r) => s + toInt(r.청구운임), 0);
+  const growthPct = prevSale > 0 ? ((totalSale - prevSale) / prevSale * 100).toFixed(1) : null;
+
+  // 건당 평균 운임
+  const avgFare = monthRows.length > 0 ? Math.round(totalSale / monthRows.length) : 0;
+
+  // 최고 거래처
+  const byClient = {};
+  monthRows.forEach(r => {
+    const c = r.거래처명 || "미지정";
+    byClient[c] = (byClient[c] || 0) + toInt(r.청구운임);
+  });
+  const topClient = Object.entries(byClient).sort((a, b) => b[1] - a[1])[0];
+
+  // 수익률
+  const totalFee = monthRows.reduce((s, r) => s + (toInt(r.청구운임) - toInt(r.기사운임)), 0);
+  const profitRate = totalSale > 0 ? (totalFee / totalSale * 100).toFixed(1) : "0.0";
+
+  const insights = [];
+  if (growthPct !== null) {
+    insights.push({
+      color: parseFloat(growthPct) >= 0 ? "emerald" : "rose",
+      icon: parseFloat(growthPct) >= 0 ? "▲" : "▼",
+      text: `전월 대비 매출 ${parseFloat(growthPct) >= 0 ? "+" : ""}${growthPct}% (${Math.abs(totalSale - prevSale).toLocaleString()}원 ${parseFloat(growthPct) >= 0 ? "증가" : "감소"})`,
+    });
+  }
+  if (topClient) insights.push({ color: "indigo", icon: "1위", text: `이달 최고 거래처: ${topClient[0]} (${topClient[1].toLocaleString()}원 · ${Math.round(topClient[1]/totalSale*100)}%)` });
+  insights.push({ color: "blue", icon: "건당", text: `건당 평균 청구운임 ${avgFare.toLocaleString()}원 (총 ${monthRows.length}건)` });
+  insights.push({ color: parseFloat(profitRate) >= 15 ? "emerald" : parseFloat(profitRate) >= 10 ? "amber" : "rose", icon: "수익", text: `수익률 ${profitRate}% · 수익 ${totalFee.toLocaleString()}원` });
+
+  const colorMap = {
+    emerald: "bg-emerald-50 border-emerald-200 text-emerald-700",
+    rose: "bg-rose-50 border-rose-200 text-rose-700",
+    indigo: "bg-indigo-50 border-indigo-200 text-indigo-700",
+    blue: "bg-blue-50 border-blue-200 text-blue-700",
+    amber: "bg-amber-50 border-amber-200 text-amber-700",
+  };
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="bg-[#1B2B4B] px-6 py-4">
+        <h3 className="text-[15px] font-bold text-white">스마트 인사이트</h3>
+        <p className="text-[11px] text-white/50 mt-0.5">이달의 핵심 지표 자동 분석</p>
+      </div>
+      <div className="p-5 space-y-2.5">
+        {insights.map((ins, i) => (
+          <div key={i} className={`flex items-start gap-3 border rounded-xl px-4 py-3 ${colorMap[ins.color] || colorMap.blue}`}>
+            <span className="text-[11px] font-extrabold shrink-0 mt-0.5">{ins.icon}</span>
+            <span className="text-[13px] font-semibold leading-snug">{ins.text}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ===================== 요일별 수주 분석 =====================
+function WeekdayAnalysisChart({ monthRows = [] }) {
+  const toInt = (v) => Number(String(v || "").replace(/[^\d]/g, "")) || 0;
+
+  if (!monthRows.length) return null;
+
+  const days = ["일", "월", "화", "수", "목", "금", "토"];
+  const byDay = Array(7).fill(null).map((_, i) => ({ day: days[i], 건수: 0, 매출: 0 }));
+
+  monthRows.forEach(r => {
+    if (!r.상차일) return;
+    const d = new Date(r.상차일 + "T00:00:00");
+    const dow = d.getDay();
+    byDay[dow].건수 += 1;
+    byDay[dow].매출 += toInt(r.청구운임);
+  });
+
+  const maxCount = Math.max(...byDay.map(d => d.건수), 1);
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="bg-[#1B2B4B] px-6 py-4">
+        <h3 className="text-[15px] font-bold text-white">요일별 수주 분석</h3>
+        <p className="text-[11px] text-white/50 mt-0.5">어느 요일에 가장 많이 출하하는지 파악</p>
+      </div>
+      <div className="p-5">
+        <div className="h-[200px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={byDay} barSize={28}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+              <XAxis dataKey="day" tick={{ fontSize: 12, fill: "#374151" }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 11, fill: "#9CA3AF" }} axisLine={false} tickLine={false} allowDecimals={false} />
+              <Tooltip
+                contentStyle={{ borderRadius: 10, fontSize: 12 }}
+                formatter={(v, n) => [n === "매출" ? `${v.toLocaleString()}원` : `${v}건`, n]}
+              />
+              <Legend verticalAlign="top" align="right" iconType="circle" wrapperStyle={{ fontSize: 12 }} />
+              <Bar dataKey="건수" fill="#6366F1" radius={[4, 4, 0, 0]}>
+                {byDay.map((entry, i) => (
+                  <Cell key={i} fill={entry.건수 === maxCount ? "#4F46E5" : "#A5B4FC"} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+        <div className="mt-3 grid grid-cols-7 gap-1 text-center text-[11px]">
+          {byDay.map((d, i) => (
+            <div key={i} className={`rounded-lg py-1.5 ${d.건수 === maxCount ? "bg-indigo-100 text-indigo-800 font-bold" : "bg-gray-50 text-gray-500"}`}>
+              <div className="font-bold">{d.day}</div>
+              <div>{d.건수}건</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ===================== 노선 TOP 5 =====================
+function RouteTopChart({ monthRows = [] }) {
+  const toInt = (v) => Number(String(v || "").replace(/[^\d]/g, "")) || 0;
+
+  if (!monthRows.length) return null;
+
+  const routeMap = {};
+  monthRows.forEach(r => {
+    const from = (r.상차지명 || "").slice(0, 8) || "미지정";
+    const to = (r.하차지명 || "").slice(0, 8) || "미지정";
+    const key = `${from} → ${to}`;
+    if (!routeMap[key]) routeMap[key] = { 건수: 0, 매출: 0 };
+    routeMap[key].건수 += 1;
+    routeMap[key].매출 += toInt(r.청구운임);
+  });
+
+  const top5 = Object.entries(routeMap)
+    .sort((a, b) => b[1].매출 - a[1].매출)
+    .slice(0, 5)
+    .map(([route, v]) => ({ route, ...v }));
+
+  const maxSale = Math.max(...top5.map(r => r.매출), 1);
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="bg-[#1B2B4B] px-6 py-4">
+        <h3 className="text-[15px] font-bold text-white">노선 TOP 5</h3>
+        <p className="text-[11px] text-white/50 mt-0.5">이달 청구운임 기준 상위 운행 노선</p>
+      </div>
+      <div className="p-5 space-y-3">
+        {top5.map((r, i) => (
+          <div key={i} className="space-y-1">
+            <div className="flex items-center justify-between text-[12px]">
+              <span className="font-semibold text-gray-700 truncate max-w-[60%]">
+                <span className="text-indigo-600 font-bold mr-1.5">{i + 1}</span>{r.route}
+              </span>
+              <span className="text-gray-500 shrink-0">{r.건수}건 · {r.매출.toLocaleString()}원</span>
+            </div>
+            <div className="w-full bg-gray-100 rounded-full h-2">
+              <div
+                className="h-2 rounded-full bg-indigo-500"
+                style={{ width: `${Math.round(r.매출 / maxSale * 100)}%` }}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

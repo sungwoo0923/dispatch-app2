@@ -1,6 +1,7 @@
 // ======================= src/App.jsx =======================
 
 import React, { useState, useEffect, useRef } from "react";
+import UpdateBanner from "./UpdateBanner";
 import {
   BrowserRouter as Router,
   Routes,
@@ -63,7 +64,7 @@ export default function App() {
   const [role, setRole] = useState(null);
   const [loading, setLoading] = useState(true);
   const [approved, setApproved] = useState(false);
-  const [updateReady, setUpdateReady] = useState(false);
+  // updateReady 팝업 제거됨 - UpdateBanner가 자동 처리
   const [splashDone, setSplashDone] = useState(false);
 
   // ★ 태블릿 감지 상태
@@ -267,16 +268,7 @@ export default function App() {
     }
   }, []);
 
-  // 업데이트 이벤트
-  useEffect(() => {
-    const onUpdate = () => {
-      if (updateShownRef.current) return;
-      updateShownRef.current = true;
-      setUpdateReady(true);
-    };
-    window.addEventListener("app-update-ready", onUpdate);
-    return () => window.removeEventListener("app-update-ready", onUpdate);
-  }, []);
+  // 업데이트 이벤트 - UpdateBanner.jsx가 처리하므로 App에서는 제거
 
   // 인증 + 역할
   useEffect(() => {
@@ -336,54 +328,8 @@ export default function App() {
 
   return (
     <>
-      {/* 업데이트 배너 */}
-      {updateReady && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[99999]">
-          <div className="bg-white rounded-2xl shadow-2xl w-[380px] overflow-hidden animate-[fadeInUp_0.3s_ease-out]">
-            <div className="bg-[#1B2B4B] px-6 py-4 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center">
-                <svg className="w-5 h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-              </div>
-              <div>
-                <h3 className="text-white text-[15px] font-bold">새 업데이트가 있습니다</h3>
-                <p className="text-white/50 text-[11px] mt-0.5">KP-Flow Logistics</p>
-              </div>
-            </div>
-            <div className="px-6 py-5">
-              <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 mb-4">
-                <div className="flex items-start gap-2">
-                  <span className="text-blue-500 text-sm mt-0.5">💡</span>
-                  <div className="text-[12px] text-blue-700 leading-relaxed">
-                    최신 버전이 준비되었습니다.<br />
-                    업데이트를 적용하면 자동으로 새로고침됩니다.
-                  </div>
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  className="flex-1 py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-500 hover:bg-gray-50 transition"
-                  onClick={() => setUpdateReady(false)}
-                >
-                  나중에
-                </button>
-                <button
-                  className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition"
-                  onClick={() => {
-                    setUpdateReady(false);
-                    if (window.__APPLYING_UPDATE__) return;
-                    window.__APPLYING_UPDATE__ = true;
-                    window.applyAppUpdate?.();
-                  }}
-                >
-                  지금 업데이트
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* 자동 업데이트 배너 (팝업 없이 상단 배너로 표시 후 자동 새로고침) */}
+      <UpdateBanner />
 
       <Router>
         <Routes>

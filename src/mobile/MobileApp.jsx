@@ -23,6 +23,7 @@ import {
 } from "firebase/firestore";
 import { db, auth } from "../firebase";
 import { signOut } from "firebase/auth";
+import { version as APP_VERSION } from "../../package.json";
 
 
 
@@ -3166,6 +3167,11 @@ function MobileSideMenu({
               로그아웃
             </button>
           </div>
+          {/* 버전 */}
+          <div className="px-5 py-2 flex items-center justify-between">
+            <span className="text-[11px] text-gray-400">버전</span>
+            <span className="text-[11px] font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">v{APP_VERSION}</span>
+          </div>
         </div>
       </div>
     </div>
@@ -3919,45 +3925,88 @@ const pickupTimeText = order.상차시간
 
   const parseDriverText = (text) => {
     let name = "", phone = "", plate = "";
-   const hasTag = text.includes("[차주정보]") || text.includes("[차량정보]") || text.includes("[기사정보]");
+
+    const CITY_EXCLUDE = [
+      "강원","서울","경기","인천","부산","대구","광주","대전","울산","세종",
+      "경북","경남","전북","전남","충북","충남","제주",
+      "하남","성남","수원","안양","부천","화성","평택","시흥","안산","군포",
+      "의왕","오산","파주","고양","의정부","양주","김포","구리","남양주","이천",
+      "여주","포천","광명","동두천","안성","용인","강남","강서","영등포",
+      "마포","서초","종로","중구","동대문","성동","송파","강동","관악",
+      "초장축윙","초장축","장축","윙바디","카고","탑차","냉장탑","냉동탑",
+      "냉장윙","냉동윙","냉장","냉동","리프트","다마스","라보","차주정보",
+      "차량정보","기사정보","차량번호",
+    ];
+
+    const hasTag = /\[(차주정보|기사정보|차량정보)\]/.test(text);
+
     if (hasTag) {
-      // 구분자 있는 경우: [차주정보] 이름 010-1234-5678
-      let ownerMatch = text.match(/\[(차주정보|기사정보)\]\s*([^\n/]+?)[\s/]+(\d{2,4}[-.\s]?\d{3,4}[-.\s]?\d{4})/);
-      if (ownerMatch) {
-        name = ownerMatch[2].trim();
-        phone = ownerMatch[3].replace(/[-.\s]/g, "").replace(/^(\d{3})(\d{3,4})(\d{4})$/, "$1-$2-$3");
-      } else {
-        // 구분자 없는 경우: [차주정보] 이름01012345678 (이름+전화 붙어있음)
-        const noSepMatch = text.match(/\[(차주정보|기사정보)\]\s*([가-힣a-zA-Z]+)(\d{10,11})/);
-        if (noSepMatch) {
-          name = noSepMatch[2].trim();
-          const rawPhone = noSepMatch[3];
-          phone = rawPhone.replace(/^(\d{3})(\d{3,4})(\d{4})$/, "$1-$2-$3");
+      // 차주/기사 태그 뒤 이름+전화 파싱
+      // 패턴1: [차주정보] 이효승 / 01079175662
+      // 패턴2: [차주정보] 이효승 01079175662 (공백만)
+      // 패턴3: [기사정보] 이효승01079175662 (붙어있음)
+      const ownerBlock = text.match(/\[(차주정보|기사정보)\]\s*(.+?)(?=\[차량정보\]|$)/s);
+      if (ownerBlock) {
+        const block = ownerBlock[2].trim();
+        // 전화번호를 먼저 추출
+        const phoneM = block.match(/0\d{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4}/);
+        if (phoneM) {
+          phone = phoneM[0].replace(/[-.\s]/g, "").replace(/^(\d{3})(\d{3,4})(\d{4})$/, "$1-$2-$3");
+          // 전화번호 앞에 있는 한글 이름 추출 (전화번호 직전 / 또는 공백으로 구분)
+          const beforePhone = block.slice(0, block.indexOf(phoneM[0])).replace(/[/\s]+$/, "");
+          const nameM = beforePhone.match(/[가-힣]{2,5}$/);
+          if (nameM) name = nameM[0];
+        } else {
+          // 전화번호 없을 때: 한글 이름만
+          const nameOnly = block.match(/^[가-힣]{2,5}/);
+          if (nameOnly) name = nameOnly[0];
         }
       }
-      const vehicleLine = text.match(/\[차량정보\]\s*([^\n]+)/);
+
+      // 차량정보 태그에서 차량번호 추출
+      const vehicleLine = text.match(/\[차량정보\]\s*([^\n\[]+)/);
       if (vehicleLine) {
-        const plateInLine = vehicleLine[1].match(/[가-힣]{0,3}\d{2,3}[가-힣]\d{4}/);
-        if (plateInLine) plate = plateInLine[0];
+        const plateM = vehicleLine[1].match(/[가-힣]{0,3}\d{2,3}[가-힣]\d{4}/);
+        if (plateM) plate = plateM[0];
+      }
+      // 차량번호 태그 없이 텍스트 전체에서 추출
+      if (!plate) {
+        const plm = text.match(/[가-힣]{0,3}\d{2,3}[가-힣]\d{4}/);
+        if (plm) plate = plm[0];
       }
       if (!phone) {
         const pm = text.match(/0\d{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4}/);
         if (pm) phone = pm[0].replace(/[-.\s]/g, "").replace(/^(\d{3})(\d{3,4})(\d{4})$/, "$1-$2-$3");
       }
-      if (!plate) {
-        const plm = text.match(/[가-힣]{0,3}\d{2,3}[가-힣]\d{4}/);
-        if (plm) plate = plm[0];
-      }
       return { phone, plate, name };
     }
-    const phoneMatch = text.match(/0\d{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4}/);
+
+    // 태그 없는 자유형식: "인천 서구 카고 3.5톤 이효승 01079175662 인천85사7787"
+    // 먼저 노선 정보(-> 앞)를 제거
+    const noRoute = text.replace(/^.+?(?:->|→|→)\s*/u, "").trim() || text;
+
+    const phoneMatch = noRoute.match(/0\d{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4}/);
     phone = phoneMatch ? phoneMatch[0].replace(/[-.\s]/g, "").replace(/^(\d{3})(\d{3,4})(\d{4})$/, "$1-$2-$3") : "";
-    const plateMatch = text.match(/[가-힣]{2,3}\d{2}[가-힣]\d{4}|\d{2,3}[가-힣]\d{4}/);
+
+    const plateMatch = noRoute.match(/[가-힣]{2,3}\d{2}[가-힣]\d{4}|\d{2,3}[가-힣]\d{4}/);
     plate = plateMatch ? plateMatch[0] : "";
-    const stripped = text.replace(phoneMatch?.[0] || "", "").replace(plate || "", "");
-    const nameMatch = stripped.match(/[가-힣]{2,4}/g) || [];
-    const EXCLUDE = ["강원","서울","경기","인천","부산","대구","광주","대전","울산","세종","경북","경남","전북","전남","충북","충남","제주","초장축윙","초장축","장축","윙바디","카고","탑차","냉장탑","냉동탑","냉장윙","냉동윙","냉장","냉동","리프트","다마스","라보"];
-    name = nameMatch.find(n => n.length >= 2 && !EXCLUDE.includes(n) && !/[구시군동읍면로]$/.test(n)) || "";
+
+    // 전화/차량번호/경로/특수문자 제거 후 한글 이름 추출
+    const stripped = noRoute
+      .replace(phoneMatch?.[0] || "", "")
+      .replace(plate || "", "")
+      .replace(/\d+[톤kg]+/gi, "")   // 톤수
+      .replace(/\d+/g, "")           // 숫자
+      .replace(/[->→/()[\]]/g, " ");  // 특수문자
+
+    const nameMatch = stripped.match(/[가-힣]{2,5}/g) || [];
+    name = nameMatch.find(n =>
+      n.length >= 2 &&
+      !CITY_EXCLUDE.includes(n) &&
+      !/[구시군동읍면로길]$/.test(n) &&
+      !/^(서|동|남|북|중)구$/.test(n)
+    ) || "";
+
     return { phone, plate, name };
   };
 
@@ -6012,7 +6061,7 @@ const pickDrop = (c) => {
                 }}
               />
               <select
-                className="h-full px-1 text-[11px] font-bold bg-[#1B2B4B] text-white border-0 outline-none cursor-pointer"
+                className="self-stretch px-2 py-1 text-[11px] font-bold bg-[#1B2B4B] text-white border-0 outline-none cursor-pointer"
                 value={톤수타입}
                 onChange={(e) => {
                   const t = e.target.value;
@@ -6043,7 +6092,7 @@ const pickDrop = (c) => {
                 }}
               />
               <select
-                className="h-full px-1 text-[11px] font-bold bg-[#1B2B4B] text-white border-0 outline-none cursor-pointer"
+                className="self-stretch px-2 py-1 text-[11px] font-bold bg-[#1B2B4B] text-white border-0 outline-none cursor-pointer"
                 value={화물타입}
                 onChange={(e) => {
                   const t = e.target.value;
@@ -6055,6 +6104,7 @@ const pickDrop = (c) => {
                 <option value="파레트">파레트</option>
                 <option value="박스">박스</option>
                 <option value="통">통</option>
+                <option value="롤">롤</option>
               </select>
             </div>
           }
@@ -6074,6 +6124,7 @@ const pickDrop = (c) => {
               >
                 <option value="">상차방법</option>
                 <option value="지게차">지게차</option>
+                <option value="크레인">크레인</option>
                 <option value="수작업">수작업</option>
                 <option value="직접수작업">직접수작업</option>
                 <option value="수도움">수도움</option>
@@ -6085,6 +6136,7 @@ const pickDrop = (c) => {
               >
                 <option value="">하차방법</option>
                 <option value="지게차">지게차</option>
+                <option value="크레인">크레인</option>
                 <option value="수작업">수작업</option>
                 <option value="직접수작업">직접수작업</option>
                 <option value="수도움">수도움</option>
