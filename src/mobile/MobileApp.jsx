@@ -3,11 +3,15 @@ import React, { useState, useMemo, useEffect, useRef, startTransition } from "re
 import {
   LineChart,
   Line,
+  BarChart,
+  Bar,
+  Cell,
   XAxis,
   YAxis,
   Tooltip,
   CartesianGrid,
-  ResponsiveContainer
+  ResponsiveContainer,
+  Legend,
 } from "recharts";
 import {
   collection,
@@ -2776,200 +2780,177 @@ setOpenMemo={setOpenMemo}
 );
 }
 function MobileSalesPage({ data = [], onBack }) {
+  const [month, setMonth] = useState(new Date(new Date().getTime() + 9*60*60*1000).toISOString().slice(0,7));
+  const toInt = (v) => Number(String(v || "").replace(/[^\d]/g, "")) || 0;
+  const won = (v) => v >= 1_000_000 ? `${(v/1_000_000).toFixed(1)}M` : v >= 10_000 ? `${Math.round(v/10_000)}만` : v.toLocaleString();
 
-  const [month, setMonth] = useState(
-    new Date().toISOString().slice(0,7)
-  );
-  const [searchClient, setSearchClient] = useState("");
+  const allBase = data.filter(r => r.상차일 && !(r.거래처명||"").includes("후레쉬물류"));
+  const rows = allBase.filter(r => r.상차일.startsWith(month));
 
-  // 🔥 숫자 변환 (핵심)
-  const toInt = (v) =>
-    Number(String(v || "").replace(/[^\d]/g, "")) || 0;
+  const prevMonth = (() => { const d = new Date(month+"-01"); d.setMonth(d.getMonth()-1); return d.toISOString().slice(0,7); })();
+  const prevRows = allBase.filter(r => r.상차일.startsWith(prevMonth));
 
-  // =========================
-  // 🔹 필터
-  // =========================
-const rows = data.filter(r => {
+  const calcKPI = (list) => list.reduce((a, r) => {
+    const s = toInt(r.청구운임), d = toInt(r.기사운임);
+    return { sale: a.sale+s, driver: a.driver+d, fee: a.fee+(s-d), cnt: a.cnt+1 };
+  }, { sale:0, driver:0, fee:0, cnt:0 });
 
-  if (!r.상차일) return false;
+  const cur = calcKPI(rows);
+  const prev = calcKPI(prevRows);
+  const profitRate = cur.sale > 0 ? (cur.fee / cur.sale * 100) : 0;
+  const avgFare = cur.cnt > 0 ? Math.round(cur.sale / cur.cnt) : 0;
+  const saleDiff = cur.sale - prev.sale;
+  const saleDiffPct = prev.sale > 0 ? (saleDiff / prev.sale * 100) : null;
 
-  // 🔥 후레쉬물류 제외 (핵심)
-  if ((r.거래처명 || "").includes("후레쉬물류")) return false;
-
-  if (!r.상차일.startsWith(month)) return false;
-
-  if (searchClient) {
-    return (r.거래처명 || "").includes(searchClient);
-  }
-
-  return true;
-});
-
-  // =========================
-  // 🔹 KPI 계산
-  // =========================
-  const total = rows.reduce((acc, r) => {
-    const sale = toInt(r.청구운임);
-    const driver = toInt(r.기사운임);
-    const fee = sale - driver;
-
-    acc.sale += sale;
-    acc.driver += driver;
-    acc.fee += fee;
-
-    return acc;
-  }, { sale:0, driver:0, fee:0 });
-
-  // =========================
-  // 🔹 전월 비교
-  // =========================
-  const prevMonth = (() => {
-    const d = new Date(month + "-01");
-    d.setMonth(d.getMonth() - 1);
-    return d.toISOString().slice(0,7);
-  })();
-
-const prevTotal = data
-  .filter(r => 
-    r.상차일?.slice(0,7) === prevMonth &&
-    !(r.거래처명 || "").includes("후레쉬물류") // 🔥 핵심 추가
-  )
-  .reduce((acc, r) => {
-    acc.sale += toInt(r.청구운임);
-    return acc;
-  }, { sale:0 });
-
-  const diff = total.sale - prevTotal.sale;
-  const diffRate = prevTotal.sale === 0
-    ? 0
-    : ((diff / prevTotal.sale) * 100);
-
-  // =========================
-  // 🔹 거래처 TOP5
-  // =========================
-  const byClient = {};
-
-  rows.forEach(r => {
-    const c = r.거래처명 || "미지정";
-
-    if (!byClient[c]) {
-      byClient[c] = 0;
-    }
-
-    byClient[c] += toInt(r.청구운임);
+  // 최근 6개월 트렌드
+  const trendData = Array.from({length: 6}, (_, i) => {
+    const d = new Date(month+"-01"); d.setMonth(d.getMonth()-5+i);
+    const ym = d.toISOString().slice(0,7);
+    const rs = allBase.filter(r => r.상차일.startsWith(ym));
+    const k = calcKPI(rs);
+    return { ym: ym.slice(5)+"월", 매출: k.sale, 수익: k.fee, 건수: k.cnt };
   });
 
-  const topClients = Object.entries(byClient)
-    .map(([name, sale]) => ({ name, sale }))
-    .sort((a,b) => b.sale - a.sale)
-    .slice(0,5);
+  // 거래처 TOP5
+  const byClient = {};
+  rows.forEach(r => { const c = r.거래처명||"미지정"; byClient[c] = (byClient[c]||0)+toInt(r.청구운임); });
+  const top5 = Object.entries(byClient).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  const maxClient = top5[0]?.[1] || 1;
 
-  // =========================
-  // UI
-  // =========================
+  // 요일별
+  const byDay = Array(7).fill(null).map((_,i) => ({ day:["일","월","화","수","목","금","토"][i], 건수:0, 매출:0 }));
+  rows.forEach(r => {
+    if (!r.상차일) return;
+    const dow = new Date(r.상차일+"T00:00:00").getDay();
+    byDay[dow].건수 += 1; byDay[dow].매출 += toInt(r.청구운임);
+  });
+  const maxDay = Math.max(...byDay.map(d=>d.건수), 1);
+
+  // 스마트 인사이트
+  const insights = [];
+  if (saleDiffPct !== null) insights.push({ c: saleDiff>=0?"emerald":"rose", t: `전월 대비 ${saleDiff>=0?"+":""}${saleDiffPct.toFixed(1)}% (${Math.abs(saleDiff).toLocaleString()}원)` });
+  if (top5[0]) insights.push({ c:"indigo", t: `이달 최고 거래처: ${top5[0][0]} (${top5[0][1].toLocaleString()}원)` });
+  insights.push({ c:"blue", t: `건당 평균 ${avgFare.toLocaleString()}원 · 총 ${cur.cnt}건` });
+  insights.push({ c: profitRate>=15?"emerald":profitRate>=10?"amber":"rose", t: `수익률 ${profitRate.toFixed(1)}% · 수익 ${cur.fee.toLocaleString()}원` });
+
+  const IC = { emerald:"bg-emerald-50 border-emerald-200 text-emerald-700", rose:"bg-rose-50 border-rose-200 text-rose-700", indigo:"bg-indigo-50 border-indigo-200 text-indigo-700", blue:"bg-blue-50 border-blue-200 text-blue-700", amber:"bg-amber-50 border-amber-200 text-amber-700" };
+
   return (
-    <div className="p-4 space-y-4 bg-gray-50 min-h-screen">
-
+    <div className="bg-gray-50 min-h-screen pb-8">
       {/* 헤더 */}
-      <div className="flex justify-between items-center">
-        <button onClick={onBack}>←</button>
-        <div className="font-bold text-lg text-blue-600">매출관리</div>
-        <div />
+      <div className="bg-[#1B2B4B] px-4 py-4 flex items-center gap-3">
+        <button onClick={onBack} className="text-white/70 text-lg font-bold w-8">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <div>
+          <div className="text-white font-bold text-[16px]">매출관리</div>
+          <div className="text-white/50 text-[11px]">매출 · 수익 · 거래처 분석</div>
+        </div>
       </div>
 
-      {/* 월 선택 */}
-      <input
-        type="month"
-        value={month}
-        onChange={(e)=>setMonth(e.target.value)}
-        className="w-full border border-blue-200 p-2 rounded-xl bg-white"
-      />
+      <div className="px-4 pt-4 space-y-4">
+        {/* 월 선택 */}
+        <input type="month" value={month} onChange={e=>setMonth(e.target.value)}
+          className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-white shadow-sm" />
 
-      {/* 거래처 검색 */}
-      <input
-        placeholder="거래처 검색"
-        value={searchClient}
-        onChange={(e)=>setSearchClient(e.target.value)}
-        className="w-full border border-blue-200 p-2 rounded-xl bg-white"
-      />
-
-      {/* KPI (다이얼 스타일) */}
-      <div className="grid grid-cols-3 gap-4">
-  <DialCard title="총매출" value={total.sale} />
-  <DialCard title="기사운임" value={total.driver} />
-  <DialCard title="수익" value={total.fee} />
-</div>
-
-      {/* 전월 대비 */}
-      <div className={`text-sm font-semibold px-3 py-2 rounded-xl text-center ${
-        diff >= 0
-          ? "bg-blue-50 text-blue-600"
-          : "bg-red-50 text-red-500"
-      }`}>
-        전월 대비 {diff >= 0 ? "▲" : "▼"}{" "}
-        {Math.abs(diff).toLocaleString()}원 ({diffRate.toFixed(1)}%)
-      </div>
-
-      {/* 거래처 TOP5 */}
-      <div className="bg-white rounded-2xl shadow p-4 border border-blue-100">
-
-        <div className="text-sm font-bold mb-3 text-blue-600">
-          거래처 TOP5
+        {/* KPI 4카드 */}
+        <div className="grid grid-cols-2 gap-3">
+          {[
+            { label:"총 청구운임", value:cur.sale, sub:`${cur.cnt}건`, color:"text-[#1B2B4B]", bg:"bg-white" },
+            { label:"수익 (수수료)", value:cur.fee, sub:`수익률 ${profitRate.toFixed(1)}%`, color: profitRate>=15?"text-emerald-600":profitRate>=10?"text-amber-600":"text-rose-600", bg:"bg-white" },
+            { label:"기사 운임", value:cur.driver, sub:"지급 합계", color:"text-gray-700", bg:"bg-white" },
+            { label:"건당 평균", value:avgFare, sub:"청구운임 기준", color:"text-indigo-600", bg:"bg-white" },
+          ].map((k,i) => (
+            <div key={i} className={`${k.bg} rounded-2xl border border-gray-100 shadow-sm px-4 py-3`}>
+              <div className="text-[11px] text-gray-400 font-semibold mb-1">{k.label}</div>
+              <div className={`text-[18px] font-extrabold leading-tight ${k.color}`}>{won(k.value)}<span className="text-[11px] font-normal text-gray-400 ml-1">원</span></div>
+              <div className="text-[11px] text-gray-400 mt-0.5">{k.sub}</div>
+            </div>
+          ))}
         </div>
 
-        {topClients.map((c,i)=>(
-          <div key={i} className="flex justify-between py-1 text-sm">
-            <span className="text-gray-700">
-              {i+1}. {c.name}
-            </span>
-            <span className="font-semibold text-blue-600">
-              {c.sale.toLocaleString()}원
-            </span>
+        {/* 전월 대비 배너 */}
+        <div className={`rounded-xl px-4 py-2.5 flex items-center justify-between text-sm font-semibold border ${saleDiff>=0?"bg-emerald-50 border-emerald-200 text-emerald-700":"bg-rose-50 border-rose-200 text-rose-600"}`}>
+          <span>전월 대비</span>
+          <span>{saleDiff>=0?"▲":"▼"} {Math.abs(saleDiff).toLocaleString()}원 {saleDiffPct!==null?`(${saleDiffPct>=0?"+":""}${saleDiffPct.toFixed(1)}%)`:"(이전 데이터 없음)"}</span>
+        </div>
+
+        {/* 스마트 인사이트 */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+          <div className="text-[13px] font-bold text-[#1B2B4B] mb-3">스마트 인사이트</div>
+          <div className="space-y-2">
+            {insights.map((ins,i) => (
+              <div key={i} className={`flex items-start gap-2 border rounded-xl px-3 py-2 ${IC[ins.c]}`}>
+                <span className="w-1.5 h-1.5 rounded-full bg-current mt-1.5 shrink-0" />
+                <span className="text-[12px] font-semibold">{ins.t}</span>
+              </div>
+            ))}
           </div>
-        ))}
+        </div>
 
-      </div>
+        {/* 최근 6개월 트렌드 */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+          <div className="text-[13px] font-bold text-[#1B2B4B] mb-3">최근 6개월 매출 추이</div>
+          <div className="h-[180px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={trendData} margin={{top:4,right:8,left:0,bottom:0}}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
+                <XAxis dataKey="ym" tick={{fontSize:10,fill:"#9CA3AF"}} axisLine={false} tickLine={false} />
+                <YAxis tickFormatter={v=>v>=1000000?`${(v/1000000).toFixed(0)}M`:v>=10000?`${Math.round(v/10000)}만`:`${v}`} tick={{fontSize:9,fill:"#9CA3AF"}} axisLine={false} tickLine={false} width={36} />
+                <Tooltip formatter={(v,n)=>[`${v.toLocaleString()}원`, n]} contentStyle={{borderRadius:10,fontSize:11}} />
+                <Line type="monotone" dataKey="매출" stroke="#6366F1" strokeWidth={2.5} dot={false} activeDot={{r:4}} />
+                <Line type="monotone" dataKey="수익" stroke="#10B981" strokeWidth={2} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="flex gap-4 mt-2 justify-center text-[11px] text-gray-500">
+            <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-indigo-500 inline-block" />매출</span>
+            <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-emerald-500 inline-block" />수익</span>
+          </div>
+        </div>
 
-    </div>
-  );
-}
+        {/* 거래처 TOP5 */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+          <div className="text-[13px] font-bold text-[#1B2B4B] mb-3">거래처 TOP 5</div>
+          {top5.length === 0 && <div className="text-[12px] text-gray-400 text-center py-4">데이터 없음</div>}
+          <div className="space-y-2.5">
+            {top5.map(([name,sale],i) => (
+              <div key={i}>
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[11px] font-bold w-5 h-5 rounded-full flex items-center justify-center ${i===0?"bg-[#1B2B4B] text-white":"bg-gray-100 text-gray-600"}`}>{i+1}</span>
+                    <span className="text-[13px] font-semibold text-gray-800 truncate max-w-[150px]">{name}</span>
+                  </div>
+                  <span className="text-[12px] font-bold text-indigo-600">{sale.toLocaleString()}원</span>
+                </div>
+                <div className="w-full bg-gray-100 rounded-full h-1.5">
+                  <div className="h-1.5 rounded-full bg-indigo-400" style={{width:`${Math.round(sale/maxClient*100)}%`}} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
 
-function DialCard({ title, value }) {
-
-  const formatted = Number(value).toLocaleString();
-
-  return (
-    <div className="bg-white rounded-2xl shadow-md p-4 text-center border border-blue-100 flex flex-col items-center">
-
-      {/* 타이틀 */}
-      <div className="text-[15px] font-bold text-blue-600 mb-3">
-        {title}
-      </div>
-
-      {/* 다이얼 */}
-      <div className="relative w-28 h-28 flex items-center justify-center">
-
-        <div className="absolute inset-0 rounded-full border-[10px] border-blue-100"></div>
-
-        {/* 🔥 숫자 (조금 더 키움 + 자동 조절) */}
-        <div
-          className="px-2 text-blue-600 font-extrabold leading-none whitespace-nowrap"
-          style={{
-            fontSize:
-              formatted.length > 9 ? "14px" :
-              formatted.length > 7 ? "16px" :
-              "18px"
-          }}
-        >
-          {formatted}
+        {/* 요일별 수주 분석 */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+          <div className="text-[13px] font-bold text-[#1B2B4B] mb-3">요일별 수주 현황</div>
+          <div className="h-[140px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={byDay} barSize={22} margin={{top:0,right:4,left:0,bottom:0}}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
+                <XAxis dataKey="day" tick={{fontSize:11,fill:"#6B7280"}} axisLine={false} tickLine={false} />
+                <YAxis tick={{fontSize:9,fill:"#9CA3AF"}} axisLine={false} tickLine={false} allowDecimals={false} />
+                <Tooltip contentStyle={{borderRadius:10,fontSize:11}} formatter={(v)=>[`${v}건`,"건수"]} />
+                <Bar dataKey="건수" radius={[4,4,0,0]}>
+                  {byDay.map((d,i) => <Cell key={i} fill={d.건수===maxDay?"#4F46E5":"#C7D2FE"} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="mt-2 text-[11px] text-gray-400 text-center">가장 많은 수주 요일: <b className="text-indigo-600">{byDay.find(d=>d.건수===maxDay)?.day}요일</b></div>
         </div>
 
       </div>
-
-      <div className="text-[12px] text-gray-400 mt-2">
-        원
-      </div>
-
     </div>
   );
 }
@@ -6049,9 +6030,9 @@ const pickDrop = (c) => {
         <RowLabelInput
           label="톤수"
           input={
-            <div className="flex items-center border rounded-lg overflow-hidden">
+            <div className="flex items-center gap-2">
               <input
-                className="flex-1 px-2 py-1 text-sm outline-none"
+                className="flex-1 min-w-0 border border-gray-300 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#1B2B4B]"
                 placeholder="예: 1"
                 value={톤수값}
                 onChange={(e) => {
@@ -6061,7 +6042,7 @@ const pickDrop = (c) => {
                 }}
               />
               <select
-                className="self-stretch px-2 py-1 text-[11px] font-bold bg-[#1B2B4B] text-white border-0 outline-none cursor-pointer"
+                className="w-[62px] shrink-0 border-0 rounded-lg px-1 py-1.5 text-[12px] font-bold bg-[#1B2B4B] text-white outline-none"
                 value={톤수타입}
                 onChange={(e) => {
                   const t = e.target.value;
@@ -6080,9 +6061,9 @@ const pickDrop = (c) => {
         <RowLabelInput
           label="화물내용"
           input={
-            <div className="flex items-center border rounded-lg overflow-hidden">
+            <div className="flex items-center gap-2">
               <input
-                className="flex-1 px-2 py-1 text-sm outline-none"
+                className="flex-1 min-w-0 border border-gray-300 rounded-lg px-2 py-1.5 text-sm outline-none focus:border-[#1B2B4B]"
                 placeholder="예: 3"
                 value={화물수량}
                 onChange={(e) => {
@@ -6092,7 +6073,7 @@ const pickDrop = (c) => {
                 }}
               />
               <select
-                className="self-stretch px-2 py-1 text-[11px] font-bold bg-[#1B2B4B] text-white border-0 outline-none cursor-pointer"
+                className="w-[76px] shrink-0 border-0 rounded-lg px-1 py-1.5 text-[12px] font-bold bg-[#1B2B4B] text-white outline-none"
                 value={화물타입}
                 onChange={(e) => {
                   const t = e.target.value;
