@@ -338,11 +338,17 @@ const normalizePhone = (p = "") =>
 export default function MobileApp() {
   const [page, setPage] = useState("list");
   const listScrollYRef = useRef(0); // 리스트 스크롤 위치 저장
+  const unassignedScrollYRef = useRef(0); // 미배차/정보미전달 스크롤 위치 저장
+  const [unassignedTab, setUnassignedTab] = useState("미배차"); // 탭 상태 (부모에서 관리)
 
   // 상세→리스트 복귀 시 스크롤 위치 복원
   useEffect(() => {
     if (page === "list" && listScrollYRef.current > 0) {
       const y = listScrollYRef.current;
+      requestAnimationFrame(() => { window.scrollTo(0, y); });
+    }
+    if (page === "unassigned" && unassignedScrollYRef.current > 0) {
+      const y = unassignedScrollYRef.current;
       requestAnimationFrame(() => { window.scrollTo(0, y); });
     }
   }, [page]);
@@ -2711,6 +2717,9 @@ setOpenMemo={setOpenMemo}
     setDetailFrom={setDetailFrom}
     setOpenMemo={setOpenMemo}
     setPrevPage={setPrevPage}
+    tab={unassignedTab}
+    setTab={setUnassignedTab}
+    onSaveScroll={() => { unassignedScrollYRef.current = window.scrollY; }}
 
     // ✅ 추가: 클릭한 오더 포커스(스크롤+하이라이트)
     focusOrderId={focusUnassignedOrderId}
@@ -3706,27 +3715,20 @@ const dt = new Date(y, m - 1, d, hh, mm);
         )}
       </div>
 
-      {/* 경유 상차지 */}
-      {validStops(order.경유상차목록 || order.경유지_상차).map((s, i) => (
-        <div key={i} className="flex items-center gap-2 mt-0.5">
-          <span className="px-1.5 py-0.5 rounded-full bg-blue-200 text-blue-800 text-[10px] font-bold shrink-0">
-            상{i + 1}
-          </span>
-          <div className="flex-1 truncate text-[0.9em] text-gray-600">{s.업체명 || "-"}</div>
-          {s.상차시간 && <span className="text-[0.75em] text-gray-400 shrink-0">{s.상차시간}</span>}
-        </div>
-      ))}
-
-      {/* 경유 하차지 */}
-      {validStops(order.경유하차목록 || order.경유지_하차).map((s, i) => (
-        <div key={i} className="flex items-center gap-2 mt-0.5">
-          <span className="px-1.5 py-0.5 rounded-full bg-gray-300 text-gray-700 text-[10px] font-bold shrink-0">
-            하{i + 1}
-          </span>
-          <div className="flex-1 truncate text-[0.9em] text-gray-600">{s.업체명 || "-"}</div>
-          {s.하차시간 && <span className="text-[0.75em] text-gray-400 shrink-0">{s.하차시간}</span>}
-        </div>
-      ))}
+      {/* 경유지 요약 */}
+      {(() => {
+        const pStops = validStops(order.경유상차목록 || order.경유지_상차);
+        const dStops = validStops(order.경유하차목록 || order.경유지_하차);
+        const all = [...pStops, ...dStops];
+        if (all.length === 0) return null;
+        const names = all.map(s => s.업체명 || "-").join(" → ");
+        return (
+          <div className="flex items-center gap-1.5 mt-0.5 pl-0.5">
+            <span className="px-1.5 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-blue-600 text-[10px] font-bold shrink-0">경유</span>
+            <div className="flex-1 truncate text-[0.78em] text-gray-500">{names}</div>
+          </div>
+        );
+      })()}
 
       {/* ▶ 하차 */}
       <div className="flex items-center gap-2 mt-1">
@@ -5357,8 +5359,134 @@ const pickDrop = (c) => {
   }
 };
 
+  // ===== 음성 오더 등록 =====
+  const [voiceSheet, setVoiceSheet] = useState(false);
+  const [voiceListening, setVoiceListening] = useState(false);
+  const [voiceTranscript, setVoiceTranscript] = useState("");
+  const [voiceParsed, setVoiceParsed] = useState(null);
+  const voiceRecogRef = useRef(null);
+
+  const startVoice = () => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { alert("이 기기에서 음성인식을 지원하지 않습니다."); return; }
+    const recog = new SR();
+    recog.lang = "ko-KR";
+    recog.interimResults = true;
+    recog.maxAlternatives = 1;
+    recog.onresult = (e) => {
+      const t = Array.from(e.results).map(r => r[0].transcript).join("");
+      setVoiceTranscript(t);
+    };
+    recog.onend = () => setVoiceListening(false);
+    recog.onerror = () => setVoiceListening(false);
+    voiceRecogRef.current = recog;
+    recog.start();
+    setVoiceListening(true);
+  };
+
+  const stopVoice = () => {
+    voiceRecogRef.current?.stop();
+    setVoiceListening(false);
+  };
+
+  const parseVoiceOrder = (text) => {
+    const res = {};
+    const t = text;
+
+    // 날짜
+    const todayDate = new Date(new Date().getTime() + 9 * 60 * 60 * 1000);
+    const fmt = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+    if (/모레/.test(t)) { const d = new Date(todayDate); d.setDate(d.getDate()+2); res.상차일 = fmt(d); }
+    else if (/내일/.test(t)) { const d = new Date(todayDate); d.setDate(d.getDate()+1); res.상차일 = fmt(d); }
+    else if (/오늘/.test(t)) res.상차일 = fmt(todayDate);
+    const dm = t.match(/(\d{1,2})월\s*(\d{1,2})일/);
+    if (dm) res.상차일 = `${todayDate.getFullYear()}-${dm[1].padStart(2,"0")}-${dm[2].padStart(2,"0")}`;
+
+    // 시간
+    const tm = t.match(/(오전|오후)\s*(\d{1,2})시(?:\s*(\d{1,2})분)?/);
+    if (tm) {
+      let h = parseInt(tm[2]), mn = parseInt(tm[3]||"0");
+      if (tm[1]==="오후" && h!==12) h+=12;
+      if (tm[1]==="오전" && h===12) h=0;
+      res.상차시간 = `${String(h).padStart(2,"0")}:${String(mn).padStart(2,"0")}`;
+    }
+    if (/즉시/.test(t)) res.상차시간 = "즉시";
+
+    // 화물내용 + 타입
+    const cargo = t.match(/(\d+)\s*(파레트|파렛트|팔레트|박스|통|롤|개)/);
+    if (cargo) {
+      res.화물내용 = cargo[1];
+      const typeMap = { "파렛트": "파레트", "팔레트": "파레트" };
+      res.화물타입 = typeMap[cargo[2]] || (["박스","통","롤"].includes(cargo[2]) ? cargo[2] : "파레트");
+    }
+
+    // 톤수
+    const ton = t.match(/(\d+(?:\.\d+)?)\s*톤/);
+    if (ton) res.톤수 = ton[1] + "톤";
+    const kg = t.match(/(\d+)\s*킬로/);
+    if (kg) res.톤수 = kg[1] + "kg";
+
+    // 차량종류
+    if (/냉동/.test(t)) res.차종 = "냉동";
+    else if (/냉장/.test(t)) res.차종 = "냉장";
+    else if (/윙/.test(t)) res.차종 = "윙바디";
+    else if (/카고/.test(t)) res.차종 = "카고";
+
+    // 업체명 - "에서"/"로"/"까지" 앞의 단어로 추출
+    const pickupM = t.match(/(.{2,10}?)\s*에서/);
+    if (pickupM) res.상차지명_후보 = pickupM[1].trim();
+    const dropM = t.match(/(.{2,10}?)\s*(?:로|까지|으로)\s*(?:배달|배송|운송|가져)/);
+    if (dropM) res.하차지명_후보 = dropM[1].trim();
+
+    // 거래처 매칭
+    if (res.상차지명_후보) {
+      const nq = normalizeCompany(res.상차지명_후보);
+      const found = clients.find(c => normalizeCompany(c.거래처명).includes(nq));
+      if (found) { res.상차지명 = found.거래처명; res.상차지주소 = found.주소||""; }
+      else res.상차지명 = res.상차지명_후보;
+    }
+    if (res.하차지명_후보) {
+      const nq = normalizeCompany(res.하차지명_후보);
+      const found = clients.find(c => normalizeCompany(c.거래처명).includes(nq));
+      if (found) { res.하차지명 = found.거래처명; res.하차지주소 = found.주소||""; }
+      else res.하차지명 = res.하차지명_후보;
+    }
+    delete res.상차지명_후보; delete res.하차지명_후보;
+    return res;
+  };
+
+  const applyVoiceParsed = () => {
+    if (!voiceParsed) return;
+    const p = voiceParsed;
+    if (p.상차일) update("상차일", p.상차일);
+    if (p.상차시간) update("상차시간", p.상차시간);
+    if (p.상차지명) update("상차지명", p.상차지명);
+    if (p.상차지주소) update("상차지주소", p.상차지주소);
+    if (p.하차지명) update("하차지명", p.하차지명);
+    if (p.하차지주소) update("하차지주소", p.하차지주소);
+    if (p.화물내용) update("화물내용", p.화물내용);
+    if (p.화물타입) update("화물타입", p.화물타입);
+    if (p.톤수) update("톤수", p.톤수);
+    if (p.차종) update("차종", p.차종);
+    setVoiceSheet(false);
+    setVoiceTranscript("");
+    setVoiceParsed(null);
+  };
+
   return (
     <div className="px-4 py-3 space-y-3">
+      {/* 음성 등록 버튼 */}
+      {(window.SpeechRecognition || window.webkitSpeechRecognition) && (
+        <button
+          type="button"
+          onClick={() => { setVoiceSheet(true); setVoiceTranscript(""); setVoiceParsed(null); }}
+          className="w-full py-3 rounded-xl border-2 border-dashed border-[#1B2B4B]/40 bg-white flex items-center justify-center gap-2 text-[#1B2B4B] font-semibold text-sm active:bg-gray-50"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+          음성으로 입력
+        </button>
+      )}
+
       {/* 총운임 / 산재 */}
       <div className="grid grid-cols-2 border rounded-lg overflow-hidden bg-white shadow-sm">
         <div className="border-r px-3 py-2">
@@ -6447,6 +6575,110 @@ const pickDrop = (c) => {
       >
         취소
       </button>
+    </div>
+  </div>
+)}
+
+{/* ===== 음성 오더 입력 바텀시트 ===== */}
+{voiceSheet && (
+  <div className="fixed inset-0 z-[9999] flex flex-col justify-end">
+    <div className="absolute inset-0 bg-black/60" onClick={() => { stopVoice(); setVoiceSheet(false); }} />
+    <div className="relative bg-white rounded-t-3xl max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+      <div className="flex justify-center pt-3 pb-0 shrink-0">
+        <div className="w-10 h-1 rounded-full bg-gray-300" />
+      </div>
+      <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 shrink-0">
+        <div className="font-bold text-[15px] text-[#1B2B4B]">음성으로 오더 입력</div>
+        <button onClick={() => { stopVoice(); setVoiceSheet(false); }}
+          className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 text-lg">×</button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+        {/* 마이크 버튼 */}
+        <div className="flex flex-col items-center gap-3 py-2">
+          <button
+            type="button"
+            onClick={voiceListening ? stopVoice : startVoice}
+            className={`w-20 h-20 rounded-full flex flex-col items-center justify-center gap-1 text-white font-bold shadow-lg transition-all ${
+              voiceListening ? "bg-red-500 scale-110 animate-pulse" : "bg-[#1B2B4B]"
+            }`}
+          >
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+            <span className="text-[11px]">{voiceListening ? "중지" : "시작"}</span>
+          </button>
+          <p className="text-xs text-gray-500 text-center">
+            {voiceListening ? "듣고 있습니다... 말씀하세요" : "버튼을 눌러 음성 입력을 시작하세요"}
+          </p>
+        </div>
+
+        {/* 예시 안내 */}
+        {!voiceTranscript && !voiceListening && (
+          <div className="bg-blue-50 rounded-xl p-3 text-[12px] text-blue-700 space-y-1">
+            <div className="font-bold mb-1">음성 예시</div>
+            <div>"내일 오전 10시에 테스트업체에서 박스 5개 주주물류로 배달"</div>
+            <div>"오늘 즉시 3톤 냉장 후레쉬2공장에서 수원종합운동장으로"</div>
+          </div>
+        )}
+
+        {/* 음성 인식 결과 */}
+        {voiceTranscript && (
+          <div className="space-y-2">
+            <div className="text-xs font-bold text-gray-500">인식된 내용</div>
+            <div className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-3 text-sm text-gray-800 min-h-[60px]">
+              {voiceTranscript}
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                const parsed = parseVoiceOrder(voiceTranscript);
+                setVoiceParsed(parsed);
+              }}
+              className="w-full py-2.5 rounded-xl bg-[#1B2B4B] text-white text-sm font-bold"
+            >
+              분석하기
+            </button>
+          </div>
+        )}
+
+        {/* 파싱 결과 미리보기 */}
+        {voiceParsed && (
+          <div className="space-y-2">
+            <div className="text-xs font-bold text-gray-500">인식 결과 확인</div>
+            <div className="bg-white border border-gray-200 rounded-xl divide-y divide-gray-100 text-sm">
+              {[
+                ["상차일", voiceParsed.상차일],
+                ["상차시간", voiceParsed.상차시간],
+                ["상차지", voiceParsed.상차지명],
+                ["하차지", voiceParsed.하차지명],
+                ["화물내용", voiceParsed.화물내용 ? `${voiceParsed.화물내용}${voiceParsed.화물타입 ? " "+voiceParsed.화물타입 : ""}` : ""],
+                ["톤수", voiceParsed.톤수],
+                ["차량종류", voiceParsed.차종],
+              ].filter(([, v]) => v).map(([label, val]) => (
+                <div key={label} className="flex items-center px-3 py-2 gap-3">
+                  <span className="text-gray-400 text-xs w-14 shrink-0">{label}</span>
+                  <span className="font-semibold text-[#1B2B4B]">{val}</span>
+                </div>
+              ))}
+              {Object.values(voiceParsed).filter(Boolean).length === 0 && (
+                <div className="px-3 py-3 text-gray-400 text-xs">인식된 정보가 없습니다. 다시 말씀해주세요.</div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="px-4 pb-6 pt-3 border-t border-gray-100 grid grid-cols-2 gap-3 shrink-0">
+        <button type="button" onClick={() => { stopVoice(); setVoiceSheet(false); }}
+          className="py-3 rounded-xl bg-gray-100 text-gray-700 text-sm font-semibold">취소</button>
+        <button
+          type="button"
+          onClick={applyVoiceParsed}
+          disabled={!voiceParsed || Object.values(voiceParsed).filter(Boolean).length === 0}
+          className="py-3 rounded-xl bg-[#1B2B4B] text-white text-sm font-bold disabled:opacity-40"
+        >
+          폼에 적용
+        </button>
+      </div>
     </div>
   </div>
 )}
@@ -8531,6 +8763,9 @@ function MobileUnassignedList({
   setDetailFrom,
   setOpenMemo,
   setPrevPage,
+  tab,
+  setTab,
+  onSaveScroll,
   focusOrderId,
   onFocusDone,
 }) {
@@ -8614,11 +8849,7 @@ function MobileUnassignedList({
   setConfirmTarget(null);
 };
 
-  // ✅ 탭 상태
-const [tab, setTab] = useState("미배차"); 
-// "미배차" | "정보미전달"
-
-// 🔥 탭별 데이터 소스 완전 분리
+  // 🔥 탭별 데이터 소스 완전 분리
 const rawSource =
   tab === "미배차"
     ? orders.unassigned
@@ -8765,6 +8996,7 @@ return (
     <MobileOrderCard
       order={o}
       onSelect={() => {
+        onSaveScroll?.();
         setPrevPage("unassigned");
         setSelectedOrder(o);
         setDetailFrom("unassigned");
