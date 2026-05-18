@@ -17817,67 +17817,48 @@ setConfirmChange(null);
         </div>
       )}
 
-    {/* ★ 전달상태 일괄 변경 — 밀어서 잠금해제 */}
-      <div className="px-6 py-3 border-t border-gray-100 bg-[#1B2B4B]/5 shrink-0">
-        <div className="text-[11px] font-bold text-[#1B2B4B] mb-2">전달상태 일괄 변경 (밀어서 실행)</div>
-        <div className="flex gap-2">
-          {/* 전체완료 스와이프 */}
-          {(() => {
-            const SwipeBtn = ({ label, colorFrom, colorTo, textColor, onDone }) => {
-              const trackRef = React.useRef(null);
-              const [prog, setprog] = React.useState(0);
-              const dragging = React.useRef(false);
-              const startX = React.useRef(0);
-              const onDown = (e) => { dragging.current = true; startX.current = e.touches ? e.touches[0].clientX : e.clientX; e.currentTarget.setPointerCapture?.(e.pointerId); };
-              const onMove = (e) => {
-                if (!dragging.current || !trackRef.current) return;
-                const cx = e.touches ? e.touches[0].clientX : e.clientX;
-                const tw = trackRef.current.offsetWidth;
-                const p = Math.max(0, Math.min(1, (cx - trackRef.current.getBoundingClientRect().left - 20) / (tw - 56)));
-                setprog(p);
-                if (p >= 0.98) { dragging.current = false; setprog(0); onDone(); }
-              };
-              const onUp = () => { dragging.current = false; setprog(0); };
-              return (
-                <div ref={trackRef} className={`relative flex-1 h-10 rounded-xl overflow-hidden select-none`}
-                  style={{ background: `linear-gradient(90deg, ${colorFrom}, ${colorTo})` }}
-                  onPointerMove={onMove} onPointerUp={onUp} onPointerLeave={onUp}
-                  onTouchMove={onMove} onTouchEnd={onUp}>
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <span className={`text-[12px] font-bold ${textColor}`}>{label}</span>
-                  </div>
-                  <div className="absolute left-1 top-1 bottom-1 w-9 rounded-lg bg-white/30 flex items-center justify-center cursor-grab touch-none"
-                    style={{ transform: `translateX(${prog * ((trackRef.current?.offsetWidth || 160) - 44)}px)`, transition: dragging.current ? "none" : "transform 0.2s" }}
-                    onPointerDown={onDown} onTouchStart={onDown}>
-                    <span className={`text-[14px] font-bold ${textColor}`}>›</span>
-                  </div>
-                </div>
-              );
-            };
-            return (
-              <>
-                <SwipeBtn label="전체완료 →" colorFrom="#059669" colorTo="#10b981" textColor="text-white"
-                  onDone={async () => {
-                    const targetDate = dailyCloseResult?.date;
-                    if (!targetDate) return;
-                    const sender = auth?.currentUser?.email ?? "unknown";
-                    const targets = rows.filter(r => r.상차일 === targetDate);
-                    for (const r of targets) patchDispatch(r._id, { 업체전달상태: "전달완료", 업체전달일시: Date.now(), 업체전달방법: "일괄", 업체전달자: sender, __system: true });
-                    setDailyCloseOpen(false);
-                  }} />
-                <SwipeBtn label="전체 미전달 →" colorFrom="#6b7280" colorTo="#9ca3af" textColor="text-white"
-                  onDone={async () => {
-                    const targetDate = dailyCloseResult?.date;
-                    if (!targetDate) return;
-                    const targets = rows.filter(r => r.상차일 === targetDate);
-                    for (const r of targets) patchDispatch(r._id, { 업체전달상태: "미전달", 업체전달일시: null, 업체전달방법: null, 업체전달자: null, __system: true });
-                    setDailyCloseOpen(false);
-                  }} />
-              </>
-            );
-          })()}
-        </div>
-      </div>
+    {/* ★ 전달상태 일괄 토글 */}
+      {(() => {
+        const targetDate = dailyCloseResult?.date;
+        const targets = targetDate ? rows.filter(r => r.상차일 === targetDate) : [];
+        const allDone = targets.length > 0 && targets.every(r => r.업체전달상태 === "전달완료");
+        const doneCnt = targets.filter(r => r.업체전달상태 === "전달완료").length;
+        return (
+          <div className="px-6 py-3 border-t border-gray-100 bg-[#1B2B4B]/5 shrink-0 flex items-center justify-between gap-4">
+            <div>
+              <div className="text-[11px] font-bold text-[#1B2B4B]">전달상태 일괄 변경</div>
+              <div className="text-[10px] text-gray-400 mt-0.5">{doneCnt}/{targets.length}건 전달완료</div>
+            </div>
+            <button
+              onClick={async () => {
+                if (!targetDate) return;
+                const sender = auth?.currentUser?.email ?? "unknown";
+                const nextState = allDone ? "미전달" : "전달완료";
+                for (const r of targets) {
+                  patchDispatch(r._id, {
+                    업체전달상태: nextState,
+                    업체전달일시: nextState === "전달완료" ? Date.now() : null,
+                    업체전달방법: nextState === "전달완료" ? "일괄" : null,
+                    업체전달자: nextState === "전달완료" ? sender : null,
+                    __system: true,
+                  });
+                }
+                setDailyCloseOpen(false);
+              }}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-[13px] transition-all ${
+                allDone
+                  ? "bg-gray-200 text-gray-600 hover:bg-gray-300"
+                  : "bg-emerald-600 text-white hover:bg-emerald-700"
+              }`}
+            >
+              <span className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${allDone ? "border-gray-400 bg-gray-400" : "border-white bg-white/20"}`}>
+                {allDone && <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="white" strokeWidth="2" strokeLinecap="round"/></svg>}
+              </span>
+              {allDone ? "전체 미전달로 변경" : "전체 전달완료로 변경"}
+            </button>
+          </div>
+        );
+      })()}
 
       {/* 하단 버튼 */}
       <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 shrink-0 flex gap-3">
@@ -20515,12 +20496,10 @@ const filtered = React.useMemo(() => {
   if (sortKey) {
     data.sort(compareBy(sortKey, sortDir));
   } else {
-    data = sortDispatchRows(data);
     data.sort((a, b) => {
-      const statusOrder = { 배차중: 0, 배차완료: 1, 취소: 2 };
-      const sa = statusOrder[a.배차상태] ?? 0;
-      const sb = statusOrder[b.배차상태] ?? 0;
-      if (sa !== sb) return sa - sb;
+      const ra = getStatusRank(a.배차상태);
+      const rb = getStatusRank(b.배차상태);
+      if (ra !== rb) return ra - rb;
       const ta = Number(a.updatedAt || a.createdAt || 0);
       const tb = Number(b.updatedAt || b.createdAt || 0);
       return tb - ta;
@@ -24423,6 +24402,49 @@ setCopyTarget(prev => ({
           </div>
         </div>
       )}
+
+      {/* ★ 전달상태 일괄 토글 */}
+      {(() => {
+        const targetDate = dailyCloseResult?.date;
+        const targets = targetDate ? (dispatchData || []).filter(r => r.상차일 === targetDate) : [];
+        const allDone = targets.length > 0 && targets.every(r => r.업체전달상태 === "전달완료");
+        const doneCnt = targets.filter(r => r.업체전달상태 === "전달완료").length;
+        return (
+          <div className="px-6 py-3 border-t border-gray-100 bg-[#1B2B4B]/5 shrink-0 flex items-center justify-between gap-4">
+            <div>
+              <div className="text-[11px] font-bold text-[#1B2B4B]">전달상태 일괄 변경</div>
+              <div className="text-[10px] text-gray-400 mt-0.5">{doneCnt}/{targets.length}건 전달완료</div>
+            </div>
+            <button
+              onClick={async () => {
+                if (!targetDate) return;
+                const sender = auth?.currentUser?.email ?? "unknown";
+                const nextState = allDone ? "미전달" : "전달완료";
+                for (const r of targets) {
+                  patchDispatch(r._id, {
+                    업체전달상태: nextState,
+                    업체전달일시: nextState === "전달완료" ? Date.now() : null,
+                    업체전달방법: nextState === "전달완료" ? "일괄" : null,
+                    업체전달자: nextState === "전달완료" ? sender : null,
+                    __system: true,
+                  });
+                }
+                setDailyCloseOpen(false);
+              }}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-[13px] transition-all ${
+                allDone
+                  ? "bg-gray-200 text-gray-600 hover:bg-gray-300"
+                  : "bg-emerald-600 text-white hover:bg-emerald-700"
+              }`}
+            >
+              <span className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${allDone ? "border-gray-400 bg-gray-400" : "border-white bg-white/20"}`}>
+                {allDone && <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="white" strokeWidth="2" strokeLinecap="round"/></svg>}
+              </span>
+              {allDone ? "전체 미전달로 변경" : "전체 전달완료로 변경"}
+            </button>
+          </div>
+        );
+      })()}
 
       {/* 하단 버튼 */}
       <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 shrink-0 flex gap-3">
