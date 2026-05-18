@@ -1513,10 +1513,11 @@ return (
 
 
         {menu === "미배차현황" && (
-          <UnassignedStatus 
-            role={role} 
-            dispatchData={dispatchData} 
+          <UnassignedStatus
+            role={role}
+            dispatchData={dispatchData}
             patchDispatch={patchDispatch}
+            removeDispatch={removeDispatch}
             drivers={drivers}
             clients={clients}
             places={places}
@@ -9907,9 +9908,9 @@ function StopBadge({ count, list, type = "pickup" }) {
       <button
         type="button"
         onClick={(e) => { e.stopPropagation(); setOpen(true); }}
-        className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-[#1B2B4B] text-white whitespace-nowrap hover:bg-[#243a60] transition"
+        className="px-1.5 py-0.5 text-[10px] font-semibold rounded border border-[#1B2B4B]/25 bg-[#1B2B4B]/10 text-[#1B2B4B] whitespace-nowrap hover:bg-[#1B2B4B]/20 transition"
       >
-        경유+{validList.length}
+        경유 +{validList.length}
       </button>
 
       {open && (
@@ -9924,7 +9925,7 @@ function StopBadge({ count, list, type = "pickup" }) {
               <div className="flex items-center gap-2">
                 <button type="button" onClick={handleCopy}
                   className={`px-3 py-1.5 rounded-lg text-[12px] font-bold transition ${copied ? "bg-emerald-500 text-white" : "bg-white/15 text-white hover:bg-white/25"}`}>
-                  {copied ? "✓ 복사됨" : "📋 복사"}
+                  {copied ? "복사됨" : "복사"}
                 </button>
                 <button type="button" onClick={() => setOpen(false)}
                   className="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 text-white text-lg flex items-center justify-center">×</button>
@@ -17283,7 +17284,9 @@ if (editTarget.거래처명) {
         >
           <div className="bg-white rounded-2xl shadow-2xl w-[460px] max-h-[80vh] overflow-y-auto overflow-hidden">
             <div className="bg-[#1B2B4B] px-6 py-4 flex items-center gap-3">
-              <div className="w-9 h-9 rounded-full bg-red-500/20 flex items-center justify-center text-white text-lg">🗑</div>
+              <div className="w-9 h-9 rounded-full bg-red-500/25 flex items-center justify-center shrink-0">
+                <svg className="w-5 h-5 text-red-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+              </div>
               <div>
                 <h3 className="text-white font-bold text-[15px]">선택한 오더를 삭제하시겠습니까?</h3>
                 <p className="text-white/60 text-[12px] mt-0.5">삭제 후에도 되돌리기로 복구할 수 있습니다</p>
@@ -20552,31 +20555,6 @@ const filtered = React.useMemo(() => {
       </span>
     );
   };
-const StopBadge = ({ count, list = [] }) => {
-  if (!count || count === 0) return null;
-
-  const names = list
-    .filter(s => s.업체명?.trim())
-    .map(s => s.업체명)
-    .join(" → ");
-
-  return (
-    <span
-      title={names}
-      className="
-        ml-1 px-1.5 py-0.5
-        text-[10px] font-semibold
-        rounded-full
-        bg-orange-100 text-orange-700
-        border border-orange-300
-        whitespace-nowrap
-        cursor-help
-      "
-    >
-      경유{count}
-    </span>
-  );
-};
   // ⭐ 상태 변경될 때마다 localStorage 저장
  React.useEffect(() => {
 const save = {
@@ -20949,7 +20927,7 @@ return (
     {(() => {
 const raw = row.경유상차목록 || row.경유지_상차;
 const list = (Array.isArray(raw) ? raw : []).filter(s => s?.업체명?.trim());
-      return list.length > 0 ? <StopBadge count={list.length} list={list} /> : null;
+      return list.length > 0 ? <StopBadge count={list.length} list={list} type="pickup" /> : null;
     })()}
   </div>
 
@@ -20959,7 +20937,7 @@ const list = (Array.isArray(raw) ? raw : []).filter(s => s?.업체명?.trim());
     {(() => {
       const raw = row.경유하차목록 || row.경유지_하차;
 const list = (Array.isArray(raw) ? raw : []).filter(s => s?.업체명?.trim());
-      return list.length > 0 ? <StopBadge count={list.length} list={list} /> : null;
+      return list.length > 0 ? <StopBadge count={list.length} list={list} type="drop" /> : null;
     })()}
   </div>
 
@@ -23907,7 +23885,9 @@ setCopyTarget(prev => ({
         >
           <div className="bg-white rounded-2xl shadow-2xl w-[460px] max-h-[80vh] overflow-y-auto overflow-hidden">
             <div className="bg-[#1B2B4B] px-6 py-4 flex items-center gap-3">
-              <div className="w-9 h-9 rounded-full bg-red-500/20 flex items-center justify-center text-white text-lg">🗑</div>
+              <div className="w-9 h-9 rounded-full bg-red-500/25 flex items-center justify-center shrink-0">
+                <svg className="w-5 h-5 text-red-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+              </div>
               <div>
                 <h3 className="text-white font-bold text-[15px]">선택한 오더를 삭제하시겠습니까?</h3>
                 <p className="text-white/60 text-[12px] mt-0.5">삭제 후에도 되돌리기로 복구할 수 있습니다</p>
@@ -26994,12 +26974,13 @@ const tableData = React.useMemo(() => {
 // ===================== DispatchApp.jsx (PART 6/8 — END) =====================
 
 // ===================== DispatchApp.jsx (PART 7/8 — 미배차현황) =====================
-function UnassignedStatus({ dispatchData, drivers = [], patchDispatch, clients = [], places = [], upsertDriver }) {
+function UnassignedStatus({ dispatchData, drivers = [], patchDispatch, removeDispatch, clients = [], places = [], upsertDriver }) {
   const [q, setQ] = React.useState("");
   const [startDate, setStartDate] = React.useState("");
   const [endDate, setEndDate] = React.useState("");
   const [deleteMode, setDeleteMode] = React.useState(false);
   const [selectedIds, setSelectedIds] = React.useState(new Set());
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
   const [filterType, setFilterType] = React.useState("거래처명");
   const [filterValue, setFilterValue] = React.useState("");
   const [openLoadAddrs, setOpenLoadAddrs] = React.useState(new Set());
@@ -27279,7 +27260,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
   }, [dispatchData, q, startDate, endDate, filterType, filterValue]);
 
   const headers = [
-    "순번","등록일","상차일","상차시간","하차시간","거래처명",
+    "순번","등록일","경과","상차일","상차시간","하차시간","거래처명",
     "상차지명","상차지주소","하차지명","하차지주소",
     "차량종류","차량톤수","화물내용","배차상태","메모",
   ];
@@ -27300,12 +27281,9 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
   const removeDocs = async (ids) => {
     if (!ids.length) { showToast("선택된 항목이 없습니다.", "err"); return; }
     try {
-      const hasDb = typeof db !== "undefined" && db;
-      const coll = typeof COLL !== "undefined" && COLL?.dispatch ? COLL.dispatch : "dispatch";
-      if (hasDb && typeof deleteDoc === "function") {
-        await Promise.all(ids.map((id) => deleteDoc(doc(db, coll, id))));
-      }
-      showToast(`✅ ${ids.length}건 삭제 완료`);
+      await Promise.all(ids.map((id) => removeDispatch(id)));
+      showToast(`${ids.length}건 삭제 완료`);
+      setDeleteConfirmOpen(false);
       exitDeleteMode();
     } catch (e) {
       console.error(e);
@@ -27382,7 +27360,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
             ) : (
               <>
                 <span className="text-[12px] px-2 py-1 rounded-lg bg-red-50 text-red-700 border border-red-200 font-semibold">선택 {selectedIds.size}건</span>
-                <button onClick={() => removeDocs(Array.from(selectedIds))} className="px-3 py-1.5 text-[13px] font-semibold rounded-lg bg-red-600 text-white hover:bg-red-700 transition">선택 삭제</button>
+                <button onClick={() => { if (selectedIds.size === 0) { showToast("선택된 항목이 없습니다.", "err"); return; } setDeleteConfirmOpen(true); }} className="px-3 py-1.5 text-[13px] font-semibold rounded-lg bg-red-600 text-white hover:bg-red-700 transition">선택 삭제</button>
                 <button onClick={() => setSelectedIds(new Set())} className="px-3 py-1.5 text-[13px] rounded-lg border border-gray-200 hover:bg-gray-50 transition">선택 해제</button>
                 <button onClick={exitDeleteMode} className="px-3 py-1.5 text-[13px] rounded-lg border border-gray-200 hover:bg-gray-50 transition">취소</button>
               </>
@@ -27446,6 +27424,14 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       )}
                       <td className={cellBase}>{i + 1}</td>
                       <td className={cellBase}>{r.등록일 || ""}</td>
+                      <td className={cellBase}>
+                        {r.등록일 ? (() => {
+                          const d = Math.floor((Date.now() - new Date(r.등록일).getTime()) / 86400000);
+                          if (d <= 0) return <span className="text-gray-400 text-[12px]">오늘</span>;
+                          if (d >= 3) return <span className="text-red-600 font-bold text-[12px]">{d}일</span>;
+                          return <span className="text-amber-600 text-[12px]">{d}일</span>;
+                        })() : ""}
+                      </td>
                       <td className={cellBase}>{r.상차일 || ""}</td>
                       <td className={cellBase} style={isEarly ? { color: "red", fontWeight: 600 } : {}}>{r.상차시간 || ""}</td>
                       <td className={cellBase}>{r.하차시간 || ""}</td>
@@ -27491,6 +27477,54 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
           </table>
         </div>
       </div>
+
+      {/* 삭제 확인 팝업 */}
+      {deleteConfirmOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]"
+          tabIndex={-1}
+          ref={el => { if (el) setTimeout(() => el.focus(), 0); }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") { e.preventDefault(); removeDocs(Array.from(selectedIds)); }
+            if (e.key === "Escape") setDeleteConfirmOpen(false);
+          }}
+        >
+          <div className="bg-white rounded-2xl shadow-2xl w-[460px] max-h-[80vh] overflow-hidden flex flex-col">
+            <div className="bg-[#1B2B4B] px-6 py-4 flex items-center gap-3 shrink-0">
+              <div className="w-9 h-9 rounded-full bg-red-500/25 flex items-center justify-center shrink-0">
+                <svg className="w-5 h-5 text-red-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+              </div>
+              <div>
+                <h3 className="text-white font-bold text-[15px]">선택한 오더를 삭제하시겠습니까?</h3>
+                <p className="text-white/60 text-[12px] mt-0.5">삭제된 오더는 복구되지 않습니다</p>
+              </div>
+            </div>
+            <div className="px-5 py-4 space-y-3 overflow-y-auto flex-1">
+              {Array.from(selectedIds).map((id, idx) => {
+                const r = filtered.find(d => d._id === id);
+                if (!r) return null;
+                return (
+                  <div key={id} className="border border-gray-200 rounded-xl p-4 bg-gray-50">
+                    <div className="flex justify-between items-center pb-2 border-b border-gray-200 mb-2">
+                      <div className="font-bold text-[#1B2B4B] text-[13px]">{idx + 1}. {r.거래처명 || "-"}</div>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700">{r.배차상태 || "배차중"}</span>
+                    </div>
+                    <div className="space-y-1 text-gray-700 text-[12px]">
+                      <div><span className="font-semibold text-gray-500 w-10 inline-block">상차</span>{r.상차일 || "-"} · {r.상차지명 || "-"}</div>
+                      <div><span className="font-semibold text-gray-500 w-10 inline-block">하차</span>{r.하차지명 || "-"}</div>
+                      {r.화물내용 && <div><span className="font-semibold text-gray-500 w-10 inline-block">화물</span>{r.화물내용}</div>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="px-5 py-4 border-t flex gap-3 shrink-0">
+              <button onClick={() => setDeleteConfirmOpen(false)} className="flex-1 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-[13px]">취소 (ESC)</button>
+              <button onClick={() => removeDocs(Array.from(selectedIds))} className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-[13px]">삭제 실행 (Enter)</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 빠른 배차 팝업 */}
       {quickAssignOpen && selectedOrder && (
