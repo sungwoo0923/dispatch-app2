@@ -6,16 +6,10 @@ import fs from "fs";
 const getAppVersion = () => {
   if (process.env.APP_VERSION) return process.env.APP_VERSION;
   try {
-    const count = parseInt(
-      execSync("git rev-list --count HEAD").toString().trim(),
-      10
-    );
-    if (count > 60) return "v3";
-    if (count > 30) return "v2";
-    return "v1";
+    const pkg = JSON.parse(fs.readFileSync("./package.json", "utf-8"));
+    return pkg.version || "1.0.0";
   } catch {
-    const sha = process.env.VERCEL_GIT_COMMIT_SHA || "";
-    return sha ? `v${sha.slice(0, 7)}` : "v1";
+    return "1.0.0";
   }
 };
 

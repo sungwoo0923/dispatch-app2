@@ -11382,14 +11382,16 @@ React.useEffect(() => {
 
     const targetCargo = String(row.화물내용 || "").trim();
     const targetTon = String(row.차량톤수 || "").trim();
+    const targetVehicle = String(row.차량종류 || "").trim();
+    const isColdVehicle = targetVehicle.includes("냉장") || targetVehicle.includes("냉동");
 
-    // 🔥 1단계: 상/하차지만으로 무조건 수집
+    // 🔥 1단계: 상/하차지 + 차량종류(냉장/냉동 그룹) 필터
     const base = (dispatchData || []).filter(r => {
       if (!r.청구운임) return false;
-      return (
-        String(r.상차지명 || "").includes(pickup) &&
-        String(r.하차지명 || "").includes(drop)
-      );
+      if (!(String(r.상차지명 || "").includes(pickup) && String(r.하차지명 || "").includes(drop))) return false;
+      const rv = String(r.차량종류 || "");
+      const rCold = rv.includes("냉장") || rv.includes("냉동");
+      return isColdVehicle ? rCold : !rCold;
     });
 
     if (!base.length) {
@@ -11460,13 +11462,15 @@ setFarePanelOpen(true);
 
     const targetCargo = String(copyTarget.화물내용 || "").trim();
     const targetTon = String(copyTarget.차량톤수 || "").trim();
+    const targetVehicle = String(copyTarget.차량종류 || "").trim();
+    const isColdVehicle = targetVehicle.includes("냉장") || targetVehicle.includes("냉동");
 
     const base = (dispatchData || []).filter(r => {
       if (!r.청구운임) return false;
-      return (
-        String(r.상차지명 || "").includes(pickup) &&
-        String(r.하차지명 || "").includes(drop)
-      );
+      if (!(String(r.상차지명 || "").includes(pickup) && String(r.하차지명 || "").includes(drop))) return false;
+      const rv = String(r.차량종류 || "");
+      const rCold = rv.includes("냉장") || rv.includes("냉동");
+      return isColdVehicle ? rCold : !rCold;
     });
 
     if (!base.length) {
@@ -25709,8 +25713,6 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [] })
             {/* 요일별 수주 분석 */}
             <WeekdayAnalysisChart monthRows={monthRows} />
 
-            {/* 노선 TOP 5 */}
-            <RouteTopChart monthRows={monthRows} />
 
           </div>
         </div>
@@ -25863,37 +25865,52 @@ function SalesInsightPanel({ monthRows = [], allRows = [], targetMonth = "" }) {
   const totalFee = monthRows.reduce((s, r) => s + (toInt(r.청구운임) - toInt(r.기사운임)), 0);
   const profitRate = totalSale > 0 ? (totalFee / totalSale * 100).toFixed(1) : "0.0";
 
-  const insights = [];
-  if (growthPct !== null) {
-    insights.push({
-      color: parseFloat(growthPct) >= 0 ? "emerald" : "rose",
+  const insights = [
+    growthPct !== null ? {
       icon: parseFloat(growthPct) >= 0 ? "▲" : "▼",
-      text: `전월 대비 매출 ${parseFloat(growthPct) >= 0 ? "+" : ""}${growthPct}% (${Math.abs(totalSale - prevSale).toLocaleString()}원 ${parseFloat(growthPct) >= 0 ? "증가" : "감소"})`,
-    });
-  }
-  if (topClient) insights.push({ color: "indigo", icon: "1위", text: `이달 최고 거래처: ${topClient[0]} (${topClient[1].toLocaleString()}원 · ${Math.round(topClient[1]/totalSale*100)}%)` });
-  insights.push({ color: "blue", icon: "건당", text: `건당 평균 청구운임 ${avgFare.toLocaleString()}원 (총 ${monthRows.length}건)` });
-  insights.push({ color: parseFloat(profitRate) >= 15 ? "emerald" : parseFloat(profitRate) >= 10 ? "amber" : "rose", icon: "수익", text: `수익률 ${profitRate}% · 수익 ${totalFee.toLocaleString()}원` });
-
-  const colorMap = {
-    emerald: "bg-emerald-50 border-emerald-200 text-emerald-700",
-    rose: "bg-rose-50 border-rose-200 text-rose-700",
-    indigo: "bg-indigo-50 border-indigo-200 text-indigo-700",
-    blue: "bg-blue-50 border-blue-200 text-blue-700",
-    amber: "bg-amber-50 border-amber-200 text-amber-700",
-  };
+      label: "전월 대비 매출",
+      value: `${parseFloat(growthPct) >= 0 ? "+" : ""}${growthPct}%`,
+      sub: `${Math.abs(totalSale - prevSale).toLocaleString()}원 ${parseFloat(growthPct) >= 0 ? "증가" : "감소"}`,
+      positive: parseFloat(growthPct) >= 0,
+    } : null,
+    topClient ? {
+      icon: "①",
+      label: "이달 최고 거래처",
+      value: topClient[0],
+      sub: `${topClient[1].toLocaleString()}원 · 점유 ${Math.round(topClient[1]/totalSale*100)||0}%`,
+      positive: true,
+    } : null,
+    {
+      icon: "≈",
+      label: "건당 평균 청구운임",
+      value: `${avgFare.toLocaleString()}원`,
+      sub: `총 ${monthRows.length}건 수주`,
+      positive: true,
+    },
+    {
+      icon: "%",
+      label: "수익률",
+      value: `${profitRate}%`,
+      sub: `수익 ${totalFee.toLocaleString()}원`,
+      positive: parseFloat(profitRate) >= 10,
+    },
+  ].filter(Boolean);
 
   return (
     <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
       <div className="bg-[#1B2B4B] px-6 py-4">
         <h3 className="text-[15px] font-bold text-white">스마트 인사이트</h3>
-        <p className="text-[11px] text-white/50 mt-0.5">이달의 핵심 지표 자동 분석</p>
+        <p className="text-[11px] text-white/50 mt-0.5">AI 기반 월별 분석 요약</p>
       </div>
-      <div className="p-5 space-y-2.5">
+      <div className="divide-y divide-gray-50">
         {insights.map((ins, i) => (
-          <div key={i} className={`flex items-start gap-3 border rounded-xl px-4 py-3 ${colorMap[ins.color] || colorMap.blue}`}>
-            <span className="text-[11px] font-extrabold shrink-0 mt-0.5">{ins.icon}</span>
-            <span className="text-[13px] font-semibold leading-snug">{ins.text}</span>
+          <div key={i} className="flex items-center gap-4 px-6 py-3.5">
+            <span className={`w-8 h-8 rounded-lg flex items-center justify-center text-[13px] font-bold shrink-0 ${ins.positive ? "bg-gray-100 text-gray-600" : "bg-rose-50 text-rose-500"}`}>{ins.icon}</span>
+            <div className="flex-1 min-w-0">
+              <div className="text-[11px] text-gray-400">{ins.label}</div>
+              <div className={`text-[14px] font-bold truncate ${ins.positive ? "text-gray-800" : "text-rose-600"}`}>{ins.value}</div>
+            </div>
+            <div className="text-[11px] text-gray-400 text-right shrink-0">{ins.sub}</div>
           </div>
         ))}
       </div>
@@ -25959,56 +25976,6 @@ function WeekdayAnalysisChart({ monthRows = [] }) {
   );
 }
 
-// ===================== 노선 TOP 5 =====================
-function RouteTopChart({ monthRows = [] }) {
-  const toInt = (v) => Number(String(v || "").replace(/[^\d]/g, "")) || 0;
-
-  if (!monthRows.length) return null;
-
-  const routeMap = {};
-  monthRows.forEach(r => {
-    const from = (r.상차지명 || "").slice(0, 8) || "미지정";
-    const to = (r.하차지명 || "").slice(0, 8) || "미지정";
-    const key = `${from} → ${to}`;
-    if (!routeMap[key]) routeMap[key] = { 건수: 0, 매출: 0 };
-    routeMap[key].건수 += 1;
-    routeMap[key].매출 += toInt(r.청구운임);
-  });
-
-  const top5 = Object.entries(routeMap)
-    .sort((a, b) => b[1].매출 - a[1].매출)
-    .slice(0, 5)
-    .map(([route, v]) => ({ route, ...v }));
-
-  const maxSale = Math.max(...top5.map(r => r.매출), 1);
-
-  return (
-    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-      <div className="bg-[#1B2B4B] px-6 py-4">
-        <h3 className="text-[15px] font-bold text-white">노선 TOP 5</h3>
-        <p className="text-[11px] text-white/50 mt-0.5">이달 청구운임 기준 상위 운행 노선</p>
-      </div>
-      <div className="p-5 space-y-3">
-        {top5.map((r, i) => (
-          <div key={i} className="space-y-1">
-            <div className="flex items-center justify-between text-[12px]">
-              <span className="font-semibold text-gray-700 truncate max-w-[60%]">
-                <span className="text-indigo-600 font-bold mr-1.5">{i + 1}</span>{r.route}
-              </span>
-              <span className="text-gray-500 shrink-0">{r.건수}건 · {r.매출.toLocaleString()}원</span>
-            </div>
-            <div className="w-full bg-gray-100 rounded-full h-2">
-              <div
-                className="h-2 rounded-full bg-indigo-500"
-                style={{ width: `${Math.round(r.매출 / maxSale * 100)}%` }}
-              />
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 function AIInsightModal({ mode, monthRows = [], forecast2026, onClose }) {
   const toInt = (v) => parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
@@ -31202,18 +31169,21 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
   const [selectedPayDate, setSelectedPayDate] = useState(todayStr9());
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [editRow, setEditRow] = useState(null); // { id, data }
+  const [searched, setSearched] = useState(false); // 조회 버튼 눌러야 결과 표시
 
   // 빠른 기간 선택
   const setThisMonth = () => {
     const ym = thisMonthStr();
     const lastDay = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
     setLoadStart(`${ym}-01`); setLoadEnd(`${ym}-${lastDay}`);
+    setSearched(true);
   };
   const setLastMonth = () => {
     const ym = lastMonthStr();
     const d = new Date(ym + "-01");
     const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
     setLoadStart(`${ym}-01`); setLoadEnd(`${ym}-${lastDay}`);
+    setSearched(true);
   };
 
   // ─── 기초 데이터 ───
@@ -31223,6 +31193,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
   );
 
   const filtered = useMemo(() => {
+    if (!searched) return [];
     let rows = [...base];
     if (statusFilter !== "전체") rows = rows.filter(r => (r.지급상태 || "지급중") === statusFilter);
     if (loadStart) rows = rows.filter(r => (r.상차일 || "") >= loadStart);
@@ -31236,7 +31207,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
     if (name) rows = rows.filter(r => String(r.이름 || "").toLowerCase().includes(name));
     if (cl) rows = rows.filter(r => String(r.거래처명 || "").toLowerCase().includes(cl));
     return rows.sort((a, b) => (a.상차일 || "").localeCompare(b.상차일 || ""));
-  }, [base, statusFilter, loadStart, loadEnd, payMethodFilter, dispatchMethodFilter, carNoQ, nameQ, clientQ]);
+  }, [searched, base, statusFilter, loadStart, loadEnd, payMethodFilter, dispatchMethodFilter, carNoQ, nameQ, clientQ]);
 
   // ─── KPI ───
   const kpi = useMemo(() => {
@@ -31391,7 +31362,9 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
           <input placeholder="차량번호" className="border border-gray-200 rounded-lg px-3 py-1.5 text-[12px] w-28 outline-none focus:border-[#1B2B4B]" value={carNoQ} onChange={e => setCarNoQ(e.target.value)} />
           <input placeholder="기사명" className="border border-gray-200 rounded-lg px-3 py-1.5 text-[12px] w-24 outline-none focus:border-[#1B2B4B]" value={nameQ} onChange={e => setNameQ(e.target.value)} />
           <input placeholder="거래처명" className="border border-gray-200 rounded-lg px-3 py-1.5 text-[12px] w-28 outline-none focus:border-[#1B2B4B]" value={clientQ} onChange={e => setClientQ(e.target.value)} />
-          <button onClick={() => { setStatusFilter("전체"); setPayMethodFilter("전체"); setDispatchMethodFilter("전체"); setCarNoQ(""); setNameQ(""); setClientQ(""); setThisMonth(); }}
+          <button onClick={() => setSearched(true)}
+            className="px-4 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-bold hover:bg-[#243a60] transition">조회</button>
+          <button onClick={() => { setStatusFilter("전체"); setPayMethodFilter("전체"); setDispatchMethodFilter("전체"); setCarNoQ(""); setNameQ(""); setClientQ(""); setSearched(false); }}
             className="px-3 py-1.5 rounded-lg bg-gray-100 text-gray-600 text-[12px] font-semibold hover:bg-gray-200 transition">초기화</button>
 
           {/* 우측 */}
@@ -31438,7 +31411,9 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
                 </tr>
               </thead>
               <tbody>
-                {filtered.length === 0 ? (
+                {!searched ? (
+                  <tr><td colSpan={16} className="text-center py-20 text-gray-400 text-[13px]">이번달 / 지난달 버튼 또는 날짜를 설정하고 <b className="text-[#1B2B4B]">조회</b> 버튼을 눌러주세요.</td></tr>
+                ) : filtered.length === 0 ? (
                   <tr><td colSpan={16} className="text-center py-16 text-gray-400 text-[13px]">조회된 데이터가 없습니다.</td></tr>
                 ) : filtered.map((r, i) => {
                   const isDone = (r.지급상태 || "지급중") === "지급완료";
@@ -31504,7 +31479,9 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
                 </tr>
               </thead>
               <tbody>
-                {driverSummary.length === 0 ? (
+                {!searched ? (
+                  <tr><td colSpan={9} className="text-center py-20 text-gray-400 text-[13px]">이번달 / 지난달 버튼 또는 날짜를 설정하고 <b className="text-[#1B2B4B]">조회</b> 버튼을 눌러주세요.</td></tr>
+                ) : driverSummary.length === 0 ? (
                   <tr><td colSpan={9} className="text-center py-16 text-gray-400 text-[13px]">데이터가 없습니다.</td></tr>
                 ) : driverSummary.map((d, i) => (
                   <tr key={d.차량번호} className={`${i % 2 === 0 ? "bg-white" : "bg-gray-50/60"} hover:bg-blue-50/40 transition`}>
