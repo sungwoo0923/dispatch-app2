@@ -3295,6 +3295,7 @@ function MobileOrderList({
   onlyToday,
   setOnlyToday,
 }) {
+  const [attachViewOrder, setAttachViewOrder] = useState(null);
   // 🔥 탭: 전체 / 배차중 / 배차완료 (배차전/배차취소 없음)
   const tabs = ["전체", "배차중", "배차완료"];
 
@@ -3340,6 +3341,7 @@ const summary = useMemo(() => {
   };
 }, [groupedByDate]);
   return (
+    <>
     <div>
       {/* 상태 탭 */}
       <div className="flex bg-white border-b">
@@ -3545,6 +3547,7 @@ const summary = useMemo(() => {
   showUndeliveredOnly={false}
   onSelect={() => onSelect(o)}
   onOpenMemo={setOpenMemo}
+  onOpenAttach={setAttachViewOrder}
 />
                   </div>
 
@@ -3555,6 +3558,11 @@ const summary = useMemo(() => {
         })}
       </div>
     </div>
+
+    {attachViewOrder && (
+      <CardAttachViewer order={attachViewOrder} onClose={() => setAttachViewOrder(null)} />
+    )}
+    </>
   );
 }
 
@@ -3611,10 +3619,113 @@ function dayBadgeClass(label) {
   return "bg-gray-50 text-gray-500 border-gray-200";
 }
 
+// ======================================================================
+// 카드에서 바로 열리는 첨부파일 뷰어 (하단 시트)
+// ======================================================================
+function CardAttachViewer({ order, onClose }) {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState(null);
+
+  useEffect(() => {
+    const col = order.__col || order._col || "dispatch";
+    const docId = order._id || order.id;
+    setLoading(true);
+    const unsub = onSnapshot(collection(db, col, docId, "attachments"), snap => {
+      setItems(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setLoading(false);
+    });
+    return () => unsub();
+  }, [order]);
+
+  return (
+    <div className="fixed inset-0 z-[9999] flex flex-col justify-end">
+      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+      <div className="relative bg-white rounded-t-3xl max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="flex justify-center pt-3 pb-1 shrink-0">
+          <div className="w-10 h-1 rounded-full bg-gray-300" />
+        </div>
+        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 shrink-0">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-xl bg-[#1B2B4B] flex items-center justify-center shrink-0">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+              </svg>
+            </div>
+            <div>
+              <div className="font-bold text-[15px] text-[#1B2B4B]">
+                첨부파일
+                {!loading && <span className="text-[12px] font-normal text-gray-400 ml-1">{items.length}장</span>}
+              </div>
+              <div className="text-[11px] text-gray-400 truncate max-w-[220px]">
+                {order.상차지명} → {order.하차지명}
+              </div>
+            </div>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 text-lg font-bold">×</button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4">
+          {loading && (
+            <div className="flex items-center justify-center py-16 gap-2 text-gray-400">
+              <div className="w-4 h-4 border-2 border-gray-300 border-t-[#1B2B4B] rounded-full animate-spin" />
+              <span className="text-sm">불러오는 중...</span>
+            </div>
+          )}
+          {!loading && items.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-16 gap-2">
+              <div className="text-sm text-gray-400 font-medium">업로드된 파일이 없습니다</div>
+              <div className="text-xs text-gray-300">기사님께 인수증 업로드를 요청하세요</div>
+            </div>
+          )}
+          {!loading && items.length > 0 && (
+            <div className="grid grid-cols-2 gap-3">
+              {items.map(item => (
+                <div key={item.id} className="border border-gray-100 rounded-xl overflow-hidden shadow-sm">
+                  <div className="aspect-[4/3] bg-gray-50 cursor-pointer" onClick={() => setSelected(item)}>
+                    <img
+                      src={item.base64 || item.url}
+                      alt={item.name}
+                      className="w-full h-full object-cover"
+                      onError={e => { e.target.parentElement.innerHTML = '<div class="w-full h-full flex items-center justify-center text-gray-300 text-xs">미리보기 없음</div>'; }}
+                    />
+                  </div>
+                  <div className="px-2.5 py-2 bg-white">
+                    <div className="text-[10px] text-gray-400 truncate mb-1.5">{item.name || "파일"}{item.sizeKB ? ` · ${item.sizeKB}KB` : ""}</div>
+                    <button
+                      onClick={() => { const a = document.createElement("a"); a.href = item.base64 || item.url; a.download = item.name || "attachment.jpg"; document.body.appendChild(a); a.click(); document.body.removeChild(a); }}
+                      className="w-full py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-bold"
+                    >
+                      저장
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+      {selected && (
+        <div className="absolute inset-0 bg-black/95 z-10 flex flex-col items-center justify-center" onClick={() => setSelected(null)}>
+          <img src={selected.base64 || selected.url} alt="full" className="max-w-full max-h-[75vh] object-contain" onClick={e => e.stopPropagation()} />
+          <button className="absolute top-4 left-4 w-10 h-10 bg-white/15 rounded-full text-white flex items-center justify-center text-sm font-bold" onClick={() => setSelected(null)}>닫기</button>
+          <button
+            className="absolute bottom-8 right-6 px-5 py-2.5 bg-[#1B2B4B] text-white rounded-xl text-sm font-bold"
+            onClick={e => { e.stopPropagation(); const a = document.createElement("a"); a.href = selected.base64 || selected.url; a.download = selected.name || "attachment.jpg"; document.body.appendChild(a); a.click(); document.body.removeChild(a); }}
+          >
+            저장
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const MobileOrderCard = React.memo(function MobileOrderCard({
   order,
   onSelect,
   onOpenMemo,
+  onOpenAttach,
   showUndeliveredOnly,
   onConfirmDeliver,
   flash = false,
@@ -3685,8 +3796,8 @@ const dropTime = order.하차시간 || "시간 없음";
     <span
       className="inline-flex items-center gap-1
                  px-2 py-0.5 rounded-full
-                 bg-yellow-100 text-yellow-800
-                 border border-yellow-300
+                 bg-[#1B2B4B]/10 text-[#1B2B4B]
+                 border border-[#1B2B4B]/20
                  text-[10px] font-semibold"
     >
        메모
@@ -3719,6 +3830,17 @@ const dropTime = order.하차시간 || "시간 없음";
     <span className="px-2 py-0.5 rounded-full bg-cyan-600 text-white text-[10px] font-bold">
       냉장/냉동
     </span>
+  )}
+
+  {(order.attachCount > 0) && (
+    <button
+      style={{ touchAction: "manipulation" }}
+      onClick={e => { e.stopPropagation(); onOpenAttach?.(order); }}
+      className="flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[10px] font-bold"
+    >
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      {order.attachCount}
+    </button>
   )}
 
   <span className={"px-2 py-0.5 rounded-full border text-[11px] font-semibold " + stateBadgeClass}>
@@ -3828,6 +3950,26 @@ const dt = new Date(y, m - 1, d, hh, mm);
           청구 {fmtMoney(claim)} · 기사 {fmtMoney(fee)}
         </div>
       </div>
+
+      {/* ▶ 배차완료 → 기사 빠른 연락 */}
+      {state === "배차완료" && (order.이름 || order.차량번호) && (
+        <div className="flex items-center gap-2 mt-1.5 pt-1.5 border-t border-dashed border-gray-100">
+          <span className="text-[11px] text-gray-400 truncate flex-1">
+            {[order.차량번호, order.이름].filter(Boolean).join(" · ")}
+          </span>
+          {order.전화번호 && (
+            <a
+              href={`tel:${order.전화번호}`}
+              onClick={e => e.stopPropagation()}
+              style={{ touchAction: "manipulation" }}
+              className="shrink-0 px-2.5 py-1 rounded-full bg-[#1B2B4B] text-white text-[10px] font-bold"
+            >
+              전화
+            </a>
+          )}
+        </div>
+      )}
+
       {/* ✅ 전달버튼은 여기 */}
 {showUndeliveredOnly && (
   <div className="flex justify-end mt-2">
