@@ -13955,14 +13955,15 @@ const head = isDark
     <button onClick={()=>setSelected([])} className="px-3 py-1.5 rounded-lg bg-gray-300 text-gray-800 text-sm font-semibold shadow hover:opacity-90">선택초기화</button>
     <button onClick={()=>{
   if(!filtered.length)return showAlert("내보낼 데이터가 없습니다.");
-  const _sp=(v)=>{try{return Array.isArray(v)?v:JSON.parse(v||"[]");}catch{return[];}};
-  const _via=(arr)=>_sp(arr).filter(s=>s.업체명).map(s=>s.업체명).join(", ");
-  const _hasVia=filtered.some(r=>_sp(r.경유상차목록||r.경유지_상차).some(s=>s.업체명)||_sp(r.경유하차목록||r.경유지_하차).some(s=>s.업체명));
+  const _sp=(v)=>{if(Array.isArray(v)&&v.length>0)return v;if(typeof v==="string"&&v.trim().startsWith("[")){try{const p=JSON.parse(v);if(Array.isArray(p))return p;}catch{}}return[];};
+  const _merge=(r,f1,f2)=>[..._sp(r[f1]),..._sp(r[f2])].filter(s=>s&&(s.업체명?.trim()||s.주소?.trim())).filter((s,i,a)=>{const k=s.업체명||s.주소;return a.findIndex(x=>(x.업체명||x.주소)===k)===i;});
+  const _via=(list)=>list.map(s=>s.업체명||s.주소||"").filter(Boolean).join(", ");
+  const _hasVia=filtered.some(r=>_merge(r,"경유상차목록","경유지_상차").length>0||_merge(r,"경유하차목록","경유지_하차").length>0);
   const rowsExcel=filtered.map((r,idx)=>{
     const row={순번:idx+1,등록일:r.등록일||"",상차일:r.상차일||"",상차시간:r.상차시간||"",하차일:r.하차일||"",하차시간:r.하차시간||"",거래처명:r.거래처명||"",상차지명:r.상차지명||""};
-    if(_hasVia)row["경유 상차지"]=_via(r.경유상차목록||r.경유지_상차||[]);
+    if(_hasVia)row["경유 상차지"]=_via(_merge(r,"경유상차목록","경유지_상차"));
     row.하차지명=r.하차지명||"";
-    if(_hasVia)row["경유 하차지"]=_via(r.경유하차목록||r.경유지_하차||[]);
+    if(_hasVia)row["경유 하차지"]=_via(_merge(r,"경유하차목록","경유지_하차"));
     Object.assign(row,{차량번호:r.차량번호||"",기사명:r.이름||"",전화번호:r.전화번호||"",배차상태:r.배차상태||"",청구운임:toInt(r.청구운임),기사운임:toInt(r.기사운임),수수료:toInt(r.청구운임)-toInt(r.기사운임),지급방식:r.지급방식||"",배차방식:r.배차방식||"",메모:r.메모||""});
     return row;
   });
@@ -15601,7 +15602,7 @@ value={copyTarget?.화물수량 || ""}
       // 🔥 두 필드 모두 업데이트
       setEditTarget(p => ({
         ...p,
-        경우하차목록: newList,
+        경유하차목록: newList,
         경유지_하차: newList,
       }));
     }
@@ -20452,9 +20453,10 @@ if (first) {
     return Number.isNaN(n) ? 0 : n;
   };
   const downloadExcel = () => {
-    const _sp=(v)=>{try{return Array.isArray(v)?v:JSON.parse(v||"[]");}catch{return[];}};
-    const _via=(arr)=>_sp(arr).filter(s=>s.업체명).map(s=>s.업체명).join(", ");
-    const _hasVia=filtered.some(r=>_sp(r.경유상차목록||r.경유지_상차).some(s=>s.업체명)||_sp(r.경유하차목록||r.경유지_하차).some(s=>s.업체명));
+    const _sp=(v)=>{if(Array.isArray(v)&&v.length>0)return v;if(typeof v==="string"&&v.trim().startsWith("[")){try{const p=JSON.parse(v);if(Array.isArray(p))return p;}catch{}}return[];};
+    const _merge=(r,f1,f2)=>[..._sp(r[f1]),..._sp(r[f2])].filter(s=>s&&(s.업체명?.trim()||s.주소?.trim())).filter((s,i,a)=>{const k=s.업체명||s.주소;return a.findIndex(x=>(x.업체명||x.주소)===k)===i;});
+    const _via=(list)=>list.map(s=>s.업체명||s.주소||"").filter(Boolean).join(", ");
+    const _hasVia=filtered.some(r=>_merge(r,"경유상차목록","경유지_상차").length>0||_merge(r,"경유하차목록","경유지_하차").length>0);
 
     const rows = filtered.map((r, i) => {
       const row = {
@@ -20468,10 +20470,10 @@ if (first) {
         상차지명: r.상차지명 || "",
         상차지주소: r.상차지주소 || "",
       };
-      if (_hasVia) row["경유 상차지"] = _via(r.경유상차목록||r.경유지_상차||[]);
+      if (_hasVia) row["경유 상차지"] = _via(_merge(r,"경유상차목록","경유지_상차"));
       row["하차지명"] = r.하차지명 || "";
       row["하차지주소"] = r.하차지주소 || "";
-      if (_hasVia) row["경유 하차지"] = _via(r.경유하차목록||r.경유지_하차||[]);
+      if (_hasVia) row["경유 하차지"] = _via(_merge(r,"경유하차목록","경유지_하차"));
       Object.assign(row, {
         화물내용: r.화물내용 || "",
         차량종류: r.차량종류 || "",
@@ -21160,9 +21162,11 @@ return (
   <div className="inline-flex items-center gap-1">
     <span>{row.상차지명}</span>
     {(() => {
-const raw = row.경유상차목록 || row.경유지_상차;
-const list = (Array.isArray(raw) ? raw : []).filter(s => s?.업체명?.trim());
-      return list.length > 0 ? <StopBadge count={list.length} list={list} /> : null;
+      const _s=(v)=>{if(Array.isArray(v)&&v.length>0)return v;if(typeof v==="string"&&v.trim().startsWith("[")){try{const p=JSON.parse(v);if(Array.isArray(p))return p;}catch{}}return[];};
+      const list=[..._s(row.경유상차목록),..._s(row.경유지_상차)]
+        .filter(s=>s&&(s.업체명?.trim()||s.주소?.trim()))
+        .filter((s,i,arr)=>{const k=s.업체명||s.주소;return arr.findIndex(x=>(x.업체명||x.주소)===k)===i;});
+      return list.length>0?<StopBadge count={list.length} list={list}/>:null;
     })()}
   </div>
 
@@ -21170,9 +21174,11 @@ const list = (Array.isArray(raw) ? raw : []).filter(s => s?.업체명?.trim());
   <div className="inline-flex items-center gap-1">
     <span>{row.하차지명}</span>
     {(() => {
-      const raw = row.경유하차목록 || row.경유지_하차;
-const list = (Array.isArray(raw) ? raw : []).filter(s => s?.업체명?.trim());
-      return list.length > 0 ? <StopBadge count={list.length} list={list} /> : null;
+      const _s=(v)=>{if(Array.isArray(v)&&v.length>0)return v;if(typeof v==="string"&&v.trim().startsWith("[")){try{const p=JSON.parse(v);if(Array.isArray(p))return p;}catch{}}return[];};
+      const list=[..._s(row.경유하차목록),..._s(row.경유지_하차)]
+        .filter(s=>s&&(s.업체명?.trim()||s.주소?.trim()))
+        .filter((s,i,arr)=>{const k=s.업체명||s.주소;return arr.findIndex(x=>(x.업체명||x.주소)===k)===i;});
+      return list.length>0?<StopBadge count={list.length} list={list}/>:null;
     })()}
   </div>
 
@@ -22566,9 +22572,7 @@ setEditTarget((p) => ({
 
 // ✅ 낙관적 UI 즉시 반영
     setLocalOverrides(prev => ({ ...prev, [savedId]: payload }));
-    setDispatchData(prev => prev.map(d =>
-      (d._id || d.id || d._fsid) === savedId ? { ...d, ...payload } : d
-    ));
+    patchDispatch(savedId, payload).catch(console.error);
     if (payload.차량번호 && payload.이름) {
       const existingD = (drivers||[]).find(d => normalizePlate(d.차량번호) === normalizePlate(payload.차량번호));
       if (!existingD) {
