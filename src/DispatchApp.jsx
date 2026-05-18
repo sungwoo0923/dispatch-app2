@@ -1037,6 +1037,146 @@ export {
 // ===================== DispatchApp.jsx (PART 1/8) — END =====================
 
 
+// ===================== FloatingCalculator =====================
+function FloatingCalculator({ onClose }) {
+  const [display, setDisplay] = React.useState("0");
+  const [prev, setPrev] = React.useState(null);
+  const [op, setOp] = React.useState(null);
+  const [waitNext, setWaitNext] = React.useState(false);
+
+  const round = (n) => Math.round(n * 1e10) / 1e10;
+  const calcResult = (a, b, o) => {
+    if (o === "+") return round(a + b);
+    if (o === "-") return round(a - b);
+    if (o === "×") return round(a * b);
+    if (o === "÷") return b !== 0 ? round(a / b) : 0;
+    return b;
+  };
+
+  const handleNum = (n) => {
+    if (display.replace("-", "").length >= 15) return;
+    if (waitNext) { setDisplay(String(n)); setWaitNext(false); }
+    else setDisplay(display === "0" ? String(n) : display + n);
+  };
+  const handleDot = () => {
+    if (waitNext) { setDisplay("0."); setWaitNext(false); return; }
+    if (!display.includes(".")) setDisplay(display + ".");
+  };
+  const handleOp = (o) => {
+    const cur = parseFloat(display);
+    if (prev !== null && !waitNext) {
+      const r = calcResult(prev, cur, op);
+      setDisplay(String(r));
+      setPrev(r);
+    } else {
+      setPrev(cur);
+    }
+    setOp(o);
+    setWaitNext(true);
+  };
+  const handleEqual = () => {
+    if (prev === null || op === null) return;
+    const r = calcResult(prev, parseFloat(display), op);
+    setDisplay(String(r));
+    setPrev(null);
+    setOp(null);
+    setWaitNext(true);
+  };
+  const handleClear = () => { setDisplay("0"); setPrev(null); setOp(null); setWaitNext(false); };
+  const handlePercent = () => setDisplay(String(round(parseFloat(display) / 100)));
+  const handlePlusMinus = () => setDisplay(String(-parseFloat(display)));
+  const handleBackspace = () => {
+    if (waitNext) return;
+    setDisplay(display.length <= 1 || display === "-0" ? "0" : display.slice(0, -1));
+  };
+
+  const fmtDisplay = (val) => {
+    const s = String(val);
+    if (s.includes("e")) return s;
+    const [int, dec] = s.split(".");
+    const intFmt = parseInt(int, 10).toLocaleString("ko-KR");
+    return dec !== undefined ? `${intFmt}.${dec}` : intFmt;
+  };
+
+  const btns = [
+    { l: "AC",  t: "func", fn: handleClear },
+    { l: "+/-", t: "func", fn: handlePlusMinus },
+    { l: "%",   t: "func", fn: handlePercent },
+    { l: "÷",   t: "op",   fn: () => handleOp("÷") },
+    { l: "7",   t: "num",  fn: () => handleNum("7") },
+    { l: "8",   t: "num",  fn: () => handleNum("8") },
+    { l: "9",   t: "num",  fn: () => handleNum("9") },
+    { l: "×",   t: "op",   fn: () => handleOp("×") },
+    { l: "4",   t: "num",  fn: () => handleNum("4") },
+    { l: "5",   t: "num",  fn: () => handleNum("5") },
+    { l: "6",   t: "num",  fn: () => handleNum("6") },
+    { l: "-",   t: "op",   fn: () => handleOp("-") },
+    { l: "1",   t: "num",  fn: () => handleNum("1") },
+    { l: "2",   t: "num",  fn: () => handleNum("2") },
+    { l: "3",   t: "num",  fn: () => handleNum("3") },
+    { l: "+",   t: "op",   fn: () => handleOp("+") },
+    { l: "0",   t: "num",  fn: () => handleNum("0"), wide: true },
+    { l: "⌫",  t: "num",  fn: handleBackspace },
+    { l: "=",   t: "eq",   fn: handleEqual },
+  ];
+
+  const colorsMap = {
+    func: { bg: "#e5e7eb", color: "#374151" },
+    op:   { bg: "#1B2B4B", color: "white" },
+    eq:   { bg: "#2563eb", color: "white" },
+    num:  { bg: "#f3f4f6", color: "#111827" },
+  };
+
+  return (
+    <div style={{
+      position: "fixed", bottom: 80, right: 24, zIndex: 99999,
+      width: 264, background: "white", borderRadius: 20,
+      boxShadow: "0 20px 60px rgba(0,0,0,0.22)",
+      overflow: "hidden", border: "1px solid #e2e8f0",
+      fontFamily: "'Noto Sans KR', sans-serif",
+    }}>
+      {/* 타이틀 */}
+      <div style={{ background: "#1B2B4B", padding: "9px 14px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <span style={{ color: "white", fontWeight: 700, fontSize: 13 }}>계산기</span>
+        <button onClick={onClose} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.6)", cursor: "pointer", fontSize: 20, lineHeight: 1, padding: 0 }}>×</button>
+      </div>
+      {/* 디스플레이 */}
+      <div style={{ background: "#f8fafc", padding: "10px 16px", borderBottom: "1px solid #e2e8f0" }}>
+        <div style={{ fontSize: 11, color: "#94a3b8", minHeight: 16, textAlign: "right" }}>
+          {prev !== null && op ? `${fmtDisplay(prev)} ${op}` : ""}
+        </div>
+        <div style={{ fontSize: 28, fontWeight: 700, color: "#1e293b", textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {fmtDisplay(display)}
+        </div>
+      </div>
+      {/* 버튼 그리드 */}
+      <div style={{ padding: 10, display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 5 }}>
+        {btns.map((btn, i) => {
+          const c = colorsMap[btn.t];
+          return (
+            <button
+              key={i}
+              onClick={btn.fn}
+              style={{
+                background: c.bg, color: c.color,
+                border: "none", borderRadius: 10,
+                cursor: "pointer", fontSize: 16, fontWeight: 600,
+                height: 52, transition: "opacity 0.1s",
+                gridColumn: btn.wide ? "span 2" : undefined,
+              }}
+              onMouseDown={e => { e.currentTarget.style.opacity = "0.75"; }}
+              onMouseUp={e => { e.currentTarget.style.opacity = "1"; }}
+              onMouseLeave={e => { e.currentTarget.style.opacity = "1"; }}
+            >
+              {btn.l}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ===================== DispatchApp.jsx (PART 2/8) — START =====================
 export default function DispatchApp({ role, user }) {
   // 🔥 화주 차단
@@ -1282,6 +1422,7 @@ useEffect(() => {
   const tonOptions = useMemo(() => Array.from({ length: 25 }, (_, i) => `${i + 1}톤`), []);
 
  const [menu, setMenu] = useState("HOME");
+  const [calcOpen, setCalcOpen] = useState(false);
    // ★ 거래명세서에서 오더 클릭 시 해당 오더로 이동하기 위한 전역 함수
   const [highlightOrderId, setHighlightOrderId] = useState(null);
 
@@ -1701,10 +1842,45 @@ return (
         </div>
       )}
     {/* AI 비서 */}
-<AiAssistant 
+<AiAssistant
   dispatches={dispatchData}
-  clients={clients} 
+  clients={clients}
 />
+
+      {/* 계산기 플로팅 버튼 */}
+      {["배차관리", "실시간배차현황", "배차현황"].includes(menu) && (
+        <>
+          <button
+            onClick={() => setCalcOpen(p => !p)}
+            title="계산기"
+            style={{
+              position: "fixed", bottom: 24, right: 24,
+              zIndex: 99998, width: 44, height: 44,
+              borderRadius: "50%", background: calcOpen ? "#243a60" : "#1B2B4B",
+              color: "white", border: "none", cursor: "pointer",
+              boxShadow: "0 4px 16px rgba(0,0,0,0.25)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              transition: "background 0.2s",
+            }}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="4" y="2" width="16" height="20" rx="2"/>
+              <line x1="8" y1="6" x2="16" y2="6"/>
+              <circle cx="8" cy="10" r="1" fill="white"/>
+              <circle cx="12" cy="10" r="1" fill="white"/>
+              <circle cx="16" cy="10" r="1" fill="white"/>
+              <circle cx="8" cy="14" r="1" fill="white"/>
+              <circle cx="12" cy="14" r="1" fill="white"/>
+              <circle cx="16" cy="14" r="1" fill="white"/>
+              <circle cx="8" cy="18" r="1" fill="white"/>
+              <circle cx="12" cy="18" r="1" fill="white"/>
+              <line x1="14" y1="18" x2="18" y2="18"/>
+            </svg>
+          </button>
+          {calcOpen && <FloatingCalculator onClose={() => setCalcOpen(false)} />}
+        </>
+      )}
+
     </ToastProvider>
   );
 }
@@ -13716,6 +13892,7 @@ const head = isDark
 }} className="px-3 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-sm font-semibold shadow hover:bg-[#243a60] transition">일괄동기화</button>
     <button onClick={()=>{setTempSortKey(sortKey||"");setTempSortDir(sortDir||"asc");setSortModalOpen(true);}} className="px-3 py-1.5 rounded-lg bg-slate-500 text-white text-sm font-semibold shadow hover:opacity-90">정렬</button>
     <button onClick={()=>{if(!selected.length)return showAlert("복사할 오더를 선택하세요.");if(selected.length>1)return showAlert("복사는 1개의 오더만 가능합니다.");setCopyModalOpen(true);}} className="px-3 py-1.5 rounded-lg bg-gray-800 text-white text-sm font-semibold shadow hover:opacity-90">기사복사</button>
+    <button onClick={()=>{const url=`${window.location.origin}/driver-upload`;navigator.clipboard.writeText(url).then(()=>showAlert("통합 업로드 링크가 복사되었습니다.\n기사에게 붙여넣기로 전달하세요.")).catch(()=>showAlert(`링크: ${url}`));}} className="px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-sm font-semibold shadow hover:opacity-90">업로드링크</button>
     <button onClick={()=>setDailyCloseOpen(true)} className="px-3 py-1.5 rounded-lg bg-gray-700 text-white text-sm font-semibold shadow hover:opacity-90">일마감</button>
 
     <button onClick={()=>{
@@ -20793,7 +20970,8 @@ return (
         {/* 우측 버튼들 */}
         <div className="ml-auto flex items-center gap-1.5">
           <button onClick={()=>setSortModalOpen(true)} className="px-3 py-1.5 rounded-lg bg-slate-500 text-white text-sm font-semibold shadow hover:opacity-90">정렬</button>
-          <button onClick={()=>{if(selected.size===0)return showAlert("복사할 항목을 선택하세요.");if(selected.size>1)return showAlert("1개만 선택할 수 있습니다.");setCopyModalOpen(true);}} className="px-3 py-1.5 rounded-lg bg-gray-800 text-white text-sm font-semibold shadow hover:opacity-90">📋 기사복사</button>
+          <button onClick={()=>{if(selected.size===0)return showAlert("복사할 항목을 선택하세요.");if(selected.size>1)return showAlert("1개만 선택할 수 있습니다.");setCopyModalOpen(true);}} className="px-3 py-1.5 rounded-lg bg-gray-800 text-white text-sm font-semibold shadow hover:opacity-90">기사복사</button>
+          <button onClick={()=>{const url=`${window.location.origin}/driver-upload`;navigator.clipboard.writeText(url).then(()=>showAlert("통합 업로드 링크가 복사되었습니다.\n기사에게 붙여넣기로 전달하세요.")).catch(()=>showAlert(`링크: ${url}`));}} className="px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-sm font-semibold shadow hover:opacity-90">업로드링크</button>
           <label className="px-3 py-1.5 rounded-lg bg-gray-700 text-white text-sm font-semibold shadow hover:opacity-90 cursor-pointer">대용량 업로드<input type="file" accept=".xlsx,.xls" hidden onChange={handleBulkFile}/></label>
           <button className="px-3 py-1.5 rounded-lg bg-gray-600 text-white text-sm font-semibold shadow hover:opacity-90" onClick={handleEditToggle}>{editMode?"수정완료":"선택수정"}</button>
           <button className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-sm font-semibold shadow hover:opacity-90" onClick={()=>{if(!selected.size)return showAlert("삭제할 항목이 없습니다.");setShowDeletePopup(true);}}>선택삭제</button>

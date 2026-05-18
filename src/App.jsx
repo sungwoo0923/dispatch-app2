@@ -29,6 +29,7 @@ import ShipperPending from "./shipper/ShipperPending";
 
 import NoAccess from "./NoAccess";
 import UploadPage from "./UploadPage";
+import DriverSearchPage from "./DriverSearchPage";
 import StandardFare from "./StandardFare";
 import ChangePassword from "./ChangePassword";
 
@@ -408,6 +409,7 @@ export default function App() {
           <Route path="/change-password" element={<ChangePassword />} />
           <Route path="/standard-fare" element={<StandardFare />} />
           <Route path="/upload" element={<UploadPage />} />
+          <Route path="/driver-upload" element={<DriverSearchPage />} />
           <Route path="/no-access" element={<NoAccess />} />
 
           <Route
