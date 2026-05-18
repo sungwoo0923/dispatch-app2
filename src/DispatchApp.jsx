@@ -274,6 +274,11 @@ const sixMonthsAgo = getSixMonthsAgo();
             const parse = (v) => {
               if (Array.isArray(v) && v.length > 0) return v;
               if (typeof v === "string" && v.startsWith("[")) try { const p = JSON.parse(v); if (Array.isArray(p) && p.length > 0) return p; } catch {}
+              if (v && typeof v === "object" && !Array.isArray(v)) {
+                const ks = Object.keys(v);
+                if (ks.length > 0 && ks.every(k => /^\d+$/.test(k))) return ks.sort((a,b)=>Number(a)-Number(b)).map(k=>v[k]);
+                if (v.업체명) return [v];
+              }
               return null;
             };
             return parse(data.경유지_상차) || parse(data.경유상차목록) || [];
@@ -282,6 +287,11 @@ const sixMonthsAgo = getSixMonthsAgo();
             const parse = (v) => {
               if (Array.isArray(v) && v.length > 0) return v;
               if (typeof v === "string" && v.startsWith("[")) try { const p = JSON.parse(v); if (Array.isArray(p) && p.length > 0) return p; } catch {}
+              if (v && typeof v === "object" && !Array.isArray(v)) {
+                const ks = Object.keys(v);
+                if (ks.length > 0 && ks.every(k => /^\d+$/.test(k))) return ks.sort((a,b)=>Number(a)-Number(b)).map(k=>v[k]);
+                if (v.업체명) return [v];
+              }
               return null;
             };
             return parse(data.경유지_하차) || parse(data.경유하차목록) || [];
@@ -358,6 +368,11 @@ const sixMonthsAgo = getSixMonthsAgo();
         const parseStops = (v) => {
           if (Array.isArray(v) && v.length > 0) return v;
           if (typeof v === "string" && v.startsWith("[")) try { const p = JSON.parse(v); if (Array.isArray(p) && p.length > 0) return p; } catch {}
+          if (v && typeof v === "object" && !Array.isArray(v)) {
+            const ks = Object.keys(v);
+            if (ks.length > 0 && ks.every(k => /^\d+$/.test(k))) return ks.sort((a,b)=>Number(a)-Number(b)).map(k=>v[k]);
+            if (v.업체명) return [v];
+          }
           return null;
         };
         return {
@@ -552,7 +567,14 @@ const patchDispatch = async (_id, patch) => {
   const safeStops = (v) => {
     if (Array.isArray(v) && v.length > 0) return v;
     if (typeof v === "string" && v.trim().startsWith("[")) {
-      try { const p = JSON.parse(v); if (Array.isArray(p)) return p; } catch {}
+      try { const p = JSON.parse(v); if (Array.isArray(p) && p.length > 0) return p; } catch {}
+    }
+    if (v && typeof v === "object" && !Array.isArray(v)) {
+      const keys = Object.keys(v);
+      if (keys.length > 0 && keys.every(k => /^\d+$/.test(k))) {
+        return keys.sort((a, b) => Number(a) - Number(b)).map(k => v[k]);
+      }
+      if (v.업체명) return [v];
     }
     return [];
   };
@@ -13955,7 +13977,7 @@ const head = isDark
     <button onClick={()=>setSelected([])} className="px-3 py-1.5 rounded-lg bg-gray-300 text-gray-800 text-sm font-semibold shadow hover:opacity-90">선택초기화</button>
     <button onClick={()=>{
   if(!filtered.length)return showAlert("내보낼 데이터가 없습니다.");
-  const _sp=(v)=>{if(Array.isArray(v)&&v.length>0)return v;if(typeof v==="string"&&v.trim().startsWith("[")){try{const p=JSON.parse(v);if(Array.isArray(p))return p;}catch{}}return[];};
+  const _sp=(v)=>{if(Array.isArray(v)&&v.length>0)return v;if(typeof v==="string"&&v.trim().startsWith("[")){try{const p=JSON.parse(v);if(Array.isArray(p)&&p.length>0)return p;}catch{}}if(v&&typeof v==="object"&&!Array.isArray(v)){const ks=Object.keys(v);if(ks.length>0&&ks.every(k=>/^\d+$/.test(k)))return ks.sort((a,b)=>Number(a)-Number(b)).map(k=>v[k]);if(v.업체명)return[v];}return[];};
   const _merge=(r,f1,f2)=>[..._sp(r[f1]),..._sp(r[f2])].filter(s=>s&&(s.업체명?.trim()||s.주소?.trim())).filter((s,i,a)=>{const k=s.업체명||s.주소;return a.findIndex(x=>(x.업체명||x.주소)===k)===i;});
   const _via=(list)=>list.map(s=>s.업체명||s.주소||"").filter(Boolean).join(", ");
   const _hasVia=filtered.some(r=>_merge(r,"경유상차목록","경유지_상차").length>0||_merge(r,"경유하차목록","경유지_하차").length>0);
@@ -20453,7 +20475,7 @@ if (first) {
     return Number.isNaN(n) ? 0 : n;
   };
   const downloadExcel = () => {
-    const _sp=(v)=>{if(Array.isArray(v)&&v.length>0)return v;if(typeof v==="string"&&v.trim().startsWith("[")){try{const p=JSON.parse(v);if(Array.isArray(p))return p;}catch{}}return[];};
+    const _sp=(v)=>{if(Array.isArray(v)&&v.length>0)return v;if(typeof v==="string"&&v.trim().startsWith("[")){try{const p=JSON.parse(v);if(Array.isArray(p)&&p.length>0)return p;}catch{}}if(v&&typeof v==="object"&&!Array.isArray(v)){const ks=Object.keys(v);if(ks.length>0&&ks.every(k=>/^\d+$/.test(k)))return ks.sort((a,b)=>Number(a)-Number(b)).map(k=>v[k]);if(v.업체명)return[v];}return[];};
     const _merge=(r,f1,f2)=>[..._sp(r[f1]),..._sp(r[f2])].filter(s=>s&&(s.업체명?.trim()||s.주소?.trim())).filter((s,i,a)=>{const k=s.업체명||s.주소;return a.findIndex(x=>(x.업체명||x.주소)===k)===i;});
     const _via=(list)=>list.map(s=>s.업체명||s.주소||"").filter(Boolean).join(", ");
     const _hasVia=filtered.some(r=>_merge(r,"경유상차목록","경유지_상차").length>0||_merge(r,"경유하차목록","경유지_하차").length>0);
@@ -21162,7 +21184,7 @@ return (
   <div className="inline-flex items-center gap-1">
     <span>{row.상차지명}</span>
     {(() => {
-      const _s=(v)=>{if(Array.isArray(v)&&v.length>0)return v;if(typeof v==="string"&&v.trim().startsWith("[")){try{const p=JSON.parse(v);if(Array.isArray(p))return p;}catch{}}return[];};
+      const _s=(v)=>{if(Array.isArray(v)&&v.length>0)return v;if(typeof v==="string"&&v.trim().startsWith("[")){try{const p=JSON.parse(v);if(Array.isArray(p)&&p.length>0)return p;}catch{}}if(v&&typeof v==="object"&&!Array.isArray(v)){const ks=Object.keys(v);if(ks.length>0&&ks.every(k=>/^\d+$/.test(k)))return ks.sort((a,b)=>Number(a)-Number(b)).map(k=>v[k]);if(v.업체명)return[v];}return[];};
       const list=[..._s(row.경유상차목록),..._s(row.경유지_상차)]
         .filter(s=>s&&(s.업체명?.trim()||s.주소?.trim()))
         .filter((s,i,arr)=>{const k=s.업체명||s.주소;return arr.findIndex(x=>(x.업체명||x.주소)===k)===i;});
@@ -21174,7 +21196,7 @@ return (
   <div className="inline-flex items-center gap-1">
     <span>{row.하차지명}</span>
     {(() => {
-      const _s=(v)=>{if(Array.isArray(v)&&v.length>0)return v;if(typeof v==="string"&&v.trim().startsWith("[")){try{const p=JSON.parse(v);if(Array.isArray(p))return p;}catch{}}return[];};
+      const _s=(v)=>{if(Array.isArray(v)&&v.length>0)return v;if(typeof v==="string"&&v.trim().startsWith("[")){try{const p=JSON.parse(v);if(Array.isArray(p)&&p.length>0)return p;}catch{}}if(v&&typeof v==="object"&&!Array.isArray(v)){const ks=Object.keys(v);if(ks.length>0&&ks.every(k=>/^\d+$/.test(k)))return ks.sort((a,b)=>Number(a)-Number(b)).map(k=>v[k]);if(v.업체명)return[v];}return[];};
       const list=[..._s(row.경유하차목록),..._s(row.경유지_하차)]
         .filter(s=>s&&(s.업체명?.trim()||s.주소?.trim()))
         .filter((s,i,arr)=>{const k=s.업체명||s.주소;return arr.findIndex(x=>(x.업체명||x.주소)===k)===i;});
