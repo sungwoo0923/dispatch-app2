@@ -593,12 +593,15 @@ const patchDispatch = async (_id, patch) => {
   }
 
   // Firestore는 백그라운드에서 처리
-  updateDoc(ref, {
+  const _updatePayload = {
     ...cleanPatch,
     작성자: auth.currentUser?.email || "",
-    updatedAt: Date.now(),
     history: [...historyArr, ...histories],
-  }).catch(e => console.error("patchDispatch 저장 오류:", e));
+  };
+  if (!cleanPatch.__system) {
+    _updatePayload.updatedAt = Date.now();
+  }
+  updateDoc(ref, _updatePayload).catch(e => console.error("patchDispatch 저장 오류:", e));
 };
 const removeDispatch = async (arg) => {
   const id = typeof arg === "string" ? arg : arg?._id;
@@ -17423,6 +17426,7 @@ if (editTarget.거래처명) {
                         ? Date.now()
                         : null;
                     patch.업체전달방법 = "수동";
+                    patch.__system = true;
                   }
 if (confirmChange.key === "지급방식") {
   if (confirmChange.after === "취소") {
@@ -17460,6 +17464,7 @@ setConfirmChange(null);
                 업체전달일시: deliveryConfirm.after === "전달완료" ? Date.now() : null,
                 업체전달방법: deliveryConfirm.after === "전달완료" ? "수동" : null,
                 업체전달자: deliveryConfirm.after === "전달완료" ? sender : null,
+                __system: true,
               };
               setRows(prev => prev.map(r => r._id === deliveryConfirm.rowId ? { ...r, ...patch } : r));
               setDeliveryConfirm(null);
@@ -17518,6 +17523,7 @@ setConfirmChange(null);
                     업체전달일시: deliveryConfirm.after === "전달완료" ? Date.now() : null,
                     업체전달방법: "수동",
                     업체전달자: sender,
+                    __system: true,
                   };
                   setRows(prev => prev.map(r => r._id === deliveryConfirm.rowId ? { ...r, ...patch } : r));
                   setDeliveryConfirm(null);
@@ -17811,47 +17817,65 @@ setConfirmChange(null);
         </div>
       )}
 
-    {/* ★ 전달상태 일괄 변경 */}
+    {/* ★ 전달상태 일괄 변경 — 밀어서 잠금해제 */}
       <div className="px-6 py-3 border-t border-gray-100 bg-[#1B2B4B]/5 shrink-0">
-        <div className="text-[11px] font-bold text-[#1B2B4B] mb-2">전달상태 일괄 변경</div>
+        <div className="text-[11px] font-bold text-[#1B2B4B] mb-2">전달상태 일괄 변경 (밀어서 실행)</div>
         <div className="flex gap-2">
-          <button
-            className="flex-1 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-[12px] font-bold transition"
-            onClick={async () => {
-              const targetDate = dailyCloseResult?.date;
-              if (!targetDate) return;
-              if (!window.confirm(`${targetDate} 전체 오더를 전달완료로 변경하시겠습니까?`)) return;
-              const sender = auth?.currentUser?.email ?? "unknown";
-              const targets = rows.filter(r => r.상차일 === targetDate);
-              for (const r of targets) {
-                patchDispatch(r._id, {
-                  업체전달상태: "전달완료",
-                  업체전달일시: Date.now(),
-                  업체전달방법: "일괄",
-                  업체전달자: sender,
-                });
-              }
-              setDailyCloseOpen(false);
-            }}
-          >전체완료</button>
-          <button
-            className="flex-1 py-2 rounded-xl bg-gray-500 hover:bg-gray-600 text-white text-[12px] font-bold transition"
-            onClick={async () => {
-              const targetDate = dailyCloseResult?.date;
-              if (!targetDate) return;
-              if (!window.confirm(`${targetDate} 전체 오더를 미전달로 변경하시겠습니까?`)) return;
-              const targets = rows.filter(r => r.상차일 === targetDate);
-              for (const r of targets) {
-                patchDispatch(r._id, {
-                  업체전달상태: "미전달",
-                  업체전달일시: null,
-                  업체전달방법: null,
-                  업체전달자: null,
-                });
-              }
-              setDailyCloseOpen(false);
-            }}
-          >전체 미전달</button>
+          {/* 전체완료 스와이프 */}
+          {(() => {
+            const SwipeBtn = ({ label, colorFrom, colorTo, textColor, onDone }) => {
+              const trackRef = React.useRef(null);
+              const [prog, setprog] = React.useState(0);
+              const dragging = React.useRef(false);
+              const startX = React.useRef(0);
+              const onDown = (e) => { dragging.current = true; startX.current = e.touches ? e.touches[0].clientX : e.clientX; e.currentTarget.setPointerCapture?.(e.pointerId); };
+              const onMove = (e) => {
+                if (!dragging.current || !trackRef.current) return;
+                const cx = e.touches ? e.touches[0].clientX : e.clientX;
+                const tw = trackRef.current.offsetWidth;
+                const p = Math.max(0, Math.min(1, (cx - trackRef.current.getBoundingClientRect().left - 20) / (tw - 56)));
+                setprog(p);
+                if (p >= 0.98) { dragging.current = false; setprog(0); onDone(); }
+              };
+              const onUp = () => { dragging.current = false; setprog(0); };
+              return (
+                <div ref={trackRef} className={`relative flex-1 h-10 rounded-xl overflow-hidden select-none`}
+                  style={{ background: `linear-gradient(90deg, ${colorFrom}, ${colorTo})` }}
+                  onPointerMove={onMove} onPointerUp={onUp} onPointerLeave={onUp}
+                  onTouchMove={onMove} onTouchEnd={onUp}>
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <span className={`text-[12px] font-bold ${textColor}`}>{label}</span>
+                  </div>
+                  <div className="absolute left-1 top-1 bottom-1 w-9 rounded-lg bg-white/30 flex items-center justify-center cursor-grab touch-none"
+                    style={{ transform: `translateX(${prog * ((trackRef.current?.offsetWidth || 160) - 44)}px)`, transition: dragging.current ? "none" : "transform 0.2s" }}
+                    onPointerDown={onDown} onTouchStart={onDown}>
+                    <span className={`text-[14px] font-bold ${textColor}`}>›</span>
+                  </div>
+                </div>
+              );
+            };
+            return (
+              <>
+                <SwipeBtn label="전체완료 →" colorFrom="#059669" colorTo="#10b981" textColor="text-white"
+                  onDone={async () => {
+                    const targetDate = dailyCloseResult?.date;
+                    if (!targetDate) return;
+                    const sender = auth?.currentUser?.email ?? "unknown";
+                    const targets = rows.filter(r => r.상차일 === targetDate);
+                    for (const r of targets) patchDispatch(r._id, { 업체전달상태: "전달완료", 업체전달일시: Date.now(), 업체전달방법: "일괄", 업체전달자: sender, __system: true });
+                    setDailyCloseOpen(false);
+                  }} />
+                <SwipeBtn label="전체 미전달 →" colorFrom="#6b7280" colorTo="#9ca3af" textColor="text-white"
+                  onDone={async () => {
+                    const targetDate = dailyCloseResult?.date;
+                    if (!targetDate) return;
+                    const targets = rows.filter(r => r.상차일 === targetDate);
+                    for (const r of targets) patchDispatch(r._id, { 업체전달상태: "미전달", 업체전달일시: null, 업체전달방법: null, 업체전달자: null, __system: true });
+                    setDailyCloseOpen(false);
+                  }} />
+              </>
+            );
+          })()}
         </div>
       </div>
 
@@ -18402,7 +18426,7 @@ const driverMap = React.useMemo(() => {
 }, [drivers]);
 
 const runDailyClose = () => {
-  const targetDate = appliedStartDate || todayKST();
+  const targetDate = appliedEndDate || appliedStartDate || todayKST();
   const todayRows = (dispatchData || []).filter(r => r.상차일 === targetDate);
   const errors = [];
   const warnings = [];
@@ -18791,7 +18815,7 @@ const commCol  = headers.indexOf("수수료");
 
   if (plateCol === -1) { showAlert("차량번호 컬럼을 찾을 수 없습니다."); return; }
 
-  const targetDate = appliedStartDate || todayKST();
+  const targetDate = appliedEndDate || appliedStartDate || todayKST();
   const todayRows = (dispatchData || []).filter(r => r.상차일 === targetDate);
 
   const fileIssues = [];
@@ -19691,11 +19715,15 @@ if (row?.업체전달상태 !== "전달완료") {
     const cargo = String(editTarget.화물내용 || "");
     const ton = String(editTarget.차량톤수 || "");
 
-    // 1️⃣ 필터: 상/하차지만
-    const base = fareSourceData.filter((r) =>
-      String(r.상차지명 || "").includes(pickup) &&
-      String(r.하차지명 || "").includes(drop)
-    );
+    // 1️⃣ 필터: 상/하차지 + 냉장/냉동 그룹
+    const _targetVehicle = String(editTarget.차량종류 || "");
+    const _isColdTarget = _targetVehicle.includes("냉장") || _targetVehicle.includes("냉동");
+    const base = fareSourceData.filter((r) => {
+      if (!(String(r.상차지명 || "").includes(pickup) && String(r.하차지명 || "").includes(drop))) return false;
+      const rv = String(r.차량종류 || "");
+      const rCold = rv.includes("냉장") || rv.includes("냉동");
+      return _isColdTarget ? rCold : !rCold;
+    });
 
     if (!base.length) {
       showAlert("📭 유사 운임 데이터가 없습니다.");
@@ -19758,12 +19786,14 @@ else if (palletDiff !== null) priority = 1;
     const drop = copyTarget.하차지명?.trim();
     if (!pickup || !drop) return showAlert("상/하차지를 입력해주세요.");
 
+    const _copyVehicle = String(copyTarget.차량종류 || "");
+    const _isCopyCold = _copyVehicle.includes("냉장") || _copyVehicle.includes("냉동");
     const base = (dispatchData || []).filter(r => {
       if (!r.청구운임) return false;
-      return (
-        String(r.상차지명 || "").includes(pickup) &&
-        String(r.하차지명 || "").includes(drop)
-      );
+      if (!(String(r.상차지명 || "").includes(pickup) && String(r.하차지명 || "").includes(drop))) return false;
+      const rv = String(r.차량종류 || "");
+      const rCold = rv.includes("냉장") || rv.includes("냉동");
+      return _isCopyCold ? rCold : !rCold;
     });
 
     if (!base.length) { showAlert("📭 동일 상/하차지 운임 이력이 없습니다."); return; }
@@ -20482,7 +20512,20 @@ const filtered = React.useMemo(() => {
   // =========================
   // 🔽 정렬
   // =========================
-  data.sort(compareBy(sortKey, sortDir));
+  if (sortKey) {
+    data.sort(compareBy(sortKey, sortDir));
+  } else {
+    data = sortDispatchRows(data);
+    data.sort((a, b) => {
+      const statusOrder = { 배차중: 0, 배차완료: 1, 취소: 2 };
+      const sa = statusOrder[a.배차상태] ?? 0;
+      const sb = statusOrder[b.배차상태] ?? 0;
+      if (sa !== sb) return sa - sb;
+      const ta = Number(a.updatedAt || a.createdAt || 0);
+      const tb = Number(b.updatedAt || b.createdAt || 0);
+      return tb - ta;
+    });
+  }
 
   return data;
 }, [
@@ -24017,109 +24060,56 @@ setCopyTarget(prev => ({
       )}
       {confirmChange && (
         <div
-          className="fixed inset-0 bg-black/40 flex items-center justify-center z-[100000]"
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100000]"
           tabIndex={-1}
-          ref={(el) => {
-            if (el) setTimeout(() => el.focus(), 0);
-          }}
+          ref={(el) => { if (el) setTimeout(() => el.focus(), 0); }}
           onKeyDown={async (e) => {
-            // ESC → 취소
-            if (e.key === "Escape") {
-              e.preventDefault();
-              e.stopPropagation();
-              setConfirmChange(null);
-              return;
-            }
-
-            // Enter → 확인
+            if (e.key === "Escape") { e.preventDefault(); setConfirmChange(null); return; }
             if (e.key === "Enter") {
               e.preventDefault();
-              e.stopPropagation();
-
-       const patch = {
-  [confirmChange.field]: confirmChange.after,
-  lastUpdated: new Date().toISOString(),
-};
-if (confirmChange.field === "지급방식") {
-  if (confirmChange.after === "취소") {
-    patch.배차상태 = "배차취소";
-  } else {
-    const row = dispatchData.find(r => r._id === confirmChange.id);
-    if (row?.배차상태 === "배차취소") {
-      patch.배차상태 = row?.차량번호 && (row?.이름 || row?.전화번호) ? "배차완료" : "배차중";
-    }
-  }
-}
-
-if (confirmChange.field === "업체전달상태") {
-  patch.업체전달일시 =
-    confirmChange.after === "전달완료" ? Date.now() : null;
-  patch.업체전달방법 =
-    confirmChange.after === "전달완료" ? "기사복사" : null;
-}
-
-await patchDispatch(confirmChange.id, patch);
-setConfirmChange(null);
+              const patch = { [confirmChange.field]: confirmChange.after };
+              if (confirmChange.field === "업체전달상태") {
+                patch.업체전달일시 = confirmChange.after === "전달완료" ? Date.now() : null;
+                patch.업체전달방법 = confirmChange.after === "전달완료" ? "수동" : null;
+                patch.__system = true;
+              }
+              if (confirmChange.field === "지급방식" && confirmChange.after === "취소") {
+                patch.배차상태 = "배차취소";
+              }
+              await patchDispatch(confirmChange.id, patch);
+              setConfirmChange(null);
             }
           }}
         >
-          <div className="bg-white rounded-xl p-6 w-[360px] shadow-xl">
-            <h3 className="font-bold text-lg mb-4 text-center">
-              {confirmChange.reason === "copy"
-                ? "📋 복사되었습니다"
-                : "변경하시겠습니까?"}
-            </h3>
-
-            <div className="text-sm mb-4 text-center">
+          <div className="bg-white rounded-2xl p-6 w-[380px] shadow-2xl">
+            <h3 className="text-lg font-bold text-center mb-4">상태를 변경하시겠습니까?</h3>
+            <div className="text-center text-sm mb-6">
               {confirmChange.reason === "copy" ? (
-                <div className="text-gray-700">
-                  전달상태를{" "}
-                  <b className="text-blue-600">전달완료</b>로 변경할까요?
-                </div>
+                <div className="text-gray-700">전달상태를 <b className="text-blue-600">전달완료</b>로 변경할까요?</div>
               ) : (
                 <>
-                  <b>{confirmChange.field}</b>
-                  <div className="text-gray-500 mt-1">
-                    {String(confirmChange.before || "없음")} →{" "}
-                    <span className="text-blue-600 font-semibold">
-                      {String(confirmChange.after || "없음")}
-                    </span>
+                  <div className="font-semibold mb-1">{confirmChange.field}</div>
+                  <div className="text-gray-500">
+                    {String(confirmChange.before || "없음")} → <span className="ml-1 text-blue-600 font-bold">{String(confirmChange.after || "없음")}</span>
                   </div>
                 </>
               )}
             </div>
             <div className="flex gap-3">
-              <button
-                className="flex-1 py-2 rounded bg-gray-200"
-                onClick={() => setConfirmChange(null)}
-              >
-                아니오 (ESC)
-              </button>
-
-              <button
-                className="flex-1 py-2 rounded bg-blue-600 text-white"
-                onClick={async () => {
-                const patch = {
-  [confirmChange.field]: confirmChange.after,
-  lastUpdated: new Date().toISOString(),
-};
-if (confirmChange.field === "지급방식" && confirmChange.after === "취소") {
-  patch.배차상태 = "배차취소";
-}
-
-                  if (confirmChange.field === "업체전달상태") {
-                    patch.업체전달일시 =
-                      confirmChange.after === "전달완료" ? Date.now() : null;
-                    patch.업체전달방법 =
-                      confirmChange.after === "전달완료" ? "기사복사" : null;
-                  }
-
-                  await patchDispatch(confirmChange.id, patch);
-                  setConfirmChange(null);
-                }}
-              >
-                확인 (Enter)
-              </button>
+              <button className="flex-1 py-2 rounded-lg bg-gray-200 hover:bg-gray-300" onClick={() => setConfirmChange(null)}>취소 (ESC)</button>
+              <button className="flex-1 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700" onClick={async () => {
+                const patch = { [confirmChange.field]: confirmChange.after };
+                if (confirmChange.field === "업체전달상태") {
+                  patch.업체전달일시 = confirmChange.after === "전달완료" ? Date.now() : null;
+                  patch.업체전달방법 = confirmChange.after === "전달완료" ? "수동" : null;
+                  patch.__system = true;
+                }
+                if (confirmChange.field === "지급방식" && confirmChange.after === "취소") {
+                  patch.배차상태 = "배차취소";
+                }
+                await patchDispatch(confirmChange.id, patch);
+                setConfirmChange(null);
+              }}>변경</button>
             </div>
           </div>
         </div>
