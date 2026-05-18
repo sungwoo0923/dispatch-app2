@@ -5259,19 +5259,8 @@ const handleFormSmartSearch = (val) => {
   if (!val.trim()) { setFormSmartMatched([]); return; }
   const nd = (s = "") => String(s).replace(/[-.\s]/g, "").toLowerCase();
 
-  // 차량번호 추출
-  const plateM = val.match(/[가-힣]{2,3}\d{2}[가-힣]\d{4}|\d{2,3}[가-힣]\d{4}/);
-  const plate = plateM ? plateM[0] : "";
-
-  // 전화번호 추출
-  const phoneM = val.match(/0\d{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4}/);
-  const phone = phoneM ? phoneM[0].replace(/[-.\s]/g, "").replace(/^(\d{3})(\d{3,4})(\d{4})$/, "$1-$2-$3") : "";
-
-  // 이름 추출 (차량번호/전화번호 제거 후 남은 한글 2~4자)
-  const EXCLUDE = ["강원","서울","경기","인천","부산","대구","광주","대전","울산","세종","경북","경남","전북","전남","충북","충남","제주","냉장","냉동","카고","윙바디","탑차","다마스","라보"];
-  const stripped = val.replace(plateM?.[0] || "", "").replace(phoneM?.[0] || "", "");
-  const nameMatch = (stripped.match(/[가-힣]{2,4}/g) || []);
-  const name = nameMatch.find(n => n.length >= 2 && !EXCLUDE.includes(n) && !/[구시군동읍면로]$/.test(n)) || "";
+  // parseDriverText 사용 — [차주정보] 태그 포함 모든 형식 정확히 파싱
+  const { plate, phone, name } = parseDriverText(val);
 
   // 1️⃣ 차량번호 우선
   if (plate) {
@@ -5623,15 +5612,15 @@ const pickDrop = (c) => {
   label="상차일시"
   input={
     <div className="space-y-1.5">
-      <div className="flex gap-2">
+      <div className="flex gap-2 min-w-0">
         <input
           type="date"
-          className="flex-1 border rounded px-2 py-1 text-sm"
+          className="flex-1 min-w-0 border rounded px-2 py-1 text-sm"
           value={form.상차일}
           onChange={(e) => update("상차일", e.target.value)}
         />
         <select
-          className="flex-1 border rounded px-2 py-1 text-sm"
+          className="w-[100px] shrink-0 border rounded px-1 py-1 text-sm"
           value={form.상차시간}
           onChange={(e) => update("상차시간", e.target.value)}
         >
@@ -5665,15 +5654,15 @@ const pickDrop = (c) => {
   label="하차일시"
   input={
     <div className="space-y-1.5">
-      <div className="flex gap-2">
+      <div className="flex gap-2 min-w-0">
         <input
           type="date"
-          className="flex-1 border rounded px-2 py-1 text-sm"
+          className="flex-1 min-w-0 border rounded px-2 py-1 text-sm"
           value={form.하차일}
           onChange={(e) => update("하차일", e.target.value)}
         />
         <select
-          className="flex-1 border rounded px-2 py-1 text-sm"
+          className="w-[100px] shrink-0 border rounded px-1 py-1 text-sm"
           value={form.하차시간}
           onChange={(e) => update("하차시간", e.target.value)}
         >
@@ -7480,12 +7469,12 @@ ${order.하차지주소 || ""}${dropMgr ? `\n${dropMgr}` : ""}
 // ======================================================================
 function RowLabelInput({ label, input, right }) {
   return (
-    <div className="flex border-b last:border-b-0">
+    <div className="flex border-b last:border-b-0 overflow-hidden">
       <div className="w-[88px] shrink-0 px-2 py-2 text-[11px] text-gray-600 bg-gray-50 flex items-center justify-between">
         <span className="whitespace-nowrap">{label}</span>
         {right && <span className="ml-1">{right}</span>}
       </div>
-      <div className="flex-1 px-2 py-2">{input}</div>
+      <div className="flex-1 min-w-0 px-2 py-2 overflow-hidden">{input}</div>
     </div>
   );
 }

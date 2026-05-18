@@ -1129,7 +1129,7 @@ function FloatingCalculator({ onClose }) {
 
   return (
     <div style={{
-      position: "fixed", bottom: 80, right: 24, zIndex: 99999,
+      position: "fixed", bottom: 148, right: 24, zIndex: 99999,
       width: 264, background: "white", borderRadius: 20,
       boxShadow: "0 20px 60px rgba(0,0,0,0.22)",
       overflow: "hidden", border: "1px solid #e2e8f0",
@@ -1854,7 +1854,7 @@ return (
             onClick={() => setCalcOpen(p => !p)}
             title="계산기"
             style={{
-              position: "fixed", bottom: 24, right: 24,
+              position: "fixed", bottom: 88, right: 24,
               zIndex: 99998, width: 44, height: 44,
               borderRadius: "50%", background: calcOpen ? "#243a60" : "#1B2B4B",
               color: "white", border: "none", cursor: "pointer",

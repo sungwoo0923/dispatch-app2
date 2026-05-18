@@ -297,6 +297,14 @@ export default function App() {
     return () => unsub();
   }, []);
 
+  // 공개 라우트는 인증/스플래시 없이 바로 렌더링 (Android PWA start_url 우회)
+  const PUBLIC_ROUTES = { "/driver-upload": DriverSearchPage, "/upload": UploadPage };
+  const publicMatch = PUBLIC_ROUTES[window.location.pathname];
+  if (publicMatch) {
+    const PublicComp = publicMatch;
+    return <Router><Routes><Route path="*" element={<PublicComp />} /></Routes></Router>;
+  }
+
   // 로딩/스플래시
   if (loading || !splashDone) {
     return (
