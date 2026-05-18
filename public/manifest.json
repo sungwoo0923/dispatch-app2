@@ -2,7 +2,7 @@
   "name": "S-Flow Logistics",
   "short_name": "S-Flow Logistics",
   "start_url": "/app",
-  "scope": "/",
+  "scope": "/app",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#ffffff",

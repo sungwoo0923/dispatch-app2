@@ -1090,6 +1090,24 @@ function FloatingCalculator({ onClose }) {
     setDisplay(display.length <= 1 || display === "-0" ? "0" : display.slice(0, -1));
   };
 
+  React.useEffect(() => {
+    const onKey = (e) => {
+      if (e.key >= "0" && e.key <= "9") { e.preventDefault(); handleNum(e.key); return; }
+      if (e.key === ".") { e.preventDefault(); handleDot(); return; }
+      if (e.key === "+" ) { e.preventDefault(); handleOp("+"); return; }
+      if (e.key === "-" ) { e.preventDefault(); handleOp("-"); return; }
+      if (e.key === "*" ) { e.preventDefault(); handleOp("×"); return; }
+      if (e.key === "/" ) { e.preventDefault(); handleOp("÷"); return; }
+      if (e.key === "%" ) { e.preventDefault(); handlePercent(); return; }
+      if (e.key === "Enter" || e.key === "=" ) { e.preventDefault(); handleEqual(); return; }
+      if (e.key === "Backspace") { e.preventDefault(); handleBackspace(); return; }
+      if (e.key === "Escape") { e.preventDefault(); onClose(); return; }
+      if (e.key === "Delete") { e.preventDefault(); handleClear(); return; }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+
   const fmtDisplay = (val) => {
     const s = String(val);
     if (s.includes("e")) return s;
@@ -13935,7 +13953,21 @@ const head = isDark
     <button onClick={handleSaveSelected} className="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-sm font-semibold shadow hover:opacity-90">저장</button>
     <button onClick={()=>{if(!selected.length)return showAlert("삭제할 항목을 선택하세요.");const list=rows.filter(r=>selected.includes(r._id));setDeleteList(list);setDeleteConfirmOpen(true);}} className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-sm font-semibold shadow hover:opacity-90">선택삭제</button>
     <button onClick={()=>setSelected([])} className="px-3 py-1.5 rounded-lg bg-gray-300 text-gray-800 text-sm font-semibold shadow hover:opacity-90">선택초기화</button>
-    <button onClick={()=>{if(!filtered.length)return showAlert("내보낼 데이터가 없습니다.");const rowsExcel=filtered.map((r,idx)=>({순번:idx+1,등록일:r.등록일||"",상차일:r.상차일||"",상차시간:r.상차시간||"",하차일:r.하차일||"",하차시간:r.하차시간||"",거래처명:r.거래처명||"",상차지명:r.상차지명||"",하차지명:r.하차지명||"",차량번호:r.차량번호||"",기사명:r.이름||"",전화번호:r.전화번호||"",배차상태:r.배차상태||"",청구운임:toInt(r.청구운임),기사운임:toInt(r.기사운임),수수료:toInt(r.청구운임)-toInt(r.기사운임),지급방식:r.지급방식||"",배차방식:r.배차방식||"",메모:r.메모||""}));const ws=XLSX.utils.json_to_sheet(rowsExcel);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"실시간배차현황");XLSX.writeFile(wb,"실시간배차현황.xlsx");}} className="px-3 py-1.5 rounded-lg bg-teal-600 text-white text-sm font-semibold shadow hover:opacity-90">엑셀다운</button>
+    <button onClick={()=>{
+  if(!filtered.length)return showAlert("내보낼 데이터가 없습니다.");
+  const _sp=(v)=>{try{return Array.isArray(v)?v:JSON.parse(v||"[]");}catch{return[];}};
+  const _via=(arr)=>_sp(arr).filter(s=>s.업체명).map(s=>s.업체명).join(", ");
+  const _hasVia=filtered.some(r=>_sp(r.경유상차목록||r.경유지_상차).some(s=>s.업체명)||_sp(r.경유하차목록||r.경유지_하차).some(s=>s.업체명));
+  const rowsExcel=filtered.map((r,idx)=>{
+    const row={순번:idx+1,등록일:r.등록일||"",상차일:r.상차일||"",상차시간:r.상차시간||"",하차일:r.하차일||"",하차시간:r.하차시간||"",거래처명:r.거래처명||"",상차지명:r.상차지명||""};
+    if(_hasVia)row["경유 상차지"]=_via(r.경유상차목록||r.경유지_상차||[]);
+    row.하차지명=r.하차지명||"";
+    if(_hasVia)row["경유 하차지"]=_via(r.경유하차목록||r.경유지_하차||[]);
+    Object.assign(row,{차량번호:r.차량번호||"",기사명:r.이름||"",전화번호:r.전화번호||"",배차상태:r.배차상태||"",청구운임:toInt(r.청구운임),기사운임:toInt(r.기사운임),수수료:toInt(r.청구운임)-toInt(r.기사운임),지급방식:r.지급방식||"",배차방식:r.배차방식||"",메모:r.메모||""});
+    return row;
+  });
+  const ws=XLSX.utils.json_to_sheet(rowsExcel);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"실시간배차현황");XLSX.writeFile(wb,"실시간배차현황.xlsx");
+}} className="px-3 py-1.5 rounded-lg bg-teal-600 text-white text-sm font-semibold shadow hover:opacity-90">엑셀다운</button>
     </div>
 </div>
 
@@ -20420,103 +20452,80 @@ if (first) {
     return Number.isNaN(n) ? 0 : n;
   };
   const downloadExcel = () => {
-    const headers = [
-      "순번", "등록일", "상차일", "상차시간", "하차일", "하차시간",
-      "거래처명", "상차지명", "상차지주소", "하차지명", "하차지주소",
-      "화물내용", "차량종류", "차량톤수", "차량번호", "기사명", "전화번호",
-      "배차상태", "청구운임", "기사운임", "수수료", "지급방식", "배차방식", "메모"
-    ];
+    const _sp=(v)=>{try{return Array.isArray(v)?v:JSON.parse(v||"[]");}catch{return[];}};
+    const _via=(arr)=>_sp(arr).filter(s=>s.업체명).map(s=>s.업체명).join(", ");
+    const _hasVia=filtered.some(r=>_sp(r.경유상차목록||r.경유지_상차).some(s=>s.업체명)||_sp(r.경유하차목록||r.경유지_하차).some(s=>s.업체명));
 
-    const rows = filtered.map((r, i) => ({
-      순번: page * pageSize + i + 1,
+    const rows = filtered.map((r, i) => {
+      const row = {
+        순번: page * pageSize + i + 1,
+        등록일: r.등록일 || "",
+        상차일: r.상차일 || "",
+        상차시간: r.상차시간 || "",
+        하차일: r.하차일 || "",
+        하차시간: r.하차시간 || "",
+        거래처명: r.거래처명 || "",
+        상차지명: r.상차지명 || "",
+        상차지주소: r.상차지주소 || "",
+      };
+      if (_hasVia) row["경유 상차지"] = _via(r.경유상차목록||r.경유지_상차||[]);
+      row["하차지명"] = r.하차지명 || "";
+      row["하차지주소"] = r.하차지주소 || "";
+      if (_hasVia) row["경유 하차지"] = _via(r.경유하차목록||r.경유지_하차||[]);
+      Object.assign(row, {
+        화물내용: r.화물내용 || "",
+        차량종류: r.차량종류 || "",
+        차량톤수: r.차량톤수 || "",
+        차량번호: r.차량번호 || "",
+        기사명: r.이름 || "",
+        전화번호: r.전화번호 || "",
+        배차상태: r.배차상태 || "",
+        청구운임: toMoney(r.청구운임),
+        기사운임: toMoney(r.기사운임),
+        수수료: toMoney(r.청구운임) - toMoney(r.기사운임),
+        지급방식: r.지급방식 || "",
+        배차방식: r.배차방식 || "",
+        메모: r.메모 || "",
+      });
+      return row;
+    });
 
-      등록일: r.등록일 || "",
-      상차일: r.상차일 || "",
-      상차시간: r.상차시간 || "",
-      하차일: r.하차일 || "",
-      하차시간: r.하차시간 || "",
-      거래처명: r.거래처명 || "",
-      상차지명: r.상차지명 || "",
-      상차지주소: r.상차지주소 || "",
-      하차지명: r.하차지명 || "",
-      하차지주소: r.하차지주소 || "",
-      화물내용: r.화물내용 || "",
-      차량종류: r.차량종류 || "",
-      차량톤수: r.차량톤수 || "",
-      차량번호: r.차량번호 || "",
-      기사명: r.이름 || "",
-      전화번호: r.전화번호 || "",
-      배차상태: r.배차상태 || "",
-
-      // 🔥 2번 문제(청구/기사/수수료 0 나오는 문제) 해결
-      청구운임: toMoney(r.청구운임),
-      기사운임: toMoney(r.기사운임),
-      수수료: toMoney(r.청구운임) - toMoney(r.기사운임),
-
-      지급방식: r.지급방식 || "",
-      배차방식: r.배차방식 || "",
-      메모: r.메모 || "",
-    }));
-
-
-    // 헤더 스킵하고 데이터만 생성
     const ws = XLSX.utils.json_to_sheet(rows, { skipHeader: false });
 
+    // Derive column letter from header name (handles variable column count)
+    const colNames = Object.keys(rows[0] || {});
+    const toColLetter = (name) => {
+      const i = colNames.indexOf(name);
+      if (i < 0) return null;
+      let n = i + 1, s = "";
+      while (n > 0) { const r = (n - 1) % 26; s = String.fromCharCode(65 + r) + s; n = Math.floor((n - 1) / 26); }
+      return s;
+    };
+    const dateCols = new Set(["등록일", "상차일", "하차일"].map(toColLetter).filter(Boolean));
+    const moneyCols = new Set(["청구운임", "기사운임", "수수료"].map(toColLetter).filter(Boolean));
 
-    // ================================
-    // 날짜/금액 타입 변환 (헤더 보호 포함)
-    // ================================
     Object.keys(ws).forEach((cell) => {
-      // 메타데이터(예: !ref)는 스킵
       if (cell[0] === "!") return;
-
-      // A, B, C ... 열
       const col = cell.replace(/[0-9]/g, "");
+      const rowNum = parseInt(cell.replace(/[A-Z]/g, ""), 10);
 
-      // 1, 2, 3 ... 행 번호
-      const row = parseInt(cell.replace(/[A-Z]/g, ""), 10);
-
-
-      // ------------------------------------
-      // 1) 날짜 칼럼(B=등록일, C=상차일, E=하차일)
-      // ------------------------------------
-      if (["B", "C", "E"].includes(col)) {
+      if (dateCols.has(col)) {
         const v = ws[cell].v;
-
-        // yyyy-mm-dd 형식만 허용
         if (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v)) {
-          ws[cell].v = v;   // 문자열 그대로
-          ws[cell].t = "s"; // string 타입
+          ws[cell].v = v;
+          ws[cell].t = "s";
         }
       }
 
-
-      // ------------------------------------
-      // 2) 금액 칼럼(S=청구, T=기사, U=수수료)
-      // ------------------------------------
-      if (["S", "T", "U"].includes(col)) {
-
-        if (row === 1) return;
-
+      if (moneyCols.has(col)) {
+        if (rowNum === 1) return;
         const num = Number(String(ws[cell].v).replace(/[^\d-]/g, ""));
         ws[cell].v = isNaN(num) ? 0 : num;
         ws[cell].t = "n";
-
-        // 🔥 여기 추가/교체
         ws[cell].z = "#,##0;[Red]-#,##0";
       }
     });
-    // ================================
-    // 컬럼 너비
-    // ================================
-    ws["!cols"] = [
-      { wch: 6 },   // A: 순번
-      { wch: 12 },  // B: 등록일
-      { wch: 12 },  // C: 상차일
-      { wch: 10 },  // D: 상차시간
-      { wch: 12 },  // E: 하차일
-      { wch: 10 },  // F: 하차시간
-    ];
+
     ws["!cols"] = [
       { wch: 6 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 10 },
     ];

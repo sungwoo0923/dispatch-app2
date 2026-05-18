@@ -257,7 +257,7 @@ const roleBadge = () => "bg-[#1B2B4B]/10 text-[#1B2B4B] border border-[#1B2B4B]/
                               {/* 바깥 클릭 닫기 */}
                               <div className="fixed inset-0 z-40" onClick={() => setOpenMenu(null)} />
 
-                              <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 shadow-2xl rounded-xl overflow-hidden z-50 w-[160px]">
+                              <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 shadow-2xl rounded-xl overflow-y-auto z-[9999] w-[160px] max-h-[min(380px,70vh)]">
                                 <div className="bg-[#1B2B4B] px-3 py-2">
                                   <div className="text-white text-[11px] font-bold">{u.name || u.email}</div>
                                   <div className="text-white/50 text-[10px]">{u.role || "user"}</div>
