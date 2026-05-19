@@ -31705,6 +31705,74 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
     XLSX.writeFile(wb, `지급관리_${loadStart}~${loadEnd}.xlsx`);
   };
 
+  // ── 엑셀 업로드 매칭 ──
+  const handlePayExcelUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const wb = XLSX.read(new Uint8Array(evt.target.result), { type: "array" });
+        const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "" });
+        const norm = (s) => String(s || "").replace(/[\s\-]/g, "").toLowerCase();
+        const toDateStr = (v) => {
+          if (!v) return "";
+          if (typeof v === "number") {
+            const d = XLSX.SSF.parse_date_code(v);
+            if (d) return `${d.y}-${String(d.m).padStart(2,"0")}-${String(d.d).padStart(2,"0")}`;
+          }
+          const s = String(v);
+          const m = s.match(/(\d{4})[.\-\/](\d{1,2})[.\-\/](\d{1,2})/);
+          if (m) return `${m[1]}-${String(m[2]).padStart(2,"0")}-${String(m[3]).padStart(2,"0")}`;
+          return s.slice(0, 10);
+        };
+        const matched = [];
+        const unmatched = [];
+        json.forEach((row, idx) => {
+          const excelPlate = norm(row["차량번호"] || row["차량"] || row["번호판"] || "");
+          const excelName = norm(row["차주이름"] || row["기사명"] || row["이름"] || row["차주"] || "");
+          const excelDate = toDateStr(row["오더일자"] || row["상차일자"] || row["상차일"] || row["오더일"] || "");
+          const excelPayDate = toDateStr(row["지급일"] || row["지급일자"] || "");
+          const excelAmt = toInt(row["운송료"] || row["기사운임"] || row["운임"] || row["금액"] || 0);
+          const found = base.find(r => {
+            const plateMatch = excelPlate && norm(r.차량번호).includes(excelPlate);
+            const nameMatch = excelName && norm(r.이름).includes(excelName);
+            const dateMatch = excelDate && (r.상차일||"").startsWith(excelDate);
+            return (plateMatch || nameMatch) && dateMatch;
+          });
+          if (found) {
+            const amtMatch = excelAmt === 0 || Math.abs(excelAmt - toInt(found.기사운임)) < 1000;
+            matched.push({ excelRow: idx+2, dispatch: found, excelDate, excelPayDate, excelAmt, amtMatch,
+              차량번호: row["차량번호"] || row["차량"] || "", 기사명: row["차주이름"] || row["기사명"] || row["이름"] || "",
+              운송료: excelAmt, 지급일: excelPayDate });
+          } else {
+            unmatched.push({ excelRow: idx+2, 차량번호: row["차량번호"] || row["차량"] || "", 기사명: row["차주이름"] || row["기사명"] || row["이름"] || "", 오더일자: excelDate, 운송료: excelAmt, 사유: "배차 데이터 없음 (차량번호/이름+날짜 불일치)" });
+          }
+        });
+        setPayExcelPreview({ matched, unmatched });
+        setPayExcelOpen(true);
+      } catch (err) {
+        alert("엑셀 파싱 오류: " + err.message);
+      } finally { e.target.value = ""; }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  const confirmPayExcel = async () => {
+    if (!payExcelPreview?.matched?.length) return;
+    setPayExcelConfirming(true);
+    try {
+      for (const m of payExcelPreview.matched) {
+        await patchDispatch(m.dispatch._id, { 지급상태: "지급완료", 지급일: m.지급일 || selectedPayDate, __system: true });
+      }
+      alert(`${payExcelPreview.matched.length}건 지급완료 처리되었습니다.`);
+      setPayExcelOpen(false);
+      setPayExcelPreview(null);
+    } catch (err) {
+      alert("처리 중 오류: " + err.message);
+    } finally { setPayExcelConfirming(false); }
+  };
+
   const PAY_METHODS = ["계산서", "선불", "착불"];
   const DISPATCH_METHODS = ["24시", "직접배차", "인성"];
 
@@ -31899,6 +31967,8 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
                     <td colSpan={9} className="px-3 py-3 text-white font-bold text-center">합 계 ({filtered.length}건)</td>
                     <td className="px-3 py-3 text-right text-white font-bold">{won(kpi.sale)}</td>
                     <td className="px-3 py-3 text-right text-yellow-300 font-bold">{won(kpi.driver)}</td>
+                    <td className="px-3 py-3 text-right text-orange-300 font-bold">{won(kpi.vatTotal)}</td>
+                    <td className="px-3 py-3 text-right text-purple-300 font-bold">{won(kpi.insuranceTotal)}</td>
                     <td className="px-3 py-3 text-right text-blue-300 font-bold">{won(kpi.fee)}</td>
                     <td colSpan={4} className="px-3 py-3 text-center text-white/60 text-[11px]">
                       지급완료 {kpi.done}건 / 미지급 {kpi.undone}건 (미지급액 {won(kpi.undoneAmt)}원)
@@ -31970,6 +32040,96 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
                 </tfoot>
               )}
             </table>
+          </div>
+        </div>
+      )}
+      {/* ── 엑셀 업로드 미리보기 모달 ── */}
+      {payExcelOpen && payExcelPreview && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[99999]">
+          <div className="bg-white rounded-2xl shadow-2xl w-[800px] max-h-[90vh] flex flex-col overflow-hidden">
+            <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
+              <div>
+                <div className="text-white font-bold text-[16px]">엑셀 업로드 매칭 결과</div>
+                <div className="text-white/60 text-[12px] mt-0.5">
+                  매칭 {payExcelPreview.matched.length}건 / 미매칭 {payExcelPreview.unmatched.length}건
+                </div>
+              </div>
+              <button className="text-white/60 hover:text-white text-xl" onClick={() => { setPayExcelOpen(false); setPayExcelPreview(null); }}>×</button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-5 space-y-4">
+              {payExcelPreview.matched.length > 0 && (
+                <div>
+                  <div className="text-[13px] font-bold text-emerald-700 mb-2">매칭 성공 ({payExcelPreview.matched.length}건) — 지급완료로 처리됩니다</div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-[12px] border-collapse">
+                      <thead>
+                        <tr className="bg-emerald-50">
+                          {["엑셀행", "차량번호", "기사명", "오더일자", "운송료(엑셀)", "기사운임(프로그램)", "금액일치", "지급일"].map(h => (
+                            <th key={h} className="px-3 py-2 text-center font-bold text-emerald-800 border border-emerald-200">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {payExcelPreview.matched.map((m, i) => (
+                          <tr key={i} className={i % 2 === 0 ? "bg-white" : "bg-emerald-50/30"}>
+                            <td className="px-3 py-2 text-center border border-gray-100 text-gray-400">{m.excelRow}</td>
+                            <td className="px-3 py-2 text-center border border-gray-100 font-mono">{m.차량번호}</td>
+                            <td className="px-3 py-2 text-center border border-gray-100 font-semibold">{m.기사명}</td>
+                            <td className="px-3 py-2 text-center border border-gray-100">{m.excelDate}</td>
+                            <td className="px-3 py-2 text-right border border-gray-100">{won(m.운송료)}</td>
+                            <td className="px-3 py-2 text-right border border-gray-100">{won(m.dispatch.기사운임)}</td>
+                            <td className="px-3 py-2 text-center border border-gray-100">
+                              <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${m.amtMatch ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+                                {m.amtMatch ? "일치" : "차이있음"}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2 text-center border border-gray-100">{m.지급일 || selectedPayDate}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+              {payExcelPreview.unmatched.length > 0 && (
+                <div>
+                  <div className="text-[13px] font-bold text-red-600 mb-2">미매칭 ({payExcelPreview.unmatched.length}건) — 처리되지 않습니다</div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-[12px] border-collapse">
+                      <thead>
+                        <tr className="bg-red-50">
+                          {["엑셀행", "차량번호", "기사명", "오더일자", "운송료", "미매칭 사유"].map(h => (
+                            <th key={h} className="px-3 py-2 text-center font-bold text-red-700 border border-red-200">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {payExcelPreview.unmatched.map((m, i) => (
+                          <tr key={i} className={i % 2 === 0 ? "bg-white" : "bg-red-50/30"}>
+                            <td className="px-3 py-2 text-center border border-gray-100 text-gray-400">{m.excelRow}</td>
+                            <td className="px-3 py-2 text-center border border-gray-100 font-mono">{m.차량번호}</td>
+                            <td className="px-3 py-2 text-center border border-gray-100">{m.기사명}</td>
+                            <td className="px-3 py-2 text-center border border-gray-100">{m.오더일자}</td>
+                            <td className="px-3 py-2 text-right border border-gray-100">{won(m.운송료)}</td>
+                            <td className="px-3 py-2 text-center border border-gray-100 text-red-500 text-[11px]">{m.사유}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="px-6 py-4 border-t border-gray-100 flex gap-3">
+              <button onClick={() => { setPayExcelOpen(false); setPayExcelPreview(null); }} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 font-semibold text-[13px] hover:bg-gray-200">취소</button>
+              <button
+                disabled={!payExcelPreview.matched.length || payExcelConfirming}
+                onClick={confirmPayExcel}
+                className="flex-1 py-2.5 rounded-xl bg-emerald-600 text-white font-bold text-[13px] hover:bg-emerald-700 disabled:opacity-50 transition"
+              >
+                {payExcelConfirming ? "처리중..." : `매칭된 ${payExcelPreview.matched.length}건 지급완료 처리`}
+              </button>
+            </div>
           </div>
         </div>
       )}
