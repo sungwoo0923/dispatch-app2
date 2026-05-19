@@ -28812,6 +28812,10 @@ const [generalEmailSubject, setGeneralEmailSubject] = useState("");
 const [generalEmailBody, setGeneralEmailBody] = useState("");
 const [generalEmailSending, setGeneralEmailSending] = useState(false);
 const [generalEmailFiles, setGeneralEmailFiles] = useState([]);
+const [generalEmailAddrOpen, setGeneralEmailAddrOpen] = useState(false);
+const [generalEmailAddrQuery, setGeneralEmailAddrQuery] = useState("");
+const [batchSendList, setBatchSendList] = useState([]); // [{name, email}]
+const [batchSendOpen, setBatchSendOpen] = useState(false);
 const [arEmailOpen, setArEmailOpen] = useState(false);
 // ★ 신규: 이메일 발송 월 범위
 const [arEmailFromMM, setArEmailFromMM] = useState("01");
@@ -29637,10 +29641,34 @@ const handleBatchSettle = async (targetStatus) => {
               >
                 초기화
               </button>
-              <div className="ml-auto flex gap-2">
+              <div className="ml-auto flex gap-2 flex-wrap">
                 <button onClick={downloadInvoiceExcel} className="px-3 py-2 rounded-lg bg-emerald-600 text-white text-[13px] font-semibold hover:bg-emerald-700 transition">엑셀</button>
                 <button onClick={savePDF} className="px-3 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition">PDF</button>
-                <button onClick={handlePrint} className="px-3 py-2 rounded-lg bg-violet-600 text-white text-[13px] font-semibold hover:bg-violet-700 transition">🖨 인쇄</button>
+                <button onClick={handlePrint} className="px-3 py-2 rounded-lg bg-violet-600 text-white text-[13px] font-semibold hover:bg-violet-700 transition">인쇄</button>
+                <button
+                  onClick={() => {
+                    if (!client) return showAlert("거래처를 먼저 검색하세요.");
+                    const found = (clients||[]).find(c=>c.거래처명===client);
+                    const email = found?.연락처이메일 || found?.이메일 || "";
+                    if (!email) return showAlert(`${client}에 등록된 이메일이 없습니다. 거래처 정보에서 이메일을 등록해주세요.`);
+                    setBatchSendList(prev => {
+                      if (prev.find(x => x.name === client)) return showAlert(`${client}은 이미 발송 목록에 있습니다.`) || prev;
+                      showAlert(`${client} 발송 목록에 추가됨`);
+                      return [...prev, { name: client, email }];
+                    });
+                  }}
+                  className="px-3 py-2 rounded-lg border border-indigo-400 text-indigo-700 text-[13px] font-semibold hover:bg-indigo-50 transition"
+                >
+                  목록 추가
+                </button>
+                {batchSendList.length > 0 && (
+                  <button
+                    onClick={() => setBatchSendOpen(true)}
+                    className="px-3 py-2 rounded-lg bg-indigo-600 text-white text-[13px] font-semibold hover:bg-indigo-700 transition"
+                  >
+                    일괄 발송 ({batchSendList.length})
+                  </button>
+                )}
                 <button
                   onClick={() => {
                     if (!searched || !rowsInvoice.length) return showAlert("먼저 조회를 실행하세요.");
@@ -29978,8 +30006,45 @@ const handleBatchSettle = async (targetStatus) => {
                 <div className="p-6 space-y-4">
                   <div>
                     <label className="text-[13px] font-bold text-gray-700 mb-1 block">수신 이메일</label>
-                    <input className="w-full border-2 border-gray-300 rounded-lg px-3 py-2.5 text-[13px] outline-none focus:border-[#1B2B4B]"
-                      placeholder="수신자 이메일 주소" value={generalEmailTo} onChange={e => setGeneralEmailTo(e.target.value)} />
+                    <div className="relative">
+                      <div className="flex gap-2">
+                        <input className="flex-1 border-2 border-gray-300 rounded-lg px-3 py-2.5 text-[13px] outline-none focus:border-[#1B2B4B]"
+                          placeholder="이메일 주소 (여러 명: 쉼표로 구분)" value={generalEmailTo} onChange={e => setGeneralEmailTo(e.target.value)} />
+                        <button type="button"
+                          onClick={() => { setGeneralEmailAddrOpen(p => !p); setGeneralEmailAddrQuery(""); }}
+                          className="px-3 py-2 rounded-lg border-2 border-[#1B2B4B] text-[#1B2B4B] text-[12px] font-bold hover:bg-[#1B2B4B] hover:text-white transition whitespace-nowrap">
+                          주소록
+                        </button>
+                      </div>
+                      {generalEmailAddrOpen && (
+                        <div className="absolute z-[200] top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl max-h-60 overflow-y-auto">
+                          <div className="p-2 border-b border-gray-100 sticky top-0 bg-white">
+                            <input className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-[12px] outline-none"
+                              placeholder="거래처명으로 검색" value={generalEmailAddrQuery}
+                              onChange={e => setGeneralEmailAddrQuery(e.target.value)} autoFocus />
+                          </div>
+                          {(clients || []).filter(c => c.이메일 && (!generalEmailAddrQuery || (c.거래처명||"").includes(generalEmailAddrQuery))).length === 0 ? (
+                            <div className="px-4 py-6 text-center text-[13px] text-gray-400">
+                              {generalEmailAddrQuery ? "검색 결과 없음" : "등록된 이메일 없음 (거래처관리에서 이메일 등록)"}
+                            </div>
+                          ) : (clients || []).filter(c => c.이메일 && (!generalEmailAddrQuery || (c.거래처명||"").includes(generalEmailAddrQuery))).map((c, i) => (
+                            <div key={i} className="px-4 py-2.5 hover:bg-blue-50 cursor-pointer flex items-center justify-between text-[13px] border-b border-gray-50"
+                              onMouseDown={e => {
+                                e.preventDefault();
+                                const cur = generalEmailTo.trim();
+                                const existing = cur ? cur.split(",").map(s => s.trim()).filter(Boolean) : [];
+                                if (!existing.includes(c.이메일)) existing.push(c.이메일);
+                                setGeneralEmailTo(existing.join(", "));
+                                setGeneralEmailAddrQuery("");
+                                setGeneralEmailAddrOpen(false);
+                              }}>
+                              <span className="font-semibold text-[#1B2B4B]">{c.거래처명}</span>
+                              <span className="text-gray-500 text-[12px]">{c.이메일}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
                   <div>
                     <label className="text-[13px] font-bold text-gray-700 mb-1 block">제목</label>
@@ -30048,8 +30113,9 @@ const handleBatchSettle = async (targetStatus) => {
                             showAlert(`${generalEmailTo} 로 발송 완료`);
                             setGeneralEmailOpen(false);
                           } else {
-                            const err = await res.json();
-                            showAlert(`발송 실패: ${err.error || "오류 발생"}`);
+                            let errMsg = `서버 오류 (${res.status})`;
+                            try { const errData = await res.json(); errMsg = errData.error || errMsg; } catch {}
+                            showAlert(`발송 실패: ${errMsg}`);
                           }
                         } catch (e) {
                           showAlert(`발송 중 오류: ${e.message}`);
@@ -30066,6 +30132,67 @@ const handleBatchSettle = async (targetStatus) => {
               </div>
             </div>
           )}
+
+{/* 일괄 발송 목록 모달 */}
+{batchSendOpen && (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
+    <div className="bg-white rounded-2xl shadow-2xl w-[560px] max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+      <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between rounded-t-2xl">
+        <div>
+          <div className="text-white font-bold text-[15px]">여러 업체 일괄 발송</div>
+          <div className="text-white/60 text-[11px] mt-0.5">선택된 {batchSendList.length}개 업체에 이메일 수신자가 자동 설정됩니다</div>
+        </div>
+        <button className="text-white/60 hover:text-white text-xl" onClick={() => setBatchSendOpen(false)}>×</button>
+      </div>
+      <div className="flex-1 overflow-y-auto p-5 space-y-2">
+        {batchSendList.map((item, i) => (
+          <div key={i} className="flex items-center justify-between bg-gray-50 rounded-xl border border-gray-200 px-4 py-3">
+            <div>
+              <div className="text-[13px] font-bold text-[#1B2B4B]">{item.name}</div>
+              <div className="text-[12px] text-gray-500 mt-0.5">{item.email}</div>
+            </div>
+            <button onClick={() => setBatchSendList(prev => prev.filter((_, j) => j !== i))} className="text-red-400 hover:text-red-600 text-[13px] font-bold px-2 py-1">삭제</button>
+          </div>
+        ))}
+        {batchSendList.length === 0 && (
+          <div className="text-center py-8 text-[13px] text-gray-400">목록이 비어있습니다</div>
+        )}
+      </div>
+      <div className="p-5 border-t border-gray-100 bg-blue-50 rounded-b-2xl">
+        <p className="text-[12px] text-blue-700 font-semibold mb-3">위 업체들의 이메일을 일반 이메일 수신자에 자동으로 넣어드립니다. 일반 이메일 창에서 내용을 작성 후 각각 발송하거나, 수신자란에 쉼표로 구분된 모든 이메일이 입력됩니다.</p>
+        <div className="flex gap-3">
+          <button onClick={() => setBatchSendOpen(false)} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 font-semibold text-[13px] hover:bg-gray-200">취소</button>
+          <button
+            disabled={!batchSendList.length}
+            onClick={() => {
+              const emails = batchSendList.map(x => x.email).join(", ");
+              const names = batchSendList.map(x => x.name).join(", ");
+              setGeneralEmailTo(emails);
+              setGeneralEmailSubject(`거래명세서 발송 안내 (${batchSendList.length}개 업체)`);
+              setGeneralEmailBody(`안녕하세요.\n\n${COMPANY_PRINT.name}입니다.\n\n거래명세서를 발송드립니다.\n대상: ${names}\n\n\n감사합니다.\n${COMPANY_PRINT.name}\n${COMPANY_PRINT.contact}`);
+              setGeneralEmailFiles([]);
+              setBatchSendOpen(false);
+              setGeneralEmailOpen(true);
+            }}
+            className="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white font-bold text-[13px] hover:bg-indigo-700 disabled:opacity-50 transition"
+          >
+            이메일 창 열기
+          </button>
+          <button
+            disabled={!batchSendList.length}
+            onClick={() => {
+              setBatchSendList([]);
+              setBatchSendOpen(false);
+            }}
+            className="px-4 py-2.5 rounded-xl bg-red-100 text-red-600 font-bold text-[13px] hover:bg-red-200 transition"
+          >
+            목록 초기화
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
 
 {/* 이메일 발송 모달 */}
           {emailModalOpen && (
@@ -30298,9 +30425,10 @@ const handleBatchSettle = async (targetStatus) => {
                           showAlert(`${emailTo} 로 발송 완료`);
                           setEmailModalOpen(false);
                         } else {
-                          const err = await res.json();
-                          logEmail({ type:"거래명세서", client, to: emailTo, subject, status:"failed", error: err.error });
-                          showAlert(`발송 실패: ${err.error || "오류 발생"}\n코드: ${err.code || ""}`);
+                          let errMsg = `서버 오류 (${res.status})`; let errCode = "";
+                          try { const errData = await res.json(); errMsg = errData.error || errMsg; errCode = errData.code || ""; } catch {}
+                          logEmail({ type:"거래명세서", client, to: emailTo, subject, status:"failed", error: errMsg });
+                          showAlert(`발송 실패: ${errMsg}${errCode ? "\n코드: "+errCode : ""}`);
                         }
                       } catch (e) {
                         showAlert("네트워크 오류로 발송 실패");
@@ -31465,6 +31593,11 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [editRow, setEditRow] = useState(null); // { id, data }
   const [searched, setSearched] = useState(false); // 조회 버튼 눌러야 결과 표시
+  const [vatRate] = useState(0.1); // 부가세 10%
+  const [insuranceRate, setInsuranceRate] = useState(1.27); // 산재보험료율 (%)
+  const [payExcelOpen, setPayExcelOpen] = useState(false);
+  const [payExcelPreview, setPayExcelPreview] = useState(null); // { matched, unmatched }
+  const [payExcelConfirming, setPayExcelConfirming] = useState(false);
 
   // 빠른 기간 선택
   const setThisMonth = () => {
@@ -31511,8 +31644,10 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
     const done = filtered.filter(r => (r.지급상태 || "지급중") === "지급완료").length;
     const undone = filtered.length - done;
     const undoneAmt = filtered.filter(r => (r.지급상태 || "지급중") !== "지급완료").reduce((s, r) => s + toInt(r.기사운임), 0);
-    return { cnt: filtered.length, sale, driver, fee: sale - driver, done, undone, undoneAmt };
-  }, [filtered]);
+    const vatTotal = Math.round(driver * vatRate);
+    const insuranceTotal = Math.round(driver * (insuranceRate / 100));
+    return { cnt: filtered.length, sale, driver, fee: sale - driver, done, undone, undoneAmt, vatTotal, insuranceTotal };
+  }, [filtered, vatRate, insuranceRate]);
 
   // ─── 기사별 집계 ───
   const driverSummary = useMemo(() => {
