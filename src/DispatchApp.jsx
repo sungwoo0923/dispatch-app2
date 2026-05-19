@@ -31712,28 +31712,41 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
     <div className="space-y-4">
 
       {/* ── 헤더 ── */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h2 className="text-[20px] font-bold text-[#1B2B4B]">지급관리</h2>
           <p className="text-[12px] text-gray-400 mt-0.5">배차완료 오더의 기사운임 지급 현황 관리</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center flex-wrap">
+          <div className="flex items-center gap-1 border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-[12px]">
+            <span className="text-gray-500 font-semibold">산재보험료율</span>
+            <input type="number" min={0} max={10} step={0.01}
+              className="w-16 border border-gray-200 rounded px-2 py-0.5 text-[12px] text-center outline-none focus:border-[#1B2B4B]"
+              value={insuranceRate} onChange={e => setInsuranceRate(Number(e.target.value))} />
+            <span className="text-gray-400">%</span>
+          </div>
+          <label className="px-4 py-2 rounded-lg bg-amber-600 text-white text-[13px] font-semibold hover:bg-amber-700 transition cursor-pointer">
+            엑셀 업로드 (지급매칭)
+            <input type="file" accept=".xlsx,.xls" className="hidden" onChange={handlePayExcelUpload} />
+          </label>
           <button onClick={downloadExcel} className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-[13px] font-semibold hover:bg-emerald-700 transition">엑셀 다운로드</button>
         </div>
       </div>
 
       {/* ── KPI 카드 ── */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
         {[
           { label: "총 건수", val: `${kpi.cnt}건`, color: "text-[#1B2B4B]", bg: "bg-white" },
           { label: "총 청구운임", val: `${won(kpi.sale)}원`, color: "text-blue-700", bg: "bg-blue-50" },
           { label: "총 기사운임", val: `${won(kpi.driver)}원`, color: "text-gray-700", bg: "bg-gray-50" },
+          { label: "부가세(10%)", val: `${won(kpi.vatTotal)}원`, color: "text-orange-600", bg: "bg-orange-50" },
+          { label: `산재보험료(${insuranceRate}%)`, val: `${won(kpi.insuranceTotal)}원`, color: "text-purple-700", bg: "bg-purple-50" },
           { label: "지급완료", val: `${kpi.done}건`, color: "text-emerald-700", bg: "bg-emerald-50" },
           { label: "미지급 금액", val: `${won(kpi.undoneAmt)}원`, color: "text-red-600", bg: "bg-red-50" },
         ].map(({ label, val, color, bg }) => (
           <div key={label} className={`${bg} rounded-xl border border-gray-200 p-4 shadow-sm`}>
             <div className="text-[11px] font-bold text-gray-400 mb-1">{label}</div>
-            <div className={`text-[17px] font-extrabold ${color}`}>{val}</div>
+            <div className={`text-[15px] font-extrabold ${color}`}>{val}</div>
           </div>
         ))}
       </div>
