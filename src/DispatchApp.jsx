@@ -31792,50 +31792,67 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
     const reader = new FileReader();
     reader.onload = (evt) => {
       try {
-        const wb = XLSX.read(new Uint8Array(evt.target.result), { type: "array" });
+        // cellDates:true → 날짜 셀을 JavaScript Date 객체로 읽기
+        const wb = XLSX.read(new Uint8Array(evt.target.result), { type: "array", cellDates: true });
         const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "" });
         const norm = (s) => String(s || "").replace(/[\s\-]/g, "").toLowerCase();
         const toDateStr = (v) => {
-          if (!v) return "";
+          if (!v && v !== 0) return "";
+          // JavaScript Date 객체 (cellDates:true)
+          if (v instanceof Date) {
+            const y = v.getFullYear();
+            const mo = String(v.getMonth() + 1).padStart(2, "0");
+            const d = String(v.getDate()).padStart(2, "0");
+            return `${y}-${mo}-${d}`;
+          }
+          // Excel 시리얼 숫자
           if (typeof v === "number") {
             const d = XLSX.SSF.parse_date_code(v);
             if (d) return `${d.y}-${String(d.m).padStart(2,"0")}-${String(d.d).padStart(2,"0")}`;
           }
-          const s = String(v);
+          const s = String(v).trim();
           const m = s.match(/(\d{4})[.\-\/](\d{1,2})[.\-\/](\d{1,2})/);
           if (m) return `${m[1]}-${String(m[2]).padStart(2,"0")}-${String(m[3]).padStart(2,"0")}`;
           return s.slice(0, 10);
         };
+        const toDateTimeFull = (v) => {
+          if (!v) return "";
+          if (v instanceof Date) return v.toLocaleString("ko-KR");
+          return String(v);
+        };
         const matched = [];
         const unmatched = [];
-        json.forEach((row, idx) => {
+        json.forEach((rowRaw, idx) => {
+          // 모든 컬럼명 공백 제거 (앞뒤 스페이스, 줄바꿈 포함)
+          const row = {};
+          Object.keys(rowRaw).forEach(k => { row[k.trim().replace(/\s+/g, "")] = rowRaw[k]; });
+
           const excelPlate = norm(row["차량번호"] || row["차량"] || row["번호판"] || "");
           const excelName = norm(row["차주이름"] || row["기사명"] || row["이름"] || row["차주"] || "");
-          // 상차일을 최우선으로 사용
-          const excelDate = toDateStr(row["상차일"] || row["상차일자"] || row["오더일자"] || row["오더일"] || "");
-          // 정산처리일시 우선, 없으면 지급일
+          // 상차일 우선 (공백 제거 후 매칭)
+          const rawDate = row["상차일"] || row["상차일자"] || row["오더일자"] || row["오더일"] || "";
+          const excelDate = toDateStr(rawDate);
+          // 정산처리일시
           const excelPayRaw = row["정산처리일시"] || row["지급일"] || row["지급일자"] || "";
           const excelPayDate = toDateStr(excelPayRaw);
-          // 정산처리일시 전체 문자열 (시간 포함)
-          const excelPayDateTimeFull = excelPayRaw ? String(excelPayRaw) : "";
+          const excelPayDateTimeFull = toDateTimeFull(excelPayRaw);
           const excelAmt = toInt(row["운송료"] || row["기사운임"] || row["운임"] || row["금액"] || 0);
-          const excelPlateRaw = row["차량번호"] || row["차량"] || "";
-          const excelNameRaw = row["차주이름"] || row["기사명"] || row["이름"] || row["차주"] || "";
-          // 차량번호+날짜 매칭 우선, 이름+날짜 보조
+          const excelPlateRaw = String(row["차량번호"] || row["차량"] || "");
+          const excelNameRaw = String(row["차주이름"] || row["기사명"] || row["이름"] || row["차주"] || "");
+
           const found = base.find(r => {
             const plateMatch = excelPlate && norm(r.차량번호).includes(excelPlate);
             const nameMatch = excelName && norm(r.이름).includes(excelName);
-            const dateMatch = excelDate && (r.상차일||"").startsWith(excelDate);
+            const dateMatch = excelDate && (r.상차일 || "").startsWith(excelDate);
             return dateMatch && (plateMatch || nameMatch);
           });
           if (found) {
             const amtMatch = excelAmt === 0 || Math.abs(excelAmt - toInt(found.기사운임)) < 1000;
             matched.push({ excelRow: idx+2, dispatch: found, excelDate, excelPayDate, excelPayDateTimeFull, excelAmt, amtMatch,
-              차량번호: excelPlateRaw, 기사명: excelNameRaw,
-              운송료: excelAmt, 지급일: excelPayDate });
+              차량번호: excelPlateRaw, 기사명: excelNameRaw, 운송료: excelAmt, 지급일: excelPayDate });
           } else {
-            const 사유 = !excelDate ? "상차일 없음" : !excelPlate && !excelName ? "차량번호/기사명 없음" : "배차 데이터 없음 (차량번호/이름+날짜 불일치)";
-            unmatched.push({ excelRow: idx+2, 차량번호: excelPlateRaw, 기사명: excelNameRaw, 상차일: excelDate, 운송료: excelAmt, 사유 });
+            const 사유 = !excelDate ? `상차일 없음 (원본값: "${String(rawDate)}")` : !excelPlate && !excelName ? "차량번호/기사명 없음" : "배차 데이터 없음 (차량번호/이름+날짜 불일치)";
+            unmatched.push({ excelRow: idx+2, 차량번호: excelPlateRaw, 기사명: excelNameRaw, 상차일: excelDate || String(rawDate), 운송료: excelAmt, 사유 });
           }
         });
         setPayExcelPreview({ matched, unmatched });
