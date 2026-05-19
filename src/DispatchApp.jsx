@@ -13341,8 +13341,13 @@ const handleCloseFileUpload = async (e) => {
   const nameCol = headers.indexOf("차주이름");
   const phoneCol = headers.indexOf("차주전화");
   const feeTypeCol = headers.indexOf("요금구분");
-const commCol = headers.indexOf("수수료");
-  // ★ 운송료 컬럼 (다양한 명칭 대응)
+  const commCol = headers.indexOf("수수료");
+
+  // 날짜 컬럼 감지 (엑셀이 여러 날짜를 포함할 때 정확한 매칭 위해)
+  const dateColNames = ["날짜", "상차일", "운송일", "일자", "접수일", "운행일", "배차일"];
+  const dateCol = dateColNames.reduce((found, name) => found !== -1 ? found : headers.indexOf(name), -1);
+
+  // 운송료 컬럼 (다양한 명칭 대응)
   const fareColNames = ["운송료", "운임", "운임금액", "금액", "결제금액", "배차료", "차주운임", "지급금액"];
   const fareCol = fareColNames.reduce((found, name) =>
     found !== -1 ? found : headers.indexOf(name), -1
@@ -13352,6 +13357,28 @@ const commCol = headers.indexOf("수수료");
     showAlert("차량번호 컬럼을 찾을 수 없습니다.");
     return;
   }
+
+  // 엑셀 날짜값 → YYYY-MM-DD 파싱
+  const parseExcelDate = (val) => {
+    if (val == null || val === "") return null;
+    const str = String(val).trim();
+    // Excel 시리얼 숫자
+    if (/^\d{5}$/.test(str)) {
+      const d = new Date(Math.round((Number(str) - 25569) * 86400 * 1000));
+      const kst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+      return kst.toISOString().slice(0, 10);
+    }
+    // YYYY-MM-DD / YYYY/MM/DD / YYYY.MM.DD
+    const m = str.match(/(\d{4})[.\-\/](\d{1,2})[.\-\/](\d{1,2})/);
+    if (m) return `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
+    // MM/DD or MM-DD (올해 연도 적용)
+    const m2 = str.match(/^(\d{1,2})[\/\-](\d{1,2})$/);
+    if (m2) {
+      const yr = new Date().getFullYear();
+      return `${yr}-${m2[1].padStart(2, "0")}-${m2[2].padStart(2, "0")}`;
+    }
+    return null;
+  };
 
   let targetDate = todayKST();
   if (dayMode === "yesterday") targetDate = yesterdayKST();
@@ -13369,15 +13396,27 @@ const commCol = headers.indexOf("수수료");
     const filePhone = String(row[phoneCol] || "").replace(/[^\d]/g, "");
     const fileFeeType = String(row[feeTypeCol] || "").trim();
     const fileComm = Number(row[commCol] || 0);
+    const fileDate = dateCol !== -1 ? parseExcelDate(row[dateCol]) : null;
 
     if (!filePlate) continue;
 
-    // 내 프로그램에서 같은 차량번호 오더 찾기
-    const matched = todayRows.filter(r => normalizePlate(r.차량번호 || "") === filePlate);
+    // 내 프로그램에서 매칭 오더 찾기
+    // 날짜 컬럼이 있으면 → 차량번호 + 상차일 동시 매칭 (전체 rows 대상)
+    // 날짜 컬럼 없으면 → 기존대로 차량번호만 (todayRows 대상)
+    let matched;
+    if (fileDate) {
+      matched = rows.filter(r =>
+        normalizePlate(r.차량번호 || "") === filePlate && r.상차일 === fileDate
+      );
+    } else {
+      matched = todayRows.filter(r => normalizePlate(r.차량번호 || "") === filePlate);
+    }
 
     matched.forEach(mr => {
-      const seq = todayRows.indexOf(mr) + 1;
-      const label = `${seq}번 [${mr.거래처명 || "-"}] ${mr.상차지명 || ""} → ${mr.하차지명 || ""}`;
+      const baseRows = fileDate ? rows : todayRows;
+      const seq = baseRows.indexOf(mr) + 1;
+      const dateLabel = fileDate ? ` (${fileDate})` : "";
+      const label = `${seq}번 [${mr.거래처명 || "-"}] ${mr.상차지명 || ""} → ${mr.하차지명 || ""}${dateLabel}`;
 
       // 1. 배차방식 검증: 24시콜 파일에 있으면 배차방식이 "24시"여야 함
       const dispatch = (mr.배차방식 || "").trim();
@@ -13413,13 +13452,12 @@ const commCol = headers.indexOf("수수료");
         }
       }
 
-      // 3. ★ 운임 불일치 검증
+      // 3. 운임 불일치 검증
       if (fareCol !== -1) {
         const fileFare = Number(String(row[fareCol] || "0").replace(/[^\d]/g, ""));
         const programFare = Number(String(mr.기사운임 || "0").replace(/[^\d]/g, ""));
 
         if (isSongsil) {
-          // 손실: 기사운임과 24시콜 운송료 비교
           if (fileFare > 0 && programFare > 0 && fileFare !== programFare) {
             fileIssues.push({
               rowId: mr._id, seq, label, type: "fare",
@@ -13427,7 +13465,6 @@ const commCol = headers.indexOf("수수료");
             });
           }
         } else {
-          // 일반: 기존과 동일
           if (fileFare > 0 && programFare > 0 && fileFare !== programFare) {
             fileIssues.push({
               rowId: mr._id, seq, label, type: "fare",
@@ -13439,11 +13476,19 @@ const commCol = headers.indexOf("수수료");
     });
   }
 
-// ✅ 역방향 검증: 프로그램에서 배차방식이 "24시"인데 24시콜 파일에 없는 경우
+  // 역방향 검증: 프로그램에서 배차방식이 "24시"인데 24시콜 파일에 없는 경우
+  // 날짜 컬럼 있으면 차량번호+날짜 세트로, 없으면 차량번호만으로 확인
   const filePlates = new Set();
+  const filePlateDate = new Set(); // "plate__date" 형태
   for (let i = headerIdx + 1; i < json.length; i++) {
     const row = json[i];
-    if (row && row[plateCol]) filePlates.add(normalizePlate(String(row[plateCol])));
+    if (!row || !row[plateCol]) continue;
+    const plate = normalizePlate(String(row[plateCol]));
+    filePlates.add(plate);
+    if (dateCol !== -1) {
+      const d = parseExcelDate(row[dateCol]);
+      if (d) filePlateDate.add(`${plate}__${d}`);
+    }
   }
 
   todayRows.forEach(mr => {
@@ -13452,7 +13497,12 @@ const commCol = headers.indexOf("수수료");
     if (!mr.차량번호?.trim()) return;
 
     const plate = normalizePlate(mr.차량번호);
-    if (!filePlates.has(plate)) {
+    // 날짜 컬럼 있으면 plate+date 조합으로 확인, 없으면 plate만 확인
+    const inFile = filePlateDate.size > 0
+      ? filePlateDate.has(`${plate}__${mr.상차일}`)
+      : filePlates.has(plate);
+
+    if (!inFile) {
       const seq = todayRows.indexOf(mr) + 1;
       const label = `${seq}번 [${mr.거래처명 || "-"}] ${mr.상차지명 || ""} → ${mr.하차지명 || ""}`;
       fileIssues.push({
