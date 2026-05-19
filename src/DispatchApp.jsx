@@ -31823,22 +31823,38 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
         const matched = [];
         const unmatched = [];
         json.forEach((rowRaw, idx) => {
-          // 모든 컬럼명 공백 제거 (앞뒤 스페이스, 줄바꿈 포함)
+          // 컬럼명에서 한글/영문/숫자 외 모든 문자 제거 (보이지 않는 유니코드 포함)
           const row = {};
-          Object.keys(rowRaw).forEach(k => { row[k.trim().replace(/\s+/g, "")] = rowRaw[k]; });
+          const rowKeys = [];
+          Object.keys(rowRaw).forEach(k => {
+            const normalized = k.replace(/[^가-힣ᄀ-ᇿ㄰-㆏a-zA-Z0-9]/g, "");
+            row[normalized] = rowRaw[k];
+            rowKeys.push(normalized);
+          });
+          // 키 부분 포함 검색 fallback
+          const getCol = (...names) => {
+            for (const n of names) {
+              if (row[n] !== undefined && row[n] !== "") return row[n];
+            }
+            for (const n of names) {
+              const found = rowKeys.find(k => k.includes(n));
+              if (found && row[found] !== undefined && row[found] !== "") return row[found];
+            }
+            return undefined;
+          };
 
-          const excelPlate = norm(row["차량번호"] || row["차량"] || row["번호판"] || "");
-          const excelName = norm(row["차주이름"] || row["기사명"] || row["이름"] || row["차주"] || "");
+          const excelPlate = norm(String(getCol("차량번호","차량","번호판") || ""));
+          const excelName = norm(String(getCol("차주이름","기사명","이름","차주") || ""));
           // 상차일 우선 (공백 제거 후 매칭)
-          const rawDate = row["상차일"] || row["상차일자"] || row["오더일자"] || row["오더일"] || "";
+          const rawDate = getCol("상차일","상차일자","오더일자","오더일") ?? "";
           const excelDate = toDateStr(rawDate);
           // 정산처리일시
-          const excelPayRaw = row["정산처리일시"] || row["지급일"] || row["지급일자"] || "";
+          const excelPayRaw = getCol("정산처리일시","지급일","지급일자") ?? "";
           const excelPayDate = toDateStr(excelPayRaw);
           const excelPayDateTimeFull = toDateTimeFull(excelPayRaw);
-          const excelAmt = toInt(row["운송료"] || row["기사운임"] || row["운임"] || row["금액"] || 0);
-          const excelPlateRaw = String(row["차량번호"] || row["차량"] || "");
-          const excelNameRaw = String(row["차주이름"] || row["기사명"] || row["이름"] || row["차주"] || "");
+          const excelAmt = toInt(getCol("운송료","기사운임","운임","금액") || 0);
+          const excelPlateRaw = String(getCol("차량번호","차량") || "");
+          const excelNameRaw = String(getCol("차주이름","기사명","이름","차주") || "");
 
           const found = base.find(r => {
             const plateMatch = excelPlate && norm(r.차량번호).includes(excelPlate);
