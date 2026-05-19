@@ -254,14 +254,12 @@ export default function ShipperMobileApp() {
 // 홈
 // ======================================================================
 function ShipperHomeM({ kpi, orders, onSelect, onGoOrder }) {
-  const today = todayStr();
-  const todayOrders = orders
-    .filter((o) => String(o.상차일 || "").slice(0, 10) === today && o.상태 !== "취소")
-    .sort((a, b) => String(a.상차시간 || "").localeCompare(String(b.상차시간 || "")));
+  const [viewDate, setViewDate] = useState(todayStr());
+  const [queriedDate, setQueriedDate] = useState(todayStr());
 
-  const recentOrders = [...orders]
-    .sort((a, b) => (b.createdAt?.toDate?.()?.getTime() || 0) - (a.createdAt?.toDate?.()?.getTime() || 0))
-    .slice(0, 5);
+  const viewOrders = orders
+    .filter((o) => String(o.상차일 || "").slice(0, 10) === queriedDate && o.상태 !== "취소")
+    .sort((a, b) => String(a.상차시간 || "").localeCompare(String(b.상차시간 || "")));
 
   return (
     <div className="px-4 py-4 space-y-4">
@@ -279,23 +277,34 @@ function ShipperHomeM({ kpi, orders, onSelect, onGoOrder }) {
       </button>
 
       <div>
-        <div className="text-sm font-bold text-gray-700 mb-2">오늘 운송 ({todayOrders.length}건)</div>
-        {todayOrders.length === 0 ? (
+        {/* 날짜 조회 */}
+        <div className="flex gap-2 mb-2">
+          <input type="date" value={viewDate} onChange={(e) => setViewDate(e.target.value)}
+            className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm" />
+          <button onClick={() => setQueriedDate(viewDate)}
+            className="px-3 py-1.5 text-xs font-semibold text-white rounded-lg shrink-0"
+            style={{ background: NAVY }}>
+            조회
+          </button>
+          {queriedDate !== todayStr() && (
+            <button onClick={() => { setViewDate(todayStr()); setQueriedDate(todayStr()); }}
+              className="px-3 py-1.5 text-xs font-semibold border rounded-lg shrink-0 text-gray-600">
+              오늘
+            </button>
+          )}
+        </div>
+        <div className="text-sm font-bold text-gray-700 mb-2">
+          {queriedDate === todayStr() ? "오늘" : queriedDate} 운송 ({viewOrders.length}건)
+        </div>
+        {viewOrders.length === 0 ? (
           <div className="text-center text-gray-400 text-sm py-6 bg-white rounded-xl border">
-            오늘 등록된 운송이 없습니다.
+            해당 날짜의 운송이 없습니다.
           </div>
         ) : (
           <div className="space-y-2">
-            {todayOrders.map((o) => <OrderCard key={o.id} order={o} onSelect={() => onSelect(o)} />)}
+            {viewOrders.map((o) => <OrderCard key={o.id} order={o} onSelect={() => onSelect(o)} />)}
           </div>
         )}
-      </div>
-
-      <div>
-        <div className="text-sm font-bold text-gray-700 mb-2">최근 등록</div>
-        <div className="space-y-2">
-          {recentOrders.map((o) => <OrderCard key={o.id} order={o} onSelect={() => onSelect(o)} />)}
-        </div>
       </div>
     </div>
   );
@@ -319,6 +328,7 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack 
   const [copyOpen, setCopyOpen] = useState(false);
   const [copySearch, setCopySearch] = useState("");
   const [copyType, setCopyType] = useState("통합");
+  const [copyResults, setCopyResults] = useState(null);
 
   const update = (k, v) => setForm((p) => ({ ...p, [k]: v }));
 
@@ -377,18 +387,19 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack 
   };
 
   // 오더 복사
-  const copyFilteredOrders = useMemo(() => {
-    if (!copySearch.trim()) return [...orders].sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)).slice(0, 30);
+  const doCopySearch = () => {
     const v = copySearch.toLowerCase();
-    return orders.filter(o => {
+    const result = orders.filter(o => {
+      if (!v) return true;
       if (copyType === "상차지") return (o.상차지명 || "").toLowerCase().includes(v);
       if (copyType === "하차지") return (o.하차지명 || "").toLowerCase().includes(v);
       if (copyType === "거래처") return (o.거래처명 || "").toLowerCase().includes(v);
       return (o.상차지명 || "").toLowerCase().includes(v) ||
         (o.하차지명 || "").toLowerCase().includes(v) ||
         (o.거래처명 || "").toLowerCase().includes(v);
-    }).slice(0, 30);
-  }, [orders, copySearch, copyType]);
+    }).sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)).slice(0, 50);
+    setCopyResults(result);
+  };
 
   const copyFrom = (src) => {
     const { num, unit } = parseTonnage(src.차량톤수 || "");
@@ -397,9 +408,11 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack 
       운송사명: fixedTransport?.name || src.운송사명 || "",
       운송사코드: fixedTransport?.code || src.운송사코드 || "",
       상차지명: src.상차지명 || "", 상차지주소: src.상차지주소 || "",
-      상차지담당자: src.상차지담당자 || "", 상차지담당자번호: src.상차지담당자번호 || "",
+      상차지담당자: src.상차지담당자 || src.상차담당자명 || "",
+      상차지담당자번호: src.상차지담당자번호 || src.상차담당자번호 || "",
       하차지명: src.하차지명 || "", 하차지주소: src.하차지주소 || "",
-      하차지담당자: src.하차지담당자 || "", 하차지담당자번호: src.하차지담당자번호 || "",
+      하차지담당자: src.하차지담당자 || src.하차담당자명 || "",
+      하차지담당자번호: src.하차지담당자번호 || src.하차담당자번호 || "",
       차량종류: src.차량종류 || "", 톤수값: num, 톤수단위: unit,
       화물내용: src.화물내용 || "", 화물단위: src.화물단위 || "파레트",
       상차방법: src.상차방법 || "", 하차방법: src.하차방법 || "",
@@ -615,8 +628,8 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack 
         <MRow label="톤수">
           <div className="flex gap-2">
             <input className="input-m" style={{ flex: 2 }} value={form.톤수값}
-              placeholder="숫자 입력" type="number" min="0"
-              onChange={(e) => update("톤수값", e.target.value)} />
+              placeholder="숫자 입력" inputMode="decimal"
+              onChange={(e) => update("톤수값", e.target.value.replace(/[^0-9.]/g, ""))} />
             <select className="input-m" style={{ flex: 1, minWidth: 0 }} value={form.톤수단위} onChange={(e) => update("톤수단위", e.target.value)}>
               {톤수단위목록.map(v => <option key={v}>{v}</option>)}
             </select>
@@ -665,25 +678,38 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack 
       {/* 오더 복사 모달 */}
       {copyOpen && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-end">
-          <div className="w-full bg-white rounded-t-2xl max-h-[80vh] flex flex-col">
+          <div className="w-full bg-white rounded-t-2xl max-h-[85vh] flex flex-col">
             <div className="px-4 py-3 border-b flex items-center justify-between" style={{ background: NAVY }}>
               <div className="text-white font-bold">오더 복사</div>
-              <button onClick={() => setCopyOpen(false)} className="text-white text-xl">×</button>
+              <button onClick={() => { setCopyOpen(false); setCopyResults(null); setCopySearch(""); }} className="text-white text-xl">×</button>
             </div>
-            <div className="px-3 py-2 border-b flex gap-2">
-              <select className="input-m w-24 shrink-0" value={copyType} onChange={(e) => setCopyType(e.target.value)}>
-                <option value="통합">통합</option>
-                <option value="상차지">상차지</option>
-                <option value="하차지">하차지</option>
-                <option value="거래처">거래처</option>
-              </select>
-              <input className="input-m flex-1" value={copySearch} onChange={(e) => setCopySearch(e.target.value)}
-                placeholder="검색어 입력" />
+            <div className="px-3 py-2 border-b space-y-2">
+              <div className="flex gap-2">
+                <select className="input-m w-24 shrink-0" value={copyType} onChange={(e) => setCopyType(e.target.value)}>
+                  <option value="통합">통합</option>
+                  <option value="상차지">상차지</option>
+                  <option value="하차지">하차지</option>
+                  <option value="거래처">거래처</option>
+                </select>
+                <input className="input-m flex-1" value={copySearch}
+                  onChange={(e) => setCopySearch(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && doCopySearch()}
+                  placeholder="검색어 입력" />
+                <button onClick={doCopySearch}
+                  className="px-3 py-1.5 text-xs font-semibold text-white rounded-lg shrink-0"
+                  style={{ background: NAVY }}>
+                  조회
+                </button>
+              </div>
             </div>
             <div className="overflow-y-auto flex-1 px-3 py-2 space-y-2">
-              {copyFilteredOrders.length === 0 ? (
-                <div className="text-center text-gray-400 text-sm py-8">검색 결과가 없습니다.</div>
-              ) : copyFilteredOrders.map(o => (
+              {copyResults === null ? (
+                <div className="text-center text-gray-400 text-sm py-10">
+                  검색어를 입력하고 조회 버튼을 누르세요
+                </div>
+              ) : copyResults.length === 0 ? (
+                <div className="text-center text-gray-400 text-sm py-10">검색 결과가 없습니다.</div>
+              ) : copyResults.map(o => (
                 <button key={o.id} className="w-full text-left bg-gray-50 border rounded-xl p-3 active:bg-blue-50"
                   onClick={() => copyFrom(o)}>
                   <div className="text-sm font-semibold text-gray-800">
@@ -692,6 +718,11 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack 
                   <div className="text-xs text-gray-500 mt-0.5">
                     {o.상차일 || "-"} · {o.차량종류 || ""} {o.차량톤수 || ""}
                   </div>
+                  {(o.상차지담당자 || o.상차담당자명) && (
+                    <div className="text-xs text-gray-400 mt-0.5">
+                      상차 담당: {o.상차지담당자 || o.상차담당자명}
+                    </div>
+                  )}
                 </button>
               ))}
             </div>

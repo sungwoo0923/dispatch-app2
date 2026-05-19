@@ -36,6 +36,15 @@ const fmt12 = (t) => {
   return `${isAM ? "오전" : "오후"} ${h12}시${m > 0 ? ` ${m}분` : ""}`;
 };
 
+const parseTonnage = (val = "") => {
+  if (!val) return { num: "", unit: "톤" };
+  const kg = val.match(/^([\d.]+)\s*kg$/i);
+  if (kg) return { num: kg[1], unit: "kg" };
+  const ton = val.match(/^([\d.]*)\s*톤?$/);
+  if (ton) return { num: ton[1].replace("톤", ""), unit: "톤" };
+  return { num: val, unit: "없음" };
+};
+
 const getDate = (offset = 0) => {
   const d = new Date();
   d.setDate(d.getDate() + offset);
@@ -144,7 +153,7 @@ export default function ShipperOrder({ editData, onClose }) {
     하차지명: "", 하차지주소: "", 하차담당자명: "", 하차담당자번호: "", 하차메모: "",
     상차일: getDate(0), 상차시간: "08:00", 상차시간구분: "이후",
     하차일: getDate(0), 하차시간: "12:00", 하차시간구분: "이후",
-    차량종류: "", 차량톤수: "", 상차방법: "", 하차방법: "", 지급방식: "", 화물내용: "", 화물단위: "파레트",
+    차량종류: "", 차량톤수: "", 차량톤수단위: "톤", 상차방법: "", 하차방법: "", 지급방식: "", 화물내용: "", 화물단위: "파레트",
     운송사명: "", 운송사코드: "",
   });
 
@@ -153,14 +162,19 @@ export default function ShipperOrder({ editData, onClose }) {
   useEffect(() => {
     if (!editId) return;
     getDoc(doc(db, "orders", editId)).then(snap => {
-      if (snap.exists()) setForm(p => ({ ...p, ...snap.data() }));
+      if (snap.exists()) {
+        const data = snap.data();
+        const { num, unit } = parseTonnage(data.차량톤수 || "");
+        setForm(p => ({ ...p, ...data, 차량톤수: num, 차량톤수단위: unit }));
+      }
       setLoading(false);
     });
   }, [editId]);
 
   useEffect(() => {
     if (!editData) return;
-    setForm(p => ({ ...p, ...editData }));
+    const { num, unit } = parseTonnage(editData.차량톤수 || "");
+    setForm(p => ({ ...p, ...editData, 차량톤수: num, 차량톤수단위: unit }));
     setLoading(false);
   }, [editData]);
 
@@ -171,7 +185,7 @@ export default function ShipperOrder({ editData, onClose }) {
       하차지명: "", 하차지주소: "", 하차담당자명: "", 하차담당자번호: "", 하차메모: "",
       상차일: getDate(0), 상차시간: "08:00", 상차시간구분: "이후",
       하차일: getDate(0), 하차시간: "12:00", 하차시간구분: "이후",
-      차량종류: "", 차량톤수: "", 상차방법: "", 하차방법: "", 지급방식: "", 화물내용: "", 화물단위: "파레트",
+      차량종류: "", 차량톤수: "", 차량톤수단위: "톤", 상차방법: "", 하차방법: "", 지급방식: "", 화물내용: "", 화물단위: "파레트",
       운송사명: "", 운송사코드: "",
     });
     setSuggestions([]); setShowDropdown(null); setActiveIndex(-1);
@@ -218,11 +232,13 @@ export default function ShipperOrder({ editData, onClose }) {
     await upsertPlace({ name: form.상차지명, address: form.상차지주소, 담당자명: form.상차담당자명, 담당자번호: form.상차담당자번호, 메모: form.상차메모 }, "상차");
     await upsertPlace({ name: form.하차지명, address: form.하차지주소, 담당자명: form.하차담당자명, 담당자번호: form.하차담당자번호, 메모: form.하차메모 }, "하차");
 
+    const 차량톤수Combined = form.차량톤수단위 === "없음" ? "" : form.차량톤수 ? `${form.차량톤수}${form.차량톤수단위}` : "";
+    const saveForm = { ...form, 차량톤수: 차량톤수Combined };
     if (editId || editData?.id) {
-      await updateDoc(doc(db, "orders", editId || editData.id), { ...form, updatedAt: serverTimestamp() });
+      await updateDoc(doc(db, "orders", editId || editData.id), { ...saveForm, updatedAt: serverTimestamp() });
     } else {
       await addDoc(collection(db, "orders"), {
-        ...form,
+        ...saveForm,
         shipperUid: user.uid,
         작성자: user.email,
         거래처명: effectiveCompany,
@@ -290,18 +306,20 @@ export default function ShipperOrder({ editData, onClose }) {
   };
 
   const applyOrder = (item) => {
+    const { num, unit } = parseTonnage(item.차량톤수 || "");
     setForm(p => ({
       ...p,
       청구운임: item.청구운임 || "",
       상차지명: item.상차지명 || "", 상차지주소: item.상차지주소 || "",
-      상차담당자명: item.상차담당자명 || "", 상차담당자번호: item.상차담당자번호 || "",
+      상차담당자명: item.상차담당자명 || item.상차지담당자 || "", 상차담당자번호: item.상차담당자번호 || item.상차지담당자번호 || "",
       하차지명: item.하차지명 || "", 하차지주소: item.하차지주소 || "",
-      하차담당자명: item.하차담당자명 || "", 하차담당자번호: item.하차담당자번호 || "",
+      하차담당자명: item.하차담당자명 || item.하차지담당자 || "", 하차담당자번호: item.하차담당자번호 || item.하차지담당자번호 || "",
       상차시간: item.상차시간 || "08:00", 상차시간구분: item.상차시간구분 || "이후",
       하차시간: item.하차시간 || "12:00", 하차시간구분: item.하차시간구분 || "이후",
-      차량종류: item.차량종류 || "", 차량톤수: item.차량톤수 || "",
+      차량종류: item.차량종류 || "", 차량톤수: num, 차량톤수단위: unit,
       상차방법: item.상차방법 || "", 하차방법: item.하차방법 || "",
       지급방식: item.지급방식 || "", 화물내용: item.화물내용 || "",
+      화물단위: item.화물단위 || "파레트",
       운송사명: item.운송사명 || "", 운송사코드: item.운송사코드 || "",
     }));
   };
@@ -362,10 +380,10 @@ export default function ShipperOrder({ editData, onClose }) {
   };
 
   return (
-    <div className="flex gap-5 w-full p-6">
+    <div className="flex gap-5 w-full p-6 max-w-[1200px]">
 
       {/* 왼쪽: 입력 폼 */}
-      <div className="flex-1 bg-white rounded-2xl border border-gray-200 shadow-sm p-7 space-y-6">
+      <div className="flex-1 min-w-0 bg-white rounded-2xl border border-gray-200 shadow-sm p-6 space-y-5">
 
         {/* 헤더 */}
         <div className="flex justify-between items-center border-b pb-4">
@@ -539,11 +557,10 @@ export default function ShipperOrder({ editData, onClose }) {
             <span className="w-1 h-4 bg-blue-600 rounded-full inline-block" />
             상·하차 정보
           </div>
-          <div className="bg-gray-50 rounded-xl p-4 grid grid-cols-3 gap-4">
-
+          <div className="bg-gray-50 rounded-xl p-4 grid grid-cols-2 gap-4">
             {/* 상차지 */}
             <div className="space-y-2">
-              <div className="text-xs font-bold text-gray-700 mb-2 border-b pb-1">상차지 정보</div>
+              <div className="text-xs font-bold text-gray-700 mb-2 border-b pb-1">상차지</div>
               <div className="relative">
                 <label className={labelCls}>상차지명</label>
                 <input className={inputCls} placeholder="상차지명" value={form.상차지명}
@@ -569,7 +586,7 @@ export default function ShipperOrder({ editData, onClose }) {
 
             {/* 하차지 */}
             <div className="space-y-2">
-              <div className="text-xs font-bold text-gray-700 mb-2 border-b pb-1">하차지 정보</div>
+              <div className="text-xs font-bold text-gray-700 mb-2 border-b pb-1">하차지</div>
               <div className="relative">
                 <label className={labelCls}>하차지명</label>
                 <input className={inputCls} placeholder="하차지명" value={form.하차지명}
@@ -592,32 +609,41 @@ export default function ShipperOrder({ editData, onClose }) {
               <div><label className={labelCls}>담당자번호</label><input className={inputCls} placeholder="담당자번호" value={form.하차담당자번호} onChange={e => onChange("하차담당자번호", e.target.value)} /></div>
               <div><label className={labelCls}>메모</label><input className={inputCls} placeholder="메모" value={form.하차메모} onChange={e => onChange("하차메모", e.target.value)} /></div>
             </div>
+          </div>
+        </div>
 
-            {/* 화물 정보 */}
-            <div className="space-y-2">
-              <div className="text-xs font-bold text-gray-700 mb-2 border-b pb-1">화물 정보</div>
-              <div>
-                <label className={labelCls}>차량종류</label>
-                <select className={inputCls} value={form.차량종류} onChange={e => onChange("차량종류", e.target.value)}>
-                  <option value="">차량종류 선택</option>
-                  {["라보/다마스","냉장탑","냉동탑","냉동윙","냉장윙","리프트","오토바이","윙바디","탑차","카고"].map(v => <option key={v}>{v}</option>)}
+        {/* 화물 정보 */}
+        <div>
+          <div className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
+            <span className="w-1 h-4 bg-blue-600 rounded-full inline-block" />
+            화물 정보
+          </div>
+          <div className="bg-gray-50 rounded-xl p-4 grid grid-cols-3 gap-4">
+            <div>
+              <label className={labelCls}>차량종류</label>
+              <select className={inputCls} value={form.차량종류} onChange={e => onChange("차량종류", e.target.value)}>
+                <option value="">선택</option>
+                {["라보/다마스","냉장탑","냉동탑","냉동윙","냉장윙","리프트","오토바이","윙바디","탑차","카고"].map(v => <option key={v}>{v}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className={labelCls}>톤수</label>
+              <div className="flex gap-1.5">
+                <input className={inputCls} style={{ flex: 2 }} placeholder="숫자" value={form.차량톤수}
+                  inputMode="decimal"
+                  onChange={e => onChange("차량톤수", e.target.value.replace(/[^0-9.]/g, ""))} />
+                <select className={inputCls} style={{ flex: 1, minWidth: 0 }} value={form.차량톤수단위} onChange={e => onChange("차량톤수단위", e.target.value)}>
+                  <option>톤</option><option>kg</option><option>없음</option>
                 </select>
               </div>
-              <div>
-                <label className={labelCls}>톤수</label>
-                <select className={inputCls} value={form.차량톤수} onChange={e => onChange("차량톤수", e.target.value)}>
-                  <option value="">톤수 선택</option>
-                  {["1톤","1.4톤","2.5톤","3.5톤","5톤","8톤","11톤","15톤","18톤","25톤"].map(v => <option key={v}>{v}</option>)}
+            </div>
+            <div>
+              <label className={labelCls}>화물내용</label>
+              <div className="flex gap-1.5">
+                <input className={inputCls} style={{ flex: 2 }} placeholder="화물내용" value={form.화물내용} onChange={e => onChange("화물내용", e.target.value)} />
+                <select className={inputCls} style={{ flex: 1, minWidth: 0 }} value={form.화물단위} onChange={e => onChange("화물단위", e.target.value)}>
+                  {["파레트","박스","없음","개"].map(v => <option key={v}>{v}</option>)}
                 </select>
-              </div>
-              <div className="flex-1">
-                <label className={labelCls}>화물내용</label>
-                <div className="flex gap-2">
-                  <input className={inputCls} placeholder="화물내용 입력" value={form.화물내용} onChange={e => onChange("화물내용", e.target.value)} />
-                  <select className={inputCls + " w-28 flex-shrink-0"} value={form.화물단위} onChange={e => onChange("화물단위", e.target.value)}>
-                    {["파레트","박스","없음","개"].map(v => <option key={v}>{v}</option>)}
-                  </select>
-                </div>
               </div>
             </div>
           </div>
