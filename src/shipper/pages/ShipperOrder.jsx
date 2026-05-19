@@ -144,7 +144,7 @@ export default function ShipperOrder({ editData, onClose }) {
     하차지명: "", 하차지주소: "", 하차담당자명: "", 하차담당자번호: "", 하차메모: "",
     상차일: getDate(0), 상차시간: "08:00", 상차시간구분: "이후",
     하차일: getDate(0), 하차시간: "12:00", 하차시간구분: "이후",
-    차량종류: "", 차량톤수: "", 상차방법: "", 하차방법: "", 지급방식: "", 화물내용: "",
+    차량종류: "", 차량톤수: "", 상차방법: "", 하차방법: "", 지급방식: "", 화물내용: "", 화물단위: "파레트",
     운송사명: "", 운송사코드: "",
   });
 
@@ -171,7 +171,7 @@ export default function ShipperOrder({ editData, onClose }) {
       하차지명: "", 하차지주소: "", 하차담당자명: "", 하차담당자번호: "", 하차메모: "",
       상차일: getDate(0), 상차시간: "08:00", 상차시간구분: "이후",
       하차일: getDate(0), 하차시간: "12:00", 하차시간구분: "이후",
-      차량종류: "", 차량톤수: "", 상차방법: "", 하차방법: "", 지급방식: "", 화물내용: "",
+      차량종류: "", 차량톤수: "", 상차방법: "", 하차방법: "", 지급방식: "", 화물내용: "", 화물단위: "파레트",
       운송사명: "", 운송사코드: "",
     });
     setSuggestions([]); setShowDropdown(null); setActiveIndex(-1);
@@ -605,11 +605,19 @@ export default function ShipperOrder({ editData, onClose }) {
               </div>
               <div>
                 <label className={labelCls}>톤수</label>
-                <input className={inputCls} placeholder="예) 1톤, 2.5톤" value={form.차량톤수} onChange={e => onChange("차량톤수", e.target.value)} />
+                <select className={inputCls} value={form.차량톤수} onChange={e => onChange("차량톤수", e.target.value)}>
+                  <option value="">톤수 선택</option>
+                  {["1톤","1.4톤","2.5톤","3.5톤","5톤","8톤","11톤","15톤","18톤","25톤"].map(v => <option key={v}>{v}</option>)}
+                </select>
               </div>
               <div className="flex-1">
                 <label className={labelCls}>화물내용</label>
-                <textarea className={inputCls + " resize-none h-24"} placeholder="화물내용 입력" value={form.화물내용} onChange={e => onChange("화물내용", e.target.value)} />
+                <div className="flex gap-2">
+                  <input className={inputCls} placeholder="화물내용 입력" value={form.화물내용} onChange={e => onChange("화물내용", e.target.value)} />
+                  <select className={inputCls + " w-28 flex-shrink-0"} value={form.화물단위} onChange={e => onChange("화물단위", e.target.value)}>
+                    {["파레트","톤","박스","개","kg","기타"].map(v => <option key={v}>{v}</option>)}
+                  </select>
+                </div>
               </div>
             </div>
           </div>

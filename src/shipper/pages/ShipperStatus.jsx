@@ -45,6 +45,23 @@ const fmt12 = (t) => {
   return `${isAM ? "오전" : "오후"} ${h12}시${m > 0 ? ` ${m}분` : ""}`;
 };
 
+const fmtDate = (ts) => {
+  if (!ts) return "-";
+  if (ts?.toDate) return ts.toDate().toISOString().slice(0, 10);
+  if (ts instanceof Date) return ts.toISOString().slice(0, 10);
+  return String(ts).slice(0, 10);
+};
+
+const fmtDateTime = (ts) => {
+  if (!ts) return "-";
+  let d;
+  if (ts?.toDate) d = ts.toDate();
+  else if (ts instanceof Date) d = ts;
+  else return String(ts).slice(0, 16);
+  const kst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+  return kst.toISOString().slice(0, 16).replace("T", " ");
+};
+
 export default function ShipperStatus() {
   const user = auth.currentUser;
   const [userData, setUserData] = useState(null);
@@ -199,6 +216,7 @@ export default function ShipperStatus() {
     import("xlsx").then(XLSX => {
       const data = rows.map((o, i) => ({
         순번: i + 1,
+        등록일: fmtDate(o.createdAt),
         상차일: o.상차일 || "",
         상차시간: o.상차시간 || "",
         하차일: o.하차일 || "",
@@ -209,7 +227,8 @@ export default function ShipperStatus() {
         차량종류: o.차량종류 || "",
         톤수: o.차량톤수 || "",
         차량번호: o.차량번호 || "",
-        기사: o.이름 || "",
+        기사명: o.이름 || "",
+        기사전화: o.전화번호 || "",
         청구운임: o.청구운임 || "",
         지급방식: o.지급방식 || "",
         상태: getStatus(o),
@@ -413,9 +432,10 @@ export default function ShipperStatus() {
         </div>
 
         <div ref={scrollRef} className="bg-white rounded-xl shadow-sm overflow-x-auto">
-          <table className="border-collapse text-[14px]" style={{ minWidth: "2530px", width: "100%" }}>
+          <table className="border-collapse text-[14px]" style={{ minWidth: "2640px", width: "100%" }}>
             <colgroup>
               <col style={{ width: 40 }} /><col style={{ width: 60 }} />
+              <col style={{ width: 100 }} />
               <col style={{ width: 110 }} /><col style={{ width: 100 }} />
               <col style={{ width: 110 }} /><col style={{ width: 100 }} />
               <col style={{ width: 140 }} /><col style={{ width: 140 }} />
@@ -433,7 +453,7 @@ export default function ShipperStatus() {
                   <input key="chk" type="checkbox"
                     checked={selectedIds.length === rows.length && rows.length > 0}
                     onChange={(e) => setSelectedIds(e.target.checked ? rows.map(o => o.id) : [])} />,
-                  "순번","상차일","상차시간","하차일","하차시간","거래처","상차지","상차지주소",
+                  "순번","등록일","상차일","상차시간","하차일","하차시간","거래처","상차지","상차지주소",
                   "하차지","하차지주소","화물","차량","톤수","차량번호","이름","전화번호",
                   "청구운임","지급방식","상태","운송사","첨부"
                 ].map((h, idx) => (
@@ -459,6 +479,7 @@ export default function ShipperStatus() {
                         onChange={(e) => toggleSelect(o.id, e.target.checked)} />
                     </td>
                     <td className={tdCls}>{(page - 1) * pageSize + i + 1}</td>
+                    <td className={`${tdCls} text-gray-500`}>{fmtDate(o.createdAt)}</td>
                     <td className={`${tdCls} font-semibold`}>{o.상차일 || "-"}</td>
                     <td className={`${tdCls} font-semibold whitespace-nowrap`}>
                       {o.상차시간 ? (o.상차시간구분 && o.상차시간구분 !== "정각" ? `${fmt12(o.상차시간)} ${o.상차시간구분}` : fmt12(o.상차시간)) : "-"}
@@ -511,7 +532,7 @@ export default function ShipperStatus() {
                 );
               })}
               {pagedRows.length === 0 && (
-                <tr><td colSpan={22} className="py-16 text-center text-gray-400 text-sm">해당 조건의 데이터가 없습니다</td></tr>
+                <tr><td colSpan={23} className="py-16 text-center text-gray-400 text-sm">해당 조건의 데이터가 없습니다</td></tr>
               )}
             </tbody>
           </table>
@@ -556,7 +577,46 @@ export default function ShipperStatus() {
             <button onClick={() => setDetailOpen(false)} className="text-gray-500 hover:text-black text-xl">×</button>
           </div>
 
+          {/* 상단 요약 */}
+          <div className="px-5 py-4 bg-gray-50 border-b grid grid-cols-2 gap-x-6 gap-y-2 text-[14px]">
+            <div><span className="text-gray-400 text-[12px]">거래처</span><div className="font-bold text-gray-900">{selectedOrder?.거래처명 || "-"}</div></div>
+            <div><span className="text-gray-400 text-[12px]">등록일시</span><div className="font-semibold text-gray-700">{fmtDateTime(selectedOrder?.createdAt)}</div></div>
+            <div><span className="text-gray-400 text-[12px]">상차</span><div className="font-semibold text-gray-800">{selectedOrder?.상차일} {selectedOrder?.상차시간 ? fmt12(selectedOrder.상차시간) : ""}{selectedOrder?.상차시간구분 && selectedOrder.상차시간구분 !== "정각" ? ` ${selectedOrder.상차시간구분}` : ""}</div></div>
+            <div><span className="text-gray-400 text-[12px]">청구운임</span><div className="font-bold text-blue-600">{selectedOrder?.청구운임 ? Number(selectedOrder.청구운임).toLocaleString() + "원" : "-"}</div></div>
+          </div>
+
           <div className="p-8 space-y-8 text-[20px]">
+            {/* 배차 / 기사 정보 */}
+            {selectedOrder?.차량번호 ? (
+              <Section title="기사 / 배차 정보">
+                <div className="grid grid-cols-2 gap-x-6">
+                  <Row label="기사명" value={selectedOrder?.이름 || "-"} />
+                  <Row label="차량번호" value={selectedOrder?.차량번호 || "-"} />
+                  <Row label="전화번호" value={selectedOrder?.전화번호 || "-"} />
+                  <Row label="운송사" value={selectedOrder?.운송사명 || "-"} />
+                </div>
+                <div className="border-t mt-2 pt-3">
+                  <Row label="배차일시" value={fmtDateTime(selectedOrder?.dispatchedAt || selectedOrder?.배차완료일시)} />
+                </div>
+                {selectedOrder?.전화번호 && (
+                  <div className="flex gap-2 mt-3">
+                    <a href={`tel:${selectedOrder.전화번호}`}
+                      className="flex-1 py-2 bg-emerald-500 text-white rounded-lg text-[13px] font-bold text-center hover:bg-emerald-600">
+                      전화 연결
+                    </a>
+                    <a href={`sms:${selectedOrder.전화번호}`}
+                      className="flex-1 py-2 bg-sky-500 text-white rounded-lg text-[13px] font-bold text-center hover:bg-sky-600">
+                      문자 전송
+                    </a>
+                  </div>
+                )}
+              </Section>
+            ) : (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl px-5 py-4 text-[14px] text-amber-700 font-semibold">
+                아직 배차가 완료되지 않았습니다. 배차 완료 시 기사 정보가 표시됩니다.
+              </div>
+            )}
+
             <Section title="물품정보">
               <Row label="화물" value={selectedOrder?.화물내용 || "-"} />
               <Row label="톤수" value={selectedOrder?.차량톤수 || "-"} />
