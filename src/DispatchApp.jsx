@@ -31848,7 +31848,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
             <table className="w-full text-[12px]">
               <thead>
                 <tr className="bg-[#1B2B4B]">
-                  {["", "순번", "상차일", "거래처명", "상차지", "하차지", "차량번호", "기사명", "전화번호", "청구운임", "기사운임", "수수료", "지급방식", "배차방식", "지급상태", "지급일"].map(h => (
+                  {["", "순번", "상차일", "거래처명", "상차지", "하차지", "차량번호", "기사명", "전화번호", "청구운임", "기사운임", "부가세(10%)", `산재보험료(${insuranceRate}%)`, "수수료", "지급방식", "배차방식", "지급상태", "지급일"].map(h => (
                     <th key={h} className="px-3 py-3 text-white font-bold text-center whitespace-nowrap border-b border-white/10">{h}</th>
                   ))}
                 </tr>
@@ -31876,6 +31876,8 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
                       <td className="px-3 py-2.5 text-center border-b border-gray-100">{r.전화번호 || ""}</td>
                       <td className="px-3 py-2.5 text-right border-b border-gray-100">{won(r.청구운임)}</td>
                       <td className="px-3 py-2.5 text-right font-semibold text-gray-700 border-b border-gray-100">{won(r.기사운임)}</td>
+                      <td className="px-3 py-2.5 text-right text-orange-600 font-semibold border-b border-gray-100">{won(Math.round(toInt(r.기사운임) * vatRate))}</td>
+                      <td className="px-3 py-2.5 text-right text-purple-700 font-semibold border-b border-gray-100">{won(Math.round(toInt(r.기사운임) * insuranceRate / 100))}</td>
                       <td className={`px-3 py-2.5 text-right font-bold border-b border-gray-100 ${fee >= 0 ? "text-blue-700" : "text-red-500"}`}>{won(fee)}</td>
                       <td className="px-3 py-2.5 text-center border-b border-gray-100">{r.지급방식 || ""}</td>
                       <td className="px-3 py-2.5 text-center border-b border-gray-100">{r.배차방식 || ""}</td>
