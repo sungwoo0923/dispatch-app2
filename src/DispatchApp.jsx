@@ -1785,6 +1785,7 @@ return (
              setDispatchData={setDispatchData}
             clients={clients}
             setClients={(next) => next.forEach(upsertClient)}
+            upsertClient={upsertClient}
             showAlert={showAlert}
             patchDispatch={patchDispatch}
           />
@@ -28208,7 +28209,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
 
 
 // ===================== DispatchApp.jsx (PART 8/8) — START =====================
-function ClientSettlement({ dispatchData, setDispatchData, clients = [], setClients, showAlert = (m) => alert(m), patchDispatch }) {
+function ClientSettlement({ dispatchData, setDispatchData, clients = [], setClients, upsertClient, showAlert = (m) => alert(m), patchDispatch }) {
 
   // ★ 오더 상세 팝업
   const [orderPopup, setOrderPopup] = useState(null);
@@ -28567,9 +28568,15 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
     setTimeout(() => { win.print(); win.close(); }, 500);
   };
 
-  const saveEdit = () => {
-    setClients(prev => prev.map(c => c.거래처명 === client ? { ...c, ...editInfo } : c));
-    showAlert("거래처 정보 수정 완료!");
+  const saveEdit = async () => {
+    const targetName = editInfo.거래처명 || client;
+    if (!targetName) return showAlert("거래처명을 입력하세요.");
+    const original = (clients || []).find(c => c.거래처명 === client) || {};
+    const merged = { ...original, ...editInfo, 거래처명: targetName };
+    if (upsertClient) {
+      await upsertClient(merged).catch(e => showAlert("저장 실패: " + e.message));
+    }
+    showAlert("거래처 정보 저장 완료!");
     setShowEdit(false);
   };
 
@@ -28806,6 +28813,7 @@ const [emailModalOpen, setEmailModalOpen] = useState(false);
   const [emailTo, setEmailTo] = useState("");
   const [emailSending, setEmailSending] = useState(false);
 const [emailBody, setEmailBody] = useState("");
+const [editInfoClientDropOpen, setEditInfoClientDropOpen] = useState(false);
 const [generalEmailOpen, setGeneralEmailOpen] = useState(false);
 const [generalEmailTo, setGeneralEmailTo] = useState("");
 const [generalEmailSubject, setGeneralEmailSubject] = useState("");
@@ -30068,11 +30076,40 @@ const handleBatchSettle = async (targetStatus) => {
                         <input type="file" multiple accept="image/*,.pdf,.xlsx,.xls,.doc,.docx" className="hidden"
                           onChange={e => {
                             const files = Array.from(e.target.files);
-                            Promise.all(files.map(f => new Promise(res => {
-                              const r = new FileReader();
-                              r.onload = ev => res({ name: f.name, size: f.size, type: f.type, base64: ev.target.result.split(",")[1] });
-                              r.readAsDataURL(f);
-                            }))).then(arr => setGeneralEmailFiles(prev => [...prev, ...arr]));
+                            const compressFile = (f) => new Promise(res => {
+                              if (!f.type.startsWith("image/")) {
+                                const r = new FileReader();
+                                r.onload = ev => res({ name: f.name, size: f.size, type: f.type, base64: ev.target.result.split(",")[1] });
+                                r.readAsDataURL(f);
+                                return;
+                              }
+                              const img = new Image();
+                              const url = URL.createObjectURL(f);
+                              img.onload = () => {
+                                URL.revokeObjectURL(url);
+                                const MAX = 1200;
+                                let w = img.width, h = img.height;
+                                if (w > MAX || h > MAX) {
+                                  if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+                                  else { w = Math.round(w * MAX / h); h = MAX; }
+                                }
+                                const canvas = document.createElement("canvas");
+                                canvas.width = w; canvas.height = h;
+                                canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+                                const dataUrl = canvas.toDataURL("image/jpeg", 0.72);
+                                res({ name: f.name.replace(/\.[^.]+$/, ".jpg"), size: Math.round(dataUrl.length * 0.75), type: "image/jpeg", base64: dataUrl.split(",")[1] });
+                              };
+                              img.onerror = () => { URL.revokeObjectURL(url); const r = new FileReader(); r.onload = ev => res({ name: f.name, size: f.size, type: f.type, base64: ev.target.result.split(",")[1] }); r.readAsDataURL(f); };
+                              img.src = url;
+                            });
+                            Promise.all(files.map(compressFile)).then(arr => {
+                              setGeneralEmailFiles(prev => {
+                                const next = [...prev, ...arr];
+                                const totalKB = Math.round(next.reduce((s, x) => s + (x.base64?.length || 0), 0) * 0.75 / 1024);
+                                if (totalKB > 3800) alert(`총 첨부 용량이 약 ${(totalKB/1024).toFixed(1)}MB입니다. Vercel 제한(4MB) 초과 시 발송 실패할 수 있습니다. 파일을 줄여주세요.`);
+                                return next;
+                              });
+                            });
                           }} />
                       </label>
                       {generalEmailFiles.length > 0 && (
@@ -30080,9 +30117,13 @@ const handleBatchSettle = async (targetStatus) => {
                           {generalEmailFiles.map((f, i) => (
                             <div key={i} className="flex items-center justify-between text-[12px] bg-gray-50 rounded px-2 py-1">
                               <span className="truncate text-gray-700">{f.name}</span>
+                              <span className="text-gray-400 ml-2 shrink-0">{f.size > 1024*1024 ? `${(f.size/1024/1024).toFixed(1)}MB` : `${Math.round(f.size/1024)}KB`}</span>
                               <button onClick={() => setGeneralEmailFiles(prev => prev.filter((_, j) => j !== i))} className="text-red-400 hover:text-red-600 ml-2 shrink-0">×</button>
                             </div>
                           ))}
+                          <div className="text-[11px] text-gray-400 text-right pt-1">
+                            총 {(generalEmailFiles.reduce((s,f)=>s+(f.size||0),0)/1024/1024).toFixed(1)}MB (권장 4MB 이하)
+                          </div>
                         </div>
                       )}
                     </div>
@@ -30476,7 +30517,46 @@ const handleBatchSettle = async (targetStatus) => {
                   <button className="text-white/60 hover:text-white text-lg" onClick={()=>setShowEdit(false)}>✕</button>
                 </div>
                 <div className="p-6 space-y-3">
-                  {["거래처명","사업자번호","대표자","업태","종목","주소","담당자","연락처","이메일"].map(k=>(
+                  {/* 거래처명 - 자동완성 드롭다운 */}
+                  <div className="relative">
+                    <label className="text-[12px] font-semibold text-gray-500 mb-1 block">거래처명 (검색하면 정보 자동 입력)</label>
+                    <input className="border-2 border-gray-200 rounded-lg px-3 py-2 w-full text-[13px] focus:border-[#1B2B4B] outline-none"
+                      value={editInfo["거래처명"]||""}
+                      onChange={e => { setEditInfo(p=>({...p, 거래처명: e.target.value})); setEditInfoClientDropOpen(true); }}
+                      onFocus={() => setEditInfoClientDropOpen(true)}
+                      onBlur={() => setTimeout(() => setEditInfoClientDropOpen(false), 180)}
+                      onKeyDown={e => {
+                        if (e.key === "Escape") setEditInfoClientDropOpen(false);
+                        if (e.key === "Enter") {
+                          const q = (editInfo["거래처명"]||"").toLowerCase();
+                          const match = (clients||[]).filter(c => (c.거래처명||"").toLowerCase().includes(q))[0];
+                          if (match) {
+                            setEditInfo({ 거래처명: match.거래처명, 사업자번호: match.사업자번호||"", 대표자: match.대표자||match.사업자명||"", 업태: match.업태||"", 종목: match.종목||"", 주소: match.주소||"", 담당자: match.담당자||"", 연락처: match.연락처||"", 이메일: match.이메일||"" });
+                            setEditInfoClientDropOpen(false);
+                          }
+                        }
+                      }}
+                      placeholder="거래처명 입력 또는 검색"
+                    />
+                    {editInfoClientDropOpen && (clients||[]).filter(c => (c.거래처명||"").toLowerCase().includes((editInfo["거래처명"]||"").toLowerCase())).length > 0 && (
+                      <div className="absolute z-[300] left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-xl shadow-xl max-h-48 overflow-y-auto">
+                        {(clients||[]).filter(c => (c.거래처명||"").toLowerCase().includes((editInfo["거래처명"]||"").toLowerCase())).slice(0, 12).map((c, i) => (
+                          <div key={i}
+                            className="px-4 py-2.5 text-[13px] cursor-pointer hover:bg-blue-50 flex items-center justify-between border-b border-gray-50"
+                            onMouseDown={e => {
+                              e.preventDefault();
+                              setEditInfo({ 거래처명: c.거래처명||"", 사업자번호: c.사업자번호||"", 대표자: c.대표자||c.사업자명||"", 업태: c.업태||"", 종목: c.종목||"", 주소: c.주소||"", 담당자: c.담당자||"", 연락처: c.연락처||"", 이메일: c.이메일||"" });
+                              setEditInfoClientDropOpen(false);
+                            }}>
+                            <span className="font-semibold text-[#1B2B4B]">{c.거래처명}</span>
+                            {c.이메일 && <span className="text-gray-400 text-[11px]">{c.이메일}</span>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {/* 나머지 필드 */}
+                  {["사업자번호","대표자","업태","종목","주소","담당자","연락처","이메일"].map(k=>(
                     <div key={k}>
                       <label className="text-[12px] font-semibold text-gray-500 mb-1 block">{k}</label>
                       <input className="border-2 border-gray-200 rounded-lg px-3 py-2 w-full text-[13px] focus:border-[#1B2B4B] outline-none"
@@ -31731,22 +31811,31 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
         json.forEach((row, idx) => {
           const excelPlate = norm(row["차량번호"] || row["차량"] || row["번호판"] || "");
           const excelName = norm(row["차주이름"] || row["기사명"] || row["이름"] || row["차주"] || "");
-          const excelDate = toDateStr(row["오더일자"] || row["상차일자"] || row["상차일"] || row["오더일"] || "");
-          const excelPayDate = toDateStr(row["지급일"] || row["지급일자"] || "");
+          // 상차일을 최우선으로 사용
+          const excelDate = toDateStr(row["상차일"] || row["상차일자"] || row["오더일자"] || row["오더일"] || "");
+          // 정산처리일시 우선, 없으면 지급일
+          const excelPayRaw = row["정산처리일시"] || row["지급일"] || row["지급일자"] || "";
+          const excelPayDate = toDateStr(excelPayRaw);
+          // 정산처리일시 전체 문자열 (시간 포함)
+          const excelPayDateTimeFull = excelPayRaw ? String(excelPayRaw) : "";
           const excelAmt = toInt(row["운송료"] || row["기사운임"] || row["운임"] || row["금액"] || 0);
+          const excelPlateRaw = row["차량번호"] || row["차량"] || "";
+          const excelNameRaw = row["차주이름"] || row["기사명"] || row["이름"] || row["차주"] || "";
+          // 차량번호+날짜 매칭 우선, 이름+날짜 보조
           const found = base.find(r => {
             const plateMatch = excelPlate && norm(r.차량번호).includes(excelPlate);
             const nameMatch = excelName && norm(r.이름).includes(excelName);
             const dateMatch = excelDate && (r.상차일||"").startsWith(excelDate);
-            return (plateMatch || nameMatch) && dateMatch;
+            return dateMatch && (plateMatch || nameMatch);
           });
           if (found) {
             const amtMatch = excelAmt === 0 || Math.abs(excelAmt - toInt(found.기사운임)) < 1000;
-            matched.push({ excelRow: idx+2, dispatch: found, excelDate, excelPayDate, excelAmt, amtMatch,
-              차량번호: row["차량번호"] || row["차량"] || "", 기사명: row["차주이름"] || row["기사명"] || row["이름"] || "",
+            matched.push({ excelRow: idx+2, dispatch: found, excelDate, excelPayDate, excelPayDateTimeFull, excelAmt, amtMatch,
+              차량번호: excelPlateRaw, 기사명: excelNameRaw,
               운송료: excelAmt, 지급일: excelPayDate });
           } else {
-            unmatched.push({ excelRow: idx+2, 차량번호: row["차량번호"] || row["차량"] || "", 기사명: row["차주이름"] || row["기사명"] || row["이름"] || "", 오더일자: excelDate, 운송료: excelAmt, 사유: "배차 데이터 없음 (차량번호/이름+날짜 불일치)" });
+            const 사유 = !excelDate ? "상차일 없음" : !excelPlate && !excelName ? "차량번호/기사명 없음" : "배차 데이터 없음 (차량번호/이름+날짜 불일치)";
+            unmatched.push({ excelRow: idx+2, 차량번호: excelPlateRaw, 기사명: excelNameRaw, 상차일: excelDate, 운송료: excelAmt, 사유 });
           }
         });
         setPayExcelPreview({ matched, unmatched });
@@ -32064,7 +32153,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
                     <table className="w-full text-[12px] border-collapse">
                       <thead>
                         <tr className="bg-emerald-50">
-                          {["엑셀행", "차량번호", "기사명", "오더일자", "운송료(엑셀)", "기사운임(프로그램)", "금액일치", "지급일"].map(h => (
+                          {["엑셀행", "차량번호", "기사명", "상차일", "운송료(엑셀)", "기사운임(프로그램)", "금액일치", "지급일", "정산처리일시"].map(h => (
                             <th key={h} className="px-3 py-2 text-center font-bold text-emerald-800 border border-emerald-200">{h}</th>
                           ))}
                         </tr>
@@ -32084,6 +32173,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
                               </span>
                             </td>
                             <td className="px-3 py-2 text-center border border-gray-100">{m.지급일 || selectedPayDate}</td>
+                            <td className="px-3 py-2 text-center border border-gray-100 text-[11px] text-gray-600">{m.excelPayDateTimeFull || "-"}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -32098,7 +32188,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
                     <table className="w-full text-[12px] border-collapse">
                       <thead>
                         <tr className="bg-red-50">
-                          {["엑셀행", "차량번호", "기사명", "오더일자", "운송료", "미매칭 사유"].map(h => (
+                          {["엑셀행", "차량번호", "기사명", "상차일", "운송료", "미매칭 사유"].map(h => (
                             <th key={h} className="px-3 py-2 text-center font-bold text-red-700 border border-red-200">{h}</th>
                           ))}
                         </tr>
@@ -32109,7 +32199,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
                             <td className="px-3 py-2 text-center border border-gray-100 text-gray-400">{m.excelRow}</td>
                             <td className="px-3 py-2 text-center border border-gray-100 font-mono">{m.차량번호}</td>
                             <td className="px-3 py-2 text-center border border-gray-100">{m.기사명}</td>
-                            <td className="px-3 py-2 text-center border border-gray-100">{m.오더일자}</td>
+                            <td className="px-3 py-2 text-center border border-gray-100">{m.상차일}</td>
                             <td className="px-3 py-2 text-right border border-gray-100">{won(m.운송료)}</td>
                             <td className="px-3 py-2 text-center border border-gray-100 text-red-500 text-[11px]">{m.사유}</td>
                           </tr>
@@ -32148,6 +32238,42 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
   const [showAll, setShowAll] = React.useState(false);
   const [page, setPage] = React.useState(1);
   const perPage = 100;
+
+  // 전화번호 정규화: 010-XXXX-XXXX 형식으로 변환
+  const normalizePhone = (raw) => {
+    const d = String(raw || "").replace(/\D/g, "");
+    if (!d) return raw;
+    // 앞에 0 없는 경우 (예: 1044683752 → 01044683752)
+    const digits = d.startsWith("0") ? d : "0" + d;
+    if (digits.length === 11 && digits.startsWith("010")) {
+      return `${digits.slice(0,3)}-${digits.slice(3,7)}-${digits.slice(7)}`;
+    }
+    if (digits.length === 11) {
+      return `${digits.slice(0,3)}-${digits.slice(3,7)}-${digits.slice(7)}`;
+    }
+    if (digits.length === 10 && digits.startsWith("010")) {
+      // 010-XXX-XXXX (구형)
+      return `${digits.slice(0,3)}-${digits.slice(3,6)}-${digits.slice(6)}`;
+    }
+    if (digits.length === 10) {
+      return `${digits.slice(0,3)}-${digits.slice(3,6)}-${digits.slice(6)}`;
+    }
+    return raw; // 변환 불가 시 원본 반환
+  };
+
+  const bulkNormalizePhones = async () => {
+    const targets = drivers.filter(d => {
+      if (!d.전화번호) return false;
+      const normalized = normalizePhone(d.전화번호);
+      return normalized !== d.전화번호;
+    });
+    if (!targets.length) return showAlert("변환할 번호가 없습니다. 이미 모두 정규화되어 있습니다.");
+    if (!window.confirm(`${targets.length}건의 전화번호를 자동 정규화하시겠습니까?\n\n예시:\n${targets.slice(0,3).map(d=>`${d.이름}: ${d.전화번호} → ${normalizePhone(d.전화번호)}`).join("\n")}`)) return;
+    for (const d of targets) {
+      await upsertDriver({ ...d, 전화번호: normalizePhone(d.전화번호) });
+    }
+    showAlert(`${targets.length}건 정규화 완료`);
+  };
 
   const norm = (s="") => String(s).toLowerCase().replace(/\s+/g,"");
 
@@ -32291,6 +32417,13 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
           </label>
           <button onClick={downloadExcel} className="px-4 py-2 rounded-lg bg-teal-600 text-white text-[13px] font-bold hover:bg-teal-700 transition">
             엑셀 다운로드
+          </button>
+          <button
+            onClick={bulkNormalizePhones}
+            className="px-4 py-2 rounded-lg bg-amber-500 text-white text-[13px] font-bold hover:bg-amber-600 transition"
+            title="형식이 잘못된 전화번호를 010-XXXX-XXXX 형식으로 일괄 변환"
+          >
+            전화번호 일괄 정규화
           </button>
           <button onClick={removeSelected} className="px-4 py-2 rounded-lg bg-red-600 text-white text-[13px] font-bold hover:bg-red-700 transition">
             선택 삭제
