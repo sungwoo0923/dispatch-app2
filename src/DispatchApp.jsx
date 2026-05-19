@@ -9822,6 +9822,19 @@ function AttachmentViewer({ row, onClose, db }) {
     return () => unsub();
   }, [row]);
 
+  React.useEffect(() => {
+    if (!selected) return;
+    const handler = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "c") {
+        e.preventDefault();
+        handleCopy(selected, `ctrl_${selected.id}`);
+      }
+      if (e.key === "Escape") setSelected(null);
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [selected]);
+
   const handleDownload = (item) => {
     const a = document.createElement("a");
     a.href = item.base64 || item.url;
@@ -9858,12 +9871,38 @@ function AttachmentViewer({ row, onClose, db }) {
   };
 
   const handleCopy = async (item, id) => {
+    const src = item.base64 || item.url;
+    const tryImageCopy = async (blob) => {
+      const type = blob.type && blob.type !== "application/octet-stream" ? blob.type : "image/png";
+      if (navigator.clipboard?.write && typeof ClipboardItem !== "undefined") {
+        await navigator.clipboard.write([new ClipboardItem({ [type]: blob })]);
+      } else {
+        throw new Error("unsupported");
+      }
+    };
     try {
-      const res = await fetch(item.base64 || item.url);
-      const blob = await res.blob();
-      await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+      let blob;
+      if (src && src.startsWith("data:")) {
+        const parts = src.split(",");
+        const mime = (parts[0].match(/:(.*?);/) || [])[1] || "image/png";
+        const bytes = atob(parts[1]);
+        const arr = new Uint8Array(bytes.length);
+        for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+        blob = new Blob([arr], { type: mime });
+      } else {
+        const res = await fetch(src);
+        blob = await res.blob();
+      }
+      await tryImageCopy(blob);
       setCopyDone(id); setTimeout(() => setCopyDone(null), 2000);
-    } catch { alert("복사 실패"); }
+    } catch {
+      try {
+        await navigator.clipboard.writeText(item.url || src || "");
+        setCopyDone(id); setTimeout(() => setCopyDone(null), 2000);
+      } catch {
+        alert("복사 실패 - 이미지를 길게 눌러 복사하세요");
+      }
+    }
   };
 const handleDelete = async (item) => {
     if (!window.confirm("이 사진을 삭제하시겠습니까?")) return;
@@ -9872,6 +9911,31 @@ const handleDelete = async (item) => {
       await deleteDoc(doc(db, col, row._id, "attachments", item.id));
       await updateDoc(doc(db, col, row._id), { attachCount: increment(-1) });
     } catch(e) { alert("삭제 실패: " + e.message); }
+  };
+
+  const handleUpload = async (files) => {
+    if (!files?.length) return;
+    const col = row.__col || "orders";
+    for (const file of files) {
+      try {
+        const reader = new FileReader();
+        const base64 = await new Promise((res, rej) => {
+          reader.onload = e => res(e.target.result);
+          reader.onerror = rej;
+          reader.readAsDataURL(file);
+        });
+        await addDoc(collection(db, col, row._id, "attachments"), {
+          url: base64,
+          base64,
+          name: file.name,
+          size: file.size,
+          sizeKB: Math.round(file.size / 1024),
+          uploadedBy: "dispatch",
+          createdAt: serverTimestamp(),
+        });
+        await updateDoc(doc(db, col, row._id), { attachCount: increment(1) });
+      } catch(e) { alert("업로드 실패: " + e.message); }
+    }
   };
   return (
     <div className="fixed inset-0 bg-black/50 z-[99999] flex items-center justify-center p-4"
@@ -9897,6 +9961,11 @@ const handleDelete = async (item) => {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <label className="px-3 py-1.5 bg-emerald-600 text-white text-[12px] font-bold rounded-lg hover:opacity-90 transition cursor-pointer">
+              파일 추가
+              <input type="file" multiple accept="image/*,.pdf" className="hidden"
+                onChange={e => handleUpload(Array.from(e.target.files))} />
+            </label>
             {items.length > 1 && (
               <button
                 onClick={handleDownloadAll}
@@ -9981,10 +10050,19 @@ const handleDelete = async (item) => {
             className="max-w-[90vw] max-h-[85vh] object-contain rounded-lg" />
           <button className="absolute top-4 right-4 w-10 h-10 bg-white/10 hover:bg-white/20 rounded-full text-white text-xl transition"
             onClick={() => setSelected(null)}>×</button>
-          <button className="absolute bottom-6 right-6 px-5 py-2.5 bg-[#1B2B4B] hover:opacity-90 text-white rounded-xl text-[13px] font-bold transition"
-            onClick={e => { e.stopPropagation(); handleDownload(selected); }}>
-            저장하기
-          </button>
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 text-white/40 text-[12px]">
+            Ctrl+C 로 복사 &nbsp;|&nbsp; ESC 로 닫기
+          </div>
+          <div className="absolute bottom-6 flex gap-3">
+            <button className="px-5 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl text-[13px] font-bold transition"
+              onClick={e => { e.stopPropagation(); handleCopy(selected, `fs_${selected.id}`); }}>
+              {copyDone === `ctrl_${selected.id}` || copyDone === `fs_${selected.id}` ? "복사됨" : "복사"}
+            </button>
+            <button className="px-5 py-2.5 bg-[#1B2B4B] hover:opacity-90 text-white rounded-xl text-[13px] font-bold transition"
+              onClick={e => { e.stopPropagation(); handleDownload(selected); }}>
+              저장하기
+            </button>
+          </div>
         </div>
       )}
     </div>

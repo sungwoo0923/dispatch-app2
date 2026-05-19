@@ -384,10 +384,10 @@ export default function ShipperOrder({ editData, onClose }) {
         ...form,
 
         shipperUid: user.uid,
+        작성자: user.email,
         거래처명: company,
         shipperCompany: company,
 
-        // 🔥 핵심 수정
         배차상태: "배차중",
         업체전달상태: "미전달",
 

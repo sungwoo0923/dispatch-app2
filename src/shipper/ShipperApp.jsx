@@ -9,6 +9,7 @@ import { updateDoc } from "firebase/firestore";
 import ShipperHome from "./pages/ShipperHome";
 import ShipperOrder from "./pages/ShipperOrder";
 import ShipperStatus from "./pages/ShipperStatus";
+import ShipperSettlement from "./pages/ShipperSettlement";
 import TransportManagement from "./pages/TransportManagement";
 import ShipperSettings from "./pages/ShipperSettings";
 import ChangePassword from "./pages/ChangePassword";
@@ -127,7 +128,7 @@ const isSubMaster = userData?.permissions?.subMaster;
   <MenuBtn
     label="정산"
     active={location.pathname.includes("/shipper/settlement")}
-    onClick={() => alert("정산 준비중")}
+    onClick={() => navigate("/shipper/settlement")}
   />
 )}
 
@@ -159,7 +160,7 @@ const isSubMaster = userData?.permissions?.subMaster;
         onClick={() => window.open("/shipper-mobile-preview", "_blank", "width=390,height=844")}
         className="bg-gray-500 hover:bg-gray-600 px-3 py-1 rounded text-sm"
       >
-        📱 모바일 미리보기
+        모바일 미리보기
       </button>
 
       <button
@@ -185,6 +186,7 @@ location.pathname.startsWith("/shipper/transport")
           <Route path="order" element={<ShipperOrder />} />
           <Route path="status" element={<ShipperStatus />} />
           <Route path="transport" element={<ShipperStatus />} />
+          <Route path="settlement" element={<ShipperSettlement />} />
           <Route path="settings" element={<ShipperSettings />} />
           <Route path="change-password" element={<ChangePassword />} />
           <Route path="*" element={<Navigate to="/shipper" replace />} />
