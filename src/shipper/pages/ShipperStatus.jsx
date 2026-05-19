@@ -36,6 +36,15 @@ const get3MonthsAgo = () => {
   return kst.toISOString().slice(0, 10);
 };
 
+const fmt12 = (t) => {
+  if (!t) return "-";
+  const [h, m] = t.split(":").map(Number);
+  if (isNaN(h)) return t;
+  const isAM = h < 12;
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${isAM ? "오전" : "오후"} ${h12}시${m > 0 ? ` ${m}분` : ""}`;
+};
+
 export default function ShipperStatus() {
   const user = auth.currentUser;
   const [userData, setUserData] = useState(null);
@@ -271,8 +280,6 @@ export default function ShipperStatus() {
     return <div className="py-24 text-center text-gray-400">불러오는 중...</div>;
   }
 
-  const colGrid = "grid-cols-[40px_60px_110px_90px_110px_90px_140px_140px_200px_140px_200px_140px_120px_90px_120px_120px_120px_110px_110px_120px_90px_70px]";
-
   return (
     <div className="flex h-screen overflow-hidden">
 
@@ -406,116 +413,114 @@ export default function ShipperStatus() {
         </div>
 
         <div ref={scrollRef} className="bg-white rounded-xl shadow-sm overflow-x-auto">
-          <div className="min-w-[2200px]">
+          <table className="border-collapse text-[14px]" style={{ minWidth: "2530px", width: "100%" }}>
+            <colgroup>
+              <col style={{ width: 40 }} /><col style={{ width: 60 }} />
+              <col style={{ width: 110 }} /><col style={{ width: 100 }} />
+              <col style={{ width: 110 }} /><col style={{ width: 100 }} />
+              <col style={{ width: 140 }} /><col style={{ width: 140 }} />
+              <col style={{ width: 200 }} /><col style={{ width: 140 }} />
+              <col style={{ width: 200 }} /><col style={{ width: 140 }} />
+              <col style={{ width: 120 }} /><col style={{ width: 90 }} />
+              <col style={{ width: 120 }} /><col style={{ width: 120 }} />
+              <col style={{ width: 120 }} /><col style={{ width: 110 }} />
+              <col style={{ width: 110 }} /><col style={{ width: 120 }} />
+              <col style={{ width: 90 }} /><col style={{ width: 75 }} />
+            </colgroup>
+            <thead>
+              <tr className="bg-[#eef3fb] text-gray-800 font-extrabold text-[13px]">
+                {[
+                  <input key="chk" type="checkbox"
+                    checked={selectedIds.length === rows.length && rows.length > 0}
+                    onChange={(e) => setSelectedIds(e.target.checked ? rows.map(o => o.id) : [])} />,
+                  "순번","상차일","상차시간","하차일","하차시간","거래처","상차지","상차지주소",
+                  "하차지","하차지주소","화물","차량","톤수","차량번호","이름","전화번호",
+                  "청구운임","지급방식","상태","운송사","첨부"
+                ].map((h, idx) => (
+                  <th key={idx} className="px-3 py-3 text-center border-r border-gray-200 last:border-r-0 whitespace-nowrap">
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {pagedRows.map((o, i) => {
+                const st = STATUS[getStatus(o)];
+                const attachCnt = o.attachCount || 0;
+                const isCanceled = getStatus(o) === "배차취소";
+                const rowCls = isCanceled ? "bg-red-50 text-red-600" : "text-gray-800 hover:bg-blue-50 cursor-pointer";
+                const tdCls = "px-3 py-3 text-center border-r border-gray-100 last:border-r-0 align-middle";
+                return (
+                  <tr key={o.id} className={`border-t border-gray-100 ${rowCls}`}
+                    onDoubleClick={() => { setSelectedOrder(o); setDetailOpen(true); }}>
+                    <td className={tdCls}>
+                      <input type="checkbox" checked={selectedIds.includes(o.id)}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => toggleSelect(o.id, e.target.checked)} />
+                    </td>
+                    <td className={tdCls}>{(page - 1) * pageSize + i + 1}</td>
+                    <td className={`${tdCls} font-semibold`}>{o.상차일 || "-"}</td>
+                    <td className={`${tdCls} font-semibold whitespace-nowrap`}>
+                      {o.상차시간 ? (o.상차시간구분 && o.상차시간구분 !== "정각" ? `${fmt12(o.상차시간)} ${o.상차시간구분}` : fmt12(o.상차시간)) : "-"}
+                    </td>
+                    <td className={`${tdCls} font-semibold`}>{o.하차일 || "-"}</td>
+                    <td className={`${tdCls} font-semibold whitespace-nowrap`}>
+                      {o.하차시간 ? (o.하차시간구분 && o.하차시간구분 !== "정각" ? `${fmt12(o.하차시간)} ${o.하차시간구분}` : fmt12(o.하차시간)) : "-"}
+                    </td>
+                    <td className={`${tdCls} font-bold text-gray-900`}>{o.거래처명 || "-"}</td>
+                    <td className={tdCls}>{o.상차지명 || "-"}</td>
+                    <td className={`${tdCls} text-gray-600 cursor-pointer`}
+                      onClick={() => toggleExpand(o.id, "up")}>
+                      <span className={expandedRows[`${o.id}_up`] ? "" : "line-clamp-1 block text-left"}>{o.상차지주소 || "-"}</span>
+                    </td>
+                    <td className={tdCls}>{o.하차지명 || "-"}</td>
+                    <td className={`${tdCls} text-gray-600 cursor-pointer`}
+                      onClick={() => toggleExpand(o.id, "down")}>
+                      <span className={expandedRows[`${o.id}_down`] ? "" : "line-clamp-1 block text-left"}>{o.하차지주소 || "-"}</span>
+                    </td>
+                    <td className={`${tdCls} truncate max-w-[140px]`}>{o.화물내용 || "-"}</td>
+                    <td className={tdCls}>{o.차량종류 || "-"}</td>
+                    <td className={tdCls}>{o.차량톤수 || "-"}</td>
+                    <td className={`${tdCls} font-semibold`}>{o.차량번호 || "-"}</td>
+                    <td className={tdCls}>{o.이름 || "-"}</td>
+                    <td className={`${tdCls} whitespace-nowrap`}>{o.전화번호 || "-"}</td>
+                    <td className={`${tdCls} font-bold text-blue-600 whitespace-nowrap`}>
+                      {o.청구운임 ? Number(o.청구운임).toLocaleString() + "원" : "-"}
+                    </td>
+                    <td className={tdCls}>{o.지급방식 || "-"}</td>
+                    <td className={tdCls}>
+                      <span className={`px-2 py-1 rounded-full text-[12px] font-bold whitespace-nowrap ${st.cls}`}>{st.label}</span>
+                    </td>
+                    <td className={`${tdCls} font-semibold text-gray-900`}>{o.운송사명 || "-"}</td>
+                    <td className={tdCls}>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setAttachViewer(o); }}
+                        className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[12px] font-bold border transition mx-auto ${
+                          attachCnt > 0
+                            ? "bg-emerald-50 border-emerald-300 text-emerald-700 hover:bg-emerald-100"
+                            : "border-gray-200 text-gray-400 hover:bg-gray-50"
+                        }`}
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+                        </svg>
+                        {attachCnt > 0 ? attachCnt : "-"}
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+              {pagedRows.length === 0 && (
+                <tr><td colSpan={22} className="py-16 text-center text-gray-400 text-sm">해당 조건의 데이터가 없습니다</td></tr>
+              )}
+            </tbody>
+          </table>
 
-            {/* 헤더 */}
-            <div className={`grid ${colGrid} bg-[#eef3fb] text-[15px] font-extrabold text-gray-800 px-4 py-4 text-center`}>
-              <div>
-                <input
-                  type="checkbox"
-                  checked={selectedIds.length === rows.length && rows.length > 0}
-                  onChange={(e) => setSelectedIds(e.target.checked ? rows.map(o => o.id) : [])}
-                />
-              </div>
-              <div>순번</div>
-              <div>상차일</div>
-              <div>상차시간</div>
-              <div>하차일</div>
-              <div>하차시간</div>
-              <div>거래처</div>
-              <div>상차지</div>
-              <div>상차지주소</div>
-              <div>하차지</div>
-              <div>하차지주소</div>
-              <div>화물</div>
-              <div>차량</div>
-              <div>톤수</div>
-              <div>차량번호</div>
-              <div>이름</div>
-              <div>전화번호</div>
-              <div>청구운임</div>
-              <div>지급방식</div>
-              <div>상태</div>
-              <div>운송사</div>
-              <div>첨부</div>
-            </div>
-
-            {/* 데이터 행 */}
-            {pagedRows.map((o, i) => {
-              const st = STATUS[getStatus(o)];
-              const attachCnt = o.attachCount || 0;
-              return (
-                <div
-                  key={o.id}
-                  onDoubleClick={() => { setSelectedOrder(o); setDetailOpen(true); }}
-                  className={`cursor-pointer grid ${colGrid} px-4 py-4 border-t text-[17px] text-center items-center [&>div]:flex [&>div]:justify-center [&>div]:items-center ${
-                    getStatus(o) === "배차취소" ? "bg-red-50 text-red-600" : "text-gray-800 hover:bg-blue-50"
-                  }`}
-                >
-                  <div>
-                    <input
-                      type="checkbox"
-                      checked={selectedIds.includes(o.id)}
-                      onClick={(e) => e.stopPropagation()}
-                      onChange={(e) => toggleSelect(o.id, e.target.checked)}
-                    />
-                  </div>
-                  <div>{i + 1}</div>
-                  <div>{o.상차일 || "-"}</div>
-                  <div className="font-semibold">{o.상차시간 || "-"}</div>
-                  <div>{o.하차일 || "-"}</div>
-                  <div className="font-semibold">{o.하차시간 || "-"}</div>
-                  <div className="font-semibold text-gray-900 text-[16px]">{o.거래처명}</div>
-                  <div>{o.상차지명}</div>
-                  <div
-                    onClick={() => toggleExpand(o.id, "up")}
-                    className={`cursor-pointer px-2 text-center text-gray-700 ${expandedRows[`${o.id}_up`] ? "text-[17px]" : "text-[15px] line-clamp-1"}`}
-                  >{o.상차지주소}</div>
-                  <div>{o.하차지명}</div>
-                  <div
-                    onClick={() => toggleExpand(o.id, "down")}
-                    className={`cursor-pointer px-2 text-center text-gray-700 ${expandedRows[`${o.id}_down`] ? "text-[17px]" : "text-[15px] line-clamp-1"}`}
-                  >{o.하차지주소}</div>
-                  <div className="truncate">{o.화물내용 || "-"}</div>
-                  <div>{o.차량종류}</div>
-                  <div>{o.차량톤수}</div>
-                  <div>{o.차량번호 || "-"}</div>
-                  <div>{o.이름 || "-"}</div>
-                  <div className="whitespace-nowrap">{o.전화번호 || "-"}</div>
-                  <div className="font-bold text-blue-600">
-                    {o.청구운임 ? Number(o.청구운임).toLocaleString() + "원" : "-"}
-                  </div>
-                  <div>{o.지급방식}</div>
-                  <div>
-                    <span className={`px-3 py-1 rounded-full text-[13px] font-bold ${st.cls}`}>{st.label}</span>
-                  </div>
-                  <div className="font-semibold text-gray-900">{o.운송사명 || "-"}</div>
-                  {/* 첨부 컬럼 */}
-                  <div>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setAttachViewer(o); }}
-                      className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[12px] font-bold border transition ${
-                        attachCnt > 0
-                          ? "bg-emerald-50 border-emerald-300 text-emerald-700 hover:bg-emerald-100"
-                          : "border-gray-200 text-gray-400 hover:bg-gray-50"
-                      }`}
-                    >
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
-                      </svg>
-                      {attachCnt > 0 ? attachCnt : "-"}
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-
-            {/* 페이지네이션 */}
-            <div className="flex justify-center items-center gap-4 py-6 border-t bg-white">
-              <button disabled={page === 1} onClick={() => setPage(p => p - 1)} className="px-4 py-2 bg-gray-200 rounded disabled:opacity-30">이전</button>
-              <div className="text-sm font-semibold">{page} / {totalPages || 1}</div>
-              <button disabled={page === totalPages || totalPages === 0} onClick={() => setPage(p => p + 1)} className="px-4 py-2 bg-gray-200 rounded disabled:opacity-30">다음</button>
-            </div>
+          {/* 페이지네이션 */}
+          <div className="flex justify-center items-center gap-4 py-6 border-t bg-white">
+            <button disabled={page === 1} onClick={() => setPage(p => p - 1)} className="px-4 py-2 bg-gray-200 rounded disabled:opacity-30">이전</button>
+            <div className="text-sm font-semibold">{page} / {totalPages || 1}</div>
+            <button disabled={page === totalPages || totalPages === 0} onClick={() => setPage(p => p + 1)} className="px-4 py-2 bg-gray-200 rounded disabled:opacity-30">다음</button>
           </div>
         </div>
       </div>
