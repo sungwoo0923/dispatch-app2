@@ -7,22 +7,34 @@ import {
   doc,
   getDoc,
   updateDoc,
+  getDocs,
+  query,
+  where,
+  orderBy,
+  limit,
 } from "firebase/firestore";
-import { getDocs, query, where } from "firebase/firestore";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
-/* ================= 공통 유틸 ================= */
+/* 시간 옵션 (오전/오후 형식) */
 const timeOptions = Array.from({ length: 48 }, (_, i) => {
   const hour24 = Math.floor(i / 2);
   const minute = i % 2 === 0 ? "00" : "30";
   const isAM = hour24 < 12;
   const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
-
   return {
     value: `${String(hour24).padStart(2, "0")}:${minute}`,
     label: `${isAM ? "오전" : "오후"} ${hour12}시${minute === "30" ? " 30분" : ""}`,
   };
 });
+
+/* 24h → 오전/오후 변환 */
+const fmt12 = (t) => {
+  if (!t) return "-";
+  const [h, m] = t.split(":").map(Number);
+  const isAM = h < 12;
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${isAM ? "오전" : "오후"} ${h12}시${m > 0 ? ` ${m}분` : ""}`;
+};
 
 const getDate = (offset = 0) => {
   const d = new Date();
@@ -30,372 +42,196 @@ const getDate = (offset = 0) => {
   return d.toISOString().slice(0, 10);
 };
 
+const SEARCH_TYPES = ["통합", "상차지명", "하차지명", "상차지주소", "하차지주소", "운송사명"];
+
+const inputCls = "w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none";
+const labelCls = "block text-xs font-bold text-gray-600 mb-1";
+
 export default function ShipperOrder({ editData, onClose }) {
   const user = auth.currentUser;
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const editId = params.get("edit");
-  const [results, setResults] = useState([]);
+
   const [company, setCompany] = useState("");
   const [loading, setLoading] = useState(!!editId);
   const [suggestions, setSuggestions] = useState([]);
   const [activeIndex, setActiveIndex] = useState(-1);
   const [showDropdown, setShowDropdown] = useState(null);
-  const listRefTop = useRef(null);
-  const listRefBottom = useRef(null);
   const [fixedTransport, setFixedTransport] = useState(null);
   const [transportList, setTransportList] = useState([]);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [coords, setCoords] = useState(null);
   const [routeInfo, setRouteInfo] = useState(null);
+  const [companyEditable, setCompanyEditable] = useState(false);
+  const [companyEdit, setCompanyEdit] = useState("");
+
+  // 오더 불러오기
+  const [searchKeyword, setSearchKeyword] = useState("");
+  const [searchType, setSearchType] = useState("통합");
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+
+  const listRefTop = useRef(null);
+  const listRefBottom = useRef(null);
+
   useEffect(() => {
   if (!previewOpen || !coords?.start || !coords?.end) return;
-
   const initMap = () => {
-    if (!window.Tmapv2) {
-      setTimeout(initMap, 200);
-      return;
-    }
-
-    const map = new window.Tmapv2.Map("map", {
+    if (!window.Tmapv2) { setTimeout(initMap, 200); return; }
+    const map = new window.Tmapv2.Map("shipper-map", {
       center: new window.Tmapv2.LatLng(coords.start.lat, coords.start.lon),
-      width: "100%",
-      height: "100%",
-      zoom: 10,
+      width: "100%", height: "100%", zoom: 10,
     });
-
-    // 🔥 경로 요청
     fetch("https://apis.openapi.sk.com/tmap/routes?version=1&format=json", {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/x-www-form-urlencoded",
-    appKey: "rmzwkLwH9N4i9ayxDj9GR6l8hyFDaEk52ZQs4yer",
-  },
-  body: new URLSearchParams({
-    startX: String(coords.start.lon),
-    startY: String(coords.start.lat),
-    endX: String(coords.end.lon),
-    endY: String(coords.end.lat),
-
-    startName: form.상차지명 || "출발지",
-    endName: form.하차지명 || "도착지",
-
-    reqCoordType: "WGS84GEO",
-    resCoordType: "WGS84GEO",
-
-    searchOption: "0",
-  }),
-})
-      .then(res => res.json())
-      .then(data => {
-
-        if (!data.features) {
-          console.error("❌ 경로 데이터 없음", data);
-          return;
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded", appKey: "rmzwkLwH9N4i9ayxDj9GR6l8hyFDaEk52ZQs4yer" },
+      body: new URLSearchParams({
+        startX: String(coords.start.lon), startY: String(coords.start.lat),
+        endX: String(coords.end.lon), endY: String(coords.end.lat),
+        startName: form.상차지명 || "출발지", endName: form.하차지명 || "도착지",
+        reqCoordType: "WGS84GEO", resCoordType: "WGS84GEO", searchOption: "0",
+      }),
+    }).then(r => r.json()).then(data => {
+      if (!data.features) return;
+      let totalDistance = 0, totalTime = 0;
+      const lineArr = [];
+      data.features.forEach(item => {
+        if (item.geometry?.type === "LineString") {
+          item.geometry.coordinates.forEach(c => lineArr.push(new window.Tmapv2.LatLng(c[1], c[0])));
         }
-
-        const resultData = data.features;
-
-        let totalDistance = 0;
-        let totalTime = 0;
-
-        const lineArr = [];
-
-        resultData.forEach(item => {
-          const geometry = item.geometry;
-
-          if (geometry.type === "LineString") {
-            geometry.coordinates.forEach(coord => {
-              lineArr.push(
-                new window.Tmapv2.LatLng(coord[1], coord[0])
-              );
-            });
-          }
-
-          if (item.properties) {
-            totalDistance = item.properties.totalDistance;
-            totalTime = item.properties.totalTime;
-          }
-        });
-
-        // 🔥 경로 그리기
-        new window.Tmapv2.Polyline({
-          path: lineArr,
-          strokeColor: "#2563eb",
-          strokeWeight: 5,
-          map,
-        });
-
-        // 🔥 ⭐ 핵심 (UI 연결)
-        setRouteInfo({
-          distance: (totalDistance / 1000).toFixed(1),
-          time: Math.round(totalTime / 60),
-        });
-
+        if (item.properties) { totalDistance = item.properties.totalDistance; totalTime = item.properties.totalTime; }
       });
+      new window.Tmapv2.Polyline({ path: lineArr, strokeColor: "#2563eb", strokeWeight: 5, map });
+      setRouteInfo({ distance: (totalDistance / 1000).toFixed(1), time: Math.round(totalTime / 60) });
+    });
   };
-
   initMap();
+  }, [previewOpen, coords]);
 
-}, [previewOpen, coords]);
   useEffect(() => {
     const saved = localStorage.getItem("fixedTransport");
-
     if (saved) {
       const parsed = JSON.parse(saved);
-
       setFixedTransport(parsed);
-
-      // 🔥 폼에도 반영
-      setForm(p => ({
-        ...p,
-        운송사명: parsed.name,
-        운송사코드: parsed.code,
-      }));
+      setForm(p => ({ ...p, 운송사명: parsed.name, 운송사코드: parsed.code }));
     }
   }, []);
+
   useEffect(() => {
     const saved = localStorage.getItem("transportList");
+    if (saved) setTransportList(JSON.parse(saved));
+  }, []);
 
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      console.log("운송사 리스트:", parsed); // 🔥 확인용
-      setTransportList(parsed);
-    }
-  }, []);
-  useEffect(() => {
-    const saved = localStorage.getItem("transportList");
-    if (saved) {
-      setTransportList(JSON.parse(saved));
-    }
-  }, []);
-  // ================= 회사명 로드 =================
   useEffect(() => {
     if (!user) return;
-
-    const loadCompany = async () => {
-      const snap = await getDoc(doc(db, "users", user.uid));
+    getDoc(doc(db, "users", user.uid)).then((snap) => {
       if (snap.exists()) {
         const d = snap.data();
-        setCompany(
-          d.companyName || d.회사명 || d.company || d.거래처명 || ""
-        );
-        return;
+        const name = d.companyName || d.회사명 || d.company || d.거래처명 || "";
+        setCompany(name);
+        setCompanyEdit(name);
+      } else {
+        setCompany(`(주)${user.email?.split("@")[0] || "화주사"}`);
       }
-      setCompany(`(주)${user.email?.split("@")[0] || "화주사"}`);
-    };
-
-    loadCompany();
+    });
   }, [user]);
 
-  // ================= form (🔥 기존 항목 전부 유지) =================
-  const [searchType, setSearchType] = useState("전체");
-  const [keyword, setKeyword] = useState("");
   const [form, setForm] = useState({
     status: "요청",
     청구운임: "",
-    상차지명: "",
-    상차지주소: "",
-    상차담당자명: "",
-    상차담당자번호: "",
-    상차메모: "",
-    하차지명: "",
-    하차지주소: "",
-    하차담당자명: "",
-    하차담당자번호: "",
-    하차메모: "",
-    상차일: getDate(0),
-    상차시간: "08:00",
-    하차일: getDate(0),
-    하차시간: "12:00",
-    차량종류: "",
-    차량톤수: "",
-    상차방법: "",
-    하차방법: "",
-    지급방식: "",
-    화물내용: "",
-    운송사명: "",
-    운송사코드: "",
+    상차지명: "", 상차지주소: "", 상차담당자명: "", 상차담당자번호: "", 상차메모: "",
+    하차지명: "", 하차지주소: "", 하차담당자명: "", 하차담당자번호: "", 하차메모: "",
+    상차일: getDate(0), 상차시간: "08:00", 상차시간구분: "이후",
+    하차일: getDate(0), 하차시간: "12:00", 하차시간구분: "이후",
+    차량종류: "", 차량톤수: "", 상차방법: "", 하차방법: "", 지급방식: "", 화물내용: "",
+    운송사명: "", 운송사코드: "",
   });
 
-  const onChange = (k, v) =>
-    setForm((p) => ({ ...p, [k]: v }));
+  const onChange = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
-  // ================= 수정모드 로드 =================
   useEffect(() => {
     if (!editId) return;
-
-    const load = async () => {
-      const snap = await getDoc(doc(db, "orders", editId));
-      if (snap.exists()) {
-        setForm((p) => ({ ...p, ...snap.data() }));
-      }
+    getDoc(doc(db, "orders", editId)).then(snap => {
+      if (snap.exists()) setForm(p => ({ ...p, ...snap.data() }));
       setLoading(false);
-    };
-
-    load();
+    });
   }, [editId]);
+
   useEffect(() => {
     if (!editData) return;
-
-    setForm(prev => ({
-      ...prev,
-      ...editData
-    }));
-
+    setForm(p => ({ ...p, ...editData }));
     setLoading(false);
   }, [editData]);
-  // ================= 저장 =================
-  // ✅ resetForm 먼저 선언
+
   const resetForm = () => {
     setForm({
-      status: "요청",
-      청구운임: "",
-
-      상차지명: "",
-      상차지주소: "",
-      상차담당자명: "",
-      상차담당자번호: "",
-      상차메모: "",
-
-      하차지명: "",
-      하차지주소: "",
-      하차담당자명: "",
-      하차담당자번호: "",
-      하차메모: "",
-
-      상차일: getDate(0),
-      상차시간: "08:00",
-      하차일: getDate(0),
-      하차시간: "12:00",
-
-      차량종류: "",
-      차량톤수: "",
-
-      상차방법: "",
-      하차방법: "",
-      지급방식: "",
-
-      화물내용: "",
-      운송사명: "",
-      운송사코드: "",
+      status: "요청", 청구운임: "",
+      상차지명: "", 상차지주소: "", 상차담당자명: "", 상차담당자번호: "", 상차메모: "",
+      하차지명: "", 하차지주소: "", 하차담당자명: "", 하차담당자번호: "", 하차메모: "",
+      상차일: getDate(0), 상차시간: "08:00", 상차시간구분: "이후",
+      하차일: getDate(0), 하차시간: "12:00", 하차시간구분: "이후",
+      차량종류: "", 차량톤수: "", 상차방법: "", 하차방법: "", 지급방식: "", 화물내용: "",
+      운송사명: "", 운송사코드: "",
     });
-
-    setSuggestions([]);
-    setShowDropdown(null);
-    setActiveIndex(-1);
+    setSuggestions([]); setShowDropdown(null); setActiveIndex(-1);
   };
+
   const upsertPlace = async (data, type) => {
+    const currentCompany = companyEditable ? companyEdit : company;
     const q = query(
       collection(db, "places"),
       where("userId", "==", user.uid),
       where("name", "==", data.name),
       where("type", "==", type)
     );
-
     const snap = await getDocs(q);
-
     if (!snap.empty) {
-      const docId = snap.docs[0].id;
-
-      await updateDoc(doc(db, "places", docId), {
-        address: data.address,
-        담당자명: data.담당자명,
-        담당자번호: data.담당자번호,
-        메모: data.메모,
-        updatedAt: serverTimestamp(),
+      await updateDoc(doc(db, "places", snap.docs[0].id), {
+        address: data.address, 담당자명: data.담당자명, 담당자번호: data.담당자번호,
+        메모: data.메모, company: currentCompany, updatedAt: serverTimestamp(),
       });
-
     } else {
       await addDoc(collection(db, "places"), {
-        ...data,
-        type,
-        userId: user.uid,
-        createdAt: serverTimestamp(),
+        ...data, type, userId: user.uid, company: currentCompany, createdAt: serverTimestamp(),
       });
     }
   };
+
   const getCoords = async (addr) => {
-  if (!addr) return null;
+    if (!addr) return null;
+    try {
+      const res = await fetch(
+        `https://apis.openapi.sk.com/tmap/geo/fullAddrGeo?version=1&format=json&fullAddr=${encodeURIComponent(addr)}`,
+        { headers: { Accept: "application/json", appKey: "rmzwkLwH9N4i9ayxDj9GR6l8hyFDaEk52ZQs4yer" } }
+      );
+      const data = await res.json();
+      const coord = data?.coordinateInfo?.coordinate?.[0];
+      if (!coord) return null;
+      return { lat: Number(coord.lat), lon: Number(coord.lon) };
+    } catch { return null; }
+  };
 
-  try {
-    const url =
-      "https://apis.openapi.sk.com/tmap/geo/fullAddrGeo" +
-      "?version=1" +
-      "&format=json" +
-      "&fullAddr=" +
-      encodeURIComponent(addr);
-
-    const res = await fetch(url, {
-  method: "GET",
-  headers: {
-    Accept: "application/json",
-    appKey: "rmzwkLwH9N4i9ayxDj9GR6l8hyFDaEk52ZQs4yer",
-  },
-});
-
-    const data = await res.json();
-
-    const coord =
-      data?.coordinateInfo?.coordinate?.[0];
-
-    if (!coord) return null;
-
-    return {
-      lat: Number(coord.lat),
-      lon: Number(coord.lon),
-    };
-  } catch (e) {
-    console.error("좌표 변환 실패:", e);
-    return null;
-  }
-};
   const submit = async () => {
-    if (!form.상차지명 || !form.하차지명) {
-      return alert("상차지 / 하차지를 입력하세요.");
-    }
-    // 🔥 상차지 항상 실행
-    await upsertPlace({
-      name: form.상차지명,
-      address: form.상차지주소,
-      담당자명: form.상차담당자명,
-      담당자번호: form.상차담당자번호,
-      메모: form.상차메모,
-    }, "상차");
+    if (!form.상차지명 || !form.하차지명) return alert("상차지 / 하차지를 입력하세요.");
+    const effectiveCompany = companyEditable ? companyEdit : company;
+    await upsertPlace({ name: form.상차지명, address: form.상차지주소, 담당자명: form.상차담당자명, 담당자번호: form.상차담당자번호, 메모: form.상차메모 }, "상차");
+    await upsertPlace({ name: form.하차지명, address: form.하차지주소, 담당자명: form.하차담당자명, 담당자번호: form.하차담당자번호, 메모: form.하차메모 }, "하차");
 
-    // 🔥 하차지 항상 실행
-    await upsertPlace({
-      name: form.하차지명,
-      address: form.하차지주소,
-      담당자명: form.하차담당자명,
-      담당자번호: form.하차담당자번호,
-      메모: form.하차메모,
-    }, "하차");
     if (editId || editData?.id) {
-      const id = editId || editData.id;
-
-      await updateDoc(doc(db, "orders", id), {
-        ...form,
-        updatedAt: serverTimestamp(),
-      });
+      await updateDoc(doc(db, "orders", editId || editData.id), { ...form, updatedAt: serverTimestamp() });
     } else {
-
       await addDoc(collection(db, "orders"), {
         ...form,
-
         shipperUid: user.uid,
         작성자: user.email,
-        거래처명: company,
-        shipperCompany: company,
-
+        거래처명: effectiveCompany,
+        shipperCompany: effectiveCompany,
         배차상태: "배차중",
         업체전달상태: "미전달",
-
         createdAt: serverTimestamp(),
-
         role: "shipper",
         source: "shipper",
-
         company: form.운송사명 || "",
         companyCode: form.운송사코드 || "",
       });
@@ -403,811 +239,538 @@ export default function ShipperOrder({ editData, onClose }) {
 
     if (editId || editData) {
       alert("수정 완료");
-
-      if (onClose) {
-        onClose();   // 팝업 닫기
-      } else {
-        navigate("/shipper/status"); // 페이지모드
-      }
-
+      onClose ? onClose() : navigate("/shipper/status");
     } else {
       navigate("/shipper/status");
     }
   };
+
+  /* 오더 불러오기 검색 */
   const handleSearch = async () => {
     if (!user) return;
-
-    const today = getDate(0);
-
-    const q = query(
-      collection(db, "orders"), // ⚠️ 컬렉션명 확인
-      where("상차일", "==", today),
-      where("shipperUid", "==", user.uid)
-    );
-
-    const snap = await getDocs(q);
-
-    let list = snap.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
-
-    if (keyword) {
-      list = list.filter(item =>
-        (item.상차지명 || "").includes(keyword) ||
-        (item.하차지명 || "").includes(keyword) ||
-        (item.거래처명 || "").includes(keyword)
+    setSearchLoading(true);
+    try {
+      let q;
+      const isMaster = false; // 모든 화주는 자신 오더 검색
+      q = query(
+        collection(db, "orders"),
+        where("shipperUid", "==", user.uid),
+        orderBy("createdAt", "desc"),
+        limit(200)
       );
-    }
+      const snap = await getDocs(q);
+      let list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
-    setResults(list);
+      if (searchKeyword.trim()) {
+        const kw = searchKeyword.trim().toLowerCase();
+        list = list.filter(item => {
+          switch (searchType) {
+            case "상차지명": return (item.상차지명 || "").toLowerCase().includes(kw);
+            case "하차지명": return (item.하차지명 || "").toLowerCase().includes(kw);
+            case "상차지주소": return (item.상차지주소 || "").toLowerCase().includes(kw);
+            case "하차지주소": return (item.하차지주소 || "").toLowerCase().includes(kw);
+            case "운송사명": return (item.운송사명 || "").toLowerCase().includes(kw);
+            default:
+              return (
+                (item.상차지명 || "").toLowerCase().includes(kw) ||
+                (item.하차지명 || "").toLowerCase().includes(kw) ||
+                (item.거래처명 || "").toLowerCase().includes(kw) ||
+                (item.화물내용 || "").toLowerCase().includes(kw) ||
+                (item.운송사명 || "").toLowerCase().includes(kw)
+              );
+          }
+        });
+      }
+      setSearchResults(list);
+    } catch (e) {
+      console.error(e);
+      setSearchResults([]);
+    }
+    setSearchLoading(false);
   };
+
   const applyOrder = (item) => {
-    setForm({
-      배차상태: "배차중",
-
+    setForm(p => ({
+      ...p,
       청구운임: item.청구운임 || "",
-
-      상차지명: item.상차지명 || "",
-      상차지주소: item.상차지주소 || "",
-
-      하차지명: item.하차지명 || "",
-      하차지주소: item.하차지주소 || "",
-
-      상차일: getDate(0),
-      상차시간: item.상차시간 || "08:00",
-
-      하차일: getDate(0),
-      하차시간: item.하차시간 || "12:00",
-
-      차량종류: item.차량종류 || "",
-      차량톤수: item.차량톤수 || "",
-
-      상차방법: item.상차방법 || "",
-      하차방법: item.하차방법 || "",
-
-      지급방식: item.지급방식 || "",
-
-      화물내용: item.화물내용 || "",
-    });
+      상차지명: item.상차지명 || "", 상차지주소: item.상차지주소 || "",
+      상차담당자명: item.상차담당자명 || "", 상차담당자번호: item.상차담당자번호 || "",
+      하차지명: item.하차지명 || "", 하차지주소: item.하차지주소 || "",
+      하차담당자명: item.하차담당자명 || "", 하차담당자번호: item.하차담당자번호 || "",
+      상차시간: item.상차시간 || "08:00", 상차시간구분: item.상차시간구분 || "이후",
+      하차시간: item.하차시간 || "12:00", 하차시간구분: item.하차시간구분 || "이후",
+      차량종류: item.차량종류 || "", 차량톤수: item.차량톤수 || "",
+      상차방법: item.상차방법 || "", 하차방법: item.하차방법 || "",
+      지급방식: item.지급방식 || "", 화물내용: item.화물내용 || "",
+      운송사명: item.운송사명 || "", 운송사코드: item.운송사코드 || "",
+    }));
   };
-  // ================= 운송사 자동완성 =================
+
+  /* 주소록 자동완성 */
   const searchTransport = (value) => {
-    if (!value) {
-      setSuggestions([]);
-      return;
-    }
-
-    const list = transportList.filter(item =>
-      (item.name || "").toLowerCase().includes(value.toLowerCase())
-    );
-
+    if (!value) { setSuggestions([]); return; }
+    const list = transportList.filter(item => (item.name || "").toLowerCase().includes(value.toLowerCase()));
     setSuggestions(list.slice(0, 10));
     setShowDropdown("운송사명");
     setActiveIndex(-1);
   };
+
   const searchPlaces = async (value, field) => {
-    if (!value) {
-      setSuggestions([]);
-      return;
-    }
-
-    const q = query(
-      collection(db, "places"),
-      where("userId", "==", user.uid)
-    );
-
+    if (!value) { setSuggestions([]); return; }
+    const q = query(collection(db, "places"), where("userId", "==", user.uid));
     const snap = await getDocs(q);
-
-    let list = snap.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
-
-    list = list.filter(item =>
-      (item.name || "").includes(value)
-    );
-
-    // 🔥 업체명 정규화 (반찬단지 = (주)반찬단지 동일 처리)
-    const normalizeName = (name = "") =>
-      name
-        .toString()
-        .replace(/\(주\)|주식회사/g, "")
-        .replace(/\s/g, "")
-        .toLowerCase();
-
-    // 🔥 중복 제거 + 최신 데이터만 유지
+    const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const filtered = list.filter(item => (item.name || "").toLowerCase().includes(value.toLowerCase()));
     const map = new Map();
-
-    list.forEach(item => {
-      const candidates = [
-        {
-          name: item.name,
-          address: item.address,
-          담당자명: item.담당자명,
-          담당자번호: item.담당자번호,
-          메모: item.메모,
-          type: item.type,
-          createdAt: item.createdAt
-        }
-      ];
-      candidates.forEach(p => {
-        if (!p.name) return;
-
-        const key = normalizeName(p.name);
-
-        if (!map.has(key)) {
-          map.set(key, p);
-        } else {
-          const existing = map.get(key);
-
-          if (
-            p.createdAt?.seconds > existing.createdAt?.seconds
-          ) {
-            map.set(key, p);
-          }
-        }
-      });
+    filtered.forEach(item => {
+      const key = (item.name || "").toLowerCase().replace(/\s/g, "");
+      if (!map.has(key) || (item.createdAt?.seconds || 0) > (map.get(key).createdAt?.seconds || 0)) {
+        map.set(key, item);
+      }
     });
-
-    // 🔥 최종 리스트
-    const uniquePlaces = Array.from(map.values())
-      .filter(p =>
-        (p.name || "").toLowerCase().includes(value.toLowerCase())
-      )
-
-    setSuggestions(uniquePlaces.slice(0, 10));
+    setSuggestions(Array.from(map.values()).slice(0, 10));
     setShowDropdown(field);
     setActiveIndex(-1);
   };
+
   const handleKeyDown = (e, field) => {
     if (!showDropdown || showDropdown !== field) return;
-
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      setActiveIndex(prev => Math.min(prev + 1, suggestions.length - 1));
-    }
-
-    if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setActiveIndex(prev => Math.max(prev - 1, 0));
-    }
-
-    if (e.key === "Enter") {
-      e.preventDefault();
-      if (activeIndex >= 0) {
-        selectSuggestion(suggestions[activeIndex], field);
-      }
-    }
+    if (e.key === "ArrowDown") { e.preventDefault(); setActiveIndex(p => Math.min(p + 1, suggestions.length - 1)); }
+    if (e.key === "ArrowUp") { e.preventDefault(); setActiveIndex(p => Math.max(p - 1, 0)); }
+    if (e.key === "Enter") { e.preventDefault(); if (activeIndex >= 0) selectSuggestion(suggestions[activeIndex], field); }
   };
 
   const selectSuggestion = (item, field) => {
     if (field === "상차지명") {
-      setForm(p => ({
-        ...p,
-        상차지명: item.name || "",
-        상차지주소: item.address || "",
-        상차담당자명: item.담당자명 || "",
-        상차담당자번호: item.담당자번호 || "",
-        상차메모: item.메모 || ""
-      }));
+      setForm(p => ({ ...p, 상차지명: item.name || "", 상차지주소: item.address || "", 상차담당자명: item.담당자명 || "", 상차담당자번호: item.담당자번호 || "", 상차메모: item.메모 || "" }));
     }
-
     if (field === "하차지명") {
-      setForm(p => ({
-        ...p,
-        하차지명: item.name || "",
-        하차지주소: item.address || "",
-        하차담당자명: item.담당자명 || "",
-        하차담당자번호: item.담당자번호 || "",
-        하차메모: item.메모 || ""
-      }));
+      setForm(p => ({ ...p, 하차지명: item.name || "", 하차지주소: item.address || "", 하차담당자명: item.담당자명 || "", 하차담당자번호: item.담당자번호 || "", 하차메모: item.메모 || "" }));
     }
     if (field === "운송사명") {
-      const selected = {
-        name: item.name,
-        code: item.code || "",
-      };
-
-      setForm(p => ({
-        ...p,
-        운송사명: selected.name,
-        운송사코드: selected.code,
-      }));
-
-      // 🔥 고정 상태면 업데이트
-      if (fixedTransport) {
-        setFixedTransport(selected);
-        localStorage.setItem("fixedTransport", JSON.stringify(selected));
-      }
+      setForm(p => ({ ...p, 운송사명: item.name, 운송사코드: item.code || "" }));
+      if (fixedTransport) { setFixedTransport({ name: item.name, code: item.code || "" }); localStorage.setItem("fixedTransport", JSON.stringify({ name: item.name, code: item.code || "" })); }
     }
     setShowDropdown(null);
   };
 
-  useEffect(() => {
-    const currentRef =
-      showDropdown === "상차지명" ? listRefTop : listRefBottom;
+  if (loading) return <div className="py-20 text-center text-gray-400">불러오는 중...</div>;
 
-    if (currentRef.current && activeIndex >= 0) {
-      const el = currentRef.current.children[activeIndex];
-      el?.scrollIntoView({ block: "nearest" });
-    }
-  }, [activeIndex, showDropdown]);
-
-  if (loading) {
-    return <div className="py-20 text-center text-gray-400">불러오는 중…</div>;
-  }
+  const timeLabel = (time, dir) => {
+    const t = fmt12(time);
+    return dir && dir !== "정각" ? `${t} ${dir}` : t;
+  };
 
   return (
-    <>
-      <div className="flex gap-6 w-full max-w-[1400px]">
+    <div className="flex gap-5 w-full p-6">
 
-        {/* ================= 왼쪽: 오더 입력 ================= */}
-        <div className="flex-1 bg-white rounded-2xl border shadow-sm p-8">
+      {/* 왼쪽: 입력 폼 */}
+      <div className="flex-1 bg-white rounded-2xl border border-gray-200 shadow-sm p-7 space-y-6">
 
-          {/* ================= 상단 바 ================= */}
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-bold">
-              {editId ? "오더 수정" : "일반배차 등록"}
-            </h2>
+        {/* 헤더 */}
+        <div className="flex justify-between items-center border-b pb-4">
+          <h2 className="text-lg font-bold text-gray-900">{editId || editData ? "오더 수정" : "일반배차 등록"}</h2>
+          <button onClick={() => { if (window.confirm("입력값을 초기화하시겠습니까?")) resetForm(); }}
+            className="px-4 py-2 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-lg">
+            초기화
+          </button>
+        </div>
 
-            <button
-              onClick={() => {
-                if (confirm("입력값을 모두 초기화하시겠습니까?")) {
-                  resetForm();
-                }
-              }}
-              className="px-4 py-2 text-sm bg-gray-200 hover:bg-gray-300 rounded-lg"
-            >
-              초기화
-            </button>
+        {/* 운송의뢰사 */}
+        <div>
+          <div className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
+            <span className="w-1 h-4 bg-blue-600 rounded-full inline-block" />
+            운송의뢰사
           </div>
-
-          {/* ================= 운송의뢰사 ================= */}
-          <section className="mb-9">
-            <h3 className="text-sm font-bold text-gray-700 mb-3">운송의뢰사</h3>
-
-            <div className="bg-gray-50 p-4 rounded-xl space-y-3">
-
-              {/* ================= 운송사명 ================= */}
-              <div className="relative">
-                <div className="text-sm font-semibold text-gray-700 mb-1">
-                  운송사명
+          <div className="bg-gray-50 rounded-xl p-4 space-y-3">
+            <div className="relative">
+              <label className={labelCls}>운송사명</label>
+              <input
+                disabled={!!fixedTransport}
+                value={form.운송사명 || ""}
+                onChange={e => { onChange("운송사명", e.target.value); searchTransport(e.target.value); }}
+                onFocus={() => setShowDropdown("운송사명")}
+                onBlur={() => setTimeout(() => setShowDropdown(null), 150)}
+                className={inputCls + (fixedTransport ? " bg-gray-100 cursor-not-allowed" : "")}
+                placeholder="운송사명 입력"
+              />
+              {showDropdown === "운송사명" && suggestions.length > 0 && (
+                <div className="absolute z-50 bg-white border rounded-lg w-full mt-1 max-h-60 overflow-y-auto shadow-lg">
+                  {suggestions.map((item, idx) => (
+                    <div key={idx} className={`px-3 py-2 text-sm cursor-pointer ${idx === activeIndex ? "bg-blue-100" : "hover:bg-gray-50"}`}
+                      onMouseDown={() => selectSuggestion(item, "운송사명")}>{item.name}</div>
+                  ))}
                 </div>
+              )}
+            </div>
+            <div>
+              <label className={labelCls}>운송사코드</label>
+              <input value={form.운송사코드 || ""} readOnly className={inputCls + " bg-gray-100 text-gray-500"} placeholder="자동 입력" />
+            </div>
+            <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+              <input type="checkbox" checked={!!fixedTransport}
+                onChange={e => {
+                  if (e.target.checked) {
+                    if (!form.운송사명) { alert("운송사를 먼저 선택하세요"); return; }
+                    const data = { name: form.운송사명, code: form.운송사코드 };
+                    setFixedTransport(data);
+                    localStorage.setItem("fixedTransport", JSON.stringify(data));
+                  } else {
+                    setFixedTransport(null);
+                    localStorage.removeItem("fixedTransport");
+                  }
+                }}
+              />
+              <span className="font-semibold">운송사 고정</span>
+            </label>
+          </div>
+        </div>
 
-                <input
-                  disabled={!!fixedTransport}
-                  value={form.운송사명 || ""}
-                  onChange={(e) => {
-                    onChange("운송사명", e.target.value);
-                    searchTransport(e.target.value); // 🔥 자동완성 연결
-                  }}
-                  onFocus={() => setShowDropdown("운송사명")}
+        {/* 거래처 정보 */}
+        <div>
+          <div className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
+            <span className="w-1 h-4 bg-blue-600 rounded-full inline-block" />
+            거래처 정보
+          </div>
+          <div className="bg-gray-50 rounded-xl p-4">
+            <label className={labelCls}>거래처명</label>
+            <div className="flex gap-2">
+              {companyEditable ? (
+                <>
+                  <input value={companyEdit} onChange={e => setCompanyEdit(e.target.value)} className={inputCls} />
+                  <button onClick={() => setCompanyEditable(false)} className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg font-semibold whitespace-nowrap">확인</button>
+                  <button onClick={() => { setCompanyEditable(false); setCompanyEdit(company); }} className="px-3 py-2 text-sm bg-gray-200 rounded-lg whitespace-nowrap">취소</button>
+                </>
+              ) : (
+                <>
+                  <input value={company} disabled className={inputCls + " bg-gray-100 font-semibold text-gray-800"} />
+                  <button onClick={() => setCompanyEditable(true)} className="px-3 py-2 text-sm bg-indigo-600 text-white rounded-lg font-semibold whitespace-nowrap">변경</button>
+                </>
+              )}
+            </div>
+            {(editId || editData) && (
+              <div className="grid grid-cols-2 gap-3 mt-3">
+                <div>
+                  <label className={labelCls}>배차상태</label>
+                  <div className="p-2.5 bg-white border rounded-lg font-semibold text-gray-800 text-sm">{form.status || "요청"}</div>
+                </div>
+                <div>
+                  <label className={labelCls}>청구운임</label>
+                  <div className="p-2.5 bg-white border rounded-lg font-semibold text-gray-800 text-sm">
+                    {form.청구운임 ? `${Number(form.청구운임).toLocaleString()}원` : "-"}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* 운송 일정 */}
+        <div>
+          <div className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
+            <span className="w-1 h-4 bg-blue-600 rounded-full inline-block" />
+            운송 일정
+          </div>
+          <div className="bg-gray-50 rounded-xl p-4 space-y-4">
+
+            {/* 상차 */}
+            <div>
+              <label className={labelCls}>상차</label>
+              <div className="flex gap-2 items-center flex-wrap">
+                <input type="date" className={inputCls + " flex-1"} value={form.상차일} onChange={e => onChange("상차일", e.target.value)} />
+                <select className={inputCls + " flex-1"} value={form.상차시간} onChange={e => onChange("상차시간", e.target.value)}>
+                  {timeOptions.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                </select>
+                <select className={inputCls + " w-20"} value={form.상차시간구분 || "이후"} onChange={e => onChange("상차시간구분", e.target.value)}>
+                  <option value="이전">이전</option>
+                  <option value="이후">이후</option>
+                  <option value="정각">정각</option>
+                </select>
+                <button type="button" onClick={() => onChange("상차일", getDate(0))}
+                  className={`px-3 py-2 rounded-lg border text-sm font-semibold ${form.상차일 === getDate(0) ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-700 border-gray-300"}`}>
+                  당일
+                </button>
+                <button type="button" onClick={() => onChange("상차일", getDate(1))}
+                  className={`px-3 py-2 rounded-lg border text-sm font-semibold ${form.상차일 === getDate(1) ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-700 border-gray-300"}`}>
+                  내일
+                </button>
+              </div>
+              {form.상차시간 && (
+                <div className="mt-1 text-xs text-blue-600 font-semibold">
+                  {timeLabel(form.상차시간, form.상차시간구분)}
+                </div>
+              )}
+            </div>
+
+            {/* 하차 */}
+            <div>
+              <label className={labelCls}>하차</label>
+              <div className="flex gap-2 items-center flex-wrap">
+                <input type="date" className={inputCls + " flex-1"} value={form.하차일} onChange={e => onChange("하차일", e.target.value)} />
+                <select className={inputCls + " flex-1"} value={form.하차시간} onChange={e => onChange("하차시간", e.target.value)}>
+                  {timeOptions.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                </select>
+                <select className={inputCls + " w-20"} value={form.하차시간구분 || "이후"} onChange={e => onChange("하차시간구분", e.target.value)}>
+                  <option value="이전">이전</option>
+                  <option value="이후">이후</option>
+                  <option value="정각">정각</option>
+                </select>
+                <button type="button" onClick={() => onChange("하차일", getDate(0))}
+                  className={`px-3 py-2 rounded-lg border text-sm font-semibold ${form.하차일 === getDate(0) ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-700 border-gray-300"}`}>
+                  당일
+                </button>
+                <button type="button" onClick={() => onChange("하차일", getDate(1))}
+                  className={`px-3 py-2 rounded-lg border text-sm font-semibold ${form.하차일 === getDate(1) ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-700 border-gray-300"}`}>
+                  내일
+                </button>
+              </div>
+              {form.하차시간 && (
+                <div className="mt-1 text-xs text-blue-600 font-semibold">
+                  {timeLabel(form.하차시간, form.하차시간구분)}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* 상·하차 정보 */}
+        <div>
+          <div className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
+            <span className="w-1 h-4 bg-blue-600 rounded-full inline-block" />
+            상·하차 정보
+          </div>
+          <div className="bg-gray-50 rounded-xl p-4 grid grid-cols-3 gap-4">
+
+            {/* 상차지 */}
+            <div className="space-y-2">
+              <div className="text-xs font-bold text-gray-700 mb-2 border-b pb-1">상차지 정보</div>
+              <div className="relative">
+                <label className={labelCls}>상차지명</label>
+                <input className={inputCls} placeholder="상차지명" value={form.상차지명}
+                  onChange={e => { onChange("상차지명", e.target.value); searchPlaces(e.target.value, "상차지명"); }}
+                  onKeyDown={e => handleKeyDown(e, "상차지명")}
+                  onFocus={() => setShowDropdown("상차지명")}
                   onBlur={() => setTimeout(() => setShowDropdown(null), 150)}
-                  className="w-full border rounded-lg px-4 py-3 text-sm bg-white text-gray-800 focus:ring-2 focus:ring-blue-500"
-                  placeholder="운송사명 입력"
                 />
-
-                {/* 🔥 드롭다운 */}
-                {showDropdown === "운송사명" && suggestions.length > 0 && (
-                  <div className="absolute z-50 bg-white border rounded-lg w-full mt-1 max-h-60 overflow-y-auto shadow">
+                {showDropdown === "상차지명" && suggestions.length > 0 && (
+                  <div ref={listRefTop} className="absolute z-50 bg-white border rounded-lg w-full mt-1 max-h-60 overflow-y-auto shadow-lg">
                     {suggestions.map((item, idx) => (
-                      <div
-                        key={idx}
-                        className={`px-3 py-2 text-sm cursor-pointer ${idx === activeIndex ? "bg-blue-100" : ""
-                          }`}
-                        onMouseDown={() => selectSuggestion(item, "운송사명")}
-                      >
-                        {item.name}
-                      </div>
+                      <div key={idx} className={`px-3 py-2 text-sm cursor-pointer ${idx === activeIndex ? "bg-blue-100" : "hover:bg-gray-50"}`}
+                        onMouseDown={() => selectSuggestion(item, "상차지명")}>{item.name}</div>
                     ))}
                   </div>
                 )}
               </div>
-
-              {/* ================= 운송사코드 ================= */}
-              <div>
-                <div className="text-sm font-semibold text-gray-700 mb-1">
-                  운송사코드
-                </div>
-
-                <input
-                  value={form.운송사코드 || ""}
-
-                  readOnly // 🔥 자동 입력이라 수정 못하게 막는게 좋음
-                  className="w-full border rounded-lg px-4 py-3 text-sm bg-gray-100 text-gray-800 font-medium"
-                  placeholder="자동 입력"
-                />
-              </div>
-              <div className="flex items-center gap-2 mt-2">
-                <input
-                  type="checkbox"
-                  checked={!!fixedTransport}
-                  onChange={(e) => {
-                    if (e.target.checked) {
-                      if (!form.운송사명) {
-                        alert("운송사를 먼저 선택하세요");
-                        return;
-                      }
-
-                      const data = {
-                        name: form.운송사명,
-                        code: form.운송사코드,
-                      };
-
-                      setFixedTransport(data);
-                      localStorage.setItem("fixedTransport", JSON.stringify(data));
-                    } else {
-                      setFixedTransport(null);
-                      localStorage.removeItem("fixedTransport");
-                    }
-                  }}
-                />
-
-                <span className="text-sm text-gray-600">
-                  운송사 고정
-                </span>
-              </div>
+              <div><label className={labelCls}>상차지주소</label><input className={inputCls} placeholder="상차지주소" value={form.상차지주소} onChange={e => onChange("상차지주소", e.target.value)} /></div>
+              <div><label className={labelCls}>담당자명</label><input className={inputCls} placeholder="담당자명" value={form.상차담당자명} onChange={e => onChange("상차담당자명", e.target.value)} /></div>
+              <div><label className={labelCls}>담당자번호</label><input className={inputCls} placeholder="담당자번호" value={form.상차담당자번호} onChange={e => onChange("상차담당자번호", e.target.value)} /></div>
+              <div><label className={labelCls}>메모</label><input className={inputCls} placeholder="메모" value={form.상차메모} onChange={e => onChange("상차메모", e.target.value)} /></div>
             </div>
-          </section>
-          {/* ================= 거래처 정보 ================= */}
-          <section className="mb-8">
-            <h3 className="text-sm font-bold text-gray-700 mb-3">거래처 정보</h3>
 
-            <div className="bg-gray-50 p-4 rounded-xl space-y-3">
-              <div>
-                <div className="text-xs text-gray-500 mb-1">거래처명</div>
-                <input
-                  value={company}
-                  disabled
-                  className="w-full border rounded-lg p-3 bg-gray-100 text-gray-700 font-semibold"
+            {/* 하차지 */}
+            <div className="space-y-2">
+              <div className="text-xs font-bold text-gray-700 mb-2 border-b pb-1">하차지 정보</div>
+              <div className="relative">
+                <label className={labelCls}>하차지명</label>
+                <input className={inputCls} placeholder="하차지명" value={form.하차지명}
+                  onChange={e => { onChange("하차지명", e.target.value); searchPlaces(e.target.value, "하차지명"); }}
+                  onKeyDown={e => handleKeyDown(e, "하차지명")}
+                  onFocus={() => setShowDropdown("하차지명")}
+                  onBlur={() => setTimeout(() => setShowDropdown(null), 150)}
                 />
-              </div>
-
-              {/* 🔥 수정모드일 때만 상태 / 운임 표시 */}
-              {editId && (
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <div className="text-xs text-gray-500 mb-1">배차상태</div>
-                    <div className="p-3 bg-white border rounded-lg font-semibold text-gray-800">
-                      {form.status || "요청"}
-                    </div>
+                {showDropdown === "하차지명" && suggestions.length > 0 && (
+                  <div ref={listRefBottom} className="absolute z-50 bg-white border rounded-lg w-full mt-1 max-h-60 overflow-y-auto shadow-lg">
+                    {suggestions.map((item, idx) => (
+                      <div key={idx} className={`px-3 py-2 text-sm cursor-pointer ${idx === activeIndex ? "bg-blue-100" : "hover:bg-gray-50"}`}
+                        onMouseDown={() => selectSuggestion(item, "하차지명")}>{item.name}</div>
+                    ))}
                   </div>
-
-                  <div>
-                    <div className="text-xs text-gray-500 mb-1">청구운임</div>
-                    <div className="p-3 bg-white border rounded-lg font-semibold text-gray-800">
-                      {form.청구운임
-                        ? `${Number(form.청구운임).toLocaleString()}원`
-                        : "-"}
-                    </div>
-                  </div>
-                </div>
-              )}
+                )}
+              </div>
+              <div><label className={labelCls}>하차지주소</label><input className={inputCls} placeholder="하차지주소" value={form.하차지주소} onChange={e => onChange("하차지주소", e.target.value)} /></div>
+              <div><label className={labelCls}>담당자명</label><input className={inputCls} placeholder="담당자명" value={form.하차담당자명} onChange={e => onChange("하차담당자명", e.target.value)} /></div>
+              <div><label className={labelCls}>담당자번호</label><input className={inputCls} placeholder="담당자번호" value={form.하차담당자번호} onChange={e => onChange("하차담당자번호", e.target.value)} /></div>
+              <div><label className={labelCls}>메모</label><input className={inputCls} placeholder="메모" value={form.하차메모} onChange={e => onChange("하차메모", e.target.value)} /></div>
             </div>
-          </section>
 
-          {/* ================= 운송 일정 ================= */}
-          <section className="mb-8">
-            <h3 className="text-sm font-bold text-gray-700 mb-3">운송 일정</h3>
-
-            <div className="bg-gray-50 p-4 rounded-xl space-y-4">
-              {/* 상차 */}
-              <div className="grid grid-cols-6 gap-2 items-center">
-                <span className="text-sm text-gray-600">상차</span>
-                <input
-                  type="date"
-                  className="input col-span-2"
-                  value={form.상차일}
-                  onChange={(e) => onChange("상차일", e.target.value)}
-                />
-                <select
-                  className="input"
-                  value={form.상차시간}
-                  onChange={(e) => onChange("상차시간", e.target.value)}
-                >
-                  {timeOptions.map((t) => (
-                    <option key={t.value} value={t.value}>
-                      {t.label}
-                    </option>
-                  ))}
+            {/* 화물 정보 */}
+            <div className="space-y-2">
+              <div className="text-xs font-bold text-gray-700 mb-2 border-b pb-1">화물 정보</div>
+              <div>
+                <label className={labelCls}>차량종류</label>
+                <select className={inputCls} value={form.차량종류} onChange={e => onChange("차량종류", e.target.value)}>
+                  <option value="">차량종류 선택</option>
+                  {["라보/다마스","냉장탑","냉동탑","냉동윙","냉장윙","리프트","오토바이","윙바디","탑차","카고"].map(v => <option key={v}>{v}</option>)}
                 </select>
-                <div className="flex gap-1 col-span-2">
-                  <button
-                    type="button"
-                    className={`px-3 py-1 rounded border ${form.상차일 === getDate(0)
-                      ? "bg-blue-600 text-white"
-                      : "bg-white"
-                      }`}
-                    onClick={() => onChange("상차일", getDate(0))}
-                  >
-                    당일
-                  </button>
-                  <button
-                    type="button"
-                    className={`px-3 py-1 rounded border ${form.상차일 === getDate(1)
-                      ? "bg-blue-600 text-white"
-                      : "bg-white"
-                      }`}
-                    onClick={() => onChange("상차일", getDate(1))}
-                  >
-                    내일
-                  </button>
-                </div>
               </div>
-
-              {/* 하차 */}
-              <div className="grid grid-cols-6 gap-2 items-center">
-                <span className="text-sm text-gray-600">하차</span>
-                <input
-                  type="date"
-                  className="input col-span-2"
-                  value={form.하차일}
-                  onChange={(e) => onChange("하차일", e.target.value)}
-                />
-                <select
-                  className="input"
-                  value={form.하차시간}
-                  onChange={(e) => onChange("하차시간", e.target.value)}
-                >
-                  {timeOptions.map((t) => (
-                    <option key={t.value} value={t.value}>
-                      {t.label}
-                    </option>
-                  ))}
-                </select>
-                <div className="flex gap-1 col-span-2">
-                  <button
-                    type="button"
-                    className={`px-3 py-1 rounded border ${form.하차일 === getDate(0)
-                      ? "bg-blue-600 text-white"
-                      : "bg-white"
-                      }`}
-                    onClick={() => onChange("하차일", getDate(0))}
-                  >
-                    당일
-                  </button>
-                  <button
-                    type="button"
-                    className={`px-3 py-1 rounded border ${form.하차일 === getDate(1)
-                      ? "bg-blue-600 text-white"
-                      : "bg-white"
-                      }`}
-                    onClick={() => onChange("하차일", getDate(1))}
-                  >
-                    내일
-                  </button>
-                </div>
+              <div>
+                <label className={labelCls}>톤수</label>
+                <input className={inputCls} placeholder="예) 1톤, 2.5톤" value={form.차량톤수} onChange={e => onChange("차량톤수", e.target.value)} />
               </div>
-
+              <div className="flex-1">
+                <label className={labelCls}>화물내용</label>
+                <textarea className={inputCls + " resize-none h-24"} placeholder="화물내용 입력" value={form.화물내용} onChange={e => onChange("화물내용", e.target.value)} />
+              </div>
             </div>
-          </section>
-          <section className="mb-8">
-            <h3 className="text-sm font-bold text-gray-700 mb-3">
-              상·하차 정보
-            </h3>
-
-            <div className="bg-gray-50 p-4 rounded-xl grid grid-cols-3 gap-4">
-
-              {/* ================= 상차 ================= */}
-              <div className="space-y-2">
-                <div className="text-xs font-bold text-gray-600">상차지 정보</div>
-
-                {/* 상차지명 */}
-                <div className="relative">
-                  <input
-                    className="input"
-                    placeholder="상차지명"
-                    value={form.상차지명}
-                    onChange={(e) => {
-                      onChange("상차지명", e.target.value);
-                      searchPlaces(e.target.value, "상차지명");
-                    }}
-                    onKeyDown={(e) => handleKeyDown(e, "상차지명")}
-                    onFocus={() => setShowDropdown("상차지명")}
-                    onBlur={() => setTimeout(() => setShowDropdown(null), 150)}
-                  />
-
-                  {showDropdown === "상차지명" && suggestions.length > 0 && (
-                    <div ref={listRefTop} className="absolute z-50 bg-white border rounded-lg w-full mt-1 max-h-60 overflow-y-auto shadow">
-                      {suggestions.map((item, idx) => (
-                        <div
-                          key={idx}
-                          className={`px-3 py-2 text-sm cursor-pointer ${idx === activeIndex ? "bg-blue-100" : ""}`}
-                          onMouseDown={() => selectSuggestion(item, "상차지명")}
-                        >
-                          {item.name}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <input className="input" placeholder="상차지주소" value={form.상차지주소} onChange={(e) => onChange("상차지주소", e.target.value)} />
-                <input className="input" placeholder="상차담당자명" value={form.상차담당자명} onChange={(e) => onChange("상차담당자명", e.target.value)} />
-                <input className="input" placeholder="상차담당자번호" value={form.상차담당자번호} onChange={(e) => onChange("상차담당자번호", e.target.value)} />
-                <input className="input" placeholder="상차메모" value={form.상차메모} onChange={(e) => onChange("상차메모", e.target.value)} />
-              </div>
-
-              {/* ================= 하차 ================= */}
-              <div className="space-y-2">
-                <div className="text-xs font-bold text-gray-600">하차지 정보</div>
-
-                <div className="relative">
-                  <input
-                    className="input"
-                    placeholder="하차지명"
-                    value={form.하차지명}
-                    onChange={(e) => {
-                      onChange("하차지명", e.target.value);
-                      searchPlaces(e.target.value, "하차지명");
-                    }}
-                    onKeyDown={(e) => handleKeyDown(e, "하차지명")}
-                    onFocus={() => setShowDropdown("하차지명")}
-                    onBlur={() => setTimeout(() => setShowDropdown(null), 150)}
-                  />
-
-                  {showDropdown === "하차지명" && suggestions.length > 0 && (
-                    <div ref={listRefBottom} className="absolute z-50 bg-white border rounded-lg w-full mt-1 max-h-60 overflow-y-auto shadow">
-                      {suggestions.map((item, idx) => (
-                        <div
-                          key={idx}
-                          className={`px-3 py-2 text-sm cursor-pointer ${idx === activeIndex ? "bg-blue-100" : ""}`}
-                          onMouseDown={() => selectSuggestion(item, "하차지명")}
-                        >
-                          {item.name}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <input className="input" placeholder="하차지주소" value={form.하차지주소} onChange={(e) => onChange("하차지주소", e.target.value)} />
-                <input className="input" placeholder="하차담당자명" value={form.하차담당자명} onChange={(e) => onChange("하차담당자명", e.target.value)} />
-                <input className="input" placeholder="하차담당자번호" value={form.하차담당자번호} onChange={(e) => onChange("하차담당자번호", e.target.value)} />
-                <input className="input" placeholder="하차메모" value={form.하차메모} onChange={(e) => onChange("하차메모", e.target.value)} />
-              </div>
-
-              {/* ================= 화물 정보 ================= */}
-              <div className="flex flex-col h-full gap-2">
-                <div className="text-xs font-bold text-gray-600">화물 정보</div>
-
-                <select
-                  className="input"
-                  value={form.차량종류}
-                  onChange={(e) => onChange("차량종류", e.target.value)}
-                >
-                  <option value="">차량종류</option>
-                  <option>라보/다마스</option>
-                  <option>냉장탑</option>
-                  <option>냉동탑</option>
-                  <option>냉동윙</option>
-                  <option>냉장윙</option>
-                  <option>리프트</option>
-                  <option>오토바이</option>
-                  <option>윙바디</option>
-                  <option>탑차</option>
-                </select>
-
-                <input
-                  className="input"
-                  placeholder="톤수"
-                  value={form.차량톤수}
-                  onChange={(e) => onChange("차량톤수", e.target.value)}
-                />
-
-                <textarea
-                  className="input flex-1 resize-none"
-                  placeholder="화물내용"
-                  value={form.화물내용}
-                  onChange={(e) => onChange("화물내용", e.target.value)}
-                />
-              </div>
-
-            </div>
-          </section>
-          {/* ================= 상하차방법 / 결제방식 ================= */}
-          <section className="mb-8">
-            <h3 className="text-sm font-bold text-gray-700 mb-3">
-              상하차방법 / 결제방식
-            </h3>
-
-            <div className="bg-gray-50 p-4 rounded-xl grid grid-cols-2 gap-4">
-
-              {/* ================= 상하차방법 ================= */}
-              <div className="space-y-3">
-                <div className="text-xs font-bold text-gray-600">상하차방법</div>
-
-                <select
-                  className="input"
-                  value={form.상차방법}
-                  onChange={(e) => onChange("상차방법", e.target.value)}
-                >
-                  <option value="">상차방법</option>
-                  <option>지게차</option>
-                  <option>수도움</option>
-                  <option>수작업</option>
-                </select>
-
-                <select
-                  className="input"
-                  value={form.하차방법}
-                  onChange={(e) => onChange("하차방법", e.target.value)}
-                >
-                  <option value="">하차방법</option>
-                  <option>지게차</option>
-                  <option>수도움</option>
-                  <option>수작업</option>
-                </select>
-              </div>
-
-              {/* ================= 결제방식 ================= */}
-              <div className="space-y-3">
-                <div className="text-xs font-bold text-gray-600">결제방식</div>
-
-                <select
-                  className="input"
-                  value={form.지급방식}
-                  onChange={(e) => onChange("지급방식", e.target.value)}
-                >
-                  <option value="">지급방식</option>
-                  <option>계산서</option>
-                  <option>선불</option>
-                  <option>착불</option>
-                </select>
-              </div>
-
-            </div>
-          </section>
-          {/* ================= 버튼 ================= */}
-          <div className="flex justify-end gap-3">
-            <button
-              onClick={() => {
-                if (onClose) {
-                  onClose();
-                } else {
-                  navigate(-1);
-                }
-              }}
-              className="px-6 py-2 rounded bg-gray-200"
-            >
-              취소
-            </button>
-
-            <button
-              onClick={async () => {
-const start = await getCoords(form.상차지주소);
-const end = await getCoords(form.하차지주소);
-
-if (!start || !end) {
-  alert("주소 좌표 변환 실패");
-  return;
-}
-
-setCoords({ start, end });
-setPreviewOpen(true);
-              }}
-              className="px-6 py-2 rounded bg-blue-600 text-white"
-            >
-              {editId || editData ? "저장" : "오더 등록"}
-            </button>
           </div>
-
         </div>
 
-        {/* 🔥🔥🔥 핵심 수정: 오른쪽 패널 위치 이동 */}
-        <div className="w-[420px] bg-white rounded-2xl border shadow-sm p-5">
-
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="text-lg font-bold">오더 불러오기</h3>
-            <button className="text-gray-400 hover:text-black">✕</button>
+        {/* 상하차방법 / 결제방식 */}
+        <div>
+          <div className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
+            <span className="w-1 h-4 bg-blue-600 rounded-full inline-block" />
+            상하차방법 / 결제방식
           </div>
-
-          <div className="flex gap-2 mb-3">
-            <input
-              value={keyword}
-              onChange={(e) => setKeyword(e.target.value)}
-              placeholder="거래처 / 주소 검색"
-              className="flex-1 border rounded-lg px-3 py-2 text-sm"
-            />
-
-            <button
-              onClick={handleSearch}
-              className="px-4 py-2 bg-blue-500 text-white rounded-lg text-sm"
-            >
-              조회
-            </button>
+          <div className="bg-gray-50 rounded-xl p-4 grid grid-cols-3 gap-4">
+            <div>
+              <label className={labelCls}>상차방법</label>
+              <select className={inputCls} value={form.상차방법} onChange={e => onChange("상차방법", e.target.value)}>
+                <option value="">선택</option>
+                {["지게차","수도움","수작업","크레인"].map(v => <option key={v}>{v}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className={labelCls}>하차방법</label>
+              <select className={inputCls} value={form.하차방법} onChange={e => onChange("하차방법", e.target.value)}>
+                <option value="">선택</option>
+                {["지게차","수도움","수작업","크레인"].map(v => <option key={v}>{v}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className={labelCls}>지급방식</label>
+              <select className={inputCls} value={form.지급방식} onChange={e => onChange("지급방식", e.target.value)}>
+                <option value="">선택</option>
+                {["계산서","선불","착불","계좌이체"].map(v => <option key={v}>{v}</option>)}
+              </select>
+            </div>
           </div>
+        </div>
 
-          <div className="space-y-2 max-h-[500px] overflow-y-auto">
-            {results.map((item) => (
-              <div
-                key={item.id}
-                className="border rounded-xl p-3 hover:bg-gray-50"
-              >
-                <div className="font-semibold text-sm">
-                  {item.상차지명} → {item.하차지명}
-                </div>
-
-                <div className="text-xs text-gray-500">
-                  {item.차량종류} / {item.차량톤수}
-                </div>
-
-                <div className="text-xs text-gray-400">
-                  {item.상차일} {item.상차시간}
-                </div>
-
-                <button
-                  className="mt-2 w-full py-1 text-xs bg-blue-500 text-white rounded"
-                  onClick={() => applyOrder(item)}
-                >
-                  선택
-                </button>
-              </div>
-            ))}
-          </div>
-
+        {/* 버튼 */}
+        <div className="flex justify-end gap-3 pt-2 border-t">
+          <button onClick={() => onClose ? onClose() : navigate(-1)}
+            className="px-6 py-2.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-sm">
+            취소
+          </button>
+          <button
+            onClick={async () => {
+              if (!form.상차지주소 || !form.하차지주소) {
+                if (window.confirm("주소가 없어 경로 미리보기 없이 등록합니다. 계속하시겠습니까?")) await submit();
+                return;
+              }
+              const start = await getCoords(form.상차지주소);
+              const end = await getCoords(form.하차지주소);
+              if (!start || !end) {
+                if (window.confirm("좌표 변환 실패. 미리보기 없이 등록하시겠습니까?")) await submit();
+                return;
+              }
+              setCoords({ start, end });
+              setPreviewOpen(true);
+            }}
+            className="px-8 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm"
+          >
+            {editId || editData ? "저장" : "오더 등록"}
+          </button>
         </div>
       </div>
 
-      {/* 팝업 */}
+      {/* 오른쪽: 오더 불러오기 */}
+      <div className="w-[400px] bg-white rounded-2xl border border-gray-200 shadow-sm p-5 flex flex-col">
+        <div className="font-bold text-gray-900 text-base mb-4 border-b pb-3">오더 불러오기</div>
+
+        {/* 검색 필터 */}
+        <div className="space-y-2 mb-3">
+          <select className={inputCls} value={searchType} onChange={e => setSearchType(e.target.value)}>
+            {SEARCH_TYPES.map(t => <option key={t}>{t}</option>)}
+          </select>
+          <div className="flex gap-2">
+            <input value={searchKeyword} onChange={e => setSearchKeyword(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") handleSearch(); }}
+              placeholder="검색어 입력 (Enter)"
+              className={inputCls + " flex-1"} />
+            <button onClick={handleSearch}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold whitespace-nowrap">
+              {searchLoading ? "검색중..." : "조회"}
+            </button>
+          </div>
+        </div>
+
+        {searchResults.length === 0 && !searchLoading && (
+          <div className="text-center py-8 text-gray-400 text-sm">
+            <div className="text-2xl mb-2">📋</div>
+            <div>조회 버튼을 눌러 과거 오더를 불러오세요</div>
+            <div className="text-xs mt-1 text-gray-300">검색어 없으면 최근 200건 표시</div>
+          </div>
+        )}
+
+        <div className="space-y-2 flex-1 overflow-y-auto max-h-[680px]">
+          {searchResults.map(item => (
+            <div key={item.id} className="border border-gray-200 rounded-xl p-3 hover:bg-blue-50 hover:border-blue-200 transition cursor-pointer"
+              onClick={() => applyOrder(item)}>
+              <div className="font-bold text-sm text-gray-900">
+                {item.상차지명 || "-"} → {item.하차지명 || "-"}
+              </div>
+              <div className="text-xs text-gray-600 mt-0.5">
+                {item.거래처명 && <span className="mr-2">{item.거래처명}</span>}
+                {item.차량종류 && <span className="mr-2">{item.차량종류}</span>}
+                {item.차량톤수 && <span>{item.차량톤수}</span>}
+              </div>
+              <div className="text-xs text-gray-400 mt-0.5">
+                {item.상차일} {fmt12(item.상차시간)}{item.상차시간구분 && item.상차시간구분 !== "정각" ? ` ${item.상차시간구분}` : ""}
+              </div>
+              {item.화물내용 && <div className="text-xs text-gray-500 truncate mt-0.5">{item.화물내용}</div>}
+              <div className="mt-2">
+                <button className="w-full py-1 text-xs bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700">
+                  이 오더 불러오기
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* 경로 미리보기 팝업 */}
       {previewOpen && (
         <div className="fixed inset-0 bg-black/40 z-[999] flex items-center justify-center">
-
-          <div className="bg-white w-[900px] h-[600px] rounded-2xl overflow-hidden flex shadow-2xl">
-<div id="map" className="w-full h-full" />
-
-            <div className="w-[320px] p-6 flex flex-col justify-between border-l">
-
+          <div className="bg-white w-[880px] h-[580px] rounded-2xl overflow-hidden flex shadow-2xl">
+            <div id="shipper-map" className="flex-1 h-full" />
+            <div className="w-[300px] p-6 flex flex-col justify-between border-l bg-white">
               <div>
-                <h2 className="text-lg font-bold mb-5">배차요청 확인</h2>
-<div className="mb-4">
-  <div className="text-xs text-gray-400">거리</div>
-  <div className="font-semibold">
-    {routeInfo?.distance || "-"} km
-  </div>
-
-  <div className="text-xs text-gray-400 mt-2">시간</div>
-  <div className="font-semibold">
-    {routeInfo?.time || "-"} 분
-  </div>
-</div>
-                <div className="mb-5">
-                  <div className="text-xs text-gray-400">상차지</div>
-                  <div className="font-semibold">{form.상차지명}</div>
-                  <div className="text-xs text-gray-400">{form.상차지주소}</div>
-                </div>
-
-                <div className="mb-5">
-                  <div className="text-xs text-gray-400">하차지</div>
-                  <div className="font-semibold">{form.하차지명}</div>
-                  <div className="text-xs text-gray-400">{form.하차지주소}</div>
+                <h2 className="text-lg font-bold mb-5 text-gray-900">배차요청 확인</h2>
+                {routeInfo && (
+                  <div className="bg-blue-50 rounded-xl p-3 mb-4 grid grid-cols-2 gap-2">
+                    <div className="text-center">
+                      <div className="text-xs text-gray-500">거리</div>
+                      <div className="font-bold text-blue-700">{routeInfo.distance} km</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-xs text-gray-500">소요시간</div>
+                      <div className="font-bold text-blue-700">{routeInfo.time} 분</div>
+                    </div>
+                  </div>
+                )}
+                <div className="space-y-3">
+                  <div className="bg-gray-50 rounded-lg p-3">
+                    <div className="text-xs text-gray-400 mb-1">상차지</div>
+                    <div className="font-semibold text-gray-900">{form.상차지명}</div>
+                    <div className="text-xs text-gray-500">{form.상차지주소}</div>
+                  </div>
+                  <div className="bg-gray-50 rounded-lg p-3">
+                    <div className="text-xs text-gray-400 mb-1">하차지</div>
+                    <div className="font-semibold text-gray-900">{form.하차지명}</div>
+                    <div className="text-xs text-gray-500">{form.하차지주소}</div>
+                  </div>
                 </div>
               </div>
-
               <div className="flex gap-2">
-                <button
-                  onClick={() => setPreviewOpen(false)}
-                  className="flex-1 py-2 bg-gray-200 rounded"
-                >
-                  취소
-                </button>
-
-                <button
-                  onClick={async () => {
-                    await submit();
-                    setPreviewOpen(false);
-                  }}
-                  className="flex-1 py-2 bg-blue-600 text-white rounded"
-                >
-                  배차요청
-                </button>
+                <button onClick={() => setPreviewOpen(false)} className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 rounded-lg font-semibold text-sm">취소</button>
+                <button onClick={async () => { await submit(); setPreviewOpen(false); }}
+                  className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-sm">배차요청</button>
               </div>
-
             </div>
           </div>
         </div>
       )}
-    </>
+    </div>
   );
-  }
+}
