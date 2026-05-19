@@ -13,6 +13,8 @@ import ShipperSettlement from "./pages/ShipperSettlement";
 import TransportManagement from "./pages/TransportManagement";
 import ShipperSettings from "./pages/ShipperSettings";
 import ChangePassword from "./pages/ChangePassword";
+import ShipperNotice from "./pages/ShipperNotice";
+import ShipperInquiry from "./pages/ShipperInquiry";
 
 export default function ShipperApp() {
   const navigate = useNavigate();
@@ -141,6 +143,18 @@ const isSubMaster = userData?.permissions?.subMaster;
   />
 )}
 
+<MenuBtn
+  label="공지사항"
+  active={location.pathname.includes("/shipper/notice")}
+  onClick={() => navigate("/shipper/notice")}
+/>
+
+<MenuBtn
+  label="문의사항"
+  active={location.pathname.includes("/shipper/inquiry")}
+  onClick={() => navigate("/shipper/inquiry")}
+/>
+
 </nav>
     </div>
 
@@ -189,6 +203,8 @@ location.pathname.startsWith("/shipper/transport")
           <Route path="settlement" element={<ShipperSettlement />} />
           <Route path="settings" element={<ShipperSettings />} />
           <Route path="change-password" element={<ChangePassword />} />
+          <Route path="notice" element={<ShipperNotice />} />
+          <Route path="inquiry" element={<ShipperInquiry />} />
           <Route path="*" element={<Navigate to="/shipper" replace />} />
         </Routes>
       </main>

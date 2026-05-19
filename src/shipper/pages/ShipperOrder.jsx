@@ -615,7 +615,7 @@ export default function ShipperOrder({ editData, onClose }) {
                 <div className="flex gap-2">
                   <input className={inputCls} placeholder="화물내용 입력" value={form.화물내용} onChange={e => onChange("화물내용", e.target.value)} />
                   <select className={inputCls + " w-28 flex-shrink-0"} value={form.화물단위} onChange={e => onChange("화물단위", e.target.value)}>
-                    {["파레트","톤","박스","개","kg","기타"].map(v => <option key={v}>{v}</option>)}
+                    {["파레트","박스","없음","개"].map(v => <option key={v}>{v}</option>)}
                   </select>
                 </div>
               </div>
