@@ -31822,6 +31822,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
         };
         const matched = [];
         const unmatched = [];
+        let debugKeys = null; // 첫 행 컬럼명 저장 (디버그용)
         json.forEach((rowRaw, idx) => {
           // 컬럼명에서 한글/영문/숫자 외 모든 문자 제거 (보이지 않는 유니코드 포함)
           const row = {};
@@ -31831,6 +31832,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
             row[normalized] = rowRaw[k];
             rowKeys.push(normalized);
           });
+          if (idx === 0) debugKeys = rowKeys.slice();
           // 키 부분 포함 검색 fallback
           const getCol = (...names) => {
             for (const n of names) {
@@ -31871,7 +31873,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
             unmatched.push({ excelRow: idx+2, 차량번호: excelPlateRaw, 기사명: excelNameRaw, 상차일: excelDate || String(rawDate), 운송료: excelAmt, 사유 });
           }
         });
-        setPayExcelPreview({ matched, unmatched });
+        setPayExcelPreview({ matched, unmatched, debugKeys });
         setPayExcelOpen(true);
       } catch (err) {
         alert("엑셀 파싱 오류: " + err.message);
@@ -32061,7 +32063,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
                       <td className="px-3 py-2.5 text-center font-semibold border-b border-gray-100">{r.거래처명 || ""}</td>
                       <td className="px-3 py-2.5 text-center border-b border-gray-100">{r.상차지명 || ""}</td>
                       <td className="px-3 py-2.5 text-center border-b border-gray-100">{r.하차지명 || ""}</td>
-                      <td className="px-3 py-2.5 text-center font-mono border-b border-gray-100">{r.차량번호 || ""}</td>
+                      <td className="px-3 py-2.5 text-center border-b border-gray-100">{r.차량번호 || ""}</td>
                       <td className="px-3 py-2.5 text-center border-b border-gray-100">{r.이름 || ""}</td>
                       <td className="px-3 py-2.5 text-center border-b border-gray-100">{r.전화번호 || ""}</td>
                       <td className="px-3 py-2.5 text-right border-b border-gray-100">{won(r.청구운임)}</td>
@@ -32122,7 +32124,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
                   <tr><td colSpan={9} className="text-center py-16 text-gray-400 text-[13px]">데이터가 없습니다.</td></tr>
                 ) : driverSummary.map((d, i) => (
                   <tr key={d.차량번호} className={`${i % 2 === 0 ? "bg-white" : "bg-gray-50/60"} hover:bg-blue-50/40 transition`}>
-                    <td className="px-3 py-3 text-center font-mono border-b border-gray-100">{d.차량번호}</td>
+                    <td className="px-3 py-3 text-center border-b border-gray-100">{d.차량번호}</td>
                     <td className="px-3 py-3 text-center font-semibold border-b border-gray-100">{d.이름 || "-"}</td>
                     <td className="px-3 py-3 text-center border-b border-gray-100">{d.전화번호 || "-"}</td>
                     <td className="px-3 py-3 text-center border-b border-gray-100">{d.cnt}건</td>
@@ -32195,7 +32197,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
                         {payExcelPreview.matched.map((m, i) => (
                           <tr key={i} className={i % 2 === 0 ? "bg-white" : "bg-emerald-50/30"}>
                             <td className="px-3 py-2 text-center border border-gray-100 text-gray-400">{m.excelRow}</td>
-                            <td className="px-3 py-2 text-center border border-gray-100 font-mono">{m.차량번호}</td>
+                            <td className="px-3 py-2 text-center border border-gray-100">{m.차량번호}</td>
                             <td className="px-3 py-2 text-center border border-gray-100 font-semibold">{m.기사명}</td>
                             <td className="px-3 py-2 text-center border border-gray-100">{m.excelDate}</td>
                             <td className="px-3 py-2 text-right border border-gray-100">{won(m.운송료)}</td>
@@ -32214,6 +32216,12 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
                   </div>
                 </div>
               )}
+              {payExcelPreview.debugKeys && (
+                <div className="mb-3 p-2 bg-gray-50 border border-gray-200 rounded text-[11px] text-gray-500">
+                  <span className="font-bold text-gray-700">인식된 컬럼명: </span>
+                  {payExcelPreview.debugKeys.join(", ")}
+                </div>
+              )}
               {payExcelPreview.unmatched.length > 0 && (
                 <div>
                   <div className="text-[13px] font-bold text-red-600 mb-2">미매칭 ({payExcelPreview.unmatched.length}건) — 처리되지 않습니다</div>
@@ -32230,7 +32238,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
                         {payExcelPreview.unmatched.map((m, i) => (
                           <tr key={i} className={i % 2 === 0 ? "bg-white" : "bg-red-50/30"}>
                             <td className="px-3 py-2 text-center border border-gray-100 text-gray-400">{m.excelRow}</td>
-                            <td className="px-3 py-2 text-center border border-gray-100 font-mono">{m.차량번호}</td>
+                            <td className="px-3 py-2 text-center border border-gray-100">{m.차량번호}</td>
                             <td className="px-3 py-2 text-center border border-gray-100">{m.기사명}</td>
                             <td className="px-3 py-2 text-center border border-gray-100">{m.상차일}</td>
                             <td className="px-3 py-2 text-right border border-gray-100">{won(m.운송료)}</td>
