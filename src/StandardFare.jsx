@@ -77,7 +77,7 @@ function isTransitStop(r) {
 // T-Map API key (module-level so AddressSearch can access it)
 const TMAP_KEY = "rmzwkLwH9N4i9ayxDj9GR6l8hyFDaEk52ZQs4yer";
 
-// T-Map 주소 자동완성 컴포넌트
+// T-Map 주소 자동완성 컴포넌트 (POI 검색 기반 — 부분 입력으로 구/동 드롭다운)
 function AddressSearch({ value, onChange, onSelect, placeholder }) {
   const [query, setQuery] = useState(value || "");
   const [suggestions, setSuggestions] = useState([]);
@@ -89,17 +89,43 @@ function AddressSearch({ value, onChange, onSelect, placeholder }) {
   const fetchSugg = async (kw) => {
     if (!kw.trim() || kw.length < 2) { setSuggestions([]); return; }
     try {
-      const url = `https://apis.openapi.sk.com/tmap/geo/fullAddrGeo?version=1&format=json&fullAddr=${encodeURIComponent(kw)}`;
-      const res = await fetch(url, { headers: { appKey: TMAP_KEY, Accept: "application/json" } });
+      // POI 검색: 부분 입력("서울", "원창동" 등)에서 구/동 수준 주소 제안
+      const url = `https://apis.openapi.sk.com/tmap/pois?version=1&format=json&searchKeyword=${encodeURIComponent(kw)}&count=20&appKey=${TMAP_KEY}`;
+      const res = await fetch(url, { headers: { Accept: "application/json" } });
       const data = await res.json();
-      const coords = data?.coordinateInfo?.coordinate || [];
+      const pois = data?.searchPoiInfo?.pois?.poi || [];
+
+      if (pois.length > 0) {
+        const seen = new Set();
+        const results = [];
+        for (const p of pois) {
+          const upper = p.upperAddrName || "";
+          const middle = p.middleAddrName || "";
+          const low = p.lowAddrName || "";
+          // 짧은 쿼리(시/도 수준)는 구 단위, 긴 쿼리는 동 단위까지 표시
+          const addr = kw.length <= 3
+            ? [upper, middle].filter(Boolean).join(" ")
+            : [upper, middle, low].filter(Boolean).join(" ");
+          if (!addr || seen.has(addr)) continue;
+          seen.add(addr);
+          results.push({
+            address: addr,
+            lat: parseFloat(p.noorLat || p.frontLat || 0),
+            lon: parseFloat(p.noorLon || p.frontLon || 0),
+          });
+          if (results.length >= 7) break;
+        }
+        if (results.length > 0) { setSuggestions(results); return; }
+      }
+
+      // 폴백: fullAddrGeo (더 정확한 주소 입력 시)
+      const url2 = `https://apis.openapi.sk.com/tmap/geo/fullAddrGeo?version=1&format=json&fullAddr=${encodeURIComponent(kw)}`;
+      const res2 = await fetch(url2, { headers: { appKey: TMAP_KEY, Accept: "application/json" } });
+      const data2 = await res2.json();
+      const coords = data2?.coordinateInfo?.coordinate || [];
       setSuggestions(
         coords.slice(0, 6)
-          .map(c => ({
-            address: c.fullAddrjibun || c.fullAddrRoad || "",
-            lat: parseFloat(c.lat || "0"),
-            lon: parseFloat(c.lon || "0"),
-          }))
+          .map(c => ({ address: c.fullAddrjibun || c.fullAddrRoad || "", lat: parseFloat(c.lat || 0), lon: parseFloat(c.lon || 0) }))
           .filter(s => s.address)
       );
     } catch { setSuggestions([]); }
@@ -244,10 +270,18 @@ const FARE_TYPES = [
 
 // 차량 유형별 할증 카테고리
 const VEHICLE_CATEGORIES = [
-  { label: "카고 / 윙바디 (일반)", multiplier: 1.0 },
-  { label: "탑차",                multiplier: 1.1 },
-  { label: "냉동 / 냉장",         multiplier: 1.4 },
-  { label: "리프트",              multiplier: 1.1 },
+  { label: "카고",       multiplier: 1.0 },
+  { label: "카고/윙",   multiplier: 1.0 },
+  { label: "윙바디",    multiplier: 1.0 },
+  { label: "리프트",    multiplier: 1.1 },
+  { label: "리프트윙",  multiplier: 1.1 },
+  { label: "탑",        multiplier: 1.05 },
+  { label: "리프트탑",  multiplier: 1.15 },
+  { label: "냉동탑",    multiplier: 1.4 },
+  { label: "냉동윙바디", multiplier: 1.4 },
+  { label: "냉장탑",    multiplier: 1.35 },
+  { label: "냉장윙바디", multiplier: 1.35 },
+  { label: "호루",      multiplier: 1.0 },
 ];
 
 export default function StandardFare() {

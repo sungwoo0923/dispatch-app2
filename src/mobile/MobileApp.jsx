@@ -7663,10 +7663,18 @@ const MOBILE_FARE_TYPES = [
 ];
 
 const MOBILE_VEHICLE_CATEGORIES = [
-  { label: "카고/윙바디 (일반)", multiplier: 1.0 },
-  { label: "탑차",             multiplier: 1.1 },
-  { label: "냉동/냉장",        multiplier: 1.4 },
-  { label: "리프트",           multiplier: 1.1 },
+  { label: "카고",       multiplier: 1.0 },
+  { label: "카고/윙",   multiplier: 1.0 },
+  { label: "윙바디",    multiplier: 1.0 },
+  { label: "리프트",    multiplier: 1.1 },
+  { label: "리프트윙",  multiplier: 1.1 },
+  { label: "탑",        multiplier: 1.05 },
+  { label: "리프트탑",  multiplier: 1.15 },
+  { label: "냉동탑",    multiplier: 1.4 },
+  { label: "냉동윙바디", multiplier: 1.4 },
+  { label: "냉장탑",    multiplier: 1.35 },
+  { label: "냉장윙바디", multiplier: 1.35 },
+  { label: "호루",      multiplier: 1.0 },
 ];
 
 function MobileAddressSearch({ value, onChange, onSelect, placeholder }) {
@@ -7680,10 +7688,32 @@ function MobileAddressSearch({ value, onChange, onSelect, placeholder }) {
   const fetchSugg = async (kw) => {
     if (!kw.trim() || kw.length < 2) { setSuggestions([]); return; }
     try {
-      const url = `https://apis.openapi.sk.com/tmap/geo/fullAddrGeo?version=1&format=json&fullAddr=${encodeURIComponent(kw)}`;
-      const res = await fetch(url, { headers: { appKey: MOBILE_TMAP_KEY, Accept: "application/json" } });
+      const url = `https://apis.openapi.sk.com/tmap/pois?version=1&format=json&searchKeyword=${encodeURIComponent(kw)}&count=20&appKey=${MOBILE_TMAP_KEY}`;
+      const res = await fetch(url, { headers: { Accept: "application/json" } });
       const data = await res.json();
-      const coords = data?.coordinateInfo?.coordinate || [];
+      const pois = data?.searchPoiInfo?.pois?.poi || [];
+      if (pois.length > 0) {
+        const seen = new Set();
+        const results = [];
+        for (const p of pois) {
+          const upper = p.upperAddrName || "";
+          const middle = p.middleAddrName || "";
+          const low = p.lowAddrName || "";
+          const addr = kw.length <= 3
+            ? [upper, middle].filter(Boolean).join(" ")
+            : [upper, middle, low].filter(Boolean).join(" ");
+          if (!addr || seen.has(addr)) continue;
+          seen.add(addr);
+          results.push({ address: addr, lat: parseFloat(p.noorLat || p.frontLat || 0), lon: parseFloat(p.noorLon || p.frontLon || 0) });
+          if (results.length >= 7) break;
+        }
+        if (results.length > 0) { setSuggestions(results); return; }
+      }
+      // fallback: fullAddrGeo
+      const url2 = `https://apis.openapi.sk.com/tmap/geo/fullAddrGeo?version=1&format=json&fullAddr=${encodeURIComponent(kw)}`;
+      const res2 = await fetch(url2, { headers: { appKey: MOBILE_TMAP_KEY, Accept: "application/json" } });
+      const data2 = await res2.json();
+      const coords = data2?.coordinateInfo?.coordinate || [];
       setSuggestions(
         coords.slice(0, 6)
           .map(c => ({ address: c.fullAddrjibun || c.fullAddrRoad || "", lat: parseFloat(c.lat || "0"), lon: parseFloat(c.lon || "0") }))
