@@ -1852,22 +1852,36 @@ return (
                 <label className={`flex-1 text-center py-2 rounded-lg border text-sm cursor-pointer font-semibold ${cardImageUploading ? "bg-gray-100 text-gray-400" : "bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100"}`}>
                   {cardImageUploading ? "업로드 중..." : "이미지 선택"}
                   <input type="file" accept="image/*" className="hidden" disabled={cardImageUploading}
-                    onChange={async (e) => {
+                    onChange={(e) => {
                       const file = e.target.files[0];
                       if (!file || !user?.uid) return;
                       setCardImageUploading(true);
-                      try {
-                        const storageRef = ref(storage, `cardImages/${user.uid}`);
-                        await uploadBytes(storageRef, file);
-                        const url = await getDownloadURL(storageRef);
-                        setCardImage(url);
-                        await setDoc(doc(db, "userProfiles", user.uid), { cardImageUrl: url }, { merge: true });
-                        showAlert("명함 이미지가 저장되었습니다.");
-                      } catch(err) {
-                        showAlert("업로드 실패: " + err.message);
-                      } finally {
-                        setCardImageUploading(false);
-                      }
+                      const imgEl = new Image();
+                      const objUrl = URL.createObjectURL(file);
+                      imgEl.onload = async () => {
+                        URL.revokeObjectURL(objUrl);
+                        const MAX = 800;
+                        let w = imgEl.width, h = imgEl.height;
+                        if (w > MAX || h > MAX) {
+                          if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+                          else { w = Math.round(w * MAX / h); h = MAX; }
+                        }
+                        const cv = document.createElement("canvas");
+                        cv.width = w; cv.height = h;
+                        cv.getContext("2d").drawImage(imgEl, 0, 0, w, h);
+                        const dataUrl = cv.toDataURL("image/jpeg", 0.65);
+                        setCardImage(dataUrl);
+                        try {
+                          await setDoc(doc(db, "userProfiles", user.uid), { cardImageUrl: dataUrl }, { merge: true });
+                          showAlert("명함 이미지가 저장되었습니다.");
+                        } catch(err) {
+                          showAlert("저장 실패: " + err.message);
+                        } finally {
+                          setCardImageUploading(false);
+                        }
+                      };
+                      imgEl.onerror = () => { URL.revokeObjectURL(objUrl); showAlert("이미지 로드 실패"); setCardImageUploading(false); };
+                      imgEl.src = objUrl;
                     }} />
                 </label>
                 {cardImage && (
@@ -28793,67 +28807,77 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
     const cInfo = item.clientInfo || {};
     const sup = item.totals?.공급가 || 0;
     const tax = item.totals?.세액 || 0;
+    const total = sup + tax;
+    const n2k = numberToKorean;
+    const receiveFields = [["상호",cInfo.거래처명],["대표자",cInfo.대표자],["사업자번호",cInfo.사업자번호],["주소",cInfo.주소],["업태",cInfo.업태],["종목",cInfo.종목]];
+    const supplyFields = [["상호",cp.name],["사업자번호",cp.bizNo],["주소",cp.addr],["업태",cp.type],["종목",cp.item]];
     const rowsHtml = rows.map((m, i) => `
-      <tr style="border-bottom:1px solid #e5e7eb;${i % 2 === 0 ? "background:#f9fafb" : "background:#fff"}">
-        <td style="padding:6px 8px;text-align:center;font-size:12px;color:#6b7280">${i+1}</td>
-        <td style="padding:6px 8px;font-size:12px;color:#374151">${m.상차일||""}</td>
-        <td style="padding:6px 8px;font-size:12px;color:#374151">${m.상차지||""}</td>
-        <td style="padding:6px 8px;font-size:12px;color:#374151">${m.하차지||""}</td>
-        <td style="padding:6px 8px;font-size:12px;color:#374151">${m.화물명||""}</td>
-        <td style="padding:6px 8px;font-size:12px;color:#374151">${m.기사명||""}</td>
-        <td style="padding:6px 8px;text-align:right;font-size:12px;color:#374151">${(m.공급가액||0).toLocaleString()}</td>
-        <td style="padding:6px 8px;text-align:right;font-size:12px;color:#374151">${(m.세액||0).toLocaleString()}</td>
-        <td style="padding:6px 8px;text-align:right;font-size:12px;font-weight:600;color:#1e3a5f">${((m.공급가액||0)+(m.세액||0)).toLocaleString()}</td>
+      <tr style="border-bottom:1px solid #f3f4f6;background:${i%2===0?"#fff":"#f9fafb"}">
+        <td style="padding:7px 10px;text-align:center;font-size:12px;color:#9ca3af">${i+1}</td>
+        <td style="padding:7px 10px;font-size:12px;color:#374151">${m.상차일||""}</td>
+        <td style="padding:7px 10px;font-size:12px;color:#374151">${m.상차지||""}</td>
+        <td style="padding:7px 10px;font-size:12px;color:#374151">${m.하차지||""}</td>
+        <td style="padding:7px 10px;font-size:12px;color:#374151">${m.화물명||""}</td>
+        <td style="padding:7px 10px;font-size:12px;color:#374151">${m.기사명||""}</td>
+        <td style="padding:7px 10px;font-size:12px;color:#374151">${m.차량번호||""}</td>
+        <td style="padding:7px 10px;text-align:right;font-size:12px;color:#374151">${(m.공급가액||0).toLocaleString()}</td>
+        <td style="padding:7px 10px;text-align:right;font-size:12px;color:#374151">${(m.세액||0).toLocaleString()}</td>
+        <td style="padding:7px 10px;text-align:right;font-size:12px;font-weight:600;color:#1B2B4B">${((m.공급가액||0)+(m.세액||0)).toLocaleString()}</td>
       </tr>`).join("");
-    return `<div style="font-family:sans-serif;background:#fff;padding:0">
-      <div style="background:#1B2B4B;padding:24px 32px;display:flex;justify-content:space-between;align-items:center">
+    const infoRow = (k, v, last=false) => `<tr style="border-bottom:${last?"none":"1px solid #f3f4f6"}"><td style="padding:6px 12px 6px 0;color:#6b7280;font-weight:600;font-size:13px;white-space:nowrap;width:90px">${k}</td><td style="padding:6px 0;color:#111827;font-weight:500;font-size:13px">${v||"-"}</td></tr>`;
+    return `<div style="font-family:'Malgun Gothic','Apple SD Gothic Neo',sans-serif;background:#fff;width:1100px;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden">
+      <div style="background:#1B2B4B;padding:20px 32px;display:flex;justify-content:space-between;align-items:center">
         <div>
-          <div style="font-size:22px;font-weight:900;color:#fff">거래명세서</div>
+          <div style="font-size:22px;font-weight:900;color:#fff;margin:0">거래명세서</div>
           <div style="font-size:13px;color:rgba(255,255,255,0.6);margin-top:4px">거래기간 : ${item.start||""} ~ ${item.end||""}</div>
         </div>
-        <div style="text-align:right;color:rgba(255,255,255,0.7);font-size:12px;line-height:1.8">
+        <div style="text-align:right;color:rgba(255,255,255,0.65);font-size:12px;line-height:1.9">
           <div>${cp.name} · 대표 ${cp.ceo}</div><div>${cp.contact}</div><div>${cp.bank}</div>
         </div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;border-bottom:1px solid #e5e7eb">
         <div style="padding:20px;border-right:1px solid #e5e7eb">
-          <div style="font-size:11px;font-weight:700;color:#9ca3af;margin-bottom:8px;letter-spacing:0.05em">공급받는자</div>
-          <table style="width:100%;font-size:13px">
-            ${[["상호",cInfo.거래처명],["대표자",cInfo.대표자],["사업자번호",cInfo.사업자번호],["주소",cInfo.주소]].map(([k,v])=>`<tr style="border-bottom:1px solid #f3f4f6"><td style="padding:5px 12px 5px 0;color:#6b7280;font-weight:600;width:80px">${k}</td><td style="padding:5px 0;color:#111827;font-weight:500">${v||"-"}</td></tr>`).join("")}
-          </table>
+          <div style="font-size:11px;font-weight:700;color:#9ca3af;margin-bottom:8px;letter-spacing:0.08em;text-transform:uppercase">공급받는자</div>
+          <table style="width:100%"><tbody>
+            ${receiveFields.map(([k,v],i)=>infoRow(k,v,i===receiveFields.length-1)).join("")}
+          </tbody></table>
         </div>
         <div style="padding:20px">
-          <div style="font-size:11px;font-weight:700;color:#9ca3af;margin-bottom:8px;letter-spacing:0.05em">공급자</div>
-          <table style="width:100%;font-size:13px">
-            ${[["상호",cp.name],["대표자",cp.ceo],["사업자번호",cp.bizNo],["주소",cp.addr]].map(([k,v])=>`<tr style="border-bottom:1px solid #f3f4f6"><td style="padding:5px 12px 5px 0;color:#6b7280;font-weight:600;width:80px">${k}</td><td style="padding:5px 0;color:#111827;font-weight:500">${v||"-"}</td></tr>`).join("")}
-          </table>
+          <div style="font-size:11px;font-weight:700;color:#9ca3af;margin-bottom:8px;letter-spacing:0.08em;text-transform:uppercase">공급자</div>
+          <table style="width:100%"><tbody>
+            <tr style="border-bottom:1px solid #f3f4f6">
+              <td style="padding:6px 12px 6px 0;color:#6b7280;font-weight:600;font-size:13px;width:90px">상호</td>
+              <td style="padding:6px 0;color:#111827;font-weight:500;font-size:13px">${cp.name}</td>
+            </tr>
+            <tr style="border-bottom:1px solid #f3f4f6">
+              <td style="padding:6px 12px 6px 0;color:#6b7280;font-weight:600;font-size:13px;width:90px">대표자</td>
+              <td style="padding:6px 0;color:#111827;font-weight:500;font-size:13px">${cp.ceo}</td>
+            </tr>
+            ${supplyFields.map(([k,v],i)=>infoRow(k,v,i===supplyFields.length-1)).join("")}
+          </tbody></table>
         </div>
+      </div>
+      <div style="padding:12px 24px;background:#f9fafb;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center">
+        <div style="font-size:13px;font-weight:600;color:#6b7280">합계금액 (공급가액+부가세)</div>
+        <div style="font-size:15px;font-weight:800;color:#1B2B4B">일금 ${n2k(total)} 원정 &nbsp;<span style="font-size:13px;font-weight:400;color:#6b7280">(W ${total.toLocaleString()})</span></div>
       </div>
       <table style="width:100%;border-collapse:collapse">
         <thead>
-          <tr style="background:#f3f4f6">
-            <th style="padding:8px;font-size:12px;color:#6b7280;font-weight:700;border-bottom:1px solid #e5e7eb">No</th>
-            <th style="padding:8px;font-size:12px;color:#6b7280;font-weight:700;border-bottom:1px solid #e5e7eb">날짜</th>
-            <th style="padding:8px;font-size:12px;color:#6b7280;font-weight:700;border-bottom:1px solid #e5e7eb">상차지</th>
-            <th style="padding:8px;font-size:12px;color:#6b7280;font-weight:700;border-bottom:1px solid #e5e7eb">하차지</th>
-            <th style="padding:8px;font-size:12px;color:#6b7280;font-weight:700;border-bottom:1px solid #e5e7eb">화물명</th>
-            <th style="padding:8px;font-size:12px;color:#6b7280;font-weight:700;border-bottom:1px solid #e5e7eb">기사명</th>
-            <th style="padding:8px;text-align:right;font-size:12px;color:#6b7280;font-weight:700;border-bottom:1px solid #e5e7eb">공급가액</th>
-            <th style="padding:8px;text-align:right;font-size:12px;color:#6b7280;font-weight:700;border-bottom:1px solid #e5e7eb">세액</th>
-            <th style="padding:8px;text-align:right;font-size:12px;color:#6b7280;font-weight:700;border-bottom:1px solid #e5e7eb">합계</th>
+          <tr style="background:#1B2B4B">
+            ${["No","날짜","상차지","하차지","화물명","기사명","차량번호","공급가액","세액(10%)","합계"].map(h=>`<th style="padding:9px 10px;font-size:12px;color:#fff;font-weight:700;text-align:center;white-space:nowrap">${h}</th>`).join("")}
           </tr>
         </thead>
         <tbody>${rowsHtml}</tbody>
         <tfoot>
-          <tr style="background:#1B2B4B">
-            <td colspan="6" style="padding:10px 16px;font-size:13px;font-weight:700;color:#fff">합계 (${rows.length}건)</td>
-            <td style="padding:10px 8px;text-align:right;font-size:13px;font-weight:700;color:#fff">${sup.toLocaleString()}</td>
-            <td style="padding:10px 8px;text-align:right;font-size:13px;font-weight:700;color:#fff">${tax.toLocaleString()}</td>
-            <td style="padding:10px 8px;text-align:right;font-size:13px;font-weight:700;color:#fff">${(sup+tax).toLocaleString()}</td>
+          <tr style="border-top:2px solid #e5e7eb;background:#f3f4f6">
+            <td colspan="7" style="padding:10px 16px;font-size:13px;font-weight:700;color:#374151">소&nbsp;&nbsp;계</td>
+            <td style="padding:10px 10px;text-align:right;font-size:13px;font-weight:700;color:#1B2B4B">${sup.toLocaleString()}</td>
+            <td style="padding:10px 10px;text-align:right;font-size:13px;font-weight:700;color:#1B2B4B">${tax.toLocaleString()}</td>
+            <td style="padding:10px 10px;text-align:right;font-size:13px;font-weight:700;color:#1B2B4B">${total.toLocaleString()}</td>
           </tr>
         </tfoot>
       </table>
-      <div style="padding:16px 24px;background:#f9fafb;border-top:1px solid #e5e7eb;font-size:12px;color:#6b7280">
+      <div style="padding:12px 24px;background:#f9fafb;border-top:1px solid #e5e7eb;font-size:12px;color:#9ca3af;text-align:center">
         입금계좌: ${cp.bank} &nbsp;|&nbsp; 문의: ${cp.email}
       </div>
     </div>`;
@@ -29233,6 +29257,8 @@ const [includeCardAr, setIncludeCardAr] = useState(true);
       sentBy: auth.currentUser?.email || "",
     });
   };
+
+  const [deleteLogConfirm, setDeleteLogConfirm] = useState(null); // log.id to delete
 
   // ── 일괄 정산 모달 상태 ──
   const [batchModalOpen, setBatchModalOpen] = useState(false);
@@ -29922,6 +29948,7 @@ const handleBatchSettle = async (targetStatus) => {
   }, [monthRowsRaw, selClient]);
 
   return (
+    <>
     <div className="p-4">
       {/* 탭 */}
       <div className="flex gap-2 mb-5">
@@ -30663,7 +30690,7 @@ const handleBatchSettle = async (targetStatus) => {
                 try {
                   const invHtml = buildBatchInvoiceHtml(item, COMPANY_PRINT);
                   const div = document.createElement("div");
-                  div.style.cssText = "position:absolute;left:-9999px;top:0;width:960px;background:#fff";
+                  div.style.cssText = "position:absolute;left:-9999px;top:0;width:1100px;overflow:visible;background:#fff";
                   div.innerHTML = invHtml;
                   document.body.appendChild(div);
                   await new Promise(r => setTimeout(r, 200));
@@ -30939,16 +30966,21 @@ const handleBatchSettle = async (targetStatus) => {
                   ) : (
                     <div className="space-y-2 max-h-[220px] overflow-y-auto">
                       {emailLogs.filter(l => l.client === client).map(log => (
-                        <div key={log.id} className={`rounded-lg px-4 py-2.5 border text-[12px] ${log.status === "success" ? "bg-emerald-50 border-emerald-200" : "bg-red-50 border-red-200"}`}>
+                        <div key={log.id} className={`rounded-lg px-4 py-2.5 border text-[12px] ${log.status === "success" ? "bg-[#f4f6f9] border-[#d0dae8]" : "bg-[#fdf4f4] border-[#e8c8c8]"}`}>
                           <div className="flex items-center justify-between">
-                            <span className={`font-bold text-[11px] px-2 py-0.5 rounded ${log.status === "success" ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>
-                              {log.status === "success" ? "성공" : "실패"}
-                            </span>
-                            <span className="text-gray-400 text-[11px]">{log.sentAt ? new Date(log.sentAt).toLocaleString("ko-KR") : ""}</span>
+                            <div className="flex items-center gap-2">
+                              <span className={`font-bold text-[11px] px-2 py-0.5 rounded ${log.status === "success" ? "bg-[#1B2B4B] text-white" : "bg-[#7a2020] text-white"}`}>
+                                {log.status === "success" ? "성공" : "실패"}
+                              </span>
+                              <span className="text-[11px] text-gray-400">{log.sentAt ? new Date(log.sentAt).toLocaleString("ko-KR") : ""}</span>
+                            </div>
+                            <button onClick={() => setDeleteLogConfirm(log.id)} className="text-gray-300 hover:text-red-400 transition" title="이력 삭제">
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                            </button>
                           </div>
-                          <div className="mt-1 text-gray-700">수신: {log.to}</div>
-                          <div className="text-gray-500 truncate">{log.subject}</div>
-                          {log.error && <div className="text-red-500 text-[11px] mt-0.5">{log.error}</div>}
+                          <div className="mt-1 text-gray-600">수신: {log.to}</div>
+                          <div className="text-gray-400 truncate">{log.subject}</div>
+                          {log.error && <div className="text-[#7a2020] text-[11px] mt-0.5">{log.error}</div>}
                         </div>
                       ))}
                     </div>
@@ -32034,19 +32066,21 @@ const handleBatchSettle = async (targetStatus) => {
                     ) : (
                       <div className="space-y-2 max-h-[220px] overflow-y-auto">
                         {emailLogs.filter(l=>l.client===selClient).map(log => (
-                          <div key={log.id} className={`rounded-lg px-4 py-2.5 border text-[12px] ${log.status==="success" ? "bg-emerald-50 border-emerald-200" : "bg-red-50 border-red-200"}`}>
+                          <div key={log.id} className={`rounded-lg px-4 py-2.5 border text-[12px] ${log.status==="success" ? "bg-[#f4f6f9] border-[#d0dae8]" : "bg-[#fdf4f4] border-[#e8c8c8]"}`}>
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-2">
-                                <span className={`font-bold text-[11px] px-2 py-0.5 rounded ${log.status==="success" ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>
+                                <span className={`font-bold text-[11px] px-2 py-0.5 rounded ${log.status==="success" ? "bg-[#1B2B4B] text-white" : "bg-[#7a2020] text-white"}`}>
                                   {log.status==="success" ? "성공" : "실패"}
                                 </span>
-                                <span className="text-[11px] text-gray-500 font-semibold">{log.type}</span>
+                                <span className="text-[11px] text-gray-400">{log.sentAt ? new Date(log.sentAt).toLocaleString("ko-KR") : ""}</span>
                               </div>
-                              <span className="text-gray-400 text-[11px]">{log.sentAt ? new Date(log.sentAt).toLocaleString("ko-KR") : ""}</span>
+                              <button onClick={() => setDeleteLogConfirm(log.id)} className="text-gray-300 hover:text-red-400 transition" title="이력 삭제">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                              </button>
                             </div>
-                            <div className="mt-1 text-gray-700">수신: {log.to}</div>
-                            <div className="text-gray-500 truncate">{log.subject}</div>
-                            {log.error && <div className="text-red-500 text-[11px] mt-0.5">{log.error}</div>}
+                            <div className="mt-1 text-gray-600">수신: {log.to}</div>
+                            <div className="text-gray-400 truncate">{log.subject}</div>
+                            {log.error && <div className="text-[#7a2020] text-[11px] mt-0.5">{log.error}</div>}
                           </div>
                         ))}
                       </div>
@@ -32059,6 +32093,28 @@ const handleBatchSettle = async (targetStatus) => {
         </div>
       )}
     </div>
+    {/* 발송이력 삭제 확인 팝업 */}
+    {deleteLogConfirm && (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]" onClick={() => setDeleteLogConfirm(null)}>
+        <div className="bg-white rounded-2xl shadow-2xl w-[360px] overflow-hidden" onClick={e => e.stopPropagation()}>
+          <div className="bg-[#1B2B4B] px-6 py-4 flex items-center gap-3">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="opacity-70"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M9 6V4h6v2"/></svg>
+            <div className="text-white font-bold text-[15px]">발송이력 삭제</div>
+          </div>
+          <div className="px-6 py-5 text-[14px] text-gray-700">이 발송이력을 삭제하시겠습니까?</div>
+          <div className="px-6 pb-5 flex gap-3">
+            <button className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 font-semibold text-[13px] hover:bg-gray-200 transition"
+              onClick={() => setDeleteLogConfirm(null)}>취소</button>
+            <button className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white font-bold text-[13px] hover:bg-[#243a60] transition"
+              onClick={async () => {
+                await deleteDoc(doc(db, "emailLogs", deleteLogConfirm)).catch(() => {});
+                setDeleteLogConfirm(null);
+              }}>삭제</button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }
 
