@@ -89,8 +89,8 @@ function AddressSearch({ value, onChange, onSelect, placeholder }) {
   const fetchSugg = async (kw) => {
     if (!kw.trim() || kw.length < 2) { setSuggestions([]); return; }
     try {
-      // POI 검색: 부분 입력("서울", "원창동" 등)에서 구/동 수준 주소 제안
-      const url = `https://apis.openapi.sk.com/tmap/pois?version=1&format=json&searchKeyword=${encodeURIComponent(kw)}&count=20&appKey=${TMAP_KEY}`;
+      const kwClean = kw.replace(/\s+/g, "");
+      const url = `https://apis.openapi.sk.com/tmap/pois?version=1&format=json&searchKeyword=${encodeURIComponent(kw)}&count=50&appKey=${TMAP_KEY}`;
       const res = await fetch(url, { headers: { Accept: "application/json" } });
       const data = await res.json();
       const pois = data?.searchPoiInfo?.pois?.poi || [];
@@ -102,18 +102,18 @@ function AddressSearch({ value, onChange, onSelect, placeholder }) {
           const upper = p.upperAddrName || "";
           const middle = p.middleAddrName || "";
           const low = p.lowAddrName || "";
-          // 짧은 쿼리(시/도 수준)는 구 단위, 긴 쿼리는 동 단위까지 표시
-          const addr = kw.length <= 3
-            ? [upper, middle].filter(Boolean).join(" ")
-            : [upper, middle, low].filter(Boolean).join(" ");
+          // 항상 동 단위까지 표시
+          const addr = [upper, middle, low].filter(Boolean).join(" ");
           if (!addr || seen.has(addr)) continue;
+          // 주소가 검색어를 포함하는 결과만 표시 (무관한 POI 제외)
+          if (!addr.replace(/\s+/g, "").includes(kwClean)) continue;
           seen.add(addr);
           results.push({
             address: addr,
             lat: parseFloat(p.noorLat || p.frontLat || 0),
             lon: parseFloat(p.noorLon || p.frontLon || 0),
           });
-          if (results.length >= 7) break;
+          if (results.length >= 8) break;
         }
         if (results.length > 0) { setSuggestions(results); return; }
       }
