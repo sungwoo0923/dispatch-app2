@@ -13438,12 +13438,27 @@ const handleCloseFileUpload = async (e) => {
         normalizePlate(r.차량번호 || "") === filePlate && r.상차일 === fileDate
       );
     } else {
-      matched = todayRows.filter(r => normalizePlate(r.차량번호 || "") === filePlate);
+      // 날짜 감지 실패: 전체 rows에서 차량번호 매칭 후, 운임으로 disambiguate
+      const candidates = rows.filter(r => normalizePlate(r.차량번호 || "") === filePlate);
+      if (candidates.length <= 1) {
+        matched = candidates;
+      } else if (fareCol !== -1) {
+        const fileFare = Number(String(row[fareCol] || "0").replace(/[^\d]/g, ""));
+        if (fileFare > 0) {
+          const byFare = candidates.filter(r =>
+            Math.abs(Number(String(r.기사운임 || "0").replace(/[^\d]/g, "")) - fileFare) < 5000
+          );
+          matched = byFare.length === 1 ? byFare : byFare.length > 1 ? byFare : [];
+        } else {
+          matched = [];
+        }
+      } else {
+        matched = [];
+      }
     }
 
     matched.forEach(mr => {
-      const baseRows = fileDate ? rows : todayRows;
-      const seq = baseRows.indexOf(mr) + 1;
+      const seq = rows.indexOf(mr) + 1;
       const dateLabel = fileDate ? ` (${fileDate})` : "";
       const label = `${seq}번 [${mr.거래처명 || "-"}] ${mr.상차지명 || ""} → ${mr.하차지명 || ""}${dateLabel}`;
 
@@ -13520,7 +13535,7 @@ const handleCloseFileUpload = async (e) => {
     }
   }
 
-  todayRows.forEach(mr => {
+  rows.forEach(mr => {
     const dispatch = (mr.배차방식 || "").trim();
     if (dispatch !== "24시" && dispatch !== "24시(고정기사)") return;
     if (!mr.차량번호?.trim()) return;
@@ -13532,7 +13547,7 @@ const handleCloseFileUpload = async (e) => {
       : filePlates.has(plate);
 
     if (!inFile) {
-      const seq = todayRows.indexOf(mr) + 1;
+      const seq = rows.indexOf(mr) + 1;
       const label = `${seq}번 [${mr.거래처명 || "-"}] ${mr.상차지명 || ""} → ${mr.하차지명 || ""}`;
       fileIssues.push({
         rowId: mr._id,
