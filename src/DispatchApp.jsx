@@ -10816,12 +10816,8 @@ function RealtimeStatus({
 }) {
 const alertAudio = React.useRef(null);
 
-  // ⚡ 탭 진입 시 끊김 방지 - 다음 프레임으로 무거운 렌더링 미루기
-  const [ready, setReady] = React.useState(false);
-  React.useEffect(() => {
-    const id = requestAnimationFrame(() => setReady(true));
-    return () => cancelAnimationFrame(id);
-  }, []);
+  // ⚡ 탭 진입 시 즉시 렌더링
+  const [ready] = React.useState(true);
 
 // 🚫 블랙 기사 알림 팝업 상태
 const [blackAlert, setBlackAlert] = React.useState(null);
@@ -32041,8 +32037,8 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
     const reader = new FileReader();
     reader.onload = (evt) => {
       try {
-        // cellDates:true → 날짜 셀을 JavaScript Date 객체로 읽기
-        const wb = XLSX.read(new Uint8Array(evt.target.result), { type: "array", cellDates: true });
+        // cellDates 없이 원본 시리얼로 읽어야 timezone 왜곡 없음
+        const wb = XLSX.read(new Uint8Array(evt.target.result), { type: "array" });
 
         // 실제 헤더 행 찾기 (첫 행이 제목일 수 있어 동적으로 감지)
         const rawArr = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: "" });

@@ -5400,8 +5400,6 @@ const formSmartRef = useRef(null);
 const handleFormSmartSearch = (val) => {
   if (!val.trim()) { setFormSmartMatched([]); return; }
   const nd = (s = "") => String(s).replace(/[-.\s]/g, "").toLowerCase();
-
-  // parseDriverText 사용 — [차주정보] 태그 포함 모든 형식 정확히 파싱
   const { plate, phone, name } = parseDriverText(val);
 
   // 1️⃣ 차량번호 우선
@@ -5409,9 +5407,17 @@ const handleFormSmartSearch = (val) => {
     const results = (drivers || []).filter(d => nd(d.차량번호) === nd(plate));
     setFormSmartMatched(results.slice(0, 5));
     if (results.length === 0) {
+      // 신규 기사: 파싱된 값 직접 적용
       update("차량번호", plate);
       update("기사명", name);
       update("전화번호", phone);
+    } else {
+      // 이름 정확 매칭 우선, 없으면 첫 번째 적용 (상세보기와 동일 로직)
+      const exactMatch = results.find(d => nd(d.이름) === nd(name));
+      const best = exactMatch || results[0];
+      update("차량번호", best.차량번호 || "");
+      update("기사명", best.이름 || "");
+      update("전화번호", best.전화번호 || "");
     }
     return;
   }
@@ -5423,6 +5429,11 @@ const handleFormSmartSearch = (val) => {
     if (results.length === 0) {
       update("기사명", name);
       update("전화번호", phone);
+    } else {
+      const best = results[0];
+      update("차량번호", best.차량번호 || "");
+      update("기사명", best.이름 || "");
+      update("전화번호", best.전화번호 || "");
     }
     return;
   }
