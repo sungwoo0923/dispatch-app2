@@ -4019,6 +4019,80 @@ function DetailCard({ children, className = "" }) {
   );
 }
 
+function parseDriverText(text) {
+  let name = "", phone = "", plate = "";
+
+  const CITY_EXCLUDE = [
+    "강원","서울","경기","인천","부산","대구","광주","대전","울산","세종",
+    "경북","경남","전북","전남","충북","충남","제주",
+    "하남","성남","수원","안양","부천","화성","평택","시흥","안산","군포",
+    "의왕","오산","파주","고양","의정부","양주","김포","구리","남양주","이천",
+    "여주","포천","광명","동두천","안성","용인","강남","강서","영등포",
+    "마포","서초","종로","중구","동대문","성동","송파","강동","관악",
+    "초장축윙","초장축","장축","윙바디","카고","탑차","냉장탑","냉동탑",
+    "냉장윙","냉동윙","냉장","냉동","리프트","다마스","라보","차주정보",
+    "차량정보","기사정보","차량번호",
+  ];
+
+  const hasTag = /\[(차주정보|기사정보|차량정보)\]/.test(text);
+
+  if (hasTag) {
+    const ownerBlock = text.match(/\[(차주정보|기사정보)\]\s*(.+?)(?=\[차량정보\]|$)/s);
+    if (ownerBlock) {
+      const block = ownerBlock[2].trim();
+      const phoneM = block.match(/0\d{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4}/);
+      if (phoneM) {
+        phone = phoneM[0].replace(/[-.\s]/g, "").replace(/^(\d{3})(\d{3,4})(\d{4})$/, "$1-$2-$3");
+        const beforePhone = block.slice(0, block.indexOf(phoneM[0])).replace(/[/\s]+$/, "");
+        const nameM = beforePhone.match(/[가-힣]{2,5}$/);
+        if (nameM) name = nameM[0];
+      } else {
+        const nameOnly = block.match(/^[가-힣]{2,5}/);
+        if (nameOnly) name = nameOnly[0];
+      }
+    }
+    const vehicleLine = text.match(/\[차량정보\]\s*([^\n\[]+)/);
+    if (vehicleLine) {
+      const plateM = vehicleLine[1].match(/[가-힣]{0,3}\d{2,3}[가-힣]\d{4}/);
+      if (plateM) plate = plateM[0];
+    }
+    if (!plate) {
+      const plm = text.match(/[가-힣]{0,3}\d{2,3}[가-힣]\d{4}/);
+      if (plm) plate = plm[0];
+    }
+    if (!phone) {
+      const pm = text.match(/0\d{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4}/);
+      if (pm) phone = pm[0].replace(/[-.\s]/g, "").replace(/^(\d{3})(\d{3,4})(\d{4})$/, "$1-$2-$3");
+    }
+    return { phone, plate, name };
+  }
+
+  const noRoute = text.replace(/^.+?(?:->|→|→)\s*/u, "").trim() || text;
+
+  const phoneMatch = noRoute.match(/0\d{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4}/);
+  phone = phoneMatch ? phoneMatch[0].replace(/[-.\s]/g, "").replace(/^(\d{3})(\d{3,4})(\d{4})$/, "$1-$2-$3") : "";
+
+  const plateMatch = noRoute.match(/[가-힣]{2,3}\d{2}[가-힣]\d{4}|\d{2,3}[가-힣]\d{4}/);
+  plate = plateMatch ? plateMatch[0] : "";
+
+  const stripped = noRoute
+    .replace(phoneMatch?.[0] || "", "")
+    .replace(plate || "", "")
+    .replace(/\d+[톤kg]+/gi, "")
+    .replace(/\d+/g, "")
+    .replace(/[->→/()[\]]/g, " ");
+
+  const nameMatch = stripped.match(/[가-힣]{2,5}/g) || [];
+  name = nameMatch.find(n =>
+    n.length >= 2 &&
+    !CITY_EXCLUDE.includes(n) &&
+    !/[구시군동읍면로길]$/.test(n) &&
+    !/^(서|동|남|북|중)구$/.test(n)
+  ) || "";
+
+  return { phone, plate, name };
+}
+
 const SmartTextarea = React.memo(function SmartTextarea({ onSearch, textareaRef }) {
   const timerRef = React.useRef(null);
   return (
@@ -4131,93 +4205,6 @@ const pickupTimeText = order.상차시간
     });
     return () => unsub();
   }, [showAttachments]);
-
-  const parseDriverText = (text) => {
-    let name = "", phone = "", plate = "";
-
-    const CITY_EXCLUDE = [
-      "강원","서울","경기","인천","부산","대구","광주","대전","울산","세종",
-      "경북","경남","전북","전남","충북","충남","제주",
-      "하남","성남","수원","안양","부천","화성","평택","시흥","안산","군포",
-      "의왕","오산","파주","고양","의정부","양주","김포","구리","남양주","이천",
-      "여주","포천","광명","동두천","안성","용인","강남","강서","영등포",
-      "마포","서초","종로","중구","동대문","성동","송파","강동","관악",
-      "초장축윙","초장축","장축","윙바디","카고","탑차","냉장탑","냉동탑",
-      "냉장윙","냉동윙","냉장","냉동","리프트","다마스","라보","차주정보",
-      "차량정보","기사정보","차량번호",
-    ];
-
-    const hasTag = /\[(차주정보|기사정보|차량정보)\]/.test(text);
-
-    if (hasTag) {
-      // 차주/기사 태그 뒤 이름+전화 파싱
-      // 패턴1: [차주정보] 이효승 / 01079175662
-      // 패턴2: [차주정보] 이효승 01079175662 (공백만)
-      // 패턴3: [기사정보] 이효승01079175662 (붙어있음)
-      const ownerBlock = text.match(/\[(차주정보|기사정보)\]\s*(.+?)(?=\[차량정보\]|$)/s);
-      if (ownerBlock) {
-        const block = ownerBlock[2].trim();
-        // 전화번호를 먼저 추출
-        const phoneM = block.match(/0\d{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4}/);
-        if (phoneM) {
-          phone = phoneM[0].replace(/[-.\s]/g, "").replace(/^(\d{3})(\d{3,4})(\d{4})$/, "$1-$2-$3");
-          // 전화번호 앞에 있는 한글 이름 추출 (전화번호 직전 / 또는 공백으로 구분)
-          const beforePhone = block.slice(0, block.indexOf(phoneM[0])).replace(/[/\s]+$/, "");
-          const nameM = beforePhone.match(/[가-힣]{2,5}$/);
-          if (nameM) name = nameM[0];
-        } else {
-          // 전화번호 없을 때: 한글 이름만
-          const nameOnly = block.match(/^[가-힣]{2,5}/);
-          if (nameOnly) name = nameOnly[0];
-        }
-      }
-
-      // 차량정보 태그에서 차량번호 추출
-      const vehicleLine = text.match(/\[차량정보\]\s*([^\n\[]+)/);
-      if (vehicleLine) {
-        const plateM = vehicleLine[1].match(/[가-힣]{0,3}\d{2,3}[가-힣]\d{4}/);
-        if (plateM) plate = plateM[0];
-      }
-      // 차량번호 태그 없이 텍스트 전체에서 추출
-      if (!plate) {
-        const plm = text.match(/[가-힣]{0,3}\d{2,3}[가-힣]\d{4}/);
-        if (plm) plate = plm[0];
-      }
-      if (!phone) {
-        const pm = text.match(/0\d{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4}/);
-        if (pm) phone = pm[0].replace(/[-.\s]/g, "").replace(/^(\d{3})(\d{3,4})(\d{4})$/, "$1-$2-$3");
-      }
-      return { phone, plate, name };
-    }
-
-    // 태그 없는 자유형식: "인천 서구 카고 3.5톤 이효승 01079175662 인천85사7787"
-    // 먼저 노선 정보(-> 앞)를 제거
-    const noRoute = text.replace(/^.+?(?:->|→|→)\s*/u, "").trim() || text;
-
-    const phoneMatch = noRoute.match(/0\d{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4}/);
-    phone = phoneMatch ? phoneMatch[0].replace(/[-.\s]/g, "").replace(/^(\d{3})(\d{3,4})(\d{4})$/, "$1-$2-$3") : "";
-
-    const plateMatch = noRoute.match(/[가-힣]{2,3}\d{2}[가-힣]\d{4}|\d{2,3}[가-힣]\d{4}/);
-    plate = plateMatch ? plateMatch[0] : "";
-
-    // 전화/차량번호/경로/특수문자 제거 후 한글 이름 추출
-    const stripped = noRoute
-      .replace(phoneMatch?.[0] || "", "")
-      .replace(plate || "", "")
-      .replace(/\d+[톤kg]+/gi, "")   // 톤수
-      .replace(/\d+/g, "")           // 숫자
-      .replace(/[->→/()[\]]/g, " ");  // 특수문자
-
-    const nameMatch = stripped.match(/[가-힣]{2,5}/g) || [];
-    name = nameMatch.find(n =>
-      n.length >= 2 &&
-      !CITY_EXCLUDE.includes(n) &&
-      !/[구시군동읍면로길]$/.test(n) &&
-      !/^(서|동|남|북|중)구$/.test(n)
-    ) || "";
-
-    return { phone, plate, name };
-  };
 
   const normD = (s = "") => String(s).replace(/[-.\s]/g, "").toLowerCase();
 
@@ -5408,26 +5395,18 @@ const closeContactPopup = (selected) => {
 const [formSmartMatched, setFormSmartMatched] = useState([]);
 const formSmartRef = useRef(null);
 const handleFormSmartSearch = (val) => {
-  if (!val.trim()) { setFormSmartMatched([]); return; }
+  if (!val.trim()) { setFormSmartMatched([]); setShowNewDriver(false); return; }
   const nd = (s = "") => String(s).replace(/[-.\s]/g, "").toLowerCase();
   const { plate, phone, name } = parseDriverText(val);
 
   // 1️⃣ 차량번호 우선
   if (plate) {
     const results = (drivers || []).filter(d => nd(d.차량번호) === nd(plate));
-    setFormSmartMatched(results.slice(0, 5));
     if (results.length === 0) {
-      // 신규 기사: 파싱된 값 직접 적용
-      update("차량번호", plate);
-      update("기사명", name);
-      update("전화번호", phone);
+      // 신규: 드롭다운에 "신규기사" 항목으로 표시
+      setFormSmartMatched([{ 차량번호: plate, 이름: name || "", 전화번호: phone || "", _isNew: true }]);
     } else {
-      // 이름 정확 매칭 우선, 없으면 첫 번째 적용 (상세보기와 동일 로직)
-      const exactMatch = results.find(d => nd(d.이름) === nd(name));
-      const best = exactMatch || results[0];
-      update("차량번호", best.차량번호 || "");
-      update("기사명", best.이름 || "");
-      update("전화번호", best.전화번호 || "");
+      setFormSmartMatched(results.slice(0, 5));
     }
     return;
   }
@@ -5435,15 +5414,10 @@ const handleFormSmartSearch = (val) => {
   // 2️⃣ 전화번호로 검색
   if (phone) {
     const results = (drivers || []).filter(d => nd(d.전화번호) === nd(phone));
-    setFormSmartMatched(results.slice(0, 5));
     if (results.length === 0) {
-      update("기사명", name);
-      update("전화번호", phone);
+      setFormSmartMatched([{ 차량번호: "", 이름: name || "", 전화번호: phone, _isNew: true }]);
     } else {
-      const best = results[0];
-      update("차량번호", best.차량번호 || "");
-      update("기사명", best.이름 || "");
-      update("전화번호", best.전화번호 || "");
+      setFormSmartMatched(results.slice(0, 5));
     }
     return;
   }
@@ -6495,19 +6469,32 @@ const pickDrop = (c) => {
           <SmartTextarea textareaRef={formSmartRef} onSearch={handleFormSmartSearch} />
           {formSmartMatched.length > 0 && (
             <div className="absolute z-50 w-full bg-white border border-gray-200 rounded-xl shadow-xl mt-1 overflow-hidden">
-              {formSmartMatched.map((d,i) => (
+              {formSmartMatched.map((d, i) => (
                 <button key={i} type="button"
                   className="w-full text-left px-4 py-2.5 hover:bg-gray-50 border-b border-gray-100 last:border-0"
                   onPointerDown={e => {
                     e.preventDefault();
-                    update("차량번호", d.차량번호||"");
-                    update("기사명", d.이름||"");
-                    update("전화번호", d.전화번호||"");
+                    update("차량번호", d.차량번호 || "");
+                    update("기사명", d.이름 || "");
+                    update("전화번호", d.전화번호 || "");
                     setFormSmartMatched([]);
-                    if (formSmartRef.current) formSmartRef.current.value="";
+                    if (formSmartRef.current) formSmartRef.current.value = "";
+                    if (d._isNew) setShowNewDriver(true);
                   }}>
-                  <div className="font-bold text-[13px] text-gray-900">{d.이름||"-"}</div>
-                  <div className="text-[11px] text-gray-400 mt-0.5">{d.차량번호} · {d.전화번호}</div>
+                  {d._isNew ? (
+                    <>
+                      <div className="flex items-center gap-1.5 mb-0.5">
+                        <span className="px-2 py-0.5 rounded-full bg-orange-100 text-orange-600 text-[11px] font-bold border border-orange-300">신규기사</span>
+                        <span className="font-bold text-[13px] text-gray-900">{d.이름 || "(이름 없음)"}</span>
+                      </div>
+                      <div className="text-[11px] text-gray-400">{d.차량번호 || "-"} · {d.전화번호 || "-"}</div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="font-bold text-[13px] text-gray-900">{d.이름 || "-"}</div>
+                      <div className="text-[11px] text-gray-400 mt-0.5">{d.차량번호} · {d.전화번호}</div>
+                    </>
+                  )}
                 </button>
               ))}
             </div>
@@ -7821,6 +7808,17 @@ function MobileNationalFare({ onBack }) {
 
   return (
     <div className="px-4 py-4 space-y-4">
+      {/* 뒤로가기 */}
+      <button
+        onClick={onBack}
+        className="flex items-center gap-1.5 text-[#1B2B4B] text-[13px] font-semibold py-1"
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="15 18 9 12 15 6"/>
+        </svg>
+        뒤로가기
+      </button>
+
       {/* 주소 입력 */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3">
         <div>
