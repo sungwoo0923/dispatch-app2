@@ -185,11 +185,78 @@ export default function StandardFare() {
   const [searched, setSearched] = useState(false);
   const [resetKey, setResetKey] = useState(0); // ClientSearch remount key
 
-  // 전국운임표 상태
-  const [nfPickup, setNfPickup] = useState("");
-  const [nfDrop, setNfDrop] = useState("");
-  const [nfTon, setNfTon] = useState("");
-  const [nfVehicle, setNfVehicle] = useState("전체");
+  // ── 전국운임 조회 (T-Map API 기반) ──
+  const [nfFrom, setNfFrom] = useState("");
+  const [nfTo, setNfTo] = useState("");
+  const [nfLoading, setNfLoading] = useState(false);
+  const [nfResult, setNfResult] = useState(null); // { km, from, to }
+  const [nfError, setNfError] = useState("");
+
+  const TMAP_KEY = "rmzwkLwH9N4i9ayxDj9GR6l8hyFDaEk52ZQs4yer";
+
+  // 차종별 운임 공식 (1800-5017 79km 데이터 역산 + 거리별 체감율 적용)
+  // Rate(km) = base + perKm * km, 5000원 단위 반올림
+  const FARE_TYPES = [
+    { label: "라보",   base: 58000,  perKm: 405  },
+    { label: "1톤",   base: 82000,  perKm: 608  },
+    { label: "1.4톤", base: 95000,  perKm: 700  },
+    { label: "2.5톤", base: 108000, perKm: 792  },
+    { label: "3.5톤", base: 126000, perKm: 873  },
+    { label: "5톤",   base: 146000, perKm: 1000 },
+    { label: "5톤축", base: 161000, perKm: 1063 },
+    { label: "11톤",  base: 191000, perKm: 1253 },
+    { label: "14톤",  base: 211000, perKm: 1316 },
+    { label: "18톤",  base: 230000, perKm: 1392 },
+    { label: "25톤",  base: 241000, perKm: 1443 },
+    { label: "장재물", base: null,   perKm: null  },
+  ];
+
+  const calcFare = (km, { base, perKm }) => {
+    if (!base) return null;
+    // 거리 체감: 100km 이상은 10%씩 perKm 감소 (최대 30% 감소)
+    let effectivePerKm = perKm;
+    if (km > 100) effectivePerKm = perKm * (1 - Math.min(0.3, (km - 100) / 1000));
+    const raw = base + Math.round(effectivePerKm * km);
+    return Math.round(raw / 5000) * 5000;
+  };
+
+  const geocodeTmap = async (addr) => {
+    const url = `https://apis.openapi.sk.com/tmap/geo/fullAddrGeo?version=1&format=json&fullAddr=${encodeURIComponent(addr)}`;
+    const res = await fetch(url, { headers: { appKey: TMAP_KEY, Accept: "application/json" } });
+    const data = await res.json();
+    const coord = data?.coordinateInfo?.coordinate?.[0];
+    if (!coord) throw new Error(`"${addr}" 주소를 찾을 수 없습니다`);
+    return { lat: parseFloat(coord.lat), lon: parseFloat(coord.lon) };
+  };
+
+  const getRouteKm = async (from, to) => {
+    const body = new URLSearchParams({
+      startX: String(from.lon), startY: String(from.lat),
+      endX: String(to.lon),   endY: String(to.lat),
+      reqCoordType: "WGS84GEO", resCoordType: "WGS84GEO", searchOption: "0",
+    });
+    const res = await fetch("https://apis.openapi.sk.com/tmap/routes?version=1", {
+      method: "POST",
+      headers: { appKey: TMAP_KEY, "Content-Type": "application/x-www-form-urlencoded" },
+      body,
+    });
+    const data = await res.json();
+    const dist = data?.features?.[0]?.properties?.totalDistance;
+    if (!dist) throw new Error("경로를 찾을 수 없습니다 (주소를 더 정확히 입력해 주세요)");
+    return Math.round(dist / 1000);
+  };
+
+  const lookupNationalFare = async () => {
+    if (!nfFrom.trim() || !nfTo.trim()) { setNfError("출발지와 도착지 주소를 모두 입력하세요"); return; }
+    setNfLoading(true); setNfError(""); setNfResult(null);
+    try {
+      const [fromCoord, toCoord] = await Promise.all([geocodeTmap(nfFrom), geocodeTmap(nfTo)]);
+      const km = await getRouteKm(fromCoord, toCoord);
+      setNfResult({ km, from: nfFrom, to: nfTo });
+    } catch (err) {
+      setNfError(err.message || "조회 중 오류가 발생했습니다");
+    } finally { setNfLoading(false); }
+  };
 
   useEffect(() => {
     let dispatchCache = [];
@@ -367,57 +434,6 @@ export default function StandardFare() {
     return { count: result.length, avg, min: Math.min(...fares), max: Math.max(...fares), avgDriver, normal, spike };
   }, [result]);
 
-  // ── 전국운임표: 전체 데이터에서 노선별 운임 집계 ──
-  const routeTable = useMemo(() => {
-    const toNum = (v) => Number(String(v||0).replace(/[^\d]/g,"")) || 0;
-    let data = dispatchData.filter(r => toNum(r.청구운임) > 0);
-
-    if (nfPickup.trim()) {
-      const q = clean(nfPickup);
-      data = data.filter(r => clean(r.상차지명||"").includes(q) || clean(r.상차지주소||"").includes(q));
-    }
-    if (nfDrop.trim()) {
-      const q = clean(nfDrop);
-      data = data.filter(r => clean(r.하차지명||"").includes(q) || clean(r.하차지주소||"").includes(q));
-    }
-    if (nfTon.trim()) {
-      const t = extractTon(nfTon);
-      if (t) data = data.filter(r => { const rt = extractTon(r.차량톤수); return rt && Math.abs(rt-t) <= 0.7; });
-    }
-    if (nfVehicle !== "전체") {
-      const vg = normalizeVehicleGroup(nfVehicle);
-      data = data.filter(r => normalizeVehicleGroup(r.차량종류) === vg);
-    }
-
-    const routeMap = new Map();
-    data.forEach(r => {
-      const from = (r.상차지명||"").trim();
-      const to = (r.하차지명||"").trim();
-      if (!from || !to) return;
-      const fare = toNum(r.청구운임);
-      const driverFare = toNum(r.기사운임);
-      const vtype = r.차량종류 || "";
-      const ton = r.차량톤수 || "";
-      const key = `${clean(from)}|${clean(to)}|${clean(vtype)}|${ton}`;
-      if (!routeMap.has(key)) routeMap.set(key, { from, to, vtype, ton, fares: [], driverFares: [] });
-      routeMap.get(key).fares.push(fare);
-      if (driverFare > 0) routeMap.get(key).driverFares.push(driverFare);
-    });
-
-    return Array.from(routeMap.values())
-      .map(e => {
-        const avg = Math.round(e.fares.reduce((s,n)=>s+n,0)/e.fares.length);
-        const avgDriver = e.driverFares.length ? Math.round(e.driverFares.reduce((s,n)=>s+n,0)/e.driverFares.length) : 0;
-        return {
-          from: e.from, to: e.to, vtype: e.vtype, ton: e.ton,
-          count: e.fares.length, avg,
-          min: Math.min(...e.fares), max: Math.max(...e.fares),
-          avgDriver, margin: avg - avgDriver,
-        };
-      })
-      .sort((a,b) => b.count - a.count)
-      .slice(0, 200);
-  }, [dispatchData, nfPickup, nfDrop, nfTon, nfVehicle]);
 
   const inputCls = "w-full px-2.5 py-1.5 text-[13px] font-medium rounded border border-gray-300 bg-white focus:border-[#1B2B4B] focus:outline-none focus:ring-1 focus:ring-[#1B2B4B]/20 placeholder:text-gray-300 transition";
   const labelCls = "block text-[12px] font-semibold text-gray-500 mb-0.5";
@@ -435,7 +451,7 @@ export default function StandardFare() {
       <div className="flex gap-1 mb-4 border-b border-gray-200">
         {[
           { key: "표준운임", label: "표준운임 조회" },
-          { key: "전국운임표", label: "전국운임표" },
+          { key: "전국운임표", label: "전국운임 조회" },
         ].map(tab => (
           <button
             key={tab.key}
@@ -624,93 +640,119 @@ export default function StandardFare() {
         </>
       )}
 
-      {/* ====== 전국운임표 탭 ====== */}
+      {/* ====== 전국운임 조회 탭 (T-Map 도로거리 기반) ====== */}
       {activeTab === "전국운임표" && (
         <>
-          {/* 안내 */}
-          <div className="bg-[#1B2B4B]/5 border border-[#1B2B4B]/15 rounded-xl px-4 py-3 mb-4 flex items-start gap-3">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1B2B4B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mt-0.5 shrink-0">
-              <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-            </svg>
-            <div className="text-[12px] text-[#1B2B4B] leading-relaxed">
-              <b>전국운임표</b>는 본 프로그램에 등록된 전체 배차 데이터를 노선별로 집계한 평균 운임 현황입니다.<br/>
-              상차지·하차지·톤수·차량종류로 필터링하면 원하는 노선의 운임 평균을 즉시 확인할 수 있습니다.
+          {/* 주소 입력 카드 */}
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm mb-4 p-5">
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div>
+                <label className="block text-[12px] font-bold text-gray-500 mb-1">출발지 주소</label>
+                <input
+                  className={inputCls}
+                  placeholder="예: 인천광역시 서구 원창동"
+                  value={nfFrom}
+                  onChange={e => setNfFrom(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && lookupNationalFare()}
+                />
+              </div>
+              <div>
+                <label className="block text-[12px] font-bold text-gray-500 mb-1">도착지 주소</label>
+                <input
+                  className={inputCls}
+                  placeholder="예: 경기도 용인시 처인구"
+                  value={nfTo}
+                  onChange={e => setNfTo(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && lookupNationalFare()}
+                />
+              </div>
             </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={lookupNationalFare}
+                disabled={nfLoading}
+                className="px-8 py-2 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-lg hover:bg-[#243a60] disabled:opacity-50 transition flex items-center gap-2"
+              >
+                {nfLoading ? (
+                  <>
+                    <svg className="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <circle cx="12" cy="12" r="10" strokeOpacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10"/>
+                    </svg>
+                    거리 계산 중...
+                  </>
+                ) : "조회하기"}
+              </button>
+              <button
+                onClick={() => { setNfFrom(""); setNfTo(""); setNfResult(null); setNfError(""); }}
+                className="px-5 py-2 bg-white text-gray-500 text-[13px] font-semibold rounded-lg border border-gray-200 hover:bg-gray-50 transition"
+              >
+                다시 입력
+              </button>
+              {nfResult && (
+                <div className="ml-auto flex items-center gap-2 text-[13px] font-semibold text-[#1B2B4B]">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M3 12h18M3 6h18M3 18h18"/>
+                  </svg>
+                  도로거리: <span className="text-[15px] font-bold">{nfResult.km} km</span>
+                </div>
+              )}
+            </div>
+            {nfError && (
+              <div className="mt-3 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-[12px] text-red-600">{nfError}</div>
+            )}
           </div>
 
-          {/* 필터 */}
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm mb-4 p-4">
-            <div className="grid grid-cols-4 gap-3">
-              <div>
-                <label className={labelCls}>상차지 검색</label>
-                <input className={inputCls} placeholder="예: 인천, 송원" value={nfPickup} onChange={e=>setNfPickup(e.target.value)} />
+          {/* 운임 결과 테이블 */}
+          {nfResult && (
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden mb-4">
+              {/* 헤더 */}
+              <div className="bg-[#1B2B4B] px-5 py-3 flex items-center justify-between">
+                <div>
+                  <div className="text-white font-bold text-[14px]">{nfResult.from} → {nfResult.to}</div>
+                  <div className="text-white/60 text-[12px] mt-0.5">도로거리 {nfResult.km}km 기준 예상 운임</div>
+                </div>
+                <div className="text-white/80 text-[13px] font-semibold">차량별 운임 현황</div>
               </div>
-              <div>
-                <label className={labelCls}>하차지 검색</label>
-                <input className={inputCls} placeholder="예: 서울, 김포" value={nfDrop} onChange={e=>setNfDrop(e.target.value)} />
-              </div>
-              <div>
-                <label className={labelCls}>차량톤수</label>
-                <input className={inputCls} placeholder="예: 5" value={nfTon} onChange={e=>setNfTon(e.target.value)} />
-              </div>
-              <div>
-                <label className={labelCls}>차량종류</label>
-                <select className={inputCls} value={nfVehicle} onChange={e=>setNfVehicle(e.target.value)}>
-                  {VEHICLE_TYPES.map(v=><option key={v} value={v}>{v}</option>)}
-                </select>
-              </div>
-            </div>
-            <div className="mt-2 flex items-center gap-2">
-              <button onClick={() => { setNfPickup(""); setNfDrop(""); setNfTon(""); setNfVehicle("전체"); }} className="px-4 py-1.5 bg-white text-gray-500 text-[12px] font-semibold rounded border border-gray-200 hover:bg-gray-50 transition">초기화</button>
-              <span className="text-[12px] text-gray-400">입력 즉시 실시간 필터링</span>
-              <span className="ml-auto text-[12px] text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1">
-                {routeTable.length}개 노선
-                {dispatchData.length > 0 && <span className="text-gray-400"> / 전체 {dispatchData.length.toLocaleString()}건 데이터</span>}
-              </span>
-            </div>
-          </div>
 
-          {/* 노선별 운임표 */}
-          {routeTable.length === 0 ? (
+              {/* 차종 × 운임 그리드 */}
+              <div className="p-4">
+                <div className="grid grid-cols-4 gap-0 border border-gray-200 rounded-lg overflow-hidden">
+                  {FARE_TYPES.map((ft, i) => {
+                    const fare = calcFare(nfResult.km, ft);
+                    return (
+                      <div key={ft.label} className={`border-b border-r border-gray-100 last:border-r-0 ${i % 4 === 3 ? "border-r-0" : ""}`}>
+                        <div className="bg-[#1B2B4B] text-white text-[12px] font-bold text-center py-2 px-3">{ft.label}</div>
+                        <div className="text-center py-3 px-3 text-[14px] font-bold text-gray-800">
+                          {fare ? fare.toLocaleString() : <span className="text-[12px] text-gray-400 font-normal">별도협의</span>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 면책 고지 */}
+              <div className="px-5 pb-4 space-y-1">
+                <div className="text-[11px] text-gray-400 flex items-start gap-1.5">
+                  <span className="text-gray-400 mt-0.5 shrink-0">●</span>
+                  예상단가로 실제 운임은 수작업·상하차 조건·계절·수급 상황에 따라 변동될 수 있습니다.
+                </div>
+                <div className="text-[11px] text-gray-400 flex items-start gap-1.5">
+                  <span className="text-gray-400 mt-0.5 shrink-0">●</span>
+                  T-Map 도로거리 기준으로 산정되며, 실제 경로에 따라 차이가 있을 수 있습니다.
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 초기 안내 */}
+          {!nfResult && !nfLoading && (
             <div className="bg-white rounded-xl border border-gray-200 flex flex-col items-center justify-center py-16 text-gray-400">
-              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="mb-3 opacity-30">
-                <path d="M3 3h18v18H3z"/><path d="M3 9h18M3 15h18M9 3v18"/>
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" className="mb-4 opacity-25">
+                <rect x="1" y="3" width="15" height="13" rx="2"/><path d="M16 8h4l3 4v4h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>
               </svg>
-              <div className="text-[14px] font-semibold">데이터가 없습니다</div>
-              <div className="text-[12px] mt-1">배차 데이터가 로드되면 자동으로 표시됩니다</div>
-            </div>
-          ) : (
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-[13px]">
-                  <thead>
-                    <tr className="bg-[#1B2B4B]">
-                      {["순위","상차지","하차지","차량종류","톤수","건수","평균 청구운임","최저","최고","평균 기사운임","평균 마진"].map(h=>(
-                        <th key={h} className="px-3 py-3 text-center text-[12px] font-bold text-white whitespace-nowrap">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {routeTable.map((r, i) => (
-                      <tr key={i} className={`border-b border-gray-100 hover:bg-blue-50/30 transition ${i%2===0?"bg-white":"bg-gray-50/30"}`}>
-                        <td className="px-3 py-2.5 text-center text-[12px] text-gray-400 font-medium">{i+1}</td>
-                        <td className="px-3 py-2.5 text-[13px] font-semibold text-gray-800 whitespace-nowrap">{r.from}</td>
-                        <td className="px-3 py-2.5 text-[13px] font-semibold text-gray-800 whitespace-nowrap">{r.to}</td>
-                        <td className="px-3 py-2.5 text-center text-[12px] text-gray-600 whitespace-nowrap">{r.vtype || "-"}</td>
-                        <td className="px-3 py-2.5 text-center text-[12px] text-gray-600">{r.ton || "-"}</td>
-                        <td className="px-3 py-2.5 text-center">
-                          <span className="px-2 py-0.5 bg-[#1B2B4B]/10 text-[#1B2B4B] text-[11px] rounded-full font-bold">{r.count}건</span>
-                        </td>
-                        <td className="px-3 py-2.5 text-right text-[13px] font-bold text-[#1B2B4B]">{r.avg.toLocaleString()}</td>
-                        <td className="px-3 py-2.5 text-right text-[12px] text-emerald-600">{r.min.toLocaleString()}</td>
-                        <td className="px-3 py-2.5 text-right text-[12px] text-orange-500">{r.max.toLocaleString()}</td>
-                        <td className="px-3 py-2.5 text-right text-[12px] text-gray-600">{r.avgDriver > 0 ? r.avgDriver.toLocaleString() : "-"}</td>
-                        <td className="px-3 py-2.5 text-right text-[12px] font-medium text-gray-500">{r.margin > 0 ? r.margin.toLocaleString() : "-"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <div className="text-[14px] font-semibold mb-1">출발지와 도착지 주소를 입력하세요</div>
+              <div className="text-[12px]">T-Map 도로거리를 기반으로 차종별 예상 운임을 계산합니다</div>
             </div>
           )}
         </>
