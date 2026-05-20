@@ -5354,7 +5354,7 @@ const inputCls =
 const labelCls =
   "block text-[15px] font-semibold text-black mb-1";
     const reqStar = <span className="text-red-500">*</span>;
-    const AutoBadge = ({ show }) => show ? <span className="ml-2 text-[12px] text-emerald-700">()</span> : null;
+    const AutoBadge = ({ show }) => null;
 function FuelPriceWidget({ apiKey }) {
   const [prices, setPrices] = React.useState([]);
 
@@ -13344,7 +13344,7 @@ const handleCloseFileUpload = async (e) => {
   const commCol = headers.indexOf("수수료");
 
   // 날짜 컬럼 감지 (엑셀이 여러 날짜를 포함할 때 정확한 매칭 위해)
-  const dateColNames = ["날짜", "상차일", "운송일", "일자", "접수일", "운행일", "배차일"];
+  const dateColNames = ["날짜", "상차일", "운송일", "일자", "접수일", "운행일", "배차일", "상차일시", "픽업일", "운행날짜", "배차날짜", "출발일"];
   const dateCol = dateColNames.reduce((found, name) => found !== -1 ? found : headers.indexOf(name), -1);
 
   // 운송료 컬럼 (다양한 명칭 대응)
@@ -13362,13 +13362,14 @@ const handleCloseFileUpload = async (e) => {
   const parseExcelDate = (val) => {
     if (val == null || val === "") return null;
     const str = String(val).trim();
-    // Excel 시리얼 숫자
-    if (/^\d{5}$/.test(str)) {
-      const d = new Date(Math.round((Number(str) - 25569) * 86400 * 1000));
+    // Excel 시리얼 숫자 (정수 or 소수점 포함 datetime) — 40000 이상이면 날짜로 간주
+    if (/^\d+(\.\d+)?$/.test(str) && Number(str) > 40000) {
+      const n = Math.floor(Number(str)); // 시간 부분(소수) 제거, 날짜만 추출
+      const d = new Date(Math.round((n - 25569) * 86400 * 1000));
       const kst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
       return kst.toISOString().slice(0, 10);
     }
-    // YYYY-MM-DD / YYYY/MM/DD / YYYY.MM.DD
+    // YYYY-MM-DD / YYYY/MM/DD / YYYY.MM.DD (날짜 또는 날짜+시간)
     const m = str.match(/(\d{4})[.\-\/](\d{1,2})[.\-\/](\d{1,2})/);
     if (m) return `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
     // MM/DD or MM-DD (올해 연도 적용)
@@ -14193,7 +14194,7 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
 
                   <td className={cell}>{editableInput("거래처명", r.거래처명, r._id)}</td>
                   <td className={cell}>
-  <div className="inline-flex items-center gap-0 flex-wrap">
+  <div className="inline-flex items-center gap-1 flex-nowrap whitespace-nowrap">
     <span>{r.상차지명}</span>
 
 {(() => {
@@ -14238,7 +14239,7 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
                   </td>
 
                                   <td className={cell}>
-  <div className="inline-flex items-center gap-0 flex-wrap">
+  <div className="inline-flex items-center gap-1 flex-nowrap whitespace-nowrap">
     <span>{r.하차지명}</span>
 
 {(() => {
@@ -31922,20 +31923,31 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
       try {
         // cellDates:true → 날짜 셀을 JavaScript Date 객체로 읽기
         const wb = XLSX.read(new Uint8Array(evt.target.result), { type: "array", cellDates: true });
-        const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "" });
+
+        // 실제 헤더 행 찾기 (첫 행이 제목일 수 있어 동적으로 감지)
+        const rawArr = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: "" });
+        const headerRowIdx = rawArr.findIndex(row =>
+          row.some(cell => ["차량번호", "차주이름", "상차일", "운송료"].includes(String(cell || "").trim()))
+        );
+        if (headerRowIdx === -1) {
+          alert("헤더 행을 찾을 수 없습니다. (차량번호/차주이름/상차일 컬럼이 필요합니다)");
+          return;
+        }
+        const headerRow = rawArr[headerRowIdx].map(h => String(h || "").trim());
+        const dataRows = rawArr.slice(headerRowIdx + 1);
+
         const norm = (s) => String(s || "").replace(/[\s\-]/g, "").toLowerCase();
         const toDateStr = (v) => {
           if (!v && v !== 0) return "";
-          // JavaScript Date 객체 (cellDates:true)
           if (v instanceof Date) {
             const y = v.getFullYear();
             const mo = String(v.getMonth() + 1).padStart(2, "0");
             const d = String(v.getDate()).padStart(2, "0");
             return `${y}-${mo}-${d}`;
           }
-          // Excel 시리얼 숫자
-          if (typeof v === "number") {
-            const d = XLSX.SSF.parse_date_code(v);
+          if (typeof v === "number" && v > 40000) {
+            const n = Math.floor(v);
+            const d = XLSX.SSF.parse_date_code(n);
             if (d) return `${d.y}-${String(d.m).padStart(2,"0")}-${String(d.d).padStart(2,"0")}`;
           }
           const s = String(v).trim();
@@ -31948,43 +31960,49 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
           if (v instanceof Date) return v.toLocaleString("ko-KR");
           return String(v);
         };
+
+        // 헤더 인덱스로 컬럼 찾기 (정확 매칭 우선, 부분 포함 fallback)
+        const colIdx = (...names) => {
+          for (const n of names) {
+            const i = headerRow.indexOf(n);
+            if (i !== -1) return i;
+          }
+          for (const n of names) {
+            const i = headerRow.findIndex(h => h.includes(n));
+            if (i !== -1) return i;
+          }
+          return -1;
+        };
+
+        const idxPlate = colIdx("차량번호", "차량");
+        const idxName = colIdx("차주이름", "기사명", "이름", "차주");
+        const idxDate = colIdx("상차일", "상차일자", "오더일자", "오더일");
+        const idxPayDate = colIdx("정산처리일시", "지급일", "지급일자");
+        const idxAmt = colIdx("운송료", "기사운임", "운임", "금액");
+        const idxInsurance = colIdx("산재보험료 차주분", "산재보험료", "산재");
+
         const matched = [];
         const unmatched = [];
-        let debugKeys = null; // 첫 행 컬럼명 저장 (디버그용)
-        json.forEach((rowRaw, idx) => {
-          // 컬럼명에서 한글/영문/숫자 외 모든 문자 제거 (보이지 않는 유니코드 포함)
-          const row = {};
-          const rowKeys = [];
-          Object.keys(rowRaw).forEach(k => {
-            const normalized = k.replace(/[^가-힣ᄀ-ᇿ㄰-㆏a-zA-Z0-9]/g, "");
-            row[normalized] = rowRaw[k];
-            rowKeys.push(normalized);
-          });
-          if (idx === 0) debugKeys = rowKeys.slice();
-          // 키 부분 포함 검색 fallback
-          const getCol = (...names) => {
-            for (const n of names) {
-              if (row[n] !== undefined && row[n] !== "") return row[n];
-            }
-            for (const n of names) {
-              const found = rowKeys.find(k => k.includes(n));
-              if (found && row[found] !== undefined && row[found] !== "") return row[found];
-            }
-            return undefined;
-          };
+        const debugKeys = headerRow.slice();
 
-          const excelPlate = norm(String(getCol("차량번호","차량","번호판") || ""));
-          const excelName = norm(String(getCol("차주이름","기사명","이름","차주") || ""));
-          // 상차일 우선 (공백 제거 후 매칭)
-          const rawDate = getCol("상차일","상차일자","오더일자","오더일") ?? "";
+        dataRows.forEach((rowArr, idx) => {
+          const getByIdx = (i) => (i !== -1 ? rowArr[i] : undefined);
+
+          const excelPlateRaw = String(getByIdx(idxPlate) || "");
+          const excelNameRaw = String(getByIdx(idxName) || "");
+          const excelPlate = norm(excelPlateRaw);
+          const excelName = norm(excelNameRaw);
+
+          const rawDate = getByIdx(idxDate) ?? "";
           const excelDate = toDateStr(rawDate);
-          // 정산처리일시
-          const excelPayRaw = getCol("정산처리일시","지급일","지급일자") ?? "";
+
+          const excelPayRaw = getByIdx(idxPayDate) ?? "";
           const excelPayDate = toDateStr(excelPayRaw);
           const excelPayDateTimeFull = toDateTimeFull(excelPayRaw);
-          const excelAmt = toInt(getCol("운송료","기사운임","운임","금액") || 0);
-          const excelPlateRaw = String(getCol("차량번호","차량") || "");
-          const excelNameRaw = String(getCol("차주이름","기사명","이름","차주") || "");
+          const excelAmt = toInt(getByIdx(idxAmt) || 0);
+          const excelInsurance = toInt(getByIdx(idxInsurance) || 0);
+
+          if (!excelPlate && !excelName) return; // 빈 행 스킵
 
           const found = base.find(r => {
             const plateMatch = excelPlate && norm(r.차량번호).includes(excelPlate);
@@ -31994,11 +32012,21 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
           });
           if (found) {
             const amtMatch = excelAmt === 0 || Math.abs(excelAmt - toInt(found.기사운임)) < 1000;
-            matched.push({ excelRow: idx+2, dispatch: found, excelDate, excelPayDate, excelPayDateTimeFull, excelAmt, amtMatch,
-              차량번호: excelPlateRaw, 기사명: excelNameRaw, 운송료: excelAmt, 지급일: excelPayDate });
+            matched.push({
+              excelRow: headerRowIdx + idx + 2,
+              dispatch: found,
+              excelDate, excelPayDate, excelPayDateTimeFull,
+              excelAmt, amtMatch,
+              excelInsurance,
+              차량번호: excelPlateRaw, 기사명: excelNameRaw, 운송료: excelAmt, 지급일: excelPayDate,
+            });
           } else {
-            const 사유 = !excelDate ? `상차일 없음 (원본값: "${String(rawDate)}")` : !excelPlate && !excelName ? "차량번호/기사명 없음" : "배차 데이터 없음 (차량번호/이름+날짜 불일치)";
-            unmatched.push({ excelRow: idx+2, 차량번호: excelPlateRaw, 기사명: excelNameRaw, 상차일: excelDate || String(rawDate), 운송료: excelAmt, 사유 });
+            const 사유 = !excelDate
+              ? `상차일 없음 (원본값: "${String(rawDate)}")`
+              : !excelPlate && !excelName
+              ? "차량번호/기사명 없음"
+              : "배차 데이터 없음 (차량번호/이름+날짜 불일치)";
+            unmatched.push({ excelRow: headerRowIdx + idx + 2, 차량번호: excelPlateRaw, 기사명: excelNameRaw, 상차일: excelDate || String(rawDate), 운송료: excelAmt, 사유 });
           }
         });
         setPayExcelPreview({ matched, unmatched, debugKeys });
@@ -32015,7 +32043,9 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
     setPayExcelConfirming(true);
     try {
       for (const m of payExcelPreview.matched) {
-        await patchDispatch(m.dispatch._id, { 지급상태: "지급완료", 지급일: m.지급일 || selectedPayDate, __system: true });
+        const patch = { 지급상태: "지급완료", 지급일: m.지급일 || selectedPayDate, __system: true };
+        if (m.excelInsurance > 0) patch.산재보험료 = m.excelInsurance;
+        await patchDispatch(m.dispatch._id, patch);
       }
       alert(`${payExcelPreview.matched.length}건 지급완료 처리되었습니다.`);
       setPayExcelOpen(false);
@@ -32316,7 +32346,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
                     <table className="w-full text-[12px] border-collapse">
                       <thead>
                         <tr className="bg-emerald-50">
-                          {["엑셀행", "차량번호", "기사명", "상차일", "운송료(엑셀)", "기사운임(프로그램)", "금액일치", "지급일", "정산처리일시"].map(h => (
+                          {["엑셀행", "차량번호", "기사명", "상차일", "운송료(엑셀)", "기사운임(프로그램)", "금액일치", "산재보험료", "지급일", "정산처리일시"].map(h => (
                             <th key={h} className="px-3 py-2 text-center font-bold text-emerald-800 border border-emerald-200">{h}</th>
                           ))}
                         </tr>
@@ -32335,6 +32365,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
                                 {m.amtMatch ? "일치" : "차이있음"}
                               </span>
                             </td>
+                            <td className="px-3 py-2 text-right border border-gray-100 text-[12px]">{m.excelInsurance > 0 ? won(m.excelInsurance) : "-"}</td>
                             <td className="px-3 py-2 text-center border border-gray-100">{m.지급일 || selectedPayDate}</td>
                             <td className="px-3 py-2 text-center border border-gray-100 text-[11px] text-gray-600">{m.excelPayDateTimeFull || "-"}</td>
                           </tr>
