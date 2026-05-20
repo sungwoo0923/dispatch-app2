@@ -13364,14 +13364,23 @@ const handleCloseFileUpload = async (e) => {
     const str = String(val).trim();
     // Excel 시리얼 숫자 (정수 or 소수점 포함 datetime) — 40000 이상이면 날짜로 간주
     if (/^\d+(\.\d+)?$/.test(str) && Number(str) > 40000) {
-      const n = Math.floor(Number(str)); // 시간 부분(소수) 제거, 날짜만 추출
+      const n = Math.floor(Number(str));
       const d = new Date(Math.round((n - 25569) * 86400 * 1000));
       const kst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
       return kst.toISOString().slice(0, 10);
     }
-    // YYYY-MM-DD / YYYY/MM/DD / YYYY.MM.DD (날짜 또는 날짜+시간)
+    // YYYY-MM-DD / YYYY/MM/DD / YYYY.MM.DD (날짜 또는 날짜+시간 모두 대응)
     const m = str.match(/(\d{4})[.\-\/](\d{1,2})[.\-\/](\d{1,2})/);
     if (m) return `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
+    // YYYY년 MM월 DD일 형식
+    const mKr1 = str.match(/(\d{4})\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*일/);
+    if (mKr1) return `${mKr1[1]}-${mKr1[2].padStart(2, "0")}-${mKr1[3].padStart(2, "0")}`;
+    // MM월 DD일 형식 (연도 없음 → 올해 적용)
+    const mKr2 = str.match(/^(\d{1,2})\s*월\s*(\d{1,2})\s*일/);
+    if (mKr2) {
+      const yr = new Date().getFullYear();
+      return `${yr}-${mKr2[1].padStart(2, "0")}-${mKr2[2].padStart(2, "0")}`;
+    }
     // MM/DD or MM-DD (올해 연도 적용)
     const m2 = str.match(/^(\d{1,2})[\/\-](\d{1,2})$/);
     if (m2) {
@@ -13380,6 +13389,25 @@ const handleCloseFileUpload = async (e) => {
     }
     return null;
   };
+
+  // 날짜 컬럼 자동 감지 (헤더명으로 못 찾으면 첫 데이터 행의 값으로 재탐색)
+  let effectiveDateCol = dateCol;
+  if (effectiveDateCol === -1 && json.length > headerIdx + 1) {
+    const firstDataRow = json[headerIdx + 1];
+    // 각 컬럼을 순회하며 날짜처럼 보이는 값이 있는 컬럼 중 "상차" 키워드 헤더 우선
+    const pickupRelated = headers.map((h, i) => ({ h, i }))
+      .filter(({ h }) => /상차|운송|픽업|배차|날짜|일자/.test(h));
+    for (const { i } of pickupRelated) {
+      if (parseExcelDate(firstDataRow?.[i])) { effectiveDateCol = i; break; }
+    }
+    // 그래도 없으면 전체 컬럼 중 날짜 값이 있는 첫 번째 컬럼
+    if (effectiveDateCol === -1) {
+      for (let ci = 0; ci < (firstDataRow?.length || 0); ci++) {
+        const parsed = parseExcelDate(firstDataRow?.[ci]);
+        if (parsed && parsed >= "2020-01-01") { effectiveDateCol = ci; break; }
+      }
+    }
+  }
 
   let targetDate = todayKST();
   if (dayMode === "yesterday") targetDate = yesterdayKST();
@@ -13397,7 +13425,7 @@ const handleCloseFileUpload = async (e) => {
     const filePhone = String(row[phoneCol] || "").replace(/[^\d]/g, "");
     const fileFeeType = String(row[feeTypeCol] || "").trim();
     const fileComm = Number(row[commCol] || 0);
-    const fileDate = dateCol !== -1 ? parseExcelDate(row[dateCol]) : null;
+    const fileDate = effectiveDateCol !== -1 ? parseExcelDate(row[effectiveDateCol]) : null;
 
     if (!filePlate) continue;
 
@@ -13486,8 +13514,8 @@ const handleCloseFileUpload = async (e) => {
     if (!row || !row[plateCol]) continue;
     const plate = normalizePlate(String(row[plateCol]));
     filePlates.add(plate);
-    if (dateCol !== -1) {
-      const d = parseExcelDate(row[dateCol]);
+    if (effectiveDateCol !== -1) {
+      const d = parseExcelDate(row[effectiveDateCol]);
       if (d) filePlateDate.add(`${plate}__${d}`);
     }
   }
