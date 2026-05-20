@@ -1960,15 +1960,14 @@ return (
   clients={clients}
 />
 
-      {/* 계산기 플로팅 버튼 */}
-      {["배차관리", "실시간배차현황", "배차현황"].includes(menu) && (
+      {/* 계산기 플로팅 버튼 — 모든 탭에 표시 */}
         <>
           <button
             onClick={() => setCalcOpen(p => !p)}
             title="계산기"
             style={{
               position: "fixed", bottom: 88, right: 24,
-              zIndex: 99998, width: 44, height: 44,
+              zIndex: 99998, width: 56, height: 56,
               borderRadius: "50%", background: calcOpen ? "#243a60" : "#1B2B4B",
               color: "white", border: "none", cursor: "pointer",
               boxShadow: "0 4px 16px rgba(0,0,0,0.25)",
@@ -1976,7 +1975,7 @@ return (
               transition: "background 0.2s",
             }}
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <rect x="4" y="2" width="16" height="20" rx="2"/>
               <line x1="8" y1="6" x2="16" y2="6"/>
               <circle cx="8" cy="10" r="1" fill="white"/>
@@ -1992,7 +1991,6 @@ return (
           </button>
           {calcOpen && <FloatingCalculator onClose={() => setCalcOpen(false)} />}
         </>
-      )}
 
     </ToastProvider>
   );
@@ -28851,7 +28849,15 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
             </tr>
             <tr style="border-bottom:1px solid #f3f4f6">
               <td style="padding:6px 12px 6px 0;color:#6b7280;font-weight:600;font-size:13px;width:90px">대표자</td>
-              <td style="padding:6px 0;color:#111827;font-weight:500;font-size:13px">${cp.ceo}</td>
+              <td style="padding:6px 0;color:#111827;font-weight:500;font-size:13px">
+                <div style="display:flex;align-items:center">
+                  <span style="flex:1">${cp.ceo}</span>
+                  <span style="position:relative;display:inline-flex;align-items:center;justify-content:center;width:52px;height:52px;margin-right:4px">
+                    <img src="/stamp.png" alt="직인" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:46px;height:46px;opacity:0.9;pointer-events:none;mix-blend-mode:multiply" />
+                    <span style="position:relative;z-index:1;font-size:13px;color:#333">(인)</span>
+                  </span>
+                </div>
+              </td>
             </tr>
             ${supplyFields.map(([k,v],i)=>infoRow(k,v,i===supplyFields.length-1)).join("")}
           </tbody></table>
@@ -28869,16 +28875,16 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
         </thead>
         <tbody>${rowsHtml}</tbody>
         <tfoot>
-          <tr style="border-top:2px solid #e5e7eb;background:#f3f4f6">
-            <td colspan="7" style="padding:10px 16px;font-size:13px;font-weight:700;color:#374151">소&nbsp;&nbsp;계</td>
-            <td style="padding:10px 10px;text-align:right;font-size:13px;font-weight:700;color:#1B2B4B">${sup.toLocaleString()}</td>
-            <td style="padding:10px 10px;text-align:right;font-size:13px;font-weight:700;color:#1B2B4B">${tax.toLocaleString()}</td>
-            <td style="padding:10px 10px;text-align:right;font-size:13px;font-weight:700;color:#1B2B4B">${total.toLocaleString()}</td>
+          <tr style="background:#1B2B4B">
+            <td colspan="7" style="padding:10px 16px;font-size:13px;font-weight:700;color:#fff;text-align:center">소 계</td>
+            <td style="padding:10px 10px;text-align:right;font-size:13px;font-weight:700;color:#fff">${sup.toLocaleString()}</td>
+            <td style="padding:10px 10px;text-align:right;font-size:13px;font-weight:700;color:#93c5fd">${tax.toLocaleString()}</td>
+            <td style="padding:10px 10px;text-align:right;font-size:13px;font-weight:700;color:#fde68a">${total.toLocaleString()}</td>
           </tr>
         </tfoot>
       </table>
-      <div style="padding:12px 24px;background:#f9fafb;border-top:1px solid #e5e7eb;font-size:12px;color:#9ca3af;text-align:center">
-        입금계좌: ${cp.bank} &nbsp;|&nbsp; 문의: ${cp.email}
+      <div style="padding:16px 24px;background:#f0f2f6;border-top:2px solid #1B2B4B;font-size:15px;font-weight:600;color:#1B2B4B;text-align:center;letter-spacing:0.01em">
+        입금계좌: ${cp.bank} &nbsp;&nbsp;|&nbsp;&nbsp; 문의: ${cp.email}
       </div>
     </div>`;
   };
@@ -30053,10 +30059,11 @@ const handleBatchSettle = async (targetStatus) => {
               >
                 초기화
               </button>
-              <div className="ml-auto flex gap-2 flex-wrap">
-                <button onClick={downloadInvoiceExcel} className="px-3 py-2 rounded-lg bg-emerald-600 text-white text-[13px] font-semibold hover:bg-emerald-700 transition">엑셀</button>
-                <button onClick={savePDF} className="px-3 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition">PDF</button>
-                <button onClick={handlePrint} className="px-3 py-2 rounded-lg bg-violet-600 text-white text-[13px] font-semibold hover:bg-violet-700 transition">인쇄</button>
+              <div className="ml-auto flex gap-2 flex-wrap items-center">
+                <button onClick={downloadInvoiceExcel} className="px-3 py-1.5 rounded border border-gray-300 text-gray-600 text-[13px] font-semibold hover:bg-gray-100 transition">엑셀</button>
+                <button onClick={savePDF} className="px-3 py-1.5 rounded border border-gray-300 text-gray-600 text-[13px] font-semibold hover:bg-gray-100 transition">PDF</button>
+                <button onClick={handlePrint} className="px-3 py-1.5 rounded border border-gray-300 text-gray-600 text-[13px] font-semibold hover:bg-gray-100 transition">인쇄</button>
+                <div className="w-px h-5 bg-gray-200 mx-0.5" />
                 <button
                   onClick={() => {
                     if (!client) return showAlert("거래처를 먼저 검색하세요.");
@@ -30077,14 +30084,14 @@ const handleBatchSettle = async (targetStatus) => {
                       }];
                     });
                   }}
-                  className="px-3 py-2 rounded-lg border border-indigo-400 text-indigo-700 text-[13px] font-semibold hover:bg-indigo-50 transition"
+                  className="px-3 py-1.5 rounded border border-[#1B2B4B] text-[#1B2B4B] text-[13px] font-semibold hover:bg-[#1B2B4B] hover:text-white transition"
                 >
                   목록 추가
                 </button>
                 {batchSendList.length > 0 && (
                   <button
                     onClick={() => setBatchSendOpen(true)}
-                    className="px-3 py-2 rounded-lg bg-indigo-600 text-white text-[13px] font-semibold hover:bg-indigo-700 transition"
+                    className="px-3 py-1.5 rounded bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition"
                   >
                     일괄 발송 ({batchSendList.length})
                   </button>
@@ -30097,7 +30104,7 @@ const handleBatchSettle = async (targetStatus) => {
                     setEmailBody(`안녕하세요, ${client} 담당자님.\n\n${COMPANY_PRINT.name}입니다.\n\n${start||""}~${end||""} 기간 거래명세서를 발송드립니다.\n\n총 ${mapped.length}건\n공급가액: ${won(합계공급가)}원\n부가세: ${won(합계세액)}원\n합계: ${won(합계공급가+합계세액)}원\n\n입금계좌: ${COMPANY_PRINT.bank}\n마감문의: 010-4249-1821\n\n확인 부탁드립니다.\n감사합니다.\n\n${COMPANY_PRINT.name}\n${COMPANY_PRINT.contact}`);
                     setEmailModalOpen(true);
                   }}
-                  className="px-3 py-2 rounded-lg bg-sky-600 text-white text-[13px] font-semibold hover:bg-sky-700 transition"
+                  className="px-3 py-1.5 rounded bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition"
                 >
                   명세서 발송
                 </button>
@@ -30110,11 +30117,11 @@ const handleBatchSettle = async (targetStatus) => {
                     setGeneralEmailFiles([]);
                     setGeneralEmailOpen(true);
                   }}
-                  className="px-3 py-2 rounded-lg border border-sky-400 text-sky-700 text-[13px] font-semibold hover:bg-sky-50 transition"
+                  className="px-3 py-1.5 rounded border border-gray-300 text-gray-600 text-[13px] font-semibold hover:bg-gray-100 transition"
                 >
                   일반 이메일
                 </button>
-                <button onClick={() => { setEditInfo({ ...cInfo }); setShowEdit(true); }} className="px-3 py-2 rounded-lg border border-[#1B2B4B] text-[#1B2B4B] text-[13px] font-semibold hover:bg-[#1B2B4B] hover:text-white transition">거래처 정보</button>
+                <button onClick={() => { setEditInfo({ ...cInfo }); setShowEdit(true); }} className="px-3 py-1.5 rounded border border-[#1B2B4B] text-[#1B2B4B] text-[13px] font-semibold hover:bg-[#1B2B4B] hover:text-white transition">거래처 정보</button>
               </div>
             </div>
 
@@ -30325,8 +30332,8 @@ const handleBatchSettle = async (targetStatus) => {
                 </table>
               </div>
 
-              <div className="px-6 py-3 bg-gray-50 text-[12px] text-gray-500 border-t text-center">
-                입금계좌: {COMPANY_PRINT.bank} &nbsp;|&nbsp; 문의: {COMPANY_PRINT.email}
+              <div className="px-6 py-4 bg-[#f0f2f6] text-[15px] font-semibold text-[#1B2B4B] border-t-2 border-[#1B2B4B] text-center">
+                입금계좌: {COMPANY_PRINT.bank} &nbsp;&nbsp;|&nbsp;&nbsp; 문의: {COMPANY_PRINT.email}
               </div>
             </div>
           )}
