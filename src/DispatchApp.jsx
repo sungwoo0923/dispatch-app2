@@ -32160,6 +32160,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
   const [payExcelOpen, setPayExcelOpen] = useState(false);
   const [payExcelPreview, setPayExcelPreview] = useState(null); // { matched, unmatched }
   const [payExcelConfirming, setPayExcelConfirming] = useState(false);
+  const [payExcelDone, setPayExcelDone] = useState(null); // { excelCount, dispatchCount, totalAmt }
 
   // 빠른 기간 선택
   const setThisMonth = () => {
@@ -32357,22 +32358,44 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
 
           if (!excelPlate && !excelName) return; // 빈 행 스킵
 
-          const found = base.find(r => {
+          // 동일 기사/날짜로 배차 레코드 검색
+          const sameDriverSameDay = base.filter(r => {
             const plateMatch = excelPlate && norm(r.차량번호).includes(excelPlate);
             const nameMatch = excelName && norm(r.이름).includes(excelName);
             const dateMatch = excelDate && (r.상차일 || "").startsWith(excelDate);
             return dateMatch && (plateMatch || nameMatch);
           });
-          if (found) {
+
+          if (sameDriverSameDay.length === 1) {
+            // 1:1 매칭
+            const found = sameDriverSameDay[0];
             const amtMatch = excelAmt === 0 || Math.abs(excelAmt - toInt(found.기사운임)) < 1000;
             matched.push({
               excelRow: headerRowIdx + idx + 2,
-              dispatch: found,
+              dispatch: found, isSumMatch: false,
               excelDate, excelPayDate, excelPayDateTimeFull,
-              excelAmt, amtMatch,
-              excelInsurance,
+              excelAmt, amtMatch, excelInsurance,
               차량번호: excelPlateRaw, 기사명: excelNameRaw, 운송료: excelAmt, 지급일: excelPayDate,
             });
+          } else if (sameDriverSameDay.length >= 2) {
+            // 합산 매칭 시도: 여러 오더를 한 건 계산서로 발행한 경우
+            const sumAmt = sameDriverSameDay.reduce((s, r) => s + toInt(r.기사운임), 0);
+            if (excelAmt === 0 || Math.abs(excelAmt - sumAmt) < 1000) {
+              matched.push({
+                excelRow: headerRowIdx + idx + 2,
+                dispatch: sameDriverSameDay[0], isSumMatch: true,
+                sumRecords: sameDriverSameDay, sumTotal: sumAmt,
+                excelDate, excelPayDate, excelPayDateTimeFull,
+                excelAmt, amtMatch: true, excelInsurance,
+                차량번호: excelPlateRaw, 기사명: excelNameRaw, 운송료: excelAmt, 지급일: excelPayDate,
+              });
+            } else {
+              unmatched.push({
+                excelRow: headerRowIdx + idx + 2,
+                차량번호: excelPlateRaw, 기사명: excelNameRaw, 상차일: excelDate || String(rawDate), 운송료: excelAmt,
+                사유: `합산불일치 (${sameDriverSameDay.length}건 합계 ${sumAmt.toLocaleString()}원 ≠ 엑셀 ${excelAmt.toLocaleString()}원)`,
+              });
+            }
           } else {
             const 사유 = !excelDate
               ? `상차일 없음 (원본값: "${String(rawDate)}")`
@@ -32395,14 +32418,20 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
     if (!payExcelPreview?.matched?.length) return;
     setPayExcelConfirming(true);
     try {
+      let dispatchCount = 0;
+      let totalAmt = 0;
       for (const m of payExcelPreview.matched) {
         const patch = { 지급상태: "지급완료", 지급일: m.지급일 || selectedPayDate, __system: true };
         if (m.excelInsurance > 0) patch.산재보험료 = m.excelInsurance;
-        await patchDispatch(m.dispatch._id, patch);
+        if (m.isSumMatch) {
+          for (const r of m.sumRecords) { await patchDispatch(r._id, patch); dispatchCount++; }
+        } else {
+          await patchDispatch(m.dispatch._id, patch); dispatchCount++;
+        }
+        totalAmt += m.excelAmt || 0;
       }
-      alert(`${payExcelPreview.matched.length}건 지급완료 처리되었습니다.`);
-      setPayExcelOpen(false);
       setPayExcelPreview(null);
+      setPayExcelDone({ excelCount: payExcelPreview.matched.length, dispatchCount, totalAmt });
     } catch (err) {
       alert("처리 중 오류: " + err.message);
     } finally { setPayExcelConfirming(false); }
@@ -32678,101 +32707,183 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
           </div>
         </div>
       )}
-      {/* ── 엑셀 업로드 미리보기 모달 ── */}
-      {payExcelOpen && payExcelPreview && (
+      {/* ── 엑셀 업로드 미리보기 / 완료 모달 ── */}
+      {payExcelOpen && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[99999]">
-          <div className="bg-white rounded-2xl shadow-2xl w-[800px] max-h-[90vh] flex flex-col overflow-hidden">
-            <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
-              <div>
-                <div className="text-white font-bold text-[16px]">엑셀 업로드 매칭 결과</div>
-                <div className="text-white/60 text-[12px] mt-0.5">
-                  매칭 {payExcelPreview.matched.length}건 / 미매칭 {payExcelPreview.unmatched.length}건
+          <div className="bg-white rounded-2xl shadow-2xl w-[860px] max-h-[90vh] flex flex-col overflow-hidden">
+
+            {/* 완료 화면 */}
+            {payExcelDone ? (
+              <>
+                <div className="bg-[#1B2B4B] px-6 py-4">
+                  <div className="text-white font-bold text-[16px]">지급완료 처리 완료</div>
                 </div>
-              </div>
-              <button className="text-white/60 hover:text-white text-xl" onClick={() => { setPayExcelOpen(false); setPayExcelPreview(null); }}>×</button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-5 space-y-4">
-              {payExcelPreview.matched.length > 0 && (
-                <div>
-                  <div className="text-[13px] font-bold text-emerald-700 mb-2">매칭 성공 ({payExcelPreview.matched.length}건) — 지급완료로 처리됩니다</div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-[12px] border-collapse">
-                      <thead>
-                        <tr className="bg-emerald-50">
-                          {["엑셀행", "차량번호", "기사명", "상차일", "운송료(엑셀)", "기사운임(프로그램)", "금액일치", "산재보험료", "지급일", "정산처리일시"].map(h => (
-                            <th key={h} className="px-3 py-2 text-center font-bold text-emerald-800 border border-emerald-200">{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {payExcelPreview.matched.map((m, i) => (
-                          <tr key={i} className={i % 2 === 0 ? "bg-white" : "bg-emerald-50/30"}>
-                            <td className="px-3 py-2 text-center border border-gray-100 text-gray-400">{m.excelRow}</td>
-                            <td className="px-3 py-2 text-center border border-gray-100">{m.차량번호}</td>
-                            <td className="px-3 py-2 text-center border border-gray-100 font-semibold">{m.기사명}</td>
-                            <td className="px-3 py-2 text-center border border-gray-100">{m.excelDate}</td>
-                            <td className="px-3 py-2 text-right border border-gray-100">{won(m.운송료)}</td>
-                            <td className="px-3 py-2 text-right border border-gray-100">{won(m.dispatch.기사운임)}</td>
-                            <td className="px-3 py-2 text-center border border-gray-100">
-                              <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${m.amtMatch ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
-                                {m.amtMatch ? "일치" : "차이있음"}
-                              </span>
-                            </td>
-                            <td className="px-3 py-2 text-right border border-gray-100 text-[12px]">{m.excelInsurance > 0 ? won(m.excelInsurance) : "-"}</td>
-                            <td className="px-3 py-2 text-center border border-gray-100">{m.지급일 || selectedPayDate}</td>
-                            <td className="px-3 py-2 text-center border border-gray-100 text-[11px] text-gray-600">{m.excelPayDateTimeFull || "-"}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                <div className="flex-1 flex flex-col items-center justify-center py-12 gap-4">
+                  <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                  </div>
+                  <div className="text-[18px] font-bold text-gray-800">지급완료 처리되었습니다</div>
+                  <div className="text-[14px] text-gray-500 text-center leading-relaxed">
+                    엑셀 {payExcelDone.excelCount}건 → 배차 {payExcelDone.dispatchCount}건 처리<br/>
+                    총 금액: <span className="font-bold text-[#1B2B4B]">{payExcelDone.totalAmt.toLocaleString()}원</span>
                   </div>
                 </div>
-              )}
-              {payExcelPreview.debugKeys && (
-                <div className="mb-3 p-2 bg-gray-50 border border-gray-200 rounded text-[11px] text-gray-500">
-                  <span className="font-bold text-gray-700">인식된 컬럼명: </span>
-                  {payExcelPreview.debugKeys.join(", ")}
+                <div className="px-6 py-4 border-t border-gray-100">
+                  <button onClick={() => { setPayExcelOpen(false); setPayExcelDone(null); }} className="w-full py-2.5 rounded-xl bg-[#1B2B4B] text-white font-bold text-[13px] hover:bg-[#243a60] transition">
+                    확인
+                  </button>
                 </div>
-              )}
-              {payExcelPreview.unmatched.length > 0 && (
-                <div>
-                  <div className="text-[13px] font-bold text-red-600 mb-2">미매칭 ({payExcelPreview.unmatched.length}건) — 처리되지 않습니다</div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-[12px] border-collapse">
-                      <thead>
-                        <tr className="bg-red-50">
-                          {["엑셀행", "차량번호", "기사명", "상차일", "운송료", "미매칭 사유"].map(h => (
-                            <th key={h} className="px-3 py-2 text-center font-bold text-red-700 border border-red-200">{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {payExcelPreview.unmatched.map((m, i) => (
-                          <tr key={i} className={i % 2 === 0 ? "bg-white" : "bg-red-50/30"}>
-                            <td className="px-3 py-2 text-center border border-gray-100 text-gray-400">{m.excelRow}</td>
-                            <td className="px-3 py-2 text-center border border-gray-100">{m.차량번호}</td>
-                            <td className="px-3 py-2 text-center border border-gray-100">{m.기사명}</td>
-                            <td className="px-3 py-2 text-center border border-gray-100">{m.상차일}</td>
-                            <td className="px-3 py-2 text-right border border-gray-100">{won(m.운송료)}</td>
-                            <td className="px-3 py-2 text-center border border-gray-100 text-red-500 text-[11px]">{m.사유}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+              </>
+            ) : payExcelPreview ? (
+              <>
+                <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
+                  <div>
+                    <div className="text-white font-bold text-[16px]">엑셀 업로드 매칭 결과</div>
+                    <div className="text-white/60 text-[12px] mt-0.5">
+                      매칭 {payExcelPreview.matched.length}건
+                      {payExcelPreview.matched.some(m=>m.isSumMatch) && <span className="ml-1 text-blue-300">(합산 {payExcelPreview.matched.filter(m=>m.isSumMatch).length}건 포함)</span>}
+                      &nbsp;/ 미매칭 {payExcelPreview.unmatched.length}건
+                    </div>
                   </div>
+                  <button className="text-white/60 hover:text-white text-xl" onClick={() => { setPayExcelOpen(false); setPayExcelPreview(null); }}>×</button>
                 </div>
-              )}
-            </div>
-            <div className="px-6 py-4 border-t border-gray-100 flex gap-3">
-              <button onClick={() => { setPayExcelOpen(false); setPayExcelPreview(null); }} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 font-semibold text-[13px] hover:bg-gray-200">취소</button>
-              <button
-                disabled={!payExcelPreview.matched.length || payExcelConfirming}
-                onClick={confirmPayExcel}
-                className="flex-1 py-2.5 rounded-xl bg-emerald-600 text-white font-bold text-[13px] hover:bg-emerald-700 disabled:opacity-50 transition"
-              >
-                {payExcelConfirming ? "처리중..." : `매칭된 ${payExcelPreview.matched.length}건 지급완료 처리`}
-              </button>
-            </div>
+                <div className="flex-1 overflow-y-auto p-5 space-y-4">
+                  {/* 1:1 매칭 */}
+                  {payExcelPreview.matched.filter(m=>!m.isSumMatch).length > 0 && (
+                    <div>
+                      <div className="text-[13px] font-bold text-emerald-700 mb-2">
+                        1:1 매칭 ({payExcelPreview.matched.filter(m=>!m.isSumMatch).length}건) — 지급완료 처리됩니다
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-[12px] border-collapse">
+                          <thead>
+                            <tr className="bg-emerald-50">
+                              {["엑셀행","차량번호","기사명","상차일","운송료(엑셀)","기사운임(프로그램)","금액일치","산재보험료","지급일"].map(h=>(
+                                <th key={h} className="px-3 py-2 text-center font-bold text-emerald-800 border border-emerald-200">{h}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {payExcelPreview.matched.filter(m=>!m.isSumMatch).map((m,i)=>(
+                              <tr key={i} className={i%2===0?"bg-white":"bg-emerald-50/30"}>
+                                <td className="px-3 py-2 text-center border border-gray-100 text-gray-400">{m.excelRow}</td>
+                                <td className="px-3 py-2 text-center border border-gray-100">{m.차량번호}</td>
+                                <td className="px-3 py-2 text-center border border-gray-100 font-semibold">{m.기사명}</td>
+                                <td className="px-3 py-2 text-center border border-gray-100">{m.excelDate}</td>
+                                <td className="px-3 py-2 text-right border border-gray-100">{won(m.운송료)}</td>
+                                <td className="px-3 py-2 text-right border border-gray-100">{won(m.dispatch.기사운임)}</td>
+                                <td className="px-3 py-2 text-center border border-gray-100">
+                                  <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${m.amtMatch?"bg-emerald-100 text-emerald-700":"bg-amber-100 text-amber-700"}`}>
+                                    {m.amtMatch?"일치":"차이있음"}
+                                  </span>
+                                </td>
+                                <td className="px-3 py-2 text-right border border-gray-100">{m.excelInsurance>0?won(m.excelInsurance):"-"}</td>
+                                <td className="px-3 py-2 text-center border border-gray-100">{m.지급일||selectedPayDate}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 합산 매칭 */}
+                  {payExcelPreview.matched.filter(m=>m.isSumMatch).length > 0 && (
+                    <div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-[13px] font-bold text-blue-700">합산 매칭 ({payExcelPreview.matched.filter(m=>m.isSumMatch).length}건)</span>
+                        <span className="px-2 py-0.5 bg-blue-100 text-blue-600 text-[11px] rounded-full font-semibold">오더 여러 건을 1장 계산서로 합산 지급</span>
+                      </div>
+                      <div className="space-y-3">
+                        {payExcelPreview.matched.filter(m=>m.isSumMatch).map((m,i)=>(
+                          <div key={i} className="border border-blue-200 rounded-lg overflow-hidden">
+                            <div className="bg-blue-50 px-4 py-2 flex items-center justify-between">
+                              <div className="text-[12px] font-bold text-blue-800">
+                                {m.기사명} ({m.차량번호}) · {m.excelDate} · 엑셀: {won(m.excelAmt)}원 = {m.sumRecords.length}건 합산 ({won(m.sumTotal)}원)
+                              </div>
+                              <span className="px-2 py-0.5 bg-blue-600 text-white text-[11px] rounded-full font-bold">합산일치</span>
+                            </div>
+                            <table className="w-full text-[11px] border-collapse">
+                              <thead>
+                                <tr className="bg-gray-50">
+                                  {["#","상차일","상차지","하차지","기사운임"].map(h=>(
+                                    <th key={h} className="px-3 py-1.5 text-center font-semibold text-gray-500 border-b border-gray-200">{h}</th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {m.sumRecords.map((r,j)=>(
+                                  <tr key={j} className="border-b border-gray-100">
+                                    <td className="px-3 py-1.5 text-center text-gray-400">{j+1}</td>
+                                    <td className="px-3 py-1.5 text-center">{r.상차일}</td>
+                                    <td className="px-3 py-1.5 text-center">{r.상차지명||r.출발지||""}</td>
+                                    <td className="px-3 py-1.5 text-center">{r.하차지명||r.도착지||""}</td>
+                                    <td className="px-3 py-1.5 text-right font-semibold text-[#1B2B4B]">{won(r.기사운임)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {payExcelPreview.debugKeys && (
+                    <div className="p-2 bg-gray-50 border border-gray-200 rounded text-[11px] text-gray-500">
+                      <span className="font-bold text-gray-700">인식된 컬럼명: </span>{payExcelPreview.debugKeys.join(", ")}
+                    </div>
+                  )}
+
+                  {/* 미매칭 */}
+                  {payExcelPreview.unmatched.length > 0 && (
+                    <div>
+                      <div className="text-[13px] font-bold text-red-600 mb-2">미매칭 ({payExcelPreview.unmatched.length}건) — 처리되지 않습니다</div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-[12px] border-collapse">
+                          <thead>
+                            <tr className="bg-red-50">
+                              {["엑셀행","차량번호","기사명","상차일","운송료","미매칭 사유"].map(h=>(
+                                <th key={h} className="px-3 py-2 text-center font-bold text-red-700 border border-red-200">{h}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {payExcelPreview.unmatched.map((m,i)=>(
+                              <tr key={i} className={i%2===0?"bg-white":"bg-red-50/30"}>
+                                <td className="px-3 py-2 text-center border border-gray-100 text-gray-400">{m.excelRow}</td>
+                                <td className="px-3 py-2 text-center border border-gray-100">{m.차량번호}</td>
+                                <td className="px-3 py-2 text-center border border-gray-100">{m.기사명}</td>
+                                <td className="px-3 py-2 text-center border border-gray-100">{m.상차일}</td>
+                                <td className="px-3 py-2 text-right border border-gray-100">{won(m.운송료)}</td>
+                                <td className="px-3 py-2 text-center border border-gray-100 text-red-500 text-[11px]">{m.사유}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div className="px-6 py-4 border-t border-gray-100 flex gap-3">
+                  <button onClick={() => { setPayExcelOpen(false); setPayExcelPreview(null); }} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 font-semibold text-[13px] hover:bg-gray-200">취소</button>
+                  <button
+                    disabled={!payExcelPreview.matched.length || payExcelConfirming}
+                    onClick={confirmPayExcel}
+                    className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white font-bold text-[13px] hover:bg-[#243a60] disabled:opacity-50 transition flex items-center justify-center gap-2"
+                  >
+                    {payExcelConfirming ? (
+                      <>
+                        <svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" strokeOpacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10" /></svg>
+                        처리 중...
+                      </>
+                    ) : `매칭된 ${payExcelPreview.matched.length}건 지급완료 처리`}
+                  </button>
+                </div>
+              </>
+            ) : null}
           </div>
         </div>
       )}
