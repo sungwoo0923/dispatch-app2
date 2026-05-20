@@ -195,7 +195,8 @@ import {
   updateDoc,
   where
 } from "firebase/firestore";
-import { auth, db } from "./firebase";
+import { auth, db, storage } from "./firebase";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 
 /* -------------------------------------------------
@@ -1824,6 +1825,47 @@ return (
             >
               비밀번호 변경
             </button>
+
+            {/* 명함 이미지 */}
+            <div className="mb-6">
+              <p className="font-semibold text-gray-700 mb-2">명함 이미지</p>
+              <p className="text-xs text-gray-400 mb-2">이메일 발송 시 하단에 첨부되는 명함 이미지입니다.</p>
+              {cardImage && (
+                <img src={cardImage} alt="명함" className="w-full rounded-lg mb-2 border border-gray-200 object-contain max-h-28" />
+              )}
+              <div className="flex gap-2">
+                <label className={`flex-1 text-center py-2 rounded-lg border text-sm cursor-pointer font-semibold ${cardImageUploading ? "bg-gray-100 text-gray-400" : "bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100"}`}>
+                  {cardImageUploading ? "업로드 중..." : "이미지 선택"}
+                  <input type="file" accept="image/*" className="hidden" disabled={cardImageUploading}
+                    onChange={async (e) => {
+                      const file = e.target.files[0];
+                      if (!file || !user?.uid) return;
+                      setCardImageUploading(true);
+                      try {
+                        const storageRef = ref(storage, `cardImages/${user.uid}`);
+                        await uploadBytes(storageRef, file);
+                        const url = await getDownloadURL(storageRef);
+                        setCardImage(url);
+                        await setDoc(doc(db, "userProfiles", user.uid), { cardImageUrl: url }, { merge: true });
+                        showAlert("명함 이미지가 저장되었습니다.");
+                      } catch(err) {
+                        showAlert("업로드 실패: " + err.message);
+                      } finally {
+                        setCardImageUploading(false);
+                      }
+                    }} />
+                </label>
+                {cardImage && (
+                  <button className="px-3 py-2 rounded-lg border border-red-200 text-red-500 text-sm hover:bg-red-50"
+                    onClick={async () => {
+                      setCardImage(null);
+                      if (user?.uid) {
+                        await setDoc(doc(db, "userProfiles", user.uid), { cardImageUrl: null }, { merge: true }).catch(() => {});
+                      }
+                    }}>삭제</button>
+                )}
+              </div>
+            </div>
 
             {/* 나의 통계 */}
             <h3 className="text-lg font-semibold mb-3">나의 통계</h3>
@@ -10816,9 +10858,8 @@ function RealtimeStatus({
 }) {
 const alertAudio = React.useRef(null);
 
-  // ⚡ 탭 진입 시 끊김 방지 - 첫 렌더 후 즉시 ready
+  // ⚡ 탭 진입 시 스피너 즉시 표시 후 데이터 로드
   const [ready, setReady] = React.useState(false);
-  React.useEffect(() => { setReady(true); }, []);
 
 // 🚫 블랙 기사 알림 팝업 상태
 const [blackAlert, setBlackAlert] = React.useState(null);
@@ -11540,8 +11581,14 @@ const sortDispatchRows = (list = []) => {
 };
 
 
-// lazy init — 탭 진입 시 rows 즉시 정렬 (불필요한 추가 render 제거)
-const [rows, setRows] = React.useState(() => sortDispatchRows(dispatchData || []));
+const [rows, setRows] = React.useState([]);
+React.useEffect(() => {
+  const id = requestAnimationFrame(() => {
+    setRows(sortDispatchRows(dispatchData || []));
+    setReady(true);
+  });
+  return () => cancelAnimationFrame(id);
+}, []); // eslint-disable-line
   const [selected, setSelected] = React.useState([]);
   const [selectedEditMode, setSelectedEditMode] = React.useState(false);
   const [edited, setEdited] = React.useState({});
@@ -28726,6 +28773,77 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
     email: "r15332525@run25.co.kr", seal: "/seal.png",
   };
 
+  const buildBatchInvoiceHtml = (item, cp) => {
+    const rows = item.mapped || [];
+    const cInfo = item.clientInfo || {};
+    const sup = item.totals?.공급가 || 0;
+    const tax = item.totals?.세액 || 0;
+    const rowsHtml = rows.map((m, i) => `
+      <tr style="border-bottom:1px solid #e5e7eb;${i % 2 === 0 ? "background:#f9fafb" : "background:#fff"}">
+        <td style="padding:6px 8px;text-align:center;font-size:12px;color:#6b7280">${i+1}</td>
+        <td style="padding:6px 8px;font-size:12px;color:#374151">${m.상차일||""}</td>
+        <td style="padding:6px 8px;font-size:12px;color:#374151">${m.상차지||""}</td>
+        <td style="padding:6px 8px;font-size:12px;color:#374151">${m.하차지||""}</td>
+        <td style="padding:6px 8px;font-size:12px;color:#374151">${m.화물명||""}</td>
+        <td style="padding:6px 8px;font-size:12px;color:#374151">${m.기사명||""}</td>
+        <td style="padding:6px 8px;text-align:right;font-size:12px;color:#374151">${(m.공급가액||0).toLocaleString()}</td>
+        <td style="padding:6px 8px;text-align:right;font-size:12px;color:#374151">${(m.세액||0).toLocaleString()}</td>
+        <td style="padding:6px 8px;text-align:right;font-size:12px;font-weight:600;color:#1e3a5f">${((m.공급가액||0)+(m.세액||0)).toLocaleString()}</td>
+      </tr>`).join("");
+    return `<div style="font-family:sans-serif;background:#fff;padding:0">
+      <div style="background:#1B2B4B;padding:24px 32px;display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div style="font-size:22px;font-weight:900;color:#fff">거래명세서</div>
+          <div style="font-size:13px;color:rgba(255,255,255,0.6);margin-top:4px">거래기간 : ${item.start||""} ~ ${item.end||""}</div>
+        </div>
+        <div style="text-align:right;color:rgba(255,255,255,0.7);font-size:12px;line-height:1.8">
+          <div>${cp.name} · 대표 ${cp.ceo}</div><div>${cp.contact}</div><div>${cp.bank}</div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;border-bottom:1px solid #e5e7eb">
+        <div style="padding:20px;border-right:1px solid #e5e7eb">
+          <div style="font-size:11px;font-weight:700;color:#9ca3af;margin-bottom:8px;letter-spacing:0.05em">공급받는자</div>
+          <table style="width:100%;font-size:13px">
+            ${[["상호",cInfo.거래처명],["대표자",cInfo.대표자],["사업자번호",cInfo.사업자번호],["주소",cInfo.주소]].map(([k,v])=>`<tr style="border-bottom:1px solid #f3f4f6"><td style="padding:5px 12px 5px 0;color:#6b7280;font-weight:600;width:80px">${k}</td><td style="padding:5px 0;color:#111827;font-weight:500">${v||"-"}</td></tr>`).join("")}
+          </table>
+        </div>
+        <div style="padding:20px">
+          <div style="font-size:11px;font-weight:700;color:#9ca3af;margin-bottom:8px;letter-spacing:0.05em">공급자</div>
+          <table style="width:100%;font-size:13px">
+            ${[["상호",cp.name],["대표자",cp.ceo],["사업자번호",cp.bizNo],["주소",cp.addr]].map(([k,v])=>`<tr style="border-bottom:1px solid #f3f4f6"><td style="padding:5px 12px 5px 0;color:#6b7280;font-weight:600;width:80px">${k}</td><td style="padding:5px 0;color:#111827;font-weight:500">${v||"-"}</td></tr>`).join("")}
+          </table>
+        </div>
+      </div>
+      <table style="width:100%;border-collapse:collapse">
+        <thead>
+          <tr style="background:#f3f4f6">
+            <th style="padding:8px;font-size:12px;color:#6b7280;font-weight:700;border-bottom:1px solid #e5e7eb">No</th>
+            <th style="padding:8px;font-size:12px;color:#6b7280;font-weight:700;border-bottom:1px solid #e5e7eb">날짜</th>
+            <th style="padding:8px;font-size:12px;color:#6b7280;font-weight:700;border-bottom:1px solid #e5e7eb">상차지</th>
+            <th style="padding:8px;font-size:12px;color:#6b7280;font-weight:700;border-bottom:1px solid #e5e7eb">하차지</th>
+            <th style="padding:8px;font-size:12px;color:#6b7280;font-weight:700;border-bottom:1px solid #e5e7eb">화물명</th>
+            <th style="padding:8px;font-size:12px;color:#6b7280;font-weight:700;border-bottom:1px solid #e5e7eb">기사명</th>
+            <th style="padding:8px;text-align:right;font-size:12px;color:#6b7280;font-weight:700;border-bottom:1px solid #e5e7eb">공급가액</th>
+            <th style="padding:8px;text-align:right;font-size:12px;color:#6b7280;font-weight:700;border-bottom:1px solid #e5e7eb">세액</th>
+            <th style="padding:8px;text-align:right;font-size:12px;color:#6b7280;font-weight:700;border-bottom:1px solid #e5e7eb">합계</th>
+          </tr>
+        </thead>
+        <tbody>${rowsHtml}</tbody>
+        <tfoot>
+          <tr style="background:#1B2B4B">
+            <td colspan="6" style="padding:10px 16px;font-size:13px;font-weight:700;color:#fff">합계 (${rows.length}건)</td>
+            <td style="padding:10px 8px;text-align:right;font-size:13px;font-weight:700;color:#fff">${sup.toLocaleString()}</td>
+            <td style="padding:10px 8px;text-align:right;font-size:13px;font-weight:700;color:#fff">${tax.toLocaleString()}</td>
+            <td style="padding:10px 8px;text-align:right;font-size:13px;font-weight:700;color:#fff">${(sup+tax).toLocaleString()}</td>
+          </tr>
+        </tfoot>
+      </table>
+      <div style="padding:16px 24px;background:#f9fafb;border-top:1px solid #e5e7eb;font-size:12px;color:#6b7280">
+        입금계좌: ${cp.bank} &nbsp;|&nbsp; 문의: ${cp.email}
+      </div>
+    </div>`;
+  };
+
   const savePDF = async () => {
     const area = document.getElementById("invoiceArea");
     const canvas = await html2canvas(area, { scale: 2, backgroundColor: "#ffffff", useCORS: true });
@@ -29071,6 +29189,21 @@ const [arEmailFromMM, setArEmailFromMM] = useState("01");
 const [arEmailToMM, setArEmailToMM]     = useState("12");
 
  const [cardImage, setCardImage] = useState(null);
+const [includeCardInvoice, setIncludeCardInvoice] = useState(true);
+const [includeCardGeneral, setIncludeCardGeneral] = useState(true);
+const [includeCardAr, setIncludeCardAr] = useState(true);
+const [cardImageUploading, setCardImageUploading] = useState(false);
+
+// 로그인 시 Firestore에서 명함 이미지 URL 로드
+React.useEffect(() => {
+  if (!user?.uid) return;
+  getDoc(doc(db, "userProfiles", user.uid)).then(snap => {
+    if (snap.exists() && snap.data().cardImageUrl) {
+      setCardImage(snap.data().cardImageUrl);
+    }
+  }).catch(() => {});
+}, [user?.uid]);
+
   const [emailLogs, setEmailLogs] = useState([]);
   const [showEmailHistory, setShowEmailHistory] = useState(false);
 // ── 이메일 발송 이력 ──
@@ -30377,6 +30510,18 @@ const handleBatchSettle = async (targetStatus) => {
                       )}
                     </div>
                   </div>
+                  {/* 명함 포함 토글 */}
+                  <div className="flex items-center justify-between bg-gray-50 rounded-xl px-4 py-3 border border-gray-200">
+                    <div>
+                      <div className="text-[13px] font-bold text-gray-700">명함 이미지 포함</div>
+                      <div className="text-[11px] text-gray-400">{cardImage ? "내 정보에서 등록한 명함이 첨부됩니다" : "명함 미등록 (내 정보에서 업로드)"}</div>
+                    </div>
+                    <button onClick={() => setIncludeCardGeneral(v => !v)} disabled={!cardImage}
+                      className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${includeCardGeneral && cardImage ? "bg-[#1B2B4B]" : "bg-gray-300"} ${!cardImage ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}`}>
+                      <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${includeCardGeneral && cardImage ? "translate-x-5" : "translate-x-0"}`} />
+                    </button>
+                  </div>
+
                   <div className="flex gap-3 pt-2">
                     <button onClick={() => setGeneralEmailOpen(false)} className="flex-1 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-[13px]">취소</button>
                     <button
@@ -30386,7 +30531,8 @@ const handleBatchSettle = async (targetStatus) => {
                         if (!generalEmailSubject.trim()) return showAlert("제목을 입력하세요.");
                         setGeneralEmailSending(true);
                         const bodyLines = (generalEmailBody || "").split("\n").map(l => `<p style="margin:0 0 6px">${l || "&nbsp;"}</p>`).join("");
-                        const bodyHtml = `<div style="font-family:sans-serif;font-size:14px;color:#333;line-height:1.8;max-width:600px">${bodyLines}<hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0"/><img src="${cardImage||'https://dispatch-app2.vercel.app/RUN25_모바일명함_업무폰.jpg'}" alt="명함" style="width:100%;max-width:500px;border-radius:8px;display:block" onerror="this.style.display='none'"/></div>`;
+                        const cardSection = (includeCardGeneral && cardImage) ? `<hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0"/><img src="${cardImage}" alt="명함" style="width:100%;max-width:500px;border-radius:8px;display:block" onerror="this.style.display='none'"/>` : "";
+                        const bodyHtml = `<div style="font-family:sans-serif;font-size:14px;color:#333;line-height:1.8;max-width:600px">${bodyLines}${cardSection}</div>`;
                         try {
                           const res = await fetch("/api/send-email", {
                             method: "POST",
@@ -30465,7 +30611,11 @@ const handleBatchSettle = async (targetStatus) => {
           <div className="bg-blue-50 rounded-xl border border-blue-200 px-4 py-3 text-[13px]">
             <div className="font-bold text-blue-700 mb-1">발송 중... {batchSendProgress.done}/{batchSendProgress.total}</div>
             {batchSendProgress.failed.length > 0 && (
-              <div className="text-red-600 text-[12px]">실패: {batchSendProgress.failed.join(", ")}</div>
+              <div className="text-red-600 text-[12px] space-y-0.5 mt-1">
+                {batchSendProgress.failed.map((f, i) => (
+                  <div key={i}><b>{f.name}</b>: {f.reason}</div>
+                ))}
+              </div>
             )}
           </div>
         )}
@@ -30484,7 +30634,12 @@ const handleBatchSettle = async (targetStatus) => {
             const failed = [];
             for (let idx = 0; idx < batchSendList.length; idx++) {
               const item = batchSendList[idx];
-              if (!item.email) { failed.push(item.name); setBatchSendProgress(p => ({ ...p, done: p.done+1, failed: [...p.failed, item.name] })); continue; }
+              if (!item.email) {
+                const reason = "이메일 없음";
+                failed.push({ name: item.name, reason });
+                setBatchSendProgress(p => ({ ...p, done: p.done+1, failed: [...p.failed, { name: item.name, reason }] }));
+                continue;
+              }
               try {
                 // 엑셀 생성
                 const wsData = (item.mapped||[]).map(m => ({
@@ -30500,6 +30655,37 @@ const handleBatchSettle = async (targetStatus) => {
                   content: excelBase64,
                   contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 }];
+
+                // PDF 생성
+                try {
+                  const invHtml = buildBatchInvoiceHtml(item, COMPANY_PRINT);
+                  const div = document.createElement("div");
+                  div.style.cssText = "position:absolute;left:-9999px;top:0;width:960px;background:#fff";
+                  div.innerHTML = invHtml;
+                  document.body.appendChild(div);
+                  await new Promise(r => setTimeout(r, 200));
+                  const canvas = await html2canvas(div, { scale: 1.5, backgroundColor: "#ffffff", useCORS: true });
+                  document.body.removeChild(div);
+                  const imgData = canvas.toDataURL("image/jpeg", 0.85);
+                  const pdf = new jsPDF("p", "mm", "a4");
+                  const imgWidth = 210;
+                  const imgHeight = (canvas.height * imgWidth) / canvas.width;
+                  let heightLeft = imgHeight, position = 0;
+                  pdf.addImage(imgData, "JPEG", 0, position, imgWidth, imgHeight);
+                  heightLeft -= 297;
+                  while (heightLeft > 0) {
+                    position = heightLeft - imgHeight;
+                    pdf.addPage();
+                    pdf.addImage(imgData, "JPEG", 0, position, imgWidth, imgHeight);
+                    heightLeft -= 297;
+                  }
+                  attachments.push({
+                    filename: `거래명세서_${item.name}_${item.start}~${item.end}.pdf`,
+                    content: pdf.output("datauristring").split(",")[1],
+                    contentType: "application/pdf",
+                  });
+                } catch(pdfErr) { console.error("PDF 생성 실패:", pdfErr); }
+
                 const subject = `[거래명세서] ${item.name} ${item.start}~${item.end}`;
                 const totalAmt = (item.totals?.공급가||0)+(item.totals?.세액||0);
                 const bodyText = `안녕하세요, ${item.name} 담당자님.\n\n${COMPANY_PRINT.name}입니다.\n\n${item.start}~${item.end} 기간 거래명세서를 발송드립니다.\n\n총 ${item.mapped?.length||0}건\n공급가액: ${(item.totals?.공급가||0).toLocaleString()}원\n부가세: ${(item.totals?.세액||0).toLocaleString()}원\n합계: ${totalAmt.toLocaleString()}원\n\n입금계좌: ${COMPANY_PRINT.bank}\n마감문의: 010-4249-1821\n\n확인 부탁드립니다.\n감사합니다.\n\n${COMPANY_PRINT.name}\n${COMPANY_PRINT.contact}`;
@@ -30507,19 +30693,20 @@ const handleBatchSettle = async (targetStatus) => {
                 const res = await fetch("/api/send-email", {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ to: item.email, subject, html: bodyHtml, attachments,
-                    excelData: { client: item.name, start: item.start, end: item.end,
-                      rows: (item.mapped||[]).map(m=>({ idx:m.idx||"", 상차일:m.상차일||"", 상차지:m.상차지||"", 하차지:m.하차지||"", 화물명:m.화물명||"", 기사명:m.기사명||"", 차량번호:m.차량번호||"", 공급가액:m.공급가액||0, 세액:m.세액||0 })),
-                      totals: { 공급가액: item.totals?.공급가||0, 세액: item.totals?.세액||0 },
-                      clientInfo: item.clientInfo||{}, companyInfo: COMPANY_PRINT } }),
+                  body: JSON.stringify({ to: item.email, subject, html: bodyHtml, attachments }),
                 });
                 if (res.ok) {
                   logEmail({ type:"거래명세서", client: item.name, to: item.email, subject, status:"success" });
                 } else {
-                  failed.push(item.name);
-                  logEmail({ type:"거래명세서", client: item.name, to: item.email, subject, status:"failed" });
+                  let reason = `서버 오류 (${res.status})`;
+                  try { const errData = await res.json(); reason = errData.error || reason; } catch {}
+                  failed.push({ name: item.name, reason });
+                  logEmail({ type:"거래명세서", client: item.name, to: item.email, subject, status:"failed", error: reason });
                 }
-              } catch { failed.push(item.name); }
+              } catch(e) {
+                const reason = e.message || "네트워크 오류";
+                failed.push({ name: item.name, reason });
+              }
               setBatchSendProgress(p => ({ ...p, done: p.done+1, failed }));
             }
             setBatchSending(false);
@@ -30528,7 +30715,7 @@ const handleBatchSettle = async (targetStatus) => {
               setBatchSendList([]);
               setBatchSendOpen(false);
             } else {
-              showAlert(`발송 완료 (실패: ${failed.join(", ")})`);
+              showAlert(`발송 완료 (실패 ${failed.length}건: ${failed.map(f => f.name).join(", ")})`);
             }
           }}
           className="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white font-bold text-[13px] hover:bg-indigo-700 disabled:opacity-50 transition"
@@ -30592,57 +30779,16 @@ const handleBatchSettle = async (targetStatus) => {
                     />
                   </div>
 
-                 {/* 명함 — 드래그/붙여넣기/파일선택 */}
-                  <div
-                    className="border-2 border-dashed border-gray-300 rounded-xl overflow-hidden"
-                    onDragOver={e => e.preventDefault()}
-                    onDrop={e => {
-                      e.preventDefault();
-                      const file = e.dataTransfer.files[0];
-                      if (!file || !file.type.startsWith("image/")) return;
-                      const reader = new FileReader();
-                      reader.onload = ev => setCardImage(ev.target.result);
-                      reader.readAsDataURL(file);
-                    }}
-                    onPaste={e => {
-                      const item = Array.from(e.clipboardData.items).find(i => i.type.startsWith("image/"));
-                      if (!item) return;
-                      const reader = new FileReader();
-                      reader.onload = ev => setCardImage(ev.target.result);
-                      reader.readAsDataURL(item.getAsFile());
-                    }}
-                    tabIndex={0}
-                  >
-                    <div className="px-3 py-2 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
-                      <span className="text-[12px] font-bold text-gray-600">이메일 하단 명함</span>
-                      <div className="flex gap-2 items-center">
-                        {cardImage && (
-                          <button className="text-[11px] text-red-500 hover:underline"
-                            onClick={() => setCardImage(null)}>초기화</button>
-                        )}
-                        <label className="text-[11px] text-blue-600 cursor-pointer hover:underline">
-                          파일 선택
-                          <input type="file" accept="image/*" className="hidden"
-                            onChange={e => {
-                              const file = e.target.files[0];
-                              if (!file) return;
-                              const reader = new FileReader();
-                              reader.onload = ev => setCardImage(ev.target.result);
-                              reader.readAsDataURL(file);
-                            }} />
-                        </label>
-                      </div>
+                  {/* 명함 포함 토글 */}
+                  <div className="flex items-center justify-between bg-gray-50 rounded-xl px-4 py-3 border border-gray-200">
+                    <div>
+                      <div className="text-[13px] font-bold text-gray-700">명함 이미지 포함</div>
+                      <div className="text-[11px] text-gray-400">{cardImage ? "내 정보에서 등록한 명함이 첨부됩니다" : "명함 미등록 (내 정보에서 업로드)"}</div>
                     </div>
-                    <div className="p-3 min-h-[80px] flex items-center justify-center">
-                      {cardImage ? (
-                        <img src={cardImage} alt="명함" className="w-full rounded object-contain max-h-[120px]" />
-                      ) : (
-                        <div className="text-center text-gray-400 text-[12px]">
-                          <div className="text-2xl mb-1"></div>
-                          이미지를 여기에 <b>드래그</b>하거나 <b>Ctrl+V</b> 붙여넣기
-                        </div>
-                      )}
-                    </div>
+                    <button onClick={() => setIncludeCardInvoice(v => !v)} disabled={!cardImage}
+                      className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${includeCardInvoice && cardImage ? "bg-[#1B2B4B]" : "bg-gray-300"} ${!cardImage ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}`}>
+                      <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${includeCardInvoice && cardImage ? "translate-x-5" : "translate-x-0"}`} />
+                    </button>
                   </div>
 
                   {/* 안내 문구 */}
@@ -30729,15 +30875,8 @@ const handleBatchSettle = async (targetStatus) => {
 
                       const subject = `[거래명세서] ${client} ${start||""}~${end||""}`;
                       const bodyLines = emailBody.split("\n").map(l => `<p style="margin:0 0 4px 0">${l || "&nbsp;"}</p>`).join("");
-                      const bodyHtml = `
-                        <div style="font-family:sans-serif;font-size:14px;color:#333;line-height:1.8;max-width:600px">
-                          ${bodyLines}
-                          <hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0"/>
-                          <img src="${cardImage || 'https://dispatch-app2.vercel.app/RUN25_모바일명함_업무폰.jpg'}"
-                            alt="RUN25 명함"
-                            style="width:100%;max-width:500px;border-radius:8px;display:block"
-                            onerror="this.style.display='none'" />
-                        </div>`;
+                      const cardSectionInvoice = (includeCardInvoice && cardImage) ? `<hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0"/><img src="${cardImage}" alt="명함" style="width:100%;max-width:500px;border-radius:8px;display:block" onerror="this.style.display='none'"/>` : "";
+                      const bodyHtml = `<div style="font-family:sans-serif;font-size:14px;color:#333;line-height:1.8;max-width:600px">${bodyLines}${cardSectionInvoice}</div>`;
 
                       try {
                         const res = await fetch("/api/send-email", {
@@ -31728,48 +31867,16 @@ const handleBatchSettle = async (targetStatus) => {
                     />
                   </div>
 
-                  {/* 명함 */}
-                  <div
-                    className="border-2 border-dashed border-gray-300 rounded-xl overflow-hidden"
-                    onDragOver={e => e.preventDefault()}
-                    onDrop={e => {
-                      e.preventDefault();
-                      const file = e.dataTransfer.files[0];
-                      if (!file||!file.type.startsWith("image/")) return;
-                      const reader = new FileReader();
-                      reader.onload = ev => setCardImage(ev.target.result);
-                      reader.readAsDataURL(file);
-                    }}
-                    onPaste={e => {
-                      const item = Array.from(e.clipboardData.items).find(i=>i.type.startsWith("image/"));
-                      if (!item) return;
-                      const reader = new FileReader();
-                      reader.onload = ev => setCardImage(ev.target.result);
-                      reader.readAsDataURL(item.getAsFile());
-                    }}
-                    tabIndex={0}
-                  >
-                    <div className="px-3 py-2 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
-                      <span className="text-[12px] font-bold text-gray-600">이메일 하단 명함</span>
-                      <div className="flex gap-2 items-center">
-                        {cardImage && <button className="text-[11px] text-red-500 hover:underline" onClick={() => setCardImage(null)}>초기화</button>}
-                        <label className="text-[11px] text-blue-600 cursor-pointer hover:underline">
-                          파일 선택
-                          <input type="file" accept="image/*" className="hidden" onChange={e => {
-                            const file = e.target.files[0]; if (!file) return;
-                            const reader = new FileReader();
-                            reader.onload = ev => setCardImage(ev.target.result);
-                            reader.readAsDataURL(file);
-                          }} />
-                        </label>
-                      </div>
+                  {/* 명함 포함 토글 */}
+                  <div className="flex items-center justify-between bg-gray-50 rounded-xl px-4 py-3 border border-gray-200">
+                    <div>
+                      <div className="text-[13px] font-bold text-gray-700">명함 이미지 포함</div>
+                      <div className="text-[11px] text-gray-400">{cardImage ? "내 정보에서 등록한 명함이 첨부됩니다" : "명함 미등록 (내 정보에서 업로드)"}</div>
                     </div>
-                    <div className="p-3 min-h-[70px] flex items-center justify-center">
-                      {cardImage
-                        ? <img src={cardImage} alt="명함" className="w-full rounded object-contain max-h-[100px]" />
-                        : <div className="text-center text-gray-400 text-[12px]">이미지를 드래그하거나 Ctrl+V 붙여넣기</div>
-                      }
-                    </div>
+                    <button onClick={() => setIncludeCardAr(v => !v)} disabled={!cardImage}
+                      className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${includeCardAr && cardImage ? "bg-[#1B2B4B]" : "bg-gray-300"} ${!cardImage ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}`}>
+                      <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${includeCardAr && cardImage ? "translate-x-5" : "translate-x-0"}`} />
+                    </button>
                   </div>
 
                   {/* 안내 */}
@@ -31885,7 +31992,8 @@ const handleBatchSettle = async (targetStatus) => {
                       } catch(e) { console.error("PDF 실패:", e); }
 
                       const bodyLines = emailBody.split("\n").map(l=>`<p style="margin:0 0 4px 0">${l||"&nbsp;"}</p>`).join("");
-                      const bodyHtml = `<div style="font-family:sans-serif;font-size:14px;color:#333;line-height:1.8;max-width:600px">${bodyLines}<hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0"/><img src="${cardImage||'https://dispatch-app2.vercel.app/RUN25_모바일명함_업무폰.jpg'}" alt="명함" style="width:100%;max-width:500px;border-radius:8px;display:block" onerror="this.style.display='none'"/></div>`;
+                      const cardSectionAr = (includeCardAr && cardImage) ? `<hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0"/><img src="${cardImage}" alt="명함" style="width:100%;max-width:500px;border-radius:8px;display:block" onerror="this.style.display='none'"/>` : "";
+                      const bodyHtml = `<div style="font-family:sans-serif;font-size:14px;color:#333;line-height:1.8;max-width:600px">${bodyLines}${cardSectionAr}</div>`;
                       try {
                         const res = await fetch("/api/send-email", {
                           method:"POST",
