@@ -7675,26 +7675,49 @@ function MobileAddressSearch({ value, onChange, onSelect, placeholder }) {
   const fetchSugg = async (kw) => {
     if (!kw.trim() || kw.length < 2) { setSuggestions([]); return; }
     try {
-      const kwClean = kw.replace(/\s+/g, "");
-      const url = `https://apis.openapi.sk.com/tmap/pois?version=1&format=json&searchKeyword=${encodeURIComponent(kw)}&count=50&appKey=${MOBILE_TMAP_KEY}`;
-      const res = await fetch(url, { headers: { Accept: "application/json" } });
-      const data = await res.json();
-      const pois = data?.searchPoiInfo?.pois?.poi || [];
-      if (pois.length > 0) {
+      const ADDR_NORM = [
+        ["서울특별시","서울"],["서울시","서울"],["부산광역시","부산"],["대구광역시","대구"],
+        ["인천광역시","인천"],["광주광역시","광주"],["대전광역시","대전"],["울산광역시","울산"],
+        ["세종특별자치시","세종"],["세종시","세종"],["경기도","경기"],
+        ["강원특별자치도","강원"],["강원도","강원"],
+        ["충청북도","충북"],["충청남도","충남"],
+        ["전라북도","전북"],["전북특별자치도","전북"],["전라남도","전남"],
+        ["경상북도","경북"],["경상남도","경남"],
+        ["제주특별자치도","제주"],["제주도","제주"],
+      ];
+      let normKw = kw;
+      for (const [f, t] of ADDR_NORM) normKw = normKw.split(f).join(t);
+      const kwWords = normKw.trim().split(/\s+/).filter(Boolean);
+
+      const queries = [kw];
+      if (kwWords.length <= 2 && normKw.replace(/\s/g,"").length <= 6) {
+        queries.push(kw + " 읍", kw + " 면", kw + " 동");
+      }
+
+      const allPois = (await Promise.all(
+        queries.map(q =>
+          fetch(`https://apis.openapi.sk.com/tmap/pois?version=1&format=json&searchKeyword=${encodeURIComponent(q)}&count=50&appKey=${MOBILE_TMAP_KEY}`,
+            { headers: { Accept: "application/json" } })
+            .then(r => r.json())
+            .then(d => d?.searchPoiInfo?.pois?.poi || [])
+            .catch(() => [])
+        )
+      )).flat();
+
+      if (allPois.length > 0) {
         const seen = new Set();
         const results = [];
-        for (const p of pois) {
+        for (const p of allPois) {
           const upper = p.upperAddrName || "";
           const middle = p.middleAddrName || "";
           const low = p.lowAddrName || "";
-          // 항상 동 단위까지 표시
           const addr = [upper, middle, low].filter(Boolean).join(" ");
           if (!addr || seen.has(addr)) continue;
-          // 주소가 검색어를 포함하는 결과만 표시
-          if (!addr.replace(/\s+/g, "").includes(kwClean)) continue;
+          const addrNorm = addr.replace(/\s+/g, "");
+          if (!kwWords.every(w => addrNorm.includes(w))) continue;
           seen.add(addr);
           results.push({ address: addr, lat: parseFloat(p.noorLat || p.frontLat || 0), lon: parseFloat(p.noorLon || p.frontLon || 0) });
-          if (results.length >= 8) break;
+          if (results.length >= 15) break;
         }
         if (results.length > 0) { setSuggestions(results); return; }
       }
