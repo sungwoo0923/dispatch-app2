@@ -1703,6 +1703,7 @@ const title =
   : page === "notice" ? "공지사항"
   : page === "schedule" ? "일정"
   : page === "fare" ? "표준운임표"
+  : page === "national-fare" ? "전국운임 조회"
   : page === "status" ? "배차현황"
   : page === "unassigned" ? "미배차현황"
   : page === "handover" ? "인수인계"
@@ -2017,6 +2018,10 @@ onGoSchedule={() => {
 
           onGoFare={() => {
             setPage("fare");
+            setShowMenu(false);
+          }}
+          onGoNationalFare={() => {
+            setPage("national-fare");
             setShowMenu(false);
           }}
           onGoRateCard={() => {
@@ -2699,6 +2704,9 @@ setOpenMemo={setOpenMemo}
        {page === "fare" && (
           <MobileStandardFare onBack={() => setPage("list")} />
         )}
+        {page === "national-fare" && (
+          <MobileNationalFare onBack={() => setPage("list")} />
+        )}
         {page === "ratecard" && (
           <MobileRateCard
             dispatchData={orders}
@@ -3075,6 +3083,7 @@ function MobileSideMenu({
   onGoList,
   onGoCreate,
   onGoFare,
+  onGoNationalFare,
   onGoRateCard,
   onGoSales,
   onGoUnassigned,
@@ -3162,6 +3171,7 @@ function MobileSideMenu({
 
           <MenuSection title="매출 / 운임표">
             <MenuItem label="표준운임표" onClick={onGoFare} />
+            <MenuItem label="전국운임 조회" onClick={onGoNationalFare} />
             <MenuItem label="단가표" onClick={onGoRateCard} />
             <MenuItem label="매출관리" onClick={onGoSales} />
           </MenuSection>
@@ -7617,6 +7627,261 @@ function RowLabelInput({ label, input, right }) {
         {right && <span className="ml-1">{right}</span>}
       </div>
       <div className="flex-1 min-w-0 px-2 py-2 overflow-hidden">{input}</div>
+    </div>
+  );
+}
+
+// ======================================================================
+// 📌 모바일 전국운임 조회 (T-Map 도로거리 기반)
+// ======================================================================
+const MOBILE_TMAP_KEY = "rmzwkLwH9N4i9ayxDj9GR6l8hyFDaEk52ZQs4yer";
+
+const MOBILE_FARE_TYPES = [
+  { label: "라보",   base: 58000,  perKm: 405  },
+  { label: "1톤",   base: 50000,  perKm: 633  },
+  { label: "1.4톤", base: 55000,  perKm: 696  },
+  { label: "2.5톤", base: 65000,  perKm: 823  },
+  { label: "3.5톤", base: 72000,  perKm: 924  },
+  { label: "5톤",   base: 82000,  perKm: 1051 },
+  { label: "5톤축", base: 87000,  perKm: 1114 },
+  { label: "11톤",  base: 105000, perKm: 1329 },
+  { label: "14톤",  base: 112000, perKm: 1430 },
+  { label: "18톤",  base: 125000, perKm: 1582 },
+  { label: "25톤",  base: 132000, perKm: 1684 },
+  { label: "장재물", base: null,   perKm: null  },
+];
+
+const MOBILE_VEHICLE_CATEGORIES = [
+  { label: "카고/윙바디 (일반)", multiplier: 1.0 },
+  { label: "탑차",             multiplier: 1.1 },
+  { label: "냉동/냉장",        multiplier: 1.4 },
+  { label: "리프트",           multiplier: 1.1 },
+];
+
+function MobileAddressSearch({ value, onChange, onSelect, placeholder }) {
+  const [query, setQuery] = useState(value || "");
+  const [suggestions, setSuggestions] = useState([]);
+  const [open, setOpen] = useState(false);
+  const debRef = useRef(null);
+
+  useEffect(() => { setQuery(value || ""); }, [value]);
+
+  const fetchSugg = async (kw) => {
+    if (!kw.trim() || kw.length < 2) { setSuggestions([]); return; }
+    try {
+      const url = `https://apis.openapi.sk.com/tmap/geo/fullAddrGeo?version=1&format=json&fullAddr=${encodeURIComponent(kw)}`;
+      const res = await fetch(url, { headers: { appKey: MOBILE_TMAP_KEY, Accept: "application/json" } });
+      const data = await res.json();
+      const coords = data?.coordinateInfo?.coordinate || [];
+      setSuggestions(
+        coords.slice(0, 6)
+          .map(c => ({ address: c.fullAddrjibun || c.fullAddrRoad || "", lat: parseFloat(c.lat || "0"), lon: parseFloat(c.lon || "0") }))
+          .filter(s => s.address)
+      );
+    } catch { setSuggestions([]); }
+  };
+
+  const handleChange = (e) => {
+    const v = e.target.value;
+    setQuery(v); onChange(v); onSelect(null); setOpen(true);
+    clearTimeout(debRef.current);
+    debRef.current = setTimeout(() => fetchSugg(v), 300);
+  };
+
+  const handleSelect = (s) => {
+    setQuery(s.address); onChange(s.address); onSelect(s);
+    setSuggestions([]); setOpen(false);
+  };
+
+  return (
+    <div className="relative">
+      <input
+        className="w-full px-3 py-2.5 text-[14px] rounded-xl border border-gray-200 bg-white focus:border-[#1B2B4B] focus:outline-none placeholder:text-gray-300"
+        placeholder={placeholder}
+        value={query}
+        onChange={handleChange}
+        onFocus={() => { setOpen(true); if (query.length >= 2) fetchSugg(query); }}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+      />
+      {open && suggestions.length > 0 && (
+        <div className="absolute z-50 left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-xl shadow-xl max-h-52 overflow-y-auto">
+          {suggestions.map((s, i) => (
+            <div
+              key={i}
+              className="px-4 py-3 text-[13px] cursor-pointer hover:bg-blue-50 text-gray-700 border-b border-gray-50 last:border-0"
+              onMouseDown={() => handleSelect(s)}
+            >
+              {s.address}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MobileNationalFare({ onBack }) {
+  const [nfFrom, setNfFrom] = useState("");
+  const [nfTo, setNfTo] = useState("");
+  const [nfFromCoord, setNfFromCoord] = useState(null);
+  const [nfToCoord, setNfToCoord] = useState(null);
+  const [nfVehicleCat, setNfVehicleCat] = useState(0);
+  const [nfLoading, setNfLoading] = useState(false);
+  const [nfResult, setNfResult] = useState(null);
+  const [nfError, setNfError] = useState("");
+
+  const geocodeTmap = async (addr) => {
+    const url = `https://apis.openapi.sk.com/tmap/geo/fullAddrGeo?version=1&format=json&fullAddr=${encodeURIComponent(addr)}`;
+    const res = await fetch(url, { headers: { appKey: MOBILE_TMAP_KEY, Accept: "application/json" } });
+    const data = await res.json();
+    const coord = data?.coordinateInfo?.coordinate?.[0];
+    if (!coord) throw new Error(`"${addr}" 주소를 찾을 수 없습니다`);
+    return { lat: parseFloat(coord.lat), lon: parseFloat(coord.lon) };
+  };
+
+  const getRouteKm = async (from, to) => {
+    const url = `https://apis.openapi.sk.com/tmap/routes?version=1&format=json&appKey=${MOBILE_TMAP_KEY}`;
+    const body = new URLSearchParams({
+      startX: String(from.lon), startY: String(from.lat),
+      endX: String(to.lon),   endY: String(to.lat),
+      reqCoordType: "WGS84GEO", resCoordType: "WGS84GEO",
+      searchOption: "0", startName: "출발지", endName: "도착지",
+    });
+    const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" }, body });
+    if (!res.ok) { const t = await res.text(); throw new Error(`경로 조회 실패 (${res.status}): ${t.slice(0, 80)}`); }
+    const data = await res.json();
+    const dist = data?.features?.[0]?.properties?.totalDistance;
+    if (!dist) throw new Error("경로를 찾을 수 없습니다 (주소를 더 정확히 입력해 주세요)");
+    return Math.round(dist / 1000);
+  };
+
+  const calcFare = (km, { base, perKm }, multiplier) => {
+    if (!base) return null;
+    let effKm = perKm;
+    if (km > 100) effKm = perKm * (1 - Math.min(0.3, (km - 100) / 1000));
+    return Math.round(((base + Math.round(effKm * km)) * multiplier) / 5000) * 5000;
+  };
+
+  const lookup = async () => {
+    if (!nfFrom.trim() || !nfTo.trim()) { setNfError("출발지와 도착지를 모두 입력하세요"); return; }
+    setNfLoading(true); setNfError(""); setNfResult(null);
+    try {
+      const fromCoord = nfFromCoord || await geocodeTmap(nfFrom);
+      const toCoord = nfToCoord || await geocodeTmap(nfTo);
+      const km = await getRouteKm(fromCoord, toCoord);
+      setNfResult({ km, from: nfFrom, to: nfTo });
+    } catch (err) { setNfError(err.message || "조회 중 오류가 발생했습니다"); }
+    finally { setNfLoading(false); }
+  };
+
+  const cat = MOBILE_VEHICLE_CATEGORIES[nfVehicleCat];
+
+  return (
+    <div className="px-4 py-4 space-y-4">
+      {/* 주소 입력 */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3">
+        <div>
+          <div className="text-[12px] font-bold text-gray-500 mb-1.5">출발지 주소</div>
+          <MobileAddressSearch
+            value={nfFrom}
+            onChange={v => { setNfFrom(v); setNfFromCoord(null); }}
+            onSelect={s => { if (s) { setNfFrom(s.address); setNfFromCoord(s); } }}
+            placeholder="예: 인천광역시 서구 원창동"
+          />
+        </div>
+        <div>
+          <div className="text-[12px] font-bold text-gray-500 mb-1.5">도착지 주소</div>
+          <MobileAddressSearch
+            value={nfTo}
+            onChange={v => { setNfTo(v); setNfToCoord(null); }}
+            onSelect={s => { if (s) { setNfTo(s.address); setNfToCoord(s); } }}
+            placeholder="예: 경기도 용인시 처인구"
+          />
+        </div>
+
+        {/* 차량 유형 */}
+        <div>
+          <div className="text-[12px] font-bold text-gray-500 mb-1.5">차량 유형</div>
+          <select
+            className="w-full px-3 py-2.5 text-[14px] rounded-xl border border-gray-200 bg-white"
+            value={nfVehicleCat}
+            onChange={e => setNfVehicleCat(Number(e.target.value))}
+          >
+            {MOBILE_VEHICLE_CATEGORIES.map((c, i) => (
+              <option key={i} value={i}>{c.label}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex gap-2 pt-1">
+          <button
+            onClick={lookup}
+            disabled={nfLoading}
+            className="flex-1 py-3 rounded-xl bg-[#1B2B4B] text-white text-[14px] font-bold disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            {nfLoading ? (
+              <>
+                <svg className="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <circle cx="12" cy="12" r="10" strokeOpacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10"/>
+                </svg>
+                계산 중...
+              </>
+            ) : "조회하기"}
+          </button>
+          <button
+            onClick={() => { setNfFrom(""); setNfTo(""); setNfFromCoord(null); setNfToCoord(null); setNfResult(null); setNfError(""); }}
+            className="px-4 py-3 rounded-xl border border-gray-200 text-gray-500 text-[13px] font-semibold"
+          >
+            초기화
+          </button>
+        </div>
+
+        {nfError && (
+          <div className="px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-[12px] text-red-600">{nfError}</div>
+        )}
+      </div>
+
+      {/* 운임 결과 */}
+      {nfResult && (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="bg-[#1B2B4B] px-4 py-3">
+            <div className="text-white font-bold text-[13px] truncate">{nfResult.from} → {nfResult.to}</div>
+            <div className="text-white/60 text-[12px] mt-0.5">
+              도로거리 {nfResult.km}km · {cat.label}
+              {cat.multiplier > 1 && <span className="ml-1 text-blue-300">({Math.round((cat.multiplier-1)*100)}% 할증)</span>}
+            </div>
+          </div>
+          <div className="p-3">
+            <div className="grid grid-cols-2 gap-0 border border-gray-100 rounded-xl overflow-hidden">
+              {MOBILE_FARE_TYPES.map((ft, i) => {
+                const fare = calcFare(nfResult.km, ft, cat.multiplier);
+                return (
+                  <div key={ft.label} className={`flex items-center justify-between px-3 py-2.5 border-b border-gray-50 ${i % 2 === 0 ? "border-r border-gray-100" : ""}`}>
+                    <span className="text-[13px] font-semibold text-[#1B2B4B]">{ft.label}</span>
+                    <span className="text-[13px] font-bold text-gray-800">
+                      {fare ? `${fare.toLocaleString()}원` : <span className="text-[12px] text-gray-400 font-normal">별도협의</span>}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          <div className="px-4 pb-4 space-y-1">
+            <div className="text-[11px] text-gray-400">● 예상단가로 실제 운임은 수작업·상하차 조건 등에 따라 변동될 수 있습니다.</div>
+            <div className="text-[11px] text-gray-400">● T-Map 도로거리 기준 산정, 실제 경로에 따라 차이가 있을 수 있습니다.</div>
+          </div>
+        </div>
+      )}
+
+      {!nfResult && !nfLoading && (
+        <div className="flex flex-col items-center justify-center py-16 text-gray-400">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" className="mb-3 opacity-30">
+            <rect x="1" y="3" width="15" height="13" rx="2"/><path d="M16 8h4l3 4v4h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>
+          </svg>
+          <div className="text-[14px] font-semibold mb-1">출발지와 도착지를 입력하세요</div>
+          <div className="text-[12px]">T-Map 도로거리 기반 차종별 예상 운임</div>
+        </div>
+      )}
     </div>
   );
 }
