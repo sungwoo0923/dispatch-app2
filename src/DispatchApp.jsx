@@ -18729,12 +18729,14 @@ const driverMap = React.useMemo(() => {
 }, [drivers]);
 
 const runDailyClose = () => {
-  const targetDate = appliedEndDate || appliedStartDate || todayKST();
-  const todayRows = (dispatchData || []).filter(r => r.상차일 === targetDate);
+  const rangeStart = appliedStartDate || todayKST();
+  const rangeEnd   = appliedEndDate   || todayKST();
+  const targetDate = rangeEnd; // 보고서 기준일 (역방향 비교용)
+  const viewRows = (dispatchData || []).filter(r => r.상차일 >= rangeStart && r.상차일 <= rangeEnd);
   const errors = [];
   const warnings = [];
 
-  todayRows.forEach((row, idx) => {
+  viewRows.forEach((row, idx) => {
     const seq = idx + 1;
     const label = `${seq}번 [${row.거래처명 || "-"}] ${row.상차지명 || ""} → ${row.하차지명 || ""}`;
 
@@ -18802,7 +18804,7 @@ const runDailyClose = () => {
   });
 
   const clientMap = new Map();
-  todayRows.forEach(row => {
+  viewRows.forEach(row => {
     const name = row.거래처명 || "(미입력)";
     if (!clientMap.has(name)) clientMap.set(name, { count: 0, charge: 0, pay: 0 });
     const c = clientMap.get(name);
@@ -18815,11 +18817,13 @@ const runDailyClose = () => {
     name, ...data, margin: data.charge - data.pay,
   }));
 
+  const dateLabel = rangeStart === rangeEnd ? rangeStart : `${rangeStart} ~ ${rangeEnd}`;
   setDailyCloseResult({
-    date: targetDate,
-    total: todayRows.length,
+    date: dateLabel,
+    dateEnd: targetDate,
+    total: viewRows.length,
     errors, warnings,
-    passed: todayRows.length - errors.length,
+    passed: viewRows.length - errors.length,
     clientSummary,
   });
 };
@@ -18830,8 +18834,10 @@ React.useEffect(() => {
 // ===================== 일마감 보고서 출력 =====================
 const handleDailyReport = () => {
   if (!dailyCloseResult) return;
-  const targetDate = dailyCloseResult.date;
-  const targetRows = (dispatchData || []).filter(r => r.상차일 === targetDate);
+  const targetDate = dailyCloseResult.dateEnd || dailyCloseResult.date;
+  const rangeStart = appliedStartDate || targetDate;
+  const rangeEnd   = appliedEndDate   || targetDate;
+  const targetRows = (dispatchData || []).filter(r => r.상차일 >= rangeStart && r.상차일 <= rangeEnd);
 
   const prevDate = (() => {
     const d = new Date(targetDate);
@@ -19099,18 +19105,21 @@ const handleCloseFileUpload = async (e) => {
   const ws = wb.Sheets[wb.SheetNames[0]];
   const json = XLSX.utils.sheet_to_json(ws, { header: 1 });
 
-  // 헤더 행 찾기
   const headerIdx = json.findIndex(row =>
     row.some(cell => String(cell || "").includes("차량번호"))
   );
   if (headerIdx === -1) { showAlert("차량번호 컬럼을 찾을 수 없습니다."); return; }
 
   const headers = json[headerIdx].map(h => String(h || "").trim());
-  const plateCol = headers.indexOf("차량번호");
-  const nameCol  = headers.indexOf("차주이름");
-  const phoneCol = headers.indexOf("차주전화");
+  const plateCol   = headers.indexOf("차량번호");
+  const nameCol    = headers.indexOf("차주이름");
+  const phoneCol   = headers.indexOf("차주전화");
   const feeTypeCol = headers.indexOf("요금구분");
-const commCol  = headers.indexOf("수수료");
+  const commCol    = headers.indexOf("수수료");
+
+  const dateColNames = ["날짜", "상차일", "운송일", "일자", "접수일", "운행일", "배차일", "상차일시", "픽업일", "운행날짜", "배차날짜", "출발일"];
+  const dateCol = dateColNames.reduce((found, name) => found !== -1 ? found : headers.indexOf(name), -1);
+
   const fareColNames = ["운송료", "운임", "운임금액", "금액", "결제금액", "배차료", "차주운임", "지급금액"];
   const fareCol = fareColNames.reduce((found, name) =>
     found !== -1 ? found : headers.indexOf(name), -1
@@ -19118,8 +19127,54 @@ const commCol  = headers.indexOf("수수료");
 
   if (plateCol === -1) { showAlert("차량번호 컬럼을 찾을 수 없습니다."); return; }
 
-  const targetDate = appliedEndDate || appliedStartDate || todayKST();
-  const todayRows = (dispatchData || []).filter(r => r.상차일 === targetDate);
+  const parseExcelDate = (val) => {
+    if (val == null || val === "") return null;
+    const str = String(val).trim();
+    if (/^\d+(\.\d+)?$/.test(str) && Number(str) > 40000) {
+      const n = Math.floor(Number(str));
+      const d = new Date(Math.round((n - 25569) * 86400 * 1000));
+      const kst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+      return kst.toISOString().slice(0, 10);
+    }
+    const m = str.match(/(\d{4})[.\-\/](\d{1,2})[.\-\/](\d{1,2})/);
+    if (m) return `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
+    const mKr1 = str.match(/(\d{4})\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*일/);
+    if (mKr1) return `${mKr1[1]}-${mKr1[2].padStart(2, "0")}-${mKr1[3].padStart(2, "0")}`;
+    const mKr2 = str.match(/^(\d{1,2})\s*월\s*(\d{1,2})\s*일/);
+    if (mKr2) {
+      const yr = new Date().getFullYear();
+      return `${yr}-${mKr2[1].padStart(2, "0")}-${mKr2[2].padStart(2, "0")}`;
+    }
+    const m2 = str.match(/^(\d{1,2})[\/\-](\d{1,2})$/);
+    if (m2) {
+      const yr = new Date().getFullYear();
+      return `${yr}-${m2[1].padStart(2, "0")}-${m2[2].padStart(2, "0")}`;
+    }
+    return null;
+  };
+
+  let effectiveDateCol = dateCol;
+  if (effectiveDateCol === -1 && json.length > headerIdx + 1) {
+    const firstDataRow = json[headerIdx + 1];
+    const pickupRelated = headers.map((h, i) => ({ h, i }))
+      .filter(({ h }) => /상차|운송|픽업|배차|날짜|일자/.test(h));
+    for (const { i } of pickupRelated) {
+      if (parseExcelDate(firstDataRow?.[i])) { effectiveDateCol = i; break; }
+    }
+    if (effectiveDateCol === -1) {
+      for (let ci = 0; ci < (firstDataRow?.length || 0); ci++) {
+        const parsed = parseExcelDate(firstDataRow?.[ci]);
+        if (parsed && parsed >= "2020-01-01") { effectiveDateCol = ci; break; }
+      }
+    }
+  }
+
+  // 조회 기간 전체 rows (appliedStartDate ~ appliedEndDate)
+  const rangeStart = appliedStartDate || todayKST();
+  const rangeEnd   = appliedEndDate   || todayKST();
+  const viewRows = (dispatchData || []).filter(r =>
+    r.상차일 >= rangeStart && r.상차일 <= rangeEnd
+  );
 
   const fileIssues = [];
 
@@ -19132,29 +19187,47 @@ const commCol  = headers.indexOf("수수료");
     const filePhone   = String(row[phoneCol]   || "").replace(/[^\d]/g, "");
     const fileFeeType = String(row[feeTypeCol] || "").trim();
     const fileComm    = Number(row[commCol] || 0);
+    const fileDate    = effectiveDateCol !== -1 ? parseExcelDate(row[effectiveDateCol]) : null;
 
     if (!filePlate) continue;
 
-    // 내 프로그램에서 같은 차량번호 오더 찾기
-    const matched = todayRows.filter(r => normalizePlate(r.차량번호 || "") === filePlate);
+    let matched;
+    if (fileDate) {
+      matched = viewRows.filter(r =>
+        normalizePlate(r.차량번호 || "") === filePlate && r.상차일 === fileDate
+      );
+    } else {
+      const candidates = viewRows.filter(r => normalizePlate(r.차량번호 || "") === filePlate);
+      if (candidates.length <= 1) {
+        matched = candidates;
+      } else if (fareCol !== -1) {
+        const fileFare = Number(String(row[fareCol] || "0").replace(/[^\d]/g, ""));
+        if (fileFare > 0) {
+          const byFare = candidates.filter(r =>
+            Math.abs(Number(String(r.기사운임 || "0").replace(/[^\d]/g, "")) - fileFare) < 5000
+          );
+          matched = byFare.length === 1 ? byFare : byFare.length > 1 ? byFare : [];
+        } else {
+          matched = [];
+        }
+      } else {
+        matched = [];
+      }
+    }
 
     matched.forEach(mr => {
-      const seq = todayRows.indexOf(mr) + 1;
-      const label = `${seq}번 [${mr.거래처명 || "-"}] ${mr.상차지명 || ""} → ${mr.하차지명 || ""}`;
+      const seq = viewRows.indexOf(mr) + 1;
+      const dateLabel = fileDate ? ` (${fileDate})` : "";
+      const label = `${seq}번 [${mr.거래처명 || "-"}] ${mr.상차지명 || ""} → ${mr.하차지명 || ""}${dateLabel}`;
 
-      // 1. 배차방식 검증: 24시콜 파일에 있으면 배차방식이 "24시"여야 함
       const dispatch = (mr.배차방식 || "").trim();
       if (dispatch && dispatch !== "24시" && dispatch !== "24시(고정기사)") {
         fileIssues.push({
-          rowId: mr._id,
-          seq,
-          label,
-          type: "dispatch",
+          rowId: mr._id, seq, label, type: "dispatch",
           msg: `24시콜 파일에 존재하나 배차방식이 "${dispatch}"(으)로 등록됨 (차량: ${row[plateCol]}, 기사: ${fileName})`,
         });
       }
 
-      // 2. 지급방식 검증 (손실이면 청구 없는 게 정상 → 지급방식 검증 스킵)
       const programPay = (mr.지급방식 || "").trim();
       const isSongsil = programPay === "손실";
 
@@ -19176,13 +19249,10 @@ const commCol  = headers.indexOf("수수료");
         }
       }
 
-      // 3. ★ 운임 불일치 검증
       if (fareCol !== -1) {
-        const fileFare = Number(String(row[fareCol] || "0").replace(/[^\d]/g, ""));
-        const programFare = Number(String(mr.기사운임 || "0").replace(/[^\d]/g, ""));
-
+        const fileFare    = Number(String(row[fareCol] || "0").replace(/[^\d]/g, ""));
+        const programFare = Number(String(mr.기사운임  || "0").replace(/[^\d]/g, ""));
         if (isSongsil) {
-          // 손실: 기사운임과 24시콜 운송료 비교
           if (fileFare > 0 && programFare > 0 && fileFare !== programFare) {
             fileIssues.push({
               rowId: mr._id, seq, label, type: "fare",
@@ -19190,7 +19260,6 @@ const commCol  = headers.indexOf("수수료");
             });
           }
         } else {
-          // 일반: 기존과 동일
           if (fileFare > 0 && programFare > 0 && fileFare !== programFare) {
             fileIssues.push({
               rowId: mr._id, seq, label, type: "fare",
@@ -19202,27 +19271,35 @@ const commCol  = headers.indexOf("수수료");
     });
   }
 
-// ✅ 역방향 검증
+  // 역방향 검증
   const filePlates = new Set();
+  const filePlateDate = new Set();
   for (let i = headerIdx + 1; i < json.length; i++) {
     const row = json[i];
-    if (row && row[plateCol]) filePlates.add(normalizePlate(String(row[plateCol])));
+    if (!row || !row[plateCol]) continue;
+    const plate = normalizePlate(String(row[plateCol]));
+    filePlates.add(plate);
+    if (effectiveDateCol !== -1) {
+      const d = parseExcelDate(row[effectiveDateCol]);
+      if (d) filePlateDate.add(`${plate}__${d}`);
+    }
   }
 
-  todayRows.forEach(mr => {
+  viewRows.forEach(mr => {
     const dispatch = (mr.배차방식 || "").trim();
     if (dispatch !== "24시" && dispatch !== "24시(고정기사)") return;
     if (!mr.차량번호?.trim()) return;
 
     const plate = normalizePlate(mr.차량번호);
-    if (!filePlates.has(plate)) {
-      const seq = todayRows.indexOf(mr) + 1;
+    const inFile = filePlateDate.size > 0
+      ? filePlateDate.has(`${plate}__${mr.상차일}`)
+      : filePlates.has(plate);
+
+    if (!inFile) {
+      const seq = viewRows.indexOf(mr) + 1;
       const label = `${seq}번 [${mr.거래처명 || "-"}] ${mr.상차지명 || ""} → ${mr.하차지명 || ""}`;
       fileIssues.push({
-        rowId: mr._id,
-        seq,
-        label,
-        type: "missing",
+        rowId: mr._id, seq, label, type: "missing",
         msg: `배차방식이 "24시"이나 24시콜 파일에 차량번호 없음 (차량: ${mr.차량번호}, 기사: ${mr.이름 || "-"}) — 배차방식 오등록 의심`,
       });
     }
