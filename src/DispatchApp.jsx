@@ -1246,6 +1246,17 @@ useEffect(() => {
   const [subMenu, setSubMenu] = useState("고정거래처관리");
   // ⭐ 내 정보 패널 ON/OFF
   const [showMyInfo, setShowMyInfo] = useState(false);
+  // ⭐ 명함 이미지 (per-user, Firestore 로드)
+  const [cardImage, setCardImage] = useState(null);
+  const [cardImageUploading, setCardImageUploading] = useState(false);
+  React.useEffect(() => {
+    if (!user?.uid) return;
+    getDoc(doc(db, "userProfiles", user.uid)).then(snap => {
+      if (snap.exists() && snap.data().cardImageUrl) {
+        setCardImage(snap.data().cardImageUrl);
+      }
+    }).catch(() => {});
+  }, [user?.uid]);
   const [darkMode, setDarkMode] = useState(
     localStorage.getItem("theme") === "dark"
   );
@@ -1789,6 +1800,10 @@ return (
             upsertClient={upsertClient}
             showAlert={showAlert}
             patchDispatch={patchDispatch}
+            cardImage={cardImage}
+            setCardImage={setCardImage}
+            cardImageUploading={cardImageUploading}
+            setCardImageUploading={setCardImageUploading}
           />
         </div>
         {menu === "지급관리" && role === "admin" && (
@@ -28495,7 +28510,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
 
 
 // ===================== DispatchApp.jsx (PART 8/8) — START =====================
-function ClientSettlement({ dispatchData, setDispatchData, clients = [], setClients, upsertClient, showAlert = (m) => alert(m), patchDispatch }) {
+function ClientSettlement({ dispatchData, setDispatchData, clients = [], setClients, upsertClient, showAlert = (m) => alert(m), patchDispatch, cardImage, setCardImage, cardImageUploading, setCardImageUploading }) {
 
   // ★ 오더 상세 팝업
   const [orderPopup, setOrderPopup] = useState(null);
@@ -29188,21 +29203,9 @@ const [arEmailOpen, setArEmailOpen] = useState(false);
 const [arEmailFromMM, setArEmailFromMM] = useState("01");
 const [arEmailToMM, setArEmailToMM]     = useState("12");
 
- const [cardImage, setCardImage] = useState(null);
 const [includeCardInvoice, setIncludeCardInvoice] = useState(true);
 const [includeCardGeneral, setIncludeCardGeneral] = useState(true);
 const [includeCardAr, setIncludeCardAr] = useState(true);
-const [cardImageUploading, setCardImageUploading] = useState(false);
-
-// 로그인 시 Firestore에서 명함 이미지 URL 로드
-React.useEffect(() => {
-  if (!user?.uid) return;
-  getDoc(doc(db, "userProfiles", user.uid)).then(snap => {
-    if (snap.exists() && snap.data().cardImageUrl) {
-      setCardImage(snap.data().cardImageUrl);
-    }
-  }).catch(() => {});
-}, [user?.uid]);
 
   const [emailLogs, setEmailLogs] = useState([]);
   const [showEmailHistory, setShowEmailHistory] = useState(false);
