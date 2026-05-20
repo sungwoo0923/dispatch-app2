@@ -192,7 +192,83 @@ export default function StandardFare() {
   const [aiFare, setAiFare] = useState(null);
   const [searched, setSearched] = useState(false);
 
-   useEffect(() => {
+  // ── 전국운임 조회 (T-Map API 기반) ──
+  const [nfFrom, setNfFrom] = useState("");
+  const [nfTo, setNfTo] = useState("");
+  const [nfLoading, setNfLoading] = useState(false);
+  const [nfResult, setNfResult] = useState(null); // { km, from, to }
+  const [nfError, setNfError] = useState("");
+
+  const TMAP_KEY = "rmzwkLwH9N4i9ayxDj9GR6l8hyFDaEk52ZQs4yer";
+
+  const FARE_TYPES = [
+    { label: "라보",   base: 58000,  perKm: 405  },
+    { label: "1톤",   base: 82000,  perKm: 608  },
+    { label: "1.4톤", base: 95000,  perKm: 700  },
+    { label: "2.5톤", base: 108000, perKm: 792  },
+    { label: "3.5톤", base: 126000, perKm: 873  },
+    { label: "5톤",   base: 146000, perKm: 1000 },
+    { label: "5톤축", base: 161000, perKm: 1063 },
+    { label: "11톤",  base: 191000, perKm: 1253 },
+    { label: "14톤",  base: 211000, perKm: 1316 },
+    { label: "18톤",  base: 230000, perKm: 1392 },
+    { label: "25톤",  base: 241000, perKm: 1443 },
+    { label: "장재물", base: null,   perKm: null  },
+  ];
+
+  const calcFare = (km, { base, perKm }) => {
+    if (!base) return null;
+    let effectivePerKm = perKm;
+    if (km > 100) effectivePerKm = perKm * (1 - Math.min(0.3, (km - 100) / 1000));
+    const raw = base + Math.round(effectivePerKm * km);
+    return Math.round(raw / 5000) * 5000;
+  };
+
+  const geocodeTmap = async (addr) => {
+    const url = `https://apis.openapi.sk.com/tmap/geo/fullAddrGeo?version=1&format=json&fullAddr=${encodeURIComponent(addr)}`;
+    const res = await fetch(url, { headers: { appKey: TMAP_KEY, Accept: "application/json" } });
+    const data = await res.json();
+    const coord = data?.coordinateInfo?.coordinate?.[0];
+    if (!coord) throw new Error(`"${addr}" 주소를 찾을 수 없습니다`);
+    return { lat: parseFloat(coord.lat), lon: parseFloat(coord.lon) };
+  };
+
+  const getRouteKm = async (from, to) => {
+    const url = `https://apis.openapi.sk.com/tmap/routes?version=1&format=json&appKey=${TMAP_KEY}`;
+    const body = new URLSearchParams({
+      startX: String(from.lon), startY: String(from.lat),
+      endX: String(to.lon),   endY: String(to.lat),
+      reqCoordType: "WGS84GEO", resCoordType: "WGS84GEO",
+      searchOption: "0", startName: "출발지", endName: "도착지",
+    });
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
+      body,
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`경로 조회 실패 (${res.status}): ${text.slice(0, 120)}`);
+    }
+    const data = await res.json();
+    const dist = data?.features?.[0]?.properties?.totalDistance;
+    if (!dist) throw new Error("경로를 찾을 수 없습니다 (주소를 더 정확히 입력해 주세요)");
+    return Math.round(dist / 1000);
+  };
+
+  const lookupNationalFare = async () => {
+    if (!nfFrom.trim() || !nfTo.trim()) { setNfError("출발지와 도착지 주소를 모두 입력하세요"); return; }
+    setNfLoading(true); setNfError(""); setNfResult(null);
+    try {
+      const [fromCoord, toCoord] = await Promise.all([geocodeTmap(nfFrom), geocodeTmap(nfTo)]);
+      const km = await getRouteKm(fromCoord, toCoord);
+      setNfResult({ km, from: nfFrom, to: nfTo });
+    } catch (err) {
+      setNfError(err.message || "조회 중 오류가 발생했습니다");
+    } finally { setNfLoading(false); }
+  };
+
+  useEffect(() => {
     let dispatchCache = [];
     let ordersCache = [];
 

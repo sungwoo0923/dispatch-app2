@@ -13410,7 +13410,34 @@ const handleCloseFileUpload = async (e) => {
         normalizePlate(r.차량번호 || "") === filePlate && r.상차일 === fileDate
       );
     } else {
-      matched = todayRows.filter(r => normalizePlate(r.차량번호 || "") === filePlate);
+      // 날짜 감지 실패: targetDate 기준 rows에서 차량번호 매칭
+      const candidates = todayRows.filter(r => normalizePlate(r.차량번호 || "") === filePlate);
+      if (candidates.length <= 1) {
+        matched = candidates;
+      } else if (fareCol !== -1) {
+        const fileFare = Number(String(row[fareCol] || "0").replace(/[^\d]/g, ""));
+        if (fileFare > 0) {
+          const byFare = candidates.filter(r =>
+            Math.abs(Number(String(r.기사운임 || "0").replace(/[^\d]/g, "")) - fileFare) < 5000
+          );
+          matched = byFare.length === 1 ? byFare : byFare.length > 1 ? byFare : [];
+        } else {
+          matched = [];
+        }
+      } else {
+        matched = [];
+      }
+    }
+
+    // 합산매칭 체크: Excel 1행 = 프로그램 N행의 운임 합계
+    let isSumFareMatch = false;
+    if (fareCol !== -1 && matched.length >= 2) {
+      const fileFareForSum = Number(String(row[fareCol] || "0").replace(/[^\d]/g, ""));
+      if (fileFareForSum > 0) {
+        const sumFare = matched.reduce((s, mr) =>
+          s + Number(String(mr.기사운임 || "0").replace(/[^\d]/g, "")), 0);
+        if (Math.abs(sumFare - fileFareForSum) < 1000) isSumFareMatch = true;
+      }
     }
 
     matched.forEach(mr => {
@@ -13453,8 +13480,8 @@ const handleCloseFileUpload = async (e) => {
         }
       }
 
-      // 3. 운임 불일치 검증
-      if (fareCol !== -1) {
+      // 3. 운임 불일치 검증 (합산매칭인 경우 개별 운임 비교 생략)
+      if (fareCol !== -1 && !isSumFareMatch) {
         const fileFare = Number(String(row[fareCol] || "0").replace(/[^\d]/g, ""));
         const programFare = Number(String(mr.기사운임 || "0").replace(/[^\d]/g, ""));
 
