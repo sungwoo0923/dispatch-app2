@@ -10891,8 +10891,8 @@ function RealtimeStatus({
 }) {
 const alertAudio = React.useRef(null);
 
-  // ⚡ 탭 진입 시 스피너 즉시 표시 후 데이터 로드
-  const [ready, setReady] = React.useState(false);
+  // ⚡ 탭 진입 시: 데이터가 이미 있으면 스피너 스킵
+  const [ready, setReady] = React.useState(() => Array.isArray(dispatchData) && dispatchData.length > 0);
 
 // 🚫 블랙 기사 알림 팝업 상태
 const [blackAlert, setBlackAlert] = React.useState(null);
@@ -12038,24 +12038,27 @@ React.useEffect(() => {
     (r) => !!r && !deletedIds.has(r._id)
   );
 
-  setRows((prev) => {
-    const map = new Map(base.map((r) => [r._id, r]));
+  React.startTransition(() => {
+    setRows((prev) => {
+      const map = new Map(base.map((r) => [r._id, r]));
 
-    const kept = prev
-      .filter((r) => map.has(r._id))
-      .map((r) => ({
-        ...r,
-        ...map.get(r._id),
-      }));
+      const kept = prev
+        .filter((r) => map.has(r._id))
+        .map((r) => ({
+          ...r,
+          ...map.get(r._id),
+        }));
 
-    const newOnes = base.filter(
-      (r) => !prev.some((p) => p._id === r._id)
-    );
+      const newOnes = base.filter(
+        (r) => !prev.some((p) => p._id === r._id)
+      );
 
-    const merged = [...kept, ...newOnes];
+      const merged = [...kept, ...newOnes];
 
-    return sortDispatchRows(merged);
-  }); // ✅ 이게 빠져있어서 에러났던 거
+      return sortDispatchRows(merged);
+    });
+    if (!ready) setReady(true);
+  });
 }, [dispatchData, deletedIds]);
 
 // 🔥 rows 갱신 후 edited 데이터 반영
@@ -12567,9 +12570,7 @@ const [quickRegPhone, setQuickRegPhone] = React.useState("");
     setDriverConfirmRowId(null);
 
     // ✅ 낙관적 업데이트
-    setRows(prev =>
-      sortDispatchRows(prev.map(r => r._id === id ? { ...r, ...updated } : r))
-    );
+    setRows(prev => prev.map(r => r._id === id ? { ...r, ...updated } : r));
 
     // ✅ 백그라운드 저장
     patchDispatch(id, updated).catch(console.error);
@@ -14757,9 +14758,7 @@ flashRow(savedId);
 
     patchDispatch(savedId, payload).catch(console.error);
     const plate = normalizePlate(payload.차량번호 || "");
-       setRows(prev => sortDispatchRows(prev.map(r =>
-      r._id === savedId ? { ...r, ...payload } : r
-    )));
+    setRows(prev => prev.map(r => r._id === savedId ? { ...r, ...payload } : r));
   }}
   className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-[13px] font-bold hover:bg-emerald-700 transition"
 >
@@ -17280,10 +17279,8 @@ setTimeout(() => {
   if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
 }, 400);
 
-// ✅ rows 즉시 반영 (항상 실행)
-setRows(prev => sortDispatchRows(prev.map(r =>
-  r._id === savedId ? { ...r, ...payload } : r
-)));
+// ✅ rows 즉시 반영 (항상 실행) — 정렬은 Firebase 업데이트 후 effect에서 처리
+setRows(prev => prev.map(r => r._id === savedId ? { ...r, ...payload } : r));
 
 // ✅ 백그라운드 저장
 if (payload.차량번호 && payload.이름) {
@@ -17411,9 +17408,7 @@ if (editTarget.거래처명) {
                 updatedAt: Date.now(),
               };
               await patchDispatch(driverSelectInfo.rowId, updated);
-              setRows(prev => sortDispatchRows(prev.map(r =>
-                r._id === driverSelectInfo.rowId ? { ...r, ...updated } : r
-              )));
+              setRows(prev => prev.map(r => r._id === driverSelectInfo.rowId ? { ...r, ...updated } : r));
               setDriverSelectInfo(null);
             }}>
             <div className="flex items-center justify-between">
@@ -17472,7 +17467,7 @@ if (editTarget.거래처명) {
               const id = driverConfirmRowId;
               const updated = { 차량번호: d.차량번호, 이름: d.이름, 전화번호: d.전화번호, 배차상태: "배차완료", updatedAt: Date.now() };
               setDriverConfirmOpen(false);
-              setRows(prev => sortDispatchRows(prev.map(r => r._id === id ? { ...r, ...updated } : r)));
+              setRows(prev => prev.map(r => r._id === id ? { ...r, ...updated } : r));
               patchDispatch(id, updated).catch(console.error);
             }
             if (e.key === "Escape") {
@@ -17608,7 +17603,7 @@ if (editTarget.거래처명) {
                 const raw = formatted.replace(/[^\d]/g, "");
                 await upsertDriver({ 차량번호: driverConfirmInfo.차량번호, 이름: quickRegName, 전화번호: raw });
                 await patchDispatch(driverConfirmRowId, { 차량번호: driverConfirmInfo.차량번호, 이름: quickRegName, 전화번호: raw, 배차상태: "배차완료", updatedAt: Date.now() });
-                setRows(prev => sortDispatchRows(prev.map(r => r._id === driverConfirmRowId ? { ...r, 차량번호: driverConfirmInfo.차량번호, 이름: quickRegName, 전화번호: raw, 배차상태: "배차완료", updatedAt: Date.now() } : r)));
+                setRows(prev => prev.map(r => r._id === driverConfirmRowId ? { ...r, 차량번호: driverConfirmInfo.차량번호, 이름: quickRegName, 전화번호: raw, 배차상태: "배차완료", updatedAt: Date.now() } : r));
                 setQuickRegMode(false); setQuickRegName(""); setQuickRegPhone("");
                 setDriverConfirmOpen(false);
                 showAlert(`기사 "${quickRegName}" 등록 완료`);
@@ -17643,7 +17638,7 @@ if (editTarget.거래처명) {
               const raw = formatted.replace(/[^\d]/g, "");
               await upsertDriver({ 차량번호: driverConfirmInfo.차량번호, 이름: quickRegName, 전화번호: raw });
               await patchDispatch(driverConfirmRowId, { 차량번호: driverConfirmInfo.차량번호, 이름: quickRegName, 전화번호: raw, 배차상태: "배차완료", updatedAt: Date.now() });
-              setRows(prev => sortDispatchRows(prev.map(r => r._id === driverConfirmRowId ? { ...r, 차량번호: driverConfirmInfo.차량번호, 이름: quickRegName, 전화번호: raw, 배차상태: "배차완료", updatedAt: Date.now() } : r)));
+              setRows(prev => prev.map(r => r._id === driverConfirmRowId ? { ...r, 차량번호: driverConfirmInfo.차량번호, 이름: quickRegName, 전화번호: raw, 배차상태: "배차완료", updatedAt: Date.now() } : r));
               setQuickRegMode(false); setQuickRegName(""); setQuickRegPhone("");
               setDriverConfirmOpen(false);
               showAlert(`기사 "${quickRegName}" 등록 완료`);
@@ -17678,7 +17673,7 @@ if (editTarget.거래처명) {
           const d = driverConfirmInfo;
           const updated = { 차량번호: d.차량번호, 이름: d.이름, 전화번호: d.전화번호, 배차상태: "배차완료", updatedAt: Date.now() };
           await patchDispatch(driverConfirmRowId, updated);
-          setRows(prev => sortDispatchRows(prev.map(r => r._id === driverConfirmRowId ? { ...r, ...updated } : r)));
+          setRows(prev => prev.map(r => r._id === driverConfirmRowId ? { ...r, ...updated } : r));
           setDriverConfirmOpen(false);
           if (driverConfirmInfo.type === "mismatch") showAlert(`기사정보를 "${d.이름}"(으)로 변경했습니다.`);
         }}>
@@ -29243,7 +29238,8 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
   }, [clients, dispatchData]);
 
   const [selClient, setSelClient] = useState("");
-  const [yearFilter, setYearFilter] = useState(String(THIS_YEAR));
+  const [yearFrom, setYearFrom] = useState(String(THIS_YEAR));
+  const [yearTo,   setYearTo]   = useState(String(THIS_YEAR));
   const [monthFilter, setMonthFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("전체");
   const [selectedMonths, setSelectedMonths] = useState(new Set());
@@ -29322,7 +29318,7 @@ const monthRowsRaw = useMemo(() => {
     const currentYYYYMM = `${THIS_YEAR}-${String(nowMM).padStart(2,"0")}`;
 
     return Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, "0")).map(mm => {
-      const yyyymm = `${yearFilter}-${mm}`;
+      const yyyymm = `${yearFrom}-${mm}`;
       const rows = base.filter(r => String(r.상차일||"").startsWith(yyyymm));
       const total = rows.reduce((s, r) => s + toInt(r.청구운임), 0);
       const allDone = rows.length > 0 && rows.every(r => r.정산상태?.[yyyymm] === "정산완료");
@@ -29336,7 +29332,7 @@ const monthRowsRaw = useMemo(() => {
       const dates = rows.map(r => r.정산일?.[yyyymm]).filter(Boolean).sort();
       return { yyyymm, mm, 거래처명: selClient, 건수: rows.length, 총청구금액: total, 정산상태: status, 정산일: dates.at(-1)||"", _rows: rows };
     });
-  }, [dispatchData, selClient, yearFilter]);
+  }, [dispatchData, selClient, yearFrom]);
 
   const monthRows = useMemo(() => {
     let rows = [...monthRowsRaw];
@@ -29615,12 +29611,19 @@ const buildArEmailReportHtml = (filteredRows, clientName, year, from, to, compan
 const handleARReport = () => {
   const fromIdx = parseInt(arFromMM, 10);
   const toIdx   = parseInt(arToMM,   10);
-  if (fromIdx > toIdx) return showAlert("시작월이 종료월보다 클 수 없습니다.");
+  const yFrom = parseInt(yearFrom, 10);
+  const yTo   = parseInt(yearTo,   10);
   if (arReportMode === "selected" && arReportClients.size === 0) return showAlert("거래처를 선택하세요.");
 
-  const months = Array.from({ length: toIdx - fromIdx + 1 }, (_, i) =>
-    `${THIS_YEAR}-${String(fromIdx + i).padStart(2, "0")}`
-  );
+  // Build month list across year range
+  const months = [];
+  for (let y = yFrom; y <= yTo; y++) {
+    const mStart = (y === yFrom) ? fromIdx : 1;
+    const mEnd   = (y === yTo)   ? toIdx   : 12;
+    for (let m = mStart; m <= mEnd; m++) {
+      months.push(`${y}-${String(m).padStart(2, "0")}`);
+    }
+  }
   const allData = Array.isArray(dispatchData) ? dispatchData : [];
 
   // 거래처별 월별 집계
@@ -29685,7 +29688,9 @@ const reportRows = Array.from(companyMap.entries())
 
   const now = new Date();
   const printDate = `${now.getFullYear()}. ${String(now.getMonth()+1).padStart(2,"0")}. ${String(now.getDate()).padStart(2,"0")}`;
-  const periodLabel = `${THIS_YEAR}년 ${fromIdx}월 ~ ${toIdx}월`;
+  const periodLabel = yearFrom === yearTo
+    ? `${yearFrom}년 ${fromIdx}월 ~ ${toIdx}월`
+    : `${yearFrom}년 ${fromIdx}월 ~ ${yearTo}년 ${toIdx}월`;
 
   const monthHeaders = months.map(m => `<th>${parseInt(m.slice(5),10)}월</th>`).join("");
 
@@ -29734,7 +29739,7 @@ if (total === 0) return `<td class="zero">-</td>`;
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<title>미수금현황_${THIS_YEAR}_${arFromMM}~${arToMM}</title>
+<title>미수금현황_${yearFrom}~${yearTo}_${arFromMM}~${arToMM}</title>
 <style id="orient-style">@page { size: A4 landscape; margin: 6mm 8mm; }</style>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap');
@@ -29953,7 +29958,7 @@ if (total === 0) return `<td class="zero">-</td>`;
     html2canvas(document.getElementById('pageWrap'), { scale:2, backgroundColor:'#f9fafb', useCORS:true }).then(canvas => {
       toolbar.style.display = 'flex';
       const a = document.createElement('a');
-      a.download = '미수금현황_${THIS_YEAR}_${arFromMM}~${arToMM}.png';
+      a.download = '미수금현황_${yearFrom}~${yearTo}_${arFromMM}~${arToMM}.png';
       a.href = canvas.toDataURL('image/png');
       a.click();
     });
@@ -31356,13 +31361,23 @@ const handleBatchSettle = async (targetStatus) => {
                 </div>
               </div>
               <div className="flex flex-col">
-                <label className="text-[12px] font-semibold text-gray-500 mb-1">년도</label>
-                <select className="border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-semibold text-[#1B2B4B] outline-none"
-                  value={yearFilter} onChange={e=>{ setYearFilter(e.target.value); clearSel(); }}>
-                  {Array.from({length:3},(_,i)=>String(THIS_YEAR - 1 + i)).map(y=>(
-                    <option key={y} value={y}>{y}년</option>
-                  ))}
-                </select>
+                <label className="text-[12px] font-semibold text-gray-500 mb-1">기간 (년도)</label>
+                <div className="flex items-center gap-1.5">
+                  <select className="border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-semibold text-[#1B2B4B] outline-none"
+                    value={yearFrom} onChange={e=>{ setYearFrom(e.target.value); if(e.target.value > yearTo) setYearTo(e.target.value); clearSel(); }}>
+                    {Array.from({length:3},(_,i)=>String(THIS_YEAR - 1 + i)).map(y=>(
+                      <option key={y} value={y}>{y}년</option>
+                    ))}
+                  </select>
+                  <span className="text-gray-400 font-semibold text-[13px]">부터</span>
+                  <select className="border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-semibold text-[#1B2B4B] outline-none"
+                    value={yearTo} onChange={e=>{ setYearTo(e.target.value); if(e.target.value < yearFrom) setYearFrom(e.target.value); clearSel(); }}>
+                    {Array.from({length:3},(_,i)=>String(THIS_YEAR - 1 + i)).map(y=>(
+                      <option key={y} value={y}>{y}년</option>
+                    ))}
+                  </select>
+                  <span className="text-gray-400 font-semibold text-[13px]">까지</span>
+                </div>
               </div>
               <div className="flex flex-col">
                 <label className="text-[12px] font-semibold text-gray-500 mb-1">월</label>
@@ -31384,7 +31399,7 @@ const handleBatchSettle = async (targetStatus) => {
                 </select>
               </div>
               <button className="px-3 py-2 rounded-lg bg-gray-200 text-gray-700 text-[13px] font-semibold hover:bg-gray-300 transition"
-                onClick={()=>{setSelClient("");setArInput("");setYearFilter(String(THIS_YEAR));setMonthFilter("all");setStatusFilter("전체");clearSel();setArDropOpen(false);}}>
+                onClick={()=>{setSelClient("");setArInput("");setYearFrom(String(THIS_YEAR));setYearTo(String(THIS_YEAR));setMonthFilter("all");setStatusFilter("전체");clearSel();setArDropOpen(false);}}>
                 초기화
               </button>
               <div className="ml-auto flex gap-2">
@@ -31640,7 +31655,7 @@ const handleBatchSettle = async (targetStatus) => {
 
       {/* 기간 선택 */}
       <div className="px-6 pt-4 pb-3 border-b border-gray-100 shrink-0">
-        <div className="text-[12px] font-bold text-gray-500 mb-2">조회 기간 ({THIS_YEAR}년)</div>
+        <div className="text-[12px] font-bold text-gray-500 mb-2">조회 기간 ({yearFrom === yearTo ? `${yearFrom}년` : `${yearFrom}~${yearTo}년`})</div>
         <div className="flex items-center gap-3">
           <select
             className="flex-1 border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
