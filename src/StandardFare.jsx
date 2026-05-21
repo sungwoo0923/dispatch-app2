@@ -89,7 +89,6 @@ function AddressSearch({ value, onChange, onSelect, placeholder }) {
   const fetchSugg = async (kw) => {
     if (!kw.trim() || kw.length < 2) { setSuggestions([]); return; }
     try {
-      // 경기도 → 경기, 서울특별시 → 서울 등 T-Map 주소 형식으로 정규화
       const ADDR_NORM = [
         ["서울특별시","서울"],["서울시","서울"],["부산광역시","부산"],["대구광역시","대구"],
         ["인천광역시","인천"],["광주광역시","광주"],["대전광역시","대전"],["울산광역시","울산"],
@@ -104,15 +103,21 @@ function AddressSearch({ value, onChange, onSelect, placeholder }) {
       for (const [f, t] of ADDR_NORM) normKw = normKw.split(f).join(t);
       const kwWords = normKw.trim().split(/\s+/).filter(Boolean);
 
-      // 단어 1~2개인 짧은 쿼리: 읍/면/동 병렬 검색으로 다양한 행정구역 커버
-      const queries = [kw];
-      if (kwWords.length <= 2 && normKw.replace(/\s/g,"").length <= 6) {
-        queries.push(kw + " 읍", kw + " 면", kw + " 동");
-      }
+      // 읍/면/동 레벨 행정구역 POI를 확보하기 위해 병렬 쿼리
+      // 면사무소/읍사무소/주민센터는 각 행정구역에 1개씩 존재 → 다양한 읍/면/동 커버
+      const isGeneralSearch = kwWords.length <= 2 && !/(읍|면|동|리)$/.test(normKw.trim());
+      const queries = [
+        { q: kw, count: 30 },
+        ...(isGeneralSearch ? [
+          { q: kw + " 면사무소", count: 20 },
+          { q: kw + " 읍사무소", count: 10 },
+          { q: kw + " 주민센터", count: 20 },
+        ] : []),
+      ];
 
       const allPois = (await Promise.all(
-        queries.map(q =>
-          fetch(`https://apis.openapi.sk.com/tmap/pois?version=1&format=json&searchKeyword=${encodeURIComponent(q)}&count=50&appKey=${TMAP_KEY}`,
+        queries.map(({ q, count }) =>
+          fetch(`https://apis.openapi.sk.com/tmap/pois?version=1&format=json&searchKeyword=${encodeURIComponent(q)}&count=${count}&appKey=${TMAP_KEY}`,
             { headers: { Accept: "application/json" } })
             .then(r => r.json())
             .then(d => d?.searchPoiInfo?.pois?.poi || [])
@@ -127,9 +132,10 @@ function AddressSearch({ value, onChange, onSelect, placeholder }) {
           const upper = p.upperAddrName || "";
           const middle = p.middleAddrName || "";
           const low = p.lowAddrName || "";
-          const addr = [upper, middle, low].filter(Boolean).join(" ");
-          if (!addr || seen.has(addr)) continue;
-          // 검색어의 각 단어가 주소에 모두 포함되어야 함
+          // 읍/면/동 레벨까지 있는 주소만 표시
+          if (!upper || !middle || !low) continue;
+          const addr = [upper, middle, low].join(" ");
+          if (seen.has(addr)) continue;
           const addrNorm = addr.replace(/\s+/g, "");
           if (!kwWords.every(w => addrNorm.includes(w))) continue;
           seen.add(addr);

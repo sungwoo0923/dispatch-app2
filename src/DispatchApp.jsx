@@ -11641,6 +11641,24 @@ React.useEffect(() => {
   const [undoStack, setUndoStack] = React.useState([]);
   const [showUndo, setShowUndo] = React.useState(false);
 
+  // 우클릭 컨텍스트 메뉴
+  const [contextMenu, setContextMenu] = React.useState(null); // { x, y, row }
+
+  React.useEffect(() => {
+    const close = () => setContextMenu(null);
+    const onKey = (e) => {
+      if (e.key === "Delete" && contextMenu) {
+        setDeleteList([contextMenu.row]);
+        setDeleteConfirmOpen(true);
+        setContextMenu(null);
+      }
+      if (e.key === "Escape") setContextMenu(null);
+    };
+    document.addEventListener("click", close);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("click", close); document.removeEventListener("keydown", onKey); };
+  }, [contextMenu]);
+
   // ===================== 일마감 상태 =====================
   const [dailyCloseOpen, setDailyCloseOpen] = React.useState(false);
   const [dailyCloseResult, setDailyCloseResult] = React.useState(null);
@@ -14211,6 +14229,7 @@ const head = isDark
   <tr
     key={r._id || r.id || `idx-${idx}`}
     id={`row-${r._id}`}
+    onContextMenu={(e) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, row: r }); }}
 
 onDoubleClick={(e) => {
   if (e.target.closest("input")) return;
@@ -17669,6 +17688,96 @@ if (editTarget.거래처명) {
               <button className="col-span-2 py-2.5 rounded-xl bg-emerald-600 text-white text-[13px] font-bold" onClick={async()=>{ const {plate,name,phone}=smart4ConflictPopup.input; await upsertDriver({차량번호:plate,이름:name,전화번호:phone}); smart4ConflictPopup.setTarget(p=>({...p,차량번호:plate,이름:name,전화번호:formatPhone(phone),배차상태:"배차완료"})); setSmartQ4(""); setSmartList4([]); setSmart4ConflictPopup(null); }}>신규 기사로 별도 등록</button>
             </div>
           </div>
+        </div>
+      )}
+
+{/* ======================= 우클릭 컨텍스트 메뉴 ======================= */}
+      {contextMenu && (
+        <div
+          className="fixed z-[999999] bg-white border border-gray-200 rounded-xl shadow-2xl py-1.5 min-w-[168px] select-none"
+          style={{ top: Math.min(contextMenu.y, window.innerHeight - 240), left: Math.min(contextMenu.x, window.innerWidth - 180) }}
+          onClick={e => e.stopPropagation()}
+        >
+          {/* 기사복사 */}
+          <button
+            className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
+            onClick={() => {
+              setSelected([contextMenu.row._id]);
+              setCopyModalOpen(true);
+              setContextMenu(null);
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            기사복사
+          </button>
+          {/* 업로드링크 */}
+          <button
+            className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
+            onClick={() => {
+              const url = `${window.location.origin}/driver-upload`;
+              const msg = `[인수증 업로드 안내]\n운송 완료 후 아래 링크를 통해 인수증을 업로드해 주시기 바랍니다.\n\n${url}\n\n서명 받은 인수증(파렛전표) 사진을 촬영하여 업로드해 주세요.\n미업로드 시 운임 정산이 지연될 수 있습니다.`;
+              navigator.clipboard.writeText(msg).then(() => showAlert("업로드 안내 메시지가 복사되었습니다.\n기사에게 붙여넣기로 전달하세요.")).catch(() => showAlert(`링크: ${url}`));
+              setContextMenu(null);
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+            업로드링크
+          </button>
+          <div className="border-t border-gray-100 my-1"/>
+          {/* 수정 */}
+          <button
+            className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
+            onClick={() => {
+              const r = contextMenu.row;
+              const latest = dispatchData.find(d => d._id === r._id) || r;
+              const raw = String(latest?.화물내용 || "");
+              const KNOWN_SUFFIXES = ["파레트","파렛트","박스","통"];
+              let cargoNum = "", cargoType = "";
+              for (const s of KNOWN_SUFFIXES) { if (raw.endsWith(s)) { cargoNum = raw.slice(0, -s.length).trim(); cargoType = s; break; } }
+              if (!cargoType) { cargoNum = raw; cargoType = ""; }
+              const ton = r.차량톤수 || "";
+              const tonValue = ton.match(/[\d.]+/)?.[0] || "";
+              const tonType = ton.includes("kg") ? "kg" : ton.includes("톤") ? "톤" : "";
+              setEditTarget({ ...r, 화물내용: raw, 화물수량: cargoNum, 화물타입: cargoType, 톤수값: tonValue, 톤수타입: tonType });
+              setEditPopupOpen(true);
+              setContextMenu(null);
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            수정
+          </button>
+          {/* 일괄동기화 */}
+          <button
+            className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
+            onClick={async () => {
+              const r = contextMenu.row;
+              const plate = String(r.차량번호 || "").trim();
+              const name = String(r.이름 || "").trim();
+              const phone = String(r.전화번호 || "").trim();
+              if (plate && name) {
+                await upsertDriver({ 차량번호: plate, 이름: name, 전화번호: phone });
+                showAlert("✅ 기사 등록 완료");
+              } else { showAlert("차량번호와 기사명이 필요합니다."); }
+              setContextMenu(null);
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
+            일괄동기화
+          </button>
+          <div className="border-t border-gray-100 my-1"/>
+          {/* 삭제 */}
+          <button
+            className="w-full text-left px-4 py-2 text-[13px] text-red-600 hover:bg-red-50 flex items-center gap-2.5 transition-colors"
+            onClick={() => {
+              setDeleteList([contextMenu.row]);
+              setDeleteConfirmOpen(true);
+              setContextMenu(null);
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+            삭제
+            <span className="ml-auto text-[11px] text-gray-400 font-mono">Del</span>
+          </button>
         </div>
       )}
 

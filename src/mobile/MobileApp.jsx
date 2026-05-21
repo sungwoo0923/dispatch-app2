@@ -7689,14 +7689,19 @@ function MobileAddressSearch({ value, onChange, onSelect, placeholder }) {
       for (const [f, t] of ADDR_NORM) normKw = normKw.split(f).join(t);
       const kwWords = normKw.trim().split(/\s+/).filter(Boolean);
 
-      const queries = [kw];
-      if (kwWords.length <= 2 && normKw.replace(/\s/g,"").length <= 6) {
-        queries.push(kw + " 읍", kw + " 면", kw + " 동");
-      }
+      const isGeneralSearch = kwWords.length <= 2 && !/(읍|면|동|리)$/.test(normKw.trim());
+      const queries = [
+        { q: kw, count: 30 },
+        ...(isGeneralSearch ? [
+          { q: kw + " 면사무소", count: 20 },
+          { q: kw + " 읍사무소", count: 10 },
+          { q: kw + " 주민센터", count: 20 },
+        ] : []),
+      ];
 
       const allPois = (await Promise.all(
-        queries.map(q =>
-          fetch(`https://apis.openapi.sk.com/tmap/pois?version=1&format=json&searchKeyword=${encodeURIComponent(q)}&count=50&appKey=${MOBILE_TMAP_KEY}`,
+        queries.map(({ q, count }) =>
+          fetch(`https://apis.openapi.sk.com/tmap/pois?version=1&format=json&searchKeyword=${encodeURIComponent(q)}&count=${count}&appKey=${MOBILE_TMAP_KEY}`,
             { headers: { Accept: "application/json" } })
             .then(r => r.json())
             .then(d => d?.searchPoiInfo?.pois?.poi || [])
@@ -7711,8 +7716,9 @@ function MobileAddressSearch({ value, onChange, onSelect, placeholder }) {
           const upper = p.upperAddrName || "";
           const middle = p.middleAddrName || "";
           const low = p.lowAddrName || "";
-          const addr = [upper, middle, low].filter(Boolean).join(" ");
-          if (!addr || seen.has(addr)) continue;
+          if (!upper || !middle || !low) continue;
+          const addr = [upper, middle, low].join(" ");
+          if (seen.has(addr)) continue;
           const addrNorm = addr.replace(/\s+/g, "");
           if (!kwWords.every(w => addrNorm.includes(w))) continue;
           seen.add(addr);
