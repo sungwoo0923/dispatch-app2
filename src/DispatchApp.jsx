@@ -10966,24 +10966,8 @@ const BANCHAN_NOTICE = ``;
     });
   });
 
-  // 3️⃣ 과거 배차 데이터 (dispatchData)
-  (dispatchData || []).forEach((r) => {
-    const name = r.거래처명 || r.상차지명 || r.하차지명;
-    if (!name) return;
-
-    if (!map.has(name)) {
-      map.set(name, {
-        거래처명: name,
-        주소: r.상차지주소 || r.하차지주소 || "",
-        담당자: r.상차지담당자 || r.하차지담당자 || "",
-        연락처: r.상차지연락처 || r.하차지연락처 || "",
-        __source: "history",
-      });
-    }
-  });
-
-  return [...map.values()];
-}, [clients, placeRows, dispatchData]);
+return [...map.values()];
+}, [clients, placeRows]);
 
   // ==========================
   // 📌 날짜 유틸 (반드시 최상단)
@@ -11614,9 +11598,16 @@ const sortDispatchRows = (list = []) => {
 };
 
 
-const [rows, setRows] = React.useState(() => sortDispatchRows(dispatchData || []));
+const [rows, setRows] = React.useState(() => {
+  const relevantDates = new Set([yesterdayKST(), todayKST(), tomorrowKST()]);
+  return sortDispatchRows(
+    (dispatchData || []).filter(r => r?.상차일 && relevantDates.has(r.상차일))
+  );
+});
 React.useEffect(() => { setReady(true); }, []); // eslint-disable-line
-  const [selected, setSelected] = React.useState([]);
+ const [selected, setSelected] = React.useState([]);
+const selectedSet = React.useMemo(() => new Set(selected), [selected]);
+  
   const [selectedEditMode, setSelectedEditMode] = React.useState(false);
   const [edited, setEdited] = React.useState({});
   // =======================
@@ -12034,8 +12025,9 @@ const [attachCount, setAttachCount] = React.useState({});
 // Firestore → rows 반영
 // ------------------------
 React.useEffect(() => {
+  const relevantDates = new Set([yesterdayKST(), todayKST(), tomorrowKST()]);
   const base = (dispatchData || []).filter(
-    (r) => !!r && !deletedIds.has(r._id)
+    (r) => !!r && !deletedIds.has(r._id) && r?.상차일 && relevantDates.has(r.상차일)
   );
 
   React.startTransition(() => {
@@ -12104,9 +12096,10 @@ React.useEffect(() => {
         });
 
         // 알림음
-        const audio = new Audio("/dingdong.mp3");
-        audio.volume = 0.5;
-        audio.play().catch(() => {});
+        if (alertAudio.current) {
+          alertAudio.current.currentTime = 0;
+          alertAudio.current.play().catch(() => {});
+        }
       }
 
       prevAttachRef.current[id] = cur;
@@ -12379,19 +12372,18 @@ if (newOnes.length > 0) {
     showAlert("신규 기사 등록 완료!");
   };
   // ------------------------
-  // driverMap 생성  ← 🔥 여기!
-  // ------------------------
-  const driverMap = (() => {
-    const m = new Map();
-    (drivers || []).forEach((d) => {
-      const k = normalizePlate(d.차량번호);
-      if (!k) return;
-      // 동일 차량번호 여러 기사 저장 허용
-      if (!m.has(k)) m.set(k, []);
-      m.get(k).push(d);
-    });
-    return m;
-  })();
+// driverMap 생성  ← 🔥 여기!
+// ------------------------
+const driverMap = React.useMemo(() => {
+  const m = new Map();
+  (drivers || []).forEach((d) => {
+    const k = normalizePlate(d.차량번호);
+    if (!k) return;
+    if (!m.has(k)) m.set(k, []);
+    m.get(k).push(d);
+  });
+  return m;
+}, [drivers, normalizePlate]);
   // =====================
   // 🔑 거래처명 통합 normalize (정렬/검색/자동완성 공용)
   // =====================
@@ -12745,10 +12737,8 @@ const [quickRegPhone, setQuickRegPhone] = React.useState("");
 if (sortKey) {
   data.sort(compareBy(sortKey, sortDir));
 } else {
-  data = sortDispatchRows(data);
-  // ★ updatedAt 있으면 최신 수정/등록 행을 같은 상태 그룹 내 최상단으로
   data.sort((a, b) => {
-    const statusOrder = { 배차중: 0, 배차완료: 1, 취소: 2 };
+    const statusOrder = { 배차중: 0, 배차완료: 1, 배차취소: 2 };
     const sa = statusOrder[a.배차상태] ?? 0;
     const sb = statusOrder[b.배차상태] ?? 0;
     if (sa !== sb) return sa - sb;
@@ -12758,7 +12748,32 @@ if (sortKey) {
   });
 }
 
-    return data;
+  // 경유지 사전 계산 (렌더 시 IIFE 제거)
+    const safeParse = (v) => {
+      if (Array.isArray(v) && v.length > 0) return v;
+      if (typeof v === "string" && v.trim().startsWith("[")) {
+        try { const p = JSON.parse(v); if (Array.isArray(p)) return p; } catch {}
+      }
+      if (v && typeof v === "object" && !Array.isArray(v)) {
+        const keys = Object.keys(v);
+        if (keys.length > 0 && keys.every(k => /^\d+$/.test(k)))
+          return keys.sort((a,b) => Number(a)-Number(b)).map(k => v[k]);
+        if (v.업체명) return [v];
+      }
+      return [];
+    };
+    const dedup = (list) => list
+      .filter(s => s && typeof s === "object" && (s.업체명?.trim() || s.주소?.trim()))
+      .filter((s, i, arr) => {
+        const key = s.업체명 || s.주소 || JSON.stringify(s);
+        return arr.findIndex(x => (x.업체명||x.주소||JSON.stringify(x)) === key) === i;
+      });
+
+    return data.map(r => ({
+      ...r,
+      __pickupStops: dedup([...safeParse(r.경유상차목록), ...safeParse(r.경유지_상차), ...safeParse(r.경유지상차)]),
+      __dropStops:   dedup([...safeParse(r.경유하차목록), ...safeParse(r.경유지_하차), ...safeParse(r.경유지하차)]),
+    }));
   }, [rows, q, sortKey, sortDir, dayMode, statusFilter, filterErrorIds]);
   // =========================
   // 📊 상태 요약 (추가 위치)
@@ -13700,7 +13715,7 @@ const handleCloseFileUpload = async (e) => {
   // 📌 선택수정 편집 가능 여부
   // ------------------------
   const canEdit = (key, id) => {
-    if (!(selectedEditMode && selected.includes(id))) return false;
+    if (!(selectedEditMode && selectedSet.has(id))) return false;
 
     const readOnly = [
       "등록일",
@@ -14335,39 +14350,9 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
   <div className="inline-flex items-center gap-1 flex-nowrap whitespace-nowrap">
     <span>{r.상차지명}</span>
 
-{(() => {
-  const safeParse = (v) => {
-    if (Array.isArray(v) && v.length > 0) return v;
-    if (typeof v === "string" && v.trim().startsWith("[")) {
-      try { const p = JSON.parse(v); if (Array.isArray(p)) return p; } catch {}
-    }
-    if (v && typeof v === "object" && !Array.isArray(v)) {
-      const keys = Object.keys(v);
-      if (keys.length > 0 && keys.every(k => /^\d+$/.test(k))) {
-        return keys.sort((a,b) => Number(a) - Number(b)).map(k => v[k]);
-      }
-      if (v.업체명) return [v];
-    }
-    return [];
-  };
-
-  const a = safeParse(r.경유상차목록);
-  const b = safeParse(r.경유지_상차);
-  const c = safeParse(r.경유지상차);
-
-
-  const list = [...a, ...b, ...c]
-    .filter(s => s && typeof s === "object" && (s.업체명?.trim() || s.주소?.trim()))
-    .filter((s, i, arr) => {
-      const key = s.업체명 || s.주소 || JSON.stringify(s);
-      return arr.findIndex(x => (x.업체명 || x.주소 || JSON.stringify(x)) === key) === i;
-    });
-
-  if (list.length === 0) return null;
-  return (
-    <StopInlineBadge count={list.length} list={list} type="pickup" />
-  );
-})()}
+{r.__pickupStops?.length > 0 && (
+  <StopInlineBadge count={r.__pickupStops.length} list={r.__pickupStops} type="pickup" />
+)}
 
   </div>
 </td>
@@ -14380,38 +14365,9 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
   <div className="inline-flex items-center gap-1 flex-nowrap whitespace-nowrap">
     <span>{r.하차지명}</span>
 
-{(() => {
-  const safeParse = (v) => {
-    if (Array.isArray(v) && v.length > 0) return v;
-    if (typeof v === "string" && v.trim().startsWith("[")) {
-      try { const p = JSON.parse(v); if (Array.isArray(p)) return p; } catch {}
-    }
-    if (v && typeof v === "object" && !Array.isArray(v)) {
-      const keys = Object.keys(v);
-      if (keys.length > 0 && keys.every(k => /^\d+$/.test(k))) {
-        return keys.sort((a,b) => Number(a) - Number(b)).map(k => v[k]);
-      }
-      if (v.업체명) return [v];
-    }
-    return [];
-  };
-
-  const a = safeParse(r.경유하차목록);
-  const b = safeParse(r.경유지_하차);
-  const c = safeParse(r.경유지하차);
-
-  const list = [...a, ...b, ...c]
-    .filter(s => s && typeof s === "object" && (s.업체명?.trim() || s.주소?.trim()))
-    .filter((s, i, arr) => {
-      const key = s.업체명 || s.주소 || JSON.stringify(s);
-      return arr.findIndex(x => (x.업체명 || x.주소 || JSON.stringify(x)) === key) === i;
-    });
-
-  if (list.length === 0) return null;
-  return (
-    <StopInlineBadge count={list.length} list={list} type="drop" />
-  );
-})()}
+{r.__dropStops?.length > 0 && (
+  <StopInlineBadge count={r.__dropStops.length} list={r.__dropStops} type="drop" />
+)}
 
   </div>
 </td>

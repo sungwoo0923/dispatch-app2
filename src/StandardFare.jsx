@@ -86,108 +86,104 @@ function AddressSearch({ value, onChange, onSelect, placeholder }) {
 
   useEffect(() => { setQuery(value || ""); }, [value]);
 
-  const fetchSugg = async (kw) => {
-    if (!kw.trim() || kw.length < 2) { setSuggestions([]); return; }
-    try {
-      const ADDR_NORM = [
-        ["서울특별시","서울"],["서울시","서울"],["부산광역시","부산"],["대구광역시","대구"],
-        ["인천광역시","인천"],["광주광역시","광주"],["대전광역시","대전"],["울산광역시","울산"],
-        ["세종특별자치시","세종"],["세종시","세종"],["경기도","경기"],
-        ["강원특별자치도","강원"],["강원도","강원"],
-        ["충청북도","충북"],["충청남도","충남"],
-        ["전라북도","전북"],["전북특별자치도","전북"],["전라남도","전남"],
-        ["경상북도","경북"],["경상남도","경남"],
-        ["제주특별자치도","제주"],["제주도","제주"],
-      ];
-      let normKw = kw;
-      for (const [f, t] of ADDR_NORM) normKw = normKw.split(f).join(t);
-      const kwWords = normKw.trim().split(/\s+/).filter(Boolean);
+ const fetchSugg = async (kw) => {
+  if (!kw.trim() || kw.length < 2) { setSuggestions([]); return; }
+  try {
+    // 주소를 동/읍/면/리 레벨로 잘라주는 함수
+    const toEmd = (addr) => {
+      if (!addr) return "";
+      // 마지막 동/읍/면/리 이후 제거 (번지·로·길 제거), 숫자포함 동 이름 허용(마곡2동 등)
+      const m = addr.match(/^(.*\S(?:동|읍|면|리))(?=[\s,]|$)/);
+      if (m) return m[1].trim();
+      const m2 = addr.match(/^(.*[가-힣\d](?:구|군|시))(?=[\s,]|$)/);
+      if (m2) return m2[1].trim();
+      return addr.split(" ").slice(0, 3).join(" ");
+    };
 
-      const isGeneralSearch = kwWords.length <= 2 && !/(읍|면|동|리)$/.test(normKw.trim());
-      const isDongSearch = /(동|읍|면)$/.test(normKw.trim());
+    // 키워드 정규화 및 매칭
+    const kwClean = kw.replace(/\s+/g, "").toLowerCase();
+    const kwStem = kwClean.replace(/[동읍면리]$/, ""); // "마곡동" → "마곡"
+    const isMatch = (addr) => {
+      const c = addr.replace(/\s+/g, "").toLowerCase();
+      return c.includes(kwStem) || c.includes(kwClean);
+    };
 
-      // T-Map searchAddress API (주소 전용 검색 — 읍/면/동 레벨 신뢰도 높음)
-      const addrSearchP = fetch(
-        `https://apis.openapi.sk.com/tmap/searchAddress?version=1&format=json&queryVersion=1&addressFlag=F00&fullAddrOnOff=Y&searchKeyword=${encodeURIComponent(kw)}&countPerPage=20&appKey=${TMAP_KEY}`,
+    // T-Map API 병렬 호출
+    const [saRes, ...poiArrs] = await Promise.all([
+      // searchAddress — 계층 주소 (읍>리 완전 포함)
+      fetch(
+        `https://apis.openapi.sk.com/tmap/searchAddress?version=1&format=json&queryVersion=1&fullAddrOnOff=Y&searchKeyword=${encodeURIComponent(kw)}&countPerPage=30&appKey=${TMAP_KEY}`,
         { headers: { Accept: "application/json" } }
-      ).then(r => r.json()).catch(() => null);
+      ).then(r => r.json()).catch(() => null),
+      // POI 5종 쿼리
+      ...[ kw, `${kw} 주민센터`, `${kw} 행정복지센터`, `${kw} 면사무소`, `${kw} 읍사무소` ]
+        .map(q =>
+          fetch(
+            `https://apis.openapi.sk.com/tmap/pois?version=1&format=json&searchKeyword=${encodeURIComponent(q)}&count=20&appKey=${TMAP_KEY}`,
+            { headers: { Accept: "application/json" } }
+          ).then(r => r.json())
+           .then(d => {
+             // ✅ T-Map이 결과 1개일 때 배열 대신 객체 반환 → 강제 배열 변환
+             const p = d?.searchPoiInfo?.pois?.poi;
+             return Array.isArray(p) ? p : (p ? [p] : []);
+           })
+           .catch(() => [])
+        ),
+    ]);
+    const allPois = poiArrs.flat();
 
-      // T-Map POI queries (면사무소/읍사무소/주민센터로 읍/면/동 커버)
-      const poisQueries = [
-        { q: kw, count: 30 },
-        ...(isGeneralSearch ? [
-          { q: kw + " 면사무소", count: 20 },
-          { q: kw + " 읍사무소", count: 10 },
-          { q: kw + " 주민센터", count: 20 },
-        ] : []),
-        ...(isDongSearch ? [
-          { q: kw + " 주민센터", count: 10 },
-          { q: kw + " 행정복지센터", count: 10 },
-        ] : []),
-      ];
-      const allPoisP = Promise.all(
-        poisQueries.map(({ q, count }) =>
-          fetch(`https://apis.openapi.sk.com/tmap/pois?version=1&format=json&searchKeyword=${encodeURIComponent(q)}&count=${count}&appKey=${TMAP_KEY}`,
-            { headers: { Accept: "application/json" } })
-            .then(r => r.json()).then(d => d?.searchPoiInfo?.pois?.poi || []).catch(() => [])
-        )
-      ).then(arr => arr.flat());
+    const seen = new Set();
+    const out = [];
+    const push = (addr, lat = 0, lon = 0) => {
+      if (!addr) return;
+      const emd = toEmd(addr);
+      if (!emd || emd.length < 2) return;
+      if (!isMatch(emd)) return;
+      if (seen.has(emd)) return;
+      seen.add(emd);
+      out.push({ address: emd, lat, lon });
+    };
 
-      const [addrSearch, allPois] = await Promise.all([addrSearchP, allPoisP]);
+    // 1순위: searchAddress 결과
+    // ✅ 결과 1개일 때 객체 반환 → 강제 배열 변환
+    const saRaw = saRes?.searchAddressInfo?.addressInfo;
+    const saArr = Array.isArray(saRaw) ? saRaw : (saRaw ? [saRaw] : []);
+    for (const it of saArr) {
+      if (out.length >= 15) break;
+      push(it.fullAddress || it.fullAddressRoad || "", parseFloat(it.lat || it.newLat || 0), parseFloat(it.lon || it.newLon || 0));
+    }
 
-      const rawResults = [];
+    // 2순위: POI 결과
+    for (const p of allPois) {
+      if (out.length >= 20) break;
+      const u = p.upperAddrName || "";
+      const mid = p.middleAddrName || "";
+      const l = p.lowAddrName || "";
+      const d = p.detailAddrName || "";
+      if (!u || !mid) continue;
+      push([u, mid, l, d].filter(Boolean).join(" "), parseFloat(p.noorLat || p.frontLat || 0), parseFloat(p.noorLon || p.frontLon || 0));
 
-      // 1순위: searchAddress 결과 (주소 전용 API — 읍/면/동 레벨 정확)
-      const addrInfos = addrSearch?.searchAddressInfo?.addressInfo || [];
-      for (const item of addrInfos) {
-        const fullAddr = (item.fullAddress || item.fullAddressRoad || "").trim();
-        if (!fullAddr) continue;
-        rawResults.push({ address: fullAddr, specificity: 4, lat: parseFloat(item.lat || item.newLat || 0), lon: parseFloat(item.lon || item.newLon || 0) });
+      // lowAddrName 비어있을 때 POI 이름에서 동/읍/면 추출 보완
+      if (!l) {
+        const dm = (p.name || "").match(/([가-힣\d]+(?:동|읍|면))/);
+        if (dm) push(`${u} ${mid} ${dm[1]}`, parseFloat(p.noorLat || 0), parseFloat(p.noorLon || 0));
       }
+    }
 
-      // 2순위: POI 결과 (upperAddrName + middleAddrName + lowAddrName)
-      for (const p of allPois) {
-        const upper = p.upperAddrName || "";
-        const middle = p.middleAddrName || "";
-        const low = p.lowAddrName || "";
-        if (!upper || !middle) continue;
-        const addr = [upper, middle, low].filter(Boolean).join(" ");
-        let addrNorm = addr.replace(/\s+/g, "");
-        for (const [f, t] of ADDR_NORM) addrNorm = addrNorm.split(f).join(t);
-        // 동/읍/면/리 접미사 없어도 stem이 일치하면 허용
-        const matches = kwWords.every(w => {
-          if (addrNorm.includes(w)) return true;
-          if (/[동읍면리]$/.test(w)) return addrNorm.includes(w.slice(0, -1));
-          return false;
-        });
-        if (!matches) continue;
-        rawResults.push({ address: addr, specificity: low ? 3 : 2, lat: parseFloat(p.noorLat || p.frontLat || 0), lon: parseFloat(p.noorLon || p.frontLon || 0) });
-      }
+    if (out.length > 0) { setSuggestions(out.slice(0, 15)); return; }
 
-      rawResults.sort((a, b) => b.specificity - a.specificity);
-      const seen = new Set();
-      const results = [];
-      for (const item of rawResults) {
-        if (seen.has(item.address)) continue;
-        seen.add(item.address);
-        results.push({ address: item.address, lat: item.lat, lon: item.lon });
-        if (results.length >= 15) break;
-      }
-      if (results.length > 0) { setSuggestions(results); return; }
-
-      // 폴백: fullAddrGeo
-      const url2 = `https://apis.openapi.sk.com/tmap/geo/fullAddrGeo?version=1&format=json&fullAddr=${encodeURIComponent(kw)}`;
-      const res2 = await fetch(url2, { headers: { appKey: TMAP_KEY, Accept: "application/json" } });
-      const data2 = await res2.json();
-      const coords = data2?.coordinateInfo?.coordinate || [];
-      setSuggestions(
-        coords.slice(0, 6)
-          .map(c => ({ address: c.fullAddrjibun || c.fullAddrRoad || "", lat: parseFloat(c.lat || 0), lon: parseFloat(c.lon || 0) }))
-          .filter(s => s.address)
-      );
-    } catch { setSuggestions([]); }
-  };
-
+    // 폴백
+    const geo = await fetch(
+      `https://apis.openapi.sk.com/tmap/geo/fullAddrGeo?version=1&format=json&fullAddr=${encodeURIComponent(kw)}`,
+      { headers: { appKey: TMAP_KEY, Accept: "application/json" } }
+    ).then(r => r.json()).catch(() => null);
+    setSuggestions(
+      (geo?.coordinateInfo?.coordinate || []).slice(0, 6)
+        .map(c => ({ address: c.fullAddrjibun || c.fullAddrRoad || "", lat: parseFloat(c.lat || 0), lon: parseFloat(c.lon || 0) }))
+        .filter(s => s.address)
+    );
+  } catch { setSuggestions([]); }
+};
   const handleChange = (e) => {
     const v = e.target.value;
     setQuery(v);
