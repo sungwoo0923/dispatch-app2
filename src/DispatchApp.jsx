@@ -14780,6 +14780,8 @@ flashRow(savedId);
     const payload = {
       ...copyTarget,
       화물내용: finalCargo,
+      상차일: todayStr(),
+      하차일: todayStr(),
       createdAt: Date.now(),
       updatedAt: Date.now(),
       배차상태:
@@ -23073,7 +23075,8 @@ setEditTarget((p) => ({
     const payload = {
       ...copyTarget,
       화물내용: finalCargo,
-
+      상차일: todayStr(),
+      하차일: todayStr(),
       createdAt: Date.now(),
       updatedAt: Date.now(),
 
@@ -29238,9 +29241,10 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
   }, [clients, dispatchData]);
 
   const [selClient, setSelClient] = useState("");
-  const [yearFrom, setYearFrom] = useState(String(THIS_YEAR));
-  const [yearTo,   setYearTo]   = useState(String(THIS_YEAR));
-  const [monthFilter, setMonthFilter] = useState("all");
+  const [yearFrom,  setYearFrom]  = useState(String(THIS_YEAR));
+  const [monthFrom, setMonthFrom] = useState("01");
+  const [yearTo,    setYearTo]    = useState(String(THIS_YEAR));
+  const [monthTo,   setMonthTo]   = useState("12");
   const [statusFilter, setStatusFilter] = useState("전체");
   const [selectedMonths, setSelectedMonths] = useState(new Set());
   const [memoMap, setMemoMap] = useState({});
@@ -29314,32 +29318,42 @@ const monthRowsRaw = useMemo(() => {
     if (!selClient) return [];
     const list = Array.isArray(dispatchData) ? dispatchData : [];
     const base = list.filter(r => (r.배차상태||"") === "배차완료" && (r.거래처명||"") === selClient);
-    const nowMM = new Date().getMonth() + 1; // 현재 월 (1~12)
+    const nowMM = new Date().getMonth() + 1;
     const currentYYYYMM = `${THIS_YEAR}-${String(nowMM).padStart(2,"0")}`;
 
-    return Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, "0")).map(mm => {
-      const yyyymm = `${yearFrom}-${mm}`;
+    // Build full month list from (yearFrom-monthFrom) to (yearTo-monthTo)
+    const allMonths = [];
+    const yFrom = parseInt(yearFrom, 10);
+    const yTo   = parseInt(yearTo,   10);
+    for (let y = yFrom; y <= yTo; y++) {
+      const mStart = (y === yFrom) ? parseInt(monthFrom, 10) : 1;
+      const mEnd   = (y === yTo)   ? parseInt(monthTo,   10) : 12;
+      for (let m = mStart; m <= mEnd; m++) {
+        allMonths.push(`${y}-${String(m).padStart(2, "0")}`);
+      }
+    }
+
+    return allMonths.map(yyyymm => {
+      const mm = yyyymm.slice(5);
       const rows = base.filter(r => String(r.상차일||"").startsWith(yyyymm));
       const total = rows.reduce((s, r) => s + toInt(r.청구운임), 0);
       const allDone = rows.length > 0 && rows.every(r => r.정산상태?.[yyyymm] === "정산완료");
 
-      // ★ 현재월 이상은 "진행중", 과거만 "미정산"
       let status;
       if (allDone) status = "정산완료";
       else if (yyyymm >= currentYYYYMM) status = "진행중";
       else status = "미정산";
 
       const dates = rows.map(r => r.정산일?.[yyyymm]).filter(Boolean).sort();
-      return { yyyymm, mm, 거래처명: selClient, 건수: rows.length, 총청구금액: total, 정산상태: status, 정산일: dates.at(-1)||"", _rows: rows };
+      return { yyyymm, mm, year: yyyymm.slice(0,4), 거래처명: selClient, 건수: rows.length, 총청구금액: total, 정산상태: status, 정산일: dates.at(-1)||"", _rows: rows };
     });
-  }, [dispatchData, selClient, yearFrom]);
+  }, [dispatchData, selClient, yearFrom, monthFrom, yearTo, monthTo]);
 
   const monthRows = useMemo(() => {
     let rows = [...monthRowsRaw];
-    if (monthFilter !== "all") rows = rows.filter(r => r.yyyymm.endsWith(`-${monthFilter}`));
     if (statusFilter !== "전체") rows = rows.filter(r => r.정산상태 === statusFilter);
     return rows;
-  }, [monthRowsRaw, monthFilter, statusFilter]);
+  }, [monthRowsRaw, statusFilter]);
 
   const kpi = useMemo(() => ({
     전체건수: monthRows.reduce((s, r) => s + r.건수, 0),
@@ -29518,14 +29532,18 @@ const [includeCardAr, setIncludeCardAr] = useState(true);
 
   // ── 일괄 정산 모달 상태 ──
   const [batchModalOpen, setBatchModalOpen] = useState(false);
-  const [batchClients, setBatchClients] = useState(new Set());   // 선택된 거래처
-  const [batchFromMM, setBatchFromMM] = useState("01");
-  const [batchToMM,   setBatchToMM]   = useState("12");
+  const [batchClients, setBatchClients] = useState(new Set());
+  const [batchFromYear, setBatchFromYear] = useState(String(THIS_YEAR));
+  const [batchFromMM,   setBatchFromMM]   = useState("01");
+  const [batchToYear,   setBatchToYear]   = useState(String(THIS_YEAR));
+  const [batchToMM,     setBatchToMM]     = useState("12");
   const [batchClientQ, setBatchClientQ] = useState("");
     const [batchLoading, setBatchLoading] = useState(false);
 const [arReportOpen, setArReportOpen] = useState(false);
-const [arFromMM, setArFromMM] = useState("01");
-const [arToMM,   setArToMM]   = useState("12");
+const [arFromYear, setArFromYear] = useState(String(THIS_YEAR));
+const [arFromMM,   setArFromMM]   = useState("01");
+const [arToYear,   setArToYear]   = useState(String(THIS_YEAR));
+const [arToMM,     setArToMM]     = useState("12");
 const [arOnlyUnsettled, setArOnlyUnsettled] = useState(false);
 // ★ 신규: 거래처 필터
 const [arReportMode, setArReportMode] = useState("all"); // "all" | "selected"
@@ -29611,8 +29629,8 @@ const buildArEmailReportHtml = (filteredRows, clientName, year, from, to, compan
 const handleARReport = () => {
   const fromIdx = parseInt(arFromMM, 10);
   const toIdx   = parseInt(arToMM,   10);
-  const yFrom = parseInt(yearFrom, 10);
-  const yTo   = parseInt(yearTo,   10);
+  const yFrom   = parseInt(arFromYear, 10);
+  const yTo     = parseInt(arToYear,   10);
   if (arReportMode === "selected" && arReportClients.size === 0) return showAlert("거래처를 선택하세요.");
 
   // Build month list across year range
@@ -29688,9 +29706,9 @@ const reportRows = Array.from(companyMap.entries())
 
   const now = new Date();
   const printDate = `${now.getFullYear()}. ${String(now.getMonth()+1).padStart(2,"0")}. ${String(now.getDate()).padStart(2,"0")}`;
-  const periodLabel = yearFrom === yearTo
-    ? `${yearFrom}년 ${fromIdx}월 ~ ${toIdx}월`
-    : `${yearFrom}년 ${fromIdx}월 ~ ${yearTo}년 ${toIdx}월`;
+  const periodLabel = arFromYear === arToYear
+    ? `${arFromYear}년 ${fromIdx}월 ~ ${toIdx}월`
+    : `${arFromYear}년 ${fromIdx}월 ~ ${arToYear}년 ${toIdx}월`;
 
   const monthHeaders = months.map(m => `<th>${parseInt(m.slice(5),10)}월</th>`).join("");
 
@@ -29739,7 +29757,7 @@ if (total === 0) return `<td class="zero">-</td>`;
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<title>미수금현황_${yearFrom}~${yearTo}_${arFromMM}~${arToMM}</title>
+<title>미수금현황_${arFromYear}${arFromMM}~${arToYear}${arToMM}</title>
 <style id="orient-style">@page { size: A4 landscape; margin: 6mm 8mm; }</style>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap');
@@ -29868,9 +29886,9 @@ if (total === 0) return `<td class="zero">-</td>`;
   <div class="title-bar">
     <div class="doc-title">미 수 금 &nbsp; 현 황 보 고</div>
     <div class="doc-meta-box">
-      <div class="doc-meta-item"><div class="doc-meta-label">대상연도</div><div class="doc-meta-value">${THIS_YEAR}년</div></div>
+      <div class="doc-meta-item"><div class="doc-meta-label">대상연도</div><div class="doc-meta-value">${arFromYear === arToYear ? `${arFromYear}년` : `${arFromYear}~${arToYear}년`}</div></div>
       <div class="doc-meta-divider"></div>
-      <div class="doc-meta-item"><div class="doc-meta-label">조회기간</div><div class="doc-meta-value">${fromIdx}월 ~ ${toIdx}월</div></div>
+      <div class="doc-meta-item"><div class="doc-meta-label">조회기간</div><div class="doc-meta-value">${periodLabel}</div></div>
       <div class="doc-meta-divider"></div>
       <div class="doc-meta-item"><div class="doc-meta-label">거래처수</div><div class="doc-meta-value">${reportRows.length}개사</div></div>
       <div class="doc-meta-divider"></div>
@@ -29958,7 +29976,7 @@ if (total === 0) return `<td class="zero">-</td>`;
     html2canvas(document.getElementById('pageWrap'), { scale:2, backgroundColor:'#f9fafb', useCORS:true }).then(canvas => {
       toolbar.style.display = 'flex';
       const a = document.createElement('a');
-      a.download = '미수금현황_${yearFrom}~${yearTo}_${arFromMM}~${arToMM}.png';
+      a.download = '미수금현황_${arFromYear}${arFromMM}~${arToYear}${arToMM}.png';
       a.href = canvas.toDataURL('image/png');
       a.click();
     });
@@ -29977,14 +29995,20 @@ const handleBatchSettle = async (targetStatus) => {
     if (!batchClients.size) return showAlert("거래처를 선택하세요.");
     const fromIdx = parseInt(batchFromMM, 10);
     const toIdx   = parseInt(batchToMM,   10);
-    if (fromIdx > toIdx) return showAlert("시작월이 종료월보다 클 수 없습니다.");
+    const yFrom   = parseInt(batchFromYear, 10);
+    const yTo     = parseInt(batchToYear,   10);
 
     const clientSnapshot = new Set(batchClients);
     setBatchLoading(true);
 
-    const months = Array.from({ length: toIdx - fromIdx + 1 }, (_, i) =>
-      `${THIS_YEAR}-${String(fromIdx + i).padStart(2, "0")}`
-    );
+    const months = [];
+    for (let y = yFrom; y <= yTo; y++) {
+      const mStart = (y === yFrom) ? fromIdx : 1;
+      const mEnd   = (y === yTo)   ? toIdx   : 12;
+      for (let m = mStart; m <= mEnd; m++) {
+        months.push(`${y}-${String(m).padStart(2, "0")}`);
+      }
+    }
     const allData = Array.isArray(dispatchData) ? [...dispatchData] : [];
     const dateStr = targetStatus === "정산완료" ? todayStr8() : "";
     const coll = (typeof COLL !== "undefined" && COLL?.dispatch) ? COLL.dispatch : "dispatch";
@@ -31361,33 +31385,35 @@ const handleBatchSettle = async (targetStatus) => {
                 </div>
               </div>
               <div className="flex flex-col">
-                <label className="text-[12px] font-semibold text-gray-500 mb-1">기간 (년도)</label>
+                <label className="text-[12px] font-semibold text-gray-500 mb-1">기간</label>
                 <div className="flex items-center gap-1.5">
                   <select className="border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-semibold text-[#1B2B4B] outline-none"
-                    value={yearFrom} onChange={e=>{ setYearFrom(e.target.value); if(e.target.value > yearTo) setYearTo(e.target.value); clearSel(); }}>
+                    value={yearFrom} onChange={e=>{ setYearFrom(e.target.value); clearSel(); }}>
                     {Array.from({length:3},(_,i)=>String(THIS_YEAR - 1 + i)).map(y=>(
                       <option key={y} value={y}>{y}년</option>
+                    ))}
+                  </select>
+                  <select className="border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-semibold text-[#1B2B4B] outline-none"
+                    value={monthFrom} onChange={e=>{ setMonthFrom(e.target.value); clearSel(); }}>
+                    {Array.from({length:12},(_,i)=>String(i+1).padStart(2,"0")).map(mm=>(
+                      <option key={mm} value={mm}>{parseInt(mm,10)}월</option>
                     ))}
                   </select>
                   <span className="text-gray-400 font-semibold text-[13px]">부터</span>
                   <select className="border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-semibold text-[#1B2B4B] outline-none"
-                    value={yearTo} onChange={e=>{ setYearTo(e.target.value); if(e.target.value < yearFrom) setYearFrom(e.target.value); clearSel(); }}>
+                    value={yearTo} onChange={e=>{ setYearTo(e.target.value); clearSel(); }}>
                     {Array.from({length:3},(_,i)=>String(THIS_YEAR - 1 + i)).map(y=>(
                       <option key={y} value={y}>{y}년</option>
                     ))}
                   </select>
+                  <select className="border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-semibold text-[#1B2B4B] outline-none"
+                    value={monthTo} onChange={e=>{ setMonthTo(e.target.value); clearSel(); }}>
+                    {Array.from({length:12},(_,i)=>String(i+1).padStart(2,"0")).map(mm=>(
+                      <option key={mm} value={mm}>{parseInt(mm,10)}월</option>
+                    ))}
+                  </select>
                   <span className="text-gray-400 font-semibold text-[13px]">까지</span>
                 </div>
-              </div>
-              <div className="flex flex-col">
-                <label className="text-[12px] font-semibold text-gray-500 mb-1">월</label>
-                <select className="border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-semibold text-[#1B2B4B] outline-none"
-                  value={monthFilter} onChange={e=>setMonthFilter(e.target.value)}>
-                  <option value="all">전체</option>
-                  {Array.from({length:12},(_,i)=>String(i+1).padStart(2,"0")).map(mm=>(
-                    <option key={mm} value={mm}>{parseInt(mm,10)}월</option>
-                  ))}
-                </select>
               </div>
               <div className="flex flex-col">
                 <label className="text-[12px] font-semibold text-gray-500 mb-1">정산상태</label>
@@ -31399,7 +31425,7 @@ const handleBatchSettle = async (targetStatus) => {
                 </select>
               </div>
               <button className="px-3 py-2 rounded-lg bg-gray-200 text-gray-700 text-[13px] font-semibold hover:bg-gray-300 transition"
-                onClick={()=>{setSelClient("");setArInput("");setYearFrom(String(THIS_YEAR));setYearTo(String(THIS_YEAR));setMonthFilter("all");setStatusFilter("전체");clearSel();setArDropOpen(false);}}>
+                onClick={()=>{setSelClient("");setArInput("");setYearFrom(String(THIS_YEAR));setMonthFrom("01");setYearTo(String(THIS_YEAR));setMonthTo("12");setStatusFilter("전체");clearSel();setArDropOpen(false);}}>
                 초기화
               </button>
               <div className="ml-auto flex gap-2">
@@ -31417,7 +31443,7 @@ const handleBatchSettle = async (targetStatus) => {
                   <input type="file" accept=".xlsx,.xls,.csv" hidden onChange={handleBankExcelUpload} />
                 </label>
                 <button
-                  onClick={() => setArReportOpen(true)}
+                  onClick={() => { setArFromYear(yearFrom); setArFromMM(monthFrom); setArToYear(yearTo); setArToMM(monthTo); setArReportOpen(true); }}
                   className="px-3 py-2 rounded-lg bg-violet-600 text-white text-[13px] font-semibold hover:bg-violet-700 transition"
                 >
                   미수금 보고서
@@ -31655,32 +31681,34 @@ const handleBatchSettle = async (targetStatus) => {
 
       {/* 기간 선택 */}
       <div className="px-6 pt-4 pb-3 border-b border-gray-100 shrink-0">
-        <div className="text-[12px] font-bold text-gray-500 mb-2">조회 기간 ({yearFrom === yearTo ? `${yearFrom}년` : `${yearFrom}~${yearTo}년`})</div>
-        <div className="flex items-center gap-3">
-          <select
-            className="flex-1 border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
+        <div className="text-[12px] font-bold text-gray-500 mb-2">조회 기간</div>
+        <div className="flex items-center gap-2">
+          <select className="border-2 border-[#1B2B4B] rounded-lg px-2 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
+            value={arFromYear} onChange={e => setArFromYear(e.target.value)}>
+            {Array.from({length:3},(_,i)=>String(THIS_YEAR - 1 + i)).map(y=>(
+              <option key={y} value={y}>{y}년</option>
+            ))}
+          </select>
+          <select className="border-2 border-[#1B2B4B] rounded-lg px-2 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
             value={arFromMM} onChange={e => setArFromMM(e.target.value)}>
-            {Array.from({length:12},(_,i)=>String(i+1).padStart(2,"0")).map(mm=>(
+            {Array.from({length:12},(_,i)=>String(i+1).padStart(2,"00")).map(mm=>(
               <option key={mm} value={mm}>{parseInt(mm,10)}월</option>
             ))}
           </select>
-          <span className="text-gray-400 font-semibold">~</span>
-          <select
-            className="flex-1 border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
+          <span className="text-gray-400 font-semibold">부터</span>
+          <select className="border-2 border-[#1B2B4B] rounded-lg px-2 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
+            value={arToYear} onChange={e => setArToYear(e.target.value)}>
+            {Array.from({length:3},(_,i)=>String(THIS_YEAR - 1 + i)).map(y=>(
+              <option key={y} value={y}>{y}년</option>
+            ))}
+          </select>
+          <select className="border-2 border-[#1B2B4B] rounded-lg px-2 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
             value={arToMM} onChange={e => setArToMM(e.target.value)}>
-            {Array.from({length:12},(_,i)=>String(i+1).padStart(2,"0")).map(mm=>(
+            {Array.from({length:12},(_,i)=>String(i+1).padStart(2,"00")).map(mm=>(
               <option key={mm} value={mm}>{parseInt(mm,10)}월</option>
             ))}
           </select>
-        </div>
-        <div className="mt-2 flex gap-2">
-          {[["상반기","01","06"],["하반기","07","12"],["전체","01","12"]].map(([label,f,t])=>(
-            <button key={label}
-              className="flex-1 py-1.5 rounded-lg bg-gray-100 text-gray-600 text-[12px] font-semibold hover:bg-gray-200 transition"
-              onClick={() => { setArFromMM(f); setArToMM(t); }}>
-              {label}
-            </button>
-          ))}
+          <span className="text-gray-400 font-semibold">까지</span>
         </div>
       </div>
 
@@ -31846,30 +31874,36 @@ const handleBatchSettle = async (targetStatus) => {
                     onClick={() => setBatchModalOpen(false)}>×</button>
                 </div>
 
-                {/* 월 범위 선택 */}
+                {/* 기간 선택 */}
                 <div className="px-6 py-4 border-b border-gray-100 shrink-0">
-                  <div className="text-[12px] font-bold text-gray-500 mb-2">기간 선택 ({THIS_YEAR}년)</div>
-                  <div className="flex items-center gap-3">
-                    <select
-                      className="border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
+                  <div className="text-[12px] font-bold text-gray-500 mb-2">기간 선택</div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <select className="border-2 border-[#1B2B4B] rounded-lg px-2 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
+                      value={batchFromYear} onChange={e => setBatchFromYear(e.target.value)}>
+                      {Array.from({length:3},(_,i)=>String(THIS_YEAR - 1 + i)).map(y=>(
+                        <option key={y} value={y}>{y}년</option>
+                      ))}
+                    </select>
+                    <select className="border-2 border-[#1B2B4B] rounded-lg px-2 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
                       value={batchFromMM} onChange={e => setBatchFromMM(e.target.value)}>
                       {Array.from({length:12},(_,i)=>String(i+1).padStart(2,"0")).map(mm=>(
                         <option key={mm} value={mm}>{parseInt(mm,10)}월</option>
                       ))}
                     </select>
                     <span className="text-gray-400 font-semibold">부터</span>
-                    <select
-                      className="border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
+                    <select className="border-2 border-[#1B2B4B] rounded-lg px-2 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
+                      value={batchToYear} onChange={e => setBatchToYear(e.target.value)}>
+                      {Array.from({length:3},(_,i)=>String(THIS_YEAR - 1 + i)).map(y=>(
+                        <option key={y} value={y}>{y}년</option>
+                      ))}
+                    </select>
+                    <select className="border-2 border-[#1B2B4B] rounded-lg px-2 py-2 text-[13px] font-bold text-[#1B2B4B] outline-none"
                       value={batchToMM} onChange={e => setBatchToMM(e.target.value)}>
                       {Array.from({length:12},(_,i)=>String(i+1).padStart(2,"0")).map(mm=>(
                         <option key={mm} value={mm}>{parseInt(mm,10)}월</option>
                       ))}
                     </select>
                     <span className="text-gray-400 font-semibold">까지</span>
-                    <span className="ml-auto text-[12px] text-[#1B2B4B] font-bold bg-[#1B2B4B]/8 px-3 py-1.5 rounded-lg">
-                      {parseInt(batchFromMM,10)}월 ~ {parseInt(batchToMM,10)}월
-                      &nbsp;({parseInt(batchToMM,10) - parseInt(batchFromMM,10) + 1}개월)
-                    </span>
                   </div>
                 </div>
 
@@ -31945,7 +31979,7 @@ const handleBatchSettle = async (targetStatus) => {
                   <div className="flex items-center gap-3">
                     <div className="text-[12px] text-gray-500 font-semibold mr-auto">
                       {batchClients.size > 0
-                        ? `${batchClients.size}개 거래처 × ${parseInt(batchToMM,10)-parseInt(batchFromMM,10)+1}개월 선택됨 (전체 ${batchEligibleClients.length}개 중)`
+                        ? `${batchClients.size}개 거래처 × ${batchFromYear}년 ${parseInt(batchFromMM,10)}월~${batchToYear}년 ${parseInt(batchToMM,10)}월 (전체 ${batchEligibleClients.length}개 중)`
                         : "거래처를 선택하세요"}
                     </div>
                     <button
