@@ -106,12 +106,17 @@ function AddressSearch({ value, onChange, onSelect, placeholder }) {
       // 읍/면/동 레벨 행정구역 POI를 확보하기 위해 병렬 쿼리
       // 면사무소/읍사무소/주민센터는 각 행정구역에 1개씩 존재 → 다양한 읍/면/동 커버
       const isGeneralSearch = kwWords.length <= 2 && !/(읍|면|동|리)$/.test(normKw.trim());
+      const isDongSearch = /(동|읍|면)$/.test(normKw.trim());
       const queries = [
-        { q: kw, count: 30 },
+        { q: kw, count: 40 },
         ...(isGeneralSearch ? [
           { q: kw + " 면사무소", count: 20 },
           { q: kw + " 읍사무소", count: 10 },
           { q: kw + " 주민센터", count: 20 },
+        ] : []),
+        ...(isDongSearch ? [
+          { q: kw + " 주민센터", count: 10 },
+          { q: kw + " 행정복지센터", count: 10 },
         ] : []),
       ];
 
@@ -132,9 +137,8 @@ function AddressSearch({ value, onChange, onSelect, placeholder }) {
           const upper = p.upperAddrName || "";
           const middle = p.middleAddrName || "";
           const low = p.lowAddrName || "";
-          // 읍/면/동 레벨까지 있는 주소만 표시
-          if (!upper || !middle || !low) continue;
-          const addr = [upper, middle, low].join(" ");
+          if (!upper || !middle) continue;
+          const addr = [upper, middle, low].filter(Boolean).join(" ");
           if (seen.has(addr)) continue;
           const addrNorm = addr.replace(/\s+/g, "");
           if (!kwWords.every(w => addrNorm.includes(w))) continue;

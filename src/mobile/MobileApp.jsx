@@ -7690,12 +7690,17 @@ function MobileAddressSearch({ value, onChange, onSelect, placeholder }) {
       const kwWords = normKw.trim().split(/\s+/).filter(Boolean);
 
       const isGeneralSearch = kwWords.length <= 2 && !/(읍|면|동|리)$/.test(normKw.trim());
+      const isDongSearch = /(동|읍|면)$/.test(normKw.trim());
       const queries = [
-        { q: kw, count: 30 },
+        { q: kw, count: 40 },
         ...(isGeneralSearch ? [
           { q: kw + " 면사무소", count: 20 },
           { q: kw + " 읍사무소", count: 10 },
           { q: kw + " 주민센터", count: 20 },
+        ] : []),
+        ...(isDongSearch ? [
+          { q: kw + " 주민센터", count: 10 },
+          { q: kw + " 행정복지센터", count: 10 },
         ] : []),
       ];
 
@@ -7716,8 +7721,8 @@ function MobileAddressSearch({ value, onChange, onSelect, placeholder }) {
           const upper = p.upperAddrName || "";
           const middle = p.middleAddrName || "";
           const low = p.lowAddrName || "";
-          if (!upper || !middle || !low) continue;
-          const addr = [upper, middle, low].join(" ");
+          if (!upper || !middle) continue;
+          const addr = [upper, middle, low].filter(Boolean).join(" ");
           if (seen.has(addr)) continue;
           const addrNorm = addr.replace(/\s+/g, "");
           if (!kwWords.every(w => addrNorm.includes(w))) continue;
