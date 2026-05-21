@@ -4072,7 +4072,7 @@ function parseDriverText(text) {
   const phoneMatch = noRoute.match(/0\d{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4}/);
   phone = phoneMatch ? phoneMatch[0].replace(/[-.\s]/g, "").replace(/^(\d{3})(\d{3,4})(\d{4})$/, "$1-$2-$3") : "";
 
-  const plateMatch = noRoute.match(/[가-힣]{2,3}\d{2}[가-힣]\d{4}|\d{2,3}[가-힣]\d{4}/);
+  const plateMatch = noRoute.match(/[가-힣]{2,3}\d{2}[가-힣]\d{4}|\d{2,3}[가-힣]\d{4}|[가-힣]{4,6}\d{3,4}/);
   plate = plateMatch ? plateMatch[0] : "";
 
   const stripped = noRoute
@@ -4229,7 +4229,7 @@ const pickupTimeText = order.상차시간
   React.useEffect(() => { driversRef.current = drivers; }, [drivers]);
 
  const handleSmartInputCb = React.useCallback((val) => {
-  if (!val.trim()) { setSmartMatched([]); setIsNewDriver(false); return; }
+  if (!val.trim()) { setSmartMatched([]); setIsNewDriver(false); setCarNo(""); setName(""); setPhone(""); return; }
   const { plate: pl, name: nm, phone: ph } = parseDriverText(val);
   const nd = (s = "") => String(s).replace(/[-.\s]/g, "").toLowerCase();
 
@@ -5395,7 +5395,7 @@ const closeContactPopup = (selected) => {
 const [formSmartMatched, setFormSmartMatched] = useState([]);
 const formSmartRef = useRef(null);
 const handleFormSmartSearch = (val) => {
-  if (!val.trim()) { setFormSmartMatched([]); setShowNewDriver(false); return; }
+  if (!val.trim()) { setFormSmartMatched([]); setShowNewDriver(false); update("차량번호", ""); update("기사명", ""); update("전화번호", ""); return; }
   const nd = (s = "") => String(s).replace(/[-.\s]/g, "").toLowerCase();
   const { plate, phone, name } = parseDriverText(val);
 

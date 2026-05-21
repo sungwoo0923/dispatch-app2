@@ -6680,9 +6680,15 @@ className={`
     <input
       className={`${inputCls} pr-[52px] text-base`}
       placeholder="예: 1"
+      inputMode="decimal"
       value={form.톤수값 || ""}
+      onKeyDown={(e) => {
+        if (!/[\d.,]/.test(e.key) && !["Backspace","Delete","Tab","ArrowLeft","ArrowRight","Home","End"].includes(e.key)) {
+          e.preventDefault();
+        }
+      }}
       onChange={(e) => {
-        const v = e.target.value;
+        const v = e.target.value.replace(/[^\d.]/g, "");
         onChange("톤수값", v);
 
         if (form.톤수타입) {
@@ -11608,14 +11614,8 @@ const sortDispatchRows = (list = []) => {
 };
 
 
-const [rows, setRows] = React.useState([]);
-React.useEffect(() => {
-  const id = requestAnimationFrame(() => {
-    setRows(sortDispatchRows(dispatchData || []));
-    setReady(true);
-  });
-  return () => cancelAnimationFrame(id);
-}, []); // eslint-disable-line
+const [rows, setRows] = React.useState(() => sortDispatchRows(dispatchData || []));
+React.useEffect(() => { setReady(true); }, []); // eslint-disable-line
   const [selected, setSelected] = React.useState([]);
   const [selectedEditMode, setSelectedEditMode] = React.useState(false);
   const [edited, setEdited] = React.useState({});
@@ -12433,7 +12433,7 @@ const [smart4ConflictPopup, setSmart4ConflictPopup] = React.useState(null);
 const parseDriverText4 = (text) => {
 const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
   const phone = phoneMatch ? phoneMatch[0].replace(/[-.\s]/g,"").replace(/^(\d{3})(\d{3,4})(\d{4})$/,"$1-$2-$3") : "";
-  const plateMatch = text.match(/[가-힣]{2,3}\d{2}[가-힣]\d{4}|\d{2,3}[가-힣]\d{4}/);
+  const plateMatch = text.match(/[가-힣]{2,3}\d{2}[가-힣]\d{4}|\d{2,3}[가-힣]\d{4}|[가-힣]{4,6}\d{3,4}/);
   const plate = plateMatch ? plateMatch[0] : "";
   let name = "";
   const ownerBlock = text.match(/\[차주정보\]\s*([가-힣]{2,4})/);
@@ -14820,6 +14820,25 @@ flashRow(savedId);
     </button>
 
   </div>
+</div>
+{/* ================= 오더 유형 버튼 ================= */}
+<div className="flex items-center gap-2 flex-wrap bg-white rounded-xl border border-gray-200 px-6 py-4 shadow-sm">
+  <button type="button"
+    onClick={() => setCopyTarget(p => ({ ...p, 독차: !p.독차, 혼적: p.독차 ? p.혼적 : false }))}
+    className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all ${copyTarget.독차 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
+  >독차</button>
+  <button type="button"
+    onClick={() => setCopyTarget(p => ({ ...p, 혼적: !p.혼적, 독차: p.혼적 ? p.독차 : false }))}
+    className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all ${copyTarget.혼적 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
+  >혼적</button>
+  <button type="button"
+    onClick={() => setCopyTarget(p => ({ ...p, 운행유형: p.운행유형 === "왕복" ? "편도" : "왕복" }))}
+    className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all ${copyTarget.운행유형 === "왕복" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
+  >왕복</button>
+  <button type="button"
+    onClick={() => setCopyTarget(p => ({ ...p, 긴급: !p.긴급 }))}
+    className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all ${copyTarget.긴급 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
+  >긴급</button>
 </div>
 {/* ================= 거래처 정보 ================= */}
 <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
@@ -19794,7 +19813,7 @@ const [smart5ConflictPopup, setSmart5ConflictPopup] = React.useState(null);
 const parseDriverText5 = (text) => {
  const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
   const phone = phoneMatch ? phoneMatch[0].replace(/[-.\s]/g,"").replace(/^(\d{3})(\d{3,4})(\d{4})$/,"$1-$2-$3") : "";
-  const plateMatch = text.match(/[가-힣]{2,3}\d{2}[가-힣]\d{4}|\d{2,3}[가-힣]\d{4}/);
+  const plateMatch = text.match(/[가-힣]{2,3}\d{2}[가-힣]\d{4}|\d{2,3}[가-힣]\d{4}|[가-힣]{4,6}\d{3,4}/);
   const plate = plateMatch ? plateMatch[0] : "";
   let name = "";
   const ownerBlock = text.match(/\[차주정보\]\s*([가-힣]{2,4})/);
@@ -23104,6 +23123,25 @@ setEditTarget((p) => ({
 </button>
 
   </div>
+</div>
+{/* ================= 오더 유형 버튼 ================= */}
+<div className="flex items-center gap-2 flex-wrap bg-white rounded-xl border border-gray-200 px-6 py-4 shadow-sm">
+  <button type="button"
+    onClick={() => setCopyTarget(p => ({ ...p, 독차: !p.독차, 혼적: p.독차 ? p.혼적 : false }))}
+    className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all ${copyTarget.독차 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
+  >독차</button>
+  <button type="button"
+    onClick={() => setCopyTarget(p => ({ ...p, 혼적: !p.혼적, 독차: p.혼적 ? p.독차 : false }))}
+    className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all ${copyTarget.혼적 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
+  >혼적</button>
+  <button type="button"
+    onClick={() => setCopyTarget(p => ({ ...p, 운행유형: p.운행유형 === "왕복" ? "편도" : "왕복" }))}
+    className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all ${copyTarget.운행유형 === "왕복" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
+  >왕복</button>
+  <button type="button"
+    onClick={() => setCopyTarget(p => ({ ...p, 긴급: !p.긴급 }))}
+    className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all ${copyTarget.긴급 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
+  >긴급</button>
 </div>
 {/* ================= 거래처 정보 ================= */}
 <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
@@ -29205,6 +29243,7 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
   }, [clients, dispatchData]);
 
   const [selClient, setSelClient] = useState("");
+  const [yearFilter, setYearFilter] = useState(String(THIS_YEAR));
   const [monthFilter, setMonthFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("전체");
   const [selectedMonths, setSelectedMonths] = useState(new Set());
@@ -29283,7 +29322,7 @@ const monthRowsRaw = useMemo(() => {
     const currentYYYYMM = `${THIS_YEAR}-${String(nowMM).padStart(2,"0")}`;
 
     return Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, "0")).map(mm => {
-      const yyyymm = `${THIS_YEAR}-${mm}`;
+      const yyyymm = `${yearFilter}-${mm}`;
       const rows = base.filter(r => String(r.상차일||"").startsWith(yyyymm));
       const total = rows.reduce((s, r) => s + toInt(r.청구운임), 0);
       const allDone = rows.length > 0 && rows.every(r => r.정산상태?.[yyyymm] === "정산완료");
@@ -29297,7 +29336,7 @@ const monthRowsRaw = useMemo(() => {
       const dates = rows.map(r => r.정산일?.[yyyymm]).filter(Boolean).sort();
       return { yyyymm, mm, 거래처명: selClient, 건수: rows.length, 총청구금액: total, 정산상태: status, 정산일: dates.at(-1)||"", _rows: rows };
     });
-  }, [dispatchData, selClient, THIS_YEAR]);
+  }, [dispatchData, selClient, yearFilter]);
 
   const monthRows = useMemo(() => {
     let rows = [...monthRowsRaw];
@@ -31317,6 +31356,15 @@ const handleBatchSettle = async (targetStatus) => {
                 </div>
               </div>
               <div className="flex flex-col">
+                <label className="text-[12px] font-semibold text-gray-500 mb-1">년도</label>
+                <select className="border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-semibold text-[#1B2B4B] outline-none"
+                  value={yearFilter} onChange={e=>{ setYearFilter(e.target.value); clearSel(); }}>
+                  {Array.from({length:3},(_,i)=>String(THIS_YEAR - 1 + i)).map(y=>(
+                    <option key={y} value={y}>{y}년</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-col">
                 <label className="text-[12px] font-semibold text-gray-500 mb-1">월</label>
                 <select className="border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-semibold text-[#1B2B4B] outline-none"
                   value={monthFilter} onChange={e=>setMonthFilter(e.target.value)}>
@@ -31336,7 +31384,7 @@ const handleBatchSettle = async (targetStatus) => {
                 </select>
               </div>
               <button className="px-3 py-2 rounded-lg bg-gray-200 text-gray-700 text-[13px] font-semibold hover:bg-gray-300 transition"
-                onClick={()=>{setSelClient("");setArInput("");setMonthFilter("all");setStatusFilter("전체");clearSel();setArDropOpen(false);}}>
+                onClick={()=>{setSelClient("");setArInput("");setYearFilter(String(THIS_YEAR));setMonthFilter("all");setStatusFilter("전체");clearSel();setArDropOpen(false);}}>
                 초기화
               </button>
               <div className="ml-auto flex gap-2">
