@@ -7715,19 +7715,25 @@ function MobileAddressSearch({ value, onChange, onSelect, placeholder }) {
       )).flat();
 
       if (allPois.length > 0) {
-        const seen = new Set();
-        const results = [];
+        const rawResults = [];
         for (const p of allPois) {
           const upper = p.upperAddrName || "";
           const middle = p.middleAddrName || "";
           const low = p.lowAddrName || "";
           if (!upper || !middle) continue;
           const addr = [upper, middle, low].filter(Boolean).join(" ");
-          if (seen.has(addr)) continue;
-          const addrNorm = addr.replace(/\s+/g, "");
+          let addrNorm = addr.replace(/\s+/g, "");
+          for (const [f, t] of ADDR_NORM) addrNorm = addrNorm.split(f).join(t);
           if (!kwWords.every(w => addrNorm.includes(w))) continue;
-          seen.add(addr);
-          results.push({ address: addr, lat: parseFloat(p.noorLat || p.frontLat || 0), lon: parseFloat(p.noorLon || p.frontLon || 0) });
+          rawResults.push({ address: addr, specificity: low ? 3 : 2, lat: parseFloat(p.noorLat || p.frontLat || 0), lon: parseFloat(p.noorLon || p.frontLon || 0) });
+        }
+        rawResults.sort((a, b) => b.specificity - a.specificity);
+        const seen = new Set();
+        const results = [];
+        for (const item of rawResults) {
+          if (seen.has(item.address)) continue;
+          seen.add(item.address);
+          results.push({ address: item.address, lat: item.lat, lon: item.lon });
           if (results.length >= 15) break;
         }
         if (results.length > 0) { setSuggestions(results); return; }

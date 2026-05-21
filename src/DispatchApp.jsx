@@ -21168,6 +21168,23 @@ const save = {
     return () => clearTimeout(timer);
   }, [focusOrderId]);
 
+  // 우클릭 컨텍스트 메뉴 (배차현황)
+  const [contextMenuDS, setContextMenuDS] = React.useState(null);
+  React.useEffect(() => {
+    const close = () => setContextMenuDS(null);
+    const onKey = (e) => {
+      if (e.key === "Delete" && contextMenuDS) {
+        setSelected(new Set([getId(contextMenuDS.row)]));
+        setShowDeletePopup(true);
+        setContextMenuDS(null);
+      }
+      if (e.key === "Escape") setContextMenuDS(null);
+    };
+    document.addEventListener("click", close);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("click", close); document.removeEventListener("keydown", onKey); };
+  }, [contextMenuDS]);
+
   if (!loaded) return null;
 
 return (
@@ -21396,6 +21413,7 @@ return (
     <tr
       key={id}
       id={`row-${id}`}
+      onContextMenu={(e) => { e.preventDefault(); setContextMenuDS({ x: e.clientX, y: e.clientY, row: r }); }}
       onDoubleClick={() => {
   const rawCargo = String(row.화물내용 || "");
 
@@ -25087,6 +25105,82 @@ setCopyTarget(prev => ({
         </div>
       )}
 
+      {/* 우클릭 컨텍스트 메뉴 (배차현황) */}
+      {contextMenuDS && (
+        <div
+          className="fixed z-[999999] bg-white border border-gray-200 rounded-xl shadow-2xl py-1.5 min-w-[168px] select-none"
+          style={{ top: Math.min(contextMenuDS.y, window.innerHeight - 260), left: Math.min(contextMenuDS.x, window.innerWidth - 180) }}
+          onClick={e => e.stopPropagation()}
+        >
+          <button className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
+            onClick={() => {
+              const r = contextMenuDS.row;
+              const rawCargo = String(r.화물내용 || "");
+              const KNOWN_S = ["파레트","파렛트","박스","통"];
+              let _cNum = "", _cType = "";
+              for (const s of KNOWN_S) { if (rawCargo.endsWith(s)) { _cNum = rawCargo.slice(0, -s.length).trim(); _cType = s; break; } }
+              if (!_cType) { _cNum = rawCargo; _cType = ""; }
+              const rawTon = String(r.차량톤수 || "");
+              const tonMatch = rawTon.match(/([\d.]+)(.*)/);
+              setCopyTarget({ ...r, 화물내용: rawCargo, 화물수량: _cNum, 화물타입: _cType, 톤수값: tonMatch ? tonMatch[1] : "", 톤수타입: tonMatch ? tonMatch[2] : "" });
+              setCopyPanelOpen(true);
+              setContextMenuDS(null);
+            }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            기사복사
+          </button>
+          <button className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
+            onClick={() => {
+              const url = `${window.location.origin}/driver-upload`;
+              const msg = `[인수증 업로드 안내]\n운송 완료 후 아래 링크를 통해 인수증을 업로드해 주시기 바랍니다.\n\n${url}\n\n서명 받은 인수증(파렛전표) 사진을 촬영하여 업로드해 주세요.\n미업로드 시 운임 정산이 지연될 수 있습니다.`;
+              navigator.clipboard.writeText(msg).then(() => showAlert("업로드 안내 메시지가 복사되었습니다.\n기사에게 붙여넣기로 전달하세요.")).catch(() => showAlert(`링크: ${url}`));
+              setContextMenuDS(null);
+            }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+            업로드링크
+          </button>
+          <div className="border-t border-gray-100 my-1"/>
+          <button className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
+            onClick={() => {
+              const r = contextMenuDS.row;
+              const raw = String(r.화물내용 || "");
+              const KNOWN_SUFFIXES = ["파레트","파렛트","박스","통"];
+              let cargoNum = "", cargoType = "";
+              for (const s of KNOWN_SUFFIXES) { if (raw.endsWith(s)) { cargoNum = raw.slice(0, -s.length).trim(); cargoType = s; break; } }
+              if (!cargoType) { cargoNum = raw; cargoType = ""; }
+              const ton = r.차량톤수 || "";
+              const tonValue = ton.match(/[\d.]+/)?.[0] || "";
+              const tonType = ton.includes("kg") ? "kg" : ton.includes("톤") ? "톤" : "";
+              setEditTarget({ ...r, 화물내용: raw, 화물수량: cargoNum, 화물타입: cargoType, 톤수값: tonValue, 톤수타입: tonType });
+              setEditPopupOpen(true);
+              setContextMenuDS(null);
+            }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            수정
+          </button>
+          <button className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
+            onClick={async () => {
+              const r = contextMenuDS.row;
+              const plate = String(r.차량번호 || "").trim();
+              const name = String(r.이름 || r.기사명 || "").trim();
+              const phone = String(r.전화번호 || "").trim();
+              if (plate && name) { await upsertDriver({ 차량번호: plate, 이름: name, 전화번호: phone }); showAlert("✅ 기사 등록 완료"); }
+              else showAlert("차량번호와 기사명이 필요합니다.");
+              setContextMenuDS(null);
+            }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
+            일괄동기화
+          </button>
+          <div className="border-t border-gray-100 my-1"/>
+          <button className="w-full text-left px-4 py-2 text-[13px] text-red-600 hover:bg-red-50 flex items-center gap-2.5 transition-colors"
+            onClick={() => { setSelected(new Set([getId(contextMenuDS.row)])); setShowDeletePopup(true); setContextMenuDS(null); }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+            삭제
+            <span className="ml-auto text-[11px] text-gray-400 font-mono">Del</span>
+          </button>
+        </div>
+      )}
+
     </div>
 
   );
@@ -27533,22 +27627,6 @@ function UnassignedStatus({ dispatchData, drivers = [], patchDispatch, removeDis
   const [matchedDriver, setMatchedDriver] = React.useState(null);
   const [newDriverPopup, setNewDriverPopup] = React.useState(false);
 
-  // 우클릭 컨텍스트 메뉴 (Part 5)
-  const [contextMenuP5, setContextMenuP5] = React.useState(null);
-  React.useEffect(() => {
-    const close = () => setContextMenuP5(null);
-    const onKey = (e) => {
-      if (e.key === "Delete" && contextMenuP5) {
-        setSelectedIds(new Set([contextMenuP5.row._id]));
-        setDeleteConfirmOpen(true);
-        setContextMenuP5(null);
-      }
-      if (e.key === "Escape") setContextMenuP5(null);
-    };
-    document.addEventListener("click", close);
-    document.addEventListener("keydown", onKey);
-    return () => { document.removeEventListener("click", close); document.removeEventListener("keydown", onKey); };
-  }, [contextMenuP5]);
   const [selectedOrder, setSelectedOrder] = React.useState(null);
   const [copyPanelOpen, setCopyPanelOpen] = React.useState(false);
   const [copyTarget, setCopyTarget] = React.useState(null);
@@ -27955,7 +28033,6 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                   return (
                     <tr
                       key={r._id || i}
-                      onContextMenu={(e) => { e.preventDefault(); setContextMenuP5({ x: e.clientX, y: e.clientY, row: r }); }}
                       onDoubleClick={(e) => {
                         if (deleteMode) return;
                         if (e.target.closest("input")) return;
@@ -28035,81 +28112,6 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
           </table>
         </div>
       </div>
-
-      {/* 우클릭 컨텍스트 메뉴 (Part 5) */}
-      {contextMenuP5 && (
-        <div
-          className="fixed z-[999999] bg-white border border-gray-200 rounded-xl shadow-2xl py-1.5 min-w-[168px] select-none"
-          style={{ top: Math.min(contextMenuP5.y, window.innerHeight - 240), left: Math.min(contextMenuP5.x, window.innerWidth - 180) }}
-          onClick={e => e.stopPropagation()}
-        >
-          <button className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
-            onClick={() => {
-              const r = contextMenuP5.row;
-              const latest = dispatchData.find(d => d._id === r._id) || r;
-              const rawCargo = String(latest?.화물내용 || "");
-              const cargoMatch = rawCargo.match(/(\d+)(.*)/);
-              const rawTon = String(latest?.차량톤수 || "");
-              const tonMatch = rawTon.match(/([\d.]+)(.*)/);
-              setCopyTarget({ ...latest, 화물수량: cargoMatch ? cargoMatch[1] : "", 화물타입: cargoMatch ? cargoMatch[2].trim() : "", 톤수값: tonMatch ? tonMatch[1] : "", 톤수타입: tonMatch ? tonMatch[2] : "" });
-              setCopyModalOpen(true);
-              setContextMenuP5(null);
-            }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-            기사복사
-          </button>
-          <button className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
-            onClick={() => {
-              const url = `${window.location.origin}/driver-upload`;
-              const msg = `[인수증 업로드 안내]\n운송 완료 후 아래 링크를 통해 인수증을 업로드해 주시기 바랍니다.\n\n${url}\n\n서명 받은 인수증(파렛전표) 사진을 촬영하여 업로드해 주세요.\n미업로드 시 운임 정산이 지연될 수 있습니다.`;
-              navigator.clipboard.writeText(msg).then(() => showAlert("업로드 안내 메시지가 복사되었습니다.\n기사에게 붙여넣기로 전달하세요.")).catch(() => showAlert(`링크: ${url}`));
-              setContextMenuP5(null);
-            }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-            업로드링크
-          </button>
-          <div className="border-t border-gray-100 my-1"/>
-          <button className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
-            onClick={() => {
-              const r = contextMenuP5.row;
-              const latest = dispatchData.find(d => d._id === r._id) || r;
-              const raw = String(latest?.화물내용 || "");
-              const KNOWN_SUFFIXES = ["파레트","파렛트","박스","통"];
-              let cargoNum = "", cargoType = "";
-              for (const s of KNOWN_SUFFIXES) { if (raw.endsWith(s)) { cargoNum = raw.slice(0, -s.length).trim(); cargoType = s; break; } }
-              if (!cargoType) { cargoNum = raw; cargoType = ""; }
-              const ton = r.차량톤수 || "";
-              const tonValue = ton.match(/[\d.]+/)?.[0] || "";
-              const tonType = ton.includes("kg") ? "kg" : ton.includes("톤") ? "톤" : "";
-              setEditTarget({ ...r, 화물내용: raw, 화물수량: cargoNum, 화물타입: cargoType, 톤수값: tonValue, 톤수타입: tonType });
-              setEditPopupOpen(true);
-              setContextMenuP5(null);
-            }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-            수정
-          </button>
-          <button className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
-            onClick={async () => {
-              const r = contextMenuP5.row;
-              const plate = String(r.차량번호 || "").trim();
-              const name = String(r.이름 || "").trim();
-              const phone = String(r.전화번호 || "").trim();
-              if (plate && name) { await upsertDriver({ 차량번호: plate, 이름: name, 전화번호: phone }); showAlert("✅ 기사 등록 완료"); }
-              else showAlert("차량번호와 기사명이 필요합니다.");
-              setContextMenuP5(null);
-            }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
-            일괄동기화
-          </button>
-          <div className="border-t border-gray-100 my-1"/>
-          <button className="w-full text-left px-4 py-2 text-[13px] text-red-600 hover:bg-red-50 flex items-center gap-2.5 transition-colors"
-            onClick={() => { setSelectedIds(new Set([contextMenuP5.row._id])); setDeleteConfirmOpen(true); setContextMenuP5(null); }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
-            삭제
-            <span className="ml-auto text-[11px] text-gray-400 font-mono">Del</span>
-          </button>
-        </div>
-      )}
 
       {/* 삭제 확인 팝업 */}
       {deleteConfirmOpen && (
