@@ -1062,10 +1062,16 @@ export {
 
 // ===================== FloatingCalculator =====================
 function FloatingCalculator({ onClose }) {
+  const [tab, setTab] = React.useState("calc"); // "calc" | "ton"
   const [display, setDisplay] = React.useState("0");
   const [prev, setPrev] = React.useState(null);
   const [op, setOp] = React.useState(null);
   const [waitNext, setWaitNext] = React.useState(false);
+
+  // tonnage calculator state
+  const [tonTotal, setTonTotal] = React.useState("");
+  const [palTotal, setPalTotal] = React.useState("");
+  const [palPart, setPalPart] = React.useState("");
 
   const round = (n) => Math.round(n * 1e10) / 1e10;
   const calcResult = (a, b, o) => {
@@ -1075,6 +1081,8 @@ function FloatingCalculator({ onClose }) {
     if (o === "÷") return b !== 0 ? round(a / b) : 0;
     return b;
   };
+
+  const isCleared = display === "0" && prev === null && op === null && !waitNext;
 
   const handleNum = (n) => {
     if (display.replace("-", "").length >= 15) return;
@@ -1114,18 +1122,23 @@ function FloatingCalculator({ onClose }) {
   };
 
   React.useEffect(() => {
+    if (tab !== "calc") return;
     const onKey = (e) => {
       if (e.key >= "0" && e.key <= "9") { e.preventDefault(); handleNum(e.key); return; }
       if (e.key === ".") { e.preventDefault(); handleDot(); return; }
-      if (e.key === "+" ) { e.preventDefault(); handleOp("+"); return; }
-      if (e.key === "-" ) { e.preventDefault(); handleOp("-"); return; }
-      if (e.key === "*" ) { e.preventDefault(); handleOp("×"); return; }
-      if (e.key === "/" ) { e.preventDefault(); handleOp("÷"); return; }
-      if (e.key === "%" ) { e.preventDefault(); handlePercent(); return; }
-      if (e.key === "Enter" || e.key === "=" ) { e.preventDefault(); handleEqual(); return; }
-      if (e.key === "Backspace") { e.preventDefault(); handleBackspace(); return; }
-      if (e.key === "Escape") { e.preventDefault(); onClose(); return; }
+      if (e.key === "+") { e.preventDefault(); handleOp("+"); return; }
+      if (e.key === "-") { e.preventDefault(); handleOp("-"); return; }
+      if (e.key === "*") { e.preventDefault(); handleOp("×"); return; }
+      if (e.key === "/") { e.preventDefault(); handleOp("÷"); return; }
+      if (e.key === "%") { e.preventDefault(); handlePercent(); return; }
+      if (e.key === "Enter" || e.key === "=") { e.preventDefault(); handleEqual(); return; }
+      if (e.key === "Backspace" || e.key === "ArrowLeft") { e.preventDefault(); handleBackspace(); return; }
       if (e.key === "Delete") { e.preventDefault(); handleClear(); return; }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        if (isCleared) { onClose(); } else { handleClear(); }
+        return;
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -1168,6 +1181,15 @@ function FloatingCalculator({ onClose }) {
     num:  { bg: "#f3f4f6", color: "#111827" },
   };
 
+  // tonnage calculation
+  const tonResult = React.useMemo(() => {
+    const tp = parseFloat(palTotal);
+    const tt = parseFloat(tonTotal);
+    const pp = parseFloat(palPart);
+    if (!tp || !tt || !pp || tp === 0) return null;
+    return Math.round((pp / tp) * tt * 100) / 100;
+  }, [palTotal, tonTotal, palPart]);
+
   return (
     <div style={{
       position: "fixed", bottom: 148, right: 24, zIndex: 99999,
@@ -1178,42 +1200,83 @@ function FloatingCalculator({ onClose }) {
     }}>
       {/* 타이틀 */}
       <div style={{ background: "#1B2B4B", padding: "9px 14px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <span style={{ color: "white", fontWeight: 700, fontSize: 13 }}>계산기</span>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={() => setTab("calc")} style={{ background: tab === "calc" ? "rgba(255,255,255,0.2)" : "none", border: "none", color: "white", fontWeight: tab === "calc" ? 700 : 400, fontSize: 12, cursor: "pointer", padding: "2px 8px", borderRadius: 6 }}>계산기</button>
+          <button onClick={() => setTab("ton")} style={{ background: tab === "ton" ? "rgba(255,255,255,0.2)" : "none", border: "none", color: "white", fontWeight: tab === "ton" ? 700 : 400, fontSize: 12, cursor: "pointer", padding: "2px 8px", borderRadius: 6 }}>톤수 계산</button>
+        </div>
         <button onClick={onClose} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.6)", cursor: "pointer", fontSize: 20, lineHeight: 1, padding: 0 }}>×</button>
       </div>
-      {/* 디스플레이 */}
-      <div style={{ background: "#f8fafc", padding: "10px 16px", borderBottom: "1px solid #e2e8f0" }}>
-        <div style={{ fontSize: 11, color: "#94a3b8", minHeight: 16, textAlign: "right" }}>
-          {prev !== null && op ? `${fmtDisplay(prev)} ${op}` : ""}
+
+      {tab === "calc" && (<>
+        {/* 디스플레이 */}
+        <div style={{ background: "#f8fafc", padding: "10px 16px", borderBottom: "1px solid #e2e8f0" }}>
+          <div style={{ fontSize: 11, color: "#94a3b8", minHeight: 16, textAlign: "right" }}>
+            {prev !== null && op ? `${fmtDisplay(prev)} ${op}` : ""}
+          </div>
+          <div style={{ fontSize: 28, fontWeight: 700, color: "#1e293b", textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {fmtDisplay(display)}
+          </div>
         </div>
-        <div style={{ fontSize: 28, fontWeight: 700, color: "#1e293b", textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {fmtDisplay(display)}
+        {/* 버튼 그리드 */}
+        <div style={{ padding: 10, display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 5 }}>
+          {btns.map((btn, i) => {
+            const c = colorsMap[btn.t];
+            return (
+              <button key={i} onClick={btn.fn} style={{ background: c.bg, color: c.color, border: "none", borderRadius: 10, cursor: "pointer", fontSize: 16, fontWeight: 600, height: 52, transition: "opacity 0.1s", gridColumn: btn.wide ? "span 2" : undefined }}
+                onMouseDown={e => { e.currentTarget.style.opacity = "0.75"; }}
+                onMouseUp={e => { e.currentTarget.style.opacity = "1"; }}
+                onMouseLeave={e => { e.currentTarget.style.opacity = "1"; }}>
+                {btn.l}
+              </button>
+            );
+          })}
         </div>
-      </div>
-      {/* 버튼 그리드 */}
-      <div style={{ padding: 10, display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 5 }}>
-        {btns.map((btn, i) => {
-          const c = colorsMap[btn.t];
-          return (
-            <button
-              key={i}
-              onClick={btn.fn}
-              style={{
-                background: c.bg, color: c.color,
-                border: "none", borderRadius: 10,
-                cursor: "pointer", fontSize: 16, fontWeight: 600,
-                height: 52, transition: "opacity 0.1s",
-                gridColumn: btn.wide ? "span 2" : undefined,
-              }}
-              onMouseDown={e => { e.currentTarget.style.opacity = "0.75"; }}
-              onMouseUp={e => { e.currentTarget.style.opacity = "1"; }}
-              onMouseLeave={e => { e.currentTarget.style.opacity = "1"; }}
-            >
-              {btn.l}
+      </>)}
+
+      {tab === "ton" && (
+        <div style={{ padding: 16 }}>
+          <div style={{ fontSize: 11, color: "#64748b", marginBottom: 12, lineHeight: 1.5 }}>
+            총 파렛 수와 총 톤수를 입력하고<br/>계산할 파렛 수를 입력하면 톤수가 나옵니다.
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", marginBottom: 4 }}>총 파렛 수</div>
+                <input type="number" min="0" placeholder="예: 27"
+                  style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 8, padding: "8px 10px", fontSize: 14, outline: "none", boxSizing: "border-box" }}
+                  value={palTotal} onChange={e => setPalTotal(e.target.value)} />
+              </div>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", marginBottom: 4 }}>총 톤수</div>
+                <input type="number" min="0" step="0.01" placeholder="예: 12"
+                  style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 8, padding: "8px 10px", fontSize: 14, outline: "none", boxSizing: "border-box" }}
+                  value={tonTotal} onChange={e => setTonTotal(e.target.value)} />
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", marginBottom: 4 }}>계산할 파렛 수</div>
+              <input type="number" min="0" placeholder="예: 16"
+                style={{ width: "100%", border: "1px solid #cbd5e1", borderRadius: 8, padding: "8px 10px", fontSize: 14, outline: "none", boxSizing: "border-box" }}
+                value={palPart} onChange={e => setPalPart(e.target.value)} />
+            </div>
+            <div style={{ background: tonResult !== null ? "#f0f9ff" : "#f8fafc", border: `1px solid ${tonResult !== null ? "#bae6fd" : "#e2e8f0"}`, borderRadius: 10, padding: "12px 14px", textAlign: "center" }}>
+              {tonResult !== null ? (
+                <>
+                  <div style={{ fontSize: 11, color: "#64748b", marginBottom: 4 }}>{palPart}파렛 = </div>
+                  <div style={{ fontSize: 28, fontWeight: 700, color: "#1B2B4B" }}>{tonResult}<span style={{ fontSize: 14, fontWeight: 500, marginLeft: 4 }}>톤</span></div>
+                  <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>({palTotal}p / {tonTotal}t 기준)</div>
+                </>
+              ) : (
+                <div style={{ fontSize: 13, color: "#94a3b8" }}>위 값을 입력하세요</div>
+              )}
+            </div>
+            <button onClick={() => { setPalTotal(""); setTonTotal(""); setPalPart(""); }}
+              style={{ width: "100%", padding: "8px", background: "#f1f5f9", border: "none", borderRadius: 8, fontSize: 13, color: "#64748b", cursor: "pointer", fontWeight: 600 }}>
+              초기화
             </button>
-          );
-        })}
-      </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -18660,46 +18723,15 @@ function MemoMore({ text = "" }) {
 // ===================== DispatchApp.jsx (PART 5/8 — 차량번호 항상 활성화 + 선택수정→수정완료 통합버튼 + 주소/메모 더보기 + 대용량업로드 + 신규 오더 등록) =====================
 
 function generateTimeOptions() {
-  function InlineEditCell({ value, placeholder, onSave }) {
-  const [editing, setEditing] = React.useState(false);
-  const [draft, setDraft] = React.useState(value);
-  const inputRef = React.useRef(null);
-
-  React.useEffect(() => {
-    if (editing && inputRef.current) inputRef.current.focus();
-  }, [editing]);
-
-  if (!editing) {
-    return (
-      <div
-        className="min-h-[24px] max-w-[120px] truncate text-[12px] text-gray-600 cursor-pointer hover:bg-gray-100 rounded px-1 py-0.5"
-        title={value || placeholder}
-        onClick={(e) => { e.stopPropagation(); setDraft(value); setEditing(true); }}
-      >
-        {value || <span className="text-gray-300 text-[11px]">+메모</span>}
-      </div>
-    );
-  }
-  return (
-    <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
-      <input
-        ref={inputRef}
-        className="border border-blue-400 rounded px-1.5 py-0.5 text-[12px] w-[100px] outline-none focus:ring-1 focus:ring-blue-300"
-        value={draft}
-        onChange={e => setDraft(e.target.value)}
-        onKeyDown={e => {
-          if (e.key === "Enter") { onSave(draft); setEditing(false); }
-          if (e.key === "Escape") setEditing(false);
-        }}
-        onBlur={() => { onSave(draft); setEditing(false); }}
-      />
-    </div>
-  );
-}
   const list = [];
-  for (let h = 0; h < 24; h++) {
-    list.push(`${String(h).padStart(2, "0")}:00`);
-    list.push(`${String(h).padStart(2, "0")}:30`);
+  const toLabel = (h, m) => {
+    const ampm = h < 12 ? "오전" : "오후";
+    const hh = ((h % 12) || 12);
+    return `${ampm} ${hh}시${m ? " 30분" : ""}`;
+  };
+  for (let h = 6; h <= 22; h++) {
+    list.push(toLabel(h, 0));
+    if (h !== 22) list.push(toLabel(h, 30));
   }
   return list;
 }
