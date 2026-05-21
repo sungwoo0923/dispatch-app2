@@ -7691,8 +7691,14 @@ function MobileAddressSearch({ value, onChange, onSelect, placeholder }) {
 
       const isGeneralSearch = kwWords.length <= 2 && !/(읍|면|동|리)$/.test(normKw.trim());
       const isDongSearch = /(동|읍|면)$/.test(normKw.trim());
-      const queries = [
-        { q: kw, count: 40 },
+
+      const addrSearchP = fetch(
+        `https://apis.openapi.sk.com/tmap/searchAddress?version=1&format=json&queryVersion=1&addressFlag=F00&fullAddrOnOff=Y&searchKeyword=${encodeURIComponent(kw)}&countPerPage=20&appKey=${MOBILE_TMAP_KEY}`,
+        { headers: { Accept: "application/json" } }
+      ).then(r => r.json()).catch(() => null);
+
+      const poisQueries = [
+        { q: kw, count: 30 },
         ...(isGeneralSearch ? [
           { q: kw + " 면사무소", count: 20 },
           { q: kw + " 읍사무소", count: 10 },
@@ -7703,30 +7709,41 @@ function MobileAddressSearch({ value, onChange, onSelect, placeholder }) {
           { q: kw + " 행정복지센터", count: 10 },
         ] : []),
       ];
-
-      const allPois = (await Promise.all(
-        queries.map(({ q, count }) =>
+      const allPoisP = Promise.all(
+        poisQueries.map(({ q, count }) =>
           fetch(`https://apis.openapi.sk.com/tmap/pois?version=1&format=json&searchKeyword=${encodeURIComponent(q)}&count=${count}&appKey=${MOBILE_TMAP_KEY}`,
             { headers: { Accept: "application/json" } })
-            .then(r => r.json())
-            .then(d => d?.searchPoiInfo?.pois?.poi || [])
-            .catch(() => [])
+            .then(r => r.json()).then(d => d?.searchPoiInfo?.pois?.poi || []).catch(() => [])
         )
-      )).flat();
+      ).then(arr => arr.flat());
 
-      if (allPois.length > 0) {
-        const rawResults = [];
-        for (const p of allPois) {
-          const upper = p.upperAddrName || "";
-          const middle = p.middleAddrName || "";
-          const low = p.lowAddrName || "";
-          if (!upper || !middle) continue;
-          const addr = [upper, middle, low].filter(Boolean).join(" ");
-          let addrNorm = addr.replace(/\s+/g, "");
-          for (const [f, t] of ADDR_NORM) addrNorm = addrNorm.split(f).join(t);
-          if (!kwWords.every(w => addrNorm.includes(w))) continue;
-          rawResults.push({ address: addr, specificity: low ? 3 : 2, lat: parseFloat(p.noorLat || p.frontLat || 0), lon: parseFloat(p.noorLon || p.frontLon || 0) });
-        }
+      const [addrSearch, allPois] = await Promise.all([addrSearchP, allPoisP]);
+
+      const rawResults = [];
+      const addrInfos = addrSearch?.searchAddressInfo?.addressInfo || [];
+      for (const item of addrInfos) {
+        const fullAddr = (item.fullAddress || item.fullAddressRoad || "").trim();
+        if (!fullAddr) continue;
+        rawResults.push({ address: fullAddr, specificity: 4, lat: parseFloat(item.lat || item.newLat || 0), lon: parseFloat(item.lon || item.newLon || 0) });
+      }
+      for (const p of allPois) {
+        const upper = p.upperAddrName || "";
+        const middle = p.middleAddrName || "";
+        const low = p.lowAddrName || "";
+        if (!upper || !middle) continue;
+        const addr = [upper, middle, low].filter(Boolean).join(" ");
+        let addrNorm = addr.replace(/\s+/g, "");
+        for (const [f, t] of ADDR_NORM) addrNorm = addrNorm.split(f).join(t);
+        const matches = kwWords.every(w => {
+          if (addrNorm.includes(w)) return true;
+          if (/[동읍면리]$/.test(w)) return addrNorm.includes(w.slice(0, -1));
+          return false;
+        });
+        if (!matches) continue;
+        rawResults.push({ address: addr, specificity: low ? 3 : 2, lat: parseFloat(p.noorLat || p.frontLat || 0), lon: parseFloat(p.noorLon || p.frontLon || 0) });
+      }
+
+      if (rawResults.length > 0) {
         rawResults.sort((a, b) => b.specificity - a.specificity);
         const seen = new Set();
         const results = [];
