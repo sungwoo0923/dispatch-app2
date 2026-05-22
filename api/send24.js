@@ -1,4 +1,5 @@
 import { createCipheriv } from "crypto";
+import https from "node:https";
 
 /* ─── 환경변수 (Vercel 대시보드 미설정 시 fallback) ─── */
 const AES_KEY = process.env.CALL24_AES_KEY || "946e5bf1c0a86333688d1d01561e06e3";
@@ -6,7 +7,7 @@ const AES_IV  = (process.env.CALL24_AES_IV  || "4eff880a505c8136").padEnd(32, "0
 const API_KEY = process.env.CALL24_API_KEY  || "946e5bf1c0a863332f1c2a6977b9f08e";
 const BASE_URL = "https://api.15887924.com:18099";
 
-/* ─── AES-128-CBC 암호화 (native crypto, 외부 의존성 없음) ─── */
+/* ─── AES-128-CBC 암호화 ─── */
 function encryptAES(str) {
   const key    = Buffer.from(AES_KEY, "hex");
   const iv     = Buffer.from(AES_IV,  "hex");
@@ -14,6 +15,40 @@ function encryptAES(str) {
   let enc = cipher.update(str, "utf8", "base64");
   enc += cipher.final("base64");
   return enc;
+}
+
+/* ─── HTTPS POST (자체서명 인증서 허용, 비표준 포트 지원) ─── */
+function httpsPost(url, body, reqHeaders) {
+  return new Promise((resolve, reject) => {
+    const u = new URL(url);
+    const data = typeof body === "string" ? body : JSON.stringify(body);
+    const options = {
+      hostname: u.hostname,
+      port: parseInt(u.port) || 443,
+      path: u.pathname + u.search,
+      method: "POST",
+      headers: {
+        ...reqHeaders,
+        "Content-Length": Buffer.byteLength(data),
+      },
+      rejectUnauthorized: false,
+      timeout: 15000,
+    };
+    const req = https.request(options, (res) => {
+      const chunks = [];
+      res.on("data", c => chunks.push(c));
+      res.on("end", () => {
+        resolve({
+          status: res.statusCode,
+          text: () => Buffer.concat(chunks).toString("utf8"),
+        });
+      });
+    });
+    req.on("error", reject);
+    req.on("timeout", () => req.destroy(new Error("request timeout")));
+    req.write(data);
+    req.end();
+  });
 }
 
 /* ─── 주소 분리 ─── */
@@ -76,24 +111,19 @@ export default async function handler(req, res) {
     const row     = req.body;
     const payload = mapTo24Order(row);
 
-    console.log("📤 24시 전송:", JSON.stringify({ 거래처명: row.거래처명, startPlanDt: payload.startPlanDt }));
+    console.log("24시 전송:", JSON.stringify({ ddID: payload.ddID, startPlanDt: payload.startPlanDt }));
 
     const encrypted = encryptAES(JSON.stringify(payload));
+    const body = JSON.stringify({ data: encrypted, userVal: row._id || row.userVal || "" });
 
-    const apiRes = await fetch(`${BASE_URL}/api/order/addOrder`, {
-      method: "POST",
-      headers: {
-        "Content-Type":   "application/json",
-        "call24-api-key": API_KEY,
-      },
-      body: JSON.stringify({
-        data:    encrypted,
-        userVal: row._id || row.userVal || "",
-      }),
-    });
+    const apiRes = await httpsPost(
+      `${BASE_URL}/api/order/addOrder`,
+      body,
+      { "Content-Type": "application/json", "call24-api-key": API_KEY }
+    );
 
-    const text = await apiRes.text();
-    console.log("📡 24시 응답:", text);
+    const text = apiRes.text();
+    console.log("24시 응답:", text);
 
     let result;
     try { result = JSON.parse(text); }
@@ -111,7 +141,7 @@ export default async function handler(req, res) {
     });
 
   } catch (err) {
-    console.error("🚨 send24 오류:", err.message);
+    console.error("send24 오류:", err.message);
     return res.status(500).json({ success: false, error: err.message });
   }
 }

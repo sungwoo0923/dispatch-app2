@@ -8221,8 +8221,6 @@ className={`
           <div
             className="fixed inset-0 bg-black/60 flex items-center justify-center z-[9999]"
             onKeyDown={e => { if (e.key === "Escape" && !send24Sending) { setSend24PreviewOpen(false); } }}
-            tabIndex={-1}
-            ref={el => { if (el) el.focus(); }}
           >
             <div className="bg-white rounded-2xl shadow-2xl w-[860px] max-h-[90vh] flex flex-col overflow-hidden border border-gray-200">
               {/* 헤더 */}
@@ -8230,7 +8228,7 @@ className={`
                 <div className="flex items-center gap-3">
                   <div className="w-1.5 h-6 bg-blue-400 rounded-full" />
                   <div>
-                    <h2 className="text-[16px] font-bold text-white">📡 24시콜 전송</h2>
+                    <h2 className="text-[16px] font-bold text-white">24시콜 전송</h2>
                     <p className="text-[11px] text-blue-200 mt-0.5">전송 전 내용을 확인하고 필요 시 수정하세요</p>
                   </div>
                 </div>
@@ -8245,7 +8243,7 @@ className={`
               <div className="overflow-y-auto flex-1 p-6 space-y-5">
                 {/* 상차지 */}
                 <div>
-                  <div className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">📦 상차지</div>
+                  <div className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">상차지</div>
                   <div className="grid grid-cols-4 gap-3">
                     {[["시도","startWide"],["시군구","startSgg"],["읍면동","startDong"],["상세주소","startDetail"],
                       ["상차예정일 (YYYYMMDD)","startPlanDt"]].map(([lbl,key]) => (
@@ -8253,7 +8251,7 @@ className={`
                         <span className="text-[10px] text-gray-500 font-medium">{lbl}</span>
                         <input className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
                           value={send24Data[key] ?? ""} disabled={send24Sending}
-                          onChange={e => setSend24Data(d => ({ ...d, [key]: e.target.value }))} />
+                          onChange={e => { const v = e.target.value; setSend24Data(d => ({ ...d, [key]: v })); }} />
                       </div>
                     ))}
                     <div className="flex flex-col gap-0.5">
@@ -8269,7 +8267,7 @@ className={`
 
                 {/* 하차지 */}
                 <div>
-                  <div className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">📍 하차지</div>
+                  <div className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">하차지</div>
                   <div className="grid grid-cols-4 gap-3">
                     {[["시도","endWide"],["시군구","endSgg"],["읍면동","endDong"],["상세주소","endDetail"],
                       ["하차예정일 (YYYYMMDD)","endPlanDt"],["하차지연락처","endAreaPhone"]].map(([lbl,key]) => (
@@ -8277,7 +8275,7 @@ className={`
                         <span className="text-[10px] text-gray-500 font-medium">{lbl}</span>
                         <input className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
                           value={send24Data[key] ?? ""} disabled={send24Sending}
-                          onChange={e => setSend24Data(d => ({ ...d, [key]: e.target.value }))} />
+                          onChange={e => { const v = e.target.value; setSend24Data(d => ({ ...d, [key]: v })); }} />
                       </div>
                     ))}
                     <div className="flex flex-col gap-0.5">
@@ -8293,14 +8291,14 @@ className={`
 
                 {/* 화물/차량 */}
                 <div>
-                  <div className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">🚛 화물 / 차량</div>
+                  <div className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">화물 / 차량</div>
                   <div className="grid grid-cols-4 gap-3">
                     {[["차량톤수","cargoTon"],["차량종류","truckType"],["화물중량(t)","frgton"],["화물내용","cargoDsc"]].map(([lbl,key]) => (
                       <div key={key} className="flex flex-col gap-0.5">
                         <span className="text-[10px] text-gray-500 font-medium">{lbl}</span>
                         <input className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
                           value={send24Data[key] ?? ""} disabled={send24Sending}
-                          onChange={e => setSend24Data(d => ({ ...d, [key]: e.target.value }))} />
+                          onChange={e => { const v = e.target.value; setSend24Data(d => ({ ...d, [key]: v })); }} />
                       </div>
                     ))}
                   </div>
@@ -8308,14 +8306,14 @@ className={`
 
                 {/* 운임 */}
                 <div>
-                  <div className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">💰 운임</div>
+                  <div className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">운임</div>
                   <div className="grid grid-cols-4 gap-3">
-                    {[["청구운임 (fare)","fare"],["기사운임 (fee)","fee"]].map(([lbl,key]) => (
+                    {[["청구운임","fare"],["기사운임","fee"]].map(([lbl,key]) => (
                       <div key={key} className="flex flex-col gap-0.5">
                         <span className="text-[10px] text-gray-500 font-medium">{lbl}</span>
                         <input className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
                           value={send24Data[key] ?? ""} disabled={send24Sending}
-                          onChange={e => setSend24Data(d => ({ ...d, [key]: e.target.value }))} />
+                          onChange={e => { const v = e.target.value; setSend24Data(d => ({ ...d, [key]: v })); }} />
                       </div>
                     ))}
                     <div className="flex flex-col gap-0.5">
@@ -8340,7 +8338,7 @@ className={`
 
                 {/* 화주 */}
                 <div>
-                  <div className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">🏢 화주 정보</div>
+                  <div className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">화주 정보</div>
                   <div className="grid grid-cols-4 gap-3">
                     <div className="flex flex-col gap-0.5">
                       <span className="text-[10px] text-gray-500 font-medium">화주유형</span>
@@ -8356,7 +8354,7 @@ className={`
                         <span className="text-[10px] text-gray-500 font-medium">{lbl}</span>
                         <input className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
                           value={send24Data[key] ?? ""} disabled={send24Sending}
-                          onChange={e => setSend24Data(d => ({ ...d, [key]: e.target.value }))} />
+                          onChange={e => { const v = e.target.value; setSend24Data(d => ({ ...d, [key]: v })); }} />
                       </div>
                     ))}
                   </div>
@@ -8364,13 +8362,13 @@ className={`
 
                 {/* 기타 */}
                 <div>
-                  <div className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">⚙️ 기타</div>
+                  <div className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">기타</div>
                   <div className="grid grid-cols-4 gap-3">
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-[10px] text-gray-500 font-medium">작성자 ID (ddID)</span>
+                      <span className="text-[10px] text-gray-500 font-medium">24시콜 계정 ID (ddID)</span>
                       <input className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
                         value={send24Data.ddID ?? ""} disabled={send24Sending}
-                        onChange={e => setSend24Data(d => ({ ...d, ddID: e.target.value }))} />
+                        onChange={e => { const v = e.target.value; setSend24Data(d => ({ ...d, ddID: v })); }} />
                     </div>
                   </div>
                 </div>
@@ -8379,8 +8377,8 @@ className={`
                 {send24Result && (
                   <div className={`rounded-xl px-5 py-4 text-[13px] font-semibold border ${send24Result.ok ? "bg-green-50 border-green-200 text-green-800" : "bg-red-50 border-red-200 text-red-800"}`}>
                     {send24Result.ok
-                      ? `✅ 전송 완료!  오더번호: ${send24Result.ordNo || "-"}  /  ${send24Result.msg}`
-                      : `❌ 전송 실패  코드: ${send24Result.code}  /  ${send24Result.msg}`}
+                      ? `전송 완료  오더번호: ${send24Result.ordNo || "-"}  /  ${send24Result.msg}`
+                      : `전송 실패  코드: ${send24Result.code}  /  ${send24Result.msg}`}
                   </div>
                 )}
               </div>
