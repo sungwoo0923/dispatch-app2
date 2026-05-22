@@ -5622,11 +5622,11 @@ const applyCopy = (r) => {
     하차지담당자: dropPlace?.담당자 || r.하차지담당자 || "",
     하차지담당자번호: dropPlace?.담당자번호 || r.하차지담당자번호 || "",
 
-// ✅ 경유지 복사 (원본 경유 유지)
-경유상차목록: (() => { const v = r.경유상차목록; if (Array.isArray(v)) return v; try { const p = JSON.parse(v); return Array.isArray(p) ? p : []; } catch { return []; } })(),
-    경유하차목록: (() => { const v = r.경유하차목록; if (Array.isArray(v)) return v; try { const p = JSON.parse(v); return Array.isArray(p) ? p : []; } catch { return []; } })(),
-    경유지_상차: (() => { const v = r.경유지_상차; if (Array.isArray(v)) return v; try { const p = JSON.parse(v); return Array.isArray(p) ? p : []; } catch { return []; } })(),
-    경유지_하차: (() => { const v = r.경유지_하차; if (Array.isArray(v)) return v; try { const p = JSON.parse(v); return Array.isArray(p) ? p : []; } catch { return []; } })(),
+// ✅ 경유지 복사 (원본 경유 유지, 두 필드 모두 체크)
+경유상차목록: (() => { const v = r.경유상차목록 || r.경유지_상차; if (Array.isArray(v)) return v; try { const p = JSON.parse(v); return Array.isArray(p) ? p : []; } catch { return []; } })(),
+    경유하차목록: (() => { const v = r.경유하차목록 || r.경유지_하차; if (Array.isArray(v)) return v; try { const p = JSON.parse(v); return Array.isArray(p) ? p : []; } catch { return []; } })(),
+    경유지_상차: (() => { const v = r.경유지_상차 || r.경유상차목록; if (Array.isArray(v)) return v; try { const p = JSON.parse(v); return Array.isArray(p) ? p : []; } catch { return []; } })(),
+    경유지_하차: (() => { const v = r.경유지_하차 || r.경유하차목록; if (Array.isArray(v)) return v; try { const p = JSON.parse(v); return Array.isArray(p) ? p : []; } catch { return []; } })(),
 
     // 기타
     화물내용: cargoBase,
@@ -10502,7 +10502,7 @@ const RoundTripBadge = () => (
   </span>
 );
 
-function StopBadge({ count, list, type = "pickup" }) {
+function StopBadge({ count, list, type = "pickup", onEdit }) {
   const [open, setOpen] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
 
@@ -10612,9 +10612,15 @@ function StopBadge({ count, list, type = "pickup" }) {
                 );
               })}
             </div>
-            <div className="px-4 py-3 border-t border-gray-100 bg-gray-50 shrink-0">
+            <div className="px-4 py-3 border-t border-gray-100 bg-gray-50 shrink-0 flex gap-2">
+              {onEdit && (
+                <button type="button" onClick={() => { setOpen(false); onEdit(); }}
+                  className="flex-1 py-2 rounded-xl bg-amber-500 text-white text-[13px] font-bold hover:bg-amber-600 transition">
+                  수정
+                </button>
+              )}
               <button type="button" onClick={() => setOpen(false)}
-                className="w-full py-2 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition">
+                className="flex-1 py-2 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition">
                 닫기
               </button>
             </div>
@@ -15390,12 +15396,7 @@ checkWarningStatus(c.거래처명, "거래처");
         return (
           <div className="mt-3 flex items-center gap-2">
             <span className="text-[12px] text-gray-500 font-medium">상차경유지</span>
-            <StopBadge count={stops.length} list={stops} type="pickup" />
-            <button
-              type="button"
-              onClick={() => { setEditStopType("pickup"); setEditStopOpen(true); }}
-              className="px-2 py-0.5 text-[11px] font-bold rounded bg-amber-500 text-white hover:bg-amber-600"
-            >수정</button>
+            <StopBadge count={stops.length} list={stops} type="pickup" onEdit={() => { setEditStopType("pickup"); setEditStopOpen(true); }} />
           </div>
         );
       })()}
@@ -15566,12 +15567,7 @@ checkWarningStatus(c.거래처명, "거래처");
         return (
           <div className="mt-3 flex items-center gap-2">
             <span className="text-[12px] text-gray-500 font-medium">하차경유지</span>
-            <StopBadge count={stops.length} list={stops} type="drop" />
-            <button
-              type="button"
-              onClick={() => { setEditStopType("drop"); setEditStopOpen(true); }}
-              className="px-2 py-0.5 text-[11px] font-bold rounded bg-amber-500 text-white hover:bg-amber-600"
-            >수정</button>
+            <StopBadge count={stops.length} list={stops} type="drop" onEdit={() => { setEditStopType("drop"); setEditStopOpen(true); }} />
           </div>
         );
       })()}
@@ -16811,7 +16807,7 @@ value={copyTarget?.화물수량 || ""}
               return (
                 <div className="mb-3 flex items-center gap-2">
                   <span className="text-[12px] text-gray-500 font-medium">상차경유지</span>
-                  <StopBadge count={stops.length} list={stops} type="pickup" />
+                  <StopBadge count={stops.length} list={stops} type="pickup" onEdit={() => { setEditStopType("pickup"); setEditStopOpen(true); }} />
                 </div>
               );
             })()}
@@ -16956,7 +16952,7 @@ value={copyTarget?.화물수량 || ""}
               return (
                 <div className="mb-3 flex items-center gap-2">
                   <span className="text-[12px] text-gray-500 font-medium">하차경유지</span>
-                  <StopBadge count={stops.length} list={stops} type="drop" />
+                  <StopBadge count={stops.length} list={stops} type="drop" onEdit={() => { setEditStopType("drop"); setEditStopOpen(true); }} />
                 </div>
               );
             })()}
@@ -22504,6 +22500,25 @@ onBlur={(e) => {
               </div>
             </div>
 
+            {/* ── 5파트 상차 경유지 표시 ── */}
+            {(() => {
+              const sp = (v) => {
+                if (Array.isArray(v) && v.length) return v;
+                if (typeof v === "string" && v.trim().startsWith("[")) { try { const p = JSON.parse(v); if (Array.isArray(p)) return p; } catch {} }
+                return [];
+              };
+              const stops = [...sp(editTarget?.경유상차목록), ...sp(editTarget?.경유지_상차)]
+                .filter(s => s?.업체명?.trim())
+                .filter((s, i, arr) => arr.findIndex(x => x.업체명 === s.업체명) === i);
+              if (!stops.length) return null;
+              return (
+                <div className="mb-3 flex items-center gap-2">
+                  <span className="text-sm font-medium text-gray-500">상차경유지</span>
+                  <StopBadge count={stops.length} list={stops} type="pickup" onEdit={() => { setEditStopType("pickup"); setEditStopOpen(true); }} />
+                </div>
+              );
+            })()}
+
             {/* ================= 하차지명 ================= */}
             <div className="mb-3 relative">
               <label>하차지명</label>
@@ -22633,6 +22648,25 @@ onBlur={(e) => {
                 </select>
               </div>
             </div>
+
+            {/* ── 5파트 하차 경유지 표시 ── */}
+            {(() => {
+              const sp = (v) => {
+                if (Array.isArray(v) && v.length) return v;
+                if (typeof v === "string" && v.trim().startsWith("[")) { try { const p = JSON.parse(v); if (Array.isArray(p)) return p; } catch {} }
+                return [];
+              };
+              const stops = [...sp(editTarget?.경유하차목록), ...sp(editTarget?.경유지_하차)]
+                .filter(s => s?.업체명?.trim())
+                .filter((s, i, arr) => arr.findIndex(x => x.업체명 === s.업체명) === i);
+              if (!stops.length) return null;
+              return (
+                <div className="mb-3 flex items-center gap-2">
+                  <span className="text-sm font-medium text-gray-500">하차경유지</span>
+                  <StopBadge count={stops.length} list={stops} type="drop" onEdit={() => { setEditStopType("drop"); setEditStopOpen(true); }} />
+                </div>
+              );
+            })()}
 
             {/* 🔥 화물내용 (단독 한 줄) */}
 <Field label="화물내용">
@@ -23639,7 +23673,7 @@ setCopyPlaceOptions(list);
         return (
           <div className="mt-1 flex items-center gap-2">
             <span className="text-[12px] text-gray-500 font-medium">상차경유지</span>
-            <StopBadge count={stops.length} list={stops} type="pickup" />
+            <StopBadge count={stops.length} list={stops} type="pickup" onEdit={() => { setEditStopType("pickup"); setEditStopOpen(true); }} />
           </div>
         );
       })()}
@@ -23791,7 +23825,7 @@ setCopyPlaceOptions(list);
         return (
           <div className="mt-1 flex items-center gap-2">
             <span className="text-[12px] text-gray-500 font-medium">하차경유지</span>
-            <StopBadge count={stops.length} list={stops} type="drop" />
+            <StopBadge count={stops.length} list={stops} type="drop" onEdit={() => { setEditStopType("drop"); setEditStopOpen(true); }} />
           </div>
         );
       })()}
