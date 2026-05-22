@@ -7551,18 +7551,24 @@ className={`
         </div>
 
         {/* 삭제 버튼 */}
-        {stopList.length > 1 && (
-          <div className="text-right">
-            <button
-              type="button"
-              className="text-xs text-red-500"
-              onClick={() => {
-                setStopList(prev => prev.filter((_, i) => i !== idx));
-              }}
-            >
-              삭제
-            </button>
-          </div>
+        <div className="text-right">
+          <button
+            type="button"
+            className="text-xs text-red-500"
+            onClick={() => {
+              const next = stopList.filter((_, i) => i !== idx);
+              if (next.length === 0) {
+                if (stopType === "pickup") onChange("경유상차목록", []);
+                else onChange("경유하차목록", []);
+                setStopPopupOpen(false);
+              } else {
+                setStopList(next);
+              }
+            }}
+          >
+            삭제
+          </button>
+        </div>
         )}
 
       </div>
@@ -10996,12 +11002,14 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
             </div>
 
             {/* 삭제 */}
-            {editList.length>1 && (
-              <div className="text-right">
-                <button type="button" className="text-xs text-red-500"
-                  onClick={()=>setEditList(prev=>prev.filter((_,i)=>i!==idx))}>삭제</button>
-              </div>
-            )}
+            <div className="text-right">
+              <button type="button" className="text-xs text-red-500"
+                onClick={()=>{
+                  const next=editList.filter((_,i)=>i!==idx);
+                  if(next.length===0){onSave([]);onClose();}
+                  else setEditList(next);
+                }}>삭제</button>
+            </div>
           </div>
         ))}
 
@@ -11519,8 +11527,8 @@ const _sc4d=(main,stops)=>{const all=[main,...stops.map(_cargoText)].filter(Bool
 const _totKg4d=_pkg4d(r.차량톤수)+dropStopsD.reduce((a,s)=>a+_pkg4d(_tonText(s)),0)+pickupStopsD.reduce((a,s)=>a+_pkg4d(_tonText(s)),0);
 const _totTon4d=_fkg4d(_totKg4d)||r.차량톤수||"-";
 const _totCargo4d=_sc4d(r.화물내용,[...pickupStopsD,...dropStopsD])||r.화물내용||"";
-const _mainDCargo4d=r.화물내용?`\n화물내용 : ${r.화물내용}`:"";
-const _mainDTon4d=r.차량톤수?`\n화물톤수 : ${r.차량톤수}`:"";
+const _mainDCargo4d=(hasDropStopsD||hasPickupStopsD)&&r.화물내용?`\n화물내용 : ${r.화물내용}`:"";
+const _mainDTon4d=(hasDropStopsD||hasPickupStopsD)&&r.차량톤수?`\n화물톤수 : ${r.차량톤수}`:"";
 
 return `[파렛전표/거래명세서 업로드]
 미 전송시 운임 지연 될 수 있습니다.
@@ -11648,8 +11656,8 @@ const _sc4f=(main,stops)=>{const all=[main,...stops.map(_cargoTextF)].filter(Boo
 const _totKg4f=_pkg4f(r.차량톤수)+dropStops.reduce((a,s)=>a+_pkg4f(_tonTextF(s)),0)+pickupStops.reduce((a,s)=>a+_pkg4f(_tonTextF(s)),0);
 const _totTon4f=_fkg4f(_totKg4f)||r.차량톤수||"-";
 const _totCargo4f=_sc4f(r.화물내용,[...pickupStops,...dropStops])||r.화물내용||"";
-const _mainDCargo4f=r.화물내용?`\n화물내용 : ${r.화물내용}`:"";
-const _mainDTon4f=r.차량톤수?`\n화물톤수 : ${r.차량톤수}`:"";
+const _mainDCargo4f=(hasDropStops||hasPickupStops)&&r.화물내용?`\n화물내용 : ${r.화물내용}`:"";
+const _mainDTon4f=(hasDropStops||hasPickupStops)&&r.차량톤수?`\n화물톤수 : ${r.차량톤수}`:"";
 
 return `${dateNotice}${r.상차일 || ""} ${yoil}
 
@@ -20292,8 +20300,8 @@ const _pNum5d=_pHas5d?`${_pStops5d.length+1}.`:"";
 const _dNum5d=_dHas5d?`${_dStops5d.length+1}.`:"";
 const _pStopsText5d=_pHas5d?_pStops5d.map((s,i)=>{const cargo=_ct5d(s);const ton=_tt5d(s);return`${i+1}.상차경유지 : ${s.업체명||"-"}\n${s.주소||""}${s.담당자?`\n담당자 : ${s.담당자}${s.담당자번호?` (${formatPhone(s.담당자번호)})`:""}`:``}${s.상차시간?`\n상차시간 : ${s.상차시간}`:""}${cargo?`\n화물내용 : ${cargo}`:""}${ton?`\n화물톤수 : ${ton}`:""}${s.방법?`\n상차방법 : ${s.방법}`:``}`;}).join("\n"):"";
 const _dStopsText5d=_dHas5d?_dStops5d.map((s,i)=>{const cargo=_ct5d(s);const ton=_tt5d(s);return`${i+1}.하차경유지 : ${s.업체명||"-"}\n${s.주소||""}${s.담당자?`\n담당자 : ${s.담당자}${s.담당자번호?` (${formatPhone(s.담당자번호)})`:""}`:``}${s.하차시간?`\n하차시간 : ${s.하차시간}`:""}${cargo?`\n화물내용 : ${cargo}`:""}${ton?`\n화물톤수 : ${ton}`:""}${s.방법?`\n하차방법 : ${s.방법}`:``}`;}).join("\n"):"";
-const _mainDCargo5d=r.화물내용?`\n화물내용 : ${r.화물내용}`:"";
-const _mainDTon5d=r.차량톤수?`\n화물톤수 : ${r.차량톤수}`:"";
+const _mainDCargo5d=(_dHas5d||_pHas5d)&&r.화물내용?`\n화물내용 : ${r.화물내용}`:"";
+const _mainDTon5d=(_dHas5d||_pHas5d)&&r.차량톤수?`\n화물톤수 : ${r.차량톤수}`:"";
 
 return `[파렛전표/거래명세서 업로드]
 (파렛전표/명세서없으면 미업로드)
@@ -20372,8 +20380,8 @@ const _pCon5f=buildContactLine(r.상차지담당자,r.상차지담당자번호);
 const _dCon5f=buildContactLine(r.하차지담당자,r.하차지담당자번호);
 const _pStopsText5f=_pHas5f?_pStops5f.map((s,i)=>{const cargo=_ct5f(s);const ton=_tt5f(s);return`${i+1}.상차경유지 : ${s.업체명||"-"}\n${s.주소||""}${s.담당자?`\n담당자 : ${s.담당자}${s.담당자번호?` (${formatPhone(s.담당자번호)})`:""}`:``}${s.상차시간?`\n상차시간 : ${s.상차시간}`:""}${cargo?`\n화물내용 : ${cargo}`:""}${ton?`\n화물톤수 : ${ton}`:""}${s.방법?`\n상차방법 : ${s.방법}`:``}`;}).join("\n"):"";
 const _dStopsText5f=_dHas5f?_dStops5f.map((s,i)=>{const cargo=_ct5f(s);const ton=_tt5f(s);return`${i+1}.하차경유지 : ${s.업체명||"-"}\n${s.주소||""}${s.담당자?`\n담당자 : ${s.담당자}${s.담당자번호?` (${formatPhone(s.담당자번호)})`:""}`:``}${s.하차시간?`\n하차시간 : ${s.하차시간}`:""}${cargo?`\n화물내용 : ${cargo}`:""}${ton?`\n화물톤수 : ${ton}`:""}${s.방법?`\n하차방법 : ${s.방법}`:``}`;}).join("\n"):"";
-const _mainDCargo5f=r.화물내용?`\n화물내용 : ${r.화물내용}`:"";
-const _mainDTon5f=r.차량톤수?`\n화물톤수 : ${r.차량톤수}`:"";
+const _mainDCargo5f=(_dHas5f||_pHas5f)&&r.화물내용?`\n화물내용 : ${r.화물내용}`:"";
+const _mainDTon5f=(_dHas5f||_pHas5f)&&r.차량톤수?`\n화물톤수 : ${r.차량톤수}`:"";
 
         return `${dateNotice}${r.상차일||""} ${yoil}
 
@@ -25379,6 +25387,7 @@ setCopyTarget(prev => ({
               const rawTon = String(r.차량톤수 || "");
               const tonMatch = rawTon.match(/([\d.]+)(.*)/);
               setCopyTarget({ ...r, 화물내용: rawCargo, 화물수량: _cNum, 화물타입: _cType, 톤수값: tonMatch ? tonMatch[1] : "", 톤수타입: tonMatch ? tonMatch[2] : "" });
+              setSelected(new Set([getId(r)]));
               setCopyModalOpen(true);
               setContextMenuDS(null);
             }}>
