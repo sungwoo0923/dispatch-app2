@@ -14622,7 +14622,7 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
 {r.__pickupStops?.length > 0 && (
   <StopInlineBadge count={r.__pickupStops.length} list={r.__pickupStops} type="pickup"
     placeRows={placeRows} timeOptions={timeOptions}
-    onEdit={newList => patchDispatch(r._id, { 경유상차목록: newList, 경유지_상차: newList })}
+    onEdit={newList => patchDispatch(r._id, { 경유상차목록: newList, 경유지_상차: newList, 경유지상차: newList })}
   />
 )}
 
@@ -14640,7 +14640,7 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
 {r.__dropStops?.length > 0 && (
   <StopInlineBadge count={r.__dropStops.length} list={r.__dropStops} type="drop"
     placeRows={placeRows} timeOptions={timeOptions}
-    onEdit={newList => patchDispatch(r._id, { 경유하차목록: newList, 경유지_하차: newList })}
+    onEdit={newList => patchDispatch(r._id, { 경유하차목록: newList, 경유지_하차: newList, 경유지하차: newList })}
   />
 )}
 
@@ -17427,11 +17427,13 @@ setEditTarget((p) => ({
 const syncedEditTarget = {
   ...editTarget,
   
-  // 🔥 경유지 배열 통합 저장
+  // 🔥 경유지 배열 통합 저장 (신구 필드 모두)
   경유상차목록: editTarget.경유상차목록 || editTarget.경유지_상차 || [],
   경유지_상차: editTarget.경유상차목록 || editTarget.경유지_상차 || [],
+  경유지상차:  editTarget.경유상차목록 || editTarget.경유지_상차 || [],
   경유하차목록: editTarget.경유하차목록 || editTarget.경유지_하차 || [],
   경유지_하차: editTarget.경유하차목록 || editTarget.경유지_하차 || [],
+  경유지하차:  editTarget.경유하차목록 || editTarget.경유지_하차 || [],
   
   // 화물내용 동기화
   화물내용: editTarget.화물타입
@@ -21771,7 +21773,7 @@ return (
       const list=[..._s(row.경유상차목록),..._s(row.경유지_상차)]
         .filter(s=>s&&(s.업체명?.trim()||s.주소?.trim()))
         .filter((s,i,arr)=>{const k=s.업체명||s.주소;return arr.findIndex(x=>(x.업체명||x.주소)===k)===i;});
-      return list.length>0?<StopBadge count={list.length} list={list} type="pickup" onSave={(newList)=>patchDispatch(row._id,{경유상차목록:newList,경유지_상차:newList,__col:row.__col})} placeRows={placeRows} timeOptions={timeOptions}/>:null;
+      return list.length>0?<StopBadge count={list.length} list={list} type="pickup" onSave={(newList)=>patchDispatch(row._id,{경유상차목록:newList,경유지_상차:newList,경유지상차:newList,__col:row.__col})} placeRows={placeRows} timeOptions={timeOptions}/>:null;
     })()}
   </div>
 
@@ -21783,7 +21785,7 @@ return (
       const list=[..._s(row.경유하차목록),..._s(row.경유지_하차)]
         .filter(s=>s&&(s.업체명?.trim()||s.주소?.trim()))
         .filter((s,i,arr)=>{const k=s.업체명||s.주소;return arr.findIndex(x=>(x.업체명||x.주소)===k)===i;});
-      return list.length>0?<StopBadge count={list.length} list={list} type="drop" onSave={(newList)=>patchDispatch(row._id,{경유하차목록:newList,경유지_하차:newList,__col:row.__col})} placeRows={placeRows} timeOptions={timeOptions}/>:null;
+      return list.length>0?<StopBadge count={list.length} list={list} type="drop" onSave={(newList)=>patchDispatch(row._id,{경유하차목록:newList,경유지_하차:newList,경유지하차:newList,__col:row.__col})} placeRows={placeRows} timeOptions={timeOptions}/>:null;
     })()}
   </div>
 
@@ -23149,8 +23151,10 @@ setEditTarget((p) => ({
       "하차지명", "하차지주소",
       "경유상차목록",
       "경유지_상차",
+      "경유지상차",
       "경유하차목록",
       "경유지_하차",
+      "경유지하차",
       "화물내용",
       "차량종류", "차량톤수",
       "차량번호", "이름", "전화번호",
@@ -23178,10 +23182,14 @@ setEditTarget((p) => ({
       : (editTarget.화물수량 || editTarget.화물내용 || "");
 
     // 🔥 editTarget이 edited보다 우선
+    const _pickArr = editTarget.경유상차목록 || editTarget.경유지_상차 || [];
+    const _dropArr = editTarget.경유하차목록 || editTarget.경유지_하차 || [];
     const merged = {
       ...(edited[getId(editTarget)] || {}),
       ...editTarget,
-      화물내용: finalCargo,  // ✅ 동기화된 값 강제 적용
+      화물내용: finalCargo,
+      경유상차목록: _pickArr, 경유지_상차: _pickArr, 경유지상차: _pickArr,
+      경유하차목록: _dropArr, 경유지_하차: _dropArr, 경유지하차: _dropArr,
     };
 
     const payload = ALLOWED_FIELDS.reduce((acc, k) => {

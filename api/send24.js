@@ -1,9 +1,14 @@
 import CryptoJS from "crypto-js";
 
+/* ─── 환경변수 (fallback: .env 기본값) ─── */
+const _AES_KEY = process.env.CALL24_AES_KEY || "946e5bf1c0a86333688d1d01561e06e3";
+const _AES_IV  = process.env.CALL24_AES_IV  || "4eff880a505c8136";
+const _API_KEY = process.env.CALL24_API_KEY || "946e5bf1c0a863332f1c2a6977b9f08e";
+
 /* ─── AES 암호화 ─── */
 function encryptAES(str) {
-  const key = CryptoJS.enc.Hex.parse(process.env.CALL24_AES_KEY);
-  const iv  = CryptoJS.enc.Hex.parse(process.env.CALL24_AES_IV);
+  const key = CryptoJS.enc.Hex.parse(_AES_KEY);
+  const iv  = CryptoJS.enc.Hex.parse(_AES_IV);
   return CryptoJS.AES.encrypt(str, key, {
     iv,
     padding: CryptoJS.pad.Pkcs7,
@@ -59,18 +64,11 @@ function mapTo24Order(row) {
   };
 }
 
-const API_KEY  = process.env.CALL24_API_KEY;
 const BASE_URL = "https://api.15887924.com:18099";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method Not Allowed" });
-  }
-
-  // 환경변수 체크
-  if (!process.env.CALL24_AES_KEY || !process.env.CALL24_AES_IV) {
-    console.error("❌ CALL24_AES_KEY / CALL24_AES_IV 환경변수 미설정");
-    return res.status(500).json({ success: false, error: "암호화 키 미설정" });
   }
 
   try {
@@ -86,7 +84,7 @@ export default async function handler(req, res) {
       method: "POST",
       headers: {
         "Content-Type":   "application/json",
-        "call24-api-key": API_KEY,
+        "call24-api-key": _API_KEY,
       },
       body: JSON.stringify({
         data:    encrypted,
