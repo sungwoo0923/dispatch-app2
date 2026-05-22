@@ -1320,13 +1320,13 @@ function FloatingCalculator({ onClose }) {
     setBoxResults({ results, qty, bw, bd, bh });
   };
 
-  const inpSt = { width: "100%", border: "1px solid #cbd5e1", borderRadius: 8, padding: "6px 8px", fontSize: 13, outline: "none", boxSizing: "border-box" };
+  const inpSt = { width: "100%", border: "1px solid #cbd5e1", borderRadius: 8, padding: "6px 8px", fontSize: 14, outline: "none", boxSizing: "border-box" };
   const lblSt = { fontSize: 11, fontWeight: 700, color: "#475569", marginBottom: 3, display: "block" };
 
   return (
     <div style={{
       position: "fixed", bottom: 148, right: 24, zIndex: 99999,
-      width: tab === "load" ? 292 : 264,
+      width: tab === "load" ? 340 : 280,
       background: "white", borderRadius: 20,
       boxShadow: "0 20px 60px rgba(0,0,0,0.22)",
       border: "1px solid #e2e8f0",
@@ -1416,7 +1416,7 @@ function FloatingCalculator({ onClose }) {
           <div style={{ padding: 12 }}>
             {/* 서브탭 */}
             <div style={{ display: "flex", gap: 4, marginBottom: 12, background: "#f1f5f9", borderRadius: 8, padding: 3 }}>
-              {[["pallet","🔲 파렛트"],["box","📦 박스"]].map(([m,l]) => (
+              {[["pallet","파렛트"],["box","박스"]].map(([m,l]) => (
                 <button key={m} onClick={() => setLoadMode(m)} style={{ flex: 1, padding: "5px 0", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: loadMode === m ? 700 : 400, background: loadMode === m ? "white" : "transparent", color: loadMode === m ? "#1B2B4B" : "#64748b", boxShadow: loadMode === m ? "0 1px 3px rgba(0,0,0,0.1)" : "none" }}>{l}</button>
               ))}
             </div>
@@ -1424,7 +1424,7 @@ function FloatingCalculator({ onClose }) {
             {/* ── 파렛트 모드 ── */}
             {loadMode === "pallet" && (
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                <div style={{ background: "#eff6ff", borderRadius: 8, padding: "7px 10px", fontSize: 11, color: "#2563eb", lineHeight: 1.5 }}>
+                <div style={{ background: "#eff6ff", borderRadius: 8, padding: "7px 10px", fontSize: 12, color: "#2563eb", lineHeight: 1.5 }}>
                   파렛트 크기(mm)·수량을 입력 후 조회. 차량 클릭 시 배치도 확인.
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 4, alignItems: "end" }}>
@@ -1470,7 +1470,7 @@ function FloatingCalculator({ onClose }) {
                             <span style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>{item.veh.name}</span>
                             <span style={{ fontSize: 10, color: "#6b7280" }}>{(item.veh.l/100).toFixed(1)}m × {(item.veh.w/100).toFixed(1)}m</span>
                           </div>
-                          <div style={{ fontSize: 11, fontWeight: 700, color: sc, marginTop: 2 }}>{st}</div>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: sc, marginTop: 2 }}>{st}</div>
                           {!item.weightOk && palKg && <div style={{ fontSize: 10, color: "#b91c1c", marginTop: 1 }}>⚖️ 중량초과 ({(parseFloat(palKg)*needed).toLocaleString()}kg &gt; {item.veh.maxKg.toLocaleString()}kg)</div>}
                           {ok && item.rotated && <div style={{ fontSize: 10, color: "#f59e0b", marginTop: 1 }}>↺ 회전 배치로 최적화됨</div>}
                         </div>
@@ -1489,7 +1489,7 @@ function FloatingCalculator({ onClose }) {
             {/* ── 박스 모드 ── */}
             {loadMode === "box" && (
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                <div style={{ background: "#fdf4ff", borderRadius: 8, padding: "7px 10px", fontSize: 11, color: "#7c3aed", lineHeight: 1.5 }}>
+                <div style={{ background: "#fdf4ff", borderRadius: 8, padding: "7px 10px", fontSize: 12, color: "#7c3aed", lineHeight: 1.5 }}>
                   박스 크기(cm)와 수량을 입력하면 차량별 최대 적재 개수를 계산합니다.
                 </div>
                 <div>
@@ -2581,9 +2581,7 @@ const [stopPopupOpen, setStopPopupOpen] = React.useState(false);
 const [stopType, setStopType] = React.useState("");
 const [activeStopIdx, setActiveStopIdx] = React.useState(null);
 const [stopList, setStopList] = React.useState([
-  
-  
-  { 업체명:"", 주소:"", 담당자:"", 담당자번호:"", 메모:"" }
+  { 업체명:"", 주소:"", 담당자:"담당자", 담당자번호:"", 메모:"", 화물내용:"", 화물타입:"파레트", 톤수값:"", 톤수타입:"톤", 차량톤수:"", 상차시간:"", 하차시간:"", 방법:"" }
 ]);
 const [stopForm, setStopForm] = React.useState({
   업체명:"",
@@ -6638,11 +6636,8 @@ const similar = placeList.filter(p => {
   setStopType("pickup");
 
 const arr = form.경유상차목록 || [];
-setStopList(
-  arr.length ? arr : [{ 업체명:"", 주소:"", 담당자:"", 담당자번호:"", 메모:"" }]
-);
   setStopList(arr.length ? arr : [
-    { 업체명:"", 주소:"", 담당자:"", 담당자번호:"", 메모:"" }
+    { 업체명:"", 주소:"", 담당자:"담당자", 담당자번호:"", 메모:"", 화물내용:"", 화물타입:"파레트", 톤수값:"", 톤수타입:"톤", 차량톤수:"", 상차시간:"", 하차시간:"", 방법:"" }
   ]);
 
   setStopPopupOpen(true);
@@ -6788,7 +6783,7 @@ className={`
   setStopList(
     arr.length
       ? arr
-      : [{ 업체명:"", 주소:"", 담당자:"", 담당자번호:"", 메모:"" }]
+      : [{ 업체명:"", 주소:"", 담당자:"담당자", 담당자번호:"", 메모:"", 화물내용:"", 화물타입:"파레트", 톤수값:"", 톤수타입:"톤", 차량톤수:"", 상차시간:"", 하차시간:"", 방법:"" }]
   );
 
   setStopPopupOpen(true);
@@ -7235,7 +7230,6 @@ className={`
 
   <div
     className="absolute inset-0 bg-black/40"
-    onClick={() => setStopPopupOpen(false)}
   />
 
   <div className="absolute top-1/2 left-1/2 w-[600px] -translate-x-1/2 -translate-y-1/2 bg-white rounded-xl shadow-xl p-6 space-y-4 max-h-[85vh] overflow-y-auto">
@@ -7387,10 +7381,10 @@ className={`
             value={stop.담당자번호}
             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); } }}
             onChange={(e) => {
-              const v = e.target.value;
+              const v = formatPhone(e.target.value);
               setStopList(prev => {
                 const copy = [...prev];
-                copy[idx].담당자번호 = v;
+                copy[idx] = { ...copy[idx], 담당자번호: v };
                 return copy;
               });
             }}
@@ -7419,12 +7413,12 @@ className={`
             <div className="absolute top-0 right-0 h-full flex items-center pr-[1px]">
               <select
                 className="w-[58px] h-[calc(100%-2px)] px-1 text-[11px] font-bold rounded-r-lg bg-[#1B2B4B] text-white border-0 appearance-none cursor-pointer"
-                value={stop.화물타입 || "파레트"}
+                value={stop.화물타입 ?? "파레트"}
                 onChange={(e) => {
                   const type = e.target.value;
                   setStopList(prev => {
                     const copy = [...prev];
-                    copy[idx].화물타입 = type;
+                    copy[idx] = { ...copy[idx], 화물타입: type };
                     return copy;
                   });
                 }}
@@ -7460,15 +7454,12 @@ className={`
             <div className="absolute top-0 right-0 h-full flex items-center pr-[1px]">
               <select
                 className="w-[48px] h-[calc(100%-2px)] px-1 text-[11px] font-bold rounded-r-lg bg-[#1B2B4B] text-white border-0 appearance-none cursor-pointer"
-                value={stop.톤수타입 || "톤"}
+                value={stop.톤수타입 ?? "톤"}
                 onChange={(e) => {
                   const type = e.target.value;
                   setStopList(prev => {
                     const copy = [...prev];
-                    copy[idx].톤수타입 = type;
-                    copy[idx].차량톤수 = type
-                      ? `${copy[idx].톤수값 || ""}${type}`
-                      : (copy[idx].톤수값 || "");
+                    copy[idx] = { ...copy[idx], 톤수타입: type, 차량톤수: type ? `${copy[idx].톤수값 || ""}${type}` : (copy[idx].톤수값 || "") };
                     return copy;
                   });
                 }}
@@ -7528,6 +7519,30 @@ className={`
           
         </div>
 
+        {/* 방법 (상/하차방법) */}
+        <div>
+          <label className="text-[11px] font-semibold text-gray-500 mb-0.5 block">
+            {stopType === "pickup" ? "상차방법" : "하차방법"}
+          </label>
+          <select
+            className={inputCls}
+            value={stop.방법 || ""}
+            onChange={(e) => {
+              const v = e.target.value;
+              setStopList(prev => {
+                const copy = [...prev];
+                copy[idx] = { ...copy[idx], 방법: v };
+                return copy;
+              });
+            }}
+          >
+            <option value="">선택</option>
+            {["지게차", "수작업", "직접수작업", "수도움", "크레인"].map(v => (
+              <option key={v} value={v}>{v}</option>
+            ))}
+          </select>
+        </div>
+
         {/* 삭제 버튼 */}
         {stopList.length > 1 && (
           <div className="text-right">
@@ -7555,9 +7570,9 @@ className={`
           setStopList(prev => [
             ...prev,
             {
-              업체명: "", 주소: "", 담당자: "", 담당자번호: "", 메모: "",
+              업체명: "", 주소: "", 담당자: "담당자", 담당자번호: "", 메모: "",
               화물내용: "", 화물타입: "파레트", 톤수값: "", 톤수타입: "톤",
-              차량톤수: "", 상차시간: "", 하차시간: ""
+              차량톤수: "", 상차시간: "", 하차시간: "", 방법: ""
             }
           ]);
         }}
@@ -11611,38 +11626,34 @@ const _tonText = (s) => {
   return type && type !== "없음" && type !== "" ? `${val}${type}` : val;
 };
 
-const pickupStopsD = [
-  ..._safeStops(r.경유상차목록),
-  ..._safeStops(r.경유지_상차),
-].filter(s => s?.업체명?.trim());
+const pickupStopsD = _safeStops(r.경유상차목록 || r.경유지_상차)
+  .filter(s => s?.업체명?.trim());
 
-const dropStopsD = [
-  ..._safeStops(r.경유하차목록),
-  ..._safeStops(r.경유지_하차),
-].filter(s => s?.업체명?.trim());
+const dropStopsD = _safeStops(r.경유하차목록 || r.경유지_하차)
+  .filter(s => s?.업체명?.trim());
 
 const hasPickupStopsD = pickupStopsD.length > 0;
 const hasDropStopsD = dropStopsD.length > 0;
 
 // 상차 텍스트 (경유 있으면 번호 붙임)
-const pickupMainNumD = hasPickupStopsD ? "1." : "";
+const pickupMainNumD = hasPickupStopsD ? `${pickupStopsD.length + 1}.` : "";
 const pickupStopsTextD = hasPickupStopsD
   ? pickupStopsD.map((s, i) => {
     const cargo = _cargoText(s);
     const ton = _tonText(s);
-    return `${i + 2}.상차경유지 : ${s.업체명 || "-"}
-${s.주소 || "-"}${s.담당자 ? `\n담당자 : ${s.담당자}${s.담당자번호 ? ` (${formatPhone(s.담당자번호)})` : ""}` : ""}${s.상차시간 ? `\n상차시간 : ${s.상차시간}` : ""}${cargo ? `\n화물내용 : ${cargo}` : ""}${ton ? `\n화물톤수 : ${ton}` : ""}`;
+    return `${i + 1}.상차경유지 : ${s.업체명 || "-"}
+${s.주소 || "-"}${s.담당자 ? `\n담당자 : ${s.담당자}${s.담당자번호 ? ` (${formatPhone(s.담당자번호)})` : ""}` : ""}${s.상차시간 ? `\n상차시간 : ${s.상차시간}` : ""}${cargo ? `\n화물내용 : ${cargo}` : ""}${ton ? `\n화물톤수 : ${ton}` : ""}${s.방법 ? `\n상차방법 : ${s.방법}` : ""}`;
   }).join("\n")
   : "";
 
 // 하차 텍스트
-const dropMainNumD = hasDropStopsD ? "1." : "";
+const dropMainNumD = hasDropStopsD ? `${dropStopsD.length + 1}.` : "";
 const dropStopsTextD = hasDropStopsD
   ? dropStopsD.map((s, i) => {
     const cargo = _cargoText(s);
     const ton = _tonText(s);
-    return `${i + 2}.하차경유지 : ${s.업체명 || "-"}
-${s.주소 || "-"}${s.담당자 ? `\n담당자 : ${s.담당자}${s.담당자번호 ? ` (${formatPhone(s.담당자번호)})` : ""}` : ""}${s.하차시간 ? `\n하차시간 : ${s.하차시간}` : ""}${cargo ? `\n화물내용 : ${cargo}` : ""}${ton ? `\n화물톤수 : ${ton}` : ""}`;
+    return `${i + 1}.하차경유지 : ${s.업체명 || "-"}
+${s.주소 || "-"}${s.담당자 ? `\n담당자 : ${s.담당자}${s.담당자번호 ? ` (${formatPhone(s.담당자번호)})` : ""}` : ""}${s.하차시간 ? `\n하차시간 : ${s.하차시간}` : ""}${cargo ? `\n화물내용 : ${cargo}` : ""}${ton ? `\n화물톤수 : ${ton}` : ""}${s.방법 ? `\n하차방법 : ${s.방법}` : ""}`;
   }).join("\n")
   : "";
 const uploadUrl = `${window.location.origin}/upload?id=${r._id}`;
@@ -11661,13 +11672,13 @@ ${uploadUrl}
 
 ${dateNotice}${dateText}
 
-${pickupMainNumD}상차 : ${r.상차지명 || "-"} / ${r.상차시간 || "즉시"}${r.상차시간기준 ? ` (${r.상차시간기준})` : ""}
+${pickupStopsTextD ? pickupStopsTextD + "\n\n" : ""}${pickupMainNumD}상차 : ${r.상차지명 || "-"} / ${r.상차시간 || "즉시"}${r.상차시간기준 ? ` (${r.상차시간기준})` : ""}
 ${r.상차지주소 || ""}${(() => { const line = buildContactLine(r.상차지담당자, r.상차지담당자번호); return line ? `\n${line}` : ""; })()}
-상차방법 : ${r.상차방법 || "-"}${pickupStopsTextD ? `\n\n${pickupStopsTextD}` : ""}
+상차방법 : ${r.상차방법 || "-"}
 
-${dropMainNumD}하차 : ${r.하차지명 || "-"} / ${dropTimeText}${r.하차시간기준 ? ` (${r.하차시간기준})` : ""}
+${dropStopsTextD ? dropStopsTextD + "\n\n" : ""}${dropMainNumD}하차 : ${r.하차지명 || "-"} / ${dropTimeText}${r.하차시간기준 ? ` (${r.하차시간기준})` : ""}
 ${r.하차지주소 || ""}${(() => { const line = buildContactLine(r.하차지담당자, r.하차지담당자번호); return line ? `\n${line}` : ""; })()}
-하차방법 : ${r.하차방법 || "-"}${dropStopsTextD ? `\n\n${dropStopsTextD}` : ""}
+하차방법 : ${r.하차방법 || "-"}
 
 화물 : ${r.차량톤수 || "-"}${r.화물내용 ? ` / ${r.화물내용}` : ""} ${r.차량종류 || r.차종}${driverNoteText}${noticeBlock ? `\n\n${noticeBlock}` : ""}
 
@@ -11745,50 +11756,46 @@ const _tonTextF = (s) => {
 };
 
 
-const pickupStops = [
-  ..._safeStopsF(r.경유상차목록),
-  ..._safeStopsF(r.경유지_상차),
-].filter(s => s?.업체명?.trim());
+const pickupStops = _safeStopsF(r.경유상차목록 || r.경유지_상차)
+  .filter(s => s?.업체명?.trim());
 
-const dropStops = [
-  ..._safeStopsF(r.경유하차목록),
-  ..._safeStopsF(r.경유지_하차),
-].filter(s => s?.업체명?.trim());
+const dropStops = _safeStopsF(r.경유하차목록 || r.경유지_하차)
+  .filter(s => s?.업체명?.trim());
 
 const hasPickupStops = pickupStops.length > 0;
 const hasDropStops = dropStops.length > 0;
 
-const pickupMainNum = hasPickupStops ? "1." : "";
+const pickupMainNum = hasPickupStops ? `${pickupStops.length + 1}.` : "";
 const pickupStopsText = hasPickupStops
   ? pickupStops.map((s, i) => {
     const cargo = _cargoTextF(s);
     const ton = _tonTextF(s);
-    return `${i + 2}.상차경유지 : ${s.업체명 || "-"}
-${s.주소 || "-"}${s.담당자 ? `\n담당자 : ${s.담당자}${s.담당자번호 ? ` (${formatPhone(s.담당자번호)})` : ""}` : ""}${s.상차시간 ? `\n상차시간 : ${s.상차시간}` : ""}${cargo ? `\n화물내용 : ${cargo}` : ""}${ton ? `\n화물톤수 : ${ton}` : ""}`;
+    return `${i + 1}.상차경유지 : ${s.업체명 || "-"}
+${s.주소 || "-"}${s.담당자 ? `\n담당자 : ${s.담당자}${s.담당자번호 ? ` (${formatPhone(s.담당자번호)})` : ""}` : ""}${s.상차시간 ? `\n상차시간 : ${s.상차시간}` : ""}${cargo ? `\n화물내용 : ${cargo}` : ""}${ton ? `\n화물톤수 : ${ton}` : ""}${s.방법 ? `\n상차방법 : ${s.방법}` : ""}`;
   }).join("\n")
   : "";
 
-const dropMainNum = hasDropStops ? "1." : "";
+const dropMainNum = hasDropStops ? `${dropStops.length + 1}.` : "";
 const dropStopsText = hasDropStops
   ? dropStops.map((s, i) => {
     const cargo = _cargoTextF(s);
     const ton = _tonTextF(s);
-    return `${i + 2}.하차경유지 : ${s.업체명 || "-"}
-${s.주소 || "-"}${s.담당자 ? `\n담당자 : ${s.담당자}${s.담당자번호 ? ` (${formatPhone(s.담당자번호)})` : ""}` : ""}${s.하차시간 ? `\n하차시간 : ${s.하차시간}` : ""}${cargo ? `\n화물내용 : ${cargo}` : ""}${ton ? `\n화물톤수 : ${ton}` : ""}`;
+    return `${i + 1}.하차경유지 : ${s.업체명 || "-"}
+${s.주소 || "-"}${s.담당자 ? `\n담당자 : ${s.담당자}${s.담당자번호 ? ` (${formatPhone(s.담당자번호)})` : ""}` : ""}${s.하차시간 ? `\n하차시간 : ${s.하차시간}` : ""}${cargo ? `\n화물내용 : ${cargo}` : ""}${ton ? `\n화물톤수 : ${ton}` : ""}${s.방법 ? `\n하차방법 : ${s.방법}` : ""}`;
   }).join("\n")
   : "";
 
 return `${dateNotice}${r.상차일 || ""} ${yoil}
 
-${pickupMainNum}상차지 : ${r.상차지명 || "-"}
+${pickupStopsText ? pickupStopsText + "\n\n" : ""}${pickupMainNum}상차지 : ${r.상차지명 || "-"}
 ${r.상차지주소 || "-"}${pickupContact ? `\n${pickupContact}` : ""}
 상차시간 : ${pickupTime}${r.상차시간기준 ? ` (${r.상차시간기준})` : ""}
-상차방법 : ${r.상차방법 || "-"}${pickupStopsText ? `\n\n${pickupStopsText}` : ""}
+상차방법 : ${r.상차방법 || "-"}
 
-${dropMainNum}하차지 : ${r.하차지명 || "-"}
+${dropStopsText ? dropStopsText + "\n\n" : ""}${dropMainNum}하차지 : ${r.하차지명 || "-"}
 ${r.하차지주소 || "-"}${dropContact ? `\n${dropContact}` : ""}
 하차시간 : ${dropTimeText}${r.하차시간기준 ? ` (${r.하차시간기준})` : ""}
-하차방법 : ${r.하차방법 || "-"}${dropStopsText ? `\n\n${dropStopsText}` : ""}
+하차방법 : ${r.하차방법 || "-"}
 
 중량 : ${r.차량톤수 || "-"}${r.화물내용 ? ` / ${r.화물내용}` : ""} ${r.차량종류 || ""}
 
@@ -23624,6 +23631,19 @@ setCopyPlaceOptions(list);
         />
       </Field>
 
+      {/* ── 상차 경유지 표시 ── */}
+      {(() => {
+        const _sp = (v) => { if (Array.isArray(v) && v.length > 0) return v; if (typeof v === "string" && v.trim().startsWith("[")) { try { const p = JSON.parse(v); if (Array.isArray(p)) return p; } catch {} } if (v && typeof v === "object" && !Array.isArray(v)) { const ks = Object.keys(v); if (ks.length > 0 && ks.every(k => /^\d+$/.test(k))) return ks.sort((a,b)=>Number(a)-Number(b)).map(k=>v[k]); if (v.업체명) return [v]; } return []; };
+        const stops = _sp(copyTarget?.경유상차목록 || copyTarget?.경유지_상차).filter(s => s && (s.업체명?.trim() || s.주소?.trim()));
+        if (!stops.length) return null;
+        return (
+          <div className="mt-1 flex items-center gap-2">
+            <span className="text-[12px] text-gray-500 font-medium">상차경유지</span>
+            <StopBadge count={stops.length} list={stops} type="pickup" />
+          </div>
+        );
+      })()}
+
     </div>
 
 {/* 하차 */}
@@ -23762,6 +23782,19 @@ setCopyPlaceOptions(list);
           onChange={(e)=>setCopyTarget(p=>({...p, 하차지담당자번호:e.target.value}))}
         />
       </Field>
+
+      {/* ── 하차 경유지 표시 ── */}
+      {(() => {
+        const _sp = (v) => { if (Array.isArray(v) && v.length > 0) return v; if (typeof v === "string" && v.trim().startsWith("[")) { try { const p = JSON.parse(v); if (Array.isArray(p)) return p; } catch {} } if (v && typeof v === "object" && !Array.isArray(v)) { const ks = Object.keys(v); if (ks.length > 0 && ks.every(k => /^\d+$/.test(k))) return ks.sort((a,b)=>Number(a)-Number(b)).map(k=>v[k]); if (v.업체명) return [v]; } return []; };
+        const stops = _sp(copyTarget?.경유하차목록 || copyTarget?.경유지_하차).filter(s => s && (s.업체명?.trim() || s.주소?.trim()));
+        if (!stops.length) return null;
+        return (
+          <div className="mt-1 flex items-center gap-2">
+            <span className="text-[12px] text-gray-500 font-medium">하차경유지</span>
+            <StopBadge count={stops.length} list={stops} type="drop" />
+          </div>
+        );
+      })()}
 
     </div>
 
