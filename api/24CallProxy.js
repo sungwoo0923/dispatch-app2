@@ -16,6 +16,6 @@ export async function sendOrderTo24Proxy(row) {
     }
   } catch (error) {
     console.error("🚨 24시 Proxy 오류:", error);
-    return { success: false, error };
+    return { success: false, error: error?.message || String(error) };
   }
 }

@@ -5528,6 +5528,13 @@ if (_quickMatches.length > 0) {
 };
     // ------------------ 오더복사 ------------------
 
+// 📡 24시콜 미리보기 팝업
+const [send24PreviewOpen, setSend24PreviewOpen] = React.useState(false);
+const [send24Payload, setSend24Payload] = React.useState(null);
+const [send24Data, setSend24Data] = React.useState(null);
+const [send24Sending, setSend24Sending] = React.useState(false);
+const [send24Result, setSend24Result] = React.useState(null);
+
 // 🔎 오더복사용 상태
 const [copyOpen, setCopyOpen] = React.useState(false);
 const [copyQ, setCopyQ] = React.useState("");
@@ -8149,40 +8156,48 @@ className={`
     </button>
     <button
       type="button"
-      onClick={async () => {
-        const { 거래처명, 상차지명, 하차지명, 상차일, 상차시간, 하차일, 하차시간 } = form;
+      onClick={() => {
+        const { 거래처명, 상차지명, 하차지명, 상차일, 하차일 } = form;
         if (!거래처명 || !상차지명 || !하차지명) return showAlert("거래처/상차지명/하차지명을 입력해주세요.");
         if (!상차일 || !하차일) return showAlert("상차일/하차일은 반드시 필요합니다.");
-       const res = await sendOrderTo24(form);
-
-const prevLogs = Array.isArray(form["24시전송로그"]) ? form["24시전송로그"] : [];
-const errMsg = res?.resultMsg || res?.error || res?.raw || "알 수 없는 오류";
-const newLog = {
-  at: serverTimestamp(),
-  success: !!res?.success,
-  resultCode: res?.resultCode || "",
-  resultMsg: errMsg,
-};
-
-if (res?.success) {
-  await patchDispatch(form._id, {
-    "24시전송여부": true,
-    "24시전송일시": serverTimestamp(),
-    "24시전송결과코드": res.resultCode || "0000",
-    "24시전송메시지": res.resultMsg || "성공",
-    "24시전송로그": [...prevLogs, newLog],
-    "24시오더번호": res.ordNo || "",
-    배차상태: "24시전송완료",
-  });
-  showAlert(`📡 24시콜 전송 완료!\n\n오더번호: ${res.ordNo || "-"}\n메시지: ${res.resultMsg || "성공"}`);
-} else {
-  await patchDispatch(form._id, {
-    "24시전송여부": false,
-    "24시전송로그": [...prevLogs, newLog],
-  });
-  showAlert(`⛔ 24시콜 전송 실패!\n\n코드: ${res?.resultCode || "-"}\n사유: ${errMsg}`);
-}
-
+        // 주소 분리 헬퍼
+        const splitAddr = (addr = "") => {
+          const p = addr.trim().split(/\s+/);
+          return { wide: p[0]||"", sgg: p[1]||"", dong: p[2]||"", detail: p.slice(3).join(" ")||addr };
+        };
+        const up   = splitAddr(form.상차지주소 || "");
+        const down = splitAddr(form.하차지주소 || "");
+        const fare = Number(form.청구운임 || 0);
+        const fee  = Math.max(fare - Number(form.기사운임 || 0), 0);
+        const tonNum = Number((String(form.차량톤수 || "")).replace(/[^0-9.]/g, ""));
+        const mapped = {
+          startWide: up.wide, startSgg: up.sgg, startDong: up.dong, startDetail: up.detail,
+          endWide: down.wide, endSgg: down.sgg, endDong: down.dong, endDetail: down.detail,
+          cargoTon: String(form.차량톤수 || ""),
+          truckType: form.차량종류 || "",
+          frgton: String(tonNum * 1.1 || 0),
+          cargoDsc: form.화물내용 || "",
+          startPlanDt: (form.상차일 || "").replace(/-/g, ""),
+          endPlanDt: (form.하차일 || form.상차일 || "").replace(/-/g, ""),
+          startLoad: form.상차방법 || "수작업",
+          endLoad: form.하차방법 || "수작업",
+          farePaytype: "인수증",
+          fare: String(fare),
+          fee: String(fee),
+          firstType: "01",
+          firstShipperNm: form.거래처명 || "",
+          firstShipperInfo: (form.거래처전화 || "").replace(/\D/g, ""),
+          firstShipperBizNo: form.거래처사업자번호 || "",
+          taxbillType: "Y",
+          endAreaPhone: (form.하차지연락처 || form.하차지담당자번호 || "").replace(/\D/g, ""),
+          ddID: form.작성자 || "dispatch",
+          _id: form._id,
+        };
+        setSend24Payload(mapped);
+        setSend24Data({ ...mapped });
+        setSend24Result(null);
+        setSend24Sending(false);
+        setSend24PreviewOpen(true);
       }}
       className="
         px-5 py-2.5 rounded-xl text-[13px] font-bold
@@ -8199,6 +8214,225 @@ if (res?.success) {
         {/* ------------------------------  
       🔵 오더복사 팝업 (완성본)
 -------------------------------- */}
+        {/* ═══════════════════════════════════════════════
+              📡 24시콜 전송 미리보기 팝업
+        ═══════════════════════════════════════════════ */}
+        {send24PreviewOpen && send24Data && (
+          <div
+            className="fixed inset-0 bg-black/60 flex items-center justify-center z-[9999]"
+            onKeyDown={e => { if (e.key === "Escape" && !send24Sending) { setSend24PreviewOpen(false); } }}
+            tabIndex={-1}
+            ref={el => { if (el) el.focus(); }}
+          >
+            <div className="bg-white rounded-2xl shadow-2xl w-[860px] max-h-[90vh] flex flex-col overflow-hidden border border-gray-200">
+              {/* 헤더 */}
+              <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="w-1.5 h-6 bg-blue-400 rounded-full" />
+                  <div>
+                    <h2 className="text-[16px] font-bold text-white">📡 24시콜 전송</h2>
+                    <p className="text-[11px] text-blue-200 mt-0.5">전송 전 내용을 확인하고 필요 시 수정하세요</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => { setSend24PreviewOpen(false); setSend24Result(null); }}
+                  disabled={send24Sending}
+                  className="text-white/60 hover:text-white text-xl font-bold leading-none disabled:opacity-40"
+                >✕</button>
+              </div>
+
+              {/* 바디 */}
+              <div className="overflow-y-auto flex-1 p-6 space-y-5">
+                {/* 상차지 */}
+                <div>
+                  <div className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">📦 상차지</div>
+                  <div className="grid grid-cols-4 gap-3">
+                    {[["시도","startWide"],["시군구","startSgg"],["읍면동","startDong"],["상세주소","startDetail"],
+                      ["상차예정일 (YYYYMMDD)","startPlanDt"]].map(([lbl,key]) => (
+                      <div key={key} className="flex flex-col gap-0.5">
+                        <span className="text-[10px] text-gray-500 font-medium">{lbl}</span>
+                        <input className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                          value={send24Data[key] ?? ""} disabled={send24Sending}
+                          onChange={e => setSend24Data(d => ({ ...d, [key]: e.target.value }))} />
+                      </div>
+                    ))}
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-[10px] text-gray-500 font-medium">상차방법</span>
+                      <select className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                        value={send24Data.startLoad ?? ""} disabled={send24Sending}
+                        onChange={e => setSend24Data(d => ({ ...d, startLoad: e.target.value }))}>
+                        {["수작업","지게차","호이스트","크레인","기타"].map(v => <option key={v} value={v}>{v}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 하차지 */}
+                <div>
+                  <div className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">📍 하차지</div>
+                  <div className="grid grid-cols-4 gap-3">
+                    {[["시도","endWide"],["시군구","endSgg"],["읍면동","endDong"],["상세주소","endDetail"],
+                      ["하차예정일 (YYYYMMDD)","endPlanDt"],["하차지연락처","endAreaPhone"]].map(([lbl,key]) => (
+                      <div key={key} className="flex flex-col gap-0.5">
+                        <span className="text-[10px] text-gray-500 font-medium">{lbl}</span>
+                        <input className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                          value={send24Data[key] ?? ""} disabled={send24Sending}
+                          onChange={e => setSend24Data(d => ({ ...d, [key]: e.target.value }))} />
+                      </div>
+                    ))}
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-[10px] text-gray-500 font-medium">하차방법</span>
+                      <select className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                        value={send24Data.endLoad ?? ""} disabled={send24Sending}
+                        onChange={e => setSend24Data(d => ({ ...d, endLoad: e.target.value }))}>
+                        {["수작업","지게차","호이스트","크레인","기타"].map(v => <option key={v} value={v}>{v}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 화물/차량 */}
+                <div>
+                  <div className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">🚛 화물 / 차량</div>
+                  <div className="grid grid-cols-4 gap-3">
+                    {[["차량톤수","cargoTon"],["차량종류","truckType"],["화물중량(t)","frgton"],["화물내용","cargoDsc"]].map(([lbl,key]) => (
+                      <div key={key} className="flex flex-col gap-0.5">
+                        <span className="text-[10px] text-gray-500 font-medium">{lbl}</span>
+                        <input className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                          value={send24Data[key] ?? ""} disabled={send24Sending}
+                          onChange={e => setSend24Data(d => ({ ...d, [key]: e.target.value }))} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 운임 */}
+                <div>
+                  <div className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">💰 운임</div>
+                  <div className="grid grid-cols-4 gap-3">
+                    {[["청구운임 (fare)","fare"],["기사운임 (fee)","fee"]].map(([lbl,key]) => (
+                      <div key={key} className="flex flex-col gap-0.5">
+                        <span className="text-[10px] text-gray-500 font-medium">{lbl}</span>
+                        <input className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                          value={send24Data[key] ?? ""} disabled={send24Sending}
+                          onChange={e => setSend24Data(d => ({ ...d, [key]: e.target.value }))} />
+                      </div>
+                    ))}
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-[10px] text-gray-500 font-medium">결제방식</span>
+                      <select className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                        value={send24Data.farePaytype ?? ""} disabled={send24Sending}
+                        onChange={e => setSend24Data(d => ({ ...d, farePaytype: e.target.value }))}>
+                        {["인수증","선불","착불","카드"].map(v => <option key={v} value={v}>{v}</option>)}
+                      </select>
+                    </div>
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-[10px] text-gray-500 font-medium">세금계산서</span>
+                      <select className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                        value={send24Data.taxbillType ?? ""} disabled={send24Sending}
+                        onChange={e => setSend24Data(d => ({ ...d, taxbillType: e.target.value }))}>
+                        <option value="Y">Y - 발행</option>
+                        <option value="N">N - 미발행</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 화주 */}
+                <div>
+                  <div className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">🏢 화주 정보</div>
+                  <div className="grid grid-cols-4 gap-3">
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-[10px] text-gray-500 font-medium">화주유형</span>
+                      <select className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                        value={send24Data.firstType ?? ""} disabled={send24Sending}
+                        onChange={e => setSend24Data(d => ({ ...d, firstType: e.target.value }))}>
+                        <option value="01">01 - 직접화주</option>
+                        <option value="02">02 - 주선사</option>
+                      </select>
+                    </div>
+                    {[["화주명","firstShipperNm"],["화주연락처","firstShipperInfo"],["사업자번호","firstShipperBizNo"]].map(([lbl,key]) => (
+                      <div key={key} className="flex flex-col gap-0.5">
+                        <span className="text-[10px] text-gray-500 font-medium">{lbl}</span>
+                        <input className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                          value={send24Data[key] ?? ""} disabled={send24Sending}
+                          onChange={e => setSend24Data(d => ({ ...d, [key]: e.target.value }))} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 기타 */}
+                <div>
+                  <div className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">⚙️ 기타</div>
+                  <div className="grid grid-cols-4 gap-3">
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-[10px] text-gray-500 font-medium">작성자 ID (ddID)</span>
+                      <input className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                        value={send24Data.ddID ?? ""} disabled={send24Sending}
+                        onChange={e => setSend24Data(d => ({ ...d, ddID: e.target.value }))} />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 결과 */}
+                {send24Result && (
+                  <div className={`rounded-xl px-5 py-4 text-[13px] font-semibold border ${send24Result.ok ? "bg-green-50 border-green-200 text-green-800" : "bg-red-50 border-red-200 text-red-800"}`}>
+                    {send24Result.ok
+                      ? `✅ 전송 완료!  오더번호: ${send24Result.ordNo || "-"}  /  ${send24Result.msg}`
+                      : `❌ 전송 실패  코드: ${send24Result.code}  /  ${send24Result.msg}`}
+                  </div>
+                )}
+              </div>
+
+              {/* 하단 버튼 */}
+              <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3 shrink-0">
+                <button
+                  onClick={() => { setSend24PreviewOpen(false); setSend24Result(null); }}
+                  disabled={send24Sending}
+                  className="px-5 py-2.5 rounded-xl text-[13px] font-semibold border border-gray-300 text-gray-600 hover:bg-gray-50 transition disabled:opacity-40"
+                >취소</button>
+                <button
+                  disabled={send24Sending || send24Result?.ok}
+                  onClick={async () => {
+                    setSend24Sending(true);
+                    setSend24Result(null);
+                    try {
+                      const payload = { ...send24Data };
+                      const rowId = payload._id;
+                      delete payload._id;
+                      const res = await sendOrderTo24({ ...payload, _id: rowId });
+                      const prevLogs = Array.isArray(form["24시전송로그"]) ? form["24시전송로그"] : [];
+                      const errMsg = res?.resultMsg || (typeof res?.error === "string" ? res.error : res?.error?.message) || res?.raw || "알 수 없는 오류";
+                      const newLog = { at: serverTimestamp(), success: !!res?.success, resultCode: res?.resultCode || "", resultMsg: errMsg };
+                      if (res?.success) {
+                        await patchDispatch(form._id, {
+                          "24시전송여부": true, "24시전송일시": serverTimestamp(),
+                          "24시전송결과코드": res.resultCode || "0000",
+                          "24시전송메시지": res.resultMsg || "성공",
+                          "24시전송로그": [...prevLogs, newLog],
+                          "24시오더번호": res.ordNo || "", 배차상태: "24시전송완료",
+                        });
+                        setSend24Result({ ok: true, ordNo: res.ordNo, msg: res.resultMsg || "성공" });
+                      } else {
+                        await patchDispatch(form._id, { "24시전송여부": false, "24시전송로그": [...prevLogs, newLog] });
+                        setSend24Result({ ok: false, code: res?.resultCode || "-", msg: errMsg });
+                      }
+                    } catch(e) {
+                      setSend24Result({ ok: false, code: "-", msg: e.message });
+                    }
+                    setSend24Sending(false);
+                  }}
+                  className={`px-7 py-2.5 rounded-xl text-[13px] font-bold text-white transition
+                    ${send24Sending || send24Result?.ok ? "bg-gray-400 cursor-not-allowed" : "bg-gradient-to-r from-[#1B2B4B] to-[#2d4a7a] hover:from-[#243a60] hover:to-[#355890]"}`}
+                >
+                  {send24Sending ? "전송 중…" : send24Result?.ok ? "전송됨 ✓" : "📡 전송"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {copyOpen && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div className="bg-white w-[1140px] max-h-[90vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden">
