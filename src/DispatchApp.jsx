@@ -14450,7 +14450,7 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
 
   if (list.length === 0) return null;
   return (
-    <StopInlineBadge count={list.length} list={list} type="pickup" />
+    <StopInlineBadge count={list.length} list={list} type="pickup" onSave={(newList) => patchDispatch(r._id, { 경유상차목록: newList, 경유지_상차: newList, __col: r.__col })} placeRows={placeRows} timeOptions={timeOptions} />
   );
 })()}
 
@@ -14494,7 +14494,7 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
 
   if (list.length === 0) return null;
   return (
-    <StopInlineBadge count={list.length} list={list} type="drop" />
+    <StopInlineBadge count={list.length} list={list} type="drop" onSave={(newList) => patchDispatch(r._id, { 경유하차목록: newList, 경유지_하차: newList, __col: r.__col })} placeRows={placeRows} timeOptions={timeOptions} />
   );
 })()}
 
