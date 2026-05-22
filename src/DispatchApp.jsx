@@ -2026,6 +2026,7 @@ return (
             drivers={drivers}
             clients={clients}
             places={places}
+            placeRows={places}
             addDispatch={addDispatch}
             patchDispatch={patchDispatch}
             removeDispatch={removeDispatch}
@@ -18950,13 +18951,14 @@ function generateTimeOptions() {
 }
 function DispatchStatus({
   dispatchData = [],
-  focusOrderId, 
+  focusOrderId,
   clearFocusOrder,
   setDispatchData,
   drivers = [],
   clients = [],
   places = [],
   placeRows = [],
+  timeOptions = [],
   addDispatch,
   patchDispatch,
   removeDispatch,
