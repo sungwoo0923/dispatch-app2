@@ -98,7 +98,8 @@ function mapTo24Order(row) {
     firstShipperBizNo: row.firstShipperBizNo || row.거래처사업자번호 || "",
     taxbillType:       row.taxbillType       || "Y",
     endAreaPhone: row.endAreaPhone || (row.하차지연락처 || row.하차지담당자번호 || "").replace(/\D/g, ""),
-    ddID:         row.ddID || row.작성자 || "dispatch",
+    ddID:         row.ddID  || row.작성자 || "dispatch",
+    ddPwd:        row.ddPwd || process.env.CALL24_PWD || "",
   };
 }
 

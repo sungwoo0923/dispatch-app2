@@ -8170,6 +8170,9 @@ className={`
         const fare = Number(form.청구운임 || 0);
         const fee  = Math.max(fare - Number(form.기사운임 || 0), 0);
         const tonNum = Number((String(form.차량톤수 || "")).replace(/[^0-9.]/g, ""));
+        // 저장된 24시 계정 불러오기
+        const savedDdID  = localStorage.getItem("call24_ddID")  || "";
+        const savedDdPwd = localStorage.getItem("call24_ddPwd") || "";
         const mapped = {
           startWide: up.wide, startSgg: up.sgg, startDong: up.dong, startDetail: up.detail,
           endWide: down.wide, endSgg: down.sgg, endDong: down.dong, endDetail: down.detail,
@@ -8190,7 +8193,8 @@ className={`
           firstShipperBizNo: form.거래처사업자번호 || "",
           taxbillType: "Y",
           endAreaPhone: (form.하차지연락처 || form.하차지담당자번호 || "").replace(/\D/g, ""),
-          ddID: form.작성자 || "dispatch",
+          ddID:  form["24시아이디"]  || savedDdID  || form.작성자 || "dispatch",
+          ddPwd: form["24시비밀번호"] || savedDdPwd || "",
           _id: form._id,
         };
         setSend24Payload(mapped);
@@ -8365,10 +8369,16 @@ className={`
                   <div className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">기타</div>
                   <div className="grid grid-cols-4 gap-3">
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-[10px] text-gray-500 font-medium">24시콜 계정 ID (ddID)</span>
+                      <span className="text-[10px] text-gray-500 font-medium">24시콜 아이디 (ddID)</span>
                       <input className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
                         value={send24Data.ddID ?? ""} disabled={send24Sending}
                         onChange={e => { const v = e.target.value; setSend24Data(d => ({ ...d, ddID: v })); }} />
+                    </div>
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-[10px] text-gray-500 font-medium">24시콜 비밀번호 (ddPwd)</span>
+                      <input type="password" className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-blue-400"
+                        value={send24Data.ddPwd ?? ""} disabled={send24Sending}
+                        onChange={e => { const v = e.target.value; setSend24Data(d => ({ ...d, ddPwd: v })); }} />
                     </div>
                   </div>
                 </div>
@@ -8399,6 +8409,9 @@ className={`
                       const payload = { ...send24Data };
                       const rowId = payload._id;
                       delete payload._id;
+                      // 계정 정보 localStorage 저장 (다음 전송에 자동 채움)
+                      if (payload.ddID)  localStorage.setItem("call24_ddID",  payload.ddID);
+                      if (payload.ddPwd) localStorage.setItem("call24_ddPwd", payload.ddPwd);
                       const res = await sendOrderTo24({ ...payload, _id: rowId });
                       const prevLogs = Array.isArray(form["24시전송로그"]) ? form["24시전송로그"] : [];
                       const errMsg = res?.resultMsg || (typeof res?.error === "string" ? res.error : res?.error?.message) || res?.raw || "알 수 없는 오류";

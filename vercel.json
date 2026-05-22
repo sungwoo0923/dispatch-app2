@@ -4,7 +4,8 @@
       "maxDuration": 30
     },
     "api/send24.js": {
-      "maxDuration": 30
+      "maxDuration": 30,
+      "regions": ["icn1"]
     }
   },
   "routes": [
