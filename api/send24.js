@@ -1,19 +1,19 @@
-import CryptoJS from "crypto-js";
+import { createCipheriv } from "crypto";
 
-/* ─── 환경변수 (fallback: .env 기본값) ─── */
-const _AES_KEY = process.env.CALL24_AES_KEY || "946e5bf1c0a86333688d1d01561e06e3";
-const _AES_IV  = process.env.CALL24_AES_IV  || "4eff880a505c8136";
-const _API_KEY = process.env.CALL24_API_KEY || "946e5bf1c0a863332f1c2a6977b9f08e";
+/* ─── 환경변수 (Vercel 대시보드 미설정 시 fallback) ─── */
+const AES_KEY = process.env.CALL24_AES_KEY || "946e5bf1c0a86333688d1d01561e06e3";
+const AES_IV  = (process.env.CALL24_AES_IV  || "4eff880a505c8136").padEnd(32, "0");
+const API_KEY = process.env.CALL24_API_KEY  || "946e5bf1c0a863332f1c2a6977b9f08e";
+const BASE_URL = "https://api.15887924.com:18099";
 
-/* ─── AES 암호화 ─── */
+/* ─── AES-128-CBC 암호화 (native crypto, 외부 의존성 없음) ─── */
 function encryptAES(str) {
-  const key = CryptoJS.enc.Hex.parse(_AES_KEY);
-  const iv  = CryptoJS.enc.Hex.parse(_AES_IV);
-  return CryptoJS.AES.encrypt(str, key, {
-    iv,
-    padding: CryptoJS.pad.Pkcs7,
-    mode:    CryptoJS.mode.CBC,
-  }).toString();
+  const key    = Buffer.from(AES_KEY, "hex");
+  const iv     = Buffer.from(AES_IV,  "hex");
+  const cipher = createCipheriv("aes-128-cbc", key, iv);
+  let enc = cipher.update(str, "utf8", "base64");
+  enc += cipher.final("base64");
+  return enc;
 }
 
 /* ─── 주소 분리 ─── */
@@ -31,40 +31,41 @@ function splitAddr(addr = "") {
 function mapTo24Order(row) {
   const up   = splitAddr(row.상차지주소 || "");
   const down = splitAddr(row.하차지주소 || "");
-  const fare      = Number(row.청구운임 || 0);
-  const driverFee = Number(row.기사운임 || 0);
+  const fare      = Number(row.fare      ?? row.청구운임 ?? 0);
+  const fee       = Number(row.fee       ?? Math.max(fare - Number(row.기사운임 ?? 0), 0));
+  const frgton    = row.frgton || String(
+    Number((String(row.차량톤수 || "")).replace(/[^0-9.]/g, "")) * 1.1 || 0
+  );
 
   return {
-    startWide:   up.wide,
-    startSgg:    up.sgg,
-    startDong:   up.dong,
-    startDetail: up.detail,
-    endWide:   down.wide,
-    endSgg:    down.sgg,
-    endDong:   down.dong,
-    endDetail: down.detail,
-    cargoTon:  String(row.차량톤수 || ""),
-    truckType: row.차량종류 || "",
-    frgton:    String(Number((row.차량톤수 || "").toString().replace(/[^0-9.]/g, "")) * 1.1 || 0),
-    cargoDsc:  row.화물내용 || "",
-    startPlanDt: (row.상차일 || "").replace(/-/g, ""),
-    endPlanDt:   (row.하차일 || row.상차일 || "").replace(/-/g, ""),
-    startLoad: row.상차방법 || "수작업",
-    endLoad:   row.하차방법 || "수작업",
-    farePaytype: "인수증",
-    fare: String(fare),
-    fee:  String(Math.max(fare - driverFee, 0)),
-    firstType:         "01",
-    firstShipperNm:    row.거래처명 || "",
-    firstShipperInfo:  (row.거래처전화 || "").replace(/\D/g, ""),
-    firstShipperBizNo: row.거래처사업자번호 || "",
-    taxbillType:       "Y",
-    endAreaPhone: (row.하차지연락처 || "").replace(/\D/g, ""),
-    ddID:         row.작성자 || "dispatch",
+    startWide:   row.startWide   || up.wide,
+    startSgg:    row.startSgg    || up.sgg,
+    startDong:   row.startDong   || up.dong,
+    startDetail: row.startDetail || up.detail,
+    endWide:     row.endWide     || down.wide,
+    endSgg:      row.endSgg      || down.sgg,
+    endDong:     row.endDong     || down.dong,
+    endDetail:   row.endDetail   || down.detail,
+    cargoTon:    String(row.cargoTon || row.차량톤수 || ""),
+    truckType:   row.truckType   || row.차량종류 || "",
+    frgton:      String(frgton),
+    cargoDsc:    row.cargoDsc    || row.화물내용 || "",
+    startPlanDt: row.startPlanDt || (row.상차일 || "").replace(/-/g, ""),
+    endPlanDt:   row.endPlanDt   || (row.하차일 || row.상차일 || "").replace(/-/g, ""),
+    startLoad:   row.startLoad   || row.상차방법 || "수작업",
+    endLoad:     row.endLoad     || row.하차방법 || "수작업",
+    farePaytype: row.farePaytype || "인수증",
+    fare:        String(fare),
+    fee:         String(fee),
+    firstType:         row.firstType         || "01",
+    firstShipperNm:    row.firstShipperNm    || row.거래처명 || "",
+    firstShipperInfo:  row.firstShipperInfo  || (row.거래처전화 || "").replace(/\D/g, ""),
+    firstShipperBizNo: row.firstShipperBizNo || row.거래처사업자번호 || "",
+    taxbillType:       row.taxbillType       || "Y",
+    endAreaPhone: row.endAreaPhone || (row.하차지연락처 || row.하차지담당자번호 || "").replace(/\D/g, ""),
+    ddID:         row.ddID || row.작성자 || "dispatch",
   };
 }
-
-const BASE_URL = "https://api.15887924.com:18099";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -72,11 +73,10 @@ export default async function handler(req, res) {
   }
 
   try {
-    const row = req.body;
-    console.log("📤 24시 전송 요청:", JSON.stringify({ 거래처명: row.거래처명, 상차일: row.상차일 }));
+    const row     = req.body;
+    const payload = mapTo24Order(row);
 
-    const payload   = mapTo24Order(row);
-    console.log("📋 매핑된 페이로드:", JSON.stringify(payload));
+    console.log("📤 24시 전송:", JSON.stringify({ 거래처명: row.거래처명, startPlanDt: payload.startPlanDt }));
 
     const encrypted = encryptAES(JSON.stringify(payload));
 
@@ -84,46 +84,34 @@ export default async function handler(req, res) {
       method: "POST",
       headers: {
         "Content-Type":   "application/json",
-        "call24-api-key": _API_KEY,
+        "call24-api-key": API_KEY,
       },
       body: JSON.stringify({
         data:    encrypted,
-        userVal: row._id || "",
+        userVal: row._id || row.userVal || "",
       }),
     });
 
     const text = await apiRes.text();
-    console.log("📡 24시 응답 (raw):", text);
+    console.log("📡 24시 응답:", text);
 
     let result;
-    try {
-      result = JSON.parse(text);
-    } catch {
-      return res.status(200).json({ success: false, raw: text, httpStatus: apiRes.status });
-    }
-
-    console.log("📡 24시 응답 (parsed):", result);
+    try { result = JSON.parse(text); }
+    catch { return res.status(200).json({ success: false, raw: text, httpStatus: apiRes.status }); }
 
     if (result?.ordNo) {
-      return res.status(200).json({
-        success:   true,
-        ordNo:     result.ordNo,
-        resultMsg: result.resultMsg || "성공",
-      });
+      return res.status(200).json({ success: true, ordNo: result.ordNo, resultMsg: result.resultMsg || "성공" });
     }
 
     return res.status(200).json({
       success:    false,
       resultCode: result?.resultCode || result?.code || "",
-      resultMsg:  result?.resultMsg || result?.message || JSON.stringify(result),
+      resultMsg:  result?.resultMsg  || result?.message || JSON.stringify(result),
       response:   result,
     });
 
   } catch (err) {
-    console.error("🚨 24시 Proxy 오류:", err.message, err.stack);
-    return res.status(500).json({
-      success: false,
-      error:   err.message,
-    });
+    console.error("🚨 send24 오류:", err.message);
+    return res.status(500).json({ success: false, error: err.message });
   }
 }
