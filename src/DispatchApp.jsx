@@ -10580,7 +10580,7 @@ function StopBadge({ count, list, type = "pickup", onSave }) {
         onClick={openBadge}
         className="px-1.5 py-0.5 text-[10px] font-semibold rounded border border-[#1B2B4B]/25 bg-[#1B2B4B]/10 text-[#1B2B4B] whitespace-nowrap hover:bg-[#1B2B4B]/20 transition"
       >
-        경유 +{validList.length}
+        경유+{validList.length}
       </button>
 
       {open && (
@@ -29960,9 +29960,23 @@ const [arReportClientQ, setArReportClientQ] = useState("");
     const map = new Map();
     const nowMM = new Date().getMonth() + 1;
     const currentYYYYMM = `${THIS_YEAR}-${String(nowMM).padStart(2,"0")}`;
-    // ★ 현재월 미만(과거)만 미수금 계산
-    const allMonths = Array.from({length:12},(_,i)=>`${THIS_YEAR}-${String(i+1).padStart(2,"0")}`)
-      .filter(ym => ym < currentYYYYMM);
+
+    // 일괄정산 모달에서 선택한 기간으로 월 목록 생성
+    const allMonths = [];
+    const yFrom = parseInt(batchFromYear, 10);
+    const yTo   = parseInt(batchToYear, 10);
+    for (let y = yFrom; y <= yTo; y++) {
+      const mStart = (y === yFrom) ? parseInt(batchFromMM, 10) : 1;
+      const mEnd   = (y === yTo)   ? parseInt(batchToMM, 10) : 12;
+      for (let m = mStart; m <= mEnd; m++) {
+        const ym = `${y}-${String(m).padStart(2, "0")}`;
+        // 현재월 미만(과거)만 미수금 계산
+        if (ym < currentYYYYMM) {
+          allMonths.push(ym);
+        }
+      }
+    }
+
     clientOptions8.forEach(name => {
       const count = allMonths.filter(ym => {
         const rows2 = (dispatchData||[]).filter(r=>
@@ -29974,7 +29988,7 @@ const [arReportClientQ, setArReportClientQ] = useState("");
       map.set(name, count);
     });
     return map;
-  }, [dispatchData, clientOptions8, THIS_YEAR]);
+  }, [dispatchData, clientOptions8, THIS_YEAR, batchFromYear, batchFromMM, batchToYear, batchToMM]);
 
   // 미수금 있는 업체만
   const batchEligibleClients = useMemo(() =>
