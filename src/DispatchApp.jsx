@@ -8121,45 +8121,32 @@ className={`
         if (!상차일 || !하차일) return showAlert("상차일/하차일은 반드시 필요합니다.");
        const res = await sendOrderTo24(form);
 
-// 🔹 기존 로그 불러오기
-const prevLogs = Array.isArray(form["24시전송로그"])
-  ? form["24시전송로그"]
-  : [];
-
+const prevLogs = Array.isArray(form["24시전송로그"]) ? form["24시전송로그"] : [];
+const errMsg = res?.resultMsg || res?.error || res?.raw || "알 수 없는 오류";
 const newLog = {
   at: serverTimestamp(),
   success: !!res?.success,
   resultCode: res?.resultCode || "",
-  resultMsg: res?.resultMsg || res?.message || "",
+  resultMsg: errMsg,
 };
 
 if (res?.success) {
-  // ✅ 성공
   await patchDispatch(form._id, {
     "24시전송여부": true,
     "24시전송일시": serverTimestamp(),
     "24시전송결과코드": res.resultCode || "0000",
     "24시전송메시지": res.resultMsg || "성공",
     "24시전송로그": [...prevLogs, newLog],
+    "24시오더번호": res.ordNo || "",
     배차상태: "24시전송완료",
   });
-
-showAlert(
-  `📡 24시콜 전송 완료!\n\n` +
-  `전송건수: 1건\n실패건수: 0건\n` +
-  `메시지: ${res.resultMsg || "성공"}`
-);
+  showAlert(`📡 24시콜 전송 완료!\n\n오더번호: ${res.ordNo || "-"}\n메시지: ${res.resultMsg || "성공"}`);
 } else {
-  // ❌ 실패
   await patchDispatch(form._id, {
     "24시전송여부": false,
     "24시전송로그": [...prevLogs, newLog],
   });
-
-  showAlert(
-    `⛔ 24시콜 전송 실패!\n\n` +
-    `사유: ${res?.resultMsg || "알 수 없는 오류"}`
-  );
+  showAlert(`⛔ 24시콜 전송 실패!\n\n코드: ${res?.resultCode || "-"}\n사유: ${errMsg}`);
 }
 
       }}
