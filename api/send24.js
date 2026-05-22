@@ -108,6 +108,14 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method Not Allowed" });
   }
 
+  // 실제 아웃바운드 IP 확인 (IP 등록 문제 진단용)
+  let outboundIp = "unknown";
+  try {
+    const ipRes = await httpsPost("https://api.ipify.org", "", { "Accept": "text/plain" });
+    outboundIp = ipRes.text().trim();
+  } catch (_) {}
+  console.log("send24 아웃바운드 IP:", outboundIp);
+
   try {
     const row     = req.body;
     const payload = mapTo24Order(row);
@@ -139,10 +147,11 @@ export default async function handler(req, res) {
       resultCode: result?.resultCode || result?.code || "",
       resultMsg:  result?.resultMsg  || result?.message || JSON.stringify(result),
       response:   result,
+      _serverIp:  outboundIp,
     });
 
   } catch (err) {
     console.error("send24 오류:", err.message);
-    return res.status(500).json({ success: false, error: err.message });
+    return res.status(500).json({ success: false, error: err.message, _serverIp: outboundIp });
   }
 }

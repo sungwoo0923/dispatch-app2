@@ -8388,7 +8388,16 @@ className={`
                   <div className={`rounded-xl px-5 py-4 text-[13px] font-semibold border ${send24Result.ok ? "bg-green-50 border-green-200 text-green-800" : "bg-red-50 border-red-200 text-red-800"}`}>
                     {send24Result.ok
                       ? `전송 완료  오더번호: ${send24Result.ordNo || "-"}  /  ${send24Result.msg}`
-                      : `전송 실패  코드: ${send24Result.code}  /  ${send24Result.msg}`}
+                      : <>
+                          {`전송 실패  코드: ${send24Result.code}  /  ${send24Result.msg}`}
+                          {send24Result.serverIp && (
+                            <div className="mt-1 text-[11px] font-normal opacity-80">
+                              서버 IP: <span className="font-bold">{send24Result.serverIp}</span>
+                              {" — 이 IP를 24시콜 마이페이지 허용 IP에 등록하세요"}
+                            </div>
+                          )}
+                        </>
+                    }
                   </div>
                 )}
               </div>
@@ -8427,7 +8436,7 @@ className={`
                         setSend24Result({ ok: true, ordNo: res.ordNo, msg: res.resultMsg || "성공" });
                       } else {
                         await patchDispatch(form._id, { "24시전송여부": false, "24시전송로그": [...prevLogs, newLog] });
-                        setSend24Result({ ok: false, code: res?.resultCode || "-", msg: errMsg });
+                        setSend24Result({ ok: false, code: res?.resultCode || "-", msg: errMsg, serverIp: res?._serverIp });
                       }
                     } catch(e) {
                       setSend24Result({ ok: false, code: "-", msg: e.message });
