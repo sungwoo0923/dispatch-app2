@@ -1,4 +1,3 @@
-import fetch from "node-fetch";
 import CryptoJS from "crypto-js";
 
 /* ─── AES 암호화 ─── */

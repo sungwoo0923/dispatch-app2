@@ -2580,6 +2580,7 @@ function renderTimeWithCond(time, cond) {
 const [confirmOpen, setConfirmOpen] = React.useState(false);
 const [stopPopupOpen, setStopPopupOpen] = React.useState(false);
 const [stopType, setStopType] = React.useState("");
+const [stopDeleteIdx, setStopDeleteIdx] = React.useState(null);
 const [activeStopIdx, setActiveStopIdx] = React.useState(null);
 const [stopList, setStopList] = React.useState([
   { 업체명:"", 주소:"", 담당자:"담당자", 담당자번호:"", 메모:"", 화물내용:"", 화물타입:"파레트", 톤수값:"", 톤수타입:"톤", 차량톤수:"", 상차시간:"", 하차시간:"", 방법:"" }
@@ -7228,9 +7229,22 @@ className={`
 <div
   className="fixed inset-0 z-[99999]"
   onKeyDown={(e) => {
-    // 🔥 팝업 안에서 Enter가 form submit으로 전파되는 것을 완전 차단
     if (e.key === "Enter") {
+      if (stopDeleteIdx !== null) {
+        e.preventDefault(); e.stopPropagation();
+        const next = stopList.filter((_, i) => i !== stopDeleteIdx);
+        setStopDeleteIdx(null);
+        if (next.length === 0) {
+          if (stopType === "pickup") onChange("경유상차목록", []);
+          else onChange("경유하차목록", []);
+          setStopPopupOpen(false);
+        } else { setStopList(next); }
+        return;
+      }
       e.stopPropagation();
+    }
+    if (e.key === "Escape" && stopDeleteIdx !== null) {
+      e.stopPropagation(); setStopDeleteIdx(null);
     }
   }}
 >
@@ -7554,22 +7568,12 @@ className={`
         <div className="text-right">
           <button
             type="button"
-            className="text-xs text-red-500"
-            onClick={() => {
-              const next = stopList.filter((_, i) => i !== idx);
-              if (next.length === 0) {
-                if (stopType === "pickup") onChange("경유상차목록", []);
-                else onChange("경유하차목록", []);
-                setStopPopupOpen(false);
-              } else {
-                setStopList(next);
-              }
-            }}
+            className="text-xs text-red-500 hover:text-red-700"
+            onClick={() => setStopDeleteIdx(idx)}
           >
             삭제
           </button>
         </div>
-        )}
 
       </div>
     ))}
@@ -7639,6 +7643,30 @@ className={`
     </div>
 
   </div>
+
+  {/* ── 경유지 삭제 확인 ── */}
+  {stopDeleteIdx !== null && (
+    <div className="fixed inset-0 z-[200000] flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/40" onClick={() => setStopDeleteIdx(null)} />
+      <div className="relative bg-white rounded-2xl shadow-2xl p-6 w-[280px] text-center space-y-5">
+        <p className="text-[15px] font-bold text-gray-800">경유지를 삭제하시겠습니까?</p>
+        <div className="flex gap-3">
+          <button type="button" className="flex-1 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-[14px] font-semibold text-gray-700 transition"
+            onClick={() => setStopDeleteIdx(null)}>아니오</button>
+          <button type="button" className="flex-1 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-white text-[14px] font-semibold transition" autoFocus
+            onClick={() => {
+              const next = stopList.filter((_, i) => i !== stopDeleteIdx);
+              setStopDeleteIdx(null);
+              if (next.length === 0) {
+                if (stopType === "pickup") onChange("경유상차목록", []);
+                else onChange("경유하차목록", []);
+                setStopPopupOpen(false);
+              } else { setStopList(next); }
+            }}>예</button>
+        </div>
+      </div>
+    </div>
+  )}
 </div>
 )}
 
@@ -10801,6 +10829,7 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
   const [placeOpts, setPlaceOpts] = React.useState([]);
   const [activeIdx, setActiveIdx] = React.useState(null);
   const [placeActive, setPlaceActive] = React.useState(0);
+  const [deleteIdx, setDeleteIdx] = React.useState(null);
 
   const emptyStop = () => ({
     업체명: "", 주소: "", 담당자: "", 담당자번호: "", 메모: "",
@@ -10867,7 +10896,20 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
   const inputCls = "w-full border border-gray-300 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B] bg-white";
 
   return (
-    <div className="fixed inset-0 z-[99999]" onKeyDown={e => { if (e.key === "Enter") e.stopPropagation(); }}>
+    <div className="fixed inset-0 z-[99999]" onKeyDown={e => {
+      if (e.key === "Enter") {
+        if (deleteIdx !== null) {
+          e.preventDefault(); e.stopPropagation();
+          const next = editList.filter((_,i) => i !== deleteIdx);
+          setDeleteIdx(null);
+          if (next.length === 0) { onSave([]); onClose(); }
+          else setEditList(next);
+          return;
+        }
+        e.stopPropagation();
+      }
+      if (e.key === "Escape" && deleteIdx !== null) { e.stopPropagation(); setDeleteIdx(null); }
+    }}>
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div className="absolute top-1/2 left-1/2 w-[600px] -translate-x-1/2 -translate-y-1/2 bg-white rounded-xl shadow-xl p-6 space-y-4 max-h-[85vh] overflow-y-auto">
 
@@ -11003,12 +11045,8 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
 
             {/* 삭제 */}
             <div className="text-right">
-              <button type="button" className="text-xs text-red-500"
-                onClick={()=>{
-                  const next=editList.filter((_,i)=>i!==idx);
-                  if(next.length===0){onSave([]);onClose();}
-                  else setEditList(next);
-                }}>삭제</button>
+              <button type="button" className="text-xs text-red-500 hover:text-red-700"
+                onClick={()=>setDeleteIdx(idx)}>삭제</button>
             </div>
           </div>
         ))}
@@ -11024,6 +11062,27 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
             <button type="button" className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded" onClick={handleSave}>저장</button>
           </div>
         </div>
+
+        {/* 삭제 확인 다이얼로그 */}
+        {deleteIdx !== null && (
+          <div className="fixed inset-0 z-[200000] flex items-center justify-center">
+            <div className="absolute inset-0 bg-black/40" onClick={() => setDeleteIdx(null)} />
+            <div className="relative bg-white rounded-2xl shadow-2xl p-6 w-[280px] text-center space-y-5">
+              <p className="text-[15px] font-bold text-gray-800">경유지를 삭제하시겠습니까?</p>
+              <div className="flex gap-3">
+                <button type="button" className="flex-1 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-[14px] font-semibold text-gray-700 transition"
+                  onClick={() => setDeleteIdx(null)}>아니오</button>
+                <button type="button" className="flex-1 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-white text-[14px] font-semibold transition" autoFocus
+                  onClick={() => {
+                    const next = editList.filter((_,i) => i !== deleteIdx);
+                    setDeleteIdx(null);
+                    if (next.length === 0) { onSave([]); onClose(); }
+                    else setEditList(next);
+                  }}>예</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
