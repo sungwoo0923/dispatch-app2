@@ -26293,6 +26293,371 @@ function NewOrderPopup({
 }
 
 // ===================== DispatchApp.jsx (PART 5/8 — END) =====================
+
+// ===================== 손익보고서 컴포넌트 =====================
+function ProfitLossReport({ dispatchData = [], fixedRows = [] }) {
+  const currentYear = new Date().getFullYear();
+  const [year, setYear] = React.useState(currentYear);
+  const [manualData, setManualData] = React.useState({});
+  const [saving, setSaving] = React.useState(false);
+  const [editingCell, setEditingCell] = React.useState(null); // { rowKey, month }
+
+  const toInt = (v) => parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
+
+  const MONTHS = ["01","02","03","04","05","06","07","08","09","10","11","12"];
+  const MONTH_LABELS = ["1월","2월","3월","4월","5월","6월","7월","8월","9월","10월","11월","12월"];
+
+  // Firestore 수동 데이터 로드
+  React.useEffect(() => {
+    async function load() {
+      try {
+        const snap = await getDoc(doc(db, "plManual", String(year)));
+        if (snap.exists()) {
+          setManualData(snap.data().rows || {});
+        } else {
+          setManualData({});
+        }
+      } catch (e) {
+        console.error("손익보고서 로드 오류:", e);
+      }
+    }
+    load();
+  }, [year]);
+
+  // 수동 데이터 저장
+  const saveManual = async (newData) => {
+    setSaving(true);
+    try {
+      await setDoc(doc(db, "plManual", String(year)), { rows: newData });
+    } catch (e) {
+      console.error("손익보고서 저장 오류:", e);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const updateCell = (rowKey, month, value) => {
+    const numVal = parseInt(String(value).replace(/[^\d-]/g, ""), 10) || 0;
+    const updated = {
+      ...manualData,
+      [rowKey]: { ...(manualData[rowKey] || {}), [month]: numVal },
+    };
+    setManualData(updated);
+    saveManual(updated);
+  };
+
+  // 배차 데이터에서 월별 집계
+  const dispatchRows = Array.isArray(dispatchData)
+    ? dispatchData.filter((r) => (r.배차상태 || "") === "배차완료")
+    : [];
+  const fixedMapped = (fixedRows || []).map((r) => ({
+    상차일: r.날짜,
+    청구운임: toInt(r.청구운임),
+    기사운임: toInt(r.기사운임),
+    배차방식: r.배차방식 || "",
+    차량종류: r.차량종류 || "",
+    배차상태: "배차완료",
+  }));
+  const allRows = [...dispatchRows.map((r) => ({ ...r, 청구운임: toInt(r.청구운임), 기사운임: toInt(r.기사운임) })), ...fixedMapped];
+
+  const getAutoMonth = React.useMemo(() => {
+    const result = {};
+    const addRow = (key, month, sale, cost) => {
+      if (!result[key]) result[key] = {};
+      if (!result[key][month]) result[key][month] = { sale: 0, cost: 0 };
+      result[key][month].sale += sale;
+      result[key][month].cost += cost;
+    };
+    allRows.forEach((r) => {
+      if (!r.상차일) return;
+      const rowYear = r.상차일.slice(0, 4);
+      if (rowYear !== String(year)) return;
+      const month = r.상차일.slice(5, 7);
+      const sale = r.청구운임 || 0;
+      const cost = r.기사운임 || 0;
+      const bm = r.배차방식 || "";
+      const ct = String(r.차량종류 || "");
+      if (bm === "24시" || bm === "24시콜") {
+        addRow("rev_24", month, sale, cost);
+      } else if (ct.includes("오토") || ct.includes("오토바이")) {
+        addRow("rev_auto", month, sale, cost);
+      } else {
+        addRow("rev_freight", month, sale, cost);
+      }
+    });
+    return result;
+  }, [allRows, year]);
+
+  const autoVal = (key, month, field = "sale") => {
+    return (getAutoMonth[key] && getAutoMonth[key][month] && getAutoMonth[key][month][field]) || 0;
+  };
+  const manVal = (key, month) => (manualData[key] && manualData[key][month]) || 0;
+
+  // 행별 월 합계
+  const rowMonthTotal = (key, isAuto = false, field = "sale") => {
+    return MONTHS.reduce((s, m) => s + (isAuto ? autoVal(key, m, field) : manVal(key, m)), 0);
+  };
+
+  // 월별 집계 함수들
+  const totalRevenue = (month) =>
+    autoVal("rev_freight", month) + autoVal("rev_24", month) + autoVal("rev_auto", month) + manVal("rev_etc", month);
+
+  const totalCost = (month) =>
+    autoVal("rev_freight", month, "cost") + autoVal("rev_24", month, "cost") + autoVal("rev_auto", month, "cost") + manVal("cost_labor", month);
+
+  const grossProfit = (month) => totalRevenue(month) - totalCost(month);
+
+  const sgaTotal = (month) =>
+    ["sga_rent","sga_util","sga_comm","sga_ins","sga_repair","sga_fuel",
+     "sga_adv","sga_welfare","sga_tax","sga_depr","sga_entertainment","sga_office","sga_misc"].reduce((s, k) => s + manVal(k, month), 0);
+
+  const opProfit = (month) => grossProfit(month) - sgaTotal(month);
+
+  const otherNet = (month) => manVal("other_income", month) - manVal("other_expense", month);
+
+  const netProfit = (month) => opProfit(month) + otherNet(month);
+
+  const won = (v) => {
+    if (v === 0) return "–";
+    return (v < 0 ? "-" : "") + Math.abs(Math.round(v)).toLocaleString();
+  };
+
+  const pct = (profit, revenue) => {
+    if (!revenue) return "–";
+    return (profit / revenue * 100).toFixed(1) + "%";
+  };
+
+  // 연간 합계
+  const yearTotal = (fn) => MONTHS.reduce((s, m) => s + fn(m), 0);
+
+  const cellClass = (v) => {
+    if (v === 0) return "text-gray-300";
+    return v > 0 ? "text-gray-800" : "text-rose-600";
+  };
+
+  const ManualCell = ({ rowKey, month }) => {
+    const isEditing = editingCell && editingCell.rowKey === rowKey && editingCell.month === month;
+    const val = manVal(rowKey, month);
+    if (isEditing) {
+      return (
+        <td className="px-1 py-0.5 text-right border-r border-gray-100">
+          <input
+            type="number"
+            defaultValue={val || ""}
+            className="w-full text-right text-[12px] border border-blue-400 rounded px-1 outline-none"
+            autoFocus
+            onBlur={(e) => {
+              updateCell(rowKey, month, e.target.value);
+              setEditingCell(null);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") { updateCell(rowKey, month, e.target.value); setEditingCell(null); }
+              if (e.key === "Escape") setEditingCell(null);
+            }}
+          />
+        </td>
+      );
+    }
+    return (
+      <td
+        className="px-1 py-0.5 text-right border-r border-gray-100 cursor-pointer hover:bg-blue-50 text-[12px] text-gray-700"
+        onClick={() => setEditingCell({ rowKey, month })}
+      >
+        {val ? val.toLocaleString() : ""}
+      </td>
+    );
+  };
+
+  const AutoCell = ({ rowKey, month, field = "sale" }) => {
+    const val = autoVal(rowKey, month, field);
+    return (
+      <td className={`px-1 py-0.5 text-right border-r border-gray-100 text-[12px] ${val ? "text-gray-700" : "text-gray-200"}`}>
+        {val ? val.toLocaleString() : ""}
+      </td>
+    );
+  };
+
+  const CalcCell = ({ value, highlight = false }) => (
+    <td className={`px-1 py-0.5 text-right border-r border-gray-100 text-[12px] font-semibold ${
+      highlight ? (value >= 0 ? "text-emerald-700" : "text-rose-600") : cellClass(value)
+    }`}>
+      {value !== 0 ? value.toLocaleString() : "–"}
+    </td>
+  );
+
+  const RateCell = ({ profit, revenue }) => (
+    <td className={`px-1 py-0.5 text-right border-r border-gray-100 text-[11px] font-medium ${
+      revenue ? (profit / revenue >= 0 ? "text-emerald-600" : "text-rose-500") : "text-gray-300"
+    }`}>
+      {pct(profit, revenue)}
+    </td>
+  );
+
+  const SectionHeader = ({ label, colSpan = 14 }) => (
+    <tr className="bg-[#1B2B4B]">
+      <td colSpan={colSpan} className="px-3 py-1.5 text-[12px] font-bold text-white tracking-wide">{label}</td>
+    </tr>
+  );
+
+  const SubHeader = ({ label, note = "" }) => (
+    <tr className="bg-gray-100 border-t border-gray-200">
+      <td className="px-3 py-1 text-[12px] font-semibold text-gray-700 whitespace-nowrap border-r border-gray-200 w-[140px]">
+        {label}
+        {note && <span className="ml-1 text-[10px] text-gray-400 font-normal">{note}</span>}
+      </td>
+      {MONTHS.map((m, i) => (
+        <td key={m} className="px-1 py-1 text-center text-[11px] text-gray-400 font-medium border-r border-gray-200 w-[72px]">
+          {MONTH_LABELS[i]}
+        </td>
+      ))}
+      <td className="px-1 py-1 text-center text-[11px] text-gray-500 font-bold w-[80px]">합계</td>
+    </tr>
+  );
+
+  const DataRow = ({ label, rowKey, isAuto = false, field = "sale", calcFn, isPct = false, isHighlight = false, indent = 0 }) => (
+    <tr className="border-t border-gray-100 hover:bg-gray-50">
+      <td className={`px-3 py-1 text-[12px] text-gray-600 whitespace-nowrap border-r border-gray-200 ${indent ? "pl-6" : ""}`}>
+        {label}
+      </td>
+      {MONTHS.map((m) => {
+        if (calcFn && isPct) return <RateCell key={m} profit={calcFn(m)} revenue={totalRevenue(m)} />;
+        if (calcFn) return <CalcCell key={m} value={calcFn(m)} highlight={isHighlight} />;
+        if (isAuto) return <AutoCell key={m} rowKey={rowKey} month={m} field={field} />;
+        return <ManualCell key={m} rowKey={rowKey} month={m} />;
+      })}
+      <td className="px-1 py-0.5 text-right text-[12px] font-semibold text-gray-800">
+        {calcFn && isPct
+          ? pct(yearTotal(calcFn), yearTotal(totalRevenue))
+          : calcFn
+            ? (yearTotal(calcFn) !== 0 ? yearTotal(calcFn).toLocaleString() : "–")
+            : isAuto
+              ? (rowMonthTotal(rowKey, true, field) || "–" === 0 ? "–" : rowMonthTotal(rowKey, true, field).toLocaleString() || "–")
+              : (rowMonthTotal(rowKey, false) !== 0 ? rowMonthTotal(rowKey, false).toLocaleString() : "–")
+        }
+      </td>
+    </tr>
+  );
+
+  const TotalRow = ({ label, calcFn, isHighlight = false, isPct = false, bold = true }) => (
+    <tr className="bg-gray-50 border-t-2 border-gray-300">
+      <td className={`px-3 py-1.5 text-[12px] border-r border-gray-200 ${bold ? "font-bold text-gray-900" : "font-semibold text-gray-700"}`}>
+        {label}
+      </td>
+      {MONTHS.map((m) => {
+        const val = calcFn(m);
+        if (isPct) return <RateCell key={m} profit={calcFn(m)} revenue={totalRevenue(m)} />;
+        return (
+          <td key={m} className={`px-1 py-1 text-right border-r border-gray-100 text-[12px] ${bold ? "font-bold" : "font-semibold"} ${
+            isHighlight ? (val >= 0 ? "text-emerald-700" : "text-rose-600") : cellClass(val)
+          }`}>
+            {val !== 0 ? val.toLocaleString() : "–"}
+          </td>
+        );
+      })}
+      <td className={`px-1 py-1 text-right text-[12px] ${bold ? "font-bold" : "font-semibold"} ${
+        isPct ? "" : isHighlight
+          ? (yearTotal(calcFn) >= 0 ? "text-emerald-700" : "text-rose-600")
+          : cellClass(yearTotal(calcFn))
+      }`}>
+        {isPct ? pct(yearTotal(calcFn), yearTotal(totalRevenue)) : (yearTotal(calcFn) !== 0 ? yearTotal(calcFn).toLocaleString() : "–")}
+      </td>
+    </tr>
+  );
+
+  const SGA_ITEMS = [
+    { key: "sga_rent",          label: "임차료" },
+    { key: "sga_util",          label: "공과금(전기/수도/가스)" },
+    { key: "sga_comm",          label: "통신비" },
+    { key: "sga_ins",           label: "보험료" },
+    { key: "sga_repair",        label: "수선유지비" },
+    { key: "sga_fuel",          label: "유류비" },
+    { key: "sga_adv",           label: "광고선전비" },
+    { key: "sga_welfare",       label: "복리후생비" },
+    { key: "sga_tax",           label: "세금과공과" },
+    { key: "sga_depr",          label: "감가상각비" },
+    { key: "sga_entertainment", label: "접대비" },
+    { key: "sga_office",        label: "사무용품비" },
+    { key: "sga_misc",          label: "기타 판관비" },
+  ];
+
+  return (
+    <div className="px-8 py-6">
+      {/* 헤더 */}
+      <div className="flex items-center justify-between mb-5">
+        <div>
+          <h2 className="text-[16px] font-bold text-[#1B2B4B]">손익보고서</h2>
+          <p className="text-[12px] text-gray-400 mt-0.5">자동 집계 항목 외 수동 입력 항목은 셀을 클릭하여 수정하세요</p>
+        </div>
+        <div className="flex items-center gap-3">
+          {saving && <span className="text-[12px] text-blue-500">저장 중...</span>}
+          <div className="flex items-center gap-1">
+            <button onClick={() => setYear(y => y - 1)} className="px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 text-[13px]">◀</button>
+            <span className="px-3 py-1 font-bold text-[14px] text-[#1B2B4B]">{year}년</span>
+            <button onClick={() => setYear(y => y + 1)} className="px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 text-[13px]">▶</button>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-x-auto">
+        <table className="min-w-full border-collapse text-[12px]">
+          <tbody>
+
+            {/* ── 매출 ── */}
+            <SectionHeader label="매출" />
+            <SubHeader label="구분" />
+            <DataRow label="화물주선 매출" rowKey="rev_freight" isAuto field="sale" indent={0} />
+            <DataRow label="24시콜 매출" rowKey="rev_24" isAuto field="sale" />
+            <DataRow label="오토바이 매출" rowKey="rev_auto" isAuto field="sale" />
+            <DataRow label="기타 매출" rowKey="rev_etc" />
+            <TotalRow label="매출액 합계" calcFn={totalRevenue} />
+
+            {/* ── 매출원가 ── */}
+            <SectionHeader label="매출원가" />
+            <SubHeader label="구분" />
+            <DataRow label="화물주선 운반비" rowKey="rev_freight" isAuto field="cost" />
+            <DataRow label="24시콜 운반비" rowKey="rev_24" isAuto field="cost" />
+            <DataRow label="오토바이 운반비" rowKey="rev_auto" isAuto field="cost" />
+            <DataRow label="인건비" rowKey="cost_labor" />
+            <TotalRow label="매출원가 합계" calcFn={totalCost} />
+
+            {/* ── 매출총이익 ── */}
+            <SectionHeader label="매출총이익" />
+            <TotalRow label="매출총이익" calcFn={grossProfit} isHighlight />
+            <TotalRow label="매출총이익률" calcFn={grossProfit} isPct />
+
+            {/* ── 판매관리비 ── */}
+            <SectionHeader label="판매관리비 (판관비)" />
+            <SubHeader label="구분" />
+            {SGA_ITEMS.map(({ key, label }) => (
+              <DataRow key={key} label={label} rowKey={key} />
+            ))}
+            <TotalRow label="판관비 합계" calcFn={sgaTotal} />
+
+            {/* ── 영업이익 ── */}
+            <SectionHeader label="영업이익" />
+            <TotalRow label="영업이익" calcFn={opProfit} isHighlight />
+            <TotalRow label="영업이익률" calcFn={opProfit} isPct />
+
+            {/* ── 영업외손익 ── */}
+            <SectionHeader label="영업외손익" />
+            <SubHeader label="구분" />
+            <DataRow label="영업외 수익" rowKey="other_income" />
+            <DataRow label="영업외 비용" rowKey="other_expense" />
+            <TotalRow label="영업외손익 합계" calcFn={otherNet} bold={false} />
+
+            {/* ── 당기순이익 ── */}
+            <SectionHeader label="당기순이익" />
+            <TotalRow label="당기순이익" calcFn={netProfit} isHighlight />
+            <TotalRow label="순이익률" calcFn={netProfit} isPct />
+
+          </tbody>
+        </table>
+      </div>
+      <p className="mt-3 text-[11px] text-gray-400">* 자동: 배차완료 기준 청구운임(매출) / 기사운임(운반비) 자동 집계 &nbsp;|&nbsp; 빈 셀 클릭 시 수동 입력 (Firestore 저장)</p>
+    </div>
+  );
+}
+
 // ===================== DispatchApp.jsx (PART 6/8 — Settlement Premium) — START =====================
 function Settlement({ dispatchData, fixedRows = [], clients = [], places = [] }) {
 
@@ -26670,6 +27035,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [] })
           {[
             { key: "overview", label: "매출 개요" },
             { key: "client_compare", label: "거래처 동향 분석" },
+            { key: "profit_loss", label: "손익보고서" },
           ].map(tab => (
             <button
               key={tab.key}
@@ -26707,6 +27073,13 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [] })
           places={places}
           fixedRows={fixedRows}
           clients={clients}
+        />
+      )}
+      {/* ================= 손익보고서 탭 ================= */}
+      {activeTab === "profit_loss" && (
+        <ProfitLossReport
+          dispatchData={dispatchData}
+          fixedRows={fixedRows}
         />
       )}
 {/* ================= 매출 개요 탭 ================= */}
