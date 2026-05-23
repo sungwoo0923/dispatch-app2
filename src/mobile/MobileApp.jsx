@@ -1707,6 +1707,7 @@ const title =
   : page === "status" ? "배차현황"
   : page === "unassigned" ? "미배차현황"
   : page === "handover" ? "인수인계"
+  : page === "myinfo" ? "내정보"
   : "상세보기";
 
   // ------------------------------------------------------------------
@@ -1901,7 +1902,7 @@ const title =
             setPage("list");
           }
         }
-    : page === "notice" || page === "schedule" || page === "unassigned" || page === "handover" || page === "ratecard"
+    : page === "notice" || page === "schedule" || page === "unassigned" || page === "handover" || page === "ratecard" || page === "myinfo"
       ? () => setPage("list")
       : page === "fare"
       ? () => setPage(prevPage || "list")
@@ -2032,6 +2033,11 @@ onGoSchedule={() => {
           onGoUnassigned={() => {
             setUnassignedTypeFilter("전체");
             setPage("unassigned");
+            setShowMenu(false);
+          }}
+
+          onGoMyInfo={() => {
+            setPage("myinfo");
             setShowMenu(false);
           }}
 
@@ -2713,6 +2719,15 @@ setOpenMemo={setOpenMemo}
             onBack={() => setPage("list")}
           />
         )}
+        {page === "myinfo" && (
+          <MobileMyInfo
+            currentUser={currentUser}
+            mobileUsers={mobileUsers}
+            loginTime={loginTime}
+            orders={orders}
+            onBack={() => setPage("list")}
+          />
+        )}
         {page === "unassigned" && (
   <MobileUnassignedList
     title="미배차 / 정보미전달"
@@ -3093,6 +3108,7 @@ function MobileSideMenu({
   hasNewSchedule,
   onDeleteAll,
   onGoHandover,
+  onGoMyInfo,
   setUiScale,
   uiScale,
   alarmEnabled,
@@ -3174,6 +3190,10 @@ function MobileSideMenu({
             <MenuItem label="전국운임 조회" onClick={onGoNationalFare} />
             <MenuItem label="단가표" onClick={onGoRateCard} />
             <MenuItem label="매출관리" onClick={onGoSales} />
+          </MenuSection>
+
+          <MenuSection title="내 계정">
+            <MenuItem label="내정보" onClick={onGoMyInfo} />
           </MenuSection>
 
         </div>
@@ -7653,6 +7673,157 @@ function RowLabelInput({ label, input, right }) {
 }
 
 // ======================================================================
+// 📌 지명 자동완성 (표준운임표 상/하차지명)
+// ======================================================================
+function MobilePlaceSuggest({ value, onChange, names = [], placeholder }) {
+  const [query, setQuery] = useState(value || "");
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => { setQuery(value || ""); }, [value]);
+
+  const filtered = useMemo(() => {
+    const q = (query || "").replace(/\s+/g, "").toLowerCase();
+    if (!q || q.length < 1) return [];
+    return names
+      .map(n => {
+        const nc = n.replace(/\s+/g, "").toLowerCase();
+        if (nc === q) return { name: n, score: 100 };
+        if (nc.startsWith(q)) return { name: n, score: 80 };
+        if (nc.includes(q)) return { name: n, score: 60 };
+        if (q.includes(nc.slice(0, 2))) return { name: n, score: 40 };
+        return null;
+      })
+      .filter(Boolean)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 10)
+      .map(x => x.name);
+  }, [query, names]);
+
+  return (
+    <div className="relative">
+      <input
+        className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B] bg-gray-50"
+        placeholder={placeholder}
+        value={query}
+        onChange={e => { setQuery(e.target.value); onChange(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+      />
+      {open && filtered.length > 0 && (
+        <div className="absolute z-50 left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-xl shadow-xl max-h-48 overflow-y-auto">
+          {filtered.map((n, i) => (
+            <div
+              key={i}
+              className="px-4 py-2.5 text-[13px] cursor-pointer hover:bg-blue-50 text-gray-700 border-b border-gray-50 last:border-0"
+              onMouseDown={() => { setQuery(n); onChange(n); setOpen(false); }}
+            >
+              {n}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ======================================================================
+// 📌 내정보 페이지
+// ======================================================================
+function MobileMyInfo({ currentUser, mobileUsers, loginTime, orders = [], onBack }) {
+  const me = mobileUsers?.find(u => u.id === currentUser?.uid);
+  const myName = me?.name || currentUser?.displayName || currentUser?.email?.split("@")[0] || "사용자";
+  const myEmail = currentUser?.email || "";
+  const myRole = me?.role || me?.직책 || "";
+  const myPhone = me?.phone || me?.전화번호 || "";
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const thisMonth = new Date().toISOString().slice(0, 7);
+
+  const myOrders = orders.filter(o => {
+    const author = o.작성자 || o.등록자 || "";
+    return author === myName || author === currentUser?.email;
+  });
+  const totalCount = myOrders.length;
+  const thisMonthCount = myOrders.filter(o => (o.상차일 || "").startsWith(thisMonth)).length;
+  const completedCount = myOrders.filter(o => o.배차상태 === "배차완료").length;
+  const todayCount = myOrders.filter(o => (o.상차일 || "") === todayStr).length;
+
+  const fmtTime = (date) => {
+    if (!date) return "-";
+    return date.toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+  };
+
+  const avatarLetter = myName.slice(0, 1).toUpperCase();
+
+  return (
+    <div className="px-4 py-5 space-y-4 pb-24">
+      {/* 프로필 카드 */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="bg-[#1B2B4B] px-5 py-6 flex items-center gap-4">
+          <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center text-white text-[22px] font-extrabold border-2 border-white/30">
+            {avatarLetter}
+          </div>
+          <div>
+            <div className="text-white text-[17px] font-extrabold tracking-tight">{myName}</div>
+            {myRole && <div className="text-white/60 text-[12px] mt-0.5">{myRole}</div>}
+            <div className="text-white/50 text-[11px] mt-1">{myEmail}</div>
+          </div>
+        </div>
+        <div className="px-5 py-4 space-y-2">
+          {myPhone && (
+            <div className="flex items-center justify-between py-1 border-b border-gray-50">
+              <span className="text-[12px] text-gray-400">연락처</span>
+              <span className="text-[13px] font-semibold text-gray-800">{myPhone}</span>
+            </div>
+          )}
+          <div className="flex items-center justify-between py-1 border-b border-gray-50">
+            <span className="text-[12px] text-gray-400">로그인 시간</span>
+            <span className="text-[13px] font-semibold text-gray-800">{fmtTime(loginTime)}</span>
+          </div>
+          <div className="flex items-center justify-between py-1">
+            <span className="text-[12px] text-gray-400">계정</span>
+            <span className="text-[12px] text-gray-500 font-mono">{currentUser?.uid?.slice(-8) || "-"}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* 활동 통계 */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+        <div className="text-[12px] font-bold text-gray-400 uppercase tracking-wider mb-3">내 활동 통계</div>
+        <div className="grid grid-cols-2 gap-3">
+          {[
+            { label: "오늘 등록", value: todayCount, color: "text-blue-600" },
+            { label: "이번 달", value: thisMonthCount, color: "text-indigo-600" },
+            { label: "배차완료", value: completedCount, color: "text-emerald-600" },
+            { label: "전체 등록", value: totalCount, color: "text-gray-700" },
+          ].map(({ label, value, color }) => (
+            <div key={label} className="bg-gray-50 rounded-xl p-3 text-center border border-gray-100">
+              <div className={`text-[22px] font-extrabold ${color}`}>{value}</div>
+              <div className="text-[11px] text-gray-400 mt-0.5">{label}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* 앱 정보 */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="text-[12px] font-bold text-gray-400 uppercase tracking-wider px-4 pt-4 pb-2">앱 정보</div>
+        {[
+          { label: "앱 이름", value: "(주)KP-Flow 모바일" },
+          { label: "버전", value: `v${typeof APP_VERSION !== "undefined" ? APP_VERSION : "–"}` },
+          { label: "플랫폼", value: navigator.userAgent.includes("Android") ? "Android" : navigator.userAgent.includes("iPhone") ? "iOS" : "Web" },
+        ].map(({ label, value }) => (
+          <div key={label} className="flex items-center justify-between px-4 py-3 border-t border-gray-50">
+            <span className="text-[12px] text-gray-400">{label}</span>
+            <span className="text-[12px] font-semibold text-gray-700">{value}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ======================================================================
 // 📌 모바일 전국운임 조회 (T-Map 도로거리 기반)
 // ======================================================================
 const MOBILE_TMAP_KEY = "rmzwkLwH9N4i9ayxDj9GR6l8hyFDaEk52ZQs4yer";
@@ -7743,12 +7914,14 @@ function MobileAddressSearch({ value, onChange, onSelect, placeholder }) {
       const [addrSearch, allPois] = await Promise.all([addrSearchP, allPoisP]);
 
       const rawResults = [];
-      const addrInfos = addrSearch?.searchAddressInfo?.addressInfo || [];
+      const addrRaw = addrSearch?.searchAddressInfo?.addressInfo;
+      const addrInfos = Array.isArray(addrRaw) ? addrRaw : (addrRaw ? [addrRaw] : []);
       for (const item of addrInfos) {
         const fullAddr = (item.fullAddress || item.fullAddressRoad || "").trim();
         if (!fullAddr) continue;
         rawResults.push({ address: fullAddr, specificity: 4, lat: parseFloat(item.lat || item.newLat || 0), lon: parseFloat(item.lon || item.newLon || 0) });
       }
+      const kwStem = normKw.trim().replace(/[동읍면리]$/, "");
       for (const p of allPois) {
         const upper = p.upperAddrName || "";
         const middle = p.middleAddrName || "";
@@ -7758,12 +7931,16 @@ function MobileAddressSearch({ value, onChange, onSelect, placeholder }) {
         let addrNorm = addr.replace(/\s+/g, "");
         for (const [f, t] of ADDR_NORM) addrNorm = addrNorm.split(f).join(t);
         const matches = kwWords.every(w => {
-          if (addrNorm.includes(w)) return true;
-          if (/[동읍면리]$/.test(w)) return addrNorm.includes(w.slice(0, -1));
-          return false;
+          const wStem = w.replace(/[동읍면리]$/, "");
+          return addrNorm.includes(w) || addrNorm.includes(wStem) || addrNorm.includes(kwStem);
         });
         if (!matches) continue;
         rawResults.push({ address: addr, specificity: low ? 3 : 2, lat: parseFloat(p.noorLat || p.frontLat || 0), lon: parseFloat(p.noorLon || p.frontLon || 0) });
+        // lowAddrName 없을 때 POI 이름에서 동/읍/면 추출 보완
+        if (!low) {
+          const dm = (p.name || "").match(/([가-힣\d]+(?:동|읍|면))/);
+          if (dm) rawResults.push({ address: [upper, middle, dm[1]].join(" "), specificity: 3, lat: parseFloat(p.noorLat || 0), lon: parseFloat(p.noorLon || 0) });
+        }
       }
 
       if (rawResults.length > 0) {
@@ -8040,6 +8217,15 @@ const [showAddressConfirmPopup, setShowAddressConfirmPopup] = useState(false);
       setDispatchData(arr);
     })();
   }, []);
+
+  const pickupNames = useMemo(() =>
+    [...new Set(dispatchData.map(r => r.상차지명).filter(Boolean))].sort(),
+    [dispatchData]
+  );
+  const dropNames = useMemo(() =>
+    [...new Set(dispatchData.map(r => r.하차지명).filter(Boolean))].sort(),
+    [dispatchData]
+  );
 
   // 🔥 preset 자동 입력
 useEffect(() => {
@@ -8586,13 +8772,11 @@ const fares = baseRows.map((r) =>
           <div className="grid grid-cols-2 gap-2">
             <div>
               <div className="text-[11px] font-semibold text-gray-500 mb-1">상차지명</div>
-              <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B] bg-gray-50"
-                placeholder="예: 인천 후레쉬2공장" value={pickup} onChange={e=>setPickup(e.target.value)} />
+              <MobilePlaceSuggest value={pickup} onChange={setPickup} names={pickupNames} placeholder="예: 인천 후레쉬2공장" />
             </div>
             <div>
               <div className="text-[11px] font-semibold text-gray-500 mb-1">하차지명</div>
-              <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B] bg-gray-50"
-                placeholder="예: 반찬단지" value={drop} onChange={e=>setDrop(e.target.value)} />
+              <MobilePlaceSuggest value={drop} onChange={setDrop} names={dropNames} placeholder="예: 반찬단지" />
             </div>
           </div>
           {/* 상/하차지주소 */}
