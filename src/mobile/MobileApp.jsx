@@ -3355,9 +3355,9 @@ function UploadLinkModal({ orders = [], onClose }) {
 
       if (dOrders.length > 1) lines.push(`[오더 ${i + 1}]`);
       if (dateStr) lines.push(`📅 ${dateStr}`);
-      if (load) lines.push(`📦 상차 : ${load}`);
-      if (unload) lines.push(`🏁 하차 : ${unload}`);
-      if (cargo) lines.push(`🚛 화물 : ${cargo}`);
+      if (load) lines.push(`상차 : ${load}`);
+      if (unload) lines.push(`하차 : ${unload}`);
+      if (cargo) lines.push(`화물 : ${cargo}`);
       if (dOrders.length > 1) lines.push("");
     });
 
