@@ -3323,74 +3323,133 @@ function MenuItem({ label, onClick, badge }) {
 // ======================================================================
 function UploadLinkModal({ orders = [], onClose }) {
   const baseUrl = window.location.origin;
-  const uploadUrl = `${baseUrl}/driver-upload`;
-  const msgBody = encodeURIComponent(`[인수증 업로드 안내]\n아래 링크에서 인수증을 업로드해 주세요.\n${uploadUrl}`);
+  const [previewDriver, setPreviewDriver] = useState(null);
 
-  // 중복 없는 기사 목록 (전화번호 기준)
+  // 기사별로 오더를 그룹핑 (전화번호 기준)
   const drivers = useMemo(() => {
-    const seen = new Set();
-    const list = [];
+    const map = new Map();
     orders.forEach(o => {
       const phone = (o.전화번호 || "").replace(/[^0-9]/g, "");
-      if (phone && !seen.has(phone)) {
-        seen.add(phone);
-        list.push({ name: o.기사명 || "기사", phone });
+      if (!phone) return;
+      if (!map.has(phone)) {
+        map.set(phone, { name: o.기사명 || "기사", phone, vehicle: o.차량번호 || "", orders: [] });
       }
+      map.get(phone).orders.push(o);
     });
-    return list;
+    return Array.from(map.values());
   }, [orders]);
+
+  // 기사별 개인화 메시지 생성
+  const buildMsg = (driver) => {
+    const { name, vehicle, orders: dOrders } = driver;
+    const lines = [];
+    lines.push("안녕하세요 돌캐 운송사입니다.\n");
+
+    dOrders.forEach((o, i) => {
+      const date = (o.상차일 || "").slice(0, 10);
+      const [y, m, d] = date.split("-");
+      const dateStr = y && m && d ? `${y}년 ${parseInt(m)}월 ${parseInt(d)}일` : date;
+      const load = [o.상차지명, o.상차지주소].filter(Boolean).join(" ");
+      const unload = [o.하차지명, o.하차지주소].filter(Boolean).join(" ");
+      const cargo = o.화물내용 || "";
+
+      if (dOrders.length > 1) lines.push(`[오더 ${i + 1}]`);
+      if (dateStr) lines.push(`📅 ${dateStr}`);
+      if (load) lines.push(`📦 상차 : ${load}`);
+      if (unload) lines.push(`🏁 하차 : ${unload}`);
+      if (cargo) lines.push(`🚛 화물 : ${cargo}`);
+      if (dOrders.length > 1) lines.push("");
+    });
+
+    lines.push("파렛전표 및 거래명세서, 타코기록지 등 관련 서류 업로드를 부탁드립니다.\n미 확인 시 운임 지연이 발생할 수 있습니다.\n");
+    lines.push("[인수증 업로드 안내]");
+    lines.push("아래 링크에서 서류를 업로드해 주세요.\n");
+    lines.push("📋 업로드 방법");
+    lines.push("① 아래 링크 클릭");
+    lines.push("② 날짜·차량번호·이름 확인");
+    lines.push("③ 오더 선택 후 사진 업로드");
+    lines.push("");
+
+    // 개인화 URL (날짜·차량번호·이름 자동입력)
+    const firstOrder = dOrders[0];
+    const params = new URLSearchParams();
+    if (firstOrder?.상차일) params.set("date", firstOrder.상차일.slice(0, 10));
+    if (vehicle) params.set("vehicle", vehicle.replace(/\s/g, ""));
+    if (name) params.set("name", name);
+    const uploadUrl = `${baseUrl}/driver-upload?${params.toString()}`;
+    lines.push(uploadUrl);
+
+    return lines.join("\n");
+  };
 
   const handleSendAll = () => {
     if (drivers.length === 0) return;
-    // Android: comma-separated multiple recipients
+    // Android: 쉼표로 여러 수신자 (iOS 미지원)
     const phones = drivers.map(d => d.phone).join(",");
-    window.location.href = `sms:${phones}?body=${msgBody}`;
+    // 전체 발송 시 첫 번째 기사 메시지 사용 (공통 부분 위주)
+    const msg = buildMsg(drivers[0]);
+    window.location.href = `sms:${phones}?body=${encodeURIComponent(msg)}`;
     onClose();
   };
 
+  const previewMsg = previewDriver ? buildMsg(previewDriver) : (drivers[0] ? buildMsg(drivers[0]) : "");
+
   return (
     <div className="fixed inset-0 z-[200] flex items-end justify-center bg-black/40">
-      <div className="w-full max-w-md bg-white rounded-t-2xl shadow-xl px-4 pt-5 pb-8">
+      <div className="w-full max-w-md bg-white rounded-t-2xl shadow-xl px-4 pt-5 pb-8 max-h-[90vh] flex flex-col">
         {/* 헤더 */}
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-3 flex-shrink-0">
           <span className="text-[15px] font-bold text-gray-800">업로드링크 발송</span>
           <button onClick={onClose} className="text-gray-400 text-xl leading-none">&times;</button>
         </div>
 
+        {/* iOS 안내 */}
+        <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mb-3 flex-shrink-0">
+          <p className="text-[11px] text-amber-700 font-semibold">
+            💡 아이폰은 개별 발송을 이용해 주세요 (iOS 다중발송 미지원)
+          </p>
+        </div>
+
         {/* 메시지 미리보기 */}
-        <div className="bg-gray-50 rounded-xl p-3 mb-4 text-[12px] text-gray-600 whitespace-pre-wrap border border-gray-200">
-          {`[인수증 업로드 안내]\n아래 링크에서 인수증을 업로드해 주세요.\n${uploadUrl}`}
+        <div className="bg-gray-50 rounded-xl p-3 mb-3 text-[11px] text-gray-600 whitespace-pre-wrap border border-gray-200 overflow-y-auto flex-shrink-0" style={{ maxHeight: 160 }}>
+          {previewMsg}
         </div>
 
         {/* 기사 목록 */}
         {drivers.length === 0 ? (
           <p className="text-[13px] text-gray-400 text-center py-4">전화번호가 등록된 기사가 없습니다.</p>
         ) : (
-          <div className="space-y-2 mb-4 max-h-48 overflow-y-auto">
+          <div className="space-y-2 mb-4 overflow-y-auto flex-grow">
             {drivers.map(d => (
-              <div key={d.phone} className="flex items-center justify-between bg-gray-50 rounded-xl px-3 py-2">
+              <div
+                key={d.phone}
+                className={`flex items-center justify-between rounded-xl px-3 py-2 cursor-pointer transition ${previewDriver?.phone === d.phone ? "bg-indigo-50 border border-indigo-200" : "bg-gray-50 border border-transparent"}`}
+                onClick={() => setPreviewDriver(previewDriver?.phone === d.phone ? null : d)}
+              >
                 <div>
                   <span className="text-[13px] font-semibold text-gray-800">{d.name}</span>
-                  <span className="ml-2 text-[12px] text-gray-500">{d.phone}</span>
+                  <span className="ml-2 text-[11px] text-gray-500">{d.phone}</span>
+                  <span className="ml-1 text-[11px] text-gray-400">{d.orders.length}건</span>
                 </div>
                 <a
-                  href={`sms:${d.phone}?body=${msgBody}`}
-                  className="text-[12px] text-indigo-600 font-semibold border border-indigo-200 rounded-lg px-2 py-1"
+                  href={`sms:${d.phone}?body=${encodeURIComponent(buildMsg(d))}`}
+                  onClick={e => e.stopPropagation()}
+                  className="text-[12px] text-indigo-600 font-semibold border border-indigo-200 rounded-lg px-2 py-1 bg-white"
                 >
-                  문자 보내기
+                  문자
                 </a>
               </div>
             ))}
           </div>
         )}
 
-        {/* 전체 발송 버튼 */}
+        {/* 전체 발송 버튼 (Android용) */}
         <button
           onClick={handleSendAll}
           disabled={drivers.length === 0}
-          className="w-full py-3 rounded-xl bg-indigo-600 text-white text-[14px] font-bold disabled:opacity-40 active:scale-[0.98] transition"
+          className="w-full py-3 rounded-xl bg-indigo-600 text-white text-[14px] font-bold disabled:opacity-40 active:scale-[0.98] transition flex-shrink-0"
         >
-          전체 {drivers.length}명에게 발송
+          전체 {drivers.length}명 일괄발송 (Android)
         </button>
       </div>
     </div>

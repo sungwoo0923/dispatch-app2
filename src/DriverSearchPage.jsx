@@ -2,7 +2,7 @@
 // 공개 통합 업로드 링크 — 로그인 불필요, 날짜+차량번호+이름으로 오더 검색
 // 사용: /driver-upload
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { db } from "./firebase";
 import { collection, query, where, getDocs } from "firebase/firestore";
 
@@ -29,9 +29,7 @@ const btnPrimary = {
 };
 
 function todayKSTStr() {
-  const d = new Date();
-  const kst = new Date(d.getTime() + (9 * 60 - d.getTimezoneOffset()) * 60000);
-  return kst.toISOString().slice(0, 10);
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(new Date());
 }
 
 function InputField({ label, type = "text", value, onChange, placeholder, onKeyDown }) {
@@ -67,12 +65,22 @@ function InputField({ label, type = "text", value, onChange, placeholder, onKeyD
 }
 
 export default function DriverSearchPage() {
-  const [date, setDate] = useState(todayKSTStr());
-  const [vehicleNo, setVehicleNo] = useState("");
-  const [name, setName] = useState("");
+  const params = new URLSearchParams(window.location.search);
+  const [date, setDate] = useState(params.get("date") || todayKSTStr());
+  const [vehicleNo, setVehicleNo] = useState(params.get("vehicle") || "");
+  const [name, setName] = useState(params.get("name") || "");
   const [results, setResults] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const autoFilled = !!(params.get("date") || params.get("vehicle") || params.get("name"));
+
+  // URL 파라미터로 자동입력된 경우 자동 검색
+  useEffect(() => {
+    if (autoFilled && params.get("date") && params.get("vehicle") && params.get("name")) {
+      handleSearch();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleSearch = async () => {
     const trimVehicle = vehicleNo.trim().replace(/\s/g, "");
@@ -158,10 +166,19 @@ export default function DriverSearchPage() {
 
         {/* 검색 카드 */}
         <div style={cardStyle}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 18 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: autoFilled ? 10 : 18 }}>
             <div style={{ width: 4, height: 20, background: "#1B2B4B", borderRadius: 2 }} />
             <span style={{ fontWeight: 700, fontSize: 14, color: "#1B2B4B" }}>오더 검색</span>
           </div>
+          {autoFilled && (
+            <div style={{
+              background: "#eff6ff", border: "1px solid #bfdbfe",
+              borderRadius: 10, padding: "9px 13px", marginBottom: 14,
+              fontSize: 12, color: "#1d4ed8", fontWeight: 600,
+            }}>
+              ✅ 담당자가 정보를 자동 입력했습니다. 확인 후 검색하세요.
+            </div>
+          )}
 
           <InputField
             label="상차일"
