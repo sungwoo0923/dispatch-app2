@@ -1691,8 +1691,23 @@ const handleOrderDuplicate = (order) => {
   };
   // 🔴 전체삭제 비활성화
   const deleteAllOrders = async () => {
-    alert("🚫 전체 삭제 기능이 비활성화되었습니다.");
+    alert("전체 삭제 기능이 비활성화되었습니다.");
     return;
+  };
+
+  const deleteSelectedOrders = async (selectedOrders) => {
+    if (!window.confirm(`선택한 ${selectedOrders.length}개 오더를 삭제하시겠습니까?\n삭제 후 복구가 불가능합니다.`)) return;
+    try {
+      for (const order of selectedOrders) {
+        const col = order.__col || collName;
+        const id = order.id || order._id;
+        if (col && id) await deleteDoc(doc(db, col, id));
+      }
+      const deletedIds = new Set(selectedOrders.map(o => o.id || o._id));
+      setOrders(prev => prev.filter(o => !deletedIds.has(o.id) && !deletedIds.has(o._id)));
+    } catch (e) {
+      alert("삭제 중 오류가 발생했습니다: " + e.message);
+    }
   };
 
 
@@ -2661,6 +2676,7 @@ setOpenMemo={setOpenMemo}
             setSearchType={setSearchType}
             searchText={searchText}
             setSearchText={setSearchText}
+            onDeleteSelected={deleteSelectedOrders}
           />
         )}
 {page === "sales" && (
@@ -3324,8 +3340,68 @@ function MobileOrderList({
   setSearchText,
   onlyToday,
   setOnlyToday,
+  onDeleteSelected,
 }) {
   const [attachViewOrder, setAttachViewOrder] = useState(null);
+  const [multiSelectMode, setMultiSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(new Set());
+
+  // 현재 보이는 모든 오더 flat 배열
+  const allVisibleOrders = useMemo(() => {
+    const result = [];
+    groupedByDate.forEach(list => list.forEach(o => result.push(o)));
+    return result;
+  }, [groupedByDate]);
+
+  const selectedOrders = useMemo(
+    () => allVisibleOrders.filter(o => selectedIds.has(o.id || o._id)),
+    [allVisibleOrders, selectedIds]
+  );
+
+  const toggleSelect = (order) => {
+    const id = order.id || order._id;
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === allVisibleOrders.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(allVisibleOrders.map(o => o.id || o._id)));
+    }
+  };
+
+  const exitMultiSelect = () => {
+    setMultiSelectMode(false);
+    setSelectedIds(new Set());
+  };
+
+  const handleUploadLink = () => {
+    const phones = selectedOrders
+      .map(o => (o.전화번호 || o.기사전화번호 || "").replace(/[^0-9]/g, ""))
+      .filter(p => p.length >= 9);
+    const uniquePhones = [...new Set(phones)];
+    const url = `${window.location.origin}/driver-upload`;
+    const msg = `[인수증 업로드 안내]\n운송 완료 후 아래 링크를 통해 인수증을 업로드해 주시기 바랍니다.\n\n${url}\n\n서명 받은 인수증(파렛전표) 사진을 촬영하여 업로드해 주세요.\n미업로드 시 운임 정산이 지연될 수 있습니다.`;
+    if (uniquePhones.length === 0) {
+      navigator.clipboard?.writeText(msg).catch(() => {});
+      alert("기사 전화번호가 등록된 오더가 없습니다.\n메시지가 클립보드에 복사되었습니다.");
+      return;
+    }
+    const isSep = /iPhone|iPad/i.test(navigator.userAgent) ? "&" : "?";
+    const smsUri = `sms:${uniquePhones.join(",")}${isSep}body=${encodeURIComponent(msg)}`;
+    window.location.href = smsUri;
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedOrders.length === 0) return;
+    await onDeleteSelected?.(selectedOrders);
+    exitMultiSelect();
+  };
   // 🔥 탭: 전체 / 배차중 / 배차완료 (배차전/배차취소 없음)
   const tabs = ["전체", "배차중", "배차완료"];
 
@@ -3505,18 +3581,29 @@ const summary = useMemo(() => {
           </select>
 
           <input
-  className="flex-1 border rounded-full px-3 py-1.5 bg-gray-50"
-  placeholder={
-    searchType === "상차지주소"
-      ? "상차지 주소 검색"
-      : searchType === "하차지주소"
-      ? "하차지 주소 검색"
-      : "검색어 입력"
-  }
-  value={searchText}
-  onChange={(e) => setSearchText(e.target.value)}
-/>
+            className="flex-1 border rounded-full px-3 py-1.5 bg-gray-50"
+            placeholder={
+              searchType === "상차지주소" ? "상차지 주소 검색"
+              : searchType === "하차지주소" ? "하차지 주소 검색"
+              : "검색어 입력"
+            }
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+          />
 
+          <button
+            onClick={() => {
+              if (multiSelectMode) { exitMultiSelect(); }
+              else { setMultiSelectMode(true); }
+            }}
+            className={`shrink-0 px-3 py-1.5 rounded-full text-[12px] font-semibold border transition-colors ${
+              multiSelectMode
+                ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
+                : "bg-white text-gray-600 border-gray-300"
+            }`}
+          >
+            {multiSelectMode ? "취소" : "선택"}
+          </button>
         </div>
       </div>
 
@@ -3570,18 +3657,42 @@ const summary = useMemo(() => {
 
 </div>
               <div className="space-y-3">
-                {list.map((o) => (
-                  <div key={o.id}>
-                    <MobileOrderCard
-  order={o}
-  showUndeliveredOnly={false}
-  onSelect={() => onSelect(o)}
-  onOpenMemo={setOpenMemo}
-  onOpenAttach={setAttachViewOrder}
-/>
-                  </div>
-
-                ))}
+                {list.map((o) => {
+                  const oid = o.id || o._id;
+                  const isChecked = selectedIds.has(oid);
+                  return (
+                    <div key={oid} className="relative">
+                      {multiSelectMode && (
+                        <button
+                          className={`absolute left-2 top-1/2 -translate-y-1/2 z-10 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${
+                            isChecked
+                              ? "bg-[#1B2B4B] border-[#1B2B4B]"
+                              : "bg-white border-gray-300"
+                          }`}
+                          onMouseDown={e => e.stopPropagation()}
+                          onClick={e => { e.stopPropagation(); toggleSelect(o); }}
+                        >
+                          {isChecked && (
+                            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                              <path d="M2 6l3 3 5-5" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                          )}
+                        </button>
+                      )}
+                      <div className={multiSelectMode ? "pl-10 transition-all" : ""}>
+                        <MobileOrderCard
+                          order={o}
+                          showUndeliveredOnly={false}
+                          onSelect={multiSelectMode ? () => toggleSelect(o) : () => onSelect(o)}
+                          onOpenMemo={multiSelectMode ? () => {} : setOpenMemo}
+                          onOpenAttach={setAttachViewOrder}
+                          selected={isChecked}
+                          multiSelectMode={multiSelectMode}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           );
@@ -3592,6 +3703,67 @@ const summary = useMemo(() => {
     {attachViewOrder && (
       <CardAttachViewer order={attachViewOrder} onClose={() => setAttachViewOrder(null)} />
     )}
+
+    {/* ── 다중선택 하단 액션바 ── */}
+    <div
+      className={`fixed bottom-0 left-0 right-0 z-50 transition-transform duration-300 ${
+        multiSelectMode ? "translate-y-0" : "translate-y-full"
+      }`}
+    >
+      <div className="bg-white border-t border-gray-200 shadow-[0_-4px_24px_rgba(0,0,0,0.10)] px-4 pt-3 pb-safe-bottom">
+        {/* 선택 현황 행 */}
+        <div className="flex items-center justify-between mb-2.5">
+          <button
+            onClick={toggleSelectAll}
+            className="flex items-center gap-1.5 text-[13px] font-semibold text-[#1B2B4B]"
+          >
+            <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
+              selectedIds.size === allVisibleOrders.length && allVisibleOrders.length > 0
+                ? "bg-[#1B2B4B] border-[#1B2B4B]"
+                : "border-gray-300"
+            }`}>
+              {selectedIds.size === allVisibleOrders.length && allVisibleOrders.length > 0 && (
+                <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
+                  <path d="M2 6l3 3 5-5" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              )}
+            </div>
+            전체선택
+          </button>
+          <span className="text-[13px] font-bold text-gray-700">
+            {selectedIds.size > 0 ? `${selectedIds.size}개 선택됨` : "오더를 선택하세요"}
+          </span>
+        </div>
+        {/* 액션 버튼 행 */}
+        <div className="flex gap-2 pb-2">
+          <button
+            onClick={handleUploadLink}
+            disabled={selectedIds.size === 0}
+            className="flex-1 py-3 rounded-xl bg-indigo-600 text-white text-[13px] font-bold disabled:opacity-40 transition active:scale-[0.97]"
+          >
+            업로드링크 발송
+          </button>
+          <button
+            onClick={handleDeleteSelected}
+            disabled={selectedIds.size === 0}
+            className="flex-1 py-3 rounded-xl bg-rose-600 text-white text-[13px] font-bold disabled:opacity-40 transition active:scale-[0.97]"
+          >
+            선택삭제
+          </button>
+          <button
+            onClick={exitMultiSelect}
+            className="px-4 py-3 rounded-xl bg-gray-100 text-gray-500 text-[13px] font-semibold transition active:scale-[0.97]"
+          >
+            닫기
+          </button>
+        </div>
+        {selectedIds.size > 0 && (
+          <div className="pb-1 text-[11px] text-gray-400 text-center">
+            {selectedOrders.filter(o => (o.전화번호 || o.기사전화번호 || "").replace(/[^0-9]/g,"").length >= 9).length}명의 기사에게 업로드링크 문자 발송
+          </div>
+        )}
+      </div>
+    </div>
     </>
   );
 }
@@ -3759,6 +3931,8 @@ const MobileOrderCard = React.memo(function MobileOrderCard({
   showUndeliveredOnly,
   onConfirmDeliver,
   flash = false,
+  selected = false,
+  multiSelectMode = false,
 }) {
   const claim = getClaim(order);
   const fee = order.기사운임 ?? 0;
@@ -3808,9 +3982,11 @@ const dropTime = order.하차시간 || "시간 없음";
    <div
   className={
     "relative bg-white rounded-2xl shadow border px-3 py-3 transition-colors " +
-    (flash
-      ? "border-blue-400 order-flash-blue shadow-[0_0_0_4px_rgba(59,130,246,0.18),0_0_18px_rgba(59,130,246,0.35)]"
-      : "border-gray-200")
+    (selected
+      ? "border-[#1B2B4B] bg-[#1B2B4B]/[0.03] shadow-[0_0_0_2px_rgba(27,43,75,0.15)]"
+      : flash
+        ? "border-blue-400 order-flash-blue shadow-[0_0_0_4px_rgba(59,130,246,0.18),0_0_18px_rgba(59,130,246,0.35)]"
+        : "border-gray-200")
   }
   onClick={onSelect}
 >
