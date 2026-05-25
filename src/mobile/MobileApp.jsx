@@ -1695,6 +1695,8 @@ const handleOrderDuplicate = (order) => {
     return;
   };
 
+  const [multiSelectMode, setMultiSelectMode] = useState(false);
+
   const deleteSelectedOrders = async (selectedOrders) => {
     if (!window.confirm(`선택한 ${selectedOrders.length}개 오더를 삭제하시겠습니까?\n삭제 후 복구가 불가능합니다.`)) return;
     try {
@@ -2677,6 +2679,8 @@ setOpenMemo={setOpenMemo}
             searchText={searchText}
             setSearchText={setSearchText}
             onDeleteSelected={deleteSelectedOrders}
+            multiSelectMode={multiSelectMode}
+            setMultiSelectMode={setMultiSelectMode}
           />
         )}
 {page === "sales" && (
@@ -2773,7 +2777,7 @@ setOpenMemo={setOpenMemo}
 
       </div>
 
-      {page === "list" && !showMenu && (
+      {page === "list" && !showMenu && !multiSelectMode && (
         <button
           onClick={() => {
             setForm({
@@ -3315,6 +3319,85 @@ function MenuItem({ label, onClick, badge }) {
 
 
 // ======================================================================
+// 업로드링크 발송 모달
+// ======================================================================
+function UploadLinkModal({ orders = [], onClose }) {
+  const baseUrl = window.location.origin;
+  const uploadUrl = `${baseUrl}/driver-upload`;
+  const msgBody = encodeURIComponent(`[인수증 업로드 안내]\n아래 링크에서 인수증을 업로드해 주세요.\n${uploadUrl}`);
+
+  // 중복 없는 기사 목록 (전화번호 기준)
+  const drivers = useMemo(() => {
+    const seen = new Set();
+    const list = [];
+    orders.forEach(o => {
+      const phone = (o.전화번호 || "").replace(/[^0-9]/g, "");
+      if (phone && !seen.has(phone)) {
+        seen.add(phone);
+        list.push({ name: o.기사명 || "기사", phone });
+      }
+    });
+    return list;
+  }, [orders]);
+
+  const handleSendAll = () => {
+    if (drivers.length === 0) return;
+    // Android: comma-separated multiple recipients
+    const phones = drivers.map(d => d.phone).join(",");
+    window.location.href = `sms:${phones}?body=${msgBody}`;
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-[200] flex items-end justify-center bg-black/40">
+      <div className="w-full max-w-md bg-white rounded-t-2xl shadow-xl px-4 pt-5 pb-8">
+        {/* 헤더 */}
+        <div className="flex items-center justify-between mb-4">
+          <span className="text-[15px] font-bold text-gray-800">업로드링크 발송</span>
+          <button onClick={onClose} className="text-gray-400 text-xl leading-none">&times;</button>
+        </div>
+
+        {/* 메시지 미리보기 */}
+        <div className="bg-gray-50 rounded-xl p-3 mb-4 text-[12px] text-gray-600 whitespace-pre-wrap border border-gray-200">
+          {`[인수증 업로드 안내]\n아래 링크에서 인수증을 업로드해 주세요.\n${uploadUrl}`}
+        </div>
+
+        {/* 기사 목록 */}
+        {drivers.length === 0 ? (
+          <p className="text-[13px] text-gray-400 text-center py-4">전화번호가 등록된 기사가 없습니다.</p>
+        ) : (
+          <div className="space-y-2 mb-4 max-h-48 overflow-y-auto">
+            {drivers.map(d => (
+              <div key={d.phone} className="flex items-center justify-between bg-gray-50 rounded-xl px-3 py-2">
+                <div>
+                  <span className="text-[13px] font-semibold text-gray-800">{d.name}</span>
+                  <span className="ml-2 text-[12px] text-gray-500">{d.phone}</span>
+                </div>
+                <a
+                  href={`sms:${d.phone}?body=${msgBody}`}
+                  className="text-[12px] text-indigo-600 font-semibold border border-indigo-200 rounded-lg px-2 py-1"
+                >
+                  문자 보내기
+                </a>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* 전체 발송 버튼 */}
+        <button
+          onClick={handleSendAll}
+          disabled={drivers.length === 0}
+          className="w-full py-3 rounded-xl bg-indigo-600 text-white text-[14px] font-bold disabled:opacity-40 active:scale-[0.98] transition"
+        >
+          전체 {drivers.length}명에게 발송
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ======================================================================
 // 등록내역 리스트
 // ======================================================================
 function MobileOrderList({
@@ -3341,10 +3424,12 @@ function MobileOrderList({
   onlyToday,
   setOnlyToday,
   onDeleteSelected,
+  multiSelectMode,
+  setMultiSelectMode,
 }) {
   const [attachViewOrder, setAttachViewOrder] = useState(null);
-  const [multiSelectMode, setMultiSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState(new Set());
+  const [uploadLinkModal, setUploadLinkModal] = useState(false);
 
   // 현재 보이는 모든 오더 flat 배열
   const allVisibleOrders = useMemo(() => {
@@ -3381,20 +3466,7 @@ function MobileOrderList({
   };
 
   const handleUploadLink = () => {
-    const phones = selectedOrders
-      .map(o => (o.전화번호 || o.기사전화번호 || "").replace(/[^0-9]/g, ""))
-      .filter(p => p.length >= 9);
-    const uniquePhones = [...new Set(phones)];
-    const url = `${window.location.origin}/driver-upload`;
-    const msg = `[인수증 업로드 안내]\n운송 완료 후 아래 링크를 통해 인수증을 업로드해 주시기 바랍니다.\n\n${url}\n\n서명 받은 인수증(파렛전표) 사진을 촬영하여 업로드해 주세요.\n미업로드 시 운임 정산이 지연될 수 있습니다.`;
-    if (uniquePhones.length === 0) {
-      navigator.clipboard?.writeText(msg).catch(() => {});
-      alert("기사 전화번호가 등록된 오더가 없습니다.\n메시지가 클립보드에 복사되었습니다.");
-      return;
-    }
-    const isSep = /iPhone|iPad/i.test(navigator.userAgent) ? "&" : "?";
-    const smsUri = `sms:${uniquePhones.join(",")}${isSep}body=${encodeURIComponent(msg)}`;
-    window.location.href = smsUri;
+    setUploadLinkModal(true);
   };
 
   const handleDeleteSelected = async () => {
@@ -3579,7 +3651,6 @@ const summary = useMemo(() => {
             <option value="하차지주소">하차지주소</option>
             <option value="메모">메모</option>
           </select>
-
           <input
             className="flex-1 border rounded-full px-3 py-1.5 bg-gray-50"
             placeholder={
@@ -3590,21 +3661,27 @@ const summary = useMemo(() => {
             value={searchText}
             onChange={(e) => setSearchText(e.target.value)}
           />
-
-          <button
-            onClick={() => {
-              if (multiSelectMode) { exitMultiSelect(); }
-              else { setMultiSelectMode(true); }
-            }}
-            className={`shrink-0 px-3 py-1.5 rounded-full text-[12px] font-semibold border transition-colors ${
-              multiSelectMode
-                ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
-                : "bg-white text-gray-600 border-gray-300"
-            }`}
-          >
-            {multiSelectMode ? "취소" : "선택"}
-          </button>
         </div>
+      </div>
+
+      {/* ── 조회 건수 + 선택 버튼 바 ── */}
+      <div className="flex items-center justify-between px-4 py-2 bg-white border-b border-gray-100">
+        <span className="text-[12px] text-gray-500">
+          총 {allVisibleOrders.length}건
+          {multiSelectMode && selectedIds.size > 0 && (
+            <span className="ml-1.5 font-bold text-[#1B2B4B]">· {selectedIds.size}개 선택</span>
+          )}
+        </span>
+        <button
+          onClick={() => multiSelectMode ? exitMultiSelect() : setMultiSelectMode(true)}
+          className={`px-3 py-1 rounded-full text-[12px] font-semibold border transition-colors ${
+            multiSelectMode
+              ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
+              : "bg-white text-gray-600 border-gray-300 hover:border-[#1B2B4B] hover:text-[#1B2B4B]"
+          }`}
+        >
+          {multiSelectMode ? "선택 취소" : "다중선택"}
+        </button>
       </div>
 
       {/* 카드 목록 */}
@@ -3711,18 +3788,20 @@ const summary = useMemo(() => {
       }`}
     >
       <div className="bg-white border-t border-gray-200 shadow-[0_-4px_24px_rgba(0,0,0,0.10)] px-4 pt-3 pb-safe-bottom">
-        {/* 선택 현황 행 */}
-        <div className="flex items-center justify-between mb-2.5">
+        {/* 전체선택 + 건수 */}
+        <div className="flex items-center justify-between mb-3">
           <button
             onClick={toggleSelectAll}
-            className="flex items-center gap-1.5 text-[13px] font-semibold text-[#1B2B4B]"
+            className="flex items-center gap-2 text-[13px] font-semibold text-[#1B2B4B]"
           >
-            <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
-              selectedIds.size === allVisibleOrders.length && allVisibleOrders.length > 0
+            <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+              selectedIds.size > 0 && selectedIds.size === allVisibleOrders.length
                 ? "bg-[#1B2B4B] border-[#1B2B4B]"
-                : "border-gray-300"
+                : selectedIds.size > 0
+                  ? "bg-[#1B2B4B]/20 border-[#1B2B4B]"
+                  : "border-gray-300"
             }`}>
-              {selectedIds.size === allVisibleOrders.length && allVisibleOrders.length > 0 && (
+              {selectedIds.size > 0 && (
                 <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
                   <path d="M2 6l3 3 5-5" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
@@ -3730,40 +3809,38 @@ const summary = useMemo(() => {
             </div>
             전체선택
           </button>
-          <span className="text-[13px] font-bold text-gray-700">
-            {selectedIds.size > 0 ? `${selectedIds.size}개 선택됨` : "오더를 선택하세요"}
+          <span className="text-[13px] text-gray-500">
+            {selectedIds.size === 0 ? "오더를 선택하세요" : <span className="font-bold text-[#1B2B4B]">{selectedIds.size}개 선택됨</span>}
           </span>
         </div>
-        {/* 액션 버튼 행 */}
-        <div className="flex gap-2 pb-2">
+        {/* 액션 버튼 */}
+        <div className="flex gap-2 pb-1">
           <button
             onClick={handleUploadLink}
             disabled={selectedIds.size === 0}
-            className="flex-1 py-3 rounded-xl bg-indigo-600 text-white text-[13px] font-bold disabled:opacity-40 transition active:scale-[0.97]"
+            className="flex-1 py-3 rounded-xl bg-indigo-600 text-white text-[13px] font-bold disabled:opacity-40 active:scale-[0.97] transition"
           >
             업로드링크 발송
           </button>
           <button
             onClick={handleDeleteSelected}
             disabled={selectedIds.size === 0}
-            className="flex-1 py-3 rounded-xl bg-rose-600 text-white text-[13px] font-bold disabled:opacity-40 transition active:scale-[0.97]"
+            className="flex-1 py-3 rounded-xl bg-rose-600 text-white text-[13px] font-bold disabled:opacity-40 active:scale-[0.97] transition"
           >
             선택삭제
           </button>
-          <button
-            onClick={exitMultiSelect}
-            className="px-4 py-3 rounded-xl bg-gray-100 text-gray-500 text-[13px] font-semibold transition active:scale-[0.97]"
-          >
-            닫기
-          </button>
         </div>
-        {selectedIds.size > 0 && (
-          <div className="pb-1 text-[11px] text-gray-400 text-center">
-            {selectedOrders.filter(o => (o.전화번호 || o.기사전화번호 || "").replace(/[^0-9]/g,"").length >= 9).length}명의 기사에게 업로드링크 문자 발송
-          </div>
-        )}
       </div>
     </div>
+
+    {/* ── 업로드링크 발송 모달 ── */}
+    {uploadLinkModal && (
+      <UploadLinkModal
+        orders={selectedOrders}
+        onClose={() => setUploadLinkModal(false)}
+      />
+    )}
+
     </>
   );
 }
