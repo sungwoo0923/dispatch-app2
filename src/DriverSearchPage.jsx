@@ -176,7 +176,7 @@ export default function DriverSearchPage() {
               borderRadius: 10, padding: "9px 13px", marginBottom: 14,
               fontSize: 12, color: "#1d4ed8", fontWeight: 600,
             }}>
-              ✅ 담당자가 정보를 자동 입력했습니다. 확인 후 검색하세요.
+              담당자가 정보를 자동 입력했습니다. 확인 후 검색하세요.
             </div>
           )}
 

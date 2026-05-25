@@ -3349,8 +3349,8 @@ function UploadLinkModal({ orders = [], onClose }) {
       const date = (o.상차일 || "").slice(0, 10);
       const [y, m, d] = date.split("-");
       const dateStr = y && m && d ? `${y}년 ${parseInt(m)}월 ${parseInt(d)}일` : date;
-      const load = [o.상차지명, o.상차지주소].filter(Boolean).join(" ");
-      const unload = [o.하차지명, o.하차지주소].filter(Boolean).join(" ");
+      const load = o.상차지명 || "";
+      const unload = o.하차지명 || "";
       const cargo = o.화물내용 || "";
 
       if (dOrders.length > 1) lines.push(`[오더 ${i + 1}]`);
@@ -3361,7 +3361,7 @@ function UploadLinkModal({ orders = [], onClose }) {
       if (dOrders.length > 1) lines.push("");
     });
 
-    lines.push("파렛전표 및 거래명세서, 타코기록지 등 관련 서류 업로드를 부탁드립니다.\n미 확인 시 운임 지연이 발생할 수 있습니다.\n");
+    lines.push("파렛전표 및 거래명세서, 타코기록지 등\n관련 서류 업로드를 부탁드립니다.\n미 확인 시 운임 지연이 발생할 수 있습니다.\n");
     lines.push("[인수증 업로드 안내]");
     lines.push("아래 링크에서 서류를 업로드해 주세요.\n");
     lines.push("📋 업로드 방법");
@@ -3404,9 +3404,9 @@ function UploadLinkModal({ orders = [], onClose }) {
         </div>
 
         {/* iOS 안내 */}
-        <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mb-3 flex-shrink-0">
-          <p className="text-[11px] text-amber-700 font-semibold">
-            💡 아이폰은 개별 발송을 이용해 주세요 (iOS 다중발송 미지원)
+        <div className="bg-[#1B2B4B]/5 border border-[#1B2B4B]/20 rounded-xl px-3 py-2 mb-3 flex-shrink-0">
+          <p className="text-[11px] text-[#1B2B4B] font-semibold">
+            아이폰은 개별 발송을 이용해 주세요 (iOS 다중발송 미지원)
           </p>
         </div>
 
@@ -3597,7 +3597,7 @@ const summary = useMemo(() => {
       </div>
 
       {/* 날짜/퀵범위/필터 */}
-      <div className="bg-white border-b px-4 py-3 space-y-2">
+      <div className="bg-white border-b px-4 pt-3 pb-3 space-y-2 overflow-hidden">
         {/* 상단 범위 텍스트 (11.24 ~ 11.24) */}
         {/* 🔥 KPI 요약 */}
 <div className="grid grid-cols-3 gap-2 mt-2">
@@ -3695,7 +3695,7 @@ const summary = useMemo(() => {
         </div>
 
         {/* 🔍 검색줄 */}
-        <div className="flex gap-2 text-sm mt-2">
+        <div className="flex gap-2 text-sm">
           <select
             className="w-28 border rounded-full px-3 py-1.5 bg-gray-50"
             value={searchType}
@@ -6081,15 +6081,15 @@ const pickDrop = (c) => {
   label="상차일시"
   input={
     <div className="space-y-1.5">
-      <div className="flex gap-2 min-w-0">
+      <div className="flex flex-wrap gap-1.5 min-w-0">
         <input
           type="date"
-          className="flex-1 min-w-0 border rounded px-2 py-1 text-sm"
+          className="flex-1 min-w-[100px] border rounded px-2 py-1 text-sm"
           value={form.상차일}
           onChange={(e) => update("상차일", e.target.value)}
         />
         <select
-          className="w-[100px] shrink-0 border rounded px-1 py-1 text-sm"
+          className="flex-1 min-w-[90px] border rounded px-1 py-1 text-sm"
           value={form.상차시간}
           onChange={(e) => update("상차시간", e.target.value)}
         >
@@ -6123,15 +6123,15 @@ const pickDrop = (c) => {
   label="하차일시"
   input={
     <div className="space-y-1.5">
-      <div className="flex gap-2 min-w-0">
+      <div className="flex flex-wrap gap-1.5 min-w-0">
         <input
           type="date"
-          className="flex-1 min-w-0 border rounded px-2 py-1 text-sm"
+          className="flex-1 min-w-[100px] border rounded px-2 py-1 text-sm"
           value={form.하차일}
           onChange={(e) => update("하차일", e.target.value)}
         />
         <select
-          className="w-[100px] shrink-0 border rounded px-1 py-1 text-sm"
+          className="flex-1 min-w-[90px] border rounded px-1 py-1 text-sm"
           value={form.하차시간}
           onChange={(e) => update("하차시간", e.target.value)}
         >
@@ -6631,9 +6631,9 @@ const pickDrop = (c) => {
         <RowLabelInput
           label="상/하차방법"
           input={
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-1.5">
               <select
-                className="flex-1 border rounded px-2 py-1 text-sm"
+                className="flex-1 min-w-[90px] border rounded px-2 py-1 text-sm"
                 value={form.상차방법}
                 onChange={(e) => update("상차방법", e.target.value)}
               >
@@ -6645,7 +6645,7 @@ const pickDrop = (c) => {
                 <option value="수도움">수도움</option>
               </select>
               <select
-                className="flex-1 border rounded px-2 py-1 text-sm"
+                className="flex-1 min-w-[90px] border rounded px-2 py-1 text-sm"
                 value={form.하차방법}
                 onChange={(e) => update("하차방법", e.target.value)}
               >
@@ -6666,9 +6666,9 @@ const pickDrop = (c) => {
         <RowLabelInput
           label="지급/배차방식"
           input={
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-1.5">
               <select
-                className="flex-1 border rounded px-2 py-1 text-sm"
+                className="flex-1 min-w-[90px] border rounded px-2 py-1 text-sm"
                 value={form.지급방식}
                 onChange={(e) => update("지급방식", e.target.value)}
               >
@@ -6681,7 +6681,7 @@ const pickDrop = (c) => {
                 <option value="취소">취소</option>
               </select>
               <select
-                className="flex-1 border rounded px-2 py-1 text-sm"
+                className="flex-1 min-w-[90px] border rounded px-2 py-1 text-sm"
                 value={form.배차방식}
                 onChange={(e) => update("배차방식", e.target.value)}
               >
