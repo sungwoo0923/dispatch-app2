@@ -1,4 +1,3 @@
-// api/24CallProxy.js
 export async function sendOrderTo24Proxy(row) {
   try {
     const res = await fetch("/api/send24", {
@@ -15,7 +14,7 @@ export async function sendOrderTo24Proxy(row) {
       return { success: false, raw: text };
     }
   } catch (error) {
-    console.error("🚨 24시 Proxy 오류:", error);
-    return { success: false, error };
+    console.error("24시 Proxy 오류:", error);
+    return { success: false, error: error?.message || String(error) };
   }
 }

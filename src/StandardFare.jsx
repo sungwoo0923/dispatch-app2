@@ -230,6 +230,59 @@ function AddressSearch({ value, onChange, onSelect, placeholder }) {
   );
 }
 
+// 지명 자동완성 컴포넌트 (표준운임 상/하차지명)
+function PlaceSuggest({ value, onChange, names = [], placeholder, onKeyDown }) {
+  const [query, setQuery] = useState(value || "");
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => { setQuery(value || ""); }, [value]);
+
+  const filtered = useMemo(() => {
+    const q = (query || "").replace(/\s+/g, "").toLowerCase();
+    if (!q || q.length < 1) return [];
+    return names
+      .map(n => {
+        const nc = n.replace(/\s+/g, "").toLowerCase();
+        if (nc === q) return { name: n, score: 100 };
+        if (nc.startsWith(q) || q.startsWith(nc.slice(0, 2))) return { name: n, score: 80 };
+        if (nc.includes(q)) return { name: n, score: 60 };
+        if (q.includes(nc.slice(0, 3))) return { name: n, score: 40 };
+        return null;
+      })
+      .filter(Boolean)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 12)
+      .map(x => x.name);
+  }, [query, names]);
+
+  return (
+    <div className="relative">
+      <input
+        className="w-full px-2.5 py-1.5 text-[13px] font-medium rounded border border-gray-300 bg-white focus:border-[#1B2B4B] focus:outline-none focus:ring-1 focus:ring-[#1B2B4B]/20 placeholder:text-gray-300 transition"
+        placeholder={placeholder}
+        value={query}
+        onChange={e => { setQuery(e.target.value); onChange(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        onKeyDown={e => { if (e.key === "Escape") setOpen(false); if (onKeyDown) onKeyDown(e); }}
+      />
+      {open && filtered.length > 0 && (
+        <div className="absolute z-50 left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-xl max-h-52 overflow-y-auto">
+          {filtered.map((n, i) => (
+            <div
+              key={i}
+              className="px-3 py-2 text-[13px] cursor-pointer hover:bg-blue-50 text-gray-700 border-b border-gray-50 last:border-0"
+              onMouseDown={() => { setQuery(n); onChange(n); setOpen(false); }}
+            >
+              {n}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // 거래처 자동완성 컴포넌트
 function ClientSearch({ value, onChange, clients }) {
   const [query, setQuery] = useState(value || "");
@@ -461,6 +514,15 @@ export default function StandardFare() {
     [dispatchData]
   );
 
+  const pickupNames = useMemo(() =>
+    [...new Set(dispatchData.map(r => r.상차지명).filter(Boolean))].sort(),
+    [dispatchData]
+  );
+  const dropNames = useMemo(() =>
+    [...new Set(dispatchData.map(r => r.하차지명).filter(Boolean))].sort(),
+    [dispatchData]
+  );
+
   const calcAiFare = (rows) => {
     if (!rows.length) return null;
     const fares = rows.map(r => Number(String(r.청구운임||0).replace(/[^\d]/g,""))).filter(n=>n>0);
@@ -626,7 +688,7 @@ export default function StandardFare() {
                     <div className="grid grid-cols-2 gap-2">
                       <div>
                         <label className={labelCls}>지명 <span className="text-red-400">*</span></label>
-                        <input className={inputCls} placeholder="예: 송원" value={pickup} onChange={e=>setPickup(e.target.value)} onKeyDown={e=>e.key==="Enter"&&search()} />
+                        <PlaceSuggest value={pickup} onChange={setPickup} names={pickupNames} placeholder="예: 송원" onKeyDown={e=>e.key==="Enter"&&search()} />
                       </div>
                       <div>
                         <label className={labelCls}>주소 (선택)</label>
@@ -639,7 +701,7 @@ export default function StandardFare() {
                     <div className="grid grid-cols-2 gap-2">
                       <div>
                         <label className={labelCls}>지명 <span className="text-red-400">*</span></label>
-                        <input className={inputCls} placeholder="예: 유통센터" value={drop} onChange={e=>setDrop(e.target.value)} onKeyDown={e=>e.key==="Enter"&&search()} />
+                        <PlaceSuggest value={drop} onChange={setDrop} names={dropNames} placeholder="예: 유통센터" onKeyDown={e=>e.key==="Enter"&&search()} />
                       </div>
                       <div>
                         <label className={labelCls}>주소 (선택)</label>
