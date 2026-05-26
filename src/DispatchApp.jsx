@@ -887,6 +887,82 @@ function normalizePlate(v = "") {
     .replace(/\s/g, "")
     .replace(/-/g, "");
 }
+// ================================
+// 경유지 포함 화물내용+톤수 합산 헬퍼 (모듈 스코프)
+// ================================
+function _parseWaypointList(v) {
+  if (Array.isArray(v) && v.length > 0) return v;
+  if (typeof v === "string" && v.trim().startsWith("[")) {
+    try { const p = JSON.parse(v); if (Array.isArray(p)) return p; } catch {}
+  }
+  if (v && typeof v === "object" && !Array.isArray(v)) {
+    const ks = Object.keys(v);
+    if (ks.length > 0 && ks.every(k => /^\d+$/.test(k)))
+      return ks.sort((a, b) => Number(a) - Number(b)).map(k => v[k]);
+    if (v.업체명) return [v];
+  }
+  return [];
+}
+function mergeViaCargoText(mainCargo, waypointLists) {
+  const allCargo = [mainCargo];
+  for (const list of waypointLists) {
+    for (const s of _parseWaypointList(list)) {
+      if (s && s.화물내용) allCargo.push(s.화물내용);
+    }
+  }
+  const validCargos = allCargo.filter(c => {
+    const t = String(c || "").trim();
+    return t && t !== "없음";
+  });
+  if (validCargos.length <= 1) return mainCargo || "";
+  const SFXS = ["파렛트", "파레트", "팔레트", "파렛", "파레", "박스", "통"];
+  const NORM = { "파렛트": "파레트", "팔레트": "파레트", "파렛": "파레트", "파레": "파레트" };
+  const typeMap = {};
+  const customs = [];
+  for (const cargo of validCargos) {
+    const c = String(cargo).trim();
+    let matched = false;
+    for (const sfx of SFXS) {
+      if (c.endsWith(sfx)) {
+        const numStr = c.slice(0, -sfx.length).trim();
+        const num = parseFloat(numStr);
+        if (!isNaN(num)) {
+          const canonical = NORM[sfx] || sfx;
+          typeMap[canonical] = (typeMap[canonical] || 0) + num;
+          matched = true;
+          break;
+        }
+      }
+    }
+    if (!matched && !customs.includes(c)) customs.push(c);
+  }
+  const parts = [];
+  for (const [type, total] of Object.entries(typeMap)) {
+    parts.push(`${total % 1 === 0 ? total : total}${type}`);
+  }
+  parts.push(...customs);
+  return parts.join(", ");
+}
+function mergeViaTonnage(mainTon, waypointLists) {
+  const allTons = [mainTon];
+  for (const list of waypointLists) {
+    for (const s of _parseWaypointList(list)) {
+      if (s && s.차량톤수) allTons.push(s.차량톤수);
+    }
+  }
+  const validTons = allTons.filter(t => {
+    const v = String(t || "").trim();
+    return v && v !== "없음";
+  });
+  if (validTons.length <= 1) return mainTon || "";
+  let total = 0;
+  for (const ton of validTons) {
+    const m = String(ton).match(/(\d+(?:\.\d+)?)/);
+    if (m) total += parseFloat(m[1]);
+  }
+  return total % 1 === 0 ? `${total}톤` : `${total}톤`;
+}
+
 // ===================== TOAST SYSTEM (GLOBAL) =====================
 const ToastContext = React.createContext(null);
 window.__sflowToastQueue = window.__sflowToastQueue || [];
@@ -2928,88 +3004,6 @@ function extractCargoBase(cargo = "") {
   }
 
   return s;  // suffix 없으면 원본 그대로
-}
-
-// ================================
-// 🔥 경유지 포함 화물내용+톤수 합산 헬퍼
-// ================================
-function _parseWaypointList(v) {
-  if (Array.isArray(v) && v.length > 0) return v;
-  if (typeof v === "string" && v.trim().startsWith("[")) {
-    try { const p = JSON.parse(v); if (Array.isArray(p)) return p; } catch {}
-  }
-  if (v && typeof v === "object" && !Array.isArray(v)) {
-    const ks = Object.keys(v);
-    if (ks.length > 0 && ks.every(k => /^\d+$/.test(k)))
-      return ks.sort((a, b) => Number(a) - Number(b)).map(k => v[k]);
-    if (v.업체명) return [v];
-  }
-  return [];
-}
-
-function mergeViaCargoText(mainCargo, waypointLists) {
-  const allCargo = [mainCargo];
-  for (const list of waypointLists) {
-    for (const s of _parseWaypointList(list)) {
-      if (s && s.화물내용) allCargo.push(s.화물내용);
-    }
-  }
-  const validCargos = allCargo.filter(c => {
-    const t = String(c || "").trim();
-    return t && t !== "없음";
-  });
-  if (validCargos.length <= 1) return mainCargo || "";
-
-  const SFXS = ["파렛트", "파레트", "팔레트", "파렛", "파레", "박스", "통"];
-  const NORM = { "파렛트": "파레트", "팔레트": "파레트", "파렛": "파레트", "파레": "파레트" };
-  const typeMap = {};
-  const customs = [];
-
-  for (const cargo of validCargos) {
-    const c = String(cargo).trim();
-    let matched = false;
-    for (const sfx of SFXS) {
-      if (c.endsWith(sfx)) {
-        const numStr = c.slice(0, -sfx.length).trim();
-        const num = parseFloat(numStr);
-        if (!isNaN(num)) {
-          const canonical = NORM[sfx] || sfx;
-          typeMap[canonical] = (typeMap[canonical] || 0) + num;
-          matched = true;
-          break;
-        }
-      }
-    }
-    if (!matched && !customs.includes(c)) customs.push(c);
-  }
-
-  const parts = [];
-  for (const [type, total] of Object.entries(typeMap)) {
-    parts.push(`${total % 1 === 0 ? total : total}${type}`);
-  }
-  parts.push(...customs);
-  return parts.join(", ");
-}
-
-function mergeViaTonnage(mainTon, waypointLists) {
-  const allTons = [mainTon];
-  for (const list of waypointLists) {
-    for (const s of _parseWaypointList(list)) {
-      if (s && s.차량톤수) allTons.push(s.차량톤수);
-    }
-  }
-  const validTons = allTons.filter(t => {
-    const v = String(t || "").trim();
-    return v && v !== "없음";
-  });
-  if (validTons.length <= 1) return mainTon || "";
-
-  let total = 0;
-  for (const ton of validTons) {
-    const m = String(ton).match(/(\d+(?:\.\d+)?)/);
-    if (m) total += parseFloat(m[1]);
-  }
-  return total % 1 === 0 ? `${total}톤` : `${total}톤`;
 }
 
 // ===============================
@@ -12255,6 +12249,17 @@ const selectedSet = React.useMemo(() => new Set(selected), [selected]);
     return () => { document.removeEventListener("click", close); document.removeEventListener("keydown", onKey); };
   }, [contextMenu]);
 
+  // ===================== 운임조회 (컨텍스트메뉴 Part 4) =====================
+  const [ctxFare4Target, setCtxFare4Target] = React.useState(null);
+  const [ctxFare4PanelOpen, setCtxFare4PanelOpen] = React.useState(false);
+  const [ctxFare4Result, setCtxFare4Result] = React.useState(null);
+  const [ctxNoHistory4Open, setCtxNoHistory4Open] = React.useState(false);
+  const [ctxAddrSearch4Open, setCtxAddrSearch4Open] = React.useState(false);
+  const [ctxAddrPickup4, setCtxAddrPickup4] = React.useState("");
+  const [ctxAddrDrop4, setCtxAddrDrop4] = React.useState("");
+  const [ctxAddrAllClients4, setCtxAddrAllClients4] = React.useState(false);
+  const [ctxAddrResults4, setCtxAddrResults4] = React.useState([]);
+
   // ===================== 일마감 상태 =====================
   const [dailyCloseOpen, setDailyCloseOpen] = React.useState(false);
   const [dailyCloseResult, setDailyCloseResult] = React.useState(null);
@@ -12464,6 +12469,148 @@ React.useEffect(() => {
   window.addEventListener("keydown", handleKeyDown);
   return () => window.removeEventListener("keydown", handleKeyDown);
 }, [copyFarePanelOpen]);
+
+  // ── 운임조회 컨텍스트메뉴 유틸 ──
+  function extractAddrArea(addr) {
+    const s = String(addr || "").trim();
+    if (!s) return "";
+    const parts = s.split(/\s+/);
+    const result = [];
+    for (const p of parts) {
+      if (result.length >= 2) break;
+      if (/[로길]$/.test(p) || /^\d/.test(p)) break;
+      result.push(p);
+    }
+    return result.join(" ");
+  }
+
+  function scoreCtxFareRow(r, targetRow) {
+    let score = 0;
+    const targetCargo = String(targetRow.화물내용 || "").trim();
+    const targetTonNum = parseFloat((String(targetRow.차량톤수 || "").match(/[\d.]+/) || [])[0]) || 0;
+    if (targetCargo && r.화물내용) {
+      if (r.화물내용 === targetCargo) score += 100;
+      else if (r.화물내용.includes(targetCargo) || targetCargo.includes(r.화물내용)) score += 50;
+    }
+    const rTon = parseFloat((String(r.차량톤수 || "").match(/[\d.]+/) || [])[0]) || 0;
+    const tonDiff = Math.abs(rTon - targetTonNum);
+    if (tonDiff === 0 && targetTonNum > 0) score += 80;
+    else if (tonDiff <= 1) score += 40;
+    else if (tonDiff <= 3) score += 10;
+    return score;
+  }
+
+  function getVehicleGroup(vehicleType) {
+    const v = String(vehicleType || "");
+    if (v.includes("냉장") || v.includes("냉동")) return "cold";
+    if (v.includes("오토바이") || v.includes("바이크")) return "motorcycle";
+    return "general";
+  }
+
+  const handleCtxFareSearch4 = (row) => {
+    const pickup = String(row.상차지명 || "").trim();
+    const drop = String(row.하차지명 || "").trim();
+    if (!pickup || !drop) { showAlert("상/하차지 정보가 없습니다."); return; }
+
+    const targetGroup = getVehicleGroup(row.차량종류);
+    const targetClient = String(row.거래처 || "").trim();
+    const targetCargo = String(row.화물내용 || "").trim();
+    const targetTon = String(row.차량톤수 || "").trim();
+
+    const base = (dispatchData || []).filter(r => {
+      if (!r.청구운임) return false;
+      const rPickup = String(r.상차지명 || "");
+      const rDrop = String(r.하차지명 || "");
+      if (!(rPickup.includes(pickup) || pickup.includes(rPickup.trim()))) return false;
+      if (!(rDrop.includes(drop) || drop.includes(rDrop.trim()))) return false;
+      const rGroup = getVehicleGroup(r.차량종류);
+      return rGroup === targetGroup;
+    });
+
+    if (!base.length) {
+      setCtxFare4Target(row);
+      setCtxAddrPickup4(extractAddrArea(row.상차지주소 || row.상차지명));
+      setCtxAddrDrop4(extractAddrArea(row.하차지주소 || row.하차지명));
+      setCtxAddrAllClients4(false);
+      setCtxAddrResults4([]);
+      setCtxNoHistory4Open(true);
+      return;
+    }
+
+    const scored = base.map(r => {
+      const cargoMatch = targetCargo && r.화물내용 && r.화물내용.includes(targetCargo);
+      const tonMatch = targetTon && r.차량톤수 && r.차량톤수 === targetTon;
+      return {
+        ...r,
+        _score: (cargoMatch ? 100 : 0) + (tonMatch ? 100 : 0),
+        _match: { cargo: cargoMatch, ton: tonMatch },
+        _time: r.updatedAt || r.등록일 || 0,
+      };
+    });
+    scored.sort((a, b) => b._score !== a._score ? b._score - a._score : b._time - a._time);
+
+    const fares = scored.map(r => Number(String(r.청구운임 || "0").replace(/[^\d]/g, "")));
+    setCtxFare4Target(row);
+    setCtxFare4Result({
+      records: scored,
+      count: fares.length,
+      avg: Math.round(fares.reduce((a, b) => a + b, 0) / fares.length),
+      min: Math.min(...fares),
+      max: Math.max(...fares),
+    });
+    setCtxFare4PanelOpen(true);
+  };
+
+  const handleCtxAddrSearch4 = () => {
+    const row = ctxFare4Target;
+    const pickupKw = ctxAddrPickup4.trim();
+    const dropKw = ctxAddrDrop4.trim();
+    if (!pickupKw || !dropKw) { showAlert("상차지역과 하차지역을 입력해주세요."); return; }
+
+    const targetGroup = row ? getVehicleGroup(row.차량종류) : "general";
+    const targetClient = row ? String(row.거래처 || "").trim() : "";
+
+    const base = (dispatchData || []).filter(r => {
+      if (!r.청구운임) return false;
+      const rPickup = String(r.상차지명 || "") + " " + String(r.상차지주소 || "");
+      const rDrop = String(r.하차지명 || "") + " " + String(r.하차지주소 || "");
+      if (!rPickup.includes(pickupKw)) return false;
+      if (!rDrop.includes(dropKw)) return false;
+      const rGroup = getVehicleGroup(r.차량종류);
+      if (rGroup !== targetGroup) return false;
+      if (!ctxAddrAllClients4 && targetClient && String(r.거래처 || "").trim() !== targetClient) return false;
+      return true;
+    });
+
+    if (!base.length) {
+      setCtxAddrResults4([]);
+      showAlert("해당 조건의 운임 이력이 없습니다.");
+      return;
+    }
+
+    const scored = base.map(r => ({
+      ...r,
+      _score: row ? scoreCtxFareRow(r, row) : 0,
+      _match: {
+        cargo: row && String(row.화물내용 || "").trim() && r.화물내용 && r.화물내용.includes(String(row.화물내용 || "").trim()),
+        ton: row && String(row.차량톤수 || "").trim() && r.차량톤수 === String(row.차량톤수 || "").trim(),
+      },
+      _time: r.updatedAt || r.등록일 || 0,
+    }));
+    scored.sort((a, b) => b._score !== a._score ? b._score - a._score : b._time - a._time);
+
+    const fares = scored.map(r => Number(String(r.청구운임 || "0").replace(/[^\d]/g, "")));
+    setCtxFare4Result({
+      records: scored,
+      count: fares.length,
+      avg: Math.round(fares.reduce((a, b) => a + b, 0) / fares.length),
+      min: Math.min(...fares),
+      max: Math.max(...fares),
+    });
+    setCtxAddrResults4(scored);
+    setCtxAddrSearch4Open(false);
+    setCtxFare4PanelOpen(true);
+  };
 
   // 🔵 동일 노선 추천 리스트
   const [similarOrders, setSimilarOrders] = React.useState([]);
@@ -18341,6 +18488,18 @@ if (editTarget.거래처명) {
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
             일괄동기화
+          </button>
+          {/* 운임조회 */}
+          <button
+            className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
+            onClick={() => {
+              const r = contextMenu.row;
+              setContextMenu(null);
+              handleCtxFareSearch4(r);
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+            운임조회
           </button>
           <div className="border-t border-gray-100 my-1"/>
           {/* 삭제 */}
