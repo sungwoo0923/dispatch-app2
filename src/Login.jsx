@@ -1,244 +1,128 @@
-// ======================= src/Login.jsx (PREMIUM V6.1 FIXED) =======================
-import React, { useState, useEffect } from "react";
-import { auth } from "./firebase";
-import {
-  signInWithEmailAndPassword,
-  sendPasswordResetEmail,
-} from "firebase/auth";
-import { useNavigate, Link } from "react-router-dom";
-import { LogIn, Loader2, Truck, UserPlus } from "lucide-react";
+// ======================= src/Login.jsx (Homepage) =======================
+import React from "react";
+import { Link } from "react-router-dom";
+
+const features = [
+  { icon: "🚚", title: "배차 관리", desc: "실시간 배차 등록 및 현황 관리" },
+  { icon: "👨‍✈️", title: "차주 관리", desc: "차주 정보 및 운행 현황 통합 관리" },
+  { icon: "💰", title: "운임 정산", desc: "청구운임 및 기사운임 자동 정산" },
+  { icon: "🏢", title: "거래처 관리", desc: "화주사 및 거래처 통합 관리" },
+];
 
 export default function Login() {
-  const [email, setEmail] = useState("");
-  const [pw, setPw] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [msg, setMsg] = useState(null);
-  const navigate = useNavigate();
-const [showPopup, setShowPopup] = useState(false);
-const [countdown, setCountdown] = useState(3);
-const [loginTime, setLoginTime] = useState("");
-useEffect(() => {
-  if (!showPopup) return;
-
-  const handleKey = (e) => {
-    if (e.key === "Enter") {
-      sessionStorage.removeItem("skipLoginPopup");
-      navigate("/app", { replace: true });
-    }
-  };
-
-  window.addEventListener("keydown", handleKey);
-  return () => window.removeEventListener("keydown", handleKey);
-}, [showPopup, navigate]);
-useEffect(() => {
-  if (!showPopup) return;
-
-  if (countdown === 0) {
-    navigate("/app", { replace: true });
-    return;
-  }
-
-  const timer = setTimeout(() => {
-    setCountdown((prev) => prev - 1);
-  }, 1000);
-
-  return () => clearTimeout(timer);
-}, [countdown, showPopup]);
-  const login = async () => {
-  setError(null);
-  setMsg(null);
-
-  if (!email.trim() || !pw.trim()) {
-    return setError("이메일 / 비밀번호를 입력해주세요.");
-  }
-
-  try {
-    setLoading(true);
-
-    await signInWithEmailAndPassword(auth, email, pw);
-sessionStorage.setItem("skipLoginPopup", "true");
-    // 🔥 로그인 시간
-    const now = new Date();
-    setLoginTime(now.toLocaleString("ko-KR"));
-
-    // 🔥 팝업 실행
-    setShowPopup(true);
-    setCountdown(3);
-
-  } catch (err) {
-    setError("로그인 실패. 이메일과 비밀번호를 확인해주세요.");
-    console.error(err);
-  } finally {
-    // 🔥 이거 반드시 필요
-    setLoading(false);
-  }
-};
-
-  const resetPw = async () => {
-    if (!email.trim()) return setError("이메일을 먼저 입력해주세요.");
-    try {
-      await sendPasswordResetEmail(auth, email);
-      setMsg("재설정 링크를 이메일로 발송했습니다.");
-      setError(null);
-    } catch (err) {
-      setError("해당 이메일을 찾을 수 없습니다.");
-    }
-  };
-
-  // 교체 후
   return (
-    <div className="min-h-screen flex items-center justify-center
-      bg-gradient-to-br from-[#061832] via-[#0B2554] to-[#0D2B66] px-4 relative">
+    <div className="relative min-h-screen overflow-hidden">
+      {/* ── 배경 비디오 ── */}
+      <video
+        className="absolute inset-0 w-full h-full object-cover"
+        src="/videos/bg-truck.mp4"
+        autoPlay
+        loop
+        muted
+        playsInline
+      />
+      {/* 비디오 위 어두운 오버레이 */}
+      <div
+        className="absolute inset-0"
+        style={{
+          background:
+            "linear-gradient(135deg, rgba(6,24,50,0.88) 0%, rgba(11,37,84,0.82) 50%, rgba(13,43,102,0.88) 100%)",
+        }}
+      />
 
-      {/* 우측 상단 로고 */}
-      <div className="fixed top-4 right-4 z-50">
-        <img
-          src="/icons/sflow-icon.png"
-          alt="S-Flow"
-          className="w-20 h-20 rounded-2xl shadow-lg"
-        />
+      {/* ── 콘텐츠 레이어 ── */}
+      <div className="relative z-10 flex flex-col min-h-screen">
+
+        {/* Fixed Nav */}
+        <nav className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 py-3 bg-[#061832]/70 backdrop-blur-md border-b border-white/10">
+          <div className="flex items-center gap-2">
+            <img src="/icons/sflow-icon.png" alt="KP-Flow" className="w-7 h-7 rounded-md" />
+            <span className="font-bold text-white text-sm tracking-tight">KP-Flow Logistics</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <Link
+              to="/transport-login"
+              className="px-4 py-2 text-sm text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-all"
+            >
+              운송사 로그인
+            </Link>
+            <Link
+              to="/driver-login"
+              className="px-4 py-2 text-sm text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-all"
+            >
+              차주 로그인
+            </Link>
+            <Link
+              to="/shipper-login"
+              className="px-4 py-2 text-sm text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-all"
+            >
+              화주사 로그인
+            </Link>
+          </div>
+        </nav>
+
+        {/* Hero Section */}
+        <section className="flex flex-col items-center justify-center flex-1 px-4 pt-20 pb-10 text-center">
+          {/* Badge */}
+          <div className="inline-flex items-center gap-2 mb-6 px-4 py-1.5 bg-white/10 border border-white/20 rounded-full">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="text-xs font-semibold text-white/80 uppercase tracking-wider">물류 관리 플랫폼</span>
+          </div>
+
+          {/* Headline */}
+          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-white leading-tight mb-5 max-w-3xl">
+            더 스마트한<br />
+            <span className="text-blue-300">물류 관리</span>
+          </h1>
+
+          {/* Subtitle */}
+          <p className="text-white/60 text-base sm:text-lg mb-10 leading-relaxed max-w-xl">
+            배차 관리부터 차주 관리, 운임 정산까지<br />
+            KP-Flow 하나로 물류 업무를 최적화하세요.
+          </p>
+
+          {/* CTA Buttons */}
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mb-16 w-full max-w-md">
+            <Link
+              to="/transport-login"
+              className="w-full sm:w-auto bg-white text-[#1B2B4B] font-bold rounded-xl px-8 py-3.5 text-sm hover:bg-blue-50 transition-all shadow-lg"
+            >
+              운송사 시작하기
+            </Link>
+            <Link
+              to="/driver-login"
+              className="w-full sm:w-auto bg-white/10 text-white border border-white/25 rounded-xl px-8 py-3.5 text-sm hover:bg-white/20 transition-all backdrop-blur-sm"
+            >
+              차주 시작하기
+            </Link>
+            <Link
+              to="/shipper-login"
+              className="w-full sm:w-auto bg-white/10 text-white border border-white/25 rounded-xl px-8 py-3.5 text-sm hover:bg-white/20 transition-all backdrop-blur-sm"
+            >
+              화주사 시작하기
+            </Link>
+          </div>
+
+          {/* Feature Cards */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 max-w-4xl w-full">
+            {features.map((f) => (
+              <div
+                key={f.title}
+                className="bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl p-5 text-left transition-all backdrop-blur-sm"
+              >
+                <div className="text-2xl mb-2">{f.icon}</div>
+                <p className="text-white font-bold text-sm">{f.title}</p>
+                <p className="text-white/40 text-xs mt-1 leading-relaxed">{f.desc}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* Footer */}
+        <footer className="py-4 text-center">
+          <p className="text-xs text-white/20">© 2025 KP-Flow Logistics. All rights reserved.</p>
+        </footer>
       </div>
-
-      <div className="bg-white/95 rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.15)]
-        p-10 w-full max-w-md border border-gray-100 backdrop-blur-md text-center">
-
-        {/* 타이틀 */}
-        <h1 className="text-2xl font-extrabold text-[#0D2B66] mb-3">
-          S-Flow Logistics
-        </h1>
-
-        <p className="text-gray-600 mb-6 text-sm">
-          직원 전용 관리자 로그인
-        </p>
-
-        {/* 이메일 */}
-        <input
-          type="email"
-          placeholder="이메일"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className="border w-full p-3 rounded-lg mb-3"
-        />
-
-        {/* 비밀번호 */}
-        <input
-          type="password"
-          placeholder="비밀번호"
-          value={pw}
-          onChange={(e) => setPw(e.target.value)}
-          className="border w-full p-3 rounded-lg mb-3"
-        />
-
-        {error && <p className="text-red-600 text-sm mb-2">{error}</p>}
-        {msg && <p className="text-green-600 text-sm mb-2">{msg}</p>}
-
-        <button
-          onClick={login}
-          disabled={loading}
-          className="w-full bg-[#0D2B66] text-white py-3 rounded-lg flex justify-center gap-2"
-        >
-          {loading ? <Loader2 size={20} className="animate-spin" /> : <LogIn size={20} />}
-          로그인
-        </button>
-
-        {!loading && (
-          <button
-            onClick={resetPw}
-            className="text-sm text-gray-500 mt-3 underline"
-          >
-            비밀번호 찾기
-          </button>
-        )}
-
-        <div className="border-t my-6"></div>
-
-        {/* 직원 / 기사 */}
-        <Link to="/signup" className="block text-blue-600 mb-4">
-          직원 회원가입
-        </Link>
-
-        <div className="flex justify-center gap-6 mb-6">
-          <Link to="/driver-login" className="flex items-center gap-1 text-green-700">
-            <Truck size={16} /> 기사 로그인
-          </Link>
-          <Link to="/driver-register" className="flex items-center gap-1 text-green-700">
-            <UserPlus size={16} /> 기사 회원가입
-          </Link>
-        </div>
-
-        {/* ================= 화주 전용 ================= */}
-        <div className="border-t my-6"></div>
-
-        <div className="text-sm text-gray-600 mb-2">
-          화주 고객이신가요?
-        </div>
-
-        <div className="flex justify-center gap-4">
-          <Link
-            to="/shipper-login"
-            className="px-4 py-2 rounded bg-blue-600 text-white font-semibold"
-          >
-            화주 로그인
-          </Link>
-
-          <Link
-            to="/shipper-signup"
-            className="px-4 py-2 rounded bg-gray-200 text-gray-800 font-semibold"
-          >
-            화주 회원가입
-          </Link>
-        </div>
-
-      </div>
-      {showPopup && (
-  <div className="fixed inset-0 bg-black/40 z-[999] flex items-center justify-center">
-    <div className="bg-white w-[320px] rounded-2xl shadow-xl p-6 text-center">
-
-      <div className="text-lg font-bold mb-3">로그인 완료</div>
-
-      <div className="text-sm text-gray-600 mb-1">로그인 일시</div>
-      <div className="text-sm font-semibold mb-2">{loginTime}</div>
-
-      <div className="text-sm text-gray-600 mb-1">로그인 아이디</div>
-      <div className="text-sm font-semibold mb-3">{email}</div>
-
-      <div className="relative w-20 h-20 mx-auto mb-4">
-        <svg className="w-20 h-20 -rotate-90">
-          <circle cx="40" cy="40" r="34" stroke="#e5e7eb" strokeWidth="6" fill="none"/>
-          <circle
-            cx="40"
-            cy="40"
-            r="34"
-            stroke="#2563eb"
-            strokeWidth="6"
-            fill="none"
-            strokeDasharray={2 * Math.PI * 34}
-            strokeDashoffset={(2 * Math.PI * 34 * countdown) / 3}
-            strokeLinecap="round"
-            style={{ transition: "stroke-dashoffset 1s linear" }}
-          />
-        </svg>
-
-        <div className="absolute inset-0 flex items-center justify-center text-lg font-bold text-blue-600">
-          {countdown}
-        </div>
-      </div>
-
-      <div className="text-xs text-gray-500 mb-4">
-        오늘도 좋은 하루 되세요!
-      </div>
-
-      <button
-        onClick={() => navigate("/app", { replace: true })}
-        className="w-full bg-blue-600 text-white py-2 rounded"
-      >
-        확인
-      </button>
-
-    </div>
-  </div>
-)}
     </div>
   );
 }

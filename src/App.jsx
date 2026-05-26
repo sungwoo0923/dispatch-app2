@@ -22,6 +22,7 @@ import DriverLogin from "./driver/DriverLogin";
 import DriverRegister from "./driver/DriverRegister";
 
 import Login from "./Login";
+import TransportLogin from "./TransportLogin";
 import Signup from "./Signup";
 import ShipperLogin from "./shipper/ShipperLogin";
 import ShipperSignup from "./shipper/ShipperSignup";
@@ -65,6 +66,7 @@ export default function App() {
   const [role, setRole] = useState(null);
   const [loading, setLoading] = useState(true);
   const [approved, setApproved] = useState(false);
+  const [userCompany, setUserCompany] = useState("");
   // updateReady 팝업 제거됨 - UpdateBanner가 자동 처리
   const [splashDone, setSplashDone] = useState(false);
 
@@ -284,11 +286,26 @@ export default function App() {
       const unsubUser = onSnapshot(doc(db, "users", u.uid), (snap) => {
         if (snap.exists()) {
           const data = snap.data();
-          setRole(data.role || "shipper");
-          setApproved(data.approved === true);
+          const dataRole = data.role || "shipper";
+          setRole(dataRole);
+          // approved !== false allows old accounts (undefined) and explicitly true
+          // only blocks accounts explicitly set to false (new unapproved signups)
+          setApproved(data.approved !== false);
+          if (dataRole === "totalMaster") {
+            // totalMaster's company is set at login time (TransportLogin "회사명" field)
+            // and stored in localStorage as "loginCompany" — don't overwrite it from Firestore
+            const loginCompany = localStorage.getItem("loginCompany") || "";
+            setUserCompany(loginCompany);
+            localStorage.setItem("userCompany", loginCompany);
+          } else {
+            setUserCompany(data.companyName || "");
+            localStorage.setItem("userCompany", data.companyName || "");
+          }
+          localStorage.setItem("role", dataRole);
         } else {
           setRole("shipper");
           setApproved(false);
+          setUserCompany("");
         }
         setLoading(false);
       });
@@ -346,26 +363,41 @@ export default function App() {
 
           <Route
             path="/login"
+            element={
+              user
+                ? role === "driver"
+                  ? <Navigate to="/driver-home" replace />
+                  : role === "shipper"
+                    ? (approved ? <Navigate to="/shipper" replace /> : <Navigate to="/shipper-pending" replace />)
+                    : <Navigate to="/app" replace />
+                : <Login />
+            }
+          />
+
+          <Route path="/signup" element={<Signup />} />
+
+          <Route
+            path="/transport-login"
             element={(() => {
-              const skip = sessionStorage.getItem("skipLoginPopup");
-              if (user && skip !== "true") {
+              const validating = sessionStorage.getItem("transportValidating") === "true";
+              const skip = sessionStorage.getItem("skipLoginPopup") === "true";
+              if (user && !validating && !skip) {
                 return role === "driver"
                   ? <Navigate to="/driver-home" replace />
                   : role === "shipper"
                     ? (approved ? <Navigate to="/shipper" replace /> : <Navigate to="/shipper-pending" replace />)
                     : <Navigate to="/app" replace />;
               }
-              return <Login />;
+              return <TransportLogin />;
             })()}
           />
-
-          <Route path="/signup" element={<Signup />} />
 
           <Route
             path="/shipper-login"
             element={(() => {
-              const skip = sessionStorage.getItem("skipLoginPopup");
-              if (user && role === "shipper" && skip !== "true") {
+              const shipperValidating = sessionStorage.getItem("shipperValidating") === "true";
+              const skip = sessionStorage.getItem("skipLoginPopup") === "true";
+              if (user && role === "shipper" && !shipperValidating && !skip) {
                 return approved ? <Navigate to="/shipper" replace /> : <Navigate to="/shipper-pending" replace />;
               }
               return <ShipperLogin />;
@@ -408,8 +440,8 @@ export default function App() {
           <Route
             path="/app"
             element={
-              user && role !== "shipper" && role !== "driver"
-                ? (isMobile ? <MobileApp role={role} user={user} /> : <DispatchApp role={role} user={user} />)
+              user && role !== "shipper" && role !== "driver" && approved
+                ? (isMobile ? <MobileApp role={role} user={user} userCompany={userCompany} /> : <DispatchApp role={role} user={user} userCompany={userCompany} />)
                 : <Navigate to="/login" replace />
             }
           />
