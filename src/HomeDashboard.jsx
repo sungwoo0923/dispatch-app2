@@ -130,7 +130,7 @@ const RegBtn = ({ onClick }) => (
 );
 
 /* ===================== HOME DASHBOARD ===================== */
-export default function HomeDashboard({ role, user, pending, delayed, dispatchData = [] }) {
+export default function HomeDashboard({ role, user, userCompany = "", pending, delayed, dispatchData = [] }) {
   const isEditingHandoverRef = useRef(false);
   const [toast, setToast] = useState(null);
   const now = new Date();
@@ -168,6 +168,10 @@ export default function HomeDashboard({ role, user, pending, delayed, dispatchDa
   const [users, setUsers] = useState([]);
 
 React.useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 10000); return () => clearTimeout(t); }, [toast]);
+
+  const getViewCompany = () => role === "totalMaster"
+    ? (localStorage.getItem("loginCompany") || userCompany || "돌캐")
+    : (userCompany || localStorage.getItem("userCompany") || "돌캐");
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "users"), (snap) => {
@@ -234,10 +238,11 @@ React.useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(
   }, []);
 
   React.useEffect(() => {
+    const vc = getViewCompany();
     const q = query(collection(db, "schedules"), orderBy("createdAt", "desc"));
     let initialLoad = true;
     const unsub = onSnapshot(q, (snap) => {
-      const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const list = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(d => (d.companyName || "돌캐") === vc);
       setSchedules(list);
       if (initialLoad) {
         initialLoad = false;
@@ -255,10 +260,11 @@ React.useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(
   }, [showTodayToast]);
 
   React.useEffect(() => {
+    const vc = getViewCompany();
     const q = query(collection(db, "notices"), orderBy("createdAt", "desc"));
     let initialLoad = true;
     const unsub = onSnapshot(q, (snap) => {
-      const list = snap.docs.map(d => { const data = d.data(); const date = formatCreatedAt(data.createdAt); if (!date) return null; return { id: d.id, ...data, date }; }).filter(Boolean);
+      const list = snap.docs.map(d => { const data = d.data(); const date = formatCreatedAt(data.createdAt); if (!date) return null; return { id: d.id, ...data, date }; }).filter(Boolean).filter(d => (d.companyName || "돌캐") === vc);
       setNotices(list);
       if (initialLoad) {
         initialLoad = false;
@@ -276,10 +282,11 @@ React.useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(
   }, [showTodayToast]);
 
   React.useEffect(() => {
+    const vc = getViewCompany();
     const q = query(collection(db, "handovers"), orderBy("createdAt", "desc"));
     let initialLoad = true;
     const unsub = onSnapshot(q, (snap) => {
-      const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const list = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(d => (d.companyName || "돌캐") === vc);
       setHandovers(list);
       if (initialLoad) {
         initialLoad = false;
@@ -665,7 +672,7 @@ React.useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(
               if (selectedNotice?.id) {
                 await updateDoc(doc(db, "notices", selectedNotice.id), { title: noticeForm.title, author: noticeForm.author, content: noticeForm.content });
               } else {
-                await addDoc(collection(db, "notices"), { title: noticeForm.title, author: noticeForm.author, content: noticeForm.content, createdAt: serverTimestamp() });
+                await addDoc(collection(db, "notices"), { title: noticeForm.title, author: noticeForm.author, content: noticeForm.content, createdAt: serverTimestamp(), companyName: getViewCompany() });
               }
               setNoticeForm({ title: "", author: "", content: "" }); setNoticeOpen(false);
             }} className="w-full bg-[#1B2B4B] text-white py-2.5 rounded-lg font-semibold text-[14px] hover:bg-[#243a60] transition">저장</button>
@@ -705,7 +712,7 @@ React.useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(
               if (selectedSchedule?.id) {
                 await updateDoc(doc(db, "schedules", selectedSchedule.id), { type: scheduleForm.type, name: userName, start: scheduleForm.start, end: scheduleForm.end, memo: scheduleForm.memo });
               } else {
-                await addDoc(collection(db, "schedules"), { type: scheduleForm.type, name: userName, start: scheduleForm.start, end: scheduleForm.end, memo: scheduleForm.memo, createdAt: serverTimestamp() });
+                await addDoc(collection(db, "schedules"), { type: scheduleForm.type, name: userName, start: scheduleForm.start, end: scheduleForm.end, memo: scheduleForm.memo, createdAt: serverTimestamp(), companyName: getViewCompany() });
               }
               setScheduleForm({ type: "휴가", start: "", end: "", memo: "" }); setScheduleOpen(false);
             }} className="w-full bg-[#1B2B4B] text-white py-2.5 rounded-lg font-semibold text-[14px] hover:bg-[#243a60] transition">저장</button>
@@ -745,7 +752,7 @@ React.useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(
               if (selectedHandover?.id) {
                 await updateDoc(doc(db, "handovers", selectedHandover.id), { ...handoverForm, author: me?.name || "사용자", authorUid: user?.uid });
               } else {
-                await addDoc(collection(db, "handovers"), { ...handoverForm, author: me?.name || "사용자", authorUid: user?.uid, createdAt: serverTimestamp(), readBy: [] });
+                await addDoc(collection(db, "handovers"), { ...handoverForm, author: me?.name || "사용자", authorUid: user?.uid, createdAt: serverTimestamp(), readBy: [], companyName: getViewCompany() });
               }
               setHandoverForm({ text: "", author: me?.name || "", authorUid: user?.uid || "", receiver: "", receiverUid: "", date: todayStr });
               setHandoverOpen(false); setSelectedHandover(null); isEditingHandoverRef.current = false;

@@ -112,7 +112,7 @@ function DriverSearchInput({ value, onChange, onSelect, drivers, placeholder = "
   );
 }
 
-export default function FixedClients({ drivers = [], upsertDriver }) {
+export default function FixedClients({ drivers = [], upsertDriver, userCompany = "", role = "" }) {
   const coll = collection(db, "fixedClients");
 
   const [rows, setRows] = useState([]);
@@ -141,13 +141,24 @@ export default function FixedClients({ drivers = [], upsertDriver }) {
   }]);
 
   useEffect(() => {
+    const viewCompany = role === "totalMaster"
+      ? (localStorage.getItem("loginCompany") || userCompany || "돌캐")
+      : (userCompany || localStorage.getItem("userCompany") || "돌캐");
     const unsub = onSnapshot(coll, (snap) => {
-      setRows(snap.docs.map(d => d.data()).sort((a, b) => (b.날짜 || "").localeCompare(a.날짜 || "")));
+      const arr = snap.docs
+        .map(d => d.data())
+        .filter(d => (d.companyName || "돌캐") === viewCompany)
+        .sort((a, b) => (b.날짜 || "").localeCompare(a.날짜 || ""));
+      setRows(arr);
     });
     return () => unsub();
-  }, []);
+  }, [userCompany, role]);
 
-  const saveRow = async (r) => await setDoc(doc(coll, r.id), r, { merge: true });
+  const getViewCompany = () => role === "totalMaster"
+    ? (localStorage.getItem("loginCompany") || userCompany || "돌캐")
+    : (userCompany || localStorage.getItem("userCompany") || "돌캐");
+
+  const saveRow = async (r) => await setDoc(doc(coll, r.id), { ...r, companyName: r.companyName || getViewCompany() }, { merge: true });
   const removeRow = async (id) => await deleteDoc(doc(coll, id));
   const updateRow = (id, patch) => setRows(prev => prev.map(r => r.id === id ? { ...r, ...patch } : r));
 
@@ -222,7 +233,7 @@ export default function FixedClients({ drivers = [], upsertDriver }) {
   };
 
   const addRow = async () => {
-    const newRow = { id: crypto.randomUUID(), 날짜: new Date().toISOString().slice(0, 10), 정산완료: false, 거래처명: "", 톤수: "", 수량: "", 차량번호: "", 이름: "", 핸드폰번호: "", 청구운임: "", 기사운임: "", 수수료: "" };
+    const newRow = { id: crypto.randomUUID(), 날짜: new Date().toISOString().slice(0, 10), 정산완료: false, 거래처명: "", 톤수: "", 수량: "", 차량번호: "", 이름: "", 핸드폰번호: "", 청구운임: "", 기사운임: "", 수수료: "", companyName: getViewCompany() };
     await setDoc(doc(coll, newRow.id), newRow);
   };
 
@@ -265,9 +276,10 @@ export default function FixedClients({ drivers = [], upsertDriver }) {
   };
 
   const submitFastRows = async () => {
+    const vc = getViewCompany();
     for (const row of fastRows) {
       const id = crypto.randomUUID();
-      await setDoc(doc(coll, id), { id, ...row, 정산완료: false });
+      await setDoc(doc(coll, id), { id, ...row, 정산완료: false, companyName: vc });
     }
     alert(`${fastRows.length}건 등록 완료!`);
     setFastRows([{ 날짜: new Date().toISOString().slice(0, 10), 거래처명: "", 톤수: "", 수량: 1, 기사단가: 0, 수수료단가: 0, 차량번호: "", 이름: "", 핸드폰번호: "", 기사운임: 0, 수수료: 0, 청구운임: 0 }]);

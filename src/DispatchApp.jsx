@@ -225,15 +225,17 @@ const [places, setPlaces] = useState([]);
 useEffect(() => {
   const coll = collection(db, "places");
   const unsub = onSnapshot(coll, (snap) => {
-    const arr = snap.docs.map((d) => ({
-      _id: d.id,
-      ...(d.data() || {}),
-    }));
+    const viewCompany = role === "totalMaster"
+      ? (localStorage.getItem("loginCompany") || userCompany || "돌캐")
+      : (userCompany || localStorage.getItem("userCompany") || "돌캐");
+    const arr = snap.docs
+      .map((d) => ({ _id: d.id, ...(d.data() || {}) }))
+      .filter((d) => (d.companyName || "돌캐") === viewCompany);
     setPlaces(arr);
   });
 
   return () => unsub();
-}, []);
+}, [userCompany, role]);
 
 // ===================== 메인 실시간 =====================
 useEffect(() => {
@@ -747,6 +749,9 @@ const upsertPlace = async (place) => {
       메모: place.메모 || "",
       isActive: place.isActive !== false,
       updatedAt: serverTimestamp(),
+      companyName: place.companyName || (role === "totalMaster"
+        ? (localStorage.getItem("loginCompany") || userCompany || "돌캐")
+        : (userCompany || localStorage.getItem("userCompany") || "돌캐")),
     };
 
     // 🔥 exists() 체크 제거
@@ -2104,6 +2109,7 @@ return (
           <HomeDashboard
             role={role}
             user={user}
+            userCompany={userCompany || localStorage.getItem("userCompany") || ""}
             todayStats={todayStats}
             myStats={myStats}
             pending={pendingToday}
@@ -2176,7 +2182,7 @@ return (
         {menu === "미배차현황" && (
           <UnassignedStatus
             role={role}
-            dispatchData={dispatchData}
+            dispatchData={dispatchDataFiltered}
             patchDispatch={patchDispatch}
             removeDispatch={removeDispatch}
             drivers={drivers}
@@ -2186,11 +2192,11 @@ return (
           />
         )}
          {menu === "표준운임표" && (
-          <StandardFare dispatchData={dispatchData} />
+          <StandardFare dispatchData={dispatchDataFiltered} />
         )}
 
         {menu === "단가표" && (
-          <RateCard dispatchData={dispatchData} />
+          <RateCard dispatchData={dispatchDataFiltered} />
         )}
 
         {menu === "기사관리" && (role === "admin" || role === "totalMaster") && (
@@ -2238,7 +2244,7 @@ return (
 
             {/* 탭 화면 */}
             {subMenu === "고정거래처관리" && (
-              <FixedClients drivers={drivers} upsertDriver={upsertDriver} />
+              <FixedClients drivers={drivers} upsertDriver={upsertDriver} userCompany={userCompany || localStorage.getItem("userCompany") || ""} role={role} />
             )}
 
             {subMenu === "지입차관리" && (
@@ -2249,7 +2255,7 @@ return (
 
         {menu === "매출관리" && (role === "admin" || role === "totalMaster") && (
           <Settlement
-            dispatchData={dispatchData}
+            dispatchData={dispatchDataFiltered}
             fixedRows={fixedRows}
             clients={clients}
             places={places}
@@ -2258,7 +2264,7 @@ return (
 
         <div style={{ display: menu === "거래처정산" && (role === "admin" || role === "totalMaster") ? "block" : "none" }}>
           <ClientSettlement
-            dispatchData={dispatchData}
+            dispatchData={dispatchDataFiltered}
             setDispatchData={setDispatchData}
             clients={clients}
             setClients={(next) => next.forEach(upsertClient)}
@@ -2273,7 +2279,7 @@ return (
         </div>
         {menu === "지급관리" && (role === "admin" || role === "totalMaster") && (
           <PaymentManagement
-            dispatchData={dispatchData}
+            dispatchData={dispatchDataFiltered}
             patchDispatch={patchDispatch}
           />
         )}
