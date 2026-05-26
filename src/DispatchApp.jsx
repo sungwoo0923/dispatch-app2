@@ -955,12 +955,25 @@ function mergeViaTonnage(mainTon, waypointLists) {
     return v && v !== "없음";
   });
   if (validTons.length <= 1) return mainTon || "";
-  let total = 0;
+  // Convert all values to kg, then format result
+  let totalKg = 0;
   for (const ton of validTons) {
-    const m = String(ton).match(/(\d+(?:\.\d+)?)/);
-    if (m) total += parseFloat(m[1]);
+    const s = String(ton).trim();
+    const m = s.match(/(\d+(?:\.\d+)?)/);
+    if (!m) continue;
+    const num = parseFloat(m[1]);
+    if (/kg/i.test(s)) {
+      totalKg += num;
+    } else {
+      totalKg += num * 1000;
+    }
   }
-  return total % 1 === 0 ? `${total}톤` : `${total}톤`;
+  if (totalKg === 0) return mainTon || "";
+  if (totalKg < 1000) {
+    return `${totalKg % 1 === 0 ? totalKg : totalKg}kg`;
+  }
+  const tons = totalKg / 1000;
+  return `${tons % 1 === 0 ? tons : tons}톤`;
 }
 
 // ===================== TOAST SYSTEM (GLOBAL) =====================
@@ -9681,9 +9694,9 @@ setConfirmChange(null);
       <div className="text-[11px] text-gray-400 font-semibold mb-2">화물 정보</div>
       <div className="grid grid-cols-3 gap-2 text-center">
         {[
-          { label: "화물", value: mergeViaCargoText(form.화물내용, [form.경유상차목록, form.경유지_상차, form.경유하차목록, form.경유지_하차]) },
+          { label: "화물", value: mergeViaCargoText(form.화물내용, [form.경유상차목록, form.경유하차목록]) },
           { label: "차량", value: form.차량종류 },
-          { label: "톤수", value: mergeViaTonnage(form.차량톤수, [form.경유상차목록, form.경유지_상차, form.경유하차목록, form.경유지_하차]) },
+          { label: "톤수", value: mergeViaTonnage(form.차량톤수, [form.경유상차목록, form.경유하차목록]) },
         ].map(({ label, value }) => (
           <div key={label} className="border border-gray-200 rounded-lg py-2 px-1 bg-gray-50">
             <div className="text-[13px] text-gray-400 mb-0.5">{label}</div>
@@ -14935,9 +14948,9 @@ const head = isDark
     if(_hasVia)row["경유 상차지"]=_via(_merge(r,"경유상차목록","경유지_상차"));
     row.하차지명=r.하차지명||"";
     if(_hasVia)row["경유 하차지"]=_via(_merge(r,"경유하차목록","경유지_하차"));
-    row.화물내용=mergeViaCargoText(r.화물내용,[r.경유상차목록,r.경유지_상차,r.경유하차목록,r.경유지_하차])||"";
+    row.화물내용=mergeViaCargoText(r.화물내용,[r.경유상차목록,r.경유하차목록])||"";
     row.차량종류=r.차량종류||"";
-    row.차량톤수=mergeViaTonnage(r.차량톤수,[r.경유상차목록,r.경유지_상차,r.경유하차목록,r.경유지_하차])||"";
+    row.차량톤수=mergeViaTonnage(r.차량톤수,[r.경유상차목록,r.경유하차목록])||"";
     Object.assign(row,{차량번호:r.차량번호||"",기사명:r.이름||"",전화번호:r.전화번호||"",배차상태:r.배차상태||"",청구운임:toInt(r.청구운임),기사운임:toInt(r.기사운임),수수료:toInt(r.청구운임)-toInt(r.기사운임),지급방식:r.지급방식||"",배차방식:r.배차방식||"",메모:r.메모||""});
     return row;
   });
@@ -21873,9 +21886,9 @@ if (first) {
       row["하차지주소"] = r.하차지주소 || "";
       if (_hasVia) row["경유 하차지"] = _via(_merge(r,"경유하차목록","경유지_하차"));
       Object.assign(row, {
-        화물내용: mergeViaCargoText(r.화물내용, [r.경유상차목록, r.경유지_상차, r.경유하차목록, r.경유지_하차]) || "",
+        화물내용: mergeViaCargoText(r.화물내용, [r.경유상차목록, r.경유하차목록]) || "",
         차량종류: r.차량종류 || "",
-        차량톤수: mergeViaTonnage(r.차량톤수, [r.경유상차목록, r.경유지_상차, r.경유하차목록, r.경유지_하차]) || "",
+        차량톤수: mergeViaTonnage(r.차량톤수, [r.경유상차목록, r.경유하차목록]) || "",
         차량번호: r.차량번호 || "",
         기사명: r.이름 || "",
         전화번호: r.전화번호 || "",
