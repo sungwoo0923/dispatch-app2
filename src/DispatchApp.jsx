@@ -11929,8 +11929,10 @@ const _sc4d=(main,stops)=>{const all=[main,...stops.map(_cargoText)].filter(Bool
 const _totKg4d=_pkg4d(r.차량톤수)+dropStopsD.reduce((a,s)=>a+_pkg4d(_tonText(s)),0)+pickupStopsD.reduce((a,s)=>a+_pkg4d(_tonText(s)),0);
 const _totTon4d=_fkg4d(_totKg4d)||r.차량톤수||"-";
 const _totCargo4d=_sc4d(r.화물내용,[...pickupStopsD,...dropStopsD])||r.화물내용||"";
-const _mainDCargo4d=(hasDropStopsD||hasPickupStopsD)&&_totCargo4d?`\n화물내용 : ${_totCargo4d}`:"";
-const _mainDTon4d=(hasDropStopsD||hasPickupStopsD)&&_totTon4d?`\n화물톤수 : ${_totTon4d}`:"";
+const _mainPCargo4d=hasPickupStopsD&&r.화물내용?`\n화물내용 : ${r.화물내용}`:"";
+const _mainPTon4d=hasPickupStopsD&&r.차량톤수?`\n화물톤수 : ${r.차량톤수}`:"";
+const _mainDCargo4d=hasPickupStopsD?(_totCargo4d?`\n화물내용 : ${_totCargo4d}`:""): (hasDropStopsD&&r.화물내용?`\n화물내용 : ${r.화물내용}`:"");
+const _mainDTon4d=hasPickupStopsD?(_totTon4d?`\n화물톤수 : ${_totTon4d}`:""):(hasDropStopsD&&r.차량톤수?`\n화물톤수 : ${r.차량톤수}`:"");
 
 return `[파렛전표/거래명세서 업로드]
 미 전송시 운임 지연 될 수 있습니다.
@@ -11940,7 +11942,7 @@ ${uploadUrl}
 ${dateNotice}${dateText}
 
 ${pickupMainNumD}상차 : ${r.상차지명 || "-"} / ${r.상차시간 || "즉시"}${r.상차시간기준 ? ` (${r.상차시간기준})` : ""}
-${r.상차지주소 || ""}${(() => { const line = buildContactLine(r.상차지담당자, r.상차지담당자번호); return line ? `\n${line}` : ""; })()}
+${r.상차지주소 || ""}${(() => { const line = buildContactLine(r.상차지담당자, r.상차지담당자번호); return line ? `\n${line}` : ""; })()}${_mainPCargo4d}${_mainPTon4d}
 상차방법 : ${r.상차방법 || "-"}${pickupStopsTextD ? "\n\n" + pickupStopsTextD : ""}
 
 ${dropStopsTextD ? dropStopsTextD + "\n\n" : ""}${dropMainNumD}하차 : ${r.하차지명 || "-"} / ${dropTimeText}${r.하차시간기준 ? ` (${r.하차시간기준})` : ""}
@@ -12058,13 +12060,15 @@ const _sc4f=(main,stops)=>{const all=[main,...stops.map(_cargoTextF)].filter(Boo
 const _totKg4f=_pkg4f(r.차량톤수)+dropStops.reduce((a,s)=>a+_pkg4f(_tonTextF(s)),0)+pickupStops.reduce((a,s)=>a+_pkg4f(_tonTextF(s)),0);
 const _totTon4f=_fkg4f(_totKg4f)||r.차량톤수||"-";
 const _totCargo4f=_sc4f(r.화물내용,[...pickupStops,...dropStops])||r.화물내용||"";
-const _mainDCargo4f=(hasDropStops||hasPickupStops)&&_totCargo4f?`\n화물내용 : ${_totCargo4f}`:"";
-const _mainDTon4f=(hasDropStops||hasPickupStops)&&_totTon4f?`\n화물톤수 : ${_totTon4f}`:"";
+const _mainPCargo4f=hasPickupStops&&r.화물내용?`\n화물내용 : ${r.화물내용}`:"";
+const _mainPTon4f=hasPickupStops&&r.차량톤수?`\n화물톤수 : ${r.차량톤수}`:"";
+const _mainDCargo4f=hasPickupStops?(_totCargo4f?`\n화물내용 : ${_totCargo4f}`:""):(hasDropStops&&r.화물내용?`\n화물내용 : ${r.화물내용}`:"");
+const _mainDTon4f=hasPickupStops?(_totTon4f?`\n화물톤수 : ${_totTon4f}`:""):(hasDropStops&&r.차량톤수?`\n화물톤수 : ${r.차량톤수}`:"");
 
 return `${dateNotice}${r.상차일 || ""} ${yoil}
 
 ${pickupMainNum}상차지 : ${r.상차지명 || "-"}
-${r.상차지주소 || "-"}${pickupContact ? `\n${pickupContact}` : ""}
+${r.상차지주소 || "-"}${pickupContact ? `\n${pickupContact}` : ""}${_mainPCargo4f}${_mainPTon4f}
 상차시간 : ${pickupTime}${r.상차시간기준 ? ` (${r.상차시간기준})` : ""}
 상차방법 : ${r.상차방법 || "-"}${pickupStopsText ? "\n\n" + pickupStopsText : ""}
 
@@ -21158,8 +21162,10 @@ const _pNum5d=_pHas5d?`1.`:"";
 const _dNum5d=_dHas5d?`${_dStops5d.length+1}.`:"";
 const _pStopsText5d=_pHas5d?_pStops5d.map((s,i)=>{const cargo=_ct5d(s);const ton=_tt5d(s);return`${i+2}.상차경유지 : ${s.업체명||"-"}\n${s.주소||""}${s.담당자?`\n담당자 : ${s.담당자}${s.담당자번호?` (${formatPhone(s.담당자번호)})`:""}`:``}${s.상차시간?`\n상차시간 : ${s.상차시간}`:""}${cargo?`\n화물내용 : ${cargo}`:""}${ton?`\n화물톤수 : ${ton}`:""}${s.방법?`\n상차방법 : ${s.방법}`:``}`;}).join("\n"):"";
 const _dStopsText5d=_dHas5d?_dStops5d.map((s,i)=>{const cargo=_ct5d(s);const ton=_tt5d(s);return`${i+1}.하차경유지 : ${s.업체명||"-"}\n${s.주소||""}${s.담당자?`\n담당자 : ${s.담당자}${s.담당자번호?` (${formatPhone(s.담당자번호)})`:""}`:``}${s.하차시간?`\n하차시간 : ${s.하차시간}`:""}${cargo?`\n화물내용 : ${cargo}`:""}${ton?`\n화물톤수 : ${ton}`:""}${s.방법?`\n하차방법 : ${s.방법}`:``}`;}).join("\n"):"";
-const _mainDCargo5d=(_dHas5d||_pHas5d)&&_totCargo5d?`\n화물내용 : ${_totCargo5d}`:"";
-const _mainDTon5d=(_dHas5d||_pHas5d)&&_totTon5d?`\n화물톤수 : ${_totTon5d}`:"";
+const _mainPCargo5d=_pHas5d&&r.화물내용?`\n화물내용 : ${r.화물내용}`:"";
+const _mainPTon5d=_pHas5d&&r.차량톤수?`\n화물톤수 : ${r.차량톤수}`:"";
+const _mainDCargo5d=_pHas5d?(_totCargo5d?`\n화물내용 : ${_totCargo5d}`:""): (_dHas5d&&r.화물내용?`\n화물내용 : ${r.화물내용}`:"");
+const _mainDTon5d=_pHas5d?(_totTon5d?`\n화물톤수 : ${_totTon5d}`:""):(_dHas5d&&r.차량톤수?`\n화물톤수 : ${r.차량톤수}`:"");
 
 return `[파렛전표/거래명세서 업로드]
 (파렛전표/명세서없으면 미업로드)
@@ -21169,7 +21175,7 @@ ${uploadUrl}
 ${dateNotice}${dateText}
 
 ${_pNum5d}상차 : ${r.상차지명||"-"} / ${r.상차시간||"즉시"}${r.상차시간기준?` (${r.상차시간기준})`:""}
-${r.상차지주소||""}${(()=>{const line=buildContactLine(r.상차지담당자,r.상차지담당자번호);return line?`\n${line}`:""})()}
+${r.상차지주소||""}${(()=>{const line=buildContactLine(r.상차지담당자,r.상차지담당자번호);return line?`\n${line}`:""})()}${_mainPCargo5d}${_mainPTon5d}
 상차방법 : ${r.상차방법||"-"}${_pStopsText5d ? "\n\n" + _pStopsText5d : ""}
 
 ${_dStopsText5d ? _dStopsText5d+"\n\n" : ""}${_dNum5d}하차 : ${r.하차지명||"-"} / ${dropTimeText}${r.하차시간기준?` (${r.하차시간기준})`:""}
@@ -21238,13 +21244,15 @@ const _pCon5f=buildContactLine(r.상차지담당자,r.상차지담당자번호);
 const _dCon5f=buildContactLine(r.하차지담당자,r.하차지담당자번호);
 const _pStopsText5f=_pHas5f?_pStops5f.map((s,i)=>{const cargo=_ct5f(s);const ton=_tt5f(s);return`${i+2}.상차경유지 : ${s.업체명||"-"}\n${s.주소||""}${s.담당자?`\n담당자 : ${s.담당자}${s.담당자번호?` (${formatPhone(s.담당자번호)})`:""}`:``}${s.상차시간?`\n상차시간 : ${s.상차시간}`:""}${cargo?`\n화물내용 : ${cargo}`:""}${ton?`\n화물톤수 : ${ton}`:""}${s.방법?`\n상차방법 : ${s.방법}`:``}`;}).join("\n"):"";
 const _dStopsText5f=_dHas5f?_dStops5f.map((s,i)=>{const cargo=_ct5f(s);const ton=_tt5f(s);return`${i+1}.하차경유지 : ${s.업체명||"-"}\n${s.주소||""}${s.담당자?`\n담당자 : ${s.담당자}${s.담당자번호?` (${formatPhone(s.담당자번호)})`:""}`:``}${s.하차시간?`\n하차시간 : ${s.하차시간}`:""}${cargo?`\n화물내용 : ${cargo}`:""}${ton?`\n화물톤수 : ${ton}`:""}${s.방법?`\n하차방법 : ${s.방법}`:``}`;}).join("\n"):"";
-const _mainDCargo5f=(_dHas5f||_pHas5f)&&_totCargo5f?`\n화물내용 : ${_totCargo5f}`:"";
-const _mainDTon5f=(_dHas5f||_pHas5f)&&_totTon5f?`\n화물톤수 : ${_totTon5f}`:"";
+const _mainPCargo5f=_pHas5f&&r.화물내용?`\n화물내용 : ${r.화물내용}`:"";
+const _mainPTon5f=_pHas5f&&r.차량톤수?`\n화물톤수 : ${r.차량톤수}`:"";
+const _mainDCargo5f=_pHas5f?(_totCargo5f?`\n화물내용 : ${_totCargo5f}`:""): (_dHas5f&&r.화물내용?`\n화물내용 : ${r.화물내용}`:"");
+const _mainDTon5f=_pHas5f?(_totTon5f?`\n화물톤수 : ${_totTon5f}`:""):(_dHas5f&&r.차량톤수?`\n화물톤수 : ${r.차량톤수}`:"");
 
         return `${dateNotice}${r.상차일||""} ${yoil}
 
 ${_pNum5f}상차지 : ${r.상차지명||"-"}
-${r.상차지주소||"-"}${_pCon5f?`\n${_pCon5f}`:""}
+${r.상차지주소||"-"}${_pCon5f?`\n${_pCon5f}`:""}${_mainPCargo5f}${_mainPTon5f}
 상차시간 : ${pickupTime}${r.상차시간기준?` (${r.상차시간기준})`:""}
 상차방법 : ${r.상차방법||"-"}${_pStopsText5f ? "\n\n" + _pStopsText5f : ""}
 
