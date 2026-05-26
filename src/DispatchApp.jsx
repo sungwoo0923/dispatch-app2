@@ -7,6 +7,7 @@ import { CartesianGrid, Line, LineChart, BarChart, Bar, Cell, PieChart, Pie, Res
 import * as XLSX from "xlsx";
 import { sendOrderTo24Proxy as sendOrderTo24 } from "../api/24CallProxy";
 import AdminMenu from "./AdminMenu";
+import CompanyApplications from "./CompanyApplications";
 import { calcFare } from "./fareUtil";
 import FixedClients from "./FixedClients";
 import FleetManagement from "./FleetManagement";
@@ -2029,9 +2030,11 @@ return (
               "거래처정산",
               "지급관리",
               "관리자메뉴",
+              "가입신청관리",
             ].map((m) => {
               const isBlocked = (role === "user" || role === "test") && blockedMenus.includes(m);
               if (m === "관리자메뉴" && role !== "admin" && role !== "totalMaster") return null;
+              if (m === "가입신청관리" && role !== "totalMaster") return null;
               if (isBlocked && role === "test") return null;
               const isActive = menu === m;
               return (
@@ -2115,6 +2118,7 @@ return (
             role={role}
             isTest={isTest}   // ★ 추가!
             showAlert={showAlert}
+            userCompany={userCompany || localStorage.getItem("userCompany") || ""}
           />
 
         )}
@@ -2265,6 +2269,8 @@ return (
         )}
 
         {menu === "관리자메뉴" && (role === "admin" || role === "totalMaster") && <AdminMenu parentRole={role} parentCompany={userCompany || localStorage.getItem("userCompany") || ""} />}
+
+        {menu === "가입신청관리" && role === "totalMaster" && <CompanyApplications />}
       </main>
       {/* ⭐⭐⭐ 내 정보 패널 ⭐⭐⭐ */}
       {showMyInfo && (
@@ -2624,6 +2630,7 @@ return (
     role = "admin",
     isTest = false,
     showAlert = (msg) => showAlert(msg),  // ★ 추가 (폴백 포함)
+    userCompany = "",
   }) {
 
       const [useNewForm, setUseNewForm] = React.useState(false);
@@ -3160,7 +3167,7 @@ const primary =
 
 
     // 관리자 여부 체크
-const isAdmin = role === "admin";
+const isAdmin = role === "admin" || role === "totalMaster";
 
 // 기존 필터 상태 (유지)
 const [filterType, setFilterType] = React.useState(null);
@@ -11601,7 +11608,7 @@ const BANCHAN_NOTICE = ``;
     Object.fromEntries(
       Object.entries(obj).filter(([, v]) => v !== undefined)
     );
-  const isAdmin = role === "admin";
+  const isAdmin = role === "admin" || role === "totalMaster";
   // ==========================
   // 🔥 거래처 자동완성 전체 풀 (clients + dispatchData)
   // ==========================
