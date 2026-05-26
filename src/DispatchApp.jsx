@@ -1652,6 +1652,15 @@ function FloatingCalculator({ onClose }) {
 }
 
 // ===================== DispatchApp.jsx (PART 2/8) — START =====================
+const ROLE_LABELS = {
+  totalMaster: "최고관리자",
+  admin: "관리자",
+  user: "실무자",
+  driver: "기사",
+  shipper: "화주",
+  test: "경리",
+};
+
 export default function DispatchApp({ role, user, userCompany = "" }) {
   // 🔥 화주 차단
   if (role === "shipper") {
@@ -1954,9 +1963,8 @@ const [alertMsg, setAlertMsg] = useState(null);
 const showAlert = (msg) => setAlertMsg(msg);
 
   // ---------------- 역할별 차단 메뉴 ----------------
-  // user(일반직원): 배차 업무만 가능, 재무/관리 메뉴 차단
+  // user(실무자): 배차/기사/거래처 업무 가능, 재무/관리 메뉴 차단
   const userBlockedMenus = [
-    "기사관리", "거래처관리", "고정거래처관리",
     "매출관리", "거래처정산", "지급관리", "관리자메뉴",
   ];
   // test(경리): 재무 관련 메뉴만 가능, 배차 입력/미배차 등 차단
@@ -2199,7 +2207,7 @@ return (
           <RateCard dispatchData={dispatchDataFiltered} />
         )}
 
-        {menu === "기사관리" && (role === "admin" || role === "totalMaster") && (
+        {menu === "기사관리" && (role === "admin" || role === "totalMaster" || role === "user") && (
           <DriverManagement
             drivers={drivers}
             upsertDriver={upsertDriver}
@@ -2207,7 +2215,7 @@ return (
           />
         )}
 
-        <div style={{ display: menu === "거래처관리" && (role === "admin" || role === "totalMaster") ? "block" : "none" }}>
+        <div style={{ display: menu === "거래처관리" && (role === "admin" || role === "totalMaster" || role === "user") ? "block" : "none" }}>
           <ClientManagement
             clients={clients}
             upsertClient={upsertClient}
@@ -2217,7 +2225,7 @@ return (
           />
         </div>
 
-        {menu === "고정거래처관리" && (role === "admin" || role === "totalMaster") && (
+        {menu === "고정거래처관리" && (role === "admin" || role === "totalMaster" || role === "user") && (
           <div>
             {/* 상단 탭 */}
             <div className="flex gap-2 mb-3 border-b pb-2">

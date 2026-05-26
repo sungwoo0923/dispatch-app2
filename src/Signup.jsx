@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, sendPasswordResetEmail } from "firebase/auth";
 import { auth, db } from "./firebase";
 import {
-  doc, setDoc, serverTimestamp, collection, query, where, getDocs, addDoc,
+  doc, setDoc, serverTimestamp, collection, query, where, getDocs, addDoc, updateDoc,
 } from "firebase/firestore";
 
 const POSITIONS = ["대표", "이사", "팀장", "과장", "대리", "사원", "기타"];
@@ -171,6 +171,7 @@ function SignupForm({ signupType, onBack }) {
   const [companySuggestions, setCompanySuggestions] = useState([]);
   const [companySearching, setCompanySearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
+  const [selectedCompanyApp, setSelectedCompanyApp] = useState(null);
 
   const searchExistingCompany = async () => {
     const q = companySearchQ.trim();
@@ -183,7 +184,7 @@ function SignupForm({ signupType, onBack }) {
         where("type", "==", "신규"),
         where("status", "==", "approved")
       ));
-      const all = snap.docs.map((d) => d.data());
+      const all = snap.docs.map((d) => ({ ...d.data(), _docId: d.id }));
       const matched = all.filter((d) =>
         (d.companyName || "").toLowerCase().includes(q.toLowerCase())
       );
@@ -199,6 +200,9 @@ function SignupForm({ signupType, onBack }) {
   const selectCompanySuggestion = (item) => {
     setCompanyName(item.companyName || "");
     setCompanySearchQ(item.companyName || "");
+    setAddress(item.address || "");
+    setAddressDetail("");
+    setSelectedCompanyApp(item);
     setCompanySuggestions([]);
     setHasSearched(false);
   };
@@ -312,6 +316,12 @@ function SignupForm({ signupType, onBack }) {
         companyCode: "",
         createdAt: serverTimestamp(),
       });
+      // 기존 가입: 회사에 주소가 없었으면 이번에 입력된 주소를 회사 원본 신청서에 저장
+      if (signupType === "기존" && fullAddress.trim() && selectedCompanyApp?._docId && !selectedCompanyApp.address) {
+        try {
+          await updateDoc(doc(db, "transportApplications", selectedCompanyApp._docId), { address: fullAddress.trim() });
+        } catch (_) {}
+      }
     };
 
     try {
@@ -441,9 +451,11 @@ function SignupForm({ signupType, onBack }) {
 
           <Field label="주소">
             <div className="flex gap-2 mb-2">
-              <input value={address} readOnly
-                placeholder="주소 검색 버튼을 눌러주세요"
-                className="flex-1 border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] bg-gray-50 focus:outline-none cursor-default" />
+              <input value={address}
+                readOnly={signupType !== "기존"}
+                onChange={signupType === "기존" ? (e) => setAddress(e.target.value) : undefined}
+                placeholder={signupType === "기존" ? "회사 선택 시 자동입력, 직접 입력도 가능" : "주소 검색 버튼을 눌러주세요"}
+                className={`flex-1 border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] ${signupType !== "기존" ? "bg-gray-50 cursor-default" : ""}`} />
               <button type="button" onClick={searchAddress}
                 className="px-4 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition whitespace-nowrap">
                 주소 검색
