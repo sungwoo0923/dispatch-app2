@@ -30,6 +30,7 @@ export default function TransportLogin() {
     if (!showPopup) return;
     const handleKey = (e) => {
       if (e.key === "Enter") {
+        sessionStorage.removeItem("skipLoginPopup");
         navigate("/app", { replace: true });
       }
     };
@@ -41,12 +42,20 @@ export default function TransportLogin() {
   useEffect(() => {
     if (!showPopup) return;
     if (countdown === 0) {
+      sessionStorage.removeItem("skipLoginPopup");
       navigate("/app", { replace: true });
       return;
     }
     const timer = setTimeout(() => setCountdown((prev) => prev - 1), 1000);
     return () => clearTimeout(timer);
   }, [countdown, showPopup, navigate]);
+
+  // cleanup: remove semaphore if component unmounts during validation
+  useEffect(() => {
+    return () => {
+      sessionStorage.removeItem("transportValidating");
+    };
+  }, []);
 
   const login = async () => {
     setError(null);
@@ -57,6 +66,9 @@ export default function TransportLogin() {
 
     try {
       setLoading(true);
+      // Semaphore set BEFORE auth so App.jsx won't redirect while we validate
+      sessionStorage.setItem("transportValidating", "true");
+
       const credential = await signInWithEmailAndPassword(auth, email.trim(), pw);
       const uid = credential.user.uid;
       const inputEmail = email.trim().toLowerCase();
@@ -67,29 +79,55 @@ export default function TransportLogin() {
         const userSnap = await getDoc(doc(db, "users", uid));
 
         if (!userSnap.exists()) {
+          sessionStorage.removeItem("transportValidating");
           await signOut(auth);
-          setError("등록된 계정 정보가 없습니다");
+          setError("등록된 계정 정보가 없습니다.");
           return;
         }
 
         const userData = userSnap.data();
 
-        if (userData.companyName !== inputCompanyName) {
+        if ((userData.companyName || "") !== inputCompanyName) {
+          sessionStorage.removeItem("transportValidating");
           await signOut(auth);
-          setError("회사명이 일치하지 않습니다");
+          setError("회사명이 일치하지 않습니다. 가입한 회사명을 정확히 입력해주세요.");
           return;
         }
 
-        if (userData.companyCode && userData.companyCode !== inputCompanyCode) {
+        if (userData.userStatus === "banned") {
+          sessionStorage.removeItem("transportValidating");
           await signOut(auth);
-          setError("회사코드가 일치하지 않습니다");
+          setError("영구 정지된 계정입니다. 관리자에게 문의하세요.");
+          return;
+        }
+
+        if (userData.userStatus === "suspended") {
+          sessionStorage.removeItem("transportValidating");
+          await signOut(auth);
+          setError("사용 정지된 계정입니다. 관리자에게 문의하세요.");
           return;
         }
 
         if (!userData.approved) {
+          sessionStorage.removeItem("transportValidating");
           await signOut(auth);
-          setError("관리자 승인 대기 중입니다");
+          setError("관리자 승인 대기 중입니다. 승인 후 로그인이 가능합니다.");
           return;
+        }
+
+        if (userData.companyCode) {
+          if (!inputCompanyCode) {
+            sessionStorage.removeItem("transportValidating");
+            await signOut(auth);
+            setError("회사코드를 입력해주세요. 코드는 가입 승인 시 이메일로 안내받으셨습니다.");
+            return;
+          }
+          if (userData.companyCode !== inputCompanyCode) {
+            sessionStorage.removeItem("transportValidating");
+            await signOut(auth);
+            setError("회사코드가 일치하지 않습니다. 승인 안내 이메일을 확인해주세요.");
+            return;
+          }
         }
 
         localStorage.setItem("loginCompany", inputCompanyName);
@@ -100,18 +138,20 @@ export default function TransportLogin() {
         localStorage.setItem("transportCode", inputCompanyCode);
       }
 
+      // Validation done — switch from validation semaphore to popup semaphore
+      sessionStorage.removeItem("transportValidating");
       sessionStorage.setItem("skipLoginPopup", "true");
 
-      const now = new Date();
-      setLoginTime(now.toLocaleString("ko-KR"));
+      setLoginTime(new Date().toLocaleString("ko-KR"));
       setShowPopup(true);
       setCountdown(3);
     } catch (err) {
+      sessionStorage.removeItem("transportValidating");
       const code = err.code;
       if (code === "auth/wrong-password" || code === "auth/invalid-credential") {
-        setError("비밀번호가 일치하지 않습니다");
+        setError("비밀번호가 일치하지 않습니다.");
       } else if (code === "auth/user-not-found") {
-        setError("등록된 이메일이 없습니다");
+        setError("등록된 이메일이 없습니다.");
       } else {
         setError("로그인에 실패했습니다. 입력 정보를 확인해주세요.");
       }
@@ -318,7 +358,7 @@ export default function TransportLogin() {
             <div className="text-xs text-gray-400 mb-4">오늘도 좋은 하루 되세요</div>
 
             <button
-              onClick={() => navigate("/app", { replace: true })}
+              onClick={() => { sessionStorage.removeItem("skipLoginPopup"); navigate("/app", { replace: true }); }}
               className="w-full bg-blue-600 text-white py-2 rounded-lg font-semibold"
             >
               확인

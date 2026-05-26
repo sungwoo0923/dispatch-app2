@@ -1,101 +1,98 @@
-// ======================= src/Login.jsx (Landing Page) =======================
+// ======================= src/Login.jsx (Homepage) =======================
 import React from "react";
 import { Link } from "react-router-dom";
 
-const cards = [
-  {
-    title: "운송사",
-    subtitle: "배차 관리 시스템 / 관리자·직원 전용",
-    loginTo: "/transport-login",
-    loginLabel: "운송사 로그인",
-    signupTo: "/signup",
-    signupLabel: "운송사 회원가입",
-  },
-  {
-    title: "기사",
-    subtitle: "차주·드라이버 / 운행 관리 전용",
-    loginTo: "/driver-login",
-    loginLabel: "기사 로그인",
-    signupTo: "/driver-register",
-    signupLabel: "기사 등록",
-  },
-  {
-    title: "화주",
-    subtitle: "화물 발주사 / 화주사 전용",
-    loginTo: "/shipper-login",
-    loginLabel: "화주 로그인",
-    signupTo: "/shipper-signup",
-    signupLabel: "화주 회원가입",
-  },
+const features = [
+  { title: "배차 관리", desc: "실시간 배차 등록 및 현황 관리" },
+  { title: "기사 관리", desc: "차주 정보 및 운행 현황" },
+  { title: "운임 정산", desc: "청구운임 및 기사운임 정산" },
+  { title: "거래처 관리", desc: "화주사 및 거래처 통합 관리" },
 ];
 
 export default function Login() {
   return (
-    <div
-      className="min-h-screen flex flex-col items-center justify-center px-4 py-10 relative"
-      style={{ background: "linear-gradient(135deg, #061832 0%, #0B2554 50%, #0D2B66 100%)" }}
-    >
-      {/* Top-right app icon */}
-      <div className="fixed top-4 right-4 z-50">
-        <img
-          src="/icons/sflow-icon.png"
-          alt="S-Flow"
-          className="w-20 h-20 rounded-2xl shadow-lg"
-        />
-      </div>
+    <div className="min-h-screen bg-gradient-to-br from-[#061832] via-[#0B2554] to-[#0D2B66]">
+      {/* Fixed Nav */}
+      <nav className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 py-3 bg-[#061832]/80 backdrop-blur border-b border-white/10">
+        <div className="flex items-center gap-2">
+          <img src="/icons/sflow-icon.png" alt="S-Flow" className="w-7 h-7 rounded-md" />
+          <span className="font-bold text-white text-sm">S-Flow Logistics</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <Link to="/transport-login" className="px-4 py-2 text-sm text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors">
+            운송사 로그인
+          </Link>
+          <Link to="/driver-login" className="px-4 py-2 text-sm text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors">
+            기사 로그인
+          </Link>
+          <Link to="/shipper-login" className="px-4 py-2 text-sm text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors">
+            화주 로그인
+          </Link>
+        </div>
+      </nav>
 
-      {/* Header */}
-      <div className="text-center mb-10">
-        <h1 className="text-3xl font-extrabold text-white tracking-tight">
-          S-Flow Logistics
+      {/* Hero Section */}
+      <section className="flex flex-col items-center justify-center min-h-screen px-4 pt-14 text-center">
+        {/* Badge */}
+        <span className="inline-block mb-6 px-4 py-1.5 text-xs font-semibold uppercase tracking-wider text-white/70 bg-white/10 border border-white/20 rounded-full">
+          물류 관리 플랫폼
+        </span>
+
+        {/* Headline */}
+        <h1 className="text-4xl sm:text-5xl font-extrabold text-white leading-tight mb-4">
+          더 스마트한 물류 관리
         </h1>
-        <p className="text-blue-200 text-base mt-2">이용 유형을 선택해주세요</p>
-      </div>
 
-      {/* Cards grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-4xl">
-        {cards.map((card) => (
-          <div
-            key={card.title}
-            className="rounded-2xl overflow-hidden shadow-xl border border-white/10"
+        {/* Subtitle */}
+        <p className="text-white/60 text-base sm:text-lg mb-10 leading-relaxed">
+          배차 관리부터 기사 관리, 운임 정산까지<br />
+          S-Flow 하나로 물류 업무를 최적화하세요.
+        </p>
+
+        {/* CTA Buttons */}
+        <div className="flex flex-row items-center justify-center gap-3 mb-16">
+          <Link
+            to="/transport-login"
+            className="bg-white text-[#1B2B4B] font-bold rounded-xl px-6 py-3 text-sm hover:bg-white/90 transition-colors"
           >
-            {/* Card header */}
-            <div
-              className="px-6 py-5 text-center"
-              style={{ background: "#1B2B4B" }}
-            >
-              <h2 className="text-xl font-bold text-white">{card.title}</h2>
-              <p className="text-blue-200 text-xs mt-1 leading-relaxed">{card.subtitle}</p>
-            </div>
+            운송사 시작하기
+          </Link>
+          <Link
+            to="/driver-login"
+            className="bg-white/10 text-white border border-white/20 rounded-xl px-6 py-3 text-sm hover:bg-white/20 transition-colors"
+          >
+            기사 로그인
+          </Link>
+          <Link
+            to="/shipper-login"
+            className="bg-white/10 text-white border border-white/20 rounded-xl px-6 py-3 text-sm hover:bg-white/20 transition-colors"
+          >
+            화주 포털
+          </Link>
+        </div>
 
-            {/* Card body */}
+        {/* Feature Cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 max-w-3xl w-full mt-0">
+          {features.map((f) => (
             <div
-              className="px-6 py-6 flex flex-col gap-3"
-              style={{ background: "#ffffff" }}
+              key={f.title}
+              className="bg-white/5 border border-white/10 rounded-xl p-5 text-left"
             >
-              <Link
-                to={card.loginTo}
-                className="block w-full text-center text-white font-semibold py-2.5 rounded-lg transition-opacity hover:opacity-90"
-                style={{ background: "#1B2B4B" }}
-              >
-                {card.loginLabel}
-              </Link>
-              <Link
-                to={card.signupTo}
-                className="block w-full text-center font-semibold py-2.5 rounded-lg border transition-colors hover:bg-gray-50"
-                style={{ color: "#1B2B4B", borderColor: "#1B2B4B" }}
-              >
-                {card.signupLabel}
-              </Link>
+              <p className="text-white font-bold text-sm">{f.title}</p>
+              <p className="text-white/40 text-xs mt-1">{f.desc}</p>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
 
-      {/* Footer */}
-      <p className="text-blue-300/50 text-xs mt-12 text-center">
-        S-Flow Logistics Management System
-      </p>
+        {/* Bottom Links */}
+        <div className="flex items-center gap-4 mt-8 text-xs text-white/30">
+          <Link to="/signup" className="hover:text-white/60 transition-colors">운송사 회원가입</Link>
+          <span>·</span>
+          <Link to="/driver-register" className="hover:text-white/60 transition-colors">기사 등록</Link>
+          <span>·</span>
+          <Link to="/shipper-signup" className="hover:text-white/60 transition-colors">화주 회원가입</Link>
+        </div>
+      </section>
     </div>
   );
 }

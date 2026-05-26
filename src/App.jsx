@@ -287,7 +287,9 @@ export default function App() {
         if (snap.exists()) {
           const data = snap.data();
           setRole(data.role || "shipper");
-          setApproved(data.approved === true);
+          // approved !== false allows old accounts (undefined) and explicitly true
+          // only blocks accounts explicitly set to false (new unapproved signups)
+          setApproved(data.approved !== false);
           setUserCompany(data.companyName || "");
           localStorage.setItem("userCompany", data.companyName || "");
           localStorage.setItem("role", data.role || "user");
@@ -367,22 +369,26 @@ export default function App() {
 
           <Route
             path="/transport-login"
-            element={
-              user
-                ? role === "driver"
+            element={(() => {
+              const validating = sessionStorage.getItem("transportValidating") === "true";
+              const skip = sessionStorage.getItem("skipLoginPopup") === "true";
+              if (user && !validating && !skip) {
+                return role === "driver"
                   ? <Navigate to="/driver-home" replace />
                   : role === "shipper"
                     ? (approved ? <Navigate to="/shipper" replace /> : <Navigate to="/shipper-pending" replace />)
-                    : <Navigate to="/app" replace />
-                : <TransportLogin />
-            }
+                    : <Navigate to="/app" replace />;
+              }
+              return <TransportLogin />;
+            })()}
           />
 
           <Route
             path="/shipper-login"
             element={(() => {
-              const skip = sessionStorage.getItem("skipLoginPopup");
-              if (user && role === "shipper" && skip !== "true") {
+              const shipperValidating = sessionStorage.getItem("shipperValidating") === "true";
+              const skip = sessionStorage.getItem("skipLoginPopup") === "true";
+              if (user && role === "shipper" && !shipperValidating && !skip) {
                 return approved ? <Navigate to="/shipper" replace /> : <Navigate to="/shipper-pending" replace />;
               }
               return <ShipperLogin />;
@@ -425,7 +431,7 @@ export default function App() {
           <Route
             path="/app"
             element={
-              user && role !== "shipper" && role !== "driver"
+              user && role !== "shipper" && role !== "driver" && approved
                 ? (isMobile ? <MobileApp role={role} user={user} userCompany={userCompany} /> : <DispatchApp role={role} user={user} userCompany={userCompany} />)
                 : <Navigate to="/login" replace />
             }

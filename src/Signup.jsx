@@ -1,7 +1,7 @@
 // src/Signup.jsx  —  운송사 회원가입
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { createUserWithEmailAndPassword } from "firebase/auth";
+import { createUserWithEmailAndPassword, signOut } from "firebase/auth";
 import { auth, db } from "./firebase";
 import {
   doc, setDoc, serverTimestamp, collection, query, where, getDocs, addDoc,
@@ -255,10 +255,21 @@ function SignupForm({ signupType, onBack }) {
         createdAt: serverTimestamp(),
       });
 
+      // Sign out immediately — prevents auto-login before admin approval
+      await signOut(auth);
       setSuccess(true);
       setTimeout(() => navigate("/login"), 2500);
     } catch (err) {
-      setError(err.message || "가입 신청 중 오류가 발생했습니다.");
+      const code = err.code || "";
+      if (code === "auth/email-already-in-use") {
+        setError("이미 가입된 이메일입니다.");
+      } else if (code === "auth/invalid-email") {
+        setError("올바른 이메일 형식을 입력해주세요.");
+      } else if (code === "auth/weak-password") {
+        setError("비밀번호는 6자 이상이어야 합니다.");
+      } else {
+        setError("가입 신청 중 오류가 발생했습니다. 다시 시도해주세요.");
+      }
     } finally {
       setLoading(false);
     }

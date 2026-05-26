@@ -52,6 +52,8 @@ export default function CompanyApplications() {
   const [rejectReason, setRejectReason] = useState("");
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [processing, setProcessing] = useState(false);
+  const [managingApp, setManagingApp] = useState(null);
+  const [codeNotice, setCodeNotice] = useState(null); // { companyName, companyCode, email, phone, appType }
 
   // 화주 신청 구독
   useEffect(() => {
@@ -96,6 +98,7 @@ export default function CompanyApplications() {
     setSelectedApp(null);
     setShowRejectModal(false);
     setRejectReason("");
+    setManagingApp(null);
   };
 
   // 현재 탭에 맞는 데이터
@@ -145,6 +148,7 @@ export default function CompanyApplications() {
         });
       }
       setSelectedApp(null);
+      setCodeNotice({ companyName: app.companyName, companyCode, email: app.email, phone: app.phone, appType: "화주" });
     } finally {
       setProcessing(false);
     }
@@ -195,6 +199,7 @@ export default function CompanyApplications() {
         });
       }
       setSelectedApp(null);
+      setCodeNotice({ companyName: app.companyName, companyCode, email: app.email, phone: app.phone, appType: "운송" });
     } finally {
       setProcessing(false);
     }
@@ -249,6 +254,22 @@ export default function CompanyApplications() {
       setShowRejectModal(false);
       setRejectReason("");
       setSelectedApp(null);
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  // 회사 상태 변경 (화주 / 운송)
+  const changeUserStatus = async (app, newStatus) => {
+    setProcessing(true);
+    try {
+      const appCollection =
+        activeTab === "화주" ? "companyApplications" : "transportApplications";
+      if (app.userId) {
+        await updateDoc(doc(db, "users", app.userId), { userStatus: newStatus });
+      }
+      await updateDoc(doc(db, appCollection, app.id), { userStatus: newStatus });
+      setManagingApp((prev) => (prev ? { ...prev, userStatus: newStatus } : null));
     } finally {
       setProcessing(false);
     }
@@ -409,6 +430,20 @@ export default function CompanyApplications() {
                         {app.status === "approved" && app.companyCode && (
                           <div className="text-[10px] text-gray-400 font-mono mt-0.5">{app.companyCode}</div>
                         )}
+                        {app.status === "approved" && app.userStatus === "suspended" && (
+                          <div className="mt-0.5">
+                            <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-orange-100 text-orange-600 border border-orange-200">
+                              정지
+                            </span>
+                          </div>
+                        )}
+                        {app.status === "approved" && app.userStatus === "banned" && (
+                          <div className="mt-0.5">
+                            <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-600 border border-red-200">
+                              영구정지
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </td>
                     <td className="px-3 py-3 text-center">
@@ -428,10 +463,18 @@ export default function CompanyApplications() {
                           </button>
                         </div>
                       ) : (
-                        <button onClick={() => setSelectedApp(app)}
-                          className="px-2.5 py-1 rounded-lg text-[11px] font-semibold text-gray-500 border border-gray-200 hover:bg-gray-50 transition">
-                          상세
-                        </button>
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button onClick={() => setSelectedApp(app)}
+                            className="px-2.5 py-1 rounded-lg text-[11px] font-semibold text-gray-500 border border-gray-200 hover:bg-gray-50 transition">
+                            상세
+                          </button>
+                          {app.status === "approved" && (
+                            <button onClick={() => setManagingApp(app)}
+                              className="px-2.5 py-1 rounded-lg text-[11px] font-semibold text-[#1B2B4B] border border-[#1B2B4B] hover:bg-[#1B2B4B]/10 transition">
+                              관리
+                            </button>
+                          )}
+                        </div>
                       )}
                     </td>
                   </tr>
@@ -667,6 +710,83 @@ export default function CompanyApplications() {
         </div>
       )}
 
+      {/* 관리 모달 (화주/운송 승인 회사) */}
+      {managingApp && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-[70]"
+          onClick={() => setManagingApp(null)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl w-[380px] p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="mb-4">
+              <h3 className="text-[16px] font-bold text-[#1B2B4B]">
+                {managingApp.companyName}
+              </h3>
+              <p className="text-[12px] text-gray-400 mt-0.5">
+                {activeTab === "화주" ? "화주사" : "운송사"} 관리
+              </p>
+            </div>
+
+            {/* Current status badge */}
+            <div className="flex items-center gap-2 mb-6">
+              <span className="text-[13px] text-gray-500">현재 상태:</span>
+              {managingApp.userStatus === "suspended" ? (
+                <span className="px-2.5 py-1 rounded-full text-[12px] font-bold bg-orange-100 text-orange-600 border border-orange-200">
+                  사용정지
+                </span>
+              ) : managingApp.userStatus === "banned" ? (
+                <span className="px-2.5 py-1 rounded-full text-[12px] font-bold bg-red-100 text-red-600 border border-red-200">
+                  영구정지
+                </span>
+              ) : (
+                <span className="px-2.5 py-1 rounded-full text-[12px] font-bold bg-emerald-100 text-emerald-700 border border-emerald-200">
+                  정상
+                </span>
+              )}
+            </div>
+
+            {/* Action buttons */}
+            <div className="flex flex-col gap-2">
+              {managingApp.userStatus !== "suspended" && managingApp.userStatus !== "banned" ? (
+                <>
+                  <button
+                    onClick={() => changeUserStatus(managingApp, "suspended")}
+                    disabled={processing}
+                    className="w-full py-2.5 rounded-xl bg-orange-500 text-white font-semibold text-[13px] hover:bg-orange-600 transition disabled:opacity-50"
+                  >
+                    사용정지
+                  </button>
+                  <button
+                    onClick={() => changeUserStatus(managingApp, "banned")}
+                    disabled={processing}
+                    className="w-full py-2.5 rounded-xl bg-red-500 text-white font-semibold text-[13px] hover:bg-red-600 transition disabled:opacity-50"
+                  >
+                    영구정지
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => changeUserStatus(managingApp, "active")}
+                  disabled={processing}
+                  className="w-full py-2.5 rounded-xl bg-emerald-600 text-white font-semibold text-[13px] hover:bg-emerald-700 transition disabled:opacity-50"
+                >
+                  정지해제
+                </button>
+              )}
+              <button
+                onClick={() => setManagingApp(null)}
+                className="w-full py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 transition"
+              >
+                닫기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 거절 사유 모달 */}
       {showRejectModal && selectedApp && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60]">
@@ -692,6 +812,83 @@ export default function CompanyApplications() {
               <button onClick={() => handleReject(selectedApp, rejectReason)} disabled={processing}
                 className="flex-1 py-2.5 rounded-xl bg-red-500 text-white font-bold text-[13px] hover:bg-red-600 transition disabled:opacity-50">
                 거절 확인
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 승인 코드 안내 모달 */}
+      {codeNotice && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[70]"
+          onClick={() => setCodeNotice(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-[460px] overflow-hidden"
+            onClick={(e) => e.stopPropagation()}>
+            <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
+              <div>
+                <h3 className="text-white font-bold text-[15px]">승인 완료 — 코드 발급</h3>
+                <p className="text-white/60 text-[12px] mt-0.5">{codeNotice.companyName} ({codeNotice.appType})</p>
+              </div>
+              <button onClick={() => setCodeNotice(null)} className="text-white/60 hover:text-white text-lg">✕</button>
+            </div>
+
+            <div className="p-6">
+              {/* 코드 표시 */}
+              <div className="bg-gray-50 border border-gray-200 rounded-xl p-5 text-center mb-5">
+                <p className="text-[12px] text-gray-500 mb-2">발급된 회사코드</p>
+                <p className="text-[28px] font-extrabold text-[#1B2B4B] tracking-widest font-mono">{codeNotice.companyCode}</p>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(codeNotice.companyCode);
+                  }}
+                  className="mt-3 px-4 py-1.5 rounded-lg text-[12px] font-semibold bg-[#1B2B4B] text-white hover:bg-[#243d6a] transition"
+                >
+                  클립보드 복사
+                </button>
+              </div>
+
+              {/* 연락처 정보 */}
+              <div className="border border-gray-100 rounded-xl overflow-hidden mb-5">
+                <div className="bg-gray-50 px-4 py-2 text-[11px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-100">
+                  신청자 연락처
+                </div>
+                {[
+                  ["이메일", codeNotice.email || "-"],
+                  ["핸드폰", codeNotice.phone || "-"],
+                ].map(([label, value]) => (
+                  <div key={label} className="flex items-center justify-between px-4 py-3 border-t border-gray-50 first:border-t-0">
+                    <span className="text-[12px] text-gray-400">{label}</span>
+                    <span className="text-[13px] font-semibold text-gray-800">{value}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* 안내 방법 */}
+              <div className="space-y-2.5 mb-5">
+                {codeNotice.email && (
+                  <a
+                    href={`mailto:${codeNotice.email}?subject=${encodeURIComponent("[S-Flow] 가입 승인 및 회사코드 안내")}&body=${encodeURIComponent(`안녕하세요, ${codeNotice.companyName} 담당자님.\n\nS-Flow 물류 관리 시스템 가입이 승인되었습니다.\n\n발급된 회사코드: ${codeNotice.companyCode}\n\n로그인 시 회사코드를 입력해주세요.\n접속 주소: https://dispatch-app2.vercel.app\n\n감사합니다.\nS-Flow 관리팀`)}`}
+                    className="flex items-center justify-between w-full px-4 py-3 rounded-xl border border-blue-200 bg-blue-50 hover:bg-blue-100 transition"
+                  >
+                    <span className="text-[13px] font-semibold text-blue-700">이메일로 코드 발송</span>
+                    <span className="text-[12px] text-blue-500">{codeNotice.email}</span>
+                  </a>
+                )}
+                {codeNotice.phone && (
+                  <div className="flex items-center justify-between w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50">
+                    <span className="text-[13px] font-semibold text-gray-700">핸드폰으로 직접 전달</span>
+                    <span className="text-[12px] font-mono text-gray-600">{codeNotice.phone}</span>
+                  </div>
+                )}
+              </div>
+
+              <p className="text-[11px] text-gray-400 text-center mb-4">
+                이메일 버튼 클릭 시 기본 메일 앱에서 발송 창이 열립니다.
+              </p>
+
+              <button onClick={() => setCodeNotice(null)}
+                className="w-full py-2.5 rounded-xl bg-[#1B2B4B] text-white font-bold text-[14px] hover:bg-[#243d6a] transition">
+                확인
               </button>
             </div>
           </div>
