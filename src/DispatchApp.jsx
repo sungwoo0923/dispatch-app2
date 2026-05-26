@@ -1637,7 +1637,7 @@ function FloatingCalculator({ onClose }) {
 }
 
 // ===================== DispatchApp.jsx (PART 2/8) — START =====================
-export default function DispatchApp({ role, user }) {
+export default function DispatchApp({ role, user, userCompany = "" }) {
   // 🔥 화주 차단
   if (role === "shipper") {
     return <Navigate to="/shipper" replace />;
@@ -1708,14 +1708,24 @@ useEffect(() => {
   const dispatchDataFiltered = useMemo(() => {
     if (!dispatchData || !user) return [];
 
-    // 관리자면 전체 데이터 그대로 반환
-    if (role === "admin") return dispatchData;
+    // 총마스터는 전체 데이터
+    if (role === "totalMaster") return dispatchData;
 
-    // 일반 계정은 본인 데이터만
-    return dispatchData.filter(o =>
+    // 회사명 기준 필터 (없으면 "돌캐"로 간주)
+    const myCompany = userCompany || localStorage.getItem("userCompany") || "돌캐";
+    const byCompany = dispatchData.filter(o => {
+      const docCompany = o?.companyName || "돌캐";
+      return docCompany === myCompany;
+    });
+
+    // 관리자면 회사 내 전체 데이터
+    if (role === "admin") return byCompany;
+
+    // 일반 계정은 회사 내 본인 데이터만
+    return byCompany.filter(o =>
       !o?.작성자 || o?.작성자 === user.email
     );
-  }, [dispatchData, user, role]);
+  }, [dispatchData, user, role, userCompany]);
 
 
   // ⭐ 내 정보 통계 계산
@@ -2000,7 +2010,8 @@ return (
               "지급관리",
               "관리자메뉴",
             ].map((m) => {
-              const isBlocked = role === "user" && blockedMenus.includes(m);
+              const isBlocked = (role === "user" || role === "test") && blockedMenus.includes(m);
+              if (m === "관리자메뉴" && role !== "admin" && role !== "totalMaster") return null;
               const isActive = menu === m;
               return (
                 <button
@@ -2232,7 +2243,7 @@ return (
           />
         )}
 
-        {menu === "관리자메뉴" && role === "admin" && <AdminMenu />}
+        {menu === "관리자메뉴" && (role === "admin" || role === "totalMaster") && <AdminMenu />}
       </main>
       {/* ⭐⭐⭐ 내 정보 패널 ⭐⭐⭐ */}
       {showMyInfo && (
@@ -5161,6 +5172,7 @@ const rec = {
   createdByUid: auth.currentUser?.uid || null,
   createdByEmail: auth.currentUser?.email || null,
   createdByName: auth.currentUser?.displayName || auth.currentUser?.email || null,
+  companyName: userCompany || localStorage.getItem("userCompany") || "돌캐",
 
   // 🔥 여기 안으로 넣어
   aiLog: aiRecommend
@@ -11431,6 +11443,31 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
   );
 }
 // ===================== /StopEditModal =====================
+
+// ===================== WaypointSection (경유 추가/수정 통합) =====================
+function WaypointSection({ stops = [], type = "pickup", onSave, placeRows = [], timeOptions = [], className = "" }) {
+  const [addOpen, setAddOpen] = React.useState(false);
+  const label = type === "pickup" ? "상차경유지" : "하차경유지";
+  return (
+    <>
+      <div className={`flex items-center gap-2 ${className}`}>
+        <span className="text-[12px] text-gray-500 font-medium">{label}</span>
+        {stops.length > 0
+          ? <StopBadge count={stops.length} list={stops} type={type} placeRows={placeRows} timeOptions={timeOptions} onSave={onSave} />
+          : <button type="button" onClick={() => setAddOpen(true)}
+              className="text-[11px] font-bold px-2.5 py-1 rounded-full border transition bg-white text-[#1B2B4B] border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white">
+              + 경유
+            </button>
+        }
+      </div>
+      <StopEditModal open={addOpen} onClose={() => setAddOpen(false)}
+        onSave={newList => { onSave(newList); setAddOpen(false); }}
+        list={[]} type={type} placeRows={placeRows} timeOptions={timeOptions} />
+    </>
+  );
+}
+// ===================== /WaypointSection =====================
+
 function DeliveryStatusBadge({ row, onConfirm }) {
   const status = row.업체전달상태 || "미전달";
   const isOn = status === "전달완료";
@@ -11901,7 +11938,7 @@ const pickupStopsTextD = hasPickupStopsD
     const ton = _tonText(s);
     return `${i + 2}.상차경유지 : ${s.업체명 || "-"}
 ${s.주소 || "-"}${s.담당자 ? `\n담당자 : ${s.담당자}${s.담당자번호 ? ` (${formatPhone(s.담당자번호)})` : ""}` : ""}${s.상차시간 ? `\n상차시간 : ${s.상차시간}` : ""}${cargo ? `\n화물내용 : ${cargo}` : ""}${ton ? `\n화물톤수 : ${ton}` : ""}${s.방법 ? `\n상차방법 : ${s.방법}` : ""}`;
-  }).join("\n")
+  }).join("\n\n")
   : "";
 
 // 하차 텍스트
@@ -11912,7 +11949,7 @@ const dropStopsTextD = hasDropStopsD
     const ton = _tonText(s);
     return `${i + 1}.하차경유지 : ${s.업체명 || "-"}
 ${s.주소 || "-"}${s.담당자 ? `\n담당자 : ${s.담당자}${s.담당자번호 ? ` (${formatPhone(s.담당자번호)})` : ""}` : ""}${s.하차시간 ? `\n하차시간 : ${s.하차시간}` : ""}${cargo ? `\n화물내용 : ${cargo}` : ""}${ton ? `\n화물톤수 : ${ton}` : ""}${s.방법 ? `\n하차방법 : ${s.방법}` : ""}`;
-  }).join("\n")
+  }).join("\n\n")
   : "";
 const uploadUrl = `${window.location.origin}/upload?id=${r._id}`;
 
@@ -12041,7 +12078,7 @@ const pickupStopsText = hasPickupStops
     const ton = _tonTextF(s);
     return `${i + 2}.상차경유지 : ${s.업체명 || "-"}
 ${s.주소 || "-"}${s.담당자 ? `\n담당자 : ${s.담당자}${s.담당자번호 ? ` (${formatPhone(s.담당자번호)})` : ""}` : ""}${s.상차시간 ? `\n상차시간 : ${s.상차시간}` : ""}${cargo ? `\n화물내용 : ${cargo}` : ""}${ton ? `\n화물톤수 : ${ton}` : ""}${s.방법 ? `\n상차방법 : ${s.방법}` : ""}`;
-  }).join("\n")
+  }).join("\n\n")
   : "";
 
 const dropMainNum = hasDropStops ? `${dropStops.length + 1}.` : "";
@@ -12051,7 +12088,7 @@ const dropStopsText = hasDropStops
     const ton = _tonTextF(s);
     return `${i + 1}.하차경유지 : ${s.업체명 || "-"}
 ${s.주소 || "-"}${s.담당자 ? `\n담당자 : ${s.담당자}${s.담당자번호 ? ` (${formatPhone(s.담당자번호)})` : ""}` : ""}${s.하차시간 ? `\n하차시간 : ${s.하차시간}` : ""}${cargo ? `\n화물내용 : ${cargo}` : ""}${ton ? `\n화물톤수 : ${ton}` : ""}${s.방법 ? `\n하차방법 : ${s.방법}` : ""}`;
-  }).join("\n")
+  }).join("\n\n")
   : "";
 
 const _pkg4f=(str)=>{const s=String(str||"").trim();if(!s)return 0;const kg=s.match(/([\d.]+)\s*kg/i);if(kg)return parseFloat(kg[1]);const ton=s.match(/([\d.]+)/);return ton?parseFloat(ton[1])*1000:0;};
@@ -15827,14 +15864,7 @@ checkWarningStatus(c.거래처명, "거래처");
         ].filter(s => s && (s.업체명?.trim() || s.주소?.trim()))
          .filter((s, i, arr) => arr.findIndex(x => (x.업체명 || x.주소) === (s.업체명 || s.주소)) === i);
 
-        if (!stops.length) return null;
-
-        return (
-          <div className="mt-3 flex items-center gap-2">
-            <span className="text-[12px] text-gray-500 font-medium">상차경유지</span>
-            <StopBadge count={stops.length} list={stops} type="pickup" placeRows={placeRows} timeOptions={timeOptions} onSave={(newList) => setCopyTarget(p => ({ ...p, 경유상차목록: newList, 경유지_상차: newList }))} />
-          </div>
-        );
+        return <WaypointSection stops={stops} type="pickup" onSave={(newList) => setCopyTarget(p => ({ ...p, 경유상차목록: newList, 경유지_상차: newList }))} placeRows={placeRows} timeOptions={timeOptions} className="mt-3" />;
       })()}
 
     </div>
@@ -15998,14 +16028,7 @@ checkWarningStatus(c.거래처명, "거래처");
         ].filter(s => s && (s.업체명?.trim() || s.주소?.trim()))
          .filter((s, i, arr) => arr.findIndex(x => (x.업체명 || x.주소) === (s.업체명 || s.주소)) === i);
 
-        if (!stops.length) return null;
-
-        return (
-          <div className="mt-3 flex items-center gap-2">
-            <span className="text-[12px] text-gray-500 font-medium">하차경유지</span>
-            <StopBadge count={stops.length} list={stops} type="drop" onSave={(newList) => setCopyTarget(p => ({ ...p, 경유하차목록: newList, 경유지_하차: newList }))} placeRows={placeRows} timeOptions={timeOptions} />
-          </div>
-        );
+        return <WaypointSection stops={stops} type="drop" onSave={(newList) => setCopyTarget(p => ({ ...p, 경유하차목록: newList, 경유지_하차: newList }))} placeRows={placeRows} timeOptions={timeOptions} className="mt-3" />;
       })()}
 
     </div>
@@ -17238,14 +17261,7 @@ value={copyTarget?.화물수량 || ""}
               ].filter(s => s?.업체명?.trim())
                .filter((s, i, arr) => arr.findIndex(x => x.업체명 === s.업체명) === i);
 
-              if (!stops.length) return null;
-
-              return (
-                <div className="mb-3 flex items-center gap-2">
-                  <span className="text-[12px] text-gray-500 font-medium">상차경유지</span>
-                  <StopBadge count={stops.length} list={stops} type="pickup" placeRows={placeRows} timeOptions={timeOptions} onSave={(newList) => setEditTarget(p => ({ ...p, 경유상차목록: newList, 경유지_상차: newList }))} />
-                </div>
-              );
+              return <WaypointSection stops={stops} type="pickup" onSave={(newList) => setEditTarget(p => ({ ...p, 경유상차목록: newList, 경유지_상차: newList }))} placeRows={placeRows} timeOptions={timeOptions} className="mb-3" />;
             })()}
 
             {/* ===================== 하차지 ===================== */}
@@ -17383,14 +17399,7 @@ value={copyTarget?.화물수량 || ""}
               ].filter(s => s?.업체명?.trim())
                .filter((s, i, arr) => arr.findIndex(x => x.업체명 === s.업체명) === i);
 
-              if (!stops.length) return null;
-
-              return (
-                <div className="mb-3 flex items-center gap-2">
-                  <span className="text-[12px] text-gray-500 font-medium">하차경유지</span>
-                  <StopBadge count={stops.length} list={stops} type="drop" placeRows={placeRows} timeOptions={timeOptions} onSave={(newList) => setEditTarget(p => ({ ...p, 경유하차목록: newList, 경유지_하차: newList }))} />
-                </div>
-              );
+              return <WaypointSection stops={stops} type="drop" onSave={(newList) => setEditTarget(p => ({ ...p, 경유하차목록: newList, 경유지_하차: newList }))} placeRows={placeRows} timeOptions={timeOptions} className="mb-3" />;
             })()}
 
             {/* ------------------------------------------------ */}
@@ -21160,8 +21169,8 @@ const _pHas5d=_pStops5d.length>0;
 const _dHas5d=_dStops5d.length>0;
 const _pNum5d=_pHas5d?`1.`:"";
 const _dNum5d=_dHas5d?`${_dStops5d.length+1}.`:"";
-const _pStopsText5d=_pHas5d?_pStops5d.map((s,i)=>{const cargo=_ct5d(s);const ton=_tt5d(s);return`${i+2}.상차경유지 : ${s.업체명||"-"}\n${s.주소||""}${s.담당자?`\n담당자 : ${s.담당자}${s.담당자번호?` (${formatPhone(s.담당자번호)})`:""}`:``}${s.상차시간?`\n상차시간 : ${s.상차시간}`:""}${cargo?`\n화물내용 : ${cargo}`:""}${ton?`\n화물톤수 : ${ton}`:""}${s.방법?`\n상차방법 : ${s.방법}`:``}`;}).join("\n"):"";
-const _dStopsText5d=_dHas5d?_dStops5d.map((s,i)=>{const cargo=_ct5d(s);const ton=_tt5d(s);return`${i+1}.하차경유지 : ${s.업체명||"-"}\n${s.주소||""}${s.담당자?`\n담당자 : ${s.담당자}${s.담당자번호?` (${formatPhone(s.담당자번호)})`:""}`:``}${s.하차시간?`\n하차시간 : ${s.하차시간}`:""}${cargo?`\n화물내용 : ${cargo}`:""}${ton?`\n화물톤수 : ${ton}`:""}${s.방법?`\n하차방법 : ${s.방법}`:``}`;}).join("\n"):"";
+const _pStopsText5d=_pHas5d?_pStops5d.map((s,i)=>{const cargo=_ct5d(s);const ton=_tt5d(s);return`${i+2}.상차경유지 : ${s.업체명||"-"}\n${s.주소||""}${s.담당자?`\n담당자 : ${s.담당자}${s.담당자번호?` (${formatPhone(s.담당자번호)})`:""}`:``}${s.상차시간?`\n상차시간 : ${s.상차시간}`:""}${cargo?`\n화물내용 : ${cargo}`:""}${ton?`\n화물톤수 : ${ton}`:""}${s.방법?`\n상차방법 : ${s.방법}`:``}`;}).join("\n\n"):"";
+const _dStopsText5d=_dHas5d?_dStops5d.map((s,i)=>{const cargo=_ct5d(s);const ton=_tt5d(s);return`${i+1}.하차경유지 : ${s.업체명||"-"}\n${s.주소||""}${s.담당자?`\n담당자 : ${s.담당자}${s.담당자번호?` (${formatPhone(s.담당자번호)})`:""}`:``}${s.하차시간?`\n하차시간 : ${s.하차시간}`:""}${cargo?`\n화물내용 : ${cargo}`:""}${ton?`\n화물톤수 : ${ton}`:""}${s.방법?`\n하차방법 : ${s.방법}`:``}`;}).join("\n\n"):"";
 const _mainPCargo5d=_pHas5d&&r.화물내용?`\n화물내용 : ${r.화물내용}`:"";
 const _mainPTon5d=_pHas5d&&r.차량톤수?`\n화물톤수 : ${r.차량톤수}`:"";
 const _mainDCargo5d=_pHas5d?(_totCargo5d?`\n화물내용 : ${_totCargo5d}`:""): (_dHas5d&&r.화물내용?`\n화물내용 : ${r.화물내용}`:"");
@@ -21242,8 +21251,8 @@ const _pNum5f=_pHas5f?`1.`:"";
 const _dNum5f=_dHas5f?`${_dStops5f.length+1}.`:"";
 const _pCon5f=buildContactLine(r.상차지담당자,r.상차지담당자번호);
 const _dCon5f=buildContactLine(r.하차지담당자,r.하차지담당자번호);
-const _pStopsText5f=_pHas5f?_pStops5f.map((s,i)=>{const cargo=_ct5f(s);const ton=_tt5f(s);return`${i+2}.상차경유지 : ${s.업체명||"-"}\n${s.주소||""}${s.담당자?`\n담당자 : ${s.담당자}${s.담당자번호?` (${formatPhone(s.담당자번호)})`:""}`:``}${s.상차시간?`\n상차시간 : ${s.상차시간}`:""}${cargo?`\n화물내용 : ${cargo}`:""}${ton?`\n화물톤수 : ${ton}`:""}${s.방법?`\n상차방법 : ${s.방법}`:``}`;}).join("\n"):"";
-const _dStopsText5f=_dHas5f?_dStops5f.map((s,i)=>{const cargo=_ct5f(s);const ton=_tt5f(s);return`${i+1}.하차경유지 : ${s.업체명||"-"}\n${s.주소||""}${s.담당자?`\n담당자 : ${s.담당자}${s.담당자번호?` (${formatPhone(s.담당자번호)})`:""}`:``}${s.하차시간?`\n하차시간 : ${s.하차시간}`:""}${cargo?`\n화물내용 : ${cargo}`:""}${ton?`\n화물톤수 : ${ton}`:""}${s.방법?`\n하차방법 : ${s.방법}`:``}`;}).join("\n"):"";
+const _pStopsText5f=_pHas5f?_pStops5f.map((s,i)=>{const cargo=_ct5f(s);const ton=_tt5f(s);return`${i+2}.상차경유지 : ${s.업체명||"-"}\n${s.주소||""}${s.담당자?`\n담당자 : ${s.담당자}${s.담당자번호?` (${formatPhone(s.담당자번호)})`:""}`:``}${s.상차시간?`\n상차시간 : ${s.상차시간}`:""}${cargo?`\n화물내용 : ${cargo}`:""}${ton?`\n화물톤수 : ${ton}`:""}${s.방법?`\n상차방법 : ${s.방법}`:``}`;}).join("\n\n"):"";
+const _dStopsText5f=_dHas5f?_dStops5f.map((s,i)=>{const cargo=_ct5f(s);const ton=_tt5f(s);return`${i+1}.하차경유지 : ${s.업체명||"-"}\n${s.주소||""}${s.담당자?`\n담당자 : ${s.담당자}${s.담당자번호?` (${formatPhone(s.담당자번호)})`:""}`:``}${s.하차시간?`\n하차시간 : ${s.하차시간}`:""}${cargo?`\n화물내용 : ${cargo}`:""}${ton?`\n화물톤수 : ${ton}`:""}${s.방법?`\n하차방법 : ${s.방법}`:``}`;}).join("\n\n"):"";
 const _mainPCargo5f=_pHas5f&&r.화물내용?`\n화물내용 : ${r.화물내용}`:"";
 const _mainPTon5f=_pHas5f&&r.차량톤수?`\n화물톤수 : ${r.차량톤수}`:"";
 const _mainDCargo5f=_pHas5f?(_totCargo5f?`\n화물내용 : ${_totCargo5f}`:""): (_dHas5f&&r.화물내용?`\n화물내용 : ${r.화물내용}`:"");
@@ -23434,13 +23443,7 @@ onBlur={(e) => {
               const stops = [...sp(editTarget?.경유상차목록), ...sp(editTarget?.경유지_상차)]
                 .filter(s => s?.업체명?.trim())
                 .filter((s, i, arr) => arr.findIndex(x => x.업체명 === s.업체명) === i);
-              if (!stops.length) return null;
-              return (
-                <div className="mb-3 flex items-center gap-2">
-                  <span className="text-sm font-medium text-gray-500">상차경유지</span>
-                  <StopBadge count={stops.length} list={stops} type="pickup" placeRows={placeRows} timeOptions={timeOptions} onSave={(newList) => setEditTarget(p => ({ ...p, 경유상차목록: newList, 경유지_상차: newList }))} />
-                </div>
-              );
+              return <WaypointSection stops={stops} type="pickup" onSave={(newList) => setEditTarget(p => ({ ...p, 경유상차목록: newList, 경유지_상차: newList }))} placeRows={placeRows} timeOptions={timeOptions} className="mb-3" />;
             })()}
 
             {/* ================= 하차지명 ================= */}
@@ -23583,13 +23586,7 @@ onBlur={(e) => {
               const stops = [...sp(editTarget?.경유하차목록), ...sp(editTarget?.경유지_하차)]
                 .filter(s => s?.업체명?.trim())
                 .filter((s, i, arr) => arr.findIndex(x => x.업체명 === s.업체명) === i);
-              if (!stops.length) return null;
-              return (
-                <div className="mb-3 flex items-center gap-2">
-                  <span className="text-sm font-medium text-gray-500">하차경유지</span>
-                  <StopBadge count={stops.length} list={stops} type="drop" placeRows={placeRows} timeOptions={timeOptions} onSave={(newList) => setEditTarget(p => ({ ...p, 경유하차목록: newList, 경유지_하차: newList }))} />
-                </div>
-              );
+              return <WaypointSection stops={stops} type="drop" onSave={(newList) => setEditTarget(p => ({ ...p, 경유하차목록: newList, 경유지_하차: newList }))} placeRows={placeRows} timeOptions={timeOptions} className="mb-3" />;
             })()}
 
             {/* 🔥 화물내용 (단독 한 줄) */}
@@ -24599,13 +24596,7 @@ setCopyPlaceOptions(list);
       {(() => {
         const _sp = (v) => { if (Array.isArray(v) && v.length > 0) return v; if (typeof v === "string" && v.trim().startsWith("[")) { try { const p = JSON.parse(v); if (Array.isArray(p)) return p; } catch {} } if (v && typeof v === "object" && !Array.isArray(v)) { const ks = Object.keys(v); if (ks.length > 0 && ks.every(k => /^\d+$/.test(k))) return ks.sort((a,b)=>Number(a)-Number(b)).map(k=>v[k]); if (v.업체명) return [v]; } return []; };
         const stops = _sp(copyTarget?.경유상차목록 || copyTarget?.경유지_상차).filter(s => s && (s.업체명?.trim() || s.주소?.trim()));
-        if (!stops.length) return null;
-        return (
-          <div className="mt-1 flex items-center gap-2">
-            <span className="text-[12px] text-gray-500 font-medium">상차경유지</span>
-            <StopBadge count={stops.length} list={stops} type="pickup" placeRows={placeRows} timeOptions={timeOptions} onSave={(newList) => setCopyTarget(p => ({ ...p, 경유상차목록: newList, 경유지_상차: newList }))} />
-          </div>
-        );
+        return <WaypointSection stops={stops} type="pickup" onSave={(newList) => setCopyTarget(p => ({ ...p, 경유상차목록: newList, 경유지_상차: newList }))} placeRows={placeRows} timeOptions={timeOptions} className="mt-1" />;
       })()}
 
     </div>
@@ -24751,13 +24742,7 @@ setCopyPlaceOptions(list);
       {(() => {
         const _sp = (v) => { if (Array.isArray(v) && v.length > 0) return v; if (typeof v === "string" && v.trim().startsWith("[")) { try { const p = JSON.parse(v); if (Array.isArray(p)) return p; } catch {} } if (v && typeof v === "object" && !Array.isArray(v)) { const ks = Object.keys(v); if (ks.length > 0 && ks.every(k => /^\d+$/.test(k))) return ks.sort((a,b)=>Number(a)-Number(b)).map(k=>v[k]); if (v.업체명) return [v]; } return []; };
         const stops = _sp(copyTarget?.경유하차목록 || copyTarget?.경유지_하차).filter(s => s && (s.업체명?.trim() || s.주소?.trim()));
-        if (!stops.length) return null;
-        return (
-          <div className="mt-1 flex items-center gap-2">
-            <span className="text-[12px] text-gray-500 font-medium">하차경유지</span>
-            <StopBadge count={stops.length} list={stops} type="drop" onSave={(newList) => setCopyTarget(p => ({ ...p, 경유하차목록: newList, 경유지_하차: newList }))} placeRows={placeRows} timeOptions={timeOptions} />
-          </div>
-        );
+        return <WaypointSection stops={stops} type="drop" onSave={(newList) => setCopyTarget(p => ({ ...p, 경유하차목록: newList, 경유지_하차: newList }))} placeRows={placeRows} timeOptions={timeOptions} className="mt-1" />;
       })()}
 
     </div>

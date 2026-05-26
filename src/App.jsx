@@ -65,6 +65,7 @@ export default function App() {
   const [role, setRole] = useState(null);
   const [loading, setLoading] = useState(true);
   const [approved, setApproved] = useState(false);
+  const [userCompany, setUserCompany] = useState("");
   // updateReady 팝업 제거됨 - UpdateBanner가 자동 처리
   const [splashDone, setSplashDone] = useState(false);
 
@@ -286,9 +287,13 @@ export default function App() {
           const data = snap.data();
           setRole(data.role || "shipper");
           setApproved(data.approved === true);
+          setUserCompany(data.companyName || "");
+          localStorage.setItem("userCompany", data.companyName || "");
+          localStorage.setItem("role", data.role || "user");
         } else {
           setRole("shipper");
           setApproved(false);
+          setUserCompany("");
         }
         setLoading(false);
       });
@@ -409,7 +414,7 @@ export default function App() {
             path="/app"
             element={
               user && role !== "shipper" && role !== "driver"
-                ? (isMobile ? <MobileApp role={role} user={user} /> : <DispatchApp role={role} user={user} />)
+                ? (isMobile ? <MobileApp role={role} user={user} /> : <DispatchApp role={role} user={user} userCompany={userCompany} />)
                 : <Navigate to="/login" replace />
             }
           />
