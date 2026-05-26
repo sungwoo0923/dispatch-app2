@@ -297,14 +297,9 @@ export default function CompanyApplications() {
       const appCollection = activeTab === "화주" ? "companyApplications" : "transportApplications";
       // 신청 문서 삭제
       await deleteDoc(doc(db, appCollection, app.id));
-      // 사용자 도큐먼트 초기화 (Auth 계정은 유지, 승인 정보만 제거)
+      // 사용자 도큐먼트 삭제 (Auth 계정은 유지 — 재가입 시 이전 비밀번호로 계정 재사용 가능)
       if (app.userId && app.userId !== auth.currentUser?.uid) {
-        await updateDoc(doc(db, "users", app.userId), {
-          approved: false,
-          companyCode: "",
-          companyName: "",
-          userStatus: null,
-        });
+        await deleteDoc(doc(db, "users", app.userId));
       }
       setManagingApp(null);
     } finally {

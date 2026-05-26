@@ -1,7 +1,7 @@
 // src/Signup.jsx  —  운송사 회원가입
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { createUserWithEmailAndPassword, signOut } from "firebase/auth";
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, sendPasswordResetEmail } from "firebase/auth";
 import { auth, db } from "./firebase";
 import {
   doc, setDoc, serverTimestamp, collection, query, where, getDocs, addDoc,
@@ -170,11 +170,13 @@ function SignupForm({ signupType, onBack }) {
   const [companySearchQ, setCompanySearchQ] = useState("");
   const [companySuggestions, setCompanySuggestions] = useState([]);
   const [companySearching, setCompanySearching] = useState(false);
+  const [hasSearched, setHasSearched] = useState(false);
 
   const searchExistingCompany = async () => {
     const q = companySearchQ.trim();
     if (!q) return;
     setCompanySearching(true);
+    setHasSearched(false);
     try {
       const snap = await getDocs(query(
         collection(db, "transportApplications"),
@@ -190,6 +192,7 @@ function SignupForm({ signupType, onBack }) {
       setCompanySuggestions([]);
     } finally {
       setCompanySearching(false);
+      setHasSearched(true);
     }
   };
 
@@ -197,6 +200,30 @@ function SignupForm({ signupType, onBack }) {
     setCompanyName(item.companyName || "");
     setCompanySearchQ(item.companyName || "");
     setCompanySuggestions([]);
+    setHasSearched(false);
+  };
+
+  // 이메일 중복확인
+  const [emailCheckMsg, setEmailCheckMsg] = useState(null);
+  const [emailChecking, setEmailChecking] = useState(false);
+
+  const checkEmailDuplicate = async () => {
+    const e = email.trim();
+    if (!e) return setEmailCheckMsg({ text: "이메일을 입력해주세요.", type: "error" });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) return setEmailCheckMsg({ text: "올바른 이메일 형식을 입력해주세요.", type: "error" });
+    setEmailChecking(true);
+    try {
+      const snap = await getDocs(query(collection(db, "users"), where("email", "==", e)));
+      if (snap.empty) {
+        setEmailCheckMsg({ text: "사용 가능한 이메일입니다.", type: "ok" });
+      } else {
+        setEmailCheckMsg({ text: "이미 사용 중인 이메일입니다.", type: "error" });
+      }
+    } catch (_) {
+      setEmailCheckMsg({ text: "확인 중 오류가 발생했습니다.", type: "error" });
+    } finally {
+      setEmailChecking(false);
+    }
   };
 
   const searchAddress = () => {
@@ -251,11 +278,9 @@ function SignupForm({ signupType, onBack }) {
       setLoading(true);
     }
 
-    try {
-      const res = await createUserWithEmailAndPassword(auth, email.trim(), password);
-      const uid = res.user.uid;
-      const fullAddress = address + (addressDetail ? ` ${addressDetail}` : "");
+    const fullAddress = address + (addressDetail ? ` ${addressDetail}` : "");
 
+    const writeUserDocs = async (uid) => {
       await setDoc(doc(db, "users", uid), {
         uid,
         email: email.trim(),
@@ -267,9 +292,9 @@ function SignupForm({ signupType, onBack }) {
         role: "admin",
         approved: false,
         isMaster: false,
+        status: null,
         createdAt: serverTimestamp(),
       });
-
       await addDoc(collection(db, "transportApplications"), {
         type: signupType,
         companyName: companyName.trim(),
@@ -287,15 +312,41 @@ function SignupForm({ signupType, onBack }) {
         companyCode: "",
         createdAt: serverTimestamp(),
       });
+    };
 
-      // Sign out immediately — prevents auto-login before admin approval
+    try {
+      const res = await createUserWithEmailAndPassword(auth, email.trim(), password);
+      await writeUserDocs(res.user.uid);
       await signOut(auth);
       setSuccess(true);
       setTimeout(() => navigate("/login"), 2500);
     } catch (err) {
       const code = err.code || "";
       if (code === "auth/email-already-in-use") {
-        setError("이미 가입된 이메일입니다.");
+        // 관리자가 계정을 삭제했는지 확인 (Firestore에 해당 이메일 문서가 없는 경우)
+        try {
+          const snap = await getDocs(query(collection(db, "users"), where("email", "==", email.trim())));
+          const existingDoc = snap.docs[0];
+          const isDeleted = !existingDoc || existingDoc.data().status === "deleted" || existingDoc.data().status === "withdrawn";
+          if (isDeleted) {
+            // 기존 Auth 계정으로 로그인 후 재가입 처리
+            try {
+              const reLogin = await signInWithEmailAndPassword(auth, email.trim(), password);
+              await writeUserDocs(reLogin.user.uid);
+              await signOut(auth);
+              setSuccess(true);
+              setTimeout(() => navigate("/login"), 2500);
+            } catch (_) {
+              setError(
+                "이전에 사용하던 비밀번호를 입력해 주세요. 비밀번호를 잊으셨다면 로그인 화면의 비밀번호 재설정을 이용해 주세요."
+              );
+            }
+          } else {
+            setError("이미 가입된 이메일입니다.");
+          }
+        } catch (_) {
+          setError("이미 가입된 이메일입니다.");
+        }
       } else if (code === "auth/invalid-email") {
         setError("올바른 이메일 형식을 입력해주세요.");
       } else if (code === "auth/weak-password") {
@@ -362,8 +413,14 @@ function SignupForm({ signupType, onBack }) {
                     ))}
                   </div>
                 )}
-                {companySearchQ && companySuggestions.length === 0 && !companySearching && (
+                {!hasSearched && companySearchQ && !companySearching && companySuggestions.length === 0 && (
                   <p className="text-[12px] text-gray-400 mt-1.5 pl-1">검색 버튼을 눌러 회사를 찾아보세요</p>
+                )}
+                {hasSearched && !companySearching && companySuggestions.length === 0 && (
+                  <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-xl text-[13px] text-amber-700 leading-relaxed">
+                    <strong>"{companySearchQ}"</strong>(으)로 등록된 운송사가 없습니다.<br/>
+                    신규가입으로 진행해 주세요.
+                  </div>
                 )}
               </div>
             ) : (
@@ -425,9 +482,21 @@ function SignupForm({ signupType, onBack }) {
           <SectionLabel>계정 정보</SectionLabel>
 
           <Field label="이메일" required>
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
-              placeholder="이메일 입력"
-              className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]" />
+            <div className="flex gap-2">
+              <input type="email" value={email}
+                onChange={(e) => { setEmail(e.target.value); setEmailCheckMsg(null); }}
+                placeholder="이메일 입력"
+                className="flex-1 border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]" />
+              <button type="button" onClick={checkEmailDuplicate} disabled={emailChecking}
+                className="px-4 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition whitespace-nowrap disabled:opacity-50">
+                {emailChecking ? "확인 중..." : "중복확인"}
+              </button>
+            </div>
+            {emailCheckMsg && (
+              <p className={`text-[12px] mt-1.5 pl-1 font-medium ${emailCheckMsg.type === "ok" ? "text-emerald-600" : "text-red-500"}`}>
+                {emailCheckMsg.text}
+              </p>
+            )}
           </Field>
 
           <Field label="비밀번호" required>
