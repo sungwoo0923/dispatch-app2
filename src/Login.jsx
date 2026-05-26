@@ -8,9 +8,12 @@ import {
 import { useNavigate, Link } from "react-router-dom";
 import { LogIn, Loader2, Truck, UserPlus } from "lucide-react";
 
+const TOTAL_MASTER_EMAIL = "tjddnqkf@naver.com";
+
 export default function Login() {
   const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
+  const [companyName, setCompanyName] = useState(() => localStorage.getItem("loginCompany") || "");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [msg, setMsg] = useState(null);
@@ -49,6 +52,7 @@ useEffect(() => {
   setError(null);
   setMsg(null);
 
+  if (!companyName.trim()) return setError("회사명을 입력해주세요.");
   if (!email.trim() || !pw.trim()) {
     return setError("이메일 / 비밀번호를 입력해주세요.");
   }
@@ -57,6 +61,10 @@ useEffect(() => {
     setLoading(true);
 
     await signInWithEmailAndPassword(auth, email, pw);
+    localStorage.setItem("loginCompany", companyName.trim());
+    if (email.trim().toLowerCase() !== TOTAL_MASTER_EMAIL) {
+      localStorage.setItem("userCompany", companyName.trim());
+    }
 sessionStorage.setItem("skipLoginPopup", "true");
     // 🔥 로그인 시간
     const now = new Date();
@@ -111,6 +119,15 @@ sessionStorage.setItem("skipLoginPopup", "true");
         <p className="text-gray-600 mb-6 text-sm">
           직원 전용 관리자 로그인
         </p>
+
+        {/* 회사명 */}
+        <input
+          type="text"
+          placeholder="회사명"
+          value={companyName}
+          onChange={(e) => setCompanyName(e.target.value)}
+          className="border w-full p-3 rounded-lg mb-3"
+        />
 
         {/* 이메일 */}
         <input

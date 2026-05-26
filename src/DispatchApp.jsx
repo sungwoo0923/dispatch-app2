@@ -1708,8 +1708,11 @@ useEffect(() => {
   const dispatchDataFiltered = useMemo(() => {
     if (!dispatchData || !user) return [];
 
-    // 총마스터는 전체 데이터
-    if (role === "totalMaster") return dispatchData;
+    // 총마스터는 입력한 회사명 기준으로 필터
+    if (role === "totalMaster") {
+      const viewCompany = localStorage.getItem("loginCompany") || userCompany || "돌캐";
+      return dispatchData.filter(o => (o?.companyName || "돌캐") === viewCompany);
+    }
 
     // 회사명 기준 필터 (없으면 "돌캐"로 간주)
     const myCompany = userCompany || localStorage.getItem("userCompany") || "돌캐";
@@ -1934,20 +1937,27 @@ useEffect(() => {
 const [alertMsg, setAlertMsg] = useState(null);
 const showAlert = (msg) => setAlertMsg(msg);
 
-  // ---------------- user 차단 메뉴 ----------------
-  const blockedMenus = [
-    "배차관리",
-    "기사관리",
-    "거래처관리",
-    "매출관리",
-    "거래처정산",
-    "지급관리",
-    "관리자메뉴",
+  // ---------------- 역할별 차단 메뉴 ----------------
+  // user(일반직원): 배차 업무만 가능, 재무/관리 메뉴 차단
+  const userBlockedMenus = [
+    "기사관리", "거래처관리", "고정거래처관리",
+    "매출관리", "거래처정산", "지급관리", "관리자메뉴",
   ];
+  // test(경리): 재무 관련 메뉴만 가능, 배차 입력/미배차 등 차단
+  const testBlockedMenus = [
+    "HOME", "배차관리", "미배차현황", "표준운임표", "단가표", "관리자메뉴",
+  ];
+
+  const blockedMenus = role === "test" ? testBlockedMenus : userBlockedMenus;
+
+  // test(경리) 기본 시작 메뉴: 실시간배차현황
+  React.useEffect(() => {
+    if (role === "test" && menu === "HOME") setMenu("실시간배차현황");
+  }, [role]);
 
   // ---------------- 메뉴 클릭 제어 ----------------
   const handleMenuClick = (m) => {
-    if (role === "user" && blockedMenus.includes(m)) return;
+    if ((role === "user" || role === "test") && blockedMenus.includes(m)) return;
     setMenu(m);
   };
 
@@ -1980,6 +1990,16 @@ return (
             >
               v{__APP_VERSION__}
             </span>
+            {(() => {
+              const co = role === "totalMaster"
+                ? (localStorage.getItem("loginCompany") || userCompany || "")
+                : (userCompany || localStorage.getItem("userCompany") || "");
+              return co ? (
+                <span className="text-[11px] font-bold bg-blue-500/30 text-blue-200 px-2 py-0.5 rounded ml-1 border border-blue-400/30">
+                  {co}
+                </span>
+              ) : null;
+            })()}
           </div>
 
           {/* 중앙 메뉴 */}
@@ -2012,6 +2032,7 @@ return (
             ].map((m) => {
               const isBlocked = (role === "user" || role === "test") && blockedMenus.includes(m);
               if (m === "관리자메뉴" && role !== "admin" && role !== "totalMaster") return null;
+              if (isBlocked && role === "test") return null;
               const isActive = menu === m;
               return (
                 <button
@@ -2256,6 +2277,19 @@ return (
             onClick={(e) => e.stopPropagation()}
           >
             <h2 className="text-xl font-bold mb-4">내 정보</h2>
+
+            {/* 회사명 */}
+            {(() => {
+              const co = role === "totalMaster"
+                ? (localStorage.getItem("loginCompany") || userCompany || "")
+                : (userCompany || localStorage.getItem("userCompany") || "");
+              return co ? (
+                <div className="mb-4">
+                  <p className="font-semibold text-gray-700 text-sm">회사명</p>
+                  <p className="text-gray-900 font-bold">{co}</p>
+                </div>
+              ) : null;
+            })()}
 
             {/* 이메일 */}
             <div className="mb-6">

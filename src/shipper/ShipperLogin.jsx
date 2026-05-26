@@ -12,6 +12,7 @@ import {
 export default function ShipperLogin() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [companyName, setCompanyName] = useState(() => localStorage.getItem("shipperCompany") || "");
   const [rememberId, setRememberId] = useState(false);
 const [autoLogin, setAutoLogin] = useState(false);
 const [showPopup, setShowPopup] = useState(false);
@@ -47,6 +48,7 @@ if (countdown === 0) {
   return () => clearTimeout(timer);
 }, [countdown, showPopup, navigate]);
   const login = async () => {
+  if (!companyName.trim()) { alert("회사명을 입력해주세요."); return; }
   try {
 
     // 🔥 자동로그인 여부에 따라 유지 방식 변경
@@ -56,6 +58,8 @@ await setPersistence(
 );
 
 await signInWithEmailAndPassword(auth, email, password);
+    localStorage.setItem("shipperCompany", companyName.trim());
+    localStorage.setItem("loginCompany", companyName.trim());
 sessionStorage.setItem("skipLoginPopup", "true");
 // 🔥 그 다음 팝업
 const now = new Date();
@@ -91,7 +95,15 @@ setCountdown(3);
 
 <form autoComplete="off">
   <input
-    name="shipper-email"              // 🔥 핵심
+    name="shipper-company"
+    autoComplete="off"
+    className="w-full border rounded p-2 mb-3"
+    placeholder="회사명"
+    value={companyName}
+    onChange={(e) => setCompanyName(e.target.value)}
+  />
+  <input
+    name="shipper-email"
     autoComplete="off"
     className="w-full border rounded p-2 mb-3"
     placeholder="이메일"

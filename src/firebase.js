@@ -81,16 +81,7 @@ export function getCollections() {
     };
   }
 
-  // TEST 계정 분기
-  if (role === "test") {
-    return {
-      dispatch: "dispatch_test",
-      drivers: "drivers_test",
-      clients: "clients_test",
-    };
-  }
-
-  // 관리자/직원 → 실 서비스
+  // 관리자/직원/경리 → 실 서비스
   return {
     dispatch: "dispatch",
     drivers: "drivers",

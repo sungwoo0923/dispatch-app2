@@ -340,7 +340,7 @@ const normalizePhone = (p = "") =>
 //  메인 컴포넌트
 // ======================================================================
 
-export default function MobileApp() {
+export default function MobileApp({ role, user, userCompany = "" }) {
   const [page, setPage] = useState("list");
   const listScrollYRef = useRef(0); // 리스트 스크롤 위치 저장
   const unassignedScrollYRef = useRef(0); // 미배차/정보미전달 스크롤 위치 저장
@@ -2745,6 +2745,7 @@ setOpenMemo={setOpenMemo}
             mobileUsers={mobileUsers}
             loginTime={loginTime}
             orders={orders}
+            userCompany={userCompany || localStorage.getItem("userCompany") || ""}
             onBack={() => setPage("list")}
           />
         )}
@@ -8041,12 +8042,13 @@ function MobilePlaceSuggest({ value, onChange, names = [], placeholder }) {
 // ======================================================================
 // 📌 내정보 페이지
 // ======================================================================
-function MobileMyInfo({ currentUser, mobileUsers, loginTime, orders = [], onBack }) {
+function MobileMyInfo({ currentUser, mobileUsers, loginTime, orders = [], userCompany = "", onBack }) {
   const me = mobileUsers?.find(u => u.id === currentUser?.uid);
   const myName = me?.name || currentUser?.displayName || currentUser?.email?.split("@")[0] || "사용자";
   const myEmail = currentUser?.email || "";
   const myRole = me?.role || me?.직책 || "";
   const myPhone = me?.phone || me?.전화번호 || "";
+  const myCompany = userCompany || me?.companyName || localStorage.getItem("userCompany") || "";
 
   const todayStr = new Date().toISOString().slice(0, 10);
   const thisMonth = new Date().toISOString().slice(0, 7);
@@ -8082,6 +8084,12 @@ function MobileMyInfo({ currentUser, mobileUsers, loginTime, orders = [], onBack
           </div>
         </div>
         <div className="px-5 py-4 space-y-2">
+          {myCompany && (
+            <div className="flex items-center justify-between py-1 border-b border-gray-50">
+              <span className="text-[12px] text-gray-400">회사명</span>
+              <span className="text-[13px] font-semibold text-gray-800">{myCompany}</span>
+            </div>
+          )}
           {myPhone && (
             <div className="flex items-center justify-between py-1 border-b border-gray-50">
               <span className="text-[12px] text-gray-400">연락처</span>
