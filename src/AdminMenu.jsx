@@ -26,13 +26,12 @@ export default function AdminMenu({ parentRole = "", parentCompany = "" }) {
   const [myRole, setMyRole] = useState("");
   const [myCompany, setMyCompany] = useState("");
 
+  const me = auth.currentUser;
+  const isTotalMaster = parentRole === "totalMaster" || me?.email === TOTAL_MASTER_EMAIL || myRole === "totalMaster";
   // totalMaster 권한은 totalMaster만 부여/변경 가능
   const ROLES = isTotalMaster
     ? ["totalMaster", "admin", "user", "driver", "shipper", "test"]
     : ["admin", "user", "driver", "shipper", "test"];
-
-  const me = auth.currentUser;
-  const isTotalMaster = parentRole === "totalMaster" || me?.email === TOTAL_MASTER_EMAIL || myRole === "totalMaster";
   // 유효 회사명: Firestore 로드 전에는 parentCompany 사용
   const effectiveCompany = myCompany || parentCompany || localStorage.getItem("userCompany") || "돌캐";
 

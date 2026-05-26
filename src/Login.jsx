@@ -3,10 +3,10 @@ import React from "react";
 import { Link } from "react-router-dom";
 
 const features = [
-  { icon: "🚚", title: "배차 관리", desc: "실시간 배차 등록 및 현황 관리" },
-  { icon: "👨‍✈️", title: "차주 관리", desc: "차주 정보 및 운행 현황 통합 관리" },
-  { icon: "💰", title: "운임 정산", desc: "청구운임 및 기사운임 자동 정산" },
-  { icon: "🏢", title: "거래처 관리", desc: "화주사 및 거래처 통합 관리" },
+  { title: "배차 관리", desc: "실시간 배차 등록 및 현황 관리" },
+  { title: "차주 관리", desc: "차주 정보 및 운행 현황 통합 관리" },
+  { title: "운임 정산", desc: "청구운임 및 기사운임 자동 정산" },
+  { title: "거래처 관리", desc: "화주사 및 거래처 통합 관리" },
 ];
 
 export default function Login() {
@@ -73,22 +73,22 @@ export default function Login() {
           </p>
 
           {/* CTA Buttons */}
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mb-16 w-full max-w-md">
+          <div className="flex flex-row items-center justify-center gap-3 mb-16 flex-wrap">
             <Link
               to="/transport-login"
-              className="w-full sm:w-auto bg-white text-[#1B2B4B] font-bold rounded-xl px-8 py-3.5 text-sm hover:bg-blue-50 transition-all shadow-lg"
+              className="bg-white text-[#1B2B4B] font-bold rounded-xl px-6 py-3 text-sm hover:bg-blue-50 transition-all shadow-lg whitespace-nowrap"
             >
               운송사 시작하기
             </Link>
             <Link
               to="/driver-login"
-              className="w-full sm:w-auto bg-white/10 text-white border border-white/25 rounded-xl px-8 py-3.5 text-sm hover:bg-white/20 transition-all backdrop-blur-sm"
+              className="bg-white/10 text-white border border-white/25 rounded-xl px-6 py-3 text-sm hover:bg-white/20 transition-all backdrop-blur-sm whitespace-nowrap"
             >
               차주 시작하기
             </Link>
             <Link
               to="/shipper-login"
-              className="w-full sm:w-auto bg-white/10 text-white border border-white/25 rounded-xl px-8 py-3.5 text-sm hover:bg-white/20 transition-all backdrop-blur-sm"
+              className="bg-white/10 text-white border border-white/25 rounded-xl px-6 py-3 text-sm hover:bg-white/20 transition-all backdrop-blur-sm whitespace-nowrap"
             >
               화주사 시작하기
             </Link>
@@ -101,7 +101,6 @@ export default function Login() {
                 key={f.title}
                 className="bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl p-5 text-left transition-all backdrop-blur-sm"
               >
-                <div className="text-2xl mb-2">{f.icon}</div>
                 <p className="text-white font-bold text-sm">{f.title}</p>
                 <p className="text-white/40 text-xs mt-1 leading-relaxed">{f.desc}</p>
               </div>
