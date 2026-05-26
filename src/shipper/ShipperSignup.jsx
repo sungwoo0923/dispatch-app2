@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { auth, db } from "../firebase";
 import {
-  doc, setDoc, serverTimestamp, collection, query, where, getDocs, addDoc,
+  doc, setDoc, serverTimestamp, collection, query, where, getDocs, addDoc, updateDoc,
 } from "firebase/firestore";
 
 const POSITIONS = ["대표", "이사", "팀장", "과장", "대리", "사원", "기타"];
@@ -163,6 +163,95 @@ function SignupForm({ signupType, onBack }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  // ── 기존 가입: 화주 회사 검색 ────────────────────────────────────────────
+  const [companySearchQ, setCompanySearchQ] = useState("");
+  const [companySuggestions, setCompanySuggestions] = useState([]);
+  const [companySearching, setCompanySearching] = useState(false);
+  const [hasCompanySearched, setHasCompanySearched] = useState(false);
+  const [selectedCompanyApp, setSelectedCompanyApp] = useState(null);
+
+  const searchExistingShipperCompany = async () => {
+    const q = companySearchQ.trim();
+    if (!q) return;
+    setCompanySearching(true);
+    setHasCompanySearched(false);
+    try {
+      const snap = await getDocs(query(
+        collection(db, "companyApplications"),
+        where("type", "==", "신규"),
+      ));
+      const all = snap.docs.map((d) => ({ ...d.data(), _docId: d.id }));
+      const matched = all.filter((d) =>
+        d.status !== "rejected" &&
+        (d.companyName || "").toLowerCase().includes(q.toLowerCase())
+      );
+      // deduplicate by companyName, keep latest approved or pending
+      const seen = new Map();
+      for (const item of matched) {
+        if (!seen.has(item.companyName)) seen.set(item.companyName, item);
+      }
+      setCompanySuggestions(Array.from(seen.values()));
+    } catch (_) {
+      setCompanySuggestions([]);
+    } finally {
+      setCompanySearching(false);
+      setHasCompanySearched(true);
+    }
+  };
+
+  const selectCompanySuggestion = (item) => {
+    setCompanyName(item.companyName || "");
+    setCompanySearchQ(item.companyName || "");
+    setBusinessNumber(formatBizNum(item.businessNumber || ""));
+    setAddress(item.address || "");
+    setAddressDetail("");
+    setSelectedCompanyApp(item);
+    setCompanySuggestions([]);
+    setHasCompanySearched(false);
+  };
+
+  // ── 신규 가입: 운송사 검색 ────────────────────────────────────────────────
+  const [transportSearchQ, setTransportSearchQ] = useState("");
+  const [transportSuggestions, setTransportSuggestions] = useState([]);
+  const [transportSearching, setTransportSearching] = useState(false);
+  const [hasTransportSearched, setHasTransportSearched] = useState(false);
+  const [selectedTransport, setSelectedTransport] = useState(null);
+
+  const searchTransportCompany = async () => {
+    const q = transportSearchQ.trim();
+    if (!q) return;
+    setTransportSearching(true);
+    setHasTransportSearched(false);
+    try {
+      const snap = await getDocs(query(
+        collection(db, "transportApplications"),
+        where("type", "==", "신규"),
+        where("status", "==", "approved"),
+      ));
+      const all = snap.docs.map((d) => ({ ...d.data(), _docId: d.id }));
+      const matched = all.filter((d) =>
+        (d.companyName || "").toLowerCase().includes(q.toLowerCase())
+      );
+      const seen = new Map();
+      for (const item of matched) {
+        if (!seen.has(item.companyName)) seen.set(item.companyName, item);
+      }
+      setTransportSuggestions(Array.from(seen.values()));
+    } catch (_) {
+      setTransportSuggestions([]);
+    } finally {
+      setTransportSearching(false);
+      setHasTransportSearched(true);
+    }
+  };
+
+  const selectTransportSuggestion = (item) => {
+    setSelectedTransport(item);
+    setTransportSearchQ(item.companyName || "");
+    setTransportSuggestions([]);
+    setHasTransportSearched(false);
+  };
+
   const searchAddress = () => {
     const load = () =>
       new Promise((resolve) => {
@@ -175,23 +264,6 @@ function SignupForm({ signupType, onBack }) {
     load().then(() => {
       new window.daum.Postcode({ oncomplete: (d) => setAddress(d.address) }).open();
     });
-  };
-
-  const validateExistingCompany = async () => {
-    const q = query(
-      collection(db, "companyApplications"),
-      where("companyName", "==", companyName.trim()),
-      where("type", "==", "신규"),
-    );
-    const snap = await getDocs(q);
-    const valid = snap.docs.some((d) => d.data().status !== "rejected");
-    if (!valid) {
-      setError(
-        `"${companyName.trim()}"으로 신청된 가입 내역이 없습니다. 관리자에게 문의하세요.`
-      );
-      return false;
-    }
-    return true;
   };
 
   const handleSubmit = async (e) => {
@@ -207,18 +279,26 @@ function SignupForm({ signupType, onBack }) {
     if (password !== passwordConfirm) return setError("비밀번호가 일치하지 않습니다.");
     if (!termsAgreed || !privacyAgreed) return setError("이용약관 및 개인정보처리방침에 모두 동의해주세요.");
 
-    if (signupType === "기존") {
-      setLoading(true);
-      const ok = await validateExistingCompany();
-      if (!ok) { setLoading(false); return; }
-    } else {
-      setLoading(true);
+    if (signupType === "기존" && !selectedCompanyApp) {
+      setError("회사명을 검색하여 선택해주세요.");
+      return;
     }
+
+    setLoading(true);
 
     try {
       const res = await createUserWithEmailAndPassword(auth, email.trim(), password);
       const uid = res.user.uid;
       const fullAddress = address + (addressDetail ? ` ${addressDetail}` : "");
+
+      const linkedTransport = selectedTransport
+        ? {
+            companyName: selectedTransport.companyName || "",
+            businessNumber: selectedTransport.businessNumber || "",
+            companyCode: selectedTransport.companyCode || "",
+            representative: selectedTransport.name || selectedTransport.representative || "",
+          }
+        : null;
 
       await setDoc(doc(db, "users", uid), {
         uid,
@@ -231,13 +311,14 @@ function SignupForm({ signupType, onBack }) {
         role: "shipper",
         approved: false,
         isMaster: false,
+        linkedTransportCompany: linkedTransport || null,
         createdAt: serverTimestamp(),
       });
 
       await addDoc(collection(db, "companyApplications"), {
         type: signupType,
         companyName: companyName.trim(),
-        businessNumber: signupType === "신규" ? businessNumber.trim() : "",
+        businessNumber: signupType === "신규" ? businessNumber.trim() : (selectedCompanyApp?.businessNumber || ""),
         email: email.trim(),
         name: name.trim(),
         phone: phone.trim(),
@@ -249,12 +330,24 @@ function SignupForm({ signupType, onBack }) {
         status: "pending",
         userId: uid,
         companyCode: "",
+        linkedTransportCompany: linkedTransport || null,
         createdAt: serverTimestamp(),
       });
 
+      // 기존 가입: 회사 doc에 주소 없으면 저장
+      if (signupType === "기존" && fullAddress.trim() && selectedCompanyApp?._docId && !selectedCompanyApp.address) {
+        try {
+          await updateDoc(doc(db, "companyApplications", selectedCompanyApp._docId), { address: fullAddress.trim() });
+        } catch (_) {}
+      }
+
       navigate("/shipper-pending", { replace: true });
     } catch (err) {
-      setError(err.message || "가입 신청 중 오류가 발생했습니다.");
+      if (err.code === "auth/email-already-in-use") {
+        setError("이미 사용 중인 이메일입니다.");
+      } else {
+        setError(err.message || "가입 신청 중 오류가 발생했습니다.");
+      }
     } finally {
       setLoading(false);
     }
@@ -283,34 +376,195 @@ function SignupForm({ signupType, onBack }) {
           {/* 회사 정보 */}
           <SectionLabel>회사 정보</SectionLabel>
 
-          <Field label="회사명" required>
-            <input value={companyName} onChange={(e) => setCompanyName(e.target.value)}
-              placeholder="회사명 입력"
-              className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]" />
-          </Field>
+          {/* 기존 가입: 회사명 검색 */}
+          {signupType === "기존" ? (
+            <Field label="회사명" required>
+              <div className="flex gap-2">
+                <input
+                  value={companySearchQ}
+                  onChange={(e) => { setCompanySearchQ(e.target.value); setSelectedCompanyApp(null); setCompanyName(""); }}
+                  onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), searchExistingShipperCompany())}
+                  placeholder="회사명 검색"
+                  className="flex-1 border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]"
+                />
+                <button
+                  type="button"
+                  onClick={searchExistingShipperCompany}
+                  disabled={companySearching}
+                  className="px-4 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition whitespace-nowrap disabled:opacity-50"
+                >
+                  {companySearching ? "검색 중..." : "검색"}
+                </button>
+              </div>
 
-          {signupType === "신규" && (
-            <Field label="사업자번호" required>
-              <input value={businessNumber}
-                onChange={(e) => setBusinessNumber(formatBizNum(e.target.value))}
-                placeholder="000-00-00000" maxLength={12}
-                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]" />
+              {companySuggestions.length > 0 && (
+                <div className="mt-1 border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+                  {companySuggestions.map((item, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => selectCompanySuggestion(item)}
+                      className="w-full text-left px-4 py-3 hover:bg-blue-50 border-b border-gray-100 last:border-b-0 transition"
+                    >
+                      <div className="text-[14px] font-bold text-[#1B2B4B]">{item.companyName}</div>
+                      <div className="text-[12px] text-gray-400 mt-0.5 flex flex-wrap gap-x-3">
+                        {item.businessNumber && <span>사업자번호: {item.businessNumber}</span>}
+                        {item.name && <span>대표: {item.name}</span>}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {hasCompanySearched && !companySearching && companySuggestions.length === 0 && (
+                <div className="mt-2 bg-amber-50 border border-amber-200 text-amber-700 text-[13px] px-4 py-3 rounded-xl">
+                  <strong>"{companySearchQ}"</strong>(으)로 등록된 화주 회사가 없습니다.<br />
+                  신규가입으로 진행해 주세요.
+                </div>
+              )}
+
+              {selectedCompanyApp && (
+                <div className="mt-2 flex items-center gap-2 bg-blue-50 border border-blue-200 px-3 py-2 rounded-xl">
+                  <span className="text-[13px] text-blue-700 font-semibold">{selectedCompanyApp.companyName}</span>
+                  <button
+                    type="button"
+                    onClick={() => { setSelectedCompanyApp(null); setCompanyName(""); setCompanySearchQ(""); setBusinessNumber(""); setAddress(""); }}
+                    className="text-[11px] text-blue-400 hover:text-red-500 ml-auto"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+            </Field>
+          ) : (
+            <Field label="회사명" required>
+              <input
+                value={companyName}
+                onChange={(e) => setCompanyName(e.target.value)}
+                placeholder="회사명 입력"
+                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]"
+              />
             </Field>
           )}
 
+          {/* 사업자번호 */}
+          {signupType === "신규" && (
+            <Field label="사업자번호" required>
+              <input
+                value={businessNumber}
+                onChange={(e) => setBusinessNumber(formatBizNum(e.target.value))}
+                placeholder="000-00-00000"
+                maxLength={12}
+                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]"
+              />
+            </Field>
+          )}
+
+          {signupType === "기존" && (
+            <Field label="사업자번호">
+              <input
+                value={businessNumber}
+                readOnly
+                placeholder="회사 선택 시 자동 입력"
+                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] bg-gray-50 focus:outline-none cursor-default"
+              />
+            </Field>
+          )}
+
+          {/* 신규 가입: 연결 운송사 검색 */}
+          {signupType === "신규" && (
+            <Field label="연결 운송사">
+              <div className="flex gap-2">
+                <input
+                  value={transportSearchQ}
+                  onChange={(e) => { setTransportSearchQ(e.target.value); setSelectedTransport(null); }}
+                  onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), searchTransportCompany())}
+                  placeholder="운송사명 검색 (선택사항)"
+                  className="flex-1 border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]"
+                />
+                <button
+                  type="button"
+                  onClick={searchTransportCompany}
+                  disabled={transportSearching}
+                  className="px-4 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition whitespace-nowrap disabled:opacity-50"
+                >
+                  {transportSearching ? "검색 중..." : "검색"}
+                </button>
+              </div>
+
+              {transportSuggestions.length > 0 && (
+                <div className="mt-1 border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+                  {transportSuggestions.map((item, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => selectTransportSuggestion(item)}
+                      className="w-full text-left px-4 py-3 hover:bg-blue-50 border-b border-gray-100 last:border-b-0 transition"
+                    >
+                      <div className="text-[14px] font-bold text-[#1B2B4B]">{item.companyName}</div>
+                      <div className="text-[12px] text-gray-400 mt-0.5 flex flex-wrap gap-x-3">
+                        {item.businessNumber && <span>사업자번호: {item.businessNumber}</span>}
+                        {(item.name || item.representative) && <span>대표: {item.name || item.representative}</span>}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {hasTransportSearched && !transportSearching && transportSuggestions.length === 0 && (
+                <div className="mt-2 bg-amber-50 border border-amber-200 text-amber-700 text-[13px] px-4 py-3 rounded-xl">
+                  <strong>"{transportSearchQ}"</strong>(으)로 등록된 운송사가 없습니다.
+                </div>
+              )}
+
+              {selectedTransport && (
+                <div className="mt-2 flex items-center gap-2 bg-blue-50 border border-blue-200 px-3 py-2 rounded-xl">
+                  <span className="text-[13px] text-blue-700 font-semibold">{selectedTransport.companyName}</span>
+                  <span className="text-[12px] text-gray-400">
+                    {selectedTransport.businessNumber && `사업자번호: ${selectedTransport.businessNumber}`}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => { setSelectedTransport(null); setTransportSearchQ(""); }}
+                    className="text-[11px] text-blue-400 hover:text-red-500 ml-auto"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+
+              <p className="text-[11px] text-gray-400 mt-1">
+                연결할 운송사를 선택하면 승인 후 오더가 해당 운송사와 연동됩니다.
+              </p>
+            </Field>
+          )}
+
+          {/* 주소 */}
           <Field label="주소">
             <div className="flex gap-2 mb-2">
-              <input value={address} readOnly
+              <input
+                value={address}
+                readOnly={signupType === "기존"}
+                onChange={signupType === "신규" ? (e) => setAddress(e.target.value) : undefined}
                 placeholder="주소 검색 버튼을 눌러주세요"
-                className="flex-1 border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] bg-gray-50 focus:outline-none cursor-default" />
-              <button type="button" onClick={searchAddress}
-                className="px-4 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition whitespace-nowrap">
-                주소 검색
-              </button>
+                className={`flex-1 border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none ${signupType === "기존" ? "bg-gray-50 cursor-default" : "focus:border-[#1B2B4B]"}`}
+              />
+              {signupType === "신규" && (
+                <button
+                  type="button"
+                  onClick={searchAddress}
+                  className="px-4 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition whitespace-nowrap"
+                >
+                  주소 검색
+                </button>
+              )}
             </div>
-            <input value={addressDetail} onChange={(e) => setAddressDetail(e.target.value)}
+            <input
+              value={addressDetail}
+              onChange={(e) => setAddressDetail(e.target.value)}
               placeholder="상세주소 입력 (선택)"
-              className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]" />
+              className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]"
+            />
           </Field>
 
           {/* 담당자 정보 */}

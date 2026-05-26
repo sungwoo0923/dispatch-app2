@@ -1746,8 +1746,8 @@ useEffect(() => {
       return docCompany === myCompany;
     });
 
-    // 관리자면 회사 내 전체 데이터
-    if (role === "admin") return byCompany;
+    // 관리자/경리회계는 회사 내 전체 데이터
+    if (role === "admin" || role === "test") return byCompany;
 
     // 일반 계정은 회사 내 본인 데이터만
     return byCompany.filter(o =>
@@ -1969,7 +1969,7 @@ const showAlert = (msg) => setAlertMsg(msg);
   ];
   // test(경리/회계): 배차현황/기사/거래처/홈/거래처정산/지급관리 가능, 배차입력/운임표/관리 차단
   const testBlockedMenus = [
-    "배차관리", "실시간배차현황", "미배차현황", "표준운임표", "단가표", "매출관리", "관리자메뉴",
+    "배차관리", "실시간배차현황", "미배차현황", "표준운임표", "단가표", "관리자메뉴",
   ];
 
   const blockedMenus = role === "test" ? testBlockedMenus : userBlockedMenus;
@@ -2256,7 +2256,7 @@ return (
           </div>
         )}
 
-        {menu === "매출관리" && (role === "admin" || role === "totalMaster") && (
+        {menu === "매출관리" && (role === "admin" || role === "totalMaster" || role === "test") && (
           <Settlement
             dispatchData={dispatchDataFiltered}
             fixedRows={fixedRows}
