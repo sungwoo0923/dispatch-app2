@@ -2179,7 +2179,7 @@ return (
           <RateCard dispatchData={dispatchData} />
         )}
 
-        {menu === "기사관리" && role === "admin" && (
+        {menu === "기사관리" && (role === "admin" || role === "totalMaster") && (
           <DriverManagement
             drivers={drivers}
             upsertDriver={upsertDriver}
@@ -2187,7 +2187,7 @@ return (
           />
         )}
 
-        <div style={{ display: menu === "거래처관리" && role === "admin" ? "block" : "none" }}>
+        <div style={{ display: menu === "거래처관리" && (role === "admin" || role === "totalMaster") ? "block" : "none" }}>
           <ClientManagement
             clients={clients}
             upsertClient={upsertClient}
@@ -2197,7 +2197,7 @@ return (
           />
         </div>
 
-        {menu === "고정거래처관리" && role === "admin" && (
+        {menu === "고정거래처관리" && (role === "admin" || role === "totalMaster") && (
           <div>
             {/* 상단 탭 */}
             <div className="flex gap-2 mb-3 border-b pb-2">
@@ -2233,19 +2233,19 @@ return (
           </div>
         )}
 
-        {menu === "매출관리" && role === "admin" && (
+        {menu === "매출관리" && (role === "admin" || role === "totalMaster") && (
           <Settlement
             dispatchData={dispatchData}
-            fixedRows={fixedRows}   // ★ 추가
+            fixedRows={fixedRows}
             clients={clients}
-  places={places}
+            places={places}
           />
         )}
 
-                  <div style={{ display: menu === "거래처정산" && role === "admin" ? "block" : "none" }}>
+        <div style={{ display: menu === "거래처정산" && (role === "admin" || role === "totalMaster") ? "block" : "none" }}>
           <ClientSettlement
             dispatchData={dispatchData}
-             setDispatchData={setDispatchData}
+            setDispatchData={setDispatchData}
             clients={clients}
             setClients={(next) => next.forEach(upsertClient)}
             upsertClient={upsertClient}
@@ -2257,14 +2257,14 @@ return (
             setCardImageUploading={setCardImageUploading}
           />
         </div>
-        {menu === "지급관리" && role === "admin" && (
+        {menu === "지급관리" && (role === "admin" || role === "totalMaster") && (
           <PaymentManagement
             dispatchData={dispatchData}
             patchDispatch={patchDispatch}
           />
         )}
 
-        {menu === "관리자메뉴" && (role === "admin" || role === "totalMaster") && <AdminMenu />}
+        {menu === "관리자메뉴" && (role === "admin" || role === "totalMaster") && <AdminMenu parentRole={role} parentCompany={userCompany || localStorage.getItem("userCompany") || ""} />}
       </main>
       {/* ⭐⭐⭐ 내 정보 패널 ⭐⭐⭐ */}
       {showMyInfo && (

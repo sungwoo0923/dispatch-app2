@@ -12,7 +12,7 @@ import {
 
 const TOTAL_MASTER_EMAIL = "tjddnqkf@naver.com";
 
-export default function AdminMenu() {
+export default function AdminMenu({ parentRole = "", parentCompany = "" }) {
   const [users, setUsers] = useState([]);
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
@@ -30,7 +30,9 @@ export default function AdminMenu() {
   const ROLES = ["totalMaster", "admin", "user", "driver", "shipper", "test"];
 
   const me = auth.currentUser;
-  const isTotalMaster = me?.email === TOTAL_MASTER_EMAIL || myRole === "totalMaster";
+  const isTotalMaster = parentRole === "totalMaster" || me?.email === TOTAL_MASTER_EMAIL || myRole === "totalMaster";
+  // 유효 회사명: Firestore 로드 전에는 parentCompany 사용
+  const effectiveCompany = myCompany || parentCompany || localStorage.getItem("userCompany") || "돌캐";
 
   // 내 정보 로드
   useEffect(() => {
@@ -54,12 +56,17 @@ export default function AdminMenu() {
     return () => unsub();
   }, []);
 
-  // 회사 기준 필터 (totalMaster는 전체, admin은 자기 회사만)
+  // 회사 기준 필터
+  // totalMaster: 전체 사용자 (본인 포함)
+  // admin: 자기 회사만, 총마스터 계정은 제외
   const visibleUsers = useMemo(() => {
     if (isTotalMaster) return users;
-    if (!myCompany) return users; // 회사명 미설정 admin은 전체 표시
-    return users.filter(u => (u.companyName || "돌캐") === myCompany);
-  }, [users, isTotalMaster, myCompany]);
+    return users.filter(u =>
+      u.email !== TOTAL_MASTER_EMAIL &&
+      u.role !== "totalMaster" &&
+      (u.companyName || "돌캐") === effectiveCompany
+    );
+  }, [users, isTotalMaster, effectiveCompany]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -74,7 +81,7 @@ export default function AdminMenu() {
 
   // 승인 토글
   const toggleApprove = async (u) => {
-    if (!isTotalMaster && (u.companyName || "돌캐") !== myCompany) return;
+    if (!isTotalMaster && (u.companyName || "돌캐") !== effectiveCompany) return;
     const status = !u.approved;
     const updateData = { approved: status };
     if (u.role === "shipper" && status === true) updateData.isMaster = true;
@@ -85,7 +92,7 @@ export default function AdminMenu() {
   // 삭제
   const removeUser = async (u) => {
     if (me?.uid === u.id) return alert("본인 계정은 삭제할 수 없습니다.");
-    if (!isTotalMaster && (u.companyName || "돌캐") !== myCompany) return;
+    if (!isTotalMaster && (u.companyName || "돌캐") !== effectiveCompany) return;
     await deleteDoc(doc(db, "users", u.id));
   };
 
@@ -178,7 +185,7 @@ export default function AdminMenu() {
                   <tr><td colSpan={7} className="py-16 text-center text-[13px] text-gray-400">검색 결과가 없습니다</td></tr>
                 ) : filtered.map((u, idx) => {
                   const isMe = me?.uid === u.id;
-                  const canManage = isTotalMaster || (u.companyName || "돌캐") === myCompany;
+                  const canManage = isTotalMaster || (u.companyName || "돌캐") === effectiveCompany;
                   return (
                     <tr key={u.id} className={`transition hover:bg-blue-50/40 ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}>
                       <td className="px-4 py-3 text-center">
