@@ -1662,11 +1662,6 @@ const ROLE_LABELS = {
 };
 
 export default function DispatchApp({ role, user, userCompany = "" }) {
-  // 🔥 화주 차단
-  if (role === "shipper") {
-    return <Navigate to="/shipper" replace />;
-  }
-
   const isTest = role === "test";
   const navigate = useNavigate();
   // ⭐ 고정거래처 매출 실시간 구독
@@ -1973,6 +1968,14 @@ const showAlert = (msg) => setAlertMsg(msg);
   ];
 
   const blockedMenus = role === "test" ? testBlockedMenus : userBlockedMenus;
+
+  // 역할이 바뀌어 현재 메뉴가 차단 목록에 포함되면 HOME으로 이동
+  useEffect(() => {
+    if (role === "shipper") { navigate("/shipper", { replace: true }); return; }
+    if ((role === "user" || role === "test") && blockedMenus.includes(menu)) {
+      setMenu("HOME");
+    }
+  }, [role]);
 
   // ---------------- 메뉴 클릭 제어 ----------------
   const handleMenuClick = (m) => {

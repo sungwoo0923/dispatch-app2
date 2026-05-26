@@ -130,7 +130,6 @@ export default function AdminMenu({ parentRole = "", parentCompany = "" }) {
 
   const saveEdit = async () => {
     if (!editName.trim()) return alert("이름을 입력하세요.");
-    // totalMaster 권한은 totalMaster만 부여 가능
     if (editRole === "totalMaster" && !isTotalMaster) return alert("totalMaster 권한은 부여할 수 없습니다.");
     const payload = {
       name: editName.trim(),
@@ -138,8 +137,12 @@ export default function AdminMenu({ parentRole = "", parentCompany = "" }) {
       role: editRole,
       companyName: editCompany.trim(),
     };
-    await setDoc(doc(db, "users", editUser.id), payload, { merge: true });
-    setEditUser(null);
+    try {
+      await setDoc(doc(db, "users", editUser.id), payload, { merge: true });
+      setEditUser(null);
+    } catch (err) {
+      alert("저장 중 오류가 발생했습니다. 다시 시도해주세요.");
+    }
   };
 
   return (
@@ -177,8 +180,8 @@ export default function AdminMenu({ parentRole = "", parentCompany = "" }) {
           {/* 검색 + 필터 */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm px-5 py-4 mb-4">
             <div className="flex items-center gap-3 flex-wrap">
-              <div className="flex items-center gap-2 border-2 border-[#1B2B4B] rounded-xl overflow-hidden bg-white flex-1 min-w-[200px] max-w-[320px]">
-                <span className="pl-3 text-gray-400 text-[15px]">🔍</span>
+              <div className="flex items-center gap-2 border border-gray-200 rounded-xl overflow-hidden bg-white flex-1 min-w-[200px] max-w-[320px] focus-within:border-[#1B2B4B] transition">
+                <svg className="ml-3 w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
                 <input value={search} onChange={e => setSearch(e.target.value)}
                   placeholder="이메일 · 이름 · 회사명 검색"
                   className="flex-1 px-2 py-2 text-[13px] outline-none" />
@@ -229,8 +232,9 @@ export default function AdminMenu({ parentRole = "", parentCompany = "" }) {
                         {u.companyName || <span className="text-gray-300">-</span>}
                       </td>
                       <td className="px-4 py-3 text-center">
-                        <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold border ${u.approved ? "bg-emerald-100 text-emerald-700 border-emerald-300" : "bg-amber-100 text-amber-600 border-amber-300"}`}>
-                          {u.approved ? "✓ 승인" : "⏳ 대기"}
+                        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold ${u.approved ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-gray-100 text-gray-500 border border-gray-200"}`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${u.approved ? "bg-emerald-500" : "bg-gray-400"}`} />
+                          {u.approved ? "승인" : "대기"}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-center">
