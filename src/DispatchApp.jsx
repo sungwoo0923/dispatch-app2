@@ -1658,7 +1658,7 @@ const ROLE_LABELS = {
   user: "실무자",
   driver: "기사",
   shipper: "화주",
-  test: "경리",
+  test: "경리/회계",
 };
 
 export default function DispatchApp({ role, user, userCompany = "" }) {
@@ -1967,17 +1967,12 @@ const showAlert = (msg) => setAlertMsg(msg);
   const userBlockedMenus = [
     "매출관리", "거래처정산", "지급관리", "관리자메뉴",
   ];
-  // test(경리): 재무 관련 메뉴만 가능, 배차 입력/미배차 등 차단
+  // test(경리/회계): 배차현황/기사/거래처/홈/거래처정산/지급관리 가능, 배차입력/운임표/관리 차단
   const testBlockedMenus = [
-    "HOME", "배차관리", "미배차현황", "표준운임표", "단가표", "관리자메뉴",
+    "배차관리", "실시간배차현황", "미배차현황", "표준운임표", "단가표", "매출관리", "관리자메뉴",
   ];
 
   const blockedMenus = role === "test" ? testBlockedMenus : userBlockedMenus;
-
-  // test(경리) 기본 시작 메뉴: 실시간배차현황
-  React.useEffect(() => {
-    if (role === "test" && menu === "HOME") setMenu("실시간배차현황");
-  }, [role]);
 
   // ---------------- 메뉴 클릭 제어 ----------------
   const handleMenuClick = (m) => {
@@ -2207,7 +2202,7 @@ return (
           <RateCard dispatchData={dispatchDataFiltered} />
         )}
 
-        {menu === "기사관리" && (role === "admin" || role === "totalMaster" || role === "user") && (
+        {menu === "기사관리" && (role === "admin" || role === "totalMaster" || role === "user" || role === "test") && (
           <DriverManagement
             drivers={drivers}
             upsertDriver={upsertDriver}
@@ -2215,7 +2210,7 @@ return (
           />
         )}
 
-        <div style={{ display: menu === "거래처관리" && (role === "admin" || role === "totalMaster" || role === "user") ? "block" : "none" }}>
+        <div style={{ display: menu === "거래처관리" && (role === "admin" || role === "totalMaster" || role === "user" || role === "test") ? "block" : "none" }}>
           <ClientManagement
             clients={clients}
             upsertClient={upsertClient}
@@ -2225,7 +2220,7 @@ return (
           />
         </div>
 
-        {menu === "고정거래처관리" && (role === "admin" || role === "totalMaster" || role === "user") && (
+        {menu === "고정거래처관리" && (role === "admin" || role === "totalMaster" || role === "user" || role === "test") && (
           <div>
             {/* 상단 탭 */}
             <div className="flex gap-2 mb-3 border-b pb-2">
@@ -2270,7 +2265,7 @@ return (
           />
         )}
 
-        <div style={{ display: menu === "거래처정산" && (role === "admin" || role === "totalMaster") ? "block" : "none" }}>
+        <div style={{ display: menu === "거래처정산" && (role === "admin" || role === "totalMaster" || role === "test") ? "block" : "none" }}>
           <ClientSettlement
             dispatchData={dispatchDataFiltered}
             setDispatchData={setDispatchData}
@@ -2285,7 +2280,7 @@ return (
             setCardImageUploading={setCardImageUploading}
           />
         </div>
-        {menu === "지급관리" && (role === "admin" || role === "totalMaster") && (
+        {menu === "지급관리" && (role === "admin" || role === "totalMaster" || role === "test") && (
           <PaymentManagement
             dispatchData={dispatchDataFiltered}
             patchDispatch={patchDispatch}

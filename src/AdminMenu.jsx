@@ -8,6 +8,9 @@ import {
   doc,
   onSnapshot,
   getDoc,
+  getDocs,
+  query,
+  where,
 } from "firebase/firestore";
 
 const TOTAL_MASTER_EMAIL = "tjddnqkf@naver.com";
@@ -18,7 +21,7 @@ const ROLE_LABELS = {
   user: "실무자",
   driver: "기사",
   shipper: "화주",
-  test: "경리",
+  test: "경리/회계",
 };
 
 export default function AdminMenu({ parentRole = "", parentCompany = "" }) {
@@ -99,11 +102,22 @@ export default function AdminMenu({ parentRole = "", parentCompany = "" }) {
     await setDoc(doc(db, "drivers", u.id), { active: status, updatedAt: new Date() }, { merge: true });
   };
 
-  // 삭제
+  // 삭제 (users 문서 + 연결된 신청 문서 모두 삭제)
   const removeUser = async (u) => {
     if (me?.uid === u.id) return alert("본인 계정은 삭제할 수 없습니다.");
     if (!isTotalMaster && (u.companyName || "돌캐") !== effectiveCompany) return;
+    if (!window.confirm(`"${u.name || u.email}" 계정을 삭제하시겠습니까?\n가입신청 내역도 함께 삭제됩니다.`)) return;
     await deleteDoc(doc(db, "users", u.id));
+    // 연결된 운송 신청 삭제 → 가입신청관리에서도 사라짐
+    try {
+      const tSnap = await getDocs(query(collection(db, "transportApplications"), where("userId", "==", u.id)));
+      for (const d of tSnap.docs) await deleteDoc(doc(db, "transportApplications", d.id));
+    } catch (_) {}
+    // 연결된 화주 신청 삭제
+    try {
+      const cSnap = await getDocs(query(collection(db, "companyApplications"), where("userId", "==", u.id)));
+      for (const d of cSnap.docs) await deleteDoc(doc(db, "companyApplications", d.id));
+    } catch (_) {}
   };
 
   const openEdit = (u) => {
