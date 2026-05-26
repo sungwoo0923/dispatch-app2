@@ -67,7 +67,7 @@ export default function DriverLogin() {
       <div className="absolute top-4 right-4">
         <img
           src="/icons/sflow-icon.png"
-          alt="S-Flow"
+          alt="KP-Flow"
           className="w-9 h-9 rounded-xl shadow-md"
         />
       </div>

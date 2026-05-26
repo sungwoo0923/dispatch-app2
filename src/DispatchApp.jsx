@@ -213,7 +213,7 @@ const getCollectionName = (role) =>
   role === "test" ? "orders_test" : "orders";
 
 
-function useRealtimeCollections(user) {
+function useRealtimeCollections(user, userCompany, role) {
   const [dispatchData, setDispatchData] = useState([]);
   const [drivers, setDrivers] = useState([]);
   const [clients, setClients] = useState([]);
@@ -448,26 +448,29 @@ const sixMonthsAgo = getSixMonthsAgo();
 
     unsubs.push(
       onSnapshot(collection(db, COLL.drivers), (snap) => {
-        const arr = snap.docs.map(d => ({
-          ...d.data(),
-          id: d.id,
-        }));
+        const viewCompany = role === "totalMaster"
+          ? (localStorage.getItem("loginCompany") || userCompany || "돌캐")
+          : (userCompany || localStorage.getItem("userCompany") || "돌캐");
+        const arr = snap.docs
+          .map(d => ({ ...d.data(), id: d.id }))
+          .filter(d => (d.companyName || "돌캐") === viewCompany);
         setDrivers(arr);
         safeSave("drivers", arr);
       })
     );
     unsubs.push(onSnapshot(collection(db, COLL.clients), (snap) => {
-const arr = snap.docs.map(d => ({
-  id: d.id,
-  ...d.data()
-}));
-
-setClients(normalizeClients(arr));
+      const viewCompany = role === "totalMaster"
+        ? (localStorage.getItem("loginCompany") || userCompany || "돌캐")
+        : (userCompany || localStorage.getItem("userCompany") || "돌캐");
+      const arr = snap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .filter(c => (c.companyName || "돌캐") === viewCompany);
+      setClients(normalizeClients(arr));
       safeSave("clients", arr);
     }));
 
     return () => unsubs.forEach(u => u && u());
-  }, [user]);
+  }, [user, userCompany, role]);
 
 const addDispatch = async (record) => {
   const _id = crypto.randomUUID(); // ⭐ 무조건 새로 생성
@@ -650,10 +653,13 @@ const removeDispatch = async (arg) => {
   const upsertDriver = async (driver) => {
   const id = driver.id || crypto.randomUUID();
   if (!id) throw new Error("driver id 없음");
-
+  const viewCompany = role === "totalMaster"
+    ? (localStorage.getItem("loginCompany") || userCompany || "돌캐")
+    : (userCompany || localStorage.getItem("userCompany") || "돌캐");
   const data = {
     ...driver,
     id,
+    companyName: driver.companyName || viewCompany,
     updatedAt: serverTimestamp(),
     createdAt: driver.createdAt || serverTimestamp(),
   };
@@ -672,9 +678,12 @@ const removeDispatch = async (arg) => {
 
   const upsertClient = async (client) => {
     const id = client.거래처명 || client.id || crypto.randomUUID();
+    const viewCompany = role === "totalMaster"
+      ? (localStorage.getItem("loginCompany") || userCompany || "돌캐")
+      : (userCompany || localStorage.getItem("userCompany") || "돌캐");
     await setDoc(
       doc(db, COLL.clients, id),
-      { ...client, id },
+      { ...client, id, companyName: client.companyName || viewCompany },
       { merge: true }
     );
   };
@@ -1651,16 +1660,17 @@ export default function DispatchApp({ role, user, userCompany = "" }) {
 // ⭐ 고정거래처 매출 Firestore 실시간 구독
 useEffect(() => {
   const unsub = onSnapshot(collection(db, "fixedClients"), (snap) => {
-    const arr = snap.docs.map(d => ({
-      id: d.id,
-      ...d.data()
-    }));
-
+    const viewCompany = role === "totalMaster"
+      ? (localStorage.getItem("loginCompany") || userCompany || "돌캐")
+      : (userCompany || localStorage.getItem("userCompany") || "돌캐");
+    const arr = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(r => (r.companyName || "돌캐") === viewCompany);
     setFixedRows(arr);
   });
 
   return () => unsub();
-}, []);
+}, [userCompany, role]);
   // ⭐ 여기 추가!
   const [subMenu, setSubMenu] = useState("고정거래처관리");
   // ⭐ 내 정보 패널 ON/OFF
@@ -1702,7 +1712,7 @@ useEffect(() => {
     removeDriver,
     upsertClient,
     removeClient,
-  } = useRealtimeCollections(user);
+  } = useRealtimeCollections(user, userCompany, role);
 
 
   // 🔍 admin = 전체 데이터, 일반 user = 본인 작성 데이터만

@@ -286,13 +286,21 @@ export default function App() {
       const unsubUser = onSnapshot(doc(db, "users", u.uid), (snap) => {
         if (snap.exists()) {
           const data = snap.data();
-          setRole(data.role || "shipper");
+          const dataRole = data.role || "shipper";
+          setRole(dataRole);
           // approved !== false allows old accounts (undefined) and explicitly true
           // only blocks accounts explicitly set to false (new unapproved signups)
           setApproved(data.approved !== false);
-          setUserCompany(data.companyName || "");
-          localStorage.setItem("userCompany", data.companyName || "");
-          localStorage.setItem("role", data.role || "user");
+          if (dataRole === "totalMaster") {
+            // totalMaster uses the company they typed at login, not their Firestore doc
+            const loginCompany = localStorage.getItem("loginCompany") || "";
+            setUserCompany(loginCompany);
+            localStorage.setItem("userCompany", loginCompany);
+          } else {
+            setUserCompany(data.companyName || "");
+            localStorage.setItem("userCompany", data.companyName || "");
+          }
+          localStorage.setItem("role", dataRole);
         } else {
           setRole("shipper");
           setApproved(false);

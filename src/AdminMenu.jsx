@@ -26,7 +26,10 @@ export default function AdminMenu({ parentRole = "", parentCompany = "" }) {
   const [myRole, setMyRole] = useState("");
   const [myCompany, setMyCompany] = useState("");
 
-  const ROLES = ["totalMaster", "admin", "user", "driver", "shipper", "test"];
+  // totalMaster 권한은 totalMaster만 부여/변경 가능
+  const ROLES = isTotalMaster
+    ? ["totalMaster", "admin", "user", "driver", "shipper", "test"]
+    : ["admin", "user", "driver", "shipper", "test"];
 
   const me = auth.currentUser;
   const isTotalMaster = parentRole === "totalMaster" || me?.email === TOTAL_MASTER_EMAIL || myRole === "totalMaster";
@@ -105,6 +108,8 @@ export default function AdminMenu({ parentRole = "", parentCompany = "" }) {
 
   const saveEdit = async () => {
     if (!editName.trim()) return alert("이름을 입력하세요.");
+    // totalMaster 권한은 totalMaster만 부여 가능
+    if (editRole === "totalMaster" && !isTotalMaster) return alert("totalMaster 권한은 부여할 수 없습니다.");
     const payload = {
       name: editName.trim(),
       phone: editPhone.trim(),

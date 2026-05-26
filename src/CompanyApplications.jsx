@@ -1,6 +1,6 @@
 // src/CompanyApplications.jsx
 import React, { useState, useEffect, useMemo } from "react";
-import { db } from "./firebase";
+import { db, auth } from "./firebase";
 import {
   collection, onSnapshot, doc, updateDoc, serverTimestamp, query, where,
 } from "firebase/firestore";
@@ -140,7 +140,7 @@ export default function CompanyApplications() {
         companyCode,
         processedAt: serverTimestamp(),
       });
-      if (app.userId) {
+      if (app.userId && app.userId !== auth.currentUser?.uid) {
         await updateDoc(doc(db, "users", app.userId), {
           approved: true,
           companyCode,
@@ -191,7 +191,7 @@ export default function CompanyApplications() {
         companyCode,
         processedAt: serverTimestamp(),
       });
-      if (app.userId) {
+      if (app.userId && app.userId !== auth.currentUser?.uid) {
         await updateDoc(doc(db, "users", app.userId), {
           approved: true,
           companyCode,
@@ -265,7 +265,7 @@ export default function CompanyApplications() {
     try {
       const appCollection =
         activeTab === "화주" ? "companyApplications" : "transportApplications";
-      if (app.userId) {
+      if (app.userId && app.userId !== auth.currentUser?.uid) {
         await updateDoc(doc(db, "users", app.userId), { userStatus: newStatus });
       }
       await updateDoc(doc(db, appCollection, app.id), { userStatus: newStatus });

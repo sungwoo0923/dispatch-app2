@@ -167,7 +167,7 @@ export default function ShipperLogin() {
       <div className="fixed top-4 right-4 z-50">
         <img
           src="/icons/sflow-icon.png"
-          alt="S-Flow"
+          alt="KP-Flow"
           className="w-9 h-9 rounded-xl shadow-lg"
         />
       </div>
@@ -178,7 +178,7 @@ export default function ShipperLogin() {
           <h1 className="text-2xl font-extrabold text-[#1B2B4B] tracking-tight">
             화주 로그인
           </h1>
-          <p className="text-gray-400 text-sm mt-1">S-Flow 화주사 전용 포털</p>
+          <p className="text-gray-400 text-sm mt-1">KP-Flow 화주사 전용 포털</p>
         </div>
 
         {/* 회사명 */}
