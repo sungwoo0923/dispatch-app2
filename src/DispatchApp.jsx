@@ -18518,6 +18518,292 @@ if (editTarget.거래처명) {
         </div>
       )}
 
+{/* ===================== 운임조회 (Part 4) - 이력없음 확인 ===================== */}
+{ctxNoHistory4Open && (
+  <div
+    className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]"
+    tabIndex={-1}
+    ref={el => { if (el) setTimeout(() => el.focus(), 0); }}
+    onKeyDown={e => {
+      if (e.key === "Enter") { e.preventDefault(); setCtxNoHistory4Open(false); setCtxAddrSearch4Open(true); }
+      if (e.key === "Escape") setCtxNoHistory4Open(false);
+    }}
+  >
+    <div className="bg-white rounded-2xl shadow-2xl w-[440px] overflow-hidden">
+      <div className="bg-[#1B2B4B] px-6 py-4 flex items-center gap-3">
+        <div className="w-9 h-9 rounded-full bg-white/15 flex items-center justify-center shrink-0">
+          <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+        </div>
+        <div>
+          <h3 className="text-white font-bold text-[15px]">운임 이력 없음</h3>
+          <p className="text-white/60 text-[12px] mt-0.5">동일 상/하차지 운임 이력이 없습니다</p>
+        </div>
+      </div>
+      <div className="px-6 py-5">
+        <p className="text-gray-700 text-[14px] leading-relaxed">동일 상/하차지 운임 이력이 없습니다.<br/>주소로 검색하시겠습니까?</p>
+      </div>
+      <div className="px-6 pb-5 flex gap-3">
+        <button
+          className="flex-1 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-[13px] transition"
+          onClick={() => setCtxNoHistory4Open(false)}>
+          아니요
+        </button>
+        <button
+          className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white font-bold text-[13px] transition"
+          onClick={() => { setCtxNoHistory4Open(false); setCtxAddrSearch4Open(true); }}>
+          예 (Enter)
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+{/* ===================== 운임조회 (Part 4) - 주소 검색 ===================== */}
+{ctxAddrSearch4Open && (
+  <div
+    className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999999] p-4"
+    onKeyDown={e => { if (e.key === "Escape") setCtxAddrSearch4Open(false); }}
+  >
+    <div className="bg-white rounded-2xl w-[520px] max-h-[88vh] flex flex-col shadow-2xl overflow-hidden">
+      <div className="bg-[#1B2B4B] px-6 py-4 flex items-start justify-between shrink-0">
+        <div>
+          <div className="text-white font-bold text-[17px] tracking-tight">주소 운임 조회</div>
+          <div className="text-white/55 text-[12px] mt-1 font-medium">지역명으로 운임 이력을 검색합니다</div>
+        </div>
+        <button onClick={() => setCtxAddrSearch4Open(false)}
+          className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white text-xl flex items-center justify-center transition mt-0.5">
+          ×
+        </button>
+      </div>
+      <div className="px-6 py-5 border-b border-gray-100 space-y-3 shrink-0">
+        <div className="flex gap-3">
+          <div className="flex-1">
+            <label className="block text-[11px] font-bold text-gray-500 mb-1 uppercase tracking-wider">상차 지역</label>
+            <input
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/30"
+              placeholder="예: 서울 강남구"
+              value={ctxAddrPickup4}
+              onChange={e => setCtxAddrPickup4(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") handleCtxAddrSearch4(); }}
+            />
+          </div>
+          <div className="flex-1">
+            <label className="block text-[11px] font-bold text-gray-500 mb-1 uppercase tracking-wider">하차 지역</label>
+            <input
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/30"
+              placeholder="예: 경기 화성시"
+              value={ctxAddrDrop4}
+              onChange={e => setCtxAddrDrop4(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") handleCtxAddrSearch4(); }}
+            />
+          </div>
+        </div>
+        <div className="flex items-center justify-between">
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              className="w-4 h-4 accent-[#1B2B4B]"
+              checked={ctxAddrAllClients4}
+              onChange={e => setCtxAddrAllClients4(e.target.checked)}
+            />
+            <span className="text-[13px] text-gray-600 font-medium">전체 노선 조회 (거래처 무관)</span>
+          </label>
+          <button
+            className="px-5 py-2 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition active:scale-95"
+            onClick={handleCtxAddrSearch4}>
+            검색
+          </button>
+        </div>
+      </div>
+      <div className="flex-1 overflow-y-auto px-6 py-4">
+        {ctxAddrResults4.length === 0 ? (
+          <div className="text-center text-gray-400 text-[13px] py-8">검색 결과가 없습니다</div>
+        ) : (
+          <div className="space-y-2">
+            {ctxAddrResults4.map((rec, idx) => {
+              const fare = Number(String(rec.청구운임 || "0").replace(/[^\d]/g, ""));
+              const isTop = idx === 0;
+              return (
+                <div key={idx} className={`rounded-xl border overflow-hidden ${isTop ? "border-[#1B2B4B]/40" : "border-gray-200"}`}>
+                  {isTop && (
+                    <div className="bg-[#1B2B4B] px-4 py-1.5">
+                      <span className="text-yellow-300 text-[11px] font-bold">★ 최근 유사 운송</span>
+                    </div>
+                  )}
+                  <div className="px-4 py-3 bg-white">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[12px] font-bold text-gray-400">{rec.상차일}</span>
+                      <div className="flex gap-1">
+                        {rec._match?.cargo && <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-gray-700 text-white">화물일치</span>}
+                        {rec._match?.ton && <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-gray-700 text-white">톤수일치</span>}
+                      </div>
+                    </div>
+                    <div className="text-[13px] font-bold text-gray-900 mb-1">{rec.상차지명 || "-"} → {rec.하차지명 || "-"}</div>
+                    <div className="text-[12px] text-gray-400 mb-2">{rec.차량종류 || "-"} / {rec.차량톤수 || "-"}{rec.화물내용 ? ` · ${rec.화물내용}` : ""}</div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[12px] text-gray-400">기사 <span className="text-gray-700 font-bold">{rec.이름 || "-"}</span></span>
+                      <span className="text-[18px] font-extrabold text-[#1B2B4B]">{fare.toLocaleString()}원</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+      <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 shrink-0">
+        <button onClick={() => setCtxAddrSearch4Open(false)}
+          className="w-full py-2.5 rounded-xl bg-gray-200 hover:bg-gray-300 text-[#1B2B4B] text-[14px] font-bold transition">
+          닫기
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+{/* ===================== 운임조회 (Part 4) - 결과 모달 ===================== */}
+{ctxFare4PanelOpen && ctxFare4Result && (() => {
+  const fareMin = ctxFare4Result.min;
+  const fareMax = ctxFare4Result.max;
+  const fareAvg = ctxFare4Result.avg;
+  const fareRange = fareMax - fareMin || 1;
+  const getBarPct = (fare) => fareRange > 0 ? Math.min(100, Math.max(0, ((fare - fareMin) / fareRange) * 100)) : 50;
+  const getFareTag = (fare) => {
+    const pct = getBarPct(fare);
+    if (pct <= 33) return { label: "저렴", cls: "text-white bg-emerald-600 border-emerald-700 font-extrabold" };
+    if (pct <= 66) return { label: "보통", cls: "text-white bg-gray-600 border-gray-700 font-extrabold" };
+    return { label: "높음", cls: "text-white bg-orange-600 border-orange-700 font-extrabold" };
+  };
+  const isMoto = getVehicleGroup(ctxFare4Target?.차량종류) === "motorcycle";
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999999] p-4">
+      <div className="bg-white rounded-2xl w-[580px] max-h-[88vh] flex flex-col shadow-2xl overflow-hidden">
+        <div className="bg-[#1B2B4B] px-6 py-4 flex items-start justify-between shrink-0">
+          <div>
+            <div className="text-white font-bold text-[17px] tracking-tight">운임 조회 결과</div>
+            <div className="text-white/55 text-[12px] mt-1 font-medium">
+              {ctxFare4Target?.상차지명 || "-"} → {ctxFare4Target?.하차지명 || "-"}
+            </div>
+          </div>
+          <button onClick={() => setCtxFare4PanelOpen(false)}
+            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white text-xl flex items-center justify-center transition mt-0.5">
+            ×
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          {isMoto && (
+            <div className="mx-6 mt-5 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-[12px] text-amber-700 font-medium">
+              오토바이/바이크 노선은 T-Map 권장 운임을 참고하시기 바랍니다.
+            </div>
+          )}
+          <div className="px-6 py-5 border-b border-gray-100">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+                조회 운임 범위 ({ctxFare4Result.count}건)
+              </span>
+            </div>
+            <div className="flex items-baseline gap-2 mt-1 mb-4">
+              <span className="text-[30px] font-black text-[#1B2B4B] leading-none">{fareMin.toLocaleString()}</span>
+              <span className="text-[18px] font-bold text-gray-300">~</span>
+              <span className="text-[30px] font-black text-[#1B2B4B] leading-none">{fareMax.toLocaleString()}</span>
+              <span className="text-[14px] font-semibold text-gray-400 mb-0.5">원</span>
+            </div>
+            <div className="relative h-2 bg-gray-100 rounded-full mb-2">
+              <div className="absolute inset-0 bg-gray-200 rounded-full" />
+              <div className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-[#1B2B4B] border-2 border-white shadow-md z-10"
+                style={{ left: `calc(${getBarPct(fareAvg)}% - 6px)` }} />
+            </div>
+            <div className="flex justify-between text-[11px] font-semibold text-gray-400">
+              <span>최저 {fareMin.toLocaleString()}원</span>
+              <span className="text-[#1B2B4B] font-bold">평균 {fareAvg.toLocaleString()}원</span>
+              <span>최고 {fareMax.toLocaleString()}원</span>
+            </div>
+            <div className="grid grid-cols-3 gap-2 mt-4">
+              {[
+                { label: "최저 운임", sub: "가장 저렴한 이력", value: fareMin },
+                { label: "평균 운임", sub: "전체 평균 기준",   value: fareAvg },
+                { label: "최고 운임", sub: "가장 높은 이력",   value: fareMax },
+              ].map(({ label, sub, value }) => (
+                <div key={label}
+                  className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-center">
+                  <div className="text-[10px] font-bold text-gray-400 mb-1">{label}</div>
+                  <div className="text-[18px] font-extrabold text-[#1B2B4B] leading-none">{value.toLocaleString()}</div>
+                  <div className="text-[10px] text-gray-400 mt-1">{sub}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="px-6 pt-4 pb-6">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-[13px] font-extrabold text-[#1B2B4B]">과거 운송 기록</span>
+              <span className="text-[11px] font-semibold text-gray-400">유사도순 · 최신순</span>
+            </div>
+            <div className="space-y-2">
+              {ctxFare4Result.records.map((rec, idx) => {
+                const fare = Number(String(rec.청구운임 || "0").replace(/[^\d]/g, ""));
+                const { label: fareLabel, cls: fareCls } = getFareTag(fare);
+                const isTop = idx === 0;
+                const barPct = getBarPct(fare);
+                return (
+                  <div key={idx} className={`rounded-xl border overflow-hidden ${isTop ? "border-[#1B2B4B]/40" : "border-gray-150"}`}>
+                    {isTop && (
+                      <div className="bg-[#1B2B4B] px-4 py-1.5">
+                        <span className="text-yellow-300 text-[11px] font-bold">★ 최근 유사 운송</span>
+                      </div>
+                    )}
+                    <div className="px-4 py-3 bg-white">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[12px] font-bold text-gray-400">{rec.상차일}</span>
+                        <div className="flex gap-1">
+                          {(rec._match?.cargo && rec._match?.ton) && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-[#1B2B4B] text-white">최적매칭</span>
+                          )}
+                          {rec._match?.ton && !rec._match?.cargo && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-gray-700 text-white">톤수일치</span>
+                          )}
+                          {rec._match?.cargo && !rec._match?.ton && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-gray-700 text-white">화물일치</span>
+                          )}
+                          <span className={`px-2.5 py-1 text-[11px] font-extrabold rounded-full border ${fareCls}`}>{fareLabel}</span>
+                        </div>
+                      </div>
+                      <div className="text-[14px] font-extrabold text-gray-900 mb-1">
+                        {rec.상차지명 || "-"} → {rec.하차지명 || "-"}
+                      </div>
+                      <div className="text-[12px] font-semibold text-gray-400 mb-2">
+                        {rec.차량종류 || "-"} / {rec.차량톤수 || "-"}
+                        {rec.화물내용 && <span> · {rec.화물내용}</span>}
+                      </div>
+                      <div className="relative h-1.5 bg-gray-100 rounded-full mb-3">
+                        <div className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-[#1B2B4B] border-2 border-white shadow"
+                          style={{ left: `calc(${barPct}% - 5px)` }} />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div className="text-[12px] font-semibold text-gray-400">
+                          기사 <span className="text-gray-700 font-bold">{rec.이름 || "-"}</span>
+                          <span className="mx-1.5 text-gray-300">·</span>
+                          기사운임 <span className="text-gray-700 font-bold">{Number(rec.기사운임 || 0).toLocaleString()}원</span>
+                        </div>
+                        <span className="text-[20px] font-extrabold text-[#1B2B4B]">{fare.toLocaleString()}원</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+        <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 shrink-0">
+          <button onClick={() => setCtxFare4PanelOpen(false)}
+            className="w-full py-2.5 rounded-xl bg-gray-200 hover:bg-gray-300 text-[#1B2B4B] text-[14px] font-bold transition">
+            닫기
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+})()}
+
 {/* ======================= 선택삭제 확인 팝업 ======================= */}
       {deleteConfirmOpen && (
         <div
@@ -21923,6 +22209,157 @@ const save = {
     document.addEventListener("keydown", onKey);
     return () => { document.removeEventListener("click", close); document.removeEventListener("keydown", onKey); };
   }, [contextMenuDS]);
+
+  // ===================== 운임조회 (컨텍스트메뉴 Part 5) =====================
+  const [ctxFare5Target, setCtxFare5Target] = React.useState(null);
+  const [ctxFare5PanelOpen, setCtxFare5PanelOpen] = React.useState(false);
+  const [ctxFare5Result, setCtxFare5Result] = React.useState(null);
+  const [ctxNoHistory5Open, setCtxNoHistory5Open] = React.useState(false);
+  const [ctxAddrSearch5Open, setCtxAddrSearch5Open] = React.useState(false);
+  const [ctxAddrPickup5, setCtxAddrPickup5] = React.useState("");
+  const [ctxAddrDrop5, setCtxAddrDrop5] = React.useState("");
+  const [ctxAddrAllClients5, setCtxAddrAllClients5] = React.useState(false);
+  const [ctxAddrResults5, setCtxAddrResults5] = React.useState([]);
+
+  function extractAddrArea5(addr) {
+    const s = String(addr || "").trim();
+    if (!s) return "";
+    const parts = s.split(/\s+/);
+    const result = [];
+    for (const p of parts) {
+      if (result.length >= 2) break;
+      if (/[로길]$/.test(p) || /^\d/.test(p)) break;
+      result.push(p);
+    }
+    return result.join(" ");
+  }
+
+  function getVehicleGroup5(vehicleType) {
+    const v = String(vehicleType || "");
+    if (v.includes("냉장") || v.includes("냉동")) return "cold";
+    if (v.includes("오토바이") || v.includes("바이크")) return "motorcycle";
+    return "general";
+  }
+
+  function scoreCtxFareRow5(r, targetRow) {
+    let score = 0;
+    const targetCargo = String(targetRow.화물내용 || "").trim();
+    const targetTonNum = parseFloat((String(targetRow.차량톤수 || "").match(/[\d.]+/) || [])[0]) || 0;
+    if (targetCargo && r.화물내용) {
+      if (r.화물내용 === targetCargo) score += 100;
+      else if (r.화물내용.includes(targetCargo) || targetCargo.includes(r.화물내용)) score += 50;
+    }
+    const rTon = parseFloat((String(r.차량톤수 || "").match(/[\d.]+/) || [])[0]) || 0;
+    const tonDiff = Math.abs(rTon - targetTonNum);
+    if (tonDiff === 0 && targetTonNum > 0) score += 80;
+    else if (tonDiff <= 1) score += 40;
+    else if (tonDiff <= 3) score += 10;
+    return score;
+  }
+
+  const handleCtxFareSearch5 = (row) => {
+    const pickup = String(row.상차지명 || "").trim();
+    const drop = String(row.하차지명 || "").trim();
+    if (!pickup || !drop) { showAlert("상/하차지 정보가 없습니다."); return; }
+
+    const targetGroup = getVehicleGroup5(row.차량종류);
+    const targetCargo = String(row.화물내용 || "").trim();
+    const targetTon = String(row.차량톤수 || "").trim();
+
+    const base = (dispatchData || []).filter(r => {
+      if (!r.청구운임) return false;
+      const rPickup = String(r.상차지명 || "");
+      const rDrop = String(r.하차지명 || "");
+      if (!(rPickup.includes(pickup) || pickup.includes(rPickup.trim()))) return false;
+      if (!(rDrop.includes(drop) || drop.includes(rDrop.trim()))) return false;
+      const rGroup = getVehicleGroup5(r.차량종류);
+      return rGroup === targetGroup;
+    });
+
+    if (!base.length) {
+      setCtxFare5Target(row);
+      setCtxAddrPickup5(extractAddrArea5(row.상차지주소 || row.상차지명));
+      setCtxAddrDrop5(extractAddrArea5(row.하차지주소 || row.하차지명));
+      setCtxAddrAllClients5(false);
+      setCtxAddrResults5([]);
+      setCtxNoHistory5Open(true);
+      return;
+    }
+
+    const scored = base.map(r => {
+      const cargoMatch = targetCargo && r.화물내용 && r.화물내용.includes(targetCargo);
+      const tonMatch = targetTon && r.차량톤수 && r.차량톤수 === targetTon;
+      return {
+        ...r,
+        _score: (cargoMatch ? 100 : 0) + (tonMatch ? 100 : 0),
+        _match: { cargo: cargoMatch, ton: tonMatch },
+        _time: r.updatedAt || r.등록일 || 0,
+      };
+    });
+    scored.sort((a, b) => b._score !== a._score ? b._score - a._score : b._time - a._time);
+
+    const fares = scored.map(r => Number(String(r.청구운임 || "0").replace(/[^\d]/g, "")));
+    setCtxFare5Target(row);
+    setCtxFare5Result({
+      records: scored,
+      count: fares.length,
+      avg: Math.round(fares.reduce((a, b) => a + b, 0) / fares.length),
+      min: Math.min(...fares),
+      max: Math.max(...fares),
+    });
+    setCtxFare5PanelOpen(true);
+  };
+
+  const handleCtxAddrSearch5 = () => {
+    const row = ctxFare5Target;
+    const pickupKw = ctxAddrPickup5.trim();
+    const dropKw = ctxAddrDrop5.trim();
+    if (!pickupKw || !dropKw) { showAlert("상차지역과 하차지역을 입력해주세요."); return; }
+
+    const targetGroup = row ? getVehicleGroup5(row.차량종류) : "general";
+    const targetClient = row ? String(row.거래처 || "").trim() : "";
+
+    const base = (dispatchData || []).filter(r => {
+      if (!r.청구운임) return false;
+      const rPickup = String(r.상차지명 || "") + " " + String(r.상차지주소 || "");
+      const rDrop = String(r.하차지명 || "") + " " + String(r.하차지주소 || "");
+      if (!rPickup.includes(pickupKw)) return false;
+      if (!rDrop.includes(dropKw)) return false;
+      const rGroup = getVehicleGroup5(r.차량종류);
+      if (rGroup !== targetGroup) return false;
+      if (!ctxAddrAllClients5 && targetClient && String(r.거래처 || "").trim() !== targetClient) return false;
+      return true;
+    });
+
+    if (!base.length) {
+      setCtxAddrResults5([]);
+      showAlert("해당 조건의 운임 이력이 없습니다.");
+      return;
+    }
+
+    const scored = base.map(r => ({
+      ...r,
+      _score: row ? scoreCtxFareRow5(r, row) : 0,
+      _match: {
+        cargo: row && String(row.화물내용 || "").trim() && r.화물내용 && r.화물내용.includes(String(row.화물내용 || "").trim()),
+        ton: row && String(row.차량톤수 || "").trim() && r.차량톤수 === String(row.차량톤수 || "").trim(),
+      },
+      _time: r.updatedAt || r.등록일 || 0,
+    }));
+    scored.sort((a, b) => b._score !== a._score ? b._score - a._score : b._time - a._time);
+
+    const fares = scored.map(r => Number(String(r.청구운임 || "0").replace(/[^\d]/g, "")));
+    setCtxFare5Result({
+      records: scored,
+      count: fares.length,
+      avg: Math.round(fares.reduce((a, b) => a + b, 0) / fares.length),
+      min: Math.min(...fares),
+      max: Math.max(...fares),
+    });
+    setCtxAddrResults5(scored);
+    setCtxAddrSearch5Open(false);
+    setCtxFare5PanelOpen(true);
+  };
 
   if (!loaded) return null;
 
@@ -26001,6 +26438,16 @@ setCopyTarget(prev => ({
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
             일괄동기화
           </button>
+          {/* 운임조회 */}
+          <button className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
+            onClick={() => {
+              const r = contextMenuDS.row;
+              setContextMenuDS(null);
+              handleCtxFareSearch5(r);
+            }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+            운임조회
+          </button>
           <div className="border-t border-gray-100 my-1"/>
           <button className="w-full text-left px-4 py-2 text-[13px] text-red-600 hover:bg-red-50 flex items-center gap-2.5 transition-colors"
             onClick={() => { setSelected(new Set([getId(contextMenuDS.row)])); setShowDeletePopup(true); setContextMenuDS(null); }}>
@@ -26010,6 +26457,292 @@ setCopyTarget(prev => ({
           </button>
         </div>
       )}
+
+{/* ===================== 운임조회 (Part 5) - 이력없음 확인 ===================== */}
+{ctxNoHistory5Open && (
+  <div
+    className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]"
+    tabIndex={-1}
+    ref={el => { if (el) setTimeout(() => el.focus(), 0); }}
+    onKeyDown={e => {
+      if (e.key === "Enter") { e.preventDefault(); setCtxNoHistory5Open(false); setCtxAddrSearch5Open(true); }
+      if (e.key === "Escape") setCtxNoHistory5Open(false);
+    }}
+  >
+    <div className="bg-white rounded-2xl shadow-2xl w-[440px] overflow-hidden">
+      <div className="bg-[#1B2B4B] px-6 py-4 flex items-center gap-3">
+        <div className="w-9 h-9 rounded-full bg-white/15 flex items-center justify-center shrink-0">
+          <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+        </div>
+        <div>
+          <h3 className="text-white font-bold text-[15px]">운임 이력 없음</h3>
+          <p className="text-white/60 text-[12px] mt-0.5">동일 상/하차지 운임 이력이 없습니다</p>
+        </div>
+      </div>
+      <div className="px-6 py-5">
+        <p className="text-gray-700 text-[14px] leading-relaxed">동일 상/하차지 운임 이력이 없습니다.<br/>주소로 검색하시겠습니까?</p>
+      </div>
+      <div className="px-6 pb-5 flex gap-3">
+        <button
+          className="flex-1 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-[13px] transition"
+          onClick={() => setCtxNoHistory5Open(false)}>
+          아니요
+        </button>
+        <button
+          className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white font-bold text-[13px] transition"
+          onClick={() => { setCtxNoHistory5Open(false); setCtxAddrSearch5Open(true); }}>
+          예 (Enter)
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+{/* ===================== 운임조회 (Part 5) - 주소 검색 ===================== */}
+{ctxAddrSearch5Open && (
+  <div
+    className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999999] p-4"
+    onKeyDown={e => { if (e.key === "Escape") setCtxAddrSearch5Open(false); }}
+  >
+    <div className="bg-white rounded-2xl w-[520px] max-h-[88vh] flex flex-col shadow-2xl overflow-hidden">
+      <div className="bg-[#1B2B4B] px-6 py-4 flex items-start justify-between shrink-0">
+        <div>
+          <div className="text-white font-bold text-[17px] tracking-tight">주소 운임 조회</div>
+          <div className="text-white/55 text-[12px] mt-1 font-medium">지역명으로 운임 이력을 검색합니다</div>
+        </div>
+        <button onClick={() => setCtxAddrSearch5Open(false)}
+          className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white text-xl flex items-center justify-center transition mt-0.5">
+          ×
+        </button>
+      </div>
+      <div className="px-6 py-5 border-b border-gray-100 space-y-3 shrink-0">
+        <div className="flex gap-3">
+          <div className="flex-1">
+            <label className="block text-[11px] font-bold text-gray-500 mb-1 uppercase tracking-wider">상차 지역</label>
+            <input
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/30"
+              placeholder="예: 서울 강남구"
+              value={ctxAddrPickup5}
+              onChange={e => setCtxAddrPickup5(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") handleCtxAddrSearch5(); }}
+            />
+          </div>
+          <div className="flex-1">
+            <label className="block text-[11px] font-bold text-gray-500 mb-1 uppercase tracking-wider">하차 지역</label>
+            <input
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/30"
+              placeholder="예: 경기 화성시"
+              value={ctxAddrDrop5}
+              onChange={e => setCtxAddrDrop5(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") handleCtxAddrSearch5(); }}
+            />
+          </div>
+        </div>
+        <div className="flex items-center justify-between">
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              className="w-4 h-4 accent-[#1B2B4B]"
+              checked={ctxAddrAllClients5}
+              onChange={e => setCtxAddrAllClients5(e.target.checked)}
+            />
+            <span className="text-[13px] text-gray-600 font-medium">전체 노선 조회 (거래처 무관)</span>
+          </label>
+          <button
+            className="px-5 py-2 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition active:scale-95"
+            onClick={handleCtxAddrSearch5}>
+            검색
+          </button>
+        </div>
+      </div>
+      <div className="flex-1 overflow-y-auto px-6 py-4">
+        {ctxAddrResults5.length === 0 ? (
+          <div className="text-center text-gray-400 text-[13px] py-8">검색 결과가 없습니다</div>
+        ) : (
+          <div className="space-y-2">
+            {ctxAddrResults5.map((rec, idx) => {
+              const fare = Number(String(rec.청구운임 || "0").replace(/[^\d]/g, ""));
+              const isTop = idx === 0;
+              return (
+                <div key={idx} className={`rounded-xl border overflow-hidden ${isTop ? "border-[#1B2B4B]/40" : "border-gray-200"}`}>
+                  {isTop && (
+                    <div className="bg-[#1B2B4B] px-4 py-1.5">
+                      <span className="text-yellow-300 text-[11px] font-bold">★ 최근 유사 운송</span>
+                    </div>
+                  )}
+                  <div className="px-4 py-3 bg-white">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[12px] font-bold text-gray-400">{rec.상차일}</span>
+                      <div className="flex gap-1">
+                        {rec._match?.cargo && <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-gray-700 text-white">화물일치</span>}
+                        {rec._match?.ton && <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-gray-700 text-white">톤수일치</span>}
+                      </div>
+                    </div>
+                    <div className="text-[13px] font-bold text-gray-900 mb-1">{rec.상차지명 || "-"} → {rec.하차지명 || "-"}</div>
+                    <div className="text-[12px] text-gray-400 mb-2">{rec.차량종류 || "-"} / {rec.차량톤수 || "-"}{rec.화물내용 ? ` · ${rec.화물내용}` : ""}</div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[12px] text-gray-400">기사 <span className="text-gray-700 font-bold">{rec.이름 || "-"}</span></span>
+                      <span className="text-[18px] font-extrabold text-[#1B2B4B]">{fare.toLocaleString()}원</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+      <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 shrink-0">
+        <button onClick={() => setCtxAddrSearch5Open(false)}
+          className="w-full py-2.5 rounded-xl bg-gray-200 hover:bg-gray-300 text-[#1B2B4B] text-[14px] font-bold transition">
+          닫기
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+{/* ===================== 운임조회 (Part 5) - 결과 모달 ===================== */}
+{ctxFare5PanelOpen && ctxFare5Result && (() => {
+  const fareMin = ctxFare5Result.min;
+  const fareMax = ctxFare5Result.max;
+  const fareAvg = ctxFare5Result.avg;
+  const fareRange = fareMax - fareMin || 1;
+  const getBarPct = (fare) => fareRange > 0 ? Math.min(100, Math.max(0, ((fare - fareMin) / fareRange) * 100)) : 50;
+  const getFareTag = (fare) => {
+    const pct = getBarPct(fare);
+    if (pct <= 33) return { label: "저렴", cls: "text-white bg-emerald-600 border-emerald-700 font-extrabold" };
+    if (pct <= 66) return { label: "보통", cls: "text-white bg-gray-600 border-gray-700 font-extrabold" };
+    return { label: "높음", cls: "text-white bg-orange-600 border-orange-700 font-extrabold" };
+  };
+  const isMoto = getVehicleGroup5(ctxFare5Target?.차량종류) === "motorcycle";
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999999] p-4">
+      <div className="bg-white rounded-2xl w-[580px] max-h-[88vh] flex flex-col shadow-2xl overflow-hidden">
+        <div className="bg-[#1B2B4B] px-6 py-4 flex items-start justify-between shrink-0">
+          <div>
+            <div className="text-white font-bold text-[17px] tracking-tight">운임 조회 결과</div>
+            <div className="text-white/55 text-[12px] mt-1 font-medium">
+              {ctxFare5Target?.상차지명 || "-"} → {ctxFare5Target?.하차지명 || "-"}
+            </div>
+          </div>
+          <button onClick={() => setCtxFare5PanelOpen(false)}
+            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white text-xl flex items-center justify-center transition mt-0.5">
+            ×
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          {isMoto && (
+            <div className="mx-6 mt-5 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-[12px] text-amber-700 font-medium">
+              오토바이/바이크 노선은 T-Map 권장 운임을 참고하시기 바랍니다.
+            </div>
+          )}
+          <div className="px-6 py-5 border-b border-gray-100">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+                조회 운임 범위 ({ctxFare5Result.count}건)
+              </span>
+            </div>
+            <div className="flex items-baseline gap-2 mt-1 mb-4">
+              <span className="text-[30px] font-black text-[#1B2B4B] leading-none">{fareMin.toLocaleString()}</span>
+              <span className="text-[18px] font-bold text-gray-300">~</span>
+              <span className="text-[30px] font-black text-[#1B2B4B] leading-none">{fareMax.toLocaleString()}</span>
+              <span className="text-[14px] font-semibold text-gray-400 mb-0.5">원</span>
+            </div>
+            <div className="relative h-2 bg-gray-100 rounded-full mb-2">
+              <div className="absolute inset-0 bg-gray-200 rounded-full" />
+              <div className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-[#1B2B4B] border-2 border-white shadow-md z-10"
+                style={{ left: `calc(${getBarPct(fareAvg)}% - 6px)` }} />
+            </div>
+            <div className="flex justify-between text-[11px] font-semibold text-gray-400">
+              <span>최저 {fareMin.toLocaleString()}원</span>
+              <span className="text-[#1B2B4B] font-bold">평균 {fareAvg.toLocaleString()}원</span>
+              <span>최고 {fareMax.toLocaleString()}원</span>
+            </div>
+            <div className="grid grid-cols-3 gap-2 mt-4">
+              {[
+                { label: "최저 운임", sub: "가장 저렴한 이력", value: fareMin },
+                { label: "평균 운임", sub: "전체 평균 기준",   value: fareAvg },
+                { label: "최고 운임", sub: "가장 높은 이력",   value: fareMax },
+              ].map(({ label, sub, value }) => (
+                <div key={label}
+                  className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-center">
+                  <div className="text-[10px] font-bold text-gray-400 mb-1">{label}</div>
+                  <div className="text-[18px] font-extrabold text-[#1B2B4B] leading-none">{value.toLocaleString()}</div>
+                  <div className="text-[10px] text-gray-400 mt-1">{sub}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="px-6 pt-4 pb-6">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-[13px] font-extrabold text-[#1B2B4B]">과거 운송 기록</span>
+              <span className="text-[11px] font-semibold text-gray-400">유사도순 · 최신순</span>
+            </div>
+            <div className="space-y-2">
+              {ctxFare5Result.records.map((rec, idx) => {
+                const fare = Number(String(rec.청구운임 || "0").replace(/[^\d]/g, ""));
+                const { label: fareLabel, cls: fareCls } = getFareTag(fare);
+                const isTop = idx === 0;
+                const barPct = getBarPct(fare);
+                return (
+                  <div key={idx} className={`rounded-xl border overflow-hidden ${isTop ? "border-[#1B2B4B]/40" : "border-gray-150"}`}>
+                    {isTop && (
+                      <div className="bg-[#1B2B4B] px-4 py-1.5">
+                        <span className="text-yellow-300 text-[11px] font-bold">★ 최근 유사 운송</span>
+                      </div>
+                    )}
+                    <div className="px-4 py-3 bg-white">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[12px] font-bold text-gray-400">{rec.상차일}</span>
+                        <div className="flex gap-1">
+                          {(rec._match?.cargo && rec._match?.ton) && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-[#1B2B4B] text-white">최적매칭</span>
+                          )}
+                          {rec._match?.ton && !rec._match?.cargo && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-gray-700 text-white">톤수일치</span>
+                          )}
+                          {rec._match?.cargo && !rec._match?.ton && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-gray-700 text-white">화물일치</span>
+                          )}
+                          <span className={`px-2.5 py-1 text-[11px] font-extrabold rounded-full border ${fareCls}`}>{fareLabel}</span>
+                        </div>
+                      </div>
+                      <div className="text-[14px] font-extrabold text-gray-900 mb-1">
+                        {rec.상차지명 || "-"} → {rec.하차지명 || "-"}
+                      </div>
+                      <div className="text-[12px] font-semibold text-gray-400 mb-2">
+                        {rec.차량종류 || "-"} / {rec.차량톤수 || "-"}
+                        {rec.화물내용 && <span> · {rec.화물내용}</span>}
+                      </div>
+                      <div className="relative h-1.5 bg-gray-100 rounded-full mb-3">
+                        <div className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-[#1B2B4B] border-2 border-white shadow"
+                          style={{ left: `calc(${barPct}% - 5px)` }} />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div className="text-[12px] font-semibold text-gray-400">
+                          기사 <span className="text-gray-700 font-bold">{rec.이름 || "-"}</span>
+                          <span className="mx-1.5 text-gray-300">·</span>
+                          기사운임 <span className="text-gray-700 font-bold">{Number(rec.기사운임 || 0).toLocaleString()}원</span>
+                        </div>
+                        <span className="text-[20px] font-extrabold text-[#1B2B4B]">{fare.toLocaleString()}원</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+        <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 shrink-0">
+          <button onClick={() => setCtxFare5PanelOpen(false)}
+            className="w-full py-2.5 rounded-xl bg-gray-200 hover:bg-gray-300 text-[#1B2B4B] text-[14px] font-bold transition">
+            닫기
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+})()}
 
     </div>
 
