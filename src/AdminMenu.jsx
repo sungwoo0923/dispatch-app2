@@ -21,7 +21,6 @@ export default function AdminMenu({ parentRole = "", parentCompany = "" }) {
   const [editPhone, setEditPhone] = useState("");
   const [editRole, setEditRole] = useState("");
   const [editCompany, setEditCompany] = useState("");
-  const [openMenu, setOpenMenu] = useState(null);
   const [showMobilePreview, setShowMobilePreview] = useState(false);
 
   const [myRole, setMyRole] = useState("");
@@ -102,7 +101,6 @@ export default function AdminMenu({ parentRole = "", parentCompany = "" }) {
     setEditPhone(u.phone || "");
     setEditRole(u.role || "user");
     setEditCompany(u.companyName || "");
-    setOpenMenu(null);
   };
 
   const saveEdit = async () => {
@@ -210,32 +208,26 @@ export default function AdminMenu({ parentRole = "", parentCompany = "" }) {
                       </td>
                       <td className="px-4 py-3 text-center">
                         {canManage ? (
-                          <div className="relative inline-block">
-                            <button onClick={() => setOpenMenu(openMenu === u.id ? null : u.id)}
-                              className="px-4 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-bold hover:bg-[#243a60] transition">
-                              관리 ▾
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button
+                              onClick={() => toggleApprove(u)}
+                              className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition ${u.approved ? "text-amber-600 border-amber-300 hover:bg-amber-50" : "text-emerald-600 border-emerald-300 hover:bg-emerald-50"}`}
+                            >
+                              {u.approved ? "승인해제" : "승인"}
                             </button>
-                            {openMenu === u.id && (
-                              <>
-                                <div className="fixed inset-0 z-40" onClick={() => setOpenMenu(null)} />
-                                <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 shadow-2xl rounded-xl overflow-hidden z-[9999] w-[140px]">
-                                  <div className="bg-[#1B2B4B] px-3 py-2">
-                                    <div className="text-white text-[11px] font-bold">{u.name || u.email}</div>
-                                  </div>
-                                  <button onClick={() => { toggleApprove(u); setOpenMenu(null); }}
-                                    className="w-full text-left px-4 py-2.5 text-[12px] font-semibold hover:bg-gray-50 border-b border-gray-100 transition">
-                                    {u.approved ? <span className="text-amber-600">✕ 승인 해제</span> : <span className="text-emerald-600">✓ 승인</span>}
-                                  </button>
-                                  <button onClick={() => openEdit(u)}
-                                    className="w-full text-left px-4 py-2.5 text-[12px] font-semibold text-[#1B2B4B] hover:bg-gray-50 border-b border-gray-100 transition">
-                                    정보 수정
-                                  </button>
-                                  <button onClick={() => { removeUser(u); setOpenMenu(null); }} disabled={isMe}
-                                    className={`w-full text-left px-4 py-2.5 text-[12px] font-semibold transition ${isMe ? "text-gray-300 cursor-not-allowed" : "text-red-500 hover:bg-red-50"}`}>
-                                    삭제
-                                  </button>
-                                </div>
-                              </>
+                            <button
+                              onClick={() => openEdit(u)}
+                              className="px-2.5 py-1 rounded-lg text-[11px] font-semibold text-[#1B2B4B] border border-[#1B2B4B]/40 hover:bg-[#1B2B4B]/10 transition"
+                            >
+                              수정
+                            </button>
+                            {!isMe && (
+                              <button
+                                onClick={() => removeUser(u)}
+                                className="px-2.5 py-1 rounded-lg text-[11px] font-semibold text-red-500 border border-red-200 hover:bg-red-50 transition"
+                              >
+                                삭제
+                              </button>
                             )}
                           </div>
                         ) : <span className="text-gray-300 text-[12px]">-</span>}
