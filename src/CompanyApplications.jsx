@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { db, auth } from "./firebase";
 import {
-  collection, onSnapshot, doc, updateDoc, serverTimestamp, query, where,
+  collection, onSnapshot, doc, updateDoc, serverTimestamp, query, where, deleteDoc,
 } from "firebase/firestore";
 
 const generateCompanyCode = () => {
@@ -48,6 +48,7 @@ export default function CompanyApplications() {
 
   const [statusFilter, setStatusFilter] = useState("pending");
   const [typeFilter, setTypeFilter] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
   const [selectedApp, setSelectedApp] = useState(null);
   const [rejectReason, setRejectReason] = useState("");
   const [showRejectModal, setShowRejectModal] = useState(false);
@@ -95,6 +96,7 @@ export default function CompanyApplications() {
     setActiveTab(tab);
     setStatusFilter("pending");
     setTypeFilter("all");
+    setSearchQuery("");
     setSelectedApp(null);
     setShowRejectModal(false);
     setRejectReason("");
@@ -106,19 +108,31 @@ export default function CompanyApplications() {
 
   // 기사 탭용 필터 (typeFilter 없음)
   const filtered = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    let list;
     if (activeTab === "기사") {
-      if (statusFilter === "all") return activeData;
-      if (statusFilter === "pending") return activeData.filter((a) => a.approved === false && a.status !== "rejected");
-      if (statusFilter === "approved") return activeData.filter((a) => a.approved === true);
-      if (statusFilter === "rejected") return activeData.filter((a) => a.status === "rejected");
-      return activeData;
+      if (statusFilter === "all") list = activeData;
+      else if (statusFilter === "pending") list = activeData.filter((a) => a.approved === false && a.status !== "rejected");
+      else if (statusFilter === "approved") list = activeData.filter((a) => a.approved === true);
+      else if (statusFilter === "rejected") list = activeData.filter((a) => a.status === "rejected");
+      else list = activeData;
+    } else {
+      list = activeData.filter((a) => {
+        const matchStatus = statusFilter === "all" ? true : a.status === statusFilter;
+        const matchType = typeFilter === "all" ? true : a.type === typeFilter;
+        return matchStatus && matchType;
+      });
     }
-    return activeData.filter((a) => {
-      const matchStatus = statusFilter === "all" ? true : a.status === statusFilter;
-      const matchType = typeFilter === "all" ? true : a.type === typeFilter;
-      return matchStatus && matchType;
-    });
-  }, [activeData, statusFilter, typeFilter, activeTab]);
+    if (q) {
+      list = list.filter((a) =>
+        (a.companyName || "").toLowerCase().includes(q) ||
+        (a.name || a.displayName || "").toLowerCase().includes(q) ||
+        (a.phone || "").includes(q) ||
+        (a.email || "").toLowerCase().includes(q)
+      );
+    }
+    return [...list].sort((a, b) => (a.companyName || a.name || "").localeCompare(b.companyName || b.name || ""));
+  }, [activeData, statusFilter, typeFilter, activeTab, searchQuery]);
 
   // 화주 승인
   const approveCompany = async (app) => {
@@ -275,6 +289,29 @@ export default function CompanyApplications() {
     }
   };
 
+  // 계정 삭제 (가입 전 상태로 리셋)
+  const deleteAccount = async (app) => {
+    if (!window.confirm(`"${app.companyName || app.name}" 계정을 삭제하고 가입 전 상태로 초기화하시겠습니까?\n사용자는 재가입이 가능합니다.`)) return;
+    setProcessing(true);
+    try {
+      const appCollection = activeTab === "화주" ? "companyApplications" : "transportApplications";
+      // 신청 문서 삭제
+      await deleteDoc(doc(db, appCollection, app.id));
+      // 사용자 도큐먼트 초기화 (Auth 계정은 유지, 승인 정보만 제거)
+      if (app.userId && app.userId !== auth.currentUser?.uid) {
+        await updateDoc(doc(db, "users", app.userId), {
+          approved: false,
+          companyCode: "",
+          companyName: "",
+          userStatus: null,
+        });
+      }
+      setManagingApp(null);
+    } finally {
+      setProcessing(false);
+    }
+  };
+
   const handleApprove = (app) => {
     if (activeTab === "화주") return approveCompany(app);
     if (activeTab === "운송") return approveTransport(app);
@@ -377,7 +414,18 @@ export default function CompanyApplications() {
             </div>
           </>
         )}
-        <div className="ml-auto text-[13px] text-gray-400 font-medium">{filtered.length}건</div>
+        <div className="ml-auto flex items-center gap-2">
+          <input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="회사명·이름·연락처 검색"
+            className="h-8 px-3 rounded-lg border border-gray-200 text-[12px] focus:outline-none focus:border-[#1B2B4B] w-48"
+          />
+          {searchQuery && (
+            <button onClick={() => setSearchQuery("")} className="text-gray-400 hover:text-gray-600 text-[12px]">✕</button>
+          )}
+          <span className="text-[13px] text-gray-400 font-medium">{filtered.length}건</span>
+        </div>
       </div>
 
       {/* 테이블 */}
@@ -755,14 +803,14 @@ export default function CompanyApplications() {
                   <button
                     onClick={() => changeUserStatus(managingApp, "suspended")}
                     disabled={processing}
-                    className="w-full py-2.5 rounded-xl bg-orange-500 text-white font-semibold text-[13px] hover:bg-orange-600 transition disabled:opacity-50"
+                    className="w-full py-2.5 rounded-xl bg-amber-50 text-amber-700 border border-amber-300 font-semibold text-[13px] hover:bg-amber-100 transition disabled:opacity-50"
                   >
                     사용정지
                   </button>
                   <button
                     onClick={() => changeUserStatus(managingApp, "banned")}
                     disabled={processing}
-                    className="w-full py-2.5 rounded-xl bg-red-500 text-white font-semibold text-[13px] hover:bg-red-600 transition disabled:opacity-50"
+                    className="w-full py-2.5 rounded-xl bg-red-50 text-red-600 border border-red-200 font-semibold text-[13px] hover:bg-red-100 transition disabled:opacity-50"
                   >
                     영구정지
                   </button>
@@ -771,11 +819,18 @@ export default function CompanyApplications() {
                 <button
                   onClick={() => changeUserStatus(managingApp, "active")}
                   disabled={processing}
-                  className="w-full py-2.5 rounded-xl bg-emerald-600 text-white font-semibold text-[13px] hover:bg-emerald-700 transition disabled:opacity-50"
+                  className="w-full py-2.5 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold text-[13px] hover:bg-emerald-100 transition disabled:opacity-50"
                 >
                   정지해제
                 </button>
               )}
+              <button
+                onClick={() => deleteAccount(managingApp)}
+                disabled={processing}
+                className="w-full py-2.5 rounded-xl bg-gray-50 text-gray-600 border border-gray-200 font-semibold text-[13px] hover:bg-gray-100 transition disabled:opacity-50"
+              >
+                삭제 (가입 전 초기화)
+              </button>
               <button
                 onClick={() => setManagingApp(null)}
                 className="w-full py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 transition"

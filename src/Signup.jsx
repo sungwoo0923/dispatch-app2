@@ -166,6 +166,39 @@ function SignupForm({ signupType, onBack }) {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
 
+  // 기존 회사 검색
+  const [companySearchQ, setCompanySearchQ] = useState("");
+  const [companySuggestions, setCompanySuggestions] = useState([]);
+  const [companySearching, setCompanySearching] = useState(false);
+
+  const searchExistingCompany = async () => {
+    const q = companySearchQ.trim();
+    if (!q) return;
+    setCompanySearching(true);
+    try {
+      const snap = await getDocs(query(
+        collection(db, "transportApplications"),
+        where("type", "==", "신규"),
+        where("status", "==", "approved")
+      ));
+      const all = snap.docs.map((d) => d.data());
+      const matched = all.filter((d) =>
+        (d.companyName || "").toLowerCase().includes(q.toLowerCase())
+      );
+      setCompanySuggestions(matched);
+    } catch (_) {
+      setCompanySuggestions([]);
+    } finally {
+      setCompanySearching(false);
+    }
+  };
+
+  const selectCompanySuggestion = (item) => {
+    setCompanyName(item.companyName || "");
+    setCompanySearchQ(item.companyName || "");
+    setCompanySuggestions([]);
+  };
+
   const searchAddress = () => {
     const load = () =>
       new Promise((resolve) => {
@@ -299,9 +332,45 @@ function SignupForm({ signupType, onBack }) {
           <SectionLabel>회사 정보</SectionLabel>
 
           <Field label="회사명" required>
-            <input value={companyName} onChange={(e) => setCompanyName(e.target.value)}
-              placeholder="회사명 입력"
-              className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]" />
+            {signupType === "기존" ? (
+              <div className="relative">
+                <div className="flex gap-2">
+                  <input
+                    value={companySearchQ}
+                    onChange={(e) => { setCompanySearchQ(e.target.value); setCompanyName(e.target.value); setCompanySuggestions([]); }}
+                    onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), searchExistingCompany())}
+                    placeholder="회사명 검색"
+                    className="flex-1 border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]"
+                  />
+                  <button type="button" onClick={searchExistingCompany} disabled={companySearching}
+                    className="px-4 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition whitespace-nowrap disabled:opacity-50">
+                    {companySearching ? "검색 중..." : "검색"}
+                  </button>
+                </div>
+                {companySuggestions.length > 0 && (
+                  <div className="absolute z-20 left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+                    {companySuggestions.map((item, i) => (
+                      <button key={i} type="button"
+                        onClick={() => selectCompanySuggestion(item)}
+                        className="w-full text-left px-4 py-3 hover:bg-blue-50 border-b border-gray-50 last:border-b-0 transition">
+                        <div className="text-[14px] font-bold text-[#1B2B4B]">{item.companyName}</div>
+                        <div className="text-[12px] text-gray-400 mt-0.5">
+                          {item.businessNumber && <span className="mr-3">사업자번호: {item.businessNumber}</span>}
+                          {item.name && <span>대표: {item.name}</span>}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {companySearchQ && companySuggestions.length === 0 && !companySearching && (
+                  <p className="text-[12px] text-gray-400 mt-1.5 pl-1">검색 버튼을 눌러 회사를 찾아보세요</p>
+                )}
+              </div>
+            ) : (
+              <input value={companyName} onChange={(e) => setCompanyName(e.target.value)}
+                placeholder="회사명 입력"
+                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]" />
+            )}
           </Field>
 
           {signupType === "신규" && (
