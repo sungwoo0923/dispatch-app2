@@ -9,7 +9,7 @@ import {
 } from "firebase/firestore";
 import { onSnapshot } from "firebase/firestore";
 
-export default function AdminMenu() {
+export default function AdminMenu({ parentRole = "admin", parentCompany = "" }) {
   const [users, setUsers] = useState([]);
   const [search, setSearch] = useState("");
   const [roleTarget, setRoleTarget] = useState(null);
@@ -18,7 +18,10 @@ export default function AdminMenu() {
 const [editName, setEditName] = useState("");
 const [editPhone, setEditPhone] = useState("");
 
-const ROLES = ["admin", "driver", "shipper", "test", "user"];
+// totalMaster 권한은 totalMaster만 부여 가능
+const ROLES = parentRole === "totalMaster"
+  ? ["totalMaster", "admin", "driver", "shipper", "test", "user"]
+  : ["admin", "driver", "shipper", "test", "user"];
 
   // 🔥 모바일 미리보기 토글
   const [showMobilePreview, setShowMobilePreview] = useState(false);
@@ -44,6 +47,9 @@ const filtered = useMemo(() => {
   const q = search.trim().toLowerCase();
 
   return users.filter((u) => {
+    // 토탈마스터 계정은 토탈마스터만 볼 수 있음
+    if (u.role === "totalMaster" && parentRole !== "totalMaster") return false;
+
     const matchSearch = !q
       ? true
       : [
@@ -62,7 +68,7 @@ const filtered = useMemo(() => {
 
     return matchSearch && matchRole;
   });
-}, [search, users, roleFilter]);
+}, [search, users, roleFilter, parentRole]);
 
   // 승인 토글
   const toggleApprove = async (u) => {
@@ -96,6 +102,8 @@ setUsers((prev) =>
 
   // 권한 변경
   const updateRole = async (u, newRole) => {
+    // totalMaster 권한 부여는 totalMaster만 가능
+    if (newRole === "totalMaster" && parentRole !== "totalMaster") return;
     await setDoc(doc(db, "users", u.id), { role: newRole }, { merge: true });
     setUsers((prev) =>
       prev.map((x) => (x.id === u.id ? { ...x, role: newRole } : x))
