@@ -22,6 +22,7 @@ import DriverLogin from "./driver/DriverLogin";
 import DriverRegister from "./driver/DriverRegister";
 
 import Login from "./Login";
+import TransportLogin from "./TransportLogin";
 import Signup from "./Signup";
 import ShipperLogin from "./shipper/ShipperLogin";
 import ShipperSignup from "./shipper/ShipperSignup";
@@ -351,20 +352,31 @@ export default function App() {
 
           <Route
             path="/login"
-            element={(() => {
-              const skip = sessionStorage.getItem("skipLoginPopup");
-              if (user && skip !== "true") {
-                return role === "driver"
+            element={
+              user
+                ? role === "driver"
                   ? <Navigate to="/driver-home" replace />
                   : role === "shipper"
                     ? (approved ? <Navigate to="/shipper" replace /> : <Navigate to="/shipper-pending" replace />)
-                    : <Navigate to="/app" replace />;
-              }
-              return <Login />;
-            })()}
+                    : <Navigate to="/app" replace />
+                : <Login />
+            }
           />
 
           <Route path="/signup" element={<Signup />} />
+
+          <Route
+            path="/transport-login"
+            element={
+              user
+                ? role === "driver"
+                  ? <Navigate to="/driver-home" replace />
+                  : role === "shipper"
+                    ? (approved ? <Navigate to="/shipper" replace /> : <Navigate to="/shipper-pending" replace />)
+                    : <Navigate to="/app" replace />
+                : <TransportLogin />
+            }
+          />
 
           <Route
             path="/shipper-login"
