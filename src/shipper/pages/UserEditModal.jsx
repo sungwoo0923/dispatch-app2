@@ -54,8 +54,10 @@ const isLoginMaster =
 const isLoginSubMaster =
   currentUserData?.permissions?.subMaster === true;
 
-const canEdit =
-  isLoginMaster || isLoginSubMaster || false;
+const canEdit = isLoginMaster || isLoginSubMaster;
+const canChangePermissions = isLoginMaster || isLoginSubMaster;
+const canGrantMaster = isLoginMaster;
+const canDelete = isLoginMaster || isLoginSubMaster;
 // ✅ approve (여기 추가)
 const approve = async () => {
 
@@ -302,7 +304,7 @@ if (mode === "reApprove") {
         {/* 헤더 */}
         <div className="flex justify-between items-center mb-5">
           <h2 className="text-[20px] font-bold text-gray-800">
-            돌캐운송사님 정보수정
+            {user?.name || user?.email}님 정보수정
           </h2>
           <button onClick={onClose} className="text-xl text-gray-500">×</button>
         </div>
@@ -430,8 +432,8 @@ disabled={!canEdit}
   등록 링크는 문자메시지와 이메일을 통해 전송되오니 입력된 정보가 올바른지 확인해 주세요.
 </p>
 
-{/* 🔴 삭제 버튼 (승인된 계정만 보임) */}
-{user?.approved && (
+{/* 삭제 버튼 — 마스터/부마스터만, 본인 계정 제외 */}
+{user?.approved && canDelete && !isSelf && (
   <div className="pt-4">
     <button
       onClick={removeUser}
@@ -460,12 +462,12 @@ disabled={!canEdit}
 {/* ===== 권한 ===== */}
 <div className="flex gap-6">
 
-  {/* 마스터 */}
+  {/* 마스터 — 마스터만 부여 가능 */}
   <label className="flex items-center gap-2">
     <input
       type="checkbox"
       checked={permissions.master}
-      disabled={!isLoginMaster}   // 🔥 마스터만 가능
+      disabled={!canGrantMaster}
       onChange={(e) =>
         setPermissions({
           master: e.target.checked,
@@ -478,12 +480,12 @@ disabled={!canEdit}
     마스터
   </label>
 
-  {/* 부마스터 */}
+  {/* 부마스터 — 마스터만 부여 가능 */}
   <label className="flex items-center gap-2">
     <input
       type="checkbox"
       checked={permissions.subMaster}
-      disabled={!isLoginMaster}   // 🔥 마스터만 가능
+      disabled={!canGrantMaster}
       onChange={(e) =>
         setPermissions({
           ...permissions,
@@ -495,12 +497,12 @@ disabled={!canEdit}
     부마스터
   </label>
 
-  {/* 정산 */}
+  {/* 정산 — 마스터/부마스터 부여 가능 */}
   <label className="flex items-center gap-2">
     <input
       type="checkbox"
       checked={permissions.settlement}
-      disabled={!isLoginMaster}   // 🔥 마스터만 가능
+      disabled={!canChangePermissions}
       onChange={(e) =>
         setPermissions({
           ...permissions,
@@ -511,12 +513,12 @@ disabled={!canEdit}
     정산
   </label>
 
-  {/* 운송 */}
+  {/* 운송 — 마스터/부마스터 부여 가능 */}
   <label className="flex items-center gap-2">
     <input
       type="checkbox"
       checked={permissions.transport}
-      disabled={!isLoginMaster}   // 🔥 마스터만 가능
+      disabled={!canChangePermissions}
       onChange={(e) =>
         setPermissions({
           ...permissions,

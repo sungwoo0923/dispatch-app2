@@ -51,7 +51,7 @@ if (data.deleted) {
   navigate("/shipper-login");
   return;
 }
-if (!data.approved) {
+if (!data.approved && u.email !== "tjddnqkf@naver.com") {
   navigate("/shipper-pending");
   return;
 }
@@ -87,10 +87,10 @@ setCompanyName(
       </div>
     );
   }
-const isMaster =
-  userData?.permissions?.master || userData?.role === "shipper";
-
-const isSubMaster = userData?.permissions?.subMaster;
+const TOTAL_MASTER_EMAIL = "tjddnqkf@naver.com";
+const isTotalMasterUser = user?.email === TOTAL_MASTER_EMAIL;
+const isMaster = isTotalMasterUser || userData?.permissions?.master;
+const isSubMaster = isTotalMasterUser || userData?.permissions?.subMaster;
   return (
     <div className="min-h-screen bg-[#f3f4f6]">
       {/* ================= HEADER ================= */}
@@ -105,7 +105,7 @@ const isSubMaster = userData?.permissions?.subMaster;
         onClick={() => navigate("/shipper")}
         className="text-lg font-bold cursor-pointer"
       >
-        RUN25
+        KP-FLOW
       </div>
 
 <nav className="flex gap-6 text-sm font-semibold">

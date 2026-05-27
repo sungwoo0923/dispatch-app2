@@ -7,6 +7,7 @@ import { CartesianGrid, Line, LineChart, BarChart, Bar, Cell, PieChart, Pie, Res
 import * as XLSX from "xlsx";
 import { sendOrderTo24Proxy as sendOrderTo24 } from "../api/24CallProxy";
 import AdminMenu from "./AdminMenu";
+import CompanyApplications from "./CompanyApplications";
 import { calcFare } from "./fareUtil";
 import FixedClients from "./FixedClients";
 import FleetManagement from "./FleetManagement";
@@ -224,15 +225,17 @@ const [places, setPlaces] = useState([]);
 useEffect(() => {
   const coll = collection(db, "places");
   const unsub = onSnapshot(coll, (snap) => {
-    const arr = snap.docs.map((d) => ({
-      _id: d.id,
-      ...(d.data() || {}),
-    }));
+    const viewCompany = role === "totalMaster"
+      ? (localStorage.getItem("loginCompany") || userCompany || "돌캐")
+      : (userCompany || localStorage.getItem("userCompany") || "돌캐");
+    const arr = snap.docs
+      .map((d) => ({ _id: d.id, ...(d.data() || {}) }))
+      .filter((d) => (d.companyName || "돌캐") === viewCompany);
     setPlaces(arr);
   });
 
   return () => unsub();
-}, []);
+}, [userCompany, role]);
 
 // ===================== 메인 실시간 =====================
 useEffect(() => {
@@ -469,7 +472,7 @@ const sixMonthsAgo = getSixMonthsAgo();
     }));
 
     return () => unsubs.forEach(u => u && u());
-  }, [user]);
+  }, [user, userCompany, role]);
 
 const addDispatch = async (record) => {
   const _id = crypto.randomUUID(); // ⭐ 무조건 새로 생성
@@ -585,16 +588,16 @@ const patchDispatch = async (_id, patch) => {
 
   const cleanPatch = stripUndefinedDeep({
     ...patch,
-    경유지_상차: safeStops(patch.경유지_상차).length > 0
+    경유지_상차: Array.isArray(patch.경유지_상차)
       ? safeStops(patch.경유지_상차)
       : safeStops(prev.경유지_상차 || prev.경유상차목록),
-    경유지_하차: safeStops(patch.경유지_하차).length > 0
+    경유지_하차: Array.isArray(patch.경유지_하차)
       ? safeStops(patch.경유지_하차)
       : safeStops(prev.경유지_하차 || prev.경유하차목록),
-    경유상차목록: safeStops(patch.경유상차목록).length > 0
+    경유상차목록: Array.isArray(patch.경유상차목록)
       ? safeStops(patch.경유상차목록)
       : safeStops(prev.경유상차목록 || prev.경유지_상차),
-    경유하차목록: safeStops(patch.경유하차목록).length > 0
+    경유하차목록: Array.isArray(patch.경유하차목록)
       ? safeStops(patch.경유하차목록)
       : safeStops(prev.경유하차목록 || prev.경유지_하차),
   });
@@ -746,6 +749,9 @@ const upsertPlace = async (place) => {
       메모: place.메모 || "",
       isActive: place.isActive !== false,
       updatedAt: serverTimestamp(),
+      companyName: place.companyName || (role === "totalMaster"
+        ? (localStorage.getItem("loginCompany") || userCompany || "돌캐")
+        : (userCompany || localStorage.getItem("userCompany") || "돌캐")),
     };
 
     // 🔥 exists() 체크 제거
@@ -896,6 +902,95 @@ function normalizePlate(v = "") {
     .replace(/\s/g, "")
     .replace(/-/g, "");
 }
+// ================================
+// 경유지 포함 화물내용+톤수 합산 헬퍼 (모듈 스코프)
+// ================================
+function _parseWaypointList(v) {
+  if (Array.isArray(v) && v.length > 0) return v;
+  if (typeof v === "string" && v.trim().startsWith("[")) {
+    try { const p = JSON.parse(v); if (Array.isArray(p)) return p; } catch {}
+  }
+  if (v && typeof v === "object" && !Array.isArray(v)) {
+    const ks = Object.keys(v);
+    if (ks.length > 0 && ks.every(k => /^\d+$/.test(k)))
+      return ks.sort((a, b) => Number(a) - Number(b)).map(k => v[k]);
+    if (v.업체명) return [v];
+  }
+  return [];
+}
+function mergeViaCargoText(mainCargo, waypointLists) {
+  const allCargo = [mainCargo];
+  for (const list of waypointLists) {
+    for (const s of _parseWaypointList(list)) {
+      if (s && s.화물내용) allCargo.push(s.화물내용);
+    }
+  }
+  const validCargos = allCargo.filter(c => {
+    const t = String(c || "").trim();
+    return t && t !== "없음";
+  });
+  if (validCargos.length <= 1) return mainCargo || "";
+  const SFXS = ["파렛트", "파레트", "팔레트", "파렛", "파레", "박스", "통"];
+  const NORM = { "파렛트": "파레트", "팔레트": "파레트", "파렛": "파레트", "파레": "파레트" };
+  const typeMap = {};
+  const customs = [];
+  for (const cargo of validCargos) {
+    const c = String(cargo).trim();
+    let matched = false;
+    for (const sfx of SFXS) {
+      if (c.endsWith(sfx)) {
+        const numStr = c.slice(0, -sfx.length).trim();
+        const num = parseFloat(numStr);
+        if (!isNaN(num)) {
+          const canonical = NORM[sfx] || sfx;
+          typeMap[canonical] = (typeMap[canonical] || 0) + num;
+          matched = true;
+          break;
+        }
+      }
+    }
+    if (!matched && !customs.includes(c)) customs.push(c);
+  }
+  const parts = [];
+  for (const [type, total] of Object.entries(typeMap)) {
+    parts.push(`${total % 1 === 0 ? total : total}${type}`);
+  }
+  parts.push(...customs);
+  return parts.join(", ");
+}
+function mergeViaTonnage(mainTon, waypointLists) {
+  const allTons = [mainTon];
+  for (const list of waypointLists) {
+    for (const s of _parseWaypointList(list)) {
+      if (s && s.차량톤수) allTons.push(s.차량톤수);
+    }
+  }
+  const validTons = allTons.filter(t => {
+    const v = String(t || "").trim();
+    return v && v !== "없음";
+  });
+  if (validTons.length <= 1) return mainTon || "";
+  // Convert all values to kg, then format result
+  let totalKg = 0;
+  for (const ton of validTons) {
+    const s = String(ton).trim();
+    const m = s.match(/(\d+(?:\.\d+)?)/);
+    if (!m) continue;
+    const num = parseFloat(m[1]);
+    if (/kg/i.test(s)) {
+      totalKg += num;
+    } else {
+      totalKg += num * 1000;
+    }
+  }
+  if (totalKg === 0) return mainTon || "";
+  if (totalKg < 1000) {
+    return `${totalKg % 1 === 0 ? totalKg : totalKg}kg`;
+  }
+  const tons = totalKg / 1000;
+  return `${tons % 1 === 0 ? tons : tons}톤`;
+}
+
 // ===================== TOAST SYSTEM (GLOBAL) =====================
 const ToastContext = React.createContext(null);
 window.__sflowToastQueue = window.__sflowToastQueue || [];
@@ -1557,12 +1652,16 @@ function FloatingCalculator({ onClose }) {
 }
 
 // ===================== DispatchApp.jsx (PART 2/8) — START =====================
-export default function DispatchApp({ role, user }) {
-  // 🔥 화주 차단
-  if (role === "shipper") {
-    return <Navigate to="/shipper" replace />;
-  }
+const ROLE_LABELS = {
+  totalMaster: "최고관리자",
+  admin: "관리자",
+  user: "실무자",
+  driver: "기사",
+  shipper: "화주",
+  test: "경리/회계",
+};
 
+export default function DispatchApp({ role, user, userCompany = "" }) {
   const isTest = role === "test";
   const navigate = useNavigate();
   // ⭐ 고정거래처 매출 실시간 구독
@@ -1629,14 +1728,27 @@ useEffect(() => {
   const dispatchDataFiltered = useMemo(() => {
     if (!dispatchData || !user) return [];
 
-    // 관리자면 전체 데이터 그대로 반환
-    if (role === "admin") return dispatchData;
+    // 총마스터는 입력한 회사명 기준으로 필터
+    if (role === "totalMaster") {
+      const viewCompany = localStorage.getItem("loginCompany") || userCompany || "돌캐";
+      return dispatchData.filter(o => (o?.companyName || "돌캐") === viewCompany);
+    }
 
-    // 일반 계정은 본인 데이터만
-    return dispatchData.filter(o =>
+    // 회사명 기준 필터 (없으면 "돌캐"로 간주)
+    const myCompany = userCompany || localStorage.getItem("userCompany") || "돌캐";
+    const byCompany = dispatchData.filter(o => {
+      const docCompany = o?.companyName || "돌캐";
+      return docCompany === myCompany;
+    });
+
+    // 관리자/경리회계는 회사 내 전체 데이터
+    if (role === "admin" || role === "test") return byCompany;
+
+    // 일반 계정은 회사 내 본인 데이터만
+    return byCompany.filter(o =>
       !o?.작성자 || o?.작성자 === user.email
     );
-  }, [dispatchData, user, role]);
+  }, [dispatchData, user, role, userCompany]);
 
 
   // ⭐ 내 정보 통계 계산
@@ -1814,6 +1926,27 @@ useEffect(() => {
 
  const [menu, setMenu] = useState("HOME");
   const [calcOpen, setCalcOpen] = useState(false);
+  const ZOOM_STEPS = [0.5, 0.6, 0.67, 0.75, 0.8, 0.9, 1.0, 1.1, 1.12, 1.2, 1.3, 1.5, 1.8, 2.0];
+  const [appZoom, setAppZoom] = useState(() => {
+    const saved = localStorage.getItem("appZoom");
+    return saved ? parseFloat(saved) : 1.12;
+  });
+  useEffect(() => {
+    const root = document.getElementById("root");
+    if (root) root.style.zoom = appZoom;
+    localStorage.setItem("appZoom", String(appZoom));
+  }, [appZoom]);
+  const zoomDown = () => {
+    const idx = ZOOM_STEPS.findIndex(s => Math.abs(s - appZoom) < 0.01);
+    const cur = idx >= 0 ? idx : ZOOM_STEPS.findIndex(s => s >= appZoom);
+    if (cur > 0) setAppZoom(ZOOM_STEPS[cur - 1]);
+  };
+  const zoomUp = () => {
+    const idx = ZOOM_STEPS.findLastIndex(s => Math.abs(s - appZoom) < 0.01);
+    const cur = idx >= 0 ? idx : ZOOM_STEPS.findIndex(s => s > appZoom) - 1;
+    const next = idx >= 0 ? idx + 1 : ZOOM_STEPS.findIndex(s => s > appZoom);
+    if (next < ZOOM_STEPS.length && next >= 0) setAppZoom(ZOOM_STEPS[next]);
+  };
    // ★ 거래명세서에서 오더 클릭 시 해당 오더로 이동하기 위한 전역 함수
   const [highlightOrderId, setHighlightOrderId] = useState(null);
 
@@ -1845,20 +1978,29 @@ useEffect(() => {
 const [alertMsg, setAlertMsg] = useState(null);
 const showAlert = (msg) => setAlertMsg(msg);
 
-  // ---------------- user 차단 메뉴 ----------------
-  const blockedMenus = [
-    "배차관리",
-    "기사관리",
-    "거래처관리",
-    "매출관리",
-    "거래처정산",
-    "지급관리",
-    "관리자메뉴",
+  // ---------------- 역할별 차단 메뉴 ----------------
+  // user(실무자): 배차/기사/거래처 업무 가능, 재무/관리 메뉴 차단
+  const userBlockedMenus = [
+    "매출관리", "거래처정산", "지급관리", "관리자메뉴",
   ];
+  // test(경리/회계): 배차현황/기사/거래처/홈/거래처정산/지급관리 가능, 배차입력/운임표/관리 차단
+  const testBlockedMenus = [
+    "배차관리", "실시간배차현황", "미배차현황", "표준운임표", "단가표", "관리자메뉴",
+  ];
+
+  const blockedMenus = role === "test" ? testBlockedMenus : userBlockedMenus;
+
+  // 역할이 바뀌어 현재 메뉴가 차단 목록에 포함되면 HOME으로 이동
+  useEffect(() => {
+    if (role === "shipper" && user?.email !== "tjddnqkf@naver.com") { navigate("/shipper", { replace: true }); return; }
+    if ((role === "user" || role === "test") && blockedMenus.includes(menu)) {
+      setMenu("HOME");
+    }
+  }, [role]);
 
   // ---------------- 메뉴 클릭 제어 ----------------
   const handleMenuClick = (m) => {
-    if (role === "user" && blockedMenus.includes(m)) return;
+    if ((role === "user" || role === "test") && blockedMenus.includes(m)) return;
     setMenu(m);
   };
 
@@ -1886,11 +2028,17 @@ return (
             <span className="text-white font-extrabold text-base tracking-tight">
               KP-Flow
             </span>
-            <span
-              className="text-[10px] font-mono bg-white/10 text-white/60 px-1.5 py-0.5 rounded ml-1"
-            >
-              v{__APP_VERSION__}
-            </span>
+            {(() => {
+              const co = role === "totalMaster"
+                ? (localStorage.getItem("loginCompany") || userCompany || "")
+                : (userCompany || localStorage.getItem("userCompany") || "");
+              return (
+                <div className="ml-2 flex flex-col leading-tight">
+                  {co && <span className="text-[12px] font-bold text-white/90 truncate max-w-[90px]">{co}</span>}
+                  <span className="text-[10px] font-mono text-white/50">v{__APP_VERSION__}</span>
+                </div>
+              );
+            })()}
           </div>
 
           {/* 중앙 메뉴 */}
@@ -1920,8 +2068,12 @@ return (
               "거래처정산",
               "지급관리",
               "관리자메뉴",
+              "가입신청관리",
             ].map((m) => {
-              const isBlocked = role === "user" && blockedMenus.includes(m);
+              const isBlocked = (role === "user" || role === "test") && blockedMenus.includes(m);
+              if (m === "관리자메뉴" && role !== "admin" && role !== "totalMaster") return null;
+              if (m === "가입신청관리" && role !== "totalMaster") return null;
+              if (isBlocked && role === "test") return null;
               const isActive = menu === m;
               return (
                 <button
@@ -1948,6 +2100,12 @@ return (
 
           {/* 우측 유저 영역 */}
           <div className="flex items-center gap-3 min-w-[180px] justify-end">
+            {/* 화면 크기 조절 */}
+            <div className="flex items-center gap-0.5 bg-white/10 rounded-lg px-1 py-0.5">
+              <button onClick={zoomDown} className="w-6 h-6 flex items-center justify-center text-white/70 hover:text-white text-sm font-bold transition rounded" title="글씨 작게">-</button>
+              <span className="text-white/60 text-[11px] w-[36px] text-center tabular-nums">{Math.round(appZoom * 100)}%</span>
+              <button onClick={zoomUp} className="w-6 h-6 flex items-center justify-center text-white/70 hover:text-white text-sm font-bold transition rounded" title="글씨 크게">+</button>
+            </div>
             <span className="text-white/50 text-xs hidden xl:block truncate max-w-[120px]">
               {user?.email}
             </span>
@@ -1980,6 +2138,7 @@ return (
           <HomeDashboard
             role={role}
             user={user}
+            userCompany={userCompany || localStorage.getItem("userCompany") || ""}
             todayStats={todayStats}
             myStats={myStats}
             pending={pendingToday}
@@ -2004,6 +2163,7 @@ return (
             role={role}
             isTest={isTest}   // ★ 추가!
             showAlert={showAlert}
+            userCompany={userCompany || localStorage.getItem("userCompany") || ""}
           />
 
         )}
@@ -2051,7 +2211,7 @@ return (
         {menu === "미배차현황" && (
           <UnassignedStatus
             role={role}
-            dispatchData={dispatchData}
+            dispatchData={dispatchDataFiltered}
             patchDispatch={patchDispatch}
             removeDispatch={removeDispatch}
             drivers={drivers}
@@ -2061,14 +2221,14 @@ return (
           />
         )}
          {menu === "표준운임표" && (
-          <StandardFare dispatchData={dispatchData} />
+          <StandardFare dispatchData={dispatchDataFiltered} />
         )}
 
         {menu === "단가표" && (
-          <RateCard dispatchData={dispatchData} />
+          <RateCard dispatchData={dispatchDataFiltered} />
         )}
 
-        {menu === "기사관리" && role === "admin" && (
+        {menu === "기사관리" && (role === "admin" || role === "totalMaster" || role === "user" || role === "test") && (
           <DriverManagement
             drivers={drivers}
             upsertDriver={upsertDriver}
@@ -2076,44 +2236,39 @@ return (
           />
         )}
 
-        <div style={{ display: menu === "거래처관리" && role === "admin" ? "block" : "none" }}>
+        <div style={{ display: menu === "거래처관리" && (role === "admin" || role === "totalMaster" || role === "user" || role === "test") ? "block" : "none" }}>
           <ClientManagement
             clients={clients}
             upsertClient={upsertClient}
             removeClient={removeClient}
             upsertPlace={upsertPlace}
+            places={places}
             showAlert={showAlert}
           />
         </div>
 
-        {menu === "고정거래처관리" && role === "admin" && (
+        {menu === "고정거래처관리" && (role === "admin" || role === "totalMaster" || role === "user" || role === "test") && (
           <div>
             {/* 상단 탭 */}
-            <div className="flex gap-2 mb-3 border-b pb-2">
-              <button
-                className={`px-3 py-1 text-sm rounded ${subMenu === "고정거래처관리"
-                  ? "bg-blue-600 text-white"
-                  : "bg-gray-200"
+            <div className="flex gap-0 mb-4 border-b border-gray-200">
+              {["고정거래처관리", "지입차관리"].map(tab => (
+                <button
+                  key={tab}
+                  onClick={() => setSubMenu(tab)}
+                  className={`px-5 py-2.5 text-[13px] font-semibold border-b-2 -mb-px transition ${
+                    subMenu === tab
+                      ? "border-[#1B2B4B] text-[#1B2B4B]"
+                      : "border-transparent text-gray-400 hover:text-gray-600"
                   }`}
-                onClick={() => setSubMenu("고정거래처관리")}
-              >
-                고정거래처관리
-              </button>
-
-              <button
-                className={`px-3 py-1 text-sm rounded ${subMenu === "지입차관리"
-                  ? "bg-blue-600 text-white"
-                  : "bg-gray-200"
-                  }`}
-                onClick={() => setSubMenu("지입차관리")}
-              >
-                지입차관리
-              </button>
+                >
+                  {tab}
+                </button>
+              ))}
             </div>
 
             {/* 탭 화면 */}
             {subMenu === "고정거래처관리" && (
-              <FixedClients drivers={drivers} upsertDriver={upsertDriver} />
+              <FixedClients drivers={drivers} upsertDriver={upsertDriver} userCompany={userCompany || localStorage.getItem("userCompany") || ""} role={role} />
             )}
 
             {subMenu === "지입차관리" && (
@@ -2122,19 +2277,19 @@ return (
           </div>
         )}
 
-        {menu === "매출관리" && role === "admin" && (
+        {menu === "매출관리" && (role === "admin" || role === "totalMaster" || role === "test") && (
           <Settlement
-            dispatchData={dispatchData}
-            fixedRows={fixedRows}   // ★ 추가
+            dispatchData={dispatchDataFiltered}
+            fixedRows={fixedRows}
             clients={clients}
-  places={places}
+            places={places}
           />
         )}
 
-                  <div style={{ display: menu === "거래처정산" && role === "admin" ? "block" : "none" }}>
+        <div style={{ display: menu === "거래처정산" && (role === "admin" || role === "totalMaster" || role === "test") ? "block" : "none" }}>
           <ClientSettlement
-            dispatchData={dispatchData}
-             setDispatchData={setDispatchData}
+            dispatchData={dispatchDataFiltered}
+            setDispatchData={setDispatchData}
             clients={clients}
             setClients={(next) => next.forEach(upsertClient)}
             upsertClient={upsertClient}
@@ -2146,14 +2301,16 @@ return (
             setCardImageUploading={setCardImageUploading}
           />
         </div>
-        {menu === "지급관리" && role === "admin" && (
+        {menu === "지급관리" && (role === "admin" || role === "totalMaster" || role === "test") && (
           <PaymentManagement
-            dispatchData={dispatchData}
+            dispatchData={dispatchDataFiltered}
             patchDispatch={patchDispatch}
           />
         )}
 
-        {menu === "관리자메뉴" && role === "admin" && <AdminMenu />}
+        {menu === "관리자메뉴" && (role === "admin" || role === "totalMaster") && <AdminMenu parentRole={role} parentCompany={userCompany || localStorage.getItem("userCompany") || ""} />}
+
+        {menu === "가입신청관리" && role === "totalMaster" && <CompanyApplications />}
       </main>
       {/* ⭐⭐⭐ 내 정보 패널 ⭐⭐⭐ */}
       {showMyInfo && (
@@ -2166,6 +2323,19 @@ return (
             onClick={(e) => e.stopPropagation()}
           >
             <h2 className="text-xl font-bold mb-4">내 정보</h2>
+
+            {/* 회사명 */}
+            {(() => {
+              const co = role === "totalMaster"
+                ? (localStorage.getItem("loginCompany") || userCompany || "")
+                : (userCompany || localStorage.getItem("userCompany") || "");
+              return co ? (
+                <div className="mb-4">
+                  <p className="font-semibold text-gray-700 text-sm">회사명</p>
+                  <p className="text-gray-900 font-bold">{co}</p>
+                </div>
+              ) : null;
+            })()}
 
             {/* 이메일 */}
             <div className="mb-6">
@@ -2500,6 +2670,7 @@ return (
     role = "admin",
     isTest = false,
     showAlert = (msg) => showAlert(msg),  // ★ 추가 (폴백 포함)
+    userCompany = "",
   }) {
 
       const [useNewForm, setUseNewForm] = React.useState(false);
@@ -2940,88 +3111,6 @@ function extractCargoBase(cargo = "") {
   return s;  // suffix 없으면 원본 그대로
 }
 
-// ================================
-// 🔥 경유지 포함 화물내용+톤수 합산 헬퍼
-// ================================
-function _parseWaypointList(v) {
-  if (Array.isArray(v) && v.length > 0) return v;
-  if (typeof v === "string" && v.trim().startsWith("[")) {
-    try { const p = JSON.parse(v); if (Array.isArray(p)) return p; } catch {}
-  }
-  if (v && typeof v === "object" && !Array.isArray(v)) {
-    const ks = Object.keys(v);
-    if (ks.length > 0 && ks.every(k => /^\d+$/.test(k)))
-      return ks.sort((a, b) => Number(a) - Number(b)).map(k => v[k]);
-    if (v.업체명) return [v];
-  }
-  return [];
-}
-
-function mergeViaCargoText(mainCargo, waypointLists) {
-  const allCargo = [mainCargo];
-  for (const list of waypointLists) {
-    for (const s of _parseWaypointList(list)) {
-      if (s && s.화물내용) allCargo.push(s.화물내용);
-    }
-  }
-  const validCargos = allCargo.filter(c => {
-    const t = String(c || "").trim();
-    return t && t !== "없음";
-  });
-  if (validCargos.length <= 1) return mainCargo || "";
-
-  const SFXS = ["파렛트", "파레트", "팔레트", "파렛", "파레", "박스", "통"];
-  const NORM = { "파렛트": "파레트", "팔레트": "파레트", "파렛": "파레트", "파레": "파레트" };
-  const typeMap = {};
-  const customs = [];
-
-  for (const cargo of validCargos) {
-    const c = String(cargo).trim();
-    let matched = false;
-    for (const sfx of SFXS) {
-      if (c.endsWith(sfx)) {
-        const numStr = c.slice(0, -sfx.length).trim();
-        const num = parseFloat(numStr);
-        if (!isNaN(num)) {
-          const canonical = NORM[sfx] || sfx;
-          typeMap[canonical] = (typeMap[canonical] || 0) + num;
-          matched = true;
-          break;
-        }
-      }
-    }
-    if (!matched && !customs.includes(c)) customs.push(c);
-  }
-
-  const parts = [];
-  for (const [type, total] of Object.entries(typeMap)) {
-    parts.push(`${total % 1 === 0 ? total : total}${type}`);
-  }
-  parts.push(...customs);
-  return parts.join(", ");
-}
-
-function mergeViaTonnage(mainTon, waypointLists) {
-  const allTons = [mainTon];
-  for (const list of waypointLists) {
-    for (const s of _parseWaypointList(list)) {
-      if (s && s.차량톤수) allTons.push(s.차량톤수);
-    }
-  }
-  const validTons = allTons.filter(t => {
-    const v = String(t || "").trim();
-    return v && v !== "없음";
-  });
-  if (validTons.length <= 1) return mainTon || "";
-
-  let total = 0;
-  for (const ton of validTons) {
-    const m = String(ton).match(/(\d+(?:\.\d+)?)/);
-    if (m) total += parseFloat(m[1]);
-  }
-  return total % 1 === 0 ? `${total}톤` : `${total}톤`;
-}
-
 // ===============================
 // 📤 즉시공유 텍스트 생성
 // ===============================
@@ -3118,7 +3207,7 @@ const primary =
 
 
     // 관리자 여부 체크
-const isAdmin = role === "admin";
+const isAdmin = role === "admin" || role === "totalMaster";
 
 // 기존 필터 상태 (유지)
 const [filterType, setFilterType] = React.useState(null);
@@ -5164,6 +5253,7 @@ const rec = {
   createdByUid: auth.currentUser?.uid || null,
   createdByEmail: auth.currentUser?.email || null,
   createdByName: auth.currentUser?.displayName || auth.currentUser?.email || null,
+  companyName: userCompany || localStorage.getItem("userCompany") || "돌캐",
 
   // 🔥 여기 안으로 넣어
   aiLog: aiRecommend
@@ -6958,10 +7048,24 @@ className={`
     {/* 입력 */}
     <input
       className={`${inputCls} pr-[62px] text-base`}
-      placeholder="예: 2 또는 변압기"
-      value={form.화물내용 || ""}
+      placeholder={form.화물타입 ? "숫자만 입력" : "예: 2 또는 변압기"}
+      value={form.화물타입
+        ? String(form.화물내용 || "").replace(/(파레트|파렛트|박스|통)$/, "").trim()
+        : (form.화물내용 || "")}
+      onKeyDown={(e) => {
+        if (form.화물타입 && form.화물타입 !== "없음") {
+          if (!/[\d]/.test(e.key) && !["Backspace","Delete","Tab","ArrowLeft","ArrowRight","Home","End"].includes(e.key)) {
+            e.preventDefault();
+          }
+        }
+      }}
       onChange={(e) => {
-        onChange("화물내용", e.target.value);
+        if (form.화물타입 && form.화물타입 !== "없음") {
+          const v = e.target.value.replace(/[^\d]/g, "");
+          onChange("화물내용", `${v}${form.화물타입}`);
+        } else {
+          onChange("화물내용", e.target.value);
+        }
       }}
     />
 
@@ -7110,20 +7214,24 @@ className={`
     {/* 입력 */}
     <input
       className={`${inputCls} pr-[52px] text-base`}
-      placeholder="예: 1"
-      inputMode="decimal"
-      value={form.톤수값 || ""}
+      placeholder={form.톤수타입 ? "예: 1" : "예: 5톤 또는 소형"}
+      inputMode={form.톤수타입 ? "decimal" : "text"}
+      value={form.톤수타입 ? (form.톤수값 || "") : (form.차량톤수 || "")}
       onKeyDown={(e) => {
-        if (!/[\d.,]/.test(e.key) && !["Backspace","Delete","Tab","ArrowLeft","ArrowRight","Home","End"].includes(e.key)) {
-          e.preventDefault();
+        if (form.톤수타입) {
+          if (!/[\d.,]/.test(e.key) && !["Backspace","Delete","Tab","ArrowLeft","ArrowRight","Home","End"].includes(e.key)) {
+            e.preventDefault();
+          }
         }
       }}
       onChange={(e) => {
-        const v = e.target.value.replace(/[^\d.]/g, "");
-        onChange("톤수값", v);
-
         if (form.톤수타입) {
+          const v = e.target.value.replace(/[^\d.]/g, "");
+          onChange("톤수값", v);
           onChange("차량톤수", `${v}${form.톤수타입}`);
+        } else {
+          onChange("차량톤수", e.target.value);
+          onChange("톤수값", e.target.value);
         }
       }}
     />
@@ -7518,11 +7626,21 @@ className={`
           <div className="relative">
             <input
               className={`${inputCls} pr-[62px]`}
-              placeholder="화물내용 (예: 2)"
-              value={stop.화물내용 || ""}
-              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); } }}
+              placeholder={stop.화물타입 ? "숫자만 입력" : "화물내용 (예: 2)"}
+              value={stop.화물타입
+                ? String(stop.화물내용 || "").replace(/(파레트|파렛트|박스|통)$/, "").trim()
+                : (stop.화물내용 || "")}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); }
+                if (stop.화물타입 && stop.화물타입 !== "없음") {
+                  if (!/[\d]/.test(e.key) && !["Backspace","Delete","Tab","ArrowLeft","ArrowRight","Home","End"].includes(e.key)) {
+                    e.preventDefault();
+                  }
+                }
+              }}
               onChange={(e) => {
-                const v = e.target.value;
+                const isUnit = stop.화물타입 && stop.화물타입 !== "없음";
+                const v = isUnit ? e.target.value.replace(/[^\d]/g, "") : e.target.value;
                 setStopList(prev => {
                   const copy = [...prev];
                   copy[idx].화물내용 = v;
@@ -7556,16 +7674,27 @@ className={`
           <div className="relative">
             <input
               className={`${inputCls} pr-[52px]`}
-              placeholder="톤수 (예: 1)"
-              value={stop.톤수값 || ""}
-              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); } }}
+              placeholder={stop.톤수타입 ? "톤수 (예: 1)" : "예: 5톤 또는 소형"}
+              value={stop.톤수타입 ? (stop.톤수값 || "") : (stop.차량톤수 || "")}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); }
+                if (stop.톤수타입) {
+                  if (!/[\d.,]/.test(e.key) && !["Backspace","Delete","Tab","ArrowLeft","ArrowRight","Home","End"].includes(e.key)) {
+                    e.preventDefault();
+                  }
+                }
+              }}
               onChange={(e) => {
-                const v = e.target.value;
+                const hasType = !!stop.톤수타입;
+                const v = hasType ? e.target.value.replace(/[^\d.]/g, "") : e.target.value;
                 setStopList(prev => {
                   const copy = [...prev];
-                  copy[idx].톤수값 = v;
-                  if (copy[idx].톤수타입) {
+                  if (hasType) {
+                    copy[idx].톤수값 = v;
                     copy[idx].차량톤수 = `${v}${copy[idx].톤수타입}`;
+                  } else {
+                    copy[idx].차량톤수 = v;
+                    copy[idx].톤수값 = v;
                   }
                   return copy;
                 });
@@ -7715,14 +7844,19 @@ className={`
               const cargoType = s.화물타입 || "";
               const tonVal = s.톤수값 || "";
               const tonType = s.톤수타입 || "";
-
+              const CARGO_SFXS = ["파레트","파렛트","박스","통"];
+              let cargoBase = cargo;
+              for (const sfx of CARGO_SFXS) { if (cargoBase.endsWith(sfx)) { cargoBase = cargoBase.slice(0, -sfx.length).trim(); break; } }
+              const TON_SFXS = ["톤","kg","KG"];
+              let tonBase = tonVal;
+              for (const sfx of TON_SFXS) { if (tonBase.endsWith(sfx)) { tonBase = tonBase.slice(0, -sfx.length).trim(); break; } }
               return {
                 ...s,
                 화물내용: cargoType && cargoType !== "없음"
-                  ? `${cargo}${cargoType}`
+                  ? `${cargoBase}${cargoType}`
                   : cargo,
                 차량톤수: tonType && tonType !== "없음"
-                  ? `${tonVal}${tonType}`
+                  ? `${tonBase}${tonType}`
                   : tonVal,
               };
             });
@@ -9469,37 +9603,30 @@ setTimeout(() => {
 {/* ================= 실시간배차 상태 변경 확인 팝업 ================= */}
 {confirmChange && (
   <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
-    <div className="bg-white rounded-xl p-6 w-[360px] shadow-xl border">
-
-      <h3 className="text-base font-bold mb-4">
-        상태를 변경하시겠습니까?
-      </h3>
-
-      <div className="text-sm text-gray-700 mb-5">
-        <div className="mb-1 font-semibold">
-          {confirmChange.key}
-        </div>
-        <div>
-          {confirmChange.before || "미설정"}
-          {" → "}
-          <b className="text-blue-600">
-            {confirmChange.after || "미설정"}
-          </b>
-        </div>
+    <div className="bg-white rounded-2xl shadow-2xl w-[360px] overflow-hidden">
+      <div className="bg-[#1B2B4B] px-5 py-4">
+        <h3 className="text-white font-bold text-[15px]">상태 변경</h3>
       </div>
-
-      <div className="flex justify-end gap-2">
-        <button
-          className="px-3 py-1.5 bg-gray-200 rounded"
-          onClick={() => setConfirmChange(null)}
-        >
-          취소
-        </button>
-
-        <button
-          className="px-3 py-1.5 bg-blue-600 text-white rounded"
-          onClick={async () => {
-            const patch = { [confirmChange.key]: confirmChange.after };
+      <div className="p-5">
+        <div className="bg-gray-50 rounded-xl px-4 py-3 mb-5 border border-gray-100">
+          <div className="text-[12px] font-semibold text-gray-500 mb-1">{confirmChange.key}</div>
+          <div className="text-[13px] text-gray-800">
+            <span className="text-gray-500">{confirmChange.before || "미설정"}</span>
+            <span className="mx-2 text-gray-300">→</span>
+            <span className="font-bold text-[#1B2B4B]">{confirmChange.after || "미설정"}</span>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <button
+            className="flex-1 py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 transition"
+            onClick={() => setConfirmChange(null)}
+          >
+            취소
+          </button>
+          <button
+            className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243d6a] transition"
+            onClick={async () => {
+              const patch = { [confirmChange.key]: confirmChange.after };
 if (confirmChange.key === "지급방식") {
   if (confirmChange.after === "취소") {
     patch.배차상태 = "배차취소";
@@ -9512,12 +9639,12 @@ if (confirmChange.key === "지급방식") {
 }
 await patchDispatch(confirmChange.rowId, patch);
 setConfirmChange(null);
-          }}
-        >
-          확인
-        </button>
+            }}
+          >
+            변경
+          </button>
+        </div>
       </div>
-
     </div>
   </div>
 )}
@@ -9697,9 +9824,9 @@ setConfirmChange(null);
       <div className="text-[11px] text-gray-400 font-semibold mb-2">화물 정보</div>
       <div className="grid grid-cols-3 gap-2 text-center">
         {[
-          { label: "화물", value: mergeViaCargoText(form.화물내용, [form.경유상차목록, form.경유지_상차, form.경유하차목록, form.경유지_하차]) },
+          { label: "화물", value: mergeViaCargoText(form.화물내용, [form.경유상차목록, form.경유하차목록]) },
           { label: "차량", value: form.차량종류 },
-          { label: "톤수", value: mergeViaTonnage(form.차량톤수, [form.경유상차목록, form.경유지_상차, form.경유하차목록, form.경유지_하차]) },
+          { label: "톤수", value: mergeViaTonnage(form.차량톤수, [form.경유상차목록, form.경유하차목록]) },
         ].map(({ label, value }) => (
           <div key={label} className="border border-gray-200 rounded-lg py-2 px-1 bg-gray-50">
             <div className="text-[13px] text-gray-400 mb-0.5">{label}</div>
@@ -10552,6 +10679,28 @@ setConfirmChange(null);
   }
   // ===================== DispatchApp.jsx (PART 3/8) — END =====================
 
+// 운임조회 공용 유틸: 상/하차지 전체 경유 포함 정류장 목록 (Part 4/5 컴포넌트에서 사용)
+// parseStops 로직을 자체 포함하여 DispatchManagement 스코프에 의존하지 않음
+function getRouteStops(row, type) {
+  const mainName = String(type === "pickup" ? (row.상차지명 || "") : (row.하차지명 || "")).trim();
+  let mainStops;
+  if (mainName) {
+    const matches = [...mainName.matchAll(/(\d+)\.\s*([^\d]+)/g)];
+    mainStops = matches.length > 0
+      ? matches.sort((a, b) => Number(a[1]) - Number(b[1])).map(m => m[2].trim())
+      : [mainName];
+  } else {
+    mainStops = [];
+  }
+  const viaKey = type === "pickup" ? "경유지_상차" : "경유지_하차";
+  const viaAlt = type === "pickup" ? "경유상차목록" : "경유하차목록";
+  const via = row[viaKey] || row[viaAlt] || [];
+  const viaNames = Array.isArray(via)
+    ? via.map(s => (typeof s === "string" ? s : (s?.업체명 || "")).trim()).filter(Boolean)
+    : [];
+  return [...mainStops, ...viaNames];
+}
+
  // ===================== DispatchApp.jsx (PART 4/8 — START) =====================
 
 /* 메뉴용 실시간배차현황 — 배차현황과 100% 동일 컬럼/순서(+주소)
@@ -10955,7 +11104,7 @@ function StopBadge({ count, list, type = "pickup", onSave, placeRows = [], timeO
                       <span className="text-[13px] font-bold text-[#1B2B4B]">{s.업체명}</span>
                     </div>
                     <div className="px-4 py-3 space-y-2">
-                      {s.주소 && <div className="flex gap-2"><span className="text-[10px] font-bold text-gray-400 w-14 shrink-0">주소</span><span className="text-[12px] text-gray-700">{s.주소}</span></div>}
+                      {s.주소 && <div className="flex gap-2"><span className="text-[10px] font-bold text-gray-400 w-14 shrink-0">주소</span><span className="text-[12px] text-gray-700 break-words min-w-0">{s.주소}</span></div>}
                       {(s.담당자||s.담당자번호) && <div className="flex gap-2"><span className="text-[10px] font-bold text-gray-400 w-14 shrink-0">담당자</span><span className="text-[12px] text-gray-700">{s.담당자}{s.담당자번호?` (${s.담당자번호})`:""}</span></div>}
                       {timeVal && <div className="flex gap-2"><span className="text-[10px] font-bold text-gray-400 w-14 shrink-0">{timeLabel}</span><span className="text-[12px] font-semibold text-[#1B2B4B]">{timeVal}</span></div>}
                       {(s.화물내용||s.차량톤수||s.톤수값) && (
@@ -11224,15 +11373,21 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
   }
 
   function handleSave() {
+    const CARGO_SFXS = ["파레트","파렛트","박스","통"];
+    const TON_SFXS = ["톤","kg","KG"];
     const finalList = editList.map(s => {
       const cargo = s.화물내용 || "";
       const cargoType = s.화물타입 || "";
       const tonVal = s.톤수값 || "";
       const tonType = s.톤수타입 || "";
+      let cargoBase = cargo;
+      for (const sfx of CARGO_SFXS) { if (cargoBase.endsWith(sfx)) { cargoBase = cargoBase.slice(0, -sfx.length).trim(); break; } }
+      let tonBase = tonVal;
+      for (const sfx of TON_SFXS) { if (tonBase.endsWith(sfx)) { tonBase = tonBase.slice(0, -sfx.length).trim(); break; } }
       return {
         ...s,
-        화물내용: cargoType && cargoType !== "없음" ? `${cargo}${cargoType}` : cargo,
-        차량톤수: tonType && tonType !== "없음" ? `${tonVal}${tonType}` : tonVal,
+        화물내용: cargoType && cargoType !== "없음" ? `${cargoBase}${cargoType}` : cargo,
+        차량톤수: tonType && tonType !== "없음" ? `${tonBase}${tonType}` : tonVal,
       };
     }).filter(s => s.업체명?.trim());
     onSave(finalList);
@@ -11329,9 +11484,22 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
             {/* 화물내용 + 타입 / 톤수 + 타입 */}
             <div className="grid grid-cols-2 gap-2">
               <div className="relative">
-                <input className={`${inputCls} pr-[62px]`} placeholder="화물내용 (예: 2)" value={stop.화물내용||""}
-                  onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();e.stopPropagation();}}}
-                  onChange={e=>{const v=e.target.value;setEditList(prev=>{const c=[...prev];c[idx].화물내용=v;return c;});}} />
+                <input className={`${inputCls} pr-[62px]`}
+                  placeholder={(stop.화물타입&&stop.화물타입!=="없음")?"숫자만 입력":"화물내용 (예: 2)"}
+                  value={(stop.화물타입&&stop.화물타입!=="없음")
+                    ?String(stop.화물내용||"").replace(/(파레트|파렛트|박스|통)$/,"").trim()
+                    :(stop.화물내용||"")}
+                  onKeyDown={e=>{
+                    if(e.key==="Enter"){e.preventDefault();e.stopPropagation();}
+                    if(stop.화물타입&&stop.화물타입!=="없음"){
+                      if(!/[\d]/.test(e.key)&&!["Backspace","Delete","Tab","ArrowLeft","ArrowRight","Home","End"].includes(e.key)){e.preventDefault();}
+                    }
+                  }}
+                  onChange={e=>{
+                    const isUnit=stop.화물타입&&stop.화물타입!=="없음";
+                    const v=isUnit?e.target.value.replace(/[^\d]/g,""):e.target.value;
+                    setEditList(prev=>{const c=[...prev];c[idx].화물내용=v;return c;});
+                  }} />
                 <div className="absolute top-0 right-0 h-full flex items-center pr-[1px]">
                   <select className="w-[58px] h-[calc(100%-2px)] px-1 text-[11px] font-bold rounded-r-lg bg-[#1B2B4B] text-white border-0 appearance-none cursor-pointer"
                     value={stop.화물타입??"파레트"}
@@ -11343,9 +11511,18 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
                 </div>
               </div>
               <div className="relative">
-                <input className={`${inputCls} pr-[52px]`} placeholder="톤수 (예: 1)" value={stop.톤수값||""}
-                  onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();e.stopPropagation();}}}
-                  onChange={e=>{const v=e.target.value;setEditList(prev=>{const c=[...prev];c[idx].톤수값=v;if(c[idx].톤수타입)c[idx].차량톤수=`${v}${c[idx].톤수타입}`;return c;});}} />
+                <input className={`${inputCls} pr-[52px]`}
+                  placeholder={stop.톤수타입?"톤수 (예: 1)":"예: 5톤 또는 소형"}
+                  value={stop.톤수타입?(stop.톤수값||""):(stop.차량톤수||"")}
+                  onKeyDown={e=>{
+                    if(e.key==="Enter"){e.preventDefault();e.stopPropagation();}
+                    if(stop.톤수타입){if(!/[\d.,]/.test(e.key)&&!["Backspace","Delete","Tab","ArrowLeft","ArrowRight","Home","End"].includes(e.key)){e.preventDefault();}}
+                  }}
+                  onChange={e=>{
+                    const hasType=!!stop.톤수타입;
+                    const v=hasType?e.target.value.replace(/[^\d.]/g,""):e.target.value;
+                    setEditList(prev=>{const c=[...prev];if(hasType){c[idx].톤수값=v;c[idx].차량톤수=`${v}${c[idx].톤수타입}`;}else{c[idx].차량톤수=v;c[idx].톤수값=v;}return c;});
+                  }} />
                 <div className="absolute top-0 right-0 h-full flex items-center pr-[1px]">
                   <select className="w-[48px] h-[calc(100%-2px)] px-1 text-[11px] font-bold rounded-r-lg bg-[#1B2B4B] text-white border-0 appearance-none cursor-pointer"
                     value={stop.톤수타입??"톤"}
@@ -11434,6 +11611,31 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
   );
 }
 // ===================== /StopEditModal =====================
+
+// ===================== WaypointSection (경유 추가/수정 통합) =====================
+function WaypointSection({ stops = [], type = "pickup", onSave, placeRows = [], timeOptions = [], className = "" }) {
+  const [addOpen, setAddOpen] = React.useState(false);
+  const label = type === "pickup" ? "상차경유지" : "하차경유지";
+  return (
+    <>
+      <div className={`flex items-center gap-2 ${className}`}>
+        <span className="text-[12px] text-gray-500 font-medium">{label}</span>
+        {stops.length > 0
+          ? <StopBadge count={stops.length} list={stops} type={type} placeRows={placeRows} timeOptions={timeOptions} onSave={onSave} />
+          : <button type="button" onClick={() => setAddOpen(true)}
+              className="text-[11px] font-bold px-2.5 py-1 rounded-full border transition bg-white text-[#1B2B4B] border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white">
+              + 경유
+            </button>
+        }
+      </div>
+      <StopEditModal open={addOpen} onClose={() => setAddOpen(false)}
+        onSave={newList => { onSave(newList); setAddOpen(false); }}
+        list={[]} type={type} placeRows={placeRows} timeOptions={timeOptions} />
+    </>
+  );
+}
+// ===================== /WaypointSection =====================
+
 function DeliveryStatusBadge({ row, onConfirm }) {
   const status = row.업체전달상태 || "미전달";
   const isOn = status === "전달완료";
@@ -11533,7 +11735,7 @@ const BANCHAN_NOTICE = ``;
     Object.fromEntries(
       Object.entries(obj).filter(([, v]) => v !== undefined)
     );
-  const isAdmin = role === "admin";
+  const isAdmin = role === "admin" || role === "totalMaster";
   // ==========================
   // 🔥 거래처 자동완성 전체 풀 (clients + dispatchData)
   // ==========================
@@ -11897,14 +12099,14 @@ const hasPickupStopsD = pickupStopsD.length > 0;
 const hasDropStopsD = dropStopsD.length > 0;
 
 // 상차 텍스트 (경유 있으면 번호 붙임)
-const pickupMainNumD = hasPickupStopsD ? `${pickupStopsD.length + 1}.` : "";
+const pickupMainNumD = hasPickupStopsD ? `1.` : "";
 const pickupStopsTextD = hasPickupStopsD
   ? pickupStopsD.map((s, i) => {
     const cargo = _cargoText(s);
     const ton = _tonText(s);
-    return `${i + 1}.상차경유지 : ${s.업체명 || "-"}
+    return `${i + 2}.상차경유지 : ${s.업체명 || "-"}
 ${s.주소 || "-"}${s.담당자 ? `\n담당자 : ${s.담당자}${s.담당자번호 ? ` (${formatPhone(s.담당자번호)})` : ""}` : ""}${s.상차시간 ? `\n상차시간 : ${s.상차시간}` : ""}${cargo ? `\n화물내용 : ${cargo}` : ""}${ton ? `\n화물톤수 : ${ton}` : ""}${s.방법 ? `\n상차방법 : ${s.방법}` : ""}`;
-  }).join("\n")
+  }).join("\n\n")
   : "";
 
 // 하차 텍스트
@@ -11915,7 +12117,7 @@ const dropStopsTextD = hasDropStopsD
     const ton = _tonText(s);
     return `${i + 1}.하차경유지 : ${s.업체명 || "-"}
 ${s.주소 || "-"}${s.담당자 ? `\n담당자 : ${s.담당자}${s.담당자번호 ? ` (${formatPhone(s.담당자번호)})` : ""}` : ""}${s.하차시간 ? `\n하차시간 : ${s.하차시간}` : ""}${cargo ? `\n화물내용 : ${cargo}` : ""}${ton ? `\n화물톤수 : ${ton}` : ""}${s.방법 ? `\n하차방법 : ${s.방법}` : ""}`;
-  }).join("\n")
+  }).join("\n\n")
   : "";
 const uploadUrl = `${window.location.origin}/upload?id=${r._id}`;
 
@@ -11932,8 +12134,10 @@ const _sc4d=(main,stops)=>{const all=[main,...stops.map(_cargoText)].filter(Bool
 const _totKg4d=_pkg4d(r.차량톤수)+dropStopsD.reduce((a,s)=>a+_pkg4d(_tonText(s)),0)+pickupStopsD.reduce((a,s)=>a+_pkg4d(_tonText(s)),0);
 const _totTon4d=_fkg4d(_totKg4d)||r.차량톤수||"-";
 const _totCargo4d=_sc4d(r.화물내용,[...pickupStopsD,...dropStopsD])||r.화물내용||"";
-const _mainDCargo4d=(hasDropStopsD||hasPickupStopsD)&&r.화물내용?`\n화물내용 : ${r.화물내용}`:"";
-const _mainDTon4d=(hasDropStopsD||hasPickupStopsD)&&r.차량톤수?`\n화물톤수 : ${r.차량톤수}`:"";
+const _mainPCargo4d=hasPickupStopsD&&r.화물내용?`\n화물내용 : ${r.화물내용}`:"";
+const _mainPTon4d=hasPickupStopsD&&r.차량톤수?`\n화물톤수 : ${r.차량톤수}`:"";
+const _mainDCargo4d=hasPickupStopsD?(_totCargo4d?`\n화물내용 : ${_totCargo4d}`:""): (hasDropStopsD&&r.화물내용?`\n화물내용 : ${r.화물내용}`:"");
+const _mainDTon4d=hasPickupStopsD?(_totTon4d?`\n화물톤수 : ${_totTon4d}`:""):(hasDropStopsD&&r.차량톤수?`\n화물톤수 : ${r.차량톤수}`:"");
 
 return `[파렛전표/거래명세서 업로드]
 미 전송시 운임 지연 될 수 있습니다.
@@ -11942,9 +12146,9 @@ ${uploadUrl}
 
 ${dateNotice}${dateText}
 
-${pickupStopsTextD ? pickupStopsTextD + "\n\n" : ""}${pickupMainNumD}상차 : ${r.상차지명 || "-"} / ${r.상차시간 || "즉시"}${r.상차시간기준 ? ` (${r.상차시간기준})` : ""}
-${r.상차지주소 || ""}${(() => { const line = buildContactLine(r.상차지담당자, r.상차지담당자번호); return line ? `\n${line}` : ""; })()}
-상차방법 : ${r.상차방법 || "-"}
+${pickupMainNumD}상차 : ${r.상차지명 || "-"} / ${r.상차시간 || "즉시"}${r.상차시간기준 ? ` (${r.상차시간기준})` : ""}
+${r.상차지주소 || ""}${(() => { const line = buildContactLine(r.상차지담당자, r.상차지담당자번호); return line ? `\n${line}` : ""; })()}${_mainPCargo4d}${_mainPTon4d}
+상차방법 : ${r.상차방법 || "-"}${pickupStopsTextD ? "\n\n" + pickupStopsTextD : ""}
 
 ${dropStopsTextD ? dropStopsTextD + "\n\n" : ""}${dropMainNumD}하차 : ${r.하차지명 || "-"} / ${dropTimeText}${r.하차시간기준 ? ` (${r.하차시간기준})` : ""}
 ${r.하차지주소 || ""}${(() => { const line = buildContactLine(r.하차지담당자, r.하차지담당자번호); return line ? `\n${line}` : ""; })()}${_mainDCargo4d}${_mainDTon4d}
@@ -12035,14 +12239,14 @@ const dropStops = _safeStopsF(r.경유하차목록 || r.경유지_하차)
 const hasPickupStops = pickupStops.length > 0;
 const hasDropStops = dropStops.length > 0;
 
-const pickupMainNum = hasPickupStops ? `${pickupStops.length + 1}.` : "";
+const pickupMainNum = hasPickupStops ? `1.` : "";
 const pickupStopsText = hasPickupStops
   ? pickupStops.map((s, i) => {
     const cargo = _cargoTextF(s);
     const ton = _tonTextF(s);
-    return `${i + 1}.상차경유지 : ${s.업체명 || "-"}
+    return `${i + 2}.상차경유지 : ${s.업체명 || "-"}
 ${s.주소 || "-"}${s.담당자 ? `\n담당자 : ${s.담당자}${s.담당자번호 ? ` (${formatPhone(s.담당자번호)})` : ""}` : ""}${s.상차시간 ? `\n상차시간 : ${s.상차시간}` : ""}${cargo ? `\n화물내용 : ${cargo}` : ""}${ton ? `\n화물톤수 : ${ton}` : ""}${s.방법 ? `\n상차방법 : ${s.방법}` : ""}`;
-  }).join("\n")
+  }).join("\n\n")
   : "";
 
 const dropMainNum = hasDropStops ? `${dropStops.length + 1}.` : "";
@@ -12052,7 +12256,7 @@ const dropStopsText = hasDropStops
     const ton = _tonTextF(s);
     return `${i + 1}.하차경유지 : ${s.업체명 || "-"}
 ${s.주소 || "-"}${s.담당자 ? `\n담당자 : ${s.담당자}${s.담당자번호 ? ` (${formatPhone(s.담당자번호)})` : ""}` : ""}${s.하차시간 ? `\n하차시간 : ${s.하차시간}` : ""}${cargo ? `\n화물내용 : ${cargo}` : ""}${ton ? `\n화물톤수 : ${ton}` : ""}${s.방법 ? `\n하차방법 : ${s.방법}` : ""}`;
-  }).join("\n")
+  }).join("\n\n")
   : "";
 
 const _pkg4f=(str)=>{const s=String(str||"").trim();if(!s)return 0;const kg=s.match(/([\d.]+)\s*kg/i);if(kg)return parseFloat(kg[1]);const ton=s.match(/([\d.]+)/);return ton?parseFloat(ton[1])*1000:0;};
@@ -12061,15 +12265,17 @@ const _sc4f=(main,stops)=>{const all=[main,...stops.map(_cargoTextF)].filter(Boo
 const _totKg4f=_pkg4f(r.차량톤수)+dropStops.reduce((a,s)=>a+_pkg4f(_tonTextF(s)),0)+pickupStops.reduce((a,s)=>a+_pkg4f(_tonTextF(s)),0);
 const _totTon4f=_fkg4f(_totKg4f)||r.차량톤수||"-";
 const _totCargo4f=_sc4f(r.화물내용,[...pickupStops,...dropStops])||r.화물내용||"";
-const _mainDCargo4f=(hasDropStops||hasPickupStops)&&r.화물내용?`\n화물내용 : ${r.화물내용}`:"";
-const _mainDTon4f=(hasDropStops||hasPickupStops)&&r.차량톤수?`\n화물톤수 : ${r.차량톤수}`:"";
+const _mainPCargo4f=hasPickupStops&&r.화물내용?`\n화물내용 : ${r.화물내용}`:"";
+const _mainPTon4f=hasPickupStops&&r.차량톤수?`\n화물톤수 : ${r.차량톤수}`:"";
+const _mainDCargo4f=hasPickupStops?(_totCargo4f?`\n화물내용 : ${_totCargo4f}`:""):(hasDropStops&&r.화물내용?`\n화물내용 : ${r.화물내용}`:"");
+const _mainDTon4f=hasPickupStops?(_totTon4f?`\n화물톤수 : ${_totTon4f}`:""):(hasDropStops&&r.차량톤수?`\n화물톤수 : ${r.차량톤수}`:"");
 
 return `${dateNotice}${r.상차일 || ""} ${yoil}
 
-${pickupStopsText ? pickupStopsText + "\n\n" : ""}${pickupMainNum}상차지 : ${r.상차지명 || "-"}
-${r.상차지주소 || "-"}${pickupContact ? `\n${pickupContact}` : ""}
+${pickupMainNum}상차지 : ${r.상차지명 || "-"}
+${r.상차지주소 || "-"}${pickupContact ? `\n${pickupContact}` : ""}${_mainPCargo4f}${_mainPTon4f}
 상차시간 : ${pickupTime}${r.상차시간기준 ? ` (${r.상차시간기준})` : ""}
-상차방법 : ${r.상차방법 || "-"}
+상차방법 : ${r.상차방법 || "-"}${pickupStopsText ? "\n\n" + pickupStopsText : ""}
 
 ${dropStopsText ? dropStopsText + "\n\n" : ""}${dropMainNum}하차지 : ${r.하차지명 || "-"}
 ${r.하차지주소 || "-"}${dropContact ? `\n${dropContact}` : ""}${_mainDCargo4f}${_mainDTon4f}
@@ -12265,6 +12471,17 @@ const selectedSet = React.useMemo(() => new Set(selected), [selected]);
     return () => { document.removeEventListener("click", close); document.removeEventListener("keydown", onKey); };
   }, [contextMenu]);
 
+  // ===================== 운임조회 (컨텍스트메뉴 Part 4) =====================
+  const [ctxFare4Target, setCtxFare4Target] = React.useState(null);
+  const [ctxFare4PanelOpen, setCtxFare4PanelOpen] = React.useState(false);
+  const [ctxFare4Result, setCtxFare4Result] = React.useState(null);
+  const [ctxNoHistory4Open, setCtxNoHistory4Open] = React.useState(false);
+  const [ctxAddrSearch4Open, setCtxAddrSearch4Open] = React.useState(false);
+  const [ctxAddrPickup4, setCtxAddrPickup4] = React.useState("");
+  const [ctxAddrDrop4, setCtxAddrDrop4] = React.useState("");
+  const [ctxAddrAllClients4, setCtxAddrAllClients4] = React.useState(false);
+  const [ctxAddrResults4, setCtxAddrResults4] = React.useState([]);
+
   // ===================== 일마감 상태 =====================
   const [dailyCloseOpen, setDailyCloseOpen] = React.useState(false);
   const [dailyCloseResult, setDailyCloseResult] = React.useState(null);
@@ -12286,10 +12503,16 @@ const selectedSet = React.useMemo(() => new Set(selected), [selected]);
     const targetVehicle = String(row.차량종류 || "").trim();
     const isColdVehicle = targetVehicle.includes("냉장") || targetVehicle.includes("냉동");
 
-    // 🔥 1단계: 상/하차지 + 차량종류(냉장/냉동 그룹) 필터
+    // 🔥 1단계: 상/하차지 + 차량종류(냉장/냉동 그룹) 필터 (경유지 포함 정확매칭)
+    const inputPickupStops = getRouteStops(row, "pickup");
+    const inputDropStops = getRouteStops(row, "drop");
+    const sameStops = (a, b) => a.length === b.length && a.every((n, i) => n.trim() === b[i].trim());
     const base = (dispatchData || []).filter(r => {
       if (!r.청구운임) return false;
-      if (!(String(r.상차지명 || "").includes(pickup) && String(r.하차지명 || "").includes(drop))) return false;
+      const rPickupStops = getRouteStops(r, "pickup");
+      const rDropStops = getRouteStops(r, "drop");
+      if (!sameStops(inputPickupStops, rPickupStops)) return false;
+      if (!sameStops(inputDropStops, rDropStops)) return false;
       const rv = String(r.차량종류 || "");
       const rCold = rv.includes("냉장") || rv.includes("냉동");
       return isColdVehicle ? rCold : !rCold;
@@ -12366,9 +12589,13 @@ setFarePanelOpen(true);
     const targetVehicle = String(copyTarget.차량종류 || "").trim();
     const isColdVehicle = targetVehicle.includes("냉장") || targetVehicle.includes("냉동");
 
+    const _copyPickupStops = getRouteStops(copyTarget, "pickup");
+    const _copyDropStops = getRouteStops(copyTarget, "drop");
+    const _copySameStops = (a, b) => a.length === b.length && a.every((n, i) => n.trim() === b[i].trim());
     const base = (dispatchData || []).filter(r => {
       if (!r.청구운임) return false;
-      if (!(String(r.상차지명 || "").includes(pickup) && String(r.하차지명 || "").includes(drop))) return false;
+      if (!_copySameStops(_copyPickupStops, getRouteStops(r, "pickup"))) return false;
+      if (!_copySameStops(_copyDropStops, getRouteStops(r, "drop"))) return false;
       const rv = String(r.차량종류 || "");
       const rCold = rv.includes("냉장") || rv.includes("냉동");
       return isColdVehicle ? rCold : !rCold;
@@ -12474,6 +12701,149 @@ React.useEffect(() => {
   window.addEventListener("keydown", handleKeyDown);
   return () => window.removeEventListener("keydown", handleKeyDown);
 }, [copyFarePanelOpen]);
+
+  // ── 운임조회 컨텍스트메뉴 유틸 ──
+  function extractAddrArea(addr) {
+    const s = String(addr || "").trim();
+    if (!s) return "";
+    const parts = s.split(/\s+/);
+    const result = [];
+    for (const p of parts) {
+      if (result.length >= 2) break;
+      if (/[로길]$/.test(p) || /^\d/.test(p)) break;
+      result.push(p);
+    }
+    return result.join(" ");
+  }
+
+  function scoreCtxFareRow(r, targetRow) {
+    let score = 0;
+    const targetCargo = String(targetRow.화물내용 || "").trim();
+    const targetTonNum = parseFloat((String(targetRow.차량톤수 || "").match(/[\d.]+/) || [])[0]) || 0;
+    if (targetCargo && r.화물내용) {
+      if (r.화물내용 === targetCargo) score += 100;
+      else if (r.화물내용.includes(targetCargo) || targetCargo.includes(r.화물내용)) score += 50;
+    }
+    const rTon = parseFloat((String(r.차량톤수 || "").match(/[\d.]+/) || [])[0]) || 0;
+    const tonDiff = Math.abs(rTon - targetTonNum);
+    if (tonDiff === 0 && targetTonNum > 0) score += 80;
+    else if (tonDiff <= 1) score += 40;
+    else if (tonDiff <= 3) score += 10;
+    return score;
+  }
+
+  function getVehicleGroup(vehicleType) {
+    const v = String(vehicleType || "");
+    if (v.includes("냉장") || v.includes("냉동")) return "cold";
+    if (v.includes("오토바이") || v.includes("바이크")) return "motorcycle";
+    return "general";
+  }
+
+  const handleCtxFareSearch4 = (row) => {
+    const pickup = String(row.상차지명 || "").trim();
+    const drop = String(row.하차지명 || "").trim();
+    if (!pickup || !drop) { showAlert("상/하차지 정보가 없습니다."); return; }
+
+    const targetGroup = getVehicleGroup(row.차량종류);
+    const targetClient = String(row.거래처 || "").trim();
+    const targetCargo = String(row.화물내용 || "").trim();
+    const targetTon = String(row.차량톤수 || "").trim();
+
+    const _ctx4PickupStops = getRouteStops(row, "pickup");
+    const _ctx4DropStops = getRouteStops(row, "drop");
+    const _ctx4Same = (a, b) => a.length === b.length && a.every((n, i) => n.trim() === b[i].trim());
+    const base = (dispatchData || []).filter(r => {
+      if (!r.청구운임) return false;
+      if (!_ctx4Same(_ctx4PickupStops, getRouteStops(r, "pickup"))) return false;
+      if (!_ctx4Same(_ctx4DropStops, getRouteStops(r, "drop"))) return false;
+      const rGroup = getVehicleGroup(r.차량종류);
+      return rGroup === targetGroup;
+    });
+
+    if (!base.length) {
+      setCtxFare4Target(row);
+      setCtxAddrPickup4(extractAddrArea(row.상차지주소 || row.상차지명));
+      setCtxAddrDrop4(extractAddrArea(row.하차지주소 || row.하차지명));
+      setCtxAddrAllClients4(false);
+      setCtxAddrResults4([]);
+      setCtxNoHistory4Open(true);
+      return;
+    }
+
+    const scored = base.map(r => {
+      const cargoMatch = targetCargo && r.화물내용 && r.화물내용.includes(targetCargo);
+      const tonMatch = targetTon && r.차량톤수 && r.차량톤수 === targetTon;
+      return {
+        ...r,
+        _score: (cargoMatch ? 100 : 0) + (tonMatch ? 100 : 0),
+        _match: { cargo: cargoMatch, ton: tonMatch },
+        _time: r.updatedAt || r.등록일 || 0,
+      };
+    });
+    scored.sort((a, b) => b._score !== a._score ? b._score - a._score : b._time - a._time);
+
+    const fares = scored.map(r => Number(String(r.청구운임 || "0").replace(/[^\d]/g, "")));
+    setCtxFare4Target(row);
+    setCtxFare4Result({
+      records: scored,
+      count: fares.length,
+      avg: Math.round(fares.reduce((a, b) => a + b, 0) / fares.length),
+      min: Math.min(...fares),
+      max: Math.max(...fares),
+    });
+    setCtxFare4PanelOpen(true);
+  };
+
+  const handleCtxAddrSearch4 = () => {
+    const row = ctxFare4Target;
+    const pickupKw = ctxAddrPickup4.trim();
+    const dropKw = ctxAddrDrop4.trim();
+    if (!pickupKw || !dropKw) { showAlert("상차지역과 하차지역을 입력해주세요."); return; }
+
+    const targetGroup = row ? getVehicleGroup(row.차량종류) : "general";
+    const targetClient = row ? String(row.거래처 || "").trim() : "";
+
+    const base = (dispatchData || []).filter(r => {
+      if (!r.청구운임) return false;
+      const rPickup = String(r.상차지명 || "") + " " + String(r.상차지주소 || "");
+      const rDrop = String(r.하차지명 || "") + " " + String(r.하차지주소 || "");
+      if (!rPickup.includes(pickupKw)) return false;
+      if (!rDrop.includes(dropKw)) return false;
+      const rGroup = getVehicleGroup(r.차량종류);
+      if (rGroup !== targetGroup) return false;
+      if (!ctxAddrAllClients4 && targetClient && String(r.거래처 || "").trim() !== targetClient) return false;
+      return true;
+    });
+
+    if (!base.length) {
+      setCtxAddrResults4([]);
+      showAlert("해당 조건의 운임 이력이 없습니다.");
+      return;
+    }
+
+    const scored = base.map(r => ({
+      ...r,
+      _score: row ? scoreCtxFareRow(r, row) : 0,
+      _match: {
+        cargo: row && String(row.화물내용 || "").trim() && r.화물내용 && r.화물내용.includes(String(row.화물내용 || "").trim()),
+        ton: row && String(row.차량톤수 || "").trim() && r.차량톤수 === String(row.차량톤수 || "").trim(),
+      },
+      _time: r.updatedAt || r.등록일 || 0,
+    }));
+    scored.sort((a, b) => b._score !== a._score ? b._score - a._score : b._time - a._time);
+
+    const fares = scored.map(r => Number(String(r.청구운임 || "0").replace(/[^\d]/g, "")));
+    setCtxFare4Result({
+      records: scored,
+      count: fares.length,
+      avg: Math.round(fares.reduce((a, b) => a + b, 0) / fares.length),
+      min: Math.min(...fares),
+      max: Math.max(...fares),
+    });
+    setCtxAddrResults4(scored);
+    setCtxAddrSearch4Open(false);
+    setCtxFare4PanelOpen(true);
+  };
 
   // 🔵 동일 노선 추천 리스트
   const [similarOrders, setSimilarOrders] = React.useState([]);
@@ -14798,9 +15168,9 @@ const head = isDark
     if(_hasVia)row["경유 상차지"]=_via(_merge(r,"경유상차목록","경유지_상차"));
     row.하차지명=r.하차지명||"";
     if(_hasVia)row["경유 하차지"]=_via(_merge(r,"경유하차목록","경유지_하차"));
-    row.화물내용=mergeViaCargoText(r.화물내용,[r.경유상차목록,r.경유지_상차,r.경유하차목록,r.경유지_하차])||"";
+    row.화물내용=mergeViaCargoText(r.화물내용,[r.경유상차목록,r.경유하차목록])||"";
     row.차량종류=r.차량종류||"";
-    row.차량톤수=mergeViaTonnage(r.차량톤수,[r.경유상차목록,r.경유지_상차,r.경유하차목록,r.경유지_하차])||"";
+    row.차량톤수=mergeViaTonnage(r.차량톤수,[r.경유상차목록,r.경유하차목록])||"";
     Object.assign(row,{차량번호:r.차량번호||"",기사명:r.이름||"",전화번호:r.전화번호||"",배차상태:r.배차상태||"",청구운임:toInt(r.청구운임),기사운임:toInt(r.기사운임),수수료:toInt(r.청구운임)-toInt(r.기사운임),지급방식:r.지급방식||"",배차방식:r.배차방식||"",메모:r.메모||""});
     return row;
   });
@@ -14810,8 +15180,8 @@ const head = isDark
 </div>
 
       {/* 테이블 */}
-      <div style={{overflowX: "auto", overflowY: "unset", width: "100%"}}
-        className={`rounded-xl overflow-hidden shadow border ${isDark ? "border-gray-700" : "border-gray-200"}`}>
+      <div style={{overflowX: "visible", overflowY: "unset", width: "100%"}}
+        className={`rounded-xl overflow-visible shadow border ${isDark ? "border-gray-700" : "border-gray-200"}`}>
   <table className="w-auto min-w-max table-auto">
           <thead className={isDark ? "bg-[#0f172a]" : "bg-[#1B2B4B]"}>
             <tr>
@@ -15673,14 +16043,7 @@ checkWarningStatus(c.거래처명, "거래처");
         ].filter(s => s && (s.업체명?.trim() || s.주소?.trim()))
          .filter((s, i, arr) => arr.findIndex(x => (x.업체명 || x.주소) === (s.업체명 || s.주소)) === i);
 
-        if (!stops.length) return null;
-
-        return (
-          <div className="mt-3 flex items-center gap-2">
-            <span className="text-[12px] text-gray-500 font-medium">상차경유지</span>
-            <StopBadge count={stops.length} list={stops} type="pickup" placeRows={placeRows} timeOptions={timeOptions} onSave={(newList) => setCopyTarget(p => ({ ...p, 경유상차목록: newList, 경유지_상차: newList }))} />
-          </div>
-        );
+        return <WaypointSection stops={stops} type="pickup" onSave={(newList) => setCopyTarget(p => ({ ...p, 경유상차목록: newList, 경유지_상차: newList }))} placeRows={placeRows} timeOptions={timeOptions} className="mt-3" />;
       })()}
 
     </div>
@@ -15844,14 +16207,7 @@ checkWarningStatus(c.거래처명, "거래처");
         ].filter(s => s && (s.업체명?.trim() || s.주소?.trim()))
          .filter((s, i, arr) => arr.findIndex(x => (x.업체명 || x.주소) === (s.업체명 || s.주소)) === i);
 
-        if (!stops.length) return null;
-
-        return (
-          <div className="mt-3 flex items-center gap-2">
-            <span className="text-[12px] text-gray-500 font-medium">하차경유지</span>
-            <StopBadge count={stops.length} list={stops} type="drop" onSave={(newList) => setCopyTarget(p => ({ ...p, 경유하차목록: newList, 경유지_하차: newList }))} placeRows={placeRows} timeOptions={timeOptions} />
-          </div>
-        );
+        return <WaypointSection stops={stops} type="drop" onSave={(newList) => setCopyTarget(p => ({ ...p, 경유하차목록: newList, 경유지_하차: newList }))} placeRows={placeRows} timeOptions={timeOptions} className="mt-3" />;
       })()}
 
     </div>
@@ -16226,6 +16582,22 @@ value={copyTarget?.화물수량 || ""}
   </div>
 </section>
 
+{/* ===================== 수정이력 ===================== */}
+{Array.isArray(copyTarget.history) && copyTarget.history.length > 0 && (
+  <div className="bg-white rounded-xl border border-gray-200 px-6 py-4 shadow-sm">
+    <div className="text-[13px] font-bold text-[#1B2B4B] mb-3">수정이력</div>
+    <div className="max-h-48 overflow-y-auto space-y-2">
+      {[...copyTarget.history].reverse().map((h, i) => (
+        <div key={i} className="flex items-start gap-3 text-[12px] pb-2 border-b border-gray-50 last:border-b-0">
+          <span className="text-gray-400 whitespace-nowrap shrink-0">{new Date(h.at).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
+          <span className="text-gray-500 shrink-0">{h.user}</span>
+          <span className="text-gray-700"><span className="font-semibold">{h.field}</span>: <span className="text-gray-500">{String(h.before ?? "없음")}</span> → <span className="font-semibold text-[#1B2B4B]">{String(h.after ?? "없음")}</span></span>
+        </div>
+      ))}
+    </div>
+  </div>
+)}
+
 {/* ===================== 복사패널 운임조회 모달 ===================== */}
 {copyFarePanelOpen && fareResult && (() => {
   const fareMin = fareResult.min;
@@ -16500,19 +16872,14 @@ value={copyTarget?.화물수량 || ""}
 
             {/* ===== 헤더 ===== */}
             <div className="flex justify-between items-center px-6 py-4 bg-[#1B2B4B] rounded-t-2xl shrink-0">
-              <h3 className="text-white text-lg font-bold">선택한 오더 수정</h3>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handleFareSearch}
-                  className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold"
-                >
-                  운임조회
-                </button>
-                <button
-                  className="text-white/70 hover:text-white text-xl"
-                  onClick={() => setEditPopupOpen(false)}
-                >✕</button>
+              <div>
+                <h3 className="text-white text-[15px] font-bold">선택한 오더 수정</h3>
+                {editTarget && <p className="text-white/60 text-[12px] mt-0.5">{editTarget.거래처명} · {editTarget.상차지명} → {editTarget.하차지명}</p>}
               </div>
+              <button
+                className="text-white/70 hover:text-white text-xl"
+                onClick={() => setEditPopupOpen(false)}
+              >✕</button>
             </div>
 
             <div className="p-6 space-y-4 overflow-y-auto">
@@ -16684,12 +17051,12 @@ value={copyTarget?.화물수량 || ""}
   );
 })()}
 
-            {/* ================= 선택수정: 상태 버튼 그룹 ================= */}
+            {/* ================= 선택수정: 상태 버튼 그룹 + 운임조회 ================= */}
             <div className="flex items-center gap-2 mb-4 flex-wrap">
               <button
                 type="button"
                 onClick={() => setEditTarget((p) => ({ ...p, 긴급: !p.긴급, 운임보정: !p.긴급 ? { type: "긴급", rate: 0.2, memo: "긴급 오더" } : null }))}
-                className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all ${editTarget.긴급 ? "bg-red-600 text-white border-red-600" : "bg-white text-red-600 border-red-300 hover:bg-red-50"}`}
+                className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition-all ${editTarget.긴급 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
               >
                 긴급
               </button>
@@ -16700,24 +17067,32 @@ value={copyTarget?.화물수량 || ""}
                   setEdited((prev) => ({ ...prev, [p._id]: { ...(prev[p._id] || {}), 운행유형: next } }));
                   return { ...p, 운행유형: next };
                 })}
-                className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all ${editTarget.운행유형 === "왕복" ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-indigo-600 border-indigo-300 hover:bg-indigo-50"}`}
+                className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition-all ${editTarget.운행유형 === "왕복" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
               >
                 왕복
               </button>
               <button
                 type="button"
                 onClick={() => setEditTarget((p) => ({ ...p, 혼적: !p.혼적, 독차: p.혼적 ? p.독차 : false }))}
-                className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all ${editTarget.혼적 ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-emerald-600 border-emerald-300 hover:bg-emerald-50"}`}
+                className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition-all ${editTarget.혼적 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
               >
                 혼적
               </button>
               <button
                 type="button"
                 onClick={() => setDeliveryConfirm({ rowId: editTarget._id, before: editTarget.업체전달상태 || "미전달", after: editTarget.업체전달상태 === "전달완료" ? "미전달" : "전달완료" })}
-                className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all ${editTarget.업체전달상태 === "전달완료" ? "bg-green-600 text-white border-green-600" : "bg-white text-green-600 border-green-300 hover:bg-green-50"}`}
+                className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition-all ${editTarget.업체전달상태 === "전달완료" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
               >
                 업체전달
               </button>
+              <div className="ml-auto">
+                <button
+                  onClick={handleFareSearch}
+                  className="px-3 py-1.5 rounded-lg text-[12px] font-semibold border border-[#1B2B4B]/40 text-[#1B2B4B] hover:bg-[#1B2B4B]/10 transition"
+                >
+                  운임조회
+                </button>
+              </div>
             </div>
 
             {/* ------------------------------------------------ */}
@@ -17084,14 +17459,7 @@ value={copyTarget?.화물수량 || ""}
               ].filter(s => s?.업체명?.trim())
                .filter((s, i, arr) => arr.findIndex(x => x.업체명 === s.업체명) === i);
 
-              if (!stops.length) return null;
-
-              return (
-                <div className="mb-3 flex items-center gap-2">
-                  <span className="text-[12px] text-gray-500 font-medium">상차경유지</span>
-                  <StopBadge count={stops.length} list={stops} type="pickup" placeRows={placeRows} timeOptions={timeOptions} onSave={(newList) => setEditTarget(p => ({ ...p, 경유상차목록: newList, 경유지_상차: newList }))} />
-                </div>
-              );
+              return <WaypointSection stops={stops} type="pickup" onSave={(newList) => setEditTarget(p => ({ ...p, 경유상차목록: newList, 경유지_상차: newList }))} placeRows={placeRows} timeOptions={timeOptions} className="mb-3" />;
             })()}
 
             {/* ===================== 하차지 ===================== */}
@@ -17229,14 +17597,7 @@ value={copyTarget?.화물수량 || ""}
               ].filter(s => s?.업체명?.trim())
                .filter((s, i, arr) => arr.findIndex(x => x.업체명 === s.업체명) === i);
 
-              if (!stops.length) return null;
-
-              return (
-                <div className="mb-3 flex items-center gap-2">
-                  <span className="text-[12px] text-gray-500 font-medium">하차경유지</span>
-                  <StopBadge count={stops.length} list={stops} type="drop" placeRows={placeRows} timeOptions={timeOptions} onSave={(newList) => setEditTarget(p => ({ ...p, 경유하차목록: newList, 경유지_하차: newList }))} />
-                </div>
-              );
+              return <WaypointSection stops={stops} type="drop" onSave={(newList) => setEditTarget(p => ({ ...p, 경유하차목록: newList, 경유지_하차: newList }))} placeRows={placeRows} timeOptions={timeOptions} className="mb-3" />;
             })()}
 
             {/* ------------------------------------------------ */}
@@ -17717,41 +18078,21 @@ setEditTarget((p) => ({
               />
             </div>
 
-            {/* ===============================
-    🕘 수정 이력
-=============================== */}
+            {/* 수정이력 */}
             {Array.isArray(editTarget.history) &&
               editTarget.history.length > 0 && (
                 <div className="mt-4 border-t pt-3">
-                  <div className="text-sm font-semibold mb-2 text-gray-700">
-                    🕘 수정 이력
-                  </div>
-
-                  <div className="max-h-40 overflow-y-auto space-y-2">
+                  <div className="text-[12px] font-bold text-[#1B2B4B] mb-2">수정이력</div>
+                  <div className="max-h-40 overflow-y-auto space-y-1.5">
                     {editTarget.history
-                      .filter(h => !IGNORE_HISTORY_FIELDS.has(h.field)) // ⭐ 여기!
+                      .filter(h => !IGNORE_HISTORY_FIELDS.has(h.field))
                       .slice()
                       .reverse()
                       .map((h, i) => (
-
-                        <div
-                          key={i}
-                          className="text-xs text-gray-700 border-b pb-1"
-                        >
-                          <div className="text-gray-500">
-                            {new Date(h.at).toLocaleString()} · {h.user}
-                          </div>
-
-                          <div>
-                            <b>{h.field}</b> :{" "}
-                            <span className="text-red-600">
-                              {String(h.before ?? "없음")}
-                            </span>
-                            {" → "}
-                            <span className="text-blue-600">
-                              {String(h.after ?? "없음")}
-                            </span>
-                          </div>
+                        <div key={i} className="flex items-start gap-2 text-[11px] pb-1.5 border-b border-gray-50 last:border-b-0">
+                          <span className="text-gray-400 whitespace-nowrap shrink-0">{new Date(h.at).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
+                          <span className="text-gray-500 shrink-0">{h.user}</span>
+                          <span className="text-gray-700"><span className="font-semibold">{h.field}</span>: <span className="text-gray-400">{String(h.before ?? "없음")}</span> → <span className="font-semibold text-[#1B2B4B]">{String(h.after ?? "없음")}</span></span>
                         </div>
                       ))}
                   </div>
@@ -17775,7 +18116,7 @@ setEditTarget((p) => ({
     // ✅ 저장 직전 경유지 + 화물내용 최종 동기화
 const syncedEditTarget = {
   ...editTarget,
-  
+
   // 🔥 경유지 배열 통합 저장 (신구 필드 모두)
   경유상차목록: editTarget.경유상차목록 || editTarget.경유지_상차 || [],
   경유지_상차: editTarget.경유상차목록 || editTarget.경유지_상차 || [],
@@ -18327,6 +18668,7 @@ if (editTarget.거래처명) {
               const tonValue = ton.match(/[\d.]+/)?.[0] || "";
               const tonType = ton.includes("kg") ? "kg" : ton.includes("톤") ? "톤" : "";
               setEditTarget({ ...r, 화물내용: raw, 화물수량: cargoNum, 화물타입: cargoType, 톤수값: tonValue, 톤수타입: tonType });
+              setSelected(prev => prev.includes(r._id) ? prev : [...prev, r._id]);
               setEditPopupOpen(true);
               setContextMenu(null);
             }}
@@ -18352,6 +18694,18 @@ if (editTarget.거래처명) {
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
             일괄동기화
           </button>
+          {/* 운임조회 */}
+          <button
+            className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
+            onClick={() => {
+              const r = contextMenu.row;
+              setContextMenu(null);
+              handleCtxFareSearch4(r);
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+            운임조회
+          </button>
           <div className="border-t border-gray-100 my-1"/>
           {/* 삭제 */}
           <button
@@ -18368,6 +18722,292 @@ if (editTarget.거래처명) {
           </button>
         </div>
       )}
+
+{/* ===================== 운임조회 (Part 4) - 이력없음 확인 ===================== */}
+{ctxNoHistory4Open && (
+  <div
+    className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]"
+    tabIndex={-1}
+    ref={el => { if (el) setTimeout(() => el.focus(), 0); }}
+    onKeyDown={e => {
+      if (e.key === "Enter") { e.preventDefault(); setCtxNoHistory4Open(false); setCtxAddrSearch4Open(true); }
+      if (e.key === "Escape") setCtxNoHistory4Open(false);
+    }}
+  >
+    <div className="bg-white rounded-2xl shadow-2xl w-[440px] overflow-hidden">
+      <div className="bg-[#1B2B4B] px-6 py-4 flex items-center gap-3">
+        <div className="w-9 h-9 rounded-full bg-white/15 flex items-center justify-center shrink-0">
+          <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+        </div>
+        <div>
+          <h3 className="text-white font-bold text-[15px]">운임 이력 없음</h3>
+          <p className="text-white/60 text-[12px] mt-0.5">동일 상/하차지 운임 이력이 없습니다</p>
+        </div>
+      </div>
+      <div className="px-6 py-5">
+        <p className="text-gray-700 text-[14px] leading-relaxed">동일 상/하차지 운임 이력이 없습니다.<br/>주소로 검색하시겠습니까?</p>
+      </div>
+      <div className="px-6 pb-5 flex gap-3">
+        <button
+          className="flex-1 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-[13px] transition"
+          onClick={() => setCtxNoHistory4Open(false)}>
+          아니요
+        </button>
+        <button
+          className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white font-bold text-[13px] transition"
+          onClick={() => { setCtxNoHistory4Open(false); setCtxAddrSearch4Open(true); }}>
+          예 (Enter)
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+{/* ===================== 운임조회 (Part 4) - 주소 검색 ===================== */}
+{ctxAddrSearch4Open && (
+  <div
+    className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999999] p-4"
+    onKeyDown={e => { if (e.key === "Escape") setCtxAddrSearch4Open(false); }}
+  >
+    <div className="bg-white rounded-2xl w-[520px] max-h-[88vh] flex flex-col shadow-2xl overflow-hidden">
+      <div className="bg-[#1B2B4B] px-6 py-4 flex items-start justify-between shrink-0">
+        <div>
+          <div className="text-white font-bold text-[17px] tracking-tight">주소 운임 조회</div>
+          <div className="text-white/55 text-[12px] mt-1 font-medium">지역명으로 운임 이력을 검색합니다</div>
+        </div>
+        <button onClick={() => setCtxAddrSearch4Open(false)}
+          className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white text-xl flex items-center justify-center transition mt-0.5">
+          ×
+        </button>
+      </div>
+      <div className="px-6 py-5 border-b border-gray-100 space-y-3 shrink-0">
+        <div className="flex gap-3">
+          <div className="flex-1">
+            <label className="block text-[11px] font-bold text-gray-500 mb-1 uppercase tracking-wider">상차 지역</label>
+            <input
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/30"
+              placeholder="예: 서울 강남구"
+              value={ctxAddrPickup4}
+              onChange={e => setCtxAddrPickup4(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") handleCtxAddrSearch4(); }}
+            />
+          </div>
+          <div className="flex-1">
+            <label className="block text-[11px] font-bold text-gray-500 mb-1 uppercase tracking-wider">하차 지역</label>
+            <input
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/30"
+              placeholder="예: 경기 화성시"
+              value={ctxAddrDrop4}
+              onChange={e => setCtxAddrDrop4(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") handleCtxAddrSearch4(); }}
+            />
+          </div>
+        </div>
+        <div className="flex items-center justify-between">
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              className="w-4 h-4 accent-[#1B2B4B]"
+              checked={ctxAddrAllClients4}
+              onChange={e => setCtxAddrAllClients4(e.target.checked)}
+            />
+            <span className="text-[13px] text-gray-600 font-medium">전체 노선 조회 (거래처 무관)</span>
+          </label>
+          <button
+            className="px-5 py-2 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition active:scale-95"
+            onClick={handleCtxAddrSearch4}>
+            검색
+          </button>
+        </div>
+      </div>
+      <div className="flex-1 overflow-y-auto px-6 py-4">
+        {ctxAddrResults4.length === 0 ? (
+          <div className="text-center text-gray-400 text-[13px] py-8">검색 결과가 없습니다</div>
+        ) : (
+          <div className="space-y-2">
+            {ctxAddrResults4.map((rec, idx) => {
+              const fare = Number(String(rec.청구운임 || "0").replace(/[^\d]/g, ""));
+              const isTop = idx === 0;
+              return (
+                <div key={idx} className={`rounded-xl border overflow-hidden ${isTop ? "border-[#1B2B4B]/40" : "border-gray-200"}`}>
+                  {isTop && (
+                    <div className="bg-[#1B2B4B] px-4 py-1.5">
+                      <span className="text-yellow-300 text-[11px] font-bold">★ 최근 유사 운송</span>
+                    </div>
+                  )}
+                  <div className="px-4 py-3 bg-white">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[12px] font-bold text-gray-400">{rec.상차일}</span>
+                      <div className="flex gap-1">
+                        {rec._match?.cargo && <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-gray-700 text-white">화물일치</span>}
+                        {rec._match?.ton && <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-gray-700 text-white">톤수일치</span>}
+                      </div>
+                    </div>
+                    <div className="text-[13px] font-bold text-gray-900 mb-1">{rec.상차지명 || "-"} → {rec.하차지명 || "-"}</div>
+                    <div className="text-[12px] text-gray-400 mb-2">{rec.차량종류 || "-"} / {rec.차량톤수 || "-"}{rec.화물내용 ? ` · ${rec.화물내용}` : ""}</div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[12px] text-gray-400">기사 <span className="text-gray-700 font-bold">{rec.이름 || "-"}</span></span>
+                      <span className="text-[18px] font-extrabold text-[#1B2B4B]">{fare.toLocaleString()}원</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+      <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 shrink-0">
+        <button onClick={() => setCtxAddrSearch4Open(false)}
+          className="w-full py-2.5 rounded-xl bg-gray-200 hover:bg-gray-300 text-[#1B2B4B] text-[14px] font-bold transition">
+          닫기
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+{/* ===================== 운임조회 (Part 4) - 결과 모달 ===================== */}
+{ctxFare4PanelOpen && ctxFare4Result && (() => {
+  const fareMin = ctxFare4Result.min;
+  const fareMax = ctxFare4Result.max;
+  const fareAvg = ctxFare4Result.avg;
+  const fareRange = fareMax - fareMin || 1;
+  const getBarPct = (fare) => fareRange > 0 ? Math.min(100, Math.max(0, ((fare - fareMin) / fareRange) * 100)) : 50;
+  const getFareTag = (fare) => {
+    const pct = getBarPct(fare);
+    if (pct <= 33) return { label: "저렴", cls: "text-white bg-emerald-600 border-emerald-700 font-extrabold" };
+    if (pct <= 66) return { label: "보통", cls: "text-white bg-gray-600 border-gray-700 font-extrabold" };
+    return { label: "높음", cls: "text-white bg-orange-600 border-orange-700 font-extrabold" };
+  };
+  const isMoto = getVehicleGroup(ctxFare4Target?.차량종류) === "motorcycle";
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999999] p-4">
+      <div className="bg-white rounded-2xl w-[580px] max-h-[88vh] flex flex-col shadow-2xl overflow-hidden">
+        <div className="bg-[#1B2B4B] px-6 py-4 flex items-start justify-between shrink-0">
+          <div>
+            <div className="text-white font-bold text-[17px] tracking-tight">운임 조회 결과</div>
+            <div className="text-white/55 text-[12px] mt-1 font-medium">
+              {ctxFare4Target?.상차지명 || "-"} → {ctxFare4Target?.하차지명 || "-"}
+            </div>
+          </div>
+          <button onClick={() => setCtxFare4PanelOpen(false)}
+            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white text-xl flex items-center justify-center transition mt-0.5">
+            ×
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          {isMoto && (
+            <div className="mx-6 mt-5 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-[12px] text-amber-700 font-medium">
+              오토바이/바이크 노선은 T-Map 권장 운임을 참고하시기 바랍니다.
+            </div>
+          )}
+          <div className="px-6 py-5 border-b border-gray-100">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+                조회 운임 범위 ({ctxFare4Result.count}건)
+              </span>
+            </div>
+            <div className="flex items-baseline gap-2 mt-1 mb-4">
+              <span className="text-[30px] font-black text-[#1B2B4B] leading-none">{fareMin.toLocaleString()}</span>
+              <span className="text-[18px] font-bold text-gray-300">~</span>
+              <span className="text-[30px] font-black text-[#1B2B4B] leading-none">{fareMax.toLocaleString()}</span>
+              <span className="text-[14px] font-semibold text-gray-400 mb-0.5">원</span>
+            </div>
+            <div className="relative h-2 bg-gray-100 rounded-full mb-2">
+              <div className="absolute inset-0 bg-gray-200 rounded-full" />
+              <div className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-[#1B2B4B] border-2 border-white shadow-md z-10"
+                style={{ left: `calc(${getBarPct(fareAvg)}% - 6px)` }} />
+            </div>
+            <div className="flex justify-between text-[11px] font-semibold text-gray-400">
+              <span>최저 {fareMin.toLocaleString()}원</span>
+              <span className="text-[#1B2B4B] font-bold">평균 {fareAvg.toLocaleString()}원</span>
+              <span>최고 {fareMax.toLocaleString()}원</span>
+            </div>
+            <div className="grid grid-cols-3 gap-2 mt-4">
+              {[
+                { label: "최저 운임", sub: "가장 저렴한 이력", value: fareMin },
+                { label: "평균 운임", sub: "전체 평균 기준",   value: fareAvg },
+                { label: "최고 운임", sub: "가장 높은 이력",   value: fareMax },
+              ].map(({ label, sub, value }) => (
+                <div key={label}
+                  className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-center">
+                  <div className="text-[10px] font-bold text-gray-400 mb-1">{label}</div>
+                  <div className="text-[18px] font-extrabold text-[#1B2B4B] leading-none">{value.toLocaleString()}</div>
+                  <div className="text-[10px] text-gray-400 mt-1">{sub}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="px-6 pt-4 pb-6">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-[13px] font-extrabold text-[#1B2B4B]">과거 운송 기록</span>
+              <span className="text-[11px] font-semibold text-gray-400">유사도순 · 최신순</span>
+            </div>
+            <div className="space-y-2">
+              {ctxFare4Result.records.map((rec, idx) => {
+                const fare = Number(String(rec.청구운임 || "0").replace(/[^\d]/g, ""));
+                const { label: fareLabel, cls: fareCls } = getFareTag(fare);
+                const isTop = idx === 0;
+                const barPct = getBarPct(fare);
+                return (
+                  <div key={idx} className={`rounded-xl border overflow-hidden ${isTop ? "border-[#1B2B4B]/40" : "border-gray-150"}`}>
+                    {isTop && (
+                      <div className="bg-[#1B2B4B] px-4 py-1.5">
+                        <span className="text-yellow-300 text-[11px] font-bold">★ 최근 유사 운송</span>
+                      </div>
+                    )}
+                    <div className="px-4 py-3 bg-white">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[12px] font-bold text-gray-400">{rec.상차일}</span>
+                        <div className="flex gap-1">
+                          {(rec._match?.cargo && rec._match?.ton) && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-[#1B2B4B] text-white">최적매칭</span>
+                          )}
+                          {rec._match?.ton && !rec._match?.cargo && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-gray-700 text-white">톤수일치</span>
+                          )}
+                          {rec._match?.cargo && !rec._match?.ton && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-gray-700 text-white">화물일치</span>
+                          )}
+                          <span className={`px-2.5 py-1 text-[11px] font-extrabold rounded-full border ${fareCls}`}>{fareLabel}</span>
+                        </div>
+                      </div>
+                      <div className="text-[14px] font-extrabold text-gray-900 mb-1">
+                        {rec.상차지명 || "-"} → {rec.하차지명 || "-"}
+                      </div>
+                      <div className="text-[12px] font-semibold text-gray-400 mb-2">
+                        {rec.차량종류 || "-"} / {rec.차량톤수 || "-"}
+                        {rec.화물내용 && <span> · {rec.화물내용}</span>}
+                      </div>
+                      <div className="relative h-1.5 bg-gray-100 rounded-full mb-3">
+                        <div className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-[#1B2B4B] border-2 border-white shadow"
+                          style={{ left: `calc(${barPct}% - 5px)` }} />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div className="text-[12px] font-semibold text-gray-400">
+                          기사 <span className="text-gray-700 font-bold">{rec.이름 || "-"}</span>
+                          <span className="mx-1.5 text-gray-300">·</span>
+                          기사운임 <span className="text-gray-700 font-bold">{Number(rec.기사운임 || 0).toLocaleString()}원</span>
+                        </div>
+                        <span className="text-[20px] font-extrabold text-[#1B2B4B]">{fare.toLocaleString()}원</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+        <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 shrink-0">
+          <button onClick={() => setCtxFare4PanelOpen(false)}
+            className="w-full py-2.5 rounded-xl bg-gray-200 hover:bg-gray-300 text-[#1B2B4B] text-[14px] font-bold transition">
+            닫기
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+})()}
 
 {/* ======================= 선택삭제 확인 팝업 ======================= */}
       {deleteConfirmOpen && (
@@ -18430,98 +19070,72 @@ if (editTarget.거래처명) {
         </div>
       )}
 
-      {/* 📋 기사복사 선택 모달 */}
+      {/* 기사복사 선택 모달 */}
       {copyModalOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
-          <div className="bg-white p-6 rounded-xl shadow-lg w-[320px]">
-            <h3 className="text-lg font-bold mb-4 text-center">📋 복사 방식 선택</h3>
-
-            <div className="space-y-2">
-              <button
-                onClick={() => copyMessage("basic")}
-                className="w-full py-2 bg-gray-200 rounded hover:bg-gray-300"
-              >
+          <div className="bg-white rounded-2xl shadow-2xl w-[320px] overflow-hidden">
+            <div className="bg-[#1B2B4B] px-5 py-4">
+              <h3 className="text-white font-bold text-[15px]">복사 방식 선택</h3>
+            </div>
+            <div className="p-4 space-y-2">
+              <button onClick={() => copyMessage("basic")} className="w-full py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 transition">
                 차량번호 / 기사명 / 전화번호
               </button>
-              <button
-                onClick={() => copyMessage("fare")}
-                className="w-full py-2 bg-blue-200 rounded hover:bg-blue-300"
-              >
+              <button onClick={() => copyMessage("fare")} className="w-full py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 transition">
                 운임 포함 (부가세/선불/착불)
               </button>
-              <button
-                onClick={() => copyMessage("full")}
-                className="w-full py-2 bg-green-200 rounded hover:bg-green-300"
-              >
+              <button onClick={() => copyMessage("full")} className="w-full py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 transition">
                 전체 상세 (상하차 + 화물정보 + 차량)
               </button>
-              <button
-                onClick={() => copyMessage("driver")}
-                className="w-full py-2 bg-emerald-200 rounded hover:bg-emerald-300 font-semibold text-emerald-900"
-              >
+              <button onClick={() => copyMessage("driver")} className="w-full py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243d6a] transition">
                 기사 전달용 (상세 + 전달메시지)
               </button>
+              <button onClick={() => setCopyModalOpen(false)} className="w-full py-2 text-[12px] text-gray-400 hover:text-gray-600 transition">
+                취소
+              </button>
             </div>
-
-            <button
-              onClick={() => setCopyModalOpen(false)}
-              className="w-full mt-4 py-2 text-sm text-gray-600 hover:opacity-70"
-            >
-              취소
-            </button>
           </div>
         </div>
       )}
       {/* ===================== 🔥 즉시 변경 확인 팝업 (PART 5 이식) ===================== */}
       {confirmChange && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100000]">
-          <div className="bg-white rounded-2xl p-6 w-[380px] shadow-2xl">
-            <h3 className="text-lg font-bold text-center mb-4">
-              상태를 변경하시겠습니까?
-            </h3>
-
-            <div className="text-center text-sm mb-6">
-              <div className="font-semibold mb-1">
-                {confirmChange.key}
-              </div>
-              <div className="text-gray-500">
-                {confirmChange.before || "없음"} →
-                <span className="ml-1 text-blue-600 font-bold">
-                  {confirmChange.after}
-                </span>
-              </div>
+          <div className="bg-white rounded-2xl shadow-2xl w-[360px] overflow-hidden">
+            <div className="bg-[#1B2B4B] px-5 py-4">
+              <h3 className="text-white font-bold text-[15px]">상태 변경</h3>
             </div>
+            <div className="p-5">
+              <div className="bg-gray-50 rounded-xl px-4 py-3 mb-5 border border-gray-100">
+                <div className="text-[12px] font-semibold text-gray-500 mb-1">{confirmChange.key}</div>
+                <div className="text-[13px] text-gray-800">
+                  <span className="text-gray-500">{confirmChange.before || "없음"}</span>
+                  <span className="mx-2 text-gray-300">→</span>
+                  <span className="font-bold text-[#1B2B4B]">{confirmChange.after}</span>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button className="flex-1 py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 transition" onClick={() => setConfirmChange(null)}>취소</button>
+                <button className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243d6a] transition"
+                  onClick={async () => {
+                   const patch = {
+                      [confirmChange.key]: confirmChange.after,
+                      updatedAt: Date.now(),
+                    };
 
-            <div className="flex gap-3">
-              <button
-                className="flex-1 py-2 rounded-lg bg-gray-200 hover:bg-gray-300"
-                onClick={() => setConfirmChange(null)}
-              >
-                취소
-              </button>
+                    if (confirmChange.key === "배차상태" && confirmChange.after === "배차중") {
+                      patch.차량번호 = "";
+                      patch.이름 = "";
+                      patch.전화번호 = "";
+                    }
 
-              <button
-                className="flex-1 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
-                onClick={async () => {
-                 const patch = {
-                    [confirmChange.key]: confirmChange.after,
-                    updatedAt: Date.now(),
-                  };
-
-                  if (confirmChange.key === "배차상태" && confirmChange.after === "배차중") {
-                    patch.차량번호 = "";
-                    patch.이름 = "";
-                    patch.전화번호 = "";
-                  }
-
-                  if (confirmChange.key === "업체전달상태") {
-                    patch.업체전달일시 =
-                      confirmChange.after === "전달완료"
-                        ? Date.now()
-                        : null;
-                    patch.업체전달방법 = "수동";
-                    patch.__system = true;
-                  }
+                    if (confirmChange.key === "업체전달상태") {
+                      patch.업체전달일시 =
+                        confirmChange.after === "전달완료"
+                          ? Date.now()
+                          : null;
+                      patch.업체전달방법 = "수동";
+                      patch.__system = true;
+                    }
 if (confirmChange.key === "지급방식") {
   if (confirmChange.after === "취소") {
     patch.배차상태 = "배차취소";
@@ -18534,10 +19148,11 @@ if (confirmChange.key === "지급방식") {
 }
 await patchDispatch(confirmChange.rowId, patch);
 setConfirmChange(null);
-                }}
-              >
-                변경
-              </button>
+                  }}
+                >
+                  변경
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -20706,12 +21321,14 @@ const _totTon5d=_fkg5d(_totKg5d)||r.차량톤수||"-";
 const _totCargo5d=_sc5d(r.화물내용,[..._pStops5d,..._dStops5d])||r.화물내용||"";
 const _pHas5d=_pStops5d.length>0;
 const _dHas5d=_dStops5d.length>0;
-const _pNum5d=_pHas5d?`${_pStops5d.length+1}.`:"";
+const _pNum5d=_pHas5d?`1.`:"";
 const _dNum5d=_dHas5d?`${_dStops5d.length+1}.`:"";
-const _pStopsText5d=_pHas5d?_pStops5d.map((s,i)=>{const cargo=_ct5d(s);const ton=_tt5d(s);return`${i+1}.상차경유지 : ${s.업체명||"-"}\n${s.주소||""}${s.담당자?`\n담당자 : ${s.담당자}${s.담당자번호?` (${formatPhone(s.담당자번호)})`:""}`:``}${s.상차시간?`\n상차시간 : ${s.상차시간}`:""}${cargo?`\n화물내용 : ${cargo}`:""}${ton?`\n화물톤수 : ${ton}`:""}${s.방법?`\n상차방법 : ${s.방법}`:``}`;}).join("\n"):"";
-const _dStopsText5d=_dHas5d?_dStops5d.map((s,i)=>{const cargo=_ct5d(s);const ton=_tt5d(s);return`${i+1}.하차경유지 : ${s.업체명||"-"}\n${s.주소||""}${s.담당자?`\n담당자 : ${s.담당자}${s.담당자번호?` (${formatPhone(s.담당자번호)})`:""}`:``}${s.하차시간?`\n하차시간 : ${s.하차시간}`:""}${cargo?`\n화물내용 : ${cargo}`:""}${ton?`\n화물톤수 : ${ton}`:""}${s.방법?`\n하차방법 : ${s.방법}`:``}`;}).join("\n"):"";
-const _mainDCargo5d=(_dHas5d||_pHas5d)&&r.화물내용?`\n화물내용 : ${r.화물내용}`:"";
-const _mainDTon5d=(_dHas5d||_pHas5d)&&r.차량톤수?`\n화물톤수 : ${r.차량톤수}`:"";
+const _pStopsText5d=_pHas5d?_pStops5d.map((s,i)=>{const cargo=_ct5d(s);const ton=_tt5d(s);return`${i+2}.상차경유지 : ${s.업체명||"-"}\n${s.주소||""}${s.담당자?`\n담당자 : ${s.담당자}${s.담당자번호?` (${formatPhone(s.담당자번호)})`:""}`:``}${s.상차시간?`\n상차시간 : ${s.상차시간}`:""}${cargo?`\n화물내용 : ${cargo}`:""}${ton?`\n화물톤수 : ${ton}`:""}${s.방법?`\n상차방법 : ${s.방법}`:``}`;}).join("\n\n"):"";
+const _dStopsText5d=_dHas5d?_dStops5d.map((s,i)=>{const cargo=_ct5d(s);const ton=_tt5d(s);return`${i+1}.하차경유지 : ${s.업체명||"-"}\n${s.주소||""}${s.담당자?`\n담당자 : ${s.담당자}${s.담당자번호?` (${formatPhone(s.담당자번호)})`:""}`:``}${s.하차시간?`\n하차시간 : ${s.하차시간}`:""}${cargo?`\n화물내용 : ${cargo}`:""}${ton?`\n화물톤수 : ${ton}`:""}${s.방법?`\n하차방법 : ${s.방법}`:``}`;}).join("\n\n"):"";
+const _mainPCargo5d=_pHas5d&&r.화물내용?`\n화물내용 : ${r.화물내용}`:"";
+const _mainPTon5d=_pHas5d&&r.차량톤수?`\n화물톤수 : ${r.차량톤수}`:"";
+const _mainDCargo5d=_pHas5d?(_totCargo5d?`\n화물내용 : ${_totCargo5d}`:""): (_dHas5d&&r.화물내용?`\n화물내용 : ${r.화물내용}`:"");
+const _mainDTon5d=_pHas5d?(_totTon5d?`\n화물톤수 : ${_totTon5d}`:""):(_dHas5d&&r.차량톤수?`\n화물톤수 : ${r.차량톤수}`:"");
 
 return `[파렛전표/거래명세서 업로드]
 (파렛전표/명세서없으면 미업로드)
@@ -20720,9 +21337,9 @@ ${uploadUrl}
 
 ${dateNotice}${dateText}
 
-${_pStopsText5d ? _pStopsText5d+"\n\n" : ""}${_pNum5d}상차 : ${r.상차지명||"-"} / ${r.상차시간||"즉시"}${r.상차시간기준?` (${r.상차시간기준})`:""}
-${r.상차지주소||""}${(()=>{const line=buildContactLine(r.상차지담당자,r.상차지담당자번호);return line?`\n${line}`:""})()}
-상차방법 : ${r.상차방법||"-"}
+${_pNum5d}상차 : ${r.상차지명||"-"} / ${r.상차시간||"즉시"}${r.상차시간기준?` (${r.상차시간기준})`:""}
+${r.상차지주소||""}${(()=>{const line=buildContactLine(r.상차지담당자,r.상차지담당자번호);return line?`\n${line}`:""})()}${_mainPCargo5d}${_mainPTon5d}
+상차방법 : ${r.상차방법||"-"}${_pStopsText5d ? "\n\n" + _pStopsText5d : ""}
 
 ${_dStopsText5d ? _dStopsText5d+"\n\n" : ""}${_dNum5d}하차 : ${r.하차지명||"-"} / ${dropTimeText}${r.하차시간기준?` (${r.하차시간기준})`:""}
 ${r.하차지주소||""}${(()=>{const line=buildContactLine(r.하차지담당자,r.하차지담당자번호);return line?`\n${line}`:""})()}${_mainDCargo5d}${_mainDTon5d}
@@ -20784,21 +21401,23 @@ const _totTon5f=_fkg5f(_totKg5f)||r.차량톤수||"-";
 const _totCargo5f=_sc5f(r.화물내용,[..._pStops5f,..._dStops5f])||r.화물내용||"";
 const _pHas5f=_pStops5f.length>0;
 const _dHas5f=_dStops5f.length>0;
-const _pNum5f=_pHas5f?`${_pStops5f.length+1}.`:"";
+const _pNum5f=_pHas5f?`1.`:"";
 const _dNum5f=_dHas5f?`${_dStops5f.length+1}.`:"";
 const _pCon5f=buildContactLine(r.상차지담당자,r.상차지담당자번호);
 const _dCon5f=buildContactLine(r.하차지담당자,r.하차지담당자번호);
-const _pStopsText5f=_pHas5f?_pStops5f.map((s,i)=>{const cargo=_ct5f(s);const ton=_tt5f(s);return`${i+1}.상차경유지 : ${s.업체명||"-"}\n${s.주소||""}${s.담당자?`\n담당자 : ${s.담당자}${s.담당자번호?` (${formatPhone(s.담당자번호)})`:""}`:``}${s.상차시간?`\n상차시간 : ${s.상차시간}`:""}${cargo?`\n화물내용 : ${cargo}`:""}${ton?`\n화물톤수 : ${ton}`:""}${s.방법?`\n상차방법 : ${s.방법}`:``}`;}).join("\n"):"";
-const _dStopsText5f=_dHas5f?_dStops5f.map((s,i)=>{const cargo=_ct5f(s);const ton=_tt5f(s);return`${i+1}.하차경유지 : ${s.업체명||"-"}\n${s.주소||""}${s.담당자?`\n담당자 : ${s.담당자}${s.담당자번호?` (${formatPhone(s.담당자번호)})`:""}`:``}${s.하차시간?`\n하차시간 : ${s.하차시간}`:""}${cargo?`\n화물내용 : ${cargo}`:""}${ton?`\n화물톤수 : ${ton}`:""}${s.방법?`\n하차방법 : ${s.방법}`:``}`;}).join("\n"):"";
-const _mainDCargo5f=(_dHas5f||_pHas5f)&&r.화물내용?`\n화물내용 : ${r.화물내용}`:"";
-const _mainDTon5f=(_dHas5f||_pHas5f)&&r.차량톤수?`\n화물톤수 : ${r.차량톤수}`:"";
+const _pStopsText5f=_pHas5f?_pStops5f.map((s,i)=>{const cargo=_ct5f(s);const ton=_tt5f(s);return`${i+2}.상차경유지 : ${s.업체명||"-"}\n${s.주소||""}${s.담당자?`\n담당자 : ${s.담당자}${s.담당자번호?` (${formatPhone(s.담당자번호)})`:""}`:``}${s.상차시간?`\n상차시간 : ${s.상차시간}`:""}${cargo?`\n화물내용 : ${cargo}`:""}${ton?`\n화물톤수 : ${ton}`:""}${s.방법?`\n상차방법 : ${s.방법}`:``}`;}).join("\n\n"):"";
+const _dStopsText5f=_dHas5f?_dStops5f.map((s,i)=>{const cargo=_ct5f(s);const ton=_tt5f(s);return`${i+1}.하차경유지 : ${s.업체명||"-"}\n${s.주소||""}${s.담당자?`\n담당자 : ${s.담당자}${s.담당자번호?` (${formatPhone(s.담당자번호)})`:""}`:``}${s.하차시간?`\n하차시간 : ${s.하차시간}`:""}${cargo?`\n화물내용 : ${cargo}`:""}${ton?`\n화물톤수 : ${ton}`:""}${s.방법?`\n하차방법 : ${s.방법}`:``}`;}).join("\n\n"):"";
+const _mainPCargo5f=_pHas5f&&r.화물내용?`\n화물내용 : ${r.화물내용}`:"";
+const _mainPTon5f=_pHas5f&&r.차량톤수?`\n화물톤수 : ${r.차량톤수}`:"";
+const _mainDCargo5f=_pHas5f?(_totCargo5f?`\n화물내용 : ${_totCargo5f}`:""): (_dHas5f&&r.화물내용?`\n화물내용 : ${r.화물내용}`:"");
+const _mainDTon5f=_pHas5f?(_totTon5f?`\n화물톤수 : ${_totTon5f}`:""):(_dHas5f&&r.차량톤수?`\n화물톤수 : ${r.차량톤수}`:"");
 
         return `${dateNotice}${r.상차일||""} ${yoil}
 
-${_pStopsText5f ? _pStopsText5f+"\n\n" : ""}${_pNum5f}상차지 : ${r.상차지명||"-"}
-${r.상차지주소||"-"}${_pCon5f?`\n${_pCon5f}`:""}
+${_pNum5f}상차지 : ${r.상차지명||"-"}
+${r.상차지주소||"-"}${_pCon5f?`\n${_pCon5f}`:""}${_mainPCargo5f}${_mainPTon5f}
 상차시간 : ${pickupTime}${r.상차시간기준?` (${r.상차시간기준})`:""}
-상차방법 : ${r.상차방법||"-"}
+상차방법 : ${r.상차방법||"-"}${_pStopsText5f ? "\n\n" + _pStopsText5f : ""}
 
 ${_dStopsText5f ? _dStopsText5f+"\n\n" : ""}${_dNum5f}하차지 : ${r.하차지명||"-"}
 ${r.하차지주소||"-"}${_dCon5f?`\n${_dCon5f}`:""}${_mainDCargo5f}${_mainDTon5f}
@@ -20869,11 +21488,15 @@ if (row?.업체전달상태 !== "전달완료") {
     const cargo = String(editTarget.화물내용 || "");
     const ton = String(editTarget.차량톤수 || "");
 
-    // 1️⃣ 필터: 상/하차지 + 냉장/냉동 그룹
+    // 1️⃣ 필터: 상/하차지(경유 포함 정확매칭) + 냉장/냉동 그룹
     const _targetVehicle = String(editTarget.차량종류 || "");
     const _isColdTarget = _targetVehicle.includes("냉장") || _targetVehicle.includes("냉동");
+    const _p5EditPickup = getRouteStops(editTarget, "pickup");
+    const _p5EditDrop = getRouteStops(editTarget, "drop");
+    const _p5EditSame = (a, b) => a.length === b.length && a.every((n, i) => n.trim() === b[i].trim());
     const base = fareSourceData.filter((r) => {
-      if (!(String(r.상차지명 || "").includes(pickup) && String(r.하차지명 || "").includes(drop))) return false;
+      if (!_p5EditSame(_p5EditPickup, getRouteStops(r, "pickup"))) return false;
+      if (!_p5EditSame(_p5EditDrop, getRouteStops(r, "drop"))) return false;
       const rv = String(r.차량종류 || "");
       const rCold = rv.includes("냉장") || rv.includes("냉동");
       return _isColdTarget ? rCold : !rCold;
@@ -20942,9 +21565,13 @@ else if (palletDiff !== null) priority = 1;
 
     const _copyVehicle = String(copyTarget.차량종류 || "");
     const _isCopyCold = _copyVehicle.includes("냉장") || _copyVehicle.includes("냉동");
+    const _p5CopyPickup = getRouteStops(copyTarget, "pickup");
+    const _p5CopyDrop = getRouteStops(copyTarget, "drop");
+    const _p5CopySame = (a, b) => a.length === b.length && a.every((n, i) => n.trim() === b[i].trim());
     const base = (dispatchData || []).filter(r => {
       if (!r.청구운임) return false;
-      if (!(String(r.상차지명 || "").includes(pickup) && String(r.하차지명 || "").includes(drop))) return false;
+      if (!_p5CopySame(_p5CopyPickup, getRouteStops(r, "pickup"))) return false;
+      if (!_p5CopySame(_p5CopyDrop, getRouteStops(r, "drop"))) return false;
       const rv = String(r.차량종류 || "");
       const rCold = rv.includes("냉장") || rv.includes("냉동");
       return _isCopyCold ? rCold : !rCold;
@@ -21438,9 +22065,9 @@ if (first) {
       row["하차지주소"] = r.하차지주소 || "";
       if (_hasVia) row["경유 하차지"] = _via(_merge(r,"경유하차목록","경유지_하차"));
       Object.assign(row, {
-        화물내용: mergeViaCargoText(r.화물내용, [r.경유상차목록, r.경유지_상차, r.경유하차목록, r.경유지_하차]) || "",
+        화물내용: mergeViaCargoText(r.화물내용, [r.경유상차목록, r.경유하차목록]) || "",
         차량종류: r.차량종류 || "",
-        차량톤수: mergeViaTonnage(r.차량톤수, [r.경유상차목록, r.경유지_상차, r.경유하차목록, r.경유지_하차]) || "",
+        차량톤수: mergeViaTonnage(r.차량톤수, [r.경유상차목록, r.경유하차목록]) || "",
         차량번호: r.차량번호 || "",
         기사명: r.이름 || "",
         전화번호: r.전화번호 || "",
@@ -21774,6 +22401,158 @@ const save = {
     document.addEventListener("keydown", onKey);
     return () => { document.removeEventListener("click", close); document.removeEventListener("keydown", onKey); };
   }, [contextMenuDS]);
+
+  // ===================== 운임조회 (컨텍스트메뉴 Part 5) =====================
+  const [ctxFare5Target, setCtxFare5Target] = React.useState(null);
+  const [ctxFare5PanelOpen, setCtxFare5PanelOpen] = React.useState(false);
+  const [ctxFare5Result, setCtxFare5Result] = React.useState(null);
+  const [ctxNoHistory5Open, setCtxNoHistory5Open] = React.useState(false);
+  const [ctxAddrSearch5Open, setCtxAddrSearch5Open] = React.useState(false);
+  const [ctxAddrPickup5, setCtxAddrPickup5] = React.useState("");
+  const [ctxAddrDrop5, setCtxAddrDrop5] = React.useState("");
+  const [ctxAddrAllClients5, setCtxAddrAllClients5] = React.useState(false);
+  const [ctxAddrResults5, setCtxAddrResults5] = React.useState([]);
+
+  function extractAddrArea5(addr) {
+    const s = String(addr || "").trim();
+    if (!s) return "";
+    const parts = s.split(/\s+/);
+    const result = [];
+    for (const p of parts) {
+      if (result.length >= 2) break;
+      if (/[로길]$/.test(p) || /^\d/.test(p)) break;
+      result.push(p);
+    }
+    return result.join(" ");
+  }
+
+  function getVehicleGroup5(vehicleType) {
+    const v = String(vehicleType || "");
+    if (v.includes("냉장") || v.includes("냉동")) return "cold";
+    if (v.includes("오토바이") || v.includes("바이크")) return "motorcycle";
+    return "general";
+  }
+
+  function scoreCtxFareRow5(r, targetRow) {
+    let score = 0;
+    const targetCargo = String(targetRow.화물내용 || "").trim();
+    const targetTonNum = parseFloat((String(targetRow.차량톤수 || "").match(/[\d.]+/) || [])[0]) || 0;
+    if (targetCargo && r.화물내용) {
+      if (r.화물내용 === targetCargo) score += 100;
+      else if (r.화물내용.includes(targetCargo) || targetCargo.includes(r.화물내용)) score += 50;
+    }
+    const rTon = parseFloat((String(r.차량톤수 || "").match(/[\d.]+/) || [])[0]) || 0;
+    const tonDiff = Math.abs(rTon - targetTonNum);
+    if (tonDiff === 0 && targetTonNum > 0) score += 80;
+    else if (tonDiff <= 1) score += 40;
+    else if (tonDiff <= 3) score += 10;
+    return score;
+  }
+
+  const handleCtxFareSearch5 = (row) => {
+    const pickup = String(row.상차지명 || "").trim();
+    const drop = String(row.하차지명 || "").trim();
+    if (!pickup || !drop) { showAlert("상/하차지 정보가 없습니다."); return; }
+
+    const targetGroup = getVehicleGroup5(row.차량종류);
+    const targetCargo = String(row.화물내용 || "").trim();
+    const targetTon = String(row.차량톤수 || "").trim();
+
+    const _ctx5PickupStops = getRouteStops(row, "pickup");
+    const _ctx5DropStops = getRouteStops(row, "drop");
+    const _ctx5Same = (a, b) => a.length === b.length && a.every((n, i) => n.trim() === b[i].trim());
+    const base = (dispatchData || []).filter(r => {
+      if (!r.청구운임) return false;
+      if (!_ctx5Same(_ctx5PickupStops, getRouteStops(r, "pickup"))) return false;
+      if (!_ctx5Same(_ctx5DropStops, getRouteStops(r, "drop"))) return false;
+      const rGroup = getVehicleGroup5(r.차량종류);
+      return rGroup === targetGroup;
+    });
+
+    if (!base.length) {
+      setCtxFare5Target(row);
+      setCtxAddrPickup5(extractAddrArea5(row.상차지주소 || row.상차지명));
+      setCtxAddrDrop5(extractAddrArea5(row.하차지주소 || row.하차지명));
+      setCtxAddrAllClients5(false);
+      setCtxAddrResults5([]);
+      setCtxNoHistory5Open(true);
+      return;
+    }
+
+    const scored = base.map(r => {
+      const cargoMatch = targetCargo && r.화물내용 && r.화물내용.includes(targetCargo);
+      const tonMatch = targetTon && r.차량톤수 && r.차량톤수 === targetTon;
+      return {
+        ...r,
+        _score: (cargoMatch ? 100 : 0) + (tonMatch ? 100 : 0),
+        _match: { cargo: cargoMatch, ton: tonMatch },
+        _time: r.updatedAt || r.등록일 || 0,
+      };
+    });
+    scored.sort((a, b) => b._score !== a._score ? b._score - a._score : b._time - a._time);
+
+    const fares = scored.map(r => Number(String(r.청구운임 || "0").replace(/[^\d]/g, "")));
+    setCtxFare5Target(row);
+    setCtxFare5Result({
+      records: scored,
+      count: fares.length,
+      avg: Math.round(fares.reduce((a, b) => a + b, 0) / fares.length),
+      min: Math.min(...fares),
+      max: Math.max(...fares),
+    });
+    setCtxFare5PanelOpen(true);
+  };
+
+  const handleCtxAddrSearch5 = () => {
+    const row = ctxFare5Target;
+    const pickupKw = ctxAddrPickup5.trim();
+    const dropKw = ctxAddrDrop5.trim();
+    if (!pickupKw || !dropKw) { showAlert("상차지역과 하차지역을 입력해주세요."); return; }
+
+    const targetGroup = row ? getVehicleGroup5(row.차량종류) : "general";
+    const targetClient = row ? String(row.거래처 || "").trim() : "";
+
+    const base = (dispatchData || []).filter(r => {
+      if (!r.청구운임) return false;
+      const rPickup = String(r.상차지명 || "") + " " + String(r.상차지주소 || "");
+      const rDrop = String(r.하차지명 || "") + " " + String(r.하차지주소 || "");
+      if (!rPickup.includes(pickupKw)) return false;
+      if (!rDrop.includes(dropKw)) return false;
+      const rGroup = getVehicleGroup5(r.차량종류);
+      if (rGroup !== targetGroup) return false;
+      if (!ctxAddrAllClients5 && targetClient && String(r.거래처 || "").trim() !== targetClient) return false;
+      return true;
+    });
+
+    if (!base.length) {
+      setCtxAddrResults5([]);
+      showAlert("해당 조건의 운임 이력이 없습니다.");
+      return;
+    }
+
+    const scored = base.map(r => ({
+      ...r,
+      _score: row ? scoreCtxFareRow5(r, row) : 0,
+      _match: {
+        cargo: row && String(row.화물내용 || "").trim() && r.화물내용 && r.화물내용.includes(String(row.화물내용 || "").trim()),
+        ton: row && String(row.차량톤수 || "").trim() && r.차량톤수 === String(row.차량톤수 || "").trim(),
+      },
+      _time: r.updatedAt || r.등록일 || 0,
+    }));
+    scored.sort((a, b) => b._score !== a._score ? b._score - a._score : b._time - a._time);
+
+    const fares = scored.map(r => Number(String(r.청구운임 || "0").replace(/[^\d]/g, "")));
+    setCtxFare5Result({
+      records: scored,
+      count: fares.length,
+      avg: Math.round(fares.reduce((a, b) => a + b, 0) / fares.length),
+      min: Math.min(...fares),
+      max: Math.max(...fares),
+    });
+    setCtxAddrResults5(scored);
+    setCtxAddrSearch5Open(false);
+    setCtxFare5PanelOpen(true);
+  };
 
   if (!loaded) return null;
 
@@ -22380,8 +23159,11 @@ onBlur={(e) => {
           <div className="bg-slate-100 rounded-2xl shadow-2xl w-[740px] max-h-[92vh] overflow-y-auto flex flex-col">
 
             {/* ===== 헤더 ===== */}
-            <div className="flex justify-between items-center px-6 py-4 bg-[#1B2B4B] rounded-t-2xl">
-              <h3 className="text-white text-lg font-bold">선택한 오더 수정</h3>
+            <div className="flex justify-between items-center px-6 py-4 bg-[#1B2B4B] rounded-t-2xl shrink-0">
+              <div>
+                <h3 className="text-white text-[15px] font-bold">선택한 오더 수정</h3>
+                {editTarget && <p className="text-white/60 text-[12px] mt-0.5">{editTarget.거래처명} · {editTarget.상차지명} → {editTarget.하차지명}</p>}
+              </div>
               <button
                 className="text-white/70 hover:text-white text-xl"
                 onClick={() => setEditPopupOpen(false)}
@@ -22393,66 +23175,35 @@ onBlur={(e) => {
               <div className="flex items-center gap-2 mb-4 flex-wrap">
               <button type="button"
                 onClick={() => setEditTarget((p) => ({ ...p, 긴급: !p.긴급 }))}
-                className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all ${editTarget.긴급 ? "bg-red-600 text-white border-red-600" : "bg-white text-red-600 border-red-300 hover:bg-red-50"}`}>
+                className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition-all ${editTarget.긴급 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
                 긴급
               </button>
               <button type="button"
                 onClick={() => setEditTarget((p) => ({ ...p, 운행유형: p.운행유형 === "왕복" ? "편도" : "왕복" }))}
-                className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all ${editTarget.운행유형 === "왕복" ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-indigo-600 border-indigo-300 hover:bg-indigo-50"}`}>
+                className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition-all ${editTarget.운행유형 === "왕복" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
                 왕복
               </button>
               <button type="button"
                 onClick={() => setEditTarget((p) => ({ ...p, 혼적: !p.혼적, 독차: p.혼적 ? p.독차 : false }))}
-                className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all ${editTarget.혼적 ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-emerald-600 border-emerald-300 hover:bg-emerald-50"}`}>
+                className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition-all ${editTarget.혼적 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
                 혼적
               </button>
-            </div>
-            {/* ================= 업체 전달 상태 ================= */}
-            <div className="mb-4">
-              <label className="block text-sm font-semibold mb-1">
-                업체 전달 상태
-              </label>
-
-              {(() => {
-                const today = todayKST();
-
-                const d =
-                  editTarget?.상차일 ||
-                  "";
-
-                const deliveryStatus =
-                  editTarget.업체전달상태
-                    ? editTarget.업체전달상태
-                    : d && d < today
-                      ? "전달완료"
-                      : "미전달";
-
-                return (
-                  <button
-                    type="button"
-                    className={`px-3 py-1.5 text-xs font-semibold rounded border
-          ${deliveryStatus === "전달완료"
-                        ? "bg-green-100 text-green-700 border-green-400"
-                        : "bg-yellow-100 text-yellow-700 border-yellow-400"
-                      }`}
-                    onClick={() => {
-                      const next =
-                        deliveryStatus === "전달완료"
-                          ? "미전달"
-                          : "전달완료";
-
-                      setConfirmChange({
-                        id: getId(editTarget),          // ⭐ 중요
-                        field: "업체전달상태",
-                        before: deliveryStatus,
-                        after: next,
-                      });
-                    }}
-                  >
-                    {deliveryStatus}
-                  </button>
-                );
-              })()}
+              <button type="button"
+                onClick={() => {
+                  const d = editTarget?.상차일 || "";
+                  const today = todayKST();
+                  const deliveryStatus = editTarget.업체전달상태 ? editTarget.업체전달상태 : (d && d < today ? "전달완료" : "미전달");
+                  const next = deliveryStatus === "전달완료" ? "미전달" : "전달완료";
+                  setConfirmChange({ id: getId(editTarget), field: "업체전달상태", before: deliveryStatus, after: next });
+                }}
+                className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition-all ${(() => { const d = editTarget?.상차일 || ""; const today = todayKST(); return (editTarget.업체전달상태 ? editTarget.업체전달상태 : (d && d < today ? "전달완료" : "미전달")) === "전달완료"; })() ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
+                업체전달
+              </button>
+              <div className="ml-auto">
+                <button type="button" onClick={handleFareSearch} className="px-3 py-1.5 rounded-lg text-[12px] font-semibold border border-[#1B2B4B]/40 text-[#1B2B4B] hover:bg-[#1B2B4B]/10 transition">
+                  운임조회
+                </button>
+              </div>
             </div>
 
 
@@ -22827,13 +23578,7 @@ onBlur={(e) => {
               const stops = [...sp(editTarget?.경유상차목록), ...sp(editTarget?.경유지_상차)]
                 .filter(s => s?.업체명?.trim())
                 .filter((s, i, arr) => arr.findIndex(x => x.업체명 === s.업체명) === i);
-              if (!stops.length) return null;
-              return (
-                <div className="mb-3 flex items-center gap-2">
-                  <span className="text-sm font-medium text-gray-500">상차경유지</span>
-                  <StopBadge count={stops.length} list={stops} type="pickup" placeRows={placeRows} timeOptions={timeOptions} onSave={(newList) => setEditTarget(p => ({ ...p, 경유상차목록: newList, 경유지_상차: newList }))} />
-                </div>
-              );
+              return <WaypointSection stops={stops} type="pickup" onSave={(newList) => setEditTarget(p => ({ ...p, 경유상차목록: newList, 경유지_상차: newList }))} placeRows={placeRows} timeOptions={timeOptions} className="mb-3" />;
             })()}
 
             {/* ================= 하차지명 ================= */}
@@ -22976,13 +23721,7 @@ onBlur={(e) => {
               const stops = [...sp(editTarget?.경유하차목록), ...sp(editTarget?.경유지_하차)]
                 .filter(s => s?.업체명?.trim())
                 .filter((s, i, arr) => arr.findIndex(x => x.업체명 === s.업체명) === i);
-              if (!stops.length) return null;
-              return (
-                <div className="mb-3 flex items-center gap-2">
-                  <span className="text-sm font-medium text-gray-500">하차경유지</span>
-                  <StopBadge count={stops.length} list={stops} type="drop" placeRows={placeRows} timeOptions={timeOptions} onSave={(newList) => setEditTarget(p => ({ ...p, 경유하차목록: newList, 경유지_하차: newList }))} />
-                </div>
-              );
+              return <WaypointSection stops={stops} type="drop" onSave={(newList) => setEditTarget(p => ({ ...p, 경유하차목록: newList, 경유지_하차: newList }))} placeRows={placeRows} timeOptions={timeOptions} className="mb-3" />;
             })()}
 
             {/* 🔥 화물내용 (단독 한 줄) */}
@@ -23347,13 +24086,6 @@ setEditTarget((p) => ({
                 />
               </div>
             </div>
-            {/* 🔍 운임조회 */}
-           <button
-              className="px-4 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold border border-amber-500 mb-4 transition-all"
-              onClick={handleFareSearch}
-            >
-              운임조회
-            </button>
 
             {/* ------------------------------------------------ */}
             {/* 🔵 지급/배차 방식 */}
@@ -23436,41 +24168,21 @@ setEditTarget((p) => ({
               />
             </div>
 
-            {/* ===============================
-    🕘 수정 이력
-=============================== */}
+            {/* 수정이력 */}
             {Array.isArray(editTarget.history) &&
               editTarget.history.length > 0 && (
                 <div className="mt-4 border-t pt-3">
-                  <div className="text-sm font-semibold mb-2 text-gray-700">
-                    🕘 수정 이력
-                  </div>
-
-                  <div className="max-h-40 overflow-y-auto space-y-2">
+                  <div className="text-[12px] font-bold text-[#1B2B4B] mb-2">수정이력</div>
+                  <div className="max-h-40 overflow-y-auto space-y-1.5">
                     {editTarget.history
-                      .filter(h => !IGNORE_HISTORY_FIELDS.has(h.field)) // ⭐⭐⭐ 이 줄 추가
+                      .filter(h => !IGNORE_HISTORY_FIELDS.has(h.field))
                       .slice()
                       .reverse()
                       .map((h, i) => (
-
-                        <div
-                          key={i}
-                          className="text-xs text-gray-700 border-b pb-1"
-                        >
-                          <div className="text-gray-500">
-                            {new Date(h.at).toLocaleString()} · {h.user}
-                          </div>
-
-                          <div>
-                            <b>{h.field}</b> :{" "}
-                            <span className="text-red-600">
-                              {String(h.before ?? "없음")}
-                            </span>
-                            {" → "}
-                            <span className="text-blue-600">
-                              {String(h.after ?? "없음")}
-                            </span>
-                          </div>
+                        <div key={i} className="flex items-start gap-2 text-[11px] pb-1.5 border-b border-gray-50 last:border-b-0">
+                          <span className="text-gray-400 whitespace-nowrap shrink-0">{new Date(h.at).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
+                          <span className="text-gray-500 shrink-0">{h.user}</span>
+                          <span className="text-gray-700"><span className="font-semibold">{h.field}</span>: <span className="text-gray-400">{String(h.before ?? "없음")}</span> → <span className="font-semibold text-[#1B2B4B]">{String(h.after ?? "없음")}</span></span>
                         </div>
                       ))}
                   </div>
@@ -23992,13 +24704,7 @@ setCopyPlaceOptions(list);
       {(() => {
         const _sp = (v) => { if (Array.isArray(v) && v.length > 0) return v; if (typeof v === "string" && v.trim().startsWith("[")) { try { const p = JSON.parse(v); if (Array.isArray(p)) return p; } catch {} } if (v && typeof v === "object" && !Array.isArray(v)) { const ks = Object.keys(v); if (ks.length > 0 && ks.every(k => /^\d+$/.test(k))) return ks.sort((a,b)=>Number(a)-Number(b)).map(k=>v[k]); if (v.업체명) return [v]; } return []; };
         const stops = _sp(copyTarget?.경유상차목록 || copyTarget?.경유지_상차).filter(s => s && (s.업체명?.trim() || s.주소?.trim()));
-        if (!stops.length) return null;
-        return (
-          <div className="mt-1 flex items-center gap-2">
-            <span className="text-[12px] text-gray-500 font-medium">상차경유지</span>
-            <StopBadge count={stops.length} list={stops} type="pickup" placeRows={placeRows} timeOptions={timeOptions} onSave={(newList) => setCopyTarget(p => ({ ...p, 경유상차목록: newList, 경유지_상차: newList }))} />
-          </div>
-        );
+        return <WaypointSection stops={stops} type="pickup" onSave={(newList) => setCopyTarget(p => ({ ...p, 경유상차목록: newList, 경유지_상차: newList }))} placeRows={placeRows} timeOptions={timeOptions} className="mt-1" />;
       })()}
 
     </div>
@@ -24144,13 +24850,7 @@ setCopyPlaceOptions(list);
       {(() => {
         const _sp = (v) => { if (Array.isArray(v) && v.length > 0) return v; if (typeof v === "string" && v.trim().startsWith("[")) { try { const p = JSON.parse(v); if (Array.isArray(p)) return p; } catch {} } if (v && typeof v === "object" && !Array.isArray(v)) { const ks = Object.keys(v); if (ks.length > 0 && ks.every(k => /^\d+$/.test(k))) return ks.sort((a,b)=>Number(a)-Number(b)).map(k=>v[k]); if (v.업체명) return [v]; } return []; };
         const stops = _sp(copyTarget?.경유하차목록 || copyTarget?.경유지_하차).filter(s => s && (s.업체명?.trim() || s.주소?.trim()));
-        if (!stops.length) return null;
-        return (
-          <div className="mt-1 flex items-center gap-2">
-            <span className="text-[12px] text-gray-500 font-medium">하차경유지</span>
-            <StopBadge count={stops.length} list={stops} type="drop" onSave={(newList) => setCopyTarget(p => ({ ...p, 경유하차목록: newList, 경유지_하차: newList }))} placeRows={placeRows} timeOptions={timeOptions} />
-          </div>
-        );
+        return <WaypointSection stops={stops} type="drop" onSave={(newList) => setCopyTarget(p => ({ ...p, 경유하차목록: newList, 경유지_하차: newList }))} placeRows={placeRows} timeOptions={timeOptions} className="mt-1" />;
       })()}
 
     </div>
@@ -24520,6 +25220,22 @@ setCopyTarget(prev => ({
   />
   </div>
 </section>
+
+{/* ===================== 수정이력 ===================== */}
+{Array.isArray(copyTarget.history) && copyTarget.history.length > 0 && (
+  <div className="bg-white rounded-xl border border-gray-200 px-6 py-4 shadow-sm">
+    <div className="text-[13px] font-bold text-[#1B2B4B] mb-3">수정이력</div>
+    <div className="max-h-48 overflow-y-auto space-y-2">
+      {[...copyTarget.history].reverse().map((h, i) => (
+        <div key={i} className="flex items-start gap-3 text-[12px] pb-2 border-b border-gray-50 last:border-b-0">
+          <span className="text-gray-400 whitespace-nowrap shrink-0">{new Date(h.at).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
+          <span className="text-gray-500 shrink-0">{h.user}</span>
+          <span className="text-gray-700"><span className="font-semibold">{h.field}</span>: <span className="text-gray-500">{String(h.before ?? "없음")}</span> → <span className="font-semibold text-[#1B2B4B]">{String(h.after ?? "없음")}</span></span>
+        </div>
+      ))}
+    </div>
+  </div>
+)}
 
 {/* ===================== 복사패널 운임조회 모달 ===================== */}
 {copyFarePanelOpen && fareResult && (() => {
@@ -25232,47 +25948,30 @@ setCopyTarget(prev => ({
         </div>
       )}
 
-      {/* ===================== 📋 기사복사 선택 모달 ===================== */}
+      {/* 기사복사 선택 모달 */}
       {copyModalOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
-          <div className="bg-white p-6 rounded-xl shadow-lg w-[320px]">
-            <h3 className="text-lg font-bold mb-4 text-center">📋 복사 방식 선택</h3>
-
-            <div className="space-y-2">
-              <button
-                onClick={() => copyMessage("basic")}
-                className="w-full py-2 bg-gray-200 rounded hover:bg-gray-300"
-              >
-                기본(번호/이름/전화)
+          <div className="bg-white rounded-2xl shadow-2xl w-[320px] overflow-hidden">
+            <div className="bg-[#1B2B4B] px-5 py-4">
+              <h3 className="text-white font-bold text-[15px]">복사 방식 선택</h3>
+            </div>
+            <div className="p-4 space-y-2">
+              <button onClick={() => copyMessage("basic")} className="w-full py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 transition">
+                차량번호 / 기사명 / 전화번호
               </button>
-              <button
-                onClick={() => copyMessage("fare")}
-                className="w-full py-2 bg-blue-200 rounded hover:bg-blue-300"
-              >
-
-                운임 포함(부가세/선불/착불)
+              <button onClick={() => copyMessage("fare")} className="w-full py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 transition">
+                운임 포함 (부가세/선불/착불)
               </button>
-              <button
-                onClick={() => copyMessage("full")}
-                className="w-full py-2 bg-green-200 rounded hover:bg-green-300"
-              >
-                전체 상세
+              <button onClick={() => copyMessage("full")} className="w-full py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 transition">
+                전체 상세 (상하차 + 화물정보 + 차량)
               </button>
-              <button
-                onClick={() => copyMessage("driver")}
-                className="w-full py-2 bg-emerald-200 rounded hover:bg-emerald-300"
-              >
+              <button onClick={() => copyMessage("driver")} className="w-full py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243d6a] transition">
                 기사 전달용 (상세 + 전달메시지)
               </button>
+              <button onClick={() => setCopyModalOpen(false)} className="w-full py-2 text-[12px] text-gray-400 hover:text-gray-600 transition">
+                취소
+              </button>
             </div>
-
-            <button
-              onClick={() => setCopyModalOpen(false)}
-              className="w-full mt-4 py-2 text-sm text-gray-600"
-            >
-
-              취소
-            </button>
           </div>
         </div>
       )}
@@ -25299,35 +25998,41 @@ setCopyTarget(prev => ({
             }
           }}
         >
-          <div className="bg-white rounded-2xl p-6 w-[380px] shadow-2xl">
-            <h3 className="text-lg font-bold text-center mb-4">상태를 변경하시겠습니까?</h3>
-            <div className="text-center text-sm mb-6">
-              {confirmChange.reason === "copy" ? (
-                <div className="text-gray-700">전달상태를 <b className="text-blue-600">전달완료</b>로 변경할까요?</div>
-              ) : (
-                <>
-                  <div className="font-semibold mb-1">{confirmChange.field}</div>
-                  <div className="text-gray-500">
-                    {String(confirmChange.before || "없음")} → <span className="ml-1 text-blue-600 font-bold">{String(confirmChange.after || "없음")}</span>
-                  </div>
-                </>
-              )}
+          <div className="bg-white rounded-2xl shadow-2xl w-[360px] overflow-hidden">
+            <div className="bg-[#1B2B4B] px-5 py-4">
+              <h3 className="text-white font-bold text-[15px]">상태 변경</h3>
             </div>
-            <div className="flex gap-3">
-              <button className="flex-1 py-2 rounded-lg bg-gray-200 hover:bg-gray-300" onClick={() => setConfirmChange(null)}>취소 (ESC)</button>
-              <button className="flex-1 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700" onClick={async () => {
-                const patch = { [confirmChange.field]: confirmChange.after };
-                if (confirmChange.field === "업체전달상태") {
-                  patch.업체전달일시 = confirmChange.after === "전달완료" ? Date.now() : null;
-                  patch.업체전달방법 = confirmChange.after === "전달완료" ? "수동" : null;
-                  patch.__system = true;
-                }
-                if (confirmChange.field === "지급방식" && confirmChange.after === "취소") {
-                  patch.배차상태 = "배차취소";
-                }
-                await patchDispatch(confirmChange.id, patch);
-                setConfirmChange(null);
-              }}>변경</button>
+            <div className="p-5">
+              <div className="bg-gray-50 rounded-xl px-4 py-3 mb-5 border border-gray-100">
+                {confirmChange.reason === "copy" ? (
+                  <div className="text-[13px] text-gray-700">전달상태를 <span className="font-bold text-[#1B2B4B]">전달완료</span>로 변경할까요?</div>
+                ) : (
+                  <>
+                    <div className="text-[12px] font-semibold text-gray-500 mb-1">{confirmChange.field}</div>
+                    <div className="text-[13px] text-gray-800">
+                      <span className="text-gray-500">{String(confirmChange.before || "없음")}</span>
+                      <span className="mx-2 text-gray-300">→</span>
+                      <span className="font-bold text-[#1B2B4B]">{String(confirmChange.after || "없음")}</span>
+                    </div>
+                  </>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <button className="flex-1 py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 transition" onClick={() => setConfirmChange(null)}>취소</button>
+                <button className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243d6a] transition" onClick={async () => {
+                  const patch = { [confirmChange.field]: confirmChange.after };
+                  if (confirmChange.field === "업체전달상태") {
+                    patch.업체전달일시 = confirmChange.after === "전달완료" ? Date.now() : null;
+                    patch.업체전달방법 = confirmChange.after === "전달완료" ? "수동" : null;
+                    patch.__system = true;
+                  }
+                  if (confirmChange.field === "지급방식" && confirmChange.after === "취소") {
+                    patch.배차상태 = "배차취소";
+                  }
+                  await patchDispatch(confirmChange.id, patch);
+                  setConfirmChange(null);
+                }}>변경</button>
+              </div>
             </div>
           </div>
         </div>
@@ -25833,6 +26538,7 @@ setCopyTarget(prev => ({
               const tonValue = ton.match(/[\d.]+/)?.[0] || "";
               const tonType = ton.includes("kg") ? "kg" : ton.includes("톤") ? "톤" : "";
               setEditTarget({ ...r, 화물내용: raw, 화물수량: cargoNum, 화물타입: cargoType, 톤수값: tonValue, 톤수타입: tonType });
+              setSelected(prev => new Set([...prev, getId(r)]));
               setEditPopupOpen(true);
               setContextMenuDS(null);
             }}>
@@ -25852,6 +26558,16 @@ setCopyTarget(prev => ({
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
             일괄동기화
           </button>
+          {/* 운임조회 */}
+          <button className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
+            onClick={() => {
+              const r = contextMenuDS.row;
+              setContextMenuDS(null);
+              handleCtxFareSearch5(r);
+            }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+            운임조회
+          </button>
           <div className="border-t border-gray-100 my-1"/>
           <button className="w-full text-left px-4 py-2 text-[13px] text-red-600 hover:bg-red-50 flex items-center gap-2.5 transition-colors"
             onClick={() => { setSelected(new Set([getId(contextMenuDS.row)])); setShowDeletePopup(true); setContextMenuDS(null); }}>
@@ -25861,6 +26577,292 @@ setCopyTarget(prev => ({
           </button>
         </div>
       )}
+
+{/* ===================== 운임조회 (Part 5) - 이력없음 확인 ===================== */}
+{ctxNoHistory5Open && (
+  <div
+    className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]"
+    tabIndex={-1}
+    ref={el => { if (el) setTimeout(() => el.focus(), 0); }}
+    onKeyDown={e => {
+      if (e.key === "Enter") { e.preventDefault(); setCtxNoHistory5Open(false); setCtxAddrSearch5Open(true); }
+      if (e.key === "Escape") setCtxNoHistory5Open(false);
+    }}
+  >
+    <div className="bg-white rounded-2xl shadow-2xl w-[440px] overflow-hidden">
+      <div className="bg-[#1B2B4B] px-6 py-4 flex items-center gap-3">
+        <div className="w-9 h-9 rounded-full bg-white/15 flex items-center justify-center shrink-0">
+          <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+        </div>
+        <div>
+          <h3 className="text-white font-bold text-[15px]">운임 이력 없음</h3>
+          <p className="text-white/60 text-[12px] mt-0.5">동일 상/하차지 운임 이력이 없습니다</p>
+        </div>
+      </div>
+      <div className="px-6 py-5">
+        <p className="text-gray-700 text-[14px] leading-relaxed">동일 상/하차지 운임 이력이 없습니다.<br/>주소로 검색하시겠습니까?</p>
+      </div>
+      <div className="px-6 pb-5 flex gap-3">
+        <button
+          className="flex-1 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-[13px] transition"
+          onClick={() => setCtxNoHistory5Open(false)}>
+          아니요
+        </button>
+        <button
+          className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white font-bold text-[13px] transition"
+          onClick={() => { setCtxNoHistory5Open(false); setCtxAddrSearch5Open(true); }}>
+          예 (Enter)
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+{/* ===================== 운임조회 (Part 5) - 주소 검색 ===================== */}
+{ctxAddrSearch5Open && (
+  <div
+    className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999999] p-4"
+    onKeyDown={e => { if (e.key === "Escape") setCtxAddrSearch5Open(false); }}
+  >
+    <div className="bg-white rounded-2xl w-[520px] max-h-[88vh] flex flex-col shadow-2xl overflow-hidden">
+      <div className="bg-[#1B2B4B] px-6 py-4 flex items-start justify-between shrink-0">
+        <div>
+          <div className="text-white font-bold text-[17px] tracking-tight">주소 운임 조회</div>
+          <div className="text-white/55 text-[12px] mt-1 font-medium">지역명으로 운임 이력을 검색합니다</div>
+        </div>
+        <button onClick={() => setCtxAddrSearch5Open(false)}
+          className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white text-xl flex items-center justify-center transition mt-0.5">
+          ×
+        </button>
+      </div>
+      <div className="px-6 py-5 border-b border-gray-100 space-y-3 shrink-0">
+        <div className="flex gap-3">
+          <div className="flex-1">
+            <label className="block text-[11px] font-bold text-gray-500 mb-1 uppercase tracking-wider">상차 지역</label>
+            <input
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/30"
+              placeholder="예: 서울 강남구"
+              value={ctxAddrPickup5}
+              onChange={e => setCtxAddrPickup5(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") handleCtxAddrSearch5(); }}
+            />
+          </div>
+          <div className="flex-1">
+            <label className="block text-[11px] font-bold text-gray-500 mb-1 uppercase tracking-wider">하차 지역</label>
+            <input
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/30"
+              placeholder="예: 경기 화성시"
+              value={ctxAddrDrop5}
+              onChange={e => setCtxAddrDrop5(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") handleCtxAddrSearch5(); }}
+            />
+          </div>
+        </div>
+        <div className="flex items-center justify-between">
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              className="w-4 h-4 accent-[#1B2B4B]"
+              checked={ctxAddrAllClients5}
+              onChange={e => setCtxAddrAllClients5(e.target.checked)}
+            />
+            <span className="text-[13px] text-gray-600 font-medium">전체 노선 조회 (거래처 무관)</span>
+          </label>
+          <button
+            className="px-5 py-2 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition active:scale-95"
+            onClick={handleCtxAddrSearch5}>
+            검색
+          </button>
+        </div>
+      </div>
+      <div className="flex-1 overflow-y-auto px-6 py-4">
+        {ctxAddrResults5.length === 0 ? (
+          <div className="text-center text-gray-400 text-[13px] py-8">검색 결과가 없습니다</div>
+        ) : (
+          <div className="space-y-2">
+            {ctxAddrResults5.map((rec, idx) => {
+              const fare = Number(String(rec.청구운임 || "0").replace(/[^\d]/g, ""));
+              const isTop = idx === 0;
+              return (
+                <div key={idx} className={`rounded-xl border overflow-hidden ${isTop ? "border-[#1B2B4B]/40" : "border-gray-200"}`}>
+                  {isTop && (
+                    <div className="bg-[#1B2B4B] px-4 py-1.5">
+                      <span className="text-yellow-300 text-[11px] font-bold">★ 최근 유사 운송</span>
+                    </div>
+                  )}
+                  <div className="px-4 py-3 bg-white">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[12px] font-bold text-gray-400">{rec.상차일}</span>
+                      <div className="flex gap-1">
+                        {rec._match?.cargo && <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-gray-700 text-white">화물일치</span>}
+                        {rec._match?.ton && <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-gray-700 text-white">톤수일치</span>}
+                      </div>
+                    </div>
+                    <div className="text-[13px] font-bold text-gray-900 mb-1">{rec.상차지명 || "-"} → {rec.하차지명 || "-"}</div>
+                    <div className="text-[12px] text-gray-400 mb-2">{rec.차량종류 || "-"} / {rec.차량톤수 || "-"}{rec.화물내용 ? ` · ${rec.화물내용}` : ""}</div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[12px] text-gray-400">기사 <span className="text-gray-700 font-bold">{rec.이름 || "-"}</span></span>
+                      <span className="text-[18px] font-extrabold text-[#1B2B4B]">{fare.toLocaleString()}원</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+      <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 shrink-0">
+        <button onClick={() => setCtxAddrSearch5Open(false)}
+          className="w-full py-2.5 rounded-xl bg-gray-200 hover:bg-gray-300 text-[#1B2B4B] text-[14px] font-bold transition">
+          닫기
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+{/* ===================== 운임조회 (Part 5) - 결과 모달 ===================== */}
+{ctxFare5PanelOpen && ctxFare5Result && (() => {
+  const fareMin = ctxFare5Result.min;
+  const fareMax = ctxFare5Result.max;
+  const fareAvg = ctxFare5Result.avg;
+  const fareRange = fareMax - fareMin || 1;
+  const getBarPct = (fare) => fareRange > 0 ? Math.min(100, Math.max(0, ((fare - fareMin) / fareRange) * 100)) : 50;
+  const getFareTag = (fare) => {
+    const pct = getBarPct(fare);
+    if (pct <= 33) return { label: "저렴", cls: "text-white bg-emerald-600 border-emerald-700 font-extrabold" };
+    if (pct <= 66) return { label: "보통", cls: "text-white bg-gray-600 border-gray-700 font-extrabold" };
+    return { label: "높음", cls: "text-white bg-orange-600 border-orange-700 font-extrabold" };
+  };
+  const isMoto = getVehicleGroup5(ctxFare5Target?.차량종류) === "motorcycle";
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999999] p-4">
+      <div className="bg-white rounded-2xl w-[580px] max-h-[88vh] flex flex-col shadow-2xl overflow-hidden">
+        <div className="bg-[#1B2B4B] px-6 py-4 flex items-start justify-between shrink-0">
+          <div>
+            <div className="text-white font-bold text-[17px] tracking-tight">운임 조회 결과</div>
+            <div className="text-white/55 text-[12px] mt-1 font-medium">
+              {ctxFare5Target?.상차지명 || "-"} → {ctxFare5Target?.하차지명 || "-"}
+            </div>
+          </div>
+          <button onClick={() => setCtxFare5PanelOpen(false)}
+            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white text-xl flex items-center justify-center transition mt-0.5">
+            ×
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          {isMoto && (
+            <div className="mx-6 mt-5 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-[12px] text-amber-700 font-medium">
+              오토바이/바이크 노선은 T-Map 권장 운임을 참고하시기 바랍니다.
+            </div>
+          )}
+          <div className="px-6 py-5 border-b border-gray-100">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+                조회 운임 범위 ({ctxFare5Result.count}건)
+              </span>
+            </div>
+            <div className="flex items-baseline gap-2 mt-1 mb-4">
+              <span className="text-[30px] font-black text-[#1B2B4B] leading-none">{fareMin.toLocaleString()}</span>
+              <span className="text-[18px] font-bold text-gray-300">~</span>
+              <span className="text-[30px] font-black text-[#1B2B4B] leading-none">{fareMax.toLocaleString()}</span>
+              <span className="text-[14px] font-semibold text-gray-400 mb-0.5">원</span>
+            </div>
+            <div className="relative h-2 bg-gray-100 rounded-full mb-2">
+              <div className="absolute inset-0 bg-gray-200 rounded-full" />
+              <div className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-[#1B2B4B] border-2 border-white shadow-md z-10"
+                style={{ left: `calc(${getBarPct(fareAvg)}% - 6px)` }} />
+            </div>
+            <div className="flex justify-between text-[11px] font-semibold text-gray-400">
+              <span>최저 {fareMin.toLocaleString()}원</span>
+              <span className="text-[#1B2B4B] font-bold">평균 {fareAvg.toLocaleString()}원</span>
+              <span>최고 {fareMax.toLocaleString()}원</span>
+            </div>
+            <div className="grid grid-cols-3 gap-2 mt-4">
+              {[
+                { label: "최저 운임", sub: "가장 저렴한 이력", value: fareMin },
+                { label: "평균 운임", sub: "전체 평균 기준",   value: fareAvg },
+                { label: "최고 운임", sub: "가장 높은 이력",   value: fareMax },
+              ].map(({ label, sub, value }) => (
+                <div key={label}
+                  className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-center">
+                  <div className="text-[10px] font-bold text-gray-400 mb-1">{label}</div>
+                  <div className="text-[18px] font-extrabold text-[#1B2B4B] leading-none">{value.toLocaleString()}</div>
+                  <div className="text-[10px] text-gray-400 mt-1">{sub}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="px-6 pt-4 pb-6">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-[13px] font-extrabold text-[#1B2B4B]">과거 운송 기록</span>
+              <span className="text-[11px] font-semibold text-gray-400">유사도순 · 최신순</span>
+            </div>
+            <div className="space-y-2">
+              {ctxFare5Result.records.map((rec, idx) => {
+                const fare = Number(String(rec.청구운임 || "0").replace(/[^\d]/g, ""));
+                const { label: fareLabel, cls: fareCls } = getFareTag(fare);
+                const isTop = idx === 0;
+                const barPct = getBarPct(fare);
+                return (
+                  <div key={idx} className={`rounded-xl border overflow-hidden ${isTop ? "border-[#1B2B4B]/40" : "border-gray-150"}`}>
+                    {isTop && (
+                      <div className="bg-[#1B2B4B] px-4 py-1.5">
+                        <span className="text-yellow-300 text-[11px] font-bold">★ 최근 유사 운송</span>
+                      </div>
+                    )}
+                    <div className="px-4 py-3 bg-white">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[12px] font-bold text-gray-400">{rec.상차일}</span>
+                        <div className="flex gap-1">
+                          {(rec._match?.cargo && rec._match?.ton) && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-[#1B2B4B] text-white">최적매칭</span>
+                          )}
+                          {rec._match?.ton && !rec._match?.cargo && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-gray-700 text-white">톤수일치</span>
+                          )}
+                          {rec._match?.cargo && !rec._match?.ton && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-gray-700 text-white">화물일치</span>
+                          )}
+                          <span className={`px-2.5 py-1 text-[11px] font-extrabold rounded-full border ${fareCls}`}>{fareLabel}</span>
+                        </div>
+                      </div>
+                      <div className="text-[14px] font-extrabold text-gray-900 mb-1">
+                        {rec.상차지명 || "-"} → {rec.하차지명 || "-"}
+                      </div>
+                      <div className="text-[12px] font-semibold text-gray-400 mb-2">
+                        {rec.차량종류 || "-"} / {rec.차량톤수 || "-"}
+                        {rec.화물내용 && <span> · {rec.화물내용}</span>}
+                      </div>
+                      <div className="relative h-1.5 bg-gray-100 rounded-full mb-3">
+                        <div className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-[#1B2B4B] border-2 border-white shadow"
+                          style={{ left: `calc(${barPct}% - 5px)` }} />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div className="text-[12px] font-semibold text-gray-400">
+                          기사 <span className="text-gray-700 font-bold">{rec.이름 || "-"}</span>
+                          <span className="mx-1.5 text-gray-300">·</span>
+                          기사운임 <span className="text-gray-700 font-bold">{Number(rec.기사운임 || 0).toLocaleString()}원</span>
+                        </div>
+                        <span className="text-[20px] font-extrabold text-[#1B2B4B]">{fare.toLocaleString()}원</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+        <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 shrink-0">
+          <button onClick={() => setCtxFare5PanelOpen(false)}
+            className="w-full py-2.5 rounded-xl bg-gray-200 hover:bg-gray-300 text-[#1B2B4B] text-[14px] font-bold transition">
+            닫기
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+})()}
 
     </div>
 
@@ -34644,7 +35646,22 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
 }
 // ===================== DispatchApp.jsx (PART 10/10) — END =====================
 // ===================== DispatchApp.jsx (PART 11/11) — START =====================
-function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlace, showAlert = (m) => alert(m) }) {
+function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlace, places: placesProp = [], showAlert = (m) => alert(m) }) {
+  const normalizePlaceRow = (d) => {
+    const primary = Array.isArray(d.contacts) && d.contacts.length
+      ? d.contacts.find(c => c.isPrimary) || d.contacts[0] : null;
+    return {
+      id: d._id || d.id || "",
+      업체명: d.업체명 || "",
+      주소: (d.주소 || "").trim(),
+      담당자: primary?.name || d.담당자 || "",
+      담당자번호: primary?.phone || d.담당자번호 || "",
+      등급: d.등급 || "일반",
+      등급변경일: d.등급변경일 || null,
+      메모: d.메모 || "",
+      updatedAt: d.updatedAt || null,
+    };
+  };
 
   const normalizePlace = (s = "") =>
     s.toString().normalize("NFC")
@@ -34670,7 +35687,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
   // ═══════════════════════════════════════════════════
   const PLACES_COLL = "places";
   const removePlace = async (id) => { if (!id) return; await deleteDoc(doc(db, PLACES_COLL, id)); };
-  const [placeRows, setPlaceRows] = React.useState([]);
+  const [placeRows, setPlaceRows] = React.useState(() => placesProp.map(normalizePlaceRow));
   const [placeQ, setPlaceQ] = React.useState("");
   const [placeSearched, setPlaceSearched] = React.useState(false);
   const [placeFilterType, setPlaceFilterType] = React.useState("업체명");
@@ -34681,25 +35698,10 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
   const [placeNewForm, setPlaceNewForm] = React.useState({ 업체명: "", 주소: "", 담당자: "", 담당자번호: "", 등급: "일반", 메모: "" });
   const [showNewPlaceForm, setShowNewPlaceForm] = React.useState(false);
 
-  // ★ Firestore 구독 (placeRows) — 맨 위에서 실행
+  // ★ 부모에서 내려온 places(회사별 필터링 완료) 기반으로 placeRows 갱신
   React.useEffect(() => {
-    const unsub = onSnapshot(collection(db, PLACES_COLL), (snap) => {
-      const arr = snap.docs.map((d) => {
-        const data = d.data() || {};
-        const primary = Array.isArray(data.contacts) && data.contacts.length
-          ? data.contacts.find(c => c.isPrimary) || data.contacts[0] : null;
-        return {
-          id: d.id, 업체명: data.업체명 || "", 주소: (data.주소 || "").trim(),
-          담당자: primary?.name || data.담당자 || "",
-          담당자번호: primary?.phone || data.담당자번호 || "",
-          등급: data.등급 || "일반", 등급변경일: data.등급변경일 || null,
-          메모: data.메모 || "", updatedAt: data.updatedAt || null,
-        };
-      });
-      setPlaceRows(arr);
-    });
-    return () => unsub();
-  }, []);
+    setPlaceRows(placesProp.map(normalizePlaceRow));
+  }, [placesProp]);
 
   // ═══════════════════════════════════════════════════
   // 기본 거래처
@@ -34944,7 +35946,7 @@ React.useEffect(() => {
   const handlePlaceBlur = async (row, key, val) => {
     if (key !== "등급" && (row[key] || "") === val) return;
     setPlaceRows(prev => prev.map(p => p.id === row.id ? { ...p, [key]: val } : p));
-    const updateData = { ...row, [key]: val };
+    const updateData = { ...row, _id: row.id, [key]: val };
     if (key === "등급" && val !== "일반") updateData.등급변경일 = new Date().toISOString().slice(0, 10);
     await upsertPlace?.(updateData);
   };

@@ -13,7 +13,12 @@ import { doc, getDoc } from "firebase/firestore";
 import { useNavigate, Link } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 
+const TOTAL_MASTER_EMAIL = "tjddnqkf@naver.com";
+
 export default function ShipperLogin() {
+  const [companyCode, setCompanyCode] = useState(
+    () => localStorage.getItem("shipperCode") || ""
+  );
   const [companyName, setCompanyName] = useState(
     () => localStorage.getItem("shipperCompany") || ""
   );
@@ -66,7 +71,13 @@ export default function ShipperLogin() {
     setError(null);
     setMsg(null);
 
-    if (!companyName.trim()) return setError("회사명을 입력해주세요.");
+    const isTotalMasterAttempt = email.trim() === TOTAL_MASTER_EMAIL;
+
+    // totalMaster: only need email + password
+    if (!isTotalMasterAttempt) {
+      if (!companyCode.trim()) return setError("회사코드를 입력해주세요.");
+      if (!companyName.trim()) return setError("회사명을 입력해주세요.");
+    }
     if (!email.trim() || !password.trim()) return setError("이메일과 비밀번호를 입력해주세요.");
 
     sessionStorage.setItem("shipperValidating", "true");
@@ -93,24 +104,38 @@ export default function ShipperLogin() {
       }
 
       const userData = userSnap.data();
+      const isTotalMaster = credential.user.email === TOTAL_MASTER_EMAIL || userData.role === "totalMaster";
 
-      if (userData.role !== "shipper") {
-        sessionStorage.removeItem("shipperValidating");
-        await signOut(auth);
-        setError("화주 계정이 아닙니다");
-        return;
-      }
+      // totalMaster: bypass all validation
+      if (!isTotalMaster) {
+        if (userData.role !== "shipper") {
+          sessionStorage.removeItem("shipperValidating");
+          await signOut(auth);
+          setError("화주 계정이 아닙니다");
+          return;
+        }
 
-      if ((userData.companyName || "") !== companyName.trim()) {
-        sessionStorage.removeItem("shipperValidating");
-        await signOut(auth);
-        setError("회사명이 일치하지 않습니다");
-        return;
+        if ((userData.companyName || "") !== companyName.trim()) {
+          sessionStorage.removeItem("shipperValidating");
+          await signOut(auth);
+          setError("회사명이 일치하지 않습니다");
+          return;
+        }
+
+        if ((userData.companyCode || "") !== companyCode.trim()) {
+          sessionStorage.removeItem("shipperValidating");
+          await signOut(auth);
+          setError("회사코드가 일치하지 않습니다");
+          return;
+        }
       }
 
       // All checks passed
-      localStorage.setItem("shipperCompany", companyName.trim());
-      localStorage.setItem("loginCompany", companyName.trim());
+      if (!isTotalMaster) {
+        localStorage.setItem("shipperCode", companyCode.trim());
+        localStorage.setItem("shipperCompany", companyName.trim());
+        localStorage.setItem("loginCompany", companyName.trim());
+      }
 
       if (rememberId) {
         localStorage.setItem("savedShipperEmail", email.trim());
@@ -161,6 +186,8 @@ export default function ShipperLogin() {
     if (e.key === "Enter" && !loading) login();
   };
 
+  const isTotalMasterInput = email.trim() === TOTAL_MASTER_EMAIL;
+
   return (
     <div className="min-h-screen flex items-center justify-center px-4 bg-gradient-to-br from-[#061832] via-[#0B2554] to-[#0D2B66]">
       {/* Top-right icon */}
@@ -181,22 +208,43 @@ export default function ShipperLogin() {
           <p className="text-gray-400 text-sm mt-1">KP-Flow 화주사 전용 포털</p>
         </div>
 
-        {/* 회사명 */}
-        <div className="mb-4">
-          <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wide">
-            회사명 <span className="text-red-500">*</span>
-          </label>
-          <input
-            type="text"
-            name="shipper-company"
-            autoComplete="off"
-            placeholder="회사명을 입력하세요"
-            value={companyName}
-            onChange={(e) => setCompanyName(e.target.value)}
-            onKeyDown={handleKeyDown}
-            className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/30 focus:border-[#1B2B4B] transition"
-          />
-        </div>
+        {/* 회사코드 — 최고관리자 입력 시 숨김 */}
+        {!isTotalMasterInput && (
+          <div className="mb-4">
+            <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wide">
+              회사코드 <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              name="shipper-code"
+              autoComplete="off"
+              placeholder="회사코드를 입력하세요"
+              value={companyCode}
+              onChange={(e) => setCompanyCode(e.target.value)}
+              onKeyDown={handleKeyDown}
+              className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/30 focus:border-[#1B2B4B] transition"
+            />
+          </div>
+        )}
+
+        {/* 회사명 — 최고관리자 입력 시 숨김 */}
+        {!isTotalMasterInput && (
+          <div className="mb-4">
+            <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wide">
+              회사명 <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              name="shipper-company"
+              autoComplete="off"
+              placeholder="회사명을 입력하세요"
+              value={companyName}
+              onChange={(e) => setCompanyName(e.target.value)}
+              onKeyDown={handleKeyDown}
+              className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/30 focus:border-[#1B2B4B] transition"
+            />
+          </div>
+        )}
 
         {/* 이메일 */}
         <div className="mb-4">

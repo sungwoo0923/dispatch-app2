@@ -124,13 +124,13 @@ export default function ShipperStatus() {
     if (isMaster || isSubMaster) {
       q = query(
         collection(db, "orders"),
-        where("shipperCompany", "==", userData.company)
+        where("shipperCompany", "==", userData.companyName)
       );
     } else if (isTransport) {
       const threeMonthsAgo = get3MonthsAgo();
       q = query(
         collection(db, "orders"),
-        where("shipperCompany", "==", userData.company),
+        where("shipperCompany", "==", userData.companyName),
         where("상차일", ">=", threeMonthsAgo)
       );
     } else {
