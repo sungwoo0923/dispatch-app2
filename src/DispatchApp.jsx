@@ -588,16 +588,16 @@ const patchDispatch = async (_id, patch) => {
 
   const cleanPatch = stripUndefinedDeep({
     ...patch,
-    경유지_상차: safeStops(patch.경유지_상차).length > 0
+    경유지_상차: Array.isArray(patch.경유지_상차)
       ? safeStops(patch.경유지_상차)
       : safeStops(prev.경유지_상차 || prev.경유상차목록),
-    경유지_하차: safeStops(patch.경유지_하차).length > 0
+    경유지_하차: Array.isArray(patch.경유지_하차)
       ? safeStops(patch.경유지_하차)
       : safeStops(prev.경유지_하차 || prev.경유하차목록),
-    경유상차목록: safeStops(patch.경유상차목록).length > 0
+    경유상차목록: Array.isArray(patch.경유상차목록)
       ? safeStops(patch.경유상차목록)
       : safeStops(prev.경유상차목록 || prev.경유지_상차),
-    경유하차목록: safeStops(patch.경유하차목록).length > 0
+    경유하차목록: Array.isArray(patch.경유하차목록)
       ? safeStops(patch.경유하차목록)
       : safeStops(prev.경유하차목록 || prev.경유지_하차),
   });
@@ -2007,20 +2007,16 @@ return (
             <span className="text-white font-extrabold text-base tracking-tight">
               KP-Flow
             </span>
-            <span
-              className="text-[10px] font-mono bg-white/10 text-white/60 px-1.5 py-0.5 rounded ml-1"
-            >
-              v{__APP_VERSION__}
-            </span>
             {(() => {
               const co = role === "totalMaster"
                 ? (localStorage.getItem("loginCompany") || userCompany || "")
                 : (userCompany || localStorage.getItem("userCompany") || "");
-              return co ? (
-                <span className="text-[11px] font-bold bg-blue-500/30 text-blue-200 px-2 py-0.5 rounded ml-1 border border-blue-400/30">
-                  {co}
-                </span>
-              ) : null;
+              return (
+                <div className="ml-2 flex flex-col leading-tight">
+                  <span className="text-[10px] font-mono text-white/50">v{__APP_VERSION__}</span>
+                  {co && <span className="text-[11px] font-bold text-white/90 truncate max-w-[80px]">{co}</span>}
+                </div>
+              );
             })()}
           </div>
 
@@ -2226,26 +2222,20 @@ return (
         {menu === "고정거래처관리" && (role === "admin" || role === "totalMaster" || role === "user" || role === "test") && (
           <div>
             {/* 상단 탭 */}
-            <div className="flex gap-2 mb-3 border-b pb-2">
-              <button
-                className={`px-3 py-1 text-sm rounded ${subMenu === "고정거래처관리"
-                  ? "bg-blue-600 text-white"
-                  : "bg-gray-200"
+            <div className="flex gap-0 mb-4 border-b border-gray-200">
+              {["고정거래처관리", "지입차관리"].map(tab => (
+                <button
+                  key={tab}
+                  onClick={() => setSubMenu(tab)}
+                  className={`px-5 py-2.5 text-[13px] font-semibold border-b-2 -mb-px transition ${
+                    subMenu === tab
+                      ? "border-[#1B2B4B] text-[#1B2B4B]"
+                      : "border-transparent text-gray-400 hover:text-gray-600"
                   }`}
-                onClick={() => setSubMenu("고정거래처관리")}
-              >
-                고정거래처관리
-              </button>
-
-              <button
-                className={`px-3 py-1 text-sm rounded ${subMenu === "지입차관리"
-                  ? "bg-blue-600 text-white"
-                  : "bg-gray-200"
-                  }`}
-                onClick={() => setSubMenu("지입차관리")}
-              >
-                지입차관리
-              </button>
+                >
+                  {tab}
+                </button>
+              ))}
             </div>
 
             {/* 탭 화면 */}
@@ -7030,10 +7020,24 @@ className={`
     {/* 입력 */}
     <input
       className={`${inputCls} pr-[62px] text-base`}
-      placeholder="예: 2 또는 변압기"
-      value={form.화물내용 || ""}
+      placeholder={form.화물타입 ? "숫자만 입력" : "예: 2 또는 변압기"}
+      value={form.화물타입
+        ? String(form.화물내용 || "").replace(/(파레트|파렛트|박스|통)$/, "").trim()
+        : (form.화물내용 || "")}
+      onKeyDown={(e) => {
+        if (form.화물타입 && form.화물타입 !== "없음") {
+          if (!/[\d]/.test(e.key) && !["Backspace","Delete","Tab","ArrowLeft","ArrowRight","Home","End"].includes(e.key)) {
+            e.preventDefault();
+          }
+        }
+      }}
       onChange={(e) => {
-        onChange("화물내용", e.target.value);
+        if (form.화물타입 && form.화물타입 !== "없음") {
+          const v = e.target.value.replace(/[^\d]/g, "");
+          onChange("화물내용", `${v}${form.화물타입}`);
+        } else {
+          onChange("화물내용", e.target.value);
+        }
       }}
     />
 
@@ -7182,20 +7186,24 @@ className={`
     {/* 입력 */}
     <input
       className={`${inputCls} pr-[52px] text-base`}
-      placeholder="예: 1"
-      inputMode="decimal"
-      value={form.톤수값 || ""}
+      placeholder={form.톤수타입 ? "예: 1" : "예: 5톤 또는 소형"}
+      inputMode={form.톤수타입 ? "decimal" : "text"}
+      value={form.톤수타입 ? (form.톤수값 || "") : (form.차량톤수 || "")}
       onKeyDown={(e) => {
-        if (!/[\d.,]/.test(e.key) && !["Backspace","Delete","Tab","ArrowLeft","ArrowRight","Home","End"].includes(e.key)) {
-          e.preventDefault();
+        if (form.톤수타입) {
+          if (!/[\d.,]/.test(e.key) && !["Backspace","Delete","Tab","ArrowLeft","ArrowRight","Home","End"].includes(e.key)) {
+            e.preventDefault();
+          }
         }
       }}
       onChange={(e) => {
-        const v = e.target.value.replace(/[^\d.]/g, "");
-        onChange("톤수값", v);
-
         if (form.톤수타입) {
+          const v = e.target.value.replace(/[^\d.]/g, "");
+          onChange("톤수값", v);
           onChange("차량톤수", `${v}${form.톤수타입}`);
+        } else {
+          onChange("차량톤수", e.target.value);
+          onChange("톤수값", e.target.value);
         }
       }}
     />
@@ -7590,11 +7598,21 @@ className={`
           <div className="relative">
             <input
               className={`${inputCls} pr-[62px]`}
-              placeholder="화물내용 (예: 2)"
-              value={stop.화물내용 || ""}
-              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); } }}
+              placeholder={stop.화물타입 ? "숫자만 입력" : "화물내용 (예: 2)"}
+              value={stop.화물타입
+                ? String(stop.화물내용 || "").replace(/(파레트|파렛트|박스|통)$/, "").trim()
+                : (stop.화물내용 || "")}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); }
+                if (stop.화물타입 && stop.화물타입 !== "없음") {
+                  if (!/[\d]/.test(e.key) && !["Backspace","Delete","Tab","ArrowLeft","ArrowRight","Home","End"].includes(e.key)) {
+                    e.preventDefault();
+                  }
+                }
+              }}
               onChange={(e) => {
-                const v = e.target.value;
+                const isUnit = stop.화물타입 && stop.화물타입 !== "없음";
+                const v = isUnit ? e.target.value.replace(/[^\d]/g, "") : e.target.value;
                 setStopList(prev => {
                   const copy = [...prev];
                   copy[idx].화물내용 = v;
@@ -7628,16 +7646,27 @@ className={`
           <div className="relative">
             <input
               className={`${inputCls} pr-[52px]`}
-              placeholder="톤수 (예: 1)"
-              value={stop.톤수값 || ""}
-              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); } }}
+              placeholder={stop.톤수타입 ? "톤수 (예: 1)" : "예: 5톤 또는 소형"}
+              value={stop.톤수타입 ? (stop.톤수값 || "") : (stop.차량톤수 || "")}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); }
+                if (stop.톤수타입) {
+                  if (!/[\d.,]/.test(e.key) && !["Backspace","Delete","Tab","ArrowLeft","ArrowRight","Home","End"].includes(e.key)) {
+                    e.preventDefault();
+                  }
+                }
+              }}
               onChange={(e) => {
-                const v = e.target.value;
+                const hasType = !!stop.톤수타입;
+                const v = hasType ? e.target.value.replace(/[^\d.]/g, "") : e.target.value;
                 setStopList(prev => {
                   const copy = [...prev];
-                  copy[idx].톤수값 = v;
-                  if (copy[idx].톤수타입) {
+                  if (hasType) {
+                    copy[idx].톤수값 = v;
                     copy[idx].차량톤수 = `${v}${copy[idx].톤수타입}`;
+                  } else {
+                    copy[idx].차량톤수 = v;
+                    copy[idx].톤수값 = v;
                   }
                   return copy;
                 });
@@ -7787,14 +7816,19 @@ className={`
               const cargoType = s.화물타입 || "";
               const tonVal = s.톤수값 || "";
               const tonType = s.톤수타입 || "";
-
+              const CARGO_SFXS = ["파레트","파렛트","박스","통"];
+              let cargoBase = cargo;
+              for (const sfx of CARGO_SFXS) { if (cargoBase.endsWith(sfx)) { cargoBase = cargoBase.slice(0, -sfx.length).trim(); break; } }
+              const TON_SFXS = ["톤","kg","KG"];
+              let tonBase = tonVal;
+              for (const sfx of TON_SFXS) { if (tonBase.endsWith(sfx)) { tonBase = tonBase.slice(0, -sfx.length).trim(); break; } }
               return {
                 ...s,
                 화물내용: cargoType && cargoType !== "없음"
-                  ? `${cargo}${cargoType}`
+                  ? `${cargoBase}${cargoType}`
                   : cargo,
                 차량톤수: tonType && tonType !== "없음"
-                  ? `${tonVal}${tonType}`
+                  ? `${tonBase}${tonType}`
                   : tonVal,
               };
             });
@@ -11027,7 +11061,7 @@ function StopBadge({ count, list, type = "pickup", onSave, placeRows = [], timeO
                       <span className="text-[13px] font-bold text-[#1B2B4B]">{s.업체명}</span>
                     </div>
                     <div className="px-4 py-3 space-y-2">
-                      {s.주소 && <div className="flex gap-2"><span className="text-[10px] font-bold text-gray-400 w-14 shrink-0">주소</span><span className="text-[12px] text-gray-700">{s.주소}</span></div>}
+                      {s.주소 && <div className="flex gap-2"><span className="text-[10px] font-bold text-gray-400 w-14 shrink-0">주소</span><span className="text-[12px] text-gray-700 break-words min-w-0">{s.주소}</span></div>}
                       {(s.담당자||s.담당자번호) && <div className="flex gap-2"><span className="text-[10px] font-bold text-gray-400 w-14 shrink-0">담당자</span><span className="text-[12px] text-gray-700">{s.담당자}{s.담당자번호?` (${s.담당자번호})`:""}</span></div>}
                       {timeVal && <div className="flex gap-2"><span className="text-[10px] font-bold text-gray-400 w-14 shrink-0">{timeLabel}</span><span className="text-[12px] font-semibold text-[#1B2B4B]">{timeVal}</span></div>}
                       {(s.화물내용||s.차량톤수||s.톤수값) && (
@@ -11296,15 +11330,21 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
   }
 
   function handleSave() {
+    const CARGO_SFXS = ["파레트","파렛트","박스","통"];
+    const TON_SFXS = ["톤","kg","KG"];
     const finalList = editList.map(s => {
       const cargo = s.화물내용 || "";
       const cargoType = s.화물타입 || "";
       const tonVal = s.톤수값 || "";
       const tonType = s.톤수타입 || "";
+      let cargoBase = cargo;
+      for (const sfx of CARGO_SFXS) { if (cargoBase.endsWith(sfx)) { cargoBase = cargoBase.slice(0, -sfx.length).trim(); break; } }
+      let tonBase = tonVal;
+      for (const sfx of TON_SFXS) { if (tonBase.endsWith(sfx)) { tonBase = tonBase.slice(0, -sfx.length).trim(); break; } }
       return {
         ...s,
-        화물내용: cargoType && cargoType !== "없음" ? `${cargo}${cargoType}` : cargo,
-        차량톤수: tonType && tonType !== "없음" ? `${tonVal}${tonType}` : tonVal,
+        화물내용: cargoType && cargoType !== "없음" ? `${cargoBase}${cargoType}` : cargo,
+        차량톤수: tonType && tonType !== "없음" ? `${tonBase}${tonType}` : tonVal,
       };
     }).filter(s => s.업체명?.trim());
     onSave(finalList);
@@ -11401,9 +11441,22 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
             {/* 화물내용 + 타입 / 톤수 + 타입 */}
             <div className="grid grid-cols-2 gap-2">
               <div className="relative">
-                <input className={`${inputCls} pr-[62px]`} placeholder="화물내용 (예: 2)" value={stop.화물내용||""}
-                  onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();e.stopPropagation();}}}
-                  onChange={e=>{const v=e.target.value;setEditList(prev=>{const c=[...prev];c[idx].화물내용=v;return c;});}} />
+                <input className={`${inputCls} pr-[62px]`}
+                  placeholder={(stop.화물타입&&stop.화물타입!=="없음")?"숫자만 입력":"화물내용 (예: 2)"}
+                  value={(stop.화물타입&&stop.화물타입!=="없음")
+                    ?String(stop.화물내용||"").replace(/(파레트|파렛트|박스|통)$/,"").trim()
+                    :(stop.화물내용||"")}
+                  onKeyDown={e=>{
+                    if(e.key==="Enter"){e.preventDefault();e.stopPropagation();}
+                    if(stop.화물타입&&stop.화물타입!=="없음"){
+                      if(!/[\d]/.test(e.key)&&!["Backspace","Delete","Tab","ArrowLeft","ArrowRight","Home","End"].includes(e.key)){e.preventDefault();}
+                    }
+                  }}
+                  onChange={e=>{
+                    const isUnit=stop.화물타입&&stop.화물타입!=="없음";
+                    const v=isUnit?e.target.value.replace(/[^\d]/g,""):e.target.value;
+                    setEditList(prev=>{const c=[...prev];c[idx].화물내용=v;return c;});
+                  }} />
                 <div className="absolute top-0 right-0 h-full flex items-center pr-[1px]">
                   <select className="w-[58px] h-[calc(100%-2px)] px-1 text-[11px] font-bold rounded-r-lg bg-[#1B2B4B] text-white border-0 appearance-none cursor-pointer"
                     value={stop.화물타입??"파레트"}
@@ -11415,9 +11468,18 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
                 </div>
               </div>
               <div className="relative">
-                <input className={`${inputCls} pr-[52px]`} placeholder="톤수 (예: 1)" value={stop.톤수값||""}
-                  onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();e.stopPropagation();}}}
-                  onChange={e=>{const v=e.target.value;setEditList(prev=>{const c=[...prev];c[idx].톤수값=v;if(c[idx].톤수타입)c[idx].차량톤수=`${v}${c[idx].톤수타입}`;return c;});}} />
+                <input className={`${inputCls} pr-[52px]`}
+                  placeholder={stop.톤수타입?"톤수 (예: 1)":"예: 5톤 또는 소형"}
+                  value={stop.톤수타입?(stop.톤수값||""):(stop.차량톤수||"")}
+                  onKeyDown={e=>{
+                    if(e.key==="Enter"){e.preventDefault();e.stopPropagation();}
+                    if(stop.톤수타입){if(!/[\d.,]/.test(e.key)&&!["Backspace","Delete","Tab","ArrowLeft","ArrowRight","Home","End"].includes(e.key)){e.preventDefault();}}
+                  }}
+                  onChange={e=>{
+                    const hasType=!!stop.톤수타입;
+                    const v=hasType?e.target.value.replace(/[^\d.]/g,""):e.target.value;
+                    setEditList(prev=>{const c=[...prev];if(hasType){c[idx].톤수값=v;c[idx].차량톤수=`${v}${c[idx].톤수타입}`;}else{c[idx].차량톤수=v;c[idx].톤수값=v;}return c;});
+                  }} />
                 <div className="absolute top-0 right-0 h-full flex items-center pr-[1px]">
                   <select className="w-[48px] h-[calc(100%-2px)] px-1 text-[11px] font-bold rounded-r-lg bg-[#1B2B4B] text-white border-0 appearance-none cursor-pointer"
                     value={stop.톤수타입??"톤"}
@@ -12401,7 +12463,15 @@ const selectedSet = React.useMemo(() => new Set(selected), [selected]);
     // 🔥 1단계: 상/하차지 + 차량종류(냉장/냉동 그룹) 필터
     const base = (dispatchData || []).filter(r => {
       if (!r.청구운임) return false;
-      if (!(String(r.상차지명 || "").includes(pickup) && String(r.하차지명 || "").includes(drop))) return false;
+      const rPickupStops = parseStops(r.상차지명 || "");
+      const rDropStops = parseStops(r.하차지명 || "");
+      const inputPickupStops = parseStops(pickup);
+      const inputDropStops = parseStops(drop);
+      if (inputPickupStops.length !== rPickupStops.length) return false;
+      if (inputDropStops.length !== rDropStops.length) return false;
+      const sameStops = (a, b) => a.every((n, i) => n.trim() === b[i].trim());
+      if (!sameStops(inputPickupStops, rPickupStops)) return false;
+      if (!sameStops(inputDropStops, rDropStops)) return false;
       const rv = String(r.차량종류 || "");
       const rCold = rv.includes("냉장") || rv.includes("냉동");
       return isColdVehicle ? rCold : !rCold;
@@ -12480,7 +12550,15 @@ setFarePanelOpen(true);
 
     const base = (dispatchData || []).filter(r => {
       if (!r.청구운임) return false;
-      if (!(String(r.상차지명 || "").includes(pickup) && String(r.하차지명 || "").includes(drop))) return false;
+      const rPickupStops = parseStops(r.상차지명 || "");
+      const rDropStops = parseStops(r.하차지명 || "");
+      const inputPickupStops = parseStops(pickup);
+      const inputDropStops = parseStops(drop);
+      if (inputPickupStops.length !== rPickupStops.length) return false;
+      if (inputDropStops.length !== rDropStops.length) return false;
+      const sameStops = (a, b) => a.every((n, i) => n.trim() === b[i].trim());
+      if (!sameStops(inputPickupStops, rPickupStops)) return false;
+      if (!sameStops(inputDropStops, rDropStops)) return false;
       const rv = String(r.차량종류 || "");
       const rCold = rv.includes("냉장") || rv.includes("냉동");
       return isColdVehicle ? rCold : !rCold;
@@ -22361,10 +22439,15 @@ const save = {
 
     const base = (dispatchData || []).filter(r => {
       if (!r.청구운임) return false;
-      const rPickup = String(r.상차지명 || "");
-      const rDrop = String(r.하차지명 || "");
-      if (!(rPickup.includes(pickup) || pickup.includes(rPickup.trim()))) return false;
-      if (!(rDrop.includes(drop) || drop.includes(rDrop.trim()))) return false;
+      const rPickupStops = parseStops(r.상차지명 || "");
+      const rDropStops = parseStops(r.하차지명 || "");
+      const inputPickupStops = parseStops(pickup);
+      const inputDropStops = parseStops(drop);
+      if (inputPickupStops.length !== rPickupStops.length) return false;
+      if (inputDropStops.length !== rDropStops.length) return false;
+      const sameStops = (a, b) => a.every((n, i) => n.trim() === b[i].trim());
+      if (!sameStops(inputPickupStops, rPickupStops)) return false;
+      if (!sameStops(inputDropStops, rDropStops)) return false;
       const rGroup = getVehicleGroup5(r.차량종류);
       return rGroup === targetGroup;
     });
