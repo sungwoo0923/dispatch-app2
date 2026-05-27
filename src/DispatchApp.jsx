@@ -16555,6 +16555,22 @@ value={copyTarget?.화물수량 || ""}
   </div>
 </section>
 
+{/* ===================== 수정이력 ===================== */}
+{Array.isArray(copyTarget.history) && copyTarget.history.length > 0 && (
+  <div className="bg-white rounded-xl border border-gray-200 px-6 py-4 shadow-sm">
+    <div className="text-[13px] font-bold text-[#1B2B4B] mb-3">수정이력</div>
+    <div className="max-h-48 overflow-y-auto space-y-2">
+      {[...copyTarget.history].reverse().map((h, i) => (
+        <div key={i} className="flex items-start gap-3 text-[12px] pb-2 border-b border-gray-50 last:border-b-0">
+          <span className="text-gray-400 whitespace-nowrap shrink-0">{new Date(h.at).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
+          <span className="text-gray-500 shrink-0">{h.user}</span>
+          <span className="text-gray-700"><span className="font-semibold">{h.field}</span>: <span className="text-gray-500">{String(h.before ?? "없음")}</span> → <span className="font-semibold text-[#1B2B4B]">{String(h.after ?? "없음")}</span></span>
+        </div>
+      ))}
+    </div>
+  </div>
+)}
+
 {/* ===================== 복사패널 운임조회 모달 ===================== */}
 {copyFarePanelOpen && fareResult && (() => {
   const fareMin = fareResult.min;
@@ -18035,41 +18051,21 @@ setEditTarget((p) => ({
               />
             </div>
 
-            {/* ===============================
-    🕘 수정 이력
-=============================== */}
+            {/* 수정이력 */}
             {Array.isArray(editTarget.history) &&
               editTarget.history.length > 0 && (
                 <div className="mt-4 border-t pt-3">
-                  <div className="text-sm font-semibold mb-2 text-gray-700">
-                    🕘 수정 이력
-                  </div>
-
-                  <div className="max-h-40 overflow-y-auto space-y-2">
+                  <div className="text-[12px] font-bold text-[#1B2B4B] mb-2">수정이력</div>
+                  <div className="max-h-40 overflow-y-auto space-y-1.5">
                     {editTarget.history
-                      .filter(h => !IGNORE_HISTORY_FIELDS.has(h.field)) // ⭐ 여기!
+                      .filter(h => !IGNORE_HISTORY_FIELDS.has(h.field))
                       .slice()
                       .reverse()
                       .map((h, i) => (
-
-                        <div
-                          key={i}
-                          className="text-xs text-gray-700 border-b pb-1"
-                        >
-                          <div className="text-gray-500">
-                            {new Date(h.at).toLocaleString()} · {h.user}
-                          </div>
-
-                          <div>
-                            <b>{h.field}</b> :{" "}
-                            <span className="text-red-600">
-                              {String(h.before ?? "없음")}
-                            </span>
-                            {" → "}
-                            <span className="text-blue-600">
-                              {String(h.after ?? "없음")}
-                            </span>
-                          </div>
+                        <div key={i} className="flex items-start gap-2 text-[11px] pb-1.5 border-b border-gray-50 last:border-b-0">
+                          <span className="text-gray-400 whitespace-nowrap shrink-0">{new Date(h.at).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
+                          <span className="text-gray-500 shrink-0">{h.user}</span>
+                          <span className="text-gray-700"><span className="font-semibold">{h.field}</span>: <span className="text-gray-400">{String(h.before ?? "없음")}</span> → <span className="font-semibold text-[#1B2B4B]">{String(h.after ?? "없음")}</span></span>
                         </div>
                       ))}
                   </div>
@@ -18093,7 +18089,7 @@ setEditTarget((p) => ({
     // ✅ 저장 직전 경유지 + 화물내용 최종 동기화
 const syncedEditTarget = {
   ...editTarget,
-  
+
   // 🔥 경유지 배열 통합 저장 (신구 필드 모두)
   경유상차목록: editTarget.경유상차목록 || editTarget.경유지_상차 || [],
   경유지_상차: editTarget.경유상차목록 || editTarget.경유지_상차 || [],
@@ -19055,16 +19051,16 @@ if (editTarget.거래처명) {
               <h3 className="text-white font-bold text-[15px]">복사 방식 선택</h3>
             </div>
             <div className="p-4 space-y-2">
-              <button onClick={() => copyMessage("basic")} className="w-full py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 transition text-left px-4">
+              <button onClick={() => copyMessage("basic")} className="w-full py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 transition">
                 차량번호 / 기사명 / 전화번호
               </button>
-              <button onClick={() => copyMessage("fare")} className="w-full py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 transition text-left px-4">
+              <button onClick={() => copyMessage("fare")} className="w-full py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 transition">
                 운임 포함 (부가세/선불/착불)
               </button>
-              <button onClick={() => copyMessage("full")} className="w-full py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 transition text-left px-4">
+              <button onClick={() => copyMessage("full")} className="w-full py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 transition">
                 전체 상세 (상하차 + 화물정보 + 차량)
               </button>
-              <button onClick={() => copyMessage("driver")} className="w-full py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243d6a] transition text-left px-4">
+              <button onClick={() => copyMessage("driver")} className="w-full py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243d6a] transition">
                 기사 전달용 (상세 + 전달메시지)
               </button>
               <button onClick={() => setCopyModalOpen(false)} className="w-full py-2 text-[12px] text-gray-400 hover:text-gray-600 transition">
@@ -19077,53 +19073,42 @@ if (editTarget.거래처명) {
       {/* ===================== 🔥 즉시 변경 확인 팝업 (PART 5 이식) ===================== */}
       {confirmChange && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100000]">
-          <div className="bg-white rounded-2xl p-6 w-[380px] shadow-2xl">
-            <h3 className="text-lg font-bold text-center mb-4">
-              상태를 변경하시겠습니까?
-            </h3>
-
-            <div className="text-center text-sm mb-6">
-              <div className="font-semibold mb-1">
-                {confirmChange.key}
-              </div>
-              <div className="text-gray-500">
-                {confirmChange.before || "없음"} →
-                <span className="ml-1 text-blue-600 font-bold">
-                  {confirmChange.after}
-                </span>
-              </div>
+          <div className="bg-white rounded-2xl shadow-2xl w-[360px] overflow-hidden">
+            <div className="bg-[#1B2B4B] px-5 py-4">
+              <h3 className="text-white font-bold text-[15px]">상태 변경</h3>
             </div>
+            <div className="p-5">
+              <div className="bg-gray-50 rounded-xl px-4 py-3 mb-5 border border-gray-100">
+                <div className="text-[12px] font-semibold text-gray-500 mb-1">{confirmChange.key}</div>
+                <div className="text-[13px] text-gray-800">
+                  <span className="text-gray-500">{confirmChange.before || "없음"}</span>
+                  <span className="mx-2 text-gray-300">→</span>
+                  <span className="font-bold text-[#1B2B4B]">{confirmChange.after}</span>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button className="flex-1 py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 transition" onClick={() => setConfirmChange(null)}>취소</button>
+                <button className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243d6a] transition"
+                  onClick={async () => {
+                   const patch = {
+                      [confirmChange.key]: confirmChange.after,
+                      updatedAt: Date.now(),
+                    };
 
-            <div className="flex gap-3">
-              <button
-                className="flex-1 py-2 rounded-lg bg-gray-200 hover:bg-gray-300"
-                onClick={() => setConfirmChange(null)}
-              >
-                취소
-              </button>
+                    if (confirmChange.key === "배차상태" && confirmChange.after === "배차중") {
+                      patch.차량번호 = "";
+                      patch.이름 = "";
+                      patch.전화번호 = "";
+                    }
 
-              <button
-                className="flex-1 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
-                onClick={async () => {
-                 const patch = {
-                    [confirmChange.key]: confirmChange.after,
-                    updatedAt: Date.now(),
-                  };
-
-                  if (confirmChange.key === "배차상태" && confirmChange.after === "배차중") {
-                    patch.차량번호 = "";
-                    patch.이름 = "";
-                    patch.전화번호 = "";
-                  }
-
-                  if (confirmChange.key === "업체전달상태") {
-                    patch.업체전달일시 =
-                      confirmChange.after === "전달완료"
-                        ? Date.now()
-                        : null;
-                    patch.업체전달방법 = "수동";
-                    patch.__system = true;
-                  }
+                    if (confirmChange.key === "업체전달상태") {
+                      patch.업체전달일시 =
+                        confirmChange.after === "전달완료"
+                          ? Date.now()
+                          : null;
+                      patch.업체전달방법 = "수동";
+                      patch.__system = true;
+                    }
 if (confirmChange.key === "지급방식") {
   if (confirmChange.after === "취소") {
     patch.배차상태 = "배차취소";
@@ -19136,10 +19121,11 @@ if (confirmChange.key === "지급방식") {
 }
 await patchDispatch(confirmChange.rowId, patch);
 setConfirmChange(null);
-                }}
-              >
-                변경
-              </button>
+                  }}
+                >
+                  변경
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -23146,8 +23132,11 @@ onBlur={(e) => {
           <div className="bg-slate-100 rounded-2xl shadow-2xl w-[740px] max-h-[92vh] overflow-y-auto flex flex-col">
 
             {/* ===== 헤더 ===== */}
-            <div className="flex justify-between items-center px-6 py-4 bg-[#1B2B4B] rounded-t-2xl">
-              <h3 className="text-white text-lg font-bold">선택한 오더 수정</h3>
+            <div className="flex justify-between items-center px-6 py-4 bg-[#1B2B4B] rounded-t-2xl shrink-0">
+              <div>
+                <h3 className="text-white text-[15px] font-bold">선택한 오더 수정</h3>
+                {editTarget && <p className="text-white/60 text-[12px] mt-0.5">{editTarget.거래처명} · {editTarget.상차지명} → {editTarget.하차지명}</p>}
+              </div>
               <button
                 className="text-white/70 hover:text-white text-xl"
                 onClick={() => setEditPopupOpen(false)}
@@ -23159,66 +23148,35 @@ onBlur={(e) => {
               <div className="flex items-center gap-2 mb-4 flex-wrap">
               <button type="button"
                 onClick={() => setEditTarget((p) => ({ ...p, 긴급: !p.긴급 }))}
-                className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all ${editTarget.긴급 ? "bg-red-600 text-white border-red-600" : "bg-white text-red-600 border-red-300 hover:bg-red-50"}`}>
+                className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition-all ${editTarget.긴급 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
                 긴급
               </button>
               <button type="button"
                 onClick={() => setEditTarget((p) => ({ ...p, 운행유형: p.운행유형 === "왕복" ? "편도" : "왕복" }))}
-                className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all ${editTarget.운행유형 === "왕복" ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-indigo-600 border-indigo-300 hover:bg-indigo-50"}`}>
+                className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition-all ${editTarget.운행유형 === "왕복" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
                 왕복
               </button>
               <button type="button"
                 onClick={() => setEditTarget((p) => ({ ...p, 혼적: !p.혼적, 독차: p.혼적 ? p.독차 : false }))}
-                className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all ${editTarget.혼적 ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-emerald-600 border-emerald-300 hover:bg-emerald-50"}`}>
+                className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition-all ${editTarget.혼적 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
                 혼적
               </button>
-            </div>
-            {/* ================= 업체 전달 상태 ================= */}
-            <div className="mb-4">
-              <label className="block text-sm font-semibold mb-1">
-                업체 전달 상태
-              </label>
-
-              {(() => {
-                const today = todayKST();
-
-                const d =
-                  editTarget?.상차일 ||
-                  "";
-
-                const deliveryStatus =
-                  editTarget.업체전달상태
-                    ? editTarget.업체전달상태
-                    : d && d < today
-                      ? "전달완료"
-                      : "미전달";
-
-                return (
-                  <button
-                    type="button"
-                    className={`px-3 py-1.5 text-xs font-semibold rounded border
-          ${deliveryStatus === "전달완료"
-                        ? "bg-green-100 text-green-700 border-green-400"
-                        : "bg-yellow-100 text-yellow-700 border-yellow-400"
-                      }`}
-                    onClick={() => {
-                      const next =
-                        deliveryStatus === "전달완료"
-                          ? "미전달"
-                          : "전달완료";
-
-                      setConfirmChange({
-                        id: getId(editTarget),          // ⭐ 중요
-                        field: "업체전달상태",
-                        before: deliveryStatus,
-                        after: next,
-                      });
-                    }}
-                  >
-                    {deliveryStatus}
-                  </button>
-                );
-              })()}
+              <button type="button"
+                onClick={() => {
+                  const d = editTarget?.상차일 || "";
+                  const today = todayKST();
+                  const deliveryStatus = editTarget.업체전달상태 ? editTarget.업체전달상태 : (d && d < today ? "전달완료" : "미전달");
+                  const next = deliveryStatus === "전달완료" ? "미전달" : "전달완료";
+                  setConfirmChange({ id: getId(editTarget), field: "업체전달상태", before: deliveryStatus, after: next });
+                }}
+                className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition-all ${(() => { const d = editTarget?.상차일 || ""; const today = todayKST(); return (editTarget.업체전달상태 ? editTarget.업체전달상태 : (d && d < today ? "전달완료" : "미전달")) === "전달완료"; })() ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
+                업체전달
+              </button>
+              <div className="ml-auto">
+                <button type="button" onClick={handleFareSearch} className="px-3 py-1.5 rounded-lg text-[12px] font-semibold border border-[#1B2B4B]/40 text-[#1B2B4B] hover:bg-[#1B2B4B]/10 transition">
+                  운임조회
+                </button>
+              </div>
             </div>
 
 
@@ -24101,13 +24059,6 @@ setEditTarget((p) => ({
                 />
               </div>
             </div>
-            {/* 🔍 운임조회 */}
-           <button
-              className="px-4 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold border border-amber-500 mb-4 transition-all"
-              onClick={handleFareSearch}
-            >
-              운임조회
-            </button>
 
             {/* ------------------------------------------------ */}
             {/* 🔵 지급/배차 방식 */}
@@ -24190,41 +24141,21 @@ setEditTarget((p) => ({
               />
             </div>
 
-            {/* ===============================
-    🕘 수정 이력
-=============================== */}
+            {/* 수정이력 */}
             {Array.isArray(editTarget.history) &&
               editTarget.history.length > 0 && (
                 <div className="mt-4 border-t pt-3">
-                  <div className="text-sm font-semibold mb-2 text-gray-700">
-                    🕘 수정 이력
-                  </div>
-
-                  <div className="max-h-40 overflow-y-auto space-y-2">
+                  <div className="text-[12px] font-bold text-[#1B2B4B] mb-2">수정이력</div>
+                  <div className="max-h-40 overflow-y-auto space-y-1.5">
                     {editTarget.history
-                      .filter(h => !IGNORE_HISTORY_FIELDS.has(h.field)) // ⭐⭐⭐ 이 줄 추가
+                      .filter(h => !IGNORE_HISTORY_FIELDS.has(h.field))
                       .slice()
                       .reverse()
                       .map((h, i) => (
-
-                        <div
-                          key={i}
-                          className="text-xs text-gray-700 border-b pb-1"
-                        >
-                          <div className="text-gray-500">
-                            {new Date(h.at).toLocaleString()} · {h.user}
-                          </div>
-
-                          <div>
-                            <b>{h.field}</b> :{" "}
-                            <span className="text-red-600">
-                              {String(h.before ?? "없음")}
-                            </span>
-                            {" → "}
-                            <span className="text-blue-600">
-                              {String(h.after ?? "없음")}
-                            </span>
-                          </div>
+                        <div key={i} className="flex items-start gap-2 text-[11px] pb-1.5 border-b border-gray-50 last:border-b-0">
+                          <span className="text-gray-400 whitespace-nowrap shrink-0">{new Date(h.at).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
+                          <span className="text-gray-500 shrink-0">{h.user}</span>
+                          <span className="text-gray-700"><span className="font-semibold">{h.field}</span>: <span className="text-gray-400">{String(h.before ?? "없음")}</span> → <span className="font-semibold text-[#1B2B4B]">{String(h.after ?? "없음")}</span></span>
                         </div>
                       ))}
                   </div>
@@ -25263,6 +25194,22 @@ setCopyTarget(prev => ({
   </div>
 </section>
 
+{/* ===================== 수정이력 ===================== */}
+{Array.isArray(copyTarget.history) && copyTarget.history.length > 0 && (
+  <div className="bg-white rounded-xl border border-gray-200 px-6 py-4 shadow-sm">
+    <div className="text-[13px] font-bold text-[#1B2B4B] mb-3">수정이력</div>
+    <div className="max-h-48 overflow-y-auto space-y-2">
+      {[...copyTarget.history].reverse().map((h, i) => (
+        <div key={i} className="flex items-start gap-3 text-[12px] pb-2 border-b border-gray-50 last:border-b-0">
+          <span className="text-gray-400 whitespace-nowrap shrink-0">{new Date(h.at).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
+          <span className="text-gray-500 shrink-0">{h.user}</span>
+          <span className="text-gray-700"><span className="font-semibold">{h.field}</span>: <span className="text-gray-500">{String(h.before ?? "없음")}</span> → <span className="font-semibold text-[#1B2B4B]">{String(h.after ?? "없음")}</span></span>
+        </div>
+      ))}
+    </div>
+  </div>
+)}
+
 {/* ===================== 복사패널 운임조회 모달 ===================== */}
 {copyFarePanelOpen && fareResult && (() => {
   const fareMin = fareResult.min;
@@ -25974,47 +25921,30 @@ setCopyTarget(prev => ({
         </div>
       )}
 
-      {/* ===================== 📋 기사복사 선택 모달 ===================== */}
+      {/* 기사복사 선택 모달 */}
       {copyModalOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
-          <div className="bg-white p-6 rounded-xl shadow-lg w-[320px]">
-            <h3 className="text-lg font-bold mb-4 text-center">📋 복사 방식 선택</h3>
-
-            <div className="space-y-2">
-              <button
-                onClick={() => copyMessage("basic")}
-                className="w-full py-2 bg-gray-200 rounded hover:bg-gray-300"
-              >
-                기본(번호/이름/전화)
+          <div className="bg-white rounded-2xl shadow-2xl w-[320px] overflow-hidden">
+            <div className="bg-[#1B2B4B] px-5 py-4">
+              <h3 className="text-white font-bold text-[15px]">복사 방식 선택</h3>
+            </div>
+            <div className="p-4 space-y-2">
+              <button onClick={() => copyMessage("basic")} className="w-full py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 transition">
+                차량번호 / 기사명 / 전화번호
               </button>
-              <button
-                onClick={() => copyMessage("fare")}
-                className="w-full py-2 bg-blue-200 rounded hover:bg-blue-300"
-              >
-
-                운임 포함(부가세/선불/착불)
+              <button onClick={() => copyMessage("fare")} className="w-full py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 transition">
+                운임 포함 (부가세/선불/착불)
               </button>
-              <button
-                onClick={() => copyMessage("full")}
-                className="w-full py-2 bg-green-200 rounded hover:bg-green-300"
-              >
-                전체 상세
+              <button onClick={() => copyMessage("full")} className="w-full py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 transition">
+                전체 상세 (상하차 + 화물정보 + 차량)
               </button>
-              <button
-                onClick={() => copyMessage("driver")}
-                className="w-full py-2 bg-emerald-200 rounded hover:bg-emerald-300"
-              >
+              <button onClick={() => copyMessage("driver")} className="w-full py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243d6a] transition">
                 기사 전달용 (상세 + 전달메시지)
               </button>
+              <button onClick={() => setCopyModalOpen(false)} className="w-full py-2 text-[12px] text-gray-400 hover:text-gray-600 transition">
+                취소
+              </button>
             </div>
-
-            <button
-              onClick={() => setCopyModalOpen(false)}
-              className="w-full mt-4 py-2 text-sm text-gray-600"
-            >
-
-              취소
-            </button>
           </div>
         </div>
       )}
@@ -26041,35 +25971,41 @@ setCopyTarget(prev => ({
             }
           }}
         >
-          <div className="bg-white rounded-2xl p-6 w-[380px] shadow-2xl">
-            <h3 className="text-lg font-bold text-center mb-4">상태를 변경하시겠습니까?</h3>
-            <div className="text-center text-sm mb-6">
-              {confirmChange.reason === "copy" ? (
-                <div className="text-gray-700">전달상태를 <b className="text-blue-600">전달완료</b>로 변경할까요?</div>
-              ) : (
-                <>
-                  <div className="font-semibold mb-1">{confirmChange.field}</div>
-                  <div className="text-gray-500">
-                    {String(confirmChange.before || "없음")} → <span className="ml-1 text-blue-600 font-bold">{String(confirmChange.after || "없음")}</span>
-                  </div>
-                </>
-              )}
+          <div className="bg-white rounded-2xl shadow-2xl w-[360px] overflow-hidden">
+            <div className="bg-[#1B2B4B] px-5 py-4">
+              <h3 className="text-white font-bold text-[15px]">상태 변경</h3>
             </div>
-            <div className="flex gap-3">
-              <button className="flex-1 py-2 rounded-lg bg-gray-200 hover:bg-gray-300" onClick={() => setConfirmChange(null)}>취소 (ESC)</button>
-              <button className="flex-1 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700" onClick={async () => {
-                const patch = { [confirmChange.field]: confirmChange.after };
-                if (confirmChange.field === "업체전달상태") {
-                  patch.업체전달일시 = confirmChange.after === "전달완료" ? Date.now() : null;
-                  patch.업체전달방법 = confirmChange.after === "전달완료" ? "수동" : null;
-                  patch.__system = true;
-                }
-                if (confirmChange.field === "지급방식" && confirmChange.after === "취소") {
-                  patch.배차상태 = "배차취소";
-                }
-                await patchDispatch(confirmChange.id, patch);
-                setConfirmChange(null);
-              }}>변경</button>
+            <div className="p-5">
+              <div className="bg-gray-50 rounded-xl px-4 py-3 mb-5 border border-gray-100">
+                {confirmChange.reason === "copy" ? (
+                  <div className="text-[13px] text-gray-700">전달상태를 <span className="font-bold text-[#1B2B4B]">전달완료</span>로 변경할까요?</div>
+                ) : (
+                  <>
+                    <div className="text-[12px] font-semibold text-gray-500 mb-1">{confirmChange.field}</div>
+                    <div className="text-[13px] text-gray-800">
+                      <span className="text-gray-500">{String(confirmChange.before || "없음")}</span>
+                      <span className="mx-2 text-gray-300">→</span>
+                      <span className="font-bold text-[#1B2B4B]">{String(confirmChange.after || "없음")}</span>
+                    </div>
+                  </>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <button className="flex-1 py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 transition" onClick={() => setConfirmChange(null)}>취소</button>
+                <button className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243d6a] transition" onClick={async () => {
+                  const patch = { [confirmChange.field]: confirmChange.after };
+                  if (confirmChange.field === "업체전달상태") {
+                    patch.업체전달일시 = confirmChange.after === "전달완료" ? Date.now() : null;
+                    patch.업체전달방법 = confirmChange.after === "전달완료" ? "수동" : null;
+                    patch.__system = true;
+                  }
+                  if (confirmChange.field === "지급방식" && confirmChange.after === "취소") {
+                    patch.배차상태 = "배차취소";
+                  }
+                  await patchDispatch(confirmChange.id, patch);
+                  setConfirmChange(null);
+                }}>변경</button>
+              </div>
             </div>
           </div>
         </div>
@@ -26575,6 +26511,7 @@ setCopyTarget(prev => ({
               const tonValue = ton.match(/[\d.]+/)?.[0] || "";
               const tonType = ton.includes("kg") ? "kg" : ton.includes("톤") ? "톤" : "";
               setEditTarget({ ...r, 화물내용: raw, 화물수량: cargoNum, 화물타입: cargoType, 톤수값: tonValue, 톤수타입: tonType });
+              setSelected(prev => new Set([...prev, getId(r)]));
               setEditPopupOpen(true);
               setContextMenuDS(null);
             }}>
