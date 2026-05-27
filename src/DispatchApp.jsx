@@ -14956,7 +14956,7 @@ const head = isDark
   );
 
  return (
-<div className="px-3 pt-1 w-full" style={{overflowX: "auto", overflowY: "unset"}}>
+<div className="px-3 pt-1 w-full" style={{overflowX: "visible", overflowY: "unset"}}>
 <CustomAlert message={alertMsg} onClose={() => setAlertMsg(null)} />
 {attachViewer && (
   <AttachmentViewer
