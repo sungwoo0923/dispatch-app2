@@ -310,6 +310,22 @@ function SignupForm({ signupType, onBack }) {
       return;
     }
 
+    // 회사명 + 사업자번호 중복 체크 (신규 가입 시)
+    if (signupType === "신규") {
+      const dupSnap = await getDocs(
+        query(
+          collection(db, "companyApplications"),
+          where("companyName", "==", companyName.trim()),
+          where("businessNumber", "==", businessNumber.trim())
+        )
+      );
+      const activeDup = dupSnap.docs.find(d => d.data().status !== "rejected");
+      if (activeDup) {
+        setError("이미 동일한 회사명과 사업자번호로 가입 신청된 내역이 있습니다.");
+        return;
+      }
+    }
+
     setLoading(true);
 
     try {
