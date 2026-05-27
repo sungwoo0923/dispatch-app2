@@ -16,6 +16,11 @@
 
 /* ================= 전역 ================= */
 
+/* 브라우저 67% 축소 시 75% 수준으로 보이게 보정 (75/67 ≈ 1.12) */
+#root {
+  zoom: 1.12;
+}
+
 html, body {
   font-family: "Noto Sans KR", "Apple SD Gothic Neo", "맑은 고딕", Malgun Gothic, sans-serif !important;
   background-color: #f9fafb;
