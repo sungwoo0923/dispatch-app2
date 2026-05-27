@@ -16874,7 +16874,7 @@ value={copyTarget?.화물수량 || ""}
       {editPopupOpen && editTarget && (
 
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-slate-100 rounded-2xl shadow-2xl w-[740px] overflow-y-auto flex flex-col" style={{ maxHeight: `${Math.floor(88 / appZoom)}vh` }}>
+          <div className="bg-slate-100 rounded-2xl shadow-2xl w-[740px] overflow-y-auto flex flex-col" style={{ maxHeight: `${Math.floor(88 / (parseFloat(document.getElementById("root")?.style.zoom) || 1))}vh` }}>
 
             {/* ===== 헤더 ===== */}
             <div className="flex justify-between items-center px-6 py-4 bg-[#1B2B4B] rounded-t-2xl shrink-0">
@@ -23162,7 +23162,7 @@ onBlur={(e) => {
       {/* ===================== 선택수정(팝업) ===================== */}
       {editPopupOpen && editTarget && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-slate-100 rounded-2xl shadow-2xl w-[740px] overflow-y-auto flex flex-col" style={{ maxHeight: `${Math.floor(88 / appZoom)}vh` }}>
+          <div className="bg-slate-100 rounded-2xl shadow-2xl w-[740px] overflow-y-auto flex flex-col" style={{ maxHeight: `${Math.floor(88 / (parseFloat(document.getElementById("root")?.style.zoom) || 1))}vh` }}>
 
             {/* ===== 헤더 ===== */}
             <div className="flex justify-between items-center px-6 py-4 bg-[#1B2B4B] rounded-t-2xl shrink-0">
