@@ -9576,37 +9576,30 @@ setTimeout(() => {
 {/* ================= 실시간배차 상태 변경 확인 팝업 ================= */}
 {confirmChange && (
   <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
-    <div className="bg-white rounded-xl p-6 w-[360px] shadow-xl border">
-
-      <h3 className="text-base font-bold mb-4">
-        상태를 변경하시겠습니까?
-      </h3>
-
-      <div className="text-sm text-gray-700 mb-5">
-        <div className="mb-1 font-semibold">
-          {confirmChange.key}
-        </div>
-        <div>
-          {confirmChange.before || "미설정"}
-          {" → "}
-          <b className="text-blue-600">
-            {confirmChange.after || "미설정"}
-          </b>
-        </div>
+    <div className="bg-white rounded-2xl shadow-2xl w-[360px] overflow-hidden">
+      <div className="bg-[#1B2B4B] px-5 py-4">
+        <h3 className="text-white font-bold text-[15px]">상태 변경</h3>
       </div>
-
-      <div className="flex justify-end gap-2">
-        <button
-          className="px-3 py-1.5 bg-gray-200 rounded"
-          onClick={() => setConfirmChange(null)}
-        >
-          취소
-        </button>
-
-        <button
-          className="px-3 py-1.5 bg-blue-600 text-white rounded"
-          onClick={async () => {
-            const patch = { [confirmChange.key]: confirmChange.after };
+      <div className="p-5">
+        <div className="bg-gray-50 rounded-xl px-4 py-3 mb-5 border border-gray-100">
+          <div className="text-[12px] font-semibold text-gray-500 mb-1">{confirmChange.key}</div>
+          <div className="text-[13px] text-gray-800">
+            <span className="text-gray-500">{confirmChange.before || "미설정"}</span>
+            <span className="mx-2 text-gray-300">→</span>
+            <span className="font-bold text-[#1B2B4B]">{confirmChange.after || "미설정"}</span>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <button
+            className="flex-1 py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 transition"
+            onClick={() => setConfirmChange(null)}
+          >
+            취소
+          </button>
+          <button
+            className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243d6a] transition"
+            onClick={async () => {
+              const patch = { [confirmChange.key]: confirmChange.after };
 if (confirmChange.key === "지급방식") {
   if (confirmChange.after === "취소") {
     patch.배차상태 = "배차취소";
@@ -9619,12 +9612,12 @@ if (confirmChange.key === "지급방식") {
 }
 await patchDispatch(confirmChange.rowId, patch);
 setConfirmChange(null);
-          }}
-        >
-          확인
-        </button>
+            }}
+          >
+            변경
+          </button>
+        </div>
       </div>
-
     </div>
   </div>
 )}
@@ -16836,19 +16829,14 @@ value={copyTarget?.화물수량 || ""}
 
             {/* ===== 헤더 ===== */}
             <div className="flex justify-between items-center px-6 py-4 bg-[#1B2B4B] rounded-t-2xl shrink-0">
-              <h3 className="text-white text-lg font-bold">선택한 오더 수정</h3>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handleFareSearch}
-                  className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold"
-                >
-                  운임조회
-                </button>
-                <button
-                  className="text-white/70 hover:text-white text-xl"
-                  onClick={() => setEditPopupOpen(false)}
-                >✕</button>
+              <div>
+                <h3 className="text-white text-[15px] font-bold">선택한 오더 수정</h3>
+                {editTarget && <p className="text-white/60 text-[12px] mt-0.5">{editTarget.거래처명} · {editTarget.상차지명} → {editTarget.하차지명}</p>}
               </div>
+              <button
+                className="text-white/70 hover:text-white text-xl"
+                onClick={() => setEditPopupOpen(false)}
+              >✕</button>
             </div>
 
             <div className="p-6 space-y-4 overflow-y-auto">
@@ -17020,12 +17008,12 @@ value={copyTarget?.화물수량 || ""}
   );
 })()}
 
-            {/* ================= 선택수정: 상태 버튼 그룹 ================= */}
+            {/* ================= 선택수정: 상태 버튼 그룹 + 운임조회 ================= */}
             <div className="flex items-center gap-2 mb-4 flex-wrap">
               <button
                 type="button"
                 onClick={() => setEditTarget((p) => ({ ...p, 긴급: !p.긴급, 운임보정: !p.긴급 ? { type: "긴급", rate: 0.2, memo: "긴급 오더" } : null }))}
-                className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all ${editTarget.긴급 ? "bg-red-600 text-white border-red-600" : "bg-white text-red-600 border-red-300 hover:bg-red-50"}`}
+                className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition-all ${editTarget.긴급 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
               >
                 긴급
               </button>
@@ -17036,24 +17024,32 @@ value={copyTarget?.화물수량 || ""}
                   setEdited((prev) => ({ ...prev, [p._id]: { ...(prev[p._id] || {}), 운행유형: next } }));
                   return { ...p, 운행유형: next };
                 })}
-                className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all ${editTarget.운행유형 === "왕복" ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-indigo-600 border-indigo-300 hover:bg-indigo-50"}`}
+                className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition-all ${editTarget.운행유형 === "왕복" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
               >
                 왕복
               </button>
               <button
                 type="button"
                 onClick={() => setEditTarget((p) => ({ ...p, 혼적: !p.혼적, 독차: p.혼적 ? p.독차 : false }))}
-                className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all ${editTarget.혼적 ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-emerald-600 border-emerald-300 hover:bg-emerald-50"}`}
+                className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition-all ${editTarget.혼적 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
               >
                 혼적
               </button>
               <button
                 type="button"
                 onClick={() => setDeliveryConfirm({ rowId: editTarget._id, before: editTarget.업체전달상태 || "미전달", after: editTarget.업체전달상태 === "전달완료" ? "미전달" : "전달완료" })}
-                className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-all ${editTarget.업체전달상태 === "전달완료" ? "bg-green-600 text-white border-green-600" : "bg-white text-green-600 border-green-300 hover:bg-green-50"}`}
+                className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition-all ${editTarget.업체전달상태 === "전달완료" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
               >
                 업체전달
               </button>
+              <div className="ml-auto">
+                <button
+                  onClick={handleFareSearch}
+                  className="px-3 py-1.5 rounded-lg text-[12px] font-semibold border border-[#1B2B4B]/40 text-[#1B2B4B] hover:bg-[#1B2B4B]/10 transition"
+                >
+                  운임조회
+                </button>
+              </div>
             </div>
 
             {/* ------------------------------------------------ */}
@@ -18649,6 +18645,7 @@ if (editTarget.거래처명) {
               const tonValue = ton.match(/[\d.]+/)?.[0] || "";
               const tonType = ton.includes("kg") ? "kg" : ton.includes("톤") ? "톤" : "";
               setEditTarget({ ...r, 화물내용: raw, 화물수량: cargoNum, 화물타입: cargoType, 톤수값: tonValue, 톤수타입: tonType });
+              setSelected(prev => prev.includes(r._id) ? prev : [...prev, r._id]);
               setEditPopupOpen(true);
               setContextMenu(null);
             }}
@@ -19050,45 +19047,30 @@ if (editTarget.거래처명) {
         </div>
       )}
 
-      {/* 📋 기사복사 선택 모달 */}
+      {/* 기사복사 선택 모달 */}
       {copyModalOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
-          <div className="bg-white p-6 rounded-xl shadow-lg w-[320px]">
-            <h3 className="text-lg font-bold mb-4 text-center">📋 복사 방식 선택</h3>
-
-            <div className="space-y-2">
-              <button
-                onClick={() => copyMessage("basic")}
-                className="w-full py-2 bg-gray-200 rounded hover:bg-gray-300"
-              >
+          <div className="bg-white rounded-2xl shadow-2xl w-[320px] overflow-hidden">
+            <div className="bg-[#1B2B4B] px-5 py-4">
+              <h3 className="text-white font-bold text-[15px]">복사 방식 선택</h3>
+            </div>
+            <div className="p-4 space-y-2">
+              <button onClick={() => copyMessage("basic")} className="w-full py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 transition text-left px-4">
                 차량번호 / 기사명 / 전화번호
               </button>
-              <button
-                onClick={() => copyMessage("fare")}
-                className="w-full py-2 bg-blue-200 rounded hover:bg-blue-300"
-              >
+              <button onClick={() => copyMessage("fare")} className="w-full py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 transition text-left px-4">
                 운임 포함 (부가세/선불/착불)
               </button>
-              <button
-                onClick={() => copyMessage("full")}
-                className="w-full py-2 bg-green-200 rounded hover:bg-green-300"
-              >
+              <button onClick={() => copyMessage("full")} className="w-full py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 transition text-left px-4">
                 전체 상세 (상하차 + 화물정보 + 차량)
               </button>
-              <button
-                onClick={() => copyMessage("driver")}
-                className="w-full py-2 bg-emerald-200 rounded hover:bg-emerald-300 font-semibold text-emerald-900"
-              >
+              <button onClick={() => copyMessage("driver")} className="w-full py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243d6a] transition text-left px-4">
                 기사 전달용 (상세 + 전달메시지)
               </button>
+              <button onClick={() => setCopyModalOpen(false)} className="w-full py-2 text-[12px] text-gray-400 hover:text-gray-600 transition">
+                취소
+              </button>
             </div>
-
-            <button
-              onClick={() => setCopyModalOpen(false)}
-              className="w-full mt-4 py-2 text-sm text-gray-600 hover:opacity-70"
-            >
-              취소
-            </button>
           </div>
         </div>
       )}
