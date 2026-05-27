@@ -4989,18 +4989,6 @@ function parseStops(text = "") {
 function getStopLabel(stops = []) {
   return stops.length > 1 ? `경유 ${stops.length}곳` : "단일";
 }
-// 운임조회: 상/하차지 전체 경유 포함 정류장 목록 반환 (상차지명 numbered + 경유지_상차 배열 통합)
-function getRouteStops(row, type) {
-  const mainName = type === "pickup" ? (row.상차지명 || "") : (row.하차지명 || "");
-  const mainStops = parseStops(mainName);
-  const viaKey = type === "pickup" ? "경유지_상차" : "경유지_하차";
-  const viaAlt = type === "pickup" ? "경유상차목록" : "경유하차목록";
-  const via = row[viaKey] || row[viaAlt] || [];
-  const viaNames = Array.isArray(via)
-    ? via.map(s => (typeof s === "string" ? s : (s?.업체명 || "")).trim()).filter(Boolean)
-    : [];
-  return [...mainStops, ...viaNames];
-}
 // ================================
 // 🏷 메모 자동 태그 추출
 // ================================
@@ -10669,6 +10657,28 @@ setConfirmChange(null);
     );
   }
   // ===================== DispatchApp.jsx (PART 3/8) — END =====================
+
+// 운임조회 공용 유틸: 상/하차지 전체 경유 포함 정류장 목록 (Part 4/5 컴포넌트에서 사용)
+// parseStops 로직을 자체 포함하여 DispatchManagement 스코프에 의존하지 않음
+function getRouteStops(row, type) {
+  const mainName = String(type === "pickup" ? (row.상차지명 || "") : (row.하차지명 || "")).trim();
+  let mainStops;
+  if (mainName) {
+    const matches = [...mainName.matchAll(/(\d+)\.\s*([^\d]+)/g)];
+    mainStops = matches.length > 0
+      ? matches.sort((a, b) => Number(a[1]) - Number(b[1])).map(m => m[2].trim())
+      : [mainName];
+  } else {
+    mainStops = [];
+  }
+  const viaKey = type === "pickup" ? "경유지_상차" : "경유지_하차";
+  const viaAlt = type === "pickup" ? "경유상차목록" : "경유하차목록";
+  const via = row[viaKey] || row[viaAlt] || [];
+  const viaNames = Array.isArray(via)
+    ? via.map(s => (typeof s === "string" ? s : (s?.업체명 || "")).trim()).filter(Boolean)
+    : [];
+  return [...mainStops, ...viaNames];
+}
 
  // ===================== DispatchApp.jsx (PART 4/8 — START) =====================
 
