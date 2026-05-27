@@ -1,7 +1,7 @@
 // src/shipper/ShipperSignup.jsx
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { createUserWithEmailAndPassword, fetchSignInMethodsForEmail } from "firebase/auth";
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, deleteUser } from "firebase/auth";
 import { auth, db } from "../firebase";
 import {
   doc, setDoc, serverTimestamp, collection, query, where, getDocs, addDoc, updateDoc,
@@ -276,14 +276,7 @@ function SignupForm({ signupType, onBack }) {
     setEmailChecked(false);
     setEmailCheckMsg(null);
     try {
-      // Firebase Auth 체크 (실제 계정 존재 여부)
-      const methods = await fetchSignInMethodsForEmail(auth, trimmed);
-      if (methods.length > 0) {
-        setEmailChecked(false);
-        setEmailCheckMsg({ ok: false, msg: "이미 사용 중인 이메일입니다." });
-        return;
-      }
-      // Firestore users 추가 체크
+      // Firestore 활성 계정만 체크 (삭제/탈퇴된 계정은 재가입 허용)
       const snap = await getDocs(query(collection(db, "users"), where("email", "==", trimmed)));
       if (!snap.empty) {
         setEmailChecked(false);
@@ -336,11 +329,8 @@ function SignupForm({ signupType, onBack }) {
 
     setLoading(true);
 
-    try {
-      const res = await createUserWithEmailAndPassword(auth, email.trim(), password);
-      const uid = res.user.uid;
+    const doFirestoreSetup = async (uid) => {
       const fullAddress = address + (addressDetail ? ` ${addressDetail}` : "");
-
       const linkedTransport = selectedTransport
         ? {
             companyName: selectedTransport.companyName || "",
@@ -349,7 +339,6 @@ function SignupForm({ signupType, onBack }) {
             representative: selectedTransport.name || selectedTransport.representative || "",
           }
         : null;
-
       await setDoc(doc(db, "users", uid), {
         uid,
         email: email.trim(),
@@ -364,7 +353,6 @@ function SignupForm({ signupType, onBack }) {
         linkedTransportCompany: linkedTransport || null,
         createdAt: serverTimestamp(),
       });
-
       await addDoc(collection(db, "companyApplications"), {
         type: signupType,
         companyName: companyName.trim(),
@@ -383,21 +371,44 @@ function SignupForm({ signupType, onBack }) {
         linkedTransportCompany: linkedTransport || null,
         createdAt: serverTimestamp(),
       });
-
-      // 기존 가입: 회사 doc에 주소 없으면 저장
       if (signupType === "기존" && fullAddress.trim() && selectedCompanyApp?._docId && !selectedCompanyApp.address) {
         try {
           await updateDoc(doc(db, "companyApplications", selectedCompanyApp._docId), { address: fullAddress.trim() });
         } catch (_) {}
       }
+    };
 
+    try {
+      let uid;
+      try {
+        const res = await createUserWithEmailAndPassword(auth, email.trim(), password);
+        uid = res.user.uid;
+      } catch (authErr) {
+        if (authErr.code === "auth/email-already-in-use") {
+          // 기존 Firestore 활성 계정 여부 확인
+          const snap = await getDocs(query(collection(db, "users"), where("email", "==", email.trim())));
+          if (!snap.empty) {
+            setError("이미 사용 중인 이메일입니다.");
+            return;
+          }
+          // 삭제된 계정 — 동일 비밀번호로 로그인 후 Auth 계정 삭제 후 재가입 시도
+          try {
+            const oldCred = await signInWithEmailAndPassword(auth, email.trim(), password);
+            await deleteUser(oldCred.user);
+            const res = await createUserWithEmailAndPassword(auth, email.trim(), password);
+            uid = res.user.uid;
+          } catch {
+            setError("이전에 탈퇴된 계정입니다. 관리자에게 계정 초기화를 요청해주세요.");
+            return;
+          }
+        } else {
+          throw authErr;
+        }
+      }
+      await doFirestoreSetup(uid);
       navigate("/shipper-pending", { replace: true });
     } catch (err) {
-      if (err.code === "auth/email-already-in-use") {
-        setError("이미 사용 중인 이메일입니다.");
-      } else {
-        setError(err.message || "가입 신청 중 오류가 발생했습니다.");
-      }
+      setError(err.message || "가입 신청 중 오류가 발생했습니다.");
     } finally {
       setLoading(false);
     }

@@ -224,14 +224,18 @@ export default function CompanyApplications() {
         processedAt: serverTimestamp(),
       });
       if (app.userId && app.userId !== auth.currentUser?.uid) {
-        await updateDoc(doc(db, "users", app.userId), {
-          approved: true,
-          companyCode,
-          companyName: app.companyName,
-        });
+        try {
+          await updateDoc(doc(db, "users", app.userId), {
+            approved: true,
+            companyCode,
+            companyName: app.companyName,
+          });
+        } catch (_) {}
       }
       setManagingApp(null);
       setCodeNotice({ companyName: app.companyName, companyCode, email: app.email, phone: app.phone, appType: "운송" });
+    } catch (err) {
+      alert("승인 처리 중 오류가 발생했습니다: " + (err?.message || err));
     } finally {
       setProcessing(false);
     }
@@ -697,26 +701,27 @@ export default function CompanyApplications() {
               {activeTab === "화주" && managingApp.userId && appUserPerms !== null && (
                 <div className="border border-gray-100 rounded-xl overflow-hidden">
                   <div className="bg-gray-50 px-4 py-2.5 text-[11px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-100">권한 관리</div>
-                  <div className="px-4 py-4 space-y-3">
+                  <div className="px-4 py-4">
+                    <div className="grid grid-cols-4 gap-2 mb-3">
                     {[
                       { key: "master", label: "마스터", desc: "전체 권한" },
-                      { key: "subMaster", label: "부마스터", desc: "마스터 권한 부여 제외" },
-                      { key: "settlement", label: "경리", desc: "정산 탭 접근" },
-                      { key: "transport", label: "운송", desc: "운송 탭 접근" },
+                      { key: "subMaster", label: "부마스터", desc: "권한 부여 제외" },
+                      { key: "settlement", label: "경리", desc: "정산 탭" },
+                      { key: "transport", label: "운송", desc: "운송 탭" },
                     ].map(({ key, label, desc }) => (
-                      <label key={key} className="flex items-center gap-3 cursor-pointer">
+                      <label key={key} className={`flex flex-col items-center gap-1.5 cursor-pointer rounded-xl border px-2 py-2.5 transition ${!!appUserPerms[key] ? "border-[#1B2B4B] bg-[#1B2B4B]/5" : "border-gray-200 bg-white hover:border-gray-300"}`}>
                         <input
                           type="checkbox"
                           checked={!!appUserPerms[key]}
                           onChange={(e) => setAppUserPerms(prev => ({ ...prev, [key]: e.target.checked }))}
                           className="w-4 h-4 rounded"
                         />
-                        <div>
-                          <div className="text-[13px] font-semibold text-gray-800">{label}</div>
-                          <div className="text-[10px] text-gray-400">{desc}</div>
+                        <div className="text-center">
+                          <div className="text-[12px] font-semibold text-gray-800">{label}</div>
+                          <div className="text-[10px] text-gray-400 leading-tight">{desc}</div>
                         </div>
                       </label>
-                    ))}
+                    ))}</div>
                     <button
                       onClick={async () => {
                         await updateDoc(doc(db, "users", managingApp.userId), { permissions: appUserPerms });

@@ -15239,7 +15239,7 @@ const head = isDark
   <tr
     key={r._id || r.id || `idx-${idx}`}
     id={`row-${r._id}`}
-    onContextMenu={(e) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, row: r }); }}
+    onContextMenu={(e) => { e.preventDefault(); const _z = parseFloat(document.getElementById("root")?.style.zoom) || 1; setContextMenu({ x: e.clientX / _z, y: e.clientY / _z, row: r }); }}
 
 onDoubleClick={(e) => {
   if (e.target.closest("input")) return;
@@ -16874,7 +16874,7 @@ value={copyTarget?.화물수량 || ""}
       {editPopupOpen && editTarget && (
 
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-slate-100 rounded-2xl shadow-2xl w-[740px] max-h-[92vh] overflow-y-auto flex flex-col">
+          <div className="bg-slate-100 rounded-2xl shadow-2xl w-[740px] overflow-y-auto flex flex-col" style={{ maxHeight: `${Math.floor(88 / appZoom)}vh` }}>
 
             {/* ===== 헤더 ===== */}
             <div className="flex justify-between items-center px-6 py-4 bg-[#1B2B4B] rounded-t-2xl shrink-0">
@@ -18630,7 +18630,7 @@ if (editTarget.거래처명) {
       {contextMenu && (
         <div
           className="fixed z-[999999] bg-white border border-gray-200 rounded-xl shadow-2xl py-1.5 min-w-[168px] select-none"
-          style={{ top: Math.min(contextMenu.y, window.innerHeight - 240), left: Math.min(contextMenu.x, window.innerWidth - 180) }}
+          style={{ top: Math.min(contextMenu.y, window.innerHeight / (parseFloat(document.getElementById("root")?.style.zoom) || 1) - 240), left: Math.min(contextMenu.x, window.innerWidth / (parseFloat(document.getElementById("root")?.style.zoom) || 1) - 180) }}
           onClick={e => e.stopPropagation()}
         >
           {/* 기사복사 */}
@@ -22788,7 +22788,7 @@ return (
     <tr
       key={id}
       id={`row-${id}`}
-      onContextMenu={(e) => { e.preventDefault(); setContextMenuDS({ x: e.clientX, y: e.clientY, row: r }); }}
+      onContextMenu={(e) => { e.preventDefault(); const _z = parseFloat(document.getElementById("root")?.style.zoom) || 1; setContextMenuDS({ x: e.clientX / _z, y: e.clientY / _z, row: r }); }}
       onDoubleClick={() => {
   const rawCargo = String(row.화물내용 || "");
 
@@ -23162,7 +23162,7 @@ onBlur={(e) => {
       {/* ===================== 선택수정(팝업) ===================== */}
       {editPopupOpen && editTarget && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-slate-100 rounded-2xl shadow-2xl w-[740px] max-h-[92vh] overflow-y-auto flex flex-col">
+          <div className="bg-slate-100 rounded-2xl shadow-2xl w-[740px] overflow-y-auto flex flex-col" style={{ maxHeight: `${Math.floor(88 / appZoom)}vh` }}>
 
             {/* ===== 헤더 ===== */}
             <div className="flex justify-between items-center px-6 py-4 bg-[#1B2B4B] rounded-t-2xl shrink-0">
@@ -26500,7 +26500,7 @@ setCopyTarget(prev => ({
       {contextMenuDS && (
         <div
           className="fixed z-[999999] bg-white border border-gray-200 rounded-xl shadow-2xl py-1.5 min-w-[168px] select-none"
-          style={{ top: Math.min(contextMenuDS.y, window.innerHeight - 260), left: Math.min(contextMenuDS.x, window.innerWidth - 180) }}
+          style={{ top: Math.min(contextMenuDS.y, window.innerHeight / (parseFloat(document.getElementById("root")?.style.zoom) || 1) - 260), left: Math.min(contextMenuDS.x, window.innerWidth / (parseFloat(document.getElementById("root")?.style.zoom) || 1) - 180) }}
           onClick={e => e.stopPropagation()}
         >
           <button className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
