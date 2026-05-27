@@ -8,6 +8,7 @@ import {
   doc,
   onSnapshot,
   getDocs,
+  getDoc,
   query,
   where,
   updateDoc,
@@ -70,6 +71,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "" }) {
 
   const [myRole, setMyRole] = useState("");
   const [myCompany, setMyCompany] = useState("");
+  const [appUserPerms, setAppUserPerms] = useState(null);
 
   const me = auth.currentUser;
   const isTotalMaster = parentRole === "totalMaster" || me?.email === TOTAL_MASTER_EMAIL || myRole === "totalMaster";
@@ -107,6 +109,13 @@ export default function AdminMenu({ parentRole = "", parentCompany = "" }) {
     });
     return () => unsub();
   }, []);
+
+  useEffect(() => {
+    if (!managingLinkedApp?.userId) { setAppUserPerms(null); return; }
+    getDoc(doc(db, "users", managingLinkedApp.userId)).then(snap => {
+      if (snap.exists()) setAppUserPerms(snap.data().permissions || {});
+    });
+  }, [managingLinkedApp?.userId]);
 
   const visibleUsers = useMemo(() => {
     if (isTotalMaster) return users;

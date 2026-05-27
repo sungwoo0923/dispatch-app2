@@ -285,6 +285,24 @@ location.pathname.startsWith("/shipper/transport")
         </select>
       </div>
 
+      {/* 내 권한 */}
+      <div className="mb-3">
+        <label className="text-sm text-gray-600 block mb-1">내 권한</label>
+        <div className="w-full border px-3 py-2 rounded bg-gray-50 text-sm text-gray-700">
+          {userData?.permissions?.master
+            ? "마스터"
+            : userData?.permissions?.subMaster
+            ? "부마스터"
+            : userData?.permissions?.settlement && userData?.permissions?.transport
+            ? "정산 · 운송"
+            : userData?.permissions?.settlement
+            ? "정산"
+            : userData?.permissions?.transport
+            ? "운송"
+            : "일반"}
+        </div>
+      </div>
+
       {/* 비밀번호 변경 */}
       <button
         onClick={() => navigate("/shipper/change-password")}
