@@ -171,7 +171,12 @@ export default function AdminMenu({ parentRole = "", parentCompany = "" }) {
     if (!isTotalMaster && (u.companyName || "돌캐") !== effectiveCompany) return;
     const status = !u.approved;
     const updateData = { approved: status };
-    if (u.role === "shipper" && status === true) updateData.isMaster = true;
+    if (u.role === "shipper" && status === true) {
+      updateData.isMaster = true;
+      if (!u.permissions?.master) {
+        updateData.permissions = { master: true, subMaster: false, settlement: false, transport: false };
+      }
+    }
     await setDoc(doc(db, "users", u.id), updateData, { merge: true });
     await setDoc(doc(db, "drivers", u.id), { active: status, updatedAt: new Date() }, { merge: true });
     if (manageUser?.id === u.id) setManageUser(prev => ({ ...prev, approved: status }));
