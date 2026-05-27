@@ -500,7 +500,12 @@ export default function AdminMenu({ parentRole = "", parentCompany = "" }) {
                             </span>
                           </td>
                           <td className="px-3 py-3 text-center font-semibold text-gray-800">{app.companyName}</td>
-                          <td className="px-3 py-3 text-center text-gray-700">{app.name}</td>
+                          <td className="px-3 py-3 text-center text-gray-700">
+                            <div>{app.name}</div>
+                            {app.linkedTransportCompany?.companyName && (
+                              <span className="text-[11px] text-blue-600">연동: {app.linkedTransportCompany.companyName}</span>
+                            )}
+                          </td>
                           <td className="px-3 py-3 text-center text-gray-500 text-[12px]">{app.phone}</td>
                           {isTotalMaster && (
                             <>
@@ -725,6 +730,43 @@ export default function AdminMenu({ parentRole = "", parentCompany = "" }) {
                       <span className="text-[13px] font-medium text-gray-800">{managingLinkedApp.transportApprovedBy || "-"}</span>
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* 권한 관리 (최고관리자 전용) */}
+              {isTotalMaster && managingLinkedApp.userId && appUserPerms !== null && (
+                <div className="border border-gray-100 rounded-xl overflow-hidden mb-5">
+                  <div className="bg-gray-50 px-4 py-2.5 text-[11px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-100">권한 관리</div>
+                  <div className="px-4 py-4 space-y-3">
+                    {[
+                      { key: "master", label: "마스터", desc: "전체 권한" },
+                      { key: "subMaster", label: "부마스터", desc: "마스터 권한 부여 제외" },
+                      { key: "settlement", label: "경리", desc: "정산 탭 접근" },
+                      { key: "transport", label: "운송", desc: "운송 탭 접근" },
+                    ].map(({ key, label, desc }) => (
+                      <label key={key} className="flex items-center gap-3 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={!!appUserPerms[key]}
+                          onChange={(e) => setAppUserPerms(prev => ({ ...prev, [key]: e.target.checked }))}
+                          className="w-4 h-4 rounded"
+                        />
+                        <div>
+                          <div className="text-[13px] font-semibold text-gray-800">{label}</div>
+                          <div className="text-[10px] text-gray-400">{desc}</div>
+                        </div>
+                      </label>
+                    ))}
+                    <button
+                      onClick={async () => {
+                        await updateDoc(doc(db, "users", managingLinkedApp.userId), { permissions: appUserPerms });
+                        alert("권한이 저장되었습니다.");
+                      }}
+                      className="w-full py-2 mt-2 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold"
+                    >
+                      권한 저장
+                    </button>
+                  </div>
                 </div>
               )}
 
