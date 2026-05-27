@@ -127,6 +127,14 @@ const getPickupDate = (o = {}) => {
 // 청구운임 / 인수증
 const getClaim = (o = {}) => o.청구운임 ?? o.인수증 ?? 0;
 
+// 좁은 화면용 금액 축약 표시 (만원/억원)
+const fmtM = (v) => {
+  const n = Number(v) || 0;
+  if (n >= 100000000) return `${(n / 100000000).toFixed(1)}억원`;
+  if (n >= 10000) return `${Math.round(n / 10000).toLocaleString()}만원`;
+  return `${n.toLocaleString()}원`;
+};
+
 // 경유지 배열 안전 파싱
 const safeParseStops = (raw) => {
   if (Array.isArray(raw) && raw.length > 0) return raw;
@@ -3036,20 +3044,20 @@ function MobileSalesPage({ data = [], onBack }) {
 
       <div className="px-4 pt-4 space-y-4">
         {/* 전월 대비 배너 */}
-        <div className={`rounded-xl px-4 py-2.5 flex items-center justify-between text-[13px] font-semibold border ${saleDiff>=0?"bg-emerald-50 border-emerald-200 text-emerald-700":"bg-rose-50 border-rose-200 text-rose-600"}`}>
-          <span>전월 대비</span>
-          <span>{saleDiff>=0?"▲":"▼"} {Math.abs(saleDiff).toLocaleString()}원 {saleDiffPct!==null?`(${saleDiffPct>=0?"+":""}${saleDiffPct.toFixed(1)}%)`:"(이전 데이터 없음)"}</span>
+        <div className={`rounded-xl px-3 py-2.5 flex items-center justify-between text-[12px] font-semibold border ${saleDiff>=0?"bg-emerald-50 border-emerald-200 text-emerald-700":"bg-rose-50 border-rose-200 text-rose-600"}`}>
+          <span className="shrink-0">전월 대비</span>
+          <span className="text-right ml-2">{saleDiff>=0?"▲":"▼"} {fmtM(Math.abs(saleDiff))} {saleDiffPct!==null?`(${saleDiffPct>=0?"+":""}${saleDiffPct.toFixed(1)}%)`:"(전월 없음)"}</span>
         </div>
 
         {/* KPI 4카드 — 다이얼 게이지 */}
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-2">
           {kpiCards.map((k,i) => (
-            <div key={i} className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-3 flex items-center gap-3">
-              <Dial pct={k.pct} color={k.color} size={64} />
-              <div className="flex-1 min-w-0">
-                <div className="text-[10px] text-gray-400 font-semibold mb-0.5">{k.label}</div>
-                <div className="text-[13px] font-extrabold leading-tight text-gray-900 truncate">{fmtWon(k.value)}<span className="text-[10px] font-normal text-gray-400 ml-0.5">원</span></div>
-                <div className="text-[10px] text-gray-400 mt-0.5">{k.sub}</div>
+            <div key={i} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-2.5 flex flex-col items-center text-center gap-1">
+              <Dial pct={k.pct} color={k.color} size={52} />
+              <div className="w-full min-w-0">
+                <div className="text-[9px] text-gray-400 font-semibold leading-tight">{k.label}</div>
+                <div className="text-[12px] font-extrabold leading-tight text-gray-900">{fmtWon(k.value)}<span className="text-[9px] font-normal text-gray-400 ml-0.5">원</span></div>
+                <div className="text-[9px] text-gray-400 mt-0.5">{k.sub}</div>
               </div>
             </div>
           ))}
@@ -3069,7 +3077,7 @@ function MobileSalesPage({ data = [], onBack }) {
                   <div className="text-[11px] text-gray-400">{ins.label}</div>
                   <div className={`text-[13px] font-bold truncate ${ins.positive?"text-gray-800":"text-rose-600"}`}>{ins.value}</div>
                 </div>
-                <div className="text-[10px] text-gray-400 text-right shrink-0 max-w-[90px]">{ins.sub}</div>
+                <div className="text-[10px] text-gray-400 text-right shrink-0 max-w-[70px] leading-tight">{ins.sub}</div>
               </div>
             ))}
           </div>
@@ -3837,22 +3845,22 @@ const summary = useMemo(() => {
 <div className="grid grid-cols-3 gap-2 mt-2">
   <div className="bg-blue-50 rounded-xl p-2 text-center">
     <div className="text-[11px] text-gray-500">청구</div>
-    <div className="text-sm font-bold text-blue-700">
-      {summary.totalClaim.toLocaleString()}원
+    <div className="text-[12px] font-bold text-blue-700 whitespace-nowrap">
+      {fmtM(summary.totalClaim)}
     </div>
   </div>
 
   <div className="bg-gray-100 rounded-xl p-2 text-center">
     <div className="text-[11px] text-gray-500">기사</div>
-    <div className="text-sm font-bold text-gray-700">
-      {summary.totalDriver.toLocaleString()}원
+    <div className="text-[12px] font-bold text-gray-700 whitespace-nowrap">
+      {fmtM(summary.totalDriver)}
     </div>
   </div>
 
   <div className="bg-green-50 rounded-xl p-2 text-center">
     <div className="text-[11px] text-gray-500">수수료</div>
-    <div className="text-sm font-bold text-green-700">
-      {summary.totalFee.toLocaleString()}원
+    <div className="text-[12px] font-bold text-green-700 whitespace-nowrap">
+      {fmtM(summary.totalFee)}
     </div>
   </div>
 </div>
