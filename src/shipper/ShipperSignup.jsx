@@ -162,6 +162,9 @@ function SignupForm({ signupType, onBack }) {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [emailChecked, setEmailChecked] = useState(false);
+  const [emailCheckMsg, setEmailCheckMsg] = useState(null);
+  const [checkingEmail, setCheckingEmail] = useState(false);
 
   // ── 기존 가입: 화주 회사 검색 ────────────────────────────────────────────
   const [companySearchQ, setCompanySearchQ] = useState("");
@@ -266,6 +269,28 @@ function SignupForm({ signupType, onBack }) {
     });
   };
 
+  const checkEmailDuplicate = async () => {
+    const trimmed = email.trim();
+    if (!trimmed) return setEmailCheckMsg({ ok: false, msg: "이메일을 먼저 입력해주세요." });
+    setCheckingEmail(true);
+    setEmailChecked(false);
+    setEmailCheckMsg(null);
+    try {
+      const snap = await getDocs(query(collection(db, "users"), where("email", "==", trimmed)));
+      if (snap.empty) {
+        setEmailChecked(true);
+        setEmailCheckMsg({ ok: true, msg: "사용 가능한 이메일입니다." });
+      } else {
+        setEmailChecked(false);
+        setEmailCheckMsg({ ok: false, msg: "이미 사용 중인 이메일입니다." });
+      }
+    } catch {
+      setEmailCheckMsg({ ok: false, msg: "확인 중 오류가 발생했습니다." });
+    } finally {
+      setCheckingEmail(false);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
@@ -275,6 +300,7 @@ function SignupForm({ signupType, onBack }) {
     if (!name.trim()) return setError("이름을 입력해주세요.");
     if (!phone.trim()) return setError("핸드폰번호를 입력해주세요.");
     if (!email.trim()) return setError("이메일을 입력해주세요.");
+    if (!emailChecked) return setError("이메일 중복확인을 해주세요.");
     if (password.length < 6) return setError("비밀번호는 6자 이상 입력해주세요.");
     if (password !== passwordConfirm) return setError("비밀번호가 일치하지 않습니다.");
     if (!termsAgreed || !privacyAgreed) return setError("이용약관 및 개인정보처리방침에 모두 동의해주세요.");
@@ -595,9 +621,25 @@ function SignupForm({ signupType, onBack }) {
           <SectionLabel>계정 정보</SectionLabel>
 
           <Field label="이메일" required>
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
-              placeholder="이메일 입력"
-              className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]" />
+            <div className="flex gap-2">
+              <input type="email" value={email}
+                onChange={(e) => { setEmail(e.target.value); setEmailChecked(false); setEmailCheckMsg(null); }}
+                placeholder="이메일 입력"
+                className="flex-1 border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]" />
+              <button
+                type="button"
+                onClick={checkEmailDuplicate}
+                disabled={checkingEmail}
+                className="px-4 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition whitespace-nowrap disabled:opacity-50"
+              >
+                {checkingEmail ? "확인 중..." : "중복확인"}
+              </button>
+            </div>
+            {emailCheckMsg && (
+              <p className={`text-[12px] mt-1 ${emailCheckMsg.ok ? "text-green-600" : "text-red-500"}`}>
+                {emailCheckMsg.msg}
+              </p>
+            )}
           </Field>
 
           <Field label="비밀번호" required>

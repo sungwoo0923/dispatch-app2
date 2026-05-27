@@ -262,11 +262,17 @@ export default function AdminMenu({ parentRole = "", parentCompany = "" }) {
       processedAt: serverTimestamp(),
     });
     if (app.userId) {
-      await updateDoc(doc(db, "users", app.userId), {
+      const isFirstMaster = app.type === "신규";
+      const updatePayload = {
         approved: true,
         companyCode,
         companyName: app.companyName,
-      });
+        businessNumber: app.businessNumber || "",
+      };
+      if (isFirstMaster) {
+        updatePayload.permissions = { master: true, subMaster: false, settlement: false, transport: false };
+      }
+      await updateDoc(doc(db, "users", app.userId), updatePayload);
     }
     setManagingLinkedApp(null);
   };

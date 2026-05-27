@@ -38,13 +38,13 @@ if (!me) {
 setMe(me);
 const filtered = arr.filter(
   u =>
-    u.company === me.company &&
+    u.companyName === me.companyName &&
     !u.rejected &&
     !u.deleted
 );
 const rejectedList = arr.filter(
   u =>
-    u.company === me.company &&
+    u.companyName === me.companyName &&
     (u.rejected || u.deleted)
 );
 setUsers(filtered);

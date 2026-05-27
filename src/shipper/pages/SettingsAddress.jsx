@@ -60,8 +60,8 @@ export default function SettingsAddress() {
     snap1.docs.forEach(addToMap);
 
     // Also query by company (records from other users in same company)
-    if (userData?.company) {
-      const q2 = query(collection(db, "places"), where("company", "==", userData.company));
+    if (userData?.companyName) {
+      const q2 = query(collection(db, "places"), where("company", "==", userData.companyName));
       const snap2 = await getDocs(q2);
       snap2.docs.forEach(addToMap);
     }

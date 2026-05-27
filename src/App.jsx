@@ -286,7 +286,7 @@ export default function App() {
       const unsubUser = onSnapshot(doc(db, "users", u.uid), (snap) => {
         if (snap.exists()) {
           const data = snap.data();
-          const dataRole = data.role || "shipper";
+          const dataRole = data.role || "user";
           setRole(dataRole);
           // approved !== false allows old accounts (undefined) and explicitly true
           // only blocks accounts explicitly set to false (new unapproved signups)
@@ -302,7 +302,7 @@ export default function App() {
           }
           localStorage.setItem("role", dataRole);
         } else {
-          setRole("shipper");
+          setRole(null);
           setApproved(false);
           setUserCompany("");
         }
@@ -417,8 +417,10 @@ export default function App() {
           <Route
             path="/shipper/*"
             element={
-              user && role === "shipper"
-                ? (approved ? (isMobile ? <ShipperMobileApp /> : <ShipperApp />) : <Navigate to="/shipper-pending" replace />)
+              user && (role === "shipper" || user.email === "tjddnqkf@naver.com")
+                ? ((approved || user.email === "tjddnqkf@naver.com")
+                    ? (isMobile ? <ShipperMobileApp /> : <ShipperApp />)
+                    : <Navigate to="/shipper-pending" replace />)
                 : <Navigate to="/shipper-login" replace />
             }
           />

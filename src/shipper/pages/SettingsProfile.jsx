@@ -66,8 +66,8 @@ if (!data) {
           </div>
 
           <div className="space-y-6">
-            <Row label="회사명" value={data.company || ""} />
-            <Row label="대표" value={data.ceo || ""} />
+            <Row label="회사명" value={data.companyName || ""} />
+            <Row label="대표" value={data.ceo || data.name || ""} />
             <Row label="주소" value={data.address || ""} />
             <Row
               label="업태/업종"
@@ -77,7 +77,7 @@ if (!data) {
             <div className="flex items-start">
               <div className="w-[180px] text-gray-500">사업자번호</div>
               <div>
-                <div className="text-gray-800">{data.bizNo || ""}</div>
+                <div className="text-gray-800">{data.businessNumber || data.bizNo || ""}</div>
                 <div className="text-[16px] text-blue-500 mt-1">
                   정보 수정이 필요할 경우 r15332525@daum.net 으로 변경된 사업자 등록증을 보내주시기 바랍니다.
                 </div>
