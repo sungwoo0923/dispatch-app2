@@ -2013,8 +2013,8 @@ return (
                 : (userCompany || localStorage.getItem("userCompany") || "");
               return (
                 <div className="ml-2 flex flex-col leading-tight">
+                  {co && <span className="text-[12px] font-bold text-white/90 truncate max-w-[90px]">{co}</span>}
                   <span className="text-[10px] font-mono text-white/50">v{__APP_VERSION__}</span>
-                  {co && <span className="text-[11px] font-bold text-white/90 truncate max-w-[80px]">{co}</span>}
                 </div>
               );
             })()}
@@ -4988,6 +4988,18 @@ function parseStops(text = "") {
 // 경유 개수 라벨
 function getStopLabel(stops = []) {
   return stops.length > 1 ? `경유 ${stops.length}곳` : "단일";
+}
+// 운임조회: 상/하차지 전체 경유 포함 정류장 목록 반환 (상차지명 numbered + 경유지_상차 배열 통합)
+function getRouteStops(row, type) {
+  const mainName = type === "pickup" ? (row.상차지명 || "") : (row.하차지명 || "");
+  const mainStops = parseStops(mainName);
+  const viaKey = type === "pickup" ? "경유지_상차" : "경유지_하차";
+  const viaAlt = type === "pickup" ? "경유상차목록" : "경유하차목록";
+  const via = row[viaKey] || row[viaAlt] || [];
+  const viaNames = Array.isArray(via)
+    ? via.map(s => (typeof s === "string" ? s : (s?.업체명 || "")).trim()).filter(Boolean)
+    : [];
+  return [...mainStops, ...viaNames];
 }
 // ================================
 // 🏷 메모 자동 태그 추출
@@ -12460,16 +12472,14 @@ const selectedSet = React.useMemo(() => new Set(selected), [selected]);
     const targetVehicle = String(row.차량종류 || "").trim();
     const isColdVehicle = targetVehicle.includes("냉장") || targetVehicle.includes("냉동");
 
-    // 🔥 1단계: 상/하차지 + 차량종류(냉장/냉동 그룹) 필터
+    // 🔥 1단계: 상/하차지 + 차량종류(냉장/냉동 그룹) 필터 (경유지 포함 정확매칭)
+    const inputPickupStops = getRouteStops(row, "pickup");
+    const inputDropStops = getRouteStops(row, "drop");
+    const sameStops = (a, b) => a.length === b.length && a.every((n, i) => n.trim() === b[i].trim());
     const base = (dispatchData || []).filter(r => {
       if (!r.청구운임) return false;
-      const rPickupStops = parseStops(r.상차지명 || "");
-      const rDropStops = parseStops(r.하차지명 || "");
-      const inputPickupStops = parseStops(pickup);
-      const inputDropStops = parseStops(drop);
-      if (inputPickupStops.length !== rPickupStops.length) return false;
-      if (inputDropStops.length !== rDropStops.length) return false;
-      const sameStops = (a, b) => a.every((n, i) => n.trim() === b[i].trim());
+      const rPickupStops = getRouteStops(r, "pickup");
+      const rDropStops = getRouteStops(r, "drop");
       if (!sameStops(inputPickupStops, rPickupStops)) return false;
       if (!sameStops(inputDropStops, rDropStops)) return false;
       const rv = String(r.차량종류 || "");
@@ -12548,17 +12558,13 @@ setFarePanelOpen(true);
     const targetVehicle = String(copyTarget.차량종류 || "").trim();
     const isColdVehicle = targetVehicle.includes("냉장") || targetVehicle.includes("냉동");
 
+    const _copyPickupStops = getRouteStops(copyTarget, "pickup");
+    const _copyDropStops = getRouteStops(copyTarget, "drop");
+    const _copySameStops = (a, b) => a.length === b.length && a.every((n, i) => n.trim() === b[i].trim());
     const base = (dispatchData || []).filter(r => {
       if (!r.청구운임) return false;
-      const rPickupStops = parseStops(r.상차지명 || "");
-      const rDropStops = parseStops(r.하차지명 || "");
-      const inputPickupStops = parseStops(pickup);
-      const inputDropStops = parseStops(drop);
-      if (inputPickupStops.length !== rPickupStops.length) return false;
-      if (inputDropStops.length !== rDropStops.length) return false;
-      const sameStops = (a, b) => a.every((n, i) => n.trim() === b[i].trim());
-      if (!sameStops(inputPickupStops, rPickupStops)) return false;
-      if (!sameStops(inputDropStops, rDropStops)) return false;
+      if (!_copySameStops(_copyPickupStops, getRouteStops(r, "pickup"))) return false;
+      if (!_copySameStops(_copyDropStops, getRouteStops(r, "drop"))) return false;
       const rv = String(r.차량종류 || "");
       const rCold = rv.includes("냉장") || rv.includes("냉동");
       return isColdVehicle ? rCold : !rCold;
@@ -12712,12 +12718,13 @@ React.useEffect(() => {
     const targetCargo = String(row.화물내용 || "").trim();
     const targetTon = String(row.차량톤수 || "").trim();
 
+    const _ctx4PickupStops = getRouteStops(row, "pickup");
+    const _ctx4DropStops = getRouteStops(row, "drop");
+    const _ctx4Same = (a, b) => a.length === b.length && a.every((n, i) => n.trim() === b[i].trim());
     const base = (dispatchData || []).filter(r => {
       if (!r.청구운임) return false;
-      const rPickup = String(r.상차지명 || "");
-      const rDrop = String(r.하차지명 || "");
-      if (!(rPickup.includes(pickup) || pickup.includes(rPickup.trim()))) return false;
-      if (!(rDrop.includes(drop) || drop.includes(rDrop.trim()))) return false;
+      if (!_ctx4Same(_ctx4PickupStops, getRouteStops(r, "pickup"))) return false;
+      if (!_ctx4Same(_ctx4DropStops, getRouteStops(r, "drop"))) return false;
       const rGroup = getVehicleGroup(r.차량종류);
       return rGroup === targetGroup;
     });
@@ -21475,11 +21482,15 @@ if (row?.업체전달상태 !== "전달완료") {
     const cargo = String(editTarget.화물내용 || "");
     const ton = String(editTarget.차량톤수 || "");
 
-    // 1️⃣ 필터: 상/하차지 + 냉장/냉동 그룹
+    // 1️⃣ 필터: 상/하차지(경유 포함 정확매칭) + 냉장/냉동 그룹
     const _targetVehicle = String(editTarget.차량종류 || "");
     const _isColdTarget = _targetVehicle.includes("냉장") || _targetVehicle.includes("냉동");
+    const _p5EditPickup = getRouteStops(editTarget, "pickup");
+    const _p5EditDrop = getRouteStops(editTarget, "drop");
+    const _p5EditSame = (a, b) => a.length === b.length && a.every((n, i) => n.trim() === b[i].trim());
     const base = fareSourceData.filter((r) => {
-      if (!(String(r.상차지명 || "").includes(pickup) && String(r.하차지명 || "").includes(drop))) return false;
+      if (!_p5EditSame(_p5EditPickup, getRouteStops(r, "pickup"))) return false;
+      if (!_p5EditSame(_p5EditDrop, getRouteStops(r, "drop"))) return false;
       const rv = String(r.차량종류 || "");
       const rCold = rv.includes("냉장") || rv.includes("냉동");
       return _isColdTarget ? rCold : !rCold;
@@ -21548,9 +21559,13 @@ else if (palletDiff !== null) priority = 1;
 
     const _copyVehicle = String(copyTarget.차량종류 || "");
     const _isCopyCold = _copyVehicle.includes("냉장") || _copyVehicle.includes("냉동");
+    const _p5CopyPickup = getRouteStops(copyTarget, "pickup");
+    const _p5CopyDrop = getRouteStops(copyTarget, "drop");
+    const _p5CopySame = (a, b) => a.length === b.length && a.every((n, i) => n.trim() === b[i].trim());
     const base = (dispatchData || []).filter(r => {
       if (!r.청구운임) return false;
-      if (!(String(r.상차지명 || "").includes(pickup) && String(r.하차지명 || "").includes(drop))) return false;
+      if (!_p5CopySame(_p5CopyPickup, getRouteStops(r, "pickup"))) return false;
+      if (!_p5CopySame(_p5CopyDrop, getRouteStops(r, "drop"))) return false;
       const rv = String(r.차량종류 || "");
       const rCold = rv.includes("냉장") || rv.includes("냉동");
       return _isCopyCold ? rCold : !rCold;
@@ -22437,17 +22452,13 @@ const save = {
     const targetCargo = String(row.화물내용 || "").trim();
     const targetTon = String(row.차량톤수 || "").trim();
 
+    const _ctx5PickupStops = getRouteStops(row, "pickup");
+    const _ctx5DropStops = getRouteStops(row, "drop");
+    const _ctx5Same = (a, b) => a.length === b.length && a.every((n, i) => n.trim() === b[i].trim());
     const base = (dispatchData || []).filter(r => {
       if (!r.청구운임) return false;
-      const rPickupStops = parseStops(r.상차지명 || "");
-      const rDropStops = parseStops(r.하차지명 || "");
-      const inputPickupStops = parseStops(pickup);
-      const inputDropStops = parseStops(drop);
-      if (inputPickupStops.length !== rPickupStops.length) return false;
-      if (inputDropStops.length !== rDropStops.length) return false;
-      const sameStops = (a, b) => a.every((n, i) => n.trim() === b[i].trim());
-      if (!sameStops(inputPickupStops, rPickupStops)) return false;
-      if (!sameStops(inputDropStops, rDropStops)) return false;
+      if (!_ctx5Same(_ctx5PickupStops, getRouteStops(r, "pickup"))) return false;
+      if (!_ctx5Same(_ctx5DropStops, getRouteStops(r, "drop"))) return false;
       const rGroup = getVehicleGroup5(r.차량종류);
       return rGroup === targetGroup;
     });
