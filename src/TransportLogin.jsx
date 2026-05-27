@@ -24,6 +24,10 @@ export default function TransportLogin() {
   const [showPopup, setShowPopup] = useState(false);
   const [countdown, setCountdown] = useState(3);
   const [loginTime, setLoginTime] = useState("");
+  const [showCodeLookup, setShowCodeLookup] = useState(false);
+  const [codeLookupQ, setCodeLookupQ] = useState("");
+  const [codeResults, setCodeResults] = useState([]);
+  const [codeSearching, setCodeSearching] = useState(false);
   const navigate = useNavigate();
 
   // 돌캐 회사 코드 자동완성: 저장된 코드 없을 때 Firestore에서 조회
@@ -82,10 +86,33 @@ export default function TransportLogin() {
     };
   }, []);
 
+  const searchCompanyCode = async () => {
+    const q2 = codeLookupQ.trim().toLowerCase();
+    if (!q2) return;
+    setCodeSearching(true);
+    try {
+      const snap = await getDocs(collection(db, "transportApplications"));
+      const all = snap.docs.map(d => d.data()).filter(d => d.status === "approved" && d.companyCode);
+      const filtered = all.filter(d => (d.companyName || "").toLowerCase().includes(q2));
+      const unique = Object.values(
+        filtered.reduce((acc, r) => {
+          acc[r.companyName] = { companyName: r.companyName, companyCode: r.companyCode };
+          return acc;
+        }, {})
+      );
+      setCodeResults(unique);
+    } catch {
+      setCodeResults([]);
+    } finally {
+      setCodeSearching(false);
+    }
+  };
+
   const login = async () => {
     setError(null);
     setMsg(null);
 
+    if (!companyCode.trim()) return setError("회사코드는 필수 항목입니다. 승인 안내 이메일을 확인해주세요.");
     if (!companyName.trim()) return setError("회사명을 입력해주세요.");
     if (!email.trim() || !pw.trim()) return setError("이메일과 비밀번호를 입력해주세요.");
 
@@ -157,6 +184,9 @@ export default function TransportLogin() {
 
         localStorage.setItem("loginCompany", inputCompanyName);
         localStorage.setItem("userCompany", inputCompanyName);
+      } else {
+        // totalMaster: loginCompany를 반드시 갱신해야 헤더에 올바른 회사명이 표시됨
+        localStorage.setItem("loginCompany", inputCompanyName);
       }
 
       if (inputCompanyCode) {
@@ -234,12 +264,21 @@ export default function TransportLogin() {
 
           {/* 회사코드 */}
           <div className="mb-4">
-            <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wide">
-              회사코드
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                회사코드 <span className="text-red-500">*</span>
+              </label>
+              <button
+                type="button"
+                onClick={() => { setShowCodeLookup(true); setCodeLookupQ(""); setCodeResults([]); }}
+                className="text-[11px] text-[#1B2B4B] font-semibold hover:underline"
+              >
+                회사코드 찾기
+              </button>
+            </div>
             <input
               type="text"
-              placeholder="승인 후 발급된 코드 입력 (선택)"
+              placeholder="승인 후 발급된 코드 입력 (필수)"
               value={companyCode}
               onChange={(e) => setCompanyCode(e.target.value.toUpperCase())}
               onKeyDown={handleKeyDown}
@@ -388,6 +427,70 @@ export default function TransportLogin() {
             >
               확인
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* 회사코드 찾기 모달 */}
+      {showCodeLookup && (
+        <div className="fixed inset-0 bg-black/50 z-[999] flex items-center justify-center"
+          onClick={() => setShowCodeLookup(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-[420px] overflow-hidden"
+            onClick={e => e.stopPropagation()}>
+            <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
+              <div>
+                <h3 className="text-white font-bold text-[15px]">회사코드 찾기</h3>
+                <p className="text-white/60 text-[12px] mt-0.5">회사명으로 코드를 검색합니다</p>
+              </div>
+              <button onClick={() => setShowCodeLookup(false)} className="text-white/60 hover:text-white text-lg">✕</button>
+            </div>
+            <div className="p-5">
+              <div className="flex gap-2 mb-4">
+                <input
+                  autoFocus
+                  value={codeLookupQ}
+                  onChange={e => setCodeLookupQ(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") searchCompanyCode(); }}
+                  placeholder="회사명을 입력하세요"
+                  className="flex-1 border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-[#1B2B4B] transition"
+                />
+                <button
+                  onClick={searchCompanyCode}
+                  disabled={codeSearching || !codeLookupQ.trim()}
+                  className="px-4 py-2.5 rounded-lg text-[13px] font-semibold text-white disabled:opacity-50 transition"
+                  style={{ background: "#1B2B4B" }}
+                >
+                  {codeSearching ? "검색 중..." : "검색"}
+                </button>
+              </div>
+              {codeResults.length > 0 ? (
+                <div className="border border-gray-100 rounded-xl overflow-hidden">
+                  {codeResults.map(r => (
+                    <div key={r.companyName} className="flex items-center justify-between px-4 py-3 border-b border-gray-50 last:border-b-0 hover:bg-blue-50/30">
+                      <div>
+                        <div className="text-[13px] font-semibold text-gray-800">{r.companyName}</div>
+                        <div className="text-[12px] font-mono text-[#1B2B4B] font-bold">{r.companyCode}</div>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setCompanyCode(r.companyCode);
+                          setCompanyName(r.companyName);
+                          setShowCodeLookup(false);
+                        }}
+                        className="px-3 py-1.5 rounded-lg text-[12px] font-semibold text-[#1B2B4B] border border-[#1B2B4B]/30 hover:bg-[#1B2B4B]/10 transition"
+                      >
+                        선택
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : codeLookupQ && !codeSearching ? (
+                <div className="text-center py-6 text-[13px] text-gray-400">검색 결과가 없습니다</div>
+              ) : null}
+              <p className="text-[11px] text-gray-400 mt-4 text-center">
+                코드를 찾지 못하면 관리자에게 문의하세요
+              </p>
+            </div>
           </div>
         </div>
       )}

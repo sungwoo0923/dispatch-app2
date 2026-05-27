@@ -2215,6 +2215,7 @@ return (
             upsertClient={upsertClient}
             removeClient={removeClient}
             upsertPlace={upsertPlace}
+            places={places}
             showAlert={showAlert}
           />
         </div>
@@ -35699,7 +35700,22 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
 }
 // ===================== DispatchApp.jsx (PART 10/10) — END =====================
 // ===================== DispatchApp.jsx (PART 11/11) — START =====================
-function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlace, showAlert = (m) => alert(m) }) {
+function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlace, places: placesProp = [], showAlert = (m) => alert(m) }) {
+  const normalizePlaceRow = (d) => {
+    const primary = Array.isArray(d.contacts) && d.contacts.length
+      ? d.contacts.find(c => c.isPrimary) || d.contacts[0] : null;
+    return {
+      id: d._id || d.id || "",
+      업체명: d.업체명 || "",
+      주소: (d.주소 || "").trim(),
+      담당자: primary?.name || d.담당자 || "",
+      담당자번호: primary?.phone || d.담당자번호 || "",
+      등급: d.등급 || "일반",
+      등급변경일: d.등급변경일 || null,
+      메모: d.메모 || "",
+      updatedAt: d.updatedAt || null,
+    };
+  };
 
   const normalizePlace = (s = "") =>
     s.toString().normalize("NFC")
@@ -35725,7 +35741,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
   // ═══════════════════════════════════════════════════
   const PLACES_COLL = "places";
   const removePlace = async (id) => { if (!id) return; await deleteDoc(doc(db, PLACES_COLL, id)); };
-  const [placeRows, setPlaceRows] = React.useState([]);
+  const [placeRows, setPlaceRows] = React.useState(() => placesProp.map(normalizePlaceRow));
   const [placeQ, setPlaceQ] = React.useState("");
   const [placeSearched, setPlaceSearched] = React.useState(false);
   const [placeFilterType, setPlaceFilterType] = React.useState("업체명");
@@ -35736,25 +35752,10 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
   const [placeNewForm, setPlaceNewForm] = React.useState({ 업체명: "", 주소: "", 담당자: "", 담당자번호: "", 등급: "일반", 메모: "" });
   const [showNewPlaceForm, setShowNewPlaceForm] = React.useState(false);
 
-  // ★ Firestore 구독 (placeRows) — 맨 위에서 실행
+  // ★ 부모에서 내려온 places(회사별 필터링 완료) 기반으로 placeRows 갱신
   React.useEffect(() => {
-    const unsub = onSnapshot(collection(db, PLACES_COLL), (snap) => {
-      const arr = snap.docs.map((d) => {
-        const data = d.data() || {};
-        const primary = Array.isArray(data.contacts) && data.contacts.length
-          ? data.contacts.find(c => c.isPrimary) || data.contacts[0] : null;
-        return {
-          id: d.id, 업체명: data.업체명 || "", 주소: (data.주소 || "").trim(),
-          담당자: primary?.name || data.담당자 || "",
-          담당자번호: primary?.phone || data.담당자번호 || "",
-          등급: data.등급 || "일반", 등급변경일: data.등급변경일 || null,
-          메모: data.메모 || "", updatedAt: data.updatedAt || null,
-        };
-      });
-      setPlaceRows(arr);
-    });
-    return () => unsub();
-  }, []);
+    setPlaceRows(placesProp.map(normalizePlaceRow));
+  }, [placesProp]);
 
   // ═══════════════════════════════════════════════════
   // 기본 거래처
@@ -35999,7 +36000,7 @@ React.useEffect(() => {
   const handlePlaceBlur = async (row, key, val) => {
     if (key !== "등급" && (row[key] || "") === val) return;
     setPlaceRows(prev => prev.map(p => p.id === row.id ? { ...p, [key]: val } : p));
-    const updateData = { ...row, [key]: val };
+    const updateData = { ...row, _id: row.id, [key]: val };
     if (key === "등급" && val !== "일반") updateData.등급변경일 = new Date().toISOString().slice(0, 10);
     await upsertPlace?.(updateData);
   };

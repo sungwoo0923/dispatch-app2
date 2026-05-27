@@ -29,12 +29,18 @@ const fmtDate = (ts) => {
 
 const statusLabel = (s) =>
   s === "approved" ? "승인" : s === "rejected" ? "거절" : "대기";
-const statusStyle = (s) =>
-  s === "approved"
-    ? "bg-emerald-100 text-emerald-700 border-emerald-300"
-    : s === "rejected"
-    ? "bg-red-100 text-red-600 border-red-200"
-    : "bg-amber-100 text-amber-600 border-amber-300";
+
+const StatusBadge = ({ status }) => {
+  const dotColor = status === "approved" ? "bg-emerald-500" : status === "rejected" ? "bg-red-400" : "bg-gray-400";
+  const textColor = status === "approved" ? "text-emerald-700" : status === "rejected" ? "text-red-600" : "text-gray-500";
+  const bgColor = status === "approved" ? "bg-emerald-50 border-emerald-200" : status === "rejected" ? "bg-red-50 border-red-200" : "bg-gray-100 border-gray-200";
+  return (
+    <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold border ${bgColor} ${textColor}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${dotColor}`} />
+      {statusLabel(status)}
+    </span>
+  );
+};
 
 export default function CompanyApplications() {
   const [activeTab, setActiveTab] = useState("화주");
@@ -55,6 +61,8 @@ export default function CompanyApplications() {
   const [processing, setProcessing] = useState(false);
   const [managingApp, setManagingApp] = useState(null);
   const [codeNotice, setCodeNotice] = useState(null); // { companyName, companyCode, email, phone, appType }
+  const [showCodeLookup, setShowCodeLookup] = useState(false);
+  const [codeLookupQuery, setCodeLookupQuery] = useState("");
 
   // 화주 신청 구독
   useEffect(() => {
@@ -355,13 +363,21 @@ export default function CompanyApplications() {
           <h1 className="text-[22px] font-bold text-[#1B2B4B]">가입신청 관리</h1>
           <p className="text-[13px] text-gray-400 mt-0.5">{tabTitle}</p>
         </div>
-        <div className="grid grid-cols-4 gap-3">
-          {statsCards.map(({ label, value, color, bg }) => (
-            <div key={label} className={`${bg} rounded-xl px-4 py-2.5 text-center`}>
-              <div className={`text-[22px] font-bold ${color}`}>{value}</div>
-              <div className="text-[11px] text-gray-500">{label}</div>
-            </div>
-          ))}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => { setShowCodeLookup(true); setCodeLookupQuery(""); }}
+            className="px-4 py-2 rounded-lg text-[13px] font-semibold bg-[#1B2B4B] text-white hover:bg-[#243d6a] transition"
+          >
+            회사코드 조회
+          </button>
+          <div className="grid grid-cols-4 gap-3">
+            {statsCards.map(({ label, value, color, bg }) => (
+              <div key={label} className={`${bg} rounded-xl px-4 py-2.5 text-center`}>
+                <div className={`text-[22px] font-bold ${color}`}>{value}</div>
+                <div className="text-[11px] text-gray-500">{label}</div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -466,26 +482,20 @@ export default function CompanyApplications() {
                       </span>
                     </td>
                     <td className="px-3 py-3 text-center">
-                      <div>
-                        <span className={`px-2 py-1 rounded-full text-[11px] font-bold border ${statusStyle(app.status)}`}>
-                          {statusLabel(app.status)}
-                        </span>
+                      <div className="flex flex-col items-center gap-0.5">
+                        <StatusBadge status={app.status} />
                         {app.status === "approved" && app.companyCode && (
-                          <div className="text-[10px] text-gray-400 font-mono mt-0.5">{app.companyCode}</div>
+                          <div className="text-[10px] text-gray-400 font-mono">{app.companyCode}</div>
                         )}
                         {app.status === "approved" && app.userStatus === "suspended" && (
-                          <div className="mt-0.5">
-                            <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-orange-100 text-orange-600 border border-orange-200">
-                              정지
-                            </span>
-                          </div>
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-gray-100 text-gray-500 border border-gray-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />정지
+                          </span>
                         )}
                         {app.status === "approved" && app.userStatus === "banned" && (
-                          <div className="mt-0.5">
-                            <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-600 border border-red-200">
-                              영구정지
-                            </span>
-                          </div>
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-gray-100 text-gray-500 border border-gray-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-red-400" />영구정지
+                          </span>
                         )}
                       </div>
                     </td>
@@ -558,9 +568,7 @@ export default function CompanyApplications() {
                       <td className="px-3 py-3 text-center text-gray-500 text-[12px]">{app.vehicleType || "-"}</td>
                       <td className="px-3 py-3 text-center text-gray-500 text-[12px]">{app.phone || app.phoneNumber || "-"}</td>
                       <td className="px-3 py-3 text-center">
-                        <span className={`px-2 py-1 rounded-full text-[11px] font-bold border ${statusStyle(st)}`}>
-                          {statusLabel(st)}
-                        </span>
+                        <StatusBadge status={st} />
                       </td>
                       <td className="px-3 py-3 text-center">
                         {st === "pending" ? (
@@ -651,9 +659,7 @@ export default function CompanyApplications() {
                   처리 상태
                 </div>
                 <div className="px-4 py-3 flex items-center justify-between">
-                  <span className={`px-3 py-1 rounded-full text-[12px] font-bold border ${statusStyle(selectedApp.status)}`}>
-                    {statusLabel(selectedApp.status)}
-                  </span>
+                  <StatusBadge status={selectedApp.status} />
                   {selectedApp.status === "approved" && selectedApp.companyCode && (
                     <span className="text-[13px] font-mono font-bold text-[#1B2B4B]">
                       회사코드: {selectedApp.companyCode}
@@ -724,9 +730,7 @@ export default function CompanyApplications() {
                     const st = driverStatus(selectedApp);
                     return (
                       <>
-                        <span className={`px-3 py-1 rounded-full text-[12px] font-bold border ${statusStyle(st)}`}>
-                          {statusLabel(st)}
-                        </span>
+                        <StatusBadge status={st} />
                         {st === "rejected" && selectedApp.rejectionReason && (
                           <span className="text-[13px] text-red-500">{selectedApp.rejectionReason}</span>
                         )}
@@ -760,78 +764,75 @@ export default function CompanyApplications() {
           onClick={() => setManagingApp(null)}
         >
           <div
-            className="bg-white rounded-2xl shadow-2xl w-[380px] p-6"
+            className="bg-white rounded-2xl shadow-2xl w-[360px] overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="mb-4">
-              <h3 className="text-[16px] font-bold text-[#1B2B4B]">
-                {managingApp.companyName}
-              </h3>
-              <p className="text-[12px] text-gray-400 mt-0.5">
-                {activeTab === "화주" ? "화주사" : "운송사"} 관리
-              </p>
+            <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
+              <div>
+                <h3 className="text-white font-bold text-[15px]">{managingApp.companyName}</h3>
+                <p className="text-white/60 text-[12px] mt-0.5">
+                  {activeTab === "화주" ? "화주사" : "운송사"} 관리
+                </p>
+              </div>
+              <button onClick={() => setManagingApp(null)} className="text-white/60 hover:text-white text-lg">✕</button>
             </div>
 
-            {/* Current status badge */}
-            <div className="flex items-center gap-2 mb-6">
-              <span className="text-[13px] text-gray-500">현재 상태:</span>
-              {managingApp.userStatus === "suspended" ? (
-                <span className="px-2.5 py-1 rounded-full text-[12px] font-bold bg-orange-100 text-orange-600 border border-orange-200">
-                  사용정지
-                </span>
-              ) : managingApp.userStatus === "banned" ? (
-                <span className="px-2.5 py-1 rounded-full text-[12px] font-bold bg-red-100 text-red-600 border border-red-200">
-                  영구정지
-                </span>
-              ) : (
-                <span className="px-2.5 py-1 rounded-full text-[12px] font-bold bg-emerald-100 text-emerald-700 border border-emerald-200">
-                  정상
-                </span>
-              )}
-            </div>
+            <div className="p-6">
+              {/* Current status */}
+              <div className="flex items-center gap-2 mb-5">
+                <span className="text-[12px] text-gray-500">현재 상태:</span>
+                {managingApp.userStatus === "suspended" ? (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-gray-100 text-gray-500 border border-gray-200">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />사용정지
+                  </span>
+                ) : managingApp.userStatus === "banned" ? (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-gray-100 text-gray-500 border border-gray-200">
+                    <span className="w-1.5 h-1.5 rounded-full bg-red-400" />영구정지
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />정상
+                  </span>
+                )}
+              </div>
 
-            {/* Action buttons */}
-            <div className="flex flex-col gap-2">
-              {managingApp.userStatus !== "suspended" && managingApp.userStatus !== "banned" ? (
-                <>
+              {/* Action buttons */}
+              <div className="flex flex-col gap-2">
+                {managingApp.userStatus !== "suspended" && managingApp.userStatus !== "banned" ? (
+                  <>
+                    <button
+                      onClick={() => changeUserStatus(managingApp, "suspended")}
+                      disabled={processing}
+                      className="w-full py-2.5 rounded-xl text-[13px] font-semibold text-gray-700 border border-gray-300 hover:bg-gray-50 transition disabled:opacity-50"
+                    >
+                      사용정지
+                    </button>
+                    <button
+                      onClick={() => changeUserStatus(managingApp, "banned")}
+                      disabled={processing}
+                      className="w-full py-2.5 rounded-xl text-[13px] font-semibold text-red-500 border border-red-200 hover:bg-red-50 transition disabled:opacity-50"
+                    >
+                      영구정지
+                    </button>
+                  </>
+                ) : (
                   <button
-                    onClick={() => changeUserStatus(managingApp, "suspended")}
+                    onClick={() => changeUserStatus(managingApp, "active")}
                     disabled={processing}
-                    className="w-full py-2.5 rounded-xl bg-amber-50 text-amber-700 border border-amber-300 font-semibold text-[13px] hover:bg-amber-100 transition disabled:opacity-50"
+                    className="w-full py-2.5 rounded-xl text-[13px] font-semibold text-emerald-600 border border-emerald-300 hover:bg-emerald-50 transition disabled:opacity-50"
                   >
-                    사용정지
+                    정지 해제
                   </button>
-                  <button
-                    onClick={() => changeUserStatus(managingApp, "banned")}
-                    disabled={processing}
-                    className="w-full py-2.5 rounded-xl bg-red-50 text-red-600 border border-red-200 font-semibold text-[13px] hover:bg-red-100 transition disabled:opacity-50"
-                  >
-                    영구정지
-                  </button>
-                </>
-              ) : (
+                )}
                 <button
-                  onClick={() => changeUserStatus(managingApp, "active")}
+                  onClick={() => deleteAccount(managingApp)}
                   disabled={processing}
-                  className="w-full py-2.5 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold text-[13px] hover:bg-emerald-100 transition disabled:opacity-50"
+                  className="w-full py-2.5 rounded-xl text-[13px] font-semibold text-gray-500 border border-gray-200 hover:bg-gray-50 transition disabled:opacity-50"
                 >
-                  정지해제
+                  삭제 (가입 전 초기화)
                 </button>
-              )}
-              <button
-                onClick={() => deleteAccount(managingApp)}
-                disabled={processing}
-                className="w-full py-2.5 rounded-xl bg-gray-50 text-gray-600 border border-gray-200 font-semibold text-[13px] hover:bg-gray-100 transition disabled:opacity-50"
-              >
-                삭제 (가입 전 초기화)
-              </button>
-              <button
-                onClick={() => setManagingApp(null)}
-                className="w-full py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 transition"
-              >
-                닫기
-              </button>
+              </div>
             </div>
           </div>
         </div>
@@ -944,6 +945,99 @@ export default function CompanyApplications() {
           </div>
         </div>
       )}
+
+      {/* 회사코드 조회 모달 */}
+      {showCodeLookup && (() => {
+        const allApproved = [
+          ...companyApps.filter(a => a.status === "approved" && a.companyCode).map(a => ({ ...a, appType: "화주" })),
+          ...transportApps.filter(a => a.status === "approved" && a.companyCode).map(a => ({ ...a, appType: "운송" })),
+        ];
+        const q = codeLookupQuery.trim().toLowerCase();
+        const lookupResults = q
+          ? allApproved.filter(a => (a.companyName || "").toLowerCase().includes(q))
+          : allApproved;
+        const grouped = Object.values(
+          lookupResults.reduce((acc, a) => {
+            const key = a.companyName;
+            if (!acc[key]) acc[key] = { companyName: key, code: a.companyCode, types: [] };
+            if (!acc[key].types.includes(a.appType)) acc[key].types.push(a.appType);
+            return acc;
+          }, {})
+        ).sort((a, b) => (a.companyName || "").localeCompare(b.companyName || ""));
+
+        return (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[80]"
+            onClick={() => setShowCodeLookup(false)}>
+            <div className="bg-white rounded-2xl shadow-2xl w-[480px] max-h-[70vh] flex flex-col overflow-hidden"
+              onClick={e => e.stopPropagation()}>
+              <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between shrink-0">
+                <div>
+                  <h3 className="text-white font-bold text-[15px]">회사코드 조회</h3>
+                  <p className="text-white/60 text-[12px] mt-0.5">회사명으로 코드를 검색합니다</p>
+                </div>
+                <button onClick={() => setShowCodeLookup(false)} className="text-white/60 hover:text-white text-lg">✕</button>
+              </div>
+              <div className="px-5 py-3 border-b border-gray-100 shrink-0">
+                <div className="flex items-center gap-2 border border-gray-200 rounded-xl overflow-hidden bg-white focus-within:border-[#1B2B4B] transition">
+                  <svg className="ml-3 w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                  <input
+                    autoFocus
+                    value={codeLookupQuery}
+                    onChange={e => setCodeLookupQuery(e.target.value)}
+                    placeholder="회사명 입력"
+                    className="flex-1 px-2 py-2.5 text-[13px] outline-none"
+                  />
+                  {codeLookupQuery && (
+                    <button onClick={() => setCodeLookupQuery("")} className="mr-2 text-gray-400 hover:text-gray-600 text-[12px]">✕</button>
+                  )}
+                </div>
+              </div>
+              <div className="overflow-y-auto flex-1">
+                {grouped.length === 0 ? (
+                  <div className="py-12 text-center text-[13px] text-gray-400">
+                    {q ? "검색 결과가 없습니다" : "승인된 회사가 없습니다"}
+                  </div>
+                ) : (
+                  <table className="w-full text-[13px]">
+                    <thead className="sticky top-0 bg-gray-50 border-b border-gray-100">
+                      <tr>
+                        <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-gray-500">회사명</th>
+                        <th className="px-4 py-2.5 text-center text-[11px] font-semibold text-gray-500">유형</th>
+                        <th className="px-4 py-2.5 text-center text-[11px] font-semibold text-gray-500">회사코드</th>
+                        <th className="px-4 py-2.5 text-center text-[11px] font-semibold text-gray-500">복사</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {grouped.map((g) => (
+                        <tr key={g.companyName} className="hover:bg-blue-50/20">
+                          <td className="px-4 py-3 font-semibold text-gray-800">{g.companyName}</td>
+                          <td className="px-4 py-3 text-center">
+                            {g.types.map(t => (
+                              <span key={t} className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold mr-1 ${t === "운송" ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-600"}`}>{t}</span>
+                            ))}
+                          </td>
+                          <td className="px-4 py-3 text-center font-mono text-[13px] font-bold text-[#1B2B4B]">{g.code}</td>
+                          <td className="px-4 py-3 text-center">
+                            <button
+                              onClick={() => { navigator.clipboard.writeText(g.code); }}
+                              className="px-2.5 py-1 rounded-lg text-[11px] font-semibold text-[#1B2B4B] border border-[#1B2B4B]/30 hover:bg-[#1B2B4B]/10 transition"
+                            >
+                              복사
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+              <div className="px-5 py-3 border-t border-gray-100 text-[11px] text-gray-400 shrink-0">
+                총 {grouped.length}개 회사
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
