@@ -341,6 +341,10 @@ const normalizePhone = (p = "") =>
 // ======================================================================
 
 export default function MobileApp({ role, user, userCompany = "" }) {
+  useEffect(() => {
+    const root = document.getElementById("root");
+    if (root) root.style.zoom = "1";
+  }, []);
   const [page, setPage] = useState("list");
   const listScrollYRef = useRef(0); // 리스트 스크롤 위치 저장
   const unassignedScrollYRef = useRef(0); // 미배차/정보미전달 스크롤 위치 저장

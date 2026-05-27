@@ -1936,6 +1936,12 @@ useEffect(() => {
     if (root) root.style.zoom = appZoom;
     localStorage.setItem("appZoom", String(appZoom));
   }, [appZoom]);
+  useEffect(() => {
+    return () => {
+      const root = document.getElementById("root");
+      if (root) root.style.zoom = "1";
+    };
+  }, []);
   const zoomDown = () => {
     const idx = ZOOM_STEPS.findIndex(s => Math.abs(s - appZoom) < 0.01);
     const cur = idx >= 0 ? idx : ZOOM_STEPS.findIndex(s => s >= appZoom);
