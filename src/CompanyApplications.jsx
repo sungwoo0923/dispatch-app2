@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { db, auth } from "./firebase";
 import {
-  collection, onSnapshot, doc, updateDoc, serverTimestamp, query, where, deleteDoc, addDoc,
+  collection, onSnapshot, doc, updateDoc, getDoc, serverTimestamp, query, where, deleteDoc, addDoc,
 } from "firebase/firestore";
 
 const generateCompanyCode = () => {
@@ -66,6 +66,7 @@ export default function CompanyApplications() {
   const [codeNotice, setCodeNotice] = useState(null);
   const [showCodeLookup, setShowCodeLookup] = useState(false);
   const [codeLookupQuery, setCodeLookupQuery] = useState("");
+  const [appUserPerms, setAppUserPerms] = useState(null);
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "companyApplications"), (snap) => {
@@ -98,6 +99,14 @@ export default function CompanyApplications() {
     });
     return () => unsub();
   }, []);
+
+  // 관리 모달에서 화주 유저 권한 로드
+  useEffect(() => {
+    if (!managingApp?.userId || activeTab !== "화주") { setAppUserPerms(null); return; }
+    getDoc(doc(db, "users", managingApp.userId)).then(snap => {
+      setAppUserPerms(snap.exists() ? (snap.data().permissions || {}) : {});
+    });
+  }, [managingApp?.userId, activeTab]);
 
   const handleTabChange = (tab) => {
     setActiveTab(tab);
@@ -160,11 +169,17 @@ export default function CompanyApplications() {
         processedAt: serverTimestamp(),
       });
       if (app.userId && app.userId !== auth.currentUser?.uid) {
-        await updateDoc(doc(db, "users", app.userId), {
+        const isFirstMaster = app.type === "신규";
+        const userPayload = {
           approved: true,
           companyCode,
           companyName: app.companyName,
-        });
+          businessNumber: app.businessNumber || "",
+        };
+        if (isFirstMaster) {
+          userPayload.permissions = { master: true, subMaster: false, settlement: false, transport: false };
+        }
+        await updateDoc(doc(db, "users", app.userId), userPayload);
       }
       setManagingApp(null);
       setCodeNotice({ companyName: app.companyName, companyCode, email: app.email, phone: app.phone, appType: "화주" });
@@ -677,6 +692,43 @@ export default function CompanyApplications() {
                   </div>
                 )}
               </div>
+
+              {/* 권한 관리 (화주 탭 + userId 있는 경우) */}
+              {activeTab === "화주" && managingApp.userId && appUserPerms !== null && (
+                <div className="border border-gray-100 rounded-xl overflow-hidden">
+                  <div className="bg-gray-50 px-4 py-2.5 text-[11px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-100">권한 관리</div>
+                  <div className="px-4 py-4 space-y-3">
+                    {[
+                      { key: "master", label: "마스터", desc: "전체 권한" },
+                      { key: "subMaster", label: "부마스터", desc: "마스터 권한 부여 제외" },
+                      { key: "settlement", label: "경리", desc: "정산 탭 접근" },
+                      { key: "transport", label: "운송", desc: "운송 탭 접근" },
+                    ].map(({ key, label, desc }) => (
+                      <label key={key} className="flex items-center gap-3 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={!!appUserPerms[key]}
+                          onChange={(e) => setAppUserPerms(prev => ({ ...prev, [key]: e.target.checked }))}
+                          className="w-4 h-4 rounded"
+                        />
+                        <div>
+                          <div className="text-[13px] font-semibold text-gray-800">{label}</div>
+                          <div className="text-[10px] text-gray-400">{desc}</div>
+                        </div>
+                      </label>
+                    ))}
+                    <button
+                      onClick={async () => {
+                        await updateDoc(doc(db, "users", managingApp.userId), { permissions: appUserPerms });
+                        alert("권한이 저장되었습니다.");
+                      }}
+                      className="w-full py-2 mt-1 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition"
+                    >
+                      권한 저장
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* 액션 버튼 */}
               <div className="space-y-2">

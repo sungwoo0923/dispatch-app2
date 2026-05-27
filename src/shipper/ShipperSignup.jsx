@@ -1,7 +1,7 @@
 // src/shipper/ShipperSignup.jsx
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { createUserWithEmailAndPassword } from "firebase/auth";
+import { createUserWithEmailAndPassword, fetchSignInMethodsForEmail } from "firebase/auth";
 import { auth, db } from "../firebase";
 import {
   doc, setDoc, serverTimestamp, collection, query, where, getDocs, addDoc, updateDoc,
@@ -276,13 +276,21 @@ function SignupForm({ signupType, onBack }) {
     setEmailChecked(false);
     setEmailCheckMsg(null);
     try {
-      const snap = await getDocs(query(collection(db, "users"), where("email", "==", trimmed)));
-      if (snap.empty) {
-        setEmailChecked(true);
-        setEmailCheckMsg({ ok: true, msg: "사용 가능한 이메일입니다." });
-      } else {
+      // Firebase Auth 체크 (실제 계정 존재 여부)
+      const methods = await fetchSignInMethodsForEmail(auth, trimmed);
+      if (methods.length > 0) {
         setEmailChecked(false);
         setEmailCheckMsg({ ok: false, msg: "이미 사용 중인 이메일입니다." });
+        return;
+      }
+      // Firestore users 추가 체크
+      const snap = await getDocs(query(collection(db, "users"), where("email", "==", trimmed)));
+      if (!snap.empty) {
+        setEmailChecked(false);
+        setEmailCheckMsg({ ok: false, msg: "이미 사용 중인 이메일입니다." });
+      } else {
+        setEmailChecked(true);
+        setEmailCheckMsg({ ok: true, msg: "사용 가능한 이메일입니다." });
       }
     } catch {
       setEmailCheckMsg({ ok: false, msg: "확인 중 오류가 발생했습니다." });
