@@ -442,6 +442,47 @@ const toggleAlarm = () => {
     return next;
   });
 };
+// 🔔 Notification bell state
+const [notifications, setNotifications] = useState(() => {
+  try { return JSON.parse(localStorage.getItem("mobileNotifs") || "[]"); } catch { return []; }
+});
+const [showNotifPanel, setShowNotifPanel] = useState(false);
+const unreadCount = notifications.filter(n => !n.read).length;
+
+const addNotification = (type, orderData) => {
+  const notif = {
+    id: `${Date.now()}_${orderData.id || ""}`,
+    type,
+    orderId: orderData.id || "",
+    거래처명: orderData.거래처명 || "",
+    상차지명: orderData.상차지명 || "",
+    하차지명: orderData.하차지명 || "",
+    상차일: orderData.상차일 || "",
+    차량번호: orderData.차량번호 || "",
+    이름: orderData.이름 || "",
+    date: new Date().toISOString(),
+    read: false,
+  };
+  setNotifications(prev => {
+    const next = [notif, ...prev].slice(0, 50);
+    localStorage.setItem("mobileNotifs", JSON.stringify(next));
+    return next;
+  });
+};
+
+const markAllRead = () => {
+  setNotifications(prev => {
+    const next = prev.map(n => ({ ...n, read: true }));
+    localStorage.setItem("mobileNotifs", JSON.stringify(next));
+    return next;
+  });
+};
+
+const clearNotifs = () => {
+  setNotifications([]);
+  localStorage.removeItem("mobileNotifs");
+};
+
 // 🔔 alarmEnabled → ref 동기화
 useEffect(() => {
   alarmEnabledRef.current = alarmEnabled;
@@ -647,6 +688,7 @@ collections.forEach((name) => {
             "신규 오더 등록",
             `${data.거래처명 || ""} ${data.상차지명} → ${data.하차지명 || ""}`
           );
+          addNotification("등록", data);
         }
 
         if (change.type === "modified") {
@@ -658,6 +700,14 @@ collections.forEach((name) => {
               "배차완료",
               `${data.거래처명 || ""} ${data.상차지명} → ${data.하차지명 || ""} | ${data.기사명 || ""} (${nextCar})`
             );
+            addNotification("배차완료", data);
+          }
+
+          // 취소 감지
+          const prevStatus = change.doc._document?.data?.value?.mapValue?.fields?.상태?.stringValue || "";
+          const nextStatus = data.상태 || "";
+          if (nextStatus === "취소" && prevStatus !== "취소") {
+            addNotification("취소", data);
           }
         }
       });
@@ -1927,7 +1977,20 @@ const title =
   }
   onRefresh={page === "list" ? handleRefresh : undefined}
   onMenu={page === "list" ? () => setShowMenu(true) : undefined}
+  notifCount={unreadCount}
+  onNotifClick={() => { setShowNotifPanel(true); markAllRead(); }}
 />
+{showNotifPanel && (
+  <NotificationPanel
+    notifications={notifications}
+    onClose={() => setShowNotifPanel(false)}
+    onMarkAllRead={markAllRead}
+    onClear={clearNotifs}
+    alarmEnabled={alarmEnabled}
+    onToggleAlarm={toggleAlarm}
+    orders={orders}
+  />
+)}
       {showMenu && (
         <MobileSideMenu
   onClose={() => setShowMenu(false)}
@@ -3079,7 +3142,7 @@ function MobileSalesPage({ data = [], onBack }) {
 // ----------------------------------------------------------------------
 // 공통 헤더 / 사이드 메뉴
 // ----------------------------------------------------------------------
-function MobileHeader({ title, onBack, onRefresh, onMenu }) {
+function MobileHeader({ title, onBack, onRefresh, onMenu, notifCount = 0, onNotifClick }) {
   const isListPage = title === "등록내역";
 
   return (
@@ -3101,19 +3164,185 @@ function MobileHeader({ title, onBack, onRefresh, onMenu }) {
         {title}
       </div>
 
-      <div className="w-8 flex justify-end">
+      <div className="flex items-center gap-2 justify-end">
         {onRefresh && (
           <button
-            className="w-8 h-8 flex items-center justify-center rounded-full"
+            className="w-8 h-8 flex items-center justify-center rounded-full active:bg-gray-100 transition"
             onClick={onRefresh}
           >
-            ⟳
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#374151" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M23 4v6h-6"/>
+              <path d="M1 20v-6h6"/>
+              <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+            </svg>
           </button>
         )}
+        <button
+          className="relative w-8 h-8 flex items-center justify-center rounded-full active:bg-gray-100 transition"
+          onClick={onNotifClick}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1f2937" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+            <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+          </svg>
+          {notifCount > 0 && (
+            <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-0.5 leading-none">
+              {notifCount > 99 ? "99+" : notifCount}
+            </span>
+          )}
+        </button>
       </div>
     </div>
   );
 }
+function NotificationPanel({ notifications, onClose, onMarkAllRead, onClear, alarmEnabled, onToggleAlarm, orders }) {
+  const [expanded, setExpanded] = useState(null);
+
+  const fmtDate = (iso) => {
+    if (!iso) return "";
+    const d = new Date(iso);
+    const pad = n => String(n).padStart(2, "0");
+    return `${d.getFullYear()}.${pad(d.getMonth()+1)}.${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+
+  const typeStyle = {
+    "등록": "bg-blue-100 text-blue-700",
+    "배차완료": "bg-emerald-100 text-emerald-700",
+    "취소": "bg-red-100 text-red-600",
+    "수정": "bg-amber-100 text-amber-700",
+  };
+
+  const typeLabel = {
+    "등록": "신규 등록",
+    "배차완료": "배차완료",
+    "취소": "취소",
+    "수정": "수정",
+  };
+
+  const getOrderDetail = (orderId) => {
+    return orders?.find(o => (o.id || o._id) === orderId) || null;
+  };
+
+  return (
+    <div className="fixed inset-0 z-[200] flex flex-col" onClick={onClose}>
+      <div
+        className="bg-white w-full max-h-[80vh] flex flex-col shadow-2xl rounded-b-2xl border-b border-gray-100"
+        onClick={e => e.stopPropagation()}
+        style={{ boxShadow: "0 8px 32px rgba(0,0,0,0.13)" }}
+      >
+        {/* 패널 헤더 */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+          <span className="font-bold text-[15px] text-gray-800">알림</span>
+          <div className="flex items-center gap-3">
+            {/* 알림 on/off 토글 */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-[12px] text-gray-500">알림</span>
+              <button
+                onClick={onToggleAlarm}
+                className={`relative w-10 h-5 rounded-full transition-colors ${alarmEnabled ? "bg-emerald-500" : "bg-gray-300"}`}
+              >
+                <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${alarmEnabled ? "translate-x-5" : "translate-x-0.5"}`} />
+              </button>
+            </div>
+            {notifications.length > 0 && (
+              <button onClick={onMarkAllRead} className="text-[12px] text-blue-500 font-semibold">전체읽음</button>
+            )}
+            {notifications.length > 0 && (
+              <button onClick={onClear} className="text-[12px] text-gray-400">전체삭제</button>
+            )}
+            <button onClick={onClose} className="text-gray-400 ml-1">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <path d="M18 6L6 18M6 6l12 12"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        {/* 알림 리스트 */}
+        <div className="overflow-y-auto flex-1">
+          {notifications.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-14 text-gray-400">
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="mb-3">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+              </svg>
+              <p className="text-[13px]">알림이 없습니다</p>
+            </div>
+          ) : (
+            notifications.map((notif) => {
+              const isExp = expanded === notif.id;
+              const detail = isExp ? getOrderDetail(notif.orderId) : null;
+              return (
+                <div key={notif.id} className={`border-b border-gray-50 last:border-b-0 ${!notif.read ? "bg-blue-50/40" : "bg-white"}`}>
+                  <button
+                    className="w-full text-left px-4 py-3 active:bg-gray-50 transition"
+                    onClick={() => setExpanded(isExp ? null : notif.id)}
+                  >
+                    <div className="flex items-start gap-2.5">
+                      {!notif.read && <div className="w-1.5 h-1.5 rounded-full bg-blue-500 mt-1.5 shrink-0" />}
+                      {notif.read && <div className="w-1.5 h-1.5 shrink-0" />}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
+                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${typeStyle[notif.type] || "bg-gray-100 text-gray-600"}`}>
+                            {typeLabel[notif.type] || notif.type}
+                          </span>
+                          <span className="text-[11px] text-gray-400">{fmtDate(notif.date)}</span>
+                        </div>
+                        <p className="text-[13px] text-gray-800 font-medium truncate">
+                          {notif.거래처명 && `[${notif.거래처명}] `}{notif.상차지명 || "-"} → {notif.하차지명 || "-"}
+                        </p>
+                        {notif.상차일 && (
+                          <p className="text-[11px] text-gray-400 mt-0.5">상차일: {notif.상차일}</p>
+                        )}
+                        {notif.type === "배차완료" && notif.이름 && (
+                          <p className="text-[11px] text-emerald-600 mt-0.5">{notif.이름} {notif.차량번호}</p>
+                        )}
+                      </div>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2.5" strokeLinecap="round" className={`shrink-0 mt-1 transition-transform ${isExp ? "rotate-180" : ""}`}>
+                        <path d="M6 9l6 6 6-6"/>
+                      </svg>
+                    </div>
+                  </button>
+                  {/* 확장된 상세 정보 */}
+                  {isExp && (
+                    <div className="px-4 pb-3 bg-gray-50 border-t border-gray-100">
+                      {detail ? (
+                        <div className="space-y-1.5 pt-2 text-[12px]">
+                          <DetailRow label="거래처" value={detail.거래처명} />
+                          <DetailRow label="상차지" value={detail.상차지명} />
+                          <DetailRow label="하차지" value={detail.하차지명} />
+                          <DetailRow label="상차일" value={detail.상차일} />
+                          <DetailRow label="차량종류" value={`${detail.차량종류 || ""} ${detail.차량톤수 || ""}`} />
+                          <DetailRow label="차량번호" value={detail.차량번호} />
+                          <DetailRow label="기사명" value={detail.이름} />
+                          <DetailRow label="청구운임" value={detail.청구운임 ? Number(detail.청구운임).toLocaleString() + "원" : ""} />
+                          <DetailRow label="상태" value={detail.상태} />
+                        </div>
+                      ) : (
+                        <p className="text-[12px] text-gray-400 pt-2">오더 정보를 불러올 수 없습니다.</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DetailRow({ label, value }) {
+  if (!value) return null;
+  return (
+    <div className="flex gap-2">
+      <span className="text-gray-400 w-14 shrink-0">{label}</span>
+      <span className="text-gray-700 font-medium">{value}</span>
+    </div>
+  );
+}
+
 function MobileSideMenu({
   onClose,
   onGoList,
