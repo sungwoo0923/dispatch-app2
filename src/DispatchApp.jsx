@@ -5819,7 +5819,7 @@ const applyCopy = (r) => {
     하차시간: r.하차시간 || "",
     하차시간기준: r.하차시간기준 ?? null,
     지급방식: r.지급방식 || "",
-    배차방식: r.배차방식 || "",
+    배차방식: "",
     메모: r.메모 || "",
     운행유형: r.운행유형 || "편도",
     긴급: r.긴급 === true,
@@ -7834,10 +7834,10 @@ className={`
                 ...s,
                 화물내용: cargoType && cargoType !== "없음"
                   ? `${cargoBase}${cargoType}`
-                  : cargo,
+                  : (cargo || "없음"),
                 차량톤수: tonType && tonType !== "없음"
                   ? `${tonBase}${tonType}`
-                  : tonVal,
+                  : (tonVal || "없음"),
               };
             });
 
@@ -11305,6 +11305,8 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
   const [activeIdx, setActiveIdx] = React.useState(null);
   const [placeActive, setPlaceActive] = React.useState(0);
   const [deleteIdx, setDeleteIdx] = React.useState(null);
+  const [contactPickerIdx, setContactPickerIdx] = React.useState(null);
+  const [contactPickerOpts, setContactPickerOpts] = React.useState([]);
 
   const emptyStop = () => ({
     업체명: "", 주소: "", 담당자: "", 담당자번호: "", 메모: "",
@@ -11366,8 +11368,8 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
       for (const sfx of TON_SFXS) { if (tonBase.endsWith(sfx)) { tonBase = tonBase.slice(0, -sfx.length).trim(); break; } }
       return {
         ...s,
-        화물내용: cargoType && cargoType !== "없음" ? `${cargoBase}${cargoType}` : cargo,
-        차량톤수: tonType && tonType !== "없음" ? `${tonBase}${tonType}` : tonVal,
+        화물내용: cargoType && cargoType !== "없음" ? `${cargoBase}${cargoType}` : (cargo || "없음"),
+        차량톤수: tonType && tonType !== "없음" ? `${tonBase}${tonType}` : (tonVal || "없음"),
       };
     }).filter(s => s.업체명?.trim());
     onSave(finalList);
@@ -11419,7 +11421,18 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
                     e.preventDefault(); e.stopPropagation();
                     if (activeIdx===idx && placeOpts.length>0) {
                       const p = placeOpts[placeActive];
-                      if (p) { setEditList(prev=>{const c=[...prev];c[idx]={...c[idx],업체명:p.업체명,주소:p.주소||"",담당자:p.담당자||"",담당자번호:p.담당자번호||""};return c;}); setActiveIdx(null); }
+                      if (p) {
+                        const contacts=(p.contacts||[]).filter(c=>c.name?.trim());
+                        const unique=[...new Map(contacts.map(c=>[c.name.trim(),c])).values()];
+                        if(unique.length>1){
+                          setEditList(prev=>{const c=[...prev];c[idx]={...c[idx],업체명:p.업체명,주소:p.주소||"",담당자:"",담당자번호:""};return c;});
+                          setContactPickerIdx(idx);
+                          setContactPickerOpts(unique);
+                        } else {
+                          setEditList(prev=>{const c=[...prev];c[idx]={...c[idx],업체명:p.업체명,주소:p.주소||"",담당자:p.담당자||"",담당자번호:p.담당자번호||""};return c;});
+                        }
+                        setActiveIdx(null);
+                      }
                     }
                     return;
                   }
@@ -11435,7 +11448,15 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
                       className={`px-2 py-1 cursor-pointer ${i===placeActive?"bg-blue-50":"hover:bg-gray-50"}`}
                       onMouseEnter={()=>setPlaceActive(i)}
                       onMouseDown={()=>{
-                        setEditList(prev=>{const c=[...prev];c[idx]={...c[idx],업체명:p.업체명,주소:p.주소||"",담당자:p.담당자||"",담당자번호:p.담당자번호||""};return c;});
+                        const contacts=(p.contacts||[]).filter(c=>c.name?.trim());
+                        const unique=[...new Map(contacts.map(c=>[c.name.trim(),c])).values()];
+                        if(unique.length>1){
+                          setEditList(prev=>{const c=[...prev];c[idx]={...c[idx],업체명:p.업체명,주소:p.주소||"",담당자:"",담당자번호:""};return c;});
+                          setContactPickerIdx(idx);
+                          setContactPickerOpts(unique);
+                        } else {
+                          setEditList(prev=>{const c=[...prev];c[idx]={...c[idx],업체명:p.업체명,주소:p.주소||"",담당자:p.담당자||"",담당자번호:p.담당자번호||""};return c;});
+                        }
                         setActiveIdx(null);
                       }}>
                       <b>{p.업체명}</b>
@@ -11460,6 +11481,25 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
                 onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();e.stopPropagation();}}}
                 onChange={e=>{const v=e.target.value;setEditList(prev=>{const c=[...prev];c[idx]={...c[idx],담당자번호:v};return c;});}} />
             </div>
+
+            {/* 담당자 선택 팝업 (복수 담당자) */}
+            {contactPickerIdx === idx && contactPickerOpts.length > 0 && (
+              <div className="border border-blue-200 rounded-lg p-2 bg-blue-50">
+                <div className="text-[11px] font-bold text-blue-600 mb-1.5">담당자 선택</div>
+                {contactPickerOpts.map((contact, ci) => (
+                  <div key={ci}
+                    className="px-2 py-1.5 cursor-pointer hover:bg-white rounded-lg flex items-center justify-between"
+                    onClick={() => {
+                      setEditList(prev=>{const c=[...prev];c[idx]={...c[idx],담당자:contact.name||"",담당자번호:contact.phone||""};return c;});
+                      setContactPickerIdx(null);
+                      setContactPickerOpts([]);
+                    }}>
+                    <span className="text-[13px] font-semibold text-gray-800">{contact.name}</span>
+                    <span className="text-[12px] text-gray-500">{contact.phone}</span>
+                  </div>
+                ))}
+              </div>
+            )}
 
             {/* 화물내용 + 타입 / 톤수 + 타입 */}
             <div className="grid grid-cols-2 gap-2">
