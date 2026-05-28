@@ -1661,6 +1661,40 @@ const ROLE_LABELS = {
   test: "경리/회계",
 };
 
+// ================================
+// ⭐ 운임조회 매칭 헬퍼 (모듈 스코프 — DispatchStatus에서도 접근 가능)
+// ================================
+function _getPalletNum(s) {
+  const m = String(s||"").match(/(\d+)\s*(p|P|파|팔|파레|파렛|파렛트|팔레트|PL)/i);
+  if (m) return Number(m[1]);
+  const m2 = String(s||"").match(/^\s*(\d+)\s*$/);
+  return m2 ? Number(m2[1]) : null;
+}
+function fareCargoExact(targetCargo, recCargo) {
+  const tc = String(targetCargo || "").trim();
+  const rc = String(recCargo || "").trim();
+  if (!tc || !rc) return false;
+  if (tc === rc) return true;
+  const tp = _getPalletNum(tc); const rp = _getPalletNum(rc);
+  if (tp != null && rp != null) return tp === rp;
+  if (/박스/.test(tc) && /박스/.test(rc)) return true;
+  return false;
+}
+function fareCargoPartial(targetCargo, recCargo) {
+  const tc = String(targetCargo || "").trim();
+  const rc = String(recCargo || "").trim();
+  if (!tc || !rc) return false;
+  const tp = _getPalletNum(tc); const rp = _getPalletNum(rc);
+  if (tp != null && rp != null) return Math.abs(tp - rp) <= 2;
+  return false;
+}
+function getFareMatchLabel(cargoExact, cargoPartial, tonExact) {
+  if (cargoExact && tonExact) return "완전일치";
+  if (cargoExact || cargoPartial) return "부분일치";
+  if (tonExact) return "톤수일치";
+  return "경로일치";
+}
+
 export default function DispatchApp({ role, user, userCompany = "" }) {
   const isTest = role === "test";
   const navigate = useNavigate();
@@ -5106,35 +5140,6 @@ if (
   }
 
   return score;
-}
-function fareCargoExact(targetCargo, recCargo) {
-  const tc = String(targetCargo || "").trim();
-  const rc = String(recCargo || "").trim();
-  if (!tc || !rc) return false;
-  if (tc === rc) return true;
-  // Pallet: compare counts
-  const tp = getPalletFromCargoText(tc);
-  const rp = getPalletFromCargoText(rc);
-  if (tp != null && rp != null) return tp === rp;
-  // Box: both contain 박스
-  if (/박스/.test(tc) && /박스/.test(rc)) return true;
-  return false;
-}
-function fareCargoPartial(targetCargo, recCargo) {
-  const tc = String(targetCargo || "").trim();
-  const rc = String(recCargo || "").trim();
-  if (!tc || !rc) return false;
-  // Pallet near-match (±2)
-  const tp = getPalletFromCargoText(tc);
-  const rp = getPalletFromCargoText(rc);
-  if (tp != null && rp != null) return Math.abs(tp - rp) <= 2;
-  return false;
-}
-function getFareMatchLabel(cargoExact, cargoPartial, tonExact) {
-  if (cargoExact && tonExact) return "완전일치";
-  if (cargoExact || cargoPartial) return "부분일치";
-  if (tonExact) return "톤수일치";
-  return "경로일치";
 }
 // ================================
 // ⭐ 운임 중복 제거용 Key 생성
@@ -12739,6 +12744,7 @@ const [copyActiveIndex, setCopyActiveIndex] = React.useState(0);
   const [editTarget, setEditTarget] = React.useState(null);
   const [farePanelOpen, setFarePanelOpen] = React.useState(false);
   const [copyFarePanelOpen, setCopyFarePanelOpen] = React.useState(false);
+  const [copyFareFilter, setCopyFareFilter] = React.useState("all");
   const [driverPick, setDriverPick] = React.useState(null);
   const [markDeliveredOnSave, setMarkDeliveredOnSave] = React.useState(false);
   React.useEffect(() => {
@@ -22565,8 +22571,6 @@ const save = {
   const [ctxFare5PanelOpen, setCtxFare5PanelOpen] = React.useState(false);
   const [ctxFare5Result, setCtxFare5Result] = React.useState(null);
   const [fare5Filter, setFare5Filter] = React.useState("all");
-  const [fare4Filter, setFare4Filter] = React.useState("all");
-  const [copyFareFilter, setCopyFareFilter] = React.useState("all");
   const [ctxNoHistory5Open, setCtxNoHistory5Open] = React.useState(false);
   const [ctxAddrSearch5Open, setCtxAddrSearch5Open] = React.useState(false);
   const [ctxAddrPickup5, setCtxAddrPickup5] = React.useState("");
