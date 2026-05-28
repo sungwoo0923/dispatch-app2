@@ -2139,7 +2139,7 @@ return (
         </div>
       </header>
       {/* ---------------- 화면 렌더링 ---------------- */}
-      <main className={`rounded shadow p-4 ${darkMode ? "bg-gray-900 text-gray-100" : "bg-white text-gray-900"}`}>
+      <main className={`rounded shadow p-4 min-w-max ${darkMode ? "bg-gray-900 text-gray-100" : "bg-white text-gray-900"}`}>
         {menu === "HOME" && (
           <HomeDashboard
             role={role}
