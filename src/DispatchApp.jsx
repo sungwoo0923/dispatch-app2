@@ -7617,6 +7617,25 @@ className={`
           />
         </div>
 
+        {/* 담당자 선택 팝업 (복수 담당자) */}
+        {stopContactPickerIdx === idx && stopContactPickerOpts.length > 0 && (
+          <div className="border border-blue-200 rounded-lg p-2 bg-blue-50">
+            <div className="text-[11px] font-bold text-blue-600 mb-1.5">담당자 선택</div>
+            {stopContactPickerOpts.map((contact, ci) => (
+              <div key={ci}
+                className="px-2 py-1.5 cursor-pointer hover:bg-white rounded-lg flex items-center justify-between"
+                onClick={() => {
+                  setStopList(prev=>{const copy=[...prev];copy[idx]={...copy[idx],담당자:contact.name||"",담당자번호:contact.phone||""};return copy;});
+                  setStopContactPickerIdx(null);
+                  setStopContactPickerOpts([]);
+                }}>
+                <span className="text-[13px] font-semibold text-gray-800">{contact.name}</span>
+                <span className="text-[12px] text-gray-500">{contact.phone}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* 🔥 새로 추가: 화물내용 + 드롭다운 / 톤수 + 드롭다운 */}
         <div className="grid grid-cols-2 gap-2">
 
@@ -18681,8 +18700,18 @@ if (editTarget.거래처명) {
           <button
             className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
             onClick={() => {
+              const r = contextMenu.row;
               const url = `${window.location.origin}/driver-upload`;
-              const msg = `[인수증 업로드 안내]\n운송 완료 후 아래 링크를 통해 인수증을 업로드해 주시기 바랍니다.\n\n${url}\n\n서명 받은 인수증(파렛전표) 사진을 촬영하여 업로드해 주세요.\n미업로드 시 운임 정산이 지연될 수 있습니다.`;
+              const dateStr = (() => {
+                const d = r.상차일 || "";
+                if (d && d.includes("-")) {
+                  const [, m, day] = d.split("-");
+                  return `${Number(m)}월 ${Number(day)}일`;
+                }
+                return d;
+              })();
+              const orderInfo = `오더 정보\n${dateStr}\n\n${r.상차지명 || "-"} → ${r.하차지명 || "-"}${r.화물내용 ? `\n${r.화물내용}` : ""}${r.차량톤수 ? ` / ${r.차량톤수}` : ""}`;
+              const msg = `${orderInfo}\n\n[인수증 업로드 안내]\n운송 완료 후 아래 링크를 통해 인수증을 업로드해 주시기 바랍니다.\n\n${url}\n\n서명 받은 인수증(파렛전표) 사진을 촬영하여 업로드해 주세요.\n미업로드 시 운임 정산이 지연될 수 있습니다.`;
               navigator.clipboard.writeText(msg).then(() => showAlert("업로드 안내 메시지가 복사되었습니다.\n기사에게 붙여넣기로 전달하세요.")).catch(() => showAlert(`링크: ${url}`));
               setContextMenu(null);
             }}
@@ -26555,8 +26584,18 @@ setCopyTarget(prev => ({
           </button>
           <button className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
             onClick={() => {
+              const r = contextMenuDS.row;
               const url = `${window.location.origin}/driver-upload`;
-              const msg = `[인수증 업로드 안내]\n운송 완료 후 아래 링크를 통해 인수증을 업로드해 주시기 바랍니다.\n\n${url}\n\n서명 받은 인수증(파렛전표) 사진을 촬영하여 업로드해 주세요.\n미업로드 시 운임 정산이 지연될 수 있습니다.`;
+              const dateStr = (() => {
+                const d = r.상차일 || "";
+                if (d && d.includes("-")) {
+                  const [, m, day] = d.split("-");
+                  return `${Number(m)}월 ${Number(day)}일`;
+                }
+                return d;
+              })();
+              const orderInfo = `오더 정보\n${dateStr}\n\n${r.상차지명 || "-"} → ${r.하차지명 || "-"}${r.화물내용 ? `\n${r.화물내용}` : ""}${r.차량톤수 ? ` / ${r.차량톤수}` : ""}`;
+              const msg = `${orderInfo}\n\n[인수증 업로드 안내]\n운송 완료 후 아래 링크를 통해 인수증을 업로드해 주시기 바랍니다.\n\n${url}\n\n서명 받은 인수증(파렛전표) 사진을 촬영하여 업로드해 주세요.\n미업로드 시 운임 정산이 지연될 수 있습니다.`;
               navigator.clipboard.writeText(msg).then(() => showAlert("업로드 안내 메시지가 복사되었습니다.\n기사에게 붙여넣기로 전달하세요.")).catch(() => showAlert(`링크: ${url}`));
               setContextMenuDS(null);
             }}>
