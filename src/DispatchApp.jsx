@@ -2022,6 +2022,7 @@ const showAlert = (msg) => setAlertMsg(msg);
 return (
     <ToastProvider>
       <CustomAlert message={alertMsg} onClose={() => setAlertMsg(null)} />
+      <div className="min-w-max">
       {/* ===== 통합 헤더 네비 ===== */}
       <header className="sticky top-0 z-50 bg-[#1B2B4B] shadow-lg mb-6">
 
@@ -2318,6 +2319,7 @@ return (
 
         {menu === "가입신청관리" && role === "totalMaster" && <CompanyApplications />}
       </main>
+      </div>
       {/* ⭐⭐⭐ 내 정보 패널 ⭐⭐⭐ */}
       {showMyInfo && (
         <div

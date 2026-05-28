@@ -241,8 +241,15 @@ export default function AdminMenu({ parentRole = "", parentCompany = "" }) {
       transportApprovalStatus: "approved",
       transportApprovedAt: serverTimestamp(),
       transportApprovedBy: myName,
+      status: "approved",
+      processedAt: serverTimestamp(),
     });
-    setManagingLinkedApp(prev => prev ? { ...prev, transportApprovalStatus: "approved", transportApprovedBy: myName } : null);
+    if (app.userId) {
+      try {
+        await updateDoc(doc(db, "users", app.userId), { approved: true, companyName: app.companyName });
+      } catch (_) {}
+    }
+    setManagingLinkedApp(prev => prev ? { ...prev, transportApprovalStatus: "approved", transportApprovedBy: myName, status: "approved" } : null);
   };
 
   // 운송사 관리자 1차 거절
@@ -759,8 +766,12 @@ export default function AdminMenu({ parentRole = "", parentCompany = "" }) {
                     ))}
                     <button
                       onClick={async () => {
-                        await updateDoc(doc(db, "users", managingLinkedApp.userId), { permissions: appUserPerms });
-                        alert("권한이 저장되었습니다.");
+                        try {
+                          await updateDoc(doc(db, "users", managingLinkedApp.userId), { permissions: appUserPerms });
+                          alert("권한이 저장되었습니다.");
+                        } catch (err) {
+                          alert("저장 중 오류가 발생했습니다: " + (err?.message || err));
+                        }
                       }}
                       className="w-full py-2 mt-2 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold"
                     >
