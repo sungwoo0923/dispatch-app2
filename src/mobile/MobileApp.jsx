@@ -669,10 +669,19 @@ collections.forEach((name) => {
       // 🔔 알림 감지 (최초 로드는 스킵)
       if (!initialLoadDoneRef.current[name]) {
         initialLoadDoneRef.current[name] = true;
+        // Initialize prevStatusMap on first load
+        list.forEach(item => {
+          if (!dispatchPrevStatus.current[name]) dispatchPrevStatus.current[name] = new Map();
+          dispatchPrevStatus.current[name].set(item.id, String(item.배차상태 || "").trim());
+        });
         return;
       }
 
       if (!alarmEnabledRef.current) return;
+
+      // Initialize prevStatusMap if needed
+      if (!dispatchPrevStatus.current[name]) dispatchPrevStatus.current[name] = new Map();
+      const prevMap = dispatchPrevStatus.current[name];
 
       // 🔥 모든 FCM 토큰 수집
       const sendPush = async (title, body) => {
@@ -705,10 +714,10 @@ collections.forEach((name) => {
         }
 
         if (change.type === "modified") {
-          const prevCar = change.doc._document?.data?.value?.mapValue
-            ?.fields?.차량번호?.stringValue || "";
+          const prevStatus = prevMap.get(change.doc.id) || "";
+          const nextStatus = String(data.배차상태 || "").trim();
           const nextCar = String(data.차량번호 || "").trim();
-          if (!prevCar && nextCar) {
+          if (nextStatus === "배차완료" && prevStatus !== "배차완료" && nextCar) {
             sendPush(
               "배차완료",
               `${data.거래처명 || ""} ${data.상차지명} → ${data.하차지명 || ""} | ${data.기사명 || ""} (${nextCar})`
@@ -717,11 +726,18 @@ collections.forEach((name) => {
           }
 
           // 취소 감지
-          const prevStatus = change.doc._document?.data?.value?.mapValue?.fields?.상태?.stringValue || "";
-          const nextStatus = data.상태 || "";
-          if (nextStatus === "취소" && prevStatus !== "취소") {
+          const prevCancelStatus = change.doc._document?.data?.value?.mapValue?.fields?.상태?.stringValue || "";
+          const nextCancelStatus = data.상태 || "";
+          if (nextCancelStatus === "취소" && prevCancelStatus !== "취소") {
             addNotification("취소", data);
           }
+        }
+
+        // Update prevMap
+        if (change.type === "removed") {
+          prevMap.delete(change.doc.id);
+        } else {
+          prevMap.set(change.doc.id, String(data.배차상태 || "").trim());
         }
       });
     });
