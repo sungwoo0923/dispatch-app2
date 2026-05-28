@@ -2871,9 +2871,9 @@ setOpenMemo={setOpenMemo}
     setTab={setUnassignedTab}
     onSaveScroll={() => { unassignedScrollYRef.current = window.scrollY; }}
 
-    // ✅ 추가: 클릭한 오더 포커스(스크롤+하이라이트)
     focusOrderId={focusUnassignedOrderId}
     onFocusDone={() => setFocusUnassignedOrderId(null)}
+    cardVersionB={cardVersionB}
   />
 )}
 
@@ -7635,7 +7635,7 @@ const pickDrop = (c) => {
                           <div key={i} className={`bg-white border rounded-2xl overflow-hidden shadow-sm ${isTop ? "border-[#1B2B4B]/30" : "border-gray-200"}`}>
                             {isTop && (
                               <div className="bg-[#1B2B4B] px-4 py-1 flex items-center gap-1">
-                                <span className="text-yellow-300 text-[10px] font-bold">★ 최근 유사 운송</span>
+                                <span className="text-yellow-300 text-[10px] font-bold">최근 유사 운송</span>
                               </div>
                             )}
                             <div className="px-4 pt-3 pb-0">
@@ -10502,6 +10502,7 @@ function MobileUnassignedList({
   onSaveScroll,
   focusOrderId,
   onFocusDone,
+  cardVersionB = false,
 }) {
     // ============================
   // 🔢 미배차 요약 계산
@@ -10646,12 +10647,12 @@ return (
       key={t}
       onClick={() => {
         setTab(t);
-        setUnassignedTypeFilter("전체"); // 🔥 탭 바뀔 때 필터 초기화
+        setUnassignedTypeFilter("전체"); // 탭 바뀔 때 필터 초기화
       }}
       className={`flex-1 py-2.5 text-sm font-bold
         ${
           tab === t
-            ? "bg-blue-600 text-white shadow"
+            ? `${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"} text-white shadow`
             : "bg-transparent text-gray-500"
         }`}
     >
@@ -10674,7 +10675,9 @@ return (
         transition
         ${
           unassignedTypeFilter === t
-            ? "bg-blue-50 text-blue-700 border-blue-400"
+            ? cardVersionB
+              ? "bg-[#1B2B4B]/10 text-[#1B2B4B] border-[#1B2B4B]/40"
+              : "bg-blue-50 text-blue-700 border-blue-400"
             : "bg-white text-gray-500 border-gray-300"
         }`}
     >
@@ -10689,7 +10692,7 @@ return (
                   flex justify-between items-center
                   text-xs font-semibold text-gray-700">
     <span>
-      총 <b className="text-blue-600">{totalCount}</b>건
+      총 <b className={cardVersionB ? "text-[#1B2B4B]" : "text-blue-600"}>{totalCount}</b>건
     </span>
 
     <div className="flex gap-2">
@@ -10700,7 +10703,7 @@ return (
 
       <span className="px-2 py-0.5 rounded-full
                        bg-gray-100 text-gray-700 text-[11px] font-bold">
-        🚚 일반 {normalCount}
+        일반 {normalCount}
       </span>
     </div>
   </div>
@@ -10740,8 +10743,7 @@ return (
       onOpenMemo={setOpenMemo}
       showUndeliveredOnly={tab === "정보미전달"}
       onConfirmDeliver={() => setConfirmTarget(o)}
-
-      // ✅ 추가: 포커스 대상이면 하이라이트
+      cardVersionB={cardVersionB}
       flash={flashId === o.id}
     />
   </div>
@@ -10781,9 +10783,7 @@ return (
 
         <button
           onClick={handleConfirmDeliver}
-          className="flex-1 py-2 rounded-lg
-                     bg-emerald-500 text-white
-                     text-sm font-semibold"
+          className={`flex-1 py-2 rounded-lg text-white text-sm font-semibold ${cardVersionB ? "bg-[#1B2B4B]" : "bg-emerald-500"}`}
         >
           확인
         </button>
