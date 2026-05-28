@@ -5343,6 +5343,7 @@ const isRoundTrip = form.운행유형 === "왕복";
 const ROUND_DISCOUNT = 0.9; // ⭐ 10% 할인 (조정 가능)
     // ⭐ 운임조회 팝업 상태
     const [fareModalOpen, setFareModalOpen] = React.useState(false);
+const [fare3Filter, setFare3Filter] = React.useState("all");
 const [fareResult, setFareResult] = React.useState(null);
 const [fareQuickOpen, setFareQuickOpen] = React.useState(false);
 const [fareQuickMatches, setFareQuickMatches] = React.useState([]);
@@ -5579,7 +5580,17 @@ if (!matchVehicle) return false;
     matchCargo = matchTon;
   }
 }
-        return matchVehicle && matchTon && matchCargo;
+        return matchVehicle;
+      });
+      // Add _match labels to each filtered record
+      filtered = filtered.map(r => {
+        const rowTonNum = extractTonNum(r.차량톤수 || "");
+        const tonExact = inputTonNum != null && rowTonNum != null && Math.abs(rowTonNum - inputTonNum) <= 0.5;
+        const rowPallets = extractPalletNum(r.화물내용);
+        const cargoExact = fareCargoExact(cargo, r.화물내용);
+        const cargoPartial = fareCargoPartial(cargo, r.화물내용);
+        const label = getFareMatchLabel(cargoExact, cargoPartial, tonExact);
+        return { ...r, _match: { label, tonExact, cargoExact, cargoPartial } };
       });
       if (!filtered.length) {
         showAlert("유사한 과거 운임 데이터를 찾지 못했습니다.");
@@ -6211,59 +6222,176 @@ const [showOrderParser, setShowOrderParser] = React.useState(false);
 
 const parseOrderText = (text) => {
   const lines = text.split(/\n/).map(l => l.trim()).filter(Boolean);
-  const pickupIdx = lines.findIndex(l => /상차지?$/.test(l) || /^1\.\s*상차/.test(l));
-  const dropIdx   = lines.findIndex(l => /하차지?$/.test(l) || /^하차지/.test(l));
-  const pickupLines = pickupIdx >= 0 && dropIdx > pickupIdx
-    ? lines.slice(pickupIdx+1, dropIdx) : lines.slice(0, Math.floor(lines.length/2));
-  const dropLines = dropIdx >= 0
-    ? lines.slice(dropIdx+1) : lines.slice(Math.floor(lines.length/2));
 
-  const extractFromLines = (sectionLines) => {
+  // ─── Format A: numbered items "1. 상차시간:", "2. 상차지:" ───
+  const numberedMap = {};
+  lines.forEach(line => {
+    const m = line.match(/^(\d+)\s*[.\s]\s*(.+?)\s*[:：]\s*(.+)$/);
+    if (m) numberedMap[m[2].trim()] = m[3].trim();
+  });
+  const hasNumberedFormat = Object.keys(numberedMap).length >= 2;
+
+  if (hasNumberedFormat) {
+    const pickupRaw = numberedMap["상차지"] || numberedMap["상차 지"] || "";
+    const dropRaw = numberedMap["하차지"] || numberedMap["하차 지"] || "";
+    const pickupTimeRaw = numberedMap["상차시간"] || numberedMap["상차 시간"] || "";
+    const dropTimeRaw = numberedMap["하차시간"] || numberedMap["하차 시간"] || "";
+    const productRaw = numberedMap["제품"] || numberedMap["화물"] || numberedMap["품목"] || "";
+    const vehicleRaw = numberedMap["필요차량"] || numberedMap["차량"] || numberedMap["차종"] || "";
+
+    // Extract company name from address string (last non-address token)
+    const extractNameFromAddr = (raw) => {
+      const addrPrefixes = /^(서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주)/;
+      if (addrPrefixes.test(raw)) {
+        // Address comes first, company name may be at end
+        const m = raw.match(/([가-힣A-Za-z0-9()\-\s]+(?:물류센터|하역장|센터|물류|창고|마트|마켓|슈퍼|공장))/);
+        return m ? m[1].trim() : "";
+      }
+      return raw;
+    };
+
+    const parseTime = (t = "") => {
+      if (!t) return "";
+      const cleaned = t.replace(/[^0-9시]/g, " ").trim();
+      const m = cleaned.match(/(\d+)/);
+      if (!m) return t;
+      const h = Number(m[1]);
+      if (h > 24) return "";
+      if (h >= 0 && h < 12) return `오전 ${h === 0 ? 12 : h}:00`;
+      if (h === 12) return "오후 12:00";
+      if (h > 12 && h <= 23) return `오후 ${h - 12}:00`;
+      return t;
+    };
+
+    const extractCold = (raw = "") => {
+      if (/냉동/.test(raw)) return "냉동탑";
+      if (/냉장/.test(raw)) return "냉장탑";
+      if (/윙/.test(raw)) return "윙바디";
+      return "";
+    };
+
+    const palletM = (productRaw + " " + vehicleRaw).match(/(\d+)\s*(파레트?|파렛트?|PLT|pallet)/i);
+    const cargoStr = palletM ? `${palletM[1]}파렛트` : (productRaw ? productRaw.split(/\(|\//).at(0).trim() : "");
+    const coldType = extractCold(productRaw + " " + vehicleRaw);
+
+    // For numbered format, address includes company name inline - try to split
+    const splitAddr = (raw) => {
+      const addrM = raw.match(/((?:서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주)[^\n]+)/);
+      const addr = addrM ? addrM[1].trim() : "";
+      // Company name: everything after the address, or before it
+      let name = "";
+      if (addr && raw.length > addr.length) {
+        name = raw.replace(addr, "").replace(/[-\/\s]+/g, " ").trim();
+      }
+      return { name, addr };
+    };
+
+    const pu = splitAddr(pickupRaw);
+    const dr = splitAddr(dropRaw);
+
+    return {
+      상차지명: pu.name || extractNameFromAddr(pickupRaw),
+      상차지주소: pu.addr || (pu.name ? "" : pickupRaw),
+      상차시간: parseTime(pickupTimeRaw),
+      하차지명: dr.name || extractNameFromAddr(dropRaw),
+      하차지주소: dr.addr || (dr.name ? "" : dropRaw),
+      하차시간: parseTime(dropTimeRaw),
+      하차일: /익일|다음날|29일|30일|31일/.test(dropTimeRaw + " " + (numberedMap["하차일"] || "")) ? _tomorrowStr() : _todayStr(),
+      화물내용: cargoStr,
+      차량톤수: "",
+      차량종류: coldType,
+    };
+  }
+
+  // ─── Format B: "상차지? :" / "하차지? :" prefix (with optional typo "하자") ───
+  const fullText = text;
+  const pickupMarker = /상차지?\s*[:：]/;
+  const dropMarker = /하차지?\s*[:：]|하자\s*\d*\s*[:：]/;
+
+  let pickupStart = -1, dropStart = -1;
+  lines.forEach((l, i) => {
+    if (pickupMarker.test(l) && pickupStart < 0) pickupStart = i;
+    if (dropMarker.test(l) && dropStart < 0) dropStart = i;
+  });
+
+  const extractInfo = (sectionLines) => {
     const info = {};
+    const normLine = l => l.replace(/\s+/g, " ").trim();
     sectionLines.forEach(line => {
-      if (/^(서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주)/.test(line)) info.주소 = line;
-      const timeM = line.match(/상차시간\s*[:：]?\s*(.+)/i); if (timeM) info.상차시간 = timeM[1].trim();
-      const dropT = line.match(/하차시간\s*[:：]?\s*(.+)/i); if (dropT) info.하차시간 = dropT[1].trim();
-      const phoneM = line.match(/0\d{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4}/); if (phoneM) info.전화번호 = phoneM[0].replace(/[^\d]/g,"").replace(/^(\d{3})(\d{3,4})(\d{4})$/,"$1-$2-$3");
-      const manM = line.match(/([가-힣]{2,4})\s*(대표|주임|팀장|부장|과장|실장|사원|이사|님|대리)/); if (manM) info.담당자 = manM[1];
-      const wM = line.match(/(\d[\d,]+)\s*kg/i); if (wM) info.중량 = wM[1].replace(/,/g,"");
-      const pM = line.match(/(\d+)\s*(파렛트?|파레트|PLT|p)/i); if (pM) info.파렛 = pM[1];
-      if (/냉동/.test(line)) info.차량종류 = "냉동탑";
-      else if (/냉장/.test(line)) info.차량종류 = "냉장탑";
-      else if (/윙바디/.test(line)) info.차량종류 = "윙바디";
-      else if (/카고/.test(line)) info.차량종류 = "카고";
+      const clean = normLine(line);
+      // address
+      if (/^(서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주)/.test(clean)) info.주소 = clean.split(/[\/,]/)[0].trim();
+      // time
+      const timeM = clean.match(/(?:상차|하차)?시간\s*[:：]?\s*(.+)/i); if (timeM) info.시간 = timeM[1].trim();
+      // phone: full or short (1533-2525 style)
+      const phoneM = clean.match(/(?:0\d{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4}|\d{4}[-]\d{4})/); if (phoneM) info.전화번호 = phoneM[0];
+      // manager with title
+      const manM = clean.match(/([가-힣]{2,4})\s*(대표|주임|팀장|부장|과장|실장|사원|이사|님|대리|차장|과장|팀원)/); if (manM) info.담당자 = manM[1];
+      if (/냉동/.test(clean)) info.차량종류 = "냉동탑";
+      else if (/냉장/.test(clean)) info.차량종류 = "냉장탑";
+      else if (/윙바디/.test(clean)) info.차량종류 = "윙바디";
+      // pallet
+      const pM = clean.match(/(\d+)\s*(파렛트?|파레트|PLT|p)\b/i); if (pM) info.파렛 = pM[1];
+      // weight
+      const wM = clean.match(/(\d[\d,]+)\s*kg/i); if (wM) info.중량 = wM[1].replace(/,/g, "");
     });
-    const nameLine = sectionLines.find(l =>
-      !/(상차|하차|시간|주소|[:：\d]|kg|파렛|냉동|냉장|윙|카고|타코|중량)/.test(l) &&
-      l.length >= 2 && l.length <= 20
-    );
-    if (nameLine) info.업체명 = nameLine;
+    // company name: first short line that isn't an address, time, or phone
+    const nameLine = sectionLines.find(l => {
+      const c = normLine(l);
+      return !/(상차|하차|시간|주소|[:：\d]|kg|파렛|냉동|냉장|윙|카고|타코|중량|대표|원|km)/.test(c) &&
+        c.length >= 2 && c.length <= 30 &&
+        !/^(서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주)/.test(c);
+    });
+    if (nameLine) info.업체명 = normLine(nameLine).replace(/\(주\)/g, "").replace(/\(.+?\)/g, "").replace(/[-\s]+$/, "").trim();
     return info;
   };
-  const pickup = extractFromLines(pickupLines);
-  const drop   = extractFromLines(dropLines);
+
+  let pickupLines, dropLines;
+  if (pickupStart >= 0 && dropStart > pickupStart) {
+    // Extract inline name from the marker line if present
+    const puMarkerLine = lines[pickupStart];
+    const puInline = puMarkerLine.replace(pickupMarker, "").trim();
+    pickupLines = puInline ? [puInline, ...lines.slice(pickupStart + 1, dropStart)] : lines.slice(pickupStart + 1, dropStart);
+    const drMarkerLine = lines[dropStart];
+    const drInline = drMarkerLine.replace(dropMarker, "").trim();
+    dropLines = drInline ? [drInline, ...lines.slice(dropStart + 1)] : lines.slice(dropStart + 1);
+  } else {
+    // Fallback: split at midpoint
+    const mid = Math.floor(lines.length / 2);
+    pickupLines = lines.slice(0, mid);
+    dropLines = lines.slice(mid);
+  }
+
+  const pickup = extractInfo(pickupLines);
+  const drop = extractInfo(dropLines);
+
   const isNextDay = /익일|다음날/.test(text);
-  const parseTime = (t="") => {
+  const parseTime = (t = "") => {
     if (!t) return "";
-    const n = t.replace(/익일|당일|다음날/g,"").match(/(\d+)/);
+    const n = t.replace(/익일|당일|다음날/g, "").match(/(\d+)/);
     if (!n) return "";
     const h = Number(n[1]);
-    if (h >= 0 && h < 12) return `오전 ${h===0?12:h}:00`;
+    if (h >= 0 && h < 12) return `오전 ${h === 0 ? 12 : h}:00`;
     if (h === 12) return "오후 12:00";
-    if (h > 12 && h <= 23) return `오후 ${h-12}:00`;
+    if (h > 12 && h <= 23) return `오후 ${h - 12}:00`;
     return t;
   };
+
   return {
-    상차지명: pickup.업체명||"", 상차지주소: pickup.주소||"",
-    상차지담당자: pickup.담당자||"", 상차지담당자번호: pickup.전화번호||"",
-    상차시간: parseTime(pickup.상차시간||""),
-    하차지명: drop.업체명||"", 하차지주소: drop.주소||"",
-    하차지담당자: drop.담당자||"", 하차지담당자번호: drop.전화번호||"",
-    하차시간: parseTime(drop.하차시간||""),
+    상차지명: pickup.업체명 || "",
+    상차지주소: pickup.주소 || "",
+    상차지담당자: pickup.담당자 || "",
+    상차지담당자번호: pickup.전화번호 || "",
+    상차시간: parseTime(pickup.시간 || ""),
+    하차지명: drop.업체명 || "",
+    하차지주소: drop.주소 || "",
+    하차지담당자: drop.담당자 || "",
+    하차지담당자번호: drop.전화번호 || "",
+    하차시간: parseTime(drop.시간 || ""),
     하차일: isNextDay ? _tomorrowStr() : _todayStr(),
-    화물내용: drop.파렛?`${drop.파렛}파렛트`:(pickup.파렛?`${pickup.파렛}파렛트`:""),
-    차량톤수: drop.중량?`${drop.중량}kg`:(pickup.중량?`${pickup.중량}kg`:""),
-    차량종류: drop.차량종류||pickup.차량종류||"",
+    화물내용: drop.파렛 ? `${drop.파렛}파렛트` : (pickup.파렛 ? `${pickup.파렛}파렛트` : ""),
+    차량톤수: drop.중량 ? `${drop.중량}kg` : (pickup.중량 ? `${pickup.중량}kg` : ""),
+    차량종류: drop.차량종류 || pickup.차량종류 || "",
   };
 };
 const applyOrderParse = () => {
@@ -6597,20 +6725,22 @@ title="상차지 ↔ 하차지 교체"
 </div>
 {/* ===== 오더 자동파싱 영역 ===== */}
 {showOrderParser && (
-  <div className="mb-4 bg-emerald-50 border border-emerald-200 rounded-xl p-4">
-    <div className="flex items-center justify-between mb-2">
-      <span className="text-sm font-bold text-emerald-800">오더 내용 붙여넣기 → 자동 입력</span>
-      <button type="button" onClick={() => setShowOrderParser(false)} className="text-gray-400 hover:text-gray-700 text-lg leading-none">✕</button>
+  <div className="mb-4 bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+    <div className="bg-[#1B2B4B] px-4 py-2.5 flex items-center justify-between">
+      <span className="text-[13px] font-bold text-white">오더 붙여넣기 - 자동 입력</span>
+      <button type="button" onClick={() => setShowOrderParser(false)} className="w-6 h-6 rounded-full bg-white/10 hover:bg-white/20 text-white text-base leading-none flex items-center justify-center transition">×</button>
     </div>
-    <textarea
-      className="w-full border border-emerald-300 rounded-lg px-3 py-2 text-sm h-28 resize-none bg-white focus:outline-none focus:ring-2 focus:ring-emerald-200"
-      placeholder={"카카오톡/문자 오더 내용을 그대로 붙여넣으세요.\n예)\n상차지\n반찬단지 물류센터\n인천 서구 북항로 28-29\n이환주 주임 1533-2525\n하차지\n하성글로벌\n경기도 이천시 신둔면 서이천로 796\n류용철 010-3715-4058\n중량:5,500kg / 7파렛트 / 냉동"}
-      value={orderParseText}
-      onChange={e => setOrderParseText(e.target.value)}
-    />
-    <div className="flex justify-end gap-2 mt-2">
-      <button type="button" onClick={() => setOrderParseText("")} className="px-3 py-1.5 text-xs rounded-lg bg-white border border-gray-200 text-gray-500 hover:bg-gray-50">지우기</button>
-      <button type="button" onClick={applyOrderParse} className="px-4 py-1.5 text-xs font-bold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700">자동 분석 적용</button>
+    <div className="p-4">
+      <textarea
+        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm h-28 resize-none bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/20 focus:border-[#1B2B4B]/30"
+        placeholder={"카카오톡/문자 오더 내용을 그대로 붙여넣으세요.\n예)\n상차지\n반찬단지 물류센터\n인천 서구 북항로 28-29\n이환주 주임 1533-2525\n하차지\n하성글로벌\n경기도 이천시 신둔면 서이천로 796\n류용철 010-3715-4058\n중량:5,500kg / 7파렛트 / 냉동"}
+        value={orderParseText}
+        onChange={e => setOrderParseText(e.target.value)}
+      />
+      <div className="flex justify-end gap-2 mt-3">
+        <button type="button" onClick={() => setOrderParseText("")} className="px-3 py-1.5 text-xs rounded-lg bg-gray-100 border border-gray-200 text-gray-500 hover:bg-gray-200">지우기</button>
+        <button type="button" onClick={applyOrderParse} className="px-4 py-1.5 text-xs font-bold rounded-lg bg-[#1B2B4B] text-white hover:bg-[#243a60]">자동 분석 적용</button>
+      </div>
     </div>
   </div>
 )}
@@ -10588,8 +10718,34 @@ setConfirmChange(null);
                 <span className="text-[11px] font-semibold text-gray-400">유사도순 · 최신순</span>
               </div>
 
+              {/* 필터 탭 */}
+              {(() => {
+                const counts = { "완전일치": 0, "부분일치": 0, "톤수일치": 0, "경로일치": 0 };
+                sortedHistory.forEach(r => {
+                  const lbl = r._match?.label || "경로일치";
+                  counts[lbl] = (counts[lbl] || 0) + 1;
+                });
+                const tabs = ["all", "완전일치", "부분일치", "톤수일치", "경로일치"];
+                return (
+                  <div className="flex gap-1.5 mb-3 flex-wrap">
+                    {tabs.map(t => {
+                      const cnt = t === "all" ? sortedHistory.length : (counts[t] || 0);
+                      if (t !== "all" && cnt === 0) return null;
+                      return (
+                        <button key={t} onClick={() => setFare3Filter(t)}
+                          className={`text-[11px] font-bold px-2.5 py-1 rounded-full border transition ${fare3Filter === t ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100"}`}>
+                          {t === "all" ? `전체 ${cnt}` : `${t} ${cnt}`}
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+
               <div className="space-y-2">
                 {sortedHistory.map((r, idx) => {
+                  const matchLabel = r._match?.label || "경로일치";
+                  if (fare3Filter !== "all" && matchLabel !== fare3Filter) return null;
                   const fare = Number(String(r.청구운임||"0").replace(/[^\d]/g,""));
                   const { label: fareLabel, cls: fareCls } = getFareTag(fare);
                   const sameCargo = getPalletFromCargoText(r.화물내용) === getPalletFromCargoText(form.화물내용);
@@ -10612,6 +10768,12 @@ setConfirmChange(null);
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-[12px] font-bold text-gray-400">{r.상차일}</span>
                           <div className="flex gap-1">
+                            <span className={`px-2.5 py-1 text-[11px] font-extrabold rounded-full ${
+                              matchLabel === "완전일치" ? "bg-[#1B2B4B] text-white"
+                              : matchLabel === "부분일치" ? "bg-emerald-600 text-white"
+                              : matchLabel === "톤수일치" ? "bg-gray-600 text-white"
+                              : "bg-blue-100 text-blue-700"
+                            }`}>{matchLabel}</span>
                             {r._palletCount != null && (
                           <span className={`px-2.5 py-1 text-[11px] font-extrabold rounded-full tracking-tight ${
                             r._palletCount === _inputPalletNum
