@@ -16,6 +16,7 @@ import StandardFare from "./StandardFare";
 import RateCard from "./RateCard";
 import DispatchFormNew from "./DispatchFormNew";
 import AiAssistant from "./AiAssistant";
+import DeliverySignaturePage from "./DeliverySignaturePage";
 
 // ================= 카운트 애니메이션 =================
 function CountUp({ value, duration = 900 }) {
@@ -2083,6 +2084,7 @@ return (
               "기사관리",
               "거래처관리",
               "고정거래처관리",
+              "서명관리",
               "매출관리",
               "거래처정산",
               "지급관리",
@@ -2288,6 +2290,10 @@ return (
               <FleetManagement />
             )}
           </div>
+        )}
+
+        {menu === "서명관리" && (role === "admin" || role === "totalMaster" || role === "user" || role === "test") && (
+          <DeliverySignaturePage />
         )}
 
         {menu === "매출관리" && (role === "admin" || role === "totalMaster" || role === "test") && (
