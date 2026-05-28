@@ -4114,6 +4114,7 @@ const summary = useMemo(() => {
                           onOpenAttach={setAttachViewOrder}
                           selected={isChecked}
                           multiSelectMode={multiSelectMode}
+                          cardVersionB={cardVersionB}
                         />
                       </div>
                     </div>
@@ -4359,6 +4360,7 @@ const MobileOrderCard = React.memo(function MobileOrderCard({
   flash = false,
   selected = false,
   multiSelectMode = false,
+  cardVersionB = false,
 }) {
   const claim = getClaim(order);
   const fee = order.기사운임 ?? 0;
@@ -4403,6 +4405,131 @@ const dropTime = order.하차시간 || "시간 없음";
   const isCold =
     String(order.차량종류 || order.차종 || "").includes("냉장") ||
     String(order.차량종류 || order.차종 || "").includes("냉동");
+
+  if (cardVersionB) {
+    // ── B VERSION: Minimal, clean design ──
+    return (
+      <div
+        className={
+          "relative bg-white rounded-xl border transition-colors overflow-hidden " +
+          (selected
+            ? "border-[#1B2B4B] shadow-[0_0_0_2px_rgba(27,43,75,0.12)]"
+            : flash
+              ? "border-blue-300 shadow-[0_0_0_3px_rgba(59,130,246,0.15)]"
+              : isToday
+                ? "border-l-4 border-l-[#1B2B4B] border-t-gray-200 border-r-gray-200 border-b-gray-200"
+                : "border-gray-200")
+        }
+        onClick={onSelect}
+      >
+        {/* 상단 정보 바 */}
+        <div className={`px-3 py-1.5 flex items-center justify-between ${state === "배차완료" ? "bg-[#1B2B4B]/5" : "bg-gray-50/80"}`}>
+          <div className="flex items-center gap-1.5">
+            {state === "배차완료" ? (
+              <span className="text-[11px] font-bold text-[#1B2B4B] flex items-center gap-1">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                배차완료
+              </span>
+            ) : (
+              <span className="text-[11px] font-semibold text-gray-400">배차중</span>
+            )}
+            {isCold && (
+              <span className="text-[10px] text-slate-500 font-semibold bg-slate-100 px-1.5 py-0.5 rounded">
+                {String(order.차량종류 || order.차종 || "").includes("냉동") ? "냉동" : "냉장"}
+              </span>
+            )}
+            {isUrgentOrder(order) && (
+              <span className="text-[10px] font-bold text-red-500">긴급</span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {(order.attachCount > 0) && (
+              <button
+                style={{ touchAction: "manipulation" }}
+                onClick={e => { e.stopPropagation(); onOpenAttach?.(order); }}
+                className="text-[10px] text-gray-400 font-semibold"
+              >
+                첨부 {order.attachCount}
+              </button>
+            )}
+            {(order.메모 || order.적요) && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onOpenMemo(order); }}
+                className="text-[10px] text-gray-400 font-semibold"
+              >
+                메모
+              </button>
+            )}
+            <span className="text-[10px] text-gray-400">{String(order.상차일 || "").slice(5)}</span>
+          </div>
+        </div>
+
+        {/* 본문 */}
+        <div className="px-3 py-2.5">
+          {/* 상/하차 */}
+          <div className="flex items-stretch gap-2">
+            <div className="flex flex-col items-center gap-1 pt-0.5">
+              <span className="w-5 h-5 rounded-full bg-[#1B2B4B] flex items-center justify-center text-white text-[9px] font-bold shrink-0">상</span>
+              <div className="w-px flex-1 bg-gray-200 my-0.5" />
+              <span className="w-5 h-5 rounded-full bg-gray-400 flex items-center justify-center text-white text-[9px] font-bold shrink-0">하</span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[13px] font-bold text-gray-900 truncate">{pickupName}</span>
+                <div className="flex items-center gap-1 shrink-0 ml-1">
+                  <span className="text-[11px] text-gray-500">{pickupTime}</span>
+                  {pickupStatus && <span className={`text-[10px] px-1 py-0.5 rounded border ${dayBadgeClass(pickupStatus)}`}>{pickupStatus}</span>}
+                </div>
+              </div>
+              {(() => {
+                const pStops = validStops(order.경유상차목록 || order.경유지_상차);
+                const dStops = validStops(order.경유하차목록 || order.경유지_하차);
+                const all = [...pStops, ...dStops];
+                if (!all.length) return null;
+                return (
+                  <div className="text-[10px] text-gray-400 mb-1.5 pl-0.5">
+                    경유: {all.map(s => s.업체명 || "-").join(" → ")}
+                  </div>
+                );
+              })()}
+              <div className="flex items-center justify-between">
+                <span className="text-[13px] font-bold text-gray-900 truncate">{dropName}</span>
+                <div className="flex items-center gap-1 shrink-0 ml-1">
+                  <span className="text-[11px] text-gray-500">{dropTime}</span>
+                  {dropStatus && <span className={`text-[10px] px-1 py-0.5 rounded border ${dayBadgeClass(dropStatus)}`}>{dropStatus}</span>}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 하단 정보 */}
+          <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-100">
+            <span className="text-[11px] text-gray-500 truncate">
+              {[ton && `${ton}`, carType, cargo].filter(Boolean).join(" · ") || "-"}
+            </span>
+            <span className="text-[12px] font-bold text-gray-700 whitespace-nowrap shrink-0 ml-2">
+              {fmtMoney(claim)}원
+            </span>
+          </div>
+
+          {/* 배차완료 시 기사 연락 */}
+          {state === "배차완료" && (order.이름 || order.차량번호) && (
+            <div className="flex items-center gap-2 mt-1.5 pt-1.5 border-t border-dashed border-gray-100">
+              <span className="text-[11px] text-gray-400 truncate flex-1">
+                {[order.차량번호, order.이름].filter(Boolean).join(" · ")}
+              </span>
+              {order.전화번호 && (
+                <a href={`tel:${order.전화번호}`} onClick={e => e.stopPropagation()} style={{ touchAction: "manipulation" }}
+                  className="shrink-0 px-2.5 py-1 rounded-full bg-[#1B2B4B] text-white text-[10px] font-bold">
+                  전화
+                </a>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
    <div
