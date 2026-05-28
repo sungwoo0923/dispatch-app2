@@ -950,7 +950,11 @@ function mergeViaCargoText(mainCargo, waypointLists) {
         }
       }
     }
-    if (!matched && !customs.includes(c)) customs.push(c);
+    if (!matched) {
+      // 수량 없이 타입명만 있는 경우("파레트" 단독) 무시 — 경유등록 빈칸 저장 결과물
+      const isTypeOnly = SFXS.some(sfx => c === sfx || c === (NORM[sfx] || sfx));
+      if (!isTypeOnly && !customs.includes(c)) customs.push(c);
+    }
   }
   const parts = [];
   for (const [type, total] of Object.entries(typeMap)) {
@@ -8038,10 +8042,10 @@ className={`
               for (const sfx of TON_SFXS) { if (tonBase.endsWith(sfx)) { tonBase = tonBase.slice(0, -sfx.length).trim(); break; } }
               return {
                 ...s,
-                화물내용: cargoType && cargoType !== "없음"
+                화물내용: (cargoType && cargoType !== "없음" && cargoBase)
                   ? `${cargoBase}${cargoType}`
                   : (cargo || "없음"),
-                차량톤수: tonType && tonType !== "없음"
+                차량톤수: (tonType && tonType !== "없음" && tonBase)
                   ? `${tonBase}${tonType}`
                   : (tonVal || "없음"),
               };
@@ -11383,10 +11387,11 @@ function StopInlineBadge({ count = 0, list = [], type = "pickup", onEdit, editab
       if (s.하차시간) lines.push(`하차시간 : ${s.하차시간}`);
       const cargo = (() => {
         const raw = s.화물내용 || "";
-        if (/파레트|파렛트|박스|통/.test(raw)) return raw;
+        const hasSfx = /파레트|파렛트|박스|통/.test(raw);
+        if (hasSfx) return /\d/.test(raw) ? raw : "";
         const qty = raw || s.화물수량 || "";
         const tp = s.화물타입 || "";
-        if (!qty) return "";
+        if (!qty || qty === "없음") return "";
         return tp && tp !== "없음" ? `${qty}${tp}` : qty;
       })();
       if (cargo) lines.push(`화물내용 : ${cargo}`);
@@ -11606,8 +11611,8 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
       for (const sfx of TON_SFXS) { if (tonBase.endsWith(sfx)) { tonBase = tonBase.slice(0, -sfx.length).trim(); break; } }
       return {
         ...s,
-        화물내용: cargoType && cargoType !== "없음" ? `${cargoBase}${cargoType}` : (cargo || "없음"),
-        차량톤수: tonType && tonType !== "없음" ? `${tonBase}${tonType}` : (tonVal || "없음"),
+        화물내용: (cargoType && cargoType !== "없음" && cargoBase) ? `${cargoBase}${cargoType}` : (cargo || "없음"),
+        차량톤수: (tonType && tonType !== "없음" && tonBase) ? `${tonBase}${tonType}` : (tonVal || "없음"),
       };
     }).filter(s => s.업체명?.trim());
     onSave(finalList);
@@ -12326,13 +12331,14 @@ const _safeStops = (v) => {
 
 // 화물내용 조합 (타입이 "없음"이거나 없으면 숫자만)
 const _cargoText = (s) => {
-  // 화물내용 자체에 이미 단위가 붙어있으면 그대로 사용
   const raw = s.화물내용 || "";
-  if (/파레트|파렛트|박스|통/.test(raw)) return raw;
+  const hasSuffix = /파레트|파렛트|박스|통/.test(raw);
+  // 숫자+단위 형식("2파레트")이면 그대로, 단위만("파레트" - 수량 없음)이면 없음 처리
+  if (hasSuffix) return /\d/.test(raw) ? raw : "";
 
   const qty = raw || s.화물수량 || "";
   const type = s.화물타입 || "";
-  if (!qty) return "";
+  if (!qty || qty === "없음") return "";
   return type && type !== "없음" && type !== "" ? `${qty}${type}` : qty;
 };
 
