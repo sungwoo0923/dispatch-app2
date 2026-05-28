@@ -2779,6 +2779,7 @@ setOpenMemo={setOpenMemo}
             onDeleteSelected={deleteSelectedOrders}
             multiSelectMode={multiSelectMode}
             setMultiSelectMode={setMultiSelectMode}
+            cardVersionB={cardVersionB}
           />
         )}
 {page === "sales" && (
@@ -3775,6 +3776,7 @@ function MobileOrderList({
   onDeleteSelected,
   multiSelectMode,
   setMultiSelectMode,
+  cardVersionB,
 }) {
   const [attachViewOrder, setAttachViewOrder] = useState(null);
   const [selectedIds, setSelectedIds] = useState(new Set());
