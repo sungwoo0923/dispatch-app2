@@ -14695,6 +14695,35 @@ const handleCloseFileUpload = async (e) => {
     found !== -1 ? found : headers.indexOf(name), -1
   );
 
+  // 상/하차지 주소 컬럼 감지 (다중 건 기사의 주소 기반 1:1 매칭에 사용)
+  const filePickupAddrColNames = ["상차지주소", "출발지주소", "출발지", "상차지", "픽업지주소", "픽업지", "출발주소", "상차주소"];
+  const fileDropAddrColNames   = ["하차지주소", "도착지주소", "도착지", "하차지", "배달지주소", "배달지", "목적지", "도착주소", "하차주소"];
+  const filePickupAddrCol = filePickupAddrColNames.reduce((f, n) => f !== -1 ? f : headers.indexOf(n), -1);
+  const fileDropAddrCol   = fileDropAddrColNames.reduce((f, n) => f !== -1 ? f : headers.indexOf(n), -1);
+
+  // 주소 유사도 점수 (0~4): 같은 기사 다중 건 매칭 정밀도 향상
+  const addrMatchScore = (a, b) => {
+    if (!a || !b) return 0;
+    const na = String(a).replace(/\s+/g, "").toLowerCase().replace(/광역시|특별시|특별자치시/g, "");
+    const nb = String(b).replace(/\s+/g, "").toLowerCase().replace(/광역시|특별시|특별자치시/g, "");
+    if (na === nb) return 4;
+    if (na.length >= 6 && nb.length >= 6) {
+      const s = na.length < nb.length ? na : nb;
+      const l = na.length < nb.length ? nb : na;
+      if (l.includes(s.slice(0, 10)) || l.includes(s.slice(0, 7))) return 3;
+    }
+    const dongA = String(a).match(/([가-힣]+동)/g) || [];
+    const dongB = String(b).match(/([가-힣]+동)/g) || [];
+    if (dongA.length && dongB.length && dongA.some(d => dongB.includes(d))) return 2;
+    const guA = String(a).match(/([가-힣]+구)/)?.[1] || "";
+    const guB = String(b).match(/([가-힣]+구)/)?.[1] || "";
+    if (guA && guA === guB) return 1;
+    const siA = String(a).match(/([가-힣]+시)/)?.[1] || "";
+    const siB = String(b).match(/([가-힣]+시)/)?.[1] || "";
+    if (siA && siA === siB) return 1;
+    return 0;
+  };
+
   if (plateCol === -1) {
     showAlert("차량번호 컬럼을 찾을 수 없습니다.");
     return;
@@ -14810,7 +14839,30 @@ const handleCloseFileUpload = async (e) => {
       }
     }
 
-    matched.forEach(mr => {
+    // ── 주소 기반 1:1 정밀 매칭 ─────────────────────────────────────────
+    // 같은 기사가 당일 여러 건일 때, 24시콜 각 행을 주소로 올바른 프로그램 레코드와 짝지음.
+    // 이 처리 없으면 24시콜 행 A의 운임이 프로그램 레코드 B와 비교되어 false positive 발생.
+    let matchedForRow = matched;
+    if (!isSumFareMatch && matched.length >= 2) {
+      const fp = filePickupAddrCol !== -1 ? String(row[filePickupAddrCol] || "").trim() : "";
+      const fd = fileDropAddrCol   !== -1 ? String(row[fileDropAddrCol]   || "").trim() : "";
+      if (fp || fd) {
+        const scored = matched.map(mr => {
+          let s = 0;
+          // 하차지(목적지)가 구별력 높으므로 가중치 높게
+          if (fd) { s += addrMatchScore(fd, mr.하차지주소 || "") * 3; s += addrMatchScore(fd, mr.하차지명 || "") * 2; }
+          if (fp) { s += addrMatchScore(fp, mr.상차지주소 || "") * 2; s += addrMatchScore(fp, mr.상차지명 || ""); }
+          return { mr, s };
+        });
+        scored.sort((a, b) => b.s - a.s);
+        // 1등이 2등보다 확연히 높을 때만 좁힘 (동점이면 모호 → 원래대로 전체 비교)
+        if (scored[0].s > 0 && (scored.length < 2 || scored[0].s > scored[1].s)) {
+          matchedForRow = [scored[0].mr];
+        }
+      }
+    }
+
+    matchedForRow.forEach(mr => {
       const seq = rows.indexOf(mr) + 1;
       const dateLabel = fileDate ? ` (${fileDate})` : "";
       const label = `${seq}번 [${mr.거래처명 || "-"}] ${mr.상차지명 || ""} → ${mr.하차지명 || ""}${dateLabel}`;
