@@ -5855,6 +5855,7 @@ const saveStopSheet = () => {
   setStopSheet(null);
 };
 const [showFareHistory, setShowFareHistory] = useState(false);
+const [mobileFareFilter, setMobileFareFilter] = useState("all");
 
 // ── 스마트 운임 조회 매칭 ──
 const fareMatches = useMemo(() => {
@@ -7003,9 +7004,17 @@ const pickDrop = (c) => {
           <div className="flex items-center gap-1.5">
             {fareMatches.length > 0 && (
               <span className="bg-white/20 text-white text-[11px] font-bold px-2 py-0.5 rounded-full">
-                {fareMatches.filter(r => r.score >= 50).length > 0
-                  ? `${fareMatches.filter(r => r.score >= 50).length}건 완전일치`
-                  : `${fareMatches.length}건`}
+                {(() => {
+                  const hasCargoInput = !!(form.화물내용 || "").trim();
+                  const hasTonInput = !!(form.톤수 || "").trim();
+                  const perfect = fareMatches.filter(r => {
+                    if (!r.tags.includes("경로일치")) return false;
+                    const ce = r.tags.includes("화물일치");
+                    const te = r.tags.includes("톤수일치");
+                    return (!hasCargoInput || ce) && (!hasTonInput || te);
+                  }).length;
+                  return perfect > 0 ? `${perfect}건 완전일치` : `${fareMatches.length}건`;
+                })()}
               </span>
             )}
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -7264,12 +7273,38 @@ const pickDrop = (c) => {
                 <button onClick={() => setShowFareHistory(false)}
                   className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 text-lg shrink-0">×</button>
               </div>
-              {/* 범례 */}
-              <div className="flex gap-2 mt-2">
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-bold">완전일치</span>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-bold">경로일치</span>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 font-bold">참고</span>
-              </div>
+              {/* 필터 탭 */}
+              {(() => {
+                const hasCargoInput = !!(form.화물내용 || "").trim();
+                const hasTonInput = !!(form.톤수 || "").trim();
+                const getLabel = (r) => {
+                  if (!r.tags.includes("경로일치")) return "참고";
+                  const ce = r.tags.includes("화물일치");
+                  const cp = r.tags.includes("화물유사");
+                  const te = r.tags.includes("톤수일치");
+                  if ((!hasCargoInput || ce) && (!hasTonInput || te)) return "완전일치";
+                  if (ce || cp) return "부분일치";
+                  if (te) return "톤수일치";
+                  return "경로일치";
+                };
+                const counts = { "완전일치": 0, "부분일치": 0, "톤수일치": 0, "경로일치": 0, "참고": 0 };
+                fareMatches.forEach(r => { const l = getLabel(r); counts[l] = (counts[l] || 0) + 1; });
+                const tabs = ["all", "완전일치", "부분일치", "톤수일치", "경로일치"];
+                return (
+                  <div className="flex gap-1.5 mt-2 flex-wrap">
+                    {tabs.map(t => {
+                      const cnt = t === "all" ? fareMatches.length : (counts[t] || 0);
+                      if (t !== "all" && cnt === 0) return null;
+                      return (
+                        <button key={t} onClick={() => setMobileFareFilter(t)}
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full border transition ${mobileFareFilter === t ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-200"}`}>
+                          {t === "all" ? `전체 ${cnt}` : `${t} ${cnt}`}
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
             </div>
             {/* 결과 목록 */}
             <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2.5">
@@ -7283,13 +7318,23 @@ const pickDrop = (c) => {
               )}
               {fareMatches.map((r, i) => {
                 const o = r.order;
-                const isTop = r.score >= 50 && r.tags.includes("경로일치");
-                const isMid = r.score >= 30;
-                const tagColor = isTop
-                  ? "bg-emerald-100 text-emerald-700"
-                  : isMid ? "bg-blue-100 text-blue-700"
+                const hasCargoInput = !!(form.화물내용 || "").trim();
+                const hasTonInput = !!(form.톤수 || "").trim();
+                const ce = r.tags.includes("화물일치");
+                const cp = r.tags.includes("화물유사");
+                const te = r.tags.includes("톤수일치");
+                const hasRoute = r.tags.includes("경로일치");
+                const tagLabel = !hasRoute ? "참고"
+                  : ((!hasCargoInput || ce) && (!hasTonInput || te)) ? "완전일치"
+                  : (ce || cp) ? "부분일치"
+                  : te ? "톤수일치"
+                  : "경로일치";
+                if (mobileFareFilter !== "all" && tagLabel !== mobileFareFilter) return null;
+                const tagColor = tagLabel === "완전일치" ? "bg-[#1B2B4B] text-white"
+                  : tagLabel === "부분일치" ? "bg-green-600 text-white"
+                  : tagLabel === "톤수일치" ? "bg-gray-600 text-white"
+                  : tagLabel === "경로일치" ? "bg-blue-100 text-blue-700"
                   : "bg-gray-100 text-gray-600";
-                const tagLabel = isTop ? "완전일치" : isMid ? "경로일치" : "참고";
 
                 // 날짜 포맷
                 const dateLabel = (() => {
