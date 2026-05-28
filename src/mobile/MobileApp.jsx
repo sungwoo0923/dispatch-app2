@@ -1981,6 +1981,7 @@ const title =
 )}
       <MobileHeader
   title={title}
+  cardVersionB={cardVersionB}
   onBack={
     page === "form"
       ? () => {
@@ -2912,7 +2913,11 @@ setOpenMemo={setOpenMemo}
             setSelectedOrder(null);
             setPage("form");
           }}
-          className="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-blue-500 text-white text-3xl flex items-center justify-center shadow-lg active:scale-95"
+          className={`fixed bottom-6 right-6 w-14 h-14 rounded-full text-white text-3xl flex items-center justify-center active:scale-95 transition-transform ${
+            cardVersionB
+              ? "bg-[#1B2B4B] shadow-[0_4px_20px_rgba(27,43,75,0.35)]"
+              : "bg-blue-500 shadow-lg"
+          }`}
         >
           +
         </button>
@@ -3178,35 +3183,47 @@ function MobileSalesPage({ data = [], onBack }) {
 // ----------------------------------------------------------------------
 // 공통 헤더 / 사이드 메뉴
 // ----------------------------------------------------------------------
-function MobileHeader({ title, onBack, onRefresh, onMenu, notifCount = 0, onNotifClick }) {
+function MobileHeader({ title, onBack, onRefresh, onMenu, notifCount = 0, onNotifClick, cardVersionB = false }) {
   const isListPage = title === "등록내역";
+  const iconColor = cardVersionB ? "#ffffff" : "#374151";
+  const bellColor = cardVersionB ? "#ffffff" : "#1f2937";
 
   return (
-    <div className="flex items-center justify-between px-4 py-3 bg-white border-b sticky top-0 z-30">
+    <div className={`flex items-center justify-between px-4 sticky top-0 z-30 ${
+      cardVersionB
+        ? "bg-[#1B2B4B] py-3.5"
+        : "bg-white border-b py-3"
+    }`}>
       <div className="w-12">
         {isListPage ? (
           <button
             onClick={onMenu}
-            className="text-sm font-semibold text-blue-600"
+            className={`text-[13px] font-bold tracking-wide ${cardVersionB ? "text-white/80 hover:text-white" : "text-blue-600"}`}
           >
             MENU
           </button>
         ) : (
-          onBack && <BackIconButton onClick={onBack} />
+          onBack && (
+            <button onClick={onBack} className={`flex items-center ${cardVersionB ? "text-white" : "text-gray-600"}`}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M19 12H5M12 19l-7-7 7-7"/>
+              </svg>
+            </button>
+          )
         )}
       </div>
 
-      <div className="font-semibold text-base text-gray-800">
+      <div className={`font-bold text-[15px] tracking-tight ${cardVersionB ? "text-white" : "text-gray-800"}`}>
         {title}
       </div>
 
-      <div className="flex items-center gap-2 justify-end">
+      <div className="flex items-center gap-1 justify-end">
         {onRefresh && (
           <button
-            className="w-8 h-8 flex items-center justify-center rounded-full active:bg-gray-100 transition"
+            className={`w-8 h-8 flex items-center justify-center rounded-full transition ${cardVersionB ? "active:bg-white/10" : "active:bg-gray-100"}`}
             onClick={onRefresh}
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#374151" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M23 4v6h-6"/>
               <path d="M1 20v-6h6"/>
               <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
@@ -3214,10 +3231,10 @@ function MobileHeader({ title, onBack, onRefresh, onMenu, notifCount = 0, onNoti
           </button>
         )}
         <button
-          className="relative w-8 h-8 flex items-center justify-center rounded-full active:bg-gray-100 transition"
+          className={`relative w-8 h-8 flex items-center justify-center rounded-full transition ${cardVersionB ? "active:bg-white/10" : "active:bg-gray-100"}`}
           onClick={onNotifClick}
         >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1f2937" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke={bellColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
             <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
           </svg>
@@ -3873,14 +3890,16 @@ const summary = useMemo(() => {
     <>
     <div>
       {/* 상태 탭 */}
-      <div className="flex bg-white border-b">
+      <div className={`flex border-b ${cardVersionB ? "bg-white" : "bg-white"}`}>
         {tabs.map((t) => (
           <button
             key={t}
             onClick={() => setStatusTab(t)}
-            className={`flex-1 py-2 text-sm font-medium border-b-2 ${statusTab === t
-                ? "border-blue-500 text-blue-600"
-                : "border-transparent text-gray-500"
+            className={`flex-1 py-2.5 text-[13px] font-semibold border-b-2 transition-colors ${statusTab === t
+                ? cardVersionB
+                  ? "border-[#1B2B4B] text-[#1B2B4B]"
+                  : "border-blue-500 text-blue-600"
+                : "border-transparent text-gray-400"
               }`}
           >
             {t}
@@ -3889,31 +3908,37 @@ const summary = useMemo(() => {
       </div>
 
       {/* 날짜/퀵범위/필터 */}
-      <div className="bg-white border-b px-4 pt-3 pb-3 space-y-2 overflow-hidden">
-        {/* 상단 범위 텍스트 (11.24 ~ 11.24) */}
-        {/* 🔥 KPI 요약 */}
-<div className="grid grid-cols-3 gap-2 mt-2">
-  <div className="bg-blue-50 rounded-xl p-2 text-center">
-    <div className="text-[11px] text-gray-500">청구</div>
-    <div className="text-[12px] font-bold text-blue-700 whitespace-nowrap">
-      {fmtM(summary.totalClaim)}
+      <div className={`border-b px-4 pt-3 pb-3 space-y-2 overflow-hidden ${cardVersionB ? "bg-white" : "bg-white"}`}>
+        {/* KPI 요약 */}
+{cardVersionB ? (
+  <div className="flex border border-gray-200 rounded-xl overflow-hidden mt-2">
+    {[
+      { label: "청구", value: summary.totalClaim },
+      { label: "기사", value: summary.totalDriver },
+      { label: "수수료", value: summary.totalFee },
+    ].map(({ label, value }, i) => (
+      <div key={label} className={`flex-1 py-2.5 text-center ${i < 2 ? "border-r border-gray-200" : ""}`}>
+        <div className="text-[10px] text-gray-400 mb-0.5">{label}</div>
+        <div className="text-[13px] font-extrabold text-[#1B2B4B] whitespace-nowrap">{fmtM(value)}</div>
+      </div>
+    ))}
+  </div>
+) : (
+  <div className="grid grid-cols-3 gap-2 mt-2">
+    <div className="bg-blue-50 rounded-xl p-2 text-center">
+      <div className="text-[11px] text-gray-500">청구</div>
+      <div className="text-[12px] font-bold text-blue-700 whitespace-nowrap">{fmtM(summary.totalClaim)}</div>
+    </div>
+    <div className="bg-gray-100 rounded-xl p-2 text-center">
+      <div className="text-[11px] text-gray-500">기사</div>
+      <div className="text-[12px] font-bold text-gray-700 whitespace-nowrap">{fmtM(summary.totalDriver)}</div>
+    </div>
+    <div className="bg-green-50 rounded-xl p-2 text-center">
+      <div className="text-[11px] text-gray-500">수수료</div>
+      <div className="text-[12px] font-bold text-green-700 whitespace-nowrap">{fmtM(summary.totalFee)}</div>
     </div>
   </div>
-
-  <div className="bg-gray-100 rounded-xl p-2 text-center">
-    <div className="text-[11px] text-gray-500">기사</div>
-    <div className="text-[12px] font-bold text-gray-700 whitespace-nowrap">
-      {fmtM(summary.totalDriver)}
-    </div>
-  </div>
-
-  <div className="bg-green-50 rounded-xl p-2 text-center">
-    <div className="text-[11px] text-gray-500">수수료</div>
-    <div className="text-[12px] font-bold text-green-700 whitespace-nowrap">
-      {fmtM(summary.totalFee)}
-    </div>
-  </div>
-</div>
+)}
         <div className="flex items-center justify-between">
   {/* 조회 기간 텍스트 */}
   <div className="text-xs font-semibold text-gray-600">
@@ -3924,16 +3949,21 @@ const summary = useMemo(() => {
   <div className="flex gap-1">
     <button
       onClick={setTodayRange}
-      className="px-2 py-0.5 rounded-full text-[11px] font-semibold
-                 border bg-blue-50 text-blue-700 border-blue-300"
+      className={`px-2.5 py-0.5 text-[11px] font-semibold border transition ${
+        cardVersionB
+          ? "rounded-lg bg-[#1B2B4B]/5 text-[#1B2B4B] border-[#1B2B4B]/20 hover:bg-[#1B2B4B]/10"
+          : "rounded-full bg-blue-50 text-blue-700 border-blue-300"
+      }`}
     >
       당일
     </button>
-
     <button
       onClick={setTomorrowRange}
-      className="px-2 py-0.5 rounded-full text-[11px] font-semibold
-                 border bg-indigo-50 text-indigo-700 border-indigo-300"
+      className={`px-2.5 py-0.5 text-[11px] font-semibold border transition ${
+        cardVersionB
+          ? "rounded-lg bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200"
+          : "rounded-full bg-indigo-50 text-indigo-700 border-indigo-300"
+      }`}
     >
       내일
     </button>
@@ -3943,24 +3973,27 @@ const summary = useMemo(() => {
         <div className="flex items-center gap-2 text-sm">
           <input
             type="date"
-            className="flex-1 border rounded-full px-3 py-1.5 text-sm bg-gray-50"
+            className={`flex-1 border px-3 py-1.5 text-sm bg-gray-50 focus:outline-none focus:ring-1 ${
+              cardVersionB ? "rounded-lg focus:ring-[#1B2B4B]/30 focus:border-[#1B2B4B]/40" : "rounded-full"
+            }`}
             value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
           />
           <span className="text-xs text-gray-400">~</span>
           <input
             type="date"
-            className="flex-1 border rounded-full px-3 py-1.5 text-sm bg-gray-50"
+            className={`flex-1 border px-3 py-1.5 text-sm bg-gray-50 focus:outline-none focus:ring-1 ${
+              cardVersionB ? "rounded-lg focus:ring-[#1B2B4B]/30 focus:border-[#1B2B4B]/40" : "rounded-full"
+            }`}
             value={endDate}
             onChange={(e) => setEndDate(e.target.value)}
           />
         </div>
 
-        
         {/* 차량종류 / 배차상태 드롭다운 */}
         <div className="flex gap-2 text-sm">
           <select
-            className="flex-1 border rounded-full px-3 py-1.5 bg-gray-50"
+            className={`flex-1 border px-3 py-1.5 bg-gray-50 ${cardVersionB ? "rounded-lg" : "rounded-full"}`}
             value={vehicleFilter}
             onChange={(e) => setVehicleFilter(e.target.value)}
           >
@@ -3976,7 +4009,7 @@ const summary = useMemo(() => {
           </select>
 
           <select
-            className="flex-1 border rounded-full px-3 py-1.5 bg-gray-50"
+            className={`flex-1 border px-3 py-1.5 bg-gray-50 ${cardVersionB ? "rounded-lg" : "rounded-full"}`}
             value={assignFilter}
             onChange={(e) => setAssignFilter(e.target.value)}
           >
@@ -3986,10 +4019,10 @@ const summary = useMemo(() => {
           </select>
         </div>
 
-        {/* 🔍 검색줄 */}
+        {/* 검색줄 */}
         <div className="flex gap-2 text-sm">
           <select
-            className="w-28 border rounded-full px-3 py-1.5 bg-gray-50"
+            className={`w-28 border px-3 py-1.5 bg-gray-50 ${cardVersionB ? "rounded-lg" : "rounded-full"}`}
             value={searchType}
             onChange={(e) => setSearchType(e.target.value)}
           >
@@ -4003,7 +4036,7 @@ const summary = useMemo(() => {
             <option value="메모">메모</option>
           </select>
           <input
-            className="flex-1 border rounded-full px-3 py-1.5 bg-gray-50"
+            className={`flex-1 border px-3 py-1.5 bg-gray-50 ${cardVersionB ? "rounded-lg" : "rounded-full"}`}
             placeholder={
               searchType === "상차지주소" ? "상차지 주소 검색"
               : searchType === "하차지주소" ? "하차지 주소 검색"
@@ -4016,27 +4049,29 @@ const summary = useMemo(() => {
       </div>
 
       {/* ── 조회 건수 + 선택 버튼 바 ── */}
-      <div className="flex items-center justify-between px-4 py-2 bg-white border-b border-gray-100">
-        <span className="text-[12px] text-gray-500">
-          총 {allVisibleOrders.length}건
+      <div className={`flex items-center justify-between px-4 py-2 border-b ${cardVersionB ? "bg-gray-50 border-gray-100" : "bg-white border-gray-100"}`}>
+        <span className={`text-[12px] ${cardVersionB ? "text-gray-500 font-medium" : "text-gray-500"}`}>
+          총 <span className={cardVersionB ? "font-bold text-[#1B2B4B]" : ""}>{allVisibleOrders.length}</span>건
           {multiSelectMode && selectedIds.size > 0 && (
             <span className="ml-1.5 font-bold text-[#1B2B4B]">· {selectedIds.size}개 선택</span>
           )}
         </span>
         <button
           onClick={() => multiSelectMode ? exitMultiSelect() : setMultiSelectMode(true)}
-          className={`px-3 py-1 rounded-full text-[12px] font-semibold border transition-colors ${
+          className={`text-[12px] font-semibold border transition-colors ${
             multiSelectMode
               ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
-              : "bg-white text-gray-600 border-gray-300 hover:border-[#1B2B4B] hover:text-[#1B2B4B]"
-          }`}
+              : cardVersionB
+                ? "bg-white text-[#1B2B4B] border-[#1B2B4B]/30 hover:bg-[#1B2B4B]/5"
+                : "bg-white text-gray-600 border-gray-300 hover:border-[#1B2B4B] hover:text-[#1B2B4B]"
+          } ${cardVersionB ? "px-3 py-1 rounded-lg" : "px-3 py-1 rounded-full"}`}
         >
           {multiSelectMode ? "선택 취소" : "다중선택"}
         </button>
       </div>
 
       {/* 카드 목록 */}
-      <div className="px-3 py-3 space-y-4">
+      <div className={`px-3 py-3 space-y-4 ${cardVersionB ? "bg-[#F0F3F8]" : ""}`}>
         {dates.length === 0 && (
           <div className="py-10 text-center text-gray-400 text-sm">
             조회된 배차내역이 없습니다.
@@ -4047,40 +4082,49 @@ const summary = useMemo(() => {
           const list = groupedByDate.get(dateKey) || [];
           return (
             <div key={dateKey}>
-            <div className="flex items-center justify-between mb-2 px-1">
+            <div className={`flex items-center justify-between mb-2 px-1 ${cardVersionB ? "py-0.5" : ""}`}>
 
   {/* 날짜 */}
-  <div className="text-sm font-bold text-gray-700">
+  <div className={`font-bold ${cardVersionB ? "text-[13px] text-[#1B2B4B] tracking-tight" : "text-sm text-gray-700"}`}>
     {formatDateHeader(dateKey)}
   </div>
 
-  {/* 🔥 여기 → 빨간 표시 위치 */}
   <div className="flex gap-1">
-
     {statusTab === "전체" && (
       <>
-        <span className="text-[11px] px-2 py-1 rounded-full bg-blue-50 text-blue-600 font-semibold">
-          배차중 {statusCount.ing}
-        </span>
-
-        <span className="text-[11px] px-2 py-1 rounded-full bg-gray-100 text-gray-600 font-semibold">
-          완료 {statusCount.done}
-        </span>
+        {cardVersionB ? (
+          <>
+            <span className="text-[11px] px-2 py-0.5 rounded-md bg-[#1B2B4B]/5 text-[#1B2B4B] font-semibold border border-[#1B2B4B]/10">
+              배차중 {statusCount.ing}
+            </span>
+            <span className="text-[11px] px-2 py-0.5 rounded-md bg-gray-100 text-gray-500 font-semibold">
+              완료 {statusCount.done}
+            </span>
+          </>
+        ) : (
+          <>
+            <span className="text-[11px] px-2 py-1 rounded-full bg-blue-50 text-blue-600 font-semibold">
+              배차중 {statusCount.ing}
+            </span>
+            <span className="text-[11px] px-2 py-1 rounded-full bg-gray-100 text-gray-600 font-semibold">
+              완료 {statusCount.done}
+            </span>
+          </>
+        )}
       </>
     )}
 
     {statusTab === "배차중" && (
-      <span className="text-[11px] px-2 py-1 rounded-full bg-blue-50 text-blue-600 font-semibold">
+      <span className={`text-[11px] font-semibold ${cardVersionB ? "px-2 py-0.5 rounded-md bg-[#1B2B4B]/5 text-[#1B2B4B] border border-[#1B2B4B]/10" : "px-2 py-1 rounded-full bg-blue-50 text-blue-600"}`}>
         배차중 {statusCount.ing}
       </span>
     )}
 
     {statusTab === "배차완료" && (
-      <span className="text-[11px] px-2 py-1 rounded-full bg-gray-100 text-gray-600 font-semibold">
+      <span className={`text-[11px] font-semibold ${cardVersionB ? "px-2 py-0.5 rounded-md bg-gray-100 text-gray-500" : "px-2 py-1 rounded-full bg-gray-100 text-gray-600"}`}>
         완료 {statusCount.done}
       </span>
     )}
-
   </div>
 
 </div>
