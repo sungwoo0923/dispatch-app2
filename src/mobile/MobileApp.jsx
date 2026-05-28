@@ -2800,6 +2800,7 @@ setOpenMemo={setOpenMemo}
             drivers={drivers}
             upsertDriver={upsertDriver}
             orders={orders}
+            cardVersionB={cardVersionB}
           />
         )}
 
@@ -3577,7 +3578,11 @@ function MobileSideMenu({
           <div className="px-5 py-3 border-t border-gray-100">
             <button
               onClick={logout}
-              className="w-full py-2.5 bg-red-50 text-red-600 rounded-xl text-[13px] font-bold border border-red-200 hover:bg-red-100 active:scale-[0.98] transition"
+              className={`w-full py-2.5 rounded-xl text-[13px] font-semibold active:scale-[0.98] transition ${
+                cardVersionB
+                  ? "bg-[#1B2B4B]/5 text-[#1B2B4B]/60 border border-[#1B2B4B]/10 hover:bg-[#1B2B4B]/10"
+                  : "bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 font-bold"
+              }`}
             >
               로그아웃
             </button>
@@ -4472,20 +4477,20 @@ const dropTime = order.하차시간 || "시간 없음";
         <div className={`px-3 py-1.5 flex items-center justify-between ${state === "배차완료" ? "bg-[#1B2B4B]/5" : "bg-gray-50/80"}`}>
           <div className="flex items-center gap-1.5">
             {state === "배차완료" ? (
-              <span className="text-[11px] font-bold text-[#1B2B4B] flex items-center gap-1">
+              <span className="text-[0.75em] font-bold text-[#1B2B4B] flex items-center gap-1">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
                 배차완료
               </span>
             ) : (
-              <span className="text-[11px] font-semibold text-gray-400">배차중</span>
+              <span className="text-[0.75em] font-semibold text-gray-400">배차중</span>
             )}
             {isCold && (
-              <span className="text-[10px] text-slate-500 font-semibold bg-slate-100 px-1.5 py-0.5 rounded">
+              <span className="text-[0.68em] text-slate-500 font-semibold bg-slate-100 px-1.5 py-0.5 rounded">
                 {String(order.차량종류 || order.차종 || "").includes("냉동") ? "냉동" : "냉장"}
               </span>
             )}
             {isUrgentOrder(order) && (
-              <span className="text-[10px] font-bold text-red-500">긴급</span>
+              <span className="text-[0.68em] font-bold text-red-500">긴급</span>
             )}
           </div>
           <div className="flex items-center gap-2">
@@ -4493,7 +4498,7 @@ const dropTime = order.하차시간 || "시간 없음";
               <button
                 style={{ touchAction: "manipulation" }}
                 onClick={e => { e.stopPropagation(); onOpenAttach?.(order); }}
-                className="text-[10px] text-gray-400 font-semibold"
+                className="text-[0.68em] text-gray-400 font-semibold"
               >
                 첨부 {order.attachCount}
               </button>
@@ -4501,12 +4506,12 @@ const dropTime = order.하차시간 || "시간 없음";
             {(order.메모 || order.적요) && (
               <button
                 onClick={(e) => { e.stopPropagation(); onOpenMemo(order); }}
-                className="text-[10px] text-gray-400 font-semibold"
+                className="text-[0.68em] text-gray-400 font-semibold"
               >
                 메모
               </button>
             )}
-            <span className="text-[10px] text-gray-400">{String(order.상차일 || "").slice(5)}</span>
+            <span className="text-[0.68em] text-gray-400">{String(order.상차일 || "").slice(5)}</span>
           </div>
         </div>
 
@@ -4515,16 +4520,21 @@ const dropTime = order.하차시간 || "시간 없음";
           {/* 상/하차 */}
           <div className="flex items-stretch gap-2">
             <div className="flex flex-col items-center gap-1 pt-0.5">
-              <span className="w-5 h-5 rounded-full bg-[#1B2B4B] flex items-center justify-center text-white text-[9px] font-bold shrink-0">상</span>
+              <span className="w-5 h-5 rounded-full bg-[#1B2B4B] flex items-center justify-center text-white text-[0.6em] font-bold shrink-0">상</span>
               <div className="w-px flex-1 bg-gray-200 my-0.5" />
-              <span className="w-5 h-5 rounded-full bg-gray-400 flex items-center justify-center text-white text-[9px] font-bold shrink-0">하</span>
+              <span className="w-5 h-5 rounded-full bg-gray-400 flex items-center justify-center text-white text-[0.6em] font-bold shrink-0">하</span>
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between mb-1.5">
-                <span className="text-[13px] font-bold text-gray-900 truncate">{pickupName}</span>
+                <div className="flex-1 min-w-0 truncate">
+                  <span className="text-[1em] font-bold text-gray-900">{pickupName}</span>
+                  {pickupAddrShort && (
+                    <span className="text-[0.75em] text-gray-400 ml-1">({pickupAddrShort})</span>
+                  )}
+                </div>
                 <div className="flex items-center gap-1 shrink-0 ml-1">
-                  <span className="text-[11px] text-gray-500">{pickupTime}</span>
-                  {pickupStatus && <span className={`text-[10px] px-1 py-0.5 rounded border ${dayBadgeClass(pickupStatus)}`}>{pickupStatus}</span>}
+                  <span className="text-[0.75em] text-gray-500">{pickupTime}</span>
+                  {pickupStatus && <span className={`text-[0.68em] px-1 py-0.5 rounded border ${dayBadgeClass(pickupStatus)}`}>{pickupStatus}</span>}
                 </div>
               </div>
               {(() => {
@@ -4533,16 +4543,21 @@ const dropTime = order.하차시간 || "시간 없음";
                 const all = [...pStops, ...dStops];
                 if (!all.length) return null;
                 return (
-                  <div className="text-[10px] text-gray-400 mb-1.5 pl-0.5">
+                  <div className="text-[0.68em] text-gray-400 mb-1.5 pl-0.5">
                     경유: {all.map(s => s.업체명 || "-").join(" → ")}
                   </div>
                 );
               })()}
               <div className="flex items-center justify-between">
-                <span className="text-[13px] font-bold text-gray-900 truncate">{dropName}</span>
+                <div className="flex-1 min-w-0 truncate">
+                  <span className="text-[1em] font-bold text-gray-900">{dropName}</span>
+                  {dropAddrShort && (
+                    <span className="text-[0.75em] text-gray-400 ml-1">({dropAddrShort})</span>
+                  )}
+                </div>
                 <div className="flex items-center gap-1 shrink-0 ml-1">
-                  <span className="text-[11px] text-gray-500">{dropTime}</span>
-                  {dropStatus && <span className={`text-[10px] px-1 py-0.5 rounded border ${dayBadgeClass(dropStatus)}`}>{dropStatus}</span>}
+                  <span className="text-[0.75em] text-gray-500">{dropTime}</span>
+                  {dropStatus && <span className={`text-[0.68em] px-1 py-0.5 rounded border ${dayBadgeClass(dropStatus)}`}>{dropStatus}</span>}
                 </div>
               </div>
             </div>
@@ -4550,23 +4565,23 @@ const dropTime = order.하차시간 || "시간 없음";
 
           {/* 하단 정보 */}
           <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-100">
-            <span className="text-[11px] text-gray-500 truncate">
+            <span className="text-[0.75em] text-gray-500 truncate">
               {[ton && `${ton}`, carType, cargo].filter(Boolean).join(" · ") || "-"}
             </span>
-            <span className="text-[12px] font-bold text-gray-700 whitespace-nowrap shrink-0 ml-2">
-              {fmtMoney(claim)}원
+            <span className="text-[0.85em] font-bold text-gray-700 whitespace-nowrap shrink-0 ml-2">
+              {fmtMoney(claim)}
             </span>
           </div>
 
           {/* 배차완료 시 기사 연락 */}
           {state === "배차완료" && (order.이름 || order.차량번호) && (
             <div className="flex items-center gap-2 mt-1.5 pt-1.5 border-t border-dashed border-gray-100">
-              <span className="text-[11px] text-gray-400 truncate flex-1">
+              <span className="text-[0.75em] text-gray-400 truncate flex-1">
                 {[order.차량번호, order.이름].filter(Boolean).join(" · ")}
               </span>
               {order.전화번호 && (
                 <a href={`tel:${order.전화번호}`} onClick={e => e.stopPropagation()} style={{ touchAction: "manipulation" }}
-                  className="shrink-0 px-2.5 py-1 rounded-full bg-[#1B2B4B] text-white text-[10px] font-bold">
+                  className="shrink-0 px-2.5 py-1 rounded-full bg-[#1B2B4B] text-white text-[0.68em] font-bold">
                   전화
                 </a>
               )}
@@ -5944,6 +5959,7 @@ function MobileOrderForm({
   drivers,
   upsertDriver,
   orders = [],
+  cardVersionB = false,
 }) {
     const handleSwapPickupDrop = () => {
     setForm((prev) => ({
@@ -7409,7 +7425,9 @@ const pickDrop = (c) => {
       <div className="mt-4 mb-8 space-y-2">
         <button
           onClick={onSave}
-          className="w-full py-3 rounded-lg bg-blue-500 text-white text-base font-semibold shadow"
+          className={`w-full py-3 rounded-lg text-white text-base font-semibold shadow ${
+            cardVersionB ? "bg-[#1B2B4B] hover:bg-[#243a60]" : "bg-blue-500"
+          }`}
         >
           {form._editId ? "수정하기" : "등록하기"}
         </button>
@@ -7447,7 +7465,11 @@ const pickDrop = (c) => {
                 _returnToDetail: false,
               });
             }}
-            className="w-full py-3 rounded-lg bg-gray-300 text-gray-800 text-base font-semibold shadow"
+            className={`w-full py-3 rounded-lg text-base font-semibold shadow ${
+              cardVersionB
+                ? "bg-gray-100 text-[#1B2B4B]/70 border border-gray-200"
+                : "bg-gray-300 text-gray-800"
+            }`}
           >
             수정취소
           </button>

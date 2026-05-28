@@ -236,37 +236,62 @@ function computeMatchScores(sheets, allRecords) {
   });
 }
 
-// 서명 입력된 Excel 생성
+// 서명 입력된 Excel 생성 — 원본 포맷(병합/스타일/열너비) 유지
 function buildOutputExcel(origWb, sheetAssignments) {
-  const newWb = XLSX.utils.book_new();
+  // JSON 깊은 복사로 원본 워크북 구조 전체 보존
+  const newWb = {
+    SheetNames: [...origWb.SheetNames],
+    Sheets: {},
+    Props: origWb.Props || {},
+  };
 
   origWb.SheetNames.forEach(sheetName => {
+    // 시트 전체 깊은 복사 (셀 데이터·스타일·병합·열너비 모두 보존)
     const origWs = origWb.Sheets[sheetName];
+    const ws = JSON.parse(JSON.stringify(origWs));
+    newWb.Sheets[sheetName] = ws;
+
     const assignment = sheetAssignments.find(a => a.sheetNum === sheetName);
-    const rows = XLSX.utils.sheet_to_json(origWs, { header: 1, defval: "" });
+    if (!assignment?.assigned?.driver?.name) return;
 
-    if (assignment?.assigned?.driver?.name) {
-      const d = assignment.assigned.driver;
-      const sigText = `${d.plate}\n${d.name} ${d.phone}`;
+    const d = assignment.assigned.driver;
+    const sigText = `${d.plate}\n${d.name} ${d.phone}`;
 
-      const headerIdx = rows.findIndex(r => r.some(c => String(c).includes("상호") || String(c).includes("업체")));
-      const headerRow = headerIdx >= 0 ? rows[headerIdx] : [];
-      const sigColIdx = findColIdx(headerRow, "서명", "확인", "싸인");
-      const effectiveSigCol = sigColIdx >= 0 ? sigColIdx : 7;
+    const range = XLSX.utils.decode_range(ws["!ref"] || "A1:Z200");
 
-      rows.forEach((row, i) => {
-        if (i <= headerIdx) return;
-        if (row[0] && String(row[0]).match(/^\d+$/)) {
-          rows[i][effectiveSigCol] = sigText;
-        }
-      });
+    // 헤더 행 탐색 (상호 포함 셀 찾기)
+    let headerRow = -1;
+    let sigCol = 7;
+
+    outer: for (let r = range.s.r; r <= Math.min(range.e.r, 15); r++) {
+      for (let c = range.s.c; c <= range.e.c; c++) {
+        const cell = ws[XLSX.utils.encode_cell({ r, c })];
+        if (!cell) continue;
+        const v = String(cell.v || "");
+        if (v.includes("상호") || v.includes("업체")) { headerRow = r; break outer; }
+      }
     }
 
-    const newWs = XLSX.utils.aoa_to_sheet(rows);
-    if (origWs["!cols"])   newWs["!cols"]   = origWs["!cols"];
-    if (origWs["!rows"])   newWs["!rows"]   = origWs["!rows"];
-    if (origWs["!merges"]) newWs["!merges"] = origWs["!merges"];
-    XLSX.utils.book_append_sheet(newWb, newWs, sheetName);
+    // 서명 컬럼 탐색
+    if (headerRow >= 0) {
+      for (let c = range.s.c; c <= range.e.c; c++) {
+        const cell = ws[XLSX.utils.encode_cell({ r: headerRow, c })];
+        if (!cell) continue;
+        const v = String(cell.v || "");
+        if (v.includes("서명") || v.includes("확인") || v.includes("싸인")) { sigCol = c; break; }
+      }
+    }
+
+    // 데이터 행에 서명 기입 (원본 셀 객체의 값만 교체)
+    for (let r = headerRow + 1; r <= range.e.r; r++) {
+      const firstCellAddr = XLSX.utils.encode_cell({ r, c: range.s.c });
+      const firstCell = ws[firstCellAddr];
+      if (firstCell && String(firstCell.v || "").match(/^\d+$/)) {
+        const sigAddr = XLSX.utils.encode_cell({ r, c: sigCol });
+        const existing = ws[sigAddr] || {};
+        ws[sigAddr] = { ...existing, t: "s", v: sigText, w: sigText };
+      }
+    }
   });
 
   return newWb;
@@ -464,26 +489,31 @@ export default function DeliverySignaturePage() {
           ) : (
             <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
               <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
-                <span className="text-[13px] font-bold text-[#1B2B4B]">학습된 파일 ({history.length}개)</span>
-                <span className="text-[11px] text-gray-400">
+                <span className="text-[14px] font-bold text-[#1B2B4B]">학습된 파일 ({history.length}개)</span>
+                <span className="text-[12px] text-gray-400">
                   총 {history.reduce((s, h) => s + (h.records?.length || 0), 0)}개 시트
                 </span>
               </div>
               <div className="divide-y divide-gray-50">
                 {history.map(h => (
-                  <div key={h.id} className="px-5 py-3 flex items-start justify-between gap-3 hover:bg-gray-50/50 transition">
+                  <div key={h.id} className="px-5 py-3.5 flex items-start justify-between gap-3 hover:bg-gray-50/50 transition">
                     <div className="flex-1 min-w-0">
-                      <div className="text-[13px] font-semibold text-gray-800 truncate">{h.filename}</div>
-                      <div className="flex flex-wrap gap-1.5 mt-1">
+                      <div className="text-[14px] font-semibold text-gray-800 truncate">{h.filename}</div>
+                      <div className="flex flex-wrap gap-1.5 mt-1.5">
                         {(h.records || []).map((r, i) => (
-                          <span key={i} className="text-[10px] bg-[#1B2B4B]/5 text-[#1B2B4B] px-2 py-0.5 rounded-full border border-[#1B2B4B]/10">
+                          <span key={i} className={`text-[11px] px-2.5 py-0.5 rounded-full border font-medium ${
+                            r.addresses?.length > 0
+                              ? "bg-[#1B2B4B]/5 text-[#1B2B4B] border-[#1B2B4B]/10"
+                              : "bg-amber-50 text-amber-600 border-amber-200"
+                          }`}>
                             {r.sheetNum} · {r.driver?.name || "미확인"} · {r.addresses?.length}곳
+                            {r.addresses?.length === 0 && " (주소없음)"}
                           </span>
                         ))}
                       </div>
                     </div>
                     <button onClick={() => handleDeleteHistory(h.id)}
-                      className="shrink-0 px-2.5 py-1 text-[11px] text-red-500 border border-red-200 rounded-lg hover:bg-red-50 transition">
+                      className="shrink-0 px-2.5 py-1 text-[12px] text-red-500 border border-red-200 rounded-lg hover:bg-red-50 transition">
                       삭제
                     </button>
                   </div>
@@ -498,10 +528,28 @@ export default function DeliverySignaturePage() {
       {tab === "fill" && (
         <div className="space-y-4">
           {history.length === 0 && (
-            <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-[12px] text-amber-700 font-medium">
+            <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-[13px] text-amber-700 font-medium">
               학습 데이터가 없습니다. 먼저 "데이터 학습" 탭에서 과거 파일을 업로드하세요.
             </div>
           )}
+          {history.length > 0 && (() => {
+            const zeroAddrDrivers = [];
+            const dMap = new Map();
+            history.forEach(h => (h.records || []).forEach(r => {
+              const k = r.driver?.name;
+              if (!k) return;
+              if (!dMap.has(k)) dMap.set(k, 0);
+              dMap.set(k, dMap.get(k) + (r.addresses?.length || 0));
+            }));
+            dMap.forEach((cnt, name) => { if (cnt === 0) zeroAddrDrivers.push(name); });
+            if (zeroAddrDrivers.length === 0) return null;
+            return (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-[12px] text-amber-700">
+                <span className="font-bold">주의:</span> 다음 기사의 학습 데이터에 주소가 0개입니다 → <span className="font-bold">{zeroAddrDrivers.join(", ")}</span><br/>
+                <span className="text-amber-600">데이터 학습 탭에서 해당 파일을 삭제하고 다시 업로드하면 매칭이 개선됩니다.</span>
+              </div>
+            );
+          })()}
 
           <div
             className="border-2 border-dashed border-gray-200 rounded-2xl p-6 text-center cursor-pointer hover:border-[#1B2B4B]/40 hover:bg-[#1B2B4B]/[0.02] transition-all"
@@ -540,10 +588,10 @@ export default function DeliverySignaturePage() {
                               {sheet.sheetNum}
                             </span>
                             <div>
-                              <div className="text-[12px] font-semibold text-gray-700">
+                              <div className="text-[13px] font-semibold text-gray-700">
                                 {sheet.title.replace(/\(.*?\)/g, "").trim()}
                               </div>
-                              <div className="text-[11px] text-gray-400">{sheet.addresses.length}곳 배송</div>
+                              <div className="text-[12px] text-gray-400">{sheet.addresses.length}곳 배송</div>
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
@@ -567,20 +615,20 @@ export default function DeliverySignaturePage() {
                             <button
                               key={sc.driver.name}
                               onClick={() => setOverrides(p => ({ ...p, [sheet.sheetNum]: sc.driver.name }))}
-                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[11px] font-semibold transition ${
+                              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-[12px] font-semibold transition ${
                                 currentDriver?.name === sc.driver.name
                                   ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
                                   : "bg-white text-gray-600 border-gray-200 hover:border-gray-300"
                               }`}
                             >
                               <span>{sc.driver.name}</span>
-                              <span className={`text-[10px] ${currentDriver?.name === sc.driver.name ? "text-white/70" : "text-gray-400"}`}>
+                              <span className={`text-[11px] ${currentDriver?.name === sc.driver.name ? "text-white/70" : "text-gray-400"}`}>
                                 {sc.matchedAddresses}/{sheet.addresses.length}건
                               </span>
                             </button>
                           ))}
                           {sheet.scores.length === 0 && (
-                            <span className="text-[11px] text-amber-600">학습 데이터 없음 - 수동 지정 필요</span>
+                            <span className="text-[12px] text-amber-600">학습 데이터 없음 - 수동 지정 필요</span>
                           )}
                         </div>
 
@@ -601,47 +649,47 @@ export default function DeliverySignaturePage() {
                               <div className="mt-2 rounded-xl border border-gray-200 overflow-hidden">
                                 {/* VS 헤더 */}
                                 <div className="grid grid-cols-2 divide-x divide-gray-200">
-                                  <div className="bg-[#1B2B4B]/5 px-4 py-2 text-[11px] font-bold text-[#1B2B4B]">
+                                  <div className="bg-[#1B2B4B]/5 px-4 py-2.5 text-[13px] font-bold text-[#1B2B4B]">
                                     과거 이력 ({currentDriver?.name || "미지정"})
                                   </div>
-                                  <div className="bg-blue-50 px-4 py-2 text-[11px] font-bold text-blue-700">
+                                  <div className="bg-blue-50 px-4 py-2.5 text-[13px] font-bold text-blue-700">
                                     새 파일 ({sheet.sheetNum}시트)
                                   </div>
                                 </div>
 
                                 {/* 주소 행 */}
-                                <div className="divide-y divide-gray-50">
+                                <div className="divide-y divide-gray-100">
                                   {sheet.addresses.map((addr, i) => {
                                     const detail = activeScore?.matchDetails?.[i];
                                     const score = detail?.score || 0;
                                     const histAddr = detail?.histAddr;
-                                    const rowBg = score >= 3 ? "bg-emerald-50/50"
-                                      : score >= 2 ? "bg-blue-50/30"
-                                      : score === 1 ? "bg-amber-50/30"
+                                    const rowBg = score >= 3 ? "bg-emerald-50/60"
+                                      : score >= 2 ? "bg-blue-50/40"
+                                      : score === 1 ? "bg-amber-50/40"
                                       : "";
                                     return (
                                       <div key={i} className={`grid grid-cols-2 divide-x divide-gray-100 ${rowBg}`}>
                                         {/* 과거 이력 */}
-                                        <div className="px-4 py-2.5">
+                                        <div className="px-4 py-3">
                                           {histAddr ? (
                                             <>
-                                              <div className="flex items-start justify-between gap-1">
-                                                <span className="text-[11px] font-semibold text-gray-700 leading-tight">{histAddr.상호}</span>
+                                              <div className="flex items-start justify-between gap-2">
+                                                <span className="text-[13px] font-semibold text-gray-800 leading-tight">{histAddr.상호}</span>
                                                 <ScoreBadge score={score} />
                                               </div>
-                                              <div className="text-[10px] text-gray-400 mt-0.5 leading-tight">{histAddr.주소}</div>
+                                              <div className="text-[12px] text-gray-500 mt-1 leading-snug">{histAddr.주소}</div>
                                               {histAddr.date && (
-                                                <div className="text-[9px] text-gray-300 mt-0.5">{histAddr.date}</div>
+                                                <div className="text-[11px] text-gray-400 mt-0.5">{histAddr.date}</div>
                                               )}
                                             </>
                                           ) : (
-                                            <div className="text-[10px] text-gray-300 italic py-1">이력 없음</div>
+                                            <div className="text-[12px] text-gray-300 italic py-1">이력 없음</div>
                                           )}
                                         </div>
                                         {/* 새 파일 */}
-                                        <div className="px-4 py-2.5">
-                                          <div className="text-[11px] font-semibold text-gray-700 leading-tight">{addr.상호}</div>
-                                          <div className="text-[10px] text-gray-400 mt-0.5 leading-tight">{addr.주소}</div>
+                                        <div className="px-4 py-3">
+                                          <div className="text-[13px] font-semibold text-gray-800 leading-tight">{addr.상호}</div>
+                                          <div className="text-[12px] text-gray-500 mt-1 leading-snug">{addr.주소}</div>
                                         </div>
                                       </div>
                                     );
