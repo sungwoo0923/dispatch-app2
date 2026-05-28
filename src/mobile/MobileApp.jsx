@@ -428,6 +428,7 @@ useEffect(() => {
 }, []);
 const alarmEnabledRef = useRef(true);              // 🔔 알람 ref
 const initialLoadDoneRef = useRef({});             // 🔔 최초로드 구분
+const dispatchPrevStatus = React.useRef({});       // 🔔 배차상태 추적
   // 🔕 알림 ON/OFF 상태 (기본 ON)
 const [alarmEnabled, setAlarmEnabled] = useState(
   localStorage.getItem("alarmEnabled") !== "false"
