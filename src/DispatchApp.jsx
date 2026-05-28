@@ -12611,26 +12611,24 @@ const selectedSet = React.useMemo(() => new Set(selected), [selected]);
 
     // 🔥 2단계: 우선순위 점수 부여
     const scored = base.map(r => {
-      const cargoMatch =
-        targetCargo &&
-        r.화물내용 &&
-        r.화물내용.includes(targetCargo);
-
-      const tonMatch =
-        targetTon &&
-        r.차량톤수 &&
-        r.차량톤수 === targetTon;
+      const ce = fareCargoExact(targetCargo, r.화물내용);
+      const cp = fareCargoPartial(targetCargo, r.화물내용);
+      const tonMatch = !!targetTon && !!r.차량톤수 && r.차량톤수 === targetTon;
+      const matchLabel = getFareMatchLabel(ce, cp, tonMatch);
 
       return {
         ...r,
 
         // 점수
-        _score: (cargoMatch ? 100 : 0) + (tonMatch ? 100 : 0),
+        _score: (ce ? 200 : cp ? 100 : 0) + (tonMatch ? 80 : 0),
 
         // 🔥 표시용 메타
         _match: {
-          cargo: cargoMatch,
+          cargo: ce || cp,
+          cargoExact: ce,
+          cargoPartial: cp,
           ton: tonMatch,
+          label: matchLabel,
         },
 
         _time: r.updatedAt || r.등록일 || 0,
@@ -12693,12 +12691,14 @@ setFarePanelOpen(true);
     }
 
     const scored = base.map(r => {
-      const cargoMatch = targetCargo && r.화물내용 && r.화물내용.includes(targetCargo);
-      const tonMatch = targetTon && r.차량톤수 && r.차량톤수 === targetTon;
+      const ce = fareCargoExact(targetCargo, r.화물내용);
+      const cp = fareCargoPartial(targetCargo, r.화물내용);
+      const tonMatch = !!targetTon && !!r.차량톤수 && r.차량톤수 === targetTon;
+      const matchLabel = getFareMatchLabel(ce, cp, tonMatch);
       return {
         ...r,
-        _score: (cargoMatch ? 100 : 0) + (tonMatch ? 100 : 0),
-        _match: { cargo: cargoMatch, ton: tonMatch },
+        _score: (ce ? 200 : cp ? 100 : 0) + (tonMatch ? 80 : 0),
+        _match: { cargo: ce || cp, cargoExact: ce, cargoPartial: cp, ton: tonMatch, label: matchLabel },
         _time: r.updatedAt || r.등록일 || 0,
       };
     });
@@ -16763,8 +16763,36 @@ value={copyTarget?.화물수량 || ""}
               <span className="text-[13px] font-extrabold text-[#1B2B4B]">과거 운송 기록</span>
               <span className="text-[11px] font-semibold text-gray-400">유사도순 · 최신순</span>
             </div>
+            {/* 필터 탭 */}
+            {(() => {
+              const filterLabels = ["all","완전일치","부분일치","톤수일치","경로일치"];
+              const filterCounts = {};
+              (fareResult.records || []).forEach(r => {
+                const l = r._match?.label || "경로일치";
+                filterCounts[l] = (filterCounts[l] || 0) + 1;
+              });
+              return (
+                <div className="flex gap-1.5 pb-3 flex-wrap">
+                  {filterLabels.map(l => {
+                    const cnt = l === "all" ? fareResult.records.length : (filterCounts[l] || 0);
+                    if (l !== "all" && cnt === 0) return null;
+                    return (
+                      <button key={l}
+                        onClick={() => setCopyFareFilter(l)}
+                        className={`px-2.5 py-1 text-[11px] font-bold rounded-full transition border ${
+                          copyFareFilter === l
+                            ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
+                            : "bg-white text-gray-600 border-gray-200 hover:border-gray-400"
+                        }`}>
+                        {l === "all" ? `전체 ${cnt}건` : `${l} ${cnt}`}
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })()}
             <div className="space-y-2">
-              {fareResult.records.map((rec, idx) => {
+              {(fareResult.records || []).filter(r => copyFareFilter === "all" || (r._match?.label || "경로일치") === copyFareFilter).map((rec, idx) => {
                 const fare = Number(String(rec.청구운임||"0").replace(/[^\d]/g,""));
                 const { label: fareLabel, cls: fareCls } = getFareTag(fare);
                 const isTop = idx === 0;
@@ -16782,14 +16810,17 @@ value={copyTarget?.화물수량 || ""}
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-[12px] font-bold text-gray-400">{rec.상차일}</span>
                         <div className="flex gap-1">
-                          {(rec._match?.cargo && rec._match?.ton) && (
-                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-[#1B2B4B] text-white">최적매칭</span>
+                          {rec._match?.label === "완전일치" && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-[#1B2B4B] text-white">완전일치</span>
                           )}
-                          {rec._match?.ton && !rec._match?.cargo && (
+                          {rec._match?.label === "부분일치" && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-green-600 text-white">부분일치</span>
+                          )}
+                          {rec._match?.label === "톤수일치" && (
                             <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-gray-700 text-white">톤수일치</span>
                           )}
-                          {rec._match?.cargo && !rec._match?.ton && (
-                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-gray-700 text-white">화물일치</span>
+                          {rec._match?.label === "경로일치" && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-gray-400 text-white">경로일치</span>
                           )}
                           <span className={`px-2.5 py-1 text-[11px] font-extrabold rounded-full border ${fareCls}`}>{fareLabel}</span>
                         </div>
@@ -17057,8 +17088,36 @@ value={copyTarget?.화물수량 || ""}
               <span className="text-[13px] font-extrabold text-[#1B2B4B]">과거 운송 기록</span>
               <span className="text-[11px] font-semibold text-gray-400">유사도순 · 최신순</span>
             </div>
+            {/* 필터 탭 */}
+            {(() => {
+              const filterLabels = ["all","완전일치","부분일치","톤수일치","경로일치"];
+              const filterCounts = {};
+              (fareResult.records || []).forEach(r => {
+                const l = r._match?.label || "경로일치";
+                filterCounts[l] = (filterCounts[l] || 0) + 1;
+              });
+              return (
+                <div className="flex gap-1.5 pb-3 flex-wrap">
+                  {filterLabels.map(l => {
+                    const cnt = l === "all" ? fareResult.records.length : (filterCounts[l] || 0);
+                    if (l !== "all" && cnt === 0) return null;
+                    return (
+                      <button key={l}
+                        onClick={() => setCopyFareFilter(l)}
+                        className={`px-2.5 py-1 text-[11px] font-bold rounded-full transition border ${
+                          copyFareFilter === l
+                            ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
+                            : "bg-white text-gray-600 border-gray-200 hover:border-gray-400"
+                        }`}>
+                        {l === "all" ? `전체 ${cnt}건` : `${l} ${cnt}`}
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })()}
             <div className="space-y-2">
-              {fareResult.records.map((rec, idx) => {
+              {(fareResult.records || []).filter(r => copyFareFilter === "all" || (r._match?.label || "경로일치") === copyFareFilter).map((rec, idx) => {
                 const fare = Number(String(rec.청구운임||"0").replace(/[^\d]/g,""));
                 const { label: fareLabel, cls: fareCls } = getFareTag(fare);
                 const isTop = idx === 0;
@@ -17076,14 +17135,17 @@ value={copyTarget?.화물수량 || ""}
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-[12px] font-bold text-gray-400">{rec.상차일}</span>
                         <div className="flex gap-1">
-                          {(rec._match?.cargo && rec._match?.ton) && (
-                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-[#1B2B4B] text-white">최적매칭</span>
+                          {rec._match?.label === "완전일치" && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-[#1B2B4B] text-white">완전일치</span>
                           )}
-                          {rec._match?.ton && !rec._match?.cargo && (
+                          {rec._match?.label === "부분일치" && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-green-600 text-white">부분일치</span>
+                          )}
+                          {rec._match?.label === "톤수일치" && (
                             <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-gray-700 text-white">톤수일치</span>
                           )}
-                          {rec._match?.cargo && !rec._match?.ton && (
-                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-gray-700 text-white">화물일치</span>
+                          {rec._match?.label === "경로일치" && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-gray-400 text-white">경로일치</span>
                           )}
                           <span className={`px-2.5 py-1 text-[11px] font-extrabold rounded-full border ${fareCls}`}>{fareLabel}</span>
                         </div>
@@ -18935,8 +18997,10 @@ if (editTarget.거래처명) {
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-[12px] font-bold text-gray-400">{rec.상차일}</span>
                       <div className="flex gap-1">
-                        {rec._match?.cargo && <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-gray-700 text-white">화물일치</span>}
-                        {rec._match?.ton && <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-gray-700 text-white">톤수일치</span>}
+                        {rec._match?.label === "완전일치" && <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-[#1B2B4B] text-white">완전일치</span>}
+                        {rec._match?.label === "부분일치" && <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-green-600 text-white">부분일치</span>}
+                        {rec._match?.label === "톤수일치" && <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-gray-700 text-white">톤수일치</span>}
+                        {rec._match?.label === "경로일치" && <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-gray-400 text-white">경로일치</span>}
                       </div>
                     </div>
                     <div className="text-[13px] font-bold text-gray-900 mb-1">{rec.상차지명 || "-"} → {rec.하차지명 || "-"}</div>
@@ -19056,14 +19120,17 @@ if (editTarget.거래처명) {
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-[12px] font-bold text-gray-400">{rec.상차일}</span>
                         <div className="flex gap-1">
-                          {(rec._match?.cargo && rec._match?.ton) && (
-                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-[#1B2B4B] text-white">최적매칭</span>
+                          {rec._match?.label === "완전일치" && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-[#1B2B4B] text-white">완전일치</span>
                           )}
-                          {rec._match?.ton && !rec._match?.cargo && (
+                          {rec._match?.label === "부분일치" && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-green-600 text-white">부분일치</span>
+                          )}
+                          {rec._match?.label === "톤수일치" && (
                             <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-gray-700 text-white">톤수일치</span>
                           )}
-                          {rec._match?.cargo && !rec._match?.ton && (
-                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-gray-700 text-white">화물일치</span>
+                          {rec._match?.label === "경로일치" && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-gray-400 text-white">경로일치</span>
                           )}
                           <span className={`px-2.5 py-1 text-[11px] font-extrabold rounded-full border ${fareCls}`}>{fareLabel}</span>
                         </div>
@@ -21604,33 +21671,26 @@ if (row?.업체전달상태 !== "전달완료") {
     }
 
     // 2️⃣ 매칭 정보 + 정렬 점수
+    const targetCargo5 = String(editTarget.화물내용 || "").trim();
+    const targetTon5 = String(editTarget.차량톤수 || "").trim();
     const records = base
       .map((r) => {
-const basePallet = getPalletCount(editTarget.화물내용);
-const recPallet  = getPalletCount(r.화물내용);
-const cargoMatch =
-  editTarget.화물내용 &&
-  r.화물내용 &&
-  r.화물내용.includes(editTarget.화물내용);
-
-const tonMatch =
-  String(editTarget.차량톤수 || "") === String(r.차량톤수 || "");
-
-const palletDiff =
-  basePallet != null && recPallet != null
-    ? Math.abs(basePallet - recPallet)
-    : null;
+const ce = fareCargoExact(targetCargo5, r.화물내용);
+const cp = fareCargoPartial(targetCargo5, r.화물내용);
+const tonMatch = !!targetTon5 && !!r.차량톤수 && r.차량톤수 === targetTon5;
+const matchLabel = getFareMatchLabel(ce, cp, tonMatch);
 
 let priority = 0;
 
 // 🔥 PART 4와 동일한 우선순위
-if (cargoMatch && tonMatch) priority = 4;
-else if (cargoMatch) priority = 3;
+if (ce && tonMatch) priority = 4;
+else if (ce) priority = 3;
+else if (cp && tonMatch) priority = 3;
 else if (tonMatch) priority = 2;
-else if (palletDiff !== null) priority = 1;
+else if (cp) priority = 1;
         return {
           ...r,
-          _match: { cargo: cargoMatch, ton: tonMatch },
+          _match: { cargo: ce || cp, cargoExact: ce, cargoPartial: cp, ton: tonMatch, label: matchLabel },
           _priority: priority,
           _date: r.상차일 || "",
         };
@@ -21679,12 +21739,14 @@ else if (palletDiff !== null) priority = 1;
     const targetTon = String(copyTarget.차량톤수 || "").trim();
 
     const scored = base.map(r => {
-      const cargoMatch = targetCargo && r.화물내용 && r.화물내용.includes(targetCargo);
-      const tonMatch = targetTon && r.차량톤수 && r.차량톤수 === targetTon;
+      const ce = fareCargoExact(targetCargo, r.화물내용);
+      const cp = fareCargoPartial(targetCargo, r.화물내용);
+      const tonMatch = !!targetTon && !!r.차량톤수 && r.차량톤수 === targetTon;
+      const matchLabel = getFareMatchLabel(ce, cp, tonMatch);
       return {
         ...r,
-        _score: (cargoMatch ? 100 : 0) + (tonMatch ? 100 : 0),
-        _match: { cargo: cargoMatch, ton: tonMatch },
+        _score: (ce ? 200 : cp ? 100 : 0) + (tonMatch ? 80 : 0),
+        _match: { cargo: ce || cp, cargoExact: ce, cargoPartial: cp, ton: tonMatch, label: matchLabel },
         _time: r.updatedAt || r.등록일 || 0,
       };
     });
@@ -22502,6 +22564,9 @@ const save = {
   const [ctxFare5Target, setCtxFare5Target] = React.useState(null);
   const [ctxFare5PanelOpen, setCtxFare5PanelOpen] = React.useState(false);
   const [ctxFare5Result, setCtxFare5Result] = React.useState(null);
+  const [fare5Filter, setFare5Filter] = React.useState("all");
+  const [fare4Filter, setFare4Filter] = React.useState("all");
+  const [copyFareFilter, setCopyFareFilter] = React.useState("all");
   const [ctxNoHistory5Open, setCtxNoHistory5Open] = React.useState(false);
   const [ctxAddrSearch5Open, setCtxAddrSearch5Open] = React.useState(false);
   const [ctxAddrPickup5, setCtxAddrPickup5] = React.useState("");
@@ -22576,12 +22641,14 @@ const save = {
     }
 
     const scored = base.map(r => {
-      const cargoMatch = targetCargo && r.화물내용 && r.화물내용.includes(targetCargo);
-      const tonMatch = targetTon && r.차량톤수 && r.차량톤수 === targetTon;
+      const ce = fareCargoExact(targetCargo, r.화물내용);
+      const cp = fareCargoPartial(targetCargo, r.화물내용);
+      const tonMatch = !!targetTon && !!r.차량톤수 && r.차량톤수 === targetTon;
+      const matchLabel = getFareMatchLabel(ce, cp, tonMatch);
       return {
         ...r,
-        _score: (cargoMatch ? 100 : 0) + (tonMatch ? 100 : 0),
-        _match: { cargo: cargoMatch, ton: tonMatch },
+        _score: (ce ? 200 : cp ? 100 : 0) + (tonMatch ? 80 : 0),
+        _match: { cargo: ce || cp, cargoExact: ce, cargoPartial: cp, ton: tonMatch, label: matchLabel },
         _time: r.updatedAt || r.등록일 || 0,
       };
     });
@@ -25412,8 +25479,36 @@ setCopyTarget(prev => ({
               <span className="text-[13px] font-extrabold text-[#1B2B4B]">과거 운송 기록</span>
               <span className="text-[11px] font-semibold text-gray-400">유사도순 · 최신순</span>
             </div>
+            {/* 필터 탭 */}
+            {(() => {
+              const filterLabels = ["all","완전일치","부분일치","톤수일치","경로일치"];
+              const filterCounts = {};
+              (fareResult.records || []).forEach(r => {
+                const l = r._match?.label || "경로일치";
+                filterCounts[l] = (filterCounts[l] || 0) + 1;
+              });
+              return (
+                <div className="flex gap-1.5 pb-3 flex-wrap">
+                  {filterLabels.map(l => {
+                    const cnt = l === "all" ? fareResult.records.length : (filterCounts[l] || 0);
+                    if (l !== "all" && cnt === 0) return null;
+                    return (
+                      <button key={l}
+                        onClick={() => setCopyFareFilter(l)}
+                        className={`px-2.5 py-1 text-[11px] font-bold rounded-full transition border ${
+                          copyFareFilter === l
+                            ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
+                            : "bg-white text-gray-600 border-gray-200 hover:border-gray-400"
+                        }`}>
+                        {l === "all" ? `전체 ${cnt}건` : `${l} ${cnt}`}
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })()}
             <div className="space-y-2">
-              {fareResult.records.map((rec, idx) => {
+              {(fareResult.records || []).filter(r => copyFareFilter === "all" || (r._match?.label || "경로일치") === copyFareFilter).map((rec, idx) => {
                 const fare = Number(String(rec.청구운임||"0").replace(/[^\d]/g,""));
                 const { label: fareLabel, cls: fareCls } = getFareTag(fare);
                 const isTop = idx === 0;
@@ -25431,14 +25526,17 @@ setCopyTarget(prev => ({
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-[12px] font-bold text-gray-400">{rec.상차일}</span>
                         <div className="flex gap-1">
-                          {(rec._match?.cargo && rec._match?.ton) && (
-                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-[#1B2B4B] text-white">최적매칭</span>
+                          {rec._match?.label === "완전일치" && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-[#1B2B4B] text-white">완전일치</span>
                           )}
-                          {rec._match?.ton && !rec._match?.cargo && (
+                          {rec._match?.label === "부분일치" && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-green-600 text-white">부분일치</span>
+                          )}
+                          {rec._match?.label === "톤수일치" && (
                             <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-gray-700 text-white">톤수일치</span>
                           )}
-                          {rec._match?.cargo && !rec._match?.ton && (
-                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-gray-700 text-white">화물일치</span>
+                          {rec._match?.label === "경로일치" && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-gray-400 text-white">경로일치</span>
                           )}
                           <span className={`px-2.5 py-1 text-[11px] font-extrabold rounded-full border ${fareCls}`}>{fareLabel}</span>
                         </div>
@@ -25628,8 +25726,36 @@ setCopyTarget(prev => ({
               <span className="text-[13px] font-extrabold text-[#1B2B4B]">과거 운송 기록</span>
               <span className="text-[11px] font-semibold text-gray-400">유사도순 · 최신순</span>
             </div>
+            {/* 필터 탭 */}
+            {(() => {
+              const filterLabels = ["all","완전일치","부분일치","톤수일치","경로일치"];
+              const filterCounts = {};
+              (fareResult.records || []).forEach(r => {
+                const l = r._match?.label || "경로일치";
+                filterCounts[l] = (filterCounts[l] || 0) + 1;
+              });
+              return (
+                <div className="flex gap-1.5 pb-3 flex-wrap">
+                  {filterLabels.map(l => {
+                    const cnt = l === "all" ? fareResult.records.length : (filterCounts[l] || 0);
+                    if (l !== "all" && cnt === 0) return null;
+                    return (
+                      <button key={l}
+                        onClick={() => setCopyFareFilter(l)}
+                        className={`px-2.5 py-1 text-[11px] font-bold rounded-full transition border ${
+                          copyFareFilter === l
+                            ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
+                            : "bg-white text-gray-600 border-gray-200 hover:border-gray-400"
+                        }`}>
+                        {l === "all" ? `전체 ${cnt}건` : `${l} ${cnt}`}
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })()}
             <div className="space-y-2">
-              {fareResult.records.map((rec, idx) => {
+              {(fareResult.records || []).filter(r => copyFareFilter === "all" || (r._match?.label || "경로일치") === copyFareFilter).map((rec, idx) => {
                 const fare = Number(String(rec.청구운임||"0").replace(/[^\d]/g,""));
                 const { label: fareLabel, cls: fareCls } = getFareTag(fare);
                 const isTop = idx === 0;
@@ -25647,14 +25773,17 @@ setCopyTarget(prev => ({
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-[12px] font-bold text-gray-400">{rec.상차일}</span>
                         <div className="flex gap-1">
-                          {(rec._match?.cargo && rec._match?.ton) && (
-                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-[#1B2B4B] text-white">최적매칭</span>
+                          {rec._match?.label === "완전일치" && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-[#1B2B4B] text-white">완전일치</span>
                           )}
-                          {rec._match?.ton && !rec._match?.cargo && (
+                          {rec._match?.label === "부분일치" && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-green-600 text-white">부분일치</span>
+                          )}
+                          {rec._match?.label === "톤수일치" && (
                             <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-gray-700 text-white">톤수일치</span>
                           )}
-                          {rec._match?.cargo && !rec._match?.ton && (
-                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-gray-700 text-white">화물일치</span>
+                          {rec._match?.label === "경로일치" && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-gray-400 text-white">경로일치</span>
                           )}
                           <span className={`px-2.5 py-1 text-[11px] font-extrabold rounded-full border ${fareCls}`}>{fareLabel}</span>
                         </div>
@@ -26800,8 +26929,10 @@ setCopyTarget(prev => ({
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-[12px] font-bold text-gray-400">{rec.상차일}</span>
                       <div className="flex gap-1">
-                        {rec._match?.cargo && <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-gray-700 text-white">화물일치</span>}
-                        {rec._match?.ton && <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-gray-700 text-white">톤수일치</span>}
+                        {rec._match?.label === "완전일치" && <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-[#1B2B4B] text-white">완전일치</span>}
+                        {rec._match?.label === "부분일치" && <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-green-600 text-white">부분일치</span>}
+                        {rec._match?.label === "톤수일치" && <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-gray-700 text-white">톤수일치</span>}
+                        {rec._match?.label === "경로일치" && <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-gray-400 text-white">경로일치</span>}
                       </div>
                     </div>
                     <div className="text-[13px] font-bold text-gray-900 mb-1">{rec.상차지명 || "-"} → {rec.하차지명 || "-"}</div>
@@ -26904,8 +27035,36 @@ setCopyTarget(prev => ({
               <span className="text-[13px] font-extrabold text-[#1B2B4B]">과거 운송 기록</span>
               <span className="text-[11px] font-semibold text-gray-400">유사도순 · 최신순</span>
             </div>
+            {/* 필터 탭 */}
+            {(() => {
+              const filterLabels = ["all","완전일치","부분일치","톤수일치","경로일치"];
+              const filterCounts = {};
+              (ctxFare5Result.records || []).forEach(r => {
+                const l = r._match?.label || "경로일치";
+                filterCounts[l] = (filterCounts[l] || 0) + 1;
+              });
+              return (
+                <div className="flex gap-1.5 pb-3 flex-wrap">
+                  {filterLabels.map(l => {
+                    const cnt = l === "all" ? ctxFare5Result.records.length : (filterCounts[l] || 0);
+                    if (l !== "all" && cnt === 0) return null;
+                    return (
+                      <button key={l}
+                        onClick={() => setFare5Filter(l)}
+                        className={`px-2.5 py-1 text-[11px] font-bold rounded-full transition border ${
+                          fare5Filter === l
+                            ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
+                            : "bg-white text-gray-600 border-gray-200 hover:border-gray-400"
+                        }`}>
+                        {l === "all" ? `전체 ${cnt}건` : `${l} ${cnt}`}
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })()}
             <div className="space-y-2">
-              {ctxFare5Result.records.map((rec, idx) => {
+              {(ctxFare5Result.records || []).filter(r => fare5Filter === "all" || (r._match?.label || "경로일치") === fare5Filter).map((rec, idx) => {
                 const fare = Number(String(rec.청구운임 || "0").replace(/[^\d]/g, ""));
                 const { label: fareLabel, cls: fareCls } = getFareTag(fare);
                 const isTop = idx === 0;
@@ -26921,14 +27080,17 @@ setCopyTarget(prev => ({
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-[12px] font-bold text-gray-400">{rec.상차일}</span>
                         <div className="flex gap-1">
-                          {(rec._match?.cargo && rec._match?.ton) && (
-                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-[#1B2B4B] text-white">최적매칭</span>
+                          {rec._match?.label === "완전일치" && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-[#1B2B4B] text-white">완전일치</span>
                           )}
-                          {rec._match?.ton && !rec._match?.cargo && (
+                          {rec._match?.label === "부분일치" && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-green-600 text-white">부분일치</span>
+                          )}
+                          {rec._match?.label === "톤수일치" && (
                             <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-gray-700 text-white">톤수일치</span>
                           )}
-                          {rec._match?.cargo && !rec._match?.ton && (
-                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-gray-700 text-white">화물일치</span>
+                          {rec._match?.label === "경로일치" && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-gray-400 text-white">경로일치</span>
                           )}
                           <span className={`px-2.5 py-1 text-[11px] font-extrabold rounded-full border ${fareCls}`}>{fareLabel}</span>
                         </div>
