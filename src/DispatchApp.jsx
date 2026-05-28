@@ -2084,7 +2084,6 @@ return (
               "기사관리",
               "거래처관리",
               "고정거래처관리",
-              "서명관리",
               "매출관리",
               "거래처정산",
               "지급관리",
@@ -2266,7 +2265,7 @@ return (
           <div>
             {/* 상단 탭 */}
             <div className="flex gap-0 mb-4 border-b border-gray-200">
-              {["고정거래처관리", "지입차관리"].map(tab => (
+              {["고정거래처관리", "지입차관리", "서명관리"].map(tab => (
                 <button
                   key={tab}
                   onClick={() => setSubMenu(tab)}
@@ -2289,11 +2288,11 @@ return (
             {subMenu === "지입차관리" && (
               <FleetManagement />
             )}
-          </div>
-        )}
 
-        {menu === "서명관리" && (role === "admin" || role === "totalMaster" || role === "user" || role === "test") && (
-          <DeliverySignaturePage />
+            {subMenu === "서명관리" && (
+              <DeliverySignaturePage />
+            )}
+          </div>
         )}
 
         {menu === "매출관리" && (role === "admin" || role === "totalMaster" || role === "test") && (
