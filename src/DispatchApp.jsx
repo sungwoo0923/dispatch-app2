@@ -2743,6 +2743,8 @@ const [stopPopupOpen, setStopPopupOpen] = React.useState(false);
 const [stopType, setStopType] = React.useState("");
 const [stopDeleteIdx, setStopDeleteIdx] = React.useState(null);
 const [activeStopIdx, setActiveStopIdx] = React.useState(null);
+const [stopContactPickerIdx, setStopContactPickerIdx] = React.useState(null);
+const [stopContactPickerOpts, setStopContactPickerOpts] = React.useState([]);
 const [stopList, setStopList] = React.useState([
   { 업체명:"", 주소:"", 담당자:"담당자", 담당자번호:"", 메모:"", 화물내용:"", 화물타입:"파레트", 톤수값:"", 톤수타입:"톤", 차량톤수:"", 상차시간:"", 하차시간:"", 방법:"" }
 ]);
@@ -7487,17 +7489,25 @@ className={`
                 if (showStopDropdown && list.length > 0) {
                   const p = list[stopPlaceActive];
                   if (p) {
-                    setStopList(prev => {
-                      const copy = [...prev];
-                      copy[idx] = {
-                        ...copy[idx],
-                        업체명: p.업체명,
-                        주소: p.주소 || "",
-                        담당자: p.담당자 || "",
-                        담당자번호: p.담당자번호 || ""
-                      };
-                      return copy;
-                    });
+                    const contacts=(p.contacts||[]).filter(c=>c.name?.trim());
+                    const unique=[...new Map(contacts.map(c=>[c.name.trim(),c])).values()];
+                    if(unique.length>1){
+                      setStopList(prev=>{const copy=[...prev];copy[idx]={...copy[idx],업체명:p.업체명,주소:p.주소||"",담당자:"",담당자번호:""};return copy;});
+                      setStopContactPickerIdx(idx);
+                      setStopContactPickerOpts(unique);
+                    } else {
+                      setStopList(prev => {
+                        const copy = [...prev];
+                        copy[idx] = {
+                          ...copy[idx],
+                          업체명: p.업체명,
+                          주소: p.주소 || "",
+                          담당자: p.담당자 || "",
+                          담당자번호: p.담당자번호 || ""
+                        };
+                        return copy;
+                      });
+                    }
                     setShowStopDropdown(false);
                     setActiveStopIdx(null);
                   }
@@ -7526,17 +7536,25 @@ className={`
                   }`}
                   onMouseEnter={() => setStopPlaceActive(i)}
                   onMouseDown={() => {
-                    setStopList(prev => {
-                      const copy = [...prev];
-                      copy[idx] = {
-                        ...copy[idx],
-                        업체명: p.업체명,
-                        주소: p.주소 || "",
-                        담당자: p.담당자 || "",
-                        담당자번호: p.담당자번호 || ""
-                      };
-                      return copy;
-                    });
+                    const contacts=(p.contacts||[]).filter(c=>c.name?.trim());
+                    const unique=[...new Map(contacts.map(c=>[c.name.trim(),c])).values()];
+                    if(unique.length>1){
+                      setStopList(prev=>{const copy=[...prev];copy[idx]={...copy[idx],업체명:p.업체명,주소:p.주소||"",담당자:"",담당자번호:""};return copy;});
+                      setStopContactPickerIdx(idx);
+                      setStopContactPickerOpts(unique);
+                    } else {
+                      setStopList(prev => {
+                        const copy = [...prev];
+                        copy[idx] = {
+                          ...copy[idx],
+                          업체명: p.업체명,
+                          주소: p.주소 || "",
+                          담당자: p.담당자 || "",
+                          담당자번호: p.담당자번호 || ""
+                        };
+                        return copy;
+                      });
+                    }
                     setShowStopDropdown(false);
                     setActiveStopIdx(null);
                   }}
