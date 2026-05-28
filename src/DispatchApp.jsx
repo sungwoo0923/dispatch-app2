@@ -5107,6 +5107,35 @@ if (
 
   return score;
 }
+function fareCargoExact(targetCargo, recCargo) {
+  const tc = String(targetCargo || "").trim();
+  const rc = String(recCargo || "").trim();
+  if (!tc || !rc) return false;
+  if (tc === rc) return true;
+  // Pallet: compare counts
+  const tp = getPalletFromCargoText(tc);
+  const rp = getPalletFromCargoText(rc);
+  if (tp != null && rp != null) return tp === rp;
+  // Box: both contain 박스
+  if (/박스/.test(tc) && /박스/.test(rc)) return true;
+  return false;
+}
+function fareCargoPartial(targetCargo, recCargo) {
+  const tc = String(targetCargo || "").trim();
+  const rc = String(recCargo || "").trim();
+  if (!tc || !rc) return false;
+  // Pallet near-match (±2)
+  const tp = getPalletFromCargoText(tc);
+  const rp = getPalletFromCargoText(rc);
+  if (tp != null && rp != null) return Math.abs(tp - rp) <= 2;
+  return false;
+}
+function getFareMatchLabel(cargoExact, cargoPartial, tonExact) {
+  if (cargoExact && tonExact) return "완전일치";
+  if (cargoExact || cargoPartial) return "부분일치";
+  if (tonExact) return "톤수일치";
+  return "경로일치";
+}
 // ================================
 // ⭐ 운임 중복 제거용 Key 생성
 // ================================
