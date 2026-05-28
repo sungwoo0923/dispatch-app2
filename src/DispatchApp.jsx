@@ -1926,33 +1926,11 @@ useEffect(() => {
 
  const [menu, setMenu] = useState("HOME");
   const [calcOpen, setCalcOpen] = useState(false);
-  const ZOOM_STEPS = [0.5, 0.6, 0.67, 0.75, 0.8, 0.9, 1.0, 1.1, 1.12, 1.2, 1.3, 1.5, 1.8, 2.0];
-  const [appZoom, setAppZoom] = useState(() => {
-    const saved = localStorage.getItem("appZoom");
-    return saved ? parseFloat(saved) : 1.12;
-  });
   useEffect(() => {
     const root = document.getElementById("root");
-    if (root) root.style.zoom = appZoom;
-    localStorage.setItem("appZoom", String(appZoom));
-  }, [appZoom]);
-  useEffect(() => {
-    return () => {
-      const root = document.getElementById("root");
-      if (root) root.style.zoom = "1";
-    };
+    if (root) root.style.zoom = "1";
+    localStorage.removeItem("appZoom");
   }, []);
-  const zoomDown = () => {
-    const idx = ZOOM_STEPS.findIndex(s => Math.abs(s - appZoom) < 0.01);
-    const cur = idx >= 0 ? idx : ZOOM_STEPS.findIndex(s => s >= appZoom);
-    if (cur > 0) setAppZoom(ZOOM_STEPS[cur - 1]);
-  };
-  const zoomUp = () => {
-    const idx = ZOOM_STEPS.findLastIndex(s => Math.abs(s - appZoom) < 0.01);
-    const cur = idx >= 0 ? idx : ZOOM_STEPS.findIndex(s => s > appZoom) - 1;
-    const next = idx >= 0 ? idx + 1 : ZOOM_STEPS.findIndex(s => s > appZoom);
-    if (next < ZOOM_STEPS.length && next >= 0) setAppZoom(ZOOM_STEPS[next]);
-  };
    // ★ 거래명세서에서 오더 클릭 시 해당 오더로 이동하기 위한 전역 함수
   const [highlightOrderId, setHighlightOrderId] = useState(null);
 
@@ -2107,13 +2085,7 @@ return (
 
           {/* 우측 유저 영역 */}
           <div className="flex items-center gap-3 min-w-[180px] justify-end">
-            {/* 화면 크기 조절 */}
-            <div className="flex items-center gap-0.5 bg-white/10 rounded-lg px-1 py-0.5">
-              <button onClick={zoomDown} className="w-6 h-6 flex items-center justify-center text-white/70 hover:text-white text-sm font-bold transition rounded" title="글씨 작게">-</button>
-              <span className="text-white/60 text-[11px] w-[36px] text-center tabular-nums">{Math.round(appZoom * 100)}%</span>
-              <button onClick={zoomUp} className="w-6 h-6 flex items-center justify-center text-white/70 hover:text-white text-sm font-bold transition rounded" title="글씨 크게">+</button>
-            </div>
-            <span className="text-white/50 text-xs hidden xl:block truncate max-w-[120px]">
+<span className="text-white/50 text-xs hidden xl:block truncate max-w-[120px]">
               {user?.email}
             </span>
             <button
