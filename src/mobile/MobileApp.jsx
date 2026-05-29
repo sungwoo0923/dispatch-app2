@@ -429,6 +429,7 @@ useEffect(() => {
 const alarmEnabledRef = useRef(true);              // 🔔 알람 ref
 const initialLoadDoneRef = useRef({});             // 🔔 최초로드 구분
 const dispatchPrevStatus = React.useRef({});       // 🔔 배차상태 추적
+const notifiedOrderIdsRef = useRef(new Set());     // 🔔 중복알림 방지
   // 🔕 알림 ON/OFF 상태 (기본 ON)
 const [alarmEnabled, setAlarmEnabled] = useState(
   localStorage.getItem("alarmEnabled") !== "false"
@@ -463,6 +464,10 @@ const [showNotifPanel, setShowNotifPanel] = useState(false);
 const unreadCount = notifications.filter(n => !n.read).length;
 
 const addNotification = (type, orderData) => {
+  const notifKey = `${type}_${orderData.id || ""}`;
+  if (notifiedOrderIdsRef.current.has(notifKey)) return;
+  notifiedOrderIdsRef.current.add(notifKey);
+
   const notif = {
     id: `${Date.now()}_${orderData.id || ""}`,
     type,
@@ -494,6 +499,7 @@ const markAllRead = () => {
 const clearNotifs = () => {
   setNotifications([]);
   localStorage.removeItem("mobileNotifs");
+  notifiedOrderIdsRef.current.clear();
 };
 
 // 🔔 alarmEnabled → ref 동기화
@@ -992,6 +998,26 @@ useEffect(() => {
   return () => unsub();
 }, []);
 
+// 🏢 기본거래처(clients) 리스너
+useEffect(() => {
+  const co = userCompany || localStorage.getItem("userCompany") || "";
+  const unsub = onSnapshot(collection(db, "clients"), (snap) => {
+    const list = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(c => !co || !c.companyName || c.companyName === co)
+      .map(d => ({
+        id: d.id,
+        거래처명: d.거래처명 || "",
+        주소: d.주소 || "",
+        담당자: d.담당자 || "",
+        담당자번호: d.연락처 || d.담당자번호 || "",
+        메모: d.메모 || "",
+      }));
+    setClients(list);
+  });
+  return () => unsub();
+}, [userCompany]);
+
   // --------------------------------------------------
   // 2. 화면 상태 / 필터
   // --------------------------------------------------
@@ -1440,8 +1466,19 @@ const groupedByDate = useMemo(() => {
         }
 
         await updateDoc(doc(db, "places", existing.id), updatePayload);
+      } else {
+        // 기존 업체 없음 → places에 신규 자동 등록
+        const newContacts = manager?.trim()
+          ? [{ name: manager.trim(), phone: phone || "", isPrimary: true }]
+          : [];
+        await addDoc(collection(db, "places"), {
+          업체명: placeName,
+          주소: addr || "",
+          contacts: newContacts,
+          등급: "일반",
+          createdAt: serverTimestamp(),
+        });
       }
-      // 기존 업체가 없으면 신규 등록은 하지 않음 (PC에서 등록된 것만 동기화)
     };
 
     // 상차지 동기화
@@ -2793,7 +2830,13 @@ setOpenMemo={setOpenMemo}
           <MobileOrderForm
             form={form}
             setForm={setForm}
-            clients={places}
+            clients={[
+              ...places,
+              ...clients.filter(c =>
+                c.거래처명 &&
+                !places.some(p => normalizeCompany(p.거래처명) === normalizeCompany(c.거래처명))
+              )
+            ]}
             onSave={handleSave}
             setPage={setPage}
             showToast={showToast}
@@ -7934,11 +7977,14 @@ const pickDrop = (c) => {
                 isPrimary: true,
               });
             }
-            await addDoc(collection(db, "places"), {
-              업체명: name,
+            const primary = contacts[0] || null;
+            const co = userCompany || localStorage.getItem("userCompany") || "";
+            await addDoc(collection(db, "clients"), {
+              거래처명: name,
               주소: newClientForm.주소.trim(),
-              contacts,
-              등급: "일반",
+              담당자: primary?.name || "",
+              연락처: primary?.phone || "",
+              companyName: co,
               createdAt: serverTimestamp(),
             });
             update("거래처명", name);
