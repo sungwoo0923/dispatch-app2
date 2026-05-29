@@ -16,6 +16,7 @@ import StandardFare from "./StandardFare";
 import RateCard from "./RateCard";
 import DispatchFormNew from "./DispatchFormNew";
 import AiAssistant from "./AiAssistant";
+import DeliverySignaturePage from "./DeliverySignaturePage";
 
 // ================= 카운트 애니메이션 =================
 function CountUp({ value, duration = 900 }) {
@@ -919,76 +920,39 @@ function _parseWaypointList(v) {
   return [];
 }
 function mergeViaCargoText(mainCargo, waypointLists) {
-  const allCargo = [mainCargo];
-  for (const list of waypointLists) {
-    for (const s of _parseWaypointList(list)) {
-      if (s && s.화물내용) allCargo.push(s.화물내용);
-    }
-  }
-  const validCargos = allCargo.filter(c => {
-    const t = String(c || "").trim();
-    return t && t !== "없음";
-  });
-  if (validCargos.length <= 1) return mainCargo || "";
+  const mainStr = String(mainCargo || "").trim();
+  if (!mainStr || mainStr === "없음") return mainCargo || "";
   const SFXS = ["파렛트", "파레트", "팔레트", "파렛", "파레", "박스", "통"];
   const NORM = { "파렛트": "파레트", "팔레트": "파레트", "파렛": "파레트", "파레": "파레트" };
-  const typeMap = {};
-  const customs = [];
-  for (const cargo of validCargos) {
-    const c = String(cargo).trim();
-    let matched = false;
+  const getType = (s) => {
     for (const sfx of SFXS) {
-      if (c.endsWith(sfx)) {
-        const numStr = c.slice(0, -sfx.length).trim();
-        const num = parseFloat(numStr);
-        if (!isNaN(num)) {
-          const canonical = NORM[sfx] || sfx;
-          typeMap[canonical] = (typeMap[canonical] || 0) + num;
-          matched = true;
-          break;
-        }
-      }
+      if (String(s).endsWith(sfx)) return NORM[sfx] || sfx;
     }
-    if (!matched && !customs.includes(c)) customs.push(c);
-  }
-  const parts = [];
-  for (const [type, total] of Object.entries(typeMap)) {
-    parts.push(`${total % 1 === 0 ? total : total}${type}`);
-  }
-  parts.push(...customs);
-  return parts.join(", ");
-}
-function mergeViaTonnage(mainTon, waypointLists) {
-  const allTons = [mainTon];
+    return null;
+  };
+  const mainType = getType(mainStr);
+  const extras = [];
   for (const list of waypointLists) {
     for (const s of _parseWaypointList(list)) {
-      if (s && s.차량톤수) allTons.push(s.차량톤수);
+      if (!s) continue;
+      const wCargo = String(s.화물내용 || "").trim();
+      if (!wCargo || wCargo === "없음") continue;
+      // type-only string (no digit) → artifact of empty save, skip
+      const isTypeOnly = SFXS.some(sfx => wCargo === sfx || wCargo === (NORM[sfx] || sfx));
+      if (isTypeOnly) continue;
+      const wType = getType(wCargo);
+      // same unit as main → already counted in main total, skip
+      if (mainType !== null && wType === mainType) continue;
+      // both custom (no known unit) → skip
+      if (mainType === null && wType === null) continue;
+      if (!extras.includes(wCargo)) extras.push(wCargo);
     }
   }
-  const validTons = allTons.filter(t => {
-    const v = String(t || "").trim();
-    return v && v !== "없음";
-  });
-  if (validTons.length <= 1) return mainTon || "";
-  // Convert all values to kg, then format result
-  let totalKg = 0;
-  for (const ton of validTons) {
-    const s = String(ton).trim();
-    const m = s.match(/(\d+(?:\.\d+)?)/);
-    if (!m) continue;
-    const num = parseFloat(m[1]);
-    if (/kg/i.test(s)) {
-      totalKg += num;
-    } else {
-      totalKg += num * 1000;
-    }
-  }
-  if (totalKg === 0) return mainTon || "";
-  if (totalKg < 1000) {
-    return `${totalKg % 1 === 0 ? totalKg : totalKg}kg`;
-  }
-  const tons = totalKg / 1000;
-  return `${tons % 1 === 0 ? tons : tons}톤`;
+  if (!extras.length) return mainStr;
+  return `${mainStr} / ${extras.join(" / ")}`;
+}
+function mergeViaTonnage(mainTon, waypointLists) {
+  return mainTon || "";
 }
 
 // ===================== TOAST SYSTEM (GLOBAL) =====================
@@ -1661,6 +1625,40 @@ const ROLE_LABELS = {
   test: "경리/회계",
 };
 
+// ================================
+// ⭐ 운임조회 매칭 헬퍼 (모듈 스코프 — DispatchStatus에서도 접근 가능)
+// ================================
+function _getPalletNum(s) {
+  const m = String(s||"").match(/(\d+)\s*(p|P|파|팔|파레|파렛|파렛트|팔레트|PL)/i);
+  if (m) return Number(m[1]);
+  const m2 = String(s||"").match(/^\s*(\d+)\s*$/);
+  return m2 ? Number(m2[1]) : null;
+}
+function fareCargoExact(targetCargo, recCargo) {
+  const tc = String(targetCargo || "").trim();
+  const rc = String(recCargo || "").trim();
+  if (!tc || !rc) return false;
+  if (tc === rc) return true;
+  const tp = _getPalletNum(tc); const rp = _getPalletNum(rc);
+  if (tp != null && rp != null) return tp === rp;
+  if (/박스/.test(tc) && /박스/.test(rc)) return true;
+  return false;
+}
+function fareCargoPartial(targetCargo, recCargo) {
+  const tc = String(targetCargo || "").trim();
+  const rc = String(recCargo || "").trim();
+  if (!tc || !rc) return false;
+  const tp = _getPalletNum(tc); const rp = _getPalletNum(rc);
+  if (tp != null && rp != null) return Math.abs(tp - rp) <= 2;
+  return false;
+}
+function getFareMatchLabel(cargoExact, cargoPartial, tonExact) {
+  if (cargoExact && tonExact) return "완전일치";
+  if (cargoExact || cargoPartial) return "부분일치";
+  if (tonExact) return "톤수일치";
+  return "경로일치";
+}
+
 export default function DispatchApp({ role, user, userCompany = "" }) {
   const isTest = role === "test";
   const navigate = useNavigate();
@@ -1926,27 +1924,11 @@ useEffect(() => {
 
  const [menu, setMenu] = useState("HOME");
   const [calcOpen, setCalcOpen] = useState(false);
-  const ZOOM_STEPS = [0.5, 0.6, 0.67, 0.75, 0.8, 0.9, 1.0, 1.1, 1.12, 1.2, 1.3, 1.5, 1.8, 2.0];
-  const [appZoom, setAppZoom] = useState(() => {
-    const saved = localStorage.getItem("appZoom");
-    return saved ? parseFloat(saved) : 1.12;
-  });
   useEffect(() => {
     const root = document.getElementById("root");
-    if (root) root.style.zoom = appZoom;
-    localStorage.setItem("appZoom", String(appZoom));
-  }, [appZoom]);
-  const zoomDown = () => {
-    const idx = ZOOM_STEPS.findIndex(s => Math.abs(s - appZoom) < 0.01);
-    const cur = idx >= 0 ? idx : ZOOM_STEPS.findIndex(s => s >= appZoom);
-    if (cur > 0) setAppZoom(ZOOM_STEPS[cur - 1]);
-  };
-  const zoomUp = () => {
-    const idx = ZOOM_STEPS.findLastIndex(s => Math.abs(s - appZoom) < 0.01);
-    const cur = idx >= 0 ? idx : ZOOM_STEPS.findIndex(s => s > appZoom) - 1;
-    const next = idx >= 0 ? idx + 1 : ZOOM_STEPS.findIndex(s => s > appZoom);
-    if (next < ZOOM_STEPS.length && next >= 0) setAppZoom(ZOOM_STEPS[next]);
-  };
+    if (root) root.style.zoom = "1";
+    localStorage.removeItem("appZoom");
+  }, []);
    // ★ 거래명세서에서 오더 클릭 시 해당 오더로 이동하기 위한 전역 함수
   const [highlightOrderId, setHighlightOrderId] = useState(null);
 
@@ -2016,8 +1998,9 @@ const showAlert = (msg) => setAlertMsg(msg);
 return (
     <ToastProvider>
       <CustomAlert message={alertMsg} onClose={() => setAlertMsg(null)} />
+      <div className="min-w-max">
       {/* ===== 통합 헤더 네비 ===== */}
-      <header className="sticky top-0 z-50 bg-[#1B2B4B] shadow-lg mb-6">
+      <header className="sticky top-0 z-50 bg-[#1B2B4B] shadow-lg mb-6" style={{width:"100vw",left:0}}>
 
         {/* 상단바: 로고 + 메뉴 + 유저 */}
         <div className="flex items-center px-6 h-14">
@@ -2044,7 +2027,7 @@ return (
           {/* 중앙 메뉴 */}
                      {/* ★ 태블릿/PC 공용 메뉴 — 전체 가로 스크롤 보장 */}
           <nav
-            className="flex-1 flex items-center gap-1 overflow-x-auto"
+            className="flex-1 flex items-center gap-1 overflow-x-auto xl:justify-center"
             style={{
               WebkitOverflowScrolling: "touch",
               scrollbarWidth: "thin",
@@ -2080,7 +2063,7 @@ return (
                   key={m}
                   disabled={isBlocked}
                   onClick={() => handleMenuClick(m)}
-                  className={`relative px-3 py-1.5 rounded-md text-[13px] font-medium whitespace-nowrap transition-all flex-shrink-0
+                  className={`relative px-3 py-1.5 rounded-md text-[13px] xl:text-[14px] xl:px-4 font-medium whitespace-nowrap transition-all flex-shrink-0
                     ${isBlocked
                       ? "text-white/20 cursor-not-allowed"
                       : isActive
@@ -2100,13 +2083,7 @@ return (
 
           {/* 우측 유저 영역 */}
           <div className="flex items-center gap-3 min-w-[180px] justify-end">
-            {/* 화면 크기 조절 */}
-            <div className="flex items-center gap-0.5 bg-white/10 rounded-lg px-1 py-0.5">
-              <button onClick={zoomDown} className="w-6 h-6 flex items-center justify-center text-white/70 hover:text-white text-sm font-bold transition rounded" title="글씨 작게">-</button>
-              <span className="text-white/60 text-[11px] w-[36px] text-center tabular-nums">{Math.round(appZoom * 100)}%</span>
-              <button onClick={zoomUp} className="w-6 h-6 flex items-center justify-center text-white/70 hover:text-white text-sm font-bold transition rounded" title="글씨 크게">+</button>
-            </div>
-            <span className="text-white/50 text-xs hidden xl:block truncate max-w-[120px]">
+<span className="text-white/50 text-xs hidden xl:block truncate max-w-[120px]">
               {user?.email}
             </span>
             <button
@@ -2133,7 +2110,7 @@ return (
         </div>
       </header>
       {/* ---------------- 화면 렌더링 ---------------- */}
-      <main className={`rounded shadow p-4 ${darkMode ? "bg-gray-900 text-gray-100" : "bg-white text-gray-900"}`}>
+      <main className={`rounded shadow p-4 min-w-max ${darkMode ? "bg-gray-900 text-gray-100" : "bg-white text-gray-900"}`}>
         {menu === "HOME" && (
           <HomeDashboard
             role={role}
@@ -2251,7 +2228,7 @@ return (
           <div>
             {/* 상단 탭 */}
             <div className="flex gap-0 mb-4 border-b border-gray-200">
-              {["고정거래처관리", "지입차관리"].map(tab => (
+              {["고정거래처관리", "지입차관리", "서명관리"].map(tab => (
                 <button
                   key={tab}
                   onClick={() => setSubMenu(tab)}
@@ -2273,6 +2250,10 @@ return (
 
             {subMenu === "지입차관리" && (
               <FleetManagement />
+            )}
+
+            {subMenu === "서명관리" && (
+              <DeliverySignaturePage />
             )}
           </div>
         )}
@@ -2312,6 +2293,7 @@ return (
 
         {menu === "가입신청관리" && role === "totalMaster" && <CompanyApplications />}
       </main>
+      </div>
       {/* ⭐⭐⭐ 내 정보 패널 ⭐⭐⭐ */}
       {showMyInfo && (
         <div
@@ -2763,6 +2745,8 @@ const [stopPopupOpen, setStopPopupOpen] = React.useState(false);
 const [stopType, setStopType] = React.useState("");
 const [stopDeleteIdx, setStopDeleteIdx] = React.useState(null);
 const [activeStopIdx, setActiveStopIdx] = React.useState(null);
+const [stopContactPickerIdx, setStopContactPickerIdx] = React.useState(null);
+const [stopContactPickerOpts, setStopContactPickerOpts] = React.useState([]);
 const [stopList, setStopList] = React.useState([
   { 업체명:"", 주소:"", 담당자:"담당자", 담당자번호:"", 메모:"", 화물내용:"", 화물타입:"파레트", 톤수값:"", 톤수타입:"톤", 차량톤수:"", 상차시간:"", 하차시간:"", 방법:"" }
 ]);
@@ -3666,14 +3650,12 @@ const filterPlaces = (q) => {
     const buildHalfHour = React.useMemo(() => {
       if (Array.isArray(timeOptions) && timeOptions.length) return timeOptions;
       const list = [];
-      const toLabel = (h, m) => {
-        const ampm = h < 12 ? "오전" : "오후";
-        const hh = ((h % 12) || 12);
-        return `${ampm} ${hh}시${m ? " 30분" : ""}`;
-      };
-      for (let h = 6; h <= 22; h++) {
-        list.push(toLabel(h, 0));
-        if (h !== 22) list.push(toLabel(h, 30));
+      for (let h = 0; h < 24; h++) {
+        for (let m of [0, 30]) {
+          const isPM = h >= 12;
+          const hour12 = h % 12 === 0 ? 12 : h % 12;
+          list.push(`${isPM ? "오후" : "오전"} ${hour12}시${m === 30 ? " 30분" : ""}`);
+        }
       }
       return list;
     }, [timeOptions]);
@@ -4169,6 +4151,17 @@ React.useEffect(() => {
     하차일: _todayStr(),
   }));
 }, []);
+// 전달사항 자동완성: 상차지명+하차지명 매칭 시 고정된 전달사항 자동 입력
+React.useEffect(() => {
+  if (!form.상차지명 || !form.하차지명 || form.전달사항) return;
+  const match = (dispatchData || []).find(r =>
+    r.전달사항고정 === true &&
+    r.상차지명?.trim() === form.상차지명.trim() &&
+    r.하차지명?.trim() === form.하차지명.trim() &&
+    r.전달사항?.trim()
+  );
+  if (match) onChange("전달사항", match.전달사항);
+}, [form.상차지명, form.하차지명]);
 // ===============================
 // 💰 주소 기반 전국 평균 운임 계산 (정확 톤수 기준)
 // ===============================
@@ -5327,6 +5320,7 @@ const isRoundTrip = form.운행유형 === "왕복";
 const ROUND_DISCOUNT = 0.9; // ⭐ 10% 할인 (조정 가능)
     // ⭐ 운임조회 팝업 상태
     const [fareModalOpen, setFareModalOpen] = React.useState(false);
+const [fare3Filter, setFare3Filter] = React.useState("all");
 const [fareResult, setFareResult] = React.useState(null);
 const [fareQuickOpen, setFareQuickOpen] = React.useState(false);
 const [fareQuickMatches, setFareQuickMatches] = React.useState([]);
@@ -5563,7 +5557,17 @@ if (!matchVehicle) return false;
     matchCargo = matchTon;
   }
 }
-        return matchVehicle && matchTon && matchCargo;
+        return matchVehicle;
+      });
+      // Add _match labels to each filtered record
+      filtered = filtered.map(r => {
+        const rowTonNum = extractTonNum(r.차량톤수 || "");
+        const tonExact = inputTonNum != null && rowTonNum != null && Math.abs(rowTonNum - inputTonNum) <= 0.5;
+        const rowPallets = extractPalletNum(r.화물내용);
+        const cargoExact = fareCargoExact(cargo, r.화물내용);
+        const cargoPartial = fareCargoPartial(cargo, r.화물내용);
+        const label = getFareMatchLabel(cargoExact, cargoPartial, tonExact);
+        return { ...r, _match: { label, tonExact, cargoExact, cargoPartial } };
       });
       if (!filtered.length) {
         showAlert("유사한 과거 운임 데이터를 찾지 못했습니다.");
@@ -5839,7 +5843,7 @@ const applyCopy = (r) => {
     하차시간: r.하차시간 || "",
     하차시간기준: r.하차시간기준 ?? null,
     지급방식: r.지급방식 || "",
-    배차방식: r.배차방식 || "",
+    배차방식: "",
     메모: r.메모 || "",
     운행유형: r.운행유형 || "편도",
     긴급: r.긴급 === true,
@@ -6195,59 +6199,176 @@ const [showOrderParser, setShowOrderParser] = React.useState(false);
 
 const parseOrderText = (text) => {
   const lines = text.split(/\n/).map(l => l.trim()).filter(Boolean);
-  const pickupIdx = lines.findIndex(l => /상차지?$/.test(l) || /^1\.\s*상차/.test(l));
-  const dropIdx   = lines.findIndex(l => /하차지?$/.test(l) || /^하차지/.test(l));
-  const pickupLines = pickupIdx >= 0 && dropIdx > pickupIdx
-    ? lines.slice(pickupIdx+1, dropIdx) : lines.slice(0, Math.floor(lines.length/2));
-  const dropLines = dropIdx >= 0
-    ? lines.slice(dropIdx+1) : lines.slice(Math.floor(lines.length/2));
 
-  const extractFromLines = (sectionLines) => {
+  // ─── Format A: numbered items "1. 상차시간:", "2. 상차지:" ───
+  const numberedMap = {};
+  lines.forEach(line => {
+    const m = line.match(/^(\d+)\s*[.\s]\s*(.+?)\s*[:：]\s*(.+)$/);
+    if (m) numberedMap[m[2].trim()] = m[3].trim();
+  });
+  const hasNumberedFormat = Object.keys(numberedMap).length >= 2;
+
+  if (hasNumberedFormat) {
+    const pickupRaw = numberedMap["상차지"] || numberedMap["상차 지"] || "";
+    const dropRaw = numberedMap["하차지"] || numberedMap["하차 지"] || "";
+    const pickupTimeRaw = numberedMap["상차시간"] || numberedMap["상차 시간"] || "";
+    const dropTimeRaw = numberedMap["하차시간"] || numberedMap["하차 시간"] || "";
+    const productRaw = numberedMap["제품"] || numberedMap["화물"] || numberedMap["품목"] || "";
+    const vehicleRaw = numberedMap["필요차량"] || numberedMap["차량"] || numberedMap["차종"] || "";
+
+    // Extract company name from address string (last non-address token)
+    const extractNameFromAddr = (raw) => {
+      const addrPrefixes = /^(서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주)/;
+      if (addrPrefixes.test(raw)) {
+        // Address comes first, company name may be at end
+        const m = raw.match(/([가-힣A-Za-z0-9()\-\s]+(?:물류센터|하역장|센터|물류|창고|마트|마켓|슈퍼|공장))/);
+        return m ? m[1].trim() : "";
+      }
+      return raw;
+    };
+
+    const parseTime = (t = "") => {
+      if (!t) return "";
+      const cleaned = t.replace(/[^0-9시]/g, " ").trim();
+      const m = cleaned.match(/(\d+)/);
+      if (!m) return t;
+      const h = Number(m[1]);
+      if (h > 24) return "";
+      if (h >= 0 && h < 12) return `오전 ${h === 0 ? 12 : h}:00`;
+      if (h === 12) return "오후 12:00";
+      if (h > 12 && h <= 23) return `오후 ${h - 12}:00`;
+      return t;
+    };
+
+    const extractCold = (raw = "") => {
+      if (/냉동/.test(raw)) return "냉동탑";
+      if (/냉장/.test(raw)) return "냉장탑";
+      if (/윙/.test(raw)) return "윙바디";
+      return "";
+    };
+
+    const palletM = (productRaw + " " + vehicleRaw).match(/(\d+)\s*(파레트?|파렛트?|PLT|pallet)/i);
+    const cargoStr = palletM ? `${palletM[1]}파렛트` : (productRaw ? productRaw.split(/\(|\//).at(0).trim() : "");
+    const coldType = extractCold(productRaw + " " + vehicleRaw);
+
+    // For numbered format, address includes company name inline - try to split
+    const splitAddr = (raw) => {
+      const addrM = raw.match(/((?:서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주)[^\n]+)/);
+      const addr = addrM ? addrM[1].trim() : "";
+      // Company name: everything after the address, or before it
+      let name = "";
+      if (addr && raw.length > addr.length) {
+        name = raw.replace(addr, "").replace(/[-\/\s]+/g, " ").trim();
+      }
+      return { name, addr };
+    };
+
+    const pu = splitAddr(pickupRaw);
+    const dr = splitAddr(dropRaw);
+
+    return {
+      상차지명: pu.name || extractNameFromAddr(pickupRaw),
+      상차지주소: pu.addr || (pu.name ? "" : pickupRaw),
+      상차시간: parseTime(pickupTimeRaw),
+      하차지명: dr.name || extractNameFromAddr(dropRaw),
+      하차지주소: dr.addr || (dr.name ? "" : dropRaw),
+      하차시간: parseTime(dropTimeRaw),
+      하차일: /익일|다음날|29일|30일|31일/.test(dropTimeRaw + " " + (numberedMap["하차일"] || "")) ? _tomorrowStr() : _todayStr(),
+      화물내용: cargoStr,
+      차량톤수: "",
+      차량종류: coldType,
+    };
+  }
+
+  // ─── Format B: "상차지? :" / "하차지? :" prefix (with optional typo "하자") ───
+  const fullText = text;
+  const pickupMarker = /상차지?\s*[:：]/;
+  const dropMarker = /하차지?\s*[:：]|하자\s*\d*\s*[:：]/;
+
+  let pickupStart = -1, dropStart = -1;
+  lines.forEach((l, i) => {
+    if (pickupMarker.test(l) && pickupStart < 0) pickupStart = i;
+    if (dropMarker.test(l) && dropStart < 0) dropStart = i;
+  });
+
+  const extractInfo = (sectionLines) => {
     const info = {};
+    const normLine = l => l.replace(/\s+/g, " ").trim();
     sectionLines.forEach(line => {
-      if (/^(서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주)/.test(line)) info.주소 = line;
-      const timeM = line.match(/상차시간\s*[:：]?\s*(.+)/i); if (timeM) info.상차시간 = timeM[1].trim();
-      const dropT = line.match(/하차시간\s*[:：]?\s*(.+)/i); if (dropT) info.하차시간 = dropT[1].trim();
-      const phoneM = line.match(/0\d{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4}/); if (phoneM) info.전화번호 = phoneM[0].replace(/[^\d]/g,"").replace(/^(\d{3})(\d{3,4})(\d{4})$/,"$1-$2-$3");
-      const manM = line.match(/([가-힣]{2,4})\s*(대표|주임|팀장|부장|과장|실장|사원|이사|님|대리)/); if (manM) info.담당자 = manM[1];
-      const wM = line.match(/(\d[\d,]+)\s*kg/i); if (wM) info.중량 = wM[1].replace(/,/g,"");
-      const pM = line.match(/(\d+)\s*(파렛트?|파레트|PLT|p)/i); if (pM) info.파렛 = pM[1];
-      if (/냉동/.test(line)) info.차량종류 = "냉동탑";
-      else if (/냉장/.test(line)) info.차량종류 = "냉장탑";
-      else if (/윙바디/.test(line)) info.차량종류 = "윙바디";
-      else if (/카고/.test(line)) info.차량종류 = "카고";
+      const clean = normLine(line);
+      // address
+      if (/^(서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주)/.test(clean)) info.주소 = clean.split(/[\/,]/)[0].trim();
+      // time
+      const timeM = clean.match(/(?:상차|하차)?시간\s*[:：]?\s*(.+)/i); if (timeM) info.시간 = timeM[1].trim();
+      // phone: full or short (1533-2525 style)
+      const phoneM = clean.match(/(?:0\d{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4}|\d{4}[-]\d{4})/); if (phoneM) info.전화번호 = phoneM[0];
+      // manager with title
+      const manM = clean.match(/([가-힣]{2,4})\s*(대표|주임|팀장|부장|과장|실장|사원|이사|님|대리|차장|과장|팀원)/); if (manM) info.담당자 = manM[1];
+      if (/냉동/.test(clean)) info.차량종류 = "냉동탑";
+      else if (/냉장/.test(clean)) info.차량종류 = "냉장탑";
+      else if (/윙바디/.test(clean)) info.차량종류 = "윙바디";
+      // pallet
+      const pM = clean.match(/(\d+)\s*(파렛트?|파레트|PLT|p)\b/i); if (pM) info.파렛 = pM[1];
+      // weight
+      const wM = clean.match(/(\d[\d,]+)\s*kg/i); if (wM) info.중량 = wM[1].replace(/,/g, "");
     });
-    const nameLine = sectionLines.find(l =>
-      !/(상차|하차|시간|주소|[:：\d]|kg|파렛|냉동|냉장|윙|카고|타코|중량)/.test(l) &&
-      l.length >= 2 && l.length <= 20
-    );
-    if (nameLine) info.업체명 = nameLine;
+    // company name: first short line that isn't an address, time, or phone
+    const nameLine = sectionLines.find(l => {
+      const c = normLine(l);
+      return !/(상차|하차|시간|주소|[:：\d]|kg|파렛|냉동|냉장|윙|카고|타코|중량|대표|원|km)/.test(c) &&
+        c.length >= 2 && c.length <= 30 &&
+        !/^(서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주)/.test(c);
+    });
+    if (nameLine) info.업체명 = normLine(nameLine).replace(/\(주\)/g, "").replace(/\(.+?\)/g, "").replace(/[-\s]+$/, "").trim();
     return info;
   };
-  const pickup = extractFromLines(pickupLines);
-  const drop   = extractFromLines(dropLines);
+
+  let pickupLines, dropLines;
+  if (pickupStart >= 0 && dropStart > pickupStart) {
+    // Extract inline name from the marker line if present
+    const puMarkerLine = lines[pickupStart];
+    const puInline = puMarkerLine.replace(pickupMarker, "").trim();
+    pickupLines = puInline ? [puInline, ...lines.slice(pickupStart + 1, dropStart)] : lines.slice(pickupStart + 1, dropStart);
+    const drMarkerLine = lines[dropStart];
+    const drInline = drMarkerLine.replace(dropMarker, "").trim();
+    dropLines = drInline ? [drInline, ...lines.slice(dropStart + 1)] : lines.slice(dropStart + 1);
+  } else {
+    // Fallback: split at midpoint
+    const mid = Math.floor(lines.length / 2);
+    pickupLines = lines.slice(0, mid);
+    dropLines = lines.slice(mid);
+  }
+
+  const pickup = extractInfo(pickupLines);
+  const drop = extractInfo(dropLines);
+
   const isNextDay = /익일|다음날/.test(text);
-  const parseTime = (t="") => {
+  const parseTime = (t = "") => {
     if (!t) return "";
-    const n = t.replace(/익일|당일|다음날/g,"").match(/(\d+)/);
+    const n = t.replace(/익일|당일|다음날/g, "").match(/(\d+)/);
     if (!n) return "";
     const h = Number(n[1]);
-    if (h >= 0 && h < 12) return `오전 ${h===0?12:h}:00`;
+    if (h >= 0 && h < 12) return `오전 ${h === 0 ? 12 : h}:00`;
     if (h === 12) return "오후 12:00";
-    if (h > 12 && h <= 23) return `오후 ${h-12}:00`;
+    if (h > 12 && h <= 23) return `오후 ${h - 12}:00`;
     return t;
   };
+
   return {
-    상차지명: pickup.업체명||"", 상차지주소: pickup.주소||"",
-    상차지담당자: pickup.담당자||"", 상차지담당자번호: pickup.전화번호||"",
-    상차시간: parseTime(pickup.상차시간||""),
-    하차지명: drop.업체명||"", 하차지주소: drop.주소||"",
-    하차지담당자: drop.담당자||"", 하차지담당자번호: drop.전화번호||"",
-    하차시간: parseTime(drop.하차시간||""),
+    상차지명: pickup.업체명 || "",
+    상차지주소: pickup.주소 || "",
+    상차지담당자: pickup.담당자 || "",
+    상차지담당자번호: pickup.전화번호 || "",
+    상차시간: parseTime(pickup.시간 || ""),
+    하차지명: drop.업체명 || "",
+    하차지주소: drop.주소 || "",
+    하차지담당자: drop.담당자 || "",
+    하차지담당자번호: drop.전화번호 || "",
+    하차시간: parseTime(drop.시간 || ""),
     하차일: isNextDay ? _tomorrowStr() : _todayStr(),
-    화물내용: drop.파렛?`${drop.파렛}파렛트`:(pickup.파렛?`${pickup.파렛}파렛트`:""),
-    차량톤수: drop.중량?`${drop.중량}kg`:(pickup.중량?`${pickup.중량}kg`:""),
-    차량종류: drop.차량종류||pickup.차량종류||"",
+    화물내용: drop.파렛 ? `${drop.파렛}파렛트` : (pickup.파렛 ? `${pickup.파렛}파렛트` : ""),
+    차량톤수: drop.중량 ? `${drop.중량}kg` : (pickup.중량 ? `${pickup.중량}kg` : ""),
+    차량종류: drop.차량종류 || pickup.차량종류 || "",
   };
 };
 const applyOrderParse = () => {
@@ -6416,20 +6537,11 @@ showAlert("✅ 오더 내용이 자동으로 입력되었습니다. 확인 후 �
   />
   {/* 상차 시간 + 이전/이후 */}
   <div className="flex items-center gap-1">
-    <select
+    <TimeAmPmPicker
       value={form.상차시간 || ""}
-      className="border-2 border-[#1B2B4B] rounded-lg px-2 py-1.5 text-[13px] font-semibold text-[#1B2B4B] outline-none focus:ring-2 focus:ring-blue-200"
-      onChange={(e) => {
-  const v = e.target.value;
-  onChange("상차시간", v);
-}}
-
-    >
-      <option value="">시간</option>
-      {localTimeOptions.map((t) => (
-        <option key={t} value={t}>{t}</option>
-      ))}
-    </select>
+      onChange={v => onChange("상차시간", v)}
+      selectCls="border-2 border-[#1B2B4B] rounded-lg px-2 py-1 text-[13px] font-semibold text-[#1B2B4B] outline-none focus:ring-2 focus:ring-blue-200"
+    />
 
     {form.상차시간 && (
       <div className="flex gap-1">
@@ -6498,19 +6610,11 @@ showAlert("✅ 오더 내용이 자동으로 입력되었습니다. 확인 후 �
 
   {/* 하차 시간 + 이전/이후 */}
   <div className="flex items-center gap-1">
-      <select
+    <TimeAmPmPicker
       value={form.하차시간 || ""}
-      className="border-2 border-[#1B2B4B] rounded-lg px-2 py-1.5 text-[13px] font-semibold text-[#1B2B4B] outline-none focus:ring-2 focus:ring-blue-200"
-      onChange={(e) => {
-  const v = e.target.value;
-  onChange("하차시간", v);
-}}
-    >
-      <option value="">시간</option>
-      {localTimeOptions.map((t) => (
-        <option key={t} value={t}>{t}</option>
-      ))}
-    </select>
+      onChange={v => onChange("하차시간", v)}
+      selectCls="border-2 border-[#1B2B4B] rounded-lg px-2 py-1 text-[13px] font-semibold text-[#1B2B4B] outline-none focus:ring-2 focus:ring-blue-200"
+    />
 
     {form.하차시간 && (
       <div className="flex gap-1">
@@ -6581,20 +6685,22 @@ title="상차지 ↔ 하차지 교체"
 </div>
 {/* ===== 오더 자동파싱 영역 ===== */}
 {showOrderParser && (
-  <div className="mb-4 bg-emerald-50 border border-emerald-200 rounded-xl p-4">
-    <div className="flex items-center justify-between mb-2">
-      <span className="text-sm font-bold text-emerald-800">오더 내용 붙여넣기 → 자동 입력</span>
-      <button type="button" onClick={() => setShowOrderParser(false)} className="text-gray-400 hover:text-gray-700 text-lg leading-none">✕</button>
+  <div className="mb-4 bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+    <div className="bg-[#1B2B4B] px-4 py-2.5 flex items-center justify-between">
+      <span className="text-[13px] font-bold text-white">오더 붙여넣기 - 자동 입력</span>
+      <button type="button" onClick={() => setShowOrderParser(false)} className="w-6 h-6 rounded-full bg-white/10 hover:bg-white/20 text-white text-base leading-none flex items-center justify-center transition">×</button>
     </div>
-    <textarea
-      className="w-full border border-emerald-300 rounded-lg px-3 py-2 text-sm h-28 resize-none bg-white focus:outline-none focus:ring-2 focus:ring-emerald-200"
-      placeholder={"카카오톡/문자 오더 내용을 그대로 붙여넣으세요.\n예)\n상차지\n반찬단지 물류센터\n인천 서구 북항로 28-29\n이환주 주임 1533-2525\n하차지\n하성글로벌\n경기도 이천시 신둔면 서이천로 796\n류용철 010-3715-4058\n중량:5,500kg / 7파렛트 / 냉동"}
-      value={orderParseText}
-      onChange={e => setOrderParseText(e.target.value)}
-    />
-    <div className="flex justify-end gap-2 mt-2">
-      <button type="button" onClick={() => setOrderParseText("")} className="px-3 py-1.5 text-xs rounded-lg bg-white border border-gray-200 text-gray-500 hover:bg-gray-50">지우기</button>
-      <button type="button" onClick={applyOrderParse} className="px-4 py-1.5 text-xs font-bold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700">자동 분석 적용</button>
+    <div className="p-4">
+      <textarea
+        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm h-28 resize-none bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/20 focus:border-[#1B2B4B]/30"
+        placeholder={"카카오톡/문자 오더 내용을 그대로 붙여넣으세요.\n예)\n상차지\n반찬단지 물류센터\n인천 서구 북항로 28-29\n이환주 주임 1533-2525\n하차지\n하성글로벌\n경기도 이천시 신둔면 서이천로 796\n류용철 010-3715-4058\n중량:5,500kg / 7파렛트 / 냉동"}
+        value={orderParseText}
+        onChange={e => setOrderParseText(e.target.value)}
+      />
+      <div className="flex justify-end gap-2 mt-3">
+        <button type="button" onClick={() => setOrderParseText("")} className="px-3 py-1.5 text-xs rounded-lg bg-gray-100 border border-gray-200 text-gray-500 hover:bg-gray-200">지우기</button>
+        <button type="button" onClick={applyOrderParse} className="px-4 py-1.5 text-xs font-bold rounded-lg bg-[#1B2B4B] text-white hover:bg-[#243a60]">자동 분석 적용</button>
+      </div>
     </div>
   </div>
 )}
@@ -7507,17 +7613,25 @@ className={`
                 if (showStopDropdown && list.length > 0) {
                   const p = list[stopPlaceActive];
                   if (p) {
-                    setStopList(prev => {
-                      const copy = [...prev];
-                      copy[idx] = {
-                        ...copy[idx],
-                        업체명: p.업체명,
-                        주소: p.주소 || "",
-                        담당자: p.담당자 || "",
-                        담당자번호: p.담당자번호 || ""
-                      };
-                      return copy;
-                    });
+                    const contacts=(p.contacts||[]).filter(c=>c.name?.trim());
+                    const unique=[...new Map(contacts.map(c=>[c.name.trim(),c])).values()];
+                    if(unique.length>1){
+                      setStopList(prev=>{const copy=[...prev];copy[idx]={...copy[idx],업체명:p.업체명,주소:p.주소||"",담당자:"",담당자번호:""};return copy;});
+                      setStopContactPickerIdx(idx);
+                      setStopContactPickerOpts(unique);
+                    } else {
+                      setStopList(prev => {
+                        const copy = [...prev];
+                        copy[idx] = {
+                          ...copy[idx],
+                          업체명: p.업체명,
+                          주소: p.주소 || "",
+                          담당자: p.담당자 || "",
+                          담당자번호: p.담당자번호 || ""
+                        };
+                        return copy;
+                      });
+                    }
                     setShowStopDropdown(false);
                     setActiveStopIdx(null);
                   }
@@ -7546,17 +7660,25 @@ className={`
                   }`}
                   onMouseEnter={() => setStopPlaceActive(i)}
                   onMouseDown={() => {
-                    setStopList(prev => {
-                      const copy = [...prev];
-                      copy[idx] = {
-                        ...copy[idx],
-                        업체명: p.업체명,
-                        주소: p.주소 || "",
-                        담당자: p.담당자 || "",
-                        담당자번호: p.담당자번호 || ""
-                      };
-                      return copy;
-                    });
+                    const contacts=(p.contacts||[]).filter(c=>c.name?.trim());
+                    const unique=[...new Map(contacts.map(c=>[c.name.trim(),c])).values()];
+                    if(unique.length>1){
+                      setStopList(prev=>{const copy=[...prev];copy[idx]={...copy[idx],업체명:p.업체명,주소:p.주소||"",담당자:"",담당자번호:""};return copy;});
+                      setStopContactPickerIdx(idx);
+                      setStopContactPickerOpts(unique);
+                    } else {
+                      setStopList(prev => {
+                        const copy = [...prev];
+                        copy[idx] = {
+                          ...copy[idx],
+                          업체명: p.업체명,
+                          주소: p.주소 || "",
+                          담당자: p.담당자 || "",
+                          담당자번호: p.담당자번호 || ""
+                        };
+                        return copy;
+                      });
+                    }
                     setShowStopDropdown(false);
                     setActiveStopIdx(null);
                   }}
@@ -7618,6 +7740,25 @@ className={`
             }}
           />
         </div>
+
+        {/* 담당자 선택 팝업 (복수 담당자) */}
+        {stopContactPickerIdx === idx && stopContactPickerOpts.length > 0 && (
+          <div className="border border-blue-200 rounded-lg p-2 bg-blue-50">
+            <div className="text-[11px] font-bold text-blue-600 mb-1.5">담당자 선택</div>
+            {stopContactPickerOpts.map((contact, ci) => (
+              <div key={ci}
+                className="px-2 py-1.5 cursor-pointer hover:bg-white rounded-lg flex items-center justify-between"
+                onClick={() => {
+                  setStopList(prev=>{const copy=[...prev];copy[idx]={...copy[idx],담당자:contact.name||"",담당자번호:contact.phone||""};return copy;});
+                  setStopContactPickerIdx(null);
+                  setStopContactPickerOpts([]);
+                }}>
+                <span className="text-[13px] font-semibold text-gray-800">{contact.name}</span>
+                <span className="text-[12px] text-gray-500">{contact.phone}</span>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* 🔥 새로 추가: 화물내용 + 드롭다운 / 톤수 + 드롭다운 */}
         <div className="grid grid-cols-2 gap-2">
@@ -7852,12 +7993,12 @@ className={`
               for (const sfx of TON_SFXS) { if (tonBase.endsWith(sfx)) { tonBase = tonBase.slice(0, -sfx.length).trim(); break; } }
               return {
                 ...s,
-                화물내용: cargoType && cargoType !== "없음"
+                화물내용: (cargoType && cargoType !== "없음" && cargoBase)
                   ? `${cargoBase}${cargoType}`
-                  : cargo,
-                차량톤수: tonType && tonType !== "없음"
+                  : (cargo || "없음"),
+                차량톤수: (tonType && tonType !== "없음" && tonBase)
                   ? `${tonBase}${tonType}`
-                  : tonVal,
+                  : (tonVal || "없음"),
               };
             });
 
@@ -10537,8 +10678,34 @@ setConfirmChange(null);
                 <span className="text-[11px] font-semibold text-gray-400">유사도순 · 최신순</span>
               </div>
 
+              {/* 필터 탭 */}
+              {(() => {
+                const counts = { "완전일치": 0, "부분일치": 0, "톤수일치": 0, "경로일치": 0 };
+                sortedHistory.forEach(r => {
+                  const lbl = r._match?.label || "경로일치";
+                  counts[lbl] = (counts[lbl] || 0) + 1;
+                });
+                const tabs = ["all", "완전일치", "부분일치", "톤수일치", "경로일치"];
+                return (
+                  <div className="flex gap-1.5 mb-3 flex-wrap">
+                    {tabs.map(t => {
+                      const cnt = t === "all" ? sortedHistory.length : (counts[t] || 0);
+                      if (t !== "all" && cnt === 0) return null;
+                      return (
+                        <button key={t} onClick={() => setFare3Filter(t)}
+                          className={`text-[11px] font-bold px-2.5 py-1 rounded-full border transition ${fare3Filter === t ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100"}`}>
+                          {t === "all" ? `전체 ${cnt}` : `${t} ${cnt}`}
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+
               <div className="space-y-2">
                 {sortedHistory.map((r, idx) => {
+                  const matchLabel = r._match?.label || "경로일치";
+                  if (fare3Filter !== "all" && matchLabel !== fare3Filter) return null;
                   const fare = Number(String(r.청구운임||"0").replace(/[^\d]/g,""));
                   const { label: fareLabel, cls: fareCls } = getFareTag(fare);
                   const sameCargo = getPalletFromCargoText(r.화물내용) === getPalletFromCargoText(form.화물내용);
@@ -10561,6 +10728,12 @@ setConfirmChange(null);
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-[12px] font-bold text-gray-400">{r.상차일}</span>
                           <div className="flex gap-1">
+                            <span className={`px-2.5 py-1 text-[11px] font-extrabold rounded-full ${
+                              matchLabel === "완전일치" ? "bg-[#1B2B4B] text-white"
+                              : matchLabel === "부분일치" ? "bg-emerald-600 text-white"
+                              : matchLabel === "톤수일치" ? "bg-gray-600 text-white"
+                              : "bg-blue-100 text-blue-700"
+                            }`}>{matchLabel}</span>
                             {r._palletCount != null && (
                           <span className={`px-2.5 py-1 text-[11px] font-extrabold rounded-full tracking-tight ${
                             r._palletCount === _inputPalletNum
@@ -10608,10 +10781,13 @@ setConfirmChange(null);
 
                         {/* 기사 + 운임 + 버튼 */}
                         <div className="flex items-center justify-between">
-                          <div className="text-[12px] font-semibold text-gray-400">
-                            기사 <span className="text-gray-700 font-bold">{r.이름 || "-"}</span>
-                            <span className="mx-1.5 text-gray-300">·</span>
-                            기사운임 <span className="text-gray-700 font-bold">{Number(r.기사운임||0).toLocaleString()}원</span>
+                          <div className="flex flex-col gap-0.5">
+                            <div className="text-[13px] font-bold text-gray-800">
+                              기사: {r.이름 || "-"}
+                            </div>
+                            <div className="text-[12px] text-gray-500">
+                              기사운임: <span className="font-bold text-gray-700">{Number(r.기사운임||0).toLocaleString()}원</span>
+                            </div>
                           </div>
                           <div className="flex items-center gap-2">
                             <span className="text-[20px] font-extrabold text-[#1B2B4B]">
@@ -10838,12 +11014,7 @@ function AttachmentViewer({ row, onClose, db }) {
       await tryImageCopy(blob);
       setCopyDone(id); setTimeout(() => setCopyDone(null), 2000);
     } catch {
-      try {
-        await navigator.clipboard.writeText(item.url || src || "");
-        setCopyDone(id); setTimeout(() => setCopyDone(null), 2000);
-      } catch {
-        alert("복사 실패 - 이미지를 길게 눌러 복사하세요");
-      }
+      alert("이미지 복사를 지원하지 않는 브라우저입니다.\n이미지를 우클릭하여 저장하거나, 저장 버튼을 이용해주세요.");
     }
   };
 const handleDelete = async (item) => {
@@ -11165,10 +11336,11 @@ function StopInlineBadge({ count = 0, list = [], type = "pickup", onEdit, editab
       if (s.하차시간) lines.push(`하차시간 : ${s.하차시간}`);
       const cargo = (() => {
         const raw = s.화물내용 || "";
-        if (/파레트|파렛트|박스|통/.test(raw)) return raw;
+        const hasSfx = /파레트|파렛트|박스|통/.test(raw);
+        if (hasSfx) return /\d/.test(raw) ? raw : "";
         const qty = raw || s.화물수량 || "";
         const tp = s.화물타입 || "";
-        if (!qty) return "";
+        if (!qty || qty === "없음") return "";
         return tp && tp !== "없음" ? `${qty}${tp}` : qty;
       })();
       if (cargo) lines.push(`화물내용 : ${cargo}`);
@@ -11325,6 +11497,8 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
   const [activeIdx, setActiveIdx] = React.useState(null);
   const [placeActive, setPlaceActive] = React.useState(0);
   const [deleteIdx, setDeleteIdx] = React.useState(null);
+  const [contactPickerIdx, setContactPickerIdx] = React.useState(null);
+  const [contactPickerOpts, setContactPickerOpts] = React.useState([]);
 
   const emptyStop = () => ({
     업체명: "", 주소: "", 담당자: "", 담당자번호: "", 메모: "",
@@ -11386,8 +11560,8 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
       for (const sfx of TON_SFXS) { if (tonBase.endsWith(sfx)) { tonBase = tonBase.slice(0, -sfx.length).trim(); break; } }
       return {
         ...s,
-        화물내용: cargoType && cargoType !== "없음" ? `${cargoBase}${cargoType}` : cargo,
-        차량톤수: tonType && tonType !== "없음" ? `${tonBase}${tonType}` : tonVal,
+        화물내용: (cargoType && cargoType !== "없음" && cargoBase) ? `${cargoBase}${cargoType}` : (cargo || "없음"),
+        차량톤수: (tonType && tonType !== "없음" && tonBase) ? `${tonBase}${tonType}` : (tonVal || "없음"),
       };
     }).filter(s => s.업체명?.trim());
     onSave(finalList);
@@ -11439,7 +11613,18 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
                     e.preventDefault(); e.stopPropagation();
                     if (activeIdx===idx && placeOpts.length>0) {
                       const p = placeOpts[placeActive];
-                      if (p) { setEditList(prev=>{const c=[...prev];c[idx]={...c[idx],업체명:p.업체명,주소:p.주소||"",담당자:p.담당자||"",담당자번호:p.담당자번호||""};return c;}); setActiveIdx(null); }
+                      if (p) {
+                        const contacts=(p.contacts||[]).filter(c=>c.name?.trim());
+                        const unique=[...new Map(contacts.map(c=>[c.name.trim(),c])).values()];
+                        if(unique.length>1){
+                          setEditList(prev=>{const c=[...prev];c[idx]={...c[idx],업체명:p.업체명,주소:p.주소||"",담당자:"",담당자번호:""};return c;});
+                          setContactPickerIdx(idx);
+                          setContactPickerOpts(unique);
+                        } else {
+                          setEditList(prev=>{const c=[...prev];c[idx]={...c[idx],업체명:p.업체명,주소:p.주소||"",담당자:p.담당자||"",담당자번호:p.담당자번호||""};return c;});
+                        }
+                        setActiveIdx(null);
+                      }
                     }
                     return;
                   }
@@ -11455,7 +11640,15 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
                       className={`px-2 py-1 cursor-pointer ${i===placeActive?"bg-blue-50":"hover:bg-gray-50"}`}
                       onMouseEnter={()=>setPlaceActive(i)}
                       onMouseDown={()=>{
-                        setEditList(prev=>{const c=[...prev];c[idx]={...c[idx],업체명:p.업체명,주소:p.주소||"",담당자:p.담당자||"",담당자번호:p.담당자번호||""};return c;});
+                        const contacts=(p.contacts||[]).filter(c=>c.name?.trim());
+                        const unique=[...new Map(contacts.map(c=>[c.name.trim(),c])).values()];
+                        if(unique.length>1){
+                          setEditList(prev=>{const c=[...prev];c[idx]={...c[idx],업체명:p.업체명,주소:p.주소||"",담당자:"",담당자번호:""};return c;});
+                          setContactPickerIdx(idx);
+                          setContactPickerOpts(unique);
+                        } else {
+                          setEditList(prev=>{const c=[...prev];c[idx]={...c[idx],업체명:p.업체명,주소:p.주소||"",담당자:p.담당자||"",담당자번호:p.담당자번호||""};return c;});
+                        }
                         setActiveIdx(null);
                       }}>
                       <b>{p.업체명}</b>
@@ -11480,6 +11673,25 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
                 onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();e.stopPropagation();}}}
                 onChange={e=>{const v=e.target.value;setEditList(prev=>{const c=[...prev];c[idx]={...c[idx],담당자번호:v};return c;});}} />
             </div>
+
+            {/* 담당자 선택 팝업 (복수 담당자) */}
+            {contactPickerIdx === idx && contactPickerOpts.length > 0 && (
+              <div className="border border-blue-200 rounded-lg p-2 bg-blue-50">
+                <div className="text-[11px] font-bold text-blue-600 mb-1.5">담당자 선택</div>
+                {contactPickerOpts.map((contact, ci) => (
+                  <div key={ci}
+                    className="px-2 py-1.5 cursor-pointer hover:bg-white rounded-lg flex items-center justify-between"
+                    onClick={() => {
+                      setEditList(prev=>{const c=[...prev];c[idx]={...c[idx],담당자:contact.name||"",담당자번호:contact.phone||""};return c;});
+                      setContactPickerIdx(null);
+                      setContactPickerOpts([]);
+                    }}>
+                    <span className="text-[13px] font-semibold text-gray-800">{contact.name}</span>
+                    <span className="text-[12px] text-gray-500">{contact.phone}</span>
+                  </div>
+                ))}
+              </div>
+            )}
 
             {/* 화물내용 + 타입 / 톤수 + 타입 */}
             <div className="grid grid-cols-2 gap-2">
@@ -11677,6 +11889,305 @@ function StopCountBadge({ count }) {
     >
       경유 {count}
     </span>
+  );
+}
+
+// KST 날짜 포맷 helpers (module scope, RealtimeStatus 등 독립 컴포넌트에서 사용)
+function _msFromVal(v) {
+  if (!v) return 0;
+  if (typeof v?.toMillis === "function") return v.toMillis();
+  if (typeof v?.seconds === "number") return v.seconds * 1000;
+  if (typeof v === "number") return v > 1e12 ? v : 0;
+  if (typeof v === "string") { const t = Date.parse(v); return isNaN(t) ? 0 : t; }
+  return 0;
+}
+function _fmtKst(v) {
+  const ms = _msFromVal(v);
+  return ms ? new Date(ms).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", hour12: false }) : "-";
+}
+function _creatorLabel(r) {
+  return r?.등록자명 || r?.createdByName || r?.등록자 || r?.createdByEmail || r?.createdBy || "-";
+}
+
+// 오전/오후 토글 + 시간 선택 컴포넌트
+function TimeAmPmPicker({ value, onChange, selectCls }) {
+  const [ampm, setAmpm] = React.useState(
+    value && value.startsWith("오후") ? "오후" : "오전"
+  );
+  React.useEffect(() => {
+    if (value && value.startsWith("오전")) setAmpm("오전");
+    else if (value && value.startsWith("오후")) setAmpm("오후");
+  }, [value]);
+
+  const times = React.useMemo(() => {
+    const list = [];
+    for (let h = 0; h < 12; h++) {
+      const hh = h === 0 ? 12 : h;
+      list.push(`${ampm} ${hh}시`);
+      list.push(`${ampm} ${hh}시 30분`);
+    }
+    return list;
+  }, [ampm]);
+
+  const handleAmpm = (ap) => {
+    setAmpm(ap);
+    if (value) {
+      const part = value.replace(/^오전 |^오후 /, "");
+      onChange(`${ap} ${part}`);
+    }
+  };
+
+  const btnBase = "px-2.5 py-1 text-[12px] font-semibold rounded border transition";
+  const act = "bg-[#1B2B4B] text-white border-[#1B2B4B]";
+  const inact = "bg-white text-gray-600 border-gray-300 hover:border-[#1B2B4B] hover:text-[#1B2B4B]";
+
+  return (
+    <div className="flex items-center gap-1">
+      <button type="button" className={`${btnBase} ${ampm === "오전" ? act : inact}`} onClick={() => handleAmpm("오전")}>오전</button>
+      <button type="button" className={`${btnBase} ${ampm === "오후" ? act : inact}`} onClick={() => handleAmpm("오후")}>오후</button>
+      <select
+        value={value || ""}
+        onChange={e => onChange(e.target.value)}
+        className={selectCls || "border border-gray-300 rounded-lg px-2 py-1 text-[12px] outline-none focus:border-[#1B2B4B]"}
+      >
+        <option value="">시간</option>
+        {times.map(t => (
+          <option key={t} value={t}>{t.replace(/^오전 |^오후 /, "")}</option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db }) {
+  const [clientQ, setClientQ] = React.useState(initialClient || "");
+  const [searched, setSearched] = React.useState(false);
+
+  // Date range: current month
+  const now = new Date();
+  const firstDay = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-01`;
+  const lastDay = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${new Date(now.getFullYear(), now.getMonth()+1, 0).getDate()}`;
+
+  const [dateFrom, setDateFrom] = React.useState(firstDay);
+  const [dateTo, setDateTo] = React.useState(lastDay);
+  const [results, setResults] = React.useState([]);
+  const [viewRow, setViewRow] = React.useState(null);
+  const [sendDone, setSendDone] = React.useState(null);
+
+  React.useEffect(() => {
+    if (open && initialClient) {
+      setClientQ(initialClient);
+    }
+  }, [open, initialClient]);
+
+  if (!open) return null;
+
+  const handleSearch = () => {
+    const q = clientQ.trim();
+    const filtered = (dispatchData || []).filter(r => {
+      if (q && !(r.거래처명 || "").includes(q)) return false;
+      const d = (r.상차일 || "").slice(0, 10);
+      if (dateFrom && d < dateFrom) return false;
+      if (dateTo && d > dateTo) return false;
+      return true;
+    }).sort((a, b) => (a.상차일 || "").localeCompare(b.상차일 || ""));
+    setResults(filtered);
+    setSearched(true);
+  };
+
+  const handleSend = (r) => {
+    const dateStr = (() => {
+      const d = r.상차일 || "";
+      if (d && d.includes("-")) {
+        const [y, m, day] = d.split("-");
+        return `${Number(y)}년 ${Number(m)}월 ${Number(day)}일`;
+      }
+      return d;
+    })();
+    const msg = [
+      "안녕하세요 돌캐 운송사입니다.",
+      "",
+      `📅 ${dateStr}`,
+      `상차 : ${r.상차지명 || "-"}`,
+      `하차 : ${r.하차지명 || "-"}`,
+      r.화물내용 ? `화물 : ${r.화물내용}` : "",
+      "파렛전표 및 거래명세서, 타코기록지 등",
+      "관련 서류 업로드를 부탁드립니다.",
+      "",
+      "★미 확인 시 운임 지연이 발생할 수 있습니다★",
+      "",
+      "[인수증 업로드 안내]",
+      "아래 링크에서 서류를 업로드해 주세요.",
+      "",
+      "업로드 방법",
+      "① 아래 링크 클릭",
+      "② 날짜·차량번호·이름 확인",
+      "③ 오더 선택 후 사진 업로드",
+      "",
+      "https://dispatch-app2.vercel.app/driver-upload",
+    ].filter(l => l !== null).join("\n");
+    navigator.clipboard.writeText(msg)
+      .then(() => { setSendDone(r._id); setTimeout(() => setSendDone(null), 2000); })
+      .catch(() => alert("클립보드 복사 실패"));
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-[99998] flex items-center justify-center p-4"
+      onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col"
+        onClick={e => e.stopPropagation()}>
+
+        {/* 헤더 */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 shrink-0">
+          <div className="font-bold text-[16px] text-[#1B2B4B]">첨부현황</div>
+          <button onClick={onClose}
+            className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 text-lg transition">
+            ×
+          </button>
+        </div>
+
+        {/* 검색 영역 */}
+        <div className="px-5 py-4 border-b border-gray-100 shrink-0 bg-gray-50">
+          <div className="flex flex-wrap gap-3 items-end">
+            <div className="flex flex-col gap-1">
+              <label className="text-[12px] font-bold text-gray-600">거래처명</label>
+              <input
+                type="text"
+                value={clientQ}
+                onChange={e => setClientQ(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && handleSearch()}
+                placeholder="거래처명 입력"
+                className="border border-gray-300 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B] w-[180px]"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[12px] font-bold text-gray-600">기간</label>
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1 border border-gray-300 rounded-lg px-2 py-1.5 bg-white">
+                  <select value={dateFrom.slice(0,4)} onChange={e => setDateFrom(`${e.target.value}-${dateFrom.slice(5,7)}-${dateFrom.slice(8,10)}`)}
+                    className="text-[13px] outline-none bg-transparent">
+                    {Array.from({length:5},(_,i)=>now.getFullYear()-2+i).map(y=><option key={y} value={y}>{y}년</option>)}
+                  </select>
+                  <select value={dateFrom.slice(5,7)} onChange={e => setDateFrom(`${dateFrom.slice(0,4)}-${e.target.value}-${dateFrom.slice(8,10)}`)}
+                    className="text-[13px] outline-none bg-transparent">
+                    {Array.from({length:12},(_,i)=>String(i+1).padStart(2,"0")).map(m=><option key={m} value={m}>{Number(m)}월</option>)}
+                  </select>
+                </div>
+                <span className="text-gray-400 text-[13px]">부터</span>
+                <div className="flex items-center gap-1 border border-gray-300 rounded-lg px-2 py-1.5 bg-white">
+                  <select value={dateTo.slice(0,4)} onChange={e => setDateTo(`${e.target.value}-${dateTo.slice(5,7)}-${dateTo.slice(8,10)}`)}
+                    className="text-[13px] outline-none bg-transparent">
+                    {Array.from({length:5},(_,i)=>now.getFullYear()-2+i).map(y=><option key={y} value={y}>{y}년</option>)}
+                  </select>
+                  <select value={dateTo.slice(5,7)} onChange={e => {
+                    const y = dateTo.slice(0,4);
+                    const m = e.target.value;
+                    const lastD = new Date(Number(y), Number(m), 0).getDate();
+                    setDateTo(`${y}-${m}-${String(lastD).padStart(2,"0")}`);
+                  }}
+                    className="text-[13px] outline-none bg-transparent">
+                    {Array.from({length:12},(_,i)=>String(i+1).padStart(2,"0")).map(m=><option key={m} value={m}>{Number(m)}월</option>)}
+                  </select>
+                </div>
+                <span className="text-gray-400 text-[13px]">까지</span>
+              </div>
+            </div>
+            <button
+              onClick={handleSearch}
+              className="px-5 py-2 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-lg hover:opacity-90 transition">
+              조회
+            </button>
+          </div>
+        </div>
+
+        {/* 결과 */}
+        <div className="flex-1 overflow-y-auto">
+          {!searched && (
+            <div className="flex items-center justify-center py-16 text-[14px] text-gray-400">
+              거래처명과 기간을 선택 후 조회하세요
+            </div>
+          )}
+          {searched && results.length === 0 && (
+            <div className="flex items-center justify-center py-16 text-[14px] text-gray-400">
+              해당 기간에 오더가 없습니다
+            </div>
+          )}
+          {searched && results.length > 0 && (
+            <table className="w-full text-[13px]">
+              <thead className="sticky top-0 bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th className="px-4 py-3 text-left font-bold text-gray-700">날짜</th>
+                  <th className="px-4 py-3 text-left font-bold text-gray-700">거래처</th>
+                  <th className="px-4 py-3 text-left font-bold text-gray-700">상차</th>
+                  <th className="px-4 py-3 text-left font-bold text-gray-700">하차</th>
+                  <th className="px-4 py-3 text-center font-bold text-gray-700">첨부</th>
+                  <th className="px-4 py-3 text-center font-bold text-gray-700">처리</th>
+                </tr>
+              </thead>
+              <tbody>
+                {results.map(r => {
+                  const cnt = r.attachCount || 0;
+                  const done = cnt > 0;
+                  return (
+                    <tr key={r._id} className="border-b border-gray-100 hover:bg-gray-50">
+                      <td className="px-4 py-3 text-gray-700 whitespace-nowrap">{r.상차일 || "-"}</td>
+                      <td className="px-4 py-3 text-gray-700 whitespace-nowrap">{r.거래처명 || "-"}</td>
+                      <td className="px-4 py-3 text-gray-700">{r.상차지명 || "-"}</td>
+                      <td className="px-4 py-3 text-gray-700">{r.하차지명 || "-"}</td>
+                      <td className="px-4 py-3 text-center">
+                        {done
+                          ? <span className="px-2 py-0.5 rounded-full bg-[#1B2B4B] text-white text-[11px] font-bold">{cnt}장 완료</span>
+                          : <span className="px-2 py-0.5 rounded-full bg-gray-200 text-gray-500 text-[11px] font-bold">미완료</span>
+                        }
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          {done && (
+                            <button
+                              onClick={() => setViewRow(r)}
+                              className="px-2.5 py-1 rounded-lg border border-gray-300 text-gray-600 text-[11px] font-bold hover:bg-gray-100 transition">
+                              보기
+                            </button>
+                          )}
+                          <button
+                            onClick={() => handleSend(r)}
+                            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition ${
+                              sendDone === r._id
+                                ? "bg-[#1B2B4B] text-white"
+                                : "border border-[#1B2B4B] text-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"
+                            }`}>
+                            {sendDone === r._id ? "복사됨" : "즉시전송"}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {/* 푸터 */}
+        <div className="px-5 py-3 border-t border-gray-100 shrink-0 bg-gray-50 flex justify-between items-center">
+          {searched && results.length > 0 && (
+            <span className="text-[13px] text-gray-500">
+              총 {results.length}건 · 완료 {results.filter(r => (r.attachCount||0)>0).length}건 · 미완료 {results.filter(r => !(r.attachCount||0)).length}건
+            </span>
+          )}
+          {!(searched && results.length > 0) && <span/>}
+          <button onClick={onClose}
+            className="px-5 py-2 bg-gray-200 hover:bg-gray-300 text-[#1B2B4B] text-[13px] font-bold rounded-lg transition">
+            닫기
+          </button>
+        </div>
+      </div>
+
+      {/* 첨부파일 뷰어 */}
+      {viewRow && (
+        <AttachmentViewer row={viewRow} onClose={() => setViewRow(null)} db={db} />
+      )}
+    </div>
   );
 }
 
@@ -12068,13 +12579,14 @@ const _safeStops = (v) => {
 
 // 화물내용 조합 (타입이 "없음"이거나 없으면 숫자만)
 const _cargoText = (s) => {
-  // 화물내용 자체에 이미 단위가 붙어있으면 그대로 사용
   const raw = s.화물내용 || "";
-  if (/파레트|파렛트|박스|통/.test(raw)) return raw;
+  const hasSuffix = /파레트|파렛트|박스|통/.test(raw);
+  // 숫자+단위 형식("2파레트")이면 그대로, 단위만("파레트" - 수량 없음)이면 없음 처리
+  if (hasSuffix) return /\d/.test(raw) ? raw : "";
 
   const qty = raw || s.화물수량 || "";
   const type = s.화물타입 || "";
-  if (!qty) return "";
+  if (!qty || qty === "없음") return "";
   return type && type !== "없음" && type !== "" ? `${qty}${type}` : qty;
 };
 
@@ -12130,9 +12642,8 @@ const noticeBlock = isBanchan
 
 const _pkg4d=(str)=>{const s=String(str||"").trim();if(!s)return 0;const kg=s.match(/([\d.]+)\s*kg/i);if(kg)return parseFloat(kg[1]);const ton=s.match(/([\d.]+)/);return ton?parseFloat(ton[1])*1000:0;};
 const _fkg4d=(kg)=>{if(!kg)return"";if(kg>=1000){const t=kg/1000;return t.toFixed(3).replace(/\.?0+$/,"")+"톤";}return`${kg}kg`;};
-const _sc4d=(main,stops)=>{const all=[main,...stops.map(_cargoText)].filter(Boolean);const byU={};const unk=[];for(const c of all){let hit=false;for(const u of["파레트","파렛트","박스","통"]){if(c.endsWith(u)){const n=parseFloat(c.slice(0,-u.length));if(!isNaN(n)){const k=u==="파렛트"?"파레트":u;byU[k]=(byU[k]||0)+n;hit=true;break;}}}if(!hit&&c)unk.push(c);}return[...Object.entries(byU).map(([u,n])=>`${n}${u}`),...unk].join(" / ");};
-const _totKg4d=_pkg4d(r.차량톤수)+dropStopsD.reduce((a,s)=>a+_pkg4d(_tonText(s)),0)+pickupStopsD.reduce((a,s)=>a+_pkg4d(_tonText(s)),0);
-const _totTon4d=_fkg4d(_totKg4d)||r.차량톤수||"-";
+const _sc4d=(main,stops)=>{if(!main||main==="없음")return main||"";const SFXS=["파레트","파렛트","박스","통"];const NORM={"파렛트":"파레트"};const getT=(s)=>{for(const u of SFXS){if(String(s).endsWith(u))return NORM[u]||u;}return null;};const mainT=getT(main);const extras=[];for(const s of stops){const c=_cargoText(s);if(!c)continue;const wT=getT(c);if(mainT!==null&&wT===mainT)continue;if(mainT===null&&wT===null)continue;if(!extras.includes(c))extras.push(c);}if(!extras.length)return main;return`${main} / ${extras.join(" / ")}`;};
+const _totTon4d=r.차량톤수||"-";
 const _totCargo4d=_sc4d(r.화물내용,[...pickupStopsD,...dropStopsD])||r.화물내용||"";
 const _mainPCargo4d=hasPickupStopsD&&r.화물내용?`\n화물내용 : ${r.화물내용}`:"";
 const _mainPTon4d=hasPickupStopsD&&r.차량톤수?`\n화물톤수 : ${r.차량톤수}`:"";
@@ -12213,19 +12724,19 @@ const _safeStopsF = (v) => {
 
 const _cargoTextF = (s) => {
   const raw = s.화물내용 || "";
-  if (/파레트|파렛트|박스|통/.test(raw)) return raw;
+  if (/파레트|파렛트|박스|통/.test(raw)) return /\d/.test(raw) ? raw : "";
   const qty = raw || s.화물수량 || "";
   const type = s.화물타입 || "";
-  if (!qty) return "";
+  if (!qty || qty === "없음") return "";
   return type && type !== "없음" && type !== "" ? `${qty}${type}` : qty;
 };
 
 const _tonTextF = (s) => {
   const raw = s.차량톤수 || "";
-  if (/톤|kg/.test(raw)) return raw;
+  if (/톤|kg/.test(raw)) return /\d/.test(raw) ? raw : "";
   const val = s.톤수값 || raw || "";
   const type = s.톤수타입 || "";
-  if (!val) return "";
+  if (!val || val === "없음") return "";
   return type && type !== "없음" && type !== "" ? `${val}${type}` : val;
 };
 
@@ -12261,9 +12772,8 @@ ${s.주소 || "-"}${s.담당자 ? `\n담당자 : ${s.담당자}${s.담당자번�
 
 const _pkg4f=(str)=>{const s=String(str||"").trim();if(!s)return 0;const kg=s.match(/([\d.]+)\s*kg/i);if(kg)return parseFloat(kg[1]);const ton=s.match(/([\d.]+)/);return ton?parseFloat(ton[1])*1000:0;};
 const _fkg4f=(kg)=>{if(!kg)return"";if(kg>=1000){const t=kg/1000;return t.toFixed(3).replace(/\.?0+$/,"")+"톤";}return`${kg}kg`;};
-const _sc4f=(main,stops)=>{const all=[main,...stops.map(_cargoTextF)].filter(Boolean);const byU={};const unk=[];for(const c of all){let hit=false;for(const u of["파레트","파렛트","박스","통"]){if(c.endsWith(u)){const n=parseFloat(c.slice(0,-u.length));if(!isNaN(n)){const k=u==="파렛트"?"파레트":u;byU[k]=(byU[k]||0)+n;hit=true;break;}}}if(!hit&&c)unk.push(c);}return[...Object.entries(byU).map(([u,n])=>`${n}${u}`),...unk].join(" / ");};
-const _totKg4f=_pkg4f(r.차량톤수)+dropStops.reduce((a,s)=>a+_pkg4f(_tonTextF(s)),0)+pickupStops.reduce((a,s)=>a+_pkg4f(_tonTextF(s)),0);
-const _totTon4f=_fkg4f(_totKg4f)||r.차량톤수||"-";
+const _sc4f=(main,stops)=>{if(!main||main==="없음")return main||"";const SFXS=["파레트","파렛트","박스","통"];const NORM={"파렛트":"파레트"};const getT=(s)=>{for(const u of SFXS){if(String(s).endsWith(u))return NORM[u]||u;}return null;};const mainT=getT(main);const extras=[];for(const s of stops){const c=_cargoTextF(s);if(!c)continue;const wT=getT(c);if(mainT!==null&&wT===mainT)continue;if(mainT===null&&wT===null)continue;if(!extras.includes(c))extras.push(c);}if(!extras.length)return main;return`${main} / ${extras.join(" / ")}`;};
+const _totTon4f=r.차량톤수||"-";
 const _totCargo4f=_sc4f(r.화물내용,[...pickupStops,...dropStops])||r.화물내용||"";
 const _mainPCargo4f=hasPickupStops&&r.화물내용?`\n화물내용 : ${r.화물내용}`:"";
 const _mainPTon4f=hasPickupStops&&r.차량톤수?`\n화물톤수 : ${r.차량톤수}`:"";
@@ -12482,6 +12992,10 @@ const selectedSet = React.useMemo(() => new Set(selected), [selected]);
   const [ctxAddrAllClients4, setCtxAddrAllClients4] = React.useState(false);
   const [ctxAddrResults4, setCtxAddrResults4] = React.useState([]);
 
+  // ===================== 첨부현황 =====================
+  const [attachStatusOpen, setAttachStatusOpen] = React.useState(false);
+  const [attachStatusClient, setAttachStatusClient] = React.useState("");
+
   // ===================== 일마감 상태 =====================
   const [dailyCloseOpen, setDailyCloseOpen] = React.useState(false);
   const [dailyCloseResult, setDailyCloseResult] = React.useState(null);
@@ -12525,26 +13039,24 @@ const selectedSet = React.useMemo(() => new Set(selected), [selected]);
 
     // 🔥 2단계: 우선순위 점수 부여
     const scored = base.map(r => {
-      const cargoMatch =
-        targetCargo &&
-        r.화물내용 &&
-        r.화물내용.includes(targetCargo);
-
-      const tonMatch =
-        targetTon &&
-        r.차량톤수 &&
-        r.차량톤수 === targetTon;
+      const ce = fareCargoExact(targetCargo, r.화물내용);
+      const cp = fareCargoPartial(targetCargo, r.화물내용);
+      const tonMatch = !!targetTon && !!r.차량톤수 && r.차량톤수 === targetTon;
+      const matchLabel = getFareMatchLabel(ce, cp, tonMatch);
 
       return {
         ...r,
 
         // 점수
-        _score: (cargoMatch ? 100 : 0) + (tonMatch ? 100 : 0),
+        _score: (ce ? 200 : cp ? 100 : 0) + (tonMatch ? 80 : 0),
 
         // 🔥 표시용 메타
         _match: {
-          cargo: cargoMatch,
+          cargo: ce || cp,
+          cargoExact: ce,
+          cargoPartial: cp,
           ton: tonMatch,
+          label: matchLabel,
         },
 
         _time: r.updatedAt || r.등록일 || 0,
@@ -12607,12 +13119,14 @@ setFarePanelOpen(true);
     }
 
     const scored = base.map(r => {
-      const cargoMatch = targetCargo && r.화물내용 && r.화물내용.includes(targetCargo);
-      const tonMatch = targetTon && r.차량톤수 && r.차량톤수 === targetTon;
+      const ce = fareCargoExact(targetCargo, r.화물내용);
+      const cp = fareCargoPartial(targetCargo, r.화물내용);
+      const tonMatch = !!targetTon && !!r.차량톤수 && r.차량톤수 === targetTon;
+      const matchLabel = getFareMatchLabel(ce, cp, tonMatch);
       return {
         ...r,
-        _score: (cargoMatch ? 100 : 0) + (tonMatch ? 100 : 0),
-        _match: { cargo: cargoMatch, ton: tonMatch },
+        _score: (ce ? 200 : cp ? 100 : 0) + (tonMatch ? 80 : 0),
+        _match: { cargo: ce || cp, cargoExact: ce, cargoPartial: cp, ton: tonMatch, label: matchLabel },
         _time: r.updatedAt || r.등록일 || 0,
       };
     });
@@ -12653,6 +13167,7 @@ const [copyActiveIndex, setCopyActiveIndex] = React.useState(0);
   const [editTarget, setEditTarget] = React.useState(null);
   const [farePanelOpen, setFarePanelOpen] = React.useState(false);
   const [copyFarePanelOpen, setCopyFarePanelOpen] = React.useState(false);
+  const [copyFareFilter, setCopyFareFilter] = React.useState("all");
   const [driverPick, setDriverPick] = React.useState(null);
   const [markDeliveredOnSave, setMarkDeliveredOnSave] = React.useState(false);
   React.useEffect(() => {
@@ -13133,13 +13648,11 @@ const normalizeTime = (t) => {
 };
 const generateTimeOptions = () => {
   const result = [];
-  for (let h = 6; h <= 23; h++) {
+  for (let h = 0; h < 24; h++) {
     for (let m of [0, 30]) {
       const isPM = h >= 12;
       const hour12 = h % 12 === 0 ? 12 : h % 12;
-      const label =
-        `${isPM ? "오후" : "오전"} ${hour12}시${m === 30 ? "30분" : ""}`;
-      result.push(label);
+      result.push(`${isPM ? "오후" : "오전"} ${hour12}시${m === 30 ? " 30분" : ""}`);
     }
   }
   return result;
@@ -14436,6 +14949,35 @@ const handleCloseFileUpload = async (e) => {
     found !== -1 ? found : headers.indexOf(name), -1
   );
 
+  // 상/하차지 주소 컬럼 감지 (다중 건 기사의 주소 기반 1:1 매칭에 사용)
+  const filePickupAddrColNames = ["상차지주소", "출발지주소", "출발지", "상차지", "픽업지주소", "픽업지", "출발주소", "상차주소"];
+  const fileDropAddrColNames   = ["하차지주소", "도착지주소", "도착지", "하차지", "배달지주소", "배달지", "목적지", "도착주소", "하차주소"];
+  const filePickupAddrCol = filePickupAddrColNames.reduce((f, n) => f !== -1 ? f : headers.indexOf(n), -1);
+  const fileDropAddrCol   = fileDropAddrColNames.reduce((f, n) => f !== -1 ? f : headers.indexOf(n), -1);
+
+  // 주소 유사도 점수 (0~4): 같은 기사 다중 건 매칭 정밀도 향상
+  const addrMatchScore = (a, b) => {
+    if (!a || !b) return 0;
+    const na = String(a).replace(/\s+/g, "").toLowerCase().replace(/광역시|특별시|특별자치시/g, "");
+    const nb = String(b).replace(/\s+/g, "").toLowerCase().replace(/광역시|특별시|특별자치시/g, "");
+    if (na === nb) return 4;
+    if (na.length >= 6 && nb.length >= 6) {
+      const s = na.length < nb.length ? na : nb;
+      const l = na.length < nb.length ? nb : na;
+      if (l.includes(s.slice(0, 10)) || l.includes(s.slice(0, 7))) return 3;
+    }
+    const dongA = String(a).match(/([가-힣]+동)/g) || [];
+    const dongB = String(b).match(/([가-힣]+동)/g) || [];
+    if (dongA.length && dongB.length && dongA.some(d => dongB.includes(d))) return 2;
+    const guA = String(a).match(/([가-힣]+구)/)?.[1] || "";
+    const guB = String(b).match(/([가-힣]+구)/)?.[1] || "";
+    if (guA && guA === guB) return 1;
+    const siA = String(a).match(/([가-힣]+시)/)?.[1] || "";
+    const siB = String(b).match(/([가-힣]+시)/)?.[1] || "";
+    if (siA && siA === siB) return 1;
+    return 0;
+  };
+
   if (plateCol === -1) {
     showAlert("차량번호 컬럼을 찾을 수 없습니다.");
     return;
@@ -14551,7 +15093,30 @@ const handleCloseFileUpload = async (e) => {
       }
     }
 
-    matched.forEach(mr => {
+    // ── 주소 기반 1:1 정밀 매칭 ─────────────────────────────────────────
+    // 같은 기사가 당일 여러 건일 때, 24시콜 각 행을 주소로 올바른 프로그램 레코드와 짝지음.
+    // 이 처리 없으면 24시콜 행 A의 운임이 프로그램 레코드 B와 비교되어 false positive 발생.
+    let matchedForRow = matched;
+    if (!isSumFareMatch && matched.length >= 2) {
+      const fp = filePickupAddrCol !== -1 ? String(row[filePickupAddrCol] || "").trim() : "";
+      const fd = fileDropAddrCol   !== -1 ? String(row[fileDropAddrCol]   || "").trim() : "";
+      if (fp || fd) {
+        const scored = matched.map(mr => {
+          let s = 0;
+          // 하차지(목적지)가 구별력 높으므로 가중치 높게
+          if (fd) { s += addrMatchScore(fd, mr.하차지주소 || "") * 3; s += addrMatchScore(fd, mr.하차지명 || "") * 2; }
+          if (fp) { s += addrMatchScore(fp, mr.상차지주소 || "") * 2; s += addrMatchScore(fp, mr.상차지명 || ""); }
+          return { mr, s };
+        });
+        scored.sort((a, b) => b.s - a.s);
+        // 1등이 2등보다 확연히 높을 때만 좁힘 (동점이면 모호 → 원래대로 전체 비교)
+        if (scored[0].s > 0 && (scored.length < 2 || scored[0].s > scored[1].s)) {
+          matchedForRow = [scored[0].mr];
+        }
+      }
+    }
+
+    matchedForRow.forEach(mr => {
       const seq = rows.indexOf(mr) + 1;
       const dateLabel = fileDate ? ` (${fileDate})` : "";
       const label = `${seq}번 [${mr.거래처명 || "-"}] ${mr.상차지명 || ""} → ${mr.하차지명 || ""}${dateLabel}`;
@@ -14926,16 +15491,16 @@ ${url}
   const isDark = darkMode;
 
 const head = isDark
-    ? "px-3 py-3 text-center text-[14px] font-bold text-white/90 whitespace-nowrap bg-transparent border-b border-white/10"
-    : "px-3 py-3 text-center text-[14px] font-bold text-white whitespace-nowrap bg-transparent border-b border-white/10";
+    ? "px-2 py-2 text-center text-[12px] font-bold text-white/90 whitespace-nowrap bg-transparent border-b border-white/10"
+    : "px-2 py-2 text-center text-[12px] font-bold text-white whitespace-nowrap bg-transparent border-b border-white/10";
 
  const cell = isDark
-    ? "px-3 py-3 text-[14px] text-gray-200 align-middle text-center whitespace-nowrap border-b border-gray-700"
-    : "px-3 py-3 text-[14px] text-gray-800 align-middle text-center whitespace-nowrap border-b border-gray-200";
+    ? "px-2 py-1.5 text-[12px] text-gray-200 align-middle text-center whitespace-nowrap border-b border-gray-700"
+    : "px-2 py-1.5 text-[12px] text-gray-800 align-middle text-center whitespace-nowrap border-b border-gray-200";
 
   const addrCell = isDark
-    ? "px-3 py-3 text-[14px] text-gray-200 align-middle text-center whitespace-nowrap overflow-hidden text-ellipsis border-b border-gray-700 max-w-[180px]"
-    : "px-3 py-3 text-[14px] text-gray-800 align-middle text-center whitespace-nowrap overflow-hidden text-ellipsis border-b border-gray-200 max-w-[180px]";
+    ? "px-2 py-1.5 text-[12px] text-gray-200 align-middle text-center whitespace-nowrap overflow-hidden text-ellipsis border-b border-gray-700 max-w-[160px]"
+    : "px-2 py-1.5 text-[12px] text-gray-800 align-middle text-center whitespace-nowrap overflow-hidden text-ellipsis border-b border-gray-200 max-w-[160px]";
 
   // ------------------------
   // 📌 화면 렌더링
@@ -14950,13 +15515,22 @@ const head = isDark
   );
 
  return (
-<div className="px-3 pt-1 w-full" style={{overflowX: "auto", overflowY: "unset"}}>
+<div className="px-3 pt-1 w-full" style={{overflowX: "visible", overflowY: "unset"}}>
 <CustomAlert message={alertMsg} onClose={() => setAlertMsg(null)} />
 {attachViewer && (
   <AttachmentViewer
     row={attachViewer}
     db={db}
     onClose={() => setAttachViewer(null)}
+  />
+)}
+{attachStatusOpen && (
+  <AttachStatusPanel
+    open={attachStatusOpen}
+    onClose={() => setAttachStatusOpen(false)}
+    initialClient={attachStatusClient}
+    dispatchData={dispatchData}
+    db={db}
   />
 )}
 {/* 🚫 블랙 기사 알림 팝업 */}
@@ -15154,7 +15728,6 @@ const head = isDark
   setEditPopupOpen(true);
 }} className="px-3 py-1.5 rounded-lg bg-gray-600 text-white text-sm font-semibold shadow hover:opacity-90">선택수정</button>
 
-    <button onClick={handleSaveSelected} className="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-sm font-semibold shadow hover:opacity-90">저장</button>
     <button onClick={()=>{if(!selected.length)return showAlert("삭제할 항목을 선택하세요.");const list=rows.filter(r=>selected.includes(r._id));setDeleteList(list);setDeleteConfirmOpen(true);}} className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-sm font-semibold shadow hover:opacity-90">선택삭제</button>
     <button onClick={()=>setSelected([])} className="px-3 py-1.5 rounded-lg bg-gray-300 text-gray-800 text-sm font-semibold shadow hover:opacity-90">선택초기화</button>
     <button onClick={()=>{
@@ -15180,8 +15753,7 @@ const head = isDark
 </div>
 
       {/* 테이블 */}
-      <div style={{overflowX: "visible", overflowY: "unset", width: "100%"}}
-        className={`rounded-xl overflow-visible shadow border ${isDark ? "border-gray-700" : "border-gray-200"}`}>
+      <div className={`rounded-xl shadow border ${isDark ? "border-gray-700" : "border-gray-200"}`}>
   <table className="w-auto min-w-max table-auto">
           <thead className={isDark ? "bg-[#0f172a]" : "bg-[#1B2B4B]"}>
             <tr>
@@ -15233,7 +15805,7 @@ const head = isDark
   <tr
     key={r._id || r.id || `idx-${idx}`}
     id={`row-${r._id}`}
-    onContextMenu={(e) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, row: r }); }}
+    onContextMenu={(e) => { e.preventDefault(); const _z = parseFloat(document.getElementById("root")?.style.zoom) || 1; setContextMenu({ x: e.clientX / _z, y: e.clientY / _z, row: r }); }}
 
 onDoubleClick={(e) => {
   if (e.target.closest("input")) return;
@@ -15311,9 +15883,9 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
 
     <div className="pointer-events-none invisible group-hover:visible absolute left-1/2 -translate-x-1/2 top-full mt-1 z-[99999] w-max">
       <div className="bg-gray-800 text-white text-[11px] rounded-lg px-3 py-2 shadow-xl leading-5 border border-gray-700">
-        <div>📅 등록시간: <span className="text-yellow-300">{formatKstDateTime(getCreatedMs(r))}</span></div>
-        <div>✏️ 마지막수정: <span className="text-green-300">{formatKstDateTime(getUpdatedMs(r))}</span></div>
-        <div>👤 등록자: <span className="text-blue-300">{getCreatorLabel(r)}</span></div>
+        <div>등록시간: <span className="text-yellow-300">{formatKstDateTime(getCreatedMs(r))}</span></div>
+        <div>마지막수정: <span className="text-green-300">{formatKstDateTime(getUpdatedMs(r))}</span></div>
+        <div>등록자: <span className="text-blue-300">{getCreatorLabel(r)}</span></div>
       </div>
     </div>
   </div>
@@ -15393,7 +15965,7 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
                       data-id={r._id}
                       type="text"
                       value={r.차량번호 || ""}
-                      className="border p-1 rounded w-[110px]"
+                      className="border p-0.5 rounded w-[95px] text-[13px]"
                       onChange={(e) => {
   const v = e.target.value;
   const isEmpty = v.trim() === "";
@@ -15445,7 +16017,7 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
                     <button
                       type="button"
                       title={r.배차상태 === "배차완료" ? "클릭 시 배차중으로 변경" : ""}
-                      className={`px-3 py-1 rounded-lg text-[12px] font-bold whitespace-nowrap transition-opacity hover:opacity-80 ${
+                      className={`px-2 py-0.5 rounded-lg text-[11px] font-bold whitespace-nowrap transition-opacity hover:opacity-80 ${
                         r.긴급 && r.배차상태 !== "배차완료"
                           ? "bg-red-500 text-white"
                           : r.배차상태 === "배차완료"
@@ -15896,16 +16468,11 @@ checkWarningStatus(c.거래처명, "거래처");
       </Field>
 
       <Field label="상차시간">
-        <select
-          className="inputStyle"
+        <TimeAmPmPicker
           value={copyTarget?.상차시간 ?? ""}
-          onChange={(e)=>setCopyTarget(p=>({...p, 상차시간:e.target.value}))}
-        >
-          <option value="">선택</option>
-          {generateTimeOptions().map(t=>(
-            <option key={t} value={t}>{t}</option>
-          ))}
-        </select>
+          onChange={v => setCopyTarget(p=>({...p, 상차시간:v}))}
+          selectCls="inputStyle"
+        />
       </Field>
       <Field label="상차방법">
   <select
@@ -16062,16 +16629,11 @@ checkWarningStatus(c.거래처명, "거래처");
       </Field>
 
       <Field label="하차시간">
-        <select
-          className="inputStyle"
+        <TimeAmPmPicker
           value={copyTarget?.하차시간 ?? ""}
-          onChange={(e)=>setCopyTarget(p=>({...p, 하차시간:e.target.value}))}
-        >
-          <option value="">선택</option>
-          {generateTimeOptions().map(t=>(
-            <option key={t} value={t}>{t}</option>
-          ))}
-        </select>
+          onChange={v => setCopyTarget(p=>({...p, 하차시간:v}))}
+          selectCls="inputStyle"
+        />
       </Field>
 <Field label="하차방법">
   <select
@@ -16677,8 +17239,36 @@ value={copyTarget?.화물수량 || ""}
               <span className="text-[13px] font-extrabold text-[#1B2B4B]">과거 운송 기록</span>
               <span className="text-[11px] font-semibold text-gray-400">유사도순 · 최신순</span>
             </div>
+            {/* 필터 탭 */}
+            {(() => {
+              const filterLabels = ["all","완전일치","부분일치","톤수일치","경로일치"];
+              const filterCounts = {};
+              (fareResult.records || []).forEach(r => {
+                const l = r._match?.label || "경로일치";
+                filterCounts[l] = (filterCounts[l] || 0) + 1;
+              });
+              return (
+                <div className="flex gap-1.5 pb-3 flex-wrap">
+                  {filterLabels.map(l => {
+                    const cnt = l === "all" ? fareResult.records.length : (filterCounts[l] || 0);
+                    if (l !== "all" && cnt === 0) return null;
+                    return (
+                      <button key={l}
+                        onClick={() => setCopyFareFilter(l)}
+                        className={`px-2.5 py-1 text-[11px] font-bold rounded-full transition border ${
+                          copyFareFilter === l
+                            ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
+                            : "bg-white text-gray-600 border-gray-200 hover:border-gray-400"
+                        }`}>
+                        {l === "all" ? `전체 ${cnt}건` : `${l} ${cnt}`}
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })()}
             <div className="space-y-2">
-              {fareResult.records.map((rec, idx) => {
+              {(fareResult.records || []).filter(r => copyFareFilter === "all" || (r._match?.label || "경로일치") === copyFareFilter).map((rec, idx) => {
                 const fare = Number(String(rec.청구운임||"0").replace(/[^\d]/g,""));
                 const { label: fareLabel, cls: fareCls } = getFareTag(fare);
                 const isTop = idx === 0;
@@ -16696,14 +17286,17 @@ value={copyTarget?.화물수량 || ""}
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-[12px] font-bold text-gray-400">{rec.상차일}</span>
                         <div className="flex gap-1">
-                          {(rec._match?.cargo && rec._match?.ton) && (
-                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-[#1B2B4B] text-white">최적매칭</span>
+                          {rec._match?.label === "완전일치" && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-[#1B2B4B] text-white">완전일치</span>
                           )}
-                          {rec._match?.ton && !rec._match?.cargo && (
+                          {rec._match?.label === "부분일치" && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-green-600 text-white">부분일치</span>
+                          )}
+                          {rec._match?.label === "톤수일치" && (
                             <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-gray-700 text-white">톤수일치</span>
                           )}
-                          {rec._match?.cargo && !rec._match?.ton && (
-                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-gray-700 text-white">화물일치</span>
+                          {rec._match?.label === "경로일치" && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-gray-400 text-white">경로일치</span>
                           )}
                           <span className={`px-2.5 py-1 text-[11px] font-extrabold rounded-full border ${fareCls}`}>{fareLabel}</span>
                         </div>
@@ -16720,10 +17313,13 @@ value={copyTarget?.화물수량 || ""}
                           style={{ left: `calc(${barPct}% - 5px)` }} />
                       </div>
                       <div className="flex items-center justify-between">
-                        <div className="text-[12px] font-semibold text-gray-400">
-                          기사 <span className="text-gray-700 font-bold">{rec.이름 || "-"}</span>
-                          <span className="mx-1.5 text-gray-300">·</span>
-                          기사운임 <span className="text-gray-700 font-bold">{Number(rec.기사운임||0).toLocaleString()}원</span>
+                        <div className="flex flex-col gap-0.5">
+                          <div className="text-[13px] font-bold text-gray-800">
+                            기사: {rec.이름 || "-"}
+                          </div>
+                          <div className="text-[12px] text-gray-500">
+                            기사운임: <span className="font-bold text-gray-700">{Number(rec.기사운임||0).toLocaleString()}원</span>
+                          </div>
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="text-[20px] font-extrabold text-[#1B2B4B]">{fare.toLocaleString()}원</span>
@@ -16868,7 +17464,7 @@ value={copyTarget?.화물수량 || ""}
       {editPopupOpen && editTarget && (
 
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-slate-100 rounded-2xl shadow-2xl w-[740px] max-h-[92vh] overflow-y-auto flex flex-col">
+          <div className="bg-slate-100 rounded-2xl shadow-2xl w-[740px] overflow-y-auto flex flex-col" style={{ maxHeight: `${Math.floor(88 / (parseFloat(document.getElementById("root")?.style.zoom) || 1))}vh` }}>
 
             {/* ===== 헤더 ===== */}
             <div className="flex justify-between items-center px-6 py-4 bg-[#1B2B4B] rounded-t-2xl shrink-0">
@@ -16971,8 +17567,36 @@ value={copyTarget?.화물수량 || ""}
               <span className="text-[13px] font-extrabold text-[#1B2B4B]">과거 운송 기록</span>
               <span className="text-[11px] font-semibold text-gray-400">유사도순 · 최신순</span>
             </div>
+            {/* 필터 탭 */}
+            {(() => {
+              const filterLabels = ["all","완전일치","부분일치","톤수일치","경로일치"];
+              const filterCounts = {};
+              (fareResult.records || []).forEach(r => {
+                const l = r._match?.label || "경로일치";
+                filterCounts[l] = (filterCounts[l] || 0) + 1;
+              });
+              return (
+                <div className="flex gap-1.5 pb-3 flex-wrap">
+                  {filterLabels.map(l => {
+                    const cnt = l === "all" ? fareResult.records.length : (filterCounts[l] || 0);
+                    if (l !== "all" && cnt === 0) return null;
+                    return (
+                      <button key={l}
+                        onClick={() => setCopyFareFilter(l)}
+                        className={`px-2.5 py-1 text-[11px] font-bold rounded-full transition border ${
+                          copyFareFilter === l
+                            ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
+                            : "bg-white text-gray-600 border-gray-200 hover:border-gray-400"
+                        }`}>
+                        {l === "all" ? `전체 ${cnt}건` : `${l} ${cnt}`}
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })()}
             <div className="space-y-2">
-              {fareResult.records.map((rec, idx) => {
+              {(fareResult.records || []).filter(r => copyFareFilter === "all" || (r._match?.label || "경로일치") === copyFareFilter).map((rec, idx) => {
                 const fare = Number(String(rec.청구운임||"0").replace(/[^\d]/g,""));
                 const { label: fareLabel, cls: fareCls } = getFareTag(fare);
                 const isTop = idx === 0;
@@ -16990,14 +17614,17 @@ value={copyTarget?.화물수량 || ""}
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-[12px] font-bold text-gray-400">{rec.상차일}</span>
                         <div className="flex gap-1">
-                          {(rec._match?.cargo && rec._match?.ton) && (
-                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-[#1B2B4B] text-white">최적매칭</span>
+                          {rec._match?.label === "완전일치" && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-[#1B2B4B] text-white">완전일치</span>
                           )}
-                          {rec._match?.ton && !rec._match?.cargo && (
+                          {rec._match?.label === "부분일치" && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-green-600 text-white">부분일치</span>
+                          )}
+                          {rec._match?.label === "톤수일치" && (
                             <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-gray-700 text-white">톤수일치</span>
                           )}
-                          {rec._match?.cargo && !rec._match?.ton && (
-                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-gray-700 text-white">화물일치</span>
+                          {rec._match?.label === "경로일치" && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-gray-400 text-white">경로일치</span>
                           )}
                           <span className={`px-2.5 py-1 text-[11px] font-extrabold rounded-full border ${fareCls}`}>{fareLabel}</span>
                         </div>
@@ -17014,10 +17641,13 @@ value={copyTarget?.화물수량 || ""}
                           style={{ left: `calc(${barPct}% - 5px)` }} />
                       </div>
                       <div className="flex items-center justify-between">
-                        <div className="text-[12px] font-semibold text-gray-400">
-                          기사 <span className="text-gray-700 font-bold">{rec.이름 || "-"}</span>
-                          <span className="mx-1.5 text-gray-300">·</span>
-                          기사운임 <span className="text-gray-700 font-bold">{Number(rec.기사운임||0).toLocaleString()}원</span>
+                        <div className="flex flex-col gap-0.5">
+                          <div className="text-[13px] font-bold text-gray-800">
+                            기사: {rec.이름 || "-"}
+                          </div>
+                          <div className="text-[12px] text-gray-500">
+                            기사운임: <span className="font-bold text-gray-700">{Number(rec.기사운임||0).toLocaleString()}원</span>
+                          </div>
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="text-[20px] font-extrabold text-[#1B2B4B]">{fare.toLocaleString()}원</span>
@@ -17213,37 +17843,11 @@ value={copyTarget?.화물수량 || ""}
   {/* ================= 상차시간 + 기준 ================= */}
   <div>
     <label>상차시간</label>
-    <select
-      className="border p-2 rounded w-full"
+    <TimeAmPmPicker
       value={editTarget.상차시간 || ""}
-      onChange={(e) =>
-        setEditTarget((p) => ({ ...p, 상차시간: e.target.value }))
-      }
-    >
-      <option value="">선택없음</option>
-      {[
-       "오전 6시","오전 6시 30분",
-        "오전 7시","오전 7시 30분",
-        "오전 8시","오전 8시 30분",
-        "오전 9시","오전 9시 30분",
-        "오전 10시","오전 10시 30분",
-        "오전 11시","오전 11시 30분",
-        "오후 12시","오후 12시 30분",
-        "오후 1시","오후 1시 30분",
-        "오후 2시","오후 2시 30분",
-        "오후 3시","오후 3시 30분",
-        "오후 4시","오후 4시 30분",
-        "오후 5시","오후 5시 30분",
-        "오후 6시","오후 6시 30분",
-        "오후 7시","오후 7시 30분",
-        "오후 8시","오후 8시 30분",
-        "오후 9시","오후 9시 30분",
-        "오후 10시","오후 10시 30분",
-        "오후 11시","오후 11시 30분",
-      ].map((t) => (
-        <option key={t} value={t}>{t}</option>
-      ))}
-    </select>
+      onChange={v => setEditTarget(p => ({ ...p, 상차시간: v }))}
+      selectCls="border p-2 rounded w-full"
+    />
 
     {/* ✅ 상차시간 기준 */}
     <select
@@ -17275,37 +17879,11 @@ value={copyTarget?.화물수량 || ""}
   {/* ================= 하차시간 + 기준 ================= */}
   <div>
     <label>하차시간</label>
-    <select
-      className="border p-2 rounded w-full"
+    <TimeAmPmPicker
       value={editTarget.하차시간 || ""}
-      onChange={(e) =>
-        setEditTarget((p) => ({ ...p, 하차시간: e.target.value }))
-      }
-    >
-      <option value="">선택없음</option>
-      {[
-       "오전 6시","오전 6시 30분",
-        "오전 7시","오전 7시 30분",
-        "오전 8시","오전 8시 30분",
-        "오전 9시","오전 9시 30분",
-        "오전 10시","오전 10시 30분",
-        "오전 11시","오전 11시 30분",
-        "오후 12시","오후 12시 30분",
-        "오후 1시","오후 1시 30분",
-        "오후 2시","오후 2시 30분",
-        "오후 3시","오후 3시 30분",
-        "오후 4시","오후 4시 30분",
-        "오후 5시","오후 5시 30분",
-        "오후 6시","오후 6시 30분",
-        "오후 7시","오후 7시 30분",
-        "오후 8시","오후 8시 30분",
-        "오후 9시","오후 9시 30분",
-        "오후 10시","오후 10시 30분",
-        "오후 11시","오후 11시 30분",
-      ].map((t) => (
-        <option key={t} value={t}>{t}</option>
-      ))}
-    </select>
+      onChange={v => setEditTarget(p => ({ ...p, 하차시간: v }))}
+      selectCls="border p-2 rounded w-full"
+    />
 
     {/* ✅ 하차시간 기준 */}
     <select
@@ -18624,7 +19202,7 @@ if (editTarget.거래처명) {
       {contextMenu && (
         <div
           className="fixed z-[999999] bg-white border border-gray-200 rounded-xl shadow-2xl py-1.5 min-w-[168px] select-none"
-          style={{ top: Math.min(contextMenu.y, window.innerHeight - 240), left: Math.min(contextMenu.x, window.innerWidth - 180) }}
+          style={{ top: Math.min(contextMenu.y, window.innerHeight / (parseFloat(document.getElementById("root")?.style.zoom) || 1) - 240), left: Math.min(contextMenu.x, window.innerWidth / (parseFloat(document.getElementById("root")?.style.zoom) || 1) - 180) }}
           onClick={e => e.stopPropagation()}
         >
           {/* 기사복사 */}
@@ -18643,8 +19221,18 @@ if (editTarget.거래처명) {
           <button
             className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
             onClick={() => {
+              const r = contextMenu.row;
               const url = `${window.location.origin}/driver-upload`;
-              const msg = `[인수증 업로드 안내]\n운송 완료 후 아래 링크를 통해 인수증을 업로드해 주시기 바랍니다.\n\n${url}\n\n서명 받은 인수증(파렛전표) 사진을 촬영하여 업로드해 주세요.\n미업로드 시 운임 정산이 지연될 수 있습니다.`;
+              const dateStr = (() => {
+                const d = r.상차일 || "";
+                if (d && d.includes("-")) {
+                  const [, m, day] = d.split("-");
+                  return `${Number(m)}월 ${Number(day)}일`;
+                }
+                return d;
+              })();
+              const orderInfo = `오더 정보\n${dateStr}\n\n${r.상차지명 || "-"} → ${r.하차지명 || "-"}${r.화물내용 ? `\n${r.화물내용}` : ""}${r.차량톤수 ? ` / ${r.차량톤수}` : ""}`;
+              const msg = `${orderInfo}\n\n[인수증 업로드 안내]\n운송 완료 후 아래 링크를 통해 인수증을 업로드해 주시기 바랍니다.\n\n${url}\n\n서명 받은 인수증(파렛전표) 사진을 촬영하여 업로드해 주세요.\n미업로드 시 운임 정산이 지연될 수 있습니다.`;
               navigator.clipboard.writeText(msg).then(() => showAlert("업로드 안내 메시지가 복사되었습니다.\n기사에게 붙여넣기로 전달하세요.")).catch(() => showAlert(`링크: ${url}`));
               setContextMenu(null);
             }}
@@ -18705,6 +19293,17 @@ if (editTarget.거래처명) {
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
             운임조회
+          </button>
+          <button
+            className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
+            onClick={() => {
+              setAttachStatusClient(contextMenu.row.거래처명 || "");
+              setAttachStatusOpen(true);
+              setContextMenu(null);
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+            첨부현황
           </button>
           <div className="border-t border-gray-100 my-1"/>
           {/* 삭제 */}
@@ -18839,14 +19438,23 @@ if (editTarget.거래처명) {
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-[12px] font-bold text-gray-400">{rec.상차일}</span>
                       <div className="flex gap-1">
-                        {rec._match?.cargo && <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-gray-700 text-white">화물일치</span>}
-                        {rec._match?.ton && <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-gray-700 text-white">톤수일치</span>}
+                        {rec._match?.label === "완전일치" && <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-[#1B2B4B] text-white">완전일치</span>}
+                        {rec._match?.label === "부분일치" && <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-green-600 text-white">부분일치</span>}
+                        {rec._match?.label === "톤수일치" && <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-gray-700 text-white">톤수일치</span>}
+                        {rec._match?.label === "경로일치" && <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-gray-400 text-white">경로일치</span>}
                       </div>
                     </div>
                     <div className="text-[13px] font-bold text-gray-900 mb-1">{rec.상차지명 || "-"} → {rec.하차지명 || "-"}</div>
                     <div className="text-[12px] text-gray-400 mb-2">{rec.차량종류 || "-"} / {rec.차량톤수 || "-"}{rec.화물내용 ? ` · ${rec.화물내용}` : ""}</div>
                     <div className="flex items-center justify-between">
-                      <span className="text-[12px] text-gray-400">기사 <span className="text-gray-700 font-bold">{rec.이름 || "-"}</span></span>
+                      <div className="flex flex-col gap-0.5">
+                        <div className="text-[13px] font-bold text-gray-800">
+                          기사: {rec.이름 || "-"}
+                        </div>
+                        <div className="text-[12px] text-gray-500">
+                          기사운임: <span className="font-bold text-gray-700">{Number(rec.기사운임 || 0).toLocaleString()}원</span>
+                        </div>
+                      </div>
                       <span className="text-[18px] font-extrabold text-[#1B2B4B]">{fare.toLocaleString()}원</span>
                     </div>
                   </div>
@@ -18960,14 +19568,17 @@ if (editTarget.거래처명) {
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-[12px] font-bold text-gray-400">{rec.상차일}</span>
                         <div className="flex gap-1">
-                          {(rec._match?.cargo && rec._match?.ton) && (
-                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-[#1B2B4B] text-white">최적매칭</span>
+                          {rec._match?.label === "완전일치" && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-[#1B2B4B] text-white">완전일치</span>
                           )}
-                          {rec._match?.ton && !rec._match?.cargo && (
+                          {rec._match?.label === "부분일치" && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-green-600 text-white">부분일치</span>
+                          )}
+                          {rec._match?.label === "톤수일치" && (
                             <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-gray-700 text-white">톤수일치</span>
                           )}
-                          {rec._match?.cargo && !rec._match?.ton && (
-                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-gray-700 text-white">화물일치</span>
+                          {rec._match?.label === "경로일치" && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-gray-400 text-white">경로일치</span>
                           )}
                           <span className={`px-2.5 py-1 text-[11px] font-extrabold rounded-full border ${fareCls}`}>{fareLabel}</span>
                         </div>
@@ -18984,10 +19595,13 @@ if (editTarget.거래처명) {
                           style={{ left: `calc(${barPct}% - 5px)` }} />
                       </div>
                       <div className="flex items-center justify-between">
-                        <div className="text-[12px] font-semibold text-gray-400">
-                          기사 <span className="text-gray-700 font-bold">{rec.이름 || "-"}</span>
-                          <span className="mx-1.5 text-gray-300">·</span>
-                          기사운임 <span className="text-gray-700 font-bold">{Number(rec.기사운임 || 0).toLocaleString()}원</span>
+                        <div className="flex flex-col gap-0.5">
+                          <div className="text-[13px] font-bold text-gray-800">
+                            기사: {rec.이름 || "-"}
+                          </div>
+                          <div className="text-[12px] text-gray-500">
+                            기사운임: <span className="font-bold text-gray-700">{Number(rec.기사운임 || 0).toLocaleString()}원</span>
+                          </div>
                         </div>
                         <span className="text-[20px] font-extrabold text-[#1B2B4B]">{fare.toLocaleString()}원</span>
                       </div>
@@ -19891,17 +20505,15 @@ function MemoMore({ text = "" }) {
 // ===================== DispatchApp.jsx (PART 5/8 — 차량번호 항상 활성화 + 선택수정→수정완료 통합버튼 + 주소/메모 더보기 + 대용량업로드 + 신규 오더 등록) =====================
 
 function generateTimeOptions() {
-  const list = [];
-  const toLabel = (h, m) => {
-    const ampm = h < 12 ? "오전" : "오후";
-    const hh = ((h % 12) || 12);
-    return `${ampm} ${hh}시${m ? " 30분" : ""}`;
-  };
-  for (let h = 6; h <= 22; h++) {
-    list.push(toLabel(h, 0));
-    if (h !== 22) list.push(toLabel(h, 30));
+  const result = [];
+  for (let h = 0; h < 24; h++) {
+    for (let m of [0, 30]) {
+      const isPM = h >= 12;
+      const hour12 = h % 12 === 0 ? 12 : h % 12;
+      result.push(`${isPM ? "오후" : "오전"} ${hour12}시${m === 30 ? " 30분" : ""}`);
+    }
   }
-  return list;
+  return result;
 }
 function DispatchStatus({
   dispatchData = [],
@@ -21388,16 +22000,13 @@ ${r.하차지주소||""}${(()=>{const line=buildContactLine(r.하차지담당자
         }
 
 const _ss5f=(v)=>{if(Array.isArray(v)&&v.length>0)return v;if(typeof v==="string"&&v.trim().startsWith("[")){try{const p=JSON.parse(v);if(Array.isArray(p))return p;}catch{}}if(v&&typeof v==="object"&&!Array.isArray(v)){const ks=Object.keys(v);if(ks.length&&ks.every(k=>/^\d+$/.test(k)))return ks.sort((a,b)=>Number(a)-Number(b)).map(k=>v[k]);if(v.업체명)return[v];}return[];};
-const _ct5f=(s)=>{const raw=s.화물내용||"";if(/파레트|파렛트|박스|통/.test(raw))return raw;const qty=raw||s.화물수량||"";const tp=s.화물타입||"";if(!qty)return"";return tp&&tp!=="없음"?`${qty}${tp}`:qty;};
-const _tt5f=(s)=>{const raw=s.차량톤수||"";if(/톤|kg/.test(raw))return raw;const val=s.톤수값||raw||"";const tp=s.톤수타입||"";if(!val)return"";return tp&&tp!=="없음"?`${val}${tp}`:val;};
-const _pkg5f=(str)=>{const s=String(str||"").trim();if(!s)return 0;const kg=s.match(/([\d.]+)\s*kg/i);if(kg)return parseFloat(kg[1]);const ton=s.match(/([\d.]+)/);return ton?parseFloat(ton[1])*1000:0;};
-const _fkg5f=(kg)=>{if(!kg)return"";if(kg>=1000){const t=kg/1000;return t.toFixed(3).replace(/\.?0+$/,"")+"톤";}return`${kg}kg`;};
-const _sc5f=(main,stops)=>{const all=[main,...stops.map(_ct5f)].filter(Boolean);const byU={};const unk=[];for(const c of all){let hit=false;for(const u of["파레트","파렛트","박스","통"]){if(c.endsWith(u)){const n=parseFloat(c.slice(0,-u.length));if(!isNaN(n)){const k=u==="파렛트"?"파레트":u;byU[k]=(byU[k]||0)+n;hit=true;break;}}}if(!hit&&c)unk.push(c);}return[...Object.entries(byU).map(([u,n])=>`${n}${u}`),...unk].join(" / ");};
+const _ct5f=(s)=>{const raw=s.화물내용||"";if(/파레트|파렛트|박스|통/.test(raw))return /\d/.test(raw)?raw:"";const qty=raw||s.화물수량||"";const tp=s.화물타입||"";if(!qty||qty==="없음")return"";return tp&&tp!=="없음"?`${qty}${tp}`:qty;};
+const _tt5f=(s)=>{const raw=s.차량톤수||"";if(/톤|kg/.test(raw))return /\d/.test(raw)?raw:"";const val=s.톤수값||raw||"";const tp=s.톤수타입||"";if(!val||val==="없음")return"";return tp&&tp!=="없음"?`${val}${tp}`:val;};
+const _sc5f=(main,stops)=>{if(!main||main==="없음")return main||"";const SFXS=["파레트","파렛트","박스","통"];const NORM={"파렛트":"파레트"};const getT=(s)=>{for(const u of SFXS){if(String(s).endsWith(u))return NORM[u]||u;}return null;};const mainT=getT(main);const extras=[];for(const s of stops){const c=_ct5f(s);if(!c)continue;const wT=getT(c);if(mainT!==null&&wT===mainT)continue;if(mainT===null&&wT===null)continue;if(!extras.includes(c))extras.push(c);}if(!extras.length)return main;return`${main} / ${extras.join(" / ")}`;};
 
 const _pStops5f=_ss5f(r.경유상차목록||r.경유지_상차).filter(s=>s?.업체명?.trim());
 const _dStops5f=_ss5f(r.경유하차목록||r.경유지_하차).filter(s=>s?.업체명?.trim());
-const _totKg5f=_pkg5f(r.차량톤수)+_dStops5f.reduce((a,s)=>a+_pkg5f(_tt5f(s)),0)+_pStops5f.reduce((a,s)=>a+_pkg5f(_tt5f(s)),0);
-const _totTon5f=_fkg5f(_totKg5f)||r.차량톤수||"-";
+const _totTon5f=r.차량톤수||"-";
 const _totCargo5f=_sc5f(r.화물내용,[..._pStops5f,..._dStops5f])||r.화물내용||"";
 const _pHas5f=_pStops5f.length>0;
 const _dHas5f=_dStops5f.length>0;
@@ -21508,33 +22117,26 @@ if (row?.업체전달상태 !== "전달완료") {
     }
 
     // 2️⃣ 매칭 정보 + 정렬 점수
+    const targetCargo5 = String(editTarget.화물내용 || "").trim();
+    const targetTon5 = String(editTarget.차량톤수 || "").trim();
     const records = base
       .map((r) => {
-const basePallet = getPalletCount(editTarget.화물내용);
-const recPallet  = getPalletCount(r.화물내용);
-const cargoMatch =
-  editTarget.화물내용 &&
-  r.화물내용 &&
-  r.화물내용.includes(editTarget.화물내용);
-
-const tonMatch =
-  String(editTarget.차량톤수 || "") === String(r.차량톤수 || "");
-
-const palletDiff =
-  basePallet != null && recPallet != null
-    ? Math.abs(basePallet - recPallet)
-    : null;
+const ce = fareCargoExact(targetCargo5, r.화물내용);
+const cp = fareCargoPartial(targetCargo5, r.화물내용);
+const tonMatch = !!targetTon5 && !!r.차량톤수 && r.차량톤수 === targetTon5;
+const matchLabel = getFareMatchLabel(ce, cp, tonMatch);
 
 let priority = 0;
 
 // 🔥 PART 4와 동일한 우선순위
-if (cargoMatch && tonMatch) priority = 4;
-else if (cargoMatch) priority = 3;
+if (ce && tonMatch) priority = 4;
+else if (ce) priority = 3;
+else if (cp && tonMatch) priority = 3;
 else if (tonMatch) priority = 2;
-else if (palletDiff !== null) priority = 1;
+else if (cp) priority = 1;
         return {
           ...r,
-          _match: { cargo: cargoMatch, ton: tonMatch },
+          _match: { cargo: ce || cp, cargoExact: ce, cargoPartial: cp, ton: tonMatch, label: matchLabel },
           _priority: priority,
           _date: r.상차일 || "",
         };
@@ -21583,12 +22185,14 @@ else if (palletDiff !== null) priority = 1;
     const targetTon = String(copyTarget.차량톤수 || "").trim();
 
     const scored = base.map(r => {
-      const cargoMatch = targetCargo && r.화물내용 && r.화물내용.includes(targetCargo);
-      const tonMatch = targetTon && r.차량톤수 && r.차량톤수 === targetTon;
+      const ce = fareCargoExact(targetCargo, r.화물내용);
+      const cp = fareCargoPartial(targetCargo, r.화물내용);
+      const tonMatch = !!targetTon && !!r.차량톤수 && r.차량톤수 === targetTon;
+      const matchLabel = getFareMatchLabel(ce, cp, tonMatch);
       return {
         ...r,
-        _score: (cargoMatch ? 100 : 0) + (tonMatch ? 100 : 0),
-        _match: { cargo: cargoMatch, ton: tonMatch },
+        _score: (ce ? 200 : cp ? 100 : 0) + (tonMatch ? 80 : 0),
+        _match: { cargo: ce || cp, cargoExact: ce, cargoPartial: cp, ton: tonMatch, label: matchLabel },
         _time: r.updatedAt || r.등록일 || 0,
       };
     });
@@ -22402,10 +23006,15 @@ const save = {
     return () => { document.removeEventListener("click", close); document.removeEventListener("keydown", onKey); };
   }, [contextMenuDS]);
 
+  // ===================== 첨부현황 =====================
+  const [attachStatusDSOpen, setAttachStatusDSOpen] = React.useState(false);
+  const [attachStatusDSClient, setAttachStatusDSClient] = React.useState("");
+
   // ===================== 운임조회 (컨텍스트메뉴 Part 5) =====================
   const [ctxFare5Target, setCtxFare5Target] = React.useState(null);
   const [ctxFare5PanelOpen, setCtxFare5PanelOpen] = React.useState(false);
   const [ctxFare5Result, setCtxFare5Result] = React.useState(null);
+  const [fare5Filter, setFare5Filter] = React.useState("all");
   const [ctxNoHistory5Open, setCtxNoHistory5Open] = React.useState(false);
   const [ctxAddrSearch5Open, setCtxAddrSearch5Open] = React.useState(false);
   const [ctxAddrPickup5, setCtxAddrPickup5] = React.useState("");
@@ -22480,12 +23089,14 @@ const save = {
     }
 
     const scored = base.map(r => {
-      const cargoMatch = targetCargo && r.화물내용 && r.화물내용.includes(targetCargo);
-      const tonMatch = targetTon && r.차량톤수 && r.차량톤수 === targetTon;
+      const ce = fareCargoExact(targetCargo, r.화물내용);
+      const cp = fareCargoPartial(targetCargo, r.화물내용);
+      const tonMatch = !!targetTon && !!r.차량톤수 && r.차량톤수 === targetTon;
+      const matchLabel = getFareMatchLabel(ce, cp, tonMatch);
       return {
         ...r,
-        _score: (cargoMatch ? 100 : 0) + (tonMatch ? 100 : 0),
-        _match: { cargo: cargoMatch, ton: tonMatch },
+        _score: (ce ? 200 : cp ? 100 : 0) + (tonMatch ? 80 : 0),
+        _match: { cargo: ce || cp, cargoExact: ce, cargoPartial: cp, ton: tonMatch, label: matchLabel },
         _time: r.updatedAt || r.등록일 || 0,
       };
     });
@@ -22564,6 +23175,15 @@ return (
     row={attachViewer}
     db={db}
     onClose={() => setAttachViewer(null)}
+  />
+)}
+{attachStatusDSOpen && (
+  <AttachStatusPanel
+    open={attachStatusDSOpen}
+    onClose={() => setAttachStatusDSOpen(false)}
+    initialClient={attachStatusDSClient}
+    dispatchData={dispatchData}
+    db={db}
   />
 )}
 {blackAlert && (
@@ -22671,7 +23291,7 @@ return (
       </div>
 
       {/* ===== 페이지+검색+날짜+버튼 한 줄 ===== */}
-      <div className="flex items-center gap-1.5 flex-wrap mb-2">
+      <div className="flex items-center gap-1.5 flex-wrap mb-2" style={{maxWidth:"calc(100vw - 2rem)"}}>
 
         {/* 페이지 이동 */}
         <button disabled={page===0} onClick={()=>setPage(p=>Math.max(0,p-1))}
@@ -22782,7 +23402,7 @@ return (
     <tr
       key={id}
       id={`row-${id}`}
-      onContextMenu={(e) => { e.preventDefault(); setContextMenuDS({ x: e.clientX, y: e.clientY, row: r }); }}
+      onContextMenu={(e) => { e.preventDefault(); const _z = parseFloat(document.getElementById("root")?.style.zoom) || 1; setContextMenuDS({ x: e.clientX / _z, y: e.clientY / _z, row: r }); }}
       onDoubleClick={() => {
   const rawCargo = String(row.화물내용 || "");
 
@@ -22840,9 +23460,20 @@ return (
         {(page * pageSize) + i + 1}
       </td>
 
-      <td className="px-3 py-3 text-[14px] font-medium text-gray-800 text-center border-b border-gray-200 border-r border-r-gray-100 whitespace-nowrap">
-        {row.등록일}
-      </td>
+      <td className="px-3 py-3 text-[14px] font-medium text-gray-800 text-center border-b border-gray-200 border-r border-r-gray-100 whitespace-nowrap overflow-visible">
+  <div className="relative inline-block group">
+    <span className="underline decoration-dotted underline-offset-2 cursor-default">
+      {row.등록일 || "-"}
+    </span>
+    <div className="pointer-events-none invisible group-hover:visible absolute left-1/2 -translate-x-1/2 top-full mt-1 z-[99999] w-max">
+      <div className="bg-gray-800 text-white text-[11px] rounded-lg px-3 py-2 shadow-xl leading-5 border border-gray-700">
+        <div>등록시간: <span className="text-yellow-300">{_fmtKst(row.createdAt || row.등록일시 || row.등록시간 || (row.등록일 && `${row.등록일}T00:00:00`))}</span></div>
+        <div>마지막수정: <span className="text-green-300">{_fmtKst(row.updatedAt || row.lastUpdated)}</span></div>
+        <div>등록자: <span className="text-blue-300">{_creatorLabel(row)}</span></div>
+      </div>
+    </div>
+  </div>
+</td>
 
                   {/* -------------------- 반복 입력 컬럼 -------------------- */}
 {[
@@ -23156,7 +23787,7 @@ onBlur={(e) => {
       {/* ===================== 선택수정(팝업) ===================== */}
       {editPopupOpen && editTarget && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-slate-100 rounded-2xl shadow-2xl w-[740px] max-h-[92vh] overflow-y-auto flex flex-col">
+          <div className="bg-slate-100 rounded-2xl shadow-2xl w-[740px] overflow-y-auto flex flex-col" style={{ maxHeight: `${Math.floor(88 / (parseFloat(document.getElementById("root")?.style.zoom) || 1))}vh` }}>
 
             {/* ===== 헤더 ===== */}
             <div className="flex justify-between items-center px-6 py-4 bg-[#1B2B4B] rounded-t-2xl shrink-0">
@@ -23303,37 +23934,11 @@ onBlur={(e) => {
   {/* 상차시간 + 이전/이후 */}
   <div>
     <label className="text-sm font-medium">상차시간</label>
-    <select
-      className="border p-2 rounded w-full"
+    <TimeAmPmPicker
       value={editTarget.상차시간 || ""}
-      onChange={(e) =>
-        setEditTarget((p) => ({ ...p, 상차시간: e.target.value }))
-      }
-    >
-      <option value="">선택없음</option>
-      {[
-        "오전 6시", "오전 6시 30분",
-        "오전 7시", "오전 7시 30분",
-        "오전 8시", "오전 8시 30분",
-        "오전 9시", "오전 9시 30분",
-        "오전 10시", "오전 10시 30분",
-        "오전 11시", "오전 11시 30분",
-        "오후 12시", "오후 12시 30분",
-        "오후 1시", "오후 1시 30분",
-        "오후 2시", "오후 2시 30분",
-        "오후 3시", "오후 3시 30분",
-        "오후 4시", "오후 4시 30분",
-        "오후 5시", "오후 5시 30분",
-        "오후 6시", "오후 6시 30분",
-        "오후 7시", "오후 7시 30분",
-        "오후 8시", "오후 8시 30분",
-        "오후 9시", "오후 9시 30분",
-        "오후 10시", "오후 10시 30분",
-        "오후 11시", "오후 11시 30분",
-      ].map((t) => (
-        <option key={t} value={t}>{t}</option>
-      ))}
-    </select>
+      onChange={v => setEditTarget(p => ({ ...p, 상차시간: v }))}
+      selectCls="border p-2 rounded w-full"
+    />
 
     {/* ⏱ 이전 / 이후 */}
     <div className="flex gap-2 mt-1">
@@ -23375,37 +23980,11 @@ onBlur={(e) => {
   {/* 하차시간 + 이전/이후 */}
   <div>
     <label className="text-sm font-medium">하차시간</label>
-    <select
-      className="border p-2 rounded w-full"
+    <TimeAmPmPicker
       value={editTarget.하차시간 || ""}
-      onChange={(e) =>
-        setEditTarget((p) => ({ ...p, 하차시간: e.target.value }))
-      }
-    >
-      <option value="">선택없음</option>
-      {[
-        "오전 6시", "오전 6시 30분",
-        "오전 7시", "오전 7시 30분",
-        "오전 8시", "오전 8시 30분",
-        "오전 9시", "오전 9시 30분",
-        "오전 10시", "오전 10시 30분",
-        "오전 11시", "오전 11시 30분",
-        "오후 12시", "오후 12시 30분",
-        "오후 1시", "오후 1시 30분",
-        "오후 2시", "오후 2시 30분",
-        "오후 3시", "오후 3시 30분",
-        "오후 4시", "오후 4시 30분",
-        "오후 5시", "오후 5시 30분",
-        "오후 6시", "오후 6시 30분",
-        "오후 7시", "오후 7시 30분",
-        "오후 8시", "오후 8시 30분",
-        "오후 9시", "오후 9시 30분",
-        "오후 10시", "오후 10시 30분",
-        "오후 11시", "오후 11시 30분",
-      ].map((t) => (
-        <option key={t} value={t}>{t}</option>
-      ))}
-    </select>
+      onChange={v => setEditTarget(p => ({ ...p, 하차시간: v }))}
+      selectCls="border p-2 rounded w-full"
+    />
 
     {/* ⏱ 이전 / 이후 */}
     <div className="flex gap-2 mt-1">
@@ -24574,16 +25153,11 @@ setCopyTarget(prev=>({
       </Field>
 
       <Field label="상차시간">
-        <select
-          className="inputStyle"
+        <TimeAmPmPicker
           value={copyTarget?.상차시간 ?? ""}
-          onChange={(e)=>setCopyTarget(p=>({...p, 상차시간:e.target.value}))}
-        >
-          <option value="">선택</option>
-          {generateTimeOptions().map(t=>(
-            <option key={t} value={t}>{t}</option>
-          ))}
-        </select>
+          onChange={v => setCopyTarget(p=>({...p, 상차시간:v}))}
+          selectCls="inputStyle"
+        />
       </Field>
       <Field label="상차방법">
   <select
@@ -24722,16 +25296,11 @@ setCopyPlaceOptions(list);
       </Field>
 
       <Field label="하차시간">
-        <select
-          className="inputStyle"
+        <TimeAmPmPicker
           value={copyTarget?.하차시간 ?? ""}
-          onChange={(e)=>setCopyTarget(p=>({...p, 하차시간:e.target.value}))}
-        >
-          <option value="">선택</option>
-          {generateTimeOptions().map(t=>(
-            <option key={t} value={t}>{t}</option>
-          ))}
-        </select>
+          onChange={v => setCopyTarget(p=>({...p, 하차시간:v}))}
+          selectCls="inputStyle"
+        />
       </Field>
 <Field label="하차방법">
   <select
@@ -25316,8 +25885,36 @@ setCopyTarget(prev => ({
               <span className="text-[13px] font-extrabold text-[#1B2B4B]">과거 운송 기록</span>
               <span className="text-[11px] font-semibold text-gray-400">유사도순 · 최신순</span>
             </div>
+            {/* 필터 탭 */}
+            {(() => {
+              const filterLabels = ["all","완전일치","부분일치","톤수일치","경로일치"];
+              const filterCounts = {};
+              (fareResult.records || []).forEach(r => {
+                const l = r._match?.label || "경로일치";
+                filterCounts[l] = (filterCounts[l] || 0) + 1;
+              });
+              return (
+                <div className="flex gap-1.5 pb-3 flex-wrap">
+                  {filterLabels.map(l => {
+                    const cnt = l === "all" ? fareResult.records.length : (filterCounts[l] || 0);
+                    if (l !== "all" && cnt === 0) return null;
+                    return (
+                      <button key={l}
+                        onClick={() => setCopyFareFilter(l)}
+                        className={`px-2.5 py-1 text-[11px] font-bold rounded-full transition border ${
+                          copyFareFilter === l
+                            ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
+                            : "bg-white text-gray-600 border-gray-200 hover:border-gray-400"
+                        }`}>
+                        {l === "all" ? `전체 ${cnt}건` : `${l} ${cnt}`}
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })()}
             <div className="space-y-2">
-              {fareResult.records.map((rec, idx) => {
+              {(fareResult.records || []).filter(r => copyFareFilter === "all" || (r._match?.label || "경로일치") === copyFareFilter).map((rec, idx) => {
                 const fare = Number(String(rec.청구운임||"0").replace(/[^\d]/g,""));
                 const { label: fareLabel, cls: fareCls } = getFareTag(fare);
                 const isTop = idx === 0;
@@ -25335,14 +25932,17 @@ setCopyTarget(prev => ({
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-[12px] font-bold text-gray-400">{rec.상차일}</span>
                         <div className="flex gap-1">
-                          {(rec._match?.cargo && rec._match?.ton) && (
-                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-[#1B2B4B] text-white">최적매칭</span>
+                          {rec._match?.label === "완전일치" && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-[#1B2B4B] text-white">완전일치</span>
                           )}
-                          {rec._match?.ton && !rec._match?.cargo && (
+                          {rec._match?.label === "부분일치" && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-green-600 text-white">부분일치</span>
+                          )}
+                          {rec._match?.label === "톤수일치" && (
                             <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-gray-700 text-white">톤수일치</span>
                           )}
-                          {rec._match?.cargo && !rec._match?.ton && (
-                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-gray-700 text-white">화물일치</span>
+                          {rec._match?.label === "경로일치" && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-gray-400 text-white">경로일치</span>
                           )}
                           <span className={`px-2.5 py-1 text-[11px] font-extrabold rounded-full border ${fareCls}`}>{fareLabel}</span>
                         </div>
@@ -25359,10 +25959,13 @@ setCopyTarget(prev => ({
                           style={{ left: `calc(${barPct}% - 5px)` }} />
                       </div>
                       <div className="flex items-center justify-between">
-                        <div className="text-[12px] font-semibold text-gray-400">
-                          기사 <span className="text-gray-700 font-bold">{rec.이름 || "-"}</span>
-                          <span className="mx-1.5 text-gray-300">·</span>
-                          기사운임 <span className="text-gray-700 font-bold">{Number(rec.기사운임||0).toLocaleString()}원</span>
+                        <div className="flex flex-col gap-0.5">
+                          <div className="text-[13px] font-bold text-gray-800">
+                            기사: {rec.이름 || "-"}
+                          </div>
+                          <div className="text-[12px] text-gray-500">
+                            기사운임: <span className="font-bold text-gray-700">{Number(rec.기사운임||0).toLocaleString()}원</span>
+                          </div>
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="text-[20px] font-extrabold text-[#1B2B4B]">{fare.toLocaleString()}원</span>
@@ -25532,8 +26135,36 @@ setCopyTarget(prev => ({
               <span className="text-[13px] font-extrabold text-[#1B2B4B]">과거 운송 기록</span>
               <span className="text-[11px] font-semibold text-gray-400">유사도순 · 최신순</span>
             </div>
+            {/* 필터 탭 */}
+            {(() => {
+              const filterLabels = ["all","완전일치","부분일치","톤수일치","경로일치"];
+              const filterCounts = {};
+              (fareResult.records || []).forEach(r => {
+                const l = r._match?.label || "경로일치";
+                filterCounts[l] = (filterCounts[l] || 0) + 1;
+              });
+              return (
+                <div className="flex gap-1.5 pb-3 flex-wrap">
+                  {filterLabels.map(l => {
+                    const cnt = l === "all" ? fareResult.records.length : (filterCounts[l] || 0);
+                    if (l !== "all" && cnt === 0) return null;
+                    return (
+                      <button key={l}
+                        onClick={() => setCopyFareFilter(l)}
+                        className={`px-2.5 py-1 text-[11px] font-bold rounded-full transition border ${
+                          copyFareFilter === l
+                            ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
+                            : "bg-white text-gray-600 border-gray-200 hover:border-gray-400"
+                        }`}>
+                        {l === "all" ? `전체 ${cnt}건` : `${l} ${cnt}`}
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })()}
             <div className="space-y-2">
-              {fareResult.records.map((rec, idx) => {
+              {(fareResult.records || []).filter(r => copyFareFilter === "all" || (r._match?.label || "경로일치") === copyFareFilter).map((rec, idx) => {
                 const fare = Number(String(rec.청구운임||"0").replace(/[^\d]/g,""));
                 const { label: fareLabel, cls: fareCls } = getFareTag(fare);
                 const isTop = idx === 0;
@@ -25551,14 +26182,17 @@ setCopyTarget(prev => ({
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-[12px] font-bold text-gray-400">{rec.상차일}</span>
                         <div className="flex gap-1">
-                          {(rec._match?.cargo && rec._match?.ton) && (
-                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-[#1B2B4B] text-white">최적매칭</span>
+                          {rec._match?.label === "완전일치" && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-[#1B2B4B] text-white">완전일치</span>
                           )}
-                          {rec._match?.ton && !rec._match?.cargo && (
+                          {rec._match?.label === "부분일치" && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-green-600 text-white">부분일치</span>
+                          )}
+                          {rec._match?.label === "톤수일치" && (
                             <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-gray-700 text-white">톤수일치</span>
                           )}
-                          {rec._match?.cargo && !rec._match?.ton && (
-                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-gray-700 text-white">화물일치</span>
+                          {rec._match?.label === "경로일치" && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-gray-400 text-white">경로일치</span>
                           )}
                           <span className={`px-2.5 py-1 text-[11px] font-extrabold rounded-full border ${fareCls}`}>{fareLabel}</span>
                         </div>
@@ -25575,10 +26209,13 @@ setCopyTarget(prev => ({
                           style={{ left: `calc(${barPct}% - 5px)` }} />
                       </div>
                       <div className="flex items-center justify-between">
-                        <div className="text-[12px] font-semibold text-gray-400">
-                          기사 <span className="text-gray-700 font-bold">{rec.이름 || "-"}</span>
-                          <span className="mx-1.5 text-gray-300">·</span>
-                          기사운임 <span className="text-gray-700 font-bold">{Number(rec.기사운임||0).toLocaleString()}원</span>
+                        <div className="flex flex-col gap-0.5">
+                          <div className="text-[13px] font-bold text-gray-800">
+                            기사: {rec.이름 || "-"}
+                          </div>
+                          <div className="text-[12px] text-gray-500">
+                            기사운임: <span className="font-bold text-gray-700">{Number(rec.기사운임||0).toLocaleString()}원</span>
+                          </div>
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="text-[20px] font-extrabold text-[#1B2B4B]">{fare.toLocaleString()}원</span>
@@ -26494,7 +27131,7 @@ setCopyTarget(prev => ({
       {contextMenuDS && (
         <div
           className="fixed z-[999999] bg-white border border-gray-200 rounded-xl shadow-2xl py-1.5 min-w-[168px] select-none"
-          style={{ top: Math.min(contextMenuDS.y, window.innerHeight - 260), left: Math.min(contextMenuDS.x, window.innerWidth - 180) }}
+          style={{ top: Math.min(contextMenuDS.y, window.innerHeight / (parseFloat(document.getElementById("root")?.style.zoom) || 1) - 260), left: Math.min(contextMenuDS.x, window.innerWidth / (parseFloat(document.getElementById("root")?.style.zoom) || 1) - 180) }}
           onClick={e => e.stopPropagation()}
         >
           <button className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
@@ -26517,8 +27154,18 @@ setCopyTarget(prev => ({
           </button>
           <button className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
             onClick={() => {
+              const r = contextMenuDS.row;
               const url = `${window.location.origin}/driver-upload`;
-              const msg = `[인수증 업로드 안내]\n운송 완료 후 아래 링크를 통해 인수증을 업로드해 주시기 바랍니다.\n\n${url}\n\n서명 받은 인수증(파렛전표) 사진을 촬영하여 업로드해 주세요.\n미업로드 시 운임 정산이 지연될 수 있습니다.`;
+              const dateStr = (() => {
+                const d = r.상차일 || "";
+                if (d && d.includes("-")) {
+                  const [, m, day] = d.split("-");
+                  return `${Number(m)}월 ${Number(day)}일`;
+                }
+                return d;
+              })();
+              const orderInfo = `오더 정보\n${dateStr}\n\n${r.상차지명 || "-"} → ${r.하차지명 || "-"}${r.화물내용 ? `\n${r.화물내용}` : ""}${r.차량톤수 ? ` / ${r.차량톤수}` : ""}`;
+              const msg = `${orderInfo}\n\n[인수증 업로드 안내]\n운송 완료 후 아래 링크를 통해 인수증을 업로드해 주시기 바랍니다.\n\n${url}\n\n서명 받은 인수증(파렛전표) 사진을 촬영하여 업로드해 주세요.\n미업로드 시 운임 정산이 지연될 수 있습니다.`;
               navigator.clipboard.writeText(msg).then(() => showAlert("업로드 안내 메시지가 복사되었습니다.\n기사에게 붙여넣기로 전달하세요.")).catch(() => showAlert(`링크: ${url}`));
               setContextMenuDS(null);
             }}>
@@ -26567,6 +27214,17 @@ setCopyTarget(prev => ({
             }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
             운임조회
+          </button>
+          <button
+            className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
+            onClick={() => {
+              setAttachStatusDSClient(contextMenuDS.row.거래처명 || "");
+              setAttachStatusDSOpen(true);
+              setContextMenuDS(null);
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+            첨부현황
           </button>
           <div className="border-t border-gray-100 my-1"/>
           <button className="w-full text-left px-4 py-2 text-[13px] text-red-600 hover:bg-red-50 flex items-center gap-2.5 transition-colors"
@@ -26694,14 +27352,23 @@ setCopyTarget(prev => ({
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-[12px] font-bold text-gray-400">{rec.상차일}</span>
                       <div className="flex gap-1">
-                        {rec._match?.cargo && <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-gray-700 text-white">화물일치</span>}
-                        {rec._match?.ton && <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-gray-700 text-white">톤수일치</span>}
+                        {rec._match?.label === "완전일치" && <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-[#1B2B4B] text-white">완전일치</span>}
+                        {rec._match?.label === "부분일치" && <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-green-600 text-white">부분일치</span>}
+                        {rec._match?.label === "톤수일치" && <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-gray-700 text-white">톤수일치</span>}
+                        {rec._match?.label === "경로일치" && <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-gray-400 text-white">경로일치</span>}
                       </div>
                     </div>
                     <div className="text-[13px] font-bold text-gray-900 mb-1">{rec.상차지명 || "-"} → {rec.하차지명 || "-"}</div>
                     <div className="text-[12px] text-gray-400 mb-2">{rec.차량종류 || "-"} / {rec.차량톤수 || "-"}{rec.화물내용 ? ` · ${rec.화물내용}` : ""}</div>
                     <div className="flex items-center justify-between">
-                      <span className="text-[12px] text-gray-400">기사 <span className="text-gray-700 font-bold">{rec.이름 || "-"}</span></span>
+                      <div className="flex flex-col gap-0.5">
+                        <div className="text-[13px] font-bold text-gray-800">
+                          기사: {rec.이름 || "-"}
+                        </div>
+                        <div className="text-[12px] text-gray-500">
+                          기사운임: <span className="font-bold text-gray-700">{Number(rec.기사운임 || 0).toLocaleString()}원</span>
+                        </div>
+                      </div>
                       <span className="text-[18px] font-extrabold text-[#1B2B4B]">{fare.toLocaleString()}원</span>
                     </div>
                   </div>
@@ -26798,8 +27465,36 @@ setCopyTarget(prev => ({
               <span className="text-[13px] font-extrabold text-[#1B2B4B]">과거 운송 기록</span>
               <span className="text-[11px] font-semibold text-gray-400">유사도순 · 최신순</span>
             </div>
+            {/* 필터 탭 */}
+            {(() => {
+              const filterLabels = ["all","완전일치","부분일치","톤수일치","경로일치"];
+              const filterCounts = {};
+              (ctxFare5Result.records || []).forEach(r => {
+                const l = r._match?.label || "경로일치";
+                filterCounts[l] = (filterCounts[l] || 0) + 1;
+              });
+              return (
+                <div className="flex gap-1.5 pb-3 flex-wrap">
+                  {filterLabels.map(l => {
+                    const cnt = l === "all" ? ctxFare5Result.records.length : (filterCounts[l] || 0);
+                    if (l !== "all" && cnt === 0) return null;
+                    return (
+                      <button key={l}
+                        onClick={() => setFare5Filter(l)}
+                        className={`px-2.5 py-1 text-[11px] font-bold rounded-full transition border ${
+                          fare5Filter === l
+                            ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
+                            : "bg-white text-gray-600 border-gray-200 hover:border-gray-400"
+                        }`}>
+                        {l === "all" ? `전체 ${cnt}건` : `${l} ${cnt}`}
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })()}
             <div className="space-y-2">
-              {ctxFare5Result.records.map((rec, idx) => {
+              {(ctxFare5Result.records || []).filter(r => fare5Filter === "all" || (r._match?.label || "경로일치") === fare5Filter).map((rec, idx) => {
                 const fare = Number(String(rec.청구운임 || "0").replace(/[^\d]/g, ""));
                 const { label: fareLabel, cls: fareCls } = getFareTag(fare);
                 const isTop = idx === 0;
@@ -26815,14 +27510,17 @@ setCopyTarget(prev => ({
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-[12px] font-bold text-gray-400">{rec.상차일}</span>
                         <div className="flex gap-1">
-                          {(rec._match?.cargo && rec._match?.ton) && (
-                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-[#1B2B4B] text-white">최적매칭</span>
+                          {rec._match?.label === "완전일치" && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-[#1B2B4B] text-white">완전일치</span>
                           )}
-                          {rec._match?.ton && !rec._match?.cargo && (
+                          {rec._match?.label === "부분일치" && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-green-600 text-white">부분일치</span>
+                          )}
+                          {rec._match?.label === "톤수일치" && (
                             <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-gray-700 text-white">톤수일치</span>
                           )}
-                          {rec._match?.cargo && !rec._match?.ton && (
-                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-gray-700 text-white">화물일치</span>
+                          {rec._match?.label === "경로일치" && (
+                            <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-gray-400 text-white">경로일치</span>
                           )}
                           <span className={`px-2.5 py-1 text-[11px] font-extrabold rounded-full border ${fareCls}`}>{fareLabel}</span>
                         </div>
@@ -26839,10 +27537,13 @@ setCopyTarget(prev => ({
                           style={{ left: `calc(${barPct}% - 5px)` }} />
                       </div>
                       <div className="flex items-center justify-between">
-                        <div className="text-[12px] font-semibold text-gray-400">
-                          기사 <span className="text-gray-700 font-bold">{rec.이름 || "-"}</span>
-                          <span className="mx-1.5 text-gray-300">·</span>
-                          기사운임 <span className="text-gray-700 font-bold">{Number(rec.기사운임 || 0).toLocaleString()}원</span>
+                        <div className="flex flex-col gap-0.5">
+                          <div className="text-[13px] font-bold text-gray-800">
+                            기사: {rec.이름 || "-"}
+                          </div>
+                          <div className="text-[12px] text-gray-500">
+                            기사운임: <span className="font-bold text-gray-700">{Number(rec.기사운임 || 0).toLocaleString()}원</span>
+                          </div>
                         </div>
                         <span className="text-[20px] font-extrabold text-[#1B2B4B]">{fare.toLocaleString()}원</span>
                       </div>
@@ -29918,16 +30619,15 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
     setSmartQ7(""); setSmartList7([]);
   };
   const generateTimeOptions = () => {
-    const options = [];
+    const result = [];
     for (let h = 0; h < 24; h++) {
-      for (let m = 0; m < 60; m += 30) {
-        const period = h < 12 ? "오전" : "오후";
-        const displayH = h === 0 ? 12 : h > 12 ? h - 12 : h;
-        const displayM = m === 0 ? "" : `${m}분`;
-        options.push(`${period} ${displayH}시${displayM}`);
+      for (let m of [0, 30]) {
+        const isPM = h >= 12;
+        const hour12 = h % 12 === 0 ? 12 : h % 12;
+        result.push(`${isPM ? "오후" : "오전"} ${hour12}시${m === 30 ? " 30분" : ""}`);
       }
     }
-    return options;
+    return result;
   };
 
   const filtered = React.useMemo(() => {
@@ -30450,12 +31150,13 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       <Field label="상차일">
                         <input type="date" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.상차일 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차일: e.target.value}))} />
                       </Field>
-                      <Field label="상차시간">
-                        <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.상차시간 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차시간: e.target.value}))}>
-                          <option value="">선택</option>
-                          {generateTimeOptions().map(t => <option key={t} value={t}>{t}</option>)}
-                        </select>
-                      </Field>
+                       <Field label="상차시간">
+                        <TimeAmPmPicker
+                          value={copyTarget?.상차시간 ?? ""}
+                          onChange={v => setCopyTarget(p => ({...p, 상차시간: v}))}
+                          selectCls="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400"
+                        />
+                       </Field>
                       <Field label="상차방법">
                         <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.상차방법 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차방법: e.target.value}))}>
                           <option value="">선택</option>
@@ -30527,12 +31228,13 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       <Field label="하차일">
                         <input type="date" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.하차일 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차일: e.target.value}))} />
                       </Field>
-                      <Field label="하차시간">
-                        <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.하차시간 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차시간: e.target.value}))}>
-                          <option value="">선택</option>
-                          {generateTimeOptions().map(t => <option key={t} value={t}>{t}</option>)}
-                        </select>
-                      </Field>
+                       <Field label="하차시간">
+                        <TimeAmPmPicker
+                          value={copyTarget?.하차시간 ?? ""}
+                          onChange={v => setCopyTarget(p => ({...p, 하차시간: v}))}
+                          selectCls="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400"
+                        />
+                       </Field>
                       <Field label="하차방법">
                         <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.하차방법 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차방법: e.target.value}))}>
                           <option value="">선택</option>
