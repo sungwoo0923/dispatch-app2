@@ -10702,6 +10702,23 @@ setConfirmChange(null);
                 );
               })()}
 
+              {(() => {
+                const fares = sortedHistory.map(r => Number(String(r.청구운임||"0").replace(/[^\d]/g,""))).filter(f => f > 0);
+                if (fares.length === 0) return null;
+                const avg = Math.round(fares.reduce((a,b)=>a+b,0) / fares.length);
+                const mn = Math.min(...fares);
+                const mx = Math.max(...fares);
+                return (
+                  <div className="mb-3 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl">
+                    <div className="text-[13px] font-bold text-gray-700 mb-2">운임 분석 ({fares.length}건)</div>
+                    <div className="flex gap-4 flex-wrap">
+                      <div><span className="text-[12px] text-gray-500">평균</span><div className="text-[15px] font-extrabold text-[#1B2B4B]">{avg.toLocaleString()}원</div></div>
+                      <div><span className="text-[12px] text-gray-500">최저</span><div className="text-[15px] font-bold text-gray-700">{mn.toLocaleString()}원</div></div>
+                      <div><span className="text-[12px] text-gray-500">최고</span><div className="text-[15px] font-bold text-gray-700">{mx.toLocaleString()}원</div></div>
+                    </div>
+                  </div>
+                );
+              })()}
               <div className="space-y-2">
                 {sortedHistory.map((r, idx) => {
                   const matchLabel = r._match?.label || "경로일치";
@@ -10726,7 +10743,7 @@ setConfirmChange(null);
                       <div className="px-4 py-3 bg-white">
                         {/* 날짜 + 태그 */}
                         <div className="flex items-center justify-between mb-2">
-                          <span className="text-[12px] font-bold text-gray-400">{r.상차일}</span>
+                          <span className="text-[13px] font-bold text-gray-600">{r.상차일}</span>
                           <div className="flex gap-1">
                             <span className={`px-2.5 py-1 text-[11px] font-extrabold rounded-full ${
                               matchLabel === "완전일치" ? "bg-[#1B2B4B] text-white"
@@ -10766,7 +10783,7 @@ setConfirmChange(null);
                         <div className="text-[14px] font-extrabold text-gray-900 mb-1">
                           {r.상차지명 || "-"} → {r.하차지명 || "-"}
                         </div>
-                        <div className="text-[12px] font-semibold text-gray-400 mb-2">
+                        <div className="text-[13px] font-semibold text-gray-600 mb-2">
                           {r.차량종류 || "-"} / {r.차량톤수 || "-"}
                           {r.화물내용 && <span> · {r.화물내용}</span>}
                         </div>
@@ -10790,9 +10807,22 @@ setConfirmChange(null);
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className="text-[20px] font-extrabold text-[#1B2B4B]">
-                              {fare.toLocaleString()}원
-                            </span>
+                            <div className="flex items-baseline gap-1">
+                              <span className="text-[20px] font-extrabold text-[#1B2B4B]">
+                                {fare.toLocaleString()}원
+                              </span>
+                              {(() => {
+                                const fares = sortedHistory.map(r2 => Number(String(r2.청구운임||"0").replace(/[^\d]/g,""))).filter(f => f > 0);
+                                const avg = fares.length ? Math.round(fares.reduce((a,b)=>a+b,0)/fares.length) : 0;
+                                const diff = fare - avg;
+                                if (!avg || Math.abs(diff) < 1000) return <span className="text-[11px] text-gray-400 ml-1">평균</span>;
+                                return (
+                                  <span className={`text-[11px] ml-1 font-semibold ${diff > 0 ? "text-red-500" : "text-blue-500"}`}>
+                                    {diff > 0 ? `+${diff.toLocaleString()}` : diff.toLocaleString()}원
+                                  </span>
+                                );
+                              })()}
+                            </div>
                             <button
                               onClick={() => { onChange("청구운임", String(r.청구운임)); setFareModalOpen(false); }}
                               className="px-3 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-bold hover:bg-[#243a60] transition active:scale-95">
@@ -17259,12 +17289,32 @@ value={copyTarget?.화물수량 || ""}
                 </div>
               );
             })()}
+            {(() => {
+              const fares = (fareResult.records || []).map(r => Number(String(r.청구운임||"0").replace(/[^\d]/g,""))).filter(f => f > 0);
+              if (fares.length === 0) return null;
+              const avg = Math.round(fares.reduce((a,b)=>a+b,0) / fares.length);
+              const mn = Math.min(...fares);
+              const mx = Math.max(...fares);
+              return (
+                <div className="mb-3 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl">
+                  <div className="text-[13px] font-bold text-gray-700 mb-2">운임 분석 ({fares.length}건)</div>
+                  <div className="flex gap-4 flex-wrap">
+                    <div><span className="text-[12px] text-gray-500">평균</span><div className="text-[15px] font-extrabold text-[#1B2B4B]">{avg.toLocaleString()}원</div></div>
+                    <div><span className="text-[12px] text-gray-500">최저</span><div className="text-[15px] font-bold text-gray-700">{mn.toLocaleString()}원</div></div>
+                    <div><span className="text-[12px] text-gray-500">최고</span><div className="text-[15px] font-bold text-gray-700">{mx.toLocaleString()}원</div></div>
+                  </div>
+                </div>
+              );
+            })()}
             <div className="space-y-2">
               {(fareResult.records || []).filter(r => copyFareFilter === "all" || (r._match?.label || "경로일치") === copyFareFilter).map((rec, idx) => {
                 const fare = Number(String(rec.청구운임||"0").replace(/[^\d]/g,""));
                 const { label: fareLabel, cls: fareCls } = getFareTag(fare);
                 const isTop = idx === 0;
                 const barPct = getBarPct(fare);
+                const _allFares4c = (fareResult.records || []).map(r => Number(String(r.청구운임||"0").replace(/[^\d]/g,""))).filter(f => f > 0);
+                const _avg4c = _allFares4c.length ? Math.round(_allFares4c.reduce((a,b)=>a+b,0)/_allFares4c.length) : 0;
+                const _diff4c = fare - _avg4c;
 
                 return (
                   <div key={idx}
@@ -17276,7 +17326,7 @@ value={copyTarget?.화물수량 || ""}
                     )}
                     <div className="px-4 py-3 bg-white">
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-[12px] font-bold text-gray-400">{rec.상차일}</span>
+                        <span className="text-[13px] font-bold text-gray-600">{rec.상차일}</span>
                         <div className="flex gap-1">
                           {rec._match?.label === "완전일치" && (
                             <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-[#1B2B4B] text-white">완전일치</span>
@@ -17296,7 +17346,7 @@ value={copyTarget?.화물수량 || ""}
                       <div className="text-[14px] font-extrabold text-gray-900 mb-1">
                         {rec.상차지명 || "-"} → {rec.하차지명 || "-"}
                       </div>
-                      <div className="text-[12px] font-semibold text-gray-400 mb-2">
+                      <div className="text-[13px] font-semibold text-gray-600 mb-2">
                         {rec.차량종류 || "-"} / {rec.차량톤수 || "-"}
                         {rec.화물내용 && <span> · {rec.화물내용}</span>}
                       </div>
@@ -17314,7 +17364,14 @@ value={copyTarget?.화물수량 || ""}
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="text-[20px] font-extrabold text-[#1B2B4B]">{fare.toLocaleString()}원</span>
+                          <div className="flex items-baseline gap-1">
+                            <span className="text-[20px] font-extrabold text-[#1B2B4B]">{fare.toLocaleString()}원</span>
+                            {_avg4c && Math.abs(_diff4c) >= 1000 ? (
+                              <span className={`text-[11px] ml-1 font-semibold ${_diff4c > 0 ? "text-red-500" : "text-blue-500"}`}>
+                                {_diff4c > 0 ? `+${_diff4c.toLocaleString()}` : _diff4c.toLocaleString()}원
+                              </span>
+                            ) : <span className="text-[11px] text-gray-400 ml-1">평균</span>}
+                          </div>
                           <button
                             onClick={() => { setCopyTarget(p => ({ ...p, 청구운임: String(fare) })); setCopyFarePanelOpen(false); }}
                             className="px-3 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-bold hover:bg-[#243a60] transition active:scale-95">
@@ -17587,12 +17644,32 @@ value={copyTarget?.화물수량 || ""}
                 </div>
               );
             })()}
+            {(() => {
+              const fares = (fareResult.records || []).map(r => Number(String(r.청구운임||"0").replace(/[^\d]/g,""))).filter(f => f > 0);
+              if (fares.length === 0) return null;
+              const avg = Math.round(fares.reduce((a,b)=>a+b,0) / fares.length);
+              const mn = Math.min(...fares);
+              const mx = Math.max(...fares);
+              return (
+                <div className="mb-3 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl">
+                  <div className="text-[13px] font-bold text-gray-700 mb-2">운임 분석 ({fares.length}건)</div>
+                  <div className="flex gap-4 flex-wrap">
+                    <div><span className="text-[12px] text-gray-500">평균</span><div className="text-[15px] font-extrabold text-[#1B2B4B]">{avg.toLocaleString()}원</div></div>
+                    <div><span className="text-[12px] text-gray-500">최저</span><div className="text-[15px] font-bold text-gray-700">{mn.toLocaleString()}원</div></div>
+                    <div><span className="text-[12px] text-gray-500">최고</span><div className="text-[15px] font-bold text-gray-700">{mx.toLocaleString()}원</div></div>
+                  </div>
+                </div>
+              );
+            })()}
             <div className="space-y-2">
               {(fareResult.records || []).filter(r => copyFareFilter === "all" || (r._match?.label || "경로일치") === copyFareFilter).map((rec, idx) => {
                 const fare = Number(String(rec.청구운임||"0").replace(/[^\d]/g,""));
                 const { label: fareLabel, cls: fareCls } = getFareTag(fare);
                 const isTop = idx === 0;
                 const barPct = getBarPct(fare);
+                const _allFares4e = (fareResult.records || []).map(r => Number(String(r.청구운임||"0").replace(/[^\d]/g,""))).filter(f => f > 0);
+                const _avg4e = _allFares4e.length ? Math.round(_allFares4e.reduce((a,b)=>a+b,0)/_allFares4e.length) : 0;
+                const _diff4e = fare - _avg4e;
 
                 return (
                   <div key={idx}
@@ -17604,7 +17681,7 @@ value={copyTarget?.화물수량 || ""}
                     )}
                     <div className="px-4 py-3 bg-white">
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-[12px] font-bold text-gray-400">{rec.상차일}</span>
+                        <span className="text-[13px] font-bold text-gray-600">{rec.상차일}</span>
                         <div className="flex gap-1">
                           {rec._match?.label === "완전일치" && (
                             <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-[#1B2B4B] text-white">완전일치</span>
@@ -17624,7 +17701,7 @@ value={copyTarget?.화물수량 || ""}
                       <div className="text-[14px] font-extrabold text-gray-900 mb-1">
                         {rec.상차지명 || "-"} → {rec.하차지명 || "-"}
                       </div>
-                      <div className="text-[12px] font-semibold text-gray-400 mb-2">
+                      <div className="text-[13px] font-semibold text-gray-600 mb-2">
                         {rec.차량종류 || "-"} / {rec.차량톤수 || "-"}
                         {rec.화물내용 && <span> · {rec.화물내용}</span>}
                       </div>
@@ -17642,7 +17719,14 @@ value={copyTarget?.화물수량 || ""}
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="text-[20px] font-extrabold text-[#1B2B4B]">{fare.toLocaleString()}원</span>
+                          <div className="flex items-baseline gap-1">
+                            <span className="text-[20px] font-extrabold text-[#1B2B4B]">{fare.toLocaleString()}원</span>
+                            {_avg4e && Math.abs(_diff4e) >= 1000 ? (
+                              <span className={`text-[11px] ml-1 font-semibold ${_diff4e > 0 ? "text-red-500" : "text-blue-500"}`}>
+                                {_diff4e > 0 ? `+${_diff4e.toLocaleString()}` : _diff4e.toLocaleString()}원
+                              </span>
+                            ) : <span className="text-[11px] text-gray-400 ml-1">평균</span>}
+                          </div>
                           <button
                             onClick={() => {
                               setEditTarget(p => ({ ...p, 청구운임: fare, 수수료: fare - Number(p.기사운임 || 0) }));
@@ -19537,12 +19621,32 @@ if (editTarget.거래처명) {
               <span className="text-[13px] font-extrabold text-[#1B2B4B]">과거 운송 기록</span>
               <span className="text-[11px] font-semibold text-gray-400">유사도순 · 최신순</span>
             </div>
+            {(() => {
+              const fares = (ctxFare4Result.records || []).map(r => Number(String(r.청구운임||"0").replace(/[^\d]/g,""))).filter(f => f > 0);
+              if (fares.length === 0) return null;
+              const avg = Math.round(fares.reduce((a,b)=>a+b,0) / fares.length);
+              const mn = Math.min(...fares);
+              const mx = Math.max(...fares);
+              return (
+                <div className="mb-3 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl">
+                  <div className="text-[13px] font-bold text-gray-700 mb-2">운임 분석 ({fares.length}건)</div>
+                  <div className="flex gap-4 flex-wrap">
+                    <div><span className="text-[12px] text-gray-500">평균</span><div className="text-[15px] font-extrabold text-[#1B2B4B]">{avg.toLocaleString()}원</div></div>
+                    <div><span className="text-[12px] text-gray-500">최저</span><div className="text-[15px] font-bold text-gray-700">{mn.toLocaleString()}원</div></div>
+                    <div><span className="text-[12px] text-gray-500">최고</span><div className="text-[15px] font-bold text-gray-700">{mx.toLocaleString()}원</div></div>
+                  </div>
+                </div>
+              );
+            })()}
             <div className="space-y-2">
               {ctxFare4Result.records.map((rec, idx) => {
                 const fare = Number(String(rec.청구운임 || "0").replace(/[^\d]/g, ""));
                 const { label: fareLabel, cls: fareCls } = getFareTag(fare);
                 const isTop = idx === 0;
                 const barPct = getBarPct(fare);
+                const _allFares4ctx = (ctxFare4Result.records || []).map(r => Number(String(r.청구운임||"0").replace(/[^\d]/g,""))).filter(f => f > 0);
+                const _avg4ctx = _allFares4ctx.length ? Math.round(_allFares4ctx.reduce((a,b)=>a+b,0)/_allFares4ctx.length) : 0;
+                const _diff4ctx = fare - _avg4ctx;
                 return (
                   <div key={idx} className={`rounded-xl border overflow-hidden ${isTop ? "border-[#1B2B4B]/40" : "border-gray-150"}`}>
                     {isTop && (
@@ -19552,7 +19656,7 @@ if (editTarget.거래처명) {
                     )}
                     <div className="px-4 py-3 bg-white">
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-[12px] font-bold text-gray-400">{rec.상차일}</span>
+                        <span className="text-[13px] font-bold text-gray-600">{rec.상차일}</span>
                         <div className="flex gap-1">
                           {rec._match?.label === "완전일치" && (
                             <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-[#1B2B4B] text-white">완전일치</span>
@@ -19572,7 +19676,7 @@ if (editTarget.거래처명) {
                       <div className="text-[14px] font-extrabold text-gray-900 mb-1">
                         {rec.상차지명 || "-"} → {rec.하차지명 || "-"}
                       </div>
-                      <div className="text-[12px] font-semibold text-gray-400 mb-2">
+                      <div className="text-[13px] font-semibold text-gray-600 mb-2">
                         {rec.차량종류 || "-"} / {rec.차량톤수 || "-"}
                         {rec.화물내용 && <span> · {rec.화물내용}</span>}
                       </div>
@@ -19589,7 +19693,14 @@ if (editTarget.거래처명) {
                             기사운임: <span className="font-bold text-gray-700">{Number(rec.기사운임 || 0).toLocaleString()}원</span>
                           </div>
                         </div>
-                        <span className="text-[20px] font-extrabold text-[#1B2B4B]">{fare.toLocaleString()}원</span>
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-[20px] font-extrabold text-[#1B2B4B]">{fare.toLocaleString()}원</span>
+                          {_avg4ctx && Math.abs(_diff4ctx) >= 1000 ? (
+                            <span className={`text-[11px] ml-1 font-semibold ${_diff4ctx > 0 ? "text-red-500" : "text-blue-500"}`}>
+                              {_diff4ctx > 0 ? `+${_diff4ctx.toLocaleString()}` : _diff4ctx.toLocaleString()}원
+                            </span>
+                          ) : <span className="text-[11px] text-gray-400 ml-1">평균</span>}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -25899,12 +26010,32 @@ setCopyTarget(prev => ({
                 </div>
               );
             })()}
+            {(() => {
+              const fares = (fareResult.records || []).map(r => Number(String(r.청구운임||"0").replace(/[^\d]/g,""))).filter(f => f > 0);
+              if (fares.length === 0) return null;
+              const avg = Math.round(fares.reduce((a,b)=>a+b,0) / fares.length);
+              const mn = Math.min(...fares);
+              const mx = Math.max(...fares);
+              return (
+                <div className="mb-3 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl">
+                  <div className="text-[13px] font-bold text-gray-700 mb-2">운임 분석 ({fares.length}건)</div>
+                  <div className="flex gap-4 flex-wrap">
+                    <div><span className="text-[12px] text-gray-500">평균</span><div className="text-[15px] font-extrabold text-[#1B2B4B]">{avg.toLocaleString()}원</div></div>
+                    <div><span className="text-[12px] text-gray-500">최저</span><div className="text-[15px] font-bold text-gray-700">{mn.toLocaleString()}원</div></div>
+                    <div><span className="text-[12px] text-gray-500">최고</span><div className="text-[15px] font-bold text-gray-700">{mx.toLocaleString()}원</div></div>
+                  </div>
+                </div>
+              );
+            })()}
             <div className="space-y-2">
               {(fareResult.records || []).filter(r => copyFareFilter === "all" || (r._match?.label || "경로일치") === copyFareFilter).map((rec, idx) => {
                 const fare = Number(String(rec.청구운임||"0").replace(/[^\d]/g,""));
                 const { label: fareLabel, cls: fareCls } = getFareTag(fare);
                 const isTop = idx === 0;
                 const barPct = getBarPct(fare);
+                const _allFares5c = (fareResult.records || []).map(r => Number(String(r.청구운임||"0").replace(/[^\d]/g,""))).filter(f => f > 0);
+                const _avg5c = _allFares5c.length ? Math.round(_allFares5c.reduce((a,b)=>a+b,0)/_allFares5c.length) : 0;
+                const _diff5c = fare - _avg5c;
 
                 return (
                   <div key={idx}
@@ -25916,7 +26047,7 @@ setCopyTarget(prev => ({
                     )}
                     <div className="px-4 py-3 bg-white">
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-[12px] font-bold text-gray-400">{rec.상차일}</span>
+                        <span className="text-[13px] font-bold text-gray-600">{rec.상차일}</span>
                         <div className="flex gap-1">
                           {rec._match?.label === "완전일치" && (
                             <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-[#1B2B4B] text-white">완전일치</span>
@@ -25936,7 +26067,7 @@ setCopyTarget(prev => ({
                       <div className="text-[14px] font-extrabold text-gray-900 mb-1">
                         {rec.상차지명 || "-"} → {rec.하차지명 || "-"}
                       </div>
-                      <div className="text-[12px] font-semibold text-gray-400 mb-2">
+                      <div className="text-[13px] font-semibold text-gray-600 mb-2">
                         {rec.차량종류 || "-"} / {rec.차량톤수 || "-"}
                         {rec.화물내용 && <span> · {rec.화물내용}</span>}
                       </div>
@@ -25954,7 +26085,14 @@ setCopyTarget(prev => ({
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="text-[20px] font-extrabold text-[#1B2B4B]">{fare.toLocaleString()}원</span>
+                          <div className="flex items-baseline gap-1">
+                            <span className="text-[20px] font-extrabold text-[#1B2B4B]">{fare.toLocaleString()}원</span>
+                            {_avg5c && Math.abs(_diff5c) >= 1000 ? (
+                              <span className={`text-[11px] ml-1 font-semibold ${_diff5c > 0 ? "text-red-500" : "text-blue-500"}`}>
+                                {_diff5c > 0 ? `+${_diff5c.toLocaleString()}` : _diff5c.toLocaleString()}원
+                              </span>
+                            ) : <span className="text-[11px] text-gray-400 ml-1">평균</span>}
+                          </div>
                           <button
                             onClick={() => { setCopyTarget(p => ({ ...p, 청구운임: String(fare) })); setCopyFarePanelOpen(false); }}
                             className="px-3 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-bold hover:bg-[#243a60] transition active:scale-95">
@@ -27471,12 +27609,32 @@ setCopyTarget(prev => ({
                 </div>
               );
             })()}
+            {(() => {
+              const fares = (ctxFare5Result.records || []).map(r => Number(String(r.청구운임||"0").replace(/[^\d]/g,""))).filter(f => f > 0);
+              if (fares.length === 0) return null;
+              const avg = Math.round(fares.reduce((a,b)=>a+b,0) / fares.length);
+              const mn = Math.min(...fares);
+              const mx = Math.max(...fares);
+              return (
+                <div className="mb-3 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl">
+                  <div className="text-[13px] font-bold text-gray-700 mb-2">운임 분석 ({fares.length}건)</div>
+                  <div className="flex gap-4 flex-wrap">
+                    <div><span className="text-[12px] text-gray-500">평균</span><div className="text-[15px] font-extrabold text-[#1B2B4B]">{avg.toLocaleString()}원</div></div>
+                    <div><span className="text-[12px] text-gray-500">최저</span><div className="text-[15px] font-bold text-gray-700">{mn.toLocaleString()}원</div></div>
+                    <div><span className="text-[12px] text-gray-500">최고</span><div className="text-[15px] font-bold text-gray-700">{mx.toLocaleString()}원</div></div>
+                  </div>
+                </div>
+              );
+            })()}
             <div className="space-y-2">
               {(ctxFare5Result.records || []).filter(r => fare5Filter === "all" || (r._match?.label || "경로일치") === fare5Filter).map((rec, idx) => {
                 const fare = Number(String(rec.청구운임 || "0").replace(/[^\d]/g, ""));
                 const { label: fareLabel, cls: fareCls } = getFareTag(fare);
                 const isTop = idx === 0;
                 const barPct = getBarPct(fare);
+                const _allFares5ctx = (ctxFare5Result.records || []).map(r => Number(String(r.청구운임||"0").replace(/[^\d]/g,""))).filter(f => f > 0);
+                const _avg5ctx = _allFares5ctx.length ? Math.round(_allFares5ctx.reduce((a,b)=>a+b,0)/_allFares5ctx.length) : 0;
+                const _diff5ctx = fare - _avg5ctx;
                 return (
                   <div key={idx} className={`rounded-xl border overflow-hidden ${isTop ? "border-[#1B2B4B]/40" : "border-gray-150"}`}>
                     {isTop && (
@@ -27486,7 +27644,7 @@ setCopyTarget(prev => ({
                     )}
                     <div className="px-4 py-3 bg-white">
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-[12px] font-bold text-gray-400">{rec.상차일}</span>
+                        <span className="text-[13px] font-bold text-gray-600">{rec.상차일}</span>
                         <div className="flex gap-1">
                           {rec._match?.label === "완전일치" && (
                             <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-[#1B2B4B] text-white">완전일치</span>
@@ -27506,7 +27664,7 @@ setCopyTarget(prev => ({
                       <div className="text-[14px] font-extrabold text-gray-900 mb-1">
                         {rec.상차지명 || "-"} → {rec.하차지명 || "-"}
                       </div>
-                      <div className="text-[12px] font-semibold text-gray-400 mb-2">
+                      <div className="text-[13px] font-semibold text-gray-600 mb-2">
                         {rec.차량종류 || "-"} / {rec.차량톤수 || "-"}
                         {rec.화물내용 && <span> · {rec.화물내용}</span>}
                       </div>
@@ -27523,7 +27681,14 @@ setCopyTarget(prev => ({
                             기사운임: <span className="font-bold text-gray-700">{Number(rec.기사운임 || 0).toLocaleString()}원</span>
                           </div>
                         </div>
-                        <span className="text-[20px] font-extrabold text-[#1B2B4B]">{fare.toLocaleString()}원</span>
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-[20px] font-extrabold text-[#1B2B4B]">{fare.toLocaleString()}원</span>
+                          {_avg5ctx && Math.abs(_diff5ctx) >= 1000 ? (
+                            <span className={`text-[11px] ml-1 font-semibold ${_diff5ctx > 0 ? "text-red-500" : "text-blue-500"}`}>
+                              {_diff5ctx > 0 ? `+${_diff5ctx.toLocaleString()}` : _diff5ctx.toLocaleString()}원
+                            </span>
+                          ) : <span className="text-[11px] text-gray-400 ml-1">평균</span>}
+                        </div>
                       </div>
                     </div>
                   </div>

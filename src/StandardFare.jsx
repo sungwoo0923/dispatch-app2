@@ -77,6 +77,51 @@ function isTransitStop(r) {
 // T-Map API key (module-level so AddressSearch can access it)
 const TMAP_KEY = "rmzwkLwH9N4i9ayxDj9GR6l8hyFDaEk52ZQs4yer";
 
+function KakaoAddressButton({ onComplete }) {
+  const open = () => {
+    if (window.daum?.Postcode) {
+      new window.daum.Postcode({
+        oncomplete: (data) => {
+          onComplete(data.roadAddress || data.jibunAddress || data.address || "");
+        },
+        width: "100%",
+        height: "100%",
+      }).open();
+    } else {
+      const script = document.createElement("script");
+      script.src = "//t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js";
+      script.onload = () => {
+        new window.daum.Postcode({
+          oncomplete: (data) => {
+            onComplete(data.roadAddress || data.jibunAddress || data.address || "");
+          },
+        }).open();
+      };
+      document.head.appendChild(script);
+    }
+  };
+  return (
+    <button
+      type="button"
+      onClick={open}
+      style={{
+        padding: "6px 12px",
+        background: "#1B2B4B",
+        color: "white",
+        border: "none",
+        borderRadius: "6px",
+        fontSize: "13px",
+        fontWeight: 700,
+        cursor: "pointer",
+        whiteSpace: "nowrap",
+        flexShrink: 0,
+      }}
+    >
+      주소 검색
+    </button>
+  );
+}
+
 // T-Map 주소 자동완성 컴포넌트 (POI 검색 기반 — 부분 입력으로 구/동 드롭다운)
 function AddressSearch({ value, onChange, onSelect, placeholder }) {
   const [query, setQuery] = useState(value || "");
@@ -800,14 +845,14 @@ export default function StandardFare() {
                 <table className="w-full min-w-[1400px] text-[13px]">
                   <thead>
                     <tr className="bg-[#1B2B4B]">
-                      {["상차일","상차지명","상차지주소","하차지명","하차지주소","화물내용","차량종류","차량톤수","청구운임","운임레벨","기사운임","수수료","메모"].map(h=>(
+                      {["상차일","상차지명","상차지주소","하차지명","하차지주소","화물내용","차량종류","차량톤수","혼적","청구운임","운임레벨","기사운임","수수료","메모"].map(h=>(
                         <th key={h} className="px-3 py-3 text-center text-[13px] font-bold text-white whitespace-nowrap border-b border-white/10">{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {result.length === 0 ? (
-                      <tr><td colSpan={13} className="py-16 text-center text-gray-400 text-[13px]">조회된 데이터가 없습니다.</td></tr>
+                      <tr><td colSpan={14} className="py-16 text-center text-gray-400 text-[13px]">조회된 데이터가 없습니다.</td></tr>
                     ) : (
                       result.map((r, i) => (
                         <tr key={r._id} className={`border-b border-gray-100 transition hover:bg-blue-50/40 ${i%2===0?"bg-white":"bg-gray-50/40"}`}>
@@ -819,10 +864,11 @@ export default function StandardFare() {
                           <td className="px-3 py-2.5 text-[13px] text-gray-700 text-center">{r.화물내용}</td>
                           <td className="px-3 py-2.5 text-[13px] text-gray-700 text-center whitespace-nowrap">{r.차량종류}</td>
                           <td className="px-3 py-2.5 text-[13px] text-gray-700 text-center">{r.차량톤수}</td>
+                          <td className="px-3 py-2.5 text-[13px] text-gray-700 text-center">{r.혼적 ? "Y" : ""}</td>
                           <td className="px-3 py-2.5 text-right text-[13px] font-bold text-gray-800">{Number(r.청구운임||0).toLocaleString()}</td>
                           <td className="px-3 py-2.5 text-center"><FareLevelBadge level={r.fareLevel} /></td>
                           <td className="px-3 py-2.5 text-right text-[13px] text-gray-700 font-medium">{Number(r.기사운임||0).toLocaleString()}</td>
-                          <td className="px-3 py-2.5 text-right text-[13px] text-gray-700 font-medium">{Number(r.수수료||0).toLocaleString()}</td>
+                          <td className="px-3 py-2.5 text-right text-[13px] text-gray-700 font-medium">{(Number(r.청구운임||0) - Number(r.기사운임||0)).toLocaleString()}</td>
                           <td className="px-3 py-2.5 text-[13px] text-gray-600 max-w-[120px] truncate" title={r.메모}>{r.메모}</td>
                         </tr>
                       ))
@@ -842,21 +888,27 @@ export default function StandardFare() {
             <div className="grid grid-cols-2 gap-4 mb-4">
               <div>
                 <label className="block text-[12px] font-bold text-gray-500 mb-1">출발지 주소</label>
-                <AddressSearch
-                  value={nfFrom}
-                  onChange={v => { setNfFrom(v); setNfFromCoord(null); }}
-                  onSelect={s => { if (s) { setNfFrom(s.address); setNfFromCoord(s); } }}
-                  placeholder="예: 인천광역시 서구 원창동"
-                />
+                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                  <AddressSearch
+                    value={nfFrom}
+                    onChange={v => { setNfFrom(v); setNfFromCoord(null); }}
+                    onSelect={s => { if (s) { setNfFrom(s.address); setNfFromCoord(s); } }}
+                    placeholder="예: 인천광역시 서구 원창동"
+                  />
+                  <KakaoAddressButton onComplete={(addr) => { setNfFrom(addr); setNfFromCoord(null); }} />
+                </div>
               </div>
               <div>
                 <label className="block text-[12px] font-bold text-gray-500 mb-1">도착지 주소</label>
-                <AddressSearch
-                  value={nfTo}
-                  onChange={v => { setNfTo(v); setNfToCoord(null); }}
-                  onSelect={s => { if (s) { setNfTo(s.address); setNfToCoord(s); } }}
-                  placeholder="예: 경기도 용인시 처인구"
-                />
+                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                  <AddressSearch
+                    value={nfTo}
+                    onChange={v => { setNfTo(v); setNfToCoord(null); }}
+                    onSelect={s => { if (s) { setNfTo(s.address); setNfToCoord(s); } }}
+                    placeholder="예: 경기도 용인시 처인구"
+                  />
+                  <KakaoAddressButton onComplete={(addr) => { setNfTo(addr); setNfToCoord(null); }} />
+                </div>
               </div>
             </div>
 
