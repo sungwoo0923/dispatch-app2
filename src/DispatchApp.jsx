@@ -11902,6 +11902,23 @@ function StopCountBadge({ count }) {
   );
 }
 
+// KST 날짜 포맷 helpers (module scope, RealtimeStatus 등 독립 컴포넌트에서 사용)
+function _msFromVal(v) {
+  if (!v) return 0;
+  if (typeof v?.toMillis === "function") return v.toMillis();
+  if (typeof v?.seconds === "number") return v.seconds * 1000;
+  if (typeof v === "number") return v > 1e12 ? v : 0;
+  if (typeof v === "string") { const t = Date.parse(v); return isNaN(t) ? 0 : t; }
+  return 0;
+}
+function _fmtKst(v) {
+  const ms = _msFromVal(v);
+  return ms ? new Date(ms).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", hour12: false }) : "-";
+}
+function _creatorLabel(r) {
+  return r?.등록자명 || r?.createdByName || r?.등록자 || r?.createdByEmail || r?.createdBy || "-";
+}
+
 function RealtimeStatus({
   dispatchData,
   drivers,
@@ -15454,8 +15471,7 @@ const head = isDark
 </div>
 
       {/* 테이블 */}
-      <div style={{overflowX: "visible", overflowY: "unset", width: "100%"}}
-        className={`rounded-xl overflow-visible shadow border ${isDark ? "border-gray-700" : "border-gray-200"}`}>
+      <div className={`overflow-x-auto rounded-xl shadow border ${isDark ? "border-gray-700" : "border-gray-200"}`}>
   <table className="w-auto min-w-max table-auto">
           <thead className={isDark ? "bg-[#0f172a]" : "bg-[#1B2B4B]"}>
             <tr>
@@ -23193,9 +23209,9 @@ return (
     </span>
     <div className="pointer-events-none invisible group-hover:visible absolute left-1/2 -translate-x-1/2 top-full mt-1 z-[99999] w-max">
       <div className="bg-gray-800 text-white text-[11px] rounded-lg px-3 py-2 shadow-xl leading-5 border border-gray-700">
-        <div>등록시간: <span className="text-yellow-300">{formatKstDateTime(getCreatedMs(row))}</span></div>
-        <div>마지막수정: <span className="text-green-300">{formatKstDateTime(getUpdatedMs(row))}</span></div>
-        <div>등록자: <span className="text-blue-300">{getCreatorLabel(row)}</span></div>
+        <div>등록시간: <span className="text-yellow-300">{_fmtKst(row.createdAt || row.등록일시 || row.등록시간 || (row.등록일 && `${row.등록일}T00:00:00`))}</span></div>
+        <div>마지막수정: <span className="text-green-300">{_fmtKst(row.updatedAt || row.lastUpdated)}</span></div>
+        <div>등록자: <span className="text-blue-300">{_creatorLabel(row)}</span></div>
       </div>
     </div>
   </div>
