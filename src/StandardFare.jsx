@@ -465,6 +465,17 @@ export default function StandardFare() {
   const [nfError, setNfError] = useState("");
 
   const geocodeTmap = async (addr) => {
+    // Try searchAddress first (handles Kakao road addresses / 도로명주소)
+    try {
+      const saUrl = `https://apis.openapi.sk.com/tmap/searchAddress?version=1&format=json&queryVersion=1&fullAddrOnOff=Y&searchKeyword=${encodeURIComponent(addr)}&countPerPage=1&appKey=${TMAP_KEY}`;
+      const saData = await fetch(saUrl, { headers: { Accept: "application/json" } }).then(r => r.json());
+      const saRaw = saData?.searchAddressInfo?.addressInfo;
+      const saItem = Array.isArray(saRaw) ? saRaw[0] : saRaw;
+      const lat = parseFloat(saItem?.newLat || saItem?.lat || "");
+      const lon = parseFloat(saItem?.newLon || saItem?.lon || "");
+      if (lat && lon) return { lat, lon };
+    } catch {}
+    // Fall back to fullAddrGeo (jibun addresses / 지번주소)
     const url = `https://apis.openapi.sk.com/tmap/geo/fullAddrGeo?version=1&format=json&fullAddr=${encodeURIComponent(addr)}`;
     const res = await fetch(url, { headers: { appKey: TMAP_KEY, Accept: "application/json" } });
     const data = await res.json();

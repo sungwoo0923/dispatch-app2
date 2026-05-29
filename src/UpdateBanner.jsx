@@ -3,12 +3,14 @@ import React from "react";
 
 export default function UpdateBanner() {
   const [visible, setVisible] = React.useState(false);
+  const [blinking, setBlinking] = React.useState(false);
 
   React.useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
 
     const activateUpdate = () => {
       setVisible(true);
+      window.dispatchEvent(new Event("appUpdateAvailable"));
     };
 
     navigator.serviceWorker.addEventListener("controllerchange", () => {
@@ -45,6 +47,17 @@ export default function UpdateBanner() {
     };
   }, []);
 
+  // Auto-blink after 10s then fade away after another 3s
+  React.useEffect(() => {
+    if (!visible) return;
+    const blinkTimer = setTimeout(() => setBlinking(true), 10000);
+    const fadeTimer = setTimeout(() => setVisible(false), 13000);
+    return () => {
+      clearTimeout(blinkTimer);
+      clearTimeout(fadeTimer);
+    };
+  }, [visible]);
+
   if (!visible) return null;
 
   return (
@@ -54,12 +67,23 @@ export default function UpdateBanner() {
           from { opacity: 0; transform: translateY(-100%); }
           to   { opacity: 1; transform: translateY(0); }
         }
+        @keyframes bannerBlink {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.25; }
+        }
+        @keyframes bannerFade {
+          from { opacity: 1; }
+          to   { opacity: 0; }
+        }
         .update-banner {
           animation: bannerDown 0.4s ease-out forwards;
         }
+        .update-banner-blink {
+          animation: bannerBlink 0.7s ease-in-out infinite, bannerFade 3s ease-in forwards;
+        }
       `}</style>
       <div
-        className="update-banner"
+        className={blinking ? "update-banner-blink" : "update-banner"}
         style={{
           position: "fixed",
           top: 0,

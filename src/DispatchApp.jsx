@@ -1028,6 +1028,10 @@ function ToastProvider({ children }) {
         .toast-enter {
           animation: toastSlideDown 0.35s ease-out forwards;
         }
+        @keyframes versionBlink {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.35; }
+        }
         @keyframes toastFlashBorder {
           0%   { box-shadow: 0 0 0 0 rgba(59,130,246,0); }
           30%  { box-shadow: 0 0 0 4px rgba(59,130,246,0.4), 0 0 20px rgba(59,130,246,0.3); }
@@ -1959,6 +1963,12 @@ useEffect(() => {
 
 const [alertMsg, setAlertMsg] = useState(null);
 const showAlert = (msg) => setAlertMsg(msg);
+const [hasUpdate, setHasUpdate] = React.useState(false);
+React.useEffect(() => {
+  const handler = () => setHasUpdate(true);
+  window.addEventListener("appUpdateAvailable", handler);
+  return () => window.removeEventListener("appUpdateAvailable", handler);
+}, []);
 
   // ---------------- 역할별 차단 메뉴 ----------------
   // user(실무자): 배차/기사/거래처 업무 가능, 재무/관리 메뉴 차단
@@ -2006,23 +2016,29 @@ return (
         <div className="flex items-center px-6 h-14">
 
           {/* 좌측 로고 */}
-          <div className="flex items-center gap-2 min-w-[180px]">
-            <img src="/icons/sflow-icon.png" alt="KP-Flow" className="w-7 h-7 rounded-lg" />
-            <span className="text-white font-extrabold text-base tracking-tight">
-              KP-Flow
-            </span>
-            {(() => {
-              const co = role === "totalMaster"
-                ? (localStorage.getItem("loginCompany") || userCompany || "")
-                : (userCompany || localStorage.getItem("userCompany") || "");
-              return (
-                <div className="ml-2 flex flex-col leading-tight">
-                  {co && <span className="text-[12px] font-bold text-white/90 truncate max-w-[90px]">{co}</span>}
-                  <span className="text-[10px] font-mono text-white/50">v{__APP_VERSION__}</span>
-                </div>
-              );
-            })()}
-          </div>
+          {(() => {
+            const co = role === "totalMaster"
+              ? (localStorage.getItem("loginCompany") || userCompany || "")
+              : (userCompany || localStorage.getItem("userCompany") || "");
+            return (
+              <div className="flex items-center gap-2 min-w-0 shrink-0">
+                <img src="/icons/sflow-icon.png" alt="KP-Flow" className="w-7 h-7 rounded-lg shrink-0" />
+                <span className="text-white font-extrabold text-[14px] tracking-tight shrink-0">KP-Flow</span>
+                {co && <span className="text-[14px] font-bold text-white/90 truncate max-w-[100px]">{co}</span>}
+                {hasUpdate ? (
+                  <button
+                    onClick={() => window.location.reload()}
+                    style={{ animation: "versionBlink 1.2s ease-in-out infinite" }}
+                    className="text-[13px] font-bold text-yellow-300 bg-white/10 border border-yellow-300/60 rounded px-2 py-0.5 cursor-pointer shrink-0"
+                  >
+                    v{__APP_VERSION__} 업데이트
+                  </button>
+                ) : (
+                  <span className="text-[13px] font-mono text-white/60 shrink-0">v{__APP_VERSION__}</span>
+                )}
+              </div>
+            );
+          })()}
 
           {/* 중앙 메뉴 */}
                      {/* ★ 태블릿/PC 공용 메뉴 — 전체 가로 스크롤 보장 */}
@@ -2734,6 +2750,8 @@ function renderTimeWithCond(time, cond) {
 }
 
     const [placeRowsTrigger, setPlaceRowsTrigger] = React.useState(0);
+const [placeConflictQueue, setPlaceConflictQueue] = React.useState([]);
+const [placeConflictOpen, setPlaceConflictOpen] = React.useState(false);
       const [aiRecommend, setAiRecommend] = React.useState(null);
       const [aiPopupOpen, setAiPopupOpen] = React.useState(false);
       const [areaFareHint, setAreaFareHint] = React.useState(null);
@@ -3481,43 +3499,100 @@ const openNewPlacePrompt = (name) => {
   showAlert("신규 거래처 등록이 완료되었습니다.");
 };
 
-const savePlaceSmart = async (name, addr, manager, phone, placeId) => {
+// 담당자N 자동 이름 부여 헬퍼
+const nextManagerName = (contacts) => {
+  const nums = contacts
+    .map(c => { const m = /^담당자(\d+)$/.exec(c.name?.trim() || ""); return m ? parseInt(m[1], 10) : 0; })
+    .filter(n => n > 0);
+  return `담당자${nums.length > 0 ? Math.max(...nums) + 1 : 1}`;
+};
+
+// 주소 동일 여부 (빈 주소 제외, 앞 10자 비교)
+const isSameAddr = (a = "", b = "") => {
+  const na = a.trim().replace(/\s+/g, "");
+  const nb = b.trim().replace(/\s+/g, "");
+  if (!na || !nb) return false;
+  return na.slice(0, 12) === nb.slice(0, 12);
+};
+
+const savePlaceSmart = async (name, addr, manager, phone, placeId, _conflictResolution) => {
   if (!name) return;
 
   const key = placeId || makePlaceKey(name);
-
-  // 🔥 placeList 기준으로 찾는다 (UI와 동일 기준)
-  const existing = placeList.find(
+  const existingByName = placeList.find(
     p => p._id === key || normalizeKey(p.업체명) === normalizeKey(name)
   );
 
-// 🔥 기존 contacts 유지 + 담당자 병합
+  // Detect: same name, different address
+  if (existingByName && addr?.trim() && existingByName.주소?.trim() &&
+      !isSameAddr(existingByName.주소, addr) && _conflictResolution !== "update" && _conflictResolution !== "keep") {
+    setPlaceConflictQueue(q => [...q, {
+      type: "addrMismatch",
+      name, addr, manager, phone, placeId,
+      existingAddr: existingByName.주소,
+      existingId: existingByName._id,
+    }]);
+    setPlaceConflictOpen(true);
+    return;
+  }
+
+  // Detect: new name, same address as existing place
+  if (!existingByName && addr?.trim() && _conflictResolution !== "separate") {
+    const sameAddrPlace = placeList.find(p => isSameAddr(p.주소, addr));
+    if (sameAddrPlace) {
+      setPlaceConflictQueue(q => [...q, {
+        type: "addrDuplicate",
+        name, addr, manager, phone, placeId,
+        existingName: sameAddrPlace.업체명,
+        existingId: sameAddrPlace._id,
+        existingAddr: sameAddrPlace.주소,
+      }]);
+      setPlaceConflictOpen(true);
+      return;
+    }
+  }
+
+  const existing = existingByName;
   let contacts = existing?.contacts ? [...existing.contacts] : [];
 
-  if (manager?.trim()) {
-    const sameNameIdx = contacts.findIndex(c => c.name?.trim() === manager.trim());
+  const resolvedManager = manager?.trim() || "";
+  const resolvedPhone = phone?.trim() || "";
+
+  if (resolvedManager) {
+    const sameNameIdx = contacts.findIndex(c => c.name?.trim() === resolvedManager);
     if (sameNameIdx >= 0) {
-      // 동일 이름 → 연락처 최신화, primary 이동
       contacts = contacts.map((c, i) => ({
         ...c,
-        phone: i === sameNameIdx ? (phone || c.phone) : c.phone,
+        phone: i === sameNameIdx ? (resolvedPhone || c.phone) : c.phone,
         isPrimary: i === sameNameIdx,
       }));
     } else {
-      // 다른 이름 → 신규 추가
       contacts = contacts.map(c => ({ ...c, isPrimary: false }));
-      contacts.push({ name: manager.trim(), phone: phone || "", isPrimary: true });
+      contacts.push({ name: resolvedManager, phone: resolvedPhone, isPrimary: true });
+    }
+  } else if (resolvedPhone) {
+    // Phone only — check if already exists by phone
+    const samePhoneIdx = contacts.findIndex(c => c.phone?.replace(/\D/g,"") === resolvedPhone.replace(/\D/g,"") && c.phone);
+    if (samePhoneIdx >= 0) {
+      contacts = contacts.map((c, i) => ({ ...c, isPrimary: i === samePhoneIdx }));
+    } else {
+      // Auto-name
+      const autoName = nextManagerName(contacts);
+      contacts = contacts.map(c => ({ ...c, isPrimary: false }));
+      contacts.push({ name: autoName, phone: resolvedPhone, isPrimary: true });
     }
   } else if (contacts.length === 0) {
-    contacts = [{ name: "", phone: phone || "", isPrimary: true }];
+    contacts = [{ name: "", phone: "", isPrimary: true }];
   }
+
+  const finalAddr = _conflictResolution === "keep" ? (existing?.주소 || addr || "") : (addr || existing?.주소 || "");
 
   await upsertPlace({
     _id: existing?._id || key,
     업체명: name,
-    주소: addr || "",
+    주소: finalAddr,
     contacts,
-    등급: existing?.등급 || "일반",      // 🔥 기존 등급 유지
+    등급: existing?.등급 || "일반",
     등급변경일: existing?.등급변경일 || null,
     메모: existing?.메모 || "",
   });
@@ -9521,6 +9596,78 @@ setTimeout(() => {
     </div>
   </div>
 )}
+{/* ===== 거래처 주소 충돌 팝업 ===== */}
+{placeConflictOpen && placeConflictQueue.length > 0 && (() => {
+  const item = placeConflictQueue[0];
+  const dismiss = () => {
+    setPlaceConflictQueue(q => q.slice(1));
+    if (placeConflictQueue.length <= 1) setPlaceConflictOpen(false);
+  };
+  const resolve = (resolution) => {
+    if (item.type === "addrMismatch") {
+      if (resolution === "update") {
+        savePlaceSmart(item.name, item.addr, item.manager, item.phone, item.placeId, "update");
+      } else if (resolution === "keep") {
+        savePlaceSmart(item.name, item.existingAddr, item.manager, item.phone, item.placeId, "keep");
+      }
+      // "cancel" → do nothing
+    } else if (item.type === "addrDuplicate") {
+      if (resolution === "overwrite") {
+        // Save using existing place id, update name
+        upsertPlace({ _id: item.existingId, 업체명: item.name, 주소: item.addr }).catch(() => {});
+      } else if (resolution === "separate") {
+        savePlaceSmart(item.name, item.addr, item.manager, item.phone, item.placeId, "separate");
+      }
+    }
+    dismiss();
+  };
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
+      <div className="bg-white rounded-2xl shadow-2xl w-[460px] overflow-hidden border">
+        <div className="bg-[#1B2B4B] px-6 py-4">
+          <h3 className="text-white font-bold text-[15px]">
+            {item.type === "addrMismatch" ? "거래처 주소 불일치" : "주소 중복 거래처"}
+          </h3>
+          <p className="text-white/60 text-[12px] mt-0.5">
+            {item.type === "addrMismatch"
+              ? `'${item.name}' 거래처의 기존 주소와 다릅니다`
+              : `입력한 주소에 이미 등록된 거래처가 있습니다`}
+          </p>
+        </div>
+        <div className="px-6 py-4 space-y-3 text-[13px]">
+          {item.type === "addrMismatch" ? (
+            <>
+              <div className="bg-gray-50 rounded-lg p-3 space-y-1">
+                <div><span className="text-gray-500">거래처명</span> <b className="ml-2">{item.name}</b></div>
+                <div><span className="text-gray-500">기존 주소</span> <span className="ml-2 text-blue-700">{item.existingAddr || "-"}</span></div>
+                <div><span className="text-gray-500">새 주소</span> <span className="ml-2 text-orange-600">{item.addr}</span></div>
+              </div>
+              <div className="flex flex-col gap-2">
+                <button onClick={() => resolve("update")} className="w-full py-2.5 bg-[#1B2B4B] text-white rounded-xl font-bold text-[13px]">주소 업데이트 (새 주소로 변경)</button>
+                <button onClick={() => resolve("keep")} className="w-full py-2.5 bg-gray-100 text-gray-800 rounded-xl font-bold text-[13px]">기존 주소 유지</button>
+                <button onClick={() => resolve("cancel")} className="w-full py-2 text-gray-400 text-[12px]">취소</button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="bg-gray-50 rounded-lg p-3 space-y-1">
+                <div><span className="text-gray-500">입력 거래처명</span> <b className="ml-2">{item.name}</b></div>
+                <div><span className="text-gray-500">기존 거래처명</span> <span className="ml-2 text-blue-700">{item.existingName}</span></div>
+                <div><span className="text-gray-500">주소</span> <span className="ml-2">{item.addr}</span></div>
+              </div>
+              <p className="text-gray-600">동일한 주소로 이미 등록된 거래처가 있습니다. 어떻게 처리할까요?</p>
+              <div className="flex flex-col gap-2">
+                <button onClick={() => resolve("overwrite")} className="w-full py-2.5 bg-[#1B2B4B] text-white rounded-xl font-bold text-[13px]">기존 거래처에 통합 (이름 업데이트)</button>
+                <button onClick={() => resolve("separate")} className="w-full py-2.5 bg-gray-100 text-gray-800 rounded-xl font-bold text-[13px]">별도 거래처로 등록</button>
+                <button onClick={dismiss} className="w-full py-2 text-gray-400 text-[12px]">취소 (등록 안 함)</button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+})()}
 {/* ===== 기사 정보 충돌 팝업 ===== */}
 {driverConflictPopup && (
   <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
@@ -12214,29 +12361,60 @@ function RealtimeStatus({
   menu,
   darkMode = false,
 }) {
+const audioCtxRef = React.useRef(null);
+React.useEffect(() => {
+  const unlock = () => {
+    try {
+      if (!audioCtxRef.current) {
+        audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioCtxRef.current.state === "suspended") {
+        audioCtxRef.current.resume().catch(() => {});
+      }
+    } catch {}
+  };
+  document.addEventListener("click", unlock, true);
+  document.addEventListener("keydown", unlock, true);
+  document.addEventListener("touchstart", unlock, true);
+  return () => {
+    document.removeEventListener("click", unlock, true);
+    document.removeEventListener("keydown", unlock, true);
+    document.removeEventListener("touchstart", unlock, true);
+  };
+}, []);
+
 const playNotifSound = React.useCallback(() => {
   try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const notes = [
-      { freq: 698.5, t: 0,    dur: 0.12 },
-      { freq: 880,   t: 0.13, dur: 0.12 },
-      { freq: 1046,  t: 0.26, dur: 0.20 },
-    ];
-    notes.forEach(({ freq, t, dur }) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.type = "sine";
-      osc.frequency.value = freq;
-      const start = ctx.currentTime + t;
-      gain.gain.setValueAtTime(0, start);
-      gain.gain.linearRampToValueAtTime(0.28, start + 0.01);
-      gain.gain.exponentialRampToValueAtTime(0.001, start + dur);
-      osc.start(start);
-      osc.stop(start + dur + 0.01);
-    });
-    setTimeout(() => ctx.close(), 1000);
+    if (!audioCtxRef.current) {
+      audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    const ctx = audioCtxRef.current;
+    const doPlay = () => {
+      const notes = [
+        { freq: 698.5, t: 0,    dur: 0.14 },
+        { freq: 880,   t: 0.15, dur: 0.14 },
+        { freq: 1046,  t: 0.31, dur: 0.22 },
+      ];
+      notes.forEach(({ freq, t, dur }) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type = "triangle";
+        osc.frequency.value = freq;
+        const start = ctx.currentTime + t;
+        gain.gain.setValueAtTime(0, start);
+        gain.gain.linearRampToValueAtTime(0.35, start + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, start + dur);
+        osc.start(start);
+        osc.stop(start + dur + 0.02);
+      });
+    };
+    if (ctx.state === "suspended") {
+      ctx.resume().then(doPlay).catch(() => {});
+    } else {
+      doPlay();
+    }
   } catch {}
 }, []);
 
