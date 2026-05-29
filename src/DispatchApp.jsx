@@ -3507,12 +3507,19 @@ const nextManagerName = (contacts) => {
   return `담당자${nums.length > 0 ? Math.max(...nums) + 1 : 1}`;
 };
 
-// 주소 동일 여부 (빈 주소 제외, 앞 10자 비교)
+// 주소 정규화 (공백·특수문자 제거, 소문자)
+const normalizeAddr = (a = "") =>
+  String(a).trim().replace(/\s+/g, "").replace(/[-./]/g, "").toLowerCase();
+
+// 주소 동일 여부 — 완전 동일 또는 한쪽이 다른쪽을 포함하는 경우 (10자 이상)
 const isSameAddr = (a = "", b = "") => {
-  const na = a.trim().replace(/\s+/g, "");
-  const nb = b.trim().replace(/\s+/g, "");
+  const na = normalizeAddr(a);
+  const nb = normalizeAddr(b);
   if (!na || !nb) return false;
-  return na.slice(0, 12) === nb.slice(0, 12);
+  if (na === nb) return true;
+  const shorter = na.length <= nb.length ? na : nb;
+  const longer  = na.length <= nb.length ? nb : na;
+  return shorter.length >= 10 && longer.startsWith(shorter);
 };
 
 const savePlaceSmart = async (name, addr, manager, phone, placeId, _conflictResolution) => {
@@ -3523,9 +3530,10 @@ const savePlaceSmart = async (name, addr, manager, phone, placeId, _conflictReso
     p => p._id === key || normalizeKey(p.업체명) === normalizeKey(name)
   );
 
-  // Detect: same name, different address
+  // Detect: same name, different address (only if existing has a stored address)
   if (existingByName && addr?.trim() && existingByName.주소?.trim() &&
-      !isSameAddr(existingByName.주소, addr) && _conflictResolution !== "update" && _conflictResolution !== "keep") {
+      normalizeAddr(existingByName.주소) !== normalizeAddr(addr) &&
+      _conflictResolution !== "update" && _conflictResolution !== "keep") {
     setPlaceConflictQueue(q => [...q, {
       type: "addrMismatch",
       name, addr, manager, phone, placeId,

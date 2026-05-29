@@ -465,22 +465,31 @@ export default function StandardFare() {
   const [nfError, setNfError] = useState("");
 
   const geocodeTmap = async (addr) => {
-    // Try searchAddress first (handles Kakao road addresses / 도로명주소)
+    // Try searchAddress first — handles Kakao 도로명주소
     try {
       const saUrl = `https://apis.openapi.sk.com/tmap/searchAddress?version=1&format=json&queryVersion=1&fullAddrOnOff=Y&searchKeyword=${encodeURIComponent(addr)}&countPerPage=1&appKey=${TMAP_KEY}`;
       const saData = await fetch(saUrl, { headers: { Accept: "application/json" } }).then(r => r.json());
       const saRaw = saData?.searchAddressInfo?.addressInfo;
       const saItem = Array.isArray(saRaw) ? saRaw[0] : saRaw;
-      const lat = parseFloat(saItem?.newLat || saItem?.lat || "");
-      const lon = parseFloat(saItem?.newLon || saItem?.lon || "");
-      if (lat && lon) return { lat, lon };
+      if (saItem) {
+        // Road address: coords in newAddressList.newAddress[0]
+        const newAddrArr = saItem?.newAddressList?.newAddress;
+        const newAddr = Array.isArray(newAddrArr) ? newAddrArr[0] : newAddrArr;
+        const lat1 = parseFloat(newAddr?.centerLat || "");
+        const lon1 = parseFloat(newAddr?.centerLon || "");
+        if (lat1 && lon1) return { lat: lat1, lon: lon1 };
+        // Jibun address: direct lat/lon on addressInfo
+        const lat2 = parseFloat(saItem?.lat || saItem?.y_wgs84 || "");
+        const lon2 = parseFloat(saItem?.lon || saItem?.x_wgs84 || "");
+        if (lat2 && lon2) return { lat: lat2, lon: lon2 };
+      }
     } catch {}
-    // Fall back to fullAddrGeo (jibun addresses / 지번주소)
+    // Fall back to fullAddrGeo (지번주소)
     const url = `https://apis.openapi.sk.com/tmap/geo/fullAddrGeo?version=1&format=json&fullAddr=${encodeURIComponent(addr)}`;
     const res = await fetch(url, { headers: { appKey: TMAP_KEY, Accept: "application/json" } });
     const data = await res.json();
     const coord = data?.coordinateInfo?.coordinate?.[0];
-    if (!coord) throw new Error(`"${addr}" 주소를 찾을 수 없습니다`);
+    if (!coord || !coord.lat) throw new Error(`"${addr}" 주소를 찾을 수 없습니다`);
     return { lat: parseFloat(coord.lat), lon: parseFloat(coord.lon) };
   };
 
