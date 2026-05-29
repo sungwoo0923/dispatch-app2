@@ -10781,10 +10781,13 @@ setConfirmChange(null);
 
                         {/* 기사 + 운임 + 버튼 */}
                         <div className="flex items-center justify-between">
-                          <div className="text-[12px] font-semibold text-gray-400">
-                            기사 <span className="text-gray-700 font-bold">{r.이름 || "-"}</span>
-                            <span className="mx-1.5 text-gray-300">·</span>
-                            기사운임 <span className="text-gray-700 font-bold">{Number(r.기사운임||0).toLocaleString()}원</span>
+                          <div className="flex flex-col gap-0.5">
+                            <div className="text-[13px] font-bold text-gray-800">
+                              기사: {r.이름 || "-"}
+                            </div>
+                            <div className="text-[12px] text-gray-500">
+                              기사운임: <span className="font-bold text-gray-700">{Number(r.기사운임||0).toLocaleString()}원</span>
+                            </div>
                           </div>
                           <div className="flex items-center gap-2">
                             <span className="text-[20px] font-extrabold text-[#1B2B4B]">
@@ -11011,12 +11014,7 @@ function AttachmentViewer({ row, onClose, db }) {
       await tryImageCopy(blob);
       setCopyDone(id); setTimeout(() => setCopyDone(null), 2000);
     } catch {
-      try {
-        await navigator.clipboard.writeText(item.url || src || "");
-        setCopyDone(id); setTimeout(() => setCopyDone(null), 2000);
-      } catch {
-        alert("복사 실패 - 이미지를 길게 눌러 복사하세요");
-      }
+      alert("이미지 복사를 지원하지 않는 브라우저입니다.\n이미지를 우클릭하여 저장하거나, 저장 버튼을 이용해주세요.");
     }
   };
 const handleDelete = async (item) => {
@@ -17070,10 +17068,13 @@ value={copyTarget?.화물수량 || ""}
                           style={{ left: `calc(${barPct}% - 5px)` }} />
                       </div>
                       <div className="flex items-center justify-between">
-                        <div className="text-[12px] font-semibold text-gray-400">
-                          기사 <span className="text-gray-700 font-bold">{rec.이름 || "-"}</span>
-                          <span className="mx-1.5 text-gray-300">·</span>
-                          기사운임 <span className="text-gray-700 font-bold">{Number(rec.기사운임||0).toLocaleString()}원</span>
+                        <div className="flex flex-col gap-0.5">
+                          <div className="text-[13px] font-bold text-gray-800">
+                            기사: {rec.이름 || "-"}
+                          </div>
+                          <div className="text-[12px] text-gray-500">
+                            기사운임: <span className="font-bold text-gray-700">{Number(rec.기사운임||0).toLocaleString()}원</span>
+                          </div>
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="text-[20px] font-extrabold text-[#1B2B4B]">{fare.toLocaleString()}원</span>
@@ -17395,10 +17396,13 @@ value={copyTarget?.화물수량 || ""}
                           style={{ left: `calc(${barPct}% - 5px)` }} />
                       </div>
                       <div className="flex items-center justify-between">
-                        <div className="text-[12px] font-semibold text-gray-400">
-                          기사 <span className="text-gray-700 font-bold">{rec.이름 || "-"}</span>
-                          <span className="mx-1.5 text-gray-300">·</span>
-                          기사운임 <span className="text-gray-700 font-bold">{Number(rec.기사운임||0).toLocaleString()}원</span>
+                        <div className="flex flex-col gap-0.5">
+                          <div className="text-[13px] font-bold text-gray-800">
+                            기사: {rec.이름 || "-"}
+                          </div>
+                          <div className="text-[12px] text-gray-500">
+                            기사운임: <span className="font-bold text-gray-700">{Number(rec.기사운임||0).toLocaleString()}원</span>
+                          </div>
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="text-[20px] font-extrabold text-[#1B2B4B]">{fare.toLocaleString()}원</span>
@@ -19328,10 +19332,13 @@ if (editTarget.거래처명) {
                           style={{ left: `calc(${barPct}% - 5px)` }} />
                       </div>
                       <div className="flex items-center justify-between">
-                        <div className="text-[12px] font-semibold text-gray-400">
-                          기사 <span className="text-gray-700 font-bold">{rec.이름 || "-"}</span>
-                          <span className="mx-1.5 text-gray-300">·</span>
-                          기사운임 <span className="text-gray-700 font-bold">{Number(rec.기사운임 || 0).toLocaleString()}원</span>
+                        <div className="flex flex-col gap-0.5">
+                          <div className="text-[13px] font-bold text-gray-800">
+                            기사: {rec.이름 || "-"}
+                          </div>
+                          <div className="text-[12px] text-gray-500">
+                            기사운임: <span className="font-bold text-gray-700">{Number(rec.기사운임 || 0).toLocaleString()}원</span>
+                          </div>
                         </div>
                         <span className="text-[20px] font-extrabold text-[#1B2B4B]">{fare.toLocaleString()}원</span>
                       </div>
@@ -25676,10 +25683,13 @@ setCopyTarget(prev => ({
                           style={{ left: `calc(${barPct}% - 5px)` }} />
                       </div>
                       <div className="flex items-center justify-between">
-                        <div className="text-[12px] font-semibold text-gray-400">
-                          기사 <span className="text-gray-700 font-bold">{rec.이름 || "-"}</span>
-                          <span className="mx-1.5 text-gray-300">·</span>
-                          기사운임 <span className="text-gray-700 font-bold">{Number(rec.기사운임||0).toLocaleString()}원</span>
+                        <div className="flex flex-col gap-0.5">
+                          <div className="text-[13px] font-bold text-gray-800">
+                            기사: {rec.이름 || "-"}
+                          </div>
+                          <div className="text-[12px] text-gray-500">
+                            기사운임: <span className="font-bold text-gray-700">{Number(rec.기사운임||0).toLocaleString()}원</span>
+                          </div>
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="text-[20px] font-extrabold text-[#1B2B4B]">{fare.toLocaleString()}원</span>
@@ -25923,10 +25933,13 @@ setCopyTarget(prev => ({
                           style={{ left: `calc(${barPct}% - 5px)` }} />
                       </div>
                       <div className="flex items-center justify-between">
-                        <div className="text-[12px] font-semibold text-gray-400">
-                          기사 <span className="text-gray-700 font-bold">{rec.이름 || "-"}</span>
-                          <span className="mx-1.5 text-gray-300">·</span>
-                          기사운임 <span className="text-gray-700 font-bold">{Number(rec.기사운임||0).toLocaleString()}원</span>
+                        <div className="flex flex-col gap-0.5">
+                          <div className="text-[13px] font-bold text-gray-800">
+                            기사: {rec.이름 || "-"}
+                          </div>
+                          <div className="text-[12px] text-gray-500">
+                            기사운임: <span className="font-bold text-gray-700">{Number(rec.기사운임||0).toLocaleString()}원</span>
+                          </div>
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="text-[20px] font-extrabold text-[#1B2B4B]">{fare.toLocaleString()}원</span>
@@ -27230,10 +27243,13 @@ setCopyTarget(prev => ({
                           style={{ left: `calc(${barPct}% - 5px)` }} />
                       </div>
                       <div className="flex items-center justify-between">
-                        <div className="text-[12px] font-semibold text-gray-400">
-                          기사 <span className="text-gray-700 font-bold">{rec.이름 || "-"}</span>
-                          <span className="mx-1.5 text-gray-300">·</span>
-                          기사운임 <span className="text-gray-700 font-bold">{Number(rec.기사운임 || 0).toLocaleString()}원</span>
+                        <div className="flex flex-col gap-0.5">
+                          <div className="text-[13px] font-bold text-gray-800">
+                            기사: {rec.이름 || "-"}
+                          </div>
+                          <div className="text-[12px] text-gray-500">
+                            기사운임: <span className="font-bold text-gray-700">{Number(rec.기사운임 || 0).toLocaleString()}원</span>
+                          </div>
                         </div>
                         <span className="text-[20px] font-extrabold text-[#1B2B4B]">{fare.toLocaleString()}원</span>
                       </div>
