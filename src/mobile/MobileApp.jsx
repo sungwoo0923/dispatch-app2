@@ -5987,6 +5987,10 @@ const [matchedClients, setMatchedClients] = useState([]);
   // 신규 거래처 등록 모달
   const [showNewClientModal, setShowNewClientModal] = useState(false);
   const [newClientForm, setNewClientForm] = useState({ 거래처명: "", 주소: "", 담당자: "", 담당자번호: "" });
+  // 거래처 검색 결과 모달 (조회 버튼 → 바텀시트)
+  const [showClientSearchModal, setShowClientSearchModal] = useState(false);
+  const [clientSearchResults, setClientSearchResults] = useState([]);
+  const [clientSearchQuery, setClientSearchQuery] = useState("");
 
 // 🔍 거래처 검색 함수
 const searchClient = (q) => {
@@ -6641,82 +6645,72 @@ const pickDrop = (c) => {
       </div>
 
       {/* 거래처명 */}
-<div className="bg-white rounded-lg border shadow-sm">
-  <RowLabelInput
-    label="거래처명"
-    input={
-      <div className="relative">
-        <div className="flex gap-1">
-          <input
-            className="flex-1 border rounded px-2 py-1 text-sm"
-            value={form.거래처명}
-            onChange={(e) => {
-              const val = e.target.value;
-              update("거래처명", val);
-              setClientQuery(val);
-              if (matchedClients.length > 0) setMatchedClients([]);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                searchClient(form.거래처명);
-              }
-            }}
-            placeholder="거래처명 입력 후 조회"
-          />
-          <button
-            type="button"
-            className={
-              cardVersionB
-                ? "px-3 py-1 rounded text-sm font-medium bg-[#1B2B4B] text-white border border-[#1B2B4B]"
-                : "px-3 py-1 rounded text-sm font-medium border border-[#1B2B4B] text-[#1B2B4B] bg-white"
-            }
-            onClick={() => {
-              const q = form.거래처명.trim();
-              if (!q) return;
-              searchClient(q);
-              if (!q) return;
-              // 검색 후 결과 없으면 신규 등록 모달 표시
-              const nq = normalizeCompany(q);
-              const found = clients.some(
-                (c) =>
-                  normalizeCompany(c.거래처명 || "") === nq ||
-                  normalizeCompany(c.거래처명 || "").startsWith(nq) ||
-                  normalizeCompany(c.거래처명 || "").includes(nq)
-              );
-              if (!found) {
-                setNewClientForm({ 거래처명: q, 주소: "", 담당자: "", 담당자번호: "" });
-                setShowNewClientModal(true);
-              }
-            }}
-          >
-            조회
-          </button>
-        </div>
-        {/* 검색 결과 드롭다운 */}
-        {matchedClients.length > 0 && (
-          <ul className="absolute z-50 bg-white border shadow rounded mt-1 w-full max-h-40 overflow-auto">
-            {matchedClients.map((c) => (
-              <li
-                key={c.id}
-                className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
-                onMouseDown={() => {
-                  chooseClient(c);
-                }}
-              >
-                <div className="font-semibold text-gray-800">
-                  {c.거래처명}
-                </div>
-                <div className="text-xs text-gray-500">
-                  {c.주소 || "- 주소 미등록"}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    }
-  />
+<div className="bg-white rounded-lg border shadow-sm px-3 py-2">
+  <div className="text-[11px] text-gray-500 mb-1">거래처명</div>
+  <div className="flex gap-2">
+    <div className="relative flex-1 min-w-0">
+      <input
+        className="w-full border rounded px-2 py-1.5 text-[13px]"
+        value={form.거래처명}
+        onChange={(e) => {
+          const val = e.target.value;
+          update("거래처명", val);
+          setClientQuery(val);
+          if (!val.trim()) { setMatchedClients([]); return; }
+          searchClient(val);
+        }}
+        onFocus={() => {
+          if (form.거래처명.trim()) searchClient(form.거래처명);
+        }}
+        onBlur={() => setTimeout(() => setMatchedClients([]), 200)}
+        placeholder="거래처명 입력"
+      />
+      {/* 실시간 자동완성 드롭다운 */}
+      {matchedClients.length > 0 && (
+        <ul className="absolute left-0 right-0 top-full mt-1 bg-white border rounded-lg shadow-lg z-50 max-h-44 overflow-auto">
+          {matchedClients.map((c) => (
+            <li
+              key={c.id || c.거래처명}
+              className="px-3 py-2 active:bg-gray-100 cursor-pointer text-[13px] border-b last:border-b-0"
+              onMouseDown={(e) => { e.preventDefault(); chooseClient(c); }}
+            >
+              <div className="font-semibold text-gray-800">{c.거래처명}</div>
+              {c.주소 && <div className="text-[11px] text-gray-400">{c.주소}</div>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+    <button
+      type="button"
+      className={`shrink-0 px-3 py-1.5 rounded text-[13px] font-medium ${
+        cardVersionB
+          ? "bg-[#1B2B4B] text-white"
+          : "border border-[#1B2B4B] text-[#1B2B4B] bg-white"
+      }`}
+      onClick={() => {
+        const q = form.거래처명.trim();
+        const nq = normalizeCompany(q || "");
+        const results = q
+          ? (() => {
+              const exact = [], starts = [], includes = [];
+              clients.forEach((c) => {
+                const n = normalizeCompany(c.거래처명 || "");
+                if (n === nq) exact.push(c);
+                else if (n.startsWith(nq)) starts.push(c);
+                else if (n.includes(nq)) includes.push(c);
+              });
+              return [...exact, ...starts, ...includes].slice(0, 20);
+            })()
+          : [];
+        setClientSearchQuery(q);
+        setClientSearchResults(results);
+        setShowClientSearchModal(true);
+      }}
+    >
+      조회
+    </button>
+  </div>
 </div>
 
 
@@ -7683,6 +7677,84 @@ const pickDrop = (c) => {
           </div>
         </div>
       )}
+
+      {/* ===== 거래처 검색 결과 바텀시트 ===== */}
+{showClientSearchModal && (
+  <div className="fixed inset-0 z-[9998] flex flex-col justify-end">
+    <div className="absolute inset-0 bg-black/50" onClick={() => setShowClientSearchModal(false)} />
+    <div
+      className="relative bg-white rounded-t-2xl shadow-xl flex flex-col"
+      style={{ maxHeight: "70vh" }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="flex justify-center pt-3 pb-1 shrink-0">
+        <div className="w-10 h-1 rounded-full bg-gray-200" />
+      </div>
+      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 shrink-0">
+        <div className="text-[14px] font-bold text-[#1B2B4B]">
+          거래처 조회 {clientSearchQuery ? `"${clientSearchQuery}"` : ""}
+        </div>
+        <button
+          type="button"
+          className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 text-lg"
+          onClick={() => setShowClientSearchModal(false)}
+        >×</button>
+      </div>
+      <div className="flex-1 overflow-y-auto">
+        {clientSearchResults.length === 0 ? (
+          <div className="px-4 py-6 space-y-3">
+            <div className="text-center text-[13px] text-gray-400">
+              {clientSearchQuery ? `"${clientSearchQuery}" 검색 결과 없음` : "거래처 전체 목록"}
+            </div>
+            <button
+              type="button"
+              className={`w-full py-2.5 rounded-lg text-[13px] font-semibold border ${
+                cardVersionB ? "border-[#1B2B4B] text-[#1B2B4B]" : "border-[#1B2B4B] text-[#1B2B4B]"
+              }`}
+              onClick={() => {
+                setShowClientSearchModal(false);
+                setNewClientForm({ 거래처명: clientSearchQuery, 주소: "", 담당자: "", 담당자번호: "" });
+                setShowNewClientModal(true);
+              }}
+            >
+              신규 거래처로 등록
+            </button>
+          </div>
+        ) : (
+          <>
+            {clientSearchResults.map((c, i) => (
+              <button
+                key={c.id || i}
+                type="button"
+                className="w-full text-left px-4 py-3 border-b border-gray-50 active:bg-gray-50"
+                onClick={() => {
+                  setShowClientSearchModal(false);
+                  chooseClient(c);
+                }}
+              >
+                <div className="text-[13px] font-semibold text-gray-800">{c.거래처명}</div>
+                {c.주소 && <div className="text-[11px] text-gray-400 mt-0.5">{c.주소}</div>}
+              </button>
+            ))}
+            <div className="px-4 py-3 border-t border-gray-100">
+              <button
+                type="button"
+                className="w-full py-2.5 rounded-lg text-[13px] font-semibold border border-gray-300 text-gray-600"
+                onClick={() => {
+                  setShowClientSearchModal(false);
+                  setNewClientForm({ 거래처명: clientSearchQuery, 주소: "", 담당자: "", 담당자번호: "" });
+                  setShowNewClientModal(true);
+                }}
+              >
+                신규 거래처로 등록
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  </div>
+)}
 
       {/* =============================
     거래처 적용 선택 팝업
