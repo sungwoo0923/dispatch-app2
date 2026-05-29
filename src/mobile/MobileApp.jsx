@@ -5978,12 +5978,15 @@ function MobileOrderForm({
       하차시간: prev.상차시간,
     }));
   };
-  // 🔍 거래처 자동검색 state
+  // 거래처 검색 state
 const [clientQuery, setClientQuery] = useState("");
 const [matchedClients, setMatchedClients] = useState([]);
-  // ▶ 거래처 선택 후 '상차/하차에 어디로 적용할지' 선택 팝업용
+  // 거래처 선택 후 '상차/하차에 어디로 적용할지' 선택 팝업용
   const [showClientApplyModal, setShowClientApplyModal] = useState(false);
   const [selectedClient, setSelectedClient] = useState(null);
+  // 신규 거래처 등록 모달
+  const [showNewClientModal, setShowNewClientModal] = useState(false);
+  const [newClientForm, setNewClientForm] = useState({ 거래처명: "", 주소: "", 담당자: "", 담당자번호: "" });
 
 // 🔍 거래처 검색 함수
 const searchClient = (q) => {
@@ -6024,18 +6027,12 @@ const searchClient = (q) => {
 
   setMatchedClients(sorted);
 };
-// 🔄 거래처 선택 시 주소 자동반영
+// 거래처 선택 시 거래처명만 반영하고 적용 위치 선택 팝업 표시
 const chooseClient = (c) => {
   setMatchedClients([]);
   update("거래처명", c.거래처명);
-  update("상차지명", c.거래처명);
-  update("상차지주소", c.주소 || c.상차지주소 || c.하차지주소 || "");
-
-  // ★ 담당자/연락처도 반영
-  const contacts = Array.isArray(c.contacts) ? c.contacts : [];
-  const primary = contacts.find(ct => ct.isPrimary) || contacts[0] || null;
-  update("상차지담당자", primary?.name || c.담당자 || "");
-  update("상차지담당자번호", primary?.phone || c.담당자번호 || "");
+  setSelectedClient(c);
+  setShowClientApplyModal(true);
 };
 
 const [showNewDriver, setShowNewDriver] = useState(false);
@@ -6649,84 +6646,64 @@ const pickDrop = (c) => {
     label="거래처명"
     input={
       <div className="relative">
-        <input
-          className="w-full border rounded px-2 py-1 text-sm"
-          value={form.거래처명}
-          onChange={(e) => {
-            const val = e.target.value;
-            update("거래처명", val);
-            update("상차지명", val);
-            setClientQuery(val);
-            searchClient(val);
-          }}
-          onFocus={() => {
-            if (form.거래처명) searchClient(form.거래처명);
-          }}
-          onBlur={async () => {
-  // 자동완성 클릭 직후 blur 방지
-  setTimeout(() => setMatchedClients([]), 200);
-
-  const val = form.거래처명.trim();
-  if (!val) return;
-
-  const normVal = normalizeCompany(val);
-
-  // ✅ 1️⃣ 자동완성으로 이미 선택된 경우 → 종료
-  if (selectedClient) {
-    return;
-  }
-
-  // ✅ 2️⃣ 주소가 이미 있으면 = 기존 거래처 → 종료
-  if (form.상차지주소 || form.하차지주소) {
-    return;
-  }
-
-  // ✅ 3️⃣ clients 기준 기존 거래처 존재 여부
-  const existing = clients.find(
-    (c) => normalizeCompany(c.거래처명) === normVal
-  );
-
-  // ✅ 4️⃣ 진짜 신규일 때만 팝업
-  if (!existing && val.length >= 2) {
-    const ok = window.confirm(
-      "등록되지 않은 거래처입니다.\n신규 등록할까요?"
-    );
-    if (ok) {
-      await addDoc(collection(db, "places"), {
-  거래처명: val,
-  주소: "",
-  createdAt: serverTimestamp(),
-});
-      showToast("신규 거래처 등록 완료!");
-    }
-  }
-}}
-        />
-        {/* 🔽 자동완성 리스트 */}
+        <div className="flex gap-1">
+          <input
+            className="flex-1 border rounded px-2 py-1 text-sm"
+            value={form.거래처명}
+            onChange={(e) => {
+              const val = e.target.value;
+              update("거래처명", val);
+              setClientQuery(val);
+              if (matchedClients.length > 0) setMatchedClients([]);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                searchClient(form.거래처명);
+              }
+            }}
+            placeholder="거래처명 입력 후 조회"
+          />
+          <button
+            type="button"
+            className={
+              cardVersionB
+                ? "px-3 py-1 rounded text-sm font-medium bg-[#1B2B4B] text-white border border-[#1B2B4B]"
+                : "px-3 py-1 rounded text-sm font-medium border border-[#1B2B4B] text-[#1B2B4B] bg-white"
+            }
+            onClick={() => {
+              const q = form.거래처명.trim();
+              if (!q) return;
+              searchClient(q);
+              if (!q) return;
+              // 검색 후 결과 없으면 신규 등록 모달 표시
+              const nq = normalizeCompany(q);
+              const found = clients.some(
+                (c) =>
+                  normalizeCompany(c.거래처명 || "") === nq ||
+                  normalizeCompany(c.거래처명 || "").startsWith(nq) ||
+                  normalizeCompany(c.거래처명 || "").includes(nq)
+              );
+              if (!found) {
+                setNewClientForm({ 거래처명: q, 주소: "", 담당자: "", 담당자번호: "" });
+                setShowNewClientModal(true);
+              }
+            }}
+          >
+            조회
+          </button>
+        </div>
+        {/* 검색 결과 드롭다운 */}
         {matchedClients.length > 0 && (
           <ul className="absolute z-50 bg-white border shadow rounded mt-1 w-full max-h-40 overflow-auto">
             {matchedClients.map((c) => (
               <li
-  key={c.id}
-  className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
-  onMouseDown={() => {
-  // 🔥 1. 거래처 확정 반영 (blur 전에!)
-  update("거래처명", c.거래처명);
-  update("상차지명", c.거래처명);
-  update(
-    "상차지주소",
-    c.주소 || c.상차지주소 || c.하차지주소 || ""
-  );
-
-  // 🔥 2. 선택 상태 저장
-  setSelectedClient(c);
-  setShowClientApplyModal(true);
-
-  // 🔥 3. 자동완성 닫기
-  setMatchedClients([]);
-}}
-
->
+                key={c.id}
+                className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
+                onMouseDown={() => {
+                  chooseClient(c);
+                }}
+              >
                 <div className="font-semibold text-gray-800">
                   {c.거래처명}
                 </div>
@@ -7714,18 +7691,23 @@ const pickDrop = (c) => {
   <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[9999]">
     <div className="bg-white rounded-xl shadow-xl p-5 w-72">
 
-      <div className="text-sm font-semibold mb-3">
-        선택한 거래처를 어디에 적용할까요?
+      <div className="text-sm font-semibold mb-1 text-[#1B2B4B]">
+        거래처를 어디에 적용할까요?
       </div>
 
       <div className="mb-4 text-xs text-gray-500">
-        {selectedClient.거래처명}
+        <span className="font-medium text-gray-700">{selectedClient.거래처명}</span>
         <br />
         {selectedClient.주소 || "- 주소 없음"}
       </div>
 
+      {/* 상차지에 적용 */}
       <button
-        className="w-full py-2 mb-2 bg-blue-500 text-white rounded-lg text-sm"
+        className={
+          cardVersionB
+            ? "w-full py-2 mb-2 rounded-lg text-sm font-medium bg-[#1B2B4B] text-white"
+            : "w-full py-2 mb-2 rounded-lg text-sm font-medium border border-[#1B2B4B] text-[#1B2B4B] bg-white"
+        }
         onClick={() => {
           const contacts = Array.isArray(selectedClient.contacts) ? selectedClient.contacts : [];
           const primary = contacts.find(ct => ct.isPrimary) || contacts[0] || null;
@@ -7739,8 +7721,13 @@ const pickDrop = (c) => {
         상차지에 적용
       </button>
 
+      {/* 하차지에 적용 */}
       <button
-        className="w-full py-2 mb-2 bg-indigo-500 text-white rounded-lg text-sm"
+        className={
+          cardVersionB
+            ? "w-full py-2 mb-2 rounded-lg text-sm font-medium bg-[#1B2B4B] text-white"
+            : "w-full py-2 mb-2 rounded-lg text-sm font-medium border border-[#1B2B4B] text-[#1B2B4B] bg-white"
+        }
         onClick={() => {
           const contacts = Array.isArray(selectedClient.contacts) ? selectedClient.contacts : [];
           const primary = contacts.find(ct => ct.isPrimary) || contacts[0] || null;
@@ -7754,12 +7741,142 @@ const pickDrop = (c) => {
         하차지에 적용
       </button>
 
+      {/* 둘 다 적용 */}
       <button
-        className="w-full py-2 bg-gray-300 text-gray-700 rounded-lg text-sm"
+        className={
+          cardVersionB
+            ? "w-full py-2 mb-2 rounded-lg text-sm font-medium bg-[#1B2B4B] text-white"
+            : "w-full py-2 mb-2 rounded-lg text-sm font-medium border border-[#1B2B4B] text-[#1B2B4B] bg-white"
+        }
+        onClick={() => {
+          const contacts = Array.isArray(selectedClient.contacts) ? selectedClient.contacts : [];
+          const primary = contacts.find(ct => ct.isPrimary) || contacts[0] || null;
+          update("상차지명", selectedClient.거래처명);
+          update("상차지주소", selectedClient.주소 || "");
+          update("상차지담당자", primary?.name || selectedClient.담당자 || "");
+          update("상차지담당자번호", primary?.phone || selectedClient.담당자번호 || "");
+          update("하차지명", selectedClient.거래처명);
+          update("하차지주소", selectedClient.주소 || "");
+          update("하차지담당자", primary?.name || selectedClient.담당자 || "");
+          update("하차지담당자번호", primary?.phone || selectedClient.담당자번호 || "");
+          setShowClientApplyModal(false);
+        }}
+      >
+        둘 다 적용
+      </button>
+
+      {/* 거래처명만 */}
+      <button
+        className={
+          cardVersionB
+            ? "w-full py-2 rounded-lg text-sm font-medium bg-gray-100 text-gray-600 border border-gray-200"
+            : "w-full py-2 rounded-lg text-sm font-medium border border-gray-300 text-gray-500 bg-white"
+        }
         onClick={() => setShowClientApplyModal(false)}
       >
-        취소
+        거래처명만
       </button>
+    </div>
+  </div>
+)}
+
+{/* ===== 신규 거래처 등록 모달 ===== */}
+{showNewClientModal && (
+  <div className="fixed inset-0 bg-black/40 flex items-end justify-center z-[9999]">
+    <div className="bg-white rounded-t-2xl shadow-xl w-full max-w-lg p-5 pb-8">
+      <div className="flex items-center justify-between mb-4">
+        <div className="text-sm font-semibold text-[#1B2B4B]">신규 거래처 등록</div>
+        <button
+          type="button"
+          className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 text-lg"
+          onClick={() => setShowNewClientModal(false)}
+        >×</button>
+      </div>
+
+      <div className="space-y-3">
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">거래처명</label>
+          <input
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+            value={newClientForm.거래처명}
+            onChange={(e) => setNewClientForm((p) => ({ ...p, 거래처명: e.target.value }))}
+            placeholder="거래처명"
+          />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">주소</label>
+          <input
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+            value={newClientForm.주소}
+            onChange={(e) => setNewClientForm((p) => ({ ...p, 주소: e.target.value }))}
+            placeholder="주소 (선택)"
+          />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">담당자</label>
+          <input
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+            value={newClientForm.담당자}
+            onChange={(e) => setNewClientForm((p) => ({ ...p, 담당자: e.target.value }))}
+            placeholder="담당자 이름 (선택)"
+          />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">담당자 번호</label>
+          <input
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+            value={newClientForm.담당자번호}
+            onChange={(e) => setNewClientForm((p) => ({ ...p, 담당자번호: e.target.value }))}
+            placeholder="연락처 (선택)"
+          />
+        </div>
+      </div>
+
+      <div className="flex gap-2 mt-5">
+        <button
+          type="button"
+          className={
+            cardVersionB
+              ? "flex-1 py-2.5 rounded-lg text-sm font-medium bg-gray-100 text-gray-600 border border-gray-200"
+              : "flex-1 py-2.5 rounded-lg text-sm font-medium border border-gray-300 text-gray-500 bg-white"
+          }
+          onClick={() => setShowNewClientModal(false)}
+        >
+          취소
+        </button>
+        <button
+          type="button"
+          className={
+            cardVersionB
+              ? "flex-1 py-2.5 rounded-lg text-sm font-medium bg-[#1B2B4B] text-white"
+              : "flex-1 py-2.5 rounded-lg text-sm font-medium bg-[#1B2B4B] text-white"
+          }
+          onClick={async () => {
+            const name = newClientForm.거래처명.trim();
+            if (!name) return;
+            const contacts = [];
+            if (newClientForm.담당자.trim() || newClientForm.담당자번호.trim()) {
+              contacts.push({
+                name: newClientForm.담당자.trim(),
+                phone: newClientForm.담당자번호.trim(),
+                isPrimary: true,
+              });
+            }
+            await addDoc(collection(db, "places"), {
+              업체명: name,
+              주소: newClientForm.주소.trim(),
+              contacts,
+              등급: "일반",
+              createdAt: serverTimestamp(),
+            });
+            update("거래처명", name);
+            showToast("신규 거래처 등록 완료");
+            setShowNewClientModal(false);
+          }}
+        >
+          등록
+        </button>
+      </div>
     </div>
   </div>
 )}
