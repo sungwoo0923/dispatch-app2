@@ -2,34 +2,23 @@
 import React from "react";
 
 export default function UpdateBanner() {
-  const [phase, setPhase] = React.useState("hidden"); // hidden | show | fadeout
+  const [visible, setVisible] = React.useState(false);
 
   React.useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
 
-    let refreshing = false;
+    const activateUpdate = () => {
+      setVisible(true);
+    };
 
-    // ✅ 컨트롤러 변경 = 새 SW 활성화 완료 → 배너 표시 후 자동 새로고침
     navigator.serviceWorker.addEventListener("controllerchange", () => {
-      if (refreshing) return;
-      refreshing = true;
-
-      setPhase("show");
-
-      // 2초 후 fadeout 시작
-      setTimeout(() => setPhase("fadeout"), 2000);
-
-      // 2.8초 후 새로고침
-      setTimeout(() => window.location.reload(), 2800);
+      activateUpdate();
     });
 
-    // ✅ 기존 waiting 워커 즉시 처리
     navigator.serviceWorker.ready.then(reg => {
       if (reg.waiting) {
         reg.waiting.postMessage({ type: "APPLY_UPDATE" });
       }
-
-      // 새 워커 설치 감지
       reg.addEventListener("updatefound", () => {
         const newWorker = reg.installing;
         if (!newWorker) return;
@@ -41,12 +30,10 @@ export default function UpdateBanner() {
       });
     });
 
-    // ✅ 5분마다 업데이트 체크
     const interval = setInterval(() => {
       navigator.serviceWorker.ready.then(reg => reg.update()).catch(() => {});
     }, 5 * 60 * 1000);
 
-    // ✅ 탭 포커스 시 업데이트 체크
     const onFocus = () => {
       navigator.serviceWorker.ready.then(reg => reg.update()).catch(() => {});
     };
@@ -58,7 +45,7 @@ export default function UpdateBanner() {
     };
   }, []);
 
-  if (phase === "hidden") return null;
+  if (!visible) return null;
 
   return (
     <>
@@ -67,18 +54,12 @@ export default function UpdateBanner() {
           from { opacity: 0; transform: translateY(-100%); }
           to   { opacity: 1; transform: translateY(0); }
         }
-        @keyframes bannerUp {
-          from { opacity: 1; transform: translateY(0); }
-          to   { opacity: 0; transform: translateY(-100%); }
-        }
         .update-banner {
           animation: bannerDown 0.4s ease-out forwards;
         }
-        .update-banner.fadeout {
-          animation: bannerUp 0.5s ease-in forwards;
-        }
       `}</style>
-      <div className={`update-banner${phase === "fadeout" ? " fadeout" : ""}`}
+      <div
+        className="update-banner"
         style={{
           position: "fixed",
           top: 0,
@@ -87,8 +68,11 @@ export default function UpdateBanner() {
           zIndex: 999999,
           background: "#1B2B4B",
           color: "white",
-          textAlign: "center",
-          padding: "10px 16px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: "16px",
+          padding: "10px 20px",
           fontSize: "13px",
           fontWeight: 600,
           letterSpacing: "0.2px",
@@ -96,8 +80,43 @@ export default function UpdateBanner() {
           fontFamily: "'Noto Sans KR', sans-serif",
         }}
       >
-        <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: "#4ade80", marginRight: 8, verticalAlign: "middle" }} />
-        최신 버전으로 자동 업데이트되었습니다. 잠시 후 새로고침됩니다.
+        <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: "#4ade80", flexShrink: 0 }} />
+          새 버전이 준비되었습니다.
+        </span>
+        <button
+          onClick={() => window.location.reload()}
+          style={{
+            background: "white",
+            color: "#1B2B4B",
+            border: "none",
+            borderRadius: "6px",
+            padding: "5px 16px",
+            fontSize: "13px",
+            fontWeight: 700,
+            cursor: "pointer",
+            letterSpacing: "0.2px",
+            flexShrink: 0,
+          }}
+        >
+          업데이트
+        </button>
+        <button
+          onClick={() => setVisible(false)}
+          style={{
+            background: "transparent",
+            color: "rgba(255,255,255,0.6)",
+            border: "none",
+            fontSize: "18px",
+            cursor: "pointer",
+            lineHeight: 1,
+            padding: "0 4px",
+            flexShrink: 0,
+          }}
+          title="닫기"
+        >
+          ×
+        </button>
       </div>
     </>
   );

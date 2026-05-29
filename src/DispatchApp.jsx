@@ -11968,6 +11968,7 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db }) {
   const [dateFrom, setDateFrom] = React.useState(firstDay);
   const [dateTo, setDateTo] = React.useState(lastDay);
   const [results, setResults] = React.useState([]);
+  const [sortMode, setSortMode] = React.useState("date"); // "date" | "done" | "undone"
   const [viewRow, setViewRow] = React.useState(null);
   const [sendDone, setSendDone] = React.useState(null);
 
@@ -11985,10 +11986,18 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db }) {
       if (dateFrom && d < dateFrom) return false;
       if (dateTo && d > dateTo) return false;
       return true;
-    }).sort((a, b) => (a.상차일 || "").localeCompare(b.상차일 || ""));
+    });
     setResults(filtered);
     setSearched(true);
+    setSortMode("date");
   };
+
+  const sortedResults = React.useMemo(() => {
+    const arr = [...results];
+    if (sortMode === "done") return arr.sort((a,b) => (b.attachCount||0) - (a.attachCount||0) || (a.상차일||"").localeCompare(b.상차일||""));
+    if (sortMode === "undone") return arr.sort((a,b) => (a.attachCount||0) - (b.attachCount||0) || (a.상차일||"").localeCompare(b.상차일||""));
+    return arr.sort((a,b) => (a.상차일||"").localeCompare(b.상차일||""));
+  }, [results, sortMode]);
 
   const handleSend = (r) => {
     const dateStr = (() => {
@@ -12026,92 +12035,118 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db }) {
       .catch(() => alert("클립보드 복사 실패"));
   };
 
+  const sortBtn = (mode, label) => (
+    <button
+      onClick={() => setSortMode(mode)}
+      className={`px-3 py-1.5 text-[12px] font-bold rounded-lg border transition ${sortMode === mode ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:border-[#1B2B4B] hover:text-[#1B2B4B]"}`}>
+      {label}
+    </button>
+  );
+
+  const doneCount = results.filter(r=>(r.attachCount||0)>0).length;
+  const undoneCount = results.length - doneCount;
+
   return (
     <div className="fixed inset-0 bg-black/50 z-[99998] flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+      <div className="bg-white rounded-2xl shadow-2xl flex flex-col" style={{width:"min(96vw, 900px)", maxHeight:"90vh"}} onClick={e => e.stopPropagation()}>
         {/* 헤더 */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 shrink-0">
-          <div className="font-bold text-[16px] text-[#1B2B4B]">첨부현황</div>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 shrink-0">
+          <div className="font-bold text-[17px] text-[#1B2B4B]">첨부현황</div>
           <button onClick={onClose} className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 text-lg transition">×</button>
         </div>
         {/* 검색 */}
-        <div className="px-5 py-4 border-b border-gray-100 shrink-0 bg-gray-50">
+        <div className="px-6 py-4 border-b border-gray-200 shrink-0 bg-gray-50">
           <div className="flex flex-wrap gap-3 items-end">
-            <div className="flex flex-col gap-1">
-              <label className="text-[12px] font-bold text-gray-600">거래처명</label>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[13px] font-bold text-gray-700">거래처명</label>
               <input type="text" value={clientQ} onChange={e => setClientQ(e.target.value)}
                 onKeyDown={e => e.key === "Enter" && handleSearch()} placeholder="거래처명 입력"
-                className="border border-gray-300 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B] w-[180px]" />
+                className="border border-gray-300 rounded-lg px-3 py-2 text-[14px] outline-none focus:border-[#1B2B4B] w-[200px]" />
             </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-[12px] font-bold text-gray-600">기간</label>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[13px] font-bold text-gray-700">기간</label>
               <div className="flex items-center gap-2">
-                <div className="flex items-center gap-1 border border-gray-300 rounded-lg px-2 py-1.5 bg-white">
-                  <select value={dateFrom.slice(0,4)} onChange={e => setDateFrom(`${e.target.value}-${dateFrom.slice(5,7)}-${dateFrom.slice(8,10)}`)} className="text-[13px] outline-none bg-transparent">
+                <div className="flex items-center gap-1 border border-gray-300 rounded-lg px-2 py-2 bg-white">
+                  <select value={dateFrom.slice(0,4)} onChange={e => setDateFrom(`${e.target.value}-${dateFrom.slice(5,7)}-${dateFrom.slice(8,10)}`)} className="text-[14px] outline-none bg-transparent">
                     {Array.from({length:5},(_,i)=>now.getFullYear()-2+i).map(y=><option key={y} value={y}>{y}년</option>)}
                   </select>
-                  <select value={dateFrom.slice(5,7)} onChange={e => setDateFrom(`${dateFrom.slice(0,4)}-${e.target.value}-${dateFrom.slice(8,10)}`)} className="text-[13px] outline-none bg-transparent">
+                  <select value={dateFrom.slice(5,7)} onChange={e => setDateFrom(`${dateFrom.slice(0,4)}-${e.target.value}-${dateFrom.slice(8,10)}`)} className="text-[14px] outline-none bg-transparent">
                     {Array.from({length:12},(_,i)=>String(i+1).padStart(2,"0")).map(m=><option key={m} value={m}>{Number(m)}월</option>)}
                   </select>
                 </div>
-                <span className="text-gray-400 text-[13px]">부터</span>
-                <div className="flex items-center gap-1 border border-gray-300 rounded-lg px-2 py-1.5 bg-white">
-                  <select value={dateTo.slice(0,4)} onChange={e => setDateTo(`${e.target.value}-${dateTo.slice(5,7)}-${dateTo.slice(8,10)}`)} className="text-[13px] outline-none bg-transparent">
+                <span className="text-gray-500 text-[13px] font-medium">부터</span>
+                <div className="flex items-center gap-1 border border-gray-300 rounded-lg px-2 py-2 bg-white">
+                  <select value={dateTo.slice(0,4)} onChange={e => setDateTo(`${e.target.value}-${dateTo.slice(5,7)}-${dateTo.slice(8,10)}`)} className="text-[14px] outline-none bg-transparent">
                     {Array.from({length:5},(_,i)=>now.getFullYear()-2+i).map(y=><option key={y} value={y}>{y}년</option>)}
                   </select>
                   <select value={dateTo.slice(5,7)} onChange={e => {
                     const y = dateTo.slice(0,4); const m = e.target.value;
                     const lastD = new Date(Number(y), Number(m), 0).getDate();
                     setDateTo(`${y}-${m}-${String(lastD).padStart(2,"0")}`);
-                  }} className="text-[13px] outline-none bg-transparent">
+                  }} className="text-[14px] outline-none bg-transparent">
                     {Array.from({length:12},(_,i)=>String(i+1).padStart(2,"0")).map(m=><option key={m} value={m}>{Number(m)}월</option>)}
                   </select>
                 </div>
-                <span className="text-gray-400 text-[13px]">까지</span>
+                <span className="text-gray-500 text-[13px] font-medium">까지</span>
               </div>
             </div>
-            <button onClick={handleSearch} className="px-5 py-2 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-lg hover:opacity-90 transition">조회</button>
+            <button onClick={handleSearch} className="px-6 py-2 bg-[#1B2B4B] text-white text-[14px] font-bold rounded-lg hover:opacity-90 transition">조회</button>
           </div>
         </div>
+        {/* 결과 헤더 (정렬) */}
+        {searched && results.length > 0 && (
+          <div className="px-6 py-3 border-b border-gray-200 shrink-0 flex items-center justify-between bg-white">
+            <div className="text-[13px] font-semibold text-gray-600">
+              총 <span className="font-bold text-gray-900">{results.length}</span>건 &nbsp;·&nbsp;
+              완료 <span className="font-bold text-[#1B2B4B]">{doneCount}</span>건 &nbsp;·&nbsp;
+              미완료 <span className="font-bold text-gray-500">{undoneCount}</span>건
+            </div>
+            <div className="flex gap-2">
+              {sortBtn("date", "날짜순")}
+              {sortBtn("done", "완료순")}
+              {sortBtn("undone", "미완료순")}
+            </div>
+          </div>
+        )}
         {/* 결과 */}
         <div className="flex-1 overflow-y-auto">
-          {!searched && <div className="flex items-center justify-center py-16 text-[14px] text-gray-400">거래처명과 기간을 선택 후 조회하세요</div>}
-          {searched && results.length === 0 && <div className="flex items-center justify-center py-16 text-[14px] text-gray-400">해당 기간에 오더가 없습니다</div>}
+          {!searched && <div className="flex items-center justify-center py-20 text-[15px] font-medium text-gray-400">거래처명과 기간을 선택 후 조회하세요</div>}
+          {searched && results.length === 0 && <div className="flex items-center justify-center py-20 text-[15px] font-medium text-gray-400">해당 기간에 오더가 없습니다</div>}
           {searched && results.length > 0 && (
-            <table className="w-full text-[13px]">
+            <table className="w-full text-[14px]">
               <thead className="sticky top-0 bg-gray-50 border-b border-gray-200">
                 <tr>
-                  <th className="px-4 py-3 text-left font-bold text-gray-700">날짜</th>
-                  <th className="px-4 py-3 text-left font-bold text-gray-700">거래처</th>
-                  <th className="px-4 py-3 text-left font-bold text-gray-700">상차</th>
-                  <th className="px-4 py-3 text-left font-bold text-gray-700">하차</th>
-                  <th className="px-4 py-3 text-center font-bold text-gray-700">첨부</th>
-                  <th className="px-4 py-3 text-center font-bold text-gray-700">처리</th>
+                  <th className="px-5 py-3 text-left font-bold text-gray-700 whitespace-nowrap">날짜</th>
+                  <th className="px-5 py-3 text-left font-bold text-gray-700 whitespace-nowrap">거래처</th>
+                  <th className="px-5 py-3 text-left font-bold text-gray-700 whitespace-nowrap">상차지</th>
+                  <th className="px-5 py-3 text-left font-bold text-gray-700 whitespace-nowrap">하차지</th>
+                  <th className="px-5 py-3 text-center font-bold text-gray-700 whitespace-nowrap">첨부 상태</th>
+                  <th className="px-5 py-3 text-center font-bold text-gray-700 whitespace-nowrap">처리</th>
                 </tr>
               </thead>
               <tbody>
-                {results.map(r => {
+                {sortedResults.map(r => {
                   const cnt = r.attachCount || 0;
                   const done = cnt > 0;
                   return (
                     <tr key={r._id} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="px-4 py-3 text-gray-700 whitespace-nowrap">{r.상차일 || "-"}</td>
-                      <td className="px-4 py-3 text-gray-700 whitespace-nowrap">{r.거래처명 || "-"}</td>
-                      <td className="px-4 py-3 text-gray-700">{r.상차지명 || "-"}</td>
-                      <td className="px-4 py-3 text-gray-700">{r.하차지명 || "-"}</td>
-                      <td className="px-4 py-3 text-center">
+                      <td className="px-5 py-3.5 text-gray-800 font-medium whitespace-nowrap">{r.상차일 || "-"}</td>
+                      <td className="px-5 py-3.5 text-gray-800 font-medium whitespace-nowrap">{r.거래처명 || "-"}</td>
+                      <td className="px-5 py-3.5 text-gray-800">{r.상차지명 || "-"}</td>
+                      <td className="px-5 py-3.5 text-gray-800">{r.하차지명 || "-"}</td>
+                      <td className="px-5 py-3.5 text-center">
                         {done
-                          ? <span className="px-2 py-0.5 rounded-full bg-[#1B2B4B] text-white text-[11px] font-bold">{cnt}장 완료</span>
-                          : <span className="px-2 py-0.5 rounded-full bg-gray-200 text-gray-500 text-[11px] font-bold">미완료</span>}
+                          ? <span className="inline-block px-3 py-1 rounded-full bg-[#1B2B4B] text-white text-[13px] font-bold">{cnt}장 완료</span>
+                          : <span className="inline-block px-3 py-1 rounded-full bg-gray-200 text-gray-600 text-[13px] font-bold">미완료</span>}
                       </td>
-                      <td className="px-4 py-3 text-center">
-                        <div className="flex items-center justify-center gap-1">
+                      <td className="px-5 py-3.5 text-center">
+                        <div className="flex items-center justify-center gap-2">
                           {done && (
                             <button onClick={() => setViewRow(r)}
-                              className="px-2.5 py-1 rounded-lg border border-gray-300 text-gray-600 text-[11px] font-bold hover:bg-gray-100 transition">보기</button>
+                              className="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 text-[13px] font-bold hover:bg-gray-100 transition">보기</button>
                           )}
                           <button onClick={() => handleSend(r)}
-                            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition ${sendDone === r._id ? "bg-[#1B2B4B] text-white" : "border border-[#1B2B4B] text-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"}`}>
+                            className={`px-3 py-1.5 rounded-lg text-[13px] font-bold transition ${sendDone === r._id ? "bg-[#1B2B4B] text-white" : "border border-[#1B2B4B] text-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"}`}>
                             {sendDone === r._id ? "복사됨" : "즉시전송"}
                           </button>
                         </div>
@@ -12124,11 +12159,8 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db }) {
           )}
         </div>
         {/* 푸터 */}
-        <div className="px-5 py-3 border-t border-gray-100 shrink-0 bg-gray-50 flex justify-between items-center">
-          {searched && results.length > 0
-            ? <span className="text-[13px] text-gray-500">총 {results.length}건 · 완료 {results.filter(r=>(r.attachCount||0)>0).length}건 · 미완료 {results.filter(r=>!(r.attachCount||0)).length}건</span>
-            : <span/>}
-          <button onClick={onClose} className="px-5 py-2 bg-gray-200 hover:bg-gray-300 text-[#1B2B4B] text-[13px] font-bold rounded-lg transition">닫기</button>
+        <div className="px-6 py-3 border-t border-gray-200 shrink-0 bg-gray-50 flex justify-end">
+          <button onClick={onClose} className="px-6 py-2 bg-gray-200 hover:bg-gray-300 text-[#1B2B4B] text-[14px] font-bold rounded-lg transition">닫기</button>
         </div>
       </div>
       {viewRow && <AttachmentViewer row={viewRow} onClose={() => setViewRow(null)} db={db} />}
@@ -12152,7 +12184,31 @@ function RealtimeStatus({
   menu,
   darkMode = false,
 }) {
-const alertAudio = React.useRef(null);
+const playNotifSound = React.useCallback(() => {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const notes = [
+      { freq: 698.5, t: 0,    dur: 0.12 },
+      { freq: 880,   t: 0.13, dur: 0.12 },
+      { freq: 1046,  t: 0.26, dur: 0.20 },
+    ];
+    notes.forEach(({ freq, t, dur }) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      const start = ctx.currentTime + t;
+      gain.gain.setValueAtTime(0, start);
+      gain.gain.linearRampToValueAtTime(0.28, start + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.001, start + dur);
+      osc.start(start);
+      osc.stop(start + dur + 0.01);
+    });
+    setTimeout(() => ctx.close(), 1000);
+  } catch {}
+}, []);
 
   // ⚡ 탭 진입 시: 데이터가 이미 있으면 스피너 스킵
   const [ready, setReady] = React.useState(() => Array.isArray(dispatchData) && dispatchData.length > 0);
@@ -12165,9 +12221,6 @@ React.useEffect(() => {
   const handler = (e) => setBlackAlert(e.detail);
   window.addEventListener("blackDriverDetected", handler);
   return () => window.removeEventListener("blackDriverDetected", handler);
-}, []);
-React.useEffect(() => {
-  alertAudio.current = new Audio("/sound/alert.wav");
 }, []);
   // ❄️ 냉장 / 냉동 차량 판별
   const isColdVehicle = (type = "") => {
@@ -13541,10 +13594,7 @@ React.useEffect(() => {
         });
 
         // 알림음
-        if (alertAudio.current) {
-          alertAudio.current.currentTime = 0;
-          alertAudio.current.play().catch(() => {});
-        }
+        playNotifSound();
       }
 
       prevAttachRef.current[id] = cur;
@@ -13668,10 +13718,7 @@ const seen = JSON.parse(localStorage.getItem(urgentKey) || "[]");
 if (newOnes.length > 0) {
   setUrgentPopup(newOnes);
 
-  if (alertAudio.current) {
-    alertAudio.current.currentTime = 0;
-    alertAudio.current.play().catch(() => {});
-  }
+  playNotifSound();
 }
 
 }, [rows]);
