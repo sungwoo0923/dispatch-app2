@@ -61,7 +61,6 @@ function parseSignature(sig = "") {
     }
     if (!name && line.length >= 2 && line.length <= 6) { name = line; break; }
   }
-  if (!plate && lines.length > 0) plate = lines[0];
   return { plate, name, phone };
 }
 

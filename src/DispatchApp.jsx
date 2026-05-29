@@ -15200,16 +15200,16 @@ ${url}
   const isDark = darkMode;
 
 const head = isDark
-    ? "px-3 py-3 text-center text-[14px] font-bold text-white/90 whitespace-nowrap bg-transparent border-b border-white/10"
-    : "px-3 py-3 text-center text-[14px] font-bold text-white whitespace-nowrap bg-transparent border-b border-white/10";
+    ? "px-2 py-2 text-center text-[12px] font-bold text-white/90 whitespace-nowrap bg-transparent border-b border-white/10"
+    : "px-2 py-2 text-center text-[12px] font-bold text-white whitespace-nowrap bg-transparent border-b border-white/10";
 
  const cell = isDark
-    ? "px-3 py-3 text-[14px] text-gray-200 align-middle text-center whitespace-nowrap border-b border-gray-700"
-    : "px-3 py-3 text-[14px] text-gray-800 align-middle text-center whitespace-nowrap border-b border-gray-200";
+    ? "px-2 py-1.5 text-[12px] text-gray-200 align-middle text-center whitespace-nowrap border-b border-gray-700"
+    : "px-2 py-1.5 text-[12px] text-gray-800 align-middle text-center whitespace-nowrap border-b border-gray-200";
 
   const addrCell = isDark
-    ? "px-3 py-3 text-[14px] text-gray-200 align-middle text-center whitespace-nowrap overflow-hidden text-ellipsis border-b border-gray-700 max-w-[180px]"
-    : "px-3 py-3 text-[14px] text-gray-800 align-middle text-center whitespace-nowrap overflow-hidden text-ellipsis border-b border-gray-200 max-w-[180px]";
+    ? "px-2 py-1.5 text-[12px] text-gray-200 align-middle text-center whitespace-nowrap overflow-hidden text-ellipsis border-b border-gray-700 max-w-[160px]"
+    : "px-2 py-1.5 text-[12px] text-gray-800 align-middle text-center whitespace-nowrap overflow-hidden text-ellipsis border-b border-gray-200 max-w-[160px]";
 
   // ------------------------
   // 📌 화면 렌더링
@@ -15585,9 +15585,9 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
 
     <div className="pointer-events-none invisible group-hover:visible absolute left-1/2 -translate-x-1/2 top-full mt-1 z-[99999] w-max">
       <div className="bg-gray-800 text-white text-[11px] rounded-lg px-3 py-2 shadow-xl leading-5 border border-gray-700">
-        <div>📅 등록시간: <span className="text-yellow-300">{formatKstDateTime(getCreatedMs(r))}</span></div>
-        <div>✏️ 마지막수정: <span className="text-green-300">{formatKstDateTime(getUpdatedMs(r))}</span></div>
-        <div>👤 등록자: <span className="text-blue-300">{getCreatorLabel(r)}</span></div>
+        <div>등록시간: <span className="text-yellow-300">{formatKstDateTime(getCreatedMs(r))}</span></div>
+        <div>마지막수정: <span className="text-green-300">{formatKstDateTime(getUpdatedMs(r))}</span></div>
+        <div>등록자: <span className="text-blue-300">{getCreatorLabel(r)}</span></div>
       </div>
     </div>
   </div>
@@ -15667,7 +15667,7 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
                       data-id={r._id}
                       type="text"
                       value={r.차량번호 || ""}
-                      className="border p-1 rounded w-[110px]"
+                      className="border p-0.5 rounded w-[95px] text-[12px]"
                       onChange={(e) => {
   const v = e.target.value;
   const isEmpty = v.trim() === "";
@@ -15719,7 +15719,7 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
                     <button
                       type="button"
                       title={r.배차상태 === "배차완료" ? "클릭 시 배차중으로 변경" : ""}
-                      className={`px-3 py-1 rounded-lg text-[12px] font-bold whitespace-nowrap transition-opacity hover:opacity-80 ${
+                      className={`px-2 py-0.5 rounded-lg text-[11px] font-bold whitespace-nowrap transition-opacity hover:opacity-80 ${
                         r.긴급 && r.배차상태 !== "배차완료"
                           ? "bg-red-500 text-white"
                           : r.배차상태 === "배차완료"
@@ -23186,9 +23186,20 @@ return (
         {(page * pageSize) + i + 1}
       </td>
 
-      <td className="px-3 py-3 text-[14px] font-medium text-gray-800 text-center border-b border-gray-200 border-r border-r-gray-100 whitespace-nowrap">
-        {row.등록일}
-      </td>
+      <td className="px-3 py-3 text-[14px] font-medium text-gray-800 text-center border-b border-gray-200 border-r border-r-gray-100 whitespace-nowrap overflow-visible">
+  <div className="relative inline-block group">
+    <span className="underline decoration-dotted underline-offset-2 cursor-default">
+      {row.등록일 || "-"}
+    </span>
+    <div className="pointer-events-none invisible group-hover:visible absolute left-1/2 -translate-x-1/2 top-full mt-1 z-[99999] w-max">
+      <div className="bg-gray-800 text-white text-[11px] rounded-lg px-3 py-2 shadow-xl leading-5 border border-gray-700">
+        <div>등록시간: <span className="text-yellow-300">{formatKstDateTime(getCreatedMs(row))}</span></div>
+        <div>마지막수정: <span className="text-green-300">{formatKstDateTime(getUpdatedMs(row))}</span></div>
+        <div>등록자: <span className="text-blue-300">{getCreatorLabel(row)}</span></div>
+      </div>
+    </div>
+  </div>
+</td>
 
                   {/* -------------------- 반복 입력 컬럼 -------------------- */}
 {[
