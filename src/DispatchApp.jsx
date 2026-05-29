@@ -15319,8 +15319,8 @@ const head = isDark
   <div className="text-orange-600">수수료 <b>{kpi.fee.toLocaleString()}원</b></div>
 </div>
 
-{/* ======================== 검색+필터 ======================== */}
-<div className="flex items-center gap-1.5 flex-wrap mb-1">
+{/* ======================== 검색+필터+버튼 한 줄 ======================== */}
+<div className="flex items-center gap-1.5 flex-wrap mb-2" style={{maxWidth:"calc(100vw - 2rem)"}}>
   {/* 검색창 */}
   <div className="flex items-center border-2 border-[#1B2B4B] rounded-lg overflow-hidden bg-white h-[34px]">
     <input
@@ -15354,7 +15354,7 @@ const head = isDark
     </button>
   ))}
 
-  <div className="flex items-center gap-1.5">
+  <div className="ml-auto flex items-center gap-1.5">
     <button onClick={async(e)=>{
   e.preventDefault();
   e.stopPropagation();
@@ -23016,8 +23016,8 @@ return (
         <div className="text-orange-600">수수료 <b>{summary.totalFee.toLocaleString()}원</b></div>
       </div>
 
-      {/* ===== 페이지+검색+날짜 ===== */}
-      <div className="flex items-center gap-1.5 flex-wrap mb-1">
+      {/* ===== 페이지+검색+날짜+버튼 한 줄 ===== */}
+      <div className="flex items-center gap-1.5 flex-wrap mb-2" style={{maxWidth:"calc(100vw - 2rem)"}}>
 
         {/* 페이지 이동 */}
         <button disabled={page===0} onClick={()=>setPage(p=>Math.max(0,p-1))}
@@ -23058,9 +23058,8 @@ return (
         <button onClick={()=>{const t=tomorrowKST();setStartDate(t);setEndDate(t);setAppliedStartDate(t);setAppliedEndDate(t);localStorage.setItem("dispatchDateState",JSON.stringify({startDate:t,endDate:t,appliedStartDate:t,appliedEndDate:t}));setQ("");setPage(0);}} className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-[12px] font-semibold">내일</button>
         <button onClick={()=>{const{first,last}=getMonthRange();setStartDate(first);setEndDate(last);setAppliedStartDate(first);setAppliedEndDate(last);setQ("");setPage(0);setLoaded(true);localStorage.setItem("dispatchDateState",JSON.stringify({startDate:first,endDate:last,appliedStartDate:first,appliedEndDate:last}));}} className="px-3 py-1.5 rounded-lg bg-gray-500 text-white text-[12px] font-semibold">전체</button>
 
-      </div>
-      {/* ===== 액션 버튼 줄 ===== */}
-      <div className="flex items-center gap-1.5 flex-wrap mb-2">
+        {/* 우측 버튼들 */}
+        <div className="ml-auto flex items-center gap-1.5">
           <button onClick={()=>setSortModalOpen(true)} className="px-3 py-1.5 rounded-lg bg-slate-500 text-white text-sm font-semibold shadow hover:opacity-90">정렬</button>
           <button onClick={()=>{if(selected.size===0)return showAlert("복사할 항목을 선택하세요.");if(selected.size>1)return showAlert("1개만 선택할 수 있습니다.");setCopyModalOpen(true);}} className="px-3 py-1.5 rounded-lg bg-gray-800 text-white text-sm font-semibold shadow hover:opacity-90">기사복사</button>
           <button onClick={()=>{const url=`${window.location.origin}/driver-upload`;const msg=`[인수증 업로드 안내]\n운송 완료 후 아래 링크를 통해 인수증을 업로드해 주시기 바랍니다.\n\n${url}\n\n서명 받은 인수증(파렛전표) 사진을 촬영하여 업로드해 주세요.\n미업로드 시 운임 정산이 지연될 수 있습니다.`;navigator.clipboard.writeText(msg).then(()=>showAlert("업로드 안내 메시지가 복사되었습니다.\n기사에게 붙여넣기로 전달하세요.")).catch(()=>showAlert(`링크: ${url}`));}} className="px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-sm font-semibold shadow hover:opacity-90">업로드링크</button>
@@ -23070,6 +23069,7 @@ return (
           <button className="px-3 py-1.5 rounded-lg bg-gray-300 text-gray-800 text-sm font-semibold shadow hover:opacity-90" onClick={()=>setSelected(new Set())}>선택초기화</button>
           <button className="px-3 py-1.5 rounded-lg bg-teal-600 text-white text-sm font-semibold shadow hover:opacity-90" onClick={downloadExcel}>엑셀다운</button>
           <button onClick={() => setDailyCloseOpen(true)} className="px-3 py-1.5 rounded-lg bg-gray-700 text-white text-sm font-semibold shadow hover:opacity-90">일마감</button>
+        </div>
       </div>
 
       {/* ★ 포커스 해제 버튼 */}

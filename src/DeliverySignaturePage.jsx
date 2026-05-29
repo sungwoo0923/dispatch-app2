@@ -106,26 +106,28 @@ function parseExcelForHistory(buffer) {
     }
     if (dataRows.length === 0) return;
 
-    // 드라이버 탐색: 지정 서명 컬럼 ±2 우선, 실패하면 행 전체 스캔
+    // 드라이버 탐색: 반드시 차량번호가 있어야 유효한 서명으로 인정
+    // (업체명/상호 같은 일반 셀과 구분하기 위해)
+    const isValidDriver = (p) => p.plate && (p.name || p.phone);
     let driver = null;
     for (const row of dataRows) {
-      // 지정 컬럼 우선 (±2)
+      // 지정 서명 컬럼 ±3 우선 탐색
       for (let colOff = -1; colOff <= 3; colOff++) {
         const idx = effectiveSigCol + colOff;
         if (idx < 0) continue;
         const cell = row[idx];
         if (cell && String(cell).trim()) {
           const parsed = parseSignature(String(cell));
-          if (parsed.name) { driver = parsed; break; }
+          if (isValidDriver(parsed)) { driver = parsed; break; }
         }
       }
       if (driver) break;
-      // 전체 열 스캔 (서명 컬럼이 다른 위치에 있는 경우)
+      // 전체 열 스캔 폴백 (서명 컬럼이 다른 위치인 경우)
       for (let col = 0; col < row.length; col++) {
         const cell = row[col];
         if (!cell || !String(cell).trim()) continue;
         const parsed = parseSignature(String(cell));
-        if (parsed.name) { driver = parsed; break; }
+        if (isValidDriver(parsed)) { driver = parsed; break; }
       }
       if (driver) break;
     }
@@ -187,7 +189,8 @@ function computeMatchScores(sheets, allRecords) {
   const driverMap = new Map();
   allRecords.forEach(rec => {
     const k = rec.driver?.name;
-    if (!k) return;
+    // 차량번호 없는 레코드는 업체명 오인식 → 비교 대상 제외
+    if (!k || !rec.driver?.plate) return;
     if (!driverMap.has(k)) driverMap.set(k, { ...rec.driver, records: [] });
     driverMap.get(k).records.push(rec);
   });
@@ -444,7 +447,8 @@ export default function DeliverySignaturePage() {
     history.forEach(h => {
       (h.records || []).forEach(r => {
         const k = r.driver?.name;
-        if (!k) return;
+        // 차량번호 없으면 업체명/상호 오인식 → 제외
+        if (!k || !r.driver?.plate) return;
         if (!stats.has(k)) stats.set(k, { driver: r.driver, totalAddresses: 0, deliveries: 0, lastDate: "" });
         const s = stats.get(k);
         s.totalAddresses += (r.addresses || []).length;
