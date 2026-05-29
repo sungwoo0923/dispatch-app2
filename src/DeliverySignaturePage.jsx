@@ -52,14 +52,19 @@ function parseSignature(sig = "") {
     if (plateM && !plate) plate = plateM[1].replace(/\s/, "");
     if (phoneM && !phone) phone = phoneM[1];
   }
+  // 지역명(차량번호 앞에 붙는 시/도명)은 이름으로 오인하지 않도록 제외
+  const regionNames = new Set(["서울","부산","대구","인천","광주","대전","울산","경기","강원","충북","충남","전북","전남","경북","경남","제주","세종"]);
   for (const line of lines) {
-    if (plateRe.test(line)) continue;
-    if (phoneRe.test(line)) {
-      const candidate = line.replace(phoneRe, "").trim();
-      if (!name && candidate.length >= 2 && candidate.length <= 6) name = candidate;
-      continue;
+    // 플레이트·전화번호 제거 후 남은 토큰 중 한글 2-5자 단어를 이름으로 인식
+    const stripped = line.replace(plateRe, "").replace(phoneRe, "").trim();
+    const parts = stripped.split(/\s+/).filter(Boolean);
+    for (const p of parts) {
+      if (/^[가-힣]{2,5}$/.test(p) && !regionNames.has(p)) {
+        name = p;
+        break;
+      }
     }
-    if (!name && line.length >= 2 && line.length <= 6) { name = line; break; }
+    if (name) break;
   }
   return { plate, name, phone };
 }
