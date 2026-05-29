@@ -3650,14 +3650,12 @@ const filterPlaces = (q) => {
     const buildHalfHour = React.useMemo(() => {
       if (Array.isArray(timeOptions) && timeOptions.length) return timeOptions;
       const list = [];
-      const toLabel = (h, m) => {
-        const ampm = h < 12 ? "오전" : "오후";
-        const hh = ((h % 12) || 12);
-        return `${ampm} ${hh}시${m ? " 30분" : ""}`;
-      };
-      for (let h = 6; h <= 22; h++) {
-        list.push(toLabel(h, 0));
-        if (h !== 22) list.push(toLabel(h, 30));
+      for (let h = 0; h < 24; h++) {
+        for (let m of [0, 30]) {
+          const isPM = h >= 12;
+          const hour12 = h % 12 === 0 ? 12 : h % 12;
+          list.push(`${isPM ? "오후" : "오전"} ${hour12}시${m === 30 ? " 30분" : ""}`);
+        }
       }
       return list;
     }, [timeOptions]);
@@ -4153,6 +4151,17 @@ React.useEffect(() => {
     하차일: _todayStr(),
   }));
 }, []);
+// 전달사항 자동완성: 상차지명+하차지명 매칭 시 고정된 전달사항 자동 입력
+React.useEffect(() => {
+  if (!form.상차지명 || !form.하차지명 || form.전달사항) return;
+  const match = (dispatchData || []).find(r =>
+    r.전달사항고정 === true &&
+    r.상차지명?.trim() === form.상차지명.trim() &&
+    r.하차지명?.trim() === form.하차지명.trim() &&
+    r.전달사항?.trim()
+  );
+  if (match) onChange("전달사항", match.전달사항);
+}, [form.상차지명, form.하차지명]);
 // ===============================
 // 💰 주소 기반 전국 평균 운임 계산 (정확 톤수 기준)
 // ===============================
@@ -6528,20 +6537,11 @@ showAlert("✅ 오더 내용이 자동으로 입력되었습니다. 확인 후 �
   />
   {/* 상차 시간 + 이전/이후 */}
   <div className="flex items-center gap-1">
-    <select
+    <TimeAmPmPicker
       value={form.상차시간 || ""}
-      className="border-2 border-[#1B2B4B] rounded-lg px-2 py-1.5 text-[13px] font-semibold text-[#1B2B4B] outline-none focus:ring-2 focus:ring-blue-200"
-      onChange={(e) => {
-  const v = e.target.value;
-  onChange("상차시간", v);
-}}
-
-    >
-      <option value="">시간</option>
-      {localTimeOptions.map((t) => (
-        <option key={t} value={t}>{t}</option>
-      ))}
-    </select>
+      onChange={v => onChange("상차시간", v)}
+      selectCls="border-2 border-[#1B2B4B] rounded-lg px-2 py-1 text-[13px] font-semibold text-[#1B2B4B] outline-none focus:ring-2 focus:ring-blue-200"
+    />
 
     {form.상차시간 && (
       <div className="flex gap-1">
@@ -6610,19 +6610,11 @@ showAlert("✅ 오더 내용이 자동으로 입력되었습니다. 확인 후 �
 
   {/* 하차 시간 + 이전/이후 */}
   <div className="flex items-center gap-1">
-      <select
+    <TimeAmPmPicker
       value={form.하차시간 || ""}
-      className="border-2 border-[#1B2B4B] rounded-lg px-2 py-1.5 text-[13px] font-semibold text-[#1B2B4B] outline-none focus:ring-2 focus:ring-blue-200"
-      onChange={(e) => {
-  const v = e.target.value;
-  onChange("하차시간", v);
-}}
-    >
-      <option value="">시간</option>
-      {localTimeOptions.map((t) => (
-        <option key={t} value={t}>{t}</option>
-      ))}
-    </select>
+      onChange={v => onChange("하차시간", v)}
+      selectCls="border-2 border-[#1B2B4B] rounded-lg px-2 py-1 text-[13px] font-semibold text-[#1B2B4B] outline-none focus:ring-2 focus:ring-blue-200"
+    />
 
     {form.하차시간 && (
       <div className="flex gap-1">
@@ -11919,6 +11911,56 @@ function _creatorLabel(r) {
   return r?.등록자명 || r?.createdByName || r?.등록자 || r?.createdByEmail || r?.createdBy || "-";
 }
 
+// 오전/오후 토글 + 시간 선택 컴포넌트
+function TimeAmPmPicker({ value, onChange, selectCls }) {
+  const [ampm, setAmpm] = React.useState(
+    value && value.startsWith("오후") ? "오후" : "오전"
+  );
+  React.useEffect(() => {
+    if (value && value.startsWith("오전")) setAmpm("오전");
+    else if (value && value.startsWith("오후")) setAmpm("오후");
+  }, [value]);
+
+  const times = React.useMemo(() => {
+    const list = [];
+    for (let h = 0; h < 12; h++) {
+      const hh = h === 0 ? 12 : h;
+      list.push(`${ampm} ${hh}시`);
+      list.push(`${ampm} ${hh}시 30분`);
+    }
+    return list;
+  }, [ampm]);
+
+  const handleAmpm = (ap) => {
+    setAmpm(ap);
+    if (value) {
+      const part = value.replace(/^오전 |^오후 /, "");
+      onChange(`${ap} ${part}`);
+    }
+  };
+
+  const btnBase = "px-2.5 py-1 text-[12px] font-semibold rounded border transition";
+  const act = "bg-[#1B2B4B] text-white border-[#1B2B4B]";
+  const inact = "bg-white text-gray-600 border-gray-300 hover:border-[#1B2B4B] hover:text-[#1B2B4B]";
+
+  return (
+    <div className="flex items-center gap-1">
+      <button type="button" className={`${btnBase} ${ampm === "오전" ? act : inact}`} onClick={() => handleAmpm("오전")}>오전</button>
+      <button type="button" className={`${btnBase} ${ampm === "오후" ? act : inact}`} onClick={() => handleAmpm("오후")}>오후</button>
+      <select
+        value={value || ""}
+        onChange={e => onChange(e.target.value)}
+        className={selectCls || "border border-gray-300 rounded-lg px-2 py-1 text-[12px] outline-none focus:border-[#1B2B4B]"}
+      >
+        <option value="">시간</option>
+        {times.map(t => (
+          <option key={t} value={t}>{t.replace(/^오전 |^오후 /, "")}</option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 function RealtimeStatus({
   dispatchData,
   drivers,
@@ -13372,13 +13414,11 @@ const normalizeTime = (t) => {
 };
 const generateTimeOptions = () => {
   const result = [];
-  for (let h = 6; h <= 23; h++) {
+  for (let h = 0; h < 24; h++) {
     for (let m of [0, 30]) {
       const isPM = h >= 12;
       const hour12 = h % 12 === 0 ? 12 : h % 12;
-      const label =
-        `${isPM ? "오후" : "오전"} ${hour12}시${m === 30 ? "30분" : ""}`;
-      result.push(label);
+      result.push(`${isPM ? "오후" : "오전"} ${hour12}시${m === 30 ? " 30분" : ""}`);
     }
   }
   return result;
@@ -15682,7 +15722,7 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
                       data-id={r._id}
                       type="text"
                       value={r.차량번호 || ""}
-                      className="border p-0.5 rounded w-[95px] text-[12px]"
+                      className="border p-0.5 rounded w-[95px] text-[13px]"
                       onChange={(e) => {
   const v = e.target.value;
   const isEmpty = v.trim() === "";
@@ -16185,16 +16225,11 @@ checkWarningStatus(c.거래처명, "거래처");
       </Field>
 
       <Field label="상차시간">
-        <select
-          className="inputStyle"
+        <TimeAmPmPicker
           value={copyTarget?.상차시간 ?? ""}
-          onChange={(e)=>setCopyTarget(p=>({...p, 상차시간:e.target.value}))}
-        >
-          <option value="">선택</option>
-          {generateTimeOptions().map(t=>(
-            <option key={t} value={t}>{t}</option>
-          ))}
-        </select>
+          onChange={v => setCopyTarget(p=>({...p, 상차시간:v}))}
+          selectCls="inputStyle"
+        />
       </Field>
       <Field label="상차방법">
   <select
@@ -16351,16 +16386,11 @@ checkWarningStatus(c.거래처명, "거래처");
       </Field>
 
       <Field label="하차시간">
-        <select
-          className="inputStyle"
+        <TimeAmPmPicker
           value={copyTarget?.하차시간 ?? ""}
-          onChange={(e)=>setCopyTarget(p=>({...p, 하차시간:e.target.value}))}
-        >
-          <option value="">선택</option>
-          {generateTimeOptions().map(t=>(
-            <option key={t} value={t}>{t}</option>
-          ))}
-        </select>
+          onChange={v => setCopyTarget(p=>({...p, 하차시간:v}))}
+          selectCls="inputStyle"
+        />
       </Field>
 <Field label="하차방법">
   <select
@@ -17564,37 +17594,11 @@ value={copyTarget?.화물수량 || ""}
   {/* ================= 상차시간 + 기준 ================= */}
   <div>
     <label>상차시간</label>
-    <select
-      className="border p-2 rounded w-full"
+    <TimeAmPmPicker
       value={editTarget.상차시간 || ""}
-      onChange={(e) =>
-        setEditTarget((p) => ({ ...p, 상차시간: e.target.value }))
-      }
-    >
-      <option value="">선택없음</option>
-      {[
-       "오전 6시","오전 6시 30분",
-        "오전 7시","오전 7시 30분",
-        "오전 8시","오전 8시 30분",
-        "오전 9시","오전 9시 30분",
-        "오전 10시","오전 10시 30분",
-        "오전 11시","오전 11시 30분",
-        "오후 12시","오후 12시 30분",
-        "오후 1시","오후 1시 30분",
-        "오후 2시","오후 2시 30분",
-        "오후 3시","오후 3시 30분",
-        "오후 4시","오후 4시 30분",
-        "오후 5시","오후 5시 30분",
-        "오후 6시","오후 6시 30분",
-        "오후 7시","오후 7시 30분",
-        "오후 8시","오후 8시 30분",
-        "오후 9시","오후 9시 30분",
-        "오후 10시","오후 10시 30분",
-        "오후 11시","오후 11시 30분",
-      ].map((t) => (
-        <option key={t} value={t}>{t}</option>
-      ))}
-    </select>
+      onChange={v => setEditTarget(p => ({ ...p, 상차시간: v }))}
+      selectCls="border p-2 rounded w-full"
+    />
 
     {/* ✅ 상차시간 기준 */}
     <select
@@ -17626,37 +17630,11 @@ value={copyTarget?.화물수량 || ""}
   {/* ================= 하차시간 + 기준 ================= */}
   <div>
     <label>하차시간</label>
-    <select
-      className="border p-2 rounded w-full"
+    <TimeAmPmPicker
       value={editTarget.하차시간 || ""}
-      onChange={(e) =>
-        setEditTarget((p) => ({ ...p, 하차시간: e.target.value }))
-      }
-    >
-      <option value="">선택없음</option>
-      {[
-       "오전 6시","오전 6시 30분",
-        "오전 7시","오전 7시 30분",
-        "오전 8시","오전 8시 30분",
-        "오전 9시","오전 9시 30분",
-        "오전 10시","오전 10시 30분",
-        "오전 11시","오전 11시 30분",
-        "오후 12시","오후 12시 30분",
-        "오후 1시","오후 1시 30분",
-        "오후 2시","오후 2시 30분",
-        "오후 3시","오후 3시 30분",
-        "오후 4시","오후 4시 30분",
-        "오후 5시","오후 5시 30분",
-        "오후 6시","오후 6시 30분",
-        "오후 7시","오후 7시 30분",
-        "오후 8시","오후 8시 30분",
-        "오후 9시","오후 9시 30분",
-        "오후 10시","오후 10시 30분",
-        "오후 11시","오후 11시 30분",
-      ].map((t) => (
-        <option key={t} value={t}>{t}</option>
-      ))}
-    </select>
+      onChange={v => setEditTarget(p => ({ ...p, 하차시간: v }))}
+      selectCls="border p-2 rounded w-full"
+    />
 
     {/* ✅ 하차시간 기준 */}
     <select
@@ -20257,17 +20235,15 @@ function MemoMore({ text = "" }) {
 // ===================== DispatchApp.jsx (PART 5/8 — 차량번호 항상 활성화 + 선택수정→수정완료 통합버튼 + 주소/메모 더보기 + 대용량업로드 + 신규 오더 등록) =====================
 
 function generateTimeOptions() {
-  const list = [];
-  const toLabel = (h, m) => {
-    const ampm = h < 12 ? "오전" : "오후";
-    const hh = ((h % 12) || 12);
-    return `${ampm} ${hh}시${m ? " 30분" : ""}`;
-  };
-  for (let h = 6; h <= 22; h++) {
-    list.push(toLabel(h, 0));
-    if (h !== 22) list.push(toLabel(h, 30));
+  const result = [];
+  for (let h = 0; h < 24; h++) {
+    for (let m of [0, 30]) {
+      const isPM = h >= 12;
+      const hour12 = h % 12 === 0 ? 12 : h % 12;
+      result.push(`${isPM ? "오후" : "오전"} ${hour12}시${m === 30 ? " 30분" : ""}`);
+    }
   }
-  return list;
+  return result;
 }
 function DispatchStatus({
   dispatchData = [],
@@ -23675,37 +23651,11 @@ onBlur={(e) => {
   {/* 상차시간 + 이전/이후 */}
   <div>
     <label className="text-sm font-medium">상차시간</label>
-    <select
-      className="border p-2 rounded w-full"
+    <TimeAmPmPicker
       value={editTarget.상차시간 || ""}
-      onChange={(e) =>
-        setEditTarget((p) => ({ ...p, 상차시간: e.target.value }))
-      }
-    >
-      <option value="">선택없음</option>
-      {[
-        "오전 6시", "오전 6시 30분",
-        "오전 7시", "오전 7시 30분",
-        "오전 8시", "오전 8시 30분",
-        "오전 9시", "오전 9시 30분",
-        "오전 10시", "오전 10시 30분",
-        "오전 11시", "오전 11시 30분",
-        "오후 12시", "오후 12시 30분",
-        "오후 1시", "오후 1시 30분",
-        "오후 2시", "오후 2시 30분",
-        "오후 3시", "오후 3시 30분",
-        "오후 4시", "오후 4시 30분",
-        "오후 5시", "오후 5시 30분",
-        "오후 6시", "오후 6시 30분",
-        "오후 7시", "오후 7시 30분",
-        "오후 8시", "오후 8시 30분",
-        "오후 9시", "오후 9시 30분",
-        "오후 10시", "오후 10시 30분",
-        "오후 11시", "오후 11시 30분",
-      ].map((t) => (
-        <option key={t} value={t}>{t}</option>
-      ))}
-    </select>
+      onChange={v => setEditTarget(p => ({ ...p, 상차시간: v }))}
+      selectCls="border p-2 rounded w-full"
+    />
 
     {/* ⏱ 이전 / 이후 */}
     <div className="flex gap-2 mt-1">
@@ -23747,37 +23697,11 @@ onBlur={(e) => {
   {/* 하차시간 + 이전/이후 */}
   <div>
     <label className="text-sm font-medium">하차시간</label>
-    <select
-      className="border p-2 rounded w-full"
+    <TimeAmPmPicker
       value={editTarget.하차시간 || ""}
-      onChange={(e) =>
-        setEditTarget((p) => ({ ...p, 하차시간: e.target.value }))
-      }
-    >
-      <option value="">선택없음</option>
-      {[
-        "오전 6시", "오전 6시 30분",
-        "오전 7시", "오전 7시 30분",
-        "오전 8시", "오전 8시 30분",
-        "오전 9시", "오전 9시 30분",
-        "오전 10시", "오전 10시 30분",
-        "오전 11시", "오전 11시 30분",
-        "오후 12시", "오후 12시 30분",
-        "오후 1시", "오후 1시 30분",
-        "오후 2시", "오후 2시 30분",
-        "오후 3시", "오후 3시 30분",
-        "오후 4시", "오후 4시 30분",
-        "오후 5시", "오후 5시 30분",
-        "오후 6시", "오후 6시 30분",
-        "오후 7시", "오후 7시 30분",
-        "오후 8시", "오후 8시 30분",
-        "오후 9시", "오후 9시 30분",
-        "오후 10시", "오후 10시 30분",
-        "오후 11시", "오후 11시 30분",
-      ].map((t) => (
-        <option key={t} value={t}>{t}</option>
-      ))}
-    </select>
+      onChange={v => setEditTarget(p => ({ ...p, 하차시간: v }))}
+      selectCls="border p-2 rounded w-full"
+    />
 
     {/* ⏱ 이전 / 이후 */}
     <div className="flex gap-2 mt-1">
@@ -24946,16 +24870,11 @@ setCopyTarget(prev=>({
       </Field>
 
       <Field label="상차시간">
-        <select
-          className="inputStyle"
+        <TimeAmPmPicker
           value={copyTarget?.상차시간 ?? ""}
-          onChange={(e)=>setCopyTarget(p=>({...p, 상차시간:e.target.value}))}
-        >
-          <option value="">선택</option>
-          {generateTimeOptions().map(t=>(
-            <option key={t} value={t}>{t}</option>
-          ))}
-        </select>
+          onChange={v => setCopyTarget(p=>({...p, 상차시간:v}))}
+          selectCls="inputStyle"
+        />
       </Field>
       <Field label="상차방법">
   <select
@@ -25094,16 +25013,11 @@ setCopyPlaceOptions(list);
       </Field>
 
       <Field label="하차시간">
-        <select
-          className="inputStyle"
+        <TimeAmPmPicker
           value={copyTarget?.하차시간 ?? ""}
-          onChange={(e)=>setCopyTarget(p=>({...p, 하차시간:e.target.value}))}
-        >
-          <option value="">선택</option>
-          {generateTimeOptions().map(t=>(
-            <option key={t} value={t}>{t}</option>
-          ))}
-        </select>
+          onChange={v => setCopyTarget(p=>({...p, 하차시간:v}))}
+          selectCls="inputStyle"
+        />
       </Field>
 <Field label="하차방법">
   <select
@@ -30395,16 +30309,15 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
     setSmartQ7(""); setSmartList7([]);
   };
   const generateTimeOptions = () => {
-    const options = [];
+    const result = [];
     for (let h = 0; h < 24; h++) {
-      for (let m = 0; m < 60; m += 30) {
-        const period = h < 12 ? "오전" : "오후";
-        const displayH = h === 0 ? 12 : h > 12 ? h - 12 : h;
-        const displayM = m === 0 ? "" : `${m}분`;
-        options.push(`${period} ${displayH}시${displayM}`);
+      for (let m of [0, 30]) {
+        const isPM = h >= 12;
+        const hour12 = h % 12 === 0 ? 12 : h % 12;
+        result.push(`${isPM ? "오후" : "오전"} ${hour12}시${m === 30 ? " 30분" : ""}`);
       }
     }
-    return options;
+    return result;
   };
 
   const filtered = React.useMemo(() => {
@@ -30927,12 +30840,13 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       <Field label="상차일">
                         <input type="date" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.상차일 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차일: e.target.value}))} />
                       </Field>
-                      <Field label="상차시간">
-                        <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.상차시간 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차시간: e.target.value}))}>
-                          <option value="">선택</option>
-                          {generateTimeOptions().map(t => <option key={t} value={t}>{t}</option>)}
-                        </select>
-                      </Field>
+                       <Field label="상차시간">
+                        <TimeAmPmPicker
+                          value={copyTarget?.상차시간 ?? ""}
+                          onChange={v => setCopyTarget(p => ({...p, 상차시간: v}))}
+                          selectCls="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400"
+                        />
+                       </Field>
                       <Field label="상차방법">
                         <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.상차방법 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차방법: e.target.value}))}>
                           <option value="">선택</option>
@@ -31004,12 +30918,13 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       <Field label="하차일">
                         <input type="date" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.하차일 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차일: e.target.value}))} />
                       </Field>
-                      <Field label="하차시간">
-                        <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.하차시간 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차시간: e.target.value}))}>
-                          <option value="">선택</option>
-                          {generateTimeOptions().map(t => <option key={t} value={t}>{t}</option>)}
-                        </select>
-                      </Field>
+                       <Field label="하차시간">
+                        <TimeAmPmPicker
+                          value={copyTarget?.하차시간 ?? ""}
+                          onChange={v => setCopyTarget(p => ({...p, 하차시간: v}))}
+                          selectCls="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400"
+                        />
+                       </Field>
                       <Field label="하차방법">
                         <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget?.하차방법 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 하차방법: e.target.value}))}>
                           <option value="">선택</option>
