@@ -11959,6 +11959,183 @@ function TimeAmPmPicker({ value, onChange, selectCls }) {
   );
 }
 
+function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db }) {
+  const [clientQ, setClientQ] = React.useState(initialClient || "");
+  const [searched, setSearched] = React.useState(false);
+  const now = new Date();
+  const firstDay = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-01`;
+  const lastDay = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${new Date(now.getFullYear(), now.getMonth()+1, 0).getDate()}`;
+  const [dateFrom, setDateFrom] = React.useState(firstDay);
+  const [dateTo, setDateTo] = React.useState(lastDay);
+  const [results, setResults] = React.useState([]);
+  const [viewRow, setViewRow] = React.useState(null);
+  const [sendDone, setSendDone] = React.useState(null);
+
+  React.useEffect(() => {
+    if (open && initialClient) setClientQ(initialClient);
+  }, [open, initialClient]);
+
+  if (!open) return null;
+
+  const handleSearch = () => {
+    const q = clientQ.trim();
+    const filtered = (dispatchData || []).filter(r => {
+      if (q && !(r.거래처명 || "").includes(q)) return false;
+      const d = (r.상차일 || "").slice(0, 10);
+      if (dateFrom && d < dateFrom) return false;
+      if (dateTo && d > dateTo) return false;
+      return true;
+    }).sort((a, b) => (a.상차일 || "").localeCompare(b.상차일 || ""));
+    setResults(filtered);
+    setSearched(true);
+  };
+
+  const handleSend = (r) => {
+    const dateStr = (() => {
+      const d = r.상차일 || "";
+      if (d && d.includes("-")) {
+        const [y, m, day] = d.split("-");
+        return `${Number(y)}년 ${Number(m)}월 ${Number(day)}일`;
+      }
+      return d;
+    })();
+    const lines = [
+      "안녕하세요 돌캐 운송사입니다.",
+      "",
+      `📅 ${dateStr}`,
+      `상차 : ${r.상차지명 || "-"}`,
+      `하차 : ${r.하차지명 || "-"}`,
+      r.화물내용 ? `화물 : ${r.화물내용}` : null,
+      "파렛전표 및 거래명세서, 타코기록지 등",
+      "관련 서류 업로드를 부탁드립니다.",
+      "",
+      "★미 확인 시 운임 지연이 발생할 수 있습니다★",
+      "",
+      "[인수증 업로드 안내]",
+      "아래 링크에서 서류를 업로드해 주세요.",
+      "",
+      "업로드 방법",
+      "① 아래 링크 클릭",
+      "② 날짜·차량번호·이름 확인",
+      "③ 오더 선택 후 사진 업로드",
+      "",
+      "https://dispatch-app2.vercel.app/driver-upload",
+    ].filter(l => l !== null).join("\n");
+    navigator.clipboard.writeText(lines)
+      .then(() => { setSendDone(r._id); setTimeout(() => setSendDone(null), 2000); })
+      .catch(() => alert("클립보드 복사 실패"));
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-[99998] flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        {/* 헤더 */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 shrink-0">
+          <div className="font-bold text-[16px] text-[#1B2B4B]">첨부현황</div>
+          <button onClick={onClose} className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 text-lg transition">×</button>
+        </div>
+        {/* 검색 */}
+        <div className="px-5 py-4 border-b border-gray-100 shrink-0 bg-gray-50">
+          <div className="flex flex-wrap gap-3 items-end">
+            <div className="flex flex-col gap-1">
+              <label className="text-[12px] font-bold text-gray-600">거래처명</label>
+              <input type="text" value={clientQ} onChange={e => setClientQ(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && handleSearch()} placeholder="거래처명 입력"
+                className="border border-gray-300 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B] w-[180px]" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[12px] font-bold text-gray-600">기간</label>
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1 border border-gray-300 rounded-lg px-2 py-1.5 bg-white">
+                  <select value={dateFrom.slice(0,4)} onChange={e => setDateFrom(`${e.target.value}-${dateFrom.slice(5,7)}-${dateFrom.slice(8,10)}`)} className="text-[13px] outline-none bg-transparent">
+                    {Array.from({length:5},(_,i)=>now.getFullYear()-2+i).map(y=><option key={y} value={y}>{y}년</option>)}
+                  </select>
+                  <select value={dateFrom.slice(5,7)} onChange={e => setDateFrom(`${dateFrom.slice(0,4)}-${e.target.value}-${dateFrom.slice(8,10)}`)} className="text-[13px] outline-none bg-transparent">
+                    {Array.from({length:12},(_,i)=>String(i+1).padStart(2,"0")).map(m=><option key={m} value={m}>{Number(m)}월</option>)}
+                  </select>
+                </div>
+                <span className="text-gray-400 text-[13px]">부터</span>
+                <div className="flex items-center gap-1 border border-gray-300 rounded-lg px-2 py-1.5 bg-white">
+                  <select value={dateTo.slice(0,4)} onChange={e => setDateTo(`${e.target.value}-${dateTo.slice(5,7)}-${dateTo.slice(8,10)}`)} className="text-[13px] outline-none bg-transparent">
+                    {Array.from({length:5},(_,i)=>now.getFullYear()-2+i).map(y=><option key={y} value={y}>{y}년</option>)}
+                  </select>
+                  <select value={dateTo.slice(5,7)} onChange={e => {
+                    const y = dateTo.slice(0,4); const m = e.target.value;
+                    const lastD = new Date(Number(y), Number(m), 0).getDate();
+                    setDateTo(`${y}-${m}-${String(lastD).padStart(2,"0")}`);
+                  }} className="text-[13px] outline-none bg-transparent">
+                    {Array.from({length:12},(_,i)=>String(i+1).padStart(2,"0")).map(m=><option key={m} value={m}>{Number(m)}월</option>)}
+                  </select>
+                </div>
+                <span className="text-gray-400 text-[13px]">까지</span>
+              </div>
+            </div>
+            <button onClick={handleSearch} className="px-5 py-2 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-lg hover:opacity-90 transition">조회</button>
+          </div>
+        </div>
+        {/* 결과 */}
+        <div className="flex-1 overflow-y-auto">
+          {!searched && <div className="flex items-center justify-center py-16 text-[14px] text-gray-400">거래처명과 기간을 선택 후 조회하세요</div>}
+          {searched && results.length === 0 && <div className="flex items-center justify-center py-16 text-[14px] text-gray-400">해당 기간에 오더가 없습니다</div>}
+          {searched && results.length > 0 && (
+            <table className="w-full text-[13px]">
+              <thead className="sticky top-0 bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th className="px-4 py-3 text-left font-bold text-gray-700">날짜</th>
+                  <th className="px-4 py-3 text-left font-bold text-gray-700">거래처</th>
+                  <th className="px-4 py-3 text-left font-bold text-gray-700">상차</th>
+                  <th className="px-4 py-3 text-left font-bold text-gray-700">하차</th>
+                  <th className="px-4 py-3 text-center font-bold text-gray-700">첨부</th>
+                  <th className="px-4 py-3 text-center font-bold text-gray-700">처리</th>
+                </tr>
+              </thead>
+              <tbody>
+                {results.map(r => {
+                  const cnt = r.attachCount || 0;
+                  const done = cnt > 0;
+                  return (
+                    <tr key={r._id} className="border-b border-gray-100 hover:bg-gray-50">
+                      <td className="px-4 py-3 text-gray-700 whitespace-nowrap">{r.상차일 || "-"}</td>
+                      <td className="px-4 py-3 text-gray-700 whitespace-nowrap">{r.거래처명 || "-"}</td>
+                      <td className="px-4 py-3 text-gray-700">{r.상차지명 || "-"}</td>
+                      <td className="px-4 py-3 text-gray-700">{r.하차지명 || "-"}</td>
+                      <td className="px-4 py-3 text-center">
+                        {done
+                          ? <span className="px-2 py-0.5 rounded-full bg-[#1B2B4B] text-white text-[11px] font-bold">{cnt}장 완료</span>
+                          : <span className="px-2 py-0.5 rounded-full bg-gray-200 text-gray-500 text-[11px] font-bold">미완료</span>}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          {done && (
+                            <button onClick={() => setViewRow(r)}
+                              className="px-2.5 py-1 rounded-lg border border-gray-300 text-gray-600 text-[11px] font-bold hover:bg-gray-100 transition">보기</button>
+                          )}
+                          <button onClick={() => handleSend(r)}
+                            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition ${sendDone === r._id ? "bg-[#1B2B4B] text-white" : "border border-[#1B2B4B] text-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"}`}>
+                            {sendDone === r._id ? "복사됨" : "즉시전송"}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+        {/* 푸터 */}
+        <div className="px-5 py-3 border-t border-gray-100 shrink-0 bg-gray-50 flex justify-between items-center">
+          {searched && results.length > 0
+            ? <span className="text-[13px] text-gray-500">총 {results.length}건 · 완료 {results.filter(r=>(r.attachCount||0)>0).length}건 · 미완료 {results.filter(r=>!(r.attachCount||0)).length}건</span>
+            : <span/>}
+          <button onClick={onClose} className="px-5 py-2 bg-gray-200 hover:bg-gray-300 text-[#1B2B4B] text-[13px] font-bold rounded-lg transition">닫기</button>
+        </div>
+      </div>
+      {viewRow && <AttachmentViewer row={viewRow} onClose={() => setViewRow(null)} db={db} />}
+    </div>
+  );
+}
+
 function RealtimeStatus({
   dispatchData,
   drivers,
@@ -12748,6 +12925,10 @@ const selectedSet = React.useMemo(() => new Set(selected), [selected]);
     document.addEventListener("keydown", onKey);
     return () => { document.removeEventListener("click", close); document.removeEventListener("keydown", onKey); };
   }, [contextMenu]);
+
+  // ===================== 첨부현황 =====================
+  const [attachStatusOpen, setAttachStatusOpen] = React.useState(false);
+  const [attachStatusClient, setAttachStatusClient] = React.useState("");
 
   // ===================== 운임조회 (컨텍스트메뉴 Part 4) =====================
   const [ctxFare4Target, setCtxFare4Target] = React.useState(null);
@@ -15286,6 +15467,15 @@ const head = isDark
     row={attachViewer}
     db={db}
     onClose={() => setAttachViewer(null)}
+  />
+)}
+{attachStatusOpen && (
+  <AttachStatusPanel
+    open={attachStatusOpen}
+    onClose={() => setAttachStatusOpen(false)}
+    initialClient={attachStatusClient}
+    dispatchData={dispatchData}
+    db={db}
   />
 )}
 {/* 🚫 블랙 기사 알림 팝업 */}
@@ -19049,6 +19239,18 @@ if (editTarget.거래처명) {
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
             운임조회
           </button>
+          {/* 첨부현황 */}
+          <button
+            className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
+            onClick={() => {
+              setAttachStatusClient(contextMenu.row.거래처명 || "");
+              setAttachStatusOpen(true);
+              setContextMenu(null);
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+            첨부현황
+          </button>
           <div className="border-t border-gray-100 my-1"/>
           {/* 삭제 */}
           <button
@@ -22743,6 +22945,10 @@ const save = {
     return () => { document.removeEventListener("click", close); document.removeEventListener("keydown", onKey); };
   }, [contextMenuDS]);
 
+  // ===================== 첨부현황 =====================
+  const [attachStatusDSOpen, setAttachStatusDSOpen] = React.useState(false);
+  const [attachStatusDSClient, setAttachStatusDSClient] = React.useState("");
+
   // ===================== 운임조회 (컨텍스트메뉴 Part 5) =====================
   const [ctxFare5Target, setCtxFare5Target] = React.useState(null);
   const [ctxFare5PanelOpen, setCtxFare5PanelOpen] = React.useState(false);
@@ -22908,6 +23114,15 @@ return (
     row={attachViewer}
     db={db}
     onClose={() => setAttachViewer(null)}
+  />
+)}
+{attachStatusDSOpen && (
+  <AttachStatusPanel
+    open={attachStatusDSOpen}
+    onClose={() => setAttachStatusDSOpen(false)}
+    initialClient={attachStatusDSClient}
+    dispatchData={dispatchData}
+    db={db}
   />
 )}
 {blackAlert && (
@@ -26938,6 +27153,16 @@ setCopyTarget(prev => ({
             }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
             운임조회
+          </button>
+          {/* 첨부현황 */}
+          <button className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
+            onClick={() => {
+              setAttachStatusDSClient(contextMenuDS.row.거래처명 || "");
+              setAttachStatusDSOpen(true);
+              setContextMenuDS(null);
+            }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+            첨부현황
           </button>
           <div className="border-t border-gray-100 my-1"/>
           <button className="w-full text-left px-4 py-2 text-[13px] text-red-600 hover:bg-red-50 flex items-center gap-2.5 transition-colors"
