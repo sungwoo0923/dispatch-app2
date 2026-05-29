@@ -920,80 +920,39 @@ function _parseWaypointList(v) {
   return [];
 }
 function mergeViaCargoText(mainCargo, waypointLists) {
-  const allCargo = [mainCargo];
-  for (const list of waypointLists) {
-    for (const s of _parseWaypointList(list)) {
-      if (s && s.화물내용) allCargo.push(s.화물내용);
-    }
-  }
-  const validCargos = allCargo.filter(c => {
-    const t = String(c || "").trim();
-    return t && t !== "없음";
-  });
-  if (validCargos.length <= 1) return mainCargo || "";
+  const mainStr = String(mainCargo || "").trim();
+  if (!mainStr || mainStr === "없음") return mainCargo || "";
   const SFXS = ["파렛트", "파레트", "팔레트", "파렛", "파레", "박스", "통"];
   const NORM = { "파렛트": "파레트", "팔레트": "파레트", "파렛": "파레트", "파레": "파레트" };
-  const typeMap = {};
-  const customs = [];
-  for (const cargo of validCargos) {
-    const c = String(cargo).trim();
-    let matched = false;
+  const getType = (s) => {
     for (const sfx of SFXS) {
-      if (c.endsWith(sfx)) {
-        const numStr = c.slice(0, -sfx.length).trim();
-        const num = parseFloat(numStr);
-        if (!isNaN(num)) {
-          const canonical = NORM[sfx] || sfx;
-          typeMap[canonical] = (typeMap[canonical] || 0) + num;
-          matched = true;
-          break;
-        }
-      }
+      if (String(s).endsWith(sfx)) return NORM[sfx] || sfx;
     }
-    if (!matched) {
-      // 수량 없이 타입명만 있는 경우("파레트" 단독) 무시 — 경유등록 빈칸 저장 결과물
-      const isTypeOnly = SFXS.some(sfx => c === sfx || c === (NORM[sfx] || sfx));
-      if (!isTypeOnly && !customs.includes(c)) customs.push(c);
-    }
-  }
-  const parts = [];
-  for (const [type, total] of Object.entries(typeMap)) {
-    parts.push(`${total % 1 === 0 ? total : total}${type}`);
-  }
-  parts.push(...customs);
-  return parts.join(", ");
-}
-function mergeViaTonnage(mainTon, waypointLists) {
-  const allTons = [mainTon];
+    return null;
+  };
+  const mainType = getType(mainStr);
+  const extras = [];
   for (const list of waypointLists) {
     for (const s of _parseWaypointList(list)) {
-      if (s && s.차량톤수) allTons.push(s.차량톤수);
+      if (!s) continue;
+      const wCargo = String(s.화물내용 || "").trim();
+      if (!wCargo || wCargo === "없음") continue;
+      // type-only string (no digit) → artifact of empty save, skip
+      const isTypeOnly = SFXS.some(sfx => wCargo === sfx || wCargo === (NORM[sfx] || sfx));
+      if (isTypeOnly) continue;
+      const wType = getType(wCargo);
+      // same unit as main → already counted in main total, skip
+      if (mainType !== null && wType === mainType) continue;
+      // both custom (no known unit) → skip
+      if (mainType === null && wType === null) continue;
+      if (!extras.includes(wCargo)) extras.push(wCargo);
     }
   }
-  const validTons = allTons.filter(t => {
-    const v = String(t || "").trim();
-    return v && v !== "없음";
-  });
-  if (validTons.length <= 1) return mainTon || "";
-  // Convert all values to kg, then format result
-  let totalKg = 0;
-  for (const ton of validTons) {
-    const s = String(ton).trim();
-    const m = s.match(/(\d+(?:\.\d+)?)/);
-    if (!m) continue;
-    const num = parseFloat(m[1]);
-    if (/kg/i.test(s)) {
-      totalKg += num;
-    } else {
-      totalKg += num * 1000;
-    }
-  }
-  if (totalKg === 0) return mainTon || "";
-  if (totalKg < 1000) {
-    return `${totalKg % 1 === 0 ? totalKg : totalKg}kg`;
-  }
-  const tons = totalKg / 1000;
-  return `${tons % 1 === 0 ? tons : tons}톤`;
+  if (!extras.length) return mainStr;
+  return `${mainStr} / ${extras.join(" / ")}`;
+}
+function mergeViaTonnage(mainTon, waypointLists) {
+  return mainTon || "";
 }
 
 // ===================== TOAST SYSTEM (GLOBAL) =====================
@@ -2068,7 +2027,7 @@ return (
           {/* 중앙 메뉴 */}
                      {/* ★ 태블릿/PC 공용 메뉴 — 전체 가로 스크롤 보장 */}
           <nav
-            className="flex-1 flex items-center gap-1 overflow-x-auto"
+            className="flex-1 flex items-center gap-1 overflow-x-auto xl:justify-center"
             style={{
               WebkitOverflowScrolling: "touch",
               scrollbarWidth: "thin",
@@ -2104,7 +2063,7 @@ return (
                   key={m}
                   disabled={isBlocked}
                   onClick={() => handleMenuClick(m)}
-                  className={`relative px-3 py-1.5 rounded-md text-[13px] font-medium whitespace-nowrap transition-all flex-shrink-0
+                  className={`relative px-3 py-1.5 rounded-md text-[13px] xl:text-[14px] xl:px-4 font-medium whitespace-nowrap transition-all flex-shrink-0
                     ${isBlocked
                       ? "text-white/20 cursor-not-allowed"
                       : isActive
@@ -12394,9 +12353,8 @@ const noticeBlock = isBanchan
 
 const _pkg4d=(str)=>{const s=String(str||"").trim();if(!s)return 0;const kg=s.match(/([\d.]+)\s*kg/i);if(kg)return parseFloat(kg[1]);const ton=s.match(/([\d.]+)/);return ton?parseFloat(ton[1])*1000:0;};
 const _fkg4d=(kg)=>{if(!kg)return"";if(kg>=1000){const t=kg/1000;return t.toFixed(3).replace(/\.?0+$/,"")+"톤";}return`${kg}kg`;};
-const _sc4d=(main,stops)=>{const all=[main,...stops.map(_cargoText)].filter(Boolean);const byU={};const unk=[];for(const c of all){let hit=false;for(const u of["파레트","파렛트","박스","통"]){if(c.endsWith(u)){const n=parseFloat(c.slice(0,-u.length));if(!isNaN(n)){const k=u==="파렛트"?"파레트":u;byU[k]=(byU[k]||0)+n;hit=true;break;}}}if(!hit&&c)unk.push(c);}return[...Object.entries(byU).map(([u,n])=>`${n}${u}`),...unk].join(" / ");};
-const _totKg4d=_pkg4d(r.차량톤수)+dropStopsD.reduce((a,s)=>a+_pkg4d(_tonText(s)),0)+pickupStopsD.reduce((a,s)=>a+_pkg4d(_tonText(s)),0);
-const _totTon4d=_fkg4d(_totKg4d)||r.차량톤수||"-";
+const _sc4d=(main,stops)=>{if(!main||main==="없음")return main||"";const SFXS=["파레트","파렛트","박스","통"];const NORM={"파렛트":"파레트"};const getT=(s)=>{for(const u of SFXS){if(String(s).endsWith(u))return NORM[u]||u;}return null;};const mainT=getT(main);const extras=[];for(const s of stops){const c=_cargoText(s);if(!c)continue;const wT=getT(c);if(mainT!==null&&wT===mainT)continue;if(mainT===null&&wT===null)continue;if(!extras.includes(c))extras.push(c);}if(!extras.length)return main;return`${main} / ${extras.join(" / ")}`;};
+const _totTon4d=r.차량톤수||"-";
 const _totCargo4d=_sc4d(r.화물내용,[...pickupStopsD,...dropStopsD])||r.화물내용||"";
 const _mainPCargo4d=hasPickupStopsD&&r.화물내용?`\n화물내용 : ${r.화물내용}`:"";
 const _mainPTon4d=hasPickupStopsD&&r.차량톤수?`\n화물톤수 : ${r.차량톤수}`:"";
@@ -12477,19 +12435,19 @@ const _safeStopsF = (v) => {
 
 const _cargoTextF = (s) => {
   const raw = s.화물내용 || "";
-  if (/파레트|파렛트|박스|통/.test(raw)) return raw;
+  if (/파레트|파렛트|박스|통/.test(raw)) return /\d/.test(raw) ? raw : "";
   const qty = raw || s.화물수량 || "";
   const type = s.화물타입 || "";
-  if (!qty) return "";
+  if (!qty || qty === "없음") return "";
   return type && type !== "없음" && type !== "" ? `${qty}${type}` : qty;
 };
 
 const _tonTextF = (s) => {
   const raw = s.차량톤수 || "";
-  if (/톤|kg/.test(raw)) return raw;
+  if (/톤|kg/.test(raw)) return /\d/.test(raw) ? raw : "";
   const val = s.톤수값 || raw || "";
   const type = s.톤수타입 || "";
-  if (!val) return "";
+  if (!val || val === "없음") return "";
   return type && type !== "없음" && type !== "" ? `${val}${type}` : val;
 };
 
@@ -12525,9 +12483,8 @@ ${s.주소 || "-"}${s.담당자 ? `\n담당자 : ${s.담당자}${s.담당자번�
 
 const _pkg4f=(str)=>{const s=String(str||"").trim();if(!s)return 0;const kg=s.match(/([\d.]+)\s*kg/i);if(kg)return parseFloat(kg[1]);const ton=s.match(/([\d.]+)/);return ton?parseFloat(ton[1])*1000:0;};
 const _fkg4f=(kg)=>{if(!kg)return"";if(kg>=1000){const t=kg/1000;return t.toFixed(3).replace(/\.?0+$/,"")+"톤";}return`${kg}kg`;};
-const _sc4f=(main,stops)=>{const all=[main,...stops.map(_cargoTextF)].filter(Boolean);const byU={};const unk=[];for(const c of all){let hit=false;for(const u of["파레트","파렛트","박스","통"]){if(c.endsWith(u)){const n=parseFloat(c.slice(0,-u.length));if(!isNaN(n)){const k=u==="파렛트"?"파레트":u;byU[k]=(byU[k]||0)+n;hit=true;break;}}}if(!hit&&c)unk.push(c);}return[...Object.entries(byU).map(([u,n])=>`${n}${u}`),...unk].join(" / ");};
-const _totKg4f=_pkg4f(r.차량톤수)+dropStops.reduce((a,s)=>a+_pkg4f(_tonTextF(s)),0)+pickupStops.reduce((a,s)=>a+_pkg4f(_tonTextF(s)),0);
-const _totTon4f=_fkg4f(_totKg4f)||r.차량톤수||"-";
+const _sc4f=(main,stops)=>{if(!main||main==="없음")return main||"";const SFXS=["파레트","파렛트","박스","통"];const NORM={"파렛트":"파레트"};const getT=(s)=>{for(const u of SFXS){if(String(s).endsWith(u))return NORM[u]||u;}return null;};const mainT=getT(main);const extras=[];for(const s of stops){const c=_cargoTextF(s);if(!c)continue;const wT=getT(c);if(mainT!==null&&wT===mainT)continue;if(mainT===null&&wT===null)continue;if(!extras.includes(c))extras.push(c);}if(!extras.length)return main;return`${main} / ${extras.join(" / ")}`;};
+const _totTon4f=r.차량톤수||"-";
 const _totCargo4f=_sc4f(r.화물내용,[...pickupStops,...dropStops])||r.화물내용||"";
 const _mainPCargo4f=hasPickupStops&&r.화물내용?`\n화물내용 : ${r.화물내용}`:"";
 const _mainPTon4f=hasPickupStops&&r.차량톤수?`\n화물톤수 : ${r.차량톤수}`:"";
@@ -21782,16 +21739,13 @@ ${r.하차지주소||""}${(()=>{const line=buildContactLine(r.하차지담당자
         }
 
 const _ss5f=(v)=>{if(Array.isArray(v)&&v.length>0)return v;if(typeof v==="string"&&v.trim().startsWith("[")){try{const p=JSON.parse(v);if(Array.isArray(p))return p;}catch{}}if(v&&typeof v==="object"&&!Array.isArray(v)){const ks=Object.keys(v);if(ks.length&&ks.every(k=>/^\d+$/.test(k)))return ks.sort((a,b)=>Number(a)-Number(b)).map(k=>v[k]);if(v.업체명)return[v];}return[];};
-const _ct5f=(s)=>{const raw=s.화물내용||"";if(/파레트|파렛트|박스|통/.test(raw))return raw;const qty=raw||s.화물수량||"";const tp=s.화물타입||"";if(!qty)return"";return tp&&tp!=="없음"?`${qty}${tp}`:qty;};
-const _tt5f=(s)=>{const raw=s.차량톤수||"";if(/톤|kg/.test(raw))return raw;const val=s.톤수값||raw||"";const tp=s.톤수타입||"";if(!val)return"";return tp&&tp!=="없음"?`${val}${tp}`:val;};
-const _pkg5f=(str)=>{const s=String(str||"").trim();if(!s)return 0;const kg=s.match(/([\d.]+)\s*kg/i);if(kg)return parseFloat(kg[1]);const ton=s.match(/([\d.]+)/);return ton?parseFloat(ton[1])*1000:0;};
-const _fkg5f=(kg)=>{if(!kg)return"";if(kg>=1000){const t=kg/1000;return t.toFixed(3).replace(/\.?0+$/,"")+"톤";}return`${kg}kg`;};
-const _sc5f=(main,stops)=>{const all=[main,...stops.map(_ct5f)].filter(Boolean);const byU={};const unk=[];for(const c of all){let hit=false;for(const u of["파레트","파렛트","박스","통"]){if(c.endsWith(u)){const n=parseFloat(c.slice(0,-u.length));if(!isNaN(n)){const k=u==="파렛트"?"파레트":u;byU[k]=(byU[k]||0)+n;hit=true;break;}}}if(!hit&&c)unk.push(c);}return[...Object.entries(byU).map(([u,n])=>`${n}${u}`),...unk].join(" / ");};
+const _ct5f=(s)=>{const raw=s.화물내용||"";if(/파레트|파렛트|박스|통/.test(raw))return /\d/.test(raw)?raw:"";const qty=raw||s.화물수량||"";const tp=s.화물타입||"";if(!qty||qty==="없음")return"";return tp&&tp!=="없음"?`${qty}${tp}`:qty;};
+const _tt5f=(s)=>{const raw=s.차량톤수||"";if(/톤|kg/.test(raw))return /\d/.test(raw)?raw:"";const val=s.톤수값||raw||"";const tp=s.톤수타입||"";if(!val||val==="없음")return"";return tp&&tp!=="없음"?`${val}${tp}`:val;};
+const _sc5f=(main,stops)=>{if(!main||main==="없음")return main||"";const SFXS=["파레트","파렛트","박스","통"];const NORM={"파렛트":"파레트"};const getT=(s)=>{for(const u of SFXS){if(String(s).endsWith(u))return NORM[u]||u;}return null;};const mainT=getT(main);const extras=[];for(const s of stops){const c=_ct5f(s);if(!c)continue;const wT=getT(c);if(mainT!==null&&wT===mainT)continue;if(mainT===null&&wT===null)continue;if(!extras.includes(c))extras.push(c);}if(!extras.length)return main;return`${main} / ${extras.join(" / ")}`;};
 
 const _pStops5f=_ss5f(r.경유상차목록||r.경유지_상차).filter(s=>s?.업체명?.trim());
 const _dStops5f=_ss5f(r.경유하차목록||r.경유지_하차).filter(s=>s?.업체명?.trim());
-const _totKg5f=_pkg5f(r.차량톤수)+_dStops5f.reduce((a,s)=>a+_pkg5f(_tt5f(s)),0)+_pStops5f.reduce((a,s)=>a+_pkg5f(_tt5f(s)),0);
-const _totTon5f=_fkg5f(_totKg5f)||r.차량톤수||"-";
+const _totTon5f=r.차량톤수||"-";
 const _totCargo5f=_sc5f(r.화물내용,[..._pStops5f,..._dStops5f])||r.화물내용||"";
 const _pHas5f=_pStops5f.length>0;
 const _dHas5f=_dStops5f.length>0;
