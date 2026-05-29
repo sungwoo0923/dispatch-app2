@@ -99,18 +99,33 @@ function parseExcelForHistory(buffer) {
     const effectiveAddrCol = addrColIdx >= 0 ? addrColIdx : 5;
     const effectiveSigCol  = sigColIdx  >= 0 ? sigColIdx  : 7;
 
-    const dataRows = rows.slice(headerIdx + 1).filter(r => r[0] && String(r[0]).match(/^\d+$/));
+    let dataRows = rows.slice(headerIdx + 1).filter(r => r[0] && String(r[0]).match(/^\d+$/));
+    // 번호 없는 포맷: 빈 행 제외하고 내용 있는 행 전부
+    if (dataRows.length === 0) {
+      dataRows = rows.slice(headerIdx + 1).filter(r => r.some(c => c && String(c).trim()));
+    }
     if (dataRows.length === 0) return;
 
-    // 서명 컬럼을 모든 행에서 탐색 (첫 행만 아님)
+    // 드라이버 탐색: 지정 서명 컬럼 ±2 우선, 실패하면 행 전체 스캔
     let driver = null;
     for (const row of dataRows) {
-      for (let colOff = 0; colOff <= 2; colOff++) {
-        const cell = row[effectiveSigCol + colOff];
+      // 지정 컬럼 우선 (±2)
+      for (let colOff = -1; colOff <= 3; colOff++) {
+        const idx = effectiveSigCol + colOff;
+        if (idx < 0) continue;
+        const cell = row[idx];
         if (cell && String(cell).trim()) {
           const parsed = parseSignature(String(cell));
           if (parsed.name) { driver = parsed; break; }
         }
+      }
+      if (driver) break;
+      // 전체 열 스캔 (서명 컬럼이 다른 위치에 있는 경우)
+      for (let col = 0; col < row.length; col++) {
+        const cell = row[col];
+        if (!cell || !String(cell).trim()) continue;
+        const parsed = parseSignature(String(cell));
+        if (parsed.name) { driver = parsed; break; }
       }
       if (driver) break;
     }
