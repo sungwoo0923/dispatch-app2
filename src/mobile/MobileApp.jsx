@@ -35,6 +35,140 @@ import { version as APP_VERSION } from "../../package.json";
 const role = localStorage.getItem("role") || "user";
 const collName = "dispatch";
 // 🔙 뒤로가기 아이콘 버튼
+// ── 스와이프 액션 로우 (iOS Messages 스타일) ──────────────────────────────
+function SwipeableRow({ children, onDelete, onCopyOrder, onCopyDriver, disabled }) {
+  const BUTTON_W = 220;
+  const SNAP_THRESHOLD = 55;
+
+  const innerRef = React.useRef(null);
+  const startX = React.useRef(0);
+  const startY = React.useRef(0);
+  const isHoriz = React.useRef(null);
+  const dragging = React.useRef(false);
+  const curX = React.useRef(0);
+  const [open, setOpen] = React.useState(false);
+
+  const applyTranslate = (x, animate) => {
+    if (!innerRef.current) return;
+    innerRef.current.style.transition = animate ? "transform 0.22s cubic-bezier(.4,0,.2,1)" : "none";
+    innerRef.current.style.transform = `translateX(${x}px)`;
+  };
+
+  const doClose = () => { applyTranslate(0, true); curX.current = 0; setOpen(false); };
+  const doOpen  = () => { applyTranslate(-BUTTON_W, true); curX.current = -BUTTON_W; setOpen(true); };
+
+  const onTouchStart = (e) => {
+    if (disabled) return;
+    startX.current = e.touches[0].clientX;
+    startY.current = e.touches[0].clientY;
+    isHoriz.current = null;
+    dragging.current = true;
+    applyTranslate(curX.current, false);
+  };
+
+  const onTouchMove = (e) => {
+    if (!dragging.current || disabled) return;
+    const dx = e.touches[0].clientX - startX.current;
+    const dy = e.touches[0].clientY - startY.current;
+    if (isHoriz.current === null) {
+      if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+        isHoriz.current = Math.abs(dx) > Math.abs(dy);
+      }
+      return;
+    }
+    if (!isHoriz.current) return;
+    e.preventDefault();
+    const base = open ? -BUTTON_W : 0;
+    const next = Math.min(0, Math.max(-BUTTON_W, base + dx));
+    applyTranslate(next, false);
+    curX.current = next;
+  };
+
+  const onTouchEnd = () => {
+    if (!dragging.current) return;
+    dragging.current = false;
+    if (!isHoriz.current) return;
+    if (open) {
+      curX.current > -BUTTON_W + SNAP_THRESHOLD ? doClose() : doOpen();
+    } else {
+      curX.current < -SNAP_THRESHOLD ? doOpen() : doClose();
+    }
+  };
+
+  React.useEffect(() => {
+    if (!open) return;
+    const close = (e) => {
+      if (innerRef.current && !innerRef.current.parentElement?.contains(e.target)) doClose();
+    };
+    document.addEventListener("touchstart", close, { passive: true });
+    return () => document.removeEventListener("touchstart", close);
+  }, [open]);
+
+  return (
+    <div className="relative overflow-hidden" style={{ borderRadius: "inherit" }}>
+      {/* 액션 버튼 영역 */}
+      <div
+        className="absolute right-0 top-0 bottom-0 flex"
+        style={{ width: BUTTON_W }}
+      >
+        {/* 오더복사 */}
+        <button
+          className="flex-1 flex flex-col items-center justify-center gap-1"
+          style={{ background: "#4B5563" }}
+          onMouseDown={e => e.stopPropagation()}
+          onClick={e => { e.stopPropagation(); doClose(); onCopyOrder?.(); }}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+            <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
+          </svg>
+          <span style={{ color: "white", fontSize: 11, fontWeight: 600 }}>오더복사</span>
+        </button>
+        {/* 기사복사 */}
+        <button
+          className="flex-1 flex flex-col items-center justify-center gap-1"
+          style={{ background: "#2563EB" }}
+          onMouseDown={e => e.stopPropagation()}
+          onClick={e => { e.stopPropagation(); doClose(); onCopyDriver?.(); }}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="9" cy="7" r="4"/>
+            <path d="M3 21v-2a4 4 0 014-4h4a4 4 0 014 4v2"/>
+            <path d="M19 8v6M22 11h-6"/>
+          </svg>
+          <span style={{ color: "white", fontSize: 11, fontWeight: 600 }}>기사복사</span>
+        </button>
+        {/* 삭제 */}
+        <button
+          className="flex-1 flex flex-col items-center justify-center gap-1"
+          style={{ background: "#EF4444" }}
+          onMouseDown={e => e.stopPropagation()}
+          onClick={e => { e.stopPropagation(); doClose(); onDelete?.(); }}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="3 6 5 6 21 6"/>
+            <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
+            <path d="M10 11v6M14 11v6"/>
+            <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/>
+          </svg>
+          <span style={{ color: "white", fontSize: 11, fontWeight: 600 }}>삭제</span>
+        </button>
+      </div>
+
+      {/* 카드 (슬라이드) */}
+      <div
+        ref={innerRef}
+        style={{ willChange: "transform" }}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
 function BackIconButton({ onClick }) {
   return (
     <button
@@ -1670,6 +1804,58 @@ const handleOrderDuplicate = (order) => {
   window.scrollTo(0, 0);
 };
 
+const handleOrderDuplicateWithDriver = (order) => {
+  const today = todayKST();
+  setForm({
+    거래처명: order.거래처명 || "",
+    상차일: today,
+    상차시간: order.상차시간 || "",
+    상차시간기준: order.상차시간기준 || null,
+    하차일: today,
+    하차시간: order.하차시간 || "",
+    하차시간기준: order.하차시간기준 || null,
+    상차지명: order.상차지명 || "",
+    상차지주소: order.상차지주소 || "",
+    상차지담당자: order.상차지담당자 || "",
+    상차지담당자번호: order.상차지담당자번호 || "",
+    하차지명: order.하차지명 || "",
+    하차지주소: order.하차지주소 || "",
+    하차지담당자: order.하차지담당자 || "",
+    하차지담당자번호: order.하차지담당자번호 || "",
+    톤수: order.톤수 || order.차량톤수 || "",
+    차종: order.차종 || order.차량종류 || "",
+    화물내용: order.화물내용 || "",
+    상차방법: order.상차방법 || "",
+    하차방법: order.하차방법 || "",
+    지급방식: order.지급방식 || "",
+    배차방식: order.배차방식 || "",
+    청구운임: order.청구운임 || 0,
+    기사운임: order.기사운임 || 0,
+    수수료: order.수수료 || 0,
+    산재보험료: order.산재보험료 || 0,
+    차량번호: order.차량번호 || "",
+    기사명: order.기사명 || "",
+    전화번호: order.전화번호 || "",
+    혼적여부: order.혼적여부 || "독차",
+    적요: "",
+    경유상차목록: validStops(order.경유상차목록 || order.경유지_상차),
+    경유하차목록: validStops(order.경유하차목록 || order.경유지_하차),
+    _editId: null,
+    _returnToDetail: false,
+  });
+  setSelectedOrder(null);
+  setPage("form");
+  window.scrollTo(0, 0);
+};
+
+const deleteSingleOrder = async (order) => {
+  const col = order.__col || collName;
+  const id = order.id || order._id;
+  if (!col || !id) return;
+  await deleteDoc(doc(db, col, id));
+  setOrders(prev => prev.filter(o => (o.id || o._id) !== id));
+};
+
   // --------------------------------------------------
   // 🔵 모바일 전용 upsertDriver
   // --------------------------------------------------
@@ -2815,6 +3001,9 @@ setOpenMemo={setOpenMemo}
             searchText={searchText}
             setSearchText={setSearchText}
             onDeleteSelected={deleteSelectedOrders}
+            onDeleteOrder={deleteSingleOrder}
+            onCopyOrder={handleOrderDuplicate}
+            onCopyDriver={handleOrderDuplicateWithDriver}
             multiSelectMode={multiSelectMode}
             setMultiSelectMode={setMultiSelectMode}
             cardVersionB={cardVersionB}
@@ -3839,6 +4028,9 @@ function MobileOrderList({
   onlyToday,
   setOnlyToday,
   onDeleteSelected,
+  onDeleteOrder,
+  onCopyOrder,
+  onCopyDriver,
   multiSelectMode,
   setMultiSelectMode,
   cardVersionB,
@@ -3846,6 +4038,7 @@ function MobileOrderList({
   const [attachViewOrder, setAttachViewOrder] = useState(null);
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [uploadLinkModal, setUploadLinkModal] = useState(false);
+  const [deleteConfirmOrder, setDeleteConfirmOrder] = useState(null);
 
   // 현재 보이는 모든 오더 flat 배열
   const allVisibleOrders = useMemo(() => {
@@ -4181,7 +4374,7 @@ const summary = useMemo(() => {
                   const oid = o.id || o._id;
                   const isChecked = selectedIds.has(oid);
                   return (
-                    <div key={oid} className="relative">
+                    <div key={oid} className={`relative rounded-xl ${multiSelectMode ? "pl-10 transition-all" : ""}`}>
                       {multiSelectMode && (
                         <button
                           className={`absolute left-2 top-1/2 -translate-y-1/2 z-10 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${
@@ -4199,7 +4392,12 @@ const summary = useMemo(() => {
                           )}
                         </button>
                       )}
-                      <div className={multiSelectMode ? "pl-10 transition-all" : ""}>
+                      <SwipeableRow
+                        disabled={multiSelectMode}
+                        onDelete={() => setDeleteConfirmOrder(o)}
+                        onCopyOrder={() => onCopyOrder?.(o)}
+                        onCopyDriver={() => onCopyDriver?.(o)}
+                      >
                         <MobileOrderCard
                           order={o}
                           showUndeliveredOnly={false}
@@ -4210,7 +4408,7 @@ const summary = useMemo(() => {
                           multiSelectMode={multiSelectMode}
                           cardVersionB={cardVersionB}
                         />
-                      </div>
+                      </SwipeableRow>
                     </div>
                   );
                 })}
@@ -4223,6 +4421,53 @@ const summary = useMemo(() => {
 
     {attachViewOrder && (
       <CardAttachViewer order={attachViewOrder} onClose={() => setAttachViewOrder(null)} />
+    )}
+
+    {/* ── 삭제 확인 모달 ── */}
+    {deleteConfirmOrder && (
+      <div className="fixed inset-0 z-[9999] flex items-end justify-center" style={{ background: "rgba(0,0,0,0.45)" }}>
+        <div
+          className={`w-full max-w-md bg-white rounded-t-2xl px-5 pt-5 pb-8 shadow-2xl ${cardVersionB ? "" : ""}`}
+          onClick={e => e.stopPropagation()}
+        >
+          <div className="w-10 h-1 rounded-full bg-gray-200 mx-auto mb-4" />
+          <div className="flex items-center gap-2 mb-1">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
+              <path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/>
+            </svg>
+            <span className={`font-bold text-[15px] ${cardVersionB ? "text-[#1B2B4B]" : "text-gray-900"}`}>오더 삭제</span>
+          </div>
+          <div className="text-[13px] text-gray-500 mb-1 ml-6">
+            {deleteConfirmOrder.거래처명 && <span className="font-semibold text-gray-700">{deleteConfirmOrder.거래처명} · </span>}
+            {deleteConfirmOrder.상차지명} → {deleteConfirmOrder.하차지명}
+          </div>
+          <div className="text-[12px] text-gray-400 mb-5 ml-6">{deleteConfirmOrder.상차일 || ""}</div>
+          <p className="text-[13px] text-gray-500 mb-5 text-center">삭제하면 복구할 수 없습니다. 진행하시겠습니까?</p>
+          <div className="flex gap-3">
+            <button
+              className={`flex-1 py-3 rounded-xl text-[14px] font-semibold ${
+                cardVersionB
+                  ? "bg-gray-100 text-gray-600 border border-gray-200"
+                  : "border border-gray-300 text-gray-600 bg-white"
+              }`}
+              onClick={() => setDeleteConfirmOrder(null)}
+            >
+              취소
+            </button>
+            <button
+              className="flex-1 py-3 rounded-xl text-[14px] font-bold bg-red-500 text-white"
+              onClick={async () => {
+                const o = deleteConfirmOrder;
+                setDeleteConfirmOrder(null);
+                await onDeleteOrder?.(o);
+              }}
+            >
+              삭제
+            </button>
+          </div>
+        </div>
+      </div>
     )}
 
     {/* ── 다중선택 하단 액션바 ── */}
