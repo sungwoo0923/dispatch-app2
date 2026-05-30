@@ -4039,6 +4039,7 @@ function MobileOrderList({
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [uploadLinkModal, setUploadLinkModal] = useState(false);
   const [deleteConfirmOrder, setDeleteConfirmOrder] = useState(null);
+  const [copyModalOrder, setCopyModalOrder] = useState(null);
 
   // 현재 보이는 모든 오더 flat 배열
   const allVisibleOrders = useMemo(() => {
@@ -4396,7 +4397,7 @@ const summary = useMemo(() => {
                         disabled={multiSelectMode}
                         onDelete={() => setDeleteConfirmOrder(o)}
                         onCopyOrder={() => onCopyOrder?.(o)}
-                        onCopyDriver={() => onCopyDriver?.(o)}
+                        onCopyDriver={() => setCopyModalOrder(o)}
                       >
                         <MobileOrderCard
                           order={o}
@@ -4468,6 +4469,16 @@ const summary = useMemo(() => {
           </div>
         </div>
       </div>
+    )}
+
+    {/* ── 복사 형식 선택 모달 ── */}
+    {copyModalOrder && (
+      <CopySelectModal
+        order={copyModalOrder}
+        onClose={() => setCopyModalOrder(null)}
+        onAfterFullCopy={() => setCopyModalOrder(null)}
+        cardVersionB={cardVersionB}
+      />
     )}
 
     {/* ── 다중선택 하단 액션바 ── */}
@@ -5945,6 +5956,7 @@ const handleAssignClick = () => {
           order={order}
           onClose={() => setShowCopyModal(false)}
           onAfterFullCopy={() => { setShowCopyModal(false); setConfirmDeliver(true); }}
+          cardVersionB={cardVersionB}
         />
       )}
 
@@ -8717,7 +8729,7 @@ const pickDrop = (c) => {
   );
 }
 
-function CopySelectModal({ order, onClose, onAfterFullCopy }) {
+function CopySelectModal({ order, onClose, onAfterFullCopy, cardVersionB = false }) {
   /* ===============================
      공통 유틸
   =============================== */
@@ -9008,49 +9020,121 @@ ${order.하차지주소||""}${dropMgr?`\n${dropMgr}`:""}${_mainDCargoMd}${_mainD
      UI
   =============================== */
 
+  const options = [
+    {
+      type: "simple",
+      label: "차량 · 기사 · 연락처",
+      desc: "차량번호 / 기사명 / 전화번호",
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/>
+        </svg>
+      ),
+    },
+    {
+      type: "fare",
+      label: "운임 포함",
+      desc: "부가세 / 선불 / 착불 형식",
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
+        </svg>
+      ),
+    },
+    {
+      type: "full",
+      label: "전체 상세",
+      desc: "상하차 + 화물 + 기사 정보",
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
+        </svg>
+      ),
+    },
+    {
+      type: "driver",
+      label: "기사 전달용",
+      desc: "운행 정보 + 업로드 링크 포함",
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 014-4h4a4 4 0 014 4v2"/><path d="M19 8v6M22 11h-6"/>
+        </svg>
+      ),
+      primary: true,
+    },
+  ];
+
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[9999]">
-      <div className="bg-white rounded-xl shadow-xl p-5 w-80 space-y-2">
-        <div className="text-sm font-semibold text-center">
-          복사 방식 선택
+    <div
+      className="fixed inset-0 z-[9999] flex items-end justify-center"
+      style={{ background: "rgba(0,0,0,0.45)" }}
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-md bg-white rounded-t-2xl pb-8 shadow-2xl"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* 핸들 */}
+        <div className="flex justify-center pt-3 pb-2">
+          <div className="w-10 h-1 rounded-full bg-gray-200" />
         </div>
 
-        <button
-          onClick={() => copy("simple")}
-          className="w-full py-2 bg-gray-100 rounded text-sm"
-        >
-          차량번호 / 기사명 / 전화번호
-        </button>
+        {/* 타이틀 */}
+        <div className={`px-5 pb-3 border-b ${cardVersionB ? "border-gray-100" : "border-gray-100"}`}>
+          <div className={`font-bold text-[15px] ${cardVersionB ? "text-[#1B2B4B]" : "text-gray-900"}`}>
+            복사 형식 선택
+          </div>
+          <div className="text-[12px] text-gray-400 mt-0.5">
+            {order.상차지명} → {order.하차지명}
+          </div>
+        </div>
 
-        <button
-          onClick={() => copy("fare")}
-          className="w-full py-2 bg-blue-100 rounded text-sm"
-        >
-          운임 포함 (부가세/선불/착불)
-        </button>
+        {/* 옵션 목록 */}
+        <div className="px-4 py-3 space-y-2">
+          {options.map(({ type, label, desc, icon, primary }) => (
+            <button
+              key={type}
+              className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-left transition-colors active:scale-[0.98] ${
+                primary
+                  ? cardVersionB
+                    ? "bg-[#1B2B4B] text-white"
+                    : "bg-[#1B2B4B] text-white"
+                  : cardVersionB
+                    ? "bg-gray-50 border border-gray-200 text-gray-800"
+                    : "bg-gray-50 border border-gray-200 text-gray-800"
+              }`}
+              onClick={() => copy(type)}
+            >
+              <span className={primary ? "text-white/80" : "text-gray-400"}>
+                {icon}
+              </span>
+              <div className="flex-1 min-w-0">
+                <div className={`text-[13px] font-semibold ${primary ? "text-white" : "text-gray-800"}`}>
+                  {label}
+                </div>
+                <div className={`text-[11px] mt-0.5 ${primary ? "text-white/70" : "text-gray-400"}`}>
+                  {desc}
+                </div>
+              </div>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={primary ? "rgba(255,255,255,0.6)" : "#CBD5E1"} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="9 18 15 12 9 6"/>
+              </svg>
+            </button>
+          ))}
+        </div>
 
-        <button
-          onClick={() => copy("full")}
-          className="w-full py-2 bg-green-100 rounded text-sm"
-        >
-          전체 상세 (상하차 + 화물정보 + 차량)
-        </button>
-
-        <button
-          onClick={() => copy("driver")}
-          className="w-full py-2 bg-emerald-200 rounded text-sm font-semibold"
-        >
-          기사 전달용 (상세 + 전달메시지)
-        </button>
-
-        <button
-          onClick={onClose}
-          className="w-full py-2 bg-gray-300 rounded text-sm"
-        >
-          취소
-        </button>
+        {/* 취소 */}
+        <div className="px-4">
+          <button
+            onClick={onClose}
+            className={`w-full py-3 rounded-xl text-[13px] font-semibold ${
+              cardVersionB ? "bg-gray-100 text-gray-500" : "border border-gray-200 text-gray-500 bg-white"
+            }`}
+          >
+            취소
+          </button>
+        </div>
       </div>
-      
     </div>
   );
 }
