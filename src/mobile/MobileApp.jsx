@@ -34,84 +34,146 @@ import { version as APP_VERSION } from "../../package.json";
 // 🔥 role 기반 컬렉션 분기
 const role = localStorage.getItem("role") || "user";
 const collName = "dispatch";
+
+// 배차중 뱃지 pulse 애니메이션 CSS (한 번만 삽입)
+if (typeof document !== "undefined" && !document.getElementById("__mobile-badge-style")) {
+  const s = document.createElement("style");
+  s.id = "__mobile-badge-style";
+  s.textContent = `
+    @keyframes dispatchingPulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.2; }
+    }
+    .badge-dispatching {
+      animation: dispatchingPulse 2.6s ease-in-out infinite;
+    }
+  `;
+  document.head.appendChild(s);
+}
+
 // 🔙 뒤로가기 아이콘 버튼
 // ── 스와이프 액션 로우 (iOS Messages 스타일) ──────────────────────────────
 function SwipeableRow({ children, onDelete, onCopyOrder, onCopyDriver, disabled }) {
   const BUTTON_W = 220;
   const SNAP_THRESHOLD = 55;
+  const DIR_THRESHOLD = 7; // px before deciding horiz vs vert
 
+  const containerRef = React.useRef(null);
   const innerRef = React.useRef(null);
   const startX = React.useRef(0);
   const startY = React.useRef(0);
-  const isHoriz = React.useRef(null);
+  const isHoriz = React.useRef(null); // null=undecided
   const dragging = React.useRef(false);
   const curX = React.useRef(0);
+  const openRef = React.useRef(false);
   const [open, setOpen] = React.useState(false);
 
   const applyTranslate = (x, animate) => {
-    if (!innerRef.current) return;
-    innerRef.current.style.transition = animate ? "transform 0.22s cubic-bezier(.4,0,.2,1)" : "none";
-    innerRef.current.style.transform = `translateX(${x}px)`;
+    const el = innerRef.current;
+    if (!el) return;
+    el.style.transition = animate ? "transform 0.24s cubic-bezier(.4,0,.2,1)" : "none";
+    el.style.transform = x === 0 ? "none" : `translate3d(${x}px,0,0)`;
   };
 
-  const doClose = () => { applyTranslate(0, true); curX.current = 0; setOpen(false); };
-  const doOpen  = () => { applyTranslate(-BUTTON_W, true); curX.current = -BUTTON_W; setOpen(true); };
+  const doClose = React.useCallback(() => {
+    applyTranslate(0, true);
+    curX.current = 0;
+    openRef.current = false;
+    setOpen(false);
+  }, []);
 
-  const onTouchStart = (e) => {
-    if (disabled) return;
-    startX.current = e.touches[0].clientX;
-    startY.current = e.touches[0].clientY;
-    isHoriz.current = null;
-    dragging.current = true;
-    applyTranslate(curX.current, false);
-  };
+  const doOpen = React.useCallback(() => {
+    applyTranslate(-BUTTON_W, true);
+    curX.current = -BUTTON_W;
+    openRef.current = true;
+    setOpen(true);
+  }, []);
 
-  const onTouchMove = (e) => {
-    if (!dragging.current || disabled) return;
-    const dx = e.touches[0].clientX - startX.current;
-    const dy = e.touches[0].clientY - startY.current;
-    if (isHoriz.current === null) {
-      if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
-        isHoriz.current = Math.abs(dx) > Math.abs(dy);
+  // Native listeners — passive:false on touchmove so preventDefault() works
+  React.useEffect(() => {
+    const el = innerRef.current;
+    if (!el) return;
+
+    const onStart = (e) => {
+      if (disabled) return;
+      startX.current = e.touches[0].clientX;
+      startY.current = e.touches[0].clientY;
+      isHoriz.current = null;
+      dragging.current = true;
+      // Don't touch DOM yet — wait for direction
+    };
+
+    const onMove = (e) => {
+      if (!dragging.current || disabled) return;
+      const dx = e.touches[0].clientX - startX.current;
+      const dy = e.touches[0].clientY - startY.current;
+
+      if (isHoriz.current === null) {
+        if (Math.abs(dx) > DIR_THRESHOLD || Math.abs(dy) > DIR_THRESHOLD) {
+          isHoriz.current = Math.abs(dx) > Math.abs(dy);
+          if (!isHoriz.current) {
+            // Vertical — bail immediately
+            dragging.current = false;
+            return;
+          }
+          // Horizontal — freeze any running CSS transition at current position
+          applyTranslate(curX.current, false);
+        }
+        return;
       }
-      return;
-    }
-    if (!isHoriz.current) return;
-    e.preventDefault();
-    const base = open ? -BUTTON_W : 0;
-    const next = Math.min(0, Math.max(-BUTTON_W, base + dx));
-    applyTranslate(next, false);
-    curX.current = next;
-  };
 
-  const onTouchEnd = () => {
-    if (!dragging.current) return;
-    dragging.current = false;
-    if (!isHoriz.current) return;
-    if (open) {
-      curX.current > -BUTTON_W + SNAP_THRESHOLD ? doClose() : doOpen();
-    } else {
-      curX.current < -SNAP_THRESHOLD ? doOpen() : doClose();
-    }
-  };
+      if (!isHoriz.current) return;
+      e.preventDefault(); // Works because passive:false
+      const base = openRef.current ? -BUTTON_W : 0;
+      const next = Math.min(0, Math.max(-BUTTON_W, base + dx));
+      applyTranslate(next, false);
+      curX.current = next;
+    };
 
+    const onEnd = () => {
+      if (!dragging.current) return;
+      const wasHoriz = isHoriz.current;
+      dragging.current = false;
+      isHoriz.current = null;
+      if (!wasHoriz) return;
+      if (openRef.current) {
+        curX.current > -BUTTON_W + SNAP_THRESHOLD ? doClose() : doOpen();
+      } else {
+        curX.current < -SNAP_THRESHOLD ? doOpen() : doClose();
+      }
+    };
+
+    el.addEventListener("touchstart", onStart, { passive: true });
+    el.addEventListener("touchmove", onMove, { passive: false });
+    el.addEventListener("touchend", onEnd, { passive: true });
+    el.addEventListener("touchcancel", onEnd, { passive: true });
+    return () => {
+      el.removeEventListener("touchstart", onStart);
+      el.removeEventListener("touchmove", onMove);
+      el.removeEventListener("touchend", onEnd);
+      el.removeEventListener("touchcancel", onEnd);
+    };
+  }, [disabled, doClose, doOpen]);
+
+  // Close when tapping elsewhere
   React.useEffect(() => {
     if (!open) return;
-    const close = (e) => {
-      if (innerRef.current && !innerRef.current.parentElement?.contains(e.target)) doClose();
+    const onOut = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) doClose();
     };
-    document.addEventListener("touchstart", close, { passive: true });
-    return () => document.removeEventListener("touchstart", close);
-  }, [open]);
+    document.addEventListener("touchstart", onOut, { passive: true });
+    return () => document.removeEventListener("touchstart", onOut);
+  }, [open, doClose]);
+
+  // Close when multiSelect activates
+  React.useEffect(() => {
+    if (disabled && openRef.current) doClose();
+  }, [disabled, doClose]);
 
   return (
-    <div className="relative overflow-hidden" style={{ borderRadius: "inherit" }}>
-      {/* 액션 버튼 영역 */}
-      <div
-        className="absolute right-0 top-0 bottom-0 flex"
-        style={{ width: BUTTON_W }}
-      >
-        {/* 오더복사 */}
+    <div ref={containerRef} className="relative overflow-hidden" style={{ borderRadius: "inherit" }}>
+      {/* 액션 버튼 (카드 뒤에 숨어있다가 스와이프로 노출) */}
+      <div className="absolute right-0 top-0 bottom-0 flex" style={{ width: BUTTON_W }}>
         <button
           className="flex-1 flex flex-col items-center justify-center gap-1"
           style={{ background: "#4B5563" }}
@@ -124,7 +186,6 @@ function SwipeableRow({ children, onDelete, onCopyOrder, onCopyDriver, disabled 
           </svg>
           <span style={{ color: "white", fontSize: 11, fontWeight: 600 }}>오더복사</span>
         </button>
-        {/* 기사복사 */}
         <button
           className="flex-1 flex flex-col items-center justify-center gap-1"
           style={{ background: "#2563EB" }}
@@ -138,7 +199,6 @@ function SwipeableRow({ children, onDelete, onCopyOrder, onCopyDriver, disabled 
           </svg>
           <span style={{ color: "white", fontSize: 11, fontWeight: 600 }}>기사복사</span>
         </button>
-        {/* 삭제 */}
         <button
           className="flex-1 flex flex-col items-center justify-center gap-1"
           style={{ background: "#EF4444" }}
@@ -155,13 +215,10 @@ function SwipeableRow({ children, onDelete, onCopyOrder, onCopyDriver, disabled 
         </button>
       </div>
 
-      {/* 카드 (슬라이드) */}
+      {/* 카드 슬라이딩 레이어 — white background으로 액션버튼 완전 차폐 */}
       <div
         ref={innerRef}
-        style={{ willChange: "transform" }}
-        onTouchStart={onTouchStart}
-        onTouchMove={onTouchMove}
-        onTouchEnd={onTouchEnd}
+        style={{ background: "white", position: "relative", zIndex: 1 }}
       >
         {children}
       </div>
@@ -4781,7 +4838,7 @@ const dropTime = order.하차시간 || "시간 없음";
                 배차완료
               </span>
             ) : (
-              <span className="text-[0.75em] font-semibold text-gray-400">배차중</span>
+              <span className="badge-dispatching text-[0.75em] font-semibold text-gray-400">배차중</span>
             )}
             {isCold && (
               <span className="text-[0.68em] text-slate-500 font-semibold bg-slate-100 px-1.5 py-0.5 rounded">
