@@ -11265,172 +11265,184 @@ const source = rawSource.filter((o) => {
   const sortedDates = Array.from(dateMap.keys()).sort();
 
 return (
-  <div className="px-3 py-3">
-    {/* ✅ 포커스 하이라이트(파란 glow) 애니메이션 */}
+  <div className={`min-h-screen ${cardVersionB ? "bg-[#F0F3F8]" : "bg-gray-50"}`}>
+    {/* 하이라이트 애니메이션 */}
     <style>{`
       @keyframes flashGlowBlue {
-        0%   { box-shadow: 0 0 0 rgba(59,130,246,0); }
-        25%  { box-shadow: 0 0 0 4px rgba(59,130,246,.22), 0 0 18px rgba(59,130,246,.35); }
-        100% { box-shadow: 0 0 0 rgba(59,130,246,0); }
+        0%   { box-shadow: none; }
+        25%  { box-shadow: 0 0 0 3px rgba(59,130,246,.25), 0 0 14px rgba(59,130,246,.3); }
+        100% { box-shadow: none; }
       }
-      .order-flash-blue {
-        animation: flashGlowBlue 1.2s ease-out;
-      }
+      .order-flash-blue { animation: flashGlowBlue 1.2s ease-out; }
     `}</style>
-      
-      {/* 🔥 미배차 / 정보미전달 탭 */}
-<div className="flex rounded-xl overflow-hidden mb-4 border bg-gray-100">
-  
-  {["미배차", "정보미전달"].map((t) => (
-    <button
-      key={t}
-      onClick={() => {
-        setTab(t);
-        setUnassignedTypeFilter("전체"); // 탭 바뀔 때 필터 초기화
-      }}
-      className={`flex-1 py-2.5 text-sm font-bold
-        ${
-          tab === t
-            ? `${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"} text-white shadow`
-            : "bg-transparent text-gray-500"
-        }`}
-    >
-      {t}
-    </button>
-  ))}
-</div>
 
-
-      {/* 🔎 상태 필터 (조건) */}
-<div className="flex gap-2 mb-4 px-1">
-  {(tab === "정보미전달"
-    ? ["전체", "배차중", "배차완료"]
-    : ["전체", "냉장/냉동", "일반"]
-  ).map((t) => (
-    <button
-      key={t}
-      onClick={() => setUnassignedTypeFilter(t)}
-      className={`px-3 py-1 rounded-full text-xs font-semibold border
-        transition
-        ${
-          unassignedTypeFilter === t
-            ? cardVersionB
-              ? "bg-[#1B2B4B]/10 text-[#1B2B4B] border-[#1B2B4B]/40"
-              : "bg-blue-50 text-blue-700 border-blue-400"
-            : "bg-white text-gray-500 border-gray-300"
-        }`}
-    >
-      {t}
-    </button>
-  ))}
-</div>
-{/* 🔢 미배차 요약 바 */}
-{tab === "미배차" && (
-  <div className="mb-3 px-3 py-2 rounded-xl
-                  bg-white border shadow-sm
-                  flex justify-between items-center
-                  text-xs font-semibold text-gray-700">
-    <span>
-      총 <b className={cardVersionB ? "text-[#1B2B4B]" : "text-blue-600"}>{totalCount}</b>건
-    </span>
-
-    <div className="flex gap-2">
-      <span className="px-2 py-0.5 rounded-full
-                       bg-cyan-100 text-cyan-700 text-[11px] font-bold">
-        냉장/냉동 {coldCount}
-      </span>
-
-      <span className="px-2 py-0.5 rounded-full
-                       bg-gray-100 text-gray-700 text-[11px] font-bold">
-        일반 {normalCount}
-      </span>
-    </div>
-  </div>
-)}
-
-      <div className="mb-2 text-xs text-gray-500">
-        {title}
+    {/* ── 탭 ── */}
+    {cardVersionB ? (
+      <div className="flex bg-white border-b border-gray-100">
+        {["미배차", "정보미전달"].map((t) => (
+          <button
+            key={t}
+            onClick={() => { setTab(t); setUnassignedTypeFilter("전체"); }}
+            className={`flex-1 py-2.5 text-[13px] font-semibold border-b-2 transition-colors ${
+              tab === t
+                ? "border-[#1B2B4B] text-[#1B2B4B]"
+                : "border-transparent text-gray-400"
+            }`}
+          >{t}</button>
+        ))}
       </div>
+    ) : (
+      <div className="px-4 pt-3 pb-0">
+        <div className="flex bg-gray-100 rounded-xl p-0.5">
+          {["미배차", "정보미전달"].map((t) => (
+            <button
+              key={t}
+              onClick={() => { setTab(t); setUnassignedTypeFilter("전체"); }}
+              className={`flex-1 py-2 rounded-[10px] text-[13px] font-semibold transition-all ${
+                tab === t
+                  ? "bg-white text-gray-900 shadow-sm"
+                  : "text-gray-400"
+              }`}
+            >{t}</button>
+          ))}
+        </div>
+      </div>
+    )}
+
+    {/* ── 필터 + 요약 ── */}
+    <div className={`px-4 py-3 ${cardVersionB ? "bg-white border-b border-gray-100" : ""}`}>
+      {/* 필터 칩 */}
+      <div className="flex gap-1.5 mb-2.5">
+        {(tab === "정보미전달"
+          ? ["전체", "배차중", "배차완료"]
+          : ["전체", "냉장/냉동", "일반"]
+        ).map((t) => (
+          <button
+            key={t}
+            onClick={() => setUnassignedTypeFilter(t)}
+            className={`px-3 py-1 text-[12px] font-semibold border transition-colors ${
+              cardVersionB
+                ? `rounded-lg ${unassignedTypeFilter === t ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-500 border-gray-200"}`
+                : `rounded-full ${unassignedTypeFilter === t ? "bg-gray-800 text-white border-gray-800" : "bg-white text-gray-500 border-gray-300"}`
+            }`}
+          >{t}</button>
+        ))}
+      </div>
+
+      {/* 요약 행 */}
+      {tab === "미배차" && (
+        cardVersionB ? (
+          <div className="flex items-center gap-3 text-[12px]">
+            <span className="text-gray-500">
+              총 <span className="font-bold text-[#1B2B4B]">{source.length}</span>건
+            </span>
+            <span className="text-gray-300">|</span>
+            <span className="text-gray-500">냉장/냉동 <span className="font-bold text-[#1B2B4B]">{coldCount}</span></span>
+            <span className="text-gray-500">일반 <span className="font-bold text-gray-700">{normalCount}</span></span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-3 text-[12px] text-gray-500">
+            <span>총 <b className="text-gray-900">{source.length}</b>건</span>
+            <span className="text-gray-300">|</span>
+            <span>냉장/냉동 <b className="text-gray-700">{coldCount}</b></span>
+            <span>일반 <b className="text-gray-700">{normalCount}</b></span>
+          </div>
+        )
+      )}
+      {tab === "정보미전달" && (
+        <div className={`text-[12px] ${cardVersionB ? "text-gray-500" : "text-gray-500"}`}>
+          총 <b className={cardVersionB ? "text-[#1B2B4B]" : "text-gray-900"}>{source.length}</b>건
+        </div>
+      )}
+    </div>
+
+    {/* ── 카드 목록 ── */}
+    <div className="px-3 pt-3 pb-24">
+      {source.length === 0 && (
+        <div className="py-16 text-center text-gray-400 text-[13px]">
+          {tab === "미배차" ? "미배차 오더가 없습니다." : "정보미전달 오더가 없습니다."}
+        </div>
+      )}
+
       {sortedDates.map((dateStr) => {
-  const list = dateMap.get(dateStr) || [];
+        const list = dateMap.get(dateStr) || [];
+        return (
+          <div key={dateStr} className="mb-5">
+            {/* 날짜 헤더 */}
+            <div className={`flex items-center gap-2 mb-2 px-1 ${cardVersionB ? "" : ""}`}>
+              <span className={`text-[12px] font-bold ${cardVersionB ? "text-[#1B2B4B]" : "text-gray-600"}`}>
+                {formatDateHeader(dateStr)}
+              </span>
+              <span className={`text-[11px] font-semibold px-1.5 py-0.5 ${
+                cardVersionB
+                  ? "rounded-md bg-[#1B2B4B]/8 text-[#1B2B4B]"
+                  : "rounded-full bg-gray-100 text-gray-500"
+              }`}>{list.length}건</span>
+            </div>
 
-  return (
-    <div key={dateStr} className="mb-6">
-      <div className="text-sm font-bold text-gray-700 mb-2 px-1">
-        {formatDateHeader(dateStr)}
+            <div className="space-y-2">
+              {list.map((o) => (
+                <div
+                  key={o.id}
+                  ref={(el) => { if (el) orderRefs.current[o.id] = el; }}
+                  style={{ scrollMarginTop: 90 }}
+                >
+                  <MobileOrderCard
+                    order={o}
+                    onSelect={() => {
+                      onSaveScroll?.();
+                      setPrevPage("unassigned");
+                      setSelectedOrder(o);
+                      setDetailFrom("unassigned");
+                      setPage("detail");
+                      window.scrollTo(0, 0);
+                    }}
+                    onOpenMemo={setOpenMemo}
+                    showUndeliveredOnly={tab === "정보미전달"}
+                    onConfirmDeliver={() => setConfirmTarget(o)}
+                    cardVersionB={cardVersionB}
+                    flash={flashId === o.id}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+
+    {/* ── 정보전달 확인 모달 ── */}
+    {confirmTarget && (
+      <div className="fixed inset-0 z-50 flex items-end justify-center" style={{ background: "rgba(0,0,0,0.45)" }}
+        onClick={() => setConfirmTarget(null)}>
+        <div className="w-full max-w-md bg-white rounded-t-2xl px-5 pt-5 pb-8 shadow-2xl"
+          onClick={e => e.stopPropagation()}>
+          <div className="w-10 h-1 rounded-full bg-gray-200 mx-auto mb-4" />
+          <div className={`font-bold text-[15px] mb-1 ${cardVersionB ? "text-[#1B2B4B]" : "text-gray-900"}`}>
+            정보전달 완료 처리
+          </div>
+          <div className="text-[13px] text-gray-500 mb-1">
+            {confirmTarget.거래처명 && <span className="font-medium text-gray-700">{confirmTarget.거래처명} · </span>}
+            {confirmTarget.상차지명} → {confirmTarget.하차지명}
+          </div>
+          <div className="text-[12px] text-gray-400 mb-5">{confirmTarget.상차일}</div>
+          <div className="flex gap-3">
+            <button onClick={() => setConfirmTarget(null)}
+              className={`flex-1 py-3 rounded-xl text-[14px] font-semibold ${
+                cardVersionB ? "bg-gray-100 text-gray-600" : "border border-gray-300 text-gray-600 bg-white"
+              }`}>
+              취소
+            </button>
+            <button onClick={handleConfirmDeliver}
+              className={`flex-1 py-3 rounded-xl text-[14px] font-bold text-white ${
+                cardVersionB ? "bg-[#1B2B4B]" : "bg-gray-800"
+              }`}>
+              전달완료
+            </button>
+          </div>
+        </div>
       </div>
-
-      <div className="space-y-3">
-        {list.map((o) => (
-  <div
-    key={o.id}
-    ref={(el) => {
-      if (el) orderRefs.current[o.id] = el;
-    }}
-    style={{ scrollMarginTop: 90 }} // ✅ sticky header에 가리지 않게
-  >
-    <MobileOrderCard
-      order={o}
-      onSelect={() => {
-        onSaveScroll?.();
-        setPrevPage("unassigned");
-        setSelectedOrder(o);
-        setDetailFrom("unassigned");
-        setPage("detail");
-        window.scrollTo(0, 0);
-      }}
-      onOpenMemo={setOpenMemo}
-      showUndeliveredOnly={tab === "정보미전달"}
-      onConfirmDeliver={() => setConfirmTarget(o)}
-      cardVersionB={cardVersionB}
-      flash={flashId === o.id}
-    />
+    )}
   </div>
-))}
-      </div>
-    </div>
-  );
-})}
-      {confirmTarget && (
-  <div
-    className="fixed inset-0 bg-black/40 z-50
-               flex items-center justify-center"
-    onClick={() => setConfirmTarget(null)}
-  >
-    <div
-      className="bg-white rounded-xl p-5 w-[80%] max-w-xs"
-      onClick={(e) => e.stopPropagation()}
-    >
-      <div className="text-sm font-semibold mb-2">
-        정보전달 완료
-      </div>
-
-      <div className="text-sm text-gray-600 mb-4">
-        이 오더를<br />
-        <b className="text-gray-900">전달완료</b> 처리하시겠습니까?
-      </div>
-
-      <div className="flex gap-2">
-        <button
-          onClick={() => setConfirmTarget(null)}
-          className="flex-1 py-2 rounded-lg
-                     bg-gray-200 text-gray-700
-                     text-sm font-semibold"
-        >
-          취소
-        </button>
-
-        <button
-          onClick={handleConfirmDeliver}
-          className={`flex-1 py-2 rounded-lg text-white text-sm font-semibold ${cardVersionB ? "bg-[#1B2B4B]" : "bg-emerald-500"}`}
-        >
-          확인
-        </button>
-      </div>
-    </div>
-  </div>
-)}
-
-    </div>
-  );
+);
 }
