@@ -690,7 +690,8 @@ const markAllRead = () => {
 const clearNotifs = () => {
   setNotifications([]);
   localStorage.removeItem("mobileNotifs");
-  notifiedOrderIdsRef.current.clear();
+  // notifiedOrderIdsRef는 유지 → 기존 오더가 재연결 시 다시 뜨는 것 방지
+  // (이후 새로 등록되는 오더만 알림 발생)
 };
 
 // 🔔 alarmEnabled → ref 동기화
@@ -866,10 +867,14 @@ collections.forEach((name) => {
       // 🔔 알림 감지 (최초 로드는 스킵)
       if (!initialLoadDoneRef.current[name]) {
         initialLoadDoneRef.current[name] = true;
-        // Initialize prevStatusMap on first load
+        // Initialize prevStatusMap and mark all existing orders as already seen
         list.forEach(item => {
           if (!dispatchPrevStatus.current[name]) dispatchPrevStatus.current[name] = new Map();
           dispatchPrevStatus.current[name].set(item.id, String(item.배차상태 || "").trim());
+          // 기존 오더는 이미 본 것으로 처리 → 재연결 시에도 알림 재발생 안 함
+          notifiedOrderIdsRef.current.add(`등록_${item.id}`);
+          notifiedOrderIdsRef.current.add(`배차완료_${item.id}`);
+          notifiedOrderIdsRef.current.add(`취소_${item.id}`);
         });
         return;
       }
@@ -1769,8 +1774,20 @@ const groupedByDate = useMemo(() => {
       // ★ PC 거래처관리(places) 동기화
       await syncPlaceFromOrder(docData);
 
+      // selectedOrder 최신화 (상세보기로 돌아갈 때 최신 데이터 반영)
+      const updated = { ...selectedOrder, ...docData, _id: form._editId, id: form._editId };
+      setSelectedOrder(updated);
+      setOrders(prev => prev.map(o =>
+        (o.id === form._editId || o._id === form._editId) ? updated : o
+      ));
+
       showToast("수정 완료!");
-      setPage(prevPage);
+      // 상세보기에서 진입한 경우 → 상세보기로 복귀, 그 외 → 이전 페이지
+      if (form._returnToDetail) {
+        setPage("detail");
+      } else {
+        setPage(prevPage);
+      }
       return;
     }
 
@@ -2269,7 +2286,7 @@ const title =
             setPage("detail");
             return;
           }
-          setPage("list");
+          setPage(prevPage || "list");
         }
       : page === "detail"
       ? () => {
@@ -5946,6 +5963,7 @@ const handleAssignClick = () => {
             <button
               onClick={() => {
                 window.scrollTo(0, 0);
+                setPrevPage("detail");
                 setPage("form");
                 setForm({
                   거래처명: order.거래처명 || "",
