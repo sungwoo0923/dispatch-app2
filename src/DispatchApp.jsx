@@ -32617,6 +32617,9 @@ const [includeCardAr, setIncludeCardAr] = useState(true);
     });
   };
   const [sentMailboxOpen, setSentMailboxOpen] = useState(false);
+  const [selectedMail, setSelectedMail] = useState(null);
+  const [mailTypeFilter, setMailTypeFilter] = useState("전체");
+  const [mailSearch, setMailSearch] = useState("");
 
   const [deleteLogConfirm, setDeleteLogConfirm] = useState(null); // log.id to delete
 
@@ -33340,6 +33343,16 @@ const handleBatchSettle = async (targetStatus) => {
     return monthRowsRaw.filter(r => r.정산상태 === "미정산" && r.건수 > 0).length;
   }, [monthRowsRaw, selClient]);
 
+  const filteredMails = useMemo(() => {
+    let logs = [...emailLogs].sort((a, b) => (b.sentAt || 0) - (a.sentAt || 0));
+    if (mailTypeFilter !== "전체") logs = logs.filter(l => l.type === mailTypeFilter);
+    if (mailSearch.trim()) {
+      const q = mailSearch.toLowerCase();
+      logs = logs.filter(l => (l.subject || "").toLowerCase().includes(q) || (l.to || "").toLowerCase().includes(q) || (l.client || "").toLowerCase().includes(q));
+    }
+    return logs;
+  }, [emailLogs, mailTypeFilter, mailSearch]);
+
   return (
     <>
     <div className="p-4">
@@ -33347,6 +33360,7 @@ const handleBatchSettle = async (targetStatus) => {
       <div className="flex gap-2 mb-5">
         {tabBtn("invoice", "거래명세서", 0)}
         {tabBtn("unsettledMonth", "미수금관리", unsettledBadge)}
+        {tabBtn("sentmails", "보낸메일함", emailLogs.length)}
       </div>
 
       {/* ══════════════ 거래명세서 탭 ══════════════ */}
@@ -34582,7 +34596,7 @@ const handleBatchSettle = async (targetStatus) => {
           )}
 
           {/* 테이블 */}
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-x-auto">
             {selClient && (
               <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100 bg-[#1B2B4B]/4">
                 <span className="text-[12px] font-bold text-gray-500">조회 거래처</span>
@@ -34590,16 +34604,16 @@ const handleBatchSettle = async (targetStatus) => {
                 <span className="text-[12px] text-gray-400">— {THIS_YEAR}년 월별 정산 현황</span>
               </div>
             )}
-            <table className="w-full text-[13px]" style={{tableLayout:"fixed"}}>
+            <table className="text-[13px]" style={{tableLayout:"fixed", minWidth:"700px", width:"100%"}}>
               <colgroup>
                 <col style={{width:"40px"}} />
                 <col style={{width:"48px"}} />
                 <col style={{width:"88px"}} />
                 <col style={{width:"56px"}} />
-                <col style={{width:"120px"}} />
+                <col style={{width:"130px"}} />
                 <col style={{width:"100px"}} />
                 <col style={{width:"100px"}} />
-                <col />
+                <col style={{width:"160px"}} />
               </colgroup>
               <thead>
                 <tr className="bg-[#1B2B4B]">
@@ -35484,6 +35498,148 @@ const handleBatchSettle = async (targetStatus) => {
           )}
         </div>
       )}
+
+      {/* ══════════════ 보낸메일함 탭 ══════════════ */}
+      {tab === "sentmails" && (
+        <div>
+          {/* 상단 필터 바 */}
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <div>
+              <div className="text-[16px] font-extrabold text-[#1B2B4B]">보낸메일함</div>
+              <div className="text-[12px] text-gray-400 mt-0.5">프로그램에서 발송한 모든 이메일 · 총 {emailLogs.length}건</div>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <select
+                className="border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-semibold text-[#1B2B4B] outline-none"
+                value={mailTypeFilter}
+                onChange={e => setMailTypeFilter(e.target.value)}
+              >
+                <option value="전체">전체 유형</option>
+                <option value="거래명세서">거래명세서</option>
+                <option value="미수금">미수금</option>
+                <option value="일반이메일">일반이메일</option>
+              </select>
+              <input
+                className="border-2 border-gray-200 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B] min-w-[220px]"
+                placeholder="제목, 받는사람, 거래처 검색..."
+                value={mailSearch}
+                onChange={e => setMailSearch(e.target.value)}
+              />
+              {(mailSearch || mailTypeFilter !== "전체") && (
+                <button
+                  onClick={() => { setMailSearch(""); setMailTypeFilter("전체"); }}
+                  className="px-3 py-2 rounded-lg bg-gray-100 text-gray-600 text-[13px] font-semibold hover:bg-gray-200 transition"
+                >초기화</button>
+              )}
+            </div>
+          </div>
+
+          {/* 메일 클라이언트 레이아웃 */}
+          <div className="flex gap-4" style={{minHeight:"580px"}}>
+            {/* 왼쪽: 메일 목록 */}
+            <div className="w-[320px] shrink-0 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
+              <div className="bg-[#1B2B4B] px-4 py-3 text-white font-bold text-[13px] flex items-center justify-between">
+                <span>발송 목록</span>
+                <span className="text-white/60 font-normal text-[12px]">{filteredMails.length}건</span>
+              </div>
+              <div className="overflow-y-auto flex-1">
+                {filteredMails.length === 0 ? (
+                  <div className="text-center text-gray-400 py-16 text-[13px]">발송된 메일이 없습니다</div>
+                ) : (
+                  filteredMails.map(log => (
+                    <div
+                      key={log.id}
+                      onClick={() => setSelectedMail(log)}
+                      className={`px-4 py-3 border-b border-gray-100 cursor-pointer transition ${selectedMail?.id === log.id ? "bg-[#e8edf5] border-l-4 border-l-[#1B2B4B]" : "hover:bg-gray-50 border-l-4 border-l-transparent"}`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${log.status === "success" ? "bg-[#1B2B4B] text-white" : "bg-red-600 text-white"}`}>
+                          {log.type || "메일"}
+                        </span>
+                        <span className="text-[11px] text-gray-400">{log.sentAt ? new Date(log.sentAt).toLocaleDateString("ko-KR") : ""}</span>
+                      </div>
+                      <div className="text-[13px] font-semibold text-gray-800 truncate">{log.subject || "(제목없음)"}</div>
+                      <div className="text-[11px] text-gray-500 truncate mt-0.5">{log.to || "-"}</div>
+                      {log.client && log.client !== "-" && (
+                        <div className="text-[11px] text-[#1B2B4B]/60 truncate">{log.client}</div>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* 오른쪽: 메일 상세 */}
+            <div className="flex-1 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
+              {!selectedMail ? (
+                <div className="flex-1 flex flex-col items-center justify-center text-gray-400">
+                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" className="mb-3 opacity-30"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+                  <div className="text-[14px]">왼쪽 목록에서 메일을 선택하세요</div>
+                </div>
+              ) : (
+                <>
+                  {/* 메일 헤더 */}
+                  <div className="bg-[#f4f6f9] border-b border-gray-200 px-6 py-4">
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="text-[16px] font-extrabold text-[#1B2B4B] leading-tight flex-1 pr-4">
+                        {selectedMail.subject || "(제목없음)"}
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${selectedMail.status === "success" ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>
+                          {selectedMail.status === "success" ? "발송성공" : "발송실패"}
+                        </span>
+                        <button onClick={() => setSelectedMail(null)} className="text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-8 gap-y-1.5 text-[12px]">
+                      <div className="flex gap-2"><span className="text-gray-400 font-semibold w-12 shrink-0">발신</span><span className="text-gray-700">{selectedMail.sentBy || "-"}</span></div>
+                      <div className="flex gap-2"><span className="text-gray-400 font-semibold w-12 shrink-0">수신</span><span className="text-gray-700 break-all">{selectedMail.to || "-"}</span></div>
+                      <div className="flex gap-2"><span className="text-gray-400 font-semibold w-12 shrink-0">유형</span><span className="text-gray-700">{selectedMail.type || "-"}</span></div>
+                      <div className="flex gap-2"><span className="text-gray-400 font-semibold w-12 shrink-0">발송일</span><span className="text-gray-700">{selectedMail.sentAt ? new Date(selectedMail.sentAt).toLocaleString("ko-KR") : "-"}</span></div>
+                      {selectedMail.client && selectedMail.client !== "-" && (
+                        <div className="flex gap-2"><span className="text-gray-400 font-semibold w-12 shrink-0">거래처</span><span className="text-gray-700">{selectedMail.client}</span></div>
+                      )}
+                    </div>
+                    {selectedMail.attachmentNames?.length > 0 && (
+                      <div className="mt-3 flex items-center gap-2 flex-wrap">
+                        <span className="text-[11px] text-gray-400 font-semibold">첨부파일</span>
+                        {selectedMail.attachmentNames.map((n, i) => (
+                          <span key={i} className="text-[11px] bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full">{n}</span>
+                        ))}
+                      </div>
+                    )}
+                    {selectedMail.error && (
+                      <div className="mt-2 text-[12px] text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-1.5">
+                        오류: {selectedMail.error}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 메일 본문 */}
+                  <div className="flex-1 overflow-y-auto px-6 py-5">
+                    <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-3">본문</div>
+                    {selectedMail.body ? (
+                      <div className="text-[14px] text-gray-700 whitespace-pre-wrap leading-relaxed">{selectedMail.body}</div>
+                    ) : (
+                      <div className="text-gray-400 text-[13px] italic">저장된 본문 내용이 없습니다</div>
+                    )}
+                  </div>
+
+                  {/* 하단 액션 */}
+                  <div className="border-t border-gray-100 px-6 py-3 flex items-center justify-end">
+                    <button
+                      onClick={() => { setDeleteLogConfirm(selectedMail.id); }}
+                      className="px-4 py-2 rounded-lg text-[13px] font-semibold text-red-500 hover:bg-red-50 border border-red-200 transition"
+                    >
+                      삭제
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
     {/* 발송이력 삭제 확인 팝업 */}
     {deleteLogConfirm && (
@@ -35500,6 +35656,7 @@ const handleBatchSettle = async (targetStatus) => {
             <button className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white font-bold text-[13px] hover:bg-[#243a60] transition"
               onClick={async () => {
                 await deleteDoc(doc(db, "emailLogs", deleteLogConfirm)).catch(() => {});
+                if (selectedMail?.id === deleteLogConfirm) setSelectedMail(null);
                 setDeleteLogConfirm(null);
               }}>삭제</button>
           </div>
