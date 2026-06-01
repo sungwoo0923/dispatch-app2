@@ -1831,6 +1831,19 @@ const groupedByDate = useMemo(() => {
 const handleOrderDuplicate = (order) => {
  const today = todayKST();
 
+  const _pendingContactItems = [];
+  [
+    { fieldName: order.상차지명, type: "pickup" },
+    { fieldName: order.하차지명, type: "drop" },
+  ].forEach(({ fieldName, type }) => {
+    if (!fieldName) return;
+    const found = clients.find(c => normalizeCompany(c.거래처명) === normalizeCompany(fieldName));
+    if (!found) return;
+    const contacts = (Array.isArray(found.contacts) ? found.contacts : []).filter(ct => ct.name?.trim());
+    const unique = [...new Map(contacts.map(ct => [ct.name.trim(), ct])).values()];
+    if (unique.length > 1) _pendingContactItems.push({ type, place: found, contacts: unique });
+  });
+
   setForm({
     거래처명: order.거래처명 || "",
 
@@ -1843,12 +1856,12 @@ const handleOrderDuplicate = (order) => {
 
     상차지명: order.상차지명 || "",
 상차지주소: order.상차지주소 || "",
-상차지담당자: order.상차지담당자 || "",     
+상차지담당자: order.상차지담당자 || "",
 상차지담당자번호: order.상차지담당자번호 || "",
 
 하차지명: order.하차지명 || "",
 하차지주소: order.하차지주소 || "",
-하차지담당자: order.하차지담당자 || "", 
+하차지담당자: order.하차지담당자 || "",
 하차지담당자번호: order.하차지담당자번호 || "",
 
     톤수: order.톤수 || order.차량톤수 || "",
@@ -1879,13 +1892,19 @@ const handleOrderDuplicate = (order) => {
 
     _editId: null,
     _returnToDetail: false,
+    _pendingContactItems,
   });
 
   setSelectedOrder(null);
+  setPrevPage("list");
   setPage("form");
   window.scrollTo(0, 0);
+};
 
-  const popupItems = [];
+const handleOrderDuplicateWithDriver = (order) => {
+  const today = todayKST();
+
+  const _pendingContactItems = [];
   [
     { fieldName: order.상차지명, type: "pickup" },
     { fieldName: order.하차지명, type: "drop" },
@@ -1895,13 +1914,9 @@ const handleOrderDuplicate = (order) => {
     if (!found) return;
     const contacts = (Array.isArray(found.contacts) ? found.contacts : []).filter(ct => ct.name?.trim());
     const unique = [...new Map(contacts.map(ct => [ct.name.trim(), ct])).values()];
-    if (unique.length > 1) popupItems.push({ type, place: found, contacts: unique });
+    if (unique.length > 1) _pendingContactItems.push({ type, place: found, contacts: unique });
   });
-  if (popupItems.length > 0) setTimeout(() => openContactPopup(popupItems), 150);
-};
 
-const handleOrderDuplicateWithDriver = (order) => {
-  const today = todayKST();
   setForm({
     거래처명: order.거래처명 || "",
     상차일: today,
@@ -1938,24 +1953,12 @@ const handleOrderDuplicateWithDriver = (order) => {
     경유하차목록: validStops(order.경유하차목록 || order.경유지_하차),
     _editId: null,
     _returnToDetail: false,
+    _pendingContactItems,
   });
   setSelectedOrder(null);
+  setPrevPage("list");
   setPage("form");
   window.scrollTo(0, 0);
-
-  const popupItems = [];
-  [
-    { fieldName: order.상차지명, type: "pickup" },
-    { fieldName: order.하차지명, type: "drop" },
-  ].forEach(({ fieldName, type }) => {
-    if (!fieldName) return;
-    const found = clients.find(c => normalizeCompany(c.거래처명) === normalizeCompany(fieldName));
-    if (!found) return;
-    const contacts = (Array.isArray(found.contacts) ? found.contacts : []).filter(ct => ct.name?.trim());
-    const unique = [...new Map(contacts.map(ct => [ct.name.trim(), ct])).values()];
-    if (unique.length > 1) popupItems.push({ type, place: found, contacts: unique });
-  });
-  if (popupItems.length > 0) setTimeout(() => openContactPopup(popupItems), 150);
 };
 
 const deleteSingleOrder = async (order) => {
@@ -2443,6 +2446,7 @@ const title =
     _returnToDetail: false,
   });
   setSelectedOrder(null);
+  setPrevPage("list");
   setPage("form");
   setShowMenu(false);
 }}
@@ -3185,6 +3189,13 @@ setOpenMemo={setOpenMemo}
     setOrders(prev => prev.map(o => (o.id === id || o._id === id) ? { ...o, ...patch } : o));
   }}
             drivers={drivers}
+            clients={[
+              ...places,
+              ...clients.filter(c =>
+                c.거래처명 &&
+                !places.some(p => normalizeCompany(p.거래처명) === normalizeCompany(c.거래처명))
+              )
+            ]}
             onDuplicate={handleOrderDuplicate}
             onAssignDriver={assignDriver}
             onCancelAssign={cancelAssign}
@@ -3287,6 +3298,7 @@ setOpenMemo={setOpenMemo}
               _returnToDetail: false,
             });
             setSelectedOrder(null);
+            setPrevPage("list");
             setPage("form");
           }}
           className={`fixed bottom-6 right-6 z-40 w-14 h-14 rounded-full text-white text-3xl flex items-center justify-center active:scale-95 transition-transform ${
@@ -4276,20 +4288,35 @@ const summary = useMemo(() => {
     <div>
       {/* 상태 탭 */}
       <div className={`flex border-b ${cardVersionB ? "bg-white" : "bg-white"}`}>
-        {tabs.map((t) => (
-          <button
-            key={t}
-            onClick={() => setStatusTab(t)}
-            className={`flex-1 py-2.5 text-[13px] font-semibold border-b-2 transition-colors ${statusTab === t
-                ? cardVersionB
-                  ? "border-[#1B2B4B] text-[#1B2B4B]"
-                  : "border-blue-500 text-blue-600"
-                : "border-transparent text-gray-400"
-              }`}
-          >
-            {t}
-          </button>
-        ))}
+        {tabs.map((t) => {
+          let count = null;
+          if (statusTab === "전체") {
+            if (t === "전체") count = allVisibleOrders.length;
+            else if (t === "배차중") count = statusCount.ing;
+            else if (t === "배차완료") count = statusCount.done;
+          } else if (t === statusTab) {
+            count = allVisibleOrders.length;
+          }
+          return (
+            <button
+              key={t}
+              onClick={() => setStatusTab(t)}
+              className={`flex-1 py-2.5 text-[13px] font-semibold border-b-2 transition-colors flex items-center justify-center gap-1 ${statusTab === t
+                  ? cardVersionB
+                    ? "border-[#1B2B4B] text-[#1B2B4B]"
+                    : "border-blue-500 text-blue-600"
+                  : "border-transparent text-gray-400"
+                }`}
+            >
+              {t}
+              {count !== null && (
+                <span className={`text-[10px] font-bold ${
+                  statusTab === t ? "opacity-60" : "opacity-40"
+                }`}>{count}</span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
       {/* 날짜/퀵범위/필터 */}
@@ -4936,15 +4963,16 @@ const dropTime = order.하차시간 || "시간 없음";
             )}
           </div>
           <div className="flex items-center gap-2">
-            {(order.attachCount > 0) && (
-              <button
-                style={{ touchAction: "manipulation" }}
-                onClick={e => { e.stopPropagation(); onOpenAttach?.(order); }}
-                className="text-[0.68em] text-gray-400 font-semibold"
-              >
-                첨부 {order.attachCount}
-              </button>
-            )}
+            <button
+              style={{ touchAction: "manipulation" }}
+              onClick={e => { e.stopPropagation(); onOpenAttach?.(order); }}
+              className={`flex items-center gap-0.5 text-[0.68em] font-semibold ${
+                (order.attachCount > 0) ? "text-gray-500" : "text-gray-300"
+              }`}
+            >
+              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+              {(order.attachCount > 0) ? order.attachCount : "-"}
+            </button>
             {(order.메모 || order.적요) && (
               <button
                 onClick={(e) => { e.stopPropagation(); onOpenMemo(order); }}
@@ -5094,16 +5122,18 @@ const dropTime = order.하차시간 || "시간 없음";
     </span>
   )}
 
-  {(order.attachCount > 0) && (
-    <button
-      style={{ touchAction: "manipulation" }}
-      onClick={e => { e.stopPropagation(); onOpenAttach?.(order); }}
-      className="flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[10px] font-bold"
-    >
-      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-      {order.attachCount}
-    </button>
-  )}
+  <button
+    style={{ touchAction: "manipulation" }}
+    onClick={e => { e.stopPropagation(); onOpenAttach?.(order); }}
+    className={`flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+      (order.attachCount > 0)
+        ? "bg-gray-50 border-gray-300 text-gray-600"
+        : "bg-white border-dashed border-gray-200 text-gray-300"
+    }`}
+  >
+    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+    {(order.attachCount > 0) ? order.attachCount : "없음"}
+  </button>
 
   <span className={"px-2 py-0.5 rounded-full border text-[11px] font-semibold " + stateBadgeClass}>
     {state}
@@ -5371,6 +5401,7 @@ function MobileOrderDetail({
   order,
   onOrderUpdate,
   drivers,
+  clients,
   onDuplicate,
   onAssignDriver,
   onCancelAssign,
@@ -6032,6 +6063,18 @@ const handleAssignClick = () => {
           <div className="grid grid-cols-3 gap-2">
             <button
               onClick={() => {
+                const _pendingContactItems = [];
+                [
+                  { fieldName: order.상차지명, type: "pickup" },
+                  { fieldName: order.하차지명, type: "drop" },
+                ].forEach(({ fieldName, type }) => {
+                  if (!fieldName) return;
+                  const found = (clients || []).find(c => normalizeCompany(c.거래처명) === normalizeCompany(fieldName));
+                  if (!found) return;
+                  const contacts = (Array.isArray(found.contacts) ? found.contacts : []).filter(ct => ct.name?.trim());
+                  const unique = [...new Map(contacts.map(ct => [ct.name.trim(), ct])).values()];
+                  if (unique.length > 1) _pendingContactItems.push({ type, place: found, contacts: unique });
+                });
                 window.scrollTo(0, 0);
                 setPrevPage("detail");
                 setPage("form");
@@ -6071,20 +6114,8 @@ const handleAssignClick = () => {
                   경유하차목록: validStops(order.경유하차목록 || order.경유지_하차),
                   _editId: order.id,
                   _returnToDetail: true,
+                  _pendingContactItems,
                 });
-                const popupItems = [];
-                [
-                  { fieldName: order.상차지명, type: "pickup" },
-                  { fieldName: order.하차지명, type: "drop" },
-                ].forEach(({ fieldName, type }) => {
-                  if (!fieldName) return;
-                  const found = clients.find(c => normalizeCompany(c.거래처명) === normalizeCompany(fieldName));
-                  if (!found) return;
-                  const contacts = (Array.isArray(found.contacts) ? found.contacts : []).filter(ct => ct.name?.trim());
-                  const unique = [...new Map(contacts.map(ct => [ct.name.trim(), ct])).values()];
-                  if (unique.length > 1) popupItems.push({ type, place: found, contacts: unique });
-                });
-                if (popupItems.length > 0) setTimeout(() => openContactPopup(popupItems), 150);
               }}
               className="py-3 rounded-xl bg-gray-700 text-white text-sm font-bold"
             >
@@ -6645,6 +6676,13 @@ const openContactPopup = (items) => {
   setContactQueue(rest);
   setContactPopup(first);
 };
+
+useEffect(() => {
+  if (form._pendingContactItems && form._pendingContactItems.length > 0) {
+    openContactPopup(form._pendingContactItems);
+    setForm(prev => ({ ...prev, _pendingContactItems: [] }));
+  }
+}, []);
 
 const closeContactPopup = (selected) => {
   if (selected && contactPopup) {
