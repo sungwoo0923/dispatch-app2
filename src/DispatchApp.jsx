@@ -33364,7 +33364,7 @@ const handleBatchSettle = async (targetStatus) => {
 
   return (
     <>
-    <div className="p-4">
+    <div className="p-4 overflow-x-auto">
       {/* 탭 */}
       <div className="flex gap-2 mb-5">
         {tabBtn("invoice", "거래명세서", 0)}
@@ -34460,7 +34460,7 @@ const handleBatchSettle = async (targetStatus) => {
 
       {/* ══════════════ 미수금관리 탭 ══════════════ */}
       {tab === "unsettledMonth" && (
-        <div className="overflow-x-hidden">
+        <div>
           {/* 필터 바 */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mb-4">
             {/* Row 1: 검색 조건 */}
@@ -34614,7 +34614,7 @@ const handleBatchSettle = async (targetStatus) => {
                 <span className="text-[12px] text-gray-400">— {THIS_YEAR}년 월별 정산 현황</span>
               </div>
             )}
-            <table className="text-[13px]" style={{tableLayout:"fixed", minWidth:"700px", width:"100%"}}>
+            <table className="text-[13px]" style={{tableLayout:"fixed", width:"722px"}}>
               <colgroup>
                 <col style={{width:"40px"}} />
                 <col style={{width:"48px"}} />

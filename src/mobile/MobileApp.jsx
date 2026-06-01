@@ -171,7 +171,7 @@ function SwipeableRow({ children, onDelete, onCopyOrder, onCopyDriver, disabled 
   }, [disabled, doClose]);
 
   return (
-    <div ref={containerRef} className="relative overflow-hidden" style={{ borderRadius: "inherit" }}>
+    <div ref={containerRef} className="relative overflow-hidden" style={{ borderRadius: "inherit", transform: "translateZ(0)" }}>
       {/* 액션 버튼 (카드 뒤에 숨어있다가 스와이프로 노출) */}
       <div className="absolute right-0 top-0 bottom-0 flex" style={{ width: BUTTON_W }}>
         <button
@@ -1645,6 +1645,14 @@ const groupedByDate = useMemo(() => {
             contacts = contacts.map(c => ({ ...c, isPrimary: false }));
             contacts.push({ name: manager.trim(), phone: phone || "", isPrimary: true });
           }
+        } else if (phone?.trim()) {
+          // 이름 없고 연락처만 있을 때 → 자동 이름 생성 후 저장
+          const samePhone = contacts.findIndex(c => (c.phone || "").replace(/\D/g, "") === phone.replace(/\D/g, ""));
+          if (samePhone < 0) {
+            const autoName = `담당자${contacts.length + 1}`;
+            contacts = contacts.map(c => ({ ...c, isPrimary: false }));
+            contacts.push({ name: autoName, phone: phone.trim(), isPrimary: true });
+          }
         }
 
         const updatePayload = {
@@ -1876,6 +1884,20 @@ const handleOrderDuplicate = (order) => {
   setSelectedOrder(null);
   setPage("form");
   window.scrollTo(0, 0);
+
+  const popupItems = [];
+  [
+    { fieldName: order.상차지명, type: "pickup" },
+    { fieldName: order.하차지명, type: "drop" },
+  ].forEach(({ fieldName, type }) => {
+    if (!fieldName) return;
+    const found = clients.find(c => normalizeCompany(c.거래처명) === normalizeCompany(fieldName));
+    if (!found) return;
+    const contacts = (Array.isArray(found.contacts) ? found.contacts : []).filter(ct => ct.name?.trim());
+    const unique = [...new Map(contacts.map(ct => [ct.name.trim(), ct])).values()];
+    if (unique.length > 1) popupItems.push({ type, place: found, contacts: unique });
+  });
+  if (popupItems.length > 0) setTimeout(() => openContactPopup(popupItems), 150);
 };
 
 const handleOrderDuplicateWithDriver = (order) => {
@@ -1920,6 +1942,20 @@ const handleOrderDuplicateWithDriver = (order) => {
   setSelectedOrder(null);
   setPage("form");
   window.scrollTo(0, 0);
+
+  const popupItems = [];
+  [
+    { fieldName: order.상차지명, type: "pickup" },
+    { fieldName: order.하차지명, type: "drop" },
+  ].forEach(({ fieldName, type }) => {
+    if (!fieldName) return;
+    const found = clients.find(c => normalizeCompany(c.거래처명) === normalizeCompany(fieldName));
+    if (!found) return;
+    const contacts = (Array.isArray(found.contacts) ? found.contacts : []).filter(ct => ct.name?.trim());
+    const unique = [...new Map(contacts.map(ct => [ct.name.trim(), ct])).values()];
+    if (unique.length > 1) popupItems.push({ type, place: found, contacts: unique });
+  });
+  if (popupItems.length > 0) setTimeout(() => openContactPopup(popupItems), 150);
 };
 
 const deleteSingleOrder = async (order) => {
@@ -3253,7 +3289,7 @@ setOpenMemo={setOpenMemo}
             setSelectedOrder(null);
             setPage("form");
           }}
-          className={`fixed bottom-6 right-6 w-14 h-14 rounded-full text-white text-3xl flex items-center justify-center active:scale-95 transition-transform ${
+          className={`fixed bottom-6 right-6 z-40 w-14 h-14 rounded-full text-white text-3xl flex items-center justify-center active:scale-95 transition-transform ${
             cardVersionB
               ? "bg-[#1B2B4B] shadow-[0_4px_20px_rgba(27,43,75,0.35)]"
               : "bg-blue-500 shadow-lg"
@@ -6036,6 +6072,19 @@ const handleAssignClick = () => {
                   _editId: order.id,
                   _returnToDetail: true,
                 });
+                const popupItems = [];
+                [
+                  { fieldName: order.상차지명, type: "pickup" },
+                  { fieldName: order.하차지명, type: "drop" },
+                ].forEach(({ fieldName, type }) => {
+                  if (!fieldName) return;
+                  const found = clients.find(c => normalizeCompany(c.거래처명) === normalizeCompany(fieldName));
+                  if (!found) return;
+                  const contacts = (Array.isArray(found.contacts) ? found.contacts : []).filter(ct => ct.name?.trim());
+                  const unique = [...new Map(contacts.map(ct => [ct.name.trim(), ct])).values()];
+                  if (unique.length > 1) popupItems.push({ type, place: found, contacts: unique });
+                });
+                if (popupItems.length > 0) setTimeout(() => openContactPopup(popupItems), 150);
               }}
               className="py-3 rounded-xl bg-gray-700 text-white text-sm font-bold"
             >
@@ -7188,6 +7237,7 @@ const pickDrop = (c) => {
             onFocus={() => {
               if (form.상차지명) setShowPickupList(true);
             }}
+            onBlur={() => setTimeout(() => setShowPickupList(false), 150)}
           />
 
           {showPickupList && pickupOptions.length > 0 && (
@@ -7316,6 +7366,7 @@ const pickDrop = (c) => {
             onFocus={() => {
               if (form.하차지명) setShowDropList(true);
             }}
+            onBlur={() => setTimeout(() => setShowDropList(false), 150)}
           />
 
           {showDropList && dropOptions.length > 0 && (
