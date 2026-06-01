@@ -750,9 +750,7 @@ const upsertPlace = async (place) => {
       메모: place.메모 || "",
       isActive: place.isActive !== false,
       updatedAt: serverTimestamp(),
-      companyName: place.companyName || (role === "totalMaster"
-        ? (localStorage.getItem("loginCompany") || userCompany || "돌캐")
-        : (userCompany || localStorage.getItem("userCompany") || "돌캐")),
+      companyName: place.companyName || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "돌캐",
     };
 
     // 🔥 exists() 체크 제거
@@ -1661,6 +1659,42 @@ function getFareMatchLabel(cargoExact, cargoPartial, tonExact) {
   if (cargoExact || cargoPartial) return "부분일치";
   if (tonExact) return "톤수일치";
   return "경로일치";
+}
+
+function SentMailLogItem({ log, onDelete }) {
+  const [expanded, setExpanded] = React.useState(false);
+  return (
+    <div className={`rounded-lg px-4 py-2.5 border text-[12px] ${log.status === "success" ? "bg-[#f4f6f9] border-[#d0dae8]" : "bg-[#fdf4f4] border-[#e8c8c8]"}`}>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className={`font-bold text-[11px] px-2 py-0.5 rounded ${log.status === "success" ? "bg-[#1B2B4B] text-white" : "bg-[#7a2020] text-white"}`}>
+            {log.status === "success" ? "성공" : "실패"}
+          </span>
+          <span className="text-[10px] text-gray-400 font-semibold px-1.5 py-0.5 bg-gray-100 rounded">{log.type || ""}</span>
+          <span className="text-[11px] text-gray-400">{log.sentAt ? new Date(log.sentAt).toLocaleString("ko-KR") : ""}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          {log.body && (
+            <button onClick={() => setExpanded(v => !v)} className="text-[11px] text-blue-500 hover:text-blue-700">
+              {expanded ? "접기" : "내용 보기"}
+            </button>
+          )}
+          <button onClick={onDelete} className="text-gray-300 hover:text-red-400 transition text-[11px]">삭제</button>
+        </div>
+      </div>
+      <div className="mt-1 text-gray-600">수신: {log.to}</div>
+      <div className="text-gray-500 font-semibold text-[12px]">{log.subject}</div>
+      {log.attachmentNames?.length > 0 && (
+        <div className="text-[11px] text-gray-400 mt-0.5">첨부: {log.attachmentNames.join(", ")}</div>
+      )}
+      {expanded && log.body && (
+        <div className="mt-2 text-gray-600 whitespace-pre-wrap bg-white border border-gray-100 rounded p-2 text-[11px] max-h-[200px] overflow-y-auto">
+          {log.body}
+        </div>
+      )}
+      {log.error && <div className="text-[#7a2020] text-[11px] mt-0.5">{log.error}</div>}
+    </div>
+  );
 }
 
 export default function DispatchApp({ role, user, userCompany = "" }) {
@@ -17301,11 +17335,11 @@ value={copyTarget?.화물수량 || ""}
             </Field>
 
             <Field label="수수료">
-              <div className="bg-slate-100 rounded-lg px-4 py-3 font-bold text-blue-700 text-lg text-center">
-                {(Number(copyTarget.청구운임||0) -
-                  Number(copyTarget.기사운임||0)
-                ).toLocaleString()} 원
+              {(() => { const _f = Number(copyTarget.청구운임||0) - Number(copyTarget.기사운임||0); return (
+              <div className={`bg-slate-100 rounded-lg px-4 py-3 font-bold text-lg text-center ${_f < 0 ? "text-red-600" : "text-blue-700"}`}>
+                {_f.toLocaleString()} 원
               </div>
+              ); })()}
             </Field>
 <Field label="지급방식">
   <select
@@ -18837,7 +18871,7 @@ setEditTarget((p) => ({
               <div>
                 <label>수수료</label>
                 <input
-                  className="border p-2 rounded w-full bg-gray-100"
+                  className={`border p-2 rounded w-full bg-gray-100 font-bold ${(editTarget.수수료 || 0) < 0 ? "text-red-600" : "text-blue-700"}`}
                   value={(editTarget.수수료 || 0).toLocaleString()}
                   readOnly
                 />
@@ -24943,7 +24977,7 @@ setEditTarget((p) => ({
               <div>
                 <label>수수료</label>
                 <input
-                  className="border p-2 rounded w-full bg-gray-100"
+                  className={`border p-2 rounded w-full bg-gray-100 font-bold ${(editTarget.수수료 || 0) < 0 ? "text-red-600" : "text-blue-700"}`}
                   value={(editTarget.수수료 || 0).toLocaleString()}
                   readOnly
                 />
@@ -26023,11 +26057,11 @@ setCopyTarget(prev => ({
             </Field>
 
             <Field label="수수료">
-              <div className="bg-slate-100 rounded-lg px-4 py-3 font-bold text-blue-700 text-lg text-center">
-                {(Number(copyTarget.청구운임||0) -
-                  Number(copyTarget.기사운임||0)
-                ).toLocaleString()} 원
+              {(() => { const _f = Number(copyTarget.청구운임||0) - Number(copyTarget.기사운임||0); return (
+              <div className={`bg-slate-100 rounded-lg px-4 py-3 font-bold text-lg text-center ${_f < 0 ? "text-red-600" : "text-blue-700"}`}>
+                {_f.toLocaleString()} 원
               </div>
+              ); })()}
             </Field>
 <Field label="지급방식">
   <select
@@ -32570,15 +32604,19 @@ const [includeCardAr, setIncludeCardAr] = useState(true);
     return () => unsub();
   }, []);
 
-  const logEmail = async ({ type, client, to, subject, status, error }) => {
+  const logEmail = async ({ type, client, to, subject, body, attachmentNames, status, error }) => {
     const id = crypto.randomUUID();
     await setDoc(doc(db, "emailLogs", id), {
-      id, type, client, to, subject, status,
+      id, type, client, to, subject,
+      body: body || "",
+      attachmentNames: attachmentNames || [],
+      status,
       error: error || null,
       sentAt: Date.now(),
       sentBy: auth.currentUser?.email || "",
     });
   };
+  const [sentMailboxOpen, setSentMailboxOpen] = useState(false);
 
   const [deleteLogConfirm, setDeleteLogConfirm] = useState(null); // log.id to delete
 
@@ -33931,7 +33969,7 @@ const handleBatchSettle = async (targetStatus) => {
                             }),
                           });
                           if (res.ok) {
-                            logEmail({ type: "일반이메일", client: client || "-", to: generalEmailTo, subject: generalEmailSubject, status: "success" });
+                            logEmail({ type: "일반이메일", client: client || "-", to: generalEmailTo, subject: generalEmailSubject, body: generalEmailBody || "", attachmentNames: generalEmailFiles.map(f => f.name), status: "success" });
                             showAlert(`${generalEmailTo} 로 발송 완료`);
                             setGeneralEmailOpen(false);
                           } else {
@@ -34082,12 +34120,12 @@ const handleBatchSettle = async (targetStatus) => {
                   body: JSON.stringify({ to: item.email, subject, html: bodyHtml, attachments }),
                 });
                 if (res.ok) {
-                  logEmail({ type:"거래명세서", client: item.name, to: item.email, subject, status:"success" });
+                  logEmail({ type:"거래명세서", client: item.name, to: item.email, subject, body: bodyText, attachmentNames: attachments.map(a=>a.filename), status:"success" });
                 } else {
                   let reason = `서버 오류 (${res.status})`;
                   try { const errData = await res.json(); reason = errData.error || reason; } catch {}
                   failed.push({ name: item.name, reason });
-                  logEmail({ type:"거래명세서", client: item.name, to: item.email, subject, status:"failed", error: reason });
+                  logEmail({ type:"거래명세서", client: item.name, to: item.email, subject, body: bodyText, attachmentNames: attachments.map(a=>a.filename), status:"failed", error: reason });
                 }
               } catch(e) {
                 const reason = e.message || "네트워크 오류";
@@ -34295,13 +34333,13 @@ const handleBatchSettle = async (targetStatus) => {
                           }),
                         });
                         if (res.ok) {
-                          logEmail({ type:"거래명세서", client, to: emailTo, subject, status:"success" });
+                          logEmail({ type:"거래명세서", client, to: emailTo, subject, body: emailBody, attachmentNames: fileAttachments.map(f=>f.filename), status:"success" });
                           showAlert(`${emailTo} 로 발송 완료`);
                           setEmailModalOpen(false);
                         } else {
                           let errMsg = `서버 오류 (${res.status})`; let errCode = "";
                           try { const errData = await res.json(); errMsg = errData.error || errMsg; errCode = errData.code || ""; } catch {}
-                          logEmail({ type:"거래명세서", client, to: emailTo, subject, status:"failed", error: errMsg });
+                          logEmail({ type:"거래명세서", client, to: emailTo, subject, body: emailBody, status:"failed", error: errMsg });
                           showAlert(`발송 실패: ${errMsg}${errCode ? "\n코드: "+errCode : ""}`);
                         }
                       } catch (e) {
@@ -34320,24 +34358,9 @@ const handleBatchSettle = async (targetStatus) => {
                   {emailLogs.filter(l => l.client === client).length === 0 ? (
                     <div className="text-[12px] text-gray-400 text-center py-4">발송 이력이 없습니다</div>
                   ) : (
-                    <div className="space-y-2 max-h-[220px] overflow-y-auto">
+                    <div className="space-y-2 max-h-[320px] overflow-y-auto">
                       {emailLogs.filter(l => l.client === client).map(log => (
-                        <div key={log.id} className={`rounded-lg px-4 py-2.5 border text-[12px] ${log.status === "success" ? "bg-[#f4f6f9] border-[#d0dae8]" : "bg-[#fdf4f4] border-[#e8c8c8]"}`}>
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <span className={`font-bold text-[11px] px-2 py-0.5 rounded ${log.status === "success" ? "bg-[#1B2B4B] text-white" : "bg-[#7a2020] text-white"}`}>
-                                {log.status === "success" ? "성공" : "실패"}
-                              </span>
-                              <span className="text-[11px] text-gray-400">{log.sentAt ? new Date(log.sentAt).toLocaleString("ko-KR") : ""}</span>
-                            </div>
-                            <button onClick={() => setDeleteLogConfirm(log.id)} className="text-gray-300 hover:text-red-400 transition" title="이력 삭제">
-                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
-                            </button>
-                          </div>
-                          <div className="mt-1 text-gray-600">수신: {log.to}</div>
-                          <div className="text-gray-400 truncate">{log.subject}</div>
-                          {log.error && <div className="text-[#7a2020] text-[11px] mt-0.5">{log.error}</div>}
-                        </div>
+                        <SentMailLogItem key={log.id} log={log} onDelete={() => setDeleteLogConfirm(log.id)} />
                       ))}
                     </div>
                   )}
@@ -34414,10 +34437,10 @@ const handleBatchSettle = async (targetStatus) => {
 
       {/* ══════════════ 미수금관리 탭 ══════════════ */}
       {tab === "unsettledMonth" && (
-        <div>
+        <div className="min-w-0 overflow-hidden">
           {/* 필터 바 */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mb-4">
-            <div className="flex flex-wrap items-end gap-3">
+            <div className="flex flex-wrap items-end gap-2">
               {/* ★ 거래처 드롭다운 검색 */}
               <div className="flex flex-col">
                 <label className="text-[12px] font-semibold text-gray-500 mb-1">거래처</label>
@@ -34494,7 +34517,7 @@ const handleBatchSettle = async (targetStatus) => {
                 onClick={()=>{setSelClient("");setArInput("");setYearFrom(String(THIS_YEAR));setMonthFrom("01");setYearTo(String(THIS_YEAR));setMonthTo("12");setStatusFilter("전체");clearSel();setArDropOpen(false);}}>
                 초기화
               </button>
-              <div className="ml-auto flex gap-2">
+              <div className="flex flex-wrap gap-2 mt-1">
                 <button onClick={settleSelected} disabled={!selectedMonths.size}
                   className={`px-3 py-2 rounded-lg text-[13px] font-bold text-white transition ${selectedMonths.size?"bg-emerald-600 hover:bg-emerald-700":"bg-emerald-600/40 cursor-not-allowed"}`}>
                   선택 정산완료
@@ -34503,29 +34526,28 @@ const handleBatchSettle = async (targetStatus) => {
                   className={`px-3 py-2 rounded-lg text-[13px] font-bold text-white transition ${monthRows.length?"bg-[#1B2B4B] hover:bg-[#243a60]":"bg-[#1B2B4B]/40 cursor-not-allowed"}`}>
                   전체 정산완료
                 </button>
-                                <button onClick={downloadMonthExcel} className="px-3 py-2 rounded-lg bg-teal-600 text-white text-[13px] font-semibold hover:bg-teal-700 transition">엑셀</button>
+                <button onClick={downloadMonthExcel} className="px-3 py-2 rounded-lg bg-teal-600 text-white text-[13px] font-semibold hover:bg-teal-700 transition">엑셀</button>
                 <label className="px-3 py-2 rounded-lg bg-indigo-600 text-white text-[13px] font-semibold hover:bg-indigo-700 transition cursor-pointer">
-                  입금확인 (엑셀)
+                  입금확인(엑셀)
                   <input type="file" accept=".xlsx,.xls,.csv" hidden onChange={handleBankExcelUpload} />
                 </label>
                 <button
                   onClick={() => { setArFromYear(yearFrom); setArFromMM(monthFrom); setArToYear(yearTo); setArToMM(monthTo); setArReportOpen(true); }}
                   className="px-3 py-2 rounded-lg bg-violet-600 text-white text-[13px] font-semibold hover:bg-violet-700 transition"
                 >
-                  미수금 보고서
+                  미수금보고서
                 </button>
                 <button
                   onClick={() => { setBatchModalOpen(true); setBatchClients(new Set()); setBatchClientQ(""); }}
                   className="px-3 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition"
                 >
-                  일괄 정산처리
+                  일괄정산처리
                 </button>
                 <button
   disabled={!selClient}
   onClick={() => {
     const found = (clients||[]).find(c => c.거래처명 === selClient);
     setEmailTo(found?.이메일 || found?.연락처이메일 || "");
-    // ★ 월 범위 초기화 (현재 필터와 동기화)
     setArEmailFromMM(monthFilter !== "all" ? monthFilter : "01");
     setArEmailToMM(monthFilter !== "all" ? monthFilter : "12");
     const unpaid = monthRows.filter(r => r.정산상태 === "미정산");
@@ -34535,7 +34557,7 @@ const handleBatchSettle = async (targetStatus) => {
   }}
   className={`px-3 py-2 rounded-lg text-[13px] font-semibold text-white transition ${selClient ? "bg-sky-600 hover:bg-sky-700" : "bg-sky-600/40 cursor-not-allowed"}`}
 >
-  이메일 발송
+  이메일발송
 </button>
 
               </div>
@@ -35421,17 +35443,17 @@ const handleBatchSettle = async (targetStatus) => {
                           body: JSON.stringify({ to: emailTo, subject, html: bodyHtml, attachments: fileAttachments }),
                         });
                         if (res.ok) {
-                          logEmail({ type:"미수금", client:selClient, to:emailTo, subject, status:"success" });
+                          logEmail({ type:"미수금", client:selClient, to:emailTo, subject, body: emailBody, status:"success" });
                           showAlert(`${emailTo} 로 발송 완료`);
                           setArEmailOpen(false);
                           setShowEmailHistory(false);
                         } else {
                           const err = await res.json();
-                          logEmail({ type:"미수금", client:selClient, to:emailTo, subject, status:"failed", error: err.error });
+                          logEmail({ type:"미수금", client:selClient, to:emailTo, subject, body: emailBody, status:"failed", error: err.error });
                           showAlert(`발송 실패: ${err.error||"오류"}\n코드: ${err.code||""}`);
                         }
                       } catch(e) {
-                        logEmail({ type:"미수금", client:selClient, to:emailTo, subject, status:"failed", error: e.message });
+                        logEmail({ type:"미수금", client:selClient, to:emailTo, subject, body: emailBody, status:"failed", error: e.message });
                         showAlert("네트워크 오류");
                       }
                       finally { setEmailSending(false); }
@@ -35449,24 +35471,9 @@ const handleBatchSettle = async (targetStatus) => {
                     {emailLogs.filter(l=>l.client===selClient).length === 0 ? (
                       <div className="text-[12px] text-gray-400 text-center py-4">발송 이력이 없습니다</div>
                     ) : (
-                      <div className="space-y-2 max-h-[220px] overflow-y-auto">
+                      <div className="space-y-2 max-h-[320px] overflow-y-auto">
                         {emailLogs.filter(l=>l.client===selClient).map(log => (
-                          <div key={log.id} className={`rounded-lg px-4 py-2.5 border text-[12px] ${log.status==="success" ? "bg-[#f4f6f9] border-[#d0dae8]" : "bg-[#fdf4f4] border-[#e8c8c8]"}`}>
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                <span className={`font-bold text-[11px] px-2 py-0.5 rounded ${log.status==="success" ? "bg-[#1B2B4B] text-white" : "bg-[#7a2020] text-white"}`}>
-                                  {log.status==="success" ? "성공" : "실패"}
-                                </span>
-                                <span className="text-[11px] text-gray-400">{log.sentAt ? new Date(log.sentAt).toLocaleString("ko-KR") : ""}</span>
-                              </div>
-                              <button onClick={() => setDeleteLogConfirm(log.id)} className="text-gray-300 hover:text-red-400 transition" title="이력 삭제">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
-                              </button>
-                            </div>
-                            <div className="mt-1 text-gray-600">수신: {log.to}</div>
-                            <div className="text-gray-400 truncate">{log.subject}</div>
-                            {log.error && <div className="text-[#7a2020] text-[11px] mt-0.5">{log.error}</div>}
-                          </div>
+                          <SentMailLogItem key={log.id} log={log} onDelete={() => setDeleteLogConfirm(log.id)} />
                         ))}
                       </div>
                     )}
