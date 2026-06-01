@@ -32620,6 +32620,9 @@ const [includeCardAr, setIncludeCardAr] = useState(true);
   const [selectedMail, setSelectedMail] = useState(null);
   const [mailTypeFilter, setMailTypeFilter] = useState("전체");
   const [mailSearch, setMailSearch] = useState("");
+  const [mailSort, setMailSort] = useState("newest");
+  const [selectedMails, setSelectedMails] = useState(new Set());
+  const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
 
   const [deleteLogConfirm, setDeleteLogConfirm] = useState(null); // log.id to delete
 
@@ -33344,14 +33347,20 @@ const handleBatchSettle = async (targetStatus) => {
   }, [monthRowsRaw, selClient]);
 
   const filteredMails = useMemo(() => {
-    let logs = [...emailLogs].sort((a, b) => (b.sentAt || 0) - (a.sentAt || 0));
+    let logs = [...emailLogs];
     if (mailTypeFilter !== "전체") logs = logs.filter(l => l.type === mailTypeFilter);
     if (mailSearch.trim()) {
       const q = mailSearch.toLowerCase();
-      logs = logs.filter(l => (l.subject || "").toLowerCase().includes(q) || (l.to || "").toLowerCase().includes(q) || (l.client || "").toLowerCase().includes(q));
+      logs = logs.filter(l =>
+        (l.subject || "").toLowerCase().includes(q) ||
+        (l.to || "").toLowerCase().includes(q) ||
+        (l.client || "").toLowerCase().includes(q) ||
+        (l.body || "").toLowerCase().includes(q)
+      );
     }
+    logs.sort((a, b) => mailSort === "newest" ? (b.sentAt || 0) - (a.sentAt || 0) : (a.sentAt || 0) - (b.sentAt || 0));
     return logs;
-  }, [emailLogs, mailTypeFilter, mailSearch]);
+  }, [emailLogs, mailTypeFilter, mailSearch, mailSort]);
 
   return (
     <>
@@ -34451,10 +34460,11 @@ const handleBatchSettle = async (targetStatus) => {
 
       {/* ══════════════ 미수금관리 탭 ══════════════ */}
       {tab === "unsettledMonth" && (
-        <div className="min-w-0 overflow-hidden">
+        <div className="overflow-x-hidden">
           {/* 필터 바 */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mb-4">
-            <div className="flex flex-wrap items-end gap-2">
+            {/* Row 1: 검색 조건 */}
+            <div className="flex flex-wrap items-end gap-2 mb-3">
               {/* ★ 거래처 드롭다운 검색 */}
               <div className="flex flex-col">
                 <label className="text-[12px] font-semibold text-gray-500 mb-1">거래처</label>
@@ -34531,7 +34541,9 @@ const handleBatchSettle = async (targetStatus) => {
                 onClick={()=>{setSelClient("");setArInput("");setYearFrom(String(THIS_YEAR));setMonthFrom("01");setYearTo(String(THIS_YEAR));setMonthTo("12");setStatusFilter("전체");clearSel();setArDropOpen(false);}}>
                 초기화
               </button>
-              <div className="flex flex-wrap gap-2 mt-1">
+            </div>
+            {/* Row 2: 액션 버튼 (우측 정렬) */}
+            <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-gray-100">
                 <button onClick={settleSelected} disabled={!selectedMonths.size}
                   className={`px-3 py-2 rounded-lg text-[13px] font-bold text-white transition ${selectedMonths.size?"bg-emerald-600 hover:bg-emerald-700":"bg-emerald-600/40 cursor-not-allowed"}`}>
                   선택 정산완료
@@ -34573,13 +34585,11 @@ const handleBatchSettle = async (targetStatus) => {
 >
   이메일발송
 </button>
-
-              </div>
             </div>
           </div>
           {/* KPI 카드 */}
           {selClient && (
-            <div className="grid grid-cols-5 gap-3 mb-4">
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-4">
               {[
                 {label:"총 오더건수", val:`${kpi.전체건수}건`, color:"text-[#1B2B4B]"},
                 {label:"총 청구금액", val:`${won(kpi.총청구)}원`, color:"text-blue-600"},
