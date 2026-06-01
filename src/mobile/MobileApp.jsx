@@ -2171,65 +2171,91 @@ const title =
 )}
 {showUnassignedEntryPopup && page === "list" && (
   <div
-    className="fixed inset-0 z-[80] bg-black/40 flex items-center justify-center"
-    onClick={() => setShowUnassignedEntryPopup(false)} // 바깥 클릭 = 그냥 닫기
+    className="fixed inset-0 z-[80] flex items-end justify-center"
+    style={{ background: "rgba(0,0,0,0.45)" }}
+    onClick={() => setShowUnassignedEntryPopup(false)}
   >
     <div
-      className="bg-white w-[92%] max-w-md rounded-2xl shadow-xl overflow-hidden"
+      className="w-full max-w-lg overflow-hidden"
+      style={{
+        borderRadius: "20px 20px 0 0",
+        background: cardVersionB ? "#fff" : "#fff",
+        maxHeight: "80vh",
+        display: "flex",
+        flexDirection: "column",
+      }}
       onClick={(e) => e.stopPropagation()}
     >
-      <div className="px-4 py-3 border-b">
-        <div className="text-base font-bold text-gray-900">미배차현황</div>
-        <div className="text-xs text-gray-500 mt-0.5">
-          미배차 {unassignedOrders.length}건 · 정보미전달 {undeliveredOrders.length}건
+      {/* 헤더 */}
+      {cardVersionB ? (
+        <div style={{ background: "#1B2B4B", padding: "16px 20px 14px" }}>
+          <div style={{ color: "#fff", fontSize: 15, fontWeight: 700, letterSpacing: "-0.3px" }}>미배차현황</div>
+          <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 12, marginTop: 3 }}>
+            미배차 <span style={{ color: "#fff", fontWeight: 600 }}>{unassignedOrders.length}</span>건
+            {undeliveredOrders.length > 0 && <> · 정보미전달 <span style={{ color: "#fff", fontWeight: 600 }}>{undeliveredOrders.length}</span>건</>}
+          </div>
         </div>
-      </div>
+      ) : (
+        <div style={{ padding: "16px 20px 12px", borderBottom: "1px solid #f0f0f0" }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: "#111", letterSpacing: "-0.3px" }}>미배차현황</div>
+          <div style={{ fontSize: 12, color: "#999", marginTop: 3 }}>
+            미배차 {unassignedOrders.length}건
+            {undeliveredOrders.length > 0 && ` · 정보미전달 ${undeliveredOrders.length}건`}
+          </div>
+        </div>
+      )}
 
-      {/* ✅ 미리보기 */}
-      <div className="px-4 py-3 max-h-[55vh] overflow-y-auto">
+      {/* 목록 */}
+      <div style={{ flex: 1, overflowY: "auto", padding: "10px 14px" }}>
         {unassignedOrders.length === 0 ? (
-          <div className="text-sm text-gray-500 py-6 text-center">
-            현재 미배차 오더가 없습니다.
+          <div style={{ textAlign: "center", padding: "32px 0", color: "#aaa", fontSize: 13 }}>
+            미배차 오더가 없습니다
           </div>
         ) : (
-          <div className="space-y-2">
-                          {[...unassignedOrders]
-                .filter(o => o.상차지명 && o.하차지명 && getPickupDate(o))
-                .sort((a, b) => {
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {[...unassignedOrders]
+              .filter(o => o.상차지명 && o.하차지명 && getPickupDate(o))
+              .sort((a, b) => {
                 const da = getPickupDate(a) || "";
                 const db = getPickupDate(b) || "";
                 if (da !== db) return da.localeCompare(db);
-                // 시간 정렬은 데이터 형식이 섞여있을 수 있어 안전하게 문자열 비교만
                 return String(a.상차시간 || "").localeCompare(String(b.상차시간 || ""));
               })
               .slice(0, 8)
               .map((o) => (
                 <button
                   key={o.id}
-                  className="w-full text-left border rounded-xl px-3 py-2 bg-gray-50 active:scale-[0.99]"
+                  style={{
+                    width: "100%",
+                    textAlign: "left",
+                    padding: "9px 12px",
+                    borderRadius: cardVersionB ? 10 : 12,
+                    background: cardVersionB ? "#F5F7FA" : "#F8F8F8",
+                    border: "none",
+                    cursor: "pointer",
+                  }}
                   onClick={() => {
-  setUnassignedTypeFilter("전체");
-
-  // ✅ 어떤 오더를 눌렀는지 저장
-  setFocusUnassignedOrderId(o.id);
-
-  setPage("unassigned");
-  setShowUnassignedEntryPopup(false);
-  window.scrollTo(0, 0);
-}}
+                    setUnassignedTypeFilter("전체");
+                    setFocusUnassignedOrderId(o.id);
+                    setPage("unassigned");
+                    setShowUnassignedEntryPopup(false);
+                    window.scrollTo(0, 0);
+                  }}
                 >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="text-sm font-semibold text-gray-800 truncate">
-                      {o.상차지명 || "-"} → {o.하차지명 || "-"}
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                    <div style={{
+                      fontSize: 13, fontWeight: 600,
+                      color: cardVersionB ? "#1B2B4B" : "#222",
+                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                    }}>
+                      {o.상차지명} → {o.하차지명}
                     </div>
-                    <div className="text-[11px] text-gray-500 whitespace-nowrap">
+                    <div style={{ fontSize: 11, color: "#999", whiteSpace: "nowrap", flexShrink: 0 }}>
                       {formatDateHeader(getPickupDate(o))}
                     </div>
                   </div>
-
-                  <div className="text-[11px] text-gray-600 mt-0.5">
-                    {o.상차시간 || ""} · {o.차량톤수 || o.톤수 || ""}{" "}
-                    {o.차량종류 || o.차종 || ""}
+                  <div style={{ fontSize: 11, color: "#888", marginTop: 2 }}>
+                    {[o.상차시간, o.차량톤수 || o.톤수, o.차량종류 || o.차종].filter(Boolean).join(" · ")}
                   </div>
                 </button>
               ))}
@@ -2237,31 +2263,14 @@ const title =
         )}
       </div>
 
-      <div className="px-4 py-3 border-t grid grid-cols-2 gap-2">
+      {/* 하단 버튼 */}
+      <div style={{ padding: "10px 14px 20px", display: "flex", flexDirection: "column", gap: 8, borderTop: "1px solid #f0f0f0" }}>
         <button
-          className="py-2 rounded-xl bg-gray-200 text-gray-800 text-sm font-semibold"
-          onClick={() => {
-            // ✅ 오늘 하루 열지 않기: 오늘(KST) 저장 → 오늘은 어떤 재접속에도 안 뜸
-            localStorage.setItem("hideUnassignedPopupDate", todayKST());
-            setShowUnassignedEntryPopup(false);
+          style={{
+            padding: "13px 0", borderRadius: 12, fontSize: 14, fontWeight: 700,
+            background: cardVersionB ? "#1B2B4B" : "#111",
+            color: "#fff", border: "none", cursor: "pointer",
           }}
-        >
-          오늘 하루 열지 않기(닫기)
-        </button>
-
-        <button
-          className="py-2 rounded-xl bg-blue-600 text-white text-sm font-semibold"
-          onClick={() => {
-            // ✅ 그냥 닫기: 다음 접속(새로고침/재접속) 때 다시 뜸
-            setShowUnassignedEntryPopup(false);
-          }}
-        >
-          닫기
-        </button>
-
-        {/* (선택) 전체보기 버튼을 따로 두고 싶으면 사용 */}
-        <button
-          className="col-span-2 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold"
           onClick={() => {
             setFocusUnassignedOrderId(null);
             setUnassignedTypeFilter("전체");
@@ -2272,6 +2281,29 @@ const title =
         >
           미배차현황 전체 보기
         </button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            style={{
+              flex: 1, padding: "11px 0", borderRadius: 12, fontSize: 13, fontWeight: 600,
+              background: "#F0F0F0", color: "#555", border: "none", cursor: "pointer",
+            }}
+            onClick={() => {
+              localStorage.setItem("hideUnassignedPopupDate", todayKST());
+              setShowUnassignedEntryPopup(false);
+            }}
+          >
+            오늘 하루 안 보기
+          </button>
+          <button
+            style={{
+              flex: 1, padding: "11px 0", borderRadius: 12, fontSize: 13, fontWeight: 600,
+              background: "#F0F0F0", color: "#555", border: "none", cursor: "pointer",
+            }}
+            onClick={() => setShowUnassignedEntryPopup(false)}
+          >
+            닫기
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -3127,6 +3159,7 @@ setOpenMemo={setOpenMemo}
             showToast={showToast}
             upsertDriver={upsertDriver}
             setPrevPage={setPrevPage}
+            cardVersionB={cardVersionB}
             onGoFare={() => {
               setPrevPage("detail");
               setPage("fare");
@@ -5313,6 +5346,7 @@ function MobileOrderDetail({
   upsertDriver,
   setPrevPage,
   onGoFare,
+  cardVersionB = false,
 }) {
   const [confirmDeliver, setConfirmDeliver] = useState(false);
   const [confirmUndoDeliver, setConfirmUndoDeliver] = useState(false);

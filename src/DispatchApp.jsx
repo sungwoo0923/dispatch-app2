@@ -21847,6 +21847,7 @@ const [clientOptions, setClientOptions] = React.useState([]);
 const [fareModalOpen, setFareModalOpen] = React.useState(false);
 const [copyFarePanelOpen, setCopyFarePanelOpen] = React.useState(false);
 const [fareResult, setFareResult] = React.useState(null);
+const [copyFareFilter, setCopyFareFilter] = React.useState("all");
   const [fareSourceData, setFareSourceData] = React.useState([]);
   // 🔥 운임조회용 원본 데이터 (날짜 필터 무시)
   React.useEffect(() => {
