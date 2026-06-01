@@ -35512,67 +35512,146 @@ const handleBatchSettle = async (targetStatus) => {
       {/* ══════════════ 보낸메일함 탭 ══════════════ */}
       {tab === "sentmails" && (
         <div>
-          {/* 상단 필터 바 */}
-          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-            <div>
-              <div className="text-[16px] font-extrabold text-[#1B2B4B]">보낸메일함</div>
-              <div className="text-[12px] text-gray-400 mt-0.5">프로그램에서 발송한 모든 이메일 · 총 {emailLogs.length}건</div>
-            </div>
-            <div className="flex items-center gap-2 flex-wrap">
+          {/* 상단 툴바 */}
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mb-4">
+            <div className="flex flex-wrap items-center gap-3">
+              {/* 제목 + 통계 */}
+              <div className="flex items-center gap-3 mr-auto">
+                <div>
+                  <div className="text-[15px] font-extrabold text-[#1B2B4B]">보낸메일함</div>
+                  <div className="text-[11px] text-gray-400 mt-0.5">총 {emailLogs.length}건 · 성공 {emailLogs.filter(l=>l.status==="success").length}건 · 실패 {emailLogs.filter(l=>l.status==="failed").length}건</div>
+                </div>
+                {/* 유형별 카운트 배지 */}
+                <div className="hidden sm:flex items-center gap-1.5 flex-wrap">
+                  {["거래명세서","미수금","일반이메일"].map(t => {
+                    const cnt = emailLogs.filter(l=>l.type===t).length;
+                    return cnt > 0 ? (
+                      <button key={t}
+                        onClick={() => setMailTypeFilter(mailTypeFilter === t ? "전체" : t)}
+                        className={`text-[11px] px-2.5 py-0.5 rounded-full font-semibold border transition ${mailTypeFilter === t ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "text-gray-500 border-gray-300 hover:border-[#1B2B4B] hover:text-[#1B2B4B]"}`}
+                      >{t} {cnt}</button>
+                    ) : null;
+                  })}
+                </div>
+              </div>
+              {/* 검색 */}
+              <div className="relative">
+                <input
+                  className="border-2 border-gray-200 rounded-lg pl-8 pr-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B] min-w-[220px]"
+                  placeholder="제목, 본문, 받는사람, 거래처 검색..."
+                  value={mailSearch}
+                  onChange={e => { setMailSearch(e.target.value); setSelectedMails(new Set()); }}
+                />
+                <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+              </div>
+              {/* 정렬 */}
+              <select
+                className="border-2 border-gray-200 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B]"
+                value={mailSort}
+                onChange={e => setMailSort(e.target.value)}
+              >
+                <option value="newest">최신순</option>
+                <option value="oldest">오래된순</option>
+              </select>
+              {/* 전체 유형 선택 */}
               <select
                 className="border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[13px] font-semibold text-[#1B2B4B] outline-none"
                 value={mailTypeFilter}
-                onChange={e => setMailTypeFilter(e.target.value)}
+                onChange={e => { setMailTypeFilter(e.target.value); setSelectedMails(new Set()); }}
               >
                 <option value="전체">전체 유형</option>
                 <option value="거래명세서">거래명세서</option>
                 <option value="미수금">미수금</option>
                 <option value="일반이메일">일반이메일</option>
               </select>
-              <input
-                className="border-2 border-gray-200 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B] min-w-[220px]"
-                placeholder="제목, 받는사람, 거래처 검색..."
-                value={mailSearch}
-                onChange={e => setMailSearch(e.target.value)}
-              />
-              {(mailSearch || mailTypeFilter !== "전체") && (
-                <button
-                  onClick={() => { setMailSearch(""); setMailTypeFilter("전체"); }}
-                  className="px-3 py-2 rounded-lg bg-gray-100 text-gray-600 text-[13px] font-semibold hover:bg-gray-200 transition"
-                >초기화</button>
-              )}
             </div>
+            {/* 선택/삭제 액션 바 */}
+            {selectedMails.size > 0 && (
+              <div className="flex items-center gap-3 mt-3 pt-3 border-t border-gray-100">
+                <span className="text-[13px] font-semibold text-[#1B2B4B]">{selectedMails.size}건 선택됨</span>
+                <button
+                  onClick={() => setSelectedMails(new Set(filteredMails.map(l=>l.id)))}
+                  className="text-[12px] text-gray-500 hover:text-[#1B2B4B] underline"
+                >전체선택 ({filteredMails.length})</button>
+                <button
+                  onClick={() => setSelectedMails(new Set())}
+                  className="text-[12px] text-gray-500 hover:text-gray-700 underline"
+                >선택해제</button>
+                <button
+                  onClick={() => setBulkDeleteConfirm(true)}
+                  className="ml-auto px-4 py-1.5 rounded-lg bg-red-500 text-white text-[13px] font-bold hover:bg-red-600 transition"
+                >선택 삭제</button>
+              </div>
+            )}
           </div>
 
           {/* 메일 클라이언트 레이아웃 */}
-          <div className="flex gap-4" style={{minHeight:"580px"}}>
+          <div className="flex gap-4" style={{minHeight:"560px"}}>
             {/* 왼쪽: 메일 목록 */}
             <div className="w-[320px] shrink-0 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
-              <div className="bg-[#1B2B4B] px-4 py-3 text-white font-bold text-[13px] flex items-center justify-between">
-                <span>발송 목록</span>
+              <div className="bg-[#1B2B4B] px-4 py-2.5 text-white font-bold text-[13px] flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={filteredMails.length > 0 && selectedMails.size === filteredMails.length}
+                  onChange={() => {
+                    if (selectedMails.size === filteredMails.length) setSelectedMails(new Set());
+                    else setSelectedMails(new Set(filteredMails.map(l=>l.id)));
+                  }}
+                  className="w-3.5 h-3.5 cursor-pointer"
+                />
+                <span className="flex-1">발송 목록</span>
                 <span className="text-white/60 font-normal text-[12px]">{filteredMails.length}건</span>
+                <button
+                  onClick={() => setBulkDeleteConfirm(true)}
+                  disabled={emailLogs.length === 0}
+                  title="전체 삭제"
+                  className="text-white/50 hover:text-red-300 transition disabled:opacity-30 text-[11px] font-semibold"
+                >전체삭제</button>
               </div>
               <div className="overflow-y-auto flex-1">
                 {filteredMails.length === 0 ? (
-                  <div className="text-center text-gray-400 py-16 text-[13px]">발송된 메일이 없습니다</div>
+                  <div className="text-center text-gray-400 py-16 text-[13px]">
+                    {mailSearch || mailTypeFilter !== "전체" ? "검색 결과가 없습니다" : "발송된 메일이 없습니다"}
+                  </div>
                 ) : (
                   filteredMails.map(log => (
                     <div
                       key={log.id}
-                      onClick={() => setSelectedMail(log)}
-                      className={`px-4 py-3 border-b border-gray-100 cursor-pointer transition ${selectedMail?.id === log.id ? "bg-[#e8edf5] border-l-4 border-l-[#1B2B4B]" : "hover:bg-gray-50 border-l-4 border-l-transparent"}`}
+                      className={`flex items-start px-3 py-3 border-b border-gray-100 cursor-pointer transition group ${
+                        selectedMail?.id === log.id
+                          ? "bg-[#e8edf5] border-l-4 border-l-[#1B2B4B]"
+                          : selectedMails.has(log.id)
+                          ? "bg-blue-50 border-l-4 border-l-blue-400"
+                          : "hover:bg-gray-50 border-l-4 border-l-transparent"
+                      }`}
                     >
-                      <div className="flex items-center justify-between mb-1">
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${log.status === "success" ? "bg-[#1B2B4B] text-white" : "bg-red-600 text-white"}`}>
-                          {log.type || "메일"}
-                        </span>
-                        <span className="text-[11px] text-gray-400">{log.sentAt ? new Date(log.sentAt).toLocaleDateString("ko-KR") : ""}</span>
+                      <input
+                        type="checkbox"
+                        checked={selectedMails.has(log.id)}
+                        onChange={e => {
+                          e.stopPropagation();
+                          setSelectedMails(prev => {
+                            const n = new Set(prev);
+                            if (n.has(log.id)) n.delete(log.id); else n.add(log.id);
+                            return n;
+                          });
+                        }}
+                        onClick={e => e.stopPropagation()}
+                        className="mt-1 mr-2.5 shrink-0 cursor-pointer"
+                      />
+                      <div className="flex-1 min-w-0" onClick={() => setSelectedMail(log)}>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${log.status === "success" ? "bg-[#1B2B4B] text-white" : "bg-red-600 text-white"}`}>
+                            {log.type || "메일"}
+                          </span>
+                          <span className="text-[11px] text-gray-400 shrink-0 ml-1">{log.sentAt ? new Date(log.sentAt).toLocaleDateString("ko-KR", {month:"2-digit",day:"2-digit"}) : ""}</span>
+                        </div>
+                        <div className="text-[12px] font-semibold text-gray-800 truncate">{log.subject || "(제목없음)"}</div>
+                        <div className="text-[11px] text-gray-500 truncate">{log.to || "-"}</div>
+                        {log.client && log.client !== "-" && (
+                          <div className="text-[10px] text-[#1B2B4B]/60 truncate">{log.client}</div>
+                        )}
                       </div>
-                      <div className="text-[13px] font-semibold text-gray-800 truncate">{log.subject || "(제목없음)"}</div>
-                      <div className="text-[11px] text-gray-500 truncate mt-0.5">{log.to || "-"}</div>
-                      {log.client && log.client !== "-" && (
-                        <div className="text-[11px] text-[#1B2B4B]/60 truncate">{log.client}</div>
-                      )}
                     </div>
                   ))
                 )}
@@ -35580,29 +35659,32 @@ const handleBatchSettle = async (targetStatus) => {
             </div>
 
             {/* 오른쪽: 메일 상세 */}
-            <div className="flex-1 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col">
+            <div className="flex-1 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col min-w-0">
               {!selectedMail ? (
                 <div className="flex-1 flex flex-col items-center justify-center text-gray-400">
                   <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" className="mb-3 opacity-30"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
                   <div className="text-[14px]">왼쪽 목록에서 메일을 선택하세요</div>
+                  {selectedMails.size > 0 && (
+                    <div className="mt-2 text-[12px] text-[#1B2B4B] font-semibold">{selectedMails.size}건 선택됨 — 상단 선택삭제 버튼으로 삭제</div>
+                  )}
                 </div>
               ) : (
                 <>
                   {/* 메일 헤더 */}
-                  <div className="bg-[#f4f6f9] border-b border-gray-200 px-6 py-4">
+                  <div className="bg-[#f4f6f9] border-b border-gray-200 px-6 py-4 shrink-0">
                     <div className="flex items-start justify-between mb-3">
                       <div className="text-[16px] font-extrabold text-[#1B2B4B] leading-tight flex-1 pr-4">
                         {selectedMail.subject || "(제목없음)"}
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${selectedMail.status === "success" ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>
-                          {selectedMail.status === "success" ? "발송성공" : "발송실패"}
+                          {selectedMail.status === "success" ? "발송완료" : "발송실패"}
                         </span>
-                        <button onClick={() => setSelectedMail(null)} className="text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
+                        <button onClick={() => setSelectedMail(null)} className="text-gray-400 hover:text-gray-600 text-xl leading-none w-7 h-7 flex items-center justify-center hover:bg-gray-200 rounded transition">×</button>
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-x-8 gap-y-1.5 text-[12px]">
-                      <div className="flex gap-2"><span className="text-gray-400 font-semibold w-12 shrink-0">발신</span><span className="text-gray-700">{selectedMail.sentBy || "-"}</span></div>
+                    <div className="grid grid-cols-2 gap-x-8 gap-y-1.5 text-[12px] mb-2">
+                      <div className="flex gap-2"><span className="text-gray-400 font-semibold w-12 shrink-0">발신</span><span className="text-gray-700 truncate">{selectedMail.sentBy || "-"}</span></div>
                       <div className="flex gap-2"><span className="text-gray-400 font-semibold w-12 shrink-0">수신</span><span className="text-gray-700 break-all">{selectedMail.to || "-"}</span></div>
                       <div className="flex gap-2"><span className="text-gray-400 font-semibold w-12 shrink-0">유형</span><span className="text-gray-700">{selectedMail.type || "-"}</span></div>
                       <div className="flex gap-2"><span className="text-gray-400 font-semibold w-12 shrink-0">발송일</span><span className="text-gray-700">{selectedMail.sentAt ? new Date(selectedMail.sentAt).toLocaleString("ko-KR") : "-"}</span></div>
@@ -35611,7 +35693,7 @@ const handleBatchSettle = async (targetStatus) => {
                       )}
                     </div>
                     {selectedMail.attachmentNames?.length > 0 && (
-                      <div className="mt-3 flex items-center gap-2 flex-wrap">
+                      <div className="flex items-center gap-2 flex-wrap mt-1">
                         <span className="text-[11px] text-gray-400 font-semibold">첨부파일</span>
                         {selectedMail.attachmentNames.map((n, i) => (
                           <span key={i} className="text-[11px] bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full">{n}</span>
@@ -35624,25 +35706,27 @@ const handleBatchSettle = async (targetStatus) => {
                       </div>
                     )}
                   </div>
-
                   {/* 메일 본문 */}
                   <div className="flex-1 overflow-y-auto px-6 py-5">
-                    <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-3">본문</div>
+                    <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                      <span>본문</span>
+                      {!selectedMail.body && <span className="font-normal normal-case text-gray-300">이 메일 이전 발송분은 본문이 저장되지 않았습니다</span>}
+                    </div>
                     {selectedMail.body ? (
                       <div className="text-[14px] text-gray-700 whitespace-pre-wrap leading-relaxed">{selectedMail.body}</div>
                     ) : (
                       <div className="text-gray-400 text-[13px] italic">저장된 본문 내용이 없습니다</div>
                     )}
                   </div>
-
                   {/* 하단 액션 */}
-                  <div className="border-t border-gray-100 px-6 py-3 flex items-center justify-end">
+                  <div className="border-t border-gray-100 px-6 py-3 flex items-center justify-between shrink-0">
+                    <div className="text-[11px] text-gray-400">
+                      {selectedMail.sentAt ? `발송: ${new Date(selectedMail.sentAt).toLocaleString("ko-KR")}` : ""}
+                    </div>
                     <button
                       onClick={() => { setDeleteLogConfirm(selectedMail.id); }}
                       className="px-4 py-2 rounded-lg text-[13px] font-semibold text-red-500 hover:bg-red-50 border border-red-200 transition"
-                    >
-                      삭제
-                    </button>
+                    >삭제</button>
                   </div>
                 </>
               )}
@@ -35651,6 +35735,37 @@ const handleBatchSettle = async (targetStatus) => {
         </div>
       )}
     </div>
+    {/* 보낸메일함 일괄 삭제 확인 팝업 */}
+    {bulkDeleteConfirm && (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]" onClick={() => setBulkDeleteConfirm(false)}>
+        <div className="bg-white rounded-2xl shadow-2xl w-[380px] overflow-hidden" onClick={e => e.stopPropagation()}>
+          <div className="bg-red-600 px-6 py-4 flex items-center gap-3">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M9 6V4h6v2"/></svg>
+            <div className="text-white font-bold text-[15px]">
+              {selectedMails.size > 0 ? `${selectedMails.size}건 선택 삭제` : "전체 삭제"}
+            </div>
+          </div>
+          <div className="px-6 py-5 text-[14px] text-gray-700">
+            {selectedMails.size > 0
+              ? `선택한 ${selectedMails.size}건의 발송이력을 삭제하시겠습니까?`
+              : `발송이력 전체 ${emailLogs.length}건을 삭제하시겠습니까?`}
+            <div className="mt-1 text-[12px] text-red-500">삭제 후 복구할 수 없습니다.</div>
+          </div>
+          <div className="px-6 pb-5 flex gap-3">
+            <button className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 font-semibold text-[13px] hover:bg-gray-200 transition"
+              onClick={() => setBulkDeleteConfirm(false)}>취소</button>
+            <button className="flex-1 py-2.5 rounded-xl bg-red-600 text-white font-bold text-[13px] hover:bg-red-700 transition"
+              onClick={async () => {
+                const toDelete = selectedMails.size > 0 ? [...selectedMails] : emailLogs.map(l => l.id);
+                await Promise.all(toDelete.map(id => deleteDoc(doc(db, "emailLogs", id)).catch(() => {})));
+                setSelectedMails(new Set());
+                if (selectedMail && toDelete.includes(selectedMail.id)) setSelectedMail(null);
+                setBulkDeleteConfirm(false);
+              }}>삭제</button>
+          </div>
+        </div>
+      </div>
+    )}
     {/* 발송이력 삭제 확인 팝업 */}
     {deleteLogConfirm && (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]" onClick={() => setDeleteLogConfirm(null)}>
