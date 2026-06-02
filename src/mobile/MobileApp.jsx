@@ -4045,21 +4045,14 @@ function UploadLinkModal({ orders = [], onClose }) {
     const lines = [];
     lines.push("안녕하세요 돌캐 운송사입니다.\n");
 
-    dOrders.forEach((o, i) => {
+    // 날짜 목록 (여러 오더면 복수 표시)
+    const dates = [...new Set(dOrders.map(o => {
       const date = (o.상차일 || "").slice(0, 10);
       const [y, m, d] = date.split("-");
-      const dateStr = y && m && d ? `${y}년 ${parseInt(m)}월 ${parseInt(d)}일` : date;
-      const load = o.상차지명 || "";
-      const unload = o.하차지명 || "";
-      const cargo = o.화물내용 || "";
-
-      if (dOrders.length > 1) lines.push(`[오더 ${i + 1}]`);
-      if (dateStr) lines.push(`📅 ${dateStr}`);
-      if (load) lines.push(`상차 : ${load}`);
-      if (unload) lines.push(`하차 : ${unload}`);
-      if (cargo) lines.push(`화물 : ${cargo}`);
-      if (dOrders.length > 1) lines.push("");
-    });
+      return y && m && d ? `${y}년 ${parseInt(m)}월 ${parseInt(d)}일` : date;
+    }).filter(Boolean))];
+    if (dates.length > 0) lines.push(`📅 ${dates.join(", ")}`);
+    if (dOrders.length > 1) lines.push(`총 ${dOrders.length}건`);
 
     lines.push("파렛전표 및 거래명세서, 타코기록지 등\n관련 서류 업로드를 부탁드립니다.\n미 확인 시 운임 지연이 발생할 수 있습니다.\n");
     lines.push("[인수증 업로드 안내]");
@@ -5431,6 +5424,12 @@ function MobileOrderDetail({
   const [carNo, setCarNo] = useState(order.차량번호 || "");
   const [name, setName] = useState(order.기사명 || "");
   const [phone, setPhone] = useState(order.전화번호 || "");
+
+  useEffect(() => {
+    setCarNo(order.차량번호 || "");
+    setName(order.기사명 || "");
+    setPhone(order.전화번호 || "");
+  }, [order.차량번호, order.기사명, order.전화번호]);
   const [isNewDriver, setIsNewDriver] = useState(false);
   const [showAttachments, setShowAttachments] = useState(false);
   const [attachItems, setAttachItems] = useState([]);
