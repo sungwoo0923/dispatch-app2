@@ -5440,6 +5440,7 @@ function MobileOrderDetail({
   const [liveAttachCount, setLiveAttachCount] = useState(order.attachCount || 0);
   const [showDetailFareHistory, setShowDetailFareHistory] = useState(false);
   const [detailFareFilter, setDetailFareFilter] = useState("all");
+  const [detailFareDetailItem, setDetailFareDetailItem] = useState(null);
 
   const detailFareMatches = useMemo(() => {
     if (!orders || orders.length === 0) return [];
@@ -5467,6 +5468,7 @@ function MobileOrderDetail({
     const candidates = [];
     orders.forEach(o => {
       if (o.id === order.id) return;
+      if ((o.상차일 || "").slice(0, 10) === todayKST()) return;
       const claim = Number(o.청구운임 || 0);
       const drv = Number(o.기사운임 || 0);
       if (!claim && !drv) return;
@@ -5490,6 +5492,64 @@ function MobileOrderDetail({
     finalList.sort((a, b) => b.score !== a.score ? b.score - a.score : b.dateStr.localeCompare(a.dateStr));
     return finalList.slice(0, 50);
   }, [orders, order.상차지주소, order.하차지주소, order.차종, order.차량종류, order.거래처명, order.id]);
+
+  const goEditWithFare = (claim, drv) => {
+    setShowDetailFareHistory(false);
+    setDetailFareDetailItem(null);
+    const _pendingContactItems = [];
+    [
+      { fieldName: order.상차지명, type: "pickup" },
+      { fieldName: order.하차지명, type: "drop" },
+    ].forEach(({ fieldName, type }) => {
+      if (!fieldName) return;
+      const found = (clients || []).find(c => normalizeCompany(c.거래처명) === normalizeCompany(fieldName));
+      if (!found) return;
+      const contacts = (Array.isArray(found.contacts) ? found.contacts : []).filter(ct => ct.name?.trim());
+      const unique = [...new Map(contacts.map(ct => [ct.name.trim(), ct])).values()];
+      if (unique.length > 1) _pendingContactItems.push({ type, place: found, contacts: unique });
+    });
+    window.scrollTo(0, 0);
+    setPrevPage("detail");
+    setPage("form");
+    setForm({
+      거래처명: order.거래처명 || "",
+      상차일: order.상차일 || "",
+      상차시간: order.상차시간 || "",
+      상차시간기준: order.상차시간기준 || null,
+      하차일: order.하차일 || "",
+      하차시간: order.하차시간 || "",
+      하차시간기준: order.하차시간기준 || null,
+      상차지명: order.상차지명 || "",
+      상차지주소: order.상차지주소 || "",
+      상차지담당자: order.상차지담당자 || "",
+      상차지담당자번호: order.상차지담당자번호 || "",
+      하차지명: order.하차지명 || "",
+      하차지주소: order.하차지주소 || "",
+      하차지담당자: order.하차지담당자 || "",
+      하차지담당자번호: order.하차지담당자번호 || "",
+      톤수: order.톤수 || order.차량톤수 || "",
+      차종: order.차종 || order.차량종류 || "",
+      화물내용: order.화물내용 || "",
+      상차방법: order.상차방법 || "",
+      하차방법: order.하차방법 || "",
+      지급방식: order.지급방식 || "",
+      배차방식: order.배차방식 || "",
+      청구운임: claim != null ? claim : (order.청구운임 || 0),
+      기사운임: drv != null ? drv : (order.기사운임 || 0),
+      수수료: (claim != null ? claim : (Number(order.청구운임)||0)) - (drv != null ? drv : (Number(order.기사운임)||0)),
+      산재보험료: order.산재보험료 || 0,
+      차량번호: order.차량번호 || "",
+      혼적여부: order.혼적여부 || "독차",
+      적요: order.메모 || "",
+      기사명: order.기사명 || "",
+      전화번호: order.전화번호 || "",
+      경유상차목록: order.경유상차목록 || [],
+      경유하차목록: order.경유하차목록 || [],
+      _editId: order.id,
+      _returnToDetail: true,
+      _pendingContactItems,
+    });
+  };
 
   const claim = getClaim(order);
   const sanjae = getSanjae(order);
@@ -6530,6 +6590,7 @@ const handleAssignClick = () => {
                 const fareMax = claims.length ? Math.max(...claims) : 0;
                 const fareAvg = claims.length ? Math.round(claims.reduce((a,b)=>a+b,0)/claims.length) : 0;
                 const fareRange = fareMax - fareMin || 1;
+                const getBarPct = (f) => fareRange > 0 ? Math.min(100, Math.max(0, ((f - fareMin) / fareRange) * 100)) : 50;
                 const tabs = ["all", "완전일치", "부분일치", "톤수일치", "노선일치"];
 
                 if (detailFareMatches.length === 0) return (
@@ -6571,12 +6632,26 @@ const handleAssignClick = () => {
                         <div className="relative h-2 bg-gray-100 rounded-full mb-1.5">
                           <div className="absolute inset-0 bg-gray-200 rounded-full" />
                           <div className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-[#1B2B4B] border-2 border-white shadow-md z-10"
-                            style={{ left: `calc(${fareRange > 0 ? Math.min(100, Math.max(0, ((fareAvg - fareMin) / fareRange) * 100)) : 50}% - 6px)` }} />
+                            style={{ left: `calc(${getBarPct(fareAvg)}% - 6px)` }} />
                         </div>
                         <div className="flex justify-between text-[10px] font-semibold text-gray-400">
                           <span>최저 {fareMin.toLocaleString()}원</span>
                           <span className="text-[#1B2B4B] font-bold">평균 {fareAvg.toLocaleString()}원</span>
                           <span>최고 {fareMax.toLocaleString()}원</span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2 mt-3">
+                          {[
+                            { label: "최저 운임", value: fareMin },
+                            { label: "평균 운임", value: fareAvg },
+                            { label: "최고 운임", value: fareMax },
+                          ].map(({ label, value }) => (
+                            <button key={label}
+                              onClick={() => goEditWithFare(value, null)}
+                              className="rounded-xl border border-gray-200 bg-gray-50 py-2.5 text-center active:scale-95 transition">
+                              <div className="text-[9px] font-bold text-gray-400 mb-1">{label}</div>
+                              <div className="text-[15px] font-extrabold text-[#1B2B4B]">{value.toLocaleString()}</div>
+                            </button>
+                          ))}
                         </div>
                       </div>
                     )}
@@ -6596,18 +6671,18 @@ const handleAssignClick = () => {
                           : tagLabel === "톤수일치" ? "bg-gray-600 text-white"
                           : "bg-blue-100 text-blue-700";
                         const fare = r.claim;
-                        const barPct = fareRange > 0 ? Math.min(100, Math.max(0, ((fare - fareMin) / fareRange) * 100)) : 50;
+                        const barPct = getBarPct(fare);
                         const fareLevel = barPct <= 33 ? "저렴" : barPct <= 66 ? "보통" : "높음";
                         const fareLevelCls = barPct <= 33 ? "bg-emerald-600 text-white" : barPct <= 66 ? "bg-gray-600 text-white" : "bg-orange-600 text-white";
                         const isTop = i === 0;
                         return (
-                          <div key={i} className={`bg-white border rounded-2xl overflow-hidden shadow-sm ${isTop ? "border-[#1B2B4B]/30" : "border-gray-200"}`}>
+                          <div key={i} onClick={() => setDetailFareDetailItem(o)} className={`bg-white border rounded-2xl overflow-hidden shadow-sm cursor-pointer active:scale-[0.99] transition ${isTop ? "border-[#1B2B4B]/30" : "border-gray-200"}`}>
                             {isTop && (
                               <div className="bg-[#1B2B4B] px-4 py-1 flex items-center gap-1">
                                 <span className="text-yellow-300 text-[10px] font-bold">최근 유사 운송</span>
                               </div>
                             )}
-                            <div className="px-4 pt-3 pb-3">
+                            <div className="px-4 pt-3 pb-0">
                               <div className="flex items-start justify-between gap-2 mb-2">
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-1.5 mb-1">
@@ -6618,6 +6693,11 @@ const handleAssignClick = () => {
                                   <div className="text-[13px] font-bold text-gray-900 truncate">
                                     {o.상차지명 || "-"} → {o.하차지명 || "-"}
                                   </div>
+                                  {(o.상차지주소 || o.하차지주소) && (
+                                    <div className="text-[11px] text-gray-400 mt-0.5">
+                                      {shortAddr(o.상차지주소)} → {shortAddr(o.하차지주소)}
+                                    </div>
+                                  )}
                                   {o.거래처명 && <div className="text-[11px] text-gray-500 mt-0.5">{o.거래처명}</div>}
                                   <div className="flex flex-wrap gap-1 mt-1">
                                     {o.화물내용 && (
@@ -6640,12 +6720,24 @@ const handleAssignClick = () => {
                                 </div>
                               </div>
                               {claims.length > 1 && (
-                                <div className="relative h-1.5 bg-gray-100 rounded-full">
+                                <div className="relative h-1.5 bg-gray-100 rounded-full mb-2.5">
                                   <div className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-[#1B2B4B] border-2 border-white shadow"
                                     style={{ left: `calc(${barPct}% - 5px)` }} />
                                 </div>
                               )}
+                              {(o.이름 || o.기사명) && (
+                                <div className="text-[11px] text-gray-400 mb-2">
+                                  기사 <span className="text-gray-700 font-semibold">{o.이름 || o.기사명}</span>
+                                </div>
+                              )}
                             </div>
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); goEditWithFare(r.claim, r.drv); }}
+                              className="w-full py-2.5 bg-[#1B2B4B] text-white text-[12px] font-bold text-center active:opacity-80 mt-0"
+                            >
+                              이 운임으로 수정 (청구 {r.claim.toLocaleString()} / 기사 {r.drv.toLocaleString()})
+                            </button>
                           </div>
                         );
                       })}
@@ -6653,6 +6745,93 @@ const handleAssignClick = () => {
                   </>
                 );
               })()}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== 상세보기 운임 상세 팝업 ===== */}
+      {detailFareDetailItem && (
+        <div className="fixed inset-0 z-[10000] flex items-end justify-center">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setDetailFareDetailItem(null)} />
+          <div className="relative bg-white rounded-t-3xl w-full max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-center pt-3 pb-0">
+              <div className="w-10 h-1 rounded-full bg-gray-300" />
+            </div>
+            <div className="bg-[#1B2B4B] px-5 py-4">
+              <div className="flex items-center justify-between">
+                <div className="text-white font-bold text-[15px]">운송 이력 상세</div>
+                <button onClick={() => setDetailFareDetailItem(null)}
+                  className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white text-lg">×</button>
+              </div>
+              <div className="text-white/60 text-[11px] mt-1">{detailFareDetailItem.상차일 || ""}</div>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              {detailFareDetailItem.거래처명 && (
+                <div className="flex items-center gap-2 pb-3 border-b border-gray-100">
+                  <span className="text-[11px] text-gray-400 w-16 shrink-0">거래처</span>
+                  <span className="text-[14px] font-bold text-[#1B2B4B]">{detailFareDetailItem.거래처명}</span>
+                </div>
+              )}
+              <div className="space-y-2">
+                <div className="flex gap-3">
+                  <div className="flex-1 bg-blue-50 rounded-xl p-3">
+                    <div className="text-[10px] font-bold text-blue-400 mb-1">상차지</div>
+                    <div className="text-[13px] font-bold text-gray-900">{detailFareDetailItem.상차지명 || "-"}</div>
+                    {detailFareDetailItem.상차지주소 && <div className="text-[11px] text-gray-500 mt-0.5">{detailFareDetailItem.상차지주소}</div>}
+                  </div>
+                  <div className="flex-1 bg-orange-50 rounded-xl p-3">
+                    <div className="text-[10px] font-bold text-orange-400 mb-1">하차지</div>
+                    <div className="text-[13px] font-bold text-gray-900">{detailFareDetailItem.하차지명 || "-"}</div>
+                    {detailFareDetailItem.하차지주소 && <div className="text-[11px] text-gray-500 mt-0.5">{detailFareDetailItem.하차지주소}</div>}
+                  </div>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {detailFareDetailItem.화물내용 && (
+                  <div className="bg-gray-50 rounded-xl p-3">
+                    <div className="text-[10px] font-bold text-gray-400 mb-1">화물</div>
+                    <div className="text-[12px] font-semibold text-gray-800">{detailFareDetailItem.화물내용}</div>
+                  </div>
+                )}
+                {(detailFareDetailItem.톤수 || detailFareDetailItem.차량톤수) && (
+                  <div className="bg-gray-50 rounded-xl p-3">
+                    <div className="text-[10px] font-bold text-gray-400 mb-1">톤수</div>
+                    <div className="text-[12px] font-semibold text-gray-800">{detailFareDetailItem.톤수 || detailFareDetailItem.차량톤수}</div>
+                  </div>
+                )}
+                {(detailFareDetailItem.차종 || detailFareDetailItem.차량종류) && (
+                  <div className="bg-gray-50 rounded-xl p-3">
+                    <div className="text-[10px] font-bold text-gray-400 mb-1">차종</div>
+                    <div className="text-[12px] font-semibold text-gray-800">{detailFareDetailItem.차종 || detailFareDetailItem.차량종류}</div>
+                  </div>
+                )}
+              </div>
+              <div className="bg-[#1B2B4B] rounded-xl p-4">
+                <div className="grid grid-cols-3 gap-4 text-center">
+                  <div>
+                    <div className="text-white/50 text-[10px] mb-1">청구운임</div>
+                    <div className="text-white font-extrabold text-[16px]">{Number(detailFareDetailItem.청구운임||0).toLocaleString()}</div>
+                  </div>
+                  <div>
+                    <div className="text-white/50 text-[10px] mb-1">기사운임</div>
+                    <div className="text-white font-extrabold text-[16px]">{Number(detailFareDetailItem.기사운임||0).toLocaleString()}</div>
+                  </div>
+                  <div>
+                    <div className="text-white/50 text-[10px] mb-1">수수료</div>
+                    <div className="text-white font-extrabold text-[16px]">{(Number(detailFareDetailItem.청구운임||0)-Number(detailFareDetailItem.기사운임||0)).toLocaleString()}</div>
+                  </div>
+                </div>
+              </div>
+              {(detailFareDetailItem.이름 || detailFareDetailItem.기사명) && (
+                <div className="text-[12px] text-gray-500">기사 <span className="font-semibold text-gray-700">{detailFareDetailItem.이름 || detailFareDetailItem.기사명}</span></div>
+              )}
+              <button
+                onClick={() => goEditWithFare(Number(detailFareDetailItem.청구운임||0), Number(detailFareDetailItem.기사운임||0))}
+                className="w-full py-3 bg-[#1B2B4B] text-white font-bold rounded-xl text-[13px] active:opacity-80 mt-1"
+              >
+                이 운임으로 수정 (청구 {Number(detailFareDetailItem.청구운임||0).toLocaleString()} / 기사 {Number(detailFareDetailItem.기사운임||0).toLocaleString()})
+              </button>
             </div>
           </div>
         </div>
@@ -6794,6 +6973,7 @@ const saveStopSheet = () => {
 };
 const [showFareHistory, setShowFareHistory] = useState(false);
 const [mobileFareFilter, setMobileFareFilter] = useState("all");
+const [fareDetailItem, setFareDetailItem] = useState(null);
 
 // ── 주소에서 지역 키워드 추출 ──
 const extractAreaFromAddr = (addr = "") => {
@@ -6842,6 +7022,7 @@ const fareMatches = useMemo(() => {
   const candidates = [];
 
   orders.forEach(o => {
+    if ((o.상차일 || "").slice(0, 10) === todayKST()) return;
     const claim = Number(o.청구운임 || 0);
     const drv = Number(o.기사운임 || 0);
     if (!claim && !drv) return;
@@ -8336,7 +8517,7 @@ const pickDrop = (c) => {
                         const isTop = i === 0;
 
                         return (
-                          <div key={i} className={`bg-white border rounded-2xl overflow-hidden shadow-sm ${isTop ? "border-[#1B2B4B]/30" : "border-gray-200"}`}>
+                          <div key={i} onClick={() => setFareDetailItem(r.order)} className={`bg-white border rounded-2xl overflow-hidden shadow-sm cursor-pointer active:scale-[0.99] transition ${isTop ? "border-[#1B2B4B]/30" : "border-gray-200"}`}>
                             {isTop && (
                               <div className="bg-[#1B2B4B] px-4 py-1 flex items-center gap-1">
                                 <span className="text-yellow-300 text-[10px] font-bold">최근 유사 운송</span>
@@ -8353,6 +8534,12 @@ const pickDrop = (c) => {
                                   <div className="text-[13px] font-bold text-gray-900 truncate">
                                     {o.상차지명 || "-"} → {o.하차지명 || "-"}
                                   </div>
+                                  {(o.상차지주소 || o.하차지주소) && (
+                                    <div className="text-[11px] text-gray-400 mt-0.5">
+                                      {shortAddr(o.상차지주소)} → {shortAddr(o.하차지주소)}
+                                    </div>
+                                  )}
+                                  {o.거래처명 && <div className="text-[11px] text-gray-500 mt-0.5">{o.거래처명}</div>}
                                   <div className="flex flex-wrap gap-1 mt-1">
                                     {o.화물내용 && (
                                       <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-medium ${ce ? "bg-orange-100 text-orange-700" : cp ? "bg-orange-50 text-orange-500" : "bg-gray-100 text-gray-500"}`}>
@@ -8406,6 +8593,99 @@ const pickDrop = (c) => {
                   </>
                 );
               })()}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== 운임 이력 상세 팝업 ===== */}
+      {fareDetailItem && (
+        <div className="fixed inset-0 z-[10000] flex items-end justify-center">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setFareDetailItem(null)} />
+          <div className="relative bg-white rounded-t-3xl w-full max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-center pt-3 pb-0">
+              <div className="w-10 h-1 rounded-full bg-gray-300" />
+            </div>
+            <div className="bg-[#1B2B4B] px-5 py-4">
+              <div className="flex items-center justify-between">
+                <div className="text-white font-bold text-[15px]">운송 이력 상세</div>
+                <button onClick={() => setFareDetailItem(null)}
+                  className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white text-lg">×</button>
+              </div>
+              <div className="text-white/60 text-[11px] mt-1">{fareDetailItem.상차일 || ""}</div>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              {fareDetailItem.거래처명 && (
+                <div className="flex items-center gap-2 pb-3 border-b border-gray-100">
+                  <span className="text-[11px] text-gray-400 w-16 shrink-0">거래처</span>
+                  <span className="text-[14px] font-bold text-[#1B2B4B]">{fareDetailItem.거래처명}</span>
+                </div>
+              )}
+              <div className="space-y-2">
+                <div className="flex gap-3">
+                  <div className="flex-1 bg-blue-50 rounded-xl p-3">
+                    <div className="text-[10px] font-bold text-blue-400 mb-1">상차지</div>
+                    <div className="text-[13px] font-bold text-gray-900">{fareDetailItem.상차지명 || "-"}</div>
+                    {fareDetailItem.상차지주소 && <div className="text-[11px] text-gray-500 mt-0.5">{fareDetailItem.상차지주소}</div>}
+                  </div>
+                  <div className="flex-1 bg-orange-50 rounded-xl p-3">
+                    <div className="text-[10px] font-bold text-orange-400 mb-1">하차지</div>
+                    <div className="text-[13px] font-bold text-gray-900">{fareDetailItem.하차지명 || "-"}</div>
+                    {fareDetailItem.하차지주소 && <div className="text-[11px] text-gray-500 mt-0.5">{fareDetailItem.하차지주소}</div>}
+                  </div>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {fareDetailItem.화물내용 && (
+                  <div className="bg-gray-50 rounded-xl p-3">
+                    <div className="text-[10px] font-bold text-gray-400 mb-1">화물</div>
+                    <div className="text-[12px] font-semibold text-gray-800">{fareDetailItem.화물내용}</div>
+                  </div>
+                )}
+                {(fareDetailItem.톤수 || fareDetailItem.차량톤수) && (
+                  <div className="bg-gray-50 rounded-xl p-3">
+                    <div className="text-[10px] font-bold text-gray-400 mb-1">톤수</div>
+                    <div className="text-[12px] font-semibold text-gray-800">{fareDetailItem.톤수 || fareDetailItem.차량톤수}</div>
+                  </div>
+                )}
+                {(fareDetailItem.차종 || fareDetailItem.차량종류) && (
+                  <div className="bg-gray-50 rounded-xl p-3">
+                    <div className="text-[10px] font-bold text-gray-400 mb-1">차종</div>
+                    <div className="text-[12px] font-semibold text-gray-800">{fareDetailItem.차종 || fareDetailItem.차량종류}</div>
+                  </div>
+                )}
+              </div>
+              <div className="bg-[#1B2B4B] rounded-xl p-4">
+                <div className="grid grid-cols-3 gap-4 text-center">
+                  <div>
+                    <div className="text-white/50 text-[10px] mb-1">청구운임</div>
+                    <div className="text-white font-extrabold text-[16px]">{Number(fareDetailItem.청구운임||0).toLocaleString()}</div>
+                  </div>
+                  <div>
+                    <div className="text-white/50 text-[10px] mb-1">기사운임</div>
+                    <div className="text-white font-extrabold text-[16px]">{Number(fareDetailItem.기사운임||0).toLocaleString()}</div>
+                  </div>
+                  <div>
+                    <div className="text-white/50 text-[10px] mb-1">수수료</div>
+                    <div className="text-white font-extrabold text-[16px]">{(Number(fareDetailItem.청구운임||0)-Number(fareDetailItem.기사운임||0)).toLocaleString()}</div>
+                  </div>
+                </div>
+              </div>
+              {(fareDetailItem.이름 || fareDetailItem.기사명) && (
+                <div className="text-[12px] text-gray-500">기사 <span className="font-semibold text-gray-700">{fareDetailItem.이름 || fareDetailItem.기사명}</span></div>
+              )}
+              <button
+                onClick={() => {
+                  updateMoney("청구운임", String(fareDetailItem.청구운임 || ""));
+                  updateMoney("기사운임", String(fareDetailItem.기사운임 || ""));
+                  setFareDetailItem(null);
+                  setShowFareHistory(false);
+                  showToast(`운임 적용: 청구 ${Number(fareDetailItem.청구운임||0).toLocaleString()}원 / 기사 ${Number(fareDetailItem.기사운임||0).toLocaleString()}원`);
+                }}
+                className="w-full py-3 bg-[#1B2B4B] text-white font-bold rounded-xl text-[13px] active:opacity-80 mt-1"
+              >
+                이 운임 적용 (청구 {Number(fareDetailItem.청구운임||0).toLocaleString()} / 기사 {Number(fareDetailItem.기사운임||0).toLocaleString()})
+              </button>
             </div>
           </div>
         </div>
@@ -10129,6 +10409,7 @@ const [showAddressConfirmPopup, setShowAddressConfirmPopup] = useState(false);
   const [result, setResult] = useState(null);
   const [aiFare, setAiFare] = useState(null);
   const [strictMatchOnly, setStrictMatchOnly] = useState(false);
+  const [fareDetailItemStd, setFareDetailItemStd] = useState(null);
 
   // 🔥 Firestore 로딩
   useEffect(() => {
@@ -10242,7 +10523,7 @@ const searchByAddress = () => {
   const dropRegion = extractRegion(dropAddr);
 
   const result = dispatchData.filter(r => {
-
+    if ((r.상차일 || "").slice(0, 10) === todayKST()) return false;
     const pAddr = r.상차지주소 || "";
     const dAddr = r.하차지주소 || "";
 
@@ -10330,7 +10611,7 @@ if (inputTonNum2 == null) {
 }
 
 let filtered = dispatchData.filter(r => {
-
+  if ((r.상차일 || "").slice(0, 10) === todayKST()) return false;
   // 🔥 경유지 제거 유지 (이건 남기는게 좋다)
   if (/\d+\./.test(r.상차지명 || "") || /\d+\./.test(r.하차지명 || "")) {
     return false;
@@ -10681,52 +10962,62 @@ const fares = baseRows.map((r) =>
 
 
   return (
-    <div className="bg-gray-50 min-h-screen pb-10">
-      {/* 검색 카드 */}
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mx-4 mt-4">
-        <div className="bg-[#1B2B4B] px-4 py-3">
-          <div className="text-[13px] font-bold text-white">운임 조회 조건</div>
-          <div className="text-[11px] text-white/50 mt-0.5">상/하차지 입력 후 조회</div>
+    <div className="bg-gray-50 min-h-screen pb-16">
+      {/* 헤더 */}
+      <div className="bg-[#1B2B4B] px-4 py-4 flex items-center gap-3">
+        <button onClick={onBack} className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="15 18 9 12 15 6"/>
+          </svg>
+        </button>
+        <div>
+          <div className="text-white font-bold text-[16px]">과거 운임 조회</div>
+          <div className="text-white/50 text-[11px]">상/하차지명 또는 주소로 검색</div>
         </div>
+      </div>
+
+      {/* 검색 카드 */}
+      <div className="mx-4 mt-4 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         <div className="p-4 space-y-3">
           {/* 상/하차지명 */}
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <div className="text-[11px] font-semibold text-gray-500 mb-1">상차지명</div>
+              <div className="text-[11px] font-bold text-gray-500 mb-1.5">상차지명</div>
               <MobilePlaceSuggest value={pickup} onChange={setPickup} names={pickupNames} placeholder="예: 인천 후레쉬2공장" />
             </div>
             <div>
-              <div className="text-[11px] font-semibold text-gray-500 mb-1">하차지명</div>
+              <div className="text-[11px] font-bold text-gray-500 mb-1.5">하차지명</div>
               <MobilePlaceSuggest value={drop} onChange={setDrop} names={dropNames} placeholder="예: 반찬단지" />
             </div>
           </div>
-          {/* 상/하차지주소 */}
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <div className="text-[11px] font-semibold text-gray-500 mb-1">상차지주소 (선택)</div>
-              <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B] bg-gray-50"
-                placeholder="주소 입력" value={pickupAddr} onChange={e=>setPickupAddr(e.target.value)} />
-            </div>
-            <div>
-              <div className="text-[11px] font-semibold text-gray-500 mb-1">하차지주소 (선택)</div>
-              <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B] bg-gray-50"
-                placeholder="주소 입력" value={dropAddr} onChange={e=>setDropAddr(e.target.value)} />
+          {/* 주소 검색 */}
+          <div className="bg-blue-50 rounded-xl p-3 space-y-2">
+            <div className="text-[11px] font-bold text-blue-500">주소로 검색 (선택)</div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <div className="text-[10px] text-blue-400 mb-1">상차지주소</div>
+                <MobileAddressSearch
+                  value={pickupAddr}
+                  onChange={v => setPickupAddr(v)}
+                  onSelect={s => s && setPickupAddr(s.address)}
+                  placeholder="예: 인천시 서구 원창동"
+                />
+              </div>
+              <div>
+                <div className="text-[10px] text-blue-400 mb-1">하차지주소</div>
+                <MobileAddressSearch
+                  value={dropAddr}
+                  onChange={v => setDropAddr(v)}
+                  onSelect={s => s && setDropAddr(s.address)}
+                  placeholder="예: 경기도 포천시"
+                />
+              </div>
             </div>
           </div>
-          {/* 톤수/화물/차종 */}
+          {/* 차종/톤수/화물 */}
           <div className="grid grid-cols-3 gap-2">
             <div>
-              <div className="text-[11px] font-semibold text-gray-500 mb-1">톤수</div>
-              <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B] bg-gray-50"
-                placeholder="예: 1톤" value={ton} onChange={e=>setTon(e.target.value)} />
-            </div>
-            <div>
-              <div className="text-[11px] font-semibold text-gray-500 mb-1">화물내용</div>
-              <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B] bg-gray-50"
-                placeholder="예: 3파레트" value={cargo} onChange={e=>setCargo(e.target.value)} />
-            </div>
-            <div>
-              <div className="text-[11px] font-semibold text-gray-500 mb-1">차종</div>
+              <div className="text-[11px] font-bold text-gray-500 mb-1.5">차종</div>
               <select className="w-full border border-gray-200 rounded-xl px-2 py-2 text-[12px] bg-gray-50 focus:outline-none focus:border-[#1B2B4B]"
                 value={vehicle} onChange={e=>setVehicle(e.target.value)}>
                 <option value="전체">전체</option>
@@ -10740,324 +11031,233 @@ const fares = baseRows.map((r) =>
                 <option value="오토바이">오토바이</option>
               </select>
             </div>
+            <div>
+              <div className="text-[11px] font-bold text-gray-500 mb-1.5">톤수</div>
+              <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B] bg-gray-50"
+                placeholder="예: 1톤" value={ton} onChange={e=>setTon(e.target.value)} />
+            </div>
+            <div>
+              <div className="text-[11px] font-bold text-gray-500 mb-1.5">화물</div>
+              <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B] bg-gray-50"
+                placeholder="예: 3파렛트" value={cargo} onChange={e=>setCargo(e.target.value)} />
+            </div>
           </div>
-          {/* 완전일치 */}
-          <label className="flex items-center gap-2 text-[12px] text-gray-600">
-            <input type="checkbox" checked={strictMatchOnly} onChange={e=>setStrictMatchOnly(e.target.checked)}
-              className="w-4 h-4 accent-[#1B2B4B]" />
-            화물/톤수 완전일치만 보기
-          </label>
-          {/* 조회 버튼 */}
-          <button id="fare-search-button" onClick={calcFareMobile}
-            className="w-full py-3 bg-[#1B2B4B] text-white text-[14px] font-bold rounded-xl active:scale-95 transition">
-            운임 조회
-          </button>
+          <div className="flex gap-2 pt-1">
+            <button id="fare-search-button" onClick={calcFareMobile}
+              className="flex-1 py-3 bg-[#1B2B4B] text-white text-[14px] font-bold rounded-xl active:scale-95 transition">
+              조회하기
+            </button>
+            <button onClick={() => { setPickup(""); setDrop(""); setPickupAddr(""); setDropAddr(""); setTon(""); setCargo(""); setVehicle("전체"); setMatchedRows([]); setResult(null); setAiFare(null); }}
+              className="px-4 py-3 rounded-xl border border-gray-200 text-gray-500 text-[13px] font-semibold">
+              초기화
+            </button>
+          </div>
         </div>
       </div>
-      <div className="px-4 py-4 space-y-3">
 
       {/* 결과 */}
-{(result || matchedRows.length > 0) && (
-  <div className="bg-white border p-4 rounded-xl shadow-sm space-y-3">
+      {matchedRows.length > 0 && (
+        <div className="mx-4 mt-4 space-y-3">
+          {/* 운임 범위 요약 */}
+          {(() => {
+            const fares = matchedRows.map(r => Number(r.청구운임||0)).filter(v => v > 0);
+            if (fares.length === 0) return null;
+            const fareMin = Math.min(...fares);
+            const fareMax = Math.max(...fares);
+            const fareAvg = Math.round(fares.reduce((a,b)=>a+b,0)/fares.length);
+            const fareRange = fareMax - fareMin || 1;
+            const getBarPct = f => fareRange > 0 ? Math.min(100, Math.max(0, ((f-fareMin)/fareRange)*100)) : 50;
+            return (
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-5 py-4">
+                <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">
+                  조회 운임 범위 ({matchedRows.length}건)
+                </div>
+                <div className="flex items-baseline gap-2 mb-3">
+                  <span className="text-[26px] font-black text-[#1B2B4B] leading-none">{fareMin.toLocaleString()}</span>
+                  <span className="text-[16px] font-bold text-gray-300">~</span>
+                  <span className="text-[26px] font-black text-[#1B2B4B] leading-none">{fareMax.toLocaleString()}</span>
+                  <span className="text-[13px] font-semibold text-gray-400 mb-0.5">원</span>
+                </div>
+                <div className="relative h-2 bg-gray-100 rounded-full mb-1.5">
+                  <div className="absolute inset-0 bg-gray-200 rounded-full" />
+                  <div className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-[#1B2B4B] border-2 border-white shadow-md z-10"
+                    style={{ left: `calc(${getBarPct(fareAvg)}% - 6px)` }} />
+                </div>
+                <div className="flex justify-between text-[10px] font-semibold text-gray-400">
+                  <span>최저 {fareMin.toLocaleString()}원</span>
+                  <span className="text-[#1B2B4B] font-bold">평균 {fareAvg.toLocaleString()}원</span>
+                  <span>최고 {fareMax.toLocaleString()}원</span>
+                </div>
+              </div>
+            );
+          })()}
 
-    <div className="font-semibold">
-      건수: {matchedRows.length}건
-    </div>
-
-    {/* ✅ result 있을 때만 평균 */}
-    {result && (
-      <>
-        <div>평균운임: {result.avg.toLocaleString()}원</div>
-        <div>
-          최근운임: {result.latestFare.toLocaleString()}원 (
-          {result.latest?.상차일?.slice(0, 10) || "-"})
+          {/* 기록 목록 */}
+          <div className="flex items-center gap-2 px-1">
+            <span className="text-[13px] font-extrabold text-[#1B2B4B]">과거 운송 기록</span>
+            <span className="text-[11px] text-gray-400">유사도순 · 최신순</span>
+          </div>
+          {matchedRows.map((r, i) => {
+            const fare = Number(r.청구운임||0);
+            const drv = Number(r.기사운임||0);
+            const fares = matchedRows.map(x => Number(x.청구운임||0)).filter(v => v > 0);
+            const fareMin = fares.length ? Math.min(...fares) : 0;
+            const fareMax = fares.length ? Math.max(...fares) : 0;
+            const fareRange = fareMax - fareMin || 1;
+            const barPct = fareRange > 0 ? Math.min(100, Math.max(0, ((fare-fareMin)/fareRange)*100)) : 50;
+            const fareLevel = barPct <= 33 ? "저렴" : barPct <= 66 ? "보통" : "높음";
+            const fareLevelCls = barPct <= 33 ? "bg-emerald-600 text-white" : barPct <= 66 ? "bg-gray-600 text-white" : "bg-orange-600 text-white";
+            const isTop = i === 0;
+            return (
+              <div key={r.id || i} onClick={() => setFareDetailItemStd(r)} className={`bg-white border rounded-2xl overflow-hidden shadow-sm cursor-pointer active:scale-[0.99] transition ${isTop ? "border-[#1B2B4B]/30" : "border-gray-100"}`}>
+                {isTop && (
+                  <div className="bg-[#1B2B4B] px-4 py-1">
+                    <span className="text-yellow-300 text-[10px] font-bold">최근 유사 운송</span>
+                  </div>
+                )}
+                <div className="px-4 pt-3 pb-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${fareLevelCls}`}>{fareLevel}</span>
+                        <span className="text-[11px] text-gray-400">{(r.상차일||"").slice(0,10)}</span>
+                      </div>
+                      <div className="text-[13px] font-bold text-gray-900 truncate">
+                        {r.상차지명||"-"} → {r.하차지명||"-"}
+                      </div>
+                      {(r.상차지주소 || r.하차지주소) && (
+                        <div className="text-[11px] text-gray-400 mt-0.5">
+                          {shortAddr(r.상차지주소)} → {shortAddr(r.하차지주소)}
+                        </div>
+                      )}
+                      {r.거래처명 && <div className="text-[11px] text-gray-500 mt-0.5">{r.거래처명}</div>}
+                      <div className="flex flex-wrap gap-1 mt-1.5">
+                        {r.화물내용 && <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-600 font-medium">{r.화물내용}</span>}
+                        {r.차량톤수 && <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-600 font-medium">{r.차량톤수}</span>}
+                        {r.차량종류 && <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-600 font-medium">{r.차량종류}</span>}
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <div className="text-[11px] text-gray-400">청구</div>
+                      <div className="text-[17px] font-extrabold text-[#1B2B4B]">{fare.toLocaleString()}원</div>
+                      <div className="text-[11px] text-gray-400 mt-0.5">기사 {drv.toLocaleString()}원</div>
+                    </div>
+                  </div>
+                  {fares.length > 1 && (
+                    <div className="relative h-1.5 bg-gray-100 rounded-full mt-2">
+                      <div className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-[#1B2B4B] border-2 border-white shadow"
+                        style={{ left: `calc(${barPct}% - 5px)` }} />
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
-      </>
-    )}
+      )}
 
-    {/* 🔥 fallback일 때 안내 */}
-    {!result && (
-      <div className="text-sm text-orange-500 font-semibold">
-        동일 조건 없음 → 유사 데이터 표시
-      </div>
-    )}
-
-    {/* AI 추천 */}
-    {result && aiFare && (
-      <div className="mt-3 p-3 rounded-lg bg-indigo-50 border border-indigo-200">
-        <div className="text-sm text-indigo-800">
-          추천 운임(예측):{" "}
-          <span className="font-bold">
-            {aiFare.aiValue.toLocaleString()}원
-          </span>
+      {!matchedRows.length && !result && (
+        <div className="flex flex-col items-center justify-center py-20 text-gray-400">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" className="mb-3 opacity-30">
+            <rect x="1" y="3" width="15" height="13" rx="2"/><path d="M16 8h4l3 4v4h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>
+          </svg>
+          <div className="text-[14px] font-semibold mb-1">상/하차지를 입력하세요</div>
+          <div className="text-[12px]">지명 또는 주소로 검색 가능합니다</div>
         </div>
-        <div className="text-xs text-indigo-500">
-          정확도 {aiFare.confidence}%
-        </div>
-      </div>
-    )}
+      )}
 
-    <div className="text-xs text-gray-600">
-      과거 운임 기록:
-    </div>
-
-    {/* 리스트 */}
-    <div className="mt-4 space-y-3">
-      {matchedRows.map((r) => {
-
-        const rawFare = Number(r.청구운임 || 0);
-        const fare = rawFare.toLocaleString();
-
-        const driverRaw = Number(r.기사운임 || 0);
-        const driver = driverRaw.toLocaleString();
-        const profit = rawFare - driverRaw;
-
-        const rowCargoNum = extractCargoNumber(r.화물내용);
-
-        const samePalletGroup = matchedRows.filter(item => {
-          const num = extractCargoNumber(item.화물내용);
-          return num === rowCargoNum;
-        });
-
-        const palletAvg = samePalletGroup.length
-          ? Math.round(
-              samePalletGroup.reduce((sum, item) =>
-                sum + Number(String(item.청구운임 || 0).replace(/[^\d]/g, "")),
-              0) / samePalletGroup.length
-            )
-          : rawFare;
-
-        const diff = rawFare - palletAvg;
-        const percent = palletAvg
-          ? Math.round((diff / palletAvg) * 100)
-          : 0;
-
-        const isHigh = percent > 3;
-        const isLow  = percent < -3;
-
-        return (
-          <div
-            key={r.id}
-            className="bg-white shadow-sm rounded-xl p-4 border border-gray-200"
-          >
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-500">
-                {r.상차일?.slice(5) || "-"}
-              </span>
-
-              <span
-                className={`text-lg font-semibold ${
-                  isHigh
-                    ? "text-red-600"
-                    : isLow
-                    ? "text-blue-600"
-                    : "text-gray-800"
-                }`}
+      {/* 운임 이력 상세 팝업 */}
+      {fareDetailItemStd && (
+        <div className="fixed inset-0 z-[10000] flex items-end justify-center">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setFareDetailItemStd(null)} />
+          <div className="relative bg-white rounded-t-3xl w-full max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-center pt-3 pb-0">
+              <div className="w-10 h-1 rounded-full bg-gray-300" />
+            </div>
+            <div className="bg-[#1B2B4B] px-5 py-4">
+              <div className="flex items-center justify-between">
+                <div className="text-white font-bold text-[15px]">운송 이력 상세</div>
+                <button onClick={() => setFareDetailItemStd(null)}
+                  className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white text-lg">×</button>
+              </div>
+              <div className="text-white/60 text-[11px] mt-1">{fareDetailItemStd.상차일 || ""}</div>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              {fareDetailItemStd.거래처명 && (
+                <div className="flex items-center gap-2 pb-3 border-b border-gray-100">
+                  <span className="text-[11px] text-gray-400 w-16 shrink-0">거래처</span>
+                  <span className="text-[14px] font-bold text-[#1B2B4B]">{fareDetailItemStd.거래처명}</span>
+                </div>
+              )}
+              <div className="flex gap-3">
+                <div className="flex-1 bg-blue-50 rounded-xl p-3">
+                  <div className="text-[10px] font-bold text-blue-400 mb-1">상차지</div>
+                  <div className="text-[13px] font-bold text-gray-900">{fareDetailItemStd.상차지명||"-"}</div>
+                  {fareDetailItemStd.상차지주소 && <div className="text-[11px] text-gray-500 mt-0.5">{fareDetailItemStd.상차지주소}</div>}
+                </div>
+                <div className="flex-1 bg-orange-50 rounded-xl p-3">
+                  <div className="text-[10px] font-bold text-orange-400 mb-1">하차지</div>
+                  <div className="text-[13px] font-bold text-gray-900">{fareDetailItemStd.하차지명||"-"}</div>
+                  {fareDetailItemStd.하차지주소 && <div className="text-[11px] text-gray-500 mt-0.5">{fareDetailItemStd.하차지주소}</div>}
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {fareDetailItemStd.화물내용 && (
+                  <div className="bg-gray-50 rounded-xl p-3">
+                    <div className="text-[10px] font-bold text-gray-400 mb-1">화물</div>
+                    <div className="text-[12px] font-semibold text-gray-800">{fareDetailItemStd.화물내용}</div>
+                  </div>
+                )}
+                {fareDetailItemStd.차량톤수 && (
+                  <div className="bg-gray-50 rounded-xl p-3">
+                    <div className="text-[10px] font-bold text-gray-400 mb-1">톤수</div>
+                    <div className="text-[12px] font-semibold text-gray-800">{fareDetailItemStd.차량톤수}</div>
+                  </div>
+                )}
+                {fareDetailItemStd.차량종류 && (
+                  <div className="bg-gray-50 rounded-xl p-3">
+                    <div className="text-[10px] font-bold text-gray-400 mb-1">차종</div>
+                    <div className="text-[12px] font-semibold text-gray-800">{fareDetailItemStd.차량종류}</div>
+                  </div>
+                )}
+              </div>
+              <div className="bg-[#1B2B4B] rounded-xl p-4">
+                <div className="grid grid-cols-3 gap-4 text-center">
+                  <div>
+                    <div className="text-white/50 text-[10px] mb-1">청구운임</div>
+                    <div className="text-white font-extrabold text-[16px]">{Number(fareDetailItemStd.청구운임||0).toLocaleString()}</div>
+                  </div>
+                  <div>
+                    <div className="text-white/50 text-[10px] mb-1">기사운임</div>
+                    <div className="text-white font-extrabold text-[16px]">{Number(fareDetailItemStd.기사운임||0).toLocaleString()}</div>
+                  </div>
+                  <div>
+                    <div className="text-white/50 text-[10px] mb-1">수수료</div>
+                    <div className="text-white font-extrabold text-[16px]">{(Number(fareDetailItemStd.청구운임||0)-Number(fareDetailItemStd.기사운임||0)).toLocaleString()}</div>
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={() => setFareDetailItemStd(null)}
+                className="w-full py-3 bg-gray-100 text-gray-700 font-bold rounded-xl text-[13px] active:opacity-80"
               >
-                {fare}원
-                
-                
-              </span>
-            </div>
-
-            {result && (
-              <div
-                className={`text-xs mt-1 ${
-                  isHigh
-                    ? "text-red-500"
-                    : isLow
-                    ? "text-blue-500"
-                    : "text-gray-400"
-                }`}
-              >
-                평균 대비 {percent > 0 ? "+" : ""}
-                {percent}%
-              </div>
-            )}
-
-            <div className="mt-3">
-              <div className="text-sm font-semibold text-gray-800">
-                {r.상차지명 || "-"} → {r.하차지명 || "-"}
-              </div>
-
-              <div className="text-xs text-gray-500 mt-1">
-                {shortAddr(r.상차지주소)} → {shortAddr(r.하차지주소)}
-              </div>
-            </div>
-
-            <div className="mt-3 text-xs text-gray-700 font-medium">
-              {r.화물내용 || "-"}
-              <span className="mx-2 text-gray-300">|</span>
-              {r.차량톤수 || "-"}
-              <span className="mx-2 text-gray-300">|</span>
-              {r.차량종류 || "-"}
-            </div>
-
-            <div className="mt-3 text-xs text-gray-600 border-t pt-2 flex justify-between">
-              <span>기사 {driver}원</span>
-              <span>수수료 {profit.toLocaleString()}원</span>
+                닫기
+              </button>
             </div>
           </div>
-        );
-      })}
-    </div>
-
-  </div>
-)}
-      {showSimilarPopup && (
-  <div className="fixed inset-0 bg-black/40 z-[60] flex items-center justify-center">
-    <div className="bg-white w-[320px] rounded-2xl p-5">
-
-      <div className="text-lg font-bold mb-2">
-        검색 결과 없음
-      </div>
-
-      <div className="text-sm text-gray-600 mb-4">
-        동일한 화물 기록이 없습니다.<br />
-        비슷한 조건으로 검색합니다.
-      </div>
-
-      <button
-        onClick={() => {
-          setShowSimilarPopup(false);
-          setMatchedRows(fallbackData);
-        }}
-        className="w-full bg-blue-600 text-white py-2 rounded-lg"
-      >
-        확인
-      </button>
-
-    </div>
-  </div>
-)}
-{showNoResultPopup && (
-  <div className="fixed inset-0 bg-black/40 z-[70] flex items-center justify-center">
-    <div className="bg-white p-5 rounded-xl w-[320px]">
-
-      <div className="text-lg font-bold mb-2">
-        조회 결과 없음
-      </div>
-
-      <div className="text-sm text-gray-600 mb-4">
-        해당 상/하차지 기록이 없습니다.
-      </div>
-
-      <button
-        onClick={() => setShowNoResultPopup(false)}
-        className="w-full py-2 bg-gray-600 text-white rounded-lg"
-      >
-        확인
-      </button>
-
-    </div>
-  </div>
-)}
-{showAddressConfirmPopup && (
-  <div className="fixed inset-0 bg-black/40 z-[70] flex items-center justify-center">
-    <div className="bg-white p-5 rounded-xl w-[340px]">
-
-      <div className="text-lg font-bold mb-2">
-        조회 결과 없음
-      </div>
-
-      <div className="text-sm text-gray-600 mb-4">
-        동일한 상/하차지 기록이 없습니다.<br />
-        주소 기준으로 조회하시겠습니까?
-      </div>
-
-      <div className="flex gap-2">
-        <button
-          onClick={() => setShowAddressConfirmPopup(false)}
-          className="flex-1 py-2 bg-gray-200 rounded-lg"
-        >
-          취소
-        </button>
-
-        <button
-          onClick={() => {
-            setShowAddressConfirmPopup(false);
-            searchByAddress();
-          }}
-          className="flex-1 py-2 bg-blue-600 text-white rounded-lg"
-        >
-          확인
-        </button>
-      </div>
-
-    </div>
-  </div>
-)}
-{showFareSummaryPopup && fareSummary && (
-  <div className="fixed inset-0 bg-black/40 z-[70] flex items-center justify-center">
-
-    <div className="bg-white w-[360px] rounded-2xl p-5 shadow-2xl">
-
-      <div className="text-lg font-bold mb-4 text-gray-800">
-        운임 이력 비교
-      </div>
-
-      <div className="mb-4 p-4 rounded-xl bg-red-50 border border-red-200">
-  <div className="text-sm text-red-500 font-semibold mb-1">
-    최고 운임
-  </div>
-
-  <div className="text-xl font-bold text-red-600">
-    {Number(fareSummary.highest.청구운임 || 0).toLocaleString()}원
-  </div>
-
-  <div className="text-sm text-gray-600 mt-1">
-    {fareSummary.highest.상차일?.slice(0,10)}
-  </div>
-
-  <div className="text-base mt-2 font-semibold">
-    {fareSummary.highest.상차지명} → {fareSummary.highest.하차지명}
-  </div>
-
-  <div className="text-sm text-gray-700 mt-1">
-    {fareSummary.highest.화물내용 || "-"} / {fareSummary.highest.차량톤수 || "-"}
-  </div>
-
-  <div className="text-sm text-gray-500 mt-2">
-    {fareSummary.highest.메모 || "메모 없음"}
-  </div>
-</div>
-
-      <div className="mb-4 p-4 rounded-xl bg-blue-50 border border-blue-200">
-        <div className="text-xs text-blue-500 font-semibold mb-1">
-          최저 운임
         </div>
+      )}
 
-        <div className="text-lg font-bold text-blue-600">
-          {Number(fareSummary.lowest.청구운임 || 0).toLocaleString()}원
+      {showNoResultPopup && (
+        <div className="fixed inset-0 bg-black/40 z-[70] flex items-center justify-center">
+          <div className="bg-white p-5 rounded-2xl w-[300px] text-center">
+            <div className="text-[16px] font-bold mb-2">조회 결과 없음</div>
+            <div className="text-[13px] text-gray-500 mb-4">해당 상/하차지 기록이 없습니다.</div>
+            <button onClick={() => setShowNoResultPopup(false)}
+              className="w-full py-2.5 bg-[#1B2B4B] text-white rounded-xl font-bold text-[13px]">확인</button>
+          </div>
         </div>
-
-        <div className="text-sm text-gray-600 mt-1">
-          {fareSummary.lowest.상차일?.slice(0,10)}
-        </div>
-
-        <div className="text-base mt-2 font-semibold">
-          {fareSummary.lowest.상차지명} → {fareSummary.lowest.하차지명}
-        </div>
-          <div className="text-sm text-gray-700 mt-1">
-    {fareSummary.highest.화물내용 || "-"} / {fareSummary.highest.차량톤수 || "-"}
-  </div>
-
-        <div className="text-sm text-gray-500 mt-2">
-          {fareSummary.lowest.메모 || "메모 없음"}
-        </div>
-      </div>
-
-      <button
-        onClick={() => setShowFareSummaryPopup(false)}
-        className="w-full bg-blue-600 text-white py-2 rounded-lg font-semibold"
-      >
-        확인
-      </button>
-
-    </div>
-  </div>
-)}
-    </div>
+      )}
     </div>
   );
 }
@@ -11131,6 +11331,7 @@ function MobileRateCard({ dispatchData = [], onBack }) {
     if (!pickup.trim()||!drop.trim()||!vGroup) { alert("상차지역, 하차지역, 차량종류를 모두 입력하세요."); return; }
     const pu=cleanStr(pickup), dr=cleanStr(drop);
     let matched = dispatchData.filter(r => {
+      if ((r.상차일 || "").slice(0, 10) === todayKST()) return false;
       const pm=cleanStr(r.상차지명||"")+cleanStr(r.상차지주소||"");
       const dm=cleanStr(r.하차지명||"")+cleanStr(r.하차지주소||"");
       if (!pm.includes(pu)||!dm.includes(dr)) return false;
