@@ -951,12 +951,14 @@ collections.forEach((name) => {
 }, [refreshKey]);
 useEffect(() => {
   const handleTouchStart = (e) => {
+    if (document.body.style.overflow === "hidden") return;
     if (window.scrollY === 0) {
       pullStartYRef.current = e.touches[0].clientY;
     }
   };
 
   const handleTouchMove = (e) => {
+    if (document.body.style.overflow === "hidden") return;
     if (window.scrollY !== 0) return;
     const diff = e.touches[0].clientY - pullStartYRef.current;
     if (diff > 0) {
@@ -965,6 +967,10 @@ useEffect(() => {
   };
 
   const handleTouchEnd = () => {
+    if (document.body.style.overflow === "hidden") {
+      pullDistanceRef.current = 0;
+      return;
+    }
     if (pullDistanceRef.current > 80) {
       handleRefresh();
     }
