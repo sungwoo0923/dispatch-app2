@@ -4769,6 +4769,8 @@ function CardAttachViewer({ order, onClose }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
+  const [saveStates, setSaveStates] = useState({});
+  const [confirmItem, setConfirmItem] = useState(null);
 
   useEffect(() => {
     const col = order.__col || order._col || "dispatch";
@@ -4780,6 +4782,22 @@ function CardAttachViewer({ order, onClose }) {
     });
     return () => unsub();
   }, [order]);
+
+  const doSave = (item) => {
+    try {
+      const a = document.createElement("a");
+      a.href = item.base64 || item.url;
+      a.download = item.name || "attachment.jpg";
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setSaveStates(prev => ({ ...prev, [item.id]: "success" }));
+    } catch {
+      setSaveStates(prev => ({ ...prev, [item.id]: "fail" }));
+    }
+  };
+  const handleSave = (item) => {
+    if (saveStates[item.id] === "success") { setConfirmItem(item); return; }
+    doSave(item);
+  };
 
   return (
     <div className="fixed inset-0 z-[9999] flex flex-col justify-end">
@@ -4836,10 +4854,14 @@ function CardAttachViewer({ order, onClose }) {
                   <div className="px-2.5 py-2 bg-white">
                     <div className="text-[10px] text-gray-400 truncate mb-1.5">{item.name || "파일"}{item.sizeKB ? ` · ${item.sizeKB}KB` : ""}</div>
                     <button
-                      onClick={() => { const a = document.createElement("a"); a.href = item.base64 || item.url; a.download = item.name || "attachment.jpg"; document.body.appendChild(a); a.click(); document.body.removeChild(a); }}
-                      className="w-full py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-bold"
+                      onClick={() => handleSave(item)}
+                      className={`w-full py-1.5 rounded-lg text-white text-[11px] font-bold transition-colors ${
+                        saveStates[item.id] === "success" ? "bg-emerald-500" :
+                        saveStates[item.id] === "fail" ? "bg-red-500" : "bg-[#1B2B4B]"
+                      }`}
                     >
-                      저장
+                      {saveStates[item.id] === "success" ? "저장완료" :
+                       saveStates[item.id] === "fail" ? "저장실패" : "저장"}
                     </button>
                   </div>
                 </div>
@@ -4853,11 +4875,27 @@ function CardAttachViewer({ order, onClose }) {
           <img src={selected.base64 || selected.url} alt="full" className="max-w-full max-h-[75vh] object-contain" onClick={e => e.stopPropagation()} />
           <button className="absolute top-4 left-4 w-10 h-10 bg-white/15 rounded-full text-white flex items-center justify-center text-sm font-bold" onClick={() => setSelected(null)}>닫기</button>
           <button
-            className="absolute bottom-8 right-6 px-5 py-2.5 bg-[#1B2B4B] text-white rounded-xl text-sm font-bold"
-            onClick={e => { e.stopPropagation(); const a = document.createElement("a"); a.href = selected.base64 || selected.url; a.download = selected.name || "attachment.jpg"; document.body.appendChild(a); a.click(); document.body.removeChild(a); }}
+            className={`absolute bottom-8 right-6 px-5 py-2.5 text-white rounded-xl text-sm font-bold transition-colors ${
+              saveStates[selected.id] === "success" ? "bg-emerald-500" :
+              saveStates[selected.id] === "fail" ? "bg-red-500" : "bg-[#1B2B4B]"
+            }`}
+            onClick={e => { e.stopPropagation(); handleSave(selected); }}
           >
-            저장
+            {saveStates[selected.id] === "success" ? "저장완료" :
+             saveStates[selected.id] === "fail" ? "저장실패" : "저장"}
           </button>
+        </div>
+      )}
+      {confirmItem && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/50" onClick={() => setConfirmItem(null)}>
+          <div className="bg-white rounded-2xl mx-6 p-5 w-full max-w-xs shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="text-[15px] font-bold text-[#1B2B4B] mb-2">이미 저장된 파일</div>
+            <div className="text-[13px] text-gray-500 mb-4">이미 저장하신 파일입니다.<br />다시 저장하시겠습니까?</div>
+            <div className="flex gap-2">
+              <button onClick={() => setConfirmItem(null)} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-600 font-bold text-[13px]">취소</button>
+              <button onClick={() => { doSave(confirmItem); setConfirmItem(null); }} className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white font-bold text-[13px]">다시 저장</button>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -5438,13 +5476,17 @@ function MobileOrderDetail({
   const [attachLoading, setAttachLoading] = useState(false);
   const [attachSelected, setAttachSelected] = useState(null);
   const [liveAttachCount, setLiveAttachCount] = useState(order.attachCount || 0);
+  const [attachSaveStates, setAttachSaveStates] = useState({});
+  const [attachConfirmItem, setAttachConfirmItem] = useState(null);
   const [showDetailFareHistory, setShowDetailFareHistory] = useState(false);
   const [detailFareFilter, setDetailFareFilter] = useState("all");
   const [detailFareDetailItem, setDetailFareDetailItem] = useState(null);
 
   const detailFareMatches = useMemo(() => {
     if (!orders || orders.length === 0) return [];
+
     const ns = (s = "") => String(s).replace(/\s+/g, "").toLowerCase();
+
     const extractArea = (addr = "") => {
       const s = String(addr).trim();
       if (!s) return "";
@@ -5454,44 +5496,107 @@ function MobileOrderDetail({
       if (parts.length >= 2) return parts[1].replace(/[시군구]$/, "");
       return parts[0].replace(/[도시군구]$/, "") || "";
     };
+
     const pickupArea = extractArea(order.상차지주소 || "");
     const dropArea = extractArea(order.하차지주소 || "");
     if (!pickupArea && !dropArea) return [];
-    const formVehicle = ns(order.차종 || order.차량종류 || "");
+
+    const formVehicleRaw = ns(order.차종 || order.차량종류 || "");
+    const isColdVehicle = (v = "") => v.includes("냉장") || v.includes("냉동");
+    const formIsCold = isColdVehicle(formVehicleRaw);
+
     const formClient = ns(order.거래처명 || "");
+    const cargo = (order.화물내용 || "").trim();
+    const ton = (order.톤수 || order.차량톤수 || "").trim();
+
+    const parseCargoQty = (s = "") => {
+      const m = String(s).match(/(\d+(?:\.\d+)?)\s*(파레트|파렛트|팔레트|박스|통|pallet|box)/i);
+      if (m) return { qty: parseFloat(m[1]), unit: m[2].replace(/팔레트|파렛트/g, "파레트") };
+      const numOnly = String(s).match(/^(\d+(?:\.\d+)?)$/);
+      if (numOnly) return { qty: parseFloat(numOnly[1]), unit: null };
+      return null;
+    };
+    const cargoParsed = parseCargoQty(cargo);
+
     const areaMatch = (oAddr = "", area) => {
       if (!area) return true;
       const oArea = extractArea(oAddr);
       if (!oArea) return false;
       return ns(oArea).includes(ns(area)) || ns(area).includes(ns(oArea));
     };
+
     const candidates = [];
+
     orders.forEach(o => {
       if (o.id === order.id) return;
       if ((o.상차일 || "").slice(0, 10) === todayKST()) return;
       const claim = Number(o.청구운임 || 0);
       const drv = Number(o.기사운임 || 0);
       if (!claim && !drv) return;
-      if (formVehicle) {
+
+      // 차종 필수 일치 (냉장/냉동 그룹핑)
+      if (formVehicleRaw) {
         const oVehicle = ns(o.차종 || o.차량종류 || "");
-        if (!oVehicle.includes(formVehicle) && !formVehicle.includes(oVehicle)) return;
+        const oIsCold = isColdVehicle(oVehicle);
+        if (formIsCold && !oIsCold) return;
+        if (!formIsCold && oIsCold) return;
+        if (!formIsCold && !oIsCold && !oVehicle.includes(formVehicleRaw) && !formVehicleRaw.includes(oVehicle)) return;
       }
+
+      // 노선 지역 필수 일치
       const pickMatch = pickupArea ? areaMatch(o.상차지주소 || "", pickupArea) : true;
       const dropMatch = dropArea ? areaMatch(o.하차지주소 || "", dropArea) : true;
       if (!pickMatch || !dropMatch) return;
+
       let score = 50;
       const tags = ["경로일치"];
+
+      // 거래처 일치 → 1순위 부스트
       const oClient = ns(o.거래처명 || "");
       const isClientMatch = formClient && oClient === formClient;
       if (isClientMatch) { score += 100; tags.push("거래처일치"); }
+
+      // 화물내용 (최대 30pt)
+      if (cargo) {
+        const oCargoParsed = parseCargoQty(o.화물내용 || "");
+        const normCargo = ns(cargo);
+        const normOCargo = ns(o.화물내용 || "");
+        if (normOCargo === normCargo) { score += 30; tags.push("화물일치"); }
+        else if (cargoParsed && oCargoParsed) {
+          const sameUnit = (!cargoParsed.unit && !oCargoParsed.unit) ||
+            (cargoParsed.unit && oCargoParsed.unit && ns(cargoParsed.unit) === ns(oCargoParsed.unit));
+          if (sameUnit) {
+            const diff = Math.abs(cargoParsed.qty - oCargoParsed.qty);
+            const pct = cargoParsed.qty > 0 ? diff / cargoParsed.qty : 1;
+            if (diff === 0) { score += 30; tags.push("화물일치"); }
+            else if (diff <= 1) { score += 22; tags.push("화물유사"); }
+            else if (diff <= 2 || pct <= 0.2) { score += 15; tags.push("화물유사"); }
+            else if (pct <= 0.4) { score += 8; tags.push("화물근사"); }
+          } else if (cargoParsed.unit && oCargoParsed.unit) { score += 5; }
+        } else if (normOCargo.includes(ns(cargo.replace(/\d+/g, "")))) { score += 8; }
+      }
+
+      // 톤수 (최대 15pt)
+      if (ton && o.톤수) {
+        if (ns(o.톤수) === ns(ton)) { score += 15; tags.push("톤수일치"); }
+        else {
+          const tn = parseFloat(ton); const otn = parseFloat(o.톤수);
+          if (!isNaN(tn) && !isNaN(otn) && Math.abs(tn - otn) / (tn || 1) <= 0.1) score += 8;
+        }
+      }
+
       candidates.push({ order: o, score, tags, dateStr: o.상차일 || "", claim, drv, isClientMatch });
     });
+
     if (candidates.length === 0) return [];
+
+    // 거래처 일치 이력이 있으면 1순위만, 없으면 전체
     const tier1 = formClient ? candidates.filter(c => c.isClientMatch) : [];
     const finalList = tier1.length > 0 ? tier1 : candidates;
+
     finalList.sort((a, b) => b.score !== a.score ? b.score - a.score : b.dateStr.localeCompare(a.dateStr));
     return finalList.slice(0, 50);
-  }, [orders, order.상차지주소, order.하차지주소, order.차종, order.차량종류, order.거래처명, order.id]);
+  }, [orders, order.상차지주소, order.하차지주소, order.차종, order.차량종류, order.거래처명, order.화물내용, order.톤수, order.차량톤수, order.id]);
 
   const goEditWithFare = (claim, drv) => {
     setShowDetailFareHistory(false);
@@ -5602,6 +5707,22 @@ const pickupTimeText = order.상차시간
     });
     return () => unsub();
   }, [showAttachments]);
+
+  const doAttachSave = (item) => {
+    try {
+      const a = document.createElement("a");
+      a.href = item.base64 || item.url;
+      a.download = item.name || "attachment.jpg";
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setAttachSaveStates(prev => ({ ...prev, [item.id]: "success" }));
+    } catch {
+      setAttachSaveStates(prev => ({ ...prev, [item.id]: "fail" }));
+    }
+  };
+  const handleAttachSave = (item) => {
+    if (attachSaveStates[item.id] === "success") { setAttachConfirmItem(item); return; }
+    doAttachSave(item);
+  };
 
   const normD = (s = "") => String(s).replace(/[-.\s]/g, "").toLowerCase();
 
@@ -6377,15 +6498,14 @@ const handleAssignClick = () => {
                       <div className="px-2.5 py-2 bg-white">
                         <div className="text-[10px] text-gray-400 truncate mb-1.5">{item.name || "파일"}{item.sizeKB ? ` · ${item.sizeKB}KB` : ""}</div>
                         <button
-                          onClick={() => {
-                            const a = document.createElement("a");
-                            a.href = item.base64 || item.url;
-                            a.download = item.name || "attachment.jpg";
-                            document.body.appendChild(a); a.click(); document.body.removeChild(a);
-                          }}
-                          className="w-full py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-bold"
+                          onClick={() => handleAttachSave(item)}
+                          className={`w-full py-1.5 rounded-lg text-white text-[11px] font-bold transition-colors ${
+                            attachSaveStates[item.id] === "success" ? "bg-emerald-500" :
+                            attachSaveStates[item.id] === "fail" ? "bg-red-500" : "bg-[#1B2B4B]"
+                          }`}
                         >
-                          저장
+                          {attachSaveStates[item.id] === "success" ? "저장완료" :
+                           attachSaveStates[item.id] === "fail" ? "저장실패" : "저장"}
                         </button>
                       </div>
                     </div>
@@ -6410,16 +6530,32 @@ const handleAssignClick = () => {
                 닫기
               </button>
               <button
-                className="absolute bottom-8 right-6 px-5 py-2.5 bg-[#1B2B4B] text-white rounded-xl text-sm font-bold"
-                onClick={e => {
-                  e.stopPropagation();
-                  const a = document.createElement("a");
-                  a.href = attachSelected.base64 || attachSelected.url;
-                  a.download = attachSelected.name || "attachment.jpg";
-                  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-                }}>
-                저장하기
+                className={`absolute bottom-8 right-6 px-5 py-2.5 text-white rounded-xl text-sm font-bold transition-colors ${
+                  attachSaveStates[attachSelected.id] === "success" ? "bg-emerald-500" :
+                  attachSaveStates[attachSelected.id] === "fail" ? "bg-red-500" : "bg-[#1B2B4B]"
+                }`}
+                onClick={e => { e.stopPropagation(); handleAttachSave(attachSelected); }}>
+                {attachSaveStates[attachSelected.id] === "success" ? "저장완료" :
+                 attachSaveStates[attachSelected.id] === "fail" ? "저장실패" : "저장하기"}
               </button>
+            </div>
+          )}
+          {attachConfirmItem && (
+            <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/50" onClick={() => setAttachConfirmItem(null)}>
+              <div className="bg-white rounded-2xl mx-6 p-5 w-full max-w-xs shadow-2xl" onClick={e => e.stopPropagation()}>
+                <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center mb-3">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                    <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                  </svg>
+                </div>
+                <div className="text-[15px] font-bold text-gray-900 mb-1">이미 저장된 파일</div>
+                <div className="text-[13px] text-gray-500 mb-4">이미 저장하신 파일입니다.<br />다시 저장하시겠습니까?</div>
+                <div className="flex gap-2">
+                  <button onClick={() => setAttachConfirmItem(null)} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-600 font-bold text-[13px]">취소</button>
+                  <button onClick={() => { doAttachSave(attachConfirmItem); setAttachConfirmItem(null); }} className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white font-bold text-[13px]">다시 저장</button>
+                </div>
+              </div>
             </div>
           )}
         </div>
@@ -7027,10 +7163,15 @@ const fareMatches = useMemo(() => {
     const drv = Number(o.기사운임 || 0);
     if (!claim && !drv) return;
 
-    // 차종 필수 일치
+    // 차종 필수 일치 (냉장/냉동 그룹핑)
     if (formVehicle) {
       const oVehicle = ns(o.차종 || o.차량종류 || "");
-      if (!oVehicle.includes(formVehicle) && !formVehicle.includes(oVehicle)) return;
+      const isCold = (v = "") => v.includes("냉장") || v.includes("냉동");
+      const formIsCold = isCold(formVehicle);
+      const oIsCold = isCold(oVehicle);
+      if (formIsCold && !oIsCold) return;
+      if (!formIsCold && oIsCold) return;
+      if (!formIsCold && !oIsCold && !oVehicle.includes(formVehicle) && !formVehicle.includes(oVehicle)) return;
     }
 
     // 노선 지역 필수 일치
