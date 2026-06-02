@@ -3189,6 +3189,7 @@ setOpenMemo={setOpenMemo}
     setOrders(prev => prev.map(o => (o.id === id || o._id === id) ? { ...o, ...patch } : o));
   }}
             drivers={drivers}
+            orders={orders}
             clients={[
               ...places,
               ...clients.filter(c =>
@@ -5395,6 +5396,7 @@ function MobileOrderDetail({
   onOrderUpdate,
   drivers,
   clients,
+  orders,
   onDuplicate,
   onAssignDriver,
   onCancelAssign,
@@ -5436,6 +5438,58 @@ function MobileOrderDetail({
   const [attachLoading, setAttachLoading] = useState(false);
   const [attachSelected, setAttachSelected] = useState(null);
   const [liveAttachCount, setLiveAttachCount] = useState(order.attachCount || 0);
+  const [showDetailFareHistory, setShowDetailFareHistory] = useState(false);
+  const [detailFareFilter, setDetailFareFilter] = useState("all");
+
+  const detailFareMatches = useMemo(() => {
+    if (!orders || orders.length === 0) return [];
+    const ns = (s = "") => String(s).replace(/\s+/g, "").toLowerCase();
+    const extractArea = (addr = "") => {
+      const s = String(addr).trim();
+      if (!s) return "";
+      const metros = ["서울", "부산", "인천", "대구", "대전", "광주", "울산", "세종", "제주"];
+      for (const city of metros) { if (s.startsWith(city)) return city; }
+      const parts = s.split(/\s+/);
+      if (parts.length >= 2) return parts[1].replace(/[시군구]$/, "");
+      return parts[0].replace(/[도시군구]$/, "") || "";
+    };
+    const pickupArea = extractArea(order.상차지주소 || "");
+    const dropArea = extractArea(order.하차지주소 || "");
+    if (!pickupArea && !dropArea) return [];
+    const formVehicle = ns(order.차종 || order.차량종류 || "");
+    const formClient = ns(order.거래처명 || "");
+    const areaMatch = (oAddr = "", area) => {
+      if (!area) return true;
+      const oArea = extractArea(oAddr);
+      if (!oArea) return false;
+      return ns(oArea).includes(ns(area)) || ns(area).includes(ns(oArea));
+    };
+    const candidates = [];
+    orders.forEach(o => {
+      if (o.id === order.id) return;
+      const claim = Number(o.청구운임 || 0);
+      const drv = Number(o.기사운임 || 0);
+      if (!claim && !drv) return;
+      if (formVehicle) {
+        const oVehicle = ns(o.차종 || o.차량종류 || "");
+        if (!oVehicle.includes(formVehicle) && !formVehicle.includes(oVehicle)) return;
+      }
+      const pickMatch = pickupArea ? areaMatch(o.상차지주소 || "", pickupArea) : true;
+      const dropMatch = dropArea ? areaMatch(o.하차지주소 || "", dropArea) : true;
+      if (!pickMatch || !dropMatch) return;
+      let score = 50;
+      const tags = ["경로일치"];
+      const oClient = ns(o.거래처명 || "");
+      const isClientMatch = formClient && oClient === formClient;
+      if (isClientMatch) { score += 100; tags.push("거래처일치"); }
+      candidates.push({ order: o, score, tags, dateStr: o.상차일 || "", claim, drv, isClientMatch });
+    });
+    if (candidates.length === 0) return [];
+    const tier1 = formClient ? candidates.filter(c => c.isClientMatch) : [];
+    const finalList = tier1.length > 0 ? tier1 : candidates;
+    finalList.sort((a, b) => b.score !== a.score ? b.score - a.score : b.dateStr.localeCompare(a.dateStr));
+    return finalList.slice(0, 50);
+  }, [orders, order.상차지주소, order.하차지주소, order.차종, order.차량종류, order.거래처명, order.id]);
 
   const claim = getClaim(order);
   const sanjae = getSanjae(order);
@@ -5896,22 +5950,10 @@ const handleAssignClick = () => {
             </button>
             <button
               style={{ touchAction: "manipulation" }}
-             onClick={() => {
-                window.__farePreset__ = {
-                  pickup: order.상차지명 || "",
-                  pickupAddr: order.상차지주소 || "",
-                  drop: order.하차지명 || "",
-                  dropAddr: order.하차지주소 || "",
-                  ton: order.차량톤수 || order.톤수 || "",
-                  cargo: order.화물내용 || "",
-                };
-                window.__forceFareSearch__ = true;
-                window.scrollTo(0, 0);
-                onGoFare?.();
-              }}
+              onClick={() => { setDetailFareFilter("all"); setShowDetailFareHistory(true); }}
               className="py-2.5 rounded-xl border border-[#1B2B4B] text-[#1B2B4B] text-xs font-bold"
             >
-              운임조회
+              운임조회{detailFareMatches.length > 0 ? ` (${detailFareMatches.length})` : ""}
             </button>
           </div>
 
@@ -6428,6 +6470,193 @@ const handleAssignClick = () => {
           </div>
         </div>
       )}
+
+      {/* ===== 상세보기 운임 조회 모달 ===== */}
+      {showDetailFareHistory && (
+        <div className="fixed inset-0 z-[9999] flex flex-col justify-end">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setShowDetailFareHistory(false)} />
+          <div className="relative bg-white rounded-t-3xl max-h-[92vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-center pt-3 pb-0 shrink-0">
+              <div className="w-10 h-1 rounded-full bg-gray-300" />
+            </div>
+            <div className="bg-[#1B2B4B] px-5 py-4 shrink-0 rounded-t-none">
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="text-white font-bold text-[16px]">운임 조회 결과</div>
+                  <div className="text-white/60 text-[11px] mt-0.5 flex flex-wrap gap-1 items-center">
+                    {(() => {
+                      const extractArea = (addr = "") => {
+                        const s = String(addr).trim(); if (!s) return "";
+                        const metros = ["서울","부산","인천","대구","대전","광주","울산","세종","제주"];
+                        for (const c of metros) { if (s.startsWith(c)) return c; }
+                        const parts = s.split(/\s+/);
+                        if (parts.length >= 2) return parts[1].replace(/[시군구]$/, "");
+                        return parts[0].replace(/[도시군구]$/, "") || "";
+                      };
+                      const pA = extractArea(order.상차지주소 || "");
+                      const dA = extractArea(order.하차지주소 || "");
+                      return (<>
+                        {pA && <span>{pA}</span>}
+                        {pA && dA && <span className="text-white/30">→</span>}
+                        {dA && <span>{dA}</span>}
+                        {(order.차종 || order.차량종류) && <><span className="text-white/30">·</span><span>{order.차종 || order.차량종류}</span></>}
+                        {order.거래처명 && detailFareMatches.some(r => r.isClientMatch) && <><span className="text-white/30">·</span><span className="text-yellow-300">{order.거래처명}</span></>}
+                      </>);
+                    })()}
+                  </div>
+                </div>
+                <button onClick={() => setShowDetailFareHistory(false)}
+                  className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white text-lg shrink-0">×</button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              {(() => {
+                const getLabel = (r) => {
+                  const ce = r.tags.includes("화물일치");
+                  const cp = r.tags.includes("화물유사");
+                  const te = r.tags.includes("톤수일치");
+                  if (ce && te) return "완전일치";
+                  if (ce || cp) return "부분일치";
+                  if (te) return "톤수일치";
+                  return "노선일치";
+                };
+                const counts = { "완전일치": 0, "부분일치": 0, "톤수일치": 0, "노선일치": 0 };
+                detailFareMatches.forEach(r => { const l = getLabel(r); counts[l] = (counts[l] || 0) + 1; });
+                const visibleMatches = detailFareFilter === "all"
+                  ? detailFareMatches
+                  : detailFareMatches.filter(r => getLabel(r) === detailFareFilter);
+                const claims = visibleMatches.map(r => r.claim).filter(v => v > 0);
+                const fareMin = claims.length ? Math.min(...claims) : 0;
+                const fareMax = claims.length ? Math.max(...claims) : 0;
+                const fareAvg = claims.length ? Math.round(claims.reduce((a,b)=>a+b,0)/claims.length) : 0;
+                const fareRange = fareMax - fareMin || 1;
+                const tabs = ["all", "완전일치", "부분일치", "톤수일치", "노선일치"];
+
+                if (detailFareMatches.length === 0) return (
+                  <div className="flex flex-col items-center justify-center py-16 gap-3 text-gray-400">
+                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                    </svg>
+                    <div className="text-sm">유사한 과거 이력이 없습니다</div>
+                  </div>
+                );
+
+                return (
+                  <>
+                    <div className="px-4 pt-3 pb-2 border-b border-gray-100">
+                      <div className="flex gap-1.5 flex-wrap">
+                        {tabs.map(t => {
+                          const cnt = t === "all" ? detailFareMatches.length : (counts[t] || 0);
+                          if (t !== "all" && cnt === 0) return null;
+                          return (
+                            <button key={t} onClick={() => setDetailFareFilter(t)}
+                              className={`text-[10px] font-bold px-2.5 py-1 rounded-full border transition ${detailFareFilter === t ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-200"}`}>
+                              {t === "all" ? `전체 ${cnt}` : `${t} ${cnt}`}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    {claims.length > 0 && (
+                      <div className="px-5 py-4 border-b border-gray-100">
+                        <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">
+                          조회 운임 범위 ({visibleMatches.length}건)
+                        </div>
+                        <div className="flex items-baseline gap-2 mb-3">
+                          <span className="text-[26px] font-black text-[#1B2B4B] leading-none">{fareMin.toLocaleString()}</span>
+                          <span className="text-[16px] font-bold text-gray-300">~</span>
+                          <span className="text-[26px] font-black text-[#1B2B4B] leading-none">{fareMax.toLocaleString()}</span>
+                          <span className="text-[13px] font-semibold text-gray-400 mb-0.5">원</span>
+                        </div>
+                        <div className="relative h-2 bg-gray-100 rounded-full mb-1.5">
+                          <div className="absolute inset-0 bg-gray-200 rounded-full" />
+                          <div className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-[#1B2B4B] border-2 border-white shadow-md z-10"
+                            style={{ left: `calc(${fareRange > 0 ? Math.min(100, Math.max(0, ((fareAvg - fareMin) / fareRange) * 100)) : 50}% - 6px)` }} />
+                        </div>
+                        <div className="flex justify-between text-[10px] font-semibold text-gray-400">
+                          <span>최저 {fareMin.toLocaleString()}원</span>
+                          <span className="text-[#1B2B4B] font-bold">평균 {fareAvg.toLocaleString()}원</span>
+                          <span>최고 {fareMax.toLocaleString()}원</span>
+                        </div>
+                      </div>
+                    )}
+                    <div className="px-4 py-3 space-y-2.5">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-[13px] font-extrabold text-[#1B2B4B]">과거 운송 기록</span>
+                        <span className="text-[11px] text-gray-400">노선일치 · 최신순</span>
+                      </div>
+                      {visibleMatches.map((r, i) => {
+                        const o = r.order;
+                        const ce = r.tags.includes("화물일치");
+                        const cp = r.tags.includes("화물유사");
+                        const te = r.tags.includes("톤수일치");
+                        const tagLabel = (ce && te) ? "완전일치" : (ce || cp) ? "부분일치" : te ? "톤수일치" : "노선일치";
+                        const tagColor = tagLabel === "완전일치" ? "bg-[#1B2B4B] text-white"
+                          : tagLabel === "부분일치" ? "bg-emerald-600 text-white"
+                          : tagLabel === "톤수일치" ? "bg-gray-600 text-white"
+                          : "bg-blue-100 text-blue-700";
+                        const fare = r.claim;
+                        const barPct = fareRange > 0 ? Math.min(100, Math.max(0, ((fare - fareMin) / fareRange) * 100)) : 50;
+                        const fareLevel = barPct <= 33 ? "저렴" : barPct <= 66 ? "보통" : "높음";
+                        const fareLevelCls = barPct <= 33 ? "bg-emerald-600 text-white" : barPct <= 66 ? "bg-gray-600 text-white" : "bg-orange-600 text-white";
+                        const isTop = i === 0;
+                        return (
+                          <div key={i} className={`bg-white border rounded-2xl overflow-hidden shadow-sm ${isTop ? "border-[#1B2B4B]/30" : "border-gray-200"}`}>
+                            {isTop && (
+                              <div className="bg-[#1B2B4B] px-4 py-1 flex items-center gap-1">
+                                <span className="text-yellow-300 text-[10px] font-bold">최근 유사 운송</span>
+                              </div>
+                            )}
+                            <div className="px-4 pt-3 pb-3">
+                              <div className="flex items-start justify-between gap-2 mb-2">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-1.5 mb-1">
+                                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${tagColor}`}>{tagLabel}</span>
+                                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${fareLevelCls}`}>{fareLevel}</span>
+                                    <span className="text-[11px] text-gray-400">{o.상차일 || ""}</span>
+                                  </div>
+                                  <div className="text-[13px] font-bold text-gray-900 truncate">
+                                    {o.상차지명 || "-"} → {o.하차지명 || "-"}
+                                  </div>
+                                  {o.거래처명 && <div className="text-[11px] text-gray-500 mt-0.5">{o.거래처명}</div>}
+                                  <div className="flex flex-wrap gap-1 mt-1">
+                                    {o.화물내용 && (
+                                      <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-medium ${ce ? "bg-orange-100 text-orange-700" : cp ? "bg-orange-50 text-orange-500" : "bg-gray-100 text-gray-500"}`}>
+                                        {o.화물내용}
+                                      </span>
+                                    )}
+                                    {o.톤수 && (
+                                      <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-medium ${te ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
+                                        {o.톤수}
+                                      </span>
+                                    )}
+                                    {(o.차종 || o.차량종류) && <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-500">{o.차종 || o.차량종류}</span>}
+                                  </div>
+                                </div>
+                                <div className="text-right shrink-0">
+                                  <div className="text-[11px] text-gray-400">청구</div>
+                                  <div className="text-[17px] font-extrabold text-[#1B2B4B]">{fare.toLocaleString()}원</div>
+                                  <div className="text-[11px] text-gray-400 mt-0.5">기사 {r.drv.toLocaleString()}원</div>
+                                </div>
+                              </div>
+                              {claims.length > 1 && (
+                                <div className="relative h-1.5 bg-gray-100 rounded-full">
+                                  <div className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-[#1B2B4B] border-2 border-white shadow"
+                                    style={{ left: `calc(${barPct}% - 5px)` }} />
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -6566,16 +6795,34 @@ const saveStopSheet = () => {
 const [showFareHistory, setShowFareHistory] = useState(false);
 const [mobileFareFilter, setMobileFareFilter] = useState("all");
 
-// ── 스마트 운임 조회 매칭 ──
+// ── 주소에서 지역 키워드 추출 ──
+const extractAreaFromAddr = (addr = "") => {
+  const s = String(addr).trim();
+  if (!s) return "";
+  const metros = ["서울", "부산", "인천", "대구", "대전", "광주", "울산", "세종", "제주"];
+  for (const city of metros) {
+    if (s.startsWith(city)) return city;
+  }
+  const parts = s.split(/\s+/);
+  if (parts.length >= 2) return parts[1].replace(/[시군구]$/, "");
+  return parts[0].replace(/[도시군구]$/, "") || "";
+};
+
+// ── 스마트 운임 조회 매칭 (주소 노선 기반) ──
 const fareMatches = useMemo(() => {
   if (!orders || orders.length === 0) return [];
-  const pickup = (form.상차지명 || "").trim();
-  const drop = (form.하차지명 || "").trim();
-  if (!pickup && !drop) return [];
 
   const ns = (s = "") => String(s).replace(/\s+/g, "").toLowerCase();
 
-  // 화물내용에서 수량과 단위 추출 ("6파렛트" → {qty:6, unit:"파렛트"})
+  const pickupArea = extractAreaFromAddr(form.상차지주소 || "");
+  const dropArea = extractAreaFromAddr(form.하차지주소 || "");
+  if (!pickupArea && !dropArea) return [];
+
+  const formVehicle = ns(form.차종 || "");
+  const formClient = ns(form.거래처명 || "");
+  const cargo = (form.화물내용 || "").trim();
+  const ton = (form.톤수 || "").trim();
+
   const parseCargoQty = (s = "") => {
     const m = String(s).match(/(\d+(?:\.\d+)?)\s*(파레트|파렛트|팔레트|박스|통|pallet|box)/i);
     if (m) return { qty: parseFloat(m[1]), unit: m[2].replace(/팔레트|파렛트/g, "파레트") };
@@ -6583,54 +6830,50 @@ const fareMatches = useMemo(() => {
     if (numOnly) return { qty: parseFloat(numOnly[1]), unit: null };
     return null;
   };
-
-  const normPickup = ns(pickup);
-  const normDrop = ns(drop);
-  const cargo = (form.화물내용 || "").trim();
-  const ton = (form.톤수 || "").trim();
   const cargoParsed = parseCargoQty(cargo);
 
-  const results = [];
+  const areaMatch = (oAddr = "", area) => {
+    if (!area) return true;
+    const oArea = extractAreaFromAddr(oAddr);
+    if (!oArea) return false;
+    return ns(oArea).includes(ns(area)) || ns(area).includes(ns(oArea));
+  };
+
+  const candidates = [];
 
   orders.forEach(o => {
     const claim = Number(o.청구운임 || 0);
     const drv = Number(o.기사운임 || 0);
     if (!claim && !drv) return;
 
-    let score = 0;
-    const tags = [];
-
-    const oPickup = ns(o.상차지명 || "");
-    const oDrop = ns(o.하차지명 || "");
-
-    // 1순위: 경로 (최대 50pt)
-    const pickMatch = normPickup && (oPickup.includes(normPickup) || normPickup.includes(oPickup));
-    const dropMatch = normDrop && (oDrop.includes(normDrop) || normDrop.includes(oDrop));
-
-    if (normPickup && normDrop) {
-      if (pickMatch && dropMatch) { score += 50; tags.push("경로일치"); }
-      else if (pickMatch) { score += 20; }
-      else if (dropMatch) { score += 15; }
-      else return; // 경로 전혀 안 맞으면 제외
-    } else if (normPickup) {
-      if (pickMatch) score += 30; else return;
-    } else if (normDrop) {
-      if (dropMatch) score += 30; else return;
+    // 차종 필수 일치
+    if (formVehicle) {
+      const oVehicle = ns(o.차종 || o.차량종류 || "");
+      if (!oVehicle.includes(formVehicle) && !formVehicle.includes(oVehicle)) return;
     }
 
-    // 2순위: 화물내용 (최대 30pt)
+    // 노선 지역 필수 일치
+    const pickMatch = pickupArea ? areaMatch(o.상차지주소 || "", pickupArea) : true;
+    const dropMatch = dropArea ? areaMatch(o.하차지주소 || "", dropArea) : true;
+    if (!pickMatch || !dropMatch) return;
+
+    let score = 50;
+    const tags = ["경로일치"];
+
+    // 거래처 일치 → 1순위 부스트
+    const oClient = ns(o.거래처명 || "");
+    const isClientMatch = formClient && oClient === formClient;
+    if (isClientMatch) { score += 100; tags.push("거래처일치"); }
+
+    // 화물내용 (최대 30pt)
     if (cargo) {
       const oCargoParsed = parseCargoQty(o.화물내용 || "");
       const normCargo = ns(cargo);
       const normOCargo = ns(o.화물내용 || "");
-
-      if (normOCargo === normCargo) {
-        score += 30; tags.push("화물일치");
-      } else if (cargoParsed && oCargoParsed) {
-        // 같은 단위 or 둘다 단위없음
+      if (normOCargo === normCargo) { score += 30; tags.push("화물일치"); }
+      else if (cargoParsed && oCargoParsed) {
         const sameUnit = (!cargoParsed.unit && !oCargoParsed.unit) ||
-          (cargoParsed.unit && oCargoParsed.unit &&
-           ns(cargoParsed.unit) === ns(oCargoParsed.unit));
+          (cargoParsed.unit && oCargoParsed.unit && ns(cargoParsed.unit) === ns(oCargoParsed.unit));
         if (sameUnit) {
           const diff = Math.abs(cargoParsed.qty - oCargoParsed.qty);
           const pct = cargoParsed.qty > 0 ? diff / cargoParsed.qty : 1;
@@ -6638,36 +6881,31 @@ const fareMatches = useMemo(() => {
           else if (diff <= 1) { score += 22; tags.push("화물유사"); }
           else if (diff <= 2 || pct <= 0.2) { score += 15; tags.push("화물유사"); }
           else if (pct <= 0.4) { score += 8; tags.push("화물근사"); }
-        } else {
-          // 단위가 다른데 같은 카테고리면 약간만
-          if (cargoParsed.unit && oCargoParsed.unit) score += 5;
-        }
-      } else if (normOCargo.includes(ns(cargo.replace(/\d+/g, "")))) {
-        // 수량 없이 종류만 맞음
-        score += 8;
-      }
+        } else if (cargoParsed.unit && oCargoParsed.unit) { score += 5; }
+      } else if (normOCargo.includes(ns(cargo.replace(/\d+/g, "")))) { score += 8; }
     }
 
-    // 3순위: 톤수 (최대 15pt)
+    // 톤수 (최대 15pt)
     if (ton && o.톤수) {
       if (ns(o.톤수) === ns(ton)) { score += 15; tags.push("톤수일치"); }
       else {
-        // 숫자만 비교
-        const tn = parseFloat(ton);
-        const otn = parseFloat(o.톤수);
-        if (!isNaN(tn) && !isNaN(otn) && Math.abs(tn - otn) / (tn || 1) <= 0.1) {
-          score += 8;
-        }
+        const tn = parseFloat(ton); const otn = parseFloat(o.톤수);
+        if (!isNaN(tn) && !isNaN(otn) && Math.abs(tn - otn) / (tn || 1) <= 0.1) score += 8;
       }
     }
 
-    const dateStr = o.상차일 || "";
-    results.push({ order: o, score, tags, dateStr, claim, drv });
+    candidates.push({ order: o, score, tags, dateStr: o.상차일 || "", claim, drv, isClientMatch });
   });
 
-  results.sort((a, b) => b.score !== a.score ? b.score - a.score : b.dateStr.localeCompare(a.dateStr));
-  return results.slice(0, 50);
-}, [orders, form.상차지명, form.하차지명, form.화물내용, form.톤수]);
+  if (candidates.length === 0) return [];
+
+  // 거래처 일치 이력이 있으면 1순위만, 없으면 전체
+  const tier1 = formClient ? candidates.filter(c => c.isClientMatch) : [];
+  const finalList = tier1.length > 0 ? tier1 : candidates;
+
+  finalList.sort((a, b) => b.score !== a.score ? b.score - a.score : b.dateStr.localeCompare(a.dateStr));
+  return finalList.slice(0, 50);
+}, [orders, form.상차지주소, form.하차지주소, form.차종, form.거래처명, form.화물내용, form.톤수]);
 
 const openContactPopup = (items) => {
   if (!items || items.length === 0) return;
@@ -7672,7 +7910,7 @@ const pickDrop = (c) => {
       </div>
 
       {/* ── 과거 운임 참고 버튼 ── */}
-      {(form.상차지명 || form.하차지명) && (
+      {(form.상차지주소 || form.하차지주소) && (
         <button
           type="button"
           onClick={() => setShowFareHistory(true)}
@@ -7958,11 +8196,13 @@ const pickDrop = (c) => {
                 <div>
                   <div className="text-white font-bold text-[16px]">운임 조회 결과</div>
                   <div className="text-white/60 text-[11px] mt-0.5 flex flex-wrap gap-1 items-center">
-                    {form.상차지명 && <span>{form.상차지명}</span>}
-                    {form.상차지명 && form.하차지명 && <span className="text-white/30">→</span>}
-                    {form.하차지명 && <span>{form.하차지명}</span>}
+                    {extractAreaFromAddr(form.상차지주소) && <span>{extractAreaFromAddr(form.상차지주소)}</span>}
+                    {extractAreaFromAddr(form.상차지주소) && extractAreaFromAddr(form.하차지주소) && <span className="text-white/30">→</span>}
+                    {extractAreaFromAddr(form.하차지주소) && <span>{extractAreaFromAddr(form.하차지주소)}</span>}
+                    {form.차종 && <><span className="text-white/30">·</span><span>{form.차종}</span></>}
                     {form.화물내용 && <><span className="text-white/30">·</span><span>{form.화물내용}</span></>}
                     {form.톤수 && <><span className="text-white/30">·</span><span>{form.톤수}</span></>}
+                    {form.거래처명 && fareMatches.some(r => r.isClientMatch) && <><span className="text-white/30">·</span><span className="text-yellow-300">{form.거래처명}</span></>}
                   </div>
                 </div>
                 <button onClick={() => setShowFareHistory(false)}
@@ -7975,16 +8215,15 @@ const pickDrop = (c) => {
                 const hasCargoInput = !!(form.화물내용 || "").trim();
                 const hasTonInput = !!(form.톤수 || "").trim();
                 const getLabel = (r) => {
-                  if (!r.tags.includes("경로일치")) return "참고";
                   const ce = r.tags.includes("화물일치");
                   const cp = r.tags.includes("화물유사");
                   const te = r.tags.includes("톤수일치");
                   if ((!hasCargoInput || ce) && (!hasTonInput || te)) return "완전일치";
                   if (ce || cp) return "부분일치";
                   if (te) return "톤수일치";
-                  return "경로일치";
+                  return "노선일치";
                 };
-                const counts = { "완전일치": 0, "부분일치": 0, "톤수일치": 0, "경로일치": 0, "참고": 0 };
+                const counts = { "완전일치": 0, "부분일치": 0, "톤수일치": 0, "노선일치": 0 };
                 fareMatches.forEach(r => { const l = getLabel(r); counts[l] = (counts[l] || 0) + 1; });
 
                 const visibleMatches = mobileFareFilter === "all"
@@ -7997,7 +8236,7 @@ const pickDrop = (c) => {
                 const fareRange = fareMax - fareMin || 1;
                 const getBarPct = (f) => fareRange > 0 ? Math.min(100, Math.max(0, ((f - fareMin) / fareRange) * 100)) : 50;
 
-                const tabs = ["all", "완전일치", "부분일치", "톤수일치", "경로일치"];
+                const tabs = ["all", "완전일치", "부분일치", "톤수일치", "노선일치"];
 
                 if (fareMatches.length === 0) return (
                   <div className="flex flex-col items-center justify-center py-16 gap-3 text-gray-400">
@@ -8081,17 +8320,14 @@ const pickDrop = (c) => {
                         const ce = r.tags.includes("화물일치");
                         const cp = r.tags.includes("화물유사");
                         const te = r.tags.includes("톤수일치");
-                        const hasRoute = r.tags.includes("경로일치");
-                        const tagLabel = !hasRoute ? "참고"
-                          : ((!hasCargoInput || ce) && (!hasTonInput || te)) ? "완전일치"
+                        const tagLabel = ((!hasCargoInput || ce) && (!hasTonInput || te)) ? "완전일치"
                           : (ce || cp) ? "부분일치"
                           : te ? "톤수일치"
-                          : "경로일치";
+                          : "노선일치";
                         const tagColor = tagLabel === "완전일치" ? "bg-[#1B2B4B] text-white"
                           : tagLabel === "부분일치" ? "bg-emerald-600 text-white"
                           : tagLabel === "톤수일치" ? "bg-gray-600 text-white"
-                          : tagLabel === "경로일치" ? "bg-blue-100 text-blue-700"
-                          : "bg-gray-100 text-gray-500";
+                          : "bg-blue-100 text-blue-700";
 
                         const fare = r.claim;
                         const barPct = fareRange > 0 ? Math.min(100, Math.max(0, ((fare - fareMin) / fareRange) * 100)) : 50;
