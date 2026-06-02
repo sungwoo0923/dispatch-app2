@@ -4769,7 +4769,10 @@ function CardAttachViewer({ order, onClose }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
-  const [saveStates, setSaveStates] = useState({});
+  const attachStorageKey = `saved_attach_${order._id || order.id}`;
+  const [saveStates, setSaveStates] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(attachStorageKey) || "{}"); } catch { return {}; }
+  });
   const [confirmItem, setConfirmItem] = useState(null);
 
   useEffect(() => {
@@ -4789,7 +4792,11 @@ function CardAttachViewer({ order, onClose }) {
       a.href = item.base64 || item.url;
       a.download = item.name || "attachment.jpg";
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
-      setSaveStates(prev => ({ ...prev, [item.id]: "success" }));
+      setSaveStates(prev => {
+        const next = { ...prev, [item.id]: "success" };
+        try { localStorage.setItem(attachStorageKey, JSON.stringify(next)); } catch {}
+        return next;
+      });
     } catch {
       setSaveStates(prev => ({ ...prev, [item.id]: "fail" }));
     }
@@ -5476,7 +5483,10 @@ function MobileOrderDetail({
   const [attachLoading, setAttachLoading] = useState(false);
   const [attachSelected, setAttachSelected] = useState(null);
   const [liveAttachCount, setLiveAttachCount] = useState(order.attachCount || 0);
-  const [attachSaveStates, setAttachSaveStates] = useState({});
+  const detailAttachStorageKey = `saved_attach_${order._id || order.id}`;
+  const [attachSaveStates, setAttachSaveStates] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(`saved_attach_${order._id || order.id}`) || "{}"); } catch { return {}; }
+  });
   const [attachConfirmItem, setAttachConfirmItem] = useState(null);
   const [showDetailFareHistory, setShowDetailFareHistory] = useState(false);
   const [detailFareFilter, setDetailFareFilter] = useState("all");
@@ -5721,7 +5731,11 @@ const pickupTimeText = order.상차시간
       a.href = item.base64 || item.url;
       a.download = item.name || "attachment.jpg";
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
-      setAttachSaveStates(prev => ({ ...prev, [item.id]: "success" }));
+      setAttachSaveStates(prev => {
+        const next = { ...prev, [item.id]: "success" };
+        try { localStorage.setItem(detailAttachStorageKey, JSON.stringify(next)); } catch {}
+        return next;
+      });
     } catch {
       setAttachSaveStates(prev => ({ ...prev, [item.id]: "fail" }));
     }
