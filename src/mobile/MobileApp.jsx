@@ -5492,6 +5492,20 @@ function MobileOrderDetail({
   const [detailFareFilter, setDetailFareFilter] = useState("all");
   const [detailFareDetailItem, setDetailFareDetailItem] = useState(null);
 
+  useEffect(() => {
+    if (showDetailFareHistory) {
+      document.body.style.overflow = "hidden";
+      document.body.style.overscrollBehavior = "none";
+    } else {
+      document.body.style.overflow = "";
+      document.body.style.overscrollBehavior = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+      document.body.style.overscrollBehavior = "";
+    };
+  }, [showDetailFareHistory]);
+
   const detailFareMatches = useMemo(() => {
     if (!orders || orders.length === 0) return [];
 
@@ -5589,8 +5603,11 @@ function MobileOrderDetail({
       // 상/하차지명 일치 보너스 (최대 20pt) — 같은 노선이 먼저 오도록
       const formPickupName = ns(order.상차지명 || "");
       const formDropName = ns(order.하차지명 || "");
-      if (formPickupName && ns(o.상차지명 || "").includes(formPickupName)) score += 10;
-      if (formDropName && ns(o.하차지명 || "").includes(formDropName)) score += 10;
+      const pickNameMatch = formPickupName && ns(o.상차지명 || "").includes(formPickupName);
+      const dropNameMatch = formDropName && ns(o.하차지명 || "").includes(formDropName);
+      if (pickNameMatch) score += 10;
+      if (dropNameMatch) score += 10;
+      if (pickNameMatch && dropNameMatch) tags.push("지명일치");
 
       // 톤수 (최대 15pt)
       const oTon = o.톤수 || o.차량톤수 || "";
@@ -6732,7 +6749,8 @@ const handleAssignClick = () => {
                   const ce = r.tags.includes("화물일치");
                   const cp = r.tags.includes("화물유사");
                   const te = r.tags.includes("톤수일치");
-                  if (ce && te) return "완전일치";
+                  const re = r.tags.includes("지명일치") || r.tags.includes("거래처일치");
+                  if (ce && te && re) return "완전일치";
                   if (ce || cp) return "부분일치";
                   if (te) return "톤수일치";
                   return "노선일치";
@@ -6822,7 +6840,8 @@ const handleAssignClick = () => {
                         const ce = r.tags.includes("화물일치");
                         const cp = r.tags.includes("화물유사");
                         const te = r.tags.includes("톤수일치");
-                        const tagLabel = (ce && te) ? "완전일치" : (ce || cp) ? "부분일치" : te ? "톤수일치" : "노선일치";
+                        const re = r.tags.includes("지명일치") || r.tags.includes("거래처일치");
+                        const tagLabel = (ce && te && re) ? "완전일치" : (ce || cp) ? "부분일치" : te ? "톤수일치" : "노선일치";
                         const tagColor = tagLabel === "완전일치" ? "bg-[#1B2B4B] text-white"
                           : tagLabel === "부분일치" ? "bg-emerald-600 text-white"
                           : tagLabel === "톤수일치" ? "bg-gray-600 text-white"
@@ -6888,13 +6907,24 @@ const handleAssignClick = () => {
                                 </div>
                               )}
                             </div>
-                            <button
-                              type="button"
-                              onClick={(e) => { e.stopPropagation(); goEditWithFare(r.claim, r.drv); }}
-                              className="w-full py-2.5 bg-[#1B2B4B] text-white text-[12px] font-bold text-center active:opacity-80 mt-0"
-                            >
-                              이 운임으로 수정 (청구 {r.claim.toLocaleString()} / 기사 {r.drv.toLocaleString()})
-                            </button>
+                            <div className="flex border-t border-gray-100 mt-0">
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); goEditWithFare(r.claim, null); }}
+                                className="flex-1 py-2.5 bg-[#1B2B4B] text-white text-[12px] font-bold text-center active:opacity-80"
+                              >
+                                청구운임 적용 ({r.claim.toLocaleString()})
+                              </button>
+                              {r.drv > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); goEditWithFare(r.claim, r.drv); }}
+                                  className="flex-1 py-2.5 bg-[#2d4a7a] text-white text-[12px] font-bold text-center active:opacity-80 border-l border-white/20"
+                                >
+                                  기사포함 ({r.drv.toLocaleString()})
+                                </button>
+                              )}
+                            </div>
                           </div>
                         );
                       })}
@@ -6983,12 +7013,22 @@ const handleAssignClick = () => {
               {(detailFareDetailItem.이름 || detailFareDetailItem.기사명) && (
                 <div className="text-[12px] text-gray-500">기사 <span className="font-semibold text-gray-700">{detailFareDetailItem.이름 || detailFareDetailItem.기사명}</span></div>
               )}
-              <button
-                onClick={() => goEditWithFare(Number(detailFareDetailItem.청구운임||0), Number(detailFareDetailItem.기사운임||0))}
-                className="w-full py-3 bg-[#1B2B4B] text-white font-bold rounded-xl text-[13px] active:opacity-80 mt-1"
-              >
-                이 운임으로 수정 (청구 {Number(detailFareDetailItem.청구운임||0).toLocaleString()} / 기사 {Number(detailFareDetailItem.기사운임||0).toLocaleString()})
-              </button>
+              <div className="flex gap-2 mt-1">
+                <button
+                  onClick={() => goEditWithFare(Number(detailFareDetailItem.청구운임||0), null)}
+                  className="flex-1 py-3 bg-[#1B2B4B] text-white font-bold rounded-xl text-[13px] active:opacity-80"
+                >
+                  청구운임 적용<br/><span className="text-[11px] font-normal">{Number(detailFareDetailItem.청구운임||0).toLocaleString()}원</span>
+                </button>
+                {Number(detailFareDetailItem.기사운임||0) > 0 && (
+                  <button
+                    onClick={() => goEditWithFare(Number(detailFareDetailItem.청구운임||0), Number(detailFareDetailItem.기사운임||0))}
+                    className="flex-1 py-3 bg-[#2d4a7a] text-white font-bold rounded-xl text-[13px] active:opacity-80"
+                  >
+                    기사포함 적용<br/><span className="text-[11px] font-normal">{Number(detailFareDetailItem.기사운임||0).toLocaleString()}원</span>
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -7132,6 +7172,20 @@ const [showFareHistory, setShowFareHistory] = useState(false);
 const [mobileFareFilter, setMobileFareFilter] = useState("all");
 const [fareDetailItem, setFareDetailItem] = useState(null);
 
+useEffect(() => {
+  if (showFareHistory) {
+    document.body.style.overflow = "hidden";
+    document.body.style.overscrollBehavior = "none";
+  } else {
+    document.body.style.overflow = "";
+    document.body.style.overscrollBehavior = "";
+  }
+  return () => {
+    document.body.style.overflow = "";
+    document.body.style.overscrollBehavior = "";
+  };
+}, [showFareHistory]);
+
 // ── 주소에서 지역 키워드 추출 ──
 const extractAreaFromAddr = (addr = "") => {
   const s = String(addr).trim();
@@ -7231,8 +7285,11 @@ const fareMatches = useMemo(() => {
     // 상/하차지명 일치 보너스 (최대 20pt) — 같은 노선이 먼저 오도록
     const formPickupName = ns(form.상차지명 || "");
     const formDropName = ns(form.하차지명 || "");
-    if (formPickupName && ns(o.상차지명 || "").includes(formPickupName)) score += 10;
-    if (formDropName && ns(o.하차지명 || "").includes(formDropName)) score += 10;
+    const pickNameMatch = formPickupName && ns(o.상차지명 || "").includes(formPickupName);
+    const dropNameMatch = formDropName && ns(o.하차지명 || "").includes(formDropName);
+    if (pickNameMatch) score += 10;
+    if (dropNameMatch) score += 10;
+    if (pickNameMatch && dropNameMatch) tags.push("지명일치");
 
     // 톤수 (최대 15pt)
     const oTon = o.톤수 || o.차량톤수 || "";
@@ -8568,7 +8625,8 @@ const pickDrop = (c) => {
                   const ce = r.tags.includes("화물일치");
                   const cp = r.tags.includes("화물유사");
                   const te = r.tags.includes("톤수일치");
-                  if ((!hasCargoInput || ce) && (!hasTonInput || te)) return "완전일치";
+                  const re = r.tags.includes("지명일치") || r.tags.includes("거래처일치");
+                  if ((!hasCargoInput || ce) && (!hasTonInput || te) && re) return "완전일치";
                   if (ce || cp) return "부분일치";
                   if (te) return "톤수일치";
                   return "노선일치";
@@ -8670,7 +8728,8 @@ const pickDrop = (c) => {
                         const ce = r.tags.includes("화물일치");
                         const cp = r.tags.includes("화물유사");
                         const te = r.tags.includes("톤수일치");
-                        const tagLabel = ((!hasCargoInput || ce) && (!hasTonInput || te)) ? "완전일치"
+                        const re = r.tags.includes("지명일치") || r.tags.includes("거래처일치");
+                        const tagLabel = ((!hasCargoInput || ce) && (!hasTonInput || te) && re) ? "완전일치"
                           : (ce || cp) ? "부분일치"
                           : te ? "톤수일치"
                           : "노선일치";
@@ -8743,18 +8802,33 @@ const pickDrop = (c) => {
                                 </div>
                               )}
                             </div>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                updateMoney("청구운임", String(r.claim));
-                                updateMoney("기사운임", String(r.drv));
-                                setShowFareHistory(false);
-                                showToast(`운임 적용: 청구 ${r.claim.toLocaleString()}원 / 기사 ${r.drv.toLocaleString()}원`);
-                              }}
-                              className="w-full py-2.5 bg-[#1B2B4B] text-white text-[12px] font-bold text-center active:opacity-80 mt-0"
-                            >
-                              이 운임 적용 (청구 {r.claim.toLocaleString()} / 기사 {r.drv.toLocaleString()})
-                            </button>
+                            <div className="flex border-t border-gray-100 mt-0">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  updateMoney("청구운임", String(r.claim));
+                                  setShowFareHistory(false);
+                                  showToast(`청구운임 적용: ${r.claim.toLocaleString()}원`);
+                                }}
+                                className="flex-1 py-2.5 bg-[#1B2B4B] text-white text-[12px] font-bold text-center active:opacity-80"
+                              >
+                                청구운임 적용 ({r.claim.toLocaleString()})
+                              </button>
+                              {r.drv > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    updateMoney("청구운임", String(r.claim));
+                                    updateMoney("기사운임", String(r.drv));
+                                    setShowFareHistory(false);
+                                    showToast(`운임 적용: 청구 ${r.claim.toLocaleString()}원 / 기사 ${r.drv.toLocaleString()}원`);
+                                  }}
+                                  className="flex-1 py-2.5 bg-[#2d4a7a] text-white text-[12px] font-bold text-center active:opacity-80 border-l border-white/20"
+                                >
+                                  기사포함 ({r.drv.toLocaleString()})
+                                </button>
+                              )}
+                            </div>
                           </div>
                         );
                       })}
@@ -8843,18 +8917,33 @@ const pickDrop = (c) => {
               {(fareDetailItem.이름 || fareDetailItem.기사명) && (
                 <div className="text-[12px] text-gray-500">기사 <span className="font-semibold text-gray-700">{fareDetailItem.이름 || fareDetailItem.기사명}</span></div>
               )}
-              <button
-                onClick={() => {
-                  updateMoney("청구운임", String(fareDetailItem.청구운임 || ""));
-                  updateMoney("기사운임", String(fareDetailItem.기사운임 || ""));
-                  setFareDetailItem(null);
-                  setShowFareHistory(false);
-                  showToast(`운임 적용: 청구 ${Number(fareDetailItem.청구운임||0).toLocaleString()}원 / 기사 ${Number(fareDetailItem.기사운임||0).toLocaleString()}원`);
-                }}
-                className="w-full py-3 bg-[#1B2B4B] text-white font-bold rounded-xl text-[13px] active:opacity-80 mt-1"
-              >
-                이 운임 적용 (청구 {Number(fareDetailItem.청구운임||0).toLocaleString()} / 기사 {Number(fareDetailItem.기사운임||0).toLocaleString()})
-              </button>
+              <div className="flex gap-2 mt-1">
+                <button
+                  onClick={() => {
+                    updateMoney("청구운임", String(fareDetailItem.청구운임 || ""));
+                    setFareDetailItem(null);
+                    setShowFareHistory(false);
+                    showToast(`청구운임 적용: ${Number(fareDetailItem.청구운임||0).toLocaleString()}원`);
+                  }}
+                  className="flex-1 py-3 bg-[#1B2B4B] text-white font-bold rounded-xl text-[13px] active:opacity-80"
+                >
+                  청구운임 적용<br/><span className="text-[11px] font-normal">{Number(fareDetailItem.청구운임||0).toLocaleString()}원</span>
+                </button>
+                {Number(fareDetailItem.기사운임||0) > 0 && (
+                  <button
+                    onClick={() => {
+                      updateMoney("청구운임", String(fareDetailItem.청구운임 || ""));
+                      updateMoney("기사운임", String(fareDetailItem.기사운임 || ""));
+                      setFareDetailItem(null);
+                      setShowFareHistory(false);
+                      showToast(`운임 적용: 청구 ${Number(fareDetailItem.청구운임||0).toLocaleString()}원 / 기사 ${Number(fareDetailItem.기사운임||0).toLocaleString()}원`);
+                    }}
+                    className="flex-1 py-3 bg-[#2d4a7a] text-white font-bold rounded-xl text-[13px] active:opacity-80"
+                  >
+                    기사포함 적용<br/><span className="text-[11px] font-normal">{Number(fareDetailItem.기사운임||0).toLocaleString()}원</span>
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
