@@ -5576,11 +5576,18 @@ function MobileOrderDetail({
         } else if (normOCargo.includes(ns(cargo.replace(/\d+/g, "")))) { score += 8; }
       }
 
+      // 상/하차지명 일치 보너스 (최대 20pt) — 같은 노선이 먼저 오도록
+      const formPickupName = ns(order.상차지명 || "");
+      const formDropName = ns(order.하차지명 || "");
+      if (formPickupName && ns(o.상차지명 || "").includes(formPickupName)) score += 10;
+      if (formDropName && ns(o.하차지명 || "").includes(formDropName)) score += 10;
+
       // 톤수 (최대 15pt)
-      if (ton && o.톤수) {
-        if (ns(o.톤수) === ns(ton)) { score += 15; tags.push("톤수일치"); }
+      const oTon = o.톤수 || o.차량톤수 || "";
+      if (ton && oTon) {
+        if (ns(oTon) === ns(ton)) { score += 15; tags.push("톤수일치"); }
         else {
-          const tn = parseFloat(ton); const otn = parseFloat(o.톤수);
+          const tn = parseFloat(ton); const otn = parseFloat(oTon);
           if (!isNaN(tn) && !isNaN(otn) && Math.abs(tn - otn) / (tn || 1) <= 0.1) score += 8;
         }
       }
@@ -5596,7 +5603,7 @@ function MobileOrderDetail({
 
     finalList.sort((a, b) => b.score !== a.score ? b.score - a.score : b.dateStr.localeCompare(a.dateStr));
     return finalList.slice(0, 50);
-  }, [orders, order.상차지주소, order.하차지주소, order.차종, order.차량종류, order.거래처명, order.화물내용, order.톤수, order.차량톤수, order.id]);
+  }, [orders, order.상차지주소, order.하차지주소, order.상차지명, order.하차지명, order.차종, order.차량종류, order.거래처명, order.화물내용, order.톤수, order.차량톤수, order.id]);
 
   const goEditWithFare = (claim, drv) => {
     setShowDetailFareHistory(false);
@@ -6705,7 +6712,7 @@ const handleAssignClick = () => {
                   className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white text-lg shrink-0">×</button>
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 overflow-y-auto overscroll-contain">
               {(() => {
                 const getLabel = (r) => {
                   const ce = r.tags.includes("화물일치");
@@ -7207,11 +7214,18 @@ const fareMatches = useMemo(() => {
       } else if (normOCargo.includes(ns(cargo.replace(/\d+/g, "")))) { score += 8; }
     }
 
+    // 상/하차지명 일치 보너스 (최대 20pt) — 같은 노선이 먼저 오도록
+    const formPickupName = ns(form.상차지명 || "");
+    const formDropName = ns(form.하차지명 || "");
+    if (formPickupName && ns(o.상차지명 || "").includes(formPickupName)) score += 10;
+    if (formDropName && ns(o.하차지명 || "").includes(formDropName)) score += 10;
+
     // 톤수 (최대 15pt)
-    if (ton && o.톤수) {
-      if (ns(o.톤수) === ns(ton)) { score += 15; tags.push("톤수일치"); }
+    const oTon = o.톤수 || o.차량톤수 || "";
+    if (ton && oTon) {
+      if (ns(oTon) === ns(ton)) { score += 15; tags.push("톤수일치"); }
       else {
-        const tn = parseFloat(ton); const otn = parseFloat(o.톤수);
+        const tn = parseFloat(ton); const otn = parseFloat(oTon);
         if (!isNaN(tn) && !isNaN(otn) && Math.abs(tn - otn) / (tn || 1) <= 0.1) score += 8;
       }
     }
@@ -7227,7 +7241,7 @@ const fareMatches = useMemo(() => {
 
   finalList.sort((a, b) => b.score !== a.score ? b.score - a.score : b.dateStr.localeCompare(a.dateStr));
   return finalList.slice(0, 50);
-}, [orders, form.상차지주소, form.하차지주소, form.차종, form.거래처명, form.화물내용, form.톤수]);
+}, [orders, form.상차지주소, form.하차지주소, form.상차지명, form.하차지명, form.차종, form.거래처명, form.화물내용, form.톤수]);
 
 const openContactPopup = (items) => {
   if (!items || items.length === 0) return;
@@ -8532,7 +8546,7 @@ const pickDrop = (c) => {
               </div>
             </div>
             {/* 콘텐츠 */}
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 overflow-y-auto overscroll-contain">
               {(() => {
                 const hasCargoInput = !!(form.화물내용 || "").trim();
                 const hasTonInput = !!(form.톤수 || "").trim();
