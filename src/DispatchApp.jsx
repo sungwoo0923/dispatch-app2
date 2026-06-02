@@ -15965,7 +15965,8 @@ const head = isDark
     화물수량: cargoNum,   // ✅ "케이스" → "케이스" (기존: "")
     화물타입: cargoType,  // ✅ "" (기존과 동일)
     톤수값:tonValue,
-    톤수타입:tonType
+    톤수타입:tonType,
+    수수료: toInt(row.청구운임) - toInt(row.기사운임),
   });
   setEditPopupOpen(true);
 }} className="px-3 py-1.5 rounded-lg bg-gray-600 text-white text-sm font-semibold shadow hover:opacity-90">선택수정</button>
@@ -19551,7 +19552,7 @@ if (editTarget.거래처명) {
               const ton = r.차량톤수 || "";
               const tonValue = ton.match(/[\d.]+/)?.[0] || "";
               const tonType = ton.includes("kg") ? "kg" : ton.includes("톤") ? "톤" : "";
-              setEditTarget({ ...r, 화물내용: raw, 화물수량: cargoNum, 화물타입: cargoType, 톤수값: tonValue, 톤수타입: tonType });
+              setEditTarget({ ...r, 화물내용: raw, 화물수량: cargoNum, 화물타입: cargoType, 톤수값: tonValue, 톤수타입: tonType, 수수료: (Number(r.청구운임) || 0) - (Number(r.기사운임) || 0) });
               setSelected(prev => prev.includes(r._id) ? prev : [...prev, r._id]);
               setEditPopupOpen(true);
               setContextMenu(null);
@@ -22891,6 +22892,7 @@ if (first) {
     화물타입: cargoType,    // ✅ ""
     톤수값: tonMatch ? tonMatch[1] : "",
     톤수타입: tonMatch ? tonMatch[2] : "",
+    수수료: (Number(latestFirst.청구운임) || 0) - (Number(latestFirst.기사운임) || 0),
   });
 
   setEditPopupOpen(true);
@@ -27529,7 +27531,7 @@ setCopyTarget(prev => ({
               const ton = r.차량톤수 || "";
               const tonValue = ton.match(/[\d.]+/)?.[0] || "";
               const tonType = ton.includes("kg") ? "kg" : ton.includes("톤") ? "톤" : "";
-              setEditTarget({ ...r, 화물내용: raw, 화물수량: cargoNum, 화물타입: cargoType, 톤수값: tonValue, 톤수타입: tonType });
+              setEditTarget({ ...r, 화물내용: raw, 화물수량: cargoNum, 화물타입: cargoType, 톤수값: tonValue, 톤수타입: tonType, 수수료: (Number(r.청구운임) || 0) - (Number(r.기사운임) || 0) });
               setSelected(prev => new Set([...prev, getId(r)]));
               setEditPopupOpen(true);
               setContextMenuDS(null);
