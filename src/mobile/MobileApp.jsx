@@ -5495,15 +5495,23 @@ function MobileOrderDetail({
   useEffect(() => {
     if (showDetailFareHistory) {
       document.body.style.overflow = "hidden";
+      document.documentElement.style.overscrollBehavior = "none";
       document.body.style.overscrollBehavior = "none";
+      const preventPTR = (e) => {
+        if (!e.target.closest("[data-fare-scroll]")) e.preventDefault();
+      };
+      document.addEventListener("touchmove", preventPTR, { passive: false });
+      return () => {
+        document.body.style.overflow = "";
+        document.documentElement.style.overscrollBehavior = "";
+        document.body.style.overscrollBehavior = "";
+        document.removeEventListener("touchmove", preventPTR);
+      };
     } else {
       document.body.style.overflow = "";
+      document.documentElement.style.overscrollBehavior = "";
       document.body.style.overscrollBehavior = "";
     }
-    return () => {
-      document.body.style.overflow = "";
-      document.body.style.overscrollBehavior = "";
-    };
   }, [showDetailFareHistory]);
 
   const detailFareMatches = useMemo(() => {
@@ -6707,9 +6715,9 @@ const handleAssignClick = () => {
 
       {/* ===== 상세보기 운임 조회 모달 ===== */}
       {showDetailFareHistory && (
-        <div className="fixed inset-0 z-[9999] flex flex-col justify-end">
-          <div className="absolute inset-0 bg-black/60" onClick={() => setShowDetailFareHistory(false)} />
-          <div className="relative bg-white rounded-t-3xl max-h-[92vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[9999] flex flex-col" style={{ background: "rgba(15,25,50,0.97)" }}>
+          <div className="flex-1 min-h-[56px]" onClick={() => setShowDetailFareHistory(false)} />
+          <div className="relative bg-white rounded-t-3xl flex flex-col" style={{ maxHeight: "calc(100dvh - 56px)" }} onClick={e => e.stopPropagation()}>
             <div className="flex justify-center pt-3 pb-0 shrink-0">
               <div className="w-10 h-1 rounded-full bg-gray-300" />
             </div>
@@ -6743,7 +6751,7 @@ const handleAssignClick = () => {
                   className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white text-lg shrink-0">×</button>
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto overscroll-contain">
+            <div className="flex-1 overflow-y-auto overscroll-contain" data-fare-scroll>
               {(() => {
                 const getLabel = (r) => {
                   const ce = r.tags.includes("화물일치");
@@ -7175,15 +7183,23 @@ const [fareDetailItem, setFareDetailItem] = useState(null);
 useEffect(() => {
   if (showFareHistory) {
     document.body.style.overflow = "hidden";
+    document.documentElement.style.overscrollBehavior = "none";
     document.body.style.overscrollBehavior = "none";
+    const preventPTR = (e) => {
+      if (!e.target.closest("[data-fare-scroll]")) e.preventDefault();
+    };
+    document.addEventListener("touchmove", preventPTR, { passive: false });
+    return () => {
+      document.body.style.overflow = "";
+      document.documentElement.style.overscrollBehavior = "";
+      document.body.style.overscrollBehavior = "";
+      document.removeEventListener("touchmove", preventPTR);
+    };
   } else {
     document.body.style.overflow = "";
+    document.documentElement.style.overscrollBehavior = "";
     document.body.style.overscrollBehavior = "";
   }
-  return () => {
-    document.body.style.overflow = "";
-    document.body.style.overscrollBehavior = "";
-  };
 }, [showFareHistory]);
 
 // ── 주소에서 지역 키워드 추출 ──
@@ -8590,9 +8606,9 @@ const pickDrop = (c) => {
       </div>
       {/* ===== 과거 운임 조회 모달 ===== */}
       {showFareHistory && (
-        <div className="fixed inset-0 z-[9999] flex flex-col justify-end">
-          <div className="absolute inset-0 bg-black/60" onClick={() => setShowFareHistory(false)} />
-          <div className="relative bg-white rounded-t-3xl max-h-[92vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[9999] flex flex-col" style={{ background: "rgba(15,25,50,0.97)" }}>
+          <div className="flex-1 min-h-[56px]" onClick={() => setShowFareHistory(false)} />
+          <div className="relative bg-white rounded-t-3xl flex flex-col" style={{ maxHeight: "calc(100dvh - 56px)" }} onClick={e => e.stopPropagation()}>
             {/* 핸들바 */}
             <div className="flex justify-center pt-3 pb-0 shrink-0">
               <div className="w-10 h-1 rounded-full bg-gray-300" />
@@ -8617,7 +8633,7 @@ const pickDrop = (c) => {
               </div>
             </div>
             {/* 콘텐츠 */}
-            <div className="flex-1 overflow-y-auto overscroll-contain">
+            <div className="flex-1 overflow-y-auto overscroll-contain" data-fare-scroll>
               {(() => {
                 const hasCargoInput = !!(form.화물내용 || "").trim();
                 const hasTonInput = !!(form.톤수 || "").trim();
