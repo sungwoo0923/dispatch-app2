@@ -6880,6 +6880,300 @@ const handleAssignClick = () => {
 // ======================= src/mobile/MobileApp.jsx (PART 3/3) =======================
 
 // ======================================================================
+// 스마트 오더 분석
+// ======================================================================
+function SmartOrderParser({ clients, onApply, onClose }) {
+  const [text, setText] = useState("");
+  const [result, setResult] = useState(null);
+  const [parsing, setParsing] = useState(false);
+
+  const normalize = (s) => String(s || "").replace(/\s+/g, "").toLowerCase();
+
+  const parseTime = (str) => {
+    if (!str) return null;
+    const ampm = str.match(/(오전|오후)\s*(\d{1,2})시(?:\s*(\d{1,2})분)?/);
+    if (ampm) {
+      let h = parseInt(ampm[2]);
+      const m = ampm[3] ? parseInt(ampm[3]) : 0;
+      if (ampm[1] === "오후" && h < 12) h += 12;
+      if (ampm[1] === "오전" && h === 12) h = 0;
+      return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+    }
+    const plain = str.match(/(\d{1,2})시(?:\s*(\d{1,2})분)?/);
+    if (plain) {
+      const h = parseInt(plain[1]);
+      const m = plain[2] ? parseInt(plain[2]) : 0;
+      return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+    }
+    return null;
+  };
+
+  const matchClientByAddress = (addr) => {
+    const normAddr = normalize(addr);
+    if (normAddr.length < 10) return null;
+    let best = null, bestScore = 0;
+    for (const c of clients) {
+      const ca = normalize(c.주소 || "");
+      if (ca.length < 8) continue;
+      let score = 0;
+      const minLen = Math.min(normAddr.length, ca.length);
+      for (let i = 0; i < minLen; i++) {
+        if (normAddr[i] === ca[i]) score++;
+        else break;
+      }
+      if (score > bestScore && score >= 8) { bestScore = score; best = c; }
+    }
+    return best;
+  };
+
+  const matchClientByName = (name) => {
+    if (!name || name.length < 2) return null;
+    const n = normalize(name);
+    return (
+      clients.find(c => normalize(c.거래처명 || "") === n) ||
+      clients.find(c => {
+        const cn = normalize(c.거래처명 || "");
+        return cn.length >= 2 && (n.includes(cn) || cn.includes(n));
+      }) ||
+      null
+    );
+  };
+
+  const extractClientInfo = (section, textBlock) => {
+    const addrPat = /(서울|부산|인천|대구|대전|광주|울산|세종|경기|강원|충북|충청북도|충남|충청남도|전북|전라북도|전남|전라남도|경북|경상북도|경남|경상남도|제주)[^\n]{5,60}/g;
+    const addrs = [...textBlock.matchAll(addrPat)].map(m => m[0].trim());
+    let client = addrs.length > 0 ? matchClientByAddress(addrs[0]) : null;
+
+    if (!client) {
+      const firstLine = section.split("\n")[0]
+        .replace(/[1-9]?\s*(?:상차지?|하차지?)[:：\s]*/gi, "").trim();
+      client = matchClientByName(firstLine);
+    }
+
+    const info = {};
+    if (client) {
+      info.name = client.거래처명;
+      info.addr = client.주소 || (addrs[0] || "");
+      // Match contact
+      const phonePat = section.match(/01[0-9][-\s]?\d{3,4}[-\s]?\d{4}/);
+      const contactPat = section.match(/([가-힣]{2,4})\s*(?:주임|팀장|대리|과장|부장|담당|매니저|실장|이사|사원|직원)/);
+      const contacts = Array.isArray(client.contacts) ? client.contacts : [];
+      let contact = null;
+      if (contactPat) contact = contacts.find(c => c.name && c.name.includes(contactPat[1]));
+      if (!contact && contacts.length > 0) contact = contacts[0];
+      if (contact) {
+        info.contact = contact.name || "";
+        info.contactPhone = contact.phone || (phonePat ? phonePat[0] : "");
+      } else {
+        if (contactPat) info.contact = contactPat[1];
+        if (phonePat) info.contactPhone = phonePat[0];
+      }
+    } else {
+      if (addrs[0]) info.addr = addrs[0];
+      const firstLine = section.split("\n")[0]
+        .replace(/[1-9]?\s*(?:상차지?|하차지?)[:：\s]*/gi, "").trim();
+      if (firstLine.length >= 2 && firstLine.length <= 20) info.name = firstLine;
+      const phonePat = section.match(/01[0-9][-\s]?\d{3,4}[-\s]?\d{4}/);
+      if (phonePat) info.contactPhone = phonePat[0];
+      const contactPat = section.match(/([가-힣]{2,4})\s*(?:주임|팀장|대리|과장|부장|담당|매니저|실장)/);
+      if (contactPat) info.contact = contactPat[1];
+    }
+    return info;
+  };
+
+  const parse = () => {
+    if (!text.trim()) return;
+    setParsing(true);
+    setTimeout(() => {
+      try {
+        const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
+        const res = {};
+
+        // ── Date ──
+        const datePat = text.match(/(?:(\d{4})년\s*)?(\d{1,2})월\s*(\d{1,2})일/);
+        if (datePat) {
+          const yr = datePat[1] ? parseInt(datePat[1]) : new Date().getFullYear();
+          res.상차일 = `${yr}-${String(parseInt(datePat[2])).padStart(2,"0")}-${String(parseInt(datePat[3])).padStart(2,"0")}`;
+        }
+
+        // ── Times ──
+        const pickupTimeRaw = text.match(/상차\s*시간?\s*[:：]\s*([^\n]+)/i);
+        if (pickupTimeRaw) {
+          const t = parseTime(pickupTimeRaw[1]);
+          if (t) res.상차시간 = t;
+        }
+        const dropTimeRaw = text.match(/하차\s*시간?\s*[:：]\s*([^\n]+)/i);
+        if (dropTimeRaw) {
+          const raw = dropTimeRaw[1];
+          const isNextDay = /익일|다음\s*날/.test(raw);
+          const t = parseTime(raw);
+          if (t) {
+            res.하차시간 = t;
+            if (/이전/.test(raw)) res.하차시간기준 = "이전";
+            if (isNextDay && res.상차일) {
+              const d = new Date(res.상차일);
+              d.setDate(d.getDate() + 1);
+              res.하차일 = d.toISOString().slice(0, 10);
+            }
+          }
+        }
+
+        // ── Vehicle ──
+        const vehicleMap = [
+          { p: /냉동/, v: "냉동탑" },
+          { p: /냉장/, v: "냉장탑" },
+          { p: /윙바디|윙\s*바디/, v: "윙바디" },
+          { p: /리프트/, v: "리프트카" },
+          { p: /카고|일반/, v: "카고" },
+        ];
+        for (const { p, v } of vehicleMap) {
+          if (p.test(text)) { res.차종 = v; break; }
+        }
+
+        // ── Weight / Ton ──
+        const kgM = text.match(/(\d+(?:\.\d+)?)\s*(?:KG|kg|킬로)/);
+        if (kgM) {
+          res.톤수 = `${kgM[1]}kg`;
+        } else {
+          const tonM = text.match(/(\d+(?:\.\d+)?)\s*(?:톤|t\b)/i);
+          if (tonM) res.톤수 = `${tonM[1]}톤`;
+        }
+
+        // ── Cargo ──
+        const palletM = text.match(/(\d+)\s*(?:파레트|파렛트|팔레트|pallet)/i);
+        if (palletM) {
+          res.화물내용 = `${palletM[1]}파레트`;
+        } else {
+          const boxM = text.match(/(\d+)\s*(?:박스|box)/i);
+          if (boxM) res.화물내용 = `${boxM[1]}박스`;
+        }
+
+        // ── Sections: split text at 상차 and 하차 markers ──
+        let pickupSection = "", dropSection = "";
+        let inPickup = false, inDrop = false;
+        for (const line of lines) {
+          if (/^[1-9]?\s*상차지?[:：]?$/.test(line) || /^[1-9]?\s*상차지?\s*[:：]/.test(line)) {
+            inPickup = true; inDrop = false;
+            pickupSection += line.replace(/^[1-9]?\s*상차지?\s*[:：]?\s*/, "") + "\n";
+          } else if (/^[1-9]?\s*하차지?[:：]?$/.test(line) || /^[1-9]?\s*하차지?\s*[:：]/.test(line)) {
+            inPickup = false; inDrop = true;
+            dropSection += line.replace(/^[1-9]?\s*하차지?\s*[:：]?\s*/, "") + "\n";
+          } else if (inPickup) {
+            pickupSection += line + "\n";
+          } else if (inDrop) {
+            dropSection += line + "\n";
+          }
+        }
+
+        if (pickupSection) {
+          const info = extractClientInfo(pickupSection, pickupSection);
+          if (info.name) res.상차지명 = info.name;
+          if (info.addr) res.상차지주소 = info.addr;
+          if (info.contact) res.상차지담당자 = info.contact;
+          if (info.contactPhone) res.상차지담당자번호 = info.contactPhone;
+        }
+        if (dropSection) {
+          const info = extractClientInfo(dropSection, dropSection);
+          if (info.name) res.하차지명 = info.name;
+          if (info.addr) res.하차지주소 = info.addr;
+          if (info.contact) res.하차지담당자 = info.contact;
+          if (info.contactPhone) res.하차지담당자번호 = info.contactPhone;
+        }
+
+        // Fallback: "하차지: 순수본" pattern
+        if (!res.하차지명) {
+          const m = text.match(/(?:하차지|도착지|하차\s*장소)\s*[:：]\s*([^\n\s☎]+)/);
+          if (m) {
+            const c = matchClientByName(m[1]);
+            res.하차지명 = c ? c.거래처명 : m[1].trim();
+            if (c) res.하차지주소 = c.주소;
+          }
+        }
+
+        setResult(res);
+      } catch (e) {
+        console.error(e);
+      }
+      setParsing(false);
+    }, 300);
+  };
+
+  const FIELD_LABELS = {
+    상차일: "상차일", 하차일: "하차일",
+    상차시간: "상차시간", 하차시간: "하차시간", 하차시간기준: "하차기준",
+    상차지명: "상차지", 상차지주소: "상차 주소",
+    상차지담당자: "상차 담당자", 상차지담당자번호: "상차 연락처",
+    하차지명: "하차지", 하차지주소: "하차 주소",
+    하차지담당자: "하차 담당자", 하차지담당자번호: "하차 연락처",
+    톤수: "톤수", 차종: "차종", 화물내용: "화물",
+  };
+
+  const hasResult = result && Object.keys(result).length > 0;
+
+  return (
+    <div className="fixed inset-0 z-[9999] flex flex-col" style={{ background: "rgba(15,25,50,0.97)" }}>
+      <div className="flex-1 min-h-[56px]" onClick={onClose} />
+      <div className="relative bg-white rounded-t-3xl flex flex-col" style={{ maxHeight: "calc(100dvh - 56px)" }} onClick={e => e.stopPropagation()}>
+        <div className="flex justify-center pt-3 pb-0 shrink-0">
+          <div className="w-10 h-1 rounded-full bg-gray-300" />
+        </div>
+        <div className="bg-[#1B2B4B] px-5 py-4 shrink-0">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-white font-bold text-[16px]">스마트 오더 분석</div>
+              <div className="text-white/60 text-[11px] mt-0.5">오더 내용을 붙여넣으면 자동으로 입력합니다</div>
+            </div>
+            <button onClick={onClose} className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white text-lg shrink-0">×</button>
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-4" data-fare-scroll>
+          <textarea
+            className="w-full border border-gray-200 rounded-2xl px-4 py-3 text-[13px] text-gray-800 resize-none focus:outline-none focus:border-[#1B2B4B] bg-gray-50"
+            rows={7}
+            placeholder={"오더 내용을 그대로 붙여넣으세요\n\n예:\n1.상차지\n반찬단지 물류센터\n인천 서구 북항로 28-29\n상차시간: 16시\n\n하차지: 순수본\n전라북도 익산시 왕궁면 무왕로 2182\n중량: 400KG / 1파렛트\n냉장차량"}
+            value={text}
+            onChange={e => { setText(e.target.value); setResult(null); }}
+          />
+          <button
+            onClick={parse}
+            disabled={!text.trim() || parsing}
+            className="w-full mt-3 py-3 rounded-2xl bg-[#1B2B4B] text-white text-[13px] font-bold active:opacity-80 disabled:opacity-40"
+          >
+            {parsing ? "분석 중..." : "분석하기"}
+          </button>
+
+          {hasResult && (
+            <div className="mt-4 space-y-2">
+              <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1">분석 결과</div>
+              <div className="bg-gray-50 rounded-2xl border border-gray-200 overflow-hidden">
+                {Object.entries(result).map(([key, val], i) => (
+                  <div key={key} className={`flex items-baseline gap-3 px-4 py-2.5 ${i > 0 ? "border-t border-gray-100" : ""}`}>
+                    <span className="text-[10px] font-bold text-gray-400 w-20 shrink-0">{FIELD_LABELS[key] || key}</span>
+                    <span className="text-[13px] font-semibold text-gray-800 flex-1">{val}</span>
+                  </div>
+                ))}
+              </div>
+              <button
+                onClick={() => { onApply(result); onClose(); }}
+                className="w-full mt-2 py-3 rounded-2xl bg-emerald-600 text-white text-[13px] font-bold active:opacity-80"
+              >
+                폼에 적용하기
+              </button>
+            </div>
+          )}
+
+          {result && !hasResult && (
+            <div className="mt-4 py-6 text-center text-gray-400 text-[13px]">
+              분석된 정보가 없습니다. 상차지/하차지 구분이 포함된 텍스트를 입력해주세요.
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ======================================================================
 // 등록 폼
 // ======================================================================
 function MobileOrderForm({
@@ -7011,6 +7305,7 @@ const saveStopSheet = () => {
 const [showFareHistory, setShowFareHistory] = useState(false);
 const [mobileFareFilter, setMobileFareFilter] = useState("all");
 const [fareDetailItem, setFareDetailItem] = useState(null);
+const [showSmartParser, setShowSmartParser] = useState(false);
 
 useEffect(() => {
   if (showFareHistory) {
@@ -7519,6 +7814,19 @@ const pickDrop = (c) => {
           음성으로 입력
         </button>
       )}
+
+      {/* 스마트 분석 버튼 */}
+      <button
+        type="button"
+        onClick={() => setShowSmartParser(true)}
+        className="w-full mb-4 py-2.5 rounded-2xl border border-gray-200 bg-white text-[12px] font-semibold text-gray-600 flex items-center justify-center gap-2 active:bg-gray-50"
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+          <line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/>
+        </svg>
+        스마트 오더 분석
+      </button>
 
       {/* 총운임 / 산재 */}
       <div className="grid grid-cols-2 border rounded-lg overflow-hidden bg-white shadow-sm">
@@ -9549,6 +9857,34 @@ const pickDrop = (c) => {
     </div>
   </div>
 )}
+
+      {showSmartParser && (
+        <SmartOrderParser
+          clients={clients || []}
+          onApply={(parsed) => {
+            setForm(prev => ({
+              ...prev,
+              ...(parsed.상차일 && { 상차일: parsed.상차일 }),
+              ...(parsed.하차일 && { 하차일: parsed.하차일 }),
+              ...(parsed.상차시간 && { 상차시간: parsed.상차시간 }),
+              ...(parsed.하차시간 && { 하차시간: parsed.하차시간 }),
+              ...(parsed.하차시간기준 && { 하차시간기준: parsed.하차시간기준 }),
+              ...(parsed.상차지명 && { 상차지명: parsed.상차지명 }),
+              ...(parsed.상차지주소 && { 상차지주소: parsed.상차지주소 }),
+              ...(parsed.상차지담당자 && { 상차지담당자: parsed.상차지담당자 }),
+              ...(parsed.상차지담당자번호 && { 상차지담당자번호: parsed.상차지담당자번호 }),
+              ...(parsed.하차지명 && { 하차지명: parsed.하차지명 }),
+              ...(parsed.하차지주소 && { 하차지주소: parsed.하차지주소 }),
+              ...(parsed.하차지담당자 && { 하차지담당자: parsed.하차지담당자 }),
+              ...(parsed.하차지담당자번호 && { 하차지담당자번호: parsed.하차지담당자번호 }),
+              ...(parsed.톤수 && { 톤수: parsed.톤수 }),
+              ...(parsed.차종 && { 차종: parsed.차종 }),
+              ...(parsed.화물내용 && { 화물내용: parsed.화물내용 }),
+            }));
+          }}
+          onClose={() => setShowSmartParser(false)}
+        />
+      )}
 
     </div>
   );
