@@ -325,25 +325,75 @@ export default function App() {
   if (loading || !splashDone) {
     return (
       <div
-        className="flex flex-col items-center justify-center h-screen"
-        style={{ backgroundColor: "#ffffff" }}
+        style={{
+          position: "fixed", inset: 0,
+          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+          background: "linear-gradient(160deg, #080f1e 0%, #1B2B4B 55%, #1e3660 100%)",
+          userSelect: "none", WebkitUserSelect: "none",
+        }}
       >
         <style>{`
-          @keyframes fadeInUp {
-            0%   { opacity: 0; transform: translateY(16px); }
-            100% { opacity: 1; transform: translateY(0); }
+          @keyframes splashBgPulse {
+            0%, 100% { opacity: 0.12; transform: scale(1); }
+            50% { opacity: 0.28; transform: scale(1.12); }
           }
-          .splash-logo { animation: fadeInUp 0.9s ease-out forwards; }
-          .splash-sub { animation: fadeInUp 0.9s ease-out 0.5s forwards; opacity: 0; }
+          @keyframes splashLogoIn {
+            0%   { opacity: 0; transform: scale(0.72) translateY(18px); }
+            65%  { opacity: 1; transform: scale(1.05) translateY(-3px); }
+            100% { opacity: 1; transform: scale(1) translateY(0); }
+          }
+          @keyframes splashLineIn {
+            0%   { opacity: 0; width: 0; }
+            100% { opacity: 1; width: 48px; }
+          }
+          @keyframes splashDotPulse {
+            0%, 100% { opacity: 0.25; transform: scale(0.75); }
+            50%       { opacity: 1;    transform: scale(1); }
+          }
+          .splash-glow {
+            position: absolute;
+            width: 340px; height: 340px; border-radius: 50%;
+            background: radial-gradient(circle, rgba(91,154,245,0.22) 0%, transparent 70%);
+            animation: splashBgPulse 2.8s ease-in-out infinite;
+            pointer-events: none;
+          }
+          .splash-logo-img {
+            animation: splashLogoIn 0.85s cubic-bezier(0.175, 0.885, 0.32, 1.275) 0.1s both;
+            filter: drop-shadow(0 6px 28px rgba(91,154,245,0.45));
+            pointer-events: none;
+            -webkit-user-drag: none;
+            user-drag: none;
+          }
+          .splash-line {
+            height: 2px; background: linear-gradient(90deg, transparent, rgba(91,154,245,0.6), transparent);
+            border-radius: 2px;
+            animation: splashLineIn 0.5s ease-out 0.75s both;
+          }
+          .splash-dot { width: 7px; height: 7px; border-radius: 50%; background: #5b9af5; }
+          .splash-dot-1 { animation: splashDotPulse 1.1s ease-in-out 1.0s infinite; }
+          .splash-dot-2 { animation: splashDotPulse 1.1s ease-in-out 1.2s infinite; }
+          .splash-dot-3 { animation: splashDotPulse 1.1s ease-in-out 1.4s infinite; }
         `}</style>
-        <img
-          src="/icons/sflow-logo.png"
-          alt="KP-Flow Logistics"
-          className="splash-logo"
-          style={{ width: "60vw", maxWidth: "320px" }}
-        />
-        <div className="splash-sub text-sm mt-4" style={{ color: "#aaaaaa" }}>
-          {loading ? "권한 확인 중..." : ""}
+
+        <div className="splash-glow" />
+
+        <div style={{ position: "relative", zIndex: 10, display: "flex", flexDirection: "column", alignItems: "center" }}>
+          <img
+            src="/icons/sflow-logo.png"
+            alt="KP-Flow Logistics"
+            draggable={false}
+            onDragStart={e => e.preventDefault()}
+            className="splash-logo-img"
+            style={{ width: "62vw", maxWidth: "260px" }}
+          />
+          <div className="splash-line" style={{ marginTop: "20px" }} />
+          {loading && (
+            <div style={{ display: "flex", gap: "9px", marginTop: "18px" }}>
+              <div className="splash-dot splash-dot-1" />
+              <div className="splash-dot splash-dot-2" />
+              <div className="splash-dot splash-dot-3" />
+            </div>
+          )}
         </div>
       </div>
     );

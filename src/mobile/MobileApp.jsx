@@ -5950,92 +5950,85 @@ const handleAssignClick = () => {
     </div>
 
     {/* 오더 정보 */}
-    <div className="px-4 py-3 border-b border-gray-100">
+    <div className="px-4 py-4 border-b border-gray-100">
       {/* 상차지 */}
-      <div className="flex gap-2 mb-2">
-        <span className="mt-0.5 w-5 h-5 rounded-full bg-blue-600 text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0">상</span>
-        <div className="flex-1 min-w-0">
-          <div className="text-[13px] font-bold text-gray-900">{order.상차지명 || "-"}</div>
-          {order.상차지주소 && (
-            <div className="flex items-start gap-1 mt-0.5">
-              <div className="text-[11px] flex-1 text-gray-500">{order.상차지주소}</div>
-              <button onClick={() => openMap("pickup")} className="shrink-0 px-1.5 py-0.5 rounded text-[10px] bg-blue-50 text-blue-600 border border-blue-200 whitespace-nowrap">지도</button>
-            </div>
-          )}
-          <div className="text-[11px] text-gray-400 mt-0.5">{상차일시 || "-"}</div>
-        </div>
+      <div className="flex flex-col items-center text-center mb-2">
+        <span className="w-6 h-6 rounded-full bg-blue-600 text-white text-[10px] font-bold flex items-center justify-center mb-1.5">상</span>
+        <div className="text-[14px] font-bold text-gray-900">{order.상차지명 || "-"}</div>
+        {order.상차지주소 && (
+          <div className="flex items-center gap-1 mt-0.5">
+            <div className="text-[11px] text-gray-500">{order.상차지주소}</div>
+            <button onClick={() => openMap("pickup")} className="shrink-0 px-1.5 py-0.5 rounded text-[10px] bg-blue-50 text-blue-600 border border-blue-200 whitespace-nowrap">지도</button>
+          </div>
+        )}
+        <div className="text-[11px] font-semibold text-blue-500 mt-1">{상차일시 || "-"}</div>
       </div>
       {validStops(order.경유상차목록 || order.경유지_상차).map((s, i) => (
-        <div key={i} className="flex gap-2 mb-1 ml-3">
-          <span className="mt-0.5 w-5 h-5 rounded-full bg-blue-300 text-white text-[9px] font-bold flex items-center justify-center flex-shrink-0">상{i+1}</span>
-          <div className="flex-1 min-w-0">
-            <div className="text-xs font-bold text-blue-700">{s.업체명 || "-"}</div>
-            {s.주소 && <div className="text-[11px] text-gray-400">{s.주소}</div>}
-            {s.담당자 && <div className="text-[11px] text-gray-500">{s.담당자}{s.담당자번호 ? ` · ${s.담당자번호}` : ""}</div>}
-            <div className="flex gap-2 mt-0.5 flex-wrap">
-              {s.화물내용 && <span className="text-[10px] text-orange-600 bg-orange-50 px-1 py-0.5 rounded">{s.화물내용}</span>}
-              {(s.차량톤수 || s.톤수값) && <span className="text-[10px] text-green-700 bg-green-50 px-1 py-0.5 rounded">{s.차량톤수 || s.톤수값}</span>}
-              {s.상차시간 && <span className="text-[10px] text-gray-500">{s.상차시간}</span>}
-            </div>
-            {s.메모 && <div className="text-[10px] text-gray-600 bg-gray-50 rounded px-1.5 py-0.5 mt-0.5">{s.메모}</div>}
+        <div key={i} className="flex flex-col items-center text-center mb-1">
+          <div className="w-px h-3 bg-blue-200 mb-1" />
+          <span className="w-5 h-5 rounded-full bg-blue-300 text-white text-[9px] font-bold flex items-center justify-center mb-1">상{i+1}</span>
+          <div className="text-xs font-bold text-blue-700">{s.업체명 || "-"}</div>
+          {s.주소 && <div className="text-[11px] text-gray-400">{s.주소}</div>}
+          {s.담당자 && <div className="text-[11px] text-gray-500">{s.담당자}{s.담당자번호 ? ` · ${s.담당자번호}` : ""}</div>}
+          <div className="flex gap-2 mt-0.5 flex-wrap justify-center">
+            {s.화물내용 && <span className="text-[10px] text-orange-600 bg-orange-50 px-1 py-0.5 rounded">{s.화물내용}</span>}
+            {(s.차량톤수 || s.톤수값) && <span className="text-[10px] text-green-700 bg-green-50 px-1 py-0.5 rounded">{s.차량톤수 || s.톤수값}</span>}
+            {s.상차시간 && <span className="text-[10px] text-gray-500">{s.상차시간}</span>}
           </div>
+          {s.메모 && <div className="text-[10px] text-gray-600 bg-gray-50 rounded px-1.5 py-0.5 mt-0.5">{s.메모}</div>}
         </div>
       ))}
-      <div className="ml-[10px] w-px h-3 bg-gray-200 mb-2" />
+      <div className="flex justify-center my-1"><div className="w-px h-5 bg-gray-200" /></div>
       {validStops(order.경유하차목록 || order.경유지_하차).map((s, i) => (
-        <div key={i} className="flex gap-2 mb-1 ml-3">
-          <span className="mt-0.5 w-5 h-5 rounded-full bg-gray-400 text-white text-[9px] font-bold flex items-center justify-center flex-shrink-0">하{i+1}</span>
-          <div className="flex-1 min-w-0">
-            <div className="text-xs font-bold text-gray-700">{s.업체명 || "-"}</div>
-            {s.주소 && <div className="text-[11px] text-gray-400">{s.주소}</div>}
-            {s.담당자 && <div className="text-[11px] text-gray-500">{s.담당자}{s.담당자번호 ? ` · ${s.담당자번호}` : ""}</div>}
-            <div className="flex gap-2 mt-0.5 flex-wrap">
-              {s.화물내용 && <span className="text-[10px] text-orange-600 bg-orange-50 px-1 py-0.5 rounded">{s.화물내용}</span>}
-              {(s.차량톤수 || s.톤수값) && <span className="text-[10px] text-green-700 bg-green-50 px-1 py-0.5 rounded">{s.차량톤수 || s.톤수값}</span>}
-              {s.하차시간 && <span className="text-[10px] text-gray-500">{s.하차시간}</span>}
-            </div>
-            {s.메모 && <div className="text-[10px] text-gray-600 bg-gray-50 rounded px-1.5 py-0.5 mt-0.5">{s.메모}</div>}
+        <div key={i} className="flex flex-col items-center text-center mb-1">
+          <span className="w-5 h-5 rounded-full bg-gray-400 text-white text-[9px] font-bold flex items-center justify-center mb-1">하{i+1}</span>
+          <div className="text-xs font-bold text-gray-700">{s.업체명 || "-"}</div>
+          {s.주소 && <div className="text-[11px] text-gray-400">{s.주소}</div>}
+          {s.담당자 && <div className="text-[11px] text-gray-500">{s.담당자}{s.담당자번호 ? ` · ${s.담당자번호}` : ""}</div>}
+          <div className="flex gap-2 mt-0.5 flex-wrap justify-center">
+            {s.화물내용 && <span className="text-[10px] text-orange-600 bg-orange-50 px-1 py-0.5 rounded">{s.화물내용}</span>}
+            {(s.차량톤수 || s.톤수값) && <span className="text-[10px] text-green-700 bg-green-50 px-1 py-0.5 rounded">{s.차량톤수 || s.톤수값}</span>}
+            {s.하차시간 && <span className="text-[10px] text-gray-500">{s.하차시간}</span>}
           </div>
+          {s.메모 && <div className="text-[10px] text-gray-600 bg-gray-50 rounded px-1.5 py-0.5 mt-0.5">{s.메모}</div>}
+          <div className="w-px h-3 bg-gray-200 mt-1" />
         </div>
       ))}
-      <div className="ml-[10px] w-px h-3 bg-gray-200 mb-2" />
       {/* 하차지 */}
-      <div className="flex gap-2 mb-3">
-        <span className="mt-0.5 w-5 h-5 rounded-full bg-gray-600 text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0">하</span>
-        <div className="flex-1 min-w-0">
-          <div className="text-[13px] font-bold text-gray-900">{order.하차지명 || "-"}</div>
-          {order.하차지주소 && (
-            <div className="flex items-start gap-1 mt-0.5">
-              <div className="text-[11px] flex-1 text-gray-500">{order.하차지주소}</div>
-              <button onClick={() => openMap("drop")} className="shrink-0 px-1.5 py-0.5 rounded text-[10px] bg-gray-100 text-gray-600 border border-gray-200 whitespace-nowrap">지도</button>
-            </div>
-          )}
-          <div className="text-[11px] text-gray-400 mt-0.5">{하차일시 || "-"}</div>
-        </div>
+      <div className="flex flex-col items-center text-center mt-0 mb-2">
+        <span className="w-6 h-6 rounded-full bg-gray-600 text-white text-[10px] font-bold flex items-center justify-center mb-1.5">하</span>
+        <div className="text-[14px] font-bold text-gray-900">{order.하차지명 || "-"}</div>
+        {order.하차지주소 && (
+          <div className="flex items-center gap-1 mt-0.5">
+            <div className="text-[11px] text-gray-500">{order.하차지주소}</div>
+            <button onClick={() => openMap("drop")} className="shrink-0 px-1.5 py-0.5 rounded text-[10px] bg-gray-100 text-gray-600 border border-gray-200 whitespace-nowrap">지도</button>
+          </div>
+        )}
+        <div className="text-[11px] font-semibold text-gray-500 mt-1">{하차일시 || "-"}</div>
       </div>
       {/* 차량/화물 정보 */}
       {((order.차량톤수 || order.톤수) || (order.차량종류 || order.차종) || order.화물내용 || order.혼적여부) && (
-        <div className="flex gap-3 pt-2.5 border-t border-gray-100">
+        <div className="flex justify-center gap-5 pt-3 border-t border-gray-100">
           {(order.차량톤수 || order.톤수) && (
-            <div className="flex-1 min-w-0">
+            <div className="text-center">
               <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">톤수</div>
               <div className="text-[12px] font-semibold text-gray-700">{order.차량톤수 || order.톤수}</div>
             </div>
           )}
           {(order.차량종류 || order.차종) && (
-            <div className="flex-1 min-w-0">
+            <div className="text-center">
               <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">차종</div>
               <div className="text-[12px] font-semibold text-gray-700">{order.차량종류 || order.차종}</div>
             </div>
           )}
           {order.화물내용 && (
-            <div className="flex-1 min-w-0">
+            <div className="text-center">
               <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">화물</div>
               <div className="text-[12px] font-semibold text-gray-700">{order.화물내용}</div>
             </div>
           )}
           {order.혼적여부 && order.혼적여부 !== "독차" && (
-            <div className="flex-1 min-w-0">
+            <div className="text-center">
               <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">혼적</div>
               <div className="text-[12px] font-semibold text-gray-700">{order.혼적여부}</div>
             </div>
@@ -6165,21 +6158,24 @@ const handleAssignClick = () => {
         <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B2B4B]" placeholder="기사 연락처" value={phone} onChange={e => setPhone(e.target.value)} />
       </div>
       {phone && (
-        <div className="grid grid-cols-2 gap-2 mb-3">
-          <a href={`tel:${normalizePhone(phone)}`} className="py-2.5 rounded-xl bg-[#1B2B4B] text-white text-xs font-bold text-center">전화</a>
-          <a href={`sms:${normalizePhone(phone)}`} className="py-2.5 rounded-xl border border-[#1B2B4B] text-[#1B2B4B] text-xs font-bold text-center">문자</a>
+        <div className="grid grid-cols-2 gap-2 mb-2">
+          <a href={`tel:${normalizePhone(phone)}`} className="py-2.5 rounded-xl bg-[#1B2B4B] text-white text-xs font-bold text-center flex items-center justify-center gap-1.5">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.38 2 2 0 0 1 3.6 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.59a16 16 0 0 0 6 6l.96-.96a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21.7 16z"/></svg>
+            전화
+          </a>
+          <a href={`sms:${normalizePhone(phone)}`} className="py-2.5 rounded-xl border border-[#1B2B4B] text-[#1B2B4B] text-xs font-bold text-center flex items-center justify-center gap-1.5">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            문자
+          </a>
         </div>
       )}
       {state !== "배차완료" ? (
-        <button onClick={handleAssignClick} className="w-full py-3 rounded-xl bg-[#1B2B4B] text-white text-sm font-bold">기사 배차하기</button>
+        <button onClick={handleAssignClick} className="w-full py-3 mb-2 rounded-xl bg-[#1B2B4B] text-white text-sm font-bold">기사 배차하기</button>
       ) : (
-        <button onClick={onCancelAssign} className="w-full py-3 rounded-xl border border-red-300 text-red-500 text-sm font-bold">기사 배차 취소</button>
+        <button onClick={onCancelAssign} className="w-full py-3 mb-2 rounded-xl border border-red-300 text-red-500 text-sm font-bold">기사 배차 취소</button>
       )}
-    </div>
-
-    {/* 오더 관리 */}
-    <div className="px-4 py-3">
-      <div className="grid grid-cols-3 gap-2">
+      <div className="h-px bg-gray-100 my-1" />
+      <div className="grid grid-cols-2 gap-2 mt-2">
         <button
           onClick={() => {
             const _pendingContactItems = [];
@@ -6945,7 +6941,9 @@ function SmartOrderParser({ clients, onApply, onClose }) {
       info.addr = client.주소 || (addrs[0] || "");
       // Match contact
       const phonePat = section.match(/01[0-9][-\s]?\d{3,4}[-\s]?\d{4}/);
-      const contactPat = section.match(/([가-힣]{2,4})\s*(?:주임|팀장|대리|과장|부장|담당|매니저|실장|이사|사원|직원)/);
+      const contactWithTitle = section.match(/([가-힣]{2,4})\s*(?:주임|팀장|대리|과장|부장|담당|매니저|실장|이사|사원|직원)/);
+      const contactWithPhone = section.match(/([가-힣]{2,4})\s+01[0-9]/);
+      const contactPat = contactWithTitle || contactWithPhone;
       const contacts = Array.isArray(client.contacts) ? client.contacts : [];
       let contact = null;
       if (contactPat) contact = contacts.find(c => c.name && c.name.includes(contactPat[1]));
@@ -6959,13 +6957,16 @@ function SmartOrderParser({ clients, onApply, onClose }) {
       }
     } else {
       if (addrs[0]) info.addr = addrs[0];
-      const firstLine = section.split("\n")[0]
-        .replace(/[1-9]?\s*(?:상차지?|하차지?)[:：\s]*/gi, "").trim();
-      if (firstLine.length >= 2 && firstLine.length <= 20) info.name = firstLine;
+      const firstLine = section.split("\n").map(l => l.trim()).find(l =>
+        l.length >= 2 && l.length <= 20 && /[가-힣]/.test(l) && !/^(서울|부산|인천|대구|대전|광주|울산|세종|경기|강원|충|전|경|제주)/.test(l)
+      ) || "";
+      if (firstLine) info.name = firstLine;
       const phonePat = section.match(/01[0-9][-\s]?\d{3,4}[-\s]?\d{4}/);
       if (phonePat) info.contactPhone = phonePat[0];
-      const contactPat = section.match(/([가-힣]{2,4})\s*(?:주임|팀장|대리|과장|부장|담당|매니저|실장)/);
-      if (contactPat) info.contact = contactPat[1];
+      const contactWithTitle2 = section.match(/([가-힣]{2,4})\s*(?:주임|팀장|대리|과장|부장|담당|매니저|실장)/);
+      const contactWithPhone2 = section.match(/([가-힣]{2,4})\s+01[0-9]/);
+      const contact2 = contactWithTitle2 || contactWithPhone2;
+      if (contact2) info.contact = contact2[1];
     }
     return info;
   };
@@ -7020,9 +7021,9 @@ function SmartOrderParser({ clients, onApply, onClose }) {
         }
 
         // ── Weight / Ton ──
-        const kgM = text.match(/(\d+(?:\.\d+)?)\s*(?:KG|kg|킬로)/);
+        const kgM = text.match(/([\d,]+(?:\.\d+)?)\s*(?:KG|kg|킬로)/);
         if (kgM) {
-          res.톤수 = `${kgM[1]}kg`;
+          res.톤수 = `${kgM[1].replace(/,/g, "")}kg`;
         } else {
           const tonM = text.match(/(\d+(?:\.\d+)?)\s*(?:톤|t\b)/i);
           if (tonM) res.톤수 = `${tonM[1]}톤`;
@@ -7038,15 +7039,16 @@ function SmartOrderParser({ clients, onApply, onClose }) {
         }
 
         // ── Sections: split text at 상차 and 하차 markers ──
+        // handles: "상차지", "1.상차지", "1)상차지", "1. 상차지:", etc.
         let pickupSection = "", dropSection = "";
         let inPickup = false, inDrop = false;
         for (const line of lines) {
-          if (/^[1-9]?\s*상차지?[:：]?$/.test(line) || /^[1-9]?\s*상차지?\s*[:：]/.test(line)) {
+          if (/^[1-9]?[.)]*\s*상차지?\s*[:：]?\s*$/.test(line) || /^[1-9]?[.)]*\s*상차지?\s*[:：]\s*/.test(line)) {
             inPickup = true; inDrop = false;
-            pickupSection += line.replace(/^[1-9]?\s*상차지?\s*[:：]?\s*/, "") + "\n";
-          } else if (/^[1-9]?\s*하차지?[:：]?$/.test(line) || /^[1-9]?\s*하차지?\s*[:：]/.test(line)) {
+            pickupSection += line.replace(/^[1-9]?[.)]*\s*상차지?\s*[:：]?\s*/, "") + "\n";
+          } else if (/^[1-9]?[.)]*\s*하차지?\s*[:：]?\s*$/.test(line) || /^[1-9]?[.)]*\s*하차지?\s*[:：]\s*/.test(line)) {
             inPickup = false; inDrop = true;
-            dropSection += line.replace(/^[1-9]?\s*하차지?\s*[:：]?\s*/, "") + "\n";
+            dropSection += line.replace(/^[1-9]?[.)]*\s*하차지?\s*[:：]?\s*/, "") + "\n";
           } else if (inPickup) {
             pickupSection += line + "\n";
           } else if (inDrop) {
