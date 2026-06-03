@@ -384,7 +384,7 @@ export default function App() {
             draggable={false}
             onDragStart={e => e.preventDefault()}
             className="splash-logo-img"
-            style={{ width: "62vw", maxWidth: "260px" }}
+            style={{ width: "62vw", maxWidth: "260px", mixBlendMode: "screen" }}
           />
           <div className="splash-line" style={{ marginTop: "20px" }} />
           {loading && (

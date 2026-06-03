@@ -5950,65 +5950,72 @@ const handleAssignClick = () => {
     </div>
 
     {/* 오더 정보 */}
-    <div className="px-4 py-4 border-b border-gray-100">
+    <div className="px-4 py-3 border-b border-gray-100">
       {/* 상차지 */}
-      <div className="flex flex-col items-center text-center mb-2">
-        <span className="w-6 h-6 rounded-full bg-blue-600 text-white text-[10px] font-bold flex items-center justify-center mb-1.5">상</span>
-        <div className="text-[14px] font-bold text-gray-900">{order.상차지명 || "-"}</div>
-        {order.상차지주소 && (
-          <div className="flex items-center gap-1 mt-0.5">
-            <div className="text-[11px] text-gray-500">{order.상차지주소}</div>
-            <button onClick={() => openMap("pickup")} className="shrink-0 px-1.5 py-0.5 rounded text-[10px] bg-blue-50 text-blue-600 border border-blue-200 whitespace-nowrap">지도</button>
-          </div>
-        )}
-        <div className="text-[11px] font-semibold text-blue-500 mt-1">{상차일시 || "-"}</div>
+      <div className="flex gap-2 mb-2">
+        <span className="mt-0.5 w-5 h-5 rounded-full bg-blue-600 text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0">상</span>
+        <div className="flex-1 min-w-0">
+          <div className="text-[13px] font-bold text-gray-900">{order.상차지명 || "-"}</div>
+          {order.상차지주소 && (
+            <div className="flex items-start gap-1 mt-0.5">
+              <div className="text-[11px] flex-1 text-gray-500">{order.상차지주소}</div>
+              <button onClick={() => openMap("pickup")} className="shrink-0 px-1.5 py-0.5 rounded text-[10px] bg-blue-50 text-blue-600 border border-blue-200 whitespace-nowrap">지도</button>
+            </div>
+          )}
+          <div className="text-[11px] text-gray-400 mt-0.5">{상차일시 || "-"}</div>
+        </div>
       </div>
       {validStops(order.경유상차목록 || order.경유지_상차).map((s, i) => (
-        <div key={i} className="flex flex-col items-center text-center mb-1">
-          <div className="w-px h-3 bg-blue-200 mb-1" />
-          <span className="w-5 h-5 rounded-full bg-blue-300 text-white text-[9px] font-bold flex items-center justify-center mb-1">상{i+1}</span>
-          <div className="text-xs font-bold text-blue-700">{s.업체명 || "-"}</div>
-          {s.주소 && <div className="text-[11px] text-gray-400">{s.주소}</div>}
-          {s.담당자 && <div className="text-[11px] text-gray-500">{s.담당자}{s.담당자번호 ? ` · ${s.담당자번호}` : ""}</div>}
-          <div className="flex gap-2 mt-0.5 flex-wrap justify-center">
-            {s.화물내용 && <span className="text-[10px] text-orange-600 bg-orange-50 px-1 py-0.5 rounded">{s.화물내용}</span>}
-            {(s.차량톤수 || s.톤수값) && <span className="text-[10px] text-green-700 bg-green-50 px-1 py-0.5 rounded">{s.차량톤수 || s.톤수값}</span>}
-            {s.상차시간 && <span className="text-[10px] text-gray-500">{s.상차시간}</span>}
+        <div key={i} className="flex gap-2 mb-1 ml-3">
+          <span className="mt-0.5 w-5 h-5 rounded-full bg-blue-300 text-white text-[9px] font-bold flex items-center justify-center flex-shrink-0">상{i+1}</span>
+          <div className="flex-1 min-w-0">
+            <div className="text-xs font-bold text-blue-700">{s.업체명 || "-"}</div>
+            {s.주소 && <div className="text-[11px] text-gray-400">{s.주소}</div>}
+            {s.담당자 && <div className="text-[11px] text-gray-500">{s.담당자}{s.담당자번호 ? ` · ${s.담당자번호}` : ""}</div>}
+            <div className="flex gap-2 mt-0.5 flex-wrap">
+              {s.화물내용 && <span className="text-[10px] text-orange-600 bg-orange-50 px-1 py-0.5 rounded">{s.화물내용}</span>}
+              {(s.차량톤수 || s.톤수값) && <span className="text-[10px] text-green-700 bg-green-50 px-1 py-0.5 rounded">{s.차량톤수 || s.톤수값}</span>}
+              {s.상차시간 && <span className="text-[10px] text-gray-500">{s.상차시간}</span>}
+            </div>
+            {s.메모 && <div className="text-[10px] text-gray-600 bg-gray-50 rounded px-1.5 py-0.5 mt-0.5">{s.메모}</div>}
           </div>
-          {s.메모 && <div className="text-[10px] text-gray-600 bg-gray-50 rounded px-1.5 py-0.5 mt-0.5">{s.메모}</div>}
         </div>
       ))}
-      <div className="flex justify-center my-1"><div className="w-px h-5 bg-gray-200" /></div>
+      <div className="ml-[10px] w-px h-3 bg-gray-200 mb-2" />
       {validStops(order.경유하차목록 || order.경유지_하차).map((s, i) => (
-        <div key={i} className="flex flex-col items-center text-center mb-1">
-          <span className="w-5 h-5 rounded-full bg-gray-400 text-white text-[9px] font-bold flex items-center justify-center mb-1">하{i+1}</span>
-          <div className="text-xs font-bold text-gray-700">{s.업체명 || "-"}</div>
-          {s.주소 && <div className="text-[11px] text-gray-400">{s.주소}</div>}
-          {s.담당자 && <div className="text-[11px] text-gray-500">{s.담당자}{s.담당자번호 ? ` · ${s.담당자번호}` : ""}</div>}
-          <div className="flex gap-2 mt-0.5 flex-wrap justify-center">
-            {s.화물내용 && <span className="text-[10px] text-orange-600 bg-orange-50 px-1 py-0.5 rounded">{s.화물내용}</span>}
-            {(s.차량톤수 || s.톤수값) && <span className="text-[10px] text-green-700 bg-green-50 px-1 py-0.5 rounded">{s.차량톤수 || s.톤수값}</span>}
-            {s.하차시간 && <span className="text-[10px] text-gray-500">{s.하차시간}</span>}
+        <div key={i} className="flex gap-2 mb-1 ml-3">
+          <span className="mt-0.5 w-5 h-5 rounded-full bg-gray-400 text-white text-[9px] font-bold flex items-center justify-center flex-shrink-0">하{i+1}</span>
+          <div className="flex-1 min-w-0">
+            <div className="text-xs font-bold text-gray-700">{s.업체명 || "-"}</div>
+            {s.주소 && <div className="text-[11px] text-gray-400">{s.주소}</div>}
+            {s.담당자 && <div className="text-[11px] text-gray-500">{s.담당자}{s.담당자번호 ? ` · ${s.담당자번호}` : ""}</div>}
+            <div className="flex gap-2 mt-0.5 flex-wrap">
+              {s.화물내용 && <span className="text-[10px] text-orange-600 bg-orange-50 px-1 py-0.5 rounded">{s.화물내용}</span>}
+              {(s.차량톤수 || s.톤수값) && <span className="text-[10px] text-green-700 bg-green-50 px-1 py-0.5 rounded">{s.차량톤수 || s.톤수값}</span>}
+              {s.하차시간 && <span className="text-[10px] text-gray-500">{s.하차시간}</span>}
+            </div>
+            {s.메모 && <div className="text-[10px] text-gray-600 bg-gray-50 rounded px-1.5 py-0.5 mt-0.5">{s.메모}</div>}
           </div>
-          {s.메모 && <div className="text-[10px] text-gray-600 bg-gray-50 rounded px-1.5 py-0.5 mt-0.5">{s.메모}</div>}
-          <div className="w-px h-3 bg-gray-200 mt-1" />
         </div>
       ))}
+      <div className="ml-[10px] w-px h-3 bg-gray-200 mb-2" />
       {/* 하차지 */}
-      <div className="flex flex-col items-center text-center mt-0 mb-2">
-        <span className="w-6 h-6 rounded-full bg-gray-600 text-white text-[10px] font-bold flex items-center justify-center mb-1.5">하</span>
-        <div className="text-[14px] font-bold text-gray-900">{order.하차지명 || "-"}</div>
-        {order.하차지주소 && (
-          <div className="flex items-center gap-1 mt-0.5">
-            <div className="text-[11px] text-gray-500">{order.하차지주소}</div>
-            <button onClick={() => openMap("drop")} className="shrink-0 px-1.5 py-0.5 rounded text-[10px] bg-gray-100 text-gray-600 border border-gray-200 whitespace-nowrap">지도</button>
-          </div>
-        )}
-        <div className="text-[11px] font-semibold text-gray-500 mt-1">{하차일시 || "-"}</div>
+      <div className="flex gap-2 mb-3">
+        <span className="mt-0.5 w-5 h-5 rounded-full bg-gray-600 text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0">하</span>
+        <div className="flex-1 min-w-0">
+          <div className="text-[13px] font-bold text-gray-900">{order.하차지명 || "-"}</div>
+          {order.하차지주소 && (
+            <div className="flex items-start gap-1 mt-0.5">
+              <div className="text-[11px] flex-1 text-gray-500">{order.하차지주소}</div>
+              <button onClick={() => openMap("drop")} className="shrink-0 px-1.5 py-0.5 rounded text-[10px] bg-gray-100 text-gray-600 border border-gray-200 whitespace-nowrap">지도</button>
+            </div>
+          )}
+          <div className="text-[11px] text-gray-400 mt-0.5">{하차일시 || "-"}</div>
+        </div>
       </div>
       {/* 차량/화물 정보 */}
       {((order.차량톤수 || order.톤수) || (order.차량종류 || order.차종) || order.화물내용 || order.혼적여부) && (
-        <div className="flex justify-center gap-5 pt-3 border-t border-gray-100">
+        <div className="flex justify-center gap-5 pt-2.5 border-t border-gray-100">
           {(order.차량톤수 || order.톤수) && (
             <div className="text-center">
               <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">톤수</div>
