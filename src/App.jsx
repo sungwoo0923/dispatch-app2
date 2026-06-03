@@ -328,14 +328,14 @@ export default function App() {
         style={{
           position: "fixed", inset: 0,
           display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-          background: "linear-gradient(160deg, #080f1e 0%, #1B2B4B 55%, #1e3660 100%)",
+          background: "linear-gradient(160deg, #0e2550 0%, #1e4a8a 50%, #163a6e 100%)",
           userSelect: "none", WebkitUserSelect: "none",
         }}
       >
         <style>{`
           @keyframes splashBgPulse {
-            0%, 100% { opacity: 0.12; transform: scale(1); }
-            50% { opacity: 0.28; transform: scale(1.12); }
+            0%, 100% { opacity: 0.18; transform: scale(1); }
+            50% { opacity: 0.38; transform: scale(1.12); }
           }
           @keyframes splashLogoIn {
             0%   { opacity: 0; transform: scale(0.72) translateY(18px); }
@@ -352,24 +352,24 @@ export default function App() {
           }
           .splash-glow {
             position: absolute;
-            width: 340px; height: 340px; border-radius: 50%;
-            background: radial-gradient(circle, rgba(91,154,245,0.22) 0%, transparent 70%);
+            width: 380px; height: 380px; border-radius: 50%;
+            background: radial-gradient(circle, rgba(120,180,255,0.3) 0%, transparent 70%);
             animation: splashBgPulse 2.8s ease-in-out infinite;
             pointer-events: none;
           }
           .splash-logo-img {
             animation: splashLogoIn 0.85s cubic-bezier(0.175, 0.885, 0.32, 1.275) 0.1s both;
-            filter: drop-shadow(0 6px 28px rgba(91,154,245,0.45));
+            filter: drop-shadow(0 0 18px rgba(180,220,255,0.6)) drop-shadow(0 4px 12px rgba(0,0,0,0.5)) brightness(1.15) contrast(1.1);
             pointer-events: none;
             -webkit-user-drag: none;
             user-drag: none;
           }
           .splash-line {
-            height: 2px; background: linear-gradient(90deg, transparent, rgba(91,154,245,0.6), transparent);
+            height: 2px; background: linear-gradient(90deg, transparent, rgba(120,190,255,0.7), transparent);
             border-radius: 2px;
             animation: splashLineIn 0.5s ease-out 0.75s both;
           }
-          .splash-dot { width: 7px; height: 7px; border-radius: 50%; background: #5b9af5; }
+          .splash-dot { width: 7px; height: 7px; border-radius: 50%; background: #7ab8ff; }
           .splash-dot-1 { animation: splashDotPulse 1.1s ease-in-out 1.0s infinite; }
           .splash-dot-2 { animation: splashDotPulse 1.1s ease-in-out 1.2s infinite; }
           .splash-dot-3 { animation: splashDotPulse 1.1s ease-in-out 1.4s infinite; }
