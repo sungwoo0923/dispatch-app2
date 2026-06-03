@@ -950,41 +950,9 @@ collections.forEach((name) => {
   return () => unsubs.forEach((u) => u());
 }, [refreshKey]);
 useEffect(() => {
-  const handleTouchStart = (e) => {
-    if (document.body.style.overflow === "hidden") return;
-    if (window.scrollY === 0) {
-      pullStartYRef.current = e.touches[0].clientY;
-    }
-  };
-
-  const handleTouchMove = (e) => {
-    if (document.body.style.overflow === "hidden") return;
-    if (window.scrollY !== 0) return;
-    const diff = e.touches[0].clientY - pullStartYRef.current;
-    if (diff > 0) {
-      pullDistanceRef.current = diff;
-    }
-  };
-
-  const handleTouchEnd = () => {
-    if (document.body.style.overflow === "hidden") {
-      pullDistanceRef.current = 0;
-      return;
-    }
-    if (pullDistanceRef.current > 80) {
-      handleRefresh();
-    }
-    pullDistanceRef.current = 0;
-  };
-
-  window.addEventListener("touchstart", handleTouchStart);
-  window.addEventListener("touchmove", handleTouchMove);
-  window.addEventListener("touchend", handleTouchEnd);
-
+  // pull-to-refresh is disabled — keep refs clean only
   return () => {
-    window.removeEventListener("touchstart", handleTouchStart);
-    window.removeEventListener("touchmove", handleTouchMove);
-    window.removeEventListener("touchend", handleTouchEnd);
+    pullDistanceRef.current = 0;
   };
 }, []);
   // --------------------------------------------------
@@ -3578,7 +3546,7 @@ function MobileSalesPage({ data = [], onBack }) {
 // ----------------------------------------------------------------------
 // 공통 헤더 / 사이드 메뉴
 // ----------------------------------------------------------------------
-function MobileHeader({ title, onBack, onRefresh, onMenu, notifCount = 0, onNotifClick, cardVersionB = false }) {
+const MobileHeader = React.memo(function MobileHeader({ title, onBack, onRefresh, onMenu, notifCount = 0, onNotifClick, cardVersionB = false }) {
   const isListPage = title === "등록내역";
   const iconColor = cardVersionB ? "#ffffff" : "#374151";
   const bellColor = cardVersionB ? "#ffffff" : "#1f2937";
@@ -3642,7 +3610,7 @@ function MobileHeader({ title, onBack, onRefresh, onMenu, notifCount = 0, onNoti
       </div>
     </div>
   );
-}
+});
 function NotificationPanel({ notifications, onClose, onMarkAllRead, onClear, alarmEnabled, onToggleAlarm, orders }) {
   const [expanded, setExpanded] = useState(null);
 
@@ -5971,7 +5939,7 @@ const handleAssignClick = () => {
       {(order.메모 || order.적요) && (
         <div className="bg-gray-50 rounded-xl px-3 py-2 cursor-pointer" onClick={() => setExpandMemo(v => !v)}>
           <div className="flex items-center justify-between mb-0.5">
-            <span className="text-[11px] font-bold text-gray-500">📝 메모</span>
+            <span className="text-[11px] font-bold text-gray-500">메모</span>
             <span className="text-[11px] text-gray-400">{expandMemo ? "접기" : "펼치기"}</span>
           </div>
           <div className={`text-[12px] text-gray-700 whitespace-pre-wrap leading-relaxed ${expandMemo ? "" : "line-clamp-2"}`}>
@@ -6045,13 +6013,35 @@ const handleAssignClick = () => {
           <div className="text-[11px] text-gray-400 mt-0.5">{하차일시 || "-"}</div>
         </div>
       </div>
-      {/* 차량/화물 태그 */}
-      <div className="flex flex-wrap gap-1.5 pt-2 border-t border-gray-100">
-        {(order.차량톤수 || order.톤수) && <span className="px-2 py-0.5 rounded-md text-xs font-medium bg-gray-100 text-gray-600">{order.차량톤수 || order.톤수}</span>}
-        {(order.차량종류 || order.차종) && <span className="px-2 py-0.5 rounded-md text-xs font-medium bg-gray-100 text-gray-600">{order.차량종류 || order.차종}</span>}
-        {order.화물내용 && <span className="px-2 py-0.5 rounded-md text-xs font-medium bg-gray-100 text-gray-600">{order.화물내용}</span>}
-        {order.혼적여부 && <span className="px-2 py-0.5 rounded-md text-xs font-medium bg-gray-100 text-gray-600">{order.혼적여부}</span>}
-      </div>
+      {/* 차량/화물 정보 */}
+      {((order.차량톤수 || order.톤수) || (order.차량종류 || order.차종) || order.화물내용 || order.혼적여부) && (
+        <div className="flex gap-3 pt-2.5 border-t border-gray-100">
+          {(order.차량톤수 || order.톤수) && (
+            <div className="flex-1 min-w-0">
+              <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">톤수</div>
+              <div className="text-[12px] font-semibold text-gray-700">{order.차량톤수 || order.톤수}</div>
+            </div>
+          )}
+          {(order.차량종류 || order.차종) && (
+            <div className="flex-1 min-w-0">
+              <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">차종</div>
+              <div className="text-[12px] font-semibold text-gray-700">{order.차량종류 || order.차종}</div>
+            </div>
+          )}
+          {order.화물내용 && (
+            <div className="flex-1 min-w-0">
+              <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">화물</div>
+              <div className="text-[12px] font-semibold text-gray-700">{order.화물내용}</div>
+            </div>
+          )}
+          {order.혼적여부 && order.혼적여부 !== "독차" && (
+            <div className="flex-1 min-w-0">
+              <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">혼적</div>
+              <div className="text-[12px] font-semibold text-gray-700">{order.혼적여부}</div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
 
     {/* 운임 정보 + 업체전달 */}
@@ -6226,7 +6216,6 @@ const handleAssignClick = () => {
           }}
           className="py-3 rounded-xl bg-gray-700 text-white text-sm font-bold"
         >수정하기</button>
-        <button onClick={handleSaveDriverToOrder} className="py-3 rounded-xl bg-[#1B2B4B] text-white text-sm font-bold">저장</button>
         <button onClick={onCancelOrder} className="py-3 rounded-xl border border-red-200 text-red-500 text-sm font-semibold">오더 삭제</button>
       </div>
     </div>

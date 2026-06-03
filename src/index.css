@@ -32,6 +32,11 @@ html, body {
   overscroll-behavior: none;
 }
 
+/* 모바일 스크롤 관성 (iOS momentum scroll) */
+.overflow-y-auto, .overflow-y-scroll, [data-fare-scroll] {
+  -webkit-overflow-scrolling: touch;
+}
+
 /* 모바일 입력칸 자동 확대 방지 (iOS/Android는 font-size < 16px 이면 줌인됨) */
 @media screen and (max-width: 768px) {
   input, select, textarea {
