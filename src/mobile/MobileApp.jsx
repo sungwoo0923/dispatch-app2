@@ -12522,18 +12522,16 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
   );
 
   const SettingRow = ({ label, sub, right, onClick, danger }) => (
-    <button
-      className={`w-full flex items-center justify-between px-4 py-3.5 bg-white border-b border-gray-50 ${onClick ? "active:bg-gray-50" : ""} ${danger ? "text-red-500" : ""}`}
+    <div
+      className={`w-full flex items-center justify-between px-4 py-3.5 bg-white border-b border-gray-50 ${onClick ? "active:bg-gray-50 cursor-pointer" : ""} ${danger ? "text-red-500" : ""}`}
       onClick={onClick}
-      disabled={!onClick}
-      type="button"
     >
       <div className="text-left">
         <div className={`text-[13px] font-semibold ${danger ? "text-red-500" : "text-gray-800"}`}>{label}</div>
         {sub && <div className="text-[11px] text-gray-400 mt-0.5">{sub}</div>}
       </div>
       {right && <div className="shrink-0">{right}</div>}
-    </button>
+    </div>
   );
 
   const Toggle = ({ value, onChange }) => (
@@ -12556,7 +12554,7 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
               <div className="flex gap-1.5">
                 {[false, true].map(v => (
                   <button key={String(v)} type="button"
-                    onClick={() => setCardVersionB(v)}
+                    onClick={() => { setCardVersionB(v); localStorage.setItem("cardVersion", v ? "B" : "A"); }}
                     className={`px-3 py-1.5 rounded-xl text-[12px] font-bold transition-all ${cardVersionB === v ? "bg-[#1B2B4B] text-white" : "bg-gray-100 text-gray-500"}`}>
                     {v ? "B형" : "A형"}
                   </button>
@@ -12571,7 +12569,7 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
               <div className="flex gap-1.5">
                 {[{v:1,l:"기본"},{v:1.1,l:"크게"},{v:1.2,l:"더 크게"}].map(({v,l}) => (
                   <button key={v} type="button"
-                    onClick={() => setFontScale(v)}
+                    onClick={() => { setFontScale(v); localStorage.setItem("fontScale", String(v)); }}
                     className={`px-2.5 py-1.5 rounded-xl text-[11px] font-bold transition-all ${fontScale===v ? "bg-[#1B2B4B] text-white" : "bg-gray-100 text-gray-500"}`}>
                     {l}
                   </button>
