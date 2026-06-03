@@ -774,11 +774,17 @@ const quickRange = (days) => {
   const [toast, setToast] = useState("");
   const [toastMuted, setToastMuted] = useState(false);
   const [quickAssignTarget, setQuickAssignTarget] = useState(null);
+  const [successBanner, setSuccessBanner] = useState(null);
 
   const showToast = (msg) => {
   if (toastMuted) return;   // 🔥 추가
   setToast(msg);
   setTimeout(() => setToast(""), 2000);
+};
+
+  const showSuccess = (msg) => {
+    setSuccessBanner(msg);
+    setTimeout(() => setSuccessBanner(null), 2000);
 };
 
   // --------------------------------------------------
@@ -1253,6 +1259,19 @@ const [detailFrom, setDetailFrom] = useState(null);
   const [statusTab, setStatusTab] = useState("전체");
   const [showMenu, setShowMenu] = useState(false);
   const [cardVersionB, setCardVersionB] = useState(() => localStorage.getItem("cardVersion") === "B");
+  const [fontScale, setFontScale] = useState(() => Number(localStorage.getItem("fontScale") || "1"));
+  const appVersion = "1.0.0";
+
+  const logout = async () => {
+    try {
+      await signOut(auth);
+    } catch (e) {
+      console.error("signOut error:", e);
+    }
+    localStorage.clear();
+    sessionStorage.clear();
+    window.location.replace("/login");
+  };
   // 🔥 미배차 차량 분류 필터 (전체 | 냉장/냉동 | 일반)
 const [unassignedTypeFilter, setUnassignedTypeFilter] = useState("전체");
 
@@ -1763,7 +1782,7 @@ const groupedByDate = useMemo(() => {
         (o.id === form._editId || o._id === form._editId) ? updated : o
       ));
 
-      showToast("수정 완료!");
+      showSuccess("수정 완료");
       // 상세보기에서 진입한 경우 → 상세보기로 복귀, 그 외 → 이전 페이지
       if (form._returnToDetail) {
         setPage("detail");
@@ -1793,7 +1812,7 @@ const groupedByDate = useMemo(() => {
       // ★ PC 거래처관리(places) 동기화
       await syncPlaceFromOrder(docData);
 
-      showToast("등록 완료!");
+      showSuccess("등록 완료");
       setPage("list");
 
     } catch (e) {
@@ -2076,8 +2095,8 @@ const deleteSingleOrder = async (order) => {
 
     await deleteDoc(doc(db, selectedOrder.__col, selectedOrder.id));
     setSelectedOrder(null);
+    showSuccess("오더 삭제 완료");
     setPage(prevPage);
-    alert("오더가 삭제되었습니다.");
   };
   // 🔴 전체삭제 비활성화
   const deleteAllOrders = async () => {
@@ -2115,6 +2134,7 @@ const title =
   : page === "unassigned" ? "미배차현황"
   : page === "handover" ? "인수인계"
   : page === "myinfo" ? "내정보"
+  : page === "settings" ? "설정"
   : "상세보기";
 
   // ------------------------------------------------------------------
@@ -2180,6 +2200,19 @@ const title =
 >
   ✕
 </button>
+  </div>
+)}
+{successBanner && (
+  <div className="fixed inset-0 z-[99998] pointer-events-none flex items-center justify-center" style={{ paddingBottom: "20vh" }}>
+    <div
+      className={`flex items-center gap-3 px-6 py-4 rounded-3xl shadow-2xl ${cardVersionB ? "bg-[#1B2B4B] text-white" : "bg-white text-gray-900"}`}
+      style={{ animation: "successBannerIn 0.3s ease-out", minWidth: "180px", maxWidth: "70vw", border: cardVersionB ? "none" : "1px solid rgba(0,0,0,0.07)" }}
+    >
+      <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center shrink-0">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+      </div>
+      <span className="text-[15px] font-bold whitespace-nowrap">{successBanner}</span>
+    </div>
   </div>
 )}
 {showUnassignedEntryPopup && page === "list" && (
@@ -2342,7 +2375,7 @@ const title =
             setPage("list");
           }
         }
-    : page === "notice" || page === "schedule" || page === "unassigned" || page === "handover" || page === "ratecard" || page === "myinfo"
+    : page === "notice" || page === "schedule" || page === "unassigned" || page === "handover" || page === "ratecard" || page === "myinfo" || page === "settings"
       ? () => setPage("list")
       : page === "fare"
       ? () => setPage(prevPage || "list")
@@ -2492,6 +2525,11 @@ onGoSchedule={() => {
 
           onGoMyInfo={() => {
             setPage("myinfo");
+            setShowMenu(false);
+          }}
+
+          onGoSettings={() => {
+            setPage("settings");
             setShowMenu(false);
           }}
 
@@ -3179,6 +3217,7 @@ setOpenMemo={setOpenMemo}
             setForm={setForm}
             setSelectedOrder={setSelectedOrder}
             showToast={showToast}
+            showSuccess={showSuccess}
             upsertDriver={upsertDriver}
             setPrevPage={setPrevPage}
             cardVersionB={cardVersionB}
@@ -3209,6 +3248,21 @@ setOpenMemo={setOpenMemo}
             orders={orders}
             userCompany={userCompany || localStorage.getItem("userCompany") || ""}
             onBack={() => setPage("list")}
+          />
+        )}
+        {page === "settings" && (
+          <MobileSettingsPage
+            onBack={() => setPage("list")}
+            cardVersionB={cardVersionB}
+            setCardVersionB={setCardVersionB}
+            alarmEnabled={alarmEnabled}
+            toggleAlarm={toggleAlarm}
+            fontScale={fontScale}
+            setFontScale={setFontScale}
+            appVersion={appVersion}
+            showSuccess={showSuccess}
+            onLogout={logout}
+            userCompany={userCompany}
           />
         )}
         {page === "unassigned" && (
@@ -3775,6 +3829,7 @@ function MobileSideMenu({
   onDeleteAll,
   onGoHandover,
   onGoMyInfo,
+  onGoSettings,
   setUiScale,
   uiScale,
   alarmEnabled,
@@ -3862,6 +3917,7 @@ function MobileSideMenu({
 
           <MenuSection title="내 계정">
             <MenuItem label="내정보" onClick={onGoMyInfo} />
+            <MenuItem label="설정" onClick={onGoSettings} />
           </MenuSection>
 
         </div>
@@ -4615,6 +4671,7 @@ const summary = useMemo(() => {
         order={copyModalOrder}
         onClose={() => setCopyModalOrder(null)}
         onAfterFullCopy={() => setCopyModalOrder(null)}
+        onCopySuccess={() => showSuccess("기사 복사 완료")}
         cardVersionB={cardVersionB}
       />
     )}
@@ -5424,6 +5481,7 @@ function MobileOrderDetail({
   setForm,
   setSelectedOrder,
   showToast,
+  showSuccess,
   upsertDriver,
   setPrevPage,
   onGoFare,
@@ -6231,6 +6289,7 @@ const handleAssignClick = () => {
           order={order}
           onClose={() => setShowCopyModal(false)}
           onAfterFullCopy={() => { setShowCopyModal(false); setConfirmDeliver(true); }}
+          onCopySuccess={() => showSuccess?.("기사 복사 완료")}
           cardVersionB={cardVersionB}
         />
       )}
@@ -9888,7 +9947,7 @@ const pickDrop = (c) => {
   );
 }
 
-function CopySelectModal({ order, onClose, onAfterFullCopy, cardVersionB = false }) {
+function CopySelectModal({ order, onClose, onAfterFullCopy, onCopySuccess, cardVersionB = false }) {
   /* ===============================
      공통 유틸
   =============================== */
@@ -10167,6 +10226,7 @@ ${order.하차지주소||""}${dropMgr?`\n${dropMgr}`:""}${_mainDCargoMd}${_mainD
     }
 
     if (type === "full" || type === "driver") {
+      onCopySuccess?.("기사 문자 복사 완료");
       onAfterFullCopy?.();
       return;
     }
@@ -11843,11 +11903,11 @@ function MobileRateCard({ dispatchData = [], onBack }) {
 
           {/* 조회 방식 */}
           <div>
-            <div className="text-[11px] font-semibold text-gray-500 mb-1">조회 방식</div>
-            <div className="flex gap-2">
+            <div className="text-[11px] font-semibold text-gray-500 mb-1.5">조회 방식</div>
+            <div className="flex bg-gray-100 rounded-xl p-1 gap-1">
               {["톤수별","파렛수별"].map(opt=>(
                 <button key={opt} type="button" onClick={()=>setViewMode(opt)}
-                  className={`flex-1 py-2 rounded-xl text-[12px] font-semibold border transition-all ${viewMode===opt?"bg-[#1B2B4B] text-white border-[#1B2B4B]":"bg-white text-gray-600 border-gray-200"}`}>
+                  className={`flex-1 py-2 rounded-lg text-[12px] font-semibold transition-all ${viewMode===opt ? "bg-white text-[#1B2B4B] shadow-sm" : "text-gray-500"}`}>
                   {opt}
                 </button>
               ))}
@@ -11856,11 +11916,11 @@ function MobileRateCard({ dispatchData = [], onBack }) {
 
           {/* 혼적 여부 */}
           <div>
-            <div className="text-[11px] font-semibold text-gray-500 mb-1">혼적 여부</div>
-            <div className="flex gap-2">
+            <div className="text-[11px] font-semibold text-gray-500 mb-1.5">혼적 여부</div>
+            <div className="flex bg-gray-100 rounded-xl p-1 gap-1">
               {["전체","독차","혼적"].map(opt=>(
                 <button key={opt} type="button" onClick={()=>setMixedFilter(opt)}
-                  className={`flex-1 py-2 rounded-xl text-[12px] font-semibold border transition-all ${mixedFilter===opt?"bg-[#1B2B4B] text-white border-[#1B2B4B]":"bg-white text-gray-600 border-gray-200"}`}>
+                  className={`flex-1 py-2 rounded-lg text-[12px] font-semibold transition-all ${mixedFilter===opt ? "bg-white text-[#1B2B4B] shadow-sm" : "text-gray-500"}`}>
                   {opt}
                 </button>
               ))}
@@ -11869,11 +11929,11 @@ function MobileRateCard({ dispatchData = [], onBack }) {
 
           {/* 조회 기준 */}
           <div>
-            <div className="text-[11px] font-semibold text-gray-500 mb-1">조회 기준</div>
-            <div className="flex gap-2">
+            <div className="text-[11px] font-semibold text-gray-500 mb-1.5">조회 기준</div>
+            <div className="flex bg-gray-100 rounded-xl p-1 gap-1">
               {[["청구운임","청구가"],["기사운임","기사운임"]].map(([val,label])=>(
                 <button key={val} type="button" onClick={()=>setFareField(val)}
-                  className={`flex-1 py-2 rounded-xl text-[12px] font-semibold border transition-all ${fareField===val?"bg-blue-600 text-white border-blue-600":"bg-white text-gray-600 border-gray-200"}`}>
+                  className={`flex-1 py-2 rounded-lg text-[12px] font-semibold transition-all ${fareField===val ? "bg-[#1B2B4B] text-white shadow-sm" : "text-gray-500"}`}>
                   {label}
                 </button>
               ))}
@@ -12450,4 +12510,133 @@ return (
     )}
   </div>
 );
+}
+
+function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnabled, toggleAlarm, fontScale, setFontScale, appVersion, showSuccess, onLogout, userCompany }) {
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+
+  const SectionHeader = ({ title }) => (
+    <div className="px-4 pt-5 pb-1.5">
+      <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">{title}</span>
+    </div>
+  );
+
+  const SettingRow = ({ label, sub, right, onClick, danger }) => (
+    <button
+      className={`w-full flex items-center justify-between px-4 py-3.5 bg-white border-b border-gray-50 ${onClick ? "active:bg-gray-50" : ""} ${danger ? "text-red-500" : ""}`}
+      onClick={onClick}
+      disabled={!onClick}
+      type="button"
+    >
+      <div className="text-left">
+        <div className={`text-[13px] font-semibold ${danger ? "text-red-500" : "text-gray-800"}`}>{label}</div>
+        {sub && <div className="text-[11px] text-gray-400 mt-0.5">{sub}</div>}
+      </div>
+      {right && <div className="shrink-0">{right}</div>}
+    </button>
+  );
+
+  const Toggle = ({ value, onChange }) => (
+    <button type="button" onClick={() => onChange(!value)}
+      className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${value ? "bg-emerald-500" : "bg-gray-300"}`}>
+      <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${value ? "translate-x-5" : "translate-x-0"}`} />
+    </button>
+  );
+
+  return (
+    <div className="flex flex-col min-h-screen bg-gray-50">
+      <div className="flex-1 pb-10">
+
+        <SectionHeader title="화면" />
+        <div className="mx-4 rounded-2xl overflow-hidden border border-gray-100 shadow-sm">
+          <SettingRow
+            label="디자인 테마"
+            sub={cardVersionB ? "B형 (다크 네이비 헤더)" : "A형 (라이트)"}
+            right={
+              <div className="flex gap-1.5">
+                {[false, true].map(v => (
+                  <button key={String(v)} type="button"
+                    onClick={() => setCardVersionB(v)}
+                    className={`px-3 py-1.5 rounded-xl text-[12px] font-bold transition-all ${cardVersionB === v ? "bg-[#1B2B4B] text-white" : "bg-gray-100 text-gray-500"}`}>
+                    {v ? "B형" : "A형"}
+                  </button>
+                ))}
+              </div>
+            }
+          />
+          <SettingRow
+            label="글자 크기"
+            sub="목록/상세 텍스트 크기"
+            right={
+              <div className="flex gap-1.5">
+                {[{v:1,l:"기본"},{v:1.1,l:"크게"},{v:1.2,l:"더 크게"}].map(({v,l}) => (
+                  <button key={v} type="button"
+                    onClick={() => setFontScale(v)}
+                    className={`px-2.5 py-1.5 rounded-xl text-[11px] font-bold transition-all ${fontScale===v ? "bg-[#1B2B4B] text-white" : "bg-gray-100 text-gray-500"}`}>
+                    {l}
+                  </button>
+                ))}
+              </div>
+            }
+          />
+        </div>
+
+        <SectionHeader title="알림" />
+        <div className="mx-4 rounded-2xl overflow-hidden border border-gray-100 shadow-sm">
+          <SettingRow
+            label="푸시 알림"
+            sub="신규 오더·배차 알림"
+            right={<Toggle value={alarmEnabled} onChange={toggleAlarm} />}
+          />
+        </div>
+
+        <SectionHeader title="데이터" />
+        <div className="mx-4 rounded-2xl overflow-hidden border border-gray-100 shadow-sm">
+          <SettingRow
+            label="앱 새로고침"
+            sub="최신 데이터로 갱신"
+            onClick={() => { showSuccess("새로고침 완료"); setTimeout(() => window.location.reload(), 800); }}
+            right={<span className="text-[12px] text-blue-500 font-semibold">실행</span>}
+          />
+          <SettingRow
+            label="캐시 초기화"
+            sub="임시 저장 데이터 삭제"
+            onClick={() => { localStorage.clear(); showSuccess("초기화 완료"); }}
+            right={<span className="text-[12px] text-blue-500 font-semibold">실행</span>}
+          />
+        </div>
+
+        <SectionHeader title="계정" />
+        <div className="mx-4 rounded-2xl overflow-hidden border border-gray-100 shadow-sm">
+          <SettingRow label="회사" sub={userCompany || "-"} />
+          <SettingRow
+            label="로그아웃"
+            danger
+            onClick={() => setShowLogoutConfirm(true)}
+          />
+        </div>
+
+        <SectionHeader title="앱 정보" />
+        <div className="mx-4 rounded-2xl overflow-hidden border border-gray-100 shadow-sm">
+          <SettingRow label="버전" sub="KP-FLOW 배차관리" right={<span className="text-[12px] text-gray-400 font-mono">v{appVersion}</span>} />
+          <SettingRow label="제작" right={<span className="text-[12px] text-gray-400">KP-FLOW Logistics</span>} />
+        </div>
+
+      </div>
+
+      {/* 로그아웃 확인 모달 */}
+      {showLogoutConfirm && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={() => setShowLogoutConfirm(false)}>
+          <div className="w-full bg-white rounded-t-3xl p-6" onClick={e => e.stopPropagation()}>
+            <div className="text-[16px] font-bold text-gray-900 mb-1">로그아웃</div>
+            <div className="text-[13px] text-gray-500 mb-5">정말 로그아웃 하시겠습니까?</div>
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={() => setShowLogoutConfirm(false)} className="py-3 rounded-xl bg-gray-100 text-gray-700 text-sm font-bold">취소</button>
+              <button onClick={onLogout} className="py-3 rounded-xl bg-red-500 text-white text-sm font-bold">로그아웃</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }

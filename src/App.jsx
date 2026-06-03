@@ -324,77 +324,38 @@ export default function App() {
   // 로딩/스플래시
   if (loading || !splashDone) {
     return (
-      <div
-        style={{
-          position: "fixed", inset: 0,
-          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-          background: "linear-gradient(160deg, #0e2550 0%, #1e4a8a 50%, #163a6e 100%)",
-          userSelect: "none", WebkitUserSelect: "none",
-        }}
-      >
+      <div style={{ position: "fixed", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", backgroundColor: "#ffffff", userSelect: "none", WebkitUserSelect: "none" }}>
         <style>{`
-          @keyframes splashBgPulse {
-            0%, 100% { opacity: 0.18; transform: scale(1); }
-            50% { opacity: 0.38; transform: scale(1.12); }
-          }
           @keyframes splashLogoIn {
-            0%   { opacity: 0; transform: scale(0.72) translateY(18px); }
-            65%  { opacity: 1; transform: scale(1.05) translateY(-3px); }
+            0%   { opacity: 0; transform: scale(0.8) translateY(12px); }
+            70%  { opacity: 1; transform: scale(1.03) translateY(-2px); }
             100% { opacity: 1; transform: scale(1) translateY(0); }
           }
-          @keyframes splashLineIn {
-            0%   { opacity: 0; width: 0; }
-            100% { opacity: 1; width: 48px; }
-          }
           @keyframes splashDotPulse {
-            0%, 100% { opacity: 0.25; transform: scale(0.75); }
-            50%       { opacity: 1;    transform: scale(1); }
+            0%, 100% { opacity: 0.3; transform: scale(0.8); }
+            50%       { opacity: 1;   transform: scale(1); }
           }
-          .splash-glow {
-            position: absolute;
-            width: 380px; height: 380px; border-radius: 50%;
-            background: radial-gradient(circle, rgba(120,180,255,0.3) 0%, transparent 70%);
-            animation: splashBgPulse 2.8s ease-in-out infinite;
-            pointer-events: none;
-          }
-          .splash-logo-img {
-            animation: splashLogoIn 0.85s cubic-bezier(0.175, 0.885, 0.32, 1.275) 0.1s both;
-            filter: drop-shadow(0 0 18px rgba(180,220,255,0.6)) drop-shadow(0 4px 12px rgba(0,0,0,0.5)) brightness(1.15) contrast(1.1);
-            pointer-events: none;
-            -webkit-user-drag: none;
-            user-drag: none;
-          }
-          .splash-line {
-            height: 2px; background: linear-gradient(90deg, transparent, rgba(120,190,255,0.7), transparent);
-            border-radius: 2px;
-            animation: splashLineIn 0.5s ease-out 0.75s both;
-          }
-          .splash-dot { width: 7px; height: 7px; border-radius: 50%; background: #7ab8ff; }
-          .splash-dot-1 { animation: splashDotPulse 1.1s ease-in-out 1.0s infinite; }
-          .splash-dot-2 { animation: splashDotPulse 1.1s ease-in-out 1.2s infinite; }
-          .splash-dot-3 { animation: splashDotPulse 1.1s ease-in-out 1.4s infinite; }
+          .splash-logo-img { animation: splashLogoIn 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275) 0.1s both; pointer-events: none; -webkit-user-drag: none; }
+          .splash-dot { width: 7px; height: 7px; border-radius: 50%; background: #1B2B4B; }
+          .splash-dot-1 { animation: splashDotPulse 1.1s ease-in-out 0.9s infinite; }
+          .splash-dot-2 { animation: splashDotPulse 1.1s ease-in-out 1.1s infinite; }
+          .splash-dot-3 { animation: splashDotPulse 1.1s ease-in-out 1.3s infinite; }
         `}</style>
-
-        <div className="splash-glow" />
-
-        <div style={{ position: "relative", zIndex: 10, display: "flex", flexDirection: "column", alignItems: "center" }}>
-          <img
-            src="/icons/sflow-logo-transparent.png"
-            alt="KP-Flow Logistics"
-            draggable={false}
-            onDragStart={e => e.preventDefault()}
-            className="splash-logo-img"
-            style={{ width: "62vw", maxWidth: "260px" }}
-          />
-          <div className="splash-line" style={{ marginTop: "20px" }} />
-          {loading && (
-            <div style={{ display: "flex", gap: "9px", marginTop: "18px" }}>
-              <div className="splash-dot splash-dot-1" />
-              <div className="splash-dot splash-dot-2" />
-              <div className="splash-dot splash-dot-3" />
-            </div>
-          )}
-        </div>
+        <img
+          src="/icons/sflow-logo.png"
+          alt="KP-Flow Logistics"
+          draggable={false}
+          onDragStart={e => e.preventDefault()}
+          className="splash-logo-img"
+          style={{ width: "60vw", maxWidth: "280px" }}
+        />
+        {loading && (
+          <div style={{ display: "flex", gap: "9px", marginTop: "28px" }}>
+            <div className="splash-dot splash-dot-1" />
+            <div className="splash-dot splash-dot-2" />
+            <div className="splash-dot splash-dot-3" />
+          </div>
+        )}
       </div>
     );
   }
