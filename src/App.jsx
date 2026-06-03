@@ -379,12 +379,12 @@ export default function App() {
 
         <div style={{ position: "relative", zIndex: 10, display: "flex", flexDirection: "column", alignItems: "center" }}>
           <img
-            src="/icons/sflow-logo.png"
+            src="/icons/sflow-logo-transparent.png"
             alt="KP-Flow Logistics"
             draggable={false}
             onDragStart={e => e.preventDefault()}
             className="splash-logo-img"
-            style={{ width: "62vw", maxWidth: "260px", mixBlendMode: "screen" }}
+            style={{ width: "62vw", maxWidth: "260px" }}
           />
           <div className="splash-line" style={{ marginTop: "20px" }} />
           {loading && (
