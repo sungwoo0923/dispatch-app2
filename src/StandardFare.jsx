@@ -1090,30 +1090,28 @@ export default function StandardFare() {
 
               {/* 차량 유형 */}
               <div className="mb-5">
-                <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2">차량 유형</div>
-                <div className="grid grid-cols-3 gap-2">
+                <label className="block text-[13px] font-bold text-gray-600 mb-1.5">차량 유형</label>
+                <select
+                  value={nfVehicleCategory}
+                  onChange={e => setNfVehicleCategory(Number(e.target.value))}
+                  className="w-full px-3 py-2.5 text-[14px] font-semibold rounded-lg border border-gray-300 bg-white focus:border-[#1B2B4B] focus:outline-none focus:ring-1 focus:ring-[#1B2B4B]/20 transition"
+                >
                   {VEHICLE_CATEGORIES.map((c, i) => (
-                    <button key={i} type="button"
-                      onClick={() => setNfVehicleCategory(i)}
-                      className={`py-2.5 text-[13px] font-semibold rounded-lg border transition ${
-                        nfVehicleCategory === i
-                          ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
-                          : "bg-white text-gray-700 border-gray-200 hover:border-[#1B2B4B] hover:text-[#1B2B4B]"
-                      }`}>
-                      {c.label}
-                    </button>
+                    <option key={i} value={i}>
+                      {c.label}{c.multiplier > 1 ? ` (+${Math.round((c.multiplier-1)*100)}% 할증)` : ""}
+                    </option>
                   ))}
-                </div>
+                </select>
               </div>
 
               {/* 조회하기 / 초기화 */}
-              <div className="flex gap-3">
+              <div className="flex gap-3 items-center">
                 <button onClick={lookupNationalFare} disabled={nfLoading}
-                  className="flex-1 py-3 bg-[#1B2B4B] text-white text-[14px] font-bold rounded-xl hover:bg-[#243a60] disabled:opacity-50 transition flex items-center justify-center gap-2">
+                  className="px-7 py-2.5 bg-[#1B2B4B] text-white text-[14px] font-bold rounded-xl hover:bg-[#243a60] disabled:opacity-50 transition flex items-center gap-2">
                   {nfLoading ? (<><svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10" strokeOpacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10"/></svg>조회 중...</>) : "운임 조회"}
                 </button>
                 <button onClick={()=>{setNfFrom("");setNfTo("");setNfFromCoord(null);setNfToCoord(null);setNfResult(null);setNfError("");setNfVias([]);setNfViaInput("");setNfViaInputCoord(null);}}
-                  className="px-6 py-3 bg-white text-gray-600 text-[13px] font-semibold rounded-xl border border-gray-200 hover:bg-gray-50 transition">
+                  className="px-5 py-2.5 bg-white text-gray-600 text-[13px] font-semibold rounded-xl border border-gray-200 hover:bg-gray-50 transition">
                   초기화
                 </button>
               </div>
@@ -1141,20 +1139,28 @@ export default function StandardFare() {
                 <div className="text-white/80 text-[13px] font-semibold">차량별 예상 운임</div>
               </div>
 
-              <div className="p-4">
-                <div className="grid grid-cols-4 gap-0 border border-gray-200 rounded-lg overflow-hidden">
-                  {FARE_TYPES.map((ft, i) => {
-                    const fare = calcFare(nfResult.km, ft, cat.multiplier);
-                    return (
-                      <div key={ft.label} className={`border-b border-r border-gray-100 ${i % 4 === 3 ? "border-r-0" : ""}`}>
-                        <div className="bg-[#1B2B4B] text-white text-[12px] font-bold text-center py-2 px-3">{ft.label}</div>
-                        <div className="text-center py-3 px-3 text-[14px] font-bold text-gray-800">
-                          {fare ? fare.toLocaleString() : <span className="text-[12px] text-gray-400 font-normal">별도협의</span>}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-[14px]">
+                  <thead>
+                    <tr className="bg-[#1B2B4B]">
+                      {FARE_TYPES.map(ft => (
+                        <th key={ft.label} className="px-3 py-3 text-center text-[13px] font-bold text-white whitespace-nowrap border-r border-white/10 last:border-r-0">{ft.label}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      {FARE_TYPES.map(ft => {
+                        const fare = calcFare(nfResult.km, ft, cat.multiplier);
+                        return (
+                          <td key={ft.label} className="px-3 py-5 text-center text-[16px] font-bold text-gray-800 border-r border-gray-100 last:border-r-0">
+                            {fare ? fare.toLocaleString() : <span className="text-[13px] text-gray-400 font-normal">별도협의</span>}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  </tbody>
+                </table>
               </div>
 
               <div className="px-5 pb-4 space-y-1">

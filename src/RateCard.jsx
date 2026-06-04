@@ -326,7 +326,7 @@ const [detailModal, setDetailModal] = useState(null);
 
     const rows=BUCKETS.map(b=>({...b, stats:trimmedStats(bucketMap[b.label],bucketRowMap[b.label])})).filter(b=>b.stats!==null);
     const groupLabel=VEHICLE_GROUPS.find(g=>g.value===vGroup)?.label||vGroup;
-        setResult({rows, totalCount:matched.length, groupLabel, pickup:pickup.trim(), drop:drop.trim(), waypoint:waypoint.trim(), fareField, mixedFilter, viewMode, includeTransit});
+        setResult({rows, totalCount:matched.length, groupLabel, pickup:pickup.trim(), drop:drop.trim(), waypoint:[...pickupVias.map(v=>`${v}(상)`), ...dropVias.map(v=>`${v}(하)`)].join(", "), fareField, mixedFilter, viewMode, includeTransit});
     setSearched(true);
     setEditMode(false);
     setEditRows(null);
