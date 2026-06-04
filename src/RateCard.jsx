@@ -144,6 +144,8 @@ export default function RateCard({ dispatchData = [] }) {
   const [searched, setSearched] = useState(false);
 const [detailModal, setDetailModal] = useState(null);
   const [viewMode, setViewMode] = useState("톤수별"); // 톤수별 | 파렛수별
+  const [pickupVia, setPickupVia] = useState("");
+  const [dropVia, setDropVia] = useState("");
   // 🔥 거래처 제외 필터
   const [excludeQuery, setExcludeQuery] = useState("");
   const [excludeList, setExcludeList] = useState([]);       // 제외할 거래처명 배열
@@ -279,6 +281,28 @@ const [detailModal, setDetailModal] = useState(null);
       }
 
       return !!Number(String(r[fareField]||0).replace(/[^\d]/g,""));
+    });
+
+    // 경유상차/하차목록 배열 형식 필터링
+    const sa = v => { if(Array.isArray(v)) return v; if(typeof v==="string"&&v.trim().startsWith("[")) { try{const p=JSON.parse(v);return Array.isArray(p)?p:[];}catch{return[];} } return[]; };
+    const puVias = pickupVia.trim().split(/[,\s]+/).map(s=>s.trim()).filter(Boolean);
+    const drVias = dropVia.trim().split(/[,\s]+/).map(s=>s.trim()).filter(Boolean);
+    matched = matched.filter(r => {
+      const rPV = sa(r.경유상차목록||r.경유지_상차||[]).map(s=>typeof s==="string"?s:(s?.업체명||"")).filter(Boolean);
+      const rDV = sa(r.경유하차목록||r.경유지_하차||[]).map(s=>typeof s==="string"?s:(s?.업체명||"")).filter(Boolean);
+      if (puVias.length > 0) {
+        if (rPV.length !== puVias.length) return false;
+        if (!puVias.every((v,i) => clean(rPV[i]).includes(clean(v))||clean(v).includes(clean(rPV[i])))) return false;
+      } else {
+        if (rPV.length > 0) return false;
+      }
+      if (drVias.length > 0) {
+        if (rDV.length !== drVias.length) return false;
+        if (!drVias.every((v,i) => clean(rDV[i]).includes(clean(v))||clean(v).includes(clean(rDV[i])))) return false;
+      } else {
+        if (rDV.length > 0) return false;
+      }
+      return true;
     });
 
     if (mixedFilter==="혼적") matched=matched.filter(r=>r.혼적===true||r.혼적==="true"||r.혼적===1);
@@ -594,10 +618,16 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
             <div>
               <label className={labelCls}>상차지역 <span className="text-red-400">*</span></label>
               <input className={inputCls} placeholder="예: 인천" value={pickup} onChange={e=>setPickup(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleSearch()} />
+              <div className="mt-1 flex items-center gap-1">
+                <input className="flex-1 px-2 py-1 text-[11px] rounded border border-dashed border-teal-300 bg-teal-50/50 focus:border-teal-400 focus:outline-none placeholder:text-teal-300" placeholder="+ 경유 상차지명 (쉼표로 구분)" value={pickupVia} onChange={e=>setPickupVia(e.target.value)} />
+              </div>
             </div>
             <div>
               <label className={labelCls}>하차지역 <span className="text-red-400">*</span></label>
               <input className={inputCls} placeholder="예: 부산" value={drop} onChange={e=>setDrop(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleSearch()} />
+              <div className="mt-1 flex items-center gap-1">
+                <input className="flex-1 px-2 py-1 text-[11px] rounded border border-dashed border-teal-300 bg-teal-50/50 focus:border-teal-400 focus:outline-none placeholder:text-teal-300" placeholder="+ 경유 하차지명 (쉼표로 구분)" value={dropVia} onChange={e=>setDropVia(e.target.value)} />
+              </div>
             </div>
             <div>
               <div className="flex items-center justify-between mb-1">
@@ -651,7 +681,7 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
             </div>
             <div className="flex items-end gap-2">
               <button onClick={handleSearch} className="flex-1 py-2 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-lg hover:bg-[#243a60] transition">단가표 생성</button>
-                            <button onClick={()=>{setPickup("");setDrop("");setWaypoint("");setVGroup("");setMixedFilter("전체");setFareField("청구운임");setViewMode("톤수별");setIncludeTransit(false);setExcludeQuery("");setExcludeList([]);setExcludeDropdown([]);setResult(null);setSearched(false);}} className="px-3 py-2 bg-white border border-gray-200 text-gray-500 text-[13px] rounded-lg hover:bg-gray-50 transition">초기화</button>
+                            <button onClick={()=>{setPickup("");setDrop("");setWaypoint("");setVGroup("");setMixedFilter("전체");setFareField("청구운임");setViewMode("톤수별");setIncludeTransit(false);setExcludeQuery("");setExcludeList([]);setExcludeDropdown([]);setResult(null);setSearched(false);setPickupVia("");setDropVia("");}} className="px-3 py-2 bg-white border border-gray-200 text-gray-500 text-[13px] rounded-lg hover:bg-gray-50 transition">초기화</button>
 
             </div>
           </div>

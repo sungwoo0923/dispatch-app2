@@ -17594,6 +17594,19 @@ value={copyTarget?.화물수량 || ""}
                       <div className="text-[14px] font-extrabold text-gray-900 mb-1">
                         {rec.상차지명 || "-"} → {rec.하차지명 || "-"}
                       </div>
+                      {(() => {
+                        const sa=v=>{if(Array.isArray(v))return v;if(typeof v==="string"&&v.trim().startsWith("["))try{const p=JSON.parse(v);return Array.isArray(p)?p:[];}catch{return[];}return[];};
+                        const pV=sa(rec.경유상차목록||rec.경유지_상차||[]).map(s=>typeof s==="string"?s:(s?.업체명||"")).filter(Boolean);
+                        const dV=sa(rec.경유하차목록||rec.경유지_하차||[]).map(s=>typeof s==="string"?s:(s?.업체명||"")).filter(Boolean);
+                        if(!pV.length&&!dV.length)return null;
+                        return(
+                          <div className="flex items-center gap-1 flex-wrap mb-1">
+                            <span className="px-2 py-0.5 bg-teal-100 text-teal-700 border border-teal-200 text-[10px] font-bold rounded-full">경유 포함</span>
+                            {pV.map((n,i)=><span key={`p${i}`} className="text-[10px] text-teal-600 bg-teal-50 border border-teal-100 px-1.5 py-0.5 rounded font-medium">{n}(상)</span>)}
+                            {dV.map((n,i)=><span key={`d${i}`} className="text-[10px] text-teal-600 bg-teal-50 border border-teal-100 px-1.5 py-0.5 rounded font-medium">{n}(하)</span>)}
+                          </div>
+                        );
+                      })()}
                       <div className="text-[13px] font-semibold text-gray-600 mb-2">
                         {rec.차량종류 || "-"} / {rec.차량톤수 || "-"}
                         {rec.화물내용 && <span> · {rec.화물내용}</span>}
@@ -17949,6 +17962,19 @@ value={copyTarget?.화물수량 || ""}
                       <div className="text-[14px] font-extrabold text-gray-900 mb-1">
                         {rec.상차지명 || "-"} → {rec.하차지명 || "-"}
                       </div>
+                      {(() => {
+                        const sa=v=>{if(Array.isArray(v))return v;if(typeof v==="string"&&v.trim().startsWith("["))try{const p=JSON.parse(v);return Array.isArray(p)?p:[];}catch{return[];}return[];};
+                        const pV=sa(rec.경유상차목록||rec.경유지_상차||[]).map(s=>typeof s==="string"?s:(s?.업체명||"")).filter(Boolean);
+                        const dV=sa(rec.경유하차목록||rec.경유지_하차||[]).map(s=>typeof s==="string"?s:(s?.업체명||"")).filter(Boolean);
+                        if(!pV.length&&!dV.length)return null;
+                        return(
+                          <div className="flex items-center gap-1 flex-wrap mb-1">
+                            <span className="px-2 py-0.5 bg-teal-100 text-teal-700 border border-teal-200 text-[10px] font-bold rounded-full">경유 포함</span>
+                            {pV.map((n,i)=><span key={`p${i}`} className="text-[10px] text-teal-600 bg-teal-50 border border-teal-100 px-1.5 py-0.5 rounded font-medium">{n}(상)</span>)}
+                            {dV.map((n,i)=><span key={`d${i}`} className="text-[10px] text-teal-600 bg-teal-50 border border-teal-100 px-1.5 py-0.5 rounded font-medium">{n}(하)</span>)}
+                          </div>
+                        );
+                      })()}
                       <div className="text-[13px] font-semibold text-gray-600 mb-2">
                         {rec.차량종류 || "-"} / {rec.차량톤수 || "-"}
                         {rec.화물내용 && <span> · {rec.화물내용}</span>}
@@ -19925,10 +19951,17 @@ if (editTarget.거래처명) {
                         {rec.상차지명 || "-"} → {rec.하차지명 || "-"}
                       </div>
                       {(() => {
-                        const _xv3 = (arr) => Array.isArray(arr) ? arr.map(v => typeof v==="string"?v:(v?.업체명||v?.주소||"")).filter(Boolean) : [];
-                        const names = [...new Set([..._xv3(rec.경유지_상차),..._xv3(rec.경유상차목록),..._xv3(rec.경유지상차),..._xv3(rec.경유지_하차),..._xv3(rec.경유하차목록),..._xv3(rec.경유지하차)])];
-                        if (!names.length) return null;
-                        return <div className="text-[11px] text-gray-400 mb-1">경유: {names.join(" → ")}</div>;
+                        const sa=v=>{if(Array.isArray(v))return v;if(typeof v==="string"&&v.trim().startsWith("["))try{const p=JSON.parse(v);return Array.isArray(p)?p:[];}catch{return[];}return[];};
+                        const pV=sa(rec.경유상차목록||rec.경유지_상차||[]).map(s=>typeof s==="string"?s:(s?.업체명||"")).filter(Boolean);
+                        const dV=sa(rec.경유하차목록||rec.경유지_하차||[]).map(s=>typeof s==="string"?s:(s?.업체명||"")).filter(Boolean);
+                        if(!pV.length&&!dV.length)return null;
+                        return(
+                          <div className="flex items-center gap-1 flex-wrap mb-1">
+                            <span className="px-2 py-0.5 bg-teal-100 text-teal-700 border border-teal-200 text-[10px] font-bold rounded-full">경유 포함</span>
+                            {pV.map((n,i)=><span key={`p${i}`} className="text-[10px] text-teal-600 bg-teal-50 border border-teal-100 px-1.5 py-0.5 rounded font-medium">{n}(상)</span>)}
+                            {dV.map((n,i)=><span key={`d${i}`} className="text-[10px] text-teal-600 bg-teal-50 border border-teal-100 px-1.5 py-0.5 rounded font-medium">{n}(하)</span>)}
+                          </div>
+                        );
                       })()}
                       <div className="text-[13px] font-semibold text-gray-600 mb-2">
                         {rec.차량종류 || "-"} / {rec.차량톤수 || "-"}
@@ -26323,6 +26356,19 @@ setCopyTarget(prev => ({
                       <div className="text-[14px] font-extrabold text-gray-900 mb-1">
                         {rec.상차지명 || "-"} → {rec.하차지명 || "-"}
                       </div>
+                      {(() => {
+                        const sa=v=>{if(Array.isArray(v))return v;if(typeof v==="string"&&v.trim().startsWith("["))try{const p=JSON.parse(v);return Array.isArray(p)?p:[];}catch{return[];}return[];};
+                        const pV=sa(rec.경유상차목록||rec.경유지_상차||[]).map(s=>typeof s==="string"?s:(s?.업체명||"")).filter(Boolean);
+                        const dV=sa(rec.경유하차목록||rec.경유지_하차||[]).map(s=>typeof s==="string"?s:(s?.업체명||"")).filter(Boolean);
+                        if(!pV.length&&!dV.length)return null;
+                        return(
+                          <div className="flex items-center gap-1 flex-wrap mb-1">
+                            <span className="px-2 py-0.5 bg-teal-100 text-teal-700 border border-teal-200 text-[10px] font-bold rounded-full">경유 포함</span>
+                            {pV.map((n,i)=><span key={`p${i}`} className="text-[10px] text-teal-600 bg-teal-50 border border-teal-100 px-1.5 py-0.5 rounded font-medium">{n}(상)</span>)}
+                            {dV.map((n,i)=><span key={`d${i}`} className="text-[10px] text-teal-600 bg-teal-50 border border-teal-100 px-1.5 py-0.5 rounded font-medium">{n}(하)</span>)}
+                          </div>
+                        );
+                      })()}
                       <div className="text-[13px] font-semibold text-gray-600 mb-2">
                         {rec.차량종류 || "-"} / {rec.차량톤수 || "-"}
                         {rec.화물내용 && <span> · {rec.화물내용}</span>}
@@ -27921,10 +27967,17 @@ setCopyTarget(prev => ({
                         {rec.상차지명 || "-"} → {rec.하차지명 || "-"}
                       </div>
                       {(() => {
-                        const _xv4 = (arr) => Array.isArray(arr) ? arr.map(v => typeof v==="string"?v:(v?.업체명||v?.주소||"")).filter(Boolean) : [];
-                        const names = [...new Set([..._xv4(rec.경유지_상차),..._xv4(rec.경유상차목록),..._xv4(rec.경유지상차),..._xv4(rec.경유지_하차),..._xv4(rec.경유하차목록),..._xv4(rec.경유지하차)])];
-                        if (!names.length) return null;
-                        return <div className="text-[11px] text-gray-400 mb-1">경유: {names.join(" → ")}</div>;
+                        const sa=v=>{if(Array.isArray(v))return v;if(typeof v==="string"&&v.trim().startsWith("["))try{const p=JSON.parse(v);return Array.isArray(p)?p:[];}catch{return[];}return[];};
+                        const pV=sa(rec.경유상차목록||rec.경유지_상차||[]).map(s=>typeof s==="string"?s:(s?.업체명||"")).filter(Boolean);
+                        const dV=sa(rec.경유하차목록||rec.경유지_하차||[]).map(s=>typeof s==="string"?s:(s?.업체명||"")).filter(Boolean);
+                        if(!pV.length&&!dV.length)return null;
+                        return(
+                          <div className="flex items-center gap-1 flex-wrap mb-1">
+                            <span className="px-2 py-0.5 bg-teal-100 text-teal-700 border border-teal-200 text-[10px] font-bold rounded-full">경유 포함</span>
+                            {pV.map((n,i)=><span key={`p${i}`} className="text-[10px] text-teal-600 bg-teal-50 border border-teal-100 px-1.5 py-0.5 rounded font-medium">{n}(상)</span>)}
+                            {dV.map((n,i)=><span key={`d${i}`} className="text-[10px] text-teal-600 bg-teal-50 border border-teal-100 px-1.5 py-0.5 rounded font-medium">{n}(하)</span>)}
+                          </div>
+                        );
                       })()}
                       <div className="text-[13px] font-semibold text-gray-600 mb-2">
                         {rec.차량종류 || "-"} / {rec.차량톤수 || "-"}
