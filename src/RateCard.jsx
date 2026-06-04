@@ -135,6 +135,8 @@ function OrderDetailModal({ rows, bucket, fareField, onClose }) {
 export default function RateCard({ dispatchData = [] }) {
   const [pickup, setPickup] = useState("");
   const [drop, setDrop] = useState("");
+  const [waypoint, setWaypoint] = useState("");
+  const [includeTransit, setIncludeTransit] = useState(false);
   const [vGroup, setVGroup] = useState("");
   const [mixedFilter, setMixedFilter] = useState("전체");
   const [fareField, setFareField] = useState("청구운임");
@@ -251,18 +253,31 @@ const [detailModal, setDetailModal] = useState(null);
   const handleSearch = () => {
     if (!pickup.trim()||!drop.trim()||!vGroup) { alert("상차지역, 하차지역, 차량종류를 모두 입력하세요."); return; }
     const pu=clean(pickup), dr=clean(drop);
+    const wp = waypoint.trim() ? clean(waypoint) : "";
 
     // 🔥 경유지 판별: "1.반찬 2.송원" 같은 패턴 제외
     const isTransitStop = (text) => /\d+\./.test(String(text || ""));
 
     let matched = dispatchData.filter(r => {
-      // 🔥 상차지명 또는 하차지명에 "1." "2." 등 경유 번호가 있으면 제외
-      if (isTransitStop(r.상차지명) || isTransitStop(r.하차지명)) return false;
+      // 🔥 경유 포함 여부에 따라 경유지 데이터 포함/제외
+      if (!includeTransit && (isTransitStop(r.상차지명) || isTransitStop(r.하차지명))) return false;
 
       const pm=clean(r.상차지명||"")+clean(r.상차지주소||"");
       const dm=clean(r.하차지명||"")+clean(r.하차지주소||"");
       if (!pm.includes(pu)||!dm.includes(dr)) return false;
       if (getVehicleGroup(r.차량종류)!==vGroup) return false;
+
+      // 경유지역 필터: 입력된 경우 경유 관련 필드에서 매칭
+      if (wp) {
+        const waypointFields = [
+          r.경유지_상차, r.경유지_하차,
+          ...(Array.isArray(r.경유상차목록) ? r.경유상차목록 : []),
+          ...(Array.isArray(r.경유하차목록) ? r.경유하차목록 : []),
+          r.하차지명, r.상차지명, r.메모,
+        ].map(v => clean(v || "")).join("");
+        if (!waypointFields.includes(wp)) return false;
+      }
+
       return !!Number(String(r[fareField]||0).replace(/[^\d]/g,""));
     });
 
@@ -298,7 +313,7 @@ const [detailModal, setDetailModal] = useState(null);
 
     const rows=BUCKETS.map(b=>({...b, stats:trimmedStats(bucketMap[b.label],bucketRowMap[b.label])})).filter(b=>b.stats!==null);
     const groupLabel=VEHICLE_GROUPS.find(g=>g.value===vGroup)?.label||vGroup;
-        setResult({rows, totalCount:matched.length, groupLabel, pickup:pickup.trim(), drop:drop.trim(), fareField, mixedFilter, viewMode});
+        setResult({rows, totalCount:matched.length, groupLabel, pickup:pickup.trim(), drop:drop.trim(), waypoint:waypoint.trim(), fareField, mixedFilter, viewMode, includeTransit});
     setSearched(true);
     setEditMode(false);
     setEditRows(null);
@@ -575,7 +590,7 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm mb-5 overflow-hidden">
         <div className="bg-[#1B2B4B] px-5 py-3"><h3 className="text-[13px] font-bold text-white">노선 조건 입력</h3></div>
         <div className="p-5">
-          <div className="grid grid-cols-6 gap-3 mb-3">
+          <div className="grid grid-cols-7 gap-3 mb-3">
             <div>
               <label className={labelCls}>상차지역 <span className="text-red-400">*</span></label>
               <input className={inputCls} placeholder="예: 인천" value={pickup} onChange={e=>setPickup(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleSearch()} />
@@ -583,6 +598,16 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
             <div>
               <label className={labelCls}>하차지역 <span className="text-red-400">*</span></label>
               <input className={inputCls} placeholder="예: 부산" value={drop} onChange={e=>setDrop(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleSearch()} />
+            </div>
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className={labelCls + " mb-0"}>경유지역 (선택)</label>
+                <label className="flex items-center gap-1 cursor-pointer select-none">
+                  <input type="checkbox" checked={includeTransit} onChange={e=>setIncludeTransit(e.target.checked)} className="w-3 h-3 accent-indigo-600" />
+                  <span className="text-[11px] text-indigo-600 font-semibold whitespace-nowrap">경유 포함</span>
+                </label>
+              </div>
+              <input className={inputCls} placeholder="예: 대전" value={waypoint} onChange={e=>setWaypoint(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleSearch()} />
             </div>
             <div>
               <label className={labelCls}>차량종류 <span className="text-red-400">*</span></label>
@@ -626,7 +651,7 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
             </div>
             <div className="flex items-end gap-2">
               <button onClick={handleSearch} className="flex-1 py-2 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-lg hover:bg-[#243a60] transition">단가표 생성</button>
-                            <button onClick={()=>{setPickup("");setDrop("");setVGroup("");setMixedFilter("전체");setFareField("청구운임");setViewMode("톤수별");setExcludeQuery("");setExcludeList([]);setExcludeDropdown([]);setResult(null);setSearched(false);}} className="px-3 py-2 bg-white border border-gray-200 text-gray-500 text-[13px] rounded-lg hover:bg-gray-50 transition">초기화</button>
+                            <button onClick={()=>{setPickup("");setDrop("");setWaypoint("");setVGroup("");setMixedFilter("전체");setFareField("청구운임");setViewMode("톤수별");setIncludeTransit(false);setExcludeQuery("");setExcludeList([]);setExcludeDropdown([]);setResult(null);setSearched(false);}} className="px-3 py-2 bg-white border border-gray-200 text-gray-500 text-[13px] rounded-lg hover:bg-gray-50 transition">초기화</button>
 
             </div>
           </div>
@@ -722,6 +747,8 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
                 <div className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-[12px] text-gray-600">차량: <b className="text-[#1B2B4B]">{result.groupLabel}</b></div>
                 <div className="bg-indigo-50 border border-indigo-200 rounded-xl px-3 py-2 text-[12px] font-bold text-indigo-700">{result.viewMode}</div>
                 {result.mixedFilter!=="전체" && <div className="bg-violet-50 border border-violet-200 rounded-xl px-3 py-2 text-[12px] font-bold text-violet-700">{result.mixedFilter}</div>}
+                {result.includeTransit && <div className="bg-indigo-50 border border-indigo-200 rounded-xl px-3 py-2 text-[12px] font-bold text-indigo-700">경유 포함</div>}
+                {result.waypoint && <div className="bg-orange-50 border border-orange-200 rounded-xl px-3 py-2 text-[12px] font-bold text-orange-700">경유: {result.waypoint}</div>}
                 <div className="bg-blue-50 border border-blue-200 rounded-xl px-3 py-2 text-[12px] text-blue-600 font-semibold">{result.fareField==="청구운임"?"청구가 기준":"기사운임 기준"}</div>
                 <div className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-[12px] text-gray-500">조회 <b className="text-[#1B2B4B]">{result.totalCount}</b>건</div>
               </div>

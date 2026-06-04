@@ -463,6 +463,8 @@ export default function StandardFare() {
   const [nfLoading, setNfLoading] = useState(false);
   const [nfResult, setNfResult] = useState(null);
   const [nfError, setNfError] = useState("");
+  // 전국운임 경유지 상태
+  const [nfWaypoints, setNfWaypoints] = useState([]); // [{addr, coord}]
 
   const geocodeTmap = async (addr) => {
     // Try searchAddress first — handles Kakao 도로명주소
@@ -530,8 +532,26 @@ export default function StandardFare() {
     try {
       const fromCoord = nfFromCoord || await geocodeTmap(nfFrom);
       const toCoord = nfToCoord || await geocodeTmap(nfTo);
-      const km = await getRouteKm(fromCoord, toCoord);
-      setNfResult({ km, from: nfFrom, to: nfTo });
+
+      // 경유지가 있을 경우 각 구간 거리 합산
+      let totalKm = 0;
+      if (nfWaypoints.length > 0) {
+        const validWaypoints = [];
+        for (const wp of nfWaypoints) {
+          if (!wp.addr.trim()) continue;
+          const coord = wp.coord || await geocodeTmap(wp.addr);
+          validWaypoints.push({ ...wp, coord });
+        }
+        const points = [fromCoord, ...validWaypoints.map(w => w.coord), toCoord];
+        for (let i = 0; i < points.length - 1; i++) {
+          totalKm += await getRouteKm(points[i], points[i + 1]);
+        }
+        const waypointLabels = validWaypoints.map(w => w.addr);
+        setNfResult({ km: totalKm, from: nfFrom, to: nfTo, waypoints: waypointLabels });
+      } else {
+        totalKm = await getRouteKm(fromCoord, toCoord);
+        setNfResult({ km: totalKm, from: nfFrom, to: nfTo, waypoints: [] });
+      }
     } catch (err) {
       setNfError(err.message || "조회 중 오류가 발생했습니다");
     } finally { setNfLoading(false); }
@@ -862,36 +882,50 @@ export default function StandardFare() {
           {searched && (
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[1400px] text-[13px]">
+                <table className="w-full min-w-[1500px] text-[13px]">
                   <thead>
                     <tr className="bg-[#1B2B4B]">
-                      {["상차일","상차지명","상차지주소","하차지명","하차지주소","화물내용","차량종류","차량톤수","혼적","청구운임","운임레벨","기사운임","수수료","메모"].map(h=>(
+                      {["상차일","상차지명","상차지주소","하차지명","하차지주소","경유지","화물내용","차량종류","차량톤수","혼적","청구운임","운임레벨","기사운임","수수료","메모"].map(h=>(
                         <th key={h} className="px-3 py-3 text-center text-[13px] font-bold text-white whitespace-nowrap border-b border-white/10">{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {result.length === 0 ? (
-                      <tr><td colSpan={14} className="py-16 text-center text-gray-400 text-[13px]">조회된 데이터가 없습니다.</td></tr>
+                      <tr><td colSpan={15} className="py-16 text-center text-gray-400 text-[13px]">조회된 데이터가 없습니다.</td></tr>
                     ) : (
-                      result.map((r, i) => (
-                        <tr key={r._id} className={`border-b border-gray-100 transition hover:bg-blue-50/40 ${i%2===0?"bg-white":"bg-gray-50/40"}`}>
-                          <td className="px-3 py-2.5 text-center text-[13px] text-gray-700 font-medium whitespace-nowrap">{r.상차일}</td>
-                          <td className="px-3 py-2.5 text-[13px] font-semibold text-gray-800 whitespace-nowrap">{r.상차지명}</td>
-                          <td className="px-3 py-2.5 text-[13px] text-gray-600 max-w-[160px] truncate" title={r.상차지주소}>{r.상차지주소}</td>
-                          <td className="px-3 py-2.5 text-[13px] font-semibold text-gray-800 whitespace-nowrap">{r.하차지명}</td>
-                          <td className="px-3 py-2.5 text-[13px] text-gray-600 max-w-[160px] truncate" title={r.하차지주소}>{r.하차지주소}</td>
-                          <td className="px-3 py-2.5 text-[13px] text-gray-700 text-center">{r.화물내용}</td>
-                          <td className="px-3 py-2.5 text-[13px] text-gray-700 text-center whitespace-nowrap">{r.차량종류}</td>
-                          <td className="px-3 py-2.5 text-[13px] text-gray-700 text-center">{r.차량톤수}</td>
-                          <td className="px-3 py-2.5 text-[13px] text-gray-700 text-center">{r.혼적 ? "Y" : ""}</td>
-                          <td className="px-3 py-2.5 text-right text-[13px] font-bold text-gray-800">{Number(r.청구운임||0).toLocaleString()}</td>
-                          <td className="px-3 py-2.5 text-center"><FareLevelBadge level={r.fareLevel} /></td>
-                          <td className="px-3 py-2.5 text-right text-[13px] text-gray-700 font-medium">{Number(r.기사운임||0).toLocaleString()}</td>
-                          <td className="px-3 py-2.5 text-right text-[13px] text-gray-700 font-medium">{(Number(r.청구운임||0) - Number(r.기사운임||0)).toLocaleString()}</td>
-                          <td className="px-3 py-2.5 text-[13px] text-gray-600 max-w-[120px] truncate" title={r.메모}>{r.메모}</td>
-                        </tr>
-                      ))
+                      result.map((r, i) => {
+                        // 경유지 정보 조합
+                        const waypointParts = [
+                          r.경유지_상차, r.경유지_하차,
+                          ...(Array.isArray(r.경유상차목록) ? r.경유상차목록 : []),
+                          ...(Array.isArray(r.경유하차목록) ? r.경유하차목록 : []),
+                        ].filter(Boolean);
+                        const waypointText = waypointParts.join(", ");
+                        return (
+                          <tr key={r._id} className={`border-b border-gray-100 transition hover:bg-blue-50/40 ${i%2===0?"bg-white":"bg-gray-50/40"}`}>
+                            <td className="px-3 py-2.5 text-center text-[13px] text-gray-700 font-medium whitespace-nowrap">{r.상차일}</td>
+                            <td className="px-3 py-2.5 text-[13px] font-semibold text-gray-800 whitespace-nowrap">{r.상차지명}</td>
+                            <td className="px-3 py-2.5 text-[13px] text-gray-600 max-w-[160px] truncate" title={r.상차지주소}>{r.상차지주소}</td>
+                            <td className="px-3 py-2.5 text-[13px] font-semibold text-gray-800 whitespace-nowrap">{r.하차지명}</td>
+                            <td className="px-3 py-2.5 text-[13px] text-gray-600 max-w-[160px] truncate" title={r.하차지주소}>{r.하차지주소}</td>
+                            <td className="px-3 py-2.5 text-[13px] text-center max-w-[120px] truncate" title={waypointText}>
+                              {waypointText ? (
+                                <span className="px-1.5 py-0.5 bg-indigo-50 text-indigo-700 rounded text-[11px] font-semibold">{waypointText}</span>
+                              ) : <span className="text-gray-300">-</span>}
+                            </td>
+                            <td className="px-3 py-2.5 text-[13px] text-gray-700 text-center">{r.화물내용}</td>
+                            <td className="px-3 py-2.5 text-[13px] text-gray-700 text-center whitespace-nowrap">{r.차량종류}</td>
+                            <td className="px-3 py-2.5 text-[13px] text-gray-700 text-center">{r.차량톤수}</td>
+                            <td className="px-3 py-2.5 text-[13px] text-gray-700 text-center">{r.혼적 ? "Y" : ""}</td>
+                            <td className="px-3 py-2.5 text-right text-[13px] font-bold text-gray-800">{Number(r.청구운임||0).toLocaleString()}</td>
+                            <td className="px-3 py-2.5 text-center"><FareLevelBadge level={r.fareLevel} /></td>
+                            <td className="px-3 py-2.5 text-right text-[13px] text-gray-700 font-medium">{Number(r.기사운임||0).toLocaleString()}</td>
+                            <td className="px-3 py-2.5 text-right text-[13px] text-gray-700 font-medium">{(Number(r.청구운임||0) - Number(r.기사운임||0)).toLocaleString()}</td>
+                            <td className="px-3 py-2.5 text-[13px] text-gray-600 max-w-[120px] truncate" title={r.메모}>{r.메모}</td>
+                          </tr>
+                        );
+                      })
                     )}
                   </tbody>
                 </table>
@@ -905,10 +939,11 @@ export default function StandardFare() {
       {activeTab === "전국운임표" && (
         <>
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm mb-4 p-5">
-            <div className="grid grid-cols-2 gap-4 mb-4">
-              <div>
+            {/* 출발지 → 도착지 한 줄 레이아웃 */}
+            <div className="flex items-end gap-2 mb-3">
+              <div className="flex-1">
                 <label className="block text-[12px] font-bold text-gray-500 mb-1">출발지 주소</label>
-                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
                   <AddressSearch
                     value={nfFrom}
                     onChange={v => { setNfFrom(v); setNfFromCoord(null); }}
@@ -918,9 +953,10 @@ export default function StandardFare() {
                   <KakaoAddressButton onComplete={(addr) => { setNfFrom(addr); setNfFromCoord(null); }} />
                 </div>
               </div>
-              <div>
+              <div className="flex items-center pb-1.5 px-1 text-[18px] font-bold text-blue-400 select-none">→</div>
+              <div className="flex-1">
                 <label className="block text-[12px] font-bold text-gray-500 mb-1">도착지 주소</label>
-                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
                   <AddressSearch
                     value={nfTo}
                     onChange={v => { setNfTo(v); setNfToCoord(null); }}
@@ -932,7 +968,46 @@ export default function StandardFare() {
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
+            {/* 경유지 입력 */}
+            {nfWaypoints.length > 0 && (
+              <div className="mb-3 space-y-2">
+                {nfWaypoints.map((wp, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <span className="text-[11px] font-semibold text-indigo-500 whitespace-nowrap w-16 text-right">경유지 {idx + 1}</span>
+                    <div className="flex-1" style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                      <AddressSearch
+                        value={wp.addr}
+                        onChange={v => {
+                          setNfWaypoints(prev => prev.map((w, i) => i === idx ? { ...w, addr: v, coord: null } : w));
+                        }}
+                        onSelect={s => {
+                          if (s) setNfWaypoints(prev => prev.map((w, i) => i === idx ? { addr: s.address, coord: s } : w));
+                        }}
+                        placeholder={`경유지 ${idx + 1} 주소 입력`}
+                      />
+                      <KakaoAddressButton onComplete={(addr) => {
+                        setNfWaypoints(prev => prev.map((w, i) => i === idx ? { addr, coord: null } : w));
+                      }} />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setNfWaypoints(prev => prev.filter((_, i) => i !== idx))}
+                      className="px-2 py-1.5 text-[12px] text-red-400 border border-red-200 rounded hover:bg-red-50 transition"
+                    >✕</button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="flex items-center gap-3 flex-wrap">
+              <button
+                type="button"
+                onClick={() => setNfWaypoints(prev => [...prev, { addr: "", coord: null }])}
+                className="px-3 py-1.5 text-[12px] font-semibold text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 transition"
+              >
+                + 경유지 추가
+              </button>
+
               <div className="flex items-center gap-2">
                 <label className="text-[12px] font-bold text-gray-500 whitespace-nowrap">차량 유형</label>
                 <select
@@ -962,7 +1037,7 @@ export default function StandardFare() {
               </button>
 
               <button
-                onClick={() => { setNfFrom(""); setNfTo(""); setNfFromCoord(null); setNfToCoord(null); setNfResult(null); setNfError(""); }}
+                onClick={() => { setNfFrom(""); setNfTo(""); setNfFromCoord(null); setNfToCoord(null); setNfResult(null); setNfError(""); setNfWaypoints([]); }}
                 className="px-5 py-2 bg-white text-gray-500 text-[13px] font-semibold rounded-lg border border-gray-200 hover:bg-gray-50 transition"
               >
                 다시 입력
@@ -970,6 +1045,9 @@ export default function StandardFare() {
 
               {nfResult && (
                 <div className="ml-auto flex items-center gap-2 text-[13px] font-semibold text-[#1B2B4B]">
+                  {nfResult.waypoints && nfResult.waypoints.length > 0 && (
+                    <span className="text-[12px] text-indigo-500 font-medium">경유 {nfResult.waypoints.length}곳 포함</span>
+                  )}
                   도로거리: <span className="text-[15px] font-bold">{nfResult.km} km</span>
                 </div>
               )}
@@ -988,6 +1066,9 @@ export default function StandardFare() {
                   <div className="text-white/60 text-[12px] mt-0.5">
                     도로거리 {nfResult.km}km · {cat.label}
                     {cat.multiplier > 1 && <span className="ml-1 text-blue-300 text-[11px]">({Math.round((cat.multiplier-1)*100)}% 할증)</span>}
+                    {nfResult.waypoints && nfResult.waypoints.length > 0 && (
+                      <span className="ml-2 text-indigo-300 text-[11px]">경유: {nfResult.waypoints.join(" → ")}</span>
+                    )}
                   </div>
                 </div>
                 <div className="text-white/80 text-[13px] font-semibold">차량별 예상 운임</div>

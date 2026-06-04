@@ -558,6 +558,7 @@ const patchDispatch = async (_id, patch) => {
     patch.기사명 = "";
     patch.배차상태 = "배차중";
     patch.상태 = "배차중";
+    patch.업체전달상태 = "미전달";
   } else {
     const basePlate = patch.차량번호 || prev?.차량번호;
     if (basePlate) {
@@ -10564,6 +10565,17 @@ setConfirmChange(null);
                 </div>
                 <div className="px-4 py-3">
                   <div className="text-[14px] font-bold text-gray-900 mb-1.5">{r.상차지명} → {r.하차지명}</div>
+                  {(() => {
+                    const viaPickup = Array.isArray(r.경유지_상차) ? r.경유지_상차 : Array.isArray(r.경유상차목록) ? r.경유상차목록 : [];
+                    const viaDrop = Array.isArray(r.경유지_하차) ? r.경유지_하차 : Array.isArray(r.경유하차목록) ? r.경유하차목록 : [];
+                    const via = [...viaPickup, ...viaDrop];
+                    if (!via.length) return null;
+                    const names = via.map(v => v.업체명 || v.주소 || "").filter(Boolean);
+                    if (!names.length) return null;
+                    return (
+                      <div className="text-[11px] text-gray-400 mt-0.5">경유: {names.join(" → ")}</div>
+                    );
+                  })()}
                   <div className="flex gap-3 text-[12px] text-gray-500">
                     <span>{r.차량종류}{r.차량톤수 ? ` / ${r.차량톤수}` : ""}</span>
                     {r.화물내용 && <span className="text-gray-400">· {r.화물내용}</span>}
@@ -10632,6 +10644,17 @@ setConfirmChange(null);
                   )}
                   {r.차량종류 && <span className="text-[11px] text-gray-400">{r.차량종류}</span>}
                   {r.차량톤수 && <span className="text-[11px] text-gray-400">{r.차량톤수}</span>}
+                  {(() => {
+                    const viaPickup = Array.isArray(r.경유지_상차) ? r.경유지_상차 : Array.isArray(r.경유상차목록) ? r.경유상차목록 : [];
+                    const viaDrop = Array.isArray(r.경유지_하차) ? r.경유지_하차 : Array.isArray(r.경유하차목록) ? r.경유하차목록 : [];
+                    const via = [...viaPickup, ...viaDrop];
+                    if (!via.length) return null;
+                    const names = via.map(v => v.업체명 || v.주소 || "").filter(Boolean);
+                    if (!names.length) return null;
+                    return (
+                      <span className="text-[11px] text-gray-400">경유: {names.join(" → ")}</span>
+                    );
+                  })()}
                 </div>
                 <div className="flex items-center gap-4 text-[11px]">
                   <span className="text-gray-500">기사 {driver.toLocaleString()}원</span>
@@ -19909,6 +19932,17 @@ if (editTarget.거래처명) {
                       <div className="text-[14px] font-extrabold text-gray-900 mb-1">
                         {rec.상차지명 || "-"} → {rec.하차지명 || "-"}
                       </div>
+                      {(() => {
+                        const viaPickup = Array.isArray(rec.경유지_상차) ? rec.경유지_상차 : Array.isArray(rec.경유상차목록) ? rec.경유상차목록 : [];
+                        const viaDrop = Array.isArray(rec.경유지_하차) ? rec.경유지_하차 : Array.isArray(rec.경유하차목록) ? rec.경유하차목록 : [];
+                        const via = [...viaPickup, ...viaDrop];
+                        if (!via.length) return null;
+                        const names = via.map(v => v.업체명 || v.주소 || "").filter(Boolean);
+                        if (!names.length) return null;
+                        return (
+                          <div className="text-[11px] text-gray-400 mb-1">경유: {names.join(" → ")}</div>
+                        );
+                      })()}
                       <div className="text-[13px] font-semibold text-gray-600 mb-2">
                         {rec.차량종류 || "-"} / {rec.차량톤수 || "-"}
                         {rec.화물내용 && <span> · {rec.화물내용}</span>}
@@ -27899,6 +27933,17 @@ setCopyTarget(prev => ({
                       <div className="text-[14px] font-extrabold text-gray-900 mb-1">
                         {rec.상차지명 || "-"} → {rec.하차지명 || "-"}
                       </div>
+                      {(() => {
+                        const viaPickup = Array.isArray(rec.경유지_상차) ? rec.경유지_상차 : Array.isArray(rec.경유상차목록) ? rec.경유상차목록 : [];
+                        const viaDrop = Array.isArray(rec.경유지_하차) ? rec.경유지_하차 : Array.isArray(rec.경유하차목록) ? rec.경유하차목록 : [];
+                        const via = [...viaPickup, ...viaDrop];
+                        if (!via.length) return null;
+                        const names = via.map(v => v.업체명 || v.주소 || "").filter(Boolean);
+                        if (!names.length) return null;
+                        return (
+                          <div className="text-[11px] text-gray-400 mb-1">경유: {names.join(" → ")}</div>
+                        );
+                      })()}
                       <div className="text-[13px] font-semibold text-gray-600 mb-2">
                         {rec.차량종류 || "-"} / {rec.차량톤수 || "-"}
                         {rec.화물내용 && <span> · {rec.화물내용}</span>}
@@ -32611,7 +32656,7 @@ const [includeCardAr, setIncludeCardAr] = useState(true);
         const arr = snap.docs
           .map(d => ({ id: d.id, ...d.data() }))
           .sort((a, b) => (b.sentAt || 0) - (a.sentAt || 0))
-          .slice(0, 30);
+          .slice(0, 200);
         setEmailLogs(arr);
       }
     );
@@ -35655,15 +35700,15 @@ const handleBatchSettle = async (targetStatus) => {
                       />
                       <div className="flex-1 min-w-0" onClick={() => setSelectedMail(log)}>
                         <div className="flex items-center justify-between mb-1">
-                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${log.status === "success" ? "bg-[#1B2B4B] text-white" : "bg-red-600 text-white"}`}>
+                          <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded ${log.status === "success" ? "bg-[#1B2B4B] text-white" : "bg-red-600 text-white"}`}>
                             {log.type || "메일"}
                           </span>
-                          <span className="text-[11px] text-gray-400 shrink-0 ml-1">{log.sentAt ? new Date(log.sentAt).toLocaleDateString("ko-KR", {month:"2-digit",day:"2-digit"}) : ""}</span>
+                          <span className="text-[12px] text-gray-400 shrink-0 ml-1">{log.sentAt ? new Date(log.sentAt).toLocaleDateString("ko-KR", {month:"2-digit",day:"2-digit"}) : ""}</span>
                         </div>
-                        <div className="text-[12px] font-semibold text-gray-800 truncate">{log.subject || "(제목없음)"}</div>
-                        <div className="text-[11px] text-gray-500 truncate">{log.to || "-"}</div>
+                        <div className="text-[13px] font-semibold text-gray-800 truncate">{log.subject || "(제목없음)"}</div>
+                        <div className="text-[12px] text-gray-500 truncate">{log.to || "-"}</div>
                         {log.client && log.client !== "-" && (
-                          <div className="text-[10px] text-[#1B2B4B]/60 truncate">{log.client}</div>
+                          <div className="text-[11px] text-[#1B2B4B]/60 truncate">{log.client}</div>
                         )}
                       </div>
                     </div>

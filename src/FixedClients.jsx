@@ -117,8 +117,9 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
 
   const [rows, setRows] = useState([]);
   const [selected, setSelected] = useState([]);
-  const [editMode, setEditMode] = useState(false);
   const [search, setSearch] = useState("");
+  const [editPopupOpen, setEditPopupOpen] = useState(false);
+  const [editPopupRow, setEditPopupRow] = useState(null);
   const [showDoneOnly, setShowDoneOnly] = useState(false);
 
   // ★ 변경 1: 초기값 빈 문자열 → 처음 진입 시 데이터 안 보임
@@ -275,6 +276,43 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
     });
   };
 
+  // Edit popup functions
+  const openEditPopup = (row) => {
+    setEditPopupRow({ ...row });
+    setEditPopupOpen(true);
+  };
+
+  const updateEditPopupField = (field, value) => {
+    setEditPopupRow(prev => {
+      const updated = { ...prev, [field]: value };
+      const qty = Number(updated.수량 || 0);
+      const d = Number(updated.기사단가 || 0);
+      const f = Number(updated.수수료단가 || 0);
+      updated.기사운임 = qty * d;
+      updated.수수료 = qty * f;
+      updated.청구운임 = updated.기사운임 + updated.수수료;
+      return updated;
+    });
+  };
+
+  const selectEditPopupDriver = (driver) => {
+    setEditPopupRow(prev => {
+      const updated = { ...prev, 차량번호: driver.차량번호, 이름: driver.이름, 핸드폰번호: driver.전화번호 };
+      const qty = Number(updated.수량 || 0);
+      updated.기사운임 = qty * Number(updated.기사단가 || 0);
+      updated.수수료 = qty * Number(updated.수수료단가 || 0);
+      updated.청구운임 = updated.기사운임 + updated.수수료;
+      return updated;
+    });
+  };
+
+  const saveEditPopup = async () => {
+    if (!editPopupRow) return;
+    await saveRow(editPopupRow);
+    setEditPopupOpen(false);
+    setEditPopupRow(null);
+  };
+
   const submitFastRows = async () => {
     const vc = getViewCompany();
     for (const row of fastRows) {
@@ -365,7 +403,7 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
             {showDoneOnly ? "✓ 정산완료만" : "정산완료만"}
           </button>
           <div className="ml-auto flex items-center gap-2">
-            <button onClick={() => setEditMode(p => !p)} className={`px-3 py-1.5 rounded-lg border text-[13px] font-semibold transition ${editMode ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>{editMode ? "수정 종료" : "수정"}</button>
+            <button onClick={() => { if (!selected.length) return alert("수정할 항목을 선택하세요."); const row = filtered.find(r => r.id === selected[0]); if (row) openEditPopup(row); }} className="px-3 py-1.5 rounded-lg border text-[13px] font-semibold transition bg-white text-gray-600 border-gray-300 hover:bg-gray-50">수정</button>
             <button onClick={markSettlement} className="px-3 py-1.5 rounded-lg bg-indigo-100 text-indigo-700 border border-indigo-300 text-[13px] font-semibold hover:bg-indigo-200 transition">정산 처리</button>
             <button onClick={() => { if (!selected.length) return alert("삭제할 항목을 선택하세요."); setDeleteConfirm(true); }} className="px-3 py-1.5 rounded-lg bg-red-100 text-red-600 border border-red-300 text-[13px] font-semibold hover:bg-red-200 transition">삭제</button>
             <button onClick={() => { const ws = XLSX.utils.json_to_sheet(filtered); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "고정거래처"); XLSX.writeFile(wb, "고정거래처관리.xlsx"); }} className="px-3 py-1.5 rounded-lg bg-teal-100 text-teal-700 border border-teal-300 text-[13px] font-semibold hover:bg-teal-200 transition">엑셀다운</button>
@@ -412,34 +450,23 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
                 ) : filtered.length === 0 ? (
                   <tr><td colSpan={12} className="py-16 text-center text-[13px] text-gray-400">해당 기간에 데이터가 없습니다</td></tr>
                 ) : filtered.map((r, idx) => (
-                  <tr key={r.id} className={`transition hover:bg-blue-50/40 ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"} ${r.정산완료 ? "opacity-60" : ""}`}>
-                    <td className={cell}><input type="checkbox" checked={selected.includes(r.id)} onChange={() => setSelected(p => p.includes(r.id) ? p.filter(x => x !== r.id) : [...p, r.id])} /></td>
+                  <tr key={r.id} onDoubleClick={() => openEditPopup(r)} className={`transition hover:bg-blue-50/40 cursor-pointer ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"} ${r.정산완료 ? "opacity-60" : ""}`}>
+                    <td className={cell} onClick={e => e.stopPropagation()}><input type="checkbox" checked={selected.includes(r.id)} onChange={() => setSelected(p => p.includes(r.id) ? p.filter(x => x !== r.id) : [...p, r.id])} /></td>
                     <td className={cell}>
                       <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold border ${r.정산완료 ? "bg-emerald-100 text-emerald-700 border-emerald-300" : "bg-amber-100 text-amber-600 border-amber-300"}`}>
                         {r.정산완료 ? "✓ 완료" : "미정산"}
                       </span>
                     </td>
-                    <td className={cell}>{editMode ? <input type="date" className="border border-gray-200 rounded-lg px-2 py-1 text-[12px]" value={r.날짜} onChange={e => updateRow(r.id, { 날짜: e.target.value })} onBlur={() => saveRow(rows.find(x => x.id === r.id))} /> : r.날짜}</td>
-                    <td className={`${cell} font-semibold`}>{editMode ? <input className="border border-gray-200 rounded-lg px-2 py-1 text-[12px] w-28" value={r.거래처명} onChange={e => updateRow(r.id, { 거래처명: e.target.value })} onBlur={() => saveRow(rows.find(x => x.id === r.id))} /> : r.거래처명}</td>
-                    <td className={cell}>{editMode ? <select className="border border-gray-200 rounded-lg px-2 py-1 text-[12px]" value={r.톤수} onChange={e => updateRow(r.id, { 톤수: e.target.value })} onBlur={() => saveRow(rows.find(x => x.id === r.id))}><option value="">선택</option>{tonList.map(t => <option key={t}>{t}</option>)}</select> : r.톤수}</td>
-                    <td className={cell}>{editMode ? <input type="number" className="border border-gray-200 rounded-lg px-2 py-1 text-[12px] w-16 text-center" value={r.수량} onChange={e => updateRow(r.id, { 수량: e.target.value })} onBlur={() => saveRow(rows.find(x => x.id === r.id))} /> : r.수량}</td>
-                    {/* ★ 변경 2-a: 테이블 차량번호 → 이름/차량번호 검색 드롭다운 */}
-                                        <td className={cell}>
-                      <DriverSearchInput
-                        value={r.차량번호}
-                        drivers={drivers}
-                        placeholder="차량번호·이름"
-                        className="w-28"
-                        onChange={(val) => updateRow(r.id, { 차량번호: val })}
-                        onSelect={(d) => handleDriverSelect(r.id, d)}
-                      />
-                    </td>
-
+                    <td className={cell}>{r.날짜}</td>
+                    <td className={`${cell} font-semibold`}>{r.거래처명}</td>
+                    <td className={cell}>{r.톤수}</td>
+                    <td className={cell}>{r.수량}</td>
+                    <td className={cell}>{r.차량번호}</td>
                     <td className={`${cell} font-semibold`}>{r.이름}</td>
                     <td className={cell}>{r.핸드폰번호}</td>
                     {["청구운임","기사운임","수수료"].map(f => (
                       <td key={f} className={`${cell} text-right font-semibold ${f === "수수료" ? "text-orange-600" : f === "기사운임" ? "text-emerald-600" : "text-blue-600"}`}>
-                        {editMode ? <input type="number" className="border border-gray-200 rounded-lg px-2 py-1 text-[12px] w-24 text-right" value={r[f]} onChange={e => updateRow(r.id, { [f]: Number(e.target.value) })} onBlur={() => saveRow(rows.find(x => x.id === r.id))} /> : fmt(r[f])}
+                        {fmt(r[f])}
                       </td>
                     ))}
                   </tr>
@@ -506,6 +533,79 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
           </div>
         </div>
       )}
+
+      {/* 수정 팝업 모달 */}
+      <Dialog open={editPopupOpen} onClose={() => setEditPopupOpen(false)} className="relative z-50">
+        <div className="fixed inset-0 bg-black/50" />
+        <div className="fixed inset-0 flex items-center justify-center p-4">
+          <Dialog.Panel className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+            <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between shrink-0">
+              <div><Dialog.Title className="text-white font-bold text-[16px]">수정</Dialog.Title><p className="text-white/60 text-[12px] mt-0.5">선택한 항목을 수정합니다</p></div>
+              <button onClick={() => setEditPopupOpen(false)} className="text-white/60 hover:text-white text-xl">✕</button>
+            </div>
+            {editPopupRow && (
+              <div className="flex-1 overflow-y-auto p-5">
+                <div className="border border-gray-200 rounded-xl p-4 bg-gray-50 space-y-3">
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-gray-500 mb-1">날짜</label>
+                      <input type="date" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px]" value={editPopupRow.날짜 || ""} onChange={e => updateEditPopupField("날짜", e.target.value)} />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-gray-500 mb-1">거래처명</label>
+                      <input type="text" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px]" value={editPopupRow.거래처명 || ""} onChange={e => updateEditPopupField("거래처명", e.target.value)} />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-gray-500 mb-1">톤수</label>
+                      <select className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px]" value={editPopupRow.톤수 || ""} onChange={e => updateEditPopupField("톤수", e.target.value)}>
+                        <option value="">선택</option>{tonList.map(t => <option key={t}>{t}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-gray-500 mb-1">수량</label>
+                      <input type="number" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px]" value={editPopupRow.수량 || ""} onChange={e => updateEditPopupField("수량", e.target.value)} />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-gray-500 mb-1">차량번호 / 기사명</label>
+                      <DriverSearchInput
+                        value={editPopupRow.차량번호 || ""}
+                        drivers={drivers}
+                        placeholder="차량번호 또는 이름 입력"
+                        onChange={(val) => updateEditPopupField("차량번호", val)}
+                        onSelect={(d) => selectEditPopupDriver(d)}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-gray-500 mb-1">기사명</label>
+                      <input className="w-full border border-gray-100 rounded-lg px-2 py-1.5 text-[13px] bg-gray-100" value={editPopupRow.이름 || ""} readOnly />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-gray-500 mb-1">기사단가</label>
+                      <input type="number" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px]" value={editPopupRow.기사단가 || 0} onChange={e => updateEditPopupField("기사단가", e.target.value)} />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-gray-500 mb-1">수수료단가</label>
+                      <input type="number" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px]" value={editPopupRow.수수료단가 || 0} onChange={e => updateEditPopupField("수수료단가", e.target.value)} />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3 pt-2 border-t border-gray-200">
+                    {[["기사운임", "text-emerald-600"],["수수료","text-orange-600"],["청구운임","text-blue-600"]].map(([f, cls]) => (
+                      <div key={f} className="bg-white rounded-lg border border-gray-200 px-3 py-2 text-center">
+                        <div className="text-[10px] text-gray-400">{f}</div>
+                        <div className={`text-[14px] font-bold ${cls}`}>{fmt(editPopupRow[f])}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+            <div className="px-5 py-4 border-t flex items-center justify-end gap-3 shrink-0">
+              <button onClick={() => setEditPopupOpen(false)} className="px-4 py-2 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 transition">취소</button>
+              <button onClick={saveEditPopup} className="px-5 py-2 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition">저장하기</button>
+            </div>
+          </Dialog.Panel>
+        </div>
+      </Dialog>
 
       {/* 빠른 등록 모달 */}
       <Dialog open={fastOpen} onClose={() => setFastOpen(false)} className="relative z-50">
