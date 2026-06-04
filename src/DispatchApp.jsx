@@ -10566,15 +10566,10 @@ setConfirmChange(null);
                 <div className="px-4 py-3">
                   <div className="text-[14px] font-bold text-gray-900 mb-1.5">{r.상차지명} → {r.하차지명}</div>
                   {(() => {
-                    const viaPickup = Array.isArray(r.경유지_상차) ? r.경유지_상차 : Array.isArray(r.경유상차목록) ? r.경유상차목록 : [];
-                    const viaDrop = Array.isArray(r.경유지_하차) ? r.경유지_하차 : Array.isArray(r.경유하차목록) ? r.경유하차목록 : [];
-                    const via = [...viaPickup, ...viaDrop];
-                    if (!via.length) return null;
-                    const names = via.map(v => v.업체명 || v.주소 || "").filter(Boolean);
+                    const _xv = (arr) => Array.isArray(arr) ? arr.map(v => typeof v==="string"?v:(v?.업체명||v?.주소||"")).filter(Boolean) : [];
+                    const names = [...new Set([..._xv(r.경유지_상차),..._xv(r.경유상차목록),..._xv(r.경유지상차),..._xv(r.경유지_하차),..._xv(r.경유하차목록),..._xv(r.경유지하차)])];
                     if (!names.length) return null;
-                    return (
-                      <div className="text-[11px] text-gray-400 mt-0.5">경유: {names.join(" → ")}</div>
-                    );
+                    return <div className="text-[11px] text-gray-400 mt-0.5">경유: {names.join(" → ")}</div>;
                   })()}
                   <div className="flex gap-3 text-[12px] text-gray-500">
                     <span>{r.차량종류}{r.차량톤수 ? ` / ${r.차량톤수}` : ""}</span>
@@ -10645,11 +10640,8 @@ setConfirmChange(null);
                   {r.차량종류 && <span className="text-[11px] text-gray-400">{r.차량종류}</span>}
                   {r.차량톤수 && <span className="text-[11px] text-gray-400">{r.차량톤수}</span>}
                   {(() => {
-                    const viaPickup = Array.isArray(r.경유지_상차) ? r.경유지_상차 : Array.isArray(r.경유상차목록) ? r.경유상차목록 : [];
-                    const viaDrop = Array.isArray(r.경유지_하차) ? r.경유지_하차 : Array.isArray(r.경유하차목록) ? r.경유하차목록 : [];
-                    const via = [...viaPickup, ...viaDrop];
-                    if (!via.length) return null;
-                    const names = via.map(v => v.업체명 || v.주소 || "").filter(Boolean);
+                    const _xv2 = (arr) => Array.isArray(arr) ? arr.map(v => typeof v==="string"?v:(v?.업체명||v?.주소||"")).filter(Boolean) : [];
+                    const names = [...new Set([..._xv2(r.경유지_상차),..._xv2(r.경유상차목록),..._xv2(r.경유지상차),..._xv2(r.경유지_하차),..._xv2(r.경유하차목록),..._xv2(r.경유지하차)])];
                     if (!names.length) return null;
                     return (
                       <span className="text-[11px] text-gray-400">경유: {names.join(" → ")}</span>
@@ -19933,15 +19925,10 @@ if (editTarget.거래처명) {
                         {rec.상차지명 || "-"} → {rec.하차지명 || "-"}
                       </div>
                       {(() => {
-                        const viaPickup = Array.isArray(rec.경유지_상차) ? rec.경유지_상차 : Array.isArray(rec.경유상차목록) ? rec.경유상차목록 : [];
-                        const viaDrop = Array.isArray(rec.경유지_하차) ? rec.경유지_하차 : Array.isArray(rec.경유하차목록) ? rec.경유하차목록 : [];
-                        const via = [...viaPickup, ...viaDrop];
-                        if (!via.length) return null;
-                        const names = via.map(v => v.업체명 || v.주소 || "").filter(Boolean);
+                        const _xv3 = (arr) => Array.isArray(arr) ? arr.map(v => typeof v==="string"?v:(v?.업체명||v?.주소||"")).filter(Boolean) : [];
+                        const names = [...new Set([..._xv3(rec.경유지_상차),..._xv3(rec.경유상차목록),..._xv3(rec.경유지상차),..._xv3(rec.경유지_하차),..._xv3(rec.경유하차목록),..._xv3(rec.경유지하차)])];
                         if (!names.length) return null;
-                        return (
-                          <div className="text-[11px] text-gray-400 mb-1">경유: {names.join(" → ")}</div>
-                        );
+                        return <div className="text-[11px] text-gray-400 mb-1">경유: {names.join(" → ")}</div>;
                       })()}
                       <div className="text-[13px] font-semibold text-gray-600 mb-2">
                         {rec.차량종류 || "-"} / {rec.차량톤수 || "-"}
@@ -27934,15 +27921,10 @@ setCopyTarget(prev => ({
                         {rec.상차지명 || "-"} → {rec.하차지명 || "-"}
                       </div>
                       {(() => {
-                        const viaPickup = Array.isArray(rec.경유지_상차) ? rec.경유지_상차 : Array.isArray(rec.경유상차목록) ? rec.경유상차목록 : [];
-                        const viaDrop = Array.isArray(rec.경유지_하차) ? rec.경유지_하차 : Array.isArray(rec.경유하차목록) ? rec.경유하차목록 : [];
-                        const via = [...viaPickup, ...viaDrop];
-                        if (!via.length) return null;
-                        const names = via.map(v => v.업체명 || v.주소 || "").filter(Boolean);
+                        const _xv4 = (arr) => Array.isArray(arr) ? arr.map(v => typeof v==="string"?v:(v?.업체명||v?.주소||"")).filter(Boolean) : [];
+                        const names = [...new Set([..._xv4(rec.경유지_상차),..._xv4(rec.경유상차목록),..._xv4(rec.경유지상차),..._xv4(rec.경유지_하차),..._xv4(rec.경유하차목록),..._xv4(rec.경유지하차)])];
                         if (!names.length) return null;
-                        return (
-                          <div className="text-[11px] text-gray-400 mb-1">경유: {names.join(" → ")}</div>
-                        );
+                        return <div className="text-[11px] text-gray-400 mb-1">경유: {names.join(" → ")}</div>;
                       })()}
                       <div className="text-[13px] font-semibold text-gray-600 mb-2">
                         {rec.차량종류 || "-"} / {rec.차량톤수 || "-"}

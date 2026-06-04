@@ -405,8 +405,8 @@ function StatCard({ label, value, sub, color = "blue" }) {
 
 // 차종별 운임 (1800-5017 79km 데이터 기준, 일반 카고)
 const FARE_TYPES = [
-  { label: "라보",   base: 58000,  perKm: 405  },
-  { label: "1톤",   base: 50000,  perKm: 633  },
+  { label: "라보",   base: 44000,  perKm: 380  },
+  { label: "1톤",   base: 54000,  perKm: 620  },
   { label: "1.4톤", base: 55000,  perKm: 696  },
   { label: "2.5톤", base: 65000,  perKm: 823  },
   { label: "3.5톤", base: 72000,  perKm: 924  },
@@ -896,12 +896,18 @@ export default function StandardFare() {
                     ) : (
                       result.map((r, i) => {
                         // 경유지 정보 조합
-                        const waypointParts = [
-                          r.경유지_상차, r.경유지_하차,
-                          ...(Array.isArray(r.경유상차목록) ? r.경유상차목록 : []),
-                          ...(Array.isArray(r.경유하차목록) ? r.경유하차목록 : []),
-                        ].filter(Boolean);
-                        const waypointText = waypointParts.join(", ");
+                        const _extractViaNames = (arr) => Array.isArray(arr)
+                          ? arr.map(v => typeof v === "string" ? v : (v?.업체명 || v?.주소 || "")).filter(Boolean)
+                          : [];
+                        const _allViaNames = [
+                          ..._extractViaNames(r.경유지_상차),
+                          ..._extractViaNames(r.경유상차목록),
+                          ..._extractViaNames(r.경유지상차),
+                          ..._extractViaNames(r.경유지_하차),
+                          ..._extractViaNames(r.경유하차목록),
+                          ..._extractViaNames(r.경유지하차),
+                        ];
+                        const waypointText = [...new Set(_allViaNames)].join(" → ");
                         return (
                           <tr key={r._id} className={`border-b border-gray-100 transition hover:bg-blue-50/40 ${i%2===0?"bg-white":"bg-gray-50/40"}`}>
                             <td className="px-3 py-2.5 text-center text-[13px] text-gray-700 font-medium whitespace-nowrap">{r.상차일}</td>
@@ -911,7 +917,7 @@ export default function StandardFare() {
                             <td className="px-3 py-2.5 text-[13px] text-gray-600 max-w-[160px] truncate" title={r.하차지주소}>{r.하차지주소}</td>
                             <td className="px-3 py-2.5 text-[13px] text-center max-w-[120px] truncate" title={waypointText}>
                               {waypointText ? (
-                                <span className="px-1.5 py-0.5 bg-indigo-50 text-indigo-700 rounded text-[11px] font-semibold">{waypointText}</span>
+                                <span className="px-1.5 py-0.5 bg-gray-100 text-gray-700 rounded text-[11px] font-semibold">{waypointText}</span>
                               ) : <span className="text-gray-300">-</span>}
                             </td>
                             <td className="px-3 py-2.5 text-[13px] text-gray-700 text-center">{r.화물내용}</td>
@@ -973,7 +979,7 @@ export default function StandardFare() {
               <div className="mb-3 space-y-2">
                 {nfWaypoints.map((wp, idx) => (
                   <div key={idx} className="flex items-center gap-2">
-                    <span className="text-[11px] font-semibold text-indigo-500 whitespace-nowrap w-16 text-right">경유지 {idx + 1}</span>
+                    <span className="text-[11px] font-semibold text-gray-500 whitespace-nowrap w-16 text-right">경유지 {idx + 1}</span>
                     <div className="flex-1" style={{ display: "flex", gap: "6px", alignItems: "center" }}>
                       <AddressSearch
                         value={wp.addr}
@@ -1003,7 +1009,7 @@ export default function StandardFare() {
               <button
                 type="button"
                 onClick={() => setNfWaypoints(prev => [...prev, { addr: "", coord: null }])}
-                className="px-3 py-1.5 text-[12px] font-semibold text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 transition"
+                className="px-3 py-1.5 text-[12px] font-semibold text-[#1B2B4B] bg-white border border-[#1B2B4B]/30 rounded-lg hover:bg-[#1B2B4B]/5 transition"
               >
                 + 경유지 추가
               </button>
@@ -1046,7 +1052,7 @@ export default function StandardFare() {
               {nfResult && (
                 <div className="ml-auto flex items-center gap-2 text-[13px] font-semibold text-[#1B2B4B]">
                   {nfResult.waypoints && nfResult.waypoints.length > 0 && (
-                    <span className="text-[12px] text-indigo-500 font-medium">경유 {nfResult.waypoints.length}곳 포함</span>
+                    <span className="text-[12px] text-gray-500 font-medium">경유 {nfResult.waypoints.length}곳 포함</span>
                   )}
                   도로거리: <span className="text-[15px] font-bold">{nfResult.km} km</span>
                 </div>
@@ -1067,7 +1073,7 @@ export default function StandardFare() {
                     도로거리 {nfResult.km}km · {cat.label}
                     {cat.multiplier > 1 && <span className="ml-1 text-blue-300 text-[11px]">({Math.round((cat.multiplier-1)*100)}% 할증)</span>}
                     {nfResult.waypoints && nfResult.waypoints.length > 0 && (
-                      <span className="ml-2 text-indigo-300 text-[11px]">경유: {nfResult.waypoints.join(" → ")}</span>
+                      <span className="ml-2 text-white/60 text-[11px]">경유: {nfResult.waypoints.join(" → ")}</span>
                     )}
                   </div>
                 </div>
