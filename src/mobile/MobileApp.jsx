@@ -3611,7 +3611,7 @@ const MobileHeader = React.memo(function MobileHeader({ title, onBack, onRefresh
       cardVersionB
         ? "bg-[#1B2B4B] py-3.5"
         : "bg-white border-b py-3"
-    }`}>
+    }`} style={{ willChange: "transform", transform: "translateZ(0)", WebkitTransform: "translateZ(0)" }}>
       <div className="w-12">
         {isListPage ? (
           <button
@@ -5172,14 +5172,14 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess }) {
             <label className={labelCls}>지급방식</label>
             <select className={inputCls} value={payType} onChange={e => setPayType(e.target.value)}>
               <option value="">선택</option>
-              {["계산서","카드","선불","착불","무통장","현금"].map(v => <option key={v}>{v}</option>)}
+              {["계산서","착불","선불","손실","개인","취소"].map(v => <option key={v}>{v}</option>)}
             </select>
           </div>
           <div>
             <label className={labelCls}>배차방식</label>
             <select className={inputCls} value={dispType} onChange={e => setDispType(e.target.value)}>
               <option value="">선택</option>
-              {["직접배차","화물맨","원배","용차","콜"].map(v => <option key={v}>{v}</option>)}
+              {["24시","직접배차","인성","고정기사"].map(v => <option key={v}>{v}</option>)}
             </select>
           </div>
         </div>
@@ -5309,7 +5309,10 @@ const dropTime = order.하차시간 || "시간 없음";
                 배차완료
               </span>
             ) : (
-              <span className="text-[0.72em] font-semibold text-gray-400 border border-gray-200 px-1.5 py-0.5 rounded">배차중</span>
+              <span className="badge-dispatching text-[0.72em] font-semibold text-gray-400 border border-gray-200 px-1.5 py-0.5 rounded">배차중</span>
+            )}
+            {order.거래처명 && (
+              <span className="text-[0.72em] font-semibold text-gray-500 truncate max-w-[90px]">{order.거래처명}</span>
             )}
             {isCold && (
               <span className="text-[0.68em] text-slate-500 font-semibold bg-slate-100 px-1.5 py-0.5 rounded">
@@ -5453,8 +5456,12 @@ const dropTime = order.하차시간 || "시간 없음";
   </div>
 )}
 
-      {/* ▶ 상태 + 냉장/냉동 */}
-<div className="flex justify-end items-center gap-1 mb-0.5">
+      {/* ▶ 거래처명 + 상태 + 냉장/냉동 */}
+<div className="flex justify-between items-center gap-1 mb-0.5">
+  {order.거래처명 ? (
+    <span className="text-[11px] font-semibold text-gray-600 truncate max-w-[45%]">{order.거래처명}</span>
+  ) : <span />}
+  <div className="flex items-center gap-1">
 
   {showUndeliveredOnly && (
     <span className="px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 text-[10px] font-bold border border-yellow-300">
@@ -5496,6 +5503,7 @@ const dropTime = order.하차시간 || "시간 없음";
   <span className={"px-2 py-0.5 rounded-full border text-[11px] font-semibold " + stateBadgeClass}>
     {state}
   </span>
+  </div>
 </div>
 
 
