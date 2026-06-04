@@ -454,6 +454,14 @@ export default function StandardFare() {
   const [searched, setSearched] = useState(false);
   const [resetKey, setResetKey] = useState(0);
 
+  // 표준운임 경유지 상태
+  const [pickupVias, setPickupVias] = useState([]);
+  const [dropVias, setDropVias] = useState([]);
+  const [pickupViaInput, setPickupViaInput] = useState("");
+  const [dropViaInput, setDropViaInput] = useState("");
+  const [showPickupViaInput, setShowPickupViaInput] = useState(false);
+  const [showDropViaInput, setShowDropViaInput] = useState(false);
+
   // 전국운임 상태
   const [nfFrom, setNfFrom] = useState("");
   const [nfTo, setNfTo] = useState("");
@@ -664,6 +672,26 @@ export default function StandardFare() {
       list = list.filter(r => clean(r.거래처명) === clean(client));
     }
 
+    // 경유지 필터링
+    const sa = v => { if(Array.isArray(v)) return v; if(typeof v==="string"&&v.trim().startsWith("[")) { try{const p=JSON.parse(v);return Array.isArray(p)?p:[];}catch{return[];} } return[]; };
+    list = list.filter(r => {
+      const rPV = sa(r.경유상차목록||r.경유지_상차||[]).map(s=>typeof s==="string"?s:(s?.업체명||"")).filter(Boolean);
+      const rDV = sa(r.경유하차목록||r.경유지_하차||[]).map(s=>typeof s==="string"?s:(s?.업체명||"")).filter(Boolean);
+      if (pickupVias.length > 0) {
+        if (rPV.length !== pickupVias.length) return false;
+        if (!pickupVias.every((v,i)=>clean(rPV[i]).includes(clean(v))||clean(v).includes(clean(rPV[i])))) return false;
+      } else {
+        if (rPV.length > 0) return false;
+      }
+      if (dropVias.length > 0) {
+        if (rDV.length !== dropVias.length) return false;
+        if (!dropVias.every((v,i)=>clean(rDV[i]).includes(clean(v))||clean(v).includes(clean(rDV[i])))) return false;
+      } else {
+        if (rDV.length > 0) return false;
+      }
+      return true;
+    });
+
     const 기준차량그룹 = vehicle === "전체" ? null : normalizeVehicleGroup(vehicle);
     const 기준파렛트 = cargo ? extractCargoNumber(cargo) : null;
     const baseGroup = list.filter(r =>
@@ -711,6 +739,7 @@ export default function StandardFare() {
   const reset = () => {
     setPickup(""); setDrop(""); setCargo(""); setTon(""); setVehicle("전체");
     setPickupAddr(""); setDropAddr(""); setClient("전체"); setResult([]); setAiFare(null); setSearched(false);
+    setPickupVias([]); setDropVias([]); setPickupViaInput(""); setDropViaInput(""); setShowPickupViaInput(false); setShowDropViaInput(false);
     setResetKey(k => k + 1);
     ["sf_pickup","sf_drop","sf_cargo","sf_ton","sf_vehicle","sf_pickupAddr","sf_dropAddr","sf_client"].forEach(k=>localStorage.removeItem(k));
   };
