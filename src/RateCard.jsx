@@ -142,13 +142,6 @@ export default function RateCard({ dispatchData = [] }) {
   const [searched, setSearched] = useState(false);
 const [detailModal, setDetailModal] = useState(null);
   const [viewMode, setViewMode] = useState("톤수별"); // 톤수별 | 파렛수별
-  // 경유지: 배열 방식 (버튼 클릭 → 입력 → 태그)
-  const [pickupVias, setPickupVias] = useState([]);
-  const [dropVias, setDropVias] = useState([]);
-  const [showPickupViaInput, setShowPickupViaInput] = useState(false);
-  const [showDropViaInput, setShowDropViaInput] = useState(false);
-  const [pickupViaInput, setPickupViaInput] = useState("");
-  const [dropViaInput, setDropViaInput] = useState("");
   // 🔥 거래처 제외 필터
   const [excludeQuery, setExcludeQuery] = useState("");
   const [excludeList, setExcludeList] = useState([]);       // 제외할 거래처명 배열
@@ -267,32 +260,6 @@ const [detailModal, setDetailModal] = useState(null);
       return !!Number(String(r[fareField]||0).replace(/[^\d]/g,""));
     });
 
-    // 경유상차/하차목록 배열 형식 필터링
-    const sa = v => { if(Array.isArray(v)) return v; if(typeof v==="string"&&v.trim().startsWith("[")) { try{const p=JSON.parse(v);return Array.isArray(p)?p:[];}catch{return[];} } return[]; };
-    // 구 포맷 "1.xxx 2.xxx" 파싱
-    const parseNameVias = (name) => {
-      const ms = [...String(name||"").matchAll(/(\d+)\.\s*([^\d\n.]+)/g)];
-      return ms.length > 1 ? ms.sort((a,b)=>+a[1]-+b[1]).slice(1).map(m=>m[2].trim()) : [];
-    };
-    matched = matched.filter(r => {
-      let rPV = sa(r.경유상차목록||r.경유지_상차||[]).map(s=>typeof s==="string"?s:(s?.업체명||"")).filter(Boolean);
-      if (!rPV.length) rPV = parseNameVias(r.상차지명);
-      let rDV = sa(r.경유하차목록||r.경유지_하차||[]).map(s=>typeof s==="string"?s:(s?.업체명||"")).filter(Boolean);
-      if (!rDV.length) rDV = parseNameVias(r.하차지명);
-      if (pickupVias.length > 0) {
-        if (rPV.length !== pickupVias.length) return false;
-        if (!pickupVias.every((v,i) => clean(rPV[i]).includes(clean(v))||clean(v).includes(clean(rPV[i])))) return false;
-      } else {
-        if (rPV.length > 0) return false;
-      }
-      if (dropVias.length > 0) {
-        if (rDV.length !== dropVias.length) return false;
-        if (!dropVias.every((v,i) => clean(rDV[i]).includes(clean(v))||clean(v).includes(clean(rDV[i])))) return false;
-      } else {
-        if (rDV.length > 0) return false;
-      }
-      return true;
-    });
 
     if (mixedFilter==="혼적") matched=matched.filter(r=>r.혼적===true||r.혼적==="true"||r.혼적===1);
     else if (mixedFilter==="독차") matched=matched.filter(r=>!r.혼적||r.혼적===false||r.혼적==="false"||r.혼적===0);
@@ -326,7 +293,7 @@ const [detailModal, setDetailModal] = useState(null);
 
     const rows=BUCKETS.map(b=>({...b, stats:trimmedStats(bucketMap[b.label],bucketRowMap[b.label])})).filter(b=>b.stats!==null);
     const groupLabel=VEHICLE_GROUPS.find(g=>g.value===vGroup)?.label||vGroup;
-        setResult({rows, totalCount:matched.length, groupLabel, pickup:pickup.trim(), drop:drop.trim(), waypoint:[...pickupVias.map(v=>`${v}(상)`), ...dropVias.map(v=>`${v}(하)`)].join(", "), fareField, mixedFilter, viewMode, includeTransit});
+        setResult({rows, totalCount:matched.length, groupLabel, pickup:pickup.trim(), drop:drop.trim(), fareField, mixedFilter, viewMode});
     setSearched(true);
     setEditMode(false);
     setEditRows(null);
@@ -608,49 +575,11 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
             <div>
               <label className={labelCls}>상차지역 <span className="text-red-400">*</span></label>
               <input className={inputCls} placeholder="예: 인천" value={pickup} onChange={e=>setPickup(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleSearch()} />
-              <div className="mt-1 flex items-center gap-1 flex-wrap min-h-[26px]">
-                {pickupVias.map((v,i) => (
-                  <span key={i} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-[#1B2B4B]/8 text-[#1B2B4B] border border-[#1B2B4B]/20 rounded text-[11px] font-semibold">
-                    경유{i+1}: {v}
-                    <button type="button" onClick={()=>setPickupVias(p=>p.filter((_,j)=>j!==i))} className="text-gray-400 hover:text-[#1B2B4B] ml-0.5 leading-none">×</button>
-                  </span>
-                ))}
-                {showPickupViaInput ? (
-                  <div className="flex items-center gap-1">
-                    <input autoFocus className="px-1.5 py-0.5 text-[11px] border border-gray-300 rounded focus:border-[#1B2B4B] focus:outline-none w-24"
-                      placeholder="경유지명" value={pickupViaInput} onChange={e=>setPickupViaInput(e.target.value)}
-                      onKeyDown={e=>{if(e.key==="Enter"&&pickupViaInput.trim()){setPickupVias(p=>[...p,pickupViaInput.trim()]);setPickupViaInput("");setShowPickupViaInput(false);}if(e.key==="Escape"){setPickupViaInput("");setShowPickupViaInput(false);}}} />
-                    <button type="button" onClick={()=>{if(pickupViaInput.trim()){setPickupVias(p=>[...p,pickupViaInput.trim()]);setPickupViaInput("");}setShowPickupViaInput(false);}} className="px-1.5 py-0.5 bg-[#1B2B4B] text-white text-[10px] font-bold rounded">추가</button>
-                    <button type="button" onClick={()=>{setPickupViaInput("");setShowPickupViaInput(false);}} className="px-1 py-0.5 text-gray-400 text-[10px]">×</button>
-                  </div>
-                ) : (
-                  <button type="button" onClick={()=>setShowPickupViaInput(true)} className="px-1.5 py-0.5 border border-dashed border-gray-300 text-gray-500 hover:border-[#1B2B4B] hover:text-[#1B2B4B] rounded text-[11px] font-semibold transition">+ 경유</button>
-                )}
-              </div>
             </div>
             {/* 하차지역 */}
             <div>
               <label className={labelCls}>하차지역 <span className="text-red-400">*</span></label>
               <input className={inputCls} placeholder="예: 부산" value={drop} onChange={e=>setDrop(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleSearch()} />
-              <div className="mt-1 flex items-center gap-1 flex-wrap min-h-[26px]">
-                {dropVias.map((v,i) => (
-                  <span key={i} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-[#1B2B4B]/8 text-[#1B2B4B] border border-[#1B2B4B]/20 rounded text-[11px] font-semibold">
-                    경유{i+1}: {v}
-                    <button type="button" onClick={()=>setDropVias(p=>p.filter((_,j)=>j!==i))} className="text-gray-400 hover:text-[#1B2B4B] ml-0.5 leading-none">×</button>
-                  </span>
-                ))}
-                {showDropViaInput ? (
-                  <div className="flex items-center gap-1">
-                    <input autoFocus className="px-1.5 py-0.5 text-[11px] border border-gray-300 rounded focus:border-[#1B2B4B] focus:outline-none w-24"
-                      placeholder="경유지명" value={dropViaInput} onChange={e=>setDropViaInput(e.target.value)}
-                      onKeyDown={e=>{if(e.key==="Enter"&&dropViaInput.trim()){setDropVias(p=>[...p,dropViaInput.trim()]);setDropViaInput("");setShowDropViaInput(false);}if(e.key==="Escape"){setDropViaInput("");setShowDropViaInput(false);}}} />
-                    <button type="button" onClick={()=>{if(dropViaInput.trim()){setDropVias(p=>[...p,dropViaInput.trim()]);setDropViaInput("");}setShowDropViaInput(false);}} className="px-1.5 py-0.5 bg-[#1B2B4B] text-white text-[10px] font-bold rounded">추가</button>
-                    <button type="button" onClick={()=>{setDropViaInput("");setShowDropViaInput(false);}} className="px-1 py-0.5 text-gray-400 text-[10px]">×</button>
-                  </div>
-                ) : (
-                  <button type="button" onClick={()=>setShowDropViaInput(true)} className="px-1.5 py-0.5 border border-dashed border-gray-300 text-gray-500 hover:border-[#1B2B4B] hover:text-[#1B2B4B] rounded text-[11px] font-semibold transition">+ 경유</button>
-                )}
-              </div>
             </div>
             <div>
               <label className={labelCls}>차량종류 <span className="text-red-400">*</span></label>
@@ -789,9 +718,7 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
                 <div className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-[12px] text-gray-600">차량: <b className="text-[#1B2B4B]">{result.groupLabel}</b></div>
                 <div className="bg-indigo-50 border border-indigo-200 rounded-xl px-3 py-2 text-[12px] font-bold text-indigo-700">{result.viewMode}</div>
                 {result.mixedFilter!=="전체" && <div className="bg-violet-50 border border-violet-200 rounded-xl px-3 py-2 text-[12px] font-bold text-violet-700">{result.mixedFilter}</div>}
-                {result.includeTransit && <div className="bg-indigo-50 border border-indigo-200 rounded-xl px-3 py-2 text-[12px] font-bold text-indigo-700">경유 포함</div>}
-                {result.waypoint && <div className="bg-orange-50 border border-orange-200 rounded-xl px-3 py-2 text-[12px] font-bold text-orange-700">경유: {result.waypoint}</div>}
-                <div className="bg-blue-50 border border-blue-200 rounded-xl px-3 py-2 text-[12px] text-blue-600 font-semibold">{result.fareField==="청구운임"?"청구가 기준":"기사운임 기준"}</div>
+<div className="bg-blue-50 border border-blue-200 rounded-xl px-3 py-2 text-[12px] text-blue-600 font-semibold">{result.fareField==="청구운임"?"청구가 기준":"기사운임 기준"}</div>
                 <div className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-[12px] text-gray-500">조회 <b className="text-[#1B2B4B]">{result.totalCount}</b>건</div>
               </div>
             </div>
