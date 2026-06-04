@@ -543,13 +543,14 @@ export default function StandardFare() {
     try {
       const fromCoord = nfFromCoord || await geocodeTmap(nfFrom);
       const toCoord = nfToCoord || await geocodeTmap(nfTo);
+      const validVias = nfVias.filter(v => v.address.trim());
       const resolvedVias = [];
-      for (const via of nfVias) {
+      for (const via of validVias) {
         const coord = via.coord || await geocodeTmap(via.address);
         resolvedVias.push(coord);
       }
       const km = await getRouteKm(fromCoord, toCoord, resolvedVias);
-      setNfResult({ km, from: nfFrom, to: nfTo, vias: nfVias.map(v=>v.address) });
+      setNfResult({ km, from: nfFrom, to: nfTo, vias: validVias.map(v=>v.address) });
     } catch (err) {
       setNfError(err.message || "조회 중 오류가 발생했습니다");
     } finally { setNfLoading(false); }
@@ -1001,66 +1002,127 @@ export default function StandardFare() {
       {/* ====== 전국운임 조회 탭 (T-Map 도로거리 기반) ====== */}
       {activeTab === "전국운임표" && (
         <>
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm mb-4 p-4">
-            {/* Route input - compact inline */}
-            <div className="flex gap-2 items-center mb-3">
-              <div className="flex-1">
-                <label className="text-[11px] font-bold text-gray-500 mb-1 block">출발지</label>
-                <div className="flex gap-1 items-center">
-                  <AddressSearch value={nfFrom} onChange={v=>{setNfFrom(v);setNfFromCoord(null);}} onSelect={s=>{if(s){setNfFrom(s.address);setNfFromCoord(s);}}} placeholder="예: 인천 서구 원창동" />
-                  <KakaoAddressButton onComplete={(addr)=>{setNfFrom(addr);setNfFromCoord(null);}} />
-                </div>
-              </div>
-              <div className="text-[#1B2B4B] font-black text-lg shrink-0 mt-5">→</div>
-              <div className="flex-1">
-                <label className="text-[11px] font-bold text-gray-500 mb-1 block">도착지</label>
-                <div className="flex gap-1 items-center">
-                  <AddressSearch value={nfTo} onChange={v=>{setNfTo(v);setNfToCoord(null);}} onSelect={s=>{if(s){setNfTo(s.address);setNfToCoord(s);}}} placeholder="예: 경기 용인시 처인구" />
-                  <KakaoAddressButton onComplete={(addr)=>{setNfTo(addr);setNfToCoord(null);}} />
-                </div>
-              </div>
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm mb-4 overflow-hidden">
+            <div className="bg-[#1B2B4B] px-5 py-3">
+              <div className="text-[14px] font-bold text-white">경로 설정</div>
+              <div className="text-[11px] text-white/55 mt-0.5">T-Map 실도로거리 기반 운임 계산</div>
             </div>
+            <div className="p-5">
 
-            {/* Waypoints */}
-            <div className="mb-3">
-              <label className="text-[11px] font-bold text-gray-500 mb-1.5 block">경유지 (선택) — 출발→경유→도착 순서</label>
-              <div className="flex items-center gap-1.5 flex-wrap">
-                {nfVias.map((v,i) => (
-                  <span key={i} className="inline-flex items-center gap-0.5 px-2 py-0.5 bg-[#1B2B4B]/8 text-[#1B2B4B] border border-[#1B2B4B]/20 rounded text-[12px] font-semibold">
-                    경유{i+1}: {v.address}
-                    <button type="button" onClick={()=>setNfVias(prev=>prev.filter((_,j)=>j!==i))} className="text-gray-400 hover:text-[#1B2B4B] ml-0.5 leading-none">×</button>
-                  </span>
+              {/* Route diagram */}
+              <div className="mb-5">
+
+                {/* 출발지 */}
+                <div className="flex gap-3 mb-0">
+                  <div className="flex flex-col items-center pt-1 shrink-0 w-5">
+                    <div className="w-3.5 h-3.5 rounded-full bg-[#1B2B4B] ring-4 ring-[#1B2B4B]/10 shrink-0" />
+                    <div className="w-px flex-1 bg-gray-200 mt-1.5 min-h-[32px]" />
+                  </div>
+                  <div className="flex-1 pb-4">
+                    <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">출발지</div>
+                    <div className="flex gap-2">
+                      <div className="flex-1">
+                        <AddressSearch value={nfFrom} onChange={v=>{setNfFrom(v);setNfFromCoord(null);}} onSelect={s=>{if(s){setNfFrom(s.address);setNfFromCoord(s);}}} placeholder="주소 검색 (예: 인천 서구 원창동)" />
+                      </div>
+                      <KakaoAddressButton onComplete={(addr)=>{setNfFrom(addr);setNfFromCoord(null);}} />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 경유지 목록 */}
+                {nfVias.map((via, i) => (
+                  <div key={i} className="flex gap-3 mb-0">
+                    <div className="flex flex-col items-center pt-1 shrink-0 w-5">
+                      <div className="w-2.5 h-2.5 rounded-full bg-gray-400 ring-2 ring-gray-400/20 shrink-0" />
+                      <div className="w-px flex-1 bg-gray-200 mt-1 min-h-[32px]" />
+                    </div>
+                    <div className="flex-1 pb-4">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">경유지 {i + 1}</div>
+                        <button type="button"
+                          onClick={() => setNfVias(prev => prev.filter((_,j) => j !== i))}
+                          className="text-gray-400 hover:text-gray-700 text-base font-bold w-5 h-5 flex items-center justify-center">
+                          ×
+                        </button>
+                      </div>
+                      <AddressSearch
+                        value={via.address}
+                        onChange={v => { const next=[...nfVias]; next[i]={...next[i],address:v,coord:null}; setNfVias(next); }}
+                        onSelect={s => { if(s){ const next=[...nfVias]; next[i]={address:s.address,coord:s}; setNfVias(next); }}}
+                        placeholder={`경유지 ${i+1} 주소 검색`}
+                      />
+                    </div>
+                  </div>
                 ))}
+
+                {/* + 경유지 추가 */}
                 {nfVias.length < 5 && (
-                  <div className="flex items-center gap-1">
-                    <AddressSearch value={nfViaInput} onChange={v=>{setNfViaInput(v);setNfViaInputCoord(null);}} onSelect={s=>{if(s){setNfViaInput(s.address);setNfViaInputCoord(s);}}} placeholder="경유지 주소 입력" />
-                    <button type="button" onClick={()=>{if(nfViaInput.trim()){setNfVias(p=>[...p,{address:nfViaInput.trim(),coord:nfViaInputCoord}]);setNfViaInput("");setNfViaInputCoord(null);}}} className="px-3 py-1.5 bg-[#1B2B4B] text-white text-[12px] font-bold rounded-lg hover:bg-[#243a60] transition whitespace-nowrap">+ 추가</button>
+                  <div className="flex gap-3 mb-0">
+                    <div className="flex flex-col items-center shrink-0 w-5">
+                      <div className="w-px bg-gray-200 min-h-[32px]" />
+                    </div>
+                    <div className="pb-4">
+                      <button type="button"
+                        onClick={() => setNfVias(prev => [...prev, {address: "", coord: null}])}
+                        className="px-3 py-1.5 text-[12px] font-semibold text-gray-500 border border-dashed border-gray-300 rounded-lg hover:border-[#1B2B4B] hover:text-[#1B2B4B] hover:bg-[#1B2B4B]/5 transition">
+                        + 경유지 추가
+                      </button>
+                    </div>
                   </div>
                 )}
-              </div>
-            </div>
 
-            {/* Controls */}
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2">
-                <label className="text-[12px] font-bold text-gray-500 whitespace-nowrap">차량 유형</label>
-                <select className="px-3 py-1.5 text-[13px] font-medium rounded border border-gray-300 bg-white focus:border-[#1B2B4B] focus:outline-none" value={nfVehicleCategory} onChange={e=>setNfVehicleCategory(Number(e.target.value))}>
-                  {VEHICLE_CATEGORIES.map((c,i) => <option key={i} value={i}>{c.label}</option>)}
-                </select>
-              </div>
-              <button onClick={lookupNationalFare} disabled={nfLoading} className="px-8 py-2 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-lg hover:bg-[#243a60] disabled:opacity-50 transition flex items-center gap-2">
-                {nfLoading ? (<><svg className="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10" strokeOpacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10"/></svg>거리 계산 중...</>) : "조회하기"}
-              </button>
-              <button onClick={()=>{setNfFrom("");setNfTo("");setNfFromCoord(null);setNfToCoord(null);setNfResult(null);setNfError("");setNfVias([]);setNfViaInput("");setNfViaInputCoord(null);}} className="px-5 py-2 bg-white text-gray-500 text-[13px] font-semibold rounded-lg border border-gray-200 hover:bg-gray-50 transition">초기화</button>
-              {nfResult && (
-                <div className="ml-auto flex items-center gap-2 text-[13px] font-semibold text-[#1B2B4B]">
-                  도로거리: <span className="text-[15px] font-bold">{nfResult.km} km</span>
-                  {nfResult.vias?.length > 0 && <span className="text-[12px] text-gray-500 font-medium">({nfResult.vias.length}개 경유)</span>}
+                {/* 도착지 */}
+                <div className="flex gap-3">
+                  <div className="shrink-0 pt-1 w-5 flex justify-center">
+                    <div className="w-3.5 h-3.5 rounded-full bg-gray-700 ring-4 ring-gray-700/10" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">도착지</div>
+                    <div className="flex gap-2">
+                      <div className="flex-1">
+                        <AddressSearch value={nfTo} onChange={v=>{setNfTo(v);setNfToCoord(null);}} onSelect={s=>{if(s){setNfTo(s.address);setNfToCoord(s);}}} placeholder="주소 검색 (예: 경기 용인시 처인구)" />
+                      </div>
+                      <KakaoAddressButton onComplete={(addr)=>{setNfTo(addr);setNfToCoord(null);}} />
+                    </div>
+                  </div>
                 </div>
-              )}
-            </div>
+              </div>
 
-            {nfError && <div className="mt-3 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-[12px] text-red-600">{nfError}</div>}
+              {/* 차량 유형 */}
+              <div className="mb-5">
+                <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2">차량 유형</div>
+                <div className="grid grid-cols-3 gap-2">
+                  {VEHICLE_CATEGORIES.map((c, i) => (
+                    <button key={i} type="button"
+                      onClick={() => setNfVehicleCategory(i)}
+                      className={`py-2.5 text-[13px] font-semibold rounded-lg border transition ${
+                        nfVehicleCategory === i
+                          ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
+                          : "bg-white text-gray-700 border-gray-200 hover:border-[#1B2B4B] hover:text-[#1B2B4B]"
+                      }`}>
+                      {c.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 조회하기 / 초기화 */}
+              <div className="flex gap-3">
+                <button onClick={lookupNationalFare} disabled={nfLoading}
+                  className="flex-1 py-3 bg-[#1B2B4B] text-white text-[14px] font-bold rounded-xl hover:bg-[#243a60] disabled:opacity-50 transition flex items-center justify-center gap-2">
+                  {nfLoading ? (<><svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10" strokeOpacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10"/></svg>조회 중...</>) : "운임 조회"}
+                </button>
+                <button onClick={()=>{setNfFrom("");setNfTo("");setNfFromCoord(null);setNfToCoord(null);setNfResult(null);setNfError("");setNfVias([]);setNfViaInput("");setNfViaInputCoord(null);}}
+                  className="px-6 py-3 bg-white text-gray-600 text-[13px] font-semibold rounded-xl border border-gray-200 hover:bg-gray-50 transition">
+                  초기화
+                </button>
+              </div>
+
+              {nfError && (
+                <div className="mt-3 px-4 py-2.5 bg-red-50 border border-red-200 rounded-lg text-[12px] text-red-600">{nfError}</div>
+              )}
+
+            </div>
           </div>
 
           {nfResult && (
