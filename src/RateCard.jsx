@@ -135,8 +135,6 @@ function OrderDetailModal({ rows, bucket, fareField, onClose }) {
 export default function RateCard({ dispatchData = [] }) {
   const [pickup, setPickup] = useState("");
   const [drop, setDrop] = useState("");
-  const [waypoint, setWaypoint] = useState("");
-  const [includeTransit, setIncludeTransit] = useState(false);
   const [vGroup, setVGroup] = useState("");
   const [mixedFilter, setMixedFilter] = useState("전체");
   const [fareField, setFareField] = useState("청구운임");
@@ -144,8 +142,13 @@ export default function RateCard({ dispatchData = [] }) {
   const [searched, setSearched] = useState(false);
 const [detailModal, setDetailModal] = useState(null);
   const [viewMode, setViewMode] = useState("톤수별"); // 톤수별 | 파렛수별
-  const [pickupVia, setPickupVia] = useState("");
-  const [dropVia, setDropVia] = useState("");
+  // 경유지: 배열 방식 (버튼 클릭 → 입력 → 태그)
+  const [pickupVias, setPickupVias] = useState([]);
+  const [dropVias, setDropVias] = useState([]);
+  const [showPickupViaInput, setShowPickupViaInput] = useState(false);
+  const [showDropViaInput, setShowDropViaInput] = useState(false);
+  const [pickupViaInput, setPickupViaInput] = useState("");
+  const [dropViaInput, setDropViaInput] = useState("");
   // 🔥 거래처 제외 필터
   const [excludeQuery, setExcludeQuery] = useState("");
   const [excludeList, setExcludeList] = useState([]);       // 제외할 거래처명 배열
@@ -255,50 +258,36 @@ const [detailModal, setDetailModal] = useState(null);
   const handleSearch = () => {
     if (!pickup.trim()||!drop.trim()||!vGroup) { alert("상차지역, 하차지역, 차량종류를 모두 입력하세요."); return; }
     const pu=clean(pickup), dr=clean(drop);
-    const wp = waypoint.trim() ? clean(waypoint) : "";
-
-    // 🔥 경유지 판별: "1.반찬 2.송원" 같은 패턴 제외
-    const isTransitStop = (text) => /\d+\./.test(String(text || ""));
 
     let matched = dispatchData.filter(r => {
-      // 🔥 경유 포함 여부에 따라 경유지 데이터 포함/제외
-      if (!includeTransit && (isTransitStop(r.상차지명) || isTransitStop(r.하차지명))) return false;
-
       const pm=clean(r.상차지명||"")+clean(r.상차지주소||"");
       const dm=clean(r.하차지명||"")+clean(r.하차지주소||"");
       if (!pm.includes(pu)||!dm.includes(dr)) return false;
       if (getVehicleGroup(r.차량종류)!==vGroup) return false;
-
-      // 경유지역 필터: 입력된 경우 경유 관련 필드에서 매칭
-      if (wp) {
-        const waypointFields = [
-          r.경유지_상차, r.경유지_하차,
-          ...(Array.isArray(r.경유상차목록) ? r.경유상차목록 : []),
-          ...(Array.isArray(r.경유하차목록) ? r.경유하차목록 : []),
-          r.하차지명, r.상차지명, r.메모,
-        ].map(v => clean(v || "")).join("");
-        if (!waypointFields.includes(wp)) return false;
-      }
-
       return !!Number(String(r[fareField]||0).replace(/[^\d]/g,""));
     });
 
     // 경유상차/하차목록 배열 형식 필터링
     const sa = v => { if(Array.isArray(v)) return v; if(typeof v==="string"&&v.trim().startsWith("[")) { try{const p=JSON.parse(v);return Array.isArray(p)?p:[];}catch{return[];} } return[]; };
-    const puVias = pickupVia.trim().split(/[,\s]+/).map(s=>s.trim()).filter(Boolean);
-    const drVias = dropVia.trim().split(/[,\s]+/).map(s=>s.trim()).filter(Boolean);
+    // 구 포맷 "1.xxx 2.xxx" 파싱
+    const parseNameVias = (name) => {
+      const ms = [...String(name||"").matchAll(/(\d+)\.\s*([^\d\n.]+)/g)];
+      return ms.length > 1 ? ms.sort((a,b)=>+a[1]-+b[1]).slice(1).map(m=>m[2].trim()) : [];
+    };
     matched = matched.filter(r => {
-      const rPV = sa(r.경유상차목록||r.경유지_상차||[]).map(s=>typeof s==="string"?s:(s?.업체명||"")).filter(Boolean);
-      const rDV = sa(r.경유하차목록||r.경유지_하차||[]).map(s=>typeof s==="string"?s:(s?.업체명||"")).filter(Boolean);
-      if (puVias.length > 0) {
-        if (rPV.length !== puVias.length) return false;
-        if (!puVias.every((v,i) => clean(rPV[i]).includes(clean(v))||clean(v).includes(clean(rPV[i])))) return false;
+      let rPV = sa(r.경유상차목록||r.경유지_상차||[]).map(s=>typeof s==="string"?s:(s?.업체명||"")).filter(Boolean);
+      if (!rPV.length) rPV = parseNameVias(r.상차지명);
+      let rDV = sa(r.경유하차목록||r.경유지_하차||[]).map(s=>typeof s==="string"?s:(s?.업체명||"")).filter(Boolean);
+      if (!rDV.length) rDV = parseNameVias(r.하차지명);
+      if (pickupVias.length > 0) {
+        if (rPV.length !== pickupVias.length) return false;
+        if (!pickupVias.every((v,i) => clean(rPV[i]).includes(clean(v))||clean(v).includes(clean(rPV[i])))) return false;
       } else {
         if (rPV.length > 0) return false;
       }
-      if (drVias.length > 0) {
-        if (rDV.length !== drVias.length) return false;
-        if (!drVias.every((v,i) => clean(rDV[i]).includes(clean(v))||clean(v).includes(clean(rDV[i])))) return false;
+      if (dropVias.length > 0) {
+        if (rDV.length !== dropVias.length) return false;
+        if (!dropVias.every((v,i) => clean(rDV[i]).includes(clean(v))||clean(v).includes(clean(rDV[i])))) return false;
       } else {
         if (rDV.length > 0) return false;
       }
@@ -614,30 +603,54 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm mb-5 overflow-hidden">
         <div className="bg-[#1B2B4B] px-5 py-3"><h3 className="text-[13px] font-bold text-white">노선 조건 입력</h3></div>
         <div className="p-5">
-          <div className="grid grid-cols-7 gap-3 mb-3">
+          <div className="grid grid-cols-6 gap-3 mb-3">
+            {/* 상차지역 */}
             <div>
               <label className={labelCls}>상차지역 <span className="text-red-400">*</span></label>
               <input className={inputCls} placeholder="예: 인천" value={pickup} onChange={e=>setPickup(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleSearch()} />
-              <div className="mt-1 flex items-center gap-1">
-                <input className="flex-1 px-2 py-1 text-[11px] rounded border border-dashed border-teal-300 bg-teal-50/50 focus:border-teal-400 focus:outline-none placeholder:text-teal-300" placeholder="+ 경유 상차지명 (쉼표로 구분)" value={pickupVia} onChange={e=>setPickupVia(e.target.value)} />
+              <div className="mt-1 flex items-center gap-1 flex-wrap min-h-[26px]">
+                {pickupVias.map((v,i) => (
+                  <span key={i} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-[#1B2B4B]/8 text-[#1B2B4B] border border-[#1B2B4B]/20 rounded text-[11px] font-semibold">
+                    경유{i+1}: {v}
+                    <button type="button" onClick={()=>setPickupVias(p=>p.filter((_,j)=>j!==i))} className="text-gray-400 hover:text-[#1B2B4B] ml-0.5 leading-none">×</button>
+                  </span>
+                ))}
+                {showPickupViaInput ? (
+                  <div className="flex items-center gap-1">
+                    <input autoFocus className="px-1.5 py-0.5 text-[11px] border border-gray-300 rounded focus:border-[#1B2B4B] focus:outline-none w-24"
+                      placeholder="경유지명" value={pickupViaInput} onChange={e=>setPickupViaInput(e.target.value)}
+                      onKeyDown={e=>{if(e.key==="Enter"&&pickupViaInput.trim()){setPickupVias(p=>[...p,pickupViaInput.trim()]);setPickupViaInput("");setShowPickupViaInput(false);}if(e.key==="Escape"){setPickupViaInput("");setShowPickupViaInput(false);}}} />
+                    <button type="button" onClick={()=>{if(pickupViaInput.trim()){setPickupVias(p=>[...p,pickupViaInput.trim()]);setPickupViaInput("");}setShowPickupViaInput(false);}} className="px-1.5 py-0.5 bg-[#1B2B4B] text-white text-[10px] font-bold rounded">추가</button>
+                    <button type="button" onClick={()=>{setPickupViaInput("");setShowPickupViaInput(false);}} className="px-1 py-0.5 text-gray-400 text-[10px]">×</button>
+                  </div>
+                ) : (
+                  <button type="button" onClick={()=>setShowPickupViaInput(true)} className="px-1.5 py-0.5 border border-dashed border-gray-300 text-gray-500 hover:border-[#1B2B4B] hover:text-[#1B2B4B] rounded text-[11px] font-semibold transition">+ 경유</button>
+                )}
               </div>
             </div>
+            {/* 하차지역 */}
             <div>
               <label className={labelCls}>하차지역 <span className="text-red-400">*</span></label>
               <input className={inputCls} placeholder="예: 부산" value={drop} onChange={e=>setDrop(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleSearch()} />
-              <div className="mt-1 flex items-center gap-1">
-                <input className="flex-1 px-2 py-1 text-[11px] rounded border border-dashed border-teal-300 bg-teal-50/50 focus:border-teal-400 focus:outline-none placeholder:text-teal-300" placeholder="+ 경유 하차지명 (쉼표로 구분)" value={dropVia} onChange={e=>setDropVia(e.target.value)} />
+              <div className="mt-1 flex items-center gap-1 flex-wrap min-h-[26px]">
+                {dropVias.map((v,i) => (
+                  <span key={i} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-[#1B2B4B]/8 text-[#1B2B4B] border border-[#1B2B4B]/20 rounded text-[11px] font-semibold">
+                    경유{i+1}: {v}
+                    <button type="button" onClick={()=>setDropVias(p=>p.filter((_,j)=>j!==i))} className="text-gray-400 hover:text-[#1B2B4B] ml-0.5 leading-none">×</button>
+                  </span>
+                ))}
+                {showDropViaInput ? (
+                  <div className="flex items-center gap-1">
+                    <input autoFocus className="px-1.5 py-0.5 text-[11px] border border-gray-300 rounded focus:border-[#1B2B4B] focus:outline-none w-24"
+                      placeholder="경유지명" value={dropViaInput} onChange={e=>setDropViaInput(e.target.value)}
+                      onKeyDown={e=>{if(e.key==="Enter"&&dropViaInput.trim()){setDropVias(p=>[...p,dropViaInput.trim()]);setDropViaInput("");setShowDropViaInput(false);}if(e.key==="Escape"){setDropViaInput("");setShowDropViaInput(false);}}} />
+                    <button type="button" onClick={()=>{if(dropViaInput.trim()){setDropVias(p=>[...p,dropViaInput.trim()]);setDropViaInput("");}setShowDropViaInput(false);}} className="px-1.5 py-0.5 bg-[#1B2B4B] text-white text-[10px] font-bold rounded">추가</button>
+                    <button type="button" onClick={()=>{setDropViaInput("");setShowDropViaInput(false);}} className="px-1 py-0.5 text-gray-400 text-[10px]">×</button>
+                  </div>
+                ) : (
+                  <button type="button" onClick={()=>setShowDropViaInput(true)} className="px-1.5 py-0.5 border border-dashed border-gray-300 text-gray-500 hover:border-[#1B2B4B] hover:text-[#1B2B4B] rounded text-[11px] font-semibold transition">+ 경유</button>
+                )}
               </div>
-            </div>
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className={labelCls + " mb-0"}>경유지역 (선택)</label>
-                <label className="flex items-center gap-1 cursor-pointer select-none">
-                  <input type="checkbox" checked={includeTransit} onChange={e=>setIncludeTransit(e.target.checked)} className="w-3 h-3 accent-indigo-600" />
-                  <span className="text-[11px] text-indigo-600 font-semibold whitespace-nowrap">경유 포함</span>
-                </label>
-              </div>
-              <input className={inputCls} placeholder="예: 대전" value={waypoint} onChange={e=>setWaypoint(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleSearch()} />
             </div>
             <div>
               <label className={labelCls}>차량종류 <span className="text-red-400">*</span></label>
@@ -681,8 +694,7 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
             </div>
             <div className="flex items-end gap-2">
               <button onClick={handleSearch} className="flex-1 py-2 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-lg hover:bg-[#243a60] transition">단가표 생성</button>
-                            <button onClick={()=>{setPickup("");setDrop("");setWaypoint("");setVGroup("");setMixedFilter("전체");setFareField("청구운임");setViewMode("톤수별");setIncludeTransit(false);setExcludeQuery("");setExcludeList([]);setExcludeDropdown([]);setResult(null);setSearched(false);setPickupVia("");setDropVia("");}} className="px-3 py-2 bg-white border border-gray-200 text-gray-500 text-[13px] rounded-lg hover:bg-gray-50 transition">초기화</button>
-
+              <button onClick={()=>{setPickup("");setDrop("");setVGroup("");setMixedFilter("전체");setFareField("청구운임");setViewMode("톤수별");setExcludeQuery("");setExcludeList([]);setExcludeDropdown([]);setResult(null);setSearched(false);setPickupVias([]);setDropVias([]);setShowPickupViaInput(false);setShowDropViaInput(false);setPickupViaInput("");setDropViaInput("");}} className="px-3 py-2 bg-white border border-gray-200 text-gray-500 text-[13px] rounded-lg hover:bg-gray-50 transition">초기화</button>
             </div>
           </div>
             {/* 🔥 거래처 제외 필터 */}

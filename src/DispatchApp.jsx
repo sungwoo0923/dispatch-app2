@@ -5848,6 +5848,8 @@ const [copyStart, setCopyStart] = React.useState("");
 const [copyEnd, setCopyEnd] = React.useState("");
 const [copyFilterType, setCopyFilterType] = React.useState("전체");
 const [onlyRoundTrip, setOnlyRoundTrip] = React.useState(false);
+const [copyShowMore, setCopyShowMore] = React.useState(false);
+const [copyDateHint, setCopyDateHint] = React.useState(null); // {origPickup, origDrop}
 // 🔍 오더복사 리스트
 const copyList = React.useMemo(() => {
   const q = copyQ.trim().toLowerCase();
@@ -5910,6 +5912,28 @@ arr.forEach((r) => {
 });
 return Array.from(dedupMap.values());
 }, [dispatchData, copyQ, copyFilterType, filterType, filterValue, onlyRoundTrip]);
+
+// 오더복사 "더보기" 전 기본 표시 목록 (최근 1건, 전체필터시 역할별 1건씩)
+const copyListShort = React.useMemo(() => {
+  if (!copyList.length) return [];
+  const q = copyQ.trim().toLowerCase();
+  if (copyFilterType === "전체" && q) {
+    const seen = new Set();
+    const out = [];
+    // 상차지로 매칭되는 것 1건
+    const pu = copyList.find(r => String(r.상차지명||"").toLowerCase().includes(q));
+    if (pu) { seen.add(pu._id); out.push(pu); }
+    // 하차지로 매칭되는 것 1건 (다른 레코드)
+    const dr = copyList.find(r => !seen.has(r._id) && String(r.하차지명||"").toLowerCase().includes(q));
+    if (dr) out.push(dr);
+    // 둘 다 없으면 그냥 첫 번째
+    return out.length ? out : [copyList[0]];
+  }
+  return [copyList[0]];
+}, [copyList, copyQ, copyFilterType]);
+
+// 검색어/필터 변경 시 더보기 초기화
+React.useEffect(() => { setCopyShowMore(false); }, [copyQ, copyFilterType]);
 
 const [copySelected, setCopySelected] = React.useState([]);
 
@@ -5978,6 +6002,13 @@ const applyCopy = (r) => {
   setAutoDropMatched(true);
 setCopyOpen(false);
   setCopySelected([]);
+
+  // 하차일 날짜 힌트: 원본 오더가 다음날 하차였으면 알림
+  if (r.상차일 && r.하차일 && r.하차일 > r.상차일) {
+    setCopyDateHint({ origPickup: r.상차일, origDrop: r.하차일 });
+  } else {
+    setCopyDateHint(null);
+  }
 
   // 🚫 복사된 오더 거래처 등급 체크
   const namesToCheck = [keep.거래처명, keep.상차지명, keep.하차지명]
@@ -6805,6 +6836,21 @@ title="상차지 ↔ 하차지 교체"
 </button>
   </div>
 </div>
+{/* ===== 오더복사 날짜 힌트 배너 ===== */}
+{copyDateHint && (
+  <div className="mx-4 mb-2 px-4 py-2.5 bg-amber-50 border border-amber-300 rounded-lg flex items-center gap-3">
+    <span className="text-amber-600 text-lg">⚠</span>
+    <div className="flex-1">
+      <span className="text-[13px] font-bold text-amber-800">하차일 확인 필요</span>
+      <span className="text-[12px] text-amber-700 ml-2">원본 오더는 다음날 하차({copyDateHint.origDrop})였습니다. 현재 하차일이 상차일과 같게 설정되었습니다.</span>
+    </div>
+    <button type="button" onClick={() => { onChange("하차일", _tomorrowStr()); setCopyDateHint(null); }}
+      className="px-3 py-1 text-[12px] font-bold rounded-lg bg-amber-600 text-white hover:bg-amber-700 transition whitespace-nowrap">
+      내일로 변경
+    </button>
+    <button type="button" onClick={() => setCopyDateHint(null)} className="text-amber-500 hover:text-amber-700 text-lg leading-none">×</button>
+  </div>
+)}
 {/* ===== 오더 자동파싱 영역 ===== */}
 {showOrderParser && (
   <div className="mb-4 bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
@@ -9022,7 +9068,11 @@ className={`
                 </div>
                 {copyQ && (
                   <p className="text-[12px] text-gray-400 mt-2 font-semibold">
-                    {copyList.length > 0 ? `검색결과 ${copyList.length}건 · 더블클릭하면 바로 복사됩니다` : "검색 결과가 없습니다"}
+                    {copyList.length > 0
+                      ? copyShowMore
+                        ? `전체 ${copyList.length}건 표시 중 · 더블클릭하면 바로 복사됩니다`
+                        : `최근 ${copyListShort.length}건 표시 중 (전체 ${copyList.length}건) · 더블클릭하면 바로 복사됩니다`
+                      : "검색 결과가 없습니다"}
                   </p>
                 )}
               </div>
@@ -9052,7 +9102,7 @@ className={`
                         </td>
                       </tr>
                     ) : (
-                      copyList.map((row) => (
+                      (copyShowMore ? copyList : copyListShort).map((row) => (
                         <tr
   key={row._id}
   id={`row-${row._id}`}
@@ -9158,6 +9208,19 @@ className={`
                 </table>
               </div>
 
+              {/* 더보기 버튼 */}
+              {!copyShowMore && copyList.length > copyListShort.length && (
+                <div className="px-6 py-2 flex justify-center border-t border-gray-100">
+                  <button
+                    type="button"
+                    onClick={() => setCopyShowMore(true)}
+                    className="px-5 py-1.5 text-[13px] font-bold text-[#1B2B4B] border border-[#1B2B4B] rounded-lg hover:bg-[#1B2B4B] hover:text-white transition"
+                  >
+                    더보기 ({copyList.length - copyListShort.length}건 더 있음) →
+                  </button>
+                </div>
+              )}
+
               {/* 하단 안내 */}
               <div className="px-6 py-3 bg-gray-50 border-t border-gray-100 flex items-center justify-between shrink-0">
                 <span className="text-[12px] font-semibold text-gray-400">
@@ -9165,7 +9228,7 @@ className={`
                 </span>
                 <button
                   className="px-4 py-2 rounded-xl bg-gray-200 hover:bg-gray-300 text-[#1B2B4B] text-[13px] font-bold transition active:scale-95"
-                  onClick={() => { setCopyOpen(false); setCopySelected([]); }}
+                  onClick={() => { setCopyOpen(false); setCopySelected([]); setCopyShowMore(false); }}
                 >
                   닫기
                 </button>
@@ -12148,24 +12211,28 @@ function _creatorLabel(r) {
 }
 
 // 오전/오후 토글 + 시간 선택 컴포넌트
-function TimeAmPmPicker({ value, onChange, selectCls }) {
-  const [ampm, setAmpm] = React.useState(
-    value && value.startsWith("오후") ? "오후" : "오전"
-  );
+function TimeAmPmPicker({ value, onChange, selectCls, showError }) {
+  const [ampm, setAmpm] = React.useState(() => {
+    if (value && value.startsWith("오후")) return "오후";
+    if (value && value.startsWith("오전")) return "오전";
+    return null; // 미선택 상태
+  });
   React.useEffect(() => {
     if (value && value.startsWith("오전")) setAmpm("오전");
     else if (value && value.startsWith("오후")) setAmpm("오후");
+    else if (!value) setAmpm(null);
   }, [value]);
 
+  const displayAmpm = ampm || "오전"; // select 옵션 생성용 (null이면 오전 기준)
   const times = React.useMemo(() => {
     const list = [];
     for (let h = 0; h < 12; h++) {
       const hh = h === 0 ? 12 : h;
-      list.push(`${ampm} ${hh}시`);
-      list.push(`${ampm} ${hh}시 30분`);
+      list.push(`${displayAmpm} ${hh}시`);
+      list.push(`${displayAmpm} ${hh}시 30분`);
     }
     return list;
-  }, [ampm]);
+  }, [displayAmpm]);
 
   const handleAmpm = (ap) => {
     setAmpm(ap);
@@ -12178,11 +12245,15 @@ function TimeAmPmPicker({ value, onChange, selectCls }) {
   const btnBase = "px-2.5 py-1 text-[12px] font-semibold rounded border transition";
   const act = "bg-[#1B2B4B] text-white border-[#1B2B4B]";
   const inact = "bg-white text-gray-600 border-gray-300 hover:border-[#1B2B4B] hover:text-[#1B2B4B]";
+  const errInact = "bg-white text-red-500 border-red-400 hover:border-red-500";
+
+  // showError가 true이고 ampm이 null인 경우 빨간 테두리
+  const needsError = showError && ampm === null;
 
   return (
     <div className="flex items-center gap-1">
-      <button type="button" className={`${btnBase} ${ampm === "오전" ? act : inact}`} onClick={() => handleAmpm("오전")}>오전</button>
-      <button type="button" className={`${btnBase} ${ampm === "오후" ? act : inact}`} onClick={() => handleAmpm("오후")}>오후</button>
+      <button type="button" className={`${btnBase} ${ampm === "오전" ? act : needsError ? errInact : inact}`} onClick={() => handleAmpm("오전")}>오전</button>
+      <button type="button" className={`${btnBase} ${ampm === "오후" ? act : needsError ? errInact : inact}`} onClick={() => handleAmpm("오후")}>오후</button>
       <select
         value={value || ""}
         onChange={e => onChange(e.target.value)}
@@ -12935,7 +13006,8 @@ ${r.하차지주소 || ""}${(() => { const line = buildContactLine(r.하차지�
 화물 : ${_totTon4d}${_totCargo4d ? ` / ${_totCargo4d}` : ""} ${r.차량종류 || r.차종}${driverNoteText}${noticeBlock ? `\n\n${noticeBlock}` : ""}
 
 ※ 인수증(파렛전표) 서명 받은 후 업로드필수
-※ 거래명세서/타코메타 기록지 함께 촬영업로드
+KPP/아주파렛트 상차시 각각 전표업로드 필수
+${/(냉장|냉동)/i.test(r.차량종류||r.차종||"") ? "※ 거래명세서/타코메타 기록지 함께 촬영업로드" : "※ 거래명세서 서류 업로드"}
 ※ 서류/전표 없는 건이면 업로드 하지마세요.
 ※ 미업로드 시 운임 지급 지연될 수 있습니다`.replace(/\n{3,}/g, "\n\n").trim();
 }
@@ -13688,11 +13760,11 @@ React.useEffect(() => {
 
   const [newOrder, setNewOrder] = React.useState({
     상차일: "",
-    상차_AMPM: "오전",
+    상차_AMPM: "",
     상차시간: "",
     상차시간기준: "",
     하차일: "",
-    하차_AMPM: "오전",
+    하차_AMPM: "",
     하차시간: "",
     하차시간기준: "",
     거래처명: "",
@@ -13795,7 +13867,7 @@ React.useEffect(() => {
   // 첨부파일 개수
 const [attachCount, setAttachCount] = React.useState({});
   const [attachViewer, setAttachViewer] = React.useState(null); // 열린 행
-
+  const [viewedAttachIds4, setViewedAttachIds4] = React.useState(new Set());
   // ------------------------
 // Firestore → rows 반영
 // ------------------------
@@ -16391,12 +16463,12 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
                   {/* 첨부 */}
                   <td className={cell}>
                     <button
-                      onClick={() => setAttachViewer(r)}
+                      onClick={() => { setAttachViewer(r); setViewedAttachIds4(prev => new Set([...prev, r._id])); }}
                       className="relative inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-gray-100 transition mx-auto"
                       title="첨부파일 보기"
                     >
                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                        stroke={(r.attachCount || 0) > 0 ? "#059669" : "#cbd5e1"}
+                        stroke={(r.attachCount || 0) > 0 ? (viewedAttachIds4.has(r._id) ? "#1B2B4B" : "#059669") : "#cbd5e1"}
                         strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                         <polyline points="14 2 14 8 20 8"/>
@@ -17596,14 +17668,17 @@ value={copyTarget?.화물수량 || ""}
                       </div>
                       {(() => {
                         const sa=v=>{if(Array.isArray(v))return v;if(typeof v==="string"&&v.trim().startsWith("["))try{const p=JSON.parse(v);return Array.isArray(p)?p:[];}catch{return[];}return[];};
+                        const parseMainVias=(name)=>{const ms=[...String(name||"").matchAll(/(\d+)\.\s*([^\d\n.]+)/g)];return ms.length>1?ms.sort((a,b)=>+a[1]-+b[1]).slice(1).map(m=>m[2].trim()):[];};
                         const pV=sa(rec.경유상차목록||rec.경유지_상차||[]).map(s=>typeof s==="string"?s:(s?.업체명||"")).filter(Boolean);
                         const dV=sa(rec.경유하차목록||rec.경유지_하차||[]).map(s=>typeof s==="string"?s:(s?.업체명||"")).filter(Boolean);
-                        if(!pV.length&&!dV.length)return null;
+                        const allPV=pV.length?pV:parseMainVias(rec.상차지명);
+                        const allDV=dV.length?dV:parseMainVias(rec.하차지명);
+                        if(!allPV.length&&!allDV.length)return null;
                         return(
                           <div className="flex items-center gap-1 flex-wrap mb-1">
-                            <span className="px-2 py-0.5 bg-teal-100 text-teal-700 border border-teal-200 text-[10px] font-bold rounded-full">경유 포함</span>
-                            {pV.map((n,i)=><span key={`p${i}`} className="text-[10px] text-teal-600 bg-teal-50 border border-teal-100 px-1.5 py-0.5 rounded font-medium">{n}(상)</span>)}
-                            {dV.map((n,i)=><span key={`d${i}`} className="text-[10px] text-teal-600 bg-teal-50 border border-teal-100 px-1.5 py-0.5 rounded font-medium">{n}(하)</span>)}
+                            <span className="px-2 py-0.5 bg-[#1B2B4B]/10 text-[#1B2B4B] border border-[#1B2B4B]/20 text-[10px] font-bold rounded-full">경유 포함</span>
+                            {allPV.map((n,i)=><span key={`p${i}`} className="text-[10px] text-[#1B2B4B]/80 bg-[#1B2B4B]/5 border border-[#1B2B4B]/15 px-1.5 py-0.5 rounded font-medium">{n}(상)</span>)}
+                            {allDV.map((n,i)=><span key={`d${i}`} className="text-[10px] text-[#1B2B4B]/80 bg-[#1B2B4B]/5 border border-[#1B2B4B]/15 px-1.5 py-0.5 rounded font-medium">{n}(하)</span>)}
                           </div>
                         );
                       })()}
@@ -17964,14 +18039,17 @@ value={copyTarget?.화물수량 || ""}
                       </div>
                       {(() => {
                         const sa=v=>{if(Array.isArray(v))return v;if(typeof v==="string"&&v.trim().startsWith("["))try{const p=JSON.parse(v);return Array.isArray(p)?p:[];}catch{return[];}return[];};
+                        const parseMainVias=(name)=>{const ms=[...String(name||"").matchAll(/(\d+)\.\s*([^\d\n.]+)/g)];return ms.length>1?ms.sort((a,b)=>+a[1]-+b[1]).slice(1).map(m=>m[2].trim()):[];};
                         const pV=sa(rec.경유상차목록||rec.경유지_상차||[]).map(s=>typeof s==="string"?s:(s?.업체명||"")).filter(Boolean);
                         const dV=sa(rec.경유하차목록||rec.경유지_하차||[]).map(s=>typeof s==="string"?s:(s?.업체명||"")).filter(Boolean);
-                        if(!pV.length&&!dV.length)return null;
+                        const allPV=pV.length?pV:parseMainVias(rec.상차지명);
+                        const allDV=dV.length?dV:parseMainVias(rec.하차지명);
+                        if(!allPV.length&&!allDV.length)return null;
                         return(
                           <div className="flex items-center gap-1 flex-wrap mb-1">
-                            <span className="px-2 py-0.5 bg-teal-100 text-teal-700 border border-teal-200 text-[10px] font-bold rounded-full">경유 포함</span>
-                            {pV.map((n,i)=><span key={`p${i}`} className="text-[10px] text-teal-600 bg-teal-50 border border-teal-100 px-1.5 py-0.5 rounded font-medium">{n}(상)</span>)}
-                            {dV.map((n,i)=><span key={`d${i}`} className="text-[10px] text-teal-600 bg-teal-50 border border-teal-100 px-1.5 py-0.5 rounded font-medium">{n}(하)</span>)}
+                            <span className="px-2 py-0.5 bg-[#1B2B4B]/10 text-[#1B2B4B] border border-[#1B2B4B]/20 text-[10px] font-bold rounded-full">경유 포함</span>
+                            {allPV.map((n,i)=><span key={`p${i}`} className="text-[10px] text-[#1B2B4B]/80 bg-[#1B2B4B]/5 border border-[#1B2B4B]/15 px-1.5 py-0.5 rounded font-medium">{n}(상)</span>)}
+                            {allDV.map((n,i)=><span key={`d${i}`} className="text-[10px] text-[#1B2B4B]/80 bg-[#1B2B4B]/5 border border-[#1B2B4B]/15 px-1.5 py-0.5 rounded font-medium">{n}(하)</span>)}
                           </div>
                         );
                       })()}
@@ -19952,14 +20030,17 @@ if (editTarget.거래처명) {
                       </div>
                       {(() => {
                         const sa=v=>{if(Array.isArray(v))return v;if(typeof v==="string"&&v.trim().startsWith("["))try{const p=JSON.parse(v);return Array.isArray(p)?p:[];}catch{return[];}return[];};
+                        const parseMainVias=(name)=>{const ms=[...String(name||"").matchAll(/(\d+)\.\s*([^\d\n.]+)/g)];return ms.length>1?ms.sort((a,b)=>+a[1]-+b[1]).slice(1).map(m=>m[2].trim()):[];};
                         const pV=sa(rec.경유상차목록||rec.경유지_상차||[]).map(s=>typeof s==="string"?s:(s?.업체명||"")).filter(Boolean);
                         const dV=sa(rec.경유하차목록||rec.경유지_하차||[]).map(s=>typeof s==="string"?s:(s?.업체명||"")).filter(Boolean);
-                        if(!pV.length&&!dV.length)return null;
+                        const allPV=pV.length?pV:parseMainVias(rec.상차지명);
+                        const allDV=dV.length?dV:parseMainVias(rec.하차지명);
+                        if(!allPV.length&&!allDV.length)return null;
                         return(
                           <div className="flex items-center gap-1 flex-wrap mb-1">
-                            <span className="px-2 py-0.5 bg-teal-100 text-teal-700 border border-teal-200 text-[10px] font-bold rounded-full">경유 포함</span>
-                            {pV.map((n,i)=><span key={`p${i}`} className="text-[10px] text-teal-600 bg-teal-50 border border-teal-100 px-1.5 py-0.5 rounded font-medium">{n}(상)</span>)}
-                            {dV.map((n,i)=><span key={`d${i}`} className="text-[10px] text-teal-600 bg-teal-50 border border-teal-100 px-1.5 py-0.5 rounded font-medium">{n}(하)</span>)}
+                            <span className="px-2 py-0.5 bg-[#1B2B4B]/10 text-[#1B2B4B] border border-[#1B2B4B]/20 text-[10px] font-bold rounded-full">경유 포함</span>
+                            {allPV.map((n,i)=><span key={`p${i}`} className="text-[10px] text-[#1B2B4B]/80 bg-[#1B2B4B]/5 border border-[#1B2B4B]/15 px-1.5 py-0.5 rounded font-medium">{n}(상)</span>)}
+                            {allDV.map((n,i)=><span key={`d${i}`} className="text-[10px] text-[#1B2B4B]/80 bg-[#1B2B4B]/5 border border-[#1B2B4B]/15 px-1.5 py-0.5 rounded font-medium">{n}(하)</span>)}
                           </div>
                         );
                       })()}
@@ -21012,6 +21093,7 @@ const renderTimeText = (time, cond) => {
   };
 const [alertMsg, setAlertMsg] = React.useState(null);
 const [attachViewer, setAttachViewer] = React.useState(null);
+const [viewedAttachIds5, setViewedAttachIds5] = React.useState(new Set());
 const [localOverrides, setLocalOverrides] = React.useState({});
 const showAlert = (msg) => setAlertMsg(msg);
 const [blackAlert, setBlackAlert] = React.useState(null);
@@ -22345,7 +22427,8 @@ ${r.하차지주소||""}${(()=>{const line=buildContactLine(r.하차지담당자
 화물 : ${_totTon5d}${_totCargo5d?` / ${_totCargo5d}`:""} ${r.차량종류||"-"}${driverNoteText}${noticeBlock?`\n\n${noticeBlock}`:""}
 
 ※ 인수증(파렛전표) 서명 받은 후 업로드필수
-※ 거래명세서/타코메타 기록지 함께 촬영업로드
+KPP/아주파렛트 상차시 각각 전표업로드 필수
+${/(냉장|냉동)/i.test(r.차량종류||"-") ? "※ 거래명세서/타코메타 기록지 함께 촬영업로드" : "※ 거래명세서 서류 업로드"}
 ※ 서류/전표 없는 건이면 업로드 하지마세요
 ※ 미업로드 시 운임 지급 지연될 수 있습니다`.replace(/\n{3,}/g, "\n\n").trim();
         }
@@ -24101,12 +24184,12 @@ onBlur={(e) => {
                {/* 첨부 */}
                   <td className="border text-center whitespace-nowrap">
                     <button
-                      onClick={() => setAttachViewer(row)}
+                      onClick={() => { setAttachViewer(row); setViewedAttachIds5(prev => new Set([...prev, row._id])); }}
                       className="relative inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-gray-100 transition mx-auto"
                       title="첨부파일 보기"
                     >
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                      stroke={(row.attachCount || 0) > 0 ? "#059669" : "#cbd5e1"}
+                      stroke={(row.attachCount || 0) > 0 ? (viewedAttachIds5.has(row._id) ? "#1B2B4B" : "#059669") : "#cbd5e1"}
                         strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                         <polyline points="14 2 14 8 20 8"/>
@@ -26358,14 +26441,17 @@ setCopyTarget(prev => ({
                       </div>
                       {(() => {
                         const sa=v=>{if(Array.isArray(v))return v;if(typeof v==="string"&&v.trim().startsWith("["))try{const p=JSON.parse(v);return Array.isArray(p)?p:[];}catch{return[];}return[];};
+                        const parseMainVias=(name)=>{const ms=[...String(name||"").matchAll(/(\d+)\.\s*([^\d\n.]+)/g)];return ms.length>1?ms.sort((a,b)=>+a[1]-+b[1]).slice(1).map(m=>m[2].trim()):[];};
                         const pV=sa(rec.경유상차목록||rec.경유지_상차||[]).map(s=>typeof s==="string"?s:(s?.업체명||"")).filter(Boolean);
                         const dV=sa(rec.경유하차목록||rec.경유지_하차||[]).map(s=>typeof s==="string"?s:(s?.업체명||"")).filter(Boolean);
-                        if(!pV.length&&!dV.length)return null;
+                        const allPV=pV.length?pV:parseMainVias(rec.상차지명);
+                        const allDV=dV.length?dV:parseMainVias(rec.하차지명);
+                        if(!allPV.length&&!allDV.length)return null;
                         return(
                           <div className="flex items-center gap-1 flex-wrap mb-1">
-                            <span className="px-2 py-0.5 bg-teal-100 text-teal-700 border border-teal-200 text-[10px] font-bold rounded-full">경유 포함</span>
-                            {pV.map((n,i)=><span key={`p${i}`} className="text-[10px] text-teal-600 bg-teal-50 border border-teal-100 px-1.5 py-0.5 rounded font-medium">{n}(상)</span>)}
-                            {dV.map((n,i)=><span key={`d${i}`} className="text-[10px] text-teal-600 bg-teal-50 border border-teal-100 px-1.5 py-0.5 rounded font-medium">{n}(하)</span>)}
+                            <span className="px-2 py-0.5 bg-[#1B2B4B]/10 text-[#1B2B4B] border border-[#1B2B4B]/20 text-[10px] font-bold rounded-full">경유 포함</span>
+                            {allPV.map((n,i)=><span key={`p${i}`} className="text-[10px] text-[#1B2B4B]/80 bg-[#1B2B4B]/5 border border-[#1B2B4B]/15 px-1.5 py-0.5 rounded font-medium">{n}(상)</span>)}
+                            {allDV.map((n,i)=><span key={`d${i}`} className="text-[10px] text-[#1B2B4B]/80 bg-[#1B2B4B]/5 border border-[#1B2B4B]/15 px-1.5 py-0.5 rounded font-medium">{n}(하)</span>)}
                           </div>
                         );
                       })()}
@@ -27968,14 +28054,17 @@ setCopyTarget(prev => ({
                       </div>
                       {(() => {
                         const sa=v=>{if(Array.isArray(v))return v;if(typeof v==="string"&&v.trim().startsWith("["))try{const p=JSON.parse(v);return Array.isArray(p)?p:[];}catch{return[];}return[];};
+                        const parseMainVias=(name)=>{const ms=[...String(name||"").matchAll(/(\d+)\.\s*([^\d\n.]+)/g)];return ms.length>1?ms.sort((a,b)=>+a[1]-+b[1]).slice(1).map(m=>m[2].trim()):[];};
                         const pV=sa(rec.경유상차목록||rec.경유지_상차||[]).map(s=>typeof s==="string"?s:(s?.업체명||"")).filter(Boolean);
                         const dV=sa(rec.경유하차목록||rec.경유지_하차||[]).map(s=>typeof s==="string"?s:(s?.업체명||"")).filter(Boolean);
-                        if(!pV.length&&!dV.length)return null;
+                        const allPV=pV.length?pV:parseMainVias(rec.상차지명);
+                        const allDV=dV.length?dV:parseMainVias(rec.하차지명);
+                        if(!allPV.length&&!allDV.length)return null;
                         return(
                           <div className="flex items-center gap-1 flex-wrap mb-1">
-                            <span className="px-2 py-0.5 bg-teal-100 text-teal-700 border border-teal-200 text-[10px] font-bold rounded-full">경유 포함</span>
-                            {pV.map((n,i)=><span key={`p${i}`} className="text-[10px] text-teal-600 bg-teal-50 border border-teal-100 px-1.5 py-0.5 rounded font-medium">{n}(상)</span>)}
-                            {dV.map((n,i)=><span key={`d${i}`} className="text-[10px] text-teal-600 bg-teal-50 border border-teal-100 px-1.5 py-0.5 rounded font-medium">{n}(하)</span>)}
+                            <span className="px-2 py-0.5 bg-[#1B2B4B]/10 text-[#1B2B4B] border border-[#1B2B4B]/20 text-[10px] font-bold rounded-full">경유 포함</span>
+                            {allPV.map((n,i)=><span key={`p${i}`} className="text-[10px] text-[#1B2B4B]/80 bg-[#1B2B4B]/5 border border-[#1B2B4B]/15 px-1.5 py-0.5 rounded font-medium">{n}(상)</span>)}
+                            {allDV.map((n,i)=><span key={`d${i}`} className="text-[10px] text-[#1B2B4B]/80 bg-[#1B2B4B]/5 border border-[#1B2B4B]/15 px-1.5 py-0.5 rounded font-medium">{n}(하)</span>)}
                           </div>
                         );
                       })()}

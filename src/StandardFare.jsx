@@ -471,10 +471,10 @@ export default function StandardFare() {
   const [nfLoading, setNfLoading] = useState(false);
   const [nfResult, setNfResult] = useState(null);
   const [nfError, setNfError] = useState("");
-  // 전국운임 경유지 상태
-  const [nfVias, setNfVias] = useState([]);
+  // 전국운임 경유지 상태 ({address, coord} 객체 배열)
+  const [nfVias, setNfVias] = useState([]); // [{address:string, coord:{lat,lon}|null}]
   const [nfViaInput, setNfViaInput] = useState("");
-  const [nfViaCoords, setNfViaCoords] = useState([]);
+  const [nfViaInputCoord, setNfViaInputCoord] = useState(null);
 
   const geocodeTmap = async (addr) => {
     // Try searchAddress first — handles Kakao 도로명주소
@@ -545,12 +545,11 @@ export default function StandardFare() {
       const toCoord = nfToCoord || await geocodeTmap(nfTo);
       const resolvedVias = [];
       for (const via of nfVias) {
-        const coord = await geocodeTmap(via);
+        const coord = via.coord || await geocodeTmap(via.address);
         resolvedVias.push(coord);
       }
-      setNfViaCoords(resolvedVias);
       const km = await getRouteKm(fromCoord, toCoord, resolvedVias);
-      setNfResult({ km, from: nfFrom, to: nfTo, vias: nfVias });
+      setNfResult({ km, from: nfFrom, to: nfTo, vias: nfVias.map(v=>v.address) });
     } catch (err) {
       setNfError(err.message || "조회 중 오류가 발생했습니다");
     } finally { setNfLoading(false); }
@@ -803,20 +802,20 @@ export default function StandardFare() {
                     {/* Pickup waypoints */}
                     <div className="mt-2 flex items-center gap-2 flex-wrap">
                       {pickupVias.map((v,i) => (
-                        <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-teal-50 border border-teal-200 text-teal-700 rounded-full text-[11px] font-semibold">
+                        <span key={i} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-[#1B2B4B]/8 text-[#1B2B4B] border border-[#1B2B4B]/20 rounded text-[11px] font-semibold">
                           경유{i+1}: {v}
-                          <button type="button" onClick={() => setPickupVias(prev => prev.filter((_,j)=>j!==i))} className="text-teal-400 hover:text-teal-700 ml-0.5">✕</button>
+                          <button type="button" onClick={() => setPickupVias(prev => prev.filter((_,j)=>j!==i))} className="text-gray-400 hover:text-[#1B2B4B] ml-0.5 leading-none">×</button>
                         </span>
                       ))}
                       {showPickupViaInput ? (
                         <div className="flex items-center gap-1">
-                          <input autoFocus className="px-2 py-0.5 text-[12px] border border-teal-300 rounded focus:outline-none w-28" placeholder="경유지명" value={pickupViaInput} onChange={e=>setPickupViaInput(e.target.value)}
+                          <input autoFocus className="px-1.5 py-0.5 text-[11px] border border-gray-300 rounded focus:border-[#1B2B4B] focus:outline-none w-24" placeholder="경유지명" value={pickupViaInput} onChange={e=>setPickupViaInput(e.target.value)}
                             onKeyDown={e=>{ if(e.key==="Enter"&&pickupViaInput.trim()){setPickupVias(p=>[...p,pickupViaInput.trim()]);setPickupViaInput("");setShowPickupViaInput(false);} if(e.key==="Escape"){setPickupViaInput("");setShowPickupViaInput(false);}}} />
-                          <button type="button" onClick={()=>{if(pickupViaInput.trim()){setPickupVias(p=>[...p,pickupViaInput.trim()]);setPickupViaInput("");} setShowPickupViaInput(false);}} className="px-2 py-0.5 bg-teal-600 text-white rounded text-[11px] font-bold">추가</button>
-                          <button type="button" onClick={()=>{setPickupViaInput("");setShowPickupViaInput(false);}} className="px-2 py-0.5 text-gray-400 text-[11px]">취소</button>
+                          <button type="button" onClick={()=>{if(pickupViaInput.trim()){setPickupVias(p=>[...p,pickupViaInput.trim()]);setPickupViaInput("");} setShowPickupViaInput(false);}} className="px-1.5 py-0.5 bg-[#1B2B4B] text-white rounded text-[10px] font-bold">추가</button>
+                          <button type="button" onClick={()=>{setPickupViaInput("");setShowPickupViaInput(false);}} className="px-1 py-0.5 text-gray-400 text-[10px]">×</button>
                         </div>
                       ) : (
-                        <button type="button" onClick={()=>setShowPickupViaInput(true)} className="px-2 py-0.5 border border-dashed border-teal-300 text-teal-600 rounded text-[11px] font-semibold hover:bg-teal-50 transition">+ 경유</button>
+                        <button type="button" onClick={()=>setShowPickupViaInput(true)} className="px-1.5 py-0.5 border border-dashed border-gray-300 text-gray-500 hover:border-[#1B2B4B] hover:text-[#1B2B4B] rounded text-[11px] font-semibold transition">+ 경유</button>
                       )}
                     </div>
                   </div>
@@ -835,20 +834,20 @@ export default function StandardFare() {
                     {/* Drop waypoints */}
                     <div className="mt-2 flex items-center gap-2 flex-wrap">
                       {dropVias.map((v,i) => (
-                        <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-teal-50 border border-teal-200 text-teal-700 rounded-full text-[11px] font-semibold">
+                        <span key={i} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-[#1B2B4B]/8 text-[#1B2B4B] border border-[#1B2B4B]/20 rounded text-[11px] font-semibold">
                           경유{i+1}: {v}
-                          <button type="button" onClick={() => setDropVias(prev => prev.filter((_,j)=>j!==i))} className="text-teal-400 hover:text-teal-700 ml-0.5">✕</button>
+                          <button type="button" onClick={() => setDropVias(prev => prev.filter((_,j)=>j!==i))} className="text-gray-400 hover:text-[#1B2B4B] ml-0.5 leading-none">×</button>
                         </span>
                       ))}
                       {showDropViaInput ? (
                         <div className="flex items-center gap-1">
-                          <input autoFocus className="px-2 py-0.5 text-[12px] border border-teal-300 rounded focus:outline-none w-28" placeholder="경유지명" value={dropViaInput} onChange={e=>setDropViaInput(e.target.value)}
+                          <input autoFocus className="px-1.5 py-0.5 text-[11px] border border-gray-300 rounded focus:border-[#1B2B4B] focus:outline-none w-24" placeholder="경유지명" value={dropViaInput} onChange={e=>setDropViaInput(e.target.value)}
                             onKeyDown={e=>{ if(e.key==="Enter"&&dropViaInput.trim()){setDropVias(p=>[...p,dropViaInput.trim()]);setDropViaInput("");setShowDropViaInput(false);} if(e.key==="Escape"){setDropViaInput("");setShowDropViaInput(false);}}} />
-                          <button type="button" onClick={()=>{if(dropViaInput.trim()){setDropVias(p=>[...p,dropViaInput.trim()]);setDropViaInput("");} setShowDropViaInput(false);}} className="px-2 py-0.5 bg-teal-600 text-white rounded text-[11px] font-bold">추가</button>
-                          <button type="button" onClick={()=>{setDropViaInput("");setShowDropViaInput(false);}} className="px-2 py-0.5 text-gray-400 text-[11px]">취소</button>
+                          <button type="button" onClick={()=>{if(dropViaInput.trim()){setDropVias(p=>[...p,dropViaInput.trim()]);setDropViaInput("");} setShowDropViaInput(false);}} className="px-1.5 py-0.5 bg-[#1B2B4B] text-white rounded text-[10px] font-bold">추가</button>
+                          <button type="button" onClick={()=>{setDropViaInput("");setShowDropViaInput(false);}} className="px-1 py-0.5 text-gray-400 text-[10px]">×</button>
                         </div>
                       ) : (
-                        <button type="button" onClick={()=>setShowDropViaInput(true)} className="px-2 py-0.5 border border-dashed border-teal-300 text-teal-600 rounded text-[11px] font-semibold hover:bg-teal-50 transition">+ 경유</button>
+                        <button type="button" onClick={()=>setShowDropViaInput(true)} className="px-1.5 py-0.5 border border-dashed border-gray-300 text-gray-500 hover:border-[#1B2B4B] hover:text-[#1B2B4B] rounded text-[11px] font-semibold transition">+ 경유</button>
                       )}
                     </div>
                   </div>
@@ -1002,44 +1001,40 @@ export default function StandardFare() {
       {/* ====== 전국운임 조회 탭 (T-Map 도로거리 기반) ====== */}
       {activeTab === "전국운임표" && (
         <>
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm mb-4 p-5">
-            {/* Route input */}
-            <div className="flex gap-3 items-start mb-4">
-              {/* Origin */}
-              <div className="flex-1 bg-gray-50 rounded-xl border border-gray-200 p-4">
-                <div className="text-[11px] font-bold text-[#1B2B4B] uppercase tracking-wider mb-3">출발지</div>
-                <div className="flex gap-2 items-center">
-                  <AddressSearch value={nfFrom} onChange={v=>{setNfFrom(v);setNfFromCoord(null);}} onSelect={s=>{if(s){setNfFrom(s.address);setNfFromCoord(s);}}} placeholder="예: 인천광역시 서구 원창동" />
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm mb-4 p-4">
+            {/* Route input - compact inline */}
+            <div className="flex gap-2 items-center mb-3">
+              <div className="flex-1">
+                <label className="text-[11px] font-bold text-gray-500 mb-1 block">출발지</label>
+                <div className="flex gap-1 items-center">
+                  <AddressSearch value={nfFrom} onChange={v=>{setNfFrom(v);setNfFromCoord(null);}} onSelect={s=>{if(s){setNfFrom(s.address);setNfFromCoord(s);}}} placeholder="예: 인천 서구 원창동" />
                   <KakaoAddressButton onComplete={(addr)=>{setNfFrom(addr);setNfFromCoord(null);}} />
                 </div>
               </div>
-              {/* Arrow */}
-              <div className="flex items-center justify-center pt-12 text-[#1B2B4B] font-black text-xl shrink-0">→</div>
-              {/* Destination */}
-              <div className="flex-1 bg-gray-50 rounded-xl border border-gray-200 p-4">
-                <div className="text-[11px] font-bold text-[#1B2B4B] uppercase tracking-wider mb-3">도착지</div>
-                <div className="flex gap-2 items-center">
-                  <AddressSearch value={nfTo} onChange={v=>{setNfTo(v);setNfToCoord(null);}} onSelect={s=>{if(s){setNfTo(s.address);setNfToCoord(s);}}} placeholder="예: 경기도 용인시 처인구" />
+              <div className="text-[#1B2B4B] font-black text-lg shrink-0 mt-5">→</div>
+              <div className="flex-1">
+                <label className="text-[11px] font-bold text-gray-500 mb-1 block">도착지</label>
+                <div className="flex gap-1 items-center">
+                  <AddressSearch value={nfTo} onChange={v=>{setNfTo(v);setNfToCoord(null);}} onSelect={s=>{if(s){setNfTo(s.address);setNfToCoord(s);}}} placeholder="예: 경기 용인시 처인구" />
                   <KakaoAddressButton onComplete={(addr)=>{setNfTo(addr);setNfToCoord(null);}} />
                 </div>
               </div>
             </div>
 
             {/* Waypoints */}
-            <div className="mb-4 px-1">
-              <div className="text-[11px] font-bold text-gray-400 mb-2">경유지 (선택) — 출발지→경유→도착지 순서</div>
-              <div className="flex items-center gap-2 flex-wrap">
+            <div className="mb-3">
+              <label className="text-[11px] font-bold text-gray-500 mb-1.5 block">경유지 (선택) — 출발→경유→도착 순서</label>
+              <div className="flex items-center gap-1.5 flex-wrap">
                 {nfVias.map((v,i) => (
-                  <span key={i} className="inline-flex items-center gap-1 px-3 py-1 bg-teal-50 border border-teal-200 text-teal-700 rounded-full text-[12px] font-semibold">
-                    경유{i+1}: {v}
-                    <button type="button" onClick={()=>setNfVias(prev=>prev.filter((_,j)=>j!==i))} className="text-teal-400 hover:text-teal-700">✕</button>
+                  <span key={i} className="inline-flex items-center gap-0.5 px-2 py-0.5 bg-[#1B2B4B]/8 text-[#1B2B4B] border border-[#1B2B4B]/20 rounded text-[12px] font-semibold">
+                    경유{i+1}: {v.address}
+                    <button type="button" onClick={()=>setNfVias(prev=>prev.filter((_,j)=>j!==i))} className="text-gray-400 hover:text-[#1B2B4B] ml-0.5 leading-none">×</button>
                   </span>
                 ))}
                 {nfVias.length < 5 && (
                   <div className="flex items-center gap-1">
-                    <input className="px-2.5 py-1 text-[12px] border border-gray-300 rounded-lg focus:border-teal-400 focus:outline-none w-48" placeholder="경유지 주소 입력" value={nfViaInput} onChange={e=>setNfViaInput(e.target.value)}
-                      onKeyDown={e=>{ if(e.key==="Enter"&&nfViaInput.trim()){setNfVias(p=>[...p,nfViaInput.trim()]);setNfViaInput("");} }} />
-                    <button type="button" onClick={()=>{if(nfViaInput.trim()){setNfVias(p=>[...p,nfViaInput.trim()]);setNfViaInput("");}}} className="px-3 py-1 bg-teal-600 text-white text-[12px] font-bold rounded-lg hover:bg-teal-700 transition">+ 경유 추가</button>
+                    <AddressSearch value={nfViaInput} onChange={v=>{setNfViaInput(v);setNfViaInputCoord(null);}} onSelect={s=>{if(s){setNfViaInput(s.address);setNfViaInputCoord(s);}}} placeholder="경유지 주소 입력" />
+                    <button type="button" onClick={()=>{if(nfViaInput.trim()){setNfVias(p=>[...p,{address:nfViaInput.trim(),coord:nfViaInputCoord}]);setNfViaInput("");setNfViaInputCoord(null);}}} className="px-3 py-1.5 bg-[#1B2B4B] text-white text-[12px] font-bold rounded-lg hover:bg-[#243a60] transition whitespace-nowrap">+ 추가</button>
                   </div>
                 )}
               </div>
@@ -1056,11 +1051,11 @@ export default function StandardFare() {
               <button onClick={lookupNationalFare} disabled={nfLoading} className="px-8 py-2 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-lg hover:bg-[#243a60] disabled:opacity-50 transition flex items-center gap-2">
                 {nfLoading ? (<><svg className="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10" strokeOpacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10"/></svg>거리 계산 중...</>) : "조회하기"}
               </button>
-              <button onClick={()=>{setNfFrom("");setNfTo("");setNfFromCoord(null);setNfToCoord(null);setNfResult(null);setNfError("");setNfVias([]);setNfViaInput("");}} className="px-5 py-2 bg-white text-gray-500 text-[13px] font-semibold rounded-lg border border-gray-200 hover:bg-gray-50 transition">다시 입력</button>
+              <button onClick={()=>{setNfFrom("");setNfTo("");setNfFromCoord(null);setNfToCoord(null);setNfResult(null);setNfError("");setNfVias([]);setNfViaInput("");setNfViaInputCoord(null);}} className="px-5 py-2 bg-white text-gray-500 text-[13px] font-semibold rounded-lg border border-gray-200 hover:bg-gray-50 transition">초기화</button>
               {nfResult && (
                 <div className="ml-auto flex items-center gap-2 text-[13px] font-semibold text-[#1B2B4B]">
                   도로거리: <span className="text-[15px] font-bold">{nfResult.km} km</span>
-                  {nfResult.vias?.length > 0 && <span className="text-[12px] text-teal-600 font-medium">({nfResult.vias.length}개 경유)</span>}
+                  {nfResult.vias?.length > 0 && <span className="text-[12px] text-gray-500 font-medium">({nfResult.vias.length}개 경유)</span>}
                 </div>
               )}
             </div>
