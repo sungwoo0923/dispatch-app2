@@ -3165,6 +3165,7 @@ setOpenMemo={setOpenMemo}
             multiSelectMode={multiSelectMode}
             setMultiSelectMode={setMultiSelectMode}
             cardVersionB={cardVersionB}
+            drivers={drivers}
           />
         )}
 {page === "sales" && (
@@ -4213,12 +4214,17 @@ function MobileOrderList({
   multiSelectMode,
   setMultiSelectMode,
   cardVersionB,
+  drivers,
 }) {
   const [attachViewOrder, setAttachViewOrder] = useState(null);
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [uploadLinkModal, setUploadLinkModal] = useState(false);
   const [deleteConfirmOrder, setDeleteConfirmOrder] = useState(null);
   const [copyModalOrder, setCopyModalOrder] = useState(null);
+  const [longPressOrder, setLongPressOrder] = useState(null);
+  const [quickEditOrder, setQuickEditOrder] = useState(null);
+  const longPressTimerRef = useRef(null);
+  const longPressStartPos = useRef({ x: 0, y: 0 });
 
   // 현재 보이는 모든 오더 flat 배열
   const allVisibleOrders = useMemo(() => {
@@ -4569,7 +4575,23 @@ const summary = useMemo(() => {
                   const oid = o.id || o._id;
                   const isChecked = selectedIds.has(oid);
                   return (
-                    <div key={oid} className={`relative rounded-xl ${multiSelectMode ? "pl-10 transition-all" : ""}`}>
+                    <div key={oid} className={`relative rounded-xl ${multiSelectMode ? "pl-10 transition-all" : ""}`}
+                      onTouchStart={multiSelectMode ? undefined : (e) => {
+                        longPressStartPos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+                        longPressTimerRef.current = setTimeout(() => {
+                          setLongPressOrder(o);
+                          longPressTimerRef.current = null;
+                        }, 500);
+                      }}
+                      onTouchMove={(e) => {
+                        if (!longPressTimerRef.current) return;
+                        const dx = Math.abs(e.touches[0].clientX - longPressStartPos.current.x);
+                        const dy = Math.abs(e.touches[0].clientY - longPressStartPos.current.y);
+                        if (dx > 8 || dy > 8) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; }
+                      }}
+                      onTouchEnd={() => { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; }}
+                      onTouchCancel={() => { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; }}
+                    >
                       {multiSelectMode && (
                         <button
                           className={`absolute left-2 top-1/2 -translate-y-1/2 z-10 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${
@@ -4673,6 +4695,30 @@ const summary = useMemo(() => {
         onAfterFullCopy={() => setCopyModalOrder(null)}
         onCopySuccess={() => showSuccess("기사 복사 완료")}
         cardVersionB={cardVersionB}
+      />
+    )}
+
+    {/* ── 길게 누르기 컨텍스트 메뉴 ── */}
+    {longPressOrder && (
+      <LongPressContextMenu
+        order={longPressOrder}
+        cardVersionB={cardVersionB}
+        onClose={() => setLongPressOrder(null)}
+        onEdit={() => { setQuickEditOrder(longPressOrder); setLongPressOrder(null); }}
+        onCopyDriver={() => { setCopyModalOrder(longPressOrder); setLongPressOrder(null); }}
+        onCopyOrder={() => { onCopyOrder?.(longPressOrder); setLongPressOrder(null); }}
+        onDelete={() => { setDeleteConfirmOrder(longPressOrder); setLongPressOrder(null); }}
+      />
+    )}
+
+    {/* ── 일부 수정 모달 ── */}
+    {quickEditOrder && (
+      <QuickEditModal
+        order={quickEditOrder}
+        drivers={drivers || []}
+        cardVersionB={cardVersionB}
+        onClose={() => setQuickEditOrder(null)}
+        onSuccess={() => {}}
       />
     )}
 
@@ -4940,6 +4986,249 @@ function CardAttachViewer({ order, onClose }) {
   );
 }
 
+// ────────────────────────────────────────────────────────────────
+// 길게 누르기 컨텍스트 메뉴 (bottom sheet)
+// ────────────────────────────────────────────────────────────────
+function LongPressContextMenu({ order, cardVersionB, onClose, onEdit, onCopyDriver, onCopyOrder, onDelete }) {
+  const menuItems = [
+    {
+      label: "일부 수정",
+      desc: "운임·기사·배차방식 빠른 수정",
+      action: onEdit,
+      svg: <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>,
+    },
+    {
+      label: "기사 복사",
+      desc: "기사 전달용·상세 복사",
+      action: onCopyDriver,
+      svg: <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/><path d="M19 8v6M22 11h-6"/></svg>,
+    },
+    {
+      label: "오더 복사",
+      desc: "동일 오더를 새로 등록",
+      action: onCopyOrder,
+      svg: <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>,
+    },
+    {
+      label: "삭제",
+      desc: "이 오더를 삭제합니다",
+      action: onDelete,
+      danger: true,
+      svg: <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>,
+    },
+  ];
+
+  const bStyle = cardVersionB;
+
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-end" style={{ background: "rgba(0,0,0,0.48)" }} onClick={onClose}>
+      <div
+        className={`w-full pb-8 pt-3 shadow-2xl ${bStyle ? "bg-white rounded-t-2xl border-t-[3px] border-[#1B2B4B]" : "bg-white rounded-t-2xl"}`}
+        style={{ maxHeight: "70vh", overflowY: "auto" }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div className={`w-10 h-1 rounded-full mx-auto mb-3 ${bStyle ? "bg-[#1B2B4B]/15" : "bg-gray-200"}`} />
+        <div className={`px-4 pb-2 text-[12px] ${bStyle ? "font-bold text-[#1B2B4B]/50 tracking-wide uppercase" : "text-gray-400"}`}>
+          {order.상차지명 || "-"} → {order.하차지명 || "-"}
+        </div>
+        {menuItems.map((item, i) => (
+          <button
+            key={i}
+            className={`w-full flex items-center gap-3 px-4 py-3.5 text-left border-t ${
+              bStyle
+                ? `border-gray-100 ${item.danger ? "text-red-500" : "text-[#1B2B4B]"} active:bg-[#1B2B4B]/5`
+                : `border-gray-100 ${item.danger ? "text-red-500" : "text-gray-800"} active:bg-gray-50`
+            }`}
+            onClick={() => { item.action?.(); onClose(); }}
+          >
+            <span className={item.danger ? "text-red-400" : (bStyle ? "text-[#1B2B4B]/70" : "text-gray-500")}>{item.svg}</span>
+            <div>
+              <div className={`text-[14px] font-semibold`}>{item.label}</div>
+              <div className="text-[11px] text-gray-400 font-normal">{item.desc}</div>
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────
+// 일부 수정 모달
+// ────────────────────────────────────────────────────────────────
+function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess }) {
+  const smartRef = useRef(null);
+  const [smartMatched, setSmartMatched] = useState([]);
+  const [carNo, setCarNo] = useState(order.차량번호 || "");
+  const [driverName, setDriverName] = useState(order.기사명 || order.이름 || "");
+  const [driverPhone, setDriverPhone] = useState(order.전화번호 || "");
+  const [claim, setClaim] = useState(String(order.청구운임 || ""));
+  const [fee, setFee] = useState(String(order.기사운임 || ""));
+  const [payType, setPayType] = useState(order.지급방식 || "");
+  const [dispType, setDispType] = useState(order.배차방식 || "");
+  const [saving, setSaving] = useState(false);
+
+  const nd = (s = "") => String(s).replace(/[-.\s]/g, "").toLowerCase();
+
+  const handleSmartSearch = (val) => {
+    if (!val.trim()) { setSmartMatched([]); return; }
+    const { plate, phone, name } = parseDriverText(val);
+    if (plate) {
+      const results = (drivers || []).filter(d => nd(d.차량번호).includes(nd(plate)));
+      setSmartMatched(results.slice(0, 6));
+      if (results.length === 0) { setCarNo(plate); setDriverName(name || ""); setDriverPhone(phone || ""); }
+      else { setCarNo(results[0].차량번호 || ""); setDriverName(results[0].이름 || ""); setDriverPhone(results[0].전화번호 || ""); }
+      return;
+    }
+    if (phone) {
+      const results = (drivers || []).filter(d => nd(d.전화번호) === nd(phone));
+      setSmartMatched(results.slice(0, 6));
+      if (results.length > 0) { setCarNo(results[0].차량번호 || ""); setDriverName(results[0].이름 || ""); setDriverPhone(results[0].전화번호 || ""); }
+      return;
+    }
+    if (name && name.length >= 2) {
+      const results = (drivers || []).filter(d => d.이름 && d.이름.includes(name));
+      setSmartMatched(results.slice(0, 6));
+    }
+  };
+
+  const selectDriver = (d) => {
+    setCarNo(d.차량번호 || "");
+    setDriverName(d.이름 || "");
+    setDriverPhone(d.전화번호 || "");
+    setSmartMatched([]);
+    if (smartRef.current) smartRef.current.value = "";
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const col = order.__col || "orders";
+      const id = order._id || order.id;
+      const patch = {
+        청구운임: Number(String(claim).replace(/[^\d]/g, "")) || 0,
+        기사운임: Number(String(fee).replace(/[^\d]/g, "")) || 0,
+        지급방식: payType,
+        배차방식: dispType,
+        updatedAt: serverTimestamp(),
+        _lastModified: Date.now(),
+      };
+      if (carNo) {
+        patch.차량번호 = carNo;
+        patch.기사명 = driverName;
+        patch.이름 = driverName;
+        patch.전화번호 = driverPhone;
+        patch.전화 = driverPhone;
+        if (!order.차량번호) {
+          patch.배차상태 = "배차완료";
+          patch.상태 = "배차완료";
+          patch.배차완료일시 = serverTimestamp();
+        }
+      }
+      await updateDoc(doc(db, col, id), patch);
+      onSuccess?.();
+      onClose();
+    } catch (e) {
+      alert("저장 실패: " + e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const bStyle = cardVersionB;
+  const inputCls = `w-full px-3 py-2 text-[13px] border rounded-lg focus:outline-none focus:border-[#1B2B4B] bg-white ${bStyle ? "border-gray-300" : "border-gray-200"}`;
+  const labelCls = `block text-[11px] font-semibold mb-1 ${bStyle ? "text-[#1B2B4B]/70" : "text-gray-500"}`;
+
+  return (
+    <div className="fixed inset-0 z-[10000] flex items-end" style={{ background: "rgba(0,0,0,0.5)" }} onClick={onClose}>
+      <div
+        className={`w-full px-4 pb-8 pt-4 shadow-2xl ${bStyle ? "bg-white rounded-t-2xl border-t-[3px] border-[#1B2B4B]" : "bg-white rounded-t-2xl"}`}
+        style={{ maxHeight: "92vh", overflowY: "auto" }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div className={`w-10 h-1 rounded-full mx-auto mb-3 ${bStyle ? "bg-[#1B2B4B]/15" : "bg-gray-200"}`} />
+        <div className="flex items-center justify-between mb-4">
+          <span className={`text-[15px] font-bold ${bStyle ? "text-[#1B2B4B]" : "text-gray-900"}`}>일부 수정</span>
+          <button onClick={onClose} className="p-1 text-gray-400">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+
+        {/* 운임 */}
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          <div>
+            <label className={labelCls}>청구운임</label>
+            <input type="number" className={inputCls} placeholder="0" value={claim} onChange={e => setClaim(e.target.value)} inputMode="numeric" />
+          </div>
+          <div>
+            <label className={labelCls}>기사운임</label>
+            <input type="number" className={inputCls} placeholder="0" value={fee} onChange={e => setFee(e.target.value)} inputMode="numeric" />
+          </div>
+        </div>
+
+        {/* 지급/배차방식 */}
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          <div>
+            <label className={labelCls}>지급방식</label>
+            <select className={inputCls} value={payType} onChange={e => setPayType(e.target.value)}>
+              <option value="">선택</option>
+              {["계산서","카드","선불","착불","무통장","현금"].map(v => <option key={v}>{v}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className={labelCls}>배차방식</label>
+            <select className={inputCls} value={dispType} onChange={e => setDispType(e.target.value)}>
+              <option value="">선택</option>
+              {["직접배차","화물맨","원배","용차","콜"].map(v => <option key={v}>{v}</option>)}
+            </select>
+          </div>
+        </div>
+
+        {/* 기사 스마트검색 */}
+        <div className="mb-3">
+          <label className={labelCls}>기사 스마트검색</label>
+          <div className="relative">
+            <SmartTextarea textareaRef={smartRef} onSearch={handleSmartSearch} />
+            {smartMatched.length > 0 && (
+              <div className="absolute z-50 w-full bg-white border border-gray-200 rounded-xl shadow-xl mt-1 overflow-hidden">
+                {smartMatched.map((d, i) => (
+                  <button key={i} className="w-full px-3 py-2.5 text-left border-b border-gray-50 last:border-0 active:bg-blue-50 transition"
+                    onClick={() => selectDriver(d)}>
+                    <span className="font-bold text-[13px] text-gray-800">{d.차량번호}</span>
+                    <span className="text-gray-400 text-[12px] ml-2">{d.이름}</span>
+                    <span className="text-gray-300 text-[11px] ml-1">{d.전화번호}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* 기사 정보 */}
+        <div className="grid grid-cols-3 gap-2 mb-5">
+          <div>
+            <label className={labelCls}>차량번호</label>
+            <input className={inputCls} value={carNo} onChange={e => setCarNo(e.target.value)} placeholder="00가0000" />
+          </div>
+          <div>
+            <label className={labelCls}>기사명</label>
+            <input className={inputCls} value={driverName} onChange={e => setDriverName(e.target.value)} placeholder="이름" />
+          </div>
+          <div>
+            <label className={labelCls}>연락처</label>
+            <input className={inputCls} value={driverPhone} onChange={e => setDriverPhone(e.target.value)} placeholder="010-0000-0000" inputMode="tel" />
+          </div>
+        </div>
+
+        <button onClick={handleSave} disabled={saving}
+          className="w-full py-3 rounded-xl text-[14px] font-bold text-white bg-[#1B2B4B] hover:bg-[#243a60] transition disabled:opacity-50">
+          {saving ? "저장 중..." : "저장"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 const MobileOrderCard = React.memo(function MobileOrderCard({
   order,
   onSelect,
@@ -5016,12 +5305,11 @@ const dropTime = order.하차시간 || "시간 없음";
         <div className={`px-3 py-1.5 flex items-center justify-between ${state === "배차완료" ? "bg-[#1B2B4B]/5" : "bg-gray-50/80"}`}>
           <div className="flex items-center gap-1.5">
             {state === "배차완료" ? (
-              <span className="text-[0.75em] font-bold text-[#1B2B4B] flex items-center gap-1">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              <span className="text-[0.72em] font-bold text-[#1B2B4B] border border-[#1B2B4B]/40 px-1.5 py-0.5 rounded">
                 배차완료
               </span>
             ) : (
-              <span className="badge-dispatching text-[0.75em] font-semibold text-gray-400">배차중</span>
+              <span className="text-[0.72em] font-semibold text-gray-400 border border-gray-200 px-1.5 py-0.5 rounded">배차중</span>
             )}
             {isCold && (
               <span className="text-[0.68em] text-slate-500 font-semibold bg-slate-100 px-1.5 py-0.5 rounded">
@@ -5059,10 +5347,10 @@ const dropTime = order.하차시간 || "시간 없음";
         <div className="px-3 py-2.5">
           {/* 상/하차 */}
           <div className="flex items-stretch gap-2">
-            <div className="flex flex-col items-center gap-1 pt-0.5">
-              <span className="w-5 h-5 rounded-full bg-[#1B2B4B] flex items-center justify-center text-white text-[0.6em] font-bold shrink-0">상</span>
-              <div className="w-px flex-1 bg-gray-200 my-0.5" />
-              <span className="w-5 h-5 rounded-full bg-gray-400 flex items-center justify-center text-white text-[0.6em] font-bold shrink-0">하</span>
+            <div className="flex flex-col items-center shrink-0 py-0.5">
+              <div className="w-2 h-2 rounded-full border-2 border-[#1B2B4B] bg-white mt-1.5" />
+              <div className="w-px flex-1 min-h-[20px] bg-gray-200 my-0.5" />
+              <div className="w-2 h-2 rounded-full bg-gray-300 mb-1.5" />
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between mb-1.5">
@@ -5985,7 +6273,9 @@ const handleAssignClick = () => {
         <span className="text-[13px] font-bold text-gray-700">{order.거래처명 || "-"}</span>
         <div className="flex flex-col items-end gap-0.5">
           <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${
-            state === "배차완료" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-blue-50 text-blue-700 border-blue-200"
+            cardVersionB
+              ? (state === "배차완료" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "border-[#1B2B4B]/30 text-[#1B2B4B] bg-transparent")
+              : (state === "배차완료" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-blue-50 text-blue-700 border-blue-200")
           }`}>{state}</span>
           {state === "배차완료" && order.배차완료일시?.seconds && (
             <span className="text-[10px] text-emerald-600">

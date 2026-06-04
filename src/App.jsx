@@ -80,26 +80,36 @@ export default function App() {
     return () => window.removeEventListener("resize", checkTablet);
   }, []);
 
-  // ★ 태블릿 viewport 동적 조정
+  // ★ 태블릿 viewport 동적 조정 (가로/세로 모드 모두 대응)
   useEffect(() => {
     if (!isTablet) return;
 
-    // viewport meta 태그 강제 설정 (태블릿에서 PC 레이아웃 정상 표시)
-    let meta = document.querySelector('meta[name="viewport"]');
-    if (!meta) {
-      meta = document.createElement("meta");
-      meta.name = "viewport";
-      document.head.appendChild(meta);
-    }
+    const updateViewport = () => {
+      let meta = document.querySelector('meta[name="viewport"]');
+      if (!meta) {
+        meta = document.createElement("meta");
+        meta.name = "viewport";
+        document.head.appendChild(meta);
+      }
+      // 화면 너비에 따라 initial-scale을 동적 계산
+      // 세로모드(~768px): 0.64 scale → PC 레이아웃이 화면에 맞게 축소
+      // 가로모드(~1024px+): 0.85+ scale → 더 크게 보임
+      const w = window.innerWidth;
+      const TARGET = 1200;
+      const scale = Math.min(1, (w / TARGET)).toFixed(3);
+      meta.content = `width=${TARGET}, initial-scale=${scale}, minimum-scale=0.3, maximum-scale=5.0, user-scalable=yes`;
+    };
 
-    // 태블릿: 최소 너비 1200px로 설정하여 PC 레이아웃 그대로 표시
-    meta.content = "width=1200, initial-scale=1, user-scalable=yes";
+    updateViewport();
+    window.addEventListener("resize", updateViewport);
+    const onOrientationChange = () => setTimeout(updateViewport, 120);
+    window.addEventListener("orientationchange", onOrientationChange);
 
     return () => {
-      // 클린업: 원래 viewport로 복원
-      if (meta) {
-        meta.content = "width=device-width, initial-scale=1";
-      }
+      window.removeEventListener("resize", updateViewport);
+      window.removeEventListener("orientationchange", onOrientationChange);
+      const meta = document.querySelector('meta[name="viewport"]');
+      if (meta) meta.content = "width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover";
     };
   }, [isTablet]);
 
