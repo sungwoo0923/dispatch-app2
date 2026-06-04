@@ -472,7 +472,9 @@ export default function StandardFare() {
   const [nfResult, setNfResult] = useState(null);
   const [nfError, setNfError] = useState("");
   // 전국운임 경유지 상태
-  const [nfWaypoints, setNfWaypoints] = useState([]); // [{addr, coord}]
+  const [nfVias, setNfVias] = useState([]);
+  const [nfViaInput, setNfViaInput] = useState("");
+  const [nfViaCoords, setNfViaCoords] = useState([]);
 
   const geocodeTmap = async (addr) => {
     // Try searchAddress first — handles Kakao 도로명주소
