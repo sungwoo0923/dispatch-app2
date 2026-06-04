@@ -780,6 +780,25 @@ export default function StandardFare() {
                         <input className={inputCls} placeholder="예: 인천 서구" value={pickupAddr} onChange={e=>setPickupAddr(e.target.value)} onKeyDown={e=>e.key==="Enter"&&search()} />
                       </div>
                     </div>
+                    {/* Pickup waypoints */}
+                    <div className="mt-2 flex items-center gap-2 flex-wrap">
+                      {pickupVias.map((v,i) => (
+                        <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-teal-50 border border-teal-200 text-teal-700 rounded-full text-[11px] font-semibold">
+                          경유{i+1}: {v}
+                          <button type="button" onClick={() => setPickupVias(prev => prev.filter((_,j)=>j!==i))} className="text-teal-400 hover:text-teal-700 ml-0.5">✕</button>
+                        </span>
+                      ))}
+                      {showPickupViaInput ? (
+                        <div className="flex items-center gap-1">
+                          <input autoFocus className="px-2 py-0.5 text-[12px] border border-teal-300 rounded focus:outline-none w-28" placeholder="경유지명" value={pickupViaInput} onChange={e=>setPickupViaInput(e.target.value)}
+                            onKeyDown={e=>{ if(e.key==="Enter"&&pickupViaInput.trim()){setPickupVias(p=>[...p,pickupViaInput.trim()]);setPickupViaInput("");setShowPickupViaInput(false);} if(e.key==="Escape"){setPickupViaInput("");setShowPickupViaInput(false);}}} />
+                          <button type="button" onClick={()=>{if(pickupViaInput.trim()){setPickupVias(p=>[...p,pickupViaInput.trim()]);setPickupViaInput("");} setShowPickupViaInput(false);}} className="px-2 py-0.5 bg-teal-600 text-white rounded text-[11px] font-bold">추가</button>
+                          <button type="button" onClick={()=>{setPickupViaInput("");setShowPickupViaInput(false);}} className="px-2 py-0.5 text-gray-400 text-[11px]">취소</button>
+                        </div>
+                      ) : (
+                        <button type="button" onClick={()=>setShowPickupViaInput(true)} className="px-2 py-0.5 border border-dashed border-teal-300 text-teal-600 rounded text-[11px] font-semibold hover:bg-teal-50 transition">+ 경유</button>
+                      )}
+                    </div>
                   </div>
                   <div className="bg-gray-50 rounded-lg p-3 border border-gray-100">
                     <div className="text-[11px] font-bold text-[#1B2B4B] mb-2 uppercase tracking-wider">하차지</div>
@@ -792,6 +811,25 @@ export default function StandardFare() {
                         <label className={labelCls}>주소 (선택)</label>
                         <input className={inputCls} placeholder="예: 서울 송파구" value={dropAddr} onChange={e=>setDropAddr(e.target.value)} onKeyDown={e=>e.key==="Enter"&&search()} />
                       </div>
+                    </div>
+                    {/* Drop waypoints */}
+                    <div className="mt-2 flex items-center gap-2 flex-wrap">
+                      {dropVias.map((v,i) => (
+                        <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-teal-50 border border-teal-200 text-teal-700 rounded-full text-[11px] font-semibold">
+                          경유{i+1}: {v}
+                          <button type="button" onClick={() => setDropVias(prev => prev.filter((_,j)=>j!==i))} className="text-teal-400 hover:text-teal-700 ml-0.5">✕</button>
+                        </span>
+                      ))}
+                      {showDropViaInput ? (
+                        <div className="flex items-center gap-1">
+                          <input autoFocus className="px-2 py-0.5 text-[12px] border border-teal-300 rounded focus:outline-none w-28" placeholder="경유지명" value={dropViaInput} onChange={e=>setDropViaInput(e.target.value)}
+                            onKeyDown={e=>{ if(e.key==="Enter"&&dropViaInput.trim()){setDropVias(p=>[...p,dropViaInput.trim()]);setDropViaInput("");setShowDropViaInput(false);} if(e.key==="Escape"){setDropViaInput("");setShowDropViaInput(false);}}} />
+                          <button type="button" onClick={()=>{if(dropViaInput.trim()){setDropVias(p=>[...p,dropViaInput.trim()]);setDropViaInput("");} setShowDropViaInput(false);}} className="px-2 py-0.5 bg-teal-600 text-white rounded text-[11px] font-bold">추가</button>
+                          <button type="button" onClick={()=>{setDropViaInput("");setShowDropViaInput(false);}} className="px-2 py-0.5 text-gray-400 text-[11px]">취소</button>
+                        </div>
+                      ) : (
+                        <button type="button" onClick={()=>setShowDropViaInput(true)} className="px-2 py-0.5 border border-dashed border-teal-300 text-teal-600 rounded text-[11px] font-semibold hover:bg-teal-50 transition">+ 경유</button>
+                      )}
                     </div>
                   </div>
                 </div>
