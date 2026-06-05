@@ -4,7 +4,7 @@ import "leaflet/dist/leaflet.css";
 import { db } from "./firebase";
 import {
   collection, onSnapshot, doc, updateDoc,
-  query, where, orderBy, limit,
+  query, where, orderBy, limit, deleteDoc, writeBatch,
 } from "firebase/firestore";
 import { MapContainer, TileLayer, Marker, Popup, Polyline, CircleMarker, useMap } from "react-leaflet";
 import L from "leaflet";
@@ -96,6 +96,58 @@ function sfSet(key, val) {
   } catch {}
 }
 
+// ─── 모듈 레벨 PIN 상태 (F5 새로고침 시 초기화, 탭 전환 시 유지) ──────────────
+let _fleetPinVerified = false;
+const FLEET_PIN_KEY = "exec_intel_pin_v1"; // 경영인텔리전스와 동일 PIN
+
+// ─── 역지오코딩 캐시 (Nominatim) ─────────────────────────────────────────────
+const _geoCache = new Map();
+let _geoQueue = [];
+let _geoProcessing = false;
+
+function enqueueGeocode(lat, lng, cb) {
+  const key = `${lat.toFixed(4)},${lng.toFixed(4)}`;
+  if (_geoCache.has(key)) { cb(_geoCache.get(key)); return; }
+  _geoQueue.push({ lat, lng, key, cb });
+  _processGeoQueue();
+}
+
+async function _processGeoQueue() {
+  if (_geoProcessing || _geoQueue.length === 0) return;
+  _geoProcessing = true;
+  const { lat, lng, key, cb } = _geoQueue.shift();
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=ko`,
+      { headers: { "User-Agent": "KPFlowDispatch/1.0" } }
+    );
+    const data = await res.json();
+    const a = data.address || {};
+    const parts = [
+      a.city || a.county || a.state,
+      a.suburb || a.quarter || a.neighbourhood || a.village,
+      a.road || a.pedestrian,
+    ].filter(Boolean);
+    const addr = parts.length ? parts.join(" ") : (data.display_name || "").split(",")[0].trim();
+    _geoCache.set(key, addr || `${lat.toFixed(5)}, ${lng.toFixed(5)}`);
+    cb(_geoCache.get(key));
+  } catch {
+    const fb = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+    _geoCache.set(key, fb);
+    cb(fb);
+  }
+  await new Promise(r => setTimeout(r, 1200));
+  _geoProcessing = false;
+  _processGeoQueue();
+}
+
+// ─── 날짜+시간 포맷 ───────────────────────────────────────────────────────────
+function formatDateTime(ts) {
+  const d = resolveTs(ts);
+  if (!d) return "--";
+  return `${String(d.getMonth()+1).padStart(2,"0")}.${String(d.getDate()).padStart(2,"0")} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+}
+
 // ─── 유틸 ─────────────────────────────────────────────────────────────────────
 
 function statusPriority(d) {
@@ -173,6 +225,123 @@ function StatusBadge({ status, size = 9 }) {
       <span style={{ width: size, height: size, borderRadius: "50%", background: color, display: "inline-block", flexShrink: 0 }} />
       <span style={{ fontSize: 14, fontWeight: 700, color: "#1B2B4B" }}>{status || "확인중"}</span>
     </span>
+  );
+}
+
+// ─── FleetPinGate ────────────────────────────────────────────────────────────
+
+function FleetPinGate({ onVerified }) {
+  const hasPin = !!localStorage.getItem(FLEET_PIN_KEY);
+  const [mode, setMode] = React.useState(hasPin ? "verify" : "setup1");
+  const [entered, setEntered] = React.useState("");
+  const [firstPin, setFirstPin] = React.useState("");
+  const [error, setError] = React.useState("");
+  const [animKey, setAnimKey] = React.useState(0);
+
+  const bump = () => { setAnimKey(k => k + 1); setEntered(""); setError(""); };
+
+  const handleKey = (d) => {
+    if (d === "back") { setEntered(p => p.slice(0, -1)); return; }
+    if (entered.length >= 6) return;
+    const next = entered + d;
+    setEntered(next);
+    if (next.length < 6) return;
+    setTimeout(() => {
+      if (mode === "verify") {
+        if (next === localStorage.getItem(FLEET_PIN_KEY)) onVerified();
+        else { setError("비밀번호가 올바르지 않습니다"); bump(); }
+      } else if (mode === "setup1") {
+        setFirstPin(next); setEntered(""); setMode("setup2");
+      } else if (mode === "setup2") {
+        if (next === firstPin) { localStorage.setItem(FLEET_PIN_KEY, next); onVerified(); }
+        else { setError("비밀번호가 일치하지 않습니다"); setFirstPin(""); setMode("setup1"); bump(); }
+      }
+    }, 200);
+  };
+
+  const heading = mode === "verify" ? "보안 인증" : mode === "setup1" ? "비밀번호 설정" : "비밀번호 확인";
+  const sub = mode === "verify" ? "지입차 관제 시스템 — 6자리 비밀번호" :
+    mode === "setup1" ? "사용할 6자리 비밀번호를 입력하세요" : "비밀번호를 한 번 더 입력하여 확인하세요";
+
+  return (
+    <div style={{ minHeight: "70vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#f4f6f9", borderRadius: 12 }}>
+      <div style={{ background: "white", borderRadius: 20, boxShadow: "0 4px 24px rgba(27,43,75,.12)", padding: "40px 44px", width: 340 }}>
+        <div style={{ textAlign: "center", marginBottom: 28 }}>
+          <div style={{ width: 58, height: 58, background: NAVY, borderRadius: 16, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8h4l3 3v5h-7V8Z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>
+            </svg>
+          </div>
+          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.2em", color: "#d1d5db", marginBottom: 6, textTransform: "uppercase" }}>FLEET MANAGEMENT</div>
+          <div style={{ fontSize: 18, fontWeight: 900, color: NAVY }}>{heading}</div>
+          <div style={{ fontSize: 13, color: "#9ca3af", marginTop: 6 }}>{sub}</div>
+        </div>
+        <div key={animKey} style={{ display: "flex", justifyContent: "center", gap: 10, marginBottom: 20 }}>
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} style={{ width: 14, height: 14, borderRadius: "50%", background: i < entered.length ? NAVY : "white", border: `2px solid ${i < entered.length ? NAVY : "#d1d5db"}`, transition: "all .15s" }} />
+          ))}
+        </div>
+        {error && <div style={{ textAlign: "center", fontSize: 12, fontWeight: 600, color: "#ef4444", background: "#fef2f2", borderRadius: 8, padding: "8px 12px", marginBottom: 14 }}>{error}</div>}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
+          {[1,2,3,4,5,6,7,8,9,null,0,"←"].map((d, i) => (
+            <button key={i} onClick={() => d !== null && handleKey(d === "←" ? "back" : String(d))} disabled={d === null}
+              style={{ height: 52, borderRadius: 12, border: "1px solid #e5e7eb", background: d === "←" ? "#f3f4f6" : "#f8f9fb", color: d === "←" ? "#6b7280" : NAVY, fontSize: d === "←" ? 15 : 18, fontWeight: 600, cursor: d === null ? "default" : "pointer", opacity: d === null ? 0 : 1, fontFamily: "inherit" }}
+            >{d}</button>
+          ))}
+        </div>
+        {mode === "verify" && (
+          <button onClick={() => { localStorage.removeItem(FLEET_PIN_KEY); setMode("setup1"); setEntered(""); setError(""); setFirstPin(""); }}
+            style={{ width: "100%", marginTop: 16, textAlign: "center", fontSize: 12, color: "#d1d5db", background: "none", border: "none", cursor: "pointer" }}>
+            비밀번호를 잊으셨나요? — 재설정
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── PinConfirmModal ──────────────────────────────────────────────────────────
+
+function PinConfirmModal({ onConfirmed, onCancel, title = "삭제 확인" }) {
+  const [entered, setEntered] = React.useState("");
+  const [error, setError] = React.useState("");
+  const [animKey, setAnimKey] = React.useState(0);
+
+  const handleKey = (d) => {
+    if (d === "back") { setEntered(p => p.slice(0, -1)); return; }
+    if (entered.length >= 6) return;
+    const next = entered + d;
+    setEntered(next);
+    if (next.length < 6) return;
+    setTimeout(() => {
+      if (next === localStorage.getItem(FLEET_PIN_KEY)) onConfirmed();
+      else { setError("비밀번호가 올바르지 않습니다"); setAnimKey(k => k+1); setEntered(""); }
+    }, 200);
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.45)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ background: "white", borderRadius: 16, padding: "32px 36px", width: 320, boxShadow: "0 8px 32px rgba(0,0,0,.2)" }}>
+        <div style={{ textAlign: "center", marginBottom: 20 }}>
+          <div style={{ fontSize: 14, fontWeight: 800, color: "#ef4444", marginBottom: 4 }}>{title}</div>
+          <div style={{ fontSize: 13, color: "#6b7280" }}>비밀번호를 다시 입력하세요</div>
+        </div>
+        <div key={animKey} style={{ display: "flex", justifyContent: "center", gap: 10, marginBottom: 16 }}>
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} style={{ width: 12, height: 12, borderRadius: "50%", background: i < entered.length ? "#ef4444" : "white", border: `2px solid ${i < entered.length ? "#ef4444" : "#d1d5db"}`, transition: "all .15s" }} />
+          ))}
+        </div>
+        {error && <div style={{ textAlign: "center", fontSize: 12, color: "#ef4444", marginBottom: 12 }}>{error}</div>}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+          {[1,2,3,4,5,6,7,8,9,null,0,"←"].map((d, i) => (
+            <button key={i} onClick={() => d !== null && handleKey(d === "←" ? "back" : String(d))} disabled={d === null}
+              style={{ height: 46, borderRadius: 10, border: "1px solid #e5e7eb", background: d === "←" ? "#f3f4f6" : "#f8f9fb", color: "#374151", fontSize: d === "←" ? 14 : 17, fontWeight: 600, cursor: d === null ? "default" : "pointer", opacity: d === null ? 0 : 1, fontFamily: "inherit" }}
+            >{d}</button>
+          ))}
+        </div>
+        <button onClick={onCancel} style={{ width: "100%", marginTop: 14, padding: "10px", borderRadius: 10, border: "1px solid #e5e7eb", background: "white", color: "#6b7280", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>취소</button>
+      </div>
+    </div>
   );
 }
 
@@ -255,7 +424,7 @@ function DriverTable({ rows, selectedId, onSelect }) {
               </td>
 
               {/* 차량번호 */}
-              <td style={{ padding: "11px 14px", color: "#1B2B4B", whiteSpace: "nowrap", fontFamily: "'JetBrains Mono','Courier New',monospace", fontSize: 13, fontWeight: 700, letterSpacing: ".03em" }}>
+              <td style={{ padding: "11px 14px", color: "#1B2B4B", whiteSpace: "nowrap", fontSize: 13, fontWeight: 700, letterSpacing: "0.04em" }}>
                 {d.차량번호 || "-"}
               </td>
 
@@ -361,46 +530,98 @@ function FleetMap({ drivers, center, onSelect, selectedPath = [] }) {
   );
 }
 
+// ─── ActivityLogItem ──────────────────────────────────────────────────────────
+
+function ActivityLogItem({ log, isLast }) {
+  const [address, setAddress] = useState(null);
+  const [showCoords, setShowCoords] = useState(false);
+  const hasLoc = log.location?.lat != null;
+  const statusColor = STATUS_COLORS[log.status] || "#9ca3af";
+
+  useEffect(() => {
+    if (hasLoc) enqueueGeocode(log.location.lat, log.location.lng, setAddress);
+  }, [hasLoc, log.location?.lat, log.location?.lng]);
+
+  return (
+    <div style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "11px 20px", borderBottom: !isLast ? "1px solid #f0f2f5" : "none" }}>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", paddingTop: 4, flexShrink: 0 }}>
+        <div style={{ width: 9, height: 9, borderRadius: "50%", background: statusColor, boxShadow: `0 0 0 3px ${statusColor}22` }} />
+        {!isLast && <div style={{ width: 1, minHeight: 18, flex: 1, background: "#e5e7eb", marginTop: 4 }} />}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap", marginBottom: 3 }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: statusColor, background: `${statusColor}18`, padding: "2px 8px", borderRadius: 99 }}>{log.status}</span>
+          <span style={{ fontSize: 12, color: "#9ca3af" }}>{timeAgo(log.timestamp)}</span>
+        </div>
+        {hasLoc && (
+          <div
+            onClick={() => setShowCoords(v => !v)}
+            style={{ fontSize: 12, color: "#6b7280", marginBottom: 1, cursor: "pointer", textDecoration: "underline dotted", display: "inline-block" }}
+            title={showCoords ? "클릭하여 주소 표시" : "클릭하여 좌표 표시"}
+          >
+            {showCoords
+              ? `${log.location.lat.toFixed(5)}, ${log.location.lng.toFixed(5)}`
+              : (address || "주소 조회중...")}
+          </div>
+        )}
+      </div>
+      <div style={{ fontSize: 12, color: "#9ca3af", flexShrink: 0, paddingTop: 2, fontWeight: 600, whiteSpace: "nowrap" }}>{formatDateTime(log.timestamp)}</div>
+    </div>
+  );
+}
+
 // ─── ActivityFeed ─────────────────────────────────────────────────────────────
 
-function ActivityFeed({ logs, driversMap }) {
-  if (logs.length === 0) {
+function ActivityFeed({ logs, driversMap, onDeleteAll }) {
+  const grouped = useMemo(() => {
+    const map = {};
+    logs.forEach(log => {
+      const k = log.uid || "unknown";
+      if (!map[k]) {
+        const info = driversMap[k] || {};
+        map[k] = {
+          uid: k,
+          name: log.driverName || info.이름 || k.slice(0, 8) || "-",
+          carNo: log.carNo || info.차량번호 || "-",
+          latestStatus: log.status,
+          logs: [],
+        };
+      }
+      map[k].logs.push(log);
+    });
+    return Object.values(map).sort((a, b) => {
+      const at = resolveTs(a.logs[0]?.timestamp)?.getTime() || 0;
+      const bt = resolveTs(b.logs[0]?.timestamp)?.getTime() || 0;
+      return bt - at;
+    });
+  }, [logs, driversMap]);
+
+  if (grouped.length === 0) {
     return (
       <div style={{ padding: "36px 16px", textAlign: "center", color: "#9ca3af", fontSize: 14 }}>
         기사가 버튼을 누르면 여기에 즉시 표시됩니다
       </div>
     );
   }
+
   return (
     <div>
-      {logs.map((log, i) => {
-        const statusColor = STATUS_COLORS[log.status] || "#9ca3af";
-        const driverInfo = driversMap[log.uid] || {};
-        const name = log.driverName || driverInfo.이름 || log.uid?.slice(0, 8) || "-";
-        const carNo = log.carNo || driverInfo.차량번호 || "-";
-        const hasLoc = log.location?.lat != null;
+      {grouped.map((group, gi) => {
+        const statusColor = STATUS_COLORS[group.latestStatus] || "#9ca3af";
         return (
-          <div key={log.id} style={{ display: "flex", alignItems: "flex-start", gap: 14, padding: "13px 20px", borderBottom: i < logs.length - 1 ? "1px solid #f0f2f5" : "none" }}>
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", paddingTop: 4, flexShrink: 0 }}>
-              <div style={{ width: 11, height: 11, borderRadius: "50%", background: statusColor, boxShadow: `0 0 0 3px ${statusColor}22` }} />
-              {i < logs.length - 1 && <div style={{ width: 1, minHeight: 20, flex: 1, background: "#e5e7eb", marginTop: 5 }} />}
+          <div key={group.uid} style={{ borderBottom: gi < grouped.length - 1 ? "2px solid #f0f2f5" : "none" }}>
+            {/* Driver group header */}
+            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 20px", background: "#f8f9fb", borderBottom: "1px solid #eaecf0" }}>
+              <span style={{ width: 8, height: 8, borderRadius: "50%", background: statusColor, display: "inline-block", flexShrink: 0 }} />
+              <span style={{ fontSize: 14, fontWeight: 800, color: "#111827" }}>{group.name}</span>
+              <span style={{ fontSize: 13, color: "#6b7280", fontWeight: 700, letterSpacing: "0.04em" }}>{group.carNo}</span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: statusColor, background: `${statusColor}18`, padding: "2px 8px", borderRadius: 99 }}>{group.latestStatus}</span>
+              <span style={{ fontSize: 12, color: "#9ca3af", marginLeft: "auto" }}>{group.logs.length}건</span>
             </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap", marginBottom: 4 }}>
-                <span style={{ fontSize: 15, fontWeight: 800, color: "#111827" }}>{name}</span>
-                <span style={{ fontSize: 13, color: "#6b7280", fontFamily: "monospace" }}>{carNo}</span>
-                <span style={{ fontSize: 13, fontWeight: 700, color: statusColor, background: `${statusColor}18`, padding: "2px 9px", borderRadius: 99 }}>
-                  {log.status}
-                </span>
-              </div>
-              {hasLoc && (
-                <div style={{ fontSize: 13, color: "#374151", marginBottom: 3 }}>
-                  위치: {log.location.lat.toFixed(5)}, {log.location.lng.toFixed(5)}
-                </div>
-              )}
-              <div style={{ fontSize: 13, color: "#9ca3af" }}>{timeAgo(log.timestamp)}</div>
-            </div>
-            <div style={{ fontSize: 13, color: "#6b7280", flexShrink: 0, paddingTop: 2, fontWeight: 600 }}>{formatTime(log.timestamp)}</div>
+            {/* Log items */}
+            {group.logs.map((log, i) => (
+              <ActivityLogItem key={log.id} log={log} isLast={i === group.logs.length - 1} />
+            ))}
           </div>
         );
       })}
@@ -410,7 +631,7 @@ function ActivityFeed({ logs, driversMap }) {
 
 // ─── DriverDetailPanel ────────────────────────────────────────────────────────
 
-function DriverDetailPanel({ data, logs, onClose }) {
+function DriverDetailPanel({ data, logs, onClose, onDeleteLogs }) {
   if (!data) return null;
 
   const lastLog = logs[0];
@@ -436,7 +657,7 @@ function DriverDetailPanel({ data, logs, onClose }) {
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             <span style={{ fontSize: 19, fontWeight: 800, color: NAVY }}>{data.이름 || "-"}</span>
-            <span style={{ fontSize: 13, color: "#374151", fontFamily: "monospace", background: "#f0f2f5", padding: "3px 9px", borderRadius: 5, fontWeight: 700 }}>{data.차량번호 || "-"}</span>
+            <span style={{ fontSize: 13, color: "#374151", background: "#f0f2f5", padding: "3px 9px", borderRadius: 5, fontWeight: 700, letterSpacing: "0.04em" }}>{data.차량번호 || "-"}</span>
             {data.vehicleType && data.vehicleType !== "-" && (
               <span style={{ fontSize: 13, color: "#6b7280", padding: "3px 9px", border: "1px solid #e5e7eb", borderRadius: 99 }}>{data.vehicleType}</span>
             )}
@@ -459,7 +680,16 @@ function DriverDetailPanel({ data, logs, onClose }) {
           { label: "근무시간", val: formatMinutes(data.근무시간) },
           { label: "접속상태", val: data.active ? "접속중" : "미접속", color: data.active ? "#10b981" : "#9ca3af" },
           data.location ? { label: "현재 좌표", val: `${data.location.lat.toFixed(4)}, ${data.location.lng.toFixed(4)}` } : null,
-          data.speed > 0 ? { label: "현재 속도", val: `${data.speed} km/h` } : null,
+          (() => {
+            const dist = data.총거리 || 0;
+            const startTs = resolveTs(data.workStartAt);
+            if (dist > 0 && startTs) {
+              const hrs = (Date.now() - startTs.getTime()) / 3600000;
+              const avg = hrs > 0 ? Math.round(dist / hrs) : 0;
+              return { label: "평균 속도", val: `${avg} km/h` };
+            }
+            return null;
+          })(),
         ].filter(Boolean).map(({ label, val, color }) => (
           <div key={label} style={{ background: "#f8f9fb", borderRadius: 9, padding: "13px 15px", border: "1px solid #eaecf0" }}>
             <p style={{ fontSize: 11, fontWeight: 700, color: "#6b7280", letterSpacing: ".07em", textTransform: "uppercase", margin: "0 0 6px" }}>{label}</p>
@@ -471,7 +701,18 @@ function DriverDetailPanel({ data, logs, onClose }) {
       {/* Log history */}
       {logs.length > 0 && (
         <>
-          <p style={{ fontSize: 12, fontWeight: 700, color: "#6b7280", letterSpacing: ".09em", textTransform: "uppercase", margin: "0 0 12px" }}>상태 이력 (이동 동선)</p>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+            <p style={{ fontSize: 12, fontWeight: 700, color: "#6b7280", letterSpacing: ".09em", textTransform: "uppercase", margin: 0 }}>상태 이력 (이동 동선)</p>
+            {onDeleteLogs && (
+              <button
+                onClick={onDeleteLogs}
+                title="이력 삭제"
+                style={{ width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid #fca5a5", borderRadius: 7, background: "white", cursor: "pointer", color: "#ef4444", padding: 0, flexShrink: 0 }}
+              >
+                <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2" strokeLinecap="round"/></svg>
+              </button>
+            )}
+          </div>
           <div style={{ maxHeight: 250, overflowY: "auto" }}>
             {logs.map((log, i) => {
               const nextLog = logs[i + 1];
@@ -491,12 +732,12 @@ function DriverDetailPanel({ data, logs, onClose }) {
                       )}
                     </div>
                     {log.location?.lat != null && (
-                      <div style={{ fontSize: 13, color: "#6b7280", marginTop: 2 }}>
+                      <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>
                         {log.location.lat.toFixed(5)}, {log.location.lng.toFixed(5)}
                       </div>
                     )}
                   </div>
-                  <div style={{ fontSize: 13, color: "#9ca3af", flexShrink: 0, fontWeight: 600 }}>{formatTime(log.timestamp)}</div>
+                  <div style={{ fontSize: 12, color: "#9ca3af", flexShrink: 0, fontWeight: 600, whiteSpace: "nowrap" }}>{formatDateTime(log.timestamp)}</div>
                 </div>
               );
             })}
@@ -544,7 +785,7 @@ function RegistrationTab({ usersMap }) {
       <div style={{ width: 9, height: 9, borderRadius: "50%", background: d.approved ? "#10b981" : "#f59e0b", flexShrink: 0 }} />
       <div style={{ minWidth: 90, flex: "0 0 auto" }}>
         <div style={{ fontSize: 15, fontWeight: 700, color: "#111827" }}>{d.name || "-"}</div>
-        <div style={{ fontSize: 13, color: "#6b7280", fontFamily: "monospace", marginTop: 2, fontWeight: 600 }}>{d.carNo || "-"}</div>
+        <div style={{ fontSize: 13, color: "#374151", marginTop: 2, fontWeight: 700, letterSpacing: "0.04em" }}>{d.carNo || "-"}</div>
       </div>
       <span style={{ fontSize: 13, color: "#374151", padding: "3px 10px", border: "1px solid #e5e7eb", borderRadius: 99, background: "#fafafa", flexShrink: 0 }}>
         {d.vehicleType || "-"}
@@ -615,6 +856,9 @@ function RegistrationTab({ usersMap }) {
 // ─── 메인 컴포넌트 ────────────────────────────────────────────────────────────
 
 export default function FleetManagement() {
+  // PIN gate — module-level var resets on F5, persists through tab switches
+  const [pinVerified, setPinVerified] = useState(_fleetPinVerified);
+
   // Tab persistence across parent-tab switches → sessionStorage
   const [mainTab, setMainTab] = useState(() => sfGet("fm_tab", "tracking"));
 
@@ -626,6 +870,9 @@ export default function FleetManagement() {
   const [loading,     setLoading]     = useState(() => sfGet("fm_drivers_raw", []).length === 0);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [refreshKey,  setRefreshKey]  = useState(0);
+
+  const [gpsTracks, setGpsTracks] = useState([]);
+  const [pinModal, setPinModal] = useState(null); // { title, onConfirmed }
 
   const [searchQuery,   setSearchQuery]  = useState("");
   const [statusFilter,  setStatusFilter] = useState("전체");
@@ -692,6 +939,23 @@ export default function FleetManagement() {
     );
   }, [selected?.id]);
 
+  // ── GPS 트랙 구독 (선택된 기사, 오늘) ─────────────────────────────────────
+  useEffect(() => {
+    if (!selected?.id) { setGpsTracks([]); return; }
+    const today = new Date().toISOString().slice(0, 10);
+    return onSnapshot(
+      query(
+        collection(db, "gps_tracks"),
+        where("driverId", "==", selected.id),
+        where("date", "==", today),
+        orderBy("timestamp", "asc"),
+        limit(500)
+      ),
+      (snap) => setGpsTracks(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
+      (err) => console.error("gps_tracks:", err)
+    );
+  }, [selected?.id]);
+
   // ── 합성 drivers ─────────────────────────────────────────────────────────
   // Only include drivers who registered via DriverRegister (have usersMap entry)
   // AND have been approved. Filters out all old/orphaned drivers collection docs.
@@ -717,6 +981,7 @@ export default function FleetManagement() {
           updatedAt: raw.updatedAt,
           active: raw.active === true,
           speed: raw.speed || 0,
+          workStartAt: raw.workStartAt || null,
         };
       })
       .sort((a, b) => statusPriority(a) - statusPriority(b));
@@ -729,11 +994,21 @@ export default function FleetManagement() {
   }, [drivers]);
 
   // ── 선택 기사 이동 경로 ───────────────────────────────────────────────────
-  // Points are in desc order from Firestore; reverse for chronological path
+  // Prefer continuous gps_tracks; fall back to sparse driver_logs status points
   const selectedPath = useMemo(() => {
+    // Use GPS tracks when we have actual continuous waypoints
+    if (gpsTracks.length >= 2) {
+      return gpsTracks.map(t => ({
+        lat: t.lat,
+        lng: t.lng,
+        status: "운행중",
+        timestamp: t.timestamp,
+        dwell: null,
+      }));
+    }
+    // Fallback: use status change log positions
     const withLoc = selectedDriverLogs.filter(l => l.location?.lat != null);
     if (withLoc.length === 0) return [];
-    // Compute dwell time between consecutive points
     return [...withLoc].reverse().map((l, i, arr) => {
       const nextLog = arr[i + 1];
       const thisTs = resolveTs(l.timestamp);
@@ -747,7 +1022,7 @@ export default function FleetManagement() {
         dwell,
       };
     });
-  }, [selectedDriverLogs]);
+  }, [selectedDriverLogs, gpsTracks]);
 
   // ── 필터링 ────────────────────────────────────────────────────────────────
   const filteredRows = useMemo(() => {
@@ -800,7 +1075,44 @@ export default function FleetManagement() {
     if (updated) setSelected(updated);
   }, [drivers]);
 
+  // ── 피드 전체 삭제 ────────────────────────────────────────────────────────
+  const handleDeleteFeedLogs = useCallback(() => {
+    setPinModal({
+      title: "활동 피드 전체 삭제",
+      onConfirmed: async () => {
+        setPinModal(null);
+        try {
+          const batch = writeBatch(db);
+          filteredActivityLogs.forEach(log => batch.delete(doc(db, "driver_logs", log.id)));
+          await batch.commit();
+        } catch (e) { console.error("feed delete:", e); }
+      },
+    });
+  }, [filteredActivityLogs]);
+
+  // ── 선택 기사 로그 삭제 ───────────────────────────────────────────────────
+  const handleDeleteDriverLogs = useCallback(() => {
+    if (!selected) return;
+    setPinModal({
+      title: `${selected.이름} 이력 삭제`,
+      onConfirmed: async () => {
+        setPinModal(null);
+        try {
+          const batch = writeBatch(db);
+          selectedDriverLogs.forEach(log => batch.delete(doc(db, "driver_logs", log.id)));
+          await batch.commit();
+        } catch (e) { console.error("driver logs delete:", e); }
+      },
+    });
+  }, [selected, selectedDriverLogs]);
+
   // ─── 렌더 ────────────────────────────────────────────────────────────────
+  if (!pinVerified) {
+    return (
+      <FleetPinGate onVerified={() => { _fleetPinVerified = true; setPinVerified(true); }} />
+    );
+  }
+
   return (
     <div style={{
       display: "flex", flexDirection: "column", gap: 16, padding: "4px 0",
@@ -957,7 +1269,8 @@ export default function FleetManagement() {
             <DriverDetailPanel
               data={selected}
               logs={selectedDriverLogs}
-              onClose={() => { setSelected(null); setSelectedDriverLogs([]); }}
+              onClose={() => { setSelected(null); setSelectedDriverLogs([]); setGpsTracks([]); }}
+              onDeleteLogs={handleDeleteDriverLogs}
             />
           )}
 
@@ -969,10 +1282,21 @@ export default function FleetManagement() {
                 <span style={{ fontSize: 15, fontWeight: 800, color: NAVY }}>실시간 활동 피드</span>
                 <span style={{ fontSize: 13, color: "#9ca3af" }}>기사가 버튼을 누를 때마다 즉시 기록</span>
               </div>
-              <span style={{ fontSize: 13, color: "#6b7280", fontWeight: 600 }}>최근 {filteredActivityLogs.length}건</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: 13, color: "#6b7280", fontWeight: 600 }}>최근 {filteredActivityLogs.length}건</span>
+                {filteredActivityLogs.length > 0 && (
+                  <button
+                    onClick={handleDeleteFeedLogs}
+                    title="피드 전체 삭제"
+                    style={{ width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid #fca5a5", borderRadius: 7, background: "white", cursor: "pointer", color: "#ef4444", padding: 0 }}
+                  >
+                    <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2" strokeLinecap="round"/></svg>
+                  </button>
+                )}
+              </div>
             </div>
             <div style={{ maxHeight: 420, overflowY: "auto" }}>
-              <ActivityFeed logs={filteredActivityLogs} driversMap={driversMap} />
+              <ActivityFeed logs={filteredActivityLogs} driversMap={driversMap} onDeleteAll={handleDeleteFeedLogs} />
             </div>
           </div>
         </>
@@ -984,6 +1308,14 @@ export default function FleetManagement() {
       <style>{`
         @keyframes fmLivePulse { 0%,100%{opacity:1} 50%{opacity:.3} }
       `}</style>
+
+      {pinModal && (
+        <PinConfirmModal
+          title={pinModal.title}
+          onConfirmed={pinModal.onConfirmed}
+          onCancel={() => setPinModal(null)}
+        />
+      )}
     </div>
   );
 }

@@ -151,53 +151,106 @@ function calcWorkSummary(logs) {
   return { workMs, driveMs, checkInTime, tripCount };
 }
 
+// ─── Haversine 거리 ───────────────────────────────────────────────────────────
+function calcDist(lat1, lng1, lat2, lng2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 // ─── GPS 추적 훅 ─────────────────────────────────────────────────────────────
 function useGpsTracking(uid, driverData) {
   const [pos, setPos] = useState(null);
   const [permissionDenied, setPermissionDenied] = useState(false);
   const lastPosRef = useRef(null);
+  const totalDistRef = useRef(0);           // running total — avoids stale closure bug
+  const distInitializedRef = useRef(false); // true once synced from Firestore
+  const lastGpsStoreRef = useRef(null);     // last point stored to gps_tracks
 
-  const calcDist = (lat1, lng1, lat2, lng2) => {
-    const R = 6371;
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLng = (lng2 - lng1) * Math.PI / 180;
-    const a = Math.sin(dLat / 2) ** 2 +
-      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  };
+  // Initialize totalDistRef once when driverData first loads from Firestore
+  useEffect(() => {
+    if (!distInitializedRef.current && driverData !== null && driverData !== undefined) {
+      totalDistRef.current = driverData.totalDistance || 0;
+      distInitializedRef.current = true;
+    }
+  }, [driverData]);
+
+  // Wake lock — keeps screen on for background tracking on Android Chrome
+  useEffect(() => {
+    if (!uid || !("wakeLock" in navigator)) return;
+    let wl = null;
+    const acquire = async () => {
+      try { wl = await navigator.wakeLock.request("screen"); } catch (_) {}
+    };
+    acquire();
+    const onVisible = () => { if (document.visibilityState === "visible") acquire(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      wl?.release().catch(() => {});
+    };
+  }, [uid]);
+
+  const resetTotalDist = useCallback(() => {
+    totalDistRef.current = 0;
+    distInitializedRef.current = true;
+    lastPosRef.current = null;
+    lastGpsStoreRef.current = null;
+  }, []);
 
   useEffect(() => {
     if (!uid) return;
     const watchId = navigator.geolocation.watchPosition(
       async (p) => {
-        const { latitude: lat, longitude: lng, speed } = p.coords;
+        const { latitude: lat, longitude: lng, speed, accuracy } = p.coords;
         setPos({ lat, lng, speed });
+
+        // Ignore readings with poor accuracy
+        if (accuracy > 100) return;
 
         const prev = lastPosRef.current;
         let distDelta = 0;
         if (prev) distDelta = calcDist(prev.lat, prev.lng, lat, lng);
         lastPosRef.current = { lat, lng };
 
-        const ref = doc(db, "drivers", uid);
         const updateData = {
           location: { lat, lng },
           speed: speed ? Math.round(speed * 3.6) : 0,
           updatedAt: serverTimestamp(),
         };
+
+        // Accumulate distance using ref (not stale driverData)
         if (distDelta > 0.01) {
-          updateData.totalDistance = (driverData?.totalDistance || 0) + distDelta;
+          totalDistRef.current += distDelta;
+          updateData.totalDistance = totalDistRef.current;
         }
-        try { await updateDoc(ref, updateData); } catch (_) {}
+
+        // Store GPS waypoint every 50 m for accurate path visualization
+        const lastStore = lastGpsStoreRef.current;
+        const storeDelta = lastStore ? calcDist(lastStore.lat, lastStore.lng, lat, lng) : 999;
+        if (storeDelta > 0.05) {
+          lastGpsStoreRef.current = { lat, lng };
+          addDoc(collection(db, "gps_tracks"), {
+            driverId: uid,
+            lat, lng,
+            speed: speed ? Math.round(speed * 3.6) : 0,
+            timestamp: serverTimestamp(),
+            date: new Date().toISOString().slice(0, 10),
+          }).catch(() => {});
+        }
+
+        try { await updateDoc(doc(db, "drivers", uid), updateData); } catch (_) {}
       },
-      (err) => {
-        if (err.code === 1) setPermissionDenied(true);
-      },
-      { enableHighAccuracy: true, maximumAge: 4000, timeout: 10000 }
+      (err) => { if (err.code === 1) setPermissionDenied(true); },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
     );
     return () => navigator.geolocation.clearWatch(watchId);
   }, [uid]);
 
-  return { pos, permissionDenied };
+  return { pos, permissionDenied, resetTotalDist };
 }
 
 // ─── 메인 컴포넌트 ────────────────────────────────────────────────────────────
@@ -223,7 +276,7 @@ export default function DriverHome() {
   }, [uid]);
 
   const logs = useTodayLogs(uid);
-  const { pos, permissionDenied } = useGpsTracking(uid, driver);
+  const { pos, permissionDenied, resetTotalDist } = useGpsTracking(uid, driver);
   const summary = React.useMemo(() => calcWorkSummary(logs), [logs]);
 
   const showToast = (msg) => {
@@ -235,12 +288,19 @@ export default function DriverHome() {
     if (!uid || statusLoading) return;
     setStatusLoading(true);
     try {
-      await updateDoc(doc(db, "drivers", uid), {
+      const driverUpdate = {
         status: newStatus,
         mainStatus: newStatus,
         updatedAt: serverTimestamp(),
         active: newStatus !== "퇴근",
-      });
+      };
+      // On 출근: reset daily distance counter and record work start time
+      if (newStatus === "출근") {
+        driverUpdate.totalDistance = 0;
+        driverUpdate.workStartAt = serverTimestamp();
+        resetTotalDist();
+      }
+      await updateDoc(doc(db, "drivers", uid), driverUpdate);
       await addDoc(collection(db, "driver_logs"), {
         uid,
         driverName: driver?.name || "",
@@ -256,7 +316,7 @@ export default function DriverHome() {
     } finally {
       setStatusLoading(false);
     }
-  }, [uid, statusLoading, pos, driver]);
+  }, [uid, statusLoading, pos, driver, resetTotalDist]);
 
   const handleLogout = async () => {
     if (uid) {
