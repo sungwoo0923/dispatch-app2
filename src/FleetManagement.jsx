@@ -496,9 +496,11 @@ function DriverTable({ rows, selectedId, onSelect }) {
 
 // ─── FleetMap ────────────────────────────────────────────────────────────────
 
-function FleetMap({ drivers, center, onSelect, selectedPath = [] }) {
+function FleetMap({ drivers, center, onSelect, selectedPath = [], roadPath = [] }) {
   const defaultCenter = center || { lat: 37.5665, lng: 126.9780 };
-  const pathPositions = selectedPath.map(p => [p.lat, p.lng]);
+  // Prefer OSRM road-following path; fall back to direct GPS waypoints
+  const displayPath = roadPath.length >= 2 ? roadPath : selectedPath;
+  const pathPositions = displayPath.map(p => [p.lat, p.lng]);
 
   return (
     <MapContainer center={[defaultCenter.lat, defaultCenter.lng]} zoom={12} scrollWheelZoom style={{ height: "100%", width: "100%", minHeight: 480 }}>
@@ -506,9 +508,9 @@ function FleetMap({ drivers, center, onSelect, selectedPath = [] }) {
       {selectedPath.length >= 2 && <FitPath points={selectedPath} />}
       <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap" />
 
-      {/* 이동 경로 선 */}
+      {/* 이동 경로 선 (OSRM 도로 경로) */}
       {pathPositions.length >= 2 && (
-        <Polyline positions={pathPositions} color={NAVY} weight={3} opacity={0.65} dashArray="6 4" />
+        <Polyline positions={pathPositions} color={NAVY} weight={4} opacity={0.75} />
       )}
 
       {/* 경로 포인트 (상태 변경 위치) */}
@@ -892,9 +894,6 @@ function RegistrationTab({ usersMap }) {
 // ─── 메인 컴포넌트 ────────────────────────────────────────────────────────────
 
 export default function FleetManagement() {
-  // PIN gate — module-level var resets on F5, persists through tab switches
-  const [pinVerified, setPinVerified] = useState(_fleetPinVerified);
-
   // Tab persistence across parent-tab switches → sessionStorage
   const [mainTab, setMainTab] = useState(() => sfGet("fm_tab", "tracking"));
 
@@ -908,6 +907,7 @@ export default function FleetManagement() {
   const [refreshKey,  setRefreshKey]  = useState(0);
 
   const [gpsTracks, setGpsTracks] = useState([]);
+  const [roadPath, setRoadPath] = useState([]);
   const [pinModal, setPinModal] = useState(null); // { title, onConfirmed }
 
   const [searchQuery,   setSearchQuery]  = useState("");
@@ -1073,6 +1073,43 @@ export default function FleetManagement() {
     });
   }, [selectedDriverLogs, gpsTracks]);
 
+  // ── 실제 도로 경로 (OSRM) ─────────────────────────────────────────────────
+  // Fetch road-following geometry so the map line follows actual roads, not straight lines.
+  // Waypoints are sampled to ≤25 before sending to keep URL short.
+  useEffect(() => {
+    setRoadPath([]);
+    if (selectedPath.length < 2) return;
+
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      try {
+        // Sample to max 25 waypoints
+        let wps = selectedPath;
+        if (selectedPath.length > 25) {
+          const step = Math.ceil(selectedPath.length / 24);
+          wps = selectedPath.filter((_, i) => i % step === 0);
+          if (wps[wps.length - 1] !== selectedPath[selectedPath.length - 1]) {
+            wps = [...wps, selectedPath[selectedPath.length - 1]];
+          }
+        }
+        const coords = wps.map(p => `${p.lng},${p.lat}`).join(";");
+        const res = await fetch(
+          `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson`,
+          { signal: controller.signal }
+        );
+        const data = await res.json();
+        const geometry = data.routes?.[0]?.geometry?.coordinates;
+        if (geometry) {
+          setRoadPath(geometry.map(([lng, lat]) => ({ lat, lng })));
+        }
+      } catch (_) {
+        // Silently fall back to straight-line selectedPath in FleetMap
+      }
+    }, 800); // small debounce to avoid firing on every live GPS update
+
+    return () => { clearTimeout(timer); controller.abort(); };
+  }, [selectedPath]);
+
   // ── 필터링 ────────────────────────────────────────────────────────────────
   const filteredRows = useMemo(() => {
     const kw = searchQuery.trim().replace(/\s/g, "");
@@ -1156,12 +1193,6 @@ export default function FleetManagement() {
   }, [selected, selectedDriverLogs]);
 
   // ─── 렌더 ────────────────────────────────────────────────────────────────
-  if (!pinVerified) {
-    return (
-      <FleetPinGate onVerified={() => { _fleetPinVerified = true; setPinVerified(true); }} />
-    );
-  }
-
   return (
     <div style={{
       display: "flex", flexDirection: "column", gap: 16, padding: "4px 0",
@@ -1309,7 +1340,7 @@ export default function FleetManagement() {
                 실시간 위치
                 <span style={{ marginLeft: 8, color: "#6b7280", fontWeight: 500 }}>{filteredRows.filter(d => d.location).length}대</span>
               </div>
-              <FleetMap drivers={filteredRows} center={mapCenter} onSelect={handleSelect} selectedPath={selectedPath} />
+              <FleetMap drivers={filteredRows} center={mapCenter} onSelect={handleSelect} selectedPath={selectedPath} roadPath={roadPath} />
             </div>
           </div>
 
@@ -1318,7 +1349,7 @@ export default function FleetManagement() {
             <DriverDetailPanel
               data={selected}
               logs={selectedDriverLogs}
-              onClose={() => { setSelected(null); setSelectedDriverLogs([]); setGpsTracks([]); }}
+              onClose={() => { setSelected(null); setSelectedDriverLogs([]); setGpsTracks([]); setRoadPath([]); }}
               onDeleteLogs={handleDeleteDriverLogs}
             />
           )}
