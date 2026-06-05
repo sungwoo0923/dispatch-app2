@@ -5091,7 +5091,7 @@ function checkDuplicateDispatch(form, dispatchData) {
       const timeNoAmPm = (t) => t && !t.startsWith("오전") && !t.startsWith("오후");
       if (timeNoAmPm(f.상차시간) || timeNoAmPm(f.하차시간)) {
         setShowAmPmError(true);
-        showAlert("⛔ 시간을 입력하려면 오전/오후를 먼저 선택해주세요.");
+        showAlert("⛔ 시간 선택 시 오전/오후를 함께 선택해주세요.");
         return false;
       }
 
@@ -12254,7 +12254,7 @@ function TimeAmPmPicker({ value, onChange, selectCls, showError }) {
   const [ampm, setAmpm] = React.useState(() => {
     if (value && value.startsWith("오후")) return "오후";
     if (value && value.startsWith("오전")) return "오전";
-    return null; // 미선택 상태
+    return null;
   });
   React.useEffect(() => {
     if (value && value.startsWith("오전")) setAmpm("오전");
@@ -12262,16 +12262,21 @@ function TimeAmPmPicker({ value, onChange, selectCls, showError }) {
     else if (!value) setAmpm(null);
   }, [value]);
 
-  const displayAmpm = ampm || "오전"; // select 옵션 생성용 (null이면 오전 기준)
+  // When ampm is selected: options have prefix "오전/오후 Xsi"; when null: bare "Xsi"
   const times = React.useMemo(() => {
     const list = [];
     for (let h = 0; h < 12; h++) {
       const hh = h === 0 ? 12 : h;
-      list.push(`${displayAmpm} ${hh}시`);
-      list.push(`${displayAmpm} ${hh}시 30분`);
+      if (ampm) {
+        list.push(`${ampm} ${hh}시`);
+        list.push(`${ampm} ${hh}시 30분`);
+      } else {
+        list.push(`${hh}시`);
+        list.push(`${hh}시 30분`);
+      }
     }
     return list;
-  }, [displayAmpm]);
+  }, [ampm]);
 
   const handleAmpm = (ap) => {
     setAmpm(ap);
@@ -12286,8 +12291,8 @@ function TimeAmPmPicker({ value, onChange, selectCls, showError }) {
   const inact = "bg-white text-gray-600 border-gray-300 hover:border-[#1B2B4B] hover:text-[#1B2B4B]";
   const errInact = "bg-white text-red-500 border-red-400 hover:border-red-500";
 
-  // showError가 true이고 ampm이 null인 경우 빨간 테두리
-  const needsError = showError && ampm === null;
+  // Red borders only when: save was attempted AND time is selected without ampm
+  const needsError = showError && ampm === null && !!value;
 
   return (
     <div className="flex items-center gap-1">
@@ -12295,12 +12300,10 @@ function TimeAmPmPicker({ value, onChange, selectCls, showError }) {
       <button type="button" className={`${btnBase} ${ampm === "오후" ? act : needsError ? errInact : inact}`} onClick={() => handleAmpm("오후")}>오후</button>
       <select
         value={value || ""}
-        disabled={!ampm}
         onChange={e => onChange(e.target.value)}
-        className={`${selectCls || "border border-gray-300 rounded-lg px-2 py-1 text-[12px] outline-none focus:border-[#1B2B4B]"} ${!ampm ? "opacity-40 cursor-not-allowed" : ""}`}
-        title={!ampm ? "오전/오후를 먼저 선택하세요" : undefined}
+        className={selectCls || "border border-gray-300 rounded-lg px-2 py-1 text-[12px] outline-none focus:border-[#1B2B4B]"}
       >
-        <option value="">{ampm ? "시간" : "← 먼저 선택"}</option>
+        <option value="">시간 선택</option>
         {times.map(t => (
           <option key={t} value={t}>{t.replace(/^오전 |^오후 /, "")}</option>
         ))}
@@ -15952,43 +15955,25 @@ const head = isDark
     </div>
   </div>
 )}
-    {/* ⚠ 상차 임박 경고 배너 */}
+    {/* 상차 임박 경고 배너 */}
 {warningList.length > 0 && (
-  <div
-    className="
-      inline-flex items-start gap-2
-      bg-blue-50
-      border border-blue-200
-      border-l-4 border-blue-500
-      rounded-lg
-      px-3 py-2
-      mb-2
-      text-[12px]
-      w-fit
-    "
-  >
-    <div className="text-blue-600 text-lg mt-[2px]">⚠</div>
-
+  <div className="flex items-start gap-3 border border-[#1B2B4B]/20 bg-[#1B2B4B]/[0.04] rounded-xl px-4 py-3 mb-3 w-fit max-w-full">
+    <div className="w-[3px] self-stretch bg-[#1B2B4B] rounded-full shrink-0" />
     <div>
-      <div className="font-semibold text-blue-800 mb-1">
-        배차 경고
-        <span className="ml-1 text-blue-700">
-          상차 2시간 이하
-          <b className="ml-1">{warningList.length}건</b>
-          이 미배차 상태입니다.
-        </span>
+      <div className="text-[12px] font-bold text-[#1B2B4B] mb-1.5">
+        상차 2시간 이내 미배차{" "}
+        <span className="text-red-600 font-extrabold">{warningList.length}건</span>
       </div>
-
-      <ul className="text-[12px] text-blue-700 space-y-[2px]">
+      <div className="space-y-[4px]">
         {warningList.map((r) => (
-          <li key={r.id}>
-            • [{r.상차일} {r.상차시간}] {r.상차지명}
-            <span className="text-gray-500">
-              {" "} (거래처: {r.거래처명})
-            </span>
-          </li>
+          <div key={r.id} className="text-[12px] text-[#1B2B4B]/80 flex items-center gap-2 flex-wrap">
+            <span className="font-semibold text-[#1B2B4B]">{r.상차일} {r.상차시간}</span>
+            <span className="text-[#1B2B4B]/30">|</span>
+            <span>{r.상차지명}</span>
+            {r.거래처명 && <span className="text-[#1B2B4B]/50 text-[11px]">({r.거래처명})</span>}
+          </div>
         ))}
-      </ul>
+      </div>
     </div>
   </div>
 )}
@@ -19232,15 +19217,17 @@ const payload = stripUndefined({
 const savedId = editTarget._id;
 
 // ✅ UI 먼저
+const _savedScrollX = window.scrollX;
 setMarkDeliveredOnSave(false);
 showAlert("수정이 저장되었습니다.");
 setEditPopupOpen(false);
 setSelected([]);
 
 flashRow(savedId);
+requestAnimationFrame(() => window.scrollTo({ left: _savedScrollX, top: window.scrollY }));
 setTimeout(() => {
   const el = document.getElementById(`row-${savedId}`);
-  if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+  if (el) el.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
 }, 400);
 
 // ✅ rows 즉시 반영 (항상 실행) — 정렬은 Firebase 업데이트 후 effect에서 처리
@@ -19776,6 +19763,26 @@ if (editTarget.거래처명) {
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
             첨부현황
+          </button>
+          {/* 문자보내기 */}
+          <button
+            className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
+            onClick={() => {
+              const r = contextMenu.row;
+              const phone = String(r.전화번호 || "").replace(/[^\d]/g, "");
+              if (!phone) { showAlert("전화번호가 없습니다."); setContextMenu(null); return; }
+              const dateStr = (() => {
+                const d = r.상차일 || "";
+                if (d.includes("-")) { const [,mo,dy] = d.split("-"); return `${Number(mo)}월 ${Number(dy)}일`; }
+                return d;
+              })();
+              const body = `안녕하세요. ${dateStr} ${r.상차시간||""} ${r.상차지명||""} → ${r.하차지명||""} 건 관련하여 연락드립니다.`;
+              window.location.href = `sms:${phone}?body=${encodeURIComponent(body)}`;
+              setContextMenu(null);
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            문자보내기
           </button>
           <div className="border-t border-gray-100 my-1"/>
           {/* 삭제 */}
@@ -23519,6 +23526,30 @@ const save = {
     return () => { document.removeEventListener("click", close); document.removeEventListener("keydown", onKey); };
   }, [contextMenuDS]);
 
+  // ===================== 상차 임박 경고 (Part 5) =====================
+  const dsWarningList = React.useMemo(() => {
+    const now = new Date();
+    return dispatchData.filter(r => {
+      if (r.차량번호 && String(r.차량번호).trim()) return false;
+      if (!r.상차일 || !r.상차시간) return false;
+      let s = String(r.상차시간).trim()
+        .replace("시 ", ":").replace("시", ":").replace("분", "");
+      if (/:\s*$/.test(s)) s += "00";
+      const m = s.match(/(오전|오후)\s*(\d{1,2}):?(\d{2})?/);
+      if (!m) return false;
+      let [, ap, hh, mm] = m;
+      mm = mm ?? "00";
+      hh = parseInt(hh, 10);
+      if (ap === "오후" && hh < 12) hh += 12;
+      if (ap === "오전" && hh === 12) hh = 0;
+      const t24 = `${String(hh).padStart(2,"0")}:${String(mm).padStart(2,"0")}`;
+      const dt = new Date(`${r.상차일}T${t24}:00`);
+      if (isNaN(dt.getTime())) return false;
+      const diff = dt.getTime() - now.getTime();
+      return diff > 0 && diff <= 2 * 60 * 60 * 1000;
+    });
+  }, [dispatchData]);
+
   // ===================== 첨부현황 =====================
   const [attachStatusDSOpen, setAttachStatusDSOpen] = React.useState(false);
   const [attachStatusDSClient, setAttachStatusDSClient] = React.useState("");
@@ -23802,6 +23833,29 @@ return (
         <div className="text-green-600">기사 <b>{summary.totalDriver.toLocaleString()}원</b></div>
         <div className="text-orange-600">수수료 <b>{summary.totalFee.toLocaleString()}원</b></div>
       </div>
+
+      {/* ===== 상차 임박 경고 배너 ===== */}
+      {dsWarningList.length > 0 && (
+        <div className="flex items-start gap-3 border border-[#1B2B4B]/20 bg-[#1B2B4B]/[0.04] rounded-xl px-4 py-3 mb-3 w-fit max-w-full">
+          <div className="w-[3px] self-stretch bg-[#1B2B4B] rounded-full shrink-0" />
+          <div>
+            <div className="text-[12px] font-bold text-[#1B2B4B] mb-1.5">
+              상차 2시간 이내 미배차{" "}
+              <span className="text-red-600 font-extrabold">{dsWarningList.length}건</span>
+            </div>
+            <div className="space-y-[4px]">
+              {dsWarningList.map((r) => (
+                <div key={r._id || r.id} className="text-[12px] text-[#1B2B4B]/80 flex items-center gap-2 flex-wrap">
+                  <span className="font-semibold text-[#1B2B4B]">{r.상차일} {r.상차시간}</span>
+                  <span className="text-[#1B2B4B]/30">|</span>
+                  <span>{r.상차지명}</span>
+                  {r.거래처명 && <span className="text-[#1B2B4B]/50 text-[11px]">({r.거래처명})</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ===== 페이지+검색+날짜+버튼 한 줄 ===== */}
       <div className="flex items-center gap-1.5 flex-wrap mb-2" style={{maxWidth:"calc(100vw - 2rem)"}}>
@@ -27781,6 +27835,24 @@ setCopyTarget(prev => ({
             }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
             첨부현황
+          </button>
+          {/* 문자보내기 */}
+          <button className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
+            onClick={() => {
+              const r = contextMenuDS.row;
+              const phone = String(r.전화번호 || "").replace(/[^\d]/g, "");
+              if (!phone) { showAlert("전화번호가 없습니다."); setContextMenuDS(null); return; }
+              const dateStr = (() => {
+                const d = r.상차일 || "";
+                if (d.includes("-")) { const [,mo,dy] = d.split("-"); return `${Number(mo)}월 ${Number(dy)}일`; }
+                return d;
+              })();
+              const body = `안녕하세요. ${dateStr} ${r.상차시간||""} ${r.상차지명||""} → ${r.하차지명||""} 건 관련하여 연락드립니다.`;
+              window.location.href = `sms:${phone}?body=${encodeURIComponent(body)}`;
+              setContextMenuDS(null);
+            }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            문자보내기
           </button>
           <div className="border-t border-gray-100 my-1"/>
           <button className="w-full text-left px-4 py-2 text-[13px] text-red-600 hover:bg-red-50 flex items-center gap-2.5 transition-colors"
