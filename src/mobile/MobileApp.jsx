@@ -1,4 +1,6 @@
 // ======================= src/mobile/MobileApp.jsx (PART 1/3) =======================
+import MobileFleetView from "./MobileFleetView";
+import MobileIntelView from "./MobileIntelView";
 import React, { useState, useMemo, useEffect, useRef, startTransition } from "react";
 import {
   LineChart,
@@ -2141,6 +2143,8 @@ const title =
   : page === "handover" ? "인수인계"
   : page === "myinfo" ? "내정보"
   : page === "settings" ? "설정"
+  : page === "fleet" ? "지입차관리"
+  : page === "intel" ? "경영인텔리전스"
   : "상세보기";
 
   // ------------------------------------------------------------------
@@ -2381,7 +2385,7 @@ const title =
             setPage("list");
           }
         }
-    : page === "notice" || page === "schedule" || page === "unassigned" || page === "handover" || page === "ratecard" || page === "myinfo" || page === "settings"
+    : page === "notice" || page === "schedule" || page === "unassigned" || page === "handover" || page === "ratecard" || page === "myinfo" || page === "settings" || page === "fleet" || page === "intel"
       ? () => setPage("list")
       : page === "fare"
       ? () => setPage(prevPage || "list")
@@ -2539,6 +2543,9 @@ onGoSchedule={() => {
             setShowMenu(false);
           }}
 
+          role={role}
+          onGoFleet={() => { setPage("fleet"); setShowMenu(false); }}
+          onGoIntel={() => { setPage("intel"); setShowMenu(false); }}
           onDeleteAll={deleteAllOrders}
           setUiScale={setUiScale}
           uiScale={uiScale}
@@ -3272,6 +3279,9 @@ setOpenMemo={setOpenMemo}
             userCompany={userCompany}
           />
         )}
+        {page === "fleet" && <MobileFleetView />}
+        {page === "intel" && <MobileIntelView dispatchData={orders} />}
+
         {page === "unassigned" && (
   <MobileUnassignedList
     title="미배차 / 정보미전달"
@@ -3846,6 +3856,9 @@ function MobileSideMenu({
   loginTime,
   cardVersionB,
   onToggleCardVersion,
+  role,
+  onGoFleet,
+  onGoIntel,
 }) {
   const myName =
     mobileUsers?.find(u => u.id === currentUser?.uid)?.name ||
@@ -3921,6 +3934,13 @@ function MobileSideMenu({
             <MenuItem label="단가표" onClick={onGoRateCard} />
             <MenuItem label="매출관리" onClick={onGoSales} />
           </MenuSection>
+
+          {role === "totalMaster" && (
+            <MenuSection title="관리자 전용">
+              <MenuItem label="지입차관리" onClick={onGoFleet} />
+              <MenuItem label="경영인텔리전스" onClick={onGoIntel} />
+            </MenuSection>
+          )}
 
           <MenuSection title="내 계정">
             <MenuItem label="내정보" onClick={onGoMyInfo} />
