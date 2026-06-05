@@ -579,6 +579,12 @@ export default function FleetManagement() {
   const [mapCenter,    setMapCenter]    = useState(null);
   const [lastUpdated,  setLastUpdated]  = useState(null);
   const [loading,      setLoading]      = useState(true);
+  const [refreshKey,   setRefreshKey]   = useState(0);
+
+  const handleRefresh = useCallback(() => {
+    setLoading(true);
+    setRefreshKey(k => k + 1);
+  }, []);
 
   // ── Firebase 실시간 구독 ──────────────────────────────────────────────────
   useEffect(() => {
@@ -628,7 +634,7 @@ export default function FleetManagement() {
     });
 
     return () => unsubAuth();
-  }, []);
+  }, [refreshKey]);
 
   // ── 필터링 ────────────────────────────────────────────────────────────────
   const filteredRows = useMemo(() => {
@@ -736,9 +742,29 @@ export default function FleetManagement() {
             <span style={{ fontSize: 11, color: "#9ca3af" }}>데이터 로딩 중...</span>
           ) : lastUpdated ? (
             <span style={{ fontSize: 11, color: "#9ca3af" }}>
-              마지막 갱신: {lastUpdated.toLocaleTimeString("ko-KR")}
+              갱신: {lastUpdated.toLocaleTimeString("ko-KR")}
             </span>
           ) : null}
+
+          <button
+            onClick={handleRefresh}
+            disabled={loading}
+            title="새로고침"
+            style={{
+              display: "inline-flex", alignItems: "center", gap: 5,
+              padding: "6px 12px", borderRadius: 8, border: "1px solid #d1d5db",
+              background: loading ? "#f9fafb" : "white", cursor: loading ? "not-allowed" : "pointer",
+              fontSize: 12, fontWeight: 600, color: loading ? "#9ca3af" : NAVY,
+              transition: "all 0.15s",
+            }}
+          >
+            <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24"
+              style={{ transform: loading ? "rotate(180deg)" : "none", transition: "transform 0.4s" }}>
+              <path d="M23 4v6h-6M1 20v-6h6" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            새로고침
+          </button>
 
           <span
             style={{

@@ -1113,7 +1113,7 @@ const TABS = [
 ];
 
 export default function ExecutiveDashboard({ dispatchData = [] }) {
-  const [verified, setVerified] = useState(false);
+  const [verified, setVerified] = useState(() => sessionStorage.getItem("exec_intel_ok") === "1");
   const [activeTab, setActiveTab] = useState("overview");
 
   const now = new Date();
@@ -1127,7 +1127,7 @@ export default function ExecutiveDashboard({ dispatchData = [] }) {
     [dispatchData, dateRange]
   );
 
-  if (!verified) return <PinGate onVerified={() => setVerified(true)} />;
+  if (!verified) return <PinGate onVerified={() => { sessionStorage.setItem("exec_intel_ok", "1"); setVerified(true); }} />;
 
   return (
     <div style={{ minHeight: "80vh", background: "#f4f6f9" }}>
@@ -1142,7 +1142,7 @@ export default function ExecutiveDashboard({ dispatchData = [] }) {
           <div className="text-[12px] text-white/40">
             {new Date().toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric" })}
           </div>
-          <button onClick={() => setVerified(false)}
+          <button onClick={() => { sessionStorage.removeItem("exec_intel_ok"); setVerified(false); }}
             className="text-[11px] text-white/25 hover:text-white/60 mt-1 transition block">
             잠금
           </button>
