@@ -21,9 +21,8 @@
 
 /* ================= 전역 ================= */
 
-/* 브라우저 67% 축소 시에도 읽기 좋도록 보정 (JS inline zoom이 없을 때 fallback) */
 #root {
-  zoom: 1.3;
+  zoom: 1;
 }
 
 html, body {
@@ -55,6 +54,27 @@ button {
 
 button:hover {
   opacity: 0.85;
+}
+
+/* ================= 전역 글씨 크기 보정 (67% 브라우저 줌 가독성) ================= */
+/* Tailwind 고정 px 클래스를 일괄 상향 — 레이아웃 너비는 변하지 않음              */
+
+/* text-[11px] → 13px */
+.text-\[11px\] { font-size: 13px !important; }
+
+/* text-[12px] → 14px */
+.text-\[12px\] { font-size: 14px !important; }
+
+/* text-[13px] → 15px */
+.text-\[13px\] { font-size: 15px !important; }
+
+/* 데스크톱 입력 필드 최소 14px */
+@media screen and (min-width: 769px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  select,
+  textarea {
+    font-size: 14px !important;
+  }
 }
 
 /* ================= 애니메이션 ================= */

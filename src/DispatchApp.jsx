@@ -1965,12 +1965,8 @@ useEffect(() => {
   const [calcOpen, setCalcOpen] = useState(false);
   useEffect(() => {
     const root = document.getElementById("root");
-    if (root) root.style.zoom = "1.3";
+    if (root) root.style.zoom = "1";
     localStorage.removeItem("appZoom");
-    return () => {
-      const r = document.getElementById("root");
-      if (r) r.style.zoom = "1";
-    };
   }, []);
    // ★ 거래명세서에서 오더 클릭 시 해당 오더로 이동하기 위한 전역 함수
   const [highlightOrderId, setHighlightOrderId] = useState(null);
