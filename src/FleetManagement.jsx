@@ -762,6 +762,12 @@ export default function FleetManagement() {
     });
   }, [drivers, searchQuery, statusFilter]);
 
+  // 활동 피드: 승인된 기사의 로그만 표시
+  const filteredActivityLogs = useMemo(() =>
+    activityLogs.filter(log => driversMap[log.uid]),
+    [activityLogs, driversMap]
+  );
+
   // ── KPI ──────────────────────────────────────────────────────────────────
   const kpi = useMemo(() => ({
     total: drivers.length,
@@ -963,10 +969,10 @@ export default function FleetManagement() {
                 <span style={{ fontSize: 15, fontWeight: 800, color: NAVY }}>실시간 활동 피드</span>
                 <span style={{ fontSize: 13, color: "#9ca3af" }}>기사가 버튼을 누를 때마다 즉시 기록</span>
               </div>
-              <span style={{ fontSize: 13, color: "#6b7280", fontWeight: 600 }}>최근 {activityLogs.length}건</span>
+              <span style={{ fontSize: 13, color: "#6b7280", fontWeight: 600 }}>최근 {filteredActivityLogs.length}건</span>
             </div>
             <div style={{ maxHeight: 420, overflowY: "auto" }}>
-              <ActivityFeed logs={activityLogs} driversMap={driversMap} />
+              <ActivityFeed logs={filteredActivityLogs} driversMap={driversMap} />
             </div>
           </div>
         </>
