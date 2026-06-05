@@ -21,8 +21,16 @@
 
 /* ================= 전역 ================= */
 
+:root {
+  --font-scale: 1;
+}
+
 #root {
   zoom: 1;
+}
+
+html {
+  font-size: calc(16px * var(--font-scale));
 }
 
 html, body {
@@ -56,24 +64,29 @@ button:hover {
   opacity: 0.85;
 }
 
-/* ================= 전역 글씨 크기 보정 (67% 브라우저 줌 가독성) ================= */
-/* Tailwind 고정 px 클래스를 일괄 상향 — 레이아웃 너비는 변하지 않음              */
+/* ================= 전역 글씨 크기 보정 + 사용자 폰트 스케일 ================= */
 
-/* text-[11px] → 13px */
-.text-\[11px\] { font-size: 13px !important; }
+/* text-[11px] → 13px × scale */
+.text-\[11px\] { font-size: calc(13px * var(--font-scale, 1)) !important; }
 
-/* text-[12px] → 14px */
-.text-\[12px\] { font-size: 14px !important; }
+/* text-[12px] → 14px × scale */
+.text-\[12px\] { font-size: calc(14px * var(--font-scale, 1)) !important; }
 
-/* text-[13px] → 15px */
-.text-\[13px\] { font-size: 15px !important; }
+/* text-[13px] → 15px × scale */
+.text-\[13px\] { font-size: calc(15px * var(--font-scale, 1)) !important; }
 
-/* 데스크톱 입력 필드 최소 14px */
+/* text-[14px] → 14px × scale */
+.text-\[14px\] { font-size: calc(14px * var(--font-scale, 1)) !important; }
+
+/* text-[15px] → 15px × scale */
+.text-\[15px\] { font-size: calc(15px * var(--font-scale, 1)) !important; }
+
+/* 데스크톱 입력 필드 */
 @media screen and (min-width: 769px) {
   input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
   select,
   textarea {
-    font-size: 14px !important;
+    font-size: calc(14px * var(--font-scale, 1)) !important;
   }
 }
 
@@ -95,21 +108,21 @@ button:hover {
 /* ===== 테이블 글씨 선명도 ===== */
 /* 교체 후 */
 table {
-  font-size: 15px !important;
+  font-size: calc(15px * var(--font-scale, 1)) !important;
   font-family: "Noto Sans KR", "Apple SD Gothic Neo", "맑은 고딕", Malgun Gothic, sans-serif !important;
   border-collapse: collapse;
   -webkit-font-smoothing: antialiased;
 }
 
 table thead th {
-  font-size: 14px !important;
+  font-size: calc(14px * var(--font-scale, 1)) !important;
   font-weight: 700 !important;
   letter-spacing: 0;
   height: 46px;
 }
 
 table tbody td {
-  font-size: 15px !important;
+  font-size: calc(15px * var(--font-scale, 1)) !important;
   font-weight: 500 !important;
   white-space: nowrap !important;
   color: #1a1a1a !important;

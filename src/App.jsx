@@ -84,6 +84,16 @@ export default function App() {
     return () => window.removeEventListener("resize", checkTablet);
   }, []);
 
+  // ★ 스플래시 후 데스크톱 viewport 복원 (index.html 기본값: user-scalable=no)
+  useEffect(() => {
+    const isMobile = isSmartPhone();
+    const isTab = isTabletDevice();
+    if (!isMobile && !isTab && !loading && splashDone) {
+      const meta = document.querySelector('meta[name="viewport"]');
+      if (meta) meta.content = "width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover";
+    }
+  }, [loading, splashDone]);
+
   // ★ 태블릿 viewport 동적 조정 (가로/세로 모드 모두 대응)
   useEffect(() => {
     if (!isTablet) return;

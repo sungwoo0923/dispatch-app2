@@ -1742,6 +1742,22 @@ useEffect(() => {
       return next;
     });
   };
+
+  // ★ 글씨 크기 조절
+  const [fontScale, setFontScale] = useState(() => {
+    const saved = localStorage.getItem("appFontScale");
+    return saved ? parseFloat(saved) : 1.0;
+  });
+  const [fontSettingsOpen, setFontSettingsOpen] = useState(false);
+  React.useEffect(() => {
+    document.documentElement.style.setProperty("--font-scale", fontScale);
+  }, [fontScale]);
+  const updateFontScale = (scale) => {
+    const v = Math.round(scale * 20) / 20; // 0.05 단위
+    setFontScale(v);
+    localStorage.setItem("appFontScale", v);
+    document.documentElement.style.setProperty("--font-scale", v);
+  };
   // ❌ 삭제 (중복 선언 오류 원인)
   // const [dispatchData, setDispatchData] = useState([]);  
   // ---------------- Firestore 실시간 훅 ----------------
@@ -2133,8 +2149,8 @@ return (
 
 
           {/* 우측 유저 영역 */}
-          <div className="flex items-center gap-3 min-w-[180px] justify-end">
-<span className="text-white/50 text-xs hidden xl:block truncate max-w-[120px]">
+          <div className="flex items-center gap-2 min-w-[180px] justify-end">
+            <span className="text-white/50 text-xs hidden xl:block truncate max-w-[120px]">
               {user?.email}
             </span>
             <button
@@ -2148,8 +2164,54 @@ return (
               onClick={toggleTheme}
               className="px-3 py-1.5 rounded-md bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition"
             >
-              {darkMode ? "☀️ 라이트" : "🌙 다크"}
+              {darkMode ? "☀️" : "🌙"}
             </button>
+
+            {/* 글씨 크기 조절 버튼 */}
+            <div className="relative">
+              <button
+                onClick={() => setFontSettingsOpen(v => !v)}
+                className="px-2.5 py-1.5 rounded-md bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition"
+                title="글씨 크기 조절"
+              >
+                가
+              </button>
+              {fontSettingsOpen && (
+                <div
+                  className="absolute right-0 top-full mt-1 bg-white rounded-xl shadow-2xl border border-gray-200 p-4 z-[9999]"
+                  style={{ width: 240 }}
+                  onMouseLeave={() => setFontSettingsOpen(false)}
+                >
+                  <div className="text-[13px] font-bold text-[#1B2B4B] mb-3">글씨 크기</div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <button
+                      onClick={() => updateFontScale(Math.max(0.8, fontScale - 0.05))}
+                      className="w-7 h-7 rounded-lg bg-gray-100 text-gray-700 font-bold text-base hover:bg-gray-200 flex items-center justify-center"
+                    >−</button>
+                    <input
+                      type="range" min="0.8" max="1.6" step="0.05"
+                      value={fontScale}
+                      onChange={e => updateFontScale(parseFloat(e.target.value))}
+                      className="flex-1"
+                    />
+                    <button
+                      onClick={() => updateFontScale(Math.min(1.6, fontScale + 0.05))}
+                      className="w-7 h-7 rounded-lg bg-gray-100 text-gray-700 font-bold text-base hover:bg-gray-200 flex items-center justify-center"
+                    >+</button>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[12px] text-gray-500">
+                      크기: <b className="text-[#1B2B4B]">{Math.round(fontScale * 100)}%</b>
+                    </span>
+                    <button
+                      onClick={() => updateFontScale(1.0)}
+                      className="text-[11px] px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-600"
+                    >기본값</button>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <button
               onClick={logout}
               className="px-3 py-1.5 rounded-md bg-red-500/80 hover:bg-red-500 text-white text-xs font-semibold transition"
@@ -15881,12 +15943,12 @@ const head = isDark
     : "px-2 py-2 text-center text-[12px] font-bold text-white whitespace-nowrap bg-transparent border-b border-white/10";
 
  const cell = isDark
-    ? "px-2 py-1.5 text-[12px] text-gray-200 align-middle text-center whitespace-nowrap border-b border-gray-700"
-    : "px-2 py-1.5 text-[12px] text-gray-800 align-middle text-center whitespace-nowrap border-b border-gray-200";
+    ? "px-2 py-1.5 text-[14px] font-medium text-gray-100 align-middle text-center whitespace-nowrap border-b border-gray-700"
+    : "px-2 py-1.5 text-[14px] font-medium text-gray-900 align-middle text-center whitespace-nowrap border-b border-gray-200";
 
   const addrCell = isDark
-    ? "px-2 py-1.5 text-[12px] text-gray-200 align-middle text-center whitespace-nowrap overflow-hidden text-ellipsis border-b border-gray-700 max-w-[160px]"
-    : "px-2 py-1.5 text-[12px] text-gray-800 align-middle text-center whitespace-nowrap overflow-hidden text-ellipsis border-b border-gray-200 max-w-[160px]";
+    ? "px-2 py-1.5 text-[14px] font-medium text-gray-100 align-middle text-center whitespace-nowrap overflow-hidden text-ellipsis border-b border-gray-700 max-w-[160px]"
+    : "px-2 py-1.5 text-[14px] font-medium text-gray-900 align-middle text-center whitespace-nowrap overflow-hidden text-ellipsis border-b border-gray-200 max-w-[160px]";
 
   // ------------------------
   // 📌 화면 렌더링
@@ -15995,11 +16057,23 @@ const head = isDark
 )}
 
 {/* ======================== KPI ======================== */}
-<div className="flex items-center gap-5 text-sm font-semibold mb-2">
-  <div>총 <b>{kpi.cnt}건</b></div>
-  <div className="text-blue-600">청구 <b>{kpi.sale.toLocaleString()}원</b></div>
-  <div className="text-green-600">기사 <b>{kpi.drv.toLocaleString()}원</b></div>
-  <div className="text-orange-600">수수료 <b>{kpi.fee.toLocaleString()}원</b></div>
+<div className="flex items-center gap-2 mb-3 flex-wrap">
+  <div className="flex items-center gap-2 bg-[#1B2B4B] text-white px-4 py-2 rounded-xl shadow-sm">
+    <span className="text-[12px] font-medium text-white/70">총</span>
+    <span className="text-[15px] font-extrabold">{kpi.cnt}건</span>
+  </div>
+  <div className="flex items-center gap-2 bg-white border border-[#1B2B4B]/20 px-4 py-2 rounded-xl shadow-sm">
+    <span className="text-[12px] font-medium text-gray-500">청구</span>
+    <span className="text-[15px] font-extrabold text-[#1B2B4B]">{kpi.sale.toLocaleString()}원</span>
+  </div>
+  <div className="flex items-center gap-2 bg-white border border-[#1B2B4B]/20 px-4 py-2 rounded-xl shadow-sm">
+    <span className="text-[12px] font-medium text-gray-500">기사</span>
+    <span className="text-[15px] font-extrabold text-[#1B2B4B]">{kpi.drv.toLocaleString()}원</span>
+  </div>
+  <div className="flex items-center gap-2 bg-white border border-[#1B2B4B]/20 px-4 py-2 rounded-xl shadow-sm">
+    <span className="text-[12px] font-medium text-gray-500">수수료</span>
+    <span className="text-[15px] font-extrabold text-[#1B2B4B]">{kpi.fee.toLocaleString()}원</span>
+  </div>
 </div>
 
 {/* ======================== 검색+필터+버튼 한 줄 ======================== */}
@@ -16608,13 +16682,13 @@ setUrgentPopup([]);
 
     <div className="absolute top-0 right-0 h-full w-[1100px] bg-gray-50 shadow-2xl border-l overflow-y-auto">
 
-      <div className="p-10 space-y-10">
+      <div className="p-10 space-y-10 text-[14px]">
 
         {/* HEADER */}
 <div className="flex justify-between items-center bg-white rounded-xl border border-gray-200 px-6 py-4 shadow-sm">
   <div>
     <h2 className="text-[18px] font-bold text-[#1B2B4B]">오더 복사 / 수정 패널</h2>
-    <p className="text-[12px] text-gray-400 mt-0.5">{copyTarget?.거래처명} · {copyTarget?.상차지명} → {copyTarget?.하차지명}</p>
+    <p className="text-[13px] text-gray-400 mt-0.5">{copyTarget?.거래처명} · {copyTarget?.상차지명} → {copyTarget?.하차지명}</p>
   </div>
   <div className="flex gap-2 items-center">
     {/* 운임조회 */}
@@ -17897,8 +17971,8 @@ value={copyTarget?.화물수량 || ""}
             {/* ===== 헤더 ===== */}
             <div className="flex justify-between items-center px-6 py-4 bg-[#1B2B4B] rounded-t-2xl shrink-0">
               <div>
-                <h3 className="text-white text-[15px] font-bold">선택한 오더 수정</h3>
-                {editTarget && <p className="text-white/60 text-[12px] mt-0.5">{editTarget.거래처명} · {editTarget.상차지명} → {editTarget.하차지명}</p>}
+                <h3 className="text-white text-[16px] font-bold">선택한 오더 수정</h3>
+                {editTarget && <p className="text-white/60 text-[13px] mt-0.5">{editTarget.거래처명} · {editTarget.상차지명} → {editTarget.하차지명}</p>}
               </div>
               <button
                 className="text-white/70 hover:text-white text-xl"
@@ -17906,7 +17980,7 @@ value={copyTarget?.화물수량 || ""}
               >✕</button>
             </div>
 
-            <div className="p-6 space-y-4 overflow-y-auto">
+            <div className="p-6 space-y-4 overflow-y-auto text-[14px]">
             {/* ===================== 📦 운임조회 중앙 모달 ===================== */}
 {farePanelOpen && fareResult && (() => {
   const fareMin = fareResult.min;
@@ -23843,14 +23917,6 @@ return (
       </div>
 
 
-      {/* ===== KPI ===== */}
-      <div className="flex items-center gap-5 text-sm font-semibold mb-2">
-        <div>총 <b>{summary.totalCount}건</b></div>
-        <div className="text-blue-600">청구 <b>{summary.totalSale.toLocaleString()}원</b></div>
-        <div className="text-green-600">기사 <b>{summary.totalDriver.toLocaleString()}원</b></div>
-        <div className="text-orange-600">수수료 <b>{summary.totalFee.toLocaleString()}원</b></div>
-      </div>
-
       {/* ===== 상차 임박 경고 배너 — 접기/펼치기 ===== */}
       {dsWarningList.length > 0 && (
         <div className="mb-3 w-fit max-w-full select-none">
@@ -23887,8 +23953,28 @@ return (
         </div>
       )}
 
+      {/* ===== KPI ===== */}
+      <div className="flex items-center gap-2 mb-3 flex-wrap">
+        <div className="flex items-center gap-2 bg-[#1B2B4B] text-white px-4 py-2 rounded-xl shadow-sm">
+          <span className="text-[12px] font-medium text-white/70">총</span>
+          <span className="text-[15px] font-extrabold">{summary.totalCount}건</span>
+        </div>
+        <div className="flex items-center gap-2 bg-white border border-[#1B2B4B]/20 px-4 py-2 rounded-xl shadow-sm">
+          <span className="text-[12px] font-medium text-gray-500">청구</span>
+          <span className="text-[15px] font-extrabold text-[#1B2B4B]">{summary.totalSale.toLocaleString()}원</span>
+        </div>
+        <div className="flex items-center gap-2 bg-white border border-[#1B2B4B]/20 px-4 py-2 rounded-xl shadow-sm">
+          <span className="text-[12px] font-medium text-gray-500">기사</span>
+          <span className="text-[15px] font-extrabold text-[#1B2B4B]">{summary.totalDriver.toLocaleString()}원</span>
+        </div>
+        <div className="flex items-center gap-2 bg-white border border-[#1B2B4B]/20 px-4 py-2 rounded-xl shadow-sm">
+          <span className="text-[12px] font-medium text-gray-500">수수료</span>
+          <span className="text-[15px] font-extrabold text-[#1B2B4B]">{summary.totalFee.toLocaleString()}원</span>
+        </div>
+      </div>
+
       {/* ===== 페이지+검색+날짜+버튼 한 줄 ===== */}
-      <div className="flex items-center gap-1.5 flex-wrap mb-2" style={{maxWidth:"calc(100vw - 2rem)"}}>
+      <div className="flex items-center gap-1.5 flex-wrap mb-2 w-full">
 
         {/* 페이지 이동 */}
         <button disabled={page===0} onClick={()=>setPage(p=>Math.max(0,p-1))}
@@ -24389,8 +24475,8 @@ onBlur={(e) => {
             {/* ===== 헤더 ===== */}
             <div className="flex justify-between items-center px-6 py-4 bg-[#1B2B4B] rounded-t-2xl shrink-0">
               <div>
-                <h3 className="text-white text-[15px] font-bold">선택한 오더 수정</h3>
-                {editTarget && <p className="text-white/60 text-[12px] mt-0.5">{editTarget.거래처명} · {editTarget.상차지명} → {editTarget.하차지명}</p>}
+                <h3 className="text-white text-[16px] font-bold">선택한 오더 수정</h3>
+                {editTarget && <p className="text-white/60 text-[13px] mt-0.5">{editTarget.거래처명} · {editTarget.상차지명} → {editTarget.하차지명}</p>}
               </div>
               <button
                 className="text-white/70 hover:text-white text-xl"
@@ -24398,7 +24484,7 @@ onBlur={(e) => {
               >✕</button>
             </div>
 
-            <div className="p-6 space-y-4 overflow-y-auto">
+            <div className="p-6 space-y-4 overflow-y-auto text-[14px]">
             {/* ================= 상태 버튼 그룹 ================= */}
               <div className="flex items-center gap-2 mb-4 flex-wrap">
               <button type="button"
@@ -25499,13 +25585,13 @@ setEditTarget((p) => ({
 
     <div className="absolute top-0 right-0 h-full w-[1100px] bg-gray-50 shadow-2xl border-l overflow-y-auto">
 
-      <div className="p-10 space-y-10">
+      <div className="p-10 space-y-10 text-[14px]">
 
         {/* HEADER */}
 <div className="flex justify-between items-center bg-white rounded-xl border border-gray-200 px-6 py-4 shadow-sm">
   <div>
     <h2 className="text-[18px] font-bold text-[#1B2B4B]">오더 복사 / 수정 패널</h2>
-    <p className="text-[12px] text-gray-400 mt-0.5">{copyTarget?.거래처명} · {copyTarget?.상차지명} → {copyTarget?.하차지명}</p>
+    <p className="text-[13px] text-gray-400 mt-0.5">{copyTarget?.거래처명} · {copyTarget?.상차지명} → {copyTarget?.하차지명}</p>
   </div>
   <div className="flex gap-2 items-center">
     <button
