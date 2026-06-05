@@ -114,6 +114,113 @@ function getYM(dateStr) { return dateStr?.slice(0, 7) ?? ""; }
 function getY(dateStr) { return dateStr?.slice(0, 4) ?? ""; }
 
 // ─────────────────────────────────────────────────────────
+//  DATE RANGE FILTER
+// ─────────────────────────────────────────────────────────
+function filterByDateRange(data, range) {
+  // range = { startY, startM, endY, endM }
+  const { startY, startM, endY, endM } = range;
+  const startPrefix = `${startY}-${String(startM).padStart(2, "0")}`;
+  const endPrefix = `${endY}-${String(endM).padStart(2, "0")}`;
+  return data.filter(d => {
+    const ym = getYM(d.상차일);
+    if (!ym) return false;
+    return ym >= startPrefix && ym <= endPrefix;
+  });
+}
+
+function DateRangePicker({ range, onChange, allData }) {
+  const { startY, startM, endY, endM } = range;
+
+  // Compute year options from allData
+  const yearOptions = useMemo(() => {
+    const years = new Set();
+    allData.forEach(d => {
+      const y = getY(d.상차일);
+      if (y && y.length === 4) years.add(Number(y));
+    });
+    const now = new Date();
+    years.add(now.getFullYear());
+    return Array.from(years).sort((a, b) => a - b);
+  }, [allData]);
+
+  const months = Array.from({ length: 12 }, (_, i) => i + 1);
+  const now = new Date();
+
+  const setThisYear = () => {
+    onChange({ startY: now.getFullYear(), startM: 1, endY: now.getFullYear(), endM: 12 });
+  };
+  const setAll = () => {
+    if (yearOptions.length === 0) return;
+    onChange({ startY: yearOptions[0], startM: 1, endY: yearOptions[yearOptions.length - 1], endM: 12 });
+  };
+
+  const selStyle = {
+    border: "1px solid #d1d5db",
+    borderRadius: 6,
+    padding: "4px 8px",
+    fontSize: 13,
+    color: "#1B2B4B",
+    background: "white",
+    fontWeight: 600,
+    cursor: "pointer",
+    outline: "none",
+  };
+  const btnStyle = (active) => ({
+    padding: "4px 12px",
+    borderRadius: 6,
+    border: `1px solid ${active ? "#1B2B4B" : "#d1d5db"}`,
+    background: active ? "#1B2B4B" : "white",
+    color: active ? "white" : "#6b7280",
+    fontSize: 12,
+    fontWeight: 600,
+    cursor: "pointer",
+  });
+
+  const isThisYear = startY === now.getFullYear() && startM === 1 && endY === now.getFullYear() && endM === 12;
+  const isAll = yearOptions.length > 0 && startY === yearOptions[0] && startM === 1 && endY === yearOptions[yearOptions.length - 1] && endM === 12;
+
+  return (
+    <div className="flex items-center gap-2 flex-wrap">
+      <span className="text-[13px] font-semibold text-gray-500">기간</span>
+      <select style={selStyle} value={startY} onChange={e => onChange({ ...range, startY: Number(e.target.value) })}>
+        {yearOptions.map(y => <option key={y} value={y}>{y}년</option>)}
+      </select>
+      <select style={selStyle} value={startM} onChange={e => onChange({ ...range, startM: Number(e.target.value) })}>
+        {months.map(m => <option key={m} value={m}>{m}월</option>)}
+      </select>
+      <span className="text-[13px] text-gray-400 font-medium">부터</span>
+      <select style={selStyle} value={endY} onChange={e => onChange({ ...range, endY: Number(e.target.value) })}>
+        {yearOptions.map(y => <option key={y} value={y}>{y}년</option>)}
+      </select>
+      <select style={selStyle} value={endM} onChange={e => onChange({ ...range, endM: Number(e.target.value) })}>
+        {months.map(m => <option key={m} value={m}>{m}월</option>)}
+      </select>
+      <span className="text-[13px] text-gray-400 font-medium">까지</span>
+      <button style={btnStyle(isThisYear)} onClick={setThisYear}>올해</button>
+      <button style={btnStyle(isAll)} onClick={setAll}>전체</button>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────
+//  NAME FILTERS
+// ─────────────────────────────────────────────────────────
+function isPersonName(name) {
+  if (!name) return false;
+  if (/\d/.test(name)) return false;
+  if (name.length > 4) return false;
+  const blockedWords = ["총", "매출", "입력", "합계", "테스트", "샘플", "리뷰"];
+  if (blockedWords.some(w => name.includes(w))) return false;
+  return true;
+}
+
+function isRealClient(name) {
+  if (!name) return false;
+  if (/^\d{2,4}년\d{1,2}월/.test(name)) return false;
+  return true;
+}
+
+// ─────────────────────────────────────────────────────────
 //  SHARED UI COMPONENTS
 // ─────────────────────────────────────────────────────────
 function KpiCard({ label, value, sub, trend, primary }) {
@@ -162,7 +269,7 @@ function DataRow({ label, value, sub, barPct, rank }) {
         </div>
         {barPct !== undefined && (
           <div className="mt-1.5 w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
-            <div className="h-full rounded-full bg-[#1B2B4B] transition-all duration-700" style={{ width: `${barPct}%`, opacity: Math.max(0.3, 1 - rank * 0.1) }} />
+            <div className="h-full rounded-full bg-[#1B2B4B] transition-all duration-700" style={{ width: `${barPct}%`, opacity: Math.max(0.3, 1 - (rank ?? 0) * 0.1) }} />
           </div>
         )}
         {sub && <div className="text-[11px] text-gray-400 mt-0.5">{sub}</div>}
@@ -205,12 +312,43 @@ function OverviewTab({ data }) {
 
   const tmRev = thisMonth.reduce((s, d) => s + toInt(d.청구운임), 0);
   const lmRev = lastMonth.reduce((s, d) => s + toInt(d.청구운임), 0);
-  const tyRev = thisYear.reduce((s, d) => s + toInt(d.청구운임), 0);
+  const cyRevSoFar = thisYear.reduce((s, d) => s + toInt(d.청구운임), 0);
   const tyCost = thisYear.reduce((s, d) => s + toInt(d.기사운임), 0);
   const lyRev = lastYear.reduce((s, d) => s + toInt(d.청구운임), 0);
-  const marginRate = tyRev > 0 ? ((tyRev - tyCost) / tyRev * 100) : 0;
+  const marginRate = cyRevSoFar > 0 ? ((cyRevSoFar - tyCost) / cyRevSoFar * 100) : 0;
   const tmTrend = lmRev > 0 ? ((tmRev - lmRev) / lmRev * 100) : 0;
-  const yoyTrend = lyRev > 0 ? ((tyRev - lyRev) / lyRev * 100) : 0;
+  const yoyTrend = lyRev > 0 ? ((cyRevSoFar - lyRev) / lyRev * 100) : 0;
+
+  // 당월 예상 매출
+  const dayOfMonth = now.getDate();
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const projectedRev = dayOfMonth > 0 ? Math.round(tmRev / dayOfMonth * daysInMonth) : 0;
+
+  // 연간 예상 매출
+  const startOfYear = new Date(now.getFullYear(), 0, 0);
+  const dayOfYear = Math.floor((now - startOfYear) / 86400000);
+  const dailyRate = dayOfYear > 0 ? cyRevSoFar / dayOfYear : 0;
+  const projectedYear = Math.round(dailyRate * 365);
+
+  // 전월 동기 비교 (이번달 1일~오늘 vs 전월 1일~같은 날)
+  const cmDayPrefix = `${cyStr}-${cm}-`;
+  const pmDayPrefix = `${pmY}-${pm}-`;
+  const todayDay = String(dayOfMonth).padStart(2, "0");
+  const thisMonthUpToToday = data.filter(d => {
+    if (!d.상차일) return false;
+    return d.상차일.startsWith(cmDayPrefix) && d.상차일.slice(8, 10) <= todayDay;
+  });
+  const lastMonthSameRange = data.filter(d => {
+    if (!d.상차일) return false;
+    return d.상차일.startsWith(pmDayPrefix) && d.상차일.slice(8, 10) <= todayDay;
+  });
+  const tmUpRev = thisMonthUpToToday.reduce((s, d) => s + toInt(d.청구운임), 0);
+  const lmSameRev = lastMonthSameRange.reduce((s, d) => s + toInt(d.청구운임), 0);
+  const tmUpProfit = thisMonthUpToToday.reduce((s, d) => s + toInt(d.청구운임) - toInt(d.기사운임), 0);
+  const lmSameProfit = lastMonthSameRange.reduce((s, d) => s + toInt(d.청구운임) - toInt(d.기사운임), 0);
+  const syncRevChg = lmSameRev > 0 ? ((tmUpRev - lmSameRev) / lmSameRev * 100) : null;
+  const syncCntChg = lastMonthSameRange.length > 0 ? ((thisMonthUpToToday.length - lastMonthSameRange.length) / lastMonthSameRange.length * 100) : null;
+  const syncProfitChg = lmSameProfit > 0 ? ((tmUpProfit - lmSameProfit) / lmSameProfit * 100) : null;
 
   const monthly12 = useMemo(() => {
     return Array.from({ length: 12 }, (_, i) => {
@@ -226,13 +364,28 @@ function OverviewTab({ data }) {
     });
   }, [data]);
 
+  const chgColor = (chg) => chg === null ? "#d1d5db" : chg >= 0 ? "#059669" : "#ef4444";
+  const chgLabel = (chg) => chg === null ? "—" : `${chg >= 0 ? "▲" : "▼"} ${Math.abs(chg).toFixed(1)}%`;
+
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-4 gap-4">
-        <KpiCard primary label="연간 누적 매출" value={fmtW(tyRev)} sub={`${cyStr}년 기준`} trend={yoyTrend} />
+      {/* KPI 카드 5개 */}
+      <div className="grid grid-cols-5 gap-4">
+        <KpiCard primary label="연간 누적 매출" value={fmtW(cyRevSoFar)} sub={`${cyStr}년 기준`} trend={yoyTrend} />
         <KpiCard label="이번 달 매출" value={fmtW(tmRev)} sub={`${cyStr}.${cm}`} trend={tmTrend} />
-        <KpiCard label="연간 마진율" value={`${marginRate.toFixed(1)}%`} sub={`수익 ${fmtW(tyRev - tyCost)}`} />
+        <KpiCard label="당월 예상 매출" value={fmtW(projectedRev)} sub={`${dayOfMonth}일 기준 추정`} />
+        <KpiCard label="연간 마진율" value={`${marginRate.toFixed(1)}%`} sub={`수익 ${fmtW(cyRevSoFar - tyCost)}`} />
         <KpiCard label="전체 오더" value={`${thisYear.length}건`} sub={`누적 ${data.length}건`} />
+      </div>
+
+      {/* 연간 예상 매출 노트 */}
+      <div className="bg-[#f0f4f9] border border-[#d4dce8] rounded-xl px-5 py-3 flex items-center gap-3">
+        <div className="w-1.5 h-1.5 rounded-full bg-[#1B2B4B] flex-shrink-0" />
+        <span className="text-[13px] text-[#1B2B4B] font-semibold">연간 예상 매출:</span>
+        <span className="text-[13px] font-black text-[#1B2B4B]">{fmtW(projectedYear)}</span>
+        <span className="text-[12px] text-gray-400">
+          (일평균 {fmtW(Math.round(dailyRate))} x 365일, {dayOfYear}일 운영 기준)
+        </span>
       </div>
 
       <div className="grid grid-cols-3 gap-4">
@@ -249,6 +402,31 @@ function OverviewTab({ data }) {
           </ResponsiveContainer>
         </Card>
 
+        <div className="space-y-4">
+          {/* 전월 동기 비교 */}
+          <Card title="전월 동기 비교" subtitle={`이번달 ${dayOfMonth}일까지 vs 전월 동기`}>
+            <div className="space-y-3">
+              {[
+                { label: "매출", curr: tmUpRev, prev: lmSameRev, chg: syncRevChg, fmt: fmtW },
+                { label: "오더 건수", curr: thisMonthUpToToday.length, prev: lastMonthSameRange.length, chg: syncCntChg, fmt: v => `${v}건` },
+                { label: "수익", curr: tmUpProfit, prev: lmSameProfit, chg: syncProfitChg, fmt: fmtW },
+              ].map(({ label, curr, prev, chg, fmt }) => (
+                <div key={label}>
+                  <div className="flex items-center justify-between mb-0.5">
+                    <span className="text-[12px] font-semibold text-gray-500">{label}</span>
+                    <span className="text-[12px] font-bold" style={{ color: chgColor(chg) }}>{chgLabel(chg)}</span>
+                  </div>
+                  <div className="text-[14px] font-extrabold text-[#1B2B4B]">{fmt(curr)}</div>
+                  <div className="text-[11px] text-gray-400">전월 동기 {fmt(prev)}</div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        </div>
+      </div>
+
+      {/* 전월 대비 + 상세 실적표 */}
+      <div className="grid grid-cols-3 gap-4">
         <Card title="전월 대비" subtitle={`${pmY}.${pm} → ${cyStr}.${cm}`}>
           <div className="space-y-5">
             {[
@@ -273,43 +451,43 @@ function OverviewTab({ data }) {
             })}
           </div>
         </Card>
-      </div>
 
-      <Card title="월별 상세 실적표" subtitle={`${cyStr}년`}>
-        <div className="overflow-x-auto">
-          <table className="w-full" style={{ fontSize: 13 }}>
-            <thead>
-              <tr style={{ borderBottom: "2px solid #f3f4f6" }}>
-                {["월","오더","총 매출","기사 운임","수익","마진율","전월 대비"].map(h => (
-                  <th key={h} className="text-left py-2.5 px-3 font-semibold text-gray-400 whitespace-nowrap">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {monthly12.slice().reverse().map((row, i, arr) => {
-                const margin = row.매출 > 0 ? (row.수익 / row.매출 * 100) : 0;
-                const prevRow = arr[i + 1];
-                const momChg = prevRow?.매출 > 0 ? ((row.매출 - prevRow.매출) / prevRow.매출 * 100) : null;
-                return (
-                  <tr key={i} style={{ borderBottom: "1px solid #f9fafb" }} className="hover:bg-gray-50/50 transition">
-                    <td className="py-2.5 px-3 font-bold text-[#1B2B4B]">{row.month}</td>
-                    <td className="py-2.5 px-3 font-semibold text-gray-700">{row.건수}건</td>
-                    <td className="py-2.5 px-3 font-semibold text-gray-900">{row.매출.toLocaleString()}원</td>
-                    <td className="py-2.5 px-3 text-gray-500">{(row.매출 - row.수익).toLocaleString()}원</td>
-                    <td className="py-2.5 px-3 font-semibold text-[#1B2B4B]">{row.수익.toLocaleString()}원</td>
-                    <td className="py-2.5 px-3">
-                      <span className="px-2 py-0.5 rounded-full text-[11px] font-bold" style={{ background: "#f0f4f9", color: "#1B2B4B" }}>{margin.toFixed(1)}%</span>
-                    </td>
-                    <td className="py-2.5 px-3 font-semibold text-[13px]" style={{ color: momChg === null ? "#d1d5db" : momChg >= 0 ? "#059669" : "#ef4444" }}>
-                      {momChg === null ? "—" : `${momChg >= 0 ? "▲" : "▼"}${Math.abs(momChg).toFixed(1)}%`}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+        <Card title="월별 상세 실적표" subtitle={`${cyStr}년`} className="col-span-2">
+          <div className="overflow-x-auto">
+            <table className="w-full" style={{ fontSize: 13 }}>
+              <thead>
+                <tr style={{ borderBottom: "2px solid #f3f4f6" }}>
+                  {["월","오더","총 매출","기사 운임","수익","마진율","전월 대비"].map(h => (
+                    <th key={h} className="text-left py-2.5 px-3 font-semibold text-gray-400 whitespace-nowrap">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {monthly12.slice().reverse().map((row, i, arr) => {
+                  const margin = row.매출 > 0 ? (row.수익 / row.매출 * 100) : 0;
+                  const prevRow = arr[i + 1];
+                  const momChg = prevRow?.매출 > 0 ? ((row.매출 - prevRow.매출) / prevRow.매출 * 100) : null;
+                  return (
+                    <tr key={i} style={{ borderBottom: "1px solid #f9fafb" }} className="hover:bg-gray-50/50 transition">
+                      <td className="py-2.5 px-3 font-bold text-[#1B2B4B]">{row.month}</td>
+                      <td className="py-2.5 px-3 font-semibold text-gray-700">{row.건수}건</td>
+                      <td className="py-2.5 px-3 font-semibold text-gray-900">{row.매출.toLocaleString()}원</td>
+                      <td className="py-2.5 px-3 text-gray-500">{(row.매출 - row.수익).toLocaleString()}원</td>
+                      <td className="py-2.5 px-3 font-semibold text-[#1B2B4B]">{row.수익.toLocaleString()}원</td>
+                      <td className="py-2.5 px-3">
+                        <span className="px-2 py-0.5 rounded-full text-[11px] font-bold" style={{ background: "#f0f4f9", color: "#1B2B4B" }}>{margin.toFixed(1)}%</span>
+                      </td>
+                      <td className="py-2.5 px-3 font-semibold text-[13px]" style={{ color: momChg === null ? "#d1d5db" : momChg >= 0 ? "#059669" : "#ef4444" }}>
+                        {momChg === null ? "—" : `${momChg >= 0 ? "▲" : "▼"}${Math.abs(momChg).toFixed(1)}%`}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      </div>
     </div>
   );
 }
@@ -404,7 +582,7 @@ function RevenueTab({ data }) {
 //  TAB: 거래처 분석
 // ─────────────────────────────────────────────────────────
 function ClientTab({ data }) {
-  const clients = useMemo(() => {
+  const { realClients, etcClients } = useMemo(() => {
     const m = {};
     data.forEach(d => {
       const k = d.거래처명?.trim();
@@ -414,46 +592,82 @@ function ClientTab({ data }) {
       m[k].revenue += toInt(d.청구운임);
       m[k].profit += toInt(d.청구운임) - toInt(d.기사운임);
     });
-    return Object.entries(m)
+    const all = Object.entries(m)
       .map(([name, v]) => ({ name, ...v, margin: v.revenue > 0 ? (v.profit / v.revenue * 100) : 0 }))
       .sort((a, b) => b.revenue - a.revenue);
+    const real = all.filter(c => isRealClient(c.name));
+    const etc = all.filter(c => !isRealClient(c.name));
+    return { realClients: real, etcClients: etc };
   }, [data]);
 
-  const totalRev = clients.reduce((s, c) => s + c.revenue, 0);
-  const top5Rev = clients.slice(0, 5).reduce((s, c) => s + c.revenue, 0);
+  const etcCount = etcClients.reduce((s, c) => s + c.count, 0);
+  const etcRevenue = etcClients.reduce((s, c) => s + c.revenue, 0);
+
+  const totalRev = [...realClients, ...etcClients].reduce((s, c) => s + c.revenue, 0);
+  const top5Rev = realClients.slice(0, 5).reduce((s, c) => s + c.revenue, 0);
   const top5Pct = totalRev > 0 ? (top5Rev / totalRev * 100) : 0;
-  const chartData = clients.slice(0, 10).map(c => ({ name: c.name, 매출: c.revenue }));
-  const maxRev = clients[0]?.revenue || 1;
+  const chartData = realClients.slice(0, 10).map(c => ({ name: c.name, 매출: c.revenue }));
+  const maxRev = realClients[0]?.revenue || 1;
+  const maxCount = [...realClients].sort((a, b) => b.count - a.count)[0]?.count || 1;
+
+  const top10ByRev = realClients.slice(0, 10);
+  const top10ByCnt = [...realClients].sort((a, b) => b.count - a.count).slice(0, 10);
 
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-4 gap-4">
-        <KpiCard primary label="등록 거래처" value={`${clients.length}곳`} />
+        <KpiCard primary label="등록 거래처" value={`${realClients.length}곳`} sub={etcClients.length > 0 ? `집계 ${etcClients.length}건 별도` : undefined} />
         <KpiCard label="Top5 집중도" value={`${top5Pct.toFixed(1)}%`} sub={fmtW(top5Rev)} />
-        <KpiCard label="거래처 평균 매출" value={fmtW(clients.length > 0 ? Math.round(totalRev / clients.length) : 0)} />
+        <KpiCard label="거래처 평균 매출" value={fmtW(realClients.length > 0 ? Math.round(realClients.reduce((s,c) => s+c.revenue,0) / realClients.length) : 0)} />
         <KpiCard label="총 거래 건수" value={`${data.length}건`} />
       </div>
 
       <div className="grid grid-cols-2 gap-5">
-        <Card title="매출 Top 10 거래처" subtitle="전체 기간 누적">
+        <Card title="매출 Top 10 거래처" subtitle="기간 누적">
           <div className="space-y-1">
-            {clients.slice(0, 10).map((c, i) => (
+            {top10ByRev.map((c, i) => (
               <DataRow key={c.name} rank={i} label={c.name}
                 value={fmtW(c.revenue)}
                 sub={`${c.count}건 · 마진 ${c.margin.toFixed(1)}%`}
                 barPct={Math.round(c.revenue / maxRev * 100)} />
             ))}
+            {etcClients.length > 0 && (
+              <div className="flex items-center gap-3 py-2.5 border-t border-gray-100 mt-1">
+                <div className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0"
+                  style={{ background: "#f3f4f6", color: "#6b7280" }}>기타</div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[13px] font-semibold text-gray-500">기타 (집계 데이터)</span>
+                    <span className="text-[13px] font-bold text-gray-400 whitespace-nowrap">{fmtW(etcRevenue)}</span>
+                  </div>
+                  <div className="text-[11px] text-gray-400">{etcCount}건 · {etcClients.length}개 항목</div>
+                </div>
+              </div>
+            )}
           </div>
         </Card>
 
-        <Card title="오더 건수 Top 10" subtitle="전체 기간">
+        <Card title="오더 건수 Top 10" subtitle="기간">
           <div className="space-y-1">
-            {[...clients].sort((a, b) => b.count - a.count).slice(0, 10).map((c, i, arr) => (
+            {top10ByCnt.map((c, i) => (
               <DataRow key={c.name} rank={i} label={c.name}
                 value={`${c.count}건`}
                 sub={`매출 ${fmtW(c.revenue)}`}
-                barPct={Math.round(c.count / (arr[0]?.count || 1) * 100)} />
+                barPct={Math.round(c.count / maxCount * 100)} />
             ))}
+            {etcClients.length > 0 && (
+              <div className="flex items-center gap-3 py-2.5 border-t border-gray-100 mt-1">
+                <div className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0"
+                  style={{ background: "#f3f4f6", color: "#6b7280" }}>기타</div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[13px] font-semibold text-gray-500">기타 (집계 데이터)</span>
+                    <span className="text-[13px] font-bold text-gray-400 whitespace-nowrap">{etcCount}건</span>
+                  </div>
+                  <div className="text-[11px] text-gray-400">매출 {fmtW(etcRevenue)}</div>
+                </div>
+              </div>
+            )}
           </div>
         </Card>
       </div>
@@ -479,7 +693,7 @@ function ClientTab({ data }) {
 //  TAB: 기사·차량 분석
 // ─────────────────────────────────────────────────────────
 function DriverTab({ data }) {
-  const drivers = useMemo(() => {
+  const { realDrivers, etcDrivers } = useMemo(() => {
     const m = {};
     data.forEach(d => {
       const k = d.이름?.trim();
@@ -488,10 +702,16 @@ function DriverTab({ data }) {
       m[k].count++;
       m[k].pay += toInt(d.기사운임);
     });
-    return Object.entries(m)
+    const all = Object.entries(m)
       .map(([name, v]) => ({ name, ...v }))
       .sort((a, b) => b.count - a.count);
+    const real = all.filter(d => isPersonName(d.name));
+    const etc = all.filter(d => !isPersonName(d.name));
+    return { realDrivers: real, etcDrivers: etc };
   }, [data]);
+
+  const etcCount = etcDrivers.reduce((s, d) => s + d.count, 0);
+  const etcPay = etcDrivers.reduce((s, d) => s + d.pay, 0);
 
   const vehicles = useMemo(() => {
     const m = {};
@@ -499,47 +719,81 @@ function DriverTab({ data }) {
     return Object.entries(m).sort((a, b) => b[1] - a[1]);
   }, [data]);
 
-  const tonnage = useMemo(() => {
+  const tonnageData = useMemo(() => {
     const m = {};
     data.forEach(d => { const k = d.차량톤수?.trim() || "미분류"; m[k] = (m[k] || 0) + 1; });
-    return Object.entries(m).sort((a, b) => b[1] - a[1]);
+    const sorted = Object.entries(m).sort((a, b) => b[1] - a[1]);
+    const top8 = sorted.slice(0, 8);
+    const rest = sorted.slice(8);
+    const etcCnt = rest.reduce((s, [, v]) => s + v, 0);
+    const result = top8.map(([label, cnt]) => ({ name: label, 건수: cnt }));
+    if (etcCnt > 0) result.push({ name: "기타", 건수: etcCnt });
+    return result;
   }, [data]);
 
   const totalCount = data.filter(d => d.이름?.trim()).length;
-  const maxCount = drivers[0]?.count || 1;
-  const maxPay = [...drivers].sort((a, b) => b.pay - a.pay)[0]?.pay || 1;
+  const maxCount = realDrivers[0]?.count || 1;
+  const maxPay = [...realDrivers].sort((a, b) => b.pay - a.pay)[0]?.pay || 1;
   const vMax = vehicles[0]?.[1] || 1;
-  const tMax = tonnage[0]?.[1] || 1;
+
+  const top10ByCount = realDrivers.slice(0, 10);
+  const top10ByPay = [...realDrivers].sort((a, b) => b.pay - a.pay).slice(0, 10);
 
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-4 gap-4">
-        <KpiCard primary label="등록 기사 수" value={`${drivers.length}명`} />
-        <KpiCard label="1위 기사 건수" value={`${drivers[0]?.count || 0}건`} sub={drivers[0]?.name || "—"} />
-        <KpiCard label="평균 기사운임" value={fmtW(drivers.length > 0 ? Math.round(drivers.reduce((s, d) => s + d.pay, 0) / drivers.length) : 0)} />
+        <KpiCard primary label="등록 기사 수" value={`${realDrivers.length}명`} sub={etcDrivers.length > 0 ? `비인물 ${etcDrivers.length}건 별도` : undefined} />
+        <KpiCard label="1위 기사 건수" value={`${realDrivers[0]?.count || 0}건`} sub={realDrivers[0]?.name || "—"} />
+        <KpiCard label="평균 기사운임" value={fmtW(realDrivers.length > 0 ? Math.round(realDrivers.reduce((s, d) => s + d.pay, 0) / realDrivers.length) : 0)} />
         <KpiCard label="차량 유형 수" value={`${vehicles.length}종`} />
       </div>
 
       <div className="grid grid-cols-2 gap-5">
-        <Card title="운행 건수 Top 10 기사" subtitle="전체 기간">
+        <Card title="운행 건수 Top 10 기사" subtitle="기간">
           <div className="space-y-1">
-            {drivers.slice(0, 10).map((d, i) => (
+            {top10ByCount.map((d, i) => (
               <DataRow key={d.name} rank={i} label={d.name}
                 value={`${d.count}건`}
                 sub={`운임 ${fmtW(d.pay)} · ${d.plate || "번호 없음"}`}
                 barPct={Math.round(d.count / maxCount * 100)} />
             ))}
+            {etcDrivers.length > 0 && (
+              <div className="flex items-center gap-3 py-2.5 border-t border-gray-100 mt-1">
+                <div className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0"
+                  style={{ background: "#f3f4f6", color: "#6b7280" }}>기타</div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[13px] font-semibold text-gray-500">기타 (비인물 항목)</span>
+                    <span className="text-[13px] font-bold text-gray-400 whitespace-nowrap">{etcCount}건</span>
+                  </div>
+                  <div className="text-[11px] text-gray-400">운임 {fmtW(etcPay)} · {etcDrivers.length}개 항목</div>
+                </div>
+              </div>
+            )}
           </div>
         </Card>
 
-        <Card title="운임 지급액 Top 10 기사" subtitle="전체 기간">
+        <Card title="운임 지급액 Top 10 기사" subtitle="기간">
           <div className="space-y-1">
-            {[...drivers].sort((a, b) => b.pay - a.pay).slice(0, 10).map((d, i) => (
+            {top10ByPay.map((d, i) => (
               <DataRow key={d.name} rank={i} label={d.name}
                 value={fmtW(d.pay)}
                 sub={`${d.count}건 · ${d.plate || "번호 없음"}`}
                 barPct={Math.round(d.pay / maxPay * 100)} />
             ))}
+            {etcDrivers.length > 0 && (
+              <div className="flex items-center gap-3 py-2.5 border-t border-gray-100 mt-1">
+                <div className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0"
+                  style={{ background: "#f3f4f6", color: "#6b7280" }}>기타</div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[13px] font-semibold text-gray-500">기타 (비인물 항목)</span>
+                    <span className="text-[13px] font-bold text-gray-400 whitespace-nowrap">{fmtW(etcPay)}</span>
+                  </div>
+                  <div className="text-[11px] text-gray-400">{etcCount}건 · {etcDrivers.length}개 항목</div>
+                </div>
+              </div>
+            )}
           </div>
         </Card>
       </div>
@@ -556,12 +810,20 @@ function DriverTab({ data }) {
         </Card>
 
         <Card title="차량 톤수별 분포">
-          <div className="space-y-1">
-            {tonnage.map(([label, cnt], i) => (
-              <DataRow key={label} rank={i} label={label} value={`${cnt}건`}
-                sub={fmtPct(cnt, data.length)}
-                barPct={Math.round(cnt / tMax * 100)} />
-            ))}
+          <div style={{ maxHeight: 200, overflow: "hidden" }}>
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={tonnageData} layout="vertical" margin={{ top: 4, right: 40, left: 48, bottom: 4 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" horizontal={false} />
+                <XAxis type="number" tick={{ fontSize: 10, fill: "#9ca3af" }} axisLine={false} tickLine={false} />
+                <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: "#374151" }} axisLine={false} tickLine={false} width={44} />
+                <Tooltip formatter={(v) => [v + "건", "건수"]} contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid #e5e7eb" }} />
+                <Bar dataKey="건수" radius={[0, 4, 4, 0]} maxBarSize={16}>
+                  {tonnageData.map((entry, i) => (
+                    <Cell key={i} fill={entry.name === "기타" ? "#d1d5db" : "#1B2B4B"} opacity={entry.name === "기타" ? 0.7 : Math.max(0.4, 1 - i * 0.08)} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
           </div>
         </Card>
       </div>
@@ -716,7 +978,7 @@ function InsightsTab({ data }) {
 
     // 3. 거래처 집중도
     const clientMap = {};
-    data.forEach(d => { const k = d.거래처명?.trim(); if (k) { clientMap[k] = (clientMap[k] || 0) + toInt(d.청구운임); } });
+    data.forEach(d => { const k = d.거래처명?.trim(); if (k && isRealClient(k)) { clientMap[k] = (clientMap[k] || 0) + toInt(d.청구운임); } });
     const sortedClients = Object.entries(clientMap).sort((a, b) => b[1] - a[1]);
     const totalRev = sortedClients.reduce((s, [, v]) => s + v, 0);
     const top3Rev = sortedClients.slice(0, 3).reduce((s, [, v]) => s + v, 0);
@@ -759,7 +1021,7 @@ function InsightsTab({ data }) {
     const driverMap = {};
     data.forEach(d => {
       const k = d.이름?.trim();
-      if (!k) return;
+      if (!k || !isPersonName(k)) return;
       driverMap[k] = driverMap[k] || { count: 0, pay: 0 };
       driverMap[k].count++;
       driverMap[k].pay += toInt(d.기사운임);
@@ -831,7 +1093,7 @@ function InsightsTab({ data }) {
       <div className="bg-[#f4f6f9] rounded-xl border border-gray-100 p-5">
         <div className="text-[12px] font-bold text-gray-400 mb-1">분석 기준 안내</div>
         <div className="text-[12px] text-gray-400 leading-relaxed">
-          본 리포트는 등록된 배차 데이터를 기반으로 자동 생성됩니다. 마진율은 (청구운임 - 기사운임) / 청구운임으로 계산되며, 기타 비용(유류비, 보험료 등)은 포함되지 않습니다. 전략적 의사결정 시 실제 원가 구조를 추가로 반영하세요.
+          본 리포트는 등록된 배차 데이터 전체를 기반으로 자동 생성됩니다. 마진율은 (청구운임 - 기사운임) / 청구운임으로 계산되며, 기타 비용(유류비, 보험료 등)은 포함되지 않습니다. 전략적 의사결정 시 실제 원가 구조를 추가로 반영하세요.
         </div>
       </div>
     </div>
@@ -854,11 +1116,22 @@ export default function ExecutiveDashboard({ dispatchData = [] }) {
   const [verified, setVerified] = useState(false);
   const [activeTab, setActiveTab] = useState("overview");
 
+  const now = new Date();
+  const [dateRange, setDateRange] = useState({
+    startY: now.getFullYear(), startM: 1,
+    endY: now.getFullYear(), endM: now.getMonth() + 1,
+  });
+
+  const filteredData = useMemo(
+    () => filterByDateRange(dispatchData, dateRange),
+    [dispatchData, dateRange]
+  );
+
   if (!verified) return <PinGate onVerified={() => setVerified(true)} />;
 
   return (
     <div style={{ minHeight: "80vh", background: "#f4f6f9" }}>
-      {/* ── 헤더 ── */}
+      {/* 헤더 */}
       <div className="bg-[#1B2B4B] px-6 py-4 flex items-start justify-between rounded-t-xl mb-0">
         <div>
           <div className="text-[10px] font-bold tracking-[0.25em] text-white/30 uppercase mb-1">CONFIDENTIAL — EXECUTIVE USE ONLY</div>
@@ -876,7 +1149,7 @@ export default function ExecutiveDashboard({ dispatchData = [] }) {
         </div>
       </div>
 
-      {/* ── 탭 ── */}
+      {/* 탭 */}
       <div className="bg-white border-b border-gray-200 px-6">
         <div className="flex gap-0">
           {TABS.map(t => (
@@ -892,13 +1165,20 @@ export default function ExecutiveDashboard({ dispatchData = [] }) {
         </div>
       </div>
 
-      {/* ── 콘텐츠 ── */}
+      {/* 날짜 필터 (AI 인사이트 탭 제외) */}
+      {activeTab !== "insights" && (
+        <div className="bg-white border-b border-gray-100 px-6 py-3">
+          <DateRangePicker range={dateRange} onChange={setDateRange} allData={dispatchData} />
+        </div>
+      )}
+
+      {/* 콘텐츠 */}
       <div className="p-6">
-        {activeTab === "overview"   && <OverviewTab    data={dispatchData} />}
-        {activeTab === "revenue"    && <RevenueTab     data={dispatchData} />}
-        {activeTab === "client"     && <ClientTab      data={dispatchData} />}
-        {activeTab === "driver"     && <DriverTab      data={dispatchData} />}
-        {activeTab === "operations" && <OperationsTab  data={dispatchData} />}
+        {activeTab === "overview"   && <OverviewTab    data={filteredData} />}
+        {activeTab === "revenue"    && <RevenueTab     data={filteredData} />}
+        {activeTab === "client"     && <ClientTab      data={filteredData} />}
+        {activeTab === "driver"     && <DriverTab      data={filteredData} />}
+        {activeTab === "operations" && <OperationsTab  data={filteredData} />}
         {activeTab === "insights"   && <InsightsTab    data={dispatchData} />}
       </div>
     </div>

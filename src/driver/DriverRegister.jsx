@@ -1,7 +1,7 @@
 // src/driver/DriverRegister.jsx
 import React, { useState } from "react";
 import { auth, db } from "../firebase";
-import { createUserWithEmailAndPassword } from "firebase/auth";
+import { createUserWithEmailAndPassword, signOut } from "firebase/auth";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { useNavigate, Link } from "react-router-dom";
 
@@ -122,6 +122,7 @@ export default function DriverRegister() {
         updatedAt: serverTimestamp(),
       });
 
+      await signOut(auth);
       setSuccess(true);
       setTimeout(() => navigate("/driver-login"), 2500);
     } catch (err) {

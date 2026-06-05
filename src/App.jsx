@@ -462,15 +462,15 @@ export default function App() {
 
           <Route
             path="/driver-login"
-            element={user && role === "driver" ? <Navigate to="/driver-home" replace /> : <DriverLogin />}
+            element={user && role === "driver" && approved ? <Navigate to="/driver-home" replace /> : <DriverLogin />}
           />
           <Route
             path="/driver-register"
-            element={user && role === "driver" ? <Navigate to="/driver-home" replace /> : <DriverRegister />}
+            element={user && role === "driver" && approved ? <Navigate to="/driver-home" replace /> : <DriverRegister />}
           />
           <Route
             path="/driver-home"
-            element={user && role === "driver" ? <DriverHome /> : <Navigate to="/driver-login" replace />}
+            element={user && role === "driver" && approved ? <DriverHome /> : <Navigate to="/driver-login" replace />}
           />
 
           <Route
