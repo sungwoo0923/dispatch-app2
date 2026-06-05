@@ -1965,8 +1965,12 @@ useEffect(() => {
   const [calcOpen, setCalcOpen] = useState(false);
   useEffect(() => {
     const root = document.getElementById("root");
-    if (root) root.style.zoom = "1";
+    if (root) root.style.zoom = "1.3";
     localStorage.removeItem("appZoom");
+    return () => {
+      const r = document.getElementById("root");
+      if (r) r.style.zoom = "1";
+    };
   }, []);
    // ★ 거래명세서에서 오더 클릭 시 해당 오더로 이동하기 위한 전역 함수
   const [highlightOrderId, setHighlightOrderId] = useState(null);
@@ -13907,6 +13911,7 @@ React.useEffect(() => {
 
   // 상차 임박 경고
   const [warningList, setWarningList] = React.useState([]);
+  const [warningExpanded, setWarningExpanded] = React.useState(false);
   const [urgentPopup, setUrgentPopup] = React.useState([]);
   // 첨부파일 개수
 const [attachCount, setAttachCount] = React.useState({});
@@ -15955,26 +15960,41 @@ const head = isDark
     </div>
   </div>
 )}
-    {/* 상차 임박 경고 배너 */}
+    {/* 상차 임박 경고 배너 — 접기/펼치기 */}
 {warningList.length > 0 && (
-  <div className="flex items-start gap-3 border border-[#1B2B4B]/20 bg-[#1B2B4B]/[0.04] rounded-xl px-4 py-3 mb-3 w-fit max-w-full">
-    <div className="w-[3px] self-stretch bg-[#1B2B4B] rounded-full shrink-0" />
-    <div>
-      <div className="text-[12px] font-bold text-[#1B2B4B] mb-1.5">
-        상차 2시간 이내 미배차{" "}
-        <span className="text-red-600 font-extrabold">{warningList.length}건</span>
-      </div>
-      <div className="space-y-[4px]">
-        {warningList.map((r) => (
-          <div key={r.id} className="text-[12px] text-[#1B2B4B]/80 flex items-center gap-2 flex-wrap">
-            <span className="font-semibold text-[#1B2B4B]">{r.상차일} {r.상차시간}</span>
-            <span className="text-[#1B2B4B]/30">|</span>
-            <span>{r.상차지명}</span>
-            {r.거래처명 && <span className="text-[#1B2B4B]/50 text-[11px]">({r.거래처명})</span>}
+  <div className="mb-3 w-fit max-w-full select-none">
+    {/* 헤더 줄 — 항상 표시 */}
+    <button
+      type="button"
+      onClick={() => setWarningExpanded(v => !v)}
+      className="flex items-center gap-3 bg-[#1B2B4B] text-white rounded-xl px-4 py-2 hover:bg-[#243a60] transition-colors"
+    >
+      <span className="font-mono font-extrabold text-red-300 text-[15px] min-w-[2ch] text-right">{warningList.length}</span>
+      <span className="text-[13px] font-semibold tracking-wide">상차 2시간 이내 미배차</span>
+      <svg
+        className={`w-4 h-4 ml-1 transition-transform ${warningExpanded ? "rotate-180" : ""}`}
+        viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+        strokeLinecap="round" strokeLinejoin="round"
+      >
+        <polyline points="6 9 12 15 18 9"/>
+      </svg>
+    </button>
+    {/* 상세 목록 — 펼쳤을 때만 */}
+    {warningExpanded && (
+      <div className="mt-1 border border-[#1B2B4B]/20 rounded-xl overflow-hidden">
+        {warningList.map((r, i) => (
+          <div
+            key={r.id}
+            className={`flex items-center gap-3 px-4 py-2 text-[13px] ${i % 2 === 0 ? "bg-white" : "bg-[#f7f9fc]"}`}
+          >
+            <span className="font-mono font-semibold text-[#1B2B4B] whitespace-nowrap">{r.상차일} {r.상차시간}</span>
+            <span className="text-[#1B2B4B]/30 text-[11px]">|</span>
+            <span className="text-[#1B2B4B] font-medium">{r.상차지명}</span>
+            {r.거래처명 && <span className="text-[#1B2B4B]/50 text-[12px] ml-auto whitespace-nowrap">{r.거래처명}</span>}
           </div>
         ))}
       </div>
-    </div>
+    )}
   </div>
 )}
 
@@ -16333,7 +16353,7 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
                       data-id={r._id}
                       type="text"
                       value={r.차량번호 || ""}
-                      className="border p-0.5 rounded w-[95px] text-[13px]"
+                      className="border p-0.5 rounded w-[95px] text-[14px] font-medium"
                       onChange={(e) => {
   const v = e.target.value;
   const isEmpty = v.trim() === "";
@@ -23527,6 +23547,7 @@ const save = {
   }, [contextMenuDS]);
 
   // ===================== 상차 임박 경고 (Part 5) =====================
+  const [dsWarningExpanded, setDsWarningExpanded] = React.useState(false);
   const dsWarningList = React.useMemo(() => {
     const now = new Date();
     return dispatchData.filter(r => {
@@ -23834,26 +23855,39 @@ return (
         <div className="text-orange-600">수수료 <b>{summary.totalFee.toLocaleString()}원</b></div>
       </div>
 
-      {/* ===== 상차 임박 경고 배너 ===== */}
+      {/* ===== 상차 임박 경고 배너 — 접기/펼치기 ===== */}
       {dsWarningList.length > 0 && (
-        <div className="flex items-start gap-3 border border-[#1B2B4B]/20 bg-[#1B2B4B]/[0.04] rounded-xl px-4 py-3 mb-3 w-fit max-w-full">
-          <div className="w-[3px] self-stretch bg-[#1B2B4B] rounded-full shrink-0" />
-          <div>
-            <div className="text-[12px] font-bold text-[#1B2B4B] mb-1.5">
-              상차 2시간 이내 미배차{" "}
-              <span className="text-red-600 font-extrabold">{dsWarningList.length}건</span>
-            </div>
-            <div className="space-y-[4px]">
-              {dsWarningList.map((r) => (
-                <div key={r._id || r.id} className="text-[12px] text-[#1B2B4B]/80 flex items-center gap-2 flex-wrap">
-                  <span className="font-semibold text-[#1B2B4B]">{r.상차일} {r.상차시간}</span>
-                  <span className="text-[#1B2B4B]/30">|</span>
-                  <span>{r.상차지명}</span>
-                  {r.거래처명 && <span className="text-[#1B2B4B]/50 text-[11px]">({r.거래처명})</span>}
+        <div className="mb-3 w-fit max-w-full select-none">
+          <button
+            type="button"
+            onClick={() => setDsWarningExpanded(v => !v)}
+            className="flex items-center gap-3 bg-[#1B2B4B] text-white rounded-xl px-4 py-2 hover:bg-[#243a60] transition-colors"
+          >
+            <span className="font-mono font-extrabold text-red-300 text-[15px] min-w-[2ch] text-right">{dsWarningList.length}</span>
+            <span className="text-[13px] font-semibold tracking-wide">상차 2시간 이내 미배차</span>
+            <svg
+              className={`w-4 h-4 ml-1 transition-transform ${dsWarningExpanded ? "rotate-180" : ""}`}
+              viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+              strokeLinecap="round" strokeLinejoin="round"
+            >
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </button>
+          {dsWarningExpanded && (
+            <div className="mt-1 border border-[#1B2B4B]/20 rounded-xl overflow-hidden">
+              {dsWarningList.map((r, i) => (
+                <div
+                  key={r._id || r.id}
+                  className={`flex items-center gap-3 px-4 py-2 text-[13px] ${i % 2 === 0 ? "bg-white" : "bg-[#f7f9fc]"}`}
+                >
+                  <span className="font-mono font-semibold text-[#1B2B4B] whitespace-nowrap">{r.상차일} {r.상차시간}</span>
+                  <span className="text-[#1B2B4B]/30 text-[11px]">|</span>
+                  <span className="text-[#1B2B4B] font-medium">{r.상차지명}</span>
+                  {r.거래처명 && <span className="text-[#1B2B4B]/50 text-[12px] ml-auto whitespace-nowrap">{r.거래처명}</span>}
                 </div>
               ))}
             </div>
-          </div>
+          )}
         </div>
       )}
 

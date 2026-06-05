@@ -543,6 +543,12 @@ export default function MobileApp({ role, user, userCompany = "" }) {
   useEffect(() => {
     const root = document.getElementById("root");
     if (root) root.style.zoom = "1";
+    // 모바일에서 핀치줌 비활성화 — 기본 크기 고정
+    const meta = document.querySelector('meta[name="viewport"]');
+    if (meta) meta.content = "width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover";
+    return () => {
+      if (meta) meta.content = "width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover";
+    };
   }, []);
   const [page, setPage] = useState("list");
   const listScrollYRef = useRef(0); // 리스트 스크롤 위치 저장

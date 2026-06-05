@@ -50,8 +50,12 @@ function isSmartPhone() {
 }
 
 // ★ 태블릿 감지 (iPad, Android 태블릿, 터치 지원 중간 사이즈)
+// 폴더블 폰 등 안드로이드 폰은 제외 ("mobile" UA 포함)
 function isTabletDevice() {
   const ua = navigator.userAgent.toLowerCase();
+  // 폰 UA → 태블릿으로 취급하지 않음
+  const isPhone = /iphone|ipod/.test(ua) || (ua.includes("android") && ua.includes("mobile"));
+  if (isPhone) return false;
   const isIpad =
     (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1) ||
     ua.includes("ipad");
