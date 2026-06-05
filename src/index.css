@@ -123,9 +123,9 @@ table thead th {
 
 table tbody td {
   font-size: calc(15px * var(--font-scale, 1)) !important;
-  font-weight: 500 !important;
+  font-weight: 600 !important;
   white-space: nowrap !important;
-  color: #1a1a1a !important;
+  color: #111827 !important;
 }
 
 /* ===== 행 구분선 (프로그램 스타일) ===== */

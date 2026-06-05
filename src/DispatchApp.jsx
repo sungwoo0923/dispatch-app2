@@ -16423,7 +16423,7 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
                       data-id={r._id}
                       type="text"
                       value={r.차량번호 || ""}
-                      className="border p-0.5 rounded w-[95px] text-[14px] font-medium"
+                      className="border p-0.5 rounded w-[120px] min-w-[100px] text-[14px] font-medium"
                       onChange={(e) => {
   const v = e.target.value;
   const isEmpty = v.trim() === "";
@@ -23894,29 +23894,6 @@ return (
 `}</style>
       <h2 className="text-lg font-bold mb-2">배차현황</h2>
 
-      {/* ===== 상태 칩 (네이비 스타일 통일) ===== */}
-      <div className="flex items-center gap-1.5 text-[12px] font-semibold mb-1">
-        {[
-          { key: "ALL",         label: `전체 ${statusSummary.전체}` },
-          { key: "UNASSIGNED",  label: `미배차 ${statusSummary.미배차}` },
-          { key: "COMPLETE",    label: `완료 ${statusSummary.완료}` },
-          { key: "UNDELIVERED", label: `미전달 ${statusSummary.미전달}` },
-        ].map(({ key, label }) => (
-          <button
-            key={key}
-            onClick={() => setStatusFilter(key)}
-            className={`h-[34px] px-3 rounded-full text-[12px] font-semibold border transition
-              ${statusFilter === key
-                ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
-                : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
-              }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
-
       {/* ===== 상차 임박 경고 배너 — 접기/펼치기 ===== */}
       {dsWarningList.length > 0 && (
         <div className="mb-3 w-fit max-w-full select-none">
@@ -23953,7 +23930,7 @@ return (
         </div>
       )}
 
-      {/* ===== KPI ===== */}
+      {/* ===== KPI + 상태 칩 한 줄 ===== */}
       <div className="flex items-center gap-2 mb-3 flex-wrap">
         <div className="flex items-center gap-2 bg-[#1B2B4B] text-white px-4 py-2 rounded-xl shadow-sm">
           <span className="text-[12px] font-medium text-white/70">총</span>
@@ -23971,6 +23948,27 @@ return (
           <span className="text-[12px] font-medium text-gray-500">수수료</span>
           <span className="text-[15px] font-extrabold text-[#1B2B4B]">{summary.totalFee.toLocaleString()}원</span>
         </div>
+        {/* 구분선 */}
+        <div className="w-px h-8 bg-gray-300 mx-1 shrink-0" />
+        {/* 상태 필터 칩 */}
+        {[
+          { key: "ALL",         label: `전체 ${statusSummary.전체}` },
+          { key: "UNASSIGNED",  label: `미배차 ${statusSummary.미배차}` },
+          { key: "COMPLETE",    label: `완료 ${statusSummary.완료}` },
+          { key: "UNDELIVERED", label: `미전달 ${statusSummary.미전달}` },
+        ].map(({ key, label }) => (
+          <button
+            key={key}
+            onClick={() => setStatusFilter(key)}
+            className={`h-[34px] px-3 rounded-full text-[12px] font-semibold border transition
+              ${statusFilter === key
+                ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
+                : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
+              }`}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
       {/* ===== 페이지+검색+날짜+버튼 한 줄 ===== */}

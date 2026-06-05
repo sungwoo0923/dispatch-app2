@@ -231,10 +231,18 @@ export default function AiAssistant({ dispatches = [], clients = [] }) {
       {/* 플로팅 버튼 */}
       <button
         onClick={() => setOpen(!open)}
-        className="fixed bottom-6 right-6 w-14 h-14 bg-gradient-to-br from-blue-500 to-blue-600 
-                   text-white rounded-full shadow-lg hover:shadow-xl hover:scale-105 
-                   transition-all duration-200 flex items-center justify-center z-[9999]"
         title="AI 비서"
+        style={{
+          position: "fixed", bottom: 24, right: 24,
+          width: 56, height: 56, borderRadius: "50%",
+          background: "linear-gradient(135deg, #3b82f6, #2563eb)",
+          color: "white", border: "none", cursor: "pointer",
+          boxShadow: "0 4px 16px rgba(59,130,246,0.4)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          zIndex: 9999, transition: "box-shadow 0.2s, transform 0.2s",
+        }}
+        onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.08)"; }}
+        onMouseLeave={e => { e.currentTarget.style.transform = "scale(1)"; }}
       >
         {open ? (
           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -250,8 +258,8 @@ export default function AiAssistant({ dispatches = [], clients = [] }) {
 
       {/* 채팅 패널 */}
       {open && (
-        <div className="fixed bottom-24 right-6 w-[420px] min-h-[400px] max-h-[700px] bg-white rounded-2xl shadow-2xl 
-                        border border-gray-200 flex flex-col z-[9999] overflow-hidden">
+        <div style={{ position: "fixed", bottom: 92, right: 24, width: 420, minHeight: 400, maxHeight: 700, zIndex: 9999 }}
+             className="bg-white rounded-2xl shadow-2xl border border-gray-200 flex flex-col overflow-hidden">
           {/* 헤더 */}
           <div className="bg-gradient-to-r from-blue-500 to-blue-600 text-white px-5 py-4 flex items-center justify-between">
             <div>
