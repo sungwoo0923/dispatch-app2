@@ -243,9 +243,12 @@ export default function DriverHome() {
       });
       await addDoc(collection(db, "driver_logs"), {
         uid,
+        driverName: driver?.name || "",
+        carNo: driver?.carNo || "",
         status: newStatus,
         mainStatus: newStatus,
         timestamp: serverTimestamp(),
+        location: pos ? { lat: pos.lat, lng: pos.lng } : null,
       });
       showToast(`${newStatus} 처리되었습니다`);
     } catch (e) {
@@ -253,7 +256,7 @@ export default function DriverHome() {
     } finally {
       setStatusLoading(false);
     }
-  }, [uid, statusLoading]);
+  }, [uid, statusLoading, pos, driver]);
 
   const handleLogout = async () => {
     if (uid) {
