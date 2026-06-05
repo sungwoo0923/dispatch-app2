@@ -6,7 +6,7 @@ import {
   collection, onSnapshot, doc, updateDoc,
   query, where, orderBy, limit,
 } from "firebase/firestore";
-import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, Polyline, CircleMarker, useMap } from "react-leaflet";
 import L from "leaflet";
 
 // ─── 상수 ────────────────────────────────────────────────────────────────────
@@ -149,6 +149,21 @@ function MapRecenter({ center }) {
   return null;
 }
 
+// ─── FitPath ─────────────────────────────────────────────────────────────────
+
+function FitPath({ points }) {
+  const map = useMap();
+  const prevLen = useRef(0);
+  useEffect(() => {
+    if (points.length < 2) return;
+    if (points.length === prevLen.current) return;
+    prevLen.current = points.length;
+    const bounds = L.latLngBounds(points.map(p => [p.lat, p.lng]));
+    map.fitBounds(bounds, { padding: [50, 50], maxZoom: 16, animate: true });
+  }, [points, map]);
+  return null;
+}
+
 // ─── StatusBadge ──────────────────────────────────────────────────────────────
 
 function StatusBadge({ status, size = 9 }) {
@@ -276,12 +291,50 @@ function DriverTable({ rows, selectedId, onSelect }) {
 
 // ─── FleetMap ────────────────────────────────────────────────────────────────
 
-function FleetMap({ drivers, center, onSelect }) {
+function FleetMap({ drivers, center, onSelect, selectedPath = [] }) {
   const defaultCenter = center || { lat: 37.5665, lng: 126.9780 };
+  const pathPositions = selectedPath.map(p => [p.lat, p.lng]);
+
   return (
     <MapContainer center={[defaultCenter.lat, defaultCenter.lng]} zoom={12} scrollWheelZoom style={{ height: "100%", width: "100%", minHeight: 480 }}>
       <MapRecenter center={center} />
+      {selectedPath.length >= 2 && <FitPath points={selectedPath} />}
       <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap" />
+
+      {/* 이동 경로 선 */}
+      {pathPositions.length >= 2 && (
+        <Polyline positions={pathPositions} color={NAVY} weight={3} opacity={0.65} dashArray="6 4" />
+      )}
+
+      {/* 경로 포인트 (상태 변경 위치) */}
+      {selectedPath.map((p, i) => {
+        const color = STATUS_COLORS[p.status] || "#9ca3af";
+        const isFirst = i === selectedPath.length - 1; // 가장 오래된 = 출근
+        const isLast = i === 0; // 가장 최근
+        return (
+          <CircleMarker
+            key={i}
+            center={[p.lat, p.lng]}
+            radius={isFirst || isLast ? 8 : 5}
+            color="#fff"
+            weight={2}
+            fillColor={color}
+            fillOpacity={1}
+          >
+            <Popup>
+              <div style={{ fontSize: 13, lineHeight: 1.7, fontFamily: "'Noto Sans KR',sans-serif" }}>
+                <span style={{ fontWeight: 700, color }}>● {p.status}</span>
+                <div style={{ color: "#6b7280", marginTop: 2 }}>{formatTime(p.timestamp)}</div>
+                {p.dwell > 60000 && (
+                  <div style={{ color: "#9ca3af", fontSize: 12 }}>체류 {formatMs(p.dwell)}</div>
+                )}
+              </div>
+            </Popup>
+          </CircleMarker>
+        );
+      })}
+
+      {/* 현재 위치 마커 */}
       {drivers.map(d =>
         d.location ? (
           <Marker
@@ -640,25 +693,33 @@ export default function FleetManagement() {
   }, [selected?.id]);
 
   // ── 합성 drivers ─────────────────────────────────────────────────────────
+  // Only include drivers who registered via DriverRegister (have usersMap entry)
+  // AND have been approved. Filters out all old/orphaned drivers collection docs.
   const drivers = useMemo(() => {
-    return driversRaw.map(raw => {
-      const u = usersMap[raw.id] || {};
-      return {
-        id: raw.id,
-        이름: (u.name || raw.name || "").trim() || "-",
-        차량번호: (u.carNo || raw.carNo || "").trim() || "-",
-        vehicleType: u.vehicleType || raw.vehicleType || "-",
-        phone: u.phone || raw.phone || "-",
-        approved: u.approved !== undefined ? u.approved : (raw.approved || false),
-        상태: raw.status || raw.mainStatus || raw.state || "대기",
-        location: raw.location || null,
-        총거리: raw.totalDistance || 0,
-        근무시간: raw.workMinutes || 0,
-        updatedAt: raw.updatedAt,
-        active: raw.active === true,
-        speed: raw.speed || 0,
-      };
-    }).sort((a, b) => statusPriority(a) - statusPriority(b));
+    return driversRaw
+      .filter(raw => {
+        const u = usersMap[raw.id];
+        return u && u.approved === true;
+      })
+      .map(raw => {
+        const u = usersMap[raw.id];
+        return {
+          id: raw.id,
+          이름: (u.name || raw.name || "").trim() || "-",
+          차량번호: (u.carNo || raw.carNo || "").trim() || "-",
+          vehicleType: u.vehicleType || raw.vehicleType || "-",
+          phone: u.phone || raw.phone || "-",
+          approved: true,
+          상태: raw.status || raw.mainStatus || raw.state || "대기",
+          location: raw.location || null,
+          총거리: raw.totalDistance || 0,
+          근무시간: raw.workMinutes || 0,
+          updatedAt: raw.updatedAt,
+          active: raw.active === true,
+          speed: raw.speed || 0,
+        };
+      })
+      .sort((a, b) => statusPriority(a) - statusPriority(b));
   }, [driversRaw, usersMap]);
 
   const driversMap = useMemo(() => {
@@ -666,6 +727,27 @@ export default function FleetManagement() {
     drivers.forEach(d => { m[d.id] = d; });
     return m;
   }, [drivers]);
+
+  // ── 선택 기사 이동 경로 ───────────────────────────────────────────────────
+  // Points are in desc order from Firestore; reverse for chronological path
+  const selectedPath = useMemo(() => {
+    const withLoc = selectedDriverLogs.filter(l => l.location?.lat != null);
+    if (withLoc.length === 0) return [];
+    // Compute dwell time between consecutive points
+    return [...withLoc].reverse().map((l, i, arr) => {
+      const nextLog = arr[i + 1];
+      const thisTs = resolveTs(l.timestamp);
+      const nextTs = resolveTs(nextLog?.timestamp);
+      const dwell = thisTs && nextTs ? nextTs.getTime() - thisTs.getTime() : null;
+      return {
+        lat: l.location.lat,
+        lng: l.location.lng,
+        status: l.status,
+        timestamp: l.timestamp,
+        dwell,
+      };
+    });
+  }, [selectedDriverLogs]);
 
   // ── 필터링 ────────────────────────────────────────────────────────────────
   const filteredRows = useMemo(() => {
@@ -860,7 +942,7 @@ export default function FleetManagement() {
                 실시간 위치
                 <span style={{ marginLeft: 8, color: "#6b7280", fontWeight: 500 }}>{filteredRows.filter(d => d.location).length}대</span>
               </div>
-              <FleetMap drivers={filteredRows} center={mapCenter} onSelect={handleSelect} />
+              <FleetMap drivers={filteredRows} center={mapCenter} onSelect={handleSelect} selectedPath={selectedPath} />
             </div>
           </div>
 
