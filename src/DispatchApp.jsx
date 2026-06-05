@@ -17,6 +17,7 @@ import RateCard from "./RateCard";
 import DispatchFormNew from "./DispatchFormNew";
 import AiAssistant from "./AiAssistant";
 import DeliverySignaturePage from "./DeliverySignaturePage";
+import ExecutiveDashboard from "./ExecutiveDashboard";
 
 // ================= 카운트 애니메이션 =================
 function CountUp({ value, duration = 900 }) {
@@ -2119,10 +2120,12 @@ return (
               "지급관리",
               "관리자메뉴",
               "가입신청관리",
+              "경영인텔리전스",
             ].map((m) => {
               const isBlocked = (role === "user" || role === "test") && blockedMenus.includes(m);
               if (m === "관리자메뉴" && role !== "admin" && role !== "totalMaster") return null;
               if (m === "가입신청관리" && role !== "totalMaster") return null;
+              if (m === "경영인텔리전스" && role !== "totalMaster") return null;
               if (isBlocked && role === "test") return null;
               const isActive = menu === m;
               return (
@@ -2405,6 +2408,10 @@ return (
         {menu === "관리자메뉴" && (role === "admin" || role === "totalMaster") && <AdminMenu parentRole={role} parentCompany={userCompany || localStorage.getItem("userCompany") || ""} />}
 
         {menu === "가입신청관리" && role === "totalMaster" && <CompanyApplications />}
+
+        {menu === "경영인텔리전스" && role === "totalMaster" && (
+          <ExecutiveDashboard dispatchData={dispatchData || []} />
+        )}
       </main>
       </div>
       {/* ⭐⭐⭐ 내 정보 패널 ⭐⭐⭐ */}
@@ -9536,21 +9543,30 @@ className={`
           }
 
           return (
-            <div className="flex items-end justify-between gap-6" style={{ height: "140px" }}>
+            <div className="flex items-end justify-between gap-4" style={{ height: "170px" }}>
               {sorted.map(([name, count], i) => {
                 const heightPct = (count / max) * 100;
                 const opacities = [1, 0.8, 0.6, 0.45, 0.35];
                 return (
-                  <div key={name} className="flex-1 flex flex-col items-center gap-1.5 h-full justify-end max-w-[120px]">
-                    <span className="text-[13px] font-bold text-[#1B2B4B]">{count}건</span>
-                    <div
-                      className="w-10 rounded-t-md transition-all duration-700 bg-[#1B2B4B]"
-                      style={{
-                        height: `${Math.max(heightPct, 10)}%`,
-                        opacity: opacities[i] || 0.3,
-                      }}
-                    />
-                    <span className="text-[13px] text-gray-600 font-semibold truncate w-full text-center mt-1">{name}</span>
+                  <div key={name} className="flex-1 flex flex-col items-center max-w-[120px]" style={{ height: "170px" }}>
+                    {/* count label — 고정 영역 */}
+                    <div style={{ height: "22px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      <span className="text-[12px] font-bold text-[#1B2B4B]">{count}건</span>
+                    </div>
+                    {/* bar — 남은 공간에서 하단 정렬 */}
+                    <div className="flex-1 w-full flex flex-col justify-end items-center" style={{ paddingBottom: "4px" }}>
+                      <div
+                        className="w-9 rounded-t-md transition-all duration-700 bg-[#1B2B4B]"
+                        style={{
+                          height: `${Math.max(heightPct, 8)}%`,
+                          opacity: opacities[i] || 0.3,
+                        }}
+                      />
+                    </div>
+                    {/* name label — 고정 영역 */}
+                    <div style={{ height: "22px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, width: "100%" }}>
+                      <span className="text-[11px] text-gray-600 font-semibold truncate w-full text-center">{name}</span>
+                    </div>
                   </div>
                 );
               })}
