@@ -303,6 +303,7 @@ function FleetPinGate({ onVerified }) {
 // ─── PinConfirmModal ──────────────────────────────────────────────────────────
 
 function PinConfirmModal({ onConfirmed, onCancel, title = "삭제 확인" }) {
+  const [stage, setStage] = React.useState("pin"); // "pin" | "confirm"
   const [entered, setEntered] = React.useState("");
   const [error, setError] = React.useState("");
   const [animKey, setAnimKey] = React.useState(0);
@@ -314,32 +315,67 @@ function PinConfirmModal({ onConfirmed, onCancel, title = "삭제 확인" }) {
     setEntered(next);
     if (next.length < 6) return;
     setTimeout(() => {
-      if (next === localStorage.getItem(FLEET_PIN_KEY)) onConfirmed();
-      else { setError("비밀번호가 올바르지 않습니다"); setAnimKey(k => k+1); setEntered(""); }
+      if (next === localStorage.getItem(FLEET_PIN_KEY)) {
+        setStage("confirm");
+        setEntered("");
+        setError("");
+      } else {
+        setError("비밀번호가 올바르지 않습니다");
+        setAnimKey(k => k + 1);
+        setEntered("");
+      }
     }, 200);
   };
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.45)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ background: "white", borderRadius: 16, padding: "32px 36px", width: 320, boxShadow: "0 8px 32px rgba(0,0,0,.2)" }}>
-        <div style={{ textAlign: "center", marginBottom: 20 }}>
-          <div style={{ fontSize: 14, fontWeight: 800, color: "#ef4444", marginBottom: 4 }}>{title}</div>
-          <div style={{ fontSize: 13, color: "#6b7280" }}>비밀번호를 다시 입력하세요</div>
-        </div>
-        <div key={animKey} style={{ display: "flex", justifyContent: "center", gap: 10, marginBottom: 16 }}>
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} style={{ width: 12, height: 12, borderRadius: "50%", background: i < entered.length ? "#ef4444" : "white", border: `2px solid ${i < entered.length ? "#ef4444" : "#d1d5db"}`, transition: "all .15s" }} />
-          ))}
-        </div>
-        {error && <div style={{ textAlign: "center", fontSize: 12, color: "#ef4444", marginBottom: 12 }}>{error}</div>}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
-          {[1,2,3,4,5,6,7,8,9,null,0,"←"].map((d, i) => (
-            <button key={i} onClick={() => d !== null && handleKey(d === "←" ? "back" : String(d))} disabled={d === null}
-              style={{ height: 46, borderRadius: 10, border: "1px solid #e5e7eb", background: d === "←" ? "#f3f4f6" : "#f8f9fb", color: "#374151", fontSize: d === "←" ? 14 : 17, fontWeight: 600, cursor: d === null ? "default" : "pointer", opacity: d === null ? 0 : 1, fontFamily: "inherit" }}
-            >{d}</button>
-          ))}
-        </div>
-        <button onClick={onCancel} style={{ width: "100%", marginTop: 14, padding: "10px", borderRadius: 10, border: "1px solid #e5e7eb", background: "white", color: "#6b7280", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>취소</button>
+        {stage === "pin" ? (
+          <>
+            <div style={{ textAlign: "center", marginBottom: 20 }}>
+              <div style={{ fontSize: 14, fontWeight: 800, color: "#ef4444", marginBottom: 4 }}>{title}</div>
+              <div style={{ fontSize: 13, color: "#6b7280" }}>비밀번호를 입력하세요</div>
+            </div>
+            <div key={animKey} style={{ display: "flex", justifyContent: "center", gap: 10, marginBottom: 16 }}>
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} style={{ width: 12, height: 12, borderRadius: "50%", background: i < entered.length ? "#ef4444" : "white", border: `2px solid ${i < entered.length ? "#ef4444" : "#d1d5db"}`, transition: "all .15s" }} />
+              ))}
+            </div>
+            {error && <div style={{ textAlign: "center", fontSize: 12, color: "#ef4444", marginBottom: 12 }}>{error}</div>}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+              {[1,2,3,4,5,6,7,8,9,null,0,"←"].map((d, i) => (
+                <button key={i} onClick={() => d !== null && handleKey(d === "←" ? "back" : String(d))} disabled={d === null}
+                  style={{ height: 46, borderRadius: 10, border: "1px solid #e5e7eb", background: d === "←" ? "#f3f4f6" : "#f8f9fb", color: "#374151", fontSize: d === "←" ? 14 : 17, fontWeight: 600, cursor: d === null ? "default" : "pointer", opacity: d === null ? 0 : 1, fontFamily: "inherit" }}
+                >{d}</button>
+              ))}
+            </div>
+            <button onClick={onCancel} style={{ width: "100%", marginTop: 14, padding: "10px", borderRadius: 10, border: "1px solid #e5e7eb", background: "white", color: "#6b7280", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>취소</button>
+          </>
+        ) : (
+          <>
+            <div style={{ textAlign: "center", marginBottom: 24 }}>
+              <div style={{ width: 54, height: 54, background: "#fef2f2", borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}>
+                <svg width="26" height="26" fill="none" stroke="#ef4444" strokeWidth="1.8" viewBox="0 0 24 24">
+                  <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2" strokeLinecap="round"/>
+                </svg>
+              </div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: "#111827", marginBottom: 6 }}>정말 삭제하시겠습니까?</div>
+              <div style={{ fontSize: 13, color: "#9ca3af" }}>이 작업은 되돌릴 수 없습니다</div>
+            </div>
+            <button
+              onClick={onConfirmed}
+              style={{ width: "100%", padding: "13px", borderRadius: 10, border: "none", background: "#ef4444", color: "white", fontSize: 15, fontWeight: 700, cursor: "pointer", marginBottom: 10 }}
+            >
+              완전 삭제
+            </button>
+            <button
+              onClick={onCancel}
+              style={{ width: "100%", padding: "10px", borderRadius: 10, border: "1px solid #e5e7eb", background: "white", color: "#6b7280", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
+            >
+              취소
+            </button>
+          </>
+        )}
       </div>
     </div>
   );
@@ -940,6 +976,8 @@ export default function FleetManagement() {
   }, [selected?.id]);
 
   // ── GPS 트랙 구독 (선택된 기사, 오늘) ─────────────────────────────────────
+  // Composite indexes for (driverId+date+timestamp) may not exist in Firestore yet,
+  // so we query by driverId only (single-field auto-index) and filter+sort client-side.
   useEffect(() => {
     if (!selected?.id) { setGpsTracks([]); return; }
     const today = new Date().toISOString().slice(0, 10);
@@ -947,11 +985,22 @@ export default function FleetManagement() {
       query(
         collection(db, "gps_tracks"),
         where("driverId", "==", selected.id),
-        where("date", "==", today),
-        orderBy("timestamp", "asc"),
-        limit(500)
+        limit(2000)
       ),
-      (snap) => setGpsTracks(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
+      (snap) => {
+        const tracks = snap.docs
+          .map(d => ({ id: d.id, ...d.data() }))
+          .filter(t => {
+            const d = resolveTs(t.timestamp);
+            return d && d.toISOString().slice(0, 10) === today;
+          })
+          .sort((a, b) => {
+            const at = resolveTs(a.timestamp)?.getTime() || 0;
+            const bt = resolveTs(b.timestamp)?.getTime() || 0;
+            return at - bt;
+          });
+        setGpsTracks(tracks);
+      },
       (err) => console.error("gps_tracks:", err)
     );
   }, [selected?.id]);
