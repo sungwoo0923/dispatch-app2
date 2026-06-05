@@ -301,12 +301,20 @@ function FleetPinGate({ onVerified }) {
 }
 
 // ─── PinConfirmModal ──────────────────────────────────────────────────────────
+// Handles three scenarios:
+//   "setup1"→"setup2" : no PIN stored yet (first time on this device/browser)
+//   "pin"             : PIN exists — verify it
+//   "confirm"         : PIN verified — show final "완전 삭제" confirmation
 
 function PinConfirmModal({ onConfirmed, onCancel, title = "삭제 확인" }) {
-  const [stage, setStage] = React.useState("pin"); // "pin" | "confirm"
+  const hasPin = !!localStorage.getItem(FLEET_PIN_KEY);
+  const [stage, setStage] = React.useState(hasPin ? "pin" : "setup1");
   const [entered, setEntered] = React.useState("");
+  const [firstPin, setFirstPin] = React.useState("");
   const [error, setError] = React.useState("");
   const [animKey, setAnimKey] = React.useState(0);
+
+  const bump = (msg) => { setError(msg); setAnimKey(k => k + 1); setEntered(""); };
 
   const handleKey = (d) => {
     if (d === "back") { setEntered(p => p.slice(0, -1)); return; }
@@ -315,30 +323,48 @@ function PinConfirmModal({ onConfirmed, onCancel, title = "삭제 확인" }) {
     setEntered(next);
     if (next.length < 6) return;
     setTimeout(() => {
-      if (next === localStorage.getItem(FLEET_PIN_KEY)) {
-        setStage("confirm");
-        setEntered("");
-        setError("");
-      } else {
-        setError("비밀번호가 올바르지 않습니다");
-        setAnimKey(k => k + 1);
-        setEntered("");
+      if (stage === "pin") {
+        if (next === localStorage.getItem(FLEET_PIN_KEY)) {
+          setStage("confirm"); setEntered(""); setError("");
+        } else {
+          bump("비밀번호가 올바르지 않습니다");
+        }
+      } else if (stage === "setup1") {
+        setFirstPin(next); setEntered(""); setError(""); setStage("setup2");
+      } else if (stage === "setup2") {
+        if (next === firstPin) {
+          localStorage.setItem(FLEET_PIN_KEY, next);
+          setStage("confirm"); setEntered(""); setError("");
+        } else {
+          setFirstPin(""); setStage("setup1");
+          bump("비밀번호가 일치하지 않습니다. 다시 입력하세요");
+        }
       }
     }, 200);
   };
 
+  const dotColor = stage === "setup2" ? "#3b82f6" : "#ef4444";
+
+  const subText = {
+    pin: "비밀번호를 입력하세요",
+    setup1: "이 기기에 등록된 비밀번호가 없습니다.\n사용할 6자리 비밀번호를 설정하세요",
+    setup2: "비밀번호를 한 번 더 입력하세요",
+  }[stage];
+
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.45)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div style={{ background: "white", borderRadius: 16, padding: "32px 36px", width: 320, boxShadow: "0 8px 32px rgba(0,0,0,.2)" }}>
-        {stage === "pin" ? (
+        {stage !== "confirm" ? (
           <>
             <div style={{ textAlign: "center", marginBottom: 20 }}>
-              <div style={{ fontSize: 14, fontWeight: 800, color: "#ef4444", marginBottom: 4 }}>{title}</div>
-              <div style={{ fontSize: 13, color: "#6b7280" }}>비밀번호를 입력하세요</div>
+              <div style={{ fontSize: 14, fontWeight: 800, color: stage === "pin" ? "#ef4444" : "#3b82f6", marginBottom: 6 }}>
+                {stage === "pin" ? title : "비밀번호 설정"}
+              </div>
+              <div style={{ fontSize: 13, color: "#6b7280", whiteSpace: "pre-line" }}>{subText}</div>
             </div>
             <div key={animKey} style={{ display: "flex", justifyContent: "center", gap: 10, marginBottom: 16 }}>
               {Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} style={{ width: 12, height: 12, borderRadius: "50%", background: i < entered.length ? "#ef4444" : "white", border: `2px solid ${i < entered.length ? "#ef4444" : "#d1d5db"}`, transition: "all .15s" }} />
+                <div key={i} style={{ width: 12, height: 12, borderRadius: "50%", background: i < entered.length ? dotColor : "white", border: `2px solid ${i < entered.length ? dotColor : "#d1d5db"}`, transition: "all .15s" }} />
               ))}
             </div>
             {error && <div style={{ textAlign: "center", fontSize: 12, color: "#ef4444", marginBottom: 12 }}>{error}</div>}
@@ -362,16 +388,10 @@ function PinConfirmModal({ onConfirmed, onCancel, title = "삭제 확인" }) {
               <div style={{ fontSize: 16, fontWeight: 800, color: "#111827", marginBottom: 6 }}>정말 삭제하시겠습니까?</div>
               <div style={{ fontSize: 13, color: "#9ca3af" }}>이 작업은 되돌릴 수 없습니다</div>
             </div>
-            <button
-              onClick={onConfirmed}
-              style={{ width: "100%", padding: "13px", borderRadius: 10, border: "none", background: "#ef4444", color: "white", fontSize: 15, fontWeight: 700, cursor: "pointer", marginBottom: 10 }}
-            >
+            <button onClick={onConfirmed} style={{ width: "100%", padding: "13px", borderRadius: 10, border: "none", background: "#ef4444", color: "white", fontSize: 15, fontWeight: 700, cursor: "pointer", marginBottom: 10 }}>
               완전 삭제
             </button>
-            <button
-              onClick={onCancel}
-              style={{ width: "100%", padding: "10px", borderRadius: 10, border: "1px solid #e5e7eb", background: "white", color: "#6b7280", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
-            >
+            <button onClick={onCancel} style={{ width: "100%", padding: "10px", borderRadius: 10, border: "1px solid #e5e7eb", background: "white", color: "#6b7280", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
               취소
             </button>
           </>
