@@ -195,7 +195,12 @@ function AddressSearch({ value, onChange, onSelect, placeholder }) {
     const saArr = Array.isArray(saRaw) ? saRaw : (saRaw ? [saRaw] : []);
     for (const it of saArr) {
       if (out.length >= 15) break;
-      push(it.fullAddress || it.fullAddressRoad || "", parseFloat(it.lat || it.newLat || 0), parseFloat(it.lon || it.newLon || 0));
+      // Road address coords are in newAddressList.newAddress[0]
+      const newAddrArr = it?.newAddressList?.newAddress;
+      const newAddr = Array.isArray(newAddrArr) ? newAddrArr[0] : newAddrArr;
+      const lat = parseFloat(newAddr?.centerLat || it.lat || it.newLat || 0);
+      const lon = parseFloat(newAddr?.centerLon || it.lon || it.newLon || 0);
+      push(it.fullAddress || it.fullAddressRoad || "", lat, lon);
     }
 
     // 2순위: POI 결과
@@ -477,32 +482,43 @@ export default function StandardFare() {
   const [nfViaInputCoord, setNfViaInputCoord] = useState(null);
 
   const geocodeTmap = async (addr) => {
-    // Try searchAddress first — handles Kakao 도로명주소
-    try {
-      const saUrl = `https://apis.openapi.sk.com/tmap/searchAddress?version=1&format=json&queryVersion=1&fullAddrOnOff=Y&searchKeyword=${encodeURIComponent(addr)}&countPerPage=1&appKey=${TMAP_KEY}`;
-      const saData = await fetch(saUrl, { headers: { Accept: "application/json" } }).then(r => r.json());
-      const saRaw = saData?.searchAddressInfo?.addressInfo;
-      const saItem = Array.isArray(saRaw) ? saRaw[0] : saRaw;
-      if (saItem) {
-        // Road address: coords in newAddressList.newAddress[0]
-        const newAddrArr = saItem?.newAddressList?.newAddress;
-        const newAddr = Array.isArray(newAddrArr) ? newAddrArr[0] : newAddrArr;
-        const lat1 = parseFloat(newAddr?.centerLat || "");
-        const lon1 = parseFloat(newAddr?.centerLon || "");
-        if (lat1 && lon1) return { lat: lat1, lon: lon1 };
-        // Jibun address: direct lat/lon on addressInfo
-        const lat2 = parseFloat(saItem?.lat || saItem?.y_wgs84 || "");
-        const lon2 = parseFloat(saItem?.lon || saItem?.x_wgs84 || "");
-        if (lat2 && lon2) return { lat: lat2, lon: lon2 };
-      }
-    } catch {}
-    // Fall back to fullAddrGeo (지번주소)
-    const url = `https://apis.openapi.sk.com/tmap/geo/fullAddrGeo?version=1&format=json&fullAddr=${encodeURIComponent(addr)}`;
-    const res = await fetch(url, { headers: { appKey: TMAP_KEY, Accept: "application/json" } });
-    const data = await res.json();
-    const coord = data?.coordinateInfo?.coordinate?.[0];
-    if (!coord || !coord.lat) throw new Error(`"${addr}" 주소를 찾을 수 없습니다`);
-    return { lat: parseFloat(coord.lat), lon: parseFloat(coord.lon) };
+    const tryOne = async (a) => {
+      try {
+        const saUrl = `https://apis.openapi.sk.com/tmap/searchAddress?version=1&format=json&queryVersion=1&fullAddrOnOff=Y&searchKeyword=${encodeURIComponent(a)}&countPerPage=1&appKey=${TMAP_KEY}`;
+        const saData = await fetch(saUrl, { headers: { Accept: "application/json" } }).then(r => r.json());
+        const saRaw = saData?.searchAddressInfo?.addressInfo;
+        const saItem = Array.isArray(saRaw) ? saRaw[0] : saRaw;
+        if (saItem) {
+          const newAddrArr = saItem?.newAddressList?.newAddress;
+          const newAddr = Array.isArray(newAddrArr) ? newAddrArr[0] : newAddrArr;
+          const lat1 = parseFloat(newAddr?.centerLat || "");
+          const lon1 = parseFloat(newAddr?.centerLon || "");
+          if (lat1 && lon1) return { lat: lat1, lon: lon1 };
+          const lat2 = parseFloat(saItem?.lat || saItem?.y_wgs84 || "");
+          const lon2 = parseFloat(saItem?.lon || saItem?.x_wgs84 || "");
+          if (lat2 && lon2) return { lat: lat2, lon: lon2 };
+        }
+      } catch {}
+      try {
+        const url = `https://apis.openapi.sk.com/tmap/geo/fullAddrGeo?version=1&format=json&fullAddr=${encodeURIComponent(a)}`;
+        const data = await fetch(url, { headers: { appKey: TMAP_KEY, Accept: "application/json" } }).then(r => r.json());
+        const coord = data?.coordinateInfo?.coordinate?.[0];
+        if (coord?.lat) return { lat: parseFloat(coord.lat), lon: parseFloat(coord.lon) };
+      } catch {}
+      return null;
+    };
+
+    let result = await tryOne(addr);
+    if (result) return result;
+
+    // Strip trailing building number (e.g. "갈산길 28-12" → "갈산길") and retry
+    const noBuilding = addr.replace(/\s+\d+(?:-\d+)?\s*$/, "").trim();
+    if (noBuilding && noBuilding !== addr) {
+      result = await tryOne(noBuilding);
+      if (result) return result;
+    }
+
+    throw new Error(`"${addr}" 주소를 찾을 수 없습니다`);
   };
 
   const getRouteKm = async (from, to, vias = []) => {
@@ -541,8 +557,8 @@ export default function StandardFare() {
     if (!nfFrom.trim() || !nfTo.trim()) { setNfError("출발지와 도착지 주소를 모두 입력하세요"); return; }
     setNfLoading(true); setNfError(""); setNfResult(null);
     try {
-      const fromCoord = nfFromCoord || await geocodeTmap(nfFrom);
-      const toCoord = nfToCoord || await geocodeTmap(nfTo);
+      const fromCoord = (nfFromCoord?.lat && nfFromCoord?.lon) ? nfFromCoord : await geocodeTmap(nfFrom);
+      const toCoord = (nfToCoord?.lat && nfToCoord?.lon) ? nfToCoord : await geocodeTmap(nfTo);
       const validVias = nfVias.filter(v => v.address.trim());
       const resolvedVias = [];
       for (const via of validVias) {

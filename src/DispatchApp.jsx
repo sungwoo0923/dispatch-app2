@@ -6332,6 +6332,7 @@ setSmartDriverMatched(results.slice(0, 8));
 const selectSmartDriver = (d) => {
   const grade = d?.등급 || d?.grade || "";
   if (grade === "블랙") setBlackAlert(d);
+  else if (d?.메모 && String(d.메모).trim()) window.dispatchEvent(new CustomEvent("driverMemoDetected", { detail: d }));
   setForm(p => ({
     ...p,
     차량번호: d.차량번호,
@@ -17394,7 +17395,7 @@ checkWarningStatus(c.거래처명, "거래처");
           <div className="px-3 py-1.5 bg-[#1B2B4B] text-white text-[11px] font-semibold">등록된 기사 {smartList4.length}명</div>
           {smartList4.map((d,i)=>(
             <div key={i} className="px-4 py-3 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-0 flex items-center justify-between"
-              onMouseDown={()=>{ const gr=d?.등급||d?.grade||""; if(gr==="블랙") setBlackAlert(d); setCopyTarget(p=>({...p,차량번호:d.차량번호,이름:d.이름,전화번호:formatPhone(d.전화번호),배차상태:"배차완료"})); setSmartQ4(""); setSmartList4([]); }}>
+              onMouseDown={()=>{ const gr=d?.등급||d?.grade||""; if(gr==="블랙") setBlackAlert(d); else if(d?.메모&&String(d.메모).trim()) window.dispatchEvent(new CustomEvent("driverMemoDetected",{detail:d})); setCopyTarget(p=>({...p,차량번호:d.차량번호,이름:d.이름,전화번호:formatPhone(d.전화번호),배차상태:"배차완료"})); setSmartQ4(""); setSmartList4([]); }}>
               <div>
                 <div className="font-bold text-gray-900 text-[14px]">{d.이름||"-"}</div>
                 <div className="text-[12px] text-gray-500">{d.차량번호} | {formatPhone(d.전화번호)}</div>
@@ -19046,7 +19047,7 @@ value={copyTarget?.화물수량 || ""}
                     <div className="px-3 py-1.5 bg-[#1B2B4B] text-white text-[11px] font-semibold">등록된 기사 {smartList4.length}명</div>
                     {smartList4.map((d,i)=>(
                       <div key={i} className="px-4 py-2.5 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-0 flex items-center justify-between"
-                        onMouseDown={()=>{ const gr=d?.등급||d?.grade||""; if(gr==="블랙") setBlackAlert(d); setEditTarget(p=>({...p,차량번호:d.차량번호,이름:d.이름,전화번호:formatPhone(d.전화번호),배차상태:"배차완료"})); setSmartQ4(""); setSmartList4([]); }}>
+                        onMouseDown={()=>{ const gr=d?.등급||d?.grade||""; if(gr==="블랙") setBlackAlert(d); else if(d?.메모&&String(d.메모).trim()) window.dispatchEvent(new CustomEvent("driverMemoDetected",{detail:d})); setEditTarget(p=>({...p,차량번호:d.차량번호,이름:d.이름,전화번호:formatPhone(d.전화번호),배차상태:"배차완료"})); setSmartQ4(""); setSmartList4([]); }}>
                         <div>
                           <div className="font-bold text-gray-900 text-[13px]">{d.이름||"-"}</div>
                           <div className="text-[11px] text-gray-500">{d.차량번호} | {formatPhone(d.전화번호)}</div>
@@ -23237,6 +23238,8 @@ else if (cp) priority = 1;
       const grade = matches[0]?.등급 || matches[0]?.grade || "";
       if (grade === "블랙") {
         setBlackAlert(matches[0]);
+      } else if (matches[0]?.메모 && String(matches[0].메모).trim()) {
+        window.dispatchEvent(new CustomEvent("driverMemoDetected", { detail: matches[0] }));
       }
       setDriverConfirmInfo({
         type: "select",
@@ -25366,7 +25369,7 @@ onBlur={(e) => {
                     <div className="px-3 py-1.5 bg-[#1B2B4B] text-white text-[11px] font-semibold">등록된 기사 {smartList5.length}명</div>
                     {smartList5.map((d,i)=>(
                       <div key={i} className="px-4 py-2.5 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-0 flex items-center justify-between"
-                        onMouseDown={()=>{ const gr=d?.등급||d?.grade||""; if(gr==="블랙") setBlackAlert(d); setEditTarget(p=>({...p,차량번호:d.차량번호,이름:d.이름,전화번호:formatPhone(d.전화번호),배차상태:"배차완료"})); setSmartQ5(""); setSmartList5([]); }}>
+                        onMouseDown={()=>{ const gr=d?.등급||d?.grade||""; if(gr==="블랙") setBlackAlert(d); else if(d?.메모&&String(d.메모).trim()) window.dispatchEvent(new CustomEvent("driverMemoDetected",{detail:d})); setEditTarget(p=>({...p,차량번호:d.차량번호,이름:d.이름,전화번호:formatPhone(d.전화번호),배차상태:"배차완료"})); setSmartQ5(""); setSmartList5([]); }}>
                         <div>
                           <div className="font-bold text-gray-900 text-[13px]">{d.이름||"-"}</div>
                           <div className="text-[11px] text-gray-500">{d.차량번호} | {formatPhone(d.전화번호)}</div>
@@ -26398,7 +26401,7 @@ setCopyPlaceOptions(list);
           <div className="px-3 py-1.5 bg-[#1B2B4B] text-white text-[11px] font-semibold">등록된 기사 {smartList5.length}명</div>
           {smartList5.map((d,i)=>(
             <div key={i} className="px-4 py-3 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-0 flex items-center justify-between"
-              onMouseDown={()=>{ const gr=d?.등급||d?.grade||""; if(gr==="블랙") setBlackAlert(d); setCopyTarget(p=>({...p,차량번호:d.차량번호,이름:d.이름,전화번호:formatPhone(d.전화번호),배차상태:"배차완료"})); setSmartQ5(""); setSmartList5([]); }}>
+              onMouseDown={()=>{ const gr=d?.등급||d?.grade||""; if(gr==="블랙") setBlackAlert(d); else if(d?.메모&&String(d.메모).trim()) window.dispatchEvent(new CustomEvent("driverMemoDetected",{detail:d})); setCopyTarget(p=>({...p,차량번호:d.차량번호,이름:d.이름,전화번호:formatPhone(d.전화번호),배차상태:"배차완료"})); setSmartQ5(""); setSmartList5([]); }}>
               <div>
                 <div className="font-bold text-gray-900 text-[14px]">{d.이름||"-"}</div>
                 <div className="text-[12px] text-gray-500">{d.차량번호} | {formatPhone(d.전화번호)}</div>
@@ -26440,11 +26443,12 @@ setCopyPlaceOptions(list);
         d => normalizePlate(d.차량번호) === plate
       );
 
-      // 🔥 블랙 기사 팝업
       if (match) {
         const grade = match?.등급 || match?.grade || "";
         if (grade === "블랙") {
           setBlackAlert(match);
+        } else if (match?.메모 && String(match.메모).trim()) {
+          window.dispatchEvent(new CustomEvent("driverMemoDetected", { detail: match }));
         }
       }
 
