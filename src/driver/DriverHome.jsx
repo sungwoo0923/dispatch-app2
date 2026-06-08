@@ -260,6 +260,8 @@ export default function DriverHome() {
   const [activeTab, setActiveTab] = useState("home");
   const [statusLoading, setStatusLoading] = useState(false);
   const [toast, setToast] = useState("");
+  const [companyDefaultLoc, setCompanyDefaultLoc] = useState(null);
+  const autoCheckinDoneRef = useRef(false);
 
   useEffect(() => {
     return onAuthStateChanged(auth, (u) => {
@@ -274,6 +276,12 @@ export default function DriverHome() {
       if (snap.exists()) setDriver(snap.data());
     });
   }, [uid]);
+
+  useEffect(() => {
+    return onSnapshot(doc(db, "fleet_settings", "default"), (snap) => {
+      setCompanyDefaultLoc(snap.exists() ? (snap.data().defaultCheckInLocation || null) : null);
+    });
+  }, []);
 
   const logs = useTodayLogs(uid);
   const { pos, permissionDenied, resetTotalDist } = useGpsTracking(uid, driver);
@@ -317,6 +325,29 @@ export default function DriverHome() {
       setStatusLoading(false);
     }
   }, [uid, statusLoading, pos, driver, resetTotalDist]);
+
+  // Reset auto-checkin guard when driver goes back to idle/퇴근
+  useEffect(() => {
+    const s = driver?.status;
+    if (!s || s === "퇴근" || s === "대기") {
+      autoCheckinDoneRef.current = false;
+    }
+  }, [driver?.status]);
+
+  // Auto 출근: trigger when GPS is within 2km of 출근지 and status is idle
+  useEffect(() => {
+    if (!pos || !uid || statusLoading) return;
+    if (autoCheckinDoneRef.current) return;
+    const status = driver?.status;
+    if (status && status !== "퇴근" && status !== "대기") return;
+    if (pos.accuracy != null && pos.accuracy > 100) return;
+    const checkInLoc = driver?.checkInLocation || companyDefaultLoc;
+    if (!checkInLoc?.lat || !checkInLoc?.lng) return;
+    const dist = calcDist(pos.lat, pos.lng, checkInLoc.lat, checkInLoc.lng);
+    if (dist > 2) return;
+    autoCheckinDoneRef.current = true;
+    updateStatus("출근").catch(() => { autoCheckinDoneRef.current = false; });
+  }, [pos, uid, statusLoading, driver?.status, driver?.checkInLocation, companyDefaultLoc, updateStatus]);
 
   const handleLogout = async () => {
     if (uid) {
@@ -442,7 +473,7 @@ export default function DriverHome() {
           {permissionDenied && (
             <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 12, padding: "12px 16px", marginBottom: 14 }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: "#dc2626", marginBottom: 2 }}>위치 권한이 필요합니다</div>
-              <div style={{ fontSize: 12, color: "#ef4444" }}>설정에서 위치 권한을 허용하면 실시간 추적과 자동 출근이 가능합니다.</div>
+              <div style={{ fontSize: 12, color: "#ef4444" }}>설정에서 위치 권한을 허용하면 실시간 추적 및 출근지 2km 이내 자동 출근이 가능합니다.</div>
             </div>
           )}
 

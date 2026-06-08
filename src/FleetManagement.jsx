@@ -3,7 +3,7 @@ import React, { useEffect, useState, useMemo, useCallback, useRef } from "react"
 import "leaflet/dist/leaflet.css";
 import { db } from "./firebase";
 import {
-  collection, onSnapshot, doc, updateDoc,
+  collection, onSnapshot, doc, updateDoc, setDoc,
   query, where, orderBy, limit, deleteDoc, writeBatch,
 } from "firebase/firestore";
 import { MapContainer, TileLayer, Marker, Popup, Polyline, CircleMarker, useMap } from "react-leaflet";
@@ -28,6 +28,8 @@ const STATUS_COLORS = {
 
 const STATUS_ORDER = ["운행중", "상차중", "하차중", "복귀중", "출근", "대기", "휴식", "퇴근"];
 const STATUS_FILTER_OPTIONS = ["전체", "운행중", "출근", "상차중", "하차중", "복귀중", "대기", "휴식", "퇴근"];
+
+const TMAP_KEY = "rmzwkLwH9N4i9ayxDj9GR6l8hyFDaEk52ZQs4yer";
 
 // ─── 타임스탬프 유틸 ──────────────────────────────────────────────────────────
 // Handles Firestore Timestamp, { seconds, nanoseconds }, number (ms), and null
@@ -685,7 +687,7 @@ function ActivityFeed({ logs, driversMap, onDeleteAll }) {
 
 // ─── DriverDetailPanel ────────────────────────────────────────────────────────
 
-function DriverDetailPanel({ data, logs, onClose, onDeleteLogs }) {
+function DriverDetailPanel({ data, logs, onClose, onDeleteLogs, checkInLoc, companyDefaultLoc, onSetCheckInLoc, onClearCheckInLoc }) {
   if (!data) return null;
 
   const lastLog = logs[0];
@@ -750,6 +752,47 @@ function DriverDetailPanel({ data, logs, onClose, onDeleteLogs }) {
             <p style={{ fontSize: 15, fontWeight: 800, color: color || NAVY, margin: 0 }}>{val}</p>
           </div>
         ))}
+      </div>
+
+      {/* 출근지 */}
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+          <p style={{ fontSize: 12, fontWeight: 700, color: "#6b7280", letterSpacing: ".09em", textTransform: "uppercase", margin: 0 }}>출근지</p>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            {checkInLoc && onClearCheckInLoc && (
+              <button
+                onClick={onClearCheckInLoc}
+                title="개별 설정 해제 (회사 기본값으로)"
+                style={{ padding: "3px 10px", borderRadius: 6, border: "1px solid #e5e7eb", background: "white", color: "#9ca3af", fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+              >
+                해제
+              </button>
+            )}
+            {onSetCheckInLoc && (
+              <button
+                onClick={onSetCheckInLoc}
+                style={{ padding: "4px 12px", borderRadius: 7, border: `1px solid ${NAVY}`, background: "white", color: NAVY, fontSize: 12, fontWeight: 700, cursor: "pointer" }}
+              >
+                {checkInLoc ? "수정" : "설정"}
+              </button>
+            )}
+          </div>
+        </div>
+        {checkInLoc ? (
+          <div style={{ background: "#f8f9fb", border: "1px solid #e5e7eb", borderRadius: 9, padding: "11px 14px" }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>{checkInLoc.name}</div>
+            <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 2 }}>{checkInLoc.lat.toFixed(5)}, {checkInLoc.lng.toFixed(5)}</div>
+          </div>
+        ) : companyDefaultLoc ? (
+          <div style={{ background: "#f8f9fb", border: "1px dashed #d1d5db", borderRadius: 9, padding: "11px 14px" }}>
+            <div style={{ fontSize: 12, color: "#9ca3af", marginBottom: 2 }}>회사 기본 출근지 적용</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "#374151" }}>{companyDefaultLoc.name}</div>
+          </div>
+        ) : (
+          <div style={{ background: "#f8f9fb", border: "1px dashed #d1d5db", borderRadius: 9, padding: "11px 14px" }}>
+            <div style={{ fontSize: 13, color: "#9ca3af" }}>출근지가 설정되지 않았습니다</div>
+          </div>
+        )}
       </div>
 
       {/* Log history */}
@@ -907,6 +950,89 @@ function RegistrationTab({ usersMap }) {
   );
 }
 
+// ─── CheckInLocModal ─────────────────────────────────────────────────────────
+
+function CheckInLocModal({ title, initialLoc, onSave, onCancel }) {
+  const [addr, setAddr] = React.useState(initialLoc?.name || "");
+  const [result, setResult] = React.useState(initialLoc?.lat ? initialLoc : null);
+  const [searching, setSearching] = React.useState(false);
+  const [error, setError] = React.useState("");
+
+  const handleSearch = async () => {
+    const kw = addr.trim();
+    if (!kw) return;
+    setSearching(true);
+    setError("");
+    setResult(null);
+    try {
+      const url1 = `https://apis.openapi.sk.com/tmap/searchAddress?version=1&format=json&queryVersion=1&fullAddrOnOff=Y&searchKeyword=${encodeURIComponent(kw)}&countPerPage=1&appKey=${TMAP_KEY}`;
+      const d1 = await fetch(url1).then(r => r.json());
+      const coords1 = d1?.coordinateInfo?.coordinate;
+      const first = Array.isArray(coords1) ? coords1[0] : coords1;
+      if (first?.lat && first?.lon) {
+        setResult({ name: kw, lat: parseFloat(first.lat), lng: parseFloat(first.lon) });
+        return;
+      }
+      const url2 = `https://apis.openapi.sk.com/tmap/geo/fullAddrGeo?version=1&format=json&fullAddr=${encodeURIComponent(kw)}`;
+      const d2 = await fetch(url2, { headers: { appKey: TMAP_KEY, Accept: "application/json" } }).then(r => r.json());
+      const coord = d2?.coordinateInfo?.coordinate?.[0];
+      if (coord?.lat && coord?.lon) {
+        setResult({ name: kw, lat: parseFloat(coord.lat), lng: parseFloat(coord.lon) });
+        return;
+      }
+      setError("주소를 찾을 수 없습니다. 도로명 또는 지번 주소를 입력하세요.");
+    } catch {
+      setError("검색 중 오류가 발생했습니다.");
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.45)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ background: "white", borderRadius: 16, padding: "28px 32px", width: 420, maxWidth: "90vw", boxShadow: "0 8px 32px rgba(0,0,0,.2)", fontFamily: "'Pretendard','Noto Sans KR',sans-serif" }}>
+        <div style={{ fontSize: 16, fontWeight: 800, color: "#111827", marginBottom: 20 }}>{title}</div>
+        <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+          <input
+            type="text"
+            value={addr}
+            onChange={e => setAddr(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && handleSearch()}
+            placeholder="예: 인천시 서구 당하동 완정로8번길"
+            style={{ flex: 1, padding: "9px 12px", border: "1px solid #d1d5db", borderRadius: 8, fontSize: 13, outline: "none", fontFamily: "inherit" }}
+          />
+          <button
+            onClick={handleSearch}
+            disabled={searching}
+            style={{ padding: "9px 16px", borderRadius: 8, border: "none", background: NAVY, color: "white", fontSize: 13, fontWeight: 700, cursor: searching ? "not-allowed" : "pointer", opacity: searching ? 0.6 : 1, whiteSpace: "nowrap", fontFamily: "inherit" }}
+          >
+            {searching ? "..." : "검색"}
+          </button>
+        </div>
+        {error && <div style={{ fontSize: 12, color: "#ef4444", marginBottom: 10 }}>{error}</div>}
+        {result && (
+          <div style={{ background: "#f8f9fb", border: "1px solid #e5e7eb", borderRadius: 9, padding: "12px 14px", marginBottom: 16 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>{result.name}</div>
+            <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 3 }}>{result.lat.toFixed(5)}, {result.lng.toFixed(5)}</div>
+          </div>
+        )}
+        <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
+          <button
+            onClick={() => result && onSave(result)}
+            disabled={!result}
+            style={{ flex: 1, padding: "11px", borderRadius: 10, border: "none", background: result ? NAVY : "#e5e7eb", color: result ? "white" : "#9ca3af", fontSize: 14, fontWeight: 700, cursor: result ? "pointer" : "not-allowed", fontFamily: "inherit" }}
+          >
+            저장
+          </button>
+          <button onClick={onCancel} style={{ flex: 1, padding: "11px", borderRadius: 10, border: "1px solid #e5e7eb", background: "white", color: "#6b7280", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+            취소
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── 메인 컴포넌트 ────────────────────────────────────────────────────────────
 
 // Inject pulse/ring keyframe animations once into <head> so markers always animate
@@ -938,6 +1064,9 @@ export default function FleetManagement() {
   const [gpsTracks, setGpsTracks] = useState([]);
   const [roadPath, setRoadPath] = useState([]);
   const [pinModal, setPinModal] = useState(null); // { title, onConfirmed }
+  const [companyDefaultLoc, setCompanyDefaultLoc] = useState(null);
+  const [checkInLocModal, setCheckInLocModal] = useState(null); // { driverId, driverName, initialLoc }
+  const [companyLocModal, setCompanyLocModal] = useState(false);
 
   const [searchQuery,   setSearchQuery]  = useState("");
   const [statusFilter,  setStatusFilter] = useState("전체");
@@ -994,12 +1123,30 @@ export default function FleetManagement() {
     return () => subs.forEach(u => u?.());
   }, [refreshKey]);
 
+  // ── 회사 기본 출근지 구독 ────────────────────────────────────────────────
+  useEffect(() => {
+    return onSnapshot(
+      doc(db, "fleet_settings", "default"),
+      (snap) => setCompanyDefaultLoc(snap.exists() ? (snap.data().defaultCheckInLocation || null) : null),
+      (err) => console.error("fleet_settings:", err)
+    );
+  }, []);
+
   // ── 선택 기사 로그 구독 ───────────────────────────────────────────────────
+  // Use uid-only query (single-field index, no composite index needed) and sort client-side
   useEffect(() => {
     if (!selected?.id) { setSelectedDriverLogs([]); return; }
     return onSnapshot(
-      query(collection(db, "driver_logs"), where("uid", "==", selected.id), orderBy("timestamp", "desc"), limit(30)),
-      (snap) => setSelectedDriverLogs(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
+      query(collection(db, "driver_logs"), where("uid", "==", selected.id), limit(100)),
+      (snap) => {
+        const logs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        logs.sort((a, b) => {
+          const at = resolveTs(a.timestamp)?.getTime() || 0;
+          const bt = resolveTs(b.timestamp)?.getTime() || 0;
+          return bt - at;
+        });
+        setSelectedDriverLogs(logs.slice(0, 30));
+      },
       (err) => console.error("selected logs:", err)
     );
   }, [selected?.id]);
@@ -1060,6 +1207,7 @@ export default function FleetManagement() {
           active: raw.active === true,
           speed: raw.speed || 0,
           workStartAt: raw.workStartAt || null,
+          checkInLocation: raw.checkInLocation || null,
         };
       })
       .sort((a, b) => statusPriority(a) - statusPriority(b));
@@ -1221,6 +1369,29 @@ export default function FleetManagement() {
     });
   }, [selected, selectedDriverLogs]);
 
+  // ── 출근지 저장 ───────────────────────────────────────────────────────────
+  const handleSaveDriverCheckInLoc = useCallback(async (loc) => {
+    if (!checkInLocModal) return;
+    try {
+      await updateDoc(doc(db, "drivers", checkInLocModal.driverId), { checkInLocation: loc });
+    } catch (e) { console.error("checkInLocation save:", e); }
+    setCheckInLocModal(null);
+  }, [checkInLocModal]);
+
+  const handleClearDriverCheckInLoc = useCallback(async () => {
+    if (!selected) return;
+    try {
+      await updateDoc(doc(db, "drivers", selected.id), { checkInLocation: null });
+    } catch (e) { console.error("clear checkInLocation:", e); }
+  }, [selected]);
+
+  const handleSaveCompanyLoc = useCallback(async (loc) => {
+    try {
+      await setDoc(doc(db, "fleet_settings", "default"), { defaultCheckInLocation: loc }, { merge: true });
+    } catch (e) { console.error("company loc save:", e); }
+    setCompanyLocModal(false);
+  }, []);
+
   // ─── 렌더 ────────────────────────────────────────────────────────────────
   return (
     <div style={{
@@ -1249,6 +1420,19 @@ export default function FleetManagement() {
           ) : lastUpdated ? (
             <span style={{ fontSize: 13, color: "#6b7280" }}>갱신: {lastUpdated.toLocaleTimeString("ko-KR")}</span>
           ) : null}
+
+          <button
+            onClick={() => setCompanyLocModal(true)}
+            style={{
+              display: "inline-flex", alignItems: "center", gap: 6,
+              padding: "7px 15px", borderRadius: 8, border: "1px solid #d1d5db",
+              background: "white", cursor: "pointer",
+              fontSize: 14, fontWeight: 700, color: NAVY,
+            }}
+          >
+            <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" strokeLinecap="round" strokeLinejoin="round"/><circle cx="12" cy="10" r="3"/></svg>
+            기본 출근지
+          </button>
 
           <button
             onClick={handleRefresh}
@@ -1380,6 +1564,10 @@ export default function FleetManagement() {
               logs={selectedDriverLogs}
               onClose={() => { setSelected(null); setSelectedDriverLogs([]); setGpsTracks([]); setRoadPath([]); }}
               onDeleteLogs={handleDeleteDriverLogs}
+              checkInLoc={selected.checkInLocation || null}
+              companyDefaultLoc={companyDefaultLoc}
+              onSetCheckInLoc={() => setCheckInLocModal({ driverId: selected.id, driverName: selected.이름, initialLoc: selected.checkInLocation || null })}
+              onClearCheckInLoc={handleClearDriverCheckInLoc}
             />
           )}
 
@@ -1423,6 +1611,24 @@ export default function FleetManagement() {
           title={pinModal.title}
           onConfirmed={pinModal.onConfirmed}
           onCancel={() => setPinModal(null)}
+        />
+      )}
+
+      {checkInLocModal && (
+        <CheckInLocModal
+          title={`${checkInLocModal.driverName} 출근지 설정`}
+          initialLoc={checkInLocModal.initialLoc}
+          onSave={handleSaveDriverCheckInLoc}
+          onCancel={() => setCheckInLocModal(null)}
+        />
+      )}
+
+      {companyLocModal && (
+        <CheckInLocModal
+          title="회사 기본 출근지 설정"
+          initialLoc={companyDefaultLoc}
+          onSave={handleSaveCompanyLoc}
+          onCancel={() => setCompanyLocModal(false)}
         />
       )}
     </div>
