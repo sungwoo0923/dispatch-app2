@@ -68,9 +68,9 @@ const trimmedStats = (fares, rawRows) => {
 };
 
 const confidence = (c) => {
-  if (c>=10) return { label:"높음", color:"text-emerald-600", bg:"bg-emerald-50 border-emerald-200" };
-  if (c>=4)  return { label:"보통", color:"text-amber-600",   bg:"bg-amber-50 border-amber-200" };
-  return           { label:"낮음", color:"text-red-500",    bg:"bg-red-50 border-red-200" };
+  if (c>=10) return { label:"높음", color:"text-gray-700", bg:"bg-gray-100 border-gray-300" };
+  if (c>=4)  return { label:"보통", color:"text-gray-600",   bg:"bg-gray-100 border-gray-200" };
+  return           { label:"낮음", color:"text-gray-500",    bg:"bg-gray-50 border-gray-200" };
 };
 
 function OrderDetailModal({ rows, bucket, fareField, onClose }) {
@@ -303,14 +303,14 @@ const [detailModal, setDetailModal] = useState(null);
 
   // ===================== 직접 단가표 작성 모달 =====================
   const [manualModal, setManualModal] = useState(false);
-  const [manualInfo, setManualInfo] = useState({ pickup: "", drop: "", vehicle: "", note: "", fareField: "청구운임", mixedFilter: "전체" });
+  const [manualInfo, setManualInfo] = useState({ pickup: "", drop: "", vehicle: "", note: "", fareField: "청구운임", mixedFilter: "전체", client: "" });
   const [manualRows, setManualRows] = useState([
     { display: "", avg: "", min: "", max: "", varianceLabel: "낮음", confLabel: "보통" }
   ]);
 
   const openManualModal = () => {
     if (result && result.rows.length > 0) {
-      setManualInfo({ pickup: result.pickup, drop: result.drop, vehicle: result.groupLabel, note: "", fareField: result.fareField, mixedFilter: result.mixedFilter });
+      setManualInfo({ pickup: result.pickup, drop: result.drop, vehicle: result.groupLabel, note: "", fareField: result.fareField, mixedFilter: result.mixedFilter, client: "" });
       setManualRows(result.rows.map(r => ({
         display: r.display,
         avg: r.stats.avg ? r.stats.avg.toLocaleString() : "",
@@ -320,7 +320,7 @@ const [detailModal, setDetailModal] = useState(null);
         confLabel: r.stats.count >= 10 ? "높음" : r.stats.count >= 4 ? "보통" : "낮음",
       })));
     } else {
-      setManualInfo({ pickup: "", drop: "", vehicle: "", note: "", fareField: "청구운임", mixedFilter: "전체" });
+      setManualInfo({ pickup: "", drop: "", vehicle: "", note: "", fareField: "청구운임", mixedFilter: "전체", client: "" });
       setManualRows([{ display: "", avg: "", min: "", max: "", varianceLabel: "낮음", confLabel: "보통" }]);
     }
     setManualModal(true);
@@ -337,7 +337,7 @@ const [detailModal, setDetailModal] = useState(null);
   };
 
   const handleManualPrint = () => {
-    addHistoryEntry({ source: "manual", pickup: manualInfo.pickup, drop: manualInfo.drop, vehicle: manualInfo.vehicle, fareField: manualInfo.fareField, mixedFilter: manualInfo.mixedFilter, rowCount: manualRows.length });
+    addHistoryEntry({ source: "manual", pickup: manualInfo.pickup, drop: manualInfo.drop, vehicle: manualInfo.vehicle, fareField: manualInfo.fareField, mixedFilter: manualInfo.mixedFilter, rowCount: manualRows.length, client: manualInfo.client });
     const today = new Date().toLocaleDateString("ko-KR");
     const w = window.open("", "_blank");
     w.document.write(`<html><head><title>단가표_${manualInfo.pickup}_${manualInfo.drop}</title>
@@ -362,13 +362,13 @@ tbody tr:nth-child(even){background:#F9FAFB;}
 td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
 .td-ton{font-weight:700;color:#1B2B4B;font-size:14px;}
 .td-price{font-weight:800;color:#2563EB;font-size:15px;}
-.badge-high{background:#D1FAE5;color:#065F46;border-radius:4px;padding:2px 6px;font-size:10px;font-weight:700;}
-.badge-mid{background:#FEF3C7;color:#92400E;border-radius:4px;padding:2px 6px;font-size:10px;font-weight:700;}
-.badge-low{background:#FEE2E2;color:#991B1B;border-radius:4px;padding:2px 6px;font-size:10px;font-weight:700;}
-.var-high{color:#EF4444;font-weight:700;font-size:12px;}
-.var-mid{color:#F59E0B;font-weight:700;font-size:12px;}
-.var-low{color:#10B981;font-weight:700;font-size:12px;}
-.notice{margin-top:28px;padding:14px 18px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;font-size:11.5px;color:#78350F;line-height:1.8;}
+.badge-high{background:#E5E7EB;color:#374151;border-radius:4px;padding:2px 6px;font-size:10px;font-weight:700;}
+.badge-mid{background:#E5E7EB;color:#4B5563;border-radius:4px;padding:2px 6px;font-size:10px;font-weight:700;}
+.badge-low{background:#F3F4F6;color:#6B7280;border-radius:4px;padding:2px 6px;font-size:10px;font-weight:700;}
+.var-high{color:#374151;font-weight:700;font-size:12px;}
+.var-mid{color:#4B5563;font-weight:700;font-size:12px;}
+.var-low{color:#6B7280;font-weight:700;font-size:12px;}
+.notice{margin-top:28px;padding:14px 18px;background:#F8FAFF;border:1px solid #C7D9FF;border-radius:8px;font-size:11.5px;color:#374151;line-height:1.8;}
 .footer{margin-top:36px;padding-top:16px;border-top:1px solid #E5E7EB;display:flex;justify-content:space-between;align-items:flex-end;}
 .stamp{width:64px;height:64px;border:2.5px solid #1B2B4B;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:900;color:#1B2B4B;margin-left:16px;text-align:center;line-height:1.3;}
 @media print{.no-print{display:none!important;}}
@@ -377,8 +377,8 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
 <div class="no-print" style="margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:#F8FAFF;border:1px solid #E0E7FF;border-radius:10px;">
   <span style="font-size:12px;color:#6B7280;">인쇄 또는 PDF로 저장하려면 아래 버튼을 클릭하세요</span>
   <div style="display:flex;gap:8px;">
-    <button onclick="window.print()" style="padding:8px 20px;background:#1B2B4B;color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">🖨 인쇄</button>
-    <button onclick="var opt=window.open('','_self');window.print();" onclick="(function(){var isSafari=/^((?!chrome|android).)*safari/i.test(navigator.userAgent);if(isSafari){alert('Safari: 인쇄 대화상자에서 PDF로 저장을 선택하세요');}window.print();})()" style="padding:8px 20px;background:#2563EB;color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">📄 PDF 저장</button>
+    <button onclick="window.print()" style="padding:8px 20px;background:#1B2B4B;color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">인쇄</button>
+    <button onclick="window.print()" style="padding:8px 20px;background:#2563EB;color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">PDF 저장</button>
   </div>
 </div>
 <div class="header">
@@ -392,7 +392,8 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
   <div class="route-arrow">→</div>
   <div class="route-item"><b>${manualInfo.drop || "도착지"}</b></div>
   <div style="flex:1"></div>
-  ${manualInfo.vehicle ? `<div class="route-item">차량: <b>${manualInfo.vehicle}</b></div>` : ""}
+  ${manualInfo.client ? `<div class="route-item">거래처: <b>${manualInfo.client}</b></div>` : ""}
+  ${manualInfo.vehicle ? `<div class="route-item" style="margin-left:12px;">차량: <b>${manualInfo.vehicle}</b></div>` : ""}
   ${manualInfo.mixedFilter !== "전체" ? `<div class="route-item" style="margin-left:12px;">[${manualInfo.mixedFilter}]</div>` : ""}
   <div class="route-item" style="margin-left:12px;">조회기준: <b>${manualInfo.fareField}</b></div>
 </div>
@@ -431,7 +432,7 @@ ${manualInfo.note ? `<div class="notice"><b>※ 특이사항</b><br>${manualInfo
 
   const handlePrint = () => {
     if (!result) return;
-    addHistoryEntry({ source: "auto", pickup: result.pickup, drop: result.drop, vehicle: result.groupLabel, fareField: result.fareField, mixedFilter: result.mixedFilter, rowCount: result.rows.length });
+    addHistoryEntry({ source: "auto", pickup: result.pickup, drop: result.drop, vehicle: result.groupLabel, fareField: result.fareField, mixedFilter: result.mixedFilter, rowCount: result.rows.length, client: "" });
     const today = new Date().toLocaleDateString("ko-KR");
     const w = window.open("", "_blank");
     w.document.write(`<html><head><title>단가표_${result.pickup}_${result.drop}</title>
@@ -459,20 +460,20 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
 .badge-high{background:#D1FAE5;color:#065F46;border-radius:4px;padding:2px 6px;font-size:10px;font-weight:700;}
 .badge-mid{background:#FEF3C7;color:#92400E;border-radius:4px;padding:2px 6px;font-size:10px;font-weight:700;}
 .badge-low{background:#FEE2E2;color:#991B1B;border-radius:4px;padding:2px 6px;font-size:10px;font-weight:700;}
-.var-high{color:#EF4444;font-weight:700;font-size:12px;}
-.var-mid{color:#F59E0B;font-weight:700;font-size:12px;}
-.var-low{color:#10B981;font-weight:700;font-size:12px;}
-.notice{margin-top:28px;padding:14px 18px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;font-size:11.5px;color:#78350F;line-height:1.8;}
+.var-high{color:#374151;font-weight:700;font-size:12px;}
+.var-mid{color:#4B5563;font-weight:700;font-size:12px;}
+.var-low{color:#6B7280;font-weight:700;font-size:12px;}
+.notice{margin-top:28px;padding:14px 18px;background:#F8FAFF;border:1px solid #C7D9FF;border-radius:8px;font-size:11.5px;color:#374151;line-height:1.8;}
 .footer{margin-top:36px;padding-top:16px;border-top:1px solid #E5E7EB;display:flex;justify-content:space-between;align-items:flex-end;}
 .stamp{width:64px;height:64px;border:2.5px solid #1B2B4B;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:900;color:#1B2B4B;margin-left:16px;text-align:center;line-height:1.3;}
 @media print{.no-print{display:none!important;}}
 </style></head><body>
 <div class="wrapper">
 <div class="no-print" style="margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:#F8FAFF;border:1px solid #E0E7FF;border-radius:10px;">
-  <button onclick="document.querySelectorAll('.edit-cell').forEach(el=>{el.style.display=el.style.display==='none'?'inline-block':'none';document.querySelectorAll('.view-cell').forEach(v=>{v.style.display=v.style.display==='none'?'inline':'none'});})" style="padding:8px 20px;background:#1B2B4B;color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">✏ 수정</button>
+  <button onclick="document.querySelectorAll('.edit-cell').forEach(el=>{el.style.display=el.style.display==='none'?'inline-block':'none';document.querySelectorAll('.view-cell').forEach(v=>{v.style.display=v.style.display==='none'?'inline':'none'});})" style="padding:8px 20px;background:#1B2B4B;color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">수정</button>
   <div style="display:flex;gap:8px;">
-    <button onclick="window.print()" style="padding:8px 20px;background:#1B2B4B;color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">🖨 인쇄</button>
-    <button onclick="window.print()" style="padding:8px 20px;background:#2563EB;color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">📄 PDF 저장</button>
+    <button onclick="window.print()" style="padding:8px 20px;background:#1B2B4B;color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">인쇄</button>
+    <button onclick="window.print()" style="padding:8px 20px;background:#2563EB;color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">PDF 저장</button>
   </div>
 </div>
 <div class="header">
@@ -573,8 +574,8 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
         </div>
         <div className="flex items-center gap-2">
           <button onClick={() => setHistoryModal(true)} className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 text-gray-600 text-[13px] font-semibold rounded-xl hover:bg-gray-50 transition shadow-sm">
-            📋 발행 이력
-            {printHistory.length > 0 && <span className="ml-1 px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded-full text-[11px] font-bold">{printHistory.length}</span>}
+            발행 이력
+            {printHistory.length > 0 && <span className="ml-1 px-1.5 py-0.5 bg-gray-200 text-gray-600 rounded-full text-[11px] font-bold">{printHistory.length}</span>}
           </button>
           <button onClick={openManualModal} className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 text-white text-[13px] font-bold rounded-xl hover:bg-emerald-700 transition shadow-sm">
             단가표 작성
@@ -758,7 +759,7 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
                 ) : result.rows.map((row,i)=>{
                   const s=row.stats; const conf=confidence(s.count);
                   const vLevel=s.variance>40?"높음":s.variance>20?"보통":"낮음";
-                  const vColor=s.variance>40?"text-red-500":s.variance>20?"text-amber-500":"text-emerald-600";
+                  const vColor=s.variance>40?"text-gray-700":s.variance>20?"text-gray-600":"text-gray-500";
                   return (
                     <tr key={i} className={`border-b border-gray-100 hover:bg-blue-50/30 transition ${i%2===0?"bg-white":"bg-gray-50/40"}`}>
                       <td className="px-4 py-3.5 text-center font-bold text-[#1B2B4B] text-[15px]">{row.display}</td>
@@ -787,9 +788,9 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
           </div>
 
           <div className="grid grid-cols-2 gap-4 mb-4">
-            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-              <div className="text-[13px] font-bold text-amber-800 mb-2">📌 안내사항</div>
-              <ul className="text-[12px] text-amber-700 space-y-1 leading-relaxed">
+            <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+              <div className="text-[13px] font-bold text-gray-700 mb-2">안내사항</div>
+              <ul className="text-[12px] text-gray-600 space-y-1 leading-relaxed">
                 <li>• 위 단가는 과거 실적 기반 참고 단가입니다 (1만원 단위 절사)</li>
                 <li>• 유가·수급 상황에 따라 실제 운임은 달라질 수 있습니다</li>
                 <li>• 신뢰도 "낮음"은 데이터 샘플이 적어 변동 가능성이 높습니다</li>
@@ -797,11 +798,11 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
               </ul>
             </div>
             <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
-              <div className="text-[13px] font-bold text-gray-700 mb-2">📊 변동성 기준</div>
+              <div className="text-[13px] font-bold text-gray-700 mb-2">변동성 기준</div>
               <div className="space-y-1.5 text-[12px]">
-                {[["낮음","bg-emerald-100 text-emerald-700","평균 ±20% 이내, 안정적"],["보통","bg-amber-100 text-amber-700","평균 ±20~40% 수준"],["높음","bg-red-100 text-red-600","연휴·수급에 따라 변동 큼, 협의 권장"]].map(([l,cls,desc])=>(
+                {[["낮음","bg-gray-200 text-gray-700","평균 ±20% 이내, 안정적"],["보통","bg-gray-200 text-gray-600","평균 ±20~40% 수준"],["높음","bg-gray-300 text-gray-700","연휴·수급에 따라 변동 큼, 협의 권장"]].map(([l,cls,desc])=>(
                   <div key={l} className="flex items-center gap-2">
-                    <span className={`px-2 py-0.5 rounded-full font-semibold text-[11px] ${cls}`}>{l}</span>
+                    <span className={`px-2 py-0.5 rounded font-semibold text-[11px] ${cls}`}>{l}</span>
                     <span className="text-gray-600">{desc}</span>
                   </div>
                 ))}
@@ -835,7 +836,7 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
             {/* 모달 헤더 */}
             <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
               <div>
-                <h3 className="text-white font-bold text-[16px]">✏️ 직접 단가표 작성</h3>
+                <h3 className="text-white font-bold text-[16px]">직접 단가표 작성</h3>
                 <p className="text-white/60 text-[12px] mt-0.5">노선 정보와 단가를 직접 입력하여 단가표를 만드세요</p>
               </div>
               <button onClick={() => setManualModal(false)} className="text-white/60 hover:text-white text-xl leading-none">✕</button>
@@ -845,7 +846,14 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
               {/* 노선 정보 입력 */}
               <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
                 <div className="text-[13px] font-bold text-[#1B2B4B] mb-3">노선 정보</div>
-                <div className="grid grid-cols-3 gap-3 mb-3">
+                <datalist id="manual-vehicle-types">
+                  {VEHICLE_GROUPS.map(g => <option key={g.value} value={g.label} />)}
+                </datalist>
+                <div className="grid grid-cols-4 gap-3 mb-3">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-500 mb-1">거래처명</label>
+                    <input className="w-full px-3 py-2 text-[13px] rounded-lg border border-gray-200 bg-white focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-100" placeholder="예: (주)홍길동물류" value={manualInfo.client} onChange={e => setManualInfo(p => ({ ...p, client: e.target.value }))} />
+                  </div>
                   <div>
                     <label className="block text-[11px] font-semibold text-gray-500 mb-1">상차지역 <span className="text-red-400">*</span></label>
                     <input className="w-full px-3 py-2 text-[13px] rounded-lg border border-gray-200 bg-white focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-100" placeholder="예: 인천" value={manualInfo.pickup} onChange={e => setManualInfo(p => ({ ...p, pickup: e.target.value }))} />
@@ -856,7 +864,7 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
                   </div>
                   <div>
                     <label className="block text-[11px] font-semibold text-gray-500 mb-1">차량종류</label>
-                    <input className="w-full px-3 py-2 text-[13px] rounded-lg border border-gray-200 bg-white focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-100" placeholder="예: 카고/윙바디/탑차" value={manualInfo.vehicle} onChange={e => setManualInfo(p => ({ ...p, vehicle: e.target.value }))} />
+                    <input list="manual-vehicle-types" className="w-full px-3 py-2 text-[13px] rounded-lg border border-gray-200 bg-white focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-100" placeholder="선택 또는 직접 입력" value={manualInfo.vehicle} onChange={e => setManualInfo(p => ({ ...p, vehicle: e.target.value }))} />
                   </div>
                 </div>
                 <div className="grid grid-cols-3 gap-3">
@@ -897,7 +905,10 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
                     + 행 추가
                   </button>
                 </div>
-                <div className="rounded-xl border border-gray-200 overflow-hidden">
+                <datalist id="manual-ton-options">
+                  {["다마스/라보","1톤","1.4톤","2.5톤","3.5톤","3.5톤광폭","5톤","5톤축","5톤플축","8톤","11톤","11톤축","15톤","18톤","25톤"].map(t => <option key={t} value={t} />)}
+                </datalist>
+              <div className="rounded-xl border border-gray-200 overflow-hidden">
                   <table className="w-full text-[12px]">
                     <thead>
                       <tr className="bg-[#1B2B4B]">
@@ -911,8 +922,9 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
                         <tr key={i} className={i % 2 === 0 ? "bg-white" : "bg-gray-50/50"}>
                           <td className="px-2 py-2">
                             <input
+                              list="manual-ton-options"
                               className="w-full px-2 py-1.5 text-[12px] rounded border border-gray-200 focus:border-blue-400 focus:outline-none text-center font-bold text-[#1B2B4B]"
-                              placeholder="예: 1톤"
+                              placeholder="선택 또는 직접 입력"
                               value={row.display}
                               onChange={e => updateManualRow(i, "display", e.target.value)}
                             />
@@ -998,7 +1010,7 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col">
             <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
               <div>
-                <h3 className="text-[16px] font-bold text-[#1B2B4B]">📋 단가표 발행 이력</h3>
+                <h3 className="text-[16px] font-bold text-[#1B2B4B]">단가표 발행 이력</h3>
                 <p className="text-[12px] text-gray-400 mt-0.5">인쇄/PDF 저장 버튼을 누른 내역이 기록됩니다</p>
               </div>
               <div className="flex items-center gap-2">
@@ -1018,23 +1030,24 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
                     const dateStr = dt.toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" });
                     const timeStr = dt.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
                     return (
-                      <div key={i} className={`flex items-start gap-3 p-3 rounded-xl border ${i === 0 ? "border-blue-200 bg-blue-50/50" : "border-gray-100 bg-white hover:bg-gray-50"} transition`}>
-                        <div className={`mt-0.5 w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold flex-shrink-0 ${h.source === "manual" ? "bg-emerald-100 text-emerald-700" : "bg-blue-100 text-blue-700"}`}>
+                      <div key={i} className="flex items-start gap-3 p-3 rounded-xl border border-gray-100 bg-white hover:bg-gray-50 transition">
+                        <div className="mt-0.5 w-6 h-6 rounded flex items-center justify-center text-[11px] font-bold flex-shrink-0 bg-gray-200 text-gray-600">
                           {h.source === "manual" ? "수" : "자"}
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
+                            {h.client && <span className="text-[13px] font-bold text-gray-500 mr-1">[{h.client}]</span>}
                             <span className="text-[14px] font-bold text-[#1B2B4B]">{h.pickup || "-"}</span>
                             <span className="text-gray-400">→</span>
                             <span className="text-[14px] font-bold text-[#1B2B4B]">{h.drop || "-"}</span>
                             {h.vehicle && <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-[11px]">{h.vehicle}</span>}
-                            {h.mixedFilter && h.mixedFilter !== "전체" && <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded text-[11px]">{h.mixedFilter}</span>}
+                            {h.mixedFilter && h.mixedFilter !== "전체" && <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-[11px]">{h.mixedFilter}</span>}
                           </div>
                           <div className="flex items-center gap-3 mt-1 text-[12px] text-gray-500">
                             <span>{dateStr} {timeStr}</span>
                             <span>기준: {h.fareField}</span>
                             <span>{h.rowCount}개 차종</span>
-                            <span className={`px-1.5 py-0.5 rounded text-[11px] font-semibold ${h.source === "manual" ? "bg-emerald-50 text-emerald-600" : "bg-blue-50 text-blue-600"}`}>{h.source === "manual" ? "수동작성" : "자동생성"}</span>
+                            <span className="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-gray-100 text-gray-600">{h.source === "manual" ? "수동작성" : "자동생성"}</span>
                           </div>
                         </div>
                       </div>

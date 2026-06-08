@@ -506,19 +506,23 @@ const addDispatch = async (record) => {
 const patchDispatch = async (_id, patch) => {
   if (!_id) return;
 
-  // 🚫 블랙 기사 차량번호 입력 시 경고
+  // 🚫 블랙 기사 / 메모 기사 차량번호 입력 시 경고
   if (patch.차량번호) {
     const plate = String(patch.차량번호).replace(/\s+/g, "");
-    const blackDriver = drivers.find(
-      (d) => d.등급 === "블랙" &&
-      String(d.차량번호 || "").replace(/\s+/g, "") === plate
+    const matched = drivers.find(
+      (d) => String(d.차량번호 || "").replace(/\s+/g, "") === plate
     );
-    if (blackDriver) {
-      window.__blackDriverAlert__ = blackDriver;
-      setTimeout(() => {
-        const ev = new CustomEvent("blackDriverDetected", { detail: blackDriver });
-        window.dispatchEvent(ev);
-      }, 100);
+    if (matched) {
+      if (matched.등급 === "블랙") {
+        window.__blackDriverAlert__ = matched;
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent("blackDriverDetected", { detail: matched }));
+        }, 100);
+      } else if (matched.메모 && String(matched.메모).trim()) {
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent("driverMemoDetected", { detail: matched }));
+        }, 100);
+      }
     }
   }
 
@@ -4836,6 +4840,12 @@ function swapPickupDrop() {
   return m;
 }, [drivers]);
 const [blackAlert, setBlackAlert] = React.useState(null);
+const [memoAlert, setMemoAlert] = React.useState(null);
+React.useEffect(() => {
+  const h = (e) => setMemoAlert(e.detail);
+  window.addEventListener("driverMemoDetected", h);
+  return () => window.removeEventListener("driverMemoDetected", h);
+}, []);
 const [contactPopup, setContactPopup] = React.useState(null);
 const [contactActive, setContactActive] = React.useState(0);
 const [contactQueue, setContactQueue] = React.useState([]);
@@ -9717,29 +9727,48 @@ className={`
   >
     <div className="bg-white rounded-2xl shadow-2xl w-[400px] overflow-hidden">
       <div className="bg-gray-900 px-6 py-4 flex items-center gap-3">
-        <span className="text-2xl">🚫</span>
         <h3 className="text-white text-lg font-bold">블랙 기사 알림</h3>
       </div>
       <div className="px-6 py-5 space-y-3">
-        <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm space-y-1">
-          <div><span className="text-gray-500">차량번호</span> <b className="ml-2">{blackAlert.차량번호}</b></div>
-          <div><span className="text-gray-500">이름</span> <b className="ml-2 text-red-600">{blackAlert.이름 || "-"}</b></div>
-          <div><span className="text-gray-500">전화번호</span> <b className="ml-2">{blackAlert.전화번호 || "-"}</b></div>
-          {blackAlert.메모 && (
-            <div><span className="text-gray-500">메모</span> <span className="ml-2 text-red-600">{blackAlert.메모}</span></div>
-          )}
+        <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-sm space-y-2">
+          <div className="flex"><span className="text-gray-500 w-16">차량번호</span><b className="ml-2">{blackAlert.차량번호}</b></div>
+          <div className="flex"><span className="text-gray-500 w-16">이름</span><b className="ml-2 text-gray-800">{blackAlert.이름 || "-"}</b></div>
+          <div className="flex"><span className="text-gray-500 w-16">전화번호</span><b className="ml-2">{blackAlert.전화번호 || "-"}</b></div>
+          {blackAlert.메모 && <div className="flex"><span className="text-gray-500 w-16">메모</span><span className="ml-2 text-gray-700">{blackAlert.메모}</span></div>}
         </div>
-        <p className="text-sm text-gray-600 text-center font-semibold">
-          해당 기사는 <span className="text-red-600 font-bold">블랙 등급</span>으로 등록된 기사입니다.
-        </p>
+        <p className="text-sm text-gray-600 text-center font-semibold">블랙 등급으로 등록된 기사입니다. 배차 시 주의하세요.</p>
       </div>
       <div className="px-6 pb-5">
-        <button
-          className="w-full py-3 bg-gray-900 text-white rounded-xl font-bold text-sm"
-          onClick={() => setBlackAlert(null)}
-        >
-          확인
-        </button>
+        <button className="w-full py-3 bg-[#1B2B4B] text-white rounded-xl font-bold text-sm" onClick={() => setBlackAlert(null)}>확인</button>
+      </div>
+    </div>
+  </div>
+)}
+{memoAlert && (
+  <div
+    className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]"
+    tabIndex={-1}
+    ref={(el) => el && setTimeout(() => el.focus(), 0)}
+    onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") { e.preventDefault(); setMemoAlert(null); } }}
+  >
+    <div className="bg-white rounded-2xl shadow-2xl w-[400px] overflow-hidden">
+      <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
+        <h3 className="text-white text-[15px] font-bold">기사 메모 확인</h3>
+        <span className="text-white/60 text-[12px]">{memoAlert.등급 || "일반"}</span>
+      </div>
+      <div className="px-6 py-5 space-y-3">
+        <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-sm space-y-2">
+          <div className="flex"><span className="text-gray-500 w-16">차량번호</span><b className="ml-2">{memoAlert.차량번호}</b></div>
+          <div className="flex"><span className="text-gray-500 w-16">이름</span><b className="ml-2">{memoAlert.이름 || "-"}</b></div>
+          <div className="flex"><span className="text-gray-500 w-16">전화번호</span><b className="ml-2">{memoAlert.전화번호 || "-"}</b></div>
+        </div>
+        <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3">
+          <div className="text-[11px] font-semibold text-gray-500 mb-1">메모</div>
+          <div className="text-[13px] text-gray-800 leading-relaxed">{memoAlert.메모}</div>
+        </div>
+      </div>
+      <div className="px-6 pb-5">
+        <button className="w-full py-3 bg-[#1B2B4B] text-white rounded-xl font-bold text-sm" onClick={() => setMemoAlert(null)}>확인</button>
       </div>
     </div>
   </div>
@@ -12677,12 +12706,18 @@ const playNotifSound = React.useCallback(() => {
 
 // 🚫 블랙 기사 알림 팝업 상태
 const [blackAlert, setBlackAlert] = React.useState(null);
+const [memoAlert, setMemoAlert] = React.useState(null);
 const [alertMsg, setAlertMsg] = React.useState(null);
 const showAlert = (msg) => setAlertMsg(msg);
 React.useEffect(() => {
   const handler = (e) => setBlackAlert(e.detail);
   window.addEventListener("blackDriverDetected", handler);
   return () => window.removeEventListener("blackDriverDetected", handler);
+}, []);
+React.useEffect(() => {
+  const handler = (e) => setMemoAlert(e.detail);
+  window.addEventListener("driverMemoDetected", handler);
+  return () => window.removeEventListener("driverMemoDetected", handler);
 }, []);
   // ❄️ 냉장 / 냉동 차량 판별
   const isColdVehicle = (type = "") => {
@@ -16008,29 +16043,48 @@ const head = isDark
   >
     <div className="bg-white rounded-2xl shadow-2xl w-[400px] overflow-hidden">
       <div className="bg-gray-900 px-6 py-4 flex items-center gap-3">
-        <span className="text-2xl">🚫</span>
         <h3 className="text-white text-lg font-bold">블랙 기사 알림</h3>
       </div>
       <div className="px-6 py-5 space-y-3">
-        <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm space-y-1">
-          <div><span className="text-gray-500">차량번호</span> <b className="ml-2">{blackAlert.차량번호}</b></div>
-          <div><span className="text-gray-500">이름</span> <b className="ml-2 text-red-600">{blackAlert.이름 || "-"}</b></div>
-          <div><span className="text-gray-500">전화번호</span> <b className="ml-2">{blackAlert.전화번호 || "-"}</b></div>
-          {blackAlert.메모 && (
-            <div><span className="text-gray-500">메모</span> <span className="ml-2 text-red-600">{blackAlert.메모}</span></div>
-          )}
+        <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-sm space-y-2">
+          <div className="flex"><span className="text-gray-500 w-16">차량번호</span><b className="ml-2">{blackAlert.차량번호}</b></div>
+          <div className="flex"><span className="text-gray-500 w-16">이름</span><b className="ml-2 text-gray-800">{blackAlert.이름 || "-"}</b></div>
+          <div className="flex"><span className="text-gray-500 w-16">전화번호</span><b className="ml-2">{blackAlert.전화번호 || "-"}</b></div>
+          {blackAlert.메모 && <div className="flex"><span className="text-gray-500 w-16">메모</span><span className="ml-2 text-gray-700">{blackAlert.메모}</span></div>}
         </div>
-        <p className="text-sm text-gray-600 text-center font-semibold">
-          해당 기사는 <span className="text-red-600 font-bold">블랙 등급</span>으로 등록된 기사입니다.
-        </p>
+        <p className="text-sm text-gray-600 text-center font-semibold">블랙 등급으로 등록된 기사입니다. 배차 시 주의하세요.</p>
       </div>
       <div className="px-6 pb-5">
-        <button
-          className="w-full py-3 bg-gray-900 text-white rounded-xl font-bold text-sm"
-          onClick={() => setBlackAlert(null)}
-        >
-          확인
-        </button>
+        <button className="w-full py-3 bg-[#1B2B4B] text-white rounded-xl font-bold text-sm" onClick={() => setBlackAlert(null)}>확인</button>
+      </div>
+    </div>
+  </div>
+)}
+{memoAlert && (
+  <div
+    className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]"
+    tabIndex={-1}
+    ref={(el) => el && setTimeout(() => el.focus(), 0)}
+    onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") { e.preventDefault(); setMemoAlert(null); } }}
+  >
+    <div className="bg-white rounded-2xl shadow-2xl w-[400px] overflow-hidden">
+      <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
+        <h3 className="text-white text-[15px] font-bold">기사 메모 확인</h3>
+        <span className="text-white/60 text-[12px]">{memoAlert.등급 || "일반"}</span>
+      </div>
+      <div className="px-6 py-5 space-y-3">
+        <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-sm space-y-2">
+          <div className="flex"><span className="text-gray-500 w-16">차량번호</span><b className="ml-2">{memoAlert.차량번호}</b></div>
+          <div className="flex"><span className="text-gray-500 w-16">이름</span><b className="ml-2">{memoAlert.이름 || "-"}</b></div>
+          <div className="flex"><span className="text-gray-500 w-16">전화번호</span><b className="ml-2">{memoAlert.전화번호 || "-"}</b></div>
+        </div>
+        <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3">
+          <div className="text-[11px] font-semibold text-gray-500 mb-1">메모</div>
+          <div className="text-[13px] text-gray-800 leading-relaxed">{memoAlert.메모}</div>
+        </div>
+      </div>
+      <div className="px-6 pb-5">
+        <button className="w-full py-3 bg-[#1B2B4B] text-white rounded-xl font-bold text-sm" onClick={() => setMemoAlert(null)}>확인</button>
       </div>
     </div>
   </div>
@@ -21256,10 +21310,16 @@ React.useEffect(() => { localStorage.setItem("va5", JSON.stringify([...viewedAtt
 const [localOverrides, setLocalOverrides] = React.useState({});
 const showAlert = (msg) => setAlertMsg(msg);
 const [blackAlert, setBlackAlert] = React.useState(null);
+const [memoAlert, setMemoAlert] = React.useState(null);
 React.useEffect(() => {
   const handler = (e) => setBlackAlert(e.detail);
   window.addEventListener("blackDriverDetected", handler);
   return () => window.removeEventListener("blackDriverDetected", handler);
+}, []);
+React.useEffect(() => {
+  const handler = (e) => setMemoAlert(e.detail);
+  window.addEventListener("driverMemoDetected", handler);
+  return () => window.removeEventListener("driverMemoDetected", handler);
 }, []);
 
 const [warningPopup, setWarningPopup] = React.useState(null);
@@ -23848,29 +23908,48 @@ return (
   >
     <div className="bg-white rounded-2xl shadow-2xl w-[400px] overflow-hidden">
       <div className="bg-gray-900 px-6 py-4 flex items-center gap-3">
-        <span className="text-2xl">🚫</span>
         <h3 className="text-white text-lg font-bold">블랙 기사 알림</h3>
       </div>
       <div className="px-6 py-5 space-y-3">
-        <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm space-y-1">
-          <div><span className="text-gray-500">차량번호</span> <b className="ml-2">{blackAlert.차량번호}</b></div>
-          <div><span className="text-gray-500">이름</span> <b className="ml-2 text-red-600">{blackAlert.이름 || "-"}</b></div>
-          <div><span className="text-gray-500">전화번호</span> <b className="ml-2">{blackAlert.전화번호 || "-"}</b></div>
-          {blackAlert.메모 && (
-            <div><span className="text-gray-500">메모</span> <span className="ml-2 text-red-600">{blackAlert.메모}</span></div>
-          )}
+        <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-sm space-y-2">
+          <div className="flex"><span className="text-gray-500 w-16">차량번호</span><b className="ml-2">{blackAlert.차량번호}</b></div>
+          <div className="flex"><span className="text-gray-500 w-16">이름</span><b className="ml-2 text-gray-800">{blackAlert.이름 || "-"}</b></div>
+          <div className="flex"><span className="text-gray-500 w-16">전화번호</span><b className="ml-2">{blackAlert.전화번호 || "-"}</b></div>
+          {blackAlert.메모 && <div className="flex"><span className="text-gray-500 w-16">메모</span><span className="ml-2 text-gray-700">{blackAlert.메모}</span></div>}
         </div>
-        <p className="text-sm text-gray-600 text-center font-semibold">
-          해당 기사는 <span className="text-red-600 font-bold">블랙 등급</span>으로 등록된 기사입니다.
-        </p>
+        <p className="text-sm text-gray-600 text-center font-semibold">블랙 등급으로 등록된 기사입니다. 배차 시 주의하세요.</p>
       </div>
       <div className="px-6 pb-5">
-        <button
-          className="w-full py-3 bg-gray-900 text-white rounded-xl font-bold text-sm"
-          onClick={() => setBlackAlert(null)}
-        >
-          확인
-        </button>
+        <button className="w-full py-3 bg-[#1B2B4B] text-white rounded-xl font-bold text-sm" onClick={() => setBlackAlert(null)}>확인</button>
+      </div>
+    </div>
+  </div>
+)}
+{memoAlert && (
+  <div
+    className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]"
+    tabIndex={-1}
+    ref={(el) => el && setTimeout(() => el.focus(), 0)}
+    onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") { e.preventDefault(); setMemoAlert(null); } }}
+  >
+    <div className="bg-white rounded-2xl shadow-2xl w-[400px] overflow-hidden">
+      <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
+        <h3 className="text-white text-[15px] font-bold">기사 메모 확인</h3>
+        <span className="text-white/60 text-[12px]">{memoAlert.등급 || "일반"}</span>
+      </div>
+      <div className="px-6 py-5 space-y-3">
+        <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-sm space-y-2">
+          <div className="flex"><span className="text-gray-500 w-16">차량번호</span><b className="ml-2">{memoAlert.차량번호}</b></div>
+          <div className="flex"><span className="text-gray-500 w-16">이름</span><b className="ml-2">{memoAlert.이름 || "-"}</b></div>
+          <div className="flex"><span className="text-gray-500 w-16">전화번호</span><b className="ml-2">{memoAlert.전화번호 || "-"}</b></div>
+        </div>
+        <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3">
+          <div className="text-[11px] font-semibold text-gray-500 mb-1">메모</div>
+          <div className="text-[13px] text-gray-800 leading-relaxed">{memoAlert.메모}</div>
+        </div>
+      </div>
+      <div className="px-6 pb-5">
+        <button className="w-full py-3 bg-[#1B2B4B] text-white rounded-xl font-bold text-sm" onClick={() => setMemoAlert(null)}>확인</button>
       </div>
     </div>
   </div>
@@ -37204,7 +37283,7 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
           {label:"지입", val:kpi.지입, key:"지입"},
           {label:"블랙", val:kpi.블랙, key:"블랙"},
         ].map(({label,val,key}) => (
-          <button key={key} onClick={() => setGradeFilter(key)}
+          <button key={key} onClick={() => { setGradeFilter(key); setShowAll(true); }}
             className={`rounded-xl border p-4 text-center shadow-sm transition ${gradeFilter===key ? "bg-[#1B2B4B] border-[#1B2B4B]" : "bg-white border-gray-200 hover:border-[#1B2B4B]"}`}>
             <div className={`text-[24px] font-extrabold ${gradeFilter===key ? "text-white" : "text-[#1B2B4B]"}`}>{val}</div>
             <div className={`text-[12px] font-semibold mt-0.5 ${gradeFilter===key ? "text-white/70" : "text-gray-400"}`}>{label}</div>
