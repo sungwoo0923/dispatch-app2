@@ -93,25 +93,21 @@ function StatusDot({ status, size = 10 }) {
   );
 }
 
-// ─── 오늘 로그 조회 ───────────────────────────────────────────────────────────
-function useTodayLogs(uid) {
+// ─── 기사 로그 전체 구독 (orderBy 제거 → composite index 불필요) ──────────────
+function useAllDriverLogs(uid) {
   const [logs, setLogs] = useState([]);
   useEffect(() => {
     if (!uid) return;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const q = query(
-      collection(db, "driver_logs"),
-      where("uid", "==", uid),
-      orderBy("timestamp", "asc"),
-    );
+    const q = query(collection(db, "driver_logs"), where("uid", "==", uid), limit(1000));
     return onSnapshot(q, (snap) => {
-      const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      const todayLogs = all.filter(l => {
-        const t = l.timestamp?.toDate?.();
-        return t && t >= today;
-      });
-      setLogs(todayLogs);
+      const all = snap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => {
+          const at = a.timestamp?.toDate?.()?.getTime() || 0;
+          const bt = b.timestamp?.toDate?.()?.getTime() || 0;
+          return at - bt;
+        });
+      setLogs(all);
     });
   }, [uid]);
   return logs;
@@ -262,6 +258,12 @@ export default function DriverHome() {
   const [toast, setToast] = useState("");
   const [companyDefaultLoc, setCompanyDefaultLoc] = useState(null);
   const autoCheckinDoneRef = useRef(false);
+  const _td = new Date();
+  const todayStr = `${_td.getFullYear()}-${String(_td.getMonth()+1).padStart(2,"0")}-${String(_td.getDate()).padStart(2,"0")}`;
+  const [logFrom, setLogFrom] = useState(todayStr);
+  const [logTo, setLogTo] = useState(todayStr);
+  const [appliedRange, setAppliedRange] = useState({ from: todayStr, to: todayStr });
+  const [checkinWarning, setCheckinWarning] = useState(null);
 
   useEffect(() => {
     return onAuthStateChanged(auth, (u) => {
@@ -283,9 +285,29 @@ export default function DriverHome() {
     });
   }, []);
 
-  const logs = useTodayLogs(uid);
+  const allLogs = useAllDriverLogs(uid);
   const { pos, permissionDenied, resetTotalDist } = useGpsTracking(uid, driver);
-  const summary = React.useMemo(() => calcWorkSummary(logs), [logs]);
+
+  // 오늘 로그 (홈탭 요약 + 상태표시용)
+  const todayLogs = React.useMemo(() => {
+    const start = new Date(todayStr + "T00:00:00");
+    return allLogs.filter(l => { const t = l.timestamp?.toDate?.(); return t && t >= start; });
+  }, [allLogs, todayStr]);
+  const summary = React.useMemo(() => calcWorkSummary(todayLogs), [todayLogs]);
+
+  // 운행기록 탭: 선택 날짜 범위 로그
+  const rangeLogs = React.useMemo(() => {
+    const from = appliedRange.from ? new Date(appliedRange.from + "T00:00:00") : null;
+    const to = appliedRange.to ? new Date(appliedRange.to + "T23:59:59") : null;
+    return allLogs.filter(l => {
+      const t = l.timestamp?.toDate?.();
+      if (!t) return false;
+      if (from && t < from) return false;
+      if (to && t > to) return false;
+      return true;
+    });
+  }, [allLogs, appliedRange]);
+  const rangeSummary = React.useMemo(() => calcWorkSummary(rangeLogs), [rangeLogs]);
 
   const showToast = (msg) => {
     setToast(msg);
@@ -349,6 +371,21 @@ export default function DriverHome() {
     updateStatus("출근").catch(() => { autoCheckinDoneRef.current = false; });
   }, [pos, uid, statusLoading, driver?.status, driver?.checkInLocation, companyDefaultLoc, updateStatus]);
 
+  // 수동 출근: 출근지가 설정된 경우 1km 이내에서만 허용
+  const handleActionButton = useCallback((action) => {
+    if (action.status === "출근") {
+      const checkInLoc = driver?.checkInLocation || companyDefaultLoc;
+      if (checkInLoc?.lat && checkInLoc?.lng && pos && (pos.accuracy == null || pos.accuracy <= 100)) {
+        const dist = calcDist(pos.lat, pos.lng, checkInLoc.lat, checkInLoc.lng);
+        if (dist > 1) {
+          setCheckinWarning(dist);
+          return;
+        }
+      }
+    }
+    updateStatus(action.status);
+  }, [driver?.checkInLocation, companyDefaultLoc, pos, updateStatus]);
+
   const handleLogout = async () => {
     if (uid) {
       try {
@@ -374,11 +411,29 @@ export default function DriverHome() {
   const currentStatus = driver.status || "대기";
   const statusCfg = STATUS_CONFIG[currentStatus] || STATUS_CONFIG["대기"];
   const actions = getActions(currentStatus);
-  const today = new Date();
-  const dateStr = `${today.getFullYear()}.${String(today.getMonth()+1).padStart(2,"0")}.${String(today.getDate()).padStart(2,"0")}`;
+  const dateStr = `${_td.getFullYear()}.${String(_td.getMonth()+1).padStart(2,"0")}.${String(_td.getDate()).padStart(2,"0")}`;
 
   return (
     <div style={{ minHeight: "100vh", background: "#f4f6f9", paddingBottom: 72, fontFamily: '"Noto Sans KR", sans-serif' }}>
+
+      {/* 출근지 1km 초과 경고 */}
+      {checkinWarning !== null && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 9998, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 24px" }}>
+          <div style={{ background: "white", borderRadius: 18, padding: "28px 22px", maxWidth: 320, width: "100%", boxShadow: "0 8px 32px rgba(0,0,0,0.2)" }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: "#111827", marginBottom: 10 }}>출근 불가</div>
+            <div style={{ fontSize: 14, color: "#6b7280", lineHeight: 1.7, marginBottom: 22 }}>
+              출근지 반경 <strong style={{ color: "#1B2B4B" }}>1km 이내</strong>에서만 출근 처리가 가능합니다.<br />
+              현재 출근지까지 거리: <strong style={{ color: "#374151" }}>{checkinWarning.toFixed(1)} km</strong>
+            </div>
+            <button
+              onClick={() => setCheckinWarning(null)}
+              style={{ width: "100%", padding: "14px", borderRadius: 12, border: "none", background: "#1B2B4B", color: "white", fontSize: 15, fontWeight: 700, cursor: "pointer" }}
+            >
+              확인
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 토스트 */}
       {toast && (
@@ -486,7 +541,7 @@ export default function DriverHome() {
               {actions.map((action, i) => (
                 <button
                   key={action.status}
-                  onClick={() => updateStatus(action.status)}
+                  onClick={() => handleActionButton(action)}
                   disabled={statusLoading}
                   style={{
                     padding: action.primary ? "16px 20px" : "12px 20px",
@@ -510,19 +565,19 @@ export default function DriverHome() {
             </div>
           </div>
 
-          {/* 오늘 상태 로그 (최근 5개) */}
-          {logs.length > 0 && (
+          {/* 오늘 상태 로그 (최근 8개) */}
+          {todayLogs.length > 0 && (
             <div style={{ background: "white", borderRadius: 16, padding: "16px", boxShadow: "0 1px 6px rgba(0,0,0,0.06)", border: "1px solid #e5e7eb" }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", marginBottom: 10, letterSpacing: "0.05em" }}>오늘 상태 기록</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-                {[...logs].reverse().slice(0, 8).map((log, i) => {
+                {[...todayLogs].reverse().slice(0, 8).map((log, i, arr) => {
                   const t = log.timestamp?.toDate?.();
                   const cfg = STATUS_CONFIG[log.status] || STATUS_CONFIG["대기"];
                   return (
                     <div key={log.id} style={{
                       display: "flex", alignItems: "center", gap: 12,
                       padding: "9px 0",
-                      borderBottom: i < Math.min(logs.length, 8) - 1 ? "1px solid #f3f4f6" : "none",
+                      borderBottom: i < arr.length - 1 ? "1px solid #f3f4f6" : "none",
                     }}>
                       <div style={{ width: 8, height: 8, borderRadius: "50%", background: cfg.color, flexShrink: 0 }} />
                       <div style={{ fontSize: 13, fontWeight: 700, color: "#1B2B4B", flex: 1 }}>{log.status}</div>
@@ -582,13 +637,45 @@ export default function DriverHome() {
       {/* ─── 탭: 로그 ─── */}
       {activeTab === "logs" && (
         <div style={{ padding: "16px" }}>
+
+          {/* 날짜 조회 */}
           <div style={{ background: "white", borderRadius: 16, padding: "16px", boxShadow: "0 1px 6px rgba(0,0,0,0.06)", border: "1px solid #e5e7eb", marginBottom: 12 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", marginBottom: 14, letterSpacing: "0.05em" }}>오늘 근무 요약</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", marginBottom: 12, letterSpacing: "0.05em" }}>날짜 조회</div>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <input
+                type="date"
+                value={logFrom}
+                max={todayStr}
+                onChange={e => setLogFrom(e.target.value)}
+                style={{ flex: 1, minWidth: 120, padding: "9px 10px", border: "1px solid #e5e7eb", borderRadius: 10, fontSize: 14, color: "#1B2B4B", background: "#f9fafb", outline: "none" }}
+              />
+              <span style={{ fontSize: 13, color: "#9ca3af", flexShrink: 0 }}>~</span>
+              <input
+                type="date"
+                value={logTo}
+                max={todayStr}
+                onChange={e => setLogTo(e.target.value)}
+                style={{ flex: 1, minWidth: 120, padding: "9px 10px", border: "1px solid #e5e7eb", borderRadius: 10, fontSize: 14, color: "#1B2B4B", background: "#f9fafb", outline: "none" }}
+              />
+              <button
+                onClick={() => setAppliedRange({ from: logFrom, to: logTo })}
+                style={{ padding: "9px 18px", borderRadius: 10, border: "none", background: "#1B2B4B", color: "white", fontSize: 13, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}
+              >
+                조회
+              </button>
+            </div>
+          </div>
+
+          {/* 근무 요약 */}
+          <div style={{ background: "white", borderRadius: 16, padding: "16px", boxShadow: "0 1px 6px rgba(0,0,0,0.06)", border: "1px solid #e5e7eb", marginBottom: 12 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", marginBottom: 14, letterSpacing: "0.05em" }}>
+              근무 요약 {appliedRange.from === appliedRange.to ? `(${appliedRange.from})` : `(${appliedRange.from} ~ ${appliedRange.to})`}
+            </div>
             {[
-              ["출근 시각", summary.checkInTime ? formatTime(summary.checkInTime) : "--"],
-              ["총 근무시간", summary.workMs > 0 ? formatDuration(summary.workMs) : "--"],
-              ["총 이동거리", `${(driver.totalDistance || 0).toFixed(2)} km`],
-              ["운행 횟수", `${summary.tripCount}회`],
+              ["출근 시각", rangeSummary.checkInTime ? formatTime(rangeSummary.checkInTime) : "--"],
+              ["총 근무시간", rangeSummary.workMs > 0 ? formatDuration(rangeSummary.workMs) : "--"],
+              ["총 이동거리", appliedRange.from === todayStr && appliedRange.to === todayStr ? `${(driver.totalDistance || 0).toFixed(2)} km` : "--"],
+              ["운행 횟수", `${rangeSummary.tripCount}회`],
             ].map(([label, value]) => (
               <div key={label} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #f3f4f6" }}>
                 <span style={{ fontSize: 13, color: "#6b7280", fontWeight: 600 }}>{label}</span>
@@ -597,25 +684,42 @@ export default function DriverHome() {
             ))}
           </div>
 
+          {/* 전체 상태 기록 */}
           <div style={{ background: "white", borderRadius: 16, padding: "16px", boxShadow: "0 1px 6px rgba(0,0,0,0.06)", border: "1px solid #e5e7eb" }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", marginBottom: 12, letterSpacing: "0.05em" }}>오늘 전체 상태 기록 ({logs.length}건)</div>
-            {logs.length === 0 ? (
-              <div style={{ textAlign: "center", padding: "24px 0", fontSize: 13, color: "#d1d5db" }}>오늘 기록이 없습니다</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", marginBottom: 12, letterSpacing: "0.05em" }}>전체 상태 기록 ({rangeLogs.length}건)</div>
+            {rangeLogs.length === 0 ? (
+              <div style={{ textAlign: "center", padding: "24px 0", fontSize: 13, color: "#d1d5db" }}>해당 기간의 기록이 없습니다</div>
             ) : (
               <div>
-                {[...logs].reverse().map((log, i) => {
+                {[...rangeLogs].reverse().map((log, i) => {
                   const t = log.timestamp?.toDate?.();
                   const cfg = STATUS_CONFIG[log.status] || STATUS_CONFIG["대기"];
+                  const isNewDay = i > 0 && (() => {
+                    const prev = rangeLogs[rangeLogs.length - i]?.timestamp?.toDate?.();
+                    return prev && t && prev.toDateString() !== t.toDateString();
+                  })();
                   return (
-                    <div key={log.id} style={{
-                      display: "flex", alignItems: "center", gap: 12,
-                      padding: "10px 0",
-                      borderBottom: i < logs.length - 1 ? "1px solid #f3f4f6" : "none",
-                    }}>
-                      <div style={{ width: 8, height: 8, borderRadius: "50%", background: cfg.color, flexShrink: 0 }} />
-                      <div style={{ flex: 1, fontSize: 13, fontWeight: 700, color: "#1B2B4B" }}>{log.status}</div>
-                      <div style={{ fontSize: 12, color: "#9ca3af" }}>{t ? formatTime(t) : "--"}</div>
-                    </div>
+                    <React.Fragment key={log.id}>
+                      {isNewDay && (
+                        <div style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", padding: "8px 0 4px", borderTop: "1px solid #f0f2f5", marginTop: 4 }}>
+                          {t ? `${t.getMonth()+1}/${t.getDate()}` : ""}
+                        </div>
+                      )}
+                      <div style={{
+                        display: "flex", alignItems: "center", gap: 12,
+                        padding: "10px 0",
+                        borderBottom: i < rangeLogs.length - 1 ? "1px solid #f3f4f6" : "none",
+                      }}>
+                        <div style={{ width: 8, height: 8, borderRadius: "50%", background: cfg.color, flexShrink: 0 }} />
+                        <div style={{ flex: 1, fontSize: 13, fontWeight: 700, color: "#1B2B4B" }}>{log.status}</div>
+                        <div style={{ fontSize: 12, color: "#9ca3af" }}>
+                          {t ? (appliedRange.from !== appliedRange.to
+                            ? `${t.getMonth()+1}/${t.getDate()} ${formatTime(t)}`
+                            : formatTime(t)
+                          ) : "--"}
+                        </div>
+                      </div>
+                    </React.Fragment>
                   );
                 })}
               </div>
