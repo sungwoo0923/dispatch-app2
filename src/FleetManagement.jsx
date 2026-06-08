@@ -158,6 +158,14 @@ function statusPriority(d) {
   return activeBonus + (idx === -1 ? 999 : idx);
 }
 
+function haversineKm(lat1, lng1, lat2, lng2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
 // ─── Leaflet 마커 ─────────────────────────────────────────────────────────────
 // Active drivers show a pulsing ring; inactive show a static dot
 
@@ -950,6 +958,208 @@ function RegistrationTab({ usersMap }) {
   );
 }
 
+// ─── HistoryTab ──────────────────────────────────────────────────────────────
+
+function HistoryTab({ drivers }) {
+  const _td = new Date();
+  const todayStr = `${_td.getFullYear()}-${String(_td.getMonth()+1).padStart(2,"0")}-${String(_td.getDate()).padStart(2,"0")}`;
+
+  const [selId, setSelId] = useState("");
+  const [fromDate, setFromDate] = useState(todayStr);
+  const [toDate, setToDate] = useState(todayStr);
+  const [applied, setApplied] = useState(null);
+  const [logs, setLogs] = useState([]);
+  const [gpsDist, setGpsDist] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!applied) return;
+    setLoading(true);
+    setLogs([]);
+    setGpsDist(null);
+    const from = new Date(applied.from + "T00:00:00");
+    const to = new Date(applied.to + "T23:59:59");
+
+    const logUnsub = onSnapshot(
+      query(collection(db, "driver_logs"), where("uid", "==", applied.driverId), limit(500)),
+      (snap) => {
+        const filtered = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+          .filter(l => { const t = l.timestamp?.toDate?.(); return t && t >= from && t <= to; })
+          .sort((a, b) => (a.timestamp?.toDate?.()?.getTime()||0) - (b.timestamp?.toDate?.()?.getTime()||0));
+        setLogs(filtered);
+        setLoading(false);
+      },
+      () => setLoading(false)
+    );
+
+    const gpsUnsub = onSnapshot(
+      query(collection(db, "gps_tracks"), where("driverId", "==", applied.driverId), limit(2000)),
+      (snap) => {
+        const tracks = snap.docs.map(d => d.data())
+          .filter(t => { const ts = resolveTs(t.timestamp); return ts && ts >= from && ts <= to; })
+          .sort((a, b) => (resolveTs(a.timestamp)?.getTime()||0) - (resolveTs(b.timestamp)?.getTime()||0));
+        let dist = 0;
+        for (let i = 1; i < tracks.length; i++) dist += haversineKm(tracks[i-1].lat, tracks[i-1].lng, tracks[i].lat, tracks[i].lng);
+        setGpsDist(dist > 0.01 ? dist : null);
+      }
+    );
+    return () => { logUnsub(); gpsUnsub(); };
+  }, [applied]);
+
+  const summary = useMemo(() => {
+    if (!logs.length) return null;
+    let checkInTime = null, checkOutTime = null, workMs = 0, tripCount = 0;
+    let lastT = null, lastS = null;
+    logs.forEach(log => {
+      const t = resolveTs(log.timestamp);
+      if (!t) return;
+      if (log.status === "출근" && !checkInTime) checkInTime = t;
+      if (log.status === "퇴근") checkOutTime = t;
+      if (log.status === "운행중") tripCount++;
+      if (lastT && lastS && lastS !== "퇴근" && lastS !== "대기" && lastS !== "휴식") workMs += t.getTime() - lastT.getTime();
+      lastT = t; lastS = log.status;
+    });
+    return { checkInTime, checkOutTime, workMs, tripCount };
+  }, [logs]);
+
+  const groupedByDate = useMemo(() => {
+    const groups = {};
+    logs.forEach(log => {
+      const t = resolveTs(log.timestamp);
+      if (!t) return;
+      const key = `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,"0")}-${String(t.getDate()).padStart(2,"0")}`;
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(log);
+    });
+    return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b));
+  }, [logs]);
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      {/* 검색 패널 */}
+      <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: "22px 26px" }}>
+        <div style={{ fontSize: 15, fontWeight: 800, color: NAVY, marginBottom: 18 }}>기사 이력 조회</div>
+        <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "flex-end" }}>
+          <div style={{ flex: "1 1 200px", minWidth: 180 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#6b7280", marginBottom: 6 }}>기사 선택</div>
+            <select
+              value={selId}
+              onChange={e => setSelId(e.target.value)}
+              style={{ width: "100%", padding: "9px 12px", border: "1px solid #e5e7eb", borderRadius: 8, fontSize: 14, color: "#374151", background: "#fafafa", outline: "none" }}
+            >
+              <option value="">기사를 선택하세요</option>
+              {drivers.map(d => <option key={d.id} value={d.id}>{d.이름} ({d.차량번호})</option>)}
+            </select>
+          </div>
+          <div style={{ flex: "0 0 auto" }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#6b7280", marginBottom: 6 }}>조회 기간</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <input type="date" value={fromDate} max={todayStr} onChange={e => setFromDate(e.target.value)}
+                style={{ padding: "9px 10px", border: "1px solid #e5e7eb", borderRadius: 8, fontSize: 14, color: "#374151", background: "#fafafa", outline: "none" }} />
+              <span style={{ color: "#9ca3af", fontSize: 13 }}>~</span>
+              <input type="date" value={toDate} max={todayStr} onChange={e => setToDate(e.target.value)}
+                style={{ padding: "9px 10px", border: "1px solid #e5e7eb", borderRadius: 8, fontSize: 14, color: "#374151", background: "#fafafa", outline: "none" }} />
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              if (!selId) return;
+              const d = drivers.find(x => x.id === selId);
+              setApplied({ driverId: selId, from: fromDate, to: toDate, driverName: d?.이름 || "", carNo: d?.차량번호 || "" });
+            }}
+            disabled={!selId}
+            style={{ padding: "10px 28px", borderRadius: 8, border: "none", background: selId ? NAVY : "#e5e7eb", color: selId ? "white" : "#9ca3af", fontSize: 14, fontWeight: 700, cursor: selId ? "pointer" : "not-allowed", whiteSpace: "nowrap" }}
+          >
+            조회
+          </button>
+        </div>
+      </div>
+
+      {/* 결과 */}
+      {applied && (loading ? (
+        <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: "48px", textAlign: "center", color: "#9ca3af", fontSize: 14 }}>조회 중...</div>
+      ) : logs.length === 0 ? (
+        <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: "48px", textAlign: "center" }}>
+          <div style={{ fontSize: 14, color: "#6b7280", fontWeight: 700 }}>해당 기간의 기록이 없습니다</div>
+          <div style={{ fontSize: 13, color: "#9ca3af", marginTop: 6 }}>{applied.from === applied.to ? applied.from : `${applied.from} ~ ${applied.to}`}</div>
+        </div>
+      ) : (
+        <>
+          {/* 기사 헤더 */}
+          <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: "16px 24px", display: "flex", alignItems: "center", gap: 16 }}>
+            <div style={{ width: 46, height: 46, borderRadius: 12, background: NAVY, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <svg width="22" height="22" fill="none" stroke="white" strokeWidth="1.7" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" strokeLinecap="round"/></svg>
+            </div>
+            <div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: NAVY }}>{applied.driverName}</div>
+              <div style={{ fontSize: 13, color: "#6b7280", marginTop: 2 }}>{applied.carNo} · {applied.from === applied.to ? applied.from : `${applied.from} ~ ${applied.to}`}</div>
+            </div>
+          </div>
+
+          {/* 요약 카드 */}
+          {summary && (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12 }}>
+              {[
+                { label: "출근 시각", val: summary.checkInTime ? formatTime(summary.checkInTime) : "--" },
+                { label: "퇴근 시각", val: summary.checkOutTime ? formatTime(summary.checkOutTime) : "--" },
+                { label: "총 근무시간", val: summary.workMs > 0 ? formatMs(summary.workMs) : "--" },
+                { label: "운행 횟수", val: `${summary.tripCount}회` },
+                { label: "이동거리", val: gpsDist != null ? `${gpsDist.toFixed(1)} km` : "--" },
+                { label: "상태 변경", val: `${logs.length}건` },
+              ].map(({ label, val }) => (
+                <div key={label} style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, padding: "14px 18px" }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 7 }}>{label}</div>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: NAVY }}>{val}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* 날짜별 타임라인 */}
+          {groupedByDate.map(([dateKey, dateLogs]) => (
+            <div key={dateKey} style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, overflow: "hidden" }}>
+              <div style={{ padding: "12px 22px", background: "#f8f9fb", borderBottom: "1px solid #eaecf0", display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: 14, fontWeight: 800, color: NAVY }}>{dateKey}</span>
+                <span style={{ fontSize: 13, color: "#9ca3af" }}>{dateLogs.length}건</span>
+              </div>
+              <div style={{ padding: "8px 0" }}>
+                {dateLogs.map((log, i) => {
+                  const t = resolveTs(log.timestamp);
+                  const nextT = resolveTs(dateLogs[i + 1]?.timestamp);
+                  const durMs = t && nextT ? nextT.getTime() - t.getTime() : null;
+                  const color = STATUS_COLORS[log.status] || "#9ca3af";
+                  return (
+                    <div key={log.id} style={{ display: "flex", alignItems: "flex-start", padding: "0 22px" }}>
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: 24, flexShrink: 0 }}>
+                        <div style={{ width: 10, height: 10, borderRadius: "50%", background: color, border: "2px solid #fff", boxShadow: `0 0 0 2px ${color}50`, flexShrink: 0, marginTop: 13 }} />
+                        {i < dateLogs.length - 1 && <div style={{ width: 1, background: "#e5e7eb", flex: 1, minHeight: 18 }} />}
+                      </div>
+                      <div style={{ flex: 1, paddingLeft: 12, paddingTop: 9, paddingBottom: i < dateLogs.length - 1 ? 4 : 14 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                          <span style={{ fontSize: 14, fontWeight: 800, color, background: `${color}15`, padding: "2px 10px", borderRadius: 99 }}>{log.status}</span>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: "#374151", fontVariantNumeric: "tabular-nums" }}>{t ? formatTime(t) : "--"}</span>
+                          {durMs != null && durMs > 60000 && (
+                            <span style={{ fontSize: 12, color: "#9ca3af" }}>{formatMs(durMs)} 체류</span>
+                          )}
+                        </div>
+                        {log.location?.lat != null && (
+                          <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 3, fontVariantNumeric: "tabular-nums" }}>
+                            {log.location.lat.toFixed(5)}, {log.location.lng.toFixed(5)}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </>
+      ))}
+    </div>
+  );
+}
+
 // ─── CheckInLocModal ─────────────────────────────────────────────────────────
 
 function CheckInLocModal({ title, initialLoc, onSave, onCancel }) {
@@ -1068,6 +1278,7 @@ export default function FleetManagement() {
   const [checkInLocModal, setCheckInLocModal] = useState(null); // { driverId, driverName, initialLoc }
   const [companyLocModal, setCompanyLocModal] = useState(false);
 
+  const [collisionAlerts, setCollisionAlerts] = useState([]);
   const [searchQuery,   setSearchQuery]  = useState("");
   const [statusFilter,  setStatusFilter] = useState("전체");
   const [selected,      setSelected]     = useState(null);
@@ -1109,7 +1320,21 @@ export default function FleetManagement() {
       (err) => console.error("users:", err)
     ));
 
-    // 3. Activity feed
+    // 3. Collision alerts (unresolved, last 24h)
+    subs.push(onSnapshot(
+      query(collection(db, "collision_alerts"), where("resolved", "==", false), limit(20)),
+      (snap) => {
+        const cutoff = Date.now() - 86400000;
+        const arr = snap.docs
+          .map(d => ({ id: d.id, ...d.data() }))
+          .filter(a => (resolveTs(a.timestamp)?.getTime() || 0) > cutoff)
+          .sort((a, b) => (resolveTs(b.timestamp)?.getTime()||0) - (resolveTs(a.timestamp)?.getTime()||0));
+        setCollisionAlerts(arr);
+      },
+      () => {}
+    ));
+
+    // 4. Activity feed
     subs.push(onSnapshot(
       query(collection(db, "driver_logs"), orderBy("timestamp", "desc"), limit(50)),
       (snap) => {
@@ -1460,7 +1685,7 @@ export default function FleetManagement() {
 
       {/* ═══ 메인 탭 ═══ */}
       <div style={{ display: "flex", gap: 0, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, overflow: "hidden", padding: 4 }}>
-        {[["tracking", "관제현황"], ["registration", "기사 등록 관리"]].map(([key, label]) => (
+        {[["tracking", "관제현황"], ["history", "이력 조회"], ["registration", "기사 등록 관리"]].map(([key, label]) => (
           <button
             key={key}
             onClick={() => setMainTab(key)}
@@ -1492,6 +1717,34 @@ export default function FleetManagement() {
             <KpiCard label="운행중" value={kpi.driving} sub="현재 주행" accent="#10b981" />
             <KpiCard label="근무중" value={kpi.onDuty} sub="출근~복귀 합산" />
           </div>
+
+          {/* 충돌 감지 알림 */}
+          {collisionAlerts.length > 0 && (
+            <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 10, padding: "14px 20px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: collisionAlerts.length > 0 ? 10 : 0 }}>
+                <svg width="15" height="15" fill="none" stroke="#ef4444" strokeWidth="2" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                <span style={{ fontSize: 14, fontWeight: 800, color: "#991b1b" }}>충돌 감지 알림 ({collisionAlerts.length}건)</span>
+                <span style={{ fontSize: 12, color: "#b91c1c" }}>기사의 기기에서 강한 충격이 감지되었습니다</span>
+              </div>
+              {collisionAlerts.map((alert, i) => (
+                <div key={alert.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 0", borderTop: "1px solid #fecaca", flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{alert.driverName || "-"}</span>
+                  <span style={{ fontSize: 13, color: "#374151", fontWeight: 700, background: "#f3f4f6", padding: "2px 9px", borderRadius: 5, fontFamily: "monospace" }}>{alert.carNo || "-"}</span>
+                  <span style={{ fontSize: 13, color: "#6b7280" }}>충격 {alert.magnitude} m/s²</span>
+                  {alert.location?.lat && (
+                    <span style={{ fontSize: 12, color: "#9ca3af" }}>{alert.location.lat.toFixed(4)}, {alert.location.lng.toFixed(4)}</span>
+                  )}
+                  <span style={{ fontSize: 12, color: "#9ca3af", marginLeft: "auto" }}>{timeAgo(alert.timestamp)}</span>
+                  <button
+                    onClick={async () => { try { await updateDoc(doc(db, "collision_alerts", alert.id), { resolved: true }); } catch (_) {} }}
+                    style={{ padding: "4px 13px", borderRadius: 6, border: "1px solid #fca5a5", background: "white", color: "#dc2626", fontSize: 12, fontWeight: 700, cursor: "pointer" }}
+                  >
+                    확인 완료
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* 검색 + 필터 */}
           <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, padding: "12px 16px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
@@ -1598,6 +1851,9 @@ export default function FleetManagement() {
           </div>
         </>
       )}
+
+      {/* ═══ 이력 조회 ═══ */}
+      {mainTab === "history" && <HistoryTab drivers={drivers} />}
 
       {/* ═══ 기사 등록 관리 ═══ */}
       {mainTab === "registration" && <RegistrationTab usersMap={usersMap} />}

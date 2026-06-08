@@ -23,6 +23,23 @@ const DRIVER_TERMS = `제1조 (목적)
 제4조 (서비스 이용 제한)
 약관 위반, 부정 이용, 사고 은폐 등의 경우 서비스 이용을 제한할 수 있습니다.`;
 
+const DRIVER_GPS = `수집 항목
+- GPS 위치 좌표 (위도·경도), 이동 속도, 이동 경로
+
+수집 목적
+- 실시간 차량 위치 모니터링 및 배차 관제
+- 운행 이력 기록 및 안전 관리 (출근·퇴근·이동 경로)
+- 충돌 등 이상 상황 감지 및 긴급 대응
+
+수집 주기
+- 앱 사용 중 상시 (출근 이후 ~ 퇴근 시까지)
+- 정확도 100m 이하의 GPS 신호만 저장됩니다
+
+보유 기간
+- 운행 종료 후 3개월
+
+위치정보 수집에 동의하지 않을 경우 차량 관제 서비스 이용이 제한될 수 있습니다.`;
+
 const DRIVER_PRIVACY = `수집하는 개인정보 항목
 - 필수: 이름, 차량번호
 - 선택: 연락처, 차종
@@ -61,6 +78,7 @@ export default function DriverRegister() {
   const [vehicleType, setVehicleType] = useState("");
   const [termsAgreed, setTermsAgreed] = useState(false);
   const [privacyAgreed, setPrivacyAgreed] = useState(false);
+  const [gpsAgreed, setGpsAgreed] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -81,7 +99,7 @@ export default function DriverRegister() {
     if (!name.trim()) return setError("이름을 입력해주세요.");
     if (!phone.trim()) return setError("핸드폰번호를 입력해주세요.");
     if (!vehicleType) return setError("차량 종류를 선택해주세요.");
-    if (!termsAgreed || !privacyAgreed) return setError("서비스 이용약관 및 개인정보처리방침에 동의해주세요.");
+    if (!termsAgreed || !privacyAgreed || !gpsAgreed) return setError("모든 약관에 동의해주세요.");
 
     const email = makeEmail(carNo.trim());
     const password = carNo.trim();
@@ -102,6 +120,7 @@ export default function DriverRegister() {
         approved: false,
         termsAgreed,
         privacyAgreed,
+        gpsAgreed,
         createdAt: serverTimestamp(),
       });
 
@@ -227,6 +246,17 @@ export default function DriverRegister() {
               className="w-4 h-4 accent-[#1B2B4B]"
             />
             <span className="text-[13px] text-gray-700 font-medium">개인정보처리방침에 동의합니다 <span className="text-red-400">(필수)</span></span>
+          </label>
+
+          <TermsBox title="위치정보 수집 동의" text={DRIVER_GPS} />
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={gpsAgreed}
+              onChange={(e) => setGpsAgreed(e.target.checked)}
+              className="w-4 h-4 accent-[#1B2B4B]"
+            />
+            <span className="text-[13px] text-gray-700 font-medium">위치정보 수집에 동의합니다 <span className="text-red-400">(필수)</span></span>
           </label>
         </div>
 

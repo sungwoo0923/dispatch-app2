@@ -249,6 +249,53 @@ function useGpsTracking(uid, driverData) {
   return { pos, permissionDenied, resetTotalDist };
 }
 
+// ─── 충돌 감지 훅 ────────────────────────────────────────────────────────────
+function useCollisionDetection(uid, driverRef, posRef, onCollision) {
+  const onCollisionRef = useRef(onCollision);
+  useEffect(() => { onCollisionRef.current = onCollision; }, [onCollision]);
+  const cooldownRef = useRef(false);
+
+  useEffect(() => {
+    if (!uid) return;
+    const handleMotion = async (e) => {
+      if (cooldownRef.current) return;
+      let magnitude = 0;
+      if (e.acceleration?.x != null) {
+        const { x = 0, y = 0, z = 0 } = e.acceleration;
+        magnitude = Math.sqrt(x * x + y * y + z * z);
+      } else if (e.accelerationIncludingGravity?.x != null) {
+        const { x = 0, y = 0, z = 0 } = e.accelerationIncludingGravity;
+        magnitude = Math.max(0, Math.sqrt(x * x + y * y + z * z) - 9.8);
+      }
+      if (magnitude < 25) return;
+      cooldownRef.current = true;
+      setTimeout(() => { cooldownRef.current = false; }, 90000); // 90s cooldown
+      onCollisionRef.current?.(magnitude);
+      const d = driverRef.current;
+      const p = posRef.current;
+      try {
+        await addDoc(collection(db, "collision_alerts"), {
+          uid,
+          driverName: d?.name || "",
+          carNo: d?.carNo || "",
+          magnitude: Math.round(magnitude * 10) / 10,
+          timestamp: serverTimestamp(),
+          location: (p && (p.accuracy == null || p.accuracy <= 100)) ? { lat: p.lat, lng: p.lng } : null,
+          resolved: false,
+        });
+      } catch (_) {}
+    };
+    if (typeof DeviceMotionEvent?.requestPermission === "function") {
+      DeviceMotionEvent.requestPermission()
+        .then(p => { if (p === "granted") window.addEventListener("devicemotion", handleMotion); })
+        .catch(() => {});
+    } else {
+      window.addEventListener("devicemotion", handleMotion);
+    }
+    return () => window.removeEventListener("devicemotion", handleMotion);
+  }, [uid]);
+}
+
 // ─── 메인 컴포넌트 ────────────────────────────────────────────────────────────
 export default function DriverHome() {
   const [uid, setUid] = useState(null);
@@ -258,12 +305,16 @@ export default function DriverHome() {
   const [toast, setToast] = useState("");
   const [companyDefaultLoc, setCompanyDefaultLoc] = useState(null);
   const autoCheckinDoneRef = useRef(false);
+  const wasAwayFromCheckInRef = useRef(false); // tracks if driver moved >2km away since last check-in/out
   const _td = new Date();
   const todayStr = `${_td.getFullYear()}-${String(_td.getMonth()+1).padStart(2,"0")}-${String(_td.getDate()).padStart(2,"0")}`;
   const [logFrom, setLogFrom] = useState(todayStr);
   const [logTo, setLogTo] = useState(todayStr);
   const [appliedRange, setAppliedRange] = useState({ from: todayStr, to: todayStr });
   const [checkinWarning, setCheckinWarning] = useState(null);
+  const [collisionAlert, setCollisionAlert] = useState(null);
+  const driverRef = useRef(null);
+  const posRef = useRef(null);
 
   useEffect(() => {
     return onAuthStateChanged(auth, (u) => {
@@ -309,6 +360,13 @@ export default function DriverHome() {
   }, [allLogs, appliedRange]);
   const rangeSummary = React.useMemo(() => calcWorkSummary(rangeLogs), [rangeLogs]);
 
+  // Keep refs in sync with latest state (avoid stale closures in collision hook)
+  useEffect(() => { driverRef.current = driver; }, [driver]);
+  useEffect(() => { posRef.current = pos; }, [pos]);
+  useCollisionDetection(uid, driverRef, posRef, (mag) => {
+    setCollisionAlert({ magnitude: mag, time: new Date() });
+  });
+
   const showToast = (msg) => {
     setToast(msg);
     setTimeout(() => setToast(""), 2500);
@@ -348,27 +406,30 @@ export default function DriverHome() {
     }
   }, [uid, statusLoading, pos, driver, resetTotalDist]);
 
-  // Reset auto-checkin guard when driver goes back to idle/퇴근
+  // Active status → reset both refs so auto-checkin can fire again on next return
   useEffect(() => {
     const s = driver?.status;
-    if (!s || s === "퇴근" || s === "대기") {
+    if (s && s !== "퇴근" && s !== "대기") {
       autoCheckinDoneRef.current = false;
+      wasAwayFromCheckInRef.current = false;
     }
   }, [driver?.status]);
 
-  // Auto 출근: trigger when GPS is within 2km of 출근지 and status is idle
+  // Auto 출근: driver must first move >2km away from 출근지 (wasAway guard)
+  // then come back within 2km — prevents immediate re-checkin after pressing 퇴근 at 출근지
   useEffect(() => {
     if (!pos || !uid || statusLoading) return;
-    if (autoCheckinDoneRef.current) return;
     const status = driver?.status;
-    if (status && status !== "퇴근" && status !== "대기") return;
-    if (pos.accuracy != null && pos.accuracy > 100) return;
     const checkInLoc = driver?.checkInLocation || companyDefaultLoc;
     if (!checkInLoc?.lat || !checkInLoc?.lng) return;
+    if (pos.accuracy != null && pos.accuracy > 100) return;
+    if (status && status !== "퇴근" && status !== "대기") return;
     const dist = calcDist(pos.lat, pos.lng, checkInLoc.lat, checkInLoc.lng);
-    if (dist > 2) return;
-    autoCheckinDoneRef.current = true;
-    updateStatus("출근").catch(() => { autoCheckinDoneRef.current = false; });
+    if (dist > 2) wasAwayFromCheckInRef.current = true;
+    if (wasAwayFromCheckInRef.current && !autoCheckinDoneRef.current && dist <= 2) {
+      autoCheckinDoneRef.current = true;
+      updateStatus("출근").catch(() => { autoCheckinDoneRef.current = false; });
+    }
   }, [pos, uid, statusLoading, driver?.status, driver?.checkInLocation, companyDefaultLoc, updateStatus]);
 
   // 수동 출근: 출근지가 설정된 경우 1km 이내에서만 허용
@@ -415,6 +476,38 @@ export default function DriverHome() {
 
   return (
     <div style={{ minHeight: "100vh", background: "#f4f6f9", paddingBottom: 72, fontFamily: '"Noto Sans KR", sans-serif' }}>
+
+      {/* 충돌 감지 경고 모달 */}
+      {collisionAlert && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 9997, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 20px" }}>
+          <div style={{ background: "white", borderRadius: 18, padding: "28px 22px", maxWidth: 320, width: "100%", boxShadow: "0 8px 32px rgba(0,0,0,0.3)" }}>
+            <div style={{ width: 48, height: 48, background: "#fef2f2", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}>
+              <svg width="26" height="26" fill="none" stroke="#ef4444" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            </div>
+            <div style={{ textAlign: "center", marginBottom: 6 }}>
+              <div style={{ fontSize: 17, fontWeight: 800, color: "#111827" }}>충격이 감지되었습니다</div>
+              <div style={{ fontSize: 13, color: "#6b7280", marginTop: 6, lineHeight: 1.6 }}>
+                강한 충격이 감지되었습니다.<br />괜찮으신가요?
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 10, marginTop: 22 }}>
+              <button
+                onClick={() => setCollisionAlert(null)}
+                style={{ flex: 1, padding: "13px", borderRadius: 12, border: "1.5px solid #e5e7eb", background: "white", color: "#374151", fontSize: 14, fontWeight: 700, cursor: "pointer" }}
+              >
+                괜찮습니다
+              </button>
+              <a
+                href="tel:119"
+                onClick={() => setCollisionAlert(null)}
+                style={{ flex: 1, padding: "13px", borderRadius: 12, border: "none", background: "#ef4444", color: "white", fontSize: 14, fontWeight: 700, cursor: "pointer", textDecoration: "none", display: "flex", alignItems: "center", justifyContent: "center" }}
+              >
+                119 신고
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 출근지 1km 초과 경고 */}
       {checkinWarning !== null && (
@@ -591,6 +684,64 @@ export default function DriverHome() {
         </div>
       )}
 
+      {/* ─── 탭: 연락처 ─── */}
+      {activeTab === "contacts" && (
+        <div style={{ padding: "16px" }}>
+          {[
+            {
+              section: "회사 연락처",
+              items: [
+                { name: "돌캐", number: "1533-2525", tel: "15332525", desc: "배차팀" },
+                { name: "후레쉬1공장", number: "032-720-7704", tel: "0327207704", desc: "인천" },
+                { name: "후레쉬2공장", number: "032-720-7770", tel: "0327207770", desc: "인천" },
+              ],
+            },
+            {
+              section: "긴급 연락처",
+              items: [
+                { name: "화재·구급", number: "119", tel: "119", desc: "소방서 / 구급대" },
+                { name: "경찰", number: "112", tel: "112", desc: "사건·사고 신고" },
+                { name: "응급의료정보", number: "1339", tel: "1339", desc: "응급의료정보센터" },
+              ],
+            },
+            {
+              section: "도로·운송 지원",
+              items: [
+                { name: "한국도로공사", number: "1588-2504", tel: "15882504", desc: "고속도로 긴급출동" },
+                { name: "교통사고 접수", number: "112", tel: "112", desc: "경찰청 교통사고" },
+                { name: "민원·행정 안내", number: "110", tel: "110", desc: "정부24 콜센터" },
+              ],
+            },
+          ].map(({ section, items }) => (
+            <div key={section} style={{ background: "white", borderRadius: 16, padding: "16px", boxShadow: "0 1px 6px rgba(0,0,0,0.06)", border: "1px solid #e5e7eb", marginBottom: 12 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", marginBottom: 12, letterSpacing: "0.05em" }}>{section}</div>
+              {items.map((item, i) => (
+                <div key={item.name} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 0", borderBottom: i < items.length - 1 ? "1px solid #f3f4f6" : "none" }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{item.name}</div>
+                    <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 1 }}>{item.desc}</div>
+                  </div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: "#374151", marginRight: 10, fontVariantNumeric: "tabular-nums" }}>{item.number}</div>
+                  <a
+                    href={`tel:${item.tel}`}
+                    style={{
+                      display: "inline-flex", alignItems: "center", justifyContent: "center",
+                      width: 38, height: 38, borderRadius: 10,
+                      background: "#1B2B4B", color: "white",
+                      textDecoration: "none", flexShrink: 0,
+                    }}
+                  >
+                    <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 8.63a19.79 19.79 0 01-3.07-8.7A2 2 0 012 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.91 7.91a16 16 0 006.13 6.13l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/>
+                    </svg>
+                  </a>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* ─── 탭: 내 정보 ─── */}
       {activeTab === "info" && (
         <div style={{ padding: "16px" }}>
@@ -744,6 +895,11 @@ export default function DriverHome() {
           { key: "logs", label: "운행기록", icon: (
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
+            </svg>
+          )},
+          { key: "contacts", label: "연락처", icon: (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 8.63a19.79 19.79 0 01-3.07-8.7A2 2 0 012 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.91 7.91a16 16 0 006.13 6.13l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/>
             </svg>
           )},
           { key: "info", label: "내 정보", icon: (
