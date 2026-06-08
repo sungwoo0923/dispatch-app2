@@ -111,7 +111,8 @@ export default function MobileFleetView() {
   const [searchQ, setSearchQ] = useState("");
   const [statusFilter, setStatusFilter] = useState("전체");
   const [expandedId, setExpandedId] = useState(null);
-  const [activeSection, setActiveSection] = useState("drivers"); // "drivers" | "map" | "feed"
+  const [activeSection, setActiveSection] = useState("drivers"); // "drivers" | "map" | "feed" | "attendance"
+  const [attendanceLogs, setAttendanceLogs] = useState([]);
 
   // 지도 관련 상태
   const [mapSelected, setMapSelected] = useState(null);
@@ -132,6 +133,10 @@ export default function MobileFleetView() {
     subs.push(onSnapshot(
       query(collection(db, "driver_logs"), orderBy("timestamp", "desc"), limit(30)),
       (snap) => setActivityLogs(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+    ));
+    subs.push(onSnapshot(
+      query(collection(db, "driver_logs"), limit(2000)),
+      (snap) => setAttendanceLogs(snap.docs.map(d => ({ id: d.id, ...d.data() })))
     ));
     return () => subs.forEach(u => u?.());
   }, []);
@@ -327,14 +332,14 @@ export default function MobileFleetView() {
       </div>
 
       {/* 섹션 탭 */}
-      <div style={{ display: "flex", margin: "16px 16px 0", background: "#f4f6fa", borderRadius: 10, padding: 3 }}>
-        {[["drivers", "기사 목록"], ["map", "지도"], ["feed", "실시간 활동"]].map(([key, label]) => (
+      <div style={{ display: "flex", margin: "16px 16px 0", background: "#f4f6fa", borderRadius: 10, padding: 3, flexWrap: "nowrap" }}>
+        {[["drivers", "기사 목록"], ["map", "지도"], ["feed", "활동"], ["attendance", "출근기록"]].map(([key, label]) => (
           <button key={key} onClick={() => setActiveSection(key)} style={{
-            flex: 1, padding: "8px 0", borderRadius: 8, border: "none",
+            flex: 1, padding: "8px 4px", borderRadius: 8, border: "none",
             background: activeSection === key ? NAVY : "transparent",
             color: activeSection === key ? "#fff" : "#6b7280",
-            fontSize: 13, fontWeight: 700, cursor: "pointer",
-            display: "flex", alignItems: "center", justifyContent: "center", gap: 4,
+            fontSize: 12, fontWeight: 700, cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 3,
           }}>
             {label}
             {key === "feed" && filteredFeed.length > 0 && (
@@ -687,7 +692,156 @@ export default function MobileFleetView() {
         </div>
       )}
 
+      {/* ═══ 출근기록 ═══ */}
+      {activeSection === "attendance" && (
+        <MobileAttendance logs={attendanceLogs} drivers={drivers} />
+      )}
+
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+    </div>
+  );
+}
+
+// ─── MobileAttendance ─────────────────────────────────────────────────────────
+
+function MobileAttendance({ logs, drivers }) {
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const [selectedDate, setSelectedDate] = useState(todayStr);
+
+  const goDay = (delta) => {
+    const d = new Date(selectedDate);
+    d.setDate(d.getDate() + delta);
+    setSelectedDate(d.toISOString().slice(0, 10));
+  };
+
+  const { attendance, noShow } = useMemo(() => {
+    const from = new Date(selectedDate + "T00:00:00");
+    const to   = new Date(selectedDate + "T23:59:59");
+    const byDriver = {};
+    logs.forEach(log => {
+      const t = resolveTs(log.timestamp);
+      if (!t || t < from || t > to) return;
+      if (!["출근", "퇴근", "최종퇴근"].includes(log.status)) return;
+      const uid = log.uid;
+      if (!byDriver[uid]) byDriver[uid] = { uid, name: log.driverName || "-", carNo: log.carNo || "-", checkIn: null, checkOut: null, isFinal: false, distance: null };
+      const e = byDriver[uid];
+      if (log.status === "출근" && (!e.checkIn || t < e.checkIn)) e.checkIn = t;
+      if ((log.status === "퇴근" || log.status === "최종퇴근") && (!e.checkOut || t > e.checkOut)) {
+        e.checkOut = t;
+        if (log.status === "최종퇴근") { e.isFinal = true; e.distance = log.finalDistance ?? null; }
+      }
+    });
+    const attendedUids = new Set(Object.keys(byDriver));
+    const noShow = selectedDate === todayStr ? drivers.filter(d => !attendedUids.has(d.id)) : [];
+    return {
+      attendance: Object.values(byDriver).sort((a, b) => (a.checkIn?.getTime() || 0) - (b.checkIn?.getTime() || 0)),
+      noShow,
+    };
+  }, [logs, selectedDate, drivers, todayStr]);
+
+  const fmtT = (d) => d ? `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}` : "--";
+
+  const dateLabel = (() => {
+    const d = new Date(selectedDate);
+    return `${d.getMonth()+1}/${d.getDate()} (${["일","월","화","수","목","금","토"][d.getDay()]})`;
+  })();
+
+  return (
+    <div style={{ padding: "12px 16px 0" }}>
+      {/* 날짜 네비 */}
+      <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: "14px 16px", marginBottom: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+          <span style={{ fontSize: 15, fontWeight: 800, color: NAVY }}>출근기록부</span>
+          <span style={{ fontSize: 13, color: "#6b7280", fontWeight: 600 }}>{dateLabel}</span>
+          <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+            <button onClick={() => goDay(-1)} style={{ padding: "5px 11px", border: "1px solid #e5e7eb", borderRadius: 7, background: "#fff", fontSize: 12, fontWeight: 600, color: "#374151", cursor: "pointer" }}>이전</button>
+            <button onClick={() => goDay(1)} disabled={selectedDate >= todayStr}
+              style={{ padding: "5px 11px", border: "1px solid #e5e7eb", borderRadius: 7, background: "#fff", fontSize: 12, fontWeight: 600, color: selectedDate >= todayStr ? "#d1d5db" : "#374151", cursor: selectedDate >= todayStr ? "default" : "pointer" }}>다음</button>
+            {selectedDate !== todayStr && (
+              <button onClick={() => setSelectedDate(todayStr)} style={{ padding: "5px 11px", border: "none", borderRadius: 7, background: NAVY, color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>오늘</button>
+            )}
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 16 }}>
+          {[
+            { label: "출근", val: attendance.length, color: NAVY },
+            { label: "미출근", val: Math.max(0, drivers.length - attendance.length), color: attendance.length < drivers.length ? "#dc2626" : "#374151" },
+            { label: "근무중", val: attendance.filter(r => !r.checkOut).length, color: "#10b981" },
+            { label: "전체", val: drivers.length, color: "#6b7280" },
+          ].map(({ label, val, color }) => (
+            <div key={label} style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "#9ca3af", letterSpacing: ".05em" }}>{label}</div>
+              <div style={{ fontSize: 20, fontWeight: 900, color }}>{val}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* 출근 목록 */}
+      {attendance.length === 0 ? (
+        <div style={{ padding: "30px", textAlign: "center", color: "#9ca3af", fontSize: 14 }}>출근 기록이 없습니다</div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {attendance.map((row, i) => {
+            const workMs = row.checkIn && row.checkOut ? row.checkOut.getTime() - row.checkIn.getTime() : null;
+            const workStr = workMs ? (() => { const h = Math.floor(workMs/3600000), m = Math.floor((workMs%3600000)/60000); return h > 0 ? `${h}시간 ${m}분` : `${m}분`; })() : null;
+            return (
+              <div key={row.uid} style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: "14px 16px" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: "#9ca3af" }}>{i + 1}</span>
+                    <span style={{ fontSize: 16, fontWeight: 800, color: "#111827" }}>{row.name}</span>
+                    <span style={{ fontSize: 12, color: NAVY, fontWeight: 700, letterSpacing: "0.04em" }}>{row.carNo}</span>
+                  </div>
+                  {!row.checkOut
+                    ? <span style={{ fontSize: 12, color: "#10b981", fontWeight: 700, background: "#d1fae5", padding: "2px 9px", borderRadius: 99 }}>근무중</span>
+                    : row.isFinal
+                      ? <span style={{ fontSize: 12, color: "#374151", background: "#f3f4f6", padding: "2px 9px", borderRadius: 99 }}>최종퇴근</span>
+                      : <span style={{ fontSize: 12, color: "#6b7280", background: "#f3f4f6", padding: "2px 9px", borderRadius: 99 }}>퇴근</span>
+                  }
+                </div>
+                <div style={{ display: "flex", gap: 16, fontSize: 13 }}>
+                  <div>
+                    <span style={{ color: "#9ca3af", fontSize: 11, fontWeight: 700 }}>출근</span>
+                    <div style={{ color: "#1B2B4B", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{fmtT(row.checkIn)}</div>
+                  </div>
+                  <div>
+                    <span style={{ color: "#9ca3af", fontSize: 11, fontWeight: 700 }}>퇴근</span>
+                    <div style={{ color: row.checkOut ? "#374151" : "#9ca3af", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{fmtT(row.checkOut)}</div>
+                  </div>
+                  {workStr && (
+                    <div>
+                      <span style={{ color: "#9ca3af", fontSize: 11, fontWeight: 700 }}>근무시간</span>
+                      <div style={{ color: "#374151", fontWeight: 700 }}>{workStr}</div>
+                    </div>
+                  )}
+                  {row.distance != null && (
+                    <div>
+                      <span style={{ color: "#9ca3af", fontSize: 11, fontWeight: 700 }}>이동거리</span>
+                      <div style={{ color: "#374151", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{row.distance.toFixed(1)} km</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* 미출근 기사 (오늘만) */}
+      {selectedDate === todayStr && noShow.length > 0 && (
+        <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: "14px 16px", marginTop: 12 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: NAVY, marginBottom: 10 }}>미출근 기사 ({noShow.length}명)</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {noShow.map(d => (
+              <div key={d.id} style={{ padding: "5px 12px", border: "1px solid #e5e7eb", borderRadius: 8, fontSize: 13, color: "#374151", fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#d1d5db", display: "inline-block" }} />
+                {d.이름} <span style={{ color: "#9ca3af", fontWeight: 500, fontSize: 12 }}>{d.차량번호}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -9,24 +9,29 @@ import { onAuthStateChanged, signOut } from "firebase/auth";
 
 // ─── 상태 설정 ───────────────────────────────────────────────────────────────
 const STATUS_CONFIG = {
-  대기:    { color: "#6b7280", label: "대기" },
-  출근:    { color: "#1B2B4B", label: "출근" },
-  상차중:  { color: "#374151", label: "상차중" },
-  운행중:  { color: "#1B2B4B", label: "운행중" },
-  하차중:  { color: "#374151", label: "하차중" },
-  복귀중:  { color: "#4b5563", label: "복귀중" },
-  휴식:    { color: "#9ca3af", label: "휴식" },
-  퇴근:    { color: "#111827", label: "퇴근" },
+  대기:      { color: "#6b7280", label: "대기" },
+  출근:      { color: "#1B2B4B", label: "출근" },
+  상차중:    { color: "#374151", label: "상차중" },
+  운행중:    { color: "#1B2B4B", label: "운행중" },
+  하차중:    { color: "#374151", label: "하차중" },
+  복귀중:    { color: "#4b5563", label: "복귀중" },
+  휴식:      { color: "#9ca3af", label: "휴식" },
+  퇴근:      { color: "#111827", label: "퇴근" },
+  최종퇴근:  { color: "#111827", label: "최종퇴근" },
 };
 
 // 다음 액션 정의 (현재 상태에 따른 컨텍스트 버튼)
 function getActions(status) {
   switch (status) {
     case "대기":
-    case "퇴근":
     case null:
     case undefined:
       return [{ label: "출근", status: "출근", primary: true }];
+    case "퇴근":
+      return [
+        { label: "출근", status: "출근", primary: true },
+        { label: "최종 퇴근 완료 (당일 종료)", status: "최종퇴근", primary: false },
+      ];
     case "출근":
       return [
         { label: "상차 시작", status: "상차중", primary: true },
@@ -375,30 +380,44 @@ export default function DriverHome() {
   const updateStatus = useCallback(async (newStatus) => {
     if (!uid || statusLoading) return;
     setStatusLoading(true);
+    const today = new Date().toISOString().slice(0, 10);
+    const isFinal = newStatus === "최종퇴근";
+    const firestoreStatus = isFinal ? "퇴근" : newStatus;
     try {
       const driverUpdate = {
-        status: newStatus,
-        mainStatus: newStatus,
+        status: firestoreStatus,
+        mainStatus: firestoreStatus,
         updatedAt: serverTimestamp(),
-        active: newStatus !== "퇴근",
+        active: firestoreStatus !== "퇴근",
       };
-      // On 출근: reset daily distance counter and record work start time
       if (newStatus === "출근") {
-        driverUpdate.totalDistance = 0;
         driverUpdate.workStartAt = serverTimestamp();
+        // 새로운 날(달력일 기준)에만 거리 초기화 — 당일 반복 출근 시 거리 누적 유지
+        if (driver?.workDate !== today) {
+          driverUpdate.totalDistance = 0;
+          driverUpdate.workDate = today;
+          resetTotalDist();
+        }
+      }
+      if (isFinal) {
+        // 최종퇴근: 오늘 누적거리 기록 후 다음날을 위해 초기화
+        driverUpdate.workDate = today;
+        driverUpdate.totalDistance = 0;
         resetTotalDist();
       }
       await updateDoc(doc(db, "drivers", uid), driverUpdate);
+      const logExtra = isFinal ? { finalDistance: driver?.totalDistance || 0 } : {};
       await addDoc(collection(db, "driver_logs"), {
         uid,
         driverName: driver?.name || "",
         carNo: driver?.carNo || "",
-        status: newStatus,
-        mainStatus: newStatus,
+        status: newStatus,        // 로그에는 "최종퇴근" 그대로 기록
+        mainStatus: firestoreStatus,
         timestamp: serverTimestamp(),
         location: (pos && (pos.accuracy == null || pos.accuracy <= 100)) ? { lat: pos.lat, lng: pos.lng } : null,
+        ...logExtra,
       });
-      showToast(`${newStatus} 처리되었습니다`);
+      showToast(`${isFinal ? "최종 퇴근" : newStatus} 처리되었습니다`);
     } catch (e) {
       showToast("처리 중 오류가 발생했습니다");
     } finally {
