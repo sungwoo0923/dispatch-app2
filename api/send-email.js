@@ -12,7 +12,9 @@ export default async function handler(req, res) {
       secure: true,
       auth: { user: "r15332525@daum.net", pass: "kzcvdgefuvltipso" },
       tls: { rejectUnauthorized: false },
-      connectionTimeout: 15000,
+      connectionTimeout: 8000,
+      greetingTimeout: 5000,
+      socketTimeout: 10000,
     });
 
     const mailOptions = {

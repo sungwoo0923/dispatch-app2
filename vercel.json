@@ -1,7 +1,8 @@
 {
   "functions": {
     "api/send-email.js": {
-      "maxDuration": 30
+      "maxDuration": 30,
+      "regions": ["icn1"]
     },
     "api/send24.js": {
       "maxDuration": 30,
