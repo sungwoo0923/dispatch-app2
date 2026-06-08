@@ -144,6 +144,7 @@ const [detailModal, setDetailModal] = useState(null);
   const [viewMode, setViewMode] = useState("톤수별"); // 톤수별 | 파렛수별
   const [printHistory, setPrintHistory] = useState(() => JSON.parse(localStorage.getItem("rateCardHistory") || "[]"));
   const [historyModal, setHistoryModal] = useState(false);
+  const [historySelected, setHistorySelected] = useState(new Set());
   // 🔥 거래처 제외 필터
   const [excludeQuery, setExcludeQuery] = useState("");
   const [excludeList, setExcludeList] = useState([]);       // 제외할 거래처명 배열
@@ -1014,10 +1015,18 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
                 <p className="text-[12px] text-gray-400 mt-0.5">인쇄/PDF 저장 버튼을 누른 내역이 기록됩니다</p>
               </div>
               <div className="flex items-center gap-2">
-                {printHistory.length > 0 && (
-                  <button onClick={() => { if(window.confirm("전체 이력을 삭제할까요?")) { localStorage.removeItem("rateCardHistory"); setPrintHistory([]); }}} className="px-3 py-1.5 text-[12px] text-red-500 border border-red-200 rounded-lg hover:bg-red-50 transition">전체 삭제</button>
+                {historySelected.size > 0 && (
+                  <button onClick={() => {
+                    const next = printHistory.filter((_, i) => !historySelected.has(i));
+                    localStorage.setItem("rateCardHistory", JSON.stringify(next));
+                    setPrintHistory(next);
+                    setHistorySelected(new Set());
+                  }} className="px-3 py-1.5 text-[12px] text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition">선택 삭제 ({historySelected.size})</button>
                 )}
-                <button onClick={() => setHistoryModal(false)} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400 text-[18px] transition">×</button>
+                {printHistory.length > 0 && (
+                  <button onClick={() => { if(window.confirm("전체 이력을 삭제할까요?")) { localStorage.removeItem("rateCardHistory"); setPrintHistory([]); setHistorySelected(new Set()); }}} className="px-3 py-1.5 text-[12px] text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50 transition">전체 삭제</button>
+                )}
+                <button onClick={() => { setHistoryModal(false); setHistorySelected(new Set()); }} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400 text-[18px] transition">×</button>
               </div>
             </div>
             <div className="overflow-y-auto flex-1 p-4">
@@ -1030,7 +1039,9 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
                     const dateStr = dt.toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" });
                     const timeStr = dt.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
                     return (
-                      <div key={i} className="flex items-start gap-3 p-3 rounded-xl border border-gray-100 bg-white hover:bg-gray-50 transition">
+                      <div key={i} className={`flex items-start gap-3 p-3 rounded-xl border transition cursor-pointer ${historySelected.has(i) ? "border-[#1B2B4B] bg-gray-50" : "border-gray-100 bg-white hover:bg-gray-50"}`}
+                        onClick={() => setHistorySelected(prev => { const n = new Set(prev); n.has(i) ? n.delete(i) : n.add(i); return n; })}>
+                        <input type="checkbox" readOnly checked={historySelected.has(i)} className="mt-1 w-4 h-4 rounded border-gray-300 accent-[#1B2B4B] shrink-0" />
                         <div className="mt-0.5 w-6 h-6 rounded flex items-center justify-center text-[11px] font-bold flex-shrink-0 bg-gray-200 text-gray-600">
                           {h.source === "manual" ? "수" : "자"}
                         </div>

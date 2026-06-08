@@ -186,6 +186,7 @@ const IGNORE_HISTORY_FIELDS = new Set([
 import { signOut } from "firebase/auth";
 import {
   collection,
+  addDoc,
   deleteDoc,
   doc,
   getDoc,
@@ -11369,7 +11370,7 @@ function InlineEditCell({ value, placeholder, onSave }) {
 }
 // ── 첨부파일 뷰어 컴포넌트 ──
 // ── 첨부파일 뷰어 컴포넌트 ──
-function AttachmentViewer({ row, onClose, db }) {
+function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed }) {
   const [items, setItems] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [selected, setSelected] = React.useState(null);
@@ -11600,6 +11601,23 @@ const handleDelete = async (item) => {
             </div>
           )}
         </div>
+
+        {/* 완료 처리 푸터 */}
+        {onToggleViewed && (
+          <div className="border-t border-gray-100 px-5 py-3 bg-gray-50 flex items-center justify-between">
+            <span className="text-[12px] text-gray-400">파일 확인 여부를 수동으로 표시할 수 있습니다</span>
+            <button
+              onClick={onToggleViewed}
+              className={`px-4 py-2 rounded-lg text-[13px] font-bold transition ${
+                isViewed
+                  ? "bg-[#1B2B4B] text-white hover:bg-[#243a60]"
+                  : "bg-white border border-gray-300 text-gray-600 hover:bg-gray-100"
+              }`}
+            >
+              {isViewed ? "완료 처리됨 (취소)" : "완료로 표시"}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* 전체화면 뷰 */}
@@ -14017,6 +14035,7 @@ React.useEffect(() => {
 
   // 주소 더보기
   const [expandedAddr, setExpandedAddr] = React.useState({});
+  const [addrPopup, setAddrPopup] = React.useState(null);
 
   // 상차 임박 경고
   const [warningList, setWarningList] = React.useState([]);
@@ -15922,33 +15941,22 @@ const handleCloseFileUpload = async (e) => {
     const text = String(val || "");
     if (!text) return "";
 
-    const stKey = `${rowId}_${key}`;
-    const expanded = !!expandedAddr[stKey];
     const LIMIT = 14;
     const isLong = text.length > LIMIT;
-    const display = isLong && !expanded ? text.slice(0, LIMIT) + "…" : text;
+    const display = isLong ? text.slice(0, LIMIT) + "…" : text;
 
     return (
       <div className="flex items-center justify-center gap-1 min-w-0">
-        <span
-          className="whitespace-nowrap overflow-hidden text-ellipsis"
-          style={{ maxWidth: 160 }}
-          title={text}
-        >
+        <span className="whitespace-nowrap overflow-hidden text-ellipsis" style={{ maxWidth: 120 }} title={text}>
           {display}
         </span>
         {isLong && (
           <button
             type="button"
-            className="text-[11px] text-blue-500 underline shrink-0"
-            onClick={() =>
-              setExpandedAddr((prev) => ({
-                ...prev,
-                [stKey]: !prev[stKey],
-              }))
-            }
+            className="text-[11px] text-[#1B2B4B] underline shrink-0 hover:opacity-70"
+            onClick={() => setAddrPopup(text)}
           >
-            {expanded ? "접기" : "더보기"}
+            더보기
           </button>
         )}
       </div>
@@ -16022,7 +16030,24 @@ const head = isDark
     row={attachViewer}
     db={db}
     onClose={() => setAttachViewer(null)}
+    isViewed={viewedAttachIds4.has(attachViewer?._id)}
+    onToggleViewed={() => setViewedAttachIds4(prev => { const n = new Set(prev); n.has(attachViewer._id) ? n.delete(attachViewer._id) : n.add(attachViewer._id); return n; })}
   />
+)}
+{addrPopup && (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]" onClick={() => setAddrPopup(null)}>
+    <div className="bg-white rounded-2xl shadow-2xl w-[440px] overflow-hidden" onClick={e => e.stopPropagation()}>
+      <div className="bg-[#1B2B4B] px-6 py-4">
+        <h3 className="text-white font-bold text-[15px]">주소 전체보기</h3>
+      </div>
+      <div className="px-6 py-5">
+        <p className="text-[14px] text-gray-800 leading-relaxed whitespace-pre-wrap break-words">{addrPopup}</p>
+      </div>
+      <div className="border-t border-gray-100 px-6 py-3 bg-gray-50 flex justify-end">
+        <button onClick={() => setAddrPopup(null)} className="px-5 py-2 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-lg hover:bg-[#243a60] transition">닫기</button>
+      </div>
+    </div>
+  </div>
 )}
 {attachStatusOpen && (
   <AttachStatusPanel
@@ -16598,20 +16623,9 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
 
                   {/* 수수료 */}
                   <td className={`${cell} text-right pr-2`}>
-                    <div className="inline-flex items-center gap-1 justify-end">
-                      <span className={`font-bold ${fee < 0 ? "text-red-600" : "text-blue-600"}`}>
-                        {formatComma(fee)}
-                      </span>
-                      {sale > 0 && (
-                        <span className={`text-[10px] font-semibold whitespace-nowrap ${
-                          fee / sale >= 0.2 ? "text-emerald-500"
-                          : fee / sale >= 0.1 ? "text-amber-500"
-                          : "text-red-400"
-                        }`}>
-                          {Math.round(fee / sale * 100)}%
-                        </span>
-                      )}
-                    </div>
+                    <span className={`font-bold ${fee < 0 ? "text-red-600" : "text-blue-600"}`}>
+                      {formatComma(fee)}
+                    </span>
                   </td>
 
                   <td className={cell}>{editableInput("지급방식", r.지급방식, r._id)}</td>
@@ -23888,6 +23902,8 @@ return (
     row={attachViewer}
     db={db}
     onClose={() => setAttachViewer(null)}
+    isViewed={viewedAttachIds5.has(attachViewer?._id)}
+    onToggleViewed={() => setViewedAttachIds5(prev => { const n = new Set(prev); n.has(attachViewer._id) ? n.delete(attachViewer._id) : n.add(attachViewer._id); return n; })}
   />
 )}
 {attachStatusDSOpen && (
@@ -28457,30 +28473,29 @@ function AddressCell({ text = "", max = 5 }) {
 
   return (
     <div className="relative inline-block">
-      <span>{open ? clean : short}</span>
-      {isLong && !open && (
-        <button onClick={() => setOpen(true)} className="text-blue-600 text-xs ml-1 underline">
+      <span>{short}</span>
+      {isLong && (
+        <button onClick={() => setOpen(true)} className="text-[11px] text-[#1B2B4B] ml-1 underline hover:opacity-70">
           더보기
         </button>
       )}
       {open && (
         <div
-          className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]"
           onClick={() => setOpen(false)}
         >
           <div
-            className="bg-white p-4 rounded-lg shadow-lg w-[420px] max-w-[90%]"
+            className="bg-white rounded-2xl shadow-2xl w-[440px] overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="font-semibold text-lg mb-2">주소 전체보기</h3>
-            <div className="text-sm whitespace-pre-wrap break-words">{clean}</div>
-            <div className="text-right mt-4">
-              <button
-                onClick={() => setOpen(false)}
-                className="px-3 py-1 rounded bg-blue-600 text-white text-sm"
-              >
-                닫기
-              </button>
+            <div className="bg-[#1B2B4B] px-6 py-4">
+              <h3 className="text-white font-bold text-[15px]">주소 전체보기</h3>
+            </div>
+            <div className="px-6 py-5">
+              <p className="text-[14px] text-gray-800 leading-relaxed whitespace-pre-wrap break-words">{clean}</p>
+            </div>
+            <div className="border-t border-gray-100 px-6 py-3 bg-gray-50 flex justify-end">
+              <button onClick={() => setOpen(false)} className="px-5 py-2 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-lg hover:bg-[#243a60] transition">닫기</button>
             </div>
           </div>
         </div>
