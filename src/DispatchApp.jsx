@@ -519,10 +519,6 @@ const patchDispatch = async (_id, patch) => {
         setTimeout(() => {
           window.dispatchEvent(new CustomEvent("blackDriverDetected", { detail: matched }));
         }, 100);
-      } else if (matched.메모 && String(matched.메모).trim()) {
-        setTimeout(() => {
-          window.dispatchEvent(new CustomEvent("driverMemoDetected", { detail: matched }));
-        }, 100);
       }
     }
   }
@@ -11614,7 +11610,7 @@ const handleDelete = async (item) => {
                   : "bg-white border border-gray-300 text-gray-600 hover:bg-gray-100"
               }`}
             >
-              {isViewed ? "완료 처리됨 (취소)" : "완료로 표시"}
+              {isViewed ? "미완료" : "완료처리"}
             </button>
           </div>
         )}
@@ -12922,6 +12918,8 @@ const checkWarningStatus = (name, type) => {
   const [showEditPlaceDropdown, setShowEditPlaceDropdown] = React.useState(false);
   const [editPlaceType, setEditPlaceType] = React.useState(null); // "pickup" | "drop"
   const [editActiveIndex, setEditActiveIndex] = React.useState(0);
+  const [panelContactPopup4, setPanelContactPopup4] = React.useState(null);
+  const [panelContactActive4, setPanelContactActive4] = React.useState(0);
   // ==========================
   // 🔵 선택수정 거래처 자동완성 상태 (추가)
   // ==========================
@@ -14638,6 +14636,11 @@ const [quickRegPhone, setQuickRegPhone] = React.useState("");
   // 🔹 기존 기사 1명 매칭
   if (matches.length === 1) {
     const match = matches[0];
+    // 메모/블랙 즉시 팝업
+    const g3 = match?.등급 || match?.grade || "";
+    if (g3 !== "블랙" && match?.메모 && String(match.메모).trim()) {
+      window.dispatchEvent(new CustomEvent("driverMemoDetected", { detail: match }));
+    }
     const existingName = (oldRow.이름 || "").trim();
     const existingPhone = (oldRow.전화번호 || "").replace(/[^\d]/g, "");
     const matchPhone = (match.전화번호 || "").replace(/[^\d]/g, "");
@@ -16114,6 +16117,42 @@ const head = isDark
     </div>
   </div>
 )}
+{panelContactPopup4 && (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]"
+    tabIndex={-1}
+    ref={(el) => { if (el) setTimeout(() => el.focus(), 0); }}
+    onKeyDown={(e) => {
+      if (e.key === "ArrowDown") { e.preventDefault(); setPanelContactActive4(i => Math.min(i + 1, panelContactPopup4.contacts.length - 1)); }
+      else if (e.key === "ArrowUp") { e.preventDefault(); setPanelContactActive4(i => Math.max(i - 1, 0)); }
+      else if (e.key === "Enter") { e.preventDefault(); const c = panelContactPopup4.contacts[panelContactActive4]; if (c) { const key = panelContactPopup4.type === "pickup" ? "상차" : "하차"; panelContactPopup4.setter(prev => ({ ...prev, [`${key}지담당자`]: c.name || "", [`${key}지담당자번호`]: c.phone || "" })); } setPanelContactPopup4(null); }
+      else if (e.key === "Escape") { e.preventDefault(); setPanelContactPopup4(null); }
+    }}>
+    <div className="bg-white rounded-2xl shadow-2xl w-[380px] overflow-hidden">
+      <div className="bg-[#1B2B4B] px-6 py-4">
+        <h3 className="text-white font-bold text-[15px]">{panelContactPopup4.type === "pickup" ? "상차지" : "하차지"} 담당자 선택</h3>
+        <p className="text-white/60 text-[12px] mt-0.5">{panelContactPopup4.place.업체명}</p>
+      </div>
+      <div className="p-4 space-y-2">
+        {panelContactPopup4.contacts.map((c, i) => (
+          <div key={i}
+            className={`rounded-xl border-2 px-4 py-3 cursor-pointer transition ${i === panelContactActive4 ? "border-[#1B2B4B] bg-[#1B2B4B]/5" : "border-gray-200 hover:border-gray-300"}`}
+            onMouseEnter={() => setPanelContactActive4(i)}
+            onClick={() => {
+              const key = panelContactPopup4.type === "pickup" ? "상차" : "하차";
+              panelContactPopup4.setter(prev => ({ ...prev, [`${key}지담당자`]: c.name || "", [`${key}지담당자번호`]: c.phone || "" }));
+              setPanelContactPopup4(null);
+            }}>
+            <div className="font-bold text-gray-900">{c.name || "-"}</div>
+            <div className="text-sm text-gray-500 mt-0.5">{c.phone || "-"}</div>
+          </div>
+        ))}
+      </div>
+      <div className="px-4 pb-4 text-right">
+        <button className="px-4 py-2 rounded-lg bg-gray-200 text-sm" onClick={() => setPanelContactPopup4(null)}>취소</button>
+      </div>
+    </div>
+  </div>
+)}
     {/* 상차 임박 경고 배너 — 접기/펼치기 */}
 {warningList.length > 0 && (
   <div className="mb-3 w-fit max-w-full select-none">
@@ -16669,7 +16708,7 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
                       title="첨부파일 보기"
                     >
                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                        stroke={(r.attachCount || 0) > 0 ? (viewedAttachIds4.has(r._id) ? "#1B2B4B" : "#059669") : "#cbd5e1"}
+                        stroke={viewedAttachIds4.has(r._id) ? "#1B2B4B" : (r.attachCount || 0) > 0 ? "#059669" : "#cbd5e1"}
                         strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                         <polyline points="14 2 14 8 20 8"/>
@@ -16822,6 +16861,8 @@ flashRow(savedId);
     }, 400);
 
     patchDispatch(savedId, payload).catch(console.error);
+    if (payload.상차지명) upsertPlace?.({ 업체명: payload.상차지명, 주소: payload.상차지주소||"", 담당자: payload.상차지담당자||"", 담당자번호: payload.상차지담당자번호||"" }).catch(console.error);
+    if (payload.하차지명) upsertPlace?.({ 업체명: payload.하차지명, 주소: payload.하차지주소||"", 담당자: payload.하차지담당자||"", 담당자번호: payload.하차지담당자번호||"" }).catch(console.error);
     const plate = normalizePlate(payload.차량번호 || "");
     setRows(prev => prev.map(r => r._id === savedId ? { ...r, ...payload } : r));
   }}
@@ -17063,14 +17104,17 @@ checkWarningStatus(c.거래처명, "거래처");
                 e.preventDefault();
                 const p = copyPlaceOptions[copyActiveIndex];
                 if(!p) return;
-
+                const cts4ce = (p.contacts || []).filter(c => c.name?.trim());
+                const ucts4ce = [...new Map(cts4ce.map(c => [c.name.trim(), c])).values()];
+                const prim4ce = ucts4ce.find(c => c.isPrimary) || ucts4ce[0];
                 setCopyTarget(prev=>({
                   ...prev,
                   상차지명:p.업체명,
                   상차지주소:p.주소 || "",
-                  상차지담당자:p.담당자 || "",
-                  상차지담당자번호:p.담당자번호 || "",
+                  상차지담당자:prim4ce?.name || p.담당자 || "",
+                  상차지담당자번호:prim4ce?.phone || p.담당자번호 || "",
                 }));
+                if (ucts4ce.length > 1) setPanelContactPopup4({ type: "pickup", place: p, contacts: ucts4ce, setter: setCopyTarget, pickupKey: "상차", dropKey: "하차" });
                 checkWarningStatus(p.업체명, "상차지");
                 setShowCopyPlaceDropdown(false);
               }
@@ -17087,13 +17131,17 @@ checkWarningStatus(c.거래처명, "거래처");
                     i===copyActiveIndex ? "bg-blue-100" : "hover:bg-gray-50"
                   }`}
                   onMouseDown={()=>{
+                    const cts4c = (p.contacts || []).filter(c => c.name?.trim());
+                    const ucts4c = [...new Map(cts4c.map(c => [c.name.trim(), c])).values()];
+                    const prim4c = ucts4c.find(c => c.isPrimary) || ucts4c[0];
                     setCopyTarget(prev=>({
                       ...prev,
                       상차지명:p.업체명,
                       상차지주소:p.주소 || "",
-                      상차지담당자:p.담당자 || "",
-                      상차지담당자번호:p.담당자번호 || "",
+                      상차지담당자:prim4c?.name || p.담당자 || "",
+                      상차지담당자번호:prim4c?.phone || p.담당자번호 || "",
                     }));
+                    if (ucts4c.length > 1) setPanelContactPopup4({ type: "pickup", place: p, contacts: ucts4c, setter: setCopyTarget, pickupKey: "상차", dropKey: "하차" });
                     checkWarningStatus(p.업체명, "상차지");
                     setShowCopyPlaceDropdown(false);
                   }}
@@ -17222,14 +17270,17 @@ checkWarningStatus(c.거래처명, "거래처");
                 e.preventDefault();
                 const p = copyPlaceOptions[copyActiveIndex];
                 if(!p) return;
-
+                const cts4cde2 = (p.contacts || []).filter(c => c.name?.trim());
+                const ucts4cde2 = [...new Map(cts4cde2.map(c => [c.name.trim(), c])).values()];
+                const prim4cde2 = ucts4cde2.find(c => c.isPrimary) || ucts4cde2[0];
                 setCopyTarget(prev=>({
                   ...prev,
                   하차지명:p.업체명,
                   하차지주소:p.주소 || "",
-                  하차지담당자:p.담당자 || "",
-                  하차지담당자번호:p.담당자번호 || "",
+                  하차지담당자:prim4cde2?.name || p.담당자 || "",
+                  하차지담당자번호:prim4cde2?.phone || p.담당자번호 || "",
                 }));
+                if (ucts4cde2.length > 1) setPanelContactPopup4({ type: "drop", place: p, contacts: ucts4cde2, setter: setCopyTarget, pickupKey: "상차", dropKey: "하차" });
                 checkWarningStatus(p.업체명, "하차지");
                 setShowCopyPlaceDropdown(false);
               }
@@ -17246,13 +17297,17 @@ checkWarningStatus(c.거래처명, "거래처");
                     i===copyActiveIndex ? "bg-blue-100" : "hover:bg-gray-50"
                   }`}
                   onMouseDown={()=>{
+                    const cts4cd2 = (p.contacts || []).filter(c => c.name?.trim());
+                    const ucts4cd2 = [...new Map(cts4cd2.map(c => [c.name.trim(), c])).values()];
+                    const prim4cd2 = ucts4cd2.find(c => c.isPrimary) || ucts4cd2[0];
                     setCopyTarget(prev=>({
                       ...prev,
                       하차지명:p.업체명,
                       하차지주소:p.주소 || "",
-                      하차지담당자:p.담당자 || "",
-                      하차지담당자번호:p.담당자번호 || "",
+                      하차지담당자:prim4cd2?.name || p.담당자 || "",
+                      하차지담당자번호:prim4cd2?.phone || p.담당자번호 || "",
                     }));
+                    if (ucts4cd2.length > 1) setPanelContactPopup4({ type: "drop", place: p, contacts: ucts4cd2, setter: setCopyTarget, pickupKey: "상차", dropKey: "하차" });
                     checkWarningStatus(p.업체명, "하차지");
                     setShowCopyPlaceDropdown(false);
                   }}
@@ -17417,11 +17472,13 @@ setCopyTarget(prev => ({
             d => normalizePlate(d.차량번호) === plate
           );
 
-          // 🔥 블랙 기사 팝업
+          // 🔥 블랙/메모 기사 팝업
           if (match) {
             const grade = match?.등급 || match?.grade || "";
             if (grade === "블랙") {
               setBlackAlert(match);
+            } else if (match?.메모 && String(match.메모).trim()) {
+              window.dispatchEvent(new CustomEvent("driverMemoDetected", { detail: match }));
             }
           }
 
@@ -18571,14 +18628,17 @@ value={copyTarget?.화물수량 || ""}
                     e.preventDefault();
                     const p = editPlaceOptions[editActiveIndex];
                     if (!p) return;
-
+                    const cts4e = (p.contacts || []).filter(c => c.name?.trim());
+                    const ucts4e = [...new Map(cts4e.map(c => [c.name.trim(), c])).values()];
+                    const prim4e = ucts4e.find(c => c.isPrimary) || ucts4e[0];
                     setEditTarget((prev) => ({
                       ...prev,
                       상차지명: p.업체명,
                       상차지주소: p.주소 || "",
-                      상차지담당자: p.담당자 || "",
-                      상차지담당자번호: p.담당자번호 || "",
+                      상차지담당자: prim4e?.name || p.담당자 || "",
+                      상차지담당자번호: prim4e?.phone || p.담당자번호 || "",
                     }));
+                    if (ucts4e.length > 1) setPanelContactPopup4({ type: "pickup", place: p, contacts: ucts4e, setter: setEditTarget, pickupKey: "상차", dropKey: "하차" });
                     setShowEditPlaceDropdown(false);
                     checkWarningStatus(p.업체명, "상차지");
                   }
@@ -18596,13 +18656,17 @@ value={copyTarget?.화물수량 || ""}
                       className={`px-3 py-1 cursor-pointer ${i === editActiveIndex ? "bg-blue-100" : ""
                         }`}
                       onMouseDown={() => {
+                        const cts4 = (p.contacts || []).filter(c => c.name?.trim());
+                        const ucts4 = [...new Map(cts4.map(c => [c.name.trim(), c])).values()];
+                        const prim4 = ucts4.find(c => c.isPrimary) || ucts4[0];
                         setEditTarget((prev) => ({
                           ...prev,
                           상차지명: p.업체명,
                           상차지주소: p.주소 || "",
-                          상차지담당자: p.담당자 || "",
-                          상차지담당자번호: p.담당자번호 || "",
+                          상차지담당자: prim4?.name || p.담당자 || "",
+                          상차지담당자번호: prim4?.phone || p.담당자번호 || "",
                         }));
+                        if (ucts4.length > 1) setPanelContactPopup4({ type: "pickup", place: p, contacts: ucts4, setter: setEditTarget, pickupKey: "상차", dropKey: "하차" });
                         setShowEditPlaceDropdown(false);
                         checkWarningStatus(p.업체명, "상차지");
                       }}
@@ -18709,14 +18773,17 @@ value={copyTarget?.화물수량 || ""}
                     e.preventDefault();
                     const p = editPlaceOptions[editActiveIndex];
                     if (!p) return;
-
+                    const cts4de = (p.contacts || []).filter(c => c.name?.trim());
+                    const ucts4de = [...new Map(cts4de.map(c => [c.name.trim(), c])).values()];
+                    const prim4de = ucts4de.find(c => c.isPrimary) || ucts4de[0];
                     setEditTarget((prev) => ({
                       ...prev,
                       하차지명: p.업체명,
                       하차지주소: p.주소 || "",
-                      하차지담당자: p.담당자 || "",
-                      하차지담당자번호: p.담당자번호 || "",
+                      하차지담당자: prim4de?.name || p.담당자 || "",
+                      하차지담당자번호: prim4de?.phone || p.담당자번호 || "",
                     }));
+                    if (ucts4de.length > 1) setPanelContactPopup4({ type: "drop", place: p, contacts: ucts4de, setter: setEditTarget, pickupKey: "상차", dropKey: "하차" });
                     setShowEditPlaceDropdown(false);
                     checkWarningStatus(p.업체명, "하차지");
                   }
@@ -18734,13 +18801,17 @@ value={copyTarget?.화물수량 || ""}
                       className={`px-3 py-1 cursor-pointer ${i === editActiveIndex ? "bg-blue-100" : ""
                         }`}
                       onMouseDown={() => {
+                        const cts4d = (p.contacts || []).filter(c => c.name?.trim());
+                        const ucts4d = [...new Map(cts4d.map(c => [c.name.trim(), c])).values()];
+                        const prim4d = ucts4d.find(c => c.isPrimary) || ucts4d[0];
                         setEditTarget((prev) => ({
                           ...prev,
                           하차지명: p.업체명,
                           하차지주소: p.주소 || "",
-                          하차지담당자: p.담당자 || "",
-                          하차지담당자번호: p.담당자번호 || "",
+                          하차지담당자: prim4d?.name || p.담당자 || "",
+                          하차지담당자번호: prim4d?.phone || p.담당자번호 || "",
                         }));
+                        if (ucts4d.length > 1) setPanelContactPopup4({ type: "drop", place: p, contacts: ucts4d, setter: setEditTarget, pickupKey: "상차", dropKey: "하차" });
                         setShowEditPlaceDropdown(false);
                         checkWarningStatus(p.업체명, "하차지");
                       }}
@@ -19012,7 +19083,15 @@ value={copyTarget?.화물수량 || ""}
                 placeholder="예: 93가1234"
                 onChange={(e) => {
                   const raw = e.target.value;
-
+                  const clean = raw.replace(/\s+/g, "");
+                  if (clean) {
+                    const match = (drivers || []).find(d => String(d.차량번호 || "").replace(/\s+/g, "") === clean);
+                    if (match) {
+                      const grade = match?.등급 || match?.grade || "";
+                      if (grade === "블랙") setBlackAlert(match);
+                      else if (match?.메모 && String(match.메모).trim()) window.dispatchEvent(new CustomEvent("driverMemoDetected", { detail: match }));
+                    }
+                  }
                   setEditTarget((p) => ({
                     ...p,
                     차량번호: raw,
@@ -19419,6 +19498,8 @@ patchDispatch(editTarget._id, payload).catch(console.error);
 if (editTarget.거래처명) {
   upsertClient?.({ 거래처명: editTarget.거래처명, 주소: editTarget.상차지주소||"", 담당자: editTarget.거래처담당자||"", 연락처: editTarget.거래처연락처||"", updatedAt: Date.now() }).catch(console.error);
 }
+if (editTarget.상차지명) upsertPlace?.({ 업체명: editTarget.상차지명, 주소: editTarget.상차지주소||"", 담당자: editTarget.상차지담당자||"", 담당자번호: editTarget.상차지담당자번호||"" }).catch(console.error);
+if (editTarget.하차지명) upsertPlace?.({ 업체명: editTarget.하차지명, 주소: editTarget.하차지주소||"", 담당자: editTarget.하차지담당자||"", 담당자번호: editTarget.하차지담당자번호||"" }).catch(console.error);
                 }}
               >
                 저장
@@ -22021,6 +22102,8 @@ const [copyPlaceOptions, setCopyPlaceOptions] = React.useState([]);
 const [copyPlaceType, setCopyPlaceType] = React.useState(null); // pickup | drop
 const [showCopyPlaceDropdown, setShowCopyPlaceDropdown] = React.useState(false);
 const [copyActiveIndex, setCopyActiveIndex] = React.useState(0);
+const [panelContactPopup5, setPanelContactPopup5] = React.useState(null);
+const [panelContactActive5, setPanelContactActive5] = React.useState(0);
   // 🔔 즉시 변경 확인 팝업 + 히스토리
   const [confirmChange, setConfirmChange] = React.useState(null);
   /*
@@ -23970,6 +24053,42 @@ return (
     </div>
   </div>
 )}
+{panelContactPopup5 && (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]"
+    tabIndex={-1}
+    ref={(el) => { if (el) setTimeout(() => el.focus(), 0); }}
+    onKeyDown={(e) => {
+      if (e.key === "ArrowDown") { e.preventDefault(); setPanelContactActive5(i => Math.min(i + 1, panelContactPopup5.contacts.length - 1)); }
+      else if (e.key === "ArrowUp") { e.preventDefault(); setPanelContactActive5(i => Math.max(i - 1, 0)); }
+      else if (e.key === "Enter") { e.preventDefault(); const c = panelContactPopup5.contacts[panelContactActive5]; if (c) { const key = panelContactPopup5.type === "pickup" ? "상차" : "하차"; panelContactPopup5.setter(prev => ({ ...prev, [`${key}지담당자`]: c.name || "", [`${key}지담당자번호`]: c.phone || "" })); } setPanelContactPopup5(null); }
+      else if (e.key === "Escape") { e.preventDefault(); setPanelContactPopup5(null); }
+    }}>
+    <div className="bg-white rounded-2xl shadow-2xl w-[380px] overflow-hidden">
+      <div className="bg-[#1B2B4B] px-6 py-4">
+        <h3 className="text-white font-bold text-[15px]">{panelContactPopup5.type === "pickup" ? "상차지" : "하차지"} 담당자 선택</h3>
+        <p className="text-white/60 text-[12px] mt-0.5">{panelContactPopup5.place.업체명}</p>
+      </div>
+      <div className="p-4 space-y-2">
+        {panelContactPopup5.contacts.map((c, i) => (
+          <div key={i}
+            className={`rounded-xl border-2 px-4 py-3 cursor-pointer transition ${i === panelContactActive5 ? "border-[#1B2B4B] bg-[#1B2B4B]/5" : "border-gray-200 hover:border-gray-300"}`}
+            onMouseEnter={() => setPanelContactActive5(i)}
+            onClick={() => {
+              const key = panelContactPopup5.type === "pickup" ? "상차" : "하차";
+              panelContactPopup5.setter(prev => ({ ...prev, [`${key}지담당자`]: c.name || "", [`${key}지담당자번호`]: c.phone || "" }));
+              setPanelContactPopup5(null);
+            }}>
+            <div className="font-bold text-gray-900">{c.name || "-"}</div>
+            <div className="text-sm text-gray-500 mt-0.5">{c.phone || "-"}</div>
+          </div>
+        ))}
+      </div>
+      <div className="px-4 pb-4 text-right">
+        <button className="px-4 py-2 rounded-lg bg-gray-200 text-sm" onClick={() => setPanelContactPopup5(null)}>취소</button>
+      </div>
+    </div>
+  </div>
+)}
 {/* 오류오더 필터 활성 배너 */}
       {filterErrorIds !== null && (
         <div className="flex items-center gap-3 px-4 py-2 mb-2 bg-[#1B2B4B]/8 border border-[#1B2B4B]/30 rounded-xl">
@@ -24514,7 +24633,7 @@ onBlur={(e) => {
                       title="첨부파일 보기"
                     >
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                      stroke={(row.attachCount || 0) > 0 ? (viewedAttachIds5.has(row._id) ? "#1B2B4B" : "#059669") : "#cbd5e1"}
+                      stroke={viewedAttachIds5.has(row._id) ? "#1B2B4B" : (row.attachCount || 0) > 0 ? "#059669" : "#cbd5e1"}
                         strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                         <polyline points="14 2 14 8 20 8"/>
@@ -24848,14 +24967,17 @@ onBlur={(e) => {
                     e.preventDefault();
                     const p = placeOptions[placeActiveIndex];
                     if (!p) return;
-
+                    const cts5e = (p.contacts || []).filter(c => c.name?.trim());
+                    const ucts5e = [...new Map(cts5e.map(c => [c.name.trim(), c])).values()];
+                    const prim5e = ucts5e.find(c => c.isPrimary) || ucts5e[0];
                     setEditTarget((prev) => ({
                       ...prev,
                       상차지명: p.업체명,
                       상차지주소: p.주소 || "",
-                      상차지담당자: p.담당자 || "",
-                      상차지담당자번호: p.담당자번호 || "",
+                      상차지담당자: prim5e?.name || p.담당자 || "",
+                      상차지담당자번호: prim5e?.phone || p.담당자번호 || "",
                     }));
+                    if (ucts5e.length > 1) setPanelContactPopup5({ type: "pickup", place: p, contacts: ucts5e, setter: setEditTarget });
                     checkWarningStatus(p.업체명, "상차지");
                     setActivePlaceField(null);
                   }
@@ -24876,13 +24998,17 @@ onBlur={(e) => {
                         (idx === placeActiveIndex ? "bg-blue-100" : "hover:bg-gray-100")
                       }
                       onMouseDown={() => {
+                        const cts5 = (p.contacts || []).filter(c => c.name?.trim());
+                        const ucts5 = [...new Map(cts5.map(c => [c.name.trim(), c])).values()];
+                        const prim5 = ucts5.find(c => c.isPrimary) || ucts5[0];
                         setEditTarget((prev) => ({
                           ...prev,
                           상차지명: p.업체명,
                           상차지주소: p.주소 || "",
-                          상차지담당자: p.담당자 || "",
-                          상차지담당자번호: p.담당자번호 || "",
+                          상차지담당자: prim5?.name || p.담당자 || "",
+                          상차지담당자번호: prim5?.phone || p.담당자번호 || "",
                         }));
+                        if (ucts5.length > 1) setPanelContactPopup5({ type: "pickup", place: p, contacts: ucts5, setter: setEditTarget });
                         checkWarningStatus(p.업체명, "상차지");
                         setActivePlaceField(null);
                       }}
@@ -24991,14 +25117,17 @@ onBlur={(e) => {
                     e.preventDefault();
                     const p = placeOptions[placeActiveIndex];
                     if (!p) return;
-
+                    const cts5de = (p.contacts || []).filter(c => c.name?.trim());
+                    const ucts5de = [...new Map(cts5de.map(c => [c.name.trim(), c])).values()];
+                    const prim5de = ucts5de.find(c => c.isPrimary) || ucts5de[0];
                     setEditTarget((prev) => ({
                       ...prev,
                       하차지명: p.업체명,
                       하차지주소: p.주소 || "",
-                      하차지담당자: p.담당자 || "",
-                      하차지담당자번호: p.담당자번호 || "",
+                      하차지담당자: prim5de?.name || p.담당자 || "",
+                      하차지담당자번호: prim5de?.phone || p.담당자번호 || "",
                     }));
+                    if (ucts5de.length > 1) setPanelContactPopup5({ type: "drop", place: p, contacts: ucts5de, setter: setEditTarget });
                     checkWarningStatus(p.업체명, "하차지");
                     setActivePlaceField(null);
                   }
@@ -25019,13 +25148,17 @@ onBlur={(e) => {
                         (idx === placeActiveIndex ? "bg-blue-100" : "hover:bg-gray-100")
                       }
                      onMouseDown={() => {
+                        const cts5d = (p.contacts || []).filter(c => c.name?.trim());
+                        const ucts5d = [...new Map(cts5d.map(c => [c.name.trim(), c])).values()];
+                        const prim5d = ucts5d.find(c => c.isPrimary) || ucts5d[0];
                         setEditTarget((prev) => ({
                           ...prev,
                           하차지명: p.업체명,
                           하차지주소: p.주소 || "",
-                          하차지담당자: p.담당자 || "",
-                          하차지담당자번호: p.담당자번호 || "",
+                          하차지담당자: prim5d?.name || p.담당자 || "",
+                          하차지담당자번호: prim5d?.phone || p.담당자번호 || "",
                         }));
+                        if (ucts5d.length > 1) setPanelContactPopup5({ type: "drop", place: p, contacts: ucts5d, setter: setEditTarget });
                         checkWarningStatus(p.업체명, "하차지");
                         setActivePlaceField(null);
                       }}
@@ -25270,7 +25403,15 @@ onBlur={(e) => {
                 placeholder="예: 93가1234"
                 onChange={(e) => {
                   const v = e.target.value;
-
+                  const clean5 = v.replace(/\s+/g, "");
+                  if (clean5) {
+                    const match5 = (drivers || []).find(d => String(d.차량번호 || "").replace(/\s+/g, "") === clean5);
+                    if (match5) {
+                      const grade5 = match5?.등급 || match5?.grade || "";
+                      if (grade5 === "블랙") setBlackAlert(match5);
+                      else if (match5?.메모 && String(match5.메모).trim()) window.dispatchEvent(new CustomEvent("driverMemoDetected", { detail: match5 }));
+                    }
+                  }
                   setEditTarget((p) => ({
                     ...p,
                     차량번호: v,
@@ -25658,6 +25799,8 @@ setEditTarget((p) => ({
 // ✅ 낙관적 UI 즉시 반영
     setLocalOverrides(prev => ({ ...prev, [savedId]: payload }));
     patchDispatch(savedId, payload).catch(console.error);
+    if (payload.상차지명) upsertPlace?.({ 업체명: payload.상차지명, 주소: payload.상차지주소||"", 담당자: payload.상차지담당자||"", 담당자번호: payload.상차지담당자번호||"" }).catch(console.error);
+    if (payload.하차지명) upsertPlace?.({ 업체명: payload.하차지명, 주소: payload.하차지주소||"", 담당자: payload.하차지담당자||"", 담당자번호: payload.하차지담당자번호||"" }).catch(console.error);
     if (payload.차량번호 && payload.이름) {
       const existingD = (drivers||[]).find(d => normalizePlate(d.차량번호) === normalizePlate(payload.차량번호));
       if (!existingD) {
@@ -25748,6 +25891,8 @@ setEditTarget((p) => ({
 
     // ✅ 백그라운드 저장
     patchDispatch(id, payload).catch(console.error);
+    if (payload.상차지명) upsertPlace?.({ 업체명: payload.상차지명, 주소: payload.상차지주소||"", 담당자: payload.상차지담당자||"", 담당자번호: payload.상차지담당자번호||"" }).catch(console.error);
+    if (payload.하차지명) upsertPlace?.({ 업체명: payload.하차지명, 주소: payload.하차지주소||"", 담당자: payload.하차지담당자||"", 담당자번호: payload.하차지담당자번호||"" }).catch(console.error);
     const plate = normalizePlate(payload.차량번호 || "");
     if (plate) {
       const d = (drivers || []).find(x => normalizePlate(x.차량번호) === plate);
@@ -25999,14 +26144,17 @@ setCopyPlaceOptions(list);
                 e.preventDefault();
                 const p = copyPlaceOptions[copyActiveIndex];
                 if(!p) return;
-
+                const cts5ce = (p.contacts || []).filter(c => c.name?.trim());
+                const ucts5ce = [...new Map(cts5ce.map(c => [c.name.trim(), c])).values()];
+                const prim5ce = ucts5ce.find(c => c.isPrimary) || ucts5ce[0];
                 setCopyTarget(prev=>({
                   ...prev,
                   상차지명:p.업체명,
                   상차지주소:p.주소 || "",
-                  상차지담당자:p.담당자 || "",
-                  상차지담당자번호:p.담당자번호 || "",
+                  상차지담당자:prim5ce?.name || p.담당자 || "",
+                  상차지담당자번호:prim5ce?.phone || p.담당자번호 || "",
                 }));
+                if (ucts5ce.length > 1) setPanelContactPopup5({ type: "pickup", place: p, contacts: ucts5ce, setter: setCopyTarget });
                 checkWarningStatus(p.업체명, "상차지");
                 setShowCopyPlaceDropdown(false);
               }
@@ -26023,13 +26171,17 @@ setCopyPlaceOptions(list);
                     i===copyActiveIndex ? "bg-blue-100" : "hover:bg-gray-50"
                   }`}
                   onMouseDown={()=>{
+                    const cts5c = (p.contacts || []).filter(c => c.name?.trim());
+                    const ucts5c = [...new Map(cts5c.map(c => [c.name.trim(), c])).values()];
+                    const prim5c = ucts5c.find(c => c.isPrimary) || ucts5c[0];
                     setCopyTarget(prev=>({
                       ...prev,
                       상차지명:p.업체명,
                       상차지주소:p.주소 || "",
-                      상차지담당자:p.담당자 || "",
-                      상차지담당자번호:p.담당자번호 || "",
+                      상차지담당자:prim5c?.name || p.담당자 || "",
+                      상차지담당자번호:prim5c?.phone || p.담당자번호 || "",
                     }));
+                    if (ucts5c.length > 1) setPanelContactPopup5({ type: "pickup", place: p, contacts: ucts5c, setter: setCopyTarget });
                     checkWarningStatus(p.업체명, "상차지");
                     setShowCopyPlaceDropdown(false);
                   }}
@@ -26140,14 +26292,17 @@ setCopyPlaceOptions(list);
                 e.preventDefault();
                 const p = copyPlaceOptions[copyActiveIndex];
                 if(!p) return;
-
+                const cts5cde2 = (p.contacts || []).filter(c => c.name?.trim());
+                const ucts5cde2 = [...new Map(cts5cde2.map(c => [c.name.trim(), c])).values()];
+                const prim5cde2 = ucts5cde2.find(c => c.isPrimary) || ucts5cde2[0];
                 setCopyTarget(prev=>({
                   ...prev,
                   하차지명:p.업체명,
                   하차지주소:p.주소 || "",
-                  하차지담당자:p.담당자 || "",
-                  하차지담당자번호:p.담당자번호 || "",
+                  하차지담당자:prim5cde2?.name || p.담당자 || "",
+                  하차지담당자번호:prim5cde2?.phone || p.담당자번호 || "",
                 }));
+                if (ucts5cde2.length > 1) setPanelContactPopup5({ type: "drop", place: p, contacts: ucts5cde2, setter: setCopyTarget });
                 checkWarningStatus(p.업체명, "하차지");
                 setShowCopyPlaceDropdown(false);
               }
@@ -26164,13 +26319,17 @@ setCopyPlaceOptions(list);
                     i===copyActiveIndex ? "bg-blue-100" : "hover:bg-gray-50"
                   }`}
                   onMouseDown={()=>{
+                    const cts5cd2 = (p.contacts || []).filter(c => c.name?.trim());
+                    const ucts5cd2 = [...new Map(cts5cd2.map(c => [c.name.trim(), c])).values()];
+                    const prim5cd2 = ucts5cd2.find(c => c.isPrimary) || ucts5cd2[0];
                     setCopyTarget(prev=>({
                       ...prev,
                       하차지명:p.업체명,
                       하차지주소:p.주소 || "",
-                      하차지담당자:p.담당자 || "",
-                      하차지담당자번호:p.담당자번호 || "",
+                      하차지담당자:prim5cd2?.name || p.담당자 || "",
+                      하차지담당자번호:prim5cd2?.phone || p.담당자번호 || "",
                     }));
+                    if (ucts5cd2.length > 1) setPanelContactPopup5({ type: "drop", place: p, contacts: ucts5cd2, setter: setCopyTarget });
                     checkWarningStatus(p.업체명, "하차지");
                     setShowCopyPlaceDropdown(false);
                   }}
@@ -32278,6 +32437,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                             if (match) {
                               const grade = match?.등급 || match?.grade || "";
                               if (grade === "블랙") setBlackDriverAlert(match);
+                              else if (match?.메모 && String(match.메모).trim()) window.dispatchEvent(new CustomEvent("driverMemoDetected", { detail: match }));
                             }
                             setCopyTarget(prev => ({ ...prev, 차량번호: v, 이름: match?.이름 || "", 전화번호: formatPhone(match?.전화번호 || ""), 배차상태: match ? "배차완료" : "배차중" }));
                           }}
