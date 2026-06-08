@@ -142,6 +142,8 @@ export default function RateCard({ dispatchData = [] }) {
   const [searched, setSearched] = useState(false);
 const [detailModal, setDetailModal] = useState(null);
   const [viewMode, setViewMode] = useState("톤수별"); // 톤수별 | 파렛수별
+  const [printHistory, setPrintHistory] = useState(() => JSON.parse(localStorage.getItem("rateCardHistory") || "[]"));
+  const [historyModal, setHistoryModal] = useState(false);
   // 🔥 거래처 제외 필터
   const [excludeQuery, setExcludeQuery] = useState("");
   const [excludeList, setExcludeList] = useState([]);       // 제외할 거래처명 배열
@@ -328,7 +330,14 @@ const [detailModal, setDetailModal] = useState(null);
   const removeManualRow = (idx) => setManualRows(prev => prev.filter((_, i) => i !== idx));
   const updateManualRow = (idx, field, value) => setManualRows(prev => { const next = [...prev]; next[idx] = { ...next[idx], [field]: value }; return next; });
 
+  const addHistoryEntry = (entry) => {
+    const next = [{ ...entry, ts: new Date().toISOString() }, ...JSON.parse(localStorage.getItem("rateCardHistory") || "[]")].slice(0, 100);
+    localStorage.setItem("rateCardHistory", JSON.stringify(next));
+    setPrintHistory(next);
+  };
+
   const handleManualPrint = () => {
+    addHistoryEntry({ source: "manual", pickup: manualInfo.pickup, drop: manualInfo.drop, vehicle: manualInfo.vehicle, fareField: manualInfo.fareField, mixedFilter: manualInfo.mixedFilter, rowCount: manualRows.length });
     const today = new Date().toLocaleDateString("ko-KR");
     const w = window.open("", "_blank");
     w.document.write(`<html><head><title>단가표_${manualInfo.pickup}_${manualInfo.drop}</title>
@@ -365,8 +374,12 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
 @media print{.no-print{display:none!important;}}
 </style></head><body>
 <div class="wrapper">
-<div class="no-print" style="margin-bottom:16px;text-align:right;">
-  <button onclick="window.print()" style="padding:8px 20px;background:#2563EB;color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">🖨 인쇄</button>
+<div class="no-print" style="margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:#F8FAFF;border:1px solid #E0E7FF;border-radius:10px;">
+  <span style="font-size:12px;color:#6B7280;">인쇄 또는 PDF로 저장하려면 아래 버튼을 클릭하세요</span>
+  <div style="display:flex;gap:8px;">
+    <button onclick="window.print()" style="padding:8px 20px;background:#1B2B4B;color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">🖨 인쇄</button>
+    <button onclick="var opt=window.open('','_self');window.print();" onclick="(function(){var isSafari=/^((?!chrome|android).)*safari/i.test(navigator.userAgent);if(isSafari){alert('Safari: 인쇄 대화상자에서 PDF로 저장을 선택하세요');}window.print();})()" style="padding:8px 20px;background:#2563EB;color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">📄 PDF 저장</button>
+  </div>
 </div>
 <div class="header">
   <div><div class="logo">RU<span>N</span>25</div><div style="font-size:11px;color:#888;margin-top:4px;">화물 운송 전문</div></div>
@@ -394,7 +407,7 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
     return `<tr>
       <td class="td-ton">${row.display || "-"}</td>
       <td class="td-price">${avgNum ? avgNum.toLocaleString() + "원" : "-"}</td>
-      <td style="color:#888;font-size:11px;">${row.min && row.max ? row.min + " ~ " + row.max + "원" : "-"}</td>
+      <td style="color:#374151;font-size:13px;font-weight:600;">${row.min && row.max ? row.min + " ~ " + row.max + "원" : "-"}</td>
       <td><span class="${vClass}">${row.varianceLabel}</span></td>
       <td><span class="${cClass}">${row.confLabel}</span></td>
     </tr>`;
@@ -414,11 +427,11 @@ ${manualInfo.note ? `<div class="notice"><b>※ 특이사항</b><br>${manualInfo
 </div></body></html>`);
     w.document.close();
     w.focus();
-    setTimeout(() => w.print(), 500);
   };
 
   const handlePrint = () => {
     if (!result) return;
+    addHistoryEntry({ source: "auto", pickup: result.pickup, drop: result.drop, vehicle: result.groupLabel, fareField: result.fareField, mixedFilter: result.mixedFilter, rowCount: result.rows.length });
     const today = new Date().toLocaleDateString("ko-KR");
     const w = window.open("", "_blank");
     w.document.write(`<html><head><title>단가표_${result.pickup}_${result.drop}</title>
@@ -455,9 +468,12 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
 @media print{.no-print{display:none!important;}}
 </style></head><body>
 <div class="wrapper">
-<div class="no-print" style="margin-bottom:16px;text-align:right;">
+<div class="no-print" style="margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:#F8FAFF;border:1px solid #E0E7FF;border-radius:10px;">
   <button onclick="document.querySelectorAll('.edit-cell').forEach(el=>{el.style.display=el.style.display==='none'?'inline-block':'none';document.querySelectorAll('.view-cell').forEach(v=>{v.style.display=v.style.display==='none'?'inline':'none'});})" style="padding:8px 20px;background:#1B2B4B;color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">✏ 수정</button>
-  <button onclick="window.print()" style="padding:8px 20px;margin-left:8px;background:#2563EB;color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">🖨 인쇄</button>
+  <div style="display:flex;gap:8px;">
+    <button onclick="window.print()" style="padding:8px 20px;background:#1B2B4B;color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">🖨 인쇄</button>
+    <button onclick="window.print()" style="padding:8px 20px;background:#2563EB;color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">📄 PDF 저장</button>
+  </div>
 </div>
 <div class="header">
   <div><div class="logo">RU<span>N</span>25</div><div style="font-size:11px;color:#888;margin-top:4px;">화물 운송 전문</div></div>
@@ -505,7 +521,7 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
         <input class="edit-cell" type="text" style="display:none;width:120px;text-align:right;padding:4px;font-size:14px;font-weight:800;color:#2563EB;" value="${s.avg.toLocaleString()}" oninput="var n=this.value.replace(/[^\\d]/g,'');this.value=n?Number(n).toLocaleString():'0'" onchange="this.parentElement.querySelector('.view-cell').textContent=this.value+'원'">
       </td>
       <td>
-        <span class="view-cell" style="color:#888;font-size:11px;">${roundDown10k(s.min).toLocaleString()} ~ ${roundDown10k(s.max).toLocaleString()}원</span>
+        <span class="view-cell" style="color:#374151;font-size:13px;font-weight:600;">${roundDown10k(s.min).toLocaleString()} ~ ${roundDown10k(s.max).toLocaleString()}원</span>
         <span class="edit-cell" style="display:none;font-size:11px;">
           <input type="text" style="width:80px;text-align:right;padding:3px;font-size:11px;" value="${roundDown10k(s.min).toLocaleString()}" oninput="var n=this.value.replace(/[^\\d]/g,'');this.value=n?Number(n).toLocaleString():'0'">
           ~
@@ -541,7 +557,6 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
 </div></body></html>`);
     w.document.close();
     w.focus();
-    setTimeout(() => w.print(), 500);
   };
 
 
@@ -557,6 +572,10 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
           <p className="text-[12px] text-gray-400 mt-0.5">노선별 톤수 단가표를 자동 생성하여 고객사에 제공하세요</p>
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={() => setHistoryModal(true)} className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 text-gray-600 text-[13px] font-semibold rounded-xl hover:bg-gray-50 transition shadow-sm">
+            📋 발행 이력
+            {printHistory.length > 0 && <span className="ml-1 px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded-full text-[11px] font-bold">{printHistory.length}</span>}
+          </button>
           <button onClick={openManualModal} className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 text-white text-[13px] font-bold rounded-xl hover:bg-emerald-700 transition shadow-sm">
             단가표 작성
           </button>
@@ -747,7 +766,7 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
                         <span className="text-[17px] font-black text-blue-700">{s.avg.toLocaleString()}</span>
                         <span className="text-[12px] text-gray-400 ml-1">원</span>
                       </td>
-                      <td className="px-4 py-3.5 text-center text-[12px] text-gray-500">{roundDown10k(s.min).toLocaleString()} ~ {roundDown10k(s.max).toLocaleString()}원</td>
+                      <td className="px-4 py-3.5 text-center text-[13px] text-gray-700 font-semibold">{roundDown10k(s.min).toLocaleString()} ~ {roundDown10k(s.max).toLocaleString()}원</td>
                       <td className="px-4 py-3.5 text-center">
                         <button onClick={()=>setDetailModal({rows:s.rows, bucket:row.display})}
                           className="text-[13px] font-bold text-blue-600 hover:underline hover:text-blue-800 transition px-2 py-1 rounded-lg hover:bg-blue-50">
@@ -973,6 +992,62 @@ td{padding:10px 14px;text-align:center;border-bottom:1px solid #E5E7EB;}
       )}
       {detailModal && (
         <OrderDetailModal rows={detailModal.rows} bucket={detailModal.bucket} fareField={result?.fareField||"청구운임"} onClose={()=>setDetailModal(null)} />
+      )}
+      {historyModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col">
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+              <div>
+                <h3 className="text-[16px] font-bold text-[#1B2B4B]">📋 단가표 발행 이력</h3>
+                <p className="text-[12px] text-gray-400 mt-0.5">인쇄/PDF 저장 버튼을 누른 내역이 기록됩니다</p>
+              </div>
+              <div className="flex items-center gap-2">
+                {printHistory.length > 0 && (
+                  <button onClick={() => { if(window.confirm("전체 이력을 삭제할까요?")) { localStorage.removeItem("rateCardHistory"); setPrintHistory([]); }}} className="px-3 py-1.5 text-[12px] text-red-500 border border-red-200 rounded-lg hover:bg-red-50 transition">전체 삭제</button>
+                )}
+                <button onClick={() => setHistoryModal(false)} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400 text-[18px] transition">×</button>
+              </div>
+            </div>
+            <div className="overflow-y-auto flex-1 p-4">
+              {printHistory.length === 0 ? (
+                <div className="text-center py-12 text-gray-400 text-[14px]">아직 발행 이력이 없습니다</div>
+              ) : (
+                <div className="space-y-2">
+                  {printHistory.map((h, i) => {
+                    const dt = new Date(h.ts);
+                    const dateStr = dt.toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit" });
+                    const timeStr = dt.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
+                    return (
+                      <div key={i} className={`flex items-start gap-3 p-3 rounded-xl border ${i === 0 ? "border-blue-200 bg-blue-50/50" : "border-gray-100 bg-white hover:bg-gray-50"} transition`}>
+                        <div className={`mt-0.5 w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold flex-shrink-0 ${h.source === "manual" ? "bg-emerald-100 text-emerald-700" : "bg-blue-100 text-blue-700"}`}>
+                          {h.source === "manual" ? "수" : "자"}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-[14px] font-bold text-[#1B2B4B]">{h.pickup || "-"}</span>
+                            <span className="text-gray-400">→</span>
+                            <span className="text-[14px] font-bold text-[#1B2B4B]">{h.drop || "-"}</span>
+                            {h.vehicle && <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-[11px]">{h.vehicle}</span>}
+                            {h.mixedFilter && h.mixedFilter !== "전체" && <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded text-[11px]">{h.mixedFilter}</span>}
+                          </div>
+                          <div className="flex items-center gap-3 mt-1 text-[12px] text-gray-500">
+                            <span>{dateStr} {timeStr}</span>
+                            <span>기준: {h.fareField}</span>
+                            <span>{h.rowCount}개 차종</span>
+                            <span className={`px-1.5 py-0.5 rounded text-[11px] font-semibold ${h.source === "manual" ? "bg-emerald-50 text-emerald-600" : "bg-blue-50 text-blue-600"}`}>{h.source === "manual" ? "수동작성" : "자동생성"}</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+            <div className="border-t border-gray-100 px-6 py-3 bg-gray-50 flex justify-end">
+              <button onClick={() => setHistoryModal(false)} className="px-5 py-2 text-[13px] text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition">닫기</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

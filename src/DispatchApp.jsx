@@ -13990,7 +13990,8 @@ React.useEffect(() => {
   // 첨부파일 개수
 const [attachCount, setAttachCount] = React.useState({});
   const [attachViewer, setAttachViewer] = React.useState(null); // 열린 행
-  const [viewedAttachIds4, setViewedAttachIds4] = React.useState(new Set());
+  const [viewedAttachIds4, setViewedAttachIds4] = React.useState(() => new Set(JSON.parse(localStorage.getItem("va4") || "[]")));
+  React.useEffect(() => { localStorage.setItem("va4", JSON.stringify([...viewedAttachIds4])); }, [viewedAttachIds4]);
   // ------------------------
 // Firestore → rows 반영
 // ------------------------
@@ -21250,7 +21251,8 @@ const renderTimeText = (time, cond) => {
   };
 const [alertMsg, setAlertMsg] = React.useState(null);
 const [attachViewer, setAttachViewer] = React.useState(null);
-const [viewedAttachIds5, setViewedAttachIds5] = React.useState(new Set());
+const [viewedAttachIds5, setViewedAttachIds5] = React.useState(() => new Set(JSON.parse(localStorage.getItem("va5") || "[]")));
+React.useEffect(() => { localStorage.setItem("va5", JSON.stringify([...viewedAttachIds5])); }, [viewedAttachIds5]);
 const [localOverrides, setLocalOverrides] = React.useState({});
 const showAlert = (msg) => setAlertMsg(msg);
 const [blackAlert, setBlackAlert] = React.useState(null);
