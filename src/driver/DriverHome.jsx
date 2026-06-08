@@ -206,7 +206,7 @@ function useGpsTracking(uid, driverData) {
     const watchId = navigator.geolocation.watchPosition(
       async (p) => {
         const { latitude: lat, longitude: lng, speed, accuracy } = p.coords;
-        setPos({ lat, lng, speed });
+        setPos({ lat, lng, speed, accuracy });
 
         // Ignore readings with poor accuracy
         if (accuracy > 100) return;
@@ -308,7 +308,7 @@ export default function DriverHome() {
         status: newStatus,
         mainStatus: newStatus,
         timestamp: serverTimestamp(),
-        location: pos ? { lat: pos.lat, lng: pos.lng } : null,
+        location: (pos && (pos.accuracy == null || pos.accuracy <= 100)) ? { lat: pos.lat, lng: pos.lng } : null,
       });
       showToast(`${newStatus} 처리되었습니다`);
     } catch (e) {

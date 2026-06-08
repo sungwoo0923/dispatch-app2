@@ -169,11 +169,7 @@ function makeIcon(color, active) {
       <div style="position:relative;width:16px;height:16px;display:flex;align-items:center;justify-content:center;">
         ${ring}
         <div style="width:14px;height:14px;background:${color};border-radius:50%;border:2.5px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.45);position:relative;z-index:1;${pulse}"></div>
-      </div>
-      <style>
-        @keyframes fmRing{0%{transform:scale(1);opacity:.5}100%{transform:scale(2.8);opacity:0}}
-        @keyframes fmDot{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.25);opacity:.8}}
-      </style>`,
+      </div>`,
     className: "",
     iconSize: [16, 16],
     iconAnchor: [8, 8],
@@ -912,6 +908,19 @@ function RegistrationTab({ usersMap }) {
 }
 
 // ─── 메인 컴포넌트 ────────────────────────────────────────────────────────────
+
+// Inject pulse/ring keyframe animations once into <head> so markers always animate
+// regardless of how many times divIcon HTML is re-created
+(function injectFleetCSS() {
+  if (typeof document === "undefined" || document.getElementById("fm-keyframes")) return;
+  const s = document.createElement("style");
+  s.id = "fm-keyframes";
+  s.textContent = `
+    @keyframes fmRing{0%{transform:scale(1);opacity:.5}100%{transform:scale(2.8);opacity:0}}
+    @keyframes fmDot{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.25);opacity:.8}}
+  `;
+  document.head.appendChild(s);
+})();
 
 export default function FleetManagement() {
   // Tab persistence across parent-tab switches → sessionStorage
