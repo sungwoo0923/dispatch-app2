@@ -6,6 +6,7 @@ import { doc, getDoc } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
 
 export default function DriverLogin() {
+  const [companyName, setCompanyName] = useState("");
   const [carNo, setCarNo] = useState("");
   const [name, setName] = useState("");
   const [error, setError] = useState("");
@@ -22,8 +23,8 @@ export default function DriverLogin() {
 
   const login = async () => {
     setError("");
-    if (!carNo.trim() || !name.trim()) {
-      setError("차량번호와 이름을 모두 입력해주세요.");
+    if (!companyName.trim() || !carNo.trim() || !name.trim()) {
+      setError("회사명, 차량번호, 이름을 모두 입력해주세요.");
       return;
     }
 
@@ -44,6 +45,16 @@ export default function DriverLogin() {
       const u = snap.data();
       if (!u.approved) {
         setError("관리자 승인 대기중입니다.");
+        await signOut(auth);
+        return;
+      }
+      if (u.name && u.name !== name.trim()) {
+        setError("차량번호 또는 이름이 올바르지 않습니다.");
+        await signOut(auth);
+        return;
+      }
+      if (u.companyName && u.companyName !== companyName.trim()) {
+        setError("소속 회사명이 올바르지 않습니다.");
         await signOut(auth);
         return;
       }
@@ -85,6 +96,19 @@ export default function DriverLogin() {
 
         {/* 입력 필드 */}
         <div className="space-y-4">
+          <div>
+            <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">
+              소속 회사명
+            </label>
+            <input
+              value={companyName}
+              onChange={(e) => setCompanyName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && login()}
+              placeholder="예: 돌캐"
+              className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] transition"
+            />
+          </div>
+
           <div>
             <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">
               차량번호

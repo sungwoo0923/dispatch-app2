@@ -72,6 +72,7 @@ function TermsBox({ title, text }) {
 }
 
 export default function DriverRegister() {
+  const [companyName, setCompanyName] = useState("");
   const [carNo, setCarNo] = useState("");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -95,6 +96,7 @@ export default function DriverRegister() {
 
   const register = async () => {
     setError("");
+    if (!companyName.trim()) return setError("소속 회사명을 입력해주세요.");
     if (!carNo.trim()) return setError("차량번호를 입력해주세요.");
     if (!name.trim()) return setError("이름을 입력해주세요.");
     if (!phone.trim()) return setError("핸드폰번호를 입력해주세요.");
@@ -117,6 +119,7 @@ export default function DriverRegister() {
         carNo: carNo.trim(),
         phone: phone.trim(),
         vehicleType: vehicleType || "",
+        companyName: companyName.trim(),
         approved: false,
         termsAgreed,
         privacyAgreed,
@@ -130,6 +133,7 @@ export default function DriverRegister() {
         carNo: carNo.trim(),
         phone: phone.trim(),
         vehicleType: vehicleType || "",
+        companyName: companyName.trim(),
         mainStatus: "대기",
         subStatus: "대기",
         status: "대기",
@@ -169,6 +173,19 @@ export default function DriverRegister() {
         </div>
 
         <div className="space-y-4 mb-5">
+          <div>
+            <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">
+              소속 회사명 <span className="text-red-400">*</span>
+            </label>
+            <input
+              value={companyName}
+              onChange={(e) => setCompanyName(e.target.value)}
+              placeholder="예: 돌캐"
+              className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] transition"
+            />
+            <p className="text-[11px] text-gray-400 mt-1">관리자가 등록한 회사명과 정확히 일치해야 합니다.</p>
+          </div>
+
           <div>
             <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">
               차량번호 <span className="text-red-400">*</span>

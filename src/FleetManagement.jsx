@@ -1,9 +1,9 @@
 // ======================= FleetManagement.jsx =======================
 import React, { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import "leaflet/dist/leaflet.css";
-import { db } from "./firebase";
+import { db, auth } from "./firebase";
 import {
-  collection, onSnapshot, doc, updateDoc, setDoc,
+  collection, onSnapshot, doc, updateDoc, setDoc, getDoc,
   query, where, orderBy, limit, deleteDoc, writeBatch,
 } from "firebase/firestore";
 import { MapContainer, TileLayer, Marker, Popup, Polyline, CircleMarker, useMap } from "react-leaflet";
@@ -199,7 +199,7 @@ function MapRecenter({ center }) {
   const prev = useRef(null);
   useEffect(() => {
     if (!center) return;
-    const key = `${center.lat},${center.lng}`;
+    const key = center._t ? `${center.lat},${center.lng},${center._t}` : `${center.lat},${center.lng}`;
     if (prev.current === key) return;
     prev.current = key;
     map.setView([center.lat, center.lng], 14, { animate: true });
@@ -431,9 +431,9 @@ function KpiCard({ label, value, sub, primary, accent }) {
 // ─── DriverTable ─────────────────────────────────────────────────────────────
 // Selection uses light-blue highlight so dark text stays readable
 
-const COL_HEADERS = ["#", "이름", "차량번호", "차종", "현재상태", "이동거리", "업데이트"];
+const COL_HEADERS = ["#", "이름", "차량번호", "차종", "현재상태", "이동거리", "업데이트", ""];
 
-function DriverTable({ rows, selectedId, onSelect }) {
+function DriverTable({ rows, selectedId, onSelect, onFocusMap, onContextMenu }) {
   if (rows.length === 0) {
     return (
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "52px 24px", color: "#9ca3af" }}>
@@ -464,6 +464,7 @@ function DriverTable({ rows, selectedId, onSelect }) {
             <tr
               key={d.id}
               onClick={() => onSelect(d)}
+              onContextMenu={e => { e.preventDefault(); onContextMenu?.(e, d); }}
               style={{
                 background: bg,
                 borderBottom: "1px solid #f0f2f5",
@@ -512,6 +513,22 @@ function DriverTable({ rows, selectedId, onSelect }) {
               <td style={{ padding: "11px 14px", color: "#6b7280", whiteSpace: "nowrap", fontSize: 13 }}>
                 {timeAgo(d.updatedAt)}
               </td>
+
+              {/* 지도 포커스 */}
+              <td style={{ padding: "11px 10px", whiteSpace: "nowrap" }}>
+                {d.location && (
+                  <button
+                    onClick={e => { e.stopPropagation(); onFocusMap?.(d.location); onSelect(d); }}
+                    title="지도에서 현재위치 보기"
+                    style={{ width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid #e5e7eb", borderRadius: 7, background: "#f8f9fb", cursor: "pointer", color: NAVY, padding: 0, flexShrink: 0 }}
+                  >
+                    <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" strokeLinecap="round" strokeLinejoin="round"/>
+                      <circle cx="12" cy="9" r="2.5"/>
+                    </svg>
+                  </button>
+                )}
+              </td>
             </tr>
           );
         })}
@@ -522,7 +539,19 @@ function DriverTable({ rows, selectedId, onSelect }) {
 
 // ─── FleetMap ────────────────────────────────────────────────────────────────
 
-function FleetMap({ drivers, center, onSelect, selectedPath = [], roadPath = [] }) {
+function FitAll({ count, drivers }) {
+  const map = useMap();
+  const prevCount = useRef(count);
+  useEffect(() => {
+    if (count === prevCount.current) return;
+    prevCount.current = count;
+    const locs = drivers.filter(d => d.location?.lat).map(d => [d.location.lat, d.location.lng]);
+    if (locs.length > 0) map.fitBounds(L.latLngBounds(locs), { padding: [50, 50], maxZoom: 14, animate: true });
+  }, [count, drivers, map]);
+  return null;
+}
+
+function FleetMap({ drivers, center, onSelect, selectedPath = [], roadPath = [], fitAllCount = 0 }) {
   const defaultCenter = center || { lat: 37.5665, lng: 126.9780 };
   // Prefer OSRM road-following path; fall back to direct GPS waypoints
   const displayPath = roadPath.length >= 2 ? roadPath : selectedPath;
@@ -531,6 +560,7 @@ function FleetMap({ drivers, center, onSelect, selectedPath = [], roadPath = [] 
   return (
     <MapContainer center={[defaultCenter.lat, defaultCenter.lng]} zoom={12} scrollWheelZoom style={{ height: "100%", width: "100%", minHeight: 480 }}>
       <MapRecenter center={center} />
+      <FitAll count={fitAllCount} drivers={drivers} />
       {selectedPath.length >= 2 && <FitPath points={selectedPath} />}
       <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap" />
 
@@ -615,7 +645,7 @@ function ActivityLogItem({ log, isLast }) {
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap", marginBottom: 3 }}>
           <span style={{ fontSize: 13, fontWeight: 700, color: statusColor, background: `${statusColor}18`, padding: "2px 8px", borderRadius: 99 }}>{log.status}</span>
-          <span style={{ fontSize: 12, color: "#9ca3af" }}>{timeAgo(log.timestamp)}</span>
+          <span style={{ fontSize: 12, color: "#4b5563", fontWeight: 600 }}>{timeAgo(log.timestamp)}</span>
         </div>
         {hasLoc && (
           <div
@@ -629,7 +659,7 @@ function ActivityLogItem({ log, isLast }) {
           </div>
         )}
       </div>
-      <div style={{ fontSize: 12, color: "#9ca3af", flexShrink: 0, paddingTop: 2, fontWeight: 600, whiteSpace: "nowrap" }}>{formatDateTime(log.timestamp)}</div>
+      <div style={{ fontSize: 12, color: "#4b5563", flexShrink: 0, paddingTop: 2, fontWeight: 600, whiteSpace: "nowrap" }}>{formatDateTime(log.timestamp)}</div>
     </div>
   );
 }
@@ -833,7 +863,7 @@ function DriverDetailPanel({ data, logs, onClose, onDeleteLogs, checkInLoc, comp
                     <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
                       <span style={{ fontSize: 14, fontWeight: 700, color: "#1B2B4B" }}>{log.status}</span>
                       {duration !== null && duration > 60000 && (
-                        <span style={{ fontSize: 12, color: "#9ca3af" }}>{formatMs(duration)} 체류</span>
+                        <span style={{ fontSize: 12, color: "#4b5563", fontWeight: 600 }}>{formatMs(duration)} 체류</span>
                       )}
                     </div>
                     {log.location?.lat != null && (
@@ -842,7 +872,7 @@ function DriverDetailPanel({ data, logs, onClose, onDeleteLogs, checkInLoc, comp
                       </div>
                     )}
                   </div>
-                  <div style={{ fontSize: 12, color: "#9ca3af", flexShrink: 0, fontWeight: 600, whiteSpace: "nowrap" }}>{formatDateTime(log.timestamp)}</div>
+                  <div style={{ fontSize: 12, color: "#4b5563", flexShrink: 0, fontWeight: 700, whiteSpace: "nowrap" }}>{formatDateTime(log.timestamp)}</div>
                 </div>
               );
             })}
@@ -855,11 +885,12 @@ function DriverDetailPanel({ data, logs, onClose, onDeleteLogs, checkInLoc, comp
 
 // ─── RegistrationTab ─────────────────────────────────────────────────────────
 
-function RegistrationTab({ usersMap }) {
+function RegistrationTab({ usersMap, myCompanyName }) {
   const [approvingId, setApprovingId] = useState(null);
 
   const driverList = useMemo(() => {
     return Object.entries(usersMap)
+      .filter(([, u]) => !myCompanyName || !u.companyName || u.companyName === myCompanyName)
       .map(([uid, u]) => ({ uid, ...u }))
       .sort((a, b) => {
         if (a.approved !== b.approved) return a.approved ? 1 : -1;
@@ -895,6 +926,11 @@ function RegistrationTab({ usersMap }) {
       <span style={{ fontSize: 13, color: "#374151", padding: "3px 10px", border: "1px solid #e5e7eb", borderRadius: 99, background: "#fafafa", flexShrink: 0 }}>
         {d.vehicleType || "-"}
       </span>
+      {d.companyName && (
+        <span style={{ fontSize: 12, color: "#6b7280", padding: "3px 10px", border: "1px solid #e5e7eb", borderRadius: 99, background: "#f9fafb", flexShrink: 0 }}>
+          {d.companyName}
+        </span>
+      )}
       <div style={{ fontSize: 14, color: "#374151", flex: 1, minWidth: 110 }}>{d.phone || "-"}</div>
       <div style={{ fontSize: 13, color: "#9ca3af", flexShrink: 0 }}>{d.createdAt ? formatDate(d.createdAt) : "-"}</div>
       <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
@@ -960,11 +996,15 @@ function RegistrationTab({ usersMap }) {
 
 // ─── HistoryTab ──────────────────────────────────────────────────────────────
 
-function HistoryTab({ drivers }) {
+function HistoryTab({ drivers, defaultDriverId }) {
   const _td = new Date();
   const todayStr = `${_td.getFullYear()}-${String(_td.getMonth()+1).padStart(2,"0")}-${String(_td.getDate()).padStart(2,"0")}`;
 
-  const [selId, setSelId] = useState("");
+  const [selId, setSelId] = useState(defaultDriverId || "");
+
+  useEffect(() => {
+    if (defaultDriverId) setSelId(defaultDriverId);
+  }, [defaultDriverId]);
   const [fromDate, setFromDate] = useState(todayStr);
   const [toDate, setToDate] = useState(todayStr);
   const [applied, setApplied] = useState(null);
@@ -1254,6 +1294,7 @@ function CheckInLocModal({ title, initialLoc, onSave, onCancel }) {
   s.textContent = `
     @keyframes fmRing{0%{transform:scale(1);opacity:.5}100%{transform:scale(2.8);opacity:0}}
     @keyframes fmDot{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.25);opacity:.8}}
+    @keyframes fmBlink{0%,100%{opacity:1}50%{opacity:0}}
   `;
   document.head.appendChild(s);
 })();
@@ -1279,6 +1320,10 @@ export default function FleetManagement() {
   const [companyLocModal, setCompanyLocModal] = useState(false);
 
   const [collisionAlerts, setCollisionAlerts] = useState([]);
+  const [myCompanyName, setMyCompanyName] = useState(null);
+  const [contextMenu, setContextMenu] = useState(null); // { x, y, driver }
+  const [historyPreselect, setHistoryPreselect] = useState(null);
+  const [fitAllCount, setFitAllCount] = useState(0);
   const [searchQuery,   setSearchQuery]  = useState("");
   const [statusFilter,  setStatusFilter] = useState("전체");
   const [selected,      setSelected]     = useState(null);
@@ -1290,6 +1335,15 @@ export default function FleetManagement() {
 
   // Persist tab choice
   useEffect(() => { sfSet("fm_tab", mainTab); }, [mainTab]);
+
+  // 현재 로그인한 관리자의 회사명 조회
+  useEffect(() => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+    getDoc(doc(db, "users", uid)).then(snap => {
+      if (snap.exists()) setMyCompanyName(snap.data().companyName || null);
+    }).catch(() => {});
+  }, []);
 
   // ── 구독 ──────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -1413,7 +1467,9 @@ export default function FleetManagement() {
     return driversRaw
       .filter(raw => {
         const u = usersMap[raw.id];
-        return u && u.approved === true;
+        if (!u || u.approved !== true) return false;
+        if (myCompanyName && u.companyName && u.companyName !== myCompanyName) return false;
+        return true;
       })
       .map(raw => {
         const u = usersMap[raw.id];
@@ -1553,6 +1609,15 @@ export default function FleetManagement() {
   const handleSelect = useCallback((d) => {
     setSelected(prev => (prev?.id === d.id ? null : d));
     if (d.location) setMapCenter(d.location);
+  }, []);
+
+  const handleFocusMap = useCallback((loc) => {
+    if (loc?.lat) setMapCenter({ lat: loc.lat, lng: loc.lng, _t: Date.now() });
+  }, []);
+
+  const handleContextMenu = useCallback((e, d) => {
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY, driver: d });
   }, []);
 
   // Keep selected in sync with live data updates
@@ -1720,24 +1785,24 @@ export default function FleetManagement() {
 
           {/* 충돌 감지 알림 */}
           {collisionAlerts.length > 0 && (
-            <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 10, padding: "14px 20px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: collisionAlerts.length > 0 ? 10 : 0 }}>
-                <svg width="15" height="15" fill="none" stroke="#ef4444" strokeWidth="2" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                <span style={{ fontSize: 14, fontWeight: 800, color: "#991b1b" }}>충돌 감지 알림 ({collisionAlerts.length}건)</span>
-                <span style={{ fontSize: 12, color: "#b91c1c" }}>기사의 기기에서 강한 충격이 감지되었습니다</span>
+            <div style={{ background: "#fff", border: "1px solid #d1d5db", borderLeft: "3px solid #1B2B4B", borderRadius: 8, overflow: "hidden" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 14px", background: "#f8f9fb", borderBottom: "1px solid #e5e7eb" }}>
+                <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#1B2B4B", flexShrink: 0, animation: "fmBlink 1s ease-in-out infinite" }} />
+                <span style={{ fontSize: 13, fontWeight: 700, color: NAVY }}>충돌 감지 알림 {collisionAlerts.length}건</span>
+                <span style={{ fontSize: 12, color: "#6b7280" }}>기기에서 강한 충격이 감지되었습니다</span>
               </div>
-              {collisionAlerts.map((alert, i) => (
-                <div key={alert.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 0", borderTop: "1px solid #fecaca", flexWrap: "wrap" }}>
+              {collisionAlerts.map((alert) => (
+                <div key={alert.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 14px", borderBottom: "1px solid #f3f4f6", flexWrap: "wrap" }}>
                   <span style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{alert.driverName || "-"}</span>
-                  <span style={{ fontSize: 13, color: "#374151", fontWeight: 700, background: "#f3f4f6", padding: "2px 9px", borderRadius: 5, fontFamily: "monospace" }}>{alert.carNo || "-"}</span>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: "#374151", background: "#f3f4f6", padding: "2px 8px", borderRadius: 5, fontFamily: "monospace" }}>{alert.carNo || "-"}</span>
                   <span style={{ fontSize: 13, color: "#6b7280" }}>충격 {alert.magnitude} m/s²</span>
                   {alert.location?.lat && (
                     <span style={{ fontSize: 12, color: "#9ca3af" }}>{alert.location.lat.toFixed(4)}, {alert.location.lng.toFixed(4)}</span>
                   )}
-                  <span style={{ fontSize: 12, color: "#9ca3af", marginLeft: "auto" }}>{timeAgo(alert.timestamp)}</span>
+                  <span style={{ fontSize: 12, color: "#6b7280", marginLeft: "auto" }}>{timeAgo(alert.timestamp)}</span>
                   <button
                     onClick={async () => { try { await updateDoc(doc(db, "collision_alerts", alert.id), { resolved: true }); } catch (_) {} }}
-                    style={{ padding: "4px 13px", borderRadius: 6, border: "1px solid #fca5a5", background: "white", color: "#dc2626", fontSize: 12, fontWeight: 700, cursor: "pointer" }}
+                    style={{ padding: "3px 11px", borderRadius: 6, border: "1px solid #d1d5db", background: "white", color: "#374151", fontSize: 12, fontWeight: 600, cursor: "pointer" }}
                   >
                     확인 완료
                   </button>
@@ -1797,16 +1862,25 @@ export default function FleetManagement() {
                 <span style={{ fontSize: 13, color: "#6b7280", fontWeight: 600 }}>{filteredRows.length}명</span>
               </div>
               <div style={{ flex: 1, overflowY: "auto", overflowX: "auto" }}>
-                <DriverTable rows={filteredRows} selectedId={selected?.id} onSelect={handleSelect} />
+                <DriverTable rows={filteredRows} selectedId={selected?.id} onSelect={handleSelect} onFocusMap={handleFocusMap} onContextMenu={handleContextMenu} />
               </div>
             </div>
 
             <div style={{ flex: "1 1 60%", border: "1px solid #e5e7eb", borderRadius: 12, overflow: "hidden", minWidth: 0, minHeight: 520, position: "relative" }}>
-              <div style={{ position: "absolute", top: 12, left: 12, zIndex: 1000, background: "rgba(255,255,255,0.93)", border: "1px solid #e5e7eb", borderRadius: 8, padding: "6px 13px", fontSize: 13, fontWeight: 700, color: NAVY, backdropFilter: "blur(4px)", boxShadow: "0 1px 6px rgba(0,0,0,.08)" }}>
-                실시간 위치
-                <span style={{ marginLeft: 8, color: "#6b7280", fontWeight: 500 }}>{filteredRows.filter(d => d.location).length}대</span>
+              <div style={{ position: "absolute", top: 12, left: 12, zIndex: 1000, display: "flex", alignItems: "center", gap: 8 }}>
+                <div style={{ background: "rgba(255,255,255,0.93)", border: "1px solid #e5e7eb", borderRadius: 8, padding: "6px 13px", fontSize: 13, fontWeight: 700, color: NAVY, backdropFilter: "blur(4px)", boxShadow: "0 1px 6px rgba(0,0,0,.08)" }}>
+                  실시간 위치
+                  <span style={{ marginLeft: 8, color: "#6b7280", fontWeight: 500 }}>{filteredRows.filter(d => d.location).length}대</span>
+                </div>
+                <button
+                  onClick={() => setFitAllCount(c => c + 1)}
+                  title="전체 기사 위치 맞추기"
+                  style={{ background: "rgba(255,255,255,0.93)", border: "1px solid #e5e7eb", borderRadius: 8, padding: "6px 11px", fontSize: 12, fontWeight: 600, color: NAVY, backdropFilter: "blur(4px)", boxShadow: "0 1px 6px rgba(0,0,0,.08)", cursor: "pointer" }}
+                >
+                  전체 보기
+                </button>
               </div>
-              <FleetMap drivers={filteredRows} center={mapCenter} onSelect={handleSelect} selectedPath={selectedPath} roadPath={roadPath} />
+              <FleetMap drivers={filteredRows} center={mapCenter} onSelect={handleSelect} selectedPath={selectedPath} roadPath={roadPath} fitAllCount={fitAllCount} />
             </div>
           </div>
 
@@ -1853,10 +1927,10 @@ export default function FleetManagement() {
       )}
 
       {/* ═══ 이력 조회 ═══ */}
-      {mainTab === "history" && <HistoryTab drivers={drivers} />}
+      {mainTab === "history" && <HistoryTab drivers={drivers} defaultDriverId={historyPreselect} />}
 
       {/* ═══ 기사 등록 관리 ═══ */}
-      {mainTab === "registration" && <RegistrationTab usersMap={usersMap} />}
+      {mainTab === "registration" && <RegistrationTab usersMap={usersMap} myCompanyName={myCompanyName} />}
 
       <style>{`
         @keyframes fmLivePulse { 0%,100%{opacity:1} 50%{opacity:.3} }
@@ -1886,6 +1960,62 @@ export default function FleetManagement() {
           onSave={handleSaveCompanyLoc}
           onCancel={() => setCompanyLocModal(false)}
         />
+      )}
+
+      {/* 우클릭 컨텍스트 메뉴 */}
+      {contextMenu && (
+        <>
+          <div
+            style={{ position: "fixed", inset: 0, zIndex: 9998 }}
+            onClick={() => setContextMenu(null)}
+            onContextMenu={e => { e.preventDefault(); setContextMenu(null); }}
+          />
+          <div style={{
+            position: "fixed",
+            top: Math.min(contextMenu.y, window.innerHeight - 160),
+            left: Math.min(contextMenu.x, window.innerWidth - 180),
+            background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10,
+            boxShadow: "0 4px 20px rgba(0,0,0,.13)", zIndex: 9999, minWidth: 170, overflow: "hidden",
+          }}>
+            <div style={{ padding: "10px 14px 8px", borderBottom: "1px solid #f0f2f5" }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: NAVY }}>{contextMenu.driver.이름}</div>
+              <div style={{ fontSize: 12, color: "#6b7280", marginTop: 1 }}>{contextMenu.driver.차량번호}</div>
+            </div>
+            {[
+              {
+                label: "현재위치로 이동",
+                icon: <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" strokeLinecap="round"/><circle cx="12" cy="9" r="2.5"/></svg>,
+                disabled: !contextMenu.driver.location,
+                action: () => { handleFocusMap(contextMenu.driver.location); setContextMenu(null); },
+              },
+              {
+                label: "기사 선택 / 상세보기",
+                icon: <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.58-7 8-7s8 3 8 7" strokeLinecap="round"/></svg>,
+                action: () => { handleSelect(contextMenu.driver); setContextMenu(null); },
+              },
+              {
+                label: "이력 조회",
+                icon: <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>,
+                action: () => { setHistoryPreselect(contextMenu.driver.id); setMainTab("history"); setContextMenu(null); },
+              },
+            ].map((item, i) => (
+              <button
+                key={i}
+                onClick={item.disabled ? undefined : item.action}
+                style={{
+                  width: "100%", padding: "9px 14px", display: "flex", alignItems: "center", gap: 9,
+                  background: "none", border: "none", cursor: item.disabled ? "default" : "pointer",
+                  fontSize: 13, color: item.disabled ? "#d1d5db" : "#374151", fontWeight: 600, textAlign: "left",
+                }}
+                onMouseEnter={e => { if (!item.disabled) e.currentTarget.style.background = "#f3f4f6"; }}
+                onMouseLeave={e => { e.currentTarget.style.background = "none"; }}
+              >
+                {item.icon}
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </>
       )}
     </div>
   );
