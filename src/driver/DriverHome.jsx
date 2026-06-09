@@ -21,13 +21,14 @@ const STATUS_CONFIG = {
 };
 
 // 다음 액션 정의 (현재 상태에 따른 컨텍스트 버튼)
-function getActions(status) {
+function getActions(status, isFinalCheckout) {
   switch (status) {
     case "대기":
     case null:
     case undefined:
       return [{ label: "출근", status: "출근", primary: true }];
     case "퇴근":
+      if (isFinalCheckout) return [{ label: "출근", status: "출근", primary: true }];
       return [
         { label: "출근", status: "출근", primary: true },
         { label: "최종 퇴근 완료 (당일 종료)", status: "최종퇴근", primary: false },
@@ -143,7 +144,7 @@ function calcWorkSummary(logs) {
   });
 
   // 현재까지 (마지막 로그 → 지금)
-  if (lastTime && lastStatus && lastStatus !== "퇴근") {
+  if (lastTime && lastStatus && lastStatus !== "퇴근" && lastStatus !== "최종퇴근") {
     const diff = Date.now() - lastTime;
     if (lastStatus !== "휴식") workMs += diff;
     if (lastStatus === "운행중" || lastStatus === "하차중") driveMs += diff;
@@ -392,6 +393,7 @@ export default function DriverHome() {
       };
       if (newStatus === "출근") {
         driverUpdate.workStartAt = serverTimestamp();
+        driverUpdate.isFinalCheckout = false;
         // 새로운 날(달력일 기준)에만 거리 초기화 — 당일 반복 출근 시 거리 누적 유지
         if (driver?.workDate !== today) {
           driverUpdate.totalDistance = 0;
@@ -403,6 +405,7 @@ export default function DriverHome() {
         // 최종퇴근: 오늘 누적거리 기록 후 다음날을 위해 초기화
         driverUpdate.workDate = today;
         driverUpdate.totalDistance = 0;
+        driverUpdate.isFinalCheckout = true;
         resetTotalDist();
       }
       await updateDoc(doc(db, "drivers", uid), driverUpdate);
@@ -439,17 +442,22 @@ export default function DriverHome() {
   useEffect(() => {
     if (!pos || !uid || statusLoading) return;
     const status = driver?.status;
+    if (status && status !== "퇴근" && status !== "대기") return;
     const checkInLoc = driver?.checkInLocation || companyDefaultLoc;
     if (!checkInLoc?.lat || !checkInLoc?.lng) return;
     if (pos.accuracy != null && pos.accuracy > 100) return;
-    if (status && status !== "퇴근" && status !== "대기") return;
+    const today = new Date().toISOString().slice(0, 10);
+    const isSameDayFinal = driver?.isFinalCheckout && driver?.workDate === today;
     const dist = calcDist(pos.lat, pos.lng, checkInLoc.lat, checkInLoc.lng);
+    // Always track wasAway so next-day auto-checkin works after driving home
     if (dist > 2) wasAwayFromCheckInRef.current = true;
+    // Don't auto-checkin if today's final checkout is done
+    if (isSameDayFinal) return;
     if (wasAwayFromCheckInRef.current && !autoCheckinDoneRef.current && dist <= 2) {
       autoCheckinDoneRef.current = true;
       updateStatus("출근").catch(() => { autoCheckinDoneRef.current = false; });
     }
-  }, [pos, uid, statusLoading, driver?.status, driver?.checkInLocation, companyDefaultLoc, updateStatus]);
+  }, [pos, uid, statusLoading, driver?.status, driver?.checkInLocation, driver?.isFinalCheckout, driver?.workDate, companyDefaultLoc, updateStatus]);
 
   // 수동 출근: 출근지가 설정된 경우 1km 이내에서만 허용
   const handleActionButton = useCallback((action) => {
@@ -490,7 +498,7 @@ export default function DriverHome() {
 
   const currentStatus = driver.status || "대기";
   const statusCfg = STATUS_CONFIG[currentStatus] || STATUS_CONFIG["대기"];
-  const actions = getActions(currentStatus);
+  const actions = getActions(currentStatus, driver.isFinalCheckout);
   const dateStr = `${_td.getFullYear()}.${String(_td.getMonth()+1).padStart(2,"0")}.${String(_td.getDate()).padStart(2,"0")}`;
 
   return (
@@ -647,7 +655,7 @@ export default function DriverHome() {
           {/* 액션 버튼 */}
           <div style={{ marginBottom: 14 }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", marginBottom: 10, letterSpacing: "0.05em" }}>
-              {currentStatus === "퇴근" || currentStatus === "대기" || !driver.status ? "오늘 업무 시작" : "다음 액션"}
+              {driver.isFinalCheckout ? "당일 근무 완료" : (currentStatus === "퇴근" || currentStatus === "대기" || !driver.status ? "오늘 업무 시작" : "다음 액션")}
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {actions.map((action, i) => (

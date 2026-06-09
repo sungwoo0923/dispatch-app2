@@ -7280,6 +7280,12 @@ function SmartOrderParser({ clients, onApply, onClose }) {
       const m = plain[2] ? parseInt(plain[2]) : 0;
       return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
     }
+    const colon = str.match(/(\d{1,2}):(\d{2})/);
+    if (colon) {
+      const h = parseInt(colon[1]), m = parseInt(colon[2]);
+      if (h >= 0 && h <= 23 && m >= 0 && m <= 59)
+        return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+    }
     return null;
   };
 
@@ -7377,12 +7383,17 @@ function SmartOrderParser({ clients, onApply, onClose }) {
         }
 
         // ── Times ──
-        const pickupTimeRaw = text.match(/상차\s*시간?\s*[:：]\s*([^\n]+)/i);
+        const pickupTimeRaw = text.match(/상차\s*시간?\s*[:：\s]\s*([^\n]+)/i);
         if (pickupTimeRaw) {
           const t = parseTime(pickupTimeRaw[1]);
           if (t) res.상차시간 = t;
         }
-        const dropTimeRaw = text.match(/하차\s*시간?\s*[:：]\s*([^\n]+)/i);
+        // Fallback: look for bare 오전/오후 time in first section of text
+        if (!res.상차시간) {
+          const bare = text.split(/하차/i)[0].match(/(오전|오후)\s*(\d{1,2})시/);
+          if (bare) { const t = parseTime(bare[0]); if (t) res.상차시간 = t; }
+        }
+        const dropTimeRaw = text.match(/하차\s*시간?\s*[:：\s]\s*([^\n]+)/i);
         if (dropTimeRaw) {
           const raw = dropTimeRaw[1];
           const isNextDay = /익일|다음\s*날/.test(raw);
@@ -7403,11 +7414,16 @@ function SmartOrderParser({ clients, onApply, onClose }) {
           { p: /냉동/, v: "냉동탑" },
           { p: /냉장/, v: "냉장탑" },
           { p: /윙바디|윙\s*바디/, v: "윙바디" },
-          { p: /리프트/, v: "리프트카" },
           { p: /카고|일반/, v: "카고" },
         ];
         for (const { p, v } of vehicleMap) {
           if (p.test(text)) { res.차종 = v; break; }
+        }
+
+        // ── Loading/Unloading Method ──
+        const methodList = ["직접수작업", "지게차", "크레인", "수도움", "수작업"];
+        for (const m of methodList) {
+          if (text.includes(m)) { res.상차방법 = m; res.하차방법 = m; break; }
         }
 
         // ── Weight / Ton ──
@@ -7487,6 +7503,7 @@ function SmartOrderParser({ clients, onApply, onClose }) {
     하차지명: "하차지", 하차지주소: "하차 주소",
     하차지담당자: "하차 담당자", 하차지담당자번호: "하차 연락처",
     톤수: "톤수", 차종: "차종", 화물내용: "화물",
+    상차방법: "상차방법", 하차방법: "하차방법",
   };
 
   const hasResult = result && Object.keys(result).length > 0;
@@ -7944,6 +7961,18 @@ const [orderCopySearchField, setOrderCopySearchField] = useState("all"); // 이 
 
   const [화물수량, set화물수량] = useState(() => detectCargoNum(form.화물내용||""));
   const [화물타입, set화물타입] = useState(() => detectCargoType(form.화물내용||""));
+
+  // Sync split local state when form values change from outside (e.g. SmartOrderParser apply)
+  useEffect(() => {
+    const t = String(form.톤수 || "");
+    set톤수값(t.replace(/톤|kg/gi, "").trim());
+    set톤수타입(t.includes("kg") ? "kg" : t.includes("톤") ? "톤" : "");
+  }, [form.톤수]);
+  useEffect(() => {
+    set화물수량(detectCargoNum(form.화물내용 || ""));
+    set화물타입(detectCargoType(form.화물내용 || ""));
+  }, [form.화물내용]);
+
   const update = (key, value) =>
     setForm((p) => ({ ...p, [key]: value }));
 
@@ -10261,6 +10290,8 @@ const pickDrop = (c) => {
               ...(parsed.톤수 && { 톤수: parsed.톤수 }),
               ...(parsed.차종 && { 차종: parsed.차종 }),
               ...(parsed.화물내용 && { 화물내용: parsed.화물내용 }),
+              ...(parsed.상차방법 && { 상차방법: parsed.상차방법 }),
+              ...(parsed.하차방법 && { 하차방법: parsed.하차방법 }),
             }));
           }}
           onClose={() => setShowSmartParser(false)}

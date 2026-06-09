@@ -170,14 +170,18 @@ function haversineKm(lat1, lng1, lat2, lng2) {
 // ─── Leaflet 마커 ─────────────────────────────────────────────────────────────
 // Active drivers show a pulsing ring; inactive show a static dot
 
-function makeIcon(color, active) {
+function makeIcon(color, active, name) {
   const ring = active
     ? `<div style="position:absolute;inset:-5px;border-radius:50%;background:${color};opacity:.25;animation:fmRing 1.8s infinite ease-out;"></div>`
     : "";
   const pulse = active ? "animation:fmDot 1.8s infinite ease-in-out;" : "";
+  const label = name
+    ? `<div style="position:absolute;bottom:20px;left:50%;transform:translateX(-50%);white-space:nowrap;background:rgba(27,43,75,0.85);color:#fff;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;pointer-events:none;letter-spacing:0.02em;">${name}</div>`
+    : "";
   return L.divIcon({
     html: `
       <div style="position:relative;width:16px;height:16px;display:flex;align-items:center;justify-content:center;">
+        ${label}
         ${ring}
         <div style="width:14px;height:14px;background:${color};border-radius:50%;border:2.5px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.45);position:relative;z-index:1;${pulse}"></div>
       </div>`,
@@ -188,9 +192,9 @@ function makeIcon(color, active) {
   });
 }
 
-function getIcon(status, active) {
+function getIcon(status, active, name) {
   const color = STATUS_COLORS[status] || "#9ca3af";
-  return makeIcon(color, !!active);
+  return makeIcon(color, !!active, name);
 }
 
 // ─── MapRecenter ──────────────────────────────────────────────────────────────
@@ -604,7 +608,7 @@ function FleetMap({ drivers, center, onSelect, selectedPath = [], roadPath = [],
           <Marker
             key={d.id}
             position={[d.location.lat, d.location.lng]}
-            icon={getIcon(d.상태, d.active)}
+            icon={getIcon(d.상태, d.active, d.이름)}
             eventHandlers={{ click: () => onSelect?.(d) }}
           >
             <Popup offset={[0, -12]}>
@@ -1294,7 +1298,7 @@ function AttendanceTab({ drivers }) {
 
   useEffect(() => {
     return onSnapshot(
-      query(collection(db, "driver_logs"), limit(3000)),
+      query(collection(db, "driver_logs"), orderBy("timestamp", "desc"), limit(3000)),
       (snap) => { setAllLogs(snap.docs.map(d => ({ id: d.id, ...d.data() }))); setLoading(false); },
       () => setLoading(false)
     );
@@ -1410,7 +1414,11 @@ function AttendanceTab({ drivers }) {
                     {row.isFinal && <span style={{ marginLeft: 7, fontSize: 11, color: "#6b7280", background: "#f3f4f6", padding: "1px 6px", borderRadius: 4, fontWeight: 600 }}>최종</span>}
                   </td>
                   <td style={{ padding: "11px 14px" }}>{fmtWork(row.checkIn, row.checkOut)}</td>
-                  <td style={{ padding: "11px 14px", color: "#374151", fontVariantNumeric: "tabular-nums" }}>{row.distance != null ? `${row.distance.toFixed(1)} km` : "--"}</td>
+                  <td style={{ padding: "11px 14px", color: "#374151", fontVariantNumeric: "tabular-nums" }}>
+                    {row.distance != null
+                      ? `${row.distance.toFixed(1)} km`
+                      : (() => { const live = drivers.find(d => d.id === row.uid); return live ? `${(live.총거리 || 0).toFixed(1)} km` : "--"; })()}
+                  </td>
                   <td style={{ padding: "11px 14px" }}>
                     {!row.checkOut
                       ? <span style={{ fontSize: 12, color: "#10b981", fontWeight: 700, background: "#d1fae5", padding: "2px 9px", borderRadius: 99 }}>근무중</span>

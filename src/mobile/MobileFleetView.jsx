@@ -79,13 +79,17 @@ function FitPath({ points }) {
   return null;
 }
 
-function makeIcon(color, active) {
+function makeIcon(color, active, name) {
   const ring = active
     ? `<div style="position:absolute;inset:-5px;border-radius:50%;background:${color};opacity:.25;animation:mfvRing 1.8s infinite ease-out;"></div>`
+    : "";
+  const label = name
+    ? `<div style="position:absolute;bottom:20px;left:50%;transform:translateX(-50%);white-space:nowrap;background:rgba(27,43,75,0.85);color:#fff;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;pointer-events:none;letter-spacing:0.02em;">${name}</div>`
     : "";
   return L.divIcon({
     html: `
       <div style="position:relative;width:16px;height:16px;display:flex;align-items:center;justify-content:center;">
+        ${label}
         ${ring}
         <div style="width:14px;height:14px;background:${color};border-radius:50%;border:2.5px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.45);position:relative;z-index:1;"></div>
       </div>
@@ -97,8 +101,8 @@ function makeIcon(color, active) {
   });
 }
 
-function getIcon(status, active) {
-  return makeIcon(STATUS_COLORS[status] || "#9ca3af", !!active);
+function getIcon(status, active, name) {
+  return makeIcon(STATUS_COLORS[status] || "#9ca3af", !!active, name);
 }
 
 // ─── 메인 컴포넌트 ────────────────────────────────────────────────────────────
@@ -135,7 +139,7 @@ export default function MobileFleetView() {
       (snap) => setActivityLogs(snap.docs.map(d => ({ id: d.id, ...d.data() })))
     ));
     subs.push(onSnapshot(
-      query(collection(db, "driver_logs"), limit(2000)),
+      query(collection(db, "driver_logs"), orderBy("timestamp", "desc"), limit(2000)),
       (snap) => setAttendanceLogs(snap.docs.map(d => ({ id: d.id, ...d.data() })))
     ));
     return () => subs.forEach(u => u?.());
@@ -558,7 +562,7 @@ export default function MobileFleetView() {
                 <Marker
                   key={d.id}
                   position={[d.location.lat, d.location.lng]}
-                  icon={getIcon(d.상태, d.active)}
+                  icon={getIcon(d.상태, d.active, d.이름)}
                   eventHandlers={{ click: () => setMapSelected(prev => prev?.id === d.id ? null : d) }}
                 >
                   <Popup offset={[0, -12]}>
@@ -815,12 +819,15 @@ function MobileAttendance({ logs, drivers }) {
                       <div style={{ color: "#374151", fontWeight: 700 }}>{workStr}</div>
                     </div>
                   )}
-                  {row.distance != null && (
-                    <div>
-                      <span style={{ color: "#9ca3af", fontSize: 11, fontWeight: 700 }}>이동거리</span>
-                      <div style={{ color: "#374151", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{row.distance.toFixed(1)} km</div>
-                    </div>
-                  )}
+                  {(() => {
+                    const dist = row.distance != null ? row.distance : (drivers.find(d => d.id === row.uid)?.총거리 ?? null);
+                    return dist != null ? (
+                      <div>
+                        <span style={{ color: "#9ca3af", fontSize: 11, fontWeight: 700 }}>이동거리</span>
+                        <div style={{ color: "#374151", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{dist.toFixed(1)} km</div>
+                      </div>
+                    ) : null;
+                  })()}
                 </div>
               </div>
             );
