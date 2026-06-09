@@ -806,6 +806,15 @@ const [isRefreshing, setIsRefreshing] = useState(false);
   const [clients, setClients] = useState([]);
   const [places, setPlaces] = useState([]);
   const [refreshKey, setRefreshKey] = useState(0);
+
+// MobileApp 스코프: clients(Firestore) + places(Firestore) 통합 검색용 (places 우선)
+// MobileOrderForm/Detail에는 이미 merged된 clients prop이 전달되므로 여기서만 사용
+const mergedCompanies = useMemo(() => {
+  const map = new Map();
+  clients.forEach(c => { const k = normalizeCompany(c.거래처명); if (k) map.set(k, c); });
+  places.forEach(p => { const k = normalizeCompany(p.거래처명); if (k) map.set(k, p); });
+  return Array.from(map.values());
+}, [clients, places]);
 const handleRefresh = () => {
   if (isRefreshing) return;
 
@@ -6003,7 +6012,7 @@ function MobileOrderDetail({
       { fieldName: order.하차지명, type: "drop" },
     ].forEach(({ fieldName, type }) => {
       if (!fieldName) return;
-      const found = mergedCompanies.find(c => normalizeCompany(c.거래처명) === normalizeCompany(fieldName));
+      const found = (clients || []).find(c => normalizeCompany(c.거래처명) === normalizeCompany(fieldName));
       if (!found) return;
       const contacts = (Array.isArray(found.contacts) ? found.contacts : []).filter(ct => ct.name?.trim());
       const unique = [...new Map(contacts.map(ct => [ct.name.trim(), ct])).values()];
@@ -7617,15 +7626,7 @@ const [matchedClients, setMatchedClients] = useState([]);
   const [clientSearchResults, setClientSearchResults] = useState([]);
   const [clientSearchQuery, setClientSearchQuery] = useState("");
 
-// clients + places 통합 (places 우선 - contacts 배열 보유)
-const mergedCompanies = useMemo(() => {
-  const map = new Map();
-  clients.forEach(c => { const k = normalizeCompany(c.거래처명); if (k) map.set(k, c); });
-  places.forEach(p => { const k = normalizeCompany(p.거래처명); if (k) map.set(k, p); });
-  return Array.from(map.values());
-}, [clients, places]);
-
-// 🔍 거래처 검색 함수
+// 🔍 거래처 검색 함수 (clients prop은 MobileApp에서 이미 places+clients 통합 전달됨)
 const searchClient = (q) => {
   if (!q.trim()) {
     setMatchedClients([]);
@@ -7638,7 +7639,7 @@ const searchClient = (q) => {
   const starts = [];
   const includes = [];
 
-  mergedCompanies.forEach((c) => {
+  clients.forEach((c) => {
     const nameRaw = c.거래처명 || "";
     const name = normalizeCompany(nameRaw);
 
@@ -8015,7 +8016,7 @@ const pickupOptions = useMemo(() => {
   const includes = [];
   const addrMatch = [];
 
-  mergedCompanies.forEach((c) => {
+  clients.forEach((c) => {
     const nameRaw = c.거래처명 || "";
     const name = normalizeCompany(nameRaw);
     const addr = normalizeCompany(c.주소 || "");
@@ -8035,7 +8036,7 @@ const pickupOptions = useMemo(() => {
 
   return [...exact, ...starts, ...includes, ...addrMatch].slice(0, 10);
 
-}, [mergedCompanies, queryPickup, form.상차지명]);
+}, [clients, queryPickup, form.상차지명]);
 const dropOptions = useMemo(() => {
   if (!queryDrop) return [];
 
@@ -8046,7 +8047,7 @@ const dropOptions = useMemo(() => {
   const includes = [];
   const addrMatch = [];
 
-  mergedCompanies.forEach((c) => {
+  clients.forEach((c) => {
     const nameRaw = c.거래처명 || "";
     const name = normalizeCompany(nameRaw);
     const addr = normalizeCompany(c.주소 || "");
@@ -8066,7 +8067,7 @@ const dropOptions = useMemo(() => {
 
   return [...exact, ...starts, ...includes, ...addrMatch].slice(0, 10);
 
-}, [mergedCompanies, queryDrop]);
+}, [clients, queryDrop]);
 
 const pickPickup = (c) => {
     update("거래처명", c.거래처명 || "");
