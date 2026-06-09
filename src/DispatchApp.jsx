@@ -12048,6 +12048,10 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
   const [deleteIdx, setDeleteIdx] = React.useState(null);
   const [contactPickerIdx, setContactPickerIdx] = React.useState(null);
   const [contactPickerOpts, setContactPickerOpts] = React.useState([]);
+  // Use ref to capture list at open time — prevents parent re-renders from resetting editList mid-edit
+  const listRef = React.useRef(list);
+  listRef.current = list;
+  const prevOpenRef = React.useRef(false);
 
   const emptyStop = () => ({
     업체명: "", 주소: "", 담당자: "", 담당자번호: "", 메모: "",
@@ -12056,16 +12060,16 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
   });
 
   React.useEffect(() => {
-    if (open) {
-      const initList = (list || []).filter(s => s?.업체명?.trim()).map(s => {
-        // 기존 화물내용에서 타입 분리
+    if (open && !prevOpenRef.current) {
+      // Initialize only when modal transitions from closed to open
+      const currentList = listRef.current;
+      const initList = (currentList || []).filter(s => s?.업체명?.trim()).map(s => {
         const cargo = s.화물내용 || "";
         let cargoVal = cargo, cargoType = "파레트";
         if (/파레트|파렛트/.test(cargo)) { cargoVal = cargo.replace(/파레트|파렛트/g,""); cargoType="파레트"; }
         else if (/박스/.test(cargo)) { cargoVal = cargo.replace(/박스/g,""); cargoType="박스"; }
         else if (/통/.test(cargo)) { cargoVal = cargo.replace(/통/g,""); cargoType="통"; }
         else { cargoType="없음"; }
-        // 기존 톤수에서 타입 분리
         const ton = s.차량톤수 || s.톤수값 || "";
         let tonVal = ton, tonType = "톤";
         if (/톤/.test(ton)) { tonVal = ton.replace(/톤/g,""); tonType="톤"; }
@@ -12075,7 +12079,8 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
       });
       setEditList(initList.length ? initList : [emptyStop()]);
     }
-  }, [open, list]);
+    prevOpenRef.current = open;
+  }, [open]); // Only re-initialize when open state changes, not on every parent re-render
 
   if (!open) return null;
 
@@ -17287,7 +17292,7 @@ checkWarningStatus(c.거래처명, "거래처");
         ].filter(s => s && (s.업체명?.trim() || s.주소?.trim()))
          .filter((s, i, arr) => arr.findIndex(x => (x.업체명 || x.주소) === (s.업체명 || s.주소)) === i);
 
-        return <WaypointSection stops={stops} type="pickup" onSave={(newList) => setCopyTarget(p => ({ ...p, 경유상차목록: newList, 경유지_상차: newList }))} placeRows={placeRows} timeOptions={timeOptions} className="mt-3" />;
+        return <WaypointSection stops={stops} type="pickup" onSave={(newList) => setCopyTarget(p => ({ ...p, 경유상차목록: newList, 경유지_상차: newList }))} placeRows={mergedClients} timeOptions={timeOptions} className="mt-3" />;
       })()}
 
     </div>
@@ -17453,7 +17458,7 @@ checkWarningStatus(c.거래처명, "거래처");
         ].filter(s => s && (s.업체명?.trim() || s.주소?.trim()))
          .filter((s, i, arr) => arr.findIndex(x => (x.업체명 || x.주소) === (s.업체명 || s.주소)) === i);
 
-        return <WaypointSection stops={stops} type="drop" onSave={(newList) => setCopyTarget(p => ({ ...p, 경유하차목록: newList, 경유지_하차: newList }))} placeRows={placeRows} timeOptions={timeOptions} className="mt-3" />;
+        return <WaypointSection stops={stops} type="drop" onSave={(newList) => setCopyTarget(p => ({ ...p, 경유하차목록: newList, 경유지_하차: newList }))} placeRows={mergedClients} timeOptions={timeOptions} className="mt-3" />;
       })()}
 
     </div>
@@ -18084,14 +18089,12 @@ value={copyTarget?.화물수량 || ""}
   onClose={() => setEditStopOpen(false)}
   onSave={(newList) => {
     if (editStopType === "pickup") {
-      // 🔥 두 필드 모두 업데이트
       setEditTarget(p => ({
         ...p,
         경유상차목록: newList,
         경유지_상차: newList,
       }));
     } else {
-      // 🔥 두 필드 모두 업데이트
       setEditTarget(p => ({
         ...p,
         경유하차목록: newList,
@@ -18125,7 +18128,7 @@ value={copyTarget?.화물수량 || ""}
     ].filter(s => s?.업체명?.trim());
   })()}
   type={editStopType}
-  placeRows={placeRows}
+  placeRows={mergedClients}
   timeOptions={timeOptions}
 />
 
@@ -18818,7 +18821,7 @@ value={copyTarget?.화물수량 || ""}
               ].filter(s => s?.업체명?.trim())
                .filter((s, i, arr) => arr.findIndex(x => x.업체명 === s.업체명) === i);
 
-              return <WaypointSection stops={stops} type="pickup" onSave={(newList) => setEditTarget(p => ({ ...p, 경유상차목록: newList, 경유지_상차: newList }))} placeRows={placeRows} timeOptions={timeOptions} className="mb-3" />;
+              return <WaypointSection stops={stops} type="pickup" onSave={(newList) => setEditTarget(p => ({ ...p, 경유상차목록: newList, 경유지_상차: newList }))} placeRows={mergedClients} timeOptions={timeOptions} className="mb-3" />;
             })()}
 
             {/* ===================== 하차지 ===================== */}
@@ -18963,7 +18966,7 @@ value={copyTarget?.화물수량 || ""}
               ].filter(s => s?.업체명?.trim())
                .filter((s, i, arr) => arr.findIndex(x => x.업체명 === s.업체명) === i);
 
-              return <WaypointSection stops={stops} type="drop" onSave={(newList) => setEditTarget(p => ({ ...p, 경유하차목록: newList, 경유지_하차: newList }))} placeRows={placeRows} timeOptions={timeOptions} className="mb-3" />;
+              return <WaypointSection stops={stops} type="drop" onSave={(newList) => setEditTarget(p => ({ ...p, 경유하차목록: newList, 경유지_하차: newList }))} placeRows={mergedClients} timeOptions={timeOptions} className="mb-3" />;
             })()}
 
             {/* ------------------------------------------------ */}
@@ -25168,7 +25171,7 @@ onBlur={(e) => {
               const stops = [...sp(editTarget?.경유상차목록), ...sp(editTarget?.경유지_상차)]
                 .filter(s => s?.업체명?.trim())
                 .filter((s, i, arr) => arr.findIndex(x => x.업체명 === s.업체명) === i);
-              return <WaypointSection stops={stops} type="pickup" onSave={(newList) => setEditTarget(p => ({ ...p, 경유상차목록: newList, 경유지_상차: newList }))} placeRows={placeRows} timeOptions={timeOptions} className="mb-3" />;
+              return <WaypointSection stops={stops} type="pickup" onSave={(newList) => setEditTarget(p => ({ ...p, 경유상차목록: newList, 경유지_상차: newList }))} placeRows={mergedClients} timeOptions={timeOptions} className="mb-3" />;
             })()}
 
             {/* ================= 하차지명 ================= */}
@@ -25318,7 +25321,7 @@ onBlur={(e) => {
               const stops = [...sp(editTarget?.경유하차목록), ...sp(editTarget?.경유지_하차)]
                 .filter(s => s?.업체명?.trim())
                 .filter((s, i, arr) => arr.findIndex(x => x.업체명 === s.업체명) === i);
-              return <WaypointSection stops={stops} type="drop" onSave={(newList) => setEditTarget(p => ({ ...p, 경유하차목록: newList, 경유지_하차: newList }))} placeRows={placeRows} timeOptions={timeOptions} className="mb-3" />;
+              return <WaypointSection stops={stops} type="drop" onSave={(newList) => setEditTarget(p => ({ ...p, 경유하차목록: newList, 경유지_하차: newList }))} placeRows={mergedClients} timeOptions={timeOptions} className="mb-3" />;
             })()}
 
             {/* 🔥 화물내용 (단독 한 줄) */}
@@ -26315,7 +26318,7 @@ setCopyPlaceOptions(list);
       {(() => {
         const _sp = (v) => { if (Array.isArray(v) && v.length > 0) return v; if (typeof v === "string" && v.trim().startsWith("[")) { try { const p = JSON.parse(v); if (Array.isArray(p)) return p; } catch {} } if (v && typeof v === "object" && !Array.isArray(v)) { const ks = Object.keys(v); if (ks.length > 0 && ks.every(k => /^\d+$/.test(k))) return ks.sort((a,b)=>Number(a)-Number(b)).map(k=>v[k]); if (v.업체명) return [v]; } return []; };
         const stops = _sp(copyTarget?.경유상차목록 || copyTarget?.경유지_상차).filter(s => s && (s.업체명?.trim() || s.주소?.trim()));
-        return <WaypointSection stops={stops} type="pickup" onSave={(newList) => setCopyTarget(p => ({ ...p, 경유상차목록: newList, 경유지_상차: newList }))} placeRows={placeRows} timeOptions={timeOptions} className="mt-1" />;
+        return <WaypointSection stops={stops} type="pickup" onSave={(newList) => setCopyTarget(p => ({ ...p, 경유상차목록: newList, 경유지_상차: newList }))} placeRows={mergedClients} timeOptions={timeOptions} className="mt-1" />;
       })()}
 
     </div>
@@ -26463,7 +26466,7 @@ setCopyPlaceOptions(list);
       {(() => {
         const _sp = (v) => { if (Array.isArray(v) && v.length > 0) return v; if (typeof v === "string" && v.trim().startsWith("[")) { try { const p = JSON.parse(v); if (Array.isArray(p)) return p; } catch {} } if (v && typeof v === "object" && !Array.isArray(v)) { const ks = Object.keys(v); if (ks.length > 0 && ks.every(k => /^\d+$/.test(k))) return ks.sort((a,b)=>Number(a)-Number(b)).map(k=>v[k]); if (v.업체명) return [v]; } return []; };
         const stops = _sp(copyTarget?.경유하차목록 || copyTarget?.경유지_하차).filter(s => s && (s.업체명?.trim() || s.주소?.trim()));
-        return <WaypointSection stops={stops} type="drop" onSave={(newList) => setCopyTarget(p => ({ ...p, 경유하차목록: newList, 경유지_하차: newList }))} placeRows={placeRows} timeOptions={timeOptions} className="mt-1" />;
+        return <WaypointSection stops={stops} type="drop" onSave={(newList) => setCopyTarget(p => ({ ...p, 경유하차목록: newList, 경유지_하차: newList }))} placeRows={mergedClients} timeOptions={timeOptions} className="mt-1" />;
       })()}
 
     </div>

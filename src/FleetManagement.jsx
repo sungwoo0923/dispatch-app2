@@ -1048,8 +1048,8 @@ function HistoryTab({ drivers, defaultDriverId }) {
       query(collection(db, "driver_logs"), where("uid", "==", applied.driverId)),
       (snap) => {
         const filtered = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-          .filter(l => { const t = l.timestamp?.toDate?.(); return t && t >= from && t <= to; })
-          .sort((a, b) => (a.timestamp?.toDate?.()?.getTime()||0) - (b.timestamp?.toDate?.()?.getTime()||0));
+          .filter(l => { const t = resolveTs(l.timestamp); return t && t >= from && t <= to; })
+          .sort((a, b) => (resolveTs(a.timestamp)?.getTime()||0) - (resolveTs(b.timestamp)?.getTime()||0));
         setLogs(filtered);
         setLoading(false);
       },
@@ -1076,9 +1076,11 @@ function HistoryTab({ drivers, defaultDriverId }) {
     logs.forEach(log => {
       const t = resolveTs(log.timestamp);
       if (!t) return;
-      if (log.status === "출근" && !checkInTime) checkInTime = t;
-      if (log.status === "최종퇴근") finalCheckOutTime = t;
-      if (log.status === "운행중") tripCount++;
+      const s = log.status || log.mainStatus || "";
+      if (s === "출근" && !checkInTime) checkInTime = t;
+      if (s === "최종퇴근") finalCheckOutTime = t;
+      if (!finalCheckOutTime && (log.status === "퇴근" || log.mainStatus === "퇴근")) finalCheckOutTime = t;
+      if (s === "운행중") tripCount++;
     });
     const endTime = finalCheckOutTime || (checkInTime ? new Date() : null);
     const workMs = checkInTime && endTime ? endTime.getTime() - checkInTime.getTime() : 0;
