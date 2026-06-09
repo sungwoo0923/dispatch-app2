@@ -737,17 +737,11 @@ const upsertPlace = async (place) => {
     const data = {
       업체명: name,
       주소: (place.주소 || "").trim(),
-      contacts: Array.isArray(place.contacts)
-        ? place.contacts
-        : (
-            place.담당자 || place.담당자번호
-              ? [{
-                  name: (place.담당자 || "").trim(),
-                  phone: (place.담당자번호 || "").trim(),
-                  isPrimary: true,
-                }]
-              : []
-          ),
+      // Only overwrite contacts when explicitly provided; otherwise merge preserves existing multi-contacts
+      ...(Array.isArray(place.contacts) ? { contacts: place.contacts } : {}),
+      // Always save flat fields for legacy fallback (placeList uses these when contacts array absent)
+      담당자: (place.담당자 || "").trim(),
+      담당자번호: (place.담당자번호 || "").trim(),
       등급: place.등급 || "일반",
       등급변경일: place.등급변경일 || null,
       메모: place.메모 || "",

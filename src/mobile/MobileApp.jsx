@@ -8061,12 +8061,17 @@ const dropOptions = useMemo(() => {
 
 }, [clients, queryDrop]);
 
+const _normName = (s = "") => String(s).replace(/\s+/g, "").toLowerCase();
 const pickPickup = (c) => {
     update("거래처명", c.거래처명 || "");
     update("상차지명", c.거래처명 || "");
     update("상차지주소", c.주소 || "");
 
-    const contacts = (Array.isArray(c.contacts) ? c.contacts : []).filter(ct => ct.name?.trim());
+    // clients collection lacks contacts; look up places for multi-contact data
+    const placeEntry = places.find(p => _normName(p.거래처명) === _normName(c.거래처명 || ""));
+    const rawContacts = Array.isArray(placeEntry?.contacts) ? placeEntry.contacts :
+                        Array.isArray(c.contacts) ? c.contacts : [];
+    const contacts = rawContacts.filter(ct => ct.name?.trim());
     const unique = [...new Map(contacts.map(ct => [ct.name.trim(), ct])).values()];
     const primary = unique.find(ct => ct.isPrimary) || unique[0] || null;
     update("상차지담당자", primary?.name || c.담당자 || "");
@@ -8076,14 +8081,18 @@ const pickPickup = (c) => {
     setShowPickupList(false);
 
     if (unique.length > 1) {
-      openContactPopup([{ type: "pickup", place: c, contacts: unique }]);
+      openContactPopup([{ type: "pickup", place: placeEntry || c, contacts: unique }]);
     }
   };
 const pickDrop = (c) => {
   update("하차지명", c.거래처명 || c.하차지명 || "");
   update("하차지주소", c.주소 || c.하차지주소 || c.상차지주소 || "");
 
-  const contacts = (Array.isArray(c.contacts) ? c.contacts : []).filter(ct => ct.name?.trim());
+  // clients collection lacks contacts; look up places for multi-contact data
+  const placeEntry = places.find(p => _normName(p.거래처명) === _normName(c.거래처명 || c.하차지명 || ""));
+  const rawContacts = Array.isArray(placeEntry?.contacts) ? placeEntry.contacts :
+                      Array.isArray(c.contacts) ? c.contacts : [];
+  const contacts = rawContacts.filter(ct => ct.name?.trim());
   const unique = [...new Map(contacts.map(ct => [ct.name.trim(), ct])).values()];
   const primary = unique.find(ct => ct.isPrimary) || unique[0] || null;
   update("하차지담당자", primary?.name || c.담당자 || "");
@@ -8093,7 +8102,7 @@ const pickDrop = (c) => {
   setShowDropList(false);
 
   if (unique.length > 1) {
-    openContactPopup([{ type: "drop", place: c, contacts: unique }]);
+    openContactPopup([{ type: "drop", place: placeEntry || c, contacts: unique }]);
   }
 };
 
@@ -9624,13 +9633,16 @@ const pickDrop = (c) => {
             : "w-full py-2 mb-2 rounded-lg text-sm font-medium border border-[#1B2B4B] text-[#1B2B4B] bg-white"
         }
         onClick={() => {
-          const contacts = Array.isArray(selectedClient.contacts) ? selectedClient.contacts : [];
-          const primary = contacts.find(ct => ct.isPrimary) || contacts[0] || null;
+          const pe = places.find(p => _normName(p.거래처명) === _normName(selectedClient.거래처명 || ""));
+          const rawC = Array.isArray(pe?.contacts) ? pe.contacts : Array.isArray(selectedClient.contacts) ? selectedClient.contacts : [];
+          const ucts = [...new Map(rawC.filter(ct => ct.name?.trim()).map(ct => [ct.name.trim(), ct])).values()];
+          const prim = ucts.find(ct => ct.isPrimary) || ucts[0] || null;
           update("상차지명", selectedClient.거래처명);
           update("상차지주소", selectedClient.주소 || "");
-          update("상차지담당자", primary?.name || selectedClient.담당자 || "");
-          update("상차지담당자번호", primary?.phone || selectedClient.담당자번호 || "");
+          update("상차지담당자", prim?.name || selectedClient.담당자 || "");
+          update("상차지담당자번호", prim?.phone || selectedClient.담당자번호 || "");
           setShowClientApplyModal(false);
+          if (ucts.length > 1) openContactPopup([{ type: "pickup", place: pe || selectedClient, contacts: ucts }]);
         }}
       >
         상차지에 적용
@@ -9644,13 +9656,16 @@ const pickDrop = (c) => {
             : "w-full py-2 mb-2 rounded-lg text-sm font-medium border border-[#1B2B4B] text-[#1B2B4B] bg-white"
         }
         onClick={() => {
-          const contacts = Array.isArray(selectedClient.contacts) ? selectedClient.contacts : [];
-          const primary = contacts.find(ct => ct.isPrimary) || contacts[0] || null;
+          const pe = places.find(p => _normName(p.거래처명) === _normName(selectedClient.거래처명 || ""));
+          const rawC = Array.isArray(pe?.contacts) ? pe.contacts : Array.isArray(selectedClient.contacts) ? selectedClient.contacts : [];
+          const ucts = [...new Map(rawC.filter(ct => ct.name?.trim()).map(ct => [ct.name.trim(), ct])).values()];
+          const prim = ucts.find(ct => ct.isPrimary) || ucts[0] || null;
           update("하차지명", selectedClient.거래처명);
           update("하차지주소", selectedClient.주소 || "");
-          update("하차지담당자", primary?.name || selectedClient.담당자 || "");
-          update("하차지담당자번호", primary?.phone || selectedClient.담당자번호 || "");
+          update("하차지담당자", prim?.name || selectedClient.담당자 || "");
+          update("하차지담당자번호", prim?.phone || selectedClient.담당자번호 || "");
           setShowClientApplyModal(false);
+          if (ucts.length > 1) openContactPopup([{ type: "drop", place: pe || selectedClient, contacts: ucts }]);
         }}
       >
         하차지에 적용
@@ -9664,17 +9679,23 @@ const pickDrop = (c) => {
             : "w-full py-2 mb-2 rounded-lg text-sm font-medium border border-[#1B2B4B] text-[#1B2B4B] bg-white"
         }
         onClick={() => {
-          const contacts = Array.isArray(selectedClient.contacts) ? selectedClient.contacts : [];
-          const primary = contacts.find(ct => ct.isPrimary) || contacts[0] || null;
+          const pe = places.find(p => _normName(p.거래처명) === _normName(selectedClient.거래처명 || ""));
+          const rawC = Array.isArray(pe?.contacts) ? pe.contacts : Array.isArray(selectedClient.contacts) ? selectedClient.contacts : [];
+          const ucts = [...new Map(rawC.filter(ct => ct.name?.trim()).map(ct => [ct.name.trim(), ct])).values()];
+          const prim = ucts.find(ct => ct.isPrimary) || ucts[0] || null;
           update("상차지명", selectedClient.거래처명);
           update("상차지주소", selectedClient.주소 || "");
-          update("상차지담당자", primary?.name || selectedClient.담당자 || "");
-          update("상차지담당자번호", primary?.phone || selectedClient.담당자번호 || "");
+          update("상차지담당자", prim?.name || selectedClient.담당자 || "");
+          update("상차지담당자번호", prim?.phone || selectedClient.담당자번호 || "");
           update("하차지명", selectedClient.거래처명);
           update("하차지주소", selectedClient.주소 || "");
-          update("하차지담당자", primary?.name || selectedClient.담당자 || "");
-          update("하차지담당자번호", primary?.phone || selectedClient.담당자번호 || "");
+          update("하차지담당자", prim?.name || selectedClient.담당자 || "");
+          update("하차지담당자번호", prim?.phone || selectedClient.담당자번호 || "");
           setShowClientApplyModal(false);
+          if (ucts.length > 1) openContactPopup([
+            { type: "pickup", place: pe || selectedClient, contacts: ucts },
+            { type: "drop", place: pe || selectedClient, contacts: ucts },
+          ]);
         }}
       >
         둘 다 적용
