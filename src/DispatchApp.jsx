@@ -12751,6 +12751,12 @@ function RealtimeStatus({
   menu,
   darkMode = false,
 }) {
+const mergedClients = React.useMemo(() => {
+  const map = new Map();
+  (placeRows || []).forEach(p => { const k = (p.업체명||"").toLowerCase().replace(/\s+/g,""); if (k) map.set(k, p); });
+  (clients || []).forEach(c => { const k = (c.업체명||"").toLowerCase().replace(/\s+/g,""); if (k && !map.has(k)) map.set(k, { 업체명: c.업체명, 주소:"", 담당자:"", 담당자번호:"" }); });
+  return Array.from(map.values());
+}, [placeRows, clients]);
 const audioCtxRef = React.useRef(null);
 React.useEffect(() => {
   const unlock = () => {
@@ -21391,7 +21397,13 @@ function DispatchStatus({
   removeDispatch,
   upsertDriver,
 }) {
-  
+const mergedClients = React.useMemo(() => {
+  const map = new Map();
+  (placeRows || []).forEach(p => { const k = (p.업체명||"").toLowerCase().replace(/\s+/g,""); if (k) map.set(k, p); });
+  (clients || []).forEach(c => { const k = (c.업체명||"").toLowerCase().replace(/\s+/g,""); if (k && !map.has(k)) map.set(k, { 업체명: c.업체명, 주소:"", 담당자:"", 담당자번호:"" }); });
+  return Array.from(map.values());
+}, [placeRows, clients]);
+
 const renderTimeText = (time, cond) => {
   
   if (!time) return "-";
