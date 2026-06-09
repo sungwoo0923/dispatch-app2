@@ -922,38 +922,71 @@ function _parseWaypointList(v) {
 }
 function mergeViaCargoText(mainCargo, waypointLists) {
   const mainStr = String(mainCargo || "").trim();
-  if (!mainStr || mainStr === "없음") return mainCargo || "";
-  const SFXS = ["파렛트", "파레트", "팔레트", "파렛", "파레", "박스", "통"];
+  const UNITS = ["파렛트", "파레트", "팔레트", "파렛", "파레", "박스", "통", "바구니"];
   const NORM = { "파렛트": "파레트", "팔레트": "파레트", "파렛": "파레트", "파레": "파레트" };
   const getType = (s) => {
-    for (const sfx of SFXS) {
-      if (String(s).endsWith(sfx)) return NORM[sfx] || sfx;
-    }
+    for (const u of UNITS) { if (String(s).endsWith(u)) return NORM[u] || u; }
     return null;
   };
-  const mainType = getType(mainStr);
-  const extras = [];
+  const getNum = (s) => { const m = String(s).match(/^([\d,.]+)/); return m ? parseFloat(m[1].replace(/,/g, "")) : null; };
+  const allCargos = [];
+  if (mainStr && mainStr !== "없음") allCargos.push(mainStr);
+  let hasViaWithCargo = false;
   for (const list of waypointLists) {
     for (const s of _parseWaypointList(list)) {
       if (!s) continue;
       const wCargo = String(s.화물내용 || "").trim();
       if (!wCargo || wCargo === "없음") continue;
-      // type-only string (no digit) → artifact of empty save, skip
-      const isTypeOnly = SFXS.some(sfx => wCargo === sfx || wCargo === (NORM[sfx] || sfx));
+      const isTypeOnly = UNITS.some(u => wCargo === u || wCargo === (NORM[u] || u));
       if (isTypeOnly) continue;
-      const wType = getType(wCargo);
-      // same unit as main → already counted in main total, skip
-      if (mainType !== null && wType === mainType) continue;
-      // both custom (no known unit) → skip
-      if (mainType === null && wType === null) continue;
-      if (!extras.includes(wCargo)) extras.push(wCargo);
+      allCargos.push(wCargo);
+      hasViaWithCargo = true;
     }
   }
-  if (!extras.length) return mainStr;
-  return `${mainStr} / ${extras.join(" / ")}`;
+  if (!hasViaWithCargo) return mainStr;
+  const byUnit = {};
+  const untyped = [];
+  for (const cargo of allCargos) {
+    const type = getType(cargo);
+    if (type !== null) {
+      const n = getNum(cargo);
+      if (n !== null) { byUnit[type] = (byUnit[type] || 0) + n; }
+      else if (!untyped.includes(cargo)) untyped.push(cargo);
+    } else {
+      if (!untyped.includes(cargo)) untyped.push(cargo);
+    }
+  }
+  const parts = [...Object.entries(byUnit).map(([u, n]) => `${n}${u}`), ...untyped];
+  return parts.join("+");
 }
 function mergeViaTonnage(mainTon, waypointLists) {
-  return mainTon || "";
+  const parseKg = (s) => {
+    const str = String(s || "").trim().replace(/,/g, "");
+    const kg = str.match(/([\d.]+)\s*kg/i);
+    if (kg) return parseFloat(kg[1]);
+    const ton = str.match(/([\d.]+)\s*톤/);
+    if (ton) return parseFloat(ton[1]) * 1000;
+    return null;
+  };
+  const fmtKg = (kg) => {
+    if (kg >= 1000) return (kg / 1000).toFixed(3).replace(/\.?0+$/, "") + "톤";
+    return Math.round(kg).toLocaleString() + "kg";
+  };
+  const mainKg = parseKg(mainTon);
+  let totalKg = mainKg || 0;
+  let hasViaWithTon = false;
+  for (const list of waypointLists) {
+    for (const s of _parseWaypointList(list)) {
+      if (!s) continue;
+      const t = String(s.차량톤수 || "").trim();
+      if (!t) continue;
+      const kg = parseKg(t);
+      if (kg !== null) { totalKg += kg; hasViaWithTon = true; }
+    }
+  }
+  if (!hasViaWithTon) return mainTon || "";
+  if (totalKg <= 0) return mainTon || "";
+  return fmtKg(totalKg);
 }
 
 // ===================== TOAST SYSTEM (GLOBAL) =====================

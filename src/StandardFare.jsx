@@ -459,13 +459,9 @@ export default function StandardFare() {
   const [searched, setSearched] = useState(false);
   const [resetKey, setResetKey] = useState(0);
 
-  // 표준운임 경유지 상태
-  const [pickupVias, setPickupVias] = useState([]);
-  const [dropVias, setDropVias] = useState([]);
-  const [pickupViaInput, setPickupViaInput] = useState("");
-  const [dropViaInput, setDropViaInput] = useState("");
-  const [showPickupViaInput, setShowPickupViaInput] = useState(false);
-  const [showDropViaInput, setShowDropViaInput] = useState(false);
+  // 표준운임 경유지 포함 토글
+  const [includePickupVia, setIncludePickupVia] = useState(false);
+  const [includeDropVia, setIncludeDropVia] = useState(false);
 
   // 전국운임 상태
   const [nfFrom, setNfFrom] = useState("");
@@ -646,17 +642,28 @@ export default function StandardFare() {
     if (!drop.trim() && !dropAddr.trim()) { alert("하차지명 또는 주소를 입력하세요."); return; }
 
     let list = [...dispatchData];
+    const _saVia = v => { if(Array.isArray(v)) return v; if(typeof v==="string"&&v.trim().startsWith("[")) { try{const p=JSON.parse(v);return Array.isArray(p)?p:[];}catch{return[];} } return[]; };
+    const _viaName = s => typeof s==="string"?s:(s?.업체명||s?.지명||s?.하차지명||s?.상차지명||s?.주소||"");
+    const getPickupVias = r => [..._saVia(r.경유상차목록||[]),..._saVia(r.경유지_상차||[]),..._saVia(r.경유지상차||[])].map(_viaName).filter(Boolean);
+    const getDropVias = r => [..._saVia(r.경유하차목록||[]),..._saVia(r.경유지_하차||[]),..._saVia(r.경유지하차||[])].map(_viaName).filter(Boolean);
+
     list = list.filter(r => {
       const name = clean(r.상차지명||""), addr = clean(r.상차지주소||"");
       const p = clean(pickup), pa = clean(pickupAddr);
       if (!p && !pa) return true;
-      return (p && (name.includes(p)||addr.includes(p))) || (pa && (name.includes(pa)||addr.includes(pa)));
+      const mainMatches = (p && (name.includes(p)||addr.includes(p))) || (pa && (name.includes(pa)||addr.includes(pa)));
+      if (mainMatches) return true;
+      if (includePickupVia && p) return getPickupVias(r).some(n => clean(n).includes(p));
+      return false;
     });
     list = list.filter(r => {
       const name = clean(r.하차지명||""), addr = clean(r.하차지주소||"");
       const d = clean(drop), da = clean(dropAddr);
       if (!d && !da) return true;
-      return (d && (name.includes(d)||addr.includes(d))) || (da && (name.includes(da)||addr.includes(da)));
+      const mainMatches = (d && (name.includes(d)||addr.includes(d))) || (da && (name.includes(da)||addr.includes(da)));
+      if (mainMatches) return true;
+      if (includeDropVia && d) return getDropVias(r).some(n => clean(n).includes(d));
+      return false;
     });
     if (cargo.trim()) {
       const cargoNum = extractCargoNumber(cargo);
@@ -679,23 +686,10 @@ export default function StandardFare() {
       list = list.filter(r => clean(r.거래처명) === clean(client));
     }
 
-    // 경유지 필터링
-    const sa = v => { if(Array.isArray(v)) return v; if(typeof v==="string"&&v.trim().startsWith("[")) { try{const p=JSON.parse(v);return Array.isArray(p)?p:[];}catch{return[];} } return[]; };
+    // 경유지 없는 직접 노선만 (토글 꺼진 경우)
     list = list.filter(r => {
-      const rPV = sa(r.경유상차목록||r.경유지_상차||[]).map(s=>typeof s==="string"?s:(s?.업체명||"")).filter(Boolean);
-      const rDV = sa(r.경유하차목록||r.경유지_하차||[]).map(s=>typeof s==="string"?s:(s?.업체명||"")).filter(Boolean);
-      if (pickupVias.length > 0) {
-        if (rPV.length !== pickupVias.length) return false;
-        if (!pickupVias.every((v,i)=>clean(rPV[i]).includes(clean(v))||clean(v).includes(clean(rPV[i])))) return false;
-      } else {
-        if (rPV.length > 0) return false;
-      }
-      if (dropVias.length > 0) {
-        if (rDV.length !== dropVias.length) return false;
-        if (!dropVias.every((v,i)=>clean(rDV[i]).includes(clean(v))||clean(v).includes(clean(rDV[i])))) return false;
-      } else {
-        if (rDV.length > 0) return false;
-      }
+      if (!includePickupVia && getPickupVias(r).length > 0) return false;
+      if (!includeDropVia && getDropVias(r).length > 0) return false;
       return true;
     });
 
@@ -746,7 +740,7 @@ export default function StandardFare() {
   const reset = () => {
     setPickup(""); setDrop(""); setCargo(""); setTon(""); setVehicle("전체");
     setPickupAddr(""); setDropAddr(""); setClient("전체"); setResult([]); setAiFare(null); setSearched(false);
-    setPickupVias([]); setDropVias([]); setPickupViaInput(""); setDropViaInput(""); setShowPickupViaInput(false); setShowDropViaInput(false);
+    setIncludePickupVia(false); setIncludeDropVia(false);
     setResetKey(k => k + 1);
     ["sf_pickup","sf_drop","sf_cargo","sf_ton","sf_vehicle","sf_pickupAddr","sf_dropAddr","sf_client"].forEach(k=>localStorage.removeItem(k));
   };
@@ -816,24 +810,19 @@ export default function StandardFare() {
                         <input className={inputCls} placeholder="예: 인천 서구" value={pickupAddr} onChange={e=>setPickupAddr(e.target.value)} onKeyDown={e=>e.key==="Enter"&&search()} />
                       </div>
                     </div>
-                    {/* Pickup waypoints */}
-                    <div className="mt-2 flex items-center gap-2 flex-wrap">
-                      {pickupVias.map((v,i) => (
-                        <span key={i} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-[#1B2B4B]/8 text-[#1B2B4B] border border-[#1B2B4B]/20 rounded text-[11px] font-semibold">
-                          경유{i+1}: {v}
-                          <button type="button" onClick={() => setPickupVias(prev => prev.filter((_,j)=>j!==i))} className="text-gray-400 hover:text-[#1B2B4B] ml-0.5 leading-none">×</button>
-                        </span>
-                      ))}
-                      {showPickupViaInput ? (
-                        <div className="flex items-center gap-1">
-                          <input autoFocus className="px-1.5 py-0.5 text-[11px] border border-gray-300 rounded focus:border-[#1B2B4B] focus:outline-none w-24" placeholder="경유지명" value={pickupViaInput} onChange={e=>setPickupViaInput(e.target.value)}
-                            onKeyDown={e=>{ if(e.key==="Enter"&&pickupViaInput.trim()){setPickupVias(p=>[...p,pickupViaInput.trim()]);setPickupViaInput("");setShowPickupViaInput(false);} if(e.key==="Escape"){setPickupViaInput("");setShowPickupViaInput(false);}}} />
-                          <button type="button" onClick={()=>{if(pickupViaInput.trim()){setPickupVias(p=>[...p,pickupViaInput.trim()]);setPickupViaInput("");} setShowPickupViaInput(false);}} className="px-1.5 py-0.5 bg-[#1B2B4B] text-white rounded text-[10px] font-bold">추가</button>
-                          <button type="button" onClick={()=>{setPickupViaInput("");setShowPickupViaInput(false);}} className="px-1 py-0.5 text-gray-400 text-[10px]">×</button>
-                        </div>
-                      ) : (
-                        <button type="button" onClick={()=>setShowPickupViaInput(true)} className="px-1.5 py-0.5 border border-dashed border-gray-300 text-gray-500 hover:border-[#1B2B4B] hover:text-[#1B2B4B] rounded text-[11px] font-semibold transition">+ 경유</button>
-                      )}
+                    {/* 상차경유지포함 토글 */}
+                    <div className="mt-2">
+                      <button
+                        type="button"
+                        onClick={() => setIncludePickupVia(v => !v)}
+                        className={`px-2.5 py-1 text-[11px] font-semibold rounded border transition ${
+                          includePickupVia
+                            ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
+                            : "bg-white text-gray-500 border-gray-300 hover:border-[#1B2B4B] hover:text-[#1B2B4B]"
+                        }`}
+                      >
+                        상차경유지포함
+                      </button>
                     </div>
                   </div>
                   <div className="bg-gray-50 rounded-lg p-3 border border-gray-100">
@@ -848,24 +837,19 @@ export default function StandardFare() {
                         <input className={inputCls} placeholder="예: 서울 송파구" value={dropAddr} onChange={e=>setDropAddr(e.target.value)} onKeyDown={e=>e.key==="Enter"&&search()} />
                       </div>
                     </div>
-                    {/* Drop waypoints */}
-                    <div className="mt-2 flex items-center gap-2 flex-wrap">
-                      {dropVias.map((v,i) => (
-                        <span key={i} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-[#1B2B4B]/8 text-[#1B2B4B] border border-[#1B2B4B]/20 rounded text-[11px] font-semibold">
-                          경유{i+1}: {v}
-                          <button type="button" onClick={() => setDropVias(prev => prev.filter((_,j)=>j!==i))} className="text-gray-400 hover:text-[#1B2B4B] ml-0.5 leading-none">×</button>
-                        </span>
-                      ))}
-                      {showDropViaInput ? (
-                        <div className="flex items-center gap-1">
-                          <input autoFocus className="px-1.5 py-0.5 text-[11px] border border-gray-300 rounded focus:border-[#1B2B4B] focus:outline-none w-24" placeholder="경유지명" value={dropViaInput} onChange={e=>setDropViaInput(e.target.value)}
-                            onKeyDown={e=>{ if(e.key==="Enter"&&dropViaInput.trim()){setDropVias(p=>[...p,dropViaInput.trim()]);setDropViaInput("");setShowDropViaInput(false);} if(e.key==="Escape"){setDropViaInput("");setShowDropViaInput(false);}}} />
-                          <button type="button" onClick={()=>{if(dropViaInput.trim()){setDropVias(p=>[...p,dropViaInput.trim()]);setDropViaInput("");} setShowDropViaInput(false);}} className="px-1.5 py-0.5 bg-[#1B2B4B] text-white rounded text-[10px] font-bold">추가</button>
-                          <button type="button" onClick={()=>{setDropViaInput("");setShowDropViaInput(false);}} className="px-1 py-0.5 text-gray-400 text-[10px]">×</button>
-                        </div>
-                      ) : (
-                        <button type="button" onClick={()=>setShowDropViaInput(true)} className="px-1.5 py-0.5 border border-dashed border-gray-300 text-gray-500 hover:border-[#1B2B4B] hover:text-[#1B2B4B] rounded text-[11px] font-semibold transition">+ 경유</button>
-                      )}
+                    {/* 하차경유지포함 토글 */}
+                    <div className="mt-2">
+                      <button
+                        type="button"
+                        onClick={() => setIncludeDropVia(v => !v)}
+                        className={`px-2.5 py-1 text-[11px] font-semibold rounded border transition ${
+                          includeDropVia
+                            ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
+                            : "bg-white text-gray-500 border-gray-300 hover:border-[#1B2B4B] hover:text-[#1B2B4B]"
+                        }`}
+                      >
+                        하차경유지포함
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -970,9 +954,15 @@ export default function StandardFare() {
                     ) : (
                       result.map((r, i) => {
                         // 경유지 정보 조합
-                        const _extractViaNames = (arr) => Array.isArray(arr)
-                          ? arr.map(v => typeof v === "string" ? v : (v?.업체명 || v?.주소 || "")).filter(Boolean)
-                          : [];
+                        const _extractViaNames = (arr) => {
+                          let list = arr;
+                          if (typeof arr === "string" && arr.trim().startsWith("[")) {
+                            try { list = JSON.parse(arr); } catch { list = []; }
+                          }
+                          return Array.isArray(list)
+                            ? list.map(v => typeof v === "string" ? v : (v?.업체명 || v?.지명 || v?.하차지명 || v?.상차지명 || v?.주소 || "")).filter(Boolean)
+                            : [];
+                        };
                         const _allViaNames = [
                           ..._extractViaNames(r.경유지_상차),
                           ..._extractViaNames(r.경유상차목록),
