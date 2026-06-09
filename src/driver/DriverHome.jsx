@@ -402,6 +402,8 @@ export default function DriverHome() {
           resetTotalDist();
         }
       }
+      // Capture before updateDoc — Firestore optimistic update may zero driver.totalDistance
+      const finalDistance = isFinal ? (driver?.totalDistance || 0) : 0;
       if (isFinal) {
         // 최종퇴근: 오늘 누적거리 기록 후 다음날을 위해 초기화
         driverUpdate.workDate = today;
@@ -410,7 +412,7 @@ export default function DriverHome() {
         resetTotalDist();
       }
       await updateDoc(doc(db, "drivers", uid), driverUpdate);
-      const logExtra = isFinal ? { finalDistance: driver?.totalDistance || 0 } : {};
+      const logExtra = isFinal ? { finalDistance } : {};
       await addDoc(collection(db, "driver_logs"), {
         uid,
         driverName: driver?.name || "",
