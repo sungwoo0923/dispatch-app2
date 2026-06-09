@@ -1397,7 +1397,7 @@ function AttendanceTab({ drivers }) {
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
             <thead>
               <tr style={{ background: "#f4f6fa", borderBottom: "2px solid #e5e7eb", position: "sticky", top: 0, zIndex: 1 }}>
-                {["#", "기사명", "차량번호", "출근시각", "퇴근시각", "근무시간", "이동거리", "상태"].map(col => (
+                {["#", "기사명", "차량번호", "출근시각", "퇴근시각", "근무시간", "이동거리", "연료비", "상태"].map(col => (
                   <th key={col} style={{ padding: "11px 14px", textAlign: "left", color: "#374151", fontWeight: 700, fontSize: 13, whiteSpace: "nowrap" }}>{col}</th>
                 ))}
               </tr>
@@ -1418,6 +1418,16 @@ function AttendanceTab({ drivers }) {
                     {row.distance != null
                       ? `${row.distance.toFixed(1)} km`
                       : (() => { const live = drivers.find(d => d.id === row.uid); return live ? `${(live.총거리 || 0).toFixed(1)} km` : "--"; })()}
+                  </td>
+                  <td style={{ padding: "11px 14px", color: "#374151", fontVariantNumeric: "tabular-nums" }}>
+                    {(() => {
+                      const live = drivers.find(d => d.id === row.uid);
+                      const km = row.distance != null ? row.distance : (live ? live.총거리 || 0 : null);
+                      if (km == null || km <= 0) return "--";
+                      const vt = String(live?.vehicleType || "").replace(/\s/g,"");
+                      const eff = /25|28/.test(vt)?3.0:/11|15|18/.test(vt)?3.5:/1[^0-9]|2\.5|소형/.test(vt)?5.5:4.0;
+                      return `${Math.round(km/eff*1750).toLocaleString()}원`;
+                    })()}
                   </td>
                   <td style={{ padding: "11px 14px" }}>
                     {!row.checkOut
@@ -1484,6 +1494,8 @@ export default function FleetManagement() {
 
   const [gpsTracks, setGpsTracks] = useState([]);
   const [roadPath, setRoadPath] = useState([]);
+  const todayDate = new Date().toISOString().slice(0, 10);
+  const [selectedTrackDate, setSelectedTrackDate] = useState(todayDate);
   const [pinModal, setPinModal] = useState(null); // { title, onConfirmed }
   const [companyDefaultLoc, setCompanyDefaultLoc] = useState(null);
   const [checkInLocModal, setCheckInLocModal] = useState(null); // { driverId, driverName, initialLoc }
@@ -1600,12 +1612,11 @@ export default function FleetManagement() {
     );
   }, [selected?.id]);
 
-  // ── GPS 트랙 구독 (선택된 기사, 오늘) ─────────────────────────────────────
+  // ── GPS 트랙 구독 (선택된 기사, 선택 날짜) ───────────────────────────────
   // Composite indexes for (driverId+date+timestamp) may not exist in Firestore yet,
   // so we query by driverId only (single-field auto-index) and filter+sort client-side.
   useEffect(() => {
     if (!selected?.id) { setGpsTracks([]); return; }
-    const today = new Date().toISOString().slice(0, 10);
     return onSnapshot(
       query(
         collection(db, "gps_tracks"),
@@ -1617,7 +1628,7 @@ export default function FleetManagement() {
           .map(d => ({ id: d.id, ...d.data() }))
           .filter(t => {
             const d = resolveTs(t.timestamp);
-            return d && d.toISOString().slice(0, 10) === today;
+            return d && d.toISOString().slice(0, 10) === selectedTrackDate;
           })
           .sort((a, b) => {
             const at = resolveTs(a.timestamp)?.getTime() || 0;
@@ -1628,7 +1639,7 @@ export default function FleetManagement() {
       },
       (err) => console.error("gps_tracks:", err)
     );
-  }, [selected?.id]);
+  }, [selected?.id, selectedTrackDate]);
 
   // ── 합성 drivers ─────────────────────────────────────────────────────────
   // Only include drivers who registered via DriverRegister (have usersMap entry)
@@ -2022,6 +2033,26 @@ export default function FleetManagement() {
             <span style={{ fontSize: 13, color: "#6b7280", marginLeft: "auto", whiteSpace: "nowrap", fontWeight: 600 }}>
               {filteredRows.length}명 / 전체 {drivers.length}명
             </span>
+          </div>
+
+          {/* 날짜별 동선 조회 */}
+          <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
+            <span style={{ fontSize:12, fontWeight:600, color:"#6b7280", whiteSpace:"nowrap" }}>동선 조회 날짜</span>
+            <input
+              type="date"
+              value={selectedTrackDate}
+              max={todayDate}
+              onChange={e => setSelectedTrackDate(e.target.value)}
+              style={{ flex:1, padding:"6px 10px", border:"1px solid #e5e7eb", borderRadius:8, fontSize:13, color:NAVY, outline:"none" }}
+            />
+            {selectedTrackDate !== todayDate && (
+              <button
+                onClick={() => setSelectedTrackDate(todayDate)}
+                style={{ padding:"6px 12px", border:"none", borderRadius:8, background:NAVY, color:"white", fontSize:12, fontWeight:700, cursor:"pointer" }}
+              >
+                오늘
+              </button>
+            )}
           </div>
 
           {/* 테이블 + 지도 */}

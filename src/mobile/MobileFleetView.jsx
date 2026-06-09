@@ -117,6 +117,8 @@ export default function MobileFleetView() {
   const [expandedId, setExpandedId] = useState(null);
   const [activeSection, setActiveSection] = useState("drivers"); // "drivers" | "map" | "feed" | "attendance"
   const [attendanceLogs, setAttendanceLogs] = useState([]);
+  const today = new Date().toISOString().slice(0, 10);
+  const [selectedDate, setSelectedDate] = useState(today);
 
   // 지도 관련 상태
   const [mapSelected, setMapSelected] = useState(null);
@@ -155,10 +157,9 @@ export default function MobileFleetView() {
     );
   }, [mapSelected?.id]);
 
-  // GPS 트랙 구독 (오늘 날짜, 클라이언트 필터)
+  // GPS 트랙 구독 (선택 날짜, 클라이언트 필터)
   useEffect(() => {
     if (!mapSelected?.id) { setGpsTracks([]); return; }
-    const today = new Date().toISOString().slice(0, 10);
     return onSnapshot(
       query(collection(db, "gps_tracks"), where("driverId", "==", mapSelected.id), limit(2000)),
       (snap) => {
@@ -166,14 +167,14 @@ export default function MobileFleetView() {
           .map(d => ({ id: d.id, ...d.data() }))
           .filter(t => {
             const d = resolveTs(t.timestamp);
-            return d && d.toISOString().slice(0, 10) === today;
+            return d && d.toISOString().slice(0, 10) === selectedDate;
           })
           .sort((a, b) => (resolveTs(a.timestamp)?.getTime() || 0) - (resolveTs(b.timestamp)?.getTime() || 0));
         setGpsTracks(tracks);
       },
       () => {}
     );
-  }, [mapSelected?.id]);
+  }, [mapSelected?.id, selectedDate]);
 
   // selectedPath 계산 (gpsTracks 우선, 없으면 driver_logs)
   const selectedPath = useMemo(() => {
@@ -261,8 +262,12 @@ export default function MobileFleetView() {
   }), [drivers]);
 
   const filteredFeed = useMemo(() =>
-    activityLogs.filter(l => driversMap[l.uid]),
-    [activityLogs, driversMap]
+    activityLogs.filter(l => {
+      if (!driversMap[l.uid]) return false;
+      const t = resolveTs(l.timestamp);
+      return t && t.toISOString().slice(0, 10) === selectedDate;
+    }),
+    [activityLogs, driversMap, selectedDate]
   );
 
   const handleMapSelect = useCallback((d) => {
@@ -333,6 +338,26 @@ export default function MobileFleetView() {
             <div style={{ fontSize: 28, fontWeight: 900, color: primary ? "#fff" : (color || NAVY), lineHeight: 1 }}>{val}</div>
           </div>
         ))}
+      </div>
+
+      {/* 날짜 선택 */}
+      <div style={{ display:"flex", alignItems:"center", gap:8, padding:"12px 16px 0" }}>
+        <span style={{ fontSize:12, fontWeight:700, color:"#6b7280", whiteSpace:"nowrap" }}>조회 날짜</span>
+        <input
+          type="date"
+          value={selectedDate}
+          max={today}
+          onChange={e => setSelectedDate(e.target.value)}
+          style={{ flex:1, padding:"7px 10px", border:"1px solid #e5e7eb", borderRadius:8, fontSize:13, color:"#1B2B4B", background:"#f9fafb", outline:"none" }}
+        />
+        {selectedDate !== today && (
+          <button
+            onClick={() => setSelectedDate(today)}
+            style={{ padding:"7px 12px", border:"none", borderRadius:8, background:"#1B2B4B", color:"white", fontSize:12, fontWeight:700, cursor:"pointer", whiteSpace:"nowrap" }}
+          >
+            오늘
+          </button>
+        )}
       </div>
 
       {/* 섹션 탭 */}
@@ -442,12 +467,18 @@ export default function MobileFleetView() {
                     {expanded && (
                       <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid #f0f2f5" }}>
                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
-                          {[
-                            ["연락처", d.phone || "-"],
-                            ["차량종류", d.vehicleType || "-"],
-                            ["이동거리", `${d.총거리.toFixed(2)} km`],
-                            ["접속상태", d.active ? "접속중" : "미접속"],
-                          ].map(([label, val]) => (
+                          {(() => {
+                            const km = d.총거리 || 0;
+                            const vt = String(d.vehicleType || "").replace(/\s/g,"");
+                            const eff = /25|28/.test(vt)?3.0:/11|15|18/.test(vt)?3.5:/1[^0-9]|2\.5|소형/.test(vt)?5.5:4.0;
+                            const fuelCost = km > 0 ? Math.round(km/eff*1750) : 0;
+                            return [
+                              ["연락처", d.phone || "-"],
+                              ["차량종류", d.vehicleType || "-"],
+                              ["이동거리", `${km.toFixed(2)} km`],
+                              ["연료비 추정", km > 0 ? `${fuelCost.toLocaleString()}원` : "-"],
+                            ];
+                          })().map(([label, val]) => (
                             <div key={label} style={{ background: "#f8f9fb", borderRadius: 9, padding: "10px 12px" }}>
                               <div style={{ fontSize: 10, fontWeight: 700, color: "#9ca3af", letterSpacing: ".06em", textTransform: "uppercase", marginBottom: 4 }}>{label}</div>
                               <div style={{ fontSize: 13, fontWeight: 700, color: NAVY }}>{val}</div>

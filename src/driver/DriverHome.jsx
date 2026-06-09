@@ -849,6 +849,34 @@ export default function DriverHome() {
             )}
           </div>
 
+          <div style={{ background:"white", borderRadius:16, padding:"20px", marginTop:12, boxShadow:"0 1px 6px rgba(0,0,0,0.06)", border:"1px solid #e5e7eb" }}>
+            <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", marginBottom:12, letterSpacing:"0.05em" }}>하차지 설정</div>
+            <div style={{ fontSize:12, color:"#6b7280", lineHeight:1.6, marginBottom:12 }}>
+              하차지를 저장하면 운행중 해당 위치 반경 100m 이내 진입 시 자동으로 하차가 처리됩니다.
+            </div>
+            {driver.dropLocation && (
+              <div style={{ fontSize:12, color:"#374151", marginBottom:10, background:"#f9fafb", borderRadius:8, padding:"8px 12px" }}>
+                저장된 하차지: {driver.dropLocation.lat.toFixed(5)}, {driver.dropLocation.lng.toFixed(5)}
+              </div>
+            )}
+            {pos ? (
+              <button
+                onClick={async () => {
+                  if (pos.accuracy != null && pos.accuracy > 100) { showToast("GPS 정확도가 낮습니다"); return; }
+                  try {
+                    await updateDoc(doc(db, "drivers", uid), { dropLocation: { lat: pos.lat, lng: pos.lng } });
+                    showToast("하차지가 저장되었습니다");
+                  } catch (_) { showToast("저장 중 오류가 발생했습니다"); }
+                }}
+                style={{ width:"100%", padding:"12px", borderRadius:12, border:"1.5px solid #e5e7eb", background:"white", color:"#374151", fontSize:14, fontWeight:700, cursor:"pointer" }}
+              >
+                현재 위치를 하차지로 저장
+              </button>
+            ) : (
+              <div style={{ fontSize:13, color:"#9ca3af" }}>GPS 신호가 필요합니다</div>
+            )}
+          </div>
+
           <div style={{ background: "#fef3f2", borderRadius: 16, padding: "16px 20px", marginTop: 12, border: "1px solid #fecaca" }}>
             <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 10 }}>문제가 발생했을 때 로그아웃 후 재로그인하세요.</div>
             <button onClick={handleLogout} style={{
