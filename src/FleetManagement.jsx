@@ -43,6 +43,13 @@ function resolveTs(ts) {
   return null;
 }
 
+function toKSTDate(ts) {
+  const d = resolveTs(ts);
+  if (!d) return null;
+  const kst = new Date(d.getTime() + 9 * 3600000);
+  return kst.toISOString().slice(0, 10);
+}
+
 function timeAgo(ts) {
   const d = resolveTs(ts);
   if (!d) return "-";
@@ -730,7 +737,7 @@ function ActivityFeed({ logs, driversMap, onDeleteAll }) {
 
 // ─── DriverDetailPanel ────────────────────────────────────────────────────────
 
-function DriverDetailPanel({ data, logs, onClose, onDeleteLogs, checkInLoc, companyDefaultLoc, onSetCheckInLoc, onClearCheckInLoc }) {
+function DriverDetailPanel({ data, logs, onClose, onDeleteLogs, checkInLoc, companyDefaultLoc, onSetCheckInLoc, onClearCheckInLoc, dropLoc, onSetDropLoc, onClearDropLoc, sessionWorkMs, sessionIsActive, sessionGpsDist }) {
   if (!data) return null;
 
   const lastLog = logs[0];
@@ -773,22 +780,12 @@ function DriverDetailPanel({ data, logs, onClose, onDeleteLogs, checkInLoc, comp
       </div>
 
       {/* Stats */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(135px, 1fr))", gap: 10, marginBottom: 22 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10, marginBottom: 22 }}>
         {[
-          { label: "이동거리", val: `${(data.총거리 || 0).toFixed(2)} km` },
-          { label: "근무시간", val: formatMinutes(data.근무시간) },
+          { label: "이동거리", val: sessionGpsDist != null && sessionGpsDist > 0 ? `${sessionGpsDist.toFixed(2)} km` : `${(data.총거리 || 0).toFixed(2)} km` },
+          { label: "근무시간", val: sessionWorkMs != null && sessionWorkMs > 0 ? formatMs(sessionWorkMs) : (sessionIsActive ? formatMs(Date.now() - (resolveTs(data.workStartAt)?.getTime()||Date.now())) : formatMinutes(data.근무시간)) },
           { label: "접속상태", val: data.active ? "접속중" : "미접속", color: data.active ? "#10b981" : "#9ca3af" },
           data.location ? { label: "현재 좌표", val: `${data.location.lat.toFixed(4)}, ${data.location.lng.toFixed(4)}` } : null,
-          (() => {
-            const dist = data.총거리 || 0;
-            const startTs = resolveTs(data.workStartAt);
-            if (dist > 0 && startTs) {
-              const hrs = (Date.now() - startTs.getTime()) / 3600000;
-              const avg = hrs > 0 ? Math.round(dist / hrs) : 0;
-              return { label: "평균 속도", val: `${avg} km/h` };
-            }
-            return null;
-          })(),
         ].filter(Boolean).map(({ label, val, color }) => (
           <div key={label} style={{ background: "#f8f9fb", borderRadius: 9, padding: "13px 15px", border: "1px solid #eaecf0" }}>
             <p style={{ fontSize: 11, fontWeight: 700, color: "#6b7280", letterSpacing: ".07em", textTransform: "uppercase", margin: "0 0 6px" }}>{label}</p>
@@ -1495,10 +1492,12 @@ export default function FleetManagement() {
   const [gpsTracks, setGpsTracks] = useState([]);
   const [roadPath, setRoadPath] = useState([]);
   const todayDate = new Date().toISOString().slice(0, 10);
+  const yesterdayDate = (() => { const d = new Date(); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10); })();
   const [selectedTrackDate, setSelectedTrackDate] = useState(todayDate);
   const [pinModal, setPinModal] = useState(null); // { title, onConfirmed }
   const [companyDefaultLoc, setCompanyDefaultLoc] = useState(null);
   const [checkInLocModal, setCheckInLocModal] = useState(null); // { driverId, driverName, initialLoc }
+  const [dropLocModal, setDropLocModal] = useState(null); // { driverId, driverName, initialLoc }
   const [companyLocModal, setCompanyLocModal] = useState(false);
 
   const [collisionAlerts, setCollisionAlerts] = useState([]);
@@ -1598,7 +1597,7 @@ export default function FleetManagement() {
   useEffect(() => {
     if (!selected?.id) { setSelectedDriverLogs([]); return; }
     return onSnapshot(
-      query(collection(db, "driver_logs"), where("uid", "==", selected.id), limit(100)),
+      query(collection(db, "driver_logs"), where("uid", "==", selected.id), limit(300)),
       (snap) => {
         const logs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         logs.sort((a, b) => {
@@ -1606,7 +1605,7 @@ export default function FleetManagement() {
           const bt = resolveTs(b.timestamp)?.getTime() || 0;
           return bt - at;
         });
-        setSelectedDriverLogs(logs.slice(0, 30));
+        setSelectedDriverLogs(logs);
       },
       (err) => console.error("selected logs:", err)
     );
@@ -1626,10 +1625,7 @@ export default function FleetManagement() {
       (snap) => {
         const tracks = snap.docs
           .map(d => ({ id: d.id, ...d.data() }))
-          .filter(t => {
-            const d = resolveTs(t.timestamp);
-            return d && d.toISOString().slice(0, 10) === selectedTrackDate;
-          })
+          .filter(t => toKSTDate(t.timestamp) === selectedTrackDate)
           .sort((a, b) => {
             const at = resolveTs(a.timestamp)?.getTime() || 0;
             const bt = resolveTs(b.timestamp)?.getTime() || 0;
@@ -1670,6 +1666,7 @@ export default function FleetManagement() {
           speed: raw.speed || 0,
           workStartAt: raw.workStartAt || null,
           checkInLocation: raw.checkInLocation || null,
+          dropLocation: raw.dropLocation || null,
         };
       })
       .sort((a, b) => statusPriority(a) - statusPriority(b));
@@ -1694,8 +1691,14 @@ export default function FleetManagement() {
         dwell: null,
       }));
     }
-    // Fallback: use status change log positions
-    const withLoc = selectedDriverLogs.filter(l => l.location?.lat != null);
+    // Fallback: use status change log positions from selected date's session
+    const sessionStart = [...selectedDriverLogs].reverse().findIndex(l =>
+      l.status === "출근" && toKSTDate(l.timestamp) === selectedTrackDate
+    );
+    const sessionLogs = sessionStart >= 0
+      ? [...selectedDriverLogs].reverse().slice(sessionStart)
+      : selectedDriverLogs.filter(l => toKSTDate(l.timestamp) === selectedTrackDate);
+    const withLoc = sessionLogs.filter(l => l.location?.lat != null);
     if (withLoc.length === 0) return [];
     return [...withLoc].reverse().map((l, i, arr) => {
       const nextLog = arr[i + 1];
@@ -1711,6 +1714,35 @@ export default function FleetManagement() {
       };
     });
   }, [selectedDriverLogs, gpsTracks]);
+
+  // ── 선택 날짜 세션 데이터 ──────────────────────────────────────────────────
+  const sessionForDate = useMemo(() => {
+    if (!selected?.id || !selectedDriverLogs.length) return { logs: [], workMs: 0, isActive: false };
+    const sorted = [...selectedDriverLogs].sort((a, b) =>
+      (resolveTs(a.timestamp)?.getTime()||0) - (resolveTs(b.timestamp)?.getTime()||0)
+    );
+    const checkInIdx = sorted.findIndex(l => l.status === "출근" && toKSTDate(l.timestamp) === selectedTrackDate);
+    if (checkInIdx < 0) return { logs: [], workMs: 0, isActive: false };
+    let endIdx = sorted.length - 1;
+    let isFinalOut = false;
+    for (let i = checkInIdx + 1; i < sorted.length; i++) {
+      if (sorted[i].status === "최종퇴근") { endIdx = i; isFinalOut = true; break; }
+    }
+    const sessionLogs = sorted.slice(checkInIdx, endIdx + 1);
+    const checkInTime = resolveTs(sorted[checkInIdx].timestamp);
+    const endTime = isFinalOut ? resolveTs(sorted[endIdx].timestamp) : null;
+    const workMs = endTime ? endTime.getTime() - checkInTime.getTime() : Date.now() - checkInTime.getTime();
+    return { logs: sessionLogs, workMs, isActive: !isFinalOut };
+  }, [selectedDriverLogs, selectedTrackDate, selected?.id]);
+
+  // ── GPS 거리 (선택 날짜 트랙 기반) ─────────────────────────────────────────
+  const sessionGpsDist = useMemo(() => {
+    if (gpsTracks.length < 2) return 0;
+    let dist = 0;
+    for (let i = 1; i < gpsTracks.length; i++)
+      dist += haversineKm(gpsTracks[i-1].lat, gpsTracks[i-1].lng, gpsTracks[i].lat, gpsTracks[i].lng);
+    return dist;
+  }, [gpsTracks]);
 
   // ── 실제 도로 경로 (OSRM) ─────────────────────────────────────────────────
   // Fetch road-following geometry so the map line follows actual roads, not straight lines.
@@ -1854,6 +1886,21 @@ export default function FleetManagement() {
     try {
       await updateDoc(doc(db, "drivers", selected.id), { checkInLocation: null });
     } catch (e) { console.error("clear checkInLocation:", e); }
+  }, [selected]);
+
+  const handleSaveDriverDropLoc = useCallback(async (loc) => {
+    if (!dropLocModal) return;
+    try {
+      await updateDoc(doc(db, "drivers", dropLocModal.driverId), { dropLocation: loc });
+    } catch (e) { console.error("dropLocation save:", e); }
+    setDropLocModal(null);
+  }, [dropLocModal]);
+
+  const handleClearDriverDropLoc = useCallback(async () => {
+    if (!selected) return;
+    try {
+      await updateDoc(doc(db, "drivers", selected.id), { dropLocation: null });
+    } catch (e) { console.error("clear dropLocation:", e); }
   }, [selected]);
 
   const handleSaveCompanyLoc = useCallback(async (loc) => {
@@ -2036,19 +2083,27 @@ export default function FleetManagement() {
           </div>
 
           {/* 날짜별 동선 조회 */}
-          <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
-            <span style={{ fontSize:12, fontWeight:600, color:"#6b7280", whiteSpace:"nowrap" }}>동선 조회 날짜</span>
+          <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:10 }}>
+            <span style={{ fontSize:12, fontWeight:700, color:"#6b7280", whiteSpace:"nowrap" }}>동선 날짜</span>
             <input
               type="date"
               value={selectedTrackDate}
               max={todayDate}
               onChange={e => setSelectedTrackDate(e.target.value)}
-              style={{ flex:1, padding:"6px 10px", border:"1px solid #e5e7eb", borderRadius:8, fontSize:13, color:NAVY, outline:"none" }}
+              style={{ padding:"5px 8px", border:"1px solid #e5e7eb", borderRadius:7, fontSize:13, color:NAVY, outline:"none", width:"auto" }}
             />
+            {selectedTrackDate !== yesterdayDate && (
+              <button
+                onClick={() => setSelectedTrackDate(yesterdayDate)}
+                style={{ padding:"5px 11px", border:"1px solid #e5e7eb", borderRadius:7, background:"white", color:"#374151", fontSize:12, fontWeight:600, cursor:"pointer", whiteSpace:"nowrap" }}
+              >
+                어제
+              </button>
+            )}
             {selectedTrackDate !== todayDate && (
               <button
                 onClick={() => setSelectedTrackDate(todayDate)}
-                style={{ padding:"6px 12px", border:"none", borderRadius:8, background:NAVY, color:"white", fontSize:12, fontWeight:700, cursor:"pointer" }}
+                style={{ padding:"5px 11px", border:"none", borderRadius:7, background:NAVY, color:"white", fontSize:12, fontWeight:700, cursor:"pointer", whiteSpace:"nowrap" }}
               >
                 오늘
               </button>
@@ -2089,13 +2144,19 @@ export default function FleetManagement() {
           {selected && (
             <DriverDetailPanel
               data={selected}
-              logs={selectedDriverLogs}
+              logs={sessionForDate.logs.length > 0 ? [...sessionForDate.logs].reverse() : selectedDriverLogs}
               onClose={() => { setSelected(null); setSelectedDriverLogs([]); setGpsTracks([]); setRoadPath([]); }}
               onDeleteLogs={handleDeleteDriverLogs}
               checkInLoc={selected.checkInLocation || null}
               companyDefaultLoc={companyDefaultLoc}
               onSetCheckInLoc={() => setCheckInLocModal({ driverId: selected.id, driverName: selected.이름, initialLoc: selected.checkInLocation || null })}
               onClearCheckInLoc={handleClearDriverCheckInLoc}
+              dropLoc={selected.dropLocation || null}
+              onSetDropLoc={() => setDropLocModal({ driverId: selected.id, driverName: selected.이름, initialLoc: selected.dropLocation || null })}
+              onClearDropLoc={handleClearDriverDropLoc}
+              sessionWorkMs={sessionForDate.workMs}
+              sessionIsActive={sessionForDate.isActive}
+              sessionGpsDist={sessionGpsDist}
             />
           )}
 
