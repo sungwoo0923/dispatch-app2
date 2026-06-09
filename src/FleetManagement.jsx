@@ -3,7 +3,7 @@ import React, { useEffect, useState, useMemo, useCallback, useRef } from "react"
 import "leaflet/dist/leaflet.css";
 import { db, auth } from "./firebase";
 import {
-  collection, onSnapshot, doc, updateDoc, setDoc, getDoc,
+  collection, onSnapshot, doc, updateDoc, setDoc, getDoc, getDocs,
   query, where, orderBy, limit, deleteDoc, writeBatch,
 } from "firebase/firestore";
 import { MapContainer, TileLayer, Marker, Popup, Polyline, CircleMarker, useMap } from "react-leaflet";
@@ -737,7 +737,7 @@ function ActivityFeed({ logs, driversMap, onDeleteAll }) {
 
 // ─── DriverDetailPanel ────────────────────────────────────────────────────────
 
-function DriverDetailPanel({ data, logs, onClose, onDeleteLogs, checkInLoc, companyDefaultLoc, onSetCheckInLoc, onClearCheckInLoc, dropLoc, onSetDropLoc, onClearDropLoc, sessionWorkMs, sessionIsActive, sessionGpsDist }) {
+function DriverDetailPanel({ data, logs, onClose, onDeleteLogs, checkInLoc, companyDefaultLoc, onSetCheckInLoc, onClearCheckInLoc, dropLoc, onSetDropLoc, onClearDropLoc, sessionWorkMs, sessionIsActive, sessionGpsDist, onFocusMap }) {
   if (!data) return null;
 
   const lastLog = logs[0];
@@ -869,7 +869,19 @@ function DriverDetailPanel({ data, logs, onClose, onDeleteLogs, checkInLoc, comp
                 : i === 0 && logTs ? Date.now() - logTs.getTime() : null;
               const color = STATUS_COLORS[log.status] || "#9ca3af";
               return (
-                <div key={log.id} style={{ display: "flex", alignItems: "flex-start", gap: 12, paddingBottom: 11, marginBottom: 11, borderBottom: i < logs.length - 1 ? "1px solid #f0f2f5" : "none" }}>
+                <div
+                  key={log.id}
+                  onClick={() => log.location?.lat != null && onFocusMap && onFocusMap(log.location)}
+                  style={{
+                    display: "flex", alignItems: "flex-start", gap: 12,
+                    paddingBottom: 11, marginBottom: 11,
+                    borderBottom: i < logs.length - 1 ? "1px solid #f0f2f5" : "none",
+                    cursor: log.location?.lat != null && onFocusMap ? "pointer" : "default",
+                    borderRadius: 6, padding: "4px 4px 11px",
+                  }}
+                  onMouseEnter={e => { if (log.location?.lat != null && onFocusMap) e.currentTarget.style.background = "#f8f9fb"; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = ""; }}
+                >
                   <div style={{ width: 9, height: 9, borderRadius: "50%", background: color, flexShrink: 0, marginTop: 5 }} />
                   <div style={{ flex: 1 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
@@ -1033,7 +1045,7 @@ function HistoryTab({ drivers, defaultDriverId }) {
     const to = new Date(applied.to + "T23:59:59");
 
     const logUnsub = onSnapshot(
-      query(collection(db, "driver_logs"), where("uid", "==", applied.driverId), limit(500)),
+      query(collection(db, "driver_logs"), where("uid", "==", applied.driverId)),
       (snap) => {
         const filtered = snap.docs.map(d => ({ id: d.id, ...d.data() }))
           .filter(l => { const t = l.timestamp?.toDate?.(); return t && t >= from && t <= to; })
@@ -1094,7 +1106,7 @@ function HistoryTab({ drivers, defaultDriverId }) {
           <select
             value={selId}
             onChange={e => setSelId(e.target.value)}
-            style={{ flex: "1 1 150px", minWidth: 130, padding: "7px 10px", border: "1px solid #e5e7eb", borderRadius: 7, fontSize: 13, color: "#374151", background: "#fafafa", outline: "none" }}
+            style={{ flex: "0 0 auto", width: 180, maxWidth: 200, padding: "7px 10px", border: "1px solid #e5e7eb", borderRadius: 7, fontSize: 13, color: "#374151", background: "#fafafa", outline: "none" }}
           >
             <option value="">기사 선택</option>
             {drivers.map(d => <option key={d.id} value={d.id}>{d.이름} ({d.차량번호})</option>)}
@@ -1613,7 +1625,7 @@ export default function FleetManagement() {
   useEffect(() => {
     if (!selected?.id) { setSelectedDriverLogs([]); return; }
     return onSnapshot(
-      query(collection(db, "driver_logs"), where("uid", "==", selected.id), limit(300)),
+      query(collection(db, "driver_logs"), where("uid", "==", selected.id)),
       (snap) => {
         const logs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         logs.sort((a, b) => {
@@ -1864,9 +1876,21 @@ export default function FleetManagement() {
       onConfirmed: async () => {
         setPinModal(null);
         try {
-          const batch = writeBatch(db);
-          filteredActivityLogs.forEach(log => batch.delete(doc(db, "driver_logs", log.id)));
-          await batch.commit();
+          const logsToDelete = [...filteredActivityLogs];
+          for (let i = 0; i < logsToDelete.length; i += 499) {
+            const batch = writeBatch(db);
+            logsToDelete.slice(i, i + 499).forEach(log => batch.delete(doc(db, "driver_logs", log.id)));
+            await batch.commit();
+          }
+          const affectedUids = [...new Set(filteredActivityLogs.map(l => l.uid).filter(Boolean))];
+          for (const uid of affectedUids) {
+            const trackSnap = await getDocs(query(collection(db, "gps_tracks"), where("driverId", "==", uid)));
+            for (let i = 0; i < trackSnap.docs.length; i += 499) {
+              const batch = writeBatch(db);
+              trackSnap.docs.slice(i, i + 499).forEach(d => batch.delete(d.ref));
+              await batch.commit();
+            }
+          }
         } catch (e) { console.error("feed delete:", e); }
       },
     });
@@ -1880,9 +1904,17 @@ export default function FleetManagement() {
       onConfirmed: async () => {
         setPinModal(null);
         try {
-          const batch = writeBatch(db);
-          selectedDriverLogs.forEach(log => batch.delete(doc(db, "driver_logs", log.id)));
-          await batch.commit();
+          for (let i = 0; i < selectedDriverLogs.length; i += 499) {
+            const batch = writeBatch(db);
+            selectedDriverLogs.slice(i, i + 499).forEach(log => batch.delete(doc(db, "driver_logs", log.id)));
+            await batch.commit();
+          }
+          const trackSnap = await getDocs(query(collection(db, "gps_tracks"), where("driverId", "==", selected.id)));
+          for (let i = 0; i < trackSnap.docs.length; i += 499) {
+            const batch = writeBatch(db);
+            trackSnap.docs.slice(i, i + 499).forEach(d => batch.delete(d.ref));
+            await batch.commit();
+          }
         } catch (e) { console.error("driver logs delete:", e); }
       },
     });
@@ -1993,7 +2025,7 @@ export default function FleetManagement() {
       </div>
 
       {/* ═══ 메인 탭 ═══ */}
-      <div style={{ display: "flex", gap: 0, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, overflow: "hidden", padding: 4 }}>
+      <div style={{ display: "flex", gap: 0, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, overflow: "hidden", padding: 4, position: "relative", zIndex: 10 }}>
         {[["tracking", "관제현황"], ["history", "이력 조회"], ["attendance", "출근기록부"], ["registration", "기사 등록 관리"]].map(([key, label]) => (
           <button
             key={key}
@@ -2138,7 +2170,7 @@ export default function FleetManagement() {
               </div>
             </div>
 
-            <div style={{ flex: "1 1 60%", border: "1px solid #e5e7eb", borderRadius: 12, overflow: "hidden", minWidth: 0, minHeight: 520, position: "relative" }}>
+            <div style={{ flex: "1 1 60%", border: "1px solid #e5e7eb", borderRadius: 12, overflow: "hidden", minWidth: 0, minHeight: 520, position: "relative", isolation: "isolate" }}>
               <div style={{ position: "absolute", top: 12, left: 12, zIndex: 1000, display: "flex", alignItems: "center", gap: 8 }}>
                 <div style={{ background: "rgba(255,255,255,0.93)", border: "1px solid #e5e7eb", borderRadius: 8, padding: "6px 13px", fontSize: 13, fontWeight: 700, color: NAVY, backdropFilter: "blur(4px)", boxShadow: "0 1px 6px rgba(0,0,0,.08)" }}>
                   실시간 위치
@@ -2173,6 +2205,7 @@ export default function FleetManagement() {
               sessionWorkMs={sessionForDate.workMs}
               sessionIsActive={sessionForDate.isActive}
               sessionGpsDist={sessionGpsDist}
+              onFocusMap={handleFocusMap}
             />
           )}
 

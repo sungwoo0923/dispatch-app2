@@ -7890,12 +7890,21 @@ className={`
                 };
                 return copy;
               });
-              const list = filterPlaces(v);
+              const _q = v.toLowerCase();
+              const list = _q
+                ? mergedClients
+                    .filter(p => (p.업체명 || "").toLowerCase().includes(_q) || normalizeKey(p.업체명 || "").includes(normalizeKey(v)))
+                    .sort((a, b) => {
+                      const na = (a.업체명 || "").toLowerCase(), nb = (b.업체명 || "").toLowerCase();
+                      const sa = na.startsWith(_q) ? 2 : na.includes(_q) ? 1 : 0;
+                      const sb = nb.startsWith(_q) ? 2 : nb.includes(_q) ? 1 : 0;
+                      return sb - sa;
+                    })
+                : [];
               setStopPlaceOptions(list);
               setActiveStopIdx(idx);
-              setShowStopDropdown(true);
+              setShowStopDropdown(list.length > 0);
               setStopPlaceActive(0);
-              if (v.trim() === "") setShowStopDropdown(false);
             }}
             onKeyDown={(e) => {
               // 🔥 Enter 전파 차단 (핵심)
@@ -11400,17 +11409,57 @@ function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed }) {
   const [selected, setSelected] = React.useState(null);
   const [copyDone, setCopyDone] = React.useState(null);
   const [zipLoading, setZipLoading] = React.useState(false);
+  const [rotations, setRotations] = React.useState({});
 
   React.useEffect(() => {
     if (!row?._id) return;
     const col = row.__col || "orders";
     const colRef = collection(db, col, row._id, "attachments");
     const unsub = onSnapshot(colRef, (snap) => {
-      setItems(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      const loaded = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setItems(loaded);
+      setRotations(prev => {
+        const next = { ...prev };
+        loaded.forEach(item => { if (item.rotation && !next[item.id]) next[item.id] = item.rotation; });
+        return next;
+      });
       setLoading(false);
     });
     return () => unsub();
   }, [row]);
+
+  const getRotation = (id) => rotations[id] || 0;
+
+  const handleRotate = async (item) => {
+    const newRot = (getRotation(item.id) + 90) % 360;
+    setRotations(prev => ({ ...prev, [item.id]: newRot }));
+    if (selected?.id === item.id) setSelected(prev => ({ ...prev, rotation: newRot }));
+    try {
+      const col = row.__col || "orders";
+      await updateDoc(doc(db, col, row._id, "attachments", item.id), { rotation: newRot });
+    } catch (e) { console.error("rotate:", e); }
+  };
+
+  const downloadRotated = (item) => {
+    const rot = getRotation(item.id);
+    if (!rot) { handleDownload(item); return; }
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      const w = img.naturalWidth, h = img.naturalHeight;
+      canvas.width = rot === 90 || rot === 270 ? h : w;
+      canvas.height = rot === 90 || rot === 270 ? w : h;
+      const ctx = canvas.getContext("2d");
+      ctx.translate(canvas.width / 2, canvas.height / 2);
+      ctx.rotate(rot * Math.PI / 180);
+      ctx.drawImage(img, -w / 2, -h / 2);
+      const a = document.createElement("a");
+      a.href = canvas.toDataURL("image/jpeg", 0.92);
+      a.download = item.name || "attachment.jpg";
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    };
+    img.src = item.base64 || item.url;
+  };
 
   React.useEffect(() => {
     if (!selected) return;
@@ -11593,7 +11642,8 @@ const handleDelete = async (item) => {
                   <div className="aspect-[4/3] bg-gray-50 cursor-zoom-in relative group"
                     onClick={() => setSelected(item)}>
                     <img src={item.base64 || item.url} alt={item.name}
-                      className="w-full h-full object-cover"
+                      className="w-full h-full object-cover transition-transform duration-200"
+                      style={{ transform: `rotate(${getRotation(item.id)}deg)` }}
                       onError={e => { e.target.parentElement.innerHTML = '<div class="w-full h-full flex items-center justify-center text-gray-300 text-[12px]">미리보기 없음</div>'; }} />
                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
                       <span className="opacity-0 group-hover:opacity-100 text-white text-[11px] font-bold bg-black/40 px-2 py-1 rounded-full transition-opacity">확대보기</span>
@@ -11602,7 +11652,7 @@ const handleDelete = async (item) => {
                   <div className="px-3 py-2.5 bg-white">
                     <div className="text-[11px] text-gray-400 truncate mb-2">{item.name || "파일"} {item.sizeKB ? `· ${item.sizeKB}KB` : ""}</div>
                     <div className="flex gap-1.5">
-                      <button onClick={() => handleDownload(item)}
+                      <button onClick={() => downloadRotated(item)}
                         className="flex-1 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-bold hover:opacity-90 transition">
                         저장
                       </button>
@@ -11613,6 +11663,11 @@ const handleDelete = async (item) => {
                             : "border-gray-200 text-gray-500 hover:bg-gray-50"
                         }`}>
                         {copyDone === item.id ? "복사됨" : "복사"}
+                      </button>
+                      <button onClick={e => { e.stopPropagation(); handleRotate(item); }}
+                        className="px-2 py-1.5 rounded-lg border border-gray-200 text-gray-500 text-[11px] font-bold hover:bg-gray-50 transition"
+                        title="90도 회전">
+                        ↻
                       </button>
                       <button onClick={() => handleDelete(item)}
                         className="px-2 py-1.5 rounded-lg border border-red-200 text-red-500 text-[11px] font-bold hover:bg-red-50 transition">
@@ -11649,7 +11704,8 @@ const handleDelete = async (item) => {
         <div className="fixed inset-0 bg-black/95 z-[999999] flex items-center justify-center"
           onClick={() => setSelected(null)}>
           <img src={selected.base64 || selected.url} alt="full"
-            className="max-w-[90vw] max-h-[85vh] object-contain rounded-lg" />
+            className="max-w-[90vw] max-h-[85vh] object-contain rounded-lg transition-transform duration-200"
+            style={{ transform: `rotate(${getRotation(selected.id)}deg)` }} />
           <button className="absolute top-4 right-4 w-10 h-10 bg-white/10 hover:bg-white/20 rounded-full text-white text-xl transition"
             onClick={() => setSelected(null)}>×</button>
           <div className="absolute top-4 left-1/2 -translate-x-1/2 text-white/40 text-[12px]">
@@ -11660,8 +11716,12 @@ const handleDelete = async (item) => {
               onClick={e => { e.stopPropagation(); handleCopy(selected, `fs_${selected.id}`); }}>
               {copyDone === `ctrl_${selected.id}` || copyDone === `fs_${selected.id}` ? "복사됨" : "복사"}
             </button>
+            <button className="px-5 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl text-[13px] font-bold transition"
+              onClick={e => { e.stopPropagation(); handleRotate(selected); }}>
+              회전 ↻
+            </button>
             <button className="px-5 py-2.5 bg-[#1B2B4B] hover:opacity-90 text-white rounded-xl text-[13px] font-bold transition"
-              onClick={e => { e.stopPropagation(); handleDownload(selected); }}>
+              onClick={e => { e.stopPropagation(); downloadRotated(selected); }}>
               저장하기
             </button>
           </div>
@@ -16374,8 +16434,8 @@ const head = isDark
 </div>
 
       {/* 테이블 */}
-      <div className={`rounded-xl shadow border ${isDark ? "border-gray-700" : "border-gray-200"}`}>
-  <table className="w-auto min-w-max table-auto">
+      <div className={`overflow-x-auto rounded-xl shadow border ${isDark ? "border-gray-700" : "border-gray-200"}`}>
+  <table className="w-full min-w-max table-auto">
           <thead className={isDark ? "bg-[#0f172a]" : "bg-[#1B2B4B]"}>
             <tr>
               {[
@@ -16572,10 +16632,8 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
                     )}
                   </td>
                   <td className={cell}>{editableInput("차량톤수", r.차량톤수, r._id)}</td>
-                  <td className={cell}>
-                    {r.혼적 && (
-                      <span className="px-1.5 py-0.5 text-[9px] font-bold rounded bg-emerald-100 text-emerald-700 whitespace-nowrap">혼적</span>
-                    )}
+                  <td className={`${cell} text-center`}>
+                    {r.혼적 ? "Y" : ""}
                   </td>
 
 
@@ -29462,17 +29520,108 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [] }) {
     { key: "sga_misc",          label: "기타 판관비" },
   ];
 
+  const VALID_MANUAL_KEYS = [
+    "rev_etc","cost_labor","sga_rent","sga_util","sga_comm","sga_ins",
+    "sga_repair","sga_fuel","sga_adv","sga_welfare","sga_tax","sga_depr",
+    "sga_entertainment","sga_office","sga_misc","other_income","other_expense",
+  ];
+
+  const LABEL_TO_KEY = {
+    "기타 매출": "rev_etc", "기타매출": "rev_etc",
+    "인건비": "cost_labor",
+    "임차료": "sga_rent",
+    "공과금(전기/수도/가스)": "sga_util", "공과금": "sga_util",
+    "통신비": "sga_comm",
+    "보험료": "sga_ins",
+    "수선유지비": "sga_repair",
+    "유류비": "sga_fuel",
+    "광고선전비": "sga_adv",
+    "복리후생비": "sga_welfare",
+    "세금과공과": "sga_tax",
+    "감가상각비": "sga_depr",
+    "접대비": "sga_entertainment",
+    "사무용품비": "sga_office",
+    "기타 판관비": "sga_misc", "기타판관비": "sga_misc",
+    "영업외 수익": "other_income", "영업외수익": "other_income",
+    "영업외 비용": "other_expense", "영업외비용": "other_expense",
+  };
+
+  const handleExcelUpload = async (file) => {
+    if (!file) return;
+    try {
+      const XLSX = await import("xlsx");
+      const data = await file.arrayBuffer();
+      const wb = XLSX.read(data, { type: "array" });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+      let headerRowIdx = 0;
+      for (let i = 0; i < Math.min(rows.length, 5); i++) {
+        const first = String(rows[i][0] || "").trim();
+        if (["항목","구분","rowKey"].includes(first)) { headerRowIdx = i; break; }
+      }
+      const headerRow = rows[headerRowIdx] || [];
+      const monthCols = {};
+      headerRow.forEach((cell, ci) => {
+        const m = String(cell || "").trim().match(/^(\d{1,2})월$/);
+        if (m) monthCols[ci] = String(parseInt(m[1])).padStart(2, "0");
+      });
+      const updated = { ...manualData };
+      for (let i = headerRowIdx + 1; i < rows.length; i++) {
+        const r = rows[i];
+        const label = String(r[0] || "").trim();
+        if (!label) continue;
+        const key = LABEL_TO_KEY[label] || label;
+        if (!VALID_MANUAL_KEYS.includes(key)) continue;
+        if (!updated[key]) updated[key] = {};
+        Object.entries(monthCols).forEach(([ci, month]) => {
+          updated[key][month] = parseInt(String(r[ci] || "0").replace(/[^\d-]/g, ""), 10) || 0;
+        });
+      }
+      setManualData(updated);
+      await saveManual(updated);
+      alert("엑셀 업로드 완료");
+    } catch (e) {
+      console.error("엑셀 업로드 오류:", e);
+      alert("파일 처리 중 오류가 발생했습니다: " + e.message);
+    }
+  };
+
+  const downloadTemplate = async () => {
+    const XLSX = await import("xlsx");
+    const header = ["항목", "1월","2월","3월","4월","5월","6월","7월","8월","9월","10월","11월","12월"];
+    const dataRows = [
+      ["기타 매출"],["인건비"],["임차료"],["공과금(전기/수도/가스)"],["통신비"],
+      ["보험료"],["수선유지비"],["유류비"],["광고선전비"],["복리후생비"],
+      ["세금과공과"],["감가상각비"],["접대비"],["사무용품비"],["기타 판관비"],
+      ["영업외 수익"],["영업외 비용"],
+    ].map(row => [...row, ...Array(12).fill(0)]);
+    const ws = XLSX.utils.aoa_to_sheet([header, ...dataRows]);
+    ws["!cols"] = [{ wch: 24 }, ...Array(12).fill({ wch: 10 })];
+    const wbOut = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wbOut, ws, "손익보고서");
+    XLSX.writeFile(wbOut, `손익보고서_서식_${year}년.xlsx`);
+  };
+
   return (
     <div className="px-8 py-6">
       {/* 헤더 */}
       <div className="flex items-center justify-between mb-5">
         <div>
           <h2 className="text-[16px] font-bold text-[#1B2B4B]">손익보고서</h2>
-          <p className="text-[12px] text-gray-400 mt-0.5">자동 집계 항목 외 수동 입력 항목은 셀을 클릭하여 수정하세요</p>
+          <p className="text-[12px] text-gray-400 mt-0.5">자동 집계 항목 외 수동 입력 항목은 셀을 클릭하거나 엑셀로 업로드하세요</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           {saving && <span className="text-[12px] text-blue-500">저장 중...</span>}
-          <div className="flex items-center gap-1">
+          <button onClick={downloadTemplate}
+            className="px-3 py-1.5 text-[12px] font-semibold rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 transition">
+            서식 다운로드
+          </button>
+          <label className="px-3 py-1.5 text-[12px] font-semibold rounded-lg bg-[#1B2B4B] text-white hover:opacity-90 transition cursor-pointer">
+            엑셀 업로드
+            <input type="file" accept=".xlsx,.xls,.csv" className="hidden"
+              onChange={e => { const f = e.target.files[0]; if (f) handleExcelUpload(f); e.target.value = ""; }} />
+          </label>
+          <div className="flex items-center gap-1 ml-2">
             <button onClick={() => setYear(y => y - 1)} className="px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 text-[13px]">◀</button>
             <span className="px-3 py-1 font-bold text-[14px] text-[#1B2B4B]">{year}년</span>
             <button onClick={() => setYear(y => y + 1)} className="px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 text-[13px]">▶</button>
@@ -29536,6 +29685,602 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [] }) {
         </table>
       </div>
       <p className="mt-3 text-[11px] text-gray-400">* 자동: 배차완료 기준 청구운임(매출) / 기사운임(운반비) 자동 집계 &nbsp;|&nbsp; 빈 셀 클릭 시 수동 입력 (Firestore 저장)</p>
+    </div>
+  );
+}
+
+// ===================== 회계자료 컴포넌트 =====================
+function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [] }) {
+  const currentYear = new Date().getFullYear();
+  const [subTab, setSubTab] = React.useState("ar");
+  const [year, setYear] = React.useState(currentYear);
+  const [arPayments, setArPayments] = React.useState({});
+  const [apPayments, setApPayments] = React.useState({});
+  const [arModal, setArModal] = React.useState(null);
+  const [apModal, setApModal] = React.useState(null);
+  const [arInput, setArInput] = React.useState("");
+  const [apInput, setApInput] = React.useState("");
+  const [saving, setSaving] = React.useState(false);
+  const [vatQuarter, setVatQuarter] = React.useState("Q1");
+
+  const toInt = (v) => parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
+  const MONTHS = ["01","02","03","04","05","06","07","08","09","10","11","12"];
+
+  React.useEffect(() => {
+    async function load() {
+      try {
+        const snap = await getDoc(doc(db, "acctPayments", String(year)));
+        if (snap.exists()) {
+          const d = snap.data();
+          setArPayments(d.ar || {});
+          setApPayments(d.ap || {});
+        } else {
+          setArPayments({});
+          setApPayments({});
+        }
+      } catch (e) { console.error(e); }
+    }
+    load();
+  }, [year]);
+
+  const yearOrders = React.useMemo(() => {
+    const all = [
+      ...(dispatchData || []).filter(r => r.배차상태 === "배차완료"),
+      ...(fixedRows || []).map(r => ({ ...r, 상차일: r.날짜, 배차상태: "배차완료" })),
+    ];
+    return all.filter(r => (r.상차일 || "").slice(0, 4) === String(year));
+  }, [dispatchData, fixedRows, year]);
+
+  const arByClient = React.useMemo(() => {
+    const map = {};
+    yearOrders.forEach(r => {
+      const c = r.거래처명 || r.상차지명 || "미분류";
+      if (!map[c]) map[c] = { invoiced: 0, oldest: null };
+      map[c].invoiced += toInt(r.청구운임);
+      const d = r.상차일;
+      if (d && (!map[c].oldest || d < map[c].oldest)) map[c].oldest = d;
+    });
+    return Object.entries(map).map(([c, v]) => {
+      const paid = arPayments[c] || 0;
+      const outstanding = Math.max(0, v.invoiced - paid);
+      const ageDays = v.oldest ? Math.floor((Date.now() - new Date(v.oldest)) / 86400000) : 0;
+      return { client: c, invoiced: v.invoiced, paid, outstanding, ageDays };
+    }).sort((a, b) => b.outstanding - a.outstanding);
+  }, [yearOrders, arPayments]);
+
+  const apByDriver = React.useMemo(() => {
+    const map = {};
+    yearOrders.forEach(r => {
+      const d = r.이름 || "미지정";
+      if (!map[d]) map[d] = { total: 0, carNo: r.차량번호 || "" };
+      map[d].total += toInt(r.기사운임);
+    });
+    return Object.entries(map).map(([d, v]) => {
+      const paid = apPayments[d] || 0;
+      return { driver: d, carNo: v.carNo, total: v.total, paid, outstanding: Math.max(0, v.total - paid) };
+    }).sort((a, b) => b.outstanding - a.outstanding);
+  }, [yearOrders, apPayments]);
+
+  const vatData = React.useMemo(() => {
+    const m = {};
+    MONTHS.forEach(mo => { m[mo] = { sales: 0, costs: 0 }; });
+    yearOrders.forEach(r => {
+      const mo = (r.상차일 || "").slice(5, 7);
+      if (m[mo]) { m[mo].sales += toInt(r.청구운임); m[mo].costs += toInt(r.기사운임); }
+    });
+    const quarters = { Q1: [0,1,2], Q2: [3,4,5], Q3: [6,7,8], Q4: [9,10,11] };
+    const qData = {};
+    Object.entries(quarters).forEach(([q, idxs]) => {
+      const mos = idxs.map(i => MONTHS[i]);
+      qData[q] = {
+        sales: mos.reduce((s, mo) => s + m[mo].sales, 0),
+        costs: mos.reduce((s, mo) => s + m[mo].costs, 0),
+        months: mos.map(mo => ({ mo, ...m[mo] })),
+      };
+    });
+    return { monthly: m, quarters: qData };
+  }, [yearOrders]);
+
+  const costByType = React.useMemo(() => {
+    const map = {};
+    yearOrders.forEach(r => {
+      const t = r.차량종류 || "미분류";
+      if (!map[t]) map[t] = { sales: 0, costs: 0, count: 0 };
+      map[t].sales += toInt(r.청구운임);
+      map[t].costs += toInt(r.기사운임);
+      map[t].count++;
+    });
+    return Object.entries(map).map(([t, v]) => ({
+      type: t, ...v,
+      profit: v.sales - v.costs,
+      margin: v.sales > 0 ? (v.sales - v.costs) / v.sales * 100 : 0,
+    })).sort((a, b) => b.sales - a.sales);
+  }, [yearOrders]);
+
+  const costByMethod = React.useMemo(() => {
+    const map = {};
+    yearOrders.forEach(r => {
+      const t = r.배차방식 || "직접";
+      if (!map[t]) map[t] = { sales: 0, costs: 0, count: 0 };
+      map[t].sales += toInt(r.청구운임);
+      map[t].costs += toInt(r.기사운임);
+      map[t].count++;
+    });
+    return Object.entries(map).map(([t, v]) => ({
+      method: t, ...v,
+      profit: v.sales - v.costs,
+      margin: v.sales > 0 ? (v.sales - v.costs) / v.sales * 100 : 0,
+    })).sort((a, b) => b.sales - a.sales);
+  }, [yearOrders]);
+
+  const totalInvoiced = arByClient.reduce((s, r) => s + r.invoiced, 0);
+  const totalArPaid = arByClient.reduce((s, r) => s + r.paid, 0);
+  const totalAr = arByClient.reduce((s, r) => s + r.outstanding, 0);
+  const totalAp = apByDriver.reduce((s, r) => s + r.total, 0);
+  const totalApPaid = apByDriver.reduce((s, r) => s + r.paid, 0);
+  const totalApOutstanding = apByDriver.reduce((s, r) => s + r.outstanding, 0);
+
+  const won = (v) => v === 0 ? "–" : (v < 0 ? "-" : "") + Math.abs(Math.round(v)).toLocaleString();
+
+  const ageLabel = (days) => {
+    if (days <= 30) return { label: "30일 이내", color: "#374151" };
+    if (days <= 60) return { label: "31~60일", color: "#b45309" };
+    if (days <= 90) return { label: "61~90일", color: "#c2410c" };
+    return { label: "90일 초과", color: "#b91c1c" };
+  };
+
+  const savePayment = async (type, name, amtStr) => {
+    const amt = parseInt(String(amtStr).replace(/[^\d]/g, ""), 10) || 0;
+    if (!amt) return;
+    setSaving(true);
+    try {
+      const newAr = type === "ar" ? { ...arPayments, [name]: (arPayments[name] || 0) + amt } : arPayments;
+      const newAp = type === "ap" ? { ...apPayments, [name]: (apPayments[name] || 0) + amt } : apPayments;
+      await setDoc(doc(db, "acctPayments", String(year)), { ar: newAr, ap: newAp });
+      setArPayments(newAr);
+      setApPayments(newAp);
+    } catch (e) { console.error(e); } finally { setSaving(false); }
+  };
+
+  const resetPayment = async (type, name) => {
+    if (!window.confirm(`${name} 의 ${type === "ar" ? "수금" : "지급"} 내역을 초기화하시겠습니까?`)) return;
+    setSaving(true);
+    try {
+      const newAr = type === "ar" ? { ...arPayments, [name]: 0 } : arPayments;
+      const newAp = type === "ap" ? { ...apPayments, [name]: 0 } : apPayments;
+      await setDoc(doc(db, "acctPayments", String(year)), { ar: newAr, ap: newAp });
+      setArPayments(newAr);
+      setApPayments(newAp);
+    } catch (e) { console.error(e); } finally { setSaving(false); }
+  };
+
+  const exportVatExcel = async () => {
+    const XLSX = await import("xlsx");
+    const qd = vatData.quarters[vatQuarter];
+    const moLabels = { "01":"1월","02":"2월","03":"3월","04":"4월","05":"5월","06":"6월","07":"7월","08":"8월","09":"9월","10":"10월","11":"11월","12":"12월" };
+    const header = ["월","공급가액(매출)","매출세액(10%)","매입공급가액","매입세액(10%)","납부세액"];
+    const rows = qd.months.map(({ mo, sales, costs }) => [
+      moLabels[mo], sales, Math.round(sales * 0.1), costs, Math.round(costs * 0.1), Math.round(sales * 0.1) - Math.round(costs * 0.1),
+    ]);
+    const totalRow = ["합계", qd.sales, Math.round(qd.sales*0.1), qd.costs, Math.round(qd.costs*0.1), Math.round(qd.sales*0.1)-Math.round(qd.costs*0.1)];
+    const ws = XLSX.utils.aoa_to_sheet([header, ...rows, totalRow]);
+    ws["!cols"] = [{ wch: 8 }, ...Array(5).fill({ wch: 16 })];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, `부가세_${year}_${vatQuarter}`);
+    XLSX.writeFile(wb, `부가세신고자료_${year}_${vatQuarter}.xlsx`);
+  };
+
+  const KpiCard = ({ label, value, sub, highlight }) => (
+    <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, padding: "16px 20px" }}>
+      <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1">{label}</div>
+      <div className={`text-[20px] font-bold ${highlight === "danger" ? "text-red-600" : highlight === "ok" ? "text-emerald-700" : "text-[#1B2B4B]"}`}>
+        {value}
+      </div>
+      {sub && <div className="text-[11px] text-gray-400 mt-1">{sub}</div>}
+    </div>
+  );
+
+  const thStyle = { padding: "8px 12px", textAlign: "left", fontSize: 11, fontWeight: 700, color: "#6b7280", letterSpacing: ".06em", textTransform: "uppercase", borderBottom: "1px solid #e5e7eb", whiteSpace: "nowrap", background: "#f8f9fb" };
+  const tdStyle = { padding: "9px 12px", fontSize: 13, color: "#374151", borderBottom: "1px solid #f0f2f5" };
+  const tdR = { ...tdStyle, textAlign: "right" };
+
+  const currentQData = vatData.quarters[vatQuarter] || { sales: 0, costs: 0, months: [] };
+  const vatOutput = Math.round(currentQData.sales * 0.1);
+  const vatInput = Math.round(currentQData.costs * 0.1);
+  const vatNet = vatOutput - vatInput;
+
+  return (
+    <div className="px-8 py-6">
+      <div className="flex items-center justify-between mb-5">
+        <div>
+          <h2 className="text-[16px] font-bold text-[#1B2B4B]">회계자료</h2>
+          <p className="text-[12px] text-gray-400 mt-0.5">미수금·지급현황·부가세·원가분석을 한 곳에서 관리하세요</p>
+        </div>
+        <div className="flex items-center gap-2">
+          {saving && <span className="text-[12px] text-blue-500">저장 중...</span>}
+          <div className="flex items-center gap-1">
+            <button onClick={() => setYear(y => y - 1)} className="px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 text-[13px]">◀</button>
+            <span className="px-3 py-1 font-bold text-[14px] text-[#1B2B4B]">{year}년</span>
+            <button onClick={() => setYear(y => y + 1)} className="px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 text-[13px]">▶</button>
+          </div>
+        </div>
+      </div>
+
+      {/* 서브탭 */}
+      <div className="flex gap-0 border-b border-gray-200 mb-6">
+        {[["ar","미수금 현황"],["ap","지급 현황"],["vat","부가세 자료"],["cost","원가 분석"]].map(([k, label]) => (
+          <button key={k} onClick={() => setSubTab(k)}
+            className={`px-5 py-2.5 text-[13px] font-semibold border-b-2 transition-colors ${subTab === k ? "border-[#1B2B4B] text-[#1B2B4B]" : "border-transparent text-gray-400 hover:text-gray-600"}`}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── 미수금 현황 ── */}
+      {subTab === "ar" && (
+        <div className="space-y-5">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <KpiCard label="총 청구액" value={`${won(totalInvoiced)}원`} />
+            <KpiCard label="수금 완료" value={`${won(totalArPaid)}원`} highlight="ok" />
+            <KpiCard label="미수금 잔액" value={`${won(totalAr)}원`} highlight={totalAr > 0 ? "danger" : "ok"} />
+            <KpiCard label="미수금 비율" value={totalInvoiced > 0 ? `${(totalAr / totalInvoiced * 100).toFixed(1)}%` : "–"} sub="미수금 / 청구액" />
+          </div>
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-x-auto">
+            <table className="min-w-full border-collapse">
+              <thead>
+                <tr>
+                  {["거래처","청구액","수금액","미수금","연체 구분",""].map((h, i) => (
+                    <th key={i} style={{ ...thStyle, textAlign: i >= 1 && i <= 3 ? "right" : "left" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {arByClient.length === 0 ? (
+                  <tr><td colSpan={6} style={{ ...tdStyle, textAlign: "center", color: "#9ca3af" }}>배차완료 데이터가 없습니다</td></tr>
+                ) : arByClient.map(r => {
+                  const age = ageLabel(r.ageDays);
+                  return (
+                    <tr key={r.client} style={{ background: r.outstanding > 0 ? "#fff" : "#f9fafb" }}>
+                      <td style={tdStyle}><span className="font-semibold">{r.client}</span></td>
+                      <td style={tdR}>{r.invoiced.toLocaleString()}</td>
+                      <td style={tdR}>{r.paid > 0 ? r.paid.toLocaleString() : "–"}</td>
+                      <td style={{ ...tdR, fontWeight: r.outstanding > 0 ? 700 : 400, color: r.outstanding > 0 ? "#b91c1c" : "#6b7280" }}>
+                        {r.outstanding > 0 ? r.outstanding.toLocaleString() : "–"}
+                      </td>
+                      <td style={tdStyle}>
+                        {r.outstanding > 0 ? <span style={{ fontSize: 12, fontWeight: 600, color: age.color }}>{age.label}</span> : <span style={{ fontSize: 12, color: "#10b981", fontWeight: 600 }}>수금완료</span>}
+                      </td>
+                      <td style={tdStyle}>
+                        <div className="flex gap-1.5">
+                          <button onClick={() => { setArModal(r.client); setArInput(""); }}
+                            className="px-2.5 py-1 rounded-md bg-[#1B2B4B] text-white text-[11px] font-bold hover:opacity-80 transition">
+                            입금 처리
+                          </button>
+                          {r.paid > 0 && (
+                            <button onClick={() => resetPayment("ar", r.client)}
+                              className="px-2 py-1 rounded-md border border-gray-200 text-gray-400 text-[11px] hover:bg-gray-50 transition">
+                              초기화
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-[11px] text-gray-400">* 배차완료 기준 청구운임 합계. 입금 처리 시 Firestore에 저장됩니다.</p>
+        </div>
+      )}
+
+      {/* ── 지급 현황 ── */}
+      {subTab === "ap" && (
+        <div className="space-y-5">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <KpiCard label="총 기사운임" value={`${won(totalAp)}원`} />
+            <KpiCard label="지급 완료" value={`${won(totalApPaid)}원`} highlight="ok" />
+            <KpiCard label="미지급 잔액" value={`${won(totalApOutstanding)}원`} highlight={totalApOutstanding > 0 ? "danger" : "ok"} />
+            <KpiCard label="미지급 비율" value={totalAp > 0 ? `${(totalApOutstanding / totalAp * 100).toFixed(1)}%` : "–"} sub="미지급 / 기사운임" />
+          </div>
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-x-auto">
+            <table className="min-w-full border-collapse">
+              <thead>
+                <tr>
+                  {["기사명","차량번호","기사운임 합계","지급액","미지급",""].map((h, i) => (
+                    <th key={i} style={{ ...thStyle, textAlign: i >= 2 && i <= 4 ? "right" : "left" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {apByDriver.length === 0 ? (
+                  <tr><td colSpan={6} style={{ ...tdStyle, textAlign: "center", color: "#9ca3af" }}>배차완료 데이터가 없습니다</td></tr>
+                ) : apByDriver.map(r => (
+                  <tr key={r.driver} style={{ background: r.outstanding > 0 ? "#fff" : "#f9fafb" }}>
+                    <td style={tdStyle}><span className="font-semibold">{r.driver}</span></td>
+                    <td style={tdStyle}>{r.carNo || "–"}</td>
+                    <td style={tdR}>{r.total.toLocaleString()}</td>
+                    <td style={tdR}>{r.paid > 0 ? r.paid.toLocaleString() : "–"}</td>
+                    <td style={{ ...tdR, fontWeight: r.outstanding > 0 ? 700 : 400, color: r.outstanding > 0 ? "#b91c1c" : "#6b7280" }}>
+                      {r.outstanding > 0 ? r.outstanding.toLocaleString() : "–"}
+                    </td>
+                    <td style={tdStyle}>
+                      <div className="flex gap-1.5">
+                        <button onClick={() => { setApModal(r.driver); setApInput(""); }}
+                          className="px-2.5 py-1 rounded-md bg-[#1B2B4B] text-white text-[11px] font-bold hover:opacity-80 transition">
+                          지급 처리
+                        </button>
+                        {r.paid > 0 && (
+                          <button onClick={() => resetPayment("ap", r.driver)}
+                            className="px-2 py-1 rounded-md border border-gray-200 text-gray-400 text-[11px] hover:bg-gray-50 transition">
+                            초기화
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-[11px] text-gray-400">* 배차완료 기준 기사운임 합계. 지급 처리 시 Firestore에 저장됩니다.</p>
+        </div>
+      )}
+
+      {/* ── 부가세 자료 ── */}
+      {subTab === "vat" && (
+        <div className="space-y-5">
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-[13px] font-semibold text-gray-600">분기 선택</span>
+            {["Q1","Q2","Q3","Q4"].map(q => (
+              <button key={q} onClick={() => setVatQuarter(q)}
+                className={`px-4 py-1.5 rounded-lg text-[13px] font-semibold border transition ${vatQuarter === q ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "border-gray-300 text-gray-600 hover:bg-gray-50"}`}>
+                {q} ({q === "Q1" ? "1~3월" : q === "Q2" ? "4~6월" : q === "Q3" ? "7~9월" : "10~12월"})
+              </button>
+            ))}
+            <button onClick={exportVatExcel}
+              className="ml-auto px-3 py-1.5 text-[12px] font-semibold rounded-lg bg-[#1B2B4B] text-white hover:opacity-90 transition">
+              엑셀 내보내기
+            </button>
+          </div>
+
+          {/* 분기 요약 */}
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            <KpiCard label="공급가액 (매출)" value={`${currentQData.sales.toLocaleString()}원`} />
+            <KpiCard label="매출세액 (10%)" value={`${vatOutput.toLocaleString()}원`} />
+            <KpiCard label="매입공급가액" value={`${currentQData.costs.toLocaleString()}원`} />
+            <KpiCard label="매입세액 (10%)" value={`${vatInput.toLocaleString()}원`} />
+            <KpiCard label="납부세액" value={`${vatNet.toLocaleString()}원`} highlight={vatNet > 0 ? "danger" : "ok"} sub="매출세액 – 매입세액" />
+            <KpiCard label="과세 기준" value="일반과세" sub="10% 부가가치세 적용" />
+          </div>
+
+          {/* 월별 명세 */}
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-x-auto">
+            <table className="min-w-full border-collapse">
+              <thead>
+                <tr>
+                  {["월","공급가액(매출)","매출세액","매입공급가액","매입세액","납부세액"].map((h, i) => (
+                    <th key={i} style={{ ...thStyle, textAlign: i === 0 ? "left" : "right" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {currentQData.months.map(({ mo, sales, costs }) => {
+                  const vOut = Math.round(sales * 0.1);
+                  const vIn = Math.round(costs * 0.1);
+                  const vNet = vOut - vIn;
+                  const moLabel = { "01":"1월","02":"2월","03":"3월","04":"4월","05":"5월","06":"6월","07":"7월","08":"8월","09":"9월","10":"10월","11":"11월","12":"12월" }[mo];
+                  return (
+                    <tr key={mo}>
+                      <td style={{ ...tdStyle, fontWeight: 600 }}>{moLabel}</td>
+                      <td style={tdR}>{sales > 0 ? sales.toLocaleString() : "–"}</td>
+                      <td style={tdR}>{vOut > 0 ? vOut.toLocaleString() : "–"}</td>
+                      <td style={tdR}>{costs > 0 ? costs.toLocaleString() : "–"}</td>
+                      <td style={tdR}>{vIn > 0 ? vIn.toLocaleString() : "–"}</td>
+                      <td style={{ ...tdR, fontWeight: 700, color: vNet > 0 ? "#b91c1c" : vNet < 0 ? "#059669" : "#374151" }}>
+                        {vNet !== 0 ? vNet.toLocaleString() : "–"}
+                      </td>
+                    </tr>
+                  );
+                })}
+                <tr style={{ background: "#f8f9fb", borderTop: "2px solid #e5e7eb" }}>
+                  <td style={{ ...tdStyle, fontWeight: 800 }}>합계</td>
+                  <td style={{ ...tdR, fontWeight: 800 }}>{currentQData.sales > 0 ? currentQData.sales.toLocaleString() : "–"}</td>
+                  <td style={{ ...tdR, fontWeight: 800 }}>{vatOutput > 0 ? vatOutput.toLocaleString() : "–"}</td>
+                  <td style={{ ...tdR, fontWeight: 800 }}>{currentQData.costs > 0 ? currentQData.costs.toLocaleString() : "–"}</td>
+                  <td style={{ ...tdR, fontWeight: 800 }}>{vatInput > 0 ? vatInput.toLocaleString() : "–"}</td>
+                  <td style={{ ...tdR, fontWeight: 800, color: vatNet > 0 ? "#b91c1c" : vatNet < 0 ? "#059669" : "#374151" }}>
+                    {vatNet !== 0 ? vatNet.toLocaleString() : "–"}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p className="text-[11px] text-gray-400">* 배차완료 청구운임을 과세표준(공급가액)으로, 기사운임을 매입가액으로 산정합니다. 실제 신고 시 세무사 확인을 권장합니다.</p>
+        </div>
+      )}
+
+      {/* ── 원가 분석 ── */}
+      {subTab === "cost" && (
+        <div className="space-y-5">
+          {/* 차량 종류별 */}
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+            <div className="px-5 py-3 border-b border-gray-100 bg-[#1B2B4B]">
+              <span className="text-[13px] font-bold text-white">차량 종류별 원가 분석</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full border-collapse">
+                <thead>
+                  <tr>
+                    {["차량 종류","건수","매출","원가(기사운임)","이익","이익률"].map((h, i) => (
+                      <th key={i} style={{ ...thStyle, textAlign: i >= 1 ? "right" : "left" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {costByType.length === 0 ? (
+                    <tr><td colSpan={6} style={{ ...tdStyle, textAlign: "center", color: "#9ca3af" }}>데이터 없음</td></tr>
+                  ) : costByType.map(r => (
+                    <tr key={r.type}>
+                      <td style={{ ...tdStyle, fontWeight: 600 }}>{r.type}</td>
+                      <td style={tdR}>{r.count.toLocaleString()}</td>
+                      <td style={tdR}>{r.sales.toLocaleString()}</td>
+                      <td style={tdR}>{r.costs.toLocaleString()}</td>
+                      <td style={{ ...tdR, fontWeight: 700, color: r.profit >= 0 ? "#1B2B4B" : "#b91c1c" }}>{r.profit.toLocaleString()}</td>
+                      <td style={{ ...tdR, fontWeight: 700, color: r.margin >= 15 ? "#059669" : r.margin >= 8 ? "#374151" : "#b91c1c" }}>
+                        {r.margin.toFixed(1)}%
+                      </td>
+                    </tr>
+                  ))}
+                  {costByType.length > 0 && (() => {
+                    const ts = costByType.reduce((s, r) => s + r.sales, 0);
+                    const tc = costByType.reduce((s, r) => s + r.costs, 0);
+                    const tp = ts - tc;
+                    return (
+                      <tr style={{ background: "#f8f9fb", borderTop: "2px solid #e5e7eb" }}>
+                        <td style={{ ...tdStyle, fontWeight: 800 }}>합계</td>
+                        <td style={{ ...tdR, fontWeight: 800 }}>{costByType.reduce((s, r) => s + r.count, 0).toLocaleString()}</td>
+                        <td style={{ ...tdR, fontWeight: 800 }}>{ts.toLocaleString()}</td>
+                        <td style={{ ...tdR, fontWeight: 800 }}>{tc.toLocaleString()}</td>
+                        <td style={{ ...tdR, fontWeight: 800, color: tp >= 0 ? "#1B2B4B" : "#b91c1c" }}>{tp.toLocaleString()}</td>
+                        <td style={{ ...tdR, fontWeight: 800, color: ts > 0 && tp/ts*100 >= 15 ? "#059669" : "#374151" }}>{ts > 0 ? (tp/ts*100).toFixed(1) : "0.0"}%</td>
+                      </tr>
+                    );
+                  })()}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* 배차방식별 */}
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+            <div className="px-5 py-3 border-b border-gray-100 bg-[#1B2B4B]">
+              <span className="text-[13px] font-bold text-white">배차 방식별 원가 분석</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full border-collapse">
+                <thead>
+                  <tr>
+                    {["배차 방식","건수","매출","원가","이익","이익률"].map((h, i) => (
+                      <th key={i} style={{ ...thStyle, textAlign: i >= 1 ? "right" : "left" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {costByMethod.length === 0 ? (
+                    <tr><td colSpan={6} style={{ ...tdStyle, textAlign: "center", color: "#9ca3af" }}>데이터 없음</td></tr>
+                  ) : costByMethod.map(r => (
+                    <tr key={r.method}>
+                      <td style={{ ...tdStyle, fontWeight: 600 }}>{r.method}</td>
+                      <td style={tdR}>{r.count.toLocaleString()}</td>
+                      <td style={tdR}>{r.sales.toLocaleString()}</td>
+                      <td style={tdR}>{r.costs.toLocaleString()}</td>
+                      <td style={{ ...tdR, fontWeight: 700, color: r.profit >= 0 ? "#1B2B4B" : "#b91c1c" }}>{r.profit.toLocaleString()}</td>
+                      <td style={{ ...tdR, fontWeight: 700, color: r.margin >= 15 ? "#059669" : r.margin >= 8 ? "#374151" : "#b91c1c" }}>
+                        {r.margin.toFixed(1)}%
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* 월별 이익률 추이 */}
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+            <div className="px-5 py-3 border-b border-gray-100 bg-[#1B2B4B]">
+              <span className="text-[13px] font-bold text-white">월별 매출·이익 추이</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full border-collapse">
+                <thead>
+                  <tr>
+                    {["월","매출","원가","이익","이익률"].map((h, i) => (
+                      <th key={i} style={{ ...thStyle, textAlign: i === 0 ? "left" : "right" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {MONTHS.map((mo, idx) => {
+                    const d = vatData.monthly[mo] || { sales: 0, costs: 0 };
+                    const profit = d.sales - d.costs;
+                    const margin = d.sales > 0 ? (profit / d.sales * 100) : 0;
+                    return (
+                      <tr key={mo} style={{ background: d.sales === 0 ? "#fafafa" : "#fff" }}>
+                        <td style={{ ...tdStyle, fontWeight: 600, color: d.sales === 0 ? "#9ca3af" : "#374151" }}>{idx + 1}월</td>
+                        <td style={{ ...tdR, color: d.sales === 0 ? "#d1d5db" : "#374151" }}>{d.sales > 0 ? d.sales.toLocaleString() : "–"}</td>
+                        <td style={{ ...tdR, color: d.costs === 0 ? "#d1d5db" : "#374151" }}>{d.costs > 0 ? d.costs.toLocaleString() : "–"}</td>
+                        <td style={{ ...tdR, fontWeight: profit !== 0 ? 700 : 400, color: profit > 0 ? "#1B2B4B" : profit < 0 ? "#b91c1c" : "#d1d5db" }}>
+                          {profit !== 0 ? profit.toLocaleString() : "–"}
+                        </td>
+                        <td style={{ ...tdR, fontWeight: d.sales > 0 ? 700 : 400, color: margin >= 15 ? "#059669" : margin >= 8 ? "#374151" : d.sales > 0 ? "#b91c1c" : "#d1d5db" }}>
+                          {d.sales > 0 ? `${margin.toFixed(1)}%` : "–"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 입금 처리 모달 */}
+      {arModal && (
+        <div className="fixed inset-0 bg-black/40 z-[99999] flex items-center justify-center p-4" onClick={() => setArModal(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6" onClick={e => e.stopPropagation()}>
+            <div className="font-bold text-[15px] text-[#1B2B4B] mb-1">입금 처리</div>
+            <div className="text-[12px] text-gray-400 mb-4">{arModal}</div>
+            <div className="mb-1 text-[12px] text-gray-500">미수금 잔액: <strong>{(arByClient.find(r => r.client === arModal)?.outstanding || 0).toLocaleString()}원</strong></div>
+            <input
+              type="number"
+              value={arInput}
+              onChange={e => setArInput(e.target.value)}
+              placeholder="입금액 입력 (원)"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-[13px] mb-4 outline-none focus:border-[#1B2B4B]"
+              autoFocus
+            />
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setArModal(null)} className="px-4 py-2 rounded-lg border border-gray-200 text-[13px] text-gray-500 hover:bg-gray-50">취소</button>
+              <button
+                onClick={async () => { await savePayment("ar", arModal, arInput); setArModal(null); }}
+                className="px-4 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold hover:opacity-90"
+              >
+                저장
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 지급 처리 모달 */}
+      {apModal && (
+        <div className="fixed inset-0 bg-black/40 z-[99999] flex items-center justify-center p-4" onClick={() => setApModal(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6" onClick={e => e.stopPropagation()}>
+            <div className="font-bold text-[15px] text-[#1B2B4B] mb-1">지급 처리</div>
+            <div className="text-[12px] text-gray-400 mb-4">{apModal}</div>
+            <div className="mb-1 text-[12px] text-gray-500">미지급 잔액: <strong>{(apByDriver.find(r => r.driver === apModal)?.outstanding || 0).toLocaleString()}원</strong></div>
+            <input
+              type="number"
+              value={apInput}
+              onChange={e => setApInput(e.target.value)}
+              placeholder="지급액 입력 (원)"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-[13px] mb-4 outline-none focus:border-[#1B2B4B]"
+              autoFocus
+            />
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setApModal(null)} className="px-4 py-2 rounded-lg border border-gray-200 text-[13px] text-gray-500 hover:bg-gray-50">취소</button>
+              <button
+                onClick={async () => { await savePayment("ap", apModal, apInput); setApModal(null); }}
+                className="px-4 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold hover:opacity-90"
+              >
+                저장
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -29918,6 +30663,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [] })
             { key: "overview", label: "매출 개요" },
             { key: "client_compare", label: "거래처 동향 분석" },
             { key: "profit_loss", label: "손익보고서" },
+            { key: "accounting", label: "회계자료" },
           ].map(tab => (
             <button
               key={tab.key}
@@ -29962,6 +30708,14 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [] })
         <ProfitLossReport
           dispatchData={dispatchData}
           fixedRows={fixedRows}
+        />
+      )}
+      {/* ================= 회계자료 탭 ================= */}
+      {activeTab === "accounting" && (
+        <AccountingDashboard
+          dispatchData={dispatchData}
+          fixedRows={fixedRows}
+          clients={clients}
         />
       )}
 {/* ================= 매출 개요 탭 ================= */}
