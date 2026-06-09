@@ -794,45 +794,55 @@ function DriverDetailPanel({ data, logs, onClose, onDeleteLogs, checkInLoc, comp
         ))}
       </div>
 
-      {/* 출근지 */}
-      <div style={{ marginBottom: 20 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-          <p style={{ fontSize: 12, fontWeight: 700, color: "#6b7280", letterSpacing: ".09em", textTransform: "uppercase", margin: 0 }}>출근지</p>
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            {checkInLoc && onClearCheckInLoc && (
-              <button
-                onClick={onClearCheckInLoc}
-                title="개별 설정 해제 (회사 기본값으로)"
-                style={{ padding: "3px 10px", borderRadius: 6, border: "1px solid #e5e7eb", background: "white", color: "#9ca3af", fontSize: 12, fontWeight: 600, cursor: "pointer" }}
-              >
-                해제
-              </button>
+      {/* 출근지 / 도착지 */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 20 }}>
+        {[
+          {
+            label: "출근지",
+            loc: checkInLoc,
+            defaultLoc: companyDefaultLoc,
+            defaultLabel: "회사 기본 출근지",
+            onSet: onSetCheckInLoc,
+            onClear: checkInLoc ? onClearCheckInLoc : null,
+          },
+          {
+            label: "도착지",
+            loc: dropLoc,
+            defaultLoc: null,
+            defaultLabel: null,
+            onSet: onSetDropLoc,
+            onClear: dropLoc ? onClearDropLoc : null,
+          },
+        ].map(({ label, loc, defaultLoc, defaultLabel, onSet, onClear }) => (
+          <div key={label}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: "#6b7280", letterSpacing: ".07em", textTransform: "uppercase" }}>{label}</span>
+              <div style={{ display: "flex", gap: 5 }}>
+                {onClear && (
+                  <button onClick={onClear} style={{ padding: "2px 8px", borderRadius: 5, border: "1px solid #e5e7eb", background: "white", color: "#9ca3af", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>해제</button>
+                )}
+                {onSet && (
+                  <button onClick={onSet} style={{ padding: "2px 8px", borderRadius: 5, border: `1px solid ${NAVY}`, background: "white", color: NAVY, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>{loc ? "수정" : "설정"}</button>
+                )}
+              </div>
+            </div>
+            {loc ? (
+              <div style={{ background: "#f8f9fb", border: "1px solid #e5e7eb", borderRadius: 8, padding: "9px 11px" }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "#111827", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{loc.name}</div>
+                <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2 }}>{loc.lat.toFixed(4)}, {loc.lng.toFixed(4)}</div>
+              </div>
+            ) : defaultLoc ? (
+              <div style={{ background: "#f8f9fb", border: "1px dashed #d1d5db", borderRadius: 8, padding: "9px 11px" }}>
+                <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 1 }}>{defaultLabel}</div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: "#374151", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{defaultLoc.name}</div>
+              </div>
+            ) : (
+              <div style={{ background: "#f8f9fb", border: "1px dashed #d1d5db", borderRadius: 8, padding: "9px 11px" }}>
+                <div style={{ fontSize: 12, color: "#9ca3af" }}>미설정</div>
+              </div>
             )}
-            {onSetCheckInLoc && (
-              <button
-                onClick={onSetCheckInLoc}
-                style={{ padding: "4px 12px", borderRadius: 7, border: `1px solid ${NAVY}`, background: "white", color: NAVY, fontSize: 12, fontWeight: 700, cursor: "pointer" }}
-              >
-                {checkInLoc ? "수정" : "설정"}
-              </button>
-            )}
           </div>
-        </div>
-        {checkInLoc ? (
-          <div style={{ background: "#f8f9fb", border: "1px solid #e5e7eb", borderRadius: 9, padding: "11px 14px" }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>{checkInLoc.name}</div>
-            <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 2 }}>{checkInLoc.lat.toFixed(5)}, {checkInLoc.lng.toFixed(5)}</div>
-          </div>
-        ) : companyDefaultLoc ? (
-          <div style={{ background: "#f8f9fb", border: "1px dashed #d1d5db", borderRadius: 9, padding: "11px 14px" }}>
-            <div style={{ fontSize: 12, color: "#9ca3af", marginBottom: 2 }}>회사 기본 출근지 적용</div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: "#374151" }}>{companyDefaultLoc.name}</div>
-          </div>
-        ) : (
-          <div style={{ background: "#f8f9fb", border: "1px dashed #d1d5db", borderRadius: 9, padding: "11px 14px" }}>
-            <div style={{ fontSize: 13, color: "#9ca3af" }}>출근지가 설정되지 않았습니다</div>
-          </div>
-        )}
+        ))}
       </div>
 
       {/* Log history */}
@@ -1050,18 +1060,17 @@ function HistoryTab({ drivers, defaultDriverId }) {
 
   const summary = useMemo(() => {
     if (!logs.length) return null;
-    let checkInTime = null, checkOutTime = null, workMs = 0, tripCount = 0;
-    let lastT = null, lastS = null;
+    let checkInTime = null, finalCheckOutTime = null, tripCount = 0;
     logs.forEach(log => {
       const t = resolveTs(log.timestamp);
       if (!t) return;
       if (log.status === "출근" && !checkInTime) checkInTime = t;
-      if (log.status === "퇴근") checkOutTime = t;
+      if (log.status === "최종퇴근") finalCheckOutTime = t;
       if (log.status === "운행중") tripCount++;
-      if (lastT && lastS && lastS !== "퇴근" && lastS !== "대기" && lastS !== "휴식") workMs += t.getTime() - lastT.getTime();
-      lastT = t; lastS = log.status;
     });
-    return { checkInTime, checkOutTime, workMs, tripCount };
+    const endTime = finalCheckOutTime || (checkInTime ? new Date() : null);
+    const workMs = checkInTime && endTime ? endTime.getTime() - checkInTime.getTime() : 0;
+    return { checkInTime, checkOutTime: finalCheckOutTime, workMs, tripCount };
   }, [logs]);
 
   const groupedByDate = useMemo(() => {
@@ -1079,29 +1088,23 @@ function HistoryTab({ drivers, defaultDriverId }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       {/* 검색 패널 */}
-      <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: "22px 26px" }}>
-        <div style={{ fontSize: 15, fontWeight: 800, color: NAVY, marginBottom: 18 }}>기사 이력 조회</div>
-        <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "flex-end" }}>
-          <div style={{ flex: "1 1 200px", minWidth: 180 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: "#6b7280", marginBottom: 6 }}>기사 선택</div>
-            <select
-              value={selId}
-              onChange={e => setSelId(e.target.value)}
-              style={{ width: "100%", padding: "9px 12px", border: "1px solid #e5e7eb", borderRadius: 8, fontSize: 14, color: "#374151", background: "#fafafa", outline: "none" }}
-            >
-              <option value="">기사를 선택하세요</option>
-              {drivers.map(d => <option key={d.id} value={d.id}>{d.이름} ({d.차량번호})</option>)}
-            </select>
-          </div>
-          <div style={{ flex: "0 0 auto" }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: "#6b7280", marginBottom: 6 }}>조회 기간</div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <input type="date" value={fromDate} max={todayStr} onChange={e => setFromDate(e.target.value)}
-                style={{ padding: "9px 10px", border: "1px solid #e5e7eb", borderRadius: 8, fontSize: 14, color: "#374151", background: "#fafafa", outline: "none" }} />
-              <span style={{ color: "#9ca3af", fontSize: 13 }}>~</span>
-              <input type="date" value={toDate} max={todayStr} onChange={e => setToDate(e.target.value)}
-                style={{ padding: "9px 10px", border: "1px solid #e5e7eb", borderRadius: 8, fontSize: 14, color: "#374151", background: "#fafafa", outline: "none" }} />
-            </div>
+      <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: "14px 18px" }}>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+          <span style={{ fontSize: 14, fontWeight: 800, color: NAVY, whiteSpace: "nowrap" }}>기사 이력 조회</span>
+          <select
+            value={selId}
+            onChange={e => setSelId(e.target.value)}
+            style={{ flex: "1 1 150px", minWidth: 130, padding: "7px 10px", border: "1px solid #e5e7eb", borderRadius: 7, fontSize: 13, color: "#374151", background: "#fafafa", outline: "none" }}
+          >
+            <option value="">기사 선택</option>
+            {drivers.map(d => <option key={d.id} value={d.id}>{d.이름} ({d.차량번호})</option>)}
+          </select>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <input type="date" value={fromDate} max={todayStr} onChange={e => setFromDate(e.target.value)}
+              style={{ padding: "7px 8px", border: "1px solid #e5e7eb", borderRadius: 7, fontSize: 13, color: "#374151", background: "#fafafa", outline: "none" }} />
+            <span style={{ color: "#9ca3af", fontSize: 13 }}>~</span>
+            <input type="date" value={toDate} max={todayStr} onChange={e => setToDate(e.target.value)}
+              style={{ padding: "7px 8px", border: "1px solid #e5e7eb", borderRadius: 7, fontSize: 13, color: "#374151", background: "#fafafa", outline: "none" }} />
           </div>
           <button
             onClick={() => {
@@ -1110,7 +1113,7 @@ function HistoryTab({ drivers, defaultDriverId }) {
               setApplied({ driverId: selId, from: fromDate, to: toDate, driverName: d?.이름 || "", carNo: d?.차량번호 || "" });
             }}
             disabled={!selId}
-            style={{ padding: "10px 28px", borderRadius: 8, border: "none", background: selId ? NAVY : "#e5e7eb", color: selId ? "white" : "#9ca3af", fontSize: 14, fontWeight: 700, cursor: selId ? "pointer" : "not-allowed", whiteSpace: "nowrap" }}
+            style={{ padding: "8px 20px", borderRadius: 7, border: "none", background: selId ? NAVY : "#e5e7eb", color: selId ? "white" : "#9ca3af", fontSize: 13, fontWeight: 700, cursor: selId ? "pointer" : "not-allowed", whiteSpace: "nowrap" }}
           >
             조회
           </button>
@@ -1308,20 +1311,32 @@ function AttendanceTab({ drivers }) {
   };
 
   const { attendance, noShow } = useMemo(() => {
-    const from = new Date(selectedDate + "T00:00:00");
-    const to   = new Date(selectedDate + "T23:59:59");
+    // Sort logs oldest-first for forward-scan session tracking
+    const sorted = [...allLogs].sort((a, b) =>
+      (resolveTs(a.timestamp)?.getTime()||0) - (resolveTs(b.timestamp)?.getTime()||0)
+    );
     const byDriver = {};
-    allLogs.forEach(log => {
+    // Step 1: find all check-ins on the selected date (KST)
+    sorted.forEach(log => {
+      if (log.status !== "출근") return;
+      if (toKSTDate(log.timestamp) !== selectedDate) return;
       const t = resolveTs(log.timestamp);
-      if (!t || t < from || t > to) return;
-      if (!["출근", "퇴근", "최종퇴근"].includes(log.status)) return;
+      if (!t) return;
       const uid = log.uid;
-      if (!byDriver[uid]) byDriver[uid] = { uid, name: log.driverName || "-", carNo: log.carNo || "-", checkIn: null, checkOut: null, isFinal: false, distance: null };
-      const e = byDriver[uid];
-      if (log.status === "출근" && (!e.checkIn || t < e.checkIn)) e.checkIn = t;
-      if ((log.status === "퇴근" || log.status === "최종퇴근") && (!e.checkOut || t > e.checkOut)) {
-        e.checkOut = t;
-        if (log.status === "최종퇴근") { e.isFinal = true; e.distance = log.finalDistance ?? null; }
+      if (!byDriver[uid]) byDriver[uid] = { uid, name: log.driverName || "-", carNo: log.carNo || "-", checkIn: t, checkOut: null, isFinal: false, distance: null };
+      else if (t < byDriver[uid].checkIn) byDriver[uid].checkIn = t;
+    });
+    // Step 2: for each driver, scan forward from check-in for final checkout (may be next day)
+    Object.values(byDriver).forEach(d => {
+      const checkInMs = d.checkIn.getTime();
+      for (const log of sorted) {
+        const t = resolveTs(log.timestamp);
+        if (!t || log.uid !== d.uid || t.getTime() <= checkInMs) continue;
+        if (log.status === "최종퇴근") {
+          d.checkOut = t; d.isFinal = true; d.distance = log.finalDistance ?? null;
+          break;
+        }
+        if (log.status === "퇴근" && (!d.checkOut || t > d.checkOut)) d.checkOut = t;
       }
     });
     const attendedUids = new Set(Object.keys(byDriver));
@@ -1335,10 +1350,11 @@ function AttendanceTab({ drivers }) {
   const fmtT = (d) => d ? `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}` : "--";
   const fmtWork = (i, o) => {
     if (!i) return "--";
-    if (!o) return <span style={{ color: "#10b981", fontWeight: 700 }}>근무중</span>;
-    const ms = o.getTime() - i.getTime();
+    const ms = (o || new Date()).getTime() - i.getTime();
     const h = Math.floor(ms / 3600000), m = Math.floor((ms % 3600000) / 60000);
-    return h > 0 ? `${h}시간 ${m}분` : `${m}분`;
+    const txt = h > 0 ? `${h}시간 ${m}분` : `${m}분`;
+    if (!o) return <span style={{ color: "#10b981", fontWeight: 700 }}>{txt} (근무중)</span>;
+    return txt;
   };
 
   const dateLabel = (() => {
@@ -2213,6 +2229,15 @@ export default function FleetManagement() {
           initialLoc={checkInLocModal.initialLoc}
           onSave={handleSaveDriverCheckInLoc}
           onCancel={() => setCheckInLocModal(null)}
+        />
+      )}
+
+      {dropLocModal && (
+        <CheckInLocModal
+          title={`${dropLocModal.driverName} 도착지 설정`}
+          initialLoc={dropLocModal.initialLoc}
+          onSave={handleSaveDriverDropLoc}
+          onCancel={() => setDropLocModal(null)}
         />
       )}
 
