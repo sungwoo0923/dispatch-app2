@@ -94,6 +94,31 @@ export default function App() {
     }
   }, [loading, splashDone]);
 
+  // ★ 작은 화면(폰)이 데스크탑 사이트를 요청한 경우 viewport 스케일 보정
+  // (isTablet effect가 담당하지 않는 경우의 fallback)
+  useEffect(() => {
+    if (isTablet) return; // 태블릿 전용 effect가 이미 처리함
+    const applyScale = () => {
+      // screen.width = 실제 디바이스 CSS px (데스크탑 모드여도 변하지 않음)
+      const screenW = window.screen.width || window.innerWidth;
+      if (screenW >= 768) return; // 실제 폰 화면이 아니면 무시
+      const meta = document.querySelector('meta[name="viewport"]');
+      if (!meta) return;
+      const w = Math.min(screenW, window.innerWidth);
+      const TARGET = 1200;
+      const scale = Math.min(1, w / TARGET).toFixed(3);
+      meta.content = `width=${TARGET}, initial-scale=${scale}, minimum-scale=0.2, maximum-scale=5.0, user-scalable=yes`;
+    };
+    applyScale();
+    window.addEventListener("resize", applyScale);
+    const onOri = () => setTimeout(applyScale, 150);
+    window.addEventListener("orientationchange", onOri);
+    return () => {
+      window.removeEventListener("resize", applyScale);
+      window.removeEventListener("orientationchange", onOri);
+    };
+  }, [isTablet]);
+
   // ★ 태블릿 viewport 동적 조정 (가로/세로 모드 모두 대응)
   useEffect(() => {
     if (!isTablet) return;
@@ -105,10 +130,10 @@ export default function App() {
         meta.name = "viewport";
         document.head.appendChild(meta);
       }
-      // 화면 너비에 따라 initial-scale을 동적 계산
-      // 세로모드(~768px): 0.64 scale → PC 레이아웃이 화면에 맞게 축소
-      // 가로모드(~1024px+): 0.85+ scale → 더 크게 보임
-      const w = window.innerWidth;
+      // Use the smaller of screen.width (physical device CSS px) and innerWidth
+      // so that phones requesting desktop mode (innerWidth ~1024) still scale
+      // down based on the actual device screen size (e.g. 390px)
+      const w = Math.min(window.screen.width || window.innerWidth, window.innerWidth);
       const TARGET = 1200;
       const scale = Math.min(1, (w / TARGET)).toFixed(3);
       meta.content = `width=${TARGET}, initial-scale=${scale}, minimum-scale=0.3, maximum-scale=5.0, user-scalable=yes`;
