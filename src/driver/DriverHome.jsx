@@ -312,7 +312,8 @@ export default function DriverHome() {
   const [companyDefaultLoc, setCompanyDefaultLoc] = useState(null);
   const autoCheckinDoneRef = useRef(false);
   const autoDropDoneRef = useRef(false);
-  const wasAwayFromCheckInRef = useRef(false); // tracks if driver moved >2km away since last check-in/out
+  const wasAwayFromCheckInRef = useRef(false); // tracks if driver moved >0.5km away since last check-in/out
+  const [tick, setTick] = useState(0);
   const _td = new Date();
   const todayStr = `${_td.getFullYear()}-${String(_td.getMonth()+1).padStart(2,"0")}-${String(_td.getDate()).padStart(2,"0")}`;
   const [logFrom, setLogFrom] = useState(todayStr);
@@ -322,6 +323,11 @@ export default function DriverHome() {
   const [collisionAlert, setCollisionAlert] = useState(null);
   const driverRef = useRef(null);
   const posRef = useRef(null);
+
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     return onAuthStateChanged(auth, (u) => {
@@ -351,7 +357,7 @@ export default function DriverHome() {
     const start = new Date(todayStr + "T00:00:00");
     return allLogs.filter(l => { const t = l.timestamp?.toDate?.(); return t && t >= start; });
   }, [allLogs, todayStr]);
-  const summary = React.useMemo(() => calcWorkSummary(todayLogs), [todayLogs]);
+  const summary = React.useMemo(() => calcWorkSummary(todayLogs), [todayLogs, tick]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 운행기록 탭: 선택 날짜 범위 로그
   const rangeLogs = React.useMemo(() => {
@@ -365,7 +371,7 @@ export default function DriverHome() {
       return true;
     });
   }, [allLogs, appliedRange]);
-  const rangeSummary = React.useMemo(() => calcWorkSummary(rangeLogs), [rangeLogs]);
+  const rangeSummary = React.useMemo(() => calcWorkSummary(rangeLogs), [rangeLogs, tick]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Keep refs in sync with latest state (avoid stale closures in collision hook)
   useEffect(() => { driverRef.current = driver; }, [driver]);
@@ -440,8 +446,8 @@ export default function DriverHome() {
     }
   }, [driver?.status]);
 
-  // Auto 출근: driver must first move >2km away from 출근지 (wasAway guard)
-  // then come back within 2km — prevents immediate re-checkin after pressing 퇴근 at 출근지
+  // Auto 출근: must have moved >0.5km away from 출근지 at some point (wasAway guard)
+  // On app restart: if driver's last status update was >5 min ago, assume they've been away
   useEffect(() => {
     if (!pos || !uid || statusLoading) return;
     const status = driver?.status;
@@ -452,15 +458,22 @@ export default function DriverHome() {
     const today = new Date().toISOString().slice(0, 10);
     const isSameDayFinal = driver?.isFinalCheckout && driver?.workDate === today;
     const dist = calcDist(pos.lat, pos.lng, checkInLoc.lat, checkInLoc.lng);
-    // Always track wasAway so next-day auto-checkin works after driving home
     if (dist > 0.5) wasAwayFromCheckInRef.current = true;
-    // Don't auto-checkin if today's final checkout is done
+    // App restart scenario: if within range but wasAway not yet set, check driver.updatedAt
+    // If last status change was >5 min ago, it's safe to assume driver was away since then
+    if (!wasAwayFromCheckInRef.current && !autoCheckinDoneRef.current && dist <= 0.5) {
+      const raw = driver?.updatedAt;
+      const updatedAt = raw?.toDate?.() || (raw?.seconds ? new Date(raw.seconds * 1000) : null);
+      if (updatedAt && (Date.now() - updatedAt.getTime()) > 5 * 60 * 1000) {
+        wasAwayFromCheckInRef.current = true;
+      }
+    }
     if (isSameDayFinal) return;
     if (wasAwayFromCheckInRef.current && !autoCheckinDoneRef.current && dist <= 0.5) {
       autoCheckinDoneRef.current = true;
       updateStatus("출근").catch(() => { autoCheckinDoneRef.current = false; });
     }
-  }, [pos, uid, statusLoading, driver?.status, driver?.checkInLocation, driver?.isFinalCheckout, driver?.workDate, companyDefaultLoc, updateStatus]);
+  }, [pos, uid, statusLoading, driver?.status, driver?.checkInLocation, driver?.isFinalCheckout, driver?.workDate, driver?.updatedAt, companyDefaultLoc, updateStatus]);
 
   // 자동 하차: status가 운행중이 아닐 때 autoDropDoneRef 리셋
   useEffect(() => {
@@ -651,7 +664,16 @@ export default function DriverHome() {
 
           {/* 오늘 요약 카드 */}
           <div style={{ background: "white", borderRadius: 16, padding: "16px", marginBottom: 14, boxShadow: "0 1px 6px rgba(0,0,0,0.06)", border: "1px solid #e5e7eb" }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", marginBottom: 12, letterSpacing: "0.05em" }}>오늘 운행 현황</div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", letterSpacing: "0.05em" }}>오늘 운행 현황</div>
+              <button
+                onClick={() => { setTick(t => t + 1); showToast("새로고침 완료"); }}
+                style={{ background: "none", border: "1px solid #e5e7eb", borderRadius: 8, padding: "4px 10px", fontSize: 11, color: "#6b7280", cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                새로고침
+              </button>
+            </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
               {[
                 { label: "총 이동거리", value: `${(driver.totalDistance || 0).toFixed(1)} km` },
