@@ -1838,7 +1838,7 @@ const handleOrderDuplicate = (order) => {
     { fieldName: order.하차지명, type: "drop" },
   ].forEach(({ fieldName, type }) => {
     if (!fieldName) return;
-    const found = clients.find(c => normalizeCompany(c.거래처명) === normalizeCompany(fieldName));
+    const found = mergedCompanies.find(c => normalizeCompany(c.거래처명) === normalizeCompany(fieldName));
     if (!found) return;
     const contacts = (Array.isArray(found.contacts) ? found.contacts : []).filter(ct => ct.name?.trim());
     const unique = [...new Map(contacts.map(ct => [ct.name.trim(), ct])).values()];
@@ -1911,7 +1911,7 @@ const handleOrderDuplicateWithDriver = (order) => {
     { fieldName: order.하차지명, type: "drop" },
   ].forEach(({ fieldName, type }) => {
     if (!fieldName) return;
-    const found = clients.find(c => normalizeCompany(c.거래처명) === normalizeCompany(fieldName));
+    const found = mergedCompanies.find(c => normalizeCompany(c.거래처명) === normalizeCompany(fieldName));
     if (!found) return;
     const contacts = (Array.isArray(found.contacts) ? found.contacts : []).filter(ct => ct.name?.trim());
     const unique = [...new Map(contacts.map(ct => [ct.name.trim(), ct])).values()];
@@ -6003,7 +6003,7 @@ function MobileOrderDetail({
       { fieldName: order.하차지명, type: "drop" },
     ].forEach(({ fieldName, type }) => {
       if (!fieldName) return;
-      const found = (clients || []).find(c => normalizeCompany(c.거래처명) === normalizeCompany(fieldName));
+      const found = mergedCompanies.find(c => normalizeCompany(c.거래처명) === normalizeCompany(fieldName));
       if (!found) return;
       const contacts = (Array.isArray(found.contacts) ? found.contacts : []).filter(ct => ct.name?.trim());
       const unique = [...new Map(contacts.map(ct => [ct.name.trim(), ct])).values()];
@@ -7617,6 +7617,14 @@ const [matchedClients, setMatchedClients] = useState([]);
   const [clientSearchResults, setClientSearchResults] = useState([]);
   const [clientSearchQuery, setClientSearchQuery] = useState("");
 
+// clients + places 통합 (places 우선 - contacts 배열 보유)
+const mergedCompanies = useMemo(() => {
+  const map = new Map();
+  clients.forEach(c => { const k = normalizeCompany(c.거래처명); if (k) map.set(k, c); });
+  places.forEach(p => { const k = normalizeCompany(p.거래처명); if (k) map.set(k, p); });
+  return Array.from(map.values());
+}, [clients, places]);
+
 // 🔍 거래처 검색 함수
 const searchClient = (q) => {
   if (!q.trim()) {
@@ -7630,7 +7638,7 @@ const searchClient = (q) => {
   const starts = [];
   const includes = [];
 
-  clients.forEach((c) => {
+  mergedCompanies.forEach((c) => {
     const nameRaw = c.거래처명 || "";
     const name = normalizeCompany(nameRaw);
 
@@ -8007,7 +8015,7 @@ const pickupOptions = useMemo(() => {
   const includes = [];
   const addrMatch = [];
 
-  clients.forEach((c) => {
+  mergedCompanies.forEach((c) => {
     const nameRaw = c.거래처명 || "";
     const name = normalizeCompany(nameRaw);
     const addr = normalizeCompany(c.주소 || "");
@@ -8027,7 +8035,7 @@ const pickupOptions = useMemo(() => {
 
   return [...exact, ...starts, ...includes, ...addrMatch].slice(0, 10);
 
-}, [clients, queryPickup, form.상차지명]);
+}, [mergedCompanies, queryPickup, form.상차지명]);
 const dropOptions = useMemo(() => {
   if (!queryDrop) return [];
 
@@ -8038,12 +8046,11 @@ const dropOptions = useMemo(() => {
   const includes = [];
   const addrMatch = [];
 
-  clients.forEach((c) => {
+  mergedCompanies.forEach((c) => {
     const nameRaw = c.거래처명 || "";
     const name = normalizeCompany(nameRaw);
     const addr = normalizeCompany(c.주소 || "");
 
-    // 🔥 입력값과 완전 동일 (원문 기준도 체크)
     if (nameRaw.trim() === queryDrop.trim()) {
       exact.push(c);
     } else if (name === nq) {
@@ -8059,19 +8066,14 @@ const dropOptions = useMemo(() => {
 
   return [...exact, ...starts, ...includes, ...addrMatch].slice(0, 10);
 
-}, [clients, queryDrop]);
+}, [mergedCompanies, queryDrop]);
 
-const _normName = (s = "") => String(s).replace(/\s+/g, "").toLowerCase();
 const pickPickup = (c) => {
     update("거래처명", c.거래처명 || "");
     update("상차지명", c.거래처명 || "");
     update("상차지주소", c.주소 || "");
 
-    // clients collection lacks contacts; look up places for multi-contact data
-    const placeEntry = places.find(p => _normName(p.거래처명) === _normName(c.거래처명 || ""));
-    const rawContacts = Array.isArray(placeEntry?.contacts) ? placeEntry.contacts :
-                        Array.isArray(c.contacts) ? c.contacts : [];
-    const contacts = rawContacts.filter(ct => ct.name?.trim());
+    const contacts = (Array.isArray(c.contacts) ? c.contacts : []).filter(ct => ct.name?.trim());
     const unique = [...new Map(contacts.map(ct => [ct.name.trim(), ct])).values()];
     const primary = unique.find(ct => ct.isPrimary) || unique[0] || null;
     update("상차지담당자", primary?.name || c.담당자 || "");
@@ -8081,18 +8083,14 @@ const pickPickup = (c) => {
     setShowPickupList(false);
 
     if (unique.length > 1) {
-      openContactPopup([{ type: "pickup", place: placeEntry || c, contacts: unique }]);
+      openContactPopup([{ type: "pickup", place: c, contacts: unique }]);
     }
-  };
+};
 const pickDrop = (c) => {
   update("하차지명", c.거래처명 || c.하차지명 || "");
   update("하차지주소", c.주소 || c.하차지주소 || c.상차지주소 || "");
 
-  // clients collection lacks contacts; look up places for multi-contact data
-  const placeEntry = places.find(p => _normName(p.거래처명) === _normName(c.거래처명 || c.하차지명 || ""));
-  const rawContacts = Array.isArray(placeEntry?.contacts) ? placeEntry.contacts :
-                      Array.isArray(c.contacts) ? c.contacts : [];
-  const contacts = rawContacts.filter(ct => ct.name?.trim());
+  const contacts = (Array.isArray(c.contacts) ? c.contacts : []).filter(ct => ct.name?.trim());
   const unique = [...new Map(contacts.map(ct => [ct.name.trim(), ct])).values()];
   const primary = unique.find(ct => ct.isPrimary) || unique[0] || null;
   update("하차지담당자", primary?.name || c.담당자 || "");
@@ -8102,7 +8100,7 @@ const pickDrop = (c) => {
   setShowDropList(false);
 
   if (unique.length > 1) {
-    openContactPopup([{ type: "drop", place: placeEntry || c, contacts: unique }]);
+    openContactPopup([{ type: "drop", place: c, contacts: unique }]);
   }
 };
 
@@ -9633,16 +9631,15 @@ const pickDrop = (c) => {
             : "w-full py-2 mb-2 rounded-lg text-sm font-medium border border-[#1B2B4B] text-[#1B2B4B] bg-white"
         }
         onClick={() => {
-          const pe = places.find(p => _normName(p.거래처명) === _normName(selectedClient.거래처명 || ""));
-          const rawC = Array.isArray(pe?.contacts) ? pe.contacts : Array.isArray(selectedClient.contacts) ? selectedClient.contacts : [];
-          const ucts = [...new Map(rawC.filter(ct => ct.name?.trim()).map(ct => [ct.name.trim(), ct])).values()];
-          const prim = ucts.find(ct => ct.isPrimary) || ucts[0] || null;
+          const contacts = (Array.isArray(selectedClient.contacts) ? selectedClient.contacts : []).filter(ct => ct.name?.trim());
+          const unique = [...new Map(contacts.map(ct => [ct.name.trim(), ct])).values()];
+          const primary = unique.find(ct => ct.isPrimary) || unique[0] || null;
           update("상차지명", selectedClient.거래처명);
           update("상차지주소", selectedClient.주소 || "");
-          update("상차지담당자", prim?.name || selectedClient.담당자 || "");
-          update("상차지담당자번호", prim?.phone || selectedClient.담당자번호 || "");
+          update("상차지담당자", primary?.name || selectedClient.담당자 || "");
+          update("상차지담당자번호", primary?.phone || selectedClient.담당자번호 || "");
           setShowClientApplyModal(false);
-          if (ucts.length > 1) openContactPopup([{ type: "pickup", place: pe || selectedClient, contacts: ucts }]);
+          if (unique.length > 1) openContactPopup([{ type: "pickup", place: selectedClient, contacts: unique }]);
         }}
       >
         상차지에 적용
@@ -9656,16 +9653,15 @@ const pickDrop = (c) => {
             : "w-full py-2 mb-2 rounded-lg text-sm font-medium border border-[#1B2B4B] text-[#1B2B4B] bg-white"
         }
         onClick={() => {
-          const pe = places.find(p => _normName(p.거래처명) === _normName(selectedClient.거래처명 || ""));
-          const rawC = Array.isArray(pe?.contacts) ? pe.contacts : Array.isArray(selectedClient.contacts) ? selectedClient.contacts : [];
-          const ucts = [...new Map(rawC.filter(ct => ct.name?.trim()).map(ct => [ct.name.trim(), ct])).values()];
-          const prim = ucts.find(ct => ct.isPrimary) || ucts[0] || null;
+          const contacts = (Array.isArray(selectedClient.contacts) ? selectedClient.contacts : []).filter(ct => ct.name?.trim());
+          const unique = [...new Map(contacts.map(ct => [ct.name.trim(), ct])).values()];
+          const primary = unique.find(ct => ct.isPrimary) || unique[0] || null;
           update("하차지명", selectedClient.거래처명);
           update("하차지주소", selectedClient.주소 || "");
-          update("하차지담당자", prim?.name || selectedClient.담당자 || "");
-          update("하차지담당자번호", prim?.phone || selectedClient.담당자번호 || "");
+          update("하차지담당자", primary?.name || selectedClient.담당자 || "");
+          update("하차지담당자번호", primary?.phone || selectedClient.담당자번호 || "");
           setShowClientApplyModal(false);
-          if (ucts.length > 1) openContactPopup([{ type: "drop", place: pe || selectedClient, contacts: ucts }]);
+          if (unique.length > 1) openContactPopup([{ type: "drop", place: selectedClient, contacts: unique }]);
         }}
       >
         하차지에 적용
@@ -9679,22 +9675,21 @@ const pickDrop = (c) => {
             : "w-full py-2 mb-2 rounded-lg text-sm font-medium border border-[#1B2B4B] text-[#1B2B4B] bg-white"
         }
         onClick={() => {
-          const pe = places.find(p => _normName(p.거래처명) === _normName(selectedClient.거래처명 || ""));
-          const rawC = Array.isArray(pe?.contacts) ? pe.contacts : Array.isArray(selectedClient.contacts) ? selectedClient.contacts : [];
-          const ucts = [...new Map(rawC.filter(ct => ct.name?.trim()).map(ct => [ct.name.trim(), ct])).values()];
-          const prim = ucts.find(ct => ct.isPrimary) || ucts[0] || null;
+          const contacts = (Array.isArray(selectedClient.contacts) ? selectedClient.contacts : []).filter(ct => ct.name?.trim());
+          const unique = [...new Map(contacts.map(ct => [ct.name.trim(), ct])).values()];
+          const primary = unique.find(ct => ct.isPrimary) || unique[0] || null;
           update("상차지명", selectedClient.거래처명);
           update("상차지주소", selectedClient.주소 || "");
-          update("상차지담당자", prim?.name || selectedClient.담당자 || "");
-          update("상차지담당자번호", prim?.phone || selectedClient.담당자번호 || "");
+          update("상차지담당자", primary?.name || selectedClient.담당자 || "");
+          update("상차지담당자번호", primary?.phone || selectedClient.담당자번호 || "");
           update("하차지명", selectedClient.거래처명);
           update("하차지주소", selectedClient.주소 || "");
-          update("하차지담당자", prim?.name || selectedClient.담당자 || "");
-          update("하차지담당자번호", prim?.phone || selectedClient.담당자번호 || "");
+          update("하차지담당자", primary?.name || selectedClient.담당자 || "");
+          update("하차지담당자번호", primary?.phone || selectedClient.담당자번호 || "");
           setShowClientApplyModal(false);
-          if (ucts.length > 1) openContactPopup([
-            { type: "pickup", place: pe || selectedClient, contacts: ucts },
-            { type: "drop", place: pe || selectedClient, contacts: ucts },
+          if (unique.length > 1) openContactPopup([
+            { type: "pickup", place: selectedClient, contacts: unique },
+            { type: "drop", place: selectedClient, contacts: unique },
           ]);
         }}
       >
