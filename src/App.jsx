@@ -95,11 +95,18 @@ export default function App() {
   }, [loading, splashDone]);
 
   // ★ 작은 화면(폰)이 데스크탑 사이트를 요청한 경우 viewport 스케일 보정
-  // (isTablet effect가 담당하지 않는 경우의 fallback)
+  // 단, 실제 모바일 앱(MobileApp)을 보여줄 때는 절대 적용하지 않음
   useEffect(() => {
     if (isTablet) return; // 태블릿 전용 effect가 이미 처리함
+    if (isSmartPhone()) {
+      // 모바일 앱 모드: 데스크탑 사이트 보다가 모바일로 돌아온 경우
+      // viewport를 모바일 기본값으로 명시적 복원 (user-scalable=no 포함)
+      const meta = document.querySelector('meta[name="viewport"]');
+      if (meta) meta.content = "width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover";
+      return;
+    }
+    // 이 시점에서는 phone UA가 아닌데 screen.width < 768 → 안드로이드 폰이 데스크탑 요청한 경우
     const applyScale = () => {
-      // screen.width = 실제 디바이스 CSS px (데스크탑 모드여도 변하지 않음)
       const screenW = window.screen.width || window.innerWidth;
       if (screenW >= 768) return; // 실제 폰 화면이 아니면 무시
       const meta = document.querySelector('meta[name="viewport"]');
