@@ -121,29 +121,29 @@ function useAllDriverLogs(uid) {
 
 // ─── 근무 요약 계산 ──────────────────────────────────────────────────────────
 function calcWorkSummary(logs) {
-  let workMs = 0;
-  let driveMs = 0;
-  let checkInTime = null;
-  let tripCount = 0;
+  // Only process the current session: logs after the last "최종퇴근"
+  let lastFinalIdx = -1;
+  for (let i = logs.length - 1; i >= 0; i--) {
+    if (logs[i].status === "최종퇴근") { lastFinalIdx = i; break; }
+  }
+  const sessionLogs = lastFinalIdx >= 0 ? logs.slice(lastFinalIdx + 1) : logs;
 
-  let lastTime = null;
-  let lastStatus = null;
+  let workMs = 0, driveMs = 0, checkInTime = null, tripCount = 0;
+  let lastTime = null, lastStatus = null;
 
-  logs.forEach(log => {
+  sessionLogs.forEach(log => {
     const t = log.timestamp?.toDate?.();
     if (!t) return;
     if (log.status === "출근" && !checkInTime) checkInTime = t;
     if (log.status === "운행중") tripCount++;
-    if (lastTime && lastStatus && lastStatus !== "퇴근" && lastStatus !== "대기") {
+    if (lastTime && lastStatus && lastStatus !== "퇴근" && lastStatus !== "대기" && lastStatus !== "최종퇴근") {
       const diff = t - lastTime;
       if (lastStatus !== "휴식") workMs += diff;
       if (lastStatus === "운행중" || lastStatus === "하차중") driveMs += diff;
     }
-    lastTime = t;
-    lastStatus = log.status;
+    lastTime = t; lastStatus = log.status;
   });
 
-  // 현재까지 (마지막 로그 → 지금)
   if (lastTime && lastStatus && lastStatus !== "퇴근" && lastStatus !== "최종퇴근") {
     const diff = Date.now() - lastTime;
     if (lastStatus !== "휴식") workMs += diff;
@@ -311,6 +311,7 @@ export default function DriverHome() {
   const [toast, setToast] = useState("");
   const [companyDefaultLoc, setCompanyDefaultLoc] = useState(null);
   const autoCheckinDoneRef = useRef(false);
+  const autoDropDoneRef = useRef(false);
   const wasAwayFromCheckInRef = useRef(false); // tracks if driver moved >2km away since last check-in/out
   const _td = new Date();
   const todayStr = `${_td.getFullYear()}-${String(_td.getMonth()+1).padStart(2,"0")}-${String(_td.getDate()).padStart(2,"0")}`;
@@ -394,8 +395,8 @@ export default function DriverHome() {
       if (newStatus === "출근") {
         driverUpdate.workStartAt = serverTimestamp();
         driverUpdate.isFinalCheckout = false;
-        // 새로운 날(달력일 기준)에만 거리 초기화 — 당일 반복 출근 시 거리 누적 유지
-        if (driver?.workDate !== today) {
+        // 날짜가 바뀌었거나 최종퇴근 후 재출근 시 거리 초기화
+        if (driver?.workDate !== today || driver?.isFinalCheckout) {
           driverUpdate.totalDistance = 0;
           driverUpdate.workDate = today;
           resetTotalDist();
@@ -450,22 +451,41 @@ export default function DriverHome() {
     const isSameDayFinal = driver?.isFinalCheckout && driver?.workDate === today;
     const dist = calcDist(pos.lat, pos.lng, checkInLoc.lat, checkInLoc.lng);
     // Always track wasAway so next-day auto-checkin works after driving home
-    if (dist > 2) wasAwayFromCheckInRef.current = true;
+    if (dist > 0.5) wasAwayFromCheckInRef.current = true;
     // Don't auto-checkin if today's final checkout is done
     if (isSameDayFinal) return;
-    if (wasAwayFromCheckInRef.current && !autoCheckinDoneRef.current && dist <= 2) {
+    if (wasAwayFromCheckInRef.current && !autoCheckinDoneRef.current && dist <= 0.5) {
       autoCheckinDoneRef.current = true;
       updateStatus("출근").catch(() => { autoCheckinDoneRef.current = false; });
     }
   }, [pos, uid, statusLoading, driver?.status, driver?.checkInLocation, driver?.isFinalCheckout, driver?.workDate, companyDefaultLoc, updateStatus]);
 
-  // 수동 출근: 출근지가 설정된 경우 1km 이내에서만 허용
+  // 자동 하차: status가 운행중이 아닐 때 autoDropDoneRef 리셋
+  useEffect(() => {
+    if (driver?.status !== "운행중") autoDropDoneRef.current = false;
+  }, [driver?.status]);
+
+  // 자동 하차시작: 운행중 + 하차지 100m 이내 진입 시 자동 트리거
+  useEffect(() => {
+    if (!pos || !uid || statusLoading) return;
+    if (driver?.status !== "운행중") return;
+    const dropLoc = driver?.dropLocation;
+    if (!dropLoc?.lat || !dropLoc?.lng) return;
+    if (pos.accuracy != null && pos.accuracy > 50) return;
+    const dist = calcDist(pos.lat, pos.lng, dropLoc.lat, dropLoc.lng);
+    if (!autoDropDoneRef.current && dist <= 0.1) {
+      autoDropDoneRef.current = true;
+      updateStatus("하차중").catch(() => { autoDropDoneRef.current = false; });
+    }
+  }, [pos, uid, statusLoading, driver?.status, driver?.dropLocation, updateStatus]);
+
+  // 수동 출근: 출근지가 설정된 경우 0.5km 이내에서만 허용
   const handleActionButton = useCallback((action) => {
     if (action.status === "출근") {
       const checkInLoc = driver?.checkInLocation || companyDefaultLoc;
       if (checkInLoc?.lat && checkInLoc?.lng && pos && (pos.accuracy == null || pos.accuracy <= 100)) {
         const dist = calcDist(pos.lat, pos.lng, checkInLoc.lat, checkInLoc.lng);
-        if (dist > 1) {
+        if (dist > 0.5) {
           setCheckinWarning(dist);
           return;
         }
@@ -542,7 +562,7 @@ export default function DriverHome() {
           <div style={{ background: "white", borderRadius: 18, padding: "28px 22px", maxWidth: 320, width: "100%", boxShadow: "0 8px 32px rgba(0,0,0,0.2)" }}>
             <div style={{ fontSize: 16, fontWeight: 800, color: "#111827", marginBottom: 10 }}>출근 불가</div>
             <div style={{ fontSize: 14, color: "#6b7280", lineHeight: 1.7, marginBottom: 22 }}>
-              출근지 반경 <strong style={{ color: "#1B2B4B" }}>1km 이내</strong>에서만 출근 처리가 가능합니다.<br />
+              출근지 반경 <strong style={{ color: "#1B2B4B" }}>500m 이내</strong>에서만 출근 처리가 가능합니다.<br />
               현재 출근지까지 거리: <strong style={{ color: "#374151" }}>{checkinWarning.toFixed(1)} km</strong>
             </div>
             <button
@@ -644,11 +664,40 @@ export default function DriverHome() {
             </div>
           </div>
 
+          {/* 연료비 추정 */}
+          {(driver.totalDistance || 0) > 0.5 && (() => {
+            const km = driver.totalDistance || 0;
+            const vt = String(driver.vehicleType || "").replace(/\s/g,"");
+            const eff = /25|28/.test(vt)?3.0:/11|15|18/.test(vt)?3.5:/1[^0-9]|2\.5|소형/.test(vt)?5.5:4.0;
+            const liters = km / eff;
+            const cost = Math.round(liters * 1750);
+            return (
+              <div style={{ background:"white", borderRadius:16, padding:"14px 16px", marginBottom:14, boxShadow:"0 1px 6px rgba(0,0,0,0.06)", border:"1px solid #e5e7eb" }}>
+                <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", marginBottom:10, letterSpacing:"0.05em" }}>오늘 연료비 추정</div>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8 }}>
+                  {[
+                    { label:"이동거리", value:`${km.toFixed(1)} km` },
+                    { label:"연료 소비", value:`${liters.toFixed(1)} L` },
+                    { label:"연료비", value:`${cost.toLocaleString()}원` },
+                  ].map(({label,value})=>(
+                    <div key={label} style={{ textAlign:"center", padding:"10px 4px", background:"#f9fafb", borderRadius:10 }}>
+                      <div style={{ fontSize:15, fontWeight:800, color:"#1B2B4B" }}>{value}</div>
+                      <div style={{ fontSize:10, color:"#9ca3af", marginTop:3, fontWeight:600 }}>{label}</div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ fontSize:10, color:"#d1d5db", marginTop:8, textAlign:"center" }}>
+                  기준: {eff}km/L · 경유 1,750원/L
+                </div>
+              </div>
+            );
+          })()}
+
           {/* GPS 경고 */}
           {permissionDenied && (
             <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 12, padding: "12px 16px", marginBottom: 14 }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: "#dc2626", marginBottom: 2 }}>위치 권한이 필요합니다</div>
-              <div style={{ fontSize: 12, color: "#ef4444" }}>설정에서 위치 권한을 허용하면 실시간 추적 및 출근지 2km 이내 자동 출근이 가능합니다.</div>
+              <div style={{ fontSize: 12, color: "#ef4444" }}>설정에서 위치 권한을 허용하면 실시간 추적 및 출근지 500m 이내 자동 출근이 가능합니다.</div>
             </div>
           )}
 
