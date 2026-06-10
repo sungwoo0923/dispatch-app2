@@ -184,24 +184,16 @@ function haversineKm(lat1, lng1, lat2, lng2) {
 // Active drivers show a pulsing ring; inactive show a static dot
 
 function makeIcon(color, active, name) {
-  const ring = active
-    ? `<div style="position:absolute;inset:-5px;border-radius:50%;background:${color};opacity:.25;animation:fmRing 1.8s infinite ease-out;"></div>`
-    : "";
-  const pulse = active ? "animation:fmDot 1.8s infinite ease-in-out;" : "";
-  const label = name
-    ? `<div style="position:absolute;bottom:20px;left:50%;transform:translateX(-50%);white-space:nowrap;background:rgba(27,43,75,0.85);color:#fff;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;pointer-events:none;letter-spacing:0.02em;">${name}</div>`
-    : "";
+  const ring1 = active ? `<div style="position:absolute;top:-7px;left:-7px;right:-7px;bottom:5px;border-radius:12px;background:${color};opacity:.22;animation:fmRing 1.8s infinite ease-out;pointer-events:none;"></div>` : "";
+  const ring2 = active ? `<div style="position:absolute;top:-4px;left:-4px;right:-4px;bottom:6px;border-radius:10px;background:${color};opacity:.15;animation:fmRing 1.8s infinite ease-out;animation-delay:.5s;pointer-events:none;"></div>` : "";
+  const label = name ? `<div style="position:absolute;top:-20px;left:50%;transform:translateX(-50%);white-space:nowrap;background:rgba(27,43,75,0.88);color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;pointer-events:none;letter-spacing:0.02em;box-shadow:0 1px 4px rgba(0,0,0,0.2);">${name}</div>` : "";
+  const truckSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="14" viewBox="0 0 26 16"><rect x="1" y="1" width="16" height="11" rx="2" fill="white" opacity="0.95"/><path d="M17 4.5L23 7V14H17V4.5Z" fill="white" opacity="0.92"/><line x1="17" y1="8" x2="22" y2="9.5" stroke="${color}" stroke-width="1" opacity="0.6"/><circle cx="5" cy="14" r="2.2" fill="${color}" stroke="white" stroke-width="1.5"/><circle cx="20" cy="14" r="2.2" fill="${color}" stroke="white" stroke-width="1.5"/><rect x="3" y="3" width="5" height="4.5" rx="0.5" fill="${color}" opacity="0.35"/><rect x="9" y="3" width="5" height="4.5" rx="0.5" fill="${color}" opacity="0.35"/></svg>`;
   return L.divIcon({
-    html: `
-      <div style="position:relative;width:16px;height:16px;display:flex;align-items:center;justify-content:center;">
-        ${label}
-        ${ring}
-        <div style="width:14px;height:14px;background:${color};border-radius:50%;border:2.5px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.45);position:relative;z-index:1;${pulse}"></div>
-      </div>`,
+    html: `<div style="position:relative;display:flex;flex-direction:column;align-items:center;width:44px;">${ring1}${ring2}${label}<div style="position:relative;width:44px;height:32px;background:${color};border-radius:10px;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(0,0,0,0.38);z-index:1;"><div style="display:flex;align-items:center;justify-content:center;">${truckSvg}</div></div><div style="width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-top:9px solid ${color};z-index:1;margin-top:-1px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.25));"></div></div>`,
     className: "",
-    iconSize: [16, 16],
-    iconAnchor: [8, 8],
-    popupAnchor: [0, -12],
+    iconSize: [44, 44],
+    iconAnchor: [22, 44],
+    popupAnchor: [0, -46],
   });
 }
 
@@ -449,7 +441,7 @@ function KpiCard({ label, value, sub, primary, accent }) {
 // ─── DriverTable ─────────────────────────────────────────────────────────────
 // Selection uses light-blue highlight so dark text stays readable
 
-const COL_HEADERS = ["#", "이름", "차량번호", "차종", "현재상태", "이동거리", "업데이트", "첨부", ""];
+const COL_HEADERS = ["#", "이름", "차량번호", "차종", "현재상태", "속력", "주행시간", "이동거리", "업데이트", "활성화", "첨부", ""];
 
 function DriverTable({ rows, selectedId, onSelect, onFocusMap, onContextMenu, todayPhotos = [], onViewPhotos }) {
   if (rows.length === 0) {
@@ -522,6 +514,29 @@ function DriverTable({ rows, selectedId, onSelect, onFocusMap, onContextMenu, to
                 </span>
               </td>
 
+              {/* 속력 */}
+              <td style={{ padding: "11px 14px", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
+                {(d.speed || 0) > 0 ? (
+                  <span style={{ fontSize: 13, fontWeight: 700, color: (d.speed||0) > 80 ? "#ef4444" : "#1B2B4B" }}>{d.speed} km/h</span>
+                ) : (
+                  <span style={{ fontSize: 12, color: "#d1d5db" }}>–</span>
+                )}
+              </td>
+
+              {/* 주행시간 */}
+              <td style={{ padding: "11px 14px", whiteSpace: "nowrap" }}>
+                {(() => {
+                  const ws = d.workStartAt;
+                  if (!ws) return <span style={{ fontSize: 12, color: "#d1d5db" }}>–</span>;
+                  const start = ws?.toDate?.() || (ws?.seconds ? new Date(ws.seconds * 1000) : null);
+                  if (!start) return <span style={{ fontSize: 12, color: "#d1d5db" }}>–</span>;
+                  const ms = Date.now() - start.getTime();
+                  const h = Math.floor(ms / 3600000);
+                  const m = Math.floor((ms % 3600000) / 60000);
+                  return <span style={{ fontSize: 12, color: "#374151", fontVariantNumeric: "tabular-nums" }}>{h > 0 ? `${h}시간 ` : ""}{m}분</span>;
+                })()}
+              </td>
+
               {/* 이동거리 */}
               <td style={{ padding: "11px 14px", color: "#374151", whiteSpace: "nowrap", fontSize: 13, fontVariantNumeric: "tabular-nums" }}>
                 {(d.총거리 || 0).toFixed(1)} km
@@ -530,6 +545,14 @@ function DriverTable({ rows, selectedId, onSelect, onFocusMap, onContextMenu, to
               {/* 업데이트 */}
               <td style={{ padding: "11px 14px", color: "#6b7280", whiteSpace: "nowrap", fontSize: 13 }}>
                 {timeAgo(d.updatedAt)}
+              </td>
+
+              {/* 활성화 */}
+              <td style={{ padding: "11px 12px", whiteSpace: "nowrap" }}>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 9px", borderRadius: 20, background: d.active ? "#f0fdf4" : "#f3f4f6", border: `1px solid ${d.active ? "#86efac" : "#e5e7eb"}` }}>
+                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: d.active ? "#10b981" : "#d1d5db", display: "inline-block", animation: d.active ? "fmBlink 2s ease-in-out infinite" : "none" }} />
+                  <span style={{ fontSize: 11, fontWeight: 700, color: d.active ? "#15803d" : "#9ca3af" }}>{d.active ? "활성" : "비활성"}</span>
+                </span>
               </td>
 
               {/* 첨부 사진 */}
@@ -1617,122 +1640,211 @@ function AttendanceTab({ drivers }) {
 // ─── 온도 관제 탭 ─────────────────────────────────────────────────────────────
 function TemperatureTab({ drivers }) {
   const [tempData, setTempData] = useState({});
+  const [alarmSettings, setAlarmSettings] = useState([]); // { id, name, minA, maxA, minB, maxB, condition }
+  const [alarmModal, setAlarmModal] = useState(false);
+  const [editAlarm, setEditAlarm] = useState(null);
+  const [filterStatus, setFilterStatus] = useState("전체");
+  const [filterVehicle, setFilterVehicle] = useState("전체");
+  const [searchQ, setSearchQ] = useState("");
+  const [activeOnly, setActiveOnly] = useState(false);
+  const [newAlarm, setNewAlarm] = useState({ name: "", minA: "", maxA: "", minB: "", maxB: "", condition: "하나 이상 이탈 시" });
 
-  // Real-time temperature subscription from Firestore (IoT device writes here)
   useEffect(() => {
-    const unsubs = drivers.map(d => {
-      return onSnapshot(
-        doc(db, "cargo_temp", d.id),
-        snap => {
-          if (snap.exists()) {
-            setTempData(prev => ({ ...prev, [d.id]: snap.data() }));
-          }
-        },
-        () => {}
-      );
-    });
+    const unsubs = drivers.map(d =>
+      onSnapshot(doc(db, "cargo_temp", d.id), snap => {
+        if (snap.exists()) setTempData(prev => ({ ...prev, [d.id]: snap.data() }));
+      }, () => {})
+    );
     return () => unsubs.forEach(u => u());
   }, [drivers]);
 
-  const hasAnyData = Object.keys(tempData).length > 0;
+  const getTempStatus = (td) => {
+    if (!td || td.temperature == null) return "미연결";
+    const t = td.temperature;
+    const updAt = td.updatedAt?.toDate?.() || (td.updatedAt?.seconds ? new Date(td.updatedAt.seconds * 1000) : null);
+    if (!updAt || Date.now() - updAt.getTime() > 10 * 60 * 1000) return "오프라인";
+    // Check alarms
+    for (const alarm of alarmSettings) {
+      const minA = parseFloat(alarm.minA), maxA = parseFloat(alarm.maxA);
+      if (!isNaN(minA) && !isNaN(maxA) && (t < minA || t > maxA)) return "이탈";
+    }
+    return "정상";
+  };
+
+  const filtered = drivers.filter(d => {
+    const td = tempData[d.id];
+    const status = getTempStatus(td);
+    if (filterStatus !== "전체" && status !== filterStatus) return false;
+    if (activeOnly && status === "미연결") return false;
+    if (searchQ && !d.이름?.includes(searchQ) && !d.차량번호?.includes(searchQ)) return false;
+    return true;
+  });
 
   return (
-    <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
-      {/* 안내 배너 */}
-      <div style={{ background:"linear-gradient(135deg, #1B2B4B 0%, #2d4a7a 100%)", borderRadius:14, padding:"20px 24px", display:"flex", alignItems:"flex-start", gap:16 }}>
-        <div style={{ width:48, height:48, borderRadius:12, background:"rgba(255,255,255,0.15)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-          <svg width="24" height="24" fill="none" stroke="white" strokeWidth="2" viewBox="0 0 24 24"><path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/></svg>
+    <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+      {/* 필터 + 버튼 바 */}
+      <div style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: 10, padding: "12px 16px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
+        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ padding: "7px 10px", borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 13, color: "#374151", background: "#f9fafb" }}>
+          {["전체", "정상", "이탈", "오프라인", "미연결"].map(s => <option key={s}>{s}</option>)}
+        </select>
+        <div style={{ position: "relative", flex: "1 1 160px" }}>
+          <input value={searchQ} onChange={e => setSearchQ(e.target.value)} placeholder="차량번호, 이름..." style={{ width: "100%", padding: "7px 10px 7px 32px", borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 13, background: "#f9fafb", outline: "none", boxSizing: "border-box" }} />
+          <svg width="14" height="14" fill="none" stroke="#9ca3af" strokeWidth="2" viewBox="0 0 24 24" style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)" }}><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35" strokeLinecap="round"/></svg>
         </div>
-        <div>
-          <div style={{ color:"white", fontWeight:800, fontSize:16, marginBottom:6 }}>적재함 온도 관제</div>
-          <div style={{ color:"rgba(255,255,255,0.75)", fontSize:13, lineHeight:1.7 }}>
-            IoT 온도 센서(블루투스/WiFi)를 차량에 부착하면 실시간으로 적재함 온도를 모니터링할 수 있습니다.<br/>
-            센서 데이터는 기사 앱을 통해 자동 전송되어 관리자가 즉시 확인 가능합니다.
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#374151", cursor: "pointer", userSelect: "none" }}>
+          <div onClick={() => setActiveOnly(v => !v)} style={{ width: 36, height: 20, borderRadius: 10, background: activeOnly ? NAVY : "#e5e7eb", position: "relative", cursor: "pointer", transition: "background .2s" }}>
+            <div style={{ width: 16, height: 16, borderRadius: "50%", background: "white", position: "absolute", top: 2, left: activeOnly ? 18 : 2, transition: "left .2s", boxShadow: "0 1px 3px rgba(0,0,0,.2)" }} />
           </div>
-          <div style={{ marginTop:10, display:"flex", gap:8, flexWrap:"wrap" }}>
-            {["냉장 화물 (-18°C ~ 0°C)", "냉동 화물 (-25°C 이하)", "일반 화물 (온도 모니터링)"].map(tag => (
-              <span key={tag} style={{ background:"rgba(255,255,255,0.15)", borderRadius:20, padding:"3px 10px", color:"rgba(255,255,255,0.9)", fontSize:11, fontWeight:600 }}>{tag}</span>
-            ))}
-          </div>
-        </div>
+          활성 차량만 보기
+        </label>
+        <span style={{ fontSize: 12, color: "#9ca3af", marginLeft: "auto" }}>총 {filtered.length}건</span>
+        <button onClick={() => setAlarmModal(true)} style={{ padding: "7px 14px", borderRadius: 8, border: `1px solid ${NAVY}`, background: NAVY, color: "white", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>온도알림 설정</button>
       </div>
 
-      {/* 연동 절차 */}
-      <div style={{ background:"white", borderRadius:14, border:"1px solid #e5e7eb", padding:"20px 24px" }}>
-        <div style={{ fontSize:14, fontWeight:800, color:NAVY, marginBottom:16 }}>연동 절차</div>
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(200px, 1fr))", gap:12 }}>
-          {[
-            { step:1, title:"센서 구매/설치", desc:"Bluetooth 또는 WiFi 온도 센서를 적재함에 부착합니다", icon:"🔧" },
-            { step:2, title:"기사 앱 연결", desc:"기사 앱 설정에서 센서 UUID를 등록합니다", icon:"📱" },
-            { step:3, title:"자동 수집", desc:"앱이 백그라운드에서 센서 데이터를 주기적으로 수집합니다", icon:"📡" },
-            { step:4, title:"관리자 모니터링", desc:"이 화면에서 모든 차량의 온도를 실시간으로 확인합니다", icon:"🖥️" },
-          ].map(s => (
-            <div key={s.step} style={{ background:"#f8fafc", borderRadius:10, padding:"14px 16px", border:"1px solid #e5e7eb" }}>
-              <div style={{ fontSize:22, marginBottom:8 }}>{s.icon}</div>
-              <div style={{ fontSize:12, fontWeight:800, color:NAVY, marginBottom:4 }}>STEP {s.step}. {s.title}</div>
-              <div style={{ fontSize:12, color:"#6b7280", lineHeight:1.6 }}>{s.desc}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* 기사별 온도 현황 */}
-      <div style={{ background:"white", borderRadius:14, border:"1px solid #e5e7eb", overflow:"hidden" }}>
-        <div style={{ padding:"14px 20px", borderBottom:"1px solid #e5e7eb", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-          <div style={{ fontSize:14, fontWeight:800, color:NAVY }}>기사별 적재함 온도</div>
-          <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-            <div style={{ width:7, height:7, borderRadius:"50%", background: hasAnyData ? "#10b981" : "#d1d5db", animation: hasAnyData ? "fmBlink 1.5s ease-in-out infinite" : "none" }} />
-            <span style={{ fontSize:12, color: hasAnyData ? "#10b981" : "#9ca3af", fontWeight:600 }}>{hasAnyData ? "실시간 수신중" : "센서 미연결"}</span>
-          </div>
-        </div>
-        {drivers.length === 0 ? (
-          <div style={{ padding:"40px 20px", textAlign:"center", color:"#9ca3af", fontSize:13 }}>등록된 기사가 없습니다</div>
-        ) : (
-          <div style={{ padding:16, display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(220px, 1fr))", gap:12 }}>
-            {drivers.map(d => {
+      {/* 테이블 */}
+      <div style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: 10, overflow: "hidden" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+          <thead>
+            <tr style={{ background: "#f4f6fa", borderBottom: "2px solid #e5e7eb" }}>
+              {["ID", "차량정보", "알림명", "온도A (℃)", "온도B (℃)", "업데이트", "상태"].map(h => (
+                <th key={h} style={{ padding: "11px 14px", textAlign: "left", color: "#374151", fontWeight: 700, fontSize: 12, whiteSpace: "nowrap" }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.length === 0 ? (
+              <tr><td colSpan={7} style={{ padding: "40px 20px", textAlign: "center", color: "#9ca3af", fontSize: 13 }}>조건에 맞는 차량이 없습니다</td></tr>
+            ) : filtered.map((d, idx) => {
               const td = tempData[d.id];
               const temp = td?.temperature;
-              const updatedAt = td?.updatedAt?.toDate?.() || (td?.updatedAt?.seconds ? new Date(td.updatedAt.seconds * 1000) : null);
-              const isOnline = updatedAt && (Date.now() - updatedAt.getTime() < 5 * 60 * 1000);
-              let tempColor = "#6b7280", tempBg = "#f3f4f6";
-              if (temp != null) {
-                if (temp <= -18) { tempColor = "#3b82f6"; tempBg = "#eff6ff"; }
-                else if (temp <= 0) { tempColor = "#06b6d4"; tempBg = "#ecfeff"; }
-                else if (temp <= 10) { tempColor = "#10b981"; tempBg = "#f0fdf4"; }
-                else if (temp > 25) { tempColor = "#ef4444"; tempBg = "#fef2f2"; }
-              }
+              const tempB = td?.temperatureB;
+              const status = getTempStatus(td);
+              const updAt = td?.updatedAt?.toDate?.() || (td?.updatedAt?.seconds ? new Date(td.updatedAt.seconds * 1000) : null);
+              const matchAlarm = alarmSettings.find(a => {
+                const minA = parseFloat(a.minA), maxA = parseFloat(a.maxA);
+                return temp != null && !isNaN(minA) && !isNaN(maxA) && (temp < minA || temp > maxA);
+              });
+              const statusColors = { 정상: { bg: "#f0fdf4", color: "#15803d", border: "#86efac" }, 이탈: { bg: "#fef2f2", color: "#dc2626", border: "#fca5a5" }, 오프라인: { bg: "#fff7ed", color: "#ea580c", border: "#fed7aa" }, 미연결: { bg: "#f3f4f6", color: "#9ca3af", border: "#e5e7eb" } };
+              const sc = statusColors[status] || statusColors["미연결"];
+              const bg = idx % 2 === 0 ? "#fff" : "#fafbfc";
               return (
-                <div key={d.id} style={{ borderRadius:10, border:`1.5px solid ${temp != null && isOnline ? tempColor + "40" : "#e5e7eb"}`, background:temp != null && isOnline ? tempBg : "#fafafa", padding:"14px 16px" }}>
-                  <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
-                    <div>
-                      <div style={{ fontSize:13, fontWeight:700, color:NAVY }}>{d.이름}</div>
-                      <div style={{ fontSize:11, color:"#9ca3af", marginTop:2 }}>{d.차량번호}</div>
-                    </div>
-                    <div style={{ width:8, height:8, borderRadius:"50%", background: isOnline ? "#10b981" : "#d1d5db" }} />
-                  </div>
-                  {temp != null && isOnline ? (
-                    <>
-                      <div style={{ fontSize:28, fontWeight:900, color:tempColor, lineHeight:1, marginBottom:4 }}>{temp > 0 ? "+" : ""}{temp.toFixed(1)}°C</div>
-                      <div style={{ fontSize:10, color:"#9ca3af" }}>{updatedAt ? `${String(updatedAt.getHours()).padStart(2,"0")}:${String(updatedAt.getMinutes()).padStart(2,"0")} 업데이트` : ""}</div>
-                      {td?.humidity != null && <div style={{ fontSize:11, color:"#6b7280", marginTop:4 }}>습도 {td.humidity.toFixed(0)}%</div>}
-                    </>
-                  ) : (
-                    <div style={{ fontSize:12, color:"#9ca3af", paddingTop:4 }}>센서 미연결</div>
-                  )}
-                </div>
+                <tr key={d.id} style={{ background: bg, borderBottom: "1px solid #f0f2f5" }}>
+                  <td style={{ padding: "11px 14px", color: "#9ca3af", fontWeight: 600, fontSize: 12 }}>{idx + 1}</td>
+                  <td style={{ padding: "11px 14px", whiteSpace: "nowrap" }}>
+                    <div style={{ fontWeight: 700, color: NAVY, fontSize: 13 }}>{d.이름 || "-"}</div>
+                    <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 1 }}>{d.차량번호} {d.vehicleType ? `· ${d.vehicleType}` : ""}</div>
+                  </td>
+                  <td style={{ padding: "11px 14px", color: "#374151", fontSize: 12 }}>
+                    {matchAlarm ? <span style={{ fontWeight: 600, color: "#dc2626" }}>{matchAlarm.name}</span> : <span style={{ color: "#d1d5db" }}>–</span>}
+                  </td>
+                  <td style={{ padding: "11px 14px", whiteSpace: "nowrap" }}>
+                    {temp != null ? (
+                      <span style={{ fontWeight: 800, fontSize: 14, color: temp <= -18 ? "#3b82f6" : temp <= 0 ? "#06b6d4" : temp > 25 ? "#ef4444" : "#374151", fontVariantNumeric: "tabular-nums" }}>{temp > 0 ? "+" : ""}{temp.toFixed(1)}℃</span>
+                    ) : <span style={{ color: "#d1d5db", fontSize: 12 }}>–</span>}
+                  </td>
+                  <td style={{ padding: "11px 14px", whiteSpace: "nowrap" }}>
+                    {tempB != null ? (
+                      <span style={{ fontWeight: 800, fontSize: 14, color: tempB <= -18 ? "#3b82f6" : tempB <= 0 ? "#06b6d4" : tempB > 25 ? "#ef4444" : "#374151", fontVariantNumeric: "tabular-nums" }}>{tempB > 0 ? "+" : ""}{tempB.toFixed(1)}℃</span>
+                    ) : <span style={{ color: "#d1d5db", fontSize: 12 }}>–</span>}
+                  </td>
+                  <td style={{ padding: "11px 14px", color: "#6b7280", fontSize: 12, whiteSpace: "nowrap" }}>
+                    {updAt ? `${String(updAt.getHours()).padStart(2,"0")}:${String(updAt.getMinutes()).padStart(2,"0")}` : "–"}
+                  </td>
+                  <td style={{ padding: "11px 14px" }}>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 10px", borderRadius: 20, background: sc.bg, border: `1px solid ${sc.border}`, fontSize: 11, fontWeight: 700, color: sc.color }}>
+                      {status === "이탈" && <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#ef4444", animation: "fmBlink 0.8s ease-in-out infinite", display: "inline-block" }} />}
+                      {status}
+                    </span>
+                  </td>
+                </tr>
               );
             })}
-          </div>
-        )}
+          </tbody>
+        </table>
       </div>
 
-      {/* 권장 센서 */}
-      <div style={{ background:"#fffbeb", border:"1px solid #fcd34d", borderRadius:12, padding:"14px 18px" }}>
-        <div style={{ fontSize:12, fontWeight:700, color:"#92400e", marginBottom:6 }}>💡 권장 IoT 센서</div>
-        <div style={{ fontSize:12, color:"#78350f", lineHeight:1.7 }}>
-          Govee, Inkbird, SensorPush 등 Bluetooth 온습도 센서 또는 HTTP API를 지원하는 WiFi 온도계를 사용하면 연동이 가능합니다.
-          센서 Firestore 문서 경로: <code style={{ background:"rgba(0,0,0,0.06)", padding:"1px 5px", borderRadius:4, fontSize:11 }}>cargo_temp / {"{"} driverId {"}"}</code>
-          에 <code style={{ background:"rgba(0,0,0,0.06)", padding:"1px 5px", borderRadius:4, fontSize:11 }}>temperature</code>, <code style={{ background:"rgba(0,0,0,0.06)", padding:"1px 5px", borderRadius:4, fontSize:11 }}>humidity</code>, <code style={{ background:"rgba(0,0,0,0.06)", padding:"1px 5px", borderRadius:4, fontSize:11 }}>updatedAt</code> 필드를 쓰면 즉시 반영됩니다.
+      {/* 온도알림 설정 모달 */}
+      {alarmModal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 99999, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }} onClick={() => setAlarmModal(false)}>
+          <div style={{ background: "white", borderRadius: 16, width: "100%", maxWidth: 560, maxHeight: "85vh", overflow: "hidden", display: "flex", flexDirection: "column" }} onClick={e => e.stopPropagation()}>
+            <div style={{ background: NAVY, padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div style={{ color: "white", fontWeight: 800, fontSize: 15 }}>온도알림 설정</div>
+              <button onClick={() => setAlarmModal(false)} style={{ background: "rgba(255,255,255,0.15)", border: "none", borderRadius: 8, color: "white", fontSize: 18, width: 32, height: 32, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
+            </div>
+            <div style={{ overflowY: "auto", flex: 1, padding: 20 }}>
+              {/* 새 알림 추가 */}
+              <div style={{ background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 12, padding: "16px", marginBottom: 20 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "#374151", marginBottom: 12 }}>새 알림 추가</div>
+                <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+                  <input placeholder="알림명 (예: 냉동 유지)" value={newAlarm.name} onChange={e => setNewAlarm(p => ({...p, name: e.target.value}))} style={{ flex: 1, padding: "8px 10px", borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 13, outline: "none" }} />
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+                  <div>
+                    <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 4, fontWeight: 600 }}>온도A 범위</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <input placeholder="-20" value={newAlarm.minA} onChange={e => setNewAlarm(p => ({...p, minA: e.target.value}))} style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 13, outline: "none" }} />
+                      <span style={{ fontSize: 12, color: "#9ca3af", flexShrink: 0 }}>~</span>
+                      <input placeholder="0" value={newAlarm.maxA} onChange={e => setNewAlarm(p => ({...p, maxA: e.target.value}))} style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 13, outline: "none" }} />
+                      <span style={{ fontSize: 11, color: "#9ca3af", flexShrink: 0 }}>℃</span>
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 4, fontWeight: 600 }}>온도B 범위</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <input placeholder="-10" value={newAlarm.minB} onChange={e => setNewAlarm(p => ({...p, minB: e.target.value}))} style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 13, outline: "none" }} />
+                      <span style={{ fontSize: 12, color: "#9ca3af", flexShrink: 0 }}>~</span>
+                      <input placeholder="0" value={newAlarm.maxB} onChange={e => setNewAlarm(p => ({...p, maxB: e.target.value}))} style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 13, outline: "none" }} />
+                      <span style={{ fontSize: 11, color: "#9ca3af", flexShrink: 0 }}>℃</span>
+                    </div>
+                  </div>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <select value={newAlarm.condition} onChange={e => setNewAlarm(p => ({...p, condition: e.target.value}))} style={{ flex: 1, padding: "8px 10px", borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 13, background: "white" }}>
+                    {["하나 이상 이탈 시", "모두 이탈 시"].map(c => <option key={c}>{c}</option>)}
+                  </select>
+                  <button onClick={() => { if (!newAlarm.name.trim()) return; setAlarmSettings(prev => [...prev, { ...newAlarm, id: Date.now() }]); setNewAlarm({ name: "", minA: "", maxA: "", minB: "", maxB: "", condition: "하나 이상 이탈 시" }); }} style={{ padding: "8px 18px", borderRadius: 8, background: NAVY, color: "white", border: "none", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>추가</button>
+                </div>
+              </div>
+
+              {/* 알림 목록 */}
+              {alarmSettings.length > 0 && (
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                  <thead>
+                    <tr style={{ background: "#f4f6fa", borderBottom: "2px solid #e5e7eb" }}>
+                      {["알림명", "온도A 최고/최저", "온도B 최고/최저", "알림조건", ""].map(h => (
+                        <th key={h} style={{ padding: "9px 12px", textAlign: "left", color: "#374151", fontWeight: 700, fontSize: 11 }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {alarmSettings.map((a, i) => (
+                      <tr key={a.id} style={{ borderBottom: "1px solid #f0f2f5" }}>
+                        <td style={{ padding: "9px 12px", fontWeight: 700, color: NAVY }}>{a.name}</td>
+                        <td style={{ padding: "9px 12px", color: "#374151" }}>{a.maxA !== "" ? `${a.maxA}℃` : "–"}<br/><span style={{ color: "#9ca3af" }}>{a.minA !== "" ? `${a.minA}℃` : "–"}</span></td>
+                        <td style={{ padding: "9px 12px", color: "#374151" }}>{a.maxB !== "" ? `${a.maxB}℃` : "–"}<br/><span style={{ color: "#9ca3af" }}>{a.minB !== "" ? `${a.minB}℃` : "–"}</span></td>
+                        <td style={{ padding: "9px 12px", color: "#6b7280" }}>{a.condition}</td>
+                        <td style={{ padding: "9px 12px" }}>
+                          <button onClick={() => setAlarmSettings(prev => prev.filter(x => x.id !== a.id))} style={{ fontSize: 11, color: "#ef4444", background: "none", border: "none", cursor: "pointer", fontWeight: 700 }}>삭제</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+              {alarmSettings.length === 0 && <div style={{ textAlign: "center", color: "#9ca3af", fontSize: 13, padding: "20px 0" }}>등록된 알림이 없습니다</div>}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* IoT 연동 안내 */}
+      <div style={{ background: "#fffbeb", border: "1px solid #fcd34d", borderRadius: 10, padding: "12px 16px", marginTop: 12 }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: "#92400e", marginBottom: 4 }}>센서 데이터 경로</div>
+        <div style={{ fontSize: 11, color: "#78350f", lineHeight: 1.7 }}>
+          Firestore <code style={{ background: "rgba(0,0,0,0.06)", padding: "1px 4px", borderRadius: 3 }}>cargo_temp / {"{driverId}"}</code> 에
+          <code style={{ background: "rgba(0,0,0,0.06)", padding: "1px 4px", borderRadius: 3, marginLeft: 4 }}>temperature</code>
+          <code style={{ background: "rgba(0,0,0,0.06)", padding: "1px 4px", borderRadius: 3, marginLeft: 4 }}>temperatureB</code>
+          <code style={{ background: "rgba(0,0,0,0.06)", padding: "1px 4px", borderRadius: 3, marginLeft: 4 }}>updatedAt</code> 필드 기록 시 즉시 반영됩니다.
         </div>
       </div>
     </div>
