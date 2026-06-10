@@ -1913,6 +1913,9 @@ export default function FleetManagement() {
   const [todayDriverPhotos, setTodayDriverPhotos] = useState([]); // today's driver_photo_logs for all drivers
   const [photoViewerPhotos, setPhotoViewerPhotos] = useState(null); // { driverName, photos[] }
   const [photoLightbox, setPhotoLightbox] = useState(null); // { photos[], index, rotation }
+  const [emergencyAlerts, setEmergencyAlerts] = useState([]); // unresolved emergency_alerts
+  const emergencyAudioRef = useRef(null); // AudioContext for alarm sound
+  const emergencyIntervalRef = useRef(null); // interval for repeating alarm
   const [newPhotoToast, setNewPhotoToast] = useState(null); // { driverName, actionType }
   const [historyPreselect, setHistoryPreselect] = useState(null);
   const [fitAllCount, setFitAllCount] = useState(0);
@@ -1956,6 +1959,50 @@ export default function FleetManagement() {
       setTodayDriverPhotos(photos);
     });
   }, [todayDate]);
+
+  // 긴급 알림 구독 + 알람 사운드
+  useEffect(() => {
+    const q = query(collection(db, "emergency_alerts"), where("resolved", "==", false));
+    return onSnapshot(q, snap => {
+      const alerts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setEmergencyAlerts(alerts);
+      if (alerts.length > 0) {
+        // Start repeating alarm if not already playing
+        if (!emergencyIntervalRef.current) {
+          const playAlarm = () => {
+            try {
+              const ctx = new (window.AudioContext || window.webkitAudioContext)();
+              [[880, 0, 0.15], [660, 0.18, 0.15], [880, 0.36, 0.15], [660, 0.54, 0.15]].forEach(([freq, delay, dur]) => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.connect(gain); gain.connect(ctx.destination);
+                osc.type = "square"; osc.frequency.value = freq;
+                gain.gain.setValueAtTime(0.4, ctx.currentTime + delay);
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + dur);
+                osc.start(ctx.currentTime + delay);
+                osc.stop(ctx.currentTime + delay + dur);
+              });
+            } catch (_) {}
+          };
+          playAlarm();
+          emergencyIntervalRef.current = setInterval(playAlarm, 3000);
+        }
+      } else {
+        // No active alerts — stop alarm
+        if (emergencyIntervalRef.current) {
+          clearInterval(emergencyIntervalRef.current);
+          emergencyIntervalRef.current = null;
+        }
+      }
+    }, () => {});
+  }, []);
+
+  // Stop alarm on unmount
+  useEffect(() => {
+    return () => {
+      if (emergencyIntervalRef.current) clearInterval(emergencyIntervalRef.current);
+    };
+  }, []);
 
   // ── 구독 ──────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -2469,6 +2516,34 @@ export default function FleetManagement() {
           </button>
         ))}
       </div>
+
+      {/* ─── 긴급 알림 배너 (모든 탭에서 상시 표시) ─── */}
+      {emergencyAlerts.length > 0 && (
+        <div style={{ background: "linear-gradient(135deg, #ef4444 0%, #dc2626 100%)", borderRadius: 14, padding: "16px 20px", display: "flex", alignItems: "flex-start", gap: 14, marginBottom: 4, animation: "fmBlink 0.8s ease-in-out infinite", boxShadow: "0 4px 24px rgba(239,68,68,0.4)" }}>
+          <div style={{ width: 44, height: 44, borderRadius: "50%", background: "rgba(255,255,255,0.2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <svg width="22" height="22" fill="white" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ color: "white", fontWeight: 900, fontSize: 15, marginBottom: 6 }}>🚨 긴급 상황 발생! ({emergencyAlerts.length}건)</div>
+            {emergencyAlerts.map(alert => {
+              const t = alert.timestamp?.toDate?.() || (alert.timestamp?.seconds ? new Date(alert.timestamp.seconds * 1000) : null);
+              return (
+                <div key={alert.id} style={{ background: "rgba(255,255,255,0.15)", borderRadius: 10, padding: "10px 14px", marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                  <div>
+                    <div style={{ color: "white", fontWeight: 800, fontSize: 14 }}>{alert.driverName || "-"} · {alert.carNo || "-"}</div>
+                    {alert.location && <div style={{ color: "rgba(255,255,255,0.75)", fontSize: 11, marginTop: 2 }}>위치: {alert.location.lat.toFixed(4)}, {alert.location.lng.toFixed(4)}</div>}
+                    <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 11, marginTop: 1 }}>{t ? `${String(t.getHours()).padStart(2,"0")}:${String(t.getMinutes()).padStart(2,"0")} 발생` : ""}</div>
+                  </div>
+                  <button
+                    onClick={async () => { try { await updateDoc(doc(db, "emergency_alerts", alert.id), { resolved: true, resolvedAt: new Date() }); } catch (_) {} }}
+                    style={{ padding: "8px 18px", borderRadius: 10, border: "2px solid white", background: "white", color: "#ef4444", fontSize: 13, fontWeight: 800, cursor: "pointer", flexShrink: 0 }}
+                  >확인 완료</button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* ═══ 관제현황 ═══ */}
       {mainTab === "tracking" && (
