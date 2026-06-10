@@ -192,6 +192,7 @@ import {
   getDoc,
   getDocs,
   increment,
+  limit,
   onSnapshot,
   query,
   serverTimestamp,
@@ -731,15 +732,28 @@ const upsertPlace = async (place) => {
     const name = (place?.업체명 || "").trim();
     if (!name) return;
 
-    const key = place._id || makePlaceKey(name);
+    let key = place._id;
+    if (!key) {
+      const normalizedKey = makePlaceKey(name);
+      // 1차: 정규화된 키로 문서 존재 확인
+      const normalizedSnap = await getDoc(doc(db, "places", normalizedKey));
+      if (normalizedSnap.exists()) {
+        key = normalizedKey;
+      } else {
+        // 2차: 같은 업체명으로 저장된 레거시 문서 검색 (addDoc으로 생성된 자동ID 방지)
+        const legacySnap = await getDocs(
+          query(collection(db, "places"), where("업체명", "==", name), limit(1))
+        );
+        key = legacySnap.empty ? normalizedKey : legacySnap.docs[0].id;
+      }
+    }
+
     const ref = doc(db, "places", key);
 
     const data = {
       업체명: name,
       주소: (place.주소 || "").trim(),
-      // Only overwrite contacts when explicitly provided; otherwise merge preserves existing multi-contacts
       ...(Array.isArray(place.contacts) ? { contacts: place.contacts } : {}),
-      // Always save flat fields for legacy fallback (placeList uses these when contacts array absent)
       담당자: (place.담당자 || "").trim(),
       담당자번호: (place.담당자번호 || "").trim(),
       등급: place.등급 || "일반",
@@ -750,7 +764,6 @@ const upsertPlace = async (place) => {
       companyName: place.companyName || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "돌캐",
     };
 
-    // 🔥 exists() 체크 제거
     await setDoc(ref, data, { merge: true });
 
   } catch (e) {
