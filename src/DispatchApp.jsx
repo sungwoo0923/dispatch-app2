@@ -14799,10 +14799,12 @@ const [quickRegPhone, setQuickRegPhone] = React.useState("");
 
   // 🔽 정렬 상태
   const [sortKey, setSortKey] = React.useState("");
-  const [sortDir, setSortDir] = React.useState("asc"); // asc | desc
+  const [sortDir, setSortDir] = React.useState("asc");
   const [sortModalOpen, setSortModalOpen] = React.useState(false);
   const [tempSortKey, setTempSortKey] = React.useState("");
   const [tempSortDir, setTempSortDir] = React.useState("asc");
+  const [filterConditions, setFilterConditions] = React.useState([]);
+  const [tempFilterConditions, setTempFilterConditions] = React.useState([]);
 
   // ------------------------
   // 📌 필터 + 검색 + 정렬
@@ -14846,6 +14848,11 @@ const [quickRegPhone, setQuickRegPhone] = React.useState("");
         )
       );
     }
+
+    // 필터 조건 적용
+    filterConditions.forEach(({field, value}) => {
+      if (field && value) data = data.filter(r => String(r[field] || "").includes(value));
+    });
 
  // 오류오더만 보기 필터
     if (filterErrorIds !== null) {
@@ -14893,7 +14900,7 @@ if (sortKey) {
       __pickupStops: dedup([...safeParse(r.경유상차목록), ...safeParse(r.경유지_상차), ...safeParse(r.경유지상차)]),
       __dropStops:   dedup([...safeParse(r.경유하차목록), ...safeParse(r.경유지_하차), ...safeParse(r.경유지하차)]),
     }));
-  }, [rows, q, sortKey, sortDir, dayMode, statusFilter, filterErrorIds]);
+  }, [rows, q, sortKey, sortDir, dayMode, statusFilter, filterErrorIds, filterConditions]);
   // =========================
   // 📊 상태 요약 (추가 위치)
   // =========================
@@ -16377,7 +16384,7 @@ const head = isDark
   }
   showAlert(`✅ 기사 ${count}명 등록 완료\n기사관리 페이지에서 확인하세요.`);
 }} className="px-3 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-sm font-semibold shadow hover:bg-[#243a60] transition">일괄동기화</button>
-    <button onClick={()=>{setTempSortKey(sortKey||"");setTempSortDir(sortDir||"asc");setSortModalOpen(true);}} className="px-3 py-1.5 rounded-lg bg-slate-500 text-white text-sm font-semibold shadow hover:opacity-90">정렬</button>
+    <button onClick={()=>{setTempSortKey(sortKey||"");setTempSortDir(sortDir||"asc");setTempFilterConditions([...filterConditions]);setSortModalOpen(true);}} className={`px-3 py-1.5 rounded-lg text-white text-sm font-semibold shadow hover:opacity-90 ${(sortKey||filterConditions.length>0)?"bg-[#1B2B4B]":"bg-slate-500"}`}>정렬/필터{filterConditions.length>0?` (${filterConditions.length})`:""}</button>
     <button onClick={()=>{if(!selected.length)return showAlert("복사할 오더를 선택하세요.");if(selected.length>1)return showAlert("복사는 1개의 오더만 가능합니다.");setCopyModalOpen(true);}} className="px-3 py-1.5 rounded-lg bg-gray-800 text-white text-sm font-semibold shadow hover:opacity-90">기사복사</button>
     <button onClick={()=>{const url=`${window.location.origin}/driver-upload`;const msg=`[인수증 업로드 안내]\n운송 완료 후 아래 링크를 통해 인수증을 업로드해 주시기 바랍니다.\n\n${url}\n\n서명 받은 인수증(파렛전표) 사진을 촬영하여 업로드해 주세요.\n미업로드 시 운임 정산이 지연될 수 있습니다.`;navigator.clipboard.writeText(msg).then(()=>showAlert("업로드 안내 메시지가 복사되었습니다.\n기사에게 붙여넣기로 전달하세요.")).catch(()=>showAlert(`링크: ${url}`));}} className="px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-sm font-semibold shadow hover:opacity-90">업로드링크</button>
     <button onClick={()=>setDailyCloseOpen(true)} className="px-3 py-1.5 rounded-lg bg-gray-700 text-white text-sm font-semibold shadow hover:opacity-90">일마감</button>
@@ -21085,98 +21092,74 @@ setConfirmChange(null);
     </div>
   </div>
 )}
-      {/* ===================== 🔽 정렬 설정 팝업 ===================== */}
+      {/* ===================== 정렬/필터 설정 팝업 ===================== */}
       {sortModalOpen && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[99999]">
-          <div className="bg-white rounded-xl p-5 w-[360px] shadow-xl">
-            <h3 className="text-lg font-bold mb-4">정렬 설정</h3>
-
-            {/* 정렬 기준 */}
-            <div className="mb-3">
-              <label className="text-sm font-semibold">정렬 기준</label>
-              <select
-                className="border p-2 rounded w-full mt-1"
-                value={tempSortKey}
-                onChange={(e) => setTempSortKey(e.target.value)}
-              >
-                <option value="">선택 안함</option>
-                {[
-                  "등록일",
-                  "상차일",
-                  "하차일",
-                  "거래처명",
-                  "상차지명",
-                  "하차지명",
-                  "차량번호",
-                  "배차상태",
-                  "배차방식",
-                  "청구운임",
-                  "기사운임",
-                  "수수료",
-                ].map((k) => (
-                  <option key={k} value={k}>{k}</option>
-                ))}
-              </select>
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[99999]" onClick={()=>setSortModalOpen(false)}>
+          <div className="bg-white rounded-2xl w-[480px] max-h-[85vh] flex flex-col shadow-2xl overflow-hidden" onClick={e=>e.stopPropagation()}>
+            <div className="bg-[#1B2B4B] px-5 py-4 flex items-center justify-between shrink-0">
+              <h3 className="text-white font-bold text-[15px]">정렬 / 필터 설정</h3>
+              <button className="text-white/60 hover:text-white text-xl leading-none" onClick={()=>setSortModalOpen(false)}>×</button>
             </div>
-
-            {/* 정렬 방향 */}
-            <div className="mb-4">
-              <label className="text-sm font-semibold">정렬 방향</label>
-              <div className="flex gap-2 mt-1">
-                <button
-                  className={`flex-1 py-2 rounded ${tempSortDir === "asc"
-                    ? "bg-blue-600 text-white"
-                    : "bg-gray-200"
-                    }`}
-                  onClick={() => setTempSortDir("asc")}
-                >
-                  오름차순
-                </button>
-                <button
-                  className={`flex-1 py-2 rounded ${tempSortDir === "desc"
-                    ? "bg-blue-600 text-white"
-                    : "bg-gray-200"
-                    }`}
-                  onClick={() => setTempSortDir("desc")}
-                >
-                  내림차순
-                </button>
+            <div className="overflow-y-auto flex-1 p-5 space-y-5">
+              <div>
+                <div className="text-[11px] font-bold text-[#1B2B4B] uppercase tracking-wider mb-2">정렬 기준</div>
+                <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] mb-2 focus:outline-none focus:border-[#1B2B4B]" value={tempSortKey} onChange={e=>setTempSortKey(e.target.value)}>
+                  <option value="">선택 안함</option>
+                  {["등록일","상차일","하차일","거래처명","상차지명","하차지명","차량번호","배차상태","배차방식","청구운임","기사운임","수수료"].map(k=><option key={k} value={k}>{k}</option>)}
+                </select>
+                <div className="flex gap-2">
+                  <button className={`flex-1 py-2 rounded-lg text-[12px] font-semibold transition ${tempSortDir==="asc"?"bg-[#1B2B4B] text-white":"bg-gray-100 text-gray-600 hover:bg-gray-200"}`} onClick={()=>setTempSortDir("asc")}>오름차순</button>
+                  <button className={`flex-1 py-2 rounded-lg text-[12px] font-semibold transition ${tempSortDir==="desc"?"bg-[#1B2B4B] text-white":"bg-gray-100 text-gray-600 hover:bg-gray-200"}`} onClick={()=>setTempSortDir("desc")}>내림차순</button>
+                </div>
+              </div>
+              <div className="border-t border-gray-100"/>
+              <div>
+                <div className="text-[11px] font-bold text-[#1B2B4B] uppercase tracking-wider mb-1">필터 조건</div>
+                <div className="text-[11px] text-gray-400 mb-3">조건을 추가하면 모두 만족하는 오더만 표시됩니다</div>
+                <div className="space-y-2 mb-3">
+                  {tempFilterConditions.map((cond,idx)=>(
+                    <div key={idx} className="flex gap-2 items-center">
+                      <select className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.field} onChange={e=>{const n=[...tempFilterConditions];n[idx]={field:e.target.value,value:""};setTempFilterConditions(n);}}>
+                        <option value="">항목 선택</option>
+                        {["배차방식","지급방식","배차상태","거래처명","차량종류","차량번호"].map(f=><option key={f} value={f}>{f}</option>)}
+                      </select>
+                      {["배차방식","지급방식","배차상태","차량종류"].includes(cond.field)?(
+                        <select className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.value} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],value:e.target.value};setTempFilterConditions(n);}}>
+                          <option value="">값 선택</option>
+                          {(cond.field==="배차방식"?["24시","24시콜","화물주선","직납","기타"]:cond.field==="지급방식"?["계산서","현금","카드","선불","착불"]:cond.field==="배차상태"?["배차중","배차완료","배차취소"]:["다마스","라보","1톤","1.4톤","2.5톤","3.5톤","5톤","11톤","25톤","오토바이"]).map(v=><option key={v} value={v}>{v}</option>)}
+                        </select>
+                      ):(
+                        <input type="text" className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.value} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],value:e.target.value};setTempFilterConditions(n);}} placeholder="검색어 입력" />
+                      )}
+                      <button className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-red-500 rounded-lg hover:bg-red-50 text-lg leading-none" onClick={()=>setTempFilterConditions(prev=>prev.filter((_,i)=>i!==idx))}>×</button>
+                    </div>
+                  ))}
+                </div>
+                <button className="w-full py-2 border-2 border-dashed border-gray-200 rounded-lg text-[12px] text-gray-400 hover:border-[#1B2B4B] hover:text-[#1B2B4B] transition" onClick={()=>setTempFilterConditions(prev=>[...prev,{field:"",value:""}])}>+ 조건 추가</button>
               </div>
             </div>
-
-            {/* 버튼 */}
-            <div className="flex justify-end gap-2">
-              <button
-                className="px-3 py-1 rounded bg-gray-200"
-                onClick={() => setSortModalOpen(false)}
-              >
-                취소
-              </button>
-
-              <button
-                className="px-3 py-1 rounded bg-gray-400 text-white"
-                onClick={() => {
-                  setSortKey("");
-                  setSortModalOpen(false);
-                }}
-              >
-                정렬 해제
-              </button>
-
-              <button
-                className="px-3 py-1 rounded bg-blue-600 text-white"
-                onClick={() => {
-                  setSortKey(tempSortKey);
-                  setSortDir(tempSortDir);
-                  setSortModalOpen(false);
-                }}
-              >
-                적용
-              </button>
+            <div className="px-5 py-4 border-t border-gray-100 flex justify-between items-center shrink-0">
+              <button className="px-4 py-2 rounded-lg bg-gray-100 text-gray-600 text-[12px] font-semibold hover:bg-gray-200 transition" onClick={()=>{setTempSortKey("");setTempSortDir("asc");setTempFilterConditions([]);}}>초기화</button>
+              <div className="flex gap-2">
+                <button className="px-4 py-2 rounded-lg bg-gray-100 text-gray-600 text-[12px] font-semibold hover:bg-gray-200 transition" onClick={()=>setSortModalOpen(false)}>취소</button>
+                <button className="px-4 py-2 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-semibold hover:bg-[#243a60] transition" onClick={()=>{setSortKey(tempSortKey);setSortDir(tempSortDir);setFilterConditions(tempFilterConditions.filter(c=>c.field&&c.value));setSortModalOpen(false);}}>적용</button>
+              </div>
             </div>
           </div>
         </div>
       )}
+{filterConditions.length > 0 && (
+  <div className="flex flex-wrap items-center gap-2 px-4 py-2 mb-2 bg-[#1B2B4B]/5 border border-[#1B2B4B]/20 rounded-xl">
+    <span className="text-[11px] font-bold text-[#1B2B4B]">필터:</span>
+    {filterConditions.map((cond, i) => (
+      <span key={i} className="flex items-center gap-1 px-2 py-0.5 bg-[#1B2B4B]/10 text-[#1B2B4B] text-[11px] rounded-full border border-[#1B2B4B]/20">
+        {cond.field} : {cond.value}
+        <button className="ml-0.5 hover:text-red-500 font-bold leading-none" onClick={()=>setFilterConditions(prev=>prev.filter((_,j)=>j!==i))}>×</button>
+      </span>
+    ))}
+    <button className="ml-auto text-[11px] text-gray-400 hover:text-red-500" onClick={()=>setFilterConditions([])}>전체 해제</button>
+  </div>
+)}
 {/* 오류오더 필터 활성 배너 */}
 {filterErrorIds !== null && (
   <div className="flex items-center gap-3 px-4 py-2 mb-2 bg-[#1B2B4B]/8 border border-[#1B2B4B]/30 rounded-xl">
@@ -22157,6 +22140,10 @@ const [appliedEndDate, setAppliedEndDate] = React.useState("");
   const [sortKey2, setSortKey2] = React.useState("");
   const [sortDir2, setSortDir2] = React.useState("asc");
   const [sortModalOpen, setSortModalOpen] = React.useState(false);
+  const [filterConditions, setFilterConditions] = React.useState([]);
+  const [tempFilterConditions, setTempFilterConditions] = React.useState([]);
+  const [tempSortKey, setTempSortKey] = React.useState("");
+  const [tempSortDir, setTempSortDir] = React.useState("asc");
   const [selected, setSelected] = React.useState(new Set());
   const [editMode, setEditMode] = React.useState(false);
   const [copyPanelOpen, setCopyPanelOpen] = React.useState(false);
@@ -23744,6 +23731,11 @@ const filtered = React.useMemo(() => {
     data = data.filter(r => filterErrorIds.includes(r._id));
   }
 
+  // 필터 조건 적용
+  filterConditions.forEach(({field, value}) => {
+    if (field && value) data = data.filter(r => String(r[field] || "").includes(value));
+  });
+
   // =========================
   // 🔽 정렬
   // =========================
@@ -23774,6 +23766,7 @@ const filtered = React.useMemo(() => {
   statusFilter,
   focusOrderId,
   filterErrorIds,
+  filterConditions,
 ]);
 
   // ⭐⭐⭐ 페이지 데이터 (정렬된 filtered 기준)
@@ -24334,7 +24327,7 @@ return (
 
         {/* 우측 버튼들 */}
         <div className="ml-auto flex items-center gap-1.5">
-          <button onClick={()=>setSortModalOpen(true)} className="px-3 py-1.5 rounded-lg bg-slate-500 text-white text-sm font-semibold shadow hover:opacity-90">정렬</button>
+          <button onClick={()=>{setTempSortKey(sortKey||"");setTempSortDir(sortDir||"asc");setTempFilterConditions([...filterConditions]);setSortModalOpen(true);}} className={`px-3 py-1.5 rounded-lg text-white text-sm font-semibold shadow hover:opacity-90 ${(sortKey||filterConditions.length>0)?"bg-[#1B2B4B]":"bg-slate-500"}`}>정렬/필터{filterConditions.length>0?` (${filterConditions.length})`:""}</button>
           <button onClick={()=>{if(selected.size===0)return showAlert("복사할 항목을 선택하세요.");if(selected.size>1)return showAlert("1개만 선택할 수 있습니다.");setCopyModalOpen(true);}} className="px-3 py-1.5 rounded-lg bg-gray-800 text-white text-sm font-semibold shadow hover:opacity-90">기사복사</button>
           <button onClick={()=>{const url=`${window.location.origin}/driver-upload`;const msg=`[인수증 업로드 안내]\n운송 완료 후 아래 링크를 통해 인수증을 업로드해 주시기 바랍니다.\n\n${url}\n\n서명 받은 인수증(파렛전표) 사진을 촬영하여 업로드해 주세요.\n미업로드 시 운임 정산이 지연될 수 있습니다.`;navigator.clipboard.writeText(msg).then(()=>showAlert("업로드 안내 메시지가 복사되었습니다.\n기사에게 붙여넣기로 전달하세요.")).catch(()=>showAlert(`링크: ${url}`));}} className="px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-sm font-semibold shadow hover:opacity-90">업로드링크</button>
           <label className="px-3 py-1.5 rounded-lg bg-gray-700 text-white text-sm font-semibold shadow hover:opacity-90 cursor-pointer">대용량 업로드<input type="file" accept=".xlsx,.xls" hidden onChange={handleBulkFile}/></label>
