@@ -449,9 +449,9 @@ function KpiCard({ label, value, sub, primary, accent }) {
 // ─── DriverTable ─────────────────────────────────────────────────────────────
 // Selection uses light-blue highlight so dark text stays readable
 
-const COL_HEADERS = ["#", "이름", "차량번호", "차종", "현재상태", "이동거리", "업데이트", ""];
+const COL_HEADERS = ["#", "이름", "차량번호", "차종", "현재상태", "이동거리", "업데이트", "첨부", ""];
 
-function DriverTable({ rows, selectedId, onSelect, onFocusMap, onContextMenu }) {
+function DriverTable({ rows, selectedId, onSelect, onFocusMap, onContextMenu, todayPhotos = [], onViewPhotos }) {
   if (rows.length === 0) {
     return (
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "52px 24px", color: "#9ca3af" }}>
@@ -530,6 +530,23 @@ function DriverTable({ rows, selectedId, onSelect, onFocusMap, onContextMenu }) 
               {/* 업데이트 */}
               <td style={{ padding: "11px 14px", color: "#6b7280", whiteSpace: "nowrap", fontSize: 13 }}>
                 {timeAgo(d.updatedAt)}
+              </td>
+
+              {/* 첨부 사진 */}
+              <td style={{ padding: "11px 10px", whiteSpace: "nowrap" }}>
+                {(() => {
+                  const driverPhotos = todayPhotos.filter(p => p.uid === d.id);
+                  if (!driverPhotos.length) return <span style={{ fontSize: 12, color: "#d1d5db" }}>–</span>;
+                  return (
+                    <button
+                      onClick={e => { e.stopPropagation(); onViewPhotos?.({ driverName: d.이름, photos: driverPhotos }); }}
+                      style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 8px", borderRadius: 7, background: "#f0fdf4", border: "1px solid #86efac", color: "#15803d", fontSize: 12, fontWeight: 700, cursor: "pointer" }}
+                    >
+                      <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                      {driverPhotos.length}장
+                    </button>
+                  );
+                })()}
               </td>
 
               {/* 지도 포커스 */}
@@ -1040,6 +1057,7 @@ function HistoryTab({ drivers, defaultDriverId }) {
   const [logs, setLogs] = useState([]);
   const [gpsDist, setGpsDist] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [driverPhotos, setDriverPhotos] = useState([]); // photos for applied driver+date range
 
   useEffect(() => {
     if (!applied) return;
@@ -1072,7 +1090,18 @@ function HistoryTab({ drivers, defaultDriverId }) {
         setGpsDist(dist > 0.01 ? dist : null);
       }
     );
-    return () => { logUnsub(); gpsUnsub(); };
+
+    const photoUnsub = onSnapshot(
+      query(collection(db, "driver_photo_logs"), where("uid", "==", applied.driverId)),
+      (snap) => {
+        const photos = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+          .filter(p => { const t = resolveTs(p.timestamp); return t && t >= from && t <= to; })
+          .sort((a, b) => (resolveTs(a.timestamp)?.getTime()||0) - (resolveTs(b.timestamp)?.getTime()||0));
+        setDriverPhotos(photos);
+      }
+    );
+
+    return () => { logUnsub(); gpsUnsub(); photoUnsub(); };
   }, [applied]);
 
   const summary = useMemo(() => {
@@ -1216,6 +1245,30 @@ function HistoryTab({ drivers, defaultDriverId }) {
                   );
                 })}
               </div>
+              {/* 해당 날짜 사진 첨부 */}
+              {(() => {
+                const dayPhotos = driverPhotos.filter(p => p.logDate === dateStr);
+                if (!dayPhotos.length) return null;
+                return (
+                  <div style={{ marginTop: 14 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", marginBottom: 10, letterSpacing: "0.05em" }}>첨부 사진</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: 10 }}>
+                      {dayPhotos.map(p => {
+                        const t = resolveTs(p.timestamp);
+                        return (
+                          <div key={p.id} style={{ borderRadius: 10, overflow: "hidden", border: "1px solid #e5e7eb", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+                            <img src={p.imageBase64} alt={p.actionType} style={{ width: "100%", aspectRatio: "4/3", objectFit: "cover", display: "block" }} />
+                            <div style={{ padding: "6px 10px", background: "#f9fafb" }}>
+                              <div style={{ fontSize: 11, fontWeight: 700, color: NAVY }}>{p.actionType}</div>
+                              <div style={{ fontSize: 10, color: "#9ca3af", marginTop: 1 }}>{t ? `${String(t.getHours()).padStart(2,"0")}:${String(t.getMinutes()).padStart(2,"0")}` : "-"}</div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           ))}
         </>
@@ -1539,6 +1592,9 @@ export default function FleetManagement() {
   const [locChangeRequests, setLocChangeRequests] = useState([]);
   const [myCompanyName, setMyCompanyName] = useState(null);
   const [contextMenu, setContextMenu] = useState(null); // { x, y, driver }
+  const [todayDriverPhotos, setTodayDriverPhotos] = useState([]); // today's driver_photo_logs for all drivers
+  const [photoViewerPhotos, setPhotoViewerPhotos] = useState(null); // { driverName, photos[] }
+  const [newPhotoToast, setNewPhotoToast] = useState(null); // { driverName, actionType }
   const [historyPreselect, setHistoryPreselect] = useState(null);
   const [fitAllCount, setFitAllCount] = useState(0);
   const [searchQuery,   setSearchQuery]  = useState("");
@@ -1561,6 +1617,26 @@ export default function FleetManagement() {
       if (snap.exists()) setMyCompanyName(snap.data().companyName || null);
     }).catch(() => {});
   }, []);
+
+  // 오늘 기사 사진 로그 실시간 구독 + 신규 업로드 알림
+  const photoFirstLoad = useRef(true);
+  useEffect(() => {
+    const q = query(collection(db, "driver_photo_logs"), where("logDate", "==", todayDate));
+    return onSnapshot(q, snap => {
+      const photos = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      if (!photoFirstLoad.current) {
+        snap.docChanges().forEach(ch => {
+          if (ch.type === "added") {
+            const p = ch.doc.data();
+            setNewPhotoToast({ driverName: p.driverName || "-", carNo: p.carNo || "", actionType: p.actionType || "" });
+            setTimeout(() => setNewPhotoToast(null), 5000);
+          }
+        });
+      }
+      photoFirstLoad.current = false;
+      setTodayDriverPhotos(photos);
+    });
+  }, [todayDate]);
 
   // ── 구독 ──────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -2224,7 +2300,7 @@ export default function FleetManagement() {
                 <span style={{ fontSize: 13, color: "#6b7280", fontWeight: 600 }}>{filteredRows.length}명</span>
               </div>
               <div style={{ flex: 1, overflowY: "auto", overflowX: "auto" }}>
-                <DriverTable rows={filteredRows} selectedId={selected?.id} onSelect={handleSelect} onFocusMap={handleFocusMap} onContextMenu={handleContextMenu} />
+                <DriverTable rows={filteredRows} selectedId={selected?.id} onSelect={handleSelect} onFocusMap={handleFocusMap} onContextMenu={handleContextMenu} todayPhotos={todayDriverPhotos} onViewPhotos={setPhotoViewerPhotos} />
               </div>
             </div>
 
@@ -2396,6 +2472,54 @@ export default function FleetManagement() {
           </div>
         </>
       )}
+
+      {/* ─── 사진 뷰어 모달 ─── */}
+      {photoViewerPhotos && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.55)", zIndex:99999, display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}
+          onClick={() => setPhotoViewerPhotos(null)}>
+          <div style={{ background:"white", borderRadius:20, width:"100%", maxWidth:560, maxHeight:"85vh", overflow:"hidden", display:"flex", flexDirection:"column" }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ background:NAVY, padding:"16px 20px", display:"flex", alignItems:"center", justifyContent:"space-between", flexShrink:0 }}>
+              <div>
+                <div style={{ color:"white", fontWeight:800, fontSize:16 }}>{photoViewerPhotos.driverName} 첨부 사진</div>
+                <div style={{ color:"rgba(255,255,255,0.6)", fontSize:12, marginTop:2 }}>오늘 업로드된 사진 {photoViewerPhotos.photos.length}장</div>
+              </div>
+              <button onClick={() => setPhotoViewerPhotos(null)} style={{ background:"rgba(255,255,255,0.15)", border:"none", borderRadius:8, color:"white", fontSize:18, width:32, height:32, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>×</button>
+            </div>
+            <div style={{ overflowY:"auto", padding:20, flex:1 }}>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+                {photoViewerPhotos.photos.map(p => {
+                  const t = p.timestamp?.toDate?.() || (p.timestamp?.seconds ? new Date(p.timestamp.seconds * 1000) : null);
+                  return (
+                    <div key={p.id} style={{ borderRadius:12, overflow:"hidden", border:"1px solid #e5e7eb", boxShadow:"0 1px 4px rgba(0,0,0,0.06)" }}>
+                      <img src={p.imageBase64} alt={p.actionType} style={{ width:"100%", aspectRatio:"4/3", objectFit:"cover", display:"block" }} />
+                      <div style={{ padding:"8px 12px", background:"#f9fafb" }}>
+                        <div style={{ fontSize:12, fontWeight:700, color:NAVY }}>{p.actionType}</div>
+                        <div style={{ fontSize:11, color:"#9ca3af", marginTop:2 }}>{t ? `${String(t.getHours()).padStart(2,"0")}:${String(t.getMinutes()).padStart(2,"0")}` : "-"}</div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── 신규 사진 업로드 알림 토스트 ─── */}
+      {newPhotoToast && (
+        <div style={{ position:"fixed", top:20, left:"50%", transform:"translateX(-50%)", zIndex:999999, background:"linear-gradient(135deg, #1B2B4B 0%, #2d4a7a 100%)", borderRadius:16, boxShadow:"0 8px 32px rgba(0,0,0,0.25)", padding:"12px 20px", display:"flex", alignItems:"center", gap:12, minWidth:300, maxWidth:"90vw" }}>
+          <div style={{ width:36, height:36, borderRadius:"50%", background:"rgba(255,255,255,0.15)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+            <svg width="18" height="18" fill="none" stroke="white" strokeWidth="2" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+          </div>
+          <div style={{ flex:1 }}>
+            <div style={{ color:"white", fontWeight:700, fontSize:13 }}>사진 업로드</div>
+            <div style={{ color:"rgba(255,255,255,0.8)", fontSize:12, marginTop:2 }}>{newPhotoToast.driverName} ({newPhotoToast.carNo}) — {newPhotoToast.actionType}</div>
+          </div>
+          <button onClick={() => setNewPhotoToast(null)} style={{ background:"none", border:"none", color:"rgba(255,255,255,0.5)", fontSize:18, cursor:"pointer" }}>×</button>
+        </div>
+      )}
+
     </div>
   );
 }

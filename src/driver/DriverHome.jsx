@@ -339,6 +339,9 @@ export default function DriverHome() {
   const [locRequestSent, setLocRequestSent] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(() => { const n = new Date(); return { y: n.getFullYear(), m: n.getMonth() }; });
   const [calendarDayDetail, setCalendarDayDetail] = useState(null); // { dateStr, logs }
+  const [photoModal, setPhotoModal] = useState(null); // { nextStatus, actionLabel }
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const [todayPhotos, setTodayPhotos] = useState([]); // today's driver_photo_logs
   const driverRef = useRef(null);
   const posRef = useRef(null);
 
@@ -359,6 +362,15 @@ export default function DriverHome() {
     return onSnapshot(doc(db, "drivers", uid), (snap) => {
       if (snap.exists()) setDriver(snap.data());
     });
+  }, [uid]);
+
+  // 오늘 사진 업로드 현황 구독
+  useEffect(() => {
+    if (!uid) return;
+    const _td2 = new Date();
+    const todayDateStr = `${_td2.getFullYear()}-${String(_td2.getMonth()+1).padStart(2,"0")}-${String(_td2.getDate()).padStart(2,"0")}`;
+    const q = query(collection(db, "driver_photo_logs"), where("uid","==",uid), where("logDate","==",todayDateStr));
+    return onSnapshot(q, snap => setTodayPhotos(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
   }, [uid]);
 
   useEffect(() => {
@@ -524,8 +536,47 @@ export default function DriverHome() {
         }
       }
     }
+    // 상차완료 / 하차완료 → 사진 업로드 모달
+    if (action.status === "운행중" || action.status === "복귀중") {
+      setPhotoModal({ nextStatus: action.status, actionLabel: action.label });
+      return;
+    }
     updateStatus(action.status);
   }, [driver?.checkInLocation, companyDefaultLoc, pos, updateStatus]);
+
+  // 사진 업로드 처리
+  const handlePhotoUpload = useCallback(async (file) => {
+    if (!file || !uid) return;
+    setPhotoUploading(true);
+    try {
+      const reader = new FileReader();
+      const base64 = await new Promise((res, rej) => {
+        reader.onload = e => res(e.target.result);
+        reader.onerror = rej;
+        reader.readAsDataURL(file);
+      });
+      const _now = new Date();
+      const logDate = `${_now.getFullYear()}-${String(_now.getMonth()+1).padStart(2,"0")}-${String(_now.getDate()).padStart(2,"0")}`;
+      const actionType = photoModal.nextStatus === "운행중" ? "상차완료" : "하차완료";
+      await addDoc(collection(db, "driver_photo_logs"), {
+        uid,
+        driverName: driver?.name || "",
+        carNo: driver?.carNo || "",
+        actionType,
+        imageBase64: base64,
+        timestamp: serverTimestamp(),
+        logDate,
+        companyName: driver?.companyName || "",
+      });
+      showToast(`${actionType} 사진이 전송되었습니다`);
+      await updateStatus(photoModal.nextStatus);
+      setPhotoModal(null);
+    } catch (e) {
+      showToast("사진 전송 중 오류가 발생했습니다");
+    } finally {
+      setPhotoUploading(false);
+    }
+  }, [uid, driver, photoModal, updateStatus]);
 
   // 이전 상태로 되돌리기: 마지막 로그 삭제 후 이전 상태로 복원
   const handleUndoLastStatus = useCallback(async () => {
@@ -834,6 +885,29 @@ export default function DriverHome() {
               ))}
             </div>
           </div>
+
+          {/* 오늘 사진 업로드 현황 */}
+          {(() => {
+            const hasLoad = todayPhotos.some(p => p.actionType === "상차완료");
+            const hasDrop = todayPhotos.some(p => p.actionType === "하차완료");
+            return (
+              <div style={{ background: "white", borderRadius: 16, padding: "14px 16px", marginBottom: 14, boxShadow: "0 1px 6px rgba(0,0,0,0.06)", border: "1px solid #e5e7eb" }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", marginBottom: 10, letterSpacing: "0.05em" }}>오늘 사진 전송 현황</div>
+                <div style={{ display: "flex", gap: 10 }}>
+                  {[["상차완료", hasLoad], ["하차완료", hasDrop]].map(([label, sent]) => (
+                    <div key={label} style={{
+                      flex: 1, padding: "10px 12px", borderRadius: 10, textAlign: "center",
+                      background: sent ? "#f0fdf4" : "#fafafa",
+                      border: `1.5px solid ${sent ? "#86efac" : "#e5e7eb"}`,
+                    }}>
+                      <div style={{ fontSize: 11, color: sent ? "#15803d" : "#9ca3af", fontWeight: 700, marginBottom: 3 }}>{label}</div>
+                      <div style={{ fontSize: 13, fontWeight: 800, color: sent ? "#15803d" : "#6b7280" }}>{sent ? "전송완료" : "미전송"}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* 이전 상태로 되돌리기 */}
           {todayLogs.length > 0 && !driver.isFinalCheckout && (
@@ -1197,6 +1271,25 @@ export default function DriverHome() {
                           </div>
                         );
                       })}
+                      {/* 해당 날짜의 사진 */}
+                      {(() => {
+                        const dateStr = calendarDayDetail.dateStr;
+                        const dayPhotos = todayPhotos.filter(p => p.logDate === dateStr);
+                        if (!dayPhotos.length) return null;
+                        return (
+                          <div style={{ marginTop: 14 }}>
+                            <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", marginBottom:10, letterSpacing:"0.05em" }}>첨부 사진</div>
+                            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+                              {dayPhotos.map(p => (
+                                <div key={p.id} style={{ borderRadius:10, overflow:"hidden", border:"1px solid #e5e7eb" }}>
+                                  <img src={p.imageBase64} alt={p.actionType} style={{ width:"100%", aspectRatio:"4/3", objectFit:"cover" }} />
+                                  <div style={{ padding:"6px 8px", fontSize:11, fontWeight:700, color:"#1B2B4B", background:"#f9fafb" }}>{p.actionType}</div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
                   );
                 })()}
@@ -1306,6 +1399,58 @@ export default function DriverHome() {
                 })}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ─── 사진 업로드 모달 ─── */}
+      {photoModal && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.55)", zIndex:9999, display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
+          <div style={{ background:"white", borderRadius:"20px 20px 0 0", width:"100%", maxWidth:480, boxShadow:"0 -8px 32px rgba(0,0,0,0.25)", paddingBottom:"max(24px, env(safe-area-inset-bottom))" }}>
+            <div style={{ background:"#1B2B4B", padding:"18px 20px 16px", borderRadius:"20px 20px 0 0", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+              <div>
+                <div style={{ color:"white", fontWeight:800, fontSize:16 }}>{photoModal.actionLabel}</div>
+                <div style={{ color:"rgba(255,255,255,0.6)", fontSize:12, marginTop:2 }}>사진을 업로드해야 다음 단계로 이동합니다</div>
+              </div>
+            </div>
+            <div style={{ padding:"20px 20px 0" }}>
+              <div style={{ fontSize:13, color:"#374151", lineHeight:1.6, marginBottom:20 }}>
+                {photoModal.nextStatus === "운행중" ? "상차가 완료된 상태를 사진으로 남겨주세요." : "하차가 완료된 상태를 사진으로 남겨주세요."}<br />
+                <span style={{ fontSize:12, color:"#9ca3af" }}>관리자가 실시간으로 확인할 수 있습니다.</span>
+              </div>
+              <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+                {/* 카메라 직접 촬영 */}
+                <label style={{ display:"block", width:"100%", padding:"15px", borderRadius:14, background:"#1B2B4B", color:"white", fontSize:16, fontWeight:700, textAlign:"center", cursor: photoUploading ? "not-allowed" : "pointer", opacity: photoUploading ? 0.6 : 1, boxShadow:"0 4px 16px rgba(27,43,75,0.25)" }}>
+                  {photoUploading ? "업로드 중..." : "카메라로 촬영"}
+                  <input type="file" accept="image/*" capture="environment" style={{ display:"none" }} disabled={photoUploading}
+                    onChange={e => { const f = e.target.files?.[0]; if (f) handlePhotoUpload(f); e.target.value=""; }} />
+                </label>
+                {/* 앨범 선택 */}
+                <label style={{ display:"block", width:"100%", padding:"13px", borderRadius:14, background:"white", color:"#1B2B4B", fontSize:15, fontWeight:700, textAlign:"center", cursor: photoUploading ? "not-allowed" : "pointer", border:"1.5px solid #1B2B4B" }}>
+                  앨범에서 선택
+                  <input type="file" accept="image/*" style={{ display:"none" }} disabled={photoUploading}
+                    onChange={e => { const f = e.target.files?.[0]; if (f) handlePhotoUpload(f); e.target.value=""; }} />
+                </label>
+                {/* 건너뛰기 (경고 포함) */}
+                <button
+                  onClick={() => {
+                    if (window.confirm("사진을 업로드하지 않으면 기록이 남지 않습니다.\n정말 건너뛰시겠습니까?")) {
+                      updateStatus(photoModal.nextStatus);
+                      setPhotoModal(null);
+                    }
+                  }}
+                  disabled={photoUploading}
+                  style={{ width:"100%", padding:"12px", borderRadius:14, border:"1.5px solid #e5e7eb", background:"white", color:"#9ca3af", fontSize:14, fontWeight:600, cursor: photoUploading ? "not-allowed" : "pointer" }}
+                >
+                  사진 없이 건너뛰기
+                </button>
+              </div>
+            </div>
+            <div style={{ padding:"16px 20px 0" }}>
+              <div style={{ padding:"10px 14px", borderRadius:10, background:"#fef9c3", border:"1px solid #fde68a" }}>
+                <div style={{ fontSize:12, color:"#92400e", fontWeight:600 }}>⚠ 사진 없이 건너뛰면 해당 시점 사진 기록이 남지 않습니다.</div>
+              </div>
+            </div>
           </div>
         </div>
       )}

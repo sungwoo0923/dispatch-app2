@@ -14862,10 +14862,19 @@ const [quickRegPhone, setQuickRegPhone] = React.useState("");
       );
     }
 
-    // 필터 조건 적용
-    filterConditions.forEach(({field, value}) => {
-      if (field && value) data = data.filter(r => String(r[field] || "").includes(value));
-    });
+    // 필터 조건 적용 (같은 필드=OR, 다른 필드=AND, 제외조건=AND NOT)
+    if (filterConditions.length > 0) {
+      const includes = filterConditions.filter(c => !c.exclude && c.field && c.value);
+      const excludes = filterConditions.filter(c => c.exclude && c.field && c.value);
+      const incGroups = {};
+      includes.forEach(({field, value}) => { if (!incGroups[field]) incGroups[field] = []; incGroups[field].push(value); });
+      Object.entries(incGroups).forEach(([field, vals]) => {
+        data = data.filter(r => vals.some(v => String(r[field] || "").includes(v)));
+      });
+      excludes.forEach(({field, value}) => {
+        data = data.filter(r => !String(r[field] || "").includes(value));
+      });
+    }
 
  // 오류오더만 보기 필터
     if (filterErrorIds !== null) {
@@ -21128,11 +21137,16 @@ setConfirmChange(null);
               <div className="border-t border-gray-100"/>
               <div>
                 <div className="text-[11px] font-bold text-[#1B2B4B] uppercase tracking-wider mb-1">필터 조건</div>
-                <div className="text-[11px] text-gray-400 mb-3">조건을 추가하면 모두 만족하는 오더만 표시됩니다</div>
+                <div className="text-[11px] text-gray-400 mb-3">같은 항목 여러 조건 → OR, 다른 항목 → AND / 제외 조건으로 특정 값 제외 가능</div>
                 <div className="space-y-2 mb-3">
                   {tempFilterConditions.map((cond,idx)=>(
-                    <div key={idx} className="flex gap-2 items-center">
-                      <select className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.field} onChange={e=>{const n=[...tempFilterConditions];n[idx]={field:e.target.value,value:""};setTempFilterConditions(n);}}>
+                    <div key={idx} className="flex gap-1.5 items-center">
+                      <button
+                        className={`shrink-0 px-2 py-1.5 rounded-lg text-[11px] font-bold border transition ${cond.exclude?"border-red-300 bg-red-50 text-red-600":"border-[#1B2B4B]/30 bg-[#1B2B4B]/5 text-[#1B2B4B]"}`}
+                        onClick={()=>{const n=[...tempFilterConditions];n[idx]={...n[idx],exclude:!n[idx].exclude};setTempFilterConditions(n);}}>
+                        {cond.exclude?"제외":"포함"}
+                      </button>
+                      <select className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.field} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],field:e.target.value,value:""};setTempFilterConditions(n);}}>
                         <option value="">항목 선택</option>
                         {["배차방식","지급방식","배차상태","거래처명","차량종류","차량번호"].map(f=><option key={f} value={f}>{f}</option>)}
                       </select>
@@ -21148,7 +21162,7 @@ setConfirmChange(null);
                     </div>
                   ))}
                 </div>
-                <button className="w-full py-2 border-2 border-dashed border-gray-200 rounded-lg text-[12px] text-gray-400 hover:border-[#1B2B4B] hover:text-[#1B2B4B] transition" onClick={()=>setTempFilterConditions(prev=>[...prev,{field:"",value:""}])}>+ 조건 추가</button>
+                <button className="w-full py-2 border-2 border-dashed border-gray-200 rounded-lg text-[12px] text-gray-400 hover:border-[#1B2B4B] hover:text-[#1B2B4B] transition" onClick={()=>setTempFilterConditions(prev=>[...prev,{field:"",value:"",exclude:false}])}>+ 조건 추가</button>
               </div>
             </div>
             <div className="px-5 py-4 border-t border-gray-100 flex justify-between items-center shrink-0">
@@ -21165,8 +21179,8 @@ setConfirmChange(null);
   <div className="flex flex-wrap items-center gap-2 px-4 py-2 mb-2 bg-[#1B2B4B]/5 border border-[#1B2B4B]/20 rounded-xl">
     <span className="text-[11px] font-bold text-[#1B2B4B]">필터:</span>
     {filterConditions.map((cond, i) => (
-      <span key={i} className="flex items-center gap-1 px-2 py-0.5 bg-[#1B2B4B]/10 text-[#1B2B4B] text-[11px] rounded-full border border-[#1B2B4B]/20">
-        {cond.field} : {cond.value}
+      <span key={i} className={`flex items-center gap-1 px-2 py-0.5 text-[11px] rounded-full border ${cond.exclude?"bg-red-50 text-red-600 border-red-200":"bg-[#1B2B4B]/10 text-[#1B2B4B] border-[#1B2B4B]/20"}`}>
+        {cond.exclude && <span className="font-bold">제외</span>}{cond.field} : {cond.value}
         <button className="ml-0.5 hover:text-red-500 font-bold leading-none" onClick={()=>setFilterConditions(prev=>prev.filter((_,j)=>j!==i))}>×</button>
       </span>
     ))}
@@ -23744,10 +23758,19 @@ const filtered = React.useMemo(() => {
     data = data.filter(r => filterErrorIds.includes(r._id));
   }
 
-  // 필터 조건 적용
-  filterConditions.forEach(({field, value}) => {
-    if (field && value) data = data.filter(r => String(r[field] || "").includes(value));
-  });
+  // 필터 조건 적용 (같은 필드=OR, 다른 필드=AND, 제외조건=AND NOT)
+  if (filterConditions.length > 0) {
+    const includes = filterConditions.filter(c => !c.exclude && c.field && c.value);
+    const excludes = filterConditions.filter(c => c.exclude && c.field && c.value);
+    const incGroups = {};
+    includes.forEach(({field, value}) => { if (!incGroups[field]) incGroups[field] = []; incGroups[field].push(value); });
+    Object.entries(incGroups).forEach(([field, vals]) => {
+      data = data.filter(r => vals.some(v => String(r[field] || "").includes(v)));
+    });
+    excludes.forEach(({field, value}) => {
+      data = data.filter(r => !String(r[field] || "").includes(value));
+    });
+  }
 
   // =========================
   // 🔽 정렬
@@ -24356,8 +24379,8 @@ return (
         <div className="flex flex-wrap items-center gap-2 px-4 py-2 mb-2 bg-[#1B2B4B]/5 border border-[#1B2B4B]/20 rounded-xl">
           <span className="text-[11px] font-bold text-[#1B2B4B]">필터:</span>
           {filterConditions.map((cond, i) => (
-            <span key={i} className="flex items-center gap-1 px-2 py-0.5 bg-[#1B2B4B]/10 text-[#1B2B4B] text-[11px] rounded-full border border-[#1B2B4B]/20">
-              {cond.field} : {cond.value}
+            <span key={i} className={`flex items-center gap-1 px-2 py-0.5 text-[11px] rounded-full border ${cond.exclude?"bg-red-50 text-red-600 border-red-200":"bg-[#1B2B4B]/10 text-[#1B2B4B] border-[#1B2B4B]/20"}`}>
+              {cond.exclude && <span className="font-bold">제외</span>}{cond.field} : {cond.value}
               <button className="ml-0.5 hover:text-red-500 font-bold leading-none" onClick={()=>setFilterConditions(prev=>prev.filter((_,j)=>j!==i))}>×</button>
             </span>
           ))}
@@ -27800,11 +27823,16 @@ setCopyTarget(prev => ({
               <div className="border-t border-gray-100"/>
               <div>
                 <div className="text-[11px] font-bold text-[#1B2B4B] uppercase tracking-wider mb-1">필터 조건</div>
-                <div className="text-[11px] text-gray-400 mb-3">조건을 추가하면 모두 만족하는 오더만 표시됩니다</div>
+                <div className="text-[11px] text-gray-400 mb-3">같은 항목 여러 조건 → OR, 다른 항목 → AND / 제외 조건으로 특정 값 제외 가능</div>
                 <div className="space-y-2 mb-3">
                   {tempFilterConditions.map((cond,idx)=>(
-                    <div key={idx} className="flex gap-2 items-center">
-                      <select className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.field} onChange={e=>{const n=[...tempFilterConditions];n[idx]={field:e.target.value,value:""};setTempFilterConditions(n);}}>
+                    <div key={idx} className="flex gap-1.5 items-center">
+                      <button
+                        className={`shrink-0 px-2 py-1.5 rounded-lg text-[11px] font-bold border transition ${cond.exclude?"border-red-300 bg-red-50 text-red-600":"border-[#1B2B4B]/30 bg-[#1B2B4B]/5 text-[#1B2B4B]"}`}
+                        onClick={()=>{const n=[...tempFilterConditions];n[idx]={...n[idx],exclude:!n[idx].exclude};setTempFilterConditions(n);}}>
+                        {cond.exclude?"제외":"포함"}
+                      </button>
+                      <select className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.field} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],field:e.target.value,value:""};setTempFilterConditions(n);}}>
                         <option value="">항목 선택</option>
                         {["배차방식","지급방식","배차상태","거래처명","차량종류","차량번호"].map(f=><option key={f} value={f}>{f}</option>)}
                       </select>
@@ -27820,7 +27848,7 @@ setCopyTarget(prev => ({
                     </div>
                   ))}
                 </div>
-                <button className="w-full py-2 border-2 border-dashed border-gray-200 rounded-lg text-[12px] text-gray-400 hover:border-[#1B2B4B] hover:text-[#1B2B4B] transition" onClick={()=>setTempFilterConditions(prev=>[...prev,{field:"",value:""}])}>+ 조건 추가</button>
+                <button className="w-full py-2 border-2 border-dashed border-gray-200 rounded-lg text-[12px] text-gray-400 hover:border-[#1B2B4B] hover:text-[#1B2B4B] transition" onClick={()=>setTempFilterConditions(prev=>[...prev,{field:"",value:"",exclude:false}])}>+ 조건 추가</button>
               </div>
             </div>
             <div className="px-5 py-4 border-t border-gray-100 flex justify-between items-center shrink-0">
@@ -29300,12 +29328,8 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [] }) {
       // ── 매출 분류 ──
       if (client.includes("후레쉬물류")) {
         addRow("rev_fresh", month, sale, 0);
-      } else if (bm === "인성") {
-        addRow("rev_auto", month, sale, 0);
       } else if (pay === "선불" || pay === "착불") {
         addRow("rev_cash", month, Math.max(0, sale - cost), 0);
-      } else if (bm === "24시" || bm === "24시콜" || bm === "고정기사") {
-        addRow("rev_24", month, sale, 0);
       } else {
         addRow("rev_freight", month, sale, 0);
       }
@@ -29334,8 +29358,8 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [] }) {
 
   // 월별 집계 함수들
   const totalRevenue = (month) =>
-    autoVal("rev_freight", month) + autoVal("rev_24", month) + autoVal("rev_auto", month) +
-    autoVal("rev_cash", month) + autoVal("rev_fresh", month) + manVal("rev_etc", month);
+    autoVal("rev_freight", month) + autoVal("rev_cash", month) +
+    autoVal("rev_fresh", month) + manVal("rev_etc", month);
 
   const totalCost = (month) =>
     autoVal("cost_freight", month, "cost") + autoVal("cost_auto", month, "cost") +
@@ -29710,9 +29734,7 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [] }) {
             <SectionHeader label="매출" bg="#1B2B4B" />
             <SubHeader label="구분" />
             <DataRow label="화물주선 매출" rowKey="rev_freight" isAuto field="sale" indent={0} />
-            <DataRow label="24시콜 매출" rowKey="rev_24" isAuto field="sale" />
-            <DataRow label="오토바이(인성) 매출" rowKey="rev_auto" isAuto field="sale" />
-            <DataRow label="선착불 매출" rowKey="rev_cash" isAuto field="sale" />
+            <DataRow label="선착불 수수료" rowKey="rev_cash" isAuto field="sale" />
             <DataRow label="후레쉬물류 매출" rowKey="rev_fresh" isAuto field="sale" />
             <DataRow label="기타 매출" rowKey="rev_etc" />
             <TotalRow label="매출액 합계" calcFn={totalRevenue} />
