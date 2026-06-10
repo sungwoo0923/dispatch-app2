@@ -221,53 +221,52 @@ function useGpsTracking(uid, driverData) {
 
   useEffect(() => {
     if (!uid) return;
-    const watchId = navigator.geolocation.watchPosition(
-      async (p) => {
-        const { latitude: lat, longitude: lng, speed, accuracy } = p.coords;
-        setPos({ lat, lng, speed, accuracy });
+    let watchId = null;
 
-        // Ignore readings with poor accuracy
-        if (accuracy > 100) return;
-
-        const prev = lastPosRef.current;
-        let distDelta = 0;
-        if (prev) distDelta = calcDist(prev.lat, prev.lng, lat, lng);
-        lastPosRef.current = { lat, lng };
-
-        const updateData = {
-          location: { lat, lng },
+    // GPS 콜백 (watchPosition + getCurrentPosition 공통)
+    const gpsCallback = async (p) => {
+      const { latitude: lat, longitude: lng, speed, accuracy } = p.coords;
+      setPos({ lat, lng, speed, accuracy });
+      if (accuracy > 100) return;
+      const prev = lastPosRef.current;
+      let distDelta = 0;
+      if (prev) distDelta = calcDist(prev.lat, prev.lng, lat, lng);
+      lastPosRef.current = { lat, lng };
+      const updateData = {
+        location: { lat, lng },
+        speed: speed ? Math.round(speed * 3.6) : 0,
+        updatedAt: serverTimestamp(),
+      };
+      if (distDelta > 0.01) {
+        totalDistRef.current += distDelta;
+        updateData.totalDistance = totalDistRef.current;
+      }
+      const lastStore = lastGpsStoreRef.current;
+      const storeDelta = lastStore ? calcDist(lastStore.lat, lastStore.lng, lat, lng) : 999;
+      const nowMs = Date.now();
+      const timeSinceLast = nowMs - lastGpsTimeRef.current;
+      if (storeDelta > 0.05 || timeSinceLast >= 30000) {
+        lastGpsStoreRef.current = { lat, lng };
+        lastGpsTimeRef.current = nowMs;
+        addDoc(collection(db, "gps_tracks"), {
+          driverId: uid, lat, lng,
           speed: speed ? Math.round(speed * 3.6) : 0,
-          updatedAt: serverTimestamp(),
-        };
+          timestamp: serverTimestamp(), date: kstDateStr(),
+        }).catch(() => {});
+      }
+      try { await updateDoc(doc(db, "drivers", uid), updateData); } catch (_) {}
+    };
 
-        // Accumulate distance using ref (not stale driverData)
-        if (distDelta > 0.01) {
-          totalDistRef.current += distDelta;
-          updateData.totalDistance = totalDistRef.current;
-        }
+    const startWatch = () => {
+      if (watchId != null) navigator.geolocation.clearWatch(watchId);
+      watchId = navigator.geolocation.watchPosition(
+        gpsCallback,
+        (err) => { if (err.code === 1) setPermissionDenied(true); },
+        { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }
+      );
+    };
 
-        // Store GPS waypoint every 50 m OR every 30 s for real-time path visualization
-        const lastStore = lastGpsStoreRef.current;
-        const storeDelta = lastStore ? calcDist(lastStore.lat, lastStore.lng, lat, lng) : 999;
-        const nowMs = Date.now();
-        const timeSinceLast = nowMs - lastGpsTimeRef.current;
-        if (storeDelta > 0.05 || timeSinceLast >= 30000) {
-          lastGpsStoreRef.current = { lat, lng };
-          lastGpsTimeRef.current = nowMs;
-          addDoc(collection(db, "gps_tracks"), {
-            driverId: uid,
-            lat, lng,
-            speed: speed ? Math.round(speed * 3.6) : 0,
-            timestamp: serverTimestamp(),
-            date: kstDateStr(),
-          }).catch(() => {});
-        }
-
-        try { await updateDoc(doc(db, "drivers", uid), updateData); } catch (_) {}
-      },
-      (err) => { if (err.code === 1) setPermissionDenied(true); },
-      { enableHighAccuracy: true, maximumAge: 15000, timeout: 20000 }
-    );
+    startWatch();
 
     // 30초마다 위치 강제 업데이트 (정지 중에도 최신 updatedAt 유지)
     const forceInterval = setInterval(() => {
@@ -280,9 +279,36 @@ function useGpsTracking(uid, driverData) {
       }).catch(() => {});
     }, 30000);
 
+    // 백그라운드→포그라운드 복귀 시 GPS 즉시 재시작
+    const handleVisibility = () => {
+      if (document.visibilityState !== "visible") return;
+      startWatch();
+      navigator.geolocation.getCurrentPosition(
+        async (p) => {
+          const { latitude: lat, longitude: lng, speed, accuracy } = p.coords;
+          setPos({ lat, lng, speed, accuracy });
+          if (accuracy <= 100) {
+            lastPosRef.current = { lat, lng };
+            try {
+              await updateDoc(doc(db, "drivers", uid), {
+                location: { lat, lng },
+                speed: speed ? Math.round(speed * 3.6) : 0,
+                updatedAt: serverTimestamp(),
+                active: true,
+              });
+            } catch (_) {}
+          }
+        },
+        () => {},
+        { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
+      );
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+
     return () => {
-      navigator.geolocation.clearWatch(watchId);
+      if (watchId != null) navigator.geolocation.clearWatch(watchId);
       clearInterval(forceInterval);
+      document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, [uid]);
 

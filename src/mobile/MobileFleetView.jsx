@@ -61,21 +61,26 @@ function MapRecenter({ center }) {
     const key = center._t ? `${center.lat},${center.lng},${center._t}` : `${center.lat},${center.lng}`;
     if (prev.current === key) return;
     prev.current = key;
-    map.setView([center.lat, center.lng], 14, { animate: true });
+    if (center._t) {
+      // 실시간 추적: zoom 변경 없이 부드럽게 이동
+      map.panTo([center.lat, center.lng], { animate: true, duration: 0.8 });
+    } else {
+      map.setView([center.lat, center.lng], 14, { animate: true });
+    }
   }, [center, map]);
   return null;
 }
 
-function FitPath({ points }) {
+function FitPath({ points, resetKey }) {
   const map = useMap();
-  const prevLen = useRef(0);
+  const fittedKeyRef = useRef(null);
   useEffect(() => {
     if (points.length < 2) return;
-    if (points.length === prevLen.current) return;
-    prevLen.current = points.length;
+    if (fittedKeyRef.current === resetKey) return; // 같은 기사 선택 중엔 재조정 안 함
+    fittedKeyRef.current = resetKey;
     const bounds = L.latLngBounds(points.map(p => [p.lat, p.lng]));
-    map.fitBounds(bounds, { padding: [30, 50], maxZoom: 16, animate: true });
-  }, [points, map]);
+    map.fitBounds(bounds, { padding: [30, 50], maxZoom: 15, animate: true });
+  }, [points, map, resetKey]);
   return null;
 }
 
@@ -583,7 +588,7 @@ export default function MobileFleetView() {
               style={{ height: "100%", width: "100%" }}
             >
               <MapRecenter center={mapCenter || mapSelected?.location} />
-              {displayPath.length >= 2 && <FitPath points={displayPath} />}
+              {displayPath.length >= 2 && <FitPath points={displayPath} resetKey={mapSelected?.id} />}
               <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap" />
 
               {/* 실제 도로 경로 선 */}
