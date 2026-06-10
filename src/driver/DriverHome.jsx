@@ -337,6 +337,8 @@ export default function DriverHome() {
   const [checkinWarning, setCheckinWarning] = useState(null);
   const [collisionAlert, setCollisionAlert] = useState(null);
   const [locRequestSent, setLocRequestSent] = useState(false);
+  const [calendarMonth, setCalendarMonth] = useState(() => { const n = new Date(); return { y: n.getFullYear(), m: n.getMonth() }; });
+  const [calendarDayDetail, setCalendarDayDetail] = useState(null); // { dateStr, logs }
   const driverRef = useRef(null);
   const posRef = useRef(null);
 
@@ -1046,6 +1048,161 @@ export default function DriverHome() {
               <div style={{ fontSize:13, color:"#9ca3af" }}>GPS 신호가 필요합니다</div>
             )}
           </div>
+
+          {/* 누적 통계 */}
+          {(() => {
+            const allSessions = [];
+            let checkIn = null;
+            const sorted = [...allLogs].sort((a,b)=>(a.timestamp?.toDate?.()?.getTime()||0)-(b.timestamp?.toDate?.()?.getTime()||0));
+            sorted.forEach(l => {
+              const s = l.status || l.mainStatus || "";
+              if (s === "출근") checkIn = l.timestamp?.toDate?.();
+              if ((s === "최종퇴근" || s === "퇴근") && checkIn) {
+                const out = l.timestamp?.toDate?.();
+                if (out) allSessions.push(out.getTime() - checkIn.getTime());
+                if (s === "최종퇴근") checkIn = null;
+              }
+            });
+            const totalWorkMs = allSessions.reduce((a,b)=>a+b, 0);
+            const workDays = new Set(sorted.filter(l=>(l.status||l.mainStatus)==="출근").map(l=>{ const t=l.timestamp?.toDate?.(); return t?kstDateStr(t):""; })).size;
+            return (
+              <div style={{ background:"white", borderRadius:16, padding:"20px", marginTop:12, boxShadow:"0 1px 6px rgba(0,0,0,0.06)", border:"1px solid #e5e7eb" }}>
+                <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", marginBottom:14, letterSpacing:"0.05em" }}>누적 통계</div>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+                  {[
+                    ["누적 출근일", `${workDays}일`],
+                    ["총 근무시간", totalWorkMs > 0 ? formatDuration(totalWorkMs) : "--"],
+                  ].map(([label, value]) => (
+                    <div key={label} style={{ textAlign:"center", padding:"12px 8px", background:"#f9fafb", borderRadius:10 }}>
+                      <div style={{ fontSize:18, fontWeight:800, color:"#1B2B4B" }}>{value}</div>
+                      <div style={{ fontSize:10, color:"#9ca3af", marginTop:3, fontWeight:600 }}>{label}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* 운행일지 달력 */}
+          {(() => {
+            const { y, m } = calendarMonth;
+            const daysInMonth = new Date(y, m + 1, 0).getDate();
+            const firstDay = new Date(y, m, 1).getDay();
+            // 출근한 날짜 집합
+            const checkinDates = new Set(
+              allLogs
+                .filter(l => (l.status || l.mainStatus) === "출근")
+                .map(l => { const t = l.timestamp?.toDate?.(); return t ? kstDateStr(t) : ""; })
+                .filter(Boolean)
+            );
+            // 각 날짜의 로그 그룹
+            const logsByDate = {};
+            allLogs.forEach(l => {
+              const t = l.timestamp?.toDate?.();
+              if (!t) return;
+              const ds = kstDateStr(t);
+              if (!logsByDate[ds]) logsByDate[ds] = [];
+              logsByDate[ds].push(l);
+            });
+            const DAYS = ["일","월","화","수","목","금","토"];
+            return (
+              <div style={{ background:"white", borderRadius:16, padding:"20px", marginTop:12, boxShadow:"0 1px 6px rgba(0,0,0,0.06)", border:"1px solid #e5e7eb" }}>
+                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}>
+                  <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", letterSpacing:"0.05em" }}>운행일지</div>
+                  <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                    <button onClick={() => setCalendarMonth(({y,m}) => m===0 ? {y:y-1,m:11} : {y,m:m-1})} style={{ background:"none", border:"1px solid #e5e7eb", borderRadius:7, padding:"3px 8px", fontSize:13, cursor:"pointer", color:"#374151" }}>‹</button>
+                    <span style={{ fontSize:13, fontWeight:700, color:"#1B2B4B", minWidth:72, textAlign:"center" }}>{y}년 {m+1}월</span>
+                    <button onClick={() => setCalendarMonth(({y,m}) => m===11 ? {y:y+1,m:0} : {y,m:m+1})} style={{ background:"none", border:"1px solid #e5e7eb", borderRadius:7, padding:"3px 8px", fontSize:13, cursor:"pointer", color:"#374151" }}>›</button>
+                  </div>
+                </div>
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(7, 1fr)", gap:2, marginBottom:8 }}>
+                  {DAYS.map(d => <div key={d} style={{ textAlign:"center", fontSize:11, fontWeight:700, color:"#9ca3af", padding:"4px 0" }}>{d}</div>)}
+                </div>
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(7, 1fr)", gap:3 }}>
+                  {Array(firstDay).fill(null).map((_,i) => <div key={`e${i}`} />)}
+                  {Array.from({length: daysInMonth}, (_,i) => {
+                    const day = i + 1;
+                    const ds = `${y}-${String(m+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+                    const hasCheckin = checkinDates.has(ds);
+                    const isToday = ds === todayStr;
+                    return (
+                      <button
+                        key={ds}
+                        onClick={() => hasCheckin && setCalendarDayDetail({ dateStr: ds, logs: (logsByDate[ds] || []).sort((a,b)=>(a.timestamp?.toDate?.()?.getTime()||0)-(b.timestamp?.toDate?.()?.getTime()||0)) })}
+                        style={{
+                          aspectRatio:"1", borderRadius:8, border:"none",
+                          background: hasCheckin ? "#1B2B4B" : isToday ? "#f0f4f8" : "transparent",
+                          color: hasCheckin ? "white" : isToday ? "#1B2B4B" : "#374151",
+                          fontSize:13, fontWeight: hasCheckin||isToday ? 700 : 400,
+                          cursor: hasCheckin ? "pointer" : "default",
+                          display:"flex", alignItems:"center", justifyContent:"center",
+                          outline: isToday && !hasCheckin ? "1.5px solid #1B2B4B" : "none",
+                        }}
+                      >
+                        {day}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div style={{ fontSize:10, color:"#9ca3af", marginTop:10, textAlign:"center" }}>
+                  출근한 날짜를 탭하면 상세 기록을 볼 수 있습니다
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* 달력 날짜 상세 팝업 */}
+          {calendarDayDetail && (
+            <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.45)", zIndex:9998, display:"flex", alignItems:"flex-end", justifyContent:"center" }} onClick={() => setCalendarDayDetail(null)}>
+              <div style={{ background:"white", borderRadius:"20px 20px 0 0", padding:"0 0 32px", width:"100%", maxWidth:480, boxShadow:"0 -8px 32px rgba(0,0,0,0.2)", maxHeight:"80vh", overflowY:"auto" }} onClick={e => e.stopPropagation()}>
+                <div style={{ background:"#1B2B4B", padding:"18px 20px 16px", borderRadius:"20px 20px 0 0", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+                  <div style={{ color:"white", fontWeight:800, fontSize:16 }}>{calendarDayDetail.dateStr}</div>
+                  <button onClick={() => setCalendarDayDetail(null)} style={{ background:"none", border:"none", color:"rgba(255,255,255,0.5)", fontSize:22, cursor:"pointer", lineHeight:1 }}>×</button>
+                </div>
+                {(() => {
+                  const logs = calendarDayDetail.logs;
+                  let checkIn=null, checkOut=null, tripCount=0;
+                  logs.forEach(l => {
+                    const s = l.status || l.mainStatus || "";
+                    const t = l.timestamp?.toDate?.();
+                    if (s==="출근" && !checkIn) checkIn=t;
+                    if (s==="최종퇴근" || s==="퇴근") checkOut=t;
+                    if (s==="운행중") tripCount++;
+                  });
+                  const workMs = checkIn && checkOut ? checkOut.getTime()-checkIn.getTime() : (checkIn ? Date.now()-checkIn.getTime() : 0);
+                  return (
+                    <div style={{ padding:"16px" }}>
+                      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:16 }}>
+                        {[
+                          ["출근 시각", checkIn ? formatTime(checkIn) : "--"],
+                          ["퇴근 시각", checkOut ? formatTime(checkOut) : (checkIn ? "근무중" : "--")],
+                          ["근무 시간", workMs > 0 ? formatDuration(workMs) : "--"],
+                          ["운행 횟수", `${tripCount}회`],
+                        ].map(([label, value]) => (
+                          <div key={label} style={{ background:"#f9fafb", borderRadius:10, padding:"12px", textAlign:"center" }}>
+                            <div style={{ fontSize:16, fontWeight:800, color:"#1B2B4B" }}>{value}</div>
+                            <div style={{ fontSize:10, color:"#9ca3af", marginTop:3, fontWeight:600 }}>{label}</div>
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", marginBottom:10, letterSpacing:"0.05em" }}>상태 기록</div>
+                      {logs.map((log, i) => {
+                        const t = log.timestamp?.toDate?.();
+                        const cfg = STATUS_CONFIG[log.status] || STATUS_CONFIG["대기"];
+                        return (
+                          <div key={log.id || i} style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 0", borderBottom: i<logs.length-1?"1px solid #f3f4f6":"none" }}>
+                            <div style={{ width:8, height:8, borderRadius:"50%", background:cfg.color, flexShrink:0 }} />
+                            <div style={{ flex:1, fontSize:13, fontWeight:700, color:"#1B2B4B" }}>{log.status}</div>
+                            <div style={{ fontSize:12, color:"#9ca3af" }}>{t ? formatTime(t) : "--"}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+          )}
 
           <div style={{ background: "#fef3f2", borderRadius: 16, padding: "16px 20px", marginTop: 12, border: "1px solid #fecaca" }}>
             <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 10 }}>문제가 발생했을 때 로그아웃 후 재로그인하세요.</div>

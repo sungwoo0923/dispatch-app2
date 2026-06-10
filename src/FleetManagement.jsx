@@ -38,6 +38,7 @@ const TMAP_KEY = "rmzwkLwH9N4i9ayxDj9GR6l8hyFDaEk52ZQs4yer";
 
 function resolveTs(ts) {
   if (!ts) return null;
+  if (ts instanceof Date) return ts;
   if (ts.toDate) return ts.toDate();
   if (ts.seconds) return new Date(ts.seconds * 1000);
   if (typeof ts === "number") return new Date(ts);

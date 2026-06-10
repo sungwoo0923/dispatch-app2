@@ -20641,11 +20641,11 @@ setConfirmChange(null);
       {/* ===================== 📤 업체 전달 상태 변경 팝업 ===================== */}
       {deliveryConfirm && (
         <div
-          className="fixed inset-0 bg-black/60 flex items-center justify-center z-[100001]"
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100001]"
           tabIndex={-1}
-          ref={(el) => el && el.focus()}
+          ref={(el) => { if (el) setTimeout(() => el.focus(), 0); }}
           onKeyDown={(e) => {
-            if (e.key === "Escape") setDeliveryConfirm(null);
+            if (e.key === "Escape") { e.preventDefault(); setDeliveryConfirm(null); return; }
             if (e.key === "Enter") {
               e.preventDefault();
               const sender = auth?.currentUser?.email ?? auth?.currentUser?.uid ?? "unknown";
@@ -20662,64 +20662,45 @@ setConfirmChange(null);
             }
           }}
         >
-          <div className="bg-[#1B2B4B] rounded-2xl overflow-hidden w-[320px] shadow-2xl">
-            {/* 헤더 */}
-            <div className="px-5 py-4 flex items-center justify-between border-b border-white/10">
-              <div className="flex items-center gap-2">
-                <span className="text-white font-bold text-[14px]">
-                  {deliveryConfirm.reason === "copy" ? "복사 완료" : "전달상태 변경"}
-                </span>
+          <div className="bg-white rounded-2xl shadow-2xl w-[360px] overflow-hidden">
+            <div className="bg-[#1B2B4B] px-5 py-4">
+              <h3 className="text-white font-bold text-[15px]">
+                {deliveryConfirm.reason === "copy" ? "복사 완료" : "전달상태 변경"}
+              </h3>
+            </div>
+            <div className="p-5">
+              <div className="bg-gray-50 rounded-xl px-4 py-3 mb-5 border border-gray-100">
+                {deliveryConfirm.reason === "copy" ? (
+                  <div className="text-[13px] text-gray-700">전달상태를 <span className="font-bold text-[#1B2B4B]">전달완료</span>로 변경할까요?</div>
+                ) : (
+                  <>
+                    <div className="text-[12px] font-semibold text-gray-500 mb-1">업체전달상태</div>
+                    <div className="text-[13px] text-gray-800">
+                      <span className="text-gray-500">{String(deliveryConfirm.before || "미전달")}</span>
+                      <span className="mx-2 text-gray-300">→</span>
+                      <span className="font-bold text-[#1B2B4B]">{String(deliveryConfirm.after || "없음")}</span>
+                    </div>
+                  </>
+                )}
               </div>
-              <button className="text-white/40 hover:text-white text-lg" onClick={() => setDeliveryConfirm(null)}>✕</button>
-            </div>
-            {/* 본문 */}
-            <div className="px-5 py-5">
-              {deliveryConfirm.reason === "copy" ? (
-                <div className="text-center text-white/80 text-[14px]">
-                  전달상태를 <span className="text-emerald-400 font-bold">전달완료</span>로 변경할까요?
-                </div>
-              ) : (
-                <div className="flex items-center justify-center gap-3">
-                  <span className={`px-3 py-1.5 rounded-full text-[12px] font-bold ${
-                    deliveryConfirm.before === "전달완료"
-                      ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                      : "bg-white/10 text-white/60 border border-white/20"
-                  }`}>{deliveryConfirm.before || "미전달"}</span>
-                  <span className="text-white/40 text-lg">→</span>
-                  <span className={`px-3 py-1.5 rounded-full text-[12px] font-bold ${
-                    deliveryConfirm.after === "전달완료"
-                      ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                      : "bg-amber-500/20 text-amber-300 border border-amber-500/30"
-                  }`}>{deliveryConfirm.after}</span>
-                </div>
-              )}
-            </div>
-            {/* 버튼 */}
-            <div className="px-5 pb-5 flex gap-2">
-              <button
-                className="flex-1 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-semibold text-[13px] transition"
-                onClick={() => setDeliveryConfirm(null)}
-              >취소 (ESC)</button>
-              <button
-                className={`flex-1 py-2.5 rounded-xl font-bold text-[13px] transition text-white ${
-                  deliveryConfirm.after === "전달완료"
-                    ? "bg-emerald-500 hover:bg-emerald-400"
-                    : "bg-amber-500 hover:bg-amber-400"
-                }`}
-                onClick={() => {
-                  const sender = auth?.currentUser?.email ?? auth?.currentUser?.uid ?? "unknown";
-                  const patch = {
-                    업체전달상태: deliveryConfirm.after,
-                    업체전달일시: deliveryConfirm.after === "전달완료" ? Date.now() : null,
-                    업체전달방법: "수동",
-                    업체전달자: sender,
-                    __system: true,
-                  };
-                  setRows(prev => prev.map(r => r._id === deliveryConfirm.rowId ? { ...r, ...patch } : r));
-                  setDeliveryConfirm(null);
-                  patchDispatch(deliveryConfirm.rowId, patch).catch(console.error);
-                }}
-              >확인 (Enter)</button>
+              <div className="flex gap-2">
+                <button className="flex-1 py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 transition" onClick={() => setDeliveryConfirm(null)}>취소</button>
+                <button className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243d6a] transition"
+                  onClick={() => {
+                    const sender = auth?.currentUser?.email ?? auth?.currentUser?.uid ?? "unknown";
+                    const patch = {
+                      업체전달상태: deliveryConfirm.after,
+                      업체전달일시: deliveryConfirm.after === "전달완료" ? Date.now() : null,
+                      업체전달방법: "수동",
+                      업체전달자: sender,
+                      __system: true,
+                    };
+                    setRows(prev => prev.map(r => r._id === deliveryConfirm.rowId ? { ...r, ...patch } : r));
+                    setDeliveryConfirm(null);
+                    patchDispatch(deliveryConfirm.rowId, patch).catch(console.error);
+                  }}
+                >변경</button>
+              </div>
             </div>
           </div>
         </div>
@@ -29256,6 +29237,7 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [] }) {
   const [manualData, setManualData] = React.useState({});
   const [saving, setSaving] = React.useState(false);
   const [editingCell, setEditingCell] = React.useState(null); // { rowKey, month }
+  const [importPreview, setImportPreview] = React.useState(null); // { parsed, fileName }
 
   const toInt = (v) => parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
 
@@ -29406,8 +29388,8 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [] }) {
               setEditingCell(null);
             }}
             onKeyDown={(e) => {
-              if (e.key === "Enter") { updateCell(rowKey, month, e.target.value); setEditingCell(null); }
-              if (e.key === "Escape") setEditingCell(null);
+              if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); updateCell(rowKey, month, e.target.value); setEditingCell(null); }
+              if (e.key === "Escape") { e.preventDefault(); setEditingCell(null); }
             }}
           />
         </td>
@@ -29542,23 +29524,34 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [] }) {
   ];
 
   const LABEL_TO_KEY = {
+    // 매출
     "기타 매출": "rev_etc", "기타매출": "rev_etc",
+    // 원가
     "인건비": "cost_labor",
-    "임차료": "sga_rent",
+    // 판관비
+    "임차료": "sga_rent", "차량임차료": "sga_rent",
     "공과금(전기/수도/가스)": "sga_util", "공과금": "sga_util",
     "통신비": "sga_comm",
-    "보험료": "sga_ins",
-    "수선유지비": "sga_repair",
+    "보험료": "sga_ins", "보험료(산재+고용)": "sga_ins",
+    "수선유지비": "sga_repair", "차량유지비": "sga_repair",
     "유류비": "sga_fuel",
     "광고선전비": "sga_adv",
     "복리후생비": "sga_welfare",
-    "세금과공과": "sga_tax",
+    "세금과공과": "sga_tax", "세금과공과금": "sga_tax",
     "감가상각비": "sga_depr",
     "접대비": "sga_entertainment",
     "사무용품비": "sga_office",
-    "기타 판관비": "sga_misc", "기타판관비": "sga_misc",
+    "소모품비": "sga_misc", "기타 판관비": "sga_misc", "기타판관비": "sga_misc",
+    // 영업외
     "영업외 수익": "other_income", "영업외수익": "other_income",
     "영업외 비용": "other_expense", "영업외비용": "other_expense",
+  };
+  const KEY_TO_LABEL = {
+    rev_etc: "기타 매출", cost_labor: "인건비", sga_rent: "차량임차료", sga_util: "공과금",
+    sga_comm: "통신비", sga_ins: "보험료", sga_repair: "차량유지비", sga_fuel: "유류비",
+    sga_adv: "광고선전비", sga_welfare: "복리후생비", sga_tax: "세금과공과금",
+    sga_depr: "감가상각비", sga_entertainment: "접대비", sga_office: "사무용품비",
+    sga_misc: "소모품비/기타 판관비", other_income: "영업외 수익", other_expense: "영업외 비용",
   };
 
   const handleExcelUpload = async (file) => {
@@ -29569,51 +29562,89 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [] }) {
       const wb = XLSX.read(data, { type: "array" });
       const sheet = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
-      let headerRowIdx = 0;
-      for (let i = 0; i < Math.min(rows.length, 5); i++) {
-        const first = String(rows[i][0] || "").trim();
+      // Find header row — match "항 목", "항목", "구분", "rowKey" after stripping whitespace
+      let headerRowIdx = -1;
+      for (let i = 0; i < Math.min(rows.length, 15); i++) {
+        const first = String(rows[i][0] || "").replace(/\s+/g, "");
         if (["항목","구분","rowKey"].includes(first)) { headerRowIdx = i; break; }
       }
+      if (headerRowIdx < 0) { alert("헤더 행(항목/구분)을 찾을 수 없습니다.\n서식 다운로드 후 해당 형식으로 작성해 주세요."); return; }
       const headerRow = rows[headerRowIdx] || [];
       const monthCols = {};
       headerRow.forEach((cell, ci) => {
         const m = String(cell || "").trim().match(/^(\d{1,2})월$/);
         if (m) monthCols[ci] = String(parseInt(m[1])).padStart(2, "0");
       });
-      const updated = { ...manualData };
+      if (Object.keys(monthCols).length === 0) { alert("월 컬럼(1월~12월)을 찾을 수 없습니다. 헤더 형식을 확인하세요."); return; }
+      // Parse rows → preview items
+      const parsed = {}; // key → { month → value }
       for (let i = headerRowIdx + 1; i < rows.length; i++) {
         const r = rows[i];
         const label = String(r[0] || "").trim();
         if (!label) continue;
-        const key = LABEL_TO_KEY[label] || label;
-        if (!VALID_MANUAL_KEYS.includes(key)) continue;
-        if (!updated[key]) updated[key] = {};
+        const key = LABEL_TO_KEY[label] || null;
+        if (!key || !VALID_MANUAL_KEYS.includes(key)) continue;
+        if (!parsed[key]) parsed[key] = {};
         Object.entries(monthCols).forEach(([ci, month]) => {
-          updated[key][month] = parseInt(String(r[ci] || "0").replace(/[^\d-]/g, ""), 10) || 0;
+          const raw = r[ci];
+          if (raw === "" || raw == null) return; // skip empty cells
+          const v = parseFloat(String(raw).replace(/[^\d.-]/g, "")) || 0;
+          parsed[key][month] = Math.round(v);
         });
       }
-      setManualData(updated);
-      await saveManual(updated);
-      alert("엑셀 업로드 완료");
+      if (Object.keys(parsed).length === 0) { alert("업로드할 수 있는 항목을 찾지 못했습니다.\n서식 다운로드 후 올바른 항목명으로 입력해 주세요."); return; }
+      setImportPreview({ parsed, fileName: file.name });
     } catch (e) {
       console.error("엑셀 업로드 오류:", e);
       alert("파일 처리 중 오류가 발생했습니다: " + e.message);
     }
   };
 
+  const applyImport = async () => {
+    if (!importPreview) return;
+    const updated = { ...manualData };
+    Object.entries(importPreview.parsed).forEach(([key, months]) => {
+      if (!updated[key]) updated[key] = {};
+      Object.entries(months).forEach(([month, val]) => {
+        updated[key][month] = val;
+      });
+    });
+    setManualData(updated);
+    setImportPreview(null);
+    await saveManual(updated);
+  };
+
   const downloadTemplate = async () => {
     const XLSX = await import("xlsx");
     const header = ["항목", "1월","2월","3월","4월","5월","6월","7월","8월","9월","10월","11월","12월"];
-    const dataRows = [
-      ["기타 매출"],["인건비"],["임차료"],["공과금(전기/수도/가스)"],["통신비"],
-      ["보험료"],["수선유지비"],["유류비"],["광고선전비"],["복리후생비"],
-      ["세금과공과"],["감가상각비"],["접대비"],["사무용품비"],["기타 판관비"],
-      ["영업외 수익"],["영업외 비용"],
-    ].map(row => [...row, ...Array(12).fill(0)]);
-    const ws = XLSX.utils.aoa_to_sheet([header, ...dataRows]);
-    ws["!cols"] = [{ wch: 24 }, ...Array(12).fill({ wch: 10 })];
+    const sectionRows = [
+      ["[기타 매출]"],
+      ["기타 매출"],
+      ["[매출원가]"],
+      ["인건비"],
+      ["[판매비와 관리비]"],
+      ["복리후생비"],
+      ["접대비"],
+      ["세금과공과금"],
+      ["차량유지비"],
+      ["차량임차료"],
+      ["광고선전비"],
+      ["사무용품비"],
+      ["소모품비"],
+      ["통신비"],
+      ["보험료(산재+고용)"],
+      ["[영업외]"],
+      ["영업외 수익"],
+      ["영업외 비용"],
+    ].map(row => {
+      if (row[0].startsWith("[")) return [row[0], ...Array(12).fill("")]; // section header
+      return [...row, ...Array(12).fill("")];
+    });
+    const ws = XLSX.utils.aoa_to_sheet([header, ...sectionRows]);
+    ws["!cols"] = [{ wch: 26 }, ...Array(12).fill({ wch: 11 })];
+    // Bold section header rows
     const wbOut = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wbOut, ws, "손익보고서");
+    XLSX.utils.book_append_sheet(wbOut, ws, `${year}`);
     XLSX.writeFile(wbOut, `손익보고서_서식_${year}년.xlsx`);
   };
 
@@ -29700,6 +29731,66 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [] }) {
         </table>
       </div>
       <p className="mt-3 text-[11px] text-gray-400">* 자동: 배차완료 기준 청구운임(매출) / 기사운임(운반비) 자동 집계 &nbsp;|&nbsp; 빈 셀 클릭 시 수동 입력 (Firestore 저장)</p>
+
+      {/* ── 엑셀 업로드 미리보기 모달 ── */}
+      {importPreview && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]" onClick={() => setImportPreview(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-[680px] max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between shrink-0">
+              <div>
+                <div className="text-white font-bold text-[15px]">업로드 미리보기</div>
+                <div className="text-white/50 text-[12px] mt-0.5">{importPreview.fileName} · {Object.keys(importPreview.parsed).length}개 항목 인식됨</div>
+              </div>
+              <button className="text-white/50 hover:text-white text-xl leading-none" onClick={() => setImportPreview(null)}>×</button>
+            </div>
+            <div className="overflow-y-auto flex-1 p-5">
+              <table className="w-full text-[12px] border-collapse">
+                <thead>
+                  <tr className="bg-gray-50">
+                    <th className="text-left px-3 py-2 border border-gray-200 font-semibold text-gray-600 w-[160px]">항목</th>
+                    {MONTH_LABELS.map((m, i) => (
+                      <th key={m} className="px-1 py-2 border border-gray-200 font-semibold text-gray-600 text-center w-[44px]">{m}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {VALID_MANUAL_KEYS.map(key => {
+                    const importedRow = importPreview.parsed[key];
+                    if (!importedRow) return null;
+                    const currentRow = manualData[key] || {};
+                    const hasDiff = MONTHS.some(m => (importedRow[m] ?? null) !== null && importedRow[m] !== (currentRow[m] || 0));
+                    return (
+                      <tr key={key} className={hasDiff ? "bg-blue-50" : ""}>
+                        <td className="px-3 py-1.5 border border-gray-100 font-semibold text-gray-700">{KEY_TO_LABEL[key] || key}</td>
+                        {MONTHS.map(m => {
+                          const imported = importedRow[m] ?? null;
+                          const current = currentRow[m] || 0;
+                          const changed = imported !== null && imported !== current;
+                          return (
+                            <td key={m} className={`px-1 py-1.5 border border-gray-100 text-right ${changed ? "text-[#1B2B4B] font-bold" : "text-gray-400"}`}>
+                              {imported !== null ? (
+                                <span>
+                                  {changed && current !== 0 && <span className="text-gray-300 line-through text-[10px] block">{current.toLocaleString()}</span>}
+                                  <span>{imported !== 0 ? imported.toLocaleString() : "–"}</span>
+                                </span>
+                              ) : ""}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  }).filter(Boolean)}
+                </tbody>
+              </table>
+              <p className="text-[11px] text-gray-400 mt-3">파란색 배경 = 변경되는 항목 · 굵은 글씨 = 현재 값과 다른 항목 · 취소선 = 기존 값</p>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-100 flex gap-3 justify-end shrink-0">
+              <button className="px-5 py-2 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-600 hover:bg-gray-50" onClick={() => setImportPreview(null)}>취소</button>
+              <button className="px-5 py-2 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243d6a]" onClick={applyImport}>적용</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
