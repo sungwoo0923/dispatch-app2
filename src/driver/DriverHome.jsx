@@ -342,6 +342,7 @@ export default function DriverHome() {
   const [photoModal, setPhotoModal] = useState(null); // { nextStatus, actionLabel }
   const [photoUploading, setPhotoUploading] = useState(false);
   const [todayPhotos, setTodayPhotos] = useState([]); // today's driver_photo_logs
+  const [cargoTemp, setCargoTemp] = useState(null); // { temperature, humidity, updatedAt }
   const driverRef = useRef(null);
   const posRef = useRef(null);
 
@@ -371,6 +372,14 @@ export default function DriverHome() {
     const todayDateStr = `${_td2.getFullYear()}-${String(_td2.getMonth()+1).padStart(2,"0")}-${String(_td2.getDate()).padStart(2,"0")}`;
     const q = query(collection(db, "driver_photo_logs"), where("uid","==",uid), where("logDate","==",todayDateStr));
     return onSnapshot(q, snap => setTodayPhotos(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+  }, [uid]);
+
+  // 적재함 온도 구독 (IoT 센서 연결 시 자동 수신)
+  useEffect(() => {
+    if (!uid) return;
+    return onSnapshot(doc(db, "cargo_temp", uid), snap => {
+      setCargoTemp(snap.exists() ? snap.data() : null);
+    }, () => {});
   }, [uid]);
 
   useEffect(() => {
@@ -549,11 +558,25 @@ export default function DriverHome() {
     if (!file || !uid) return;
     setPhotoUploading(true);
     try {
-      const reader = new FileReader();
+      // Compress image before storing (Canvas resize → JPEG 0.75, max 1200px)
       const base64 = await new Promise((res, rej) => {
-        reader.onload = e => res(e.target.result);
-        reader.onerror = rej;
-        reader.readAsDataURL(file);
+        const img = new Image();
+        const objUrl = URL.createObjectURL(file);
+        img.onload = () => {
+          URL.revokeObjectURL(objUrl);
+          const MAX = 1200;
+          let { width, height } = img;
+          if (width > MAX || height > MAX) {
+            if (width > height) { height = Math.round(height * MAX / width); width = MAX; }
+            else { width = Math.round(width * MAX / height); height = MAX; }
+          }
+          const canvas = document.createElement("canvas");
+          canvas.width = width; canvas.height = height;
+          canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+          res(canvas.toDataURL("image/jpeg", 0.75));
+        };
+        img.onerror = rej;
+        img.src = objUrl;
       });
       const _now = new Date();
       const logDate = `${_now.getFullYear()}-${String(_now.getMonth()+1).padStart(2,"0")}-${String(_now.getDate()).padStart(2,"0")}`;
@@ -891,17 +914,17 @@ export default function DriverHome() {
             const hasLoad = todayPhotos.some(p => p.actionType === "상차완료");
             const hasDrop = todayPhotos.some(p => p.actionType === "하차완료");
             return (
-              <div style={{ background: "white", borderRadius: 16, padding: "14px 16px", marginBottom: 14, boxShadow: "0 1px 6px rgba(0,0,0,0.06)", border: "1px solid #e5e7eb" }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", marginBottom: 10, letterSpacing: "0.05em" }}>오늘 사진 전송 현황</div>
+              <div style={{ background: "#1B2B4B", borderRadius: 16, padding: "14px 16px", marginBottom: 14, boxShadow: "0 4px 16px rgba(27,43,75,0.18)" }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.5)", marginBottom: 10, letterSpacing: "0.06em" }}>오늘 사진 전송 현황</div>
                 <div style={{ display: "flex", gap: 10 }}>
                   {[["상차완료", hasLoad], ["하차완료", hasDrop]].map(([label, sent]) => (
                     <div key={label} style={{
                       flex: 1, padding: "10px 12px", borderRadius: 10, textAlign: "center",
-                      background: sent ? "#f0fdf4" : "#fafafa",
-                      border: `1.5px solid ${sent ? "#86efac" : "#e5e7eb"}`,
+                      background: sent ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.06)",
+                      border: `1px solid ${sent ? "rgba(255,255,255,0.3)" : "rgba(255,255,255,0.1)"}`,
                     }}>
-                      <div style={{ fontSize: 11, color: sent ? "#15803d" : "#9ca3af", fontWeight: 700, marginBottom: 3 }}>{label}</div>
-                      <div style={{ fontSize: 13, fontWeight: 800, color: sent ? "#15803d" : "#6b7280" }}>{sent ? "전송완료" : "미전송"}</div>
+                      <div style={{ fontSize: 11, color: sent ? "rgba(255,255,255,0.7)" : "rgba(255,255,255,0.4)", fontWeight: 700, marginBottom: 3 }}>{label}</div>
+                      <div style={{ fontSize: 13, fontWeight: 800, color: sent ? "#ffffff" : "rgba(255,255,255,0.35)" }}>{sent ? "✓ 전송완료" : "미전송"}</div>
                     </div>
                   ))}
                 </div>
@@ -953,6 +976,62 @@ export default function DriverHome() {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ─── 탭: 온도 관제 ─── */}
+      {activeTab === "temperature" && (
+        <div style={{ padding: "16px" }}>
+          {/* 헤더 */}
+          <div style={{ background: "#1B2B4B", borderRadius: 16, padding: "16px 18px", marginBottom: 14, display: "flex", alignItems: "center", gap: 14 }}>
+            <div style={{ width: 44, height: 44, borderRadius: 12, background: "rgba(255,255,255,0.15)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <svg width="22" height="22" fill="none" stroke="white" strokeWidth="2" viewBox="0 0 24 24"><path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/></svg>
+            </div>
+            <div>
+              <div style={{ color: "white", fontWeight: 800, fontSize: 15 }}>적재함 온도</div>
+              <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 12, marginTop: 2 }}>IoT 센서 연결 시 실시간 표시</div>
+            </div>
+          </div>
+
+          {cargoTemp && cargoTemp.temperature != null ? (() => {
+            const temp = cargoTemp.temperature;
+            const updAt = cargoTemp.updatedAt?.toDate?.() || (cargoTemp.updatedAt?.seconds ? new Date(cargoTemp.updatedAt.seconds * 1000) : null);
+            const ago = updAt ? Math.round((Date.now() - updAt.getTime()) / 1000) : null;
+            const isOnline = ago != null && ago < 300;
+            let tempColor = "#1B2B4B", tempBg = "#f0f4ff";
+            if (temp <= -18) { tempColor = "#3b82f6"; tempBg = "#eff6ff"; }
+            else if (temp <= 0) { tempColor = "#06b6d4"; tempBg = "#ecfeff"; }
+            else if (temp <= 10) { tempColor = "#10b981"; tempBg = "#f0fdf4"; }
+            else if (temp > 25) { tempColor = "#ef4444"; tempBg = "#fef2f2"; }
+            return (
+              <div style={{ background: "white", borderRadius: 16, padding: "24px 20px", boxShadow: "0 1px 6px rgba(0,0,0,0.06)", border: `1.5px solid ${tempColor}30`, textAlign: "center", marginBottom: 14 }}>
+                <div style={{ fontSize: 11, color: "#9ca3af", fontWeight: 700, marginBottom: 6, letterSpacing: "0.05em" }}>현재 온도</div>
+                <div style={{ fontSize: 52, fontWeight: 900, color: tempColor, lineHeight: 1, marginBottom: 8 }}>
+                  {temp > 0 ? "+" : ""}{temp.toFixed(1)}°C
+                </div>
+                {cargoTemp.humidity != null && (
+                  <div style={{ fontSize: 13, color: "#6b7280", marginBottom: 8 }}>습도 {cargoTemp.humidity.toFixed(0)}%</div>
+                )}
+                <div style={{ fontSize: 11, color: isOnline ? "#10b981" : "#9ca3af", fontWeight: 600 }}>
+                  {isOnline ? `● 실시간 · ${ago}초 전 업데이트` : `● 오프라인 · ${updAt ? updAt.toLocaleTimeString("ko-KR") : "알 수 없음"}`}
+                </div>
+              </div>
+            );
+          })() : (
+            <div style={{ background: "white", borderRadius: 16, padding: "32px 20px", boxShadow: "0 1px 6px rgba(0,0,0,0.06)", border: "1px solid #e5e7eb", textAlign: "center", marginBottom: 14 }}>
+              <div style={{ fontSize: 32, marginBottom: 12 }}>🌡️</div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#374151", marginBottom: 6 }}>센서 미연결</div>
+              <div style={{ fontSize: 13, color: "#9ca3af", lineHeight: 1.6 }}>IoT 온도 센서가 설치되면<br/>여기에 적재함 온도가 표시됩니다</div>
+            </div>
+          )}
+
+          {/* 안내 */}
+          <div style={{ background: "#fffbeb", border: "1px solid #fcd34d", borderRadius: 12, padding: "14px 16px" }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#92400e", marginBottom: 6 }}>센서 연결 안내</div>
+            <div style={{ fontSize: 12, color: "#78350f", lineHeight: 1.7 }}>
+              Bluetooth 또는 WiFi 온도 센서 구매 후 차량에 부착하면 자동으로 연동됩니다. 관리자에게 문의하세요.
+            </div>
+          </div>
         </div>
       )}
 
@@ -1471,6 +1550,11 @@ export default function DriverHome() {
           { key: "logs", label: "운행기록", icon: (
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
+            </svg>
+          )},
+          { key: "temperature", label: "온도", icon: (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/>
             </svg>
           )},
           { key: "contacts", label: "연락처", icon: (

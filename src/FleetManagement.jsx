@@ -533,17 +533,22 @@ function DriverTable({ rows, selectedId, onSelect, onFocusMap, onContextMenu, to
               </td>
 
               {/* 첨부 사진 */}
-              <td style={{ padding: "11px 10px", whiteSpace: "nowrap" }}>
+              <td style={{ padding: "11px 10px", whiteSpace: "nowrap", textAlign: "center" }}>
                 {(() => {
                   const driverPhotos = todayPhotos.filter(p => p.uid === d.id);
                   if (!driverPhotos.length) return <span style={{ fontSize: 12, color: "#d1d5db" }}>–</span>;
                   return (
                     <button
                       onClick={e => { e.stopPropagation(); onViewPhotos?.({ driverName: d.이름, photos: driverPhotos }); }}
-                      style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 8px", borderRadius: 7, background: "#f0fdf4", border: "1px solid #86efac", color: "#15803d", fontSize: 12, fontWeight: 700, cursor: "pointer" }}
+                      style={{ position: "relative", display: "inline-flex", alignItems: "center", justifyContent: "center", width: 32, height: 32, borderRadius: 8, background: "transparent", border: "none", cursor: "pointer" }}
+                      title="사진 보기"
+                      onMouseEnter={e => e.currentTarget.style.background = "rgba(27,43,75,0.08)"}
+                      onMouseLeave={e => e.currentTarget.style.background = "transparent"}
                     >
-                      <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-                      {driverPhotos.length}장
+                      <svg width="16" height="16" fill="none" stroke={NAVY} strokeWidth="2" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                      <span style={{ position: "absolute", top: -4, right: -4, minWidth: 16, height: 16, background: "#059669", color: "white", fontSize: 9, fontWeight: 800, borderRadius: 999, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px", lineHeight: 1 }}>
+                        {driverPhotos.length}
+                      </span>
                     </button>
                   );
                 })()}
@@ -1058,6 +1063,7 @@ function HistoryTab({ drivers, defaultDriverId }) {
   const [gpsDist, setGpsDist] = useState(null);
   const [loading, setLoading] = useState(false);
   const [driverPhotos, setDriverPhotos] = useState([]); // photos for applied driver+date range
+  const [histPhotoLightbox, setHistPhotoLightbox] = useState(null); // { photos[], index, rotation }
 
   useEffect(() => {
     if (!applied) return;
@@ -1247,17 +1253,22 @@ function HistoryTab({ drivers, defaultDriverId }) {
               </div>
               {/* 해당 날짜 사진 첨부 */}
               {(() => {
-                const dayPhotos = driverPhotos.filter(p => p.logDate === dateStr);
+                const dayPhotos = driverPhotos.filter(p => p.logDate === dateKey);
                 if (!dayPhotos.length) return null;
                 return (
                   <div style={{ marginTop: 14 }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", marginBottom: 10, letterSpacing: "0.05em" }}>첨부 사진</div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", marginBottom: 10, letterSpacing: "0.05em" }}>첨부 사진 · 클릭하면 크게 봅니다</div>
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: 10 }}>
-                      {dayPhotos.map(p => {
+                      {dayPhotos.map((p, photoIdx) => {
                         const t = resolveTs(p.timestamp);
                         return (
-                          <div key={p.id} style={{ borderRadius: 10, overflow: "hidden", border: "1px solid #e5e7eb", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
-                            <img src={p.imageBase64} alt={p.actionType} style={{ width: "100%", aspectRatio: "4/3", objectFit: "cover", display: "block" }} />
+                          <div key={p.id} style={{ borderRadius: 10, overflow: "hidden", border: "1px solid #e5e7eb", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", cursor: "pointer" }}
+                            onClick={() => setHistPhotoLightbox({ photos: dayPhotos, index: photoIdx, rotation: 0 })}>
+                            <div style={{ position: "relative", overflow: "hidden" }}>
+                              <img src={p.imageBase64} alt={p.actionType} style={{ width: "100%", aspectRatio: "4/3", objectFit: "cover", display: "block", transition: "transform .2s" }}
+                                onMouseEnter={e => e.currentTarget.style.transform = "scale(1.05)"}
+                                onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"} />
+                            </div>
                             <div style={{ padding: "6px 10px", background: "#f9fafb" }}>
                               <div style={{ fontSize: 11, fontWeight: 700, color: NAVY }}>{p.actionType}</div>
                               <div style={{ fontSize: 10, color: "#9ca3af", marginTop: 1 }}>{t ? `${String(t.getHours()).padStart(2,"0")}:${String(t.getMinutes()).padStart(2,"0")}` : "-"}</div>
@@ -1273,6 +1284,61 @@ function HistoryTab({ drivers, defaultDriverId }) {
           ))}
         </>
       ))}
+
+      {/* HistoryTab 라이트박스 */}
+      {histPhotoLightbox && (() => {
+        const { photos, index, rotation } = histPhotoLightbox;
+        const p = photos[index];
+        const t = resolveTs(p.timestamp);
+        const handleDownload = () => {
+          const a = document.createElement("a");
+          a.href = p.imageBase64;
+          a.download = `${p.driverName || "driver"}_${p.actionType}_${t ? `${String(t.getHours()).padStart(2,"0")}${String(t.getMinutes()).padStart(2,"0")}` : index}.jpg`;
+          a.click();
+        };
+        return (
+          <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.92)", zIndex:299999, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center" }}
+            onClick={() => setHistPhotoLightbox(null)}>
+            <div style={{ position:"absolute", top:0, left:0, right:0, display:"flex", alignItems:"center", justifyContent:"space-between", padding:"16px 20px", background:"rgba(0,0,0,0.5)", zIndex:1 }}
+              onClick={e => e.stopPropagation()}>
+              <div>
+                <div style={{ color:"white", fontWeight:700, fontSize:14 }}>{p.driverName} — {p.actionType}</div>
+                <div style={{ color:"rgba(255,255,255,0.55)", fontSize:12, marginTop:2 }}>{t ? `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,"0")}-${String(t.getDate()).padStart(2,"0")} ${String(t.getHours()).padStart(2,"0")}:${String(t.getMinutes()).padStart(2,"0")}` : ""} · {index+1}/{photos.length}</div>
+              </div>
+              <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                <button onClick={() => setHistPhotoLightbox(lb => ({ ...lb, rotation: (lb.rotation - 90 + 360) % 360 }))} style={{ background:"rgba(255,255,255,0.15)", border:"none", borderRadius:8, color:"white", width:36, height:36, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                  <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                </button>
+                <button onClick={() => setHistPhotoLightbox(lb => ({ ...lb, rotation: (lb.rotation + 90) % 360 }))} style={{ background:"rgba(255,255,255,0.15)", border:"none", borderRadius:8, color:"white", width:36, height:36, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                  <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M16 3h5v5"/></svg>
+                </button>
+                <button onClick={handleDownload} style={{ background:"rgba(255,255,255,0.15)", border:"none", borderRadius:8, color:"white", width:36, height:36, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                  <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                </button>
+                <button onClick={() => setHistPhotoLightbox(null)} style={{ background:"rgba(255,255,255,0.15)", border:"none", borderRadius:8, color:"white", width:36, height:36, cursor:"pointer", fontSize:18, display:"flex", alignItems:"center", justifyContent:"center" }}>×</button>
+              </div>
+            </div>
+            <div onClick={e => e.stopPropagation()} style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", width:"100%", padding:"72px 60px 60px" }}>
+              <img src={p.imageBase64} alt={p.actionType} style={{ maxWidth:"100%", maxHeight:"100%", objectFit:"contain", transform:`rotate(${rotation}deg)`, transition:"transform .25s", borderRadius:8, boxShadow:"0 4px 40px rgba(0,0,0,0.6)" }} />
+            </div>
+            {index > 0 && (
+              <button onClick={e => { e.stopPropagation(); setHistPhotoLightbox(lb => ({ ...lb, index: lb.index - 1, rotation: 0 })); }} style={{ position:"absolute", left:12, top:"50%", transform:"translateY(-50%)", background:"rgba(255,255,255,0.15)", border:"none", borderRadius:10, color:"white", width:44, height:44, fontSize:22, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>‹</button>
+            )}
+            {index < photos.length - 1 && (
+              <button onClick={e => { e.stopPropagation(); setHistPhotoLightbox(lb => ({ ...lb, index: lb.index + 1, rotation: 0 })); }} style={{ position:"absolute", right:12, top:"50%", transform:"translateY(-50%)", background:"rgba(255,255,255,0.15)", border:"none", borderRadius:10, color:"white", width:44, height:44, fontSize:22, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>›</button>
+            )}
+            {photos.length > 1 && (
+              <div onClick={e => e.stopPropagation()} style={{ position:"absolute", bottom:0, left:0, right:0, display:"flex", justifyContent:"center", gap:8, padding:"12px 20px 16px", background:"rgba(0,0,0,0.5)" }}>
+                {photos.map((ph, i) => (
+                  <div key={ph.id} onClick={() => setHistPhotoLightbox(lb => ({ ...lb, index: i, rotation: 0 }))} style={{ width:48, height:48, borderRadius:6, overflow:"hidden", cursor:"pointer", border:i === index ? "2px solid white" : "2px solid rgba(255,255,255,0.2)", flexShrink:0 }}>
+                    <img src={ph.imageBase64} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -1548,6 +1614,258 @@ function AttendanceTab({ drivers }) {
   );
 }
 
+// ─── 온도 관제 탭 ─────────────────────────────────────────────────────────────
+function TemperatureTab({ drivers }) {
+  const [tempData, setTempData] = useState({});
+
+  // Real-time temperature subscription from Firestore (IoT device writes here)
+  useEffect(() => {
+    const unsubs = drivers.map(d => {
+      return onSnapshot(
+        doc(db, "cargo_temp", d.id),
+        snap => {
+          if (snap.exists()) {
+            setTempData(prev => ({ ...prev, [d.id]: snap.data() }));
+          }
+        },
+        () => {}
+      );
+    });
+    return () => unsubs.forEach(u => u());
+  }, [drivers]);
+
+  const hasAnyData = Object.keys(tempData).length > 0;
+
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+      {/* 안내 배너 */}
+      <div style={{ background:"linear-gradient(135deg, #1B2B4B 0%, #2d4a7a 100%)", borderRadius:14, padding:"20px 24px", display:"flex", alignItems:"flex-start", gap:16 }}>
+        <div style={{ width:48, height:48, borderRadius:12, background:"rgba(255,255,255,0.15)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+          <svg width="24" height="24" fill="none" stroke="white" strokeWidth="2" viewBox="0 0 24 24"><path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/></svg>
+        </div>
+        <div>
+          <div style={{ color:"white", fontWeight:800, fontSize:16, marginBottom:6 }}>적재함 온도 관제</div>
+          <div style={{ color:"rgba(255,255,255,0.75)", fontSize:13, lineHeight:1.7 }}>
+            IoT 온도 센서(블루투스/WiFi)를 차량에 부착하면 실시간으로 적재함 온도를 모니터링할 수 있습니다.<br/>
+            센서 데이터는 기사 앱을 통해 자동 전송되어 관리자가 즉시 확인 가능합니다.
+          </div>
+          <div style={{ marginTop:10, display:"flex", gap:8, flexWrap:"wrap" }}>
+            {["냉장 화물 (-18°C ~ 0°C)", "냉동 화물 (-25°C 이하)", "일반 화물 (온도 모니터링)"].map(tag => (
+              <span key={tag} style={{ background:"rgba(255,255,255,0.15)", borderRadius:20, padding:"3px 10px", color:"rgba(255,255,255,0.9)", fontSize:11, fontWeight:600 }}>{tag}</span>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* 연동 절차 */}
+      <div style={{ background:"white", borderRadius:14, border:"1px solid #e5e7eb", padding:"20px 24px" }}>
+        <div style={{ fontSize:14, fontWeight:800, color:NAVY, marginBottom:16 }}>연동 절차</div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(200px, 1fr))", gap:12 }}>
+          {[
+            { step:1, title:"센서 구매/설치", desc:"Bluetooth 또는 WiFi 온도 센서를 적재함에 부착합니다", icon:"🔧" },
+            { step:2, title:"기사 앱 연결", desc:"기사 앱 설정에서 센서 UUID를 등록합니다", icon:"📱" },
+            { step:3, title:"자동 수집", desc:"앱이 백그라운드에서 센서 데이터를 주기적으로 수집합니다", icon:"📡" },
+            { step:4, title:"관리자 모니터링", desc:"이 화면에서 모든 차량의 온도를 실시간으로 확인합니다", icon:"🖥️" },
+          ].map(s => (
+            <div key={s.step} style={{ background:"#f8fafc", borderRadius:10, padding:"14px 16px", border:"1px solid #e5e7eb" }}>
+              <div style={{ fontSize:22, marginBottom:8 }}>{s.icon}</div>
+              <div style={{ fontSize:12, fontWeight:800, color:NAVY, marginBottom:4 }}>STEP {s.step}. {s.title}</div>
+              <div style={{ fontSize:12, color:"#6b7280", lineHeight:1.6 }}>{s.desc}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* 기사별 온도 현황 */}
+      <div style={{ background:"white", borderRadius:14, border:"1px solid #e5e7eb", overflow:"hidden" }}>
+        <div style={{ padding:"14px 20px", borderBottom:"1px solid #e5e7eb", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+          <div style={{ fontSize:14, fontWeight:800, color:NAVY }}>기사별 적재함 온도</div>
+          <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+            <div style={{ width:7, height:7, borderRadius:"50%", background: hasAnyData ? "#10b981" : "#d1d5db", animation: hasAnyData ? "fmBlink 1.5s ease-in-out infinite" : "none" }} />
+            <span style={{ fontSize:12, color: hasAnyData ? "#10b981" : "#9ca3af", fontWeight:600 }}>{hasAnyData ? "실시간 수신중" : "센서 미연결"}</span>
+          </div>
+        </div>
+        {drivers.length === 0 ? (
+          <div style={{ padding:"40px 20px", textAlign:"center", color:"#9ca3af", fontSize:13 }}>등록된 기사가 없습니다</div>
+        ) : (
+          <div style={{ padding:16, display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(220px, 1fr))", gap:12 }}>
+            {drivers.map(d => {
+              const td = tempData[d.id];
+              const temp = td?.temperature;
+              const updatedAt = td?.updatedAt?.toDate?.() || (td?.updatedAt?.seconds ? new Date(td.updatedAt.seconds * 1000) : null);
+              const isOnline = updatedAt && (Date.now() - updatedAt.getTime() < 5 * 60 * 1000);
+              let tempColor = "#6b7280", tempBg = "#f3f4f6";
+              if (temp != null) {
+                if (temp <= -18) { tempColor = "#3b82f6"; tempBg = "#eff6ff"; }
+                else if (temp <= 0) { tempColor = "#06b6d4"; tempBg = "#ecfeff"; }
+                else if (temp <= 10) { tempColor = "#10b981"; tempBg = "#f0fdf4"; }
+                else if (temp > 25) { tempColor = "#ef4444"; tempBg = "#fef2f2"; }
+              }
+              return (
+                <div key={d.id} style={{ borderRadius:10, border:`1.5px solid ${temp != null && isOnline ? tempColor + "40" : "#e5e7eb"}`, background:temp != null && isOnline ? tempBg : "#fafafa", padding:"14px 16px" }}>
+                  <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
+                    <div>
+                      <div style={{ fontSize:13, fontWeight:700, color:NAVY }}>{d.이름}</div>
+                      <div style={{ fontSize:11, color:"#9ca3af", marginTop:2 }}>{d.차량번호}</div>
+                    </div>
+                    <div style={{ width:8, height:8, borderRadius:"50%", background: isOnline ? "#10b981" : "#d1d5db" }} />
+                  </div>
+                  {temp != null && isOnline ? (
+                    <>
+                      <div style={{ fontSize:28, fontWeight:900, color:tempColor, lineHeight:1, marginBottom:4 }}>{temp > 0 ? "+" : ""}{temp.toFixed(1)}°C</div>
+                      <div style={{ fontSize:10, color:"#9ca3af" }}>{updatedAt ? `${String(updatedAt.getHours()).padStart(2,"0")}:${String(updatedAt.getMinutes()).padStart(2,"0")} 업데이트` : ""}</div>
+                      {td?.humidity != null && <div style={{ fontSize:11, color:"#6b7280", marginTop:4 }}>습도 {td.humidity.toFixed(0)}%</div>}
+                    </>
+                  ) : (
+                    <div style={{ fontSize:12, color:"#9ca3af", paddingTop:4 }}>센서 미연결</div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* 권장 센서 */}
+      <div style={{ background:"#fffbeb", border:"1px solid #fcd34d", borderRadius:12, padding:"14px 18px" }}>
+        <div style={{ fontSize:12, fontWeight:700, color:"#92400e", marginBottom:6 }}>💡 권장 IoT 센서</div>
+        <div style={{ fontSize:12, color:"#78350f", lineHeight:1.7 }}>
+          Govee, Inkbird, SensorPush 등 Bluetooth 온습도 센서 또는 HTTP API를 지원하는 WiFi 온도계를 사용하면 연동이 가능합니다.
+          센서 Firestore 문서 경로: <code style={{ background:"rgba(0,0,0,0.06)", padding:"1px 5px", borderRadius:4, fontSize:11 }}>cargo_temp / {"{"} driverId {"}"}</code>
+          에 <code style={{ background:"rgba(0,0,0,0.06)", padding:"1px 5px", borderRadius:4, fontSize:11 }}>temperature</code>, <code style={{ background:"rgba(0,0,0,0.06)", padding:"1px 5px", borderRadius:4, fontSize:11 }}>humidity</code>, <code style={{ background:"rgba(0,0,0,0.06)", padding:"1px 5px", borderRadius:4, fontSize:11 }}>updatedAt</code> 필드를 쓰면 즉시 반영됩니다.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── 적재함 카메라 탭 ─────────────────────────────────────────────────────────
+function CargoCameraTab({ drivers }) {
+  const [selectedDriver, setSelectedDriver] = useState(null);
+  const [streamTokens, setStreamTokens] = useState({});
+
+  // Subscribe to stream tokens/status
+  useEffect(() => {
+    const unsubs = drivers.map(d => {
+      return onSnapshot(
+        doc(db, "cargo_camera", d.id),
+        snap => {
+          if (snap.exists()) setStreamTokens(prev => ({ ...prev, [d.id]: snap.data() }));
+        },
+        () => {}
+      );
+    });
+    return () => unsubs.forEach(u => u());
+  }, [drivers]);
+
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+      {/* 안내 배너 */}
+      <div style={{ background:"linear-gradient(135deg, #1B2B4B 0%, #2d4a7a 100%)", borderRadius:14, padding:"20px 24px", display:"flex", alignItems:"flex-start", gap:16 }}>
+        <div style={{ width:48, height:48, borderRadius:12, background:"rgba(255,255,255,0.15)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+          <svg width="24" height="24" fill="none" stroke="white" strokeWidth="2" viewBox="0 0 24 24"><path d="M15 10l4.553-2.069A1 1 0 0 1 21 8.87v6.26a1 1 0 0 1-1.447.9L15 14"/><rect x="1" y="6" width="14" height="12" rx="2"/></svg>
+        </div>
+        <div>
+          <div style={{ color:"white", fontWeight:800, fontSize:16, marginBottom:6 }}>적재함 카메라 관제</div>
+          <div style={{ color:"rgba(255,255,255,0.75)", fontSize:13, lineHeight:1.7 }}>
+            차량 적재함 내부에 IP 카메라 또는 LTE 카메라를 설치하면 관리자가 실시간 영상을 확인할 수 있습니다.<br/>
+            기사 앱에서도 현재 적재 상태를 영상으로 확인할 수 있습니다.
+          </div>
+          <div style={{ marginTop:10, display:"flex", gap:8, flexWrap:"wrap" }}>
+            {["RTSP 스트림 지원", "HLS / DASH 호환", "모바일 뷰어 포함"].map(tag => (
+              <span key={tag} style={{ background:"rgba(255,255,255,0.15)", borderRadius:20, padding:"3px 10px", color:"rgba(255,255,255,0.9)", fontSize:11, fontWeight:600 }}>{tag}</span>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* 연동 절차 */}
+      <div style={{ background:"white", borderRadius:14, border:"1px solid #e5e7eb", padding:"20px 24px" }}>
+        <div style={{ fontSize:14, fontWeight:800, color:NAVY, marginBottom:16 }}>연동 절차</div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(200px, 1fr))", gap:12 }}>
+          {[
+            { step:1, title:"카메라 설치", desc:"적재함 내부에 LTE 또는 WiFi IP 카메라를 설치합니다", icon:"📷" },
+            { step:2, title:"스트림 URL 등록", desc:"Firestore cargo_camera/{driverId}에 streamUrl을 등록합니다", icon:"🔗" },
+            { step:3, title:"HLS 변환 서버", desc:"RTSP → HLS 변환 서버(예: MediaMTX) 구성 후 토큰 발급", icon:"⚙️" },
+            { step:4, title:"실시간 모니터링", desc:"이 화면에서 모든 차량 카메라를 동시에 확인합니다", icon:"🖥️" },
+          ].map(s => (
+            <div key={s.step} style={{ background:"#f8fafc", borderRadius:10, padding:"14px 16px", border:"1px solid #e5e7eb" }}>
+              <div style={{ fontSize:22, marginBottom:8 }}>{s.icon}</div>
+              <div style={{ fontSize:12, fontWeight:800, color:NAVY, marginBottom:4 }}>STEP {s.step}. {s.title}</div>
+              <div style={{ fontSize:12, color:"#6b7280", lineHeight:1.6 }}>{s.desc}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* 카메라 그리드 */}
+      <div style={{ background:"white", borderRadius:14, border:"1px solid #e5e7eb", overflow:"hidden" }}>
+        <div style={{ padding:"14px 20px", borderBottom:"1px solid #e5e7eb" }}>
+          <div style={{ fontSize:14, fontWeight:800, color:NAVY }}>카메라 모니터</div>
+          <div style={{ fontSize:12, color:"#9ca3af", marginTop:2 }}>카메라가 연결된 차량의 영상이 자동으로 표시됩니다</div>
+        </div>
+        {drivers.length === 0 ? (
+          <div style={{ padding:"40px 20px", textAlign:"center", color:"#9ca3af", fontSize:13 }}>등록된 기사가 없습니다</div>
+        ) : (
+          <div style={{ padding:16, display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(280px, 1fr))", gap:12 }}>
+            {drivers.map(d => {
+              const cam = streamTokens[d.id];
+              const hasStream = cam?.streamUrl && cam?.active;
+              return (
+                <div key={d.id} style={{ borderRadius:10, border:"1px solid #e5e7eb", overflow:"hidden", background:"#fafafa" }}>
+                  {/* 카메라 뷰 */}
+                  <div style={{ aspectRatio:"16/9", background:"#111827", display:"flex", alignItems:"center", justifyContent:"center", position:"relative" }}>
+                    {hasStream ? (
+                      <video
+                        src={cam.streamUrl}
+                        autoPlay muted playsInline
+                        style={{ width:"100%", height:"100%", objectFit:"cover" }}
+                        onError={e => { e.target.style.display = "none"; }}
+                      />
+                    ) : (
+                      <div style={{ textAlign:"center" }}>
+                        <svg width="32" height="32" fill="none" stroke="#4b5563" strokeWidth="1.5" viewBox="0 0 24 24" style={{ marginBottom:8, display:"block", margin:"0 auto 8px" }}><path d="M15 10l4.553-2.069A1 1 0 0 1 21 8.87v6.26a1 1 0 0 1-1.447.9L15 14"/><rect x="1" y="6" width="14" height="12" rx="2"/><line x1="1" y1="1" x2="23" y2="23" stroke="#6b7280"/></svg>
+                        <div style={{ fontSize:12, color:"#6b7280" }}>카메라 미연결</div>
+                      </div>
+                    )}
+                    {hasStream && (
+                      <div style={{ position:"absolute", top:8, left:8, background:"rgba(239,68,68,0.9)", borderRadius:6, padding:"2px 8px", display:"flex", alignItems:"center", gap:4 }}>
+                        <div style={{ width:5, height:5, borderRadius:"50%", background:"white", animation:"fmBlink 1s ease-in-out infinite" }} />
+                        <span style={{ fontSize:10, color:"white", fontWeight:700 }}>LIVE</span>
+                      </div>
+                    )}
+                  </div>
+                  {/* 기사 정보 */}
+                  <div style={{ padding:"10px 12px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+                    <div>
+                      <div style={{ fontSize:13, fontWeight:700, color:NAVY }}>{d.이름}</div>
+                      <div style={{ fontSize:11, color:"#9ca3af" }}>{d.차량번호}</div>
+                    </div>
+                    <div style={{ fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:20, background: hasStream ? "#fef2f2" : "#f3f4f6", color: hasStream ? "#ef4444" : "#9ca3af" }}>
+                      {hasStream ? "● LIVE" : "● OFF"}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* 권장 장비 */}
+      <div style={{ background:"#fffbeb", border:"1px solid #fcd34d", borderRadius:12, padding:"14px 18px" }}>
+        <div style={{ fontSize:12, fontWeight:700, color:"#92400e", marginBottom:6 }}>💡 권장 카메라 장비</div>
+        <div style={{ fontSize:12, color:"#78350f", lineHeight:1.7 }}>
+          Reolink Go, TP-Link Tapo LTE 카메라 등 SIM 카드 내장 IP 카메라 또는 WiFi 카메라를 권장합니다.
+          Firestore 경로 <code style={{ background:"rgba(0,0,0,0.06)", padding:"1px 5px", borderRadius:4, fontSize:11 }}>cargo_camera / {"{"} driverId {"}"}</code>에
+          <code style={{ background:"rgba(0,0,0,0.06)", padding:"1px 5px", borderRadius:4, fontSize:11, marginLeft:4 }}>streamUrl (HLS)</code>,
+          <code style={{ background:"rgba(0,0,0,0.06)", padding:"1px 5px", borderRadius:4, fontSize:11, marginLeft:4 }}>active: true</code> 필드를 등록하면 즉시 표시됩니다.
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── 메인 컴포넌트 ────────────────────────────────────────────────────────────
 
 // Inject pulse/ring keyframe animations once into <head> so markers always animate
@@ -1594,6 +1912,7 @@ export default function FleetManagement() {
   const [contextMenu, setContextMenu] = useState(null); // { x, y, driver }
   const [todayDriverPhotos, setTodayDriverPhotos] = useState([]); // today's driver_photo_logs for all drivers
   const [photoViewerPhotos, setPhotoViewerPhotos] = useState(null); // { driverName, photos[] }
+  const [photoLightbox, setPhotoLightbox] = useState(null); // { photos[], index, rotation }
   const [newPhotoToast, setNewPhotoToast] = useState(null); // { driverName, actionType }
   const [historyPreselect, setHistoryPreselect] = useState(null);
   const [fitAllCount, setFitAllCount] = useState(0);
@@ -1808,13 +2127,19 @@ export default function FleetManagement() {
   const selectedPath = useMemo(() => {
     // Use GPS tracks when we have actual continuous waypoints
     if (gpsTracks.length >= 2) {
-      return gpsTracks.map(t => ({
-        lat: t.lat,
-        lng: t.lng,
-        status: "운행중",
-        timestamp: t.timestamp,
-        dwell: null,
-      }));
+      // Interpolate driver status at each GPS timestamp from driver_logs
+      const sortedLogs = [...selectedDriverLogs]
+        .filter(l => l.status)
+        .sort((a, b) => (resolveTs(a.timestamp)?.getTime() || 0) - (resolveTs(b.timestamp)?.getTime() || 0));
+      return gpsTracks.map(t => {
+        const ts = resolveTs(t.timestamp)?.getTime() || 0;
+        let status = "운행중";
+        for (let i = sortedLogs.length - 1; i >= 0; i--) {
+          const logTs = resolveTs(sortedLogs[i].timestamp)?.getTime() || 0;
+          if (logTs <= ts) { status = sortedLogs[i].status; break; }
+        }
+        return { lat: t.lat, lng: t.lng, status, timestamp: t.timestamp, dwell: null };
+      });
     }
     // Fallback: use status change log positions from selected date's session
     const sessionStart = [...selectedDriverLogs].reverse().findIndex(l =>
@@ -2123,7 +2448,7 @@ export default function FleetManagement() {
 
       {/* ═══ 메인 탭 ═══ */}
       <div style={{ display: "flex", gap: 0, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, overflow: "hidden", padding: 4, position: "relative", zIndex: 10 }}>
-        {[["tracking", "관제현황"], ["history", "이력 조회"], ["attendance", "출근기록부"], ["registration", "기사 등록 관리"]].map(([key, label]) => (
+        {[["tracking", "관제현황"], ["history", "이력 조회"], ["attendance", "출근기록부"], ["temperature", "온도 관제"], ["cargo-camera", "적재함 카메라"], ["registration", "기사 등록 관리"]].map(([key, label]) => (
           <button
             key={key}
             onClick={() => setMainTab(key)}
@@ -2375,6 +2700,12 @@ export default function FleetManagement() {
       {mainTab === "history" && <HistoryTab drivers={drivers} defaultDriverId={historyPreselect} />}
       {mainTab === "attendance" && <AttendanceTab drivers={drivers} />}
 
+      {/* ═══ 온도 관제 ═══ */}
+      {mainTab === "temperature" && <TemperatureTab drivers={drivers} />}
+
+      {/* ═══ 적재함 카메라 ═══ */}
+      {mainTab === "cargo-camera" && <CargoCameraTab drivers={drivers} />}
+
       {/* ═══ 기사 등록 관리 ═══ */}
       {mainTab === "registration" && <RegistrationTab usersMap={usersMap} myCompanyName={myCompanyName} />}
 
@@ -2482,17 +2813,25 @@ export default function FleetManagement() {
             <div style={{ background:NAVY, padding:"16px 20px", display:"flex", alignItems:"center", justifyContent:"space-between", flexShrink:0 }}>
               <div>
                 <div style={{ color:"white", fontWeight:800, fontSize:16 }}>{photoViewerPhotos.driverName} 첨부 사진</div>
-                <div style={{ color:"rgba(255,255,255,0.6)", fontSize:12, marginTop:2 }}>오늘 업로드된 사진 {photoViewerPhotos.photos.length}장</div>
+                <div style={{ color:"rgba(255,255,255,0.6)", fontSize:12, marginTop:2 }}>오늘 업로드된 사진 {photoViewerPhotos.photos.length}장 · 클릭하면 크게 봅니다</div>
               </div>
               <button onClick={() => setPhotoViewerPhotos(null)} style={{ background:"rgba(255,255,255,0.15)", border:"none", borderRadius:8, color:"white", fontSize:18, width:32, height:32, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>×</button>
             </div>
             <div style={{ overflowY:"auto", padding:20, flex:1 }}>
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
-                {photoViewerPhotos.photos.map(p => {
+                {photoViewerPhotos.photos.map((p, idx) => {
                   const t = p.timestamp?.toDate?.() || (p.timestamp?.seconds ? new Date(p.timestamp.seconds * 1000) : null);
                   return (
-                    <div key={p.id} style={{ borderRadius:12, overflow:"hidden", border:"1px solid #e5e7eb", boxShadow:"0 1px 4px rgba(0,0,0,0.06)" }}>
-                      <img src={p.imageBase64} alt={p.actionType} style={{ width:"100%", aspectRatio:"4/3", objectFit:"cover", display:"block" }} />
+                    <div key={p.id} style={{ borderRadius:12, overflow:"hidden", border:"1px solid #e5e7eb", boxShadow:"0 1px 4px rgba(0,0,0,0.06)", cursor:"pointer" }}
+                      onClick={() => setPhotoLightbox({ photos: photoViewerPhotos.photos, index: idx, rotation: 0 })}>
+                      <div style={{ position:"relative", overflow:"hidden" }}>
+                        <img src={p.imageBase64} alt={p.actionType} style={{ width:"100%", aspectRatio:"4/3", objectFit:"cover", display:"block", transition:"transform .2s" }}
+                          onMouseEnter={e => e.currentTarget.style.transform = "scale(1.04)"}
+                          onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"} />
+                        <div style={{ position:"absolute", top:6, right:6, background:"rgba(0,0,0,0.4)", borderRadius:6, padding:"2px 6px" }}>
+                          <svg width="12" height="12" fill="none" stroke="white" strokeWidth="2" viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+                        </div>
+                      </div>
                       <div style={{ padding:"8px 12px", background:"#f9fafb" }}>
                         <div style={{ fontSize:12, fontWeight:700, color:NAVY }}>{p.actionType}</div>
                         <div style={{ fontSize:11, color:"#9ca3af", marginTop:2 }}>{t ? `${String(t.getHours()).padStart(2,"0")}:${String(t.getMinutes()).padStart(2,"0")}` : "-"}</div>
@@ -2505,6 +2844,71 @@ export default function FleetManagement() {
           </div>
         </div>
       )}
+
+      {/* ─── 사진 라이트박스 ─── */}
+      {photoLightbox && (() => {
+        const { photos, index, rotation } = photoLightbox;
+        const p = photos[index];
+        const t = p.timestamp?.toDate?.() || (p.timestamp?.seconds ? new Date(p.timestamp.seconds * 1000) : null);
+        const handleDownload = () => {
+          const a = document.createElement("a");
+          a.href = p.imageBase64;
+          a.download = `${p.driverName || "driver"}_${p.actionType}_${t ? `${String(t.getHours()).padStart(2,"0")}${String(t.getMinutes()).padStart(2,"0")}` : index}.jpg`;
+          a.click();
+        };
+        return (
+          <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.92)", zIndex:199999, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center" }}
+            onClick={() => setPhotoLightbox(null)}>
+            {/* 툴바 */}
+            <div style={{ position:"absolute", top:0, left:0, right:0, display:"flex", alignItems:"center", justifyContent:"space-between", padding:"16px 20px", background:"rgba(0,0,0,0.5)", zIndex:1 }}
+              onClick={e => e.stopPropagation()}>
+              <div>
+                <div style={{ color:"white", fontWeight:700, fontSize:14 }}>{p.driverName} — {p.actionType}</div>
+                <div style={{ color:"rgba(255,255,255,0.55)", fontSize:12, marginTop:2 }}>{t ? `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,"0")}-${String(t.getDate()).padStart(2,"0")} ${String(t.getHours()).padStart(2,"0")}:${String(t.getMinutes()).padStart(2,"0")}` : ""} · {index+1}/{photos.length}</div>
+              </div>
+              <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                <button onClick={() => setPhotoLightbox(lb => ({ ...lb, rotation: (lb.rotation - 90 + 360) % 360 }))}
+                  style={{ background:"rgba(255,255,255,0.15)", border:"none", borderRadius:8, color:"white", width:36, height:36, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }} title="왼쪽 회전">
+                  <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                </button>
+                <button onClick={() => setPhotoLightbox(lb => ({ ...lb, rotation: (lb.rotation + 90) % 360 }))}
+                  style={{ background:"rgba(255,255,255,0.15)", border:"none", borderRadius:8, color:"white", width:36, height:36, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }} title="오른쪽 회전">
+                  <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M16 3h5v5"/></svg>
+                </button>
+                <button onClick={handleDownload}
+                  style={{ background:"rgba(255,255,255,0.15)", border:"none", borderRadius:8, color:"white", width:36, height:36, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }} title="저장">
+                  <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                </button>
+                <button onClick={() => setPhotoLightbox(null)}
+                  style={{ background:"rgba(255,255,255,0.15)", border:"none", borderRadius:8, color:"white", width:36, height:36, cursor:"pointer", fontSize:18, display:"flex", alignItems:"center", justifyContent:"center" }}>×</button>
+              </div>
+            </div>
+            {/* 이미지 */}
+            <div onClick={e => e.stopPropagation()} style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", width:"100%", padding:"72px 60px 60px" }}>
+              <img src={p.imageBase64} alt={p.actionType} style={{ maxWidth:"100%", maxHeight:"100%", objectFit:"contain", transform:`rotate(${rotation}deg)`, transition:"transform .25s", borderRadius:8, boxShadow:"0 4px 40px rgba(0,0,0,0.6)" }} />
+            </div>
+            {/* 이전/다음 */}
+            {index > 0 && (
+              <button onClick={e => { e.stopPropagation(); setPhotoLightbox(lb => ({ ...lb, index: lb.index - 1, rotation: 0 })); }}
+                style={{ position:"absolute", left:12, top:"50%", transform:"translateY(-50%)", background:"rgba(255,255,255,0.15)", border:"none", borderRadius:10, color:"white", width:44, height:44, fontSize:22, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>‹</button>
+            )}
+            {index < photos.length - 1 && (
+              <button onClick={e => { e.stopPropagation(); setPhotoLightbox(lb => ({ ...lb, index: lb.index + 1, rotation: 0 })); }}
+                style={{ position:"absolute", right:12, top:"50%", transform:"translateY(-50%)", background:"rgba(255,255,255,0.15)", border:"none", borderRadius:10, color:"white", width:44, height:44, fontSize:22, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>›</button>
+            )}
+            {/* 썸네일 스트립 */}
+            {photos.length > 1 && (
+              <div onClick={e => e.stopPropagation()} style={{ position:"absolute", bottom:0, left:0, right:0, display:"flex", justifyContent:"center", gap:8, padding:"12px 20px 16px", background:"rgba(0,0,0,0.5)" }}>
+                {photos.map((ph, i) => (
+                  <div key={ph.id} onClick={() => setPhotoLightbox(lb => ({ ...lb, index: i, rotation: 0 }))} style={{ width:48, height:48, borderRadius:6, overflow:"hidden", cursor:"pointer", border:i === index ? "2px solid white" : "2px solid rgba(255,255,255,0.2)", flexShrink:0 }}>
+                    <img src={ph.imageBase64} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* ─── 신규 사진 업로드 알림 토스트 ─── */}
       {newPhotoToast && (
