@@ -29298,7 +29298,7 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [] }) {
       const pay = String(r.지급방식 || "");
 
       // ── 매출 분류 ──
-      if (client.includes("후레쉬")) {
+      if (client.includes("후레쉬물류")) {
         addRow("rev_fresh", month, sale, 0);
       } else if (bm === "인성") {
         addRow("rev_auto", month, sale, 0);
@@ -29311,10 +29311,10 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [] }) {
       }
 
       // ── 매출원가(기사운임) 분류 ──
-      if (client.includes("후레쉬")) {
-        addRow("cost_fresh", month, 0, cost);
-      } else if (bm === "인성") {
+      if (bm === "인성") {
         addRow("cost_auto", month, 0, cost);
+      } else if (client.includes("후레쉬물류")) {
+        addRow("cost_fresh", month, 0, cost);
       } else {
         addRow("cost_freight", month, 0, cost);
       }
