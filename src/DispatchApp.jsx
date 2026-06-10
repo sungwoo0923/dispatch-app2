@@ -24339,6 +24339,18 @@ return (
         </div>
       </div>
 
+      {filterConditions.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 px-4 py-2 mb-2 bg-[#1B2B4B]/5 border border-[#1B2B4B]/20 rounded-xl">
+          <span className="text-[11px] font-bold text-[#1B2B4B]">필터:</span>
+          {filterConditions.map((cond, i) => (
+            <span key={i} className="flex items-center gap-1 px-2 py-0.5 bg-[#1B2B4B]/10 text-[#1B2B4B] text-[11px] rounded-full border border-[#1B2B4B]/20">
+              {cond.field} : {cond.value}
+              <button className="ml-0.5 hover:text-red-500 font-bold leading-none" onClick={()=>setFilterConditions(prev=>prev.filter((_,j)=>j!==i))}>×</button>
+            </span>
+          ))}
+          <button className="ml-auto text-[11px] text-gray-400 hover:text-red-500" onClick={()=>setFilterConditions([])}>전체 해제</button>
+        </div>
+      )}
       {/* ★ 포커스 해제 버튼 */}
       {focusOrderId && (
         <div className="mb-3 flex items-center gap-2">
