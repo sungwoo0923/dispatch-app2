@@ -22,13 +22,14 @@ const STATUS_COLORS = {
   하차중:   "#8b5cf6",
   대기:     "#6b7280",
   휴식:     "#9ca3af",
+  휴차:     "#374151",
   퇴근:     "#374151",
   최종퇴근: "#374151",
   복귀중:   "#06b6d4",
 };
 
 const STATUS_ORDER = ["운행중", "상차중", "하차중", "복귀중", "출근", "대기", "휴식", "퇴근"];
-const STATUS_FILTER_OPTIONS = ["전체", "운행중", "출근", "상차중", "하차중", "복귀중", "대기", "휴식", "퇴근"];
+const STATUS_FILTER_OPTIONS = ["전체", "운행중", "출근", "상차중", "하차중", "복귀중", "대기", "휴식", "휴차", "퇴근"];
 
 const TMAP_KEY = "rmzwkLwH9N4i9ayxDj9GR6l8hyFDaEk52ZQs4yer";
 
@@ -48,6 +49,10 @@ function toKSTDate(ts) {
   if (!d) return null;
   const kst = new Date(d.getTime() + 9 * 3600000);
   return kst.toISOString().slice(0, 10);
+}
+
+function kstDateStr(d = new Date()) {
+  return new Date((d instanceof Date ? d : new Date(d)).getTime() + 9 * 3600_000).toISOString().slice(0, 10);
 }
 
 function timeAgo(ts) {
@@ -1021,8 +1026,7 @@ function RegistrationTab({ usersMap, myCompanyName }) {
 // ─── HistoryTab ──────────────────────────────────────────────────────────────
 
 function HistoryTab({ drivers, defaultDriverId }) {
-  const _td = new Date();
-  const todayStr = `${_td.getFullYear()}-${String(_td.getMonth()+1).padStart(2,"0")}-${String(_td.getDate()).padStart(2,"0")}`;
+  const todayStr = kstDateStr();
 
   const [selId, setSelId] = useState(defaultDriverId || "");
 
@@ -1041,8 +1045,8 @@ function HistoryTab({ drivers, defaultDriverId }) {
     setLoading(true);
     setLogs([]);
     setGpsDist(null);
-    const from = new Date(applied.from + "T00:00:00");
-    const to = new Date(applied.to + "T23:59:59");
+    const from = new Date(applied.from + "T00:00:00+09:00");
+    const to = new Date(applied.to + "T23:59:59+09:00");
 
     const logUnsub = onSnapshot(
       query(collection(db, "driver_logs"), where("uid", "==", applied.driverId)),
@@ -1305,7 +1309,7 @@ function CheckInLocModal({ title, initialLoc, onSave, onCancel }) {
 // ─── AttendanceTab ────────────────────────────────────────────────────────────
 
 function AttendanceTab({ drivers }) {
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = kstDateStr();
   const [selectedDate, setSelectedDate] = useState(todayStr);
   const [allLogs, setAllLogs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1319,9 +1323,9 @@ function AttendanceTab({ drivers }) {
   }, []);
 
   const goDay = (delta) => {
-    const d = new Date(selectedDate);
+    const d = new Date(selectedDate + "T12:00:00+09:00");
     d.setDate(d.getDate() + delta);
-    setSelectedDate(d.toISOString().slice(0, 10));
+    setSelectedDate(kstDateStr(d));
   };
 
   const { attendance, noShow } = useMemo(() => {
@@ -1521,8 +1525,8 @@ export default function FleetManagement() {
 
   const [gpsTracks, setGpsTracks] = useState([]);
   const [roadPath, setRoadPath] = useState([]);
-  const todayDate = new Date().toISOString().slice(0, 10);
-  const yesterdayDate = (() => { const d = new Date(); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10); })();
+  const todayDate = kstDateStr();
+  const yesterdayDate = kstDateStr(new Date(Date.now() - 86400_000));
   const [selectedTrackDate, setSelectedTrackDate] = useState(todayDate);
   const [pinModal, setPinModal] = useState(null); // { title, onConfirmed }
   const [companyDefaultLoc, setCompanyDefaultLoc] = useState(null);
@@ -1531,6 +1535,7 @@ export default function FleetManagement() {
   const [companyLocModal, setCompanyLocModal] = useState(false);
 
   const [collisionAlerts, setCollisionAlerts] = useState([]);
+  const [locChangeRequests, setLocChangeRequests] = useState([]);
   const [myCompanyName, setMyCompanyName] = useState(null);
   const [contextMenu, setContextMenu] = useState(null); // { x, y, driver }
   const [historyPreselect, setHistoryPreselect] = useState(null);
@@ -1619,6 +1624,19 @@ export default function FleetManagement() {
       doc(db, "fleet_settings", "default"),
       (snap) => setCompanyDefaultLoc(snap.exists() ? (snap.data().defaultCheckInLocation || null) : null),
       (err) => console.error("fleet_settings:", err)
+    );
+  }, []);
+
+  // ── 출발지 변경 요청 구독 ───────────────────────────────────────────────
+  useEffect(() => {
+    return onSnapshot(
+      query(collection(db, "location_change_requests"), where("status", "==", "pending"), limit(50)),
+      (snap) => {
+        const reqs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        reqs.sort((a, b) => (resolveTs(b.requestedAt)?.getTime() || 0) - (resolveTs(a.requestedAt)?.getTime() || 0));
+        setLocChangeRequests(reqs);
+      },
+      () => {}
     );
   }, []);
 
@@ -2060,6 +2078,43 @@ export default function FleetManagement() {
             <KpiCard label="운행중" value={kpi.driving} sub="현재 주행" accent="#10b981" />
             <KpiCard label="근무중" value={kpi.onDuty} sub="출근~복귀 합산" />
           </div>
+
+          {/* 출발지 변경 요청 */}
+          {locChangeRequests.length > 0 && (
+            <div style={{ background: "#fff", border: "1px solid #d1d5db", borderLeft: "3px solid #374151", borderRadius: 8, overflow: "hidden" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 14px", background: "#f8f9fb", borderBottom: "1px solid #e5e7eb" }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: NAVY }}>출발지 변경 요청 {locChangeRequests.length}건</span>
+                <span style={{ fontSize: 12, color: "#6b7280" }}>기사가 출발지 변경을 요청했습니다</span>
+              </div>
+              {locChangeRequests.map((req) => (
+                <div key={req.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 14px", borderBottom: "1px solid #f3f4f6", flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{req.driverName || "-"}</span>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: "#374151", background: "#f3f4f6", padding: "2px 8px", borderRadius: 5, fontFamily: "monospace" }}>{req.carNo || "-"}</span>
+                  {req.currentLocation?.name && (
+                    <span style={{ fontSize: 12, color: "#6b7280" }}>현재: {req.currentLocation.name}</span>
+                  )}
+                  <span style={{ fontSize: 12, color: "#6b7280", marginLeft: "auto" }}>{timeAgo(req.requestedAt)}</span>
+                  <button
+                    onClick={() => {
+                      const drv = drivers.find(d => d.id === req.uid);
+                      if (drv) {
+                        setCheckInLocModal({ driverId: req.uid, driverName: req.driverName || drv.이름, initialLoc: drv.checkInLocation || null });
+                      }
+                    }}
+                    style={{ padding: "3px 11px", borderRadius: 6, border: "1px solid #d1d5db", background: "white", color: "#374151", fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+                  >
+                    출발지 설정
+                  </button>
+                  <button
+                    onClick={async () => { try { await updateDoc(doc(db, "location_change_requests", req.id), { status: "dismissed" }); } catch (_) {} }}
+                    style={{ padding: "3px 11px", borderRadius: 6, border: "1px solid #e5e7eb", background: "white", color: "#9ca3af", fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+                  >
+                    닫기
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* 충돌 감지 알림 */}
           {collisionAlerts.length > 0 && (

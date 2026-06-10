@@ -2,10 +2,15 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import { db, auth } from "../firebase";
 import {
-  doc, onSnapshot, updateDoc, addDoc,
+  doc, onSnapshot, updateDoc, addDoc, deleteDoc,
   collection, query, where, orderBy, limit, getDocs, serverTimestamp,
 } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
+
+// KST 날짜 문자열 (YYYY-MM-DD) — UTC 대신 KST 기준 오늘 날짜
+function kstDateStr(d = new Date()) {
+  return new Date(d.getTime() + 9 * 3600_000).toISOString().slice(0, 10);
+}
 
 // ─── 상태 설정 ───────────────────────────────────────────────────────────────
 const STATUS_CONFIG = {
@@ -16,6 +21,7 @@ const STATUS_CONFIG = {
   하차중:    { color: "#374151", label: "하차중" },
   복귀중:    { color: "#4b5563", label: "복귀중" },
   휴식:      { color: "#9ca3af", label: "휴식" },
+  휴차:      { color: "#374151", label: "휴차" },
   퇴근:      { color: "#111827", label: "퇴근" },
   최종퇴근:  { color: "#111827", label: "최종퇴근" },
 };
@@ -26,11 +32,15 @@ function getActions(status, isFinalCheckout) {
     case "대기":
     case null:
     case undefined:
-      return [{ label: "출근", status: "출근", primary: true }];
+      return [
+        { label: "출근", status: "출근", primary: true },
+        { label: "휴차 처리", status: "휴차", primary: false },
+      ];
     case "퇴근":
       if (isFinalCheckout) return [{ label: "출근", status: "출근", primary: true }];
       return [
         { label: "출근", status: "출근", primary: true },
+        { label: "휴차 처리", status: "휴차", primary: false },
         { label: "최종 퇴근 완료 (당일 종료)", status: "최종퇴근", primary: false },
       ];
     case "출근":
@@ -38,6 +48,7 @@ function getActions(status, isFinalCheckout) {
         { label: "상차 시작", status: "상차중", primary: true },
         { label: "대기", status: "대기", primary: false },
         { label: "휴식", status: "휴식", primary: false },
+        { label: "휴차 처리", status: "휴차", primary: false },
         { label: "퇴근", status: "퇴근", primary: false },
       ];
     case "상차중":
@@ -63,6 +74,10 @@ function getActions(status, isFinalCheckout) {
       return [
         { label: "대기로 복귀", status: "대기", primary: true },
         { label: "상차 시작", status: "상차중", primary: false },
+      ];
+    case "휴차":
+      return [
+        { label: "대기로 복귀", status: "대기", primary: true },
       ];
     default:
       return [
@@ -240,7 +255,7 @@ function useGpsTracking(uid, driverData) {
             lat, lng,
             speed: speed ? Math.round(speed * 3.6) : 0,
             timestamp: serverTimestamp(),
-            date: new Date().toISOString().slice(0, 10),
+            date: kstDateStr(),
           }).catch(() => {});
         }
 
@@ -321,6 +336,7 @@ export default function DriverHome() {
   const [appliedRange, setAppliedRange] = useState({ from: todayStr, to: todayStr });
   const [checkinWarning, setCheckinWarning] = useState(null);
   const [collisionAlert, setCollisionAlert] = useState(null);
+  const [locRequestSent, setLocRequestSent] = useState(false);
   const driverRef = useRef(null);
   const posRef = useRef(null);
 
@@ -354,15 +370,15 @@ export default function DriverHome() {
 
   // 오늘 로그 (홈탭 요약 + 상태표시용)
   const todayLogs = React.useMemo(() => {
-    const start = new Date(todayStr + "T00:00:00");
+    const start = new Date(todayStr + "T00:00:00+09:00");
     return allLogs.filter(l => { const t = l.timestamp?.toDate?.(); return t && t >= start; });
   }, [allLogs, todayStr]);
   const summary = React.useMemo(() => calcWorkSummary(todayLogs), [todayLogs, tick]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 운행기록 탭: 선택 날짜 범위 로그
   const rangeLogs = React.useMemo(() => {
-    const from = appliedRange.from ? new Date(appliedRange.from + "T00:00:00") : null;
-    const to = appliedRange.to ? new Date(appliedRange.to + "T23:59:59") : null;
+    const from = appliedRange.from ? new Date(appliedRange.from + "T00:00:00+09:00") : null;
+    const to = appliedRange.to ? new Date(appliedRange.to + "T23:59:59+09:00") : null;
     return allLogs.filter(l => {
       const t = l.timestamp?.toDate?.();
       if (!t) return false;
@@ -388,7 +404,7 @@ export default function DriverHome() {
   const updateStatus = useCallback(async (newStatus) => {
     if (!uid || statusLoading) return;
     setStatusLoading(true);
-    const today = new Date().toISOString().slice(0, 10);
+    const today = kstDateStr();
     const isFinal = newStatus === "최종퇴근";
     const firestoreStatus = isFinal ? "퇴근" : newStatus;
     try {
@@ -455,7 +471,7 @@ export default function DriverHome() {
     const checkInLoc = driver?.checkInLocation || companyDefaultLoc;
     if (!checkInLoc?.lat || !checkInLoc?.lng) return;
     if (pos.accuracy != null && pos.accuracy > 100) return;
-    const today = new Date().toISOString().slice(0, 10);
+    const today = kstDateStr();
     const isSameDayFinal = driver?.isFinalCheckout && driver?.workDate === today;
     const dist = calcDist(pos.lat, pos.lng, checkInLoc.lat, checkInLoc.lng);
     if (dist > 0.5) wasAwayFromCheckInRef.current = true;
@@ -508,6 +524,65 @@ export default function DriverHome() {
     }
     updateStatus(action.status);
   }, [driver?.checkInLocation, companyDefaultLoc, pos, updateStatus]);
+
+  // 이전 상태로 되돌리기: 마지막 로그 삭제 후 이전 상태로 복원
+  const handleUndoLastStatus = useCallback(async () => {
+    if (!uid || statusLoading || todayLogs.length === 0) return;
+    setStatusLoading(true);
+    try {
+      const sorted = [...todayLogs].sort((a, b) => {
+        const at = a.timestamp?.toDate?.()?.getTime() || 0;
+        const bt = b.timestamp?.toDate?.()?.getTime() || 0;
+        return at - bt;
+      });
+      const lastLog = sorted[sorted.length - 1];
+      const prevLog = sorted.length >= 2 ? sorted[sorted.length - 2] : null;
+      const prevStatus = prevLog?.mainStatus || prevLog?.status || "대기";
+      await deleteDoc(doc(db, "driver_logs", lastLog.id));
+      const undoUpdate = {
+        status: prevStatus,
+        mainStatus: prevStatus,
+        active: prevStatus !== "퇴근" && prevStatus !== "대기" && prevStatus !== "휴차",
+        updatedAt: serverTimestamp(),
+      };
+      if (prevStatus === "출근") undoUpdate.isFinalCheckout = false;
+      await updateDoc(doc(db, "drivers", uid), undoUpdate);
+      showToast(`'${lastLog.status}' 취소 → '${prevStatus}'`);
+    } catch (_) {
+      showToast("되돌리기 중 오류가 발생했습니다");
+    } finally {
+      setStatusLoading(false);
+    }
+  }, [uid, statusLoading, todayLogs]);
+
+  // 새로고침: tick 갱신 + 출근지 반경 내이면 자동 출근 시도
+  const handleRefresh = useCallback(() => {
+    setTick(t => t + 1);
+    const status = driver?.status;
+    if (!uid || statusLoading || (status && status !== "퇴근" && status !== "대기" && status !== "휴차")) {
+      showToast("새로고침 완료");
+      return;
+    }
+    if (driver?.isFinalCheckout && kstDateStr() === (driver?.workDate)) {
+      showToast("새로고침 완료");
+      return;
+    }
+    const checkInLoc = driver?.checkInLocation || companyDefaultLoc;
+    if (!checkInLoc?.lat || !checkInLoc?.lng || !pos || (pos.accuracy != null && pos.accuracy > 100)) {
+      showToast("새로고침 완료");
+      return;
+    }
+    const dist = calcDist(pos.lat, pos.lng, checkInLoc.lat, checkInLoc.lng);
+    if (dist <= 0.5 && !autoCheckinDoneRef.current) {
+      autoCheckinDoneRef.current = true;
+      wasAwayFromCheckInRef.current = true;
+      updateStatus("출근")
+        .then(() => showToast("출근지 인식 — 출근 처리되었습니다"))
+        .catch(() => { autoCheckinDoneRef.current = false; wasAwayFromCheckInRef.current = false; showToast("출근 처리 중 오류"); });
+    } else {
+      showToast("새로고침 완료");
+    }
+  }, [uid, statusLoading, driver, companyDefaultLoc, pos, updateStatus]);
 
   const handleLogout = async () => {
     if (uid) {
@@ -667,7 +742,7 @@ export default function DriverHome() {
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", letterSpacing: "0.05em" }}>오늘 운행 현황</div>
               <button
-                onClick={() => { setTick(t => t + 1); showToast("새로고침 완료"); }}
+                onClick={handleRefresh}
                 style={{ background: "none", border: "1px solid #e5e7eb", borderRadius: 8, padding: "4px 10px", fontSize: 11, color: "#6b7280", cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}
               >
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
@@ -757,6 +832,27 @@ export default function DriverHome() {
               ))}
             </div>
           </div>
+
+          {/* 이전 상태로 되돌리기 */}
+          {todayLogs.length > 0 && !driver.isFinalCheckout && (
+            <div style={{ marginBottom: 14 }}>
+              <button
+                onClick={handleUndoLastStatus}
+                disabled={statusLoading}
+                style={{
+                  width: "100%", padding: "11px 20px", borderRadius: 12,
+                  border: "1.5px solid #e5e7eb", background: "white",
+                  color: "#6b7280", fontSize: 13, fontWeight: 600,
+                  cursor: statusLoading ? "not-allowed" : "pointer",
+                  opacity: statusLoading ? 0.6 : 1,
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                }}
+              >
+                <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.36"/></svg>
+                이전 상태로 되돌리기
+              </button>
+            </div>
+          )}
 
           {/* 오늘 상태 로그 (최근 8개) */}
           {todayLogs.length > 0 && (
@@ -859,6 +955,56 @@ export default function DriverHome() {
                 <span style={{ fontSize: 13, color: "#1B2B4B", fontWeight: 700 }}>{value}</span>
               </div>
             ))}
+          </div>
+
+          {/* 출발지 정보 */}
+          <div style={{ background: "white", borderRadius: 16, padding: "20px", marginTop: 12, boxShadow: "0 1px 6px rgba(0,0,0,0.06)", border: "1px solid #e5e7eb" }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", marginBottom: 12, letterSpacing: "0.05em" }}>출발지 (출근지)</div>
+            {(() => {
+              const loc = driver.checkInLocation || companyDefaultLoc;
+              return loc ? (
+                <>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "#1B2B4B", marginBottom: 4 }}>
+                    {loc.name || `${loc.lat?.toFixed(5)}, ${loc.lng?.toFixed(5)}`}
+                  </div>
+                  <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 12 }}>
+                    {driver.checkInLocation ? "개인 출발지 설정" : "회사 기본 출발지"}
+                    {loc.lat && ` · ${loc.lat.toFixed(5)}, ${loc.lng?.toFixed(5)}`}
+                  </div>
+                </>
+              ) : (
+                <div style={{ fontSize: 13, color: "#9ca3af", marginBottom: 12 }}>출발지가 설정되지 않았습니다</div>
+              );
+            })()}
+            {locRequestSent ? (
+              <div style={{ fontSize: 13, color: "#10b981", fontWeight: 600, padding: "10px 12px", background: "#f0fdf4", borderRadius: 8 }}>
+                관리자에게 변경 요청이 전송되었습니다
+              </div>
+            ) : (
+              <button
+                onClick={async () => {
+                  try {
+                    const loc = driver.checkInLocation || companyDefaultLoc;
+                    await addDoc(collection(db, "location_change_requests"), {
+                      uid,
+                      driverName: driver?.name || "",
+                      carNo: driver?.carNo || "",
+                      currentLocation: loc || null,
+                      requestedAt: serverTimestamp(),
+                      status: "pending",
+                    });
+                    setLocRequestSent(true);
+                    setTimeout(() => setLocRequestSent(false), 30000);
+                    showToast("관리자에게 요청이 전송되었습니다");
+                  } catch (_) {
+                    showToast("요청 전송 중 오류가 발생했습니다");
+                  }
+                }}
+                style={{ width: "100%", padding: "11px", borderRadius: 10, border: "1.5px solid #e5e7eb", background: "white", color: "#374151", fontSize: 13, fontWeight: 700, cursor: "pointer" }}
+              >
+                출발지 변경 관리자에게 요청
+              </button>
+            )}
           </div>
 
           <div style={{ background: "white", borderRadius: 16, padding: "20px", marginTop: 12, boxShadow: "0 1px 6px rgba(0,0,0,0.06)", border: "1px solid #e5e7eb" }}>
