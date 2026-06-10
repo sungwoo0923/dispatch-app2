@@ -27766,94 +27766,57 @@ setCopyTarget(prev => ({
       )}
       
       {sortModalOpen && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[100000]">
-          <div className="bg-white rounded-xl w-[420px] p-6 shadow-xl">
-            {/* 제목 */}
-            <h3 className="text-lg font-bold mb-4">정렬 설정</h3>
-            {/* 정렬 기준 */}
-            <div className="mb-5">
-              <div className="text-sm font-semibold mb-2">정렬 기준</div>
-              <select
-                className="w-full border rounded p-2"
-                value={sortKey || ""}
-                onChange={(e) => setSortKey(e.target.value)}
-              >
-                <option value="">선택 안함</option>
-                {[
-                  "등록일",
-                  "상차일",
-                  "하차일",
-                  "거래처명",
-                  "상차지명",
-                  "하차지명",
-                  "차량번호",
-                  "배차상태",
-                  "배차방식",
-                  "청구운임",
-                  "기사운임",
-                  "수수료",
-                ].map((k) => (
-                  <option key={k} value={k}>
-                    {k}
-                  </option>
-                ))}
-              </select>
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[100000]" onClick={()=>setSortModalOpen(false)}>
+          <div className="bg-white rounded-2xl w-[480px] max-h-[85vh] flex flex-col shadow-2xl overflow-hidden" onClick={e=>e.stopPropagation()}>
+            <div className="bg-[#1B2B4B] px-5 py-4 flex items-center justify-between shrink-0">
+              <h3 className="text-white font-bold text-[15px]">정렬 / 필터 설정</h3>
+              <button className="text-white/60 hover:text-white text-xl leading-none" onClick={()=>setSortModalOpen(false)}>×</button>
             </div>
-
-
-            {/* 정렬 방향 */}
-            <div className="mb-6">
-              <div className="text-sm font-semibold mb-2">정렬 방향</div>
-              <div className="flex gap-2">
-                <button
-                  className={`flex-1 py-2 rounded ${sortDir === "asc"
-                    ? "bg-blue-600 text-white"
-                    : "bg-gray-200"
-                    }`}
-                  onClick={() => setSortDir("asc")}
-                >
-                  오름차순
-                </button>
-                <button
-                  className={`flex-1 py-2 rounded ${sortDir === "desc"
-                    ? "bg-blue-600 text-white"
-                    : "bg-gray-200"
-                    }`}
-                  onClick={() => setSortDir("desc")}
-                >
-                  내림차순
-                </button>
+            <div className="overflow-y-auto flex-1 p-5 space-y-5">
+              <div>
+                <div className="text-[11px] font-bold text-[#1B2B4B] uppercase tracking-wider mb-2">정렬 기준</div>
+                <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] mb-2 focus:outline-none focus:border-[#1B2B4B]" value={tempSortKey} onChange={e=>setTempSortKey(e.target.value)}>
+                  <option value="">선택 안함</option>
+                  {["등록일","상차일","하차일","거래처명","상차지명","하차지명","차량번호","배차상태","배차방식","청구운임","기사운임","수수료"].map(k=><option key={k} value={k}>{k}</option>)}
+                </select>
+                <div className="flex gap-2">
+                  <button className={`flex-1 py-2 rounded-lg text-[12px] font-semibold transition ${tempSortDir==="asc"?"bg-[#1B2B4B] text-white":"bg-gray-100 text-gray-600 hover:bg-gray-200"}`} onClick={()=>setTempSortDir("asc")}>오름차순</button>
+                  <button className={`flex-1 py-2 rounded-lg text-[12px] font-semibold transition ${tempSortDir==="desc"?"bg-[#1B2B4B] text-white":"bg-gray-100 text-gray-600 hover:bg-gray-200"}`} onClick={()=>setTempSortDir("desc")}>내림차순</button>
+                </div>
+              </div>
+              <div className="border-t border-gray-100"/>
+              <div>
+                <div className="text-[11px] font-bold text-[#1B2B4B] uppercase tracking-wider mb-1">필터 조건</div>
+                <div className="text-[11px] text-gray-400 mb-3">조건을 추가하면 모두 만족하는 오더만 표시됩니다</div>
+                <div className="space-y-2 mb-3">
+                  {tempFilterConditions.map((cond,idx)=>(
+                    <div key={idx} className="flex gap-2 items-center">
+                      <select className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.field} onChange={e=>{const n=[...tempFilterConditions];n[idx]={field:e.target.value,value:""};setTempFilterConditions(n);}}>
+                        <option value="">항목 선택</option>
+                        {["배차방식","지급방식","배차상태","거래처명","차량종류","차량번호"].map(f=><option key={f} value={f}>{f}</option>)}
+                      </select>
+                      {["배차방식","지급방식","배차상태","차량종류"].includes(cond.field)?(
+                        <select className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.value} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],value:e.target.value};setTempFilterConditions(n);}}>
+                          <option value="">값 선택</option>
+                          {(cond.field==="배차방식"?["24시","24시콜","화물주선","직납","기타"]:cond.field==="지급방식"?["계산서","현금","카드","선불","착불"]:cond.field==="배차상태"?["배차중","배차완료","배차취소"]:["다마스","라보","1톤","1.4톤","2.5톤","3.5톤","5톤","11톤","25톤","오토바이"]).map(v=><option key={v} value={v}>{v}</option>)}
+                        </select>
+                      ):(
+                        <input type="text" className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.value} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],value:e.target.value};setTempFilterConditions(n);}} placeholder="검색어 입력" />
+                      )}
+                      <button className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-red-500 rounded-lg hover:bg-red-50 text-lg leading-none" onClick={()=>setTempFilterConditions(prev=>prev.filter((_,i)=>i!==idx))}>×</button>
+                    </div>
+                  ))}
+                </div>
+                <button className="w-full py-2 border-2 border-dashed border-gray-200 rounded-lg text-[12px] text-gray-400 hover:border-[#1B2B4B] hover:text-[#1B2B4B] transition" onClick={()=>setTempFilterConditions(prev=>[...prev,{field:"",value:""}])}>+ 조건 추가</button>
               </div>
             </div>
-
-            {/* 하단 버튼 */}
-            <div className="flex justify-end gap-2">
-              <button
-                className="px-4 py-2 rounded bg-gray-200"
-                onClick={() => setSortModalOpen(false)}
-              >
-                취소
-              </button>
-
-              <button
-                className="px-4 py-2 rounded bg-gray-300"
-                onClick={() => {
-                  setSortKey("");
-                  setSortDir("asc");
-                  setSortModalOpen(false);
-                }}
-              >
-                정렬 해제
-              </button>
-
-              <button
-                className="px-4 py-2 rounded bg-blue-600 text-white"
-                onClick={() => setSortModalOpen(false)}
-              >
-                적용
-              </button>
+            <div className="px-5 py-4 border-t border-gray-100 flex justify-between items-center shrink-0">
+              <button className="px-4 py-2 rounded-lg bg-gray-100 text-gray-600 text-[12px] font-semibold hover:bg-gray-200 transition" onClick={()=>{setTempSortKey("");setTempSortDir("asc");setTempFilterConditions([]);}}>초기화</button>
+              <div className="flex gap-2">
+                <button className="px-4 py-2 rounded-lg bg-gray-100 text-gray-600 text-[12px] font-semibold hover:bg-gray-200 transition" onClick={()=>setSortModalOpen(false)}>취소</button>
+                <button className="px-4 py-2 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-semibold hover:bg-[#243a60] transition" onClick={()=>{setSortKey(tempSortKey);setSortDir(tempSortDir);setFilterConditions(tempFilterConditions.filter(c=>c.field&&c.value));setSortModalOpen(false);}}>적용</button>
+              </div>
             </div>
-
           </div>
         </div>
       )}
@@ -29319,7 +29282,14 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [] }) {
       const cost = r.기사운임 || 0;
       const bm = r.배차방식 || "";
       const ct = String(r.차량종류 || "");
-      if (bm === "24시" || bm === "24시콜") {
+      const client = String(r.거래처명 || "");
+      const pay = String(r.지급방식 || "");
+      if (client.includes("후레쉬")) {
+        addRow("rev_fresh", month, sale, cost);
+      } else if (pay === "선불" || pay === "착불") {
+        addRow("rev_cash", month, sale, 0);
+        addRow("rev_cash_cost", month, 0, cost);
+      } else if (bm === "24시" || bm === "24시콜") {
         addRow("rev_24", month, sale, cost);
       } else if (ct.includes("오토") || ct.includes("오토바이")) {
         addRow("rev_auto", month, sale, cost);
@@ -29342,10 +29312,13 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [] }) {
 
   // 월별 집계 함수들
   const totalRevenue = (month) =>
-    autoVal("rev_freight", month) + autoVal("rev_24", month) + autoVal("rev_auto", month) + manVal("rev_etc", month);
+    autoVal("rev_freight", month) + autoVal("rev_24", month) + autoVal("rev_auto", month) +
+    autoVal("rev_cash", month) + autoVal("rev_fresh", month) + manVal("rev_etc", month);
 
   const totalCost = (month) =>
-    autoVal("rev_freight", month, "cost") + autoVal("rev_24", month, "cost") + autoVal("rev_auto", month, "cost") + manVal("cost_labor", month);
+    autoVal("rev_freight", month, "cost") + autoVal("rev_24", month, "cost") +
+    autoVal("rev_auto", month, "cost") + autoVal("rev_cash_cost", month, "cost") +
+    autoVal("rev_fresh", month, "cost") + manVal("cost_labor", month);
 
   const grossProfit = (month) => totalRevenue(month) - totalCost(month);
 
@@ -29435,9 +29408,34 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [] }) {
     </td>
   );
 
-  const SectionHeader = ({ label, colSpan = 14 }) => (
-    <tr className="bg-[#1B2B4B]">
-      <td colSpan={colSpan} className="px-3 py-1.5 text-[12px] font-bold text-white tracking-wide">{label}</td>
+  const momPct = (calcFn, month) => {
+    const mIdx = MONTHS.indexOf(month);
+    if (mIdx === 0) return null;
+    const prev = calcFn(MONTHS[mIdx - 1]);
+    if (!prev) return null;
+    return ((calcFn(month) - prev) / Math.abs(prev)) * 100;
+  };
+
+  const MomRow = ({ calcFn }) => (
+    <tr className="border-t border-gray-50">
+      <td className="px-3 py-0.5 text-[10px] text-gray-400 whitespace-nowrap border-r border-gray-200 pl-8">전월대비</td>
+      {MONTHS.map(m => {
+        const p = momPct(calcFn, m);
+        if (p === null) return <td key={m} className="px-1 py-0.5 text-right border-r border-gray-100 text-[10px] text-gray-300">–</td>;
+        const isPos = p >= 0;
+        return (
+          <td key={m} className={`px-1 py-0.5 text-right border-r border-gray-100 text-[10px] font-semibold ${isPos ? "text-red-500" : "text-blue-500"}`}>
+            {isPos ? "▲" : "▼"}{Math.abs(p).toFixed(1)}%
+          </td>
+        );
+      })}
+      <td className="px-1 py-0.5 border-r border-gray-100"/>
+    </tr>
+  );
+
+  const SectionHeader = ({ label, bg = "#1B2B4B" }) => (
+    <tr style={{backgroundColor: bg}}>
+      <td colSpan={14} className="px-3 py-1.5 text-[12px] font-bold text-white tracking-wide">{label}</td>
     </tr>
   );
 
@@ -29685,30 +29683,37 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [] }) {
           <tbody>
 
             {/* ── 매출 ── */}
-            <SectionHeader label="매출" />
+            <SectionHeader label="매출" bg="#1B2B4B" />
             <SubHeader label="구분" />
             <DataRow label="화물주선 매출" rowKey="rev_freight" isAuto field="sale" indent={0} />
             <DataRow label="24시콜 매출" rowKey="rev_24" isAuto field="sale" />
             <DataRow label="오토바이 매출" rowKey="rev_auto" isAuto field="sale" />
+            <DataRow label="선착불 매출" rowKey="rev_cash" isAuto field="sale" />
+            <DataRow label="후레쉬물류 매출" rowKey="rev_fresh" isAuto field="sale" />
             <DataRow label="기타 매출" rowKey="rev_etc" />
             <TotalRow label="매출액 합계" calcFn={totalRevenue} />
+            <MomRow calcFn={totalRevenue} />
 
             {/* ── 매출원가 ── */}
-            <SectionHeader label="매출원가" />
+            <SectionHeader label="매출원가" bg="#1E3A5F" />
             <SubHeader label="구분" />
             <DataRow label="화물주선 운반비" rowKey="rev_freight" isAuto field="cost" />
             <DataRow label="24시콜 운반비" rowKey="rev_24" isAuto field="cost" />
             <DataRow label="오토바이 운반비" rowKey="rev_auto" isAuto field="cost" />
+            <DataRow label="선착불 운반비" rowKey="rev_cash_cost" isAuto field="cost" />
+            <DataRow label="후레쉬물류 운반비" rowKey="rev_fresh" isAuto field="cost" />
             <DataRow label="인건비" rowKey="cost_labor" />
             <TotalRow label="매출원가 합계" calcFn={totalCost} />
+            <MomRow calcFn={totalCost} />
 
             {/* ── 매출총이익 ── */}
-            <SectionHeader label="매출총이익" />
+            <SectionHeader label="매출총이익" bg="#14453A" />
             <TotalRow label="매출총이익" calcFn={grossProfit} isHighlight />
+            <MomRow calcFn={grossProfit} />
             <TotalRow label="매출총이익률" calcFn={grossProfit} isPct />
 
             {/* ── 판매관리비 ── */}
-            <SectionHeader label="판매관리비 (판관비)" />
+            <SectionHeader label="판매관리비 (판관비)" bg="#2D3748" />
             <SubHeader label="구분" />
             {SGA_ITEMS.map(({ key, label }) => (
               <DataRow key={key} label={label} rowKey={key} />
@@ -29716,20 +29721,22 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [] }) {
             <TotalRow label="판관비 합계" calcFn={sgaTotal} />
 
             {/* ── 영업이익 ── */}
-            <SectionHeader label="영업이익" />
+            <SectionHeader label="영업이익" bg="#0F4C3A" />
             <TotalRow label="영업이익" calcFn={opProfit} isHighlight />
+            <MomRow calcFn={opProfit} />
             <TotalRow label="영업이익률" calcFn={opProfit} isPct />
 
             {/* ── 영업외손익 ── */}
-            <SectionHeader label="영업외손익" />
+            <SectionHeader label="영업외손익" bg="#3B3052" />
             <SubHeader label="구분" />
             <DataRow label="영업외 수익" rowKey="other_income" />
             <DataRow label="영업외 비용" rowKey="other_expense" />
             <TotalRow label="영업외손익 합계" calcFn={otherNet} bold={false} />
 
             {/* ── 당기순이익 ── */}
-            <SectionHeader label="당기순이익" />
+            <SectionHeader label="당기순이익" bg="#1B2B4B" />
             <TotalRow label="당기순이익" calcFn={netProfit} isHighlight />
+            <MomRow calcFn={netProfit} />
             <TotalRow label="순이익률" calcFn={netProfit} isPct />
 
           </tbody>
