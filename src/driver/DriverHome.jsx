@@ -186,6 +186,7 @@ function useGpsTracking(uid, driverData) {
   const totalDistRef = useRef(0);           // running total — avoids stale closure bug
   const distInitializedRef = useRef(false); // true once synced from Firestore
   const lastGpsStoreRef = useRef(null);     // last point stored to gps_tracks
+  const lastGpsTimeRef = useRef(0);         // timestamp of last gps_tracks write
 
   // Initialize totalDistRef once when driverData first loads from Firestore
   useEffect(() => {
@@ -245,11 +246,14 @@ function useGpsTracking(uid, driverData) {
           updateData.totalDistance = totalDistRef.current;
         }
 
-        // Store GPS waypoint every 50 m for accurate path visualization
+        // Store GPS waypoint every 50 m OR every 30 s for real-time path visualization
         const lastStore = lastGpsStoreRef.current;
         const storeDelta = lastStore ? calcDist(lastStore.lat, lastStore.lng, lat, lng) : 999;
-        if (storeDelta > 0.05) {
+        const nowMs = Date.now();
+        const timeSinceLast = nowMs - lastGpsTimeRef.current;
+        if (storeDelta > 0.05 || timeSinceLast >= 30000) {
           lastGpsStoreRef.current = { lat, lng };
+          lastGpsTimeRef.current = nowMs;
           addDoc(collection(db, "gps_tracks"), {
             driverId: uid,
             lat, lng,
@@ -262,9 +266,24 @@ function useGpsTracking(uid, driverData) {
         try { await updateDoc(doc(db, "drivers", uid), updateData); } catch (_) {}
       },
       (err) => { if (err.code === 1) setPermissionDenied(true); },
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
+      { enableHighAccuracy: true, maximumAge: 15000, timeout: 20000 }
     );
-    return () => navigator.geolocation.clearWatch(watchId);
+
+    // 30초마다 위치 강제 업데이트 (정지 중에도 최신 updatedAt 유지)
+    const forceInterval = setInterval(() => {
+      const p = lastPosRef.current;
+      if (!p) return;
+      updateDoc(doc(db, "drivers", uid), {
+        location: { lat: p.lat, lng: p.lng },
+        updatedAt: serverTimestamp(),
+        active: true,
+      }).catch(() => {});
+    }, 30000);
+
+    return () => {
+      navigator.geolocation.clearWatch(watchId);
+      clearInterval(forceInterval);
+    };
   }, [uid]);
 
   return { pos, permissionDenied, resetTotalDist };

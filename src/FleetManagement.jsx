@@ -614,14 +614,14 @@ function FitAll({ count, drivers }) {
   return null;
 }
 
-function FleetMap({ drivers, center, onSelect, selectedPath = [], roadPath = [], fitAllCount = 0 }) {
+function FleetMap({ drivers, center, onSelect, selectedPath = [], roadPath = [], fitAllCount = 0, selectedDriver = null }) {
   const defaultCenter = center || { lat: 37.5665, lng: 126.9780 };
   // Prefer OSRM road-following path; fall back to direct GPS waypoints
   const displayPath = roadPath.length >= 2 ? roadPath : selectedPath;
   const pathPositions = displayPath.map(p => [p.lat, p.lng]);
 
   return (
-    <MapContainer center={[defaultCenter.lat, defaultCenter.lng]} zoom={12} scrollWheelZoom style={{ height: "100%", width: "100%", minHeight: 480 }}>
+    <MapContainer center={[defaultCenter.lat, defaultCenter.lng]} zoom={12} scrollWheelZoom style={{ height: "100%", width: "100%", minHeight: 480, position: "relative" }}>
       <MapRecenter center={center} />
       <FitAll count={fitAllCount} drivers={drivers} />
       {selectedPath.length >= 2 && <FitPath points={selectedPath} />}
@@ -2281,48 +2281,55 @@ export default function FleetManagement() {
     return m;
   }, [drivers]);
 
-  // ── 선택 기사 이동 경로 ───────────────────────────────────────────────────
+  // ── 선택 기사 이동 경로 (출근 → 최종퇴근 구간) ──────────────────────────
   // Prefer continuous gps_tracks; fall back to sparse driver_logs status points
   const selectedPath = useMemo(() => {
+    // Session time window: 출근 ~ 최종퇴근
+    const sorted = [...selectedDriverLogs].sort(
+      (a, b) => (resolveTs(a.timestamp)?.getTime() || 0) - (resolveTs(b.timestamp)?.getTime() || 0)
+    );
+    const checkInLog  = sorted.find(l => l.status === "출근"      && toKSTDate(l.timestamp) === selectedTrackDate);
+    const checkOutLog = [...sorted].reverse().find(l => l.status === "최종퇴근" && toKSTDate(l.timestamp) === selectedTrackDate);
+    const checkInTime  = checkInLog  ? resolveTs(checkInLog.timestamp)?.getTime()  : null;
+    const checkOutTime = checkOutLog ? resolveTs(checkOutLog.timestamp)?.getTime() : null;
+
     // Use GPS tracks when we have actual continuous waypoints
     if (gpsTracks.length >= 2) {
-      // Interpolate driver status at each GPS timestamp from driver_logs
-      const sortedLogs = [...selectedDriverLogs]
-        .filter(l => l.status)
-        .sort((a, b) => (resolveTs(a.timestamp)?.getTime() || 0) - (resolveTs(b.timestamp)?.getTime() || 0));
-      return gpsTracks.map(t => {
+      const sessionTracks = checkInTime
+        ? gpsTracks.filter(t => {
+            const ts = resolveTs(t.timestamp)?.getTime() || 0;
+            return ts >= checkInTime && (checkOutTime == null || ts <= checkOutTime);
+          })
+        : gpsTracks;
+      const tracksToUse = sessionTracks.length >= 2 ? sessionTracks : gpsTracks;
+      return tracksToUse.map(t => {
         const ts = resolveTs(t.timestamp)?.getTime() || 0;
         let status = "운행중";
-        for (let i = sortedLogs.length - 1; i >= 0; i--) {
-          const logTs = resolveTs(sortedLogs[i].timestamp)?.getTime() || 0;
-          if (logTs <= ts) { status = sortedLogs[i].status; break; }
+        for (let i = sorted.length - 1; i >= 0; i--) {
+          const logTs = resolveTs(sorted[i].timestamp)?.getTime() || 0;
+          if (logTs <= ts) { status = sorted[i].status; break; }
         }
         return { lat: t.lat, lng: t.lng, status, timestamp: t.timestamp, dwell: null };
       });
     }
     // Fallback: use status change log positions from selected date's session
-    const sessionStart = [...selectedDriverLogs].reverse().findIndex(l =>
-      l.status === "출근" && toKSTDate(l.timestamp) === selectedTrackDate
-    );
-    const sessionLogs = sessionStart >= 0
-      ? [...selectedDriverLogs].reverse().slice(sessionStart)
-      : selectedDriverLogs.filter(l => toKSTDate(l.timestamp) === selectedTrackDate);
+    const sessionStart = sorted.findIndex(l => l.status === "출근" && toKSTDate(l.timestamp) === selectedTrackDate);
+    let sessionLogs = sessionStart >= 0
+      ? sorted.slice(sessionStart)
+      : sorted.filter(l => toKSTDate(l.timestamp) === selectedTrackDate);
+    // Cut off at 최종퇴근
+    const endIdx = sessionLogs.findIndex(l => l.status === "최종퇴근");
+    if (endIdx >= 0) sessionLogs = sessionLogs.slice(0, endIdx + 1);
     const withLoc = sessionLogs.filter(l => l.location?.lat != null);
     if (withLoc.length === 0) return [];
-    return [...withLoc].reverse().map((l, i, arr) => {
+    return withLoc.map((l, i, arr) => {
       const nextLog = arr[i + 1];
       const thisTs = resolveTs(l.timestamp);
       const nextTs = resolveTs(nextLog?.timestamp);
       const dwell = thisTs && nextTs ? nextTs.getTime() - thisTs.getTime() : null;
-      return {
-        lat: l.location.lat,
-        lng: l.location.lng,
-        status: l.status,
-        timestamp: l.timestamp,
-        dwell,
-      };
+      return { lat: l.location.lat, lng: l.location.lng, status: l.status, timestamp: l.timestamp, dwell };
     });
-  }, [selectedDriverLogs, gpsTracks]);
+  }, [selectedDriverLogs, gpsTracks, selectedTrackDate]);
 
   // ── 선택 날짜 세션 데이터 ──────────────────────────────────────────────────
   const sessionForDate = useMemo(() => {
@@ -2442,12 +2449,22 @@ export default function FleetManagement() {
     setContextMenu({ x: e.clientX, y: e.clientY, driver: d });
   }, []);
 
-  // Keep selected in sync with live data updates
+  // Keep selected in sync with live data updates + auto-follow on map (출근~최종퇴근 중)
   useEffect(() => {
     const sel = selectedRef.current;
     if (!sel) return;
     const updated = drivers.find(d => d.id === sel.id);
-    if (updated) setSelected(updated);
+    if (!updated) return;
+    setSelected(updated);
+    // Auto-follow only while driver is active (퇴근/최종퇴근이면 추적 중단)
+    const isCheckedOut = ["퇴근", "최종퇴근"].includes(updated.상태);
+    if (
+      updated.location &&
+      !isCheckedOut &&
+      (updated.location.lat !== sel.location?.lat || updated.location.lng !== sel.location?.lng)
+    ) {
+      setMapCenter({ lat: updated.location.lat, lng: updated.location.lng, _t: Date.now() });
+    }
   }, [drivers]);
 
   // ── 피드 전체 삭제 ────────────────────────────────────────────────────────
@@ -2830,7 +2847,7 @@ export default function FleetManagement() {
                   전체 보기
                 </button>
               </div>
-              <FleetMap drivers={filteredRows} center={mapCenter} onSelect={handleSelect} selectedPath={selectedPath} roadPath={roadPath} fitAllCount={fitAllCount} />
+              <FleetMap drivers={filteredRows} center={mapCenter} onSelect={handleSelect} selectedPath={selectedPath} roadPath={roadPath} fitAllCount={fitAllCount} selectedDriver={selected} />
             </div>
           </div>
 

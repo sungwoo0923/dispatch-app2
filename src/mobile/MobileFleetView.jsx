@@ -58,7 +58,7 @@ function MapRecenter({ center }) {
   const prev = useRef(null);
   useEffect(() => {
     if (!center) return;
-    const key = `${center.lat},${center.lng}`;
+    const key = center._t ? `${center.lat},${center.lng},${center._t}` : `${center.lat},${center.lng}`;
     if (prev.current === key) return;
     prev.current = key;
     map.setView([center.lat, center.lng], 14, { animate: true });
@@ -80,24 +80,16 @@ function FitPath({ points }) {
 }
 
 function makeIcon(color, active, name) {
-  const ring = active
-    ? `<div style="position:absolute;inset:-5px;border-radius:50%;background:${color};opacity:.25;animation:mfvRing 1.8s infinite ease-out;"></div>`
-    : "";
-  const label = name
-    ? `<div style="position:absolute;bottom:20px;left:50%;transform:translateX(-50%);white-space:nowrap;background:rgba(27,43,75,0.85);color:#fff;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;pointer-events:none;letter-spacing:0.02em;">${name}</div>`
-    : "";
+  const ring1 = active ? `<div style="position:absolute;top:-7px;left:-7px;right:-7px;bottom:5px;border-radius:12px;background:${color};opacity:.22;animation:mfvRing 1.8s infinite ease-out;pointer-events:none;"></div>` : "";
+  const ring2 = active ? `<div style="position:absolute;top:-4px;left:-4px;right:-4px;bottom:6px;border-radius:10px;background:${color};opacity:.15;animation:mfvRing 1.8s infinite ease-out;animation-delay:.5s;pointer-events:none;"></div>` : "";
+  const label = name ? `<div style="position:absolute;top:-20px;left:50%;transform:translateX(-50%);white-space:nowrap;background:rgba(27,43,75,0.88);color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;pointer-events:none;letter-spacing:0.02em;box-shadow:0 1px 4px rgba(0,0,0,0.2);">${name}</div>` : "";
+  const truckSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="14" viewBox="0 0 26 16"><rect x="1" y="1" width="16" height="11" rx="2" fill="white" opacity="0.95"/><path d="M17 4.5L23 7V14H17V4.5Z" fill="white" opacity="0.92"/><line x1="17" y1="8" x2="22" y2="9.5" stroke="${color}" stroke-width="1" opacity="0.6"/><circle cx="5" cy="14" r="2.2" fill="${color}" stroke="white" stroke-width="1.5"/><circle cx="20" cy="14" r="2.2" fill="${color}" stroke="white" stroke-width="1.5"/><rect x="3" y="3" width="5" height="4.5" rx="0.5" fill="${color}" opacity="0.35"/><rect x="9" y="3" width="5" height="4.5" rx="0.5" fill="${color}" opacity="0.35"/></svg>`;
   return L.divIcon({
-    html: `
-      <div style="position:relative;width:16px;height:16px;display:flex;align-items:center;justify-content:center;">
-        ${label}
-        ${ring}
-        <div style="width:14px;height:14px;background:${color};border-radius:50%;border:2.5px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.45);position:relative;z-index:1;"></div>
-      </div>
-      <style>@keyframes mfvRing{0%{transform:scale(1);opacity:.5}100%{transform:scale(2.8);opacity:0}}</style>`,
+    html: `<div style="position:relative;display:flex;flex-direction:column;align-items:center;width:44px;">${ring1}${ring2}${label}<div style="position:relative;width:44px;height:32px;background:${color};border-radius:10px;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(0,0,0,0.38);z-index:1;"><div style="display:flex;align-items:center;justify-content:center;">${truckSvg}</div></div><div style="width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-top:9px solid ${color};z-index:1;margin-top:-1px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.25));"></div></div>`,
     className: "",
-    iconSize: [16, 16],
-    iconAnchor: [8, 8],
-    popupAnchor: [0, -12],
+    iconSize: [44, 44],
+    iconAnchor: [22, 44],
+    popupAnchor: [0, -46],
   });
 }
 
@@ -125,6 +117,8 @@ export default function MobileFleetView() {
   const [selectedDriverLogs, setSelectedDriverLogs] = useState([]);
   const [gpsTracks, setGpsTracks] = useState([]);
   const [roadPath, setRoadPath] = useState([]);
+  const [mapCenter, setMapCenter] = useState(null);
+  const prevMapLocRef = useRef(null);
 
   // 기본 구독
   useEffect(() => {
@@ -176,18 +170,45 @@ export default function MobileFleetView() {
     );
   }, [mapSelected?.id, selectedDate]);
 
-  // selectedPath 계산 (gpsTracks 우선, 없으면 driver_logs)
+  // selectedPath 계산 (출근 → 최종퇴근 구간, gpsTracks 우선)
   const selectedPath = useMemo(() => {
+    // 출근 시각: driver.workStartAt 또는 오늘 "출근" 로그
+    const checkInLog = selectedDriverLogs.find(l =>
+      l.status === "출근" && resolveTs(l.timestamp)?.toISOString().slice(0, 10) === selectedDate
+    );
+    const checkInTime = checkInLog
+      ? resolveTs(checkInLog.timestamp)?.getTime()
+      : (mapSelected?.workStartAt ? resolveTs(mapSelected.workStartAt)?.getTime() : null);
+    // 최종퇴근 시각
+    const checkOutLog = [...selectedDriverLogs].find(l =>
+      l.status === "최종퇴근" && resolveTs(l.timestamp)?.toISOString().slice(0, 10) === selectedDate
+    );
+    const checkOutTime = checkOutLog ? resolveTs(checkOutLog.timestamp)?.getTime() : null;
+
     if (gpsTracks.length >= 2) {
-      return gpsTracks.map(t => ({ lat: t.lat, lng: t.lng, status: "운행중", timestamp: t.timestamp }));
+      const sessionTracks = checkInTime
+        ? gpsTracks.filter(t => {
+            const ts = resolveTs(t.timestamp)?.getTime() || 0;
+            return ts >= checkInTime && (checkOutTime == null || ts <= checkOutTime);
+          })
+        : gpsTracks;
+      const tracks = sessionTracks.length >= 2 ? sessionTracks : gpsTracks;
+      return tracks.map(t => ({ lat: t.lat, lng: t.lng, status: "운행중", timestamp: t.timestamp }));
     }
-    const withLoc = selectedDriverLogs.filter(l => l.location?.lat != null);
+    const withLoc = selectedDriverLogs.filter(l => {
+      if (!l.location?.lat) return false;
+      const ts = resolveTs(l.timestamp)?.getTime();
+      if (!ts) return false;
+      if (checkInTime && ts < checkInTime) return false;
+      if (checkOutTime && ts > checkOutTime) return false;
+      return true;
+    });
     if (withLoc.length === 0) return [];
     return [...withLoc].reverse().map(l => ({
       lat: l.location.lat, lng: l.location.lng,
       status: l.status, timestamp: l.timestamp,
     }));
-  }, [selectedDriverLogs, gpsTracks]);
+  }, [selectedDriverLogs, gpsTracks, selectedDate, mapSelected?.workStartAt]);
 
   // OSRM 도로 경로 (실제 도로 추적)
   useEffect(() => {
@@ -284,11 +305,20 @@ export default function MobileFleetView() {
     setActiveSection("map");
   }, []);
 
-  // 지도에서 선택 기사 live 동기화
+  // 지도에서 선택 기사 live 동기화 + 자동 추적 (출근~최종퇴근 중)
   useEffect(() => {
     if (!mapSelected) return;
     const updated = drivers.find(d => d.id === mapSelected.id);
-    if (updated) setMapSelected(updated);
+    if (!updated) return;
+    setMapSelected(updated);
+    const isCheckedOut = ["퇴근", "최종퇴근"].includes(updated.상태);
+    if (updated.location && !isCheckedOut) {
+      const locKey = `${updated.location.lat.toFixed(5)},${updated.location.lng.toFixed(5)}`;
+      if (prevMapLocRef.current !== locKey) {
+        prevMapLocRef.current = locKey;
+        setMapCenter({ lat: updated.location.lat, lng: updated.location.lng, _t: Date.now() });
+      }
+    }
   }, [drivers]); // eslint-disable-line
 
   const STATUS_OPTS = ["전체", "운행중", "출근", "상차중", "하차중", "대기", "퇴근"];
@@ -552,7 +582,7 @@ export default function MobileFleetView() {
               scrollWheelZoom
               style={{ height: "100%", width: "100%" }}
             >
-              {mapSelected?.location && <MapRecenter center={mapSelected.location} />}
+              <MapRecenter center={mapCenter || mapSelected?.location} />
               {displayPath.length >= 2 && <FitPath points={displayPath} />}
               <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap" />
 
@@ -596,7 +626,7 @@ export default function MobileFleetView() {
                   icon={getIcon(d.상태, d.active, d.이름)}
                   eventHandlers={{ click: () => setMapSelected(prev => prev?.id === d.id ? null : d) }}
                 >
-                  <Popup offset={[0, -12]}>
+                  <Popup offset={[0, -46]}>
                     <div style={{ fontSize: 13, lineHeight: 1.8, minWidth: 140, fontFamily: "'Noto Sans KR',sans-serif" }}>
                       <div style={{ fontWeight: 800, color: NAVY, marginBottom: 3, fontSize: 14 }}>
                         {d.이름}
@@ -614,6 +644,18 @@ export default function MobileFleetView() {
               ) : null)}
             </MapContainer>
 
+            {/* 실시간 갱신 배지 */}
+            <div style={{ position: "absolute", top: 10, left: 10, zIndex: 1000, display: "flex", flexDirection: "column", gap: 6 }}>
+              <div style={{ background: "rgba(27,43,75,0.82)", borderRadius: 8, padding: "5px 10px", fontSize: 11, color: "rgba(255,255,255,0.9)", fontWeight: 700, display: "flex", alignItems: "center", gap: 5, backdropFilter: "blur(4px)" }}>
+                <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#10b981", animation: "mfvBlink 1.5s ease-in-out infinite" }} />
+                30초 주기 갱신
+              </div>
+              {mapSelected && (
+                <div style={{ background: "rgba(255,255,255,0.9)", borderRadius: 8, padding: "5px 10px", fontSize: 11, color: NAVY, fontWeight: 700, backdropFilter: "blur(4px)" }}>
+                  {mapSelected.이름} · {timeAgo(mapSelected.updatedAt)}
+                </div>
+              )}
+            </div>
             {/* 경로 로딩 표시 */}
             {mapSelected && selectedPath.length >= 2 && roadPath.length < 2 && (
               <div style={{ position: "absolute", top: 10, right: 10, zIndex: 1000, background: "rgba(255,255,255,.92)", borderRadius: 8, padding: "5px 11px", fontSize: 12, color: "#6b7280", fontWeight: 600, display: "flex", alignItems: "center", gap: 6, backdropFilter: "blur(4px)" }}>
@@ -732,7 +774,11 @@ export default function MobileFleetView() {
         <MobileAttendance logs={attendanceLogs} drivers={drivers} />
       )}
 
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+      <style>{`
+        @keyframes spin{to{transform:rotate(360deg)}}
+        @keyframes mfvRing{0%{transform:scale(1);opacity:.5}100%{transform:scale(2.2);opacity:0}}
+        @keyframes mfvBlink{0%,100%{opacity:1}50%{opacity:.4}}
+      `}</style>
     </div>
   );
 }
