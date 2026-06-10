@@ -21126,7 +21126,7 @@ setConfirmChange(null);
                       {["배차방식","지급방식","배차상태","차량종류"].includes(cond.field)?(
                         <select className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.value} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],value:e.target.value};setTempFilterConditions(n);}}>
                           <option value="">값 선택</option>
-                          {(cond.field==="배차방식"?["24시","24시콜","화물주선","직납","기타"]:cond.field==="지급방식"?["계산서","현금","카드","선불","착불"]:cond.field==="배차상태"?["배차중","배차완료","배차취소"]:["다마스","라보","1톤","1.4톤","2.5톤","3.5톤","5톤","11톤","25톤","오토바이"]).map(v=><option key={v} value={v}>{v}</option>)}
+                          {(cond.field==="배차방식"?["24시","직접배차","인성","고정기사"]:cond.field==="지급방식"?["계산서","착불","선불"]:cond.field==="배차상태"?["배차중","배차완료","배차취소"]:["라보/다마스","카고","윙바디","리프트","탑차","냉장탑","냉동탑","냉장윙","냉동윙","오토바이","기타"]).map(v=><option key={v} value={v}>{v}</option>)}
                         </select>
                       ):(
                         <input type="text" className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.value} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],value:e.target.value};setTempFilterConditions(n);}} placeholder="검색어 입력" />
@@ -27798,7 +27798,7 @@ setCopyTarget(prev => ({
                       {["배차방식","지급방식","배차상태","차량종류"].includes(cond.field)?(
                         <select className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.value} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],value:e.target.value};setTempFilterConditions(n);}}>
                           <option value="">값 선택</option>
-                          {(cond.field==="배차방식"?["24시","24시콜","화물주선","직납","기타"]:cond.field==="지급방식"?["계산서","현금","카드","선불","착불"]:cond.field==="배차상태"?["배차중","배차완료","배차취소"]:["다마스","라보","1톤","1.4톤","2.5톤","3.5톤","5톤","11톤","25톤","오토바이"]).map(v=><option key={v} value={v}>{v}</option>)}
+                          {(cond.field==="배차방식"?["24시","직접배차","인성","고정기사"]:cond.field==="지급방식"?["계산서","착불","선불"]:cond.field==="배차상태"?["배차중","배차완료","배차취소"]:["라보/다마스","카고","윙바디","리프트","탑차","냉장탑","냉동탑","냉장윙","냉동윙","오토바이","기타"]).map(v=><option key={v} value={v}>{v}</option>)}
                         </select>
                       ):(
                         <input type="text" className="border border-gray-200 rounded-lg px-2 py-1.5 text-[12px] flex-1 focus:outline-none focus:border-[#1B2B4B]" value={cond.value} onChange={e=>{const n=[...tempFilterConditions];n[idx]={...n[idx],value:e.target.value};setTempFilterConditions(n);}} placeholder="검색어 입력" />
@@ -29281,20 +29281,29 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [] }) {
       const sale = r.청구운임 || 0;
       const cost = r.기사운임 || 0;
       const bm = r.배차방식 || "";
-      const ct = String(r.차량종류 || "");
       const client = String(r.거래처명 || "");
       const pay = String(r.지급방식 || "");
+
+      // ── 매출 분류 ──
       if (client.includes("후레쉬")) {
-        addRow("rev_fresh", month, sale, cost);
+        addRow("rev_fresh", month, sale, 0);
+      } else if (bm === "인성") {
+        addRow("rev_auto", month, sale, 0);
       } else if (pay === "선불" || pay === "착불") {
-        addRow("rev_cash", month, sale, 0);
-        addRow("rev_cash_cost", month, 0, cost);
-      } else if (bm === "24시" || bm === "24시콜") {
-        addRow("rev_24", month, sale, cost);
-      } else if (ct.includes("오토") || ct.includes("오토바이")) {
-        addRow("rev_auto", month, sale, cost);
+        addRow("rev_cash", month, Math.max(0, sale - cost), 0);
+      } else if (bm === "24시" || bm === "24시콜" || bm === "고정기사") {
+        addRow("rev_24", month, sale, 0);
       } else {
-        addRow("rev_freight", month, sale, cost);
+        addRow("rev_freight", month, sale, 0);
+      }
+
+      // ── 매출원가(기사운임) 분류 ──
+      if (client.includes("후레쉬")) {
+        addRow("cost_fresh", month, 0, cost);
+      } else if (bm === "인성") {
+        addRow("cost_auto", month, 0, cost);
+      } else {
+        addRow("cost_freight", month, 0, cost);
       }
     });
     return result;
@@ -29316,9 +29325,8 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [] }) {
     autoVal("rev_cash", month) + autoVal("rev_fresh", month) + manVal("rev_etc", month);
 
   const totalCost = (month) =>
-    autoVal("rev_freight", month, "cost") + autoVal("rev_24", month, "cost") +
-    autoVal("rev_auto", month, "cost") + autoVal("rev_cash_cost", month, "cost") +
-    autoVal("rev_fresh", month, "cost") + manVal("cost_labor", month);
+    autoVal("cost_freight", month, "cost") + autoVal("cost_auto", month, "cost") +
+    autoVal("cost_fresh", month, "cost") + manVal("cost_labor", month);
 
   const grossProfit = (month) => totalRevenue(month) - totalCost(month);
 
@@ -29355,11 +29363,11 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [] }) {
     const val = manVal(rowKey, month);
     if (isEditing) {
       return (
-        <td className="px-1 py-0.5 text-right border-r border-gray-100">
+        <td className="px-1 py-0.5 text-center border-r border-gray-100">
           <input
             type="number"
             defaultValue={val || ""}
-            className="w-full text-right text-[12px] border border-blue-400 rounded px-1 outline-none"
+            className="w-full text-center text-[12px] border border-blue-400 rounded px-1 outline-none"
             autoFocus
             onBlur={(e) => {
               updateCell(rowKey, month, e.target.value);
@@ -29375,7 +29383,7 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [] }) {
     }
     return (
       <td
-        className="px-1 py-0.5 text-right border-r border-gray-100 cursor-pointer hover:bg-blue-50 text-[12px] text-gray-700"
+        className="px-1 py-0.5 text-center border-r border-gray-100 cursor-pointer hover:bg-blue-50 text-[12px] text-gray-700"
         onClick={() => setEditingCell({ rowKey, month })}
       >
         {val ? val.toLocaleString() : ""}
@@ -29386,14 +29394,14 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [] }) {
   const AutoCell = ({ rowKey, month, field = "sale" }) => {
     const val = autoVal(rowKey, month, field);
     return (
-      <td className={`px-1 py-0.5 text-right border-r border-gray-100 text-[12px] ${val ? "text-gray-700" : "text-gray-200"}`}>
+      <td className={`px-1 py-0.5 text-center border-r border-gray-100 text-[12px] ${val ? "text-gray-700" : "text-gray-200"}`}>
         {val ? val.toLocaleString() : ""}
       </td>
     );
   };
 
   const CalcCell = ({ value, highlight = false }) => (
-    <td className={`px-1 py-0.5 text-right border-r border-gray-100 text-[12px] font-semibold ${
+    <td className={`px-1 py-0.5 text-center border-r border-gray-100 text-[12px] font-semibold ${
       highlight ? (value >= 0 ? "text-emerald-700" : "text-rose-600") : cellClass(value)
     }`}>
       {value !== 0 ? value.toLocaleString() : "–"}
@@ -29401,7 +29409,7 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [] }) {
   );
 
   const RateCell = ({ profit, revenue }) => (
-    <td className={`px-1 py-0.5 text-right border-r border-gray-100 text-[11px] font-medium ${
+    <td className={`px-1 py-0.5 text-center border-r border-gray-100 text-[11px] font-medium ${
       revenue ? (profit / revenue >= 0 ? "text-emerald-600" : "text-rose-500") : "text-gray-300"
     }`}>
       {pct(profit, revenue)}
@@ -29411,9 +29419,11 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [] }) {
   const momPct = (calcFn, month) => {
     const mIdx = MONTHS.indexOf(month);
     if (mIdx === 0) return null;
+    const cur = calcFn(month);
+    if (!cur) return null; // 이번 달 데이터 없으면 표시 안함
     const prev = calcFn(MONTHS[mIdx - 1]);
     if (!prev) return null;
-    return ((calcFn(month) - prev) / Math.abs(prev)) * 100;
+    return ((cur - prev) / Math.abs(prev)) * 100;
   };
 
   const MomRow = ({ calcFn }) => (
@@ -29421,10 +29431,11 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [] }) {
       <td className="px-3 py-0.5 text-[10px] text-gray-400 whitespace-nowrap border-r border-gray-200 pl-8">전월대비</td>
       {MONTHS.map(m => {
         const p = momPct(calcFn, m);
-        if (p === null) return <td key={m} className="px-1 py-0.5 text-right border-r border-gray-100 text-[10px] text-gray-300">–</td>;
+        if (p === null) return <td key={m} className="px-1 py-0.5 text-center border-r border-gray-100 text-[10px] text-gray-300">–</td>;
         const isPos = p >= 0;
         return (
-          <td key={m} className={`px-1 py-0.5 text-right border-r border-gray-100 text-[10px] font-semibold ${isPos ? "text-red-500" : "text-blue-500"}`}>
+          <td key={m} className="px-1 py-0.5 text-center border-r border-gray-100 text-[10px] font-semibold"
+            style={{ color: isPos ? "#ef4444" : "#3b82f6" }}>
             {isPos ? "▲" : "▼"}{Math.abs(p).toFixed(1)}%
           </td>
         );
@@ -29435,7 +29446,7 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [] }) {
 
   const SectionHeader = ({ label, bg = "#1B2B4B" }) => (
     <tr style={{backgroundColor: bg}}>
-      <td colSpan={14} className="px-3 py-1.5 text-[12px] font-bold text-white tracking-wide">{label}</td>
+      <td colSpan={14} className="px-4 py-2 text-[13px] font-bold text-white tracking-widest uppercase">{label}</td>
     </tr>
   );
 
@@ -29465,13 +29476,13 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [] }) {
         if (isAuto) return <AutoCell key={m} rowKey={rowKey} month={m} field={field} />;
         return <ManualCell key={m} rowKey={rowKey} month={m} />;
       })}
-      <td className="px-1 py-0.5 text-right text-[12px] font-semibold text-gray-800">
+      <td className="px-1 py-0.5 text-center text-[12px] font-semibold text-gray-800">
         {calcFn && isPct
           ? pct(yearTotal(calcFn), yearTotal(totalRevenue))
           : calcFn
             ? (yearTotal(calcFn) !== 0 ? yearTotal(calcFn).toLocaleString() : "–")
             : isAuto
-              ? (rowMonthTotal(rowKey, true, field) || "–" === 0 ? "–" : rowMonthTotal(rowKey, true, field).toLocaleString() || "–")
+              ? (rowMonthTotal(rowKey, true, field) ? rowMonthTotal(rowKey, true, field).toLocaleString() : "–")
               : (rowMonthTotal(rowKey, false) !== 0 ? rowMonthTotal(rowKey, false).toLocaleString() : "–")
         }
       </td>
@@ -29487,14 +29498,14 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [] }) {
         const val = calcFn(m);
         if (isPct) return <RateCell key={m} profit={calcFn(m)} revenue={totalRevenue(m)} />;
         return (
-          <td key={m} className={`px-1 py-1 text-right border-r border-gray-100 text-[12px] ${bold ? "font-bold" : "font-semibold"} ${
+          <td key={m} className={`px-1 py-1 text-center border-r border-gray-100 text-[12px] ${bold ? "font-bold" : "font-semibold"} ${
             isHighlight ? (val >= 0 ? "text-emerald-700" : "text-rose-600") : cellClass(val)
           }`}>
             {val !== 0 ? val.toLocaleString() : "–"}
           </td>
         );
       })}
-      <td className={`px-1 py-1 text-right text-[12px] ${bold ? "font-bold" : "font-semibold"} ${
+      <td className={`px-1 py-1 text-center text-[12px] ${bold ? "font-bold" : "font-semibold"} ${
         isPct ? "" : isHighlight
           ? (yearTotal(calcFn) >= 0 ? "text-emerald-700" : "text-rose-600")
           : cellClass(yearTotal(calcFn))
@@ -29687,7 +29698,7 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [] }) {
             <SubHeader label="구분" />
             <DataRow label="화물주선 매출" rowKey="rev_freight" isAuto field="sale" indent={0} />
             <DataRow label="24시콜 매출" rowKey="rev_24" isAuto field="sale" />
-            <DataRow label="오토바이 매출" rowKey="rev_auto" isAuto field="sale" />
+            <DataRow label="오토바이(인성) 매출" rowKey="rev_auto" isAuto field="sale" />
             <DataRow label="선착불 매출" rowKey="rev_cash" isAuto field="sale" />
             <DataRow label="후레쉬물류 매출" rowKey="rev_fresh" isAuto field="sale" />
             <DataRow label="기타 매출" rowKey="rev_etc" />
@@ -29695,25 +29706,23 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [] }) {
             <MomRow calcFn={totalRevenue} />
 
             {/* ── 매출원가 ── */}
-            <SectionHeader label="매출원가" bg="#1E3A5F" />
+            <SectionHeader label="매출원가" bg="#27374D" />
             <SubHeader label="구분" />
-            <DataRow label="화물주선 운반비" rowKey="rev_freight" isAuto field="cost" />
-            <DataRow label="24시콜 운반비" rowKey="rev_24" isAuto field="cost" />
-            <DataRow label="오토바이 운반비" rowKey="rev_auto" isAuto field="cost" />
-            <DataRow label="선착불 운반비" rowKey="rev_cash_cost" isAuto field="cost" />
-            <DataRow label="후레쉬물류 운반비" rowKey="rev_fresh" isAuto field="cost" />
+            <DataRow label="화물주선 운반비" rowKey="cost_freight" isAuto field="cost" />
+            <DataRow label="오토바이(인성) 운반비" rowKey="cost_auto" isAuto field="cost" />
+            <DataRow label="후레쉬물류 운반비" rowKey="cost_fresh" isAuto field="cost" />
             <DataRow label="인건비" rowKey="cost_labor" />
             <TotalRow label="매출원가 합계" calcFn={totalCost} />
             <MomRow calcFn={totalCost} />
 
             {/* ── 매출총이익 ── */}
-            <SectionHeader label="매출총이익" bg="#14453A" />
+            <SectionHeader label="매출총이익" bg="#1A4731" />
             <TotalRow label="매출총이익" calcFn={grossProfit} isHighlight />
             <MomRow calcFn={grossProfit} />
             <TotalRow label="매출총이익률" calcFn={grossProfit} isPct />
 
             {/* ── 판매관리비 ── */}
-            <SectionHeader label="판매관리비 (판관비)" bg="#2D3748" />
+            <SectionHeader label="판매관리비 (판관비)" bg="#4A4A6A" />
             <SubHeader label="구분" />
             {SGA_ITEMS.map(({ key, label }) => (
               <DataRow key={key} label={label} rowKey={key} />
@@ -29721,13 +29730,13 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [] }) {
             <TotalRow label="판관비 합계" calcFn={sgaTotal} />
 
             {/* ── 영업이익 ── */}
-            <SectionHeader label="영업이익" bg="#0F4C3A" />
+            <SectionHeader label="영업이익" bg="#1D4E5A" />
             <TotalRow label="영업이익" calcFn={opProfit} isHighlight />
             <MomRow calcFn={opProfit} />
             <TotalRow label="영업이익률" calcFn={opProfit} isPct />
 
             {/* ── 영업외손익 ── */}
-            <SectionHeader label="영업외손익" bg="#3B3052" />
+            <SectionHeader label="영업외손익" bg="#5B2333" />
             <SubHeader label="구분" />
             <DataRow label="영업외 수익" rowKey="other_income" />
             <DataRow label="영업외 비용" rowKey="other_expense" />
