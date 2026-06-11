@@ -9545,7 +9545,7 @@ className={`
 
   {/* ================= Premium Today Dashboard v7 — Bold & Clear ================= */}
 <div
-  className="w-[330px] flex-shrink-0 rounded-2xl overflow-hidden border border-gray-200/50 bg-[#fafafa] flex flex-col self-start"
+  className="w-[1300px] flex-shrink-0 rounded-2xl overflow-hidden border border-gray-200/50 bg-[#fafafa] flex flex-col self-start"
   style={{ maxHeight: "fit-content" }}
 >
 
@@ -16586,8 +16586,8 @@ const head = isDark
 </div>
 
       {/* 테이블 */}
-      <div className={`overflow-x-auto w-full rounded-xl shadow border ${isDark ? "border-gray-700" : "border-gray-200"}`}>
-  <table className="dispatch-table">
+      <div className={`overflow-x-auto rounded-xl shadow border ${isDark ? "border-gray-700" : "border-gray-200"}`}>
+  <table className="w-full min-w-max table-auto">
           <thead className={isDark ? "bg-[#0f172a]" : "bg-[#1B2B4B]"}>
             <tr>
               {[
@@ -24525,9 +24525,9 @@ return (
       )}
 
       {/* ---------------- 테이블 ---------------- */}
-      <div className="overflow-x-auto w-full rounded-xl shadow border border-gray-200">
+      <div className="overflow-x-auto w-full rounded-xl overflow-hidden shadow border border-gray-200">
 
-  <table className="dispatch-table">
+  <table className="w-full min-w-max table-auto">
           <thead className="bg-[#1B2B4B]">
             <tr>
               {[

@@ -159,12 +159,3 @@ table tbody tr:nth-child(odd) td {
   background-color: #ffffff;
 }
 
-/* ===== dispatch-table: 4/5파트 — min-w-max 없이 100% 폭 유지, 셀 내용 말줄임 ===== */
-.dispatch-table {
-  width: 100% !important;
-}
-.dispatch-table thead th,
-.dispatch-table tbody td {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
