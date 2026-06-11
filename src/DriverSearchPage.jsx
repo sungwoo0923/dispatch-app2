@@ -180,12 +180,17 @@ export default function DriverSearchPage() {
             </div>
           )}
 
-          <InputField
-            label="상차일"
-            type="date"
-            value={date}
-            onChange={e => setDate(e.target.value)}
-          />
+          <div>
+            <InputField
+              label="상차일"
+              type="date"
+              value={date}
+              onChange={e => setDate(e.target.value)}
+            />
+            <div style={{ marginTop: -10, marginBottom: 14, fontSize: 11, color: "#ef4444", fontWeight: 600 }}>
+              * 상차일 기준으로 선택하세요
+            </div>
+          </div>
           <InputField
             label="차량번호"
             value={vehicleNo}
