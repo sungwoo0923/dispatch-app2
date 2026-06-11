@@ -2045,6 +2045,10 @@ export default function FleetManagement() {
   const selectedRef = useRef(selected);
   useEffect(() => { selectedRef.current = selected; }, [selected]);
 
+  const osrmKeyRef  = useRef(null);  // "<driverId>-<date>" — prevents OSRM re-run on GPS point additions
+  const osrmDoneRef = useRef(false); // true once OSRM succeeded for current key
+  const lastMapRefreshRef = useRef(0); // ms timestamp of last map-center pan (throttled to 1 min)
+
   // Persist tab choice
   useEffect(() => { sfSet("fm_tab", mainTab); }, [mainTab]);
 
@@ -2366,16 +2370,24 @@ export default function FleetManagement() {
   }, [gpsTracks]);
 
   // ── 실제 도로 경로 (OSRM) ─────────────────────────────────────────────────
-  // Fetch road-following geometry so the map line follows actual roads, not straight lines.
-  // Waypoints are sampled to ≤25 before sending to keep URL short.
+  // Only re-fetches when driver or date changes — NOT on every new GPS point.
   useEffect(() => {
-    setRoadPath([]);
+    const key = `${selected?.id ?? "none"}-${selectedTrackDate}`;
+
+    // Driver or date changed → reset and prepare for a new fetch
+    if (osrmKeyRef.current !== key) {
+      osrmKeyRef.current = key;
+      osrmDoneRef.current = false;
+      setRoadPath([]);
+    }
+
+    // Already fetched successfully for this driver+date → keep existing road path
+    if (osrmDoneRef.current) return;
     if (selectedPath.length < 2) return;
 
     const controller = new AbortController();
     const timer = setTimeout(async () => {
       try {
-        // Sample to max 25 waypoints
         let wps = selectedPath;
         if (selectedPath.length > 25) {
           const step = Math.ceil(selectedPath.length / 24);
@@ -2393,11 +2405,10 @@ export default function FleetManagement() {
         const geometry = data.routes?.[0]?.geometry?.coordinates;
         if (geometry) {
           setRoadPath(geometry.map(([lng, lat]) => ({ lat, lng })));
+          osrmDoneRef.current = true;
         }
-      } catch (_) {
-        // Silently fall back to straight-line selectedPath in FleetMap
-      }
-    }, 800); // small debounce to avoid firing on every live GPS update
+      } catch (_) {}
+    }, 800);
 
     return () => { clearTimeout(timer); controller.abort(); };
   }, [selectedPath]);
@@ -2449,26 +2460,36 @@ export default function FleetManagement() {
     if (loc?.lat) setMapCenter({ lat: loc.lat, lng: loc.lng, _t: Date.now() });
   }, []);
 
+  const handleMapRefresh = useCallback(() => {
+    const sel = selectedRef.current;
+    const updated = sel ? drivers.find(d => d.id === sel.id) : null;
+    const loc = updated?.location ?? sel?.location;
+    if (loc?.lat) {
+      lastMapRefreshRef.current = Date.now();
+      setMapCenter({ lat: loc.lat, lng: loc.lng, _t: Date.now() });
+    }
+  }, [drivers]);
+
   const handleContextMenu = useCallback((e, d) => {
     e.preventDefault();
     setContextMenu({ x: e.clientX, y: e.clientY, driver: d });
   }, []);
 
-  // Keep selected in sync with live data updates + auto-follow on map (출근~최종퇴근 중)
+  // Keep selected in sync with live data updates + auto-follow on map (1분 주기, 퇴근 시 중단)
   useEffect(() => {
     const sel = selectedRef.current;
     if (!sel) return;
     const updated = drivers.find(d => d.id === sel.id);
     if (!updated) return;
     setSelected(updated);
-    // Auto-follow only while driver is active (퇴근/최종퇴근이면 추적 중단)
     const isCheckedOut = ["퇴근", "최종퇴근"].includes(updated.상태);
-    if (
-      updated.location &&
-      !isCheckedOut &&
-      (updated.location.lat !== sel.location?.lat || updated.location.lng !== sel.location?.lng)
-    ) {
-      setMapCenter({ lat: updated.location.lat, lng: updated.location.lng, _t: Date.now() });
+    if (updated.location && !isCheckedOut &&
+        (updated.location.lat !== sel.location?.lat || updated.location.lng !== sel.location?.lng)) {
+      const now = Date.now();
+      if (now - lastMapRefreshRef.current >= 60000) {
+        lastMapRefreshRef.current = now;
+        setMapCenter({ lat: updated.location.lat, lng: updated.location.lng, _t: Date.now() });
+      }
     }
   }, [drivers]);
 
@@ -2840,10 +2861,19 @@ export default function FleetManagement() {
 
             <div style={{ flex: "1 1 60%", border: "1px solid #e5e7eb", borderRadius: 12, overflow: "hidden", minWidth: 0, minHeight: 520, position: "relative", isolation: "isolate" }}>
               <div style={{ position: "absolute", top: 12, left: 12, zIndex: 1000, display: "flex", alignItems: "center", gap: 8 }}>
-                <div style={{ background: "rgba(255,255,255,0.93)", border: "1px solid #e5e7eb", borderRadius: 8, padding: "6px 13px", fontSize: 13, fontWeight: 700, color: NAVY, backdropFilter: "blur(4px)", boxShadow: "0 1px 6px rgba(0,0,0,.08)" }}>
-                  실시간 위치
-                  <span style={{ marginLeft: 8, color: "#6b7280", fontWeight: 500 }}>{filteredRows.filter(d => d.location).length}대</span>
+                <div style={{ background: "rgba(255,255,255,0.93)", border: "1px solid #e5e7eb", borderRadius: 8, padding: "6px 13px", fontSize: 13, fontWeight: 700, color: NAVY, backdropFilter: "blur(4px)", boxShadow: "0 1px 6px rgba(0,0,0,.08)", display: "flex", alignItems: "center", gap: 7 }}>
+                  <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#10b981", display: "inline-block" }} />
+                  1분 주기 갱신
+                  <span style={{ color: "#6b7280", fontWeight: 500 }}>{filteredRows.filter(d => d.location).length}대</span>
                 </div>
+                <button
+                  onClick={handleMapRefresh}
+                  title="지도 위치 즉시 새로고침"
+                  style={{ background: "rgba(255,255,255,0.93)", border: "1px solid #e5e7eb", borderRadius: 8, padding: "6px 11px", fontSize: 12, fontWeight: 700, color: NAVY, backdropFilter: "blur(4px)", boxShadow: "0 1px 6px rgba(0,0,0,.08)", cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}
+                >
+                  <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  새로고침
+                </button>
                 <button
                   onClick={() => setFitAllCount(c => c + 1)}
                   title="전체 기사 위치 맞추기"

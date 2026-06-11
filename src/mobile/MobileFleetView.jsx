@@ -124,6 +124,9 @@ export default function MobileFleetView() {
   const [roadPath, setRoadPath] = useState([]);
   const [mapCenter, setMapCenter] = useState(null);
   const prevMapLocRef = useRef(null);
+  const osrmKeyRef  = useRef(null);  // "<driverId>-<date>" — prevents OSRM re-run on GPS additions
+  const osrmDoneRef = useRef(false); // true once OSRM succeeded for current key
+  const lastMapRefreshRef = useRef(0); // throttle auto-pan to 1 minute
 
   // 기본 구독
   useEffect(() => {
@@ -215,10 +218,19 @@ export default function MobileFleetView() {
     }));
   }, [selectedDriverLogs, gpsTracks, selectedDate, mapSelected?.workStartAt]);
 
-  // OSRM 도로 경로 (실제 도로 추적)
+  // OSRM 도로 경로 — 기사/날짜 변경 시에만 재계산 (30초 GPS 업데이트 때는 스킵)
   useEffect(() => {
-    setRoadPath([]);
+    const key = `${mapSelected?.id ?? "none"}-${selectedDate}`;
+
+    if (osrmKeyRef.current !== key) {
+      osrmKeyRef.current = key;
+      osrmDoneRef.current = false;
+      setRoadPath([]);
+    }
+
+    if (osrmDoneRef.current) return;
     if (selectedPath.length < 2) return;
+
     const controller = new AbortController();
     const timer = setTimeout(async () => {
       try {
@@ -237,7 +249,10 @@ export default function MobileFleetView() {
         );
         const data = await res.json();
         const geometry = data.routes?.[0]?.geometry?.coordinates;
-        if (geometry) setRoadPath(geometry.map(([lng, lat]) => ({ lat, lng })));
+        if (geometry) {
+          setRoadPath(geometry.map(([lng, lat]) => ({ lat, lng })));
+          osrmDoneRef.current = true;
+        }
       } catch (_) {}
     }, 800);
     return () => { clearTimeout(timer); controller.abort(); };
@@ -310,7 +325,7 @@ export default function MobileFleetView() {
     setActiveSection("map");
   }, []);
 
-  // 지도에서 선택 기사 live 동기화 + 자동 추적 (출근~최종퇴근 중)
+  // 지도에서 선택 기사 live 동기화 + 자동 추적 (1분 주기, 퇴근 시 중단)
   useEffect(() => {
     if (!mapSelected) return;
     const updated = drivers.find(d => d.id === mapSelected.id);
@@ -321,10 +336,23 @@ export default function MobileFleetView() {
       const locKey = `${updated.location.lat.toFixed(5)},${updated.location.lng.toFixed(5)}`;
       if (prevMapLocRef.current !== locKey) {
         prevMapLocRef.current = locKey;
-        setMapCenter({ lat: updated.location.lat, lng: updated.location.lng, _t: Date.now() });
+        const now = Date.now();
+        if (now - lastMapRefreshRef.current >= 60000) {
+          lastMapRefreshRef.current = now;
+          setMapCenter({ lat: updated.location.lat, lng: updated.location.lng, _t: Date.now() });
+        }
       }
     }
   }, [drivers]); // eslint-disable-line
+
+  const handleMapRefresh = useCallback(() => {
+    const updated = mapSelected ? drivers.find(d => d.id === mapSelected.id) : null;
+    const loc = updated?.location ?? mapSelected?.location;
+    if (loc?.lat) {
+      lastMapRefreshRef.current = Date.now();
+      setMapCenter({ lat: loc.lat, lng: loc.lng, _t: Date.now() });
+    }
+  }, [mapSelected, drivers]);
 
   const STATUS_OPTS = ["전체", "운행중", "출근", "상차중", "하차중", "대기", "퇴근"];
 
@@ -649,11 +677,21 @@ export default function MobileFleetView() {
               ) : null)}
             </MapContainer>
 
-            {/* 실시간 갱신 배지 */}
+            {/* 갱신 배지 + 새로고침 버튼 */}
             <div style={{ position: "absolute", top: 10, left: 10, zIndex: 1000, display: "flex", flexDirection: "column", gap: 6 }}>
-              <div style={{ background: "rgba(27,43,75,0.82)", borderRadius: 8, padding: "5px 10px", fontSize: 11, color: "rgba(255,255,255,0.9)", fontWeight: 700, display: "flex", alignItems: "center", gap: 5, backdropFilter: "blur(4px)" }}>
-                <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#10b981", animation: "mfvBlink 1.5s ease-in-out infinite" }} />
-                30초 주기 갱신
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <div style={{ background: "rgba(27,43,75,0.82)", borderRadius: 8, padding: "5px 10px", fontSize: 11, color: "rgba(255,255,255,0.9)", fontWeight: 700, display: "flex", alignItems: "center", gap: 5, backdropFilter: "blur(4px)" }}>
+                  <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#10b981", animation: "mfvBlink 1.5s ease-in-out infinite" }} />
+                  1분 주기 갱신
+                </div>
+                <button
+                  onClick={handleMapRefresh}
+                  title="위치 즉시 새로고침"
+                  style={{ background: "rgba(255,255,255,0.93)", border: "1px solid #e5e7eb", borderRadius: 8, padding: "5px 10px", fontSize: 11, fontWeight: 700, color: NAVY, backdropFilter: "blur(4px)", cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}
+                >
+                  <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  새로고침
+                </button>
               </div>
               {mapSelected && (
                 <div style={{ background: "rgba(255,255,255,0.9)", borderRadius: 8, padding: "5px 10px", fontSize: 11, color: NAVY, fontWeight: 700, backdropFilter: "blur(4px)" }}>
@@ -661,8 +699,8 @@ export default function MobileFleetView() {
                 </div>
               )}
             </div>
-            {/* 경로 로딩 표시 */}
-            {mapSelected && selectedPath.length >= 2 && roadPath.length < 2 && (
+            {/* 경로 로딩 표시 — 기사/날짜 변경 시에만 잠깐 표시 */}
+            {mapSelected && selectedPath.length >= 2 && roadPath.length < 2 && !osrmDoneRef.current && (
               <div style={{ position: "absolute", top: 10, right: 10, zIndex: 1000, background: "rgba(255,255,255,.92)", borderRadius: 8, padding: "5px 11px", fontSize: 12, color: "#6b7280", fontWeight: 600, display: "flex", alignItems: "center", gap: 6, backdropFilter: "blur(4px)" }}>
                 <div style={{ width: 10, height: 10, border: `2px solid ${NAVY}`, borderTopColor: "transparent", borderRadius: "50%", animation: "spin .8s linear infinite" }} />
                 경로 계산중...
