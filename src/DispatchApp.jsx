@@ -9545,7 +9545,7 @@ className={`
 
   {/* ================= Premium Today Dashboard v7 — Bold & Clear ================= */}
 <div
-  className="w-[1300px] flex-shrink-0 rounded-2xl overflow-hidden border border-gray-200/50 bg-[#fafafa] flex flex-col self-start"
+  className="w-[330px] flex-shrink-0 rounded-2xl overflow-hidden border border-gray-200/50 bg-[#fafafa] flex flex-col self-start"
   style={{ maxHeight: "fit-content" }}
 >
 
@@ -16520,7 +16520,7 @@ const head = isDark
 }} className="px-2 py-1 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-semibold shadow hover:bg-[#243a60] transition whitespace-nowrap">일괄동기화</button>
     <button onClick={()=>{setTempSortKey(sortKey||"");setTempSortDir(sortDir||"asc");setTempFilterConditions([...filterConditions]);setSortModalOpen(true);}} className={`px-2 py-1 rounded-lg text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap ${(sortKey||filterConditions.length>0)?"bg-[#1B2B4B]":"bg-slate-500"}`}>정렬/필터{filterConditions.length>0?` (${filterConditions.length})`:""}</button>
     <button onClick={()=>{if(!selected.length)return showAlert("복사할 오더를 선택하세요.");if(selected.length>1)return showAlert("복사는 1개의 오더만 가능합니다.");setCopyModalOpen(true);}} className="px-2 py-1 rounded-lg bg-gray-800 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap">기사복사</button>
-    <button onClick={()=>{const selRow=selected.length===1?rows.find(r=>r._id===selected[0]):null;const url=selRow?`${window.location.origin}/driver-upload?id=${encodeURIComponent(selRow._id)}`:`${window.location.origin}/driver-upload`;const msg=`[인수증 업로드 안내]\n운송 완료 후 아래 링크를 통해 인수증을 업로드해 주시기 바랍니다.\n\n${url}\n\n서명 받은 인수증(파렛전표) 사진을 촬영하여 업로드해 주세요.\n미업로드 시 운임 정산이 지연될 수 있습니다.`;navigator.clipboard.writeText(msg).then(()=>showAlert("업로드 안내 메시지가 복사되었습니다.\n기사에게 붙여넣기로 전달하세요.")).catch(()=>showAlert(`링크: ${url}`));}} className="px-2 py-1 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap">업로드링크</button>
+    <button onClick={()=>{const selRow=selected.length===1?rows.find(r=>r._id===selected[0]):null;const url=selRow?`${window.location.origin}/upload?id=${encodeURIComponent(selRow._id)}`:`${window.location.origin}/upload`;const msg=`[인수증 업로드 안내]\n운송 완료 후 아래 링크를 통해 인수증을 업로드해 주시기 바랍니다.\n\n${url}\n\n서명 받은 인수증(파렛전표) 사진을 촬영하여 업로드해 주세요.\n미업로드 시 운임 정산이 지연될 수 있습니다.`;navigator.clipboard.writeText(msg).then(()=>showAlert("업로드 안내 메시지가 복사되었습니다.\n기사에게 붙여넣기로 전달하세요.")).catch(()=>showAlert(`링크: ${url}`));}} className="px-2 py-1 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap">업로드링크</button>
     <button onClick={()=>setDailyCloseOpen(true)} className="px-2 py-1 rounded-lg bg-gray-700 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap">일마감</button>
 
     <button onClick={()=>{
@@ -20174,7 +20174,7 @@ if (editTarget.하차지명) upsertPlace?.({ 업체명: editTarget.하차지명,
             className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
             onClick={() => {
               const r = contextMenu.row;
-              const url = `${window.location.origin}/driver-upload?id=${encodeURIComponent(r._id)}`;
+              const url = `${window.location.origin}/upload?id=${encodeURIComponent(r._id)}`;
               const dateStr = (() => {
                 const d = r.상차일 || "";
                 if (d && d.includes("-")) {
@@ -24489,7 +24489,7 @@ return (
         <div className="ml-auto flex items-center gap-1 flex-shrink-0">
           <button onClick={()=>{setTempSortKey(sortKey||"");setTempSortDir(sortDir||"asc");setTempFilterConditions([...filterConditions]);setSortModalOpen(true);}} className={`px-2 py-1 rounded-lg text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap ${(sortKey||filterConditions.length>0)?"bg-[#1B2B4B]":"bg-slate-500"}`}>정렬/필터{filterConditions.length>0?` (${filterConditions.length})`:""}</button>
           <button onClick={()=>{if(selected.size===0)return showAlert("복사할 항목을 선택하세요.");if(selected.size>1)return showAlert("1개만 선택할 수 있습니다.");setCopyModalOpen(true);}} className="px-2 py-1 rounded-lg bg-gray-800 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap">기사복사</button>
-          <button onClick={()=>{const selArr=[...selected];const selRow=selArr.length===1?filtered.find(r=>getId(r)===selArr[0]):null;const url=selRow?`${window.location.origin}/driver-upload?id=${encodeURIComponent(getId(selRow))}`:`${window.location.origin}/driver-upload`;const msg=`[인수증 업로드 안내]\n운송 완료 후 아래 링크를 통해 인수증을 업로드해 주시기 바랍니다.\n\n${url}\n\n서명 받은 인수증(파렛전표) 사진을 촬영하여 업로드해 주세요.\n미업로드 시 운임 정산이 지연될 수 있습니다.`;navigator.clipboard.writeText(msg).then(()=>showAlert("업로드 안내 메시지가 복사되었습니다.\n기사에게 붙여넣기로 전달하세요.")).catch(()=>showAlert(`링크: ${url}`));}} className="px-2 py-1 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap">업로드링크</button>
+          <button onClick={()=>{const selArr=[...selected];const selRow=selArr.length===1?filtered.find(r=>getId(r)===selArr[0]):null;const url=selRow?`${window.location.origin}/upload?id=${encodeURIComponent(getId(selRow))}`:`${window.location.origin}/upload`;const msg=`[인수증 업로드 안내]\n운송 완료 후 아래 링크를 통해 인수증을 업로드해 주시기 바랍니다.\n\n${url}\n\n서명 받은 인수증(파렛전표) 사진을 촬영하여 업로드해 주세요.\n미업로드 시 운임 정산이 지연될 수 있습니다.`;navigator.clipboard.writeText(msg).then(()=>showAlert("업로드 안내 메시지가 복사되었습니다.\n기사에게 붙여넣기로 전달하세요.")).catch(()=>showAlert(`링크: ${url}`));}} className="px-2 py-1 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap">업로드링크</button>
           <label className="px-2 py-1 rounded-lg bg-gray-700 text-white text-[11px] font-semibold shadow hover:opacity-90 cursor-pointer whitespace-nowrap">대용량 업로드<input type="file" accept=".xlsx,.xls" hidden onChange={handleBulkFile}/></label>
           <button className="px-2 py-1 rounded-lg bg-gray-600 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap" onClick={handleEditToggle}>{editMode?"수정완료":"선택수정"}</button>
           <button className="px-2 py-1 rounded-lg bg-red-600 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap" onClick={()=>{if(!selected.size)return showAlert("삭제할 항목이 없습니다.");setShowDeletePopup(true);}}>선택삭제</button>
@@ -24525,7 +24525,7 @@ return (
       )}
 
       {/* ---------------- 테이블 ---------------- */}
-      <div className="overflow-x-auto w-full rounded-xl overflow-hidden shadow border border-gray-200">
+      <div className="overflow-x-auto w-full rounded-xl shadow border border-gray-200">
 
   <table className="dispatch-table">
           <thead className="bg-[#1B2B4B]">
@@ -28377,7 +28377,7 @@ setCopyTarget(prev => ({
           <button className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
             onClick={() => {
               const r = contextMenuDS.row;
-              const url = `${window.location.origin}/driver-upload?id=${encodeURIComponent(r._id)}`;
+              const url = `${window.location.origin}/upload?id=${encodeURIComponent(r._id)}`;
               const dateStr = (() => {
                 const d = r.상차일 || "";
                 if (d && d.includes("-")) {
@@ -38342,6 +38342,7 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
   const [selected, setSelected] = React.useState(new Set());
   const [gradeFilter, setGradeFilter] = React.useState("전체");
   const [showAddForm, setShowAddForm] = React.useState(false);
+  const [newForm, setNewForm] = React.useState({ 차량번호:"", 이름:"", 전화번호:"", 메모:"", 등급:"일반" });
   const [showAll, setShowAll] = React.useState(false);
   const [page, setPage] = React.useState(1);
   const perPage = 100;
