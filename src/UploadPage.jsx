@@ -1,7 +1,7 @@
 // src/UploadPage.jsx
 // ─────────────────────────────────────────────────────────────
 // 공개 인수증 업로드 페이지 — 로그인 불필요, 링크만 있으면 접근 가능
-// 사용: /upload?id={dispatchDocId}
+// ?id=... 있으면 오더 기반 모드, 없으면 수동 입력 모드
 // ─────────────────────────────────────────────────────────────
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
@@ -24,7 +24,14 @@ import {
 export default function UploadPage() {
   const [orderId, setOrderId]     = useState(null);
   const [order, setOrder]         = useState(null);
-  const [status, setStatus]       = useState("loading"); // loading | ready | error | done
+  const [status, setStatus]       = useState("loading"); // loading | ready | done | error
+  const [isManual, setIsManual]   = useState(false);
+
+  // 수동 모드 입력 필드
+  const [manualDate, setManualDate] = useState("");
+  const [manualCar, setManualCar]   = useState("");
+  const [manualName, setManualName] = useState("");
+
   const [files, setFiles]         = useState([]);
   const [previews, setPreviews]   = useState([]);
   const [progress, setProgress]   = useState({});
@@ -32,11 +39,11 @@ export default function UploadPage() {
   const [uploaded, setUploaded]   = useState([]);
   const [drag, setDrag]           = useState(false);
   const inputRef                  = useRef(null);
-    const sigRef                    = useRef(null);
+  const sigRef                    = useRef(null);
   const [signed, setSigned]       = useState(false);
   const [sigDrawing, setSigDrawing] = useState(false);
 
-const isCold = React.useMemo(() => {
+  const isCold = React.useMemo(() => {
     const t = String(order?.차량종류 || "");
     return t.includes("냉장") || t.includes("냉동");
   }, [order]);
@@ -58,14 +65,25 @@ const isCold = React.useMemo(() => {
     setChecks(new Array(checkItems.length).fill(false));
   }, [checkItems.length]);
 
-  // ── URL에서 id 추출 & 오더 조회 ──────────────────────────
+  // ── URL에서 id/params 추출 & 오더 조회 ──────────────────────────
   useEffect(() => {
-    const id = new URLSearchParams(window.location.search).get("id");
-    if (!id) { setStatus("error"); return; }
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get("id");
+
+    if (!id) {
+      // 수동 모드 — URL 파라미터에서 초기값 읽기
+      setManualDate(params.get("date") || "");
+      setManualCar(params.get("car") || "");
+      setManualName(params.get("name") || "");
+      setIsManual(true);
+      setStatus("ready");
+      return;
+    }
+
     setOrderId(id);
- 
+
     (async () => {
-     try {
+      try {
         // orders(신규) → dispatch(기존) → dispatch_test(테스트) 순으로 검색
         let snap = await getDoc(doc(db, "orders", id));
         if (!snap.exists()) {
@@ -75,7 +93,6 @@ const isCold = React.useMemo(() => {
           snap = await getDoc(doc(db, "dispatch_test", id));
         }
         if (snap.exists()) {
-          // 어느 컬렉션에서 찾았는지 저장
           setOrderId(id);
           setOrder({ _id: id, _col: snap.ref.parent.id, ...snap.data() });
           setStatus("ready");
@@ -105,7 +122,8 @@ const isCold = React.useMemo(() => {
     setFiles(prev => prev.filter((_, idx) => idx !== i));
     setPreviews(prev => prev.filter((_, idx) => idx !== i));
   };
-// ✅ 이미지 압축 (최대 1200px, JPEG 75%)
+
+  // ✅ 이미지 압축 (최대 1200px, JPEG 75%)
   const compressImage = (file) => new Promise((resolve) => {
     if (file.type === "application/pdf") { resolve(file); return; }
     const reader = new FileReader();
@@ -127,20 +145,50 @@ const isCold = React.useMemo(() => {
     };
     reader.readAsDataURL(file);
   });
+
   // ── 업로드 실행 ──────────────────────────────────────────
   const handleUpload = async () => {
     if (!files.length || uploading) return;
+
+    // 수동 모드: 날짜 필수
+    if (isManual && !manualDate) {
+      alert("상차일을 선택해주세요.");
+      return;
+    }
+
     setUploading(true);
     const results = [];
+
+    // 수동 모드: 업로드 전 메타 문서 먼저 생성
+    let targetCol = order?._col || "orders";
+    let targetId = orderId;
+
+    if (isManual) {
+      try {
+        const metaDoc = await addDoc(collection(db, "driver_uploads"), {
+          상차일: manualDate,
+          차량번호: manualCar,
+          이름: manualName,
+          createdAt: serverTimestamp(),
+          source: "manual_upload",
+        });
+        targetCol = "driver_uploads";
+        targetId = metaDoc.id;
+        setOrderId(metaDoc.id);
+      } catch (e) {
+        console.error("메타 문서 생성 실패:", e);
+        alert("업로드 준비 실패: " + e.message);
+        setUploading(false);
+        return;
+      }
+    }
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       try {
-        // ✅ 압축
         setProgress(prev => ({ ...prev, [i]: 10 }));
         const compressed = await compressImage(file);
 
-        // ✅ base64 변환
         const base64 = await new Promise((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = (e) => resolve(e.target.result);
@@ -148,7 +196,6 @@ const isCold = React.useMemo(() => {
           reader.readAsDataURL(compressed);
         });
 
-        // ✅ 크기 체크 (1MB = 1,000,000 bytes)
         const sizeKB = Math.round(base64.length * 0.75 / 1024);
         if (base64.length > 1_300_000) {
           alert(`${file.name} 파일이 너무 큽니다 (${sizeKB}KB). 사진을 더 작게 찍거나 다른 사진을 사용하세요.`);
@@ -157,10 +204,11 @@ const isCold = React.useMemo(() => {
         }
 
         setProgress(prev => ({ ...prev, [i]: 70 }));
-// ✅ 첫 번째 파일 업로드 시 서명 이미지도 저장
+
+        // 첫 번째 파일 업로드 시 서명 이미지도 저장
         if (i === 0 && sigRef.current && signed) {
           const sigBase64 = sigRef.current.toDataURL("image/png");
-          await addDoc(collection(db, order._col || "orders", orderId, "attachments"), {
+          await addDoc(collection(db, targetCol, targetId, "attachments"), {
             base64: sigBase64,
             name: "서명.png",
             type: "image/png",
@@ -169,8 +217,8 @@ const isCold = React.useMemo(() => {
             source: "driver_signature",
           });
         }
-        // ✅ Firestore 저장 (각 사진 = 개별 문서)
-        const docRef = await addDoc(collection(db, order._col || "orders", orderId, "attachments"), {
+
+        const docRef = await addDoc(collection(db, targetCol, targetId, "attachments"), {
           base64,
           name: file.name,
           type: "image/jpeg",
@@ -188,10 +236,9 @@ const isCold = React.useMemo(() => {
       }
     }
 
-    // ✅ 부모 문서에 attachCount 업데이트 (실시간 카운트용)
-if (results.length > 0) {
+    if (results.length > 0 && !isManual) {
       try {
-        const parentRef = doc(db, order._col || "orders", orderId);
+        const parentRef = doc(db, targetCol, targetId);
         await updateDoc(parentRef, { attachCount: increment(results.length) });
       } catch(e) { console.error("카운트 업데이트 실패:", e); }
     }
@@ -203,6 +250,7 @@ if (results.length > 0) {
     setUploading(false);
     setStatus("done");
   };
+
   // ────────────────────────────────────────────────────────
   // 렌더
   // ────────────────────────────────────────────────────────
@@ -227,7 +275,6 @@ if (results.length > 0) {
         {status === "loading" && (
           <div style={cardStyle}>
             <div style={{ textAlign: "center", padding: "40px 0", color: "#6b7280" }}>
-              <div style={{ fontSize: 40, marginBottom: 12 }}>⏳</div>
               <div style={{ fontWeight: 700, fontSize: 16 }}>배차 정보 불러오는 중...</div>
             </div>
           </div>
@@ -237,7 +284,6 @@ if (results.length > 0) {
         {status === "error" && (
           <div style={cardStyle}>
             <div style={{ textAlign: "center", padding: "40px 0", color: "#ef4444" }}>
-              <div style={{ fontSize: 40, marginBottom: 12 }}>❌</div>
               <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 6 }}>링크가 올바르지 않습니다</div>
               <div style={{ color: "#9ca3af", fontSize: 13 }}>배차 담당자에게 링크를 다시 요청해주세요.</div>
             </div>
@@ -248,7 +294,6 @@ if (results.length > 0) {
         {status === "done" && (
           <div style={cardStyle}>
             <div style={{ textAlign: "center", paddingTop: 24, paddingBottom: 8 }}>
-              <div style={{ fontSize: 48, marginBottom: 8 }}>✅</div>
               <div style={{ fontWeight: 900, fontSize: 18, color: "#1B2B4B", marginBottom: 4 }}>업로드 완료!</div>
               <div style={{ color: "#6b7280", fontSize: 13, marginBottom: 16 }}>
                 {uploaded.length}개 파일이 전달되었습니다.
@@ -264,13 +309,14 @@ if (results.length > 0) {
                     <div style={{ fontSize: 12, color: "#1e293b", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</div>
                     <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>업로드 완료</div>
                   </div>
-                  {f.docId && (
+                  {f.docId && !isManual && (
                     <button
                       onClick={async () => {
                         if (!window.confirm("이 사진을 삭제하시겠습니까?")) return;
                         try {
-                          await deleteDoc(doc(db, order._col || "orders", orderId, "attachments", f.docId));
-                          await updateDoc(doc(db, order._col || "orders", orderId), { attachCount: increment(-1) });
+                          const col = order?._col || "orders";
+                          await deleteDoc(doc(db, col, orderId, "attachments", f.docId));
+                          await updateDoc(doc(db, col, orderId), { attachCount: increment(-1) });
                           setUploaded(prev => prev.filter((_, idx) => idx !== i));
                         } catch(e) { alert("삭제 실패: " + e.message); }
                       }}
@@ -292,34 +338,88 @@ if (results.length > 0) {
         )}
 
         {/* ── 메인 업로드 UI ── */}
-        {status === "ready" && order && (
+        {status === "ready" && (
           <>
-            {/* 오더 정보 카드 */}
-            <div style={cardStyle}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
-                <div style={{ width: 4, height: 20, background: "#1B2B4B", borderRadius: 2 }} />
-                <span style={{ fontWeight: 700, fontSize: 14, color: "#1B2B4B" }}>배차 정보</span>
-              </div>
-
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                <InfoBox label="기사명" value={order.이름 || "-"} />
-                <InfoBox label="차량번호" value={order.차량번호 || "-"} />
-                <InfoBox label="연락처" value={order.전화번호 || "-"} />
-                <InfoBox label="상차일" value={order.상차일 || "-"} />
-              </div>
-
-              <div style={{ marginTop: 10, background: "#f8fafc", borderRadius: 8, padding: "10px 12px", display: "flex", alignItems: "center", gap: 10 }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600, marginBottom: 2 }}>상차지</div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: "#1e293b" }}>{order.상차지명 || "-"}</div>
+            {/* 오더 정보 카드 (오더 기반 모드) */}
+            {!isManual && order && (
+              <div style={cardStyle}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+                  <div style={{ width: 4, height: 20, background: "#1B2B4B", borderRadius: 2 }} />
+                  <span style={{ fontWeight: 700, fontSize: 14, color: "#1B2B4B" }}>배차 정보</span>
                 </div>
-                <div style={{ color: "#94a3b8", fontSize: 16 }}>→</div>
-                <div style={{ flex: 1, textAlign: "right" }}>
-                  <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600, marginBottom: 2 }}>하차지</div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: "#1e293b" }}>{order.하차지명 || "-"}</div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                  <InfoBox label="기사명" value={order.이름 || "-"} />
+                  <InfoBox label="차량번호" value={order.차량번호 || "-"} />
+                  <InfoBox label="연락처" value={order.전화번호 || "-"} />
+                  <div style={{ background: "#f8fafc", borderRadius: 8, padding: "8px 10px" }}>
+                    <div style={{ fontSize: 10, color: "#94a3b8", fontWeight: 600, marginBottom: 2 }}>상차일</div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "#1e293b" }}>{order.상차일 || "-"}</div>
+                    <div style={{ fontSize: 10, color: "#ef4444", marginTop: 2 }}>* 상차일 기준으로 선택하세요</div>
+                  </div>
+                </div>
+
+                <div style={{ marginTop: 10, background: "#f8fafc", borderRadius: 8, padding: "10px 12px", display: "flex", alignItems: "center", gap: 10 }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600, marginBottom: 2 }}>상차지</div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "#1e293b" }}>{order.상차지명 || "-"}</div>
+                  </div>
+                  <div style={{ color: "#94a3b8", fontSize: 16 }}>→</div>
+                  <div style={{ flex: 1, textAlign: "right" }}>
+                    <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600, marginBottom: 2 }}>하차지</div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "#1e293b" }}>{order.하차지명 || "-"}</div>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
+
+            {/* 수동 입력 카드 (수동 모드) */}
+            {isManual && (
+              <div style={cardStyle}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+                  <div style={{ width: 4, height: 20, background: "#1B2B4B", borderRadius: 2 }} />
+                  <span style={{ fontWeight: 700, fontSize: 14, color: "#1B2B4B" }}>배차 정보 입력</span>
+                </div>
+
+                {/* 상차일 */}
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                    <label style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>상차일</label>
+                    <span style={{ fontSize: 11, color: "#ef4444", fontWeight: 600 }}>* 상차일 기준으로 선택하세요</span>
+                  </div>
+                  <input
+                    type="date"
+                    value={manualDate}
+                    onChange={e => setManualDate(e.target.value)}
+                    style={{ width: "100%", padding: "9px 12px", border: "1.5px solid #e2e8f0", borderRadius: 8, fontSize: 14, fontFamily: "inherit", boxSizing: "border-box", outline: "none" }}
+                  />
+                </div>
+
+                {/* 차량번호 */}
+                <div style={{ marginBottom: 12 }}>
+                  <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#374151", marginBottom: 4 }}>차량번호</label>
+                  <input
+                    type="text"
+                    value={manualCar}
+                    onChange={e => setManualCar(e.target.value)}
+                    placeholder="예: 12가 3456"
+                    style={{ width: "100%", padding: "9px 12px", border: "1.5px solid #e2e8f0", borderRadius: 8, fontSize: 14, fontFamily: "inherit", boxSizing: "border-box", outline: "none" }}
+                  />
+                </div>
+
+                {/* 기사명 */}
+                <div>
+                  <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#374151", marginBottom: 4 }}>기사명</label>
+                  <input
+                    type="text"
+                    value={manualName}
+                    onChange={e => setManualName(e.target.value)}
+                    placeholder="기사 이름을 입력하세요"
+                    style={{ width: "100%", padding: "9px 12px", border: "1.5px solid #e2e8f0", borderRadius: 8, fontSize: 14, fontFamily: "inherit", boxSizing: "border-box", outline: "none" }}
+                  />
+                </div>
+              </div>
+            )}
 
             {/* 체크리스트 카드 */}
             <div style={cardStyle}>
@@ -362,6 +462,7 @@ if (results.length > 0) {
               </div>
               <div style={{ textAlign: "center", marginTop: 8, fontSize: 12, color: "#94a3b8" }}>거래명세서 예시</div>
             </div>
+
             {/* 서명 카드 */}
             <div style={cardStyle}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
@@ -413,6 +514,7 @@ if (results.length > 0) {
                 다시 서명
               </button>
             </div>
+
             {/* 업로드 영역 */}
             <div style={cardStyle}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
@@ -420,7 +522,6 @@ if (results.length > 0) {
                 <span style={{ fontWeight: 700, fontSize: 14, color: "#1B2B4B" }}>파일 선택</span>
               </div>
 
-              {/* 드래그앤드롭 영역 */}
               <div
                 onClick={() => inputRef.current?.click()}
                 onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
@@ -450,7 +551,6 @@ if (results.length > 0) {
                 />
               </div>
 
-              {/* 선택된 파일 미리보기 */}
               {previews.length > 0 && (
                 <div style={{ marginBottom: 14 }}>
                   <div style={{ fontSize: 12, color: "#6b7280", fontWeight: 600, marginBottom: 8 }}>선택된 파일 ({previews.length}장)</div>
@@ -465,7 +565,6 @@ if (results.length > 0) {
                             <span style={{ fontSize: 10, color: "#6b7280", marginTop: 4 }}>PDF</span>
                           </div>
                         )}
-                        {/* 진행률 오버레이 */}
                         {uploading && progress[i] !== undefined && progress[i] < 100 && (
                           <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                             <span style={{ color: "white", fontWeight: 700, fontSize: 16 }}>{progress[i]}%</span>
@@ -476,7 +575,6 @@ if (results.length > 0) {
                             <span style={{ color: "white", fontSize: 24 }}>✓</span>
                           </div>
                         )}
-                        {/* 삭제 버튼 */}
                         {!uploading && (
                           <button
                             onClick={(e) => { e.stopPropagation(); removeFile(i); }}
@@ -489,8 +587,7 @@ if (results.length > 0) {
                 </div>
               )}
 
-              {/* 업로드 버튼 */}
-           {files.length > 0 && !allChecked && (
+              {files.length > 0 && !allChecked && (
                 <div style={{ textAlign: "center", padding: "10px 0 4px", fontSize: 13, color: "#ef4444", fontWeight: 600 }}>
                   위 확인사항을 모두 체크해주세요
                 </div>
@@ -514,7 +611,7 @@ if (results.length > 0) {
                     transition: "background 0.2s",
                   }}
                 >
-                  {uploading ? `⏫ 업로드 중...` : `📤 ${files.length}장 업로드하기`}
+                  {uploading ? `업로드 중...` : `${files.length}장 업로드하기`}
                 </button>
               )}
             </div>

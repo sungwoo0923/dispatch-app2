@@ -14252,7 +14252,21 @@ const [attachCount, setAttachCount] = React.useState({});
   const [attachViewer, setAttachViewer] = React.useState(null); // 열린 행
   const [orderInfoRow4, setOrderInfoRow4] = React.useState(null);
   const [viewedAttachIds4, setViewedAttachIds4] = React.useState(() => new Set(JSON.parse(localStorage.getItem("va4") || "[]")));
-  React.useEffect(() => { try { const a = [...viewedAttachIds4]; localStorage.setItem("va4", JSON.stringify(a.length > 2000 ? a.slice(-2000) : a)); } catch {} }, [viewedAttachIds4]);
+  React.useEffect(() => {
+    const a = [...viewedAttachIds4];
+    const trimmed = a.length > 100 ? a.slice(-100) : a;
+    try {
+      localStorage.setItem("va4", JSON.stringify(trimmed));
+    } catch {
+      try {
+        // Free space by clearing urgentSeen keys, then retry with minimal data
+        for (const k of Object.keys(localStorage)) {
+          if (k.startsWith("urgentSeen_")) localStorage.removeItem(k);
+        }
+        localStorage.setItem("va4", JSON.stringify(trimmed.slice(-50)));
+      } catch {}
+    }
+  }, [viewedAttachIds4]);
   // ------------------------
 // Firestore → rows 반영
 // ------------------------
@@ -16438,15 +16452,15 @@ const head = isDark
 </div>
 
 {/* ======================== 검색+필터+버튼 한 줄 ======================== */}
-<div className="flex items-center gap-1.5 flex-wrap mb-2">
+<div className="flex items-center gap-1 flex-nowrap overflow-x-auto mb-2 pb-0.5">
   {/* 검색창 */}
-  <div className="flex items-center border-2 border-[#1B2B4B] rounded-lg overflow-hidden bg-white h-[34px]">
+  <div className="flex items-center border-2 border-[#1B2B4B] rounded-lg overflow-hidden bg-white h-[30px] flex-shrink-0">
     <input
       type="text"
       value={q}
       onChange={(e) => setQ(e.target.value)}
       placeholder="검색어"
-      className="px-3 h-full text-[13px] w-28 outline-none"
+      className="px-2 h-full text-[11px] w-20 outline-none"
     />
   </div>
   {/* 날짜 버튼 */}
@@ -16454,7 +16468,7 @@ const head = isDark
     const labels=["어제","당일","내일"];
     return (
       <button key={mode} onClick={()=>setDayMode(mode)}
-        className={`h-[34px] px-3 rounded-lg text-[12px] font-semibold transition ${dayMode===mode?"bg-[#1B2B4B] text-white":"bg-gray-100 text-gray-700 hover:bg-gray-200"}`}>
+        className={`h-[30px] px-2 rounded-lg text-[11px] font-semibold transition whitespace-nowrap flex-shrink-0 ${dayMode===mode?"bg-[#1B2B4B] text-white":"bg-gray-100 text-gray-700 hover:bg-gray-200"}`}>
         {labels[i]}
       </button>
     );
@@ -16467,12 +16481,12 @@ const head = isDark
     ...(statusSummary.업체미전달>0?[{key:"UNDELIVERED",label:`미전달 ${statusSummary.업체미전달}`}]:[]),
   ].map(({key,label})=>(
     <button key={key} onClick={()=>setStatusFilter(key)}
-      className={`h-[34px] px-3 rounded-full text-[12px] font-semibold border transition ${statusFilter===key?"bg-[#1B2B4B] text-white border-[#1B2B4B]":"bg-white text-gray-700 border-gray-300 hover:bg-gray-50"}`}>
+      className={`h-[30px] px-2 rounded-full text-[11px] font-semibold border transition whitespace-nowrap flex-shrink-0 ${statusFilter===key?"bg-[#1B2B4B] text-white border-[#1B2B4B]":"bg-white text-gray-700 border-gray-300 hover:bg-gray-50"}`}>
       {label}
     </button>
   ))}
 
-  <div className="ml-auto flex items-center gap-1.5">
+  <div className="ml-auto flex items-center gap-1 flex-shrink-0">
     <button onClick={async(e)=>{
   e.preventDefault();
   e.stopPropagation();
@@ -16503,11 +16517,11 @@ const head = isDark
     }
   }
   showAlert(`✅ 기사 ${count}명 등록 완료\n기사관리 페이지에서 확인하세요.`);
-}} className="px-3 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-sm font-semibold shadow hover:bg-[#243a60] transition">일괄동기화</button>
-    <button onClick={()=>{setTempSortKey(sortKey||"");setTempSortDir(sortDir||"asc");setTempFilterConditions([...filterConditions]);setSortModalOpen(true);}} className={`px-3 py-1.5 rounded-lg text-white text-sm font-semibold shadow hover:opacity-90 ${(sortKey||filterConditions.length>0)?"bg-[#1B2B4B]":"bg-slate-500"}`}>정렬/필터{filterConditions.length>0?` (${filterConditions.length})`:""}</button>
-    <button onClick={()=>{if(!selected.length)return showAlert("복사할 오더를 선택하세요.");if(selected.length>1)return showAlert("복사는 1개의 오더만 가능합니다.");setCopyModalOpen(true);}} className="px-3 py-1.5 rounded-lg bg-gray-800 text-white text-sm font-semibold shadow hover:opacity-90">기사복사</button>
-    <button onClick={()=>{const url=`${window.location.origin}/driver-upload`;const msg=`[인수증 업로드 안내]\n운송 완료 후 아래 링크를 통해 인수증을 업로드해 주시기 바랍니다.\n\n${url}\n\n서명 받은 인수증(파렛전표) 사진을 촬영하여 업로드해 주세요.\n미업로드 시 운임 정산이 지연될 수 있습니다.`;navigator.clipboard.writeText(msg).then(()=>showAlert("업로드 안내 메시지가 복사되었습니다.\n기사에게 붙여넣기로 전달하세요.")).catch(()=>showAlert(`링크: ${url}`));}} className="px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-sm font-semibold shadow hover:opacity-90">업로드링크</button>
-    <button onClick={()=>setDailyCloseOpen(true)} className="px-3 py-1.5 rounded-lg bg-gray-700 text-white text-sm font-semibold shadow hover:opacity-90">일마감</button>
+}} className="px-2 py-1 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-semibold shadow hover:bg-[#243a60] transition whitespace-nowrap">일괄동기화</button>
+    <button onClick={()=>{setTempSortKey(sortKey||"");setTempSortDir(sortDir||"asc");setTempFilterConditions([...filterConditions]);setSortModalOpen(true);}} className={`px-2 py-1 rounded-lg text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap ${(sortKey||filterConditions.length>0)?"bg-[#1B2B4B]":"bg-slate-500"}`}>정렬/필터{filterConditions.length>0?` (${filterConditions.length})`:""}</button>
+    <button onClick={()=>{if(!selected.length)return showAlert("복사할 오더를 선택하세요.");if(selected.length>1)return showAlert("복사는 1개의 오더만 가능합니다.");setCopyModalOpen(true);}} className="px-2 py-1 rounded-lg bg-gray-800 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap">기사복사</button>
+    <button onClick={()=>{const selRow=selected.length===1?rows.find(r=>r._id===selected[0]):null;const url=selRow?`${window.location.origin}/driver-upload?id=${encodeURIComponent(selRow._id)}`:`${window.location.origin}/driver-upload`;const msg=`[인수증 업로드 안내]\n운송 완료 후 아래 링크를 통해 인수증을 업로드해 주시기 바랍니다.\n\n${url}\n\n서명 받은 인수증(파렛전표) 사진을 촬영하여 업로드해 주세요.\n미업로드 시 운임 정산이 지연될 수 있습니다.`;navigator.clipboard.writeText(msg).then(()=>showAlert("업로드 안내 메시지가 복사되었습니다.\n기사에게 붙여넣기로 전달하세요.")).catch(()=>showAlert(`링크: ${url}`));}} className="px-2 py-1 rounded-lg bg-indigo-600 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap">업로드링크</button>
+    <button onClick={()=>setDailyCloseOpen(true)} className="px-2 py-1 rounded-lg bg-gray-700 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap">일마감</button>
 
     <button onClick={()=>{
   if(selected.length!==1)return showAlert("수정할 항목은 1개만 선택해야 합니다.");
@@ -16545,10 +16559,10 @@ const head = isDark
     수수료: toInt(row.청구운임) - toInt(row.기사운임),
   });
   setEditPopupOpen(true);
-}} className="px-3 py-1.5 rounded-lg bg-gray-600 text-white text-sm font-semibold shadow hover:opacity-90">선택수정</button>
+}} className="px-2 py-1 rounded-lg bg-gray-600 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap">선택수정</button>
 
-    <button onClick={()=>{if(!selected.length)return showAlert("삭제할 항목을 선택하세요.");const list=rows.filter(r=>selected.includes(r._id));setDeleteList(list);setDeleteConfirmOpen(true);}} className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-sm font-semibold shadow hover:opacity-90">선택삭제</button>
-    <button onClick={()=>setSelected([])} className="px-3 py-1.5 rounded-lg bg-gray-300 text-gray-800 text-sm font-semibold shadow hover:opacity-90">선택초기화</button>
+    <button onClick={()=>{if(!selected.length)return showAlert("삭제할 항목을 선택하세요.");const list=rows.filter(r=>selected.includes(r._id));setDeleteList(list);setDeleteConfirmOpen(true);}} className="px-2 py-1 rounded-lg bg-red-600 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap">선택삭제</button>
+    <button onClick={()=>setSelected([])} className="px-2 py-1 rounded-lg bg-gray-300 text-gray-800 text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap">선택초기화</button>
     <button onClick={()=>{
   if(!filtered.length)return showAlert("내보낼 데이터가 없습니다.");
   const _sp=(v)=>{if(Array.isArray(v)&&v.length>0)return v;if(typeof v==="string"&&v.trim().startsWith("[")){try{const p=JSON.parse(v);if(Array.isArray(p)&&p.length>0)return p;}catch{}}if(v&&typeof v==="object"&&!Array.isArray(v)){const ks=Object.keys(v);if(ks.length>0&&ks.every(k=>/^\d+$/.test(k)))return ks.sort((a,b)=>Number(a)-Number(b)).map(k=>v[k]);if(v.업체명)return[v];}return[];};
@@ -16567,7 +16581,7 @@ const head = isDark
     return row;
   });
   const ws=XLSX.utils.json_to_sheet(rowsExcel);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"실시간배차현황");XLSX.writeFile(wb,"실시간배차현황.xlsx");
-}} className="px-3 py-1.5 rounded-lg bg-teal-600 text-white text-sm font-semibold shadow hover:opacity-90">엑셀다운</button>
+}} className="px-2 py-1 rounded-lg bg-teal-600 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap">엑셀다운</button>
     </div>
 </div>
 
@@ -17000,7 +17014,9 @@ const updated = [
   ...urgentPopup.map((r) => r._id)
 ];
 
-localStorage.setItem(urgentKey, JSON.stringify(updated));
+const deduped = [...new Set(updated)];
+const trimmedUrgent = deduped.length > 500 ? deduped.slice(-500) : deduped;
+try { localStorage.setItem(urgentKey, JSON.stringify(trimmedUrgent)); } catch {}
 
 setUrgentPopup([]);
             }}
@@ -20158,7 +20174,7 @@ if (editTarget.하차지명) upsertPlace?.({ 업체명: editTarget.하차지명,
             className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
             onClick={() => {
               const r = contextMenu.row;
-              const url = `${window.location.origin}/driver-upload`;
+              const url = `${window.location.origin}/driver-upload?id=${encodeURIComponent(r._id)}`;
               const dateStr = (() => {
                 const d = r.상차일 || "";
                 if (d && d.includes("-")) {
@@ -24428,22 +24444,22 @@ return (
       </div>
 
       {/* ===== 페이지+검색+날짜+버튼 한 줄 ===== */}
-      <div className="flex items-center gap-1.5 flex-wrap mb-2 w-full">
+      <div className="flex items-center gap-1 flex-nowrap overflow-x-auto mb-2 w-full pb-0.5">
 
         {/* 페이지 이동 */}
         <button disabled={page===0} onClick={()=>setPage(p=>Math.max(0,p-1))}
-          className={`px-3 py-1.5 rounded-lg text-sm font-semibold border ${page===0?"bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed":"bg-white text-gray-700 border-gray-300 hover:bg-gray-100 shadow-sm"}`}>
+          className={`px-2 py-1 rounded-lg text-[11px] font-semibold border whitespace-nowrap flex-shrink-0 ${page===0?"bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed":"bg-white text-gray-700 border-gray-300 hover:bg-gray-100 shadow-sm"}`}>
           ◀ 이전
         </button>
-        <span className="text-sm font-semibold text-gray-600 px-1">{page+1}<span className="text-gray-400"> / {Math.ceil(filtered.length/pageSize)}</span></span>
+        <span className="text-[11px] font-semibold text-gray-600 px-1 whitespace-nowrap flex-shrink-0">{page+1}<span className="text-gray-400"> / {Math.ceil(filtered.length/pageSize)}</span></span>
         <button disabled={(page+1)*pageSize>=filtered.length} onClick={()=>setPage(p=>p+1)}
-          className={`px-3 py-1.5 rounded-lg text-sm font-semibold border ${(page+1)*pageSize>=filtered.length?"bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed":"bg-white text-gray-700 border-gray-300 hover:bg-gray-100 shadow-sm"}`}>
+          className={`px-2 py-1 rounded-lg text-[11px] font-semibold border whitespace-nowrap flex-shrink-0 ${(page+1)*pageSize>=filtered.length?"bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed":"bg-white text-gray-700 border-gray-300 hover:bg-gray-100 shadow-sm"}`}>
           다음 ▶
         </button>
 
 {/* 검색창 (통합) */}
-        <div className="flex items-center border-2 border-[#1B2B4B] rounded-lg overflow-hidden bg-white h-[34px]">
-          <select className="px-2 h-full text-[12px] bg-[#1B2B4B] text-white outline-none cursor-pointer"
+        <div className="flex items-center border-2 border-[#1B2B4B] rounded-lg overflow-hidden bg-white h-[30px] flex-shrink-0">
+          <select className="px-1 h-full text-[11px] bg-[#1B2B4B] text-white outline-none cursor-pointer"
             value={searchType} onChange={(e)=>{setSearchType(e.target.value);setQ("");setPage(0);}}>
             <option value="all">통합</option>
             <option value="client">거래처</option>
@@ -24454,32 +24470,32 @@ return (
             <option value="pay">지급방식</option>
             <option value="dispatch">배차방식</option>
           </select>
-       <input className="px-3 h-full text-[13px] w-36 outline-none" placeholder="검색어"
+       <input className="px-2 h-full text-[11px] w-24 outline-none" placeholder="검색어"
             value={loaded?q:""} onChange={(e)=>{setQ(e.target.value);setPage(0);}} />
         </div>
 
         {/* 날짜 */}
-        <input type="date" className="border border-gray-300 rounded-lg px-2 py-1.5 text-[13px]" value={startDate} onChange={(e)=>setStartDate(e.target.value)} />
-        <span className="text-gray-400 text-sm">~</span>
-        <input type="date" className="border border-gray-300 rounded-lg px-2 py-1.5 text-[13px]" value={endDate} onChange={(e)=>setEndDate(e.target.value)} />
+        <input type="date" className="border border-gray-300 rounded-lg px-2 py-1 text-[11px] flex-shrink-0" value={startDate} onChange={(e)=>setStartDate(e.target.value)} />
+        <span className="text-gray-400 text-[11px] flex-shrink-0">~</span>
+        <input type="date" className="border border-gray-300 rounded-lg px-2 py-1 text-[11px] flex-shrink-0" value={endDate} onChange={(e)=>setEndDate(e.target.value)} />
 
         {/* 날짜 버튼들 */}
-        <button onClick={handleSearch} className="px-3 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-semibold">조회</button>
-        <button onClick={()=>{const t=todayKST();setStartDate(t);setEndDate(t);setAppliedStartDate(t);setAppliedEndDate(t);localStorage.setItem("dispatchDateState",JSON.stringify({startDate:t,endDate:t,appliedStartDate:t,appliedEndDate:t}));setQ("");setPage(0);}} className="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-[12px] font-semibold">당일</button>
-        <button onClick={()=>{const t=tomorrowKST();setStartDate(t);setEndDate(t);setAppliedStartDate(t);setAppliedEndDate(t);localStorage.setItem("dispatchDateState",JSON.stringify({startDate:t,endDate:t,appliedStartDate:t,appliedEndDate:t}));setQ("");setPage(0);}} className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-[12px] font-semibold">내일</button>
-        <button onClick={()=>{const{first,last}=getMonthRange();setStartDate(first);setEndDate(last);setAppliedStartDate(first);setAppliedEndDate(last);setQ("");setPage(0);setLoaded(true);localStorage.setItem("dispatchDateState",JSON.stringify({startDate:first,endDate:last,appliedStartDate:first,appliedEndDate:last}));}} className="px-3 py-1.5 rounded-lg bg-gray-500 text-white text-[12px] font-semibold">전체</button>
+        <button onClick={handleSearch} className="px-2 py-1 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-semibold whitespace-nowrap flex-shrink-0">조회</button>
+        <button onClick={()=>{const t=todayKST();setStartDate(t);setEndDate(t);setAppliedStartDate(t);setAppliedEndDate(t);localStorage.setItem("dispatchDateState",JSON.stringify({startDate:t,endDate:t,appliedStartDate:t,appliedEndDate:t}));setQ("");setPage(0);}} className="px-2 py-1 rounded-lg bg-blue-600 text-white text-[11px] font-semibold whitespace-nowrap flex-shrink-0">당일</button>
+        <button onClick={()=>{const t=tomorrowKST();setStartDate(t);setEndDate(t);setAppliedStartDate(t);setAppliedEndDate(t);localStorage.setItem("dispatchDateState",JSON.stringify({startDate:t,endDate:t,appliedStartDate:t,appliedEndDate:t}));setQ("");setPage(0);}} className="px-2 py-1 rounded-lg bg-emerald-600 text-white text-[11px] font-semibold whitespace-nowrap flex-shrink-0">내일</button>
+        <button onClick={()=>{const{first,last}=getMonthRange();setStartDate(first);setEndDate(last);setAppliedStartDate(first);setAppliedEndDate(last);setQ("");setPage(0);setLoaded(true);localStorage.setItem("dispatchDateState",JSON.stringify({startDate:first,endDate:last,appliedStartDate:first,appliedEndDate:last}));}} className="px-2 py-1 rounded-lg bg-gray-500 text-white text-[11px] font-semibold whitespace-nowrap flex-shrink-0">전체</button>
 
         {/* 우측 버튼들 */}
-        <div className="ml-auto flex items-center gap-1.5">
-          <button onClick={()=>{setTempSortKey(sortKey||"");setTempSortDir(sortDir||"asc");setTempFilterConditions([...filterConditions]);setSortModalOpen(true);}} className={`px-3 py-1.5 rounded-lg text-white text-sm font-semibold shadow hover:opacity-90 ${(sortKey||filterConditions.length>0)?"bg-[#1B2B4B]":"bg-slate-500"}`}>정렬/필터{filterConditions.length>0?` (${filterConditions.length})`:""}</button>
-          <button onClick={()=>{if(selected.size===0)return showAlert("복사할 항목을 선택하세요.");if(selected.size>1)return showAlert("1개만 선택할 수 있습니다.");setCopyModalOpen(true);}} className="px-3 py-1.5 rounded-lg bg-gray-800 text-white text-sm font-semibold shadow hover:opacity-90">기사복사</button>
-          <button onClick={()=>{const url=`${window.location.origin}/driver-upload`;const msg=`[인수증 업로드 안내]\n운송 완료 후 아래 링크를 통해 인수증을 업로드해 주시기 바랍니다.\n\n${url}\n\n서명 받은 인수증(파렛전표) 사진을 촬영하여 업로드해 주세요.\n미업로드 시 운임 정산이 지연될 수 있습니다.`;navigator.clipboard.writeText(msg).then(()=>showAlert("업로드 안내 메시지가 복사되었습니다.\n기사에게 붙여넣기로 전달하세요.")).catch(()=>showAlert(`링크: ${url}`));}} className="px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-sm font-semibold shadow hover:opacity-90">업로드링크</button>
-          <label className="px-3 py-1.5 rounded-lg bg-gray-700 text-white text-sm font-semibold shadow hover:opacity-90 cursor-pointer">대용량 업로드<input type="file" accept=".xlsx,.xls" hidden onChange={handleBulkFile}/></label>
-          <button className="px-3 py-1.5 rounded-lg bg-gray-600 text-white text-sm font-semibold shadow hover:opacity-90" onClick={handleEditToggle}>{editMode?"수정완료":"선택수정"}</button>
-          <button className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-sm font-semibold shadow hover:opacity-90" onClick={()=>{if(!selected.size)return showAlert("삭제할 항목이 없습니다.");setShowDeletePopup(true);}}>선택삭제</button>
-          <button className="px-3 py-1.5 rounded-lg bg-gray-300 text-gray-800 text-sm font-semibold shadow hover:opacity-90" onClick={()=>setSelected(new Set())}>선택초기화</button>
-          <button className="px-3 py-1.5 rounded-lg bg-teal-600 text-white text-sm font-semibold shadow hover:opacity-90" onClick={downloadExcel}>엑셀다운</button>
-          <button onClick={() => setDailyCloseOpen(true)} className="px-3 py-1.5 rounded-lg bg-gray-700 text-white text-sm font-semibold shadow hover:opacity-90">일마감</button>
+        <div className="ml-auto flex items-center gap-1 flex-shrink-0">
+          <button onClick={()=>{setTempSortKey(sortKey||"");setTempSortDir(sortDir||"asc");setTempFilterConditions([...filterConditions]);setSortModalOpen(true);}} className={`px-2 py-1 rounded-lg text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap ${(sortKey||filterConditions.length>0)?"bg-[#1B2B4B]":"bg-slate-500"}`}>정렬/필터{filterConditions.length>0?` (${filterConditions.length})`:""}</button>
+          <button onClick={()=>{if(selected.size===0)return showAlert("복사할 항목을 선택하세요.");if(selected.size>1)return showAlert("1개만 선택할 수 있습니다.");setCopyModalOpen(true);}} className="px-2 py-1 rounded-lg bg-gray-800 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap">기사복사</button>
+          <button onClick={()=>{const selArr=[...selected];const selRow=selArr.length===1?filtered.find(r=>getId(r)===selArr[0]):null;const url=selRow?`${window.location.origin}/driver-upload?id=${encodeURIComponent(getId(selRow))}`:`${window.location.origin}/driver-upload`;const msg=`[인수증 업로드 안내]\n운송 완료 후 아래 링크를 통해 인수증을 업로드해 주시기 바랍니다.\n\n${url}\n\n서명 받은 인수증(파렛전표) 사진을 촬영하여 업로드해 주세요.\n미업로드 시 운임 정산이 지연될 수 있습니다.`;navigator.clipboard.writeText(msg).then(()=>showAlert("업로드 안내 메시지가 복사되었습니다.\n기사에게 붙여넣기로 전달하세요.")).catch(()=>showAlert(`링크: ${url}`));}} className="px-2 py-1 rounded-lg bg-indigo-600 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap">업로드링크</button>
+          <label className="px-2 py-1 rounded-lg bg-gray-700 text-white text-[11px] font-semibold shadow hover:opacity-90 cursor-pointer whitespace-nowrap">대용량 업로드<input type="file" accept=".xlsx,.xls" hidden onChange={handleBulkFile}/></label>
+          <button className="px-2 py-1 rounded-lg bg-gray-600 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap" onClick={handleEditToggle}>{editMode?"수정완료":"선택수정"}</button>
+          <button className="px-2 py-1 rounded-lg bg-red-600 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap" onClick={()=>{if(!selected.size)return showAlert("삭제할 항목이 없습니다.");setShowDeletePopup(true);}}>선택삭제</button>
+          <button className="px-2 py-1 rounded-lg bg-gray-300 text-gray-800 text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap" onClick={()=>setSelected(new Set())}>선택초기화</button>
+          <button className="px-2 py-1 rounded-lg bg-teal-600 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap" onClick={downloadExcel}>엑셀다운</button>
+          <button onClick={() => setDailyCloseOpen(true)} className="px-2 py-1 rounded-lg bg-gray-700 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap">일마감</button>
         </div>
       </div>
 
@@ -28361,7 +28377,7 @@ setCopyTarget(prev => ({
           <button className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
             onClick={() => {
               const r = contextMenuDS.row;
-              const url = `${window.location.origin}/driver-upload`;
+              const url = `${window.location.origin}/driver-upload?id=${encodeURIComponent(r._id)}`;
               const dateStr = (() => {
                 const d = r.상차일 || "";
                 if (d && d.includes("-")) {
@@ -29864,7 +29880,7 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [] }) {
             <MomRow calcFn={totalRevenue} />
 
             {/* ── 매출원가 ── */}
-            <SectionHeader label="매출원가" bg="#27374D" />
+            <SectionHeader label="매출원가" />
             <SubHeader label="구분" />
             <DataRow label="화물주선 운반비" rowKey="cost_freight" isAuto field="cost" />
             <DataRow label="오토바이(인성) 운반비" rowKey="cost_auto" isAuto field="cost" />
@@ -29874,13 +29890,13 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [] }) {
             <MomRow calcFn={totalCost} />
 
             {/* ── 매출총이익 ── */}
-            <SectionHeader label="매출총이익" bg="#1A4731" />
+            <SectionHeader label="매출총이익" />
             <TotalRow label="매출총이익" calcFn={grossProfit} isHighlight />
             <MomRow calcFn={grossProfit} />
             <TotalRow label="매출총이익률" calcFn={grossProfit} isPct />
 
             {/* ── 판매관리비 ── */}
-            <SectionHeader label="판매관리비 (판관비)" bg="#4A4A6A" />
+            <SectionHeader label="판매관리비 (판관비)" />
             <SubHeader label="구분" />
             {SGA_ITEMS.map(({ key, label }) => (
               <DataRow key={key} label={label} rowKey={key} />
@@ -29888,13 +29904,13 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [] }) {
             <TotalRow label="판관비 합계" calcFn={sgaTotal} />
 
             {/* ── 영업이익 ── */}
-            <SectionHeader label="영업이익" bg="#1D4E5A" />
+            <SectionHeader label="영업이익" />
             <TotalRow label="영업이익" calcFn={opProfit} isHighlight />
             <MomRow calcFn={opProfit} />
             <TotalRow label="영업이익률" calcFn={opProfit} isPct />
 
             {/* ── 영업외손익 ── */}
-            <SectionHeader label="영업외손익" bg="#5B2333" />
+            <SectionHeader label="영업외손익" />
             <SubHeader label="구분" />
             <DataRow label="영업외 수익" rowKey="other_income" />
             <DataRow label="영업외 비용" rowKey="other_expense" />
