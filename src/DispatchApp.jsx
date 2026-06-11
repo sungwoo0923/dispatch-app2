@@ -16520,7 +16520,7 @@ const head = isDark
 }} className="px-2 py-1 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-semibold shadow hover:bg-[#243a60] transition whitespace-nowrap">일괄동기화</button>
     <button onClick={()=>{setTempSortKey(sortKey||"");setTempSortDir(sortDir||"asc");setTempFilterConditions([...filterConditions]);setSortModalOpen(true);}} className={`px-2 py-1 rounded-lg text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap ${(sortKey||filterConditions.length>0)?"bg-[#1B2B4B]":"bg-slate-500"}`}>정렬/필터{filterConditions.length>0?` (${filterConditions.length})`:""}</button>
     <button onClick={()=>{if(!selected.length)return showAlert("복사할 오더를 선택하세요.");if(selected.length>1)return showAlert("복사는 1개의 오더만 가능합니다.");setCopyModalOpen(true);}} className="px-2 py-1 rounded-lg bg-gray-800 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap">기사복사</button>
-    <button onClick={()=>{const selRow=selected.length===1?rows.find(r=>r._id===selected[0]):null;const url=selRow?`${window.location.origin}/driver-upload?id=${encodeURIComponent(selRow._id)}`:`${window.location.origin}/driver-upload`;const msg=`[인수증 업로드 안내]\n운송 완료 후 아래 링크를 통해 인수증을 업로드해 주시기 바랍니다.\n\n${url}\n\n서명 받은 인수증(파렛전표) 사진을 촬영하여 업로드해 주세요.\n미업로드 시 운임 정산이 지연될 수 있습니다.`;navigator.clipboard.writeText(msg).then(()=>showAlert("업로드 안내 메시지가 복사되었습니다.\n기사에게 붙여넣기로 전달하세요.")).catch(()=>showAlert(`링크: ${url}`));}} className="px-2 py-1 rounded-lg bg-indigo-600 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap">업로드링크</button>
+    <button onClick={()=>{const selRow=selected.length===1?rows.find(r=>r._id===selected[0]):null;const url=selRow?`${window.location.origin}/driver-upload?id=${encodeURIComponent(selRow._id)}`:`${window.location.origin}/driver-upload`;const msg=`[인수증 업로드 안내]\n운송 완료 후 아래 링크를 통해 인수증을 업로드해 주시기 바랍니다.\n\n${url}\n\n서명 받은 인수증(파렛전표) 사진을 촬영하여 업로드해 주세요.\n미업로드 시 운임 정산이 지연될 수 있습니다.`;navigator.clipboard.writeText(msg).then(()=>showAlert("업로드 안내 메시지가 복사되었습니다.\n기사에게 붙여넣기로 전달하세요.")).catch(()=>showAlert(`링크: ${url}`));}} className="px-2 py-1 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap">업로드링크</button>
     <button onClick={()=>setDailyCloseOpen(true)} className="px-2 py-1 rounded-lg bg-gray-700 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap">일마감</button>
 
     <button onClick={()=>{
@@ -16581,13 +16581,13 @@ const head = isDark
     return row;
   });
   const ws=XLSX.utils.json_to_sheet(rowsExcel);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"실시간배차현황");XLSX.writeFile(wb,"실시간배차현황.xlsx");
-}} className="px-2 py-1 rounded-lg bg-teal-600 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap">엑셀다운</button>
+}} className="px-2 py-1 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap">엑셀다운</button>
     </div>
 </div>
 
       {/* 테이블 */}
       <div className={`overflow-x-auto rounded-xl shadow border ${isDark ? "border-gray-700" : "border-gray-200"}`}>
-  <table className="w-full min-w-max table-auto">
+  <table className="dispatch-table">
           <thead className={isDark ? "bg-[#0f172a]" : "bg-[#1B2B4B]"}>
             <tr>
               {[
@@ -24481,20 +24481,20 @@ return (
 
         {/* 날짜 버튼들 */}
         <button onClick={handleSearch} className="px-2 py-1 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-semibold whitespace-nowrap flex-shrink-0">조회</button>
-        <button onClick={()=>{const t=todayKST();setStartDate(t);setEndDate(t);setAppliedStartDate(t);setAppliedEndDate(t);localStorage.setItem("dispatchDateState",JSON.stringify({startDate:t,endDate:t,appliedStartDate:t,appliedEndDate:t}));setQ("");setPage(0);}} className="px-2 py-1 rounded-lg bg-blue-600 text-white text-[11px] font-semibold whitespace-nowrap flex-shrink-0">당일</button>
-        <button onClick={()=>{const t=tomorrowKST();setStartDate(t);setEndDate(t);setAppliedStartDate(t);setAppliedEndDate(t);localStorage.setItem("dispatchDateState",JSON.stringify({startDate:t,endDate:t,appliedStartDate:t,appliedEndDate:t}));setQ("");setPage(0);}} className="px-2 py-1 rounded-lg bg-emerald-600 text-white text-[11px] font-semibold whitespace-nowrap flex-shrink-0">내일</button>
+        <button onClick={()=>{const t=todayKST();setStartDate(t);setEndDate(t);setAppliedStartDate(t);setAppliedEndDate(t);localStorage.setItem("dispatchDateState",JSON.stringify({startDate:t,endDate:t,appliedStartDate:t,appliedEndDate:t}));setQ("");setPage(0);}} className="px-2 py-1 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-semibold whitespace-nowrap flex-shrink-0">당일</button>
+        <button onClick={()=>{const t=tomorrowKST();setStartDate(t);setEndDate(t);setAppliedStartDate(t);setAppliedEndDate(t);localStorage.setItem("dispatchDateState",JSON.stringify({startDate:t,endDate:t,appliedStartDate:t,appliedEndDate:t}));setQ("");setPage(0);}} className="px-2 py-1 rounded-lg bg-gray-500 text-white text-[11px] font-semibold whitespace-nowrap flex-shrink-0">내일</button>
         <button onClick={()=>{const{first,last}=getMonthRange();setStartDate(first);setEndDate(last);setAppliedStartDate(first);setAppliedEndDate(last);setQ("");setPage(0);setLoaded(true);localStorage.setItem("dispatchDateState",JSON.stringify({startDate:first,endDate:last,appliedStartDate:first,appliedEndDate:last}));}} className="px-2 py-1 rounded-lg bg-gray-500 text-white text-[11px] font-semibold whitespace-nowrap flex-shrink-0">전체</button>
 
         {/* 우측 버튼들 */}
         <div className="ml-auto flex items-center gap-1 flex-shrink-0">
           <button onClick={()=>{setTempSortKey(sortKey||"");setTempSortDir(sortDir||"asc");setTempFilterConditions([...filterConditions]);setSortModalOpen(true);}} className={`px-2 py-1 rounded-lg text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap ${(sortKey||filterConditions.length>0)?"bg-[#1B2B4B]":"bg-slate-500"}`}>정렬/필터{filterConditions.length>0?` (${filterConditions.length})`:""}</button>
           <button onClick={()=>{if(selected.size===0)return showAlert("복사할 항목을 선택하세요.");if(selected.size>1)return showAlert("1개만 선택할 수 있습니다.");setCopyModalOpen(true);}} className="px-2 py-1 rounded-lg bg-gray-800 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap">기사복사</button>
-          <button onClick={()=>{const selArr=[...selected];const selRow=selArr.length===1?filtered.find(r=>getId(r)===selArr[0]):null;const url=selRow?`${window.location.origin}/driver-upload?id=${encodeURIComponent(getId(selRow))}`:`${window.location.origin}/driver-upload`;const msg=`[인수증 업로드 안내]\n운송 완료 후 아래 링크를 통해 인수증을 업로드해 주시기 바랍니다.\n\n${url}\n\n서명 받은 인수증(파렛전표) 사진을 촬영하여 업로드해 주세요.\n미업로드 시 운임 정산이 지연될 수 있습니다.`;navigator.clipboard.writeText(msg).then(()=>showAlert("업로드 안내 메시지가 복사되었습니다.\n기사에게 붙여넣기로 전달하세요.")).catch(()=>showAlert(`링크: ${url}`));}} className="px-2 py-1 rounded-lg bg-indigo-600 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap">업로드링크</button>
+          <button onClick={()=>{const selArr=[...selected];const selRow=selArr.length===1?filtered.find(r=>getId(r)===selArr[0]):null;const url=selRow?`${window.location.origin}/driver-upload?id=${encodeURIComponent(getId(selRow))}`:`${window.location.origin}/driver-upload`;const msg=`[인수증 업로드 안내]\n운송 완료 후 아래 링크를 통해 인수증을 업로드해 주시기 바랍니다.\n\n${url}\n\n서명 받은 인수증(파렛전표) 사진을 촬영하여 업로드해 주세요.\n미업로드 시 운임 정산이 지연될 수 있습니다.`;navigator.clipboard.writeText(msg).then(()=>showAlert("업로드 안내 메시지가 복사되었습니다.\n기사에게 붙여넣기로 전달하세요.")).catch(()=>showAlert(`링크: ${url}`));}} className="px-2 py-1 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap">업로드링크</button>
           <label className="px-2 py-1 rounded-lg bg-gray-700 text-white text-[11px] font-semibold shadow hover:opacity-90 cursor-pointer whitespace-nowrap">대용량 업로드<input type="file" accept=".xlsx,.xls" hidden onChange={handleBulkFile}/></label>
           <button className="px-2 py-1 rounded-lg bg-gray-600 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap" onClick={handleEditToggle}>{editMode?"수정완료":"선택수정"}</button>
           <button className="px-2 py-1 rounded-lg bg-red-600 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap" onClick={()=>{if(!selected.size)return showAlert("삭제할 항목이 없습니다.");setShowDeletePopup(true);}}>선택삭제</button>
           <button className="px-2 py-1 rounded-lg bg-gray-300 text-gray-800 text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap" onClick={()=>setSelected(new Set())}>선택초기화</button>
-          <button className="px-2 py-1 rounded-lg bg-teal-600 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap" onClick={downloadExcel}>엑셀다운</button>
+          <button className="px-2 py-1 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap" onClick={downloadExcel}>엑셀다운</button>
           <button onClick={() => setDailyCloseOpen(true)} className="px-2 py-1 rounded-lg bg-gray-700 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap">일마감</button>
         </div>
       </div>
@@ -24527,7 +24527,7 @@ return (
       {/* ---------------- 테이블 ---------------- */}
       <div className="overflow-x-auto w-full rounded-xl overflow-hidden shadow border border-gray-200">
 
-  <table className="w-full min-w-max table-auto">
+  <table className="dispatch-table">
           <thead className="bg-[#1B2B4B]">
             <tr>
               {[

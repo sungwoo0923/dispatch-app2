@@ -261,7 +261,7 @@ export default function UploadPage() {
       {/* ── 헤더 ── */}
       <div style={{ background: "#1B2B4B", padding: "16px 24px", display: "flex", alignItems: "center", gap: 12 }}>
         <div style={{ width: 36, height: 36, background: "rgba(255,255,255,0.15)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <span style={{ color: "white", fontSize: 20 }}>📦</span>
+          <span style={{ color: "white", fontSize: 20, fontWeight: 900 }}>KP</span>
         </div>
         <div>
           <div style={{ color: "white", fontWeight: 900, fontSize: 16, letterSpacing: "-0.3px" }}>KP-Flow</div>
@@ -538,7 +538,7 @@ export default function UploadPage() {
                   marginBottom: 14,
                 }}
               >
-                <div style={{ fontSize: 36, marginBottom: 8 }}>📷</div>
+                <div style={{ fontSize: 36, marginBottom: 8, color: "#94a3b8" }}>+</div>
                 <div style={{ fontWeight: 700, color: "#1B2B4B", fontSize: 15, marginBottom: 4 }}>사진을 탭하여 선택하세요</div>
                 <div style={{ fontSize: 12, color: "#94a3b8" }}>JPG, PNG, PDF 지원 · 여러 장 동시 선택 가능</div>
                 <input
@@ -561,7 +561,7 @@ export default function UploadPage() {
                           <img src={p.src} alt={p.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                         ) : (
                           <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontSize: 28 }}>
-                            📄
+                            <span style={{ fontSize: 22, fontWeight: 700, color: "#6b7280" }}>PDF</span>
                             <span style={{ fontSize: 10, color: "#6b7280", marginTop: 4 }}>PDF</span>
                           </div>
                         )}
