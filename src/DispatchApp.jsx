@@ -996,6 +996,102 @@ function mergeViaTonnage(mainTon, waypointLists) {
   return fmtKg(totalKg);
 }
 
+// ===================== 오더정보 모달 =====================
+function OrderInfoModal({ row, onClose }) {
+  if (!row) return null;
+  const _s = (v) => _parseWaypointList(v);
+  const pickupStops = [..._s(row.경유상차목록), ..._s(row.경유지_상차), ..._s(row.경유지상차)]
+    .filter((s, i, arr) => s && (s.업체명 || s.주소) && arr.findIndex(x => (x.업체명 || x.주소) === (s.업체명 || s.주소)) === i);
+  const dropStops = [..._s(row.경유하차목록), ..._s(row.경유지_하차), ..._s(row.경유지하차)]
+    .filter((s, i, arr) => s && (s.업체명 || s.주소) && arr.findIndex(x => (x.업체명 || x.주소) === (s.업체명 || s.주소)) === i);
+  const mergedCargo = mergeViaCargoText(row.화물내용, [row.경유상차목록, row.경유지_상차, row.경유하차목록, row.경유지_하차]);
+  const mergedTon = mergeViaTonnage(row.차량톤수, [row.경유상차목록, row.경유지_상차, row.경유하차목록, row.경유지_하차]);
+  const fee = (Number(row.청구운임) || 0) - (Number(row.기사운임) || 0);
+  const fmtPhone = (p) => { const d = String(p || "").replace(/[^\d]/g, ""); if (d.length === 11) return `${d.slice(0,3)}-${d.slice(3,7)}-${d.slice(7)}`; if (d.length === 10) return `${d.slice(0,3)}-${d.slice(3,6)}-${d.slice(6)}`; return p || "-"; };
+  const fmtMoney = (v) => v ? Number(v).toLocaleString() + "원" : "-";
+  const Row = ({ label, value }) => (
+    <div className="flex gap-2 text-[13px]">
+      <span className="text-gray-400 w-[72px] shrink-0">{label}</span>
+      <span className="text-gray-800">{value || "-"}</span>
+    </div>
+  );
+  const Section = ({ title, children }) => (
+    <div>
+      <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">{title}</div>
+      <div className="bg-gray-50 border border-gray-100 rounded-lg px-4 py-3 space-y-1.5">{children}</div>
+    </div>
+  );
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-[480px] max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between sticky top-0">
+          <div>
+            <h3 className="text-white font-bold text-[15px]">오더정보</h3>
+            <p className="text-white/50 text-[12px] mt-0.5">{row.상차일 || ""} {row.거래처명 ? `· ${row.거래처명}` : ""}</p>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/10 hover:bg-white/20 text-white text-lg font-bold transition">×</button>
+        </div>
+        <div className="px-6 py-5 space-y-4">
+          <Section title="상차지">
+            <Row label="업체명" value={row.상차지명} />
+            <Row label="주소" value={row.상차지주소} />
+            <Row label="상차시간" value={row.상차시간 ? `${row.상차시간}${row.상차시간기준 ? ` ${row.상차시간기준}` : ""}` : ""} />
+          </Section>
+          {pickupStops.length > 0 && (
+            <Section title={`상차 경유지 (${pickupStops.length})`}>
+              {pickupStops.map((s, i) => (
+                <div key={i} className={i > 0 ? "pt-1.5 mt-1.5 border-t border-gray-200" : ""}>
+                  <Row label="업체명" value={s.업체명} />
+                  {s.주소 && <Row label="주소" value={s.주소} />}
+                  {(s.화물내용 || s.화물수량) && <Row label="화물내용" value={s.화물내용 || s.화물수량} />}
+                  {s.차량톤수 && <Row label="톤수" value={s.차량톤수} />}
+                  {s.상차시간 && <Row label="상차시간" value={s.상차시간} />}
+                </div>
+              ))}
+            </Section>
+          )}
+          <Section title="하차지">
+            <Row label="업체명" value={row.하차지명} />
+            <Row label="주소" value={row.하차지주소} />
+            <Row label="하차시간" value={row.하차시간 ? `${row.하차시간}${row.하차시간기준 ? ` ${row.하차시간기준}` : ""}` : ""} />
+          </Section>
+          {dropStops.length > 0 && (
+            <Section title={`하차 경유지 (${dropStops.length})`}>
+              {dropStops.map((s, i) => (
+                <div key={i} className={i > 0 ? "pt-1.5 mt-1.5 border-t border-gray-200" : ""}>
+                  <Row label="업체명" value={s.업체명} />
+                  {s.주소 && <Row label="주소" value={s.주소} />}
+                  {(s.화물내용 || s.화물수량) && <Row label="화물내용" value={s.화물내용 || s.화물수량} />}
+                  {s.차량톤수 && <Row label="톤수" value={s.차량톤수} />}
+                  {s.하차시간 && <Row label="하차시간" value={s.하차시간} />}
+                </div>
+              ))}
+            </Section>
+          )}
+          <Section title="화물 정보">
+            <Row label="화물내용" value={mergedCargo || row.화물내용} />
+            <Row label="화물톤수" value={mergedTon || row.차량톤수} />
+            <Row label="차량종류" value={row.차량종류} />
+          </Section>
+          <Section title="운임 정보">
+            <Row label="청구운임" value={fmtMoney(row.청구운임)} />
+            <Row label="기사운임" value={fmtMoney(row.기사운임)} />
+            <Row label="수수료" value={fee ? fee.toLocaleString() + "원" : "-"} />
+          </Section>
+          <Section title="차량 정보">
+            <Row label="차량번호" value={row.차량번호} />
+            <Row label="기사명" value={row.이름 || row.기사명} />
+            <Row label="전화번호" value={fmtPhone(row.전화번호)} />
+          </Section>
+        </div>
+        <div className="px-6 pb-5">
+          <button className="w-full py-3 bg-[#1B2B4B] text-white rounded-xl font-bold text-[13px] hover:bg-[#263d6b] transition" onClick={onClose}>닫기</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ===================== TOAST SYSTEM (GLOBAL) =====================
 const ToastContext = React.createContext(null);
 window.__sflowToastQueue = window.__sflowToastQueue || [];
@@ -14154,8 +14250,9 @@ React.useEffect(() => {
   // 첨부파일 개수
 const [attachCount, setAttachCount] = React.useState({});
   const [attachViewer, setAttachViewer] = React.useState(null); // 열린 행
+  const [orderInfoRow4, setOrderInfoRow4] = React.useState(null);
   const [viewedAttachIds4, setViewedAttachIds4] = React.useState(() => new Set(JSON.parse(localStorage.getItem("va4") || "[]")));
-  React.useEffect(() => { localStorage.setItem("va4", JSON.stringify([...viewedAttachIds4])); }, [viewedAttachIds4]);
+  React.useEffect(() => { try { const a = [...viewedAttachIds4]; localStorage.setItem("va4", JSON.stringify(a.length > 2000 ? a.slice(-2000) : a)); } catch {} }, [viewedAttachIds4]);
   // ------------------------
 // Firestore → rows 반영
 // ------------------------
@@ -16165,6 +16262,7 @@ const head = isDark
     onToggleViewed={() => setViewedAttachIds4(prev => { const n = new Set(prev); n.has(attachViewer._id) ? n.delete(attachViewer._id) : n.add(attachViewer._id); return n; })}
   />
 )}
+{orderInfoRow4 && <OrderInfoModal row={orderInfoRow4} onClose={() => setOrderInfoRow4(null)} />}
 {addrPopup && (
   <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]" onClick={() => setAddrPopup(null)}>
     <div className="bg-white rounded-2xl shadow-2xl w-[440px] overflow-hidden" onClick={e => e.stopPropagation()}>
@@ -16663,7 +16761,7 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
                     {renderAddrCell("하차지주소", r.하차지주소, r._id)}
                   </td>
 
-                  <td className={cell}>{editableInput("화물내용", r.화물내용, r._id)}</td>
+                  <td className={cell}>{canEdit("화물내용", r._id) ? editableInput("화물내용", r.화물내용, r._id) : (mergeViaCargoText(r.화물내용, [r.__pickupStops, r.__dropStops]) || r.화물내용 || "")}</td>
                   <td className={cell}>
                     {editableInput(
                       "차량종류",
@@ -16671,7 +16769,7 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
                       r._id
                     )}
                   </td>
-                  <td className={cell}>{editableInput("차량톤수", r.차량톤수, r._id)}</td>
+                  <td className={cell}>{canEdit("차량톤수", r._id) ? editableInput("차량톤수", r.차량톤수, r._id) : (mergeViaTonnage(r.차량톤수, [r.__pickupStops, r.__dropStops]) || r.차량톤수 || "")}</td>
                   <td className={`${cell} text-center`}>
                     {r.혼적 ? "Y" : ""}
                   </td>
@@ -20079,6 +20177,14 @@ if (editTarget.하차지명) upsertPlace?.({ 업체명: editTarget.하차지명,
             업로드링크
           </button>
           <div className="border-t border-gray-100 my-1"/>
+          {/* 오더정보 */}
+          <button
+            className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
+            onClick={() => { setOrderInfoRow4(contextMenu.row); setContextMenu(null); }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            오더정보
+          </button>
           {/* 수정 */}
           <button
             className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
@@ -21492,8 +21598,9 @@ const renderTimeText = (time, cond) => {
   };
 const [alertMsg, setAlertMsg] = React.useState(null);
 const [attachViewer, setAttachViewer] = React.useState(null);
+const [orderInfoRow5, setOrderInfoRow5] = React.useState(null);
 const [viewedAttachIds5, setViewedAttachIds5] = React.useState(() => new Set(JSON.parse(localStorage.getItem("va5") || "[]")));
-React.useEffect(() => { localStorage.setItem("va5", JSON.stringify([...viewedAttachIds5])); }, [viewedAttachIds5]);
+React.useEffect(() => { try { const a = [...viewedAttachIds5]; localStorage.setItem("va5", JSON.stringify(a.length > 2000 ? a.slice(-2000) : a)); } catch {} }, [viewedAttachIds5]);
 const [localOverrides, setLocalOverrides] = React.useState({});
 const showAlert = (msg) => setAlertMsg(msg);
 const [blackAlert, setBlackAlert] = React.useState(null);
@@ -24105,6 +24212,7 @@ return (
     onToggleViewed={() => setViewedAttachIds5(prev => { const n = new Set(prev); n.has(attachViewer._id) ? n.delete(attachViewer._id) : n.add(attachViewer._id); return n; })}
   />
 )}
+{orderInfoRow5 && <OrderInfoModal row={orderInfoRow5} onClose={() => setOrderInfoRow5(null)} />}
 {attachStatusDSOpen && (
   <AttachStatusPanel
     open={attachStatusDSOpen}
@@ -24603,6 +24711,10 @@ return (
       : ""}
   </span>
 
+) : key === "화물내용" ? (
+  mergeViaCargoText(row.화물내용, [row.경유상차목록, row.경유지_상차, row.경유하차목록, row.경유지_하차]) || row.화물내용 || ""
+) : key === "차량톤수" ? (
+  mergeViaTonnage(row.차량톤수, [row.경유상차목록, row.경유지_상차, row.경유하차목록, row.경유지_하차]) || row.차량톤수 || ""
 ) : (
   row[key]
 )}
@@ -28267,6 +28379,12 @@ setCopyTarget(prev => ({
             업로드링크
           </button>
           <div className="border-t border-gray-100 my-1"/>
+          {/* 오더정보 */}
+          <button className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
+            onClick={() => { setOrderInfoRow5(contextMenuDS.row); setContextMenuDS(null); }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            오더정보
+          </button>
           <button className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
             onClick={() => {
               const r = contextMenuDS.row;
@@ -29303,6 +29421,10 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [] }) {
     배차방식: r.배차방식 || "",
     차량종류: r.차량종류 || "",
     배차상태: "배차완료",
+    지급방식: r.지급방식 || "",
+    실수수료: toInt(r.실수수료 != null ? r.실수수료 : (Number(r.수수료||0) - Number(r.선결제||0))),
+    거래처명: r.거래처명 || "",
+    __isFixed: true,
   }));
   const allRows = [...dispatchRows.map((r) => ({ ...r, 청구운임: toInt(r.청구운임), 기사운임: toInt(r.기사운임) })), ...fixedMapped];
 
@@ -29329,7 +29451,8 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [] }) {
       if (client.includes("후레쉬물류")) {
         addRow("rev_fresh", month, sale, 0);
       } else if (pay === "선불" || pay === "착불") {
-        addRow("rev_cash", month, Math.max(0, sale - cost), 0);
+        const cashAmt = r.__isFixed ? (r.실수수료 || 0) : Math.max(0, sale - cost);
+        addRow("rev_cash", month, cashAmt, 0);
       } else {
         addRow("rev_freight", month, sale, 0);
       }

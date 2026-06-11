@@ -25,35 +25,49 @@ function KpiCard({ title, value, unit = "원", color = "blue" }) {
   );
 }
 
-const tonList = ["다마스", "1톤", "1.4톤", "2.5톤", "3.5톤", "5톤", "11톤", "25톤"];
+function parseTonToKg(s) {
+  const str = String(s || "").trim();
+  const kg = str.match(/([\d.]+)\s*kg/i);
+  if (kg) return parseFloat(kg[1]);
+  const ton = str.match(/([\d.]+)\s*톤/);
+  if (ton) return parseFloat(ton[1]) * 1000;
+  const bare = str.match(/^([\d.]+)$/);
+  if (bare) return parseFloat(bare[1]) * 1000;
+  return null;
+}
 
-// 이번 달 기본값 (버튼용)
-const thisMonthStart = () => {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
-};
-const thisMonthEnd = () => {
-  const now = new Date();
-  return new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
-};
+function calcRow(row) {
+  const qty = Number(row.수량 || 0);
+  const d = Number(row.기사단가 || 0);
+  const f = Number(row.수수료단가 || 0);
+  const basis = row.수수료기준 || "수량";
+  let tonNum = 0;
+  if (basis === "톤수") {
+    const parsed = parseTonToKg(row.톤수);
+    tonNum = parsed !== null ? parsed / 1000 : 0;
+  }
+  const 기사운임 = qty * d;
+  const 수수료 = basis === "톤수" ? Math.round(tonNum * f) : qty * f;
+  const 선결제 = Number(row.선결제 || 0);
+  const 실수수료 = 수수료 - 선결제;
+  const 청구운임 = 기사운임 + 수수료;
+  return { ...row, 기사운임, 수수료, 선결제, 실수수료, 청구운임 };
+}
 
-// ─── 기사 검색 드롭다운 (빠른등록 & 테이블 공용) ───
+const thisMonthStart = () => { const now = new Date(); return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`; };
+const thisMonthEnd = () => { const now = new Date(); return new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10); };
+
 function DriverSearchInput({ value, onChange, onSelect, drivers, placeholder = "차량번호 또는 이름 검색", className = "" }) {
-
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState(value || "");
   const wrapperRef = useRef(null);
 
-  // 외부 클릭 시 닫기
   useEffect(() => {
-    const handleClick = (e) => {
-      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) setOpen(false);
-    };
+    const handleClick = (e) => { if (wrapperRef.current && !wrapperRef.current.contains(e.target)) setOpen(false); };
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
-  // 부모에서 value가 변경되면 반영
   useEffect(() => { setQuery(value || ""); }, [value]);
 
   const suggestions = useMemo(() => {
@@ -71,35 +85,19 @@ function DriverSearchInput({ value, onChange, onSelect, drivers, placeholder = "
         className="w-full border border-gray-200 rounded-lg px-2 py-1 text-[12px] text-center"
         placeholder={placeholder}
         value={query}
-        onChange={e => {
-          setQuery(e.target.value);
-          onChange(e.target.value);
-          setOpen(true);
-        }}
+        onChange={e => { setQuery(e.target.value); onChange(e.target.value); setOpen(true); }}
         onFocus={() => { if (query) setOpen(true); }}
         onKeyDown={e => {
-          if (e.key === "Enter") {
-            if (suggestions.length > 0) {
-              onSelect(suggestions[0]);
-              setQuery(suggestions[0].차량번호);
-              setOpen(false);
-            }
+          if (e.key === "Enter" && suggestions.length > 0) {
+            onSelect(suggestions[0]); setQuery(suggestions[0].차량번호); setOpen(false);
           }
         }}
       />
       {open && suggestions.length > 0 && (
         <div className="absolute z-50 left-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto min-w-[200px]">
-
           {suggestions.map((d, i) => (
-            <div
-              key={i}
-              className="px-3 py-2 hover:bg-blue-50 cursor-pointer flex items-center gap-2 text-[12px]"
-              onMouseDown={() => {
-                onSelect(d);
-                setQuery(d.차량번호);
-                setOpen(false);
-              }}
-            >
+            <div key={i} className="px-3 py-2 hover:bg-blue-50 cursor-pointer flex items-center gap-2 text-[12px]"
+              onMouseDown={() => { onSelect(d); setQuery(d.차량번호); setOpen(false); }}>
               <span className="font-bold text-[#1B2B4B]">{d.이름}</span>
               <span className="text-gray-400">|</span>
               <span className="text-gray-600">{d.차량번호}</span>
@@ -108,6 +106,200 @@ function DriverSearchInput({ value, onChange, onSelect, drivers, placeholder = "
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function TonnageInput({ value, onChange }) {
+  const parse = (v) => {
+    const s = String(v || "");
+    if (s.toLowerCase().includes("kg")) return { num: s.replace(/kg/gi, "").trim(), unit: "kg" };
+    if (s.includes("톤")) return { num: s.replace("톤", "").trim(), unit: "톤" };
+    return { num: s, unit: "없음" };
+  };
+  const [num, setNum] = useState(() => parse(value).num);
+  const [unit, setUnit] = useState(() => parse(value).unit);
+
+  useEffect(() => {
+    const p = parse(value);
+    setNum(p.num);
+    setUnit(p.unit);
+  }, [value]);
+
+  const emit = (n, u) => {
+    if (!n.trim()) { onChange(""); return; }
+    onChange(u === "없음" ? n : `${n}${u}`);
+  };
+
+  return (
+    <div className="flex gap-1">
+      <input
+        type="text"
+        className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] min-w-0"
+        value={num}
+        placeholder="수치"
+        onChange={e => { setNum(e.target.value); emit(e.target.value, unit); }}
+      />
+      <select
+        className="border border-gray-200 rounded-lg px-1 py-1.5 text-[13px] shrink-0"
+        value={unit}
+        onChange={e => { setUnit(e.target.value); emit(num, e.target.value); }}
+      >
+        <option value="없음">없음</option>
+        <option value="톤">톤</option>
+        <option value="kg">kg</option>
+      </select>
+    </div>
+  );
+}
+
+function FastRowCard({ idx, row, drivers, rows, getClientConfigs, onUpdate, onSelectDriver, onSelectClient, onDelete }) {
+  const [searchQ, setSearchQ] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const wrapRef = useRef(null);
+
+  useEffect(() => {
+    const h = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setSearchOpen(false); };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, []);
+
+  const searchResults = useMemo(() => {
+    const q = (searchQ || "").toLowerCase().replace(/\s/g, "");
+    if (!q) return [];
+    return rows.filter(r =>
+      (r.거래처명 || "").toLowerCase().replace(/\s/g, "").includes(q) ||
+      (r.이름 || "").toLowerCase().replace(/\s/g, "").includes(q) ||
+      (r.차량번호 || "").toLowerCase().replace(/\s/g, "").includes(q)
+    ).slice(0, 8);
+  }, [searchQ, rows]);
+
+  const copyFrom = (r) => {
+    const configs = getClientConfigs();
+    const cfg = configs[r.거래처명] || {};
+    const merged = {
+      ...row,
+      거래처명: r.거래처명 || row.거래처명,
+      톤수: r.톤수 || row.톤수,
+      수량: r.수량 || row.수량,
+      차량번호: r.차량번호 || row.차량번호,
+      이름: r.이름 || row.이름,
+      핸드폰번호: r.핸드폰번호 || row.핸드폰번호,
+      기사단가: cfg.기사단가 || r.기사단가 || row.기사단가,
+      수수료단가: cfg.수수료단가 || r.수수료단가 || row.수수료단가,
+      수수료기준: cfg.수수료기준 || r.수수료기준 || row.수수료기준 || "수량",
+      지급방식: r.지급방식 || row.지급방식,
+      선결제: 0,
+    };
+    const c = calcRow(merged);
+    Object.entries(c).forEach(([k, v]) => { if (k !== "id" && k !== "정산완료" && k !== "날짜") onUpdate(k, v); });
+    setSearchQ("");
+    setSearchOpen(false);
+  };
+
+  return (
+    <div className="border border-gray-200 rounded-xl p-4 bg-gray-50 space-y-3">
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-[13px] font-bold text-[#1B2B4B]">{idx + 1}번 등록</span>
+        <div className="flex items-center gap-2">
+          <div ref={wrapRef} className="relative">
+            <div className="flex items-center gap-1 border border-gray-200 bg-white rounded-lg px-2 py-1 text-[12px]">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input
+                className="outline-none w-36 text-[12px] bg-transparent"
+                placeholder="거래처·기사·차량번호 검색"
+                value={searchQ}
+                onChange={e => { setSearchQ(e.target.value); setSearchOpen(true); }}
+                onFocus={() => setSearchOpen(true)}
+              />
+            </div>
+            {searchOpen && searchResults.length > 0 && (
+              <div className="absolute right-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-lg shadow-xl max-h-48 overflow-y-auto min-w-[260px]">
+                {searchResults.map((r, i) => (
+                  <div key={i} className="px-3 py-2 hover:bg-blue-50 cursor-pointer text-[12px] flex items-center gap-2"
+                    onMouseDown={() => copyFrom(r)}>
+                    <span className="font-semibold text-[#1B2B4B] truncate max-w-[80px]">{r.거래처명}</span>
+                    <span className="text-gray-400">|</span>
+                    <span className="text-gray-600">{r.이름}</span>
+                    <span className="text-gray-400">{r.차량번호}</span>
+                    <span className="ml-auto text-gray-400">{r.날짜}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          {idx > 0 && <button onClick={onDelete} className="text-red-500 text-[12px] hover:text-red-700">삭제</button>}
+        </div>
+      </div>
+      <div className="grid grid-cols-3 gap-3">
+        <div>
+          <label className="block text-[11px] font-semibold text-gray-500 mb-1">날짜</label>
+          <input type="date" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px]" value={row.날짜} onChange={e => onUpdate("날짜", e.target.value)} />
+        </div>
+        <div>
+          <label className="block text-[11px] font-semibold text-gray-500 mb-1">거래처명</label>
+          <input type="text" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px]" value={row.거래처명} onChange={e => { onUpdate("거래처명", e.target.value); onSelectClient(e.target.value); }} />
+        </div>
+        <div>
+          <label className="block text-[11px] font-semibold text-gray-500 mb-1">톤수</label>
+          <TonnageInput value={row.톤수} onChange={v => onUpdate("톤수", v)} />
+        </div>
+        <div>
+          <label className="block text-[11px] font-semibold text-gray-500 mb-1">차량번호 / 기사명</label>
+          <DriverSearchInput value={row.차량번호} drivers={drivers} placeholder="차량번호 또는 이름 입력" onChange={val => onUpdate("차량번호", val)} onSelect={onSelectDriver} />
+        </div>
+        <div>
+          <label className="block text-[11px] font-semibold text-gray-500 mb-1">기사명</label>
+          <input className="w-full border border-gray-100 rounded-lg px-2 py-1.5 text-[13px] bg-gray-100" value={row.이름} readOnly />
+        </div>
+        <div>
+          <label className="block text-[11px] font-semibold text-gray-500 mb-1">수량</label>
+          <input type="number" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px]" value={row.수량} onChange={e => onUpdate("수량", e.target.value)} />
+        </div>
+        <div>
+          <label className="block text-[11px] font-semibold text-gray-500 mb-1">기사단가</label>
+          <input type="number" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px]" value={row.기사단가} onChange={e => onUpdate("기사단가", e.target.value)} />
+        </div>
+        <div>
+          <label className="block text-[11px] font-semibold text-gray-500 mb-1">수수료단가</label>
+          <input type="number" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px]" value={row.수수료단가} onChange={e => onUpdate("수수료단가", e.target.value)} />
+        </div>
+        <div>
+          <label className="block text-[11px] font-semibold text-gray-500 mb-1">수수료기준</label>
+          <select className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px]" value={row.수수료기준 || "수량"} onChange={e => onUpdate("수수료기준", e.target.value)}>
+            <option value="수량">수량 기준</option>
+            <option value="톤수">톤수 기준</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-[11px] font-semibold text-gray-500 mb-1">선결제</label>
+          <input type="number" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px]" value={row.선결제 || 0} onChange={e => onUpdate("선결제", e.target.value)} />
+        </div>
+        <div>
+          <label className="block text-[11px] font-semibold text-gray-500 mb-1">지급방식</label>
+          <select className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px]" value={row.지급방식 || ""} onChange={e => onUpdate("지급방식", e.target.value)}>
+            <option value="">선택</option>
+            <option value="계산서">계산서</option>
+            <option value="착불">착불</option>
+            <option value="선불">선불</option>
+            <option value="손실">손실</option>
+            <option value="개인">개인</option>
+            <option value="취소">취소</option>
+          </select>
+        </div>
+      </div>
+      <div className="grid grid-cols-4 gap-3 pt-2 border-t border-gray-200">
+        {[["기사운임","text-emerald-600"],["수수료","text-orange-600"],["선결제","text-gray-500"],["실수수료","text-[#1B2B4B]"]].map(([f, cls]) => (
+          <div key={f} className="bg-white rounded-lg border border-gray-200 px-3 py-2 text-center">
+            <div className="text-[10px] text-gray-400">{f}</div>
+            <div className={`text-[13px] font-bold ${cls}`}>{fmt(row[f])}</div>
+          </div>
+        ))}
+      </div>
+      <div className="bg-white rounded-lg border border-gray-200 px-3 py-2 text-center">
+        <div className="text-[10px] text-gray-400">청구운임</div>
+        <div className="text-[15px] font-bold text-blue-600">{fmt(row.청구운임)}</div>
+      </div>
     </div>
   );
 }
@@ -121,25 +313,35 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
   const [editPopupOpen, setEditPopupOpen] = useState(false);
   const [editPopupRow, setEditPopupRow] = useState(null);
   const [showDoneOnly, setShowDoneOnly] = useState(false);
-
-  // ★ 변경 1: 초기값 빈 문자열 → 처음 진입 시 데이터 안 보임
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
-
   const [fastOpen, setFastOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [sortKey, setSortKey] = useState(null);
+  const [sortDir, setSortDir] = useState("asc");
 
-  // ★ 변경 3: 정렬 state
-  const [sortKey, setSortKey] = useState(null);      // 정렬 컬럼
-  const [sortDir, setSortDir] = useState("asc");      // "asc" | "desc"
+  const getViewCompany = () => role === "totalMaster"
+    ? (localStorage.getItem("loginCompany") || userCompany || "돌캐")
+    : (userCompany || localStorage.getItem("userCompany") || "돌캐");
 
-  const [fastRows, setFastRows] = useState([{
+  const getClientConfigs = () => {
+    try { return JSON.parse(localStorage.getItem(`fcConfig_${getViewCompany()}`) || "{}"); } catch { return {}; }
+  };
+  const saveClientConfig = (clientName, config) => {
+    if (!clientName) return;
+    try { const all = getClientConfigs(); all[clientName] = config; localStorage.setItem(`fcConfig_${getViewCompany()}`, JSON.stringify(all)); } catch {}
+  };
+
+  const emptyFastRow = () => ({
     날짜: new Date().toISOString().slice(0, 10),
     거래처명: "", 톤수: "", 수량: 1,
-    기사단가: 0, 수수료단가: 0,
+    기사단가: 0, 수수료단가: 0, 수수료기준: "수량",
     차량번호: "", 이름: "", 핸드폰번호: "",
-    기사운임: 0, 수수료: 0, 청구운임: 0
-  }]);
+    기사운임: 0, 수수료: 0, 선결제: 0, 실수수료: 0, 청구운임: 0,
+    지급방식: "",
+  });
+
+  const [fastRows, setFastRows] = useState([emptyFastRow()]);
 
   useEffect(() => {
     const viewCompany = role === "totalMaster"
@@ -155,27 +357,11 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
     return () => unsub();
   }, [userCompany, role]);
 
-  const getViewCompany = () => role === "totalMaster"
-    ? (localStorage.getItem("loginCompany") || userCompany || "돌캐")
-    : (userCompany || localStorage.getItem("userCompany") || "돌캐");
-
   const saveRow = async (r) => await setDoc(doc(coll, r.id), { ...r, companyName: r.companyName || getViewCompany() }, { merge: true });
   const removeRow = async (id) => await deleteDoc(doc(coll, id));
-  const updateRow = (id, patch) => setRows(prev => prev.map(r => r.id === id ? { ...r, ...patch } : r));
 
-  // ★ 변경 2-a: 테이블 내 차량번호 → 이름으로도 기사 매칭
-  const handleDriverSelect = async (id, driver) => {
-    const patch = { 차량번호: driver.차량번호, 이름: driver.이름, 핸드폰번호: driver.전화번호 };
-    updateRow(id, patch);
-    const row = rows.find(r => r.id === id);
-    if (row) await saveRow({ ...row, ...patch });
-  };
-
-  // ★ 변경 1: 날짜가 둘 다 비어있으면 아무것도 표시하지 않음
   const filtered = useMemo(() => {
-    // 날짜가 하나도 설정되지 않으면 빈 배열
     if (!startDate && !endDate) return [];
-
     let list = [...rows];
     if (startDate) list = list.filter(r => r.날짜 >= startDate);
     if (endDate) list = list.filter(r => r.날짜 <= endDate);
@@ -184,26 +370,16 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
       list = list.filter(r => Object.values(r).some(v => String(v).toLowerCase().includes(q)));
     }
     if (showDoneOnly) list = list.filter(r => r.정산완료);
-
-    // ★ 변경 3: 정렬 적용
     if (sortKey) {
       list.sort((a, b) => {
-        let va = a[sortKey] ?? "";
-        let vb = b[sortKey] ?? "";
-        // 숫자 컬럼은 숫자로 비교
-        if (["수량", "청구운임", "기사운임", "수수료"].includes(sortKey)) {
-          va = Number(va) || 0;
-          vb = Number(vb) || 0;
-        } else {
-          va = String(va).toLowerCase();
-          vb = String(vb).toLowerCase();
-        }
+        let va = a[sortKey] ?? "", vb = b[sortKey] ?? "";
+        if (["수량","청구운임","기사운임","수수료","선결제","실수수료"].includes(sortKey)) { va = Number(va)||0; vb = Number(vb)||0; }
+        else { va = String(va).toLowerCase(); vb = String(vb).toLowerCase(); }
         if (va < vb) return sortDir === "asc" ? -1 : 1;
         if (va > vb) return sortDir === "asc" ? 1 : -1;
         return 0;
       });
     }
-
     return list;
   }, [rows, search, startDate, endDate, showDoneOnly, sortKey, sortDir]);
 
@@ -211,12 +387,14 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
   const totalDrv = filtered.reduce((a, b) => a + Number(b.기사운임 || 0), 0);
   const totalFee = totalSale - totalDrv;
   const marginRate = totalSale ? ((totalFee / totalSale) * 100).toFixed(1) : "0";
+  const totalQty = filtered.reduce((a, b) => a + Number(b.수량 || 0), 0);
+  const totalTonKg = filtered.reduce((a, b) => { const kg = parseTonToKg(b.톤수); return kg !== null ? a + kg : a; }, 0);
+  const totalTonDisplay = totalTonKg > 0 ? (totalTonKg >= 1000 ? `${(totalTonKg / 1000).toFixed(2)}톤` : `${totalTonKg}kg`) : null;
 
   const chartData = useMemo(() => {
     const map = {};
     filtered.forEach(r => { map[r.날짜] = (map[r.날짜] || 0) + Number(r.청구운임 || 0); });
-    return Object.entries(map).sort(([a], [b]) => a.localeCompare(b))
-      .map(([date, 매출]) => ({ date: date.slice(5), 매출 }));
+    return Object.entries(map).sort(([a], [b]) => a.localeCompare(b)).map(([date, 매출]) => ({ date: date.slice(5), 매출 }));
   }, [filtered]);
 
   const topDrivers = useMemo(() => {
@@ -234,7 +412,7 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
   };
 
   const addRow = async () => {
-    const newRow = { id: crypto.randomUUID(), 날짜: new Date().toISOString().slice(0, 10), 정산완료: false, 거래처명: "", 톤수: "", 수량: "", 차량번호: "", 이름: "", 핸드폰번호: "", 청구운임: "", 기사운임: "", 수수료: "", companyName: getViewCompany() };
+    const newRow = { id: crypto.randomUUID(), 날짜: new Date().toISOString().slice(0, 10), 정산완료: false, 거래처명: "", 톤수: "", 수량: "", 차량번호: "", 이름: "", 핸드폰번호: "", 청구운임: "", 기사운임: "", 수수료: "", 선결제: 0, 실수수료: 0, 지급방식: "", companyName: getViewCompany() };
     await setDoc(doc(coll, newRow.id), newRow);
   };
 
@@ -244,98 +422,67 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
     setDeleteConfirm(false);
   };
 
-  // 빠른 등록 함수들
-  const addFastRow = () => setFastRows(p => [...p, { 날짜: new Date().toISOString().slice(0, 10), 거래처명: "", 톤수: "", 수량: 1, 기사단가: 0, 수수료단가: 0, 차량번호: "", 이름: "", 핸드폰번호: "", 기사운임: 0, 수수료: 0, 청구운임: 0 }]);
-
-  const updateFastField = (idx, field, value) => {
-    setFastRows(prev => {
-      const updated = [...prev];
-      updated[idx][field] = value;
-      const qty = Number(updated[idx].수량 || 0);
-      const d = Number(updated[idx].기사단가 || 0);
-      const f = Number(updated[idx].수수료단가 || 0);
-      updated[idx].기사운임 = qty * d;
-      updated[idx].수수료 = qty * f;
-      updated[idx].청구운임 = updated[idx].기사운임 + updated[idx].수수료;
-      return updated;
-    });
-  };
-
-  // ★ 변경 2-b: 빠른등록에서 기사 선택 시 반영
-  const selectFastDriver = (idx, driver) => {
-    setFastRows(prev => {
-      const updated = [...prev];
-      updated[idx].차량번호 = driver.차량번호;
-      updated[idx].이름 = driver.이름;
-      updated[idx].핸드폰번호 = driver.전화번호;
-      const qty = Number(updated[idx].수량 || 0);
-      updated[idx].기사운임 = qty * Number(updated[idx].기사단가 || 0);
-      updated[idx].수수료 = qty * Number(updated[idx].수수료단가 || 0);
-      updated[idx].청구운임 = updated[idx].기사운임 + updated[idx].수수료;
-      return updated;
-    });
-  };
-
-  // Edit popup functions
-  const openEditPopup = (row) => {
-    setEditPopupRow({ ...row });
-    setEditPopupOpen(true);
-  };
+  const openEditPopup = (row) => { setEditPopupRow({ ...row }); setEditPopupOpen(true); };
 
   const updateEditPopupField = (field, value) => {
-    setEditPopupRow(prev => {
-      const updated = { ...prev, [field]: value };
-      const qty = Number(updated.수량 || 0);
-      const d = Number(updated.기사단가 || 0);
-      const f = Number(updated.수수료단가 || 0);
-      updated.기사운임 = qty * d;
-      updated.수수료 = qty * f;
-      updated.청구운임 = updated.기사운임 + updated.수수료;
-      return updated;
-    });
+    setEditPopupRow(prev => calcRow({ ...prev, [field]: value }));
   };
 
   const selectEditPopupDriver = (driver) => {
-    setEditPopupRow(prev => {
-      const updated = { ...prev, 차량번호: driver.차량번호, 이름: driver.이름, 핸드폰번호: driver.전화번호 };
-      const qty = Number(updated.수량 || 0);
-      updated.기사운임 = qty * Number(updated.기사단가 || 0);
-      updated.수수료 = qty * Number(updated.수수료단가 || 0);
-      updated.청구운임 = updated.기사운임 + updated.수수료;
-      return updated;
-    });
+    setEditPopupRow(prev => calcRow({ ...prev, 차량번호: driver.차량번호, 이름: driver.이름, 핸드폰번호: driver.전화번호 }));
   };
 
   const saveEditPopup = async () => {
     if (!editPopupRow) return;
+    if (editPopupRow.거래처명) {
+      saveClientConfig(editPopupRow.거래처명, {
+        기사단가: Number(editPopupRow.기사단가 || 0),
+        수수료단가: Number(editPopupRow.수수료단가 || 0),
+        수수료기준: editPopupRow.수수료기준 || "수량",
+      });
+    }
     await saveRow(editPopupRow);
     setEditPopupOpen(false);
     setEditPopupRow(null);
+  };
+
+  const copyEditToFast = () => {
+    if (!editPopupRow) return;
+    setFastRows([calcRow({ ...emptyFastRow(), ...editPopupRow, 날짜: new Date().toISOString().slice(0, 10), 정산완료: false, 선결제: 0 })]);
+    setEditPopupOpen(false);
+    setFastOpen(true);
+  };
+
+  const updateFastField = (idx, field, value) => {
+    setFastRows(prev => { const u = [...prev]; u[idx] = calcRow({ ...u[idx], [field]: value }); return u; });
+  };
+
+  const selectFastDriver = (idx, driver) => {
+    setFastRows(prev => { const u = [...prev]; u[idx] = calcRow({ ...u[idx], 차량번호: driver.차량번호, 이름: driver.이름, 핸드폰번호: driver.전화번호 }); return u; });
+  };
+
+  const selectFastClient = (idx, clientName) => {
+    const cfg = getClientConfigs()[clientName];
+    if (cfg) setFastRows(prev => { const u = [...prev]; u[idx] = calcRow({ ...u[idx], 거래처명: clientName, 기사단가: cfg.기사단가 || 0, 수수료단가: cfg.수수료단가 || 0, 수수료기준: cfg.수수료기준 || "수량" }); return u; });
   };
 
   const submitFastRows = async () => {
     const vc = getViewCompany();
     for (const row of fastRows) {
       const id = crypto.randomUUID();
-      await setDoc(doc(coll, id), { id, ...row, 정산완료: false, companyName: vc });
+      const finalRow = calcRow(row);
+      await setDoc(doc(coll, id), { id, ...finalRow, 정산완료: false, companyName: vc });
+      if (row.거래처명) saveClientConfig(row.거래처명, { 기사단가: Number(row.기사단가 || 0), 수수료단가: Number(row.수수료단가 || 0), 수수료기준: row.수수료기준 || "수량" });
     }
     alert(`${fastRows.length}건 등록 완료!`);
-    setFastRows([{ 날짜: new Date().toISOString().slice(0, 10), 거래처명: "", 톤수: "", 수량: 1, 기사단가: 0, 수수료단가: 0, 차량번호: "", 이름: "", 핸드폰번호: "", 기사운임: 0, 수수료: 0, 청구운임: 0 }]);
+    setFastRows([emptyFastRow()]);
     setFastOpen(false);
   };
 
-  // ★ 변경 3: 정렬 핸들러
   const handleSort = (key) => {
-    if (sortKey === key) {
-      // 같은 컬럼 다시 클릭 → 방향 전환, 3번째 클릭 → 정렬 해제
-      if (sortDir === "asc") setSortDir("desc");
-      else { setSortKey(null); setSortDir("asc"); }
-    } else {
-      setSortKey(key);
-      setSortDir("asc");
-    }
+    if (sortKey === key) { if (sortDir === "asc") setSortDir("desc"); else { setSortKey(null); setSortDir("asc"); } }
+    else { setSortKey(key); setSortDir("asc"); }
   };
-
   const sortIcon = (key) => {
     if (sortKey !== key) return <span className="ml-1 text-white/30">↕</span>;
     return <span className="ml-1">{sortDir === "asc" ? "↑" : "↓"}</span>;
@@ -344,37 +491,42 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
   const head = "px-3 py-3 text-center text-[13px] font-semibold text-white whitespace-nowrap bg-transparent border-b border-white/10 cursor-pointer select-none hover:bg-white/10 transition";
   const cell = "px-3 py-2.5 text-[13px] text-gray-800 text-center whitespace-nowrap border-b border-gray-100 align-middle";
 
-  // 정렬 가능한 헤더 정의: [표시이름, 데이터키]
   const sortableHeaders = [
-    ["정산", "정산완료"],
-    ["날짜", "날짜"],
-    ["거래처명", "거래처명"],
-    ["톤수", "톤수"],
-    ["수량", "수량"],
-    ["차량번호", "차량번호"],
-    ["기사명", "이름"],
-    ["핸드폰", "핸드폰번호"],
-    ["청구운임", "청구운임"],
-    ["기사운임", "기사운임"],
-    ["수수료", "수수료"],
+    ["정산","정산완료"],["날짜","날짜"],["거래처명","거래처명"],["톤수","톤수"],["수량","수량"],
+    ["차량번호","차량번호"],["기사명","이름"],["핸드폰","핸드폰번호"],
+    ["청구운임","청구운임"],["기사운임","기사운임"],["수수료","수수료"],
+    ["선결제","선결제"],["실수수료","실수수료"],["지급방식","지급방식"],
   ];
+  const COL_SPAN = sortableHeaders.length + 1;
 
   return (
     <div className="bg-gray-50 min-h-screen p-5 space-y-4">
-
-      {/* ===== 헤더 ===== */}
+      {/* 헤더 */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-[22px] font-bold text-[#1B2B4B]">고정거래처 관리</h1>
           <p className="text-[12px] text-gray-400 mt-0.5">고정 운송 계약 거래처 정산 관리</p>
         </div>
         <div className="flex items-center gap-2">
+          {(startDate || endDate) && filtered.length > 0 && (
+            <div className="flex items-center gap-3 mr-2 px-4 py-2 bg-white rounded-xl border border-gray-200 text-[13px]">
+              <span className="text-gray-500">총 수량</span>
+              <span className="font-bold text-[#1B2B4B]">{totalQty.toLocaleString()}</span>
+              {totalTonDisplay && (
+                <>
+                  <span className="text-gray-300">|</span>
+                  <span className="text-gray-500">총 톤수</span>
+                  <span className="font-bold text-[#1B2B4B]">{totalTonDisplay}</span>
+                </>
+              )}
+            </div>
+          )}
           <button onClick={() => setFastOpen(true)} className="px-4 py-2 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition">+ 빠른 등록</button>
           <button onClick={addRow} className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-[13px] font-semibold hover:bg-emerald-700 transition">+ 행 추가</button>
         </div>
       </div>
 
-      {/* ===== KPI ===== */}
+      {/* KPI */}
       <div className="grid grid-cols-4 gap-4">
         <KpiCard title="총 청구금액" value={fmt(totalSale)} color="blue" />
         <KpiCard title="총 기사운임" value={fmt(totalDrv)} color="green" />
@@ -382,11 +534,11 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
         <KpiCard title="수익률" value={marginRate} unit="%" color="purple" />
       </div>
 
-      {/* ===== 검색 + 필터 ===== */}
+      {/* 검색 + 필터 */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm px-5 py-4">
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2 border-2 border-[#1B2B4B] rounded-xl overflow-hidden bg-white h-[36px]">
-            <span className="pl-3 text-gray-400">🔍</span>
+            <svg className="w-4 h-4 text-gray-400 ml-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="거래처명 · 기사명 검색" className="flex-1 px-2 h-full text-[13px] outline-none w-48" />
           </div>
           <div className="flex items-center gap-1.5">
@@ -395,12 +547,11 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
             <input type="date" className="border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] focus:outline-none focus:border-[#1B2B4B]" value={endDate} onChange={e => setEndDate(e.target.value)} />
           </div>
           <button onClick={() => { setStartDate(thisMonthStart()); setEndDate(thisMonthEnd()); }} className="px-3 py-1.5 rounded-lg border border-gray-200 text-[13px] text-gray-500 hover:bg-gray-50 transition">이번 달</button>
-          {/* ★ 날짜 초기화 버튼 */}
           {(startDate || endDate) && (
             <button onClick={() => { setStartDate(""); setEndDate(""); }} className="px-3 py-1.5 rounded-lg border border-red-200 text-[13px] text-red-500 hover:bg-red-50 transition">날짜 초기화</button>
           )}
           <button onClick={() => setShowDoneOnly(p => !p)} className={`px-3 py-1.5 rounded-lg border text-[13px] font-semibold transition ${showDoneOnly ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
-            {showDoneOnly ? "✓ 정산완료만" : "정산완료만"}
+            정산완료만
           </button>
           <div className="ml-auto flex items-center gap-2">
             <button onClick={() => { if (!selected.length) return alert("수정할 항목을 선택하세요."); const row = filtered.find(r => r.id === selected[0]); if (row) openEditPopup(row); }} className="px-3 py-1.5 rounded-lg border text-[13px] font-semibold transition bg-white text-gray-600 border-gray-300 hover:bg-gray-50">수정</button>
@@ -411,10 +562,8 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
         </div>
       </div>
 
-      {/* ===== 메인 레이아웃 ===== */}
+      {/* 메인 레이아웃 */}
       <div className="flex gap-4 items-start">
-
-        {/* 테이블 */}
         <div className="flex-1 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-[13px]">
@@ -424,37 +573,29 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
                     <input type="checkbox" onChange={() => selected.length === filtered.length ? setSelected([]) : setSelected(filtered.map(r => r.id))} checked={selected.length > 0 && selected.length === filtered.length} />
                   </th>
                   {sortableHeaders.map(([label, key]) => (
-                    <th key={label} className={head} onClick={() => handleSort(key)}>
-                      {label}{sortIcon(key)}
-                    </th>
+                    <th key={label} className={head} onClick={() => handleSort(key)}>{label}{sortIcon(key)}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {/* ★ 변경 1: 날짜 미설정 시 안내 문구 */}
                 {!startDate && !endDate ? (
                   <tr>
-                    <td colSpan={12} className="py-16 text-center text-[14px] text-gray-400">
+                    <td colSpan={COL_SPAN} className="py-16 text-center text-[14px] text-gray-400">
                       <div className="flex flex-col items-center gap-2">
-                        <span className="text-3xl"></span>
+                        <span className="text-3xl">📅</span>
                         <span>조회할 기간을 설정해주세요</span>
-                        <button
-                          onClick={() => { setStartDate(thisMonthStart()); setEndDate(thisMonthEnd()); }}
-                          className="mt-2 px-4 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition"
-                        >
-                          이번 달 조회
-                        </button>
+                        <button onClick={() => { setStartDate(thisMonthStart()); setEndDate(thisMonthEnd()); }} className="mt-2 px-4 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243a60] transition">이번 달 조회</button>
                       </div>
                     </td>
                   </tr>
                 ) : filtered.length === 0 ? (
-                  <tr><td colSpan={12} className="py-16 text-center text-[13px] text-gray-400">해당 기간에 데이터가 없습니다</td></tr>
+                  <tr><td colSpan={COL_SPAN} className="py-16 text-center text-[13px] text-gray-400">해당 기간에 데이터가 없습니다</td></tr>
                 ) : filtered.map((r, idx) => (
                   <tr key={r.id} onDoubleClick={() => openEditPopup(r)} className={`transition hover:bg-blue-50/40 cursor-pointer ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"} ${r.정산완료 ? "opacity-60" : ""}`}>
                     <td className={cell} onClick={e => e.stopPropagation()}><input type="checkbox" checked={selected.includes(r.id)} onChange={() => setSelected(p => p.includes(r.id) ? p.filter(x => x !== r.id) : [...p, r.id])} /></td>
                     <td className={cell}>
                       <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold border ${r.정산완료 ? "bg-emerald-100 text-emerald-700 border-emerald-300" : "bg-amber-100 text-amber-600 border-amber-300"}`}>
-                        {r.정산완료 ? "✓ 완료" : "미정산"}
+                        {r.정산완료 ? "완료" : "미정산"}
                       </span>
                     </td>
                     <td className={cell}>{r.날짜}</td>
@@ -464,11 +605,12 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
                     <td className={cell}>{r.차량번호}</td>
                     <td className={`${cell} font-semibold`}>{r.이름}</td>
                     <td className={cell}>{r.핸드폰번호}</td>
-                    {["청구운임","기사운임","수수료"].map(f => (
-                      <td key={f} className={`${cell} text-right font-semibold ${f === "수수료" ? "text-orange-600" : f === "기사운임" ? "text-emerald-600" : "text-blue-600"}`}>
-                        {fmt(r[f])}
-                      </td>
-                    ))}
+                    <td className={`${cell} text-right font-semibold text-blue-600`}>{fmt(r.청구운임)}</td>
+                    <td className={`${cell} text-right font-semibold text-emerald-600`}>{fmt(r.기사운임)}</td>
+                    <td className={`${cell} text-right font-semibold text-orange-600`}>{fmt(r.수수료)}</td>
+                    <td className={`${cell} text-right text-gray-500`}>{r.선결제 ? fmt(r.선결제) : ""}</td>
+                    <td className={`${cell} text-right font-semibold text-[#1B2B4B]`}>{fmt(r.실수수료 != null ? r.실수수료 : (Number(r.수수료||0) - Number(r.선결제||0)))}</td>
+                    <td className={cell}>{r.지급방식}</td>
                   </tr>
                 ))}
               </tbody>
@@ -478,8 +620,6 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
 
         {/* 사이드 대시보드 */}
         <div className="w-[300px] shrink-0 space-y-4">
-
-          {/* 매출 차트 */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
             <div className="bg-[#1B2B4B] px-4 py-3"><h3 className="text-[14px] font-bold text-white">일별 매출</h3></div>
             <div className="p-4 h-[160px]">
@@ -495,8 +635,6 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
               </ResponsiveContainer>
             </div>
           </div>
-
-          {/* 기사별 TOP 5 */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
             <div className="bg-[#1B2B4B] px-4 py-3"><h3 className="text-[14px] font-bold text-white">기사별 매출 TOP 5</h3></div>
             <div className="p-4 space-y-2">
@@ -517,11 +655,10 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
               })}
             </div>
           </div>
-
         </div>
       </div>
 
-      {/* 삭제 확인 팝업 */}
+      {/* 삭제 확인 */}
       {deleteConfirm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl shadow-2xl w-[360px] overflow-hidden">
@@ -534,7 +671,7 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
         </div>
       )}
 
-      {/* 수정 팝업 모달 */}
+      {/* 수정 팝업 */}
       <Dialog open={editPopupOpen} onClose={() => setEditPopupOpen(false)} className="relative z-50">
         <div className="fixed inset-0 bg-black/50" />
         <div className="fixed inset-0 flex items-center justify-center p-4">
@@ -553,13 +690,15 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
                     </div>
                     <div>
                       <label className="block text-[11px] font-semibold text-gray-500 mb-1">거래처명</label>
-                      <input type="text" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px]" value={editPopupRow.거래처명 || ""} onChange={e => updateEditPopupField("거래처명", e.target.value)} />
+                      <input type="text" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px]" value={editPopupRow.거래처명 || ""} onChange={e => {
+                        const v = e.target.value;
+                        const cfg = getClientConfigs()[v];
+                        setEditPopupRow(prev => calcRow({ ...prev, 거래처명: v, ...(cfg ? { 기사단가: cfg.기사단가, 수수료단가: cfg.수수료단가, 수수료기준: cfg.수수료기준 } : {}) }));
+                      }} />
                     </div>
                     <div>
                       <label className="block text-[11px] font-semibold text-gray-500 mb-1">톤수</label>
-                      <select className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px]" value={editPopupRow.톤수 || ""} onChange={e => updateEditPopupField("톤수", e.target.value)}>
-                        <option value="">선택</option>{tonList.map(t => <option key={t}>{t}</option>)}
-                      </select>
+                      <TonnageInput value={editPopupRow.톤수 || ""} onChange={v => updateEditPopupField("톤수", v)} />
                     </div>
                     <div>
                       <label className="block text-[11px] font-semibold text-gray-500 mb-1">수량</label>
@@ -567,13 +706,7 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
                     </div>
                     <div>
                       <label className="block text-[11px] font-semibold text-gray-500 mb-1">차량번호 / 기사명</label>
-                      <DriverSearchInput
-                        value={editPopupRow.차량번호 || ""}
-                        drivers={drivers}
-                        placeholder="차량번호 또는 이름 입력"
-                        onChange={(val) => updateEditPopupField("차량번호", val)}
-                        onSelect={(d) => selectEditPopupDriver(d)}
-                      />
+                      <DriverSearchInput value={editPopupRow.차량번호 || ""} drivers={drivers} placeholder="차량번호 또는 이름 입력" onChange={val => updateEditPopupField("차량번호", val)} onSelect={selectEditPopupDriver} />
                     </div>
                     <div>
                       <label className="block text-[11px] font-semibold text-gray-500 mb-1">기사명</label>
@@ -587,21 +720,51 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
                       <label className="block text-[11px] font-semibold text-gray-500 mb-1">수수료단가</label>
                       <input type="number" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px]" value={editPopupRow.수수료단가 || 0} onChange={e => updateEditPopupField("수수료단가", e.target.value)} />
                     </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-gray-500 mb-1">수수료기준</label>
+                      <select className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px]" value={editPopupRow.수수료기준 || "수량"} onChange={e => updateEditPopupField("수수료기준", e.target.value)}>
+                        <option value="수량">수량 기준</option>
+                        <option value="톤수">톤수 기준</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-gray-500 mb-1">선결제</label>
+                      <input type="number" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px]" value={editPopupRow.선결제 || 0} onChange={e => updateEditPopupField("선결제", e.target.value)} />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-gray-500 mb-1">지급방식</label>
+                      <select className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px]" value={editPopupRow.지급방식 || ""} onChange={e => updateEditPopupField("지급방식", e.target.value)}>
+                        <option value="">선택</option>
+                        <option value="계산서">계산서</option>
+                        <option value="착불">착불</option>
+                        <option value="선불">선불</option>
+                        <option value="손실">손실</option>
+                        <option value="개인">개인</option>
+                        <option value="취소">취소</option>
+                      </select>
+                    </div>
                   </div>
-                  <div className="grid grid-cols-3 gap-3 pt-2 border-t border-gray-200">
-                    {[["기사운임", "text-emerald-600"],["수수료","text-orange-600"],["청구운임","text-blue-600"]].map(([f, cls]) => (
+                  <div className="grid grid-cols-4 gap-3 pt-2 border-t border-gray-200">
+                    {[["기사운임","text-emerald-600"],["수수료","text-orange-600"],["선결제","text-gray-500"],["실수수료","text-[#1B2B4B]"]].map(([f, cls]) => (
                       <div key={f} className="bg-white rounded-lg border border-gray-200 px-3 py-2 text-center">
                         <div className="text-[10px] text-gray-400">{f}</div>
-                        <div className={`text-[14px] font-bold ${cls}`}>{fmt(editPopupRow[f])}</div>
+                        <div className={`text-[13px] font-bold ${cls}`}>{fmt(editPopupRow[f])}</div>
                       </div>
                     ))}
+                  </div>
+                  <div className="bg-white rounded-lg border border-gray-200 px-3 py-2 text-center">
+                    <div className="text-[10px] text-gray-400">청구운임</div>
+                    <div className="text-[16px] font-bold text-blue-600">{fmt(editPopupRow.청구운임)}</div>
                   </div>
                 </div>
               </div>
             )}
-            <div className="px-5 py-4 border-t flex items-center justify-end gap-3 shrink-0">
-              <button onClick={() => setEditPopupOpen(false)} className="px-4 py-2 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 transition">취소</button>
-              <button onClick={saveEditPopup} className="px-5 py-2 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition">저장하기</button>
+            <div className="px-5 py-4 border-t flex items-center justify-between shrink-0">
+              <button onClick={copyEditToFast} className="px-4 py-2 rounded-xl border border-[#1B2B4B] text-[#1B2B4B] text-[13px] font-semibold hover:bg-[#1B2B4B]/5 transition">오더복사</button>
+              <div className="flex gap-3">
+                <button onClick={() => setEditPopupOpen(false)} className="px-4 py-2 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 transition">취소</button>
+                <button onClick={saveEditPopup} className="px-5 py-2 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition">저장하기</button>
+              </div>
             </div>
           </Dialog.Panel>
         </div>
@@ -618,65 +781,22 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
             </div>
             <div className="flex-1 overflow-y-auto p-5 space-y-3">
               {fastRows.map((row, idx) => (
-                <div key={idx} className="border border-gray-200 rounded-xl p-4 bg-gray-50 space-y-3">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[13px] font-bold text-[#1B2B4B]">{idx + 1}번 등록</span>
-                    {idx > 0 && <button onClick={() => setFastRows(p => p.filter((_, i) => i !== idx))} className="text-red-500 text-[12px] hover:text-red-700">삭제</button>}
-                  </div>
-                  <div className="grid grid-cols-3 gap-3">
-                    {[["날짜","date"],["거래처명","text"],["톤수","select"]].map(([label, type]) => (
-                      <div key={label}>
-                        <label className="block text-[11px] font-semibold text-gray-500 mb-1">{label}</label>
-                        {type === "select" ? (
-                          <select className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px]" value={row.톤수} onChange={e => updateFastField(idx, "톤수", e.target.value)}>
-                            <option value="">선택</option>{tonList.map(t => <option key={t}>{t}</option>)}
-                          </select>
-                        ) : (
-                          <input type={type} className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px]" value={row[label]} onChange={e => updateFastField(idx, label, e.target.value)} />
-                        )}
-                      </div>
-                    ))}
-                    {/* ★ 변경 2-b: 빠른등록 차량번호 → 이름/차량번호 검색 드롭다운 */}
-                    <div>
-                      <label className="block text-[11px] font-semibold text-gray-500 mb-1">차량번호 / 기사명</label>
-                      <DriverSearchInput
-                        value={row.차량번호}
-                        drivers={drivers}
-                        placeholder="차량번호 또는 이름 입력"
-                        onChange={(val) => updateFastField(idx, "차량번호", val)}
-                        onSelect={(d) => selectFastDriver(idx, d)}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-semibold text-gray-500 mb-1">기사명</label>
-                      <input className="w-full border border-gray-100 rounded-lg px-2 py-1.5 text-[13px] bg-gray-100" value={row.이름} readOnly />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-semibold text-gray-500 mb-1">수량</label>
-                      <input type="number" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px]" value={row.수량} onChange={e => updateFastField(idx, "수량", e.target.value)} />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-semibold text-gray-500 mb-1">기사단가</label>
-                      <input type="number" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px]" value={row.기사단가} onChange={e => updateFastField(idx, "기사단가", e.target.value)} />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-semibold text-gray-500 mb-1">수수료단가</label>
-                      <input type="number" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px]" value={row.수수료단가} onChange={e => updateFastField(idx, "수수료단가", e.target.value)} />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-3 gap-3 pt-2 border-t border-gray-200">
-                    {[["기사운임", "text-emerald-600"],["수수료","text-orange-600"],["청구운임","text-blue-600"]].map(([f, cls]) => (
-                      <div key={f} className="bg-white rounded-lg border border-gray-200 px-3 py-2 text-center">
-                        <div className="text-[10px] text-gray-400">{f}</div>
-                        <div className={`text-[14px] font-bold ${cls}`}>{fmt(row[f])}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                <FastRowCard
+                  key={idx}
+                  idx={idx}
+                  row={row}
+                  drivers={drivers}
+                  rows={rows}
+                  getClientConfigs={getClientConfigs}
+                  onUpdate={(field, value) => updateFastField(idx, field, value)}
+                  onSelectDriver={(d) => selectFastDriver(idx, d)}
+                  onSelectClient={(name) => selectFastClient(idx, name)}
+                  onDelete={() => setFastRows(p => p.filter((_, i) => i !== idx))}
+                />
               ))}
             </div>
             <div className="px-5 py-4 border-t flex items-center justify-between shrink-0">
-              <button onClick={addFastRow} className="px-4 py-2 rounded-xl border border-[#1B2B4B] text-[#1B2B4B] text-[13px] font-semibold hover:bg-[#1B2B4B]/5 transition">+ 행 추가</button>
+              <button onClick={() => setFastRows(p => [...p, emptyFastRow()])} className="px-4 py-2 rounded-xl border border-[#1B2B4B] text-[#1B2B4B] text-[13px] font-semibold hover:bg-[#1B2B4B]/5 transition">+ 행 추가</button>
               <button onClick={submitFastRows} className="px-5 py-2 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition">저장하기</button>
             </div>
           </Dialog.Panel>
