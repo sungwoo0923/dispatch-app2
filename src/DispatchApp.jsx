@@ -16586,7 +16586,7 @@ const head = isDark
 </div>
 
       {/* 테이블 */}
-      <div className={`overflow-x-auto rounded-xl shadow border ${isDark ? "border-gray-700" : "border-gray-200"}`}>
+      <div className={`overflow-x-auto w-full rounded-xl shadow border ${isDark ? "border-gray-700" : "border-gray-200"}`}>
   <table className="dispatch-table">
           <thead className={isDark ? "bg-[#0f172a]" : "bg-[#1B2B4B]"}>
             <tr>
