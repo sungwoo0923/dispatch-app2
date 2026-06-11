@@ -1,0 +1,77 @@
+name: Build Android APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: '빌드 타입'
+        required: true
+        default: 'debug'
+        type: choice
+        options:
+          - debug
+          - release
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: 코드 체크아웃
+        uses: actions/checkout@v4
+        with:
+          ref: claude/tender-wright-wBiU5
+
+      - name: Node.js 22 설정
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Java 21 설정
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Android SDK 설정
+        uses: android-actions/setup-android@v3
+
+      - name: npm 패키지 설치
+        run: npm ci
+
+      - name: 웹 앱 빌드
+        run: npm run build
+
+      - name: Capacitor Android 동기화
+        run: npx cap sync android
+
+      - name: Gradle 권한 설정
+        run: chmod +x android/gradlew
+
+      - name: Debug APK 빌드
+        if: ${{ inputs.build_type == 'debug' }}
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Release APK 빌드
+        if: ${{ inputs.build_type == 'release' }}
+        working-directory: android
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: Debug APK 업로드
+        if: ${{ inputs.build_type == 'debug' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: KPFlow-기사앱-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
+
+      - name: Release APK 업로드
+        if: ${{ inputs.build_type == 'release' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: KPFlow-기사앱-release
+          path: android/app/build/outputs/apk/release/app-release-unsigned.apk
+          retention-days: 30
