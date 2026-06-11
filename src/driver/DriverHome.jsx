@@ -7,6 +7,21 @@ import {
 } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 
+// Capacitor 네이티브 컨텍스트 여부 확인
+const isNative = () => typeof window !== "undefined" && !!(window.Capacitor?.isNativePlatform?.());
+
+// BackgroundGeolocation 플러그인 — Capacitor native bridge를 통해 등록
+// 웹 빌드 시 registerPlugin은 no-op stub을 반환하므로 동적 import 불필요
+let BgGeo = null;
+async function loadBgGeo() {
+  if (BgGeo) return BgGeo;
+  try {
+    const { registerPlugin } = await import("@capacitor/core");
+    BgGeo = registerPlugin("BackgroundGeolocation");
+  } catch (_) {}
+  return BgGeo;
+}
+
 // KST 날짜 문자열 (YYYY-MM-DD) — UTC 대신 KST 기준 오늘 날짜
 function kstDateStr(d = new Date()) {
   return new Date(d.getTime() + 9 * 3600_000).toISOString().slice(0, 10);
@@ -221,11 +236,9 @@ function useGpsTracking(uid, driverData) {
 
   useEffect(() => {
     if (!uid) return;
-    let watchId = null;
 
-    // GPS 콜백 (watchPosition + getCurrentPosition 공통)
-    const gpsCallback = async (p) => {
-      const { latitude: lat, longitude: lng, speed, accuracy } = p.coords;
+    // GPS 콜백 (watchPosition + BackgroundGeolocation 공통)
+    const gpsCallback = async (lat, lng, speed, accuracy) => {
       setPos({ lat, lng, speed, accuracy });
       if (accuracy > 100) return;
       const prev = lastPosRef.current;
@@ -257,59 +270,96 @@ function useGpsTracking(uid, driverData) {
       try { await updateDoc(doc(db, "drivers", uid), updateData); } catch (_) {}
     };
 
-    const startWatch = () => {
-      if (watchId != null) navigator.geolocation.clearWatch(watchId);
-      watchId = navigator.geolocation.watchPosition(
-        gpsCallback,
-        (err) => { if (err.code === 1) setPermissionDenied(true); },
-        { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }
-      );
-    };
+    let cleanup = () => {};
 
-    startWatch();
-
-    // 30초마다 위치 강제 업데이트 (정지 중에도 최신 updatedAt 유지)
-    const forceInterval = setInterval(() => {
-      const p = lastPosRef.current;
-      if (!p) return;
-      updateDoc(doc(db, "drivers", uid), {
-        location: { lat: p.lat, lng: p.lng },
-        updatedAt: serverTimestamp(),
-        active: true,
-      }).catch(() => {});
-    }, 30000);
-
-    // 백그라운드→포그라운드 복귀 시 GPS 즉시 재시작
-    const handleVisibility = () => {
-      if (document.visibilityState !== "visible") return;
-      startWatch();
-      navigator.geolocation.getCurrentPosition(
-        async (p) => {
-          const { latitude: lat, longitude: lng, speed, accuracy } = p.coords;
-          setPos({ lat, lng, speed, accuracy });
-          if (accuracy <= 100) {
-            lastPosRef.current = { lat, lng };
-            try {
-              await updateDoc(doc(db, "drivers", uid), {
-                location: { lat, lng },
-                speed: speed ? Math.round(speed * 3.6) : 0,
-                updatedAt: serverTimestamp(),
-                active: true,
-              });
-            } catch (_) {}
+    if (isNative()) {
+      // ── 네이티브 앱: BackgroundGeolocation 플러그인 사용 ──
+      let watcherId = null;
+      loadBgGeo().then((plugin) => {
+        if (!plugin) return;
+        plugin.addWatcher(
+          {
+            backgroundMessage: "취소하면 위치 추적이 중지됩니다.",
+            backgroundTitle: "KP-Flow 운행 추적 중",
+            requestPermissions: true,
+            stale: false,
+            distanceFilter: 10,
+          },
+          (location, error) => {
+            if (error) {
+              if (error.code === "NOT_AUTHORIZED") setPermissionDenied(true);
+              return;
+            }
+            gpsCallback(location.latitude, location.longitude, location.speed, location.accuracy);
           }
-        },
-        () => {},
-        { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
-      );
-    };
-    document.addEventListener("visibilitychange", handleVisibility);
+        ).then((id) => { watcherId = id; });
+      });
 
-    return () => {
-      if (watchId != null) navigator.geolocation.clearWatch(watchId);
-      clearInterval(forceInterval);
-      document.removeEventListener("visibilitychange", handleVisibility);
-    };
+      cleanup = () => {
+        if (watcherId) {
+          loadBgGeo().then((plugin) => plugin?.removeWatcher({ id: watcherId }).catch(() => {}));
+        }
+      };
+    } else {
+      // ── 웹 브라우저: navigator.geolocation 사용 ──
+      let watchId = null;
+
+      const startWatch = () => {
+        if (watchId != null) navigator.geolocation.clearWatch(watchId);
+        watchId = navigator.geolocation.watchPosition(
+          (p) => gpsCallback(p.coords.latitude, p.coords.longitude, p.coords.speed, p.coords.accuracy),
+          (err) => { if (err.code === 1) setPermissionDenied(true); },
+          { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }
+        );
+      };
+
+      startWatch();
+
+      // 30초마다 updatedAt 강제 갱신 (정지 중에도 최신 상태 유지)
+      const forceInterval = setInterval(() => {
+        const p = lastPosRef.current;
+        if (!p) return;
+        updateDoc(doc(db, "drivers", uid), {
+          location: { lat: p.lat, lng: p.lng },
+          updatedAt: serverTimestamp(),
+          active: true,
+        }).catch(() => {});
+      }, 30000);
+
+      // 백그라운드→포그라운드 복귀 시 GPS 재시작
+      const handleVisibility = () => {
+        if (document.visibilityState !== "visible") return;
+        startWatch();
+        navigator.geolocation.getCurrentPosition(
+          async (p) => {
+            const { latitude: lat, longitude: lng, speed, accuracy } = p.coords;
+            setPos({ lat, lng, speed, accuracy });
+            if (accuracy <= 100) {
+              lastPosRef.current = { lat, lng };
+              try {
+                await updateDoc(doc(db, "drivers", uid), {
+                  location: { lat, lng },
+                  speed: speed ? Math.round(speed * 3.6) : 0,
+                  updatedAt: serverTimestamp(),
+                  active: true,
+                });
+              } catch (_) {}
+            }
+          },
+          () => {},
+          { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
+        );
+      };
+      document.addEventListener("visibilitychange", handleVisibility);
+
+      cleanup = () => {
+        if (watchId != null) navigator.geolocation.clearWatch(watchId);
+        clearInterval(forceInterval);
+        document.removeEventListener("visibilitychange", handleVisibility);
+      };
+    }
+
+    return cleanup;
   }, [uid]);
 
   return { pos, permissionDenied, resetTotalDist };
