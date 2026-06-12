@@ -24624,7 +24624,7 @@ return (
       )}
 
       {/* ---------------- 테이블 ---------------- */}
-      <div className="overflow-x-auto w-full rounded-xl shadow border border-gray-200">
+      <div className="w-full rounded-xl shadow border border-gray-200">
 
   <table className="w-full min-w-max table-auto">
           <thead className="bg-[#1B2B4B]">
@@ -24635,10 +24635,8 @@ return (
                 "화물내용", "차량종류", "차량톤수", "혼적", "차량번호", "기사명", "전화번호",
                "배차상태", "청구운임", "기사운임", "수수료", "지급방식", "배차방식", "메모", "전달사항", "첨부", "전달상태",
 
-              ].map((h) => {
-                const wideCol = ["거래처명","상차지명","하차지명","화물내용"].includes(h);
-                return (
-                <th key={h} className={`px-2 py-3 text-center text-[14px] font-bold text-white whitespace-nowrap border-b border-white/10 border-r border-r-white/10 last:border-r-0${wideCol ? " max-w-[90px]" : ""}`}>
+              ].map((h) => (
+                <th key={h} className="px-3 py-3 text-center text-[14px] font-bold text-white whitespace-nowrap border-b border-white/10 border-r border-r-white/10 last:border-r-0">
                   {h === "선택" ? (
                     <input
                       type="checkbox"
@@ -24647,8 +24645,7 @@ return (
                     />
                   ) : h}
                 </th>
-                );
-              })}
+              ))}
             </tr>
           </thead>
 
@@ -24748,13 +24745,10 @@ return (
   "거래처명", "상차지명", "상차지주소",
   "하차지명", "하차지주소",
   "화물내용", "차량종류", "차량톤수",
-].map((key) => {
-  const wideCol = ["거래처명","화물내용","차량종류","차량톤수"].includes(key);
-  return (
+].map((key) => (
   <td
     key={`${id}-${key}`}
-    className={`px-2 py-3 text-[14px] font-medium text-gray-800 text-center border-b border-gray-200 border-r border-r-gray-100 last:border-r-0 whitespace-nowrap${wideCol ? " max-w-[90px] overflow-hidden text-ellipsis" : ""}`}
-    title={wideCol ? String(row[key] || "") : undefined}
+    className="px-3 py-3 text-[14px] font-medium text-gray-800 text-center border-b border-gray-200 border-r border-r-gray-100 last:border-r-0 whitespace-nowrap"
   >
 
     {/* ✅ 차량종류 즉시변경 드롭다운 */}
@@ -24796,7 +24790,7 @@ return (
 
    ) : key === "상차지명" ? (
   <div className="inline-flex items-center gap-1">
-    <span className="max-w-[70px] overflow-hidden text-ellipsis whitespace-nowrap inline-block" title={row.상차지명}>{row.상차지명}</span>
+    <span>{row.상차지명}</span>
     {(() => {
       const _s=(v)=>{if(Array.isArray(v)&&v.length>0)return v;if(typeof v==="string"&&v.trim().startsWith("[")){try{const p=JSON.parse(v);if(Array.isArray(p)&&p.length>0)return p;}catch{}}if(v&&typeof v==="object"&&!Array.isArray(v)){const ks=Object.keys(v);if(ks.length>0&&ks.every(k=>/^\d+$/.test(k)))return ks.sort((a,b)=>Number(a)-Number(b)).map(k=>v[k]);if(v.업체명)return[v];}return[];};
       const list=[..._s(row.경유상차목록),..._s(row.경유지_상차)]
@@ -24808,7 +24802,7 @@ return (
 
 ) : key === "하차지명" ? (
   <div className="inline-flex items-center gap-1">
-    <span className="max-w-[70px] overflow-hidden text-ellipsis whitespace-nowrap inline-block" title={row.하차지명}>{row.하차지명}</span>
+    <span>{row.하차지명}</span>
     {(() => {
       const _s=(v)=>{if(Array.isArray(v)&&v.length>0)return v;if(typeof v==="string"&&v.trim().startsWith("[")){try{const p=JSON.parse(v);if(Array.isArray(p)&&p.length>0)return p;}catch{}}if(v&&typeof v==="object"&&!Array.isArray(v)){const ks=Object.keys(v);if(ks.length>0&&ks.every(k=>/^\d+$/.test(k)))return ks.sort((a,b)=>Number(a)-Number(b)).map(k=>v[k]);if(v.업체명)return[v];}return[];};
       const list=[..._s(row.경유하차목록),..._s(row.경유지_하차)]
@@ -24840,8 +24834,7 @@ return (
   row[key]
 )}
   </td>
-  );
-})}
+))}
 
                   {/* 혼적 여부(Y) */}
                  <td className="px-3 py-3 text-[14px] text-center border-b border-gray-200 border-r border-r-gray-100">
