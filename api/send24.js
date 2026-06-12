@@ -17,6 +17,25 @@ function encryptAES(str) {
   return enc;
 }
 
+/* ─── HTTPS GET (IP 조회용) ─── */
+function httpsGet(url, timeoutMs = 5000) {
+  return new Promise((resolve, reject) => {
+    const u = new URL(url);
+    const req = https.get({
+      hostname: u.hostname,
+      port: parseInt(u.port) || 443,
+      path: u.pathname + u.search,
+      timeout: timeoutMs,
+    }, (res) => {
+      const chunks = [];
+      res.on("data", c => chunks.push(c));
+      res.on("end", () => resolve(Buffer.concat(chunks).toString("utf8").trim()));
+    });
+    req.on("error", reject);
+    req.on("timeout", () => req.destroy(new Error("timeout")));
+  });
+}
+
 /* ─── HTTPS POST (자체서명 인증서 허용, 비표준 포트 지원) ─── */
 function httpsPost(url, body, reqHeaders) {
   return new Promise((resolve, reject) => {
@@ -110,10 +129,17 @@ export default async function handler(req, res) {
 
   // 실제 아웃바운드 IP 확인 (IP 등록 문제 진단용)
   let outboundIp = "unknown";
-  try {
-    const ipRes = await httpsPost("https://api.ipify.org", "", { "Accept": "text/plain" });
-    outboundIp = ipRes.text().trim();
-  } catch (_) {}
+  const ipServices = [
+    "https://checkip.amazonaws.com",
+    "https://api4.ipify.org",
+    "https://ipv4.icanhazip.com",
+  ];
+  for (const svc of ipServices) {
+    try {
+      const ip = await httpsGet(svc, 4000);
+      if (/^\d+\.\d+\.\d+\.\d+$/.test(ip)) { outboundIp = ip; break; }
+    } catch (_) {}
+  }
   console.log("send24 아웃바운드 IP:", outboundIp);
 
   try {

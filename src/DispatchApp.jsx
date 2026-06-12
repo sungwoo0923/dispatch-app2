@@ -14251,22 +14251,6 @@ React.useEffect(() => {
 const [attachCount, setAttachCount] = React.useState({});
   const [attachViewer, setAttachViewer] = React.useState(null); // 열린 행
   const [orderInfoRow4, setOrderInfoRow4] = React.useState(null);
-  const [viewedAttachIds4, setViewedAttachIds4] = React.useState(() => new Set(JSON.parse(localStorage.getItem("va4") || "[]")));
-  React.useEffect(() => {
-    const a = [...viewedAttachIds4];
-    const trimmed = a.length > 100 ? a.slice(-100) : a;
-    try {
-      localStorage.setItem("va4", JSON.stringify(trimmed));
-    } catch {
-      try {
-        // Free space by clearing urgentSeen keys, then retry with minimal data
-        for (const k of Object.keys(localStorage)) {
-          if (k.startsWith("urgentSeen_")) localStorage.removeItem(k);
-        }
-        localStorage.setItem("va4", JSON.stringify(trimmed.slice(-50)));
-      } catch {}
-    }
-  }, [viewedAttachIds4]);
   // ------------------------
 // Firestore → rows 반영
 // ------------------------
@@ -16271,8 +16255,8 @@ const head = isDark
     row={attachViewer}
     db={db}
     onClose={() => setAttachViewer(null)}
-    isViewed={viewedAttachIds4.has(attachViewer?._id)}
-    onToggleViewed={() => setViewedAttachIds4(prev => { const n = new Set(prev); n.has(attachViewer._id) ? n.delete(attachViewer._id) : n.add(attachViewer._id); return n; })}
+    isViewed={rows.find(r => r._id === attachViewer?._id)?.attachViewed ?? false}
+    onToggleViewed={() => { const r2 = rows.find(r => r._id === attachViewer?._id); updateDoc(doc(db, attachViewer.__col || "orders", attachViewer._id), { attachViewed: !r2?.attachViewed }).catch(() => {}); }}
   />
 )}
 {orderInfoRow4 && <OrderInfoModal row={orderInfoRow4} onClose={() => setOrderInfoRow4(null)} />}
@@ -16585,7 +16569,7 @@ const head = isDark
 </div>
 
       {/* 테이블 */}
-      <div className={`overflow-x-auto rounded-xl shadow border ${isDark ? "border-gray-700" : "border-gray-200"}`}>
+      <div className={`overflow-x-auto overflow-hidden rounded-xl shadow border ${isDark ? "border-gray-700" : "border-gray-200"}`}>
   <table className="w-full min-w-max table-auto">
           <thead className={isDark ? "bg-[#0f172a]" : "bg-[#1B2B4B]"}>
             <tr>
@@ -16904,8 +16888,8 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
                     </span>
                   </td>
 
-                  <td className={cell} style={{maxWidth:92,minWidth:70}}>{editableInput("지급방식", r.지급방식, r._id)}</td>
-                  <td className={cell} style={{maxWidth:92,minWidth:70}}>{editableInput("배차방식", r.배차방식, r._id)}</td>
+                  <td className={cell} style={{maxWidth:120,minWidth:100}}>{editableInput("지급방식", r.지급방식, r._id)}</td>
+                  <td className={cell} style={{maxWidth:120,minWidth:100}}>{editableInput("배차방식", r.배차방식, r._id)}</td>
                   <td className={cell}>
                     {canEdit("메모", r._id)
                       ? editableInput("메모", r.메모, r._id)
@@ -16927,12 +16911,12 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
                   {/* 첨부 */}
                   <td className={cell}>
                     <button
-                      onClick={() => { setAttachViewer(r); setViewedAttachIds4(prev => new Set([...prev, r._id])); }}
+                      onClick={() => { setAttachViewer(r); updateDoc(doc(db, r.__col || "orders", r._id), { attachViewed: true }).catch(() => {}); }}
                       className="relative inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-gray-100 transition mx-auto"
                       title="첨부파일 보기"
                     >
                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                        stroke={viewedAttachIds4.has(r._id) ? "#1B2B4B" : (r.attachCount || 0) > 0 ? "#059669" : "#cbd5e1"}
+                        stroke={r.attachViewed ? "#1B2B4B" : (r.attachCount || 0) > 0 ? "#059669" : "#cbd5e1"}
                         strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                         <polyline points="14 2 14 8 20 8"/>
@@ -17114,6 +17098,7 @@ flashRow(savedId);
       화물내용: finalCargo,
       상차일: todayStr(),
       하차일: todayStr(),
+      등록일: todayStr(),
       createdAt: Date.now(),
       updatedAt: Date.now(),
       배차상태:
@@ -21731,8 +21716,6 @@ const renderTimeText = (time, cond) => {
 const [alertMsg, setAlertMsg] = React.useState(null);
 const [attachViewer, setAttachViewer] = React.useState(null);
 const [orderInfoRow5, setOrderInfoRow5] = React.useState(null);
-const [viewedAttachIds5, setViewedAttachIds5] = React.useState(() => new Set(JSON.parse(localStorage.getItem("va5") || "[]")));
-React.useEffect(() => { try { const a = [...viewedAttachIds5]; localStorage.setItem("va5", JSON.stringify(a.length > 2000 ? a.slice(-2000) : a)); } catch {} }, [viewedAttachIds5]);
 const [localOverrides, setLocalOverrides] = React.useState({});
 const showAlert = (msg) => setAlertMsg(msg);
 const [blackAlert, setBlackAlert] = React.useState(null);
@@ -24341,8 +24324,8 @@ return (
     row={attachViewer}
     db={db}
     onClose={() => setAttachViewer(null)}
-    isViewed={viewedAttachIds5.has(attachViewer?._id)}
-    onToggleViewed={() => setViewedAttachIds5(prev => { const n = new Set(prev); n.has(attachViewer._id) ? n.delete(attachViewer._id) : n.add(attachViewer._id); return n; })}
+    isViewed={filtered.find(r => getId(r) === getId(attachViewer))?.attachViewed ?? false}
+    onToggleViewed={() => { const r2 = filtered.find(r => getId(r) === getId(attachViewer)); updateDoc(doc(db, attachViewer.__col || "orders", getId(attachViewer)), { attachViewed: !r2?.attachViewed }).catch(() => {}); }}
   />
 )}
 {orderInfoRow5 && <OrderInfoModal row={orderInfoRow5} onClose={() => setOrderInfoRow5(null)} />}
@@ -24976,12 +24959,12 @@ onBlur={(e) => {
                {/* 첨부 */}
                   <td className="border text-center whitespace-nowrap">
                     <button
-                      onClick={() => { setAttachViewer(row); setViewedAttachIds5(prev => new Set([...prev, row._id])); }}
+                      onClick={() => { setAttachViewer(row); updateDoc(doc(db, row.__col || "orders", row._id), { attachViewed: true }).catch(() => {}); }}
                       className="relative inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-gray-100 transition mx-auto"
                       title="첨부파일 보기"
                     >
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                      stroke={viewedAttachIds5.has(row._id) ? "#1B2B4B" : (row.attachCount || 0) > 0 ? "#059669" : "#cbd5e1"}
+                      stroke={row.attachViewed ? "#1B2B4B" : (row.attachCount || 0) > 0 ? "#059669" : "#cbd5e1"}
                         strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                         <polyline points="14 2 14 8 20 8"/>
@@ -26273,6 +26256,7 @@ setEditTarget((p) => ({
       화물내용: finalCargo,
       상차일: todayStr(),
       하차일: todayStr(),
+      등록일: todayStr(),
       createdAt: Date.now(),
       updatedAt: Date.now(),
 
@@ -33293,7 +33277,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                     onClick={async () => {
                       if (!copyTarget) { showToast("복사할 데이터가 없습니다.", "err"); return; }
                       const finalCargo = copyTarget.화물타입 ? `${copyTarget.화물수량 || ""}${copyTarget.화물타입}` : (copyTarget.화물수량 || "");
-                      const payload = { ...copyTarget, 화물내용: finalCargo, createdAt: Date.now(), updatedAt: Date.now(), 배차상태: copyTarget?.차량번호?.trim() ? "배차완료" : "배차중", 업체전달상태: "미전달" };
+                      const payload = { ...copyTarget, 화물내용: finalCargo, 등록일: todayStr(), createdAt: Date.now(), updatedAt: Date.now(), 배차상태: copyTarget?.차량번호?.trim() ? "배차완료" : "배차중", 업체전달상태: "미전달" };
                       delete payload._id;
                       await setDoc(doc(db, copyTarget.__col || "orders", crypto.randomUUID()), payload);
                       showToast("복사 등록 완료");
