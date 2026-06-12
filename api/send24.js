@@ -7,13 +7,16 @@ const AES_IV  = (process.env.CALL24_AES_IV  || "4eff880a505c8136").padEnd(32, "0
 const API_KEY = process.env.CALL24_API_KEY  || "946e5bf1c0a863332f1c2a6977b9f08e";
 const BASE_URL = "https://api.15887924.com:18099";
 
-/* ─── AES-128-CBC 암호화 ─── */
+/* ─── AES 암호화 (키 길이에 따라 AES-128 또는 AES-256 자동 선택) ─── */
 function encryptAES(str) {
-  const key    = Buffer.from(AES_KEY, "hex");
-  const iv     = Buffer.from(AES_IV,  "hex");
-  const cipher = createCipheriv("aes-128-cbc", key, iv);
+  const key = Buffer.from(AES_KEY, "hex");
+  const iv  = Buffer.from(AES_IV,  "hex");
+  // PDF 스펙: Key size 256bit → 32바이트(64 hex자)이면 aes-256-cbc, 16바이트면 aes-128-cbc
+  const algo = key.length === 32 ? "aes-256-cbc" : "aes-128-cbc";
+  const cipher = createCipheriv(algo, key, iv);
   let enc = cipher.update(str, "utf8", "base64");
   enc += cipher.final("base64");
+  console.log("send24 암호화 알고리즘:", algo, "/ 키 길이:", key.length, "바이트");
   return enc;
 }
 
@@ -174,6 +177,8 @@ export default async function handler(req, res) {
       resultMsg:  result?.resultMsg  || result?.message || JSON.stringify(result),
       response:   result,
       _serverIp:  outboundIp,
+      _keyLen:    Buffer.from(AES_KEY, "hex").length,
+      _algo:      Buffer.from(AES_KEY, "hex").length === 32 ? "aes-256-cbc" : "aes-128-cbc",
     });
 
   } catch (err) {
