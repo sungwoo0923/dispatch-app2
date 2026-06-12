@@ -16072,7 +16072,7 @@ const handleCloseFileUpload = async (e) => {
     if (key === "지급방식") {
       return (
         <select
-          className="border p-1 rounded w-full"
+          className="border rounded px-1 py-0.5 w-full text-center"
           value={val || ""}
           onChange={(e) => {
             const next = e.target.value;
@@ -16100,7 +16100,7 @@ const handleCloseFileUpload = async (e) => {
     if (key === "배차방식") {
       return (
         <select
-          className="border p-1 rounded w-full"
+          className="border rounded px-1 py-0.5 w-full text-center"
           value={val || ""}
           onChange={(e) => {
             const next = e.target.value;
@@ -16114,7 +16114,6 @@ const handleCloseFileUpload = async (e) => {
             });
           }}
         >
-
           <option value="">선택</option>
           <option value="24시">24시</option>
           <option value="직접배차">직접배차</option>
@@ -16905,8 +16904,8 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
                     </span>
                   </td>
 
-                  <td className={cell}>{editableInput("지급방식", r.지급방식, r._id)}</td>
-                  <td className={cell}>{editableInput("배차방식", r.배차방식, r._id)}</td>
+                  <td className={cell} style={{maxWidth:92,minWidth:70}}>{editableInput("지급방식", r.지급방식, r._id)}</td>
+                  <td className={cell} style={{maxWidth:92,minWidth:70}}>{editableInput("배차방식", r.배차방식, r._id)}</td>
                   <td className={cell}>
                     {canEdit("메모", r._id)
                       ? editableInput("메모", r.메모, r._id)
@@ -24894,7 +24893,7 @@ onBlur={(e) => {
 }}
                     />
                   </td>
-                  <td className="border text-center">{row.이름}</td>
+                  <td className="border text-center whitespace-nowrap max-w-[80px] w-[80px] overflow-hidden text-ellipsis" title={row.이름 || ""}>{row.이름}</td>
                   <td className="border text-center">
   {formatPhone(row.전화번호)}
 </td>
