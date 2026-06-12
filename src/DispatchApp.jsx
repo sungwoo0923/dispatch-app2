@@ -16908,28 +16908,15 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
                   <td className={cell}>{editableInput("지급방식", r.지급방식, r._id)}</td>
                   <td className={cell}>{editableInput("배차방식", r.배차방식, r._id)}</td>
                   <td className={cell}>
-                    {/* 🔴 메모 중요도 뱃지 */}
-                    {r.메모중요도 === "CRITICAL" && (
-                      <span className="mr-1 px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-red-600 text-white">
-                        긴급
-                      </span>
-                    )}
-                    {r.메모중요도 === "HIGH" && (
-                      <span className="mr-1 px-1.5 py-0.5 text-[10px] font-semibold rounded-full bg-orange-200 text-orange-800">
-                        중요
-                      </span>
-                    )}
-
                     {canEdit("메모", r._id)
                       ? editableInput("메모", r.메모, r._id)
-                      : <MemoMore text={r.메모} />}
+                      : <MemoIconCell text={r.메모} urgency={r.메모중요도} />}
                   </td>
 
-{/* 전달사항 인라인 편집 */}
-                  <td className={cell} style={{minWidth: 100}}>
-                    <InlineEditCell
+                  {/* 전달사항 */}
+                  <td className={cell}>
+                    <NoteIconCell
                       value={edited[r._id]?.전달사항 ?? r.전달사항 ?? ""}
-                      placeholder="전달사항"
                       onSave={(val) => {
                         const patch = { 전달사항: val, updatedAt: Date.now() };
                         patchDispatch(r._id, patch).catch(console.error);
@@ -21473,6 +21460,144 @@ function MemoMore({ text = "" }) {
   );
 }
 // ===================== PART 4/8 — END =====================
+
+// ─── 메모 아이콘 셀 ──────────────────────────────────────────────────────────
+function MemoIconCell({ text = "", urgency = "" }) {
+  const [open, setOpen] = React.useState(false);
+  const clean = String(text || "").trim();
+  const has = clean.length > 0;
+  const iconColor = !has ? "#cbd5e1"
+    : urgency === "CRITICAL" ? "#dc2626"
+    : urgency === "HIGH" ? "#d97706"
+    : "#1B2B4B";
+
+  return (
+    <div className="flex items-center justify-center">
+      <button
+        className="relative inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-gray-100 transition mx-auto"
+        onClick={() => { if (has) setOpen(true); }}
+        style={{ cursor: has ? "pointer" : "default" }}
+        title={has ? (clean.length > 40 ? clean.slice(0, 40) + "…" : clean) : "메모 없음"}
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+          <line x1="16" y1="13" x2="8" y2="13"/>
+          <line x1="16" y1="17" x2="8" y2="17"/>
+          <line x1="10" y1="9" x2="8" y2="9"/>
+        </svg>
+        {urgency === "CRITICAL" && (
+          <span className="absolute -top-1.5 -right-1.5 w-2.5 h-2.5 bg-red-600 rounded-full border border-white" />
+        )}
+        {urgency === "HIGH" && (
+          <span className="absolute -top-1.5 -right-1.5 w-2.5 h-2.5 bg-amber-500 rounded-full border border-white" />
+        )}
+      </button>
+
+      {open && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[9999]" onClick={() => setOpen(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-[440px] max-w-[92vw] border border-gray-100" onClick={e => e.stopPropagation()}>
+            <div className="bg-[#1B2B4B] px-5 py-4 rounded-t-2xl flex items-center gap-3">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+              </svg>
+              <span className="text-white font-bold text-[15px]">메모</span>
+              {urgency === "CRITICAL" && <span className="px-2 py-0.5 bg-red-600 text-white text-[10px] font-bold rounded-full">긴급</span>}
+              {urgency === "HIGH" && <span className="px-2 py-0.5 bg-amber-500 text-white text-[10px] font-bold rounded-full">중요</span>}
+              <button onClick={() => setOpen(false)} className="ml-auto text-white/60 hover:text-white transition">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+            <div className="px-5 py-5">
+              <p className="text-[14px] text-gray-700 whitespace-pre-wrap leading-relaxed">{clean}</p>
+            </div>
+            <div className="px-5 pb-4 flex justify-end border-t border-gray-100 pt-3">
+              <button onClick={() => setOpen(false)} className="px-5 py-2 bg-[#1B2B4B] text-white rounded-lg text-[13px] font-semibold hover:opacity-90 transition">닫기</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── 전달사항 아이콘 셀 ───────────────────────────────────────────────────────
+function NoteIconCell({ value = "", onSave }) {
+  const [open, setOpen] = React.useState(false);
+  const [draft, setDraft] = React.useState("");
+  const [editing, setEditing] = React.useState(false);
+  const clean = String(value || "").trim();
+  const has = clean.length > 0;
+  const iconColor = has ? "#1B2B4B" : "#cbd5e1";
+
+  const handleOpen = () => { setDraft(clean); setEditing(false); setOpen(true); };
+  const handleSave = () => { if (onSave) onSave(draft); setOpen(false); };
+
+  return (
+    <div className="flex items-center justify-center">
+      <button
+        className="relative inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-gray-100 transition mx-auto"
+        onClick={handleOpen}
+        title={has ? (clean.length > 40 ? clean.slice(0, 40) + "…" : clean) : "전달사항 없음"}
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+          <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+        </svg>
+      </button>
+
+      {open && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[9999]" onClick={() => { setOpen(false); setEditing(false); }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-[440px] max-w-[92vw] border border-gray-100" onClick={e => e.stopPropagation()}>
+            <div className="bg-[#1B2B4B] px-5 py-4 rounded-t-2xl flex items-center gap-3">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+              </svg>
+              <span className="text-white font-bold text-[15px]">전달사항</span>
+              <button onClick={() => { setOpen(false); setEditing(false); }} className="ml-auto text-white/60 hover:text-white transition">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+            <div className="px-5 py-5">
+              {editing ? (
+                <textarea
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-[14px] resize-none focus:outline-none focus:border-[#1B2B4B]"
+                  rows={4}
+                  value={draft}
+                  onChange={e => setDraft(e.target.value)}
+                  autoFocus
+                  onKeyDown={e => { if (e.key === "Escape") setEditing(false); }}
+                />
+              ) : (
+                <p className="text-[14px] text-gray-700 whitespace-pre-wrap leading-relaxed min-h-[40px]">
+                  {has ? clean : <span className="text-gray-400">전달사항이 없습니다.</span>}
+                </p>
+              )}
+            </div>
+            <div className="px-5 pb-4 flex justify-end gap-2 border-t border-gray-100 pt-3">
+              {editing ? (
+                <>
+                  <button onClick={() => setEditing(false)} className="px-4 py-2 bg-gray-100 text-gray-600 rounded-lg text-[13px] font-semibold hover:opacity-90 transition border border-gray-200">취소</button>
+                  <button onClick={handleSave} className="px-4 py-2 bg-[#1B2B4B] text-white rounded-lg text-[13px] font-semibold hover:opacity-90 transition">저장</button>
+                </>
+              ) : (
+                <>
+                  {onSave && <button onClick={() => setEditing(true)} className="px-4 py-2 bg-gray-100 text-gray-600 rounded-lg text-[13px] font-semibold hover:opacity-90 transition border border-gray-200">수정</button>}
+                  <button onClick={() => setOpen(false)} className="px-4 py-2 bg-[#1B2B4B] text-white rounded-lg text-[13px] font-semibold hover:opacity-90 transition">닫기</button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ===================== DispatchApp.jsx (PART 5/8 — 차량번호 항상 활성화 + 선택수정→수정완료 통합버튼 + 주소/메모 더보기 + 대용량업로드 + 신규 오더 등록) =====================
 
 function generateTimeOptions() {
@@ -21487,6 +21612,7 @@ function generateTimeOptions() {
   return result;
 }
 function DispatchStatus({
+  role,
   dispatchData = [],
   focusOrderId,
   clearFocusOrder,
@@ -22392,11 +22518,12 @@ const handleSearch = () => {
     return;
   }
 
-  const diff = getMonthDiff(startDate, endDate);
-
-  if (diff > 2) {
-    showAlert("⚠️ 조회는 최대 3개월까지만 가능합니다.");
-    return;
+  if (role !== "totalMaster") {
+    const diff = getMonthDiff(startDate, endDate);
+    if (diff > 2) {
+      showAlert("⚠️ 조회는 최대 3개월까지만 가능합니다.");
+      return;
+    }
   }
 setAppliedStartDate(startDate);
 setAppliedEndDate(endDate);
@@ -24831,40 +24958,15 @@ onBlur={(e) => {
                     </select>
                   </td>
 
-                  <td className="border px-2 whitespace-nowrap">
-                    <div className="flex items-center gap-1">
-
-                      {/* ⭐ 중요도 뱃지 (항상 먼저, 고정) */}
-                      {(() => {
-                        const level = row.메모중요도;
-
-                        if (level === "CRITICAL") {
-                          return (
-                            <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-red-600 text-white animate-pulse">
-                              긴급
-                            </span>
-                          );
-                        }
-
-                        if (level === "HIGH") {
-                          return (
-                            <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-orange-500 text-white">
-                              중요
-                            </span>
-                          );
-                        }
-                        return null;
-                      })()}
-
-                      {/* 메모 */}
-                      <MemoCell text={row.메모 || ""} />
-                    </div>
+                  {/* 메모 */}
+                  <td className="border text-center whitespace-nowrap">
+                    <MemoIconCell text={row.메모 || ""} urgency={row.메모중요도} />
                   </td>
-{/* 전달사항 인라인 편집 */}
-                  <td className="border text-center px-2 py-1">
-                    <InlineEditCell
+
+                  {/* 전달사항 */}
+                  <td className="border text-center whitespace-nowrap">
+                    <NoteIconCell
                       value={edited[id]?.전달사항 ?? r.전달사항 ?? ""}
-                      placeholder="전달사항"
                       onSave={(val) => {
                         const patch = { 전달사항: val, updatedAt: Date.now() };
                         patchDispatch?.(id, patch).catch(console.error);
