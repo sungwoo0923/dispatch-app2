@@ -2377,7 +2377,7 @@ return (
           />
         )}
 
-        {menu === "배차관리" && (
+        <div style={{ display: menu === "배차관리" ? "block" : "none" }}>
           <DispatchManagement
           menu={menu}
             dispatchData={dispatchDataFiltered}
@@ -2391,12 +2391,11 @@ return (
             upsertPlace={upsertPlace}
             placeRows={places}
             role={role}
-            isTest={isTest}   // ★ 추가!
+            isTest={isTest}
             showAlert={showAlert}
             userCompany={userCompany || localStorage.getItem("userCompany") || ""}
           />
-
-        )}
+        </div>
 
         {menu === "실시간배차현황" && (
           <RealtimeStatus
