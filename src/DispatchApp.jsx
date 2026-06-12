@@ -18,6 +18,7 @@ import DispatchFormNew from "./DispatchFormNew";
 import AiAssistant from "./AiAssistant";
 import DeliverySignaturePage from "./DeliverySignaturePage";
 import ExecutiveDashboard from "./ExecutiveDashboard";
+import FreightRateInquiry from "./FreightRateInquiry";
 
 // ================= 카운트 애니메이션 =================
 function CountUp({ value, duration = 900 }) {
@@ -2249,6 +2250,7 @@ return (
               "미배차현황",
               "표준운임표",
               "단가표",
+              "운임조회",
               "기사관리",
               "거래처관리",
               "고정거래처관리",
@@ -2540,6 +2542,8 @@ return (
             patchDispatch={patchDispatch}
           />
         )}
+
+        {menu === "운임조회" && <FreightRateInquiry />}
 
         {menu === "관리자메뉴" && (role === "admin" || role === "totalMaster") && <AdminMenu parentRole={role} parentCompany={userCompany || localStorage.getItem("userCompany") || ""} />}
 
