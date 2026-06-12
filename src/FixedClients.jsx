@@ -2,11 +2,88 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import * as XLSX from "xlsx";
 import { db } from "./firebase";
-import { collection, onSnapshot, setDoc, doc, deleteDoc } from "firebase/firestore";
+import { collection, onSnapshot, setDoc, doc, deleteDoc, getDocs, updateDoc } from "firebase/firestore";
 import { Dialog } from "@headlessui/react";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
 
 const fmt = (n) => (n ? Number(n).toLocaleString() : "0");
+
+// ── 첨부파일 뷰어 (고정거래처) ──
+function FCAttachViewer({ row, onClose }) {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState(null);
+
+  useEffect(() => {
+    if (!row?.id) return;
+    const colRef = collection(db, "fixedClients", row.id, "attachments");
+    const unsub = onSnapshot(colRef, (snap) => {
+      setItems(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setLoading(false);
+    });
+    return () => unsub();
+  }, [row]);
+
+  useEffect(() => {
+    const handler = (e) => { if (e.key === "Escape") { if (selected) setSelected(null); else onClose(); } };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [selected, onClose]);
+
+  const handleDownload = (item) => {
+    const a = document.createElement("a");
+    a.href = item.base64 || item.url;
+    a.download = item.name || "attachment.jpg";
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => { if (selected) setSelected(null); else onClose(); }}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="bg-[#1B2B4B] px-5 py-4 flex items-center justify-between">
+          <div>
+            <div className="text-white font-bold text-[15px]">첨부파일</div>
+            <div className="text-white/60 text-[12px] mt-0.5">{row.날짜} · {row.거래처명} {row.이름 ? `· ${row.이름}` : ""}</div>
+          </div>
+          <button onClick={onClose} className="text-white/60 hover:text-white text-xl">✕</button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4">
+          {loading ? (
+            <div className="flex items-center justify-center py-12 text-gray-400 text-[13px]">불러오는 중...</div>
+          ) : items.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-gray-400">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" strokeWidth="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              <div className="mt-2 text-[13px]">첨부파일 없음</div>
+            </div>
+          ) : selected ? (
+            <div className="flex flex-col items-center gap-3">
+              <img src={selected.base64 || selected.url} alt={selected.name} className="max-w-full max-h-[60vh] rounded-lg object-contain"/>
+              <div className="flex gap-2">
+                <button onClick={() => handleDownload(selected)} className="px-4 py-2 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-semibold hover:bg-[#243a60]">다운로드</button>
+                <button onClick={() => setSelected(null)} className="px-4 py-2 rounded-lg border border-gray-300 text-gray-600 text-[12px] font-semibold hover:bg-gray-50">목록으로</button>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-3 gap-3">
+              {items.map(item => (
+                <div key={item.id} onClick={() => setSelected(item)} className="cursor-pointer rounded-xl overflow-hidden border border-gray-200 hover:border-[#1B2B4B] hover:shadow-md transition group">
+                  <div className="aspect-square bg-gray-50 flex items-center justify-center overflow-hidden">
+                    {(item.base64 || item.url) ? (
+                      <img src={item.base64 || item.url} alt={item.name} className="w-full h-full object-cover"/>
+                    ) : (
+                      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    )}
+                  </div>
+                  <div className="px-2 py-1.5 text-[10px] text-gray-500 truncate">{item.name || "파일"}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function KpiCard({ title, value, unit = "원", color = "blue" }) {
   const colors = {
@@ -319,6 +396,8 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [sortKey, setSortKey] = useState(null);
   const [sortDir, setSortDir] = useState("asc");
+  const [attachViewer, setAttachViewer] = useState(null);
+  const [attachCounts, setAttachCounts] = useState({});
 
   const getViewCompany = () => role === "totalMaster"
     ? (localStorage.getItem("loginCompany") || userCompany || "돌캐")
@@ -356,6 +435,22 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
     });
     return () => unsub();
   }, [userCompany, role]);
+
+  useEffect(() => {
+    if (!rows.length) return;
+    const load = async () => {
+      try {
+        const result = {};
+        for (const row of rows) {
+          if (!row?.id) continue;
+          const snap = await getDocs(collection(db, "fixedClients", row.id, "attachments"));
+          if (snap.size > 0) result[row.id] = snap.size;
+        }
+        setAttachCounts(result);
+      } catch {}
+    };
+    load();
+  }, [rows]);
 
   const saveRow = async (r) => await setDoc(doc(coll, r.id), { ...r, companyName: r.companyName || getViewCompany() }, { merge: true });
   const removeRow = async (id) => await deleteDoc(doc(coll, id));
@@ -497,7 +592,7 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
     ["청구운임","청구운임"],["기사운임","기사운임"],["수수료","수수료"],
     ["선결제","선결제"],["실수수료","실수수료"],["지급방식","지급방식"],
   ];
-  const COL_SPAN = sortableHeaders.length + 1;
+  const COL_SPAN = sortableHeaders.length + 2; // +1 checkbox, +1 첨부
 
   return (
     <div className="bg-gray-50 min-h-screen p-5 space-y-4">
@@ -554,6 +649,14 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
             정산완료만
           </button>
           <div className="ml-auto flex items-center gap-2">
+            <button onClick={() => {
+              const selRow = selected.length === 1 ? filtered.find(r => r.id === selected[0]) : null;
+              const url = selRow
+                ? `${window.location.origin}/driver-upload?date=${encodeURIComponent(selRow.날짜||"")}&vehicle=${encodeURIComponent((selRow.차량번호||"").replace(/\s/g,""))}&name=${encodeURIComponent((selRow.이름||"").trim())}`
+                : `${window.location.origin}/driver-upload`;
+              const msg = `[인수증 업로드 안내]\n운송 완료 후 아래 링크를 통해 인수증을 업로드해 주시기 바랍니다.\n\n${url}\n\n날짜·차량번호·이름을 확인 후 검색하여 오더를 선택해 업로드해 주세요.\n미업로드 시 운임 정산이 지연될 수 있습니다.`;
+              navigator.clipboard.writeText(msg).then(() => alert("업로드 안내 메시지가 복사되었습니다.\n기사에게 붙여넣기로 전달하세요.")).catch(() => alert(`링크: ${url}`));
+            }} className="px-3 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-semibold hover:opacity-90 transition whitespace-nowrap">업로드링크</button>
             <button onClick={() => { if (!selected.length) return alert("수정할 항목을 선택하세요."); const row = filtered.find(r => r.id === selected[0]); if (row) openEditPopup(row); }} className="px-3 py-1.5 rounded-lg border text-[13px] font-semibold transition bg-white text-gray-600 border-gray-300 hover:bg-gray-50">수정</button>
             <button onClick={markSettlement} className="px-3 py-1.5 rounded-lg bg-indigo-100 text-indigo-700 border border-indigo-300 text-[13px] font-semibold hover:bg-indigo-200 transition">정산 처리</button>
             <button onClick={() => { if (!selected.length) return alert("삭제할 항목을 선택하세요."); setDeleteConfirm(true); }} className="px-3 py-1.5 rounded-lg bg-red-100 text-red-600 border border-red-300 text-[13px] font-semibold hover:bg-red-200 transition">삭제</button>
@@ -575,6 +678,7 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
                   {sortableHeaders.map(([label, key]) => (
                     <th key={label} className={head} onClick={() => handleSort(key)}>{label}{sortIcon(key)}</th>
                   ))}
+                  <th className={head}>첨부</th>
                 </tr>
               </thead>
               <tbody>
@@ -611,6 +715,25 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
                     <td className={`${cell} text-right text-gray-500`}>{r.선결제 ? fmt(r.선결제) : ""}</td>
                     <td className={`${cell} text-right font-semibold text-[#1B2B4B]`}>{fmt(r.실수수료 != null ? r.실수수료 : (Number(r.수수료||0) - Number(r.선결제||0)))}</td>
                     <td className={cell}>{r.지급방식}</td>
+                    <td className={cell}>
+                      <button
+                        onClick={e => { e.stopPropagation(); setAttachViewer(r); }}
+                        className="relative inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-gray-100 transition mx-auto"
+                        title="첨부파일 보기"
+                      >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                          stroke={(attachCounts[r.id]||0)>0?"#059669":"#cbd5e1"}
+                          strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                          <polyline points="14 2 14 8 20 8"/>
+                        </svg>
+                        {(attachCounts[r.id]||0)>0&&(
+                          <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 text-white text-[9px] font-bold flex items-center justify-center">
+                            {attachCounts[r.id]}
+                          </span>
+                        )}
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -802,6 +925,9 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
           </Dialog.Panel>
         </div>
       </Dialog>
+
+      {/* 첨부파일 뷰어 */}
+      {attachViewer && <FCAttachViewer row={attachViewer} onClose={() => setAttachViewer(null)} />}
     </div>
   );
 }

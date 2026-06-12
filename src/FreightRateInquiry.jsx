@@ -1,68 +1,57 @@
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useRef, useEffect } from "react";
 
-// ─── 한국 지도 SVG 경로 데이터 (viewBox="0 0 360 445") ─────────────────
+// ─── 한국 지도 SVG 경로 (지리 기반 다점 폴리곤) ─────────────────────────
+// viewBox="0 0 430 500"  x=(lon-125.4)*80+40  y=(39.0-lat)*82+20
 const PROVINCE_PATHS = {
-  경기: "M104,98 L198,91 L203,180 L163,190 L104,160Z",
-  서울: "M123,124 L154,119 L158,148 L125,152Z",
-  인천: "M80,120 L123,115 L125,152 L112,163 L80,148Z",
-  강원: "M203,91 L322,48 L328,182 L250,191 L203,180Z",
-  충북: "M203,180 L250,175 L255,248 L212,256 L174,238 L163,190Z",
-  충남: "M80,148 L130,144 L163,160 L165,192 L158,215 L134,222 L106,222 L80,210 L70,185 L72,162Z",
-  세종: "M163,190 L178,187 L183,200 L172,208 L162,205Z",
-  대전: "M158,205 L177,202 L183,215 L174,224 L156,224 L150,212Z",
-  경북: "M250,175 L328,162 L334,205 L318,248 L290,268 L262,270 L235,255 L218,232 L220,196 L235,182 Z",
-  대구: "M244,228 L272,223 L278,245 L270,263 L244,262Z",
-  전북: "M106,222 L162,217 L185,230 L190,258 L178,272 L152,278 L122,276 L102,260 L100,238Z",
-  광주: "M120,292 L148,288 L154,303 L145,315 L122,316 L112,302Z",
-  전남: "M96,262 L148,258 L180,268 L188,300 L178,332 L152,348 L118,355 L90,340 L74,316 L73,290 L84,268Z",
-  경남: "M218,255 L260,253 L286,268 L292,300 L276,325 L250,336 L218,336 L192,322 L185,295 L190,268Z",
-  울산: "M290,240 L320,238 L330,256 L322,278 L302,282 L286,268Z",
-  부산: "M264,322 L290,318 L302,334 L296,352 L272,358 L258,347 L255,330Z",
-  제주: "M138,390 L192,382 L210,396 L206,418 L184,428 L152,428 L130,414 L128,398Z",
+  경기: "M 128,86 L 152,93 L 176,98 L 200,86 L 224,82 L 230,102 L 234,122 L 238,142 L 248,156 L 238,165 L 222,172 L 206,178 L 190,183 L 172,184 L 155,183 L 142,180 L 132,172 L 130,158 L 133,145 L 138,133 L 136,119 L 128,108 Z",
+  서울: "M 164,136 L 178,133 L 190,136 L 194,146 L 188,156 L 174,159 L 162,154 L 158,144 Z",
+  인천: "M 128,108 L 138,104 L 152,104 L 163,110 L 166,122 L 163,134 L 156,142 L 144,146 L 132,143 L 122,134 L 118,122 L 122,112 Z",
+  강원: "M 224,82 L 238,74 L 254,65 L 270,55 L 284,49 L 296,53 L 308,61 L 320,72 L 330,84 L 338,98 L 343,115 L 346,134 L 346,153 L 344,172 L 342,190 L 336,195 L 318,195 L 302,192 L 285,187 L 269,180 L 256,170 L 248,156 L 238,142 L 234,122 L 230,102 Z",
+  충북: "M 248,156 L 256,162 L 264,170 L 268,183 L 269,198 L 266,215 L 259,228 L 247,238 L 232,243 L 216,242 L 202,235 L 195,220 L 195,204 L 198,188 L 206,178 L 222,172 L 238,165 Z",
+  충남: "M 132,172 L 142,180 L 155,183 L 172,184 L 190,183 L 206,178 L 198,188 L 195,204 L 196,220 L 191,234 L 180,245 L 164,252 L 146,254 L 128,248 L 114,238 L 106,224 L 104,208 L 110,194 L 120,183 Z",
+  세종: "M 206,178 L 216,176 L 224,181 L 225,191 L 218,198 L 207,198 L 200,192 L 200,182 Z",
+  대전: "M 202,235 L 212,232 L 222,236 L 226,245 L 220,253 L 208,255 L 198,249 L 196,240 Z",
+  경북: "M 248,156 L 258,158 L 272,156 L 288,154 L 304,156 L 318,162 L 330,172 L 338,185 L 342,200 L 341,218 L 336,235 L 328,250 L 314,262 L 298,270 L 280,273 L 262,268 L 247,257 L 238,243 L 235,226 L 238,210 L 244,196 L 248,180 L 250,166 Z",
+  대구: "M 280,273 L 294,268 L 308,270 L 316,281 L 312,295 L 297,301 L 282,298 L 274,287 Z",
+  전북: "M 128,248 L 146,254 L 164,252 L 180,245 L 196,240 L 208,248 L 215,262 L 216,279 L 210,295 L 198,305 L 180,311 L 160,312 L 140,306 L 122,296 L 109,282 L 105,266 L 110,252 Z",
+  광주: "M 148,332 L 162,328 L 174,332 L 178,342 L 171,351 L 156,353 L 145,347 L 142,337 Z",
+  전남: "M 109,282 L 122,296 L 140,306 L 160,312 L 180,311 L 198,305 L 210,295 L 216,279 L 218,295 L 214,315 L 204,332 L 190,344 L 173,354 L 153,358 L 132,354 L 112,344 L 96,328 L 86,308 L 82,286 L 88,268 L 100,258 L 112,255 Z",
+  경남: "M 238,243 L 248,252 L 260,260 L 274,265 L 280,273 L 274,287 L 282,298 L 298,304 L 314,312 L 322,326 L 318,340 L 306,348 L 287,353 L 265,350 L 246,341 L 230,328 L 220,312 L 218,295 L 216,279 L 224,268 L 234,258 Z",
+  울산: "M 340,272 L 356,267 L 368,276 L 370,292 L 362,306 L 346,311 L 333,305 L 328,293 L 332,279 Z",
+  부산: "M 322,326 L 340,320 L 356,326 L 363,338 L 356,350 L 340,355 L 323,352 L 314,341 Z",
+  제주: "M 110,453 L 132,448 L 156,445 L 178,445 L 200,448 L 214,456 L 213,467 L 200,474 L 178,477 L 154,476 L 132,470 L 115,462 Z",
 };
 
 const PROVINCE_LABEL_POS = {
-  경기: [152, 128],
-  서울: [140, 136],
-  인천: [97, 137],
-  강원: [248, 122],
-  충북: [210, 218],
-  충남: [116, 184],
-  세종: [172, 198],
-  대전: [164, 214],
-  경북: [272, 215],
-  대구: [259, 244],
-  전북: [146, 250],
-  광주: [133, 302],
-  전남: [128, 308],
-  경남: [240, 295],
-  울산: [306, 258],
-  부산: [276, 338],
-  제주: [168, 406],
+  경기: [188, 128], 서울: [176, 147], 인천: [142, 125],
+  강원: [288, 122], 충북: [232, 200], 충남: [154, 216],
+  세종: [212, 188], 대전: [212, 244], 경북: [292, 214],
+  대구: [295, 284], 전북: [162, 280], 광주: [160, 341],
+  전남: [158, 320], 경남: [272, 318], 울산: [350, 290],
+  부산: [338, 338], 제주: [162, 461],
 };
 
 const PROVINCE_COLORS = {
-  경기: "#dce9f5", 인천: "#d4e4f0", 서울: "#c8dff0",
-  강원: "#ddeedd", 충북: "#f0eacc", 충남: "#eedccc",
-  세종: "#e8e0c8", 대전: "#e4dcc4", 경북: "#f0ddd0",
-  대구: "#e8d4c8", 전북: "#d4ecdc", 광주: "#cce4d4",
-  전남: "#c8e4d8", 경남: "#dce8d8", 울산: "#d8dce8",
-  부산: "#ccd0e0", 제주: "#f0e8c0",
+  경기: "#dce8f4", 서울: "#c8def2", 인천: "#cce0f0",
+  강원: "#ddeedd", 충북: "#ede8c4", 충남: "#e8ddc8",
+  세종: "#e4d8c0", 대전: "#e0d4bc", 경북: "#f0ddd0",
+  대구: "#e8d0c4", 전북: "#d8e8d4", 광주: "#cce0cc",
+  전남: "#c4ddd4", 경남: "#d4ddd0", 울산: "#ccd4e4",
+  부산: "#c4cee0", 제주: "#ede8bc",
 };
 
-// ─── 시도별 중심 좌표 ──────────────────────────────────────────────────
 const PROVINCE_COORDS = {
-  서울: [37.5665, 126.9780], 인천: [37.4563, 126.7052], 경기: [37.4138, 127.5183],
-  강원: [37.8228, 128.1555], 충북: [36.6357, 127.4914], 충남: [36.6588, 126.6728],
-  세종: [36.4800, 127.2890], 대전: [36.3504, 127.3845], 경북: [36.4919, 128.8889],
-  대구: [35.8714, 128.6014], 전북: [35.8202, 127.1089], 광주: [35.1595, 126.8526],
-  전남: [34.8679, 126.9910], 경남: [35.4606, 128.2132], 울산: [35.5384, 129.3114],
-  부산: [35.1796, 129.0756], 제주: [33.4890, 126.4983],
+  서울:[37.5665,126.978], 인천:[37.4563,126.705], 경기:[37.4138,127.518],
+  강원:[37.822,128.155], 충북:[36.636,127.491], 충남:[36.659,126.673],
+  세종:[36.480,127.289], 대전:[36.350,127.384], 경북:[36.492,128.889],
+  대구:[35.871,128.601], 전북:[35.820,127.109], 광주:[35.160,126.853],
+  전남:[34.868,126.991], 경남:[35.461,128.213], 울산:[35.538,129.311],
+  부산:[35.180,129.076], 제주:[33.489,126.498],
 };
 
-// ─── 시군구 데이터 ─────────────────────────────────────────────────────
+// ─── 시군구 ────────────────────────────────────────────────────────────────
 const CITIES = {
-  서울: [
+  서울:[
     {n:"강남구",la:37.517,lo:127.047},{n:"강동구",la:37.530,lo:127.124},{n:"강북구",la:37.639,lo:127.026},
     {n:"강서구",la:37.551,lo:126.850},{n:"관악구",la:37.478,lo:126.952},{n:"광진구",la:37.538,lo:127.082},
     {n:"구로구",la:37.495,lo:126.888},{n:"금천구",la:37.456,lo:126.896},{n:"노원구",la:37.654,lo:127.056},
@@ -73,13 +62,13 @@ const CITIES = {
     {n:"은평구",la:37.602,lo:126.929},{n:"종로구",la:37.573,lo:126.979},{n:"중구",la:37.564,lo:126.998},
     {n:"중랑구",la:37.606,lo:127.093},
   ],
-  인천: [
+  인천:[
     {n:"강화군",la:37.742,lo:126.487},{n:"계양구",la:37.537,lo:126.738},{n:"남동구",la:37.447,lo:126.731},
     {n:"동구",la:37.474,lo:126.643},{n:"미추홀구",la:37.454,lo:126.651},{n:"부평구",la:37.508,lo:126.723},
     {n:"서구",la:37.546,lo:126.676},{n:"연수구",la:37.410,lo:126.678},{n:"옹진군",la:37.468,lo:126.214},
     {n:"중구",la:37.473,lo:126.622},
   ],
-  경기: [
+  경기:[
     {n:"가평군",la:37.831,lo:127.510},{n:"고양시",la:37.658,lo:126.832},{n:"과천시",la:37.429,lo:126.987},
     {n:"광명시",la:37.479,lo:126.864},{n:"광주시",la:37.430,lo:127.255},{n:"구리시",la:37.596,lo:127.130},
     {n:"군포시",la:37.362,lo:126.935},{n:"김포시",la:37.615,lo:126.716},{n:"남양주시",la:37.636,lo:127.216},
@@ -92,7 +81,7 @@ const CITIES = {
     {n:"평택시",la:36.992,lo:127.113},{n:"포천시",la:37.895,lo:127.200},{n:"하남시",la:37.540,lo:127.215},
     {n:"화성시",la:37.200,lo:126.831},
   ],
-  강원: [
+  강원:[
     {n:"강릉시",la:37.751,lo:128.876},{n:"고성군",la:38.380,lo:128.468},{n:"동해시",la:37.525,lo:129.114},
     {n:"삼척시",la:37.450,lo:129.165},{n:"속초시",la:38.207,lo:128.592},{n:"양구군",la:38.106,lo:127.989},
     {n:"양양군",la:38.080,lo:128.619},{n:"영월군",la:37.184,lo:128.462},{n:"원주시",la:37.342,lo:127.920},
@@ -100,25 +89,25 @@ const CITIES = {
     {n:"춘천시",la:37.882,lo:127.730},{n:"태백시",la:37.174,lo:128.986},{n:"평창군",la:37.370,lo:128.392},
     {n:"홍천군",la:37.697,lo:127.889},{n:"화천군",la:38.107,lo:127.708},{n:"횡성군",la:37.492,lo:127.985},
   ],
-  충북: [
+  충북:[
     {n:"괴산군",la:36.815,lo:127.787},{n:"단양군",la:36.985,lo:128.365},{n:"보은군",la:36.490,lo:127.729},
     {n:"영동군",la:36.175,lo:127.779},{n:"옥천군",la:36.306,lo:127.572},{n:"음성군",la:36.940,lo:127.690},
     {n:"제천시",la:37.133,lo:128.191},{n:"증평군",la:36.786,lo:127.583},{n:"진천군",la:36.856,lo:127.436},
     {n:"청주시",la:36.642,lo:127.490},{n:"충주시",la:36.991,lo:127.926},
   ],
-  충남: [
+  충남:[
     {n:"계룡시",la:36.275,lo:127.249},{n:"공주시",la:36.447,lo:127.119},{n:"금산군",la:36.109,lo:127.488},
     {n:"논산시",la:36.187,lo:127.099},{n:"당진시",la:36.890,lo:126.628},{n:"보령시",la:36.333,lo:126.613},
     {n:"부여군",la:36.275,lo:126.910},{n:"서산시",la:36.785,lo:126.450},{n:"서천군",la:36.079,lo:126.691},
     {n:"아산시",la:36.790,lo:127.002},{n:"예산군",la:36.680,lo:126.849},{n:"천안시",la:36.808,lo:127.114},
     {n:"청양군",la:36.459,lo:126.801},{n:"태안군",la:36.745,lo:126.298},{n:"홍성군",la:36.601,lo:126.661},
   ],
-  세종: [{n:"세종시",la:36.480,lo:127.289}],
-  대전: [
+  세종:[{n:"세종시",la:36.480,lo:127.289}],
+  대전:[
     {n:"대덕구",la:36.387,lo:127.415},{n:"동구",la:36.312,lo:127.455},{n:"서구",la:36.355,lo:127.384},
     {n:"유성구",la:36.362,lo:127.356},{n:"중구",la:36.325,lo:127.421},
   ],
-  경북: [
+  경북:[
     {n:"경산시",la:35.825,lo:128.741},{n:"경주시",la:35.856,lo:129.225},{n:"고령군",la:35.727,lo:128.263},
     {n:"구미시",la:36.119,lo:128.344},{n:"군위군",la:36.240,lo:128.570},{n:"김천시",la:36.140,lo:128.113},
     {n:"문경시",la:36.586,lo:128.186},{n:"봉화군",la:36.893,lo:128.732},{n:"상주시",la:36.410,lo:128.160},
@@ -128,23 +117,23 @@ const CITIES = {
     {n:"의성군",la:36.352,lo:128.697},{n:"청도군",la:35.647,lo:128.737},{n:"청송군",la:36.436,lo:129.057},
     {n:"칠곡군",la:35.994,lo:128.401},{n:"포항시",la:36.019,lo:129.343},
   ],
-  대구: [
+  대구:[
     {n:"군위군",la:36.240,lo:128.570},{n:"남구",la:35.846,lo:128.597},{n:"달성군",la:35.775,lo:128.432},
     {n:"달서구",la:35.830,lo:128.532},{n:"동구",la:35.887,lo:128.635},{n:"북구",la:35.885,lo:128.583},
     {n:"서구",la:35.872,lo:128.559},{n:"수성구",la:35.858,lo:128.631},{n:"중구",la:35.869,lo:128.607},
   ],
-  전북: [
+  전북:[
     {n:"고창군",la:35.436,lo:126.702},{n:"군산시",la:35.967,lo:126.737},{n:"김제시",la:35.803,lo:126.881},
     {n:"남원시",la:35.416,lo:127.390},{n:"무주군",la:35.906,lo:127.661},{n:"부안군",la:35.731,lo:126.733},
     {n:"순창군",la:35.374,lo:127.138},{n:"완주군",la:35.905,lo:127.162},{n:"익산시",la:35.948,lo:126.954},
     {n:"임실군",la:35.617,lo:127.289},{n:"장수군",la:35.647,lo:127.522},{n:"전주시",la:35.822,lo:127.148},
     {n:"정읍시",la:35.570,lo:126.856},{n:"진안군",la:35.791,lo:127.425},
   ],
-  광주: [
+  광주:[
     {n:"광산구",la:35.140,lo:126.794},{n:"남구",la:35.133,lo:126.903},{n:"동구",la:35.146,lo:126.923},
     {n:"북구",la:35.174,lo:126.912},{n:"서구",la:35.152,lo:126.890},
   ],
-  전남: [
+  전남:[
     {n:"강진군",la:34.642,lo:126.767},{n:"고흥군",la:34.611,lo:127.276},{n:"곡성군",la:35.282,lo:127.292},
     {n:"광양시",la:34.941,lo:127.696},{n:"구례군",la:35.202,lo:127.463},{n:"나주시",la:35.016,lo:126.711},
     {n:"담양군",la:35.321,lo:126.988},{n:"목포시",la:34.812,lo:126.392},{n:"무안군",la:34.991,lo:126.481},
@@ -154,7 +143,7 @@ const CITIES = {
     {n:"진도군",la:34.487,lo:126.263},{n:"함평군",la:35.066,lo:126.517},{n:"해남군",la:34.574,lo:126.599},
     {n:"화순군",la:35.064,lo:126.987},
   ],
-  경남: [
+  경남:[
     {n:"거제시",la:34.880,lo:128.622},{n:"거창군",la:35.687,lo:127.909},{n:"고성군",la:34.974,lo:128.323},
     {n:"김해시",la:35.234,lo:128.881},{n:"남해군",la:34.837,lo:127.892},{n:"밀양시",la:35.503,lo:128.746},
     {n:"사천시",la:35.004,lo:128.064},{n:"산청군",la:35.415,lo:127.874},{n:"양산시",la:35.335,lo:129.034},
@@ -162,11 +151,11 @@ const CITIES = {
     {n:"창원시",la:35.228,lo:128.682},{n:"통영시",la:34.854,lo:128.433},{n:"하동군",la:35.068,lo:127.752},
     {n:"함안군",la:35.273,lo:128.409},{n:"함양군",la:35.520,lo:127.725},{n:"합천군",la:35.566,lo:128.166},
   ],
-  울산: [
+  울산:[
     {n:"남구",la:35.540,lo:129.332},{n:"동구",la:35.505,lo:129.416},{n:"북구",la:35.582,lo:129.361},
     {n:"울주군",la:35.520,lo:129.242},{n:"중구",la:35.570,lo:129.332},
   ],
-  부산: [
+  부산:[
     {n:"강서구",la:35.212,lo:128.981},{n:"금정구",la:35.243,lo:129.093},{n:"기장군",la:35.244,lo:129.222},
     {n:"남구",la:35.136,lo:129.084},{n:"동구",la:35.179,lo:129.044},{n:"동래구",la:35.199,lo:129.086},
     {n:"부산진구",la:35.163,lo:129.053},{n:"북구",la:35.197,lo:128.991},{n:"사상구",la:35.151,lo:128.984},
@@ -174,377 +163,430 @@ const CITIES = {
     {n:"연제구",la:35.176,lo:129.080},{n:"영도구",la:35.091,lo:129.068},{n:"중구",la:35.105,lo:129.032},
     {n:"해운대구",la:35.163,lo:129.163},
   ],
-  제주: [{n:"서귀포시",la:33.253,lo:126.560},{n:"제주시",la:33.499,lo:126.531}],
+  제주:[{n:"서귀포시",la:33.253,lo:126.560},{n:"제주시",la:33.499,lo:126.531}],
 };
 
-// ─── 차량 종류 및 요율 ─────────────────────────────────────────────────
+// ─── 차량 종류 ─────────────────────────────────────────────────────────────
 const VEHICLE_TYPES = [
-  {id:"damas", name:"다마스/라보", base:15000, perKm:440, min:30000, desc:"소형"},
-  {id:"1ton",  name:"1톤",        base:20000, perKm:690, min:50000, desc:""},
-  {id:"2.5ton",name:"2.5톤",      base:32000, perKm:980, min:80000, desc:""},
-  {id:"5ton",  name:"5톤",        base:48000, perKm:1280,min:120000,desc:""},
-  {id:"11ton", name:"11톤",       base:68000, perKm:1680,min:180000,desc:""},
-  {id:"18ton", name:"18톤",       base:86000, perKm:2100,min:240000,desc:""},
-  {id:"25ton", name:"25톤",       base:108000,perKm:2380,min:300000,desc:""},
+  {id:"bike",   name:"오토바이",      base:8000,  perKm:180,  min:15000,  L100km:4},
+  {id:"1ton",   name:"1톤",          base:20000, perKm:690,  min:50000,  L100km:12},
+  {id:"1.4ton", name:"1.4톤",        base:24000, perKm:780,  min:60000,  L100km:14},
+  {id:"2.5ton", name:"2.5톤",        base:32000, perKm:980,  min:80000,  L100km:18},
+  {id:"3.5ton", name:"3.5톤",        base:38000, perKm:1100, min:100000, L100km:22},
+  {id:"3.5tonW",name:"3.5톤(광폭)",  base:42000, perKm:1200, min:110000, L100km:24},
+  {id:"5ton",   name:"5톤",          base:48000, perKm:1280, min:120000, L100km:27},
+  {id:"5tonP",  name:"5톤+",         base:52000, perKm:1380, min:130000, L100km:29},
+  {id:"5tonAx", name:"5톤+축",       base:56000, perKm:1480, min:140000, L100km:30},
+  {id:"11ton",  name:"11톤",         base:68000, perKm:1680, min:180000, L100km:35},
+  {id:"18ton",  name:"18톤",         base:86000, perKm:2100, min:240000, L100km:38},
+  {id:"25ton",  name:"25톤",         base:108000,perKm:2380, min:300000, L100km:42},
+  {id:"trailer",name:"추레라",       base:125000,perKm:2600, min:350000, L100km:45},
+  {id:"lowbed", name:"로베드",       base:135000,perKm:2800, min:380000, L100km:47},
 ];
 
-// ─── 운임 유형 ─────────────────────────────────────────────────────────
 const CARGO_TYPES = [
-  {id:"일반", name:"일반"},
-  {id:"냉장", name:"냉장/냉동", surcharge: 0.12},
-  {id:"위험물", name:"위험물", surcharge: 0.20},
+  {id:"일반",  name:"일반"},
+  {id:"냉장",  name:"냉장/냉동", surcharge:0.12},
+  {id:"위험물",name:"위험물",   surcharge:0.20},
 ];
 
-// ─── Haversine 거리 계산 ────────────────────────────────────────────────
-function haversine(la1, lo1, la2, lo2) {
-  const R = 6371;
-  const d1 = (la2 - la1) * Math.PI / 180;
-  const d2 = (lo2 - lo1) * Math.PI / 180;
-  const a = Math.sin(d1/2)**2 + Math.cos(la1*Math.PI/180)*Math.cos(la2*Math.PI/180)*Math.sin(d2/2)**2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+const PREF_LABELS = ["없음","보통","다소 선호","선호","매우 선호"];
+
+// ─── 계산 함수 ─────────────────────────────────────────────────────────────
+function haversine(la1,lo1,la2,lo2){
+  const R=6371, d1=(la2-la1)*Math.PI/180, d2=(lo2-lo1)*Math.PI/180;
+  const a=Math.sin(d1/2)**2+Math.cos(la1*Math.PI/180)*Math.cos(la2*Math.PI/180)*Math.sin(d2/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
 }
 
-// ─── 운임 계산 ────────────────────────────────────────────────────────
-function calcRate(fromCoords, toCoords, vtId, ctId) {
-  const [la1, lo1] = fromCoords;
-  const [la2, lo2] = toCoords;
-  const straightDist = haversine(la1, lo1, la2, lo2);
-  const roadDist = Math.round(straightDist * 1.35);
-  const vt = VEHICLE_TYPES.find(v => v.id === vtId) || VEHICLE_TYPES[1];
-  const ct = CARGO_TYPES.find(c => c.id === ctId) || CARGO_TYPES[0];
-  const base = vt.base + vt.perKm * roadDist;
-  const surchargedBase = Math.max(vt.min, base) * (1 + (ct.surcharge || 0));
-  const avg = Math.round(surchargedBase / 5000) * 5000;
-  const minFare = Math.round(avg * 0.83 / 5000) * 5000;
-  const maxFare = Math.round(avg * 1.17 / 5000) * 5000;
-  return { distance: roadDist, min: minFare, max: maxFare, avg };
+function calcRate(fromC,toC,vtId,ctId){
+  const [la1,lo1]=fromC, [la2,lo2]=toC;
+  const roadDist=Math.round(haversine(la1,lo1,la2,lo2)*1.35);
+  const vt=VEHICLE_TYPES.find(v=>v.id===vtId)||VEHICLE_TYPES[1];
+  const ct=CARGO_TYPES.find(c=>c.id===ctId)||CARGO_TYPES[0];
+  const base=vt.base+vt.perKm*roadDist;
+  const surchargedBase=Math.max(vt.min,base)*(1+(ct.surcharge||0));
+  const avg=Math.round(surchargedBase/5000)*5000;
+  const minFare=Math.round(avg*0.83/5000)*5000;
+  const maxFare=Math.round(avg*1.17/5000)*5000;
+  const fuelCost=Math.round(vt.L100km/100*roadDist*1650);
+  const mins=Math.round(roadDist/80*60);
+  return{distance:roadDist,min:minFare,max:maxFare,avg,fuelCost,mins};
 }
 
-// ─── 유틸 ─────────────────────────────────────────────────────────────
-const fmt = (n) => (n >= 10000 ? `${(n/10000).toFixed(1).replace(/\.0$/,"")}만원` : `${n.toLocaleString()}원`);
+const fmtMoney=(n)=>{
+  if(n>=10000){const v=(n/10000);return v%1===0?`${v}만원`:`${v.toFixed(1)}만원`;}
+  return `${n.toLocaleString()}원`;
+};
+const fmtTime=(m)=>{const h=Math.floor(m/60);const mm=m%60;return h>0?`${h}h ${mm}m`:`${mm}m`;};
 
-// ─── 메인 컴포넌트 ────────────────────────────────────────────────────
-export default function FreightRateInquiry() {
-  const [step, setStep] = useState("from"); // from | to | result
-  const [fromP, setFromP] = useState(null);  // 출발 도/시
-  const [fromC, setFromC] = useState(null);  // 출발 시/군/구
-  const [toP, setToP]     = useState(null);  // 도착 도/시
-  const [toC, setToC]     = useState(null);  // 도착 시/군/구
-  const [vehicle, setVehicle] = useState("1ton");
-  const [cargoType, setCargoType] = useState("일반");
-  const [hover, setHover]  = useState(null);
-  const [cityStep, setCityStep] = useState(null); // null | 'from' | 'to'
+// ─── 차량 드롭다운 ─────────────────────────────────────────────────────────
+function VehicleDropdown({vehicle,onChange}){
+  const [open,setOpen]=useState(false);
+  const ref=useRef();
+  useEffect(()=>{
+    const fn=(e)=>{if(ref.current&&!ref.current.contains(e.target))setOpen(false);};
+    document.addEventListener("mousedown",fn);
+    return()=>document.removeEventListener("mousedown",fn);
+  },[]);
+  const cur=VEHICLE_TYPES.find(v=>v.id===vehicle)||VEHICLE_TYPES[1];
+  return(
+    <div ref={ref} className="relative">
+      <button
+        onClick={()=>setOpen(p=>!p)}
+        className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 bg-white hover:border-[#1B2B4B] transition text-[13px] font-semibold text-gray-800 w-full"
+      >
+        <span className="flex-1 text-left">{cur.name}</span>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+          <path d="M6 9l6 6 6-6"/>
+        </svg>
+      </button>
+      {open&&(
+        <div className="absolute top-full left-0 mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden">
+          <div className="max-h-[260px] overflow-y-auto py-1">
+            {VEHICLE_TYPES.map(vt=>(
+              <button
+                key={vt.id}
+                onClick={()=>{onChange(vt.id);setOpen(false);}}
+                className={`w-full flex items-center gap-2 px-4 py-2.5 text-[13px] transition hover:bg-gray-50 ${vehicle===vt.id?"bg-blue-50 font-bold text-[#1B2B4B]":"text-gray-700 font-medium"}`}
+              >
+                <span className="flex-1 text-left">{vt.name}</span>
+                {vehicle===vt.id&&(
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1B2B4B" strokeWidth="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
-  const result = useMemo(() => {
-    if (!fromC || !toC) return null;
-    const fc = fromC ? [fromC.la, fromC.lo] : PROVINCE_COORDS[fromP];
-    const tc = toC ? [toC.la, toC.lo] : PROVINCE_COORDS[toP];
-    if (!fc || !tc) return null;
-    return calcRate(fc, tc, vehicle, cargoType);
-  }, [fromC, toC, vehicle, cargoType]);
+// ─── 기사선호도 슬라이더 ───────────────────────────────────────────────────
+function DriverPreference({value,onChange}){
+  return(
+    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-1">
+          <span className="text-[12px] font-bold text-gray-500">기사 선호도</span>
+          <div className="w-4 h-4 rounded-full border border-gray-300 flex items-center justify-center cursor-help" title="0: 없음 ~ 4: 매우선호">
+            <span className="text-[9px] text-gray-400 font-bold">i</span>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className={`w-2 h-2 rounded-full ${value===0?"bg-red-500":"bg-blue-500"}`}/>
+          <span className={`text-[12px] font-semibold ${value===0?"text-red-500":"text-[#1B2B4B]"}`}>{PREF_LABELS[value]}</span>
+          <span className="text-[11px] text-gray-400">{value+1} / 5</span>
+        </div>
+      </div>
+      <div className="relative mb-2">
+        <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+          <div
+            className="h-full rounded-full transition-all"
+            style={{width:`${(value/4)*100}%`, background: value===0?"#ef4444":"#1B2B4B"}}
+          />
+        </div>
+        <div className="absolute inset-y-0 left-0 right-0 flex">
+          {[0,1,2,3,4].map(i=>(
+            <button
+              key={i}
+              onClick={()=>onChange(i)}
+              className="flex-1 h-full"
+              style={{cursor:"pointer"}}
+            />
+          ))}
+        </div>
+      </div>
+      <div className="flex justify-between">
+        {PREF_LABELS.map((l,i)=>(
+          <span key={i} className={`text-[9px] ${value===i?"font-bold text-[#1B2B4B]":"text-gray-400"}`}>{l}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
 
-  const reset = useCallback(() => {
-    setStep("from"); setFromP(null); setFromC(null);
-    setToP(null); setToC(null); setCityStep(null);
-  }, []);
+// ─── 메인 컴포넌트 ────────────────────────────────────────────────────────
+export default function FreightRateInquiry(){
+  const [step,setStep]=useState("from");
+  const [fromP,setFromP]=useState(null);
+  const [fromC,setFromC]=useState(null);
+  const [toP,setToP]=useState(null);
+  const [toC,setToC]=useState(null);
+  const [vehicle,setVehicle]=useState("1ton");
+  const [cargoType,setCargoType]=useState("일반");
+  const [preference,setPreference]=useState(0);
+  const [hover,setHover]=useState(null);
+  const [cityStep,setCityStep]=useState(null);
 
-  const handleProvinceClick = (prov) => {
-    if (step === "from") {
-      setFromP(prov);
-      setCityStep("from");
-    } else if (step === "to") {
-      setToP(prov);
-      setCityStep("to");
-    }
+  const result=useMemo(()=>{
+    if(!fromC||!toC)return null;
+    return calcRate([fromC.la,fromC.lo],[toC.la,toC.lo],vehicle,cargoType);
+  },[fromC,toC,vehicle,cargoType]);
+
+  const reset=useCallback(()=>{
+    setStep("from");setFromP(null);setFromC(null);setToP(null);setToC(null);setCityStep(null);
+  },[]);
+
+  const handleProvinceClick=(prov)=>{
+    if(step==="from"){setFromP(prov);setCityStep("from");}
+    else if(step==="to"){setToP(prov);setCityStep("to");}
   };
 
-  const handleCitySelect = (city) => {
-    if (cityStep === "from") {
-      setFromC(city);
-      setStep("to");
-      setCityStep(null);
-    } else if (cityStep === "to") {
-      setToC(city);
-      setStep("result");
-      setCityStep(null);
-    }
+  const handleCitySelect=(city)=>{
+    if(cityStep==="from"){setFromC(city);setStep("to");setCityStep(null);}
+    else if(cityStep==="to"){setToC(city);setStep("result");setCityStep(null);}
   };
 
-  const provinces = Object.keys(PROVINCE_PATHS);
-  const activeProv = step === "from" ? fromP : toP;
+  const provinces=Object.keys(PROVINCE_PATHS);
+  const SMALL=["서울","인천","세종","대전","대구","광주","울산","부산","제주"];
 
-  return (
+  // 화살표 제어점 계산
+  const arrowFrom=fromP?PROVINCE_LABEL_POS[fromP]:null;
+  const arrowTo=toP?PROVINCE_LABEL_POS[toP]:null;
+  let arrowPath=null;
+  if(arrowFrom&&arrowTo&&step==="result"){
+    const mx=(arrowFrom[0]+arrowTo[0])/2;
+    const my=(arrowFrom[1]+arrowTo[1])/2-50;
+    arrowPath=`M ${arrowFrom[0]},${arrowFrom[1]} Q ${mx},${my} ${arrowTo[0]},${arrowTo[1]}`;
+  }
+
+  return(
     <div className="w-full">
-      <h2 className="text-[18px] font-bold text-[#1B2B4B] mb-4">전국운임 조회</h2>
+      <div className="flex items-center gap-3 mb-4">
+        <h2 className="text-[18px] font-bold text-[#1B2B4B]">전국운임 조회</h2>
+        <span className="text-[11px] text-gray-400 bg-gray-100 rounded-full px-2 py-0.5">원하는 지역을 클릭해 <span className="text-blue-600 font-bold">5초</span> 만에 운임을 확인하세요</span>
+      </div>
 
-      <div className="flex gap-4 min-h-[600px]">
-        {/* ───────────────── 왼쪽 패널 ───────────────── */}
-        <div className="w-[420px] flex-shrink-0 flex flex-col gap-3">
+      <div className="flex gap-4 min-h-[640px]">
+        {/* ───────────── 왼쪽 패널 ───────────── */}
+        <div className="w-[400px] flex-shrink-0 flex flex-col gap-3">
 
-          {/* 출발지/도착지 카드 */}
+          {/* 경로 */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-            <div className="text-[12px] font-bold text-gray-400 mb-3 tracking-wide">경로 설정</div>
+            <div className="text-[11px] font-bold text-gray-400 mb-3 tracking-wide uppercase">경로 설정</div>
             <div className="flex flex-col gap-2">
-              {/* 출발지 */}
               <div
                 className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer border-2 transition ${
-                  step === "from" || cityStep === "from"
-                    ? "border-[#1B2B4B] bg-[#1B2B4B]/5"
-                    : fromC ? "border-blue-200 bg-blue-50" : "border-gray-200 hover:border-gray-300"
-                }`}
-                onClick={() => { setStep("from"); setCityStep(null); setFromP(null); setFromC(null); setToC(null); setToP(null); }}
+                  step==="from"||cityStep==="from"?"border-[#1B2B4B] bg-[#1B2B4B]/5"
+                  :fromC?"border-blue-300 bg-blue-50":"border-gray-200 hover:border-gray-300"}`}
+                onClick={()=>{setStep("from");setCityStep(null);setFromP(null);setFromC(null);setToC(null);setToP(null);}}
               >
                 <div className="w-7 h-7 rounded-full bg-blue-500 flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0">출</div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-[11px] text-gray-400 font-medium">출발지</div>
-                  {fromC ? (
-                    <div className="text-[14px] font-bold text-[#1B2B4B] truncate">{fromP} {fromC.n}</div>
-                  ) : fromP && cityStep === "from" ? (
-                    <div className="text-[13px] text-blue-600 font-medium">{fromP} — 시/군/구 선택 중</div>
-                  ) : (
-                    <div className="text-[13px] text-gray-400">지도에서 도/시를 클릭하세요</div>
-                  )}
+                  <div className="text-[10px] text-gray-400 font-medium">출발지</div>
+                  {fromC?<div className="text-[14px] font-bold text-[#1B2B4B] truncate">{fromP} {fromC.n}</div>
+                  :fromP&&cityStep==="from"?<div className="text-[12px] text-blue-600 font-medium">{fromP} — 시/군/구 선택 중</div>
+                  :<div className="text-[12px] text-gray-400">지도에서 도/시를 클릭하세요</div>}
                 </div>
-                {fromC && <button className="text-gray-400 hover:text-red-400 text-[16px] leading-none" onClick={e=>{e.stopPropagation();reset();}}>×</button>}
+                {fromC&&<button className="text-gray-400 hover:text-red-400 text-[18px] leading-none" onClick={e=>{e.stopPropagation();reset();}}>×</button>}
               </div>
 
               <div className="flex items-center gap-2 px-3">
                 <div className="flex-1 h-px bg-gray-200"/>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2">
-                  <path d="M12 5v14M5 12l7 7 7-7"/>
-                </svg>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
                 <div className="flex-1 h-px bg-gray-200"/>
               </div>
 
-              {/* 도착지 */}
               <div
                 className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer border-2 transition ${
-                  step === "to" || cityStep === "to"
-                    ? "border-orange-400 bg-orange-50"
-                    : toC ? "border-orange-200 bg-orange-50" : "border-gray-200 hover:border-gray-300"
-                }`}
-                onClick={() => { if (fromC) { setStep("to"); setCityStep(null); setToP(null); setToC(null); } }}
+                  step==="to"||cityStep==="to"?"border-orange-400 bg-orange-50"
+                  :toC?"border-orange-300 bg-orange-50":"border-gray-200 hover:border-gray-300"}`}
+                onClick={()=>{if(fromC){setStep("to");setCityStep(null);setToP(null);setToC(null);}}}
               >
-                <div className="w-7 h-7 rounded-full bg-orange-400 flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0">도</div>
+                <div className="w-7 h-7 rounded-full bg-orange-400 flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0">하</div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-[11px] text-gray-400 font-medium">도착지</div>
-                  {toC ? (
-                    <div className="text-[14px] font-bold text-[#1B2B4B] truncate">{toP} {toC.n}</div>
-                  ) : toP && cityStep === "to" ? (
-                    <div className="text-[13px] text-orange-500 font-medium">{toP} — 시/군/구 선택 중</div>
-                  ) : (
-                    <div className="text-[13px] text-gray-400">{fromC ? "지도에서 도/시를 클릭하세요" : "출발지 먼저 선택"}</div>
-                  )}
+                  <div className="text-[10px] text-gray-400 font-medium">도착지</div>
+                  {toC?<div className="text-[14px] font-bold text-[#1B2B4B] truncate">{toP} {toC.n}</div>
+                  :toP&&cityStep==="to"?<div className="text-[12px] text-orange-500 font-medium">{toP} — 시/군/구 선택 중</div>
+                  :<div className="text-[12px] text-gray-400">{fromC?"지도에서 도/시를 클릭하세요":"출발지 먼저 선택"}</div>}
                 </div>
-                {toC && <button className="text-gray-400 hover:text-red-400 text-[16px] leading-none" onClick={e=>{e.stopPropagation();setToP(null);setToC(null);setStep("to");}}>×</button>}
+                {toC&&<button className="text-gray-400 hover:text-red-400 text-[18px] leading-none" onClick={e=>{e.stopPropagation();setToP(null);setToC(null);setStep("to");}}>×</button>}
               </div>
             </div>
           </div>
 
           {/* 차량 종류 */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-            <div className="text-[12px] font-bold text-gray-400 mb-3 tracking-wide">차량 종류</div>
-            <div className="flex flex-wrap gap-2">
-              {VEHICLE_TYPES.map(vt => (
-                <button
-                  key={vt.id}
-                  onClick={() => setVehicle(vt.id)}
-                  className={`px-3 py-1.5 rounded-lg text-[13px] font-semibold border transition ${
-                    vehicle === vt.id
-                      ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
-                      : "bg-white text-gray-700 border-gray-300 hover:border-[#1B2B4B] hover:text-[#1B2B4B]"
-                  }`}
-                >{vt.name}</button>
-              ))}
-            </div>
+            <div className="text-[11px] font-bold text-gray-400 mb-3 tracking-wide uppercase">차량 종류</div>
+            <VehicleDropdown vehicle={vehicle} onChange={setVehicle}/>
           </div>
 
           {/* 화물 유형 */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-            <div className="text-[12px] font-bold text-gray-400 mb-3 tracking-wide">화물 유형</div>
+            <div className="text-[11px] font-bold text-gray-400 mb-3 tracking-wide uppercase">화물 유형</div>
             <div className="flex gap-2">
-              {CARGO_TYPES.map(ct => (
+              {CARGO_TYPES.map(ct=>(
                 <button
                   key={ct.id}
-                  onClick={() => setCargoType(ct.id)}
-                  className={`px-3 py-1.5 rounded-lg text-[13px] font-semibold border transition ${
-                    cargoType === ct.id
-                      ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
-                      : "bg-white text-gray-700 border-gray-300 hover:border-[#1B2B4B]"
-                  }`}
+                  onClick={()=>setCargoType(ct.id)}
+                  className={`flex-1 py-2 rounded-lg text-[12px] font-semibold border transition ${
+                    cargoType===ct.id?"bg-[#1B2B4B] text-white border-[#1B2B4B]":"bg-white text-gray-700 border-gray-200 hover:border-[#1B2B4B]"}`}
                 >{ct.name}</button>
               ))}
             </div>
           </div>
 
+          {/* 기사 선호도 */}
+          <DriverPreference value={preference} onChange={setPreference}/>
+
           {/* 결과 */}
-          {result && step === "result" && (
-            <div className="bg-[#1B2B4B] rounded-xl p-5 text-white shadow-lg">
-              <div className="flex items-center justify-between mb-4">
-                <div className="text-[13px] text-white/70">예상 운임</div>
-                <div className="text-[11px] text-white/50">VAT 별도 · 참고용 시세</div>
-              </div>
-
-              <div className="mb-4">
-                <div className="text-[12px] text-white/60 mb-1">운임 범위</div>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-[28px] font-extrabold">{fmt(result.min)}</span>
-                  <span className="text-white/60 text-[18px]">~</span>
-                  <span className="text-[28px] font-extrabold">{fmt(result.max)}</span>
+          {result&&step==="result"&&(
+            <div className="rounded-xl overflow-hidden shadow-lg" style={{background:"linear-gradient(135deg,#1B3A6B 0%,#2563eb 100%)"}}>
+              <div className="p-5">
+                <div className="flex items-start justify-between mb-4">
+                  <div>
+                    <div className="text-[11px] text-white/60 mb-1">예상운임</div>
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-[30px] font-extrabold text-white leading-none">{fmtMoney(result.min)}</span>
+                      <span className="text-white/60 text-[22px] font-light leading-none">~</span>
+                      <span className="text-[30px] font-extrabold text-white leading-none">{fmtMoney(result.max)}</span>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-[9px] text-white/50">VAT 별도 · 광고 시세</div>
+                    <div className="mt-1">
+                      <div className="text-[10px] text-white/60">평균운임</div>
+                      <div className="text-[26px] font-extrabold text-blue-200 leading-none">{fmtMoney(result.avg)}</div>
+                    </div>
+                  </div>
                 </div>
-              </div>
 
-              <div className="bg-white/10 rounded-lg p-3 mb-4">
-                <div className="text-[11px] text-white/60 mb-1">평균 운임</div>
-                <div className="text-[22px] font-extrabold text-blue-300">{fmt(result.avg)}</div>
-              </div>
-
-              {/* 프로그레스 바 */}
-              <div className="mb-4">
-                <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-                  <div className="h-full bg-gradient-to-r from-blue-400 to-blue-200 rounded-full" style={{width:"60%"}}/>
+                <div className="mb-3">
+                  <div className="h-1.5 bg-white/15 rounded-full overflow-hidden">
+                    <div className="h-full bg-white/70 rounded-full" style={{width:"55%"}}/>
+                  </div>
+                  <div className="flex justify-between mt-1">
+                    <span className="text-[10px] text-white/50">최저 {fmtMoney(result.min)}</span>
+                    <span className="text-[10px] text-white/50">최고 {fmtMoney(result.max)}</span>
+                  </div>
                 </div>
-                <div className="flex justify-between mt-1">
-                  <span className="text-[10px] text-white/50">최저 {fmt(result.min)}</span>
-                  <span className="text-[10px] text-white/50">최고 {fmt(result.max)}</span>
+
+                <div className="border-t border-white/15 pt-3 flex flex-wrap gap-x-4 gap-y-1">
+                  <span className="text-[11px] text-white/70">거리: 약 {result.distance}km</span>
+                  <span className="text-[11px] text-white/70">예상소요: {fmtTime(result.mins)}</span>
+                  <span className="text-[11px] text-white/70">경유가: {result.fuelCost.toLocaleString()}원</span>
+                  <span className="text-[11px] text-white/70">차종: {VEHICLE_TYPES.find(v=>v.id===vehicle)?.name}</span>
                 </div>
-              </div>
 
-              <div className="flex items-center gap-4 text-[11px] text-white/60 border-t border-white/10 pt-3">
-                <span>거리 약 {result.distance}km</span>
-                <span>차종 {VEHICLE_TYPES.find(v=>v.id===vehicle)?.name}</span>
-                {cargoType !== "일반" && <span>{cargoType} 할증 포함</span>}
+                <button onClick={reset} className="mt-4 w-full py-2 rounded-lg bg-white/15 hover:bg-white/25 text-white text-[12px] font-semibold transition">
+                  다시 조회
+                </button>
               </div>
-
-              <button
-                onClick={reset}
-                className="mt-4 w-full py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-[13px] font-semibold transition"
-              >
-                다시 조회
-              </button>
             </div>
           )}
 
-          {/* 시/군/구 선택 패널 */}
-          {cityStep && (
+          {/* 시군구 선택 패널 */}
+          {cityStep&&(
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
               <div className="flex items-center gap-2 mb-3">
-                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] font-bold ${cityStep === "from" ? "bg-blue-500" : "bg-orange-400"}`}>
-                  {cityStep === "from" ? "출" : "도"}
+                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] font-bold ${cityStep==="from"?"bg-blue-500":"bg-orange-400"}`}>
+                  {cityStep==="from"?"출":"하"}
                 </div>
-                <span className="text-[13px] font-bold text-[#1B2B4B]">{cityStep === "from" ? fromP : toP}</span>
+                <span className="text-[13px] font-bold text-[#1B2B4B]">{cityStep==="from"?fromP:toP}</span>
                 <button
                   className="ml-auto text-[11px] text-gray-500 hover:text-[#1B2B4B] border border-gray-300 rounded-md px-2 py-0.5"
-                  onClick={() => { setCityStep(null); setFromP(cityStep === "from" ? null : fromP); setToP(cityStep === "to" ? null : toP); }}
-                >
-                  ← 도(道) 다시 선택
-                </button>
+                  onClick={()=>{setCityStep(null);if(cityStep==="from")setFromP(null);else setToP(null);}}
+                >← 도/시 재선택</button>
               </div>
-              <div className="text-[12px] text-gray-500 mb-3">시·군·구를 선택하세요</div>
-              <div className="grid grid-cols-3 gap-1.5 max-h-[240px] overflow-y-auto pr-1">
-                {(CITIES[cityStep === "from" ? fromP : toP] || []).map(city => (
+              <div className="text-[11px] text-gray-500 mb-2">시·군·구를 선택하세요</div>
+              <div className="grid grid-cols-3 gap-1.5 max-h-[220px] overflow-y-auto pr-1">
+                {(CITIES[cityStep==="from"?fromP:toP]||[]).map(city=>(
                   <button
                     key={city.n}
-                    onClick={() => handleCitySelect(city)}
-                    className="px-2 py-2 text-[12px] font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-[#1B2B4B] hover:text-white hover:border-[#1B2B4B] transition text-left"
-                  >
-                    {city.n}
-                  </button>
+                    onClick={()=>handleCitySelect(city)}
+                    className="px-2 py-2 text-[11px] font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-[#1B2B4B] hover:text-white hover:border-[#1B2B4B] transition text-left"
+                  >{city.n}</button>
                 ))}
               </div>
             </div>
           )}
         </div>
 
-        {/* ───────────────── 오른쪽 지도 패널 ───────────────── */}
-        <div className="flex-1 bg-white rounded-xl border border-gray-200 shadow-sm flex flex-col">
+        {/* ───────────── 오른쪽 지도 ───────────── */}
+        <div className="flex-1 rounded-xl border border-gray-200 shadow-sm flex flex-col overflow-hidden"
+          style={{background:"linear-gradient(160deg,#f0f4fa 0%,#eaf2fb 50%,#f0f4fa 100%)"}}>
           {/* 지도 헤더 */}
-          <div className="px-4 pt-4 pb-2 border-b border-gray-100 flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              {step !== "result" && (
-                <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[12px] font-semibold ${
-                  step === "from" ? "bg-blue-500 text-white" : "bg-orange-400 text-white"
-                }`}>
-                  <span className="w-2 h-2 rounded-full bg-white/80 inline-block"/>
-                  {step === "from" ? "출발지를 선택하세요" : "도착지를 선택하세요"}
-                </div>
-              )}
-              {step === "result" && fromP && toP && (
-                <div className="text-[13px] text-gray-600">
+          <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-3">
+            {step!=="result"&&(
+              <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-semibold shadow-sm ${
+                step==="from"?"bg-blue-500 text-white":"bg-orange-400 text-white"}`}>
+                <span className="w-1.5 h-1.5 rounded-full bg-white/80"/>
+                {step==="from"?"출발 지역을 선택하세요":"도착 지역을 선택하세요"}
+              </div>
+            )}
+            {step==="result"&&fromP&&toP&&(
+              <div className="flex items-center gap-2 text-[13px]">
+                <div className="flex items-center gap-1">
+                  <span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block"/>
                   <span className="font-bold text-blue-600">{fromP} {fromC?.n}</span>
-                  <span className="mx-2 text-gray-400">→</span>
+                </div>
+                <span className="text-gray-400">→</span>
+                <div className="flex items-center gap-1">
+                  <span className="w-2.5 h-2.5 rounded-full bg-orange-400 inline-block"/>
                   <span className="font-bold text-orange-500">{toP} {toC?.n}</span>
                 </div>
-              )}
-            </div>
-            {(fromP || toP) && (
-              <button onClick={reset} className="ml-auto text-[11px] text-gray-500 hover:text-red-500 border border-gray-200 rounded-md px-2 py-1">초기화</button>
+              </div>
             )}
+            {(fromP||toP)&&<button onClick={reset} className="ml-auto text-[11px] text-gray-500 hover:text-red-500 border border-gray-200 rounded-md px-2 py-1 bg-white/80">초기화</button>}
           </div>
 
           {/* SVG 지도 */}
-          <div className="flex-1 flex items-center justify-center p-4">
-            <svg
-              viewBox="0 0 360 445"
-              className="w-full max-w-[420px]"
-              style={{ userSelect: "none" }}
-            >
+          <div className="flex-1 flex items-center justify-center p-3">
+            <svg viewBox="0 0 430 500" className="w-full max-w-[420px] drop-shadow-sm" style={{userSelect:"none"}}>
+              <defs>
+                <filter id="provShadow">
+                  <feDropShadow dx="0" dy="1" stdDeviation="1.5" floodOpacity="0.12"/>
+                </filter>
+                <marker id="arrowHead" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+                  <path d="M 0,0 L 8,4 L 0,8 Z" fill="#1B2B4B" opacity="0.85"/>
+                </marker>
+              </defs>
+
               {/* 배경 */}
-              <rect width="360" height="445" fill="transparent"/>
+              <rect width="430" height="500" fill="transparent"/>
 
               {/* 도/시 폴리곤 */}
-              {provinces.map(prov => {
-                const isFrom   = prov === fromP;
-                const isTo     = prov === toP;
-                const isHover  = prov === hover;
-                const isActive = isFrom || isTo;
-                const [lx, ly] = PROVINCE_LABEL_POS[prov] || [0, 0];
-                const isSmall  = ["서울","인천","세종","대전","대구","광주","울산","부산"].includes(prov);
+              {provinces.map(prov=>{
+                const isFrom=prov===fromP;
+                const isTo=prov===toP;
+                const isHover=prov===hover;
+                const isSmall=SMALL.includes(prov);
+                const [lx,ly]=PROVINCE_LABEL_POS[prov]||[0,0];
 
-                let fill = PROVINCE_COLORS[prov] || "#e8edf2";
-                if (isFrom) fill = "#2563eb";
-                else if (isTo) fill = "#f97316";
-                else if (isHover) fill = "#c7d8ef";
+                let fill=PROVINCE_COLORS[prov]||"#e8edf2";
+                if(isFrom) fill="#3b82f6";
+                else if(isTo) fill="#f97316";
+                else if(isHover) fill="#bfdbfe";
 
-                return (
-                  <g key={prov}>
+                return(
+                  <g key={prov} filter="url(#provShadow)">
                     <path
                       d={PROVINCE_PATHS[prov]}
                       fill={fill}
-                      stroke={isActive ? "white" : "#c0cdd8"}
-                      strokeWidth={isActive ? 2 : 0.8}
-                      style={{ cursor: "pointer", transition: "fill 0.15s" }}
-                      onMouseEnter={() => setHover(prov)}
-                      onMouseLeave={() => setHover(null)}
-                      onClick={() => handleProvinceClick(prov)}
+                      stroke={isFrom||isTo?"rgba(255,255,255,0.8)":"rgba(180,196,214,0.7)"}
+                      strokeWidth={isFrom||isTo?2:1}
+                      style={{cursor:"pointer",transition:"fill 0.15s"}}
+                      onMouseEnter={()=>setHover(prov)}
+                      onMouseLeave={()=>setHover(null)}
+                      onClick={()=>handleProvinceClick(prov)}
                     />
                     <text
-                      x={lx}
-                      y={ly}
-                      textAnchor="middle"
-                      dominantBaseline="middle"
-                      fontSize={isSmall ? 8.5 : 11}
-                      fontWeight={isActive ? "bold" : "600"}
-                      fill={isActive ? "white" : "#374151"}
-                      style={{ pointerEvents: "none", letterSpacing: "-0.3px" }}
-                    >
-                      {prov}
-                    </text>
-                    {/* 출/도 배지 */}
-                    {(isFrom || isTo) && (
+                      x={lx} y={ly}
+                      textAnchor="middle" dominantBaseline="middle"
+                      fontSize={isSmall?8:10.5}
+                      fontWeight={isFrom||isTo?"bold":"600"}
+                      fill={isFrom||isTo?"white":"#374151"}
+                      style={{pointerEvents:"none",letterSpacing:"-0.2px"}}
+                    >{prov}</text>
+                    {(isFrom||isTo)&&(
                       <>
-                        <circle cx={lx} cy={ly - (isSmall ? 10 : 13)} r={8} fill="white" fillOpacity={0.9}/>
-                        <text
-                          x={lx}
-                          y={ly - (isSmall ? 10 : 13)}
-                          textAnchor="middle"
-                          dominantBaseline="middle"
-                          fontSize={9}
-                          fontWeight="bold"
-                          fill={isFrom ? "#2563eb" : "#f97316"}
-                          style={{ pointerEvents: "none" }}
-                        >
-                          {isFrom ? "출" : "도"}
+                        <circle cx={lx} cy={ly-(isSmall?10:13)} r={7.5} fill="white" fillOpacity={0.92}/>
+                        <text x={lx} y={ly-(isSmall?10:13)} textAnchor="middle" dominantBaseline="middle"
+                          fontSize={8.5} fontWeight="bold"
+                          fill={isFrom?"#2563eb":"#f97316"} style={{pointerEvents:"none"}}>
+                          {isFrom?"출":"하"}
                         </text>
                       </>
                     )}
@@ -552,49 +594,53 @@ export default function FreightRateInquiry() {
                 );
               })}
 
-              {/* 호버 툴팁 */}
-              {hover && !fromP && !toP && (
+              {/* 출→도 화살표 (결과 시) */}
+              {arrowPath&&(
                 <g>
-                  <rect
-                    x={(PROVINCE_LABEL_POS[hover]?.[0] || 0) - 22}
-                    y={(PROVINCE_LABEL_POS[hover]?.[1] || 0) + 14}
-                    width={44} height={16} rx={4}
-                    fill="#1B2B4B" fillOpacity={0.85}
-                  />
-                  <text
-                    x={PROVINCE_LABEL_POS[hover]?.[0] || 0}
-                    y={(PROVINCE_LABEL_POS[hover]?.[1] || 0) + 22}
-                    textAnchor="middle"
-                    dominantBaseline="middle"
-                    fontSize={9}
-                    fill="white"
-                    style={{ pointerEvents: "none" }}
-                  >
-                    클릭 선택
-                  </text>
+                  <path d={arrowPath} fill="none" stroke="#1B2B4B" strokeWidth="2" strokeOpacity="0.7"
+                    strokeDasharray="0" markerEnd="url(#arrowHead)"/>
+                  {/* 견적 계산 완료 버블 */}
+                  {arrowFrom&&(
+                    <g transform={`translate(${arrowFrom[0]},${arrowFrom[1]-32})`}>
+                      <rect x="-42" y="-12" width="84" height="22" rx="11" fill="white" fillOpacity="0.9" stroke="#cbd5e1" strokeWidth="0.8"/>
+                      <text x="0" y="0" textAnchor="middle" dominantBaseline="middle" fontSize="9" fill="#1B2B4B" fontWeight="600">견적 계산 완료</text>
+                    </g>
+                  )}
                 </g>
               )}
+
+              {/* 호버 툴팁 */}
+              {hover&&!fromP&&!toP&&(()=>{
+                const[hx,hy]=PROVINCE_LABEL_POS[hover]||[0,0];
+                return(
+                  <g>
+                    <rect x={hx-26} y={hy+15} width="52" height="16" rx="8" fill="#1B2B4B" fillOpacity="0.82"/>
+                    <text x={hx} y={hy+23} textAnchor="middle" dominantBaseline="middle" fontSize="9" fill="white" style={{pointerEvents:"none"}}>
+                      클릭 선택
+                    </text>
+                  </g>
+                );
+              })()}
             </svg>
           </div>
 
           {/* 범례 */}
-          <div className="px-4 pb-3 border-t border-gray-100 flex items-center gap-4 pt-2">
+          <div className="px-4 pb-3 border-t border-gray-100/80 flex items-center gap-4 pt-2 bg-white/30">
             <div className="flex items-center gap-1.5">
               <div className="w-3 h-3 rounded-full bg-blue-500"/>
-              <span className="text-[11px] text-gray-500">출발지</span>
+              <span className="text-[10px] text-gray-500">출발지</span>
             </div>
             <div className="flex items-center gap-1.5">
               <div className="w-3 h-3 rounded-full bg-orange-400"/>
-              <span className="text-[11px] text-gray-500">도착지</span>
+              <span className="text-[10px] text-gray-500">도착지</span>
             </div>
-            <div className="ml-auto text-[11px] text-gray-400">도/시를 클릭하면 시/군/구 목록이 표시됩니다</div>
+            <div className="ml-auto text-[10px] text-gray-400">도/시 클릭 → 시/군/구 선택</div>
           </div>
         </div>
       </div>
 
-      {/* 안내 문구 */}
-      <div className="mt-3 text-[11px] text-gray-400 text-center">
-        실거래 기반 참고 운임입니다. 실제 운임은 차량 상태, 시간대, 계절 등에 따라 달라질 수 있습니다.
+      <div className="mt-2 text-[10px] text-gray-400 text-center">
+        실거래 기반 참고 운임입니다. 실제 운임은 차량 상태·시간대·계절 등에 따라 달라질 수 있습니다.
       </div>
     </div>
   );
