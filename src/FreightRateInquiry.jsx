@@ -18,22 +18,22 @@ const PROVINCE_PATHS = Object.fromEntries(
 
 const PROVINCE_LABEL_POS = {
   서울: [152, 127],
-  인천: [100, 138],
-  경기: [120, 75],
-  강원: [295, 95],
-  충북: [250, 238],
-  충남: [115, 252],
-  세종: [177, 255],
-  대전: [192, 275],
-  경북: [370, 248],
-  대구: [298, 337],
-  전북: [163, 343],
+  인천: [100, 140],
+  경기: [182, 168],
+  강원: [298, 100],
+  충북: [248, 212],
+  충남: [120, 258],
+  세종: [178, 256],
+  대전: [194, 277],
+  경북: [368, 252],
+  대구: [298, 338],
+  전북: [163, 345],
   광주: [140, 408],
-  전남: [115, 448],
-  경남: [282, 398],
-  울산: [363, 367],
-  부산: [343, 402],
-  제주: [112, 610],
+  전남: [118, 452],
+  경남: [282, 400],
+  울산: [364, 368],
+  부산: [344, 404],
+  제주: [112, 611],
 };
 
 const PROVINCE_COLORS = {
@@ -538,58 +538,107 @@ export default function FreightRateInquiry(){
           </div>
 
           {/* SVG 지도 */}
-          <div className="flex-1 flex items-center justify-center p-3">
-            <svg viewBox="0 0 524 631" className="w-full max-w-[420px] drop-shadow-sm" style={{userSelect:"none"}}>
+          <div className="flex-1 flex items-center justify-center p-4">
+            <svg viewBox="0 0 524 631" className="w-full max-w-[440px]" style={{userSelect:"none",filter:"drop-shadow(0 8px 24px rgba(27,43,75,0.18))"}}>
               <defs>
-                <filter id="provShadow">
-                  <feDropShadow dx="0" dy="1" stdDeviation="1.5" floodOpacity="0.12"/>
+                {/* 3D 빛 그라디언트 — 좌상단에서 우하단으로 */}
+                <linearGradient id="provLight" x1="15%" y1="5%" x2="85%" y2="95%">
+                  <stop offset="0%"   stopColor="white"    stopOpacity="0.58"/>
+                  <stop offset="45%"  stopColor="white"    stopOpacity="0.06"/>
+                  <stop offset="100%" stopColor="#0a1428"  stopOpacity="0.22"/>
+                </linearGradient>
+                {/* 선택된 도/시 글로우 */}
+                <radialGradient id="selGlow" cx="38%" cy="30%" r="65%">
+                  <stop offset="0%"   stopColor="white" stopOpacity="0.55"/>
+                  <stop offset="100%" stopColor="white" stopOpacity="0"/>
+                </radialGradient>
+                {/* 기본 도/시 입체 그림자 */}
+                <filter id="provShadow" x="-6%" y="-6%" width="112%" height="112%">
+                  <feDropShadow dx="1" dy="2.5" stdDeviation="2.2" floodColor="#1B2B4B" floodOpacity="0.28"/>
+                </filter>
+                {/* 호버 시 강조 그림자 */}
+                <filter id="provHover" x="-10%" y="-10%" width="120%" height="120%">
+                  <feDropShadow dx="2" dy="5" stdDeviation="4" floodColor="#1B2B4B" floodOpacity="0.42"/>
+                </filter>
+                {/* 선택 시 글로우 필터 */}
+                <filter id="provSel" x="-12%" y="-12%" width="124%" height="124%">
+                  <feDropShadow dx="0" dy="0" stdDeviation="5" floodColor="#3b82f6" floodOpacity="0.5"/>
+                  <feDropShadow dx="2" dy="5" stdDeviation="3" floodColor="#1B2B4B" floodOpacity="0.3"/>
                 </filter>
                 <marker id="arrowHead" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
                   <path d="M 0,0 L 8,4 L 0,8 Z" fill="#1B2B4B" opacity="0.85"/>
                 </marker>
               </defs>
 
-              {/* 배경 */}
-              <rect width="524" height="631" fill="transparent"/>
+              {/* 바다 배경 */}
+              <rect width="524" height="631" fill="url(#seaBg)"/>
+              <defs>
+                <linearGradient id="seaBg" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%"   stopColor="#c8dff2"/>
+                  <stop offset="100%" stopColor="#b0cfe6"/>
+                </linearGradient>
+              </defs>
 
               {/* 도/시 폴리곤 */}
               {provinces.map(prov=>{
                 const isFrom=prov===fromP;
                 const isTo=prov===toP;
                 const isHover=prov===hover;
+                const isActive=isFrom||isTo;
                 const isSmall=SMALL.includes(prov);
                 const [lx,ly]=PROVINCE_LABEL_POS[prov]||[0,0];
 
                 let fill=PROVINCE_COLORS[prov]||"#e8edf2";
                 if(isFrom) fill="#3b82f6";
                 else if(isTo) fill="#f97316";
-                else if(isHover) fill="#bfdbfe";
+                else if(isHover) fill="#c7dcfc";
+
+                const filt=isActive?"url(#provSel)":isHover?"url(#provHover)":"url(#provShadow)";
+                const sw=isActive?2.5:isHover?1.5:0.8;
+                const stroke=isActive?"rgba(255,255,255,0.9)":isHover?"rgba(100,150,220,0.9)":"rgba(155,178,210,0.75)";
 
                 return(
-                  <g key={prov} filter="url(#provShadow)">
+                  <g key={prov}>
+                    {/* 입체 베이스 레이어 */}
                     <path
                       d={PROVINCE_PATHS[prov]}
                       fill={fill}
-                      stroke={isFrom||isTo?"rgba(255,255,255,0.8)":"rgba(180,196,214,0.7)"}
-                      strokeWidth={isFrom||isTo?2:1}
-                      style={{cursor:"pointer",transition:"fill 0.15s"}}
+                      stroke={stroke}
+                      strokeWidth={sw}
+                      filter={filt}
+                      style={{cursor:"pointer",transition:"fill 0.18s,filter 0.18s"}}
                       onMouseEnter={()=>setHover(prov)}
                       onMouseLeave={()=>setHover(null)}
                       onClick={()=>handleProvinceClick(prov)}
                     />
+                    {/* 3D 광원 오버레이 */}
+                    <path
+                      d={PROVINCE_PATHS[prov]}
+                      fill={isActive?"url(#selGlow)":"url(#provLight)"}
+                      stroke="none"
+                      style={{pointerEvents:"none"}}
+                    />
+                    {/* 라벨 — 흰 윤곽선으로 가독성 향상 */}
                     <text
                       x={lx} y={ly}
                       textAnchor="middle" dominantBaseline="middle"
-                      fontSize={isSmall?8:10.5}
-                      fontWeight={isFrom||isTo?"bold":"600"}
-                      fill={isFrom||isTo?"white":"#374151"}
-                      style={{pointerEvents:"none",letterSpacing:"-0.2px"}}
+                      fontSize={isSmall?11:13.5}
+                      fontWeight="700"
+                      fill={isActive?"white":"#1e293b"}
+                      stroke={isActive?"transparent":"white"}
+                      strokeWidth="3"
+                      paintOrder="stroke"
+                      style={{pointerEvents:"none"}}
                     >{prov}</text>
-                    {(isFrom||isTo)&&(
+                    {/* 출/하 뱃지 */}
+                    {isActive&&(
                       <>
-                        <circle cx={lx} cy={ly-(isSmall?10:13)} r={7.5} fill="white" fillOpacity={0.92}/>
-                        <text x={lx} y={ly-(isSmall?10:13)} textAnchor="middle" dominantBaseline="middle"
-                          fontSize={8.5} fontWeight="bold"
+                        <circle cx={lx} cy={ly-(isSmall?13:17)} r={9.5}
+                          fill="white" fillOpacity={0.95}
+                          stroke={isFrom?"#2563eb":"#f97316"} strokeWidth="1.5"/>
+                        <text x={lx} y={ly-(isSmall?13:17)}
+                          textAnchor="middle" dominantBaseline="middle"
+                          fontSize={10.5} fontWeight="800"
                           fill={isFrom?"#2563eb":"#f97316"} style={{pointerEvents:"none"}}>
                           {isFrom?"출":"하"}
                         </text>
@@ -602,13 +651,14 @@ export default function FreightRateInquiry(){
               {/* 출→도 화살표 (결과 시) */}
               {arrowPath&&(
                 <g>
-                  <path d={arrowPath} fill="none" stroke="#1B2B4B" strokeWidth="2" strokeOpacity="0.7"
-                    strokeDasharray="0" markerEnd="url(#arrowHead)"/>
-                  {/* 견적 계산 완료 버블 */}
+                  <path d={arrowPath} fill="none" stroke="#1B2B4B" strokeWidth="2.5" strokeOpacity="0.75"
+                    markerEnd="url(#arrowHead)"/>
                   {arrowFrom&&(
-                    <g transform={`translate(${arrowFrom[0]},${arrowFrom[1]-32})`}>
-                      <rect x="-42" y="-12" width="84" height="22" rx="11" fill="white" fillOpacity="0.9" stroke="#cbd5e1" strokeWidth="0.8"/>
-                      <text x="0" y="0" textAnchor="middle" dominantBaseline="middle" fontSize="9" fill="#1B2B4B" fontWeight="600">견적 계산 완료</text>
+                    <g transform={`translate(${arrowFrom[0]},${arrowFrom[1]-36})`}>
+                      <rect x="-45" y="-13" width="90" height="24" rx="12"
+                        fill="white" fillOpacity="0.95" stroke="#94a3b8" strokeWidth="0.8"/>
+                      <text x="0" y="0" textAnchor="middle" dominantBaseline="middle"
+                        fontSize="10" fill="#1B2B4B" fontWeight="700">견적 계산 완료 ✓</text>
                     </g>
                   )}
                 </g>
@@ -619,8 +669,10 @@ export default function FreightRateInquiry(){
                 const[hx,hy]=PROVINCE_LABEL_POS[hover]||[0,0];
                 return(
                   <g>
-                    <rect x={hx-26} y={hy+15} width="52" height="16" rx="8" fill="#1B2B4B" fillOpacity="0.82"/>
-                    <text x={hx} y={hy+23} textAnchor="middle" dominantBaseline="middle" fontSize="9" fill="white" style={{pointerEvents:"none"}}>
+                    <rect x={hx-30} y={hy+17} width="60" height="18" rx="9"
+                      fill="#1B2B4B" fillOpacity="0.88"/>
+                    <text x={hx} y={hy+26} textAnchor="middle" dominantBaseline="middle"
+                      fontSize="10" fill="white" style={{pointerEvents:"none"}}>
                       클릭 선택
                     </text>
                   </g>
