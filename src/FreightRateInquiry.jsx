@@ -401,14 +401,14 @@ export default function FreightRateInquiry(){
           {["독차","혼적"].map(m=>(
             <button key={m} onClick={()=>{setFreightMode(m);setStep("from");setFromP(null);setFromC(null);setToP(null);setToC(null);setCityStep(null);}}
               className={`px-4 py-1.5 text-[12px] font-bold transition ${freightMode===m?"bg-[#1B2B4B] text-white":"bg-white text-gray-500 hover:bg-gray-50"}`}>
-              {m==="독차"?"🚛 독차":"📦 혼적(합짐)"}
+              {m==="독차"?"독차":"혼적(합짐)"}
             </button>
           ))}
         </div>
         <span className="text-[11px] text-gray-400 bg-gray-100 rounded-full px-2 py-0.5">
           {freightMode==="독차"
             ? <>원하는 지역을 클릭해 <span className="text-blue-600 font-bold">5초</span> 만에 운임을 확인하세요</>
-            : <><span className="text-orange-500 font-bold">혼적</span> · 중량/CBM 입력 후 조회</>}
+            : <><span className="text-[#1B2B4B] font-bold">혼적</span> · 중량/CBM 입력 후 조회</>}
         </span>
       </div>
 
@@ -467,10 +467,10 @@ export default function FreightRateInquiry(){
               <VehicleDropdown vehicle={vehicle} onChange={setVehicle}/>
             </div>
           ):(
-            <div className="bg-white rounded-xl border border-orange-200 shadow-sm p-4">
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
               <div className="flex items-center justify-between mb-3">
-                <div className="text-[11px] font-bold text-orange-500 tracking-wide uppercase">화물 중량 / 부피</div>
-                <span className="text-[10px] text-gray-400 bg-orange-50 rounded px-2 py-0.5">1CBM = 250kg 기준</span>
+                <div className="text-[11px] font-bold text-gray-400 tracking-wide uppercase">화물 중량 / 부피</div>
+                <span className="text-[10px] text-gray-500 bg-gray-100 rounded px-2 py-0.5">1CBM = 250kg 기준</span>
               </div>
               <div className="flex gap-2">
                 <div className="flex-1">
@@ -479,7 +479,7 @@ export default function FreightRateInquiry(){
                     type="number" min="0" placeholder="예: 500"
                     value={mixWeightKg}
                     onChange={e=>{setMixWeightKg(e.target.value);if(e.target.value)setMixCbm("");}}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-[13px] font-semibold focus:outline-none focus:border-orange-400"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-[13px] font-semibold focus:outline-none focus:border-[#1B2B4B]"
                   />
                 </div>
                 <div className="flex items-end pb-2 text-gray-400 text-[12px] font-medium">또는</div>
@@ -489,12 +489,12 @@ export default function FreightRateInquiry(){
                     type="number" min="0" step="0.1" placeholder="예: 2.5"
                     value={mixCbm}
                     onChange={e=>{setMixCbm(e.target.value);if(e.target.value)setMixWeightKg("");}}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-[13px] font-semibold focus:outline-none focus:border-orange-400"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-[13px] font-semibold focus:outline-none focus:border-[#1B2B4B]"
                   />
                 </div>
               </div>
               {(mixWeightKg||mixCbm)&&(
-                <div className="mt-2 text-[11px] text-orange-600 bg-orange-50 rounded-lg px-3 py-1.5">
+                <div className="mt-2 text-[11px] text-[#1B2B4B] bg-[#1B2B4B]/5 rounded-lg px-3 py-1.5">
                   적용 중량: <b>{Math.max(parseFloat(mixWeightKg)||0,(parseFloat(mixCbm)||0)*250).toLocaleString()}kg</b>
                   {" · "}단위: <b>{Math.max(1,Math.ceil(Math.max(parseFloat(mixWeightKg)||0,(parseFloat(mixCbm)||0)*250)/100))}개</b> (100kg 기준)
                 </div>
@@ -522,12 +522,12 @@ export default function FreightRateInquiry(){
 
           {/* 혼적 전용: 가이드 */}
           {freightMode==="혼적"&&(
-            <div className="bg-orange-50 rounded-xl border border-orange-100 p-3 text-[11px] text-orange-700 leading-relaxed">
-              <div className="font-bold mb-1">📦 혼적(합짐) 안내</div>
+            <div className="bg-gray-50 rounded-xl border border-gray-200 p-3 text-[11px] text-gray-600 leading-relaxed">
+              <div className="font-bold text-[#1B2B4B] mb-1">혼적(합짐) 안내</div>
               <div>• 100km 이하: 기본 28,000원 + 100kg당 3,500원</div>
               <div>• 100~300km: 기본 28,000~58,000원 구간 요율</div>
               <div>• 300km 초과: 기본 78,000원 + 100kg당 12,000원~</div>
-              <div className="mt-1 text-orange-500">※ 실제 운임은 업체별 협의에 따라 상이할 수 있습니다</div>
+              <div className="mt-1 text-gray-400">※ 실제 운임은 업체별 협의에 따라 상이할 수 있습니다</div>
             </div>
           )}
 
@@ -541,7 +541,7 @@ export default function FreightRateInquiry(){
                 {/* 모드 배지 */}
                 <div className="flex items-center gap-2 mb-3">
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/20 text-white">
-                    {result.mode==="혼적"?"📦 혼적(합짐)":"🚛 독차"}
+                    {result.mode==="혼적"?"혼적(합짐)":"독차"}
                   </span>
                   {result.mode==="혼적"&&<span className="text-[10px] text-white/70">{result.tier} · {result.effWeight.toLocaleString()}kg</span>}
                 </div>
@@ -680,8 +680,8 @@ export default function FreightRateInquiry(){
                 </marker>
               </defs>
 
-              {/* 바다 배경 (흰 패널에 녹아드는 연한 색) */}
-              <rect width="524" height="631" fill="#eef3f8" rx="4"/>
+              {/* 배경 — 흰색 패널과 동일 */}
+              <rect width="524" height="631" fill="white"/>
 
               {/* 도/시 폴리곤 */}
               {provinces.map(prov=>{
@@ -762,7 +762,7 @@ export default function FreightRateInquiry(){
                       <rect x="-45" y="-13" width="90" height="24" rx="12"
                         fill="white" fillOpacity="0.95" stroke="#94a3b8" strokeWidth="0.8"/>
                       <text x="0" y="0" textAnchor="middle" dominantBaseline="middle"
-                        fontSize="10" fill="#1B2B4B" fontWeight="700">견적 계산 완료 ✓</text>
+                        fontSize="10" fill="#1B2B4B" fontWeight="700">견적 계산 완료</text>
                     </g>
                   )}
                 </g>
