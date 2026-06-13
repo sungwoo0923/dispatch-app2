@@ -37,12 +37,12 @@ const PROVINCE_LABEL_POS = {
 };
 
 const PROVINCE_COLORS = {
-  경기: "#dce8f4", 서울: "#c8def2", 인천: "#cce0f0",
-  강원: "#ddeedd", 충북: "#ede8c4", 충남: "#e8ddc8",
-  세종: "#e4d8c0", 대전: "#e0d4bc", 경북: "#f0ddd0",
-  대구: "#e8d0c4", 전북: "#d8e8d4", 광주: "#cce0cc",
-  전남: "#c4ddd4", 경남: "#d4ddd0", 울산: "#ccd4e4",
-  부산: "#c4cee0", 제주: "#ede8bc",
+  경기: "#c4d8d0", 서울: "#b8cce0", 인천: "#b8cce0",
+  강원: "#b8ccd8", 충북: "#d4cce4", 충남: "#c4d8c4",
+  세종: "#c8d4c8", 대전: "#c4ccd8", 경북: "#e4d0c0",
+  대구: "#dcc0b4", 전북: "#e0e0c0", 광주: "#c0d8bc",
+  전남: "#c4d8c0", 경남: "#c0d0e4", 울산: "#bccce0",
+  부산: "#b8c8e0", 제주: "#e4e0b4",
 };
 
 const PROVINCE_COORDS = {
@@ -647,41 +647,47 @@ export default function FreightRateInquiry(){
             {(fromP||toP)&&<button onClick={reset} className="ml-auto text-[11px] text-gray-500 hover:text-red-500 border border-gray-200 rounded-md px-2 py-1 bg-white/80">초기화</button>}
           </div>
 
-          {/* SVG 지도 */}
-          <div className="flex-1 flex items-center justify-center p-4">
-            <svg viewBox="0 0 524 631" className="w-full max-w-[440px]" style={{userSelect:"none",filter:"drop-shadow(0 8px 24px rgba(27,43,75,0.18))"}}>
+          {/* SVG 지도 — 패딩 없이 패널을 꽉 채움 */}
+          <div className="flex-1 min-h-0">
+            <svg viewBox="0 0 524 631" className="w-full h-full" preserveAspectRatio="xMidYMid meet" style={{userSelect:"none",display:"block"}}>
               <defs>
-                {/* 3D 빛 그라디언트 — 좌상단에서 우하단으로 */}
-                <linearGradient id="provLight" x1="15%" y1="5%" x2="85%" y2="95%">
-                  <stop offset="0%"   stopColor="white"    stopOpacity="0.58"/>
-                  <stop offset="45%"  stopColor="white"    stopOpacity="0.06"/>
-                  <stop offset="100%" stopColor="#0a1428"  stopOpacity="0.22"/>
+                {/* 배경 그라디언트 — 다불러 참고 이미지 스타일 */}
+                <linearGradient id="mapBg" x1="90%" y1="0%" x2="10%" y2="100%">
+                  <stop offset="0%"   stopColor="#deeaf4"/>
+                  <stop offset="50%"  stopColor="#ecf3f8"/>
+                  <stop offset="100%" stopColor="#f4f7fb"/>
                 </linearGradient>
-                {/* 선택된 도/시 글로우 */}
+                {/* 도/시 광원 오버레이 */}
+                <linearGradient id="provLight" x1="15%" y1="5%" x2="85%" y2="95%">
+                  <stop offset="0%"   stopColor="white"   stopOpacity="0.5"/>
+                  <stop offset="50%"  stopColor="white"   stopOpacity="0.04"/>
+                  <stop offset="100%" stopColor="#0a1428" stopOpacity="0.18"/>
+                </linearGradient>
+                {/* 선택 글로우 */}
                 <radialGradient id="selGlow" cx="38%" cy="30%" r="65%">
-                  <stop offset="0%"   stopColor="white" stopOpacity="0.55"/>
+                  <stop offset="0%"   stopColor="white" stopOpacity="0.5"/>
                   <stop offset="100%" stopColor="white" stopOpacity="0"/>
                 </radialGradient>
-                {/* 기본 도/시 입체 그림자 */}
-                <filter id="provShadow" x="-6%" y="-6%" width="112%" height="112%">
-                  <feDropShadow dx="1" dy="2.5" stdDeviation="2.2" floodColor="#1B2B4B" floodOpacity="0.28"/>
+                {/* 기본 그림자 */}
+                <filter id="provShadow" x="-4%" y="-4%" width="108%" height="108%">
+                  <feDropShadow dx="0.5" dy="1.5" stdDeviation="1.5" floodColor="#4a6080" floodOpacity="0.20"/>
                 </filter>
-                {/* 호버 시 강조 그림자 */}
-                <filter id="provHover" x="-10%" y="-10%" width="120%" height="120%">
-                  <feDropShadow dx="2" dy="5" stdDeviation="4" floodColor="#1B2B4B" floodOpacity="0.42"/>
+                {/* 호버 그림자 */}
+                <filter id="provHover" x="-8%" y="-8%" width="116%" height="116%">
+                  <feDropShadow dx="1" dy="3" stdDeviation="3" floodColor="#1B2B4B" floodOpacity="0.32"/>
                 </filter>
-                {/* 선택 시 글로우 필터 */}
-                <filter id="provSel" x="-12%" y="-12%" width="124%" height="124%">
-                  <feDropShadow dx="0" dy="0" stdDeviation="5" floodColor="#3b82f6" floodOpacity="0.5"/>
-                  <feDropShadow dx="2" dy="5" stdDeviation="3" floodColor="#1B2B4B" floodOpacity="0.3"/>
+                {/* 선택 글로우 필터 */}
+                <filter id="provSel" x="-10%" y="-10%" width="120%" height="120%">
+                  <feDropShadow dx="0" dy="0" stdDeviation="4" floodColor="#3b82f6" floodOpacity="0.45"/>
+                  <feDropShadow dx="1" dy="3" stdDeviation="2" floodColor="#1B2B4B" floodOpacity="0.25"/>
                 </filter>
                 <marker id="arrowHead" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
                   <path d="M 0,0 L 8,4 L 0,8 Z" fill="#1B2B4B" opacity="0.85"/>
                 </marker>
               </defs>
 
-              {/* 배경 — 흰색 패널과 동일 */}
-              <rect width="524" height="631" fill="white"/>
+              {/* 배경 */}
+              <rect width="524" height="631" fill="url(#mapBg)"/>
 
               {/* 도/시 폴리곤 */}
               {provinces.map(prov=>{
@@ -698,8 +704,8 @@ export default function FreightRateInquiry(){
                 else if(isHover) fill="#c7dcfc";
 
                 const filt=isActive?"url(#provSel)":isHover?"url(#provHover)":"url(#provShadow)";
-                const sw=isActive?2.5:isHover?1.5:0.8;
-                const stroke=isActive?"rgba(255,255,255,0.9)":isHover?"rgba(100,150,220,0.9)":"rgba(155,178,210,0.75)";
+                const sw=isActive?2:isHover?1.2:1;
+                const stroke=isActive?"rgba(255,255,255,0.95)":"rgba(255,255,255,0.85)";
 
                 return(
                   <g key={prov}>
@@ -722,16 +728,13 @@ export default function FreightRateInquiry(){
                       stroke="none"
                       style={{pointerEvents:"none"}}
                     />
-                    {/* 라벨 — 흰 윤곽선으로 가독성 향상 */}
+                    {/* 라벨 — 윤곽선 없이 굵은 다크 텍스트 */}
                     <text
                       x={lx} y={ly}
                       textAnchor="middle" dominantBaseline="middle"
-                      fontSize={isSmall?11:13.5}
-                      fontWeight="700"
-                      fill={isActive?"white":"#1e293b"}
-                      stroke={isActive?"transparent":"white"}
-                      strokeWidth="3"
-                      paintOrder="stroke"
+                      fontSize={isSmall?12:15}
+                      fontWeight="800"
+                      fill={isActive?"white":"#374151"}
                       style={{pointerEvents:"none"}}
                     >{prov}</text>
                     {/* 출/하 뱃지 */}
