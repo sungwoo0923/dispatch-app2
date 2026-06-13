@@ -219,6 +219,31 @@ function calcRate(fromC,toC,vtId,ctId){
   return{distance:roadDist,min:minFare,max:maxFare,avg,fuelCost,mins};
 }
 
+// ─── 혼적(합짐) 요율표 ────────────────────────────────────────────────────
+const MIXED_TIERS=[
+  {maxKm:100,  base:28000, per100kg:3500,  label:"단거리"},
+  {maxKm:200,  base:42000, per100kg:5500,  label:"중단거리"},
+  {maxKm:300,  base:58000, per100kg:8000,  label:"중거리"},
+  {maxKm:500,  base:78000, per100kg:12000, label:"장거리"},
+  {maxKm:Infinity, base:95000, per100kg:16000, label:"초장거리"},
+];
+
+function calcMixedRate(fromC,toC,ctId,weightKg,cbm){
+  const [la1,lo1]=fromC, [la2,lo2]=toC;
+  const roadDist=Math.round(haversine(la1,lo1,la2,lo2)*1.35);
+  const ct=CARGO_TYPES.find(c=>c.id===ctId)||CARGO_TYPES[0];
+  const effWeight=Math.max(weightKg||0, (cbm||0)*250);
+  const tier=MIXED_TIERS.find(r=>roadDist<=r.maxKm)||MIXED_TIERS[MIXED_TIERS.length-1];
+  const units=Math.max(1,Math.ceil(effWeight/100));
+  const rawCost=tier.base+tier.per100kg*(units-1);
+  const withSurcharge=rawCost*(1+(ct.surcharge||0));
+  const avg=Math.round(withSurcharge/1000)*1000;
+  const minFare=Math.round(avg*0.85/1000)*1000;
+  const maxFare=Math.round(avg*1.15/1000)*1000;
+  const mins=Math.round(roadDist/80*60);
+  return{distance:roadDist,min:minFare,max:maxFare,avg,mins,effWeight,units,tier:tier.label,per100kg:tier.per100kg};
+}
+
 const fmtMoney=(n)=>{
   if(n>=10000){const v=(n/10000);return v%1===0?`${v}만원`:`${v.toFixed(1)}만원`;}
   return `${n.toLocaleString()}원`;
@@ -324,14 +349,24 @@ export default function FreightRateInquiry(){
   const [preference,setPreference]=useState(0);
   const [hover,setHover]=useState(null);
   const [cityStep,setCityStep]=useState(null);
+  const [freightMode,setFreightMode]=useState("독차");
+  const [mixWeightKg,setMixWeightKg]=useState("");
+  const [mixCbm,setMixCbm]=useState("");
 
   const result=useMemo(()=>{
     if(!fromC||!toC)return null;
-    return calcRate([fromC.la,fromC.lo],[toC.la,toC.lo],vehicle,cargoType);
-  },[fromC,toC,vehicle,cargoType]);
+    if(freightMode==="혼적"){
+      const wkg=parseFloat(mixWeightKg)||0;
+      const cbm=parseFloat(mixCbm)||0;
+      if(wkg===0&&cbm===0)return null;
+      return{mode:"혼적",...calcMixedRate([fromC.la,fromC.lo],[toC.la,toC.lo],cargoType,wkg,cbm)};
+    }
+    return{mode:"독차",...calcRate([fromC.la,fromC.lo],[toC.la,toC.lo],vehicle,cargoType)};
+  },[fromC,toC,vehicle,cargoType,freightMode,mixWeightKg,mixCbm]);
 
   const reset=useCallback(()=>{
     setStep("from");setFromP(null);setFromC(null);setToP(null);setToC(null);setCityStep(null);
+    setMixWeightKg("");setMixCbm("");
   },[]);
 
   const handleProvinceClick=(prov)=>{
@@ -359,9 +394,22 @@ export default function FreightRateInquiry(){
 
   return(
     <div className="w-full">
-      <div className="flex items-center gap-3 mb-4">
+      <div className="flex items-center gap-3 mb-4 flex-wrap">
         <h2 className="text-[18px] font-bold text-[#1B2B4B]">전국운임 조회</h2>
-        <span className="text-[11px] text-gray-400 bg-gray-100 rounded-full px-2 py-0.5">원하는 지역을 클릭해 <span className="text-blue-600 font-bold">5초</span> 만에 운임을 확인하세요</span>
+        {/* 독차 / 혼적 토글 */}
+        <div className="flex rounded-lg border border-gray-200 overflow-hidden shadow-sm">
+          {["독차","혼적"].map(m=>(
+            <button key={m} onClick={()=>{setFreightMode(m);setStep("from");setFromP(null);setFromC(null);setToP(null);setToC(null);setCityStep(null);}}
+              className={`px-4 py-1.5 text-[12px] font-bold transition ${freightMode===m?"bg-[#1B2B4B] text-white":"bg-white text-gray-500 hover:bg-gray-50"}`}>
+              {m==="독차"?"🚛 독차":"📦 혼적(합짐)"}
+            </button>
+          ))}
+        </div>
+        <span className="text-[11px] text-gray-400 bg-gray-100 rounded-full px-2 py-0.5">
+          {freightMode==="독차"
+            ? <>원하는 지역을 클릭해 <span className="text-blue-600 font-bold">5초</span> 만에 운임을 확인하세요</>
+            : <><span className="text-orange-500 font-bold">혼적</span> · 중량/CBM 입력 후 조회</>}
+        </span>
       </div>
 
       <div className="flex gap-4 min-h-[640px]">
@@ -412,11 +460,47 @@ export default function FreightRateInquiry(){
             </div>
           </div>
 
-          {/* 차량 종류 */}
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-            <div className="text-[11px] font-bold text-gray-400 mb-3 tracking-wide uppercase">차량 종류</div>
-            <VehicleDropdown vehicle={vehicle} onChange={setVehicle}/>
-          </div>
+          {/* 독차: 차량 종류 / 혼적: 중량·CBM 입력 */}
+          {freightMode==="독차"?(
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+              <div className="text-[11px] font-bold text-gray-400 mb-3 tracking-wide uppercase">차량 종류</div>
+              <VehicleDropdown vehicle={vehicle} onChange={setVehicle}/>
+            </div>
+          ):(
+            <div className="bg-white rounded-xl border border-orange-200 shadow-sm p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div className="text-[11px] font-bold text-orange-500 tracking-wide uppercase">화물 중량 / 부피</div>
+                <span className="text-[10px] text-gray-400 bg-orange-50 rounded px-2 py-0.5">1CBM = 250kg 기준</span>
+              </div>
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <label className="block text-[10px] text-gray-400 mb-1">중량 (kg)</label>
+                  <input
+                    type="number" min="0" placeholder="예: 500"
+                    value={mixWeightKg}
+                    onChange={e=>{setMixWeightKg(e.target.value);if(e.target.value)setMixCbm("");}}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-[13px] font-semibold focus:outline-none focus:border-orange-400"
+                  />
+                </div>
+                <div className="flex items-end pb-2 text-gray-400 text-[12px] font-medium">또는</div>
+                <div className="flex-1">
+                  <label className="block text-[10px] text-gray-400 mb-1">CBM (㎥)</label>
+                  <input
+                    type="number" min="0" step="0.1" placeholder="예: 2.5"
+                    value={mixCbm}
+                    onChange={e=>{setMixCbm(e.target.value);if(e.target.value)setMixWeightKg("");}}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-[13px] font-semibold focus:outline-none focus:border-orange-400"
+                  />
+                </div>
+              </div>
+              {(mixWeightKg||mixCbm)&&(
+                <div className="mt-2 text-[11px] text-orange-600 bg-orange-50 rounded-lg px-3 py-1.5">
+                  적용 중량: <b>{Math.max(parseFloat(mixWeightKg)||0,(parseFloat(mixCbm)||0)*250).toLocaleString()}kg</b>
+                  {" · "}단위: <b>{Math.max(1,Math.ceil(Math.max(parseFloat(mixWeightKg)||0,(parseFloat(mixCbm)||0)*250)/100))}개</b> (100kg 기준)
+                </div>
+              )}
+            </div>
+          )}
 
           {/* 화물 유형 */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
@@ -433,27 +517,48 @@ export default function FreightRateInquiry(){
             </div>
           </div>
 
-          {/* 기사 선호도 */}
-          <DriverPreference value={preference} onChange={setPreference}/>
+          {/* 독차 전용: 기사 선호도 */}
+          {freightMode==="독차"&&<DriverPreference value={preference} onChange={setPreference}/>}
+
+          {/* 혼적 전용: 가이드 */}
+          {freightMode==="혼적"&&(
+            <div className="bg-orange-50 rounded-xl border border-orange-100 p-3 text-[11px] text-orange-700 leading-relaxed">
+              <div className="font-bold mb-1">📦 혼적(합짐) 안내</div>
+              <div>• 100km 이하: 기본 28,000원 + 100kg당 3,500원</div>
+              <div>• 100~300km: 기본 28,000~58,000원 구간 요율</div>
+              <div>• 300km 초과: 기본 78,000원 + 100kg당 12,000원~</div>
+              <div className="mt-1 text-orange-500">※ 실제 운임은 업체별 협의에 따라 상이할 수 있습니다</div>
+            </div>
+          )}
 
           {/* 결과 */}
           {result&&step==="result"&&(
-            <div className="rounded-xl overflow-hidden shadow-lg" style={{background:"linear-gradient(135deg,#1B3A6B 0%,#2563eb 100%)"}}>
+            <div className="rounded-xl overflow-hidden shadow-lg"
+              style={{background: result.mode==="혼적"
+                ?"linear-gradient(135deg,#7c3aed 0%,#db2777 100%)"
+                :"linear-gradient(135deg,#1B3A6B 0%,#2563eb 100%)"}}>
               <div className="p-5">
+                {/* 모드 배지 */}
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/20 text-white">
+                    {result.mode==="혼적"?"📦 혼적(합짐)":"🚛 독차"}
+                  </span>
+                  {result.mode==="혼적"&&<span className="text-[10px] text-white/70">{result.tier} · {result.effWeight.toLocaleString()}kg</span>}
+                </div>
                 <div className="flex items-start justify-between mb-4">
                   <div>
                     <div className="text-[11px] text-white/60 mb-1">예상운임</div>
                     <div className="flex items-baseline gap-1">
-                      <span className="text-[30px] font-extrabold text-white leading-none">{fmtMoney(result.min)}</span>
-                      <span className="text-white/60 text-[22px] font-light leading-none">~</span>
-                      <span className="text-[30px] font-extrabold text-white leading-none">{fmtMoney(result.max)}</span>
+                      <span className="text-[28px] font-extrabold text-white leading-none">{fmtMoney(result.min)}</span>
+                      <span className="text-white/60 text-[20px] font-light leading-none">~</span>
+                      <span className="text-[28px] font-extrabold text-white leading-none">{fmtMoney(result.max)}</span>
                     </div>
                   </div>
                   <div className="text-right">
                     <div className="text-[9px] text-white/50">VAT 별도 · 광고 시세</div>
                     <div className="mt-1">
                       <div className="text-[10px] text-white/60">평균운임</div>
-                      <div className="text-[26px] font-extrabold text-blue-200 leading-none">{fmtMoney(result.avg)}</div>
+                      <div className="text-[24px] font-extrabold text-yellow-200 leading-none">{fmtMoney(result.avg)}</div>
                     </div>
                   </div>
                 </div>
@@ -471,8 +576,14 @@ export default function FreightRateInquiry(){
                 <div className="border-t border-white/15 pt-3 flex flex-wrap gap-x-4 gap-y-1">
                   <span className="text-[11px] text-white/70">거리: 약 {result.distance}km</span>
                   <span className="text-[11px] text-white/70">예상소요: {fmtTime(result.mins)}</span>
-                  <span className="text-[11px] text-white/70">경유가: {result.fuelCost.toLocaleString()}원</span>
-                  <span className="text-[11px] text-white/70">차종: {VEHICLE_TYPES.find(v=>v.id===vehicle)?.name}</span>
+                  {result.mode==="독차"&&<>
+                    <span className="text-[11px] text-white/70">경유가: {result.fuelCost?.toLocaleString()}원</span>
+                    <span className="text-[11px] text-white/70">차종: {VEHICLE_TYPES.find(v=>v.id===vehicle)?.name}</span>
+                  </>}
+                  {result.mode==="혼적"&&<>
+                    <span className="text-[11px] text-white/70">적재단위: {result.units}개</span>
+                    <span className="text-[11px] text-white/70">단가: {result.per100kg.toLocaleString()}원/100kg</span>
+                  </>}
                 </div>
 
                 <button onClick={reset} className="mt-4 w-full py-2 rounded-lg bg-white/15 hover:bg-white/25 text-white text-[12px] font-semibold transition">
@@ -510,8 +621,7 @@ export default function FreightRateInquiry(){
         </div>
 
         {/* ───────────── 오른쪽 지도 ───────────── */}
-        <div className="flex-1 rounded-xl border border-gray-200 shadow-sm flex flex-col overflow-hidden"
-          style={{background:"linear-gradient(160deg,#f0f4fa 0%,#eaf2fb 50%,#f0f4fa 100%)"}}>
+        <div className="flex-1 rounded-xl border border-gray-200 shadow-sm flex flex-col overflow-hidden bg-white">
           {/* 지도 헤더 */}
           <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-3">
             {step!=="result"&&(
@@ -570,14 +680,8 @@ export default function FreightRateInquiry(){
                 </marker>
               </defs>
 
-              {/* 바다 배경 */}
-              <rect width="524" height="631" fill="url(#seaBg)"/>
-              <defs>
-                <linearGradient id="seaBg" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%"   stopColor="#c8dff2"/>
-                  <stop offset="100%" stopColor="#b0cfe6"/>
-                </linearGradient>
-              </defs>
+              {/* 바다 배경 (흰 패널에 녹아드는 연한 색) */}
+              <rect width="524" height="631" fill="#eef3f8" rx="4"/>
 
               {/* 도/시 폴리곤 */}
               {provinces.map(prov=>{
