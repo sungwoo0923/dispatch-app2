@@ -651,12 +651,6 @@ export default function FreightRateInquiry(){
           <div className="flex-1 min-h-0">
             <svg viewBox="0 0 524 631" className="w-full h-full" preserveAspectRatio="xMidYMid meet" style={{userSelect:"none",display:"block"}}>
               <defs>
-                {/* 배경 그라디언트 — 다불러 참고 이미지 스타일 */}
-                <linearGradient id="mapBg" x1="90%" y1="0%" x2="10%" y2="100%">
-                  <stop offset="0%"   stopColor="#deeaf4"/>
-                  <stop offset="50%"  stopColor="#ecf3f8"/>
-                  <stop offset="100%" stopColor="#f4f7fb"/>
-                </linearGradient>
                 {/* 도/시 광원 오버레이 */}
                 <linearGradient id="provLight" x1="15%" y1="5%" x2="85%" y2="95%">
                   <stop offset="0%"   stopColor="white"   stopOpacity="0.5"/>
@@ -681,13 +675,14 @@ export default function FreightRateInquiry(){
                   <feDropShadow dx="0" dy="0" stdDeviation="4" floodColor="#3b82f6" floodOpacity="0.45"/>
                   <feDropShadow dx="1" dy="3" stdDeviation="2" floodColor="#1B2B4B" floodOpacity="0.25"/>
                 </filter>
-                <marker id="arrowHead" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
-                  <path d="M 0,0 L 8,4 L 0,8 Z" fill="#1B2B4B" opacity="0.85"/>
+                {/* 화살표 머리 — 파란색 크게 */}
+                <marker id="arrowHead" markerWidth="11" markerHeight="11" refX="6" refY="5.5" orient="auto">
+                  <path d="M 0,1 L 10,5.5 L 0,10 Z" fill="#3b82f6"/>
                 </marker>
               </defs>
 
-              {/* 배경 */}
-              <rect width="524" height="631" fill="url(#mapBg)"/>
+              {/* 배경 — 흰색 */}
+              <rect width="524" height="631" fill="white"/>
 
               {/* 도/시 폴리곤 */}
               {provinces.map(prov=>{
@@ -728,28 +723,16 @@ export default function FreightRateInquiry(){
                       stroke="none"
                       style={{pointerEvents:"none"}}
                     />
-                    {/* 라벨 — 윤곽선 없이 굵은 다크 텍스트 */}
-                    <text
-                      x={lx} y={ly}
-                      textAnchor="middle" dominantBaseline="middle"
-                      fontSize={isSmall?12:15}
-                      fontWeight="800"
-                      fill={isActive?"white":"#374151"}
-                      style={{pointerEvents:"none"}}
-                    >{prov}</text>
-                    {/* 출/하 뱃지 */}
-                    {isActive&&(
-                      <>
-                        <circle cx={lx} cy={ly-(isSmall?13:17)} r={9.5}
-                          fill="white" fillOpacity={0.95}
-                          stroke={isFrom?"#2563eb":"#f97316"} strokeWidth="1.5"/>
-                        <text x={lx} y={ly-(isSmall?13:17)}
-                          textAnchor="middle" dominantBaseline="middle"
-                          fontSize={10.5} fontWeight="800"
-                          fill={isFrom?"#2563eb":"#f97316"} style={{pointerEvents:"none"}}>
-                          {isFrom?"출":"하"}
-                        </text>
-                      </>
+                    {/* 라벨 — 비활성 지역만 표시 */}
+                    {!isActive&&(
+                      <text
+                        x={lx} y={ly}
+                        textAnchor="middle" dominantBaseline="middle"
+                        fontSize={isSmall?12:15}
+                        fontWeight="800"
+                        fill="#374151"
+                        style={{pointerEvents:"none"}}
+                      >{prov}</text>
                     )}
                   </g>
                 );
@@ -757,19 +740,45 @@ export default function FreightRateInquiry(){
 
               {/* 출→도 화살표 (결과 시) */}
               {arrowPath&&(
-                <g>
-                  <path d={arrowPath} fill="none" stroke="#1B2B4B" strokeWidth="2.5" strokeOpacity="0.75"
-                    markerEnd="url(#arrowHead)"/>
-                  {arrowFrom&&(
-                    <g transform={`translate(${arrowFrom[0]},${arrowFrom[1]-36})`}>
-                      <rect x="-45" y="-13" width="90" height="24" rx="12"
-                        fill="white" fillOpacity="0.95" stroke="#94a3b8" strokeWidth="0.8"/>
-                      <text x="0" y="0" textAnchor="middle" dominantBaseline="middle"
-                        fontSize="10" fill="#1B2B4B" fontWeight="700">견적 계산 완료</text>
-                    </g>
-                  )}
-                </g>
+                <path d={arrowPath} fill="none" stroke="#3b82f6" strokeWidth="4"
+                  strokeLinecap="round" strokeLinejoin="round"
+                  markerEnd="url(#arrowHead)"/>
               )}
+
+              {/* 플로팅 뱃지 — 항상 맨 위에 렌더링 */}
+              {[fromP&&{prov:fromP,label:"출",color:"#3b82f6",border:"#2563eb"},
+                toP&&{prov:toP,label:"하",color:"#f97316",border:"#ea580c"}]
+                .filter(Boolean)
+                .map(({prov,label,color,border})=>{
+                  const pos=PROVINCE_LABEL_POS[prov];
+                  if(!pos) return null;
+                  const [bx,by]=pos;
+                  const isSmall=SMALL.includes(prov);
+                  const stemY=by-(isSmall?28:34);
+                  return(
+                    <g key={label} style={{pointerEvents:"none"}}>
+                      {/* 연결 점 */}
+                      <circle cx={bx} cy={by} r={5} fill={color} fillOpacity="0.85"/>
+                      {/* 줄기 */}
+                      <line x1={bx} y1={by-6} x2={bx} y2={stemY+22}
+                        stroke={color} strokeWidth="2" strokeOpacity="0.6"/>
+                      {/* 원형 뱃지 */}
+                      <circle cx={bx} cy={stemY} r={20}
+                        fill={color} stroke="white" strokeWidth="2.5"
+                        filter="url(#provSel)"/>
+                      <text x={bx} y={stemY}
+                        textAnchor="middle" dominantBaseline="middle"
+                        fontSize="14" fontWeight="900" fill="white">{label}</text>
+                      {/* 지역명 */}
+                      <rect x={bx-22} y={stemY+23} width="44" height="16" rx="8"
+                        fill="white" fillOpacity="0.92" stroke={border} strokeWidth="1"/>
+                      <text x={bx} y={stemY+31}
+                        textAnchor="middle" dominantBaseline="middle"
+                        fontSize="10" fontWeight="800" fill={border}>{prov}</text>
+                    </g>
+                  );
+                })
+              }
 
               {/* 호버 툴팁 */}
               {hover&&!fromP&&!toP&&(()=>{

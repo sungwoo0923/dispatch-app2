@@ -2355,6 +2355,20 @@ return (
             </div>
 
             <button
+              className="md:hidden px-3 py-1.5 rounded-md bg-[#1B2B4B]/80 hover:bg-[#1B2B4B] text-white text-xs font-semibold transition"
+              onClick={()=>{
+                const meta=document.querySelector('meta[name="viewport"]');
+                if(meta){
+                  const isPC=meta.content.includes('width=1200');
+                  meta.content=isPC
+                    ?'width=device-width,initial-scale=1'
+                    :'width=1200,initial-scale=1';
+                }
+              }}
+            >
+              PC버전
+            </button>
+            <button
               onClick={logout}
               className="px-3 py-1.5 rounded-md bg-red-500/80 hover:bg-red-500 text-white text-xs font-semibold transition"
             >
