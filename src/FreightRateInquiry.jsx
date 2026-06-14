@@ -382,14 +382,16 @@ export default function FreightRateInquiry(){
   const provinces=Object.keys(PROVINCE_PATHS);
   const SMALL=["서울","인천","세종","대전","대구","광주","울산","부산","제주"];
 
-  // 화살표 제어점 계산
+  // 화살표 제어점 계산 — 뱃지 하단 위치(ly-11)를 연결점으로 사용
   const arrowFrom=fromP?PROVINCE_LABEL_POS[fromP]:null;
   const arrowTo=toP?PROVINCE_LABEL_POS[toP]:null;
   let arrowPath=null;
   if(arrowFrom&&arrowTo&&step==="result"){
-    const mx=(arrowFrom[0]+arrowTo[0])/2;
-    const my=(arrowFrom[1]+arrowTo[1])/2-50;
-    arrowPath=`M ${arrowFrom[0]},${arrowFrom[1]} Q ${mx},${my} ${arrowTo[0]},${arrowTo[1]}`;
+    const fx=arrowFrom[0], fy=arrowFrom[1]-11;
+    const tx=arrowTo[0],   ty=arrowTo[1]-11;
+    const mx=(fx+tx)/2;
+    const my=(fy+ty)/2-50;
+    arrowPath=`M ${fx},${fy} Q ${mx},${my} ${tx},${ty}`;
   }
 
   return(
@@ -738,13 +740,6 @@ export default function FreightRateInquiry(){
                 );
               })}
 
-              {/* 출→도 화살표 (결과 시) */}
-              {arrowPath&&(
-                <path d={arrowPath} fill="none" stroke="#3b82f6" strokeWidth="4"
-                  strokeLinecap="round" strokeLinejoin="round"
-                  markerEnd="url(#arrowHead)"/>
-              )}
-
               {/* 플로팅 뱃지 — 항상 맨 위에 렌더링 */}
               {[fromP&&{prov:fromP,label:"출",color:"#3b82f6",border:"#2563eb"},
                 toP&&{prov:toP,label:"하",color:"#f97316",border:"#ea580c"}]
@@ -779,6 +774,13 @@ export default function FreightRateInquiry(){
                   );
                 })
               }
+
+              {/* 출→도 화살표 — 최상위 레이어로 이동해 항상 보이게 */}
+              {arrowPath&&(
+                <path d={arrowPath} fill="none" stroke="#3b82f6" strokeWidth="4"
+                  strokeLinecap="round" strokeLinejoin="round"
+                  markerEnd="url(#arrowHead)"/>
+              )}
 
               {/* 호버 툴팁 */}
               {hover&&!fromP&&!toP&&(()=>{

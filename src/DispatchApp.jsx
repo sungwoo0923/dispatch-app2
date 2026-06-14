@@ -2355,7 +2355,7 @@ return (
             </div>
 
             <button
-              className="md:hidden px-3 py-1.5 rounded-md bg-[#1B2B4B]/80 hover:bg-[#1B2B4B] text-white text-xs font-semibold transition"
+              className="px-3 py-1.5 rounded-md bg-[#1B2B4B]/80 hover:bg-[#1B2B4B] text-white text-xs font-semibold transition border border-white/20"
               onClick={()=>{
                 const meta=document.querySelector('meta[name="viewport"]');
                 if(meta){
