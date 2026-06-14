@@ -1842,6 +1842,7 @@ export default function DispatchApp({ role, user, userCompany = "" }) {
   const navigate = useNavigate();
   // ⭐ 고정거래처 매출 실시간 구독
   const [fixedRows, setFixedRows] = useState([]);
+  const [isPCMode, setIsPCMode] = useState(false);
 // ⭐ 고정거래처 매출 Firestore 실시간 구독
 useEffect(() => {
   const unsub = onSnapshot(collection(db, "fixedClients"), (snap) => {
@@ -2355,18 +2356,21 @@ return (
             </div>
 
             <button
-              className="px-3 py-1.5 rounded-md bg-[#1B2B4B]/80 hover:bg-[#1B2B4B] text-white text-xs font-semibold transition border border-white/20"
+              className="px-3 py-1.5 rounded-md bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition border border-white/25"
               onClick={()=>{
                 const meta=document.querySelector('meta[name="viewport"]');
                 if(meta){
-                  const isPC=meta.content.includes('width=1200');
-                  meta.content=isPC
-                    ?'width=device-width,initial-scale=1'
-                    :'width=1200,initial-scale=1';
+                  if(isPCMode){
+                    meta.content='width=device-width,initial-scale=1';
+                    setIsPCMode(false);
+                  } else {
+                    meta.content='width=1200,initial-scale=1';
+                    setIsPCMode(true);
+                  }
                 }
               }}
             >
-              PC버전
+              {isPCMode?"모바일버전":"PC버전"}
             </button>
             <button
               onClick={logout}

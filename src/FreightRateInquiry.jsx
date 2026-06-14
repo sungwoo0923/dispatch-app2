@@ -588,9 +588,20 @@ export default function FreightRateInquiry(){
                   </>}
                 </div>
 
-                <button onClick={reset} className="mt-4 w-full py-2 rounded-lg bg-white/15 hover:bg-white/25 text-white text-[12px] font-semibold transition">
-                  다시 조회
-                </button>
+                <div className="mt-4 flex gap-2">
+                  <button onClick={reset} className="flex-1 py-2 rounded-lg bg-white/15 hover:bg-white/25 text-white text-[12px] font-semibold transition">
+                    다시 조회
+                  </button>
+                  <button
+                    onClick={()=>{
+                      const route=`${fromP} ${fromC?.n||""} → ${toP} ${toC?.n||""}`;
+                      const modeStr=result.mode==="혼적"?`혼적(합짐) · ${result.effWeight?.toLocaleString()}kg`:`독차 · ${VEHICLE_TYPES.find(v=>v.id===vehicle)?.name||""}`;
+                      const text=`[운임견적]\n경로: ${route}\n구분: ${modeStr}\n거리: 약 ${result.distance}km · 예상 ${fmtTime(result.mins)}\n운임: ${fmtMoney(result.min)}~${fmtMoney(result.max)} (평균 ${fmtMoney(result.avg)})\n※ VAT 별도 · 광고시세 기준`;
+                      navigator.clipboard.writeText(text).catch(()=>{});
+                    }}
+                    className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white/80 text-[12px] font-semibold transition border border-white/20"
+                  >복사</button>
+                </div>
               </div>
             </div>
           )}
@@ -686,57 +697,48 @@ export default function FreightRateInquiry(){
               {/* 배경 — 흰색 */}
               <rect width="524" height="631" fill="white"/>
 
-              {/* 도/시 폴리곤 */}
+              {/* 레이어 1: 도/시 채색 + 3D 오버레이 */}
               {provinces.map(prov=>{
                 const isFrom=prov===fromP;
                 const isTo=prov===toP;
                 const isHover=prov===hover;
                 const isActive=isFrom||isTo;
-                const isSmall=SMALL.includes(prov);
-                const [lx,ly]=PROVINCE_LABEL_POS[prov]||[0,0];
-
                 let fill=PROVINCE_COLORS[prov]||"#e8edf2";
                 if(isFrom) fill="#3b82f6";
                 else if(isTo) fill="#f97316";
                 else if(isHover) fill="#c7dcfc";
-
                 const filt=isActive?"url(#provSel)":isHover?"url(#provHover)":"url(#provShadow)";
                 const sw=isActive?2:isHover?1.2:1;
                 const stroke=isActive?"rgba(255,255,255,0.95)":"rgba(255,255,255,0.85)";
-
                 return(
-                  <g key={prov}>
-                    {/* 입체 베이스 레이어 */}
-                    <path
-                      d={PROVINCE_PATHS[prov]}
-                      fill={fill}
-                      stroke={stroke}
-                      strokeWidth={sw}
-                      filter={filt}
-                      style={{cursor:"pointer",transition:"fill 0.18s,filter 0.18s"}}
-                      onMouseEnter={()=>setHover(prov)}
-                      onMouseLeave={()=>setHover(null)}
-                      onClick={()=>handleProvinceClick(prov)}
-                    />
-                    {/* 3D 광원 오버레이 */}
-                    <path
-                      d={PROVINCE_PATHS[prov]}
-                      fill={isActive?"url(#selGlow)":"url(#provLight)"}
-                      stroke="none"
-                      style={{pointerEvents:"none"}}
-                    />
-                    {/* 라벨 — 비활성 지역만 표시 */}
-                    {!isActive&&(
-                      <text
-                        x={lx} y={ly}
-                        textAnchor="middle" dominantBaseline="middle"
-                        fontSize={isSmall?12:15}
-                        fontWeight="800"
-                        fill="#374151"
-                        style={{pointerEvents:"none"}}
-                      >{prov}</text>
-                    )}
+                  <g key={`fill-${prov}`}>
+                    <path d={PROVINCE_PATHS[prov]} fill={fill} stroke={stroke} strokeWidth={sw}
+                      filter={filt} style={{cursor:"pointer",transition:"fill 0.18s,filter 0.18s"}}
+                      onMouseEnter={()=>setHover(prov)} onMouseLeave={()=>setHover(null)}
+                      onClick={()=>handleProvinceClick(prov)}/>
+                    <path d={PROVINCE_PATHS[prov]} fill={isActive?"url(#selGlow)":"url(#provLight)"}
+                      stroke="none" style={{pointerEvents:"none"}}/>
                   </g>
+                );
+              })}
+
+              {/* 레이어 2: 화살표 — 채색 위, 지역명 아래 */}
+              {arrowPath&&(
+                <path d={arrowPath} fill="none" stroke="#3b82f6" strokeWidth="4"
+                  strokeLinecap="round" strokeLinejoin="round"
+                  markerEnd="url(#arrowHead)"/>
+              )}
+
+              {/* 레이어 3: 지역 텍스트 라벨 (비활성만) */}
+              {provinces.map(prov=>{
+                if(prov===fromP||prov===toP) return null;
+                const isSmall=SMALL.includes(prov);
+                const [lx,ly]=PROVINCE_LABEL_POS[prov]||[0,0];
+                return(
+                  <text key={`label-${prov}`}
+                    x={lx} y={ly} textAnchor="middle" dominantBaseline="middle"
+                    fontSize={isSmall?12:15} fontWeight="800" fill="#374151"
+                    style={{pointerEvents:"none"}}>{prov}</text>
                 );
               })}
 
@@ -774,13 +776,6 @@ export default function FreightRateInquiry(){
                   );
                 })
               }
-
-              {/* 출→도 화살표 — 최상위 레이어로 이동해 항상 보이게 */}
-              {arrowPath&&(
-                <path d={arrowPath} fill="none" stroke="#3b82f6" strokeWidth="4"
-                  strokeLinecap="round" strokeLinejoin="round"
-                  markerEnd="url(#arrowHead)"/>
-              )}
 
               {/* 호버 툴팁 */}
               {hover&&!fromP&&!toP&&(()=>{
