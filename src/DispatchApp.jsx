@@ -2789,7 +2789,7 @@ const FuelSlideWidget = React.memo(function FuelSlideWidget() {
 React.useEffect(() => {
   async function loadFuel() {
     try {
-      const res = await fetch(`/fuel?area=${area || "01"}`);
+      const res = await fetch(`/api/fuel?area=${area || "01"}`);
       const data = await res.json();
 
       const oil = Array.isArray(data?.RESULT?.OIL) ? data.RESULT.OIL : [];
@@ -6335,7 +6335,7 @@ function FuelPriceWidget({ apiKey }) {
 React.useEffect(() => {
   async function loadFuel() {
     try {
-      const res = await fetch(`/fuel?area=${area || "01"}`)
+      const res = await fetch(`/api/fuel?area=${area || "01"}`)
       const data = await res.json();
       setPrices(data?.RESULT?.OIL || []);
     } catch (e) {
