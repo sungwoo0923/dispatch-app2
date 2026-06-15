@@ -21,6 +21,15 @@ const TRUCKS = [
   { id: "trailer", name: "추레라",    L: 13.6, W: 2.45, maxKg: 27000, wc: 3 },
 ];
 
+// Truck size markers for the comparison chart
+const MARKERS = [
+  { label: "5톤",           L: 6.2  },
+  { label: "5톤+, 5톤+축",  L: 7.4  },
+  { label: "11~15톤",       L: 9.1  },
+  { label: "18톤, 22~25톤", L: 10.1 },
+  { label: "추레라",        L: 13.6 },
+];
+
 function calcFit(truckL, truckW, pw, pd, mode) {
   const f = (l, w, a, b) => ({
     cols: Math.floor(w / a), rows: Math.floor(l / b),
@@ -38,215 +47,215 @@ function calcFit(truckL, truckW, pw, pd, mode) {
   }
 }
 
-// ── 트럭 측면뷰 SVG ────────────────────────────────────────────────────────
-function TruckSideView({ truck, fit, stacking, bodyType, palletCount }) {
-  const VW = 900, VH = 310;
-  const groundY = 278;
+// ── 트럭 3D 뷰 SVG (다불러 참고 스타일) ─────────────────────────────────────
+function TruckSideView({ truck, fit, stacking, palletCount, pSize }) {
+  const VW = 900, VH = 290;
+  const GY = 244;   // 지면 y
 
-  const isLg = truck.maxKg >= 11000;
-  const isSm = truck.maxKg <= 2500;
+  // ── 화물칸 기하학 ────────────────────────────────────────────
+  const BLX = 190;   // 화물칸 시작 x
+  const BRX = 856;   // 추레라(13.6m) 끝 x
+  const MAX_L = 13.6;
+  const PX_M = (BRX - BLX) / MAX_L;  // ~48.97 px/m
 
-  const wheelR    = isSm ? 22 : isLg ? 34 : 28;
-  const cabW      = isSm ? 118 : isLg ? 188 : 158;
-  const cabH      = isSm ? 126 : isLg ? 186 : 158;
-  const cabX      = 28;
-  const cabEndX   = cabX + cabW;
+  const BNY = GY;       // 가까운 모서리(하단) y
+  const BSX = 20;       // 먼 모서리 x 오프셋(우)
+  const BSY = 64;       // 먼 모서리 y 오프셋(상)
+  const BFY = BNY - BSY; // 먼 모서리 y = 180
 
-  const axleY      = groundY - wheelR;
-  const bedTopY    = axleY - wheelR - 2;
-  const bedH       = 16;
-  const cargoStartX = cabEndX - 12;
-  const cargoEndX  = VW - 18;
-  const cargoW     = cargoEndX - cargoStartX;
-  const scale      = cargoW / truck.L;
+  const MAX_W = 2.45;
+  const SX_M = BSX / MAX_W;
+  const SY_M = BSY / MAX_W;
 
-  const isWing   = bodyType === "윙바디";
-  const layers   = stacking === "2단" ? 2 : 1;
-  const singleH  = Math.min(isSm ? 78 : 108, bedTopY - (groundY - cabH) - 8);
-  const cargoH   = singleH * (stacking === "2단" ? 1.82 : 1);
-  const cargoTopY = bedTopY - cargoH;
+  const TRUCK_END_X = BLX + truck.L * PX_M;
 
-  const palLayerH = (singleH - 6) / layers;
-  const depthPx   = fit.pd * scale;
+  // ── 파렛트 기하학 ────────────────────────────────────────────
+  const palD   = fit.pd;
+  const palDpx = palD * PX_M;
+  const palWshX = (pSize.w / MAX_W) * BSX;
+  const palWshY = (pSize.w / MAX_W) * BSY;
+  const PAL_H  = Math.max(22, Math.min(42, palWshY * 0.88));
+  const GAP    = 2;
+  const layers = stacking === "2단" ? 2 : 1;
 
+  // 파렛트 위치 생성
   const pallets = [];
   let cnt = 0;
-  for (let layer = 0; layer < layers && cnt < palletCount; layer++) {
-    for (let r = 0; r < fit.rows && cnt < palletCount; r++) {
-      const px = cargoStartX + 8 + r * (depthPx + 1.5);
-      if (px + depthPx > cargoEndX - 6) break;
-      pallets.push({ x: px, y: bedTopY - (layer + 1) * (palLayerH + 3) - 1, w: depthPx - 1, h: palLayerH });
-      cnt++;
+
+  const pushPal = (bx, by) => {
+    pallets.push({ bx, by, pw: palDpx - GAP, ph: PAL_H, dx: palWshX, dy: -palWshY });
+    cnt++;
+  };
+
+  outer:
+  for (let layer = 0; layer < layers; layer++) {
+    for (let row = 0; row < fit.rows; row++) {
+      for (let col = 0; col < fit.cols; col++) {
+        if (cnt >= palletCount) break outer;
+        pushPal(
+          BLX + row * palDpx + col * palWshX,
+          BNY - col * palWshY - layer * (PAL_H + GAP)
+        );
+      }
     }
     if (fit.mixed) {
       const m = fit.mixed;
-      const md = m.pd * scale;
-      for (let r = 0; r < m.rows && cnt < palletCount; r++) {
-        const px = cargoStartX + 8 + m.offsetL * scale + r * (md + 1.5);
-        if (px + md > cargoEndX - 6) break;
-        pallets.push({ x: px, y: bedTopY - (layer + 1) * (palLayerH + 3) - 1, w: md - 1, h: palLayerH });
-        cnt++;
+      const mDpx = m.pd * PX_M;
+      for (let row = 0; row < m.rows; row++) {
+        for (let col = 0; col < m.cols; col++) {
+          if (cnt >= palletCount) break outer;
+          pushPal(
+            BLX + m.offsetL * PX_M + row * mDpx + col * palWshX,
+            BNY - col * palWshY - layer * (PAL_H + GAP)
+          );
+        }
       }
     }
   }
 
-  const frontWheelX = cabX + cabW * 0.67;
-  const rearCnt = truck.wc;
-  const rearWheels = Array.from({ length: rearCnt }, (_, i) =>
-    cargoStartX + cargoW * (rearCnt === 1 ? 0.52 : rearCnt === 2 ? (i === 0 ? 0.35 : 0.68) : (0.22 + i * 0.28))
-  );
+  // 먼 파렛트부터 먼저 그려야 앞쪽 파렛트가 위에 나옴
+  pallets.sort((a, b) => a.by - b.by);
+
+  // ── 바퀴 ─────────────────────────────────────────────────────
+  const WR = 20;
+  const WY = GY + WR + 1;
+  const frontWX = 152;
+  const rearFracs = truck.wc === 1 ? [0.55] : truck.wc === 2 ? [0.28, 0.68] : [0.2, 0.5, 0.8];
+  const rearWXs   = rearFracs.map(f => BLX + truck.L * PX_M * f);
 
   const Wheel = ({ cx }) => (
     <g>
-      <circle cx={cx} cy={axleY} r={wheelR} fill="#333333"/>
-      <circle cx={cx} cy={axleY} r={wheelR * 0.62} fill="#4a4a4a"/>
-      <circle cx={cx} cy={axleY} r={wheelR * 0.22} fill="#888"/>
-      {[0,60,120,180,240,300].map(d => {
-        const rad = d * Math.PI / 180;
-        return <circle key={d} cx={cx + Math.cos(rad)*wheelR*0.41} cy={axleY + Math.sin(rad)*wheelR*0.41} r={wheelR*0.082} fill="#aaa"/>;
-      })}
+      <ellipse cx={cx} cy={WY} rx={WR} ry={WR * 0.9} fill="#3a3a3a"/>
+      <ellipse cx={cx} cy={WY} rx={WR * 0.63} ry={WR * 0.56} fill="#555"/>
+      <ellipse cx={cx} cy={WY} rx={WR * 0.23} ry={WR * 0.21} fill="#888"/>
     </g>
   );
 
   return (
-    <svg viewBox={`0 0 ${VW} ${VH}`} className="w-full h-full" style={{ userSelect:"none" }}>
+    <svg viewBox={`0 0 ${VW} ${VH}`} className="w-full h-full" style={{ userSelect: "none" }}>
 
-      {/* ── 화물칸 바닥 ── */}
-      <rect x={cargoStartX} y={bedTopY} width={cargoW} height={bedH} fill="#C8C8C8" stroke="#9a9a9a" strokeWidth="1" rx="2"/>
-      {/* 바닥 상단 레일 */}
-      <rect x={cargoStartX + 4} y={bedTopY - 7} width={cargoW - 8} height={5} fill="#B4B4B4" stroke="#9a9a9a" strokeWidth="0.5" rx="1"/>
-      {/* 크로스 멤버 */}
-      {Array.from({ length: Math.min(12, Math.ceil(cargoW / 58)) }).map((_, i) => {
-        const x = cargoStartX + 8 + i * ((cargoW - 16) / Math.max(1, Math.ceil(cargoW / 58) - 1));
-        return <rect key={i} x={x - 1} y={bedTopY + 4} width={3} height={bedH - 5} fill="#9a9a9a" rx="1"/>;
+      {/* ── 화물칸 표면 (평행사변형) ── */}
+      <polygon
+        points={`${BLX},${BNY} ${BRX},${BNY} ${BRX+BSX},${BFY} ${BLX+BSX},${BFY}`}
+        fill="#CECECE" stroke="#B0B0B0" strokeWidth="1"/>
+
+      {/* 화물칸 깊이 가이드선 */}
+      {[0.2, 0.4, 0.6, 0.8].map((f, i) => {
+        const x = BLX + (BRX - BLX) * f;
+        return <line key={i} x1={x} y1={BNY} x2={x + BSX} y2={BFY}
+          stroke="#C0C0C0" strokeWidth="0.6" strokeDasharray="4,3"/>;
       })}
 
-      {/* ── 윙바디 / 카고 박스 ── */}
-      {isWing ? (
-        <>
-          {/* 옆면 패널 */}
-          <rect x={cargoStartX + 6} y={cargoTopY} width={cargoW - 12} height={cargoH}
-            fill="rgba(208,218,230,0.18)" stroke="#B0B8C4" strokeWidth="1.5" rx="2"/>
-          {/* 지붕 */}
-          <rect x={cargoStartX + 6} y={cargoTopY} width={cargoW - 12} height={9} fill="#C0C6CE" stroke="#A8B0B8" strokeWidth="1" rx="2"/>
-          {/* 하단 실 */}
-          <rect x={cargoStartX + 6} y={bedTopY - 10} width={cargoW - 12} height={7} fill="#A8AEAD" stroke="#909898" strokeWidth="0.5"/>
-          {/* 윙 패널 힌지선 */}
-          {[0.33, 0.66].map(f => (
-            <line key={f}
-              x1={cargoStartX + 6 + (cargoW - 12) * f} y1={cargoTopY + 9}
-              x2={cargoStartX + 6 + (cargoW - 12) * f} y2={bedTopY - 10}
-              stroke="#C0C6CE" strokeWidth="1" strokeDasharray="4,3"/>
-          ))}
-        </>
-      ) : (
-        /* 카고 — 오픈 사이드레일만 */
-        <>
-          <rect x={cargoStartX + 6} y={cargoTopY} width={8} height={cargoH} fill="#C0C0C0" stroke="#A0A0A0" strokeWidth="1" rx="1"/>
-          <rect x={cargoEndX - 14} y={cargoTopY} width={8} height={cargoH} fill="#C0C0C0" stroke="#A0A0A0" strokeWidth="1" rx="1"/>
-          <rect x={cargoStartX + 6} y={cargoTopY} width={cargoW - 12} height={6} fill="#B8B8B8" stroke="#A0A0A0" strokeWidth="0.5"/>
-        </>
-      )}
+      {/* 가까운 레일(굵게) */}
+      <line x1={BLX} y1={BNY} x2={BRX} y2={BNY} stroke="#A8A8A8" strokeWidth="2.5"/>
+      {/* 먼 레일 */}
+      <line x1={BLX+BSX} y1={BFY} x2={BRX+BSX} y2={BFY} stroke="#B8B8B8" strokeWidth="1.2"/>
+      {/* 왼쪽 세로 레일 */}
+      <line x1={BLX} y1={BNY} x2={BLX+BSX} y2={BFY} stroke="#B0B0B0" strokeWidth="1.2"/>
+      {/* 현재 트럭 끝 표시 */}
+      <line x1={TRUCK_END_X} y1={BNY} x2={TRUCK_END_X+BSX} y2={BFY}
+        stroke="#909090" strokeWidth="1.5"/>
 
-      {/* ── 파렛트 ── */}
+      {/* 오른쪽 끝 레일 */}
+      <line x1={BRX} y1={BNY} x2={BRX+BSX} y2={BFY} stroke="#B0B0B0" strokeWidth="1.2"/>
+
+      {/* ── 차종별 길이 마커 ── */}
+      {MARKERS.map((m, i) => {
+        const mx = BLX + m.L * PX_M;
+        if (mx > BRX + 5) return null;
+        const ex = mx + 14 + i * 2;
+        const ey = BNY + 22 + i * 18;
+        const isCur = Math.abs(m.L - truck.L) < 0.05;
+        return (
+          <g key={i}>
+            <line x1={mx} y1={BNY + 1} x2={ex} y2={ey - 3}
+              stroke={isCur ? "#1B2B4B" : "#999"} strokeWidth={isCur ? 1.8 : 1}/>
+            <text x={ex + 2} y={ey + 1}
+              fontSize="9" fill={isCur ? "#1B2B4B" : "#888"}
+              fontWeight={isCur ? "bold" : "normal"} fontFamily="sans-serif">
+              {m.label}
+            </text>
+            <text x={ex + 2} y={ey + 11}
+              fontSize="8.5" fill={isCur ? "#2d4a7a" : "#aaa"} fontFamily="sans-serif">
+              {m.L.toFixed(1)}m
+            </text>
+          </g>
+        );
+      })}
+
+      {/* ── 파렛트 (3D 박스, 주황색) ── */}
       {pallets.map((p, i) => (
         <g key={i}>
-          <rect x={p.x} y={p.y} width={p.w} height={p.h}
-            fill="#4E81B4" stroke="#3A6A9A" strokeWidth="0.8" rx="1"/>
-          <rect x={p.x + 1} y={p.y + 1} width={p.w - 2} height={Math.min(6, p.h * 0.22)}
-            fill="rgba(255,255,255,0.22)" rx="1"/>
-          <line x1={p.x + 1} y1={p.y + p.h * 0.38} x2={p.x + p.w - 1} y2={p.y + p.h * 0.38}
-            stroke="rgba(255,255,255,0.18)" strokeWidth="0.7"/>
-          <line x1={p.x + 1} y1={p.y + p.h * 0.72} x2={p.x + p.w - 1} y2={p.y + p.h * 0.72}
-            stroke="rgba(255,255,255,0.18)" strokeWidth="0.7"/>
+          {/* 윗면 */}
+          <polygon
+            points={`${p.bx},${p.by-p.ph} ${p.bx+p.pw},${p.by-p.ph} ${p.bx+p.pw+p.dx},${p.by-p.ph+p.dy} ${p.bx+p.dx},${p.by+p.dy}`}
+            fill="#FCD34D" stroke="#D97706" strokeWidth="0.7"/>
+          {/* 앞면 */}
+          <rect x={p.bx} y={p.by-p.ph} width={p.pw} height={p.ph}
+            fill="#F59E0B" stroke="#D97706" strokeWidth="0.7"/>
+          {/* 오른쪽 측면 */}
+          <polygon
+            points={`${p.bx+p.pw},${p.by-p.ph} ${p.bx+p.pw+p.dx},${p.by-p.ph+p.dy} ${p.bx+p.pw+p.dx},${p.by+p.dy} ${p.bx+p.pw},${p.by}`}
+            fill="#B45309" stroke="#D97706" strokeWidth="0.7"/>
         </g>
       ))}
 
-      {/* ── 바퀴 ── */}
-      <Wheel cx={frontWheelX}/>
-      {rearWheels.map((cx, i) => (
-        <g key={i}>
-          <Wheel cx={cx - (isSm ? 0 : 3.5)}/>
-          {!isSm && <Wheel cx={cx + 4.5}/>}
-        </g>
-      ))}
-
-      {/* 프레임 / 샤시 라인 */}
-      <line x1={cargoStartX} y1={bedTopY + bedH} x2={cargoEndX} y2={bedTopY + bedH} stroke="#888" strokeWidth="2"/>
-
-      {/* ── 캡 ── */}
-      {/* 후드 */}
-      <rect x={cabX} y={groundY - cabH * 0.30} width={cabW * 0.36} height={cabH * 0.30}
-        fill="#D0D0D0" stroke="#A8A8A8" strokeWidth="1.2" rx="3"/>
-      {/* 캡 바디 */}
-      <rect x={cabX + cabW * 0.24} y={groundY - cabH} width={cabW * 0.76} height={cabH}
-        fill="#D0D0D0" stroke="#A8A8A8" strokeWidth="1.2" rx="5"/>
-      {/* 앞부분 연결 */}
-      <rect x={cabX} y={groundY - cabH * 0.30} width={cabW * 0.30} height={cabH * 0.30}
-        fill="#D0D0D0" stroke="none"/>
-
-      {/* 캡 루프 에어 디플렉터 */}
-      <rect x={cabX + cabW * 0.26} y={groundY - cabH - (isSm ? 3 : 8)} width={cabW * 0.72} height={isSm ? 8 : 14}
-        fill="#C4C4C4" stroke="#A8A8A8" strokeWidth="1" rx="3"/>
-
-      {/* 배기관 (대형) */}
-      {isLg && <rect x={cabX + cabW * 0.28} y={groundY - cabH - 36} width={10} height={32} fill="#909090" stroke="#777" strokeWidth="0.8" rx="3"/>}
-
-      {/* 앞유리 */}
-      {(() => {
-        const wx  = cabX + cabW * 0.32, wy  = groundY - cabH + 13;
-        const wx2 = cabEndX - 5,        wy2 = groundY - cabH + 10;
-        const wh  = cabH * 0.50;
+      {/* 파렛 수량 표시 */}
+      {cnt > 0 && (() => {
+        const last = pallets.reduce((m, p) => (p.bx + p.pw > m.bx + m.pw ? p : m), pallets[0]);
         return (
-          <path d={`M ${wx},${wy} L ${wx2},${wy2} L ${wx2},${wy2+wh} L ${wx},${wy+wh*1.04} Z`}
-            fill="#AED6F1" stroke="#89C0DE" strokeWidth="1.2"/>
+          <text x={last.bx + last.pw * 0.5} y={last.by + 5}
+            textAnchor="middle" fill="white" fontSize="14" fontWeight="900"
+            stroke="#92400E" strokeWidth="0.5" fontFamily="sans-serif">
+            {cnt}
+          </text>
         );
       })()}
 
+      {/* ── 바퀴 ── */}
+      <Wheel cx={frontWX}/>
+      {rearWXs.map((cx, i) => <Wheel key={i} cx={cx}/>)}
+
+      {/* ── 격벽 (캡↔화물칸 구분) ── */}
+      <rect x={186} y={GY - 112} width={14} height={112} fill="#E0E0E0" stroke="#C0C0C0" strokeWidth="1"/>
+      <rect x={187} y={GY - 108} width={12} height={104} fill="#F4F4F4" stroke="none"/>
+
+      {/* ── 캡 본체 ── */}
+      <rect x={20} y={GY - 118} width={170} height={118} fill="#D8D8D8" stroke="#B8B8B8" strokeWidth="1.5" rx={8}/>
+      {/* 캡 루프 */}
+      <rect x={32} y={GY - 122} width={148} height={12} fill="#CACACA" stroke="#B0B0B0" strokeWidth="1" rx={5}/>
+      {/* 앞유리 */}
+      <path d={`M 60,${GY-108} L 188,${GY-113} L 188,${GY-52} L 60,${GY-48} Z`}
+        fill="#EAEAF0" stroke="#C8C8D0" strokeWidth="1.2"/>
       {/* 사이드 윈도 */}
-      <rect x={cabX + cabW * 0.27} y={groundY - cabH + 22} width={cabW * 0.20} height={cabH * 0.26}
-        fill="#AED6F1" stroke="#89C0DE" strokeWidth="1" rx="2"/>
-
+      <rect x={22} y={GY-108} width={36} height={44} fill="#EAEAF0" stroke="#C8C8D0" strokeWidth="1" rx={2}/>
       {/* 도어선 */}
-      <line x1={cabX + cabW * 0.32} y1={groundY - cabH * 0.58} x2={cabX + cabW * 0.32} y2={groundY - 5}
-        stroke="#B0B0B0" strokeWidth="1"/>
+      <line x1={60} y1={GY-112} x2={60} y2={GY-6} stroke="#C0C0C0" strokeWidth="1.2"/>
       {/* 도어 핸들 */}
-      <rect x={cabX + cabW * 0.37} y={groundY - cabH * 0.28} width={14} height={5} fill="#A0A0A0" rx="2"/>
-
-      {/* 사이드 미러 */}
-      <rect x={cabEndX - 5} y={groundY - cabH * 0.76} width={13} height={8}
-        fill="#B8B8B8" stroke="#999" strokeWidth="0.8" rx="1"/>
-      <line x1={cabEndX + 2} y1={groundY - cabH * 0.72} x2={cabEndX + 8} y2={groundY - cabH * 0.72}
-        stroke="#999" strokeWidth="1"/>
-
+      <rect x={72} y={GY-46} width={18} height={5} fill="#B8B8B8" rx={2}/>
+      {/* 미러 */}
+      <rect x={186} y={GY-94} width={16} height={10} fill="#C8C8C8" stroke="#B0B0B0" strokeWidth="0.8" rx={1}/>
+      <line x1={194} y1={GY-90} x2={200} y2={GY-90} stroke="#B0B0B0" strokeWidth="1"/>
       {/* 헤드라이트 */}
-      <rect x={cabX + 1} y={groundY - cabH * 0.33} width={13} height={10} fill="#FEFEB0" stroke="#D4A800" strokeWidth="0.5" rx="1"/>
-      <rect x={cabX + 1} y={groundY - cabH * 0.20} width={13} height={8} fill="#F0F0A0" stroke="#C4A000" strokeWidth="0.5" rx="1"/>
-
+      <rect x={21} y={GY-56} width={17} height={12} fill="#FFFFCC" stroke="#CCCC00" strokeWidth="0.5" rx={1}/>
+      <rect x={21} y={GY-42} width={17} height={9} fill="#FFF8CC" stroke="#CCCC00" strokeWidth="0.5" rx={1}/>
       {/* 그릴 */}
-      <rect x={cabX + 1} y={groundY - cabH * 0.14} width={22} height={cabH * 0.13} fill="#444" stroke="#333" strokeWidth="0.5" rx="2"/>
-      {[0.35, 0.68].map(f => (
-        <line key={f} x1={cabX + 2} y1={groundY - cabH * 0.14 + cabH * 0.13 * f}
-          x2={cabX + 21} y2={groundY - cabH * 0.14 + cabH * 0.13 * f}
-          stroke="#666" strokeWidth="0.8"/>
+      <rect x={21} y={GY-30} width={26} height={22} fill="#555" rx={2}/>
+      {[0.32, 0.66].map(f => (
+        <line key={f} x1={22} y1={GY-30+22*f} x2={45} y2={GY-30+22*f} stroke="#777" strokeWidth="0.8"/>
       ))}
+      {/* 캡 하단 스커트 */}
+      <rect x={20} y={GY-10} width={168} height={10} fill="#C8C8C8" stroke="#B0B0B0" strokeWidth="0.8"/>
+      {/* 번호판 */}
+      <rect x={48} y={GY-20} width={60} height={18} fill="#E8E8E8" stroke="#AAA" strokeWidth="0.5" rx={1}/>
 
-      {/* ── 정보 배지 ── */}
-      <rect x={VW - 186} y={8} width={174} height={42} rx="20" fill="rgba(15,30,56,0.82)"/>
-      <text x={VW - 99} y={26} textAnchor="middle" fill="white" fontSize="12" fontWeight="700" fontFamily="sans-serif">
-        {`파렛 ${Math.min(palletCount, fit.count * layers)}개 적재`}
+      {/* ── 배지 ── */}
+      <rect x={VW-198} y={6} width={190} height={44} rx={20} fill="rgba(15,30,56,0.82)"/>
+      <text x={VW-103} y={25} textAnchor="middle" fill="white" fontSize="12" fontWeight="700" fontFamily="sans-serif">
+        {`파렛 ${cnt}개 적재`}
       </text>
-      <text x={VW - 99} y={41} textAnchor="middle" fill="rgba(255,255,255,0.5)" fontSize="10" fontFamily="sans-serif">
+      <text x={VW-103} y={41} textAnchor="middle" fill="rgba(255,255,255,0.55)" fontSize="10" fontFamily="sans-serif">
         {`최대 ${fit.count * layers}개 · ${fit.cols}열 × ${fit.rows}행`}
-      </text>
-
-      {/* 치수선 */}
-      <line x1={cargoStartX} y1={groundY + 18} x2={cargoEndX} y2={groundY + 18} stroke="#94a3b8" strokeWidth="1"/>
-      <line x1={cargoStartX} y1={groundY + 12} x2={cargoStartX} y2={groundY + 24} stroke="#94a3b8" strokeWidth="1"/>
-      <line x1={cargoEndX}   y1={groundY + 12} x2={cargoEndX}   y2={groundY + 24} stroke="#94a3b8" strokeWidth="1"/>
-      <text x={(cargoStartX + cargoEndX) / 2} y={groundY + 34} textAnchor="middle"
-        fill="#64748b" fontSize="11" fontWeight="600" fontFamily="sans-serif">
-        {truck.L}m × {truck.W}m
       </text>
     </svg>
   );
@@ -259,7 +268,7 @@ export default function PalletSimulator() {
   const [stacking,    setStacking]   = useState("1단");
   const [weightVal,   setWeightVal]  = useState("");
   const [weightUnit,  setWeightUnit] = useState("kg");
-  const [palletCount, setPalletCount]= useState(8);
+  const [palletCount, setPalletCount]= useState(4);
   const [bodyType,    setBodyType]   = useState("윙바디");
   const [selectedId,  setSelectedId] = useState(null);
 
@@ -287,9 +296,16 @@ export default function PalletSimulator() {
 
   const layers = stacking === "2단" ? 2 : 1;
 
+  // 적재 길이 계산
+  const loadedRows = displayRes
+    ? Math.min(displayRes.fit.rows, Math.ceil(palletCount / Math.max(1, displayRes.fit.cols)))
+    : 0;
+  const loadedLength    = displayRes ? (loadedRows * displayRes.fit.pd).toFixed(2) : "0.00";
+  const remainingLength = displayRes ? Math.max(0, displayRes.truck.L - loadedRows * displayRes.fit.pd).toFixed(2) : "0.00";
+
   const reset = () => {
     setPalletSize("10x12"); setMode("최적"); setStacking("1단");
-    setWeightVal(""); setWeightUnit("kg"); setPalletCount(8);
+    setWeightVal(""); setWeightUnit("kg"); setPalletCount(4);
     setBodyType("윙바디"); setSelectedId(null);
   };
 
@@ -308,8 +324,8 @@ export default function PalletSimulator() {
 
       <div className="flex gap-5" style={{ height: "calc(100vh - 188px)", minHeight: "580px" }}>
 
-        {/* ── 왼쪽 입력 (38%) ── */}
-        <div className="flex-[38] min-w-0 flex flex-col gap-3 overflow-y-auto pr-1">
+        {/* ── 왼쪽 입력 (36%) ── */}
+        <div className="flex-[36] min-w-0 flex flex-col gap-3 overflow-y-auto pr-1">
 
           {/* 파렛트 규격 */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
@@ -367,11 +383,16 @@ export default function PalletSimulator() {
               </div>
             </div>
 
-            <div className="flex items-center justify-between mb-1.5">
-              <div className="text-[11px] text-gray-500 font-semibold">파렛 수량</div>
+            {/* 파렛 수량 — +/- 버튼 + 슬라이더 */}
+            <div className="text-[11px] text-gray-500 font-semibold mb-2">파렛 수량</div>
+            <div className="flex items-center gap-3 mb-3">
+              <button onClick={() => setPalletCount(p => Math.max(1, p - 1))}
+                className="w-9 h-9 rounded-xl bg-gray-100 hover:bg-[#1B2B4B] hover:text-white text-[18px] font-black flex items-center justify-center transition">−</button>
               <input type="number" min="1" max="20" value={palletCount}
                 onChange={e => setPalletCount(Math.max(1, Math.min(20, Number(e.target.value))))}
-                className="w-16 text-center py-1 text-[16px] font-black text-[#1B2B4B] border-2 border-[#1B2B4B]/20 rounded-xl focus:border-[#1B2B4B] outline-none"/>
+                className="flex-1 text-center py-1.5 text-[20px] font-black text-[#1B2B4B] border-2 border-[#1B2B4B]/20 rounded-xl focus:border-[#1B2B4B] outline-none"/>
+              <button onClick={() => setPalletCount(p => Math.min(20, p + 1))}
+                className="w-9 h-9 rounded-xl bg-gray-100 hover:bg-[#1B2B4B] hover:text-white text-[18px] font-black flex items-center justify-center transition">+</button>
             </div>
             <input type="range" min="1" max="20" value={palletCount}
               onChange={e => setPalletCount(Number(e.target.value))} className="w-full accent-[#1B2B4B] mb-2"/>
@@ -393,12 +414,12 @@ export default function PalletSimulator() {
           </div>
         </div>
 
-        {/* ── 오른쪽 결과 (62%) ── */}
-        <div className="flex-[62] min-w-0 flex flex-col gap-3 overflow-y-auto pr-1">
+        {/* ── 오른쪽 결과 (64%) ── */}
+        <div className="flex-[64] min-w-0 flex flex-col gap-3 overflow-y-auto pr-1">
 
           {/* 트럭 시각화 */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex-shrink-0">
-            {/* 바디 탭 + 차량 선택 */}
+            {/* 헤더: 차종 선택 탭 */}
             <div className="flex items-center border-b border-gray-100 px-3 gap-1">
               {["윙바디","카고"].map(t => (
                 <button key={t} onClick={() => setBodyType(t)}
@@ -414,16 +435,26 @@ export default function PalletSimulator() {
               </div>
             </div>
 
+            {/* 적재 길이 표시 */}
+            {displayRes && (
+              <div className="flex items-baseline justify-center gap-2 pt-3 pb-1">
+                <span className="text-[13px] font-bold text-gray-600">적재 길이</span>
+                <span className="text-[22px] font-black text-[#1B2B4B] underline underline-offset-2">{loadedLength}</span>
+                <span className="text-[13px] font-bold text-gray-600">m</span>
+                <span className="text-[12px] text-gray-400 ml-1">({displayRes.truck.name} 기준 여유길이 {remainingLength} m)</span>
+              </div>
+            )}
+
             {/* SVG */}
-            <div className="h-[260px]" style={{ background: "linear-gradient(160deg,#f6f8fc 0%,#eaeff6 100%)" }}>
+            <div className="h-[268px]" style={{ background: "linear-gradient(160deg,#f6f8fc 0%,#eef1f7 100%)" }}>
               {displayRes && (
                 <TruckSideView
                   truck={displayRes.truck}
                   fit={displayRes.fit}
-                  palletD={pSize.d}
                   stacking={stacking}
                   bodyType={bodyType}
                   palletCount={palletCount}
+                  pSize={pSize}
                 />
               )}
             </div>
@@ -462,7 +493,7 @@ export default function PalletSimulator() {
             </div>
           )}
 
-          {/* 전체 차량 비교 — 세로 목록 */}
+          {/* 전체 차량 비교 */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
             <div className="text-[11px] font-bold text-[#1B2B4B]/40 mb-3 tracking-widest uppercase">전체 차량 비교</div>
             <div className="space-y-2">
@@ -472,11 +503,9 @@ export default function PalletSimulator() {
                 return (
                   <button key={r.truck.id} onClick={() => setSelectedId(r.truck.id)}
                     className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border-2 transition text-left ${isActive ? "border-[#1B2B4B] bg-[#1B2B4B]/4" : r.ok ? "border-gray-100 hover:border-gray-300 hover:bg-gray-50" : "border-gray-100 hover:bg-gray-50 opacity-75"}`}>
-                    {/* 차량명 */}
                     <div className={`w-[80px] text-[14px] font-black flex-shrink-0 ${isActive?"text-[#1B2B4B]":"text-gray-700"}`}>
                       {r.truck.name}
                     </div>
-                    {/* 진행바 */}
                     <div className="flex-1 h-6 bg-gray-100 rounded-lg overflow-hidden relative">
                       <div className="h-full rounded-lg transition-all duration-300"
                         style={{ width: `${loadedPct}%`, background: r.ok ? (isActive ? "#1B2B4B" : "#2d4a7a") : "#ef4444" }}/>
@@ -486,11 +515,9 @@ export default function PalletSimulator() {
                         </span>
                       </div>
                     </div>
-                    {/* 최대 수량 */}
                     <div className="flex-shrink-0 w-[44px] text-right">
                       <div className={`text-[15px] font-black ${r.ok ? "text-[#1B2B4B]" : "text-red-500"}`}>{r.maxPal}개</div>
                     </div>
-                    {/* 가능/초과 */}
                     <div className={`flex-shrink-0 w-[36px] text-center text-[11px] font-black py-0.5 rounded-lg ${r.ok ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-600"}`}>
                       {r.ok ? "가능" : "초과"}
                     </div>
