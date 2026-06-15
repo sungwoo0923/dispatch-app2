@@ -48,7 +48,7 @@ function calcFit(truckL, truckW, pw, pd, mode) {
 }
 
 // ── 트럭 3D 뷰 SVG (다불러 참고 스타일) ─────────────────────────────────────
-function TruckSideView({ truck, fit, stacking, palletCount, pSize }) {
+function TruckSideView({ truck, fit, stacking, palletCount, pSize, bodyType }) {
   const VW = 900, VH = 290;
   const GY = 244;   // 지면 y
 
@@ -68,6 +68,8 @@ function TruckSideView({ truck, fit, stacking, palletCount, pSize }) {
   const SY_M = BSY / MAX_W;
 
   const TRUCK_END_X = BLX + truck.L * PX_M;
+  const isWing = bodyType === "윙바디";
+  const WALL_H = 82;  // 윙바디 박스 벽 높이(px)
 
   // ── 파렛트 기하학 ────────────────────────────────────────────
   const palD   = fit.pd;
@@ -183,20 +185,20 @@ function TruckSideView({ truck, fit, stacking, palletCount, pSize }) {
         );
       })}
 
-      {/* ── 파렛트 (3D 박스, 주황색) ── */}
+      {/* ── 파렛트 (3D 박스, 빨간색) ── */}
       {pallets.map((p, i) => (
         <g key={i}>
-          {/* 윗면 */}
+          {/* 윗면 — 4th point must use by-ph+dy, not by+dy */}
           <polygon
-            points={`${p.bx},${p.by-p.ph} ${p.bx+p.pw},${p.by-p.ph} ${p.bx+p.pw+p.dx},${p.by-p.ph+p.dy} ${p.bx+p.dx},${p.by+p.dy}`}
-            fill="#FCD34D" stroke="#D97706" strokeWidth="0.7"/>
+            points={`${p.bx},${p.by-p.ph} ${p.bx+p.pw},${p.by-p.ph} ${p.bx+p.pw+p.dx},${p.by-p.ph+p.dy} ${p.bx+p.dx},${p.by-p.ph+p.dy}`}
+            fill="#E74C3C" stroke="#C0392B" strokeWidth="0.7"/>
           {/* 앞면 */}
           <rect x={p.bx} y={p.by-p.ph} width={p.pw} height={p.ph}
-            fill="#F59E0B" stroke="#D97706" strokeWidth="0.7"/>
+            fill="#C0392B" stroke="#922B21" strokeWidth="0.7"/>
           {/* 오른쪽 측면 */}
           <polygon
             points={`${p.bx+p.pw},${p.by-p.ph} ${p.bx+p.pw+p.dx},${p.by-p.ph+p.dy} ${p.bx+p.pw+p.dx},${p.by+p.dy} ${p.bx+p.pw},${p.by}`}
-            fill="#B45309" stroke="#D97706" strokeWidth="0.7"/>
+            fill="#922B21" stroke="#922B21" strokeWidth="0.7"/>
         </g>
       ))}
 
@@ -206,9 +208,45 @@ function TruckSideView({ truck, fit, stacking, palletCount, pSize }) {
         return (
           <text x={last.bx + last.pw * 0.5} y={last.by + 5}
             textAnchor="middle" fill="white" fontSize="14" fontWeight="900"
-            stroke="#92400E" strokeWidth="0.5" fontFamily="sans-serif">
+            stroke="#922B21" strokeWidth="0.5" fontFamily="sans-serif">
             {cnt}
           </text>
+        );
+      })()}
+
+      {/* ── 윙바디 박스 (파렛 위에 덮어 그림) ── */}
+      {isWing && (() => {
+        const ex = TRUCK_END_X;
+        const nt = BNY - WALL_H;      // near side top y
+        const ft = BFY - WALL_H;      // far side top y
+        return (
+          <g>
+            {/* 먼 쪽 벽 (배경) */}
+            <polygon
+              points={`${BLX+BSX},${BFY} ${ex+BSX},${BFY} ${ex+BSX},${ft} ${BLX+BSX},${ft}`}
+              fill="#AAAAAA" stroke="#999" strokeWidth="1"/>
+            {/* 지붕 */}
+            <polygon
+              points={`${BLX},${nt} ${ex},${nt} ${ex+BSX},${ft} ${BLX+BSX},${ft}`}
+              fill="#CCCCCC" stroke="#AAAAAA" strokeWidth="1.2"/>
+            {/* 가까운 쪽 벽 (반투명 — 안의 파렛 보임) */}
+            <rect x={BLX} y={nt} width={ex - BLX} height={WALL_H}
+              fill="rgba(210,210,210,0.50)" stroke="#BBBBBB" strokeWidth="1.4"/>
+            {/* 패널 구분선 */}
+            {[0.33, 0.66].map((f, i) => (
+              <line key={i}
+                x1={BLX + (ex - BLX) * f} y1={nt}
+                x2={BLX + (ex - BLX) * f} y2={BNY}
+                stroke="#B8B8B8" strokeWidth="0.9" strokeDasharray="4,4"/>
+            ))}
+            {/* 윙 힌지선 (중간 가로선) */}
+            <line x1={BLX} y1={nt + WALL_H * 0.5} x2={ex} y2={nt + WALL_H * 0.5}
+              stroke="#A0A0A0" strokeWidth="1" strokeDasharray="7,4"/>
+            {/* 후면 벽 */}
+            <polygon
+              points={`${ex},${BNY} ${ex+BSX},${BFY} ${ex+BSX},${ft} ${ex},${nt}`}
+              fill="#B8B8B8" stroke="#999" strokeWidth="1"/>
+          </g>
         );
       })()}
 
