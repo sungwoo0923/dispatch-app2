@@ -5123,6 +5123,8 @@ const [driverActive, setDriverActive] = React.useState(0);
      const grade = list[0]?.등급 || list[0]?.grade || list[0]?.상태 || "";
     if (grade === "블랙") {
       setBlackAlert(list[0]);
+    } else if (list[0]?.메모 && String(list[0].메모).trim()) {
+      window.dispatchEvent(new CustomEvent("driverMemoDetected", { detail: list[0] }));
     }
     setForm((p) => ({
       ...p,
@@ -6504,6 +6506,9 @@ const applySmartDriverInput = async (text) => {
       // 완전히 동일 → 기존 기사 정보로 세팅
       const grade = existing?.등급 || existing?.grade || "";
       if (grade === "블랙") setBlackAlert(existing);
+      else if (existing?.메모 && String(existing.메모).trim()) {
+        window.dispatchEvent(new CustomEvent("driverMemoDetected", { detail: existing }));
+      }
       setForm(p => ({
         ...p,
         차량번호: existing.차량번호,
@@ -6538,6 +6543,9 @@ const applySmartDriverInput = async (text) => {
       // 그 외 (이름 파싱 안 됨 등) → 기존 기사 정보로 세팅
       const grade = existing?.등급 || existing?.grade || "";
       if (grade === "블랙") setBlackAlert(existing);
+      else if (existing?.메모 && String(existing.메모).trim()) {
+        window.dispatchEvent(new CustomEvent("driverMemoDetected", { detail: existing }));
+      }
       setForm(p => ({
         ...p,
         차량번호: existing.차량번호,
