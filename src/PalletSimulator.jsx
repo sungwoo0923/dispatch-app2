@@ -1,11 +1,20 @@
 import React, { useState, useMemo } from "react";
 
 const PALLET_SIZES = [
-  { id: "11x11", label: "1,100 × 1,100", sub: "KPP T-11 · 한국표준",      w: 1.1, d: 1.1, cat: "KPP" },
-  { id: "12x10", label: "1,200 × 1,000", sub: "아주파레트 · ISO 국제규격", w: 1.2, d: 1.0, cat: "아주" },
-  { id: "08x12", label: "800 × 1,200",   sub: "소형 파렛트",               w: 0.8, d: 1.2, cat: "기타" },
-  { id: "10x12", label: "1,000 × 1,200", sub: "중형 파렛트",               w: 1.0, d: 1.2, cat: "기타" },
-  { id: "12x11", label: "1,200 × 1,100", sub: "대형 파렛트",               w: 1.2, d: 1.1, cat: "기타" },
+  // ── KPP 한국파렛트풀 (logisall.com 공식 제품) ─────────────────────────
+  { id: "kpp-n11", label: "1,100 × 1,100", sub: "N11 · 의약품·식품·유통",    w: 1.1,  d: 1.1,  cat: "KPP", model: "N11" },
+  { id: "kpp-n12", label: "1,200 × 1,000", sub: "N12 · 제약·음료회사",       w: 1.2,  d: 1.0,  cat: "KPP", model: "N12" },
+  { id: "kpp-n15", label: "1,460 × 1,130", sub: "N15 · 사료·전자·물류창고",  w: 1.46, d: 1.13, cat: "KPP", model: "N15" },
+  { id: "kpp-p11", label: "1,100 × 1,100", sub: "P11 · 비료업계 (강화형)",   w: 1.1,  d: 1.1,  cat: "KPP", model: "P11" },
+  // ── 아주파레트 (AJ Networks · ajnetworks.co.kr) ───────────────────────
+  { id: "aj-t11",  label: "1,100 × 1,100", sub: "T-11형 · 국내표준",         w: 1.1,  d: 1.1,  cat: "아주", model: "T-11" },
+  { id: "aj-t12",  label: "1,200 × 1,000", sub: "T-12형 · 국제표준",         w: 1.2,  d: 1.0,  cat: "아주", model: "T-12" },
+  { id: "aj-lg",   label: "1,300 × 1,100", sub: "대형 · 사료·전자",           w: 1.3,  d: 1.1,  cat: "아주", model: "대형" },
+  { id: "aj-sm",   label: "1,100 × 800",   sub: "소형 · 편의점·화장품",       w: 1.1,  d: 0.8,  cat: "아주", model: "소형" },
+  // ── 기타 규격 ─────────────────────────────────────────────────────────
+  { id: "etc-08x12", label: "800 × 1,200",   sub: "소형 규격",  w: 0.8, d: 1.2, cat: "기타" },
+  { id: "etc-10x12", label: "1,000 × 1,200", sub: "중형 규격",  w: 1.0, d: 1.2, cat: "기타" },
+  { id: "etc-12x11", label: "1,200 × 1,100", sub: "대형 규격",  w: 1.2, d: 1.1, cat: "기타" },
 ];
 
 const PALLET_COMPANIES = [
@@ -340,7 +349,7 @@ function TruckSideView({ truck, fit, stacking, palletCount, pSize, bodyType }) {
 // ── 메인 컴포넌트 ─────────────────────────────────────────────────────────
 export default function PalletSimulator() {
   const [palletCompany, setPalletCompany] = useState("KPP");
-  const [palletSize,    setPalletSize]    = useState("11x11");
+  const [palletSize,    setPalletSize]    = useState("kpp-n11");
   const [mode,          setMode]          = useState("최적");
   const [stacking,      setStacking]      = useState("1단");
   const [weightVal,     setWeightVal]     = useState("");
@@ -386,7 +395,7 @@ export default function PalletSimulator() {
   const remainingLength = displayRes ? Math.max(0, displayRes.truck.L - loadedRows * displayRes.fit.pd).toFixed(2) : "0.00";
 
   const reset = () => {
-    setPalletCompany("KPP"); setPalletSize("11x11"); setMode("최적"); setStacking("1단");
+    setPalletCompany("KPP"); setPalletSize("kpp-n11"); setMode("최적"); setStacking("1단");
     setWeightVal(""); setWeightUnit("kg"); setPalletCount(4);
     setBodyType("윙바디"); setSelectedId(null);
   };
@@ -445,21 +454,29 @@ export default function PalletSimulator() {
             <div className="flex flex-col gap-1.5">
               {PALLET_SIZES.filter(ps => ps.cat === palletCompany).map(ps => (
                 <button key={ps.id} onClick={() => setPalletSize(ps.id)}
-                  className={`flex items-center justify-between px-3 py-2.5 rounded-xl border-2 text-left transition-all ${
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border-2 text-left transition-all ${
                     palletSize === ps.id
                       ? "border-[#1B2B4B] bg-[#1B2B4B]"
                       : "border-gray-200 bg-gray-50 hover:border-[#1B2B4B]/25 hover:bg-gray-100"
                   }`}>
-                  <div>
-                    <div className={`text-[15px] font-bold leading-tight ${palletSize === ps.id ? "text-white" : "text-[#1B2B4B]"}`}>
-                      {ps.label}
+                  {/* 모델 배지 */}
+                  {ps.model && (
+                    <span className={`flex-shrink-0 text-[11px] font-black px-2 py-0.5 rounded-lg min-w-[36px] text-center ${
+                      palletSize === ps.id ? "bg-white/20 text-white" : "bg-[#1B2B4B]/10 text-[#1B2B4B]"
+                    }`}>
+                      {ps.model}
+                    </span>
+                  )}
+                  <div className="flex-1">
+                    <div className={`text-[14px] font-bold leading-tight ${palletSize === ps.id ? "text-white" : "text-[#1B2B4B]"}`}>
+                      {ps.label} <span className={`text-[10px] font-normal ${palletSize === ps.id ? "text-white/50" : "text-gray-400"}`}>mm</span>
                     </div>
                     <div className={`text-[11px] mt-0.5 ${palletSize === ps.id ? "text-white/55" : "text-gray-400"}`}>
                       {ps.sub}
                     </div>
                   </div>
                   {palletSize === ps.id && (
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><path d="M20 6L9 17l-5-5"/></svg>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" className="flex-shrink-0"><path d="M20 6L9 17l-5-5"/></svg>
                   )}
                 </button>
               ))}
