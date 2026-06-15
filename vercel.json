@@ -1,5 +1,9 @@
 {
   "functions": {
+    "api/fuel.js": {
+      "maxDuration": 10,
+      "regions": ["icn1"]
+    },
     "api/send-email.js": {
       "maxDuration": 30,
       "regions": ["icn1"]
