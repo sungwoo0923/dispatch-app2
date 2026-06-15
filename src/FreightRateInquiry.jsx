@@ -414,9 +414,9 @@ export default function FreightRateInquiry(){
         </span>
       </div>
 
-      <div className="flex gap-4 min-h-[640px]">
+      <div className="flex gap-4 h-[680px]">
         {/* ───────────── 왼쪽 패널 ───────────── */}
-        <div className="w-[400px] flex-shrink-0 flex flex-col gap-3">
+        <div className="w-[400px] flex-shrink-0 flex flex-col gap-3 overflow-y-auto">
 
           {/* 경로 */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
@@ -634,7 +634,7 @@ export default function FreightRateInquiry(){
         </div>
 
         {/* ───────────── 오른쪽 지도 ───────────── */}
-        <div className="flex-1 rounded-xl border border-gray-200 shadow-sm flex flex-col overflow-hidden bg-white">
+        <div className="flex-1 max-w-[580px] rounded-xl border border-gray-200 shadow-sm flex flex-col overflow-hidden bg-white">
           {/* 지도 헤더 */}
           <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-3">
             {step!=="result"&&(
@@ -722,14 +722,7 @@ export default function FreightRateInquiry(){
                 );
               })}
 
-              {/* 레이어 2: 화살표 — 채색 위, 지역명 아래 */}
-              {arrowPath&&(
-                <path d={arrowPath} fill="none" stroke="#3b82f6" strokeWidth="4"
-                  strokeLinecap="round" strokeLinejoin="round"
-                  markerEnd="url(#arrowHead)"/>
-              )}
-
-              {/* 레이어 3: 지역 텍스트 라벨 (비활성만) */}
+              {/* 레이어 2: 지역 텍스트 라벨 (비활성만) */}
               {provinces.map(prov=>{
                 if(prov===fromP||prov===toP) return null;
                 const isSmall=SMALL.includes(prov);
@@ -776,6 +769,13 @@ export default function FreightRateInquiry(){
                   );
                 })
               }
+
+              {/* 레이어 4: 화살표 — 최상위 (뱃지 위에 렌더링) */}
+              {arrowPath&&(
+                <path d={arrowPath} fill="none" stroke="#3b82f6" strokeWidth="4"
+                  strokeLinecap="round" strokeLinejoin="round"
+                  markerEnd="url(#arrowHead)"/>
+              )}
 
               {/* 호버 툴팁 */}
               {hover&&!fromP&&!toP&&(()=>{

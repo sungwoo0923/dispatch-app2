@@ -595,14 +595,15 @@ export default function StandardFare() {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem("sf_pickup", pickup);
-    localStorage.setItem("sf_drop", drop);
-    localStorage.setItem("sf_cargo", cargo);
-    localStorage.setItem("sf_ton", ton);
-    localStorage.setItem("sf_vehicle", vehicle);
-    localStorage.setItem("sf_pickupAddr", pickupAddr);
-    localStorage.setItem("sf_dropAddr", dropAddr);
-    localStorage.setItem("sf_client", client);
+    const save=(k,v)=>{try{localStorage.setItem(k,v);}catch{}};
+    save("sf_pickup", pickup);
+    save("sf_drop", drop);
+    save("sf_cargo", cargo.slice(0,500));
+    save("sf_ton", ton);
+    save("sf_vehicle", vehicle);
+    save("sf_pickupAddr", pickupAddr);
+    save("sf_dropAddr", dropAddr);
+    save("sf_client", client);
   }, [pickup, drop, cargo, ton, vehicle, pickupAddr, dropAddr, client]);
 
   const clientList = useMemo(() =>
