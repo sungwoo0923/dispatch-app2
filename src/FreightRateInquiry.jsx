@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import southKorea from "@svg-maps/south-korea";
+import PalletSimulator from "./PalletSimulator";
 
 // ─── 한국 지도 SVG 경로 (실제 지리 데이터) ─────────────────────────────
 // viewBox="0 0 524 631" — @svg-maps/south-korea 패키지 기준
@@ -339,6 +340,7 @@ function DriverPreference({value,onChange}){
 
 // ─── 메인 컴포넌트 ────────────────────────────────────────────────────────
 export default function FreightRateInquiry(){
+  const [activeTab,setActiveTab]=useState("운임조회");
   const [step,setStep]=useState("from");
   const [fromP,setFromP]=useState(null);
   const [fromC,setFromC]=useState(null);
@@ -400,6 +402,19 @@ export default function FreightRateInquiry(){
 
   return(
     <div className="w-full">
+      {/* 탭 네비게이션 */}
+      <div className="flex items-center gap-1 mb-5 border-b border-gray-200">
+        {["운임조회","차량제원"].map(tab=>(
+          <button key={tab} onClick={()=>setActiveTab(tab)}
+            className={`px-5 py-2.5 text-[14px] font-extrabold transition border-b-2 -mb-px ${activeTab===tab?"border-[#1B2B4B] text-[#1B2B4B]":"border-transparent text-gray-400 hover:text-gray-600"}`}>
+            {tab}
+          </button>
+        ))}
+      </div>
+
+      {activeTab==="차량제원"&&<PalletSimulator/>}
+
+      {activeTab==="운임조회"&&<>
       <div className="flex items-center gap-4 mb-5 flex-wrap">
         <div>
           <h2 className="text-[20px] font-black text-[#1B2B4B] leading-tight">전국운임 조회</h2>
@@ -812,6 +827,7 @@ export default function FreightRateInquiry(){
       <div className="mt-2 text-[10px] text-gray-400 text-center">
         실거래 기반 참고 운임입니다. 실제 운임은 차량 상태·시간대·계절 등에 따라 달라질 수 있습니다.
       </div>
+      </>}
     </div>
   );
 }
