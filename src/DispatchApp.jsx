@@ -2784,22 +2784,27 @@ const FuelSlideWidget = React.memo(function FuelSlideWidget() {
   const [prices, setPrices] = React.useState([]);
   const [page, setPage] = React.useState(0);
   const [area, setArea] = React.useState("01");
+  const [loading, setLoading] = React.useState(true);
 
   // 🔹 유가 로드
 React.useEffect(() => {
+  setLoading(true);
+  const timer = setTimeout(() => setLoading(false), 8000); // 8초 타임아웃
   async function loadFuel() {
     try {
       const res = await fetch(`/api/fuel?area=${area || "01"}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-
       const oil = Array.isArray(data?.RESULT?.OIL) ? data.RESULT.OIL : [];
       setPrices(oil);
     } catch (e) {
       console.warn("유가 조회 실패:", e);
       setPrices([]);
+    } finally {
+      clearTimeout(timer);
+      setLoading(false);
     }
   }
-
   loadFuel();
 }, [area]);
 
@@ -2831,22 +2836,12 @@ React.useEffect(() => {
   return () => clearInterval(timer);
 }, [items.length]);
 
-// 🔹 로딩 UI
-if (!prices.length) {
-  return (
-    <div className="h-10 flex items-center px-5 text-sm text-gray-400">
-      유가 불러오는 중...
-    </div>
-  );
+// 🔹 로딩 / 에러 UI
+if (loading) {
+  return <div className="h-10 flex items-center px-5 text-sm text-gray-400">유가 불러오는 중...</div>;
 }
-
-// 🔹 데이터 없음 대비
-if (!items.length) {
-  return (
-    <div className="h-10 flex items-center px-5 text-sm text-gray-400">
-      유가 데이터 없음
-    </div>
-  );
+if (!prices.length || !items.length) {
+  return <div className="h-10 flex items-center px-5 text-sm text-gray-400">유가 정보 없음</div>;
 }
 
 return (
