@@ -8,8 +8,15 @@ const PALLET_SIZES = [
   { id: "12x11", label: "1,200 × 1,100", sub: "대형 파렛트",               w: 1.2, d: 1.1, cat: "기타" },
 ];
 
+const PALLET_COMPANIES = [
+  { id: "KPP",  label: "KPP 파레트",  desc: "한국파렛트풀 표준" },
+  { id: "아주", label: "아주파레트", desc: "ISO 국제규격" },
+  { id: "기타", label: "기타 규격",  desc: "소형 · 대형 · 특수" },
+];
+
 const TRUCKS = [
   { id: "1ton",    name: "1톤",       L: 2.8,  W: 1.50, maxKg: 1000,  wc: 1 },
+  { id: "1.4ton",  name: "1.4톤",     L: 3.6,  W: 1.60, maxKg: 1400,  wc: 1 },
   { id: "2.5ton",  name: "2.5톤",     L: 4.5,  W: 1.75, maxKg: 2500,  wc: 1 },
   { id: "3.5ton",  name: "3.5톤",     L: 5.2,  W: 2.10, maxKg: 3500,  wc: 2 },
   { id: "3.5tonW", name: "3.5톤광폭", L: 5.2,  W: 2.35, maxKg: 3800,  wc: 2 },
@@ -332,14 +339,21 @@ function TruckSideView({ truck, fit, stacking, palletCount, pSize, bodyType }) {
 
 // ── 메인 컴포넌트 ─────────────────────────────────────────────────────────
 export default function PalletSimulator() {
-  const [palletSize, setPalletSize] = useState("11x11");
-  const [mode,        setMode]       = useState("최적");
-  const [stacking,    setStacking]   = useState("1단");
-  const [weightVal,   setWeightVal]  = useState("");
-  const [weightUnit,  setWeightUnit] = useState("kg");
-  const [palletCount, setPalletCount]= useState(4);
-  const [bodyType,    setBodyType]   = useState("윙바디");
-  const [selectedId,  setSelectedId] = useState(null);
+  const [palletCompany, setPalletCompany] = useState("KPP");
+  const [palletSize,    setPalletSize]    = useState("11x11");
+  const [mode,          setMode]          = useState("최적");
+  const [stacking,      setStacking]      = useState("1단");
+  const [weightVal,     setWeightVal]     = useState("");
+  const [weightUnit,    setWeightUnit]    = useState("kg");
+  const [palletCount,   setPalletCount]   = useState(4);
+  const [bodyType,      setBodyType]      = useState("윙바디");
+  const [selectedId,    setSelectedId]    = useState(null);
+
+  const handleCompanyChange = (compId) => {
+    setPalletCompany(compId);
+    const first = PALLET_SIZES.find(ps => ps.cat === compId);
+    if (first) setPalletSize(first.id);
+  };
 
   const pSize = PALLET_SIZES.find(p => p.id === palletSize) || PALLET_SIZES[0];
 
@@ -372,16 +386,10 @@ export default function PalletSimulator() {
   const remainingLength = displayRes ? Math.max(0, displayRes.truck.L - loadedRows * displayRes.fit.pd).toFixed(2) : "0.00";
 
   const reset = () => {
-    setPalletSize("11x11"); setMode("최적"); setStacking("1단");
+    setPalletCompany("KPP"); setPalletSize("11x11"); setMode("최적"); setStacking("1단");
     setWeightVal(""); setWeightUnit("kg"); setPalletCount(4);
     setBodyType("윙바디"); setSelectedId(null);
   };
-
-  const CAT_META = [
-    { cat: "KPP",  label: "KPP 표준 파렛트" },
-    { cat: "아주", label: "아주파레트 (국제규격)" },
-    { cat: "기타", label: "기타 규격" },
-  ];
 
   return (
     <div className="w-full">
@@ -401,60 +409,82 @@ export default function PalletSimulator() {
         {/* ── 왼쪽 입력 (34%) ── */}
         <div className="flex-[34] min-w-0 flex flex-col gap-3 overflow-y-auto pr-1">
 
-          {/* 파렛트 규격 — 카테고리별 */}
+          {/* 파렛트 규격 — 2단계 (파레트사 → 크기) */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-            <div className="text-[10px] font-bold text-[#1B2B4B]/35 mb-3 tracking-widest uppercase">파렛트 규격</div>
-            {CAT_META.map(({ cat, label }) => {
-              const items = PALLET_SIZES.filter(ps => ps.cat === cat);
-              return (
-                <div key={cat} className="mb-3 last:mb-0">
-                  <div className="text-[9.5px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 px-0.5">{label}</div>
-                  <div className="flex flex-col gap-1">
-                    {items.map(ps => (
-                      <button key={ps.id} onClick={() => setPalletSize(ps.id)}
-                        className={`flex items-center justify-between px-3 py-2 rounded-xl border-2 text-left transition-all ${
-                          palletSize === ps.id
-                            ? "border-[#1B2B4B] bg-[#1B2B4B]"
-                            : "border-gray-100 bg-gray-50 hover:border-[#1B2B4B]/20 hover:bg-gray-100"
-                        }`}>
-                        <div>
-                          <div className={`text-[13px] font-bold leading-tight ${palletSize === ps.id ? "text-white" : "text-[#1B2B4B]"}`}>
-                            {ps.label}
-                          </div>
-                          <div className={`text-[10px] mt-0.5 ${palletSize === ps.id ? "text-white/55" : "text-gray-400"}`}>
-                            {ps.sub}
-                          </div>
-                        </div>
-                        {palletSize === ps.id && (
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><path d="M20 6L9 17l-5-5"/></svg>
-                        )}
-                      </button>
-                    ))}
+            <div className="text-[12px] font-bold text-[#1B2B4B]/50 mb-3 tracking-widest uppercase">파렛트 규격</div>
+
+            {/* Step 1: 파레트사 선택 */}
+            <div className="text-[13px] font-bold text-[#1B2B4B] mb-2">① 파레트사 선택</div>
+            <div className="flex flex-col gap-1.5 mb-4">
+              {PALLET_COMPANIES.map(co => (
+                <button key={co.id} onClick={() => handleCompanyChange(co.id)}
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border-2 text-left transition-all ${
+                    palletCompany === co.id
+                      ? "border-[#1B2B4B] bg-[#1B2B4B]"
+                      : "border-gray-200 bg-gray-50 hover:border-[#1B2B4B]/30 hover:bg-gray-100"
+                  }`}>
+                  <div className={`w-3.5 h-3.5 rounded-full border-2 flex-shrink-0 ${
+                    palletCompany === co.id ? "border-white bg-white" : "border-gray-400 bg-white"
+                  }`}>
+                    {palletCompany === co.id && <div className="w-full h-full rounded-full bg-[#1B2B4B] scale-50"/>}
                   </div>
-                </div>
-              );
-            })}
+                  <div>
+                    <div className={`text-[14px] font-bold leading-tight ${palletCompany === co.id ? "text-white" : "text-[#1B2B4B]"}`}>
+                      {co.label}
+                    </div>
+                    <div className={`text-[11px] mt-0.5 ${palletCompany === co.id ? "text-white/55" : "text-gray-400"}`}>
+                      {co.desc}
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            {/* Step 2: 크기 선택 */}
+            <div className="text-[13px] font-bold text-[#1B2B4B] mb-2">② 크기 선택</div>
+            <div className="flex flex-col gap-1.5">
+              {PALLET_SIZES.filter(ps => ps.cat === palletCompany).map(ps => (
+                <button key={ps.id} onClick={() => setPalletSize(ps.id)}
+                  className={`flex items-center justify-between px-3 py-2.5 rounded-xl border-2 text-left transition-all ${
+                    palletSize === ps.id
+                      ? "border-[#1B2B4B] bg-[#1B2B4B]"
+                      : "border-gray-200 bg-gray-50 hover:border-[#1B2B4B]/25 hover:bg-gray-100"
+                  }`}>
+                  <div>
+                    <div className={`text-[15px] font-bold leading-tight ${palletSize === ps.id ? "text-white" : "text-[#1B2B4B]"}`}>
+                      {ps.label}
+                    </div>
+                    <div className={`text-[11px] mt-0.5 ${palletSize === ps.id ? "text-white/55" : "text-gray-400"}`}>
+                      {ps.sub}
+                    </div>
+                  </div>
+                  {palletSize === ps.id && (
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><path d="M20 6L9 17l-5-5"/></svg>
+                  )}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* 적재 옵션 */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-            <div className="text-[10px] font-bold text-[#1B2B4B]/35 mb-2.5 tracking-widest uppercase">적재 옵션</div>
+            <div className="text-[12px] font-bold text-[#1B2B4B]/50 mb-3 tracking-widest uppercase">적재 옵션</div>
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <div className="text-[11px] text-gray-500 font-semibold mb-1.5">배치 방식</div>
-                <div className="flex rounded-xl border border-gray-200 overflow-hidden h-9">
+                <div className="text-[13px] font-bold text-[#1B2B4B] mb-1.5">배치 방식</div>
+                <div className="flex rounded-xl border border-gray-200 overflow-hidden h-10">
                   {["최적","최대"].map(m => (
                     <button key={m} onClick={() => setMode(m)}
-                      className={`flex-1 text-[12px] font-bold transition ${mode===m?"bg-[#1B2B4B] text-white":"bg-white text-gray-500 hover:bg-gray-50"}`}>{m}</button>
+                      className={`flex-1 text-[13px] font-bold transition ${mode===m?"bg-[#1B2B4B] text-white":"bg-white text-gray-500 hover:bg-gray-50"}`}>{m}</button>
                   ))}
                 </div>
               </div>
               <div>
-                <div className="text-[11px] text-gray-500 font-semibold mb-1.5">적재 단수</div>
-                <div className="flex rounded-xl border border-gray-200 overflow-hidden h-9">
+                <div className="text-[13px] font-bold text-[#1B2B4B] mb-1.5">적재 단수</div>
+                <div className="flex rounded-xl border border-gray-200 overflow-hidden h-10">
                   {["1단","2단"].map(s => (
                     <button key={s} onClick={() => setStacking(s)}
-                      className={`flex-1 text-[12px] font-bold transition ${stacking===s?"bg-[#1B2B4B] text-white":"bg-white text-gray-500 hover:bg-gray-50"}`}>{s}</button>
+                      className={`flex-1 text-[13px] font-bold transition ${stacking===s?"bg-[#1B2B4B] text-white":"bg-white text-gray-500 hover:bg-gray-50"}`}>{s}</button>
                   ))}
                 </div>
               </div>
@@ -463,22 +493,22 @@ export default function PalletSimulator() {
 
           {/* 중량·수량 */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-            <div className="text-[10px] font-bold text-[#1B2B4B]/35 mb-2.5 tracking-widest uppercase">중량 · 수량</div>
+            <div className="text-[12px] font-bold text-[#1B2B4B]/50 mb-3 tracking-widest uppercase">중량 · 수량</div>
 
-            <div className="text-[11px] text-gray-500 font-semibold mb-1.5">파렛당 중량</div>
+            <div className="text-[13px] font-bold text-[#1B2B4B] mb-1.5">파렛당 중량</div>
             <div className="flex gap-2 mb-4">
               <input type="number" value={weightVal} onChange={e => setWeightVal(e.target.value)}
                 placeholder="0" min="0"
-                className="flex-1 px-3 py-2 rounded-xl border-2 border-gray-200 text-[14px] font-bold text-[#1B2B4B] focus:border-[#1B2B4B] outline-none transition"/>
+                className="flex-1 px-3 py-2 rounded-xl border-2 border-gray-200 text-[15px] font-bold text-[#1B2B4B] focus:border-[#1B2B4B] outline-none transition"/>
               <div className="flex rounded-xl border border-gray-200 overflow-hidden">
                 {["kg","톤"].map(u => (
                   <button key={u} onClick={() => setWeightUnit(u)}
-                    className={`px-3 py-2 text-[12px] font-bold transition ${weightUnit===u?"bg-[#1B2B4B] text-white":"bg-white text-gray-500"}`}>{u}</button>
+                    className={`px-3 py-2 text-[13px] font-bold transition ${weightUnit===u?"bg-[#1B2B4B] text-white":"bg-white text-gray-500"}`}>{u}</button>
                 ))}
               </div>
             </div>
 
-            <div className="text-[11px] text-gray-500 font-semibold mb-2">파렛 수량</div>
+            <div className="text-[13px] font-bold text-[#1B2B4B] mb-2">파렛 수량</div>
             <div className="flex items-center gap-3 mb-3">
               <button onClick={() => setPalletCount(p => Math.max(1, p - 1))}
                 className="w-9 h-9 rounded-xl bg-gray-100 hover:bg-[#1B2B4B] hover:text-white text-[18px] font-black flex items-center justify-center transition">−</button>
