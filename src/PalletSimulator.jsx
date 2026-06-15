@@ -39,251 +39,213 @@ function calcFit(truckL, truckW, pw, pd, mode) {
 }
 
 // ── 트럭 측면뷰 SVG ────────────────────────────────────────────────────────
-// 참고 이미지(다불러) 스타일: 좌=캡, 우=화물칸, 약간 입체감
-function TruckSideView({ truck, fit, palletD, stacking, bodyType, palletCount }) {
-  const W = 900, H = 320;
-  const groundY = 294;
+function TruckSideView({ truck, fit, stacking, bodyType, palletCount }) {
+  const VW = 900, VH = 310;
+  const groundY = 278;
 
-  // 트럭 사이즈별 치수
   const isLg = truck.maxKg >= 11000;
   const isSm = truck.maxKg <= 2500;
-  const wheelR  = isSm ? 22 : isLg ? 36 : 29;
-  const cabW    = isSm ? 128 : isLg ? 198 : 162;
-  const cabH    = isSm ? 140 : isLg ? 198 : 168;
-  const cabX    = 28;
-  const cabEndX = cabX + cabW;
 
-  // 화물칸
-  const axleY     = groundY - wheelR;
-  const flatTopY  = axleY - wheelR - 2;   // 화물칸 바닥 상단
-  const flatH     = 18;                    // 바닥 두께
-  const flatStartX = cabEndX - 14;
-  const flatEndX  = W - 20;
-  const flatPx    = flatEndX - flatStartX;
-  const scale     = flatPx / truck.L;
+  const wheelR    = isSm ? 22 : isLg ? 34 : 28;
+  const cabW      = isSm ? 118 : isLg ? 188 : 158;
+  const cabH      = isSm ? 126 : isLg ? 186 : 158;
+  const cabX      = 28;
+  const cabEndX   = cabX + cabW;
 
-  // 윙바디
+  const axleY      = groundY - wheelR;
+  const bedTopY    = axleY - wheelR - 2;
+  const bedH       = 16;
+  const cargoStartX = cabEndX - 12;
+  const cargoEndX  = VW - 18;
+  const cargoW     = cargoEndX - cargoStartX;
+  const scale      = cargoW / truck.L;
+
   const isWing   = bodyType === "윙바디";
   const layers   = stacking === "2단" ? 2 : 1;
-  const singleH  = Math.min(isSm ? 76 : 108, flatTopY - (groundY - cabH) - 10);
-  const cargoH   = singleH * (stacking === "2단" ? 1.85 : 1);
-  const cargoTopY = flatTopY - cargoH;
+  const singleH  = Math.min(isSm ? 78 : 108, bedTopY - (groundY - cabH) - 8);
+  const cargoH   = singleH * (stacking === "2단" ? 1.82 : 1);
+  const cargoTopY = bedTopY - cargoH;
 
-  // 파렛 위치 계산 (측면에서 보면 row = 길이방향)
-  const palLayerH = (singleH - 8) / layers;
+  const palLayerH = (singleH - 6) / layers;
   const depthPx   = fit.pd * scale;
 
   const pallets = [];
   let cnt = 0;
   for (let layer = 0; layer < layers && cnt < palletCount; layer++) {
     for (let r = 0; r < fit.rows && cnt < palletCount; r++) {
-      const px = flatStartX + 8 + r * (depthPx + 1);
-      if (px + depthPx > flatEndX - 4) break;
-      pallets.push({ x: px, y: flatTopY - (layer + 1) * (palLayerH + 3) - 2, w: depthPx - 1, h: palLayerH });
+      const px = cargoStartX + 8 + r * (depthPx + 1.5);
+      if (px + depthPx > cargoEndX - 6) break;
+      pallets.push({ x: px, y: bedTopY - (layer + 1) * (palLayerH + 3) - 1, w: depthPx - 1, h: palLayerH });
       cnt++;
     }
     if (fit.mixed) {
       const m = fit.mixed;
       const md = m.pd * scale;
       for (let r = 0; r < m.rows && cnt < palletCount; r++) {
-        const px = flatStartX + 8 + m.offsetL * scale + r * (md + 1);
-        if (px + md > flatEndX - 4) break;
-        pallets.push({ x: px, y: flatTopY - (layer + 1) * (palLayerH + 3) - 2, w: md - 1, h: palLayerH });
+        const px = cargoStartX + 8 + m.offsetL * scale + r * (md + 1.5);
+        if (px + md > cargoEndX - 6) break;
+        pallets.push({ x: px, y: bedTopY - (layer + 1) * (palLayerH + 3) - 1, w: md - 1, h: palLayerH });
         cnt++;
       }
     }
   }
 
-  // 바퀴 위치
-  const frontWheelX = cabX + cabW * 0.66;
+  const frontWheelX = cabX + cabW * 0.67;
   const rearCnt = truck.wc;
   const rearWheels = Array.from({ length: rearCnt }, (_, i) =>
-    flatStartX + flatPx * (rearCnt === 1 ? 0.52 : rearCnt === 2 ? (i === 0 ? 0.36 : 0.68) : (0.24 + i * 0.27))
+    cargoStartX + cargoW * (rearCnt === 1 ? 0.52 : rearCnt === 2 ? (i === 0 ? 0.35 : 0.68) : (0.22 + i * 0.28))
   );
 
-  const Wheel = ({ cx }) => {
-    const cy = axleY;
-    return (
-      <g>
-        <circle cx={cx} cy={cy} r={wheelR} fill="#1c1c1c"/>
-        <circle cx={cx} cy={cy} r={wheelR * 0.63} fill="#3a3a3a"/>
-        <circle cx={cx} cy={cy} r={wheelR * 0.23} fill="#888"/>
-        {[0, 60, 120, 180, 240, 300].map(d => {
-          const r2 = d * Math.PI / 180;
-          return <circle key={d} cx={cx + Math.cos(r2) * wheelR * 0.43} cy={cy + Math.sin(r2) * wheelR * 0.43} r={wheelR * 0.085} fill="#aaa"/>;
-        })}
-      </g>
-    );
-  };
+  const Wheel = ({ cx }) => (
+    <g>
+      <circle cx={cx} cy={axleY} r={wheelR} fill="#333333"/>
+      <circle cx={cx} cy={axleY} r={wheelR * 0.62} fill="#4a4a4a"/>
+      <circle cx={cx} cy={axleY} r={wheelR * 0.22} fill="#888"/>
+      {[0,60,120,180,240,300].map(d => {
+        const rad = d * Math.PI / 180;
+        return <circle key={d} cx={cx + Math.cos(rad)*wheelR*0.41} cy={axleY + Math.sin(rad)*wheelR*0.41} r={wheelR*0.082} fill="#aaa"/>;
+      })}
+    </g>
+  );
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-full" style={{ userSelect: "none" }}>
-      <defs>
-        <linearGradient id="cabGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#d6dae4"/><stop offset="100%" stopColor="#a0a6b4"/>
-        </linearGradient>
-        <linearGradient id="flatGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#c8cbcc"/><stop offset="100%" stopColor="#989c9c"/>
-        </linearGradient>
-        <linearGradient id="palGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#f87171"/><stop offset="45%" stopColor="#dc2626"/><stop offset="100%" stopColor="#991b1b"/>
-        </linearGradient>
-        <filter id="dropS" x="-5%" y="-5%" width="110%" height="120%">
-          <feDropShadow dx="0" dy="4" stdDeviation="6" floodColor="#1B2B4B" floodOpacity="0.18"/>
-        </filter>
-      </defs>
-
-      {/* 그림자 */}
-      <ellipse cx={flatStartX + flatPx * 0.45 + 40} cy={groundY + 16} rx={flatPx * 0.52 + 70} ry={13} fill="rgba(0,0,0,0.1)"/>
+    <svg viewBox={`0 0 ${VW} ${VH}`} className="w-full h-full" style={{ userSelect:"none" }}>
 
       {/* ── 화물칸 바닥 ── */}
-      <rect x={flatStartX - 8} y={flatTopY} width={flatPx + 9} height={flatH} fill="url(#flatGrad)" rx={2}/>
-      <rect x={flatStartX - 8} y={flatTopY} width={flatPx + 9} height={4} fill="rgba(255,255,255,0.32)"/>
+      <rect x={cargoStartX} y={bedTopY} width={cargoW} height={bedH} fill="#C8C8C8" stroke="#9a9a9a" strokeWidth="1" rx="2"/>
+      {/* 바닥 상단 레일 */}
+      <rect x={cargoStartX + 4} y={bedTopY - 7} width={cargoW - 8} height={5} fill="#B4B4B4" stroke="#9a9a9a" strokeWidth="0.5" rx="1"/>
       {/* 크로스 멤버 */}
-      {Array.from({ length: Math.min(10, Math.ceil(flatPx / 62)) }).map((_, i) => {
-        const x = flatStartX + 6 + i * ((flatPx - 12) / Math.max(1, Math.ceil(flatPx / 62) - 1));
-        return <rect key={i} x={x} y={flatTopY + 4} width={3} height={flatH - 5} fill="#8a8e8e" rx={1}/>;
+      {Array.from({ length: Math.min(12, Math.ceil(cargoW / 58)) }).map((_, i) => {
+        const x = cargoStartX + 8 + i * ((cargoW - 16) / Math.max(1, Math.ceil(cargoW / 58) - 1));
+        return <rect key={i} x={x - 1} y={bedTopY + 4} width={3} height={bedH - 5} fill="#9a9a9a" rx="1"/>;
       })}
-      {/* 상단 레일 */}
-      <rect x={flatStartX + 5} y={flatTopY - 11} width={flatPx - 10} height={4} fill="#b0b4b4" rx={1}/>
-      {/* 앞 벌크헤드 */}
-      <rect x={flatStartX - 2} y={cargoTopY} width={10} height={flatTopY - cargoTopY} fill="#7a8090" rx={1}/>
 
-      {/* ── 윙바디 프레임 ── */}
-      {isWing && (
+      {/* ── 윙바디 / 카고 박스 ── */}
+      {isWing ? (
         <>
-          <rect x={flatStartX + 8} y={cargoTopY} width={flatPx - 16} height={cargoH}
-            fill="rgba(27,43,75,0.03)" stroke="#1B2B4B" strokeWidth="1.6" rx={2}/>
+          {/* 옆면 패널 */}
+          <rect x={cargoStartX + 6} y={cargoTopY} width={cargoW - 12} height={cargoH}
+            fill="rgba(208,218,230,0.18)" stroke="#B0B8C4" strokeWidth="1.5" rx="2"/>
           {/* 지붕 */}
-          <rect x={flatStartX + 8} y={cargoTopY} width={flatPx - 16} height={8} fill="rgba(27,43,75,0.6)" rx={2}/>
+          <rect x={cargoStartX + 6} y={cargoTopY} width={cargoW - 12} height={9} fill="#C0C6CE" stroke="#A8B0B8" strokeWidth="1" rx="2"/>
           {/* 하단 실 */}
-          <rect x={flatStartX + 8} y={flatTopY - 8} width={flatPx - 16} height={8} fill="#3d4455"/>
-          {/* 윙 힌지선 */}
-          {[0.34, 0.67].map(f => (
+          <rect x={cargoStartX + 6} y={bedTopY - 10} width={cargoW - 12} height={7} fill="#A8AEAD" stroke="#909898" strokeWidth="0.5"/>
+          {/* 윙 패널 힌지선 */}
+          {[0.33, 0.66].map(f => (
             <line key={f}
-              x1={flatStartX + 8 + (flatPx - 16) * f} y1={cargoTopY + 8}
-              x2={flatStartX + 8 + (flatPx - 16) * f} y2={flatTopY - 8}
-              stroke="rgba(27,43,75,0.2)" strokeWidth={1} strokeDasharray="5,3"/>
+              x1={cargoStartX + 6 + (cargoW - 12) * f} y1={cargoTopY + 9}
+              x2={cargoStartX + 6 + (cargoW - 12) * f} y2={bedTopY - 10}
+              stroke="#C0C6CE" strokeWidth="1" strokeDasharray="4,3"/>
           ))}
+        </>
+      ) : (
+        /* 카고 — 오픈 사이드레일만 */
+        <>
+          <rect x={cargoStartX + 6} y={cargoTopY} width={8} height={cargoH} fill="#C0C0C0" stroke="#A0A0A0" strokeWidth="1" rx="1"/>
+          <rect x={cargoEndX - 14} y={cargoTopY} width={8} height={cargoH} fill="#C0C0C0" stroke="#A0A0A0" strokeWidth="1" rx="1"/>
+          <rect x={cargoStartX + 6} y={cargoTopY} width={cargoW - 12} height={6} fill="#B8B8B8" stroke="#A0A0A0" strokeWidth="0.5"/>
         </>
       )}
 
       {/* ── 파렛트 ── */}
-      {pallets.map((p, i) => {
-        const sh = Math.min(7, p.w * 0.12); // 상단면 시어(깊이감)
-        return (
-          <g key={i}>
-            {/* 상단면 (입체감) */}
-            <polygon
-              points={`${p.x},${p.y} ${p.x + p.w},${p.y} ${p.x + p.w + sh},${p.y - sh * 0.55} ${p.x + sh},${p.y - sh * 0.55}`}
-              fill="#fca5a5" stroke="rgba(185,28,28,0.55)" strokeWidth={0.5}/>
-            {/* 앞면 */}
-            <rect x={p.x} y={p.y} width={p.w} height={p.h}
-              fill="url(#palGrad)" stroke="rgba(0,0,0,0.12)" strokeWidth={0.5} rx={1}/>
-            {/* 광택 */}
-            <rect x={p.x + 1} y={p.y + 1} width={p.w - 2} height={Math.min(8, p.h * 0.18)}
-              fill="rgba(255,255,255,0.28)" rx={1}/>
-            {/* 수평 목재선 */}
-            {[0.36, 0.68].map(f => (
-              <line key={f} x1={p.x + 1} y1={p.y + p.h * f} x2={p.x + p.w - 1} y2={p.y + p.h * f}
-                stroke="rgba(153,27,27,0.4)" strokeWidth={0.7}/>
-            ))}
-            {/* 우측 측면 (깊이) */}
-            <polygon
-              points={`${p.x + p.w},${p.y} ${p.x + p.w + sh},${p.y - sh * 0.55} ${p.x + p.w + sh},${p.y - sh * 0.55 + p.h} ${p.x + p.w},${p.y + p.h}`}
-              fill="rgba(153,27,27,0.4)" stroke="none"/>
-          </g>
-        );
-      })}
+      {pallets.map((p, i) => (
+        <g key={i}>
+          <rect x={p.x} y={p.y} width={p.w} height={p.h}
+            fill="#4E81B4" stroke="#3A6A9A" strokeWidth="0.8" rx="1"/>
+          <rect x={p.x + 1} y={p.y + 1} width={p.w - 2} height={Math.min(6, p.h * 0.22)}
+            fill="rgba(255,255,255,0.22)" rx="1"/>
+          <line x1={p.x + 1} y1={p.y + p.h * 0.38} x2={p.x + p.w - 1} y2={p.y + p.h * 0.38}
+            stroke="rgba(255,255,255,0.18)" strokeWidth="0.7"/>
+          <line x1={p.x + 1} y1={p.y + p.h * 0.72} x2={p.x + p.w - 1} y2={p.y + p.h * 0.72}
+            stroke="rgba(255,255,255,0.18)" strokeWidth="0.7"/>
+        </g>
+      ))}
 
       {/* ── 바퀴 ── */}
       <Wheel cx={frontWheelX}/>
       {rearWheels.map((cx, i) => (
         <g key={i}>
-          <Wheel cx={cx - (isSm ? 0 : 3)}/>
-          {!isSm && <Wheel cx={cx + 5}/>}
+          <Wheel cx={cx - (isSm ? 0 : 3.5)}/>
+          {!isSm && <Wheel cx={cx + 4.5}/>}
         </g>
       ))}
 
-      {/* 축 */}
-      <line x1={frontWheelX} y1={flatTopY + flatH - 2} x2={frontWheelX} y2={axleY} stroke="#555" strokeWidth={2}/>
-      {rearWheels.map((cx, i) => (
-        <line key={i} x1={cx} y1={flatTopY + flatH - 2} x2={cx} y2={axleY} stroke="#555" strokeWidth={2}/>
-      ))}
+      {/* 프레임 / 샤시 라인 */}
+      <line x1={cargoStartX} y1={bedTopY + bedH} x2={cargoEndX} y2={bedTopY + bedH} stroke="#888" strokeWidth="2"/>
 
       {/* ── 캡 ── */}
-      <rect x={cabX} y={groundY - cabH} width={cabW} height={cabH} fill="url(#cabGrad)" rx={6} filter="url(#dropS)"/>
+      {/* 후드 */}
+      <rect x={cabX} y={groundY - cabH * 0.30} width={cabW * 0.36} height={cabH * 0.30}
+        fill="#D0D0D0" stroke="#A8A8A8" strokeWidth="1.2" rx="3"/>
+      {/* 캡 바디 */}
+      <rect x={cabX + cabW * 0.24} y={groundY - cabH} width={cabW * 0.76} height={cabH}
+        fill="#D0D0D0" stroke="#A8A8A8" strokeWidth="1.2" rx="5"/>
+      {/* 앞부분 연결 */}
+      <rect x={cabX} y={groundY - cabH * 0.30} width={cabW * 0.30} height={cabH * 0.30}
+        fill="#D0D0D0" stroke="none"/>
 
-      {/* 캡 루프 */}
-      <rect x={cabX + 20} y={groundY - cabH - (isSm ? 2 : 6)} width={cabW - 22} height={isSm ? 9 : 14} fill="#c4c9d8" rx={4}/>
+      {/* 캡 루프 에어 디플렉터 */}
+      <rect x={cabX + cabW * 0.26} y={groundY - cabH - (isSm ? 3 : 8)} width={cabW * 0.72} height={isSm ? 8 : 14}
+        fill="#C4C4C4" stroke="#A8A8A8" strokeWidth="1" rx="3"/>
 
-      {/* 배기관 */}
-      {isLg && <rect x={cabX + 16} y={groundY - cabH - 32} width={10} height={36} fill="#5a6070" rx={3}/>}
+      {/* 배기관 (대형) */}
+      {isLg && <rect x={cabX + cabW * 0.28} y={groundY - cabH - 36} width={10} height={32} fill="#909090" stroke="#777" strokeWidth="0.8" rx="3"/>}
 
       {/* 앞유리 */}
       {(() => {
-        const wx = cabX + cabW * 0.3, wy = groundY - cabH + 14;
-        const wx2 = cabEndX - 4, wy2 = groundY - cabH + 10;
-        const wh = cabH * 0.52;
+        const wx  = cabX + cabW * 0.32, wy  = groundY - cabH + 13;
+        const wx2 = cabEndX - 5,        wy2 = groundY - cabH + 10;
+        const wh  = cabH * 0.50;
         return (
-          <path d={`M ${wx},${wy} L ${wx2},${wy2} L ${wx2},${wy2 + wh} L ${wx},${wy + wh * 1.04} Z`}
-            fill="#93c5fd" fillOpacity={0.58} stroke="rgba(255,255,255,0.55)" strokeWidth={1.4}/>
-        );
-      })()}
-      {/* 앞유리 하이라이트 */}
-      {(() => {
-        const wx = cabX + cabW * 0.34, wy = groundY - cabH + 17;
-        const wx2 = cabEndX - 7, wy2 = groundY - cabH + 13;
-        const wh = cabH * 0.24;
-        return (
-          <path d={`M ${wx},${wy} L ${wx2},${wy2} L ${wx2},${wy2 + wh} L ${wx},${wy + wh * 1.02} Z`}
-            fill="rgba(255,255,255,0.11)"/>
+          <path d={`M ${wx},${wy} L ${wx2},${wy2} L ${wx2},${wy2+wh} L ${wx},${wy+wh*1.04} Z`}
+            fill="#AED6F1" stroke="#89C0DE" strokeWidth="1.2"/>
         );
       })()}
 
       {/* 사이드 윈도 */}
-      <rect x={cabX + 5} y={groundY - cabH + 26} width={cabW * 0.24} height={cabH * 0.25}
-        fill="#96c4e8" fillOpacity={0.5} rx={3} stroke="rgba(255,255,255,0.35)" strokeWidth={1}/>
+      <rect x={cabX + cabW * 0.27} y={groundY - cabH + 22} width={cabW * 0.20} height={cabH * 0.26}
+        fill="#AED6F1" stroke="#89C0DE" strokeWidth="1" rx="2"/>
 
       {/* 도어선 */}
-      <line x1={cabX + cabW * 0.30} y1={groundY - cabH * 0.56} x2={cabX + cabW * 0.30} y2={groundY - 6}
-        stroke="rgba(0,0,0,0.1)" strokeWidth={1.5}/>
+      <line x1={cabX + cabW * 0.32} y1={groundY - cabH * 0.58} x2={cabX + cabW * 0.32} y2={groundY - 5}
+        stroke="#B0B0B0" strokeWidth="1"/>
       {/* 도어 핸들 */}
-      <rect x={cabX + cabW * 0.35} y={groundY - cabH * 0.30} width={15} height={5} fill="#7a8090" rx={2}/>
+      <rect x={cabX + cabW * 0.37} y={groundY - cabH * 0.28} width={14} height={5} fill="#A0A0A0" rx="2"/>
 
       {/* 사이드 미러 */}
-      <rect x={cabEndX - 6} y={groundY - cabH * 0.78} width={10} height={7} fill="#6a7280" rx={2} stroke="#555" strokeWidth={0.5}/>
-      <line x1={cabEndX - 2} y1={groundY - cabH * 0.75} x2={cabEndX + 4} y2={groundY - cabH * 0.75} stroke="#666" strokeWidth={1}/>
+      <rect x={cabEndX - 5} y={groundY - cabH * 0.76} width={13} height={8}
+        fill="#B8B8B8" stroke="#999" strokeWidth="0.8" rx="1"/>
+      <line x1={cabEndX + 2} y1={groundY - cabH * 0.72} x2={cabEndX + 8} y2={groundY - cabH * 0.72}
+        stroke="#999" strokeWidth="1"/>
 
       {/* 헤드라이트 */}
-      <rect x={cabX + 2} y={groundY - cabH * 0.32} width={14} height={10} fill="#fef08a" rx={2} stroke="#d97706" strokeWidth={0.5}/>
-      <rect x={cabX + 2} y={groundY - cabH * 0.21} width={14} height={8} fill="#fde68a" rx={2}/>
+      <rect x={cabX + 1} y={groundY - cabH * 0.33} width={13} height={10} fill="#FEFEB0" stroke="#D4A800" strokeWidth="0.5" rx="1"/>
+      <rect x={cabX + 1} y={groundY - cabH * 0.20} width={13} height={8} fill="#F0F0A0" stroke="#C4A000" strokeWidth="0.5" rx="1"/>
 
       {/* 그릴 */}
-      <rect x={cabX + 2} y={groundY - cabH * 0.16} width={24} height={cabH * 0.14} fill="#2d323e" rx={2}/>
-      {[0.3, 0.6, 0.85].map(f => (
-        <line key={f} x1={cabX + 3} y1={groundY - cabH * (0.16 - f * 0.14)} x2={cabX + 24} y2={groundY - cabH * (0.16 - f * 0.14)}
-          stroke="#555" strokeWidth={0.8}/>
+      <rect x={cabX + 1} y={groundY - cabH * 0.14} width={22} height={cabH * 0.13} fill="#444" stroke="#333" strokeWidth="0.5" rx="2"/>
+      {[0.35, 0.68].map(f => (
+        <line key={f} x1={cabX + 2} y1={groundY - cabH * 0.14 + cabH * 0.13 * f}
+          x2={cabX + 21} y2={groundY - cabH * 0.14 + cabH * 0.13 * f}
+          stroke="#666" strokeWidth="0.8"/>
       ))}
 
-      {/* 캡 루프 광택 */}
-      <rect x={cabX + 8} y={groundY - cabH + 5} width={cabW - 14} height={7} fill="rgba(255,255,255,0.2)" rx={2}/>
-
       {/* ── 정보 배지 ── */}
-      <rect x={W - 180} y={8} width={168} height={40} rx={20} fill="rgba(15,30,56,0.83)"/>
-      <text x={W - 96} y={24} textAnchor="middle" fill="white" fontSize={12} fontWeight="700" fontFamily="sans-serif">
+      <rect x={VW - 186} y={8} width={174} height={42} rx="20" fill="rgba(15,30,56,0.82)"/>
+      <text x={VW - 99} y={26} textAnchor="middle" fill="white" fontSize="12" fontWeight="700" fontFamily="sans-serif">
         {`파렛 ${Math.min(palletCount, fit.count * layers)}개 적재`}
       </text>
-      <text x={W - 96} y={39} textAnchor="middle" fill="rgba(255,255,255,0.5)" fontSize={10} fontFamily="sans-serif">
+      <text x={VW - 99} y={41} textAnchor="middle" fill="rgba(255,255,255,0.5)" fontSize="10" fontFamily="sans-serif">
         {`최대 ${fit.count * layers}개 · ${fit.cols}열 × ${fit.rows}행`}
       </text>
 
-      {/* 치수 표기 */}
-      <line x1={flatStartX} y1={groundY + 20} x2={flatEndX} y2={groundY + 20} stroke="#94a3b8" strokeWidth={1}/>
-      <line x1={flatStartX} y1={groundY + 14} x2={flatStartX} y2={groundY + 26} stroke="#94a3b8" strokeWidth={1}/>
-      <line x1={flatEndX}   y1={groundY + 14} x2={flatEndX}   y2={groundY + 26} stroke="#94a3b8" strokeWidth={1}/>
-      <text x={(flatStartX + flatEndX) / 2} y={groundY + 35} textAnchor="middle"
-        fill="#64748b" fontSize={11} fontWeight="600" fontFamily="sans-serif">
+      {/* 치수선 */}
+      <line x1={cargoStartX} y1={groundY + 18} x2={cargoEndX} y2={groundY + 18} stroke="#94a3b8" strokeWidth="1"/>
+      <line x1={cargoStartX} y1={groundY + 12} x2={cargoStartX} y2={groundY + 24} stroke="#94a3b8" strokeWidth="1"/>
+      <line x1={cargoEndX}   y1={groundY + 12} x2={cargoEndX}   y2={groundY + 24} stroke="#94a3b8" strokeWidth="1"/>
+      <text x={(cargoStartX + cargoEndX) / 2} y={groundY + 34} textAnchor="middle"
+        fill="#64748b" fontSize="11" fontWeight="600" fontFamily="sans-serif">
         {truck.L}m × {truck.W}m
       </text>
     </svg>
