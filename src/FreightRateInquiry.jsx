@@ -414,9 +414,9 @@ export default function FreightRateInquiry(){
         </span>
       </div>
 
-      <div className="flex gap-4 h-[680px]">
+      <div className="flex gap-4" style={{height:"calc(100vh - 180px)", minHeight:"580px"}}>
         {/* ───────────── 왼쪽 패널 ───────────── */}
-        <div className="w-[400px] flex-shrink-0 flex flex-col gap-3 overflow-y-auto">
+        <div className="w-[360px] flex-shrink-0 flex flex-col gap-3 overflow-y-auto">
 
           {/* 경로 */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
@@ -634,7 +634,7 @@ export default function FreightRateInquiry(){
         </div>
 
         {/* ───────────── 오른쪽 지도 ───────────── */}
-        <div className="flex-1 max-w-[580px] rounded-xl border border-gray-200 shadow-sm flex flex-col overflow-hidden bg-white">
+        <div className="flex-1 rounded-xl border border-gray-200 shadow-sm flex flex-col overflow-hidden bg-white">
           {/* 지도 헤더 */}
           <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-3">
             {step!=="result"&&(
