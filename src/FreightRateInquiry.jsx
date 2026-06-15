@@ -173,7 +173,8 @@ const CITIES = {
 
 // ─── 차량 종류 ─────────────────────────────────────────────────────────────
 const VEHICLE_TYPES = [
-  {id:"bike",   name:"오토바이",      base:8000,  perKm:180,  min:15000,  L100km:4},
+  {id:"bike",   name:"오토바이",      base:8000,  perKm:180,  min:15000,  L100km:4,  smallOnly:true},
+  {id:"damas",  name:"라보/다마스",   base:12000, perKm:350,  min:25000,  L100km:8,  smallOnly:true},
   {id:"1ton",   name:"1톤",          base:20000, perKm:690,  min:50000,  L100km:12},
   {id:"1.4ton", name:"1.4톤",        base:24000, perKm:780,  min:60000,  L100km:14},
   {id:"2.5ton", name:"2.5톤",        base:32000, perKm:980,  min:80000,  L100km:18},
@@ -251,7 +252,7 @@ const fmtMoney=(n)=>{
 const fmtTime=(m)=>{const h=Math.floor(m/60);const mm=m%60;return h>0?`${h}h ${mm}m`:`${mm}m`;};
 
 // ─── 차량 드롭다운 ─────────────────────────────────────────────────────────
-function VehicleDropdown({vehicle,onChange}){
+function VehicleDropdown({vehicle,onChange,cargoType}){
   const [open,setOpen]=useState(false);
   const ref=useRef();
   useEffect(()=>{
@@ -259,26 +260,25 @@ function VehicleDropdown({vehicle,onChange}){
     document.addEventListener("mousedown",fn);
     return()=>document.removeEventListener("mousedown",fn);
   },[]);
-  const cur=VEHICLE_TYPES.find(v=>v.id===vehicle)||VEHICLE_TYPES[1];
+  const visible=VEHICLE_TYPES.filter(v=>!(v.smallOnly&&cargoType==="냉장"));
+  const cur=visible.find(v=>v.id===vehicle)||visible[0];
   return(
     <div ref={ref} className="relative">
       <button
         onClick={()=>setOpen(p=>!p)}
-        className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 bg-white hover:border-[#1B2B4B] transition text-[13px] font-semibold text-gray-800 w-full"
+        className="flex items-center gap-3 px-4 py-3 rounded-xl border-2 border-gray-200 bg-white hover:border-[#1B2B4B] transition text-[14px] font-bold text-[#1B2B4B] w-full"
       >
         <span className="flex-1 text-left">{cur.name}</span>
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-          <path d="M6 9l6 6 6-6"/>
-        </svg>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 9l6 6 6-6"/></svg>
       </button>
       {open&&(
-        <div className="absolute top-full left-0 mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden">
-          <div className="max-h-[260px] overflow-y-auto py-1">
-            {VEHICLE_TYPES.map(vt=>(
+        <div className="absolute top-full left-0 mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-2xl z-50 overflow-hidden">
+          <div className="max-h-[280px] overflow-y-auto py-1">
+            {visible.map(vt=>(
               <button
                 key={vt.id}
                 onClick={()=>{onChange(vt.id);setOpen(false);}}
-                className={`w-full flex items-center gap-2 px-4 py-2.5 text-[13px] transition hover:bg-gray-50 ${vehicle===vt.id?"bg-blue-50 font-bold text-[#1B2B4B]":"text-gray-700 font-medium"}`}
+                className={`w-full flex items-center gap-3 px-4 py-2.5 text-[13px] transition ${vehicle===vt.id?"bg-[#1B2B4B]/8 font-bold text-[#1B2B4B]":"text-gray-700 font-medium hover:bg-gray-50"}`}
               >
                 <span className="flex-1 text-left">{vt.name}</span>
                 {vehicle===vt.id&&(
@@ -353,6 +353,10 @@ export default function FreightRateInquiry(){
   const [mixWeightKg,setMixWeightKg]=useState("");
   const [mixCbm,setMixCbm]=useState("");
 
+  useEffect(()=>{
+    if(cargoType==="냉장"&&(vehicle==="bike"||vehicle==="damas"))setVehicle("1ton");
+  },[cargoType]);
+
   const result=useMemo(()=>{
     if(!fromC||!toC)return null;
     if(freightMode==="혼적"){
@@ -396,124 +400,116 @@ export default function FreightRateInquiry(){
 
   return(
     <div className="w-full">
-      <div className="flex items-center gap-3 mb-4 flex-wrap">
-        <h2 className="text-[18px] font-bold text-[#1B2B4B]">전국운임 조회</h2>
+      <div className="flex items-center gap-4 mb-5 flex-wrap">
+        <div>
+          <h2 className="text-[20px] font-black text-[#1B2B4B] leading-tight">전국운임 조회</h2>
+          <p className="text-[12px] text-gray-400 font-medium mt-0.5">
+            {freightMode==="독차"?"지역 클릭 → 시/군/구 선택 → 5초 내 운임 확인":"중량·CBM 입력 후 혼적 운임 조회"}
+          </p>
+        </div>
         {/* 독차 / 혼적 토글 */}
-        <div className="flex rounded-lg border border-gray-200 overflow-hidden shadow-sm">
+        <div className="flex rounded-xl border-2 border-gray-100 overflow-hidden shadow-sm">
           {["독차","혼적"].map(m=>(
             <button key={m} onClick={()=>{setFreightMode(m);setStep("from");setFromP(null);setFromC(null);setToP(null);setToC(null);setCityStep(null);}}
-              className={`px-4 py-1.5 text-[12px] font-bold transition ${freightMode===m?"bg-[#1B2B4B] text-white":"bg-white text-gray-500 hover:bg-gray-50"}`}>
+              className={`px-5 py-2 text-[13px] font-extrabold transition ${freightMode===m?"bg-[#1B2B4B] text-white":"bg-white text-gray-400 hover:bg-gray-50"}`}>
               {m==="독차"?"독차":"혼적(합짐)"}
             </button>
           ))}
         </div>
-        <span className="text-[11px] text-gray-400 bg-gray-100 rounded-full px-2 py-0.5">
-          {freightMode==="독차"
-            ? <>원하는 지역을 클릭해 <span className="text-blue-600 font-bold">5초</span> 만에 운임을 확인하세요</>
-            : <><span className="text-[#1B2B4B] font-bold">혼적</span> · 중량/CBM 입력 후 조회</>}
-        </span>
       </div>
 
-      <div className="flex gap-4" style={{height:"calc(100vh - 180px)", minHeight:"580px"}}>
-        {/* ───────────── 왼쪽 패널 ───────────── */}
-        <div className="w-[360px] flex-shrink-0 flex flex-col gap-3 overflow-y-auto">
+      <div className="flex gap-5" style={{height:"calc(100vh - 180px)", minHeight:"580px"}}>
+        {/* ───────────── 왼쪽 패널 (40%) ───────────── */}
+        <div className="flex-[4] min-w-0 flex flex-col gap-3 overflow-y-auto pr-1">
 
-          {/* 경로 */}
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-            <div className="text-[11px] font-bold text-gray-400 mb-3 tracking-wide uppercase">경로 설정</div>
-            <div className="flex flex-col gap-2">
+          {/* 경로 카드 */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+            <div className="text-[11px] font-bold text-[#1B2B4B]/40 mb-4 tracking-widest uppercase">경로 설정</div>
+            <div className="flex flex-col gap-3">
               <div
-                className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer border-2 transition ${
+                className={`flex items-center gap-4 p-4 rounded-xl cursor-pointer border-2 transition ${
                   step==="from"||cityStep==="from"?"border-[#1B2B4B] bg-[#1B2B4B]/5"
-                  :fromC?"border-blue-300 bg-blue-50":"border-gray-200 hover:border-gray-300"}`}
+                  :fromC?"border-blue-400 bg-blue-50/60":"border-gray-100 bg-gray-50 hover:border-gray-300"}`}
                 onClick={()=>{setStep("from");setCityStep(null);setFromP(null);setFromC(null);setToC(null);setToP(null);}}
               >
-                <div className="w-7 h-7 rounded-full bg-blue-500 flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0">출</div>
+                <div className="w-9 h-9 rounded-full bg-[#1B2B4B] flex items-center justify-center text-white text-[12px] font-extrabold flex-shrink-0">출</div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-[10px] text-gray-400 font-medium">출발지</div>
-                  {fromC?<div className="text-[14px] font-bold text-[#1B2B4B] truncate">{fromP} {fromC.n}</div>
-                  :fromP&&cityStep==="from"?<div className="text-[12px] text-blue-600 font-medium">{fromP} — 시/군/구 선택 중</div>
-                  :<div className="text-[12px] text-gray-400">지도에서 도/시를 클릭하세요</div>}
+                  <div className="text-[11px] text-gray-400 font-semibold mb-0.5">출발지</div>
+                  {fromC?<div className="text-[15px] font-extrabold text-[#1B2B4B] truncate">{fromP} {fromC.n}</div>
+                  :fromP&&cityStep==="from"?<div className="text-[13px] text-[#1B2B4B] font-semibold">{fromP} — 시/군/구 선택 중</div>
+                  :<div className="text-[13px] text-gray-400">지도에서 도/시를 클릭하세요</div>}
                 </div>
-                {fromC&&<button className="text-gray-400 hover:text-red-400 text-[18px] leading-none" onClick={e=>{e.stopPropagation();reset();}}>×</button>}
+                {fromC&&<button className="text-gray-300 hover:text-red-400 text-[20px] leading-none transition" onClick={e=>{e.stopPropagation();reset();}}>×</button>}
               </div>
 
-              <div className="flex items-center gap-2 px-3">
-                <div className="flex-1 h-px bg-gray-200"/>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
-                <div className="flex-1 h-px bg-gray-200"/>
+              <div className="flex items-center gap-2 px-4">
+                <div className="flex-1 h-px bg-gray-100"/>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" strokeWidth="2"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+                <div className="flex-1 h-px bg-gray-100"/>
               </div>
 
               <div
-                className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer border-2 transition ${
-                  step==="to"||cityStep==="to"?"border-orange-400 bg-orange-50"
-                  :toC?"border-orange-300 bg-orange-50":"border-gray-200 hover:border-gray-300"}`}
+                className={`flex items-center gap-4 p-4 rounded-xl cursor-pointer border-2 transition ${
+                  step==="to"||cityStep==="to"?"border-orange-400 bg-orange-50/60"
+                  :toC?"border-orange-300 bg-orange-50/60":"border-gray-100 bg-gray-50 hover:border-gray-300"}`}
                 onClick={()=>{if(fromC){setStep("to");setCityStep(null);setToP(null);setToC(null);}}}
               >
-                <div className="w-7 h-7 rounded-full bg-orange-400 flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0">하</div>
+                <div className="w-9 h-9 rounded-full bg-orange-400 flex items-center justify-center text-white text-[12px] font-extrabold flex-shrink-0">하</div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-[10px] text-gray-400 font-medium">도착지</div>
-                  {toC?<div className="text-[14px] font-bold text-[#1B2B4B] truncate">{toP} {toC.n}</div>
-                  :toP&&cityStep==="to"?<div className="text-[12px] text-orange-500 font-medium">{toP} — 시/군/구 선택 중</div>
-                  :<div className="text-[12px] text-gray-400">{fromC?"지도에서 도/시를 클릭하세요":"출발지 먼저 선택"}</div>}
+                  <div className="text-[11px] text-gray-400 font-semibold mb-0.5">도착지</div>
+                  {toC?<div className="text-[15px] font-extrabold text-[#1B2B4B] truncate">{toP} {toC.n}</div>
+                  :toP&&cityStep==="to"?<div className="text-[13px] text-orange-500 font-semibold">{toP} — 시/군/구 선택 중</div>
+                  :<div className="text-[13px] text-gray-400">{fromC?"지도에서 도/시를 클릭하세요":"출발지 먼저 선택"}</div>}
                 </div>
-                {toC&&<button className="text-gray-400 hover:text-red-400 text-[18px] leading-none" onClick={e=>{e.stopPropagation();setToP(null);setToC(null);setStep("to");}}>×</button>}
+                {toC&&<button className="text-gray-300 hover:text-red-400 text-[20px] leading-none transition" onClick={e=>{e.stopPropagation();setToP(null);setToC(null);setStep("to");}}>×</button>}
               </div>
             </div>
           </div>
 
-          {/* 독차: 차량 종류 / 혼적: 중량·CBM 입력 */}
+          {/* 독차: 차량 종류 / 혼적: 중량·CBM */}
           {freightMode==="독차"?(
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-              <div className="text-[11px] font-bold text-gray-400 mb-3 tracking-wide uppercase">차량 종류</div>
-              <VehicleDropdown vehicle={vehicle} onChange={setVehicle}/>
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+              <div className="text-[11px] font-bold text-[#1B2B4B]/40 mb-3 tracking-widest uppercase">차량 종류</div>
+              <VehicleDropdown vehicle={vehicle} onChange={setVehicle} cargoType={cargoType}/>
             </div>
           ):(
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
               <div className="flex items-center justify-between mb-3">
-                <div className="text-[11px] font-bold text-gray-400 tracking-wide uppercase">화물 중량 / 부피</div>
-                <span className="text-[10px] text-gray-500 bg-gray-100 rounded px-2 py-0.5">1CBM = 250kg 기준</span>
+                <div className="text-[11px] font-bold text-[#1B2B4B]/40 tracking-widest uppercase">화물 중량 / 부피</div>
+                <span className="text-[10px] text-gray-400 bg-gray-100 rounded-full px-2 py-0.5">1CBM = 250kg</span>
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-3">
                 <div className="flex-1">
-                  <label className="block text-[10px] text-gray-400 mb-1">중량 (kg)</label>
-                  <input
-                    type="number" min="0" placeholder="예: 500"
-                    value={mixWeightKg}
+                  <label className="block text-[11px] text-gray-400 font-semibold mb-1.5">중량 (kg)</label>
+                  <input type="number" min="0" placeholder="예: 500" value={mixWeightKg}
                     onChange={e=>{setMixWeightKg(e.target.value);if(e.target.value)setMixCbm("");}}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-[13px] font-semibold focus:outline-none focus:border-[#1B2B4B]"
-                  />
+                    className="w-full px-4 py-3 border-2 border-gray-100 rounded-xl text-[14px] font-bold text-[#1B2B4B] focus:outline-none focus:border-[#1B2B4B] bg-gray-50"/>
                 </div>
-                <div className="flex items-end pb-2 text-gray-400 text-[12px] font-medium">또는</div>
+                <div className="flex items-end pb-3 text-gray-300 text-[13px] font-medium">또는</div>
                 <div className="flex-1">
-                  <label className="block text-[10px] text-gray-400 mb-1">CBM (㎥)</label>
-                  <input
-                    type="number" min="0" step="0.1" placeholder="예: 2.5"
-                    value={mixCbm}
+                  <label className="block text-[11px] text-gray-400 font-semibold mb-1.5">CBM (㎥)</label>
+                  <input type="number" min="0" step="0.1" placeholder="예: 2.5" value={mixCbm}
                     onChange={e=>{setMixCbm(e.target.value);if(e.target.value)setMixWeightKg("");}}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-[13px] font-semibold focus:outline-none focus:border-[#1B2B4B]"
-                  />
+                    className="w-full px-4 py-3 border-2 border-gray-100 rounded-xl text-[14px] font-bold text-[#1B2B4B] focus:outline-none focus:border-[#1B2B4B] bg-gray-50"/>
                 </div>
               </div>
               {(mixWeightKg||mixCbm)&&(
-                <div className="mt-2 text-[11px] text-[#1B2B4B] bg-[#1B2B4B]/5 rounded-lg px-3 py-1.5">
-                  적용 중량: <b>{Math.max(parseFloat(mixWeightKg)||0,(parseFloat(mixCbm)||0)*250).toLocaleString()}kg</b>
-                  {" · "}단위: <b>{Math.max(1,Math.ceil(Math.max(parseFloat(mixWeightKg)||0,(parseFloat(mixCbm)||0)*250)/100))}개</b> (100kg 기준)
+                <div className="mt-3 text-[12px] text-[#1B2B4B] bg-[#1B2B4B]/5 rounded-xl px-4 py-2.5 font-semibold">
+                  적용: <b>{Math.max(parseFloat(mixWeightKg)||0,(parseFloat(mixCbm)||0)*250).toLocaleString()}kg</b>
+                  {" · "}단위 <b>{Math.max(1,Math.ceil(Math.max(parseFloat(mixWeightKg)||0,(parseFloat(mixCbm)||0)*250)/100))}개</b>
                 </div>
               )}
             </div>
           )}
 
           {/* 화물 유형 */}
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-            <div className="text-[11px] font-bold text-gray-400 mb-3 tracking-wide uppercase">화물 유형</div>
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+            <div className="text-[11px] font-bold text-[#1B2B4B]/40 mb-3 tracking-widest uppercase">화물 유형</div>
             <div className="flex gap-2">
               {CARGO_TYPES.map(ct=>(
-                <button
-                  key={ct.id}
-                  onClick={()=>setCargoType(ct.id)}
-                  className={`flex-1 py-2 rounded-lg text-[12px] font-semibold border transition ${
-                    cargoType===ct.id?"bg-[#1B2B4B] text-white border-[#1B2B4B]":"bg-white text-gray-700 border-gray-200 hover:border-[#1B2B4B]"}`}
+                <button key={ct.id} onClick={()=>setCargoType(ct.id)}
+                  className={`flex-1 py-3 rounded-xl text-[13px] font-bold border-2 transition ${
+                    cargoType===ct.id?"bg-[#1B2B4B] text-white border-[#1B2B4B] shadow-md":"bg-white text-gray-500 border-gray-100 hover:border-[#1B2B4B]/40 hover:text-[#1B2B4B]"}`}
                 >{ct.name}</button>
               ))}
             </div>
@@ -522,74 +518,80 @@ export default function FreightRateInquiry(){
           {/* 독차 전용: 기사 선호도 */}
           {freightMode==="독차"&&<DriverPreference value={preference} onChange={setPreference}/>}
 
-          {/* 혼적 전용: 가이드 */}
+          {/* 혼적 전용: 안내 */}
           {freightMode==="혼적"&&(
-            <div className="bg-gray-50 rounded-xl border border-gray-200 p-3 text-[11px] text-gray-600 leading-relaxed">
-              <div className="font-bold text-[#1B2B4B] mb-1">혼적(합짐) 안내</div>
-              <div>• 100km 이하: 기본 28,000원 + 100kg당 3,500원</div>
-              <div>• 100~300km: 기본 28,000~58,000원 구간 요율</div>
-              <div>• 300km 초과: 기본 78,000원 + 100kg당 12,000원~</div>
-              <div className="mt-1 text-gray-400">※ 실제 운임은 업체별 협의에 따라 상이할 수 있습니다</div>
+            <div className="bg-[#1B2B4B]/4 rounded-2xl border border-[#1B2B4B]/10 p-4 text-[12px] text-[#1B2B4B]/70 leading-relaxed">
+              <div className="font-extrabold text-[#1B2B4B] mb-2 text-[13px]">혼적(합짐) 요율 안내</div>
+              <div className="space-y-1">
+                <div>• 100km 이하: 기본 28,000원 + 100kg당 3,500원</div>
+                <div>• 100~300km: 기본 28,000~58,000원 구간 요율</div>
+                <div>• 300km 초과: 기본 78,000원 + 100kg당 12,000원~</div>
+              </div>
+              <div className="mt-2 text-[11px] text-[#1B2B4B]/40">※ 실제 운임은 업체별 협의에 따라 상이할 수 있습니다</div>
             </div>
           )}
 
-          {/* 결과 */}
+          {/* ── 결과 카드 ── */}
           {result&&step==="result"&&(
-            <div className="rounded-xl overflow-hidden shadow-lg"
-              style={{background: result.mode==="혼적"
-                ?"linear-gradient(135deg,#7c3aed 0%,#db2777 100%)"
-                :"linear-gradient(135deg,#1B3A6B 0%,#2563eb 100%)"}}>
-              <div className="p-5">
-                {/* 모드 배지 */}
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/20 text-white">
+            <div className="rounded-2xl overflow-hidden shadow-xl border border-[#1B2B4B]/10"
+              style={{background:"linear-gradient(150deg,#0f1e38 0%,#1B2B4B 50%,#243a60 100%)"}}>
+              <div className="p-6">
+                {/* 상단 배지 */}
+                <div className="flex items-center gap-2 mb-4">
+                  <span className={`text-[11px] font-extrabold px-3 py-1 rounded-full ${result.mode==="혼적"?"bg-orange-400/90 text-white":"bg-blue-400/90 text-white"}`}>
                     {result.mode==="혼적"?"혼적(합짐)":"독차"}
                   </span>
-                  {result.mode==="혼적"&&<span className="text-[10px] text-white/70">{result.tier} · {result.effWeight.toLocaleString()}kg</span>}
+                  {result.mode==="혼적"&&<span className="text-[11px] text-white/50 font-semibold">{result.tier} · {result.effWeight.toLocaleString()}kg</span>}
+                  {result.mode==="독차"&&<span className="text-[11px] text-white/50 font-semibold">{VEHICLE_TYPES.find(v=>v.id===vehicle)?.name}</span>}
                 </div>
-                <div className="flex items-start justify-between mb-4">
-                  <div>
-                    <div className="text-[11px] text-white/60 mb-1">예상운임</div>
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-[28px] font-extrabold text-white leading-none">{fmtMoney(result.min)}</span>
-                      <span className="text-white/60 text-[20px] font-light leading-none">~</span>
-                      <span className="text-[28px] font-extrabold text-white leading-none">{fmtMoney(result.max)}</span>
+
+                {/* 운임 메인 */}
+                <div className="mb-4">
+                  <div className="text-[12px] text-white/40 font-semibold mb-1 tracking-wide">예상 운임 (VAT 별도)</div>
+                  <div className="flex items-baseline gap-2 flex-wrap">
+                    <span className="text-[32px] font-black text-white leading-none">{fmtMoney(result.min)}</span>
+                    <span className="text-white/30 text-[22px] font-light">~</span>
+                    <span className="text-[32px] font-black text-white leading-none">{fmtMoney(result.max)}</span>
+                  </div>
+                </div>
+
+                {/* 평균 운임 바 */}
+                <div className="mb-4 bg-white/8 rounded-xl p-4">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-[12px] text-white/50 font-semibold">평균 운임</span>
+                    <span className="text-[22px] font-black text-yellow-300 leading-none">{fmtMoney(result.avg)}</span>
+                  </div>
+                  <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
+                    <div className="h-full bg-gradient-to-r from-blue-400 to-yellow-300 rounded-full" style={{width:"55%"}}/>
+                  </div>
+                  <div className="flex justify-between mt-1.5">
+                    <span className="text-[11px] text-white/30">최저 {fmtMoney(result.min)}</span>
+                    <span className="text-[11px] text-white/30">최고 {fmtMoney(result.max)}</span>
+                  </div>
+                </div>
+
+                {/* 세부 정보 */}
+                <div className="grid grid-cols-2 gap-2 mb-4">
+                  {[
+                    {label:"거리",value:`약 ${result.distance}km`},
+                    {label:"예상시간",value:fmtTime(result.mins)},
+                    ...(result.mode==="독차"?[
+                      {label:"경유가",value:`${result.fuelCost?.toLocaleString()}원`},
+                      {label:"차종",value:VEHICLE_TYPES.find(v=>v.id===vehicle)?.name},
+                    ]:[
+                      {label:"적재단위",value:`${result.units}개`},
+                      {label:"단가",value:`${result.per100kg?.toLocaleString()}원/100kg`},
+                    ]),
+                  ].map(({label,value})=>(
+                    <div key={label} className="bg-white/6 rounded-xl px-3 py-2.5">
+                      <div className="text-[10px] text-white/35 font-semibold mb-0.5">{label}</div>
+                      <div className="text-[13px] font-bold text-white/85">{value}</div>
                     </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-[9px] text-white/50">VAT 별도 · 광고 시세</div>
-                    <div className="mt-1">
-                      <div className="text-[10px] text-white/60">평균운임</div>
-                      <div className="text-[24px] font-extrabold text-yellow-200 leading-none">{fmtMoney(result.avg)}</div>
-                    </div>
-                  </div>
+                  ))}
                 </div>
 
-                <div className="mb-3">
-                  <div className="h-1.5 bg-white/15 rounded-full overflow-hidden">
-                    <div className="h-full bg-white/70 rounded-full" style={{width:"55%"}}/>
-                  </div>
-                  <div className="flex justify-between mt-1">
-                    <span className="text-[10px] text-white/50">최저 {fmtMoney(result.min)}</span>
-                    <span className="text-[10px] text-white/50">최고 {fmtMoney(result.max)}</span>
-                  </div>
-                </div>
-
-                <div className="border-t border-white/15 pt-3 flex flex-wrap gap-x-4 gap-y-1">
-                  <span className="text-[11px] text-white/70">거리: 약 {result.distance}km</span>
-                  <span className="text-[11px] text-white/70">예상소요: {fmtTime(result.mins)}</span>
-                  {result.mode==="독차"&&<>
-                    <span className="text-[11px] text-white/70">경유가: {result.fuelCost?.toLocaleString()}원</span>
-                    <span className="text-[11px] text-white/70">차종: {VEHICLE_TYPES.find(v=>v.id===vehicle)?.name}</span>
-                  </>}
-                  {result.mode==="혼적"&&<>
-                    <span className="text-[11px] text-white/70">적재단위: {result.units}개</span>
-                    <span className="text-[11px] text-white/70">단가: {result.per100kg.toLocaleString()}원/100kg</span>
-                  </>}
-                </div>
-
-                <div className="mt-4 flex gap-2">
-                  <button onClick={reset} className="flex-1 py-2 rounded-lg bg-white/15 hover:bg-white/25 text-white text-[12px] font-semibold transition">
+                <div className="flex gap-2">
+                  <button onClick={reset} className="flex-1 py-3 rounded-xl bg-white/10 hover:bg-white/18 text-white text-[13px] font-bold transition border border-white/10">
                     다시 조회
                   </button>
                   <button
@@ -599,7 +601,7 @@ export default function FreightRateInquiry(){
                       const text=`[운임견적]\n경로: ${route}\n구분: ${modeStr}\n거리: 약 ${result.distance}km · 예상 ${fmtTime(result.mins)}\n운임: ${fmtMoney(result.min)}~${fmtMoney(result.max)} (평균 ${fmtMoney(result.avg)})\n※ VAT 별도 · 광고시세 기준`;
                       navigator.clipboard.writeText(text).catch(()=>{});
                     }}
-                    className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white/80 text-[12px] font-semibold transition border border-white/20"
+                    className="px-4 py-3 rounded-xl bg-white/10 hover:bg-white/18 text-white/70 text-[13px] font-bold transition border border-white/10"
                   >복사</button>
                 </div>
               </div>
@@ -608,24 +610,22 @@ export default function FreightRateInquiry(){
 
           {/* 시군구 선택 패널 */}
           {cityStep&&(
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-              <div className="flex items-center gap-2 mb-3">
-                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] font-bold ${cityStep==="from"?"bg-blue-500":"bg-orange-400"}`}>
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+              <div className="flex items-center gap-3 mb-3">
+                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-white text-[11px] font-extrabold flex-shrink-0 ${cityStep==="from"?"bg-[#1B2B4B]":"bg-orange-400"}`}>
                   {cityStep==="from"?"출":"하"}
                 </div>
-                <span className="text-[13px] font-bold text-[#1B2B4B]">{cityStep==="from"?fromP:toP}</span>
+                <span className="text-[15px] font-extrabold text-[#1B2B4B]">{cityStep==="from"?fromP:toP}</span>
                 <button
-                  className="ml-auto text-[11px] text-gray-500 hover:text-[#1B2B4B] border border-gray-300 rounded-md px-2 py-0.5"
+                  className="ml-auto text-[11px] text-gray-400 hover:text-[#1B2B4B] border border-gray-200 rounded-lg px-3 py-1 font-semibold transition"
                   onClick={()=>{setCityStep(null);if(cityStep==="from")setFromP(null);else setToP(null);}}
-                >← 도/시 재선택</button>
+                >← 재선택</button>
               </div>
-              <div className="text-[11px] text-gray-500 mb-2">시·군·구를 선택하세요</div>
+              <div className="text-[12px] text-gray-400 font-semibold mb-3">시·군·구를 선택하세요</div>
               <div className="grid grid-cols-3 gap-1.5 max-h-[220px] overflow-y-auto pr-1">
                 {(CITIES[cityStep==="from"?fromP:toP]||[]).map(city=>(
-                  <button
-                    key={city.n}
-                    onClick={()=>handleCitySelect(city)}
-                    className="px-2 py-2 text-[11px] font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-[#1B2B4B] hover:text-white hover:border-[#1B2B4B] transition text-left"
+                  <button key={city.n} onClick={()=>handleCitySelect(city)}
+                    className="px-2 py-2.5 text-[12px] font-semibold text-gray-600 border border-gray-100 rounded-xl hover:bg-[#1B2B4B] hover:text-white hover:border-[#1B2B4B] transition text-center bg-gray-50"
                   >{city.n}</button>
                 ))}
               </div>
@@ -633,8 +633,8 @@ export default function FreightRateInquiry(){
           )}
         </div>
 
-        {/* ───────────── 오른쪽 지도 ───────────── */}
-        <div className="flex-1 rounded-xl border border-gray-200 shadow-sm flex flex-col overflow-hidden bg-white">
+        {/* ───────────── 오른쪽 지도 (60%) ───────────── */}
+        <div className="flex-[6] min-w-0 rounded-2xl border border-gray-100 shadow-sm flex flex-col overflow-hidden bg-white">
           {/* 지도 헤더 */}
           <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-3">
             {step!=="result"&&(
