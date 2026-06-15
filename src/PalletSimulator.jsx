@@ -49,7 +49,7 @@ function calcFit(truckL, truckW, pw, pd, mode) {
 
 // ── 트럭 3D 뷰 SVG (다불러 참고 스타일) ─────────────────────────────────────
 function TruckSideView({ truck, fit, stacking, palletCount, pSize, bodyType }) {
-  const VW = 900, VH = 290;
+  const VW = 900, VH = 400;
   const GY = 244;   // 지면 y
 
   // ── 화물칸 기하학 ────────────────────────────────────────────
@@ -161,26 +161,30 @@ function TruckSideView({ truck, fit, stacking, palletCount, pSize, bodyType }) {
       {/* 오른쪽 끝 레일 */}
       <line x1={BRX} y1={BNY} x2={BRX+BSX} y2={BFY} stroke="#B0B0B0" strokeWidth="1.2"/>
 
-      {/* ── 차종별 길이 마커 ── */}
+      {/* ── 차종별 길이 마커 (말풍선 박스) ── */}
       {MARKERS.map((m, i) => {
         const mx = BLX + m.L * PX_M;
         if (mx > BRX + 5) return null;
-        const ex = mx + 14 + i * 2;
-        const ey = BNY + 22 + i * 18;
         const isCur = Math.abs(m.L - truck.L) < 0.05;
+        const BW = 68, BH = 32;
+        // 2줄로 엇갈려 아래에 배치
+        const row = i % 2;
+        const by = GY + 16 + row * 44;
+        const bx = Math.max(BLX - 4, Math.min(BRX - BW + 4, mx - BW / 2));
+        const lineTip = bx + BW / 2;
         return (
           <g key={i}>
-            <line x1={mx} y1={BNY + 1} x2={ex} y2={ey - 3}
-              stroke={isCur ? "#1B2B4B" : "#999"} strokeWidth={isCur ? 1.8 : 1}/>
-            <text x={ex + 2} y={ey + 1}
-              fontSize="9" fill={isCur ? "#1B2B4B" : "#888"}
-              fontWeight={isCur ? "bold" : "normal"} fontFamily="sans-serif">
-              {m.label}
-            </text>
-            <text x={ex + 2} y={ey + 11}
-              fontSize="8.5" fill={isCur ? "#2d4a7a" : "#aaa"} fontFamily="sans-serif">
-              {m.L.toFixed(1)}m
-            </text>
+            <line x1={mx} y1={GY + 2} x2={lineTip} y2={by - 1}
+              stroke={isCur ? "#1B2B4B" : "#BBBBBB"} strokeWidth={isCur ? 1.6 : 1}/>
+            <rect x={bx} y={by} width={BW} height={BH} rx={5}
+              fill={isCur ? "#1B2B4B" : "white"}
+              stroke={isCur ? "#1B2B4B" : "#CCCCCC"} strokeWidth={isCur ? 1.5 : 1}/>
+            <text x={bx + BW / 2} y={by + 12} textAnchor="middle"
+              fill={isCur ? "white" : "#555"} fontSize="8" fontWeight={isCur ? "bold" : "600"}
+              fontFamily="sans-serif">{m.label}</text>
+            <text x={bx + BW / 2} y={by + 25} textAnchor="middle"
+              fill={isCur ? "rgba(255,255,255,0.9)" : "#888"} fontSize="9.5" fontWeight="bold"
+              fontFamily="sans-serif">{m.L.toFixed(2)}m</text>
           </g>
         );
       })}
@@ -259,14 +263,24 @@ function TruckSideView({ truck, fit, stacking, palletCount, pSize, bodyType }) {
       <rect x={187} y={GY - 108} width={12} height={104} fill="#F4F4F4" stroke="none"/>
 
       {/* ── 캡 본체 ── */}
-      <rect x={20} y={GY - 118} width={170} height={118} fill="#D8D8D8" stroke="#B8B8B8" strokeWidth="1.5" rx={8}/>
-      {/* 캡 루프 */}
-      <rect x={32} y={GY - 122} width={148} height={12} fill="#CACACA" stroke="#B0B0B0" strokeWidth="1" rx={5}/>
+      {/* 캡 윗면 (3D top face) */}
+      <polygon
+        points={`20,${GY-118} 186,${GY-118} ${186+BSX},${GY-118-BSY} ${20+BSX},${GY-118-BSY}`}
+        fill="#E2E2E2" stroke="#C4C4C4" strokeWidth="1"/>
+      {/* 에어 디플렉터 줄 */}
+      {[0.3, 0.6].map((f, i) => (
+        <line key={i}
+          x1={20 + f * 166} y1={GY - 118}
+          x2={20 + BSX + f * 166} y2={GY - 118 - BSY}
+          stroke="#CCCCCC" strokeWidth="0.7"/>
+      ))}
+      {/* 캡 측면 */}
+      <rect x={20} y={GY - 118} width={166} height={118} fill="#DCDCDC" stroke="#C0C0C0" strokeWidth="1.5" rx={6}/>
       {/* 앞유리 */}
-      <path d={`M 60,${GY-108} L 188,${GY-113} L 188,${GY-52} L 60,${GY-48} Z`}
-        fill="#EAEAF0" stroke="#C8C8D0" strokeWidth="1.2"/>
+      <path d={`M 60,${GY-108} L 186,${GY-113} L 186,${GY-52} L 60,${GY-48} Z`}
+        fill="#D8E8F4" stroke="#B8C8D8" strokeWidth="1.2"/>
       {/* 사이드 윈도 */}
-      <rect x={22} y={GY-108} width={36} height={44} fill="#EAEAF0" stroke="#C8C8D0" strokeWidth="1" rx={2}/>
+      <rect x={22} y={GY-108} width={36} height={44} fill="#D8E8F4" stroke="#B8C8D8" strokeWidth="1" rx={2}/>
       {/* 도어선 */}
       <line x1={60} y1={GY-112} x2={60} y2={GY-6} stroke="#C0C0C0" strokeWidth="1.2"/>
       {/* 도어 핸들 */}
@@ -484,7 +498,7 @@ export default function PalletSimulator() {
             )}
 
             {/* SVG */}
-            <div className="h-[268px]" style={{ background: "linear-gradient(160deg,#f6f8fc 0%,#eef1f7 100%)" }}>
+            <div className="h-[340px]" style={{ background: "linear-gradient(160deg,#f6f8fc 0%,#eef1f7 100%)" }}>
               {displayRes && (
                 <TruckSideView
                   truck={displayRes.truck}
