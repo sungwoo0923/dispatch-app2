@@ -47,8 +47,248 @@ function calcFit(truckL, truckW, pw, pd, mode) {
   }
 }
 
-// ── 트럭 3D 뷰 SVG (다불러 참고 스타일) ─────────────────────────────────────
+// ── 미니 그리드 (전체 차량 비교 카드용) ──────────────────────────────────
+function MiniGrid({ fit, palletCount, layers }) {
+  const cols = Math.max(1, fit.cols), rows = Math.max(1, fit.rows);
+  const cell = Math.max(3, Math.min(11, Math.floor(66 / Math.max(cols, rows))));
+  const gw = cols * cell, gh = rows * cell;
+  return (
+    <svg viewBox={`0 0 ${gw} ${gh}`} style={{ width: gw, height: gh }}>
+      {Array.from({ length: rows }).flatMap((_, r) =>
+        Array.from({ length: cols }).map((_, c) => {
+          const idx = r * cols + c;
+          const layer1 = idx < Math.min(palletCount, cols * rows);
+          const layer2 = layers === 2 && idx < Math.min(palletCount - cols * rows, cols * rows);
+          return (
+            <rect key={`${r}_${c}`}
+              x={c * cell + 0.5} y={r * cell + 0.5}
+              width={cell - 1} height={cell - 1}
+              fill={layer2 ? "#7B241C" : layer1 ? "#C0392B" : "#E8E8EC"} rx={1}/>
+          );
+        })
+      )}
+    </svg>
+  );
+}
+
+// ── 탑다운 화물 적재 시뮬레이터 ──────────────────────────────────────────
 function TruckSideView({ truck, fit, stacking, palletCount, pSize, bodyType }) {
+  const VW = 800, VH = 290;
+
+  // ── 레이아웃 ──
+  const TM = 36, BM = 40, LM = 56, RM = 24, CAB_W = 38;
+  const availW = VW - LM - RM;
+  const availH = VH - TM - BM;
+
+  // 스케일: 트럭 치수를 화면에 맞게
+  const scale = Math.min(availW / truck.L, availH / truck.W);
+  const CL = truck.L * scale;   // 컨테이너 px 길이
+  const CW = truck.W * scale;   // 컨테이너 px 너비
+  const CX = LM + (availW - CL) / 2;
+  const CY = TM + (availH - CW) / 2;
+
+  // ── 파렛트 크기 ──
+  const palD_px = fit.pd * scale;
+  const palW_px = pSize.w * scale;
+  const GAP = Math.max(1.5, scale * 0.015);
+  const layers = stacking === "2단" ? 2 : 1;
+
+  // ── 파렛트 슬롯 생성 (layerCount 누적) ──
+  const slots = {};  // key "row,col" → {x, y, w, h, layerCount, pd, pw}
+
+  const addSlot = (key, x, y, w, h) => {
+    if (!slots[key]) slots[key] = { x, y, w, h, layerCount: 0 };
+    slots[key].layerCount++;
+  };
+
+  let cnt = 0;
+  outer:
+  for (let layer = 0; layer < layers; layer++) {
+    for (let row = 0; row < fit.rows; row++) {
+      for (let col = 0; col < fit.cols; col++) {
+        if (cnt >= palletCount) break outer;
+        addSlot(`${row},${col}`,
+          CX + row * palD_px + GAP, CY + col * palW_px + GAP,
+          palD_px - GAP * 2, palW_px - GAP * 2);
+        cnt++;
+      }
+    }
+    if (fit.mixed) {
+      const m = fit.mixed;
+      const mDpx = m.pd * scale, mWpx = m.pw * scale;
+      for (let row = 0; row < m.rows; row++) {
+        for (let col = 0; col < m.cols; col++) {
+          if (cnt >= palletCount) break outer;
+          addSlot(`mx${row},${col}`,
+            CX + m.offsetL * scale + row * mDpx + GAP, CY + col * mWpx + GAP,
+            mDpx - GAP * 2, mWpx - GAP * 2);
+          cnt++;
+        }
+      }
+    }
+  }
+
+  const slotList = Object.values(slots);
+
+  // ── 적재 길이 ──
+  const filledRows = Math.min(fit.rows, Math.ceil(palletCount / Math.max(1, fit.cols)));
+  const loadedM    = filledRows * fit.pd;
+  const loadedPx   = loadedM * scale;
+  const remainM    = Math.max(0, truck.L - loadedM);
+  const isWing     = bodyType === "윙바디";
+
+  return (
+    <svg viewBox={`0 0 ${VW} ${VH}`} className="w-full h-full" style={{ userSelect: "none" }}>
+      <defs>
+        <linearGradient id="fg" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#F9F9FC"/>
+          <stop offset="100%" stopColor="#F0F0F6"/>
+        </linearGradient>
+        <linearGradient id="lg" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#FEF4F4"/>
+          <stop offset="100%" stopColor="#FDEAEA"/>
+        </linearGradient>
+        <linearGradient id="cg" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stopColor="#C4C4C4"/>
+          <stop offset="100%" stopColor="#DCDCDC"/>
+        </linearGradient>
+      </defs>
+
+      {/* 배경 */}
+      <rect width={VW} height={VH} fill="#EAEDF4"/>
+
+      {/* ── 컨테이너 바닥 ── */}
+      <rect x={CX} y={CY} width={CL} height={CW} fill="url(#fg)" rx={3}/>
+
+      {/* 적재 구역 강조 */}
+      {loadedPx > 0 && (
+        <rect x={CX} y={CY} width={Math.min(loadedPx, CL)} height={CW}
+          fill="url(#lg)" rx={3}/>
+      )}
+
+      {/* 격자선 */}
+      {Array.from({ length: fit.rows + 1 }).map((_, i) => {
+        const x = CX + i * palD_px;
+        return x <= CX + CL + 1
+          ? <line key={`v${i}`} x1={x} y1={CY} x2={x} y2={CY + CW} stroke="#DDDDE8" strokeWidth="0.7"/>
+          : null;
+      })}
+      {Array.from({ length: fit.cols + 1 }).map((_, i) => {
+        const y = CY + i * palW_px;
+        return y <= CY + CW + 1
+          ? <line key={`h${i}`} x1={CX} y1={y} x2={CX + CL} y2={y} stroke="#DDDDE8" strokeWidth="0.7"/>
+          : null;
+      })}
+
+      {/* ── 파렛트 ── */}
+      {slotList.map((p, i) => {
+        if (p.layerCount === 0) return null;
+        const fill = p.layerCount >= 2 ? "#8B1A1A" : "#C0392B";
+        const sh = Math.min(6, p.h * 0.28), sb = Math.min(5, p.h * 0.2);
+        return (
+          <g key={i}>
+            <rect x={p.x + 2} y={p.y + 2} width={p.w} height={p.h} fill="rgba(0,0,0,0.10)" rx={2}/>
+            <rect x={p.x} y={p.y} width={p.w} height={p.h} fill={fill} rx={2}/>
+            <rect x={p.x} y={p.y} width={p.w} height={sh} fill="rgba(255,255,255,0.22)" rx={2}/>
+            <rect x={p.x} y={p.y + p.h - sb} width={p.w} height={sb} fill="rgba(0,0,0,0.18)" rx={2}/>
+            {p.w > 22 && <line x1={p.x + p.w/2} y1={p.y+2} x2={p.x + p.w/2} y2={p.y+p.h-2} stroke="rgba(0,0,0,0.10)" strokeWidth="0.8"/>}
+            {p.h > 22 && <line x1={p.x+2} y1={p.y + p.h/2} x2={p.x+p.w-2} y2={p.y + p.h/2} stroke="rgba(0,0,0,0.10)" strokeWidth="0.8"/>}
+            {p.layerCount >= 2 && p.w > 14 && p.h > 14 && (
+              <>
+                <rect x={p.x+p.w-15} y={p.y+2} width={13} height={12} rx={3} fill="rgba(0,0,0,0.35)"/>
+                <text x={p.x+p.w-8.5} y={p.y+11} textAnchor="middle" fontSize="7.5" fill="white" fontWeight="bold" fontFamily="sans-serif">2</text>
+              </>
+            )}
+          </g>
+        );
+      })}
+
+      {/* ── 윙바디 측벽 ── */}
+      {isWing && (
+        <>
+          <rect x={CX} y={CY - 7} width={CL} height={7} fill="#B8B8B8" stroke="#A8A8A8" strokeWidth="0.8"/>
+          <rect x={CX} y={CY + CW} width={CL} height={7} fill="#B8B8B8" stroke="#A8A8A8" strokeWidth="0.8"/>
+        </>
+      )}
+
+      {/* 컨테이너 외벽 */}
+      <rect x={CX} y={CY} width={CL} height={CW} fill="none" stroke="#ABABBA" strokeWidth="1.8" rx={3}/>
+
+      {/* ── 캡 블록 ── */}
+      <rect x={CX - CAB_W - 5} y={CY - 10} width={CAB_W} height={CW + 20}
+        fill="url(#cg)" stroke="#B4B4B4" strokeWidth="1.5" rx={5}/>
+      <rect x={CX - CAB_W - 1} y={CY + CW * 0.1} width={CAB_W - 10} height={CW * 0.4}
+        fill="rgba(170,210,245,0.75)" stroke="#9BBCD8" strokeWidth="1" rx={3}/>
+      <rect x={CX - 5} y={CY - 2} width={5} height={CW + 4} fill="#C0C0C0"/>
+
+      {/* ── 적재 구분선 + 화살표 ── */}
+      {loadedPx > 0 && loadedPx < CL - 3 && (
+        <g>
+          <line x1={CX + loadedPx} y1={CY - 18} x2={CX + loadedPx} y2={CY + CW + 8}
+            stroke="#E74C3C" strokeWidth="1.5" strokeDasharray="5,3"/>
+          <rect x={CX} y={CY - 26} width={loadedPx} height={11} rx={5.5}
+            fill="rgba(231,76,60,0.13)"/>
+          <line x1={CX + 3} y1={CY - 20} x2={CX + loadedPx - 3} y2={CY - 20}
+            stroke="#E74C3C" strokeWidth="1.2"/>
+          <polygon points={`${CX+3},${CY-20} ${CX+9},${CY-17} ${CX+9},${CY-23}`} fill="#E74C3C"/>
+          <polygon points={`${CX+loadedPx-3},${CY-20} ${CX+loadedPx-9},${CY-17} ${CX+loadedPx-9},${CY-23}`} fill="#E74C3C"/>
+          <text x={CX + loadedPx/2} y={CY - 18} textAnchor="middle" fontSize="8.5"
+            fill="#E74C3C" fontWeight="bold" fontFamily="sans-serif">{loadedM.toFixed(2)}m</text>
+        </g>
+      )}
+      {/* 전체 길이: 적재 0이거나 꽉 찼을 때 */}
+      {(loadedPx <= 3 || loadedPx >= CL - 3) && (
+        <text x={CX + CL/2} y={CY - 14} textAnchor="middle" fontSize="9"
+          fill="#888" fontFamily="sans-serif">{truck.L.toFixed(1)}m</text>
+      )}
+
+      {/* ── 하단 눈금자 ── */}
+      {(() => {
+        const step = truck.L <= 4 ? 0.5 : truck.L <= 8 ? 1 : 2;
+        const marks = [];
+        for (let m = 0; m <= truck.L + 0.01; m += step) {
+          const rx = CX + m * scale;
+          const major = Math.round(m / step) % 2 === 0;
+          marks.push(
+            <g key={`r${m}`}>
+              <line x1={rx} y1={CY + CW + 3} x2={rx} y2={CY + CW + (major ? 10 : 5)}
+                stroke="#B0B0B0" strokeWidth={major ? 1 : 0.7}/>
+              {major && <text x={rx} y={CY + CW + 22} textAnchor="middle"
+                fontSize="9" fill="#999" fontFamily="sans-serif">{m}m</text>}
+            </g>
+          );
+        }
+        return marks;
+      })()}
+      <line x1={CX} y1={CY + CW + 3} x2={CX + CL} y2={CY + CW + 3} stroke="#C0C0C0" strokeWidth="1"/>
+
+      {/* ── 너비 주석 (좌측) ── */}
+      <line x1={CX - CAB_W - 14} y1={CY} x2={CX - CAB_W - 14} y2={CY + CW} stroke="#C0C0C0" strokeWidth="1"/>
+      <line x1={CX-CAB_W-18} y1={CY} x2={CX-CAB_W-10} y2={CY} stroke="#C0C0C0" strokeWidth="1"/>
+      <line x1={CX-CAB_W-18} y1={CY+CW} x2={CX-CAB_W-10} y2={CY+CW} stroke="#C0C0C0" strokeWidth="1"/>
+      <text x={CX - CAB_W - 24} y={CY + CW/2 + 4} textAnchor="middle" fontSize="9.5" fill="#999"
+        fontFamily="sans-serif" transform={`rotate(-90,${CX-CAB_W-24},${CY+CW/2})`}>{truck.W}m</text>
+
+      {/* ── 상단 정보 배지 ── */}
+      <rect x={CX} y={4} width={CL} height={26} rx={13} fill="rgba(27,43,75,0.90)"/>
+      <text x={CX + CL/2} y={21} textAnchor="middle" fill="white" fontSize="11"
+        fontWeight="700" fontFamily="sans-serif">
+        {`${truck.name} · ${bodyType}  ·  파렛 ${cnt}개 적재  /  ${fit.cols}열 × ${fit.rows}행 · 최대 ${fit.count * layers}개`}
+      </text>
+
+      {/* 여유 길이 */}
+      {remainM > 0.05 && (
+        <text x={CX + CL - 4} y={CY + CW/2 + 4} textAnchor="end"
+          fontSize="9" fill="#AAAAAA" fontFamily="sans-serif"
+          style={{ pointerEvents: "none" }}>
+          여유 {remainM.toFixed(2)}m →
+        </text>
+      )}
+    </svg>
+  );
+}
+
+
   const VW = 900, VH = 400;
   const GY = 244;   // 지면 y
 
@@ -498,7 +738,7 @@ export default function PalletSimulator() {
             )}
 
             {/* SVG */}
-            <div className="h-[340px]" style={{ background: "linear-gradient(160deg,#f6f8fc 0%,#eef1f7 100%)" }}>
+            <div className="h-[270px]" style={{ background: "linear-gradient(160deg,#f6f8fc 0%,#eef1f7 100%)" }}>
               {displayRes && (
                 <TruckSideView
                   truck={displayRes.truck}
@@ -545,33 +785,47 @@ export default function PalletSimulator() {
             </div>
           )}
 
-          {/* 전체 차량 비교 */}
+          {/* 전체 차량 비교 — 카드 그리드 */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
             <div className="text-[11px] font-bold text-[#1B2B4B]/40 mb-3 tracking-widest uppercase">전체 차량 비교</div>
-            <div className="space-y-2">
+            <div className="grid grid-cols-5 gap-2">
               {results.map(r => {
                 const isActive = selectedId === r.truck.id || (!selectedId && r === (okResults[0] || results[0]));
-                const loadedPct = r.maxPal > 0 ? Math.min(100, (palletCount / r.maxPal) * 100) : 100;
+                const pct = r.maxPal > 0 ? Math.min(100, (palletCount / r.maxPal) * 100) : 100;
                 return (
                   <button key={r.truck.id} onClick={() => setSelectedId(r.truck.id)}
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border-2 transition text-left ${isActive ? "border-[#1B2B4B] bg-[#1B2B4B]/4" : r.ok ? "border-gray-100 hover:border-gray-300 hover:bg-gray-50" : "border-gray-100 hover:bg-gray-50 opacity-75"}`}>
-                    <div className={`w-[80px] text-[14px] font-black flex-shrink-0 ${isActive?"text-[#1B2B4B]":"text-gray-700"}`}>
+                    className={`flex flex-col items-center gap-1.5 py-3 px-2 rounded-2xl border-2 transition-all ${
+                      isActive
+                        ? "border-[#1B2B4B] bg-[#1B2B4B]/5 shadow-md scale-[1.03]"
+                        : r.ok
+                          ? "border-gray-100 hover:border-gray-300 hover:bg-gray-50"
+                          : "border-gray-100 opacity-55 hover:opacity-80"
+                    }`}>
+                    {/* 톤수명 */}
+                    <span className={`text-[12px] font-black leading-tight ${isActive ? "text-[#1B2B4B]" : "text-gray-700"}`}>
                       {r.truck.name}
+                    </span>
+                    {/* 미니 파렛 그리드 */}
+                    <div className="flex items-center justify-center">
+                      <MiniGrid fit={r.fit} palletCount={palletCount} layers={layers}/>
                     </div>
-                    <div className="flex-1 h-6 bg-gray-100 rounded-lg overflow-hidden relative">
-                      <div className="h-full rounded-lg transition-all duration-300"
-                        style={{ width: `${loadedPct}%`, background: r.ok ? (isActive ? "#1B2B4B" : "#2d4a7a") : "#ef4444" }}/>
-                      <div className="absolute inset-0 flex items-center px-2.5">
-                        <span className={`text-[11px] font-semibold ${loadedPct > 48 ? "text-white" : r.ok ? "text-gray-600" : "text-red-700"}`}>
-                          {r.truck.L}m · {r.fit.cols}열 × {r.fit.rows}행
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex-shrink-0 w-[44px] text-right">
-                      <div className={`text-[15px] font-black ${r.ok ? "text-[#1B2B4B]" : "text-red-500"}`}>{r.maxPal}개</div>
-                    </div>
-                    <div className={`flex-shrink-0 w-[36px] text-center text-[11px] font-black py-0.5 rounded-lg ${r.ok ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-600"}`}>
+                    {/* 최대 개수 */}
+                    <span className={`text-[18px] font-black leading-none ${r.ok ? (isActive ? "text-[#1B2B4B]" : "text-gray-800") : "text-red-500"}`}>
+                      {r.maxPal}
+                      <span className="text-[10px] font-semibold text-gray-400 ml-0.5">개</span>
+                    </span>
+                    {/* 트럭 길이 */}
+                    <span className="text-[9px] text-gray-400 font-medium">{r.truck.L}m</span>
+                    {/* 상태 배지 */}
+                    <span className={`text-[9px] font-black px-2 py-0.5 rounded-full ${
+                      r.ok ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-600"
+                    }`}>
                       {r.ok ? "가능" : "초과"}
+                    </span>
+                    {/* 점유율 바 */}
+                    <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                      <div className="h-full rounded-full transition-all duration-300"
+                        style={{ width: `${pct}%`, background: r.ok ? (isActive ? "#1B2B4B" : "#4a6fa5") : "#ef4444" }}/>
                     </div>
                   </button>
                 );
