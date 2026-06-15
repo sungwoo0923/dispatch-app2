@@ -2916,6 +2916,7 @@ return (
   }) {
 
       const [useNewForm, setUseNewForm] = React.useState(false);
+      const [bottomStatusKey, setBottomStatusKey] = React.useState(0);
       // ⏱ 상/하차 시간 + 이전/이후 표시용
 function renderTimeWithCond(time, cond) {
   if (!time) return "-";
@@ -5638,6 +5639,7 @@ const finalCount = saveCount;
 setMultiCount(1);
 setIsSaving(false);
 showAlert(finalCount > 1 ? `${finalCount}건 등록되었습니다.` : "등록되었습니다.");
+setBottomStatusKey(k => k+1);
 
 // ★ 백그라운드 저장 (UI 블로킹 없음)
 if (typeof upsertPlace === "function") {
@@ -11431,6 +11433,7 @@ setConfirmChange(null);
 {role !== "dispatchManagement" && (
   <div id="realtime-status-area">
     <RealtimeStatus
+      key={bottomStatusKey}
       role={role}
       menu={menu}
       dispatchData={dispatchData}
