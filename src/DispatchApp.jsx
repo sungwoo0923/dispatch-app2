@@ -35309,19 +35309,18 @@ const handleBatchSettle = async (targetStatus) => {
   };
 
   const tabBtn = (key, label, badge) => (
-
     <button
       key={key}
       onClick={() => setTab(key)}
-      className={`px-5 py-2.5 text-[14px] font-bold rounded-lg transition relative ${
+      className={`px-5 py-2.5 text-[13px] font-semibold border-b-2 -mb-px transition-colors relative ${
         tab === key
-          ? "bg-[#1B2B4B] text-white shadow"
-          : "bg-white text-[#1B2B4B] border border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"
+          ? "border-[#1B2B4B] text-[#1B2B4B]"
+          : "border-transparent text-gray-400 hover:text-gray-600"
       }`}
     >
       {label}
       {badge > 0 && (
-        <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+        <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
           {badge > 9 ? "9+" : badge}
         </span>
       )}
@@ -35354,7 +35353,7 @@ const handleBatchSettle = async (targetStatus) => {
     <>
     <div className="p-4 overflow-x-auto">
       {/* 탭 */}
-      <div className="flex gap-2 mb-5">
+      <div className="flex gap-0 mb-5 border-b border-gray-200">
         {tabBtn("invoice", "거래명세서", 0)}
         {tabBtn("unsettledMonth", "미수금관리", unsettledBadge)}
         {tabBtn("sentmails", "보낸메일함", emailLogs.length)}

@@ -1,6 +1,8 @@
 // ======================= src/mobile/MobileApp.jsx (PART 1/3) =======================
 import MobileFleetView from "./MobileFleetView";
 import MobileIntelView from "./MobileIntelView";
+import MobileMapFare from "./MobileMapFare";
+import PalletSimulator from "../PalletSimulator";
 import React, { useState, useMemo, useEffect, useRef, startTransition } from "react";
 import {
   LineChart,
@@ -2141,7 +2143,7 @@ const title =
   : page === "form" ? (form._editId ? "수정하기" : "화물등록")
   : page === "notice" ? "공지사항"
   : page === "schedule" ? "일정"
-  : page === "fare" ? "표준운임표"
+  : page === "fare" ? "자사운임표"
   : page === "national-fare" ? "전국운임 조회"
   : page === "status" ? "배차현황"
   : page === "unassigned" ? "미배차현황"
@@ -3934,7 +3936,7 @@ function MobileSideMenu({
           </MenuSection>
 
           <MenuSection title="매출 / 운임표">
-            <MenuItem label="표준운임표" onClick={onGoFare} />
+            <MenuItem label="자사운임표" onClick={onGoFare} />
             <MenuItem label="전국운임 조회" onClick={onGoNationalFare} />
             <MenuItem label="단가표" onClick={onGoRateCard} />
             <MenuItem label="매출관리" onClick={onGoSales} />
@@ -11101,7 +11103,33 @@ function MobileAddressSearch({ value, onChange, onSelect, placeholder }) {
   );
 }
 
+// ── 탭 래퍼: 전국운임조회 / 지도형운임조회 / 차량제원 ──────────────────────
 function MobileNationalFare({ onBack }) {
+  const [nfTab, setNfTab] = useState("전국운임조회");
+  const tabs = ["전국운임조회", "지도형운임조회", "차량제원"];
+  return (
+    <div>
+      <div className="flex gap-0 px-4 pt-3 pb-0 border-b border-gray-200">
+        {tabs.map(t => (
+          <button
+            key={t}
+            onClick={() => setNfTab(t)}
+            className={`px-4 py-2.5 text-[13px] font-semibold border-b-2 -mb-px transition-colors ${
+              nfTab === t
+                ? "border-[#1B2B4B] text-[#1B2B4B]"
+                : "border-transparent text-gray-400 hover:text-gray-600"
+            }`}
+          >{t}</button>
+        ))}
+      </div>
+      {nfTab === "전국운임조회" && <MobileNationalFareSearch />}
+      {nfTab === "지도형운임조회" && <MobileMapFare />}
+      {nfTab === "차량제원" && <div className="px-4 py-4"><PalletSimulator /></div>}
+    </div>
+  );
+}
+
+function MobileNationalFareSearch() {
   const [nfFrom, setNfFrom] = useState("");
   const [nfTo, setNfTo] = useState("");
   const [nfFromCoord, setNfFromCoord] = useState(null);
@@ -11159,17 +11187,6 @@ function MobileNationalFare({ onBack }) {
 
   return (
     <div className="px-4 py-4 space-y-4">
-      {/* 뒤로가기 */}
-      <button
-        onClick={onBack}
-        className="flex items-center gap-1.5 text-[#1B2B4B] text-[13px] font-semibold py-1"
-      >
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-          <polyline points="15 18 9 12 15 6"/>
-        </svg>
-        뒤로가기
-      </button>
-
       {/* 주소 입력 */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3">
         <div>
