@@ -143,10 +143,8 @@ function TruckSideView({ truck, fit, stacking, palletCount, pSize, bodyType }) {
   const loadedM = filledRows * fit.pd;
   const loadedPx = loadedM * scale;
   const remainM = Math.max(0, truck.L - loadedM);
-  const isTap  = bodyType.includes("탑차");
-  const isWing = bodyType === "윙바디" || bodyType.includes("윙");
-  const isCold = bodyType.includes("냉장") || bodyType.includes("냉동");
-  const isFrozen = bodyType.includes("냉동");
+  const isTap  = bodyType === "탑차";
+  const isWing = bodyType === "윙바디";
 
   return (
     <svg viewBox={`0 0 ${VW} ${VH}`} className="w-full h-full" style={{ userSelect: "none" }}>
@@ -171,14 +169,6 @@ function TruckSideView({ truck, fit, stacking, palletCount, pSize, bodyType }) {
           <stop offset="0%" stopColor="#B4B4B4"/>
           <stop offset="100%" stopColor="#DCDCDC"/>
         </linearGradient>
-        <linearGradient id="coldFloor" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#EBF5FC"/>
-          <stop offset="100%" stopColor="#D6EAF8"/>
-        </linearGradient>
-        <linearGradient id="frozenFloor" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#DAEAF8"/>
-          <stop offset="100%" stopColor="#C2D9EF"/>
-        </linearGradient>
         <filter id="palShadow" x="-20%" y="-20%" width="140%" height="140%">
           <feDropShadow dx="1.5" dy="2" stdDeviation="2.5" floodColor="#00000022"/>
         </filter>
@@ -188,8 +178,7 @@ function TruckSideView({ truck, fit, stacking, palletCount, pSize, bodyType }) {
       <rect width={VW} height={VH} fill="#E4E8F0"/>
 
       {/* Cargo floor */}
-      <rect x={CX} y={CY} width={CL} height={CW}
-        fill={isFrozen ? "url(#frozenFloor)" : isCold ? "url(#coldFloor)" : "url(#floorGrad)"} rx={5}/>
+      <rect x={CX} y={CY} width={CL} height={CW} fill="url(#floorGrad)" rx={5}/>
 
       {/* Floor plank texture */}
       {Array.from({ length: Math.floor(CW / 11) }).map((_, i) => (
@@ -206,40 +195,29 @@ function TruckSideView({ truck, fit, stacking, palletCount, pSize, bodyType }) {
       )}
 
       {/* Wing body side rails */}
-      {isWing && !isTap && <>
-        <rect x={CX} y={CY - 12} width={CL} height={12}
-          fill={isFrozen ? "#A4C4DC" : isCold ? "#B6D0E8" : "#C6C6C6"}
-          stroke={isFrozen ? "#72A4C0" : isCold ? "#88B4CC" : "#ABABAB"} strokeWidth="1"/>
+      {isWing && <>
+        <rect x={CX} y={CY - 12} width={CL} height={12} fill="#C6C6C6" stroke="#ABABAB" strokeWidth="1"/>
         {Array.from({ length: Math.floor(CL / 28) }).map((_, i) => (
           <line key={`wr${i}`}
             x1={CX + i * 28 + 14} y1={CY - 12}
             x2={CX + i * 28 + 14} y2={CY}
-            stroke={isCold ? "rgba(90,150,190,0.35)" : "#B8B8B8"} strokeWidth="0.7"/>
+            stroke="#B8B8B8" strokeWidth="0.7"/>
         ))}
-        <rect x={CX} y={CY + CW} width={CL} height={12}
-          fill={isFrozen ? "#A4C4DC" : isCold ? "#B6D0E8" : "#C6C6C6"}
-          stroke={isFrozen ? "#72A4C0" : isCold ? "#88B4CC" : "#ABABAB"} strokeWidth="1"/>
+        <rect x={CX} y={CY + CW} width={CL} height={12} fill="#C6C6C6" stroke="#ABABAB" strokeWidth="1"/>
         {Array.from({ length: Math.floor(CL / 28) }).map((_, i) => (
           <line key={`wb${i}`}
             x1={CX + i * 28 + 14} y1={CY + CW}
             x2={CX + i * 28 + 14} y2={CY + CW + 12}
-            stroke={isCold ? "rgba(90,150,190,0.35)" : "#B8B8B8"} strokeWidth="0.7"/>
+            stroke="#B8B8B8" strokeWidth="0.7"/>
         ))}
       </>}
 
       {/* 탑차 solid box walls */}
       {isTap && <>
         <rect x={CX} y={CY - 18} width={CL} height={18}
-          fill={isFrozen ? "#94BAD6" : isCold ? "#A8CAE0" : "#CACACA"}
-          stroke={isFrozen ? "#68A0C0" : isCold ? "#80B0CC" : "#A0A0A0"} strokeWidth="1.5" rx={2}/>
+          fill="#CACACA" stroke="#A0A0A0" strokeWidth="1.5" rx={2}/>
         <rect x={CX} y={CY + CW} width={CL} height={18}
-          fill={isFrozen ? "#94BAD6" : isCold ? "#A8CAE0" : "#CACACA"}
-          stroke={isFrozen ? "#68A0C0" : isCold ? "#80B0CC" : "#A0A0A0"} strokeWidth="1.5" rx={2}/>
-        {isCold && <>
-          <text x={CX + 8} y={CY - 5} fontSize="9" fill={isFrozen ? "#3870A0" : "#4A90B8"} fontWeight="bold" fontFamily="sans-serif">
-            {isFrozen ? "냉동" : "냉장"}
-          </text>
-        </>}
+          fill="#CACACA" stroke="#A0A0A0" strokeWidth="1.5" rx={2}/>
       </>}
 
       {/* Empty slot outlines */}
@@ -599,9 +577,9 @@ export default function PalletSimulator() {
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex-shrink-0">
             {/* 차종 선택 탭 */}
             <div className="flex items-center border-b border-gray-100 px-3 gap-0.5 flex-wrap">
-              {["카고","윙바디","탑차","냉장탑차","냉동탑차","냉장윙","냉동윙"].map(t => (
+              {["카고","윙바디","탑차"].map(t => (
                 <button key={t} onClick={() => setBodyType(t)}
-                  className={`px-3 py-2 text-[12px] font-bold transition border-b-2 ${bodyType===t?"border-[#1B2B4B] text-[#1B2B4B]":"border-transparent text-gray-400 hover:text-gray-600"}`}>{t}</button>
+                  className={`px-4 py-2.5 text-[13px] font-bold transition border-b-2 ${bodyType===t?"border-[#1B2B4B] text-[#1B2B4B]":"border-transparent text-gray-400 hover:text-gray-600"}`}>{t}</button>
               ))}
               <div className="ml-auto flex items-center gap-1 py-1 flex-wrap">
                 {okResults.slice(0, 6).map(r => (

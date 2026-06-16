@@ -4645,6 +4645,13 @@ const [fareCompare, setFareCompare] = React.useState({
 });
 const [isSaving, setIsSaving] = React.useState(false);
 const [multiCount, setMultiCount] = React.useState(1); // ★ 다중 등록 수량
+const [orderDates, setOrderDates] = React.useState([]); // 오더별 개별 상차일
+const [useSeparateDates, setUseSeparateDates] = React.useState(false);
+
+React.useEffect(() => {
+  if (multiCount <= 1) { setUseSeparateDates(false); return; }
+  setOrderDates(Array.from({ length: multiCount }, (_, i) => form.상차일 || ""));
+}, [multiCount]); // eslint-disable-line react-hooks/exhaustive-deps
 
 React.useEffect(() => {
   const pickup = normalizeKey(form.상차지명);
@@ -5609,7 +5616,10 @@ const _carNo = form.차량번호, _name = form.이름, _tel = form.전화번호;
 
 // ★ 오더 병렬 저장 (순차→병렬로 속도 개선)
 const saveCount = multiCount > 1 ? multiCount : 1;
-await Promise.all(Array.from({ length: saveCount }, () => addDispatch({ ...rec })));
+await Promise.all(Array.from({ length: saveCount }, (_, i) => {
+  const dateForOrder = (useSeparateDates && orderDates[i]) ? lockYear(orderDates[i]) : rec.상차일;
+  return addDispatch({ ...rec, 상차일: dateForOrder });
+}));
 
 // ★ UI 즉시 초기화 (Firestore 백그라운드 기다리지 않음)
 const reset = {
@@ -5627,6 +5637,8 @@ setConfirmOpen(false);
 try { localStorage.removeItem("dispatchForm"); } catch {}
 const finalCount = saveCount;
 setMultiCount(1);
+setUseSeparateDates(false);
+setOrderDates([]);
 setIsSaving(false);
 showAlert(finalCount > 1 ? `${finalCount}건 등록되었습니다.` : "등록되었습니다.");
 setBottomStatusKey(k => k+1);
@@ -10689,6 +10701,55 @@ setConfirmChange(null);
     </div>
 
   </div>
+
+  {/* 날짜 개별 설정 (수량 2개 이상일 때) */}
+  {multiCount > 1 && (
+    <div className="px-4 py-3 border-t border-gray-100 shrink-0">
+      <div className="flex items-center justify-between mb-2">
+        <div>
+          <span className="text-[12px] font-bold text-[#1B2B4B]">날짜 개별 설정</span>
+          <span className="text-[10px] text-gray-400 ml-1.5">{multiCount}건 각각 상차일 지정</span>
+        </div>
+        <button
+          type="button"
+          onClick={() => setUseSeparateDates(v => !v)}
+          className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+            useSeparateDates ? "bg-[#1B2B4B]" : "bg-gray-200"
+          }`}
+        >
+          <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform ${
+            useSeparateDates ? "translate-x-4" : "translate-x-0.5"
+          }`}/>
+        </button>
+      </div>
+      {useSeparateDates && (
+        <div className="space-y-1.5">
+          {Array.from({ length: multiCount }, (_, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <span className="text-[11px] font-bold text-gray-400 w-8 shrink-0 text-right">{i + 1}번</span>
+              <input
+                type="date"
+                value={orderDates[i] || form.상차일 || ""}
+                onChange={e => {
+                  const next = [...orderDates];
+                  next[i] = e.target.value;
+                  setOrderDates(next);
+                }}
+                className="flex-1 px-2 py-1 text-[12px] font-medium border border-gray-200 rounded-lg focus:border-[#1B2B4B] outline-none bg-white"
+              />
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={() => setOrderDates(Array.from({ length: multiCount }, () => form.상차일 || ""))}
+            className="w-full mt-0.5 py-1 text-[10px] font-semibold text-gray-400 hover:text-gray-600 transition text-center"
+          >
+            전체 날짜 초기화
+          </button>
+        </div>
+      )}
+    </div>
+  )}
 
   {/* 하단 고정 버튼 */}
   <div className="px-4 py-4 border-t border-gray-200 bg-white flex gap-3 shrink-0">
