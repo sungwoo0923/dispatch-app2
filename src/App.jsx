@@ -318,6 +318,13 @@ export default function App() {
 
   const updateShownRef = useRef(false);
 
+  // 네트워크 문제로 Firestore 응답 없을 때 영구 로딩 방지 (8초 타임아웃)
+  useEffect(() => {
+    if (!loading) return;
+    const t = setTimeout(() => setLoading(false), 8000);
+    return () => clearTimeout(t);
+  }, [loading]);
+
   // 카카오 인앱 브라우저 → 크롬 강제
   useEffect(() => {
     const ua = navigator.userAgent.toLowerCase();

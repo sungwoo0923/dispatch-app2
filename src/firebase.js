@@ -9,8 +9,9 @@ import {
 } from "firebase/auth";
 import {
   initializeFirestore,
+  getFirestore,
   persistentLocalCache,
-  persistentMultipleTabManager,
+  persistentSingleTabManager,
   doc,
   updateDoc,
   getDoc,
@@ -46,11 +47,20 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 
 export const auth = getAuth(app);
-export const db = initializeFirestore(app, {
-  localCache: persistentLocalCache({
-    tabManager: persistentMultipleTabManager(),
-  }),
-});
+
+// IndexedDB 영구 캐시 시도 → 실패 시 기본 메모리 캐시로 폴백
+function createDb() {
+  try {
+    return initializeFirestore(app, {
+      localCache: persistentLocalCache({
+        tabManager: persistentSingleTabManager({ forceOwnership: true }),
+      }),
+    });
+  } catch {
+    return getFirestore(app);
+  }
+}
+export const db = createDb();
 export const storage = getStorage(app);
 
 // ====================================================
