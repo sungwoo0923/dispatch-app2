@@ -4646,11 +4646,13 @@ const [fareCompare, setFareCompare] = React.useState({
 const [isSaving, setIsSaving] = React.useState(false);
 const [multiCount, setMultiCount] = React.useState(1); // ★ 다중 등록 수량
 const [orderDates, setOrderDates] = React.useState([]); // 오더별 개별 상차일
+const [orderDropDates, setOrderDropDates] = React.useState([]); // 오더별 개별 하차일
 const [useSeparateDates, setUseSeparateDates] = React.useState(false);
 
 React.useEffect(() => {
   if (multiCount <= 1) { setUseSeparateDates(false); return; }
-  setOrderDates(Array.from({ length: multiCount }, (_, i) => form.상차일 || ""));
+  setOrderDates(Array.from({ length: multiCount }, () => form.상차일 || ""));
+  setOrderDropDates(Array.from({ length: multiCount }, () => form.상차일 || ""));
 }, [multiCount]); // eslint-disable-line react-hooks/exhaustive-deps
 
 React.useEffect(() => {
@@ -5618,7 +5620,8 @@ const _carNo = form.차량번호, _name = form.이름, _tel = form.전화번호;
 const saveCount = multiCount > 1 ? multiCount : 1;
 await Promise.all(Array.from({ length: saveCount }, (_, i) => {
   const dateForOrder = (useSeparateDates && orderDates[i]) ? lockYear(orderDates[i]) : rec.상차일;
-  return addDispatch({ ...rec, 상차일: dateForOrder });
+  const dropDateForOrder = (useSeparateDates && orderDropDates[i]) ? lockYear(orderDropDates[i]) : (rec.하차일 || dateForOrder);
+  return addDispatch({ ...rec, 상차일: dateForOrder, 하차일: dropDateForOrder });
 }));
 
 // ★ UI 즉시 초기화 (Firestore 백그라운드 기다리지 않음)
@@ -10708,7 +10711,7 @@ setConfirmChange(null);
       <div className="flex items-center justify-between mb-2">
         <div>
           <span className="text-[12px] font-bold text-[#1B2B4B]">날짜 개별 설정</span>
-          <span className="text-[10px] text-gray-400 ml-1.5">{multiCount}건 각각 상차일 지정</span>
+          <span className="text-[10px] text-gray-400 ml-1.5">{multiCount}건 상차일/하차일 개별 지정</span>
         </div>
         <button
           type="button"
@@ -10724,6 +10727,11 @@ setConfirmChange(null);
       </div>
       {useSeparateDates && (
         <div className="space-y-1.5">
+          <div className="flex items-center gap-2 mb-1">
+            <div className="w-8 shrink-0" />
+            <span className="flex-1 text-[10px] font-bold text-gray-400 text-center">상차일</span>
+            <span className="flex-1 text-[10px] font-bold text-gray-400 text-center">하차일</span>
+          </div>
           {Array.from({ length: multiCount }, (_, i) => (
             <div key={i} className="flex items-center gap-2">
               <span className="text-[11px] font-bold text-gray-400 w-8 shrink-0 text-right">{i + 1}번</span>
@@ -10734,6 +10742,22 @@ setConfirmChange(null);
                   const next = [...orderDates];
                   next[i] = e.target.value;
                   setOrderDates(next);
+                  // 하차일이 상차일과 같으면 같이 업데이트
+                  if (!orderDropDates[i] || orderDropDates[i] === (orderDates[i] || form.상차일 || "")) {
+                    const nd = [...orderDropDates];
+                    nd[i] = e.target.value;
+                    setOrderDropDates(nd);
+                  }
+                }}
+                className="flex-1 px-2 py-1 text-[12px] font-medium border border-gray-200 rounded-lg focus:border-[#1B2B4B] outline-none bg-white"
+              />
+              <input
+                type="date"
+                value={orderDropDates[i] || orderDates[i] || form.상차일 || ""}
+                onChange={e => {
+                  const nd = [...orderDropDates];
+                  nd[i] = e.target.value;
+                  setOrderDropDates(nd);
                 }}
                 className="flex-1 px-2 py-1 text-[12px] font-medium border border-gray-200 rounded-lg focus:border-[#1B2B4B] outline-none bg-white"
               />
@@ -10741,7 +10765,10 @@ setConfirmChange(null);
           ))}
           <button
             type="button"
-            onClick={() => setOrderDates(Array.from({ length: multiCount }, () => form.상차일 || ""))}
+            onClick={() => {
+              setOrderDates(Array.from({ length: multiCount }, () => form.상차일 || ""));
+              setOrderDropDates(Array.from({ length: multiCount }, () => form.상차일 || ""));
+            }}
             className="w-full mt-0.5 py-1 text-[10px] font-semibold text-gray-400 hover:text-gray-600 transition text-center"
           >
             전체 날짜 초기화

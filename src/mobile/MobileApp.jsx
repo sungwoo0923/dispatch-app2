@@ -5105,10 +5105,26 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess }) {
     if (!val.trim()) { setSmartMatched([]); return; }
     const { plate, phone, name } = parseDriverText(val);
     if (plate) {
-      const results = (drivers || []).filter(d => nd(d.차량번호).includes(nd(plate)));
-      setSmartMatched(results.slice(0, 6));
-      if (results.length === 0) { setCarNo(plate); setDriverName(name || ""); setDriverPhone(phone || ""); }
-      else { setCarNo(results[0].차량번호 || ""); setDriverName(results[0].이름 || ""); setDriverPhone(results[0].전화번호 || ""); }
+      const ndL = (s = "") => String(s).replace(/[-.\s]/g, "").toLowerCase();
+      const results = (drivers || []).filter(d => ndL(d.차량번호).includes(ndL(plate)));
+      const sorted = [...results].sort((a, b) => {
+        const aExact = ndL(a.이름) === ndL(name) && ndL(a.전화번호) === ndL(phone);
+        const bExact = ndL(b.이름) === ndL(name) && ndL(b.전화번호) === ndL(phone);
+        if (aExact && !bExact) return -1;
+        if (!aExact && bExact) return 1;
+        const aName = name && ndL(a.이름) === ndL(name);
+        const bName = name && ndL(b.이름) === ndL(name);
+        if (aName && !bName) return -1;
+        if (!aName && bName) return 1;
+        return 0;
+      });
+      setSmartMatched(sorted.slice(0, 6));
+      if (sorted.length === 0) { setCarNo(plate); setDriverName(name || ""); setDriverPhone(phone || ""); }
+      else {
+        const nameMatch = name ? sorted.find(d => ndL(d.이름) === ndL(name)) : null;
+        const best = nameMatch || sorted[0];
+        setCarNo(best.차량번호 || ""); setDriverName(best.이름 || ""); setDriverPhone(best.전화번호 || "");
+      }
       return;
     }
     if (phone) {
@@ -6566,7 +6582,10 @@ const handleAssignClick = () => {
       {state !== "배차완료" ? (
         <button onClick={handleAssignClick} className="w-full py-3 mb-2 rounded-xl bg-[#1B2B4B] text-white text-sm font-bold">기사 배차하기</button>
       ) : (
-        <button onClick={onCancelAssign} className="w-full py-3 mb-2 rounded-xl border border-red-300 text-red-500 text-sm font-bold">기사 배차 취소</button>
+        <div className="space-y-2 mb-2">
+          <button onClick={handleAssignClick} className="w-full py-3 rounded-xl bg-[#1B2B4B] text-white text-sm font-bold">기사 변경하기</button>
+          <button onClick={onCancelAssign} className="w-full py-3 rounded-xl border border-red-300 text-red-500 text-sm font-bold">기사 배차 취소</button>
+        </div>
       )}
       <div className="h-px bg-gray-100 my-1" />
       <div className="grid grid-cols-2 gap-2 mt-2">
