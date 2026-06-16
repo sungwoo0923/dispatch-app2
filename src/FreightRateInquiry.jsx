@@ -405,7 +405,7 @@ export default function FreightRateInquiry(){
     <div className="w-full">
       {/* 탭 네비게이션 */}
       <div className="flex items-center gap-1 mb-5 border-b border-gray-200">
-        {["운임조회","차량제원","전국운임조회"].map(tab=>(
+        {["운임조회","차량제원","전국운임조회","자사운임표"].map(tab=>(
           <button key={tab} onClick={()=>setActiveTab(tab)}
             className={`px-5 py-2.5 text-[14px] font-extrabold transition border-b-2 -mb-px ${activeTab===tab?"border-[#1B2B4B] text-[#1B2B4B]":"border-transparent text-gray-400 hover:text-gray-600"}`}>
             {tab}
@@ -415,6 +415,7 @@ export default function FreightRateInquiry(){
 
       {activeTab==="차량제원"&&<PalletSimulator/>}
       {activeTab==="전국운임조회"&&<StandardFare embedded={true} defaultTab="전국운임표"/>}
+      {activeTab==="자사운임표"&&<StandardFare embedded={true} defaultTab="표준운임"/>}
 
       {activeTab==="운임조회"&&<>
       <div className="flex items-center gap-4 mb-5 flex-wrap">

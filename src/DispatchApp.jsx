@@ -2167,7 +2167,7 @@ React.useEffect(() => {
   ];
   // test(경리/회계): 배차현황/기사/거래처/홈/거래처정산/지급관리 가능, 배차입력/운임표/관리 차단
   const testBlockedMenus = [
-    "배차관리", "실시간배차현황", "미배차현황", "표준운임표", "단가표", "관리자메뉴",
+    "배차관리", "실시간배차현황", "미배차현황", "단가표", "관리자메뉴",
   ];
 
   const blockedMenus = role === "test" ? testBlockedMenus : userBlockedMenus;
@@ -2248,7 +2248,6 @@ return (
               "실시간배차현황",
               "배차현황",
               "미배차현황",
-              "표준운임표",
               "단가표",
               "운임조회",
               "기사관리",
@@ -2451,10 +2450,6 @@ return (
             upsertDriver={upsertDriver}
           />
         )}
-         {menu === "표준운임표" && (
-          <StandardFare dispatchData={dispatchDataFiltered} />
-        )}
-
         {menu === "단가표" && (
           <RateCard dispatchData={dispatchDataFiltered} />
         )}
