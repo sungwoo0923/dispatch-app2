@@ -1857,7 +1857,10 @@ useEffect(() => {
   return () => unsub();
 }, [userCompany, role]);
   // ⭐ 여기 추가!
-  const [subMenu, setSubMenu] = useState("고정거래처관리");
+  const [배차현황Tab, set배차현황Tab] = useState("배차현황");
+  const [거래처관리Tab, set거래처관리Tab] = useState("하차지거래처");
+  const [정산관리Tab, set정산관리Tab] = useState("거래처정산");
+  const [관리센터Tab, set관리센터Tab] = useState("경영인텔리전스");
   // ⭐ 내 정보 패널 ON/OFF
   const [showMyInfo, setShowMyInfo] = useState(false);
   // ⭐ 명함 이미지 (per-user, Firestore 로드)
@@ -2163,11 +2166,11 @@ React.useEffect(() => {
   // ---------------- 역할별 차단 메뉴 ----------------
   // user(실무자): 배차/기사/거래처 업무 가능, 재무/관리 메뉴 차단
   const userBlockedMenus = [
-    "매출관리", "거래처정산", "지급관리", "관리자메뉴",
+    "매출관리", "정산관리", "관리자메뉴",
   ];
-  // test(경리/회계): 배차현황/기사/거래처/홈/거래처정산/지급관리 가능, 배차입력/운임표/관리 차단
+  // test(경리/회계): 배차현황/기사/거래처/홈/정산관리 가능, 배차입력/운임표/관리 차단
   const testBlockedMenus = [
-    "배차관리", "실시간배차현황", "미배차현황", "단가표", "관리자메뉴",
+    "배차관리", "실시간배차현황", "단가표", "관리자메뉴",
   ];
 
   const blockedMenus = role === "test" ? testBlockedMenus : userBlockedMenus;
@@ -2247,23 +2250,19 @@ return (
               "배차관리",
               "실시간배차현황",
               "배차현황",
-              "미배차현황",
               "단가표",
               "운임조회",
               "기사관리",
               "거래처관리",
-              "고정거래처관리",
+              "지입차관리",
               "매출관리",
-              "거래처정산",
-              "지급관리",
+              "정산관리",
               "관리자메뉴",
-              "가입신청관리",
-              "경영인텔리전스",
+              "관리센터",
             ].map((m) => {
               const isBlocked = (role === "user" || role === "test") && blockedMenus.includes(m);
               if (m === "관리자메뉴" && role !== "admin" && role !== "totalMaster") return null;
-              if (m === "가입신청관리" && role !== "totalMaster") return null;
-              if (m === "경영인텔리전스" && role !== "totalMaster") return null;
+              if (m === "관리센터" && role !== "totalMaster") return null;
               if (isBlocked && role === "test") return null;
               const isActive = menu === m;
               return (
@@ -2417,38 +2416,51 @@ return (
           />
         )}
 
-                {menu === "배차현황" && (
-          <DispatchStatus
-            role={role}
-            dispatchData={dispatchDataFiltered}
-            timeOptions={timeOptions}
-            tonOptions={tonOptions}
-            drivers={drivers}
-            clients={clients}
-            places={places}
-            placeRows={places}
-            addDispatch={addDispatch}
-            patchDispatch={patchDispatch}
-            removeDispatch={removeDispatch}
-            upsertDriver={upsertDriver}
-            focusOrderId={focusOrderId}
-            clearFocusOrder={() => setFocusOrderId(null)}
-          />
-        )}
-
-
-
-        {menu === "미배차현황" && (
-          <UnassignedStatus
-            role={role}
-            dispatchData={dispatchDataFiltered}
-            patchDispatch={patchDispatch}
-            removeDispatch={removeDispatch}
-            drivers={drivers}
-            clients={clients}
-            places={places}
-            upsertDriver={upsertDriver}
-          />
+        {menu === "배차현황" && (
+          <div>
+            <div className="flex gap-2 px-4 pt-4 pb-0">
+              {["배차현황", "미배차현황"].map(tab => (
+                <button key={tab} onClick={() => set배차현황Tab(tab)}
+                  className={`px-5 py-2 text-[13px] font-bold rounded-lg transition border ${
+                    배차현황Tab === tab
+                      ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
+                      : "bg-white text-[#1B2B4B] border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"
+                  }`}>
+                  {tab}
+                </button>
+              ))}
+            </div>
+            {배차현황Tab === "배차현황" && (
+              <DispatchStatus
+                role={role}
+                dispatchData={dispatchDataFiltered}
+                timeOptions={timeOptions}
+                tonOptions={tonOptions}
+                drivers={drivers}
+                clients={clients}
+                places={places}
+                placeRows={places}
+                addDispatch={addDispatch}
+                patchDispatch={patchDispatch}
+                removeDispatch={removeDispatch}
+                upsertDriver={upsertDriver}
+                focusOrderId={focusOrderId}
+                clearFocusOrder={() => setFocusOrderId(null)}
+              />
+            )}
+            {배차현황Tab === "미배차현황" && (
+              <UnassignedStatus
+                role={role}
+                dispatchData={dispatchDataFiltered}
+                patchDispatch={patchDispatch}
+                removeDispatch={removeDispatch}
+                drivers={drivers}
+                clients={clients}
+                places={places}
+                upsertDriver={upsertDriver}
+              />
+            )}
+          </div>
         )}
         {menu === "단가표" && (
           <RateCard dispatchData={dispatchDataFiltered} />
@@ -2463,47 +2475,55 @@ return (
         )}
 
         <div style={{ display: menu === "거래처관리" && (role === "admin" || role === "totalMaster" || role === "user" || role === "test") ? "block" : "none" }}>
-          <ClientManagement
-            clients={clients}
-            upsertClient={upsertClient}
-            removeClient={removeClient}
-            upsertPlace={upsertPlace}
-            places={places}
-            showAlert={showAlert}
-          />
+          <div className="flex gap-2 px-4 pt-4 pb-0">
+            {["하차지거래처", "기본거래처", "고정거래처관리", "고정노선관리"].map(tab => (
+              <button key={tab} onClick={() => set거래처관리Tab(tab)}
+                className={`px-5 py-2 text-[13px] font-bold rounded-lg transition border ${
+                  거래처관리Tab === tab
+                    ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
+                    : "bg-white text-[#1B2B4B] border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"
+                }`}>
+                {tab}
+              </button>
+            ))}
+          </div>
+          {(거래처관리Tab === "하차지거래처" || 거래처관리Tab === "기본거래처") && (
+            <ClientManagement
+              key={거래처관리Tab}
+              clients={clients}
+              upsertClient={upsertClient}
+              removeClient={removeClient}
+              upsertPlace={upsertPlace}
+              places={places}
+              showAlert={showAlert}
+              initialTab={거래처관리Tab === "기본거래처" ? "기본" : "하차지"}
+              hideTabs={true}
+            />
+          )}
+          {거래처관리Tab === "고정거래처관리" && (
+            <div className="p-4">
+              <FixedClients drivers={drivers} upsertDriver={upsertDriver} userCompany={userCompany || localStorage.getItem("userCompany") || ""} role={role} />
+            </div>
+          )}
+          {거래처관리Tab === "고정노선관리" && (
+            <div className="p-4">
+              <DeliverySignaturePage />
+            </div>
+          )}
         </div>
 
-        {menu === "고정거래처관리" && (role === "admin" || role === "totalMaster" || role === "user" || role === "test") && (
+        {menu === "지입차관리" && (role === "admin" || role === "totalMaster" || role === "user" || role === "test") && (
           <div>
-            {/* 상단 탭 */}
-            <div className="flex gap-0 mb-4 border-b border-gray-200">
-              {["고정거래처관리", "지입차관리", "서명관리"].map(tab => (
-                <button
-                  key={tab}
-                  onClick={() => setSubMenu(tab)}
-                  className={`px-5 py-2.5 text-[13px] font-semibold border-b-2 -mb-px transition ${
-                    subMenu === tab
-                      ? "border-[#1B2B4B] text-[#1B2B4B]"
-                      : "border-transparent text-gray-400 hover:text-gray-600"
-                  }`}
-                >
-                  {tab}
-                </button>
-              ))}
+            <div className="flex gap-2 px-4 pt-4 pb-4">
+              <button
+                className="px-5 py-2 text-[13px] font-bold rounded-lg transition border bg-[#1B2B4B] text-white border-[#1B2B4B]"
+              >
+                지입차관리
+              </button>
             </div>
-
-            {/* 탭 화면 */}
-            {subMenu === "고정거래처관리" && (
-              <FixedClients drivers={drivers} upsertDriver={upsertDriver} userCompany={userCompany || localStorage.getItem("userCompany") || ""} role={role} />
-            )}
-
-            {subMenu === "지입차관리" && (
+            <div className="px-4">
               <FleetManagement />
-            )}
-
-            {subMenu === "서명관리" && (
-              <DeliverySignaturePage />
-            )}
+            </div>
           </div>
         )}
 
@@ -2516,36 +2536,69 @@ return (
           />
         )}
 
-        <div style={{ display: menu === "거래처정산" && (role === "admin" || role === "totalMaster" || role === "test") ? "block" : "none" }}>
-          <ClientSettlement
-            dispatchData={dispatchDataFiltered}
-            setDispatchData={setDispatchData}
-            clients={clients}
-            setClients={(next) => next.forEach(upsertClient)}
-            upsertClient={upsertClient}
-            showAlert={showAlert}
-            patchDispatch={patchDispatch}
-            cardImage={cardImage}
-            setCardImage={setCardImage}
-            cardImageUploading={cardImageUploading}
-            setCardImageUploading={setCardImageUploading}
-          />
+        <div style={{ display: menu === "정산관리" && (role === "admin" || role === "totalMaster" || role === "test") ? "block" : "none" }}>
+          <div className="flex gap-2 px-4 pt-4 pb-0">
+            {["거래처정산", "지급관리"].map(tab => (
+              <button key={tab} onClick={() => set정산관리Tab(tab)}
+                className={`px-5 py-2 text-[13px] font-bold rounded-lg transition border ${
+                  정산관리Tab === tab
+                    ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
+                    : "bg-white text-[#1B2B4B] border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"
+                }`}>
+                {tab}
+              </button>
+            ))}
+          </div>
+          <div style={{ display: 정산관리Tab === "거래처정산" ? "block" : "none" }}>
+            <ClientSettlement
+              dispatchData={dispatchDataFiltered}
+              setDispatchData={setDispatchData}
+              clients={clients}
+              setClients={(next) => next.forEach(upsertClient)}
+              upsertClient={upsertClient}
+              showAlert={showAlert}
+              patchDispatch={patchDispatch}
+              cardImage={cardImage}
+              setCardImage={setCardImage}
+              cardImageUploading={cardImageUploading}
+              setCardImageUploading={setCardImageUploading}
+            />
+          </div>
+          {정산관리Tab === "지급관리" && (
+            <div className="p-4">
+              <PaymentManagement
+                dispatchData={dispatchDataFiltered}
+                patchDispatch={patchDispatch}
+              />
+            </div>
+          )}
         </div>
-        {menu === "지급관리" && (role === "admin" || role === "totalMaster" || role === "test") && (
-          <PaymentManagement
-            dispatchData={dispatchDataFiltered}
-            patchDispatch={patchDispatch}
-          />
-        )}
 
         {menu === "운임조회" && <FreightRateInquiry />}
 
         {menu === "관리자메뉴" && (role === "admin" || role === "totalMaster") && <AdminMenu parentRole={role} parentCompany={userCompany || localStorage.getItem("userCompany") || ""} />}
 
-        {menu === "가입신청관리" && role === "totalMaster" && <CompanyApplications />}
-
-        {menu === "경영인텔리전스" && role === "totalMaster" && (
-          <ExecutiveDashboard dispatchData={dispatchData || []} />
+        {menu === "관리센터" && role === "totalMaster" && (
+          <div>
+            <div className="flex gap-2 px-4 pt-4 pb-4">
+              {["경영인텔리전스", "가입신청관리"].map(tab => (
+                <button key={tab} onClick={() => set관리센터Tab(tab)}
+                  className={`px-5 py-2 text-[13px] font-bold rounded-lg transition border ${
+                    관리센터Tab === tab
+                      ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
+                      : "bg-white text-[#1B2B4B] border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"
+                  }`}>
+                  {tab}
+                </button>
+              ))}
+            </div>
+            {관리센터Tab === "경영인텔리전스" && (
+              <ExecutiveDashboard dispatchData={dispatchData || []} />
+            )}
+            {관리센터Tab === "가입신청관리" && (
+              <CompanyApplications />
+            )}
+          </div>
         )}
       </main>
       </div>
@@ -38903,7 +38956,7 @@ function DriverManagement({ drivers, upsertDriver, removeDriver }) {
 }
 // ===================== DispatchApp.jsx (PART 10/10) — END =====================
 // ===================== DispatchApp.jsx (PART 11/11) — START =====================
-function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlace, places: placesProp = [], showAlert = (m) => alert(m) }) {
+function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlace, places: placesProp = [], showAlert = (m) => alert(m), hideTabs = false, initialTab = "하차지" }) {
   const normalizePlaceRow = (d) => {
     const primary = Array.isArray(d.contacts) && d.contacts.length
       ? d.contacts.find(c => c.isPrimary) || d.contacts[0] : null;
@@ -38937,7 +38990,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
     return "bg-blue-50 text-blue-600 border border-blue-200";
   };
 
-  const [subTab, setSubTab] = React.useState("하차지");
+  const [subTab, setSubTab] = React.useState(initialTab);
 
   // ═══════════════════════════════════════════════════
   // ★★★ placeRows를 맨 위에 선언 (순서 핵심) ★★★
@@ -39294,24 +39347,26 @@ React.useEffect(() => {
     <div className="p-4">
 
       {/* 탭 */}
-      <div className="flex gap-2 mb-4">
-        {[
-          { key: "하차지", label: "하차지 거래처", count: gradeStats.전체 },
-          { key: "기본", label: "기본 거래처", count: rows.length },
-        ].map(({ key, label, count }) => (
-          <button key={key} onClick={() => setSubTab(key)}
-            className={`px-5 py-2 text-[13px] font-bold rounded-lg transition relative border ${
-              subTab === key
-                ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
-                : "bg-white text-[#1B2B4B] border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"
-            }`}>
-            {label}
-            <span className={`ml-2 text-[11px] px-1.5 py-0.5 rounded-full font-bold ${subTab === key ? "bg-white/20 text-white" : "bg-gray-100 text-gray-500"}`}>
-              {count}
-            </span>
-          </button>
-        ))}
-      </div>
+      {!hideTabs && (
+        <div className="flex gap-2 mb-4">
+          {[
+            { key: "하차지", label: "하차지 거래처", count: gradeStats.전체 },
+            { key: "기본", label: "기본 거래처", count: rows.length },
+          ].map(({ key, label, count }) => (
+            <button key={key} onClick={() => setSubTab(key)}
+              className={`px-5 py-2 text-[13px] font-bold rounded-lg transition relative border ${
+                subTab === key
+                  ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
+                  : "bg-white text-[#1B2B4B] border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"
+              }`}>
+              {label}
+              <span className={`ml-2 text-[11px] px-1.5 py-0.5 rounded-full font-bold ${subTab === key ? "bg-white/20 text-white" : "bg-gray-100 text-gray-500"}`}>
+                {count}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* ══════ 하차지 거래처 탭 ══════ */}
       {subTab === "하차지" && (
