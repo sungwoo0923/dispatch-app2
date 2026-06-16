@@ -440,9 +440,9 @@ const VEHICLE_CATEGORIES = [
   { label: "호루",      multiplier: 1.0 },
 ];
 
-export default function StandardFare() {
+export default function StandardFare({ embedded = false, defaultTab = "표준운임" }) {
   const [dispatchData, setDispatchData] = useState([]);
-  const [activeTab, setActiveTab] = useState("표준운임"); // "표준운임" | "전국운임표"
+  const [activeTab, setActiveTab] = useState(embedded ? defaultTab : "표준운임"); // "표준운임" | "전국운임표"
 
   // 표준운임 상태
   const [sortKey, setSortKey] = useState("date_desc");
@@ -763,33 +763,37 @@ export default function StandardFare() {
   const cat = VEHICLE_CATEGORIES[nfVehicleCategory];
 
   return (
-    <div className="p-5 bg-gray-50 min-h-screen">
+    <div className={embedded ? "w-full" : "p-5 bg-gray-50 min-h-screen"}>
 
-      {/* 페이지 헤더 */}
-      <div className="mb-4">
-        <h2 className="text-[18px] font-bold text-[#1B2B4B]">표준 운임표</h2>
-        <p className="text-[12px] text-gray-500 mt-0.5">배차 데이터 기반 운임 조회 및 노선별 평균 운임 분석</p>
-      </div>
+      {/* 페이지 헤더 — 단독 페이지일 때만 표시 */}
+      {!embedded && (
+        <div className="mb-4">
+          <h2 className="text-[18px] font-bold text-[#1B2B4B]">표준 운임표</h2>
+          <p className="text-[12px] text-gray-500 mt-0.5">배차 데이터 기반 운임 조회 및 노선별 평균 운임 분석</p>
+        </div>
+      )}
 
-      {/* 탭 네비게이션 */}
-      <div className="flex gap-1 mb-4 border-b border-gray-200">
-        {[
-          { key: "표준운임", label: "표준운임 조회" },
-          { key: "전국운임표", label: "전국운임 조회" },
-        ].map(tab => (
-          <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
-            className={`px-5 py-2.5 text-[13px] font-semibold border-b-2 transition ${
-              activeTab === tab.key
-                ? "border-[#1B2B4B] text-[#1B2B4B]"
-                : "border-transparent text-gray-400 hover:text-gray-600"
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      {/* 탭 네비게이션 — 단독 페이지일 때만 표시 */}
+      {!embedded && (
+        <div className="flex gap-1 mb-4 border-b border-gray-200">
+          {[
+            { key: "표준운임", label: "표준운임 조회" },
+            { key: "전국운임표", label: "전국운임 조회" },
+          ].map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={`px-5 py-2.5 text-[13px] font-semibold border-b-2 transition ${
+                activeTab === tab.key
+                  ? "border-[#1B2B4B] text-[#1B2B4B]"
+                  : "border-transparent text-gray-400 hover:text-gray-600"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* ====== 표준운임 조회 탭 ====== */}
       {activeTab === "표준운임" && (

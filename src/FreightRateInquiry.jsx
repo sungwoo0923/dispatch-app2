@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import southKorea from "@svg-maps/south-korea";
 import PalletSimulator from "./PalletSimulator";
+import StandardFare from "./StandardFare";
 
 // ─── 한국 지도 SVG 경로 (실제 지리 데이터) ─────────────────────────────
 // viewBox="0 0 524 631" — @svg-maps/south-korea 패키지 기준
@@ -404,7 +405,7 @@ export default function FreightRateInquiry(){
     <div className="w-full">
       {/* 탭 네비게이션 */}
       <div className="flex items-center gap-1 mb-5 border-b border-gray-200">
-        {["운임조회","차량제원"].map(tab=>(
+        {["운임조회","차량제원","전국운임조회"].map(tab=>(
           <button key={tab} onClick={()=>setActiveTab(tab)}
             className={`px-5 py-2.5 text-[14px] font-extrabold transition border-b-2 -mb-px ${activeTab===tab?"border-[#1B2B4B] text-[#1B2B4B]":"border-transparent text-gray-400 hover:text-gray-600"}`}>
             {tab}
@@ -413,6 +414,7 @@ export default function FreightRateInquiry(){
       </div>
 
       {activeTab==="차량제원"&&<PalletSimulator/>}
+      {activeTab==="전국운임조회"&&<StandardFare embedded={true} defaultTab="전국운임표"/>}
 
       {activeTab==="운임조회"&&<>
       <div className="flex items-center gap-4 mb-5 flex-wrap">

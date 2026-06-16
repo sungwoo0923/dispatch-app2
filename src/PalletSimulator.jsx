@@ -12,9 +12,11 @@ const PALLET_SIZES = [
   { id: "aj-lg",   label: "1,300 × 1,100", sub: "대형 · 사료·전자",           w: 1.3,  d: 1.1,  cat: "아주", model: "대형" },
   { id: "aj-sm",   label: "1,100 × 800",   sub: "소형 · 편의점·화장품",       w: 1.1,  d: 0.8,  cat: "아주", model: "소형" },
   // ── 기타 규격 ─────────────────────────────────────────────────────────
-  { id: "etc-08x12", label: "800 × 1,200",   sub: "소형 규격",  w: 0.8, d: 1.2, cat: "기타" },
-  { id: "etc-10x12", label: "1,000 × 1,200", sub: "중형 규격",  w: 1.0, d: 1.2, cat: "기타" },
-  { id: "etc-12x11", label: "1,200 × 1,100", sub: "대형 규격",  w: 1.2, d: 1.1, cat: "기타" },
+  { id: "etc-08x12", label: "800 × 1,200",   sub: "소형 규격",         w: 0.8,  d: 1.2, cat: "기타" },
+  { id: "etc-09x09", label: "900 × 900",     sub: "소형 정방형",        w: 0.9,  d: 0.9, cat: "기타" },
+  { id: "etc-10x12", label: "1,000 × 1,200", sub: "중형 규격",         w: 1.0,  d: 1.2, cat: "기타" },
+  { id: "etc-12x08", label: "1,200 × 800",   sub: "EUR 유럽표준 파렛트", w: 1.2,  d: 0.8, cat: "기타" },
+  { id: "etc-12x11", label: "1,200 × 1,100", sub: "대형 규격",         w: 1.2,  d: 1.1, cat: "기타" },
 ];
 
 const PALLET_COMPANIES = [
@@ -23,18 +25,19 @@ const PALLET_COMPANIES = [
   { id: "기타", label: "기타 규격",  desc: "소형 · 대형 · 특수" },
 ];
 
+// 제원 출처: 실차 기준 업계 표준 (1단 적재 기준 최대치)
 const TRUCKS = [
-  { id: "1ton",    name: "1톤",       L: 2.8,  W: 1.50, maxKg: 1000,  wc: 1 },
-  { id: "1.4ton",  name: "1.4톤",     L: 3.6,  W: 1.60, maxKg: 1400,  wc: 1 },
-  { id: "2.5ton",  name: "2.5톤",     L: 4.5,  W: 1.75, maxKg: 2500,  wc: 1 },
-  { id: "3.5ton",  name: "3.5톤",     L: 5.2,  W: 2.10, maxKg: 3500,  wc: 2 },
-  { id: "3.5tonW", name: "3.5톤광폭", L: 5.2,  W: 2.35, maxKg: 3800,  wc: 2 },
-  { id: "5ton",    name: "5톤",       L: 6.2,  W: 2.35, maxKg: 5000,  wc: 2 },
-  { id: "5tonP",   name: "5톤+",      L: 7.4,  W: 2.35, maxKg: 5500,  wc: 2 },
+  { id: "1ton",    name: "1톤",       L: 2.8,  W: 1.60, maxKg: 1000,  wc: 1 },
+  { id: "1.4ton",  name: "1.4톤",     L: 3.1,  W: 1.60, maxKg: 1400,  wc: 1 },
+  { id: "2.5ton",  name: "2.5톤",     L: 4.2,  W: 1.80, maxKg: 2500,  wc: 1 },
+  { id: "3.5ton",  name: "3.5톤",     L: 4.4,  W: 2.00, maxKg: 3500,  wc: 2 },
+  { id: "3.5tonW", name: "3.5톤광폭", L: 4.4,  W: 2.35, maxKg: 3800,  wc: 2 },
+  { id: "5ton",    name: "5톤",       L: 6.2,  W: 2.30, maxKg: 5000,  wc: 2 },
+  { id: "5tonP",   name: "5톤+",      L: 7.3,  W: 2.30, maxKg: 5500,  wc: 2 },
   { id: "11ton",   name: "11톤",      L: 9.1,  W: 2.35, maxKg: 11000, wc: 3 },
-  { id: "18ton",   name: "18톤",      L: 10.1, W: 2.40, maxKg: 18000, wc: 3 },
-  { id: "25ton",   name: "25톤",      L: 11.2, W: 2.45, maxKg: 25000, wc: 3 },
-  { id: "trailer", name: "추레라",    L: 13.6, W: 2.45, maxKg: 27000, wc: 3 },
+  { id: "18ton",   name: "18톤",      L: 10.2, W: 2.35, maxKg: 18000, wc: 3 },
+  { id: "25ton",   name: "25톤",      L: 10.2, W: 2.35, maxKg: 25000, wc: 3 },
+  { id: "trailer", name: "추레라",    L: 12.0, W: 2.40, maxKg: 27000, wc: 3 },
 ];
 
 function calcFit(truckL, truckW, pw, pd, mode) {
