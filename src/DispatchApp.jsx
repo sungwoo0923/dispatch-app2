@@ -14256,6 +14256,8 @@ React.useEffect(() => {
   const [warningList, setWarningList] = React.useState([]);
   const [warningExpanded, setWarningExpanded] = React.useState(false);
   const [urgentPopup, setUrgentPopup] = React.useState([]);
+  const urgentTimerRef = React.useRef(null);
+  const [snoozeRecheckTrigger, setSnoozeRecheckTrigger] = React.useState(0);
   // 첨부파일 개수
 const [attachCount, setAttachCount] = React.useState({});
   const [attachViewer, setAttachViewer] = React.useState(null); // 열린 행
@@ -14426,43 +14428,56 @@ const generateTimeOptions = () => {
   }, [rows]);
 React.useEffect(() => {
   if (!rows.length) return;
-
   const now = new Date();
+  const email = auth.currentUser?.email || "guest";
+  const seen = JSON.parse(localStorage.getItem(`urgentSeen_${email}`) || "[]");
+  const snoozed = JSON.parse(localStorage.getItem(`urgentSnoozed_${email}`) || "{}");
 
   const urgent = rows.filter((r) => {
-
     if (r.배차상태 !== "배차중") return false;
-
     if (!r.상차일 || !r.상차시간) return false;
-
     const t24 = normalizeTime(r.상차시간);
     if (!t24) return false;
-
     const dt = new Date(`${r.상차일}T${t24}:00`);
-
     const diff = dt.getTime() - now.getTime();
-
-    // 1시간 이내 임박
     return diff > 0 && diff <= 30 * 60 * 1000;
   });
 
   if (!urgent.length) return;
 
-  // 이미 본 오더 제외
+  const newOnes = urgent.filter((r) => {
+    if (!r._id) return false;
+    if (seen.includes(r._id)) return false;
+    const until = snoozed[r._id];
+    if (until && now.getTime() < until) return false;
+    return true;
+  });
+
+  if (newOnes.length > 0) {
+    setUrgentPopup(newOnes);
+    playNotifSound();
+  }
+}, [rows, snoozeRecheckTrigger]);
+
+const handleUrgentDismiss = () => {
   const email = auth.currentUser?.email || "guest";
-const urgentKey = `urgentSeen_${email}`;
+  const seen = JSON.parse(localStorage.getItem(`urgentSeen_${email}`) || "[]");
+  const updated = [...new Set([...seen, ...urgentPopup.map((r) => r._id).filter(Boolean)])];
+  try { localStorage.setItem(`urgentSeen_${email}`, JSON.stringify(updated.slice(-500))); } catch {}
+  setUrgentPopup([]);
+};
 
-const seen = JSON.parse(localStorage.getItem(urgentKey) || "[]");
-
-  const newOnes = urgent.filter((r) => !seen.includes(r._id));
-
-if (newOnes.length > 0) {
-  setUrgentPopup(newOnes);
-
-  playNotifSound();
-}
-
-}, [rows]);
+const handleUrgentSnooze = (minutes) => {
+  const email = auth.currentUser?.email || "guest";
+  const snoozedKey = `urgentSnoozed_${email}`;
+  const snoozed = JSON.parse(localStorage.getItem(snoozedKey) || "{}");
+  const until = Date.now() + minutes * 60 * 1000;
+  urgentPopup.forEach((r) => { if (r._id) snoozed[r._id] = until; });
+  try { localStorage.setItem(snoozedKey, JSON.stringify(snoozed)); } catch {}
+  setUrgentPopup([]);
+  if (urgentTimerRef.current) clearTimeout(urgentTimerRef.current);
+  urgentTimerRef.current = setTimeout(() => setSnoozeRecheckTrigger((n) => n + 1), minutes * 60 * 1000);
+};
   // ------------------------
   // 🔁 동일 노선 추천 불러오기
   // ------------------------
@@ -16953,57 +16968,42 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
       </div>
 {/* ================= 임박 미배차 팝업 ================= */}
 {menu === "실시간배차현황" && urgentPopup.length > 0 && (
-  <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[99999]">
-
-    <div className="bg-white w-[420px] rounded-xl shadow-2xl border border-blue-200">
-
-      <div className="bg-blue-600 text-white px-4 py-3 rounded-t-xl font-semibold">
-        배차 알림
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
+    <div className="bg-white w-[440px] rounded-2xl shadow-2xl border border-gray-200 overflow-hidden">
+      <div className="bg-[#1B2B4B] px-5 py-4">
+        <div className="text-[15px] font-bold text-white">미배차 임박 알림</div>
+        <div className="text-[12px] text-white/55 mt-0.5">상차 30분 이내 미배차 오더</div>
       </div>
-
-      <div className="p-4 text-sm">
-
-        <div className="mb-3 text-blue-800 font-semibold">
-          시간이 임박한 배차가 <b>{urgentPopup.length}건</b> 있습니다.
+      <div className="p-5">
+        <div className="text-[13px] font-semibold text-[#1B2B4B] mb-3">
+          {urgentPopup.length}건의 배차가 임박했습니다
         </div>
-
-        <ul className="space-y-1 text-gray-700 max-h-[200px] overflow-y-auto">
+        <div className="space-y-2 max-h-[240px] overflow-y-auto">
           {urgentPopup.map((r) => (
-            <li key={r._id}>
-              • {r.상차시간} {r.상차지명}
-              <span className="text-gray-400">
-                {" "}({r.거래처명})
-              </span>
-            </li>
+            <div key={r._id} className="flex items-center gap-3 px-3 py-2.5 bg-gray-50 rounded-xl border border-gray-100">
+              <div className="w-2 h-2 rounded-full bg-[#1B2B4B] flex-shrink-0" />
+              <div>
+                <span className="text-[13px] font-bold text-[#1B2B4B]">{r.상차시간}</span>
+                <span className="text-[13px] text-gray-600 ml-2">{r.상차지명}</span>
+                <span className="text-[11px] text-gray-400 ml-1">({r.거래처명})</span>
+              </div>
+            </div>
           ))}
-        </ul>
-
-        <div className="mt-4 flex justify-end">
-          <button
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg"
-            onClick={() => {
-
-              const email = auth.currentUser?.email || "guest";
-const urgentKey = `urgentSeen_${email}`;
-
-const seen = JSON.parse(localStorage.getItem(urgentKey) || "[]");
-
-const updated = [
-  ...seen,
-  ...urgentPopup.map((r) => r._id)
-];
-
-const deduped = [...new Set(updated)];
-const trimmedUrgent = deduped.length > 500 ? deduped.slice(-500) : deduped;
-try { localStorage.setItem(urgentKey, JSON.stringify(trimmedUrgent)); } catch {}
-
-setUrgentPopup([]);
-            }}
-          >
-            확인
-          </button>
         </div>
-
+      </div>
+      <div className="px-5 pb-5 flex gap-2">
+        <div className="flex gap-1.5 flex-1">
+          {[5, 10, 30].map((min) => (
+            <button key={min} onClick={() => handleUrgentSnooze(min)}
+              className="flex-1 py-2 text-[12px] font-semibold text-gray-500 border border-gray-200 rounded-xl hover:border-[#1B2B4B]/30 hover:text-[#1B2B4B] transition">
+              {min}분 후 알림
+            </button>
+          ))}
+        </div>
+        <button onClick={handleUrgentDismiss}
+          className="px-5 py-2 text-[13px] font-bold text-white bg-[#1B2B4B] rounded-xl hover:bg-[#243a60] transition">
+          확인
+        </button>
       </div>
     </div>
   </div>

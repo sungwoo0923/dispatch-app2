@@ -773,12 +773,11 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
         </div>
       )}
 
-      {/* 탭 네비게이션 — 단독 페이지일 때만 표시 */}
+      {/* 탭 네비게이션 — 단독 페이지일 때만 표시 (전국운임조회는 운임조회 메뉴로 이동) */}
       {!embedded && (
         <div className="flex gap-1 mb-4 border-b border-gray-200">
           {[
             { key: "표준운임", label: "표준운임 조회" },
-            { key: "전국운임표", label: "전국운임 조회" },
           ].map(tab => (
             <button
               key={tab.key}
