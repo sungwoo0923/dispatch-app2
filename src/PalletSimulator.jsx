@@ -428,10 +428,10 @@ export default function PalletSimulator() {
         </button>
       </div>
 
-      <div className="flex gap-5" style={{ height: "calc(100vh - 188px)", minHeight: "600px" }}>
+      <div className="flex flex-col gap-5 lg:flex-row lg:h-[calc(100vh-188px)] lg:min-h-[600px]">
 
         {/* ── 왼쪽 입력 (34%) ── */}
-        <div className="flex-[34] min-w-0 flex flex-col gap-3 overflow-y-auto pr-1">
+        <div className="flex flex-col gap-3 lg:flex-[34] lg:min-w-0 lg:overflow-y-auto lg:pr-1">
 
           {/* 파렛트 규격 — 2단계 (파레트사 → 크기) */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
@@ -571,7 +571,7 @@ export default function PalletSimulator() {
         </div>
 
         {/* ── 오른쪽 결과 (66%) ── */}
-        <div className="flex-[66] min-w-0 flex flex-col gap-3 overflow-y-auto pr-1">
+        <div className="flex flex-col gap-3 lg:flex-[66] lg:min-w-0 lg:overflow-y-auto lg:pr-1">
 
           {/* 트럭 시각화 */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex-shrink-0">
@@ -602,7 +602,7 @@ export default function PalletSimulator() {
             )}
 
             {/* SVG 컨테이너 */}
-            <div className="h-[360px]" style={{ background: "linear-gradient(160deg,#f3f5fa 0%,#e8ecf4 100%)" }}>
+            <div className="h-[200px] lg:h-[360px]" style={{ background: "linear-gradient(160deg,#f3f5fa 0%,#e8ecf4 100%)" }}>
               {displayRes && (
                 <TruckSideView
                   truck={displayRes.truck}
@@ -630,7 +630,7 @@ export default function PalletSimulator() {
                     {displayRes.ok ? "적재 가능" : "초과"}
                   </span>
                 </div>
-                <div className="grid grid-cols-4 gap-2">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                   {[
                     { l:"최대 적재", v:`${displayRes.maxPal}개`, s:`${stacking} / ${displayRes.fit.count}개/단`, ok:true },
                     { l:"요청 수량", v:`${palletCount}개`, s:displayRes.palletOk?`여유 ${displayRes.maxPal-palletCount}개`:`${palletCount-displayRes.maxPal}개 초과`, ok:displayRes.palletOk },
@@ -652,7 +652,7 @@ export default function PalletSimulator() {
           {/* 전체 차량 비교 */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
             <div className="text-[11px] font-bold text-[#1B2B4B]/40 mb-3 tracking-widest uppercase">전체 차량 비교</div>
-            <div className="grid grid-cols-5 gap-2">
+            <div className="grid grid-cols-3 md:grid-cols-5 gap-2">
               {results.map(r => {
                 const isActive = selectedId === r.truck.id || (!selectedId && r === (okResults[0] || results[0]));
                 const pct = r.maxPal > 0 ? Math.min(100, (palletCount / r.maxPal) * 100) : 100;
@@ -668,7 +668,7 @@ export default function PalletSimulator() {
                     <div className={`text-[12px] font-black leading-tight ${isActive ? "text-white" : "text-[#1B2B4B]"}`}>
                       {r.truck.name}
                     </div>
-                    <div className={`text-[28px] font-black leading-none tracking-tight ${
+                    <div className={`text-[22px] lg:text-[28px] font-black leading-none tracking-tight ${
                       isActive ? "text-white" : r.ok ? "text-[#1B2B4B]" : "text-red-500"
                     }`}>
                       {r.maxPal}

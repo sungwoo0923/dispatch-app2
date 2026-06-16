@@ -229,9 +229,16 @@ export default function MobileMapFare() {
   const [toP, setToP] = useState(null);
   const [toC, setToC] = useState(null);
   const [vehicle, setVehicle] = useState("1ton");
-  const [hover, setHover] = useState(null);
+  const [zoom, setZoom] = useState(1);
+  const [showProvList, setShowProvList] = useState(false);
 
   const provinces = Object.keys(PROVINCE_PATHS);
+
+  const vbW = 524 / zoom;
+  const vbH = 631 / zoom;
+  const vbX = (524 - vbW) / 2;
+  const vbY = (631 - vbH) / 2;
+  const viewBox = `${vbX} ${vbY} ${vbW} ${vbH}`;
 
   const result = useMemo(() => {
     if (!fromC || !toC) return null;
@@ -286,60 +293,90 @@ export default function MobileMapFare() {
       {/* 지도 */}
       {showMap && (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-          <div className={`px-4 py-2.5 text-[12px] font-bold border-b border-gray-50 ${
+          <div className={`px-4 py-2.5 text-[12px] font-bold border-b border-gray-50 flex items-center justify-between ${
             isFromStep ? "bg-blue-50 text-[#1B2B4B]" : "bg-orange-50 text-orange-600"
           }`}>
-            {isFromStep ? "출발 도/시를 선택하세요" : "도착 도/시를 선택하세요"}
+            <span>{isFromStep ? "출발 도/시를 선택하세요" : "도착 도/시를 선택하세요"}</span>
+            {/* 줌 컨트롤 */}
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setZoom(z => Math.min(3, parseFloat((z * 1.5).toFixed(2))))}
+                className="w-7 h-7 rounded-lg bg-white/80 border border-gray-200 text-[#1B2B4B] font-bold text-[14px] flex items-center justify-center shadow-sm"
+              >+</button>
+              {zoom > 1 && (
+                <button
+                  onClick={() => setZoom(1)}
+                  className="h-7 px-2 rounded-lg bg-white/80 border border-gray-200 text-gray-500 text-[10px] font-bold flex items-center shadow-sm"
+                >원래</button>
+              )}
+              <button
+                onClick={() => setZoom(z => Math.max(1, parseFloat((z / 1.5).toFixed(2))))}
+                disabled={zoom <= 1}
+                className="w-7 h-7 rounded-lg bg-white/80 border border-gray-200 text-[#1B2B4B] font-bold text-[16px] flex items-center justify-center shadow-sm disabled:opacity-30"
+              >−</button>
+            </div>
           </div>
           <svg
-            viewBox="0 0 524 631"
+            viewBox={viewBox}
             className="w-full"
-            style={{ maxHeight: "52vw", touchAction: "manipulation" }}
+            style={{ maxHeight: "54vw", touchAction: "none" }}
           >
             {provinces.map(prov => {
               const pos = PROVINCE_LABEL_POS[prov];
-              const isFrom = fromP === prov;
-              const isTo = toP === prov;
-              const isHover = hover === prov;
-              const fill = isFrom
-                ? "#1B2B4B"
-                : isTo
-                ? "#f97316"
-                : isHover
-                ? "#3d5a8a"
-                : PROVINCE_COLORS[prov] || "#d0d8e0";
-              const textFill = (isFrom || isTo || isHover) ? "white" : "#1B2B4B";
+              const isFrom = fromP === prov && (step === "from-city" || step === "to" || step === "result");
+              const isTo = toP === prov && (step === "to-city" || step === "result");
+              const isActive = (step === "from" && fromP === prov) || (step === "to" && toP === prov);
+              const fill = isFrom ? "#1B2B4B" : isTo ? "#f97316" : isActive ? "#3d5a8a" : PROVINCE_COLORS[prov] || "#d0d8e0";
+              const textFill = (isFrom || isTo || isActive) ? "white" : "#1B2B4B";
+              const labelSize = zoom >= 2 ? "11" : zoom >= 1.5 ? "10" : "9";
               return (
-                <g
-                  key={prov}
-                  onClick={() => handleProvinceClick(prov)}
-                  onMouseEnter={() => setHover(prov)}
-                  onMouseLeave={() => setHover(null)}
-                  style={{ cursor: "pointer" }}
-                >
-                  <path
-                    d={PROVINCE_PATHS[prov]}
-                    fill={fill}
-                    stroke="white"
-                    strokeWidth="1.5"
-                    style={{ transition: "fill .15s" }}
-                  />
+                <g key={prov} onClick={() => handleProvinceClick(prov)} style={{ cursor: "pointer" }}>
+                  <path d={PROVINCE_PATHS[prov]} fill={fill} stroke="white" strokeWidth="1.5" style={{ transition: "fill .15s" }} />
                   {pos && (
                     <text
                       x={pos[0]} y={pos[1]}
                       textAnchor="middle"
-                      fontSize="9"
+                      fontSize={labelSize}
                       fontWeight="700"
                       fill={textFill}
                       style={{ pointerEvents: "none", userSelect: "none" }}
-                    >
-                      {prov}
-                    </text>
+                    >{prov}</text>
                   )}
                 </g>
               );
             })}
           </svg>
+          {/* 지역 목록 토글 */}
+          <div className="border-t border-gray-100 px-4 py-2">
+            <button
+              onClick={() => setShowProvList(p => !p)}
+              className="w-full text-[12px] text-gray-500 font-semibold flex items-center justify-between"
+            >
+              <span>지역 목록으로 선택</span>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ transform: showProvList ? "rotate(180deg)" : "none", transition: "transform .2s" }}>
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </button>
+            {showProvList && (
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {provinces.map(prov => {
+                  const isFrom = fromP === prov && (step === "from-city" || step === "to" || step === "result");
+                  const isTo = toP === prov && (step === "to-city" || step === "result");
+                  return (
+                    <button
+                      key={prov}
+                      onClick={() => handleProvinceClick(prov)}
+                      className={`px-3 py-1.5 rounded-full text-[12px] font-bold border transition ${
+                        isFrom ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
+                        : isTo ? "bg-orange-400 text-white border-orange-400"
+                        : "bg-white text-[#1B2B4B] border-[#1B2B4B]/30 hover:bg-[#1B2B4B]/5"
+                      }`}
+                    >{prov}</button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -361,9 +398,7 @@ export default function MobileMapFare() {
                 key={city.n}
                 onClick={() => handleCitySelect(city)}
                 className="px-2 py-2.5 text-[12px] font-semibold text-gray-600 border border-gray-100 rounded-xl hover:bg-[#1B2B4B] hover:text-white hover:border-[#1B2B4B] transition text-center bg-gray-50"
-              >
-                {city.n}
-              </button>
+              >{city.n}</button>
             ))}
           </div>
         </div>
@@ -387,9 +422,7 @@ export default function MobileMapFare() {
                 key={city.n}
                 onClick={() => handleCitySelect(city)}
                 className="px-2 py-2.5 text-[12px] font-semibold text-gray-600 border border-gray-100 rounded-xl hover:bg-[#1B2B4B] hover:text-white hover:border-[#1B2B4B] transition text-center bg-gray-50"
-              >
-                {city.n}
-              </button>
+              >{city.n}</button>
             ))}
           </div>
         </div>

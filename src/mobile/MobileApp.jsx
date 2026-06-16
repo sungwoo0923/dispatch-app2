@@ -2392,7 +2392,7 @@ const title =
             setPage("list");
           }
         }
-    : page === "notice" || page === "schedule" || page === "unassigned" || page === "handover" || page === "ratecard" || page === "myinfo" || page === "settings" || page === "fleet" || page === "intel"
+    : page === "notice" || page === "schedule" || page === "unassigned" || page === "handover" || page === "ratecard" || page === "myinfo" || page === "settings" || page === "fleet" || page === "intel" || page === "national-fare"
       ? () => setPage("list")
       : page === "fare"
       ? () => setPage(prevPage || "list")
@@ -11026,9 +11026,11 @@ function MobileAddressSearch({ value, onChange, onSelect, placeholder }) {
         const addr = [upper, middle, low].filter(Boolean).join(" ");
         let addrNorm = addr.replace(/\s+/g, "");
         for (const [f, t] of ADDR_NORM) addrNorm = addrNorm.split(f).join(t);
+        const poiNameNorm = (p.name || "").replace(/\s+/g, "");
         const matches = kwWords.every(w => {
           const wStem = w.replace(/[동읍면리]$/, "");
-          return addrNorm.includes(w) || addrNorm.includes(wStem) || addrNorm.includes(kwStem);
+          return addrNorm.includes(w) || addrNorm.includes(wStem) || addrNorm.includes(kwStem)
+            || poiNameNorm.includes(w) || poiNameNorm.includes(wStem);
         });
         if (!matches) continue;
         rawResults.push({ address: addr, specificity: low ? 3 : 2, lat: parseFloat(p.noorLat || p.frontLat || 0), lon: parseFloat(p.noorLon || p.frontLon || 0) });
@@ -11122,9 +11124,9 @@ function MobileNationalFare({ onBack }) {
           >{t}</button>
         ))}
       </div>
-      {nfTab === "전국운임조회" && <MobileNationalFareSearch />}
-      {nfTab === "지도형운임조회" && <MobileMapFare />}
-      {nfTab === "차량제원" && <div className="px-4 py-4"><PalletSimulator /></div>}
+      <div style={{ display: nfTab === "전국운임조회" ? "block" : "none" }}><MobileNationalFareSearch /></div>
+      <div style={{ display: nfTab === "지도형운임조회" ? "block" : "none" }}><MobileMapFare /></div>
+      <div style={{ display: nfTab === "차량제원" ? "block" : "none" }} className="px-4 py-4"><PalletSimulator /></div>
     </div>
   );
 }
