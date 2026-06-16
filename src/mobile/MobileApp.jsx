@@ -2021,51 +2021,47 @@ const deleteSingleOrder = async (order) => {
 
     const norm = (s = "") => String(s).replace(/\s+/g, "").toLowerCase();
 
-    let driver = drivers.find(
-      (d) => norm(d.차량번호) === norm(차량번호)
-    );
+    // 이름+차량번호 일치 우선, 없으면 차량번호만
+    const existingDriver =
+      drivers.find((d) => norm(d.차량번호) === norm(차량번호) && norm(d.이름) === norm(이름)) ||
+      drivers.find((d) => norm(d.차량번호) === norm(차량번호));
 
-    if (!driver) {
-      const newId = await upsertDriver({
+    if (!existingDriver) {
+      await upsertDriver({
         차량번호,
         이름: 이름 || "",
         전화번호: 전화번호 || "",
       });
-
-      driver = {
-        id: newId,
-        차량번호,
-        이름: 이름 || "",
-        전화번호: 전화번호 || "",
-      };
     }
 
-     await updateDoc(doc(db, selectedOrder.__col, selectedOrder.id), {
-  기사명: driver.이름,
-  이름: driver.이름,
-  차량번호: driver.차량번호,
-  전화번호: driver.전화번호,
-  전화: driver.전화번호,
-  배차상태: "배차완료",
-  상태: "배차완료",
-  배차완료일시: serverTimestamp(),
-  updatedAt: serverTimestamp(),
-  _lastModified: Date.now(),
-});
+    // 사용자가 선택한 값(이름, 차량번호, 전화번호)을 그대로 저장
+    await updateDoc(doc(db, selectedOrder.__col, selectedOrder.id), {
+      기사명: 이름,
+      이름: 이름,
+      차량번호: 차량번호,
+      전화번호: 전화번호,
+      전화: 전화번호,
+      배차상태: "배차완료",
+      상태: "배차완료",
+      배차완료일시: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      _lastModified: Date.now(),
+    });
+
     setSelectedOrder((prev) =>
       prev
         ? {
           ...prev,
           배차상태: "배차완료",
           상태: "배차완료",
-          기사명: driver.이름,
-          차량번호: driver.차량번호,
-          전화번호: driver.전화번호,
+          기사명: 이름,
+          차량번호: 차량번호,
+          전화번호: 전화번호,
         }
         : prev
     );
 
-    alert(`기사 배차 완료: ${driver.이름} (${driver.차량번호})`);
+    alert(`기사 배차 완료: ${이름} (${차량번호})`);
   };
 
   const cancelAssign = async () => {
@@ -6526,7 +6522,7 @@ const handleAssignClick = () => {
                     <input className="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm mb-2 focus:outline-none focus:border-blue-400" placeholder="전화번호" value={editingDriverData.전화번호} onChange={e => setEditingDriverData(p => ({ ...p, 전화번호: e.target.value }))} onPointerDown={e => e.stopPropagation()} />
                     <div className="flex gap-2">
                       <button type="button" className="flex-1 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-bold"
-                        onPointerDown={async (e) => { e.preventDefault(); if (!editingDriverData.이름.trim()) return; await updateDoc(doc(db, "drivers", d.id), { 이름: editingDriverData.이름, 전화번호: editingDriverData.전화번호 }); setEditingDriverId(null); }}>저장</button>
+                        onPointerDown={async (e) => { e.preventDefault(); if (!editingDriverData.이름.trim()) return; await updateDoc(doc(db, "drivers", d.id), { 이름: editingDriverData.이름, 전화번호: editingDriverData.전화번호 }); setSmartMatched(prev => prev.map(m => m.id === d.id ? { ...m, 이름: editingDriverData.이름, 전화번호: editingDriverData.전화번호 } : m)); setEditingDriverId(null); }}>저장</button>
                       <button type="button" className="px-3 py-1.5 rounded-lg bg-gray-200 text-gray-700 text-xs" onPointerDown={e => { e.preventDefault(); setEditingDriverId(null); }}>취소</button>
                     </div>
                   </div>
