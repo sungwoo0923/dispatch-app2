@@ -339,6 +339,372 @@ function DriverPreference({value,onChange}){
   );
 }
 
+// ─── 차량 아이콘 SVG (라인아트) ──────────────────────────────────────────────
+function VehicleIconSvg({ id, sel }) {
+  const c = sel ? "white" : "#1B2B4B";
+  const p = { fill:"none", stroke:c, strokeWidth:"1.8", strokeLinecap:"round", strokeLinejoin:"round" };
+  if(id==="bike") return (
+    <svg viewBox="0 0 44 30" style={{width:40,height:26}} {...p}>
+      <circle cx="10" cy="22" r="7"/><circle cx="34" cy="22" r="7"/>
+      <path d="M10 22L16 10L25 10"/><path d="M16 10L22 22"/>
+      <path d="M25 10L31 6"/><circle cx="31" cy="6" r="2.5"/>
+    </svg>
+  );
+  if(id==="damas") return (
+    <svg viewBox="0 0 50 30" style={{width:46,height:28}} {...p}>
+      <path d="M2 22V10L30 10L42 18V22Z"/>
+      <path d="M30 10V22"/>
+      <rect x="4" y="12" width="22" height="8" rx="1" strokeWidth="1.4"/>
+      <circle cx="11" cy="26" r="4"/><circle cx="35" cy="26" r="4"/>
+    </svg>
+  );
+  if(["1ton","1.4ton","2.5ton"].includes(id)) return (
+    <svg viewBox="0 0 52 28" style={{width:48,height:26}} {...p}>
+      <rect x="2" y="5" width="30" height="19" rx="1.5"/>
+      <path d="M32 9L32 24L50 24L50 13L44 9Z"/>
+      <path d="M44 9V24"/><line x1="32" y1="17" x2="50" y2="17" strokeWidth="1.3"/>
+      <circle cx="11" cy="24" r="4"/><circle cx="44" cy="24" r="4"/>
+    </svg>
+  );
+  if(["3.5ton","3.5tonW","5ton","5tonP","5tonAx"].includes(id)) return (
+    <svg viewBox="0 0 58 28" style={{width:54,height:26}} {...p}>
+      <rect x="2" y="4" width="38" height="20" rx="1.5"/>
+      <path d="M40 9L40 24L56 24L56 13L50 9Z"/>
+      <path d="M50 9V24"/><line x1="40" y1="17" x2="56" y2="17" strokeWidth="1.3"/>
+      <circle cx="11" cy="24" r="4"/><circle cx="27" cy="24" r="4"/>
+      <circle cx="50" cy="24" r="4"/>
+    </svg>
+  );
+  if(["11ton","18ton","25ton"].includes(id)) return (
+    <svg viewBox="0 0 62 28" style={{width:58,height:26}} {...p}>
+      <rect x="2" y="4" width="42" height="20" rx="1.5"/>
+      <path d="M44 9L44 24L60 24L60 13L54 9Z"/>
+      <path d="M54 9V24"/><line x1="44" y1="17" x2="60" y2="17" strokeWidth="1.3"/>
+      <circle cx="10" cy="24" r="4"/><circle cx="23" cy="24" r="4"/>
+      <circle cx="36" cy="24" r="4"/><circle cx="54" cy="24" r="4"/>
+    </svg>
+  );
+  return (
+    <svg viewBox="0 0 66 28" style={{width:62,height:26}} {...p}>
+      <rect x="2" y="6" width="40" height="18" rx="1.5"/>
+      <path d="M42 10L42 24L62 24L62 14L56 10Z"/>
+      <path d="M56 10V24"/><line x1="42" y1="17" x2="62" y2="17" strokeWidth="1.3"/>
+      <circle cx="11" cy="24" r="4"/><circle cx="24" cy="24" r="4"/>
+      <circle cx="38" cy="24" r="4"/><circle cx="56" cy="24" r="4"/>
+    </svg>
+  );
+}
+
+// ─── 전국운임조회 탭 (차량그리드 + 지도) ─────────────────────────────────────
+function NationalFareTab() {
+  const [vehicle,setVehicle]=useState("1ton");
+  const [cargoType,setCargoType]=useState("일반");
+  const [step,setStep]=useState("from");
+  const [fromP,setFromP]=useState(null);
+  const [fromC,setFromC]=useState(null);
+  const [toP,setToP]=useState(null);
+  const [toC,setToC]=useState(null);
+  const [hover,setHover]=useState(null);
+  const [cityStep,setCityStep]=useState(null);
+  const provinces=Object.keys(PROVINCE_PATHS);
+  const SMALLS=["서울","인천","세종","대전","대구","광주","울산","부산","제주"];
+
+  const result=useMemo(()=>{
+    if(!fromC||!toC) return null;
+    return calcRate([fromC.la,fromC.lo],[toC.la,toC.lo],vehicle,cargoType);
+  },[fromC,toC,vehicle,cargoType]);
+
+  const reset=useCallback(()=>{
+    setStep("from");setFromP(null);setFromC(null);setToP(null);setToC(null);setCityStep(null);
+  },[]);
+
+  const onProvClick=(prov)=>{
+    if(step==="from"){setFromP(prov);setCityStep("from");}
+    else if(step==="to"){setToP(prov);setCityStep("to");}
+  };
+  const onCitySelect=(city)=>{
+    if(cityStep==="from"){setFromC(city);setStep("to");setCityStep(null);}
+    else if(cityStep==="to"){setToC(city);setStep("result");setCityStep(null);}
+  };
+
+  const aFrom=fromP?PROVINCE_LABEL_POS[fromP]:null;
+  const aTo=toP?PROVINCE_LABEL_POS[toP]:null;
+  let aPath=null;
+  if(aFrom&&aTo&&step==="result"){
+    const[fx,fy]=[aFrom[0],aFrom[1]-11];
+    const[tx,ty]=[aTo[0],aTo[1]-11];
+    aPath=`M ${fx},${fy} Q ${(fx+tx)/2},${(fy+ty)/2-50} ${tx},${ty}`;
+  }
+
+  const vehicles=VEHICLE_TYPES.filter(v=>!(v.smallOnly&&cargoType==="냉장"));
+
+  return (
+    <div className="flex gap-5 min-h-0" style={{height:"calc(100vh - 230px)",minHeight:580}}>
+
+      {/* ── 왼쪽 패널 (입력/선택) ── */}
+      <div className="flex-[4] flex flex-col gap-5 overflow-y-auto pr-1 min-w-0">
+
+        {/* 상·하차지 */}
+        <div>
+          <p className="text-[14px] font-extrabold text-[#1B2B4B] mb-2.5">
+            상·하차지를 입력해주세요 <span className="text-red-500">*</span>
+          </p>
+          <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+            <div className={`flex items-center gap-3 px-4 py-3.5 cursor-pointer border-b border-gray-100 transition ${step==="from"||cityStep==="from"?"bg-blue-50/60":""}`}
+              onClick={()=>{setStep("from");setCityStep(null);setFromP(null);setFromC(null);setToC(null);setToP(null);}}>
+              <div className="w-2 h-2 rounded-full bg-blue-500 shrink-0"/>
+              <span className="text-[12px] text-gray-400 font-bold w-11 shrink-0">상차지</span>
+              {fromC?<span className="font-extrabold text-[14px] text-[#1B2B4B]">{fromP} {fromC.n}</span>
+                    :<span className="text-[13px] text-gray-300 font-medium">상차지를 추가하세요</span>}
+              {fromC&&<button className="ml-auto text-gray-300 hover:text-red-400 text-[18px] leading-none" onClick={e=>{e.stopPropagation();reset();}}>×</button>}
+            </div>
+            <div className={`flex items-center gap-3 px-4 py-3.5 cursor-pointer transition ${step==="to"||cityStep==="to"?"bg-orange-50/60":""}`}
+              onClick={()=>{if(fromC){setStep("to");setCityStep(null);setToP(null);setToC(null);}}}>
+              <div className="w-2 h-2 rounded-full bg-orange-400 shrink-0"/>
+              <span className="text-[12px] text-gray-400 font-bold w-11 shrink-0">하차지</span>
+              {toC?<span className="font-extrabold text-[14px] text-[#1B2B4B]">{toP} {toC.n}</span>
+                  :<span className="text-[13px] text-gray-300 font-medium">{fromC?"하차지를 추가하세요":"상차지 먼저 선택"}</span>}
+              {toC&&<button className="ml-auto text-gray-300 hover:text-red-400 text-[18px] leading-none" onClick={e=>{e.stopPropagation();setToP(null);setToC(null);setStep("to");}}>×</button>}
+            </div>
+          </div>
+          {(fromP||toP)&&<button onClick={reset} className="mt-1.5 text-[11px] text-gray-400 hover:text-red-500 transition">초기화</button>}
+        </div>
+
+        {/* 차량 선택 */}
+        <div>
+          <p className="text-[14px] font-extrabold text-[#1B2B4B] mb-2.5">
+            차량을 선택해주세요 <span className="text-red-500">*</span>
+          </p>
+          <div className="grid grid-cols-5 gap-1.5">
+            {vehicles.map(v=>(
+              <button key={v.id} onClick={()=>setVehicle(v.id)}
+                className={`flex flex-col items-center pt-3 pb-2 px-1 rounded-xl border-2 transition ${vehicle===v.id
+                  ?"bg-[#1B2B4B] border-[#1B2B4B] shadow-lg"
+                  :"bg-white border-gray-200 hover:border-[#1B2B4B]/50 hover:shadow-sm"}`}>
+                <div className="flex items-center justify-center" style={{width:48,height:28}}>
+                  <VehicleIconSvg id={v.id} sel={vehicle===v.id}/>
+                </div>
+                <span className={`text-[10px] font-bold text-center mt-1.5 leading-tight ${vehicle===v.id?"text-white":"text-gray-700"}`}>{v.name}</span>
+              </button>
+            ))}
+          </div>
+          <p className="text-[11px] text-gray-400 mt-1.5">차량 선택이 어렵다면, 상단의 차량제원을 참고하세요.</p>
+        </div>
+
+        {/* 화물 유형 */}
+        <div>
+          <p className="text-[14px] font-extrabold text-[#1B2B4B] mb-2.5">화물 유형</p>
+          <div className="flex gap-2">
+            {CARGO_TYPES.map(ct=>(
+              <button key={ct.id} onClick={()=>setCargoType(ct.id)}
+                className={`flex-1 py-3 rounded-xl text-[13px] font-bold border-2 transition ${cargoType===ct.id
+                  ?"bg-[#1B2B4B] text-white border-[#1B2B4B] shadow-md"
+                  :"bg-white text-gray-500 border-gray-200 hover:border-[#1B2B4B]/40"}`}>
+                {ct.name}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* 결과 카드 */}
+        {result&&step==="result"&&(
+          <div className="rounded-2xl overflow-hidden shadow-xl border border-[#1B2B4B]/10"
+            style={{background:"linear-gradient(150deg,#0f1e38 0%,#1B2B4B 50%,#243a60 100%)"}}>
+            <div className="p-5">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-[10px] font-extrabold px-2.5 py-1 rounded-full bg-white/15 text-white">{VEHICLE_TYPES.find(v=>v.id===vehicle)?.name}</span>
+                <span className="text-[10px] text-white/40">{fromP} {fromC?.n} → {toP} {toC?.n}</span>
+              </div>
+              <div className="mb-4">
+                <div className="text-[10px] text-white/40 font-semibold mb-1 tracking-wide">예상 운임 (VAT 별도)</div>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-[26px] font-black text-white">{fmtMoney(result.min)}</span>
+                  <span className="text-white/30 text-[18px]">~</span>
+                  <span className="text-[26px] font-black text-white">{fmtMoney(result.max)}</span>
+                </div>
+              </div>
+              <div className="bg-white/8 rounded-xl p-3.5 mb-4">
+                <div className="flex justify-between items-center mb-1.5">
+                  <span className="text-[11px] text-white/50 font-semibold">평균 운임</span>
+                  <span className="text-[18px] font-black text-yellow-300">{fmtMoney(result.avg)}</span>
+                </div>
+                <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
+                  <div className="h-full bg-gradient-to-r from-blue-400 to-yellow-300 rounded-full" style={{width:"55%"}}/>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2 mb-4">
+                {[{l:"거리",v:`약 ${result.distance}km`},{l:"예상시간",v:fmtTime(result.mins)},
+                  {l:"연료비",v:`${result.fuelCost?.toLocaleString()}원`},{l:"차종",v:VEHICLE_TYPES.find(v=>v.id===vehicle)?.name}
+                ].map(({l,v})=>(
+                  <div key={l} className="bg-white/6 rounded-xl px-3 py-2">
+                    <div className="text-[9px] text-white/35 font-semibold">{l}</div>
+                    <div className="text-[12px] font-bold text-white/85">{v}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <button onClick={reset} className="flex-1 py-2.5 rounded-xl bg-white/10 hover:bg-white/18 text-white text-[12px] font-bold transition">다시 조회</button>
+                <button onClick={()=>navigator.clipboard.writeText(
+                  `[운임견적]\n경로: ${fromP} ${fromC?.n} → ${toP} ${toC?.n}\n차종: ${VEHICLE_TYPES.find(v=>v.id===vehicle)?.name}\n거리: 약 ${result.distance}km / 예상 ${fmtTime(result.mins)}\n운임: ${fmtMoney(result.min)}~${fmtMoney(result.max)} (평균 ${fmtMoney(result.avg)})\n※ VAT 별도 · 광고시세 기준`
+                ).catch(()=>{})} className="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/18 text-white/70 text-[12px] font-bold transition">복사</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 시군구 선택 패널 */}
+        {cityStep&&(
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <div className={`w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-extrabold shrink-0 ${cityStep==="from"?"bg-[#1B2B4B]":"bg-orange-400"}`}>
+                {cityStep==="from"?"출":"하"}
+              </div>
+              <span className="text-[14px] font-extrabold text-[#1B2B4B]">{cityStep==="from"?fromP:toP}</span>
+              <button className="ml-auto text-[11px] text-gray-400 hover:text-[#1B2B4B] border border-gray-200 rounded-lg px-2.5 py-1"
+                onClick={()=>{setCityStep(null);if(cityStep==="from")setFromP(null);else setToP(null);}}>← 재선택</button>
+            </div>
+            <div className="grid grid-cols-3 gap-1.5 max-h-[200px] overflow-y-auto">
+              {(CITIES[cityStep==="from"?fromP:toP]||[]).map(city=>(
+                <button key={city.n} onClick={()=>onCitySelect(city)}
+                  className="px-2 py-2 text-[11px] font-semibold text-gray-600 border border-gray-100 rounded-xl hover:bg-[#1B2B4B] hover:text-white hover:border-[#1B2B4B] transition bg-gray-50">
+                  {city.n}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── 오른쪽 패널 (지도) ── */}
+      <div className="flex-[6] min-w-0 rounded-2xl border border-gray-200 shadow-sm flex flex-col overflow-hidden bg-white">
+        <div className="px-4 py-2.5 border-b border-gray-100 flex items-center gap-3 shrink-0">
+          {step!=="result"&&(
+            <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold ${step==="from"?"bg-[#1B2B4B] text-white":"bg-orange-400 text-white"}`}>
+              <span className="w-1.5 h-1.5 rounded-full bg-white/80"/>
+              {step==="from"?"출발 지역을 선택하세요":"도착 지역을 선택하세요"}
+            </div>
+          )}
+          {step==="result"&&fromP&&toP&&(
+            <div className="flex items-center gap-2 text-[13px]">
+              <span className="font-extrabold text-blue-600">{fromP} {fromC?.n}</span>
+              <span className="text-gray-300">→</span>
+              <span className="font-extrabold text-orange-500">{toP} {toC?.n}</span>
+            </div>
+          )}
+          {(fromP||toP)&&<button onClick={reset} className="ml-auto text-[11px] text-gray-400 hover:text-red-500 border border-gray-200 rounded-md px-2 py-1">초기화</button>}
+        </div>
+        <div className="flex-1 min-h-0">
+          <svg viewBox="0 0 524 631" className="w-full h-full" preserveAspectRatio="xMidYMid meet" style={{userSelect:"none",display:"block"}}>
+            <defs>
+              <linearGradient id="nfLight" x1="15%" y1="5%" x2="85%" y2="95%">
+                <stop offset="0%" stopColor="white" stopOpacity="0.45"/>
+                <stop offset="100%" stopColor="#0a1428" stopOpacity="0.15"/>
+              </linearGradient>
+              <radialGradient id="nfGlow" cx="38%" cy="30%" r="65%">
+                <stop offset="0%" stopColor="white" stopOpacity="0.5"/>
+                <stop offset="100%" stopColor="white" stopOpacity="0"/>
+              </radialGradient>
+              <filter id="nfShad" x="-4%" y="-4%" width="108%" height="108%">
+                <feDropShadow dx="0.5" dy="1.5" stdDeviation="1.5" floodColor="#4a6080" floodOpacity="0.18"/>
+              </filter>
+              <filter id="nfHovF" x="-8%" y="-8%" width="116%" height="116%">
+                <feDropShadow dx="0" dy="2" stdDeviation="2.5" floodColor="#3b82f6" floodOpacity="0.35"/>
+              </filter>
+              <filter id="nfSelF" x="-10%" y="-10%" width="120%" height="120%">
+                <feDropShadow dx="0" dy="0" stdDeviation="4" floodColor="#3b82f6" floodOpacity="0.45"/>
+              </filter>
+              <marker id="nfArr" markerWidth="10" markerHeight="10" refX="5" refY="5" orient="auto">
+                <path d="M 0,1 L 9,5 L 0,9 Z" fill="#3b82f6"/>
+              </marker>
+            </defs>
+            <rect width="524" height="631" fill="white"/>
+            {provinces.map(prov=>{
+              const isFr=prov===fromP,isTo=prov===toP,isHov=prov===hover,isAct=isFr||isTo;
+              let fill=PROVINCE_COLORS[prov]||"#c8d8e8";
+              if(isFr) fill="#3b82f6";
+              else if(isTo) fill="#f97316";
+              else if(isHov) fill="#9ac0e8";
+              return(
+                <g key={prov}>
+                  <path d={PROVINCE_PATHS[prov]} fill={fill}
+                    stroke={isAct?"rgba(255,255,255,0.95)":isHov?"#4a8fcc":"rgba(255,255,255,0.8)"}
+                    strokeWidth={isAct?2:isHov?1.5:1}
+                    filter={isAct?"url(#nfSelF)":isHov?"url(#nfHovF)":"url(#nfShad)"}
+                    style={{cursor:"pointer",transition:"fill 0.15s"}}
+                    onMouseEnter={()=>setHover(prov)} onMouseLeave={()=>setHover(null)}
+                    onClick={()=>onProvClick(prov)}/>
+                  <path d={PROVINCE_PATHS[prov]} fill={isAct?"url(#nfGlow)":"url(#nfLight)"} stroke="none" style={{pointerEvents:"none"}}/>
+                </g>
+              );
+            })}
+            {provinces.map(prov=>{
+              if(prov===fromP||prov===toP) return null;
+              const isSmall=SMALLS.includes(prov),isHovL=prov===hover;
+              const [lx,ly]=PROVINCE_LABEL_POS[prov]||[0,0];
+              return(
+                <text key={`nl-${prov}`} x={lx} y={ly} textAnchor="middle" dominantBaseline="middle"
+                  fontSize={isSmall?11:14} fontWeight={isHovL?"800":"700"}
+                  fill={isHovL?"#1a5fa8":"#1B2B4B"} style={{pointerEvents:"none",transition:"fill 0.15s"}}>{prov}</text>
+              );
+            })}
+            {[fromP&&{prov:fromP,label:"출",color:"#3b82f6",border:"#2563eb"},
+              toP&&{prov:toP,label:"하",color:"#f97316",border:"#ea580c"}]
+              .filter(Boolean).map(({prov,label,color,border})=>{
+                const pos=PROVINCE_LABEL_POS[prov];
+                if(!pos) return null;
+                const [bx,by]=pos,stemY=by-(SMALLS.includes(prov)?28:34);
+                return(
+                  <g key={label} style={{pointerEvents:"none"}}>
+                    <circle cx={bx} cy={by} r={5} fill={color} fillOpacity="0.85"/>
+                    <line x1={bx} y1={by-6} x2={bx} y2={stemY+22} stroke={color} strokeWidth="2" strokeOpacity="0.6"/>
+                    <circle cx={bx} cy={stemY} r={20} fill={color} stroke="white" strokeWidth="2.5" filter="url(#nfSelF)"/>
+                    <text x={bx} y={stemY} textAnchor="middle" dominantBaseline="middle" fontSize="13" fontWeight="900" fill="white">{label}</text>
+                    <rect x={bx-22} y={stemY+23} width="44" height="16" rx="8" fill="white" fillOpacity="0.92" stroke={border} strokeWidth="1"/>
+                    <text x={bx} y={stemY+31} textAnchor="middle" dominantBaseline="middle" fontSize="10" fontWeight="800" fill={border}>{prov}</text>
+                  </g>
+                );
+              })}
+            {aPath&&<path d={aPath} fill="none" stroke="#3b82f6" strokeWidth="3.5" strokeLinecap="round" markerEnd="url(#nfArr)"/>}
+          </svg>
+        </div>
+        <div className="px-4 py-2 border-t border-gray-100 flex items-center gap-4 shrink-0">
+          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block"/><span className="text-[11px] font-semibold text-gray-500">출발지</span></div>
+          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-orange-400 inline-block"/><span className="text-[11px] font-semibold text-gray-500">도착지</span></div>
+          <span className="ml-auto text-[10px] text-gray-300">지역 클릭 → 시/군/구 선택 → 운임 확인</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── 자사운임표 컴포넌트 ──────────────────────────────────────────────────
+function CompanyFareTab() {
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="rounded-2xl overflow-hidden border border-[#1B2B4B]/10"
+        style={{background:"linear-gradient(135deg,#1B2B4B 0%,#243a60 60%,#2a4470 100%)"}}>
+        <div className="px-6 py-5 flex items-center justify-between">
+          <div>
+            <h2 className="text-[20px] font-black text-white leading-tight tracking-tight">자사 운임표 조회</h2>
+            <p className="text-[12px] text-white/50 font-medium mt-1">실거래 데이터 기반 · 노선별 운임 히스토리</p>
+          </div>
+          <div className="flex gap-3">
+            <div className="bg-white/10 rounded-xl px-4 py-2.5 text-center">
+              <div className="text-[10px] text-white/50 font-semibold">데이터 기준</div>
+              <div className="text-[13px] font-black text-white">실거래</div>
+            </div>
+            <div className="bg-white/10 rounded-xl px-4 py-2.5 text-center">
+              <div className="text-[10px] text-white/50 font-semibold">업데이트</div>
+              <div className="text-[13px] font-black text-white">실시간</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <StandardFare embedded={true} defaultTab="표준운임"/>
+    </div>
+  );
+}
+
 // ─── 메인 컴포넌트 ────────────────────────────────────────────────────────
 export default function FreightRateInquiry(){
   const [activeTab,setActiveTab]=useState("운임조회");
@@ -414,8 +780,8 @@ export default function FreightRateInquiry(){
       </div>
 
       {activeTab==="차량제원"&&<PalletSimulator/>}
-      {activeTab==="전국운임조회"&&<StandardFare embedded={true} defaultTab="전국운임표"/>}
-      {activeTab==="자사운임표"&&<StandardFare embedded={true} defaultTab="표준운임"/>}
+      {activeTab==="전국운임조회"&&<NationalFareTab/>}
+      {activeTab==="자사운임표"&&<CompanyFareTab/>}
 
       {activeTab==="운임조회"&&<>
       <div className="flex items-center gap-4 mb-5 flex-wrap">
