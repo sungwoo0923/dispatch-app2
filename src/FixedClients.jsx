@@ -398,6 +398,7 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
   const [sortDir, setSortDir] = useState("asc");
   const [attachViewer, setAttachViewer] = useState(null);
   const [attachCounts, setAttachCounts] = useState({});
+  const [contextMenuFC, setContextMenuFC] = useState(null);
 
   const getViewCompany = () => role === "totalMaster"
     ? (localStorage.getItem("loginCompany") || userCompany || "돌캐")
@@ -435,6 +436,13 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
     });
     return () => unsub();
   }, [userCompany, role]);
+
+  useEffect(() => {
+    if (!contextMenuFC) return;
+    const fn = () => setContextMenuFC(null);
+    document.addEventListener("mousedown", fn);
+    return () => document.removeEventListener("mousedown", fn);
+  }, [contextMenuFC]);
 
   useEffect(() => {
     if (!rows.length) return;
@@ -695,7 +703,7 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
                 ) : filtered.length === 0 ? (
                   <tr><td colSpan={COL_SPAN} className="py-16 text-center text-[13px] text-gray-400">해당 기간에 데이터가 없습니다</td></tr>
                 ) : filtered.map((r, idx) => (
-                  <tr key={r.id} onDoubleClick={() => openEditPopup(r)} className={`transition hover:bg-blue-50/40 cursor-pointer ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"} ${r.정산완료 ? "opacity-60" : ""}`}>
+                  <tr key={r.id} onDoubleClick={() => openEditPopup(r)} onContextMenu={e=>{e.preventDefault();const _z=parseFloat(document.getElementById("root")?.style.zoom)||1;setContextMenuFC({x:e.clientX/_z,y:e.clientY/_z,row:r});}} className={`transition hover:bg-blue-50/40 cursor-pointer ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"} ${r.정산완료 ? "opacity-60" : ""}`}>
                     <td className={cell} onClick={e => e.stopPropagation()}><input type="checkbox" checked={selected.includes(r.id)} onChange={() => setSelected(p => p.includes(r.id) ? p.filter(x => x !== r.id) : [...p, r.id])} /></td>
                     <td className={cell}>
                       <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold border ${r.정산완료 ? "bg-emerald-100 text-emerald-700 border-emerald-300" : "bg-amber-100 text-amber-600 border-amber-300"}`}>
@@ -780,6 +788,53 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
           </div>
         </div>
       </div>
+
+      {/* 우클릭 컨텍스트 메뉴 */}
+      {contextMenuFC && (
+        <div
+          className="fixed z-[999999] bg-white border border-gray-200 rounded-xl shadow-2xl py-1.5 min-w-[168px] select-none"
+          style={{top:Math.min(contextMenuFC.y,window.innerHeight/((parseFloat(document.getElementById("root")?.style.zoom)||1))-220),left:Math.min(contextMenuFC.x,window.innerWidth/((parseFloat(document.getElementById("root")?.style.zoom)||1))-180)}}
+          onClick={e=>e.stopPropagation()}
+        >
+          <button className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
+            onClick={()=>{openEditPopup(contextMenuFC.row);setContextMenuFC(null);}}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            수정
+          </button>
+          <button className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
+            onClick={()=>{
+              const r=contextMenuFC.row;
+              const url=`${window.location.origin}/driver-upload?date=${encodeURIComponent(r.날짜||"")}&vehicle=${encodeURIComponent((r.차량번호||"").replace(/\s/g,""))}&name=${encodeURIComponent((r.이름||"").trim())}`;
+              const msg=`[인수증 업로드 안내]\n운송 완료 후 아래 링크를 통해 인수증을 업로드해 주시기 바랍니다.\n\n${url}\n\n날짜·차량번호·이름을 확인 후 검색하여 오더를 선택해 업로드해 주세요.\n미업로드 시 운임 정산이 지연될 수 있습니다.`;
+              navigator.clipboard.writeText(msg).then(()=>alert("업로드 안내 메시지가 복사되었습니다.\n기사에게 붙여넣기로 전달하세요.")).catch(()=>alert(`링크: ${url}`));
+              setContextMenuFC(null);
+            }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+            업로드링크
+          </button>
+          <button className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
+            onClick={async()=>{
+              const r=contextMenuFC.row;
+              if(!r?.id){setContextMenuFC(null);return;}
+              await updateDoc(doc(db,"fixedClients",r.id),{정산완료:!r.정산완료});
+              setContextMenuFC(null);
+            }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            {contextMenuFC.row.정산완료?"정산 취소":"정산 처리"}
+          </button>
+          <button className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
+            onClick={()=>{setAttachViewer(contextMenuFC.row);setContextMenuFC(null);}}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            첨부파일
+          </button>
+          <div className="border-t border-gray-100 my-1"/>
+          <button className="w-full text-left px-4 py-2 text-[13px] text-red-600 hover:bg-red-50 flex items-center gap-2.5 transition-colors"
+            onClick={()=>{setSelected([contextMenuFC.row.id]);setDeleteConfirm(true);setContextMenuFC(null);}}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+            삭제
+          </button>
+        </div>
+      )}
 
       {/* 삭제 확인 */}
       {deleteConfirm && (

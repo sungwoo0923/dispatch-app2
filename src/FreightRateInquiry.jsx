@@ -213,18 +213,26 @@ const SIDO_MAP = {
 };
 
 const SURCHARGE_MANUAL = {
-  bike:0, damas:20000, "1ton":40000, "1.4ton":45000,
-  "2.5ton":60000, "3.5ton":75000, "3.5tonW":80000,
-  "5ton":100000, "5tonP":110000, "5tonAx":115000,
-  "11ton":140000, "18ton":180000, "25ton":220000,
-  trailer:270000, lowbed:310000,
+  bike:0, damas:15000, "1ton":20000, "1.4ton":22000,
+  "2.5ton":25000, "3.5ton":25000, "3.5tonW":28000,
+  "5ton":28000, "5tonP":30000, "5tonAx":30000,
+  "11ton":30000, "18ton":30000, "25ton":30000,
+  trailer:35000, lowbed:40000,
+};
+
+const SURCHARGE_LIFTGATE = {
+  bike:0, damas:0, "1ton":30000, "1.4ton":35000,
+  "2.5ton":50000, "3.5ton":65000, "3.5tonW":70000,
+  "5ton":90000, "5tonP":95000, "5tonAx":95000,
+  "11ton":120000, "18ton":150000, "25ton":200000,
+  trailer:0, lowbed:0,
 };
 
 const searchTmapPOI = async (keyword, setter) => {
   if (!keyword || keyword.trim().length < 2) { setter([]); return; }
   try {
-    const url = `https://apis.openapi.sk.com/tmap/pois?version=1&searchKeyword=${encodeURIComponent(keyword.trim())}&count=8&resCoordType=WGS84GEO`;
-    const res = await fetch(url, { headers: { appKey: TMAP_KEY } });
+    const url = `https://apis.openapi.sk.com/tmap/pois?version=1&searchKeyword=${encodeURIComponent(keyword.trim())}&count=10&resCoordType=WGS84GEO&appKey=${TMAP_KEY}`;
+    const res = await fetch(url);
     if (!res.ok) { setter([]); return; }
     const data = await res.json();
     const pois = data?.searchPoiInfo?.pois?.poi || [];
@@ -367,11 +375,16 @@ function NationalFareTab() {
   const [toResults,setToResults]=useState([]);
   const [manualWork,setManualWork]=useState(false);
   const [roundTrip,setRoundTrip]=useState(false);
+  const [weatherSurcharge,setWeatherSurcharge]=useState(false);
+  const [liftgate,setLiftgate]=useState(false);
   const [mixWeightKg,setMixWeightKg]=useState("");
   const [mixCbm,setMixCbm]=useState("");
   const [dispatchData,setDispatchData]=useState([]);
+  const [vias,setVias]=useState([]);
+  const [viaResults,setViaResults]=useState([]);
   const fromRef=useRef(null);
   const toRef=useRef(null);
+  const viaTimers=useRef({});
   const provinces=Object.keys(PROVINCE_PATHS);
   const SMALL=["서울","인천","세종","대전","대구","광주","울산","부산","제주"];
 
@@ -405,18 +418,46 @@ function NationalFareTab() {
 
   const result=useMemo(()=>{
     if(!fromC||!toC)return null;
+    const activeVias=vias.filter(v=>v.coord);
+    const allPts=[fromC,...activeVias.map(v=>v.coord),toC];
+    const totalStraight=allPts.length<2?0:allPts.reduce((acc,p,i)=>{
+      if(i===0)return 0;
+      return acc+haversine(allPts[i-1].la,allPts[i-1].lo,p.la,p.lo);
+    },0);
+    const viaRoadDist=activeVias.length>0?Math.round(totalStraight*1.35):null;
     let base;
     if(freightMode==="혼적"){
       const wkg=parseFloat(mixWeightKg)||0,cbm=parseFloat(mixCbm)||0;
       if(!wkg&&!cbm)return null;
-      base={mode:"혼적",...calcMixedRate([fromC.la,fromC.lo],[toC.la,toC.lo],cargoType,wkg,cbm)};
+      if(viaRoadDist){
+        const ct=CARGO_TYPES.find(c=>c.id===cargoType)||CARGO_TYPES[0];
+        const effWeight=Math.max(wkg,(cbm||0)*250);
+        const tier=MIXED_TIERS.find(r=>viaRoadDist<=r.maxKm)||MIXED_TIERS[MIXED_TIERS.length-1];
+        const units=Math.max(1,Math.ceil(effWeight/100));
+        const raw=tier.base+tier.per100kg*(units-1);
+        const avg=Math.round(raw*(1+(ct.surcharge||0))/1000)*1000;
+        base={mode:"혼적",distance:viaRoadDist,min:Math.round(avg*0.85/1000)*1000,max:Math.round(avg*1.15/1000)*1000,avg,mins:Math.round(viaRoadDist/80*60),effWeight,units,tier:tier.label,per100kg:tier.per100kg};
+      }else{
+        base={mode:"혼적",...calcMixedRate([fromC.la,fromC.lo],[toC.la,toC.lo],cargoType,wkg,cbm)};
+      }
     }else{
-      base={mode:"독차",...calcRate([fromC.la,fromC.lo],[toC.la,toC.lo],vehicle,cargoType)};
+      if(viaRoadDist){
+        const vt=VEHICLE_TYPES.find(v=>v.id===vehicle)||VEHICLE_TYPES[1];
+        const ct=CARGO_TYPES.find(c=>c.id===cargoType)||CARGO_TYPES[0];
+        const bFare=vt.base+vt.perKm*viaRoadDist;
+        const surchargedBase=Math.max(vt.min,bFare)*(1+(ct.surcharge||0));
+        const avg=Math.round(surchargedBase/5000)*5000;
+        base={mode:"독차",distance:viaRoadDist,min:Math.round(avg*0.83/5000)*5000,max:Math.round(avg*1.17/5000)*5000,avg,fuelCost:Math.round(vt.L100km/100*viaRoadDist*1650),mins:Math.round(viaRoadDist/80*60)};
+      }else{
+        base={mode:"독차",...calcRate([fromC.la,fromC.lo],[toC.la,toC.lo],vehicle,cargoType)};
+      }
     }
     const mul=roundTrip?1.8:1;
+    const wMul=weatherSurcharge?1.15:1;
     const mfee=(manualWork&&freightMode==="독차")?(SURCHARGE_MANUAL[vehicle]||0):0;
-    return{...base,min:Math.round((base.min*mul+mfee)/1000)*1000,max:Math.round((base.max*mul+mfee)/1000)*1000,avg:Math.round((base.avg*mul+mfee)/1000)*1000,manualFee:mfee,isRound:roundTrip};
-  },[fromC,toC,vehicle,cargoType,freightMode,mixWeightKg,mixCbm,manualWork,roundTrip]);
+    const liftFee=(liftgate&&freightMode==="독차")?(SURCHARGE_LIFTGATE[vehicle]||0):0;
+    return{...base,min:Math.round((base.min*mul*wMul+mfee+liftFee)/1000)*1000,max:Math.round((base.max*mul*wMul+mfee+liftFee)/1000)*1000,avg:Math.round((base.avg*mul*wMul+mfee+liftFee)/1000)*1000,manualFee:mfee,liftFee,isRound:roundTrip,isWeather:weatherSurcharge,viaCount:activeVias.length};
+  },[fromC,toC,vehicle,cargoType,freightMode,mixWeightKg,mixCbm,manualWork,roundTrip,weatherSurcharge,liftgate,vias]);
 
   const refData=useMemo(()=>{
     if(!fromP||!toP||!dispatchData.length||step!=="result")return null;
@@ -434,6 +475,7 @@ function NationalFareTab() {
   const reset=useCallback(()=>{
     setStep("from");setFromP(null);setFromC(null);setToP(null);setToC(null);setCityStep(null);
     setFromSearch("");setToSearch("");setFromResults([]);setToResults([]);setMixWeightKg("");setMixCbm("");
+    setVias([]);setViaResults([]);
   },[]);
 
   const onProvClick=(prov)=>{
@@ -455,12 +497,43 @@ function NationalFareTab() {
     if(fromC)setStep("result");
   };
 
+  const addVia=useCallback(()=>{
+    if(vias.length>=3)return;
+    setVias(p=>[...p,{search:"",prov:null,coord:null}]);
+    setViaResults(p=>[...p,[]]);
+  },[vias.length]);
+
+  const removeVia=useCallback((i)=>{
+    clearTimeout(viaTimers.current[i]);
+    setVias(p=>p.filter((_,j)=>j!==i));
+    setViaResults(p=>p.filter((_,j)=>j!==i));
+  },[]);
+
+  const updateViaSearch=useCallback((i,val)=>{
+    setVias(p=>{const n=[...p];n[i]={...n[i],search:val,prov:null,coord:null};return n;});
+    setViaResults(p=>{const n=[...p];n[i]=[];return n;});
+    clearTimeout(viaTimers.current[i]);
+    if(val&&val.length>=2){
+      viaTimers.current[i]=setTimeout(()=>{
+        searchTmapPOI(val,res=>{setViaResults(p=>{const n=[...p];n[i]=res;return n;});});
+      },400);
+    }
+  },[]);
+
+  const selectVia=useCallback((i,r)=>{
+    setVias(p=>{const n=[...p];n[i]={search:r.full,prov:r.prov,coord:{la:r.la,lo:r.lo}};return n;});
+    setViaResults(p=>{const n=[...p];n[i]=[];return n;});
+  },[]);
+
   const aFrom=fromP?PROVINCE_LABEL_POS[fromP]:null;
   const aTo=toP?PROVINCE_LABEL_POS[toP]:null;
   let aPath=null;
+  const activeViaProvs=vias.filter(v=>v.prov&&PROVINCE_LABEL_POS[v.prov]);
   if(aFrom&&aTo&&step==="result"){
-    const[fx,fy]=[aFrom[0],aFrom[1]-11],[tx,ty]=[aTo[0],aTo[1]-11];
-    aPath=`M ${fx},${fy} Q ${(fx+tx)/2},${(fy+ty)/2-50} ${tx},${ty}`;
+    const pts=[[aFrom[0],aFrom[1]-11],...activeViaProvs.map(v=>{const p=PROVINCE_LABEL_POS[v.prov];return[p[0],p[1]-11];}),[(aTo[0]),(aTo[1]-11)]];
+    aPath=pts.length===2
+      ?`M ${pts[0][0]},${pts[0][1]} Q ${(pts[0][0]+pts[1][0])/2},${(pts[0][1]+pts[1][1])/2-50} ${pts[1][0]},${pts[1][1]}`
+      :pts.reduce((acc,p,i)=>{if(i===0)return`M ${p[0]},${p[1]}`;const prev=pts[i-1];return acc+` Q ${(prev[0]+p[0])/2},${(prev[1]+p[1])/2-30} ${p[0]},${p[1]}`;},"");
   }
   const vehicles=VEHICLE_TYPES.filter(v=>!(v.smallOnly&&cargoType==="냉장"));
 
@@ -516,8 +589,40 @@ function NationalFareTab() {
                 </div>
               )}
             </div>
+            {/* 경유지 */}
+            {vias.map((via,i)=>(
+              <div key={i} className="relative border-t border-gray-100">
+                <div className="flex items-center gap-3 px-4 py-3">
+                  <div className="w-2 h-2 rounded-full bg-gray-400 shrink-0"/>
+                  <span className="text-[11px] font-bold text-gray-400 w-10 shrink-0">경유{i+1}</span>
+                  {via.coord?(
+                    <span className="font-semibold text-[13px] text-[#1B2B4B] truncate flex-1">{via.search}</span>
+                  ):(
+                    <input
+                      className="flex-1 text-[13px] bg-transparent outline-none text-[#1B2B4B] font-semibold placeholder-gray-300"
+                      placeholder="경유지 검색"
+                      value={via.search}
+                      onChange={e=>updateViaSearch(i,e.target.value)}
+                      autoFocus
+                    />
+                  )}
+                  <button className="text-gray-300 hover:text-red-400 text-lg leading-none shrink-0" onClick={e=>{e.stopPropagation();removeVia(i);}}>×</button>
+                </div>
+                {(viaResults[i]||[]).length>0&&(
+                  <div className="absolute left-0 right-0 top-full bg-white border border-gray-200 rounded-xl shadow-xl z-[60] overflow-hidden mt-1">
+                    {(viaResults[i]||[]).map((r,j)=>(
+                      <button key={j} onClick={()=>selectVia(i,r)}
+                        className="w-full px-4 py-2.5 text-left hover:bg-gray-50 transition border-b border-gray-50 last:border-0">
+                        <div className="text-[12px] font-bold text-[#1B2B4B]">{r.name}</div>
+                        <div className="text-[11px] text-gray-400">{r.full}</div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
             {/* 하차지 */}
-            <div ref={toRef} className="relative">
+            <div ref={toRef} className="relative border-t border-gray-100">
               <div className={`flex items-center gap-3 px-4 py-3 ${step==="to"||cityStep==="to"?"bg-orange-50/50":""}`}>
                 <div className="w-2 h-2 rounded-full bg-orange-400 shrink-0"/>
                 <span className="text-[11px] font-bold text-gray-400 w-10 shrink-0">하차지</span>
@@ -526,10 +631,10 @@ function NationalFareTab() {
                 ):(
                   <input
                     className="flex-1 text-[13px] bg-transparent outline-none text-[#1B2B4B] font-semibold placeholder-gray-300"
-                    placeholder={fromC?"지역명 또는 주소 검색":"상차지 먼저 선택"}
+                    placeholder="지역명 또는 주소 검색"
                     value={toSearch}
                     onChange={e=>{setToSearch(e.target.value);if(!e.target.value){setToP(null);setToC(null);}}}
-                    onFocus={()=>{if(fromC)setStep("to");}}
+                    onFocus={()=>{if(fromC||fromSearch)setStep("to");}}
                     disabled={!fromC&&!fromSearch}
                   />
                 )}
@@ -550,7 +655,12 @@ function NationalFareTab() {
               )}
             </div>
           </div>
-          {(fromP||toP)&&<button onClick={reset} className="mt-1 text-[11px] text-gray-400 hover:text-red-500 transition">초기화</button>}
+          <div className="flex items-center gap-3 mt-1.5">
+            {vias.length<3&&(
+              <button onClick={addVia} className="text-[11px] font-semibold text-[#1B2B4B]/70 hover:text-[#1B2B4B] border border-dashed border-[#1B2B4B]/30 hover:border-[#1B2B4B]/60 rounded-lg px-2.5 py-1 transition">+ 경유 추가</button>
+            )}
+            {(fromP||toP||vias.length>0)&&<button onClick={reset} className="text-[11px] text-gray-400 hover:text-red-500 transition">초기화</button>}
+          </div>
         </div>
 
         {/* 독차: 차량 선택 */}
@@ -615,23 +725,20 @@ function NationalFareTab() {
         {/* 추가 옵션 */}
         {freightMode==="독차"&&(
           <div className="bg-white rounded-xl border border-gray-200 p-4">
-            <p className="text-[12px] font-bold text-[#1B2B4B] mb-3">추가 옵션</p>
-            <div className="flex flex-col gap-2.5">
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input type="checkbox" checked={roundTrip} onChange={e=>setRoundTrip(e.target.checked)} className="w-4 h-4 accent-[#1B2B4B] cursor-pointer"/>
-                <div>
-                  <span className="text-[13px] font-bold text-gray-700">왕복 운행</span>
-                  {roundTrip&&<span className="ml-2 text-[11px] text-gray-400 font-medium">편도 × 1.8 적용</span>}
-                </div>
-              </label>
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input type="checkbox" checked={manualWork} onChange={e=>setManualWork(e.target.checked)} className="w-4 h-4 accent-[#1B2B4B] cursor-pointer"/>
-                <div>
-                  <span className="text-[13px] font-bold text-gray-700">수작업 (상하차)</span>
-                  {manualWork&&SURCHARGE_MANUAL[vehicle]>0&&<span className="ml-2 text-[11px] text-gray-400 font-medium">+{SURCHARGE_MANUAL[vehicle]?.toLocaleString()}원</span>}
-                  {manualWork&&SURCHARGE_MANUAL[vehicle]===0&&<span className="ml-2 text-[11px] text-gray-400">해당없음</span>}
-                </div>
-              </label>
+            <p className="text-[12px] font-bold text-[#1B2B4B] mb-2.5">추가 옵션</p>
+            <div className="flex flex-wrap gap-2">
+              {[
+                {id:"roundTrip",label:"왕복 운행",sub:"×1.8",active:roundTrip,set:()=>setRoundTrip(p=>!p)},
+                {id:"manualWork",label:"수작업(상하차)",sub:SURCHARGE_MANUAL[vehicle]>0?`+${(SURCHARGE_MANUAL[vehicle]/1000).toFixed(0)}만원`:null,active:manualWork,set:()=>setManualWork(p=>!p)},
+                {id:"weather",label:"기상악화",sub:"+15%",active:weatherSurcharge,set:()=>setWeatherSurcharge(p=>!p)},
+                {id:"liftgate",label:"리프트",sub:SURCHARGE_LIFTGATE[vehicle]>0?`+${(SURCHARGE_LIFTGATE[vehicle]/1000).toFixed(0)}만원`:null,active:liftgate,set:()=>setLiftgate(p=>!p)},
+              ].map(opt=>(
+                <button key={opt.id} onClick={opt.set}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-[12px] font-bold border-2 transition ${opt.active?"bg-[#1B2B4B] text-white border-[#1B2B4B]":"bg-white text-gray-500 border-gray-200 hover:border-[#1B2B4B]/40"}`}>
+                  {opt.label}
+                  {opt.sub&&<span className={`text-[10px] font-semibold ${opt.active?"text-white/70":"text-gray-400"}`}>{opt.sub}</span>}
+                </button>
+              ))}
             </div>
           </div>
         )}
@@ -645,9 +752,12 @@ function NationalFareTab() {
                 <span className={`text-[10px] font-extrabold px-2.5 py-1 rounded-full ${result.mode==="혼적"?"bg-orange-400/90":"bg-blue-400/90"} text-white`}>
                   {result.mode==="혼적"?"혼적(합짐)":"독차"}
                 </span>
-                {result.isRound&&<span className="text-[10px] font-bold px-2 py-1 rounded-full bg-green-400/80 text-white">왕복</span>}
-                {result.manualFee>0&&<span className="text-[10px] font-bold px-2 py-1 rounded-full bg-yellow-500/80 text-white">수작업포함</span>}
-                <span className="text-[10px] text-white/40 font-semibold">{result.mode==="독차"?VEHICLE_TYPES.find(v=>v.id===vehicle)?.name:""} {fromP}→{toP}</span>
+                {result.isRound&&<span className="text-[10px] font-bold px-2 py-1 rounded-full bg-white/20 text-white">왕복</span>}
+                {result.manualFee>0&&<span className="text-[10px] font-bold px-2 py-1 rounded-full bg-white/20 text-white">수작업</span>}
+                {result.liftFee>0&&<span className="text-[10px] font-bold px-2 py-1 rounded-full bg-white/20 text-white">리프트</span>}
+                {result.isWeather&&<span className="text-[10px] font-bold px-2 py-1 rounded-full bg-white/20 text-white">기상악화+15%</span>}
+                {result.viaCount>0&&<span className="text-[10px] font-bold px-2 py-1 rounded-full bg-white/20 text-white">경유{result.viaCount}</span>}
+                <span className="text-[10px] text-white/40 font-semibold ml-auto">{result.mode==="독차"?VEHICLE_TYPES.find(v=>v.id===vehicle)?.name:""} {fromP}→{toP}</span>
               </div>
               <div className="mb-3">
                 <div className="text-[10px] text-white/40 font-semibold mb-1">예상 운임 (VAT 별도)</div>
@@ -671,7 +781,10 @@ function NationalFareTab() {
                   ...(result.mode==="독차"?[{l:"연료비",v:`${result.fuelCost?.toLocaleString()}원`},{l:"차종",v:VEHICLE_TYPES.find(v=>v.id===vehicle)?.name}]
                     :[{l:"적재단위",v:`${result.units}개`},{l:"구간",v:result.tier}]),
                   ...(result.manualFee>0?[{l:"수작업비",v:`${result.manualFee.toLocaleString()}원`}]:[]),
+                  ...(result.liftFee>0?[{l:"리프트",v:`${result.liftFee.toLocaleString()}원`}]:[]),
+                  ...(result.isWeather?[{l:"기상악화",v:"+15%"}]:[]),
                   ...(result.isRound?[{l:"왕복적용",v:"×1.8"}]:[]),
+                  ...(result.viaCount>0?[{l:"경유지",v:`${result.viaCount}곳`}]:[]),
                 ].map(({l,v})=>(
                   <div key={l} className="bg-white/6 rounded-xl px-3 py-2">
                     <div className="text-[9px] text-white/35 font-semibold">{l}</div>
@@ -824,6 +937,16 @@ function NationalFareTab() {
                   </g>
                 );
               })}
+            {activeViaProvs.map((via,i)=>{
+              const pos=PROVINCE_LABEL_POS[via.prov];if(!pos)return null;
+              const[bx,by]=pos,stemY=by-(SMALL.includes(via.prov)?22:28);
+              return(
+                <g key={`via-${i}`} style={{pointerEvents:"none"}}>
+                  <circle cx={bx} cy={stemY} r={14} fill="#6b7280" stroke="white" strokeWidth="2" filter="url(#nfSel)"/>
+                  <text x={bx} y={stemY} textAnchor="middle" dominantBaseline="middle" fontSize="11" fontWeight="900" fill="white">경{i+1}</text>
+                </g>
+              );
+            })}
             {aPath&&<path d={aPath} fill="none" stroke="#3b82f6" strokeWidth="3.5" strokeLinecap="round" markerEnd="url(#nfArr)"/>}
           </svg>
         </div>

@@ -174,7 +174,11 @@ React.useEffect(() => {
   if (!toast) return;
   const snap = toast; // capture current toast
   const t = setTimeout(() => {
-    if (snap?.data?.id) _dismissedToasts.add(`${snap.type}_${snap.data.id}`);
+    if (snap?.data?.id) {
+      const _k=`${snap.type}_${snap.data.id}`;
+      _dismissedToasts.add(_k);
+      try{const _s=new Set(JSON.parse(localStorage.getItem("permDismissed")||"[]"));_s.add(_k);localStorage.setItem("permDismissed",JSON.stringify([..._s].slice(-300)));}catch{}
+    }
     setToast(null);
   }, 10000);
   return () => clearTimeout(t);

@@ -915,27 +915,27 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
             <div className="grid grid-cols-6 gap-3 mb-4">
               <StatCard label="조회 건수" value={`${stats.count}건`} color="gray" />
               <StatCard label="평균 청구운임" value={`${stats.avg.toLocaleString()}원`} color="navy" />
-              <StatCard label="최저 운임" value={`${stats.min.toLocaleString()}원`} color="green" />
-              <StatCard label="최고 운임" value={`${stats.max.toLocaleString()}원`} color="orange" />
+              <StatCard label="최저 운임" value={`${stats.min.toLocaleString()}원`} color="navy" />
+              <StatCard label="최고 운임" value={`${stats.max.toLocaleString()}원`} color="navy" />
               <StatCard label="평균 기사운임" value={`${stats.avgDriver.toLocaleString()}원`} sub={`마진 ${(stats.avg-stats.avgDriver).toLocaleString()}원`} color="gray" />
-              <StatCard label="프리미엄 건수" value={`${stats.spike}건`} sub={`표준 ${stats.normal}건`} color={stats.spike > 0 ? "red" : "gray"} />
+              <StatCard label="프리미엄 건수" value={`${stats.spike}건`} sub={`표준 ${stats.normal}건`} color="gray" />
             </div>
           )}
 
           {aiFare && (
-            <div className="bg-white border border-amber-200 rounded-xl p-5 mb-4 shadow-sm">
-              <div className="flex items-start justify-between">
+            <div className="bg-white border border-gray-200 rounded-xl p-4 mb-4 shadow-sm">
+              <div className="flex items-start justify-between gap-4">
                 <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-[15px] font-bold text-amber-700">AI 추천 운임</span>
-                    <span className="px-2 py-0.5 bg-amber-100 text-amber-600 text-[11px] rounded-full font-semibold">신뢰도 {aiFare.confidence}%</span>
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span className="text-[13px] font-bold text-[#1B2B4B]">AI 추천 운임</span>
+                    <span className="px-2 py-0.5 bg-[#1B2B4B]/10 text-[#1B2B4B] text-[11px] rounded-full font-semibold">신뢰도 {aiFare.confidence}%</span>
                   </div>
-                  <p className="text-[13px] text-gray-600 leading-relaxed">{aiFare.message}</p>
+                  <p className="text-[12px] text-gray-500 leading-relaxed">{aiFare.message}</p>
                 </div>
-                <div className="ml-6 text-right">
-                  <div className="text-[13px] text-gray-500 mb-0.5">추천 운임</div>
-                  <div className="text-[22px] font-bold text-amber-600">{aiFare.aiValue.toLocaleString()}원</div>
-                  <div className="text-[12px] text-gray-500 mt-1">범위: {aiFare.min.toLocaleString()} ~ {aiFare.max.toLocaleString()}원</div>
+                <div className="shrink-0 text-right">
+                  <div className="text-[11px] text-gray-400 mb-0.5">추천 운임</div>
+                  <div className="text-[20px] font-bold text-[#1B2B4B]">{aiFare.aiValue.toLocaleString()}원</div>
+                  <div className="text-[11px] text-gray-400 mt-0.5">범위: {aiFare.min.toLocaleString()} ~ {aiFare.max.toLocaleString()}원</div>
                 </div>
               </div>
             </div>
