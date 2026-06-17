@@ -39,12 +39,12 @@ const PROVINCE_LABEL_POS = {
 };
 
 const PROVINCE_COLORS = {
-  경기: "#cdd8e8", 서울: "#b8c8e0", 인천: "#bccce4",
-  강원: "#c2cede", 충북: "#cccad8", 충남: "#c4d4cc",
-  세종: "#c8d0cc", 대전: "#c6ccd8", 경북: "#d4ccbc",
-  대구: "#cec6b4", 전북: "#d0d0bc", 광주: "#bdd0bc",
-  전남: "#c0ccb8", 경남: "#bdc8d8", 울산: "#b8c4d4",
-  부산: "#b4c0d4", 제주: "#d0d4b0",
+  서울: "#a8c4dc", 인천: "#98b4d0", 경기: "#b4a0d8",
+  강원: "#98bcd8", 충북: "#eeacc0", 충남: "#94b4e4",
+  세종: "#a4d49c", 대전: "#94c88c", 경북: "#eec49c",
+  대구: "#eca4a4", 전북: "#eee09e", 광주: "#9cd494",
+  전남: "#c8e490", 경남: "#eebca8", 울산: "#8cb4d0",
+  부산: "#84acc8", 제주: "#9cd4a0",
 };
 
 const PROVINCE_COORDS = {
@@ -710,10 +710,17 @@ export default function FreightRateInquiry(){
                 <marker id="arrowHead" markerWidth="11" markerHeight="11" refX="6" refY="5.5" orient="auto">
                   <path d="M 0,1 L 10,5.5 L 0,10 Z" fill="#3b82f6"/>
                 </marker>
+                {/* 배경 라디얼 그라데이션 */}
+                <radialGradient id="bgGrad" cx="50%" cy="42%" r="58%" gradientUnits="objectBoundingBox">
+                  <stop offset="0%"   stopColor="#e8f2fc"/>
+                  <stop offset="55%"  stopColor="#d0e4f4"/>
+                  <stop offset="85%"  stopColor="#b8d0e8"/>
+                  <stop offset="100%" stopColor="#9bbcda"/>
+                </radialGradient>
               </defs>
 
-              {/* 배경 — 바다색 */}
-              <rect width="524" height="631" fill="#dce8f2"/>
+              {/* 배경 — 라디얼 그라데이션 */}
+              <rect width="524" height="631" fill="url(#bgGrad)"/>
 
               {/* 레이어 1: 도/시 채색 + 3D 오버레이 */}
               {provinces.map(prov=>{
@@ -721,17 +728,17 @@ export default function FreightRateInquiry(){
                 const isTo=prov===toP;
                 const isHover=prov===hover;
                 const isActive=isFrom||isTo;
-                let fill=PROVINCE_COLORS[prov]||"#e8edf2";
+                let fill=PROVINCE_COLORS[prov]||"#c8d8e8";
                 if(isFrom) fill="#3b82f6";
                 else if(isTo) fill="#f97316";
-                else if(isHover) fill="#c7dcfc";
                 const filt=isActive?"url(#provSel)":isHover?"url(#provHover)":"url(#provShadow)";
-                const sw=isActive?2:isHover?1.2:1;
-                const stroke=isActive?"rgba(255,255,255,0.95)":"rgba(255,255,255,0.85)";
+                const sw=isActive?2.5:isHover?2.5:1;
+                const stroke=isActive?"rgba(255,255,255,0.95)":isHover?"#3b82f6":"rgba(255,255,255,0.75)";
                 return(
-                  <g key={`fill-${prov}`}>
+                  <g key={`fill-${prov}`}
+                    style={{transform:isHover?"translateY(-4px)":"none",transition:"transform 0.18s cubic-bezier(0.34,1.56,0.64,1)"}}>
                     <path d={PROVINCE_PATHS[prov]} fill={fill} stroke={stroke} strokeWidth={sw}
-                      filter={filt} style={{cursor:"pointer",transition:"fill 0.18s,filter 0.18s"}}
+                      filter={filt} style={{cursor:"pointer",transition:"fill 0.18s,filter 0.18s,stroke 0.15s"}}
                       onMouseEnter={()=>setHover(prov)} onMouseLeave={()=>setHover(null)}
                       onClick={()=>handleProvinceClick(prov)}/>
                     <path d={PROVINCE_PATHS[prov]} fill={isActive?"url(#selGlow)":"url(#provLight)"}
@@ -744,12 +751,14 @@ export default function FreightRateInquiry(){
               {provinces.map(prov=>{
                 if(prov===fromP||prov===toP) return null;
                 const isSmall=SMALL.includes(prov);
+                const isHovL=prov===hover;
                 const [lx,ly]=PROVINCE_LABEL_POS[prov]||[0,0];
                 return(
                   <text key={`label-${prov}`}
                     x={lx} y={ly} textAnchor="middle" dominantBaseline="middle"
-                    fontSize={isSmall?11:14} fontWeight="700" fill="#1B2B4B"
-                    style={{pointerEvents:"none"}}>{prov}</text>
+                    fontSize={isSmall?11:14} fontWeight={isHovL?"800":"700"}
+                    fill={isHovL?"#2563eb":"#1B2B4B"}
+                    style={{pointerEvents:"none",transform:isHovL?"translateY(-4px)":"none",transition:"transform 0.18s cubic-bezier(0.34,1.56,0.64,1),fill 0.15s"}}>{prov}</text>
                 );
               })}
 
