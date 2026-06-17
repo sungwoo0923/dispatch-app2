@@ -217,6 +217,8 @@ const COLL = {
 const getCollectionName = (role) =>
   role === "test" ? "orders_test" : "orders";
 
+// 모듈 레벨 dismiss Set: 컴포넌트 재마운트 후에도 세션 동안 유지
+const _urgentDismissed = new Set();
 
 function useRealtimeCollections(user, userCompany, role) {
   const [dispatchData, setDispatchData] = useState([]);
@@ -14565,6 +14567,8 @@ const generateTimeOptions = () => {
     setWarningList(temp);
   }, [rows]);
 React.useEffect(() => {
+  // 실시간배차현황 탭에 있을 때만 팝업 체크 (다른 탭에서 미리 세팅되어 진입 시 뜨는 문제 방지)
+  if (menu !== "실시간배차현황") return;
   if (!rows.length) return;
   const now = new Date();
   const email = auth.currentUser?.email || "guest";
@@ -14587,8 +14591,8 @@ React.useEffect(() => {
 
   const newOnes = urgent.filter((r) => {
     if (!r._id) return false;
-    // 세션 내 메모리 dismiss Set 우선 체크 (localStorage 실패 시에도 재출현 방지)
-    if (urgentDismissedRef.current.has(r._id)) return false;
+    // 모듈 레벨 Set 체크 (컴포넌트 재마운트 후에도 유지)
+    if (_urgentDismissed.has(r._id)) return false;
     if (seen.includes(r._id)) return false;
     const until = snoozed[r._id];
     if (until && now.getTime() < until) return false;
@@ -14599,13 +14603,13 @@ React.useEffect(() => {
     setUrgentPopup(newOnes);
     playNotifSound();
   }
-}, [rows, snoozeRecheckTrigger]);
+}, [rows, snoozeRecheckTrigger, menu]);
 
 const handleUrgentDismiss = () => {
   const email = auth.currentUser?.email || "guest";
   const ids = urgentPopup.map((r) => r._id).filter(Boolean);
-  // 세션 내 메모리에 즉시 등록 (localStorage 저장 실패해도 재출현 방지)
-  ids.forEach((id) => urgentDismissedRef.current.add(id));
+  // 모듈 레벨 Set + ref 모두에 등록 (재마운트 후에도, localStorage 실패해도 재출현 방지)
+  ids.forEach((id) => { _urgentDismissed.add(id); urgentDismissedRef.current.add(id); });
   try {
     const seen = JSON.parse(localStorage.getItem(`urgentSeen_${email}`) || "[]");
     const updated = [...new Set([...seen, ...ids])];
@@ -14620,7 +14624,7 @@ const handleUrgentSnooze = (minutes) => {
   const until = Date.now() + minutes * 60 * 1000;
   const ids = urgentPopup.map((r) => r._id).filter(Boolean);
   // 스누즈 기간 동안 세션 메모리에도 등록 (스누즈 만료 시 재확인 트리거로 제거)
-  ids.forEach((id) => urgentDismissedRef.current.add(id));
+  ids.forEach((id) => { _urgentDismissed.add(id); urgentDismissedRef.current.add(id); });
   try {
     const snoozed = JSON.parse(localStorage.getItem(snoozedKey) || "{}");
     ids.forEach((id) => { snoozed[id] = until; });
@@ -14629,7 +14633,8 @@ const handleUrgentSnooze = (minutes) => {
   setUrgentPopup([]);
   if (urgentTimerRef.current) clearTimeout(urgentTimerRef.current);
   urgentTimerRef.current = setTimeout(() => {
-    ids.forEach((id) => urgentDismissedRef.current.delete(id));
+    // 스누즈 만료: 모듈 Set과 ref 모두에서 제거 후 재확인
+    ids.forEach((id) => { _urgentDismissed.delete(id); urgentDismissedRef.current.delete(id); });
     setSnoozeRecheckTrigger((n) => n + 1);
   }, minutes * 60 * 1000);
 };
