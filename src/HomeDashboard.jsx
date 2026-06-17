@@ -129,6 +129,9 @@ const RegBtn = ({ onClick }) => (
   </button>
 );
 
+/* ===== 모듈 레벨: 당일 닫기/읽기 완료된 토스트 ID 관리 ===== */
+const _dismissedToasts = new Set();
+
 /* ===================== HOME DASHBOARD ===================== */
 export default function HomeDashboard({ role, user, userCompany = "", pending, delayed, dispatchData = [] }) {
   const isEditingHandoverRef = useRef(false);
@@ -226,14 +229,14 @@ React.useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(
 
     // localStorage에 이미 본 기록 있으면 스킵
     const shownKey = `${type}_${todayItem.id}`;
-    if (seen[shownKey]) return;
+    if (seen[shownKey] || _dismissedToasts.has(shownKey)) return;
 
+    markToastSeen(shownKey); // setTimeout 이전에 기록 (race condition 방지)
     setTimeout(() => {
       setToast({
         type,
         data: { ...todayItem, date: formatCreatedAt(todayItem.createdAt) }
       });
-      markToastSeen(shownKey); // 표시 즉시 기록
     }, type === "notice" ? 500 : type === "schedule" ? 1500 : 2500);
   }, []);
 
@@ -253,7 +256,9 @@ React.useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(
       const added = snap.docChanges().find(c => c.type === "added" && !c.doc.metadata.hasPendingWrites);
       if (!added) return;
       const data = { id: added.doc.id, ...added.doc.data() };
-      markToastSeen(`schedule_${data.id}`);
+      const seenKeyS = `schedule_${data.id}`;
+      if (getSeenToasts()[seenKeyS] || _dismissedToasts.has(seenKeyS)) return;
+      markToastSeen(seenKeyS);
       setToast({ type: "schedule", data });
     });
     return () => unsub();
@@ -275,7 +280,9 @@ React.useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(
       const added = snap.docChanges().find(c => c.type === "added" && !c.doc.metadata.hasPendingWrites);
       if (!added) return;
       const data = { id: added.doc.id, ...added.doc.data(), date: formatCreatedAt(added.doc.data().createdAt) };
-      markToastSeen(`notice_${data.id}`);
+      const seenKeyN = `notice_${data.id}`;
+      if (getSeenToasts()[seenKeyN] || _dismissedToasts.has(seenKeyN)) return;
+      markToastSeen(seenKeyN);
       setToast({ type: "notice", data });
     });
     return () => unsub();
@@ -296,8 +303,10 @@ React.useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(
       // 실시간 신규 등록 알림 (내가 직접 편집 중인 건 제외)
       const added = snap.docChanges().find(c => c.type === "added" && !c.doc.metadata.hasPendingWrites && !isEditingHandoverRef.current);
       if (!added) return;
-         const data = { id: added.doc.id, ...added.doc.data() };
-      markToastSeen(`handover_${data.id}`);
+      const data = { id: added.doc.id, ...added.doc.data() };
+      const seenKeyH = `handover_${data.id}`;
+      if (getSeenToasts()[seenKeyH] || _dismissedToasts.has(seenKeyH)) return;
+      markToastSeen(seenKeyH);
       setToast({ type: "handover", data });
     });
     return () => unsub();
@@ -823,6 +832,8 @@ React.useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(
             className="toast-enter fixed bottom-6 right-6 z-50 cursor-pointer select-none"
             style={{ width: 320 }}
             onClick={() => {
+              const k = `${toast.type}_${toast.data?.id}`;
+              if (toast.data?.id) { markToastSeen(k); _dismissedToasts.add(k); }
               if (toast.type === "notice") setSelectedNotice(toast.data);
               else if (toast.type === "schedule") setSelectedSchedule(toast.data);
               else if (toast.type === "handover") setSelectedHandover(toast.data);
@@ -846,7 +857,7 @@ React.useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(
                   </div>
                 </div>
                 <button
-                  onClick={e => { e.stopPropagation(); setToast(null); }}
+                  onClick={e => { e.stopPropagation(); const k = `${toast.type}_${toast.data?.id}`; if (toast.data?.id) { markToastSeen(k); _dismissedToasts.add(k); } setToast(null); }}
                   className="w-6 h-6 rounded-full flex items-center justify-center text-white/50 hover:text-white hover:bg-white/20 transition text-[14px]"
                 >✕</button>
               </div>

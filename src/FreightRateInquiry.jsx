@@ -21,30 +21,30 @@ const PROVINCE_PATHS = Object.fromEntries(
 const PROVINCE_LABEL_POS = {
   서울: [152, 127],
   인천: [100, 140],
-  경기: [182, 168],
-  강원: [298, 100],
-  충북: [248, 212],
-  충남: [120, 258],
-  세종: [178, 256],
-  대전: [194, 277],
-  경북: [368, 252],
-  대구: [298, 338],
-  전북: [163, 345],
-  광주: [140, 408],
-  전남: [118, 452],
-  경남: [282, 400],
-  울산: [364, 368],
-  부산: [344, 404],
-  제주: [112, 611],
+  경기: [168, 178],
+  강원: [326, 132],
+  충북: [248, 218],
+  충남: [142, 265],
+  세종: [192, 260],
+  대전: [200, 282],
+  경북: [352, 272],
+  대구: [300, 338],
+  전북: [168, 352],
+  광주: [148, 408],
+  전남: [160, 470],
+  경남: [290, 415],
+  울산: [366, 372],
+  부산: [348, 407],
+  제주: [118, 611],
 };
 
 const PROVINCE_COLORS = {
-  경기: "#c4d8d0", 서울: "#b8cce0", 인천: "#b8cce0",
-  강원: "#b8ccd8", 충북: "#d4cce4", 충남: "#c4d8c4",
-  세종: "#c8d4c8", 대전: "#c4ccd8", 경북: "#e4d0c0",
-  대구: "#dcc0b4", 전북: "#e0e0c0", 광주: "#c0d8bc",
-  전남: "#c4d8c0", 경남: "#c0d0e4", 울산: "#bccce0",
-  부산: "#b8c8e0", 제주: "#e4e0b4",
+  경기: "#cdd8e8", 서울: "#b8c8e0", 인천: "#bccce4",
+  강원: "#c2cede", 충북: "#cccad8", 충남: "#c4d4cc",
+  세종: "#c8d0cc", 대전: "#c6ccd8", 경북: "#d4ccbc",
+  대구: "#cec6b4", 전북: "#d0d0bc", 광주: "#bdd0bc",
+  전남: "#c0ccb8", 경남: "#bdc8d8", 울산: "#b8c4d4",
+  부산: "#b4c0d4", 제주: "#d0d4b0",
 };
 
 const PROVINCE_COORDS = {
@@ -712,8 +712,8 @@ export default function FreightRateInquiry(){
                 </marker>
               </defs>
 
-              {/* 배경 — 흰색 */}
-              <rect width="524" height="631" fill="white"/>
+              {/* 배경 — 바다색 */}
+              <rect width="524" height="631" fill="#dce8f2"/>
 
               {/* 레이어 1: 도/시 채색 + 3D 오버레이 */}
               {provinces.map(prov=>{
@@ -748,7 +748,7 @@ export default function FreightRateInquiry(){
                 return(
                   <text key={`label-${prov}`}
                     x={lx} y={ly} textAnchor="middle" dominantBaseline="middle"
-                    fontSize={isSmall?12:15} fontWeight="800" fill="#374151"
+                    fontSize={isSmall?11:14} fontWeight="700" fill="#1B2B4B"
                     style={{pointerEvents:"none"}}>{prov}</text>
                 );
               })}

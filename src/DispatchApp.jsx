@@ -2188,7 +2188,7 @@ React.useEffect(() => {
   // ---------------- 메뉴 클릭 제어 ----------------
   const handleMenuClick = (m) => {
     if ((role === "user" || role === "test") && blockedMenus.includes(m)) return;
-    setMenu(m);
+    React.startTransition(() => setMenu(m));
   };
 
 
@@ -7422,7 +7422,7 @@ const arr = form.경유상차목록 || [];
   setStopPopupOpen(true);
 }}
 className={`
-  text-[11px] font-bold px-2.5 py-1 rounded-full border transition
+  text-[11px] font-bold px-2.5 py-1 rounded-lg border transition
   ${hasPickupStops
     ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
     : "bg-white text-[#1B2B4B] border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"
@@ -7568,7 +7568,7 @@ className={`
   setStopPopupOpen(true);
 }}
 className={`
-  text-[11px] font-bold px-2.5 py-1 rounded-full border transition
+  text-[11px] font-bold px-2.5 py-1 rounded-lg border transition
   ${hasDropStops
     ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
     : "bg-white text-[#1B2B4B] border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"
@@ -7714,7 +7714,7 @@ className={`
       e.stopPropagation();
       setVehicleSpecOpen(true);
     }}
-   className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-white border border-[#1B2B4B] text-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white transition"
+   className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-white border border-[#1B2B4B] text-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white transition"
   >
     차량제원
   </button>
@@ -24691,25 +24691,17 @@ return (
         </div>
         {/* 구분선 */}
         <div className="w-px h-8 bg-gray-300 mx-1 shrink-0" />
-        {/* 상태 필터 칩 */}
-        {[
-          { key: "ALL",         label: `전체 ${statusSummary.전체}` },
-          { key: "UNASSIGNED",  label: `미배차 ${statusSummary.미배차}` },
-          { key: "COMPLETE",    label: `완료 ${statusSummary.완료}` },
-          { key: "UNDELIVERED", label: `미전달 ${statusSummary.미전달}` },
-        ].map(({ key, label }) => (
-          <button
-            key={key}
-            onClick={() => setStatusFilter(key)}
-            className={`h-[34px] px-3 rounded-full text-[12px] font-semibold border transition
-              ${statusFilter === key
-                ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
-                : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
-              }`}
-          >
-            {label}
-          </button>
-        ))}
+        {/* 상태 필터 드롭다운 */}
+        <select
+          value={statusFilter}
+          onChange={e => setStatusFilter(e.target.value)}
+          className="h-[34px] px-3 rounded-lg text-[12px] font-semibold border border-gray-300 bg-white text-gray-700 cursor-pointer focus:outline-none focus:border-[#1B2B4B] transition"
+        >
+          <option value="ALL">전체 {statusSummary.전체}</option>
+          <option value="UNASSIGNED">미배차 {statusSummary.미배차}</option>
+          <option value="COMPLETE">완료 {statusSummary.완료}</option>
+          <option value="UNDELIVERED">미전달 {statusSummary.미전달}</option>
+        </select>
       </div>
 
       {/* ===== 페이지+검색+날짜+버튼 한 줄 ===== */}
