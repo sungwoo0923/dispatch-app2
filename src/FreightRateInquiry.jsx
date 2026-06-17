@@ -349,10 +349,11 @@ function VehicleIconSvg({ id, sel }) {
   );
 }
 
-// ─── 전국운임조회 탭 (차량그리드 + 지도) ─────────────────────────────────────
+// ─── 전국운임조회 탭 ───────────────────────────────────────────────────────
 function NationalFareTab() {
   const [vehicle,setVehicle]=useState("1ton");
   const [cargoType,setCargoType]=useState("일반");
+  const [freightMode,setFreightMode]=useState("독차");
   const [step,setStep]=useState("from");
   const [fromP,setFromP]=useState(null);
   const [fromC,setFromC]=useState(null);
@@ -360,16 +361,79 @@ function NationalFareTab() {
   const [toC,setToC]=useState(null);
   const [hover,setHover]=useState(null);
   const [cityStep,setCityStep]=useState(null);
+  const [fromSearch,setFromSearch]=useState("");
+  const [fromResults,setFromResults]=useState([]);
+  const [toSearch,setToSearch]=useState("");
+  const [toResults,setToResults]=useState([]);
+  const [manualWork,setManualWork]=useState(false);
+  const [roundTrip,setRoundTrip]=useState(false);
+  const [mixWeightKg,setMixWeightKg]=useState("");
+  const [mixCbm,setMixCbm]=useState("");
+  const [dispatchData,setDispatchData]=useState([]);
+  const fromRef=useRef(null);
+  const toRef=useRef(null);
   const provinces=Object.keys(PROVINCE_PATHS);
-  const SMALLS=["서울","인천","세종","대전","대구","광주","울산","부산","제주"];
+  const SMALL=["서울","인천","세종","대전","대구","광주","울산","부산","제주"];
+
+  useEffect(()=>{
+    let c1=[],c2=[];
+    const merge=()=>{const m=new Map();[...c1,...c2].forEach(r=>m.set(r._id,r));setDispatchData([...m.values()]);};
+    const mapDoc=d=>({_id:d.id,...d.data()});
+    const u1=onSnapshot(collection(db,"dispatch"),s=>{c1=s.docs.map(mapDoc);merge();});
+    const u2=onSnapshot(collection(db,"orders"),s=>{c2=s.docs.map(mapDoc);merge();});
+    return()=>{u1();u2();};
+  },[]);
+  useEffect(()=>{
+    if(!fromSearch.trim()||fromSearch.length<2){setFromResults([]);return;}
+    const t=setTimeout(()=>searchTmapPOI(fromSearch,setFromResults),400);
+    return()=>clearTimeout(t);
+  },[fromSearch]);
+  useEffect(()=>{
+    if(!toSearch.trim()||toSearch.length<2){setToResults([]);return;}
+    const t=setTimeout(()=>searchTmapPOI(toSearch,setToResults),400);
+    return()=>clearTimeout(t);
+  },[toSearch]);
+  useEffect(()=>{
+    const fn=(e)=>{
+      if(fromRef.current&&!fromRef.current.contains(e.target))setFromResults([]);
+      if(toRef.current&&!toRef.current.contains(e.target))setToResults([]);
+    };
+    document.addEventListener("mousedown",fn);
+    return()=>document.removeEventListener("mousedown",fn);
+  },[]);
+  useEffect(()=>{if(cargoType==="냉장"&&(vehicle==="bike"||vehicle==="damas"))setVehicle("1ton");},[cargoType]);
 
   const result=useMemo(()=>{
-    if(!fromC||!toC) return null;
-    return calcRate([fromC.la,fromC.lo],[toC.la,toC.lo],vehicle,cargoType);
-  },[fromC,toC,vehicle,cargoType]);
+    if(!fromC||!toC)return null;
+    let base;
+    if(freightMode==="혼적"){
+      const wkg=parseFloat(mixWeightKg)||0,cbm=parseFloat(mixCbm)||0;
+      if(!wkg&&!cbm)return null;
+      base={mode:"혼적",...calcMixedRate([fromC.la,fromC.lo],[toC.la,toC.lo],cargoType,wkg,cbm)};
+    }else{
+      base={mode:"독차",...calcRate([fromC.la,fromC.lo],[toC.la,toC.lo],vehicle,cargoType)};
+    }
+    const mul=roundTrip?1.8:1;
+    const mfee=(manualWork&&freightMode==="독차")?(SURCHARGE_MANUAL[vehicle]||0):0;
+    return{...base,min:Math.round((base.min*mul+mfee)/1000)*1000,max:Math.round((base.max*mul+mfee)/1000)*1000,avg:Math.round((base.avg*mul+mfee)/1000)*1000,manualFee:mfee,isRound:roundTrip};
+  },[fromC,toC,vehicle,cargoType,freightMode,mixWeightKg,mixCbm,manualWork,roundTrip]);
+
+  const refData=useMemo(()=>{
+    if(!fromP||!toP||!dispatchData.length||step!=="result")return null;
+    const filtered=dispatchData.filter(r=>{
+      const pu=String(r.상차지명||""),dr=String(r.하차지명||"");
+      return pu.includes(fromP)&&dr.includes(toP)&&Number(r.청구운임||0)>0;
+    });
+    if(!filtered.length)return null;
+    const charges=filtered.map(r=>Number(r.청구운임||0)).filter(v=>v>0);
+    const drivers=filtered.map(r=>Number(r.기사운임||0)).filter(v=>v>0);
+    const stat=arr=>arr.length?{avg:Math.round(arr.reduce((a,b)=>a+b)/arr.length),min:Math.min(...arr),max:Math.max(...arr)}:null;
+    return{count:filtered.length,charge:stat(charges),driver:stat(drivers)};
+  },[fromP,toP,dispatchData,step]);
 
   const reset=useCallback(()=>{
     setStep("from");setFromP(null);setFromC(null);setToP(null);setToC(null);setCityStep(null);
+    setFromSearch("");setToSearch("");setFromResults([]);setToResults([]);setMixWeightKg("");setMixCbm("");
   },[]);
 
   const onProvClick=(prov)=>{
@@ -377,118 +441,237 @@ function NationalFareTab() {
     else if(step==="to"){setToP(prov);setCityStep("to");}
   };
   const onCitySelect=(city)=>{
-    if(cityStep==="from"){setFromC(city);setStep("to");setCityStep(null);}
-    else if(cityStep==="to"){setToC(city);setStep("result");setCityStep(null);}
+    if(cityStep==="from"){setFromC(city);setFromSearch("");setStep("to");setCityStep(null);}
+    else{setToC(city);setToSearch("");setStep("result");setCityStep(null);}
+  };
+  const selectFrom=(r)=>{
+    setFromP(r.prov);setFromC({n:r.addr||r.name,la:r.la,lo:r.lo});
+    setFromSearch(r.full);setFromResults([]);setCityStep(null);
+    if(toC)setStep("result");else setStep("to");
+  };
+  const selectTo=(r)=>{
+    setToP(r.prov);setToC({n:r.addr||r.name,la:r.la,lo:r.lo});
+    setToSearch(r.full);setToResults([]);setCityStep(null);
+    if(fromC)setStep("result");
   };
 
   const aFrom=fromP?PROVINCE_LABEL_POS[fromP]:null;
   const aTo=toP?PROVINCE_LABEL_POS[toP]:null;
   let aPath=null;
   if(aFrom&&aTo&&step==="result"){
-    const[fx,fy]=[aFrom[0],aFrom[1]-11];
-    const[tx,ty]=[aTo[0],aTo[1]-11];
+    const[fx,fy]=[aFrom[0],aFrom[1]-11],[tx,ty]=[aTo[0],aTo[1]-11];
     aPath=`M ${fx},${fy} Q ${(fx+tx)/2},${(fy+ty)/2-50} ${tx},${ty}`;
   }
-
   const vehicles=VEHICLE_TYPES.filter(v=>!(v.smallOnly&&cargoType==="냉장"));
 
-  return (
-    <div className="flex gap-5 min-h-0" style={{height:"calc(100vh - 230px)",minHeight:580}}>
+  return(
+    <div className="flex gap-5 min-h-0" style={{height:"calc(100vh - 220px)",minHeight:560}}>
 
-      {/* ── 왼쪽 패널 (입력/선택) ── */}
-      <div className="flex-[4] flex flex-col gap-5 overflow-y-auto pr-1 min-w-0">
+      {/* ── 왼쪽 패널 ── */}
+      <div className="flex-[4] flex flex-col gap-4 overflow-y-auto pr-1 min-w-0">
+
+        {/* 독차/혼적 토글 */}
+        <div className="flex rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+          {["독차","혼적"].map(m=>(
+            <button key={m} onClick={()=>{setFreightMode(m);setMixWeightKg("");setMixCbm("");}}
+              className={`flex-1 py-2.5 text-[13px] font-bold transition ${freightMode===m?"bg-[#1B2B4B] text-white":"bg-white text-gray-500 hover:bg-gray-50"}`}>
+              {m==="혼적"?"혼적(합짐)":m}
+            </button>
+          ))}
+        </div>
 
         {/* 상·하차지 */}
         <div>
-          <p className="text-[14px] font-extrabold text-[#1B2B4B] mb-2.5">
-            상·하차지를 입력해주세요 <span className="text-red-500">*</span>
-          </p>
-          <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
-            <div className={`flex items-center gap-3 px-4 py-3.5 cursor-pointer border-b border-gray-100 transition ${step==="from"||cityStep==="from"?"bg-blue-50/60":""}`}
-              onClick={()=>{setStep("from");setCityStep(null);setFromP(null);setFromC(null);setToC(null);setToP(null);}}>
-              <div className="w-2 h-2 rounded-full bg-blue-500 shrink-0"/>
-              <span className="text-[12px] text-gray-400 font-bold w-11 shrink-0">상차지</span>
-              {fromC?<span className="font-extrabold text-[14px] text-[#1B2B4B]">{fromP} {fromC.n}</span>
-                    :<span className="text-[13px] text-gray-300 font-medium">상차지를 추가하세요</span>}
-              {fromC&&<button className="ml-auto text-gray-300 hover:text-red-400 text-[18px] leading-none" onClick={e=>{e.stopPropagation();reset();}}>×</button>}
+          <p className="text-[13px] font-extrabold text-[#1B2B4B] mb-2">상·하차지 입력 <span className="text-red-500">*</span></p>
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-visible">
+            {/* 상차지 */}
+            <div ref={fromRef} className="relative border-b border-gray-100">
+              <div className={`flex items-center gap-3 px-4 py-3 ${step==="from"||cityStep==="from"?"bg-blue-50/50":""}`}>
+                <div className="w-2 h-2 rounded-full bg-blue-500 shrink-0"/>
+                <span className="text-[11px] font-bold text-gray-400 w-10 shrink-0">상차지</span>
+                {fromC&&!cityStep?(
+                  <span className="font-extrabold text-[13px] text-[#1B2B4B] truncate flex-1">{fromP} {fromC.n}</span>
+                ):(
+                  <input
+                    className="flex-1 text-[13px] bg-transparent outline-none text-[#1B2B4B] font-semibold placeholder-gray-300"
+                    placeholder="지역명 또는 주소 검색"
+                    value={fromSearch}
+                    onChange={e=>{setFromSearch(e.target.value);if(!e.target.value){setFromP(null);setFromC(null);}}}
+                    onFocus={()=>{setStep("from");}}
+                  />
+                )}
+                {(fromC||fromSearch)&&(
+                  <button className="text-gray-300 hover:text-red-400 text-lg leading-none shrink-0" onClick={e=>{e.stopPropagation();setFromP(null);setFromC(null);setFromSearch("");setFromResults([]);setStep("from");}}>×</button>
+                )}
+              </div>
+              {fromResults.length>0&&(
+                <div className="absolute left-0 right-0 top-full bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden mt-1">
+                  {fromResults.map((r,i)=>(
+                    <button key={i} onClick={()=>selectFrom(r)}
+                      className="w-full px-4 py-2.5 text-left hover:bg-blue-50 transition border-b border-gray-50 last:border-0">
+                      <div className="text-[12px] font-bold text-[#1B2B4B]">{r.name}</div>
+                      <div className="text-[11px] text-gray-400">{r.full}</div>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
-            <div className={`flex items-center gap-3 px-4 py-3.5 cursor-pointer transition ${step==="to"||cityStep==="to"?"bg-orange-50/60":""}`}
-              onClick={()=>{if(fromC){setStep("to");setCityStep(null);setToP(null);setToC(null);}}}>
-              <div className="w-2 h-2 rounded-full bg-orange-400 shrink-0"/>
-              <span className="text-[12px] text-gray-400 font-bold w-11 shrink-0">하차지</span>
-              {toC?<span className="font-extrabold text-[14px] text-[#1B2B4B]">{toP} {toC.n}</span>
-                  :<span className="text-[13px] text-gray-300 font-medium">{fromC?"하차지를 추가하세요":"상차지 먼저 선택"}</span>}
-              {toC&&<button className="ml-auto text-gray-300 hover:text-red-400 text-[18px] leading-none" onClick={e=>{e.stopPropagation();setToP(null);setToC(null);setStep("to");}}>×</button>}
+            {/* 하차지 */}
+            <div ref={toRef} className="relative">
+              <div className={`flex items-center gap-3 px-4 py-3 ${step==="to"||cityStep==="to"?"bg-orange-50/50":""}`}>
+                <div className="w-2 h-2 rounded-full bg-orange-400 shrink-0"/>
+                <span className="text-[11px] font-bold text-gray-400 w-10 shrink-0">하차지</span>
+                {toC&&!cityStep?(
+                  <span className="font-extrabold text-[13px] text-[#1B2B4B] truncate flex-1">{toP} {toC.n}</span>
+                ):(
+                  <input
+                    className="flex-1 text-[13px] bg-transparent outline-none text-[#1B2B4B] font-semibold placeholder-gray-300"
+                    placeholder={fromC?"지역명 또는 주소 검색":"상차지 먼저 선택"}
+                    value={toSearch}
+                    onChange={e=>{setToSearch(e.target.value);if(!e.target.value){setToP(null);setToC(null);}}}
+                    onFocus={()=>{if(fromC)setStep("to");}}
+                    disabled={!fromC&&!fromSearch}
+                  />
+                )}
+                {(toC||toSearch)&&(
+                  <button className="text-gray-300 hover:text-red-400 text-lg leading-none shrink-0" onClick={e=>{e.stopPropagation();setToP(null);setToC(null);setToSearch("");setToResults([]);setStep("to");}}>×</button>
+                )}
+              </div>
+              {toResults.length>0&&(
+                <div className="absolute left-0 right-0 top-full bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden mt-1">
+                  {toResults.map((r,i)=>(
+                    <button key={i} onClick={()=>selectTo(r)}
+                      className="w-full px-4 py-2.5 text-left hover:bg-orange-50 transition border-b border-gray-50 last:border-0">
+                      <div className="text-[12px] font-bold text-[#1B2B4B]">{r.name}</div>
+                      <div className="text-[11px] text-gray-400">{r.full}</div>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
-          {(fromP||toP)&&<button onClick={reset} className="mt-1.5 text-[11px] text-gray-400 hover:text-red-500 transition">초기화</button>}
+          {(fromP||toP)&&<button onClick={reset} className="mt-1 text-[11px] text-gray-400 hover:text-red-500 transition">초기화</button>}
         </div>
 
-        {/* 차량 선택 */}
-        <div>
-          <p className="text-[14px] font-extrabold text-[#1B2B4B] mb-2.5">
-            차량을 선택해주세요 <span className="text-red-500">*</span>
-          </p>
-          <div className="grid grid-cols-5 gap-1.5">
-            {vehicles.map(v=>(
-              <button key={v.id} onClick={()=>setVehicle(v.id)}
-                className={`flex flex-col items-center pt-3 pb-2 px-1 rounded-xl border-2 transition ${vehicle===v.id
-                  ?"bg-[#1B2B4B] border-[#1B2B4B] shadow-lg"
-                  :"bg-white border-gray-200 hover:border-[#1B2B4B]/50 hover:shadow-sm"}`}>
-                <div className="flex items-center justify-center" style={{width:48,height:28}}>
-                  <VehicleIconSvg id={v.id} sel={vehicle===v.id}/>
-                </div>
-                <span className={`text-[10px] font-bold text-center mt-1.5 leading-tight ${vehicle===v.id?"text-white":"text-gray-700"}`}>{v.name}</span>
-              </button>
-            ))}
+        {/* 독차: 차량 선택 */}
+        {freightMode==="독차"&&(
+          <div>
+            <p className="text-[13px] font-extrabold text-[#1B2B4B] mb-2">차량 선택 <span className="text-red-500">*</span></p>
+            <div className="grid grid-cols-5 gap-2">
+              {vehicles.map(v=>(
+                <button key={v.id} onClick={()=>setVehicle(v.id)}
+                  className={`flex flex-col items-center py-3 px-1 rounded-xl border-2 transition ${vehicle===v.id?"bg-[#1B2B4B] border-[#1B2B4B] shadow-lg":"bg-white border-gray-200 hover:border-[#1B2B4B]/50"}`}>
+                  <div className="w-full flex justify-center mb-1.5 overflow-hidden" style={{height:30}}>
+                    <VehicleIconSvg id={v.id} sel={vehicle===v.id}/>
+                  </div>
+                  <span className={`text-[11px] font-bold text-center leading-tight ${vehicle===v.id?"text-white":"text-gray-700"}`}>
+                    {v.name.replace("(광폭)","(광)").replace("(합짐)","+")}
+                  </span>
+                </button>
+              ))}
+            </div>
+            <p className="text-[11px] text-gray-400 mt-1.5">차량 선택이 어렵다면 상단 차량제원 탭을 참고하세요.</p>
           </div>
-          <p className="text-[11px] text-gray-400 mt-1.5">차량 선택이 어렵다면, 상단의 차량제원을 참고하세요.</p>
-        </div>
+        )}
+
+        {/* 혼적: 중량/CBM */}
+        {freightMode==="혼적"&&(
+          <div>
+            <p className="text-[13px] font-extrabold text-[#1B2B4B] mb-2">화물 중량 / 부피</p>
+            <div className="flex gap-3 bg-white rounded-xl border border-gray-200 p-4">
+              <div className="flex-1">
+                <label className="block text-[11px] font-bold text-gray-400 mb-1.5">중량 (kg)</label>
+                <input type="number" min="0" placeholder="예: 500" value={mixWeightKg}
+                  onChange={e=>{setMixWeightKg(e.target.value);if(e.target.value)setMixCbm("");}}
+                  className="w-full px-3 py-2.5 border-2 border-gray-100 rounded-xl text-[13px] font-bold text-[#1B2B4B] focus:outline-none focus:border-[#1B2B4B]"/>
+              </div>
+              <div className="flex items-end pb-2.5 text-gray-300 text-[12px]">또는</div>
+              <div className="flex-1">
+                <label className="block text-[11px] font-bold text-gray-400 mb-1.5">CBM (㎥)</label>
+                <input type="number" min="0" step="0.1" placeholder="예: 2.5" value={mixCbm}
+                  onChange={e=>{setMixCbm(e.target.value);if(e.target.value)setMixWeightKg("");}}
+                  className="w-full px-3 py-2.5 border-2 border-gray-100 rounded-xl text-[13px] font-bold text-[#1B2B4B] focus:outline-none focus:border-[#1B2B4B]"/>
+              </div>
+            </div>
+            <div className="mt-2 text-[11px] text-gray-400 bg-gray-50 rounded-lg px-3 py-2">
+              혼적 요율: 100km 이하 기본 28,000원+100kg당 3,500원 · 300km+ 기본 78,000원+100kg당 12,000원
+            </div>
+          </div>
+        )}
 
         {/* 화물 유형 */}
         <div>
-          <p className="text-[14px] font-extrabold text-[#1B2B4B] mb-2.5">화물 유형</p>
+          <p className="text-[13px] font-extrabold text-[#1B2B4B] mb-2">화물 유형</p>
           <div className="flex gap-2">
             {CARGO_TYPES.map(ct=>(
               <button key={ct.id} onClick={()=>setCargoType(ct.id)}
-                className={`flex-1 py-3 rounded-xl text-[13px] font-bold border-2 transition ${cargoType===ct.id
-                  ?"bg-[#1B2B4B] text-white border-[#1B2B4B] shadow-md"
-                  :"bg-white text-gray-500 border-gray-200 hover:border-[#1B2B4B]/40"}`}>
+                className={`flex-1 py-2.5 rounded-xl text-[13px] font-bold border-2 transition ${cargoType===ct.id?"bg-[#1B2B4B] text-white border-[#1B2B4B] shadow-md":"bg-white text-gray-500 border-gray-200 hover:border-[#1B2B4B]/40"}`}>
                 {ct.name}
               </button>
             ))}
           </div>
         </div>
 
+        {/* 추가 옵션 */}
+        {freightMode==="독차"&&(
+          <div className="bg-white rounded-xl border border-gray-200 p-4">
+            <p className="text-[12px] font-bold text-[#1B2B4B] mb-3">추가 옵션</p>
+            <div className="flex flex-col gap-2.5">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input type="checkbox" checked={roundTrip} onChange={e=>setRoundTrip(e.target.checked)} className="w-4 h-4 accent-[#1B2B4B] cursor-pointer"/>
+                <div>
+                  <span className="text-[13px] font-bold text-gray-700">왕복 운행</span>
+                  {roundTrip&&<span className="ml-2 text-[11px] text-gray-400 font-medium">편도 × 1.8 적용</span>}
+                </div>
+              </label>
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input type="checkbox" checked={manualWork} onChange={e=>setManualWork(e.target.checked)} className="w-4 h-4 accent-[#1B2B4B] cursor-pointer"/>
+                <div>
+                  <span className="text-[13px] font-bold text-gray-700">수작업 (상하차)</span>
+                  {manualWork&&SURCHARGE_MANUAL[vehicle]>0&&<span className="ml-2 text-[11px] text-gray-400 font-medium">+{SURCHARGE_MANUAL[vehicle]?.toLocaleString()}원</span>}
+                  {manualWork&&SURCHARGE_MANUAL[vehicle]===0&&<span className="ml-2 text-[11px] text-gray-400">해당없음</span>}
+                </div>
+              </label>
+            </div>
+          </div>
+        )}
+
         {/* 결과 카드 */}
         {result&&step==="result"&&(
           <div className="rounded-2xl overflow-hidden shadow-xl border border-[#1B2B4B]/10"
             style={{background:"linear-gradient(150deg,#0f1e38 0%,#1B2B4B 50%,#243a60 100%)"}}>
             <div className="p-5">
-              <div className="flex items-center gap-2 mb-3">
-                <span className="text-[10px] font-extrabold px-2.5 py-1 rounded-full bg-white/15 text-white">{VEHICLE_TYPES.find(v=>v.id===vehicle)?.name}</span>
-                <span className="text-[10px] text-white/40">{fromP} {fromC?.n} → {toP} {toC?.n}</span>
+              <div className="flex items-center gap-2 mb-3 flex-wrap">
+                <span className={`text-[10px] font-extrabold px-2.5 py-1 rounded-full ${result.mode==="혼적"?"bg-orange-400/90":"bg-blue-400/90"} text-white`}>
+                  {result.mode==="혼적"?"혼적(합짐)":"독차"}
+                </span>
+                {result.isRound&&<span className="text-[10px] font-bold px-2 py-1 rounded-full bg-green-400/80 text-white">왕복</span>}
+                {result.manualFee>0&&<span className="text-[10px] font-bold px-2 py-1 rounded-full bg-yellow-500/80 text-white">수작업포함</span>}
+                <span className="text-[10px] text-white/40 font-semibold">{result.mode==="독차"?VEHICLE_TYPES.find(v=>v.id===vehicle)?.name:""} {fromP}→{toP}</span>
               </div>
-              <div className="mb-4">
-                <div className="text-[10px] text-white/40 font-semibold mb-1 tracking-wide">예상 운임 (VAT 별도)</div>
+              <div className="mb-3">
+                <div className="text-[10px] text-white/40 font-semibold mb-1">예상 운임 (VAT 별도)</div>
                 <div className="flex items-baseline gap-2">
-                  <span className="text-[26px] font-black text-white">{fmtMoney(result.min)}</span>
+                  <span className="text-[24px] font-black text-white">{fmtMoney(result.min)}</span>
                   <span className="text-white/30 text-[18px]">~</span>
-                  <span className="text-[26px] font-black text-white">{fmtMoney(result.max)}</span>
+                  <span className="text-[24px] font-black text-white">{fmtMoney(result.max)}</span>
                 </div>
               </div>
-              <div className="bg-white/8 rounded-xl p-3.5 mb-4">
-                <div className="flex justify-between items-center mb-1.5">
+              <div className="bg-white/8 rounded-xl p-3 mb-3">
+                <div className="flex justify-between items-center mb-1">
                   <span className="text-[11px] text-white/50 font-semibold">평균 운임</span>
-                  <span className="text-[18px] font-black text-yellow-300">{fmtMoney(result.avg)}</span>
+                  <span className="text-[20px] font-black text-yellow-300">{fmtMoney(result.avg)}</span>
                 </div>
-                <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
-                  <div className="h-full bg-gradient-to-r from-blue-400 to-yellow-300 rounded-full" style={{width:"55%"}}/>
-                </div>
+                <div className="h-1.5 bg-white/10 rounded-full"><div className="h-full bg-gradient-to-r from-blue-400 to-yellow-300 rounded-full" style={{width:"55%"}}/></div>
               </div>
-              <div className="grid grid-cols-2 gap-2 mb-4">
-                {[{l:"거리",v:`약 ${result.distance}km`},{l:"예상시간",v:fmtTime(result.mins)},
-                  {l:"연료비",v:`${result.fuelCost?.toLocaleString()}원`},{l:"차종",v:VEHICLE_TYPES.find(v=>v.id===vehicle)?.name}
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                {[
+                  {l:"거리",v:`약 ${result.distance}km`},
+                  {l:"예상시간",v:fmtTime(result.mins)},
+                  ...(result.mode==="독차"?[{l:"연료비",v:`${result.fuelCost?.toLocaleString()}원`},{l:"차종",v:VEHICLE_TYPES.find(v=>v.id===vehicle)?.name}]
+                    :[{l:"적재단위",v:`${result.units}개`},{l:"구간",v:result.tier}]),
+                  ...(result.manualFee>0?[{l:"수작업비",v:`${result.manualFee.toLocaleString()}원`}]:[]),
+                  ...(result.isRound?[{l:"왕복적용",v:"×1.8"}]:[]),
                 ].map(({l,v})=>(
                   <div key={l} className="bg-white/6 rounded-xl px-3 py-2">
                     <div className="text-[9px] text-white/35 font-semibold">{l}</div>
@@ -496,17 +679,40 @@ function NationalFareTab() {
                   </div>
                 ))}
               </div>
-              <div className="flex gap-2">
+
+              {/* 자사 실데이터 참고 운임 */}
+              {refData&&(
+                <div className="mt-3 border-t border-white/10 pt-3">
+                  <div className="text-[10px] text-white/40 font-semibold mb-2">자사 실거래 참고 ({refData.count}건)</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {refData.charge&&(
+                      <div className="bg-white/6 rounded-xl px-3 py-2">
+                        <div className="text-[9px] text-white/35 font-semibold mb-1">청구운임</div>
+                        <div className="text-[11px] font-bold text-blue-300">{fmtMoney(refData.charge.avg)} 평균</div>
+                        <div className="text-[10px] text-white/40">{fmtMoney(refData.charge.min)}~{fmtMoney(refData.charge.max)}</div>
+                      </div>
+                    )}
+                    {refData.driver&&(
+                      <div className="bg-white/6 rounded-xl px-3 py-2">
+                        <div className="text-[9px] text-white/35 font-semibold mb-1">기사운임</div>
+                        <div className="text-[11px] font-bold text-green-300">{fmtMoney(refData.driver.avg)} 평균</div>
+                        <div className="text-[10px] text-white/40">{fmtMoney(refData.driver.min)}~{fmtMoney(refData.driver.max)}</div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-2 mt-3">
                 <button onClick={reset} className="flex-1 py-2.5 rounded-xl bg-white/10 hover:bg-white/18 text-white text-[12px] font-bold transition">다시 조회</button>
-                <button onClick={()=>navigator.clipboard.writeText(
-                  `[운임견적]\n경로: ${fromP} ${fromC?.n} → ${toP} ${toC?.n}\n차종: ${VEHICLE_TYPES.find(v=>v.id===vehicle)?.name}\n거리: 약 ${result.distance}km / 예상 ${fmtTime(result.mins)}\n운임: ${fmtMoney(result.min)}~${fmtMoney(result.max)} (평균 ${fmtMoney(result.avg)})\n※ VAT 별도 · 광고시세 기준`
-                ).catch(()=>{})} className="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/18 text-white/70 text-[12px] font-bold transition">복사</button>
+                <button onClick={()=>navigator.clipboard.writeText(`[운임견적]\n경로: ${fromP} ${fromC?.n||""}→${toP} ${toC?.n||""}\n차종: ${VEHICLE_TYPES.find(v=>v.id===vehicle)?.name||""}\n예상운임: ${fmtMoney(result.min)}~${fmtMoney(result.max)} (평균 ${fmtMoney(result.avg)})\n거리: 약${result.distance}km\n※VAT별도·참고시세`).catch(()=>{})}
+                  className="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/18 text-white/70 text-[12px] font-bold transition">복사</button>
               </div>
             </div>
           </div>
         )}
 
-        {/* 시군구 선택 패널 */}
+        {/* 시군구 선택 (지도 클릭 시) */}
         {cityStep&&(
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
             <div className="flex items-center gap-2 mb-3">
@@ -529,7 +735,7 @@ function NationalFareTab() {
         )}
       </div>
 
-      {/* ── 오른쪽 패널 (지도) ── */}
+      {/* ── 오른쪽 지도 ── */}
       <div className="flex-[6] min-w-0 rounded-2xl border border-gray-200 shadow-sm flex flex-col overflow-hidden bg-white">
         <div className="px-4 py-2.5 border-b border-gray-100 flex items-center gap-3 shrink-0">
           {step!=="result"&&(
@@ -551,24 +757,26 @@ function NationalFareTab() {
           <svg viewBox="0 0 524 631" className="w-full h-full" preserveAspectRatio="xMidYMid meet" style={{userSelect:"none",display:"block"}}>
             <defs>
               <linearGradient id="nfLight" x1="15%" y1="5%" x2="85%" y2="95%">
-                <stop offset="0%" stopColor="white" stopOpacity="0.45"/>
-                <stop offset="100%" stopColor="#0a1428" stopOpacity="0.15"/>
+                <stop offset="0%" stopColor="white" stopOpacity="0.5"/>
+                <stop offset="50%" stopColor="white" stopOpacity="0.04"/>
+                <stop offset="100%" stopColor="#0a1428" stopOpacity="0.18"/>
               </linearGradient>
               <radialGradient id="nfGlow" cx="38%" cy="30%" r="65%">
                 <stop offset="0%" stopColor="white" stopOpacity="0.5"/>
                 <stop offset="100%" stopColor="white" stopOpacity="0"/>
               </radialGradient>
               <filter id="nfShad" x="-4%" y="-4%" width="108%" height="108%">
-                <feDropShadow dx="0.5" dy="1.5" stdDeviation="1.5" floodColor="#4a6080" floodOpacity="0.18"/>
+                <feDropShadow dx="0.5" dy="1.5" stdDeviation="1.5" floodColor="#4a6080" floodOpacity="0.20"/>
               </filter>
-              <filter id="nfHovF" x="-8%" y="-8%" width="116%" height="116%">
-                <feDropShadow dx="0" dy="2" stdDeviation="2.5" floodColor="#3b82f6" floodOpacity="0.35"/>
+              <filter id="nfHov" x="-8%" y="-8%" width="116%" height="116%">
+                <feDropShadow dx="1" dy="3" stdDeviation="3" floodColor="#1B2B4B" floodOpacity="0.32"/>
               </filter>
-              <filter id="nfSelF" x="-10%" y="-10%" width="120%" height="120%">
+              <filter id="nfSel" x="-10%" y="-10%" width="120%" height="120%">
                 <feDropShadow dx="0" dy="0" stdDeviation="4" floodColor="#3b82f6" floodOpacity="0.45"/>
+                <feDropShadow dx="1" dy="3" stdDeviation="2" floodColor="#1B2B4B" floodOpacity="0.25"/>
               </filter>
-              <marker id="nfArr" markerWidth="10" markerHeight="10" refX="5" refY="5" orient="auto">
-                <path d="M 0,1 L 9,5 L 0,9 Z" fill="#3b82f6"/>
+              <marker id="nfArr" markerWidth="11" markerHeight="11" refX="6" refY="5.5" orient="auto">
+                <path d="M 0,1 L 10,5.5 L 0,10 Z" fill="#3b82f6"/>
               </marker>
             </defs>
             <rect width="524" height="631" fill="white"/>
@@ -583,8 +791,8 @@ function NationalFareTab() {
                   <path d={PROVINCE_PATHS[prov]} fill={fill}
                     stroke={isAct?"rgba(255,255,255,0.95)":isHov?"#4a8fcc":"rgba(255,255,255,0.8)"}
                     strokeWidth={isAct?2:isHov?1.5:1}
-                    filter={isAct?"url(#nfSelF)":isHov?"url(#nfHovF)":"url(#nfShad)"}
-                    style={{cursor:"pointer",transition:"fill 0.15s"}}
+                    filter={isAct?"url(#nfSel)":isHov?"url(#nfHov)":"url(#nfShad)"}
+                    style={{cursor:"pointer",transition:"fill 0.15s,stroke 0.15s"}}
                     onMouseEnter={()=>setHover(prov)} onMouseLeave={()=>setHover(null)}
                     onClick={()=>onProvClick(prov)}/>
                   <path d={PROVINCE_PATHS[prov]} fill={isAct?"url(#nfGlow)":"url(#nfLight)"} stroke="none" style={{pointerEvents:"none"}}/>
@@ -593,25 +801,23 @@ function NationalFareTab() {
             })}
             {provinces.map(prov=>{
               if(prov===fromP||prov===toP) return null;
-              const isSmall=SMALLS.includes(prov),isHovL=prov===hover;
-              const [lx,ly]=PROVINCE_LABEL_POS[prov]||[0,0];
+              const isSmall=SMALL.includes(prov),isHovL=prov===hover;
+              const[lx,ly]=PROVINCE_LABEL_POS[prov]||[0,0];
               return(
                 <text key={`nl-${prov}`} x={lx} y={ly} textAnchor="middle" dominantBaseline="middle"
                   fontSize={isSmall?11:14} fontWeight={isHovL?"800":"700"}
                   fill={isHovL?"#1a5fa8":"#1B2B4B"} style={{pointerEvents:"none",transition:"fill 0.15s"}}>{prov}</text>
               );
             })}
-            {[fromP&&{prov:fromP,label:"출",color:"#3b82f6",border:"#2563eb"},
-              toP&&{prov:toP,label:"하",color:"#f97316",border:"#ea580c"}]
+            {[fromP&&{prov:fromP,label:"출",color:"#3b82f6",border:"#2563eb"},toP&&{prov:toP,label:"하",color:"#f97316",border:"#ea580c"}]
               .filter(Boolean).map(({prov,label,color,border})=>{
-                const pos=PROVINCE_LABEL_POS[prov];
-                if(!pos) return null;
-                const [bx,by]=pos,stemY=by-(SMALLS.includes(prov)?28:34);
+                const pos=PROVINCE_LABEL_POS[prov];if(!pos)return null;
+                const[bx,by]=pos,stemY=by-(SMALL.includes(prov)?28:34);
                 return(
                   <g key={label} style={{pointerEvents:"none"}}>
                     <circle cx={bx} cy={by} r={5} fill={color} fillOpacity="0.85"/>
                     <line x1={bx} y1={by-6} x2={bx} y2={stemY+22} stroke={color} strokeWidth="2" strokeOpacity="0.6"/>
-                    <circle cx={bx} cy={stemY} r={20} fill={color} stroke="white" strokeWidth="2.5" filter="url(#nfSelF)"/>
+                    <circle cx={bx} cy={stemY} r={20} fill={color} stroke="white" strokeWidth="2.5" filter="url(#nfSel)"/>
                     <text x={bx} y={stemY} textAnchor="middle" dominantBaseline="middle" fontSize="13" fontWeight="900" fill="white">{label}</text>
                     <rect x={bx-22} y={stemY+23} width="44" height="16" rx="8" fill="white" fillOpacity="0.92" stroke={border} strokeWidth="1"/>
                     <text x={bx} y={stemY+31} textAnchor="middle" dominantBaseline="middle" fontSize="10" fontWeight="800" fill={border}>{prov}</text>
@@ -624,7 +830,7 @@ function NationalFareTab() {
         <div className="px-4 py-2 border-t border-gray-100 flex items-center gap-4 shrink-0">
           <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block"/><span className="text-[11px] font-semibold text-gray-500">출발지</span></div>
           <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-orange-400 inline-block"/><span className="text-[11px] font-semibold text-gray-500">도착지</span></div>
-          <span className="ml-auto text-[10px] text-gray-300">지역 클릭 → 시/군/구 선택 → 운임 확인</span>
+          <span className="ml-auto text-[10px] text-gray-300">지역 클릭 또는 직접 입력 → 운임 확인</span>
         </div>
       </div>
     </div>
@@ -661,498 +867,20 @@ function CompanyFareTab() {
 
 // ─── 메인 컴포넌트 ────────────────────────────────────────────────────────
 export default function FreightRateInquiry(){
-  const [activeTab,setActiveTab]=useState("운임조회");
-  const [step,setStep]=useState("from");
-  const [fromP,setFromP]=useState(null);
-  const [fromC,setFromC]=useState(null);
-  const [toP,setToP]=useState(null);
-  const [toC,setToC]=useState(null);
-  const [vehicle,setVehicle]=useState("1ton");
-  const [cargoType,setCargoType]=useState("일반");
-  const [preference,setPreference]=useState(0);
-  const [hover,setHover]=useState(null);
-  const [cityStep,setCityStep]=useState(null);
-  const [freightMode,setFreightMode]=useState("독차");
-  const [mixWeightKg,setMixWeightKg]=useState("");
-  const [mixCbm,setMixCbm]=useState("");
-
-  useEffect(()=>{
-    if(cargoType==="냉장"&&(vehicle==="bike"||vehicle==="damas"))setVehicle("1ton");
-  },[cargoType]);
-
-  const result=useMemo(()=>{
-    if(!fromC||!toC)return null;
-    if(freightMode==="혼적"){
-      const wkg=parseFloat(mixWeightKg)||0;
-      const cbm=parseFloat(mixCbm)||0;
-      if(wkg===0&&cbm===0)return null;
-      return{mode:"혼적",...calcMixedRate([fromC.la,fromC.lo],[toC.la,toC.lo],cargoType,wkg,cbm)};
-    }
-    return{mode:"독차",...calcRate([fromC.la,fromC.lo],[toC.la,toC.lo],vehicle,cargoType)};
-  },[fromC,toC,vehicle,cargoType,freightMode,mixWeightKg,mixCbm]);
-
-  const reset=useCallback(()=>{
-    setStep("from");setFromP(null);setFromC(null);setToP(null);setToC(null);setCityStep(null);
-    setMixWeightKg("");setMixCbm("");
-  },[]);
-
-  const handleProvinceClick=(prov)=>{
-    if(step==="from"){setFromP(prov);setCityStep("from");}
-    else if(step==="to"){setToP(prov);setCityStep("to");}
-  };
-
-  const handleCitySelect=(city)=>{
-    if(cityStep==="from"){setFromC(city);setStep("to");setCityStep(null);}
-    else if(cityStep==="to"){setToC(city);setStep("result");setCityStep(null);}
-  };
-
-  const provinces=Object.keys(PROVINCE_PATHS);
-  const SMALL=["서울","인천","세종","대전","대구","광주","울산","부산","제주"];
-
-  // 화살표 제어점 계산 — 뱃지 하단 위치(ly-11)를 연결점으로 사용
-  const arrowFrom=fromP?PROVINCE_LABEL_POS[fromP]:null;
-  const arrowTo=toP?PROVINCE_LABEL_POS[toP]:null;
-  let arrowPath=null;
-  if(arrowFrom&&arrowTo&&step==="result"){
-    const fx=arrowFrom[0], fy=arrowFrom[1]-11;
-    const tx=arrowTo[0],   ty=arrowTo[1]-11;
-    const mx=(fx+tx)/2;
-    const my=(fy+ty)/2-50;
-    arrowPath=`M ${fx},${fy} Q ${mx},${my} ${tx},${ty}`;
-  }
-
+  const [activeTab,setActiveTab]=useState("전국운임조회");
   return(
     <div className="w-full">
-      {/* 탭 네비게이션 */}
       <div className="flex items-center gap-1 mb-5 border-b border-gray-200">
-        {["운임조회","차량제원","전국운임조회","자사운임표"].map(tab=>(
+        {["전국운임조회","자사운임표","차량제원"].map(tab=>(
           <button key={tab} onClick={()=>setActiveTab(tab)}
             className={`px-5 py-2.5 text-[14px] font-extrabold transition border-b-2 -mb-px ${activeTab===tab?"border-[#1B2B4B] text-[#1B2B4B]":"border-transparent text-gray-400 hover:text-gray-600"}`}>
             {tab}
           </button>
         ))}
       </div>
-
-      {activeTab==="차량제원"&&<PalletSimulator/>}
       {activeTab==="전국운임조회"&&<NationalFareTab/>}
       {activeTab==="자사운임표"&&<CompanyFareTab/>}
-
-      {activeTab==="운임조회"&&<>
-      <div className="flex items-center gap-4 mb-5 flex-wrap">
-        <div>
-          <h2 className="text-[20px] font-black text-[#1B2B4B] leading-tight">전국운임 조회</h2>
-          <p className="text-[12px] text-gray-400 font-medium mt-0.5">
-            {freightMode==="독차"?"지역 클릭 → 시/군/구 선택 → 5초 내 운임 확인":"중량·CBM 입력 후 혼적 운임 조회"}
-          </p>
-        </div>
-        {/* 독차 / 혼적 토글 */}
-        <div className="flex rounded-xl border-2 border-gray-100 overflow-hidden shadow-sm">
-          {["독차","혼적"].map(m=>(
-            <button key={m} onClick={()=>{setFreightMode(m);setStep("from");setFromP(null);setFromC(null);setToP(null);setToC(null);setCityStep(null);}}
-              className={`px-5 py-2 text-[13px] font-extrabold transition ${freightMode===m?"bg-[#1B2B4B] text-white":"bg-white text-gray-400 hover:bg-gray-50"}`}>
-              {m==="독차"?"독차":"혼적(합짐)"}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="flex gap-5" style={{height:"calc(100vh - 180px)", minHeight:"580px"}}>
-        {/* ───────────── 왼쪽 패널 (40%) ───────────── */}
-        <div className="flex-[4] min-w-0 flex flex-col gap-3 overflow-y-auto pr-1">
-
-          {/* 경로 카드 */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-            <div className="text-[11px] font-bold text-[#1B2B4B]/40 mb-4 tracking-widest uppercase">경로 설정</div>
-            <div className="flex flex-col gap-3">
-              <div
-                className={`flex items-center gap-4 p-4 rounded-xl cursor-pointer border-2 transition ${
-                  step==="from"||cityStep==="from"?"border-[#1B2B4B] bg-[#1B2B4B]/5"
-                  :fromC?"border-blue-400 bg-blue-50/60":"border-gray-100 bg-gray-50 hover:border-gray-300"}`}
-                onClick={()=>{setStep("from");setCityStep(null);setFromP(null);setFromC(null);setToC(null);setToP(null);}}
-              >
-                <div className="w-9 h-9 rounded-full bg-[#1B2B4B] flex items-center justify-center text-white text-[12px] font-extrabold flex-shrink-0">출</div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-[11px] text-gray-400 font-semibold mb-0.5">출발지</div>
-                  {fromC?<div className="text-[15px] font-extrabold text-[#1B2B4B] truncate">{fromP} {fromC.n}</div>
-                  :fromP&&cityStep==="from"?<div className="text-[13px] text-[#1B2B4B] font-semibold">{fromP} — 시/군/구 선택 중</div>
-                  :<div className="text-[13px] text-gray-400">지도에서 도/시를 클릭하세요</div>}
-                </div>
-                {fromC&&<button className="text-gray-300 hover:text-red-400 text-[20px] leading-none transition" onClick={e=>{e.stopPropagation();reset();}}>×</button>}
-              </div>
-
-              <div className="flex items-center gap-2 px-4">
-                <div className="flex-1 h-px bg-gray-100"/>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" strokeWidth="2"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
-                <div className="flex-1 h-px bg-gray-100"/>
-              </div>
-
-              <div
-                className={`flex items-center gap-4 p-4 rounded-xl cursor-pointer border-2 transition ${
-                  step==="to"||cityStep==="to"?"border-orange-400 bg-orange-50/60"
-                  :toC?"border-orange-300 bg-orange-50/60":"border-gray-100 bg-gray-50 hover:border-gray-300"}`}
-                onClick={()=>{if(fromC){setStep("to");setCityStep(null);setToP(null);setToC(null);}}}
-              >
-                <div className="w-9 h-9 rounded-full bg-orange-400 flex items-center justify-center text-white text-[12px] font-extrabold flex-shrink-0">하</div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-[11px] text-gray-400 font-semibold mb-0.5">도착지</div>
-                  {toC?<div className="text-[15px] font-extrabold text-[#1B2B4B] truncate">{toP} {toC.n}</div>
-                  :toP&&cityStep==="to"?<div className="text-[13px] text-orange-500 font-semibold">{toP} — 시/군/구 선택 중</div>
-                  :<div className="text-[13px] text-gray-400">{fromC?"지도에서 도/시를 클릭하세요":"출발지 먼저 선택"}</div>}
-                </div>
-                {toC&&<button className="text-gray-300 hover:text-red-400 text-[20px] leading-none transition" onClick={e=>{e.stopPropagation();setToP(null);setToC(null);setStep("to");}}>×</button>}
-              </div>
-            </div>
-          </div>
-
-          {/* 독차: 차량 종류 / 혼적: 중량·CBM */}
-          {freightMode==="독차"?(
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-              <div className="text-[11px] font-bold text-[#1B2B4B]/40 mb-3 tracking-widest uppercase">차량 종류</div>
-              <VehicleDropdown vehicle={vehicle} onChange={setVehicle} cargoType={cargoType}/>
-            </div>
-          ):(
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-              <div className="flex items-center justify-between mb-3">
-                <div className="text-[11px] font-bold text-[#1B2B4B]/40 tracking-widest uppercase">화물 중량 / 부피</div>
-                <span className="text-[10px] text-gray-400 bg-gray-100 rounded-full px-2 py-0.5">1CBM = 250kg</span>
-              </div>
-              <div className="flex gap-3">
-                <div className="flex-1">
-                  <label className="block text-[11px] text-gray-400 font-semibold mb-1.5">중량 (kg)</label>
-                  <input type="number" min="0" placeholder="예: 500" value={mixWeightKg}
-                    onChange={e=>{setMixWeightKg(e.target.value);if(e.target.value)setMixCbm("");}}
-                    className="w-full px-4 py-3 border-2 border-gray-100 rounded-xl text-[14px] font-bold text-[#1B2B4B] focus:outline-none focus:border-[#1B2B4B] bg-gray-50"/>
-                </div>
-                <div className="flex items-end pb-3 text-gray-300 text-[13px] font-medium">또는</div>
-                <div className="flex-1">
-                  <label className="block text-[11px] text-gray-400 font-semibold mb-1.5">CBM (㎥)</label>
-                  <input type="number" min="0" step="0.1" placeholder="예: 2.5" value={mixCbm}
-                    onChange={e=>{setMixCbm(e.target.value);if(e.target.value)setMixWeightKg("");}}
-                    className="w-full px-4 py-3 border-2 border-gray-100 rounded-xl text-[14px] font-bold text-[#1B2B4B] focus:outline-none focus:border-[#1B2B4B] bg-gray-50"/>
-                </div>
-              </div>
-              {(mixWeightKg||mixCbm)&&(
-                <div className="mt-3 text-[12px] text-[#1B2B4B] bg-[#1B2B4B]/5 rounded-xl px-4 py-2.5 font-semibold">
-                  적용: <b>{Math.max(parseFloat(mixWeightKg)||0,(parseFloat(mixCbm)||0)*250).toLocaleString()}kg</b>
-                  {" · "}단위 <b>{Math.max(1,Math.ceil(Math.max(parseFloat(mixWeightKg)||0,(parseFloat(mixCbm)||0)*250)/100))}개</b>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* 화물 유형 */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-            <div className="text-[11px] font-bold text-[#1B2B4B]/40 mb-3 tracking-widest uppercase">화물 유형</div>
-            <div className="flex gap-2">
-              {CARGO_TYPES.map(ct=>(
-                <button key={ct.id} onClick={()=>setCargoType(ct.id)}
-                  className={`flex-1 py-3 rounded-xl text-[13px] font-bold border-2 transition ${
-                    cargoType===ct.id?"bg-[#1B2B4B] text-white border-[#1B2B4B] shadow-md":"bg-white text-gray-500 border-gray-100 hover:border-[#1B2B4B]/40 hover:text-[#1B2B4B]"}`}
-                >{ct.name}</button>
-              ))}
-            </div>
-          </div>
-
-          {/* 독차 전용: 기사 선호도 */}
-          {freightMode==="독차"&&<DriverPreference value={preference} onChange={setPreference}/>}
-
-          {/* 혼적 전용: 안내 */}
-          {freightMode==="혼적"&&(
-            <div className="bg-[#1B2B4B]/4 rounded-2xl border border-[#1B2B4B]/10 p-4 text-[12px] text-[#1B2B4B]/70 leading-relaxed">
-              <div className="font-extrabold text-[#1B2B4B] mb-2 text-[13px]">혼적(합짐) 요율 안내</div>
-              <div className="space-y-1">
-                <div>• 100km 이하: 기본 28,000원 + 100kg당 3,500원</div>
-                <div>• 100~300km: 기본 28,000~58,000원 구간 요율</div>
-                <div>• 300km 초과: 기본 78,000원 + 100kg당 12,000원~</div>
-              </div>
-              <div className="mt-2 text-[11px] text-[#1B2B4B]/40">※ 실제 운임은 업체별 협의에 따라 상이할 수 있습니다</div>
-            </div>
-          )}
-
-          {/* ── 결과 카드 ── */}
-          {result&&step==="result"&&(
-            <div className="rounded-2xl overflow-hidden shadow-xl border border-[#1B2B4B]/10"
-              style={{background:"linear-gradient(150deg,#0f1e38 0%,#1B2B4B 50%,#243a60 100%)"}}>
-              <div className="p-6">
-                {/* 상단 배지 */}
-                <div className="flex items-center gap-2 mb-4">
-                  <span className={`text-[11px] font-extrabold px-3 py-1 rounded-full ${result.mode==="혼적"?"bg-orange-400/90 text-white":"bg-blue-400/90 text-white"}`}>
-                    {result.mode==="혼적"?"혼적(합짐)":"독차"}
-                  </span>
-                  {result.mode==="혼적"&&<span className="text-[11px] text-white/50 font-semibold">{result.tier} · {result.effWeight.toLocaleString()}kg</span>}
-                  {result.mode==="독차"&&<span className="text-[11px] text-white/50 font-semibold">{VEHICLE_TYPES.find(v=>v.id===vehicle)?.name}</span>}
-                </div>
-
-                {/* 운임 메인 */}
-                <div className="mb-4">
-                  <div className="text-[12px] text-white/40 font-semibold mb-1 tracking-wide">예상 운임 (VAT 별도)</div>
-                  <div className="flex items-baseline gap-2 flex-wrap">
-                    <span className="text-[32px] font-black text-white leading-none">{fmtMoney(result.min)}</span>
-                    <span className="text-white/30 text-[22px] font-light">~</span>
-                    <span className="text-[32px] font-black text-white leading-none">{fmtMoney(result.max)}</span>
-                  </div>
-                </div>
-
-                {/* 평균 운임 바 */}
-                <div className="mb-4 bg-white/8 rounded-xl p-4">
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-[12px] text-white/50 font-semibold">평균 운임</span>
-                    <span className="text-[22px] font-black text-yellow-300 leading-none">{fmtMoney(result.avg)}</span>
-                  </div>
-                  <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
-                    <div className="h-full bg-gradient-to-r from-blue-400 to-yellow-300 rounded-full" style={{width:"55%"}}/>
-                  </div>
-                  <div className="flex justify-between mt-1.5">
-                    <span className="text-[11px] text-white/30">최저 {fmtMoney(result.min)}</span>
-                    <span className="text-[11px] text-white/30">최고 {fmtMoney(result.max)}</span>
-                  </div>
-                </div>
-
-                {/* 세부 정보 */}
-                <div className="grid grid-cols-2 gap-2 mb-4">
-                  {[
-                    {label:"거리",value:`약 ${result.distance}km`},
-                    {label:"예상시간",value:fmtTime(result.mins)},
-                    ...(result.mode==="독차"?[
-                      {label:"경유가",value:`${result.fuelCost?.toLocaleString()}원`},
-                      {label:"차종",value:VEHICLE_TYPES.find(v=>v.id===vehicle)?.name},
-                    ]:[
-                      {label:"적재단위",value:`${result.units}개`},
-                      {label:"단가",value:`${result.per100kg?.toLocaleString()}원/100kg`},
-                    ]),
-                  ].map(({label,value})=>(
-                    <div key={label} className="bg-white/6 rounded-xl px-3 py-2.5">
-                      <div className="text-[10px] text-white/35 font-semibold mb-0.5">{label}</div>
-                      <div className="text-[13px] font-bold text-white/85">{value}</div>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="flex gap-2">
-                  <button onClick={reset} className="flex-1 py-3 rounded-xl bg-white/10 hover:bg-white/18 text-white text-[13px] font-bold transition border border-white/10">
-                    다시 조회
-                  </button>
-                  <button
-                    onClick={()=>{
-                      const route=`${fromP} ${fromC?.n||""} → ${toP} ${toC?.n||""}`;
-                      const modeStr=result.mode==="혼적"?`혼적(합짐) · ${result.effWeight?.toLocaleString()}kg`:`독차 · ${VEHICLE_TYPES.find(v=>v.id===vehicle)?.name||""}`;
-                      const text=`[운임견적]\n경로: ${route}\n구분: ${modeStr}\n거리: 약 ${result.distance}km · 예상 ${fmtTime(result.mins)}\n운임: ${fmtMoney(result.min)}~${fmtMoney(result.max)} (평균 ${fmtMoney(result.avg)})\n※ VAT 별도 · 광고시세 기준`;
-                      navigator.clipboard.writeText(text).catch(()=>{});
-                    }}
-                    className="px-4 py-3 rounded-xl bg-white/10 hover:bg-white/18 text-white/70 text-[13px] font-bold transition border border-white/10"
-                  >복사</button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* 시군구 선택 패널 */}
-          {cityStep&&(
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-              <div className="flex items-center gap-3 mb-3">
-                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-white text-[11px] font-extrabold flex-shrink-0 ${cityStep==="from"?"bg-[#1B2B4B]":"bg-orange-400"}`}>
-                  {cityStep==="from"?"출":"하"}
-                </div>
-                <span className="text-[15px] font-extrabold text-[#1B2B4B]">{cityStep==="from"?fromP:toP}</span>
-                <button
-                  className="ml-auto text-[11px] text-gray-400 hover:text-[#1B2B4B] border border-gray-200 rounded-lg px-3 py-1 font-semibold transition"
-                  onClick={()=>{setCityStep(null);if(cityStep==="from")setFromP(null);else setToP(null);}}
-                >← 재선택</button>
-              </div>
-              <div className="text-[12px] text-gray-400 font-semibold mb-3">시·군·구를 선택하세요</div>
-              <div className="grid grid-cols-3 gap-1.5 max-h-[220px] overflow-y-auto pr-1">
-                {(CITIES[cityStep==="from"?fromP:toP]||[]).map(city=>(
-                  <button key={city.n} onClick={()=>handleCitySelect(city)}
-                    className="px-2 py-2.5 text-[12px] font-semibold text-gray-600 border border-gray-100 rounded-xl hover:bg-[#1B2B4B] hover:text-white hover:border-[#1B2B4B] transition text-center bg-gray-50"
-                  >{city.n}</button>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* ───────────── 오른쪽 지도 (60%) ───────────── */}
-        <div className="flex-[6] min-w-0 rounded-2xl border border-gray-100 shadow-sm flex flex-col overflow-hidden bg-white">
-          {/* 지도 헤더 */}
-          <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-3">
-            {step!=="result"&&(
-              <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-semibold shadow-sm ${
-                step==="from"?"bg-blue-500 text-white":"bg-orange-400 text-white"}`}>
-                <span className="w-1.5 h-1.5 rounded-full bg-white/80"/>
-                {step==="from"?"출발 지역을 선택하세요":"도착 지역을 선택하세요"}
-              </div>
-            )}
-            {step==="result"&&fromP&&toP&&(
-              <div className="flex items-center gap-2 text-[13px]">
-                <div className="flex items-center gap-1">
-                  <span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block"/>
-                  <span className="font-bold text-blue-600">{fromP} {fromC?.n}</span>
-                </div>
-                <span className="text-gray-400">→</span>
-                <div className="flex items-center gap-1">
-                  <span className="w-2.5 h-2.5 rounded-full bg-orange-400 inline-block"/>
-                  <span className="font-bold text-orange-500">{toP} {toC?.n}</span>
-                </div>
-              </div>
-            )}
-            {(fromP||toP)&&<button onClick={reset} className="ml-auto text-[11px] text-gray-500 hover:text-red-500 border border-gray-200 rounded-md px-2 py-1 bg-white/80">초기화</button>}
-          </div>
-
-          {/* SVG 지도 — 패딩 없이 패널을 꽉 채움 */}
-          <div className="flex-1 min-h-0">
-            <svg viewBox="0 0 524 631" className="w-full h-full" preserveAspectRatio="xMidYMid meet" style={{userSelect:"none",display:"block"}}>
-              <defs>
-                {/* 도/시 광원 오버레이 */}
-                <linearGradient id="provLight" x1="15%" y1="5%" x2="85%" y2="95%">
-                  <stop offset="0%"   stopColor="white"   stopOpacity="0.5"/>
-                  <stop offset="50%"  stopColor="white"   stopOpacity="0.04"/>
-                  <stop offset="100%" stopColor="#0a1428" stopOpacity="0.18"/>
-                </linearGradient>
-                {/* 선택 글로우 */}
-                <radialGradient id="selGlow" cx="38%" cy="30%" r="65%">
-                  <stop offset="0%"   stopColor="white" stopOpacity="0.5"/>
-                  <stop offset="100%" stopColor="white" stopOpacity="0"/>
-                </radialGradient>
-                {/* 기본 그림자 */}
-                <filter id="provShadow" x="-4%" y="-4%" width="108%" height="108%">
-                  <feDropShadow dx="0.5" dy="1.5" stdDeviation="1.5" floodColor="#4a6080" floodOpacity="0.20"/>
-                </filter>
-                {/* 호버 그림자 */}
-                <filter id="provHover" x="-8%" y="-8%" width="116%" height="116%">
-                  <feDropShadow dx="1" dy="3" stdDeviation="3" floodColor="#1B2B4B" floodOpacity="0.32"/>
-                </filter>
-                {/* 선택 글로우 필터 */}
-                <filter id="provSel" x="-10%" y="-10%" width="120%" height="120%">
-                  <feDropShadow dx="0" dy="0" stdDeviation="4" floodColor="#3b82f6" floodOpacity="0.45"/>
-                  <feDropShadow dx="1" dy="3" stdDeviation="2" floodColor="#1B2B4B" floodOpacity="0.25"/>
-                </filter>
-                {/* 화살표 머리 — 파란색 크게 */}
-                <marker id="arrowHead" markerWidth="11" markerHeight="11" refX="6" refY="5.5" orient="auto">
-                  <path d="M 0,1 L 10,5.5 L 0,10 Z" fill="#3b82f6"/>
-                </marker>
-              </defs>
-
-              {/* 배경 — 흰색 (지도 틀에만 색이 보이도록) */}
-              <rect width="524" height="631" fill="white"/>
-
-              {/* 레이어 1: 도/시 채색 + 3D 오버레이 */}
-              {provinces.map(prov=>{
-                const isFrom=prov===fromP;
-                const isTo=prov===toP;
-                const isHover=prov===hover;
-                const isActive=isFrom||isTo;
-                let fill=PROVINCE_COLORS[prov]||"#c8d8e8";
-                if(isFrom) fill="#3b82f6";
-                else if(isTo) fill="#f97316";
-                else if(isHover) fill="#9ac0e8"; // 호버 시 지역 자체를 파란색으로
-                const filt=isActive?"url(#provSel)":isHover?"url(#provHover)":"url(#provShadow)";
-                const sw=isActive?2:isHover?1.5:1;
-                const stroke=isActive?"rgba(255,255,255,0.95)":isHover?"#4a8fcc":"rgba(255,255,255,0.8)";
-                return(
-                  <g key={`fill-${prov}`}>
-                    <path d={PROVINCE_PATHS[prov]} fill={fill} stroke={stroke} strokeWidth={sw}
-                      filter={filt} style={{cursor:"pointer",transition:"fill 0.15s,stroke 0.15s"}}
-                      onMouseEnter={()=>setHover(prov)} onMouseLeave={()=>setHover(null)}
-                      onClick={()=>handleProvinceClick(prov)}/>
-                    <path d={PROVINCE_PATHS[prov]} fill={isActive?"url(#selGlow)":"url(#provLight)"}
-                      stroke="none" style={{pointerEvents:"none"}}/>
-                  </g>
-                );
-              })}
-
-              {/* 레이어 2: 지역 텍스트 라벨 (비활성만) */}
-              {provinces.map(prov=>{
-                if(prov===fromP||prov===toP) return null;
-                const isSmall=SMALL.includes(prov);
-                const isHovL=prov===hover;
-                const [lx,ly]=PROVINCE_LABEL_POS[prov]||[0,0];
-                return(
-                  <text key={`label-${prov}`}
-                    x={lx} y={ly} textAnchor="middle" dominantBaseline="middle"
-                    fontSize={isSmall?11:14} fontWeight={isHovL?"800":"700"}
-                    fill={isHovL?"#1a5fa8":"#1B2B4B"}
-                    style={{pointerEvents:"none",transition:"fill 0.15s"}}>{prov}</text>
-                );
-              })}
-
-              {/* 플로팅 뱃지 — 항상 맨 위에 렌더링 */}
-              {[fromP&&{prov:fromP,label:"출",color:"#3b82f6",border:"#2563eb"},
-                toP&&{prov:toP,label:"하",color:"#f97316",border:"#ea580c"}]
-                .filter(Boolean)
-                .map(({prov,label,color,border})=>{
-                  const pos=PROVINCE_LABEL_POS[prov];
-                  if(!pos) return null;
-                  const [bx,by]=pos;
-                  const isSmall=SMALL.includes(prov);
-                  const stemY=by-(isSmall?28:34);
-                  return(
-                    <g key={label} style={{pointerEvents:"none"}}>
-                      {/* 연결 점 */}
-                      <circle cx={bx} cy={by} r={5} fill={color} fillOpacity="0.85"/>
-                      {/* 줄기 */}
-                      <line x1={bx} y1={by-6} x2={bx} y2={stemY+22}
-                        stroke={color} strokeWidth="2" strokeOpacity="0.6"/>
-                      {/* 원형 뱃지 */}
-                      <circle cx={bx} cy={stemY} r={20}
-                        fill={color} stroke="white" strokeWidth="2.5"
-                        filter="url(#provSel)"/>
-                      <text x={bx} y={stemY}
-                        textAnchor="middle" dominantBaseline="middle"
-                        fontSize="14" fontWeight="900" fill="white">{label}</text>
-                      {/* 지역명 */}
-                      <rect x={bx-22} y={stemY+23} width="44" height="16" rx="8"
-                        fill="white" fillOpacity="0.92" stroke={border} strokeWidth="1"/>
-                      <text x={bx} y={stemY+31}
-                        textAnchor="middle" dominantBaseline="middle"
-                        fontSize="10" fontWeight="800" fill={border}>{prov}</text>
-                    </g>
-                  );
-                })
-              }
-
-              {/* 레이어 4: 화살표 — 최상위 (뱃지 위에 렌더링) */}
-              {arrowPath&&(
-                <path d={arrowPath} fill="none" stroke="#3b82f6" strokeWidth="4"
-                  strokeLinecap="round" strokeLinejoin="round"
-                  markerEnd="url(#arrowHead)"/>
-              )}
-
-              {/* 호버 툴팁 */}
-              {hover&&!fromP&&!toP&&(()=>{
-                const[hx,hy]=PROVINCE_LABEL_POS[hover]||[0,0];
-                return(
-                  <g>
-                    <rect x={hx-30} y={hy+17} width="60" height="18" rx="9"
-                      fill="#1B2B4B" fillOpacity="0.88"/>
-                    <text x={hx} y={hy+26} textAnchor="middle" dominantBaseline="middle"
-                      fontSize="10" fill="white" style={{pointerEvents:"none"}}>
-                      클릭 선택
-                    </text>
-                  </g>
-                );
-              })()}
-            </svg>
-          </div>
-
-          {/* 범례 */}
-          <div className="px-4 pb-3 border-t border-gray-100/80 flex items-center gap-4 pt-2 bg-white/30">
-            <div className="flex items-center gap-1.5">
-              <div className="w-3 h-3 rounded-full bg-blue-500"/>
-              <span className="text-[10px] text-gray-500">출발지</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <div className="w-3 h-3 rounded-full bg-orange-400"/>
-              <span className="text-[10px] text-gray-500">도착지</span>
-            </div>
-            <div className="ml-auto text-[10px] text-gray-400">도/시 클릭 → 시/군/구 선택</div>
-          </div>
-        </div>
-      </div>
-
-      <div className="mt-2 text-[10px] text-gray-400 text-center">
-        실거래 기반 참고 운임입니다. 실제 운임은 차량 상태·시간대·계절 등에 따라 달라질 수 있습니다.
-      </div>
-      </>}
+      {activeTab==="차량제원"&&<PalletSimulator/>}
     </div>
   );
 }
