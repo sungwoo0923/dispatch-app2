@@ -14394,6 +14394,8 @@ React.useEffect(() => {
   const [urgentPopup, setUrgentPopup] = React.useState([]);
   const urgentTimerRef = React.useRef(null);
   const [snoozeRecheckTrigger, setSnoozeRecheckTrigger] = React.useState(0);
+  // 세션 내 dismiss 된 ID Set (localStorage 실패해도 재출현 방지)
+  const urgentDismissedRef = React.useRef(new Set());
   // 첨부파일 개수
 const [attachCount, setAttachCount] = React.useState({});
   const [attachViewer, setAttachViewer] = React.useState(null); // 열린 행
@@ -14566,8 +14568,10 @@ React.useEffect(() => {
   if (!rows.length) return;
   const now = new Date();
   const email = auth.currentUser?.email || "guest";
-  const seen = JSON.parse(localStorage.getItem(`urgentSeen_${email}`) || "[]");
-  const snoozed = JSON.parse(localStorage.getItem(`urgentSnoozed_${email}`) || "{}");
+  let seen = [];
+  let snoozed = {};
+  try { seen = JSON.parse(localStorage.getItem(`urgentSeen_${email}`) || "[]"); } catch {}
+  try { snoozed = JSON.parse(localStorage.getItem(`urgentSnoozed_${email}`) || "{}"); } catch {}
 
   const urgent = rows.filter((r) => {
     if (r.배차상태 !== "배차중") return false;
@@ -14583,6 +14587,8 @@ React.useEffect(() => {
 
   const newOnes = urgent.filter((r) => {
     if (!r._id) return false;
+    // 세션 내 메모리 dismiss Set 우선 체크 (localStorage 실패 시에도 재출현 방지)
+    if (urgentDismissedRef.current.has(r._id)) return false;
     if (seen.includes(r._id)) return false;
     const until = snoozed[r._id];
     if (until && now.getTime() < until) return false;
@@ -14597,22 +14603,35 @@ React.useEffect(() => {
 
 const handleUrgentDismiss = () => {
   const email = auth.currentUser?.email || "guest";
-  const seen = JSON.parse(localStorage.getItem(`urgentSeen_${email}`) || "[]");
-  const updated = [...new Set([...seen, ...urgentPopup.map((r) => r._id).filter(Boolean)])];
-  try { localStorage.setItem(`urgentSeen_${email}`, JSON.stringify(updated.slice(-500))); } catch {}
+  const ids = urgentPopup.map((r) => r._id).filter(Boolean);
+  // 세션 내 메모리에 즉시 등록 (localStorage 저장 실패해도 재출현 방지)
+  ids.forEach((id) => urgentDismissedRef.current.add(id));
+  try {
+    const seen = JSON.parse(localStorage.getItem(`urgentSeen_${email}`) || "[]");
+    const updated = [...new Set([...seen, ...ids])];
+    localStorage.setItem(`urgentSeen_${email}`, JSON.stringify(updated.slice(-500)));
+  } catch {}
   setUrgentPopup([]);
 };
 
 const handleUrgentSnooze = (minutes) => {
   const email = auth.currentUser?.email || "guest";
   const snoozedKey = `urgentSnoozed_${email}`;
-  const snoozed = JSON.parse(localStorage.getItem(snoozedKey) || "{}");
   const until = Date.now() + minutes * 60 * 1000;
-  urgentPopup.forEach((r) => { if (r._id) snoozed[r._id] = until; });
-  try { localStorage.setItem(snoozedKey, JSON.stringify(snoozed)); } catch {}
+  const ids = urgentPopup.map((r) => r._id).filter(Boolean);
+  // 스누즈 기간 동안 세션 메모리에도 등록 (스누즈 만료 시 재확인 트리거로 제거)
+  ids.forEach((id) => urgentDismissedRef.current.add(id));
+  try {
+    const snoozed = JSON.parse(localStorage.getItem(snoozedKey) || "{}");
+    ids.forEach((id) => { snoozed[id] = until; });
+    localStorage.setItem(snoozedKey, JSON.stringify(snoozed));
+  } catch {}
   setUrgentPopup([]);
   if (urgentTimerRef.current) clearTimeout(urgentTimerRef.current);
-  urgentTimerRef.current = setTimeout(() => setSnoozeRecheckTrigger((n) => n + 1), minutes * 60 * 1000);
+  urgentTimerRef.current = setTimeout(() => {
+    ids.forEach((id) => urgentDismissedRef.current.delete(id));
+    setSnoozeRecheckTrigger((n) => n + 1);
+  }, minutes * 60 * 1000);
 };
   // ------------------------
   // 🔁 동일 노선 추천 불러오기
