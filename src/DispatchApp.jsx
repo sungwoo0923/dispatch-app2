@@ -24996,11 +24996,37 @@ return (
       : ""}
   </span>
 
-) : key === "화물내용" ? (
-  mergeViaCargoText(row.화물내용, [row.경유상차목록, row.경유지_상차, row.경유하차목록, row.경유지_하차]) || row.화물내용 || ""
-) : key === "차량톤수" ? (
-  mergeViaTonnage(row.차량톤수, [row.경유상차목록, row.경유지_상차, row.경유하차목록, row.경유지_하차]) || row.차량톤수 || ""
-) : (
+) : key === "화물내용" ? (() => {
+  // 중복 필드 참조로 인한 중복 합산 방지: 실시간배차현황과 동일하게 dedup 처리
+  const parseDedup = (fields) => {
+    const seen = new Set();
+    return fields.flatMap(f => _parseWaypointList(f)).filter(s => {
+      if (!s || typeof s !== "object" || (!s.업체명?.trim() && !s.주소?.trim())) return false;
+      const k = s.업체명 || s.주소 || JSON.stringify(s);
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+  };
+  const pickupStops = parseDedup([row.경유상차목록, row.경유지_상차, row.경유지상차]);
+  const dropStops   = parseDedup([row.경유하차목록, row.경유지_하차, row.경유지하차]);
+  return mergeViaCargoText(row.화물내용, [pickupStops, dropStops]) || row.화물내용 || "";
+})()
+: key === "차량톤수" ? (() => {
+  const parseDedup = (fields) => {
+    const seen = new Set();
+    return fields.flatMap(f => _parseWaypointList(f)).filter(s => {
+      if (!s || typeof s !== "object" || (!s.업체명?.trim() && !s.주소?.trim())) return false;
+      const k = s.업체명 || s.주소 || JSON.stringify(s);
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+  };
+  const pickupStops = parseDedup([row.경유상차목록, row.경유지_상차, row.경유지상차]);
+  const dropStops   = parseDedup([row.경유하차목록, row.경유지_하차, row.경유지하차]);
+  return mergeViaTonnage(row.차량톤수, [pickupStops, dropStops]) || row.차량톤수 || "";
+})() : (
   row[key]
 )}
   </td>
