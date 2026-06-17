@@ -10937,7 +10937,11 @@ const MOBILE_VT = [
   {id:"25ton",name:"25톤",base:155000,perKm:1830,min:155000,L100km:33},
   {id:"trailer",name:"트레일러",base:200000,perKm:2000,min:200000,L100km:40},
 ];
-const MOBILE_CARGO_MUL = {일반:1.0, 냉장:1.3, 귀중품:1.2};
+const MOBILE_CARGO_TYPES = [
+  {id:"일반",   name:"일반",      surcharge:0},
+  {id:"냉장",   name:"냉장/냉동", surcharge:0.12},
+  {id:"위험물", name:"위험물",    surcharge:0.20},
+];
 const MOBILE_MIXED_TIERS=[
   {maxKm:100,base:28000,per100kg:3500},{maxKm:200,base:42000,per100kg:5500},
   {maxKm:350,base:58000,per100kg:7500},{maxKm:500,base:75000,per100kg:9500},
@@ -10992,7 +10996,7 @@ function MobileFareInquiry() {
       return acc+mHaversine(allPts[i-1].lat,allPts[i-1].lon,p.lat,p.lon);
     },0);
     const dist=Math.round(totalStraight*1.35);
-    const cMul=MOBILE_CARGO_MUL[cargoType]||1;
+    const ct=MOBILE_CARGO_TYPES.find(c=>c.id===cargoType)||MOBILE_CARGO_TYPES[0];
     let base;
     if(freightMode==="혼적"){
       const wkg=parseFloat(mixWeightKg)||0,cbm=parseFloat(mixCbm)||0;
@@ -11001,11 +11005,12 @@ function MobileFareInquiry() {
       const tier=MOBILE_MIXED_TIERS.find(r=>dist<=r.maxKm)||MOBILE_MIXED_TIERS[MOBILE_MIXED_TIERS.length-1];
       const units=Math.max(1,Math.ceil(eff/100));
       const raw=tier.base+tier.per100kg*(units-1);
-      const avg=Math.round(raw*cMul/1000)*1000;
+      const avg=Math.round(raw*(1+(ct.surcharge||0))/1000)*1000;
       base={mode:"혼적",distance:dist,min:Math.round(avg*0.85/1000)*1000,max:Math.round(avg*1.15/1000)*1000,avg,mins:Math.round(dist/80*60)};
     }else{
       const vt=MOBILE_VT.find(v=>v.id===vehicle)||MOBILE_VT[0];
-      const fare=Math.max(vt.min,(vt.base+vt.perKm*dist)*cMul);
+      const rawBase=vt.base+vt.perKm*dist;
+      const fare=Math.max(vt.min,rawBase)*(1+(ct.surcharge||0));
       const avg=Math.round(fare/5000)*5000;
       base={mode:"독차",distance:dist,min:Math.round(avg*0.83/5000)*5000,max:Math.round(avg*1.17/5000)*5000,avg,fuelCost:Math.round(vt.L100km/100*dist*1650),mins:Math.round(dist/80*60)};
     }
@@ -11110,9 +11115,9 @@ function MobileFareInquiry() {
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
         <p className="text-[12px] font-bold text-[#1B2B4B] mb-2">화물 유형</p>
         <div className="flex gap-2">
-          {["일반","냉장","귀중품"].map(t=>(
-            <button key={t} onClick={()=>setCargoType(t)}
-              className={`flex-1 py-2 rounded-xl text-[12px] font-bold transition ${cargoType===t?"bg-[#1B2B4B] text-white":"bg-gray-100 text-gray-600"}`}>{t}</button>
+          {MOBILE_CARGO_TYPES.map(ct=>(
+            <button key={ct.id} onClick={()=>setCargoType(ct.id)}
+              className={`flex-1 py-2 rounded-xl text-[12px] font-bold transition ${cargoType===ct.id?"bg-[#1B2B4B] text-white":"bg-gray-100 text-gray-600"}`}>{ct.name}</button>
           ))}
         </div>
       </div>
