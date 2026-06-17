@@ -1279,7 +1279,7 @@ const [detailFrom, setDetailFrom] = useState(null);
   const [showMenu, setShowMenu] = useState(false);
   const [cardVersionB, setCardVersionB] = useState(() => localStorage.getItem("cardVersion") === "B");
   const [fontScale, setFontScale] = useState(() => Number(localStorage.getItem("fontScale") || "1"));
-  const appVersion = "1.0.0";
+  const appVersion = APP_VERSION;
 
   const logout = async () => {
     try {
@@ -10524,7 +10524,7 @@ ${order.하차지주소||""}${_dConMf?`\n${_dConMf}`:""}${_mainDCargoMf}${_mainD
 중량 : ${_totTonMf}${_totCargoMf?` / ${_totCargoMf}`:""} ${order.차량종류||order.차종||""}
 
 ${order.차량번호} ${driverName} ${driverPhone}
-${Number(order.청구운임||0).toLocaleString()}원 부가세별도 배차되었습니다.
+${Number(order.청구운임||0).toLocaleString()}원 ${(()=>{const pt=order.지급방식||"";return pt==="계산서"?"부가세별도":pt==="착불"?"착불":pt==="선불"?"선불":"부가세별도";})()  } 배차되었습니다.
 `.trim();
 }
     else if (type === "driver") {
@@ -10920,9 +10920,286 @@ function MobileMyInfo({ currentUser, mobileUsers, loginTime, orders = [], userCo
 }
 
 // ======================================================================
-// 📌 모바일 전국운임 조회 (T-Map 도로거리 기반)
+// 📌 모바일 전국운임 조회 (통합 운임조회)
 // ======================================================================
 const MOBILE_TMAP_KEY = "rmzwkLwH9N4i9ayxDj9GR6l8hyFDaEk52ZQs4yer";
+
+// 통합 운임조회용 차량 타입
+const MOBILE_VT = [
+  {id:"1ton",name:"1톤",base:55000,perKm:690,min:55000,L100km:10},
+  {id:"1.4ton",name:"1.4톤",base:60000,perKm:760,min:60000,L100km:11},
+  {id:"2.5ton",name:"2.5톤",base:70000,perKm:895,min:70000,L100km:13},
+  {id:"3.5ton",name:"3.5톤",base:80000,perKm:1005,min:80000,L100km:14},
+  {id:"5ton",name:"5톤",base:90000,perKm:1143,min:90000,L100km:16},
+  {id:"5tonP",name:"5톤플",base:95000,perKm:1200,min:95000,L100km:17},
+  {id:"11ton",name:"11톤",base:115000,perKm:1445,min:115000,L100km:22},
+  {id:"18ton",name:"18톤",base:140000,perKm:1720,min:140000,L100km:28},
+  {id:"25ton",name:"25톤",base:155000,perKm:1830,min:155000,L100km:33},
+  {id:"trailer",name:"트레일러",base:200000,perKm:2000,min:200000,L100km:40},
+];
+const MOBILE_CARGO_MUL = {일반:1.0, 냉장:1.3, 귀중품:1.2};
+const MOBILE_MIXED_TIERS=[
+  {maxKm:100,base:28000,per100kg:3500},{maxKm:200,base:42000,per100kg:5500},
+  {maxKm:350,base:58000,per100kg:7500},{maxKm:500,base:75000,per100kg:9500},
+  {maxKm:Infinity,base:95000,per100kg:12000},
+];
+const MOBILE_SM={
+  "1ton":20000,"1.4ton":22000,"2.5ton":25000,"3.5ton":25000,
+  "5ton":28000,"5tonP":30000,"11ton":30000,"18ton":30000,"25ton":30000,
+  trailer:35000,
+};
+const MOBILE_SL={
+  "1ton":8000,"1.4ton":10000,"2.5ton":12000,"3.5ton":15000,
+  "5ton":18000,"5tonP":20000,"11ton":25000,"18ton":28000,"25ton":30000,
+};
+const MOBILE_SV={
+  "1ton":15000,"1.4ton":18000,"2.5ton":20000,"3.5ton":25000,
+  "5ton":28000,"5tonP":30000,"11ton":35000,"18ton":40000,"25ton":45000,
+  trailer:50000,
+};
+
+function mHaversine(la1,lo1,la2,lo2){
+  const R=6371,d1=(la2-la1)*Math.PI/180,d2=(lo2-lo1)*Math.PI/180;
+  const a=Math.sin(d1/2)**2+Math.cos(la1*Math.PI/180)*Math.cos(la2*Math.PI/180)*Math.sin(d2/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+function mFmt(v){if(!v)return"0원";if(v>=10000){const m=v/10000;return(Number.isInteger(m)?m:m.toFixed(1))+"만원";}return v.toLocaleString()+"원";}
+function mFmtTime(mins){if(!mins)return"-";const h=Math.floor(mins/60),m=mins%60;return h>0?`${h}시간${m>0?` ${m}분`:""}`:` ${m}분`;}
+
+// ─ 통합 모바일 운임조회 컴포넌트 ──────────────────────────────────────────
+function MobileFareInquiry() {
+  const [freightMode,setFreightMode]=useState("독차");
+  const [fromSearch,setFromSearch]=useState("");
+  const [toSearch,setToSearch]=useState("");
+  const [fromCoord,setFromCoord]=useState(null);
+  const [toCoord,setToCoord]=useState(null);
+  const [vias,setVias]=useState([]);
+  const [vehicle,setVehicle]=useState("1ton");
+  const [cargoType,setCargoType]=useState("일반");
+  const [roundTrip,setRoundTrip]=useState(false);
+  const [manualWork,setManualWork]=useState(false);
+  const [weatherSurcharge,setWeatherSurcharge]=useState(false);
+  const [liftgate,setLiftgate]=useState(false);
+  const [mixWeightKg,setMixWeightKg]=useState("");
+  const [mixCbm,setMixCbm]=useState("");
+
+  const result=useMemo(()=>{
+    if(!fromCoord||!toCoord)return null;
+    const activeVias=vias.filter(v=>v.coord);
+    const allPts=[fromCoord,...activeVias.map(v=>v.coord),toCoord];
+    const totalStraight=allPts.reduce((acc,p,i)=>{
+      if(i===0)return 0;
+      return acc+mHaversine(allPts[i-1].lat,allPts[i-1].lon,p.lat,p.lon);
+    },0);
+    const dist=Math.round(totalStraight*1.35);
+    const cMul=MOBILE_CARGO_MUL[cargoType]||1;
+    let base;
+    if(freightMode==="혼적"){
+      const wkg=parseFloat(mixWeightKg)||0,cbm=parseFloat(mixCbm)||0;
+      if(!wkg&&!cbm)return null;
+      const eff=Math.max(wkg,cbm*250);
+      const tier=MOBILE_MIXED_TIERS.find(r=>dist<=r.maxKm)||MOBILE_MIXED_TIERS[MOBILE_MIXED_TIERS.length-1];
+      const units=Math.max(1,Math.ceil(eff/100));
+      const raw=tier.base+tier.per100kg*(units-1);
+      const avg=Math.round(raw*cMul/1000)*1000;
+      base={mode:"혼적",distance:dist,min:Math.round(avg*0.85/1000)*1000,max:Math.round(avg*1.15/1000)*1000,avg,mins:Math.round(dist/80*60)};
+    }else{
+      const vt=MOBILE_VT.find(v=>v.id===vehicle)||MOBILE_VT[0];
+      const fare=Math.max(vt.min,(vt.base+vt.perKm*dist)*cMul);
+      const avg=Math.round(fare/5000)*5000;
+      base={mode:"독차",distance:dist,min:Math.round(avg*0.83/5000)*5000,max:Math.round(avg*1.17/5000)*5000,avg,fuelCost:Math.round(vt.L100km/100*dist*1650),mins:Math.round(dist/80*60)};
+    }
+    const mul=roundTrip?1.8:1;
+    const wMul=weatherSurcharge?1.15:1;
+    const mfee=(manualWork&&freightMode==="독차")?(MOBILE_SM[vehicle]||0):0;
+    const lFee=(liftgate&&freightMode==="독차")?(MOBILE_SL[vehicle]||0):0;
+    const vFee=freightMode==="독차"?activeVias.length*(MOBILE_SV[vehicle]||20000):activeVias.length*20000;
+    return{...base,min:Math.round((base.min*mul*wMul+mfee+lFee+vFee)/1000)*1000,max:Math.round((base.max*mul*wMul+mfee+lFee+vFee)/1000)*1000,avg:Math.round((base.avg*mul*wMul+mfee+lFee+vFee)/1000)*1000,manualFee:mfee,liftFee:lFee,viaFee:vFee,viaCount:activeVias.length,isRound:roundTrip,isWeather:weatherSurcharge};
+  },[fromCoord,toCoord,vehicle,cargoType,freightMode,roundTrip,manualWork,weatherSurcharge,liftgate,vias,mixWeightKg,mixCbm]);
+
+  const addVia=()=>{if(vias.length<3)setVias(p=>[...p,{search:"",coord:null}]);};
+  const removeVia=(i)=>setVias(p=>p.filter((_,j)=>j!==i));
+  const reset=()=>{setFromSearch("");setToSearch("");setFromCoord(null);setToCoord(null);setVias([]);};
+  const vtObj=MOBILE_VT.find(v=>v.id===vehicle)||MOBILE_VT[0];
+
+  return(
+    <div className="px-4 py-4 space-y-3">
+      {/* 독차/혼적 */}
+      <div className="flex rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+        {["독차","혼적"].map(m=>(
+          <button key={m} onClick={()=>{setFreightMode(m);setMixWeightKg("");setMixCbm("");}}
+            className={`flex-1 py-2.5 text-[13px] font-bold transition ${freightMode===m?"bg-[#1B2B4B] text-white":"bg-white text-gray-500"}`}>{m}</button>
+        ))}
+      </div>
+
+      {/* 주소 입력 */}
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-visible">
+        <div className="px-4 pt-3 pb-2 border-b border-gray-100">
+          <div className="flex items-center gap-2 mb-1.5">
+            <div className="w-2 h-2 rounded-full bg-blue-500 shrink-0"/>
+            <span className="text-[11px] font-bold text-gray-400">상차지</span>
+          </div>
+          <MobileAddressSearch value={fromSearch}
+            onChange={v=>{setFromSearch(v);setFromCoord(null);}}
+            onSelect={s=>{if(s){setFromSearch(s.address);setFromCoord(s);}}}
+            placeholder="주소 또는 지역명 검색"/>
+        </div>
+        {vias.map((via,i)=>(
+          <div key={i} className="px-4 pt-3 pb-2 border-b border-gray-100">
+            <div className="flex items-center gap-2 mb-1.5">
+              <div className="w-2 h-2 rounded-full bg-gray-400 shrink-0"/>
+              <span className="text-[11px] font-bold text-gray-400">경유{i+1}</span>
+              <button className="ml-auto text-gray-300 hover:text-red-400 text-lg leading-none" onClick={()=>removeVia(i)}>×</button>
+            </div>
+            <MobileAddressSearch value={via.search}
+              onChange={v=>{setVias(p=>{const n=[...p];n[i]={search:v,coord:null};return n;});}}
+              onSelect={s=>{if(s){setVias(p=>{const n=[...p];n[i]={search:s.address,coord:s};return n;});}}}
+              placeholder="경유지 검색"/>
+          </div>
+        ))}
+        <div className="px-4 pt-3 pb-3">
+          <div className="flex items-center gap-2 mb-1.5">
+            <div className="w-2 h-2 rounded-full bg-orange-400 shrink-0"/>
+            <span className="text-[11px] font-bold text-gray-400">하차지</span>
+          </div>
+          <MobileAddressSearch value={toSearch}
+            onChange={v=>{setToSearch(v);setToCoord(null);}}
+            onSelect={s=>{if(s){setToSearch(s.address);setToCoord(s);}}}
+            placeholder="주소 또는 지역명 검색"/>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2">
+        {vias.length<3&&<button onClick={addVia} className="text-[11px] font-semibold text-[#1B2B4B]/70 border border-dashed border-[#1B2B4B]/30 rounded-lg px-2.5 py-1">+ 경유 추가</button>}
+        {(fromCoord||toCoord||vias.length>0)&&<button onClick={reset} className="text-[11px] text-gray-400 hover:text-red-500">초기화</button>}
+      </div>
+
+      {/* 혼적 화물 */}
+      {freightMode==="혼적"&&(
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
+          <p className="text-[12px] font-bold text-[#1B2B4B] mb-2">혼적 화물 정보</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <div className="text-[11px] text-gray-400 mb-1">중량 (kg)</div>
+              <input type="number" className="w-full px-3 py-2 text-[13px] bg-gray-50 rounded-xl border border-gray-200 outline-none"
+                placeholder="0" value={mixWeightKg} onChange={e=>setMixWeightKg(e.target.value)}/>
+            </div>
+            <div>
+              <div className="text-[11px] text-gray-400 mb-1">CBM</div>
+              <input type="number" className="w-full px-3 py-2 text-[13px] bg-gray-50 rounded-xl border border-gray-200 outline-none"
+                placeholder="0.0" value={mixCbm} onChange={e=>setMixCbm(e.target.value)}/>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 차량 선택 (독차) */}
+      {freightMode==="독차"&&(
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
+          <p className="text-[12px] font-bold text-[#1B2B4B] mb-2">차량 선택</p>
+          <div className="grid grid-cols-5 gap-1.5">
+            {MOBILE_VT.map(v=>(
+              <button key={v.id} onClick={()=>setVehicle(v.id)}
+                className={`py-2 rounded-lg text-[11px] font-bold transition ${vehicle===v.id?"bg-[#1B2B4B] text-white":"bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>{v.name}</button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 화물 유형 */}
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
+        <p className="text-[12px] font-bold text-[#1B2B4B] mb-2">화물 유형</p>
+        <div className="flex gap-2">
+          {["일반","냉장","귀중품"].map(t=>(
+            <button key={t} onClick={()=>setCargoType(t)}
+              className={`flex-1 py-2 rounded-xl text-[12px] font-bold transition ${cargoType===t?"bg-[#1B2B4B] text-white":"bg-gray-100 text-gray-600"}`}>{t}</button>
+          ))}
+        </div>
+      </div>
+
+      {/* 추가 옵션 (독차) */}
+      {freightMode==="독차"&&(
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
+          <p className="text-[12px] font-bold text-[#1B2B4B] mb-2">추가 옵션</p>
+          <div className="flex flex-wrap gap-2">
+            {[
+              {id:"rt",label:"왕복",sub:"×1.8",active:roundTrip,set:()=>setRoundTrip(p=>!p)},
+              {id:"mw",label:"수작업",sub:MOBILE_SM[vehicle]>0?`+${(MOBILE_SM[vehicle]/10000).toFixed(0)}만`:null,active:manualWork,set:()=>setManualWork(p=>!p)},
+              {id:"ws",label:"기상악화",sub:"+15%",active:weatherSurcharge,set:()=>setWeatherSurcharge(p=>!p)},
+              {id:"lg",label:"리프트",sub:MOBILE_SL[vehicle]>0?`+${Number((MOBILE_SL[vehicle]/10000).toFixed(1))}만`:null,active:liftgate,set:()=>setLiftgate(p=>!p)},
+            ].map(opt=>(
+              <button key={opt.id} onClick={opt.set}
+                className={`flex items-center gap-1 px-3 py-2 rounded-xl text-[12px] font-bold border-2 transition ${opt.active?"bg-[#1B2B4B] text-white border-[#1B2B4B]":"bg-white text-gray-500 border-gray-200"}`}>
+                {opt.label}
+                {opt.sub&&<span className={`text-[10px] ${opt.active?"text-white/70":"text-gray-400"}`}>{opt.sub}</span>}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 결과 카드 */}
+      {result&&fromCoord&&toCoord&&(
+        <div className="rounded-2xl overflow-hidden shadow-xl border border-[#1B2B4B]/10"
+          style={{background:"linear-gradient(150deg,#0f1e38 0%,#1B2B4B 50%,#243a60 100%)"}}>
+          <div className="p-4">
+            <div className="flex items-center gap-2 mb-3 flex-wrap">
+              <span className={`text-[10px] font-extrabold px-2.5 py-1 rounded-full ${result.mode==="혼적"?"bg-orange-400/90":"bg-blue-400/90"} text-white`}>{result.mode==="혼적"?"혼적":"독차"}</span>
+              {result.isRound&&<span className="text-[10px] font-bold px-2 py-1 rounded-full bg-white/20 text-white">왕복</span>}
+              {result.viaCount>0&&<span className="text-[10px] font-bold px-2 py-1 rounded-full bg-white/20 text-white">경유{result.viaCount}</span>}
+              {result.isWeather&&<span className="text-[10px] font-bold px-2 py-1 rounded-full bg-white/20 text-white">기상악화+15%</span>}
+              {result.manualFee>0&&<span className="text-[10px] font-bold px-2 py-1 rounded-full bg-white/20 text-white">수작업</span>}
+              {result.liftFee>0&&<span className="text-[10px] font-bold px-2 py-1 rounded-full bg-white/20 text-white">리프트</span>}
+            </div>
+            <div className="mb-3">
+              <div className="text-[10px] text-white/40 font-semibold mb-0.5">예상 운임 (VAT 별도)</div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-[22px] font-black text-white">{mFmt(result.min)}</span>
+                <span className="text-white/30 text-[16px]">~</span>
+                <span className="text-[22px] font-black text-white">{mFmt(result.max)}</span>
+              </div>
+            </div>
+            <div className="bg-white/8 rounded-xl p-3 mb-3">
+              <div className="flex justify-between items-center">
+                <span className="text-[11px] text-white/50 font-semibold">평균 운임</span>
+                <span className="text-[18px] font-black text-yellow-300">{mFmt(result.avg)}</span>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2 mb-3">
+              {[
+                {l:"거리",v:`약 ${result.distance}km`},
+                {l:"예상시간",v:mFmtTime(result.mins)},
+                ...(result.mode==="독차"?[{l:"차종",v:vtObj?.name||""},{l:"연료비",v:`${(result.fuelCost||0).toLocaleString()}원`}]:[]),
+                ...(result.manualFee>0?[{l:"수작업비",v:mFmt(result.manualFee)}]:[]),
+                ...(result.liftFee>0?[{l:"리프트",v:mFmt(result.liftFee)}]:[]),
+                ...(result.viaCount>0?[{l:"경유비",v:`${mFmt(result.viaFee)}(${result.viaCount}곳)`}]:[]),
+              ].map(({l,v})=>(
+                <div key={l} className="bg-white/6 rounded-xl px-3 py-2">
+                  <div className="text-[9px] text-white/35 font-semibold">{l}</div>
+                  <div className="text-[11px] font-bold text-white/85">{v}</div>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <button onClick={reset} className="flex-1 py-2.5 rounded-xl bg-white/10 text-white text-[12px] font-bold">다시 조회</button>
+              <button onClick={()=>navigator.clipboard.writeText(`[운임견적]\n경로: ${fromSearch}→${toSearch}\n차종: ${vtObj?.name||freightMode}\n예상운임: ${mFmt(result.min)}~${mFmt(result.max)} (평균 ${mFmt(result.avg)})\n거리: 약${result.distance}km\n※VAT별도·참고시세`).catch(()=>{})}
+                className="px-4 py-2.5 rounded-xl bg-white/10 text-white/70 text-[12px] font-bold">복사</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {!result&&!(fromCoord&&toCoord)&&(
+        <div className="flex flex-col items-center justify-center py-12 text-gray-400">
+          <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" className="mb-3 opacity-25">
+            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/>
+          </svg>
+          <div className="text-[13px] font-semibold mb-1">출발지·도착지를 입력하세요</div>
+          <div className="text-[11px]">차종별 예상 운임을 바로 확인할 수 있습니다</div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 const MOBILE_FARE_TYPES = [
   { label: "라보",   base: 58000,  perKm: 405  },
@@ -11105,30 +11382,9 @@ function MobileAddressSearch({ value, onChange, onSelect, placeholder }) {
   );
 }
 
-// ── 탭 래퍼: 전국운임조회 / 지도형운임조회 / 차량제원 ──────────────────────
+// ── 통합 전국운임조회 ────────────────────────────────────────────────────
 function MobileNationalFare({ onBack }) {
-  const [nfTab, setNfTab] = useState("전국운임조회");
-  const tabs = ["전국운임조회", "지도형운임조회", "차량제원"];
-  return (
-    <div>
-      <div className="flex gap-0 px-4 pt-3 pb-0 border-b border-gray-200">
-        {tabs.map(t => (
-          <button
-            key={t}
-            onClick={() => setNfTab(t)}
-            className={`px-4 py-2.5 text-[13px] font-semibold border-b-2 -mb-px transition-colors ${
-              nfTab === t
-                ? "border-[#1B2B4B] text-[#1B2B4B]"
-                : "border-transparent text-gray-400 hover:text-gray-600"
-            }`}
-          >{t}</button>
-        ))}
-      </div>
-      <div style={{ display: nfTab === "전국운임조회" ? "block" : "none" }}><MobileNationalFareSearch /></div>
-      <div style={{ display: nfTab === "지도형운임조회" ? "block" : "none" }}><MobileMapFare /></div>
-      <div style={{ display: nfTab === "차량제원" ? "block" : "none" }} className="px-4 py-4"><PalletSimulator /></div>
-    </div>
-  );
+  return <MobileFareInquiry />;
 }
 
 function MobileNationalFareSearch() {
@@ -13022,7 +13278,12 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
 
         <SectionHeader title="앱 정보" />
         <div className="mx-4 rounded-2xl overflow-hidden border border-gray-100 shadow-sm">
-          <SettingRow label="버전" sub="KP-FLOW 배차관리" right={<span className="text-[12px] text-gray-400 font-mono">v{appVersion}</span>} />
+          <SettingRow label="버전" sub="KP-FLOW 배차관리" right={
+            <div className="flex items-center gap-1.5">
+              <span className="text-[12px] text-gray-400 font-mono">v{appVersion}</span>
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-600">최신버전</span>
+            </div>
+          } />
           <SettingRow label="제작" right={<span className="text-[12px] text-gray-400">KP-FLOW Logistics</span>} />
         </div>
 

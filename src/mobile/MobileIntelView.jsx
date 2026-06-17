@@ -1,5 +1,5 @@
 // src/mobile/MobileIntelView.jsx — 경영인텔리전스 (모바일 totalMaster 전용)
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
@@ -7,6 +7,7 @@ import {
 const NAVY = "#1B2B4B";
 const PIN_KEY = "exec_intel_pin_v1";
 const BIOMETRIC_KEY = "exec_intel_biometric_v1";
+const BIOMETRIC_AUTO_KEY = "exec_intel_biometric_auto_v1";
 
 function ab2b64(buf) {
   const bytes = new Uint8Array(buf);
@@ -34,8 +35,19 @@ function MobilePinGate({ onVerified }) {
   const [hasBiometric, setHasBiometric] = useState(() => !!localStorage.getItem(BIOMETRIC_KEY));
   const [biometricSupported] = useState(() => !!(window.PublicKeyCredential));
   const [bioLoading, setBioLoading] = useState(false);
+  const [bioAuto, setBioAuto] = useState(() => localStorage.getItem(BIOMETRIC_AUTO_KEY) === "1");
+  const autoTriggered = useRef(false);
 
   const bump = () => { setAnimKey(k => k + 1); setEntered(""); setError(""); };
+
+  // 자동 생체인증 실행 (카카오톡처럼)
+  useEffect(() => {
+    if (mode === "verify" && hasBiometric && biometricSupported && bioAuto && !autoTriggered.current) {
+      autoTriggered.current = true;
+      const t = setTimeout(verifyBiometric, 350);
+      return () => clearTimeout(t);
+    }
+  }, []); // mount 시 1회만
 
   const handleKey = (d) => {
     if (d === "back") { setEntered(p => p.slice(0, -1)); return; }
@@ -205,11 +217,24 @@ function MobilePinGate({ onVerified }) {
           )}
           {mode === "verify" && biometricSupported && (
             <button
-              onClick={hasBiometric ? () => { localStorage.removeItem(BIOMETRIC_KEY); setHasBiometric(false); setError("생체인증이 해제되었습니다"); } : registerBiometric}
+              onClick={hasBiometric ? () => { localStorage.removeItem(BIOMETRIC_KEY); localStorage.removeItem(BIOMETRIC_AUTO_KEY); setHasBiometric(false); setBioAuto(false); setError("생체인증이 해제되었습니다"); } : registerBiometric}
               disabled={bioLoading}
               style={{ textAlign: "center", fontSize: 12, color: hasBiometric ? "#d1d5db" : "#6b7280", background: "none", border: "none", cursor: "pointer", fontFamily: "'Noto Sans KR', sans-serif" }}
             >
               {bioLoading ? "처리 중..." : hasBiometric ? "생체인증 해제" : "지문 / Face ID 등록"}
+            </button>
+          )}
+          {mode === "verify" && hasBiometric && biometricSupported && (
+            <button
+              onClick={() => {
+                const next = !bioAuto;
+                setBioAuto(next);
+                localStorage.setItem(BIOMETRIC_AUTO_KEY, next ? "1" : "0");
+                setError(next ? "다음부터 자동으로 생체인증이 실행됩니다" : "자동 생체인증이 해제되었습니다");
+              }}
+              style={{ textAlign: "center", fontSize: 12, color: bioAuto ? "#1B2B4B" : "#9ca3af", background: "none", border: "none", cursor: "pointer", fontFamily: "'Noto Sans KR', sans-serif", fontWeight: bioAuto ? 700 : 400 }}
+            >
+              {bioAuto ? "✓ 자동 생체인증 켜짐 (탭하여 해제)" : "자동 생체인증 설정 (카카오톡처럼)"}
             </button>
           )}
         </div>

@@ -228,6 +228,14 @@ const SURCHARGE_LIFTGATE = {
   trailer:0, lowbed:0,
 };
 
+const SURCHARGE_VIA = {
+  bike:10000, damas:12000, "1ton":15000, "1.4ton":18000,
+  "2.5ton":20000, "3.5ton":25000, "3.5tonW":25000,
+  "5ton":28000, "5tonP":30000, "5tonAx":30000,
+  "11ton":35000, "18ton":40000, "25ton":45000,
+  trailer:50000, lowbed:50000,
+};
+
 const _provFromAddr = (addr) => {
   for (const [full, short] of Object.entries(SIDO_MAP)) {
     if (addr.includes(full)) return short;
@@ -500,7 +508,8 @@ function NationalFareTab() {
     const wMul=weatherSurcharge?1.15:1;
     const mfee=(manualWork&&freightMode==="독차")?(SURCHARGE_MANUAL[vehicle]||0):0;
     const liftFee=(liftgate&&freightMode==="독차")?(SURCHARGE_LIFTGATE[vehicle]||0):0;
-    return{...base,min:Math.round((base.min*mul*wMul+mfee+liftFee)/1000)*1000,max:Math.round((base.max*mul*wMul+mfee+liftFee)/1000)*1000,avg:Math.round((base.avg*mul*wMul+mfee+liftFee)/1000)*1000,manualFee:mfee,liftFee,isRound:roundTrip,isWeather:weatherSurcharge,viaCount:activeVias.length};
+    const viaFee=freightMode==="독차"?activeVias.length*(SURCHARGE_VIA[vehicle]||20000):activeVias.length*20000;
+    return{...base,min:Math.round((base.min*mul*wMul+mfee+liftFee+viaFee)/1000)*1000,max:Math.round((base.max*mul*wMul+mfee+liftFee+viaFee)/1000)*1000,avg:Math.round((base.avg*mul*wMul+mfee+liftFee+viaFee)/1000)*1000,manualFee:mfee,liftFee,viaFee,isRound:roundTrip,isWeather:weatherSurcharge,viaCount:activeVias.length};
   },[fromC,toC,vehicle,cargoType,freightMode,mixWeightKg,mixCbm,manualWork,roundTrip,weatherSurcharge,liftgate,vias]);
 
   const refData=useMemo(()=>{
@@ -842,7 +851,7 @@ function NationalFareTab() {
                   ...(result.liftFee>0?[{l:"리프트",v:`${result.liftFee.toLocaleString()}원`}]:[]),
                   ...(result.isWeather?[{l:"기상악화",v:"+15%"}]:[]),
                   ...(result.isRound?[{l:"왕복적용",v:"×1.8"}]:[]),
-                  ...(result.viaCount>0?[{l:"경유지",v:`${result.viaCount}곳`}]:[]),
+                  ...(result.viaCount>0?[{l:"경유지",v:`${result.viaCount}곳 (+${Number((result.viaFee/10000).toFixed(0))}만원)`}]:[]),
                 ].map(({l,v})=>(
                   <div key={l} className="bg-white/6 rounded-xl px-3 py-2">
                     <div className="text-[9px] text-white/35 font-semibold">{l}</div>
