@@ -221,29 +221,73 @@ const SURCHARGE_MANUAL = {
 };
 
 const SURCHARGE_LIFTGATE = {
-  bike:0, damas:0, "1ton":30000, "1.4ton":35000,
-  "2.5ton":50000, "3.5ton":65000, "3.5tonW":70000,
-  "5ton":90000, "5tonP":95000, "5tonAx":95000,
-  "11ton":120000, "18ton":150000, "25ton":200000,
+  bike:0, damas:0, "1ton":8000, "1.4ton":10000,
+  "2.5ton":12000, "3.5ton":15000, "3.5tonW":15000,
+  "5ton":18000, "5tonP":20000, "5tonAx":20000,
+  "11ton":25000, "18ton":28000, "25ton":30000,
   trailer:0, lowbed:0,
+};
+
+const _provFromAddr = (addr) => {
+  for (const [full, short] of Object.entries(SIDO_MAP)) {
+    if (addr.includes(full)) return short;
+  }
+  for (const short of Object.values(SIDO_MAP)) {
+    if (addr.startsWith(short + " ") || addr.startsWith(short + "　")) return short;
+  }
+  return null;
 };
 
 const searchTmapPOI = async (keyword, setter) => {
   if (!keyword || keyword.trim().length < 2) { setter([]); return; }
   try {
-    const url = `https://apis.openapi.sk.com/tmap/pois?version=1&searchKeyword=${encodeURIComponent(keyword.trim())}&count=10&resCoordType=WGS84GEO&appKey=${TMAP_KEY}`;
-    const res = await fetch(url);
-    if (!res.ok) { setter([]); return; }
-    const data = await res.json();
-    const pois = data?.searchPoiInfo?.pois?.poi || [];
-    const results = pois.map(p => ({
-      name: p.name || "",
-      prov: SIDO_MAP[p.upperAddrName || ""] || null,
-      addr: [p.middleAddrName, p.lowerAddrName].filter(Boolean).join(" "),
-      full: [p.upperAddrName, p.middleAddrName, p.lowerAddrName].filter(Boolean).join(" "),
-      la: parseFloat(p.frontLat || p.noorLat || 0),
-      lo: parseFloat(p.frontLon || p.noorLon || 0),
-    })).filter(p => p.prov && p.la && p.lo);
+    const kw = keyword.trim();
+    const headers = { Accept: "application/json" };
+    const [saData, poiData] = await Promise.all([
+      fetch(`https://apis.openapi.sk.com/tmap/searchAddress?version=1&format=json&queryVersion=1&fullAddrOnOff=Y&searchKeyword=${encodeURIComponent(kw)}&countPerPage=20&appKey=${TMAP_KEY}`, { headers }).then(r => r.json()).catch(() => null),
+      fetch(`https://apis.openapi.sk.com/tmap/pois?version=1&format=json&searchKeyword=${encodeURIComponent(kw)}&count=15&appKey=${TMAP_KEY}`, { headers }).then(r => r.json()).catch(() => null),
+    ]);
+
+    const seen = new Set();
+    const results = [];
+
+    // 1. searchAddress 결과 (주소 레벨)
+    const saRaw = saData?.searchAddressInfo?.addressInfo;
+    const saArr = Array.isArray(saRaw) ? saRaw : (saRaw ? [saRaw] : []);
+    for (const it of saArr) {
+      if (results.length >= 10) break;
+      const full = it.fullAddress || it.fullAddressRoad || "";
+      if (!full || seen.has(full)) continue;
+      const prov = _provFromAddr(full);
+      if (!prov) continue;
+      const newAddrList = it?.newAddressList?.newAddress;
+      const newAddr = Array.isArray(newAddrList) ? newAddrList[0] : newAddrList;
+      const la = parseFloat(newAddr?.centerLat || it.lat || it.newLat || 0);
+      const lo = parseFloat(newAddr?.centerLon || it.lon || it.newLon || 0);
+      if (!la || !lo) continue;
+      seen.add(full);
+      results.push({ name: full, prov, addr: full, full, la, lo });
+    }
+
+    // 2. POI 결과
+    const poiRaw = poiData?.searchPoiInfo?.pois?.poi;
+    const pois = Array.isArray(poiRaw) ? poiRaw : (poiRaw ? [poiRaw] : []);
+    for (const p of pois) {
+      if (results.length >= 12) break;
+      const upper = p.upperAddrName || "";
+      const mid = p.middleAddrName || "";
+      const low = p.lowerAddrName || "";
+      const full = [upper, mid, low].filter(Boolean).join(" ");
+      if (!full || seen.has(full)) continue;
+      const prov = SIDO_MAP[upper] || _provFromAddr(full);
+      if (!prov) continue;
+      const la = parseFloat(p.frontLat || p.noorLat || 0);
+      const lo = parseFloat(p.frontLon || p.noorLon || 0);
+      if (!la || !lo) continue;
+      seen.add(full);
+      results.push({ name: p.name || full, prov, addr: [mid, low].filter(Boolean).join(" "), full, la, lo });
+    }
+
     setter(results);
   } catch { setter([]); }
 };
@@ -478,18 +522,28 @@ function NationalFareTab() {
     setVias([]);setViaResults([]);
   },[]);
 
+  const _hasUnfilledVia = (vs) => vs.some(v => !v.coord);
+
   const onProvClick=(prov)=>{
     if(step==="from"){setFromP(prov);setCityStep("from");}
     else if(step==="to"){setToP(prov);setCityStep("to");}
   };
   const onCitySelect=(city)=>{
-    if(cityStep==="from"){setFromC(city);setFromSearch("");setStep("to");setCityStep(null);}
-    else{setToC(city);setToSearch("");setStep("result");setCityStep(null);}
+    if(cityStep==="from"){
+      setFromC(city);setFromSearch("");setCityStep(null);
+      if(toC) setStep("result");
+      else if(_hasUnfilledVia(vias)) setStep("via");
+      else setStep("to");
+    }else{
+      setToC(city);setToSearch("");setStep("result");setCityStep(null);
+    }
   };
   const selectFrom=(r)=>{
     setFromP(r.prov);setFromC({n:r.addr||r.name,la:r.la,lo:r.lo});
     setFromSearch(r.full);setFromResults([]);setCityStep(null);
-    if(toC)setStep("result");else setStep("to");
+    if(toC) setStep("result");
+    else if(_hasUnfilledVia(vias)) setStep("via");
+    else setStep("to");
   };
   const selectTo=(r)=>{
     setToP(r.prov);setToC({n:r.addr||r.name,la:r.la,lo:r.lo});
@@ -521,9 +575,13 @@ function NationalFareTab() {
   },[]);
 
   const selectVia=useCallback((i,r)=>{
-    setVias(p=>{const n=[...p];n[i]={search:r.full,prov:r.prov,coord:{la:r.la,lo:r.lo}};return n;});
+    const newVias=[...vias];
+    newVias[i]={search:r.full,prov:r.prov,coord:{la:r.la,lo:r.lo}};
+    setVias(newVias);
     setViaResults(p=>{const n=[...p];n[i]=[];return n;});
-  },[]);
+    const allFilled=newVias.every(v=>v.coord);
+    if(allFilled){if(toC)setStep("result");else setStep("to");}
+  },[vias,toC]);
 
   const aFrom=fromP?PROVINCE_LABEL_POS[fromP]:null;
   const aTo=toP?PROVINCE_LABEL_POS[toP]:null;
@@ -729,14 +787,14 @@ function NationalFareTab() {
             <div className="flex flex-wrap gap-2">
               {[
                 {id:"roundTrip",label:"왕복 운행",sub:"×1.8",active:roundTrip,set:()=>setRoundTrip(p=>!p)},
-                {id:"manualWork",label:"수작업(상하차)",sub:SURCHARGE_MANUAL[vehicle]>0?`+${(SURCHARGE_MANUAL[vehicle]/1000).toFixed(0)}만원`:null,active:manualWork,set:()=>setManualWork(p=>!p)},
+                {id:"manualWork",label:"수작업(상하차)",sub:SURCHARGE_MANUAL[vehicle]>0?`+${Number((SURCHARGE_MANUAL[vehicle]/10000).toFixed(1))}만원`:null,active:manualWork,set:()=>setManualWork(p=>!p)},
                 {id:"weather",label:"기상악화",sub:"+15%",active:weatherSurcharge,set:()=>setWeatherSurcharge(p=>!p)},
-                {id:"liftgate",label:"리프트",sub:SURCHARGE_LIFTGATE[vehicle]>0?`+${(SURCHARGE_LIFTGATE[vehicle]/1000).toFixed(0)}만원`:null,active:liftgate,set:()=>setLiftgate(p=>!p)},
+                {id:"liftgate",label:"리프트",sub:SURCHARGE_LIFTGATE[vehicle]>0?`+${Number((SURCHARGE_LIFTGATE[vehicle]/10000).toFixed(1))}만원`:null,active:liftgate,set:()=>setLiftgate(p=>!p)},
               ].map(opt=>(
                 <button key={opt.id} onClick={opt.set}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-[12px] font-bold border-2 transition ${opt.active?"bg-[#1B2B4B] text-white border-[#1B2B4B]":"bg-white text-gray-500 border-gray-200 hover:border-[#1B2B4B]/40"}`}>
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-bold border-2 transition ${opt.active?"bg-[#1B2B4B] text-white border-[#1B2B4B]":"bg-white text-gray-500 border-gray-200 hover:border-[#1B2B4B]/40"}`}>
                   {opt.label}
-                  {opt.sub&&<span className={`text-[10px] font-semibold ${opt.active?"text-white/70":"text-gray-400"}`}>{opt.sub}</span>}
+                  {opt.sub&&<span className={`text-[11px] font-semibold ${opt.active?"text-white/70":"text-gray-400"}`}>{opt.sub}</span>}
                 </button>
               ))}
             </div>
@@ -852,9 +910,9 @@ function NationalFareTab() {
       <div className="flex-[6] min-w-0 rounded-2xl border border-gray-200 shadow-sm flex flex-col overflow-hidden bg-white">
         <div className="px-4 py-2.5 border-b border-gray-100 flex items-center gap-3 shrink-0">
           {step!=="result"&&(
-            <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold ${step==="from"?"bg-[#1B2B4B] text-white":"bg-orange-400 text-white"}`}>
+            <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold ${step==="from"?"bg-[#1B2B4B] text-white":step==="via"?"bg-green-600 text-white":"bg-orange-400 text-white"}`}>
               <span className="w-1.5 h-1.5 rounded-full bg-white/80"/>
-              {step==="from"?"출발 지역을 선택하세요":"도착 지역을 선택하세요"}
+              {step==="from"?"출발 지역을 선택하세요":step==="via"?"경유지를 입력하세요":"도착 지역을 선택하세요"}
             </div>
           )}
           {step==="result"&&fromP&&toP&&(
