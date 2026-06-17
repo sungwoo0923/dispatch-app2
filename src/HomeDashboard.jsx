@@ -170,7 +170,15 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
   const [selectedSchedule, setSelectedSchedule] = useState(null);
   const [users, setUsers] = useState([]);
 
-React.useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 10000); return () => clearTimeout(t); }, [toast]);
+React.useEffect(() => {
+  if (!toast) return;
+  const snap = toast; // capture current toast
+  const t = setTimeout(() => {
+    if (snap?.data?.id) _dismissedToasts.add(`${snap.type}_${snap.data.id}`);
+    setToast(null);
+  }, 10000);
+  return () => clearTimeout(t);
+}, [toast]);
 
   const getViewCompany = () => role === "totalMaster"
     ? (localStorage.getItem("loginCompany") || userCompany || "돌캐")
@@ -213,6 +221,9 @@ React.useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(
     } catch {}
   };
 
+  const getPermDismissed = () => { try { return new Set(JSON.parse(localStorage.getItem("permDismissed") || "[]")); } catch { return new Set(); } };
+  const addPermDismissed = (key) => { try { const s = getPermDismissed(); s.add(key); localStorage.setItem("permDismissed", JSON.stringify([...s].slice(-300))); } catch {} };
+
   const showTodayToast = React.useCallback((type, items) => {
     const today = todayKST();
     const seen = getSeenToasts();
@@ -229,7 +240,7 @@ React.useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(
 
     // localStorage에 이미 본 기록 있으면 스킵
     const shownKey = `${type}_${todayItem.id}`;
-    if (seen[shownKey] || _dismissedToasts.has(shownKey)) return;
+    if (seen[shownKey] || _dismissedToasts.has(shownKey) || getPermDismissed().has(shownKey)) return;
 
     markToastSeen(shownKey); // setTimeout 이전에 기록 (race condition 방지)
     setTimeout(() => {
@@ -257,7 +268,7 @@ React.useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(
       if (!added) return;
       const data = { id: added.doc.id, ...added.doc.data() };
       const seenKeyS = `schedule_${data.id}`;
-      if (getSeenToasts()[seenKeyS] || _dismissedToasts.has(seenKeyS)) return;
+      if (getSeenToasts()[seenKeyS] || _dismissedToasts.has(seenKeyS) || getPermDismissed().has(seenKeyS)) return;
       markToastSeen(seenKeyS);
       setToast({ type: "schedule", data });
     });
@@ -281,7 +292,7 @@ React.useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(
       if (!added) return;
       const data = { id: added.doc.id, ...added.doc.data(), date: formatCreatedAt(added.doc.data().createdAt) };
       const seenKeyN = `notice_${data.id}`;
-      if (getSeenToasts()[seenKeyN] || _dismissedToasts.has(seenKeyN)) return;
+      if (getSeenToasts()[seenKeyN] || _dismissedToasts.has(seenKeyN) || getPermDismissed().has(seenKeyN)) return;
       markToastSeen(seenKeyN);
       setToast({ type: "notice", data });
     });
@@ -305,7 +316,7 @@ React.useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(
       if (!added) return;
       const data = { id: added.doc.id, ...added.doc.data() };
       const seenKeyH = `handover_${data.id}`;
-      if (getSeenToasts()[seenKeyH] || _dismissedToasts.has(seenKeyH)) return;
+      if (getSeenToasts()[seenKeyH] || _dismissedToasts.has(seenKeyH) || getPermDismissed().has(seenKeyH)) return;
       markToastSeen(seenKeyH);
       setToast({ type: "handover", data });
     });
@@ -833,7 +844,7 @@ React.useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(
             style={{ width: 320 }}
             onClick={() => {
               const k = `${toast.type}_${toast.data?.id}`;
-              if (toast.data?.id) { markToastSeen(k); _dismissedToasts.add(k); }
+              if (toast.data?.id) { markToastSeen(k); _dismissedToasts.add(k); addPermDismissed(k); }
               if (toast.type === "notice") setSelectedNotice(toast.data);
               else if (toast.type === "schedule") setSelectedSchedule(toast.data);
               else if (toast.type === "handover") setSelectedHandover(toast.data);
@@ -857,7 +868,7 @@ React.useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(
                   </div>
                 </div>
                 <button
-                  onClick={e => { e.stopPropagation(); const k = `${toast.type}_${toast.data?.id}`; if (toast.data?.id) { markToastSeen(k); _dismissedToasts.add(k); } setToast(null); }}
+                  onClick={e => { e.stopPropagation(); const k = `${toast.type}_${toast.data?.id}`; if (toast.data?.id) { markToastSeen(k); _dismissedToasts.add(k); addPermDismissed(k); } setToast(null); }}
                   className="w-6 h-6 rounded-full flex items-center justify-center text-white/50 hover:text-white hover:bg-white/20 transition text-[14px]"
                 >✕</button>
               </div>

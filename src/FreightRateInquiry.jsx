@@ -2,6 +2,8 @@ import React, { useState, useMemo, useCallback, useRef, useEffect } from "react"
 import southKorea from "@svg-maps/south-korea";
 import PalletSimulator from "./PalletSimulator";
 import StandardFare from "./StandardFare";
+import { db } from "./firebase";
+import { collection, onSnapshot } from "firebase/firestore";
 
 // ─── 한국 지도 SVG 경로 (실제 지리 데이터) ─────────────────────────────
 // viewBox="0 0 524 631" — @svg-maps/south-korea 패키지 기준
@@ -200,6 +202,44 @@ const CARGO_TYPES = [
 
 const PREF_LABELS = ["없음","보통","다소 선호","선호","매우 선호"];
 
+const TMAP_KEY = "rmzwkLwH9N4i9ayxDj9GR6l8hyFDaEk52ZQs4yer";
+
+const SIDO_MAP = {
+  "서울특별시":"서울","부산광역시":"부산","대구광역시":"대구","인천광역시":"인천",
+  "광주광역시":"광주","대전광역시":"대전","울산광역시":"울산","세종특별자치시":"세종",
+  "경기도":"경기","강원도":"강원","강원특별자치도":"강원",
+  "충청북도":"충북","충청남도":"충남","전라북도":"전북","전북특별자치도":"전북",
+  "전라남도":"전남","경상북도":"경북","경상남도":"경남","제주특별자치도":"제주","제주도":"제주",
+};
+
+const SURCHARGE_MANUAL = {
+  bike:0, damas:20000, "1ton":40000, "1.4ton":45000,
+  "2.5ton":60000, "3.5ton":75000, "3.5tonW":80000,
+  "5ton":100000, "5tonP":110000, "5tonAx":115000,
+  "11ton":140000, "18ton":180000, "25ton":220000,
+  trailer:270000, lowbed:310000,
+};
+
+const searchTmapPOI = async (keyword, setter) => {
+  if (!keyword || keyword.trim().length < 2) { setter([]); return; }
+  try {
+    const url = `https://apis.openapi.sk.com/tmap/pois?version=1&searchKeyword=${encodeURIComponent(keyword.trim())}&count=8&resCoordType=WGS84GEO`;
+    const res = await fetch(url, { headers: { appKey: TMAP_KEY } });
+    if (!res.ok) { setter([]); return; }
+    const data = await res.json();
+    const pois = data?.searchPoiInfo?.pois?.poi || [];
+    const results = pois.map(p => ({
+      name: p.name || "",
+      prov: SIDO_MAP[p.upperAddrName || ""] || null,
+      addr: [p.middleAddrName, p.lowerAddrName].filter(Boolean).join(" "),
+      full: [p.upperAddrName, p.middleAddrName, p.lowerAddrName].filter(Boolean).join(" "),
+      la: parseFloat(p.frontLat || p.noorLat || 0),
+      lo: parseFloat(p.frontLon || p.noorLon || 0),
+    })).filter(p => p.prov && p.la && p.lo);
+    setter(results);
+  } catch { setter([]); }
+};
+
 // ─── 계산 함수 ─────────────────────────────────────────────────────────────
 function haversine(la1,lo1,la2,lo2){
   const R=6371, d1=(la2-la1)*Math.PI/180, d2=(lo2-lo1)*Math.PI/180;
@@ -253,105 +293,19 @@ const fmtMoney=(n)=>{
 };
 const fmtTime=(m)=>{const h=Math.floor(m/60);const mm=m%60;return h>0?`${h}h ${mm}m`:`${mm}m`;};
 
-// ─── 차량 드롭다운 ─────────────────────────────────────────────────────────
-function VehicleDropdown({vehicle,onChange,cargoType}){
-  const [open,setOpen]=useState(false);
-  const ref=useRef();
-  useEffect(()=>{
-    const fn=(e)=>{if(ref.current&&!ref.current.contains(e.target))setOpen(false);};
-    document.addEventListener("mousedown",fn);
-    return()=>document.removeEventListener("mousedown",fn);
-  },[]);
-  const visible=VEHICLE_TYPES.filter(v=>!(v.smallOnly&&cargoType==="냉장"));
-  const cur=visible.find(v=>v.id===vehicle)||visible[0];
-  return(
-    <div ref={ref} className="relative">
-      <button
-        onClick={()=>setOpen(p=>!p)}
-        className="flex items-center gap-3 px-4 py-3 rounded-xl border-2 border-gray-200 bg-white hover:border-[#1B2B4B] transition text-[14px] font-bold text-[#1B2B4B] w-full"
-      >
-        <span className="flex-1 text-left">{cur.name}</span>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 9l6 6 6-6"/></svg>
-      </button>
-      {open&&(
-        <div className="absolute top-full left-0 mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-2xl z-50 overflow-hidden">
-          <div className="max-h-[280px] overflow-y-auto py-1">
-            {visible.map(vt=>(
-              <button
-                key={vt.id}
-                onClick={()=>{onChange(vt.id);setOpen(false);}}
-                className={`w-full flex items-center gap-3 px-4 py-2.5 text-[13px] transition ${vehicle===vt.id?"bg-[#1B2B4B]/8 font-bold text-[#1B2B4B]":"text-gray-700 font-medium hover:bg-gray-50"}`}
-              >
-                <span className="flex-1 text-left">{vt.name}</span>
-                {vehicle===vt.id&&(
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1B2B4B" strokeWidth="2.5"><path d="M20 6L9 17l-5-5"/></svg>
-                )}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── 기사선호도 슬라이더 ───────────────────────────────────────────────────
-function DriverPreference({value,onChange}){
-  return(
-    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-1">
-          <span className="text-[12px] font-bold text-gray-500">기사 선호도</span>
-          <div className="w-4 h-4 rounded-full border border-gray-300 flex items-center justify-center cursor-help" title="0: 없음 ~ 4: 매우선호">
-            <span className="text-[9px] text-gray-400 font-bold">i</span>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className={`w-2 h-2 rounded-full ${value===0?"bg-red-500":"bg-blue-500"}`}/>
-          <span className={`text-[12px] font-semibold ${value===0?"text-red-500":"text-[#1B2B4B]"}`}>{PREF_LABELS[value]}</span>
-          <span className="text-[11px] text-gray-400">{value+1} / 5</span>
-        </div>
-      </div>
-      <div className="relative mb-2">
-        <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
-          <div
-            className="h-full rounded-full transition-all"
-            style={{width:`${(value/4)*100}%`, background: value===0?"#ef4444":"#1B2B4B"}}
-          />
-        </div>
-        <div className="absolute inset-y-0 left-0 right-0 flex">
-          {[0,1,2,3,4].map(i=>(
-            <button
-              key={i}
-              onClick={()=>onChange(i)}
-              className="flex-1 h-full"
-              style={{cursor:"pointer"}}
-            />
-          ))}
-        </div>
-      </div>
-      <div className="flex justify-between">
-        {PREF_LABELS.map((l,i)=>(
-          <span key={i} className={`text-[9px] ${value===i?"font-bold text-[#1B2B4B]":"text-gray-400"}`}>{l}</span>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 // ─── 차량 아이콘 SVG (라인아트) ──────────────────────────────────────────────
 function VehicleIconSvg({ id, sel }) {
   const c = sel ? "white" : "#1B2B4B";
   const p = { fill:"none", stroke:c, strokeWidth:"1.8", strokeLinecap:"round", strokeLinejoin:"round" };
   if(id==="bike") return (
-    <svg viewBox="0 0 44 30" style={{width:40,height:26}} {...p}>
+    <svg viewBox="0 0 44 30" style={{width:"100%",maxWidth:54,height:28,display:"block"}} {...p}>
       <circle cx="10" cy="22" r="7"/><circle cx="34" cy="22" r="7"/>
       <path d="M10 22L16 10L25 10"/><path d="M16 10L22 22"/>
       <path d="M25 10L31 6"/><circle cx="31" cy="6" r="2.5"/>
     </svg>
   );
   if(id==="damas") return (
-    <svg viewBox="0 0 50 30" style={{width:46,height:28}} {...p}>
+    <svg viewBox="0 0 50 30" style={{width:"100%",maxWidth:54,height:28,display:"block"}} {...p}>
       <path d="M2 22V10L30 10L42 18V22Z"/>
       <path d="M30 10V22"/>
       <rect x="4" y="12" width="22" height="8" rx="1" strokeWidth="1.4"/>
@@ -359,7 +313,7 @@ function VehicleIconSvg({ id, sel }) {
     </svg>
   );
   if(["1ton","1.4ton","2.5ton"].includes(id)) return (
-    <svg viewBox="0 0 52 28" style={{width:48,height:26}} {...p}>
+    <svg viewBox="0 0 52 28" style={{width:"100%",maxWidth:54,height:28,display:"block"}} {...p}>
       <rect x="2" y="5" width="30" height="19" rx="1.5"/>
       <path d="M32 9L32 24L50 24L50 13L44 9Z"/>
       <path d="M44 9V24"/><line x1="32" y1="17" x2="50" y2="17" strokeWidth="1.3"/>
@@ -367,7 +321,7 @@ function VehicleIconSvg({ id, sel }) {
     </svg>
   );
   if(["3.5ton","3.5tonW","5ton","5tonP","5tonAx"].includes(id)) return (
-    <svg viewBox="0 0 58 28" style={{width:54,height:26}} {...p}>
+    <svg viewBox="0 0 58 28" style={{width:"100%",maxWidth:54,height:28,display:"block"}} {...p}>
       <rect x="2" y="4" width="38" height="20" rx="1.5"/>
       <path d="M40 9L40 24L56 24L56 13L50 9Z"/>
       <path d="M50 9V24"/><line x1="40" y1="17" x2="56" y2="17" strokeWidth="1.3"/>
@@ -376,7 +330,7 @@ function VehicleIconSvg({ id, sel }) {
     </svg>
   );
   if(["11ton","18ton","25ton"].includes(id)) return (
-    <svg viewBox="0 0 62 28" style={{width:58,height:26}} {...p}>
+    <svg viewBox="0 0 62 28" style={{width:"100%",maxWidth:54,height:28,display:"block"}} {...p}>
       <rect x="2" y="4" width="42" height="20" rx="1.5"/>
       <path d="M44 9L44 24L60 24L60 13L54 9Z"/>
       <path d="M54 9V24"/><line x1="44" y1="17" x2="60" y2="17" strokeWidth="1.3"/>
@@ -385,7 +339,7 @@ function VehicleIconSvg({ id, sel }) {
     </svg>
   );
   return (
-    <svg viewBox="0 0 66 28" style={{width:62,height:26}} {...p}>
+    <svg viewBox="0 0 66 28" style={{width:"100%",maxWidth:54,height:28,display:"block"}} {...p}>
       <rect x="2" y="6" width="40" height="18" rx="1.5"/>
       <path d="M42 10L42 24L62 24L62 14L56 10Z"/>
       <path d="M56 10V24"/><line x1="42" y1="17" x2="62" y2="17" strokeWidth="1.3"/>
