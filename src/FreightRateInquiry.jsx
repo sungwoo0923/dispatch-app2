@@ -710,17 +710,10 @@ export default function FreightRateInquiry(){
                 <marker id="arrowHead" markerWidth="11" markerHeight="11" refX="6" refY="5.5" orient="auto">
                   <path d="M 0,1 L 10,5.5 L 0,10 Z" fill="#3b82f6"/>
                 </marker>
-                {/* 배경 라디얼 그라데이션 */}
-                <radialGradient id="bgGrad" cx="50%" cy="42%" r="58%" gradientUnits="objectBoundingBox">
-                  <stop offset="0%"   stopColor="#e8f2fc"/>
-                  <stop offset="55%"  stopColor="#d0e4f4"/>
-                  <stop offset="85%"  stopColor="#b8d0e8"/>
-                  <stop offset="100%" stopColor="#9bbcda"/>
-                </radialGradient>
               </defs>
 
-              {/* 배경 — 라디얼 그라데이션 */}
-              <rect width="524" height="631" fill="url(#bgGrad)"/>
+              {/* 배경 — 흰색 (지도 틀에만 색이 보이도록) */}
+              <rect width="524" height="631" fill="white"/>
 
               {/* 레이어 1: 도/시 채색 + 3D 오버레이 */}
               {provinces.map(prov=>{
@@ -731,14 +724,14 @@ export default function FreightRateInquiry(){
                 let fill=PROVINCE_COLORS[prov]||"#c8d8e8";
                 if(isFrom) fill="#3b82f6";
                 else if(isTo) fill="#f97316";
+                else if(isHover) fill="#9ac0e8"; // 호버 시 지역 자체를 파란색으로
                 const filt=isActive?"url(#provSel)":isHover?"url(#provHover)":"url(#provShadow)";
-                const sw=isActive?2.5:isHover?2.5:1;
-                const stroke=isActive?"rgba(255,255,255,0.95)":isHover?"#3b82f6":"rgba(255,255,255,0.75)";
+                const sw=isActive?2:isHover?1.5:1;
+                const stroke=isActive?"rgba(255,255,255,0.95)":isHover?"#4a8fcc":"rgba(255,255,255,0.8)";
                 return(
-                  <g key={`fill-${prov}`}
-                    style={{transform:isHover?"translateY(-4px)":"none",transition:"transform 0.18s cubic-bezier(0.34,1.56,0.64,1)"}}>
+                  <g key={`fill-${prov}`}>
                     <path d={PROVINCE_PATHS[prov]} fill={fill} stroke={stroke} strokeWidth={sw}
-                      filter={filt} style={{cursor:"pointer",transition:"fill 0.18s,filter 0.18s,stroke 0.15s"}}
+                      filter={filt} style={{cursor:"pointer",transition:"fill 0.15s,stroke 0.15s"}}
                       onMouseEnter={()=>setHover(prov)} onMouseLeave={()=>setHover(null)}
                       onClick={()=>handleProvinceClick(prov)}/>
                     <path d={PROVINCE_PATHS[prov]} fill={isActive?"url(#selGlow)":"url(#provLight)"}
@@ -757,8 +750,8 @@ export default function FreightRateInquiry(){
                   <text key={`label-${prov}`}
                     x={lx} y={ly} textAnchor="middle" dominantBaseline="middle"
                     fontSize={isSmall?11:14} fontWeight={isHovL?"800":"700"}
-                    fill={isHovL?"#2563eb":"#1B2B4B"}
-                    style={{pointerEvents:"none",transform:isHovL?"translateY(-4px)":"none",transition:"transform 0.18s cubic-bezier(0.34,1.56,0.64,1),fill 0.15s"}}>{prov}</text>
+                    fill={isHovL?"#1a5fa8":"#1B2B4B"}
+                    style={{pointerEvents:"none",transition:"fill 0.15s"}}>{prov}</text>
                 );
               })}
 
