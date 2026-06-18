@@ -13785,20 +13785,20 @@ const getCreatorLabel = (r) => {
   );
 };
 
-// ✅ 최종: 상태순서 고정 + 같은 상태 안에서는 “등록시간(createdAt)” 최신순
+// ✅ 최종: 상태순서 고정 + 같은 상태 안에서는 상차일 미래순, 동일 상차일이면 updatedAt 최신순
 const sortDispatchRows = (list = []) => {
   return [...list].sort((a, b) => {
     const ra = getStatusRank(a?.배차상태);
     const rb = getStatusRank(b?.배차상태);
     if (ra !== rb) return ra - rb;
 
-    // 배차완료 → updatedAt 최신순 (수정시간 기준)
-    if (a?.배차상태 === "배차완료") {
-      return toMs(b?.updatedAt) - toMs(a?.updatedAt);
-    }
+    const da = String(a?.상차일 || “”);
+    const db = String(b?.상차일 || “”);
+    if (da !== db) return db.localeCompare(da);
 
-    // 배차중 → createdAt 최신순 (등록시간 기준)
-    return getCreatedMs(b) - getCreatedMs(a);
+    const ta = Number(a?.updatedAt || a?.createdAt || 0);
+    const tb = Number(b?.updatedAt || b?.createdAt || 0);
+    return tb - ta;
   });
 };
 
@@ -24182,6 +24182,9 @@ const filtered = React.useMemo(() => {
       const ra = getStatusRank(a.배차상태);
       const rb = getStatusRank(b.배차상태);
       if (ra !== rb) return ra - rb;
+      const da = String(a.상차일 || "");
+      const db = String(b.상차일 || "");
+      if (da !== db) return db.localeCompare(da);
       const ta = Number(a.updatedAt || a.createdAt || 0);
       const tb = Number(b.updatedAt || b.createdAt || 0);
       return tb - ta;
