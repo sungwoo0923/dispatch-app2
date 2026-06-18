@@ -434,9 +434,15 @@ function NationalFareTab() {
   const [dispatchData,setDispatchData]=useState([]);
   const [vias,setVias]=useState([]);
   const [viaResults,setViaResults]=useState([]);
+  const [subCityStep,setSubCityStep]=useState(null);
+  const [subCity,setSubCity]=useState(null);
+  const [subDistricts,setSubDistricts]=useState([]);
+  const [subDistrictLoading,setSubDistrictLoading]=useState(false);
   const fromRef=useRef(null);
   const toRef=useRef(null);
   const viaTimers=useRef({});
+  const fromSelectedRef=useRef(false);
+  const toSelectedRef=useRef(false);
   const provinces=Object.keys(PROVINCE_PATHS);
   const SMALL=["서울","인천","세종","대전","대구","광주","울산","부산","제주"];
 
@@ -449,11 +455,13 @@ function NationalFareTab() {
     return()=>{u1();u2();};
   },[]);
   useEffect(()=>{
+    if(fromSelectedRef.current){fromSelectedRef.current=false;return;}
     if(!fromSearch.trim()||fromSearch.length<2){setFromResults([]);return;}
     const t=setTimeout(()=>searchTmapPOI(fromSearch,setFromResults),400);
     return()=>clearTimeout(t);
   },[fromSearch]);
   useEffect(()=>{
+    if(toSelectedRef.current){toSelectedRef.current=false;return;}
     if(!toSearch.trim()||toSearch.length<2){setToResults([]);return;}
     const t=setTimeout(()=>searchTmapPOI(toSearch,setToResults),400);
     return()=>clearTimeout(t);
@@ -533,21 +541,81 @@ function NationalFareTab() {
 
   const _hasUnfilledVia = (vs) => vs.some(v => !v.coord);
 
+  const fetchSubDistricts=async(prov,cityObj)=>{
+    setSubDistrictLoading(true);
+    setSubDistricts([]);
+    try{
+      const cityN=cityObj.n;
+      const isGun=cityN.endsWith("군");
+      const isGu=cityN.endsWith("구");
+      const queries=isGun
+        ?[`${prov} ${cityN} 면사무소`,`${prov} ${cityN} 읍사무소`]
+        :isGu
+        ?[`${prov} ${cityN} 주민센터`,`${prov} ${cityN} 행정복지센터`]
+        :[`${prov} ${cityN} 면사무소`,`${prov} ${cityN} 읍사무소`,`${prov} ${cityN} 주민센터`];
+      const allPois=await Promise.all(
+        queries.map(q=>
+          fetch(`https://apis.openapi.sk.com/tmap/pois?version=1&format=json&searchKeyword=${encodeURIComponent(q)}&count=20&appKey=${TMAP_KEY}`)
+            .then(r=>r.json())
+            .then(d=>d?.searchPoiInfo?.pois?.poi||[])
+            .catch(()=>[])
+        )
+      ).then(arrs=>arrs.flat());
+      const seen=new Set();
+      const results=[];
+      for(const p of allPois){
+        const low=p.lowAddrName||"";
+        if(!low||seen.has(low))continue;
+        const mid=p.middleAddrName||"";
+        const midNorm=mid.replace(/시$|구$|군$/,"");
+        const cityNorm=cityN.replace(/시$|구$|군$/,"");
+        if(!midNorm.includes(cityNorm)&&!mid.includes(cityN))continue;
+        seen.add(low);
+        results.push({n:low,la:parseFloat(p.frontLat||p.noorLat||0),lo:parseFloat(p.frontLon||p.noorLon||0)});
+      }
+      results.sort((a,b)=>a.n.localeCompare(b.n,"ko"));
+      setSubDistricts(results);
+    }finally{setSubDistrictLoading(false);}
+  };
+
   const onProvClick=(prov)=>{
     if(step==="from"){setFromP(prov);setCityStep("from");}
     else if(step==="to"){setToP(prov);setCityStep("to");}
   };
   const onCitySelect=(city)=>{
-    if(cityStep==="from"){
-      setFromC(city);setFromSearch("");setCityStep(null);
-      if(toC) setStep("result");
-      else if(_hasUnfilledVia(vias)) setStep("via");
+    // Show 3rd level sub-district selection
+    setSubCity(city);
+    setSubCityStep(cityStep);
+    setCityStep(null);
+    const prov=cityStep==="from"?fromP:toP;
+    fetchSubDistricts(prov,city);
+  };
+
+  const onSubDistrictSelect=(sd)=>{
+    const cityObj={n:`${subCity.n} ${sd.n}`,la:sd.la,lo:sd.lo};
+    if(subCityStep==="from"){
+      setFromC(cityObj);setFromSearch("");setSubCityStep(null);setSubCity(null);setSubDistricts([]);
+      if(toC)setStep("result");
+      else if(_hasUnfilledVia(vias))setStep("via");
       else setStep("to");
     }else{
-      setToC(city);setToSearch("");setStep("result");setCityStep(null);
+      setToC(cityObj);setToSearch("");setStep("result");setSubCityStep(null);setSubCity(null);setSubDistricts([]);
+    }
+  };
+
+  const onSelectWholeCity=()=>{
+    const city=subCity;
+    if(subCityStep==="from"){
+      setFromC(city);setFromSearch("");setSubCityStep(null);setSubCity(null);setSubDistricts([]);
+      if(toC)setStep("result");
+      else if(_hasUnfilledVia(vias))setStep("via");
+      else setStep("to");
+    }else{
+      setToC(city);setToSearch("");setStep("result");setSubCityStep(null);setSubCity(null);setSubDistricts([]);
     }
   };
   const selectFrom=(r)=>{
+    fromSelectedRef.current=true;
     setFromP(r.prov);setFromC({n:r.addr||r.name,la:r.la,lo:r.lo});
     setFromSearch(r.full);setFromResults([]);setCityStep(null);
     if(toC) setStep("result");
@@ -555,6 +623,7 @@ function NationalFareTab() {
     else setStep("to");
   };
   const selectTo=(r)=>{
+    toSelectedRef.current=true;
     setToP(r.prov);setToC({n:r.addr||r.name,la:r.la,lo:r.lo});
     setToSearch(r.full);setToResults([]);setCityStep(null);
     if(fromC)setStep("result");
@@ -911,6 +980,39 @@ function NationalFareTab() {
                 </button>
               ))}
             </div>
+          </div>
+        )}
+        {/* 읍/면/동 선택 (3단계) */}
+        {subCityStep&&(
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <div className={`w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-extrabold shrink-0 ${subCityStep==="from"?"bg-[#1B2B4B]":"bg-orange-400"}`}>
+                {subCityStep==="from"?"출":"하"}
+              </div>
+              <span className="text-[14px] font-extrabold text-[#1B2B4B]">{subCity?.n}</span>
+              <span className="text-[11px] text-gray-400 ml-1">세부 지역</span>
+              <button className="ml-auto text-[11px] text-gray-400 hover:text-[#1B2B4B] border border-gray-200 rounded-lg px-2.5 py-1"
+                onClick={()=>{setSubCityStep(null);setSubCity(null);setSubDistricts([]);setCityStep(subCityStep==="from"?"from":"to");}}>← 재선택</button>
+            </div>
+            {subDistrictLoading?(
+              <div className="text-center py-4 text-[12px] text-gray-400">읍/면/동 로딩 중...</div>
+            ):(
+              <div className="grid grid-cols-3 gap-1.5 max-h-[240px] overflow-y-auto">
+                <button onClick={onSelectWholeCity}
+                  className="px-2 py-2 text-[11px] font-extrabold text-[#1B2B4B] border-2 border-[#1B2B4B]/30 rounded-xl hover:bg-[#1B2B4B] hover:text-white hover:border-[#1B2B4B] transition bg-blue-50/50 col-span-1">
+                  {subCity?.n} 전체
+                </button>
+                {subDistricts.map(sd=>(
+                  <button key={sd.n} onClick={()=>onSubDistrictSelect(sd)}
+                    className="px-2 py-2 text-[11px] font-semibold text-gray-600 border border-gray-100 rounded-xl hover:bg-[#1B2B4B] hover:text-white hover:border-[#1B2B4B] transition bg-gray-50">
+                    {sd.n}
+                  </button>
+                ))}
+                {!subDistrictLoading&&subDistricts.length===0&&(
+                  <div className="col-span-3 text-center text-[11px] text-gray-400 py-2">세부 지역 정보 없음</div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>

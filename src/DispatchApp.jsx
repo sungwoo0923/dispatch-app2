@@ -3815,9 +3815,17 @@ const isSameAddr = (a = "", b = "") => {
 const savePlaceSmart = async (name, addr, manager, phone, placeId, _conflictResolution) => {
   if (!name) return;
 
+  // "keep_new" = keep existing place unchanged, create brand new separate record
+  if (_conflictResolution === "keep_new") {
+    const uniqueKey = makePlaceKey(name) + "_" + Date.now().toString(36);
+    const contacts = manager?.trim() ? [{name: manager.trim(), phone: phone?.trim() || "", isPrimary: true}] : [];
+    await upsertPlace({ _id: uniqueKey, 업체명: name, 주소: addr || "", contacts }).catch(() => {});
+    return;
+  }
+
   const key = placeId || makePlaceKey(name);
   const existingByName = placeList.find(
-    p => p._id === key || normalizeKey(p.업체명) === normalizeKey(name)
+    p => normalizeKey(p.업체명) === normalizeKey(name)
   );
 
   // Detect: same name, different address (only if existing has a stored address)
@@ -10063,16 +10071,16 @@ setTimeout(() => {
       if (resolution === "update") {
         savePlaceSmart(item.name, item.addr, item.manager, item.phone, item.placeId, "update");
       } else if (resolution === "keep") {
-        savePlaceSmart(item.name, item.existingAddr, item.manager, item.phone, item.placeId, "keep");
+        // Keep existing place, save current input as NEW separate record
+        savePlaceSmart(item.name, item.addr, item.manager, item.phone, null, "keep_new");
       }
-      // "cancel" → do nothing
     } else if (item.type === "addrDuplicate") {
       if (resolution === "overwrite") {
-        // Save using existing place id, update name
         upsertPlace({ _id: item.existingId, 업체명: item.name, 주소: item.addr }).catch(() => {});
       } else if (resolution === "separate") {
         savePlaceSmart(item.name, item.addr, item.manager, item.phone, item.placeId, "separate");
       }
+      // "use_existing" → dismiss without saving (do nothing)
     }
     dismiss();
   };
@@ -10098,9 +10106,8 @@ setTimeout(() => {
                 <div><span className="text-gray-500">새 주소</span> <span className="ml-2 text-orange-600">{item.addr}</span></div>
               </div>
               <div className="flex flex-col gap-2">
-                <button onClick={() => resolve("update")} className="w-full py-2.5 bg-[#1B2B4B] text-white rounded-xl font-bold text-[13px]">주소 업데이트 (새 주소로 변경)</button>
-                <button onClick={() => resolve("keep")} className="w-full py-2.5 bg-gray-100 text-gray-800 rounded-xl font-bold text-[13px]">기존 주소 유지</button>
-                <button onClick={() => resolve("cancel")} className="w-full py-2 text-gray-400 text-[12px]">취소</button>
+                <button onClick={() => resolve("update")} className="w-full py-2.5 bg-[#1B2B4B] text-white rounded-xl font-bold text-[13px]">새 주소로 업데이트</button>
+                <button onClick={() => resolve("keep")} className="w-full py-2.5 bg-gray-100 text-gray-800 rounded-xl font-bold text-[13px]">기존 주소 유지 (별도 저장)</button>
               </div>
             </>
           ) : (
@@ -10114,7 +10121,7 @@ setTimeout(() => {
               <div className="flex flex-col gap-2">
                 <button onClick={() => resolve("overwrite")} className="w-full py-2.5 bg-[#1B2B4B] text-white rounded-xl font-bold text-[13px]">기존 거래처에 통합 (이름 업데이트)</button>
                 <button onClick={() => resolve("separate")} className="w-full py-2.5 bg-gray-100 text-gray-800 rounded-xl font-bold text-[13px]">별도 거래처로 등록</button>
-                <button onClick={dismiss} className="w-full py-2 text-gray-400 text-[12px]">취소 (등록 안 함)</button>
+                <button onClick={dismiss} className="w-full py-2 text-gray-400 text-[12px]">기존 데이터 사용</button>
               </div>
             </>
           )}

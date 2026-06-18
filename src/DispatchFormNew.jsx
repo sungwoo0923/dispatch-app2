@@ -447,6 +447,7 @@ useEffect(() => {
 
 
   return (
+    <form autoComplete="off" onSubmit={e => e.preventDefault()}>
     <div className="grid grid-cols-[1fr_minmax(420px,520px)] gap-10">
           {showNewClientModal && (
       <NewClientModal
@@ -1157,6 +1158,7 @@ onKeyDown={(e) => {
 </aside>
 
     </div>
+    </form>
   );
 }
 function NewClientModal({ initialName, onClose, onSave }) {
