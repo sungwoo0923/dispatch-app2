@@ -12678,23 +12678,18 @@ function DeliveryStatusBadge({ row, onConfirm }) {
   const isOn = status === "전달완료";
 
   return (
-    <div className="flex flex-col items-center gap-0.5">
-      <button
-        type="button"
-        onClick={() => onConfirm({
-          rowId: row._id,
-          before: status,
-          after: isOn ? "미전달" : "전달완료",
-        })}
-        className={`relative w-11 h-6 rounded-full transition-colors duration-200 focus:outline-none ${isOn ? "bg-emerald-500" : "bg-gray-300"}`}
-        title={isOn ? "전달완료 → 클릭 시 미전달" : "미전달 → 클릭 시 전달완료"}
-      >
-        <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200 ${isOn ? "translate-x-5" : "translate-x-0"}`} />
-      </button>
-      <span className={`text-[9px] font-bold ${isOn ? "text-emerald-600" : "text-gray-400"}`}>
-        {status}
-      </span>
-    </div>
+    <button
+      type="button"
+      onClick={() => onConfirm({
+        rowId: row._id,
+        before: status,
+        after: isOn ? "미전달" : "전달완료",
+      })}
+      className={`relative w-11 h-6 rounded-full transition-colors duration-200 focus:outline-none ${isOn ? "bg-[#6272C3]" : "bg-gray-300"}`}
+      title={isOn ? "전달완료 → 클릭 시 미전달" : "미전달 → 클릭 시 전달완료"}
+    >
+      <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200 ${isOn ? "translate-x-5" : "translate-x-0"}`} />
+    </button>
   );
 }
 function StopCountBadge({ count }) {
@@ -14714,7 +14709,7 @@ const handleUrgentSnooze = (minutes) => {
   };
   const formatComma = (n) => {
     const v = toInt(n);
-    return v ? v.toLocaleString() : "";
+    return v.toLocaleString();
   };
 
   // ------------------------
@@ -17084,7 +17079,7 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
 
                   {/* 수수료 */}
                   <td className={`${cell} text-right pr-2`}>
-                    <span className={`font-bold ${fee < 0 ? "text-red-600" : "text-yellow-600"}`}>
+                    <span className={`font-bold ${fee < 0 ? "text-red-600" : "text-blue-600"}`}>
                       {formatComma(fee)}
                     </span>
                   </td>
@@ -25107,8 +25102,8 @@ onBlur={(e) => {
                     </td>
                   ))}
 
-                <td className={`border text-right pr-2 ${fee < 0 ? "text-red-500" : "text-blue-600"}`}>
-                    <span className="font-bold">{fee.toLocaleString()}</span>
+                <td className="border text-right pr-2">
+                    <span className={`font-bold ${fee < 0 ? "text-red-500" : "text-blue-600"}`}>{fee.toLocaleString()}</span>
                   </td>
 
                   {/* 지급 / 배차 방식 */}
