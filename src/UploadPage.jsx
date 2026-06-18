@@ -84,13 +84,16 @@ export default function UploadPage() {
 
     (async () => {
       try {
-        // orders(신규) → dispatch(기존) → dispatch_test(테스트) 순으로 검색
+        // orders(신규) → dispatch(기존) → dispatch_test(테스트) → fixedClients 순으로 검색
         let snap = await getDoc(doc(db, "orders", id));
         if (!snap.exists()) {
           snap = await getDoc(doc(db, "dispatch", id));
         }
         if (!snap.exists()) {
           snap = await getDoc(doc(db, "dispatch_test", id));
+        }
+        if (!snap.exists()) {
+          snap = await getDoc(doc(db, "fixedClients", id));
         }
         if (snap.exists()) {
           setOrderId(id);

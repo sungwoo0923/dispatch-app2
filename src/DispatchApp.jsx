@@ -17084,7 +17084,7 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
 
                   {/* 수수료 */}
                   <td className={`${cell} text-right pr-2`}>
-                    <span className={`font-bold ${fee < 0 ? "text-red-600" : "text-blue-600"}`}>
+                    <span className={`font-bold ${fee < 0 ? "text-red-600" : "text-yellow-600"}`}>
                       {formatComma(fee)}
                     </span>
                   </td>
@@ -38326,7 +38326,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
                       <td className="px-3 py-2.5 text-right font-semibold text-gray-700 border-b border-gray-100">{won(r.기사운임)}</td>
                       <td className="px-3 py-2.5 text-right text-orange-600 font-semibold border-b border-gray-100">{won(Math.round(toInt(r.기사운임) * vatRate))}</td>
                       <td className="px-3 py-2.5 text-right text-purple-700 font-semibold border-b border-gray-100">{won(Math.round(toInt(r.기사운임) * insuranceRate / 100))}</td>
-                      <td className={`px-3 py-2.5 text-right font-bold border-b border-gray-100 ${fee >= 0 ? "text-blue-700" : "text-red-500"}`}>{won(fee)}</td>
+                      <td className={`px-3 py-2.5 text-right font-bold border-b border-gray-100 ${fee >= 0 ? "text-yellow-600" : "text-red-500"}`}>{won(fee)}</td>
                       <td className="px-3 py-2.5 text-center border-b border-gray-100">{r.지급방식 || ""}</td>
                       <td className="px-3 py-2.5 text-center border-b border-gray-100">{r.배차방식 || ""}</td>
                       <td className="px-3 py-2.5 text-center border-b border-gray-100">
@@ -38349,7 +38349,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
                     <td className="px-3 py-3 text-right text-yellow-300 font-bold">{won(kpi.driver)}</td>
                     <td className="px-3 py-3 text-right text-orange-300 font-bold">{won(kpi.vatTotal)}</td>
                     <td className="px-3 py-3 text-right text-purple-300 font-bold">{won(kpi.insuranceTotal)}</td>
-                    <td className="px-3 py-3 text-right text-blue-300 font-bold">{won(kpi.fee)}</td>
+                    <td className="px-3 py-3 text-right text-yellow-300 font-bold">{won(kpi.fee)}</td>
                     <td colSpan={4} className="px-3 py-3 text-center text-white/60 text-[11px]">
                       지급완료 {kpi.done}건 / 미지급 {kpi.undone}건 (미지급액 {won(kpi.undoneAmt)}원)
                     </td>

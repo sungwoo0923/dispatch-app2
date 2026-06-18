@@ -1220,17 +1220,16 @@ useEffect(() => {
   const [onlyToday, setOnlyToday] = useState(false);
   // list | form | detail | fare | status | unassigned | handover | undelivered
 // list | form | detail | fare | status | unassigned | handover
-  // 🆕 공지 NEW 판단 (데이터 기준)
+  // 🆕 공지 NEW 판단 (데이터 기준, 사용자별)
 useEffect(() => {
   if (!notices.length) {
     setHasNewNotice(false);
     return;
   }
-
+  const uid = currentUser?.uid || "guest";
   const lastRead = Number(
-    localStorage.getItem("lastReadNoticeAt") || 0
+    localStorage.getItem(`lastReadNoticeAt_${uid}`) || 0
   );
-
   const latest = Math.max(
     ...notices.map(n =>
       n.createdAt?.seconds ||
@@ -1238,37 +1237,25 @@ useEffect(() => {
       0
     )
   );
-
   setHasNewNotice(latest > lastRead);
-}, [notices]);
+}, [notices, currentUser]);
 
-
-
-// 🆕 일정 NEW 판단
+// 🆕 일정 NEW 판단 (사용자별)
 useEffect(() => {
   if (!schedules.length) {
     setHasNewSchedule(false);
     return;
   }
-
+  const uid = currentUser?.uid || "guest";
   const lastRead = Number(
-    localStorage.getItem("lastReadScheduleAt") || 0
+    localStorage.getItem(`lastReadScheduleAt_${uid}`) || 0
   );
-
-  const latest = Math.max(
-    ...schedules.map(s =>
-      s.createdAt?.seconds ||
-      s.updatedAt?.seconds ||
-      (s.start ? Math.floor(new Date(s.start).getTime() / 1000) : 0)
+  setHasNewSchedule(
+    schedules.some(s =>
+      (s.createdAt?.seconds || 0) > lastRead
     )
   );
-
-setHasNewSchedule(
-  schedules.some(s =>
-    (s.createdAt?.seconds || 0) > lastRead
-  )
-);
-}, [schedules]);
+}, [schedules, currentUser]);
 
 
 
@@ -2477,46 +2464,16 @@ const title =
 }}
 // ⭐⭐⭐ 여기 추가
     onGoNotice={() => {
-  if (notices.length) {
-    const latest = Math.max(
-      ...notices.map(n =>
-        n.createdAt?.seconds ||
-        n.updatedAt?.seconds ||
-        0
-      )
-    );
-
-    if (latest > 0) {
-      localStorage.setItem(
-  "lastReadNoticeAt",
-  Math.floor(Date.now() / 1000)
-);
-    }
-  }
-
+  const uid = currentUser?.uid || "guest";
+  try { localStorage.setItem(`lastReadNoticeAt_${uid}`, Math.floor(Date.now() / 1000)); } catch {}
   setHasNewNotice(false);
   setPage("notice");
   setShowMenu(false);
 }}
 
 onGoSchedule={() => {
-  if (schedules.length) {
-    const latest = Math.max(
-      ...schedules.map(s =>
-        s.createdAt?.seconds ||
-        s.updatedAt?.seconds ||
-        (s.start ? Math.floor(new Date(s.start).getTime() / 1000) : 0)
-      )
-    );
-
-    if (latest > 0) {
-      localStorage.setItem(
-  "lastReadScheduleAt",
-  Math.floor(Date.now() / 1000)
-);
-    }
-  }
-
+  const uid = currentUser?.uid || "guest";
+  try { localStorage.setItem(`lastReadScheduleAt_${uid}`, Math.floor(Date.now() / 1000)); } catch {}
   setHasNewSchedule(false);
   setPage("schedule");
   setShowMenu(false);
@@ -4071,7 +4028,7 @@ function MenuItem({ label, onClick, badge }) {
       <span>{label}</span>
       <div className="flex items-center gap-2">
         {badge && (
-          <span className="px-1.5 py-0.5 text-[9px] font-extrabold rounded bg-blue-500 text-white leading-none">
+          <span className="px-2 py-0.5 text-[10px] font-bold rounded border border-yellow-500/70 bg-yellow-50 text-yellow-700 leading-none">
             {badge}
           </span>
         )}
