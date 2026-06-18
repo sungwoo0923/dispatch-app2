@@ -13738,7 +13738,7 @@ const toMs = (v) => {
   return 0;
 };
 
-// 🔥 “등록시간”을 뽑는 함수: createdAt 최우선, 없으면 updatedAt/등록일 fallback
+// 🔥 "등록시간"을 뽑는 함수: createdAt 최우선, 없으면 updatedAt/등록일 fallback
 const getCreatedMs = (r) => {
   return (
     toMs(r?.createdAt) ||
@@ -13793,7 +13793,7 @@ const sortDispatchRows = (list = []) => {
     if (ra !== rb) return ra - rb;
 
     // 배차완료 → updatedAt 최신순 (배차확정 시간 기준)
-    if (a?.배차상태 === “배차완료”) {
+    if (a?.배차상태 === "배차완료") {
       return getUpdatedMs(b) - getUpdatedMs(a);
     }
     // 배차중 → 등록/수정시간 중 최신값 (모바일 등록 오더가 상단에 오도록)
