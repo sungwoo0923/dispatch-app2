@@ -660,8 +660,8 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
             <button onClick={() => {
               const selRow = selected.length === 1 ? filtered.find(r => r.id === selected[0]) : null;
               const url = selRow
-                ? `${window.location.origin}/driver-upload?date=${encodeURIComponent(selRow.날짜||"")}&vehicle=${encodeURIComponent((selRow.차량번호||"").replace(/\s/g,""))}&name=${encodeURIComponent((selRow.이름||"").trim())}`
-                : `${window.location.origin}/driver-upload`;
+                ? `${window.location.origin}/driver-upload?source=fixed&date=${encodeURIComponent(selRow.날짜||"")}&vehicle=${encodeURIComponent((selRow.차량번호||"").replace(/\s/g,""))}&name=${encodeURIComponent((selRow.이름||"").trim())}`
+                : `${window.location.origin}/driver-upload?source=fixed`;
               const msg = `[인수증 업로드 안내]\n운송 완료 후 아래 링크를 통해 인수증을 업로드해 주시기 바랍니다.\n\n${url}\n\n날짜·차량번호·이름을 확인 후 검색하여 오더를 선택해 업로드해 주세요.\n미업로드 시 운임 정산이 지연될 수 있습니다.`;
               navigator.clipboard.writeText(msg).then(() => alert("업로드 안내 메시지가 복사되었습니다.\n기사에게 붙여넣기로 전달하세요.")).catch(() => alert(`링크: ${url}`));
             }} className="px-3 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-semibold hover:opacity-90 transition whitespace-nowrap">업로드링크</button>
@@ -794,6 +794,7 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
         <div
           className="fixed z-[999999] bg-white border border-gray-200 rounded-xl shadow-2xl py-1.5 min-w-[168px] select-none"
           style={{top:Math.min(contextMenuFC.y,window.innerHeight/((parseFloat(document.getElementById("root")?.style.zoom)||1))-220),left:Math.min(contextMenuFC.x,window.innerWidth/((parseFloat(document.getElementById("root")?.style.zoom)||1))-180)}}
+          onMouseDown={e=>e.stopPropagation()}
           onClick={e=>e.stopPropagation()}
         >
           <button className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
@@ -804,7 +805,7 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
           <button className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
             onClick={()=>{
               const r=contextMenuFC.row;
-              const url=`${window.location.origin}/driver-upload?date=${encodeURIComponent(r.날짜||"")}&vehicle=${encodeURIComponent((r.차량번호||"").replace(/\s/g,""))}&name=${encodeURIComponent((r.이름||"").trim())}`;
+              const url=`${window.location.origin}/driver-upload?source=fixed&date=${encodeURIComponent(r.날짜||"")}&vehicle=${encodeURIComponent((r.차량번호||"").replace(/\s/g,""))}&name=${encodeURIComponent((r.이름||"").trim())}`;
               const msg=`[인수증 업로드 안내]\n운송 완료 후 아래 링크를 통해 인수증을 업로드해 주시기 바랍니다.\n\n${url}\n\n날짜·차량번호·이름을 확인 후 검색하여 오더를 선택해 업로드해 주세요.\n미업로드 시 운임 정산이 지연될 수 있습니다.`;
               navigator.clipboard.writeText(msg).then(()=>alert("업로드 안내 메시지가 복사되었습니다.\n기사에게 붙여넣기로 전달하세요.")).catch(()=>alert(`링크: ${url}`));
               setContextMenuFC(null);

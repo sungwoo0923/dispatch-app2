@@ -66,6 +66,7 @@ function InputField({ label, type = "text", value, onChange, placeholder, onKeyD
 
 export default function DriverSearchPage() {
   const params = new URLSearchParams(window.location.search);
+  const sourceFixed = params.get("source") === "fixed";
   const [date, setDate] = useState(params.get("date") || todayKSTStr());
   const [vehicleNo, setVehicleNo] = useState(params.get("vehicle") || "");
   const [name, setName] = useState(params.get("name") || "");
@@ -96,26 +97,45 @@ export default function DriverSearchPage() {
     try {
       const matched = [];
 
-      const tryCollection = async (colName) => {
+      if (sourceFixed) {
+        // 고정거래처관리 오더만 검색 (날짜 필드 사용)
         try {
           const snap = await getDocs(
-            query(collection(db, colName), where("상차일", "==", date))
+            query(collection(db, "fixedClients"), where("날짜", "==", date))
           );
           snap.forEach(d => {
             const data = d.data();
             const vn = String(data.차량번호 || "").replace(/\s/g, "");
             const nm = String(data.이름 || "").trim();
             if (vn === trimVehicle && nm === trimName) {
-              matched.push({ _id: d.id, _col: colName, ...data });
+              matched.push({ _id: d.id, _col: "fixedClients", 상차일: data.날짜, ...data });
             }
           });
         } catch {
           // collection may not exist
         }
-      };
-
-      await tryCollection("orders");
-      if (matched.length === 0) await tryCollection("dispatch");
+      } else {
+        // 4/5파트 오더만 검색
+        const tryCollection = async (colName) => {
+          try {
+            const snap = await getDocs(
+              query(collection(db, colName), where("상차일", "==", date))
+            );
+            snap.forEach(d => {
+              const data = d.data();
+              const vn = String(data.차량번호 || "").replace(/\s/g, "");
+              const nm = String(data.이름 || "").trim();
+              if (vn === trimVehicle && nm === trimName) {
+                matched.push({ _id: d.id, _col: colName, ...data });
+              }
+            });
+          } catch {
+            // collection may not exist
+          }
+        };
+        await tryCollection("orders");
+        if (matched.length === 0) await tryCollection("dispatch");
+      }
 
       setResults(matched);
     } catch (e) {

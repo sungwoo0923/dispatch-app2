@@ -4541,7 +4541,10 @@ React.useEffect(() => {
     r.하차지명?.trim() === form.하차지명.trim() &&
     r.전달사항?.trim()
   );
-  if (match) onChange("전달사항", match.전달사항);
+  if (match) {
+    onChange("전달사항", match.전달사항);
+    onChange("전달사항고정", true);
+  }
 }, [form.상차지명, form.하차지명]);
 // ===============================
 // 💰 주소 기반 전국 평균 운임 계산 (정확 톤수 기준)
@@ -4992,6 +4995,10 @@ function swapPickupDrop() {
           const autoSync = !p.하차방법 || p.하차방법 === p.상차방법;
           return { ...p, 상차방법: value, 하차방법: autoSync ? value : p.하차방법 };
         });
+        return;
+      }
+      if (key === "차량종류" && value === "오토바이") {
+        setForm((p) => ({ ...p, 차량종류: value, 상차방법: "수작업", 하차방법: "수작업", 배차방식: "인성" }));
         return;
       }
       setForm((p) => ({ ...p, [key]: value }));
@@ -6283,6 +6290,8 @@ const applyCopy = (r) => {
     지급방식: r.지급방식 || "",
     배차방식: "",
     메모: r.메모 || "",
+    전달사항: r.전달사항 || "",
+    전달사항고정: r.전달사항고정 === true,
     운행유형: r.운행유형 || "편도",
     긴급: r.긴급 === true,
     운임보정: r.운임보정 || null,
@@ -8829,14 +8838,13 @@ className={`
     <div className="flex items-center gap-2 mb-2">
       <label className={labelCls}>전달사항</label>
 
-      <ToggleBadge
-        active={form.전달사항고정}
+      <button
+        type="button"
         onClick={() => onChange("전달사항고정", !form.전달사항고정)}
-        activeCls="bg-[#1B2B4B] text-white border-[#1B2B4B]"
-        inactiveCls="bg-white text-gray-500 border-gray-300 hover:bg-gray-50"
+        className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all ${form.전달사항고정 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
       >
         고정
-      </ToggleBadge>
+      </button>
     </div>
 
        <textarea
@@ -9818,7 +9826,7 @@ className={`
   <div
     className="fixed inset-0 bg-black/50 flex items-center justify-center z-[999999]"
     tabIndex={-1}
-    ref={(el) => { if (el) setTimeout(() => el.focus(), 0); }}
+    ref={(el) => { if (el && editingContactIdx === null) setTimeout(() => el.focus(), 0); }}
     onKeyDown={(e) => {
       if (e.key === "ArrowDown") {
         e.preventDefault();
