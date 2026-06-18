@@ -3850,31 +3850,33 @@ function MobileSideMenu({
     window.location.replace("/login");
   };
 
+  const dark = cardVersionB;
+
   return (
     <div className="fixed inset-0 z-40">
       <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
       <div className={`absolute left-0 top-0 bottom-0 w-72 shadow-2xl flex flex-col ${
-        cardVersionB ? "bg-white border-r border-gray-200" : "bg-[#1B2B4B] border-r border-white/10"
+        dark ? "bg-[#1B2B4B] border-r border-white/10" : "bg-white border-r border-blue-100"
       }`}>
 
         {/* 헤더 */}
         <div className={`px-5 py-4 flex items-center justify-between ${
-          cardVersionB ? "border-b border-gray-100" : "border-b border-white/10"
+          dark ? "border-b border-white/10" : "border-b border-blue-100"
         }`}>
           <div>
-            <div className={`text-[15px] font-extrabold tracking-tight ${cardVersionB ? "text-[#1B2B4B]" : "text-white"}`}>(주)KP-Flow 모바일</div>
-            <div className={`text-[11px] mt-0.5 ${cardVersionB ? "text-gray-400" : "text-white/50"}`}>DISPATCH MANAGEMENT</div>
+            <div className={`text-[15px] font-extrabold tracking-tight ${dark ? "text-white" : "text-[#1B2B4B]"}`}>(주)KP-Flow 모바일</div>
+            <div className={`text-[11px] mt-0.5 ${dark ? "text-white/50" : "text-[#6272C3]"}`}>DISPATCH MANAGEMENT</div>
             <div className="mt-2 flex items-center gap-1.5">
-              <span className={`w-2 h-2 rounded-full inline-block ${cardVersionB ? "bg-emerald-400" : "bg-blue-300"}`}></span>
-              <span className={`text-[12px] font-bold ${cardVersionB ? "text-[#1B2B4B]" : "text-white"}`}>{myName}</span>
+              <span className={`w-2 h-2 rounded-full inline-block ${dark ? "bg-blue-300" : "bg-blue-400"}`}></span>
+              <span className={`text-[12px] font-bold ${dark ? "text-white" : "text-[#1B2B4B]"}`}>{myName}</span>
             </div>
-            <div className={`text-[11px] mt-0.5 ${cardVersionB ? "text-gray-400" : "text-white/50"}`}>
+            <div className={`text-[11px] mt-0.5 ${dark ? "text-white/50" : "text-gray-400"}`}>
               접속: {fmtLoginTime(loginTime)}
             </div>
           </div>
           <button
             className={`w-8 h-8 rounded-full flex items-center justify-center transition ${
-              cardVersionB ? "bg-gray-100 text-gray-400 hover:bg-gray-200" : "bg-white/10 text-white/70 hover:bg-white/20"
+              dark ? "bg-white/10 text-white/70 hover:bg-white/20" : "bg-blue-50 text-blue-400 hover:bg-blue-100"
             }`}
             onClick={onClose}
           >
@@ -3885,45 +3887,51 @@ function MobileSideMenu({
         </div>
 
         {/* 메뉴 본문 */}
-        <div className="flex-1 overflow-y-auto py-1">
-          <MenuSection title="배차관리" dark={!cardVersionB}>
-            <MenuItem label="등록내역" onClick={onGoList} dark={!cardVersionB} />
-            <MenuItem label="화물등록" onClick={onGoCreate} dark={!cardVersionB} />
-            <MenuItem label="미배차현황" onClick={onGoUnassigned} dark={!cardVersionB} />
+        <div
+          className="flex-1 overflow-y-auto py-1"
+          style={dark
+            ? { scrollbarWidth: "thin", scrollbarColor: "rgba(255,255,255,0.2) transparent" }
+            : { scrollbarWidth: "thin", scrollbarColor: "#6272C3 #EEF2FF" }
+          }
+        >
+          <MenuSection title="배차관리" dark={dark}>
+            <MenuItem label="등록내역" onClick={onGoList} dark={dark} />
+            <MenuItem label="화물등록" onClick={onGoCreate} dark={dark} />
+            <MenuItem label="미배차현황" onClick={onGoUnassigned} dark={dark} />
           </MenuSection>
-          <MenuSection title="공지 / 일정" dark={!cardVersionB}>
-            <MenuItem label="공지사항" onClick={onGoNotice} badge={hasNewNotice ? "NEW" : null} dark={!cardVersionB} />
-            <MenuItem label="일정" onClick={onGoSchedule} badge={hasNewSchedule ? "NEW" : null} dark={!cardVersionB} />
-            <MenuItem label="인수인계" onClick={onGoHandover} dark={!cardVersionB} />
+          <MenuSection title="공지 / 일정" dark={dark}>
+            <MenuItem label="공지사항" onClick={onGoNotice} badge={hasNewNotice ? "NEW" : null} dark={dark} />
+            <MenuItem label="일정" onClick={onGoSchedule} badge={hasNewSchedule ? "NEW" : null} dark={dark} />
+            <MenuItem label="인수인계" onClick={onGoHandover} dark={dark} />
           </MenuSection>
-          <MenuSection title="매출 / 운임표" dark={!cardVersionB}>
-            <MenuItem label="자사운임표" onClick={onGoFare} dark={!cardVersionB} />
-            <MenuItem label="전국운임 조회" onClick={onGoNationalFare} dark={!cardVersionB} />
-            <MenuItem label="단가표" onClick={onGoRateCard} dark={!cardVersionB} />
-            <MenuItem label="매출관리" onClick={onGoSales} dark={!cardVersionB} />
+          <MenuSection title="매출 / 운임표" dark={dark}>
+            <MenuItem label="자사운임표" onClick={onGoFare} dark={dark} />
+            <MenuItem label="전국운임 조회" onClick={onGoNationalFare} dark={dark} />
+            <MenuItem label="단가표" onClick={onGoRateCard} dark={dark} />
+            <MenuItem label="매출관리" onClick={onGoSales} dark={dark} />
           </MenuSection>
           {role === "totalMaster" && (
-            <MenuSection title="관리자 전용" dark={!cardVersionB}>
-              <MenuItem label="지입차관리" onClick={onGoFleet} dark={!cardVersionB} />
-              <MenuItem label="경영인텔리전스" onClick={onGoIntel} dark={!cardVersionB} />
+            <MenuSection title="관리자 전용" dark={dark}>
+              <MenuItem label="지입차관리" onClick={onGoFleet} dark={dark} />
+              <MenuItem label="경영인텔리전스" onClick={onGoIntel} dark={dark} />
             </MenuSection>
           )}
-          <MenuSection title="내 계정" dark={!cardVersionB}>
-            <MenuItem label="내정보" onClick={onGoMyInfo} dark={!cardVersionB} />
-            <MenuItem label="설정" onClick={onGoSettings} dark={!cardVersionB} />
+          <MenuSection title="내 계정" dark={dark}>
+            <MenuItem label="내정보" onClick={onGoMyInfo} dark={dark} />
+            <MenuItem label="설정" onClick={onGoSettings} dark={dark} />
           </MenuSection>
         </div>
 
         {/* 하단 컨트롤 */}
-        <div className={`${cardVersionB ? "border-t border-gray-100" : "border-t border-white/10"}`}>
+        <div className={`${dark ? "border-t border-white/10" : "border-t border-blue-100"}`}>
 
           {/* 알림 토글 */}
           <div className="px-5 py-3 flex items-center justify-between">
-            <span className={`text-[13px] font-semibold ${cardVersionB ? "text-gray-700" : "text-white/80"}`}>알림</span>
+            <span className={`text-[13px] font-semibold ${dark ? "text-white/80" : "text-gray-700"}`}>알림</span>
             <button
               onClick={toggleAlarm}
               className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${
-                alarmEnabled ? (cardVersionB ? "bg-emerald-500" : "bg-blue-400") : "bg-gray-400"
+                alarmEnabled ? (dark ? "bg-blue-400" : "bg-[#6272C3]") : "bg-gray-400"
               }`}
             >
               <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${alarmEnabled ? "translate-x-5" : "translate-x-0"}`} />
@@ -3931,15 +3939,15 @@ function MobileSideMenu({
           </div>
 
           {/* 화면 크기 */}
-          <div className={`px-5 py-3 ${cardVersionB ? "border-t border-gray-50" : "border-t border-white/10"}`}>
-            <div className={`text-[11px] font-semibold tracking-wider mb-2 ${cardVersionB ? "text-gray-400" : "text-white/50"}`}>화면 크기</div>
+          <div className={`px-5 py-3 ${dark ? "border-t border-white/10" : "border-t border-blue-50"}`}>
+            <div className={`text-[11px] font-semibold tracking-wider mb-2 ${dark ? "text-white/50" : "text-[#6272C3]"}`}>화면 크기</div>
             <div className="flex gap-1.5">
               {[{ v: 1, label: "기본" }, { v: 1.1, label: "크게" }, { v: 1.2, label: "아주 크게" }].map(({ v, label }) => (
                 <button key={v} onClick={() => { setUiScale(v); localStorage.setItem("uiScale", v); }}
                   className={`flex-1 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${
                     uiScale === v
-                      ? (cardVersionB ? "bg-[#1B2B4B] text-white" : "bg-white text-[#1B2B4B]")
-                      : (cardVersionB ? "bg-gray-100 text-gray-500 hover:bg-gray-200" : "bg-white/10 text-white/60 hover:bg-white/20")
+                      ? (dark ? "bg-white text-[#1B2B4B]" : "bg-[#1B2B4B] text-white")
+                      : (dark ? "bg-white/10 text-white/60 hover:bg-white/20" : "bg-blue-50 text-[#6272C3] hover:bg-blue-100")
                   }`}
                 >{label}</button>
               ))}
@@ -3947,15 +3955,15 @@ function MobileSideMenu({
           </div>
 
           {/* 카드 스타일 */}
-          <div className={`px-5 py-3 ${cardVersionB ? "border-t border-gray-50" : "border-t border-white/10"}`}>
-            <div className={`text-[11px] font-semibold tracking-wider mb-2 ${cardVersionB ? "text-gray-400" : "text-white/50"}`}>카드 스타일</div>
+          <div className={`px-5 py-3 ${dark ? "border-t border-white/10" : "border-t border-blue-50"}`}>
+            <div className={`text-[11px] font-semibold tracking-wider mb-2 ${dark ? "text-white/50" : "text-[#6272C3]"}`}>카드 스타일</div>
             <div className="flex gap-1.5">
               {[{ v: false, label: "A형 (기본)" }, { v: true, label: "B형 (심플)" }].map(({ v, label }) => (
                 <button key={String(v)} onClick={() => onToggleCardVersion(v)}
                   className={`flex-1 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${
                     cardVersionB === v
-                      ? (cardVersionB ? "bg-[#1B2B4B] text-white" : "bg-white text-[#1B2B4B]")
-                      : (cardVersionB ? "bg-gray-100 text-gray-500 hover:bg-gray-200" : "bg-white/10 text-white/60 hover:bg-white/20")
+                      ? (dark ? "bg-white text-[#1B2B4B]" : "bg-[#1B2B4B] text-white")
+                      : (dark ? "bg-white/10 text-white/60 hover:bg-white/20" : "bg-blue-50 text-[#6272C3] hover:bg-blue-100")
                   }`}
                 >{label}</button>
               ))}
@@ -3963,18 +3971,18 @@ function MobileSideMenu({
           </div>
 
           {/* 로그아웃 */}
-          <div className={`px-5 py-3 ${cardVersionB ? "border-t border-gray-100" : "border-t border-white/10"}`}>
+          <div className={`px-5 py-3 ${dark ? "border-t border-white/10" : "border-t border-blue-100"}`}>
             <button onClick={logout}
               className={`w-full py-2.5 rounded-xl text-[13px] font-semibold active:scale-[0.98] transition ${
-                cardVersionB
-                  ? "bg-[#1B2B4B]/5 text-[#1B2B4B]/60 border border-[#1B2B4B]/10 hover:bg-[#1B2B4B]/10"
-                  : "bg-white/10 text-white/80 border border-white/20 hover:bg-white/20"
+                dark
+                  ? "bg-white/10 text-white/80 border border-white/20 hover:bg-white/20"
+                  : "bg-[#1B2B4B]/5 text-[#1B2B4B]/70 border border-[#1B2B4B]/15 hover:bg-[#1B2B4B]/10"
               }`}
             >로그아웃</button>
           </div>
           <div className="px-5 py-2 flex items-center justify-between">
-            <span className={`text-[11px] ${cardVersionB ? "text-gray-400" : "text-white/40"}`}>버전</span>
-            <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${cardVersionB ? "text-gray-500 bg-gray-100" : "text-white/60 bg-white/10"}`}>v{APP_VERSION}</span>
+            <span className={`text-[11px] ${dark ? "text-white/40" : "text-gray-400"}`}>버전</span>
+            <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${dark ? "text-white/60 bg-white/10" : "text-[#6272C3] bg-blue-50"}`}>v{APP_VERSION}</span>
           </div>
         </div>
       </div>
@@ -3985,7 +3993,7 @@ function MobileSideMenu({
 function MenuSection({ title, children, dark }) {
   return (
     <div className="mt-1 mb-1">
-      <div className={`px-5 pt-4 pb-1.5 text-[11px] font-bold uppercase tracking-widest ${dark ? "text-white/40" : "text-gray-400"}`}>
+      <div className={`px-5 pt-4 pb-1.5 text-[11px] font-bold uppercase tracking-widest ${dark ? "text-white/40" : "text-[#6272C3]"}`}>
         {title}
       </div>
       <div className="flex flex-col">{children}</div>
@@ -3997,7 +4005,7 @@ function MenuItem({ label, onClick, badge, dark }) {
   return (
     <button
       className={`w-full flex items-center justify-between px-5 py-2.5 text-[13px] font-semibold transition-colors ${
-        dark ? "text-white/90 hover:bg-white/10 active:bg-white/20" : "text-gray-700 hover:bg-gray-50 active:bg-gray-100"
+        dark ? "text-white/90 hover:bg-white/10 active:bg-white/20" : "text-[#1B2B4B] hover:bg-blue-50 active:bg-blue-100"
       }`}
       onClick={onClick}
     >
@@ -4008,7 +4016,7 @@ function MenuItem({ label, onClick, badge, dark }) {
             {badge}
           </span>
         )}
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={dark ? "rgba(255,255,255,0.3)" : "#d1d5db"} strokeWidth="2" strokeLinecap="round">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={dark ? "rgba(255,255,255,0.3)" : "#6272C3"} strokeWidth="2" strokeLinecap="round">
           <path d="M9 6l6 6-6 6" />
         </svg>
       </div>

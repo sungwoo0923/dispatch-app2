@@ -25189,23 +25189,19 @@ onBlur={(e) => {
                       const isOn = deliveryStatus === "전달완료";
 
                       return (
-                        <div className="flex flex-col items-center gap-0.5">
-                          <button
-                            type="button"
-                            onClick={() => setConfirmChange({
-                              id,
-                              field: "업체전달상태",
-                              before: deliveryStatus,
-                              after: isOn ? "미전달" : "전달완료",
-                            })}
-                            className={`relative w-11 h-6 rounded-full transition-colors duration-200 focus:outline-none ${isOn ? "bg-emerald-500" : "bg-gray-300"}`}
-                          >
-                            <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200 ${isOn ? "translate-x-5" : "translate-x-0"}`} />
-                          </button>
-                          <span className={`text-[9px] font-bold ${isOn ? "text-emerald-600" : "text-gray-400"}`}>
-                            {deliveryStatus}
-                          </span>
-                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmChange({
+                            id,
+                            field: "업체전달상태",
+                            before: deliveryStatus,
+                            after: isOn ? "미전달" : "전달완료",
+                          })}
+                          className={`relative w-11 h-6 rounded-full transition-colors duration-200 focus:outline-none ${isOn ? "bg-[#6272C3]" : "bg-gray-300"}`}
+                          title={isOn ? "전달완료 → 클릭 시 미전달" : "미전달 → 클릭 시 전달완료"}
+                        >
+                          <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200 ${isOn ? "translate-x-5" : "translate-x-0"}`} />
+                        </button>
                       );
                     })()}
                   </td>
