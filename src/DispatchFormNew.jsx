@@ -448,716 +448,246 @@ useEffect(() => {
 
   return (
     <form autoComplete="off" onSubmit={e => e.preventDefault()}>
-    <div className="grid grid-cols-[1fr_minmax(420px,520px)] gap-10">
-          {showNewClientModal && (
-      <NewClientModal
-        initialName={form.거래처명}
-        onClose={() => setShowNewClientModal(false)}
-        onSave={(client) => {
-          onChange("거래처명", client.업체명);
-          onChange("상차지명", client.업체명);
-          onChange("상차지주소", client.주소);
-          onChange("상차담당자", client.담당자);
-          onChange("상차연락처", client.담당자연락처);
-          setShowNewClientModal(false);
-        }}
-      />
-    )}
-    {/* 🔥 여기 추가 */}
-    {showNewDriverModal && (
-      <NewDriverModal
-        plate={pendingPlate}
-        onClose={() => setShowNewDriverModal(false)}
-        onSave={(driver) => {
-          onChange("차량번호", driver.차량번호);
-          onChange("기사명", driver.이름);
-          onChange("기사연락처", driver.전화번호);
-
-const plateId = normalizePlate(driver.차량번호);
-
-upsertDriver?.({
-  id: plateId,
-  차량번호: plateId,
-  이름: driver.이름,
-  전화번호: driver.전화번호
-});
-
-          setShowNewDriverModal(false);
-        }}
-      />
-    )}
-
-      {/* ================= LEFT : 입력 ================= */}
-      <div className="space-y-12">
-
-        {/* ================= 거래 / 날짜 ================= */}
-<section className="pl-6 py-5 border-l-4 border-blue-200">
-  <h3 className="text-base font-bold mb-6">오더 정보</h3>
-
-  <div className="grid grid-cols-3 gap-8 max-w-[760px]">
-
-    {/* ===== 거래처명 ===== */}
-    <div className="relative place-autocomplete">
-      {/* 라벨 + 신규 버튼 */}
-      <div className="flex items-center justify-between h-6 mb-1">
-        <span className="text-xs text-gray-500">거래처명</span>
-
-        {/* 🔥 신규 거래처 버튼 (기존에 없을 때만) */}
-        {isNewClient && (
-          <button
-            type="button"
-            onClick={() => setShowNewClientModal(true)}
-            className="
-              px-2 py-0.5
-              text-xs
-              rounded-md
-              border
-              border-blue-400
-              text-blue-600
-              bg-blue-50
-              hover:bg-blue-100
-            "
-          >
-            신규
-          </button>
-        )}
-      </div>
-
-      <input
-        className={lineInput}
-        value={form.거래처명 || ""}
-        onFocus={() => setActivePlaceType("거래처")}
-        onChange={(e) => {
-          onChange("거래처명", e.target.value);
-          setActivePlaceType("거래처");
-        }}
-        onKeyDown={handlePlaceKeyDown}
-      />
-
-      {/* 🔽 거래처 드롭다운 */}
-      {activePlaceType === "거래처" && filteredPlaces.length > 0 && (
-        <ul className="absolute z-20 mt-1 w-full bg-white border rounded-md shadow">
-          {filteredPlaces.map((p, idx) => (
-            <li
-              key={idx}
-              onMouseDown={() => selectPlace(p)}
-              onMouseEnter={() => setHighlightIndex(idx)}
-              className={
-                "px-3 py-2 text-sm cursor-pointer " +
-                (idx === highlightIndex
-                  ? "bg-blue-100"
-                  : "hover:bg-blue-50")
-              }
-            >
-              {p.거래처명}
-            </li>
-          ))}
-        </ul>
+      {showNewClientModal && (
+        <NewClientModal
+          initialName={form.거래처명}
+          onClose={() => setShowNewClientModal(false)}
+          onSave={(client) => {
+            onChange("거래처명", client.업체명);
+            onChange("상차지명", client.업체명);
+            onChange("상차지주소", client.주소);
+            onChange("상차담당자", client.담당자);
+            onChange("상차연락처", client.담당자연락처);
+            setShowNewClientModal(false);
+          }}
+        />
       )}
-    </div>
-    {/* ===== 상차일 ===== */}
-    <div>
-      {/* 1줄: 라벨 + 버튼 */}
-      <div className="flex items-center justify-between h-6 mb-1">
-        <span className="text-xs text-gray-500">상차일</span>
-        <div className="flex gap-1">
-          <button
-            type="button"
-            className={`${dateQuickBtnBase} ${
-              pickupQuick === "today" ? dateQuickBtnActive : dateQuickBtnInactive
-            }`}
-            onClick={() => {
-              onChange("상차일", getToday());
-              setPickupQuick("today");
-            }}
-          >
-            당일
-          </button>
-          <button
-            type="button"
-            className={`${dateQuickBtnBase} ${
-              pickupQuick === "tomorrow" ? dateQuickBtnActive : dateQuickBtnInactive
-            }`}
-            onClick={() => {
-              onChange("상차일", getTomorrow());
-              setPickupQuick("tomorrow");
-            }}
-          >
-            내일
-          </button>
-          <button
-            type="button"
-            className={`${dateQuickBtnBase} ${
-              pickupQuick === "monday" ? dateQuickBtnActive : dateQuickBtnInactive
-            }`}
-            onClick={() => {
-              onChange("상차일", getNextMonday());
-              setPickupQuick("monday");
-            }}
-          >
-            월상
-          </button>
-        </div>
-      </div>
+      {showNewDriverModal && (
+        <NewDriverModal
+          plate={pendingPlate}
+          onClose={() => setShowNewDriverModal(false)}
+          onSave={(driver) => {
+            onChange("차량번호", driver.차량번호);
+            onChange("기사명", driver.이름);
+            onChange("기사연락처", driver.전화번호);
+            const plateId = normalizePlate(driver.차량번호);
+            upsertDriver?.({
+              id: plateId,
+              차량번호: plateId,
+              이름: driver.이름,
+              전화번호: driver.전화번호
+            });
+            setShowNewDriverModal(false);
+          }}
+        />
+      )}
 
-      {/* 2줄: input */}
-      <input
-        type="date"
-        className={lineInput}
-        value={form.상차일 || ""}
-        onChange={(e) => {
-          onChange("상차일", e.target.value);
-          setPickupQuick(null);
-        }}
-      />
-    </div>
+      <div className="space-y-0 divide-y divide-gray-100">
 
-    {/* ===== 하차일 (상차일과 구조 100% 동일) ===== */}
-    <div>
-      <div className="flex items-center justify-between h-6 mb-1">
-        <span className="text-xs text-gray-500">하차일</span>
-        <div className="flex gap-1">
-          <button
-            type="button"
-            className={`${dateQuickBtnBase} ${
-              dropQuick === "today" ? dateQuickBtnActive : dateQuickBtnInactive
-            }`}
-            onClick={() => {
-              onChange("하차일", getToday());
-              setDropQuick("today");
-            }}
-          >
-            당일
-          </button>
-          <button
-            type="button"
-            className={`${dateQuickBtnBase} ${
-              dropQuick === "tomorrow" ? dateQuickBtnActive : dateQuickBtnInactive
-            }`}
-            onClick={() => {
-              onChange("하차일", getTomorrow());
-              setDropQuick("tomorrow");
-            }}
-          >
-            내일
-          </button>
-          <button
-            type="button"
-            className={`${dateQuickBtnBase} ${
-              dropQuick === "monday" ? dateQuickBtnActive : dateQuickBtnInactive
-            }`}
-            onClick={() => {
-              onChange("하차일", getNextMonday());
-              setDropQuick("monday");
-            }}
-          >
-            월착
-          </button>
-        </div>
-      </div>
-
-      <input
-        type="date"
-        className={lineInput}
-        value={form.하차일 || ""}
-        onChange={(e) => {
-          onChange("하차일", e.target.value);
-          setDropQuick(null);
-        }}
-      />
-    </div>
-
-  </div>
-</section>
-
-        {/* ================= 상/하차 ================= */}
-        <section className="pl-6 py-5 border-l-4 border-blue-200">
-          <h3 className="flex items-center gap-2 text-base font-bold mb-4">
-  <span>
-    상 · 하차 정보 <span className="text-red-500">*</span>
-  </span>
-
-  {/* 🔄 초기화 */}
-  <button
-    type="button"
-    onClick={handleResetAll}
-    tabIndex={-1}
-    className="
-      flex items-center gap-1
-      px-2 py-1
-      text-xs font-normal
-      text-gray-500
-      border border-gray-200
-      rounded
-      hover:bg-gray-100
-      hover:text-gray-700
-      transition
-    "
-  >
-    🔄 초기화
-  </button>
-
-  {/* 🔁 상/하차 바꾸기 */}
-  <button
-    type="button"
-    onClick={handleSwapPickupDrop}
-    tabIndex={-1}
-    className="
-      flex items-center gap-1
-      px-2 py-1
-      text-xs font-normal
-      text-blue-600
-      border border-blue-300
-      rounded
-      bg-blue-50
-      hover:bg-blue-100
-      transition
-    "
-  >
-    🔁 상·하차 바꾸기
-  </button>
-</h3>
-
-
-          <div className="grid grid-cols-2 gap-10 max-w-[760px]">
-
-            {/* ================= 상차 ================= */}
-<div className="space-y-5">
-  <div className="relative">
-    <input
-      ref={upNameRef}
-      className={lineInput}
-      placeholder="상차지명"
-      value={form.상차지명 || ""}
-      onFocus={() => setActivePlaceType("상차")}
-      onChange={(e) => {
-        const v = e.target.value;
-        onChange("상차지명", v);
-        setActivePlaceType("상차");
-
-        if (!v.trim()) {
-          onChange("상차지주소", "");
-          onChange("상차담당자", "");
-          onChange("상차연락처", "");
-        }
-      }}
-      onKeyDown={(e) => {
-        // 🔹 자동완성 방향키 / Enter
-        handlePlaceKeyDown(e);
-
-        // 🔹 TAB 이동 로직
-        if (e.key !== "Tab") return;
-
-        const emptyTargets = [
-          { v: form.상차지주소, ref: upAddrRef },
-          { v: form.상차담당자, ref: upManRef },
-          { v: form.상차연락처, ref: upTelRef },
-        ].filter(x => !x.v?.trim());
-
-        e.preventDefault();
-
-        if (emptyTargets.length > 0) {
-          emptyTargets[0].ref.current?.focus();
-        } else {
-          downNameRef.current?.focus();
-        }
-      }}
-    />
-
-    {activePlaceType === "상차" && filteredPlaces.length > 0 && (
-      <ul className="absolute z-20 mt-1 w-full bg-white border rounded-md shadow">
-        {filteredPlaces.map((p, idx) => (
-          <li
-            key={idx}
-            onMouseDown={() => selectPlace(p)}
-            onMouseEnter={() => setHighlightIndex(idx)}
-            className={
-              "px-3 py-2 text-sm cursor-pointer " +
-              (idx === highlightIndex
-                ? "bg-blue-100"
-                : "hover:bg-blue-50")
-            }
-          >
-            <div className="font-medium text-gray-900">{p.지명}</div>
-            <div className="text-xs text-gray-500">{p.주소}</div>
-          </li>
-        ))}
-      </ul>
-    )}
-  </div>
-
-  <input
-    ref={upAddrRef}
-    className={lineInput}
-    placeholder="상차지 주소"
-    value={form.상차지주소 || ""}
-    onChange={(e) => onChange("상차지주소", e.target.value)}
-  />
-
-  <div className="grid grid-cols-2 gap-4">
-    <input
-      ref={upManRef}
-      className={lineInput}
-      placeholder="상차 담당자"
-      value={form.상차담당자 || ""}
-      onChange={(e) => onChange("상차담당자", e.target.value)}
-    />
-    <input
-      ref={upTelRef}
-      className={lineInput}
-      placeholder="상차 연락처"
-      value={form.상차연락처 || ""}
-      onChange={(e) => onChange("상차연락처", e.target.value)}
-    />
-  </div>
-</div>
-            {/* ================= 하차 ================= */}
-<div className="space-y-5">
-  <div className="relative">
-    <input
-      ref={downNameRef}
-      className={lineInput}
-      placeholder="하차지명"
-      value={form.하차지명 || ""}
-      onFocus={() => setActivePlaceType("하차")}
-      onChange={(e) => {
-        const v = e.target.value;
-        onChange("하차지명", v);
-        setActivePlaceType("하차");
-
-        if (!v.trim()) {
-          onChange("하차지주소", "");
-          onChange("하차담당자", "");
-          onChange("하차연락처", "");
-        }
-      }}
-      onKeyDown={handlePlaceKeyDown}
-    />
-
-    {activePlaceType === "하차" && filteredPlaces.length > 0 && (
-      <ul className="absolute z-20 mt-1 w-full bg-white border rounded-md shadow">
-        {filteredPlaces.map((p, idx) => (
-          <li
-            key={idx}
-            onMouseDown={() => selectPlace(p)}
-            onMouseEnter={() => setHighlightIndex(idx)}
-            className={
-              "px-3 py-2 text-sm cursor-pointer " +
-              (idx === highlightIndex
-                ? "bg-blue-100"
-                : "hover:bg-blue-50")
-            }
-          >
-            <div className="font-medium text-gray-900">{p.지명}</div>
-            <div className="text-xs text-gray-500">{p.주소}</div>
-          </li>
-        ))}
-      </ul>
-    )}
-  </div>
-
-  <input
-    className={lineInput}
-    placeholder="하차지 주소"
-    value={form.하차지주소 || ""}
-    onChange={(e) => onChange("하차지주소", e.target.value)}
-  />
-
-  <div className="grid grid-cols-2 gap-4">
-    <input
-      className={lineInput}
-      placeholder="하차 담당자"
-      value={form.하차담당자 || ""}
-      onChange={(e) => onChange("하차담당자", e.target.value)}
-    />
-    <input
-      className={lineInput}
-      placeholder="하차 연락처"
-      value={form.하차연락처 || ""}
-      onChange={(e) => onChange("하차연락처", e.target.value)}
-    />
-  </div>
-</div>
-          </div>
-        </section>
-        {/* ================= 화물 / 차량 ================= */}
-        <section className="pl-6 py-5 border-l-4 border-blue-200">
-          <h3 className="text-base font-bold mb-6">
-            화물 · 차량 정보
-          </h3>
-
-          <div className="grid grid-cols-3 gap-8 max-w-[760px]">
-            <input
-              className={lineInput}
-              placeholder="화물내용"
-              value={form.화물내용 || ""}
-              onChange={(e) => onChange("화물내용", e.target.value)}
-            />
-
-            <input
-              className={lineInput}
-              placeholder="차량톤수 (예: 1톤 / 2.5톤)"
-              value={form.차량톤수 || ""}
-              onChange={(e) => onChange("차량톤수", e.target.value)}
-            />
-
-            <select
-              className={select}
-              value={form.차량종류 || ""}
-              onChange={(e) => onChange("차량종류", e.target.value)}
-            >
-              <option value="">차량종류 선택</option>
-              {VEHICLE_TYPES.map((v) => (
-                <option key={v} value={v}>{v}</option>
-              ))}
-            </select>
+        {/* 기본 정보 */}
+        <section className="py-5">
+          <div className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-4">기본 정보</div>
+          <div className="grid grid-cols-3 gap-5">
+            <div className="relative place-autocomplete">
+              <label className="block text-[11px] text-gray-400 mb-1">거래처명</label>
+              <div className="relative">
+                <input className={lineInput} value={form.거래처명 || ""} onFocus={() => setActivePlaceType("거래처")} onChange={(e) => { onChange("거래처명", e.target.value); setActivePlaceType("거래처"); }} onKeyDown={handlePlaceKeyDown}/>
+                {isNewClient && <button type="button" onClick={() => setShowNewClientModal(true)} className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] border border-gray-300 rounded px-1.5 py-0.5 text-gray-500 hover:border-[#1B2B4B] hover:text-[#1B2B4B] bg-white">신규</button>}
+              </div>
+              {activePlaceType === "거래처" && filteredPlaces.length > 0 && (
+                <ul className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-md shadow-sm text-[12px]">
+                  {filteredPlaces.map((p, idx) => (
+                    <li key={idx} onMouseDown={() => selectPlace(p)} onMouseEnter={() => setHighlightIndex(idx)}
+                      className={"px-3 py-1.5 cursor-pointer " + (idx === highlightIndex ? "bg-[#1B2B4B] text-white" : "hover:bg-gray-50")}>
+                      {p.거래처명}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-[11px] text-gray-400">상차일</label>
+                <div className="flex gap-0.5">
+                  {[["당일","today",getToday],["내일","tomorrow",getTomorrow],["월상","monday",getNextMonday]].map(([lbl,key,fn]) => (
+                    <button key={key} type="button" onClick={() => { onChange("상차일", fn()); setPickupQuick(key); }}
+                      className={"px-2 py-0.5 text-[10px] rounded border transition " + (pickupQuick === key ? "border-[#1B2B4B] text-[#1B2B4B] bg-[#1B2B4B]/5" : "border-gray-200 text-gray-500 hover:border-gray-400")}>{lbl}</button>
+                  ))}
+                </div>
+              </div>
+              <input type="date" className={lineInput} value={form.상차일 || ""} onChange={e => { onChange("상차일", e.target.value); setPickupQuick(null); }}/>
+            </div>
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-[11px] text-gray-400">하차일</label>
+                <div className="flex gap-0.5">
+                  {[["당일","today",getToday],["내일","tomorrow",getTomorrow],["월착","monday",getNextMonday]].map(([lbl,key,fn]) => (
+                    <button key={key} type="button" onClick={() => { onChange("하차일", fn()); setDropQuick(key); }}
+                      className={"px-2 py-0.5 text-[10px] rounded border transition " + (dropQuick === key ? "border-[#1B2B4B] text-[#1B2B4B] bg-[#1B2B4B]/5" : "border-gray-200 text-gray-500 hover:border-gray-400")}>{lbl}</button>
+                  ))}
+                </div>
+              </div>
+              <input type="date" className={lineInput} value={form.하차일 || ""} onChange={e => { onChange("하차일", e.target.value); setDropQuick(null); }}/>
+            </div>
           </div>
         </section>
 
-        {/* ================= 상/하차 방법 ================= */}
-        <section className="pl-6 py-5 border-l-4 border-blue-200">
-          <h3 className="text-base font-bold mb-6">
-            작업 방식
-          </h3>
-
-
-          <div className="grid grid-cols-4 gap-6 max-w-[760px]">
-            <select
-              className={select}
-              value={form.상차방법 || ""}
-              onChange={(e) => onChange("상차방법", e.target.value)}
-            >
-              <option value="">상차방법</option>
-              {LOAD_TYPES.map(v => <option key={v}>{v}</option>)}
-            </select>
-
-            <select
-              className={select}
-              value={form.하차방법 || ""}
-              onChange={(e) => onChange("하차방법", e.target.value)}
-            >
-              <option value="">하차방법</option>
-              {LOAD_TYPES.map(v => <option key={v}>{v}</option>)}
-            </select>
-
-            <select
-              className={select}
-              value={form.지급방식 || ""}
-              onChange={(e) => onChange("지급방식", e.target.value)}
-            >
-              <option value="">지급방식</option>
-              {PAY_TYPES.map(v => <option key={v}>{v}</option>)}
-            </select>
-
-            <select
-              className={select}
-              value={form.배차방식 || ""}
-              onChange={(e) => onChange("배차방식", e.target.value)}
-            >
-              <option value="">배차방식</option>
-              {DISPATCH_TYPES.map(v => <option key={v}>{v}</option>)}
-            </select>
+        {/* 상/하차 정보 */}
+        <section className="py-5">
+          <div className="flex items-center gap-3 mb-4">
+            <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">상/하차 정보</span>
+            <button type="button" onClick={handleSwapPickupDrop}
+              className="text-[10px] text-gray-400 border border-gray-200 rounded px-2 py-0.5 hover:border-[#1B2B4B] hover:text-[#1B2B4B] transition">상하차 전환</button>
+            <button type="button" onClick={handleResetAll}
+              className="text-[10px] text-gray-400 border border-gray-200 rounded px-2 py-0.5 hover:border-red-300 hover:text-red-500 transition">초기화</button>
           </div>
-        </section>
-{/* ================= 차량 정보 ================= */}
-<section className="pl-6 py-5 border-l-4 border-blue-200">
-  <h3 className="text-base font-bold mb-6">
-    차량 정보
-  </h3>
-
-  <div className="grid grid-cols-3 gap-8 max-w-[760px]">
-    <input
-  className={lineInput}
-  placeholder="차량번호"
-  value={form.차량번호 || ""}
-
-  onChange={(e) => {
-  const v = e.target.value;
-
-  onChange("차량번호", v);
-
-  // 차량번호 비우면 기사정보도 초기화
-  if (!v.trim()) {
-    onChange("기사명", "");
-    onChange("기사연락처", "");
-  }
-}}
-onBlur={checkDriverMatch}
-
-onKeyDown={(e) => {
-  if (e.key === "Enter") {
-    e.preventDefault();
-    checkDriverMatch();
-    e.target.blur();
-  }
-}}
-/>
-
-    <input
-  className={`${lineInput} bg-gray-100`}
-  placeholder="기사명"
-  value={form.기사명 || ""}
-  readOnly
-/>
-
-    <input
-  className={`${lineInput} bg-gray-100`}
-  placeholder="기사 연락처"
-  value={form.기사연락처 || ""}
-  readOnly
-/>
-  </div>
-</section>
-{/* ================= 운임 정보 ================= */}
-<section className="pl-6 py-5 border-l-4 border-blue-200">
-  <h3 className="text-base font-bold mb-6">
-    운임 정보
-  </h3>
-
-  <div className="grid grid-cols-3 gap-8 max-w-[760px]">
-    <input
-      className={lineInput}
-      placeholder="청구운임"
-      value={form.청구운임 || ""}
-      onChange={(e) => onChange("청구운임", e.target.value)}
-    />
-
-    <input
-      className={lineInput}
-      placeholder="기사운임"
-      value={form.기사운임 || ""}
-      onChange={(e) => onChange("기사운임", e.target.value)}
-    />
-
-    <input
-      className={lineInput}
-      placeholder="수수료"
-      value={form.수수료 || ""}
-      onChange={(e) => onChange("수수료", e.target.value)}
-    />
-  </div>
-</section>
-
-        {/* ================= 메모 ================= */}
-        <section>
-          <h3 className="text-base font-bold mb-4">
-            메모
-          </h3>
-
-          <div className="max-w-[760px]">
-            <textarea
-              className="w-full border border-gray-300 rounded-lg p-3 text-sm focus:outline-none focus:border-blue-600"
-              rows={4}
-              value={form.메모 || ""}
-              onChange={(e) => onChange("메모", e.target.value)}
-            />
+          <div className="grid grid-cols-2 gap-6">
+            <div className="space-y-2">
+              <div className="flex items-center gap-1.5 mb-2">
+                <div className="w-2.5 h-2.5 rounded-full bg-[#1B2B4B]"/>
+                <span className="text-[11px] font-semibold text-[#1B2B4B]">상차지</span>
+              </div>
+              <div className="relative place-autocomplete">
+                <input ref={upNameRef} className={lineInput} placeholder="상차지명" value={form.상차지명 || ""} onFocus={() => setActivePlaceType("상차")} onChange={(e) => { const v = e.target.value; onChange("상차지명", v); setActivePlaceType("상차"); if (!v.trim()) { onChange("상차지주소", ""); onChange("상차담당자", ""); onChange("상차연락처", ""); } }} onKeyDown={(e) => { handlePlaceKeyDown(e); if (e.key !== "Tab") return; const empty = [{v: form.상차지주소, ref: upAddrRef},{v: form.상차담당자, ref: upManRef},{v: form.상차연락처, ref: upTelRef}].filter(x => !x.v?.trim()); e.preventDefault(); if (empty.length > 0) empty[0].ref.current?.focus(); else downNameRef.current?.focus(); }}/>
+                {activePlaceType === "상차" && filteredPlaces.length > 0 && (
+                  <ul className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-md shadow-sm text-[12px]">
+                    {filteredPlaces.map((p, idx) => (
+                      <li key={idx} onMouseDown={() => selectPlace(p)} onMouseEnter={() => setHighlightIndex(idx)}
+                        className={"px-3 py-1.5 cursor-pointer " + (idx === highlightIndex ? "bg-[#1B2B4B] text-white" : "hover:bg-gray-50")}>
+                        <div className="font-medium">{p.지명}</div>
+                        <div className="text-[10px] text-gray-400">{p.주소}</div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <input ref={upAddrRef} className={lineInput} placeholder="상차지 주소" value={form.상차지주소 || ""} onChange={e => onChange("상차지주소", e.target.value)}/>
+              <div className="grid grid-cols-2 gap-2">
+                <input ref={upManRef} className={lineInput} placeholder="담당자" value={form.상차담당자 || ""} onChange={e => onChange("상차담당자", e.target.value)}/>
+                <input ref={upTelRef} className={lineInput} placeholder="연락처" value={form.상차연락처 || ""} onChange={e => onChange("상차연락처", e.target.value)}/>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center gap-1.5 mb-2">
+                <div className="w-2.5 h-2.5 rounded-full bg-orange-400"/>
+                <span className="text-[11px] font-semibold text-orange-500">하차지</span>
+              </div>
+              <div className="relative place-autocomplete">
+                <input ref={downNameRef} className={lineInput} placeholder="하차지명" value={form.하차지명 || ""} onFocus={() => setActivePlaceType("하차")} onChange={(e) => { const v = e.target.value; onChange("하차지명", v); setActivePlaceType("하차"); if (!v.trim()) { onChange("하차지주소", ""); onChange("하차담당자", ""); onChange("하차연락처", ""); } }} onKeyDown={handlePlaceKeyDown}/>
+                {activePlaceType === "하차" && filteredPlaces.length > 0 && (
+                  <ul className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-md shadow-sm text-[12px]">
+                    {filteredPlaces.map((p, idx) => (
+                      <li key={idx} onMouseDown={() => selectPlace(p)} onMouseEnter={() => setHighlightIndex(idx)}
+                        className={"px-3 py-1.5 cursor-pointer " + (idx === highlightIndex ? "bg-[#1B2B4B] text-white" : "hover:bg-gray-50")}>
+                        <div className="font-medium">{p.지명}</div>
+                        <div className="text-[10px] text-gray-400">{p.주소}</div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <input className={lineInput} placeholder="하차지 주소" value={form.하차지주소 || ""} onChange={e => onChange("하차지주소", e.target.value)}/>
+              <div className="grid grid-cols-2 gap-2">
+                <input className={lineInput} placeholder="담당자" value={form.하차담당자 || ""} onChange={e => onChange("하차담당자", e.target.value)}/>
+                <input className={lineInput} placeholder="연락처" value={form.하차연락처 || ""} onChange={e => onChange("하차연락처", e.target.value)}/>
+              </div>
+            </div>
           </div>
         </section>
 
-        {/* ================= 저장 ================= */}
-        <div>
-          <button
-            onClick={doSave}
-            className="px-12 py-3 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700"
-          >
+        {/* 화물 / 차량 */}
+        <section className="py-5">
+          <div className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-4">화물 / 차량</div>
+          <div className="grid grid-cols-2 gap-5 mb-4">
+            <input className={lineInput} placeholder="화물내용" value={form.화물내용 || ""} onChange={e => onChange("화물내용", e.target.value)}/>
+            <input className={lineInput} placeholder="차량톤수 (예: 1톤 / 2.5톤)" value={form.차량톤수 || ""} onChange={e => onChange("차량톤수", e.target.value)}/>
+          </div>
+          <label className="text-[11px] text-gray-400 block mb-1.5">차량종류</label>
+          <div className="flex flex-wrap gap-1.5">
+            {VEHICLE_TYPES.map(v => (
+              <button key={v} type="button" onClick={() => onChange("차량종류", form.차량종류 === v ? "" : v)}
+                className={"px-3 py-1.5 text-[12px] font-medium rounded border transition " + (form.차량종류 === v ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-200 hover:border-[#1B2B4B] hover:text-[#1B2B4B]")}>
+                {v}
+              </button>
+            ))}
+          </div>
+        </section>
+
+        {/* 작업 방식 */}
+        <section className="py-5">
+          <div className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-4">작업 방식</div>
+          <div className="space-y-3">
+            {[
+              {label:"상차방법", field:"상차방법", opts:LOAD_TYPES},
+              {label:"하차방법", field:"하차방법", opts:LOAD_TYPES},
+              {label:"지급방식", field:"지급방식", opts:PAY_TYPES},
+              {label:"배차방식", field:"배차방식", opts:DISPATCH_TYPES},
+            ].map(({label, field, opts}) => (
+              <div key={field} className="flex items-center gap-3 flex-wrap">
+                <span className="text-[11px] text-gray-400 w-14 shrink-0">{label}</span>
+                <div className="flex flex-wrap gap-1">
+                  {opts.map(o => (
+                    <button key={o} type="button" onClick={() => onChange(field, form[field] === o ? "" : o)}
+                      className={"px-2.5 py-1 text-[11px] font-medium rounded border transition " + (form[field] === o ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-500 border-gray-200 hover:border-[#1B2B4B]")}>
+                      {o}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* 차량 / 기사 */}
+        <section className="py-5">
+          <div className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-4">차량 / 기사</div>
+          <div className="grid grid-cols-3 gap-5">
+            <input className={lineInput} placeholder="차량번호" value={form.차량번호 || ""} onChange={(e) => { const v = e.target.value; onChange("차량번호", v); if (!v.trim()) { onChange("기사명", ""); onChange("기사연락처", ""); } }} onBlur={checkDriverMatch} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); checkDriverMatch(); e.target.blur(); } }}/>
+            <input className={lineInput + " bg-gray-50"} placeholder="기사명" value={form.기사명 || ""} readOnly/>
+            <input className={lineInput + " bg-gray-50"} placeholder="기사 연락처" value={form.기사연락처 || ""} readOnly/>
+          </div>
+        </section>
+
+        {/* 운임 정보 */}
+        <section className="py-5">
+          <div className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-4">운임 정보</div>
+          {routeError && <div className="text-[11px] text-red-500 bg-red-50 border border-red-100 rounded px-3 py-1.5 mb-3">{routeError}</div>}
+          {(fareResult.distanceKm !== null || fareResult.durationMin !== null) && (
+            <div className="flex gap-4 text-[11px] text-gray-400 mb-3">
+              {fareResult.distanceKm !== null && <span>거리 <strong className="text-gray-700">{fareResult.distanceKm} km</strong></span>}
+              {fareResult.durationMin !== null && <span>소요 <strong className="text-gray-700">{fareResult.durationMin} 분</strong></span>}
+            </div>
+          )}
+          <div className="grid grid-cols-3 gap-5">
+            <div>
+              <label className="text-[11px] text-gray-400 block mb-1">청구운임</label>
+              <input className={lineInput} placeholder="0" value={form.청구운임 || ""} onChange={e => onChange("청구운임", e.target.value)}/>
+            </div>
+            <div>
+              <label className="text-[11px] text-gray-400 block mb-1">기사운임</label>
+              <input className={lineInput} placeholder="0" value={form.기사운임 || ""} onChange={e => onChange("기사운임", e.target.value)}/>
+            </div>
+            <div>
+              <label className="text-[11px] text-gray-400 block mb-1">수수료</label>
+              <input className={lineInput} placeholder="0" value={form.수수료 || ""} onChange={e => onChange("수수료", e.target.value)}/>
+            </div>
+          </div>
+        </section>
+
+        {/* 메모 */}
+        <section className="py-5">
+          <div className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-3">메모</div>
+          <textarea className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[13px] text-gray-800 bg-gray-50 focus:outline-none focus:border-[#1B2B4B] focus:bg-white transition resize-none" rows={3} value={form.메모 || ""} onChange={e => onChange("메모", e.target.value)}/>
+        </section>
+
+        {/* 저장 */}
+        <div className="py-5">
+          <button onClick={doSave}
+            className="w-full py-3 bg-[#1B2B4B] text-white text-[14px] font-semibold rounded-xl hover:bg-[#0f1e38] transition tracking-wide">
             저장
           </button>
         </div>
       </div>
-
-      {/* ================= RIGHT : 요약 ================= */}
-<aside className="sticky top-[120px] h-fit">
-  <div className="border rounded-2xl p-6 bg-white shadow-sm space-y-6">
-
-    {/* 제목 */}
-    <div className="flex items-center justify-between">
-      <h4 className="text-lg font-bold text-gray-900">예상 운임료</h4>
-      <button
-        type="button"
-        className="text-sm text-blue-600 hover:underline"
-      >
-        초기화
-      </button>
-    </div>
-{routeError && (
-  <div className="text-xs text-red-500 bg-red-50 border border-red-200 rounded-md px-3 py-2">
-    {routeError}
-  </div>
-)}
-    {/* 기본 정보 */}
-    <div className="space-y-2 text-sm">
-      <div className="flex justify-between text-gray-500">
-        <span>총거리(예상)</span>
-        <span>
-{fareResult.distanceKm !== null
-  ? `${fareResult.distanceKm} km`
-  : "-"}
-</span>
-      </div>
-      <div className="flex justify-between text-gray-500">
-        <span>소요시간(예상)</span>
-        <span>
-{fareResult.durationMin !== null
-  ? `${fareResult.durationMin} 분`
-  : "-"}
-</span>
-      </div>
-      <div className="flex justify-between items-center">
-        <span className="text-gray-500">차량</span>
-        <span className="font-bold text-gray-900">
-          {form.차량종류 || "-"}
-        </span>
-      </div>
-    </div>
-
-    {/* 옵션 버튼 (1번째 이미지 느낌) */}
-    <div className="flex gap-2 flex-wrap">
-      {["주간", "평일", "일반", "편도"].map((v) => (
-        <button
-          key={v}
-          type="button"
-          className="px-3 py-1.5 rounded-full border text-xs font-semibold
-                     border-blue-500 text-blue-600 bg-blue-50"
-        >
-          {v}
-        </button>
-      ))}
-    </div>
-
-    {/* 운임 정보 */}
-    <div className="space-y-2 text-sm">
-      <div className="flex justify-between text-gray-600">
-        <span>기본 운임</span>
-        <span>{fareResult.baseFare.toLocaleString()}원</span>
-      </div>
-      <div className="flex justify-between text-gray-600">
-        <span>추가 운임</span>
-        <span>0원</span>
-      </div>
-    </div>
-
-    {/* 실시간 예상 운임 */}
-    <div className="border-t pt-4">
-      <div className="text-sm text-gray-500 mb-1">
-        실시간 예상 운임
-      </div>
-      <div className="text-3xl font-extrabold text-blue-600">
-        {fareResult.baseFare.toLocaleString()}원
-      </div>
-    </div>
-
-    {/* CTA 버튼 */}
-    <button
-  type="button"
-  onClick={handleFareLookup}
-  className="w-full mt-2 py-3 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700"
->
-  운임 조회
-</button>
-  </div>
-</aside>
-
-    </div>
     </form>
   );
 }
