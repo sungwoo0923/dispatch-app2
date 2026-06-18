@@ -13785,19 +13785,20 @@ const getCreatorLabel = (r) => {
   );
 };
 
-// ✅ 최종: 상태순서 고정 + 같은 상태 안에서는 상차일 미래순, 동일 상차일이면 updatedAt 최신순
+// ✅ 상태순서 고정 + 배차완료→updatedAt 최신순, 배차중→최근활동(updatedAt or createdAt) 최신순
 const sortDispatchRows = (list = []) => {
   return [...list].sort((a, b) => {
     const ra = getStatusRank(a?.배차상태);
     const rb = getStatusRank(b?.배차상태);
     if (ra !== rb) return ra - rb;
 
-    const da = String(a?.상차일 || “”);
-    const db = String(b?.상차일 || “”);
-    if (da !== db) return db.localeCompare(da);
-
-    const ta = Number(a?.updatedAt || a?.createdAt || 0);
-    const tb = Number(b?.updatedAt || b?.createdAt || 0);
+    // 배차완료 → updatedAt 최신순 (배차확정 시간 기준)
+    if (a?.배차상태 === “배차완료”) {
+      return getUpdatedMs(b) - getUpdatedMs(a);
+    }
+    // 배차중 → 등록/수정시간 중 최신값 (모바일 등록 오더가 상단에 오도록)
+    const ta = Math.max(getCreatedMs(a), getUpdatedMs(a));
+    const tb = Math.max(getCreatedMs(b), getUpdatedMs(b));
     return tb - ta;
   });
 };

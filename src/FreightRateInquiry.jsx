@@ -547,17 +547,14 @@ function NationalFareTab() {
     try{
       const cityN=cityObj.n;
       const isGun=cityN.endsWith("군");
-      const isGu=cityN.endsWith("구");
       const queries=isGun
         ?[`${prov} ${cityN} 면사무소`,`${prov} ${cityN} 읍사무소`]
-        :isGu
-        ?[`${prov} ${cityN} 주민센터`,`${prov} ${cityN} 행정복지센터`]
-        :[`${prov} ${cityN} 면사무소`,`${prov} ${cityN} 읍사무소`,`${prov} ${cityN} 주민센터`];
+        :[`${prov} ${cityN} 행정복지센터`,`${prov} ${cityN} 주민센터`];
       const allPois=await Promise.all(
         queries.map(q=>
-          fetch(`https://apis.openapi.sk.com/tmap/pois?version=1&format=json&searchKeyword=${encodeURIComponent(q)}&count=20&appKey=${TMAP_KEY}`)
+          fetch(`https://apis.openapi.sk.com/tmap/pois?version=1&format=json&searchKeyword=${encodeURIComponent(q)}&count=200&centerLat=${cityObj.la}&centerLon=${cityObj.lo}&appKey=${TMAP_KEY}`)
             .then(r=>r.json())
-            .then(d=>d?.searchPoiInfo?.pois?.poi||[])
+            .then(d=>{const poi=d?.searchPoiInfo?.pois?.poi;if(!poi)return[];return Array.isArray(poi)?poi:[poi];})
             .catch(()=>[])
         )
       ).then(arrs=>arrs.flat());
@@ -571,7 +568,7 @@ function NationalFareTab() {
         const cityNorm=cityN.replace(/시$|구$|군$/,"");
         if(!midNorm.includes(cityNorm)&&!mid.includes(cityN))continue;
         seen.add(low);
-        results.push({n:low,la:parseFloat(p.frontLat||p.noorLat||0),lo:parseFloat(p.frontLon||p.noorLon||0)});
+        results.push({n:low,la:parseFloat(p.frontLat||p.noorLat||p.centerLat||0),lo:parseFloat(p.frontLon||p.noorLon||p.centerLon||0)});
       }
       results.sort((a,b)=>a.n.localeCompare(b.n,"ko"));
       setSubDistricts(results);
