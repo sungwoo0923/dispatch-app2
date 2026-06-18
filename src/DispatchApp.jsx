@@ -15169,9 +15169,10 @@ if (sortKey) {
     const sa = statusOrder[a.배차상태] ?? 0;
     const sb = statusOrder[b.배차상태] ?? 0;
     if (sa !== sb) return sa - sb;
-    const ta = Number(a.updatedAt || a.createdAt || 0);
-    const tb = Number(b.updatedAt || b.createdAt || 0);
-    return tb - ta;
+    // 상차일 내림차순 (미래→과거): 같은 상태 내에서 상차일이 최신인 것이 위로
+    const da = String(a.상차일 || "");
+    const db = String(b.상차일 || "");
+    return db.localeCompare(da);
   });
 }
 
