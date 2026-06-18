@@ -729,8 +729,8 @@ const sortedSchedules = [...schedules].sort((a, b) => {
 // 🆕 NEW 뱃지 상태
 const [hasNewNotice, setHasNewNotice] = useState(false);
 const [hasNewSchedule, setHasNewSchedule] = useState(false);
-const [userReadNoticeAt, setUserReadNoticeAt] = useState(0);
-const [userReadScheduleAt, setUserReadScheduleAt] = useState(0);
+const [userReadNoticeAt, setUserReadNoticeAt] = useState(null);
+const [userReadScheduleAt, setUserReadScheduleAt] = useState(null);
 const [selectedSchedule, setSelectedSchedule] = useState(null);
 const [selectedNotice, setSelectedNotice] = useState(null);
 const [noticeOpen, setNoticeOpen] = useState(false);
@@ -1230,22 +1230,28 @@ useEffect(() => {
   getDoc(doc(db, "userSettings", currentUser.uid)).then(snap => {
     if (snap.exists()) {
       const d = snap.data();
-      if (d.lastReadNoticeAt) setUserReadNoticeAt(Number(d.lastReadNoticeAt));
-      if (d.lastReadScheduleAt) setUserReadScheduleAt(Number(d.lastReadScheduleAt));
+      setUserReadNoticeAt(d.lastReadNoticeAt ? Number(d.lastReadNoticeAt) : 0);
+      setUserReadScheduleAt(d.lastReadScheduleAt ? Number(d.lastReadScheduleAt) : 0);
+    } else {
+      setUserReadNoticeAt(0);
+      setUserReadScheduleAt(0);
     }
-  }).catch(() => {});
+  }).catch(() => {
+    setUserReadNoticeAt(0);
+    setUserReadScheduleAt(0);
+  });
 }, [currentUser]);
 
-// 🆕 공지 NEW 판단 (Firestore 기반, 사용자별)
 useEffect(() => {
+  if (userReadNoticeAt === null) return;
   if (!notices.length) { setHasNewNotice(false); return; }
   if (!currentUser?.uid) return;
   const latest = Math.max(...notices.map(n => n.createdAt?.seconds || n.updatedAt?.seconds || 0));
   setHasNewNotice(latest > userReadNoticeAt);
 }, [notices, currentUser, userReadNoticeAt]);
 
-// 🆕 일정 NEW 판단 (Firestore 기반, 사용자별)
 useEffect(() => {
+  if (userReadScheduleAt === null) return;
   if (!schedules.length) { setHasNewSchedule(false); return; }
   if (!currentUser?.uid) return;
   setHasNewSchedule(schedules.some(s => (s.createdAt?.seconds || 0) > userReadScheduleAt));
@@ -3864,11 +3870,11 @@ function MobileSideMenu({
           dark ? "border-b border-white/10" : "border-b border-blue-100"
         }`}>
           <div>
-            <div className={`text-[15px] font-extrabold tracking-tight ${dark ? "text-white" : "text-[#1B2B4B]"}`}>(주)KP-Flow 모바일</div>
-            <div className={`text-[11px] mt-0.5 ${dark ? "text-white/50" : "text-[#6272C3]"}`}>DISPATCH MANAGEMENT</div>
+            <div className={`text-[15px] font-extrabold tracking-tight ${dark ? "text-white" : "text-blue-600"}`}>(주)KP-Flow 모바일</div>
+            <div className={`text-[11px] mt-0.5 ${dark ? "text-white/50" : "text-blue-400"}`}>DISPATCH MANAGEMENT</div>
             <div className="mt-2 flex items-center gap-1.5">
-              <span className={`w-2 h-2 rounded-full inline-block ${dark ? "bg-blue-300" : "bg-blue-400"}`}></span>
-              <span className={`text-[12px] font-bold ${dark ? "text-white" : "text-[#1B2B4B]"}`}>{myName}</span>
+              <span className={`w-2 h-2 rounded-full inline-block ${dark ? "bg-blue-300" : "bg-blue-500"}`}></span>
+              <span className={`text-[12px] font-bold ${dark ? "text-white" : "text-gray-800"}`}>{myName}</span>
             </div>
             <div className={`text-[11px] mt-0.5 ${dark ? "text-white/50" : "text-gray-400"}`}>
               접속: {fmtLoginTime(loginTime)}
@@ -3876,7 +3882,7 @@ function MobileSideMenu({
           </div>
           <button
             className={`w-8 h-8 rounded-full flex items-center justify-center transition ${
-              dark ? "bg-white/10 text-white/70 hover:bg-white/20" : "bg-blue-50 text-blue-400 hover:bg-blue-100"
+              dark ? "bg-white/10 text-white/70 hover:bg-white/20" : "bg-blue-50 text-blue-500 hover:bg-blue-100"
             }`}
             onClick={onClose}
           >
@@ -3891,7 +3897,7 @@ function MobileSideMenu({
           className="flex-1 overflow-y-auto py-1"
           style={dark
             ? { scrollbarWidth: "thin", scrollbarColor: "rgba(255,255,255,0.2) transparent" }
-            : { scrollbarWidth: "thin", scrollbarColor: "#6272C3 #EEF2FF" }
+            : { scrollbarWidth: "thin", scrollbarColor: "#2563EB #EFF6FF" }
           }
         >
           <MenuSection title="배차관리" dark={dark}>
@@ -3931,7 +3937,7 @@ function MobileSideMenu({
             <button
               onClick={toggleAlarm}
               className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${
-                alarmEnabled ? (dark ? "bg-blue-400" : "bg-[#6272C3]") : "bg-gray-400"
+                alarmEnabled ? "bg-blue-600" : "bg-gray-300"
               }`}
             >
               <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${alarmEnabled ? "translate-x-5" : "translate-x-0"}`} />
@@ -3940,14 +3946,14 @@ function MobileSideMenu({
 
           {/* 화면 크기 */}
           <div className={`px-5 py-3 ${dark ? "border-t border-white/10" : "border-t border-blue-50"}`}>
-            <div className={`text-[11px] font-semibold tracking-wider mb-2 ${dark ? "text-white/50" : "text-[#6272C3]"}`}>화면 크기</div>
+            <div className={`text-[11px] font-semibold tracking-wider mb-2 ${dark ? "text-white/50" : "text-blue-500"}`}>화면 크기</div>
             <div className="flex gap-1.5">
               {[{ v: 1, label: "기본" }, { v: 1.1, label: "크게" }, { v: 1.2, label: "아주 크게" }].map(({ v, label }) => (
                 <button key={v} onClick={() => { setUiScale(v); localStorage.setItem("uiScale", v); }}
                   className={`flex-1 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${
                     uiScale === v
-                      ? (dark ? "bg-white text-[#1B2B4B]" : "bg-[#1B2B4B] text-white")
-                      : (dark ? "bg-white/10 text-white/60 hover:bg-white/20" : "bg-blue-50 text-[#6272C3] hover:bg-blue-100")
+                      ? (dark ? "bg-white text-[#1B2B4B]" : "bg-blue-600 text-white")
+                      : (dark ? "bg-white/10 text-white/60 hover:bg-white/20" : "bg-blue-50 text-blue-600 hover:bg-blue-100")
                   }`}
                 >{label}</button>
               ))}
@@ -3956,14 +3962,14 @@ function MobileSideMenu({
 
           {/* 카드 스타일 */}
           <div className={`px-5 py-3 ${dark ? "border-t border-white/10" : "border-t border-blue-50"}`}>
-            <div className={`text-[11px] font-semibold tracking-wider mb-2 ${dark ? "text-white/50" : "text-[#6272C3]"}`}>카드 스타일</div>
+            <div className={`text-[11px] font-semibold tracking-wider mb-2 ${dark ? "text-white/50" : "text-blue-500"}`}>카드 스타일</div>
             <div className="flex gap-1.5">
               {[{ v: false, label: "A형 (기본)" }, { v: true, label: "B형 (심플)" }].map(({ v, label }) => (
                 <button key={String(v)} onClick={() => onToggleCardVersion(v)}
                   className={`flex-1 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${
                     cardVersionB === v
-                      ? (dark ? "bg-white text-[#1B2B4B]" : "bg-[#1B2B4B] text-white")
-                      : (dark ? "bg-white/10 text-white/60 hover:bg-white/20" : "bg-blue-50 text-[#6272C3] hover:bg-blue-100")
+                      ? (dark ? "bg-white text-[#1B2B4B]" : "bg-blue-600 text-white")
+                      : (dark ? "bg-white/10 text-white/60 hover:bg-white/20" : "bg-blue-50 text-blue-600 hover:bg-blue-100")
                   }`}
                 >{label}</button>
               ))}
@@ -3976,13 +3982,13 @@ function MobileSideMenu({
               className={`w-full py-2.5 rounded-xl text-[13px] font-semibold active:scale-[0.98] transition ${
                 dark
                   ? "bg-white/10 text-white/80 border border-white/20 hover:bg-white/20"
-                  : "bg-[#1B2B4B]/5 text-[#1B2B4B]/70 border border-[#1B2B4B]/15 hover:bg-[#1B2B4B]/10"
+                  : "bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100"
               }`}
             >로그아웃</button>
           </div>
           <div className="px-5 py-2 flex items-center justify-between">
             <span className={`text-[11px] ${dark ? "text-white/40" : "text-gray-400"}`}>버전</span>
-            <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${dark ? "text-white/60 bg-white/10" : "text-[#6272C3] bg-blue-50"}`}>v{APP_VERSION}</span>
+            <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${dark ? "text-white/60 bg-white/10" : "text-blue-600 bg-blue-50"}`}>v{APP_VERSION}</span>
           </div>
         </div>
       </div>
@@ -3993,7 +3999,7 @@ function MobileSideMenu({
 function MenuSection({ title, children, dark }) {
   return (
     <div className="mt-1 mb-1">
-      <div className={`px-5 pt-4 pb-1.5 text-[11px] font-bold uppercase tracking-widest ${dark ? "text-white/40" : "text-[#6272C3]"}`}>
+      <div className={`px-5 pt-4 pb-1.5 text-[11px] font-bold uppercase tracking-widest ${dark ? "text-white/40" : "text-blue-500"}`}>
         {title}
       </div>
       <div className="flex flex-col">{children}</div>
@@ -4005,18 +4011,18 @@ function MenuItem({ label, onClick, badge, dark }) {
   return (
     <button
       className={`w-full flex items-center justify-between px-5 py-2.5 text-[13px] font-semibold transition-colors ${
-        dark ? "text-white/90 hover:bg-white/10 active:bg-white/20" : "text-[#1B2B4B] hover:bg-blue-50 active:bg-blue-100"
+        dark ? "text-white/90 hover:bg-white/10 active:bg-white/20" : "text-gray-800 hover:bg-blue-50 active:bg-blue-100"
       }`}
       onClick={onClick}
     >
       <span>{label}</span>
       <div className="flex items-center gap-2">
         {badge && (
-          <span className={`px-2 py-0.5 text-[10px] font-bold rounded leading-none ${dark ? "bg-white text-[#1B2B4B]" : "bg-[#1B2B4B] text-white"}`}>
+          <span className={`px-2 py-0.5 text-[10px] font-bold rounded leading-none ${dark ? "bg-white text-[#1B2B4B]" : "bg-blue-600 text-white"}`}>
             {badge}
           </span>
         )}
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={dark ? "rgba(255,255,255,0.3)" : "#6272C3"} strokeWidth="2" strokeLinecap="round">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={dark ? "rgba(255,255,255,0.3)" : "#2563EB"} strokeWidth="2" strokeLinecap="round">
           <path d="M9 6l6 6-6 6" />
         </svg>
       </div>
