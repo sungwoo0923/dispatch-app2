@@ -11076,8 +11076,10 @@ const MOBILE_VT = [
   {id:"1.4ton", name:"1.4톤",   base:24000, perKm:780,  min:60000,  L100km:14},
   {id:"2.5ton", name:"2.5톤",   base:32000, perKm:980,  min:80000,  L100km:18},
   {id:"3.5ton", name:"3.5톤",   base:38000, perKm:1100, min:100000, L100km:22},
+  {id:"3.5tonW",name:"3.5톤광폭",base:42000, perKm:1200, min:110000, L100km:24},
   {id:"5ton",   name:"5톤",     base:48000, perKm:1280, min:120000, L100km:27},
   {id:"5tonP",  name:"5톤+",    base:52000, perKm:1380, min:130000, L100km:29},
+  {id:"5tonAx", name:"5톤+축",  base:56000, perKm:1480, min:140000, L100km:30},
   {id:"11ton",  name:"11톤",    base:68000, perKm:1680, min:180000, L100km:35},
   {id:"18ton",  name:"18톤",    base:86000, perKm:2100, min:240000, L100km:38},
   {id:"25ton",  name:"25톤",    base:108000,perKm:2380, min:300000, L100km:42},
@@ -11096,17 +11098,17 @@ const MOBILE_MIXED_TIERS=[
   {maxKm:Infinity, base:95000, per100kg:16000, label:"초장거리"},
 ];
 const MOBILE_SM={
-  "1ton":20000,"1.4ton":22000,"2.5ton":25000,"3.5ton":25000,
-  "5ton":28000,"5tonP":30000,"11ton":30000,"18ton":30000,"25ton":30000,
+  "1ton":20000,"1.4ton":22000,"2.5ton":25000,"3.5ton":25000,"3.5tonW":27000,
+  "5ton":28000,"5tonP":30000,"5tonAx":30000,"11ton":30000,"18ton":30000,"25ton":30000,
   trailer:35000,
 };
 const MOBILE_SL={
-  "1ton":8000,"1.4ton":10000,"2.5ton":12000,"3.5ton":15000,
-  "5ton":18000,"5tonP":20000,"11ton":25000,"18ton":28000,"25ton":30000,
+  "1ton":8000,"1.4ton":10000,"2.5ton":12000,"3.5ton":15000,"3.5tonW":17000,
+  "5ton":18000,"5tonP":20000,"5tonAx":20000,"11ton":25000,"18ton":28000,"25ton":30000,
 };
 const MOBILE_SV={
-  "1ton":15000,"1.4ton":18000,"2.5ton":20000,"3.5ton":25000,
-  "5ton":28000,"5tonP":30000,"11ton":35000,"18ton":40000,"25ton":45000,
+  "1ton":15000,"1.4ton":18000,"2.5ton":20000,"3.5ton":25000,"3.5tonW":27000,
+  "5ton":28000,"5tonP":30000,"5tonAx":30000,"11ton":35000,"18ton":40000,"25ton":45000,
   trailer:50000,
 };
 
@@ -11198,8 +11200,10 @@ function MobileFareInquiry() {
       for(const p of allPois){
         const low=p.lowAddrName||"";if(!low||seen.has(low))continue;
         const mid=p.middleAddrName||"";
-        const midNorm=mid.replace(/시$|구$|군$/,""),cityNorm=cityN.replace(/시$|구$|군$/,"");
-        if(!midNorm.includes(cityNorm)&&!mid.includes(cityN))continue;
+        if(!cityN.endsWith("시")){
+          const midNorm=mid.replace(/시$|구$|군$/,""),cityNorm=cityN.replace(/시$|구$|군$/,"");
+          if(!midNorm.includes(cityNorm)&&!mid.includes(cityN))continue;
+        }
         seen.add(low);results.push({n:low,lat:parseFloat(p.frontLat||p.noorLat||p.centerLat||0),lon:parseFloat(p.frontLon||p.noorLon||p.centerLon||0)});
       }
       results.sort((a,b)=>a.n.localeCompare(b.n,"ko"));
@@ -11238,6 +11242,35 @@ function MobileFareInquiry() {
 
   const curFromProv=mapFromProv,curToProv=mapToProv;
 
+  const [mapTf,setMapTf]=useState({scale:1,tx:0,ty:0});
+  const mapTouchRef=useRef({mode:null,dist:0,scale:1,tx:0,ty:0,startX:0,startY:0});
+  const resetMapTf=()=>setMapTf({scale:1,tx:0,ty:0});
+
+  const onMapPinchStart=(e)=>{
+    if(e.touches.length===2){
+      e.preventDefault();
+      const d=Math.hypot(e.touches[1].clientX-e.touches[0].clientX,e.touches[1].clientY-e.touches[0].clientY);
+      mapTouchRef.current={mode:"pinch",dist:d,scale:mapTf.scale,tx:mapTf.tx,ty:mapTf.ty};
+    }else if(e.touches.length===1&&mapTf.scale>1.1){
+      mapTouchRef.current={mode:"pan",startX:e.touches[0].clientX,startY:e.touches[0].clientY,tx:mapTf.tx,ty:mapTf.ty,scale:mapTf.scale};
+    }
+  };
+  const onMapPinchMove=(e)=>{
+    const mt=mapTouchRef.current;
+    if(mt.mode==="pinch"&&e.touches.length===2){
+      e.preventDefault();
+      const d=Math.hypot(e.touches[1].clientX-e.touches[0].clientX,e.touches[1].clientY-e.touches[0].clientY);
+      const ns=Math.max(0.8,Math.min(5,mt.scale*(d/mt.dist)));
+      setMapTf(prev=>({...prev,scale:ns}));
+    }else if(mt.mode==="pan"&&e.touches.length===1){
+      e.preventDefault();
+      const dx=e.touches[0].clientX-mt.startX,dy=e.touches[0].clientY-mt.startY;
+      setMapTf({scale:mt.scale,tx:mt.tx+dx,ty:mt.ty+dy});
+      mapTouchRef.current={...mt,startX:e.touches[0].clientX,startY:e.touches[0].clientY,tx:mt.tx+dx,ty:mt.ty+dy};
+    }
+  };
+  const onMapPinchEnd=()=>{mapTouchRef.current.mode=null;};
+
   return(
     <div className="px-4 py-4 space-y-3">
       {/* 독차/혼적 */}
@@ -11248,152 +11281,162 @@ function MobileFareInquiry() {
         ))}
       </div>
 
-      {/* 지도 선택 */}
+      {/* 상/하차 + 지도 통합 카드 */}
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-        <div className="flex border-b border-gray-100">
-          <button onClick={()=>setMapCityStep(p=>p==="from"?null:"from")}
-            className={`flex-1 py-2 text-[12px] font-bold transition ${mapCityStep==="from"?"bg-[#1B2B4B] text-white":"text-gray-500 hover:bg-gray-50"}`}>
-            지도로 상차지 선택 {curFromProv&&!mapCityStep?`(${curFromProv})`:""}
-          </button>
-          <div className="w-px bg-gray-200"/>
-          <button onClick={()=>setMapCityStep(p=>p==="to"?null:"to")}
-            className={`flex-1 py-2 text-[12px] font-bold transition ${mapCityStep==="to"?"bg-orange-400 text-white":"text-gray-500 hover:bg-gray-50"}`}>
-            지도로 하차지 선택 {curToProv&&!mapCityStep?`(${curToProv})`:""}
-          </button>
-        </div>
-        {mapCityStep&&!mapSubCityStep&&(
-          <>
-            <div className="px-3 py-2 bg-gray-50 text-center text-[11px] text-gray-500 border-b border-gray-100">
-              {mapCityStep==="from"?"상차지":"하차지"} 도/시 선택
+        <div className="flex" style={{minHeight:260}}>
+          {/* 왼쪽: 주소 입력 */}
+          <div className="flex flex-col p-3 gap-2 border-r border-gray-100" style={{flex:"0 0 48%",minWidth:0}}>
+            <div>
+              <div className="flex items-center gap-1.5 mb-1">
+                <div className="w-2 h-2 rounded-full bg-blue-500 shrink-0"/>
+                <span className="text-[10px] font-bold text-gray-400">상차지</span>
+              </div>
+              <MobileAddressSearch value={fromSearch}
+                onChange={v=>{setFromSearch(v);setFromCoord(null);}}
+                onSelect={s=>{if(s){setFromSearch(s.address);setFromCoord(s);}}}
+                placeholder="주소 또는 지역명"/>
             </div>
-            <div style={{height:260}}>
-              <svg viewBox="0 0 524 631" className="w-full h-full" preserveAspectRatio="xMidYMid meet" style={{userSelect:"none",display:"block"}}>
-                <rect width="524" height="631" fill="white"/>
-                {M_PROVINCES.map(prov=>{
-                  const isFr=prov===curFromProv,isTo=prov===curToProv,isHov=prov===mapHover;
-                  let fill=M_PROVINCE_COLORS[prov]||"#c8d8e8";
-                  if(isFr)fill="#3b82f6";else if(isTo)fill="#f97316";else if(isHov)fill="#9ac0e8";
-                  return(
-                    <g key={prov}>
-                      <path d={M_PROVINCE_PATHS[prov]} fill={fill}
-                        stroke={isFr||isTo?"rgba(255,255,255,0.9)":"rgba(255,255,255,0.7)"}
-                        strokeWidth={isFr||isTo?2:1}
-                        style={{cursor:"pointer"}}
-                        onMouseEnter={()=>setMapHover(prov)} onMouseLeave={()=>setMapHover(null)}
-                        onClick={()=>onMapProvClick(prov)}/>
-                    </g>
-                  );
-                })}
-                {M_PROVINCES.map(prov=>{
-                  if(prov===curFromProv||prov===curToProv)return null;
-                  const isSmall=M_SMALL.includes(prov);
-                  const[lx,ly]=M_PROVINCE_LABEL_POS[prov]||[0,0];
-                  return(
-                    <text key={`ml-${prov}`} x={lx} y={ly} textAnchor="middle" dominantBaseline="middle"
-                      fontSize={isSmall?10:13} fontWeight="700" fill="#1B2B4B" style={{pointerEvents:"none"}}>{prov}</text>
-                  );
-                })}
-                {[curFromProv&&{prov:curFromProv,label:"출",color:"#3b82f6"},curToProv&&{prov:curToProv,label:"하",color:"#f97316"}]
-                  .filter(Boolean).map(({prov,label,color})=>{
-                    const pos=M_PROVINCE_LABEL_POS[prov];if(!pos)return null;
-                    const[bx,by]=pos;
+            {vias.map((via,i)=>(
+              <div key={i}>
+                <div className="flex items-center gap-1.5 mb-1">
+                  <div className="w-2 h-2 rounded-full bg-gray-400 shrink-0"/>
+                  <span className="text-[10px] font-bold text-gray-400">경유{i+1}</span>
+                  <button className="ml-auto text-gray-300 hover:text-red-400 text-base leading-none" onClick={()=>removeVia(i)}>x</button>
+                </div>
+                <MobileAddressSearch value={via.search}
+                  onChange={v=>{setVias(p=>{const n=[...p];n[i]={search:v,coord:null};return n;});}}
+                  onSelect={s=>{if(s){setVias(p=>{const n=[...p];n[i]={search:s.address,coord:s};return n;});}}}
+                  placeholder="경유지"/>
+              </div>
+            ))}
+            <div>
+              <div className="flex items-center gap-1.5 mb-1">
+                <div className="w-2 h-2 rounded-full bg-orange-400 shrink-0"/>
+                <span className="text-[10px] font-bold text-gray-400">하차지</span>
+              </div>
+              <MobileAddressSearch value={toSearch}
+                onChange={v=>{setToSearch(v);setToCoord(null);}}
+                onSelect={s=>{if(s){setToSearch(s.address);setToCoord(s);}}}
+                placeholder="주소 또는 지역명"/>
+            </div>
+            <div className="flex gap-1.5 mt-auto pt-1 flex-wrap">
+              {vias.length<3&&<button onClick={addVia} className="text-[10px] font-semibold text-[#1B2B4B]/70 border border-dashed border-[#1B2B4B]/30 rounded-md px-2 py-0.5">+ 경유</button>}
+              {(fromCoord||toCoord||vias.length>0)&&<button onClick={reset} className="text-[10px] text-gray-400 hover:text-red-500">초기화</button>}
+            </div>
+          </div>
+
+          {/* 오른쪽: 지도 패널 */}
+          <div className="flex flex-col" style={{flex:1,minWidth:0}}>
+            {/* 상/하차 선택 토글 */}
+            <div className="flex border-b border-gray-100" style={{flexShrink:0}}>
+              <button onClick={()=>{setMapCityStep("from");setMapSubCityStep(null);setMapSubCity(null);setMapSubDistricts([]);resetMapTf();}}
+                className={`flex-1 py-1.5 text-[10px] font-bold transition ${mapCityStep==="from"?"bg-[#1B2B4B] text-white":"text-gray-400 hover:bg-gray-50"}`}>
+                상차지 지역
+              </button>
+              <div className="w-px bg-gray-100"/>
+              <button onClick={()=>{setMapCityStep("to");setMapSubCityStep(null);setMapSubCity(null);setMapSubDistricts([]);resetMapTf();}}
+                className={`flex-1 py-1.5 text-[10px] font-bold transition ${mapCityStep==="to"?"bg-orange-400 text-white":"text-gray-400 hover:bg-gray-50"}`}>
+                하차지 지역
+              </button>
+            </div>
+
+            {/* 도/시 지도 */}
+            {!mapSubCityStep&&!(mapCityStep&&(mapCityStep==="from"?curFromProv:curToProv))&&(
+              <div style={{flex:1,overflow:"hidden",touchAction:"none",position:"relative",minHeight:180}}
+                onTouchStart={onMapPinchStart} onTouchMove={onMapPinchMove} onTouchEnd={onMapPinchEnd}>
+                <svg viewBox="0 0 524 631"
+                  style={{width:"100%",height:"100%",display:"block",transform:`translate(${mapTf.tx}px,${mapTf.ty}px) scale(${mapTf.scale})`,transformOrigin:"50% 50%",userSelect:"none"}}
+                  preserveAspectRatio="xMidYMid meet">
+                  <rect width="524" height="631" fill="white"/>
+                  {M_PROVINCES.map(prov=>{
+                    const isFr=prov===curFromProv,isTo=prov===curToProv,isHov=prov===mapHover;
+                    let fill=M_PROVINCE_COLORS[prov]||"#c8d8e8";
+                    if(isFr)fill="#3b82f6";else if(isTo)fill="#f97316";else if(isHov)fill="#9ac0e8";
                     return(
-                      <g key={label} style={{pointerEvents:"none"}}>
-                        <circle cx={bx} cy={by} r={18} fill={color} stroke="white" strokeWidth="2"/>
-                        <text x={bx} y={by} textAnchor="middle" dominantBaseline="middle" fontSize="11" fontWeight="900" fill="white">{label}</text>
+                      <g key={prov}>
+                        <path d={M_PROVINCE_PATHS[prov]} fill={fill}
+                          stroke={isFr||isTo?"rgba(255,255,255,0.9)":"rgba(255,255,255,0.7)"}
+                          strokeWidth={isFr||isTo?2:1}
+                          style={{cursor:"pointer"}}
+                          onMouseEnter={()=>setMapHover(prov)} onMouseLeave={()=>setMapHover(null)}
+                          onClick={()=>onMapProvClick(prov)}/>
                       </g>
                     );
                   })}
-              </svg>
-            </div>
+                  {M_PROVINCES.map(prov=>{
+                    if(prov===curFromProv||prov===curToProv)return null;
+                    const isSmall=M_SMALL.includes(prov);
+                    const[lx,ly]=M_PROVINCE_LABEL_POS[prov]||[0,0];
+                    return(
+                      <text key={`ml-${prov}`} x={lx} y={ly} textAnchor="middle" dominantBaseline="middle"
+                        fontSize={isSmall?9:11} fontWeight="700" fill="#1B2B4B" style={{pointerEvents:"none"}}>{prov}</text>
+                    );
+                  })}
+                  {[curFromProv&&{prov:curFromProv,label:"출",color:"#3b82f6"},curToProv&&{prov:curToProv,label:"하",color:"#f97316"}]
+                    .filter(Boolean).map(({prov,label,color})=>{
+                      const pos=M_PROVINCE_LABEL_POS[prov];if(!pos)return null;
+                      const[bx,by]=pos;
+                      return(
+                        <g key={label} style={{pointerEvents:"none"}}>
+                          <circle cx={bx} cy={by} r={14} fill={color} stroke="white" strokeWidth="2"/>
+                          <text x={bx} y={by} textAnchor="middle" dominantBaseline="middle" fontSize="9" fontWeight="900" fill="white">{label}</text>
+                        </g>
+                      );
+                    })}
+                </svg>
+              </div>
+            )}
+
             {/* 시/군/구 선택 */}
-            {(mapCityStep==="from"?curFromProv:curToProv)&&(
-              <div className="border-t border-gray-100 p-3">
-                <div className="text-[11px] font-bold text-gray-500 mb-2">{mapCityStep==="from"?curFromProv:curToProv} 시·군·구 선택</div>
-                <div className="grid grid-cols-4 gap-1.5 max-h-[160px] overflow-y-auto">
+            {!mapSubCityStep&&mapCityStep&&(mapCityStep==="from"?curFromProv:curToProv)&&(
+              <div className="p-2 flex flex-col" style={{flex:1,overflow:"hidden"}}>
+                <div className="flex items-center justify-between mb-1.5" style={{flexShrink:0}}>
+                  <span className="text-[10px] font-bold text-gray-500">{mapCityStep==="from"?curFromProv:curToProv} 시.군.구</span>
+                  <button onClick={()=>{mapCityStep==="from"?setMapFromProv(null):setMapToProv(null);resetMapTf();}}
+                    className="text-[10px] text-gray-400 border border-gray-200 rounded px-1.5 py-0.5">← 지도</button>
+                </div>
+                <div className="grid grid-cols-3 gap-1 overflow-y-auto">
                   {(M_CITIES[mapCityStep==="from"?curFromProv:curToProv]||[]).map(city=>(
                     <button key={city.n} onClick={()=>onMapCitySelect(city)}
-                      className="px-1.5 py-2 text-[11px] font-semibold text-gray-600 border border-gray-100 rounded-lg hover:bg-[#1B2B4B] hover:text-white transition bg-gray-50 text-center">
+                      className="px-1 py-1.5 text-[9px] font-semibold text-gray-600 border border-gray-100 rounded-md hover:bg-[#1B2B4B] hover:text-white transition bg-gray-50 text-center leading-tight">
                       {city.n}
                     </button>
                   ))}
                 </div>
               </div>
             )}
-          </>
-        )}
-        {/* 읍/면/동 선택 */}
-        {mapSubCityStep&&(
-          <div className="p-3">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-[12px] font-bold text-[#1B2B4B]">{mapSubCity?.n}</span>
-              <span className="text-[11px] text-gray-400">읍·면·동 선택</span>
-              <button onClick={()=>{setMapSubCityStep(null);setMapSubCity(null);setMapSubDistricts([]);setMapCityStep(mapSubCityStep==="from"?"from":"to");}}
-                className="ml-auto text-[11px] text-gray-400 border border-gray-200 rounded-lg px-2 py-0.5">← 재선택</button>
-            </div>
-            {mapSubLoading?(
-              <div className="text-center py-3 text-[11px] text-gray-400">로딩 중...</div>
-            ):(
-              <div className="grid grid-cols-4 gap-1.5 max-h-[160px] overflow-y-auto">
-                <button onClick={onMapSelectWholeCity}
-                  className="px-1.5 py-2 text-[10px] font-extrabold text-[#1B2B4B] border-2 border-[#1B2B4B]/30 rounded-lg hover:bg-[#1B2B4B] hover:text-white transition bg-blue-50/50 text-center">
-                  전체
-                </button>
-                {mapSubDistricts.map(sd=>(
-                  <button key={sd.n} onClick={()=>onMapSubDistrictSelect(sd)}
-                    className="px-1.5 py-2 text-[11px] font-semibold text-gray-600 border border-gray-100 rounded-lg hover:bg-[#1B2B4B] hover:text-white transition bg-gray-50 text-center">
-                    {sd.n}
-                  </button>
-                ))}
-                {!mapSubLoading&&mapSubDistricts.length===0&&(
-                  <div className="col-span-4 text-center text-[11px] text-gray-400 py-2">세부 지역 없음</div>
+
+            {/* 읍/면/동 선택 */}
+            {mapSubCityStep&&(
+              <div className="p-2 flex flex-col" style={{flex:1,overflow:"hidden"}}>
+                <div className="flex items-center justify-between mb-1.5" style={{flexShrink:0}}>
+                  <span className="text-[10px] font-bold text-[#1B2B4B]">{mapSubCity?.n}</span>
+                  <button onClick={()=>{setMapSubCityStep(null);setMapSubCity(null);setMapSubDistricts([]);setMapCityStep(mapSubCityStep==="from"?"from":"to");}}
+                    className="text-[10px] text-gray-400 border border-gray-200 rounded px-1.5 py-0.5">← 구/시</button>
+                </div>
+                {mapSubLoading?(
+                  <div className="text-center py-3 text-[10px] text-gray-400">로딩 중...</div>
+                ):(
+                  <div className="grid grid-cols-3 gap-1 overflow-y-auto">
+                    <button onClick={onMapSelectWholeCity}
+                      className="px-1 py-1.5 text-[9px] font-extrabold text-[#1B2B4B] border-2 border-[#1B2B4B]/30 rounded-md hover:bg-[#1B2B4B] hover:text-white transition bg-blue-50/50 text-center leading-tight">
+                      전체
+                    </button>
+                    {mapSubDistricts.map(sd=>(
+                      <button key={sd.n} onClick={()=>onMapSubDistrictSelect(sd)}
+                        className="px-1 py-1.5 text-[9px] font-semibold text-gray-600 border border-gray-100 rounded-md hover:bg-[#1B2B4B] hover:text-white transition bg-gray-50 text-center leading-tight">
+                        {sd.n}
+                      </button>
+                    ))}
+                    {!mapSubLoading&&mapSubDistricts.length===0&&(
+                      <div className="col-span-3 text-center text-[9px] text-gray-400 py-2">세부 지역 없음</div>
+                    )}
+                  </div>
                 )}
               </div>
             )}
           </div>
-        )}
-      </div>
-
-      {/* 주소 입력 */}
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-visible">
-        <div className="px-4 pt-3 pb-2 border-b border-gray-100">
-          <div className="flex items-center gap-2 mb-1.5">
-            <div className="w-2 h-2 rounded-full bg-blue-500 shrink-0"/>
-            <span className="text-[11px] font-bold text-gray-400">상차지</span>
-          </div>
-          <MobileAddressSearch value={fromSearch}
-            onChange={v=>{setFromSearch(v);setFromCoord(null);}}
-            onSelect={s=>{if(s){setFromSearch(s.address);setFromCoord(s);}}}
-            placeholder="주소 또는 지역명 검색"/>
         </div>
-        {vias.map((via,i)=>(
-          <div key={i} className="px-4 pt-3 pb-2 border-b border-gray-100">
-            <div className="flex items-center gap-2 mb-1.5">
-              <div className="w-2 h-2 rounded-full bg-gray-400 shrink-0"/>
-              <span className="text-[11px] font-bold text-gray-400">경유{i+1}</span>
-              <button className="ml-auto text-gray-300 hover:text-red-400 text-lg leading-none" onClick={()=>removeVia(i)}>×</button>
-            </div>
-            <MobileAddressSearch value={via.search}
-              onChange={v=>{setVias(p=>{const n=[...p];n[i]={search:v,coord:null};return n;});}}
-              onSelect={s=>{if(s){setVias(p=>{const n=[...p];n[i]={search:s.address,coord:s};return n;});}}}
-              placeholder="경유지 검색"/>
-          </div>
-        ))}
-        <div className="px-4 pt-3 pb-3">
-          <div className="flex items-center gap-2 mb-1.5">
-            <div className="w-2 h-2 rounded-full bg-orange-400 shrink-0"/>
-            <span className="text-[11px] font-bold text-gray-400">하차지</span>
-          </div>
-          <MobileAddressSearch value={toSearch}
-            onChange={v=>{setToSearch(v);setToCoord(null);}}
-            onSelect={s=>{if(s){setToSearch(s.address);setToCoord(s);}}}
-            placeholder="주소 또는 지역명 검색"/>
-        </div>
-      </div>
-
-      <div className="flex items-center gap-2">
-        {vias.length<3&&<button onClick={addVia} className="text-[11px] font-semibold text-[#1B2B4B]/70 border border-dashed border-[#1B2B4B]/30 rounded-lg px-2.5 py-1">+ 경유 추가</button>}
-        {(fromCoord||toCoord||vias.length>0)&&<button onClick={reset} className="text-[11px] text-gray-400 hover:text-red-500">초기화</button>}
       </div>
 
       {/* 혼적 화물 */}

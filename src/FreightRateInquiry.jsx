@@ -564,9 +564,11 @@ function NationalFareTab() {
         const low=p.lowAddrName||"";
         if(!low||seen.has(low))continue;
         const mid=p.middleAddrName||"";
-        const midNorm=mid.replace(/시$|구$|군$/,"");
-        const cityNorm=cityN.replace(/시$|구$|군$/,"");
-        if(!midNorm.includes(cityNorm)&&!mid.includes(cityN))continue;
+        if(!cityN.endsWith("시")){
+          const midNorm=mid.replace(/시$|구$|군$/,"");
+          const cityNorm=cityN.replace(/시$|구$|군$/,"");
+          if(!midNorm.includes(cityNorm)&&!mid.includes(cityN))continue;
+        }
         seen.add(low);
         results.push({n:low,la:parseFloat(p.frontLat||p.noorLat||p.centerLat||0),lo:parseFloat(p.frontLon||p.noorLon||p.centerLon||0)});
       }
