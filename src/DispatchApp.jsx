@@ -1088,6 +1088,12 @@ function OrderInfoModal({ row, onClose }) {
             <Row label="기사명" value={row.이름 || row.기사명} />
             <Row label="전화번호" value={fmtPhone(row.전화번호)} />
           </Section>
+          {(row.메모 || row.전달사항) && (
+            <Section title="메모 / 전달사항">
+              {row.메모 && <Row label="메모" value={row.메모} />}
+              {row.전달사항 && <Row label="전달사항" value={row.전달사항} />}
+            </Section>
+          )}
         </div>
         <div className="px-6 pb-5">
           <button className="w-full py-3 bg-[#1B2B4B] text-white rounded-xl font-bold text-[13px] hover:bg-[#263d6b] transition" onClick={onClose}>닫기</button>
@@ -18112,17 +18118,35 @@ value={copyTarget?.화물수량 || ""}
           </div>
         </div>
         </section>
-{/* ================= 메모 ================= */}
+{/* ================= 메모 + 전달사항 ================= */}
 <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-  <div className="bg-[#1B2B4B] px-6 py-3"><h3 className="text-[14px] font-bold text-white">메모</h3></div>
-  <div className="p-6">
-
-  <textarea
-    className="w-full min-h-[140px] px-4 py-3 text-[13px] rounded-xl border-2 border-gray-300 bg-white resize-y focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/25 focus:border-[#1B2B4B] placeholder:text-gray-400 transition-all"
-    placeholder="메모를 입력하세요"
-    value={copyTarget?.메모 ?? ""}
-    onChange={(e)=>setCopyTarget(p=>({...p, 메모:e.target.value}))}
-  />
+  <div className="bg-[#1B2B4B] px-6 py-3"><h3 className="text-[14px] font-bold text-white">메모 / 전달사항</h3></div>
+  <div className="p-6 grid grid-cols-2 gap-4">
+    <div>
+      <label className="block text-[13px] font-semibold text-gray-700 mb-2">메모</label>
+      <textarea
+        className="w-full min-h-[140px] px-4 py-3 text-[13px] rounded-xl border-2 border-gray-300 bg-white resize-y focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/25 focus:border-[#1B2B4B] placeholder:text-gray-400 transition-all"
+        placeholder="메모를 입력하세요"
+        value={copyTarget?.메모 ?? ""}
+        onChange={(e)=>setCopyTarget(p=>({...p, 메모:e.target.value}))}
+      />
+    </div>
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <label className="text-[13px] font-semibold text-gray-700">전달사항</label>
+        <button type="button"
+          onClick={() => setCopyTarget(p => ({ ...p, 전달사항고정: !p.전달사항고정 }))}
+          className={`px-2 py-0.5 rounded text-xs font-semibold border transition-all ${copyTarget?.전달사항고정 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
+          고정
+        </button>
+      </div>
+      <textarea
+        className="w-full min-h-[140px] px-4 py-3 text-[13px] rounded-xl border-2 border-gray-300 bg-white resize-y focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/25 focus:border-[#1B2B4B] placeholder:text-gray-400 transition-all"
+        placeholder="기사에게 전달할 내용"
+        value={copyTarget?.전달사항 ?? ""}
+        onChange={(e)=>setCopyTarget(p=>({...p, 전달사항:e.target.value}))}
+      />
+    </div>
   </div>
 </section>
 
@@ -19714,36 +19738,51 @@ setEditTarget((p) => ({
             </div>
 
             {/* ------------------------------------------------ */}
-            {/* 🔵 메모 + 메모 중요도 */}
+            {/* 🔵 메모 + 전달사항 (2열) */}
             {/* ------------------------------------------------ */}
-            <div className="mb-3">
-              <div className="flex items-center justify-between mb-1">
-                <label className="font-semibold">메모</label>
-
-                {/* 🔴 메모 중요도 버튼 */}
-                <div className="flex items-center gap-1">
-                  <button type="button" onClick={() => setEditTarget((p) => ({ ...p, 메모중요도: "NORMAL" }))}
-                    className={`px-3 py-1 rounded-lg text-xs font-semibold border transition-all ${editTarget.메모중요도 === "NORMAL" ? "bg-gray-700 text-white border-gray-700" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
-                    일반
-                  </button>
-                  <button type="button" onClick={() => setEditTarget((p) => ({ ...p, 메모중요도: "HIGH" }))}
-                    className={`px-3 py-1 rounded-lg text-xs font-semibold border transition-all ${editTarget.메모중요도 === "HIGH" ? "bg-orange-500 text-white border-orange-500" : "bg-white text-orange-600 border-orange-300 hover:bg-orange-50"}`}>
-                    중요
-                  </button>
-                  <button type="button" onClick={() => setEditTarget((p) => ({ ...p, 메모중요도: "CRITICAL" }))}
-                    className={`px-3 py-1 rounded-lg text-xs font-semibold border transition-all ${editTarget.메모중요도 === "CRITICAL" ? "bg-red-600 text-white border-red-600" : "bg-white text-red-600 border-red-300 hover:bg-red-50"}`}>
-                    긴급
+            <div className="mb-3 grid grid-cols-2 gap-3">
+              {/* 메모 */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="font-semibold text-sm">메모</label>
+                  <div className="flex items-center gap-1">
+                    <button type="button" onClick={() => setEditTarget((p) => ({ ...p, 메모중요도: "NORMAL" }))}
+                      className={`px-2 py-0.5 rounded text-xs font-semibold border transition-all ${editTarget.메모중요도 === "NORMAL" ? "bg-gray-700 text-white border-gray-700" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
+                      일반
+                    </button>
+                    <button type="button" onClick={() => setEditTarget((p) => ({ ...p, 메모중요도: "HIGH" }))}
+                      className={`px-2 py-0.5 rounded text-xs font-semibold border transition-all ${editTarget.메모중요도 === "HIGH" ? "bg-orange-500 text-white border-orange-500" : "bg-white text-orange-600 border-orange-300 hover:bg-orange-50"}`}>
+                      중요
+                    </button>
+                    <button type="button" onClick={() => setEditTarget((p) => ({ ...p, 메모중요도: "CRITICAL" }))}
+                      className={`px-2 py-0.5 rounded text-xs font-semibold border transition-all ${editTarget.메모중요도 === "CRITICAL" ? "bg-red-600 text-white border-red-600" : "bg-white text-red-600 border-red-300 hover:bg-red-50"}`}>
+                      긴급
+                    </button>
+                  </div>
+                </div>
+                <textarea
+                  className="border p-2 rounded w-full h-20"
+                  value={editTarget.메모 || ""}
+                  onChange={(e) => setEditTarget((p) => ({ ...p, 메모: e.target.value }))}
+                />
+              </div>
+              {/* 전달사항 */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="font-semibold text-sm">전달사항</label>
+                  <button type="button"
+                    onClick={() => setEditTarget((p) => ({ ...p, 전달사항고정: !p.전달사항고정 }))}
+                    className={`px-2 py-0.5 rounded text-xs font-semibold border transition-all ${editTarget.전달사항고정 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
+                    고정
                   </button>
                 </div>
+                <textarea
+                  className="border p-2 rounded w-full h-20"
+                  placeholder="기사에게 전달할 내용"
+                  value={editTarget.전달사항 || ""}
+                  onChange={(e) => setEditTarget((p) => ({ ...p, 전달사항: e.target.value }))}
+                />
               </div>
-
-              <textarea
-                className="border p-2 rounded w-full h-20"
-                value={editTarget.메모 || ""}
-                onChange={(e) =>
-                  setEditTarget((p) => ({ ...p, 메모: e.target.value }))
-                }
-              />
             </div>
 
             {/* 수정이력 */}
@@ -19818,6 +19857,7 @@ const ALLOWED_FIELDS = [
   "메모",
   "메모중요도",
   "전달사항",
+  "전달사항고정",
   "상차지담당자",
   "상차지담당자번호",
   "상차방법",
@@ -26154,43 +26194,54 @@ setEditTarget((p) => ({
             </div>
 
             {/* ------------------------------------------------ */}
-            {/* 🔵 메모 + 메모 중요도 */}
+            {/* 🔵 메모 + 전달사항 (2열) */}
             {/* ------------------------------------------------ */}
-            <div className="mb-3">
-              {/* 라벨 + 중요도 버튼 */}
-              <div className="flex items-center justify-between mb-1">
-                <label className="font-semibold">메모</label>
-
-                <div className="flex items-center gap-1">
-                  {/* 일반 */}
+            <div className="mb-3 grid grid-cols-2 gap-3">
+              {/* 메모 */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="font-semibold text-sm">메모</label>
+                  <div className="flex items-center gap-1">
+                    <button type="button"
+                      onClick={() => { setEditTarget((p) => ({ ...p, 메모중요도: "일반" })); setEdited((prev) => ({ ...prev, [getId(editTarget)]: { ...(prev[getId(editTarget)] || {}), 메모중요도: "일반" } })); }}
+                      className={`px-2 py-0.5 rounded text-xs font-semibold border transition-all ${editTarget.메모중요도 === "일반" ? "bg-gray-700 text-white border-gray-700" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
+                      일반
+                    </button>
+                    <button type="button"
+                      onClick={() => { setEditTarget((p) => ({ ...p, 메모중요도: "HIGH" })); setEdited((prev) => ({ ...prev, [getId(editTarget)]: { ...(prev[getId(editTarget)] || {}), 메모중요도: "HIGH" } })); }}
+                      className={`px-2 py-0.5 rounded text-xs font-semibold border transition-all ${editTarget.메모중요도 === "HIGH" ? "bg-orange-500 text-white border-orange-500" : "bg-white text-orange-600 border-orange-300 hover:bg-orange-50"}`}>
+                      중요
+                    </button>
+                    <button type="button"
+                      onClick={() => { setEditTarget((p) => ({ ...p, 메모중요도: "CRITICAL" })); setEdited((prev) => ({ ...prev, [getId(editTarget)]: { ...(prev[getId(editTarget)] || {}), 메모중요도: "CRITICAL" } })); }}
+                      className={`px-2 py-0.5 rounded text-xs font-semibold border transition-all ${editTarget.메모중요도 === "CRITICAL" ? "bg-red-600 text-white border-red-600" : "bg-white text-red-600 border-red-300 hover:bg-red-50"}`}>
+                      긴급
+                    </button>
+                  </div>
+                </div>
+                <textarea
+                  className="border p-2 rounded w-full h-20"
+                  value={editTarget.메모 || ""}
+                  onChange={(e) => setEditTarget((p) => ({ ...p, 메모: e.target.value }))}
+                />
+              </div>
+              {/* 전달사항 */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="font-semibold text-sm">전달사항</label>
                   <button type="button"
-                    onClick={() => { setEditTarget((p) => ({ ...p, 메모중요도: "일반" })); setEdited((prev) => ({ ...prev, [getId(editTarget)]: { ...(prev[getId(editTarget)] || {}), 메모중요도: "일반" } })); }}
-                    className={`px-3 py-1 rounded-lg text-xs font-semibold border transition-all ${editTarget.메모중요도 === "일반" ? "bg-gray-700 text-white border-gray-700" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
-                    일반
-                  </button>
-
-                  {/* 중요 */}
-                  <button type="button"
-                    onClick={() => { setEditTarget((p) => ({ ...p, 메모중요도: "HIGH" })); setEdited((prev) => ({ ...prev, [getId(editTarget)]: { ...(prev[getId(editTarget)] || {}), 메모중요도: "HIGH" } })); }}
-                    className={`px-3 py-1 rounded-lg text-xs font-semibold border transition-all ${editTarget.메모중요도 === "HIGH" ? "bg-orange-500 text-white border-orange-500" : "bg-white text-orange-600 border-orange-300 hover:bg-orange-50"}`}>
-                    중요
-                  </button>
-                  <button type="button"
-                    onClick={() => { setEditTarget((p) => ({ ...p, 메모중요도: "CRITICAL" })); setEdited((prev) => ({ ...prev, [getId(editTarget)]: { ...(prev[getId(editTarget)] || {}), 메모중요도: "CRITICAL" } })); }}
-                    className={`px-3 py-1 rounded-lg text-xs font-semibold border transition-all ${editTarget.메모중요도 === "CRITICAL" ? "bg-red-600 text-white border-red-600" : "bg-white text-red-600 border-red-300 hover:bg-red-50"}`}>
-                    긴급
+                    onClick={() => { setEditTarget((p) => ({ ...p, 전달사항고정: !p.전달사항고정 })); setEdited((prev) => ({ ...prev, [getId(editTarget)]: { ...(prev[getId(editTarget)] || {}), 전달사항고정: !editTarget.전달사항고정 } })); }}
+                    className={`px-2 py-0.5 rounded text-xs font-semibold border transition-all ${editTarget.전달사항고정 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
+                    고정
                   </button>
                 </div>
+                <textarea
+                  className="border p-2 rounded w-full h-20"
+                  placeholder="기사에게 전달할 내용"
+                  value={editTarget.전달사항 || ""}
+                  onChange={(e) => setEditTarget((p) => ({ ...p, 전달사항: e.target.value }))}
+                />
               </div>
-
-              {/* 메모 입력 */}
-              <textarea
-                className="border p-2 rounded w-full h-20"
-                value={editTarget.메모 || ""}
-                onChange={(e) =>
-                  setEditTarget((p) => ({ ...p, 메모: e.target.value }))
-                }
-              />
             </div>
 
             {/* 수정이력 */}
@@ -26249,6 +26300,7 @@ setEditTarget((p) => ({
       "메모",
       "메모중요도",
       "전달사항",
+      "전달사항고정",
       "상차지담당자",
       "상차지담당자번호",
       "상차방법",
@@ -27242,17 +27294,35 @@ setCopyTarget(prev => ({
           </div>
 </div>
         </section>
-{/* ================= 메모 ================= */}
+{/* ================= 메모 + 전달사항 ================= */}
 <section className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-  <div className="bg-[#1B2B4B] px-6 py-3"><h3 className="text-[14px] font-bold text-white">메모</h3></div>
-  <div className="p-6">
-
-  <textarea
-    className="w-full min-h-[140px] px-4 py-3 text-[13px] rounded-xl border-2 border-gray-300 bg-white resize-y focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/25 focus:border-[#1B2B4B] placeholder:text-gray-400 transition-all"
-    placeholder="메모를 입력하세요"
-    value={copyTarget?.메모 ?? ""}
-    onChange={(e)=>setCopyTarget(p=>({...p, 메모:e.target.value}))}
-  />
+  <div className="bg-[#1B2B4B] px-6 py-3"><h3 className="text-[14px] font-bold text-white">메모 / 전달사항</h3></div>
+  <div className="p-6 grid grid-cols-2 gap-4">
+    <div>
+      <label className="block text-[13px] font-semibold text-gray-700 mb-2">메모</label>
+      <textarea
+        className="w-full min-h-[140px] px-4 py-3 text-[13px] rounded-xl border-2 border-gray-300 bg-white resize-y focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/25 focus:border-[#1B2B4B] placeholder:text-gray-400 transition-all"
+        placeholder="메모를 입력하세요"
+        value={copyTarget?.메모 ?? ""}
+        onChange={(e)=>setCopyTarget(p=>({...p, 메모:e.target.value}))}
+      />
+    </div>
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <label className="text-[13px] font-semibold text-gray-700">전달사항</label>
+        <button type="button"
+          onClick={() => setCopyTarget(p => ({ ...p, 전달사항고정: !p.전달사항고정 }))}
+          className={`px-2 py-0.5 rounded text-xs font-semibold border transition-all ${copyTarget?.전달사항고정 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}>
+          고정
+        </button>
+      </div>
+      <textarea
+        className="w-full min-h-[140px] px-4 py-3 text-[13px] rounded-xl border-2 border-gray-300 bg-white resize-y focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/25 focus:border-[#1B2B4B] placeholder:text-gray-400 transition-all"
+        placeholder="기사에게 전달할 내용"
+        value={copyTarget?.전달사항 ?? ""}
+        onChange={(e)=>setCopyTarget(p=>({...p, 전달사항:e.target.value}))}
+      />
+    </div>
   </div>
 </section>
 

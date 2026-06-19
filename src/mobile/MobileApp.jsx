@@ -4235,6 +4235,7 @@ function MobileOrderList({
   const [copyModalOrder, setCopyModalOrder] = useState(null);
   const [longPressOrder, setLongPressOrder] = useState(null);
   const [quickEditOrder, setQuickEditOrder] = useState(null);
+  const [orderInfoOrder, setOrderInfoOrder] = useState(null);
   const longPressTimerRef = useRef(null);
   const longPressStartPos = useRef({ x: 0, y: 0 });
 
@@ -4765,11 +4766,17 @@ const summary = useMemo(() => {
         cardVersionB={cardVersionB}
         onClose={() => setLongPressOrder(null)}
         onEdit={() => { setQuickEditOrder(longPressOrder); setLongPressOrder(null); }}
+        onOrderInfo={() => { setOrderInfoOrder(longPressOrder); setLongPressOrder(null); }}
         onCopyDriver={() => { setCopyModalOrder(longPressOrder); setLongPressOrder(null); }}
         onCopyOrder={() => { onCopyOrder?.(longPressOrder); setLongPressOrder(null); }}
         onDelete={() => { setDeleteConfirmOrder(longPressOrder); setLongPressOrder(null); }}
         onUploadLink={() => { handleSingleUploadLink(longPressOrder); setLongPressOrder(null); }}
       />
+    )}
+
+    {/* ── 오더정보 모달 ── */}
+    {orderInfoOrder && (
+      <MobileOrderInfoModal order={orderInfoOrder} onClose={() => setOrderInfoOrder(null)} />
     )}
 
     {/* ── 일부 수정 모달 ── */}
@@ -5048,15 +5055,92 @@ function CardAttachViewer({ order, onClose }) {
 }
 
 // ────────────────────────────────────────────────────────────────
+// 모바일 오더정보 모달
+// ────────────────────────────────────────────────────────────────
+function MobileOrderInfoModal({ order: row, onClose }) {
+  if (!row) return null;
+  const fmtPhone = (p) => { const d = String(p || "").replace(/[^\d]/g, ""); if (d.length === 11) return `${d.slice(0,3)}-${d.slice(3,7)}-${d.slice(7)}`; if (d.length === 10) return `${d.slice(0,3)}-${d.slice(3,6)}-${d.slice(6)}`; return p || "-"; };
+  const fmtMoney = (v) => v ? Number(v).toLocaleString() + "원" : "-";
+  const fee = (Number(row.청구운임) || 0) - (Number(row.기사운임) || 0);
+  const InfoRow = ({ label, value }) => value ? (
+    <div className="flex gap-2 text-[13px] py-1 border-b border-gray-50 last:border-b-0">
+      <span className="text-gray-400 w-[68px] shrink-0 text-[12px]">{label}</span>
+      <span className="text-gray-800 break-all">{value}</span>
+    </div>
+  ) : null;
+  const Section = ({ title, children }) => (
+    <div className="mb-4">
+      <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 px-1">{title}</div>
+      <div className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-2">{children}</div>
+    </div>
+  );
+  return (
+    <div className="fixed inset-0 z-[10000] flex items-end bg-black/50" onClick={onClose}>
+      <div className="w-full bg-white rounded-t-2xl shadow-2xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="bg-[#1B2B4B] px-5 py-4 rounded-t-2xl flex items-center justify-between shrink-0">
+          <div>
+            <div className="text-white font-bold text-[15px]">오더정보</div>
+            <div className="text-white/50 text-[12px] mt-0.5">{row.상차일 || ""}{row.거래처명 ? ` · ${row.거래처명}` : ""}</div>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/10 text-white text-xl font-bold">×</button>
+        </div>
+        <div className="overflow-y-auto px-4 pt-4 pb-6 flex-1">
+          <Section title="상차지">
+            <InfoRow label="업체명" value={row.상차지명} />
+            <InfoRow label="주소" value={row.상차지주소} />
+            <InfoRow label="상차시간" value={row.상차시간 ? `${row.상차시간}${row.상차시간기준 ? ` ${row.상차시간기준}` : ""}` : null} />
+          </Section>
+          <Section title="하차지">
+            <InfoRow label="업체명" value={row.하차지명} />
+            <InfoRow label="주소" value={row.하차지주소} />
+            <InfoRow label="하차시간" value={row.하차시간 ? `${row.하차시간}${row.하차시간기준 ? ` ${row.하차시간기준}` : ""}` : null} />
+          </Section>
+          <Section title="화물 정보">
+            <InfoRow label="화물내용" value={row.화물내용} />
+            <InfoRow label="화물톤수" value={row.차량톤수} />
+            <InfoRow label="차량종류" value={row.차량종류 || row.차종} />
+          </Section>
+          <Section title="운임 정보">
+            <InfoRow label="청구운임" value={fmtMoney(row.청구운임)} />
+            <InfoRow label="기사운임" value={fmtMoney(row.기사운임)} />
+            <InfoRow label="수수료" value={fee ? fee.toLocaleString() + "원" : null} />
+          </Section>
+          <Section title="차량 정보">
+            <InfoRow label="차량번호" value={row.차량번호} />
+            <InfoRow label="기사명" value={row.이름 || row.기사명} />
+            <InfoRow label="전화번호" value={fmtPhone(row.전화번호)} />
+          </Section>
+          {(row.메모 || row.전달사항) && (
+            <Section title="메모 / 전달사항">
+              <InfoRow label="메모" value={row.메모} />
+              <InfoRow label="전달사항" value={row.전달사항} />
+            </Section>
+          )}
+        </div>
+        <div className="px-4 pb-6 pt-2 shrink-0">
+          <button className="w-full py-3.5 bg-[#1B2B4B] text-white rounded-xl font-bold text-[14px]" onClick={onClose}>닫기</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────
 // 길게 누르기 컨텍스트 메뉴 (bottom sheet)
 // ────────────────────────────────────────────────────────────────
-function LongPressContextMenu({ order, cardVersionB, onClose, onEdit, onCopyDriver, onCopyOrder, onDelete, onUploadLink }) {
+function LongPressContextMenu({ order, cardVersionB, onClose, onEdit, onCopyDriver, onCopyOrder, onDelete, onUploadLink, onOrderInfo }) {
   const menuItems = [
     {
       label: "일부 수정",
       desc: "운임·기사·배차방식 빠른 수정",
       action: onEdit,
       svg: <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>,
+    },
+    {
+      label: "오더정보",
+      desc: "상세 오더 정보 확인",
+      action: onOrderInfo,
+      svg: <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>,
     },
     {
       label: "기사 복사",
@@ -13282,6 +13366,7 @@ function MobileUnassignedList({
   const [quickEditOrder, setQuickEditOrder] = useState(null);
   const [deleteConfirmOrder, setDeleteConfirmOrder] = useState(null);
   const [copyModalOrder, setCopyModalOrder] = useState(null);
+  const [orderInfoOrder, setOrderInfoOrder] = useState(null);
   const longPressTimerRef = useRef(null);
   const longPressStartPos = useRef({ x: 0, y: 0 });
 
@@ -13607,11 +13692,17 @@ return (
         cardVersionB={cardVersionB}
         onClose={() => setLongPressOrder(null)}
         onEdit={() => { setQuickEditOrder(longPressOrder); setLongPressOrder(null); }}
+        onOrderInfo={() => { setOrderInfoOrder(longPressOrder); setLongPressOrder(null); }}
         onCopyDriver={() => { onCopyDriver?.(longPressOrder); setLongPressOrder(null); }}
         onCopyOrder={() => { onCopyOrder?.(longPressOrder); setLongPressOrder(null); }}
         onDelete={() => { setDeleteConfirmOrder(longPressOrder); setLongPressOrder(null); }}
         onUploadLink={() => { handleSingleUploadLink(longPressOrder); setLongPressOrder(null); }}
       />
+    )}
+
+    {/* ── 오더정보 모달 ── */}
+    {orderInfoOrder && (
+      <MobileOrderInfoModal order={orderInfoOrder} onClose={() => setOrderInfoOrder(null)} />
     )}
 
     {/* ── 일부 수정 모달 ── */}
