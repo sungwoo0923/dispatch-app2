@@ -3278,10 +3278,13 @@ setOpenMemo={setOpenMemo}
     tab={unassignedTab}
     setTab={setUnassignedTab}
     onSaveScroll={() => { unassignedScrollYRef.current = window.scrollY; }}
-
     focusOrderId={focusUnassignedOrderId}
     onFocusDone={() => setFocusUnassignedOrderId(null)}
     cardVersionB={cardVersionB}
+    drivers={drivers}
+    onCopyOrder={handleOrderDuplicate}
+    onCopyDriver={handleOrderDuplicateWithDriver}
+    onDeleteOrder={deleteSingleOrder}
   />
 )}
 
@@ -13169,6 +13172,10 @@ function MobileUnassignedList({
   focusOrderId,
   onFocusDone,
   cardVersionB = false,
+  drivers = [],
+  onCopyOrder,
+  onCopyDriver,
+  onDeleteOrder,
 }) {
     // ============================
   // 🔢 미배차 요약 계산
@@ -13185,6 +13192,14 @@ function MobileUnassignedList({
   // ✅ 포커스 스크롤/하이라이트용 ref + 상태
   const orderRefs = useRef({}); // { [orderId]: HTMLElement }
   const [flashId, setFlashId] = useState(null);
+
+  // 길게 누르기 컨텍스트 메뉴
+  const [longPressOrder, setLongPressOrder] = useState(null);
+  const [quickEditOrder, setQuickEditOrder] = useState(null);
+  const [deleteConfirmOrder, setDeleteConfirmOrder] = useState(null);
+  const [copyModalOrder, setCopyModalOrder] = useState(null);
+  const longPressTimerRef = useRef(null);
+  const longPressStartPos = useRef({ x: 0, y: 0 });
 
   // ✅ focusOrderId가 들어오면: 해당 카드로 스크롤 → 파란 glow 1회 → 종료
   useEffect(() => {
@@ -13413,6 +13428,21 @@ return (
                   key={o.id}
                   ref={(el) => { if (el) orderRefs.current[o.id] = el; }}
                   style={{ scrollMarginTop: 90 }}
+                  onTouchStart={(e) => {
+                    longPressStartPos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+                    longPressTimerRef.current = setTimeout(() => {
+                      setLongPressOrder(o);
+                      longPressTimerRef.current = null;
+                    }, 500);
+                  }}
+                  onTouchMove={(e) => {
+                    if (!longPressTimerRef.current) return;
+                    const dx = Math.abs(e.touches[0].clientX - longPressStartPos.current.x);
+                    const dy = Math.abs(e.touches[0].clientY - longPressStartPos.current.y);
+                    if (dx > 8 || dy > 8) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; }
+                  }}
+                  onTouchEnd={() => { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; }}
+                  onTouchCancel={() => { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; }}
                 >
                   <MobileOrderCard
                     order={o}
@@ -13437,6 +13467,64 @@ return (
         );
       })}
     </div>
+
+    {/* ── 길게 누르기 컨텍스트 메뉴 ── */}
+    {longPressOrder && (
+      <LongPressContextMenu
+        order={longPressOrder}
+        cardVersionB={cardVersionB}
+        onClose={() => setLongPressOrder(null)}
+        onEdit={() => { setQuickEditOrder(longPressOrder); setLongPressOrder(null); }}
+        onCopyDriver={() => { onCopyDriver?.(longPressOrder); setLongPressOrder(null); }}
+        onCopyOrder={() => { onCopyOrder?.(longPressOrder); setLongPressOrder(null); }}
+        onDelete={() => { setDeleteConfirmOrder(longPressOrder); setLongPressOrder(null); }}
+      />
+    )}
+
+    {/* ── 일부 수정 모달 ── */}
+    {quickEditOrder && (
+      <QuickEditModal
+        order={quickEditOrder}
+        drivers={drivers}
+        cardVersionB={cardVersionB}
+        onClose={() => setQuickEditOrder(null)}
+        onSuccess={() => {}}
+      />
+    )}
+
+    {/* ── 삭제 확인 모달 ── */}
+    {deleteConfirmOrder && (
+      <div className="fixed inset-0 z-[9999] flex items-end justify-center" style={{ background: "rgba(0,0,0,0.48)" }}
+        onClick={() => setDeleteConfirmOrder(null)}>
+        <div className="w-full max-w-md bg-white rounded-t-2xl px-5 pt-5 pb-8 shadow-2xl"
+          onClick={e => e.stopPropagation()}>
+          <div className="w-10 h-1 rounded-full bg-gray-200 mx-auto mb-4" />
+          <div className="font-bold text-[15px] text-gray-900 mb-1">오더 삭제</div>
+          <div className="text-[13px] text-gray-500 mb-5">
+            {deleteConfirmOrder.상차지명} → {deleteConfirmOrder.하차지명} 오더를 삭제합니다.
+          </div>
+          <div className="flex gap-3">
+            <button onClick={() => setDeleteConfirmOrder(null)}
+              className="flex-1 py-3 rounded-xl text-[14px] font-semibold bg-gray-100 text-gray-600">취소</button>
+            <button onClick={async () => {
+              const o = deleteConfirmOrder;
+              setDeleteConfirmOrder(null);
+              await onDeleteOrder?.(o);
+            }} className="flex-1 py-3 rounded-xl text-[14px] font-bold bg-red-500 text-white">삭제</button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* ── 기사 복사 모달 ── */}
+    {copyModalOrder && (
+      <CopySelectModal
+        order={copyModalOrder}
+        onClose={() => setCopyModalOrder(null)}
+        onAfterFullCopy={() => setCopyModalOrder(null)}
+        cardVersionB={cardVersionB}
+      />
+    )}
 
     {/* ── 정보전달 확인 모달 ── */}
     {confirmTarget && (
