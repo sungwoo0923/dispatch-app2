@@ -4276,6 +4276,54 @@ function MobileOrderList({
     setUploadLinkModal(true);
   };
 
+  const buildSingleUploadMsg = (order) => {
+    const baseUrl = window.location.origin;
+    const date = (order.상차일 || "").slice(0, 10);
+    let dateLabel = "";
+    if (date) {
+      const [, m, d] = date.split("-");
+      if (m && d) dateLabel = `${parseInt(m)}월 ${parseInt(d)}일`;
+    }
+    const timeLabel = order.상차시간 || "";
+    const from = order.상차지명 || "";
+    const to = order.하차지명 || "";
+    const vehicleType = String(order.차량종류 || order.차종 || "");
+    const isCold = vehicleType.includes("냉장") || vehicleType.includes("냉동");
+    const cargoLine = isCold
+      ? "파렛전표,거래명세서,타코기록지 등"
+      : "파렛전표,거래명세서 등";
+    const params = new URLSearchParams();
+    if (date) params.set("date", date);
+    const vehicle = (order.차량번호 || "").replace(/\s/g, "");
+    if (vehicle) params.set("vehicle", vehicle);
+    const name = (order.이름 || order.기사명 || "").trim();
+    if (name) params.set("name", name);
+    const url = `${baseUrl}/driver-upload?${params.toString()}`;
+    const header = `안녕하세요. ${[dateLabel, timeLabel, from && to ? `${from} → ${to}` : (from || to)].filter(Boolean).join(" ")}`;
+    return [
+      header,
+      "관련 서류가 업로드 되지 않았습니다.",
+      "미 업로드시 운임 지급이 늦어 질 수 있습니다.",
+      "",
+      "아래 링크를 통하여 빠른 업로드 부탁드리겠습니다.",
+      cargoLine,
+      "서류는 반드시 한 장씩 찍어서 올려주세요.",
+      "(전표/명세서 없으면 문자로 x 남겨주세요)",
+      "",
+      "여기를 눌러 업로드해주세요",
+      url,
+    ].join("\n");
+  };
+  const handleSingleUploadLink = (order) => {
+    const phone = (order.전화번호 || "").replace(/[^0-9]/g, "");
+    const msg = buildSingleUploadMsg(order);
+    if (phone) {
+      window.location.href = `sms:${phone}?body=${encodeURIComponent(msg)}`;
+    } else {
+      navigator.clipboard.writeText(msg).catch(() => {});
+    }
+  };
+
   const handleDeleteSelected = async () => {
     if (selectedOrders.length === 0) return;
     await onDeleteSelected?.(selectedOrders);
@@ -4720,6 +4768,7 @@ const summary = useMemo(() => {
         onCopyDriver={() => { setCopyModalOrder(longPressOrder); setLongPressOrder(null); }}
         onCopyOrder={() => { onCopyOrder?.(longPressOrder); setLongPressOrder(null); }}
         onDelete={() => { setDeleteConfirmOrder(longPressOrder); setLongPressOrder(null); }}
+        onUploadLink={() => { handleSingleUploadLink(longPressOrder); setLongPressOrder(null); }}
       />
     )}
 
@@ -5001,7 +5050,7 @@ function CardAttachViewer({ order, onClose }) {
 // ────────────────────────────────────────────────────────────────
 // 길게 누르기 컨텍스트 메뉴 (bottom sheet)
 // ────────────────────────────────────────────────────────────────
-function LongPressContextMenu({ order, cardVersionB, onClose, onEdit, onCopyDriver, onCopyOrder, onDelete }) {
+function LongPressContextMenu({ order, cardVersionB, onClose, onEdit, onCopyDriver, onCopyOrder, onDelete, onUploadLink }) {
   const menuItems = [
     {
       label: "일부 수정",
@@ -5020,6 +5069,12 @@ function LongPressContextMenu({ order, cardVersionB, onClose, onEdit, onCopyDriv
       desc: "동일 오더를 새로 등록",
       action: onCopyOrder,
       svg: <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>,
+    },
+    {
+      label: "업로드링크",
+      desc: "업로드링크 SMS 발송",
+      action: onUploadLink,
+      svg: <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>,
     },
     {
       label: "삭제",
@@ -13335,6 +13390,54 @@ const source = rawSource.filter((o) => {
   }
   const sortedDates = Array.from(dateMap.keys()).sort();
 
+  const buildSingleUploadMsg = (order) => {
+    const baseUrl = window.location.origin;
+    const date = (order.상차일 || "").slice(0, 10);
+    let dateLabel = "";
+    if (date) {
+      const [, m, d] = date.split("-");
+      if (m && d) dateLabel = `${parseInt(m)}월 ${parseInt(d)}일`;
+    }
+    const timeLabel = order.상차시간 || "";
+    const from = order.상차지명 || "";
+    const to = order.하차지명 || "";
+    const vehicleType = String(order.차량종류 || order.차종 || "");
+    const isCold = vehicleType.includes("냉장") || vehicleType.includes("냉동");
+    const cargoLine = isCold
+      ? "파렛전표,거래명세서,타코기록지 등"
+      : "파렛전표,거래명세서 등";
+    const params = new URLSearchParams();
+    if (date) params.set("date", date);
+    const vehicle = (order.차량번호 || "").replace(/\s/g, "");
+    if (vehicle) params.set("vehicle", vehicle);
+    const name = (order.이름 || order.기사명 || "").trim();
+    if (name) params.set("name", name);
+    const url = `${baseUrl}/driver-upload?${params.toString()}`;
+    const header = `안녕하세요. ${[dateLabel, timeLabel, from && to ? `${from} → ${to}` : (from || to)].filter(Boolean).join(" ")}`;
+    return [
+      header,
+      "관련 서류가 업로드 되지 않았습니다.",
+      "미 업로드시 운임 지급이 늦어 질 수 있습니다.",
+      "",
+      "아래 링크를 통하여 빠른 업로드 부탁드리겠습니다.",
+      cargoLine,
+      "서류는 반드시 한 장씩 찍어서 올려주세요.",
+      "(전표/명세서 없으면 문자로 x 남겨주세요)",
+      "",
+      "여기를 눌러 업로드해주세요",
+      url,
+    ].join("\n");
+  };
+  const handleSingleUploadLink = (order) => {
+    const phone = (order.전화번호 || "").replace(/[^0-9]/g, "");
+    const msg = buildSingleUploadMsg(order);
+    if (phone) {
+      window.location.href = `sms:${phone}?body=${encodeURIComponent(msg)}`;
+    } else {
+      navigator.clipboard.writeText(msg).catch(() => {});
+    }
+  };
+
 return (
   <div className={`min-h-screen ${cardVersionB ? "bg-[#F0F3F8]" : "bg-gray-50"}`}>
     {/* 하이라이트 애니메이션 */}
@@ -13507,6 +13610,7 @@ return (
         onCopyDriver={() => { onCopyDriver?.(longPressOrder); setLongPressOrder(null); }}
         onCopyOrder={() => { onCopyOrder?.(longPressOrder); setLongPressOrder(null); }}
         onDelete={() => { setDeleteConfirmOrder(longPressOrder); setLongPressOrder(null); }}
+        onUploadLink={() => { handleSingleUploadLink(longPressOrder); setLongPressOrder(null); }}
       />
     )}
 
