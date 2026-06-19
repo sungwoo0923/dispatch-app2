@@ -14981,8 +14981,8 @@ const [quickRegPhone, setQuickRegPhone] = React.useState("");
     // ✅ 낙관적 업데이트
     setRows(prev => prev.map(r => r._id === id ? { ...r, ...updated } : r));
 
-    // ✅ 백그라운드 저장
-    patchDispatch(id, updated).catch(console.error);
+    // ✅ 백그라운드 저장 (약간 지연해 re-render 후 write)
+    setTimeout(() => patchDispatch(id, updated).catch(console.error), 150);
   };
   // ------------------------
   // 📌 차량번호 입력(auto-match + 신규기사 등록)
@@ -15016,7 +15016,8 @@ const [quickRegPhone, setQuickRegPhone] = React.useState("");
     setRows((prev) =>
       prev.map((r) => (r._id === id ? { ...r, ...updated } : r))
     );
-    patchDispatch?.(id, updated);
+    // 약간 지연해 UI render 후 Firestore write (즉각 write → onSnapshot → 전체 re-render 방지)
+    setTimeout(() => patchDispatch?.(id, updated), 150);
     return;
   }
 
@@ -16980,13 +16981,17 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
     )
   );
 }}
-                      onKeyDown={(e) =>
-                        e.key === "Enter" &&
-                        handleCarInput(r._id, e.currentTarget.value, e)
-                      }
-                      onBlur={(e) =>
-                        handleCarInput(r._id, e.currentTarget.value)
-                      }
+                      onFocus={(e) => { e.currentTarget.dataset.origVal = e.currentTarget.value; }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handleCarInput(r._id, e.currentTarget.value, e);
+                      }}
+                      onBlur={(e) => {
+                        // 팝업 열려있으면 blur로 재트리거 방지
+                        if (driverConfirmOpen || memoAlert || blackAlert) return;
+                        // 값이 변경되지 않았으면 스킵
+                        if (e.currentTarget.value === (e.currentTarget.dataset.origVal ?? "")) return;
+                        handleCarInput(r._id, e.currentTarget.value);
+                      }}
                     />
 
 
@@ -23670,14 +23675,14 @@ else if (cp) priority = 1;
     if (!v) {
       setDriverConfirmInfo(null);
       setDriverSelectInfo(null);
-      patchDispatch(id, {
+      setTimeout(() => patchDispatch(id, {
         차량번호: "",
         이름: "",
         전화번호: "",
         배차상태: "배차중",
         긴급: row.긴급 === true,
         lastUpdated: new Date().toISOString(),
-      });
+      }), 150);
       return;
     }
 
@@ -25034,14 +25039,15 @@ return (
                           }
                         }));
                       }}
+                      onFocus={(e) => { e.currentTarget.dataset.origVal = e.currentTarget.value; }}
                       onKeyDown={(e) => {
-  if (e.key === "Enter") {
-    handleCarInput(id, e.target.value);
-  }
-}}
-onBlur={(e) => {
-  handleCarInput(id, e.target.value);
-}}
+                        if (e.key === "Enter") handleCarInput(id, e.target.value);
+                      }}
+                      onBlur={(e) => {
+                        if (driverConfirmInfo || driverSelectInfo || memoAlert || blackAlert) return;
+                        if (e.currentTarget.value === (e.currentTarget.dataset.origVal ?? "")) return;
+                        handleCarInput(id, e.target.value);
+                      }}
                     />
                   </td>
                   <td className="border text-center whitespace-nowrap max-w-[80px] w-[80px] overflow-hidden text-ellipsis" title={row.이름 || ""}>{row.이름}</td>
