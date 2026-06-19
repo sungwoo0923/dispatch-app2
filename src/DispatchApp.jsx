@@ -2603,7 +2603,7 @@ return (
               ))}
             </div>
             {관리센터Tab === "경영인텔리전스" && (
-              <ExecutiveDashboard dispatchData={dispatchData || []} />
+              <ExecutiveDashboard dispatchData={dispatchData || []} fixedRows={fixedRows} />
             )}
             {관리센터Tab === "가입신청관리" && (
               <CompanyApplications />

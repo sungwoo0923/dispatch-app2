@@ -564,6 +564,8 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
   const totalQty = filtered.reduce((a, b) => a + Number(b.수량 || 0), 0);
   const totalTonKg = filtered.reduce((a, b) => { const kg = parseTonToKg(b.톤수); return kg !== null ? a + kg : a; }, 0);
   const totalTonDisplay = totalTonKg > 0 ? (totalTonKg >= 1000 ? `${(totalTonKg / 1000).toFixed(2)}톤` : `${totalTonKg}kg`) : null;
+  const totalPrePay = filtered.reduce((a, b) => a + Number(b.선결제 || 0), 0);
+  const totalRealFee = filtered.reduce((a, b) => a + Number(b.실수수료 != null ? b.실수수료 : (Number(b.수수료||0) - Number(b.선결제||0))), 0);
 
   const chartData = useMemo(() => {
     const map = {};
@@ -833,7 +835,7 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
                   <tr key={r.id} onDoubleClick={() => openEditPopup(r)} onContextMenu={e=>{e.preventDefault();const _z=parseFloat(document.getElementById("root")?.style.zoom)||1;setContextMenuFC({x:e.clientX/_z,y:e.clientY/_z,row:r});}} className={`transition hover:bg-blue-50/40 cursor-pointer ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"} ${r.정산완료 ? "opacity-60" : ""}`}>
                     <td className={cell} onClick={e => e.stopPropagation()}><input type="checkbox" checked={selected.includes(r.id)} onChange={() => setSelected(p => p.includes(r.id) ? p.filter(x => x !== r.id) : [...p, r.id])} /></td>
                     <td className={cell}>
-                      <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold border ${r.정산완료 ? "bg-emerald-100 text-emerald-700 border-emerald-300" : "bg-amber-100 text-amber-600 border-amber-300"}`}>
+                      <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold border ${r.정산완료 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-gray-100 text-gray-500 border-gray-200"}`}>
                         {r.정산완료 ? "완료" : "미정산"}
                       </span>
                     </td>
@@ -872,6 +874,27 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
                   </tr>
                 ))}
               </tbody>
+              {filtered.length > 0 && (
+                <tfoot>
+                  <tr className="bg-[#1B2B4B]">
+                    <td colSpan={2} className="px-3 py-3 text-center text-[12px] font-bold text-white whitespace-nowrap">합계 ({filtered.length}건)</td>
+                    <td className="px-3 py-3 text-center text-white/40 text-[12px]"></td>
+                    <td className="px-3 py-3 text-center text-white/40 text-[12px]"></td>
+                    <td className="px-3 py-3 text-center text-[12px] font-semibold text-white/80">{totalTonDisplay || ""}</td>
+                    <td className="px-3 py-3 text-center text-[12px] font-bold text-white">{totalQty.toLocaleString()}</td>
+                    <td className="px-3 py-3 text-center text-white/40 text-[12px]"></td>
+                    <td className="px-3 py-3 text-center text-white/40 text-[12px]"></td>
+                    <td className="px-3 py-3 text-center text-white/40 text-[12px]"></td>
+                    <td className="px-3 py-3 text-right text-[12px] font-bold text-white">{fmt(totalSale)}</td>
+                    <td className="px-3 py-3 text-right text-[12px] font-bold text-white/80">{fmt(totalDrv)}</td>
+                    <td className="px-3 py-3 text-right text-[12px] font-semibold text-white/70">{fmt(totalFee)}</td>
+                    <td className="px-3 py-3 text-right text-[12px] font-semibold text-white/60">{totalPrePay > 0 ? fmt(totalPrePay) : ""}</td>
+                    <td className="px-3 py-3 text-right text-[12px] font-bold text-white/80">{fmt(totalRealFee)}</td>
+                    <td className="px-3 py-3 text-center text-white/40 text-[12px]"></td>
+                    <td className="px-3 py-3 text-center text-white/40 text-[12px]"></td>
+                  </tr>
+                </tfoot>
+              )}
             </table>
           </div>
         </div>

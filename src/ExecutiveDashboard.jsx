@@ -1112,7 +1112,7 @@ const TABS = [
   { id: "insights",    label: "AI 인사이트" },
 ];
 
-export default function ExecutiveDashboard({ dispatchData = [] }) {
+export default function ExecutiveDashboard({ dispatchData = [], fixedRows = [] }) {
   const [verified, setVerified] = useState(() => sessionStorage.getItem("exec_intel_ok") === "1");
   const [activeTab, setActiveTab] = useState("overview");
 
@@ -1122,9 +1122,19 @@ export default function ExecutiveDashboard({ dispatchData = [] }) {
     endY: now.getFullYear(), endM: now.getMonth() + 1,
   });
 
+  // fixedClients 오더를 dispatch 형식으로 변환하여 합산
+  const allData = useMemo(() => {
+    const fixed = fixedRows.map(r => ({
+      ...r,
+      상차일: r.날짜 || r.상차일 || "",
+      배차상태: "배차완료",
+    }));
+    return [...dispatchData, ...fixed];
+  }, [dispatchData, fixedRows]);
+
   const filteredData = useMemo(
-    () => filterByDateRange(dispatchData, dateRange),
-    [dispatchData, dateRange]
+    () => filterByDateRange(allData, dateRange),
+    [allData, dateRange]
   );
 
   if (!verified) return <PinGate onVerified={() => { sessionStorage.setItem("exec_intel_ok", "1"); setVerified(true); }} />;
@@ -1136,7 +1146,7 @@ export default function ExecutiveDashboard({ dispatchData = [] }) {
         <div>
           <div className="text-[10px] font-bold tracking-[0.25em] text-white/30 uppercase mb-1">CONFIDENTIAL — EXECUTIVE USE ONLY</div>
           <h1 className="text-[18px] font-extrabold text-white">경영 인텔리전스 대시보드</h1>
-          <div className="text-[12px] text-white/40 mt-0.5">전체 {dispatchData.length.toLocaleString()}건 배차 데이터 기반</div>
+          <div className="text-[12px] text-white/40 mt-0.5">배차 {dispatchData.length.toLocaleString()}건 + 고정거래처 {fixedRows.length.toLocaleString()}건 통합</div>
         </div>
         <div className="text-right shrink-0">
           <div className="text-[12px] text-white/40">
@@ -1168,7 +1178,7 @@ export default function ExecutiveDashboard({ dispatchData = [] }) {
       {/* 날짜 필터 (AI 인사이트 탭 제외) */}
       {activeTab !== "insights" && (
         <div className="bg-white border-b border-gray-100 px-6 py-3">
-          <DateRangePicker range={dateRange} onChange={setDateRange} allData={dispatchData} />
+          <DateRangePicker range={dateRange} onChange={setDateRange} allData={allData} />
         </div>
       )}
 
@@ -1179,7 +1189,7 @@ export default function ExecutiveDashboard({ dispatchData = [] }) {
         {activeTab === "client"     && <ClientTab      data={filteredData} />}
         {activeTab === "driver"     && <DriverTab      data={filteredData} />}
         {activeTab === "operations" && <OperationsTab  data={filteredData} />}
-        {activeTab === "insights"   && <InsightsTab    data={dispatchData} />}
+        {activeTab === "insights"   && <InsightsTab    data={allData} />}
       </div>
     </div>
   );

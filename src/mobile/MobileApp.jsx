@@ -3354,10 +3354,86 @@ setOpenMemo={setOpenMemo}
   </div>
 );
 }
+const SALES_PIN_KEY = "exec_intel_pin_v1";
+
+function SalesPinGate({ onVerified }) {
+  const hasPin = !!localStorage.getItem(SALES_PIN_KEY);
+  const [mode, setMode] = useState(hasPin ? "verify" : "setup1");
+  const [entered, setEntered] = useState("");
+  const [firstPin, setFirstPin] = useState("");
+  const [error, setError] = useState("");
+  const [animKey, setAnimKey] = useState(0);
+
+  const bump = () => { setAnimKey(k => k + 1); setEntered(""); setError(""); };
+
+  const handleKey = (d) => {
+    if (d === "back") { setEntered(p => p.slice(0, -1)); return; }
+    if (entered.length >= 6) return;
+    const next = entered + d;
+    setEntered(next);
+    if (next.length < 6) return;
+    setTimeout(() => {
+      if (mode === "verify") {
+        if (next === localStorage.getItem(SALES_PIN_KEY)) { onVerified(); }
+        else { setError("비밀번호가 올바르지 않습니다"); bump(); }
+      } else if (mode === "setup1") {
+        setFirstPin(next); setEntered(""); setMode("setup2");
+      } else if (mode === "setup2") {
+        if (next === firstPin) { localStorage.setItem(SALES_PIN_KEY, next); onVerified(); }
+        else { setError("비밀번호가 일치하지 않습니다"); setFirstPin(""); setMode("setup1"); bump(); }
+      }
+    }, 200);
+  };
+
+  const heading = mode === "verify" ? "매출관리 인증" : mode === "setup1" ? "비밀번호 설정" : "비밀번호 확인";
+  const sub = mode === "verify" ? "6자리 비밀번호를 입력하세요" : mode === "setup1" ? "사용할 6자리 비밀번호를 입력하세요" : "비밀번호를 한 번 더 입력하세요";
+
+  return (
+    <div style={{ minHeight: "100vh", background: "#f4f6f9", display: "flex", flexDirection: "column" }}>
+      <div style={{ background: "#1B2B4B", padding: "16px 20px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ width: 34, height: 34, background: "rgba(255,255,255,0.12)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          </svg>
+        </div>
+        <div>
+          <div style={{ color: "white", fontWeight: 800, fontSize: 15, letterSpacing: "-0.3px" }}>매출관리</div>
+          <div style={{ color: "rgba(255,255,255,0.4)", fontSize: 11 }}>보안 인증이 필요합니다</div>
+        </div>
+      </div>
+      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px 24px" }}>
+        <div style={{ width: "100%", maxWidth: 340 }}>
+          <div style={{ textAlign: "center", marginBottom: 32 }}>
+            <h2 style={{ fontSize: 20, fontWeight: 800, color: "#1B2B4B", marginBottom: 6 }}>{heading}</h2>
+            <p style={{ fontSize: 13, color: "#9ca3af" }}>{sub}</p>
+          </div>
+          <div key={animKey} style={{ display: "flex", justifyContent: "center", gap: 12, marginBottom: 20 }}>
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} style={{ width: 14, height: 14, borderRadius: "50%", border: "2px solid", transition: "all 0.15s", background: i < entered.length ? "#1B2B4B" : "white", borderColor: i < entered.length ? "#1B2B4B" : "#d1d5db" }} />
+            ))}
+          </div>
+          {error && <div style={{ textAlign: "center", fontSize: 12, color: "#ef4444", fontWeight: 600, marginBottom: 16, background: "#fef2f2", borderRadius: 10, padding: "9px 12px" }}>{error}</div>}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
+            {[1,2,3,4,5,6,7,8,9,null,0,"←"].map((d, i) => (
+              <button key={i} onClick={() => d !== null && handleKey(d === "←" ? "back" : String(d))} disabled={d === null}
+                style={{ height: 58, borderRadius: 14, fontSize: 20, fontWeight: 700, border: "none", cursor: d === null ? "default" : "pointer", opacity: d === null ? 0 : 1, background: d === "←" ? "#f1f5f9" : "white", color: "#1B2B4B", boxShadow: d === null ? "none" : "0 2px 8px rgba(0,0,0,0.07)", transition: "all 0.1s", WebkitTapHighlightColor: "transparent" }}>
+                {d}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function MobileSalesPage({ data = [], fixedData = [], onBack }) {
+  const [verified, setVerified] = useState(() => sessionStorage.getItem("sales_ok") === "1");
   const [month, setMonth] = useState(new Date(new Date().getTime() + 9*60*60*1000).toISOString().slice(0,7));
   const toInt = (v) => Number(String(v || "").replace(/[^\d]/g, "")) || 0;
   const fmtWon = (v) => Number(v).toLocaleString("ko-KR");
+
+  if (!verified) return <SalesPinGate onVerified={() => { sessionStorage.setItem("sales_ok", "1"); setVerified(true); }} />;
 
   // 고정거래처 오더를 dispatch orders 형식으로 변환하여 합산
   const normalizeFixed = (r) => ({
