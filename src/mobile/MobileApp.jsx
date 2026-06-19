@@ -5441,12 +5441,12 @@ const dropTime = order.하차시간 || "시간 없음";
               {order.전화번호 && (
                 <div className="flex gap-1">
                   <a href={`tel:${order.전화번호}`} onClick={e => e.stopPropagation()} style={{ touchAction: "manipulation" }}
-                    className="shrink-0 px-2 py-1 rounded-full bg-blue-600 text-white text-[0.68em] font-bold">
-                    📞
+                    className="shrink-0 w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.38 2 2 0 0 1 3.6 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.59a16 16 0 0 0 6 6l.96-.96a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21.7 16z"/></svg>
                   </a>
                   <a href={`sms:${order.전화번호}`} onClick={e => e.stopPropagation()} style={{ touchAction: "manipulation" }}
-                    className="shrink-0 px-2 py-1 rounded-full border border-blue-600 text-blue-600 text-[0.68em] font-bold">
-                    💬
+                    className="shrink-0 w-7 h-7 rounded-full border border-blue-600 flex items-center justify-center">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
                   </a>
                 </div>
               )}
@@ -5635,12 +5635,12 @@ const dt = new Date(y, m - 1, d, hh, mm);
           {order.전화번호 && (
             <div className="flex gap-1">
               <a href={`tel:${order.전화번호}`} onClick={e => e.stopPropagation()} style={{ touchAction: "manipulation" }}
-                className="shrink-0 px-2 py-1 rounded-full bg-[#1B2B4B] text-white text-[10px] font-bold">
-                📞
+                className="shrink-0 w-7 h-7 rounded-full bg-[#1B2B4B] flex items-center justify-center">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.38 2 2 0 0 1 3.6 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.59a16 16 0 0 0 6 6l.96-.96a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21.7 16z"/></svg>
               </a>
               <a href={`sms:${order.전화번호}`} onClick={e => e.stopPropagation()} style={{ touchAction: "manipulation" }}
-                className="shrink-0 px-2 py-1 rounded-full border border-[#1B2B4B] text-[#1B2B4B] text-[10px] font-bold">
-                💬
+                className="shrink-0 w-7 h-7 rounded-full border border-[#1B2B4B] flex items-center justify-center">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#1B2B4B" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
               </a>
             </div>
           )}
@@ -6597,13 +6597,6 @@ const handleAssignClick = () => {
       ) : (
         <button onClick={onCancelAssign} className="w-full py-3 mb-2 rounded-xl border border-red-300 text-red-500 text-sm font-bold">기사 배차 취소</button>
       )}
-      <div className="h-px bg-gray-100 my-1" />
-      <div className="grid grid-cols-2 gap-2 mt-2">
-        <button onClick={handleGoToEdit}
-          className={`py-3 rounded-xl text-sm font-bold ${cardVersionB ? "bg-gray-700 text-white" : "bg-blue-600 text-white"}`}
-        >수정하기</button>
-        <button onClick={onCancelOrder} className="py-3 rounded-xl border border-red-200 text-red-500 text-sm font-semibold">오더 삭제</button>
-      </div>
     </div>
 
   </div>
