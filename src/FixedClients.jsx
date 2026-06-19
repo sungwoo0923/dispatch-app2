@@ -464,6 +464,7 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
     기사단가: { enabled: false, value: 5091 },
     수수료단가: { enabled: false, value: 909 },
     수수료기준: { enabled: false, value: "수량" },
+    선결제: { enabled: false, value: "auto" },
     거래처명: { enabled: false, value: "" },
     톤수: { enabled: false, value: "" },
     정산완료: { enabled: false, value: false },
@@ -670,13 +671,18 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
       ? filtered.filter(r => selected.includes(r.id))
       : filtered;
     if (!targets.length) { alert("변경할 항목이 없습니다."); return; }
-    const patch = {};
+    const staticPatch = {};
+    const autoFields = new Set();
     Object.entries(bulkFields).forEach(([key, { enabled, value }]) => {
-      if (enabled) patch[key] = value;
+      if (!enabled) return;
+      if (key === "선결제" && value === "auto") { autoFields.add("선결제"); }
+      else { staticPatch[key] = value; }
     });
-    if (!Object.keys(patch).length) { alert("변경할 항목을 선택하세요."); return; }
+    if (!Object.keys(staticPatch).length && !autoFields.size) { alert("변경할 항목을 선택하세요."); return; }
     for (const r of targets) {
-      const updated = calcRow({ ...r, ...patch });
+      const perRowPatch = { ...staticPatch };
+      if (autoFields.has("선결제")) perRowPatch.선결제 = Number(r.수량 || 0) * 360;
+      const updated = calcRow({ ...r, ...perRowPatch });
       await saveRow(updated);
     }
     setBulkEditOpen(false);
@@ -786,13 +792,10 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
                 : `${window.location.origin}/driver-upload?source=fixed`;
               const msg = `[인수증 업로드 안내]\n운송 완료 후 아래 링크를 통해 인수증을 업로드해 주시기 바랍니다.\n\n${url}\n\n날짜·차량번호·이름을 확인 후 검색하여 오더를 선택해 업로드해 주세요.\n미업로드 시 운임 정산이 지연될 수 있습니다.`;
               navigator.clipboard.writeText(msg).then(() => alert("업로드 안내 메시지가 복사되었습니다.\n기사에게 붙여넣기로 전달하세요.")).catch(() => alert(`링크: ${url}`));
-            }} className="px-3 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-semibold hover:opacity-90 transition whitespace-nowrap">업로드링크</button>
-            <button onClick={() => { if (!selected.length) return alert("수정할 항목을 선택하세요."); const row = filtered.find(r => r.id === selected[0]); if (row) openEditPopup(row); }} className="px-3 py-1.5 rounded-lg border text-[13px] font-semibold transition bg-white text-gray-600 border-gray-300 hover:bg-gray-50">수정</button>
-            <button onClick={markSettlement} className="px-3 py-1.5 rounded-lg bg-indigo-100 text-indigo-700 border border-indigo-300 text-[13px] font-semibold hover:bg-indigo-200 transition">정산 처리</button>
-            <button onClick={() => { if (!selected.length) return alert("삭제할 항목을 선택하세요."); setDeleteConfirm(true); }} className="px-3 py-1.5 rounded-lg bg-red-100 text-red-600 border border-red-300 text-[13px] font-semibold hover:bg-red-200 transition">삭제</button>
-            <button onClick={() => { const ws = XLSX.utils.json_to_sheet(filtered); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "고정거래처"); XLSX.writeFile(wb, "고정거래처관리.xlsx"); }} className="px-3 py-1.5 rounded-lg bg-teal-100 text-teal-700 border border-teal-300 text-[13px] font-semibold hover:bg-teal-200 transition">엑셀다운</button>
+            }} className="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 text-[13px] font-semibold hover:bg-gray-50 transition whitespace-nowrap">업로드링크</button>
+            <button onClick={markSettlement} className="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 text-[13px] font-semibold hover:bg-gray-50 transition">정산</button>
+            <button onClick={() => { const ws = XLSX.utils.json_to_sheet(filtered); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "고정거래처"); XLSX.writeFile(wb, "고정거래처관리.xlsx"); }} className="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 text-[13px] font-semibold hover:bg-gray-50 transition">엑셀다운</button>
             <button onClick={() => setBulkEditOpen(true)} disabled={filtered.length === 0} className="px-3 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-semibold hover:opacity-90 transition disabled:opacity-40">일괄수정</button>
-            <button onClick={applyDefaultsToAll} className="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition">전체 기본값 적용</button>
           </div>
         </div>
       </div>
@@ -925,6 +928,11 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
             onClick={()=>{openEditPopup(contextMenuFC.row);setContextMenuFC(null);}}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
             수정
+          </button>
+          <button className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
+            onClick={()=>{setBulkEditOpen(true);setContextMenuFC(null);}}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+            일괄수정
           </button>
           <button className="w-full text-left px-4 py-2 text-[13px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors"
             onClick={()=>{
@@ -1119,66 +1127,89 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
 
       {/* 일괄수정 모달 */}
       {bulkEditOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[480px] overflow-hidden">
             <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
               <div>
-                <h3 className="text-white font-bold text-[16px]">일괄 수정</h3>
-                <p className="text-white/60 text-[12px] mt-0.5">변경할 항목을 선택하고 값을 입력하세요</p>
+                <h3 className="text-white font-bold text-[15px]">일괄 수정</h3>
+                <p className="text-white/50 text-[12px] mt-0.5">변경할 항목을 선택하고 값을 입력하세요</p>
               </div>
-              <button onClick={() => setBulkEditOpen(false)} className="text-white/60 hover:text-white text-xl">✕</button>
+              <button onClick={() => setBulkEditOpen(false)} className="w-7 h-7 flex items-center justify-center rounded-lg text-white/50 hover:text-white hover:bg-white/10 transition">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
             </div>
-            <div className="p-5 space-y-3">
+            <div className="p-5 space-y-4">
               {/* 적용 범위 */}
-              <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl border border-gray-200">
-                <span className="text-[13px] font-semibold text-gray-600 shrink-0">적용 범위</span>
-                <label className="flex items-center gap-1.5 cursor-pointer">
-                  <input type="radio" checked={bulkScope === "selected"} onChange={() => setBulkScope("selected")} />
-                  <span className="text-[13px]">선택된 항목 ({selected.length}건)</span>
-                </label>
-                <label className="flex items-center gap-1.5 cursor-pointer">
-                  <input type="radio" checked={bulkScope === "filtered"} onChange={() => setBulkScope("filtered")} />
-                  <span className="text-[13px]">조회 중인 전체 ({filtered.length}건)</span>
-                </label>
+              <div className="p-3 bg-gray-50 rounded-xl border border-gray-200">
+                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2">적용 범위</p>
+                <div className="flex items-center gap-4">
+                  {[
+                    { val: "selected", label: `선택된 항목 (${selected.length}건)` },
+                    { val: "filtered", label: `조회 전체 (${filtered.length}건)` },
+                  ].map(({ val, label }) => (
+                    <label key={val} className="flex items-center gap-2 cursor-pointer" onClick={() => setBulkScope(val)}>
+                      <span className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all ${bulkScope === val ? "border-[#1B2B4B] bg-[#1B2B4B]" : "border-gray-300 bg-white"}`}>
+                        {bulkScope === val && <span className="w-1.5 h-1.5 rounded-full bg-white block" />}
+                      </span>
+                      <span className={`text-[13px] font-semibold ${bulkScope === val ? "text-[#1B2B4B]" : "text-gray-500"}`}>{label}</span>
+                    </label>
+                  ))}
+                </div>
               </div>
               {/* 필드 선택 */}
-              {[
-                { key: "지급방식", label: "지급방식", type: "select", options: ["계산서","착불","선불","손실","개인","취소"] },
-                { key: "기사단가", label: "기사단가", type: "number" },
-                { key: "수수료단가", label: "수수료단가", type: "number" },
-                { key: "수수료기준", label: "수수료기준", type: "select", options: ["수량","톤수"] },
-                { key: "거래처명", label: "거래처명", type: "text" },
-                { key: "톤수", label: "톤수", type: "text" },
-                { key: "정산완료", label: "정산완료", type: "bool" },
-              ].map(({ key, label, type, options }) => (
-                <div key={key} className="flex items-center gap-3">
-                  <label className="flex items-center gap-2 w-[110px] shrink-0 cursor-pointer">
-                    <input type="checkbox" checked={bulkFields[key]?.enabled || false} onChange={e => setBulkFields(p => ({ ...p, [key]: { ...p[key], enabled: e.target.checked } }))} />
-                    <span className="text-[13px] font-semibold text-gray-700">{label}</span>
-                  </label>
-                  {type === "select" && (
-                    <select disabled={!bulkFields[key]?.enabled} className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] disabled:opacity-40" value={bulkFields[key]?.value || ""} onChange={e => setBulkFields(p => ({ ...p, [key]: { ...p[key], value: e.target.value } }))}>
-                      {options.map(o => <option key={o} value={o}>{o}</option>)}
-                    </select>
-                  )}
-                  {type === "number" && (
-                    <input type="number" disabled={!bulkFields[key]?.enabled} className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] disabled:opacity-40" value={bulkFields[key]?.value ?? ""} onChange={e => setBulkFields(p => ({ ...p, [key]: { ...p[key], value: Number(e.target.value) } }))} />
-                  )}
-                  {type === "text" && (
-                    <input type="text" disabled={!bulkFields[key]?.enabled} className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] disabled:opacity-40" value={bulkFields[key]?.value || ""} onChange={e => setBulkFields(p => ({ ...p, [key]: { ...p[key], value: e.target.value } }))} />
-                  )}
-                  {type === "bool" && (
-                    <select disabled={!bulkFields[key]?.enabled} className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] disabled:opacity-40" value={String(bulkFields[key]?.value)} onChange={e => setBulkFields(p => ({ ...p, [key]: { ...p[key], value: e.target.value === "true" } }))}>
-                      <option value="true">완료</option>
-                      <option value="false">미정산</option>
-                    </select>
-                  )}
-                </div>
-              ))}
+              <div className="space-y-1">
+                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2">변경 항목</p>
+                {[
+                  { key: "지급방식", label: "지급방식", type: "select", options: ["계산서","착불","선불","손실","개인","취소"] },
+                  { key: "기사단가", label: "기사단가", type: "number" },
+                  { key: "수수료단가", label: "수수료단가", type: "number" },
+                  { key: "수수료기준", label: "수수료기준", type: "select", options: ["수량","톤수"] },
+                  { key: "선결제", label: "선결제", type: "auto" },
+                  { key: "거래처명", label: "거래처명", type: "text" },
+                  { key: "톤수", label: "톤수", type: "text" },
+                  { key: "정산완료", label: "정산완료", type: "bool" },
+                ].map(({ key, label, type, options }) => {
+                  const enabled = bulkFields[key]?.enabled || false;
+                  return (
+                    <div key={key} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border transition-all ${enabled ? "border-[#1B2B4B] bg-[#f0f3f8]" : "border-gray-100 bg-white hover:bg-gray-50"}`}>
+                      <button
+                        type="button"
+                        onClick={() => setBulkFields(p => ({ ...p, [key]: { ...p[key], enabled: !enabled } }))}
+                        className={`w-5 h-5 rounded-[5px] border-2 flex items-center justify-center transition-all shrink-0 ${enabled ? "bg-[#1B2B4B] border-[#1B2B4B]" : "bg-white border-gray-300"}`}
+                      >
+                        {enabled && (
+                          <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="1.5 6 4.5 9 10.5 3" />
+                          </svg>
+                        )}
+                      </button>
+                      <span className={`text-[13px] font-semibold w-[90px] shrink-0 ${enabled ? "text-[#1B2B4B]" : "text-gray-500"}`}>{label}</span>
+                      {type === "auto" ? (
+                        <span className={`flex-1 text-[12px] font-medium px-3 py-1.5 rounded-lg ${enabled ? "text-[#1B2B4B] bg-[#1B2B4B]/10" : "text-gray-400 bg-gray-100"}`}>
+                          수량 × 360원 자동 계산
+                        </span>
+                      ) : type === "select" ? (
+                        <select disabled={!enabled} className={`flex-1 border rounded-lg px-2 py-1.5 text-[13px] outline-none transition-all ${enabled ? "border-[#1B2B4B]/30 bg-white text-gray-800" : "border-gray-200 bg-gray-50 text-gray-400"}`} value={bulkFields[key]?.value || ""} onChange={e => setBulkFields(p => ({ ...p, [key]: { ...p[key], value: e.target.value } }))}>
+                          {options.map(o => <option key={o} value={o}>{o}</option>)}
+                        </select>
+                      ) : type === "number" ? (
+                        <input type="number" disabled={!enabled} className={`flex-1 border rounded-lg px-2 py-1.5 text-[13px] outline-none transition-all ${enabled ? "border-[#1B2B4B]/30 bg-white text-gray-800" : "border-gray-200 bg-gray-50 text-gray-400"}`} value={bulkFields[key]?.value ?? ""} onChange={e => setBulkFields(p => ({ ...p, [key]: { ...p[key], value: Number(e.target.value) } }))} />
+                      ) : type === "text" ? (
+                        <input type="text" disabled={!enabled} className={`flex-1 border rounded-lg px-2 py-1.5 text-[13px] outline-none transition-all ${enabled ? "border-[#1B2B4B]/30 bg-white text-gray-800" : "border-gray-200 bg-gray-50 text-gray-400"}`} value={bulkFields[key]?.value || ""} onChange={e => setBulkFields(p => ({ ...p, [key]: { ...p[key], value: e.target.value } }))} />
+                      ) : (
+                        <select disabled={!enabled} className={`flex-1 border rounded-lg px-2 py-1.5 text-[13px] outline-none transition-all ${enabled ? "border-[#1B2B4B]/30 bg-white text-gray-800" : "border-gray-200 bg-gray-50 text-gray-400"}`} value={String(bulkFields[key]?.value)} onChange={e => setBulkFields(p => ({ ...p, [key]: { ...p[key], value: e.target.value === "true" } }))}>
+                          <option value="true">완료</option>
+                          <option value="false">미정산</option>
+                        </select>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-            <div className="px-5 py-4 border-t flex justify-end gap-3">
-              <button onClick={() => setBulkEditOpen(false)} className="px-4 py-2 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-600 hover:bg-gray-50">취소</button>
-              <button onClick={executeBulkEdit} className="px-5 py-2 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60]">적용하기</button>
+            <div className="px-5 py-4 border-t border-gray-100 flex justify-end gap-2">
+              <button onClick={() => setBulkEditOpen(false)} className="px-4 py-2 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 transition">취소</button>
+              <button onClick={executeBulkEdit} className="px-5 py-2 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition">적용하기</button>
             </div>
           </div>
         </div>
