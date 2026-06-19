@@ -1266,6 +1266,11 @@ const [detailFrom, setDetailFrom] = useState(null);
   const [statusTab, setStatusTab] = useState("전체");
   const [showMenu, setShowMenu] = useState(false);
   const [cardVersionB, setCardVersionB] = useState(() => localStorage.getItem("cardVersion") === "B");
+
+  useEffect(() => {
+    document.body.style.overflow = showMenu ? "hidden" : "";
+    return () => { document.body.style.overflow = ""; };
+  }, [showMenu]);
   const [fontScale, setFontScale] = useState(() => Number(localStorage.getItem("fontScale") || "1"));
   const appVersion = APP_VERSION;
 
@@ -2528,7 +2533,7 @@ onGoSchedule={() => {
         />
       )}
 
-      <div className="flex-1 overflow-y-auto pb-24" style={{ WebkitOverflowScrolling: "touch" }}>
+      <div className="flex-1 overflow-y-auto pb-24" style={{ WebkitOverflowScrolling: "touch", scrollbarWidth: "thin", scrollbarColor: "rgba(0,0,0,0.12) transparent" }}>
         {page === "notice" && (
   <div className="px-4 py-3 space-y-3">
     {/* 등록 버튼 */}
@@ -3897,7 +3902,7 @@ function MobileSideMenu({
           className="flex-1 overflow-y-auto py-1"
           style={dark
             ? { scrollbarWidth: "thin", scrollbarColor: "rgba(255,255,255,0.2) transparent" }
-            : { scrollbarWidth: "thin", scrollbarColor: "#2563EB #EFF6FF" }
+            : { scrollbarWidth: "thin", scrollbarColor: "rgba(0,0,0,0.12) transparent" }
           }
         >
           <MenuSection title="배차관리" dark={dark}>
@@ -5255,7 +5260,7 @@ const isToday =
 
   const stateBadgeClass =
     state === "배차완료"
-      ? "bg-emerald-50 text-emerald-700 border-emerald-300"
+      ? "bg-blue-600 text-white border-blue-600"
       : "bg-gray-100 text-gray-600 border-gray-300";
 
   const pickupName = order.상차지명 || "-";
@@ -5432,33 +5437,20 @@ const dropTime = order.하차시간 || "시간 없음";
   }
   onClick={onSelect}
 >
-      {/* 📝 메모 뱃지 */}
-{(order.메모 || order.적요) && (
-  <div
-    className="absolute top-2 left-2"
-    onClick={(e) => {
-      e.stopPropagation();
-      onOpenMemo(order);   // ✅ 기존 팝업 그대로 호출
-    }}
-  >
-    <span
-      className="inline-flex items-center gap-1
-                 px-2 py-0.5 rounded-full
-                 bg-[#1B2B4B]/10 text-[#1B2B4B]
-                 border border-[#1B2B4B]/20
-                 text-[10px] font-semibold"
-    >
-       메모
-    </span>
-  </div>
-)}
-
-      {/* ▶ 거래처명 + 상태 + 냉장/냉동 */}
+      {/* ▶ 거래처명 + 메모 + 상태 + 배지들 */}
 <div className="flex justify-between items-center gap-1 mb-0.5">
-  {order.거래처명 ? (
-    <span className="text-[11px] font-semibold text-gray-600 truncate max-w-[45%]">{order.거래처명}</span>
-  ) : <span />}
-  <div className="flex items-center gap-1">
+  <div className="flex items-center gap-1 min-w-0 flex-1">
+    {order.거래처명 && (
+      <span className="text-[11px] font-semibold text-gray-600 truncate">{order.거래처명}</span>
+    )}
+    {(order.메모 || order.적요) && (
+      <button
+        onClick={(e) => { e.stopPropagation(); onOpenMemo(order); }}
+        className="shrink-0 px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-500 border border-blue-200 text-[10px] font-semibold"
+      >메모</button>
+    )}
+  </div>
+  <div className="flex items-center gap-1 shrink-0">
 
   {showUndeliveredOnly && (
     <span className="px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 text-[10px] font-bold border border-yellow-300">
@@ -5469,12 +5461,6 @@ const dropTime = order.하차시간 || "시간 없음";
   {!showUndeliveredOnly && isUrgentOrder(order) && (
     <span className="px-2 py-0.5 rounded-full bg-red-600 text-white text-[10px] font-bold">
       긴급
-    </span>
-  )}
-
-  {!showUndeliveredOnly && isToday && (
-    <span className="px-2 py-0.5 rounded-full bg-red-500 text-white text-[10px] font-bold">
-      TODAY
     </span>
   )}
 
@@ -5497,9 +5483,11 @@ const dropTime = order.하차시간 || "시간 없음";
     {(order.attachCount > 0) ? order.attachCount : "없음"}
   </button>
 
-  <span className={"px-2 py-0.5 rounded-full border text-[11px] font-semibold " + stateBadgeClass}>
-    {state}
-  </span>
+  {state === "배차완료" ? (
+    <span className={"px-2 py-0.5 rounded-full border text-[11px] font-semibold " + stateBadgeClass}>{state}</span>
+  ) : (
+    <span className={"badge-dispatching px-2 py-0.5 rounded-full border text-[11px] font-semibold " + stateBadgeClass}>{state}</span>
+  )}
   </div>
 </div>
 
@@ -6280,7 +6268,7 @@ const handleAssignClick = () => {
           <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${
             cardVersionB
               ? (state === "배차완료" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "border-[#1B2B4B]/30 text-[#1B2B4B] bg-transparent")
-              : (state === "배차완료" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-blue-50 text-blue-700 border-blue-200")
+              : (state === "배차완료" ? "bg-blue-600 text-white border-blue-600" : "bg-blue-50 text-blue-600 border-blue-200")
           }`}>{state}</span>
           {state === "배차완료" && order.배차완료일시?.seconds && (
             <span className="text-[10px] text-emerald-600">
@@ -6573,7 +6561,7 @@ const handleAssignClick = () => {
               _editId: order.id, _returnToDetail: true, _pendingContactItems,
             });
           }}
-          className="py-3 rounded-xl bg-gray-700 text-white text-sm font-bold"
+          className={`py-3 rounded-xl text-sm font-bold ${cardVersionB ? "bg-gray-700 text-white" : "bg-blue-600 text-white"}`}
         >수정하기</button>
         <button onClick={onCancelOrder} className="py-3 rounded-xl border border-red-200 text-red-500 text-sm font-semibold">오더 삭제</button>
       </div>

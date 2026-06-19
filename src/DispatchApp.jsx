@@ -15001,6 +15001,9 @@ const [quickRegPhone, setQuickRegPhone] = React.useState("");
 
   const oldRow = rows[idx];
 
+  // 값이 변경되지 않았고 이미 기사 정보가 있으면 팝업 불필요
+  if (v && v === normalizePlate(oldRow.차량번호) && (oldRow.이름 || oldRow.전화번호)) return;
+
   // 차량번호 삭제 → 기사 정보 초기화
   if (!v) {
     const updated = {
@@ -15010,26 +15013,10 @@ const [quickRegPhone, setQuickRegPhone] = React.useState("");
       배차상태: "배차중",
       updatedAt: Date.now(),
     };
-
     setRows((prev) =>
       prev.map((r) => (r._id === id ? { ...r, ...updated } : r))
     );
-
-    await patchDispatch?.(id, updated);
-    setTimeout(() => {
-      const el = document.querySelector(`[data-id="${id}"] input[name="차량번호"]`);
-      if (el) {
-        el.focus();
-        el.select();
-      }
-    }, 80);
-
-    setRows(prev =>
-      prev.map(r =>
-        r._id === id ? { ...r, updatedAt: Date.now() } : r
-      )
-    );
-
+    patchDispatch?.(id, updated);
     return;
   }
 
@@ -16979,7 +16966,6 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
                       onChange={(e) => {
   const v = e.target.value;
   const isEmpty = v.trim() === "";
-
   setRows(prev =>
     prev.map(row =>
       row._id === r._id
@@ -16993,17 +16979,6 @@ ${highlightIds.has(r._id) ? "animate-pulse bg-blue-100" : ""}
         : row
     )
   );
-
-  // 🔥 즉시 DB 반영
-  if (isEmpty) {
-    patchDispatch(r._id, {
-      차량번호: "",
-      이름: "",
-      전화번호: "",
-      배차상태: "배차중",
-      updatedAt: Date.now(),
-    });
-  }
 }}
                       onKeyDown={(e) =>
                         e.key === "Enter" &&
@@ -23686,25 +23661,23 @@ else if (cp) priority = 1;
     if (idx === -1) return;
     const row = dispatchData[idx];
 
+    // 값이 변경되지 않았고 이미 기사 정보가 있으면 팝업 불필요
+    if (v && v.replace(/\s+/g, "") === (row.차량번호 || "").replace(/\s+/g, "") && (row.이름 || row.전화번호)) return;
+
     // =====================================================
     // 1️⃣ 차량번호를 "완전히 삭제"했을 때
     // =====================================================
     if (!v) {
-      // 🔥 팝업 전부 강제 종료
       setDriverConfirmInfo(null);
       setDriverSelectInfo(null);
-
-      // 🔥 기사 정보 완전 초기화
-      await patchDispatch(id, {
+      patchDispatch(id, {
         차량번호: "",
         이름: "",
         전화번호: "",
         배차상태: "배차중",
-        긴급: row.긴급 === true, // 긴급 플래그 유지
+        긴급: row.긴급 === true,
         lastUpdated: new Date().toISOString(),
-
       });
-
       return;
     }
 
@@ -25060,13 +25033,6 @@ return (
                             ...(isEmpty && { 이름: "", 전화번호: "", 배차상태: "배차중" }),
                           }
                         }));
-                        // 🔥 즉시 DB 반영
-                        if (isEmpty) {
-                          patchDispatch(id, {
-                            차량번호: "", 이름: "", 전화번호: "",
-                            배차상태: "배차중", updatedAt: Date.now(),
-                          });
-                        }
                       }}
                       onKeyDown={(e) => {
   if (e.key === "Enter") {
