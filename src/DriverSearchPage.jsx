@@ -134,7 +134,7 @@ export default function DriverSearchPage() {
           }
         };
         await tryCollection("orders");
-        if (matched.length === 0) await tryCollection("dispatch");
+        await tryCollection("dispatch");
       }
 
       setResults(matched);
