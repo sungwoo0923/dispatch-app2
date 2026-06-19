@@ -230,6 +230,59 @@ function TonnageInput({ value, onChange }) {
   );
 }
 
+function ClientNameInput({ value, onChange, onSelect, rows, getClientConfigs, placeholder = "거래처명 입력" }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState(value || "");
+  const wrapperRef = useRef(null);
+
+  useEffect(() => { setQuery(value || ""); }, [value]);
+
+  useEffect(() => {
+    const fn = (e) => { if (wrapperRef.current && !wrapperRef.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", fn);
+    return () => document.removeEventListener("mousedown", fn);
+  }, []);
+
+  const knownNames = useMemo(() => {
+    const fromRows = [...new Set(rows.map(r => r.거래처명).filter(Boolean))];
+    const fromCfg = Object.keys(getClientConfigs?.() || {});
+    return [...new Set([...fromRows, ...fromCfg])].sort();
+  }, [rows, getClientConfigs]);
+
+  const filtered = query.trim()
+    ? knownNames.filter(n => n.toLowerCase().includes(query.toLowerCase()))
+    : knownNames;
+
+  const handleSelect = (name) => {
+    setQuery(name);
+    setOpen(false);
+    onSelect?.(name);
+    onChange?.(name);
+  };
+
+  return (
+    <div ref={wrapperRef} className="relative">
+      <input
+        type="text"
+        className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] focus:outline-none focus:border-[#1B2B4B]"
+        value={query}
+        placeholder={placeholder}
+        onChange={e => { setQuery(e.target.value); onChange?.(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+      />
+      {open && filtered.length > 0 && (
+        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-48 overflow-y-auto">
+          {filtered.map(name => (
+            <button key={name} type="button" className="w-full text-left px-3 py-2 text-[13px] hover:bg-blue-50 hover:text-blue-700 transition" onClick={() => handleSelect(name)}>
+              {name}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function FastRowCard({ idx, row, drivers, rows, getClientConfigs, onUpdate, onSelectDriver, onSelectClient, onDelete }) {
   const [searchQ, setSearchQ] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -315,7 +368,13 @@ function FastRowCard({ idx, row, drivers, rows, getClientConfigs, onUpdate, onSe
         </div>
         <div>
           <label className="block text-[11px] font-semibold text-gray-500 mb-1">거래처명</label>
-          <input type="text" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px]" value={row.거래처명} onChange={e => { onUpdate("거래처명", e.target.value); onSelectClient(e.target.value); }} />
+          <ClientNameInput
+            value={row.거래처명 || ""}
+            rows={rows}
+            getClientConfigs={getClientConfigs}
+            onChange={val => onUpdate("거래처명", val)}
+            onSelect={name => onSelectClient(name)}
+          />
         </div>
         <div>
           <label className="block text-[11px] font-semibold text-gray-500 mb-1">톤수</label>
@@ -399,6 +458,17 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
   const [attachViewer, setAttachViewer] = useState(null);
   const [attachCounts, setAttachCounts] = useState({});
   const [contextMenuFC, setContextMenuFC] = useState(null);
+  const [bulkEditOpen, setBulkEditOpen] = useState(false);
+  const [bulkFields, setBulkFields] = useState({
+    지급방식: { enabled: false, value: "착불" },
+    기사단가: { enabled: false, value: 5091 },
+    수수료단가: { enabled: false, value: 909 },
+    수수료기준: { enabled: false, value: "수량" },
+    거래처명: { enabled: false, value: "" },
+    톤수: { enabled: false, value: "" },
+    정산완료: { enabled: false, value: false },
+  });
+  const [bulkScope, setBulkScope] = useState("selected");
 
   const getViewCompany = () => role === "totalMaster"
     ? (localStorage.getItem("loginCompany") || userCompany || "돌캐")
@@ -415,10 +485,10 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
   const emptyFastRow = () => ({
     날짜: new Date().toISOString().slice(0, 10),
     거래처명: "", 톤수: "", 수량: 1,
-    기사단가: 0, 수수료단가: 0, 수수료기준: "수량",
+    기사단가: 5091, 수수료단가: 909, 수수료기준: "수량",
     차량번호: "", 이름: "", 핸드폰번호: "",
     기사운임: 0, 수수료: 0, 선결제: 0, 실수수료: 0, 청구운임: 0,
-    지급방식: "",
+    지급방식: "착불",
   });
 
   const [fastRows, setFastRows] = useState([emptyFastRow()]);
@@ -515,7 +585,7 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
   };
 
   const addRow = async () => {
-    const newRow = { id: crypto.randomUUID(), 날짜: new Date().toISOString().slice(0, 10), 정산완료: false, 거래처명: "", 톤수: "", 수량: "", 차량번호: "", 이름: "", 핸드폰번호: "", 청구운임: "", 기사운임: "", 수수료: "", 선결제: 0, 실수수료: 0, 지급방식: "", companyName: getViewCompany() };
+    const newRow = { id: crypto.randomUUID(), 날짜: new Date().toISOString().slice(0, 10), 정산완료: false, 거래처명: "", 톤수: "", 수량: 1, 차량번호: "", 이름: "", 핸드폰번호: "", 기사단가: 5091, 수수료단가: 909, 수수료기준: "수량", 선결제: 360, 기사운임: 5091, 수수료: 909, 실수수료: 549, 청구운임: 6000, 지급방식: "착불", companyName: getViewCompany() };
     await setDoc(doc(coll, newRow.id), newRow);
   };
 
@@ -528,7 +598,10 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
   const openEditPopup = (row) => { setEditPopupRow({ ...row }); setEditPopupOpen(true); };
 
   const updateEditPopupField = (field, value) => {
-    setEditPopupRow(prev => calcRow({ ...prev, [field]: value }));
+    setEditPopupRow(prev => {
+      const extra = field === "수량" ? { 선결제: Number(value || 0) * 360 } : {};
+      return calcRow({ ...prev, [field]: value, ...extra });
+    });
   };
 
   const selectEditPopupDriver = (driver) => {
@@ -542,6 +615,7 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
         기사단가: Number(editPopupRow.기사단가 || 0),
         수수료단가: Number(editPopupRow.수수료단가 || 0),
         수수료기준: editPopupRow.수수료기준 || "수량",
+        지급방식: editPopupRow.지급방식 || "",
       });
     }
     await saveRow(editPopupRow);
@@ -557,7 +631,12 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
   };
 
   const updateFastField = (idx, field, value) => {
-    setFastRows(prev => { const u = [...prev]; u[idx] = calcRow({ ...u[idx], [field]: value }); return u; });
+    setFastRows(prev => {
+      const u = [...prev];
+      const extra = field === "수량" ? { 선결제: Number(value || 0) * 360 } : {};
+      u[idx] = calcRow({ ...u[idx], [field]: value, ...extra });
+      return u;
+    });
   };
 
   const selectFastDriver = (idx, driver) => {
@@ -566,7 +645,11 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
 
   const selectFastClient = (idx, clientName) => {
     const cfg = getClientConfigs()[clientName];
-    if (cfg) setFastRows(prev => { const u = [...prev]; u[idx] = calcRow({ ...u[idx], 거래처명: clientName, 기사단가: cfg.기사단가 || 0, 수수료단가: cfg.수수료단가 || 0, 수수료기준: cfg.수수료기준 || "수량" }); return u; });
+    if (cfg) setFastRows(prev => {
+      const u = [...prev];
+      u[idx] = calcRow({ ...u[idx], 거래처명: clientName, 기사단가: cfg.기사단가 || 0, 수수료단가: cfg.수수료단가 || 0, 수수료기준: cfg.수수료기준 || "수량", ...(cfg.지급방식 ? { 지급방식: cfg.지급방식 } : {}) });
+      return u;
+    });
   };
 
   const submitFastRows = async () => {
@@ -575,11 +658,50 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
       const id = crypto.randomUUID();
       const finalRow = calcRow(row);
       await setDoc(doc(coll, id), { id, ...finalRow, 정산완료: false, companyName: vc });
-      if (row.거래처명) saveClientConfig(row.거래처명, { 기사단가: Number(row.기사단가 || 0), 수수료단가: Number(row.수수료단가 || 0), 수수료기준: row.수수료기준 || "수량" });
+      if (row.거래처명) saveClientConfig(row.거래처명, { 기사단가: Number(row.기사단가 || 0), 수수료단가: Number(row.수수료단가 || 0), 수수료기준: row.수수료기준 || "수량", 지급방식: row.지급방식 || "" });
     }
     alert(`${fastRows.length}건 등록 완료!`);
     setFastRows([emptyFastRow()]);
     setFastOpen(false);
+  };
+
+  const executeBulkEdit = async () => {
+    const targets = bulkScope === "selected"
+      ? filtered.filter(r => selected.includes(r.id))
+      : filtered;
+    if (!targets.length) { alert("변경할 항목이 없습니다."); return; }
+    const patch = {};
+    Object.entries(bulkFields).forEach(([key, { enabled, value }]) => {
+      if (enabled) patch[key] = value;
+    });
+    if (!Object.keys(patch).length) { alert("변경할 항목을 선택하세요."); return; }
+    for (const r of targets) {
+      const updated = calcRow({ ...r, ...patch });
+      await saveRow(updated);
+    }
+    setBulkEditOpen(false);
+    setSelected([]);
+  };
+
+  const applyDefaultsToAll = async () => {
+    const thisYear = new Date().getFullYear().toString();
+    const thisYearCount = rows.filter(r => (r.날짜 || "").startsWith(thisYear)).length;
+    const prevYearCount = rows.length - thisYearCount;
+    if (!window.confirm(
+      `전체 ${rows.length}건을 업데이트합니다.\n` +
+      `• 올해(${thisYear}) ${thisYearCount}건: 기사단가 5,091원 / 수수료단가 909원 / 지급방식 착불\n` +
+      `• 이전 연도 ${prevYearCount}건: 지급방식 착불만 변경 (기사단가·수수료단가 유지)\n\n` +
+      `이 작업은 되돌릴 수 없습니다.`
+    )) return;
+    for (const r of rows) {
+      const isThisYear = (r.날짜 || "").startsWith(thisYear);
+      const patch = isThisYear
+        ? { 기사단가: 5091, 수수료단가: 909, 지급방식: "착불" }
+        : { 지급방식: "착불" };
+      const updated = calcRow({ ...r, ...patch });
+      await saveRow(updated);
+    }
+    alert(`${rows.length}건 업데이트 완료!`);
   };
 
   const handleSort = (key) => {
@@ -669,6 +791,8 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
             <button onClick={markSettlement} className="px-3 py-1.5 rounded-lg bg-indigo-100 text-indigo-700 border border-indigo-300 text-[13px] font-semibold hover:bg-indigo-200 transition">정산 처리</button>
             <button onClick={() => { if (!selected.length) return alert("삭제할 항목을 선택하세요."); setDeleteConfirm(true); }} className="px-3 py-1.5 rounded-lg bg-red-100 text-red-600 border border-red-300 text-[13px] font-semibold hover:bg-red-200 transition">삭제</button>
             <button onClick={() => { const ws = XLSX.utils.json_to_sheet(filtered); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "고정거래처"); XLSX.writeFile(wb, "고정거래처관리.xlsx"); }} className="px-3 py-1.5 rounded-lg bg-teal-100 text-teal-700 border border-teal-300 text-[13px] font-semibold hover:bg-teal-200 transition">엑셀다운</button>
+            <button onClick={() => setBulkEditOpen(true)} disabled={filtered.length === 0} className="px-3 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-semibold hover:opacity-90 transition disabled:opacity-40">일괄수정</button>
+            <button onClick={applyDefaultsToAll} className="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition">전체 기본값 적용</button>
           </div>
         </div>
       </div>
@@ -869,11 +993,19 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
                     </div>
                     <div>
                       <label className="block text-[11px] font-semibold text-gray-500 mb-1">거래처명</label>
-                      <input type="text" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[13px]" value={editPopupRow.거래처명 || ""} onChange={e => {
-                        const v = e.target.value;
-                        const cfg = getClientConfigs()[v];
-                        setEditPopupRow(prev => calcRow({ ...prev, 거래처명: v, ...(cfg ? { 기사단가: cfg.기사단가, 수수료단가: cfg.수수료단가, 수수료기준: cfg.수수료기준 } : {}) }));
-                      }} />
+                      <ClientNameInput
+                        value={editPopupRow.거래처명 || ""}
+                        rows={rows}
+                        getClientConfigs={getClientConfigs}
+                        onChange={v => {
+                          const cfg = getClientConfigs()[v];
+                          setEditPopupRow(prev => calcRow({ ...prev, 거래처명: v, ...(cfg ? { 기사단가: cfg.기사단가, 수수료단가: cfg.수수료단가, 수수료기준: cfg.수수료기준, ...(cfg.지급방식 ? { 지급방식: cfg.지급방식 } : {}) } : {}) }));
+                        }}
+                        onSelect={v => {
+                          const cfg = getClientConfigs()[v];
+                          setEditPopupRow(prev => calcRow({ ...prev, 거래처명: v, ...(cfg ? { 기사단가: cfg.기사단가, 수수료단가: cfg.수수료단가, 수수료기준: cfg.수수료기준, ...(cfg.지급방식 ? { 지급방식: cfg.지급방식 } : {}) } : {}) }));
+                        }}
+                      />
                     </div>
                     <div>
                       <label className="block text-[11px] font-semibold text-gray-500 mb-1">톤수</label>
@@ -984,6 +1116,73 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
 
       {/* 첨부파일 뷰어 */}
       {attachViewer && <FCAttachViewer row={attachViewer} onClose={() => setAttachViewer(null)} />}
+
+      {/* 일괄수정 모달 */}
+      {bulkEditOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
+            <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
+              <div>
+                <h3 className="text-white font-bold text-[16px]">일괄 수정</h3>
+                <p className="text-white/60 text-[12px] mt-0.5">변경할 항목을 선택하고 값을 입력하세요</p>
+              </div>
+              <button onClick={() => setBulkEditOpen(false)} className="text-white/60 hover:text-white text-xl">✕</button>
+            </div>
+            <div className="p-5 space-y-3">
+              {/* 적용 범위 */}
+              <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl border border-gray-200">
+                <span className="text-[13px] font-semibold text-gray-600 shrink-0">적용 범위</span>
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input type="radio" checked={bulkScope === "selected"} onChange={() => setBulkScope("selected")} />
+                  <span className="text-[13px]">선택된 항목 ({selected.length}건)</span>
+                </label>
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input type="radio" checked={bulkScope === "filtered"} onChange={() => setBulkScope("filtered")} />
+                  <span className="text-[13px]">조회 중인 전체 ({filtered.length}건)</span>
+                </label>
+              </div>
+              {/* 필드 선택 */}
+              {[
+                { key: "지급방식", label: "지급방식", type: "select", options: ["계산서","착불","선불","손실","개인","취소"] },
+                { key: "기사단가", label: "기사단가", type: "number" },
+                { key: "수수료단가", label: "수수료단가", type: "number" },
+                { key: "수수료기준", label: "수수료기준", type: "select", options: ["수량","톤수"] },
+                { key: "거래처명", label: "거래처명", type: "text" },
+                { key: "톤수", label: "톤수", type: "text" },
+                { key: "정산완료", label: "정산완료", type: "bool" },
+              ].map(({ key, label, type, options }) => (
+                <div key={key} className="flex items-center gap-3">
+                  <label className="flex items-center gap-2 w-[110px] shrink-0 cursor-pointer">
+                    <input type="checkbox" checked={bulkFields[key]?.enabled || false} onChange={e => setBulkFields(p => ({ ...p, [key]: { ...p[key], enabled: e.target.checked } }))} />
+                    <span className="text-[13px] font-semibold text-gray-700">{label}</span>
+                  </label>
+                  {type === "select" && (
+                    <select disabled={!bulkFields[key]?.enabled} className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] disabled:opacity-40" value={bulkFields[key]?.value || ""} onChange={e => setBulkFields(p => ({ ...p, [key]: { ...p[key], value: e.target.value } }))}>
+                      {options.map(o => <option key={o} value={o}>{o}</option>)}
+                    </select>
+                  )}
+                  {type === "number" && (
+                    <input type="number" disabled={!bulkFields[key]?.enabled} className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] disabled:opacity-40" value={bulkFields[key]?.value ?? ""} onChange={e => setBulkFields(p => ({ ...p, [key]: { ...p[key], value: Number(e.target.value) } }))} />
+                  )}
+                  {type === "text" && (
+                    <input type="text" disabled={!bulkFields[key]?.enabled} className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] disabled:opacity-40" value={bulkFields[key]?.value || ""} onChange={e => setBulkFields(p => ({ ...p, [key]: { ...p[key], value: e.target.value } }))} />
+                  )}
+                  {type === "bool" && (
+                    <select disabled={!bulkFields[key]?.enabled} className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] disabled:opacity-40" value={String(bulkFields[key]?.value)} onChange={e => setBulkFields(p => ({ ...p, [key]: { ...p[key], value: e.target.value === "true" } }))}>
+                      <option value="true">완료</option>
+                      <option value="false">미정산</option>
+                    </select>
+                  )}
+                </div>
+              ))}
+            </div>
+            <div className="px-5 py-4 border-t flex justify-end gap-3">
+              <button onClick={() => setBulkEditOpen(false)} className="px-4 py-2 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-600 hover:bg-gray-50">취소</button>
+              <button onClick={executeBulkEdit} className="px-5 py-2 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60]">적용하기</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
