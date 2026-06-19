@@ -812,6 +812,7 @@ const [isRefreshing, setIsRefreshing] = useState(false);
   const [drivers, setDrivers] = useState([]);
   const [clients, setClients] = useState([]);
   const [places, setPlaces] = useState([]);
+  const [fixedClientRows, setFixedClientRows] = useState([]);
   const [refreshKey, setRefreshKey] = useState(0);
 
 // MobileApp 스코프: clients(Firestore) + places(Firestore) 통합 검색용 (places 우선)
@@ -1197,6 +1198,18 @@ useEffect(() => {
 
   return () => unsub();
 }, []);
+
+// 고정거래처관리 리스너
+useEffect(() => {
+  const co = userCompany || localStorage.getItem("userCompany") || "";
+  const unsub = onSnapshot(collection(db, "fixedClients"), (snap) => {
+    const list = snap.docs
+      .map(d => ({ id: d.id, __col: "fixedClients", ...d.data() }))
+      .filter(r => !co || !r.companyName || r.companyName === co);
+    setFixedClientRows(list);
+  });
+  return () => unsub();
+}, [userCompany]);
 
 // 🏢 기본거래처(clients) 리스너
 useEffect(() => {
@@ -3159,7 +3172,8 @@ setOpenMemo={setOpenMemo}
         )}
 {page === "sales" && (
   <MobileSalesPage
-    data={orders}   // ⚠ dispatchData 아님 → orders 써야함
+    data={orders}
+    fixedData={fixedClientRows}
     onBack={() => setPage("list")}
   />
 )}
@@ -3340,12 +3354,21 @@ setOpenMemo={setOpenMemo}
   </div>
 );
 }
-function MobileSalesPage({ data = [], onBack }) {
+function MobileSalesPage({ data = [], fixedData = [], onBack }) {
   const [month, setMonth] = useState(new Date(new Date().getTime() + 9*60*60*1000).toISOString().slice(0,7));
   const toInt = (v) => Number(String(v || "").replace(/[^\d]/g, "")) || 0;
   const fmtWon = (v) => Number(v).toLocaleString("ko-KR");
 
-  const allBase = data.filter(r => r.상차일 && !(r.거래처명||"").includes("후레쉬물류"));
+  // 고정거래처 오더를 dispatch orders 형식으로 변환하여 합산
+  const normalizeFixed = (r) => ({
+    ...r,
+    상차일: r.상차일 || r.날짜 || "",
+    청구운임: r.청구운임 || r.운임 || 0,
+    기사운임: r.기사운임 || r.기사비 || 0,
+    거래처명: r.거래처명 || r.업체명 || "",
+  });
+  const allFixed = fixedData.map(normalizeFixed).filter(r => r.상차일);
+  const allBase = [...data.filter(r => r.상차일 && !(r.거래처명||"").includes("후레쉬물류")), ...allFixed];
   const rows = allBase.filter(r => r.상차일.startsWith(month));
 
   const prevMonth = (() => { const d = new Date(month+"-01"); d.setMonth(d.getMonth()-1); return d.toISOString().slice(0,7); })();
@@ -5416,10 +5439,16 @@ const dropTime = order.하차시간 || "시간 없음";
                 {[order.차량번호, order.이름].filter(Boolean).join(" · ")}
               </span>
               {order.전화번호 && (
-                <a href={`tel:${order.전화번호}`} onClick={e => e.stopPropagation()} style={{ touchAction: "manipulation" }}
-                  className="shrink-0 px-2.5 py-1 rounded-full bg-[#1B2B4B] text-white text-[0.68em] font-bold">
-                  전화
-                </a>
+                <div className="flex gap-1">
+                  <a href={`tel:${order.전화번호}`} onClick={e => e.stopPropagation()} style={{ touchAction: "manipulation" }}
+                    className="shrink-0 px-2 py-1 rounded-full bg-blue-600 text-white text-[0.68em] font-bold">
+                    📞
+                  </a>
+                  <a href={`sms:${order.전화번호}`} onClick={e => e.stopPropagation()} style={{ touchAction: "manipulation" }}
+                    className="shrink-0 px-2 py-1 rounded-full border border-blue-600 text-blue-600 text-[0.68em] font-bold">
+                    💬
+                  </a>
+                </div>
               )}
             </div>
           )}
@@ -5604,14 +5633,16 @@ const dt = new Date(y, m - 1, d, hh, mm);
             {[order.차량번호, order.이름].filter(Boolean).join(" · ")}
           </span>
           {order.전화번호 && (
-            <a
-              href={`tel:${order.전화번호}`}
-              onClick={e => e.stopPropagation()}
-              style={{ touchAction: "manipulation" }}
-              className="shrink-0 px-2.5 py-1 rounded-full bg-[#1B2B4B] text-white text-[10px] font-bold"
-            >
-              전화
-            </a>
+            <div className="flex gap-1">
+              <a href={`tel:${order.전화번호}`} onClick={e => e.stopPropagation()} style={{ touchAction: "manipulation" }}
+                className="shrink-0 px-2 py-1 rounded-full bg-[#1B2B4B] text-white text-[10px] font-bold">
+                📞
+              </a>
+              <a href={`sms:${order.전화번호}`} onClick={e => e.stopPropagation()} style={{ touchAction: "manipulation" }}
+                className="shrink-0 px-2 py-1 rounded-full border border-[#1B2B4B] text-[#1B2B4B] text-[10px] font-bold">
+                💬
+              </a>
+            </div>
           )}
         </div>
       )}
@@ -6258,6 +6289,40 @@ const handleAssignClick = () => {
       alert("저장 실패: " + e.message);
     }
   };
+  const handleGoToEdit = () => {
+    const _pendingContactItems = [];
+    [{ fieldName: order.상차지명, type: "pickup" }, { fieldName: order.하차지명, type: "drop" }].forEach(({ fieldName, type }) => {
+      if (!fieldName) return;
+      const found = (clients || []).find(c => normalizeCompany(c.거래처명) === normalizeCompany(fieldName));
+      if (!found) return;
+      const contacts = (Array.isArray(found.contacts) ? found.contacts : []).filter(ct => ct.name?.trim());
+      const unique = [...new Map(contacts.map(ct => [ct.name.trim(), ct])).values()];
+      if (unique.length > 1) _pendingContactItems.push({ type, place: found, contacts: unique });
+    });
+    window.scrollTo(0, 0);
+    setPrevPage("detail");
+    setPage("form");
+    setForm({
+      거래처명: order.거래처명 || "", 상차일: order.상차일 || "", 상차시간: order.상차시간 || "",
+      상차시간기준: order.상차시간기준 || null, 하차일: order.하차일 || "", 하차시간: order.하차시간 || "",
+      하차시간기준: order.하차시간기준 || null, 상차지명: order.상차지명 || "", 상차지주소: order.상차지주소 || "",
+      상차지담당자: order.상차지담당자 || "", 상차지담당자번호: order.상차지담당자번호 || "",
+      하차지명: order.하차지명 || "", 하차지주소: order.하차지주소 || "",
+      하차지담당자: order.하차지담당자 || "", 하차지담당자번호: order.하차지담당자번호 || "",
+      톤수: order.톤수 || order.차량톤수 || "", 차종: order.차종 || order.차량종류 || "",
+      화물내용: order.화물내용 || "", 상차방법: order.상차방법 || "", 하차방법: order.하차방법 || "",
+      지급방식: order.지급방식 || "", 배차방식: order.배차방식 || "",
+      청구운임: order.청구운임 || 0, 기사운임: order.기사운임 || 0,
+      수수료: (Number(order.청구운임) || 0) - (Number(order.기사운임) || 0),
+      산재보험료: order.산재보험료 || 0, 차량번호: carNo || "",
+      혼적여부: order.혼적여부 || "독차", 적요: order.메모 || "",
+      기사명: name || "", 전화번호: phone || "",
+      경유상차목록: validStops(order.경유상차목록 || order.경유지_상차),
+      경유하차목록: validStops(order.경유하차목록 || order.경유지_하차),
+      _editId: order.id, _returnToDetail: true, _pendingContactItems,
+    });
+  };
+
   return (
     <div className="px-3 py-4 bg-gray-50 pb-10">
   {/* ── 통합 카드 ── */}
@@ -6267,17 +6332,21 @@ const handleAssignClick = () => {
     <div className="px-4 pt-4 pb-3 border-b border-gray-100">
       <div className="flex items-center justify-between mb-2">
         <span className="text-[13px] font-bold text-gray-700">{order.거래처명 || "-"}</span>
-        <div className="flex flex-col items-end gap-0.5">
-          <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${
-            cardVersionB
-              ? (state === "배차완료" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "border-[#1B2B4B]/30 text-[#1B2B4B] bg-transparent")
-              : (state === "배차완료" ? "bg-blue-600 text-white border-blue-600" : "bg-blue-50 text-blue-600 border-blue-200")
-          }`}>{state}</span>
-          {state === "배차완료" && order.배차완료일시?.seconds && (
-            <span className="text-[10px] text-emerald-600">
-              {new Date(order.배차완료일시.seconds * 1000).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })} 완료
-            </span>
-          )}
+        <div className="flex items-center gap-2">
+          <button onClick={handleGoToEdit} className={`px-2.5 py-1 rounded-lg text-[11px] font-bold ${cardVersionB ? "bg-gray-700 text-white" : "bg-blue-600 text-white"}`}>수정</button>
+          <button onClick={onCancelOrder} className="px-2.5 py-1 rounded-lg text-[11px] font-bold border border-red-200 text-red-500">삭제</button>
+          <div className="flex flex-col items-end gap-0.5">
+            <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${
+              cardVersionB
+                ? (state === "배차완료" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "border-[#1B2B4B]/30 text-[#1B2B4B] bg-transparent")
+                : (state === "배차완료" ? "bg-blue-600 text-white border-blue-600" : "bg-blue-50 text-blue-600 border-blue-200")
+            }`}>{state}</span>
+            {state === "배차완료" && order.배차완료일시?.seconds && (
+              <span className="text-[10px] text-gray-400">
+                {new Date(order.배차완료일시.seconds * 1000).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })} 완료
+              </span>
+            )}
+          </div>
         </div>
       </div>
       {(order.메모 || order.적요) && (
@@ -6411,11 +6480,10 @@ const handleAssignClick = () => {
           <button
             type="button"
             onClick={() => isDelivered ? setConfirmUndoDeliver(true) : setConfirmDeliver(true)}
-            className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${isDelivered ? "bg-emerald-500" : "bg-gray-300"}`}
+            className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${isDelivered ? (cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600") : "bg-gray-300"}`}
           >
             <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${isDelivered ? "translate-x-5" : "translate-x-0"}`} />
           </button>
-          <div className={`text-[10px] font-semibold ${isDelivered ? "text-emerald-600" : "text-gray-400"}`}>{isDelivered ? "완료" : "미전달"}</div>
         </div>
       </div>
     </div>
@@ -6424,7 +6492,7 @@ const handleAssignClick = () => {
     <div className="border-b border-gray-100">
       <button onClick={() => setShowAttachments(true)} style={{ touchAction: "manipulation" }} className="w-full flex items-center justify-between px-4 py-3">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-[#1B2B4B] flex items-center justify-center shrink-0">
+          <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
             </svg>
@@ -6435,7 +6503,7 @@ const handleAssignClick = () => {
           </div>
         </div>
         <div className="flex items-center gap-1.5">
-          {liveAttachCount > 0 && <span className="min-w-[20px] h-5 px-1 rounded-full bg-[#1B2B4B] text-white text-[10px] font-bold flex items-center justify-center">{liveAttachCount}</span>}
+          {liveAttachCount > 0 && <span className={`min-w-[20px] h-5 px-1 rounded-full text-white text-[10px] font-bold flex items-center justify-center ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`}>{liveAttachCount}</span>}
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
         </div>
       </button>
@@ -6450,7 +6518,7 @@ const handleAssignClick = () => {
           className="py-2 rounded-xl bg-gray-100 text-gray-700 text-[11px] font-bold">기사복사</button>
         <button style={{ touchAction: "manipulation" }}
           onClick={() => { setDetailFareFilter("all"); setShowDetailFareHistory(true); }}
-          className="py-2 rounded-xl bg-[#1B2B4B] text-white text-[11px] font-bold">
+          className={`py-2 rounded-xl text-white text-[11px] font-bold ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`}>
           운임조회{detailFareMatches.length > 0 ? ` (${detailFareMatches.length})` : ""}
         </button>
       </div>
@@ -6461,109 +6529,77 @@ const handleAssignClick = () => {
       <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">기사 배차</div>
       <div className="flex items-center justify-between mb-3">
         <span className="text-[12px] text-gray-500">현재 상태</span>
-        <span className={`text-[12px] font-bold ${carNo ? "text-emerald-600" : "text-blue-600"}`}>
+        <span className={`text-[12px] font-bold ${carNo ? (cardVersionB ? "text-[#1B2B4B]" : "text-blue-600") : "text-gray-500"}`}>
           {carNo ? "배차완료" : "배차중"}{name && ` · ${name} (${carNo})`}
         </span>
       </div>
-      <div className="text-[11px] font-semibold text-gray-500 mb-1.5">기사 검색 (이름 · 차량번호 · 연락처 · 문자복붙)</div>
-      <div className="relative mb-3">
-        <SmartTextarea textareaRef={smartTextareaRef} onSearch={handleSmartInputCb} />
-        {smartMatched.length > 0 && (
-          <div className="absolute z-50 w-full bg-white border border-gray-200 rounded-xl shadow-xl mt-1 overflow-hidden">
-            {smartMatched.map((d, i) => (
-              <div key={d.id || i} className="border-b border-gray-100 last:border-0">
-                {editingDriverId === (d.id || i) ? (
-                  <div className="px-4 py-3 bg-blue-50">
-                    <div className="text-[11px] font-semibold text-gray-500 mb-1">{d.차량번호}</div>
-                    <input className="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm mb-1.5 focus:outline-none focus:border-blue-400" placeholder="기사 이름" value={editingDriverData.이름} onChange={e => setEditingDriverData(p => ({ ...p, 이름: e.target.value }))} onPointerDown={e => e.stopPropagation()} />
-                    <input className="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm mb-2 focus:outline-none focus:border-blue-400" placeholder="전화번호" value={editingDriverData.전화번호} onChange={e => setEditingDriverData(p => ({ ...p, 전화번호: e.target.value }))} onPointerDown={e => e.stopPropagation()} />
-                    <div className="flex gap-2">
-                      <button type="button" className="flex-1 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-bold"
-                        onPointerDown={async (e) => { e.preventDefault(); if (!editingDriverData.이름.trim()) return; await updateDoc(doc(db, "drivers", d.id), { 이름: editingDriverData.이름, 전화번호: editingDriverData.전화번호 }); setSmartMatched(prev => prev.map(m => m.id === d.id ? { ...m, 이름: editingDriverData.이름, 전화번호: editingDriverData.전화번호 } : m)); setEditingDriverId(null); }}>저장</button>
-                      <button type="button" className="px-3 py-1.5 rounded-lg bg-gray-200 text-gray-700 text-xs" onPointerDown={e => { e.preventDefault(); setEditingDriverId(null); }}>취소</button>
-                    </div>
+      {state !== "배차완료" && (
+        <>
+          <div className="text-[11px] font-semibold text-gray-500 mb-1.5">기사 검색 (이름 · 차량번호 · 연락처 · 문자복붙)</div>
+          <div className="relative mb-3">
+            <SmartTextarea textareaRef={smartTextareaRef} onSearch={handleSmartInputCb} />
+            {smartMatched.length > 0 && (
+              <div className="absolute z-50 w-full bg-white border border-gray-200 rounded-xl shadow-xl mt-1 overflow-hidden">
+                {smartMatched.map((d, i) => (
+                  <div key={d.id || i} className="border-b border-gray-100 last:border-0">
+                    {editingDriverId === (d.id || i) ? (
+                      <div className="px-4 py-3 bg-blue-50">
+                        <div className="text-[11px] font-semibold text-gray-500 mb-1">{d.차량번호}</div>
+                        <input className="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm mb-1.5 focus:outline-none focus:border-blue-400" placeholder="기사 이름" value={editingDriverData.이름} onChange={e => setEditingDriverData(p => ({ ...p, 이름: e.target.value }))} onPointerDown={e => e.stopPropagation()} />
+                        <input className="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm mb-2 focus:outline-none focus:border-blue-400" placeholder="전화번호" value={editingDriverData.전화번호} onChange={e => setEditingDriverData(p => ({ ...p, 전화번호: e.target.value }))} onPointerDown={e => e.stopPropagation()} />
+                        <div className="flex gap-2">
+                          <button type="button" className="flex-1 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-bold"
+                            onPointerDown={async (e) => { e.preventDefault(); if (!editingDriverData.이름.trim()) return; await updateDoc(doc(db, "drivers", d.id), { 이름: editingDriverData.이름, 전화번호: editingDriverData.전화번호 }); setSmartMatched(prev => prev.map(m => m.id === d.id ? { ...m, 이름: editingDriverData.이름, 전화번호: editingDriverData.전화번호 } : m)); setEditingDriverId(null); }}>저장</button>
+                          <button type="button" className="px-3 py-1.5 rounded-lg bg-gray-200 text-gray-700 text-xs" onPointerDown={e => { e.preventDefault(); setEditingDriverId(null); }}>취소</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center">
+                        <button type="button" className="flex-1 text-left px-4 py-3 hover:bg-gray-50" onPointerDown={e => { e.preventDefault(); selectSmartDriver(d); }}>
+                          <div className="font-bold text-gray-900 text-[13px]">{d.이름 || "-"}</div>
+                          <div className="text-[11px] text-gray-400 mt-0.5">{d.차량번호} · {d.전화번호}</div>
+                        </button>
+                        <button type="button" className="px-3 py-3 text-gray-400 hover:text-blue-500 text-xs" onPointerDown={e => { e.preventDefault(); setEditingDriverId(d.id || i); setEditingDriverData({ 이름: d.이름 || "", 전화번호: d.전화번호 || "" }); }}>수정</button>
+                      </div>
+                    )}
                   </div>
-                ) : (
-                  <div className="flex items-center">
-                    <button type="button" className="flex-1 text-left px-4 py-3 hover:bg-gray-50" onPointerDown={e => { e.preventDefault(); selectSmartDriver(d); }}>
-                      <div className="font-bold text-gray-900 text-[13px]">{d.이름 || "-"}</div>
-                      <div className="text-[11px] text-gray-400 mt-0.5">{d.차량번호} · {d.전화번호}</div>
-                    </button>
-                    <button type="button" className="px-3 py-3 text-gray-400 hover:text-blue-500 text-xs" onPointerDown={e => { e.preventDefault(); setEditingDriverId(d.id || i); setEditingDriverData({ 이름: d.이름 || "", 전화번호: d.전화번호 || "" }); }}>수정</button>
-                  </div>
-                )}
+                ))}
               </div>
-            ))}
+            )}
           </div>
-        )}
-      </div>
+        </>
+      )}
       <div className="space-y-2 mb-3">
-        {isNewDriver && (
+        {isNewDriver && state !== "배차완료" && (
           <div className="flex items-center gap-1.5 px-1 mb-1">
             <span className="px-2 py-0.5 rounded-full bg-orange-100 text-orange-600 text-[11px] font-bold border border-orange-300">신규 기사</span>
             <span className="text-[11px] text-gray-400">저장 시 기사관리에 등록됩니다</span>
           </div>
         )}
-        <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B2B4B]" placeholder="차량번호" value={carNo} onChange={e => { setCarNo(e.target.value); setIsNewDriver(false); }} />
-        <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B2B4B]" placeholder="기사 이름" value={name} onChange={e => setName(e.target.value)} />
-        <input className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#1B2B4B]" placeholder="기사 연락처" value={phone} onChange={e => setPhone(e.target.value)} />
+        <input readOnly={state === "배차완료"} className={`w-full border rounded-xl px-3 py-2 text-sm focus:outline-none ${state === "배차완료" ? "bg-gray-50 border-gray-100 text-gray-500 cursor-default" : "border-gray-200 focus:border-[#1B2B4B]"}`} placeholder="차량번호" value={carNo} onChange={e => { if (state !== "배차완료") { setCarNo(e.target.value); setIsNewDriver(false); } }} />
+        <input readOnly={state === "배차완료"} className={`w-full border rounded-xl px-3 py-2 text-sm focus:outline-none ${state === "배차완료" ? "bg-gray-50 border-gray-100 text-gray-500 cursor-default" : "border-gray-200 focus:border-[#1B2B4B]"}`} placeholder="기사 이름" value={name} onChange={e => { if (state !== "배차완료") setName(e.target.value); }} />
+        <input readOnly={state === "배차완료"} className={`w-full border rounded-xl px-3 py-2 text-sm focus:outline-none ${state === "배차완료" ? "bg-gray-50 border-gray-100 text-gray-500 cursor-default" : "border-gray-200 focus:border-[#1B2B4B]"}`} placeholder="기사 연락처" value={phone} onChange={e => { if (state !== "배차완료") setPhone(e.target.value); }} />
       </div>
       {phone && (
         <div className="grid grid-cols-2 gap-2 mb-2">
-          <a href={`tel:${normalizePhone(phone)}`} className="py-2.5 rounded-xl bg-[#1B2B4B] text-white text-xs font-bold text-center flex items-center justify-center gap-1.5">
+          <a href={`tel:${normalizePhone(phone)}`} className={`py-2.5 rounded-xl text-xs font-bold text-center flex items-center justify-center gap-1.5 ${cardVersionB ? "bg-[#1B2B4B] text-white" : "bg-blue-600 text-white"}`}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.38 2 2 0 0 1 3.6 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.59a16 16 0 0 0 6 6l.96-.96a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21.7 16z"/></svg>
-            전화
+            📞 전화
           </a>
-          <a href={`sms:${normalizePhone(phone)}`} className="py-2.5 rounded-xl border border-[#1B2B4B] text-[#1B2B4B] text-xs font-bold text-center flex items-center justify-center gap-1.5">
+          <a href={`sms:${normalizePhone(phone)}`} className={`py-2.5 rounded-xl border text-xs font-bold text-center flex items-center justify-center gap-1.5 ${cardVersionB ? "border-[#1B2B4B] text-[#1B2B4B]" : "border-blue-600 text-blue-600"}`}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-            문자
+            💬 문자
           </a>
         </div>
       )}
       {state !== "배차완료" ? (
-        <button onClick={handleAssignClick} className="w-full py-3 mb-2 rounded-xl bg-[#1B2B4B] text-white text-sm font-bold">기사 배차하기</button>
+        <button onClick={handleAssignClick} className={`w-full py-3 mb-2 rounded-xl text-white text-sm font-bold ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`}>기사 배차하기</button>
       ) : (
-        <div className="space-y-2 mb-2">
-          <button onClick={handleAssignClick} className="w-full py-3 rounded-xl bg-[#1B2B4B] text-white text-sm font-bold">기사 변경하기</button>
-          <button onClick={onCancelAssign} className="w-full py-3 rounded-xl border border-red-300 text-red-500 text-sm font-bold">기사 배차 취소</button>
-        </div>
+        <button onClick={onCancelAssign} className="w-full py-3 mb-2 rounded-xl border border-red-300 text-red-500 text-sm font-bold">기사 배차 취소</button>
       )}
       <div className="h-px bg-gray-100 my-1" />
       <div className="grid grid-cols-2 gap-2 mt-2">
-        <button
-          onClick={() => {
-            const _pendingContactItems = [];
-            [{ fieldName: order.상차지명, type: "pickup" }, { fieldName: order.하차지명, type: "drop" }].forEach(({ fieldName, type }) => {
-              if (!fieldName) return;
-              const found = (clients || []).find(c => normalizeCompany(c.거래처명) === normalizeCompany(fieldName));
-              if (!found) return;
-              const contacts = (Array.isArray(found.contacts) ? found.contacts : []).filter(ct => ct.name?.trim());
-              const unique = [...new Map(contacts.map(ct => [ct.name.trim(), ct])).values()];
-              if (unique.length > 1) _pendingContactItems.push({ type, place: found, contacts: unique });
-            });
-            window.scrollTo(0, 0);
-            setPrevPage("detail");
-            setPage("form");
-            setForm({
-              거래처명: order.거래처명 || "", 상차일: order.상차일 || "", 상차시간: order.상차시간 || "",
-              상차시간기준: order.상차시간기준 || null, 하차일: order.하차일 || "", 하차시간: order.하차시간 || "",
-              하차시간기준: order.하차시간기준 || null, 상차지명: order.상차지명 || "", 상차지주소: order.상차지주소 || "",
-              상차지담당자: order.상차지담당자 || "", 상차지담당자번호: order.상차지담당자번호 || "",
-              하차지명: order.하차지명 || "", 하차지주소: order.하차지주소 || "",
-              하차지담당자: order.하차지담당자 || "", 하차지담당자번호: order.하차지담당자번호 || "",
-              톤수: order.톤수 || order.차량톤수 || "", 차종: order.차종 || order.차량종류 || "",
-              화물내용: order.화물내용 || "", 상차방법: order.상차방법 || "", 하차방법: order.하차방법 || "",
-              지급방식: order.지급방식 || "", 배차방식: order.배차방식 || "",
-              청구운임: order.청구운임 || 0, 기사운임: order.기사운임 || 0,
-              수수료: (Number(order.청구운임) || 0) - (Number(order.기사운임) || 0),
-              산재보험료: order.산재보험료 || 0, 차량번호: carNo || "",
-              혼적여부: order.혼적여부 || "독차", 적요: order.메모 || "",
-              기사명: name || "", 전화번호: phone || "",
-              경유상차목록: validStops(order.경유상차목록 || order.경유지_상차),
-              경유하차목록: validStops(order.경유하차목록 || order.경유지_하차),
-              _editId: order.id, _returnToDetail: true, _pendingContactItems,
-            });
-          }}
+        <button onClick={handleGoToEdit}
           className={`py-3 rounded-xl text-sm font-bold ${cardVersionB ? "bg-gray-700 text-white" : "bg-blue-600 text-white"}`}
         >수정하기</button>
         <button onClick={onCancelOrder} className="py-3 rounded-xl border border-red-200 text-red-500 text-sm font-semibold">오더 삭제</button>

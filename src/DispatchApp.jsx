@@ -5047,8 +5047,13 @@ function swapPickupDrop() {
 }, [drivers]);
 const [blackAlert, setBlackAlert] = React.useState(null);
 const [memoAlert, setMemoAlert] = React.useState(null);
+const _menuRef = React.useRef(menu);
+React.useEffect(() => { _menuRef.current = menu; }, [menu]);
 React.useEffect(() => {
-  const h = (e) => setMemoAlert(e.detail);
+  const h = (e) => {
+    if (_menuRef.current !== "배차관리") return;
+    setMemoAlert(e.detail);
+  };
   window.addEventListener("driverMemoDetected", h);
   return () => window.removeEventListener("driverMemoDetected", h);
 }, []);
