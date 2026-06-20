@@ -550,11 +550,24 @@ export default function MobileApp({ role, user, userCompany = "" }) {
   useEffect(() => {
     const root = document.getElementById("root");
     if (root) root.style.zoom = "1";
-    // 모바일에서 핀치줌 비활성화 — 기본 크기 고정
+    // viewport 강제 리셋 — 브라우저에서 확대/축소 후 앱 접속해도 항상 1:1 비율 유지
     const meta = document.querySelector('meta[name="viewport"]');
-    if (meta) meta.content = "width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover";
+    const resetContent = "width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover";
+    if (meta) {
+      meta.content = resetContent;
+    } else {
+      const m = document.createElement("meta");
+      m.name = "viewport";
+      m.content = resetContent;
+      document.head.appendChild(m);
+    }
+    // document.body zoom/transform 리셋 (일부 브라우저 잔여 줌 제거)
+    document.body.style.zoom = "1";
+    document.documentElement.style.zoom = "1";
     return () => {
       if (meta) meta.content = "width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover";
+      document.body.style.zoom = "";
+      document.documentElement.style.zoom = "";
     };
   }, []);
   const [page, setPage] = useState("list");
@@ -758,8 +771,11 @@ const setTomorrowRange = () => {
   setEndDate(tmr);
 };
   // 🔍 UI 크기 스케일 (1 = 기본, 1.1 = 크게, 1.2 = 아주 크게)
+  // PWA(standalone)와 브라우저 링크 접속을 구분하여 별도 키 사용
+  const isPWA = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+  const uiScaleKey = isPWA ? "uiScale_pwa" : "uiScale_browser";
   const [uiScale, setUiScale] = useState(
-    Number(localStorage.getItem("uiScale") || 1)
+    Number(localStorage.getItem(uiScaleKey) || 1)
   );
 const quickRange = (days) => {
   const end = todayKST();
@@ -4056,7 +4072,7 @@ function MobileSideMenu({
             <div className={`text-[11px] font-semibold tracking-wider mb-2 ${dark ? "text-white/50" : "text-blue-500"}`}>화면 크기</div>
             <div className="flex gap-1.5">
               {[{ v: 1, label: "기본" }, { v: 1.1, label: "크게" }, { v: 1.2, label: "아주 크게" }].map(({ v, label }) => (
-                <button key={v} onClick={() => { setUiScale(v); localStorage.setItem("uiScale", v); }}
+                <button key={v} onClick={() => { setUiScale(v); localStorage.setItem(uiScaleKey, v); }}
                   className={`flex-1 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${
                     uiScale === v
                       ? (dark ? "bg-white text-[#1B2B4B]" : "bg-blue-600 text-white")
@@ -6202,6 +6218,26 @@ function MobileOrderDetail({
     return finalList.slice(0, 50);
   }, [orders, order.상차지주소, order.하차지주소, order.상차지명, order.하차지명, order.차종, order.차량종류, order.거래처명, order.화물내용, order.톤수, order.차량톤수, order.id]);
 
+  const applyFareDirectly = async (claim, drv) => {
+    setShowDetailFareHistory(false);
+    setDetailFareDetailItem(null);
+    const col = order.__col || order._col || "dispatch";
+    const id = order.id || order._id;
+    if (!id) return;
+    const patch = {
+      청구운임: claim,
+      기사운임: drv != null ? drv : (order.기사운임 || 0),
+      수수료: claim - (drv != null ? drv : (Number(order.기사운임) || 0)),
+    };
+    try {
+      await updateDoc(doc(db, col, id), patch);
+      if (typeof onOrderUpdate === "function") onOrderUpdate(id, patch);
+      showToast(drv != null ? `기사포함 적용 완료 (청구 ${claim.toLocaleString()}원 / 기사 ${drv.toLocaleString()}원)` : `청구운임 적용 완료 (${claim.toLocaleString()}원)`);
+    } catch {
+      showToast("적용 중 오류가 발생했습니다.");
+    }
+  };
+
   const goEditWithFare = (claim, drv) => {
     setShowDetailFareHistory(false);
     setDetailFareDetailItem(null);
@@ -7245,7 +7281,7 @@ const handleAssignClick = () => {
                             { label: "최고 운임", value: fareMax },
                           ].map(({ label, value }) => (
                             <button key={label}
-                              onClick={() => goEditWithFare(value, null)}
+                              onClick={() => applyFareDirectly(value, null)}
                               className="rounded-xl border border-gray-200 bg-gray-50 py-2.5 text-center active:scale-95 transition">
                               <div className="text-[9px] font-bold text-gray-400 mb-1">{label}</div>
                               <div className="text-[15px] font-extrabold text-[#1B2B4B]">{value.toLocaleString()}</div>
@@ -7334,7 +7370,7 @@ const handleAssignClick = () => {
                             <div className="flex border-t border-gray-100 mt-0">
                               <button
                                 type="button"
-                                onClick={(e) => { e.stopPropagation(); goEditWithFare(r.claim, null); }}
+                                onClick={(e) => { e.stopPropagation(); applyFareDirectly(r.claim, null); }}
                                 className="flex-1 py-2.5 bg-[#1B2B4B] text-white text-[12px] font-bold text-center active:opacity-80"
                               >
                                 청구운임 적용 ({r.claim.toLocaleString()})
@@ -7342,7 +7378,7 @@ const handleAssignClick = () => {
                               {r.drv > 0 && (
                                 <button
                                   type="button"
-                                  onClick={(e) => { e.stopPropagation(); goEditWithFare(r.claim, r.drv); }}
+                                  onClick={(e) => { e.stopPropagation(); applyFareDirectly(r.claim, r.drv); }}
                                   className="flex-1 py-2.5 bg-[#2d4a7a] text-white text-[12px] font-bold text-center active:opacity-80 border-l border-white/20"
                                 >
                                   기사포함 ({r.drv.toLocaleString()})
@@ -7439,14 +7475,14 @@ const handleAssignClick = () => {
               )}
               <div className="flex gap-2 mt-1">
                 <button
-                  onClick={() => goEditWithFare(Number(detailFareDetailItem.청구운임||0), null)}
+                  onClick={() => applyFareDirectly(Number(detailFareDetailItem.청구운임||0), null)}
                   className="flex-1 py-3 bg-[#1B2B4B] text-white font-bold rounded-xl text-[13px] active:opacity-80"
                 >
                   청구운임 적용<br/><span className="text-[11px] font-normal">{Number(detailFareDetailItem.청구운임||0).toLocaleString()}원</span>
                 </button>
                 {Number(detailFareDetailItem.기사운임||0) > 0 && (
                   <button
-                    onClick={() => goEditWithFare(Number(detailFareDetailItem.청구운임||0), Number(detailFareDetailItem.기사운임||0))}
+                    onClick={() => applyFareDirectly(Number(detailFareDetailItem.청구운임||0), Number(detailFareDetailItem.기사운임||0))}
                     className="flex-1 py-3 bg-[#2d4a7a] text-white font-bold rounded-xl text-[13px] active:opacity-80"
                   >
                     기사포함 적용<br/><span className="text-[11px] font-normal">{Number(detailFareDetailItem.기사운임||0).toLocaleString()}원</span>
