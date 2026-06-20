@@ -54,6 +54,10 @@ if (typeof document !== "undefined" && !document.getElementById("__mobile-badge-
     .badge-dispatching {
       animation: dispatchingPulse 2.6s ease-in-out infinite;
     }
+    @keyframes slideUpFade {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
   `;
   document.head.appendChild(s);
 }
@@ -6067,6 +6071,7 @@ function MobileOrderDetail({
   });
   const [attachConfirmItem, setAttachConfirmItem] = useState(null);
   const [showDetailFareHistory, setShowDetailFareHistory] = useState(false);
+  const [fareAppliedPopup, setFareAppliedPopup] = React.useState(null);
   const [detailFareFilter, setDetailFareFilter] = useState("all");
   const [detailFareDetailItem, setDetailFareDetailItem] = useState(null);
 
@@ -6232,7 +6237,12 @@ function MobileOrderDetail({
     try {
       await updateDoc(doc(db, col, id), patch);
       if (typeof onOrderUpdate === "function") onOrderUpdate(id, patch);
-      showToast(drv != null ? `기사포함 적용 완료 (청구 ${claim.toLocaleString()}원 / 기사 ${drv.toLocaleString()}원)` : `청구운임 적용 완료 (${claim.toLocaleString()}원)`);
+      // 상세보기 즉시 반영
+      if (typeof setSelectedOrder === "function") {
+        setSelectedOrder(prev => ({ ...(prev || order), ...patch }));
+      }
+      setFareAppliedPopup({ claim, drv });
+      setTimeout(() => setFareAppliedPopup(null), 2800);
     } catch {
       showToast("적용 중 오류가 발생했습니다.");
     }
@@ -7491,6 +7501,63 @@ const handleAssignClick = () => {
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* 운임 적용 완료 팝업 — A/B 카드 스타일 */}
+      {fareAppliedPopup && (
+        <div
+          className="fixed bottom-[96px] left-4 right-4 z-[9999]"
+          style={{ animation: "slideUpFade 0.22s ease-out" }}
+          onClick={() => setFareAppliedPopup(null)}
+        >
+          {cardVersionB ? (
+            <div className="bg-[#1B2B4B] rounded-2xl shadow-2xl overflow-hidden">
+              <div className="px-5 py-3.5 flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-white/15 flex items-center justify-center shrink-0">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                </div>
+                <div className="flex-1">
+                  <div className="text-white font-bold text-[14px]">운임 적용 완료</div>
+                  <div className="text-white/40 text-[11px]">탭하여 닫기</div>
+                </div>
+              </div>
+              <div className="border-t border-white/10 px-5 py-3.5 flex gap-6">
+                <div>
+                  <div className="text-white/40 text-[10px] font-bold tracking-wider mb-1">청구운임</div>
+                  <div className="text-white font-extrabold text-[18px]">{fareAppliedPopup.claim.toLocaleString()}<span className="text-[12px] font-semibold ml-0.5">원</span></div>
+                </div>
+                {fareAppliedPopup.drv != null && (
+                  <div>
+                    <div className="text-white/40 text-[10px] font-bold tracking-wider mb-1">기사운임</div>
+                    <div className="text-white font-extrabold text-[18px]">{fareAppliedPopup.drv.toLocaleString()}<span className="text-[12px] font-semibold ml-0.5">원</span></div>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden">
+              <div className="bg-[#1B2B4B] px-5 py-3 flex items-center gap-2">
+                <div className="w-7 h-7 rounded-full bg-white/15 flex items-center justify-center shrink-0">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                </div>
+                <span className="text-white font-bold text-[14px]">운임 적용 완료</span>
+                <span className="ml-auto text-white/40 text-[11px]">탭하여 닫기</span>
+              </div>
+              <div className="px-5 py-3.5 flex gap-6">
+                <div>
+                  <div className="text-gray-400 text-[10px] font-bold tracking-wider mb-1">청구운임</div>
+                  <div className="text-[#1B2B4B] font-extrabold text-[18px]">{fareAppliedPopup.claim.toLocaleString()}<span className="text-[12px] font-semibold ml-0.5">원</span></div>
+                </div>
+                {fareAppliedPopup.drv != null && (
+                  <div>
+                    <div className="text-gray-400 text-[10px] font-bold tracking-wider mb-1">기사운임</div>
+                    <div className="text-[#1B2B4B] font-extrabold text-[18px]">{fareAppliedPopup.drv.toLocaleString()}<span className="text-[12px] font-semibold ml-0.5">원</span></div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
