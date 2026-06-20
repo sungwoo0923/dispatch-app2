@@ -4733,6 +4733,8 @@ const summary = useMemo(() => {
                   const isChecked = selectedIds.has(oid);
                   return (
                     <div key={oid} className={`relative rounded-xl ${multiSelectMode ? "pl-10 transition-all" : ""}`}
+                      style={{ WebkitTouchCallout: "none", userSelect: "none", WebkitUserSelect: "none" }}
+                      onContextMenu={(e) => e.preventDefault()}
                       onTouchStart={multiSelectMode ? undefined : (e) => {
                         longPressStartPos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
                         longPressTimerRef.current = setTimeout(() => {
@@ -13823,7 +13825,8 @@ return (
                 <div
                   key={o.id}
                   ref={(el) => { if (el) orderRefs.current[o.id] = el; }}
-                  style={{ scrollMarginTop: 90 }}
+                  style={{ scrollMarginTop: 90, WebkitTouchCallout: "none", userSelect: "none", WebkitUserSelect: "none" }}
+                  onContextMenu={(e) => e.preventDefault()}
                   onTouchStart={(e) => {
                     longPressStartPos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
                     longPressTimerRef.current = setTimeout(() => {

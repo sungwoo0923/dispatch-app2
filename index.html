@@ -2,6 +2,19 @@
 <html lang="ko">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      (function() {
+        document.addEventListener('gesturestart', function(e) { e.preventDefault(); }, { passive: false });
+        document.addEventListener('gesturechange', function(e) { e.preventDefault(); }, { passive: false });
+        document.addEventListener('gestureend', function(e) { e.preventDefault(); }, { passive: false });
+        var lastTouch = 0;
+        document.addEventListener('touchend', function(e) {
+          var now = Date.now();
+          if (now - lastTouch < 300) { e.preventDefault(); }
+          lastTouch = now;
+        }, { passive: false });
+      })();
+    </script>
 
       <meta
       name="viewport"
