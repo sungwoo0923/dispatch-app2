@@ -6588,28 +6588,31 @@ const handleAssignClick = () => {
 
   return (
     <div className="px-3 py-4 bg-gray-50 pb-10">
+
+    {/* ── 배차상태 (카드 위) ── */}
+    <div className="flex items-center justify-between mb-2.5 px-1">
+      <span className={`px-3 py-1 rounded-full text-[12px] font-bold border ${
+        cardVersionB
+          ? (state === "배차완료" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "border-[#1B2B4B]/30 text-[#1B2B4B] bg-transparent")
+          : (state === "배차완료" ? "bg-blue-600 text-white border-blue-600" : "bg-blue-50 text-blue-600 border-blue-200")
+      }`}>{state}</span>
+      {state === "배차완료" && order.배차완료일시?.seconds && (
+        <span className="text-[10px] text-gray-400">
+          {new Date(order.배차완료일시.seconds * 1000).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })} 완료
+        </span>
+      )}
+    </div>
+
   {/* ── 통합 카드 ── */}
   <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
 
-    {/* 상단: 거래처 + 상태 + 메모 */}
+    {/* 상단: 거래처 + 수정/삭제 + 메모 */}
     <div className="px-4 pt-4 pb-3 border-b border-gray-100">
       <div className="flex items-center justify-between mb-2">
         <span className="text-[13px] font-bold text-gray-700">{order.거래처명 || "-"}</span>
         <div className="flex items-center gap-2">
           <button onClick={handleGoToEdit} className={`px-2.5 py-1 rounded-lg text-[11px] font-bold ${cardVersionB ? "bg-gray-700 text-white" : "bg-blue-600 text-white"}`}>수정</button>
           <button onClick={onCancelOrder} className="px-2.5 py-1 rounded-lg text-[11px] font-bold border border-red-200 text-red-500">삭제</button>
-          <div className="flex flex-col items-end gap-0.5">
-            <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${
-              cardVersionB
-                ? (state === "배차완료" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "border-[#1B2B4B]/30 text-[#1B2B4B] bg-transparent")
-                : (state === "배차완료" ? "bg-blue-600 text-white border-blue-600" : "bg-blue-50 text-blue-600 border-blue-200")
-            }`}>{state}</span>
-            {state === "배차완료" && order.배차완료일시?.seconds && (
-              <span className="text-[10px] text-gray-400">
-                {new Date(order.배차완료일시.seconds * 1000).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })} 완료
-              </span>
-            )}
-          </div>
         </div>
       </div>
       {(order.메모 || order.적요) && (
@@ -6691,29 +6694,29 @@ const handleAssignClick = () => {
       </div>
       {/* 차량/화물 정보 */}
       {((order.차량톤수 || order.톤수) || (order.차량종류 || order.차종) || order.화물내용 || order.혼적여부) && (
-        <div className="flex justify-center gap-5 pt-2.5 border-t border-gray-100">
+        <div className="flex border-t border-gray-100 mt-2.5">
           {(order.차량톤수 || order.톤수) && (
-            <div className="text-center">
+            <div className="flex-1 text-center py-2.5 border-r border-gray-100">
               <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">톤수</div>
-              <div className="text-[12px] font-semibold text-gray-700">{order.차량톤수 || order.톤수}</div>
+              <div className="text-[12px] font-semibold text-gray-800">{order.차량톤수 || order.톤수}</div>
             </div>
           )}
           {(order.차량종류 || order.차종) && (
-            <div className="text-center">
+            <div className="flex-1 text-center py-2.5 border-r border-gray-100">
               <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">차종</div>
-              <div className="text-[12px] font-semibold text-gray-700">{order.차량종류 || order.차종}</div>
+              <div className="text-[12px] font-semibold text-gray-800">{order.차량종류 || order.차종}</div>
             </div>
           )}
           {order.화물내용 && (
-            <div className="text-center">
+            <div className="flex-1 text-center py-2.5 border-r border-gray-100 last:border-r-0">
               <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">화물</div>
-              <div className="text-[12px] font-semibold text-gray-700">{order.화물내용}</div>
+              <div className="text-[12px] font-semibold text-gray-800">{order.화물내용}</div>
             </div>
           )}
           {order.혼적여부 && order.혼적여부 !== "독차" && (
-            <div className="text-center">
+            <div className="flex-1 text-center py-2.5">
               <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">혼적</div>
-              <div className="text-[12px] font-semibold text-gray-700">{order.혼적여부}</div>
+              <div className="text-[12px] font-semibold text-gray-800">{order.혼적여부}</div>
             </div>
           )}
         </div>
@@ -6793,7 +6796,7 @@ const handleAssignClick = () => {
       <div className="flex items-center justify-between mb-3">
         <span className="text-[12px] text-gray-500">현재 상태</span>
         <span className={`text-[12px] font-bold ${carNo ? (cardVersionB ? "text-[#1B2B4B]" : "text-blue-600") : "text-gray-500"}`}>
-          {carNo ? "배차완료" : "배차중"}{name && ` · ${name} (${carNo})`}
+          {carNo ? "배차완료" : "배차중"}
         </span>
       </div>
       {state !== "배차완료" && (
