@@ -25,7 +25,7 @@ function b642ab(b64) {
 // ────────────────────────────────────────────────
 //  PIN GATE (mobile inline-style) + 생체인증
 // ────────────────────────────────────────────────
-function MobilePinGate({ onVerified }) {
+function MobilePinGate({ onVerified, accent = NAVY }) {
   const hasPin = !!localStorage.getItem(PIN_KEY);
   const [mode, setMode] = useState(hasPin ? "verify" : "setup1");
   const [entered, setEntered] = useState("");
@@ -131,14 +131,14 @@ function MobilePinGate({ onVerified }) {
       <div style={{ background: "white", borderRadius: 20, boxShadow: "0 4px 24px rgba(0,0,0,.12)", padding: 32, width: "100%", maxWidth: 340 }}>
         {/* 아이콘 */}
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginBottom: 24 }}>
-          <div style={{ width: 60, height: 60, background: NAVY, borderRadius: 16, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 14, boxShadow: "0 4px 12px rgba(27,43,75,.3)" }}>
+          <div style={{ width: 60, height: 60, background: accent, borderRadius: 16, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 14, boxShadow: "0 4px 12px rgba(27,43,75,.3)" }}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <rect x="3" y="11" width="18" height="11" rx="2"/>
               <path d="M7 11V7a5 5 0 0110 0v4"/>
             </svg>
           </div>
           <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.2em", color: "#d1d5db", marginBottom: 6 }}>CONFIDENTIAL</div>
-          <div style={{ fontSize: 18, fontWeight: 900, color: NAVY }}>{heading}</div>
+          <div style={{ fontSize: 18, fontWeight: 900, color: accent }}>{heading}</div>
           <div style={{ fontSize: 13, color: "#9ca3af", marginTop: 6, textAlign: "center" }}>{sub}</div>
         </div>
 
@@ -149,7 +149,7 @@ function MobilePinGate({ onVerified }) {
             disabled={bioLoading}
             style={{
               width: "100%", marginBottom: 20, padding: "14px 0",
-              background: NAVY, color: "white", borderRadius: 14, border: "none",
+              background: accent, color: "white", borderRadius: 14, border: "none",
               fontSize: 14, fontWeight: 700, cursor: bioLoading ? "not-allowed" : "pointer",
               opacity: bioLoading ? 0.6 : 1,
               display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
@@ -174,8 +174,8 @@ function MobilePinGate({ onVerified }) {
           {Array.from({ length: 6 }).map((_, i) => (
             <div key={i} style={{
               width: 14, height: 14, borderRadius: "50%",
-              background: i < entered.length ? NAVY : "white",
-              border: `2px solid ${i < entered.length ? NAVY : "#d1d5db"}`,
+              background: i < entered.length ? accent : "white",
+              border: `2px solid ${i < entered.length ? accent : "#d1d5db"}`,
               transition: "all .15s",
             }} />
           ))}
@@ -195,7 +195,7 @@ function MobilePinGate({ onVerified }) {
               style={{
                 height: 52, borderRadius: 12, border: "1px solid #e5e7eb",
                 background: d === "←" ? "#f3f4f6" : "#f8f9fb",
-                color: d === "←" ? "#6b7280" : NAVY,
+                color: d === "←" ? "#6b7280" : accent,
                 fontSize: d === "←" ? 15 : 18, fontWeight: 600,
                 cursor: d === null ? "default" : "pointer",
                 opacity: d === null ? 0 : 1,
@@ -232,7 +232,7 @@ function MobilePinGate({ onVerified }) {
                 localStorage.setItem(BIOMETRIC_AUTO_KEY, next ? "1" : "0");
                 setError(next ? "다음부터 자동으로 생체인증이 실행됩니다" : "자동 생체인증이 해제되었습니다");
               }}
-              style={{ textAlign: "center", fontSize: 12, color: bioAuto ? "#1B2B4B" : "#9ca3af", background: "none", border: "none", cursor: "pointer", fontFamily: "'Noto Sans KR', sans-serif", fontWeight: bioAuto ? 700 : 400 }}
+              style={{ textAlign: "center", fontSize: 12, color: bioAuto ? accent : "#9ca3af", background: "none", border: "none", cursor: "pointer", fontFamily: "'Noto Sans KR', sans-serif", fontWeight: bioAuto ? 700 : 400 }}
             >
               {bioAuto ? "✓ 자동 생체인증 켜짐 (탭하여 해제)" : "자동 생체인증 설정 (카카오톡처럼)"}
             </button>
@@ -261,7 +261,7 @@ function getY(dateStr) { return dateStr?.slice(0, 4) ?? ""; }
 // ────────────────────────────────────────────────
 //  MAIN COMPONENT
 // ────────────────────────────────────────────────
-export default function MobileIntelView({ dispatchData = [] }) {
+export default function MobileIntelView({ dispatchData = [], cardVersionB = false }) {
   const [verified, setVerified] = useState(() => {
     return sessionStorage.getItem("exec_intel_ok") === "1";
   });
@@ -271,14 +271,16 @@ export default function MobileIntelView({ dispatchData = [] }) {
     setVerified(true);
   };
 
+  const ACCENT = cardVersionB ? NAVY : "#2563eb";
+
   if (!verified) {
-    return <MobilePinGate onVerified={handleVerified} />;
+    return <MobilePinGate onVerified={handleVerified} accent={ACCENT} />;
   }
 
-  return <IntelDashboard dispatchData={dispatchData} />;
+  return <IntelDashboard dispatchData={dispatchData} accent={ACCENT} />;
 }
 
-function IntelDashboard({ dispatchData }) {
+function IntelDashboard({ dispatchData, accent = NAVY }) {
   const now = new Date();
   const cyStr = String(now.getFullYear());
   const cm = String(now.getMonth() + 1).padStart(2, "0");
@@ -350,13 +352,13 @@ function IntelDashboard({ dispatchData }) {
           { label: "연간 누적 매출", val: fmtW(cyRev), sub: `${cyStr}년 기준` },
         ].map(({ label, val, sub, trend, primary }) => (
           <div key={label} style={{
-            background: primary ? NAVY : "white",
+            background: primary ? accent : "white",
             borderRadius: 14, padding: "14px 16px",
             border: primary ? "none" : "1px solid #e5e7eb",
             boxShadow: primary ? "0 2px 8px rgba(27,43,75,.2)" : "none",
           }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: primary ? "rgba(255,255,255,.5)" : "#6b7280", marginBottom: 5, letterSpacing: ".05em" }}>{label}</div>
-            <div style={{ fontSize: 22, fontWeight: 900, color: primary ? "#fff" : NAVY, lineHeight: 1.1 }}>{val}</div>
+            <div style={{ fontSize: 22, fontWeight: 900, color: primary ? "#fff" : accent, lineHeight: 1.1 }}>{val}</div>
             <div style={{ fontSize: 11, color: primary ? "rgba(255,255,255,.4)" : "#9ca3af", marginTop: 4 }}>{sub}</div>
             {trend !== undefined && (
               <div style={{ fontSize: 11, fontWeight: 700, color: primary ? (trend >= 0 ? "#6ee7b7" : "#fca5a5") : trendColor, marginTop: 4 }}>
@@ -369,7 +371,7 @@ function IntelDashboard({ dispatchData }) {
 
       {/* 월별 매출 차트 */}
       <div style={{ margin: "16px 16px 0", background: "white", borderRadius: 14, border: "1px solid #e5e7eb", padding: "16px 0 8px" }}>
-        <div style={{ padding: "0 16px 12px", fontSize: 13, fontWeight: 800, color: NAVY }}>
+        <div style={{ padding: "0 16px 12px", fontSize: 13, fontWeight: 800, color: accent }}>
           월별 매출 추이
           <span style={{ fontSize: 11, fontWeight: 500, color: "#9ca3af", marginLeft: 8 }}>최근 6개월</span>
         </div>
@@ -385,7 +387,7 @@ function IntelDashboard({ dispatchData }) {
               formatter={(v) => [`${v.toLocaleString()}원`, "매출"]}
               contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid #e5e7eb" }}
             />
-            <Bar dataKey="매출" fill={NAVY} radius={[4, 4, 0, 0]} maxBarSize={32} />
+            <Bar dataKey="매출" fill={accent} radius={[4, 4, 0, 0]} maxBarSize={32} />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -393,7 +395,7 @@ function IntelDashboard({ dispatchData }) {
       {/* 상위 거래처 */}
       <div style={{ margin: "16px 16px 0", background: "white", borderRadius: 14, border: "1px solid #e5e7eb", overflow: "hidden" }}>
         <div style={{ padding: "14px 16px 10px", borderBottom: "1px solid #f3f4f6", display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-          <span style={{ fontSize: 13, fontWeight: 800, color: NAVY }}>이번달 상위 거래처</span>
+          <span style={{ fontSize: 13, fontWeight: 800, color: accent }}>이번달 상위 거래처</span>
           <span style={{ fontSize: 11, color: "#9ca3af" }}>{cyStr}.{cm}</span>
         </div>
         <div style={{ padding: "4px 16px 12px" }}>
@@ -403,7 +405,7 @@ function IntelDashboard({ dispatchData }) {
             <div key={name} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: i < topClients.length - 1 ? "1px solid #f9fafb" : "none" }}>
               <div style={{
                 width: 24, height: 24, borderRadius: "50%", flexShrink: 0,
-                background: i < 3 ? NAVY : "#f3f4f6",
+                background: i < 3 ? accent : "#f3f4f6",
                 color: i < 3 ? "white" : "#6b7280",
                 display: "flex", alignItems: "center", justifyContent: "center",
                 fontSize: 11, fontWeight: 700,
@@ -411,10 +413,10 @@ function IntelDashboard({ dispatchData }) {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: "#111827", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</div>
                 <div style={{ marginTop: 4, width: "100%", height: 4, background: "#f3f4f6", borderRadius: 99, overflow: "hidden" }}>
-                  <div style={{ height: "100%", background: NAVY, borderRadius: 99, width: `${(rev / maxClient) * 100}%`, opacity: Math.max(0.3, 1 - i * 0.12), transition: "width .6s" }} />
+                  <div style={{ height: "100%", background: accent, borderRadius: 99, width: `${(rev / maxClient) * 100}%`, opacity: Math.max(0.3, 1 - i * 0.12), transition: "width .6s" }} />
                 </div>
               </div>
-              <div style={{ fontSize: 13, fontWeight: 800, color: NAVY, flexShrink: 0 }}>{fmtW(rev)}</div>
+              <div style={{ fontSize: 13, fontWeight: 800, color: accent, flexShrink: 0 }}>{fmtW(rev)}</div>
             </div>
           ))}
         </div>
@@ -423,7 +425,7 @@ function IntelDashboard({ dispatchData }) {
       {/* 상위 기사 */}
       <div style={{ margin: "16px 16px 0", background: "white", borderRadius: 14, border: "1px solid #e5e7eb", overflow: "hidden" }}>
         <div style={{ padding: "14px 16px 10px", borderBottom: "1px solid #f3f4f6", display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-          <span style={{ fontSize: 13, fontWeight: 800, color: NAVY }}>이번달 상위 기사</span>
+          <span style={{ fontSize: 13, fontWeight: 800, color: accent }}>이번달 상위 기사</span>
           <span style={{ fontSize: 11, color: "#9ca3af" }}>{cyStr}.{cm} 배차건수</span>
         </div>
         <div style={{ padding: "4px 16px 12px" }}>
@@ -433,7 +435,7 @@ function IntelDashboard({ dispatchData }) {
             <div key={name} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: i < topDrivers.length - 1 ? "1px solid #f9fafb" : "none" }}>
               <div style={{
                 width: 24, height: 24, borderRadius: "50%", flexShrink: 0,
-                background: i < 3 ? NAVY : "#f3f4f6",
+                background: i < 3 ? accent : "#f3f4f6",
                 color: i < 3 ? "white" : "#6b7280",
                 display: "flex", alignItems: "center", justifyContent: "center",
                 fontSize: 11, fontWeight: 700,
@@ -452,8 +454,8 @@ function IntelDashboard({ dispatchData }) {
 
       {/* 전체 데이터 수 */}
       <div style={{ margin: "14px 16px 0", padding: "12px 16px", background: "#f0f4f9", borderRadius: 10, display: "flex", alignItems: "center", gap: 8 }}>
-        <div style={{ width: 6, height: 6, borderRadius: "50%", background: NAVY, flexShrink: 0 }} />
-        <span style={{ fontSize: 12, color: NAVY, fontWeight: 600 }}>전체 {dispatchData.length.toLocaleString()}건 배차 데이터 기반</span>
+        <div style={{ width: 6, height: 6, borderRadius: "50%", background: accent, flexShrink: 0 }} />
+        <span style={{ fontSize: 12, color: accent, fontWeight: 600 }}>전체 {dispatchData.length.toLocaleString()}건 배차 데이터 기반</span>
       </div>
     </div>
   );

@@ -2576,7 +2576,7 @@ onGoSchedule={() => {
         setNoticeForm({ title: "", author: mobileUsers.find(u => u.id === currentUser?.uid)?.name || "", content: "" });
         setNoticeOpen(true);
       }}
-      className="w-full py-2.5 rounded-xl bg-[#1B2B4B] text-white text-sm font-semibold"
+      className={`w-full py-2.5 rounded-xl ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"} text-white text-sm font-semibold`}
     >
       + 공지사항 등록
     </button>
@@ -2630,7 +2630,7 @@ onGoSchedule={() => {
         setScheduleForm({ type: "휴가", start: "", end: "", memo: "" });
         setScheduleOpen(true);
       }}
-      className="w-full py-2.5 rounded-xl bg-[#1B2B4B] text-white text-sm font-semibold"
+      className={`w-full py-2.5 rounded-xl ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"} text-white text-sm font-semibold`}
     >
       + 일정 등록
     </button>
@@ -2825,7 +2825,7 @@ onGoSchedule={() => {
         setHandoverForm({ text: "", receiver: "", receiverUid: "", date: todayKST() });
         setHandoverOpen(true);
       }}
-      className="w-full py-2.5 rounded-xl bg-[#1B2B4B] text-white text-sm font-semibold"
+      className={`w-full py-2.5 rounded-xl ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"} text-white text-sm font-semibold`}
     >
       + 인수인계 등록
     </button>
@@ -3195,6 +3195,7 @@ setOpenMemo={setOpenMemo}
     data={orders}
     fixedData={fixedClientRows}
     onBack={() => setPage("list")}
+    cardVersionB={cardVersionB}
   />
 )}
     {page === "form" && (
@@ -3253,15 +3254,16 @@ setOpenMemo={setOpenMemo}
         )}
 
        {page === "fare" && (
-          <MobileStandardFare onBack={() => setPage("list")} />
+          <MobileStandardFare onBack={() => setPage("list")} cardVersionB={cardVersionB} />
         )}
         {page === "national-fare" && (
-          <MobileNationalFare onBack={() => setPage("list")} />
+          <MobileNationalFare onBack={() => setPage("list")} cardVersionB={cardVersionB} />
         )}
         {page === "ratecard" && (
           <MobileRateCard
             dispatchData={orders}
             onBack={() => setPage("list")}
+            cardVersionB={cardVersionB}
           />
         )}
         {page === "myinfo" && (
@@ -3272,6 +3274,7 @@ setOpenMemo={setOpenMemo}
             orders={orders}
             userCompany={userCompany || localStorage.getItem("userCompany") || ""}
             onBack={() => setPage("list")}
+            cardVersionB={cardVersionB}
           />
         )}
         {page === "settings" && (
@@ -3290,7 +3293,7 @@ setOpenMemo={setOpenMemo}
           />
         )}
         {page === "fleet" && <MobileFleetView />}
-        {page === "intel" && <MobileIntelView dispatchData={orders} />}
+        {page === "intel" && <MobileIntelView dispatchData={orders} cardVersionB={cardVersionB} />}
 
         {page === "unassigned" && (
   <MobileUnassignedList
@@ -3447,7 +3450,7 @@ function SalesPinGate({ onVerified }) {
   );
 }
 
-function MobileSalesPage({ data = [], fixedData = [], onBack }) {
+function MobileSalesPage({ data = [], fixedData = [], onBack, cardVersionB = false }) {
   const [verified, setVerified] = useState(() => sessionStorage.getItem("sales_ok") === "1");
   const [month, setMonth] = useState(new Date(new Date().getTime() + 9*60*60*1000).toISOString().slice(0,7));
   const toInt = (v) => Number(String(v || "").replace(/[^\d]/g, "")) || 0;
@@ -3572,7 +3575,7 @@ function MobileSalesPage({ data = [], fixedData = [], onBack }) {
   return (
     <div className="bg-[#f4f5f8] min-h-screen pb-10">
       {/* 헤더 */}
-      <div className="bg-[#1B2B4B] px-4 pt-5 pb-6">
+      <div className={`${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"} px-4 pt-5 pb-6`}>
         <div className="flex items-center gap-3 mb-5">
           <button onClick={onBack} className="text-white/60">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
@@ -3626,7 +3629,7 @@ function MobileSalesPage({ data = [], fixedData = [], onBack }) {
 
         {/* 스마트 인사이트 */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-          <div className="px-4 py-3 bg-[#1B2B4B]">
+          <div className={`px-4 py-3 ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`}>
             <div className="text-[13px] font-bold text-white tracking-tight">스마트 인사이트</div>
             <div className="text-[10px] text-white/40 mt-0.5">AI 기반 월별 분석 요약</div>
           </div>
@@ -3646,7 +3649,7 @@ function MobileSalesPage({ data = [], fixedData = [], onBack }) {
 
         {/* 최근 6개월 트렌드 */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-          <div className="text-[13px] font-bold text-[#1B2B4B] mb-3">최근 6개월 매출 추이</div>
+          <div className={`text-[13px] font-bold ${cardVersionB ? "text-[#1B2B4B]" : "text-blue-600"} mb-3`}>최근 6개월 매출 추이</div>
           <div className="h-[180px]">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={trendData} margin={{top:4,right:8,left:0,bottom:0}}>
@@ -3654,27 +3657,27 @@ function MobileSalesPage({ data = [], fixedData = [], onBack }) {
                 <XAxis dataKey="ym" tick={{fontSize:10,fill:"#9CA3AF"}} axisLine={false} tickLine={false} />
                 <YAxis tickFormatter={v=>v>=1000000?`${(v/1000000).toFixed(0)}M`:v>=10000?`${Math.round(v/10000)}만`:`${v}`} tick={{fontSize:9,fill:"#9CA3AF"}} axisLine={false} tickLine={false} width={36} />
                 <Tooltip formatter={(v,n)=>[`${v.toLocaleString()}원`, n]} contentStyle={{borderRadius:10,fontSize:11}} />
-                <Line type="monotone" dataKey="매출" stroke="#1B2B4B" strokeWidth={2.5} dot={false} activeDot={{r:4}} />
+                <Line type="monotone" dataKey="매출" stroke={cardVersionB ? "#1B2B4B" : "#2563eb"} strokeWidth={2.5} dot={false} activeDot={{r:4}} />
                 <Line type="monotone" dataKey="수익" stroke="#6B7280" strokeWidth={2} dot={false} strokeDasharray="4 2" />
               </LineChart>
             </ResponsiveContainer>
           </div>
           <div className="flex gap-4 mt-2 justify-center text-[11px] text-gray-500">
-            <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-[#1B2B4B] inline-block" />매출</span>
+            <span className="flex items-center gap-1"><span className={`w-3 h-0.5 ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"} inline-block`} />매출</span>
             <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-gray-400 inline-block" />수익</span>
           </div>
         </div>
 
         {/* 거래처 TOP5 */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-          <div className="text-[13px] font-bold text-[#1B2B4B] mb-3">거래처 TOP 5</div>
+          <div className={`text-[13px] font-bold ${cardVersionB ? "text-[#1B2B4B]" : "text-blue-600"} mb-3`}>거래처 TOP 5</div>
           {top5.length === 0 && <div className="text-[12px] text-gray-400 text-center py-4">데이터 없음</div>}
           <div className="space-y-2.5">
             {top5.map(([name,sale],i) => (
               <div key={i}>
                 <div className="flex items-center justify-between mb-1">
                   <div className="flex items-center gap-2">
-                    <span className={`text-[11px] font-bold w-5 h-5 rounded-full flex items-center justify-center ${i===0?"bg-[#1B2B4B] text-white":"bg-gray-100 text-gray-500"}`}>{i+1}</span>
+                    <span className={`text-[11px] font-bold w-5 h-5 rounded-full flex items-center justify-center ${i===0?(cardVersionB?"bg-[#1B2B4B] text-white":"bg-blue-600 text-white"):"bg-gray-100 text-gray-500"}`}>{i+1}</span>
                     <span className="text-[13px] font-semibold text-gray-800 truncate max-w-[150px]">{name}</span>
                   </div>
                   <span className="text-[12px] font-bold text-gray-700">{sale.toLocaleString()}원</span>
@@ -3689,7 +3692,7 @@ function MobileSalesPage({ data = [], fixedData = [], onBack }) {
 
         {/* 요일별 수주 분석 */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-          <div className="text-[13px] font-bold text-[#1B2B4B] mb-3">요일별 수주 현황</div>
+          <div className={`text-[13px] font-bold ${cardVersionB ? "text-[#1B2B4B]" : "text-blue-600"} mb-3`}>요일별 수주 현황</div>
           <div className="h-[140px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={byDay} barSize={22} margin={{top:0,right:4,left:0,bottom:0}}>
@@ -3698,12 +3701,12 @@ function MobileSalesPage({ data = [], fixedData = [], onBack }) {
                 <YAxis tick={{fontSize:9,fill:"#9CA3AF"}} axisLine={false} tickLine={false} allowDecimals={false} />
                 <Tooltip contentStyle={{borderRadius:10,fontSize:11}} formatter={(v)=>[`${v}건`,"건수"]} />
                 <Bar dataKey="건수" radius={[4,4,0,0]}>
-                  {byDay.map((d,i) => <Cell key={i} fill={d.건수===maxDay?"#1B2B4B":"#D1D5DB"} />)}
+                  {byDay.map((d,i) => <Cell key={i} fill={d.건수===maxDay?(cardVersionB?"#1B2B4B":"#2563eb"):"#D1D5DB"} />)}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
-          <div className="mt-2 text-[11px] text-gray-400 text-center">가장 많은 수주 요일: <b className="text-[#1B2B4B]">{busyDayLabel}요일</b></div>
+          <div className="mt-2 text-[11px] text-gray-400 text-center">가장 많은 수주 요일: <b className={cardVersionB ? "text-[#1B2B4B]" : "text-blue-600"}>{busyDayLabel}요일</b></div>
         </div>
 
       </div>
@@ -5272,12 +5275,12 @@ function LongPressContextMenu({ order, cardVersionB, onClose, onEdit, onCopyDriv
   return (
     <div className="fixed inset-0 z-[9999] flex items-end" style={{ background: "rgba(0,0,0,0.48)" }} onClick={onClose}>
       <div
-        className={`w-full pb-8 pt-3 shadow-2xl ${bStyle ? "bg-white rounded-t-2xl border-t-[3px] border-[#1B2B4B]" : "bg-white rounded-t-2xl"}`}
+        className={`w-full pb-8 pt-3 shadow-2xl bg-white rounded-t-2xl ${bStyle ? "border-t-[3px] border-[#1B2B4B]" : "border-t-[3px] border-blue-600"}`}
         style={{ maxHeight: "70vh", overflowY: "auto" }}
         onClick={e => e.stopPropagation()}
       >
-        <div className={`w-10 h-1 rounded-full mx-auto mb-3 ${bStyle ? "bg-[#1B2B4B]/15" : "bg-gray-200"}`} />
-        <div className={`px-4 pb-2 text-[12px] ${bStyle ? "font-bold text-[#1B2B4B]/50 tracking-wide uppercase" : "text-gray-400"}`}>
+        <div className={`w-10 h-1 rounded-full mx-auto mb-3 ${bStyle ? "bg-[#1B2B4B]/15" : "bg-blue-100"}`} />
+        <div className={`px-4 pb-2 text-[12px] ${bStyle ? "font-bold text-[#1B2B4B]/50 tracking-wide uppercase" : "font-semibold text-blue-600/60 tracking-wide uppercase"}`}>
           {order.상차지명 || "-"} → {order.하차지명 || "-"}
         </div>
         {menuItems.map((item, i) => (
@@ -5286,11 +5289,11 @@ function LongPressContextMenu({ order, cardVersionB, onClose, onEdit, onCopyDriv
             className={`w-full flex items-center gap-3 px-4 py-3.5 text-left border-t ${
               bStyle
                 ? `border-gray-100 ${item.danger ? "text-red-500" : "text-[#1B2B4B]"} active:bg-[#1B2B4B]/5`
-                : `border-gray-100 ${item.danger ? "text-red-500" : "text-gray-800"} active:bg-gray-50`
+                : `border-gray-100 ${item.danger ? "text-red-500" : "text-gray-900"} active:bg-blue-50`
             }`}
             onClick={() => { item.action?.(); onClose(); }}
           >
-            <span className={item.danger ? "text-red-400" : (bStyle ? "text-[#1B2B4B]/70" : "text-gray-500")}>{item.svg}</span>
+            <span className={item.danger ? "text-red-400" : (bStyle ? "text-[#1B2B4B]/70" : "text-blue-500")}>{item.svg}</span>
             <div>
               <div className={`text-[14px] font-semibold`}>{item.label}</div>
               <div className="text-[11px] text-gray-400 font-normal">{item.desc}</div>
@@ -5720,12 +5723,6 @@ const dropTime = order.하차시간 || "시간 없음";
     )}
   </div>
   <div className="flex items-center gap-1 shrink-0">
-
-  {showUndeliveredOnly && (
-    <span className="px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 text-[10px] font-bold border border-yellow-300">
-      미전달
-    </span>
-  )}
 
   {!showUndeliveredOnly && isUrgentOrder(order) && (
     <span className="px-2 py-0.5 rounded-full bg-red-600 text-white text-[10px] font-bold">
@@ -6619,7 +6616,7 @@ const handleAssignClick = () => {
       {/* ── 상차지 블록 ── */}
       <div className="px-4 pt-3 pb-3 bg-blue-50/30">
         <div className="flex gap-2">
-          <span className="mt-0.5 w-5 h-5 rounded-full bg-[#1B2B4B] text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0">상</span>
+          <span className={`mt-0.5 w-5 h-5 rounded-full ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"} text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0`}>상</span>
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between gap-2 mb-0.5">
               <div className="text-[13px] font-bold text-gray-900 flex-1 min-w-0">{order.상차지명 || "-"}</div>
@@ -11112,7 +11109,7 @@ function MobilePlaceSuggest({ value, onChange, names = [], placeholder }) {
 // ======================================================================
 // 📌 내정보 페이지
 // ======================================================================
-function MobileMyInfo({ currentUser, mobileUsers, loginTime, orders = [], userCompany = "", onBack }) {
+function MobileMyInfo({ currentUser, mobileUsers, loginTime, orders = [], userCompany = "", onBack, cardVersionB = false }) {
   const me = mobileUsers?.find(u => u.id === currentUser?.uid);
   const myName = me?.name || currentUser?.displayName || currentUser?.email?.split("@")[0] || "사용자";
   const myEmail = currentUser?.email || "";
@@ -11143,7 +11140,7 @@ function MobileMyInfo({ currentUser, mobileUsers, loginTime, orders = [], userCo
     <div className="px-4 py-5 space-y-4 pb-24">
       {/* 프로필 카드 */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        <div className="bg-[#1B2B4B] px-5 py-6 flex items-center gap-4">
+        <div className={`${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"} px-5 py-6 flex items-center gap-4`}>
           <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center text-white text-[22px] font-extrabold border-2 border-white/30">
             {avatarLetter}
           </div>
@@ -11414,7 +11411,7 @@ function mFmt(v){if(!v)return"0원";if(v>=10000){const m=v/10000;return(Number.i
 function mFmtTime(mins){if(!mins)return"-";const h=Math.floor(mins/60),m=mins%60;return h>0?`${h}시간${m>0?` ${m}분`:""}`:` ${m}분`;}
 
 // ─ 통합 모바일 운임조회 컴포넌트 ──────────────────────────────────────────
-function MobileFareInquiry() {
+function MobileFareInquiry({ cardVersionB = false }) {
   const [freightMode,setFreightMode]=useState("독차");
   const [fromSearch,setFromSearch]=useState("");
   const [toSearch,setToSearch]=useState("");
@@ -12041,8 +12038,8 @@ function MobileAddressSearch({ value, onChange, onSelect, placeholder }) {
 }
 
 // ── 통합 전국운임조회 ────────────────────────────────────────────────────
-function MobileNationalFare({ onBack }) {
-  return <MobileFareInquiry />;
+function MobileNationalFare({ onBack, cardVersionB = false }) {
+  return <MobileFareInquiry cardVersionB={cardVersionB} />;
 }
 
 function MobileNationalFareSearch() {
@@ -12142,7 +12139,7 @@ function MobileNationalFareSearch() {
           <button
             onClick={lookup}
             disabled={nfLoading}
-            className="flex-1 py-3 rounded-xl bg-[#1B2B4B] text-white text-[14px] font-bold disabled:opacity-50 flex items-center justify-center gap-2"
+            className={`flex-1 py-3 rounded-xl ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"} text-white text-[14px] font-bold disabled:opacity-50 flex items-center justify-center gap-2`}
           >
             {nfLoading ? (
               <>
@@ -12169,7 +12166,7 @@ function MobileNationalFareSearch() {
       {/* 운임 결과 */}
       {nfResult && (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-          <div className="bg-[#1B2B4B] px-4 py-3">
+          <div className={`${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"} px-4 py-3`}>
             <div className="text-white font-bold text-[13px] truncate">{nfResult.from} → {nfResult.to}</div>
             <div className="text-white/60 text-[12px] mt-0.5">
               도로거리 {nfResult.km}km · {cat.label}
@@ -12214,7 +12211,7 @@ function MobileNationalFareSearch() {
 // ======================================================================
 // 📌 모바일 표준운임표 — 흰 화면 100% 해결 버전
 // ======================================================================
-function MobileStandardFare({ onBack }) {
+function MobileStandardFare({ onBack, cardVersionB = false }) {
 
   const [dispatchData, setDispatchData] = useState([]);
 
@@ -12790,7 +12787,7 @@ const fares = baseRows.map((r) =>
   return (
     <div className="bg-gray-50 min-h-screen pb-16">
       {/* 헤더 */}
-      <div className="bg-[#1B2B4B] px-4 py-4 flex items-center gap-3">
+      <div className={`${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"} px-4 py-4 flex items-center gap-3`}>
         <button onClick={onBack} className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="15 18 9 12 15 6"/>
@@ -12870,7 +12867,7 @@ const fares = baseRows.map((r) =>
           </div>
           <div className="flex gap-2 pt-1">
             <button id="fare-search-button" onClick={calcFareMobile}
-              className="flex-1 py-3 bg-[#1B2B4B] text-white text-[14px] font-bold rounded-xl active:scale-95 transition">
+              className={`flex-1 py-3 ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"} text-white text-[14px] font-bold rounded-xl active:scale-95 transition`}>
               조회하기
             </button>
             <button onClick={() => { setPickup(""); setDrop(""); setPickupAddr(""); setDropAddr(""); setTon(""); setCargo(""); setVehicle("전체"); setMatchedRows([]); setResult(null); setAiFare(null); }}
@@ -12937,7 +12934,7 @@ const fares = baseRows.map((r) =>
             return (
               <div key={r.id || i} onClick={() => setFareDetailItemStd(r)} className={`bg-white border rounded-2xl overflow-hidden shadow-sm cursor-pointer active:scale-[0.99] transition ${isTop ? "border-[#1B2B4B]/30" : "border-gray-100"}`}>
                 {isTop && (
-                  <div className="bg-[#1B2B4B] px-4 py-1">
+                  <div className={`${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"} px-4 py-1`}>
                     <span className="text-yellow-300 text-[10px] font-bold">최근 유사 운송</span>
                   </div>
                 )}
@@ -13000,7 +12997,7 @@ const fares = baseRows.map((r) =>
             <div className="flex justify-center pt-3 pb-0">
               <div className="w-10 h-1 rounded-full bg-gray-300" />
             </div>
-            <div className="bg-[#1B2B4B] px-5 py-4">
+            <div className={`${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"} px-5 py-4`}>
               <div className="flex items-center justify-between">
                 <div className="text-white font-bold text-[15px]">운송 이력 상세</div>
                 <button onClick={() => setFareDetailItemStd(null)}
@@ -13080,7 +13077,7 @@ const fares = baseRows.map((r) =>
             <div className="text-[16px] font-bold mb-2">조회 결과 없음</div>
             <div className="text-[13px] text-gray-500 mb-4">해당 상/하차지 기록이 없습니다.</div>
             <button onClick={() => setShowNoResultPopup(false)}
-              className="w-full py-2.5 bg-[#1B2B4B] text-white rounded-xl font-bold text-[13px]">확인</button>
+              className={`w-full py-2.5 ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"} text-white rounded-xl font-bold text-[13px]`}>확인</button>
           </div>
         </div>
       )}
@@ -13090,7 +13087,7 @@ const fares = baseRows.map((r) =>
 // ======================================================================
 // 📌 모바일 단가표
 // ======================================================================
-function MobileRateCard({ dispatchData = [], onBack }) {
+function MobileRateCard({ dispatchData = [], onBack, cardVersionB = false }) {
   const TON_BUCKETS = [
     { label: "다마스/라보", min: 0,    max: 0.6,  display: "다마스/라보" },
     { label: "1톤",         min: 0.6,  max: 1.2,  display: "1톤" },
@@ -13196,7 +13193,7 @@ function MobileRateCard({ dispatchData = [], onBack }) {
 
       {/* 검색 카드 */}
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-        <div className="bg-[#1B2B4B] px-4 py-3">
+        <div className={`${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"} px-4 py-3`}>
           <div className="text-[13px] font-bold text-white">노선 조건 입력</div>
         </div>
         <div className="p-4 space-y-3">
@@ -13262,7 +13259,7 @@ function MobileRateCard({ dispatchData = [], onBack }) {
 
           {/* 버튼 */}
           <div className="flex gap-2 pt-1">
-            <button onClick={handleSearch} className="flex-1 py-3 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-xl active:scale-95 transition">
+            <button onClick={handleSearch} className={`flex-1 py-3 ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"} text-white text-[13px] font-bold rounded-xl active:scale-95 transition`}>
               단가표 생성
             </button>
             <button onClick={()=>{setPickup("");setDrop("");setVGroup("");setMixedFilter("전체");setFareField("청구운임");setViewMode("톤수별");setResult(null);setSearched(false);}}
@@ -13277,7 +13274,7 @@ function MobileRateCard({ dispatchData = [], onBack }) {
       {searched && result && (
         <div className="space-y-3">
           {/* 헤더 정보 */}
-          <div className="bg-[#1B2B4B] rounded-2xl px-4 py-4">
+          <div className={`${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"} rounded-2xl px-4 py-4`}>
             <div className="text-[20px] font-black text-white tracking-tight mb-1">RUN25</div>
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-white font-bold text-[14px]">{result.pickup}</span>
@@ -13357,7 +13354,7 @@ function MobileRateCard({ dispatchData = [], onBack }) {
       {detailModal && (
         <div className="fixed inset-0 bg-black/60 z-[9999] flex items-center justify-center" onClick={()=>setDetailModal(null)}>
           <div className="bg-white rounded-2xl w-[96%] max-h-[80vh] overflow-hidden flex flex-col shadow-2xl" onClick={e=>e.stopPropagation()}>
-            <div className="bg-[#1B2B4B] px-4 py-3 flex items-center justify-between">
+            <div className={`${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"} px-4 py-3 flex items-center justify-between`}>
               <div>
                 <div className="text-white font-bold text-[14px]">{detailModal.bucket} 상세 내역</div>
                 <div className="text-white/60 text-[11px]">총 {detailModal.rows.length}건</div>
@@ -13769,7 +13766,7 @@ return (
             className={`px-3 py-1 text-[12px] font-semibold border transition-colors ${
               cardVersionB
                 ? `rounded-lg ${unassignedTypeFilter === t ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-500 border-gray-200"}`
-                : `rounded-full ${unassignedTypeFilter === t ? "bg-gray-800 text-white border-gray-800" : "bg-white text-gray-500 border-gray-300"}`
+                : `rounded-full ${unassignedTypeFilter === t ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-500 border-gray-300"}`
             }`}
           >{t}</button>
         ))}
@@ -13788,16 +13785,16 @@ return (
           </div>
         ) : (
           <div className="flex items-center gap-3 text-[12px] text-gray-500">
-            <span>총 <b className="text-gray-900">{source.length}</b>건</span>
+            <span>총 <b className="text-blue-600">{source.length}</b>건</span>
             <span className="text-gray-300">|</span>
-            <span>냉장/냉동 <b className="text-gray-700">{coldCount}</b></span>
+            <span>냉장/냉동 <b className="text-blue-600">{coldCount}</b></span>
             <span>일반 <b className="text-gray-700">{normalCount}</b></span>
           </div>
         )
       )}
       {tab === "정보미전달" && (
         <div className={`text-[12px] ${cardVersionB ? "text-gray-500" : "text-gray-500"}`}>
-          총 <b className={cardVersionB ? "text-[#1B2B4B]" : "text-gray-900"}>{source.length}</b>건
+          총 <b className={cardVersionB ? "text-[#1B2B4B]" : "text-blue-600"}>{source.length}</b>건
         </div>
       )}
     </div>
