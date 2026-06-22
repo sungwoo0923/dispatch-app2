@@ -7910,10 +7910,11 @@ className={`
 
       <input
         className={inputCls}
-        value={form.청구운임}
-        onChange={(e) =>
-          onChange("청구운임", e.target.value.replace(/[^\d-]/g, ""))
-        }
+        value={form.청구운임 ? Number(form.청구운임).toLocaleString() : ""}
+        onChange={(e) => {
+          const raw = e.target.value.replace(/[^\d-]/g, "").replace(/(?!^)-/g, "");
+          onChange("청구운임", raw);
+        }}
       />
     </div>
 
@@ -7941,10 +7942,11 @@ className={`
 
       <input
         className={inputCls}
-        value={form.기사운임}
-        onChange={(e) =>
-          onChange("기사운임", e.target.value.replace(/[^\d-]/g, ""))
-        }
+        value={form.기사운임 ? Number(form.기사운임).toLocaleString() : ""}
+        onChange={(e) => {
+          const raw = e.target.value.replace(/[^\d-]/g, "").replace(/(?!^)-/g, "");
+          onChange("기사운임", raw);
+        }}
       />
     </div>
 
@@ -18055,11 +18057,11 @@ value={copyTarget?.화물수량 || ""}
             <Field label="청구운임">
               <input
   className="inputStyle"
-  value={copyTarget.청구운임 || ""}
+  value={copyTarget.청구운임 ? Number(copyTarget.청구운임).toLocaleString() : ""}
   onChange={(e)=>{
     const v = e.target.value
-      .replace(/[^\d-]/g, "")   // 숫자 + - 허용
-      .replace(/(?!^)-/g, "");  // -는 맨 앞만 허용
+      .replace(/[^\d-]/g, "")
+      .replace(/(?!^)-/g, "");
 
     setCopyTarget(p=>({...p, 청구운임: v}))
   }}
@@ -18069,7 +18071,7 @@ value={copyTarget?.화물수량 || ""}
             <Field label="기사운임">
               <input
   className="inputStyle"
-  value={copyTarget.기사운임 || ""}
+  value={copyTarget.기사운임 ? Number(copyTarget.기사운임).toLocaleString() : ""}
   onChange={(e)=>{
     const v = e.target.value
       .replace(/[^\d-]/g, "")
@@ -27231,11 +27233,11 @@ setCopyTarget(prev => ({
             <Field label="청구운임">
               <input
   className="inputStyle"
-  value={copyTarget.청구운임 || ""}
+  value={copyTarget.청구운임 ? Number(copyTarget.청구운임).toLocaleString() : ""}
   onChange={(e)=>{
     const v = e.target.value
-      .replace(/[^\d-]/g, "")   // 숫자 + - 허용
-      .replace(/(?!^)-/g, "");  // -는 맨 앞만 허용
+      .replace(/[^\d-]/g, "")
+      .replace(/(?!^)-/g, "");
 
     setCopyTarget(p=>({...p, 청구운임: v}))
   }}
@@ -27245,7 +27247,7 @@ setCopyTarget(prev => ({
             <Field label="기사운임">
               <input
   className="inputStyle"
-  value={copyTarget.기사운임 || ""}
+  value={copyTarget.기사운임 ? Number(copyTarget.기사운임).toLocaleString() : ""}
   onChange={(e)=>{
     const v = e.target.value
       .replace(/[^\d-]/g, "")
@@ -33907,10 +33909,10 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                 <div className="p-6">
                   <div className="grid grid-cols-5 gap-6">
                     <Field label="청구운임">
-                      <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget.청구운임 || ""} onChange={(e) => setCopyTarget(p => ({...p, 청구운임: e.target.value.replace(/[^\d]/g, "")}))} />
+                      <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget.청구운임 ? Number(copyTarget.청구운임).toLocaleString() : ""} onChange={(e) => { const v = e.target.value.replace(/[^\d]/g, ""); setCopyTarget(p => ({...p, 청구운임: v})); }} />
                     </Field>
                     <Field label="기사운임">
-                      <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget.기사운임 || ""} onChange={(e) => setCopyTarget(p => ({...p, 기사운임: e.target.value.replace(/[^\d]/g, "")}))} />
+                      <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-blue-400" value={copyTarget.기사운임 ? Number(copyTarget.기사운임).toLocaleString() : ""} onChange={(e) => { const v = e.target.value.replace(/[^\d]/g, ""); setCopyTarget(p => ({...p, 기사운임: v})); }} />
                     </Field>
                     <Field label="수수료">
                       <div className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-[14px] font-bold text-blue-700 text-center">
