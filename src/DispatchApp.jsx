@@ -13694,7 +13694,7 @@ return `[파렛전표/거래명세서 업로드]
 👇👇👇👇👇👇👇👇👇👇👇👇
 ${uploadUrl}
 
-${dateNotice}${dateText}
+${dateNotice}${dateText}${r.운행유형 === "왕복" ? "\n[왕복운행]" : ""}
 
 ${pickupMainNumD}상차 : ${r.상차지명 || "-"} / ${r.상차시간 || "즉시"}${r.상차시간기준 ? ` (${r.상차시간기준})` : ""}
 ${r.상차지주소 || ""}${(() => { const line = buildContactLine(r.상차지담당자, r.상차지담당자번호); return line ? `\n${line}` : ""; })()}${_mainPCargo4d}${_mainPTon4d}
@@ -13821,7 +13821,7 @@ const _mainPTon4f=hasPickupStops&&r.차량톤수?`\n화물톤수 : ${r.차량톤
 const _mainDCargo4f=hasPickupStops?(_totCargo4f?`\n화물내용 : ${_totCargo4f}`:""):(hasDropStops&&r.화물내용?`\n화물내용 : ${r.화물내용}`:"");
 const _mainDTon4f=hasPickupStops?(_totTon4f?`\n화물톤수 : ${_totTon4f}`:""):(hasDropStops&&r.차량톤수?`\n화물톤수 : ${r.차량톤수}`:"");
 
-return `${dateNotice}${r.상차일 || ""} ${yoil}
+return `${dateNotice}${r.상차일 || ""} ${yoil}${r.운행유형 === "왕복" ? "\n[왕복운행]" : ""}
 
 ${pickupMainNum}상차지 : ${r.상차지명 || "-"}
 ${r.상차지주소 || "-"}${pickupContact ? `\n${pickupContact}` : ""}${_mainPCargo4f}${_mainPTon4f}
@@ -18005,7 +18005,6 @@ checkWarningStatus(c.거래처명, "거래처");
         onBlur={(e) => {
           const plate = normalizePlate(e.target.value);
           if (!plate) return;
-          if (copyTarget?.이름?.trim()) return;
           const match = (drivers || []).find(d => normalizePlate(d.차량번호) === plate);
           if (match) return;
           const plateVal = e.target.value;
@@ -19099,24 +19098,24 @@ value={copyTarget?.화물수량 || ""}
   {/* ================= 상차시간 + 기준 ================= */}
   <div>
     <label>상차시간</label>
-    <TimeAmPmPicker
-      value={editTarget.상차시간 || ""}
-      onChange={v => setEditTarget(p => ({ ...p, 상차시간: v }))}
-      selectCls="border p-2 rounded w-full"
-    />
-
-    {/* ✅ 상차시간 기준 */}
-    <select
-      className="border p-2 rounded w-full mt-1 text-sm"
-      value={editTarget.상차시간기준 || ""}
-      onChange={(e) =>
-        setEditTarget((p) => ({ ...p, 상차시간기준: e.target.value }))
-      }
-    >
-      <option value="">기준없음</option>
-      <option value="이전">이전</option>
-      <option value="이후">이후</option>
-    </select>
+    <div className="flex items-center gap-1 flex-nowrap">
+      <TimeAmPmPicker
+        value={editTarget.상차시간 || ""}
+        onChange={v => setEditTarget(p => ({ ...p, 상차시간: v }))}
+        selectCls="border p-2 rounded flex-1 min-w-0"
+      />
+      <select
+        className="border p-2 rounded text-sm shrink-0"
+        value={editTarget.상차시간기준 || ""}
+        onChange={(e) =>
+          setEditTarget((p) => ({ ...p, 상차시간기준: e.target.value }))
+        }
+      >
+        <option value="">기준없음</option>
+        <option value="이전">이전</option>
+        <option value="이후">이후</option>
+      </select>
+    </div>
   </div>
 
   {/* ================= 하차일 ================= */}
@@ -19135,24 +19134,24 @@ value={copyTarget?.화물수량 || ""}
   {/* ================= 하차시간 + 기준 ================= */}
   <div>
     <label>하차시간</label>
-    <TimeAmPmPicker
-      value={editTarget.하차시간 || ""}
-      onChange={v => setEditTarget(p => ({ ...p, 하차시간: v }))}
-      selectCls="border p-2 rounded w-full"
-    />
-
-    {/* ✅ 하차시간 기준 */}
-    <select
-      className="border p-2 rounded w-full mt-1 text-sm"
-      value={editTarget.하차시간기준 || ""}
-      onChange={(e) =>
-        setEditTarget((p) => ({ ...p, 하차시간기준: e.target.value }))
-      }
-    >
-      <option value="">기준없음</option>
-      <option value="이전">이전</option>
-      <option value="이후">이후</option>
-    </select>
+    <div className="flex items-center gap-1 flex-nowrap">
+      <TimeAmPmPicker
+        value={editTarget.하차시간 || ""}
+        onChange={v => setEditTarget(p => ({ ...p, 하차시간: v }))}
+        selectCls="border p-2 rounded flex-1 min-w-0"
+      />
+      <select
+        className="border p-2 rounded text-sm shrink-0"
+        value={editTarget.하차시간기준 || ""}
+        onChange={(e) =>
+          setEditTarget((p) => ({ ...p, 하차시간기준: e.target.value }))
+        }
+      >
+        <option value="">기준없음</option>
+        <option value="이전">이전</option>
+        <option value="이후">이후</option>
+      </select>
+    </div>
   </div>
 </div>
 
@@ -19710,9 +19709,7 @@ value={copyTarget?.화물수량 || ""}
     return;
   }
 
-  // 0명 → 신규 등록 (단, 이미 이름이 있으면 스킵)
-  if (editTarget?.이름?.trim()) return;
-
+  // 0명 → 신규 등록
   openNewDriverModal(raw, async (driverInfo) => {
     const fmt = formatPhone(driverInfo.전화번호);
     const rawPhone = fmt.replace(/[^\d]/g, "");
@@ -19724,7 +19721,6 @@ value={copyTarget?.화물수량 || ""}
                   const raw = e.target.value.trim();
                   const clean = raw.replace(/\s+/g, "");
                   if (!clean) return;
-                  if (editTarget?.이름?.trim()) return;
                   const matches = (drivers || []).filter(d => String(d.차량번호 || "").replace(/\s+/g, "") === clean);
                   if (matches.length > 0) return;
                   openNewDriverModal(raw, async (driverInfo) => {
@@ -23449,9 +23445,9 @@ return `[파렛전표/거래명세서 업로드]
 👇👇👇👇👇👇👇👇👇👇👇👇
 ${uploadUrl}
 
-${dateNotice}${dateText}
+${dateNotice}${dateText}${r.운행유형==="왕복"?"\n[왕복운행]":""}
 
-${_pNum5d}상차 : ${r.상차지명||"-"} / ${r.상차시간||"즉시"}${r.상차시간기준?` (${r.상차시간기준})`:""}
+${_pNum5d}상차 :${r.상차지명||"-"} / ${r.상차시간||"즉시"}${r.상차시간기준?` (${r.상차시간기준})`:""}
 ${r.상차지주소||""}${(()=>{const line=buildContactLine(r.상차지담당자,r.상차지담당자번호);return line?`\n${line}`:""})()}${_mainPCargo5d}${_mainPTon5d}
 상차방법 : ${r.상차방법||"-"}${_pStopsText5d ? "\n\n" + _pStopsText5d : ""}
 
@@ -23527,7 +23523,7 @@ const _mainPTon5f=_pHas5f&&r.차량톤수?`\n화물톤수 : ${r.차량톤수}`:"
 const _mainDCargo5f=_pHas5f?(_totCargo5f?`\n화물내용 : ${_totCargo5f}`:""): (_dHas5f&&r.화물내용?`\n화물내용 : ${r.화물내용}`:"");
 const _mainDTon5f=_pHas5f?(_totTon5f?`\n화물톤수 : ${_totTon5f}`:""):(_dHas5f&&r.차량톤수?`\n화물톤수 : ${r.차량톤수}`:"");
 
-        return `${dateNotice}${r.상차일||""} ${yoil}
+        return `${dateNotice}${r.상차일||""} ${yoil}${r.운행유형==="왕복"?"\n[왕복운행]":""}
 
 ${_pNum5f}상차지 : ${r.상차지명||"-"}
 ${r.상차지주소||"-"}${_pCon5f?`\n${_pCon5f}`:""}${_mainPCargo5f}${_mainPTon5f}
@@ -25587,19 +25583,17 @@ return (
   {/* 상차시간 + 이전/이후 */}
   <div>
     <label className="text-sm font-medium">상차시간</label>
-    <TimeAmPmPicker
-      value={editTarget.상차시간 || ""}
-      onChange={v => setEditTarget(p => ({ ...p, 상차시간: v }))}
-      selectCls="border p-2 rounded w-full"
-    />
-
-    {/* ⏱ 이전 / 이후 */}
-    <div className="flex gap-2 mt-1">
+    <div className="flex items-center gap-1 flex-nowrap">
+      <TimeAmPmPicker
+        value={editTarget.상차시간 || ""}
+        onChange={v => setEditTarget(p => ({ ...p, 상차시간: v }))}
+        selectCls="border p-2 rounded flex-1 min-w-0"
+      />
       {["이전", "이후"].map((v) => (
         <button
           key={v}
           type="button"
-          className={`px-2 py-0.5 text-xs rounded border
+          className={`px-2 py-1 text-xs rounded border shrink-0
             ${editTarget.상차시간기준 === v
               ? "bg-gray-800 text-white border-gray-800"
               : "bg-gray-100 text-gray-600 border-gray-300"}
@@ -25633,19 +25627,17 @@ return (
   {/* 하차시간 + 이전/이후 */}
   <div>
     <label className="text-sm font-medium">하차시간</label>
-    <TimeAmPmPicker
-      value={editTarget.하차시간 || ""}
-      onChange={v => setEditTarget(p => ({ ...p, 하차시간: v }))}
-      selectCls="border p-2 rounded w-full"
-    />
-
-    {/* ⏱ 이전 / 이후 */}
-    <div className="flex gap-2 mt-1">
+    <div className="flex items-center gap-1 flex-nowrap">
+      <TimeAmPmPicker
+        value={editTarget.하차시간 || ""}
+        onChange={v => setEditTarget(p => ({ ...p, 하차시간: v }))}
+        selectCls="border p-2 rounded flex-1 min-w-0"
+      />
       {["이전", "이후"].map((v) => (
         <button
           key={v}
           type="button"
-          className={`px-2 py-0.5 text-xs rounded border
+          className={`px-2 py-1 text-xs rounded border shrink-0
             ${editTarget.하차시간기준 === v
               ? "bg-gray-800 text-white border-gray-800"
               : "bg-gray-100 text-gray-600 border-gray-300"}
@@ -26213,7 +26205,6 @@ return (
                   const raw = e.target.value.trim();
                   const clean = raw.replace(/\s+/g, "");
                   if (!clean) return;
-                  if (editTarget?.이름?.trim()) return;
                   const matches = (drivers || []).filter(d => String(d.차량번호 || "").replace(/\s+/g, "") === clean);
                   if (matches.length > 0) return;
                   openNewDriverModal(raw, async (driverInfo) => {
@@ -27212,9 +27203,6 @@ setCopyPlaceOptions(list);
       const plate = normalizePlate(copyTarget?.차량번호 || "");
 
       if (!plate) return;
-
-      // ✅ 스마트검색으로 이미 이름이 세팅된 경우 → 신규 등록 팝업 스킵
-      if (copyTarget?.이름?.trim()) return;
 
       const match = (drivers || []).find(
         d => normalizePlate(d.차량번호) === plate
