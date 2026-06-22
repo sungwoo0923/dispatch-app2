@@ -2267,6 +2267,7 @@ return (
               "지입차관리",
               "매출관리",
               "정산관리",
+              "회사관리",
               "관리자메뉴",
               "관리센터",
             ].map((m) => {
@@ -2585,6 +2586,8 @@ return (
         </div>
 
         {menu === "운임조회" && <FreightRateInquiry />}
+
+        {menu === "회사관리" && <CompanyProfile userCompany={userCompany || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || ""} />}
 
         {menu === "관리자메뉴" && (role === "admin" || role === "totalMaster") && <AdminMenu parentRole={role} parentCompany={userCompany || localStorage.getItem("userCompany") || ""} />}
 
@@ -3766,35 +3769,12 @@ const findPlaceByName = (name) => {
   );
 };
 
+const [newClientModalOpen, setNewClientModalOpen] = React.useState(false);
+const [newClientModalData, setNewClientModalData] = React.useState({ name: "", addr: "", manager: "", phone: "" });
+
 const openNewPlacePrompt = (name) => {
-  const addr = prompt("주소 (선택)");
-  if (addr === null) return;
-
-  const manager = prompt("담당자 (선택)");
-  if (manager === null) return;
-
-  const phone = prompt("연락처 (선택)");
-  if (phone === null) return;
-
-  // 🔥 최종 확인
-  const ok = window.confirm(
-    `신규 거래처를 등록하시겠습니까?\n\n` +
-    `업체명: ${name}\n` +
-    `주소: ${addr || "-"}\n` +
-    `담당자: ${manager || "-"}\n` +
-    `연락처: ${phone || "-"}`
-  );
-
-  if (!ok) return; // ❌ 여기서 완전 중단
-
-  savePlaceSmart(
-    name,
-    addr || "",
-    manager || "",
-    phone || ""
-  );
-
-  showAlert("신규 거래처 등록이 완료되었습니다.");
+  setNewClientModalData({ name: name || "", addr: "", manager: "", phone: "" });
+  setNewClientModalOpen(true);
 };
 
 // 담당자N 자동 이름 부여 헬퍼
@@ -7358,7 +7338,7 @@ const similar = placeList.filter(p => {
     // 🔥 2️⃣ 진짜 없을 때만 신규 입력 팝업
     openNewPlacePrompt(name);
   }}
-  className="px-3 py-2 border rounded-lg text-sm bg-gray-50 hover:bg-gray-100"
+  className="px-3 py-2 border border-[#1B2B4B] rounded-lg text-sm bg-[#1B2B4B] text-white hover:bg-[#243a60] font-medium transition whitespace-nowrap"
 >
   + 신규등록
 </button>
@@ -10950,6 +10930,94 @@ setConfirmChange(null);
         ))}
       </div>
 
+    </div>
+  </div>
+)}
+
+{/* ================= 거래처 신규등록 팝업 ================= */}
+{newClientModalOpen && (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]" onClick={() => setNewClientModalOpen(false)}>
+    <div className="bg-white rounded-2xl w-[480px] shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}
+      onKeyDown={e => { if (e.key === "Escape") setNewClientModalOpen(false); }}>
+      <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
+        <div>
+          <h3 className="text-white font-bold text-[16px]">거래처 신규등록</h3>
+          <p className="text-white/60 text-[12px] mt-0.5">새 거래처 정보를 입력하세요</p>
+        </div>
+        <button className="text-white/50 hover:text-white text-xl transition" onClick={() => setNewClientModalOpen(false)}>✕</button>
+      </div>
+      <div className="px-6 py-5 space-y-4">
+        <div>
+          <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">업체명 <span className="text-red-500">*</span></label>
+          <input
+            className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20"
+            placeholder="업체명 입력"
+            value={newClientModalData.name}
+            onChange={e => setNewClientModalData(p => ({ ...p, name: e.target.value }))}
+            autoFocus
+            onKeyDown={e => { if (e.key === "Tab") { e.preventDefault(); document.getElementById("nc-addr")?.focus(); } }}
+          />
+        </div>
+        <div>
+          <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">주소</label>
+          <input
+            id="nc-addr"
+            className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20"
+            placeholder="주소 입력 (선택)"
+            value={newClientModalData.addr}
+            onChange={e => setNewClientModalData(p => ({ ...p, addr: e.target.value }))}
+            onKeyDown={e => { if (e.key === "Tab") { e.preventDefault(); document.getElementById("nc-manager")?.focus(); } }}
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">담당자</label>
+            <input
+              id="nc-manager"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20"
+              placeholder="담당자명 (선택)"
+              value={newClientModalData.manager}
+              onChange={e => setNewClientModalData(p => ({ ...p, manager: e.target.value }))}
+              onKeyDown={e => { if (e.key === "Tab") { e.preventDefault(); document.getElementById("nc-phone")?.focus(); } }}
+            />
+          </div>
+          <div>
+            <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">연락처</label>
+            <input
+              id="nc-phone"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20"
+              placeholder="010-0000-0000 (선택)"
+              value={newClientModalData.phone}
+              onChange={e => setNewClientModalData(p => ({ ...p, phone: e.target.value }))}
+              onKeyDown={async e => {
+                if (e.key === "Enter") {
+                  if (!newClientModalData.name.trim()) { showAlert("업체명을 입력하세요."); return; }
+                  await savePlaceSmart(newClientModalData.name.trim(), newClientModalData.addr, newClientModalData.manager, newClientModalData.phone);
+                  showAlert("신규 거래처 등록이 완료되었습니다.");
+                  setNewClientModalOpen(false);
+                }
+              }}
+            />
+          </div>
+        </div>
+      </div>
+      <div className="px-6 pb-5 flex gap-3">
+        <button
+          className="flex-1 py-2.5 rounded-xl border border-gray-200 bg-white text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition"
+          onClick={() => setNewClientModalOpen(false)}>
+          취소
+        </button>
+        <button
+          className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition"
+          onClick={async () => {
+            if (!newClientModalData.name.trim()) { showAlert("업체명을 입력하세요."); return; }
+            await savePlaceSmart(newClientModalData.name.trim(), newClientModalData.addr, newClientModalData.manager, newClientModalData.phone);
+            showAlert("신규 거래처 등록이 완료되었습니다.");
+            setNewClientModalOpen(false);
+          }}>
+          등록 완료
+        </button>
+      </div>
     </div>
   </div>
 )}
@@ -17998,12 +18066,14 @@ checkWarningStatus(c.거래처명, "거래처");
           if (match) return;
 
           const plateVal = e.target.value;
-          openNewDriverModal(plateVal, async (driverInfo) => {
-            const fmt = formatPhone(driverInfo.전화번호);
-            const raw = fmt.replace(/[^\d]/g, "");
-            await upsertDriver({ 차량번호: plateVal, 이름: driverInfo.이름, 전화번호: raw, 등급: driverInfo.등급, 메모: driverInfo.메모 });
-            setCopyTarget(prev => ({ ...prev, 차량번호: plateVal, 이름: driverInfo.이름, 전화번호: fmt, 배차상태: "배차완료" }));
-          });
+          driverPanelCallbackRef.current = async (name, fmt) => {
+            setCopyTarget(prev => ({ ...prev, 차량번호: plateVal, 이름: name, 전화번호: fmt, 배차상태: "배차완료" }));
+          };
+          setDriverConfirmInfo({ type: "new", 차량번호: plateVal, 이름: "", 전화번호: "" });
+          setDriverConfirmRowId("__panel__");
+          setQuickRegMode(true);
+          setQuickRegName(""); setQuickRegPhone("");
+          setDriverConfirmOpen(true);
         }}
         onBlur={(e) => {
           const plate = normalizePlate(e.target.value);
@@ -20282,7 +20352,7 @@ if (editTarget.하차지명) upsertPlace?.({ 업체명: editTarget.하차지명,
 <div className="px-6 py-3 bg-gray-50 border-b border-gray-200">
   <div className="flex items-center gap-2 flex-nowrap">
     {driverConfirmInfo.type === "new" ? (
-      <span className="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-700 text-[12px] font-bold whitespace-nowrap shrink-0">
+      <span className="px-2.5 py-1 rounded-lg bg-[#1B2B4B]/10 text-[#1B2B4B] text-[12px] font-bold whitespace-nowrap shrink-0">
         미등록 차량
       </span>
     ) : driverConfirmInfo.type === "mismatch" ? (
@@ -20367,10 +20437,10 @@ if (editTarget.하차지명) upsertPlace?.({ 업체명: editTarget.하차지명,
 
   {/* 빠른기사등록 인라인 폼 */}
   {quickRegMode ? (
-    <div className="border border-amber-200 rounded-xl overflow-hidden">
-      <div className="bg-amber-50 px-4 py-2.5 border-b border-amber-200">
-        <span className="text-[12px] font-bold text-amber-700">신규 기사 정보 입력</span>
-        <span className="text-[11px] text-amber-600 ml-2">{driverConfirmInfo.차량번호}</span>
+    <div className="border border-[#1B2B4B]/20 rounded-xl overflow-hidden">
+      <div className="bg-[#1B2B4B]/5 px-4 py-2.5 border-b border-[#1B2B4B]/15">
+        <span className="text-[12px] font-bold text-[#1B2B4B]">신규 기사 정보 입력</span>
+        <span className="text-[11px] text-[#1B2B4B]/60 ml-2">{driverConfirmInfo.차량번호}</span>
       </div>
       <div className="p-4 space-y-2.5">
         <div>
@@ -20417,8 +20487,8 @@ if (editTarget.하차지명) upsertPlace?.({ 업체명: editTarget.하차지명,
           </button>
           <button
             className={`flex-1 py-2 rounded-lg text-[12px] font-bold transition text-white ${
-              quickRegName.trim() && quickRegPhone.trim()
-                ? "bg-amber-500 hover:bg-amber-600"
+              quickRegName.trim()
+                ? "bg-[#1B2B4B] hover:bg-[#243a60]"
                 : "bg-gray-300 cursor-not-allowed"
             }`}
             disabled={!quickRegName.trim()}
@@ -20451,7 +20521,7 @@ if (editTarget.하차지명) upsertPlace?.({ 업체명: editTarget.하차지명,
       </button>
 
       <button
-        className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-[13px] transition"
+        className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white font-bold text-[13px] transition"
         onClick={() => setQuickRegMode(true)}>
         빠른 기사 등록
       </button>
@@ -27195,10 +27265,22 @@ setCopyPlaceOptions(list);
   onKeyDown={(e)=>{
     if(e.key === "Enter"){
       e.preventDefault();
-      e.target.blur(); // 🔥 Enter → blur 강제 발생
+      const plate = normalizePlate(e.target.value);
+      if (!plate) return;
+      const match = (drivers || []).find(d => normalizePlate(d.차량번호) === plate);
+      if (match) return;
+      const plateVal = e.target.value;
+      driverPanelCallbackRef5.current = async (name, fmt) => {
+        setCopyTarget(prev => ({ ...prev, 차량번호: plateVal, 이름: name, 전화번호: fmt, 배차상태: "배차완료" }));
+      };
+      setDriverConfirmInfo5({ type: "new", 차량번호: plateVal, 이름: "", 전화번호: "" });
+      setDriverConfirmRowId5("__panel__");
+      setQuickRegMode5(true);
+      setQuickRegName5(""); setQuickRegPhone5("");
+      setDriverConfirmOpen5(true);
     }
   }}
-    
+
     onChange={(e) => {
 
       const v = e.target.value;
@@ -27227,9 +27309,10 @@ setCopyPlaceOptions(list);
 
     }}
 
-    onBlur={() => {
+    onBlur={(e) => {
 
-      const plate = normalizePlate(copyTarget?.차량번호 || "");
+      const plateVal2 = e.target.value;
+      const plate = normalizePlate(plateVal2);
 
       if (!plate) return;
 
@@ -27240,7 +27323,6 @@ setCopyPlaceOptions(list);
       // 기존 기사 있으면 끝
       if (match) return;
 
-      const plateVal2 = copyTarget?.차량번호;
       driverPanelCallbackRef5.current = async (name, fmt) => {
         setCopyTarget(prev => ({ ...prev, 차량번호: plateVal2, 이름: name, 전화번호: fmt, 배차상태: "배차완료" }));
       };
@@ -28045,7 +28127,7 @@ setCopyPlaceOptions(list);
             <div className="px-6 py-3 bg-gray-50 border-b border-gray-200">
               <div className="flex items-center gap-2 flex-nowrap">
                 {driverConfirmInfo.type === "new" ? (
-                  <span className="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-700 text-[12px] font-bold whitespace-nowrap shrink-0">미등록 차량</span>
+                  <span className="px-2.5 py-1 rounded-lg bg-[#1B2B4B]/10 text-[#1B2B4B] text-[12px] font-bold whitespace-nowrap shrink-0">미등록 차량</span>
                 ) : (
                   <span className="px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-700 text-[12px] font-bold whitespace-nowrap shrink-0">등록 기사</span>
                 )}
@@ -28086,10 +28168,10 @@ setCopyPlaceOptions(list);
             {/* 버튼 영역 */}
             <div className="px-6 pb-5 space-y-3">
               {quickRegMode5 ? (
-                <div className="border border-amber-200 rounded-xl overflow-hidden">
-                  <div className="bg-amber-50 px-4 py-2.5 border-b border-amber-200">
-                    <span className="text-[12px] font-bold text-amber-700">신규 기사 정보 입력</span>
-                    <span className="text-[11px] text-amber-600 ml-2">{driverConfirmInfo.plate}</span>
+                <div className="border border-[#1B2B4B]/20 rounded-xl overflow-hidden">
+                  <div className="bg-[#1B2B4B]/5 px-4 py-2.5 border-b border-[#1B2B4B]/15">
+                    <span className="text-[12px] font-bold text-[#1B2B4B]">신규 기사 정보 입력</span>
+                    <span className="text-[11px] text-[#1B2B4B]/60 ml-2">{driverConfirmInfo.plate}</span>
                   </div>
                   <div className="p-4 space-y-2.5">
                     <div>
@@ -28119,11 +28201,11 @@ setCopyPlaceOptions(list);
                       </button>
                       <button
                         className={`flex-1 py-2 rounded-lg text-[12px] font-bold transition text-white ${
-                          quickRegName5.trim() && quickRegPhone5.trim()
-                            ? "bg-amber-500 hover:bg-amber-600"
+                          quickRegName5.trim()
+                            ? "bg-[#1B2B4B] hover:bg-[#243a60]"
                             : "bg-gray-300 cursor-not-allowed"
                         }`}
-                        disabled={!quickRegName5.trim() || !quickRegPhone5.trim()}
+                        disabled={!quickRegName5.trim()}
                         onClick={async () => {
                           const formatted = formatPhone(quickRegPhone5);
                           const raw = formatted.replace(/[^\d]/g, "");
@@ -28149,7 +28231,7 @@ setCopyPlaceOptions(list);
                     취소
                   </button>
                   <button
-                    className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-[13px] transition"
+                    className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white font-bold text-[13px] transition"
                     onClick={() => setQuickRegMode5(true)}>
                     빠른 기사 등록
                   </button>
@@ -29892,7 +29974,7 @@ function NewOrderPopup({
             </div>
             <div className="px-6 py-3 bg-gray-50 border-b border-gray-200">
               <div className="flex items-center gap-2 flex-nowrap">
-                <span className="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-700 text-[12px] font-bold whitespace-nowrap shrink-0">미등록 차량</span>
+                <span className="px-2.5 py-1 rounded-lg bg-[#1B2B4B]/10 text-[#1B2B4B] text-[12px] font-bold whitespace-nowrap shrink-0">미등록 차량</span>
                 <span className="text-[12px] text-gray-500 whitespace-nowrap">기사 정보가 없습니다. 빠른등록 후 배차하세요.</span>
               </div>
             </div>
@@ -29906,10 +29988,10 @@ function NewOrderPopup({
             </div>
             <div className="px-6 pb-5 space-y-3">
               {quickRegMode5 ? (
-                <div className="border border-amber-200 rounded-xl overflow-hidden">
-                  <div className="bg-amber-50 px-4 py-2.5 border-b border-amber-200">
-                    <span className="text-[12px] font-bold text-amber-700">신규 기사 정보 입력</span>
-                    <span className="text-[11px] text-amber-600 ml-2">{driverConfirmInfo5.차량번호}</span>
+                <div className="border border-[#1B2B4B]/20 rounded-xl overflow-hidden">
+                  <div className="bg-[#1B2B4B]/5 px-4 py-2.5 border-b border-[#1B2B4B]/15">
+                    <span className="text-[12px] font-bold text-[#1B2B4B]">신규 기사 정보 입력</span>
+                    <span className="text-[11px] text-[#1B2B4B]/60 ml-2">{driverConfirmInfo5.차량번호}</span>
                   </div>
                   <div className="p-4 space-y-2.5">
                     <div>
@@ -29952,7 +30034,7 @@ function NewOrderPopup({
                         취소
                       </button>
                       <button
-                        className={`flex-1 py-2 rounded-lg text-[12px] font-bold transition text-white ${quickRegName5.trim() ? "bg-amber-500 hover:bg-amber-600" : "bg-gray-300 cursor-not-allowed"}`}
+                        className={`flex-1 py-2 rounded-lg text-[12px] font-bold transition text-white ${quickRegName5.trim() ? "bg-[#1B2B4B] hover:bg-[#243a60]" : "bg-gray-300 cursor-not-allowed"}`}
                         disabled={!quickRegName5.trim()}
                         onClick={async () => {
                           const formatted = formatPhone(quickRegPhone5);
@@ -29979,7 +30061,7 @@ function NewOrderPopup({
                     취소
                   </button>
                   <button
-                    className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-[13px] transition"
+                    className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white font-bold text-[13px] transition"
                     onClick={() => setQuickRegMode5(true)}>
                     빠른 기사 등록
                   </button>
@@ -40242,3 +40324,207 @@ React.useEffect(() => {
   );
 }
 // ===================== DispatchApp.jsx (PART 11/11) — END =====================
+
+// ===================== 회사 정보 관리 =====================
+function CompanyProfile({ userCompany = "" }) {
+  const companyName = userCompany || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "";
+  const [appData, setAppData] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
+  const [uploading, setUploading] = React.useState(false);
+  const [uploadProgress, setUploadProgress] = React.useState("");
+  const [alert, setAlert] = React.useState("");
+  const fileRef = React.useRef(null);
+
+  const showMsg = (msg) => { setAlert(msg); setTimeout(() => setAlert(""), 3000); };
+
+  React.useEffect(() => {
+    if (!companyName) { setLoading(false); return; }
+    getDocs(collection(db, "transportApplications")).then(snap => {
+      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const found = docs.find(d =>
+        (d.companyName || "").trim() === companyName.trim() && d.status === "approved"
+      );
+      setAppData(found || null);
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, [companyName]);
+
+  const handleFileUpload = async (file) => {
+    if (!file) return;
+    const allowed = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
+    if (!allowed.includes(file.type)) { showMsg("JPG, PNG, WEBP, PDF 파일만 업로드 가능합니다."); return; }
+    if (file.size > 10 * 1024 * 1024) { showMsg("파일 크기는 10MB 이하여야 합니다."); return; }
+    setUploading(true);
+    setUploadProgress("업로드 중...");
+    try {
+      const storageRef = ref(storage, `company-docs/${companyName}/사업자등록증_${Date.now()}_${file.name}`);
+      await uploadBytes(storageRef, file);
+      const url = await getDownloadURL(storageRef);
+      if (appData?.id) {
+        await updateDoc(doc(db, "transportApplications", appData.id), { 사업자등록증URL: url, 사업자등록증파일명: file.name, 사업자등록증업로드일: new Date().toISOString() });
+        setAppData(prev => ({ ...prev, 사업자등록증URL: url, 사업자등록증파일명: file.name }));
+      }
+      showMsg("사업자등록증이 업로드되었습니다.");
+    } catch (err) {
+      showMsg("업로드 실패: " + err.message);
+    } finally {
+      setUploading(false);
+      setUploadProgress("");
+    }
+  };
+
+  const handleCopyImage = async () => {
+    if (!appData?.사업자등록증URL) return;
+    try {
+      const res = await fetch(appData.사업자등록증URL);
+      const blob = await res.blob();
+      if (blob.type.startsWith("image/")) {
+        await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+        showMsg("이미지가 클립보드에 복사되었습니다.");
+      } else {
+        showMsg("PDF는 이미지 복사를 지원하지 않습니다. 다운로드를 이용하세요.");
+      }
+    } catch {
+      showMsg("복사에 실패했습니다. 다운로드를 이용하세요.");
+    }
+  };
+
+  const handleDownload = () => {
+    if (!appData?.사업자등록증URL) return;
+    const a = document.createElement("a");
+    a.href = appData.사업자등록증URL;
+    a.download = appData.사업자등록증파일명 || "사업자등록증";
+    a.target = "_blank";
+    a.click();
+  };
+
+  if (loading) return <div className="flex items-center justify-center h-64 text-gray-400 text-[14px]">불러오는 중...</div>;
+
+  const InfoRow = ({ label, value }) => (
+    <div className="flex items-center py-3 border-b border-gray-100 last:border-0">
+      <span className="w-32 text-[13px] font-semibold text-gray-500 shrink-0">{label}</span>
+      <span className="text-[14px] text-gray-900">{value || "-"}</span>
+    </div>
+  );
+
+  return (
+    <div className="p-6 max-w-3xl mx-auto space-y-5">
+      {alert && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[99999] bg-[#1B2B4B] text-white px-5 py-3 rounded-xl shadow-lg text-[13px] font-medium">
+          {alert}
+        </div>
+      )}
+
+      {/* 회사 기본 정보 */}
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+        <div className="bg-[#1B2B4B] px-6 py-4">
+          <h2 className="text-white font-bold text-[16px]">회사 기본 정보</h2>
+          <p className="text-white/55 text-[12px] mt-0.5">승인된 가입 정보를 기반으로 표시됩니다</p>
+        </div>
+        {appData ? (
+          <div className="px-6 py-2">
+            <InfoRow label="회사명" value={appData.companyName} />
+            <InfoRow label="회사 코드" value={
+              <span className="font-mono font-bold text-[#1B2B4B] tracking-wider bg-[#1B2B4B]/5 px-2 py-0.5 rounded">
+                {appData.companyCode || "-"}
+              </span>
+            } />
+            <InfoRow label="대표자" value={appData.representative || appData.대표자 || appData.ceo} />
+            <InfoRow label="주소" value={appData.address || appData.주소} />
+            <InfoRow label="사업자번호" value={appData.businessNumber || appData.사업자번호} />
+            <InfoRow label="연락처" value={appData.phone || appData.연락처} />
+            <InfoRow label="이메일" value={appData.email} />
+            <InfoRow label="가입 유형" value={appData.type} />
+            <InfoRow label="승인일" value={appData.approvedAt ? new Date(appData.approvedAt).toLocaleDateString("ko-KR") : "-"} />
+          </div>
+        ) : (
+          <div className="px-6 py-8 text-center text-gray-400 text-[14px]">
+            승인된 회사 정보를 찾을 수 없습니다.
+          </div>
+        )}
+      </div>
+
+      {/* 사업자등록증 */}
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+        <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
+          <div>
+            <h2 className="text-white font-bold text-[16px]">사업자등록증</h2>
+            <p className="text-white/55 text-[12px] mt-0.5">파일 업로드 후 다운로드 및 클립보드 복사 가능</p>
+          </div>
+          <button
+            className="px-4 py-2 bg-white/15 hover:bg-white/25 text-white text-[13px] font-semibold rounded-lg transition border border-white/20"
+            onClick={() => fileRef.current?.click()}
+            disabled={uploading}
+          >
+            {uploading ? uploadProgress : "파일 업로드"}
+          </button>
+          <input ref={fileRef} type="file" accept="image/*,application/pdf" className="hidden"
+            onChange={e => handleFileUpload(e.target.files?.[0])} />
+        </div>
+        <div className="px-6 py-5">
+          {appData?.사업자등록증URL ? (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-200">
+                <div>
+                  <div className="text-[14px] font-semibold text-gray-800">{appData.사업자등록증파일명 || "사업자등록증"}</div>
+                  {appData.사업자등록증업로드일 && (
+                    <div className="text-[12px] text-gray-500 mt-0.5">
+                      업로드: {new Date(appData.사업자등록증업로드일).toLocaleDateString("ko-KR")}
+                    </div>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    className="px-3 py-1.5 text-[12px] font-semibold rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition"
+                    onClick={handleCopyImage}>
+                    이미지 복사
+                  </button>
+                  <button
+                    className="px-3 py-1.5 text-[12px] font-semibold rounded-lg bg-[#1B2B4B] text-white hover:bg-[#243a60] transition"
+                    onClick={handleDownload}>
+                    다운로드
+                  </button>
+                </div>
+              </div>
+              {appData.사업자등록증URL.match(/\.(jpg|jpeg|png|webp)/i) && (
+                <div className="border border-gray-200 rounded-xl overflow-hidden max-h-[400px] flex items-center justify-center bg-gray-50">
+                  <img src={appData.사업자등록증URL} alt="사업자등록증" className="max-h-[400px] object-contain" />
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-10 text-center">
+              <div className="w-16 h-16 rounded-2xl bg-gray-100 flex items-center justify-center mb-3">
+                <svg className="w-8 h-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              </div>
+              <p className="text-[14px] font-semibold text-gray-600">업로드된 사업자등록증이 없습니다</p>
+              <p className="text-[12px] text-gray-400 mt-1">위 버튼을 눌러 파일을 업로드하세요 (JPG, PNG, PDF)</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 이용 안내 */}
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+        <div className="bg-[#1B2B4B] px-6 py-4">
+          <h2 className="text-white font-bold text-[16px]">이용 안내</h2>
+        </div>
+        <div className="px-6 py-4 space-y-2">
+          {[
+            "회사 코드는 로그인 시 필요한 고유 코드입니다. 분실 시 관리자에게 문의하세요.",
+            "사업자등록증은 이미지(JPG/PNG) 또는 PDF로 업로드할 수 있습니다.",
+            "업로드된 이미지는 클립보드 복사 기능을 통해 다른 곳에 붙여넣을 수 있습니다.",
+            "회사 정보 변경이 필요한 경우 관리자에게 문의하세요.",
+          ].map((text, i) => (
+            <div key={i} className="flex gap-2 text-[13px] text-gray-600">
+              <span className="text-gray-300 shrink-0">—</span>
+              <span>{text}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
